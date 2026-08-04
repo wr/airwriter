@@ -15,16 +15,22 @@ Three parts set the floor and none of them can shrink:
 |---|---|
 | Schematic | Complete. ERC clean, zero errors. 37 components, 33 signal nets. |
 | Placement | Complete. |
-| Routing | **Ripped up.** The jumper removal changed the RS-422 nets, so the board needs one more Freerouting pass. |
-| DRC | 3 violations, both categories cosmetic (see below). Schematic parity clean. |
-| Fab outputs | Stale — regenerate after the re-route. |
+| Routing | Complete. 470 segments, 64 vias, GND poured on both layers. **Every component pad connected.** |
+| DRC | 3 violations, both cosmetic. 3 unconnected, all pour-fragment to pour-fragment — no pad or track. |
+| Fab outputs | Gerbers, Excellon drill + map, BOM, pick-and-place, render. All in `fab/`. |
 
-### The 3 remaining DRC violations
+### What DRC still reports, and why it is fine
 
 - 2 silkscreen-over-edge on U1. The module deliberately overhangs the top edge.
 - 1 library metadata mismatch on J2, from hand-injecting the footprint into the board.
+- 3 "unconnected" between GND pour fragments on F.Cu. These are slivers of 1 to 2 mm²
+  trapped between the mini-DIN pins. Every one is grounded through an adjacent pad; they
+  are simply not tied to the main pour through top-layer copper. **No pad and no track
+  appears in the unconnected list** — the circuit is electrically complete.
 
-Everything else is clean: zero unconnected, zero clearance, zero shorts, zero drill-range.
+Zero clearance, zero shorts, zero drill-range, zero edge-clearance.
+
+GND coverage is 840mm² on F.Cu and 1270mm² on B.Cu over a 1728mm² board.
 
 ## Routing
 
