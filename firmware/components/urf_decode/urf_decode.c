@@ -2,6 +2,7 @@
 #include "urf_decode.h"
 #include <stdlib.h>
 #include <string.h>
+#include <sys/types.h>
 
 // cups/raster-stream.c, cups_raster_read_header(): rawcspace[] / rawnumcolors[]
 static uint8_t colorspace_num_colors(uint8_t code)
@@ -100,10 +101,79 @@ int urf_next_page(urf_t *u)
     return URF_OK;
 }
 
+// Decode one line into u->line. Sets *repeat to the number of times the
+// caller should deliver it (the leading byte plus one).
+//
+// Ported from _cupsRasterReadPixels() in cups/raster-stream.c and cross-read
+// against PWG 5102.4-2012 section 4.4. Note that this is PackBits with the
+// ranges swapped: low control bytes repeat, high control bytes are literal.
+static int decode_line(urf_t *u, unsigned *repeat)
+{
+    const urf_page_t *p = &u->page;
+    uint8_t  ctl;
+    uint8_t *dst   = u->line;
+    ssize_t  bytes = (ssize_t)p->bytes_per_line;
+
+    if (!u->read(u->ctx, &ctl, 1)) return URF_ERR_IO;
+    *repeat = (unsigned)ctl + 1;          // 0 means once, never zero times
+
+    while (bytes > 0) {
+        if (!u->read(u->ctx, &ctl, 1)) return URF_ERR_IO;
+
+        if (ctl == 0x80) {
+            // Undefined in PWG 5102.4; both CUPS and urftopdf treat it as
+            // clear-to-end-of-line. The fill depends on the colour space.
+            memset(dst, p->fill_byte, (size_t)bytes);
+            dst  += bytes;
+            bytes = 0;
+        } else if (ctl & 0x80) {
+            // Literal: 257 - ctl colour values, so 2..128. A literal run of
+            // one is not encodable.
+            size_t n = (size_t)(257 - ctl) * p->bpp_bytes;
+            if (n > (size_t)bytes) n = (size_t)bytes;
+            if (!u->read(u->ctx, dst, n)) return URF_ERR_IO;
+            dst   += n;
+            bytes -= (ssize_t)n;
+        } else {
+            // Repeat: ctl + 1 copies of the next colour value.
+            size_t n = ((size_t)ctl + 1) * p->bpp_bytes;
+            if (n > (size_t)bytes) n = (size_t)bytes;
+            if (n < p->bpp_bytes) break;   // clamp left less than one pixel
+            bytes -= (ssize_t)n;
+            if (!u->read(u->ctx, dst, p->bpp_bytes)) return URF_ERR_IO;
+            dst += p->bpp_bytes;
+            n   -= p->bpp_bytes;
+            while (n > 0) {
+                memcpy(dst, dst - p->bpp_bytes, p->bpp_bytes);
+                dst += p->bpp_bytes;
+                n   -= p->bpp_bytes;
+            }
+        }
+    }
+
+    // If a clamped run left the row short, zero the tail rather than leaking
+    // whatever the previous row put there. CUPS leaves it stale; we do not,
+    // because a regression diff must be deterministic.
+    if (bytes > 0) memset(dst, p->fill_byte, (size_t)bytes);
+    return URF_OK;
+}
+
 int urf_next_row(urf_t *u, const uint8_t **row)
 {
-    (void)u; (void)row;
-    return URF_ERR_UNSUPPORTED;   // Task 3
+    // Bound by the declared height. The line-repeat byte lets a file claim
+    // more rows than the header says; CUPS bounds this and urftopdf does
+    // not, which is how urftopdf writes past the end of a page buffer.
+    if (u->rows_emitted >= u->page.height) return URF_END;
+
+    if (u->repeat_left == 0) {
+        int rc = decode_line(u, &u->repeat_left);
+        if (rc != URF_OK) return rc;
+    }
+
+    u->repeat_left--;
+    u->rows_emitted++;
+    *row = u->line;
+    return URF_OK;
 }
 
 void urf_free(urf_t *u)
