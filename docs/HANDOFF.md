@@ -141,6 +141,39 @@ automated; the Freerouting round trip is GUI-only.
   `rotate -90 0 180`, offset zero. Verified by rendering the bottom of the board: all eight pins and
   all three posts land centred in their holes. Without it the board's STEP export had two holes
   where the ports should be.
+- **`lib/airwriter.3dshapes/USB_C_Receptacle_HRO_TYPE-C-31-M-12.step`** — KiCad 10 ships this
+  footprint but not its model, and the stock footprint points at a `${KICAD10_3DMODEL_DIR}` path
+  that does not exist, so J1 vanished from the 3D export without any warning. Upstream
+  `kicad-packages3D` does not have it either; KiCad issue #22139 tracks it. Taken from
+  NabuCasa/yellow-3dshapes, which processed the vendor model through KiCad StepUp. That repo
+  carries no licence file — check provenance before publishing the hardware.
+  The model's origin is a corner, not the footprint centre, hence `rotate -90 0 0` with
+  `offset -4.47 -3.65 0`. Derived by matching the four shield tabs (8.64mm apart, rows 4.18mm
+  apart) and the two 0.65mm legs (5.78mm apart) to the pads, then confirmed by render: all six
+  through-board features seat in their holes, and the asymmetric shield-tab pattern rules out a
+  180-degree error.
+
+**J1's model lives on the board, not in a library.** The footprint comes from KiCad's stock
+`Connector_USB`, so re-importing it from the library will restore the dead `${KICAD10_3DMODEL_DIR}`
+path and J1 will silently disappear from the STEP export again. Same class of trap as U1's vias.
+
+**D1 has no 3D model.** `LED_WS2812B-2020_PLCC4_2.0x2.0mm.step` does not exist in KiCad 10 or
+upstream, so the WS2812B is absent from the export. It is a 2.0 x 2.0 x 0.8mm block; it matters only
+if the enclosure needs a light pipe over it.
+
+Before trusting a STEP export, check every model path resolves — a missing one is silent:
+
+```
+python3 - <<'EOF'
+import re, os
+b = open('hardware/airwriter/airwriter.kicad_pcb').read()
+base = '/Applications/KiCad/KiCad.app/Contents/SharedSupport/3dmodels'
+proj = 'hardware/airwriter'
+for p in re.findall(r'\(model "([^"]+)"', b):
+    real = p.replace('${KICAD10_3DMODEL_DIR}', base).replace('${KIPRJMOD}', proj)
+    if not os.path.exists(real): print('MISSING', p)
+EOF
+```
 - **`Mini-DIN-8_Shielded`** — the stock symbol has no shield pin, so there is no way to net the shell.
   Pin 9 is SHIELD, tied to all three mounting posts in the footprint.
 - **`SN65HVD1473DGSR`** — reused with credit from FeralFirmware/TailTalk. No longer placed on the
