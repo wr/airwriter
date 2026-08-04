@@ -9,7 +9,7 @@ that must not be guessed at.
 
 ## Source of truth
 - GitHub: none (local only)
-- Linear project: not yet created
+- Linear project: AirWriter (id: 9c428072-e8eb-4c3d-88e6-b3eadf604eed), team Personal
 - Branch prefix: wells/
 - PR mode: none
 
@@ -27,6 +27,12 @@ docs/SPEC.md          the build spec
 - `kicad-cli` is not on PATH. It lives at
   `/Applications/KiCad/KiCad.app/Contents/MacOS/kicad-cli` (KiCad 10.0.2).
 - ESP-IDF is not installed yet.
+- The `konnect` MCP tools resolve `lib_id` only against KiCad's install directory —
+  they ignore project and global `sym-lib-table`. The project libraries are therefore
+  symlinked into the app bundle so placement tools can see them:
+  `/Applications/KiCad/KiCad.app/Contents/SharedSupport/{symbols/airwriter.kicad_sym,footprints/airwriter.pretty}`.
+  KiCad itself uses the project table, so the symlinks are a tooling workaround, not a
+  dependency — but they will disappear on a KiCad upgrade and need recreating.
 - Always run `kicad-cli <sub> --help` before using a subcommand. KiCad 10's CLI differs
   from the 8/9-era flags in most training data. Generate `.kicad_sch` / `.kicad_pcb`
   with the tool rather than hand-writing s-expressions.
