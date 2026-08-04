@@ -4089,125 +4089,20 @@
       (justify left bottom))
     (uuid "1e4e74e0-dfd0-44ff-98dd-210642481005"))
 
-  (label "RS422_Y"
-    (at 350.52 67.31 0)
-    (effects
-      (font
-        (size 1.27 1.27))
-      (justify left bottom))
-    (uuid "5f05e5b8-8f78-4284-9a26-e354bfff3658"))
 
-  (label "RS422_Y"
-    (at 369.57 44.45 0)
-    (effects
-      (font
-        (size 1.27 1.27))
-      (justify left bottom))
-    (uuid "f0a64026-f046-4d25-9076-cd8dfb51072f"))
 
-  (label "RS422_Y"
-    (at 379.73 57.15 0)
-    (effects
-      (font
-        (size 1.27 1.27))
-      (justify left bottom))
-    (uuid "2ea07b75-45fa-4b36-bf24-b0d69ddd9a7b"))
 
-  (label "RS422_Z"
-    (at 350.52 62.23 0)
-    (effects
-      (font
-        (size 1.27 1.27))
-      (justify left bottom))
-    (uuid "d59e9ab7-f822-4758-8ca5-49fd35927804"))
 
-  (label "RS422_Z"
-    (at 369.57 57.15 0)
-    (effects
-      (font
-        (size 1.27 1.27))
-      (justify left bottom))
-    (uuid "4b1c01d6-ced2-4614-9258-d300972eef2a"))
 
-  (label "RS422_Z"
-    (at 379.73 44.45 0)
-    (effects
-      (font
-        (size 1.27 1.27))
-      (justify left bottom))
-    (uuid "ba2cfffa-ff75-4b9c-bde8-4787bc69c1c0"))
 
-  (label "RS422_A"
-    (at 350.52 52.07 0)
-    (effects
-      (font
-        (size 1.27 1.27))
-      (justify left bottom))
-    (uuid "393eb685-7f66-43e9-bc45-9f81454979d3"))
 
-  (label "RS422_A"
-    (at 374.65 72.39 0)
-    (effects
-      (font
-        (size 1.27 1.27))
-      (justify left bottom))
-    (uuid "db9326cc-aca4-4104-b738-e8b1dc786753"))
 
-  (label "RS422_A"
-    (at 400.05 58.42 0)
-    (effects
-      (font
-        (size 1.27 1.27))
-      (justify left bottom))
-    (uuid "c15dea94-ffe1-4339-a471-f5ae0b9fc35c"))
 
-  (label "RS422_A"
-    (at 410.21 53.34 0)
-    (effects
-      (font
-        (size 1.27 1.27))
-      (justify left bottom))
-    (uuid "9326fd92-46a7-48a0-9a5a-94000a3dd592"))
 
-  (label "RS422_B"
-    (at 350.52 57.15 0)
-    (effects
-      (font
-        (size 1.27 1.27))
-      (justify left bottom))
-    (uuid "44596a3d-8a1a-4849-918c-b064fb4e33c0"))
 
-  (label "RS422_B"
-    (at 374.65 85.09 0)
-    (effects
-      (font
-        (size 1.27 1.27))
-      (justify left bottom))
-    (uuid "6b1f7c96-d242-4a4f-9aa5-a8c8e001e91b"))
 
-  (label "RS422_B"
-    (at 400.05 66.04 0)
-    (effects
-      (font
-        (size 1.27 1.27))
-      (justify left bottom))
-    (uuid "45f584a7-7ba0-4a01-b6a5-85774614f750"))
 
-  (label "RS422_B"
-    (at 410.21 71.12 0)
-    (effects
-      (font
-        (size 1.27 1.27))
-      (justify left bottom))
-    (uuid "a93de4c9-4c62-4808-8f86-152d6ce91b76"))
 
-  (label "PR_RXD_P"
-    (at 374.65 48.26 0)
-    (effects
-      (font
-        (size 1.27 1.27))
-      (justify left bottom))
-    (uuid "b1e312bf-6488-4172-987d-a7889d69a42b"))
 
   (label "PR_RXD_P"
     (at 426.72 118.11 0)
@@ -4217,13 +4112,6 @@
       (justify left bottom))
     (uuid "905c4327-7d91-4e7c-b822-1edeb2c69fe1"))
 
-  (label "PR_RXD_N"
-    (at 374.65 60.96 0)
-    (effects
-      (font
-        (size 1.27 1.27))
-      (justify left bottom))
-    (uuid "7c2db1ad-d9c4-4ffb-ad63-2e653b3f905c"))
 
   (label "PR_RXD_N"
     (at 426.72 110.49 0)
@@ -4241,21 +4129,7 @@
       (justify left bottom))
     (uuid "30766914-a5ed-4a85-b107-656528798758"))
 
-  (label "PR_TXD_N"
-    (at 369.57 68.58 0)
-    (effects
-      (font
-        (size 1.27 1.27))
-      (justify left bottom))
-    (uuid "bd590886-7601-4f3b-bdbb-b645e76c30f7"))
 
-  (label "PR_TXD_N"
-    (at 379.73 81.28 0)
-    (effects
-      (font
-        (size 1.27 1.27))
-      (justify left bottom))
-    (uuid "bccc088b-b0d1-492f-9c67-bdf9973d6517"))
 
   (label "PR_TXD_P"
     (at 426.72 113.03 0)
@@ -4265,21 +4139,7 @@
       (justify left bottom))
     (uuid "161920ee-dd76-4491-b521-31fa62926d18"))
 
-  (label "PR_TXD_P"
-    (at 379.73 68.58 0)
-    (effects
-      (font
-        (size 1.27 1.27))
-      (justify left bottom))
-    (uuid "3abe9a92-4334-4352-a66a-a47e20115e50"))
 
-  (label "PR_TXD_P"
-    (at 369.57 81.28 0)
-    (effects
-      (font
-        (size 1.27 1.27))
-      (justify left bottom))
-    (uuid "34f93386-3504-49cf-a4b4-a52e79dcfe0d"))
 
   (label "PR_HSKO"
     (at 426.72 100.33 0)
@@ -4449,6 +4309,21 @@
       (justify left bottom))
     (uuid "94d1832e-f2c5-45f2-b330-82ce185193bf"))
 
+  (label "VBUS"
+    (at 97.79 39.37 0)
+    (effects
+      (font
+        (size 1.27 1.27))
+      (justify left bottom))
+    (uuid "5fb2192a-0849-46de-a6e9-9d7e77b06a62"))
+
+  (label "GND"
+    (at 109.22 69.85 0)
+    (effects
+      (font
+        (size 1.27 1.27))
+      (justify left bottom))
+    (uuid "5487d2cc-ed97-429e-9acf-9e1d3c40d80d"))
 
   (symbol
     (lib_id "Connector:USB_C_Receptacle_USB2.0_16P")
@@ -5171,150 +5046,6 @@
           (unit 1)))))
 
   (symbol
-    (lib_id "Jumper:SolderJumper_3_Bridged12")
-    (at 374.65 44.45 0)
-    (unit 1)
-    (in_bom yes)
-    (on_board yes)
-    (dnp no)
-    (uuid "8d2c68c3-2d1b-4931-9ba3-94b1e9b4c3e0")
-    (property "Reference" "JP1"
-      (at 374.65 40.64 0)
-      (effects
-        (font
-          (size 1.27 1.27))))
-    (property "Value" "RxD+ pol"
-      (at 374.65 48.26 0)
-      (effects
-        (font
-          (size 1.27 1.27))))
-    (property "Footprint" "Jumper:SolderJumper-3_P1.3mm_Bridged12_RoundedPad1.0x1.5mm"
-      (at 374.65 44.45 0)
-      (hide yes)
-      (effects
-        (font
-          (size 1.27 1.27))))
-    (property "Datasheet" ""
-      (at 374.65 44.45 0)
-      (hide yes)
-      (effects
-        (font
-          (size 1.27 1.27))))
-    (instances
-      (project "airwriter"
-        (path "/b907fa76-c5fe-4a7a-8e4e-adfdab62cb9c"
-          (reference "JP1")
-          (unit 1)))))
-
-  (symbol
-    (lib_id "Jumper:SolderJumper_3_Bridged12")
-    (at 374.65 57.15 0)
-    (unit 1)
-    (in_bom yes)
-    (on_board yes)
-    (dnp no)
-    (uuid "c5a71802-eede-4a84-ac7a-84fee4477cfb")
-    (property "Reference" "JP2"
-      (at 374.65 53.34 0)
-      (effects
-        (font
-          (size 1.27 1.27))))
-    (property "Value" "RxD- pol"
-      (at 374.65 60.96 0)
-      (effects
-        (font
-          (size 1.27 1.27))))
-    (property "Footprint" "Jumper:SolderJumper-3_P1.3mm_Bridged12_RoundedPad1.0x1.5mm"
-      (at 374.65 57.15 0)
-      (hide yes)
-      (effects
-        (font
-          (size 1.27 1.27))))
-    (property "Datasheet" ""
-      (at 374.65 57.15 0)
-      (hide yes)
-      (effects
-        (font
-          (size 1.27 1.27))))
-    (instances
-      (project "airwriter"
-        (path "/b907fa76-c5fe-4a7a-8e4e-adfdab62cb9c"
-          (reference "JP2")
-          (unit 1)))))
-
-  (symbol
-    (lib_id "Jumper:SolderJumper_3_Bridged12")
-    (at 374.65 68.58 0)
-    (unit 1)
-    (in_bom yes)
-    (on_board yes)
-    (dnp no)
-    (uuid "c80d3ca9-533b-40d5-8549-71489438b375")
-    (property "Reference" "JP3"
-      (at 374.65 64.77 0)
-      (effects
-        (font
-          (size 1.27 1.27))))
-    (property "Value" "TxD- pol"
-      (at 374.65 72.39 0)
-      (effects
-        (font
-          (size 1.27 1.27))))
-    (property "Footprint" "Jumper:SolderJumper-3_P1.3mm_Bridged12_RoundedPad1.0x1.5mm"
-      (at 374.65 68.58 0)
-      (hide yes)
-      (effects
-        (font
-          (size 1.27 1.27))))
-    (property "Datasheet" ""
-      (at 374.65 68.58 0)
-      (hide yes)
-      (effects
-        (font
-          (size 1.27 1.27))))
-    (instances
-      (project "airwriter"
-        (path "/b907fa76-c5fe-4a7a-8e4e-adfdab62cb9c"
-          (reference "JP3")
-          (unit 1)))))
-
-  (symbol
-    (lib_id "Jumper:SolderJumper_3_Bridged12")
-    (at 374.65 81.28 0)
-    (unit 1)
-    (in_bom yes)
-    (on_board yes)
-    (dnp no)
-    (uuid "9401691b-5ff5-4fc0-bf48-87530825ee8e")
-    (property "Reference" "JP4"
-      (at 374.65 77.47 0)
-      (effects
-        (font
-          (size 1.27 1.27))))
-    (property "Value" "TxD+ pol"
-      (at 374.65 85.09 0)
-      (effects
-        (font
-          (size 1.27 1.27))))
-    (property "Footprint" "Jumper:SolderJumper-3_P1.3mm_Bridged12_RoundedPad1.0x1.5mm"
-      (at 374.65 81.28 0)
-      (hide yes)
-      (effects
-        (font
-          (size 1.27 1.27))))
-    (property "Datasheet" ""
-      (at 374.65 81.28 0)
-      (hide yes)
-      (effects
-        (font
-          (size 1.27 1.27))))
-    (instances
-      (project "airwriter"
-        (path "/b907fa76-c5fe-4a7a-8e4e-adfdab62cb9c"
-          (reference "JP4")
-          (unit 1)))))
-
-  (symbol
     (lib_id "Device:R")
     (at 400.05 62.23 0)
     (unit 1)
@@ -5861,15 +5592,51 @@
     (path "/"
       (page "1")))
 
-  (label "VBUS"
-    (at 97.79 39.37 0)
+  (label "PR_RXD_P"
+    (at 350.52000000000004 67.31 0)
     (fields_autoplaced yes)
     (effects (font (size 1.27 1.27)) (justify left bottom))
-    (uuid "5fb2192a-0849-46de-a6e9-9d7e77b06a62")
+    (uuid "9754edfd-4772-46f5-8223-0493cb6e0ebe")
   )
-  (label "GND"
-    (at 109.22 69.85 0)
+  (label "PR_RXD_N"
+    (at 350.52000000000004 62.23 0)
     (fields_autoplaced yes)
     (effects (font (size 1.27 1.27)) (justify left bottom))
-    (uuid "5487d2cc-ed97-429e-9acf-9e1d3c40d80d")
+    (uuid "d787e0d0-8f78-4110-beb2-097001945089")
+  )
+  (label "PR_TXD_P"
+    (at 350.52000000000004 52.07 0)
+    (fields_autoplaced yes)
+    (effects (font (size 1.27 1.27)) (justify left bottom))
+    (uuid "5050779d-c9a0-45c4-b9de-41717323152b")
+  )
+  (label "PR_TXD_P"
+    (at 400.05 58.419999999999995 0)
+    (fields_autoplaced yes)
+    (effects (font (size 1.27 1.27)) (justify left bottom))
+    (uuid "93b63eb8-ea5c-48b8-956b-e0b13eb36415")
+  )
+  (label "PR_TXD_P"
+    (at 410.21 53.34 0)
+    (fields_autoplaced yes)
+    (effects (font (size 1.27 1.27)) (justify left bottom))
+    (uuid "b7b287ba-fa4b-437d-8e9d-bde63cad52cb")
+  )
+  (label "PR_TXD_N"
+    (at 350.52000000000004 57.15 0)
+    (fields_autoplaced yes)
+    (effects (font (size 1.27 1.27)) (justify left bottom))
+    (uuid "cfde01e6-dc7c-44af-9e35-7bb4f6e21551")
+  )
+  (label "PR_TXD_N"
+    (at 400.05 66.03999999999999 0)
+    (fields_autoplaced yes)
+    (effects (font (size 1.27 1.27)) (justify left bottom))
+    (uuid "91ea75fb-7501-477b-948f-813bc39c1305")
+  )
+  (label "PR_TXD_N"
+    (at 410.21 71.12 0)
+    (fields_autoplaced yes)
+    (effects (font (size 1.27 1.27)) (justify left bottom))
+    (uuid "e5ebe92f-0f51-4e99-9a15-bb8d125c9c8d")
   ))

@@ -96,17 +96,23 @@ works — these are cheap and plentiful on eBay):
 |---|---|---|---|
 | 1 | HSKo | out | U3 R1IN → ESP32 UART1 CTS |
 | 2 | HSKi | in | U3 T1OUT (DNP) |
-| 3 | TxD- | out | U2 A (receiver) |
+| 3 | TxD- | out | U2 B (receiver) |
 | 4 | GND | — | GND |
 | 5 | RxD- | in | U2 Z (driver) |
-| 6 | TxD+ | out | U2 B (receiver) |
+| 6 | TxD+ | out | U2 A (receiver) |
 | 7 | GPi | in | not connected |
 | 8 | RxD+ | in | U2 Y (driver) |
 
-**Polarity solder jumpers.** Put a two-way solder jumper on each differential pair (JP1 on
-the driver pair, JP2 on the receiver pair) so A/B and Y/Z can be swapped without cutting
-traces. RS-422 polarity conventions between Apple's implementation and the transceiver
-datasheet are not something to bet a board spin on.
+*(The receiver mapping above is corrected. The original draft had A←TxD- and B←TxD+, which
+inverts every received byte. See assumption 3 in section 4.)*
+
+**No polarity jumpers.** The draft called for solder jumpers on each pair so A/B and Y/Z
+could be swapped without cutting traces. They were built and then removed, because the
+ESP32 UART can inverse TXD and RXD in firmware — `uart_set_line_inverse()` with
+`UART_SIGNAL_TXD_INV` / `UART_SIGNAL_RXD_INV`. Inverting DI flips Y and Z together, which
+is electrically identical to swapping the pair, and the same holds for RO. That makes
+polarity a one-line config change instead of four extra parts, so the insurance is kept
+and the components are not.
 
 **Termination and bias.** Footprint a 120R across the receiver pair and 4.7k bias
 resistors to 3.3V and GND on it. All three DNP. Cable runs here are under two metres and

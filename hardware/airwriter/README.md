@@ -15,9 +15,9 @@ Three parts set the floor and none of them can shrink:
 |---|---|
 | Schematic | Complete. ERC clean, zero errors. 37 components, 33 signal nets. |
 | Placement | Complete. |
-| Routing | Complete. 571 segments, 58 vias (0.6/0.3mm), **0 unconnected**. |
-| DRC | **3 violations, both categories cosmetic** (see below). |
-| Fab outputs | Gerbers, Excellon drill + map, BOM, pick-and-place, render. All in `fab/`. |
+| Routing | **Ripped up.** The jumper removal changed the RS-422 nets, so the board needs one more Freerouting pass. |
+| DRC | 3 violations, both categories cosmetic (see below). Schematic parity clean. |
+| Fab outputs | Stale — regenerate after the re-route. |
 
 ### The 3 remaining DRC violations
 
@@ -63,8 +63,13 @@ in its ground pad. That is within JLCPCB capability.
 - **U2 is a MAX3490ESA+ (SOIC-8), not a MAX3491ESD+ (SOIC-14).** The spec tied DE high and RE low
   permanently, so the MAX3491's enable pins were dead weight. The MAX3490 is the same full-duplex
   RS-422 transceiver without them, and it ships with a verified pinout in KiCad's stock library.
-- **Four polarity jumpers, not two.** A 3-pad solder jumper switches one line, not a pair, so
-  swapping A/B and Y/Z takes four. Same rework story the spec wanted.
+- **No polarity jumpers at all.** The spec wanted them so the RS-422 pairs could be swapped
+  without a respin. The ESP32 UART does the same job in firmware — `uart_set_line_inverse()`
+  with `UART_SIGNAL_TXD_INV` / `UART_SIGNAL_RXD_INV`. Inverting DI flips Y and Z together,
+  which is electrically identical to swapping the pair. Four parts saved, insurance kept.
+- **Receiver polarity corrected.** Spec 2.4 mapped A<-TxD- and B<-TxD+, which inverts every
+  received byte. Apple's convention is that a binary 1 has TxD- more negative than TxD+, so
+  the + line is non-inverting: A<-TxD+ (pin 6), B<-TxD- (pin 3).
 - **R9 added**, a DNP 0R in series with the MAX3232 T1OUT to HSKi path. The spec wanted T1 wired
   but not populated; a DNP series resistor expresses that without U3 driving HSKi by default.
 - **SW1 is a B3U-1000P**, not the 4.5mm tactile the spec assumed. The B3S-1100 KiCad offers has a
