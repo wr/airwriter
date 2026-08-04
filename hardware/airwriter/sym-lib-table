@@ -1,5 +1,4 @@
 (sym_lib_table
-  (version 7)
-
-  (lib (name "airwriter") (type "KiCad") (uri "/Users/wells/Projects/airwriter/hardware/airwriter/lib/airwriter.kicad_sym") (options "") (descr ""))
+	(version 7)
+	(lib (name "airwriter")(type "KiCad")(uri "${KIPRJMOD}/lib/airwriter.kicad_sym")(options "")(descr "AirWriter project symbols"))
 )

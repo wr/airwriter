@@ -5764,7 +5764,7 @@
       (effects
         (font
           (size 1.27 1.27))))
-    (property "Footprint" ""
+    (property "Footprint" "Resistor_SMD:R_0603_1608Metric"
       (at 400.05 139.7 0)
       (hide yes)
       (effects

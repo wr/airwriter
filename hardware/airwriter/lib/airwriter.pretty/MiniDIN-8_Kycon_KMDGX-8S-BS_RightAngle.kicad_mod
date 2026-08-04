@@ -2,7 +2,7 @@
   (version 20240108)
   (generator "konnect")
   (layer "F.Cu")
-  (descr "Mini-DIN 8-pin female receptacle, right-angle PCB mount, fully shielded. Kycon KMDGX-8S-BS. Dimensions from Kycon engineering drawing KMDGX-xS-BS Series rev C6 (ECO#18-013), "Recommended PCB Layout (Top View)", 8-position variant. Origin at connector centreline (X) and mating face (Y); +Y runs into the board. Pad 9 = three shield/mounting posts.")
+  (descr "Mini-DIN 8-pin female receptacle, right-angle PCB mount, fully shielded. Kycon KMDGX-8S-BS. Geometry from Kycon engineering drawing KMDGX-xS-BS Series rev C6 (ECO#18-013), Recommended PCB Layout (Top View), 8-position variant. Origin at connector centreline (X) and mating face (Y); +Y runs into the board. Pad 9 = the three shield/mounting posts.")
   (attr through_hole)
   (pad "3" thru_hole circle (at -3.4 8.5) (size 1.7 1.7) (layers "*.Cu" "*.Mask") (drill 1.1))
   (pad "1" thru_hole rect (at -1.3 8.5) (size 1.7 1.7) (layers "*.Cu" "*.Mask") (drill 1.1))

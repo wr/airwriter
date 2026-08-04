@@ -1,5 +1,4 @@
 (fp_lib_table
-  (version 7)
-
-  (lib (name "airwriter") (type "KiCad") (uri "/Users/wells/Projects/airwriter/hardware/airwriter/lib/airwriter.pretty") (options "") (descr ""))
+	(version 7)
+	(lib (name "airwriter")(type "KiCad")(uri "${KIPRJMOD}/lib/airwriter.pretty")(options "")(descr "AirWriter project footprints"))
 )
