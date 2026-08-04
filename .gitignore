@@ -21,3 +21,6 @@ tools/rip/build/
 
 # macOS
 .DS_Store
+
+# KiCad 10 auto-versioning
+.history/
