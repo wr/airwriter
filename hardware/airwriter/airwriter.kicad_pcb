@@ -8022,46 +8022,6 @@
 		)
 		(embedded_fonts no)
 	)
-	(gr_line
-		(start 100 60)
-		(end 132 60)
-		(stroke
-			(width 0.05)
-			(type solid)
-		)
-		(layer "Edge.Cuts")
-		(uuid "d5983e0a-44e7-4d75-8803-f307fa298c17")
-	)
-	(gr_line
-		(start 100 114)
-		(end 100 60)
-		(stroke
-			(width 0.05)
-			(type solid)
-		)
-		(layer "Edge.Cuts")
-		(uuid "a0b15dbd-4a27-42e4-b565-0f136942dc16")
-	)
-	(gr_line
-		(start 132 60)
-		(end 132 114)
-		(stroke
-			(width 0.05)
-			(type solid)
-		)
-		(layer "Edge.Cuts")
-		(uuid "a81c0748-f359-4339-b689-750e541b3105")
-	)
-	(gr_line
-		(start 132 114)
-		(end 100 114)
-		(stroke
-			(width 0.05)
-			(type solid)
-		)
-		(layer "Edge.Cuts")
-		(uuid "c4981164-323b-4aba-8bdc-a9909ed11f74")
-	)
 	(segment
 		(start 110.1 84.1088)
 		(end 109.275 84.9338)
@@ -12358,7 +12318,7 @@
 		)
 		(polygon
 			(pts
-				(xy 100.3 60.3) (xy 131.7 60.3) (xy 131.7 113.7) (xy 100.3 113.7)
+				(xy 100.3 60.3) (xy 151.7 60.3) (xy 151.7 113.7) (xy 100.3 113.7)
 			)
 		)
 		(filled_polygon
@@ -13700,7 +13660,7 @@
 		)
 		(polygon
 			(pts
-				(xy 100.3 60.3) (xy 131.7 60.3) (xy 131.7 113.7) (xy 100.3 113.7)
+				(xy 100.3 60.3) (xy 151.7 60.3) (xy 151.7 113.7) (xy 100.3 113.7)
 			)
 		)
 		(filled_polygon
@@ -14339,4 +14299,32 @@
 		)
 	)
 	(embedded_fonts no)
+	(gr_line
+		(start 100.0 60.0)
+		(end 152.0 60.0)
+		(stroke (width 0.1) (type default))
+		(layer "Edge.Cuts")
+		(uuid "d22cc8a5-8cb6-4837-931b-bcfd4674a5f6")
+	)
+	(gr_line
+		(start 152.0 60.0)
+		(end 152.0 114.0)
+		(stroke (width 0.1) (type default))
+		(layer "Edge.Cuts")
+		(uuid "d34ad838-1df6-468f-b8b6-5edfe76698ba")
+	)
+	(gr_line
+		(start 152.0 114.0)
+		(end 100.0 114.0)
+		(stroke (width 0.1) (type default))
+		(layer "Edge.Cuts")
+		(uuid "d930c5b4-7b1d-4a0f-8376-7bb04e6a8514")
+	)
+	(gr_line
+		(start 100.0 114.0)
+		(end 100.0 60.0)
+		(stroke (width 0.1) (type default))
+		(layer "Edge.Cuts")
+		(uuid "d8b1874e-0283-4a4f-b3c6-9193f8c887c5")
+	)
 )
