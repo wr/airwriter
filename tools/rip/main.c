@@ -98,36 +98,56 @@ int main(int argc, char **argv)
             break;
         }
 
-        uint32_t res = u.page.res_x ? u.page.res_x : DPI_X;
-        p.dst_w = (uint32_t)((uint64_t)u.page.width  * DPI_X / res);
+        uint32_t res    = u.page.res_x ? u.page.res_x : DPI_X;
+        uint32_t raw_w  = (uint32_t)((uint64_t)u.page.width  * DPI_X / res);
+        p.dst_w = raw_w;
         p.dst_h = (uint32_t)((uint64_t)u.page.height * DPI_Y / res);
-        if (p.dst_w > IW_MAX_DOTS) p.dst_w = IW_MAX_DOTS;
+        if (p.dst_w > IW_MAX_DOTS) {
+            fprintf(stderr, "rip: page %d width %u dots clamped to %u dots\n",
+                    pages + 1, raw_w, (unsigned)IW_MAX_DOTS);
+            p.dst_w = IW_MAX_DOTS;
+        }
         if (!p.dst_w || !p.dst_h) { fprintf(stderr, "rip: empty page\n"); rc = -1; break; }
 
-        p.bits   = calloc((p.dst_w + 7) / 8, 1);
-        p.prev_y = 0;
-        p.preview = out_preview ? calloc((size_t)p.dst_w * p.dst_h, 1) : NULL;
-        if (!p.bits || (out_preview && !p.preview)) { rc = -1; break; }
+        /* From here on, every failure jumps to page_cleanup instead of
+         * breaking directly, so nothing allocated for this page is ever
+         * leaked and ht_free/rs_free only run on state that was actually
+         * initialised. */
+        int  ht_ready = 0, rs_ready = 0;
+        rs_t rs;
 
-        if (ht_init(&p.ht, algo, p.dst_w)) { rc = -1; break; }
+        p.bits    = calloc((p.dst_w + 7) / 8, 1);
+        p.prev_y  = 0;
+        p.preview = out_preview ? calloc((size_t)p.dst_w * p.dst_h, 1) : NULL;
+        if (!p.bits || (out_preview && !p.preview)) { rc = -1; goto page_cleanup; }
+
+        if (ht_init(&p.ht, algo, p.dst_w)) { rc = -1; goto page_cleanup; }
+        ht_ready = 1;
         iw_init(&p.iw, p.dst_w, stream_out, &p);
         iw_begin_page(&p.iw);
 
-        rs_t rs;
         if (rs_init(&rs, u.page.width, u.page.height, p.dst_w, p.dst_h, on_row, &p)) {
-            rc = -1; break;
+            rc = -1; goto page_cleanup;
+        }
+        rs_ready = 1;
+
+        {
+            const uint8_t *row;
+            int r;
+            while ((r = urf_next_row(&u, &row)) == URF_OK) rs_push(&rs, row);
+            if (r < 0) {
+                fprintf(stderr, "rip: page %d incomplete, stream is truncated\n", pages + 1);
+                rc = r;
+            } else {
+                iw_end_page(&p.iw);
+            }
         }
 
-        const uint8_t *row;
-        int r;
-        while ((r = urf_next_row(&u, &row)) == URF_OK) rs_push(&rs, row);
-        if (r < 0) { fprintf(stderr, "rip: decode failed on page %d (%d)\n", pages + 1, r); rc = r; }
+page_cleanup:
+        if (rs_ready) rs_free(&rs);
+        if (ht_ready) ht_free(&p.ht);
 
-        iw_end_page(&p.iw);
-        rs_free(&rs);
-        ht_free(&p.ht);
-
-        if (p.preview && pages == 0) {
+        if (p.preview && rs_ready && pages == 0) {
             if (png_write_gray(out_preview, p.preview, p.dst_w, p.dst_h))
                 fprintf(stderr, "rip: could not write %s\n", out_preview);
         }
