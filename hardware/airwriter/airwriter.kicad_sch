@@ -4354,18 +4354,6 @@
     (uuid "8a4708c7-78f2-4cd1-8da6-6fa0ae92e0a6"))
 
   (no_connect
-    (at 219.71 137.16)
-    (uuid "4b890c9b-c61f-4f1d-9276-de3326424bd8"))
-
-  (no_connect
-    (at 219.71 139.7)
-    (uuid "20c57557-4ae9-4aba-adb3-6d347ff839ff"))
-
-  (no_connect
-    (at 219.71 142.24)
-    (uuid "0cc6e006-7690-456d-a37c-7e18e9c9d707"))
-
-  (no_connect
     (at 219.71 144.78)
     (uuid "30da1d5c-f131-4022-809d-4ed579d32736"))
 
@@ -4424,6 +4412,18 @@
   (no_connect
     (at 157.48 223.52)
     (uuid "4ba77558-0c28-4827-9ce5-0f0dabaec56f"))
+
+  (no_connect
+    (at 189.23 157.48)
+    (uuid "5e2bc99a-c97a-42bd-92e2-faea74ba1169"))
+
+  (no_connect
+    (at 189.23 160.02)
+    (uuid "c17a0fc5-cb2e-41c8-92e7-f922530ee11f"))
+
+  (no_connect
+    (at 189.23 162.56)
+    (uuid "44ec9fdf-d2f4-402b-a2ed-d4ef97b2a430"))
 
   (wire
     (pts
@@ -4484,24 +4484,6 @@
       (xy 162.56 199.39)
       (xy 162.56 201.93))
     (uuid "e71ca465-9d24-42bd-a0c6-b427391d847f"))
-
-  (wire
-    (pts
-      (xy 189.23 157.48)
-      (xy 186.69 157.48))
-    (uuid "50bff456-5280-47df-b0bf-204f28d3ba97"))
-
-  (wire
-    (pts
-      (xy 189.23 160.02)
-      (xy 186.69 160.02))
-    (uuid "88c9297a-da68-4137-ab10-8abb9c2b6fc8"))
-
-  (wire
-    (pts
-      (xy 189.23 162.56)
-      (xy 186.69 162.56))
-    (uuid "07f97368-4c9a-4505-b871-9c71eadb9a79"))
 
   (wire
     (pts
@@ -4568,6 +4550,24 @@
       (xy 184.15 248.92)
       (xy 184.15 251.46))
     (uuid "fd695a3c-bc32-41f1-a334-44dc71a3be26"))
+
+  (wire
+    (pts
+      (xy 219.71 137.16)
+      (xy 222.25 137.16))
+    (uuid "9ae7a110-5449-4258-a7ba-43ca4aabe48a"))
+
+  (wire
+    (pts
+      (xy 219.71 139.7)
+      (xy 222.25 139.7))
+    (uuid "fef27be4-a7a7-4a4e-8c71-98de7b48b633"))
+
+  (wire
+    (pts
+      (xy 219.71 142.24)
+      (xy 222.25 142.24))
+    (uuid "4ef8734e-29bd-4bcb-adc0-d1f4d2630104"))
 
   (label "VBUS"
     (at 50.8 44.45 0)
@@ -5953,18 +5953,6 @@
     (at 162.56 201.93 270)
     (uuid "873db3b4-62e8-4e76-a722-2b5baa55007d"))
 
-  (label "BTN_MODE"
-    (at 186.69 157.48 180)
-    (uuid "4504c280-2e30-470b-abd4-5d22dd19299a"))
-
-  (label "I2C_SDA"
-    (at 186.69 160.02 180)
-    (uuid "2bd5e322-12aa-432f-9f8e-d15886d83e9d"))
-
-  (label "I2C_SCL"
-    (at 186.69 162.56 180)
-    (uuid "d86e8fa4-1933-4acd-b95e-89c0ffb6fb40"))
-
   (label "+3V3"
     (at 149.86 242.57 90)
     (uuid "a256d480-8212-4a62-ad5d-053f423c7405"))
@@ -6004,6 +5992,18 @@
   (label "I2C_SCL"
     (at 184.15 251.46 270)
     (uuid "91d25202-c6ce-4a87-bf2e-13604cd78360"))
+
+  (label "I2C_SDA"
+    (at 222.25 137.16 0)
+    (uuid "6a6a85e4-7959-4f0f-94ee-1c9b14f9d558"))
+
+  (label "I2C_SCL"
+    (at 222.25 139.7 0)
+    (uuid "52b1b50f-a8c1-4e0a-bde8-19bc39e88ff1"))
+
+  (label "BTN_MODE"
+    (at 222.25 142.24 0)
+    (uuid "8aba108e-48e6-487d-8c2f-588ae2adb41b"))
 
   (symbol
     (lib_id "Connector:USB_C_Receptacle_USB2.0_16P")
