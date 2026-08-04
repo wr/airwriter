@@ -12256,7 +12256,7 @@
 		(uuid "509e61a6-6ae8-446e-aeb2-3351bde180fb")
 	)
 	(gr_text "rev A"
-		(at 133.5 97.5 0)
+		(at 137.5 92.3 0)
 		(layer "F.SilkS")
 		(uuid "677214e8-3b11-4cce-8f9f-0f9024f06219")
 		(effects
@@ -12267,7 +12267,7 @@
 		)
 	)
 	(gr_text "AirWriter"
-		(at 133.5 94 0)
+		(at 137.5 89.8 0)
 		(layer "F.SilkS")
 		(uuid "efdfcfba-7028-46fa-9403-27aed11886c7")
 		(effects
