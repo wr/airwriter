@@ -294,6 +294,7 @@ Create `firmware/components/urf_decode/include/urf_decode.h`:
 #define URF_ERR_IO          -1
 #define URF_ERR_MAGIC       -2
 #define URF_ERR_UNSUPPORTED -3
+#define URF_ERR_MALFORMED   -4   // a run overran its line; the stream is corrupt
 
 // Returns 1 when all n bytes were read, 0 on short read or error.
 typedef int (*urf_read_fn)(void *ctx, uint8_t *buf, size_t n);
@@ -612,6 +613,11 @@ In `firmware/components/urf_decode/urf_decode.c`, add above `urf_next_row`:
 // Ported from _cupsRasterReadPixels() in cups/raster-stream.c and cross-read
 // against PWG 5102.4-2012 section 4.4. Note that this is PackBits with the
 // ranges swapped: low control bytes repeat, high control bytes are literal.
+//
+// One deliberate divergence from CUPS: where CUPS clamps an over-long run to
+// the remaining line, we reject the page. CUPS clamps the read as well as the
+// write, so the run's unread bytes become the next line's control bytes and
+// every later line is garbage. A printer should fail the job instead.
 static int decode_line(urf_t *u, unsigned *repeat)
 {
     const urf_page_t *p = &u->page;
@@ -635,15 +641,17 @@ static int decode_line(urf_t *u, unsigned *repeat)
             // Literal: 257 - ctl colour values, so 2..128. A literal run of
             // one is not encodable.
             size_t n = (size_t)(257 - ctl) * p->bpp_bytes;
-            if (n > (size_t)bytes) n = (size_t)bytes;
+            // A run never legitimately crosses a line boundary. Clamping here
+            // would leave the run's remaining bytes unread and desynchronise
+            // every later line, so treat it as corrupt input instead.
+            if (n > (size_t)bytes) return URF_ERR_MALFORMED;
             if (!u->read(u->ctx, dst, n)) return URF_ERR_IO;
             dst   += n;
             bytes -= (ssize_t)n;
         } else {
             // Repeat: ctl + 1 copies of the next colour value.
             size_t n = ((size_t)ctl + 1) * p->bpp_bytes;
-            if (n > (size_t)bytes) n = (size_t)bytes;
-            if (n < p->bpp_bytes) break;   // clamp left less than one pixel
+            if (n > (size_t)bytes) return URF_ERR_MALFORMED;
             bytes -= (ssize_t)n;
             if (!u->read(u->ctx, dst, p->bpp_bytes)) return URF_ERR_IO;
             dst += p->bpp_bytes;
@@ -656,10 +664,6 @@ static int decode_line(urf_t *u, unsigned *repeat)
         }
     }
 
-    // If a clamped run left the row short, zero the tail rather than leaking
-    // whatever the previous row put there. CUPS leaves it stale; we do not,
-    // because a regression diff must be deterministic.
-    if (bytes > 0) memset(dst, p->fill_byte, (size_t)bytes);
     return URF_OK;
 }
 ```
