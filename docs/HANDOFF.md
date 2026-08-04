@@ -204,6 +204,12 @@ serves mode 2 and mode 3 equally.
 
 ## What to do next
 
+**Printer scope is settled.** See `docs/superpowers/specs/2026-08-04-printer-support-scope-design.md`.
+Short version: v1 is the ImageWriter II over serial and nothing else. StyleWriter and
+ImageWriter LQ are cut on consumables. LocalTalk is built second, because its job goes out
+through the serial port and that has to work first. Two of the five unverified assumptions
+in `SPEC.md` §4 are now resolved from Apple's technical reference.
+
 **Settle the mini-DIN.** It blocks ordering and you need two.
 
 **Then M2, which needs no hardware and no ESP-IDF.** The spec calls `tools/rip` the highest-value

@@ -1,0 +1,482 @@
+<title>AirWriter — how it wires up</title>
+<style>
+  :root {
+    --paper:      #FBFBF6;
+    --bar:        #E7EFE2;
+    --ink:        #1B1E19;
+    --ink-soft:   #5C6359;
+    --ink-faint:  #9AA294;
+    --rule:       #C3CCBC;
+    --backdrop:   #DDDCD3;
+
+    /* the ImageWriter II 4-colour ribbon */
+    --serial:     #B0356A;   /* magenta */
+    --localtalk:  #12718F;   /* cyan    */
+    --wifi:       #B07E12;   /* yellow  */
+
+    --display: Futura, "Futura PT", "Century Gothic", "Avenir Next", sans-serif;
+    --body:    "Helvetica Neue", Helvetica, Arial, sans-serif;
+    --mono:    Monaco, "Andale Mono", "SF Mono", monospace;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root { --backdrop: #17191A; }
+  }
+  :root[data-theme="dark"] { --backdrop: #17191A; }
+  :root[data-theme="light"] { --backdrop: #DDDCD3; }
+
+  body {
+    margin: 0;
+    padding: 0 0 64px;
+    background: var(--backdrop);
+    color: var(--ink);
+    font-family: var(--body);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ---- the fanfold sheet ---------------------------------------- */
+
+  .sheet {
+    max-width: 1000px;
+    margin: 0 auto;
+    background:
+      repeating-linear-gradient(
+        to bottom,
+        var(--paper) 0 40px,
+        var(--bar)   40px 80px
+      );
+    display: grid;
+    grid-template-columns: 34px 1fr 34px;
+  }
+
+  .tractor {
+    background-image: radial-gradient(circle, var(--backdrop) 0 4.5px, transparent 5px);
+    background-size: 34px 26px;
+    background-position: 50% 13px;
+    border-left:  1px dashed var(--rule);
+    border-right: 1px dashed var(--rule);
+  }
+  .tractor.left  { border-left:  0; }
+  .tractor.right { border-right: 0; }
+
+  .col { min-width: 0; }
+
+  /* ---- masthead --------------------------------------------------- */
+
+  .masthead { padding: 52px 40px 40px; }
+
+  .eyebrow {
+    font-family: var(--display);
+    font-size: 11px;
+    letter-spacing: 0.34em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+    margin: 0 0 18px;
+  }
+
+  .masthead h1 {
+    font-family: var(--display);
+    font-size: clamp(30px, 5.2vw, 52px);
+    line-height: 1.04;
+    letter-spacing: -0.015em;
+    margin: 0 0 20px;
+    max-width: 15ch;
+  }
+  .masthead h1 em {
+    font-style: normal;
+    display: block;
+    color: var(--serial);
+  }
+
+  .standfirst {
+    font-size: 17px;
+    line-height: 1.5;
+    color: var(--ink-soft);
+    max-width: 46ch;
+    margin: 0;
+  }
+
+  /* ---- legend ------------------------------------------------------ */
+
+  .legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px 28px;
+    padding: 0 40px 44px;
+  }
+  .key {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.04em;
+    color: var(--ink-soft);
+  }
+  .swatch {
+    width: 30px; height: 0;
+    border-top: 4px dotted currentColor;
+  }
+  .key.serial    { color: var(--serial); }
+  .key.localtalk { color: var(--localtalk); }
+  .key.wifi      { color: var(--wifi); }
+  .key span      { color: var(--ink-soft); }
+
+  /* ---- cases ------------------------------------------------------- */
+
+  .case {
+    padding: 38px 40px 42px;
+    border-top: 1px dashed var(--rule);
+  }
+
+  .case-head {
+    display: flex;
+    align-items: baseline;
+    gap: 14px;
+    flex-wrap: wrap;
+    margin-bottom: 6px;
+  }
+
+  .case h2 {
+    font-family: var(--display);
+    font-size: 25px;
+    letter-spacing: -0.01em;
+    margin: 0;
+  }
+
+  .tag {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    padding: 4px 9px;
+    border: 1px solid currentColor;
+    border-radius: 2px;
+  }
+  .tag.now    { color: var(--ink-faint); }
+  .tag.pick   { color: var(--serial); }
+  .tag.later  { color: var(--localtalk); }
+
+  .case p {
+    margin: 0 0 4px;
+    font-size: 16px;
+    line-height: 1.5;
+    color: var(--ink-soft);
+    max-width: 52ch;
+  }
+
+  .diagram { width: 100%; height: auto; display: block; margin: 12px 0 4px; overflow: visible; }
+
+  .needs {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--ink-soft);
+    border-left: 3px solid var(--rule);
+    padding-left: 12px;
+    margin-top: 18px;
+    line-height: 1.6;
+  }
+  .needs b { color: var(--ink); font-weight: normal; }
+
+  /* ---- svg primitives ---------------------------------------------- */
+
+  .dev      { fill: var(--paper); stroke: var(--ink); stroke-width: 1.5; }
+  .dev.hero { stroke-width: 2.5; }
+  .dev.dim  { stroke: var(--ink-faint); }
+
+  .dev-name {
+    font-family: var(--body);
+    font-size: 14px;
+    font-weight: 600;
+    fill: var(--ink);
+  }
+  .dev-sub {
+    font-family: var(--mono);
+    font-size: 9.5px;
+    letter-spacing: 0.06em;
+    fill: var(--ink-faint);
+    text-transform: uppercase;
+  }
+  .dim-text .dev-name { fill: var(--ink-faint); }
+
+  .wire {
+    fill: none;
+    stroke-width: 3.5;
+    stroke-linecap: square;
+    stroke-dasharray: 3 9;
+    animation: march 900ms linear infinite;
+  }
+  .wire.serial    { stroke: var(--serial); }
+  .wire.localtalk { stroke: var(--localtalk); }
+  .wire.wifi      { stroke: var(--wifi); }
+  .wire.rev       { animation-direction: reverse; }
+
+  @keyframes march { to { stroke-dashoffset: -24; } }
+
+  @media (prefers-reduced-motion: reduce) {
+    .wire { animation: none; stroke-dasharray: 3 9; }
+  }
+
+  .wire-label {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  .wire-label.serial    { fill: var(--serial); }
+  .wire-label.localtalk { fill: var(--localtalk); }
+  .wire-label.wifi      { fill: var(--wifi); }
+
+  .boxnode { fill: var(--paper); stroke: var(--localtalk); stroke-width: 1.5; }
+  .boxnode-dot { fill: var(--localtalk); }
+  .bus { stroke: var(--localtalk); stroke-width: 1.5; fill: none; }
+  .nope { stroke: var(--ink-faint); stroke-width: 1.5; stroke-dasharray: 4 5; fill: none; }
+
+  .footnote {
+    padding: 34px 40px 46px;
+    border-top: 1px dashed var(--rule);
+    font-size: 15px;
+    line-height: 1.55;
+    color: var(--ink-soft);
+    max-width: 58ch;
+  }
+  .footnote strong { color: var(--ink); font-weight: 600; }
+
+  @media (max-width: 620px) {
+    .sheet { grid-template-columns: 20px 1fr 20px; }
+    .tractor { background-size: 20px 26px; }
+    .masthead { padding: 36px 22px 28px; }
+    .legend { padding: 0 22px 32px; gap: 8px 18px; }
+    .case { padding: 28px 22px 30px; }
+    .footnote { padding: 26px 22px 34px; }
+  }
+</style>
+
+<div class="sheet">
+  <div class="tractor left"></div>
+  <div class="col">
+
+    <header class="masthead">
+      <p class="eyebrow">AirWriter &nbsp;/&nbsp; wiring</p>
+      <h1>Your printer stops being a printer.<em>It becomes a network printer.</em></h1>
+      <p class="standfirst">Once AirWriter is in the middle, everything else — your iPhone, your SE/30 — just talks to it over the network. Here is every way that can be plugged together.</p>
+    </header>
+
+    <div class="legend">
+      <div class="key serial"><span class="swatch"></span><span>Serial cable</span></div>
+      <div class="key localtalk"><span class="swatch"></span><span>LocalTalk (wired)</span></div>
+      <div class="key wifi"><span class="swatch"></span><span>Wi-Fi</span></div>
+    </div>
+
+    <!-- ================= CASE: today ================= -->
+    <section class="case">
+      <div class="case-head">
+        <h2>What you have now</h2>
+        <span class="tag now">Today</span>
+      </div>
+      <p>One cable, two devices. The iPhone has no way in.</p>
+
+      <svg class="diagram" viewBox="0 0 860 190" role="img" aria-label="SE/30 connects by serial cable to the ImageWriter II. The iPhone is not connected.">
+        <g class="dim-text">
+          <rect class="dev dim" x="30"  y="46" width="150" height="58" rx="3"/>
+          <text class="dev-name" x="105" y="72" text-anchor="middle">SE/30</text>
+          <text class="dev-sub"  x="105" y="88" text-anchor="middle">Your Mac</text>
+        </g>
+
+        <path class="wire serial" d="M180,75 L350,75"/>
+        <text class="wire-label serial" x="265" y="62" text-anchor="middle">Serial</text>
+
+        <rect class="dev" x="350" y="46" width="170" height="58" rx="3"/>
+        <text class="dev-name" x="435" y="72" text-anchor="middle">ImageWriter II</text>
+        <text class="dev-sub"  x="435" y="88" text-anchor="middle">The printer</text>
+
+        <g class="dim-text">
+          <rect class="dev dim" x="680" y="46" width="150" height="58" rx="3"/>
+          <text class="dev-name" x="755" y="72" text-anchor="middle">iPhone</text>
+          <text class="dev-sub"  x="755" y="88" text-anchor="middle">No route</text>
+        </g>
+        <path class="nope" d="M660,75 L540,75"/>
+        <path class="nope" d="M590,60 L610,90 M610,60 L590,90"/>
+      </svg>
+    </section>
+
+    <!-- ================= CASE: airprint only ================= -->
+    <section class="case">
+      <div class="case-head">
+        <h2>Add AirPrint, unplug the Mac</h2>
+        <span class="tag later">Ships first</span>
+      </div>
+      <p>AirWriter takes the printer's serial port. The iPhone prints. The SE/30 has nowhere to plug in — that port is gone.</p>
+
+      <svg class="diagram" viewBox="0 0 860 190" role="img" aria-label="iPhone connects over Wi-Fi to AirWriter, which connects by serial cable to the ImageWriter II.">
+        <rect class="dev" x="30" y="46" width="150" height="58" rx="3"/>
+        <text class="dev-name" x="105" y="72" text-anchor="middle">iPhone</text>
+        <text class="dev-sub"  x="105" y="88" text-anchor="middle">AirPrint</text>
+
+        <path class="wire wifi" d="M180,75 L340,75"/>
+        <text class="wire-label wifi" x="260" y="62" text-anchor="middle">Wi-Fi</text>
+
+        <rect class="dev hero" x="340" y="46" width="150" height="58" rx="3"/>
+        <text class="dev-name" x="415" y="72" text-anchor="middle">AirWriter</text>
+        <text class="dev-sub"  x="415" y="88" text-anchor="middle">The bridge</text>
+
+        <path class="wire serial" d="M490,75 L660,75"/>
+        <text class="wire-label serial" x="575" y="62" text-anchor="middle">Serial</text>
+
+        <rect class="dev" x="660" y="46" width="170" height="58" rx="3"/>
+        <text class="dev-name" x="745" y="72" text-anchor="middle">ImageWriter II</text>
+        <text class="dev-sub"  x="745" y="88" text-anchor="middle">The printer</text>
+      </svg>
+
+      <p class="needs"><b>You need:</b> nothing extra. This is the first thing that will work.</p>
+    </section>
+
+    <!-- ================= CASE: recommended ================= -->
+    <section class="case">
+      <div class="case-head">
+        <h2>Keep the Mac, over a LocalTalk cable</h2>
+        <span class="tag pick">The one I'd build toward</span>
+      </div>
+      <p>The SE/30 moves off serial and onto LocalTalk. It sees AirWriter in the Chooser and prints as normal. The iPhone prints at the same time.</p>
+
+      <svg class="diagram" viewBox="0 0 860 250" role="img" aria-label="SE/30 connects over LocalTalk and iPhone connects over Wi-Fi, both to AirWriter, which connects by serial cable to the ImageWriter II.">
+        <rect class="dev" x="20" y="24" width="130" height="58" rx="3"/>
+        <text class="dev-name" x="85" y="50" text-anchor="middle">SE/30</text>
+        <text class="dev-sub"  x="85" y="66" text-anchor="middle">Chooser</text>
+
+        <rect class="dev" x="30" y="150" width="150" height="58" rx="3"/>
+        <text class="dev-name" x="105" y="176" text-anchor="middle">iPhone</text>
+        <text class="dev-sub"  x="105" y="192" text-anchor="middle">AirPrint</text>
+
+        <!-- SE/30 into its box, box chained to AirWriter's box, box into AirWriter -->
+        <path class="wire localtalk" d="M150,53 L186,53"/>
+        <rect class="boxnode" x="186" y="33" width="38" height="40" rx="2"/>
+        <circle class="boxnode-dot" cx="205" cy="53" r="3"/>
+        <path class="wire localtalk" d="M224,53 L262,53"/>
+        <rect class="boxnode" x="262" y="33" width="38" height="40" rx="2"/>
+        <circle class="boxnode-dot" cx="281" cy="53" r="3"/>
+        <path class="wire localtalk" d="M300,53 C332,53 322,101 350,101"/>
+
+        <text class="wire-label localtalk" x="243" y="20" text-anchor="middle">LocalTalk</text>
+        <text class="wire-label localtalk" x="243" y="90" text-anchor="middle">Two connector boxes</text>
+
+        <path class="wire wifi" d="M180,179 C265,179 275,131 350,131"/>
+        <text class="wire-label wifi" x="258" y="200" text-anchor="middle">Wi-Fi</text>
+
+        <rect class="dev hero" x="350" y="87" width="150" height="58" rx="3"/>
+        <text class="dev-name" x="425" y="113" text-anchor="middle">AirWriter</text>
+        <text class="dev-sub"  x="425" y="129" text-anchor="middle">The bridge</text>
+
+        <path class="wire serial" d="M500,116 L660,116"/>
+        <text class="wire-label serial" x="580" y="103" text-anchor="middle">Serial</text>
+
+        <rect class="dev" x="660" y="87" width="170" height="58" rx="3"/>
+        <text class="dev-name" x="745" y="113" text-anchor="middle">ImageWriter II</text>
+        <text class="dev-sub"  x="745" y="129" text-anchor="middle">The printer</text>
+      </svg>
+
+      <p class="needs"><b>You need:</b> two LocalTalk connector boxes, about $15 on eBay.<br>One for the SE/30, one for AirWriter. They're what turn two ports into a network.</p>
+    </section>
+
+    <!-- ================= CASE: airtalk ================= -->
+    <section class="case">
+      <div class="case-head">
+        <h2>Keep the Mac, over Wi-Fi instead</h2>
+        <span class="tag later">Alternative</span>
+      </div>
+      <p>An AirTalk dongle plugs into the SE/30 and carries LocalTalk over Wi-Fi. No cables between rooms, no connector boxes.</p>
+
+      <svg class="diagram" viewBox="0 0 860 250" role="img" aria-label="SE/30 connects to an AirTalk dongle, which reaches AirWriter over Wi-Fi. The iPhone also reaches AirWriter over Wi-Fi. AirWriter connects by serial cable to the ImageWriter II.">
+        <rect class="dev" x="10" y="24" width="120" height="58" rx="3"/>
+        <text class="dev-name" x="70" y="50" text-anchor="middle">SE/30</text>
+        <text class="dev-sub"  x="70" y="66" text-anchor="middle">Chooser</text>
+
+        <path class="wire localtalk" d="M130,53 L186,53"/>
+
+        <rect class="dev" x="186" y="30" width="104" height="46" rx="3"/>
+        <text class="dev-name" x="238" y="50" text-anchor="middle" font-size="12">AirTalk</text>
+        <text class="dev-sub"  x="238" y="64" text-anchor="middle">Dongle</text>
+
+        <rect class="dev" x="30" y="150" width="150" height="58" rx="3"/>
+        <text class="dev-name" x="105" y="176" text-anchor="middle">iPhone</text>
+        <text class="dev-sub"  x="105" y="192" text-anchor="middle">AirPrint</text>
+
+        <path class="wire wifi" d="M290,53 C330,53 320,101 350,101"/>
+        <text class="wire-label wifi" x="318" y="42" text-anchor="middle">Wi-Fi</text>
+
+        <path class="wire wifi" d="M180,179 C265,179 275,131 350,131"/>
+        <text class="wire-label wifi" x="258" y="200" text-anchor="middle">Wi-Fi</text>
+
+        <rect class="dev hero" x="350" y="87" width="150" height="58" rx="3"/>
+        <text class="dev-name" x="425" y="113" text-anchor="middle">AirWriter</text>
+        <text class="dev-sub"  x="425" y="129" text-anchor="middle">The bridge</text>
+
+        <path class="wire serial" d="M500,116 L660,116"/>
+        <text class="wire-label serial" x="580" y="103" text-anchor="middle">Serial</text>
+
+        <rect class="dev" x="660" y="87" width="170" height="58" rx="3"/>
+        <text class="dev-name" x="745" y="113" text-anchor="middle">ImageWriter II</text>
+        <text class="dev-sub"  x="745" y="129" text-anchor="middle">The printer</text>
+      </svg>
+
+      <p class="needs"><b>You need:</b> an AirTalk dongle.<br><b>The catch:</b> its Wi-Fi format is someone else's invention. If they change it, this breaks.</p>
+    </section>
+
+    <!-- ================= CASE: localtalk printer ================= -->
+    <section class="case">
+      <div class="case-head">
+        <h2>If the printer is already on LocalTalk</h2>
+        <span class="tag later">Different printer</span>
+      </div>
+      <p>Nothing gets displaced. LocalTalk is a network, so the printer, the Mac and AirWriter all sit on it together. The Mac keeps printing exactly as before.</p>
+
+      <svg class="diagram" viewBox="0 0 860 306" role="img" aria-label="SE/30, AirWriter and a LocalTalk printer each plug into their own connector box. The boxes are daisy-chained together to form one network. AirWriter also reaches the iPhone over Wi-Fi.">
+        <!-- the daisy chain of boxes -->
+        <text class="wire-label localtalk" x="430" y="24" text-anchor="middle">The boxes daisy-chain to each other. That chain is the network.</text>
+
+        <rect class="boxnode" x="86"  y="40" width="38" height="40" rx="2"/>
+        <circle class="boxnode-dot" cx="105" cy="60" r="3"/>
+        <rect class="boxnode" x="411" y="40" width="38" height="40" rx="2"/>
+        <circle class="boxnode-dot" cx="430" cy="60" r="3"/>
+        <rect class="boxnode" x="731" y="40" width="38" height="40" rx="2"/>
+        <circle class="boxnode-dot" cx="750" cy="60" r="3"/>
+
+        <path class="wire localtalk" d="M124,60 L411,60"/>
+        <path class="wire localtalk" d="M449,60 L731,60"/>
+
+        <!-- each device drops into its own box -->
+        <path class="wire localtalk" d="M105,80 L105,150"/>
+        <path class="wire localtalk" d="M430,80 L430,150"/>
+        <path class="wire localtalk" d="M750,80 L750,150"/>
+
+        <rect class="dev" x="30"  y="150" width="150" height="58" rx="3"/>
+        <text class="dev-name" x="105" y="176" text-anchor="middle">SE/30</text>
+        <text class="dev-sub"  x="105" y="192" text-anchor="middle">Chooser</text>
+
+        <rect class="dev hero" x="355" y="150" width="150" height="58" rx="3"/>
+        <text class="dev-name" x="430" y="176" text-anchor="middle">AirWriter</text>
+        <text class="dev-sub"  x="430" y="192" text-anchor="middle">The bridge</text>
+
+        <rect class="dev" x="670" y="150" width="160" height="58" rx="3"/>
+        <text class="dev-name" x="750" y="176" text-anchor="middle">LaserWriter</text>
+        <text class="dev-sub"  x="750" y="192" text-anchor="middle">The printer</text>
+
+        <text class="wire-label localtalk" x="196" y="120" text-anchor="start">Each device plugs into a box</text>
+
+        <!-- iPhone underneath, no crossings -->
+        <path class="wire wifi rev" d="M430,208 L430,242"/>
+        <text class="wire-label wifi" x="446" y="230" text-anchor="start">Wi-Fi</text>
+
+        <rect class="dev" x="355" y="242" width="150" height="58" rx="3"/>
+        <text class="dev-name" x="430" y="268" text-anchor="middle">iPhone</text>
+        <text class="dev-sub"  x="430" y="284" text-anchor="middle">AirPrint</text>
+      </svg>
+
+      <p class="needs"><b>You need:</b> connector boxes for each device, as any LocalTalk setup already has.</p>
+    </section>
+
+    <p class="footnote">The thing worth remembering: <strong>a serial cable joins exactly two devices, and LocalTalk joins as many as you like.</strong> That single difference decides every layout above — it's why the serial printer forces the Mac to move, and why the LocalTalk printer doesn't.</p>
+
+  </div>
+  <div class="tractor right"></div>
+</div>
