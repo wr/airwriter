@@ -86,6 +86,37 @@ def printer_attrs(req_id, host):
     return bytes(b)
 
 
+def find_document(body):
+    """Return the offset of the document data, walking the attribute groups.
+
+    RFC 8010: after the 8-byte header comes a sequence of delimiter tags
+    (0x01-0x05) and attributes. An attribute is a one-byte value tag, a
+    2-byte big-endian name length, the name, a 2-byte big-endian value
+    length, and the value. The end-of-attributes tag (0x03) terminates the
+    sequence and the document follows immediately. Searching for a bare
+    0x03 instead would match any such byte inside a name or a value.
+    """
+    pos = 8
+    n = len(body)
+    while pos < n:
+        tag = body[pos]
+        if tag == TAG_END:
+            return pos + 1
+        if tag <= 0x05:            # a delimiter starting a new group
+            pos += 1
+            continue
+        pos += 1                   # value tag
+        if pos + 2 > n:
+            raise ValueError("truncated attribute name length")
+        namelen = struct.unpack(">H", body[pos:pos + 2])[0]
+        pos += 2 + namelen
+        if pos + 2 > n:
+            raise ValueError("truncated attribute value length")
+        vallen = struct.unpack(">H", body[pos:pos + 2])[0]
+        pos += 2 + vallen
+    raise ValueError("no end-of-attributes tag found")
+
+
 def job_attrs(req_id, job_id, host):
     b = bytearray(struct.pack(">HHI", 0x0200, 0x0000, req_id))
     b.append(TAG_OPERATION)
@@ -133,8 +164,20 @@ class Handler(http.server.BaseHTTPRequestHandler):
             resp = job_attrs(rid, Handler.job_id, host)
         elif op in (0x0002, 0x0009, 0x000A):              # Print-Job / Get-Job(s)
             if op == 0x0002:
-                # The document follows the end-of-attributes tag.
-                i = body.index(bytes([TAG_END])) + 1
+                # The document follows the end-of-attributes tag. Walk the
+                # attribute structure to find it rather than searching for
+                # a bare 0x03, which can also occur inside a name or value.
+                try:
+                    i = find_document(body)
+                except ValueError as e:
+                    print(f"  malformed Print-Job request: {e}")
+                    resp = struct.pack(">HHI", 0x0200, 0x0400, rid) + bytes([TAG_END])
+                    self.send_response(200)
+                    self.send_header("Content-Type", "application/ipp")
+                    self.send_header("Content-Length", str(len(resp)))
+                    self.end_headers()
+                    self.wfile.write(resp)
+                    return
                 doc = body[i:]
                 OUT.mkdir(parents=True, exist_ok=True)
                 stamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
