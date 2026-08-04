@@ -4355,6 +4355,24 @@
       (effects
         (font
           (size 1.27 1.27))))
+    (property "MPN" "TYPE-C-31-M-12"
+      (at 35.56 55.88 0)
+      (hide yes)
+      (effects
+        (font
+          (size 1.27 1.27))))
+    (property "Manufacturer" "Korean Hroparts Elec"
+      (at 35.56 55.88 0)
+      (hide yes)
+      (effects
+        (font
+          (size 1.27 1.27))))
+    (property "Description" "USB Type-C receptacle, 16P SMD. Power only here"
+      (at 35.56 55.88 0)
+      (hide yes)
+      (effects
+        (font
+          (size 1.27 1.27))))
     (instances
       (project "airwriter"
         (path "/b907fa76-c5fe-4a7a-8e4e-adfdab62cb9c"
@@ -4387,6 +4405,24 @@
           (size 1.27 1.27))))
     (property "Datasheet" ""
       (at 85.09 64.77 0)
+      (hide yes)
+      (effects
+        (font
+          (size 1.27 1.27))))
+    (property "MPN" "USBLC6-2SC6"
+      (at 85.09 60.96 0)
+      (hide yes)
+      (effects
+        (font
+          (size 1.27 1.27))))
+    (property "Manufacturer" "STMicroelectronics"
+      (at 85.09 60.96 0)
+      (hide yes)
+      (effects
+        (font
+          (size 1.27 1.27))))
+    (property "Description" "ESD protection array, 2-line, SOT-23-6"
+      (at 85.09 60.96 0)
       (hide yes)
       (effects
         (font
@@ -4427,6 +4463,24 @@
       (effects
         (font
           (size 1.27 1.27))))
+    (property "MPN" "AP7361C-33E-13"
+      (at 129.54 40.64 0)
+      (hide yes)
+      (effects
+        (font
+          (size 1.27 1.27))))
+    (property "Manufacturer" "Diodes Incorporated"
+      (at 129.54 40.64 0)
+      (hide yes)
+      (effects
+        (font
+          (size 1.27 1.27))))
+    (property "Description" "LDO regulator, 3.3V fixed, 1A, SOT-223"
+      (at 129.54 40.64 0)
+      (hide yes)
+      (effects
+        (font
+          (size 1.27 1.27))))
     (instances
       (project "airwriter"
         (path "/b907fa76-c5fe-4a7a-8e4e-adfdab62cb9c"
@@ -4459,6 +4513,24 @@
           (size 1.27 1.27))))
     (property "Datasheet" ""
       (at 59.69 85.09 0)
+      (hide yes)
+      (effects
+        (font
+          (size 1.27 1.27))))
+    (property "MPN" ""
+      (at 59.69 81.28 0)
+      (hide yes)
+      (effects
+        (font
+          (size 1.27 1.27))))
+    (property "Manufacturer" "Any"
+      (at 59.69 81.28 0)
+      (hide yes)
+      (effects
+        (font
+          (size 1.27 1.27))))
+    (property "Description" "RES 5.1k 1% 1/10W 0603, or equivalent"
+      (at 59.69 81.28 0)
       (hide yes)
       (effects
         (font
@@ -4499,6 +4571,24 @@
       (effects
         (font
           (size 1.27 1.27))))
+    (property "MPN" ""
+      (at 69.85 81.28 0)
+      (hide yes)
+      (effects
+        (font
+          (size 1.27 1.27))))
+    (property "Manufacturer" "Any"
+      (at 69.85 81.28 0)
+      (hide yes)
+      (effects
+        (font
+          (size 1.27 1.27))))
+    (property "Description" "RES 5.1k 1% 1/10W 0603, or equivalent"
+      (at 69.85 81.28 0)
+      (hide yes)
+      (effects
+        (font
+          (size 1.27 1.27))))
     (instances
       (project "airwriter"
         (path "/b907fa76-c5fe-4a7a-8e4e-adfdab62cb9c"
@@ -4531,6 +4621,24 @@
           (size 1.27 1.27))))
     (property "Datasheet" ""
       (at 110.49 54.61 0)
+      (hide yes)
+      (effects
+        (font
+          (size 1.27 1.27))))
+    (property "MPN" ""
+      (at 110.49 50.8 0)
+      (hide yes)
+      (effects
+        (font
+          (size 1.27 1.27))))
+    (property "Manufacturer" "Any"
+      (at 110.49 50.8 0)
+      (hide yes)
+      (effects
+        (font
+          (size 1.27 1.27))))
+    (property "Description" "CAP 22uF >=10V X5R/X7R 0805, or equivalent"
+      (at 110.49 50.8 0)
       (hide yes)
       (effects
         (font
@@ -4571,6 +4679,24 @@
       (effects
         (font
           (size 1.27 1.27))))
+    (property "MPN" ""
+      (at 149.86 50.8 0)
+      (hide yes)
+      (effects
+        (font
+          (size 1.27 1.27))))
+    (property "Manufacturer" "Any"
+      (at 149.86 50.8 0)
+      (hide yes)
+      (effects
+        (font
+          (size 1.27 1.27))))
+    (property "Description" "CAP 10uF >=10V X5R/X7R 0805, or equivalent"
+      (at 149.86 50.8 0)
+      (hide yes)
+      (effects
+        (font
+          (size 1.27 1.27))))
     (instances
       (project "airwriter"
         (path "/b907fa76-c5fe-4a7a-8e4e-adfdab62cb9c"
@@ -4603,6 +4729,24 @@
           (size 1.27 1.27))))
     (property "Datasheet" ""
       (at 162.56 54.61 0)
+      (hide yes)
+      (effects
+        (font
+          (size 1.27 1.27))))
+    (property "MPN" ""
+      (at 162.56 50.8 0)
+      (hide yes)
+      (effects
+        (font
+          (size 1.27 1.27))))
+    (property "Manufacturer" "Any"
+      (at 162.56 50.8 0)
+      (hide yes)
+      (effects
+        (font
+          (size 1.27 1.27))))
+    (property "Description" "CAP 100nF >=25V X7R 0603, or equivalent"
+      (at 162.56 50.8 0)
       (hide yes)
       (effects
         (font
@@ -4643,6 +4787,24 @@
       (effects
         (font
           (size 1.27 1.27))))
+    (property "MPN" "ESP32-S3-WROOM-1-N8R2"
+      (at 204.47 135.89 0)
+      (hide yes)
+      (effects
+        (font
+          (size 1.27 1.27))))
+    (property "Manufacturer" "Espressif Systems"
+      (at 204.47 135.89 0)
+      (hide yes)
+      (effects
+        (font
+          (size 1.27 1.27))))
+    (property "Description" "WiFi/BLE module, ESP32-S3, 8MB flash, 2MB PSRAM, PCB antenna"
+      (at 204.47 135.89 0)
+      (hide yes)
+      (effects
+        (font
+          (size 1.27 1.27))))
     (instances
       (project "airwriter"
         (path "/b907fa76-c5fe-4a7a-8e4e-adfdab62cb9c"
@@ -4675,6 +4837,24 @@
           (size 1.27 1.27))))
     (property "Datasheet" ""
       (at 149.86 105.41 0)
+      (hide yes)
+      (effects
+        (font
+          (size 1.27 1.27))))
+    (property "MPN" ""
+      (at 149.86 101.6 0)
+      (hide yes)
+      (effects
+        (font
+          (size 1.27 1.27))))
+    (property "Manufacturer" "Any"
+      (at 149.86 101.6 0)
+      (hide yes)
+      (effects
+        (font
+          (size 1.27 1.27))))
+    (property "Description" "CAP 10uF >=10V X5R/X7R 0805, or equivalent"
+      (at 149.86 101.6 0)
       (hide yes)
       (effects
         (font
@@ -4715,6 +4895,24 @@
       (effects
         (font
           (size 1.27 1.27))))
+    (property "MPN" ""
+      (at 162.56 101.6 0)
+      (hide yes)
+      (effects
+        (font
+          (size 1.27 1.27))))
+    (property "Manufacturer" "Any"
+      (at 162.56 101.6 0)
+      (hide yes)
+      (effects
+        (font
+          (size 1.27 1.27))))
+    (property "Description" "CAP 100nF >=25V X7R 0603, or equivalent"
+      (at 162.56 101.6 0)
+      (hide yes)
+      (effects
+        (font
+          (size 1.27 1.27))))
     (instances
       (project "airwriter"
         (path "/b907fa76-c5fe-4a7a-8e4e-adfdab62cb9c"
@@ -4747,6 +4945,24 @@
           (size 1.27 1.27))))
     (property "Datasheet" ""
       (at 149.86 129.54 0)
+      (hide yes)
+      (effects
+        (font
+          (size 1.27 1.27))))
+    (property "MPN" ""
+      (at 149.86 125.73 0)
+      (hide yes)
+      (effects
+        (font
+          (size 1.27 1.27))))
+    (property "Manufacturer" "Any"
+      (at 149.86 125.73 0)
+      (hide yes)
+      (effects
+        (font
+          (size 1.27 1.27))))
+    (property "Description" "RES 10k 1% 1/10W 0603, or equivalent"
+      (at 149.86 125.73 0)
       (hide yes)
       (effects
         (font
@@ -4787,6 +5003,24 @@
       (effects
         (font
           (size 1.27 1.27))))
+    (property "MPN" ""
+      (at 162.56 125.73 0)
+      (hide yes)
+      (effects
+        (font
+          (size 1.27 1.27))))
+    (property "Manufacturer" "Any"
+      (at 162.56 125.73 0)
+      (hide yes)
+      (effects
+        (font
+          (size 1.27 1.27))))
+    (property "Description" "CAP 1uF >=16V X5R/X7R 0603, or equivalent"
+      (at 162.56 125.73 0)
+      (hide yes)
+      (effects
+        (font
+          (size 1.27 1.27))))
     (instances
       (project "airwriter"
         (path "/b907fa76-c5fe-4a7a-8e4e-adfdab62cb9c"
@@ -4819,6 +5053,24 @@
           (size 1.27 1.27))))
     (property "Datasheet" ""
       (at 149.86 175.26 0)
+      (hide yes)
+      (effects
+        (font
+          (size 1.27 1.27))))
+    (property "MPN" "B3U-1000P"
+      (at 149.86 171.45 0)
+      (hide yes)
+      (effects
+        (font
+          (size 1.27 1.27))))
+    (property "Manufacturer" "Omron"
+      (at 149.86 171.45 0)
+      (hide yes)
+      (effects
+        (font
+          (size 1.27 1.27))))
+    (property "Description" "Tactile switch SPST-NO, SMD, ultra-small"
+      (at 149.86 171.45 0)
       (hide yes)
       (effects
         (font
@@ -4859,6 +5111,24 @@
       (effects
         (font
           (size 1.27 1.27))))
+    (property "MPN" ""
+      (at 162.56 171.45 0)
+      (hide yes)
+      (effects
+        (font
+          (size 1.27 1.27))))
+    (property "Manufacturer" "Any"
+      (at 162.56 171.45 0)
+      (hide yes)
+      (effects
+        (font
+          (size 1.27 1.27))))
+    (property "Description" "CAP 100nF >=25V X7R 0603, or equivalent"
+      (at 162.56 171.45 0)
+      (hide yes)
+      (effects
+        (font
+          (size 1.27 1.27))))
     (instances
       (project "airwriter"
         (path "/b907fa76-c5fe-4a7a-8e4e-adfdab62cb9c"
@@ -4891,6 +5161,24 @@
           (size 1.27 1.27))))
     (property "Datasheet" ""
       (at 275.59 105.41 0)
+      (hide yes)
+      (effects
+        (font
+          (size 1.27 1.27))))
+    (property "MPN" "WS2812B-2020"
+      (at 275.59 101.6 0)
+      (hide yes)
+      (effects
+        (font
+          (size 1.27 1.27))))
+    (property "Manufacturer" "Worldsemi"
+      (at 275.59 101.6 0)
+      (hide yes)
+      (effects
+        (font
+          (size 1.27 1.27))))
+    (property "Description" "RGB LED, integrated controller, 2.0 x 2.0mm"
+      (at 275.59 101.6 0)
       (hide yes)
       (effects
         (font
@@ -4931,6 +5219,24 @@
       (effects
         (font
           (size 1.27 1.27))))
+    (property "MPN" ""
+      (at 299.72 101.6 0)
+      (hide yes)
+      (effects
+        (font
+          (size 1.27 1.27))))
+    (property "Manufacturer" "Any"
+      (at 299.72 101.6 0)
+      (hide yes)
+      (effects
+        (font
+          (size 1.27 1.27))))
+    (property "Description" "CAP 100nF >=25V X7R 0603, or equivalent"
+      (at 299.72 101.6 0)
+      (hide yes)
+      (effects
+        (font
+          (size 1.27 1.27))))
     (instances
       (project "airwriter"
         (path "/b907fa76-c5fe-4a7a-8e4e-adfdab62cb9c"
@@ -4963,6 +5269,24 @@
           (size 1.27 1.27))))
     (property "Datasheet" ""
       (at 275.59 175.26 0)
+      (hide yes)
+      (effects
+        (font
+          (size 1.27 1.27))))
+    (property "MPN" ""
+      (at 275.59 171.45 0)
+      (hide yes)
+      (effects
+        (font
+          (size 1.27 1.27))))
+    (property "Manufacturer" "Any"
+      (at 275.59 171.45 0)
+      (hide yes)
+      (effects
+        (font
+          (size 1.27 1.27))))
+    (property "Description" "Header 1x4, 1.27mm pitch, vertical. Bring-up only, may be left unpopulated"
+      (at 275.59 171.45 0)
       (hide yes)
       (effects
         (font
@@ -5003,6 +5327,24 @@
       (effects
         (font
           (size 1.27 1.27))))
+    (property "MPN" "MAX3490ESA+"
+      (at 340.36 55.88 0)
+      (hide yes)
+      (effects
+        (font
+          (size 1.27 1.27))))
+    (property "Manufacturer" "Analog Devices"
+      (at 340.36 55.88 0)
+      (hide yes)
+      (effects
+        (font
+          (size 1.27 1.27))))
+    (property "Description" "RS-422/485 full-duplex transceiver, 3.3V, SOIC-8"
+      (at 340.36 55.88 0)
+      (hide yes)
+      (effects
+        (font
+          (size 1.27 1.27))))
     (instances
       (project "airwriter"
         (path "/b907fa76-c5fe-4a7a-8e4e-adfdab62cb9c"
@@ -5035,6 +5377,24 @@
           (size 1.27 1.27))))
     (property "Datasheet" ""
       (at 309.88 39.37 0)
+      (hide yes)
+      (effects
+        (font
+          (size 1.27 1.27))))
+    (property "MPN" ""
+      (at 309.88 35.56 0)
+      (hide yes)
+      (effects
+        (font
+          (size 1.27 1.27))))
+    (property "Manufacturer" "Any"
+      (at 309.88 35.56 0)
+      (hide yes)
+      (effects
+        (font
+          (size 1.27 1.27))))
+    (property "Description" "CAP 100nF >=25V X7R 0603, or equivalent"
+      (at 309.88 35.56 0)
       (hide yes)
       (effects
         (font
@@ -5075,6 +5435,24 @@
       (effects
         (font
           (size 1.27 1.27))))
+    (property "MPN" ""
+      (at 400.05 58.42 0)
+      (hide yes)
+      (effects
+        (font
+          (size 1.27 1.27))))
+    (property "Manufacturer" "Any"
+      (at 400.05 58.42 0)
+      (hide yes)
+      (effects
+        (font
+          (size 1.27 1.27))))
+    (property "Description" "RES 120R 1% 1/10W 0603, or equivalent. DNP"
+      (at 400.05 58.42 0)
+      (hide yes)
+      (effects
+        (font
+          (size 1.27 1.27))))
     (instances
       (project "airwriter"
         (path "/b907fa76-c5fe-4a7a-8e4e-adfdab62cb9c"
@@ -5107,6 +5485,24 @@
           (size 1.27 1.27))))
     (property "Datasheet" ""
       (at 410.21 49.53 0)
+      (hide yes)
+      (effects
+        (font
+          (size 1.27 1.27))))
+    (property "MPN" ""
+      (at 410.21 45.72 0)
+      (hide yes)
+      (effects
+        (font
+          (size 1.27 1.27))))
+    (property "Manufacturer" "Any"
+      (at 410.21 45.72 0)
+      (hide yes)
+      (effects
+        (font
+          (size 1.27 1.27))))
+    (property "Description" "RES 4.7k 1% 1/10W 0603, or equivalent. DNP"
+      (at 410.21 45.72 0)
       (hide yes)
       (effects
         (font
@@ -5147,6 +5543,24 @@
       (effects
         (font
           (size 1.27 1.27))))
+    (property "MPN" ""
+      (at 410.21 71.12 0)
+      (hide yes)
+      (effects
+        (font
+          (size 1.27 1.27))))
+    (property "Manufacturer" "Any"
+      (at 410.21 71.12 0)
+      (hide yes)
+      (effects
+        (font
+          (size 1.27 1.27))))
+    (property "Description" "RES 4.7k 1% 1/10W 0603, or equivalent. DNP"
+      (at 410.21 71.12 0)
+      (hide yes)
+      (effects
+        (font
+          (size 1.27 1.27))))
     (instances
       (project "airwriter"
         (path "/b907fa76-c5fe-4a7a-8e4e-adfdab62cb9c"
@@ -5179,6 +5593,24 @@
           (size 1.27 1.27))))
     (property "Datasheet" ""
       (at 340.36 149.86 0)
+      (hide yes)
+      (effects
+        (font
+          (size 1.27 1.27))))
+    (property "MPN" "MAX3232ESE+"
+      (at 340.36 146.05 0)
+      (hide yes)
+      (effects
+        (font
+          (size 1.27 1.27))))
+    (property "Manufacturer" "Analog Devices"
+      (at 340.36 146.05 0)
+      (hide yes)
+      (effects
+        (font
+          (size 1.27 1.27))))
+    (property "Description" "RS-232 transceiver, 3.0-5.5V, SOIC-16"
+      (at 340.36 146.05 0)
       (hide yes)
       (effects
         (font
@@ -5219,6 +5651,24 @@
       (effects
         (font
           (size 1.27 1.27))))
+    (property "MPN" ""
+      (at 299.72 125.73 0)
+      (hide yes)
+      (effects
+        (font
+          (size 1.27 1.27))))
+    (property "Manufacturer" "Any"
+      (at 299.72 125.73 0)
+      (hide yes)
+      (effects
+        (font
+          (size 1.27 1.27))))
+    (property "Description" "CAP 100nF >=25V X7R 0603, or equivalent"
+      (at 299.72 125.73 0)
+      (hide yes)
+      (effects
+        (font
+          (size 1.27 1.27))))
     (instances
       (project "airwriter"
         (path "/b907fa76-c5fe-4a7a-8e4e-adfdab62cb9c"
@@ -5251,6 +5701,24 @@
           (size 1.27 1.27))))
     (property "Datasheet" ""
       (at 312.42 129.54 0)
+      (hide yes)
+      (effects
+        (font
+          (size 1.27 1.27))))
+    (property "MPN" ""
+      (at 312.42 125.73 0)
+      (hide yes)
+      (effects
+        (font
+          (size 1.27 1.27))))
+    (property "Manufacturer" "Any"
+      (at 312.42 125.73 0)
+      (hide yes)
+      (effects
+        (font
+          (size 1.27 1.27))))
+    (property "Description" "CAP 100nF >=25V X7R 0603, or equivalent"
+      (at 312.42 125.73 0)
       (hide yes)
       (effects
         (font
@@ -5291,6 +5759,24 @@
       (effects
         (font
           (size 1.27 1.27))))
+    (property "MPN" ""
+      (at 299.72 181.61 0)
+      (hide yes)
+      (effects
+        (font
+          (size 1.27 1.27))))
+    (property "Manufacturer" "Any"
+      (at 299.72 181.61 0)
+      (hide yes)
+      (effects
+        (font
+          (size 1.27 1.27))))
+    (property "Description" "CAP 100nF >=25V X7R 0603, or equivalent"
+      (at 299.72 181.61 0)
+      (hide yes)
+      (effects
+        (font
+          (size 1.27 1.27))))
     (instances
       (project "airwriter"
         (path "/b907fa76-c5fe-4a7a-8e4e-adfdab62cb9c"
@@ -5323,6 +5809,24 @@
           (size 1.27 1.27))))
     (property "Datasheet" ""
       (at 312.42 185.42 0)
+      (hide yes)
+      (effects
+        (font
+          (size 1.27 1.27))))
+    (property "MPN" ""
+      (at 312.42 181.61 0)
+      (hide yes)
+      (effects
+        (font
+          (size 1.27 1.27))))
+    (property "Manufacturer" "Any"
+      (at 312.42 181.61 0)
+      (hide yes)
+      (effects
+        (font
+          (size 1.27 1.27))))
+    (property "Description" "CAP 100nF >=25V X7R 0603, or equivalent"
+      (at 312.42 181.61 0)
       (hide yes)
       (effects
         (font
@@ -5363,6 +5867,24 @@
       (effects
         (font
           (size 1.27 1.27))))
+    (property "MPN" ""
+      (at 323.85 181.61 0)
+      (hide yes)
+      (effects
+        (font
+          (size 1.27 1.27))))
+    (property "Manufacturer" "Any"
+      (at 323.85 181.61 0)
+      (hide yes)
+      (effects
+        (font
+          (size 1.27 1.27))))
+    (property "Description" "CAP 100nF >=25V X7R 0603, or equivalent"
+      (at 323.85 181.61 0)
+      (hide yes)
+      (effects
+        (font
+          (size 1.27 1.27))))
     (instances
       (project "airwriter"
         (path "/b907fa76-c5fe-4a7a-8e4e-adfdab62cb9c"
@@ -5395,6 +5917,24 @@
           (size 1.27 1.27))))
     (property "Datasheet" ""
       (at 420.37 160.02 0)
+      (hide yes)
+      (effects
+        (font
+          (size 1.27 1.27))))
+    (property "MPN" ""
+      (at 420.37 156.21 0)
+      (hide yes)
+      (effects
+        (font
+          (size 1.27 1.27))))
+    (property "Manufacturer" "Any"
+      (at 420.37 156.21 0)
+      (hide yes)
+      (effects
+        (font
+          (size 1.27 1.27))))
+    (property "Description" "RES 0R jumper 0603, or equivalent"
+      (at 420.37 156.21 0)
       (hide yes)
       (effects
         (font
@@ -5435,6 +5975,24 @@
       (effects
         (font
           (size 1.27 1.27))))
+    (property "MPN" ""
+      (at 431.8 156.21 0)
+      (hide yes)
+      (effects
+        (font
+          (size 1.27 1.27))))
+    (property "Manufacturer" "Any"
+      (at 431.8 156.21 0)
+      (hide yes)
+      (effects
+        (font
+          (size 1.27 1.27))))
+    (property "Description" "CAP 1nF >=50V X7R/C0G 0603, or equivalent"
+      (at 431.8 156.21 0)
+      (hide yes)
+      (effects
+        (font
+          (size 1.27 1.27))))
     (instances
       (project "airwriter"
         (path "/b907fa76-c5fe-4a7a-8e4e-adfdab62cb9c"
@@ -5471,6 +6029,24 @@
       (effects
         (font
           (size 1.27 1.27))))
+    (property "MPN" "KMDGX-8S-BS"
+      (at 439.42 106.68 0)
+      (hide yes)
+      (effects
+        (font
+          (size 1.27 1.27))))
+    (property "Manufacturer" "Kycon"
+      (at 439.42 106.68 0)
+      (hide yes)
+      (effects
+        (font
+          (size 1.27 1.27))))
+    (property "Description" "Mini-DIN 8-pin female, right angle, fully shielded"
+      (at 439.42 106.68 0)
+      (hide yes)
+      (effects
+        (font
+          (size 1.27 1.27))))
     (instances
       (project "airwriter"
         (path "/b907fa76-c5fe-4a7a-8e4e-adfdab62cb9c"
@@ -5503,6 +6079,24 @@
           (size 1.27 1.27))))
     (property "Datasheet" ""
       (at 400.05 139.7 0)
+      (hide yes)
+      (effects
+        (font
+          (size 1.27 1.27))))
+    (property "MPN" ""
+      (at 400.05 135.89 0)
+      (hide yes)
+      (effects
+        (font
+          (size 1.27 1.27))))
+    (property "Manufacturer" "Any"
+      (at 400.05 135.89 0)
+      (hide yes)
+      (effects
+        (font
+          (size 1.27 1.27))))
+    (property "Description" "RES 0R jumper 0603, or equivalent. DNP"
+      (at 400.05 135.89 0)
       (hide yes)
       (effects
         (font

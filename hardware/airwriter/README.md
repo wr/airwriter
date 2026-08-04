@@ -22,7 +22,8 @@ Three parts set the floor and none of them can shrink:
 ### What DRC still reports, and why it is fine
 
 - 2 silkscreen-over-edge on U1. The module deliberately overhangs the top edge.
-- 1 library metadata mismatch on J2, from hand-injecting the footprint into the board.
+- 2 library metadata mismatches, on J2 and U1. J2's came from hand-injecting the footprint;
+  U1's is deliberate, because its thermal-via drills were enlarged (see the fab section).
 - 3 "unconnected" between GND pour fragments on F.Cu. These are slivers of 1 to 2 mm²
   trapped between the mini-DIN pins. Every one is grounded through an adjacent pad; they
   are simply not tied to the main pour through top-layer copper. **No pad and no track
@@ -45,6 +46,37 @@ SES import from `kicad-cli`, so the round trip is GUI-only. Freerouting lives at
 **After any re-route, always run DRC with `--refill-zones`.** Freerouting does not repour the GND
 zone, and an unfilled zone produces hundreds of phantom clearance errors — 278 violations that
 drop to 3 once refilled.
+
+## Fab: PCBWay
+
+Order as: **32 x 54mm, 2 layer, 1.6mm FR4, 1oz copper, HASL**. Nothing here needs a premium
+process.
+
+The design is held to PCBWay's cost-effective tier on purpose:
+
+| Parameter | This board | PCBWay |
+|---|---|---|
+| Min drill | 0.30mm | 0.30mm standard. **0.20mm is an upgraded spec and costs a lot more** |
+| Min track / space | 0.20mm actual, 0.15mm rule | 0.076mm possible, 0.15mm recommended to save cost |
+| Copper to board edge | 0.2665mm worst case | under 0.20mm gets flagged |
+| Via | 0.6mm pad / 0.3mm drill | standard |
+
+**The 0.30mm drill floor is the one to protect.** KiCad's stock ESP32-S3-WROOM-1 footprint puts
+twelve 0.20mm thermal vias in its ground pad, which would drop the whole board into PCBWay's
+advanced tier — a documented case went from $5 to $65 for ten boards. Those twelve drills were
+enlarged to 0.30mm in the board file. The 0.6mm pad still leaves a 0.15mm annular ring.
+
+That edit lives in the board, not in KiCad's library, so **re-importing U1's footprint from the
+library will silently put the 0.20mm drills back**. It is also why U1 shows a library mismatch in
+DRC. Check the drill table before every order:
+
+```
+kicad-cli pcb export drill --output fab/ --format excellon airwriter.kicad_pcb
+grep -E '^T[0-9]+C' fab/airwriter.drl     # nothing below 0.300
+```
+
+BOM carries manufacturer part numbers for the actives and connectors. Passives are specified by
+value, package, dielectric and voltage with "or equivalent", which PCBWay sources normally.
 
 ## Toolchain notes
 
