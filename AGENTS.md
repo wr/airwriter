@@ -3,6 +3,8 @@
 AirPrint bridge for Apple serial printers. ESP32-S3 dongle on the ImageWriter II's
 mini-DIN-8 serial port, presenting as a native IPP Everywhere printer.
 
+**Start with `docs/HANDOFF.md`** — current state, decisions, traps and next actions.
+
 The full build spec is `docs/SPEC.md`. Read it before touching hardware or firmware —
 it carries the pinout, part list, escape-code plan, and a list of unverified assumptions
 that must not be guessed at.
