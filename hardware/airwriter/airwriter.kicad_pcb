@@ -11875,16 +11875,10 @@
 			(uuid "ce560aa6-9e23-4d97-be17-f6e93b7638a8")
 		)
 		(embedded_fonts no)
-		(model "${KICAD10_3DMODEL_DIR}/LED_SMD.3dshapes/LED_WS2812B-2020_PLCC4_2.0x2.0mm.step"
-			(offset
-				(xyz 0 0 0)
-			)
-			(scale
-				(xyz 1 1 1)
-			)
-			(rotate
-				(xyz 0 0 0)
-			)
+		(model "${KIPRJMOD}/lib/airwriter.3dshapes/LED_WS2812B-2020_PLCC4_2.0x2.0mm.step"
+			(offset (xyz 0 0 0))
+			(scale (xyz 1 1 1))
+			(rotate (xyz 0 0 0))
 		)
 	)
 	(footprint "Capacitor_SMD:C_0603_1608Metric"
