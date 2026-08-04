@@ -31,3 +31,11 @@ test: $(TESTBIN)
 
 clean:
 	rm -rf build
+
+.PHONY: regress
+regress: build/rip
+	@python3 test/make_fixture.py /tmp/checker.urf >/dev/null
+	@./build/rip --in /tmp/checker.urf --out-stream /tmp/checker.bin 2>/dev/null
+	@cmp /tmp/checker.bin ../../fixtures/checker.expected.bin \
+	  && echo "ok  regression: stream.bin unchanged" \
+	  || (echo "FAIL regression: stream.bin changed"; exit 1)
