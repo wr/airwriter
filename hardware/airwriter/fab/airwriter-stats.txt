@@ -1,0 +1,61 @@
+PCB statistics report
+=====================
+- Date: Tuesday, August 04, 2026 at 12:02:19 PM
+- Project: airwriter
+- Board name: airwriter
+
+Board
+-----
+- Width: 32.0000 mm
+- Height: 54.0000 mm
+- Area: 1728.00 mm²
+- Front copper area: 260.132 mm²
+- Back copper area: 69.294 mm²
+- Min track clearance: 2147.4836 mm
+- Min track width: 2147.4836 mm
+- Min drill diameter: 0.2000 mm
+- Board stackup thickness: 1.6000 mm
+
+- Front footprint area: 2128.315 mm²
+- Back footprint area: 98.272 mm²
+- Front component density: 123.17 %
+- Back component density: 5.69 %
+Pads
+----
+- Through hole: 31
+- SMD: 164
+- Connector: 0
+- NPTH: 6
+- Castellated: 0
+- Press-fit: 0
+
+Vias
+----
+- Through vias: 0
+- Blind vias: 0
+- Buried vias: 0
+- Micro vias: 0
+
+Components
+----------
+
+|              | Front Side | Back Side | Total |
+|--------------|------------|-----------|-------|
+|THT:          |          2 |         0 |     2 |
+|SMD:          |         31 |         0 |    31 |
+|Unspecified:  |          8 |         0 |     8 |
+|Total:        |         41 |         0 |    41 |
+
+Drill holes
+-----------
+
+| Count | Shape |    X Size |    Y Size | Plated | Via/Pad | Start Layer | Stop Layer |
+|-------|-------|-----------|-----------|--------|---------|-------------|------------|
+|    12 | Round | 0.2000 mm | 0.2000 mm |    PTH |     Pad |        F.Cu |       B.Cu |
+|     8 | Round | 1.1000 mm | 1.1000 mm |    PTH |     Pad |        F.Cu |       B.Cu |
+|     4 | Round | 0.6500 mm | 0.6500 mm |    PTH |     Pad |        F.Cu |       B.Cu |
+|     4 | Round | 2.2000 mm | 2.2000 mm |   NPTH |     Pad |        F.Cu |       B.Cu |
+|     3 | Round | 2.3000 mm | 2.3000 mm |    PTH |     Pad |        F.Cu |       B.Cu |
+|     2 | Round | 0.6500 mm | 0.6500 mm |   NPTH |     Pad |        F.Cu |       B.Cu |
+|     2 |  Slot | 0.6000 mm | 1.7000 mm |    PTH |     Pad |        F.Cu |       B.Cu |
+|     2 |  Slot | 0.6000 mm | 1.2000 mm |    PTH |     Pad |        F.Cu |       B.Cu |

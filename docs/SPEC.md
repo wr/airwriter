@@ -51,6 +51,11 @@ Two-layer, 1.6mm FR4, 1oz copper, HASL. Standard process — no controlled imped
 blind vias. Target outline 55 x 35mm, rectangular with 3mm corner radii and four M2
 mounting holes inset 3mm from the corners.
 
+**As built: 32 x 54mm** (1728mm² against the target's 1925), rectangular, four M2 holes.
+The aspect ratio flipped to portrait because the WROOM-1 wants its antenna overhanging a
+short edge while the mini-DIN and USB-C both need the opposite short edge. Corner radii
+are not cut yet. See `hardware/airwriter/README.md` for the size derivation.
+
 ### 2.2 Block diagram
 
 ```
@@ -79,7 +84,7 @@ USB-C (5V) ─┬─ ESD ─ LDO 3.3V ─┬─ ESP32-S3-WROOM-1
 | J1 | USB-C receptacle, 16-pin | SMD | 5.1k CC1/CC2 pulldowns |
 | J2 | Kycon KMDGX-8S or CUI MD-80S | THT | Mini-DIN-8 female. Footprint may need to be drawn — verify against KiCad stock libs first |
 | D1 | WS2812B-2020 | 2020 | Status |
-| SW1 | Tactile 4.5mm | SMD | Config / factory reset, wired to GPIO0 |
+| SW1 | Omron B3U-1000P | SMD | Config / factory reset, wired to GPIO0. **Changed from a generic 4.5mm tactile** — the closest KiCad stock footprint (B3S-1100) has a 10 x 8.9mm courtyard, which became the binding constraint on the pocket beside the mini-DIN. The B3U-1000P is 4.8 x 3.4mm |
 | — | 22uF + 10uF + 0.1uF | 0805/0603 | Bulk on 3.3V rail, one 0.1uF per IC pin pair |
 
 ### 2.4 Connector wiring
