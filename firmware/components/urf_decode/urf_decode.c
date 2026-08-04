@@ -73,6 +73,11 @@ int urf_next_page(urf_t *u)
     if (p->bits_per_pixel == 0 || p->width == 0 || p->height == 0)
         return URF_ERR_UNSUPPORTED;
 
+    // A malformed width must not wrap the multiply on a 32-bit target,
+    // where size_t is 32 bits. 1152 dots is the printer's real limit;
+    // 65535 is a generous ceiling that still cannot overflow.
+    if (p->width > 65535 || p->height > 65535) return URF_ERR_UNSUPPORTED;
+
     p->num_colors     = colorspace_num_colors(p->colorspace);
     p->bits_per_color = p->bits_per_pixel / p->num_colors;
     p->fill_byte      = colorspace_fill(p->colorspace);

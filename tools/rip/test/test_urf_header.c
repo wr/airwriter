@@ -51,5 +51,14 @@ int main(void)
     urf_t bu;
     CHECK_EQ_INT(urf_open(&bu, memsrc_read, &bsrc), URF_ERR_MAGIC);
 
+    /* An absurd width must be rejected to guard against overflow on 32-bit targets. */
+    uint8_t overflow[sizeof hdr];
+    memcpy(overflow, hdr, sizeof hdr);
+    overflow[12] = 0x00; overflow[13] = 0x10; overflow[14] = 0x00; overflow[15] = 0x00; /* width = 0x00100000 */
+    memsrc_t osrc = { overflow, sizeof overflow, 0 };
+    urf_t ou;
+    CHECK_EQ_INT(urf_open(&ou, memsrc_read, &osrc), URF_OK);
+    CHECK_EQ_INT(urf_next_page(&ou), URF_ERR_UNSUPPORTED);
+
     TEST_END;
 }
