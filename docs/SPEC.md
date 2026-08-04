@@ -302,7 +302,29 @@ almost right, which is the worst failure mode.
    densities selected by single-character escapes. The letter-to-dpi mapping in circulating
    documentation is inconsistent. Verify the code for 144 dpi before building anything on
    top of it.
-3. **Differential polarity** on both pairs. Hence the solder jumpers.
+3. ~~**Differential polarity** on both pairs. Hence the solder jumpers.~~
+   **RESOLVED BY RESEARCH — and §2.4's receiver mapping is wrong.**
+
+   Apple's convention: *"a binary 1 is represented when TxD- is more negative than TxD+.
+   Binary 0 is indicated by TxD- more positive than TxD+"*, and the RxD pair reads the same
+   way. So the `+` line is non-inverting: at mark/idle, TxD+ is high and TxD- is low.
+
+   The MAX3490 has RO high when A > B, and DI high drives Y high and Z low.
+
+   - **Driver (us → printer): §2.4 is correct.** Idle TX is high → Y high, Z low → RxD+ high,
+     RxD- low = mark. Y→pin 8 (RxD+), Z→pin 5 (RxD-).
+   - **Receiver (printer → us): §2.4 is backwards.** It maps A←TxD- and B←TxD+, which puts
+     A low at mark, so RO idles low and every byte arrives inverted. It should be
+     **A ← pin 6 (TxD+), B ← pin 3 (TxD-)**.
+
+   Confidence: good, not certain. Both sources are secondary (Mac serial references, not the
+   ImageWriter II Technical Reference), and they document the Macintosh port rather than the
+   printer specifically. The two are the same Apple serial family so the convention should
+   hold, but JP3/JP4 remain the cheap insurance.
+
+   Impact is limited: the ImageWriter talks back over HSKo hardware handshaking rather than
+   the serial receive path, so a wrong receiver polarity does not block M1 or M5. Bias
+   resistors R6/R7 already pull A high and B low, which matches the corrected mapping.
 4. **HSKo electrical levels.** Assumed RS-232-ish single-ended against ground, which the
    MAX3232 receiver handles. Scope it before trusting it.
 5. **URF 32-byte page header field offsets.** Take these from cups-filters source, not from
