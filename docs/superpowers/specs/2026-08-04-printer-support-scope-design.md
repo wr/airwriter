@@ -145,7 +145,7 @@ deliberate choice at Rev B rather than an inherited one.
 Archived under `docs/reference/` because both are load-bearing and both were hard to find:
 
 - `ImageWriter_II_Technical_Reference.pdf` — 227 pages, image-only, no OCR layer. PDF page =
-  book page + 20. Appendix A (133–146) is the command summary, Chapter 8 (103–125) the
+  book page + 20 through chapter 7, drifting to +19 in the appendices. Appendix A (133–146) is the command summary, Chapter 8 (103–125) the
   graphics detail, Appendix E (187–194) the electrical interface.
 - `Inside_AppleTalk_2nd_ed.pdf` — chapter 9 is ATP, chapter 10 is PAP.
 

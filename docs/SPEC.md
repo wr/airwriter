@@ -311,7 +311,9 @@ almost right, which is the worst failure mode.
    most raster code assumes. Ghostscript's `gdevadmp.c` does an explicit 8x8 transpose plus
    a bit reversal for exactly this reason, which independently confirms it.
 
-   Scan: `docs/reference/ImageWriter_II_Technical_Reference.pdf` (PDF page = book page + 20).
+   Scan: `docs/reference/ImageWriter_II_Technical_Reference.pdf`. PDF page = book page + 20 for
+   chapters 1-7; the offset drifts to +19 partway through the appendices, so Table A-15 on book
+   p. 144 is PDF page 163, not 164.
 
 2. ~~**Density escape codes.**~~ **RESOLVED FROM PRIMARY SOURCE.**
 
