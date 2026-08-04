@@ -250,13 +250,15 @@ that dominates real print jobs, and you won't know until you've printed both.
 ### 3.8 The ImageWriter output stage
 
 Target for v1: **144 dpi horizontal, 72 dpi vertical, single pass.** Printable width 8
-inches = 1152 dots.
+inches = 1152 dots. Select the density once per page with **`ESC p`** — see assumption 2 in
+section 4 for the full table and the `ESC p` / `ESC P` trap.
 
 Per eight raster rows:
 
 1. Accumulate 8 rows of 1bpp data into a strip buffer (1152 bytes worst case — under 2KB,
    so nothing ever needs a full page in RAM)
-2. Transpose to column-major: each output byte is one vertical column of 8 dots
+2. Transpose to column-major: each output byte is one vertical column of 8 dots, **bit 0
+   at the top** (assumption 1, resolved) — so the transpose reverses bit order
 3. Emit `ESC G nnnn` where `nnnn` is a four-digit ASCII decimal byte count
 4. Emit the column bytes
 5. Emit carriage return and a line feed of 8/72 inch
@@ -301,13 +303,47 @@ These are marked because they must be checked against hardware or Apple's *Image
 Technical Reference*, not inferred. Any of them being wrong will produce output that looks
 almost right, which is the worst failure mode.
 
-1. **Bit order within a graphics byte.** Whether bit 0 is the top pin or the bottom pin is
-   not settled here. Bring-up task: print a strip where only the top pin fires, observe,
-   and encode the answer in a single `#define`.
-2. **Density escape codes.** The ImageWriter II supports roughly eight horizontal
-   densities selected by single-character escapes. The letter-to-dpi mapping in circulating
-   documentation is inconsistent. Verify the code for 144 dpi before building anything on
-   top of it.
+1. ~~**Bit order within a graphics byte.**~~ **RESOLVED FROM PRIMARY SOURCE.**
+
+   *ImageWriter II Technical Reference*, p. 107, verbatim: "Bit 7 causes the dot at the
+   bottom of the column to be printed and bit 0 causes the dot at the top to be printed."
+   So **bit 0 is the TOP pin**, bit 7 the bottom — reversed from the MSB-is-top convention
+   most raster code assumes. Ghostscript's `gdevadmp.c` does an explicit 8x8 transpose plus
+   a bit reversal for exactly this reason, which independently confirms it.
+
+   Scan: `docs/reference/ImageWriter_II_Technical_Reference.pdf` (PDF page = book page + 20).
+
+2. ~~**Density escape codes.**~~ **RESOLVED FROM PRIMARY SOURCE.**
+
+   Table 8-2, p. 106. Every byte cross-checked against `gdevadmp.c` and they agree exactly.
+
+   | Command | Hex | Pitch | dpi | Max dots/line |
+   |---|---|---|---|---|
+   | `ESC n` | 1B 6E | Extended 9 cpi | 72 | 0576 |
+   | `ESC N` | 1B 4E | Pica 10 cpi | 80 | 0640 |
+   | `ESC E` | 1B 45 | Elite 12 cpi | 96 | 0768 |
+   | `ESC e` | 1B 65 | Semicondensed 13.4 cpi | 107 | 0856 |
+   | `ESC q` | 1B 71 | Condensed 15 cpi | 120 | 0960 |
+   | `ESC Q` | 1B 51 | Ultracondensed 17 cpi | 136 | 1068 |
+   | **`ESC p`** | **1B 70** | **Pica proportional** | **144** | **1152** |
+   | `ESC P` | 1B 50 | Elite proportional | 160 | 1280 |
+
+   **`ESC p` is 144 dpi and `ESC P` is 160 dpi.** Case-sensitive, adjacent in the table, and
+   the most commonly mis-transcribed pair in circulating documentation.
+
+   Two further corrections to watch, both verified against the manual:
+
+   - **`ESC G nnnn` takes four ASCII decimal digits**, not a 16-bit binary count. Summaries
+     describing it as `n1 + n2 * 256` are quoting Epson ESC/P's `ESC K`, which is a different
+     printer family. `ESC S nnnn` is an exact alias for `ESC G`. `ESC g nnn` takes three
+     digits and prints `nnn * 8` bytes.
+   - **`ESC T nn` is nn/144 inch, exactly two ASCII digits, 01-99.** `ESC T16` (16/144 =
+     8/72) exactly abuts successive 8-dot bands, which is the 72 dpi vertical case in §3.8.
+     144 dpi vertical needs two interleaved passes with `ESC T01` between them.
+
+   One more, not an assumption but a trap: the printer's DIP default is **7 data bits**.
+   Graphics commands force 8-bit for the duration of their data, but text will not behave
+   until the mode is set.
 3. ~~**Differential polarity** on both pairs. Hence the solder jumpers.~~
    **RESOLVED BY RESEARCH — and §2.4's receiver mapping is wrong.**
 
@@ -331,8 +367,22 @@ almost right, which is the worst failure mode.
    Impact is limited: the ImageWriter talks back over HSKo hardware handshaking rather than
    the serial receive path, so a wrong receiver polarity does not block M1 or M5. Bias
    resistors R6/R7 already pull A high and B low, which matches the corrected mapping.
-4. **HSKo electrical levels.** Assumed RS-232-ish single-ended against ground, which the
-   MAX3232 receiver handles. Scope it before trusting it.
+4. **HSKo electrical levels.** Still open, but narrowed. Appendix E of the technical
+   reference says the printer's output stage is a **26LS30**, with DTR driven from a
+   separate single-ended section of it. The 26LS30 is a dual-mode RS-422/RS-423 driver, so
+   in single-ended mode the swing is RS-423-ish rather than TTL — consistent with the
+   MAX3232 receiver assumption, but scope it before trusting it. If the swing turns out
+   modest, a divider and clamp into a GPIO deletes U3.
+
+   **The handshake timing is a hard firmware constraint.** DTR goes false when the buffer
+   has room for fewer than 30 characters, and the host must stop within 27 more characters
+   or data is lost. At 9600 baud 8N1 that is a 28 ms window — comfortable for the hardware
+   CTS path, which is another reason to let the peripheral stall the FIFO rather than
+   watermarking in software. DTR returns true at 100 characters free.
+   **Polarity: true = logic 0 = ready.**
+
+   XON/XOFF is the forgiving alternative if the hardware path disappoints: XOFF at fewer
+   than 266 free, with 256 characters of slack, XON at 337 free. Appendix E, pp. 187-193.
 5. **URF 32-byte page header field offsets.** Take these from cups-filters source, not from
    memory.
 
