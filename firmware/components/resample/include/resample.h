@@ -2,6 +2,14 @@
 //
 // Streaming grayscale resampler. Box filter when downscaling, replication
 // when upscaling. Holds one destination row, never a page.
+//
+// Contract: the caller must push exactly src_h rows. Pushing fewer leaves the
+// trailing destination rows unemitted — a truncated source yields a short page
+// rather than an error. Pushing more returns -1.
+//
+// Bound: acc[] accumulates one per-row average (<= 255) per folded source row,
+// so it would overflow only above ~16.8 million rows folded into one
+// destination row. Unreachable — urf_decode caps page height at 65535.
 #pragma once
 #include <stdint.h>
 #include <stddef.h>
