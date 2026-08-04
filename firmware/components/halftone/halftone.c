@@ -91,12 +91,14 @@ void ht_row(ht_t *h, const uint8_t *gray, uint8_t *bits)
             break;
         }
         default: {                              // HT_ATKINSON, HT_FLOYD
-            int adj = v + cur[x];
-            if (adj < 0)   adj = 0;
-            if (adj > 255) adj = 255;
-            int out = adj < 128 ? 0 : 255;
+            // The published algorithms derive the quantisation error from the
+            // unclamped accumulated value. Clamping here instead would discard
+            // error whenever a pixel overshoots, which lightens or darkens the
+            // result and loses detail in extremes.
+            int raw = v + cur[x];
+            int out = raw < 128 ? 0 : 255;
             ink = (out == 0);
-            spread(h, x, adj - out);
+            spread(h, x, raw - out);
             break;
         }
         }

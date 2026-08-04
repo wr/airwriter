@@ -72,6 +72,32 @@ int main(void)
         ht_free(&h);
     }
 
+    /* -- Floyd-Steinberg spreads error with kernel 7/16, 3/16, 5/16, 1/16 --
+     *
+     * Width 3, row { 255, 128, 255 }:
+     *
+     * x=0: raw 255, out 255, error 0 — spreads nothing.
+     * x=1: raw 128, out 255, error -127. Taps:
+     *      r0[2] += -127*7/16 = -55; r1[0] += -127*3/16 = -23;
+     *      r1[1] += -127*5/16 = -39; r1[2] += -127*1/16 = -7.
+     * x=2: raw = 255 + (-55) = 200, out 255, error -55. Taps:
+     *      r1[1] += -55*3/16 = -10; r1[2] += -55*5/16 = -17.
+     *      (7/16 and 1/16 taps fall outside the row.)
+     *
+     * After row: ht_peek_err(&h, 0, 0) = -23; [0, 1] = -49; [0, 2] = -24.
+     */
+    {
+        ht_t h;
+        CHECK_EQ_INT(ht_init(&h, HT_FLOYD, 3), 0);
+        const uint8_t row0[3] = { 255, 128, 255 };
+        uint8_t bits[1] = { 0 };
+        ht_row(&h, row0, bits);
+        CHECK_EQ_INT(ht_peek_err(&h, 0, 0), -23);
+        CHECK_EQ_INT(ht_peek_err(&h, 0, 1), -49);
+        CHECK_EQ_INT(ht_peek_err(&h, 0, 2), -24);
+        ht_free(&h);
+    }
+
     /* -- algorithm names round-trip -- */
     {
         ht_algo_t a;
