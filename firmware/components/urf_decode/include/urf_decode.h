@@ -15,6 +15,7 @@
 #define URF_ERR_IO          -1
 #define URF_ERR_MAGIC       -2
 #define URF_ERR_UNSUPPORTED -3
+#define URF_ERR_MALFORMED   -4
 
 // Returns 1 when all n bytes were read, 0 on short read or error.
 typedef int (*urf_read_fn)(void *ctx, uint8_t *buf, size_t n);

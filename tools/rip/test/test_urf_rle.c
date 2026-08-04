@@ -104,5 +104,40 @@ int main(void)
         urf_free(&u);
     }
 
+    /* -- literal run overruns line: 257-0xFD = 4 bytes on a 3-byte line -- */
+    {
+        const uint8_t body[] = { 0x00, 0xFD, 0x11, 0x22, 0x33, 0x44 };
+        memsrc_t s = { file, build(file, 3, 1, 8, 0, body, sizeof body), 0 };
+        CHECK_EQ_INT(urf_open(&u, memsrc_read, &s), URF_OK);
+        CHECK_EQ_INT(urf_next_page(&u), URF_OK);
+        CHECK_EQ_INT(urf_next_row(&u, &row), URF_ERR_MALFORMED);
+        urf_free(&u);
+    }
+
+    /* -- repeat run overruns line: 0x02 = 3 copies on a 2-byte line -- */
+    {
+        const uint8_t body[] = { 0x00, 0x02, 0xAA };
+        memsrc_t s = { file, build(file, 2, 1, 8, 0, body, sizeof body), 0 };
+        CHECK_EQ_INT(urf_open(&u, memsrc_read, &s), URF_OK);
+        CHECK_EQ_INT(urf_next_page(&u), URF_OK);
+        CHECK_EQ_INT(urf_next_row(&u, &row), URF_ERR_MALFORMED);
+        urf_free(&u);
+    }
+
+    /* -- height limit overrides line-repeat byte: L=3 claims 4 rows on 2-row page -- */
+    {
+        const uint8_t body[] = { 0x03, 0x01, 0x55 };
+        memsrc_t s = { file, build(file, 2, 2, 8, 0, body, sizeof body), 0 };
+        CHECK_EQ_INT(urf_open(&u, memsrc_read, &s), URF_OK);
+        CHECK_EQ_INT(urf_next_page(&u), URF_OK);
+        const uint8_t want[2] = { 0x55, 0x55 };
+        CHECK_EQ_INT(urf_next_row(&u, &row), URF_OK);
+        CHECK_EQ_MEM(row, want, 2);
+        CHECK_EQ_INT(urf_next_row(&u, &row), URF_OK);
+        CHECK_EQ_MEM(row, want, 2);
+        CHECK_EQ_INT(urf_next_row(&u, &row), URF_END);  /* height limit reached */
+        urf_free(&u);
+    }
+
     TEST_END;
 }
