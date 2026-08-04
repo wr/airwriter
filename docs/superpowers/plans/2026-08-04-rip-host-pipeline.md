@@ -417,6 +417,11 @@ int urf_next_page(urf_t *u)
     p->bpp_bytes      = (uint8_t)((p->bits_per_pixel + 7) / 8);
     if (p->bpp_bytes == 0) p->bpp_bytes = 1;
 
+    // A malformed width must not wrap the multiply on a 32-bit target,
+    // where size_t is 32 bits. 1152 dots is the printer's real limit;
+    // 65535 is a generous ceiling that still cannot overflow.
+    if (p->width > 65535 || p->height > 65535) return URF_ERR_UNSUPPORTED;
+
     // URF has no sub-byte depths, so this cannot lose a partial byte.
     p->bytes_per_line = (size_t)p->width * p->bits_per_pixel / 8;
 
