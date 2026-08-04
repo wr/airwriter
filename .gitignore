@@ -1,6 +1,7 @@
 # KiCad
 *-backups/
 *.kicad_prl
+!hardware/airwriter/lib/**
 fp-info-cache
 *.kicad_pcb-bak
 *.kicad_sch-bak
