@@ -14,30 +14,31 @@ Three parts set the floor and none of them can shrink:
 | Stage | State |
 |---|---|
 | Schematic | Complete. ERC clean, zero errors. 37 components, 33 signal nets. |
-| Footprints | All 41 placed. |
-| Placement | Complete. DRC 6 violations, all benign (see below). |
-| Routing | **Not started.** 96 unconnected items. |
-| Fab outputs | BOM and pick-and-place done. Gerbers deliberately not generated — they would be meaningless before routing. |
+| Placement | Complete. |
+| Routing | Complete. 571 segments, 58 vias (0.6/0.3mm), **0 unconnected**. |
+| DRC | **3 violations, both categories cosmetic** (see below). |
+| Fab outputs | Gerbers, Excellon drill + map, BOM, pick-and-place, render. All in `fab/`. |
 
-### The 6 accepted DRC violations
+### The 3 remaining DRC violations
 
-- 2 courtyard overlaps, H1/H2 against U1. The WROOM-1's courtyard is 48 x 41mm because it
-  includes the antenna keepout. The mounting holes are NPTH with no copper, so this is fine.
-- 2 silkscreen-over-edge, U1. The module deliberately overhangs the top edge.
-- 2 library metadata mismatches, U1 and J2.
+- 2 silkscreen-over-edge on U1. The module deliberately overhangs the top edge.
+- 1 library metadata mismatch on J2, from hand-injecting the footprint into the board.
+
+Everything else is clean: zero unconnected, zero clearance, zero shorts, zero drill-range.
 
 ## Routing
 
-Autorouting could not be automated. KiCad 10 dropped Specctra DSN export and SES import from
-`kicad-cli`, so the Freerouting round trip is GUI-only. Freerouting 2.2.4 is installed at
-`~/.local/share/freerouting/freerouting.jar` and Java 25 is present, so the manual path works:
+Routed with Freerouting 2.2.4. It cannot be automated: KiCad 10 dropped Specctra DSN export and
+SES import from `kicad-cli`, so the round trip is GUI-only. Freerouting lives at
+`~/.local/share/freerouting/freerouting.jar` and Java 25 is present. To re-route:
 
 1. Open the PCB, File > Export > Specctra DSN
 2. `java -jar ~/.local/share/freerouting/freerouting.jar -de board.dsn -do board.ses`
 3. File > Import > Specctra Session
 
-A GND zone is already laid on B.Cu. It will not connect much until stitching vias exist, which
-the router adds.
+**After any re-route, always run DRC with `--refill-zones`.** Freerouting does not repour the GND
+zone, and an unfilled zone produces hundreds of phantom clearance errors — 278 violations that
+drop to 3 once refilled.
 
 ## Toolchain notes
 
@@ -82,9 +83,15 @@ in its ground pad. That is within JLCPCB capability.
 
 ## Still to do
 
-1. Route the board.
-2. Regenerate DRC, confirm zero unconnected.
-3. Export gerbers and drill files.
-4. Add LCSC/Digi-Key ordering codes to the BOM — currently it carries values and footprints only.
-5. Push the DNP flags through to the board footprints. They are set in the schematic (R5, R6, R7,
-   R9) but the pick-and-place still lists them, so an assembler would populate them.
+1. Add LCSC/Digi-Key ordering codes to the BOM. It currently carries values and footprints only.
+2. Optional: 3mm corner radii, which the spec asked for and the outline does not yet have.
+
+## Traps that cost real time here
+
+- **The GND zone was on net `"GND"` while every pad is on `"/GND"`.** KiCad uses the hierarchical
+  name with a leading slash. The pour was floating for its entire life and DRC reported it as 28
+  isolated-copper islands rather than as a disconnected zone. Check zone nets by string.
+- **Footprint zones store absolute coordinates.** Moving a footprint by editing `(at ...)` in a
+  script moves the pads but strands any keepout polygon. The WROOM-1 antenna keepout sat 46mm off
+  the board until corrected, so DRC was never enforcing it.
+- **Freerouting does not repour zones.** Always DRC with `--refill-zones`.
