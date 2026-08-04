@@ -13,25 +13,35 @@ Three parts set the floor and none of them can shrink:
 
 | Stage | State |
 |---|---|
-| Schematic | Complete. ERC clean, zero errors. 37 components, 33 signal nets. |
-| Placement | Complete. |
-| Routing | Complete. 470 segments, 64 vias, GND poured on both layers. **Every component pad connected.** |
-| DRC | 3 violations, both cosmetic. 3 unconnected, all pour-fragment to pour-fragment — no pad or track. |
-| Fab outputs | Gerbers, Excellon drill + map, BOM, pick-and-place, render. All in `fab/`. |
+| Schematic | Complete. ERC clean, zero errors. 52 footprints, both ports. |
+| Routing | Complete. 434 segments, 34 vias. **Every component pad connected.** |
+| DRC | 5, all cosmetic. 15 unconnected, all pour-fragment to pour-fragment, none involving a pad or track. |
+| Fab outputs | Gerbers, Excellon drill + map, BOM, pick-and-place, render, in `fab/`. |
+
+Board is **52 x 54mm**, two layers. Bottom edge carries the printer mini-DIN, the
+LocalTalk mini-DIN and USB-C. BOM is 44 populated parts plus 4 DNP.
 
 ### What DRC still reports, and why it is fine
 
 - 2 silkscreen-over-edge on U1. The module deliberately overhangs the top edge.
-- 2 library metadata mismatches, on J2 and U1. J2's came from hand-injecting the footprint;
-  U1's is deliberate, because its thermal-via drills were enlarged (see the fab section).
-- 3 "unconnected" between GND pour fragments on F.Cu. These are slivers of 1 to 2 mm²
-  trapped between the mini-DIN pins. Every one is grounded through an adjacent pad; they
-  are simply not tied to the main pour through top-layer copper. **No pad and no track
-  appears in the unconnected list** — the circuit is electrically complete.
+- 3 library metadata mismatches. J2 and J4 because the mini-DIN footprint was injected
+  into the board by hand; U1 because its thermal-via drills were deliberately enlarged.
+- 15 "unconnected" between GND pour fragments. Every fragment is anchored to GND through
+  an adjacent pad or via, so this is zone contiguity rather than floating copper. **No pad
+  and no track appears in the unconnected list.**
 
-Zero clearance, zero shorts, zero drill-range, zero edge-clearance.
+## Modes
 
-GND coverage is 840mm² on F.Cu and 1270mm² on B.Cu over a 1728mm² board.
+The board supports three, and only the third needed hardware:
+
+1. **AirPrint only** — IPP over WiFi to the printer's serial port.
+2. **AirPrint + EtherTalk** — pure firmware, no hardware change. Not yet written.
+3. **AirPrint + LocalTalk** — the second mini-DIN, the PIC running TashTalk, and the split
+   transceiver. This is AirWriter acting as the AppleTalk option card the ImageWriter never
+   had. Firmware not yet written.
+
+Only one AppleTalk transport can be active at a time unless you write an AppleTalk router.
+AirPrint runs concurrently with any of them because it is IP.
 
 ## Routing
 
