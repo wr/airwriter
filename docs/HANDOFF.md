@@ -133,7 +133,14 @@ automated; the Freerouting round trip is GUI-only.
   read off Kycon engineering drawing KMDGX-xS-BS rev C6 (ECO#18-013), 8-position "Recommended PCB
   Layout (Top View)", cross-checked against three dimension chains. **Pin 7 sits at +0.90mm from the
   centreline while pin 2 directly above it sits at +1.30mm** — the lower row is deliberately
-  asymmetric and easy to get wrong by eye.
+  asymmetric and easy to get wrong by eye. Kycon's own STEP model, fetched later, has the same
+  asymmetry, which is independent confirmation the footprint is right.
+- **`lib/airwriter.3dshapes/MiniDIN-8_Kycon_KMDGX-8S-BS_RightAngle.step`** — Kycon's official model,
+  from `kycon.com/website/Extranet/3D/KMDGX-8S-BS_rC6.STEP`. That Extranet path is not linked from
+  the product page; it was found through a search index. Attached to the footprint at
+  `rotate -90 0 180`, offset zero. Verified by rendering the bottom of the board: all eight pins and
+  all three posts land centred in their holes. Without it the board's STEP export had two holes
+  where the ports should be.
 - **`Mini-DIN-8_Shielded`** — the stock symbol has no shield pin, so there is no way to net the shell.
   Pin 9 is SHIELD, tied to all three mounting posts in the footprint.
 - **`SN65HVD1473DGSR`** — reused with credit from FeralFirmware/TailTalk. No longer placed on the

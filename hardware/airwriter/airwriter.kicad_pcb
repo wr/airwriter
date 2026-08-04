@@ -2774,6 +2774,12 @@
 			(uuid "34d00685-7d6a-40a6-8bc3-c91ffb231e57")
 		)
 		(embedded_fonts no)
+	
+		(model "${KIPRJMOD}/lib/airwriter.3dshapes/MiniDIN-8_Kycon_KMDGX-8S-BS_RightAngle.step"
+			(offset (xyz 0 0 0))
+			(scale (xyz 1 1 1))
+			(rotate (xyz -90 0 180))
+		)
 	)
 	(footprint "Package_SO:SOIC-8_3.9x4.9mm_P1.27mm"
 		(layer "F.Cu")
@@ -5714,6 +5720,12 @@
 			(uuid "1cd736ae-9865-478f-bb05-b7913134a344")
 		)
 		(embedded_fonts no)
+	
+		(model "${KIPRJMOD}/lib/airwriter.3dshapes/MiniDIN-8_Kycon_KMDGX-8S-BS_RightAngle.step"
+			(offset (xyz 0 0 0))
+			(scale (xyz 1 1 1))
+			(rotate (xyz -90 0 180))
+		)
 	)
 	(footprint "Resistor_SMD:R_0603_1608Metric"
 		(layer "F.Cu")

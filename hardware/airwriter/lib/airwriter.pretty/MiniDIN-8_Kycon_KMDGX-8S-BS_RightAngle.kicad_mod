@@ -19,4 +19,9 @@
   (fp_rect (start -8.4500 3.0000) (end 8.4500 12.0000) (stroke (width 0.12) (type solid)) (fill none) (layer "F.SilkS"))
   (fp_poly (pts (xy -7.0000 0.7500) (xy 7.0000 0.7500) (xy 7.0000 14.2500) (xy -6.0000 14.2500) (xy -7.0000 13.2500)) (stroke (width 0.1) (type solid)) (fill none) (layer "F.Fab"))
   (fp_circle (center -8.8500 8.5000) (end -8.7000 8.5000) (stroke (width 0.1) (type solid)) (fill solid) (layer "F.SilkS"))
+	(model "${KIPRJMOD}/lib/airwriter.3dshapes/MiniDIN-8_Kycon_KMDGX-8S-BS_RightAngle.step"
+		(offset (xyz 0 0 0))
+		(scale (xyz 1 1 1))
+		(rotate (xyz -90 0 180))
+	)
 )
