@@ -11,7 +11,7 @@
 **Status:** every code block in Tasks 1–8 was extracted, compiled under `-Wall -Wextra -Werror`
 and run before this plan was committed. All 179 checks pass, `rip` builds, and the synthetic
 fixture rips to a valid PNG and a 2673-byte stream that starts `1B 63 1B 70 1B 54 31 36` and
-ends `0C`. Task 9 is the exception — it needs a phone and has not been run.
+ends `0C`. Task 8 is the exception — it needs a phone and has not been run.
 
 ## Global Constraints
 
@@ -436,7 +436,7 @@ int urf_next_page(urf_t *u)
 int urf_next_row(urf_t *u, const uint8_t **row)
 {
     (void)u; (void)row;
-    return URF_ERR_UNSUPPORTED;   // Task 4
+    return URF_ERR_UNSUPPORTED;   // Task 3
 }
 
 void urf_free(urf_t *u)
@@ -464,8 +464,7 @@ matters for the ImageWriter's anisotropic 144x72 grid."
 ```
 
 ---
-
-### Task 3: The line RLE decoder
+### Task 3: The line RLE decoder and row streaming
 
 This is the part `SPEC.md` §3.6 warns about. Three separate `+1` conventions, and a control byte the PWG spec does not define.
 
@@ -479,7 +478,7 @@ This is the part `SPEC.md` §3.6 warns about. Three separate `+1` conventions, a
 
 - [ ] **Step 1: Write the failing test**
 
-Create `tools/rip/test/test_urf_rle.c`. It reaches the internal decoder through the public row API, so `urf_next_row` must exist — Task 4 writes the real one, but these vectors define its behaviour and must be written first.
+Create `tools/rip/test/test_urf_rle.c`. It drives the internal decoder through the public row API.
 
 ```c
 // SPDX-License-Identifier: GPL-3.0-or-later
@@ -660,37 +659,9 @@ static int decode_line(urf_t *u, unsigned *repeat)
 }
 ```
 
-- [ ] **Step 4: Run the tests**
+- [ ] **Step 4: Write the row streamer**
 
-Run: `make -C tools/rip test`
-Expected: `test_urf_rle` still fails — `urf_next_row` is still the stub. That is correct; Task 4 wires it up. Confirm `test_urf_header` still passes and the build has no warnings.
-
-- [ ] **Step 5: Commit**
-
-```bash
-git add firmware/components/urf_decode/urf_decode.c tools/rip/test/test_urf_rle.c
-git commit -m "Add the PackBits-variant line decoder
-
-Ported from _cupsRasterReadPixels in cups/raster-stream.c. Low control
-bytes repeat and high ones are literal, which is inverted from real
-PackBits, and 0x80 clears to end of line with a fill that depends on
-whether the colour space is additive."
-```
-
----
-
-### Task 4: Page and row streaming
-
-**Files:**
-- Modify: `firmware/components/urf_decode/urf_decode.c`
-
-**Interfaces:**
-- Consumes: `decode_line` from Task 3.
-- Produces: working `int urf_next_row(urf_t *u, const uint8_t **row)` returning `URF_OK` with `*row` pointing at `bytes_per_line` bytes, `URF_END` when the page's declared height has been delivered, or a negative error.
-
-- [ ] **Step 1: Replace the stub**
-
-In `firmware/components/urf_decode/urf_decode.c`, replace the whole `urf_next_row` stub with:
+In `firmware/components/urf_decode/urf_decode.c`, replace the whole `urf_next_row` stub from Task 2 with:
 
 ```c
 int urf_next_row(urf_t *u, const uint8_t **row)
@@ -712,24 +683,29 @@ int urf_next_row(urf_t *u, const uint8_t **row)
 }
 ```
 
-- [ ] **Step 2: Run the tests and verify they pass**
+- [ ] **Step 5: Run the tests and verify they pass**
 
 Run: `make -C tools/rip test`
-Expected: `ok  test/test_urf_rle.c` and `ok  test/test_urf_header.c`, exit 0.
+Expected: every test binary reports `ok`, exit 0. The suite must be green before you commit.
 
-- [ ] **Step 3: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
-git add firmware/components/urf_decode/urf_decode.c
-git commit -m "Stream decoded rows, bounded by the page height
+git add firmware/components/urf_decode/urf_decode.c tools/rip/test/test_urf_rle.c
+git commit -m "Decode raster lines and stream rows
 
-The line-repeat byte can claim more rows than the header declares, so
-the bound is per row rather than per block."
+The line encoding is ported from _cupsRasterReadPixels in
+cups/raster-stream.c. Low control bytes repeat and high ones are
+literal, inverted from real PackBits, and 0x80 clears to end of line
+with a fill that depends on whether the colour space is additive.
+
+Row delivery is bounded by the declared page height, because the
+line-repeat byte can claim more rows than the header says."
 ```
 
 ---
 
-### Task 5: Resample onto the printer's dot grid
+### Task 4: Resample onto the printer's dot grid
 
 The ImageWriter's grid is anisotropic — 144 dpi across, 72 dpi down — and iOS may send any resolution. This module maps source rows onto target rows by box filtering, streaming, with no full-page buffer. `SPEC.md` does not name this module; it is added here because §3.3 requires a downsample path and there was nowhere for it to live.
 
@@ -956,7 +932,7 @@ up, one destination row held at a time."
 
 ---
 
-### Task 6: Halftoning
+### Task 5: Halftoning
 
 **Files:**
 - Create: `firmware/components/halftone/include/halftone.h`
@@ -1237,7 +1213,7 @@ control."
 
 ---
 
-### Task 7: The ImageWriter output stage
+### Task 6: The ImageWriter output stage
 
 **Files:**
 - Create: `firmware/components/imagewriter/include/imagewriter.h`
@@ -1490,7 +1466,7 @@ header, because all three are wrong in most circulating documentation."
 
 ---
 
-### Task 8: The `rip` CLI
+### Task 7: The `rip` CLI
 
 **Files:**
 - Create: `tools/rip/png_write.h`
@@ -1866,7 +1842,7 @@ whole tool."
 
 ---
 
-### Task 9: Capture a real URF from an iPhone
+### Task 8: Capture a real URF from an iPhone
 
 Everything above runs on a synthetic file. This task replaces the guess with the real thing, and answers a question the spec flags in §3.3: what resolution and colour space iOS actually sends when told the printer can only do 72 and 144 dpi.
 
