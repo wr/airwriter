@@ -89,13 +89,17 @@ static esp_err_t scan_get(httpd_req_t *req)
     wifi_ap_record_t *aps = n ? calloc(n, sizeof *aps) : NULL;
     if (aps) esp_wifi_scan_get_ap_records(&n, aps);
 
-    char out[768];
+    // Each network as {s: name, r: rssi, a: 1 if it needs a password}. The UI
+    // draws a signal glyph and a lock from these, the way a phone does.
+    char out[1400];
     size_t len = 0;
     out[len++] = '[';
     for (uint16_t i = 0; i < n && aps; i++) {
         if (!aps[i].ssid[0]) continue;
-        int w = snprintf(out + len, sizeof out - len, "%s\"%s\"",
-                         len > 1 ? "," : "", (char *)aps[i].ssid);
+        int w = snprintf(out + len, sizeof out - len,
+                         "%s{\"s\":\"%s\",\"r\":%d,\"a\":%d}",
+                         len > 1 ? "," : "", (char *)aps[i].ssid, aps[i].rssi,
+                         aps[i].authmode == WIFI_AUTH_OPEN ? 0 : 1);
         if (w < 0 || (size_t)w >= sizeof out - len) break;
         len += (size_t)w;
     }
