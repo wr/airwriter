@@ -164,7 +164,7 @@ txtvers=1
 rp=ipp/print
 ty=Apple ImageWriter II
 product=(AirWriter)
-pdl=image/urf,image/pwg-raster
+pdl=image/urf
 adminurl=http://<host>.local/
 priority=10
 UUID=<stable, derived from eFuse MAC>
@@ -172,6 +172,11 @@ Color=F
 Duplex=F
 URF=<see 3.3>
 ```
+
+Only `image/urf` is advertised for now — `urf_decode` recognises the PWG Raster magic
+but rejects it (`URF_ERR_UNSUPPORTED`), and advertising a PDL the firmware can't decode
+fails every job a client sends in that format. Add `image/pwg-raster` back to `pdl=` once
+the 1796-byte PWG header parser exists.
 
 Default hostname `imagewriter-XXXX.local` where XXXX is the last two MAC bytes in hex,
 overridable from the web UI.

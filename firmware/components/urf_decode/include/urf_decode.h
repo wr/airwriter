@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// URF (Apple Raster) and PWG Raster decoder.
+// URF (Apple Raster) decoder. It recognises the PWG Raster magic (`RaS2`)
+// well enough to reject it cleanly with URF_ERR_UNSUPPORTED -- PWG support
+// itself is deferred; see urf_open().
 //
 // Binary layout and the line encoding were read from OpenPrinting/cups
 // cups/raster-stream.c (_cupsRasterReadHeader, _cupsRasterReadPixels) and
@@ -16,6 +18,15 @@
 #define URF_ERR_MAGIC       -2
 #define URF_ERR_UNSUPPORTED -3
 #define URF_ERR_MALFORMED   -4
+#define URF_ERR_ALLOC       -5
+
+// Ceiling for one decoded scanline (urf_page_t.bytes_per_line), checked in
+// urf_next_page before the allocation it sizes. This module must not depend
+// on the imagewriter component, so it does not reference IW_MAX_DOTS (1152
+// dots at 8bpp grayscale, the printer's real limit) -- it just needs a sane
+// bound of its own. Sized with headroom above a 300 dpi Letter page at
+// 32bpp: 2550px * 4B/px = 10200B/line.
+#define URF_MAX_BYTES_PER_LINE (64u * 1024u)
 
 // Returns 1 when all n bytes were read, 0 on short read or error.
 typedef int (*urf_read_fn)(void *ctx, uint8_t *buf, size_t n);

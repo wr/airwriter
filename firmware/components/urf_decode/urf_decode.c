@@ -45,8 +45,9 @@ int urf_open(urf_t *u, urf_read_fn read, void *ctx)
     }
     if (memcmp(h, "RaS2", 4) == 0) {
         // PWG: the sync word is 4 bytes, so 8 of the 12 read belong to the
-        // first page header. Task 3 handles PWG; reject it for now rather
-        // than silently mis-parsing.
+        // first page header. PWG support is deferred entirely (no 1796-byte
+        // header parser exists yet); reject it here rather than silently
+        // mis-parsing.
         u->is_pwg = 1;
         return URF_ERR_UNSUPPORTED;
     }
@@ -88,9 +89,14 @@ int urf_next_page(urf_t *u)
     // URF has no sub-byte depths, so this cannot lose a partial byte.
     p->bytes_per_line = (size_t)p->width * p->bits_per_pixel / 8;
 
+    // Veto an oversized format before allocating for it. Without this, a
+    // header claiming e.g. 65535 wide at high bpp forces a multi-megabyte
+    // allocation -- fine on a host, fatal on a 512 KB target.
+    if (p->bytes_per_line > URF_MAX_BYTES_PER_LINE) return URF_ERR_UNSUPPORTED;
+
     if (p->bytes_per_line > u->line_cap) {
         uint8_t *nl = realloc(u->line, p->bytes_per_line);
-        if (!nl) return URF_ERR_IO;
+        if (!nl) return URF_ERR_ALLOC;
         u->line     = nl;
         u->line_cap = p->bytes_per_line;
     }

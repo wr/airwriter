@@ -23,12 +23,13 @@ typedef struct {
     uint8_t *bits;
     uint8_t *preview;      // dst_w * dst_h, grown as rows arrive
     uint32_t dst_w, dst_h, prev_y;
+    int      write_failed;
 } pipe_t;
 
 static void stream_out(void *ctx, const uint8_t *b, size_t n)
 {
     pipe_t *p = (pipe_t *)ctx;
-    if (p->stream) fwrite(b, 1, n, p->stream);
+    if (p->stream && fwrite(b, 1, n, p->stream) != n) p->write_failed = 1;
 }
 
 /* One resampled row: halftone it, feed the printer, record the preview. */
@@ -78,7 +79,12 @@ int main(int argc, char **argv)
     urf_t u;
     int rc = urf_open(&u, file_read, f);
     if (rc != URF_OK) {
-        fprintf(stderr, "rip: %s is not a URF file (%d)\n", in, rc);
+        if (rc == URF_ERR_UNSUPPORTED && u.is_pwg)
+            fprintf(stderr, "rip: %s is PWG raster, which is not supported yet\n", in);
+        else if (rc == URF_ERR_MAGIC)
+            fprintf(stderr, "rip: %s is neither a URF nor PWG raster file\n", in);
+        else
+            fprintf(stderr, "rip: could not read %s (%d)\n", in, rc);
         fclose(f);
         return 1;
     }
@@ -99,13 +105,37 @@ int main(int argc, char **argv)
         }
 
         uint32_t res    = u.page.res_x ? u.page.res_x : DPI_X;
-        uint32_t raw_w  = (uint32_t)((uint64_t)u.page.width  * DPI_X / res);
-        p.dst_w = raw_w;
+        uint32_t full_w = (uint32_t)((uint64_t)u.page.width * DPI_X / res);
+
+        // SPEC.md 3.5 declares a 0.25in left/right margin to iOS, so the
+        // outermost res/4 source pixels per side are white by construction.
+        // A page wider than the printer's 8in / 1152 dots is US Letter
+        // (8.5in) arriving at full bleed; crop the margin instead of
+        // squashing the whole page down to fit.
+        uint32_t src_w = u.page.width, crop_left = 0, crop_per_side = 0;
+        if (full_w > IW_MAX_DOTS) {
+            uint32_t shortfall_dst  = full_w - IW_MAX_DOTS;
+            uint32_t shortfall_src  = (uint32_t)((uint64_t)shortfall_dst * res / DPI_X);
+            uint32_t max_per_side   = res / 4;             // 0.25in in source px
+            crop_per_side = shortfall_src / 2;
+            if (crop_per_side > max_per_side) crop_per_side = max_per_side;
+            crop_left = crop_per_side;
+            src_w = u.page.width - 2 * crop_per_side;
+        }
+
+        p.dst_w = (uint32_t)((uint64_t)src_w * DPI_X / res);
         p.dst_h = (uint32_t)((uint64_t)u.page.height * DPI_Y / res);
+
+        int still_wide = 0;
         if (p.dst_w > IW_MAX_DOTS) {
-            fprintf(stderr, "rip: page %d width %u dots clamped to %u dots\n",
-                    pages + 1, raw_w, (unsigned)IW_MAX_DOTS);
             p.dst_w = IW_MAX_DOTS;
+            still_wide = 1;
+        }
+        if (crop_per_side || still_wide) {
+            fprintf(stderr, "rip: page %d width %u dots exceeds %u; cropped %u "
+                            "source px per side (0.25in margin)%s\n",
+                    pages + 1, full_w, (unsigned)IW_MAX_DOTS, crop_per_side,
+                    still_wide ? ", still scaled to fit" : "");
         }
         if (!p.dst_w || !p.dst_h) { fprintf(stderr, "rip: empty page\n"); rc = -1; break; }
 
@@ -126,7 +156,7 @@ int main(int argc, char **argv)
         iw_init(&p.iw, p.dst_w, stream_out, &p);
         iw_begin_page(&p.iw);
 
-        if (rs_init(&rs, u.page.width, u.page.height, p.dst_w, p.dst_h, on_row, &p)) {
+        if (rs_init(&rs, src_w, u.page.height, p.dst_w, p.dst_h, on_row, &p)) {
             rc = -1; goto page_cleanup;
         }
         rs_ready = 1;
@@ -134,12 +164,18 @@ int main(int argc, char **argv)
         {
             const uint8_t *row;
             int r;
-            while ((r = urf_next_row(&u, &row)) == URF_OK) rs_push(&rs, row);
+            // 8-bit grayscale, one byte per pixel: the pointer offset is the
+            // pixel offset.
+            while ((r = urf_next_row(&u, &row)) == URF_OK) rs_push(&rs, row + crop_left);
             if (r < 0) {
                 fprintf(stderr, "rip: page %d incomplete, stream is truncated\n", pages + 1);
                 rc = r;
             } else {
                 iw_end_page(&p.iw);
+                if (p.write_failed) {
+                    fprintf(stderr, "rip: short write to %s\n", out_stream);
+                    rc = -1;
+                }
             }
         }
 

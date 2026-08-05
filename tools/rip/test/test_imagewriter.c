@@ -51,16 +51,20 @@ int main(void)
 
         sink_n = 0;
         uint8_t row[1] = { 0x80 };
-        for (int i = 0; i < 8; i++) iw_row(&w, row);   /* one full strip */
+        for (int i = 0; i < 16; i++) iw_row(&w, row);   /* two full strips */
 
-        /* ESC G 0 0 0 8, then 8 column bytes, then CR LF */
-        const uint8_t want_strip[] = {
+        /* Strip 1 is mid-page, so it ends CR LF. Strip 2 is the page's last
+         * strip, so its LF is suppressed -- only CR. */
+        const uint8_t want[] = {
             0x1B,'G','0','0','0','8',
             0xFF, 0, 0, 0, 0, 0, 0, 0,
-            '\r', '\n'
+            '\r', '\n',
+            0x1B,'G','0','0','0','8',
+            0xFF, 0, 0, 0, 0, 0, 0, 0,
+            '\r'
         };
-        CHECK_EQ_INT(sink_n, sizeof want_strip);
-        CHECK_EQ_MEM(sink, want_strip, sizeof want_strip);
+        CHECK_EQ_INT(sink_n, sizeof want);
+        CHECK_EQ_MEM(sink, want, sizeof want);
 
         sink_n = 0;
         iw_end_page(&w);
@@ -68,7 +72,8 @@ int main(void)
         CHECK_EQ_INT(sink[0], 0x0C);      /* form feed, or it waits for Select */
     }
 
-    /* -- a partial strip is padded with blank rows, not dropped -- */
+    /* -- a partial strip is padded with blank rows, not dropped, and it is
+     *    the page's last strip so it too gets CR without a trailing LF -- */
     {
         iw_t w;
         sink_n = 0;
@@ -81,10 +86,11 @@ int main(void)
         CHECK_EQ_INT(sink_n, 0);          /* nothing emitted yet */
 
         iw_end_page(&w);
-        /* strip header + 8 data + CR LF + FF = 6 + 8 + 2 + 1 */
-        CHECK_EQ_INT(sink_n, 17);
+        /* strip header + 8 data + CR (no LF) + FF = 6 + 8 + 1 + 1 */
+        CHECK_EQ_INT(sink_n, 16);
         CHECK_EQ_INT(sink[6], 0x01);      /* only the top pin fires */
-        CHECK_EQ_INT(sink[16], 0x0C);
+        CHECK_EQ_INT(sink[14], '\r');
+        CHECK_EQ_INT(sink[15], 0x0C);
     }
 
     TEST_END;

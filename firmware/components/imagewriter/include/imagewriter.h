@@ -3,7 +3,7 @@
 // ImageWriter II output stage. 144 dpi horizontal, 72 dpi vertical, one pass.
 //
 // Escape codes from the Apple ImageWriter II Technical Reference:
-//   ESC c        reset                              (Table A-15, p. 144)
+//   ESC c        reset                              (Table A-2,  p. 135)
 //   ESC p        144 dpi, 1152 dots max             (Table 8-2,  p. 106)
 //   ESC T nn     line feed of nn/144 inch, 2 digits (Table A-15, p. 144)
 //   ESC G nnnn   nnnn bytes of graphics, 4 digits   (Table 8-1,  p. 105)
@@ -24,6 +24,8 @@ typedef struct {
     uint8_t   rows[8][(IW_MAX_DOTS + 7) / 8];
     uint32_t  nrows;
     uint8_t   cols[IW_MAX_DOTS];
+    int       pending_lf;   // LF from the previous strip, held back in case
+                             // it turns out to be the page's last strip
 } iw_t;
 
 void iw_init(iw_t *w, uint32_t width_dots, iw_out_fn out, void *ctx);
