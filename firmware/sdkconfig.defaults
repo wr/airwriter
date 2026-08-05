@@ -1,0 +1,10 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# Target-independent defaults. The real board is an ESP32-S3-WROOM-1-N8R2, but
+# the network side (ipp_server, mDNS, webui) is developed on an ESP32-C6 devkit
+# while boards are unordered. ESP-IDF merges sdkconfig.defaults.<target> on top
+# of this file, so keep anything chip-specific out of here.
+
+# Console goes over the native USB serial/JTAG peripheral, not a UART -- UART1
+# belongs to the printer. See SPEC.md 2.5. Both chips have this peripheral.
+CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y

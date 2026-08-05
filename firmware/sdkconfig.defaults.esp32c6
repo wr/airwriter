@@ -1,0 +1,6 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# Development devkit only, never the shipping board. No PSRAM, so a page buffer
+# that fits here fits the S3 too -- which makes the C6 the stricter target for
+# memory and a useful place to catch an allocation the S3 would have absorbed.
+CONFIG_ESPTOOLPY_FLASHSIZE_4MB=y

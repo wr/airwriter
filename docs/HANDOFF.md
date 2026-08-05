@@ -314,14 +314,16 @@ serves mode 2 and mode 3 equally.
 
 ## What to do next
 
-**Print from your iPhone into `tools/ippcap`.** This is the one outstanding item and it needs a
-human. Run `python3 tools/ippcap/ippcap.py fixtures`, advertise it with the `dns-sd` line in that
-file's docstring, print to "AirWriterCap" from the phone, then fill in the table in
-`fixtures/README.md`. Everything in the pipeline currently rests on CUPS source and a
-self-generated fixture; this is what confirms it against reality, and it also settles whether iOS
-honours `RS72-144` or sends 300 dpi regardless.
+**The iPhone capture is done.** `fixtures/ios-20260804-232652.urf` came off a real phone through
+`tools/ippcap`, and iOS honoured `RS72-144` — it rendered at exactly 144 dpi rather than sending
+300, so no downsample fallback is needed and `RS300` need not be advertised. The capture is in
+`make regress` and `test/test_ios_capture.c` asserts its header fields, so assumption 5 now has a
+real-world check. 249 checks green.
 
-**Then M1, M3, M4, M5 in order** — all gated on boards, which are not ordered.
+**Write `ipp_server`, `ipp_attrs` and mDNS discovery (M4) next.** It is the largest remaining
+block of code, it needs WiFi only, and it does not need the AirWriter board — any ESP32-S3 devkit
+will do. `serial_out`, `printer_state` and the M1/M3 printing work are the parts genuinely gated
+on boards, which are not ordered.
 
 **Printer scope is settled.** See `docs/superpowers/specs/2026-08-04-printer-support-scope-design.md`.
 Short version: v1 is the ImageWriter II over serial and nothing else. StyleWriter and
@@ -356,4 +358,8 @@ export Specctra DSN from the PCB editor, run
 `java -jar ~/.local/share/freerouting/freerouting.jar -de board.dsn -do board.ses`, import the
 session. Then DRC with `--refill-zones`.
 
-ESP-IDF is **not installed**.
+ESP-IDF **v5.5.1 is installed** at `~/esp/esp-idf`, tools for esp32s3 only. Source
+`. ~/esp/esp-idf/export.sh` before any `idf.py`. The `firmware/` project builds for the
+target today: `idf.py build` produces a 200KB image, and all four raster components
+compile there unchanged as promised. `main.c` is a bring-up stub that runs the halftone
+and imagewriter path once against a gradient and idles.
