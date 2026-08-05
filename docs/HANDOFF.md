@@ -108,8 +108,18 @@ and an unloadable board. `set_board_size` appends an outline instead of replacin
 overlapping rectangles on Edge.Cuts. Edit `airwriter.kicad_pro` directly for rules; rebuild the
 outline by hand.
 
-**`check_freerouting` hangs and wedges the whole MCP server.** The Java process it spawns never
-exits. Recovery is `pkill -f freerouting.jar`. Do not call it.
+**Freerouting hangs on any DSN KiCad exports, and the cause is fractional coordinates.** KiCad
+writes coordinates with decimals while declaring `(resolution um 10)`; Specctra wants whole units.
+Freerouting turns them into exact rationals, the numerators explode in `Line.intersection`, and it
+spins at 200% CPU inside `BasicBoard.normalize_traces` forever, still printing "Opening ...".
+Rounding every number in the `.dsn` to an integer drops the load from never to 0.9 seconds.
+`route.py` does this for you. This is also why `check_freerouting` appeared to wedge the MCP
+server — same root cause, not a tooling quirk. Recovery is `pkill -f freerouting.jar`.
+
+**Freerouting also blows up re-reading its own previous output.** Same arithmetic, so `route.py`
+drops the existing wiring and routes the whole board from scratch each time; a full route takes
+about 15 seconds. `--keep-wiring` routes only what is missing but will hang on a board Freerouting
+has already routed.
 
 **Freerouting never repours zones.** DRC without `--refill-zones` showed 278 violations that dropped
 to 3 once refilled. Always pass it.
@@ -131,8 +141,20 @@ workaround. Those symlinks vanish on a KiCad upgrade.
 makes the s-expression malformed. KiCad failed to load the footprint and dropped the part from the
 board without complaint. Balance-check any generated library file.
 
-**KiCad 10 removed Specctra DSN export and SES import from `kicad-cli`.** Routing therefore cannot be
-automated; the Freerouting round trip is GUI-only.
+**KiCad 10 removed Specctra DSN export and SES import from `kicad-cli`** — but not from the
+`pcbnew` Python module, which still has `ExportSpecctraDSN` and `ImportSpecctraSES`. Routing is
+therefore fully automatable; run `hardware/airwriter/route.py` with the interpreter inside the app
+bundle and it does export, round, route, import, and DRC in one go, no GUI:
+
+```
+/Applications/KiCad/KiCad.app/Contents/Frameworks/Python.framework/Versions/3.9/bin/python3 \
+    hardware/airwriter/route.py --passes 30
+```
+
+**A footprint's rotation does not rotate its pad shapes.** Each pad carries its own angle in
+`(at x y ANGLE)`, and KiCad writes the footprint rotation into it. A generated footprint that omits
+the angle places its pads correctly but leaves every pad shape unrotated — on J6 that turned a
+1mm-pitch connector into four shorted pads. Set the angle on every pad of a rotated footprint.
 
 ## Custom library
 
