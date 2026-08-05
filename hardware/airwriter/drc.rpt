@@ -1,29 +1,21 @@
 ** Drc report for airwriter.kicad_pcb **
-** Created on 2026-08-05T10:01:36 **
+** Created on 2026-08-05T13:43:42 **
 ** Report includes: Errors, Warnings **
 
-** Found 5 DRC violations **
+** Found 3 DRC violations **
 [silk_edge_clearance]: Silkscreen clipped by board edge
     Rule: board setup constraints silk; warning
-    @(149.0000 mm, 126.0000 mm): Segment on Edge.Cuts
-    @(139.6000 mm, 125.8500 mm): Segment of J1 on F.Silkscreen
+    @(149.0000 mm, 138.0000 mm): Segment on Edge.Cuts
+    @(139.6000 mm, 137.8500 mm): Segment of J1 on F.Silkscreen
 [silk_edge_clearance]: Silkscreen clipped by board edge
     Rule: board setup constraints silk; warning
-    @(149.0000 mm, 126.0000 mm): Segment on Edge.Cuts
-    @(149.0000 mm, 125.8500 mm): Segment of J1 on F.Silkscreen
-[silk_edge_clearance]: Silkscreen clipped by board edge
-    Rule: board setup constraints silk; warning
-    @(103.0000 mm, 60.0000 mm): Segment on Edge.Cuts
-    @(106.8000 mm, 53.8500 mm): Segment of U1 on F.Silkscreen
-[silk_edge_clearance]: Silkscreen clipped by board edge
-    Rule: board setup constraints silk; warning
-    @(103.0000 mm, 60.0000 mm): Segment on Edge.Cuts
-    @(125.2000 mm, 53.8500 mm): Segment of U1 on F.Silkscreen
+    @(149.0000 mm, 138.0000 mm): Segment on Edge.Cuts
+    @(149.0000 mm, 137.8500 mm): Segment of J1 on F.Silkscreen
 [lib_footprint_mismatch]: Footprint 'ESP32-S3-WROOM-1' does not match copy in library 'RF_Module'
     Local override; warning
     @(116.0000 mm, 66.7500 mm): Footprint U1
 
-** Found 8 unconnected pads **
+** Found 7 unconnected pads **
 [unconnected_items]: Missing connection between items
     Local override; error
     @(100.3000 mm, 60.3000 mm): Zone [/GND] on F.Cu, priority 0
@@ -35,11 +27,7 @@
 [unconnected_items]: Missing connection between items
     Local override; error
     @(100.3000 mm, 60.3000 mm): Zone [/GND] on F.Cu, priority 0
-    @(100.3000 mm, 60.3000 mm): Zone [/GND] on F.Cu, priority 0
-[unconnected_items]: Missing connection between items
-    Local override; error
-    @(100.3000 mm, 60.3000 mm): Zone [/GND] on F.Cu, priority 0
-    @(100.3000 mm, 60.3000 mm): Zone [/GND] on F.Cu, priority 0
+    @(100.3000 mm, 60.3000 mm): Zone [/GND] on B.Cu, priority 0
 [unconnected_items]: Missing connection between items
     Local override; error
     @(100.3000 mm, 60.3000 mm): Zone [/GND] on F.Cu, priority 0

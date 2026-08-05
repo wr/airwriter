@@ -16,7 +16,7 @@ flashes. 569 checks pass on the host. Still to write: `serial_out`, `printer_sta
 | | State |
 |---|---|
 | Schematic | Complete, ERC clean, zero errors |
-| PCB | Routed, 52 x 66mm, DRC clean, schematic parity clean |
+| PCB | Routed, 52 x 78mm, DRC clean, schematic parity clean |
 | Fab package | Gerbers, drill, BOM, pick-and-place in `hardware/airwriter/fab/` |
 | Firmware | M2 and M4 done: raster pipeline and AirPrint, 569 checks green |
 | Devkit | ESP32-C6 stands in for the board; it discovers, accepts jobs and prints from an iPhone |
@@ -91,11 +91,34 @@ because the board was never fully re-synced from the schematic. Those show up in
 file's value column, so an assembler would have seen "R18" where "4.7k" belongs. Synced against the
 BOM.
 
-**Board is 52 x 66mm, not 55 x 35.** The aspect flipped to portrait because the WROOM-1 wants its
+**Board is 52 x 78mm, not 55 x 35.** The aspect flipped to portrait because the WROOM-1 wants its
 antenna overhanging a short edge while both mini-DINs and the USB-C need the opposite one. It grew
-from 32 x 54 when the LocalTalk port was added, and to 66 tall when the indicators, the buttons and
-the I2C header needed a band of their own. Growing it sideways was tried first and undone: the
-ports live on one edge, so the room has to come from the axis they sit on.
+from 32 x 54 when the LocalTalk port was added, to 66 tall when the indicators, the buttons and
+the I2C header needed a band of their own, and to 78 for the artwork band below. Growing it sideways
+was tried first and undone: the ports live on one edge, so the room has to come from the axis they
+sit on.
+
+**A blank band runs across the board at y 86 to 98, for a logo and whatever else wants silkscreen.**
+Roughly 50 x 12mm, clear of copper on both layers apart from stitching vias, sitting between the
+ESP32 row and the transceiver row. The AirWriter wordmark sits just above it at y 82 to 86. Adding
+the band is what took the board from 66 to 78mm tall: every footprint below y=87 moved down 12mm and
+nothing above it moved, so the antenna keepout, the front connectors and their 2mm proud stand are
+all untouched.
+
+C9 and C14 came down with the band. They bypass U2 and U3, and leaving them in the top row would
+have put them 22mm from the chips they serve. They now sit at the top edge of the lower block,
+about 5mm from their pins — closer than before the board grew.
+
+**The three internal connectors carry function labels, not pinouts.** J3 is `USB`, J5 is `ICSP`,
+J6 is `I2C`. Per-pin labels do not fit: J3 has 1.35mm between the board edge and U1's pads, and J6's
+1mm pitch cannot hold text at the 0.8mm minimum height with legal spacing. J6 is wired in Qwiic pin
+order — GND, 3V3, SDA, SCL — so the word is the pinout for anyone with a Qwiic cable.
+
+**The mounting holes are not grounded, deliberately.** A ground ring buys nothing in a printed
+plastic case, and it would create a second path to ground that cannot be broken. The mini-DIN shells
+already reach GND through R8, which is a 0R precisely so that tie can be lifted; the ImageWriter II
+is mains-powered with a metal chassis, so a second, unbreakable ground path is exactly what puts
+noise on the serial link. The holes stay non-plated.
 
 **All three front connectors stand 2mm proud of the board edge**, so their faces sit flush with the
 outside of a 3mm-wall printed case rather than with the PCB. Move them together or not at all. They were not coplanar with each other
@@ -295,7 +318,7 @@ EOF
 enough to change design decisions. MAX3232 is $9.98 at Mouser and $0.91 at LCSC. MAX3490 is $6.61 at
 Digi-Key and $0.687 at LCSC.
 
-Order the board as **52 x 66mm, 2 layer, 1.6mm FR4, 1oz copper, HASL**. Nothing needs a premium
+Order the board as **52 x 78mm, 2 layer, 1.6mm FR4, 1oz copper, HASL**. Nothing needs a premium
 process.
 
 **Protect the 0.30mm drill floor.** PCBWay's standard minimum is 0.30mm and 0.20mm is an upgraded

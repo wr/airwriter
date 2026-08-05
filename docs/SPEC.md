@@ -48,7 +48,7 @@ than hand-writing s-expressions from memory.
 - A 3D render PNG for the README
 
 Two-layer, 1.6mm FR4, 1oz copper, HASL. Standard process — no controlled impedance, no
-blind vias. Outline 52 x 66mm, rectangular with 3mm corner radii and four M2
+blind vias. Outline 52 x 78mm, rectangular with 3mm corner radii and four M2
 mounting holes inset 3mm from the corners.
 
 **As built: 32 x 54mm** (1728mm² against the target's 1925), rectangular, four M2 holes.
