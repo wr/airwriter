@@ -7,18 +7,19 @@ Written 2026-08-04. Everything below reflects the repo at that date.
 **Hardware rev A is finished and not yet ordered.** The board routes clean, the fab package is
 generated, and the mini-DIN is settled — Kycon KMDGX-8S-BS from Mouser. Nothing blocks the order.
 
-**Four of the nine firmware components exist and are tested.** `urf_decode`, `resample`,
-`halftone` and `imagewriter` are written, reviewed and passing 233 checks on the host. They
-live in ESP-IDF component layout under `firmware/components/` and are meant to compile there
-unchanged, but nothing has been built for the device — ESP-IDF is still not installed. The
-other five components are still to write.
+**Six of the nine firmware components exist and are tested.** `urf_decode`, `resample`,
+`halftone` and `imagewriter` do the raster path; `ipp_attrs` and `ipp_server` do AirPrint.
+All six build for the ESP32 and run there — ESP-IDF v5.5.1 is installed and the project
+flashes. 569 checks pass on the host. Still to write: `serial_out`, `printer_state`,
+`net_provision` and `webui`, all of which want hardware or are M6.
 
 | | State |
 |---|---|
 | Schematic | Complete, ERC clean, zero errors |
 | PCB | Routed, 52 x 66mm, DRC clean, schematic parity clean |
 | Fab package | Gerbers, drill, BOM, pick-and-place in `hardware/airwriter/fab/` |
-| Firmware | M2 done: raster pipeline written, reviewed, 233 checks green |
+| Firmware | M2 and M4 done: raster pipeline and AirPrint, 569 checks green |
+| Devkit | ESP32-C6 stands in for the board; it discovers, accepts jobs and prints from an iPhone |
 | Boards ordered | No |
 
 Linear project **AirWriter** on the Personal team tracks this. W-562 through W-567 are milestones
@@ -364,10 +365,16 @@ serves mode 2 and mode 3 equally.
 `make regress` and `test/test_ios_capture.c` asserts its header fields, so assumption 5 now has a
 real-world check. 249 checks green.
 
-**Write `ipp_server`, `ipp_attrs` and mDNS discovery (M4) next.** It is the largest remaining
-block of code, it needs WiFi only, and it does not need the AirWriter board — any ESP32-S3 devkit
-will do. `serial_out`, `printer_state` and the M1/M3 printing work are the parts genuinely gated
-on boards, which are not ordered.
+**M4 is done and was verified from a real iPhone.** The phone found the printer in its print
+sheet and sent a job, which arrived complete. CUPS `ipptool` passes `get-printer-attributes`
+conformance, and a Print-Job carrying the captured fixture moved all 143,470 bytes in 240ms.
+
+**M5 is next and needs no board.** Swap the byte-counting sink in `main.c` for the real chain —
+`urf_decode` → `resample` → `halftone` → `imagewriter` — and write the printer stream to flash
+or the console instead of a UART. That makes the whole pipeline verifiable on the devkit, and
+what remains for the real board is only `serial_out`: the UART, the RS-422 levels and the DTR
+handshake. `printer_state` and the M1/M3 work are the parts genuinely gated on boards, which
+are not ordered.
 
 **Printer scope is settled.** See `docs/superpowers/specs/2026-08-04-printer-support-scope-design.md`.
 Short version: v1 is the ImageWriter II over serial and nothing else. StyleWriter and
@@ -402,8 +409,10 @@ export Specctra DSN from the PCB editor, run
 `java -jar ~/.local/share/freerouting/freerouting.jar -de board.dsn -do board.ses`, import the
 session. Then DRC with `--refill-zones`.
 
-ESP-IDF **v5.5.1 is installed** at `~/esp/esp-idf`, tools for esp32s3 only. Source
-`. ~/esp/esp-idf/export.sh` before any `idf.py`. The `firmware/` project builds for the
-target today: `idf.py build` produces a 200KB image, and all four raster components
-compile there unchanged as promised. `main.c` is a bring-up stub that runs the halftone
-and imagewriter path once against a gradient and idles.
+ESP-IDF **v5.5.1 is installed** at `~/esp/esp-idf`, with tools for both esp32s3 and esp32c6.
+Source `. ~/esp/esp-idf/export.sh` before any `idf.py`. `sdkconfig.defaults` is split per
+target because the devkit on hand is a C6 and the board is an S3; the C6 has no PSRAM, which
+makes it the stricter of the two for memory.
+
+WiFi credentials live in the gitignored `sdkconfig` (`idf.py menuconfig`, AirWriter menu) and
+are overridden by anything in the `wifi` NVS namespace.
