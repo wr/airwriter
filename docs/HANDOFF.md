@@ -121,9 +121,14 @@ take firmware never gets soldered down.
 
 What changed with it:
 
-- **MCLR now ties to +3V3.** It was only ever wired to J5 pin 1, so in normal operation it was
-  floating — held up by nothing but the PIC's internal weak pull-up. Tied high it is defined. There
-  is no in-circuit programming to protect any more, so no series resistor.
+- **MCLR now runs to the ESP32 on IO2**, net `LT_RESET`, instead of to J5. It was only ever wired
+  to J5 pin 1, so in normal operation it floated — held up by nothing but the PIC's internal weak
+  pull-up. Firmware can now hold the LocalTalk engine in reset, which is worth having on a headless
+  dongle: it recovers a wedged PIC without a power cycle, and it keeps the PIC quiet in the modes
+  where LocalTalk is not the live transport. Driving it low asserts reset; leaving the GPIO as an
+  input lets the PIC's internal pull-up run it, which is the state through ESP32 boot. No external
+  resistor. IO2 was picked because it is a plain GPIO — not a strapping pin, not JTAG, not the
+  console UART — and it is the closest free module pad to U7, 5.1mm away.
 - **The socket is 10.7 x 10.8mm against the SOIC-8's 7.8 x 4.9**, so the top-right block spread out:
   U7's body centres on (133.5, 69), C17/R14/R18/R19 moved right to x=141.5, and R15/R16 dropped to
   y=76. The DIP-8 footprint's origin is pad 1, not the body centre — offset by 3.81mm in both axes
@@ -147,10 +152,11 @@ that went away. None of them is a wiring error:
 
 Run it with the flag before ordering if you want them gone; none of them changes the copper.
 
-**TashTalk can also be reset over MCLR, and this board gives that up.** Pulling RA3/MCLR low holds
-the PIC in reset and tristates its outputs, which matters when something else shares the RS-422
-driver. Nothing does here — U6 and U8 are the LocalTalk pair and U2 is the printer's — so the tie to
-+3V3 costs nothing. If you ever want firmware control of it, run MCLR to a spare ESP32 GPIO instead.
+**Firmware owns the PIC's reset line.** Pulling RA3/MCLR low holds TashTalk in reset and tristates
+its outputs. Nothing else shares the RS-422 driver here — U6 and U8 are the LocalTalk pair, U2 is
+the printer's — so this is not about bus arbitration; it is about being able to restart the LocalTalk
+engine on a board with no reset button and no console. The wire was free at fab time and impossible
+to add afterwards, which is why it went in before the order rather than after the first bug.
 
 **The mounting holes are not grounded, deliberately.** A ground ring buys nothing in a printed
 plastic case, and it would create a second path to ground that cannot be broken. The mini-DIN shells

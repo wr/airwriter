@@ -4309,9 +4309,13 @@
     (at 189.23 124.46)
     (uuid "79d6885d-28a6-4757-bbdd-5ce5065db533"))
 
-  (no_connect
-    (at 189.23 127)
-    (uuid "4676c7bf-6f52-4d13-a9f3-c1ef9b065feb"))
+  (label "LT_RESET"
+    (at 189.23 127 0)
+    (effects
+      (font
+        (size 1.27 1.27))
+      (justify left bottom))
+    (uuid "b790c32c-1fb4-4384-8b50-ab432159fe78"))
 
   (no_connect
     (at 189.23 129.54)
@@ -5565,7 +5569,7 @@
       (justify left bottom))
     (uuid "5628a37c-6117-4730-8869-df47807b3e62"))
 
-  (label "+3V3"
+  (label "LT_RESET"
     (at 285.75 227.33 0)
     (effects
       (font
