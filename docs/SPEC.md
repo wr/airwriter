@@ -48,7 +48,7 @@ than hand-writing s-expressions from memory.
 - A 3D render PNG for the README
 
 Two-layer, 1.6mm FR4, 1oz copper, HASL. Standard process — no controlled impedance, no
-blind vias. Target outline 55 x 35mm, rectangular with 3mm corner radii and four M2
+blind vias. Outline 64 x 54mm, rectangular with 3mm corner radii and four M2
 mounting holes inset 3mm from the corners.
 
 **As built: 32 x 54mm** (1728mm² against the target's 1925), rectangular, four M2 holes.
@@ -83,7 +83,10 @@ USB-C (5V) ─┬─ ESD ─ LDO 3.3V ─┬─ ESP32-S3-WROOM-1
 | U5 | USBLC6-2SC6 | SOT-23-6 | USB ESD |
 | J1 | USB-C receptacle, 16-pin | SMD | 5.1k CC1/CC2 pulldowns |
 | J2 | Kycon KMDGX-8S or CUI MD-80S | THT | Mini-DIN-8 female. Footprint may need to be drawn — verify against KiCad stock libs first |
-| D1 | WS2812B-2020 | 2020 | Status |
+| D1, D2 | WS2812B-2020 | 2020 | Status. D2 chains off D1's DOUT, so the second costs no GPIO. D1 = network, D2 = printer/job |
+| D3 | green LED + 1k | 0603 | Power. Straight across the 3V3 rail, no GPIO. Separates "board is dead" from "firmware is dead" during bring-up |
+| SW2 | Omron B3U-1000P | SMD | Mode / test page, on IO38. Cannot share IO0 with SW1: IO0 is a strapping pin, so holding it at reset means USB download mode |
+| J6 | JST-SH 4-pin, Qwiic pin order | SMD | I2C on IO36/IO37 with 4.7k pullups. A display module plugs in if one is ever wanted; the board does not commit 27 x 27mm to a screen that may never be fitted |
 | SW1 | Omron B3U-1000P | SMD | Config / factory reset, wired to GPIO0. **Changed from a generic 4.5mm tactile** — the closest KiCad stock footprint (B3S-1100) has a 10 x 8.9mm courtyard, which became the binding constraint on the pocket beside the mini-DIN. The B3U-1000P is 4.8 x 3.4mm |
 | — | 22uF + 10uF + 0.1uF | 0805/0603 | Bulk on 3.3V rail, one 0.1uF per IC pin pair |
 

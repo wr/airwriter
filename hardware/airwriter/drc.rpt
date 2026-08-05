@@ -1,5 +1,5 @@
 ** Drc report for airwriter.kicad_pcb **
-** Created on 2026-08-04T23:41:47 **
+** Created on 2026-08-04T23:44:42 **
 ** Report includes: Errors **
 
 ** Found 0 DRC violations **
@@ -83,8 +83,8 @@
     @(151.6345 mm, 79.5759 mm): Track [/GND] on F.Cu, length 1.2146 mm
 [unconnected_items]: Missing connection between items
     Local override; error
-    @(152.8491 mm, 79.5759 mm): Track [/GND] on F.Cu, length 6.7541 mm
-    @(161.3508 mm, 70.3507 mm): Track [/GND] on F.Cu, length 2.5751 mm
+    @(157.6250 mm, 74.8000 mm): Pad MP [/GND] of J6 on F.Cu
+    @(158.7757 mm, 70.3507 mm): Track [/GND] on F.Cu, length 1.6273 mm
 
 ** Found 0 Footprint errors **
 
