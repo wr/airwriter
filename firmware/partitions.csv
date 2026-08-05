@@ -1,0 +1,13 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# Sized for the 4MB C6 devkit so the same table works on the 8MB S3 board.
+# The default single-factory table gives the app 1MB, and M4 alone already
+# fills 90% of that -- WiFi and the HTTP server are most of it.
+#
+# `storage` holds the printer-icon PNGs the print sheet renders (SPEC.md 3.5)
+# and the captured-job scratch space.
+# Name,   Type, SubType, Offset,   Size
+nvs,      data, nvs,     0x9000,   0x6000
+phy_init, data, phy,     0xf000,   0x1000
+factory,  app,  factory, 0x10000,  0x200000
+storage,  data, spiffs,  0x210000, 0x1f0000

@@ -8,3 +8,7 @@
 # Console goes over the native USB serial/JTAG peripheral, not a UART -- UART1
 # belongs to the printer. See SPEC.md 2.5. Both chips have this peripheral.
 CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y
+
+# The default 1MB app partition is already 90% full at M4. See partitions.csv.
+CONFIG_PARTITION_TABLE_CUSTOM=y
+CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
