@@ -108,9 +108,28 @@ Moving U6 and U8 down beside J4 cut the four LocalTalk differential runs from ab
 9.5mm off the right edge of a board that ends at 152 — it was outside the outline entirely, so rev A
 had three usable holes and one that would have been drilled into nothing.
 
-**The ground pour is stitched.** 82 vias tie the F.Cu fragments to the B.Cu plane, dropping isolated
-pour islands from 28 to 9. `hardware/airwriter/route.py` does not add these; the stitching pass is a
-separate script and has to be re-run after any re-route.
+**The ground pour is stitched, with 44 vias, not the 82 a blanket grid wanted.** Freerouting never
+stitches, so a fresh route leaves the front pour cut into 17 fragments. `stitch.py` places one via
+per fragment first, at the roomiest point inside it, then fills in a 5mm lattice. The counts, all
+measured on this board:
+
+| stitching vias | fragments left unjoined |
+|---|---|
+| 0 | 14 |
+| 8, one per fragment | 8 |
+| 22, blanket 5mm grid | 12 |
+| 44, one per fragment plus a 5mm grid | 8 |
+| 82, blanket 2mm grid | 9 |
+
+Targeted placement is what does the work; a blanket grid mostly drops vias into fragments that were
+already stitched and misses the small ones. The 8 that remain are slivers too small to take a 0.6mm
+via with clearance — each is tied to GND through its own pads, so they are harmless. The grid pass
+is there for return-path continuity under the 2.4GHz module, not for connectivity, and it is free:
+0.3mm is the same drill tool the board already uses.
+
+`stitch.py` has no undo — pcbnew's `Remove()` on a via does not survive a `Save`, so running it
+twice just accumulates vias. To re-stitch, strip every segment, via and arc from the `.kicad_pcb`,
+run `route.py`, then run `stitch.py`.
 
 ## The unverified assumptions, current status
 

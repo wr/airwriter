@@ -18,10 +18,12 @@ typedef struct {
 
 void ipp_enc_init(ipp_enc_t *e, uint8_t *buf, size_t cap);
 
-// Response header: version 1.1, the status code, and the request id echoed
-// back from the request. A response with a different request id is discarded
-// by the client without an error, which is a miserable thing to debug.
-void ipp_resp_begin(ipp_enc_t *e, uint16_t status, uint32_t request_id);
+// Response header: the version, status code, and request id. Both the version
+// and the request id are echoed from the request -- a response carrying either
+// one wrong is discarded by the client without an error, which is a miserable
+// thing to debug. RFC 8011 section 4.1.8 for the version rule.
+void ipp_resp_begin(ipp_enc_t *e, uint16_t version, uint16_t status,
+                    uint32_t request_id);
 
 void ipp_group(ipp_enc_t *e, uint8_t delimiter_tag);
 void ipp_end(ipp_enc_t *e);
@@ -38,6 +40,22 @@ void ipp_attr_strs(ipp_enc_t *e, uint8_t tag, const char *name,
                    const char *const *vals, size_t n);
 void ipp_attr_ints(ipp_enc_t *e, uint8_t tag, const char *name,
                    const int32_t *vals, size_t n);
+
+// Collections (RFC 8010 section 3.1.6), which is how media-col carries a page
+// size and its margins as one value. A member value is written with the
+// ipp_addl_* helpers, since members carry no name of their own -- the
+// preceding memberAttrName supplies it:
+//
+//   ipp_col_begin(e, "media-col-default");
+//   ipp_col_member(e, "media-type");
+//   ipp_addl_str(e, IPP_TAG_KEYWORD, "stationery");
+//   ipp_col_end(e);
+//
+// Pass NULL as the name to open an additional collection value on the
+// attribute just written, or a nested one after ipp_col_member.
+void ipp_col_begin(ipp_enc_t *e, const char *name);
+void ipp_col_member(ipp_enc_t *e, const char *member_name);
+void ipp_col_end(ipp_enc_t *e);
 
 // Adds one more value to the attribute just written, for the cases where the
 // values do not come from a single array.

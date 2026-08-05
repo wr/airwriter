@@ -11,7 +11,7 @@ int main(void)
     /* The response header is fixed-width and byte-exact: version 1.1, the
      * status code, then the request id echoed back. */
     ipp_enc_init(&e, buf, sizeof buf);
-    ipp_resp_begin(&e, IPP_STATUS_OK, 0x01020304);
+    ipp_resp_begin(&e, IPP_VERSION_1_1, IPP_STATUS_OK, 0x01020304);
     CHECK_EQ_INT(ipp_enc_len(&e), 8);
     static const uint8_t want_hdr[] = { 0x01, 0x01, 0x00, 0x00, 0x01, 0x02, 0x03, 0x04 };
     CHECK_EQ_MEM(buf, want_hdr, sizeof want_hdr);
@@ -70,6 +70,32 @@ int main(void)
     CHECK_EQ_INT(ipp_enc_len(&e), sizeof want_multi);
     CHECK_EQ_MEM(buf, want_multi, sizeof want_multi);
 
+    /* A collection: begCollection carries the name and an empty value, each
+     * member is a memberAttrName with an empty name followed by a nameless
+     * value, and endCollection closes it. Getting the empty-name convention
+     * backwards here produces a message clients silently drop. */
+    ipp_enc_init(&e, buf, sizeof buf);
+    ipp_col_begin(&e, "m");
+    ipp_col_member(&e, "x-dimension");
+    ipp_addl_int(&e, IPP_TAG_INTEGER, 21590);
+    ipp_col_end(&e);
+    static const uint8_t want_col[] = {
+        0x34, 0x00, 0x01, 'm', 0x00, 0x00,
+        0x4A, 0x00, 0x00, 0x00, 0x0B,
+              'x','-','d','i','m','e','n','s','i','o','n',
+        0x21, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x54, 0x56,
+        0x37, 0x00, 0x00, 0x00, 0x00
+    };
+    CHECK_EQ_INT(ipp_enc_len(&e), sizeof want_col);
+    CHECK_EQ_MEM(buf, want_col, sizeof want_col);
+
+    /* A nested collection opens with no name of its own. */
+    ipp_enc_init(&e, buf, sizeof buf);
+    ipp_col_begin(&e, NULL);
+    static const uint8_t want_nested[] = { 0x34, 0x00, 0x00, 0x00, 0x00 };
+    CHECK_EQ_INT(ipp_enc_len(&e), sizeof want_nested);
+    CHECK_EQ_MEM(buf, want_nested, sizeof want_nested);
+
     /* An empty value list emits nothing at all rather than a nameless stub. */
     ipp_enc_init(&e, buf, sizeof buf);
     ipp_attr_strs(&e, IPP_TAG_KEYWORD, "k", three, 0);
@@ -81,7 +107,7 @@ int main(void)
      * no-op so a caller can check once at the end. */
     uint8_t small[10];
     ipp_enc_init(&e, small, sizeof small);
-    ipp_resp_begin(&e, IPP_STATUS_OK, 1);
+    ipp_resp_begin(&e, IPP_VERSION_1_1, IPP_STATUS_OK, 1);
     CHECK(ipp_enc_ok(&e));
     ipp_attr_str(&e, IPP_TAG_CHARSET, "attributes-charset", "utf-8");
     CHECK(!ipp_enc_ok(&e));
@@ -95,7 +121,7 @@ int main(void)
     /* The walker used by the other tests must agree with the encoder, so
      * prove it round-trips before anything relies on it. */
     ipp_enc_init(&e, buf, sizeof buf);
-    ipp_resp_begin(&e, IPP_STATUS_OK, 7);
+    ipp_resp_begin(&e, IPP_VERSION_1_1, IPP_STATUS_OK, 7);
     ipp_group(&e, IPP_TAG_PRINTER);
     ipp_attr_str(&e, IPP_TAG_NAME, "printer-name", "AirWriter");
     ipp_attr_strs(&e, IPP_TAG_KEYWORD, "k", three, 3);

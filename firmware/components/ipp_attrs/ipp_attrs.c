@@ -30,7 +30,7 @@ static const char *const k_urf[] = {
 };
 
 static const char *const k_job_creation[] = {
-    "copies", "media", "print-color-mode", "print-quality",
+    "copies", "media", "media-col", "print-color-mode", "print-quality",
     "printer-resolution", "sides", "job-name"
 };
 
@@ -45,6 +45,42 @@ static const int32_t k_qualities[] = { 3, 4, 5 };
 static const int32_t k_finishings[] = { 3 };   // 'none'
 
 #define NELEM(a) (sizeof (a) / sizeof (a)[0])
+
+// Letter, in hundredths of a millimetre: 8.5 x 11in.
+#define LETTER_X 21590
+#define LETTER_Y 27940
+
+// media-col is how IPP Everywhere carries a sheet size together with the
+// margins that apply to it. iOS lays out against these, so they have to agree
+// with the flat media-*-margin-supported values above.
+static void write_media_col(ipp_enc_t *e, const char *name)
+{
+    ipp_col_begin(e, name);
+
+    ipp_col_member(e, "media-size");
+    ipp_col_begin(e, NULL);                  // nested collection, no name
+    ipp_col_member(e, "x-dimension");
+    ipp_addl_int(e, IPP_TAG_INTEGER, LETTER_X);
+    ipp_col_member(e, "y-dimension");
+    ipp_addl_int(e, IPP_TAG_INTEGER, LETTER_Y);
+    ipp_col_end(e);
+
+    ipp_col_member(e, "media-bottom-margin");
+    ipp_addl_int(e, IPP_TAG_INTEGER, MARGIN_ENDS);
+    ipp_col_member(e, "media-top-margin");
+    ipp_addl_int(e, IPP_TAG_INTEGER, MARGIN_ENDS);
+    ipp_col_member(e, "media-left-margin");
+    ipp_addl_int(e, IPP_TAG_INTEGER, MARGIN_SIDE);
+    ipp_col_member(e, "media-right-margin");
+    ipp_addl_int(e, IPP_TAG_INTEGER, MARGIN_SIDE);
+
+    ipp_col_member(e, "media-source");
+    ipp_addl_str(e, IPP_TAG_KEYWORD, "main");
+    ipp_col_member(e, "media-type");
+    ipp_addl_str(e, IPP_TAG_KEYWORD, "stationery");
+
+    ipp_col_end(e);
+}
 
 void ipp_write_op_attrs(ipp_enc_t *e)
 {
@@ -107,6 +143,17 @@ void ipp_write_printer_attrs(ipp_enc_t *e, const ipp_printer_t *p)
                   k_media_source, NELEM(k_media_source));
     ipp_attr_strs(e, IPP_TAG_KEYWORD, "media-type-supported",
                   k_media_type, NELEM(k_media_type));
+
+    write_media_col(e, "media-col-default");
+    write_media_col(e, "media-col-ready");
+    write_media_col(e, "media-col-database");
+
+    ipp_col_begin(e, "media-size-supported");
+    ipp_col_member(e, "x-dimension");
+    ipp_addl_int(e, IPP_TAG_INTEGER, LETTER_X);
+    ipp_col_member(e, "y-dimension");
+    ipp_addl_int(e, IPP_TAG_INTEGER, LETTER_Y);
+    ipp_col_end(e);
 
     ipp_attr_int(e, IPP_TAG_INTEGER, "media-left-margin-supported",   MARGIN_SIDE);
     ipp_attr_int(e, IPP_TAG_INTEGER, "media-right-margin-supported",  MARGIN_SIDE);

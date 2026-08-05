@@ -27,7 +27,7 @@ int main(void)
 
     ipp_enc_t e;
     ipp_enc_init(&e, buf, sizeof buf);
-    ipp_resp_begin(&e, IPP_STATUS_OK, 1);
+    ipp_resp_begin(&e, IPP_VERSION_1_1, IPP_STATUS_OK, 1);
     ipp_write_op_attrs(&e);
     ipp_write_printer_attrs(&e, &p);
     ipp_end(&e);
@@ -112,8 +112,11 @@ int main(void)
     CHECK(ipp_val_is(&f, "na_letter_8.5x11in"));
 
     /* The whole set has to fit the buffer the server hands it with room to
-     * spare, or Get-Printer-Attributes fails on target and nowhere else. */
-    CHECK(n < 3072);
+     * spare, or Get-Printer-Attributes fails on target and nowhere else.
+     * Printed because it is the number RESP_MAX in ipp_server.c is chosen
+     * against, and media-col is not cheap. */
+    printf("    printer attributes encode to %zu bytes\n", n);
+    CHECK(n < 4096);
 
     /* Job attributes, the subset iOS polls while printing. */
     ipp_job_t j = {
@@ -123,7 +126,7 @@ int main(void)
         .impressions_done = 0, .time_at_creation = 61,
     };
     ipp_enc_init(&e, buf, sizeof buf);
-    ipp_resp_begin(&e, IPP_STATUS_OK, 2);
+    ipp_resp_begin(&e, IPP_VERSION_1_1, IPP_STATUS_OK, 2);
     ipp_write_op_attrs(&e);
     ipp_write_job_attrs(&e, &j);
     ipp_end(&e);

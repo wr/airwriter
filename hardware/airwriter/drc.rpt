@@ -1,5 +1,5 @@
 ** Drc report for airwriter.kicad_pcb **
-** Created on 2026-08-05T08:21:32 **
+** Created on 2026-08-05T09:40:46 **
 ** Report includes: Errors, Warnings **
 
 ** Found 5 DRC violations **
@@ -23,35 +23,7 @@
     Local override; warning
     @(116.0000 mm, 66.7500 mm): Footprint U1
 
-** Found 9 unconnected pads **
-[unconnected_items]: Missing connection between items
-    Local override; error
-    @(100.3000 mm, 60.3000 mm): Zone [/GND] on F.Cu, priority 0
-    @(100.3000 mm, 60.3000 mm): Zone [/GND] on B.Cu, priority 0
-[unconnected_items]: Missing connection between items
-    Local override; error
-    @(100.3000 mm, 60.3000 mm): Zone [/GND] on F.Cu, priority 0
-    @(100.3000 mm, 60.3000 mm): Zone [/GND] on B.Cu, priority 0
-[unconnected_items]: Missing connection between items
-    Local override; error
-    @(100.3000 mm, 60.3000 mm): Zone [/GND] on B.Cu, priority 0
-    @(100.3000 mm, 60.3000 mm): Zone [/GND] on F.Cu, priority 0
-[unconnected_items]: Missing connection between items
-    Local override; error
-    @(100.3000 mm, 60.3000 mm): Zone [/GND] on F.Cu, priority 0
-    @(100.3000 mm, 60.3000 mm): Zone [/GND] on B.Cu, priority 0
-[unconnected_items]: Missing connection between items
-    Local override; error
-    @(100.3000 mm, 60.3000 mm): Zone [/GND] on F.Cu, priority 0
-    @(100.3000 mm, 60.3000 mm): Zone [/GND] on F.Cu, priority 0
-[unconnected_items]: Missing connection between items
-    Local override; error
-    @(100.3000 mm, 60.3000 mm): Zone [/GND] on F.Cu, priority 0
-    @(100.3000 mm, 60.3000 mm): Zone [/GND] on F.Cu, priority 0
-[unconnected_items]: Missing connection between items
-    Local override; error
-    @(100.3000 mm, 60.3000 mm): Zone [/GND] on F.Cu, priority 0
-    @(100.3000 mm, 60.3000 mm): Zone [/GND] on F.Cu, priority 0
+** Found 8 unconnected pads **
 [unconnected_items]: Missing connection between items
     Local override; error
     @(100.3000 mm, 60.3000 mm): Zone [/GND] on F.Cu, priority 0
@@ -59,6 +31,30 @@
 [unconnected_items]: Missing connection between items
     Local override; error
     @(100.3000 mm, 60.3000 mm): Zone [/GND] on B.Cu, priority 0
+    @(100.3000 mm, 60.3000 mm): Zone [/GND] on F.Cu, priority 0
+[unconnected_items]: Missing connection between items
+    Local override; error
+    @(100.3000 mm, 60.3000 mm): Zone [/GND] on F.Cu, priority 0
+    @(100.3000 mm, 60.3000 mm): Zone [/GND] on F.Cu, priority 0
+[unconnected_items]: Missing connection between items
+    Local override; error
+    @(100.3000 mm, 60.3000 mm): Zone [/GND] on F.Cu, priority 0
+    @(100.3000 mm, 60.3000 mm): Zone [/GND] on F.Cu, priority 0
+[unconnected_items]: Missing connection between items
+    Local override; error
+    @(100.3000 mm, 60.3000 mm): Zone [/GND] on F.Cu, priority 0
+    @(100.3000 mm, 60.3000 mm): Zone [/GND] on F.Cu, priority 0
+[unconnected_items]: Missing connection between items
+    Local override; error
+    @(100.3000 mm, 60.3000 mm): Zone [/GND] on F.Cu, priority 0
+    @(100.3000 mm, 60.3000 mm): Zone [/GND] on F.Cu, priority 0
+[unconnected_items]: Missing connection between items
+    Local override; error
+    @(100.3000 mm, 60.3000 mm): Zone [/GND] on F.Cu, priority 0
+    @(100.3000 mm, 60.3000 mm): Zone [/GND] on F.Cu, priority 0
+[unconnected_items]: Missing connection between items
+    Local override; error
+    @(100.3000 mm, 60.3000 mm): Zone [/GND] on F.Cu, priority 0
     @(100.3000 mm, 60.3000 mm): Zone [/GND] on F.Cu, priority 0
 
 ** Found 0 Footprint errors **

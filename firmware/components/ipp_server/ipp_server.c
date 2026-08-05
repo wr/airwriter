@@ -17,7 +17,7 @@ static const char *TAG = "ipp";
 // One job at a time. printer_state owns the real queue later; M4 only needs
 // enough to answer Get-Job-Attributes while a job is in flight.
 #define JOB_NAME_MAX  IPP_NAME_MAX
-#define RESP_MAX      3584   // printer attributes measure ~2.6KB
+#define RESP_MAX      5120   // printer attributes measure ~3.4KB with media-col
 #define CHUNK         1024
 
 typedef struct {
@@ -108,13 +108,20 @@ static esp_err_t send_ipp(httpd_req_t *req, const ipp_enc_t *e)
     return httpd_resp_send(req, (const char *)e->buf, ipp_enc_len(e));
 }
 
+// The response must carry the version the client asked for. A 2.0 client that
+// gets a 1.1 response treats it as a protocol error, not as a downgrade.
+static uint16_t resp_version(const ipp_req_t *r)
+{
+    return ((r->version >> 8) == 2) ? 0x0200 : IPP_VERSION_1_1;
+}
+
 // A response carrying nothing but a status. Every error path uses this rather
 // than closing the connection, which SPEC.md 3.4 calls for explicitly.
-static esp_err_t send_status(httpd_req_t *req, uint16_t status, uint32_t request_id)
+static esp_err_t send_status(httpd_req_t *req, const ipp_req_t *r, uint16_t status)
 {
     ipp_enc_t e;
     ipp_enc_init(&e, s_resp, sizeof s_resp);
-    ipp_resp_begin(&e, status, request_id);
+    ipp_resp_begin(&e, resp_version(r), status, r->request_id);
     ipp_write_op_attrs(&e);
     ipp_end(&e);
     return send_ipp(req, &e);
@@ -168,7 +175,7 @@ static esp_err_t op_print_job(httpd_req_t *req, const ipp_req_t *r,
 {
     if (!format_supported(r->document_format)) {
         ESP_LOGW(TAG, "refusing document-format %s", r->document_format);
-        return send_status(req, IPP_STATUS_ERR_FORMAT_NOT_SUPPORTED, r->request_id);
+        return send_status(req, r, IPP_STATUS_ERR_FORMAT_NOT_SUPPORTED);
     }
 
     memset(&s_job, 0, sizeof s_job);
@@ -183,7 +190,7 @@ static esp_err_t op_print_job(httpd_req_t *req, const ipp_req_t *r,
         esp_err_t err = s_sink.begin(s_sink.ctx, r->document_format, s_job.name);
         if (err != ESP_OK) {
             s_job.state = IPP_JSTATE_ABORTED;
-            return send_status(req, IPP_STATUS_ERR_NOT_ACCEPTING_JOBS, r->request_id);
+            return send_status(req, r, IPP_STATUS_ERR_NOT_ACCEPTING_JOBS);
         }
     }
 
@@ -200,7 +207,7 @@ static esp_err_t op_print_job(httpd_req_t *req, const ipp_req_t *r,
     fill_job(&j, &s_job);
     ipp_enc_t e;
     ipp_enc_init(&e, s_resp, sizeof s_resp);
-    ipp_resp_begin(&e, IPP_STATUS_OK, r->request_id);
+    ipp_resp_begin(&e, resp_version(r), IPP_STATUS_OK, r->request_id);
     ipp_write_op_attrs(&e);
     ipp_write_job_attrs(&e, &j);
     ipp_end(&e);
@@ -217,7 +224,7 @@ static esp_err_t dispatch(httpd_req_t *req, const ipp_req_t *r,
     case IPP_OP_GET_PRINTER_ATTRIBUTES: {
         ipp_printer_t p;
         fill_printer(&p);
-        ipp_resp_begin(&e, IPP_STATUS_OK, r->request_id);
+        ipp_resp_begin(&e, resp_version(r), IPP_STATUS_OK, r->request_id);
         ipp_write_op_attrs(&e);
         ipp_write_printer_attrs(&e, &p);
         ipp_end(&e);
@@ -226,18 +233,18 @@ static esp_err_t dispatch(httpd_req_t *req, const ipp_req_t *r,
 
     case IPP_OP_VALIDATE_JOB:
         if (!format_supported(r->document_format))
-            return send_status(req, IPP_STATUS_ERR_FORMAT_NOT_SUPPORTED, r->request_id);
-        return send_status(req, IPP_STATUS_OK, r->request_id);
+            return send_status(req, r, IPP_STATUS_ERR_FORMAT_NOT_SUPPORTED);
+        return send_status(req, r, IPP_STATUS_OK);
 
     case IPP_OP_PRINT_JOB:
         return op_print_job(req, r, hdr, hdr_have);
 
     case IPP_OP_GET_JOB_ATTRIBUTES: {
         if (r->job_id >= 0 && r->job_id != s_job.id)
-            return send_status(req, IPP_STATUS_ERR_NOT_FOUND, r->request_id);
+            return send_status(req, r, IPP_STATUS_ERR_NOT_FOUND);
         ipp_job_t j;
         fill_job(&j, &s_job);
-        ipp_resp_begin(&e, IPP_STATUS_OK, r->request_id);
+        ipp_resp_begin(&e, resp_version(r), IPP_STATUS_OK, r->request_id);
         ipp_write_op_attrs(&e);
         ipp_write_job_attrs(&e, &j);
         ipp_end(&e);
@@ -245,7 +252,7 @@ static esp_err_t dispatch(httpd_req_t *req, const ipp_req_t *r,
     }
 
     case IPP_OP_GET_JOBS: {
-        ipp_resp_begin(&e, IPP_STATUS_OK, r->request_id);
+        ipp_resp_begin(&e, resp_version(r), IPP_STATUS_OK, r->request_id);
         ipp_write_op_attrs(&e);
         // An empty list is a complete answer, and the only honest one while
         // no job is in flight.
@@ -260,20 +267,21 @@ static esp_err_t dispatch(httpd_req_t *req, const ipp_req_t *r,
 
     case IPP_OP_CANCEL_JOB:
         if (r->job_id >= 0 && r->job_id != s_job.id)
-            return send_status(req, IPP_STATUS_ERR_NOT_FOUND, r->request_id);
+            return send_status(req, r, IPP_STATUS_ERR_NOT_FOUND);
         s_job.canceled = 1;
         if (s_job.state == IPP_JSTATE_PROCESSING) s_job.state = IPP_JSTATE_CANCELED;
-        return send_status(req, IPP_STATUS_OK, r->request_id);
+        return send_status(req, r, IPP_STATUS_OK);
 
     default:
         ESP_LOGW(TAG, "unsupported operation 0x%04x", r->op);
-        return send_status(req, IPP_STATUS_ERR_OP_NOT_SUPPORTED, r->request_id);
+        return send_status(req, r, IPP_STATUS_ERR_OP_NOT_SUPPORTED);
     }
 }
 
 static esp_err_t ipp_post(httpd_req_t *req)
 {
     size_t have = 0;
+    ESP_LOGI(TAG, "POST %s content_len %u", req->uri, (unsigned)req->content_len);
     ipp_req_t r;
     int rc;
 
@@ -289,7 +297,7 @@ static esp_err_t ipp_post(httpd_req_t *req)
         }
         int n = httpd_req_recv(req, (char *)s_hdrbuf + have, sizeof s_hdrbuf - have);
         if (n == HTTPD_SOCK_ERR_TIMEOUT) continue;
-        if (n <= 0) return ESP_FAIL;
+        if (n <= 0) { ESP_LOGE(TAG, "header recv returned %d after %u bytes", n, (unsigned)have); return ESP_FAIL; }
         have += (size_t)n;
     }
 
@@ -304,7 +312,7 @@ static esp_err_t ipp_post(httpd_req_t *req)
     // Major version 1 and 2 share this encoding; anything else we cannot
     // speak, but the client still needs a well-formed answer.
     if ((r.version >> 8) != 1 && (r.version >> 8) != 2)
-        return send_status(req, IPP_STATUS_ERR_BAD_REQUEST, r.request_id);
+        return send_status(req, &r, IPP_STATUS_ERR_BAD_REQUEST);
 
     return dispatch(req, &r, s_hdrbuf, have);
 }
@@ -323,6 +331,8 @@ static esp_err_t start_mdns(void)
 
     ESP_ERROR_CHECK(mdns_hostname_set(s_hostname));
     ESP_ERROR_CHECK(mdns_instance_name_set(s_cfg.queue_name));
+
+    // The service has to exist before a subtype can attach to it.
 
     mdns_txt_item_t txt[] = {
         { "txtvers",  "1" },
@@ -348,14 +358,20 @@ static esp_err_t start_mdns(void)
 
     // Without the _universal subtype iOS never lists the printer, however
     // correct the rest of the advertisement is. SPEC.md 3.2.
-    ESP_ERROR_CHECK(mdns_service_subtype_add_for_host("_ipp", "_ipp", "_tcp", NULL,
-                                                      "_universal"));
-    ESP_ERROR_CHECK(mdns_service_subtype_add_for_host("_ipp", "_ipp", "_tcp", NULL,
-                                                      "_print"));
+    //
+    // The first argument is the instance name, not the service type. NULL
+    // means the default instance -- passing "_ipp" there looks plausible and
+    // fails with "service doesn't exist".
+    err = mdns_service_subtype_add_for_host(NULL, "_ipp", "_tcp", NULL, "_universal");
+    if (err != ESP_OK) ESP_LOGE(TAG, "no _universal subtype: iOS will not list us (%s)",
+                                esp_err_to_name(err));
 
-    // A stub for older clients that probe LPD before IPP.
-    ESP_ERROR_CHECK(mdns_service_add(NULL, "_printer", "_tcp", 515, NULL, 0));
-    ESP_ERROR_CHECK(mdns_service_add(NULL, "_http", "_tcp", 80, NULL, 0));
+    // A stub for older clients that probe LPD before IPP. Neither of these is
+    // worth failing the printer over, so they only warn.
+    if (mdns_service_add(NULL, "_printer", "_tcp", 515, NULL, 0) != ESP_OK)
+        ESP_LOGW(TAG, "no _printer._tcp advertisement");
+    if (mdns_service_add(NULL, "_http", "_tcp", 80, NULL, 0) != ESP_OK)
+        ESP_LOGW(TAG, "no _http._tcp advertisement");
 
     return ESP_OK;
 }

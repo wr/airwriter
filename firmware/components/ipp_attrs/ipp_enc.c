@@ -43,9 +43,10 @@ void ipp_enc_init(ipp_enc_t *e, uint8_t *buf, size_t cap)
     e->overflow = 0;
 }
 
-void ipp_resp_begin(ipp_enc_t *e, uint16_t status, uint32_t request_id)
+void ipp_resp_begin(ipp_enc_t *e, uint16_t version, uint16_t status,
+                    uint32_t request_id)
 {
-    put_u16(e, IPP_VERSION_1_1);
+    put_u16(e, version);
     put_u16(e, status);
     put_u32(e, request_id);
 }
@@ -109,6 +110,27 @@ void ipp_addl_int(ipp_enc_t *e, uint8_t tag, int32_t val)
     put_u16(e, 0);
     put_u16(e, 4);
     put_u32(e, (uint32_t)val);
+}
+
+void ipp_col_begin(ipp_enc_t *e, const char *name)
+{
+    put_u8(e, IPP_TAG_BEGIN_COLLECTION);
+    put_len_bytes(e, name ? name : "", name ? strlen(name) : 0);
+    put_u16(e, 0);                       // a collection has no value of its own
+}
+
+void ipp_col_member(ipp_enc_t *e, const char *member_name)
+{
+    put_u8(e, IPP_TAG_MEMBERNAME);
+    put_u16(e, 0);                       // members are named by the value, not here
+    put_len_bytes(e, member_name, strlen(member_name));
+}
+
+void ipp_col_end(ipp_enc_t *e)
+{
+    put_u8(e, IPP_TAG_END_COLLECTION);
+    put_u16(e, 0);
+    put_u16(e, 0);
 }
 
 void ipp_attr_strs(ipp_enc_t *e, uint8_t tag, const char *name,
