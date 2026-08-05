@@ -389,6 +389,33 @@ The rule is 0.15mm now and the board re-routes clean against it. Check it the sa
 kicad-cli pcb drc --format json -o /tmp/d.json airwriter.kicad_pcb   # no clearance violations
 ```
 
+**The regulator sits next to the ESP32, not next to the USB-C inlet.** Freerouting treats a power
+net like any other signal — hop to the nearest unconnected pad, repeat — so the 3.3V rail came out as
+one long daisy chain. With U4 down by J1, the loads measured like this from the regulator's output
+pin, on a board 78mm tall:
+
+| | before | after moving U4 |
+|---|---|---|
+| U2, printer transceiver | 145mm, 14 pads | **34mm, 2 pads** |
+| U3, RS-232 | 147mm, 14 pads | **39mm, 3 pads** |
+| D1 / D2, status LEDs | 165-170mm, 15-16 pads | **44mm, 2 pads** |
+| U1, the ESP32 | 113mm, 10 pads | 90mm, 6 pads |
+
+U4 moved up beside U1 with C1, C2 and C3; U5 and the CC pulldowns stayed at J1, because ESD
+clamping and USB-C configuration belong at the connector. VBUS now makes the long diagonal instead
+of 3.3V, which is the right way round — 5V into an LDO with 300mV of dropout does not care about
+30mV of trace drop, and the 3.3V rail does.
+
+**U1 is the one that did not really improve, and the reason is geometry.** Its only power pin is
+module pad 2 at (107.25, 62.76) — the top-left corner — boxed in by H1, J3 and the board edge, with
+the module body filling everything to its right. There is no lane the router will take, so it goes
+the long way round regardless of where U4 sits. Fixing that one properly means either pouring 3.3V
+as a zone on F.Cu, or moving H1 and J3 to open a channel up the left edge. Neither is done.
+
+At 90mm of 0.5mm trace the path is about 88 milliohms, so a 500mA WiFi burst sags the rail ~44mV
+against a 3.0V floor. It works with margin, and U1's own bypass caps sit beside it in the chain
+rather than at the far end, so the local decoupling is genuinely local.
+
 **There is a Power net class now: 0.5mm track for `/+3V3`, `/VBUS` and `/GND`, against 0.2mm for
 signals.** Everything used to be 0.2mm, including the 3.3V rail feeding a module whose WiFi
 transmit current peaks near 500mA. 0.2mm in 1oz copper carries that, but with no margin and a
