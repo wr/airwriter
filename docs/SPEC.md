@@ -129,8 +129,11 @@ Apple's own cables were unterminated, but the pads cost nothing.
   pour, no traces under the antenna region on either layer.
 - Star-ground the DIN8 shell to signal ground through a single 0R jumper plus a footprint
   for a 1nF capacitor in parallel, so the shield strategy can be changed after testing.
-- USB-C is power only. Flashing and console go over the S3's native USB peripheral on
-  GPIO19/20 — expose those on a 4-pin 1.27mm header for bring-up.
+- **USB-C carries data as well as power.** D+ and D- go to the S3's native USB peripheral
+  on GPIO19/20 through U5, so the same cable that powers the board also flashes and
+  consoles it. Both flip orientations are tied (A6+B6, A7+B7). J3, the 4-pin 1.27mm
+  header, stays as a parallel tap on the same two nets for bring-up.
+  *Amended: the original draft made the USB-C power-only and put USB on the header alone.*
 
 ---
 

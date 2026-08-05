@@ -4265,21 +4265,37 @@
                 (size 1.27 1.27))))))
       (embedded_fonts no)))
 
-  (no_connect
-    (at 50.8 57.15)
-    (uuid "d300bed4-9c3f-4298-a8c9-974684b7d63f"))
+  (label "USB_DM"
+    (at 50.8 57.15 0)
+    (effects
+      (font
+        (size 1.27 1.27))
+      (justify left bottom))
+    (uuid "579b4c47-650e-4ef9-bbe1-69589669e4cf"))
 
-  (no_connect
-    (at 50.8 59.69)
-    (uuid "b7869b70-78b2-4ae2-829d-2a07c8b94f75"))
+  (label "USB_DM"
+    (at 50.8 59.69 0)
+    (effects
+      (font
+        (size 1.27 1.27))
+      (justify left bottom))
+    (uuid "ccf24d5c-f8b4-4d7c-b440-8ce1cb16c1ea"))
 
-  (no_connect
-    (at 50.8 62.23)
-    (uuid "1b207309-a7a3-4a22-b4da-2f507d5fdb86"))
+  (label "USB_DP"
+    (at 50.8 62.23 0)
+    (effects
+      (font
+        (size 1.27 1.27))
+      (justify left bottom))
+    (uuid "b1b5041e-92f1-4b09-a460-812c0baa71c5"))
 
-  (no_connect
-    (at 50.8 64.77)
-    (uuid "33ff92a3-0c02-4233-b2ff-adf38e883f41"))
+  (label "USB_DP"
+    (at 50.8 64.77 0)
+    (effects
+      (font
+        (size 1.27 1.27))
+      (justify left bottom))
+    (uuid "d68806f7-aa90-45c5-b67a-cdf1c78b83f5"))
 
   (no_connect
     (at 50.8 72.39)
@@ -4289,21 +4305,37 @@
     (at 50.8 74.93)
     (uuid "3dd6dc1a-f8ee-43f0-b8e2-2570d7f2d5a9"))
 
-  (no_connect
-    (at 80.01 64.77)
-    (uuid "67560f1f-f25e-4814-8f21-33e4f884b425"))
+  (label "USB_DP"
+    (at 80.01 64.77 0)
+    (effects
+      (font
+        (size 1.27 1.27))
+      (justify left bottom))
+    (uuid "5711c056-a920-49cb-a49e-061fa63b6ef8"))
 
-  (no_connect
-    (at 80.01 67.31)
-    (uuid "44500641-1890-42fb-9e4e-81689c77ce70"))
+  (label "USB_DM"
+    (at 80.01 67.31 0)
+    (effects
+      (font
+        (size 1.27 1.27))
+      (justify left bottom))
+    (uuid "cd3bac33-626c-4a87-aa16-ad8f4cfa9389"))
 
-  (no_connect
-    (at 90.17 64.77)
-    (uuid "cd66abec-c699-42b6-a0da-92b7c49a1790"))
+  (label "USB_DP"
+    (at 90.17 64.77 0)
+    (effects
+      (font
+        (size 1.27 1.27))
+      (justify left bottom))
+    (uuid "b5c30885-320d-49e1-8b2a-e2412da8c8ab"))
 
-  (no_connect
-    (at 90.17 67.31)
-    (uuid "13fd22d7-7f8d-4324-bee1-a73b61af0768"))
+  (label "USB_DM"
+    (at 90.17 67.31 0)
+    (effects
+      (font
+        (size 1.27 1.27))
+      (justify left bottom))
+    (uuid "912af8a6-de96-4664-9821-7d6c91b96783"))
 
   (no_connect
     (at 189.23 124.46)

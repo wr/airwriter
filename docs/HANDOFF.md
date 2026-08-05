@@ -389,6 +389,31 @@ The rule is 0.15mm now and the board re-routes clean against it. Check it the sa
 kicad-cli pcb drc --format json -o /tmp/d.json airwriter.kicad_pcb   # no clearance violations
 ```
 
+**The USB-C is a USB port now, not a power inlet.** Spec §2.5 originally read "USB-C is power
+only", with flashing and console going to a 4-pin 1.27mm header instead. That left a USB connector
+on the front panel with its data pins tied off, a debug header nobody can reach without a custom
+cable, and a two-line USB ESD part with four of its six pins no-connected. D+ and D- now run from
+J1 through U5 to the S3's native USB peripheral:
+
+| net | pads |
+|---|---|
+| `/USB_DP` | J1.A6, J1.B6, U5.1, U5.6, U1.14, J3.3 |
+| `/USB_DM` | J1.A7, J1.B7, U5.3, U5.4, U1.13, J3.2 |
+
+Both USB-C flip orientations are tied together (A6+B6, A7+B7), which is what a USB 2.0-only device
+does. U5's I/O1 pins are 1 and 6 and its I/O2 pins are 3 and 4 — each pair is the same node inside
+the package, so both carry one net and the layout routes through the part.
+
+**U5 moved to sit 2-4mm from J1's data pins**, swapping places with the CC pulldowns. Trace
+inductance ahead of a clamp is what lets a strike through, so the ESD part goes closest to the
+connector; R1 and R2 only carry a DC level and can sit further back. It was 16.7mm away before.
+
+J3 stays, tapping the same two nets, as a bring-up fallback for the first spin. The silkscreen on
+J1 now reads `USB-C` rather than `5V IN`, which was no longer true.
+
+Only the ESP32's native USB is on this — full speed, 12 Mbps — so the ~60mm run from J1 to U1
+needs no length matching and no impedance control.
+
 **The regulator sits next to the ESP32, not next to the USB-C inlet.** Freerouting treats a power
 net like any other signal — hop to the nearest unconnected pad, repeat — so the 3.3V rail came out as
 one long daisy chain. With U4 down by J1, the loads measured like this from the regulator's output

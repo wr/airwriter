@@ -1,5 +1,5 @@
 ** Drc report for airwriter.kicad_pcb **
-** Created on 2026-08-05T15:55:55 **
+** Created on 2026-08-05T17:26:20 **
 ** Report includes: Errors, Warnings **
 
 ** Found 1 DRC violations **
@@ -7,7 +7,27 @@
     Local override; warning
     @(116.0000 mm, 66.7500 mm): Footprint U1
 
-** Found 5 unconnected pads **
+** Found 10 unconnected pads **
+[unconnected_items]: Missing connection between items
+    Local override; error
+    @(100.3000 mm, 60.3000 mm): Zone [/GND] on F.Cu, priority 0
+    @(100.3000 mm, 60.3000 mm): Zone [/GND] on F.Cu, priority 0
+[unconnected_items]: Missing connection between items
+    Local override; error
+    @(100.3000 mm, 60.3000 mm): Zone [/GND] on B.Cu, priority 0
+    @(100.3000 mm, 60.3000 mm): Zone [/GND] on F.Cu, priority 0
+[unconnected_items]: Missing connection between items
+    Local override; error
+    @(100.3000 mm, 60.3000 mm): Zone [/GND] on F.Cu, priority 0
+    @(100.3000 mm, 60.3000 mm): Zone [/GND] on F.Cu, priority 0
+[unconnected_items]: Missing connection between items
+    Local override; error
+    @(100.3000 mm, 60.3000 mm): Zone [/GND] on F.Cu, priority 0
+    @(100.3000 mm, 60.3000 mm): Zone [/GND] on F.Cu, priority 0
+[unconnected_items]: Missing connection between items
+    Local override; error
+    @(100.3000 mm, 60.3000 mm): Zone [/GND] on F.Cu, priority 0
+    @(100.3000 mm, 60.3000 mm): Zone [/GND] on F.Cu, priority 0
 [unconnected_items]: Missing connection between items
     Local override; error
     @(100.3000 mm, 60.3000 mm): Zone [/GND] on B.Cu, priority 0
@@ -23,11 +43,11 @@
 [unconnected_items]: Missing connection between items
     Local override; error
     @(100.3000 mm, 60.3000 mm): Zone [/GND] on F.Cu, priority 0
-    @(100.3000 mm, 60.3000 mm): Zone [/GND] on F.Cu, priority 0
+    @(100.3000 mm, 60.3000 mm): Zone [/GND] on B.Cu, priority 0
 [unconnected_items]: Missing connection between items
     Local override; error
-    @(100.3000 mm, 60.3000 mm): Zone [/GND] on B.Cu, priority 0
-    @(100.3000 mm, 60.3000 mm): Zone [/GND] on F.Cu, priority 0
+    @(128.9750 mm, 104.1350 mm): Pad 6 [/LT_Y] of U6 on F.Cu
+    @(129.1750 mm, 115.0000 mm): Pad 1 [/LT_Y] of R12 on F.Cu
 
 ** Found 0 Footprint errors **
 
