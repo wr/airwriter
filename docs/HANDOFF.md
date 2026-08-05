@@ -7,15 +7,18 @@ Written 2026-08-04. Everything below reflects the repo at that date.
 **Hardware rev A is finished and not yet ordered.** The board routes clean, the fab package is
 generated, and the only thing stopping an order is which mini-DIN connector to buy.
 
-**No firmware exists.** Not a line. The nine components listed in `docs/SPEC.md` §3.1 are all
-still to write.
+**Four of the nine firmware components exist and are tested.** `urf_decode`, `resample`,
+`halftone` and `imagewriter` are written, reviewed and passing 233 checks on the host. They
+live in ESP-IDF component layout under `firmware/components/` and are meant to compile there
+unchanged, but nothing has been built for the device — ESP-IDF is still not installed. The
+other five components are still to write.
 
 | | State |
 |---|---|
 | Schematic | Complete, ERC clean, zero errors |
 | PCB | Routed, 52 x 54mm, DRC 5 (all cosmetic), every pad connected |
 | Fab package | Gerbers, drill, BOM, pick-and-place in `hardware/airwriter/fab/` |
-| Firmware | Nothing |
+| Firmware | M2 done: raster pipeline written, reviewed, 233 checks green |
 | Boards ordered | No |
 
 Linear project **AirWriter** on the Personal team tracks this. W-562 through W-567 are milestones
@@ -74,16 +77,22 @@ unreadable and generated 75 of 82 DRC violations. They still print on the assemb
 
 ## The unverified assumptions, current status
 
-Spec §4 lists five. Only one is resolved.
+Spec §4 lists five. Three are now resolved, all from primary sources.
 
-1. **Bit order within a graphics byte** — open. Bring-up task: print a strip where only the top pin
-   fires, observe, encode the answer in one `#define`.
-2. **Density escape codes** — open. Verify the letter-to-dpi mapping for 144 dpi before building on it.
+1. **Bit order within a graphics byte** — **resolved.** Bit 0 is the top pin, bit 7 the bottom,
+   read off the ImageWriter II Technical Reference p. 107 and independently confirmed against
+   Ghostscript's `gdevadmp.c`. A reviewer re-checked it against the scan. Implemented in
+   `imagewriter.c`.
+2. **Density escape codes** — **resolved.** `ESC p` is 144 dpi at 1152 dots; `ESC P` is 160 dpi.
+   Table 8-2, p. 106, cross-checked against `gdevadmp.c` and re-verified against the scan by a
+   reviewer. The full table is in `SPEC.md` §4.
 3. **Differential polarity** — **resolved by research**, and it found the spec error described above.
    Not yet confirmed against hardware.
 4. **HSKo electrical levels** — open. Scope it before trusting the MAX3232 receiver assumption. If the
    swing turns out modest, a divider and clamp into a GPIO could delete U3 entirely.
-5. **URF page header field offsets** — open. Take them from cups-filters, not from memory.
+5. **URF page header field offsets** — **resolved.** Taken from `cups/raster-stream.c` in
+   OpenPrinting/cups, not from memory, and implemented in `urf_decode.c` with the offsets cited
+   in comments. Still unconfirmed against a real iOS capture — see below.
 
 ## Traps that cost real time
 
@@ -243,6 +252,15 @@ actually delivers to an ImageWriter** — the question gating all the AppleTalk 
 serves mode 2 and mode 3 equally.
 
 ## What to do next
+
+**Print from your iPhone into `tools/ippcap`.** This is the one outstanding item and it needs a
+human. Run `python3 tools/ippcap/ippcap.py fixtures`, advertise it with the `dns-sd` line in that
+file's docstring, print to "AirWriterCap" from the phone, then fill in the table in
+`fixtures/README.md`. Everything in the pipeline currently rests on CUPS source and a
+self-generated fixture; this is what confirms it against reality, and it also settles whether iOS
+honours `RS72-144` or sends 300 dpi regardless.
+
+**Then M1, M3, M4, M5 in order** — all gated on boards, which are not ordered.
 
 **Printer scope is settled.** See `docs/superpowers/specs/2026-08-04-printer-support-scope-design.md`.
 Short version: v1 is the ImageWriter II over serial and nothing else. StyleWriter and
