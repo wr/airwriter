@@ -13,6 +13,17 @@ Fill this in from the ippcap log after the first capture. It answers the
 question SPEC.md 3.3 leaves open: whether a client honours RS72-144 or
 ignores it and sends 300 dpi anyway.
 
-| Capture | Device / iOS | Width | Height | dpi | bpp | Colorspace |
+| Capture | Width | Height | dpi | bpp | Colorspace | Duplex |
 |---|---|---|---|---|---|---|
-| | | | | | | |
+| `ios-20260804-232652.urf` | 1224 | 1584 | 144 | 8 | 0 (sGray) | 1 (simplex) |
+
+**iOS honoured `RS72-144`.** It rendered at exactly 144 dpi rather than sending 300
+and leaving us to downsample, so the fallback contemplated in `SPEC.md` §3.3 is not
+needed and `RS300` does not have to be advertised. 1224 x 1584 at 144 dpi is 8.5 x 11
+inches, the full media size including the margins — so the raster always arrives
+72 dots wider than the printer's 1152, and the margin crop in `tools/rip/main.c` is
+on the normal path, not an edge case.
+
+Source was a Safari page in dark mode, which is why the preview is mostly black.
+Useful as a worst-case ribbon and throughput fixture; not representative of a
+typical document.
