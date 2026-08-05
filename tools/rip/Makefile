@@ -2,12 +2,14 @@
 CC      ?= cc
 CFLAGS  := -std=c11 -Wall -Wextra -Werror -O2 -g
 COMP    := ../../firmware/components
-INCS    := -I$(COMP)/urf_decode/include \
+INCS    := -I$(COMP)/ripjob/include \
+           -I$(COMP)/urf_decode/include \
            -I$(COMP)/resample/include \
            -I$(COMP)/halftone/include \
            -I$(COMP)/imagewriter/include \
            -I.
-SRCS    := $(wildcard $(COMP)/urf_decode/*.c) \
+SRCS    := $(wildcard $(COMP)/ripjob/*.c) \
+           $(wildcard $(COMP)/urf_decode/*.c) \
            $(wildcard $(COMP)/resample/*.c) \
            $(wildcard $(COMP)/halftone/*.c) \
            $(wildcard $(COMP)/imagewriter/*.c)

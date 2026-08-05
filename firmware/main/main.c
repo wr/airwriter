@@ -22,6 +22,7 @@
 #include "halftone.h"
 #include "imagewriter.h"
 #include "ipp_server.h"
+#include "job_pipe.h"
 
 static const char *TAG = "airwriter";
 
@@ -75,38 +76,66 @@ static void raster_selftest(void)
 }
 
 // ------------------------------------------------------------- document
-// M4 discards the document and reports what arrived. M5 replaces this sink
-// with the urf_decode -> resample -> halftone -> imagewriter chain.
+// The document goes straight into the raster pipeline. What comes out is the
+// ImageWriter byte stream -- the exact bytes serial_out will put on the wire
+// once there is a board to put them on. Until then they are checksummed, which
+// is enough to compare the device against tools/rip byte for byte.
 
-typedef struct { size_t bytes; int is_urf; } discard_t;
-static discard_t s_doc;
+// CRC-32/ISO-HDLC, computed without a table: 256 entries of flash is not worth
+// it at these rates, and this runs once per output byte, not per pixel.
+static uint32_t crc32_up(uint32_t crc, const uint8_t *buf, size_t n)
+{
+    crc = ~crc;
+    while (n--) {
+        crc ^= *buf++;
+        for (int k = 0; k < 8; k++)
+            crc = (crc >> 1) ^ (0xEDB88320u & (uint32_t)(-(int32_t)(crc & 1)));
+    }
+    return ~crc;
+}
+
+static uint32_t s_stream_crc;
+
+static void printer_out(void *ctx, const uint8_t *buf, size_t n)
+{
+    (void)ctx;
+    s_stream_crc = crc32_up(s_stream_crc, buf, n);
+}
 
 static esp_err_t doc_begin(void *ctx, const char *format, const char *name)
 {
     (void)ctx;
-    s_doc.bytes = 0;
-    s_doc.is_urf = 0;
     ESP_LOGI(TAG, "job \"%s\" format %s", name, format[0] ? format : "(unspecified)");
-    return ESP_OK;
+    s_stream_crc = 0;
+    return job_pipe_begin(name);
 }
 
 static esp_err_t doc_data(void *ctx, const uint8_t *buf, size_t n)
 {
     (void)ctx;
-    // Confirms the client really sent URF and that the first bytes line up
-    // with what the host fixtures decode.
-    if (s_doc.bytes == 0 && n >= 8)
-        s_doc.is_urf = memcmp(buf, "UNIRAST\0", 8) == 0;
-    s_doc.bytes += n;
-    return ESP_OK;
+    return job_pipe_data(buf, n);
 }
 
 static void doc_end(void *ctx, int ok)
 {
     (void)ctx;
-    ESP_LOGI(TAG, "document %s: %u bytes, magic %s",
-             ok ? "complete" : "TRUNCATED", (unsigned)s_doc.bytes,
-             s_doc.is_urf ? "UNIRAST" : "not URF");
+    job_pipe_stats_t st;
+    job_pipe_end(ok, &st);
+
+    if (st.rc != 0 || !ok) {
+        ESP_LOGE(TAG, "job failed: %u bytes in, rc %d%s",
+                 (unsigned)st.doc_bytes, st.rc, ok ? "" : ", transfer truncated");
+        return;
+    }
+
+    ESP_LOGI(TAG, "ripped %d page%s, %ux%u dots, %u bytes in -> %u printer bytes in %ums",
+             st.pages, st.pages == 1 ? "" : "s", (unsigned)st.dst_w, (unsigned)st.dst_h,
+             (unsigned)st.doc_bytes, (unsigned)st.printer_bytes, (unsigned)st.ms);
+    ESP_LOGI(TAG, "printer stream crc32 %08x", (unsigned)s_stream_crc);
+
+    // At 9600 baud, 8N1, one byte costs 10 bit times.
+    ESP_LOGI(TAG, "that is %u seconds of printing at 9600 baud",
+             (unsigned)(st.printer_bytes * 10 / 9600));
 }
 
 // ----------------------------------------------------------------- wifi
@@ -237,6 +266,9 @@ void app_main(void)
         ESP_LOGE(TAG, "no network; IPP not started");
         for (;;) vTaskDelay(pdMS_TO_TICKS(10000));
     }
+
+    job_pipe_cfg_t pipe = { .out = printer_out, .dither = HT_ATKINSON };
+    ESP_ERROR_CHECK(job_pipe_init(&pipe));
 
     ipp_server_cfg_t cfg = {
         .queue_name = CONFIG_AIRWRITER_QUEUE_NAME,

@@ -28,6 +28,11 @@ typedef struct {
 
     ht_algo_t   dither;
 
+    // Called as each page starts, with the geometry every later row will
+    // have, before any row arrives. Return non-zero to abort the job.
+    int       (*page)(void *ctx, int index, uint32_t dst_w, uint32_t dst_h);
+    void       *page_ctx;
+
     // Called once per halftoned destination row, in order, before it reaches
     // the printer stage. The host tool builds its preview from this; the
     // firmware leaves it NULL.
