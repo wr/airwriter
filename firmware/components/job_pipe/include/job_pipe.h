@@ -41,6 +41,10 @@ esp_err_t job_pipe_begin(const char *job_name);
 // Blocks while the pipeline is behind. That backpressure is the point.
 esp_err_t job_pipe_data(const uint8_t *buf, size_t n);
 
+// Abandons the page in flight. Safe to call from another task -- the pipeline
+// notices at its next read and unwinds through the normal truncation path.
+void job_pipe_abort(void);
+
 // Signals end of document and waits for the pipeline to finish. Pass ok = 0
 // when the transfer was truncated, so the pipeline abandons the page rather
 // than emitting a short one.

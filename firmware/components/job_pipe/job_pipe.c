@@ -140,6 +140,13 @@ esp_err_t job_pipe_data(const uint8_t *buf, size_t n)
     return ESP_OK;
 }
 
+void job_pipe_abort(void)
+{
+    if (!s_task) return;
+    ESP_LOGW(TAG, "job canceled; abandoning the page");
+    s_aborted = 1;
+}
+
 void job_pipe_end(int ok, job_pipe_stats_t *st)
 {
     if (!ok) s_aborted = 1;

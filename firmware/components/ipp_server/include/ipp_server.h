@@ -19,6 +19,9 @@ typedef struct {
     esp_err_t (*data)(void *ctx, const uint8_t *buf, size_t n);
     // Called once when the body ends. `ok` is 0 if the transfer was cut short.
     void      (*end)(void *ctx, int ok);
+    // Called when the client cancels a job that is still printing. Runs on the
+    // canceling request's task, not the one streaming the document.
+    void      (*cancel)(void *ctx);
     void       *ctx;
 } ipp_doc_sink_t;
 

@@ -311,11 +311,16 @@ static int dispatch(work_t *w, int fd, const ipp_req_t *r, hbody_t *body,
     case IPP_OP_CANCEL_JOB: {
         xSemaphoreTake(s_job_lock, portMAX_DELAY);
         int found = (r->job_id < 0 || r->job_id == s_job.id);
+        int was_printing = found && s_job.state == IPP_JSTATE_PROCESSING;
         if (found) {
             s_job.canceled = 1;
-            if (s_job.state == IPP_JSTATE_PROCESSING) s_job.state = IPP_JSTATE_CANCELED;
+            if (was_printing) s_job.state = IPP_JSTATE_CANCELED;
         }
         xSemaphoreGive(s_job_lock);
+
+        // Stop the paper, not just the bookkeeping. Called outside the lock:
+        // the pipeline takes it too as it unwinds.
+        if (was_printing && s_sink.cancel) s_sink.cancel(s_sink.ctx);
         return send_status(w, fd, r,
                            found ? IPP_STATUS_OK : IPP_STATUS_ERR_NOT_FOUND, keep_alive);
     }

@@ -9,6 +9,7 @@
 
 #include "esp_log.h"
 #include "esp_system.h"
+#include "esp_timer.h"
 #include "esp_mac.h"
 #include "esp_event.h"
 #include "esp_netif.h"
@@ -24,6 +25,10 @@
 #include "ipp_server.h"
 #include "job_pipe.h"
 #include "serial_out.h"
+#include "settings.h"
+#include "webui.h"
+#include "net_provision.h"
+#include "esp_app_desc.h"
 
 static const char *TAG = "airwriter";
 
@@ -56,7 +61,13 @@ static const char *TAG = "airwriter";
 
 static EventGroupHandle_t s_wifi_events;
 static int s_retries;
-static char s_hostname[40];
+static settings_t s_set;
+static char s_ip[16] = "0.0.0.0";
+static int  s_ap_mode;
+
+// Last job, for the status page.
+static char   s_last_job[64];
+static size_t s_last_pages, s_last_bytes;
 
 // ---------------------------------------------------------------- raster
 // A bring-up check that the raster components run on this silicon, not just
@@ -141,6 +152,8 @@ static esp_err_t doc_begin(void *ctx, const char *format, const char *name)
 {
     (void)ctx;
     ESP_LOGI(TAG, "job \"%s\" format %s", name, format[0] ? format : "(unspecified)");
+    strncpy(s_last_job, name && name[0] ? name : "Untitled", sizeof s_last_job - 1);
+    s_last_job[sizeof s_last_job - 1] = '\0';
     s_stream_crc = 0;
     serial_out_loopback_reset();
     return job_pipe_begin(name);
@@ -150,6 +163,12 @@ static esp_err_t doc_data(void *ctx, const uint8_t *buf, size_t n)
 {
     (void)ctx;
     return job_pipe_data(buf, n);
+}
+
+static void doc_cancel(void *ctx)
+{
+    (void)ctx;
+    job_pipe_abort();
 }
 
 static void doc_end(void *ctx, int ok)
@@ -164,6 +183,8 @@ static void doc_end(void *ctx, int ok)
         return;
     }
 
+    s_last_pages = (size_t)st.pages;
+    s_last_bytes = st.printer_bytes;
     ESP_LOGI(TAG, "ripped %d page%s, %ux%u dots, %u bytes in -> %u printer bytes in %ums",
              st.pages, st.pages == 1 ? "" : "s", (unsigned)st.dst_w, (unsigned)st.dst_h,
              (unsigned)st.doc_bytes, (unsigned)st.printer_bytes, (unsigned)st.ms);
@@ -212,45 +233,19 @@ static void wifi_event(void *arg, esp_event_base_t base, int32_t id, void *data)
     } else if (base == IP_EVENT && id == IP_EVENT_STA_GOT_IP) {
         ip_event_got_ip_t *e = (ip_event_got_ip_t *)data;
         ESP_LOGI(TAG, "got ip " IPSTR, IP2STR(&e->ip_info.ip));
+        snprintf(s_ip, sizeof s_ip, IPSTR, IP2STR(&e->ip_info.ip));
         s_retries = 0;
         xEventGroupSetBits(s_wifi_events, WIFI_CONNECTED_BIT);
     }
 }
 
-// Credentials come from NVS first so a device can be reprovisioned without a
-// rebuild; the Kconfig values are the development fallback. M6 replaces both
-// with Improv-over-BLE.
-static int load_credentials(char *ssid, size_t ssid_cap, char *pass, size_t pass_cap)
-{
-    nvs_handle_t h;
-    if (nvs_open("wifi", NVS_READONLY, &h) == ESP_OK) {
-        size_t sl = ssid_cap, pl = pass_cap;
-        esp_err_t a = nvs_get_str(h, "ssid", ssid, &sl);
-        esp_err_t b = nvs_get_str(h, "pass", pass, &pl);
-        nvs_close(h);
-        if (a == ESP_OK && b == ESP_OK && ssid[0]) {
-            ESP_LOGI(TAG, "wifi credentials from NVS");
-            return 1;
-        }
-    }
-    strncpy(ssid, CONFIG_AIRWRITER_WIFI_SSID, ssid_cap - 1);
-    strncpy(pass, CONFIG_AIRWRITER_WIFI_PASSWORD, pass_cap - 1);
-    return ssid[0] != '\0';
-}
-
 static esp_err_t wifi_start(void)
 {
-    char ssid[33] = {0}, pass[65] = {0};
-    if (!load_credentials(ssid, sizeof ssid, pass, sizeof pass)) {
-        ESP_LOGE(TAG, "no wifi credentials -- run idf.py menuconfig, AirWriter menu");
-        return ESP_ERR_INVALID_STATE;
-    }
-
     s_wifi_events = xEventGroupCreate();
     ESP_ERROR_CHECK(esp_netif_init());
     ESP_ERROR_CHECK(esp_event_loop_create_default());
     esp_netif_t *netif = esp_netif_create_default_wifi_sta();
-    esp_netif_set_hostname(netif, s_hostname);
+    esp_netif_set_hostname(netif, s_set.hostname);
 
     wifi_init_config_t ic = WIFI_INIT_CONFIG_DEFAULT();
     ESP_ERROR_CHECK(esp_wifi_init(&ic));
@@ -260,8 +255,8 @@ static esp_err_t wifi_start(void)
                                                         wifi_event, NULL, NULL));
 
     wifi_config_t wc = {0};
-    strncpy((char *)wc.sta.ssid, ssid, sizeof wc.sta.ssid);
-    strncpy((char *)wc.sta.password, pass, sizeof wc.sta.password);
+    strncpy((char *)wc.sta.ssid, s_set.ssid, sizeof wc.sta.ssid);
+    strncpy((char *)wc.sta.password, s_set.pass, sizeof wc.sta.password);
     // WPA3 access points may require hash-to-element rather than the older
     // hunting-and-pecking. The default leaves it unspecified, which can
     // associate and then fail to agree a group key -- the station sits
@@ -278,7 +273,7 @@ static esp_err_t wifi_start(void)
     // that is asleep, which strands the device associated but with no lease.
     ESP_ERROR_CHECK(esp_wifi_set_ps(WIFI_PS_NONE));
 
-    ESP_LOGI(TAG, "joining \"%s\"", ssid);
+    ESP_LOGI(TAG, "joining \"%s\"", s_set.ssid);
     for (int waited = 0;; waited += 5) {
         EventBits_t bits = xEventGroupWaitBits(s_wifi_events,
                                                WIFI_CONNECTED_BIT | WIFI_FAILED_BIT,
@@ -292,6 +287,36 @@ static esp_err_t wifi_start(void)
         esp_netif_get_ip_info(netif, &ip);
         ESP_LOGW(TAG, "%ds: no lease yet, netif ip " IPSTR, waited, IP2STR(&ip.ip));
     }
+}
+
+// --------------------------------------------------------------- status
+// What the config page shows. Kept here rather than in webui because it is the
+// application that knows these things, not the HTTP layer.
+
+static void status_json(void *ctx, char *buf, size_t cap)
+{
+    (void)ctx;
+    const esp_app_desc_t *app = esp_app_get_description();
+    int blocked = serial_out_state() == SERIAL_OUT_BLOCKED;
+    uint32_t up = (uint32_t)(esp_timer_get_time() / 1000000);
+
+    char job[96];
+    if (s_last_job[0])
+        snprintf(job, sizeof job, "%s (%u page%s)", s_last_job,
+                 (unsigned)s_last_pages, s_last_pages == 1 ? "" : "s");
+    else
+        snprintf(job, sizeof job, "none yet");
+
+    snprintf(buf, cap,
+        "{\"state\":\"%s\",\"stopped\":%s,\"job\":\"%s\",\"queue\":\"%s\","
+        "\"host\":\"%s.local\",\"ip\":\"%s\",\"ssid\":\"%s\",\"dither\":\"%s\","
+        "\"uptime\":\"%uh %02um\",\"version\":\"%s\",\"heap\":\"%u KB\","
+        "\"model\":\"Apple ImageWriter II\"}",
+        s_ap_mode ? "Waiting for setup" : blocked ? "Out of paper" : "Ready",
+        blocked ? "true" : "false",
+        job, s_set.queue, s_set.hostname, s_ip, s_set.ssid, s_set.dither,
+        (unsigned)(up / 3600), (unsigned)((up / 60) % 60),
+        app->version, (unsigned)(esp_get_free_heap_size() / 1024));
 }
 
 // ----------------------------------------------------------------- main
@@ -310,14 +335,14 @@ void app_main(void)
     // Default hostname imagewriter-XXXX, the last two MAC bytes. SPEC.md 3.2.
     uint8_t mac[6] = {0};
     esp_read_mac(mac, ESP_MAC_WIFI_STA);
-    snprintf(s_hostname, sizeof s_hostname, "imagewriter-%02x%02x", mac[4], mac[5]);
+    char suffix[8];
+    snprintf(suffix, sizeof suffix, "%02x%02x", mac[4], mac[5]);
+    settings_load(&s_set, suffix);
 
     raster_selftest();
 
-    if (wifi_start() != ESP_OK) {
-        ESP_LOGE(TAG, "no network; IPP not started");
-        for (;;) vTaskDelay(pdMS_TO_TICKS(10000));
-    }
+    ht_algo_t algo;
+    if (ht_algo_from_name(s_set.dither, &algo)) algo = HT_ATKINSON;
 
     serial_out_cfg_t ser = {
         .uart_num        = CONFIG_AIRWRITER_UART_NUM,
@@ -333,19 +358,43 @@ void app_main(void)
     };
     ESP_ERROR_CHECK(serial_out_init(&ser));
 
-    job_pipe_cfg_t pipe = { .out = printer_out, .dither = HT_ATKINSON };
+    job_pipe_cfg_t pipe = { .out = printer_out, .dither = algo };
     ESP_ERROR_CHECK(job_pipe_init(&pipe));
 
+    // No credentials, or they no longer work: become an access point and let
+    // the user fix it from a phone. This is the only path a person who did not
+    // build the firmware can take.
+    if (!s_set.ssid[0] || wifi_start() != ESP_OK) {
+        char ap[32];
+        snprintf(ap, sizeof ap, "AirWriter-%s", suffix);
+        s_ap_mode = 1;
+        strncpy(s_ip, "192.168.4.1", sizeof s_ip - 1);
+
+        if (!s_set.ssid[0]) ESP_LOGW(TAG, "no wi-fi credentials stored");
+        else                ESP_LOGW(TAG, "could not join \"%s\"", s_set.ssid);
+
+        ESP_ERROR_CHECK(net_provision_start(ap));
+        webui_cfg_t wcfg = { .status_json = status_json, .captive = 1 };
+        ESP_ERROR_CHECK(webui_start(&wcfg));
+
+        for (;;) vTaskDelay(pdMS_TO_TICKS(30000));
+    }
+
     ipp_server_cfg_t cfg = {
-        .queue_name = CONFIG_AIRWRITER_QUEUE_NAME,
-        .hostname   = s_hostname,
+        .queue_name = s_set.queue,
+        .hostname   = s_set.hostname,
         .port       = 631,
         .dev_mode   = AW_DEV_MODE,
-        .sink = { .begin = doc_begin, .data = doc_data, .end = doc_end, .ctx = NULL },
+        .sink = { .begin = doc_begin, .data = doc_data, .end = doc_end,
+                  .cancel = doc_cancel, .ctx = NULL },
     };
     ESP_ERROR_CHECK(ipp_server_start(&cfg));
 
+    webui_cfg_t wcfg = { .status_json = status_json, .captive = 0 };
+    ESP_ERROR_CHECK(webui_start(&wcfg));
+
     ESP_LOGI(TAG, "ready: %s", ipp_server_uri());
+    ESP_LOGI(TAG, "settings at http://%s.local/", s_set.hostname);
     ESP_LOGI(TAG, "%u bytes free after startup", (unsigned)esp_get_free_heap_size());
 
     for (;;) vTaskDelay(pdMS_TO_TICKS(30000));
