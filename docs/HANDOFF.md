@@ -16,7 +16,7 @@ other five components are still to write.
 | | State |
 |---|---|
 | Schematic | Complete, ERC clean, zero errors |
-| PCB | Routed, 64 x 54mm, DRC clean, schematic parity clean |
+| PCB | Routed, 52 x 66mm, DRC clean, schematic parity clean |
 | Fab package | Gerbers, drill, BOM, pick-and-place in `hardware/airwriter/fab/` |
 | Firmware | M2 done: raster pipeline written, reviewed, 233 checks green |
 | Boards ordered | No |
@@ -68,10 +68,16 @@ beside the mini-DIN.
 that path wired but not populated; a DNP series resistor expresses that without U3 driving HSKi by
 default.
 
-**Board is 64 x 54mm, not 55 x 35.** The aspect flipped to portrait because the WROOM-1 wants its
+**Board is 52 x 66mm, not 55 x 35.** The aspect flipped to portrait because the WROOM-1 wants its
 antenna overhanging a short edge while both mini-DINs and the USB-C need the opposite one. It grew
-from 32 x 54 when the LocalTalk port was added, and again to 64 wide when the indicators, the
-mode button and the I2C header needed a column of their own down the right-hand edge.
+from 32 x 54 when the LocalTalk port was added, and to 66 tall when the indicators, the buttons and
+the I2C header needed a band of their own. Growing it sideways was tried first and undone: the
+ports live on one edge, so the room has to come from the axis they sit on.
+
+**All three front connectors have their mating faces on the board edge at y=126.** They were not
+coplanar before — the mini-DINs stood 1.25mm proud while the USB-C sat 0.55mm back, a 1.8mm spread
+that no single case wall can meet. The mini-DIN origin has to sit 0.75mm past the edge to put its
+face on it; the USB-C origin 4.15mm short of it.
 
 **Reference designators live on F.Fab, not the silkscreen.** At this density the silk text was
 unreadable and generated 75 of 82 DRC violations. They still print on the assembly drawing.
@@ -217,7 +223,7 @@ EOF
 enough to change design decisions. MAX3232 is $9.98 at Mouser and $0.91 at LCSC. MAX3490 is $6.61 at
 Digi-Key and $0.687 at LCSC.
 
-Order the board as **64 x 54mm, 2 layer, 1.6mm FR4, 1oz copper, HASL**. Nothing needs a premium
+Order the board as **52 x 66mm, 2 layer, 1.6mm FR4, 1oz copper, HASL**. Nothing needs a premium
 process.
 
 **Protect the 0.30mm drill floor.** PCBWay's standard minimum is 0.30mm and 0.20mm is an upgraded

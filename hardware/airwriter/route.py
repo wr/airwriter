@@ -51,9 +51,37 @@ def scope_span(text, keyword):
         i += 1
 
 
+EDGE_INSET_UM = 300
+
+
+def shrink_boundary(text):
+    """Pull the board outline inward so the router cannot hug the edge.
+
+    Freerouting routes right up to the boundary, which leaves vias a few microns
+    inside KiCad's 0.25mm copper-to-edge rule. Moving every outline point toward
+    the centroid keeps the router honest without touching the real Edge.Cuts.
+    """
+    start, end = scope_span(text, 'boundary')
+    scope = text[start:end]
+    m = re.search(r'\(path pcb (\d+)([\s\S]*?)\)', scope)
+    if not m:
+        return text
+    nums = [float(v) for v in m.group(2).split()]
+    xs, ys = nums[0::2], nums[1::2]
+    cx, cy = sum(xs) / len(xs), sum(ys) / len(ys)
+    out = []
+    for x, y in zip(xs, ys):
+        dx, dy = x - cx, y - cy
+        d = max((dx * dx + dy * dy) ** 0.5, 1e-9)
+        out += [round(x - dx / d * EDGE_INSET_UM), round(y - dy / d * EDGE_INSET_UM)]
+    body = '  '.join(f'{a} {b}' for a, b in zip(out[0::2], out[1::2]))
+    return text[:start] + scope[:m.start()] + f'(path pcb {m.group(1)}  {body})' + scope[m.end():] + text[end:]
+
+
 def prepare_dsn(path, keep_wiring):
     text = open(path).read()
     text, rounded = NUMBER.subn(lambda m: str(round(float(m.group(0)))), text)
+    text = shrink_boundary(text)
     if not keep_wiring:
         start, end = scope_span(text, 'wiring')
         text = text[:start] + '(wiring\n  )' + text[end:]
