@@ -69,6 +69,28 @@ beside the mini-DIN.
 that path wired but not populated; a DNP series resistor expresses that without U3 driving HSKi by
 default.
 
+**Four parts are fitted only if the printer port misbehaves.** They are the bare pad pairs in the row
+under U3 and U2, and they are marked DNP in both the schematic and the board.
+
+| | Value | What it does | Fit it when |
+|---|---|---|---|
+| R5 | 120R | Differential termination across the printer's TxD pair, at U2's receiver | The cable is long enough to ring. At 9600 baud on a printer cable it only loads the line |
+| R6 | 4.7k | Failsafe bias, +3V3 to TxD+ | The receiver reads garbage with the printer off or unplugged |
+| R7 | 4.7k | Failsafe bias, TxD- to GND | Same — R6 and R7 are a pair, fit both or neither |
+| R9 | 0R | Series jumper from the MAX3232's T1OUT to the printer's HSKi pin | You decide the board should drive HSKi rather than only listen on HSKo |
+
+**The BOM had three parts wrongly marked DNP.** It grouped rows by value and footprint but not by the
+DNP flag, so R8 landed in the same row as R9 and R18/R19 landed in the same row as R6/R7 — and the
+row took the DNP label. An assembler working from it would have left the printer port's shield
+ungrounded and the I2C bus without pullups. Regenerated with DNP in the group-by. The pick-and-place
+file is now exported with `--exclude-dnp`, so it lists only parts that should actually be placed: 53
+of the 57.
+
+**Nine board footprints carried placeholder values** — R17 read "R17", C19 read "C19", J6 read "J6" —
+because the board was never fully re-synced from the schematic. Those show up in the pick-and-place
+file's value column, so an assembler would have seen "R18" where "4.7k" belongs. Synced against the
+BOM.
+
 **Board is 52 x 66mm, not 55 x 35.** The aspect flipped to portrait because the WROOM-1 wants its
 antenna overhanging a short edge while both mini-DINs and the USB-C need the opposite one. It grew
 from 32 x 54 when the LocalTalk port was added, and to 66 tall when the indicators, the buttons and

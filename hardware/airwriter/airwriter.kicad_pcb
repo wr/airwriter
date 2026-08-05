@@ -288,7 +288,7 @@
 				)
 			)
 		)
-		(property "Value" "R18"
+		(property "Value" "4.7k"
 			(at 0 2.5 0)
 			(layer "F.Fab")
 			(hide yes)
@@ -1329,7 +1329,7 @@
 				)
 			)
 		)
-		(property "Value" "D2"
+		(property "Value" "WS2812B-2020"
 			(at 0 2.5 0)
 			(layer "F.Fab")
 			(hide yes)
@@ -1978,7 +1978,7 @@
 				)
 			)
 		)
-		(property "Value" "D3"
+		(property "Value" "green PWR"
 			(at 0 2.5 0)
 			(layer "F.Fab")
 			(hide yes)
@@ -6378,7 +6378,7 @@
 				)
 			)
 		)
-		(property "Value" "R19"
+		(property "Value" "4.7k"
 			(at 0 2.5 0)
 			(layer "F.Fab")
 			(hide yes)
@@ -6525,7 +6525,7 @@
 				)
 			)
 		)
-		(property "Value" "C19"
+		(property "Value" "100n"
 			(at 0 2.5 0)
 			(layer "F.Fab")
 			(hide yes)
@@ -7798,7 +7798,7 @@
 				)
 			)
 		)
-		(property "Value" "J6"
+		(property "Value" "I2C / Qwiic"
 			(at 0 2.5 0)
 			(layer "F.Fab")
 			(hide yes)
@@ -12309,7 +12309,7 @@
 				)
 			)
 		)
-		(property "Value" "SW2"
+		(property "Value" "MODE/TEST"
 			(at 0 2.5 0)
 			(layer "F.Fab")
 			(hide yes)
@@ -13029,7 +13029,7 @@
 				)
 			)
 		)
-		(property "Value" "R17"
+		(property "Value" "1k"
 			(at 0 2.5 0)
 			(layer "F.Fab")
 			(hide yes)
@@ -13176,7 +13176,7 @@
 				)
 			)
 		)
-		(property "Value" "C20"
+		(property "Value" "100n"
 			(at 0 2.5 0)
 			(layer "F.Fab")
 			(hide yes)
