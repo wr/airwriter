@@ -300,12 +300,31 @@ static esp_err_t wifi_start(void)
 // What the config page shows. Kept here rather than in webui because it is the
 // application that knows these things, not the HTTP layer.
 
+static const char *auth_name(wifi_auth_mode_t m)
+{
+    switch (m) {
+    case WIFI_AUTH_OPEN:            return "Open";
+    case WIFI_AUTH_WEP:             return "WEP";
+    case WIFI_AUTH_WPA_PSK:         return "WPA";
+    case WIFI_AUTH_WPA2_PSK:        return "WPA2";
+    case WIFI_AUTH_WPA_WPA2_PSK:    return "WPA/WPA2";
+    case WIFI_AUTH_WPA3_PSK:        return "WPA3";
+    case WIFI_AUTH_WPA2_WPA3_PSK:   return "WPA2/WPA3";
+    default:                        return "Secured";
+    }
+}
+
 static void status_json(void *ctx, char *buf, size_t cap)
 {
     (void)ctx;
     const esp_app_desc_t *app = esp_app_get_description();
     int blocked = serial_out_state() == SERIAL_OUT_BLOCKED;
     uint32_t up = (uint32_t)(esp_timer_get_time() / 1000000);
+
+    // Details of the network actually joined, for the Wi-Fi panel. Absent in
+    // setup mode, where there is no association to describe.
+    wifi_ap_record_t ap;
+    int joined = !s_ap_mode && esp_wifi_sta_get_ap_info(&ap) == ESP_OK;
 
     char job[96];
     if (s_last_job[0])
@@ -315,13 +334,22 @@ static void status_json(void *ctx, char *buf, size_t cap)
         snprintf(job, sizeof job, "none yet");
 
     snprintf(buf, cap,
-        "{\"state\":\"%s\",\"stopped\":%s,\"job\":\"%s\",\"queue\":\"%s\","
-        "\"host\":\"%s.local\",\"ip\":\"%s\",\"ssid\":\"%s\",\"dither\":\"%s\","
+        "{\"state\":\"%s\",\"stopped\":%s,\"setup\":%s,\"job\":\"%s\","
+        "\"queue\":\"%s\",\"host\":\"%s.local\",\"ip\":\"%s\","
+        "\"ssid\":\"%s\",\"dither\":\"%s\",\"signal\":\"%s\","
+        "\"channel\":\"%s\",\"security\":\"%s\","
         "\"uptime\":\"%uh %02um\",\"version\":\"%s\",\"heap\":\"%u KB\","
         "\"model\":\"Apple ImageWriter II\"}",
         s_ap_mode ? "Waiting for setup" : blocked ? "Out of paper" : "Ready",
         blocked ? "true" : "false",
-        job, s_set.queue, s_set.hostname, s_ip, s_set.ssid, s_set.dither,
+        s_ap_mode ? "true" : "false",
+        job, s_set.queue, s_set.hostname, s_ip,
+        joined ? (char *)ap.ssid : (s_ap_mode ? "" : s_set.ssid),
+        s_set.dither,
+        joined ? (ap.rssi > -55 ? "Excellent" : ap.rssi > -67 ? "Good"
+                : ap.rssi > -75 ? "Fair" : "Weak") : "",
+        joined ? "2.4 GHz" : "",
+        joined ? auth_name(ap.authmode) : "",
         (unsigned)(up / 3600), (unsigned)((up / 60) % 60),
         app->version, (unsigned)(esp_get_free_heap_size() / 1024));
 }

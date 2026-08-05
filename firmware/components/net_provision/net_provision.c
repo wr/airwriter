@@ -110,9 +110,20 @@ esp_err_t net_provision_start(const char *ap_name)
     wc.ap.max_connection = 4;
     wc.ap.authmode       = WIFI_AUTH_OPEN;
 
+    // The station half has to be told to stop before the access point comes
+    // up. Left half-alive it keeps retrying and rescanning in the background,
+    // and in APSTA mode the access point follows the station's channel -- so
+    // the beacon wanders off the channel it advertised and the network quietly
+    // vanishes from every phone in the room, minutes after it appeared.
+    esp_wifi_disconnect();
+
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_APSTA));   // STA stays up to scan
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_AP, &wc));
     ESP_ERROR_CHECK(esp_wifi_start());
+
+    // Nothing here may doze: the beacon has to be continuous for the network
+    // to stay listed, and this device is mains powered.
+    ESP_ERROR_CHECK(esp_wifi_set_ps(WIFI_PS_NONE));
 
     esp_err_t err = start_dns();
     if (err != ESP_OK) return err;
