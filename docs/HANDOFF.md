@@ -16,7 +16,7 @@ flashes. 569 checks pass on the host. Still to write: `serial_out`, `printer_sta
 | | State |
 |---|---|
 | Schematic | Complete, ERC clean, zero errors |
-| PCB | Routed, 52 x 78mm, DRC clean, schematic parity clean |
+| PCB | Routed, 52 x 78mm, DRC down to one known violation |
 | Fab package | Gerbers, drill, BOM, pick-and-place in `hardware/airwriter/fab/` |
 | Firmware | M2 and M4 done: raster pipeline and AirPrint, 569 checks green |
 | Devkit | ESP32-C6 stands in for the board; it discovers, accepts jobs and prints from an iPhone |
@@ -109,10 +109,48 @@ C9 and C14 came down with the band. They bypass U2 and U3, and leaving them in t
 have put them 22mm from the chips they serve. They now sit at the top edge of the lower block,
 about 5mm from their pins — closer than before the board grew.
 
-**The three internal connectors carry function labels, not pinouts.** J3 is `USB`, J5 is `ICSP`,
-J6 is `I2C`. Per-pin labels do not fit: J3 has 1.35mm between the board edge and U1's pads, and J6's
-1mm pitch cannot hold text at the 0.8mm minimum height with legal spacing. J6 is wired in Qwiic pin
-order — GND, 3V3, SDA, SCL — so the word is the pinout for anyone with a Qwiic cable.
+**The two remaining connectors carry function labels, not pinouts.** J3 is `USB` and J6 is
+`I2C DISPLAY`. Per-pin labels do not fit: J3 has 1.35mm between the board edge and U1's pads, and
+J6's 1mm pitch cannot hold text at the 0.8mm minimum height with legal spacing. J6 is wired in Qwiic
+pin order — GND, 3V3, SDA, SCL — so the word is the pinout for anyone with a Qwiic cable.
+
+**U7 sits in a socket and J5 is gone.** The PIC is a **PIC12F1840-I/P** in PDIP-8, dropped into an
+8-pin DIP socket, and it gets TashTalk flashed into it in a chip programmer before it is inserted.
+That deletes the ICSP header, five pads and a part from the board, and it means a PIC that will not
+take firmware never gets soldered down.
+
+What changed with it:
+
+- **MCLR now ties to +3V3.** It was only ever wired to J5 pin 1, so in normal operation it was
+  floating — held up by nothing but the PIC's internal weak pull-up. Tied high it is defined. There
+  is no in-circuit programming to protect any more, so no series resistor.
+- **The socket is 10.7 x 10.8mm against the SOIC-8's 7.8 x 4.9**, so the top-right block spread out:
+  U7's body centres on (133.5, 69), C17/R14/R18/R19 moved right to x=141.5, and R15/R16 dropped to
+  y=76. The DIP-8 footprint's origin is pad 1, not the body centre — offset by 3.81mm in both axes
+  when placing it.
+- **It stands about 9mm proud** once a PIC is seated, against roughly 12mm for the mini-DIN bodies.
+  Still inside the tallest thing on the board, but check it against the case lid.
+- **The socket is not a BOM line.** kicad-cli only emits parts that have a schematic symbol, and the
+  socket has none — it is the footprint U7 sits on. Buy it separately: LCSC `C72124`, CONNFLY
+  DS1009-08AT1NX-0A2, $0.024. U7's BOM description says so.
+
+**"Schematic parity clean" was never true.** Nothing had been running the check — `kicad-cli pcb
+drc` only does it with `--schematic-parity`, and none of the earlier runs passed it. The board sits
+at 15 parity issues and sat at 16 before the socket work, so removing J5 accounted for the one
+that went away. None of them is a wiring error:
+
+- `extra_footprint` on H1–H4, because mounting holes have no schematic symbol. Normal.
+- `footprint_symbol_field_mismatch` on D2, D3, J4, J6, SW2, U6, U7, U8 — field text that differs
+  between the two files, not connectivity.
+- `net_conflict` on D2 pad 1 (the last WS2812's DOUT, genuinely unconnected) and on J6's two
+  mounting-post pads.
+
+Run it with the flag before ordering if you want them gone; none of them changes the copper.
+
+**TashTalk can also be reset over MCLR, and this board gives that up.** Pulling RA3/MCLR low holds
+the PIC in reset and tristates its outputs, which matters when something else shares the RS-422
+driver. Nothing does here — U6 and U8 are the LocalTalk pair and U2 is the printer's — so the tie to
++3V3 costs nothing. If you ever want firmware control of it, run MCLR to a spare ESP32 GPIO instead.
 
 **The mounting holes are not grounded, deliberately.** A ground ring buys nothing in a printed
 plastic case, and it would create a second path to ground that cannot be broken. The mini-DIN shells
@@ -140,7 +178,7 @@ bottom-right quadrant sat empty. Each block now sits with its chip:
 | Block | Where | Parts |
 |---|---|---|
 | ESP32 rail and EN | directly under U1 | C4 C5 R3 C6 |
-| LocalTalk digital | top right | U7 PIC, C17, R14, R15, R16, J5 ICSP |
+| LocalTalk digital | top right | U7 PIC in a DIP socket, C17, R14, R15, R16 |
 | I2C expansion | right edge, top | J6, R18, R19 |
 | Printer analog | left, above J2 | U3, U2, C9–C15, R5–R9 |
 | LocalTalk line drivers | centre, above J4 | U6, U8, C16, C18, R10–R13 |
@@ -342,7 +380,8 @@ grep -E '^T[0-9]+C' fab/airwriter.drl        # nothing below 0.300
 | U4 | AP7361C-33E-13 | $0.52 @10, $0.40 @100 | 1,526 |
 | U5 | USBLC6-2SC6 | $0.099 ST, $0.018 UMW clone | good |
 | U6, U8 | SP3485EN-L/TR | $0.21 each | 37,970 |
-| U7 | PIC12F1840-I/SN | $0.70 | good |
+| U7 | PIC12F1840-I/P (PDIP-8) | ~$1.50 | Mouser or Digi-Key, **not LCSC** — LCSC stocks only the SOIC |
+| U7 socket | CONNFLY DS1009-08AT1NX-0A2, LCSC `C72124` | $0.024 | good |
 | D1, D2 | WS2812B-2020 | $0.092 @10 | 35,115 |
 | J1 | TYPE-C-31-M-12 | $0.096 | good |
 | J2, J4 | Kycon KMDGX-8S-BS mini-DIN | ~$2.50 (Mouser) | 1,032 — Digi-Key is the backordered one |
@@ -352,10 +391,9 @@ grep -E '^T[0-9]+C' fab/airwriter.drl        # nothing below 0.300
 That is about **$13 of parts per board**, and $5 of it is the two mini-DINs. Passives are generic
 0603 and 0805 with no MPN in the BOM — buy whatever is cheap and in stock.
 
-**J3 and J5 are the only awkward line.** LCSC does not stock 1.27mm single-row male headers as 1x4
-or 1x5; it stocks strips. Buy `C28952` (1x10P, $0.025) or `C3408` (1x50P, $0.123) and cut. Neither
-header has to be fitted for the board to work: J3 is bring-up only, and the PIC can be programmed
-through J5's pads with pogo pins instead of a soldered header.
+**J3 is the only awkward line.** LCSC does not stock 1.27mm single-row male headers as 1x4; it
+stocks strips. Buy `C28952` (1x10P, $0.025) or `C3408` (1x50P, $0.123) and cut. It does not have to
+be fitted at all — it is bring-up only.
 
 **U2 and U3 carry the `+T` tape MPNs, not the plain `+`.** Same silicon; the plain MAX3232ESE+ is
 $1.70 at LCSC against $0.91 for the +T. Cut tape is what a small order gets anyway.
@@ -408,7 +446,8 @@ LocalTalk transceiver is two half-duplex parts rather than one full-duplex one.
 
 **TashTalk** (lampmerchant) — a LocalTalk data-link engine that fits in a PIC12F1840, bit-banging
 SDLC and FM0 framing and presenting it over a 1 Mbps UART with CTS flow control. The board carries
-one running his firmware. It needs flashing; that is what J5 is for.
+one running his firmware. It needs flashing, which now happens in a chip programmer before the PIC
+goes into its socket — see the socket note above.
 
 **TailTalk / TashTalkUSB** (FeralFirmware) — the LocalTalk section's wiring was copied from
 TashTalkUSB's KiCad netlist node for node rather than derived from prose. TailTalk itself is a

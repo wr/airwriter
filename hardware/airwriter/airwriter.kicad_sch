@@ -5513,13 +5513,7 @@
       (justify left bottom))
     (uuid "b4650e17-160d-40ae-8f3c-89641c848a72"))
 
-  (label "LT_ICSPCLK"
-    (at 240.03 265.43 0)
-    (effects
-      (font
-        (size 1.27 1.27))
-      (justify left bottom))
-    (uuid "1ececb77-0ee8-4a39-a0ad-047baa5be4fd"))
+  
 
   (label "LT_UART_RX"
     (at 189.23 134.62 0)
@@ -5553,13 +5547,7 @@
       (justify left bottom))
     (uuid "858b5254-d112-4932-b7b6-20dcbcfaaf6e"))
 
-  (label "LT_ICSPDAT"
-    (at 240.03 262.89 0)
-    (effects
-      (font
-        (size 1.27 1.27))
-      (justify left bottom))
-    (uuid "35d0c23b-5ef1-4eb8-b6b7-d1b6f9a660d6"))
+  
 
   (label "LT_CTS"
     (at 189.23 137.16 0)
@@ -5577,7 +5565,7 @@
       (justify left bottom))
     (uuid "5628a37c-6117-4730-8869-df47807b3e62"))
 
-  (label "LT_MCLR"
+  (label "+3V3"
     (at 285.75 227.33 0)
     (effects
       (font
@@ -5585,13 +5573,7 @@
       (justify left bottom))
     (uuid "cca5ffee-039e-4c3e-89fb-bad65f924ad7"))
 
-  (label "LT_MCLR"
-    (at 240.03 255.27 0)
-    (effects
-      (font
-        (size 1.27 1.27))
-      (justify left bottom))
-    (uuid "10740cb2-c5bf-402b-bb82-588f92702e6b"))
+  
 
   (label "LT_A"
     (at 384.81 210.82 0)
@@ -5721,13 +5703,7 @@
       (justify left bottom))
     (uuid "af167984-c324-4955-b5e0-6dfef194901e"))
 
-  (label "+3V3"
-    (at 240.03 257.81 0)
-    (effects
-      (font
-        (size 1.27 1.27))
-      (justify left bottom))
-    (uuid "2d25cb07-0d7a-4f68-a808-5ebed93ff10b"))
+  
 
   (label "GND"
     (at 270.51 245.11 0)
@@ -5753,13 +5729,7 @@
       (justify left bottom))
     (uuid "048d9628-5e4e-4fb5-8917-5398f759b406"))
 
-  (label "GND"
-    (at 240.03 260.35 0)
-    (effects
-      (font
-        (size 1.27 1.27))
-      (justify left bottom))
-    (uuid "83537c59-2fb3-46c3-8383-ecaaa77a6f52"))
+  
 
   (label "GND"
     (at 426.72 227.33 0)
@@ -7874,18 +7844,18 @@
       (effects
         (font
           (size 1.27 1.27))))
-    (property "Value" "PIC12F1840-I/SN"
+    (property "Value" "PIC12F1840-I/P"
       (at 270.51 233.68 0)
       (effects
         (font
           (size 1.27 1.27))))
-    (property "Footprint" "Package_SO:SOIC-8_3.9x4.9mm_P1.27mm"
+    (property "Footprint" "Package_DIP:DIP-8_W7.62mm_Socket"
       (at 270.51 229.87 0)
       (hide yes)
       (effects
         (font
           (size 1.27 1.27))))
-    (property "MPN" "PIC12F1840-I/SN"
+    (property "MPN" "PIC12F1840-I/P"
       (at 270.51 229.87 0)
       (hide yes)
       (effects
@@ -7897,7 +7867,7 @@
       (effects
         (font
           (size 1.27 1.27))))
-    (property "Description" "8-bit MCU, SOIC-8, runs TashTalk LocalTalk firmware"
+    (property "Description" "8-bit MCU, PDIP-8 in an 8-pin DIP socket. Runs TashTalk. Program it in a chip programmer before inserting - there is no ICSP header"
       (at 270.51 229.87 0)
       (hide yes)
       (effects
@@ -8293,59 +8263,7 @@
           (reference "C17")
           (unit 1)))))
 
-  (symbol
-    (lib_id "Connector_Generic:Conn_01x05")
-    (at 245.11 260.35 0)
-    (unit 1)
-    (in_bom yes)
-    (on_board yes)
-    (dnp no)
-    (uuid "86409e2d-1793-4efb-bcef-83cb8d89fa17")
-    (property "Reference" "J5"
-      (at 245.11 256.54 0)
-      (effects
-        (font
-          (size 1.27 1.27))))
-    (property "Value" "ICSP"
-      (at 245.11 264.16 0)
-      (effects
-        (font
-          (size 1.27 1.27))))
-    (property "Footprint" "Connector_PinHeader_1.27mm:PinHeader_1x05_P1.27mm_Vertical"
-      (at 245.11 260.35 0)
-      (hide yes)
-      (effects
-        (font
-          (size 1.27 1.27))))
-    (property "MPN" ""
-      (at 245.11 260.35 0)
-      (hide yes)
-      (effects
-        (font
-          (size 1.27 1.27))))
-    (property "Manufacturer" "Any"
-      (at 245.11 260.35 0)
-      (hide yes)
-      (effects
-        (font
-          (size 1.27 1.27))))
-    (property "Description" "1x5 1.27mm pin header, ICSP for the PIC"
-      (at 245.11 260.35 0)
-      (hide yes)
-      (effects
-        (font
-          (size 1.27 1.27))))
-    (property "Datasheet" ""
-      (at 245.11 260.35 0)
-      (hide yes)
-      (effects
-        (font
-          (size 1.27 1.27))))
-    (instances
-      (project "airwriter"
-        (path "/b907fa76-c5fe-4a7a-8e4e-adfdab62cb9c"
-          (reference "J5")
-          (unit 1)))))
+  
 
   (symbol
     (lib_id "Interface_UART:MAX3485")

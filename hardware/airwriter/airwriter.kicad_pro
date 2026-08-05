@@ -61,7 +61,7 @@
           "hatch_smoothing_value": 0.1,
           "hatch_thickness": 1.0,
           "min_clearance": 0.25,
-          "min_island_area": 10.0,
+          "min_island_area": 0.0013161349,
           "min_thickness": 0.2,
           "pad_connection": 2,
           "remove_islands": 0,
@@ -80,11 +80,11 @@
           ""
         ],
         [
-          "silk_edge_clearance|139600000|126000000|15874372-b841-4db1-bd0f-5337a80c78fa|f5d17560-861e-44ef-9891-e935babe67c1",
+          "silk_edge_clearance|139600000|138000000|15874372-b841-4db1-bd0f-5337a80c78fa|f5d17560-861e-44ef-9891-e935babe67c1",
           ""
         ],
         [
-          "silk_edge_clearance|149000000|126000000|15874372-b841-4db1-bd0f-5337a80c78fa|4d352a79-a9a8-48a9-a89c-3d9f7efec7f6",
+          "silk_edge_clearance|149000000|138000000|15874372-b841-4db1-bd0f-5337a80c78fa|4d352a79-a9a8-48a9-a89c-3d9f7efec7f6",
           ""
         ]
       ],
