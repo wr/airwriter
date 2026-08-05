@@ -376,6 +376,25 @@ kicad-cli pcb export drill --output fab/ --format excellon airwriter.kicad_pcb
 grep -E '^T[0-9]+C' fab/airwriter.drl        # nothing below 0.300
 ```
 
+**Protect the 0.15mm clearance floor too — this one was being violated.** PCBWay's own guidance is
+"design trace width/spacing above 6mil (0.15mm) to save cost", and the board's only net class had
+`clearance` set to **0.12mm**. The autorouter happily used it: raising the rule to 0.15 and
+re-running DRC turned up **98 clearance violations**, every one a pair of traces sitting between
+0.12 and 0.15mm apart. That is the same trap as the drill floor — a rule quietly permitting an
+upgraded spec — and it would have been invisible until the quote came back.
+
+The rule is 0.15mm now and the board re-routes clean against it. Check it the same way:
+
+```
+kicad-cli pcb drc --format json -o /tmp/d.json airwriter.kicad_pcb   # no clearance violations
+```
+
+**There is a Power net class now: 0.5mm track for `/+3V3`, `/VBUS` and `/GND`, against 0.2mm for
+signals.** Everything used to be 0.2mm, including the 3.3V rail feeding a module whose WiFi
+transmit current peaks near 500mA. 0.2mm in 1oz copper carries that, but with no margin and a
+10-15°C rise; 0.5mm makes it a non-question. Signals stay at 0.2mm, which is 7.9 mil and
+comfortably inside PCBWay's standard.
+
 **Every named part sources. Prices and stock, LCSC unless noted, verified 2026-08-05:**
 
 | Ref | Part | Price | Stock |

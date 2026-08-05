@@ -1,5 +1,5 @@
 ** Drc report for airwriter.kicad_pcb **
-** Created on 2026-08-05T15:17:21 **
+** Created on 2026-08-05T15:32:57 **
 ** Report includes: Errors, Warnings **
 
 ** Found 1 DRC violations **
@@ -10,19 +10,11 @@
 ** Found 7 unconnected pads **
 [unconnected_items]: Missing connection between items
     Local override; error
-    @(119.9150 mm, 120.6783 mm): Track [/+3V3] on F.Cu, length 2.3900 mm
-    @(114.9150 mm, 118.6900 mm): Track [/+3V3] on F.Cu, length 2.3900 mm
-[unconnected_items]: Missing connection between items
-    Local override; error
     @(100.3000 mm, 60.3000 mm): Zone [/GND] on F.Cu, priority 0
     @(100.3000 mm, 60.3000 mm): Zone [/GND] on F.Cu, priority 0
 [unconnected_items]: Missing connection between items
     Local override; error
-    @(100.3000 mm, 60.3000 mm): Zone [/GND] on F.Cu, priority 0
-    @(100.3000 mm, 60.3000 mm): Zone [/GND] on F.Cu, priority 0
-[unconnected_items]: Missing connection between items
-    Local override; error
-    @(100.3000 mm, 60.3000 mm): Zone [/GND] on F.Cu, priority 0
+    @(100.3000 mm, 60.3000 mm): Zone [/GND] on B.Cu, priority 0
     @(100.3000 mm, 60.3000 mm): Zone [/GND] on F.Cu, priority 0
 [unconnected_items]: Missing connection between items
     Local override; error
@@ -34,8 +26,16 @@
     @(100.3000 mm, 60.3000 mm): Zone [/GND] on F.Cu, priority 0
 [unconnected_items]: Missing connection between items
     Local override; error
-    @(100.3000 mm, 60.3000 mm): Zone [/GND] on B.Cu, priority 0
     @(100.3000 mm, 60.3000 mm): Zone [/GND] on F.Cu, priority 0
+    @(100.3000 mm, 60.3000 mm): Zone [/GND] on F.Cu, priority 0
+[unconnected_items]: Missing connection between items
+    Local override; error
+    @(100.3000 mm, 60.3000 mm): Zone [/GND] on F.Cu, priority 0
+    @(100.3000 mm, 60.3000 mm): Zone [/GND] on F.Cu, priority 0
+[unconnected_items]: Missing connection between items
+    Local override; error
+    @(100.3000 mm, 60.3000 mm): Zone [/GND] on F.Cu, priority 0
+    @(100.3000 mm, 60.3000 mm): Zone [/GND] on B.Cu, priority 0
 
 ** Found 0 Footprint errors **
 
