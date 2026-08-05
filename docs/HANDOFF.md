@@ -79,13 +79,38 @@ outside of a 3mm-wall printed case rather than with the PCB. Move them together 
 before either — the mini-DINs stood 1.25mm proud while the USB-C sat 0.55mm back. The mini-DIN
 origin sits 2.75mm past the edge; the USB-C origin 2.15mm short of it.
 
-**Reference designators are back on the silkscreen.** They moved to F.Fab in the first layout because
-silk text was unreadable at that density and generated 75 of 82 DRC violations. On the taller board
-they fit. Parts a user touches carry a function label above and the designator below: PWR, NET, JOB
-over the LEDs, BOOT and MODE over the buttons.
+**Resistor and capacitor designators live on F.Fab; everything else is on the silkscreen.** Those
+two classes are the dense ones, and their silk text was the source of 61 of the 75 DRC violations
+the board carried. They still print on the assembly drawing, so pick-and-place and hand assembly
+lose nothing. Chips, connectors, LEDs, buttons and mounting holes keep silk designators, and the
+parts a user touches carry a function label above and the designator below: PWR, NET, JOB over the
+LEDs, BOOT and MODE over the buttons.
 
-**Reference designators live on F.Fab, not the silkscreen.** At this density the silk text was
-unreadable and generated 75 of 82 DRC violations. They still print on the assembly drawing.
+**The placement is block-per-function, not row-per-part-type.** The first layout put every passive
+into three long rows across the middle of the board regardless of what it served — USB-C CC
+pulldowns 40mm from the connector, RS-232 charge-pump caps far from the MAX3232 — while the whole
+bottom-right quadrant sat empty. Each block now sits with its chip:
+
+| Block | Where | Parts |
+|---|---|---|
+| ESP32 rail and EN | directly under U1 | C4 C5 R3 C6 |
+| LocalTalk digital | top right | U7 PIC, C17, R14, R15, R16, J5 ICSP |
+| I2C expansion | right edge, top | J6, R18, R19 |
+| Printer analog | left, above J2 | U3, U2, C9–C15, R5–R9 |
+| LocalTalk line drivers | centre, above J4 | U6, U8, C16, C18, R10–R13 |
+| Power chain | right, above J1 | C2, C3, U4, U5, C1, R1, R2 |
+| UI strip | band above the ports | D3 D1 D2, SW1 SW2, R17, C7, C8, C19, C20 |
+
+Moving U6 and U8 down beside J4 cut the four LocalTalk differential runs from about 30mm to about
+14mm. Nothing enclosure-critical moved: U1, J1, J2 and J4 are exactly where they were.
+
+**The four mounting holes are a symmetric 45 x 50mm rectangle.** H2 used to sit at x=161.5, which is
+9.5mm off the right edge of a board that ends at 152 — it was outside the outline entirely, so rev A
+had three usable holes and one that would have been drilled into nothing.
+
+**The ground pour is stitched.** 82 vias tie the F.Cu fragments to the B.Cu plane, dropping isolated
+pour islands from 28 to 9. `hardware/airwriter/route.py` does not add these; the stitching pass is a
+separate script and has to be re-run after any re-route.
 
 ## The unverified assumptions, current status
 
