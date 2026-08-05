@@ -7885,6 +7885,24 @@
       (effects
         (font
           (size 1.27 1.27))))
+    (property "MPN" "PIC12F1840-I/SN"
+      (at 270.51 229.87 0)
+      (hide yes)
+      (effects
+        (font
+          (size 1.27 1.27))))
+    (property "Manufacturer" "Microchip Technology"
+      (at 270.51 229.87 0)
+      (hide yes)
+      (effects
+        (font
+          (size 1.27 1.27))))
+    (property "Description" "8-bit MCU, SOIC-8, runs TashTalk LocalTalk firmware"
+      (at 270.51 229.87 0)
+      (hide yes)
+      (effects
+        (font
+          (size 1.27 1.27))))
     (property "Datasheet" ""
       (at 270.51 229.87 0)
       (hide yes)
@@ -8299,6 +8317,24 @@
       (effects
         (font
           (size 1.27 1.27))))
+    (property "MPN" ""
+      (at 245.11 260.35 0)
+      (hide yes)
+      (effects
+        (font
+          (size 1.27 1.27))))
+    (property "Manufacturer" "Any"
+      (at 245.11 260.35 0)
+      (hide yes)
+      (effects
+        (font
+          (size 1.27 1.27))))
+    (property "Description" "1x5 1.27mm pin header, ICSP for the PIC"
+      (at 245.11 260.35 0)
+      (hide yes)
+      (effects
+        (font
+          (size 1.27 1.27))))
     (property "Datasheet" ""
       (at 245.11 260.35 0)
       (hide yes)
@@ -8389,6 +8425,18 @@
       (effects
         (font
           (size 1.27 1.27))))
+    (property "MPN" "SP3485EN-L/TR"
+      (at 335.28 265.43 0)
+      (hide yes)
+      (effects
+        (font
+          (size 1.27 1.27))))
+    (property "Manufacturer" "MaxLinear"
+      (at 335.28 265.43 0)
+      (hide yes)
+      (effects
+        (font
+          (size 1.27 1.27))))
     (property "Description" "RS-485 half-duplex transceiver, 3.3V, SOIC-8"
       (at 335.28 265.43 0)
       (hide yes)
@@ -8462,6 +8510,24 @@
         (font
           (size 1.27 1.27))))
     (property "Footprint" "Button_Switch_SMD:SW_SPST_B3U-1000P"
+      (at 149.86 195.58 0)
+      (hide yes)
+      (effects
+        (font
+          (size 1.27 1.27))))
+    (property "MPN" "B3U-1000P"
+      (at 149.86 195.58 0)
+      (hide yes)
+      (effects
+        (font
+          (size 1.27 1.27))))
+    (property "Manufacturer" "Omron"
+      (at 149.86 195.58 0)
+      (hide yes)
+      (effects
+        (font
+          (size 1.27 1.27))))
+    (property "Description" "Tactile switch, SMD, 4.8 x 3.4mm"
       (at 149.86 195.58 0)
       (hide yes)
       (effects
@@ -8624,6 +8690,24 @@
         (font
           (size 1.27 1.27))))
     (property "Footprint" "LED_SMD:LED_0603_1608Metric"
+      (at 149.86 248.92 0)
+      (hide yes)
+      (effects
+        (font
+          (size 1.27 1.27))))
+    (property "MPN" ""
+      (at 149.86 248.92 0)
+      (hide yes)
+      (effects
+        (font
+          (size 1.27 1.27))))
+    (property "Manufacturer" "Any"
+      (at 149.86 248.92 0)
+      (hide yes)
+      (effects
+        (font
+          (size 1.27 1.27))))
+    (property "Description" "Green LED, 0603, power rail indicator"
       (at 149.86 248.92 0)
       (hide yes)
       (effects
