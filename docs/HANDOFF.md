@@ -74,10 +74,15 @@ from 32 x 54 when the LocalTalk port was added, and to 66 tall when the indicato
 the I2C header needed a band of their own. Growing it sideways was tried first and undone: the
 ports live on one edge, so the room has to come from the axis they sit on.
 
-**All three front connectors have their mating faces on the board edge at y=126.** They were not
-coplanar before — the mini-DINs stood 1.25mm proud while the USB-C sat 0.55mm back, a 1.8mm spread
-that no single case wall can meet. The mini-DIN origin has to sit 0.75mm past the edge to put its
-face on it; the USB-C origin 4.15mm short of it.
+**All three front connectors stand 2mm proud of the board edge**, so their faces sit flush with the
+outside of a 3mm-wall printed case rather than with the PCB. Move them together or not at all. They were not coplanar with each other
+before either — the mini-DINs stood 1.25mm proud while the USB-C sat 0.55mm back. The mini-DIN
+origin sits 2.75mm past the edge; the USB-C origin 2.15mm short of it.
+
+**Reference designators are back on the silkscreen.** They moved to F.Fab in the first layout because
+silk text was unreadable at that density and generated 75 of 82 DRC violations. On the taller board
+they fit. Parts a user touches carry a function label above and the designator below: PWR, NET, JOB
+over the LEDs, BOOT and MODE over the buttons.
 
 **Reference designators live on F.Fab, not the silkscreen.** At this density the silk text was
 unreadable and generated 75 of 82 DRC violations. They still print on the assembly drawing.

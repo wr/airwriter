@@ -7921,6 +7921,24 @@
       (effects
         (font
           (size 1.27 1.27))))
+    (property "MPN" "KMDGX-8S-BS"
+      (at 439.42 229.87 0)
+      (hide yes)
+      (effects
+        (font
+          (size 1.27 1.27))))
+    (property "Manufacturer" "Kycon"
+      (at 439.42 229.87 0)
+      (hide yes)
+      (effects
+        (font
+          (size 1.27 1.27))))
+    (property "Description" "Mini-DIN 8-pin female, right angle, fully shielded"
+      (at 439.42 229.87 0)
+      (hide yes)
+      (effects
+        (font
+          (size 1.27 1.27))))
     (property "Datasheet" ""
       (at 439.42 229.87 0)
       (hide yes)
@@ -8317,6 +8335,24 @@
       (effects
         (font
           (size 1.27 1.27))))
+    (property "MPN" "SP3485EN-L/TR"
+      (at 335.28 224.79 0)
+      (hide yes)
+      (effects
+        (font
+          (size 1.27 1.27))))
+    (property "Manufacturer" "MaxLinear"
+      (at 335.28 224.79 0)
+      (hide yes)
+      (effects
+        (font
+          (size 1.27 1.27))))
+    (property "Description" "RS-485 half-duplex transceiver, 3.3V, SOIC-8"
+      (at 335.28 224.79 0)
+      (hide yes)
+      (effects
+        (font
+          (size 1.27 1.27))))
     (property "Datasheet" ""
       (at 335.28 224.79 0)
       (hide yes)
@@ -8348,6 +8384,12 @@
         (font
           (size 1.27 1.27))))
     (property "Footprint" "Package_SO:SOIC-8_3.9x4.9mm_P1.27mm"
+      (at 335.28 265.43 0)
+      (hide yes)
+      (effects
+        (font
+          (size 1.27 1.27))))
+    (property "Description" "RS-485 half-duplex transceiver, 3.3V, SOIC-8"
       (at 335.28 265.43 0)
       (hide yes)
       (effects
@@ -8497,6 +8539,24 @@
       (effects
         (font
           (size 1.27 1.27))))
+    (property "MPN" "WS2812B-2020"
+      (at 149.86 223.52 0)
+      (hide yes)
+      (effects
+        (font
+          (size 1.27 1.27))))
+    (property "Manufacturer" "Worldsemi"
+      (at 149.86 223.52 0)
+      (hide yes)
+      (effects
+        (font
+          (size 1.27 1.27))))
+    (property "Description" "Addressable RGB LED, 2020, chained from D1's DOUT"
+      (at 149.86 223.52 0)
+      (hide yes)
+      (effects
+        (font
+          (size 1.27 1.27))))
     (property "Datasheet" ""
       (at 149.86 223.52 0)
       (hide yes)
@@ -8636,6 +8696,24 @@
         (font
           (size 1.27 1.27))))
     (property "Footprint" "Connector_JST:JST_SH_SM04B-SRSS-TB_1x04-1MP_P1.00mm_Horizontal"
+      (at 195.58 254 0)
+      (hide yes)
+      (effects
+        (font
+          (size 1.27 1.27))))
+    (property "MPN" "SM04B-SRSS-TB"
+      (at 195.58 254 0)
+      (hide yes)
+      (effects
+        (font
+          (size 1.27 1.27))))
+    (property "Manufacturer" "JST"
+      (at 195.58 254 0)
+      (hide yes)
+      (effects
+        (font
+          (size 1.27 1.27))))
+    (property "Description" "4-pin 1.00mm JST SH horizontal SMD header, Qwiic pin order"
       (at 195.58 254 0)
       (hide yes)
       (effects
