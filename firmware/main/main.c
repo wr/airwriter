@@ -273,8 +273,12 @@ static esp_err_t wifi_start(void)
     // that is asleep, which strands the device associated but with no lease.
     ESP_ERROR_CHECK(esp_wifi_set_ps(WIFI_PS_NONE));
 
+    // Bounded, because associating and never getting a lease is a real state
+    // -- a network that admits the device and then drops its traffic looks
+    // exactly like this, and waiting forever means the setup portal never
+    // appears and the printer cannot be recovered without a cable.
     ESP_LOGI(TAG, "joining \"%s\"", s_set.ssid);
-    for (int waited = 0;; waited += 5) {
+    for (int waited = 0; waited < 60; waited += 5) {
         EventBits_t bits = xEventGroupWaitBits(s_wifi_events,
                                                WIFI_CONNECTED_BIT | WIFI_FAILED_BIT,
                                                pdFALSE, pdFALSE, pdMS_TO_TICKS(5000));
@@ -287,6 +291,9 @@ static esp_err_t wifi_start(void)
         esp_netif_get_ip_info(netif, &ip);
         ESP_LOGW(TAG, "%ds: no lease yet, netif ip " IPSTR, waited, IP2STR(&ip.ip));
     }
+
+    ESP_LOGE(TAG, "joined \"%s\" but never got an address", s_set.ssid);
+    return ESP_FAIL;
 }
 
 // --------------------------------------------------------------- status
