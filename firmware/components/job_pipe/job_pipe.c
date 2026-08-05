@@ -145,8 +145,14 @@ void job_pipe_end(int ok, job_pipe_stats_t *st)
     if (!ok) s_aborted = 1;
     s_eof = 1;
 
-    if (!xSemaphoreTake(s_done, pdMS_TO_TICKS(30000)))
-        ESP_LOGE(TAG, "pipeline did not finish within 30s");
+    // A Letter page is 119 seconds of transmission at 9600 baud, and the
+    // pipeline blocks on the UART the whole time. Waiting 30s here would
+    // abandon every real job a third of the way through.
+    for (int waited = 0; !xSemaphoreTake(s_done, pdMS_TO_TICKS(15000)); waited += 15) {
+        if (waited >= 600) { ESP_LOGE(TAG, "pipeline stuck for 10 minutes"); break; }
+        ESP_LOGI(TAG, "still printing: %us elapsed, %u bytes out",
+                 (unsigned)waited + 15, (unsigned)s_st.printer_bytes);
+    }
 
     if (st) *st = s_st;
 }

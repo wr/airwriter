@@ -37,3 +37,8 @@ void      ipp_server_stop(void);
 
 // The printer URI the server answers on, for logging. Valid after start.
 const char *ipp_server_uri(void);
+
+// Reports the printer stopped, with an IPP state reason keyword such as
+// "media-empty". Pass NULL to clear it. This is what turns a stalled HSKo line
+// into an alert on the phone -- SPEC.md 3.9.
+void ipp_server_set_stopped(const char *reason_or_null);

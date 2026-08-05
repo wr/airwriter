@@ -23,8 +23,32 @@
 #include "imagewriter.h"
 #include "ipp_server.h"
 #include "job_pipe.h"
+#include "serial_out.h"
 
 static const char *TAG = "airwriter";
+
+// A Kconfig bool that is off defines nothing at all, so every one of these
+// needs a fallback rather than a bare CONFIG_ reference.
+#ifdef CONFIG_AIRWRITER_INVERT_TX
+#define AW_INVERT_TX 1
+#else
+#define AW_INVERT_TX 0
+#endif
+#ifdef CONFIG_AIRWRITER_INVERT_RX
+#define AW_INVERT_RX 1
+#else
+#define AW_INVERT_RX 0
+#endif
+#ifdef CONFIG_AIRWRITER_UART_LOOPBACK
+#define AW_LOOPBACK 1
+#else
+#define AW_LOOPBACK 0
+#endif
+#ifdef CONFIG_AIRWRITER_DEV_MODE
+#define AW_DEV_MODE 1
+#else
+#define AW_DEV_MODE 0
+#endif
 
 #define WIFI_CONNECTED_BIT BIT0
 #define WIFI_FAILED_BIT    BIT1
@@ -96,10 +120,21 @@ static uint32_t crc32_up(uint32_t crc, const uint8_t *buf, size_t n)
 
 static uint32_t s_stream_crc;
 
+// The printer stream: checksummed so the device can be compared with tools/rip
+// byte for byte, then put on the wire.
 static void printer_out(void *ctx, const uint8_t *buf, size_t n)
 {
     (void)ctx;
     s_stream_crc = crc32_up(s_stream_crc, buf, n);
+    serial_out_write(buf, n);
+}
+
+// HSKo has been low too long. SPEC.md 3.9: that becomes a real alert on the
+// phone rather than a job that quietly never finishes.
+static void printer_state_changed(void *ctx, serial_out_state_t st)
+{
+    (void)ctx;
+    ipp_server_set_stopped(st == SERIAL_OUT_BLOCKED ? "media-empty" : NULL);
 }
 
 static esp_err_t doc_begin(void *ctx, const char *format, const char *name)
@@ -107,6 +142,7 @@ static esp_err_t doc_begin(void *ctx, const char *format, const char *name)
     (void)ctx;
     ESP_LOGI(TAG, "job \"%s\" format %s", name, format[0] ? format : "(unspecified)");
     s_stream_crc = 0;
+    serial_out_loopback_reset();
     return job_pipe_begin(name);
 }
 
@@ -132,6 +168,22 @@ static void doc_end(void *ctx, int ok)
              st.pages, st.pages == 1 ? "" : "s", (unsigned)st.dst_w, (unsigned)st.dst_h,
              (unsigned)st.doc_bytes, (unsigned)st.printer_bytes, (unsigned)st.ms);
     ESP_LOGI(TAG, "printer stream crc32 %08x", (unsigned)s_stream_crc);
+
+    // Let the last byte clear the shift register before calling it printed.
+    serial_out_flush(120000);
+
+    if (AW_LOOPBACK) {
+        size_t got; uint32_t crc;
+        serial_out_loopback_wait(st.printer_bytes, 3000);
+        serial_out_loopback_stats(&got, &crc);
+        if (got == st.printer_bytes && crc == s_stream_crc)
+            ESP_LOGI(TAG, "uart loopback: %u bytes returned intact, crc32 %08x",
+                     (unsigned)got, (unsigned)crc);
+        else
+            ESP_LOGE(TAG, "uart loopback MISMATCH: sent %u/%08x, got %u/%08x",
+                     (unsigned)st.printer_bytes, (unsigned)s_stream_crc,
+                     (unsigned)got, (unsigned)crc);
+    }
 
     // At 9600 baud, 8N1, one byte costs 10 bit times.
     ESP_LOGI(TAG, "that is %u seconds of printing at 9600 baud",
@@ -267,6 +319,20 @@ void app_main(void)
         for (;;) vTaskDelay(pdMS_TO_TICKS(10000));
     }
 
+    serial_out_cfg_t ser = {
+        .uart_num        = CONFIG_AIRWRITER_UART_NUM,
+        .tx_pin          = CONFIG_AIRWRITER_TX_PIN,
+        .rx_pin          = CONFIG_AIRWRITER_RX_PIN,
+        .cts_pin         = CONFIG_AIRWRITER_CTS_PIN,
+        .baud            = CONFIG_AIRWRITER_BAUD,
+        .invert_tx       = AW_INVERT_TX,
+        .invert_rx       = AW_INVERT_RX,
+        .stall_timeout_s = CONFIG_AIRWRITER_STALL_TIMEOUT,
+        .on_state        = printer_state_changed,
+        .loopback        = AW_LOOPBACK,
+    };
+    ESP_ERROR_CHECK(serial_out_init(&ser));
+
     job_pipe_cfg_t pipe = { .out = printer_out, .dither = HT_ATKINSON };
     ESP_ERROR_CHECK(job_pipe_init(&pipe));
 
@@ -274,7 +340,7 @@ void app_main(void)
         .queue_name = CONFIG_AIRWRITER_QUEUE_NAME,
         .hostname   = s_hostname,
         .port       = 631,
-        .dev_mode   = CONFIG_AIRWRITER_DEV_MODE,
+        .dev_mode   = AW_DEV_MODE,
         .sink = { .begin = doc_begin, .data = doc_data, .end = doc_end, .ctx = NULL },
     };
     ESP_ERROR_CHECK(ipp_server_start(&cfg));
