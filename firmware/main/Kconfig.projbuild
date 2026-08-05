@@ -14,9 +14,11 @@ config AIRWRITER_WIFI_PASSWORD
 
 config AIRWRITER_QUEUE_NAME
     string "Print queue name"
-    default "AirWriter"
+    default "ImageWriter II"
     help
-        What the iOS print sheet shows.
+        What the iOS print sheet shows. This is the printer's name, not the
+        bridge's: AirWriter is the dongle, and a user picking a printer is
+        looking for the machine the paper comes out of.
 
 config AIRWRITER_DEV_MODE
     bool "Development mode"

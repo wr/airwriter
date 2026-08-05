@@ -337,7 +337,7 @@ static void status_json(void *ctx, char *buf, size_t cap)
         "{\"state\":\"%s\",\"stopped\":%s,\"setup\":%s,\"job\":\"%s\","
         "\"queue\":\"%s\",\"host\":\"%s.local\",\"ip\":\"%s\","
         "\"ssid\":\"%s\",\"dither\":\"%s\",\"signal\":\"%s\","
-        "\"channel\":\"%s\",\"security\":\"%s\","
+        "\"channel\":\"%s\",\"security\":\"%s\",\"uri\":\"%s\","
         "\"uptime\":\"%uh %02um\",\"version\":\"%s\",\"heap\":\"%u KB\","
         "\"model\":\"Apple ImageWriter II\"}",
         s_ap_mode ? "Waiting for setup" : blocked ? "Out of paper" : "Ready",
@@ -350,6 +350,7 @@ static void status_json(void *ctx, char *buf, size_t cap)
                 : ap.rssi > -75 ? "Fair" : "Weak") : "",
         joined ? "2.4 GHz" : "",
         joined ? auth_name(ap.authmode) : "",
+        s_ap_mode ? "" : ipp_server_uri(),
         (unsigned)(up / 3600), (unsigned)((up / 60) % 60),
         app->version, (unsigned)(esp_get_free_heap_size() / 1024));
 }
