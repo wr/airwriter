@@ -6,6 +6,9 @@ Regenerate the expected stream only when the output is meant to change,
 and say why in the commit message.
 
 `ios-*.urf` — captured from a real iPhone through `tools/ippcap/ippcap.py`.
+`ios-*.expected.bin` — the printer stream that capture rips to. It is in
+`make regress` alongside the synthetic one, and `test/test_ios_capture.c`
+decodes the raw capture header for header-field regressions.
 
 ## What iOS sent
 

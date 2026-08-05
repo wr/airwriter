@@ -32,10 +32,17 @@ test: $(TESTBIN)
 clean:
 	rm -rf build
 
+FIX  := ../../fixtures
+IOS  := ios-20260804-232652
+
 .PHONY: regress
 regress: build/rip
 	@python3 test/make_fixture.py /tmp/checker.urf >/dev/null
 	@./build/rip --in /tmp/checker.urf --out-stream /tmp/checker.bin 2>/dev/null
-	@cmp /tmp/checker.bin ../../fixtures/checker.expected.bin \
-	  && echo "ok  regression: stream.bin unchanged" \
-	  || (echo "FAIL regression: stream.bin changed"; exit 1)
+	@cmp /tmp/checker.bin $(FIX)/checker.expected.bin \
+	  && echo "ok  regression: synthetic stream.bin unchanged" \
+	  || (echo "FAIL regression: synthetic stream.bin changed"; exit 1)
+	@./build/rip --in $(FIX)/$(IOS).urf --out-stream /tmp/ios.bin 2>/dev/null
+	@cmp /tmp/ios.bin $(FIX)/$(IOS).expected.bin \
+	  && echo "ok  regression: iOS stream.bin unchanged" \
+	  || (echo "FAIL regression: iOS stream.bin changed"; exit 1)
