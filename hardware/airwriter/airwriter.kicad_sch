@@ -7007,7 +7007,7 @@
       (effects
         (font
           (size 1.27 1.27))))
-    (property "MPN" "MAX3490ESA+"
+    (property "MPN" "MAX3490ESA+T"
       (at 340.36 55.88 0)
       (hide yes)
       (effects
@@ -7277,7 +7277,7 @@
       (effects
         (font
           (size 1.27 1.27))))
-    (property "MPN" "MAX3232ESE+"
+    (property "MPN" "MAX3232ESE+T"
       (at 340.36 146.05 0)
       (hide yes)
       (effects

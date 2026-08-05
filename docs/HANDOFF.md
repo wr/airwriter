@@ -309,15 +309,37 @@ kicad-cli pcb export drill --output fab/ --format excellon airwriter.kicad_pcb
 grep -E '^T[0-9]+C' fab/airwriter.drl        # nothing below 0.300
 ```
 
-**Key part prices, LCSC, verified 2026-08-04:**
+**Every named part sources. Prices and stock, LCSC unless noted, verified 2026-08-05:**
 
-| Part | Price | Stock |
-|---|---|---|
-| ESP32-S3-WROOM-1-N8R2 | $3.57 | good |
-| MAX3490ESA+T (printer port) | $0.687 @10 | 3,788 |
-| SP3485EN-L/TR x2 (LocalTalk) | $0.21 each | 37,970 |
-| PIC12F1840-I/SN | $0.70 | good |
-| Kycon KMDGX-8S-BS mini-DIN | ~$2.50 (Mouser) | 1,032 — Digi-Key is the backordered one |
+| Ref | Part | Price | Stock |
+|---|---|---|---|
+| U1 | ESP32-S3-WROOM-1-N8R2 | $3.75 | 9,842 |
+| U2 | MAX3490ESA+T (printer port) | $0.687 @10 | 3,788 |
+| U3 | MAX3232ESE+T | $0.91 | 7,956 for the plain +, the +T line is its own SKU |
+| U4 | AP7361C-33E-13 | $0.52 @10, $0.40 @100 | 1,526 |
+| U5 | USBLC6-2SC6 | $0.099 ST, $0.018 UMW clone | good |
+| U6, U8 | SP3485EN-L/TR | $0.21 each | 37,970 |
+| U7 | PIC12F1840-I/SN | $0.70 | good |
+| D1, D2 | WS2812B-2020 | $0.092 @10 | 35,115 |
+| J1 | TYPE-C-31-M-12 | $0.096 | good |
+| J2, J4 | Kycon KMDGX-8S-BS mini-DIN | ~$2.50 (Mouser) | 1,032 — Digi-Key is the backordered one |
+| J6 | SM04B-SRSS-TB(LF)(SN) | $0.13 | 60,960 |
+| SW1, SW2 | Omron B3U-1000P | $0.128 | 112,590 |
+
+That is about **$13 of parts per board**, and $5 of it is the two mini-DINs. Passives are generic
+0603 and 0805 with no MPN in the BOM — buy whatever is cheap and in stock.
+
+**J3 and J5 are the only awkward line.** LCSC does not stock 1.27mm single-row male headers as 1x4
+or 1x5; it stocks strips. Buy `C28952` (1x10P, $0.025) or `C3408` (1x50P, $0.123) and cut. Neither
+header has to be fitted for the board to work: J3 is bring-up only, and the PIC can be programmed
+through J5's pads with pogo pins instead of a soldered header.
+
+**U2 and U3 carry the `+T` tape MPNs, not the plain `+`.** Same silicon; the plain MAX3232ESE+ is
+$1.70 at LCSC against $0.91 for the +T. Cut tape is what a small order gets anyway.
+
+**The WS2812B-2020 footprint is right despite its name.** `LED_WS2812B-2020_PLCC4_2.0x2.0mm` draws a
+2.2 x 2.0mm body, which is the real package — LCSC lists it as 2.2x2mm too. The pin order matches the
+chain as wired: 1 DOUT, 2 GND, 3 DIN, 4 VDD, with D1's DOUT feeding D2's DIN.
 
 **The mini-DIN is settled: Kycon KMDGX-8S-BS, bought from Mouser.** The part was only ever a
 problem because Digi-Key is backordered on it; Mouser holds 1,032 and ships immediately. It is the
