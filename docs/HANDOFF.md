@@ -5,7 +5,7 @@ Written 2026-08-04. Everything below reflects the repo at that date.
 ## Where the project stands
 
 **Hardware rev A is finished and not yet ordered.** The board routes clean, the fab package is
-generated, and the only thing stopping an order is which mini-DIN connector to buy.
+generated, and the mini-DIN is settled — Kycon KMDGX-8S-BS from Mouser. Nothing blocks the order.
 
 **Four of the nine firmware components exist and are tested.** `urf_decode`, `resample`,
 `halftone` and `imagewriter` are written, reviewed and passing 233 checks on the host. They
@@ -239,16 +239,43 @@ grep -E '^T[0-9]+C' fab/airwriter.drl        # nothing below 0.300
 | MAX3490ESA+T (printer port) | $0.687 @10 | 3,788 |
 | SP3485EN-L/TR x2 (LocalTalk) | $0.21 each | 37,970 |
 | PIC12F1840-I/SN | $0.70 | good |
-| Kycon KMDGX-8S-BS mini-DIN | $2.35 (Digi-Key) | **backordered** |
+| Kycon KMDGX-8S-BS mini-DIN | ~$2.50 (Mouser) | 1,032 — Digi-Key is the backordered one |
 
-**The open sourcing question is the mini-DIN, and you need two.** Three candidates:
+**The mini-DIN is settled: Kycon KMDGX-8S-BS, bought from Mouser.** The part was only ever a
+problem because Digi-Key is backordered on it; Mouser holds 1,032 and ships immediately. It is the
+exact part the footprint was drawn from and cross-checked against Kycon's own STEP model, so the
+geometry risk is zero. Buy six — you need two, it is a through-hole part you can damage, and the
+spares cost about $2.50 each.
 
-- **Kycon KMDGX-8S-BS** — what the footprint was drawn from, currently backordered at Digi-Key.
-- **CUI MD-80S** — the spec's listed alternative, in stock, ships same day. Verify CUI's drawing
-  against the footprint before switching.
-- **Legion DIN-802, LCSC C41409494** — $0.24, but only 5 in stock, and its footprint (taken from
-  TashTalkUSB) has **different pin numbering** to mine while the pad positions match within 0.15mm.
-  One of us has the numbering wrong. Do not use it without resolving that.
+**Solder them by hand rather than having PCBWay fit them.** PCBWay keeps no parts library and buys
+every component per order, so a through-hole connector becomes a manually quoted line item with a
+5-10 day sourcing delay. Twenty-two joints across two large, well-anchored parts is a few minutes
+with an iron, it keeps the connector off the critical path of the board order, and a wrong part
+then costs $5 instead of a scrapped assembly run.
+
+The alternatives were checked and rejected, so nobody needs to re-do this:
+
+- **Kycon KMDGX-8S-AS** — in stock at Digi-Key, but it is a "Board Guide, Board Lock" push-pull
+  variant and Digi-Key does not list it as a substitute for the -BS. Different mounting scheme.
+- **Adam Tech MDJ-008-FS** — a genuine drop-in; its drawing matches all eight signal positions and
+  the ±6.75 posts. Out of stock at Digi-Key. Keep as the fallback if Kycon ever dries up.
+- **Same Sky (ex-CUI) MD-80SM** — signal pads match, mounting does not. The shield tabs are
+  rectangular slots and there is a 2.5 x 1.0mm earth blade where the footprint has a ø2.3 round
+  hole; a 2.5mm blade has a 2.69mm diagonal and will not fit. MD-80S is worse — unshielded, no
+  side posts. The spec's old suggestion of MD-80S was wrong.
+- **HOOYA / Legion DIN-802 (LCSC C20611694 / C41409494)** — cheapest by far and 780 in stock at
+  HOOYA, but the pads sit 0.15-0.20mm out almost everywhere and the centre feature is a 1.5 x 3.0
+  oval slot rather than a round hole. Not usable without redrawing the footprint.
+
+**The pin-numbering discrepancy is resolved: our footprint is correct and the DIN-802 one is
+mirrored.** Derived from the socket-face view (the mirror of the plug convention) combined with
+KiCad's +Y-downward frame, it predicts all eight pad positions including the 0.90/1.30 asymmetry.
+The DIN-802 footprint transposes pins 1 and 2, puts 3 on the wrong side, and places centre pin 4
+in the front row with outer pin 5 behind it, which is backwards for a right-angle fan-out.
+
+Worth knowing: **the 0.90mm asymmetry is an industry pattern, not a Kycon quirk.** Adam Tech and
+Same Sky both show 0.90 against 1.30 on their 7- and 8-pin layouts and neither shows it on their
+6-pin ones. It is the extra lower-row pin offset to clear the one above it.
 
 Note that full-duplex RS-422 transceivers are a niche part and keep going out of stock on LCSC —
 ISL3177EIBZ and MAX3491ESD+ were both zero. Half-duplex RS-485 is commodity. That is why the

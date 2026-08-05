@@ -82,7 +82,7 @@ USB-C (5V) ─┬─ ESD ─ LDO 3.3V ─┬─ ESP32-S3-WROOM-1
 | U4 | AP7361C-33E | SOT-223 | 1A LDO. Do not use a 600mA part — S3 WiFi TX peaks near 500mA and margin matters |
 | U5 | USBLC6-2SC6 | SOT-23-6 | USB ESD |
 | J1 | USB-C receptacle, 16-pin | SMD | 5.1k CC1/CC2 pulldowns |
-| J2 | Kycon KMDGX-8S or CUI MD-80S | THT | Mini-DIN-8 female. Footprint may need to be drawn — verify against KiCad stock libs first |
+| J2, J4 | **Kycon KMDGX-8S-BS** | THT | Mini-DIN-8 female, right-angle, fully shielded. Buy from Mouser, not Digi-Key, which is backordered. Footprint is custom — KiCad ships none — and was drawn from Kycon's drawing and verified against their STEP model. **Do not substitute Same Sky MD-80S/MD-80SM**, listed here in the original draft: their mounting is a rectangular-slot and earth-blade arrangement that does not fit this footprint. Solder by hand; see `HANDOFF.md` |
 | D1, D2 | WS2812B-2020 | 2020 | Status. D2 chains off D1's DOUT, so the second costs no GPIO. D1 = network, D2 = printer/job |
 | D3 | green LED + 1k | 0603 | Power. Straight across the 3V3 rail, no GPIO. Separates "board is dead" from "firmware is dead" during bring-up |
 | SW2 | Omron B3U-1000P | SMD | Mode / test page, on IO38. Cannot share IO0 with SW1: IO0 is a strapping pin, so holding it at reset means USB download mode |
