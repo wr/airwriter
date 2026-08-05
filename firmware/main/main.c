@@ -116,10 +116,14 @@ static void wifi_event(void *arg, esp_event_base_t base, int32_t id, void *data)
     (void)arg;
     if (base == WIFI_EVENT && id == WIFI_EVENT_STA_START) {
         esp_wifi_connect();
+    } else if (base == WIFI_EVENT && id == WIFI_EVENT_STA_CONNECTED) {
+        ESP_LOGI(TAG, "associated; waiting for dhcp");
     } else if (base == WIFI_EVENT && id == WIFI_EVENT_STA_DISCONNECTED) {
+        wifi_event_sta_disconnected_t *d = (wifi_event_sta_disconnected_t *)data;
         if (s_retries < WIFI_MAX_RETRY) {
             s_retries++;
-            ESP_LOGW(TAG, "wifi retry %d/%d", s_retries, WIFI_MAX_RETRY);
+            ESP_LOGW(TAG, "wifi retry %d/%d, reason %d", s_retries, WIFI_MAX_RETRY,
+                     d ? d->reason : -1);
             esp_wifi_connect();
         } else {
             xEventGroupSetBits(s_wifi_events, WIFI_FAILED_BIT);
@@ -177,15 +181,36 @@ static esp_err_t wifi_start(void)
     wifi_config_t wc = {0};
     strncpy((char *)wc.sta.ssid, ssid, sizeof wc.sta.ssid);
     strncpy((char *)wc.sta.password, pass, sizeof wc.sta.password);
+    // WPA3 access points may require hash-to-element rather than the older
+    // hunting-and-pecking. The default leaves it unspecified, which can
+    // associate and then fail to agree a group key -- the station sits
+    // associated and never sees the broadcast DHCP offer.
+    wc.sta.sae_pwe_h2e = WPA3_SAE_PWE_BOTH;
+    wc.sta.pmf_cfg.capable = true;
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wc));
     ESP_ERROR_CHECK(esp_wifi_start());
 
+    // A printer is mains powered and has to answer an mDNS query or an IPP
+    // request the moment it arrives, so there is nothing to gain from dozing
+    // between beacons -- and some APs drop the unicast DHCP reply to a station
+    // that is asleep, which strands the device associated but with no lease.
+    ESP_ERROR_CHECK(esp_wifi_set_ps(WIFI_PS_NONE));
+
     ESP_LOGI(TAG, "joining \"%s\"", ssid);
-    EventBits_t bits = xEventGroupWaitBits(s_wifi_events,
-                                           WIFI_CONNECTED_BIT | WIFI_FAILED_BIT,
-                                           pdFALSE, pdFALSE, portMAX_DELAY);
-    return (bits & WIFI_CONNECTED_BIT) ? ESP_OK : ESP_FAIL;
+    for (int waited = 0;; waited += 5) {
+        EventBits_t bits = xEventGroupWaitBits(s_wifi_events,
+                                               WIFI_CONNECTED_BIT | WIFI_FAILED_BIT,
+                                               pdFALSE, pdFALSE, pdMS_TO_TICKS(5000));
+        if (bits & WIFI_CONNECTED_BIT) return ESP_OK;
+        if (bits & WIFI_FAILED_BIT) return ESP_FAIL;
+
+        // Silence here means associated but no lease, which looks identical to
+        // a wrong password from the console. Say which it is.
+        esp_netif_ip_info_t ip = {0};
+        esp_netif_get_ip_info(netif, &ip);
+        ESP_LOGW(TAG, "%ds: no lease yet, netif ip " IPSTR, waited, IP2STR(&ip.ip));
+    }
 }
 
 // ----------------------------------------------------------------- main
