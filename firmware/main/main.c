@@ -67,6 +67,7 @@ static int  s_ap_mode;
 
 // Last job, for the status page.
 static char   s_last_job[64];
+static int    s_printing;
 static size_t s_last_pages, s_last_bytes;
 
 // ---------------------------------------------------------------- raster
@@ -155,6 +156,7 @@ static esp_err_t doc_begin(void *ctx, const char *format, const char *name)
     strncpy(s_last_job, name && name[0] ? name : "Untitled", sizeof s_last_job - 1);
     s_last_job[sizeof s_last_job - 1] = '\0';
     s_stream_crc = 0;
+    s_printing = 1;
     serial_out_loopback_reset();
     return job_pipe_begin(name);
 }
@@ -176,6 +178,7 @@ static void doc_end(void *ctx, int ok)
     (void)ctx;
     job_pipe_stats_t st;
     job_pipe_end(ok, &st);
+    s_printing = 0;
 
     if (st.rc != 0 || !ok) {
         ESP_LOGE(TAG, "job failed: %u bytes in, rc %d%s",
@@ -335,6 +338,7 @@ static void status_json(void *ctx, char *buf, size_t cap)
 
     snprintf(buf, cap,
         "{\"state\":\"%s\",\"stopped\":%s,\"setup\":%s,\"job\":\"%s\","
+        "\"fault\":%s,\"printer\":%s,\"printing\":%s,"
         "\"queue\":\"%s\",\"host\":\"%s.local\",\"ip\":\"%s\","
         "\"ssid\":\"%s\",\"dither\":\"%s\",\"signal\":\"%s\","
         "\"channel\":\"%s\",\"security\":\"%s\",\"uri\":\"%s\","
@@ -343,7 +347,10 @@ static void status_json(void *ctx, char *buf, size_t cap)
         s_ap_mode ? "Waiting for setup" : blocked ? "Out of paper" : "Ready",
         blocked ? "true" : "false",
         s_ap_mode ? "true" : "false",
-        job, s_set.queue, s_set.hostname, s_ip,
+        job,
+        blocked ? "true" : "false",
+        serial_out_clear() ? "true" : "false",
+        s_printing ? "true" : "false", s_set.queue, s_set.hostname, s_ip,
         joined ? (char *)ap.ssid : (s_ap_mode ? "" : s_set.ssid),
         s_set.dither,
         joined ? (ap.rssi > -55 ? "Excellent" : ap.rssi > -67 ? "Good"

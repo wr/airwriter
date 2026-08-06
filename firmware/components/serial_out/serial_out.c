@@ -161,6 +161,15 @@ esp_err_t serial_out_flush(uint32_t timeout_ms)
 
 serial_out_state_t serial_out_state(void) { return s_state; }
 
+int serial_out_clear(void)
+{
+    // With no handshake line wired there is nothing to read, and "no idea"
+    // must not be reported as "a printer is there". clear_to_send() assumes
+    // clear in that case so transmission is not blocked; this does not.
+    if (s_cfg.cts_pin < 0) return 0;
+    return clear_to_send();
+}
+
 void serial_out_loopback_stats(size_t *bytes, uint32_t *crc32)
 {
     if (bytes)  *bytes = s_lb_bytes;

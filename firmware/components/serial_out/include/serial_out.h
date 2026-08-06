@@ -57,6 +57,11 @@ esp_err_t serial_out_flush(uint32_t timeout_ms);
 
 serial_out_state_t serial_out_state(void);
 
+// The printer's HSKo line right now. A printer that is attached and online
+// holds this asserted; nothing plugged in reads the same as offline, which is
+// the honest answer -- the line cannot tell those apart.
+int serial_out_clear(void);
+
 // Bytes read back while loopback is enabled, and their CRC-32. Zero otherwise.
 void serial_out_loopback_stats(size_t *bytes, uint32_t *crc32);
 void serial_out_loopback_reset(void);
