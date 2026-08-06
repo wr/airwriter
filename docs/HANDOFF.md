@@ -498,6 +498,37 @@ they are drawn for shining through a hole. Those were removed so the fibreglass 
 any of these three footprints from the library will silently punch the holes back in**, exactly the
 trap U1's 0.30mm vias already set.
 
+**The back carries a dithered cover artwork, imported from `~/Downloads/kicad/`.** Eight SVGs at
+100 x 150mm — exactly 1.923x the board, same aspect — scaled by **0.52** and **mirrored in X** onto
+the back layers. Smallest cell lands at 0.455mm, silk at 0.364mm; both clear the fab floor.
+
+Three departures from the artwork's own README, and they matter:
+
+- **It goes on B.\*, not F.\*.** The back is the display face, so everything mirrors.
+- **The `*_gold_copper` layer is not imported at all.** The back is already a solid ground pour, so
+  copper is everywhere; 503 separate copper islands would have shorted across traces. **The mask
+  openings alone give the gold**, because the pour underneath is the copper. Same trick as the
+  touch pad and the logo.
+- **The artwork's wordmark replaced the old rectangular logo window.** They landed in the same
+  place, and a dithered wordmark beats a plain slab.
+
+**Order of operations is the whole game here, and getting it wrong cost several passes.** Freerouting
+only sees keepouts that are *separate single-outline zones* — a zone holding 320 cell outlines
+exported to the DSN as **one** keepout, so the router drove straight through the artwork. What works:
+
+1. Reserve the wordmark with **one rectangular keepout** (`WORDMARK RESERVE`, 49 x 8.8mm) and give
+   each LED window **its own zone**. Sixteen keepouts reach the router and it honours them.
+2. Route, stitch, then **prune stitching vias that landed in a via-barred area** — `stitch.py` reads
+   the pour, not the rule areas, so it drops vias into reserves.
+3. Only then filter the artwork cells against the finished copper and emit them, as rule areas that
+   bar **copper pour only**. They constrain nothing, so no re-route is needed.
+
+Cell retention after filtering: wordmark FR4 **282/293**, grain FR4 23/27, gold 625/625 and 162/198.
+
+**141 more cells were dropped because they sat under silkscreen**, mostly the long TashTalk credit
+line across the top. Silk over exposed copper does not adhere, so the cells give way. If that band
+looks thin, move the credit rather than the artwork.
+
 **The logo is a backlit window, not printed artwork.** The wordmark is 32.3 x 7.1mm at x 110.07 to
 142.33, y 90.07 to 97.13, inside the blank band. Three things make it glow:
 
