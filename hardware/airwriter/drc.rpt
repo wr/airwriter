@@ -1,5 +1,5 @@
 ** Drc report for airwriter.kicad_pcb **
-** Created on 2026-08-06T06:22:54 **
+** Created on 2026-08-06T06:42:41 **
 ** Report includes: Errors, Warnings **
 
 ** Found 4 DRC violations **
@@ -16,7 +16,7 @@
     Local override; warning
     @(124.5000 mm, 121.8000 mm): Footprint D2
 
-** Found 12 unconnected pads **
+** Found 10 unconnected pads **
 [unconnected_items]: Missing connection between items
     Local override; error
     @(100.3000 mm, 60.3000 mm): Zone [/GND] on F.Cu, priority 0
@@ -33,29 +33,9 @@
     Local override; error
     @(100.3000 mm, 60.3000 mm): Zone [/GND] on F.Cu, priority 0
     @(100.3000 mm, 60.3000 mm): Zone [/GND] on F.Cu, priority 0
-[unconnected_items]: Missing connection between items
-    Local override; error
-    @(100.3000 mm, 60.3000 mm): Zone [/GND] on F.Cu, priority 0
-    @(100.3000 mm, 60.3000 mm): Zone [/GND] on F.Cu, priority 0
-[unconnected_items]: Missing connection between items
-    Local override; error
-    @(100.3000 mm, 60.3000 mm): Zone [/GND] on F.Cu, priority 0
-    @(100.3000 mm, 60.3000 mm): Zone [/GND] on B.Cu, priority 0
 [unconnected_items]: Missing connection between items
     Local override; error
     @(100.3000 mm, 60.3000 mm): Zone [/GND] on B.Cu, priority 0
-    @(100.3000 mm, 60.3000 mm): Zone [/GND] on F.Cu, priority 0
-[unconnected_items]: Missing connection between items
-    Local override; error
-    @(100.3000 mm, 60.3000 mm): Zone [/GND] on F.Cu, priority 0
-    @(100.3000 mm, 60.3000 mm): Zone [/GND] on F.Cu, priority 0
-[unconnected_items]: Missing connection between items
-    Local override; error
-    @(100.3000 mm, 60.3000 mm): Zone [/GND] on F.Cu, priority 0
-    @(100.3000 mm, 60.3000 mm): Zone [/GND] on F.Cu, priority 0
-[unconnected_items]: Missing connection between items
-    Local override; error
-    @(100.3000 mm, 60.3000 mm): Zone [/GND] on F.Cu, priority 0
     @(100.3000 mm, 60.3000 mm): Zone [/GND] on F.Cu, priority 0
 [unconnected_items]: Missing connection between items
     Local override; error
@@ -65,6 +45,18 @@
     Local override; error
     @(110.9750 mm, 107.9050 mm): Pad 11 [/HSKI_DRV] of U3 on F.Cu
     @(124.7500 mm, 76.7300 mm): Pad 28 [/HSKI_DRV] of U1 on F.Cu
+[unconnected_items]: Missing connection between items
+    Local override; error
+    @(123.7368 mm, 104.1350 mm): Track [/LT_DE] on F.Cu, length 0.2882 mm
+    @(129.6900 mm, 70.2700 mm): PTH pad 3 [/LT_DE] of U7
+[unconnected_items]: Missing connection between items
+    Local override; error
+    @(129.6900 mm, 67.7300 mm): Track [/LT_DATA] on F.Cu, length 1.5606 mm
+    @(124.0250 mm, 108.5950 mm): Track [/LT_DATA] on F.Cu, length 3.1900 mm
+[unconnected_items]: Missing connection between items
+    Local override; error
+    @(130.2250 mm, 120.6733 mm): Track [/BOOT_CFG] on F.Cu, length 3.6733 mm
+    @(124.7500 mm, 78.0000 mm): Pad 27 [/BOOT_CFG] of U1 on F.Cu
 
 ** Found 0 Footprint errors **
 

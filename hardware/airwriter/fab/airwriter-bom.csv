@@ -27,7 +27,7 @@
 "R18,R19","4.7k","Resistor_SMD:R_0603_1608Metric","","","","2",""
 "R20","1k","Resistor_SMD:R_0603_1608Metric","","Any","RES 1k 0603. Series ESD limiter between the exposed touch pad and the GPIO","1",""
 "SW1","BOOT bridge","Jumper:SolderJumper-2_P1.3mm_Open_Pad1.0x1.5mm","","none - bare pads on the board","Two exposed pads, normally open. Bridge with tweezers to force download mode; the USB-C port normally does this without them","1",""
-"SW2","MODE touch","airwriter:TouchPad_Comb_9x7mm","","none - copper on the board","Capacitive touch pad, exposed gold on the back face. Pad 1 is the electrode, pad 2 the ground guard","1",""
+"SW2","MODE touch","airwriter:TouchPad_Arcs_D9mm","","none - copper on the board","Capacitive touch pad on the back face. Solid copper disc with the pattern in the soldermask, so it reads as fine gold arcs on black","1",""
 "U1","ESP32-S3-WROOM-1-N8R2","RF_Module:ESP32-S3-WROOM-1","ESP32-S3-WROOM-1-N8R2","Espressif Systems","WiFi/BLE module, ESP32-S3, 8MB flash, 2MB PSRAM, PCB antenna","1",""
 "U2","MAX3490ESA+","Package_SO:SOIC-8_3.9x4.9mm_P1.27mm","MAX3490ESA+","Analog Devices","RS-422/485 full-duplex transceiver, 3.3V, SOIC-8","1",""
 "U3","MAX3232ESE+","Package_SO:SOIC-16_3.9x9.9mm_P1.27mm","MAX3232ESE+","Analog Devices","RS-232 transceiver, 3.0-5.5V, SOIC-16","1",""

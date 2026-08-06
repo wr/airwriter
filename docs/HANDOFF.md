@@ -413,10 +413,18 @@ kicad-cli pcb drc --format json -o /tmp/d.json airwriter.kicad_pcb   # no cleara
 ```
 
 **MODE is a capacitive touch pad in exposed gold on the back face.** SW2 is no longer a switch: it
-is `airwriter:TouchPad_Comb_9x7mm`, a comb electrode on B.Cu with a ground guard bar below it, mask
-opened over both so a bare finger meets ENIG gold. The comb is one net — the interleaving is
-visual. The ESP32-S3 senses self-capacitance, where a continuous electrode beats an interdigitated
-one, so nothing is given up for the look.
+is `airwriter:TouchPad_Arcs_D9mm`.
+
+**The electrode is a solid 9.2mm copper disc and the pattern lives in the soldermask.** That is the
+whole trick. Self-capacitance wants unbroken area, so cutting the copper into a comb or a halftone
+would have cost sensitivity for looks. Instead the copper stays whole and the mask opens along
+eleven thin arcs — 0.18mm wide on a 0.45mm pitch — so what you see is fine gold arcs on matte black
+with continuous metal underneath. Same trick as the logo: mask carries the artwork, copper carries
+the function.
+
+The 0.27mm mask dams between arcs are well clear of the 0.1mm fab floor. The footprint is generated
+rather than drawn — `lib/airwriter.pretty/TouchPad_Arcs_D9mm.kicad_mod` came out of a short script,
+so the pattern can be re-cut to a different rhythm by changing three numbers and re-running it.
 
 - **MODE moved from IO38 to IO14.** The S3 only does capacitive touch on IO1–IO14. The old pin is
   released and capped.

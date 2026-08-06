@@ -8951,7 +8951,7 @@
       (effects
         (font
           (size 1.27 1.27))))
-    (property "Footprint" "airwriter:TouchPad_Comb_9x7mm"
+    (property "Footprint" "airwriter:TouchPad_Arcs_D9mm"
       (at 149.86 195.58 0)
       (hide yes)
       (effects
@@ -8969,7 +8969,7 @@
       (effects
         (font
           (size 1.27 1.27))))
-    (property "Description" "Capacitive touch pad, exposed gold on the back face. Pad 1 is the electrode, pad 2 the ground guard"
+    (property "Description" "Capacitive touch pad on the back face. Solid copper disc with the pattern in the soldermask, so it reads as fine gold arcs on black"
       (at 149.86 195.58 0)
       (hide yes)
       (effects
