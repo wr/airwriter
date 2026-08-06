@@ -396,5 +396,11 @@ function syncTabs(){
     d.querySelector('button').setAttribute('aria-pressed',on);
   }
 }
-let rt; addEventListener('resize',()=>{clearTimeout(rt);rt=setTimeout(render,150)});
+let rt;
+const redraw=()=>{clearTimeout(rt);rt=setTimeout(render,120)};
+addEventListener('resize',redraw);
+/* The sheet's width changes with the layout, not only with the window: a
+   phone applies its own metrics after first paint, and a canvas sized before
+   that is the wrong width for the rest of its life. */
+if(window.ResizeObserver) new ResizeObserver(redraw).observe($('prev').parentElement);
 drawNets(); buildTabs(); render();

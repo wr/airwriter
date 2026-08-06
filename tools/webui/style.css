@@ -118,13 +118,14 @@ main{width:100%;max-width:42rem}
              var(--hi) 52%,var(--case) 100%)}
 
 /* vents: 2 mm slots on 10 mm centres, tapered at both ends */
-.grooves{height:var(--vent-h);margin:var(--sp-3) 0 var(--sp-4);
-  background-position:50% 0;
+.grooves{height:var(--vent-h);margin:var(--sp-4) 0;
   background:repeating-linear-gradient(to right,
     transparent 0 calc(var(--vent-pitch) - var(--vent-line) - 1.2px),
     rgba(0,0,0,.40) calc(var(--vent-pitch) - var(--vent-line) - 1.2px)
                    calc(var(--vent-pitch) - 1.2px),
     rgba(255,255,255,.8) calc(var(--vent-pitch) - 1.2px) var(--vent-pitch));
+  /* after the shorthand, which resets it */
+  background-position:50% 50%;
   -webkit-mask-image:linear-gradient(to bottom,transparent 0,#000 7%,#000 93%,transparent);
   mask-image:linear-gradient(to bottom,transparent 0,#000 7%,#000 93%,transparent)}
 
@@ -310,3 +311,46 @@ svg{display:block;shape-rendering:crispEdges}
 .foot a{color:var(--ink);text-decoration:none;border-bottom:1px solid var(--seam);
   cursor:pointer}
 .sep{margin:0 var(--sp-2);color:var(--seam)}
+
+/* ── narrow screens ─────────────────────────────────────────────────
+   A phone is where this page is opened first, and often the only place
+   it is opened at all: the setup portal is reached by joining the
+   printer's own access point. Nothing here is a different design, only
+   the same one with its metrics turned down and its rows unstacked. */
+@media (max-width:34rem){
+  :root{
+    --size-display:38px;
+    --pad-sec:15px;
+    --feed-w:17px; --hole:9px; --hole-pitch:20px;
+    --lamp-w:72px; --lamp-h:13px;
+    --vent-h:54px; --vent-pitch:16px;
+    --row-h:38px; --field-h:38px;   /* a finger, not a pointer */
+  }
+  body{padding:var(--sp-4) var(--sp-3) var(--sp-6)}
+
+  /* the nameplate and the indicator stack stop competing for one line */
+  .plate{flex-direction:column;align-items:stretch;gap:var(--sp-4)}
+  .stack{align-items:flex-end}
+  .lamp{justify-content:flex-end}
+
+  /* four halftone keys will not sit across a phone: two rows of two */
+  #tabs{flex-wrap:wrap;gap:var(--sp-3) var(--sp-3)}
+  #tabs .key{flex:1 1 calc(50% - var(--sp-3));min-width:0}
+  #tabs .slot{width:100%}
+
+  .grid2{grid-template-columns:1fr}
+  /* the name of the network matters more than its address: on the narrowest
+     screens the address goes rather than truncating the name to one letter */
+  .n .ip{font-size:calc(var(--size-paper) - 1px)}
+  .keys{flex-wrap:wrap}
+  .foot{line-height:2}
+}
+
+/* Nothing may push the page sideways: a horizontal scrollbar on a phone
+   means something has a width it cannot honour. */
+html,body{max-width:100%;overflow-x:hidden}
+main,.sec,.paper,.sheet,.key{min-width:0}
+
+@media (max-width:24rem){
+  .n .ip{display:none}
+}
