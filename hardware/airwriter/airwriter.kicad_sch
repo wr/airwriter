@@ -7219,7 +7219,7 @@
       (effects
         (font
           (size 1.27 1.27))))
-    (property "Footprint" "Jumper:SolderJumper-2_P1.3mm_Open_Pad1.0x1.5mm"
+    (property "Footprint" "airwriter:BootPads_Ring_D5mm"
       (at 149.86 175.26 0)
       (hide yes)
       (effects
@@ -7243,7 +7243,7 @@
       (effects
         (font
           (size 1.27 1.27))))
-    (property "Description" "Two exposed pads, normally open. Bridge with tweezers to force download mode; the USB-C port normally does this without them"
+    (property "Description" "BOOT bridge on the back face: a gold disc inside a gold ring, 0.5mm apart. Short with tweezers to force download mode; the USB-C port normally does this without them"
       (at 149.86 171.45 0)
       (hide yes)
       (effects

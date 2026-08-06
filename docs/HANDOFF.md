@@ -525,9 +525,25 @@ exported to the DSN as **one** keepout, so the router drove straight through the
 
 Cell retention after filtering: wordmark FR4 **282/293**, grain FR4 23/27, gold 625/625 and 162/198.
 
-**141 more cells were dropped because they sat under silkscreen**, mostly the long TashTalk credit
-line across the top. Silk over exposed copper does not adhere, so the cells give way. If that band
-looks thin, move the credit rather than the artwork.
+**The TashTalk credit line is gone from B.Silkscreen.** It ran the width of the board and was eating
+a band of the grain — silk over exposed copper does not adhere, so every cell beneath it had to give
+way. The attribution still stands in this file, in `SPEC.md` and in the licence; it does not need to
+be on the show face.
+
+**`artwork.py` regenerates the whole thing** and is the only supported way to re-import. It reads the
+SVGs, filters every cell against the copper actually on the board, and emits rule areas that bar
+copper pour only — so it never forces a re-route. Run it last:
+
+```
+strip wiring  ->  route.py  ->  stitch.py  ->  prune vias in keepouts  ->  artwork.py  ->  refill
+```
+
+**BOOT is a gold bullseye on the back, not a pair of rectangles on the hidden side.** `SW1` was
+`SolderJumper-2_Open` sitting on the component face, where you would have had to open the case to
+reach it — useless for something that exists as insurance. It is now
+`airwriter:BootPads_Ring_D5mm`: a 2.2mm disc inside a 0.9mm-wide ring, 0.5mm apart, both exposed
+ENIG, on the visible face beside the MODE pad. Bridge the gap with tweezers to force download mode.
+Ø5mm against MODE's Ø9.2mm, so it reads as the secondary control it is.
 
 **The logo is a backlit window, not printed artwork.** The wordmark is 32.3 x 7.1mm at x 110.07 to
 142.33, y 90.07 to 97.13, inside the blank band. Three things make it glow:

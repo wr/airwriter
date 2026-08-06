@@ -1,0 +1,34 @@
+(footprint "BootPads_Ring_D5mm"
+	(version 20240108)
+	(generator "airwriter")
+	(layer "B.Cu")
+	(descr "BOOT bridge pads for the back face: a gold disc inside a gold ring, 0.5mm apart. Short them with tweezers to force download mode. Exposed ENIG, sized to read as a companion to the MODE touch pad rather than as hardware.")
+	(tags "boot bridge pads")
+	(attr smd exclude_from_pos_files)
+	(property "Reference" "SW**"
+		(at 0 -3.6 0)
+		(layer "B.SilkS")
+		(effects (font (size 0.8 0.8) (thickness 0.12)) (justify mirror))
+	)
+	(property "Value" "BootPads_Ring_D5mm"
+		(at 0 3.6 0)
+		(layer "B.Fab")
+		(hide yes)
+		(effects (font (size 1 1) (thickness 0.15)) (justify mirror))
+	)
+	(fp_circle (center 0 0) (end 3.1 0) (stroke (width 0.05) (type solid)) (fill no) (layer "B.CrtYd"))
+	(pad "1" smd circle
+		(at 0 0)
+		(size 2.2 2.2)
+		(layers "B.Cu" "B.Mask")
+	)
+	(pad "2" smd custom
+		(at 2.05 0)
+		(size 0.5 0.5)
+		(layers "B.Cu" "B.Mask")
+		(options (clearance outline) (anchor circle))
+		(primitives
+			(gr_circle (center -2.05 0) (end 0 0) (width 0.9) (fill no))
+		)
+	)
+)
