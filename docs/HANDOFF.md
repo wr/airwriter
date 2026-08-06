@@ -389,6 +389,34 @@ The rule is 0.15mm now and the board re-routes clean against it. Check it the sa
 kicad-cli pcb drc --format json -o /tmp/d.json airwriter.kicad_pcb   # no clearance violations
 ```
 
+**The logo is a backlit window, not printed artwork.** The wordmark is 32.3 x 7.1mm at x 110.07 to
+142.33, y 90.07 to 97.13, inside the blank band. Three things make it glow:
+
+- **A keepout rule area, `LOGO WINDOW`, on F.Cu and B.Cu** covering the wordmark plus 0.6mm —
+  33.5 x 8.3mm. Tracks, vias and copper pour are all barred, so nothing crosses the light path.
+  It has to exist *before* routing: Freerouting honours keepouts and funnels the crossings into the
+  9.5mm channel on the left and the 9.1mm on the right. Verified clear afterwards — zero tracks,
+  vias or pour samples inside the box.
+- **Mask openings on B.Mask and F.Mask**, not silkscreen. The logo arrived on B.Silkscreen, which is
+  white ink and would have covered the very window it was meant to be. Light crosses the whole
+  stack, so the mask opens on *both* faces; leaving the front closed would put green mask in the
+  path and dim it.
+- **No copper on either layer** in the window, from the keepout above.
+
+The result in daylight is a copper-free panel that reads as a slightly different green, with bare
+FR4 letterforms inside it. The original silkscreen version is in git if the printed look is wanted
+instead — the two are mutually exclusive in the same place.
+
+**The board is 1.6mm and that is a brightness ceiling.** Thinner FR4 passes more light, but the
+board is also the case lid and carries two through-hole mini-DINs that take plug and unplug force,
+so it stays at 1.6mm.
+
+**Still unsolved: the LEDs point the wrong way.** Components sit on F.Cu, which becomes the
+underside, so a normal SMD LED there fires away from the board. Backlighting the window needs one
+of: side-firing LEDs at the window edge, a white reflective cavity in the housing acting as a light
+box, or reverse-mount LEDs firing through a board cutout. The third suits point indicators — it is
+what would let the status LEDs drop their light pipes — but not a glowing logo.
+
 **The USB-C is a USB port now, not a power inlet.** Spec §2.5 originally read "USB-C is power
 only", with flashing and console going to a 4-pin 1.27mm header instead. That left a USB connector
 on the front panel with its data pins tied off, a debug header nobody can reach without a custom
