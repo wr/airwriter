@@ -412,6 +412,41 @@ The rule is 0.15mm now and the board re-routes clean against it. Check it the sa
 kicad-cli pcb drc --format json -o /tmp/d.json airwriter.kicad_pcb   # no clearance violations
 ```
 
+**The indicators fire up through the board, and BOOT is two pads.** Every component sits on the
+face that becomes the underside, so a normal SMD LED points away from the viewer. All three
+indicators are reverse-mount now — they emit *toward* the board, and instead of the hole their
+footprints expect, they shine into a bare-FR4 window:
+
+| | was | is | window |
+|---|---|---|---|
+| D1, D2 | WS2812B-2020 | **SK6812MINI-E**, LCSC `C5149201`, $0.045 | 3.4 x 3.0mm |
+| D3 | 0603 green | **LED_1206 ReverseMount** | 1.6 x 2.2mm |
+| SW1 | Omron B3U-1000P | **two bare pads**, `SolderJumper-2_P1.3mm_Open` | — |
+
+**The pin numbering changed but the wiring did not.** WS2812B-2020 numbers its pins DOUT-VSS-DIN-VDD
+and SK6812 numbers them VSS-DIN-VDD-DOUT — but both KiCad symbols put the same *functions* at the
+same coordinates, so swapping `lib_id` moved every net correctly and no label had to be touched.
+Verified against the exported netlist. Firmware is unaffected: SK6812 speaks the same one-wire
+protocol at the same 800kbit/s.
+
+**Each window is the logo recipe at small scale** — a `LED WINDOW <ref>` keepout barring tracks,
+vias and pour on both layers, with a mask opening 0.4mm smaller on both faces so no exposed copper
+sits at the edge.
+
+**BOOT is gone as a switch.** Now the USB-C carries data, `esptool` can drive the S3 into download
+mode over the wire; the two pads are insurance you bridge with tweezers. It also removes the last
+part that would have needed a hole in the visible face. MODE (SW2) stays a real switch and still
+faces into the housing — that one is unresolved.
+
+**The strip re-spaced because the new LED is 7.3mm wide against the WS2812B's 3.0.** It now runs
+from x 108.9 to 136.3, fitting between mounting hole H3 and the power column at x 139.8.
+
+**D1, D2 and D3 now show `lib_footprint_mismatch` in DRC, deliberately.** Their library footprints
+carry a board cutout — Edge.Cuts segments on the SK6812MINI-E, an NPTH slot on the 1206 — because
+they are drawn for shining through a hole. Those were removed so the fibreglass stays. **Re-importing
+any of these three footprints from the library will silently punch the holes back in**, exactly the
+trap U1's 0.30mm vias already set.
+
 **The logo is a backlit window, not printed artwork.** The wordmark is 32.3 x 7.1mm at x 110.07 to
 142.33, y 90.07 to 97.13, inside the blank band. Three things make it glow:
 

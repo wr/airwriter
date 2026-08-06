@@ -6,6 +6,249 @@
   (paper "A3")
 
   (lib_symbols
+    (symbol "LED:SK6812MINI-E"
+      (exclude_from_sim no)
+      (in_bom yes)
+      (on_board yes)
+(property "Reference" "D"
+            (at 5.08 5.715 0)
+            (show_name no)
+            (do_not_autoplace no)
+            (effects
+              (font
+                (size 1.27 1.27)
+              )
+              (justify right bottom)
+            )
+          )
+(property "Value" "SK6812MINI-E"
+            (at 1.27 -5.715 0)
+            (show_name no)
+            (do_not_autoplace no)
+            (effects
+              (font
+                (size 1.27 1.27)
+              )
+              (justify left top)
+            )
+          )
+(property "Footprint" "LED_SMD:LED_SK6812MINI-E_3.2x2.8mm_P1.5mm_ReverseMount"
+            (at 1.27 -7.62 0)
+            (show_name no)
+            (do_not_autoplace no)
+            (hide yes)
+            (effects
+              (font
+                (size 1.27 1.27)
+              )
+              (justify left top)
+            )
+          )
+(property "Datasheet" "https://www.lcsc.com/datasheet/C5149201.pdf"
+            (at 2.54 -9.525 0)
+            (show_name no)
+            (do_not_autoplace no)
+            (hide yes)
+            (effects
+              (font
+                (size 1.27 1.27)
+              )
+              (justify left top)
+            )
+          )
+(property "Description" "RGB LED with integrated controller"
+            (at 0 0 0)
+            (show_name no)
+            (do_not_autoplace no)
+            (hide yes)
+            (effects
+              (font
+                (size 1.27 1.27)
+              )
+            )
+          )
+(symbol "SK6812MINI-E_0_0"
+            (text "RGB"
+              (at 2.286 -4.191 0)
+              (effects
+                (font
+                  (size 0.762 0.762)
+                )
+              )
+            )
+          )
+(symbol "SK6812MINI-E_0_1"
+            (polyline
+              (pts
+                (xy 1.27 -2.54) (xy 1.778 -2.54)
+              )
+              (stroke
+                (width 0)
+                (type default)
+              )
+              (fill
+                (type none)
+              )
+            )
+            (polyline
+              (pts
+                (xy 1.27 -3.556) (xy 1.778 -3.556)
+              )
+              (stroke
+                (width 0)
+                (type default)
+              )
+              (fill
+                (type none)
+              )
+            )
+            (polyline
+              (pts
+                (xy 2.286 -1.524) (xy 1.27 -2.54) (xy 1.27 -2.032)
+              )
+              (stroke
+                (width 0)
+                (type default)
+              )
+              (fill
+                (type none)
+              )
+            )
+            (polyline
+              (pts
+                (xy 2.286 -2.54) (xy 1.27 -3.556) (xy 1.27 -3.048)
+              )
+              (stroke
+                (width 0)
+                (type default)
+              )
+              (fill
+                (type none)
+              )
+            )
+            (polyline
+              (pts
+                (xy 3.683 -1.016) (xy 3.683 -3.556) (xy 3.683 -4.064)
+              )
+              (stroke
+                (width 0)
+                (type default)
+              )
+              (fill
+                (type none)
+              )
+            )
+            (polyline
+              (pts
+                (xy 4.699 -1.524) (xy 2.667 -1.524) (xy 3.683 -3.556) (xy 4.699 -1.524)
+              )
+              (stroke
+                (width 0)
+                (type default)
+              )
+              (fill
+                (type none)
+              )
+            )
+            (polyline
+              (pts
+                (xy 4.699 -3.556) (xy 2.667 -3.556)
+              )
+              (stroke
+                (width 0)
+                (type default)
+              )
+              (fill
+                (type none)
+              )
+            )
+            (rectangle
+              (start 5.08 5.08)
+              (end -5.08 -5.08)
+              (stroke
+                (width 0.254)
+                (type default)
+              )
+              (fill
+                (type background)
+              )
+            )
+          )
+(symbol "SK6812MINI-E_1_1"
+            (pin power_in line
+              (at 0 -7.62 90)
+              (length 2.54)
+              (name "VSS"
+                (effects
+                  (font
+                    (size 1.27 1.27)
+                  )
+                )
+              )
+              (number "1"
+                (effects
+                  (font
+                    (size 1.27 1.27)
+                  )
+                )
+              )
+            )
+            (pin input line
+              (at -7.62 0 0)
+              (length 2.54)
+              (name "DIN"
+                (effects
+                  (font
+                    (size 1.27 1.27)
+                  )
+                )
+              )
+              (number "2"
+                (effects
+                  (font
+                    (size 1.27 1.27)
+                  )
+                )
+              )
+            )
+            (pin power_in line
+              (at 0 7.62 270)
+              (length 2.54)
+              (name "VDD"
+                (effects
+                  (font
+                    (size 1.27 1.27)
+                  )
+                )
+              )
+              (number "3"
+                (effects
+                  (font
+                    (size 1.27 1.27)
+                  )
+                )
+              )
+            )
+            (pin output line
+              (at 7.62 0 180)
+              (length 2.54)
+              (name "DOUT"
+                (effects
+                  (font
+                    (size 1.27 1.27)
+                  )
+                )
+              )
+              (number "4"
+                (effects
+                  (font
+                    (size 1.27 1.27)
+                  )
+                )
+              )
+            )
+          )
+    )
     (symbol "Connector:USB_C_Receptacle_USB2.0_16P"
       (pin_names
         (offset 1.016))
@@ -6726,12 +6969,12 @@
       (effects
         (font
           (size 1.27 1.27))))
-    (property "Value" "CONFIG/BOOT"
+    (property "Value" "BOOT bridge"
       (at 149.86 179.07 0)
       (effects
         (font
           (size 1.27 1.27))))
-    (property "Footprint" "Button_Switch_SMD:SW_SPST_B3U-1000P"
+    (property "Footprint" "Jumper:SolderJumper-2_P1.3mm_Open_Pad1.0x1.5mm"
       (at 149.86 175.26 0)
       (hide yes)
       (effects
@@ -6743,19 +6986,19 @@
       (effects
         (font
           (size 1.27 1.27))))
-    (property "MPN" "B3U-1000P"
+    (property "MPN" ""
       (at 149.86 171.45 0)
       (hide yes)
       (effects
         (font
           (size 1.27 1.27))))
-    (property "Manufacturer" "Omron"
+    (property "Manufacturer" "none - bare pads on the board"
       (at 149.86 171.45 0)
       (hide yes)
       (effects
         (font
           (size 1.27 1.27))))
-    (property "Description" "Tactile switch SPST-NO, SMD, ultra-small"
+    (property "Description" "Two exposed pads, normally open. Bridge with tweezers to force download mode; the USB-C port normally does this without them"
       (at 149.86 171.45 0)
       (hide yes)
       (effects
@@ -6822,7 +7065,7 @@
           (unit 1)))))
 
   (symbol
-    (lib_id "LED:WS2812B-2020")
+    (lib_id "LED:SK6812MINI-E")
     (at 275.59 105.41 0)
     (unit 1)
     (in_bom yes)
@@ -6834,12 +7077,12 @@
       (effects
         (font
           (size 1.27 1.27))))
-    (property "Value" "WS2812B-2020"
+    (property "Value" "SK6812MINI-E"
       (at 275.59 109.22 0)
       (effects
         (font
           (size 1.27 1.27))))
-    (property "Footprint" "LED_SMD:LED_WS2812B-2020_PLCC4_2.0x2.0mm"
+    (property "Footprint" "LED_SMD:LED_SK6812MINI-E_3.2x2.8mm_P1.5mm_ReverseMount"
       (at 275.59 105.41 0)
       (hide yes)
       (effects
@@ -6851,19 +7094,19 @@
       (effects
         (font
           (size 1.27 1.27))))
-    (property "MPN" "WS2812B-2020"
+    (property "MPN" "SK6812MINI-E"
       (at 275.59 101.6 0)
       (hide yes)
       (effects
         (font
           (size 1.27 1.27))))
-    (property "Manufacturer" "Worldsemi"
+    (property "Manufacturer" "OPSCO Optoelectronics"
       (at 275.59 101.6 0)
       (hide yes)
       (effects
         (font
           (size 1.27 1.27))))
-    (property "Description" "RGB LED, integrated controller, 2.0 x 2.0mm"
+    (property "Description" "Addressable RGB LED, reverse mount. Fires up through the board into a bare-FR4 window, no hole"
       (at 275.59 101.6 0)
       (hide yes)
       (effects
@@ -8536,7 +8779,7 @@
           (unit 1)))))
 
   (symbol
-    (lib_id "LED:WS2812B-2020")
+    (lib_id "LED:SK6812MINI-E")
     (at 149.86 223.52 0)
     (unit 1)
     (in_bom yes)
@@ -8548,30 +8791,30 @@
       (effects
         (font
           (size 1.27 1.27))))
-    (property "Value" "WS2812B-2020"
+    (property "Value" "SK6812MINI-E"
       (at 149.86 227.33 0)
       (effects
         (font
           (size 1.27 1.27))))
-    (property "Footprint" "LED_SMD:LED_WS2812B-2020_PLCC4_2.0x2.0mm"
+    (property "Footprint" "LED_SMD:LED_SK6812MINI-E_3.2x2.8mm_P1.5mm_ReverseMount"
       (at 149.86 223.52 0)
       (hide yes)
       (effects
         (font
           (size 1.27 1.27))))
-    (property "MPN" "WS2812B-2020"
+    (property "MPN" "SK6812MINI-E"
       (at 149.86 223.52 0)
       (hide yes)
       (effects
         (font
           (size 1.27 1.27))))
-    (property "Manufacturer" "Worldsemi"
+    (property "Manufacturer" "OPSCO Optoelectronics"
       (at 149.86 223.52 0)
       (hide yes)
       (effects
         (font
           (size 1.27 1.27))))
-    (property "Description" "Addressable RGB LED, 2020, chained from D1's DOUT"
+    (property "Description" "Addressable RGB LED, reverse mount. Fires up through the board into a bare-FR4 window, no hole"
       (at 149.86 223.52 0)
       (hide yes)
       (effects
@@ -8643,7 +8886,7 @@
       (effects
         (font
           (size 1.27 1.27))))
-    (property "Footprint" "LED_SMD:LED_0603_1608Metric"
+    (property "Footprint" "LED_SMD:LED_1206_3216Metric_ReverseMount_Hole1.8x2.4mm"
       (at 149.86 248.92 0)
       (hide yes)
       (effects
@@ -8661,7 +8904,7 @@
       (effects
         (font
           (size 1.27 1.27))))
-    (property "Description" "Green LED, 0603, power rail indicator"
+    (property "Description" "Green power LED, reverse mount. Fires up through the board into a bare-FR4 window"
       (at 149.86 248.92 0)
       (hide yes)
       (effects
