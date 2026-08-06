@@ -362,8 +362,31 @@ EOF
 enough to change design decisions. MAX3232 is $9.98 at Mouser and $0.91 at LCSC. MAX3490 is $6.61 at
 Digi-Key and $0.687 at LCSC.
 
-Order the board as **52 x 78mm, 2 layer, 1.6mm FR4, 1oz copper, HASL**. Nothing needs a premium
-process.
+Order the board as **52 x 78mm, 2 layer, 1.6mm FR4, 1oz copper, matte black soldermask, ENIG**.
+
+**ENIG is not vanity here.** J1 is a USB-C receptacle at 0.5mm pitch, and HASL is molten solder
+blown flat with an air knife — the surface it leaves is uneven enough that plenty of fabs will not
+guarantee it below 0.5mm pitch. ENIG is flat. The board wants it regardless of how the back looks.
+It also stops exposed copper tarnishing, which matters now that the back is a display surface and
+may carry capacitive touch pads. Reckon on about **+$25** on the order — roughly one pair of
+mini-DINs, against a build with $13 of parts per board.
+
+**The finish and mask colour are recorded in the board's stackup**, so `kicad-cli pcb render` and
+the STEP export show what will actually arrive. Gerbers carry no colour; the mask is an order
+option, and the stackup is the thing that stops it being forgotten at the cart.
+
+**The artwork palette is now four materials**, which is worth designing to rather than discovering:
+
+| | |
+|---|---|
+| Matte black | soldermask, the ground |
+| White | silkscreen |
+| Gold | exposed copper — a mask opening over the pour |
+| Translucent tan | bare FR4, where copper and mask are both absent. This is the one that glows |
+
+Note that `kicad-cli pcb render` tints bare FR4 by the mask colour, so the logo window looks nearly
+black in renders. It will not look like that on the board — tan fibreglass against matte black is a
+hard contrast, and it is the whole point of the window.
 
 **Protect the 0.30mm drill floor.** PCBWay's standard minimum is 0.30mm and 0.20mm is an upgraded
 spec — a documented case went from $5 to $65 for ten boards. KiCad's stock ESP32-S3-WROOM-1 footprint
