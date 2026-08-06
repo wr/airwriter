@@ -27,6 +27,21 @@ const bars=r=>r>=-60?3:r>=-70?2:1;
 let nets=[], joined='', ip='', sel=null, other=0, changing=0, first=1, setup=0,
     suffix='', dither='atkinson';
 
+/* Scanning takes the radio off channel for a second and drops whatever is
+   listening, so the last list is kept and reused. An hour is well past the
+   point where a scan is worth the interruption. */
+const CACHE='aw.nets', CACHE_MAX=3600e3;
+function cacheLoad(){
+  try{ const c=JSON.parse(localStorage.getItem(CACHE));
+    if(c && Date.now()-c.t < CACHE_MAX && Array.isArray(c.nets)) return c.nets;
+  }catch(e){}
+  return null;
+}
+function cacheSave(list){
+  try{ localStorage.setItem(CACHE,JSON.stringify({t:Date.now(),nets:list})); }catch(e){}
+}
+const RSSI={Excellent:-50,Good:-62,Fair:-70,Weak:-80};
+
 const MODELS=[['ImageWriter II','imagewriter'],['ImageWriter','imagewriter'],
  ['ImageWriter LQ','imagewriter-lq']];
 (function(){const d=$('devsel');
@@ -41,8 +56,9 @@ function drawNets(){
       +'<span class=s></span>'+(n.s===joined&&ip?'<span class=ip>'+ip+'</span>':'')
       +'<span class=l>'+(n.a?LOCK:'')+'</span>'+wf(bars(n.r))+'</button>';
   if(!nets.length)
-    h='<button class=n disabled><span class=t></span>'
-     +'<span class=s>no networks found</span><span class=l></span></button>';
+    h='<button class="n empty" disabled><span class=t></span>'
+     +'<span class=s>press scan to look for networks</span>'
+     +'<span class=l></span></button>';
   h+='<button class=n data-s="__other__"><span class=t></span>'
     +'<span class=s>Other…</span><span class=l></span></button>';
   $('rows').innerHTML=h;
@@ -91,6 +107,7 @@ async function scan(){
     for(const n of raw){ if(!n.s) continue;
       if(!best[n.s]||n.r>best[n.s].r) best[n.s]=n; }
     nets=Object.values(best).sort((x,y)=>y.r-x.r);
+    cacheSave(nets);
     other=0; drawNets();
   }catch(e){}
   clearInterval(t); led.classList.remove('act');
@@ -111,13 +128,27 @@ function draw(s){
   $('ver').textContent=s.version||'';
   if(s.uri) $('uri').textContent=s.uri;
 
-  lamp($('ledfault'),s.fault,'r',s.fault?'fault':'no fault');
+  /* Nothing on the serial port is a fault, not an idle state: this device
+     exists to drive a printer, and without one it cannot do its job. */
+  const noprinter=!s.printer, fault=!!s.fault||noprinter;
+  lamp($('ledfault'),fault,'r',
+    s.fault?'fault':noprinter?'no printer on the serial port':'no fault');
   lamp($('ledlink'),!setup,'g',setup?'not on a network':'joined “'+(s.ssid||'')+'”');
-  lamp($('ledprn'),s.printer,'g',s.printer?'printer connected and online':'no printer');
+  const prn=$('ledprn');
+  prn.classList.toggle('g',!noprinter);
+  prn.classList.toggle('r',noprinter);
+  prn.dataset.tip=noprinter?'no printer on the serial port'
+                           :'printer connected and online';
   lamp($('ledjob'),s.printing,'a',s.printing?'printing':'idle');
   if(!s.printing) $('ledjob').classList.remove('act-a');
 
   joined=setup?'':(s.ssid||''); ip=s.ip||'';
+  /* Whatever else is known, the network this printer is on belongs in the
+     list -- without waiting for a scan to confirm what it is already doing. */
+  if(joined && !nets.some(n=>n.s===joined)){
+    nets.unshift({s:joined, r:RSSI[s.signal]||-70, a:s.security!=='Open'});
+    drawNets();
+  }
   $('sec-halftone').classList.toggle('hide',setup);
   $('sec-printer').classList.toggle('hide',setup);
 
@@ -131,7 +162,14 @@ function draw(s){
   if(s.dither&&s.dither!==dither&&!$('tabs').dataset.touched){
     dither=s.dither; syncTabs(); render();}
 
-  if(first){ first=0; scan(); if(!setup&&s.ssid) sel=null; }
+  if(first){
+    first=0;
+    const c=cacheLoad();
+    if(c && c.length){ nets=c; drawNets(); }
+    /* Only interrupt the radio when there is nothing to show: a printer that
+       is already on a network has nothing to look for. */
+    else if(setup) scan();
+  }
 }
 /* Every poll is a packet: blink the activity LED on each one. */
 function poll(){
