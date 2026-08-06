@@ -4939,9 +4939,13 @@
       (justify left bottom))
     (uuid "859a71d6-90cb-45f7-a1df-96d78d852b24"))
 
-  (no_connect
-    (at 189.23 157.48)
-    (uuid "5e2bc99a-c97a-42bd-92e2-faea74ba1169"))
+  (label "TOUCH_SENSE"
+    (at 189.23 157.48 0)
+    (effects
+      (font
+        (size 1.27 1.27))
+      (justify left bottom))
+    (uuid "46be27a0-5173-4cc8-98c1-69433cd82c17"))
 
   (no_connect
     (at 189.23 160.02)
@@ -5089,11 +5093,7 @@
       (xy 222.25 139.7))
     (uuid "fef27be4-a7a7-4a4e-8c71-98de7b48b633"))
 
-  (wire
-    (pts
-      (xy 219.71 142.24)
-      (xy 222.25 142.24))
-    (uuid "4ef8734e-29bd-4bcb-adc0-d1f4d2630104"))
+  
 
   (label "VBUS"
     (at 50.8 44.45 0)
@@ -6497,9 +6497,7 @@
     (at 222.25 139.7 0)
     (uuid "52b1b50f-a8c1-4e0a-bde8-19bc39e88ff1"))
 
-  (label "BTN_MODE"
-    (at 222.25 142.24 0)
-    (uuid "8aba108e-48e6-487d-8c2f-588ae2adb41b"))
+  
 
   (symbol
     (lib_id "Connector:USB_C_Receptacle_USB2.0_16P")
@@ -8948,30 +8946,30 @@
       (effects
         (font
           (size 1.27 1.27))))
-    (property "Value" "MODE/TEST"
+    (property "Value" "MODE touch"
       (at 149.86 199.39 0)
       (effects
         (font
           (size 1.27 1.27))))
-    (property "Footprint" "Button_Switch_SMD:SW_SPST_B3U-1000P"
+    (property "Footprint" "airwriter:TouchPad_Comb_9x7mm"
       (at 149.86 195.58 0)
       (hide yes)
       (effects
         (font
           (size 1.27 1.27))))
-    (property "MPN" "B3U-1000P"
+    (property "MPN" ""
       (at 149.86 195.58 0)
       (hide yes)
       (effects
         (font
           (size 1.27 1.27))))
-    (property "Manufacturer" "Omron"
+    (property "Manufacturer" "none - copper on the board"
       (at 149.86 195.58 0)
       (hide yes)
       (effects
         (font
           (size 1.27 1.27))))
-    (property "Description" "Tactile switch, SMD, 4.8 x 3.4mm"
+    (property "Description" "Capacitive touch pad, exposed gold on the back face. Pad 1 is the electrode, pad 2 the ground guard"
       (at 149.86 195.58 0)
       (hide yes)
       (effects
@@ -8995,7 +8993,7 @@
     (unit 1)
     (in_bom yes)
     (on_board yes)
-    (dnp no)
+    (dnp yes)
     (uuid "ef506f1f-2061-40a5-a06c-367842791208")
     (property "Reference" "C19"
       (at 162.56 191.77 0)
@@ -9420,7 +9418,38 @@
         (size 1.27 1.27))
       (justify left bottom))
     (uuid "855ef5c0-31c8-4dfd-bd1b-9fd7cf268636"))
+  (no_connect (at 219.71 142.24) (uuid "c35d5edc-ee25-4522-8fcd-d96330ed078e"))
   (no_connect (at 85.09 115.57) (uuid "8c59e9a1-e150-4274-9c60-0d56e87da09c"))
+  (symbol
+    (lib_id "Device:R")
+    (at 33.02 133.35 0)
+    (unit 1)
+    (exclude_from_sim no)
+    (in_bom yes)
+    (on_board yes)
+    (dnp no)
+    (uuid "c4cc3ab5-59bd-4949-b46f-227892e5dd04")
+    (property "Reference" "R20" (at 30.48 133.35 90) (effects (font (size 1.27 1.27))))
+    (property "Value" "1k" (at 35.56 133.35 90) (effects (font (size 1.27 1.27))))
+    (property "Footprint" "Resistor_SMD:R_0603_1608Metric" (at 33.02 133.35 0) (hide yes) (effects (font (size 1.27 1.27))))
+    (property "MPN" "" (at 33.02 133.35 0) (hide yes) (effects (font (size 1.27 1.27))))
+    (property "Manufacturer" "Any" (at 33.02 133.35 0) (hide yes) (effects (font (size 1.27 1.27))))
+    (property "Description" "RES 1k 0603. Series ESD limiter between the exposed touch pad and the GPIO" (at 33.02 133.35 0) (hide yes) (effects (font (size 1.27 1.27))))
+  )
+  (label "TOUCH_SENSE"
+    (at 33.02 129.54 0)
+    (effects
+      (font
+        (size 1.27 1.27))
+      (justify left bottom))
+    (uuid "cc6c4e6d-184b-4b07-b139-f8bd1b02fa6a"))
+  (label "BTN_MODE"
+    (at 33.02 137.16 0)
+    (effects
+      (font
+        (size 1.27 1.27))
+      (justify left bottom))
+    (uuid "c9155837-5423-44cb-a0d4-3d0ec1c0376e"))
   (symbol
     (lib_id "Device:R")
     (at 184.15 245.11 0)

@@ -412,6 +412,30 @@ The rule is 0.15mm now and the board re-routes clean against it. Check it the sa
 kicad-cli pcb drc --format json -o /tmp/d.json airwriter.kicad_pcb   # no clearance violations
 ```
 
+**MODE is a capacitive touch pad in exposed gold on the back face.** SW2 is no longer a switch: it
+is `airwriter:TouchPad_Comb_9x7mm`, a comb electrode on B.Cu with a ground guard bar below it, mask
+opened over both so a bare finger meets ENIG gold. The comb is one net — the interleaving is
+visual. The ESP32-S3 senses self-capacitance, where a continuous electrode beats an interdigitated
+one, so nothing is given up for the look.
+
+- **MODE moved from IO38 to IO14.** The S3 only does capacitive touch on IO1–IO14. The old pin is
+  released and capped.
+- **R20, 1k, sits in series** between the pad and the GPIO. Exposed metal wired straight to a pin is
+  an ESD path; the S3 is rated about 2kV and a person can carry far more.
+- **C19 is DNP, not deleted.** 100nF across a touch pin would swamp a sense capacitance measured in
+  picofarads. Leaving the pads means fitting one part reverts MODE to a mechanical switch if touch
+  disappoints.
+
+**On the research, because the eurorack precedent is split.** Make Noise's René uses *resistive*
+touch — skin completing a circuit — and is known for not reading reliably on dry hands. That is the
+failure mode worth avoiding, and it is a different technology from what Synthux's Simple Touch does,
+which is capacitive via an MPR121. Capacitive does not care about skin conductivity. An MPR121 is a
+12-channel part and would be silly for one button when the S3 has the peripheral built in.
+
+**Bare gold is correct here, and an earlier note in this file was wrong to say otherwise.**
+Soldermask is about 25 microns and barely affects sensitivity, so either works — but exposed ENIG is
+what the synth world does, it is more sensitive, and it is the entire point of the finish.
+
 **The logo is lit by a light box, not by LEDs behind the letters.** Reverse-mount LEDs make a local
 pool of light where they sit — they do not spread sideways — so four of them behind a 33mm wordmark
 would give four bright patches and dim gaps. Instead **D4, D5 and D6 are top-firing SK6812MINI**
