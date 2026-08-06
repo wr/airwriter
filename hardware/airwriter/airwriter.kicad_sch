@@ -6,6 +6,249 @@
   (paper "A3")
 
   (lib_symbols
+    (symbol "LED:SK6812MINI"
+      (exclude_from_sim no)
+      (in_bom yes)
+      (on_board yes)
+(property "Reference" "D"
+            (at 5.08 5.715 0)
+            (show_name no)
+            (do_not_autoplace no)
+            (effects
+              (font
+                (size 1.27 1.27)
+              )
+              (justify right bottom)
+            )
+          )
+(property "Value" "SK6812MINI"
+            (at 1.27 -5.715 0)
+            (show_name no)
+            (do_not_autoplace no)
+            (effects
+              (font
+                (size 1.27 1.27)
+              )
+              (justify left top)
+            )
+          )
+(property "Footprint" "LED_SMD:LED_SK6812MINI_PLCC4_3.5x3.5mm_P1.75mm"
+            (at 1.27 -7.62 0)
+            (show_name no)
+            (do_not_autoplace no)
+            (hide yes)
+            (effects
+              (font
+                (size 1.27 1.27)
+              )
+              (justify left top)
+            )
+          )
+(property "Datasheet" "https://cdn-shop.adafruit.com/product-files/2686/SK6812MINI_REV.01-1-2.pdf"
+            (at 2.54 -9.525 0)
+            (show_name no)
+            (do_not_autoplace no)
+            (hide yes)
+            (effects
+              (font
+                (size 1.27 1.27)
+              )
+              (justify left top)
+            )
+          )
+(property "Description" "RGB LED with integrated controller"
+            (at 0 0 0)
+            (show_name no)
+            (do_not_autoplace no)
+            (hide yes)
+            (effects
+              (font
+                (size 1.27 1.27)
+              )
+            )
+          )
+(symbol "SK6812MINI_0_0"
+            (text "RGB"
+              (at 2.286 -4.191 0)
+              (effects
+                (font
+                  (size 0.762 0.762)
+                )
+              )
+            )
+          )
+(symbol "SK6812MINI_0_1"
+            (polyline
+              (pts
+                (xy 1.27 -2.54) (xy 1.778 -2.54)
+              )
+              (stroke
+                (width 0)
+                (type default)
+              )
+              (fill
+                (type none)
+              )
+            )
+            (polyline
+              (pts
+                (xy 1.27 -3.556) (xy 1.778 -3.556)
+              )
+              (stroke
+                (width 0)
+                (type default)
+              )
+              (fill
+                (type none)
+              )
+            )
+            (polyline
+              (pts
+                (xy 2.286 -1.524) (xy 1.27 -2.54) (xy 1.27 -2.032)
+              )
+              (stroke
+                (width 0)
+                (type default)
+              )
+              (fill
+                (type none)
+              )
+            )
+            (polyline
+              (pts
+                (xy 2.286 -2.54) (xy 1.27 -3.556) (xy 1.27 -3.048)
+              )
+              (stroke
+                (width 0)
+                (type default)
+              )
+              (fill
+                (type none)
+              )
+            )
+            (polyline
+              (pts
+                (xy 3.683 -1.016) (xy 3.683 -3.556) (xy 3.683 -4.064)
+              )
+              (stroke
+                (width 0)
+                (type default)
+              )
+              (fill
+                (type none)
+              )
+            )
+            (polyline
+              (pts
+                (xy 4.699 -1.524) (xy 2.667 -1.524) (xy 3.683 -3.556) (xy 4.699 -1.524)
+              )
+              (stroke
+                (width 0)
+                (type default)
+              )
+              (fill
+                (type none)
+              )
+            )
+            (polyline
+              (pts
+                (xy 4.699 -3.556) (xy 2.667 -3.556)
+              )
+              (stroke
+                (width 0)
+                (type default)
+              )
+              (fill
+                (type none)
+              )
+            )
+            (rectangle
+              (start 5.08 5.08)
+              (end -5.08 -5.08)
+              (stroke
+                (width 0.254)
+                (type default)
+              )
+              (fill
+                (type background)
+              )
+            )
+          )
+(symbol "SK6812MINI_1_1"
+            (pin power_in line
+              (at 0 -7.62 90)
+              (length 2.54)
+              (name "VSS"
+                (effects
+                  (font
+                    (size 1.27 1.27)
+                  )
+                )
+              )
+              (number "1"
+                (effects
+                  (font
+                    (size 1.27 1.27)
+                  )
+                )
+              )
+            )
+            (pin input line
+              (at -7.62 0 0)
+              (length 2.54)
+              (name "DIN"
+                (effects
+                  (font
+                    (size 1.27 1.27)
+                  )
+                )
+              )
+              (number "2"
+                (effects
+                  (font
+                    (size 1.27 1.27)
+                  )
+                )
+              )
+            )
+            (pin power_in line
+              (at 0 7.62 270)
+              (length 2.54)
+              (name "VDD"
+                (effects
+                  (font
+                    (size 1.27 1.27)
+                  )
+                )
+              )
+              (number "3"
+                (effects
+                  (font
+                    (size 1.27 1.27)
+                  )
+                )
+              )
+            )
+            (pin output line
+              (at 7.62 0 180)
+              (length 2.54)
+              (name "DOUT"
+                (effects
+                  (font
+                    (size 1.27 1.27)
+                  )
+                )
+              )
+              (number "4"
+                (effects
+                  (font
+                    (size 1.27 1.27)
+                  )
+                )
+              )
+            )
+          )
+    )
     (symbol "LED:SK6812MINI-E"
       (exclude_from_sim no)
       (in_bom yes)
@@ -4688,9 +4931,13 @@
     (at 325.12 219.71)
     (uuid "8b1a355d-f9e8-4b68-b5d9-b5a4fe56d5e1"))
 
-  (no_connect
-    (at 157.48 223.52)
-    (uuid "4ba77558-0c28-4827-9ce5-0f0dabaec56f"))
+  (label "LOGO_CH1"
+    (at 157.48 223.52 0)
+    (effects
+      (font
+        (size 1.27 1.27))
+      (justify left bottom))
+    (uuid "859a71d6-90cb-45f7-a1df-96d78d852b24"))
 
   (no_connect
     (at 189.23 157.48)
@@ -9048,6 +9295,132 @@
           (reference "R18")
           (unit 1)))))
 
+  (symbol
+    (lib_id "LED:SK6812MINI")
+    (at 33.02 115.57 0)
+    (unit 1)
+    (exclude_from_sim no)
+    (in_bom yes)
+    (on_board yes)
+    (dnp no)
+    (uuid "da471e89-9031-4c5c-83d1-ebea3c60d0a2")
+    (property "Reference" "D4" (at 33.02 104.14 0) (effects (font (size 1.27 1.27))))
+    (property "Value" "SK6812MINI" (at 33.02 127 0) (effects (font (size 1.27 1.27))))
+    (property "Footprint" "LED_SMD:LED_SK6812MINI_PLCC4_3.5x3.5mm_P1.75mm" (at 33.02 115.57 0) (hide yes) (effects (font (size 1.27 1.27))))
+    (property "MPN" "SK6812MINI" (at 33.02 115.57 0) (hide yes) (effects (font (size 1.27 1.27))))
+    (property "Manufacturer" "OPSCO Optoelectronics" (at 33.02 115.57 0) (hide yes) (effects (font (size 1.27 1.27))))
+    (property "Description" "Addressable RGB LED, top firing. Shines down into the housing cavity; the bounce lights the logo window" (at 33.02 115.57 0) (hide yes) (effects (font (size 1.27 1.27))))
+  )
+  (label "+3V3"
+    (at 33.02 107.95 0)
+    (effects
+      (font
+        (size 1.27 1.27))
+      (justify left bottom))
+    (uuid "50771264-b070-4907-bf18-81bf04599952"))
+  (label "GND"
+    (at 33.02 123.19 0)
+    (effects
+      (font
+        (size 1.27 1.27))
+      (justify left bottom))
+    (uuid "9e6c9790-b214-4bdf-ba54-399092b14840"))
+  (label "LOGO_CH1"
+    (at 25.4 115.57 0)
+    (effects
+      (font
+        (size 1.27 1.27))
+      (justify left bottom))
+    (uuid "407d1db7-7262-46ec-9aef-04f01947b23c"))
+  (label "LOGO_CH2"
+    (at 40.64 115.57 0)
+    (effects
+      (font
+        (size 1.27 1.27))
+      (justify left bottom))
+    (uuid "5e79b147-8a2b-41e6-8eaf-2b853d52577c"))
+  (symbol
+    (lib_id "LED:SK6812MINI")
+    (at 54.61 115.57 0)
+    (unit 1)
+    (exclude_from_sim no)
+    (in_bom yes)
+    (on_board yes)
+    (dnp no)
+    (uuid "80f765c7-f9d9-450a-8638-6a0d7387d825")
+    (property "Reference" "D5" (at 54.61 104.14 0) (effects (font (size 1.27 1.27))))
+    (property "Value" "SK6812MINI" (at 54.61 127 0) (effects (font (size 1.27 1.27))))
+    (property "Footprint" "LED_SMD:LED_SK6812MINI_PLCC4_3.5x3.5mm_P1.75mm" (at 54.61 115.57 0) (hide yes) (effects (font (size 1.27 1.27))))
+    (property "MPN" "SK6812MINI" (at 54.61 115.57 0) (hide yes) (effects (font (size 1.27 1.27))))
+    (property "Manufacturer" "OPSCO Optoelectronics" (at 54.61 115.57 0) (hide yes) (effects (font (size 1.27 1.27))))
+    (property "Description" "Addressable RGB LED, top firing. Shines down into the housing cavity; the bounce lights the logo window" (at 54.61 115.57 0) (hide yes) (effects (font (size 1.27 1.27))))
+  )
+  (label "+3V3"
+    (at 54.61 107.95 0)
+    (effects
+      (font
+        (size 1.27 1.27))
+      (justify left bottom))
+    (uuid "ffa19c2f-7f32-4948-b97b-be0a7c887951"))
+  (label "GND"
+    (at 54.61 123.19 0)
+    (effects
+      (font
+        (size 1.27 1.27))
+      (justify left bottom))
+    (uuid "363e9a10-94cd-4275-9b84-c4bcfeb3f5c7"))
+  (label "LOGO_CH2"
+    (at 46.99 115.57 0)
+    (effects
+      (font
+        (size 1.27 1.27))
+      (justify left bottom))
+    (uuid "d1cef3bf-6e3b-4aea-80a7-7d348679221c"))
+  (label "LOGO_CH3"
+    (at 62.23 115.57 0)
+    (effects
+      (font
+        (size 1.27 1.27))
+      (justify left bottom))
+    (uuid "2ebbdc30-d7ee-45be-a388-e09b56768aef"))
+  (symbol
+    (lib_id "LED:SK6812MINI")
+    (at 77.47 115.57 0)
+    (unit 1)
+    (exclude_from_sim no)
+    (in_bom yes)
+    (on_board yes)
+    (dnp no)
+    (uuid "f60f6bac-c9e8-4539-b246-d5d5e21b9657")
+    (property "Reference" "D6" (at 77.47 104.14 0) (effects (font (size 1.27 1.27))))
+    (property "Value" "SK6812MINI" (at 77.47 127 0) (effects (font (size 1.27 1.27))))
+    (property "Footprint" "LED_SMD:LED_SK6812MINI_PLCC4_3.5x3.5mm_P1.75mm" (at 77.47 115.57 0) (hide yes) (effects (font (size 1.27 1.27))))
+    (property "MPN" "SK6812MINI" (at 77.47 115.57 0) (hide yes) (effects (font (size 1.27 1.27))))
+    (property "Manufacturer" "OPSCO Optoelectronics" (at 77.47 115.57 0) (hide yes) (effects (font (size 1.27 1.27))))
+    (property "Description" "Addressable RGB LED, top firing. Shines down into the housing cavity; the bounce lights the logo window" (at 77.47 115.57 0) (hide yes) (effects (font (size 1.27 1.27))))
+  )
+  (label "+3V3"
+    (at 77.47 107.95 0)
+    (effects
+      (font
+        (size 1.27 1.27))
+      (justify left bottom))
+    (uuid "6404a87f-7ff2-454c-a201-8cf0eeafa1ab"))
+  (label "GND"
+    (at 77.47 123.19 0)
+    (effects
+      (font
+        (size 1.27 1.27))
+      (justify left bottom))
+    (uuid "20437172-0946-4fd5-931e-e0f6674a962e"))
+  (label "LOGO_CH3"
+    (at 69.85 115.57 0)
+    (effects
+      (font
+        (size 1.27 1.27))
+      (justify left bottom))
+    (uuid "855ef5c0-31c8-4dfd-bd1b-9fd7cf268636"))
+  (no_connect (at 85.09 115.57) (uuid "8c59e9a1-e150-4274-9c60-0d56e87da09c"))
   (symbol
     (lib_id "Device:R")
     (at 184.15 245.11 0)

@@ -412,6 +412,25 @@ The rule is 0.15mm now and the board re-routes clean against it. Check it the sa
 kicad-cli pcb drc --format json -o /tmp/d.json airwriter.kicad_pcb   # no clearance violations
 ```
 
+**The logo is lit by a light box, not by LEDs behind the letters.** Reverse-mount LEDs make a local
+pool of light where they sit — they do not spread sideways — so four of them behind a 33mm wordmark
+would give four bright patches and dim gaps. Instead **D4, D5 and D6 are top-firing SK6812MINI**
+that shine *down* into the printed housing. A white cavity floor bounces the light back up through
+the window, arriving already diffused. That is what a wide even glow wants, and it needs no special
+parts.
+
+They sit outside the logo keepout — at (105.5, 93), (146.5, 93) and (115, 86.3) — because anything
+under the window would block the light coming back up. Position barely matters for a light box; the
+cavity floods.
+
+**All six pixels are one chain on one wire.** U1 IO48 to D1, D1 to D2, then D2's DOUT — which was
+unconnected — carries on to D4, D5, D6 over `LOGO_CH1/2/3`. No new GPIO, and the logo is addressable:
+any colour, any animation, same protocol. Firmware needs one constant changed from 2 pixels to 6.
+
+**SK6812 rather than WS2812B for a real reason.** WS2812B wants 3.5V minimum and this rail is 3.3V —
+the original D1/D2 were out of spec and nobody had noticed. Every SK6812 variant on the board is
+specified down to 3.3V.
+
 **The indicators fire up through the board, and BOOT is two pads.** Every component sits on the
 face that becomes the underside, so a normal SMD LED points away from the viewer. All three
 indicators are reverse-mount now — they emit *toward* the board, and instead of the hole their

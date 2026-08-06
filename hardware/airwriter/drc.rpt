@@ -1,5 +1,5 @@
 ** Drc report for airwriter.kicad_pcb **
-** Created on 2026-08-06T00:34:01 **
+** Created on 2026-08-06T00:59:50 **
 ** Report includes: Errors, Warnings **
 
 ** Found 4 DRC violations **
@@ -20,7 +20,7 @@
 [unconnected_items]: Missing connection between items
     Local override; error
     @(100.3000 mm, 60.3000 mm): Zone [/GND] on F.Cu, priority 0
-    @(100.3000 mm, 60.3000 mm): Zone [/GND] on F.Cu, priority 0
+    @(100.3000 mm, 60.3000 mm): Zone [/GND] on B.Cu, priority 0
 [unconnected_items]: Missing connection between items
     Local override; error
     @(100.3000 mm, 60.3000 mm): Zone [/GND] on F.Cu, priority 0
@@ -36,15 +36,15 @@
 [unconnected_items]: Missing connection between items
     Local override; error
     @(100.3000 mm, 60.3000 mm): Zone [/GND] on F.Cu, priority 0
-    @(100.3000 mm, 60.3000 mm): Zone [/GND] on F.Cu, priority 0
+    @(100.3000 mm, 60.3000 mm): Zone [/GND] on B.Cu, priority 0
 [unconnected_items]: Missing connection between items
     Local override; error
     @(100.3000 mm, 60.3000 mm): Zone [/GND] on F.Cu, priority 0
     @(100.3000 mm, 60.3000 mm): Zone [/GND] on F.Cu, priority 0
 [unconnected_items]: Missing connection between items
     Local override; error
-    @(100.3000 mm, 60.3000 mm): Zone [/GND] on F.Cu, priority 0
-    @(100.3000 mm, 60.3000 mm): Zone [/GND] on F.Cu, priority 0
+    @(110.9750 mm, 107.9050 mm): Pad 11 [/HSKI_DRV] of U3 on F.Cu
+    @(124.7500 mm, 76.7300 mm): Pad 28 [/HSKI_DRV] of U1 on F.Cu
 
 ** Found 0 Footprint errors **
 

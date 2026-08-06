@@ -7,6 +7,7 @@
 "C16-C20","100n","Capacitor_SMD:C_0603_1608Metric","","","","5",""
 "D1,D2","SK6812MINI-E","LED_SMD:LED_SK6812MINI-E_3.2x2.8mm_P1.5mm_ReverseMount","SK6812MINI-E","OPSCO Optoelectronics","Addressable RGB LED, reverse mount. Fires up through the board into a bare-FR4 window, no hole","2",""
 "D3","green PWR","LED_SMD:LED_1206_3216Metric_ReverseMount_Hole1.8x2.4mm","","Any","Green power LED, reverse mount. Fires up through the board into a bare-FR4 window","1",""
+"D4-D6","SK6812MINI","LED_SMD:LED_SK6812MINI_PLCC4_3.5x3.5mm_P1.75mm","SK6812MINI","OPSCO Optoelectronics","Addressable RGB LED, top firing. Shines down into the housing cavity; the bounce lights the logo window","3",""
 "J1","USB-C 5V in","Connector_USB:USB_C_Receptacle_HRO_TYPE-C-31-M-12","TYPE-C-31-M-12","Korean Hroparts Elec","USB Type-C receptacle, 16P SMD. Power only here","1",""
 "J2","Mini-DIN-8 to printer","airwriter:MiniDIN-8_Kycon_KMDGX-8S-BS_RightAngle","KMDGX-8S-BS","Kycon","Mini-DIN 8-pin female, right angle, fully shielded","1",""
 "J3","Bring-up USB/UART","Connector_PinHeader_1.27mm:PinHeader_1x04_P1.27mm_Vertical","","Any","Header 1x4, 1.27mm pitch, vertical. Bring-up only, may be left unpopulated","1",""
