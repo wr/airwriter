@@ -268,7 +268,7 @@ select{padding-right:var(--sp-6);background-repeat:no-repeat;background-size:5px
 .paper{position:relative;background:var(--paper);border:1px solid var(--seam);
   border-radius:var(--r-hair);padding:0 var(--feed-w);box-shadow:var(--sink-field)}
 .paper:before,.paper:after{content:'';position:absolute;top:0;bottom:0;
-  width:var(--feed-w);pointer-events:none;
+  width:var(--feed-w);pointer-events:none;z-index:2;
   background-image:radial-gradient(circle at 50% calc(var(--hole-pitch)/2),
     var(--paper-edge) calc(var(--hole)/2), transparent calc(var(--hole)/2 + .5px));
   background-size:100% var(--hole-pitch)}

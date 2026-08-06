@@ -211,7 +211,7 @@ static const char WEBUI_HTML[] =
 ".paper{position:relative;background:var(--paper);border:1px solid var(--seam);\n"
 "  border-radius:var(--r-hair);padding:0 var(--feed-w);box-shadow:var(--sink-field)}\n"
 ".paper:before,.paper:after{content:'';position:absolute;top:0;bottom:0;\n"
-"  width:var(--feed-w);pointer-events:none;\n"
+"  width:var(--feed-w);pointer-events:none;z-index:2;\n"
 "  background-image:radial-gradient(circle at 50% calc(var(--hole-pitch)/2),\n"
 "    var(--paper-edge) calc(var(--hole)/2), transparent calc(var(--hole)/2 + .5px));\n"
 "  background-size:100% var(--hole-pitch)}\n"
