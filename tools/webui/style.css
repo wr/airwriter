@@ -119,6 +119,7 @@ main{width:100%;max-width:42rem}
 
 /* vents: 2 mm slots on 10 mm centres, tapered at both ends */
 .grooves{height:var(--vent-h);margin:var(--sp-3) 0 var(--sp-4);
+  background-position:50% 0;
   background:repeating-linear-gradient(to right,
     transparent 0 calc(var(--vent-pitch) - var(--vent-line) - 1.2px),
     rgba(0,0,0,.40) calc(var(--vent-pitch) - var(--vent-line) - 1.2px)

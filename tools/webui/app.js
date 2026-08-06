@@ -193,8 +193,20 @@ async function post(url,body){
   try{ await fetch(url,{method:'POST',body:JSON.stringify(body)}); return 1; }
   catch(e){ return 0; }
 }
-$('savegen').onclick=()=>post('/api/general',
-  {queue:$('queue').value,host:$('host').value,dither:dither});
+/* Saving is silent otherwise: say so on the heading, briefly, and put it back. */
+function noted(sec,word){
+  const h=$(sec).querySelector('h2');
+  if(h.dataset.busy) clearTimeout(+h.dataset.busy);
+  if(!h.dataset.name) h.dataset.name=h.textContent;
+  h.textContent=h.dataset.name+' · '+word;
+  h.dataset.busy=setTimeout(()=>{h.textContent=h.dataset.name;
+    delete h.dataset.busy;},1800);
+}
+$('savegen').onclick=async()=>{
+  const ok=await post('/api/general',
+    {queue:$('queue').value,host:$('host').value,dither:dither});
+  noted('sec-printer', ok?'saved':'failed');
+};
 
 /* ── overlay ───────────────────────────────────────────────────────── */
 function overlay(title,text,secs){
@@ -213,6 +225,15 @@ $('join').onclick=async()=>{
   $('join').disabled=1;
   await post('/api/wifi',{ssid:name,pass:pw});
   overlay('Restarting','Joining “'+name+'”',25);
+};
+
+/* CUPS' own web interface is disabled by default on macOS, so a link to it is
+   a dead end. The address is the thing a person needs to add the printer. */
+$('cups').onclick=async()=>{
+  const uri=$('uri').textContent.trim(); if(!uri) return;
+  try{ await navigator.clipboard.writeText(uri); $('cups').textContent='address copied'; }
+  catch(e){ $('cups').textContent=uri; }
+  setTimeout(()=>{$('cups').textContent='copy printer address';},2200);
 };
 
 $('upd').onclick=()=>$('fw').click();
@@ -363,7 +384,8 @@ function buildTabs(){
     dither=e.currentTarget.dataset.k;
     $('tabs').dataset.touched=1;
     syncTabs(); render();
-    post('/api/general',{dither:dither});
+    post('/api/general',{dither:dither}).then(ok=>
+      noted('sec-halftone', ok?'saved':'failed'));
   });
   syncTabs();
 }
