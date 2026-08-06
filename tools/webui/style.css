@@ -46,6 +46,9 @@
   --keyface:#f4f2ec; --keyhover:#faf9f4; --keydown:#eeece6; --keyoff:#efece5;
   --lamp-body:#9d9a8f;
   --paper:#fff; --paper-bar:#e7efe4; --paper-edge:#c9c6bb; --paper-perf:#b9b6ab;
+  /* Paper does not invert with the colour scheme. Ink on a page is dark in a
+     dark room too, so these are deliberately the same in both. */
+  --paper-ink:#1b1a17; --paper-dim:#6f6c64;
   /* Lit plastic, not painted plastic: a saturated body, a core the light
      blows out to near white, and a little of it spilling onto the case. */
   --lamp-green:#33bf1f; --lamp-green-top:#5cdc3c; --lamp-green-core:#9df07a;
@@ -92,7 +95,7 @@
   --slot-wall:#1b1a15; --slotbg:#070603;
   --keyface:#2a2921; --keyhover:#333125; --keydown:#252420; --keyoff:#232219;
   --lamp-body:#302f28;
-  --paper:#f4f2ec; --paper-bar:#e4eae2; --paper-edge:#a9a69b; --paper-perf:#8e8b81;
+  --paper:#ded9cd; --paper-bar:#cdd9c8; --paper-edge:#a9a49a; --paper-perf:#918d84;
 }}
 
 /* ── base ───────────────────────────────────────────────────────── */
@@ -136,9 +139,12 @@ h1{margin:0;font:normal 300 var(--size-display)/.9 var(--font-display);
 .model{margin:var(--sp-1) 0 0;font-size:var(--size-text);color:var(--dim);
   line-height:var(--lead-tight);text-shadow:0 1px 0 var(--hi)}
 
-.stack{display:flex;flex-direction:column;gap:var(--sp-3);padding-top:var(--sp-1)}
-.lamp{display:grid;grid-template-columns:var(--lamp-w) 1fr;align-items:center;
-  gap:var(--sp-3)}
+/* The stack is the grid, not each lamp: separate grids line their own
+   columns up independently, so the bars drift as the legends change width. */
+.stack{display:grid;grid-template-columns:var(--lamp-w) auto;
+  gap:var(--sp-3);align-items:center;padding-top:var(--sp-1);
+  justify-content:end}
+.lamp{display:contents}
 .lamp b{font-weight:var(--weight-text);font-size:var(--size-text);line-height:var(--lead-tight);
   color:var(--ink);opacity:.78;white-space:nowrap;text-align:right}
 /* an LED behind an acrylic pipe */
@@ -186,7 +192,7 @@ h1{margin:0;font:normal 300 var(--size-display)/.9 var(--font-display);
 [data-tip]{cursor:help}
 
 .job{margin:var(--sp-4) 0 0;color:var(--dim)}
-.n .ip{color:var(--dim);white-space:nowrap;font:inherit}
+.n .ip{color:var(--paper-dim);white-space:nowrap;font:inherit}
 .n[aria-selected=true] .ip{color:var(--paper)}
 
 /* ── headings, labels, fields ───────────────────────────────────── */
@@ -205,7 +211,7 @@ select{padding-right:var(--sp-6);background-repeat:no-repeat;background-size:5px
                    linear-gradient(135deg,var(--dim) 50%,transparent 50%)}
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:0 var(--sp-3)}
 #extra{margin:0 var(--feed-w)}
-#extra input{background:var(--paper);letter-spacing:0;
+#extra input{background:var(--paper);color:var(--paper-ink);letter-spacing:0;
   font:normal 400 var(--size-paper)/1 var(--font-paper);
   -webkit-font-smoothing:none;font-smooth:never}
 .say{margin:var(--sp-3) 0 0;color:var(--dim)}
@@ -283,21 +289,21 @@ select{padding-right:var(--sp-6);background-repeat:no-repeat;background-size:5px
 /* Fixed height: the sheet is the same size before and after a scan, so
    the page does not jump when the first list arrives. */
 .scroll{height:calc(var(--row-h)*5 + var(--row-h)/2);overflow-y:auto}
-.n.empty{color:var(--dim);cursor:default}
+.n.empty{color:var(--paper-dim);cursor:default}
 .n{display:flex;align-items:center;gap:var(--sp-3);width:100%;height:var(--row-h);
   padding:0 var(--sp-3);background:var(--paper);border:0;
-  border-radius:0;color:var(--ink);text-align:left;cursor:pointer;
+  border-radius:0;color:var(--paper-ink);text-align:left;cursor:pointer;
   font:normal 400 var(--size-paper)/1 var(--font-paper);letter-spacing:0;
   /* no antialiasing: a printed glyph is on the paper or it is not */
   -webkit-font-smoothing:none;font-smooth:never}
 .bars .n:nth-child(odd){background:var(--paper-bar)}
 /* after the ruling, so selecting a green row still turns it black */
-.bars .n[aria-selected=true]{background:var(--ink);color:var(--paper)}
+.bars .n[aria-selected=true]{background:var(--paper-ink);color:var(--paper)}
 .n:hover{filter:brightness(.96)}
-.n[aria-selected=true]{background:var(--ink);color:var(--paper)}
+.n[aria-selected=true]{background:var(--paper-ink);color:var(--paper)}
 .n .t{flex:0 0 var(--icon);display:flex;align-items:center}
 .n .s{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.n .l{flex:0 0 calc(var(--icon) - 2px);display:flex;align-items:center;color:var(--dim)}
+.n .l{flex:0 0 calc(var(--icon) - 2px);display:flex;align-items:center;color:var(--paper-dim)}
 .n[aria-selected=true] .l,.n[aria-selected=true] .t{color:var(--paper)}
 svg{display:block;shape-rendering:crispEdges}
 .off{opacity:.17}          /* an unlit arc on the signal glyph */
@@ -330,8 +336,7 @@ svg{display:block;shape-rendering:crispEdges}
 
   /* the nameplate and the indicator stack stop competing for one line */
   .plate{flex-direction:column;align-items:stretch;gap:var(--sp-4)}
-  .stack{align-items:flex-end}
-  .lamp{justify-content:flex-end}
+  .stack{justify-content:end}
 
   /* four halftone keys will not sit across a phone: two rows of two */
   #tabs{flex-wrap:wrap;gap:var(--sp-3) var(--sp-3)}
