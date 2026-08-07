@@ -100,6 +100,12 @@
 
 /* ── base ───────────────────────────────────────────────────────── */
 *{box-sizing:border-box}
+/* iOS paints its own grey wash over anything tapped and offers to select the
+   text inside it. A moulded key does neither. */
+button,.key,.legend,.n,.foot a,.say a,.bar{
+  -webkit-tap-highlight-color:transparent;
+  -webkit-touch-callout:none;
+  -webkit-user-select:none;user-select:none}
 body{margin:0;padding:var(--sp-6) var(--sp-4) calc(var(--sp-6)*2);
   background:var(--desk);color:var(--ink);
   font:italic var(--weight-text) var(--size-text)/var(--lead-body) var(--font-ui);
@@ -339,9 +345,9 @@ svg{display:block;shape-rendering:crispEdges}
   .stack{justify-content:end}
 
   /* four halftone keys will not sit across a phone: two rows of two */
-  #tabs{flex-wrap:wrap;gap:var(--sp-3) var(--sp-3)}
-  #tabs .key{flex:1 1 calc(50% - var(--sp-3));min-width:0}
-  #tabs .slot{width:100%}
+  #tabs{flex-wrap:wrap;gap:var(--sp-3);margin-left:auto;
+        width:calc(var(--key-w)*2 + var(--sp-3))}
+  #tabs .key{flex:0 0 var(--key-w)}
 
   .grid2{grid-template-columns:1fr}
   /* the name of the network matters more than its address: on the narrowest
