@@ -251,13 +251,59 @@ document.addEventListener('click',e=>{
   if(!key||e.target.tagName==='BUTTON') return;
   const b=key.querySelector('button'); if(b&&!b.disabled) b.click();
 });
+/* The panel makes the noise the panel makes. Synthesised rather than sampled:
+   nothing here may fetch a file, and a click is a filtered burst of noise
+   anyway. A latching key clicks twice -- once going over centre, once seating
+   in the detent -- and a momentary one gives a single hollow knock. */
+const audio=(()=>{
+  let ctx=null, noise=null;
+  function init(){
+    if(ctx) return;
+    const AC=window.AudioContext||window.webkitAudioContext; if(!AC) return;
+    ctx=new AC();
+    const n=Math.floor(ctx.sampleRate*0.05);
+    noise=ctx.createBuffer(1,n,ctx.sampleRate);
+    const d=noise.getChannelData(0);
+    for(let i=0;i<n;i++) d[i]=Math.random()*2-1;
+  }
+  function burst(freq,q,gain,decay,delay){
+    if(!ctx) return;
+    const t=ctx.currentTime+(delay||0);
+    const src=ctx.createBufferSource(); src.buffer=noise;
+    const bp=ctx.createBiquadFilter(); bp.type='bandpass';
+    bp.frequency.value=freq; bp.Q.value=q;
+    const g=ctx.createGain();
+    g.gain.setValueAtTime(gain,t);
+    g.gain.exponentialRampToValueAtTime(0.0001,t+decay);
+    src.connect(bp).connect(g).connect(ctx.destination);
+    src.start(t); src.stop(t+decay+0.02);
+  }
+  return {
+    /* iOS will not start an audio context outside a gesture, so this is the
+       gesture: the first press builds it. */
+    press(latching){
+      init(); if(!ctx) return;
+      if(ctx.state==='suspended') ctx.resume();
+      if(latching) burst(2600,7,0.22,0.018,0);
+      else{ burst(760,2.2,0.30,0.055,0); burst(300,1.6,0.16,0.070,0.004); }
+    },
+    release(latching){ if(latching) burst(2100,6,0.16,0.024,0); }
+  };
+})();
+
 function down(e){
   const k=e.target.closest('.key'); if(!k) return;
   const slot=k.querySelector('.slot'), b=k.querySelector('button');
-  if(slot&&b&&!b.disabled) slot.classList.add('is-down');
+  if(!slot||!b||b.disabled) return;
+  slot.classList.add('is-down');
+  audio.press(!slot.classList.contains('momentary'));
 }
-function up(){ for(const s of document.querySelectorAll('.slot.is-down'))
-  s.classList.remove('is-down'); }
+function up(){
+  for(const s of document.querySelectorAll('.slot.is-down')){
+    s.classList.remove('is-down');
+    audio.release(!s.classList.contains('momentary'));
+  }
+}
 document.addEventListener('pointerdown',down);
 document.addEventListener('pointerup',up);
 document.addEventListener('pointercancel',up);
