@@ -255,6 +255,14 @@ document.addEventListener('click',e=>{
    nothing here may fetch a file, and a click is a filtered burst of noise
    anyway. A latching key clicks twice -- once going over centre, once seating
    in the detent -- and a momentary one gives a single hollow knock. */
+/* Each voice is one filtered burst: freq, Q, gain, decay, delay. Kept in a
+   table so the tuner (open the page with #snd) can reach in and move them. */
+const SND={
+  latch  :[4500,8  ,0.30,0.014,0    ],  /* latching key going over centre */
+  strike :[4500,2.6,0.24,0.030,0    ],  /* momentary: the strike */
+  body   :[ 150,1.4,0.13,0.075,0.003],  /* and the body under it */
+  unlatch:[3000,7  ,0.15,0.018,0    ]   /* latching key seating on release */
+};
 const audio=(()=>{
   let ctx=null, noise=null;
   function init(){
@@ -284,10 +292,10 @@ const audio=(()=>{
     press(latching){
       init(); if(!ctx) return;
       if(ctx.state==='suspended') ctx.resume();
-      if(latching) burst(2600,7,0.22,0.018,0);
-      else{ burst(760,2.2,0.30,0.055,0); burst(300,1.6,0.16,0.070,0.004); }
+      if(latching) burst(...SND.latch);
+      else{ burst(...SND.strike); burst(...SND.body); }
     },
-    release(latching){ if(latching) burst(2100,6,0.16,0.024,0); }
+    release(latching){ if(latching) burst(...SND.unlatch); }
   };
 })();
 
@@ -307,6 +315,56 @@ function up(){
 document.addEventListener('pointerdown',down);
 document.addEventListener('pointerup',up);
 document.addEventListener('pointercancel',up);
+
+/* ── sound tuner: open the page with #snd ──────────────────────────── */
+/* Debug only. Sliders write straight into SND and replay the voice they
+   moved, so every drag is audible. Copy the values out and paste them
+   into the SND table above to keep a sound. */
+function sndTuner(){
+  if($('sndout')) return;   /* already built */
+  const PARAMS=[['freq',40,8000,1],['Q',0.5,20,0.1],['gain',0,0.5,0.005],
+                ['decay',0.005,0.2,0.001],['delay',0,0.03,0.001]];
+  const box=document.createElement('div');
+  box.style.cssText='position:fixed;right:8px;top:8px;z-index:99;background:#fff;'
+    +'color:#000;border:1px solid #000;padding:10px;font:11px/1.6 monospace;'
+    +'max-height:92vh;overflow:auto;box-shadow:4px 4px 0 rgba(0,0,0,.15)';
+  let h='<b>sound tuner</b>';
+  for(const name in SND){
+    h+='<fieldset style="border:1px solid #bbb;margin:6px 0;padding:2px 6px">'
+      +'<legend>'+name+'</legend>';
+    PARAMS.forEach(([p,min,max,step],i)=>{
+      h+='<label style="display:flex;gap:6px;align-items:center">'
+        +'<span style="width:38px">'+p+'</span>'
+        +'<input type=range data-s='+name+' data-i='+i+' min='+min+' max='+max
+        +' step='+step+' value='+SND[name][i]+' style="width:140px">'
+        +'<output style="width:44px">'+SND[name][i]+'</output></label>';
+    });
+    h+='</fieldset>';
+  }
+  h+='<button id=sndm>momentary</button> <button id=sndl>latch dn</button> '
+    +'<button id=sndu>latch up</button> <button id=sndc>copy</button>'
+    +'<pre id=sndout style="white-space:pre-wrap;max-width:240px;margin:6px 0 0"></pre>';
+  box.innerHTML=h; document.body.appendChild(box);
+  const dump=()=>{$('sndout').textContent=
+    Object.entries(SND).map(([k,v])=>k+': ['+v.join(', ')+']').join('\n');};
+  const replay={latch:()=>audio.press(true), strike:()=>audio.press(false),
+                body:()=>audio.press(false), unlatch:()=>audio.release(true)};
+  let last=0;
+  box.addEventListener('input',e=>{
+    const t=e.target; if(t.type!=='range') return;
+    SND[t.dataset.s][+t.dataset.i]=+t.value;
+    t.nextElementSibling.value=t.value; dump();
+    const now=performance.now();               /* a drag fires ~60/s; don't */
+    if(now-last>120){ last=now; replay[t.dataset.s](); } /* stack the bursts */
+  });
+  $('sndm').onclick=()=>audio.press(false);
+  $('sndl').onclick=()=>audio.press(true);
+  $('sndu').onclick=()=>audio.release(true);
+  $('sndc').onclick=()=>navigator.clipboard.writeText($('sndout').textContent);
+  dump();
+}
+if(location.hash==='#snd') sndTuner();
+addEventListener('hashchange',()=>{if(location.hash==='#snd')sndTuner();});
 
 /* ── tooltips ──────────────────────────────────────────────────────── */
 (function tips(){
