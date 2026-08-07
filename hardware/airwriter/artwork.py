@@ -3,7 +3,9 @@
     /Applications/KiCad/KiCad.app/Contents/Frameworks/Python.framework/Versions/3.9/bin/python3 \
         artwork.py [source_dir]
 
-Run AFTER route.py, stitch.py and the via prune -- never before. The cells are placed
+Run AFTER route.py, stitch.py and the via prune -- never before. It also lays down the
+TOUCH GUARD, because KiCad exports every rule area to Freerouting as a hard keepout
+regardless of its tracks/vias settings, so a pour-only guard still blocks the router. The cells are placed
 around finished copper, and the rule areas they emit bar copper pour only, so nothing
 here forces another route. Running it before routing does not work: Freerouting reads
 a multi-outline zone as a single keepout and drives straight through the artwork.
@@ -97,6 +99,18 @@ def rect(k,l):
             '(fill solid) (layer "%s") (uuid "%s"))'%(k[0],k[1],k[2],k[3],l,uuid.uuid4()))
 
 s=open(BRD).read()
+
+# the touch guard is a pour keepout, but KiCad exports every rule area to the router
+# as a hard keepout -- so it, like the artwork, goes on only after routing
+import math as _m
+GX,GY,GR = 136.30, 121.80, 6.1
+_oct=' '.join('(xy %.1f %.1f)'%(GX+GR*_m.cos(_m.radians(a)), GY+GR*_m.sin(_m.radians(a))) for a in range(0,360,45))
+guard=('\t(zone\n\t\t(layers "F.Cu" "B.Cu")\n\t\t(uuid "%s")\n\t\t(name "TOUCH GUARD")\n\t\t(hatch full 0.508)\n'
+       '\t\t(connect_pads (clearance 0))\n\t\t(min_thickness 0.254)\n'
+       '\t\t(keepout (tracks allowed) (vias allowed) (pads allowed) (copperpour not_allowed) (footprints allowed))\n'
+       '\t\t(placement (enabled no) (sheetname ""))\n'
+       '\t\t(fill (thermal_gap 0.508) (thermal_bridge_width 0.508))\n'
+       '\t\t(polygon (pts %s))\n\t)'%(uuid.uuid4(), _oct))
 gr=[]
 for k in fr4_logo: gr += [rect(k,'B.Mask'), rect(k,'F.Mask')]     # lit: open both faces
 for k in fr4_grain: gr.append(rect(k,'B.Mask'))
@@ -107,7 +121,7 @@ for k in led:
     gr += [rect(m,'B.Mask'), rect(m,'F.Mask')]
 i=s.rindex('\n\t(zone')
 j=s.index('\n\t)',s.index('(polygon',i))+3
-s=s[:j]+'\n'+zone('ARTWORK FR4 WORDMARK','"F.Cu" "B.Cu"',fr4_logo)+'\n'+zone('ARTWORK FR4 GRAIN','"B.Cu"',fr4_grain)+s[j:]
+s=s[:j]+'\n'+guard+'\n'+zone('ARTWORK FR4 WORDMARK','"F.Cu" "B.Cu"',fr4_logo)+'\n'+zone('ARTWORK FR4 GRAIN','"B.Cu"',fr4_grain)+s[j:]
 a=s.rindex('\n\t(gr_text ') if '\n\t(gr_text ' in s else s.rindex('\n\t(zone')
 s=s[:a+1]+'\n'.join(gr)+'\n'+s[a+1:]
 open(BRD,'w').write(s)

@@ -55,13 +55,18 @@ open(os.path.join(OUT,'TouchPad_Dither_D9mm.kicad_mod'),'w').write('''(footprint
 print('MODE: %d dither cells over a %.1fmm disc'%(len(cells), R*2))
 
 # ---- BOOT: same language, half the size, split into two pads -------------------
+import math as _m
+def _gap(cx, cy):                     # 60 degree opening so the centre pad can route out
+    a = _m.degrees(_m.atan2(cy, cx)) % 360
+    return not (150 <= a <= 210)
 core = dither(1.1, lambda t: 1.0, salt=11)
-ring = dither(2.5, lambda t: 0.85, salt=13, keep=lambda r: r > 1.62)
+ring = [k for k in dither(2.5, lambda t: 0.85, salt=13, keep=lambda r: r > 1.62)
+        if _gap((k[0]+k[2])/2, (k[1]+k[3])/2)]
 open(os.path.join(OUT,'BootPads_Dither_D5mm.kicad_mod'),'w').write('''(footprint "BootPads_Dither_D5mm"
 \t(version 20240108)
 \t(generator "airwriter")
 \t(layer "B.Cu")
-\t(descr "BOOT bridge pads, back face: a dithered disc inside a dithered ring, 0.5mm of bare gap between them. Short with tweezers to force download mode. Same 0.455mm grid as the cover artwork, half the diameter of the MODE pad so it reads as secondary.")
+\t(descr "BOOT bridge pads, back face: a dithered disc inside a dithered C-ring with a 60 degree opening, 0.5mm of bare gap. The opening is how the centre pad routes out, and a 0.3mm via through its middle lets the router reach it from the component side. Short with tweezers to force download mode. Same 0.455mm grid as the cover artwork, half the diameter of the MODE pad so it reads as secondary.")
 \t(tags "boot bridge pads dither")
 \t(attr smd exclude_from_pos_files)
 \t(property "Reference" "SW**" (at 0 -3.6 0) (layer "B.SilkS")
@@ -72,9 +77,10 @@ open(os.path.join(OUT,'BootPads_Dither_D5mm.kicad_mod'),'w').write('''(footprint
 %s
 %s
 \t(pad "1" smd circle (at 0 0) (size 2.2 2.2) (layers "B.Cu"))
+\t(pad "1" thru_hole circle (at 0 0) (size 0.7 0.7) (drill 0.3) (layers "*.Cu"))
 \t(pad "2" smd custom (at 2.05 0) (size 0.5 0.5) (layers "B.Cu")
 \t\t(options (clearance outline) (anchor circle))
-\t\t(primitives (gr_circle (center -2.05 0) (end 0 0) (width 0.9) (fill no)))
+\t\t(primitives (gr_arc (start -3.825 -1.025) (mid 0 0) (end -3.825 1.025) (width 0.9)))
 \t)
 )
 '''%(rects(core,'B.Mask'), rects(ring,'B.Mask')))

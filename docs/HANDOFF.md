@@ -500,6 +500,44 @@ they are drawn for shining through a hole. Those were removed so the fibreglass 
 any of these three footprints from the library will silently punch the holes back in**, exactly the
 trap U1's 0.30mm vias already set.
 
+**Read this before touching the routing: `unconnected_items` is not all pour fragments.**
+`kicad-cli pcb drc` reports pour islands and genuinely unrouted signals in the same list, and
+`route.py` prints `Found N unconnected pads` for both. For several commits this board carried
+**12 to 16 real net breaks** — UART_TX, UART_RX, UART_CTS, LED_DATA, USB_DP/DM among them — while
+DRC's *violations* count stayed at four and everything looked fine. Split them before believing a
+board is routed:
+
+```
+real = [u for u in drc['unconnected_items']
+        if ' <-> '.join(i['description'] for i in u['items']).count('Zone') != 2]
+```
+
+The router also says so plainly if you read the whole line: `completed ... (11 unrouted and 10
+violations)`. A finished board has no `unrouted` clause at all.
+
+**What actually broke it: the wordmark reserve was 49mm wide on a 52mm board.** Barring tracks on
+*both* layers across a band that wide leaves 0.5mm at one edge and 2.5mm at the other — the router
+simply could not cross. The fix is two-part and both halves matter:
+
+- **Three separate reserve blocks**, split at natural gaps in the wordmark (x 115.4–117.4 and
+  138.4–140.4), so traces have channels through the middle rather than only round the ends.
+- **B.Cu only.** The visible face has to stay clear; the component side does not. Letting F.Cu route
+  under the wordmark is what took it from 9 unrouted to fully routed. The cost is that a wordmark
+  cell with a trace beneath it stays dark instead of glowing — which in a dither is invisible.
+  Retention landed at 198 of 293 lit cells.
+
+**Every rule area exports to Freerouting as a hard keepout**, whatever its tracks/vias settings say.
+A pour-only guard still blocks the router. That is why `artwork.py` lays down the artwork *and* the
+touch guard, and why both go on after routing.
+
+**`SW1` was sitting on top of `D2`.** The BOOT pad is on B.Cu, so the courtyard checks skipped it —
+but its centre via is through-hole, and it landed 1.5mm from a LED. Back-side controls need checking
+against *front*-side footprints, which is not automatic.
+
+**`C19`'s ground pad is starved by the touch guard.** It is DNP so nothing is fitted and nothing
+floats today, but if MODE ever reverts to a mechanical switch, delete the `TOUCH GUARD` rule area at
+the same time or that pad has no ground.
+
 **The back carries a dithered cover artwork, imported from `~/Downloads/kicad/`.** Eight SVGs at
 100 x 150mm — exactly 1.923x the board, same aspect — scaled by **0.52** and **mirrored in X** onto
 the back layers. Smallest cell lands at 0.455mm, silk at 0.364mm; both clear the fab floor.
