@@ -417,14 +417,16 @@ is `airwriter:TouchPad_Arcs_D9mm`.
 
 **The electrode is a solid 9.2mm copper disc and the pattern lives in the soldermask.** That is the
 whole trick. Self-capacitance wants unbroken area, so cutting the copper into a comb or a halftone
-would have cost sensitivity for looks. Instead the copper stays whole and the mask opens along
-eleven thin arcs — 0.18mm wide on a 0.45mm pitch — so what you see is fine gold arcs on matte black
-with continuous metal underneath. Same trick as the logo: mask carries the artwork, copper carries
-the function.
+would have cost sensitivity for looks. Instead the copper stays whole and the mask is **dithered on
+the same 0.455mm grid as the cover artwork**, density falling off with radius — which is what makes
+a flat field read as a target rather than a blob. The controls belong to the pattern instead of
+sitting on top of it.
 
-The 0.27mm mask dams between arcs are well clear of the 0.1mm fab floor. The footprint is generated
-rather than drawn — `lib/airwriter.pretty/TouchPad_Arcs_D9mm.kicad_mod` came out of a short script,
-so the pattern can be re-cut to a different rhythm by changing three numbers and re-running it.
+`SW1` is the same language at half the size: a dithered disc inside a dithered ring, 0.5mm of bare
+gap between them, Ø5mm against MODE's Ø9.2mm so it reads as secondary.
+
+Both come out of `lib/gen_touchpads.py`, so the density curve, grid and cell size are three numbers
+in one place. Re-run it and re-place the footprints to change the look.
 
 - **MODE moved from IO38 to IO14.** The S3 only does capacitive touch on IO1–IO14. The old pin is
   released and capped.

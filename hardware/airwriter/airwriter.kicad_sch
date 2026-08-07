@@ -7219,7 +7219,7 @@
       (effects
         (font
           (size 1.27 1.27))))
-    (property "Footprint" "airwriter:BootPads_Ring_D5mm"
+    (property "Footprint" "airwriter:BootPads_Dither_D5mm"
       (at 149.86 175.26 0)
       (hide yes)
       (effects
@@ -7243,7 +7243,7 @@
       (effects
         (font
           (size 1.27 1.27))))
-    (property "Description" "BOOT bridge on the back face: a gold disc inside a gold ring, 0.5mm apart. Short with tweezers to force download mode; the USB-C port normally does this without them"
+    (property "Description" "BOOT bridge, back face: a dithered disc inside a dithered ring, 0.5mm apart. Short with tweezers to force download mode"
       (at 149.86 171.45 0)
       (hide yes)
       (effects
@@ -8951,7 +8951,7 @@
       (effects
         (font
           (size 1.27 1.27))))
-    (property "Footprint" "airwriter:TouchPad_Arcs_D9mm"
+    (property "Footprint" "airwriter:TouchPad_Dither_D9mm"
       (at 149.86 195.58 0)
       (hide yes)
       (effects
@@ -8969,7 +8969,7 @@
       (effects
         (font
           (size 1.27 1.27))))
-    (property "Description" "Capacitive touch pad on the back face. Solid copper disc with the pattern in the soldermask, so it reads as fine gold arcs on black"
+    (property "Description" "Capacitive touch pad, back face. Solid copper disc with a dithered mask on the cover artwork grid, fading outward"
       (at 149.86 195.58 0)
       (hide yes)
       (effects
