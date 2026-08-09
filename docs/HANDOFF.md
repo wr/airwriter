@@ -7,6 +7,14 @@ Written 2026-08-04. Everything below reflects the repo at that date.
 **Hardware rev A is finished and not yet ordered.** The board routes clean, the fab package is
 generated, and the mini-DIN is settled — Kycon KMDGX-8S-BS from Mouser. Nothing blocks the order.
 
+**An artwork swatch coupon is ordered ahead of it (PCBWay, 2026-08-09).** Wells was on the fence
+about the cover's whole visual language — logo, mist, touch pad — and the coupon
+(`hardware/coupon/`, black mask, ENIG, 60 x 45mm) shows all of it in real materials for ~$40:
+the harvested wordmark, the mist, all three MODE pad candidates A/B/C, and the LED window sizes.
+When it arrives: judge the aesthetic, pick the MODE pattern (the main board currently carries C),
+and only then order rev A. Note the main board's fab package predates the SW1/SW2 rework and
+needs regenerating before that order.
+
 **Six of the nine firmware components exist and are tested.** `urf_decode`, `resample`,
 `halftone` and `imagewriter` do the raster path; `ipp_attrs` and `ipp_server` do AirPrint.
 All six build for the ESP32 and run there — ESP-IDF v5.5.1 is installed and the project
