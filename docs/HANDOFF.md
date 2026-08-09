@@ -1,6 +1,6 @@
 # AirWriter handoff
 
-Written 2026-08-04. Everything below reflects the repo at that date.
+Written 2026-08-04, last updated 2026-08-09.
 
 ## Where the project stands
 
@@ -781,6 +781,20 @@ actually delivers to an ImageWriter** — the question gating all the AppleTalk 
 serves mode 2 and mode 3 equally.
 
 ## What to do next
+
+**As of 2026-08-09, the board waits on the swatch coupon.** Ordered from PCBWay that day; expect
+it 1–2 weeks out. When it arrives, Wells judges the cover language in hand and picks the MODE
+pattern — A, B or C, all three are on the coupon; the main board carries C. Then regenerate the
+main fab package (`hardware/airwriter/fab/` predates the SW1/SW2 rework and the D4–D6 model fix)
+and order rev A. Firmware is not blocked meanwhile: M5 needs no board.
+
+Also from that session: the webui key clicks were tuned by ear (latch and strike now 4500Hz,
+values in the `SND` table in `tools/webui/app.js`; the debug tuner that did it is retired but
+one commit away), and the sections above on the touch pad, BOOT pads and LED models were
+rewritten to match the current board.
+
+Older next-steps below are kept for context; several are already done (mini-DIN settled,
+ESP-IDF installed, M2 and M4 done).
 
 **The iPhone capture is done.** `fixtures/ios-20260804-232652.urf` came off a real phone through
 `tools/ippcap`, and iOS honoured `RS72-144` — it rendered at exactly 144 dpi rather than sending
