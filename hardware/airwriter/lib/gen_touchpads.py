@@ -1,13 +1,18 @@
-"""Generate the MODE and BOOT pads as dithered mask over solid copper.
+"""Generate the MODE touch pad and the BOOT service pads.
 
-Cells sit on the same 0.455mm grid as the cover artwork, so the controls read as part
-of the pattern rather than as hardware dropped on top. The copper underneath stays
-whole -- self-capacitance wants unbroken area -- and only the soldermask is dithered.
-Density falls off with radius, which is what makes a flat field read as a target.
+MODE (TouchPad_Core_D9mm): a solid gold core whose edge dissolves into the cover's
+mist. Cells sit on the mist's own grid -- 0.72mm cells on a 0.91mm pitch, the same
+size the grain artwork uses -- so the control reads as the mist condensing rather
+than as a texture of its own. The copper underneath stays whole (self-capacitance
+wants unbroken area); only the soldermask carries the pattern.
+
+BOOT (BootPads_Service): plain bridge pads on the component side, where service
+points belong. Two bare rectangles, a silk box and a BOOT label. Short with
+tweezers to force download mode. No through-hole, so the visible face stays clean.
 """
 import math, os
-GRID = 0.455          # matches the cover's gold cells
-CELL = 0.40           # slightly under the grid so dams survive
+MIST_GRID = 0.91      # the grain artwork's pitch
+MIST_CELL = 0.72      # and its cell size
 OUT  = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'airwriter.pretty')
 
 def rnd(i, j, salt):
@@ -16,72 +21,64 @@ def rnd(i, j, salt):
     h ^= h >> 13; h = (h*1274126177) & 0xFFFFFFFF; h ^= h >> 16
     return h / 0xFFFFFFFF
 
-def dither(R, prob, salt, keep=None):
-    n = int(R/GRID)+2; out=[]
-    for i in range(-n, n+1):
-        for j in range(-n, n+1):
-            cx, cy = i*GRID, j*GRID
-            r = math.hypot(cx, cy)
-            if keep and not keep(r): continue
-            if r > R - CELL/2: continue
-            if rnd(i, j, salt) < prob(r/R):
-                out.append((cx-CELL/2, cy-CELL/2, cx+CELL/2, cy+CELL/2))
-    return out
-
 def rects(cells, layer):
     return '\n'.join('\t(fp_rect (start %.4f %.4f) (end %.4f %.4f) (stroke (width 0.02) (type solid)) '
                      '(fill solid) (layer "%s"))'%(k[0],k[1],k[2],k[3],layer) for k in cells)
 
-# ---- MODE: one solid electrode, density fading outward -------------------------
-R = 4.6
-cells = dither(R, lambda t: max(0.0, 1.06 - t**1.5), salt=7)
-open(os.path.join(OUT,'TouchPad_Dither_D9mm.kicad_mod'),'w').write('''(footprint "TouchPad_Dither_D9mm"
+# ---- MODE: solid core, edge dissolving into the mist ---------------------------
+R    = 4.6            # electrode radius; every opening must stay on copper
+CORE = 2.0            # solid gold disc
+AMB  = 0.055          # the mist's ambient density, where the fade ends
+cells=[]
+n = int(R/MIST_GRID)+2
+for i in range(-n, n+1):
+    for j in range(-n, n+1):
+        cx, cy = i*MIST_GRID, j*MIST_GRID
+        r = math.hypot(cx, cy)
+        if r > R - MIST_CELL/2: continue      # stay on the electrode
+        if r < CORE - MIST_CELL/2: continue   # the solid circle covers these
+        t = max(0.0, (r - CORE) / (R - MIST_CELL/2 - CORE))
+        p = AMB + (1-AMB) * (1-t)**1.0
+        if rnd(i, j, 101) < p:
+            cells.append((cx-MIST_CELL/2, cy-MIST_CELL/2, cx+MIST_CELL/2, cy+MIST_CELL/2))
+open(os.path.join(OUT,'TouchPad_Core_D9mm.kicad_mod'),'w').write('''(footprint "TouchPad_Core_D9mm"
 \t(version 20240108)
 \t(generator "airwriter")
 \t(layer "B.Cu")
-\t(descr "Capacitive touch pad, back face. Solid 9.2mm copper disc -- self-capacitance wants unbroken area -- with the pattern in the soldermask, dithered on the cover artwork's 0.455mm grid and fading outward. Pad 1 electrode, pad 2 ground tie.")
-\t(tags "touch capacitive pad dither")
+\t(descr "Capacitive touch pad, back face. Solid 9.2mm copper disc -- self-capacitance wants unbroken area -- with the pattern in the soldermask: a solid gold core dissolving outward into the cover's mist, drawn in the mist's own 0.72mm cells. Pad 1 electrode, pad 2 ground tie.")
+\t(tags "touch capacitive pad mist")
 \t(attr smd exclude_from_pos_files)
 \t(property "Reference" "SW**" (at 0 -6 0) (layer "B.SilkS")
 \t\t(effects (font (size 0.8 0.8) (thickness 0.12)) (justify mirror)))
-\t(property "Value" "TouchPad_Dither_D9mm" (at 0 6 0) (layer "B.Fab") (hide yes)
+\t(property "Value" "TouchPad_Core_D9mm" (at 0 6 0) (layer "B.Fab") (hide yes)
 \t\t(effects (font (size 1 1) (thickness 0.15)) (justify mirror)))
 \t(fp_circle (center 0 0) (end %.2f 0) (stroke (width 0.05) (type solid)) (fill no) (layer "B.CrtYd"))
+\t(fp_circle (center 0 0) (end %.2f 0) (stroke (width 0.02) (type solid)) (fill solid) (layer "B.Mask"))
 %s
 \t(pad "1" smd circle (at 0 0) (size %.2f %.2f) (layers "B.Cu"))
 \t(pad "2" smd rect (at 0 6.1) (size 2 0.9) (layers "B.Cu"))
 )
-'''%(R+0.9, rects(cells,'B.Mask'), R*2, R*2))
-print('MODE: %d dither cells over a %.1fmm disc'%(len(cells), R*2))
+'''%(R+0.9, CORE, rects(cells,'B.Mask'), R*2, R*2))
+print('MODE: solid %.1fmm core + %d mist cells over a %.1fmm disc'%(CORE*2, len(cells), R*2))
 
-# ---- BOOT: same language, half the size, split into two pads -------------------
-import math as _m
-def _gap(cx, cy):                     # 60 degree opening so the centre pad can route out
-    a = _m.degrees(_m.atan2(cy, cx)) % 360
-    return not (150 <= a <= 210)
-core = dither(1.1, lambda t: 1.0, salt=11)
-ring = [k for k in dither(2.5, lambda t: 0.85, salt=13, keep=lambda r: r > 1.62)
-        if _gap((k[0]+k[2])/2, (k[1]+k[3])/2)]
-open(os.path.join(OUT,'BootPads_Dither_D5mm.kicad_mod'),'w').write('''(footprint "BootPads_Dither_D5mm"
+# ---- BOOT: plain service pads, component side ----------------------------------
+open(os.path.join(OUT,'BootPads_Service.kicad_mod'),'w').write('''(footprint "BootPads_Service"
 \t(version 20240108)
 \t(generator "airwriter")
-\t(layer "B.Cu")
-\t(descr "BOOT bridge pads, back face: a dithered disc inside a dithered C-ring with a 60 degree opening, 0.5mm of bare gap. The opening is how the centre pad routes out, and a 0.3mm via through its middle lets the router reach it from the component side. Short with tweezers to force download mode. Same 0.455mm grid as the cover artwork, half the diameter of the MODE pad so it reads as secondary.")
-\t(tags "boot bridge pads dither")
+\t(layer "F.Cu")
+\t(descr "BOOT bridge pads on the component side: two bare rectangles you short with tweezers to force download mode. A service point styled as one -- the visible face carries no trace of it. Pad 1 BOOT_CFG (at origin, where the existing track lands), pad 2 ground.")
+\t(tags "boot bridge pads service")
 \t(attr smd exclude_from_pos_files)
-\t(property "Reference" "SW**" (at 0 -3.6 0) (layer "B.SilkS")
-\t\t(effects (font (size 0.8 0.8) (thickness 0.12)) (justify mirror)))
-\t(property "Value" "BootPads_Dither_D5mm" (at 0 3.6 0) (layer "B.Fab") (hide yes)
-\t\t(effects (font (size 1 1) (thickness 0.15)) (justify mirror)))
-\t(fp_circle (center 0 0) (end 3.1 0) (stroke (width 0.05) (type solid)) (fill no) (layer "B.CrtYd"))
-%s
-%s
-\t(pad "1" smd circle (at 0 0) (size 2.2 2.2) (layers "B.Cu"))
-\t(pad "1" thru_hole circle (at 0 0) (size 0.7 0.7) (drill 0.3) (layers "*.Cu"))
-\t(pad "2" smd custom (at 2.05 0) (size 0.5 0.5) (layers "B.Cu")
-\t\t(options (clearance outline) (anchor circle))
-\t\t(primitives (gr_arc (start -3.825 -1.025) (mid 0 0) (end -3.825 1.025) (width 0.9)))
-\t)
+\t(property "Reference" "SW**" (at 1.05 -2.2 0) (layer "F.SilkS")
+\t\t(effects (font (size 0.8 0.8) (thickness 0.12))))
+\t(property "Value" "BootPads_Service" (at 1.05 2.2 0) (layer "F.Fab") (hide yes)
+\t\t(effects (font (size 1 1) (thickness 0.15))))
+\t(fp_rect (start -1.15 -1.4) (end 3.25 1.4) (stroke (width 0.12) (type solid)) (fill no) (layer "F.SilkS"))
+\t(fp_rect (start -1.35 -1.6) (end 3.45 1.6) (stroke (width 0.05) (type solid)) (fill no) (layer "F.CrtYd"))
+\t(fp_text user "BOOT" (at 5.2 0 0) (layer "F.SilkS")
+\t\t(effects (font (size 0.8 0.8) (thickness 0.12))))
+\t(pad "1" smd rect (at 0 0) (size 1.3 1.8) (layers "F.Cu" "F.Mask"))
+\t(pad "2" smd rect (at 2.1 0) (size 1.3 1.8) (layers "F.Cu" "F.Mask"))
 )
-'''%(rects(core,'B.Mask'), rects(ring,'B.Mask')))
-print('BOOT: %d core cells + %d ring cells'%(len(core), len(ring)))
+''')
+print('BOOT: plain pads, front')

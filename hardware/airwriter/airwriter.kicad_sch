@@ -7219,7 +7219,7 @@
       (effects
         (font
           (size 1.27 1.27))))
-    (property "Footprint" "airwriter:BootPads_Dither_D5mm"
+    (property "Footprint" "airwriter:BootPads_Service"
       (at 149.86 175.26 0)
       (hide yes)
       (effects
@@ -8951,7 +8951,7 @@
       (effects
         (font
           (size 1.27 1.27))))
-    (property "Footprint" "airwriter:TouchPad_Dither_D9mm"
+    (property "Footprint" "airwriter:TouchPad_Core_D9mm"
       (at 149.86 195.58 0)
       (hide yes)
       (effects

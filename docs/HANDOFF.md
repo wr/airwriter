@@ -334,9 +334,12 @@ the angle places its pads correctly but leaves every pad shape unrotated — on 
 `Connector_USB`, so re-importing it from the library will restore the dead `${KICAD10_3DMODEL_DIR}`
 path and J1 will silently disappear from the STEP export again. Same class of trap as U1's vias.
 
-**D1 has no 3D model.** `LED_WS2812B-2020_PLCC4_2.0x2.0mm.step` does not exist in KiCad 10 or
-upstream, so the WS2812B is absent from the export. It is a 2.0 x 2.0 x 0.8mm block; it matters only
-if the enclosure needs a light pipe over it.
+**D4–D6 borrow a stand-in 3D model.** `LED_SK6812MINI_PLCC4_3.5x3.5mm_P1.75mm.step` does not exist
+in KiCad 10, so the logo LEDs pointed at nothing and rendered as bare pads — which read as
+"not populated" and was only ever a picture problem. They now reference
+`LED_WS2812B-Mini_PLCC4_3.5x3.5mm.step`, the same 3.5mm PLCC4 package, so the preview and STEP
+export show the part. (D1/D2's older missing-model note is obsolete: as SK6812MINI-E they use a
+model KiCad does ship.)
 
 Before trusting a STEP export, check every model path resolves — a missing one is silent:
 
@@ -413,20 +416,25 @@ kicad-cli pcb drc --format json -o /tmp/d.json airwriter.kicad_pcb   # no cleara
 ```
 
 **MODE is a capacitive touch pad in exposed gold on the back face.** SW2 is no longer a switch: it
-is `airwriter:TouchPad_Arcs_D9mm`.
+is `airwriter:TouchPad_Core_D9mm`.
 
 **The electrode is a solid 9.2mm copper disc and the pattern lives in the soldermask.** That is the
 whole trick. Self-capacitance wants unbroken area, so cutting the copper into a comb or a halftone
-would have cost sensitivity for looks. Instead the copper stays whole and the mask is **dithered on
-the same 0.455mm grid as the cover artwork**, density falling off with radius — which is what makes
-a flat field read as a target rather than a blob. The controls belong to the pattern instead of
-sitting on top of it.
+would have cost sensitivity for looks. Instead the copper stays whole and the mask carries the
+image: a solid Ø4mm gold core whose edge dissolves outward into the cover's mist, drawn in the
+mist's own cells — **0.72mm cells on the grain's 0.91mm pitch**, not the 0.455mm logo grid an
+earlier revision used. Wells judged that revision a mismatch: its fine dense dither read as a
+clump, not as the mist condensing. All openings stay on the electrode; the touch guard's bare
+annulus (4.6–6.1mm radius, no pour, so no gold) reads as a quiet dark ring around the control.
 
-`SW1` is the same language at half the size: a dithered disc inside a dithered ring, 0.5mm of bare
-gap between them, Ø5mm against MODE's Ø9.2mm so it reads as secondary.
+**SW1 is not a control and no longer pretends to be one.** It moved to the component side as
+`airwriter:BootPads_Service` — two plain bare rectangles in a silk box labelled BOOT, at the same
+(139.7, 111.3) so the existing F.Cu track lands on pad 1 unchanged. The old back-face bullseye and
+its 0.3mm through-hole are gone; the visible face now carries exactly one control, and mist cells
+backfill where the bullseye sat.
 
-Both come out of `lib/gen_touchpads.py`, so the density curve, grid and cell size are three numbers
-in one place. Re-run it and re-place the footprints to change the look.
+MODE's pattern comes out of `lib/gen_touchpads.py`, so core size, fade curve and cell size are
+numbers in one place. Re-run it and re-place the footprint to change the look.
 
 - **MODE moved from IO38 to IO14.** The S3 only does capacitive touch on IO1–IO14. The old pin is
   released and capped.
