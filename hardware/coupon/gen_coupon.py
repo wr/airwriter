@@ -43,7 +43,7 @@ def rnd(i, j, salt):
 # ---- harvest the wordmark from the routed board --------------------------------
 src = pcbnew.LoadBoard(SRC)
 Lname = src.GetLayerName
-gold, fr4 = [], []           # (x0,y0,x1,y1) in coupon coordinates
+gold, fr4, silk = [], [], []     # (x0,y0,x1,y1) in coupon coordinates
 for d in src.GetDrawings():
     if not (isinstance(d, pcbnew.PCB_SHAPE) and d.GetShape() == pcbnew.SHAPE_T_RECT):
         continue
@@ -55,10 +55,11 @@ for d in src.GetDrawings():
     L = Lname(d.GetLayer())
     if L == 'F.Mask': fr4.append(k)
     elif L == 'B.Mask': gold.append(k)
+    elif L == 'B.Silkscreen': silk.append(k)
 # gold list still contains the B.Mask twins of every FR4 cell; drop them
 def near(a, b): return abs(a[0]-b[0]) < 0.05 and abs(a[1]-b[1]) < 0.05
 gold = [g for g in gold if not any(near(g, f) for f in fr4)]
-print('harvested: %d gold cells, %d FR4 cells' % (len(gold), len(fr4)))
+print('harvested: %d gold, %d FR4, %d silk cells' % (len(gold), len(fr4), len(silk)))
 
 # ---- the coupon board ----------------------------------------------------------
 b = pcbnew.CreateEmptyBoard()
@@ -125,8 +126,9 @@ for (px, py, kind) in PADS:
     add_keepout(pts, 'GUARD '+kind)
     guard_out.append((px, py))
 
-# wordmark: gold cells on the back mask, FR4 cells open on both masks
+# wordmark: gold cells on the back mask, FR4 cells open on both masks, silk on top
 for k in gold: rect(k, pcbnew.B_Mask)
+for k in silk: rect(k, pcbnew.B_SilkS)
 for k in fr4:
     rect(k, pcbnew.B_Mask); rect(k, pcbnew.F_Mask)
 
@@ -188,6 +190,8 @@ for i in range(int(W/MIST_GRID)+1):
             rect(k, pcbnew.B_Mask); rect(k, pcbnew.F_Mask)
             add_keepout_rect(k, 'WHITE %d.%d' % (i, j))
             n_white += 1
+        elif rnd(i, j, 41) < 0.004:          # and the rare printed-silk cell
+            rect(k, pcbnew.B_SilkS)
 
 # front-face notes (the hidden side)
 text('AIRWRITER ARTWORK COUPON', W/2, 3.0, pcbnew.F_SilkS, 1.4)
