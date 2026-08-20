@@ -154,6 +154,56 @@ def mask_knockout(board, cx, cy, dia, glyphs):
         for hole in glyph["holes"]:
             poly_shape(board, pcbnew.F_Mask, [dict(outline=hole, holes=[])])
 
+def back_copper_flood(board, p, dots, g, fr4):
+    # The black soldermask alone still transmits some teal - without a copper
+    # backstop behind it, an LED would glow through the whole back face and
+    # bleed between neighbouring dots. Flood B.Cu solid everywhere (behind
+    # gold dots, the lockup, all of it) except the windows light actually
+    # needs: the 37 translucent (P/B/L) dot openings, oversized by 0.15mm of
+    # registration slack so misalignment can't clip the lit edge; the fr4
+    # slash's footprint (it sits behind mask, so a plain rect is invisible);
+    # and the test NPTH's drill clearance.
+    #
+    # Inset 0.5mm (not the 0.25mm first specified) - this board's default
+    # copper-to-edge clearance rule is 0.5mm, and a 0.25mm inset failed DRC
+    # outright regardless of polygon precision. +0.05mm extra margin absorbs
+    # the rounded corners' own arc-sampling error.
+    flood = panel_interior(p["w"], p["h"], p["corner_r"], 0.55)
+    for d in dots:
+        if d["mat"] in ("P", "B", "L"):
+            r, segs = (g["dot_dia"] + 0.15) / 2, 64
+        elif d["mat"] == "T":
+            # This hole's clearance to the NPTH is exactly the 0.25mm board
+            # minimum at the specified drill+0.5mm diameter - a 64-gon's
+            # inscribed-circle sagitta alone ate enough of that margin to
+            # fail DRC (0.2483mm actual). More segments shrinks the error
+            # roughly with the square of the count instead of changing the
+            # specified diameter.
+            r, segs = (g["hole_dia"] + 0.5) / 2, 256
+        else:
+            continue
+        hl = pcbnew.SHAPE_LINE_CHAIN()
+        for px, py in _circle_pts(d["x"], d["y"], r, segs):
+            hl.Append(mm(px), mm(py))
+        hl.SetClosed(True)
+        flood.AddHole(hl)
+    for slash in fr4:
+        xs = [x for x, y in slash["outline"]]
+        ys = [y for x, y in slash["outline"]]
+        x0, y0 = min(xs) - 0.2, min(ys) - 0.2
+        x1, y1 = max(xs) + 0.2, max(ys) + 0.2
+        hl = pcbnew.SHAPE_LINE_CHAIN()
+        for x, y in [(x0, y0), (x1, y0), (x1, y1), (x0, y1)]:
+            hl.Append(mm(x), mm(y))
+        hl.SetClosed(True)
+        flood.AddHole(hl)
+    hole_count = flood.HoleCount(0)
+    flood.Fracture()
+    s = pcbnew.PCB_SHAPE(board, pcbnew.SHAPE_T_POLY)
+    s.SetPolyShape(flood); s.SetFilled(True); s.SetWidth(0); s.SetLayer(pcbnew.B_Cu)
+    board.Add(s)
+    return hole_count
+
 def check_floors(lay, gold, silk, fr4):
     g = lay["grid"]
     assert g["hole_dia"] >= 0.30, "drill floor"
@@ -270,12 +320,14 @@ def main():
     poly_shape(board, pcbnew.F_SilkS, silk, clip=silk_clip)   # excludes mask knockouts
     poly_shape(board, pcbnew.F_Mask, fr4)    # bare FR4 = open both faces
     poly_shape(board, pcbnew.B_Mask, fr4)
+    flood_holes = back_copper_flood(board, p, lay["dots"], g, fr4)
 
     out = HERE / "panel.kicad_pcb"
     board.Save(str(out))
     derandomize_uuids(out)
     inject_stackup(out)
-    print("wrote panel.kicad_pcb:", len(lay["dots"]), "dots")
+    print("wrote panel.kicad_pcb:", len(lay["dots"]), "dots,",
+          flood_holes, "back-copper flood holes")
 
 if __name__ == "__main__":
     main()

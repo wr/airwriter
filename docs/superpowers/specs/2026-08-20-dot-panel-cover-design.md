@@ -90,6 +90,13 @@ Wells owns the artwork. He exports SVGs (as with `Frame 25.svg` / `Frame 27.svg`
 
 Mask-dot columns must be copper-free on both layers (trivial here — the panel has no
 copper except under G dots and the lockup).
+[amended: the panel now also carries a solid B.Cu flood everywhere except the
+P/B/L dot windows (oversized 0.15mm), the fr4 slash, and the test NPTH's
+clearance - the black soldermask alone still transmits some teal, so without
+a copper backstop an LED would glow through the whole back face and bleed
+between dots; the flood confines each LED's light to its own window. Dot
+material at the dot location itself is unchanged - see `emit_board.py`'s
+`back_copper_flood()`.]
 
 **Unverified:** single-mask teal (B) was reasoned from coupon #1, not observed.
 The panel margin (the snap-off rail) carries a swatch line of B, L, and P dots at
