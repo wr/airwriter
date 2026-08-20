@@ -8,4 +8,5 @@ python3 panel_layout.py
 python3 svg2poly.py svg/panel.svg "$S" "#dda857" gold.polys.json
 python3 svg2poly.py svg/panel.svg "$S" "white,#ffffff" silk.polys.json
 python3 svg2poly.py svg/panel.svg "$S" "#e7ba9b" fr4.polys.json
+python3 floors.py
 "$KIPY" emit_board.py

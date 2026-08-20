@@ -174,8 +174,9 @@ def inject_stackup(path):
     # ...) section directly, matching the format KiCad itself writes.
     text = path.read_text()
     assert "(stackup" not in text
-    text = text.replace("\t(setup\n", "\t(setup\n" + STACKUP, 1)
-    path.write_text(text)
+    spliced = text.replace("\t(setup\n", "\t(setup\n" + STACKUP, 1)
+    assert "(stackup" in spliced, "splice anchor '\\t(setup\\n' not found - board writer format changed"
+    path.write_text(spliced)
 
 def main():
     lay = json.loads((HERE / "panel_layout.json").read_text())

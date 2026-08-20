@@ -61,9 +61,10 @@ def _contains(outer, pt):
     return inside
 
 def _interior_point(ring):
-    # A point guaranteed to sit strictly inside ring's own interior: the
-    # centroid of the ear triangle at ring's extreme (lowest-y) vertex, which
-    # is always a convex corner regardless of winding. Deliberately not a
+    # The centroid of the ear triangle at ring's extreme (lowest-y) vertex,
+    # which is always a convex corner regardless of winding - not a general-
+    # purpose interior-point method, just reliable for the ~0.2mm-sampled
+    # convex-ish glyph/rect rings this module produces. Deliberately not a
     # ring vertex itself - a sampled vertex can sit exactly on another ring's
     # edge and give a false containment reading.
     i = min(range(len(ring)), key=lambda k: (ring[k][1], ring[k][0]))

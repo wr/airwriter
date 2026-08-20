@@ -1,5 +1,5 @@
 import unittest, tempfile, pathlib
-from svg2poly import flatten
+from svg2poly import flatten, _interior_point, _contains
 
 DONUT = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
 <rect width="100" height="100" fill="#dda857"/>
@@ -28,22 +28,6 @@ MASKED_BAND = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 200">
 </mask>
 <path d="M0 36V44H100V36V32H0V36Z" fill="white" mask="url(#m1)"/>
 </svg>"""
-
-def _interior_point(ring):
-    # Point guaranteed strictly inside ring's own interior: the centroid of the
-    # ear triangle at ring's extreme (lowest-y) vertex, which is always convex.
-    # Deliberately not a ring vertex - a sampled vertex can sit exactly on
-    # another ring's edge and give a false containment reading.
-    i = min(range(len(ring)), key=lambda k: (ring[k][1], ring[k][0]))
-    a, b, c = ring[i - 1], ring[i], ring[(i + 1) % len(ring)]
-    return ((a[0] + b[0] + c[0]) / 3, (a[1] + b[1] + c[1]) / 3)
-
-def _contains(outer, pt):
-    x, y = pt; inside = False
-    for (x1, y1), (x2, y2) in zip(outer, outer[1:] + outer[:1]):
-        if (y1 > y) != (y2 > y) and x < (x2 - x1) * (y - y1) / (y2 - y1) + x1:
-            inside = not inside
-    return inside
 
 class TestFlatten(unittest.TestCase):
     def _write(self, text):
