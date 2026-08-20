@@ -17,14 +17,14 @@ import pcbnew, r6_lib as L
 
 BLOCKS = [
     # --- north-east strip: regulator + the rail/EN column at U1's power pads
-    ("U4",  144.335, 131.530, 180),   # rot 180 turns its rail pins toward the cap column
-    ("C4",  150.725, 128.875,   0),   # 10u +3V3, at U4's output pin
-    ("C2",  150.725, 131.125,   0),   # 10u +3V3
-    ("C21", 150.725, 133.375,   0),   # 22u VBUS, at U4's input pin
-    ("R3",  154.195, 128.625,   0),   # 10k, /EN
-    ("C6",  154.195, 130.375,   0),   # 1u,  /EN
-    ("C5",  154.195, 132.125,   0),   # 100n rail
-    ("C9",  154.195, 133.875,   0),   # 100n, U1 rail (nearest U1 pad 2)
+    ("U4",  144.335, 130.795, 180),   # rot 180 turns its rail pins toward the cap column
+    ("C4",  150.725, 128.175,   0),   # 10u +3V3, at U4's output pin
+    ("C2",  150.725, 130.425,   0),   # 10u +3V3
+    ("C21", 150.725, 132.675,   0),   # 22u VBUS, at U4's input pin
+    ("R3",  154.195, 127.925,   0),   # 10k, /EN
+    ("C6",  154.195, 129.675,   0),   # 1u,  /EN
+    ("C5",  154.195, 131.425,   0),   # 100n rail
+    ("C9",  154.195, 133.175,   0),   # 100n, U1 rail (nearest U1 pad 2)
     # --- middle block
     ("U7",  131.035, 136.995, 180),   # PIC + socket; rot 180 keeps the same
                                       # courtyard box but faces VDD at the free pocket
@@ -42,10 +42,9 @@ BLOCKS = [
     ("D3",  160.025, 162.560,  90),   # green PWR LED
     # --- south-west strip, west of J2
     ("R5",  101.825, 155.325,   0),   # 120R printer TX termination
-    ("R6",  101.825, 157.075,   0),
-    ("R7",  101.825, 158.825,   0),
-    ("R8",  101.825, 160.575,   0),   # 0R /SHELL
-    ("C15", 101.825, 162.325,   0),   # 1n /SHELL
+    ("R7",  101.825, 157.742,   0),
+    ("R8",  101.825, 160.159,   0),   # 0R /SHELL
+    ("C15", 101.825, 162.576,   0),   # 1n /SHELL, kept at the connector
 ]
 
 b = L.load()

@@ -12,7 +12,7 @@ import pcbnew, r6_lib as L
 OUT = "/Users/wells/Projects/airwriter/hardware/airwriter/tools_pcb/r6_geom.json"
 
 MOVABLE = ["C1", "C3", "C7", "C10", "C11", "C12", "C13", "C14", "C16", "C17",
-           "C18", "C22", "R9", "R10", "R11", "R12", "R13", "R14", "R15", "R16"]
+           "C18", "C22", "R6", "R9", "R10", "R11", "R12", "R13", "R14", "R15", "R16"]
 
 b = L.load()
 fps = {f.GetReference(): f for f in b.Footprints()}

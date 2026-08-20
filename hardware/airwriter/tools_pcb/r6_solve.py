@@ -22,13 +22,13 @@ ORDER = [
     "C14", "R10", "R11",                         # U8 / LocalTalk A-B
     "C18", "R12", "R13",                         # U6 / LocalTalk Y-Z
     "C17", "C10", "C11", "C12", "C13", "R9",     # U3 / RS-232 block
-    "C3", "C7",                                  # U2 block, boot cap
+    "C3", "C7", "R6",                             # U2 block, boot cap, TX bias
     "C22", "C1",                                 # VBUS bulk
 ]
 EXPLICIT = {"C3": "U2@/+3V3", "C17": "U3@/+3V3", "C18": "U6@/+3V3",
             "C16": "U7@/+3V3", "C14": "U8@/+3V3",
             "C10": "U3", "C11": "U3", "C12": "U3", "C13": "U3",
-            "C1": "U4@/VBUS", "C22": "U4@/VBUS"}
+            "C1": "U4@/VBUS", "C22": "U4@/VBUS", "R6": "U2@/+3V3"}
 SKIP_NETS = {"/GND", "/+3V3", "/VBUS"}
 ROTS = {r: (0, 90, 180, 270) for r in ("U2", "U3", "U4", "U5", "U6", "U7", "U8")}
 
