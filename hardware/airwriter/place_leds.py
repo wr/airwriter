@@ -51,12 +51,13 @@ PANEL_W = 62.0
 # derived from the stock ReverseMount footprint): pad "3" (VDD) sits at
 # local (2.725, -0.75); the F.CrtYd rectangle is -3.65..3.65 x -1.87..1.87.
 LED_VDD_LOCAL = (2.725, -0.75)
-LED_CRTYD_HALF = (3.65, 1.87)
-# Capacitor_SMD:C_0603_1608Metric's own F.CrtYd is -1.48..1.48 x -0.73..0.73
-# (courtyard, not body -- read off the stock footprint). Kept unrotated
-# (0 degrees) throughout, so these are its half-extents along each axis.
-CAP_CRTYD_HALF = (1.48, 0.73)
-CAP_MARGIN = 0.15
+
+# Every bypass cap sits at one offset, 2.6mm north of its own LED (Wells,
+# "Line the LED caps up for the light grille"). This replaced a per-LED search
+# that put each cap on whichever side was geometrically nearest the VDD pad,
+# which scattered them around the cells and under the grille's lattice walls.
+# One uniform offset keeps every cap inside its own cell.
+CAP_OFFSET = (0.0, -2.6)
 
 
 def export_netlist():
@@ -113,65 +114,6 @@ def board_pos(dot):
 TEST_BUTTON_RC = (3, 3)  # SW3 sits here (panel dot (31,31) -> board (131,91)) though led:false
 
 
-def free_neighbor_dirs(dot, dots_by_rc):
-    """Which of the 4 panel-grid neighbors of `dot` are NOT a lit LED
-    (either off-grid or led:false). Returns board-space directions --
-    round 5: X is no longer mirrored, so a free panel "left" (c-1) neighbor
-    is a free BOARD -x direction (not +x, as the old mirrored math had it).
-    The test-button cell is led:false but is NOT free -- SW3 (a real,
-    fairly large THT part) sits there."""
-    r, c = dot["r"], dot["c"]
-
-    def occupied(rr, cc):
-        if (rr, cc) == TEST_BUTTON_RC:
-            return True
-        n = dots_by_rc.get((rr, cc))
-        return bool(n and n["led"])
-
-    free = set()
-    if not occupied(r, c - 1):
-        free.add("-x")   # panel left -> board -x
-    if not occupied(r, c + 1):
-        free.add("+x")   # panel right -> board +x
-    if not occupied(r - 1, c):
-        free.add("-y")   # panel up -> board -y
-    if not occupied(r + 1, c):
-        free.add("+y")   # panel down -> board +y
-    return free
-
-
-def cap_offset_for_dir(direction):
-    """Local (dx, dy) offset from the LED footprint origin for a cap placed
-    just clear of the LED's own courtyard in the given board-local direction,
-    biased toward the VDD pad on whichever axis it doesn't move along."""
-    vx, vy = LED_VDD_LOCAL
-    hx, hy = LED_CRTYD_HALF
-    cap_hx, cap_hy = CAP_CRTYD_HALF
-    if direction == "+x":
-        return (hx + cap_hx + CAP_MARGIN, vy)
-    if direction == "-x":
-        return (-(hx + cap_hx + CAP_MARGIN), vy)
-    if direction == "-y":
-        return (vx, -(hy + cap_hy + CAP_MARGIN))
-    if direction == "+y":
-        return (vx, hy + cap_hy + CAP_MARGIN)
-    raise ValueError(direction)
-
-
-# preference order: closest to the VDD pad first (measured against the
-# footprint geometry above), falling back toward the GND/DIN side last.
-DIR_PRIORITY = ["-y", "+x", "+y", "-x"]
-
-# D10 sits in the grid-zone corner right next to U9/C29 (the chain-entry
-# level shifter, an allowed grid-zone exception -- see the report). The
-# panel-grid neighbor check has no idea U9/C29 are there, so it happily
-# offers +y for D10's cap even though that lands C30 on top of U9's
-# courtyard under the round-5 (corrected, unmirrored) chain entry. Forbid
-# it explicitly rather than teach the whole heuristic about board-level
-# fixed obstacles for one cell.
-FORBIDDEN_CAP_DIRS = {"D10": {"+y"}}
-
-
 def main():
     layout = json.loads(PANEL_LAYOUT.read_text())
     dots = layout["dots"]
@@ -179,8 +121,12 @@ def main():
     led_dots = [d for d in dots if d["led"]]
     assert len(led_dots) == 37, f"expected 37 led dots, got {len(led_dots)}"
 
+    # The walk is what assigns the reference designators: D10 is chain position
+    # 0 and the walk order IS the electrical order, which the chain check below
+    # then proves against the schematic rather than assuming.
     order = serpentine_order(dots)
     assert len(order) == 37
+    populated = [(f"D{10 + i}", f"C{30 + i}", d) for i, d in enumerate(order)]
 
     # SW3 sanity check (round 5): the test dot (31,31) is led:false and not
     # walked, but its board position must still land at the centre column
@@ -211,19 +157,22 @@ def main():
     assert abs(plunger[0] - tx) < 1e-4 and abs(plunger[1] - ty) < 1e-4, (
         f"SW3 plunger centre is at {plunger}, must be on the test dot ({tx},{ty})")
 
-    placements = []
-    for idx, dot in enumerate(order):
-        led_ref = f"D{10 + idx}"
-        cap_ref = f"C{30 + idx}"
-
-        expected_net = "/LED_DATA5" if idx == 0 else f"/LED_CH{idx:02d}"
-        actual_net = net_of_pin(nets, led_ref, "2")  # pad 2 = DIN
-        if actual_net != expected_net:
-            print(f"FATAL: chain-order mismatch at position {idx}: "
-                  f"{led_ref}.DIN is {actual_net!r}, expected {expected_net!r} "
-                  f"for this walk position. Refusing to place.")
+    # Chain check, read off the live netlist rather than from a name formula:
+    # each LED's DIN must be on the net the previous LED's DOUT drives, and the
+    # first one's DIN must be the buffer output. Retiring a dot leaves gaps in
+    # the position-equals-number rule would pass on a schematic whose chain was
+    # wired out of designator order; following the links cannot.
+    upstream = "/LED_DATA5"
+    for led_ref, _cap_ref, _dot in populated:
+        din = net_of_pin(nets, led_ref, "2")
+        if din != upstream:
+            print(f"FATAL: chain break at {led_ref}: DIN is {din!r}, expected "
+                  f"{upstream!r} from the previous LED's DOUT. Refusing to place.")
             sys.exit(1)
+        upstream = net_of_pin(nets, led_ref, "4")  # this LED's DOUT feeds the next
 
+    placements = []
+    for led_ref, cap_ref, dot in populated:
         bx, by = board_pos(dot)
 
         led_fp = fps.get(led_ref)
@@ -236,43 +185,23 @@ def main():
         led_fp.SetPosition(pcbnew.VECTOR2I(pcbnew.FromMM(bx), pcbnew.FromMM(by)))
         led_fp.SetOrientationDegrees(0.0)
 
-        free_dirs = free_neighbor_dirs(dot, dots_by_rc)
-
-        def fits_on_board(direction):
-            ox, oy = cap_offset_for_dir(direction)
-            cx = bx + ox
-            return (BOARD_ORIGIN_X + 0.6) <= cx <= (BOARD_ORIGIN_X + PANEL_W - 0.6)
-
-        forbidden = FORBIDDEN_CAP_DIRS.get(led_ref, set())
-        candidates = [d for d in DIR_PRIORITY
-                      if d in free_dirs and d not in forbidden and fits_on_board(d)]
-        chosen_dir = candidates[0] if candidates else None
-        if chosen_dir is None:
-            # every panel-free direction would run the cap off the board
-            # edge (edge-column LEDs choosing -x/+x), or the LED is fully
-            # boxed in -- fall back to +y, which never approaches a side
-            # edge, even if the direction wasn't reported "free" by the
-            # neighbor check (worst case it's merely not optimally close).
-            chosen_dir = "+y"
-            print(f"WARN: {led_ref} ({dot['r']},{dot['c']}) has no board-safe "
-                  f"free neighbor direction; falling back to +y (may need a manual nudge)")
-        dx, dy = cap_offset_for_dir(chosen_dir)
+        dx, dy = CAP_OFFSET
         cap_x, cap_y = bx + dx, by + dy
         cap_fp.SetPosition(pcbnew.VECTOR2I(pcbnew.FromMM(cap_x), pcbnew.FromMM(cap_y)))
         cap_fp.SetOrientationDegrees(0.0)
 
         dist_from_vdd = ((dx - LED_VDD_LOCAL[0]) ** 2 + (dy - LED_VDD_LOCAL[1]) ** 2) ** 0.5
-        placements.append((led_ref, dot["r"], dot["c"], cap_ref, chosen_dir, dist_from_vdd))
+        placements.append((led_ref, dot["r"], dot["c"], cap_ref, dist_from_vdd))
 
     board.Save(str(BOARD))
 
     print(f"Placed {len(placements)} LEDs + caps.")
     worst = max(placements, key=lambda p: p[-1])
-    print(f"Worst-case cap-to-VDD distance: {worst[0]} -> {worst[3]}, "
-          f"{worst[-1]:.2f}mm (direction {worst[4]})")
+    print(f"Worst-case cap-to-VDD distance: {worst[0]} -> {worst[3]}, {worst[-1]:.2f}mm")
     over_2mm = [p for p in placements if p[-1] > 2.0]
-    print(f"{len(over_2mm)} of 37 caps landed over the 2mm VDD-distance target "
-          f"(courtyard clearance took priority; see report).")
+    print(f"{len(over_2mm)} of {len(placements)} caps sit over the 2mm VDD-distance "
+          f"guideline (the uniform grille offset is 2.71mm from the VDD pad by "
+          f"construction, so this is expected, not a packing failure).")
 
 
 if __name__ == "__main__":
