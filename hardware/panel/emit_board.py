@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """panel_layout.json + *.polys.json -> panel.kicad_pcb. KiCad python only."""
-import json, math, pathlib, pcbnew
+import json, math, pathlib, re, uuid, pcbnew
 
 HERE = pathlib.Path(__file__).parent
 mm = pcbnew.FromMM
@@ -29,6 +29,22 @@ def filled_circle(board, layer, x, y, dia):
     c.SetFilled(True); c.SetWidth(0); c.SetLayer(layer)
     board.Add(c)
 
+def filled_ring(board, layer, x, y, od, idia, segs=64):
+    chain = pcbnew.SHAPE_POLY_SET()
+    ol = pcbnew.SHAPE_LINE_CHAIN()
+    hl = pcbnew.SHAPE_LINE_CHAIN()
+    for i in range(segs):
+        a = 2 * math.pi * i / segs
+        ol.Append(mm(x + od / 2 * math.cos(a)), mm(y + od / 2 * math.sin(a)))
+        hl.Append(mm(x + idia / 2 * math.cos(a)), mm(y + idia / 2 * math.sin(a)))
+    ol.SetClosed(True); hl.SetClosed(True)
+    chain.AddOutline(ol)
+    chain.AddHole(hl)
+    chain.Fracture()
+    s = pcbnew.PCB_SHAPE(board, pcbnew.SHAPE_T_POLY)
+    s.SetPolyShape(chain); s.SetFilled(True); s.SetWidth(0); s.SetLayer(layer)
+    board.Add(s)
+
 def npth(board, x, y, dia):
     fp = pcbnew.FOOTPRINT(board)
     fp.SetPosition(pcbnew.VECTOR2I(mm(x), mm(y)))
@@ -48,6 +64,119 @@ RECIPE = {  # mat -> (copper_F, mask_F, mask_B)
     "P": (False, True, True), "B": (False, False, True), "L": (False, False, False),
 }
 
+def panel_interior(w, h, r, margin, segs_per_corner=24):
+    # The rounded-rect board boundary, inset by margin, as a SHAPE_POLY_SET.
+    # Used to clip silk against the true board silhouette (straight edges
+    # *and* the rounded corners) instead of hand-rolling edge cases.
+    ri = r - margin
+    chain = pcbnew.SHAPE_LINE_CHAIN()
+    corners = [(r, r, 180), (w - r, r, 270), (w - r, h - r, 0), (r, h - r, 90)]
+    for cx, cy, a0 in corners:
+        for i in range(segs_per_corner + 1):
+            a = math.radians(a0 + 90 * i / segs_per_corner)
+            chain.Append(mm(cx + ri * math.cos(a)), mm(cy + ri * math.sin(a)))
+    chain.SetClosed(True)
+    poly = pcbnew.SHAPE_POLY_SET()
+    poly.AddOutline(chain)
+    return poly
+
+def poly_shape(board, layer, polys, clip=None):
+    for p in polys:
+        chain = pcbnew.SHAPE_POLY_SET()
+        ol = pcbnew.SHAPE_LINE_CHAIN()
+        for x, y in p["outline"]:
+            ol.Append(mm(x), mm(y))
+        ol.SetClosed(True)
+        chain.AddOutline(ol)
+        for hole in p["holes"]:
+            hl = pcbnew.SHAPE_LINE_CHAIN()
+            for x, y in hole:
+                hl.Append(mm(x), mm(y))
+            hl.SetClosed(True)
+            chain.AddHole(hl)
+        if clip is not None:
+            chain.BooleanIntersection(clip)
+        chain.Fracture()
+        s = pcbnew.PCB_SHAPE(board, pcbnew.SHAPE_T_POLY)
+        s.SetPolyShape(chain); s.SetFilled(True); s.SetWidth(0); s.SetLayer(layer)
+        board.Add(s)
+
+def check_floors(lay, gold, silk, fr4):
+    g = lay["grid"]
+    assert g["hole_dia"] >= 0.30, "drill floor"
+    assert g["pitch"] - g["dot_dia"] >= 0.15, "dot-to-dot clearance floor"
+    for name, polys, lo in (("gold", gold, 3), ("silk", silk, 4), ("fr4", fr4, 1)):
+        assert len(polys) >= lo, f"{name} art missing (got {len(polys)})"
+        for p in polys:
+            for x, y in p["outline"]:
+                assert -0.1 <= x <= lay["panel"]["w"] + 0.1, f"{name} x out of panel"
+                assert -0.1 <= y <= lay["panel"]["h"] + 0.1, f"{name} y out of panel"
+
+STACKUP = """\t\t(stackup
+\t\t\t(layer "F.SilkS"
+\t\t\t\t(type "Top Silk Screen")
+\t\t\t\t(color "White")
+\t\t\t)
+\t\t\t(layer "F.Mask"
+\t\t\t\t(type "Top Solder Mask")
+\t\t\t\t(color "Black")
+\t\t\t\t(thickness 0.01)
+\t\t\t)
+\t\t\t(layer "F.Cu"
+\t\t\t\t(type "copper")
+\t\t\t\t(thickness 0.035)
+\t\t\t)
+\t\t\t(layer "dielectric 1"
+\t\t\t\t(type "core")
+\t\t\t\t(thickness 1.51)
+\t\t\t\t(material "FR4")
+\t\t\t\t(epsilon_r 4.5)
+\t\t\t\t(loss_tangent 0.02)
+\t\t\t)
+\t\t\t(layer "B.Cu"
+\t\t\t\t(type "copper")
+\t\t\t\t(thickness 0.035)
+\t\t\t)
+\t\t\t(layer "B.Mask"
+\t\t\t\t(type "Bottom Solder Mask")
+\t\t\t\t(color "Black")
+\t\t\t\t(thickness 0.01)
+\t\t\t)
+\t\t\t(layer "B.SilkS"
+\t\t\t\t(type "Bottom Silk Screen")
+\t\t\t\t(color "White")
+\t\t\t)
+\t\t\t(copper_finish "ENIG")
+\t\t\t(dielectric_constraints no)
+\t\t)
+"""
+
+UUID_NS = uuid.UUID("6f2c6b0a-5b0a-4f3e-9c1e-000000000000")
+
+def derandomize_uuids(path):
+    # board.Save() assigns every shape/pad/footprint a fresh random UUID, so
+    # two generate.sh runs never hash the same even with identical geometry.
+    # Emission order is deterministic, so replace each uuid in file order with
+    # one derived from its position -- stable across runs, still unique.
+    text = path.read_text()
+    counter = [0]
+    def repl(m):
+        i = counter[0]; counter[0] += 1
+        return f'(uuid "{uuid.uuid5(UUID_NS, str(i))}")'
+    text = re.sub(r'\(uuid "[0-9a-f-]+"\)', repl, text)
+    path.write_text(text)
+
+def inject_stackup(path):
+    # BOARD_STACKUP isn't exposed by this pcbnew build's SWIG bindings (no
+    # BS_ITEM_TYPE_* enum, GetStackupDescriptor() returns an opaque
+    # SwigPyObject with no methods), so the finish/colour can't be set through
+    # the object API. Splice the stackup block into the saved file's (setup
+    # ...) section directly, matching the format KiCad itself writes.
+    text = path.read_text()
+    assert "(stackup" not in text
+    text = text.replace("\t(setup\n", "\t(setup\n" + STACKUP, 1)
+    path.write_text(text)
+
 def main():
     lay = json.loads((HERE / "panel_layout.json").read_text())
     board = pcbnew.CreateEmptyBoard()
@@ -56,12 +185,35 @@ def main():
     for d in lay["dots"]:
         cu, mf, mb = RECIPE[d["mat"]]
         dia = g["dot_dia"]
-        if cu: filled_circle(board, pcbnew.F_Cu, d["x"], d["y"], dia)
+        if cu:
+            if d["mat"] == "T":
+                # Relieve copper around the NPTH: a solid disc drilled through
+                # its centre leaves 0mm hole clearance under DRC even though the
+                # physical result is the same gold annulus. Draw the annulus
+                # directly, sized to clear the board's 0.25mm hole clearance rule.
+                filled_ring(board, pcbnew.F_Cu, d["x"], d["y"], dia, g["hole_dia"] + 0.6)
+            else:
+                filled_circle(board, pcbnew.F_Cu, d["x"], d["y"], dia)
         if mf: filled_circle(board, pcbnew.F_Mask, d["x"], d["y"], dia)
         if mb: filled_circle(board, pcbnew.B_Mask, d["x"], d["y"], dia)
         if d["mat"] == "T":
             npth(board, d["x"], d["y"], g["hole_dia"])
-    board.Save(str(HERE / "panel.kicad_pcb"))
+
+    gold = json.loads((HERE / "gold.polys.json").read_text())
+    silk = json.loads((HERE / "silk.polys.json").read_text())
+    fr4 = json.loads((HERE / "fr4.polys.json").read_text())
+    check_floors(lay, gold, silk, fr4)
+    silk_clip = panel_interior(p["w"], p["h"], p["corner_r"], 0.15)
+    poly_shape(board, pcbnew.F_Cu, gold)     # gold = copper...
+    poly_shape(board, pcbnew.F_Mask, gold)   # ...plus mask opening
+    poly_shape(board, pcbnew.F_SilkS, silk, clip=silk_clip)
+    poly_shape(board, pcbnew.F_Mask, fr4)    # bare FR4 = open both faces
+    poly_shape(board, pcbnew.B_Mask, fr4)
+
+    out = HERE / "panel.kicad_pcb"
+    board.Save(str(out))
+    derandomize_uuids(out)
+    inject_stackup(out)
     print("wrote panel.kicad_pcb:", len(lay["dots"]), "dots")
 
 if __name__ == "__main__":
