@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Flatten SVG fills to polygons (mm). Outlines + holes, evenodd."""
+"""Flatten fill-filtered SVG <path> art to polygons in absolute mm."""
 import json, sys
-from svgelements import SVG, Path, Shape
+from svgelements import SVG, Path
 
-TOL = 0.05  # mm sampling tolerance at target scale
+TOL = 0.05  # mm sampling tolerance
 
 # svgelements has no scipy available in this environment, so Segment.length()
 # falls back to a recursive subdivider with a default error of 1e-12 - absurd
@@ -19,7 +19,7 @@ def _subpaths_to_points(path, scale):
         # Sample each segment with its own point(t), not Path.point(t) on the
         # whole subpath: Path.point() re-derives cumulative arc length across
         # every prior segment on each call, which is O(n) per sample and O(n^2)
-        # over a subpath - the actual cause of the multi-minute hang on real
+        # over a subpath - the actual cause of a multi-minute hang on real
         # (curve-heavy) glyph paths. Segment.point(t) is a direct polynomial
         # evaluation and stays O(1) per sample.
         for segment in Path(sub):
@@ -40,32 +40,29 @@ def _area(poly):
     return s / 2
 
 def _contains(outer, pt):
-    # ray cast
     x, y = pt; inside = False
     for (x1, y1), (x2, y2) in zip(outer, outer[1:] + outer[:1]):
         if (y1 > y) != (y2 > y) and x < (x2 - x1) * (y - y1) / (y2 - y1) + x1:
             inside = not inside
     return inside
 
-def flatten(svg_path, target_w_mm):
+def flatten(svg_path, scale, fills):
+    fills = {f.lower() for f in fills}
     svg = SVG.parse(svg_path, reify=True)
-    vb_w = svg.viewbox.width if svg.viewbox else svg.width
-    scale = target_w_mm / float(vb_w)
+    vb = svg.viewbox
     rings = []
     for el in svg.elements():
-        if isinstance(el, Shape) and not isinstance(el, SVG):
-            p = Path(el)
-            if len(p) == 0:
-                continue
-            rings.extend(_subpaths_to_points(p, scale))
-    if not rings:
-        raise ValueError(
-            f"{svg_path}: no fillable path geometry found. If this SVG uses "
-            "<mask> elements to clip strokes, svgelements may not resolve them "
-            "into flat paths here — ask Wells for a flattened re-export "
-            "(outline strokes, no masks) rather than implementing SVG masks."
-        )
-    # largest-area rings are outlines; a ring inside another ring is its hole
+        if not isinstance(el, Path):
+            continue
+        fill = str(getattr(el, "fill", "")).lower()
+        if fill not in fills:
+            continue
+        bb = el.bbox()
+        if bb and vb and (bb[2]-bb[0]) * (bb[3]-bb[1]) >= 0.9 * vb.width * vb.height:
+            continue                       # background-sized shape
+        if len(el) == 0:
+            continue
+        rings.extend(_subpaths_to_points(el, scale))
     rings.sort(key=lambda r: abs(_area(r)), reverse=True)
     polys = []
     for ring in rings:
@@ -78,7 +75,7 @@ def flatten(svg_path, target_w_mm):
     return polys
 
 if __name__ == "__main__":
-    inp, w_mm, outp = sys.argv[1], float(sys.argv[2]), sys.argv[3]
+    inp, scale, fills, outp = sys.argv[1], float(sys.argv[2]), sys.argv[3], sys.argv[4]
     with open(outp, "w") as f:
-        json.dump(flatten(inp, w_mm), f)
+        json.dump(flatten(inp, scale, set(fills.split(","))), f)
     print("wrote", outp)
