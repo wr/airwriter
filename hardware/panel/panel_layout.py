@@ -6,7 +6,7 @@ VIEW_W_PX = 1100.0
 SCALE = 62.0 / VIEW_W_PX          # mm per px
 CFG = dict(w=62.0, corner_r=2.0)
 MAT_BY_FILL = {"#dda857": "G", "#e7ba9b": "P", "#849bff": "B", "#a4acce": "L",
-               "#111111": "."}
+               "#111111": "L"}   # near-black cells are LED-backed, invisible until lit
 LED_MATS = set("PBL")
 GRID0_PX, PITCH_PX = 100.0, 150.0
 

@@ -138,9 +138,11 @@ on the gold ring, not white silk beneath it - see amendment block above]
 
 ### Added
 
-- **LED array:** one SK6812MINI-E per translucent dot — **31** in the current Frame 7
-  map (50 dots, of which 19 are gold and unlit; the count follows Wells's final
-  artwork) — top-firing, placed at the mirrored dot coordinates.
+- **LED array:** one SK6812MINI-E per translucent dot — **37** *[amended 2026-08-20:
+  Wells ruled the six near-black cells are LED-backed too — dark until lit, physically
+  identical to double-mask dots]* in the current map (56 dots, of which 19 are gold and
+  unlit; the count follows Wells's final artwork) — top-firing, placed at the mirrored
+  dot coordinates from `panel_layout.json`.
   All on the existing single chain from IO48 (D1, D2, D4–D6 predecessors collapse
   into this array); firmware pixel count is one constant.
 - **Test switch:** 6 × 6 mm through-hole tact switch with a long round actuator,
@@ -159,7 +161,7 @@ on the gold ring, not white silk beneath it - see amendment block above]
 
 ### Power
 
-31 LEDs at full white is ~1.9 A — far beyond the AP7361C's 1 A and the point.
+37 LEDs *[amended]* at full white is ~2.2 A — far beyond the AP7361C's 1 A and the point.
 Firmware enforces a global brightness cap; the states are dim animations by design.
 The plan includes a real budget: worst-case animation current vs the 3.3 V rail,
 and whether the LED VDD moves to VBUS with a level-shifted data line or stays on
