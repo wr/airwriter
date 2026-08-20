@@ -152,13 +152,17 @@ def main():
     # pass 2 -- coarse lattice over the rest, for return-path continuity.
     # Both passes read the same pre-existing fill, so they are computed before any
     # via is added; placing them afterwards keeps pcbnew out of freed fill memory.
+    # Box covering the ESP32-S3-WROOM module footprint (149.25, 144.95, flush at
+    # the x=162 edge since round 6) and the ground it returns through -- update
+    # this if the module ever moves again. The antenna rule area (x156-162,
+    # y130.2-159.7) bars vias itself, so the box may safely overlap it.
     front = filled(board, F)
     obs = obstacles(board)
     grid = []
-    x = mm(101)
-    while x <= mm(151):
-        y = mm(61)
-        while y <= mm(125):
+    x = mm(134)
+    while x <= mm(161):
+        y = mm(110)
+        while y <= mm(163):
             v = pcbnew.VECTOR2I(int(x), int(y))
             fits = front.Contains(v) and back.Contains(v)
             if fits:
