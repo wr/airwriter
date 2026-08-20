@@ -1,5 +1,5 @@
 import json, pathlib, unittest
-from floors import check_floors, check_mask_ridges, knockout_glyphs
+from floors import WARN, check_floors, check_mask_ridges, class_gap, knockout_glyphs
 
 SQUARE = lambda x0, y0, x1, y1: dict(
     outline=[[x0, y0], [x1, y0], [x1, y1], [x0, y1]], holes=[])
@@ -34,19 +34,28 @@ class TestFloors(unittest.TestCase):
             pinches)
 
     def test_knockout_glyphs_finds_only_the_test_tag(self):
-        # The test tag ("test", 4 letters) is the only silk art fully inside
-        # a gold-family dot's disc - everything else (wordmark, subtitle,
-        # bottom labels) sits well outside any dot.
+        # The test tag ("test", 4 letters) is the only ink fully inside a
+        # gold-family dot's disc - everything else (wordmark, subtitle, bottom
+        # labels) sits well outside any dot. Frame 9b draws the tag in #111111
+        # instead of white, so this also guards the generate.sh fill list.
         here = pathlib.Path(__file__).parent
         silk = json.loads((here / "silk.polys.json").read_text())
         layout = json.loads((here / "panel_layout.json").read_text())
         glyphs = knockout_glyphs(silk, layout)
         self.assertEqual(len(glyphs), 4, glyphs)
 
-    def test_mask_ridge_reports_known_test_tag_gap(self):
+    def test_mask_ridge_of_the_test_tag_clears_the_warn_band(self):
+        # The ridge is the kept mask between two letter strokes, and it is the
+        # narrowest feature on the panel's front face. Frame 9b redrew the tag
+        # with wider spacing, so the check now asserts the measurement rather
+        # than the warning: the old art sat at 0.089mm, inside the warn band,
+        # and this one has to stay clear of it.
         here = pathlib.Path(__file__).parent
         silk = json.loads((here / "silk.polys.json").read_text())
         layout = json.loads((here / "panel_layout.json").read_text())
         glyphs = knockout_glyphs(silk, layout)
-        warnings = check_mask_ridges(glyphs)
-        self.assertTrue(any(w.startswith("mask ridge") for w in warnings), warnings)
+        self.assertEqual(len(glyphs), 4, glyphs)
+        ridge = class_gap(glyphs)
+        self.assertIsNotNone(ridge)
+        self.assertGreater(ridge[0], WARN, f"mask ridge back in the warn band: {ridge}")
+        self.assertEqual(check_mask_ridges(glyphs), [])

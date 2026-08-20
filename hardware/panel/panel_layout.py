@@ -5,8 +5,13 @@ import json, pathlib, re
 VIEW_W_PX = 1100.0
 SCALE = 62.0 / VIEW_W_PX          # mm per px
 CFG = dict(w=62.0, corner_r=2.0)
-MAT_BY_FILL = {"#dda857": "G", "#e7ba9b": "P", "#849bff": "B", "#a4acce": "L",
-               "#111111": "L"}   # near-black cells are LED-backed, invisible until lit
+# Frame 9b's palette. The two teal classes are the two mask recipes, and the
+# distinction is which faces open, not what the dot is made of:
+#   B  bright teal -- single mask, the viewer's face masked, the far face open
+#   L  deep teal   -- mask on both sides, so it reads darker until it is lit
+# Both are LED-backed; gold and the test dot are not. #111111 is the artboard
+# background and the wordmark strokes, never a dot, so it is not mapped here.
+MAT_BY_FILL = {"#dda857": "G", "#e7ba9b": "P", "#14baba": "B", "#176767": "L"}
 LED_MATS = set("PBL")
 GRID0_PX, PITCH_PX = 100.0, 150.0
 

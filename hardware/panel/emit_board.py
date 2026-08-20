@@ -209,7 +209,13 @@ def back_copper_flood(board, p, dots, g, fr4):
 # up from the case floor through the main board's mounting holes. Coordinates
 # are the main board's H1-H4 minus its (100, 60) origin - the two boards'
 # holes must stay coaxial; change them together or not at all.
-STANDOFFS = [(19.0, 71.0), (37.0, 71.0), (19.0, 89.5), (44.15, 101.3)]
+#
+# Round 7 spread them to the corners: H1 and H2 now sit directly behind panel
+# dots (0,0) and (0,6), both gold in Frame 9b, so the flood is already solid
+# there and no exception is needed. A seat over a flood window would have no
+# copper to reflow onto, which is what check_seats proves against the real
+# hole list rather than by inspection.
+STANDOFFS = [(5.6364, 5.6364), (56.3636, 5.6364), (5.6364, 91.93), (43.99, 100.83)]
 STANDOFF_SEAT_DIA = 5.0   # exposed ENIG ring in the flood
 STANDOFF_PASTE_DIA = 4.6
 
@@ -217,6 +223,30 @@ def standoff_pads(board):
     for x, y in STANDOFFS:
         filled_circle(board, pcbnew.B_Mask, x, y, STANDOFF_SEAT_DIA)
         filled_circle(board, pcbnew.B_Paste, x, y, STANDOFF_PASTE_DIA)
+
+def check_seats(p, dots, g, fr4):
+    # Every seat must land on solid back copper: no dot window, no slash relief,
+    # and far enough in from the outline that the flood's 0.55mm inset has not
+    # eaten it.
+    r = STANDOFF_SEAT_DIA / 2
+    for x, y in STANDOFFS:
+        assert (r + 0.55 <= x <= p["w"] - r - 0.55
+                and r + 0.55 <= y <= p["h"] - r - 0.55), f"seat ({x},{y}) off the flood"
+        for d in dots:
+            if d["mat"] in ("P", "B", "L"):
+                hole_r = (g["dot_dia"] + 0.15) / 2
+            elif d["mat"] == "T":
+                hole_r = (g["hole_dia"] + 0.5) / 2
+            else:
+                continue
+            assert math.hypot(x - d["x"], y - d["y"]) > r + hole_r, \
+                f"seat ({x},{y}) overlaps dot ({d['r']},{d['c']})'s flood window"
+        for slash in fr4:
+            xs = [q for q, _ in slash["outline"]]
+            ys = [q for _, q in slash["outline"]]
+            assert (x + r < min(xs) - 0.2 or x - r > max(xs) + 0.2
+                    or y + r < min(ys) - 0.2 or y - r > max(ys) + 0.2), \
+                f"seat ({x},{y}) overlaps the slash relief"
 
 def check_floors(lay, gold, silk, fr4):
     g = lay["grid"]
@@ -305,6 +335,7 @@ def main():
     silk = json.loads((HERE / "silk.polys.json").read_text())
     fr4 = json.loads((HERE / "fr4.polys.json").read_text())
     check_floors(lay, gold, silk, fr4)
+    check_seats(p, lay["dots"], g, fr4)
     silk, mask_knockouts = split_mask_knockouts(silk, lay["dots"], g["dot_dia"] / 2)
 
     for i, d in enumerate(lay["dots"]):
