@@ -81,7 +81,6 @@ place("U1", 149.25, 144.95, -90)    # antenna tip flush at x=162; 1.05mm north
 place("S1", 101.33, 130.265, 0)     # body face 0.25mm off the x=100 edge
 place("SW1", 103.55, 152.70, 180)   # actuator tip flush at x=100
 place("H4", 143.70, 159.70, 0)      # relocated clear of U1's new body
-place("C29", 161.00, 128.40, 90)    # U9's bypass, out of the antenna keepout
 
 # ---- antenna keepout: narrowed, notched clear of J1's fixed corner --------
 # Ruled extent: x156..162, module width +5mm/side laterally (29.5mm), centred on

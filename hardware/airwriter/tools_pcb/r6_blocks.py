@@ -43,6 +43,14 @@ BLOCKS = [
                                       # data-pin distances (6.73 -> 6.27mm)
     ("H4",  143.948, 160.741,   0),   # see r6_h4.py: every frame-legal spot
                                       # elsewhere gives a far worse support hull
+    # --- LED chain entry. The bottom grid row has two unlit dot cells; the one
+    # at x=147.91 has a 3.2 x 3.8mm gap between D10's and D11's caps, which fits
+    # the buffer. Puts U9's output pad 5.0mm from D10's DIN (was 7.6mm) with its
+    # input pad facing west into the open row-gap lane, instead of wedged in the
+    # 1.5mm keyhole between the cap column and the LED row where /LED_DATA kept
+    # failing. U9 is 1.1mm tall, so grid-zone margin placement is legal.
+    ("U9",  147.900, 124.500,   0),   # 74AHCT1G125 level shifter
+    ("C29", 147.900, 121.000,   0),   # its VBUS bypass, follows it
     # --- region F, east of J1 below the antenna zone
     ("R17", 158.240, 162.560,  90),   # 1k, the power indicator's series pair
     ("D3",  160.025, 162.560,  90),   # green PWR LED
