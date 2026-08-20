@@ -42,12 +42,18 @@ stale lines in place; this block is the correction:
   the 0.10 mm mask-sliver floor stated in §1, so it's a real risk, not a
   false positive; whether a given fab can actually resolve it is a
   quote-time question, not resolved here.
-- **The `test` tag currently sits on exposed copper, not black mask.** The
-  white silk `test` label overlaps the gold dot's F.Mask opening (§1's
-  original assumption), so on a real fab run that silk gets clipped where it
-  crosses the copper — legible in the Task 4 render but not the clean
-  silk-on-black look. Pending a designer re-export moving the tag onto
-  adjacent black mask.
+- **The `test` tag is a mask knockout, not silk.** Superseding the silk-
+  clipping caveat this amendment block originally carried: Wells's design is
+  black letters on exposed gold, not white silk over the dot. `emit_board.py`
+  detects any white art fully inside a gold-family dot's disc and cuts it
+  into that dot's F.Mask instead of emitting it on F.SilkS — mask stays kept
+  (dark) over the glyph strokes, punched back open (gold) for each glyph's
+  own counter (e.g. inside the `e`). Data-driven: the current Frame 9 export
+  already places the tag fully inside its dot, so no further re-export was
+  needed. The silk-clipping risk is resolved by construction, not pending
+  anything. `floors.py` carries the equivalent floor check under the label
+  "mask ridge" (the solid mask between letter strokes has the same practical
+  minimum as any other feature).
 
 ## 1. Art panel
 
@@ -105,7 +111,8 @@ One gold dot in the grid is the test button: a **3.5 mm NPTH** through its centr
 gold ring around it, white silk `test` beneath. The plunger of a tact switch on the
 main board passes through it (§2). The hole is plain drilled fibreglass — no plating,
 so no electrical path to the panel.
-[amended: hole is 2.25 mm NPTH, not 3.5 mm - see amendment block above]
+[amended: hole is 2.25 mm NPTH, not 3.5 mm; `test` is a black-mask knockout
+on the gold ring, not white silk beneath it - see amendment block above]
 
 ### Lockup and labels
 

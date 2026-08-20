@@ -29,16 +29,21 @@ def filled_circle(board, layer, x, y, dia):
     c.SetFilled(True); c.SetWidth(0); c.SetLayer(layer)
     board.Add(c)
 
+def _circle_pts(cx, cy, r, segs=64):
+    return [(cx + r * math.cos(2 * math.pi * i / segs),
+             cy + r * math.sin(2 * math.pi * i / segs)) for i in range(segs)]
+
 def filled_ring(board, layer, x, y, od, idia, segs=64):
     chain = pcbnew.SHAPE_POLY_SET()
     ol = pcbnew.SHAPE_LINE_CHAIN()
-    hl = pcbnew.SHAPE_LINE_CHAIN()
-    for i in range(segs):
-        a = 2 * math.pi * i / segs
-        ol.Append(mm(x + od / 2 * math.cos(a)), mm(y + od / 2 * math.sin(a)))
-        hl.Append(mm(x + idia / 2 * math.cos(a)), mm(y + idia / 2 * math.sin(a)))
-    ol.SetClosed(True); hl.SetClosed(True)
+    for px, py in _circle_pts(x, y, od / 2, segs):
+        ol.Append(mm(px), mm(py))
+    ol.SetClosed(True)
     chain.AddOutline(ol)
+    hl = pcbnew.SHAPE_LINE_CHAIN()
+    for px, py in _circle_pts(x, y, idia / 2, segs):
+        hl.Append(mm(px), mm(py))
+    hl.SetClosed(True)
     chain.AddHole(hl)
     chain.Fracture()
     s = pcbnew.PCB_SHAPE(board, pcbnew.SHAPE_T_POLY)
@@ -100,6 +105,54 @@ def poly_shape(board, layer, polys, clip=None):
         s = pcbnew.PCB_SHAPE(board, pcbnew.SHAPE_T_POLY)
         s.SetPolyShape(chain); s.SetFilled(True); s.SetWidth(0); s.SetLayer(layer)
         board.Add(s)
+
+def split_mask_knockouts(silk, dots, dot_r):
+    # A white path fully inside a gold-family (G/T) dot's disc is Wells's
+    # black-letters-on-gold design (e.g. the "test" tag): mask kept over the
+    # glyph strokes instead of separate silkscreen. Data-driven - any glyph
+    # meeting the geometry test gets this treatment, no name/position special
+    # case. Returns (remaining_silk, {dot_index: [glyph_polys]}).
+    gold_idxs = [i for i, d in enumerate(dots) if d["mat"] in ("G", "T")]
+    remaining = []
+    knockouts = {}
+    for poly in silk:
+        owner = next((i for i in gold_idxs
+                      if all(math.hypot(x - dots[i]["x"], y - dots[i]["y"]) < dot_r
+                             for x, y in poly["outline"])), None)
+        if owner is None:
+            remaining.append(poly)
+        else:
+            knockouts.setdefault(owner, []).append(poly)
+    return remaining, knockouts
+
+def mask_knockout(board, cx, cy, dia, glyphs):
+    # Mask KEPT (not opened) over each glyph's own outline - dark letters on
+    # exposed gold copper. One gr_poly: the dot's disc with each glyph's
+    # outline as a hole (a "hole" here in the geometric sense of pcbnew's own
+    # SHAPE_POLY_SET API, not a mask opening - it cuts the glyph shape *out*
+    # of the open-mask disc, so mask stays solid/kept there). A glyph's own
+    # hole (a letter counter, e.g. inside "e") must still read as open gold -
+    # that can't be expressed as a hole-of-a-hole in one poly, so punch each
+    # counter back open as its own small standalone F.Mask poly.
+    chain = pcbnew.SHAPE_POLY_SET()
+    ol = pcbnew.SHAPE_LINE_CHAIN()
+    for px, py in _circle_pts(cx, cy, dia / 2):
+        ol.Append(mm(px), mm(py))
+    ol.SetClosed(True)
+    chain.AddOutline(ol)
+    for glyph in glyphs:
+        hl = pcbnew.SHAPE_LINE_CHAIN()
+        for x, y in glyph["outline"]:
+            hl.Append(mm(x), mm(y))
+        hl.SetClosed(True)
+        chain.AddHole(hl)
+    chain.Fracture()
+    s = pcbnew.PCB_SHAPE(board, pcbnew.SHAPE_T_POLY)
+    s.SetPolyShape(chain); s.SetFilled(True); s.SetWidth(0); s.SetLayer(pcbnew.F_Mask)
+    board.Add(s)
+    for glyph in glyphs:
+        for hole in glyph["holes"]:
+            poly_shape(board, pcbnew.F_Mask, [dict(outline=hole, holes=[])])
 
 def check_floors(lay, gold, silk, fr4):
     g = lay["grid"]
@@ -183,7 +236,14 @@ def main():
     board = pcbnew.CreateEmptyBoard()
     p, g = lay["panel"], lay["grid"]
     rounded_outline(board, p["w"], p["h"], p["corner_r"])
-    for d in lay["dots"]:
+
+    gold = json.loads((HERE / "gold.polys.json").read_text())
+    silk = json.loads((HERE / "silk.polys.json").read_text())
+    fr4 = json.loads((HERE / "fr4.polys.json").read_text())
+    check_floors(lay, gold, silk, fr4)
+    silk, mask_knockouts = split_mask_knockouts(silk, lay["dots"], g["dot_dia"] / 2)
+
+    for i, d in enumerate(lay["dots"]):
         cu, mf, mb = RECIPE[d["mat"]]
         dia = g["dot_dia"]
         if cu:
@@ -195,19 +255,19 @@ def main():
                 filled_ring(board, pcbnew.F_Cu, d["x"], d["y"], dia, g["hole_dia"] + 0.6)
             else:
                 filled_circle(board, pcbnew.F_Cu, d["x"], d["y"], dia)
-        if mf: filled_circle(board, pcbnew.F_Mask, d["x"], d["y"], dia)
+        if mf:
+            if i in mask_knockouts:
+                mask_knockout(board, d["x"], d["y"], dia, mask_knockouts[i])
+            else:
+                filled_circle(board, pcbnew.F_Mask, d["x"], d["y"], dia)
         if mb: filled_circle(board, pcbnew.B_Mask, d["x"], d["y"], dia)
         if d["mat"] == "T":
             npth(board, d["x"], d["y"], g["hole_dia"])
 
-    gold = json.loads((HERE / "gold.polys.json").read_text())
-    silk = json.loads((HERE / "silk.polys.json").read_text())
-    fr4 = json.loads((HERE / "fr4.polys.json").read_text())
-    check_floors(lay, gold, silk, fr4)
     silk_clip = panel_interior(p["w"], p["h"], p["corner_r"], 0.15)
     poly_shape(board, pcbnew.F_Cu, gold)     # gold = copper...
     poly_shape(board, pcbnew.F_Mask, gold)   # ...plus mask opening
-    poly_shape(board, pcbnew.F_SilkS, silk, clip=silk_clip)
+    poly_shape(board, pcbnew.F_SilkS, silk, clip=silk_clip)   # excludes mask knockouts
     poly_shape(board, pcbnew.F_Mask, fr4)    # bare FR4 = open both faces
     poly_shape(board, pcbnew.B_Mask, fr4)
 

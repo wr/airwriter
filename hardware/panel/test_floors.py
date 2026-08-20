@@ -1,5 +1,5 @@
 import json, pathlib, unittest
-from floors import check_floors
+from floors import check_floors, check_mask_ridges, knockout_glyphs
 
 SQUARE = lambda x0, y0, x1, y1: dict(
     outline=[[x0, y0], [x1, y0], [x1, y1], [x0, y1]], holes=[])
@@ -32,3 +32,21 @@ class TestFloors(unittest.TestCase):
                 and abs(float(w.split("y ")[1]) - 83.93) < 2
                 for w in pinches),
             pinches)
+
+    def test_knockout_glyphs_finds_only_the_test_tag(self):
+        # The test tag ("test", 4 letters) is the only silk art fully inside
+        # a gold-family dot's disc - everything else (wordmark, subtitle,
+        # bottom labels) sits well outside any dot.
+        here = pathlib.Path(__file__).parent
+        silk = json.loads((here / "silk.polys.json").read_text())
+        layout = json.loads((here / "panel_layout.json").read_text())
+        glyphs = knockout_glyphs(silk, layout)
+        self.assertEqual(len(glyphs), 4, glyphs)
+
+    def test_mask_ridge_reports_known_test_tag_gap(self):
+        here = pathlib.Path(__file__).parent
+        silk = json.loads((here / "silk.polys.json").read_text())
+        layout = json.loads((here / "panel_layout.json").read_text())
+        glyphs = knockout_glyphs(silk, layout)
+        warnings = check_mask_ridges(glyphs)
+        self.assertTrue(any(w.startswith("mask ridge") for w in warnings), warnings)

@@ -53,29 +53,66 @@ def poly_pinch(poly):
         pts += [(x, y, "hole") for x, y in h]
     return _min_dist(pts)
 
+def _banded(label, dist_xy):
+    # Round to the same 3 decimals the warning prints before banding -
+    # otherwise a measurement that reads as "0.101mm" on screen can fail an
+    # unrounded "<= 0.101" comparison by a fraction of a micron.
+    if dist_xy and IGNORE <= round(dist_xy[0], 3) <= WARN:
+        d, x, y = dist_xy
+        return f"{label} {d:.3f}mm at x {x:.2f}, y {y:.2f}"
+    return None
+
 def check_floors(classes):
     """classes: {name: polys}. Returns a list of warning strings; never raises."""
     warnings = []
     for name, polys in classes.items():
-        gap = class_gap(polys)
-        # Round to the same 3 decimals the warning prints before banding -
-        # otherwise a measurement that reads as "0.101mm" on screen can fail
-        # an unrounded "<= 0.101" comparison by a fraction of a micron.
-        if gap and IGNORE <= round(gap[0], 3) <= WARN:
-            warnings.append(
-                f"{name} inter-poly gap {gap[0]:.3f}mm at x {gap[1]:.2f}, y {gap[2]:.2f}")
+        w = _banded(f"{name} inter-poly gap", class_gap(polys))
+        if w:
+            warnings.append(w)
         for p in polys:
-            pinch = poly_pinch(p)
-            if pinch and IGNORE <= round(pinch[0], 3) <= WARN:
-                warnings.append(
-                    f"{name} pinch {pinch[0]:.3f}mm at x {pinch[1]:.2f}, y {pinch[2]:.2f}")
+            w = _banded(f"{name} pinch", poly_pinch(p))
+            if w:
+                warnings.append(w)
+    return warnings
+
+def knockout_glyphs(silk, layout):
+    """Silk polys that sit fully inside a gold-family (G/T) dot's disc -
+    Wells's black-letters-on-gold mask-knockout design (a label drawn as a
+    hole in the dot's kept mask instead of separate silkscreen). Mirrors the
+    same "fully inside a gold dot" test emit_board.py's
+    split_mask_knockouts() applies at emission time, from JSON alone."""
+    r = layout["grid"]["dot_dia"] / 2
+    dots = [d for d in layout["dots"] if d["mat"] in ("G", "T")]
+    return [p for p in silk
+            if any(all(((x - d["x"]) ** 2 + (y - d["y"]) ** 2) ** 0.5 < r
+                       for x, y in p["outline"])
+                   for d in dots)]
+
+def check_mask_ridges(glyphs):
+    """Same nearest-neighbour check as check_floors, but for mask-knockout
+    glyphs: the solid (kept) mask forming a letter stroke must still clear
+    the fab's practical minimum, whether that stroke sits between two
+    letters (a "gap" in copper/silk terms) or around a letter's own counter
+    (a "pinch") - both are just "mask ridge" width here."""
+    warnings = []
+    w = _banded("mask ridge", class_gap(glyphs))
+    if w:
+        warnings.append(w)
+    for p in glyphs:
+        w = _banded("mask ridge", poly_pinch(p))
+        if w:
+            warnings.append(w)
     return warnings
 
 if __name__ == "__main__":
     here = pathlib.Path(__file__).parent
     classes = {name: json.loads((here / f"{name}.polys.json").read_text())
                for name in ("gold", "silk", "fr4")}
-    warnings = check_floors(classes)
+    layout = json.loads((here / "panel_layout.json").read_text())
+    glyphs = knockout_glyphs(classes["silk"], layout)
+    glyph_ids = {id(p) for p in glyphs}
+    classes["silk"] = [p for p in classes["silk"] if id(p) not in glyph_ids]
+    warnings = check_floors(classes) + check_mask_ridges(glyphs)
     for w in warnings:
         print(f"WARNING floors: {w}", file=sys.stderr)
     print(f"floors: {len(warnings)} warning(s)" if warnings else "floors: clean")
