@@ -23361,7 +23361,7 @@
 		(descr "8x-dip-switch SPST , Slide, row spacing 7.62 mm (300 mils), body size 9.78x22.5mm (see e.g. https://www.ctscorp.com/wp-content/uploads/206-208.pdf)")
 		(tags "DIP Switch SPST Slide 7.62mm 300mil")
 		(property "Reference" "S1"
-			(at 4.096266 -4.722751 0)
+			(at 11.87 -0.665 0)
 			(layer "F.SilkS")
 			(uuid "69c96f00-ba6f-45cc-b2bb-0d3a92e91ddd")
 			(effects
