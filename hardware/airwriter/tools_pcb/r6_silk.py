@@ -9,7 +9,7 @@ sys.path.insert(0, "/Users/wells/Projects/airwriter/hardware/airwriter/tools_pcb
 import pcbnew, r6_lib as L
 
 TEXTS = ["USB-C", "LOCALTALK", "PWR", "PRINTER"]
-REFS = ["U7", "U8", "U5", "U9", "SW1", "SW3", "U2", "U6", "U3", "U4"]  # S1 placed by hand
+REFS = ["U7", "U8", "U5", "U9", "SW1", "SW3", "S1", "U2", "U6", "U3", "U4", "D3"]
 PAD_CLR = 0.15
 SILK_CLR = 0.15
 

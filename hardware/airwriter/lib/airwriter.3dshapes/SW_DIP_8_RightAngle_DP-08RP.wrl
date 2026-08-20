@@ -1,0 +1,114 @@
+#VRML V2.0 utf8
+# HRL DP-08RP 8-way right-angle piano DIP switch.
+# Authored in mm and divided by 2.54: KiCad reads .wrl in 0.1 inch units at scale 1.
+# Footprint -y (the key face) is model +y -- KiCad's model frame flips Y.
+Group { children [
+	# body 21.88 x 9.61 x 9.41
+	Transform {
+		translation 0 0 1.8524
+		children [ Shape {
+			appearance Appearance { material Material {
+				diffuseColor 0.15 0.15 0.17
+				specularColor 0.15 0.15 0.15
+				shininess 0.2
+			} }
+			geometry Box { size 8.6142 3.7835 3.7047 }
+		} ]
+	}
+	# key 1
+	Transform {
+		translation -3.5 2.3642 3.3701
+		children [ Shape {
+			appearance Appearance { material Material {
+				diffuseColor 0.85 0.85 0.85
+				specularColor 0.15 0.15 0.15
+				shininess 0.2
+			} }
+			geometry Box { size 0.5118 0.9449 0.3543 }
+		} ]
+	}
+	# key 2
+	Transform {
+		translation -2.5 2.3642 3.3701
+		children [ Shape {
+			appearance Appearance { material Material {
+				diffuseColor 0.85 0.85 0.85
+				specularColor 0.15 0.15 0.15
+				shininess 0.2
+			} }
+			geometry Box { size 0.5118 0.9449 0.3543 }
+		} ]
+	}
+	# key 3
+	Transform {
+		translation -1.5 2.3642 3.3701
+		children [ Shape {
+			appearance Appearance { material Material {
+				diffuseColor 0.85 0.85 0.85
+				specularColor 0.15 0.15 0.15
+				shininess 0.2
+			} }
+			geometry Box { size 0.5118 0.9449 0.3543 }
+		} ]
+	}
+	# key 4
+	Transform {
+		translation -0.5 2.3642 3.3701
+		children [ Shape {
+			appearance Appearance { material Material {
+				diffuseColor 0.85 0.85 0.85
+				specularColor 0.15 0.15 0.15
+				shininess 0.2
+			} }
+			geometry Box { size 0.5118 0.9449 0.3543 }
+		} ]
+	}
+	# key 5
+	Transform {
+		translation 0.5 2.3642 3.3701
+		children [ Shape {
+			appearance Appearance { material Material {
+				diffuseColor 0.85 0.85 0.85
+				specularColor 0.15 0.15 0.15
+				shininess 0.2
+			} }
+			geometry Box { size 0.5118 0.9449 0.3543 }
+		} ]
+	}
+	# key 6
+	Transform {
+		translation 1.5 2.3642 3.3701
+		children [ Shape {
+			appearance Appearance { material Material {
+				diffuseColor 0.85 0.85 0.85
+				specularColor 0.15 0.15 0.15
+				shininess 0.2
+			} }
+			geometry Box { size 0.5118 0.9449 0.3543 }
+		} ]
+	}
+	# key 7
+	Transform {
+		translation 2.5 2.3642 3.3701
+		children [ Shape {
+			appearance Appearance { material Material {
+				diffuseColor 0.85 0.85 0.85
+				specularColor 0.15 0.15 0.15
+				shininess 0.2
+			} }
+			geometry Box { size 0.5118 0.9449 0.3543 }
+		} ]
+	}
+	# key 8
+	Transform {
+		translation 3.5 2.3642 3.3701
+		children [ Shape {
+			appearance Appearance { material Material {
+				diffuseColor 0.85 0.85 0.85
+				specularColor 0.15 0.15 0.15
+				shininess 0.2
+			} }
+			geometry Box { size 0.5118 0.9449 0.3543 }
+		} ]
+	}
+] }

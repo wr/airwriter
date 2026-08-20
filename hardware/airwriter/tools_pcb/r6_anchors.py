@@ -76,9 +76,14 @@ print("  SW3  -> origin (%.4f, %.4f) rot %d; plunger PROVEN at (%.4f, %.4f)"
       % (SW3_ORG[0], SW3_ORG[1], SW3_ROT, pc[0], pc[1]))
 
 # ---- structural anchors --------------------------------------------------
-place("U1", 149.25, 144.95, -90)    # antenna tip flush at x=162; 1.05mm north
-                                    # of centre so the body clears J4's courtyard
-place("S1", 101.33, 130.265, 0)     # body face 0.25mm off the x=100 edge
+place("U1", 149.25, 144.35, -90)    # antenna tip flush at x=162; 1.65mm north
+                                    # of centre. 1.05mm of that clears J4's courtyard;
+                                    # the last 0.6mm balances the escape corridors on
+                                    # U1's two pad rows -- south of the module only
+                                    # 0.72mm of copper separated it from J4, and seven
+                                    # signals have to leave that row westward.
+place("S1", 105.005, 138.785, 90)   # DP-08RP: body face 0.2mm off the x=100
+                                    # edge, keys overhanging 2.2mm past it
 place("SW1", 103.55, 152.70, 180)   # actuator tip flush at x=100
 place("H4", 143.70, 159.70, 0)      # relocated clear of U1's new body
 
@@ -86,8 +91,8 @@ place("H4", 143.70, 159.70, 0)      # relocated clear of U1's new body
 # Ruled extent: x156..162, module width +5mm/side laterally (29.5mm), centred on
 # the module -- so it tracks U1's 1.05mm shift to y130.2..159.7.  Notched around
 # J1's fixed corner: J1 is edge-fixed and its shield pads are copper.
-KEEPOUT = [(156.0, 130.2), (162.0, 130.2), (162.0, 159.7),
-           (157.6, 159.7), (157.6, 156.6), (156.0, 156.6)]
+KEEPOUT = [(156.0, 129.6), (162.0, 129.6), (162.0, 159.1),
+           (157.6, 159.1), (157.6, 156.6), (156.0, 156.6)]
 zone = None
 for z in fps["U1"].Zones():
     zone = z
