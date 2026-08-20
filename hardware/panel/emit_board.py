@@ -204,6 +204,20 @@ def back_copper_flood(board, p, dots, g, fr4):
     board.Add(s)
     return hole_count
 
+# Reflow standoff seats: blind SMT nuts (PEM SMTSO-M25-3ET or equivalent,
+# verify stock at order) solder to the back-copper flood so M2.5 screws come
+# up from the case floor through the main board's mounting holes. Coordinates
+# are the main board's H1-H4 minus its (100, 60) origin - the two boards'
+# holes must stay coaxial; change them together or not at all.
+STANDOFFS = [(19.0, 71.0), (37.0, 71.0), (19.0, 89.5), (44.15, 101.3)]
+STANDOFF_SEAT_DIA = 5.0   # exposed ENIG ring in the flood
+STANDOFF_PASTE_DIA = 4.6
+
+def standoff_pads(board):
+    for x, y in STANDOFFS:
+        filled_circle(board, pcbnew.B_Mask, x, y, STANDOFF_SEAT_DIA)
+        filled_circle(board, pcbnew.B_Paste, x, y, STANDOFF_PASTE_DIA)
+
 def check_floors(lay, gold, silk, fr4):
     g = lay["grid"]
     assert g["hole_dia"] >= 0.30, "drill floor"
@@ -321,6 +335,7 @@ def main():
     poly_shape(board, pcbnew.F_Mask, fr4)    # bare FR4 = open both faces
     poly_shape(board, pcbnew.B_Mask, fr4)
     flood_holes = back_copper_flood(board, p, lay["dots"], g, fr4)
+    standoff_pads(board)
 
     out = HERE / "panel.kicad_pcb"
     board.Save(str(out))
