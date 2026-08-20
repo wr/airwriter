@@ -1127,6 +1127,17 @@
 			(uuid "89ffeee0-ec59-43d0-8a02-344f5ba3523a")
 		)
 		(embedded_fonts no)
+		(model "${KICAD10_3DMODEL_DIR}/LED_SMD.3dshapes/LED_SK6812MINI-E_3.2x2.8mm_P1.5mm_ReverseMount.step"
+			(offset
+				(xyz 0 0 0.84)
+			)
+			(scale
+				(xyz 1 1 1)
+			)
+			(rotate
+				(xyz 0 0 0)
+			)
+		)
 	)
 	(footprint "Capacitor_SMD:C_0603_1608Metric"
 		(layer "F.Cu")
@@ -2181,6 +2192,17 @@
 			(uuid "c65b694e-04b5-4140-a2ee-4c3a04ceca4f")
 		)
 		(embedded_fonts no)
+		(model "${KICAD10_3DMODEL_DIR}/LED_SMD.3dshapes/LED_SK6812MINI-E_3.2x2.8mm_P1.5mm_ReverseMount.step"
+			(offset
+				(xyz 0 0 0.84)
+			)
+			(scale
+				(xyz 1 1 1)
+			)
+			(rotate
+				(xyz 0 0 0)
+			)
+		)
 	)
 	(footprint "airwriter:LED_SK6812MINI-E_3.2x2.8mm_P1.5mm_TopFiring"
 		(layer "F.Cu")
@@ -2379,6 +2401,17 @@
 			(uuid "c8016260-eb96-42c3-8a38-5a31c9e649fd")
 		)
 		(embedded_fonts no)
+		(model "${KICAD10_3DMODEL_DIR}/LED_SMD.3dshapes/LED_SK6812MINI-E_3.2x2.8mm_P1.5mm_ReverseMount.step"
+			(offset
+				(xyz 0 0 0.84)
+			)
+			(scale
+				(xyz 1 1 1)
+			)
+			(rotate
+				(xyz 0 0 0)
+			)
+		)
 	)
 	(footprint "Capacitor_SMD:C_0805_2012Metric"
 		(layer "F.Cu")
@@ -5685,6 +5718,17 @@
 			(uuid "3e793013-52ce-4b7d-a032-73d3be338119")
 		)
 		(embedded_fonts no)
+		(model "${KICAD10_3DMODEL_DIR}/LED_SMD.3dshapes/LED_SK6812MINI-E_3.2x2.8mm_P1.5mm_ReverseMount.step"
+			(offset
+				(xyz 0 0 0.84)
+			)
+			(scale
+				(xyz 1 1 1)
+			)
+			(rotate
+				(xyz 0 0 0)
+			)
+		)
 	)
 	(footprint "airwriter:LED_SK6812MINI-E_3.2x2.8mm_P1.5mm_TopFiring"
 		(layer "F.Cu")
@@ -5883,6 +5927,17 @@
 			(uuid "9c415eab-b515-46ca-8e56-d8250b353d6e")
 		)
 		(embedded_fonts no)
+		(model "${KICAD10_3DMODEL_DIR}/LED_SMD.3dshapes/LED_SK6812MINI-E_3.2x2.8mm_P1.5mm_ReverseMount.step"
+			(offset
+				(xyz 0 0 0.84)
+			)
+			(scale
+				(xyz 1 1 1)
+			)
+			(rotate
+				(xyz 0 0 0)
+			)
+		)
 	)
 	(footprint "airwriter:LED_SK6812MINI-E_3.2x2.8mm_P1.5mm_TopFiring"
 		(layer "F.Cu")
@@ -6081,6 +6136,17 @@
 			(uuid "f2f4842e-2d1e-46e0-8792-7b56c0c9dae5")
 		)
 		(embedded_fonts no)
+		(model "${KICAD10_3DMODEL_DIR}/LED_SMD.3dshapes/LED_SK6812MINI-E_3.2x2.8mm_P1.5mm_ReverseMount.step"
+			(offset
+				(xyz 0 0 0.84)
+			)
+			(scale
+				(xyz 1 1 1)
+			)
+			(rotate
+				(xyz 0 0 0)
+			)
+		)
 	)
 	(footprint "Capacitor_SMD:C_0603_1608Metric"
 		(layer "F.Cu")
@@ -6425,6 +6491,17 @@
 			(uuid "6e99a3ff-899e-43ca-b913-d97f0949ed4b")
 		)
 		(embedded_fonts no)
+		(model "${KICAD10_3DMODEL_DIR}/LED_SMD.3dshapes/LED_SK6812MINI-E_3.2x2.8mm_P1.5mm_ReverseMount.step"
+			(offset
+				(xyz 0 0 0.84)
+			)
+			(scale
+				(xyz 1 1 1)
+			)
+			(rotate
+				(xyz 0 0 0)
+			)
+		)
 	)
 	(footprint "MountingHole:MountingHole_2.2mm_M2"
 		(layer "F.Cu")
@@ -7374,6 +7451,17 @@
 			(uuid "8c87324f-0139-4a20-ba58-d8a600d4eadc")
 		)
 		(embedded_fonts no)
+		(model "${KICAD10_3DMODEL_DIR}/LED_SMD.3dshapes/LED_SK6812MINI-E_3.2x2.8mm_P1.5mm_ReverseMount.step"
+			(offset
+				(xyz 0 0 0.84)
+			)
+			(scale
+				(xyz 1 1 1)
+			)
+			(rotate
+				(xyz 0 0 0)
+			)
+		)
 	)
 	(footprint "airwriter:LED_SK6812MINI-E_3.2x2.8mm_P1.5mm_TopFiring"
 		(layer "F.Cu")
@@ -7572,6 +7660,17 @@
 			(uuid "c7e9eb26-6734-4241-bcb6-cad33cbd41c5")
 		)
 		(embedded_fonts no)
+		(model "${KICAD10_3DMODEL_DIR}/LED_SMD.3dshapes/LED_SK6812MINI-E_3.2x2.8mm_P1.5mm_ReverseMount.step"
+			(offset
+				(xyz 0 0 0.84)
+			)
+			(scale
+				(xyz 1 1 1)
+			)
+			(rotate
+				(xyz 0 0 0)
+			)
+		)
 	)
 	(footprint "airwriter:LED_SK6812MINI-E_3.2x2.8mm_P1.5mm_TopFiring"
 		(layer "F.Cu")
@@ -7770,6 +7869,17 @@
 			(uuid "00af40c8-a823-496f-bdce-9e21991f8ea9")
 		)
 		(embedded_fonts no)
+		(model "${KICAD10_3DMODEL_DIR}/LED_SMD.3dshapes/LED_SK6812MINI-E_3.2x2.8mm_P1.5mm_ReverseMount.step"
+			(offset
+				(xyz 0 0 0.84)
+			)
+			(scale
+				(xyz 1 1 1)
+			)
+			(rotate
+				(xyz 0 0 0)
+			)
+		)
 	)
 	(footprint "Capacitor_SMD:C_0603_1608Metric"
 		(layer "F.Cu")
@@ -9586,6 +9696,17 @@
 			(uuid "e1de5e94-7cb3-4cc3-a0d9-39ddd1688cd2")
 		)
 		(embedded_fonts no)
+		(model "${KICAD10_3DMODEL_DIR}/LED_SMD.3dshapes/LED_SK6812MINI-E_3.2x2.8mm_P1.5mm_ReverseMount.step"
+			(offset
+				(xyz 0 0 0.84)
+			)
+			(scale
+				(xyz 1 1 1)
+			)
+			(rotate
+				(xyz 0 0 0)
+			)
+		)
 	)
 	(footprint "airwriter:LED_SK6812MINI-E_3.2x2.8mm_P1.5mm_TopFiring"
 		(layer "F.Cu")
@@ -9784,6 +9905,17 @@
 			(uuid "7bd182b1-5f4a-472a-adee-3168400eab95")
 		)
 		(embedded_fonts no)
+		(model "${KICAD10_3DMODEL_DIR}/LED_SMD.3dshapes/LED_SK6812MINI-E_3.2x2.8mm_P1.5mm_ReverseMount.step"
+			(offset
+				(xyz 0 0 0.84)
+			)
+			(scale
+				(xyz 1 1 1)
+			)
+			(rotate
+				(xyz 0 0 0)
+			)
+		)
 	)
 	(footprint "Capacitor_SMD:C_0603_1608Metric"
 		(layer "F.Cu")
@@ -10656,6 +10788,17 @@
 			(uuid "29cc639e-8b3a-4db5-b08b-cd8edcd8e345")
 		)
 		(embedded_fonts no)
+		(model "${KICAD10_3DMODEL_DIR}/LED_SMD.3dshapes/LED_SK6812MINI-E_3.2x2.8mm_P1.5mm_ReverseMount.step"
+			(offset
+				(xyz 0 0 0.84)
+			)
+			(scale
+				(xyz 1 1 1)
+			)
+			(rotate
+				(xyz 0 0 0)
+			)
+		)
 	)
 	(footprint "Capacitor_SMD:C_0603_1608Metric"
 		(layer "F.Cu")
@@ -11000,6 +11143,17 @@
 			(uuid "8f1e1907-1e72-40cd-8a63-f1799369d791")
 		)
 		(embedded_fonts no)
+		(model "${KICAD10_3DMODEL_DIR}/LED_SMD.3dshapes/LED_SK6812MINI-E_3.2x2.8mm_P1.5mm_ReverseMount.step"
+			(offset
+				(xyz 0 0 0.84)
+			)
+			(scale
+				(xyz 1 1 1)
+			)
+			(rotate
+				(xyz 0 0 0)
+			)
+		)
 	)
 	(footprint "Capacitor_SMD:C_0603_1608Metric"
 		(layer "F.Cu")
@@ -11609,6 +11763,17 @@
 			(uuid "07da3e3d-acad-4f6e-99d1-b5fdc2013dac")
 		)
 		(embedded_fonts no)
+		(model "${KICAD10_3DMODEL_DIR}/LED_SMD.3dshapes/LED_SK6812MINI-E_3.2x2.8mm_P1.5mm_ReverseMount.step"
+			(offset
+				(xyz 0 0 0.84)
+			)
+			(scale
+				(xyz 1 1 1)
+			)
+			(rotate
+				(xyz 0 0 0)
+			)
+		)
 	)
 	(footprint "airwriter:LED_SK6812MINI-E_3.2x2.8mm_P1.5mm_TopFiring"
 		(layer "F.Cu")
@@ -11807,6 +11972,17 @@
 			(uuid "1efa363f-f3d0-4a4b-b1d7-17790909bacd")
 		)
 		(embedded_fonts no)
+		(model "${KICAD10_3DMODEL_DIR}/LED_SMD.3dshapes/LED_SK6812MINI-E_3.2x2.8mm_P1.5mm_ReverseMount.step"
+			(offset
+				(xyz 0 0 0.84)
+			)
+			(scale
+				(xyz 1 1 1)
+			)
+			(rotate
+				(xyz 0 0 0)
+			)
+		)
 	)
 	(footprint "Resistor_SMD:R_0603_1608Metric"
 		(layer "F.Cu")
@@ -12189,6 +12365,17 @@
 			(uuid "c7c66eff-cf53-4501-bbc3-b03d52b6e6ef")
 		)
 		(embedded_fonts no)
+		(model "${KICAD10_3DMODEL_DIR}/LED_SMD.3dshapes/LED_SK6812MINI-E_3.2x2.8mm_P1.5mm_ReverseMount.step"
+			(offset
+				(xyz 0 0 0.84)
+			)
+			(scale
+				(xyz 1 1 1)
+			)
+			(rotate
+				(xyz 0 0 0)
+			)
+		)
 	)
 	(footprint "Capacitor_SMD:C_0603_1608Metric"
 		(layer "F.Cu")
@@ -12863,6 +13050,17 @@
 			(uuid "caaec5e2-a018-4713-a31d-c1f13169e224")
 		)
 		(embedded_fonts no)
+		(model "${KICAD10_3DMODEL_DIR}/LED_SMD.3dshapes/LED_SK6812MINI-E_3.2x2.8mm_P1.5mm_ReverseMount.step"
+			(offset
+				(xyz 0 0 0.84)
+			)
+			(scale
+				(xyz 1 1 1)
+			)
+			(rotate
+				(xyz 0 0 0)
+			)
+		)
 	)
 	(footprint "airwriter:LED_SK6812MINI-E_3.2x2.8mm_P1.5mm_TopFiring"
 		(layer "F.Cu")
@@ -13061,6 +13259,17 @@
 			(uuid "9f2964de-33ff-42c9-93f6-7605ad130828")
 		)
 		(embedded_fonts no)
+		(model "${KICAD10_3DMODEL_DIR}/LED_SMD.3dshapes/LED_SK6812MINI-E_3.2x2.8mm_P1.5mm_ReverseMount.step"
+			(offset
+				(xyz 0 0 0.84)
+			)
+			(scale
+				(xyz 1 1 1)
+			)
+			(rotate
+				(xyz 0 0 0)
+			)
+		)
 	)
 	(footprint "Capacitor_SMD:C_0603_1608Metric"
 		(layer "F.Cu")
@@ -13405,6 +13614,17 @@
 			(uuid "7f18502a-973d-4883-a944-712d0d2efec7")
 		)
 		(embedded_fonts no)
+		(model "${KICAD10_3DMODEL_DIR}/LED_SMD.3dshapes/LED_SK6812MINI-E_3.2x2.8mm_P1.5mm_ReverseMount.step"
+			(offset
+				(xyz 0 0 0.84)
+			)
+			(scale
+				(xyz 1 1 1)
+			)
+			(rotate
+				(xyz 0 0 0)
+			)
+		)
 	)
 	(footprint "Package_TO_SOT_SMD:SOT-353_SC-70-5"
 		(layer "F.Cu")
@@ -14277,6 +14497,17 @@
 			(uuid "7dcafb0b-9d08-411b-b80c-5705aa812ab7")
 		)
 		(embedded_fonts no)
+		(model "${KICAD10_3DMODEL_DIR}/LED_SMD.3dshapes/LED_SK6812MINI-E_3.2x2.8mm_P1.5mm_ReverseMount.step"
+			(offset
+				(xyz 0 0 0.84)
+			)
+			(scale
+				(xyz 1 1 1)
+			)
+			(rotate
+				(xyz 0 0 0)
+			)
+		)
 	)
 	(footprint "airwriter:LED_SK6812MINI-E_3.2x2.8mm_P1.5mm_TopFiring"
 		(layer "F.Cu")
@@ -14475,6 +14706,17 @@
 			(uuid "485c1bf3-3bcf-4f19-bd7a-855dbbc9834f")
 		)
 		(embedded_fonts no)
+		(model "${KICAD10_3DMODEL_DIR}/LED_SMD.3dshapes/LED_SK6812MINI-E_3.2x2.8mm_P1.5mm_ReverseMount.step"
+			(offset
+				(xyz 0 0 0.84)
+			)
+			(scale
+				(xyz 1 1 1)
+			)
+			(rotate
+				(xyz 0 0 0)
+			)
+		)
 	)
 	(footprint "Capacitor_SMD:C_0805_2012Metric"
 		(layer "F.Cu")
@@ -14819,6 +15061,17 @@
 			(uuid "c5423478-f21d-4198-b053-c32edbc5338d")
 		)
 		(embedded_fonts no)
+		(model "${KICAD10_3DMODEL_DIR}/LED_SMD.3dshapes/LED_SK6812MINI-E_3.2x2.8mm_P1.5mm_ReverseMount.step"
+			(offset
+				(xyz 0 0 0.84)
+			)
+			(scale
+				(xyz 1 1 1)
+			)
+			(rotate
+				(xyz 0 0 0)
+			)
+		)
 	)
 	(footprint "Capacitor_SMD:C_0603_1608Metric"
 		(layer "F.Cu")
@@ -15892,6 +16145,17 @@
 			(uuid "d6023ae5-0f92-4dfd-b211-4d863dcb4325")
 		)
 		(embedded_fonts no)
+		(model "${KICAD10_3DMODEL_DIR}/LED_SMD.3dshapes/LED_SK6812MINI-E_3.2x2.8mm_P1.5mm_ReverseMount.step"
+			(offset
+				(xyz 0 0 0.84)
+			)
+			(scale
+				(xyz 1 1 1)
+			)
+			(rotate
+				(xyz 0 0 0)
+			)
+		)
 	)
 	(footprint "Capacitor_SMD:C_0603_1608Metric"
 		(layer "F.Cu")
@@ -16488,6 +16752,17 @@
 			(uuid "e50dd26e-18d3-4647-8094-fa81df6531a0")
 		)
 		(embedded_fonts no)
+		(model "${KICAD10_3DMODEL_DIR}/LED_SMD.3dshapes/LED_SK6812MINI-E_3.2x2.8mm_P1.5mm_ReverseMount.step"
+			(offset
+				(xyz 0 0 0.84)
+			)
+			(scale
+				(xyz 1 1 1)
+			)
+			(rotate
+				(xyz 0 0 0)
+			)
+		)
 	)
 	(footprint "Capacitor_SMD:C_0603_1608Metric"
 		(layer "F.Cu")
@@ -17530,6 +17805,17 @@
 			(uuid "832df57c-6c42-4ea5-9953-a2c34372d0fe")
 		)
 		(embedded_fonts no)
+		(model "${KICAD10_3DMODEL_DIR}/LED_SMD.3dshapes/LED_SK6812MINI-E_3.2x2.8mm_P1.5mm_ReverseMount.step"
+			(offset
+				(xyz 0 0 0.84)
+			)
+			(scale
+				(xyz 1 1 1)
+			)
+			(rotate
+				(xyz 0 0 0)
+			)
+		)
 	)
 	(footprint "Connector_USB:USB_C_Receptacle_HRO_TYPE-C-31-M-12"
 		(layer "F.Cu")
@@ -18198,6 +18484,17 @@
 			(uuid "166da282-6b98-43d7-a662-2db8c6a9b39a")
 		)
 		(embedded_fonts no)
+		(model "${KICAD10_3DMODEL_DIR}/LED_SMD.3dshapes/LED_SK6812MINI-E_3.2x2.8mm_P1.5mm_ReverseMount.step"
+			(offset
+				(xyz 0 0 0.84)
+			)
+			(scale
+				(xyz 1 1 1)
+			)
+			(rotate
+				(xyz 0 0 0)
+			)
+		)
 	)
 	(footprint "Capacitor_SMD:C_0603_1608Metric"
 		(layer "F.Cu")
@@ -18542,6 +18839,17 @@
 			(uuid "88d775a9-3816-4515-9cb7-49bc5a0d098e")
 		)
 		(embedded_fonts no)
+		(model "${KICAD10_3DMODEL_DIR}/LED_SMD.3dshapes/LED_SK6812MINI-E_3.2x2.8mm_P1.5mm_ReverseMount.step"
+			(offset
+				(xyz 0 0 0.84)
+			)
+			(scale
+				(xyz 1 1 1)
+			)
+			(rotate
+				(xyz 0 0 0)
+			)
+		)
 	)
 	(footprint "Capacitor_SMD:C_0603_1608Metric"
 		(layer "F.Cu")
@@ -19032,6 +19340,17 @@
 			(uuid "0776fac8-d715-4f94-b79c-2e1a2e69df48")
 		)
 		(embedded_fonts no)
+		(model "${KICAD10_3DMODEL_DIR}/LED_SMD.3dshapes/LED_SK6812MINI-E_3.2x2.8mm_P1.5mm_ReverseMount.step"
+			(offset
+				(xyz 0 0 0.84)
+			)
+			(scale
+				(xyz 1 1 1)
+			)
+			(rotate
+				(xyz 0 0 0)
+			)
+		)
 	)
 	(footprint "airwriter:LED_SK6812MINI-E_3.2x2.8mm_P1.5mm_TopFiring"
 		(layer "F.Cu")
@@ -19230,6 +19549,17 @@
 			(uuid "a30dc3cf-153c-4bc1-87e9-dfcde357fd35")
 		)
 		(embedded_fonts no)
+		(model "${KICAD10_3DMODEL_DIR}/LED_SMD.3dshapes/LED_SK6812MINI-E_3.2x2.8mm_P1.5mm_ReverseMount.step"
+			(offset
+				(xyz 0 0 0.84)
+			)
+			(scale
+				(xyz 1 1 1)
+			)
+			(rotate
+				(xyz 0 0 0)
+			)
+		)
 	)
 	(footprint "RF_Module:ESP32-S3-WROOM-1"
 		(layer "F.Cu")
@@ -21194,6 +21524,17 @@
 			(uuid "ffa4b4d7-c020-4af7-a57f-05085894d661")
 		)
 		(embedded_fonts no)
+		(model "${KICAD10_3DMODEL_DIR}/LED_SMD.3dshapes/LED_SK6812MINI-E_3.2x2.8mm_P1.5mm_ReverseMount.step"
+			(offset
+				(xyz 0 0 0.84)
+			)
+			(scale
+				(xyz 1 1 1)
+			)
+			(rotate
+				(xyz 0 0 0)
+			)
+		)
 	)
 	(footprint "Capacitor_SMD:C_0603_1608Metric"
 		(layer "F.Cu")
@@ -22563,6 +22904,17 @@
 			(uuid "65e9e261-6084-4ecb-bc92-5773054dc472")
 		)
 		(embedded_fonts no)
+		(model "${KICAD10_3DMODEL_DIR}/LED_SMD.3dshapes/LED_SK6812MINI-E_3.2x2.8mm_P1.5mm_ReverseMount.step"
+			(offset
+				(xyz 0 0 0.84)
+			)
+			(scale
+				(xyz 1 1 1)
+			)
+			(rotate
+				(xyz 0 0 0)
+			)
+		)
 	)
 	(footprint "Capacitor_SMD:C_0603_1608Metric"
 		(layer "F.Cu")
@@ -22945,6 +23297,17 @@
 			(uuid "e2f435a6-0acd-4af8-87ed-1ce3be7552af")
 		)
 		(embedded_fonts no)
+		(model "${KICAD10_3DMODEL_DIR}/LED_SMD.3dshapes/LED_SK6812MINI-E_3.2x2.8mm_P1.5mm_ReverseMount.step"
+			(offset
+				(xyz 0 0 0.84)
+			)
+			(scale
+				(xyz 1 1 1)
+			)
+			(rotate
+				(xyz 0 0 0)
+			)
+		)
 	)
 	(footprint "Capacitor_SMD:C_0603_1608Metric"
 		(layer "F.Cu")
@@ -23803,6 +24166,17 @@
 			(uuid "87adf81e-713d-4155-aab4-30fea1773af3")
 		)
 		(embedded_fonts no)
+		(model "${KICAD10_3DMODEL_DIR}/LED_SMD.3dshapes/LED_SK6812MINI-E_3.2x2.8mm_P1.5mm_ReverseMount.step"
+			(offset
+				(xyz 0 0 0.84)
+			)
+			(scale
+				(xyz 1 1 1)
+			)
+			(rotate
+				(xyz 0 0 0)
+			)
+		)
 	)
 	(footprint "MountingHole:MountingHole_2.2mm_M2"
 		(layer "F.Cu")
@@ -25003,6 +25377,17 @@
 			(uuid "f76ec1a1-cd29-41a0-a5cf-fe84c37a0b31")
 		)
 		(embedded_fonts no)
+		(model "${KICAD10_3DMODEL_DIR}/LED_SMD.3dshapes/LED_SK6812MINI-E_3.2x2.8mm_P1.5mm_ReverseMount.step"
+			(offset
+				(xyz 0 0 0.84)
+			)
+			(scale
+				(xyz 1 1 1)
+			)
+			(rotate
+				(xyz 0 0 0)
+			)
+		)
 	)
 	(footprint "airwriter:LED_SK6812MINI-E_3.2x2.8mm_P1.5mm_TopFiring"
 		(layer "F.Cu")
@@ -25201,6 +25586,17 @@
 			(uuid "6d1d4ec5-a5f0-4fcf-baf9-c6aa02b1f1fd")
 		)
 		(embedded_fonts no)
+		(model "${KICAD10_3DMODEL_DIR}/LED_SMD.3dshapes/LED_SK6812MINI-E_3.2x2.8mm_P1.5mm_ReverseMount.step"
+			(offset
+				(xyz 0 0 0.84)
+			)
+			(scale
+				(xyz 1 1 1)
+			)
+			(rotate
+				(xyz 0 0 0)
+			)
+		)
 	)
 	(footprint "airwriter:LED_SK6812MINI-E_3.2x2.8mm_P1.5mm_TopFiring"
 		(layer "F.Cu")
@@ -25399,6 +25795,17 @@
 			(uuid "896556a4-b93a-4981-880c-8e96c82ca156")
 		)
 		(embedded_fonts no)
+		(model "${KICAD10_3DMODEL_DIR}/LED_SMD.3dshapes/LED_SK6812MINI-E_3.2x2.8mm_P1.5mm_ReverseMount.step"
+			(offset
+				(xyz 0 0 0.84)
+			)
+			(scale
+				(xyz 1 1 1)
+			)
+			(rotate
+				(xyz 0 0 0)
+			)
+		)
 	)
 	(footprint "Resistor_SMD:R_0603_1608Metric"
 		(layer "F.Cu")
