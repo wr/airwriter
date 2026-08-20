@@ -126,8 +126,10 @@ on the gold ring, not white silk beneath it - see amendment block above]
 
 ### Removed (the whole show face)
 
-- The 12 mm artwork band and the back-face artwork rule areas — the board shrinks
-  back toward ~52 × 66 mm; exact outline falls out of re-placement.
+- The 12 mm artwork band and the back-face artwork rule areas. *[amended 2026-08-20:
+  the board does NOT shrink — the 62 mm-wide dot grid needs an LED directly under every
+  translucent dot, so the board grows to the panel's own footprint, 62 × 104.27, with
+  the circuits in the opaque lower band and ports out the bottom edge.]*
 - MODE capacitive touch pad (SW2), its guard ring, R20, and C19's touch-revert role.
   IO14 is released.
 - BOOT gold bullseye on the show face. USB download mode plus two plain component-side
