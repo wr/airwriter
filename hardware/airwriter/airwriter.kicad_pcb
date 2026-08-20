@@ -3905,9 +3905,9 @@
 		(descr "SOIC, 16 Pin (JEDEC MS-012, variation AC, https://www.jedec.org/document_search?search_api_views_fulltext=MS-012, https://www.analog.com/media/en/package-pcb-resources/package/pkg_pdf/soic_narrow-r/r_16.pdf)")
 		(tags "SOIC SO 16-pin-NSOP R-16 R-16-S D0016A M2B SO16 SOT109-1 751B SOIC_N narrow")
 		(property "Reference" "U3"
-			(at 0 -3.9 0)
+			(at 0 0 0)
 			(layer "F.SilkS")
-			(uuid "53940162-b2cf-49b5-9ce6-8dfd284a443b")
+			(uuid "e95cd68b-a407-400b-b0a6-b3ed0522e307")
 			(effects
 				(font
 					(size 1 1)
@@ -3918,7 +3918,7 @@
 		(property "Value" "MAX3232ESE+"
 			(at 0 5.9 0)
 			(layer "F.Fab")
-			(uuid "417ace3c-a0ee-460d-a357-042825f44b03")
+			(uuid "087a4e05-e9c0-4593-8e3a-7162a446bd2d")
 			(effects
 				(font
 					(size 1 1)
@@ -3930,7 +3930,7 @@
 			(at 0 0 0)
 			(layer "F.Fab")
 			(hide yes)
-			(uuid "fc821ef2-d726-456d-be6e-47e8e03e3d3b")
+			(uuid "ae110078-d66f-4885-95ee-25e736493b0e")
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -3941,7 +3941,7 @@
 			(at 0 0 0)
 			(layer "F.Fab")
 			(hide yes)
-			(uuid "ccb0bb58-4ea2-4b21-b791-76211a8adecf")
+			(uuid "9a3cb3aa-aabe-41d9-b1d5-b271ae98dc1f")
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -4962,9 +4962,9 @@
 		(descr "SOIC, 8 Pin (JEDEC MS-012AA, https://www.analog.com/media/en/package-pcb-resources/package/pkg_pdf/soic_narrow-r/r_8.pdf)")
 		(tags "SOIC SO")
 		(property "Reference" "U2"
-			(at 0.130733 1.494292 90)
+			(at 0 0 90)
 			(layer "F.SilkS")
-			(uuid "f2a0c42a-4491-41b2-8e82-444130543b5d")
+			(uuid "4a1e56d4-ac9a-4d1f-b21a-b052d38d759f")
 			(effects
 				(font
 					(size 1 1)
@@ -4975,7 +4975,7 @@
 		(property "Value" "MAX3490ESA+"
 			(at 0 3.4 90)
 			(layer "F.Fab")
-			(uuid "5253eba4-19b8-4811-a7cb-b9801cb6bf25")
+			(uuid "3431b958-dd15-4557-8934-c29df0060623")
 			(effects
 				(font
 					(size 1 1)
@@ -4987,7 +4987,7 @@
 			(at 0 0 90)
 			(layer "F.Fab")
 			(hide yes)
-			(uuid "72e5b095-6764-4ed2-9b12-a1bb53976216")
+			(uuid "301ffb15-80b3-4a18-83be-656e296ddfce")
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -4998,7 +4998,7 @@
 			(at 0 0 90)
 			(layer "F.Fab")
 			(hide yes)
-			(uuid "63bb6592-3796-4c34-865c-05ad96e50bce")
+			(uuid "d6d23374-273e-4b26-9212-e3e87f815312")
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -6512,7 +6512,7 @@
 		(property "Reference" "H2"
 			(at 0 -3.15 0)
 			(layer "F.Fab")
-			(uuid "f49013de-163a-4660-804e-d49dd275cbba")
+			(uuid "1cfe8901-5ab0-4089-8a85-dbdf2e04992c")
 			(effects
 				(font
 					(size 1 1)
@@ -6523,7 +6523,7 @@
 		(property "Value" "MountingHole_2.2mm_M2"
 			(at 0 3.15 0)
 			(layer "F.Fab")
-			(uuid "c707962f-5b91-4d6d-88dd-3ca5ea697a97")
+			(uuid "6943337b-60d1-4793-9035-264cf7f66562")
 			(effects
 				(font
 					(size 1 1)
@@ -6535,7 +6535,7 @@
 			(at 0 0 0)
 			(layer "F.Fab")
 			(hide yes)
-			(uuid "3c2e1d44-8de5-48d4-a696-bc8ac614215f")
+			(uuid "a3fa5966-3dc7-415b-b931-5861eb306bc1")
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -6546,7 +6546,7 @@
 			(at 0 0 0)
 			(layer "F.Fab")
 			(hide yes)
-			(uuid "4f800356-8214-49e3-a42f-3a8a536aa643")
+			(uuid "571c6932-9e57-49ba-b3ba-07b6948dd920")
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -8484,7 +8484,7 @@
 		(descr "module CMS SOT223 4 pins")
 		(tags "CMS SOT")
 		(property "Reference" "U4"
-			(at 0.51303 1.409538 180)
+			(at 3.135 2.695 180)
 			(layer "F.SilkS")
 			(uuid "3c29bc2b-0b15-4864-99da-13cf38d3d509")
 			(effects
@@ -9124,9 +9124,9 @@
 		(descr "SOIC, 8 Pin (JEDEC MS-012AA, https://www.analog.com/media/en/package-pcb-resources/package/pkg_pdf/soic_narrow-r/r_8.pdf)")
 		(tags "SOIC SO")
 		(property "Reference" "U6"
-			(at 0 1.5 0)
+			(at 0 0 0)
 			(layer "F.SilkS")
-			(uuid "f74794e9-73c5-4e07-9218-2bae3daec7ab")
+			(uuid "5d5597b5-c3bf-44b2-bf5e-e90950323093")
 			(effects
 				(font
 					(size 1 1)
@@ -9137,7 +9137,7 @@
 		(property "Value" "SP3485EN-L"
 			(at 0 3.4 0)
 			(layer "F.Fab")
-			(uuid "e5662545-b882-43b1-8271-c8a80d7f881a")
+			(uuid "466066cb-1cf3-4aa6-9892-1a79877321fc")
 			(effects
 				(font
 					(size 1 1)
@@ -9149,7 +9149,7 @@
 			(at 0 0 0)
 			(layer "F.Fab")
 			(hide yes)
-			(uuid "6db97197-9703-4867-a234-e75982452b45")
+			(uuid "35698c89-87a8-4836-be66-67f8579fa190")
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -9160,7 +9160,7 @@
 			(at 0 0 0)
 			(layer "F.Fab")
 			(hide yes)
-			(uuid "4cf563fc-3912-4f1e-bfb8-dd601097d454")
+			(uuid "a4642628-b4b4-4f76-88fb-869264780a54")
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -10216,9 +10216,9 @@
 		(descr "SOIC, 8 Pin (JEDEC MS-012AA, https://www.analog.com/media/en/package-pcb-resources/package/pkg_pdf/soic_narrow-r/r_8.pdf)")
 		(tags "SOIC SO")
 		(property "Reference" "U8"
-			(at 6.678363 3.798133 180)
+			(at 0 0 180)
 			(layer "F.SilkS")
-			(uuid "2d2b3b69-e92f-4d5b-af96-eb3e112a0177")
+			(uuid "a4542ac5-eb29-43de-978c-b95458d1e079")
 			(effects
 				(font
 					(size 1 1)
@@ -10229,7 +10229,7 @@
 		(property "Value" "SP3485EN-L"
 			(at 0 3.4 180)
 			(layer "F.Fab")
-			(uuid "e5fe4b92-d275-4baf-b3c8-1c5b49b1e9b7")
+			(uuid "b9f81b9b-523d-4d0e-969e-8096a8ae2157")
 			(effects
 				(font
 					(size 1 1)
@@ -10241,7 +10241,7 @@
 			(at 0 0 180)
 			(layer "F.Fab")
 			(hide yes)
-			(uuid "0f02bb3e-063c-40b2-943e-f5ca52fca394")
+			(uuid "bdc92476-49dc-4d69-bc8d-8f644ff9e50f")
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -10252,7 +10252,7 @@
 			(at 0 0 180)
 			(layer "F.Fab")
 			(hide yes)
-			(uuid "dad8ebb5-1f63-4d47-8966-2f5e4107c472")
+			(uuid "d6d3162c-f6a7-45e4-af7f-3215c6650c56")
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -13633,7 +13633,7 @@
 		(descr "SOT, 5 Pin (https://home.jeita.or.jp/tsc/std-pdf/ED-7500A.pdf#page=171, JEDEC MO-203, variant AA, https://www.jedec.org/document_search?search_api_views_fulltext=MO-203)")
 		(tags "SOT TO_SOT_SMD SC-88A SOT-353 SC-70-5")
 		(property "Reference" "U9"
-			(at -2.5 -2.598077 0)
+			(at -2.5 0 0)
 			(layer "F.SilkS")
 			(uuid "4682c0c2-4940-41bd-b0e8-27ec82460cbf")
 			(effects
@@ -15264,7 +15264,7 @@
 		(descr "HRL DP-08RP, 8-position right-angle piano DIP switch, LCSC C458097. Body 21.88 x 9.61 x 9.41mm standing on the board, piano keys on the vertical face protruding 2.40mm past it. Geometry measured from the manufacturer drawing's own vector paths (scaled by its 7.62mm pin-row dimension), not estimated: the body is CENTRED on the two pin rows, 0.994mm beyond each -- it does not stand flush to the front row. Holes dia 0.97+-0.05 -> 1.0mm drill. Keys align with the pin columns and sit on the pins 1-8 row. Replaces the stock top-slide SW_DIP_SPSTx08_Slide footprint, whose body and 3D model misrepresent this part.")
 		(tags "DIP switch SPST right angle piano DP-08RP 7.62mm 300mil")
 		(property "Reference" "S1"
-			(at 0 1.955 90)
+			(at 0 0 90)
 			(layer "F.SilkS")
 			(uuid "a72c2867-eb2a-46cb-bc23-189983d0f130")
 			(effects
@@ -16458,7 +16458,7 @@
 		(property "Reference" "H3"
 			(at 0 3 0)
 			(layer "F.Fab")
-			(uuid "654d249d-4e2e-4b0c-9aeb-f09cc0a4c0d3")
+			(uuid "d48d8bc4-41bc-4778-968d-b92c77b97a92")
 			(effects
 				(font
 					(size 1 1)
@@ -16469,7 +16469,7 @@
 		(property "Value" "MountingHole_2.2mm_M2"
 			(at 0 3.15 0)
 			(layer "F.Fab")
-			(uuid "6b214f82-e0f3-4ce6-9e4f-8608c85c36ec")
+			(uuid "62921572-5257-4938-a670-ed03ba000bbd")
 			(effects
 				(font
 					(size 1 1)
@@ -16481,7 +16481,7 @@
 			(at 0 0 0)
 			(layer "F.Fab")
 			(hide yes)
-			(uuid "7dcc06ba-ba47-43d5-844c-c784e591bfc0")
+			(uuid "12f35ad6-6d93-43d0-b671-9176ba14b755")
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -16492,7 +16492,7 @@
 			(at 0 0 0)
 			(layer "F.Fab")
 			(hide yes)
-			(uuid "b90dc439-734c-49f9-a3b6-6ee4d00d518b")
+			(uuid "af31f08c-86bd-4774-820d-0b736b33242d")
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -22361,7 +22361,7 @@
 		(descr "Panasonic EVQP44B3M side-press (edge-mount) SMD tactile switch, LCSC C79164, in stock. Body 6.2 (X, length) x 3.0mm (Y, width), 3.5mm tall, 1.35mm standoff, actuator protrudes ~0.45mm past the +X edge (edge-mount convention: overhang faces the board edge/case pinhole). DERIVED, NOT TRACED: Panasonic's outline drawing PDF is image-based, same class of gap as the DP-08RP lookup earlier in this project -- pad positions below are a conservative edge-mount-family estimate (2 switch pads inboard, 2 ground/anchor pads at the actuator end), not read off the real drawing. Verify against a physical part before a fab run that depends on exact pad geometry.")
 		(tags "tactile switch side press edge mount EVQP4 C79164")
 		(property "Reference" "SW1"
-			(at 0 -0.8 180)
+			(at 0 0 180)
 			(layer "F.SilkS")
 			(uuid "24abdada-ecac-4998-9cc1-240665bb198d")
 			(effects
@@ -24187,7 +24187,7 @@
 		(property "Reference" "H1"
 			(at 0 -3.15 0)
 			(layer "F.Fab")
-			(uuid "1172d395-592b-4dbc-8bd2-7312a0022a04")
+			(uuid "1be94d4a-1682-42fe-b168-5273665c5075")
 			(effects
 				(font
 					(size 1 1)
@@ -24198,7 +24198,7 @@
 		(property "Value" "MountingHole_2.2mm_M2"
 			(at 0 3.15 0)
 			(layer "F.Fab")
-			(uuid "d77c51d1-16a3-4cb8-b8e4-0be4dc79e4b6")
+			(uuid "277472a0-558c-43de-b207-0596019d055a")
 			(effects
 				(font
 					(size 1 1)
@@ -24210,7 +24210,7 @@
 			(at 0 0 0)
 			(layer "F.Fab")
 			(hide yes)
-			(uuid "aa1d9bec-cdd4-4558-8d24-6f9e21ef4446")
+			(uuid "7474a800-f3eb-49cd-b5ba-f1e09ce460e3")
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -24221,7 +24221,7 @@
 			(at 0 0 0)
 			(layer "F.Fab")
 			(hide yes)
-			(uuid "2e89ed86-5b8b-4b74-b6a8-4a6681fbadb1")
+			(uuid "0cdd688a-e55e-437a-bd87-83d6a9889ccd")
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -24876,9 +24876,9 @@
 		(descr "8-lead though-hole mounted DIP package, row spacing 7.62mm (300 mils), Socket")
 		(tags "THT DIP DIL PDIP 2.54mm 7.62mm 300mil Socket")
 		(property "Reference" "U7"
-			(at 10.31 3.81 180)
+			(at 3.81 3.81 180)
 			(layer "F.SilkS")
-			(uuid "3e40c08d-afef-4c6d-a60b-de9122ca4391")
+			(uuid "4e92e92c-d18f-49b0-ab6a-24f70f3cac13")
 			(effects
 				(font
 					(size 1 1)
@@ -24889,7 +24889,7 @@
 		(property "Value" "PIC12F1840-I/P"
 			(at 3.81 9.95 180)
 			(layer "F.Fab")
-			(uuid "d0f7ebb4-54a9-4612-8a88-6a13601e350b")
+			(uuid "e77661ed-2ac2-4373-9dd4-208042a5f482")
 			(effects
 				(font
 					(size 1 1)
@@ -24901,7 +24901,7 @@
 			(at 0 0 180)
 			(layer "F.Fab")
 			(hide yes)
-			(uuid "a136abf1-cf30-4d45-9d0f-65103e9a2e0f")
+			(uuid "7601113d-1a67-4d78-9b62-e659c086960e")
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -24912,7 +24912,7 @@
 			(at 0 0 180)
 			(layer "F.Fab")
 			(hide yes)
-			(uuid "224c5630-ac6a-42ca-83ec-7871dab3ba42")
+			(uuid "bad4eb82-7372-48d1-a25f-d04e27b7f1a3")
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -26158,7 +26158,7 @@
 		(property "Reference" "H4"
 			(at 0 3 0)
 			(layer "F.Fab")
-			(uuid "cbd4a7a4-a279-4cee-8032-c5966bb2a376")
+			(uuid "f31873da-2069-4445-a635-a87adc8f65ef")
 			(effects
 				(font
 					(size 1 1)
@@ -26169,7 +26169,7 @@
 		(property "Value" "MountingHole_2.2mm_M2"
 			(at 0 3.15 0)
 			(layer "F.Fab")
-			(uuid "f1698c84-efa1-41a1-9b0d-20a18b542fbe")
+			(uuid "399cccab-5691-4e22-ac2e-2c6738fa2e32")
 			(effects
 				(font
 					(size 1 1)
@@ -26181,7 +26181,7 @@
 			(at 0 0 0)
 			(layer "F.Fab")
 			(hide yes)
-			(uuid "a358958f-176e-43d4-b13f-beeacb72c72a")
+			(uuid "d5d1a672-92f8-4690-8315-2dfa83f16ed5")
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -26192,7 +26192,7 @@
 			(at 0 0 0)
 			(layer "F.Fab")
 			(hide yes)
-			(uuid "f25ee896-fd9f-41a3-8dbf-a34579e07f1e")
+			(uuid "eb30e7b8-0f7b-48a6-a25f-757660cbb60f")
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -26339,29 +26339,7 @@
 		(layer "Edge.Cuts")
 		(uuid "3f130af6-9cb4-4808-8d8e-ba94bb57497b")
 	)
-	(gr_text "PWR"
-		(at 152 163.3 0)
-		(layer "F.SilkS")
-		(uuid "d69bd3bd-1853-4c08-96da-aefe12af68ad")
-		(effects
-			(font
-				(size 0.8 0.8)
-				(thickness 0.15)
-			)
-		)
-	)
-	(gr_text "USB-C"
-		(at 152 161.3 0)
-		(layer "F.SilkS")
-		(uuid "df4c16bf-a29b-4304-b984-9dd16f438908")
-		(effects
-			(font
-				(size 0.9 0.9)
-				(thickness 0.15)
-			)
-		)
-	)
-	(gr_text "PRINTER"
+	(gr_text "SERIAL"
 		(at 113 160.2 0)
 		(layer "F.SilkS")
 		(uuid "fe46cd8d-4296-44f5-8884-75ab0b5f721f")
@@ -26372,10 +26350,43 @@
 			)
 		)
 	)
-	(gr_text "LOCALTALK"
+	(gr_text "TASHTALK"
+		(at 127.2 127.4 0)
+		(layer "F.SilkS")
+		(uuid "1de254b6-ea82-432c-a819-4a1ee865a888")
+		(effects
+			(font
+				(size 1 1)
+				(thickness 0.15)
+			)
+		)
+	)
+	(gr_text "APPLETALK"
 		(at 132 160.2 0)
 		(layer "F.SilkS")
 		(uuid "6e85e84f-1a5f-488a-9191-9301f05ecc12")
+		(effects
+			(font
+				(size 1 1)
+				(thickness 0.15)
+			)
+		)
+	)
+	(gr_text "USB-C"
+		(at 152 160.4 0)
+		(layer "F.SilkS")
+		(uuid "df4c16bf-a29b-4304-b984-9dd16f438908")
+		(effects
+			(font
+				(size 1 1)
+				(thickness 0.15)
+			)
+		)
+	)
+	(gr_text "PWR"
+		(at 152 162.12 0)
+		(layer "F.SilkS")
+		(uuid "d69bd3bd-1853-4c08-96da-aefe12af68ad")
 		(effects
 			(font
 				(size 1 1)
