@@ -46,6 +46,16 @@ def _contains(outer, pt):
             inside = not inside
     return inside
 
+def _interior_point(ring):
+    # A point guaranteed to sit strictly inside ring's own interior: the
+    # centroid of the ear triangle at ring's extreme (lowest-y) vertex, which
+    # is always a convex corner regardless of winding. Deliberately not a
+    # ring vertex itself - a sampled vertex can sit exactly on another ring's
+    # edge and give a false containment reading.
+    i = min(range(len(ring)), key=lambda k: (ring[k][1], ring[k][0]))
+    a, b, c = ring[i - 1], ring[i], ring[(i + 1) % len(ring)]
+    return ((a[0] + b[0] + c[0]) / 3, (a[1] + b[1] + c[1]) / 3)
+
 def flatten(svg_path, scale, fills):
     fills = {f.lower() for f in fills}
     svg = SVG.parse(svg_path, reify=True)
@@ -63,15 +73,51 @@ def flatten(svg_path, scale, fills):
         if len(el) == 0:
             continue
         rings.extend(_subpaths_to_points(el, scale))
-    rings.sort(key=lambda r: abs(_area(r)), reverse=True)
+    return _classify(rings)
+
+def _classify(rings):
+    # evenodd nesting can be more than two levels deep: a plate, a letter-shaped
+    # hole cut into it, and a counter island re-solidified inside that hole (the
+    # bowl of an "a"/"e"/"p"). A flat "biggest ring wins, everything else is its
+    # hole" pass puts the hole and its island in as siblings, which loses the
+    # island. Classify by containment depth instead: depth counts how many other
+    # rings contain this ring's interior point. Even depth (0, 2, 4, ...) is
+    # filled material and becomes its own top-level poly's outline - this is what
+    # turns a counter island back into a solid shape instead of void space. Odd
+    # depth is a gap and becomes a hole of its immediate (tightest-area) parent.
+    n = len(rings)
+    interior = [_interior_point(r) for r in rings]
+    areas = [abs(_area(r)) for r in rings]
+    depth = [0] * n
+    parent = [None] * n
+    for i in range(n):
+        best_area = None
+        for j in range(n):
+            # A container must have strictly larger area than what it
+            # contains. Without this, two unrelated failure modes both look
+            # like containment: (a) a ring's own nested descendant can swallow
+            # the ring's interior-point test (e.g. a donut's outer boundary,
+            # tested near its middle, geometrically also sits inside its own
+            # smaller inner hole ring) and (b) two adjacent same-fill shapes
+            # that merely share a boundary by design (a label cell's rule bar
+            # flush against its background rectangle's edge) can trade false
+            # positives depending on exactly where the test point lands. Real
+            # ancestors are always larger than what they contain, so this one
+            # filter rules out both without needing a cleverer test point.
+            if i == j or areas[j] <= areas[i] or not _contains(rings[j], interior[i]):
+                continue
+            depth[i] += 1
+            if best_area is None or areas[j] < best_area:
+                best_area, parent[i] = areas[j], j
     polys = []
-    for ring in rings:
-        for poly in polys:
-            if _contains(poly["outline"], ring[0]):
-                poly["holes"].append(ring)
-                break
+    poly_for_ring = {}
+    for i in sorted(range(n), key=lambda k: depth[k]):
+        if depth[i] % 2 == 0:
+            poly = dict(outline=rings[i], holes=[])
+            polys.append(poly)
+            poly_for_ring[i] = poly
         else:
-            polys.append(dict(outline=ring, holes=[]))
+            poly_for_ring[parent[i]]["holes"].append(rings[i])
     return polys
 
 if __name__ == "__main__":
