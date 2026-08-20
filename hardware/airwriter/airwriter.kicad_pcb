@@ -18727,7 +18727,7 @@
 				(type solid)
 			)
 			(layer "F.CrtYd")
-			(uuid "c339d833-ee66-4add-a043-0ede9c5502ba")
+			(uuid "20103448-acfa-4a79-b199-2cd3a2c29470")
 		)
 		(fp_line
 			(start 9.5 13.45)
@@ -18737,7 +18737,7 @@
 				(type solid)
 			)
 			(layer "F.CrtYd")
-			(uuid "565f61cd-c6ab-4f8c-bd5e-bd0c9973580f")
+			(uuid "4444b87f-9ca4-4c06-9cef-95fa2a52b6c6")
 		)
 		(fp_line
 			(start -9.5 -12.75)
@@ -18747,7 +18747,7 @@
 				(type solid)
 			)
 			(layer "F.CrtYd")
-			(uuid "4444b87f-9ca4-4c06-9cef-95fa2a52b6c6")
+			(uuid "c339d833-ee66-4add-a043-0ede9c5502ba")
 		)
 		(fp_line
 			(start 9.5 -12.75)
@@ -18757,7 +18757,7 @@
 				(type solid)
 			)
 			(layer "F.CrtYd")
-			(uuid "20103448-acfa-4a79-b199-2cd3a2c29470")
+			(uuid "565f61cd-c6ab-4f8c-bd5e-bd0c9973580f")
 		)
 		(fp_line
 			(start -9 12.75)
@@ -22247,7 +22247,7 @@
 	(footprint "Capacitor_SMD:C_0603_1608Metric"
 		(layer "F.Cu")
 		(uuid "e4d688fc-290b-4f10-86d0-6a91f2b34f8e")
-		(at 154.195 131.425)
+		(at 154.195 129.675)
 		(descr "Capacitor SMD 0603 (1608 Metric), square (rectangular) end terminal, IPC-7351 nominal, (Body size source: IPC-SM-782 page 76, https://www.pcb-3d.com/wordpress/wp-content/uploads/ipc-sm-782a_amendment_1_and_2.pdf)")
 		(tags "capacitor")
 		(property "Reference" "C5"
@@ -25742,7 +25742,7 @@
 	(footprint "Capacitor_SMD:C_0603_1608Metric"
 		(layer "F.Cu")
 		(uuid "fc323715-ea24-454c-a474-09182e006096")
-		(at 154.195 129.675)
+		(at 154.195 131.425)
 		(descr "Capacitor SMD 0603 (1608 Metric), square (rectangular) end terminal, IPC-7351 nominal, (Body size source: IPC-SM-782 page 76, https://www.pcb-3d.com/wordpress/wp-content/uploads/ipc-sm-782a_amendment_1_and_2.pdf)")
 		(tags "capacitor")
 		(property "Reference" "C6"

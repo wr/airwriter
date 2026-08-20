@@ -22,8 +22,9 @@ BLOCKS = [
     ("C2",  150.725, 130.425,   0),   # 10u +3V3
     ("C21", 150.725, 132.675,   0),   # 22u VBUS, at U4's input pin
     ("R3",  154.195, 127.925,   0),   # 10k, /EN
-    ("C6",  154.195, 129.675,   0),   # 1u,  /EN
-    ("C5",  154.195, 131.425,   0),   # 100n rail
+    ("C5",  154.195, 129.675,   0),   # 100n rail
+    ("C6",  154.195, 131.425,   0),   # 1u, /EN -- one row lower than the rail cap,
+                                      # closer to U1 pad 3 and the escape channel
     ("C9",  154.195, 133.175,   0),   # 100n, U1 rail (nearest U1 pad 2)
     # --- middle block
     ("U7",  131.035, 136.995, 180),   # PIC + socket; rot 180 keeps the same
