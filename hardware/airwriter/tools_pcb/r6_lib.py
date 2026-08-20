@@ -3,6 +3,12 @@ import pcbnew, math, json, sys
 
 BOARD = "/Users/wells/Projects/airwriter/hardware/airwriter/airwriter.kicad_pcb"
 
+# Satellites the solver fits around the hand-placed frame. Anything not listed
+# here is furniture: fixed by the case, by the panel, or by r6_blocks.py.
+MOVABLE = ["C1", "C3", "C7", "C10", "C11", "C12", "C13", "C14", "C16", "C17",
+           "C18", "C22", "R1", "R2", "R6", "R9", "R10", "R11", "R12", "R13",
+           "R14", "R15", "R16"]
+
 def load():
     return pcbnew.LoadBoard(BOARD)
 

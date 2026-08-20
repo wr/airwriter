@@ -24,6 +24,7 @@ ORDER = [
     "C17", "C10", "C11", "C12", "C13", "R9",     # U3 / RS-232 block
     "C3", "C7", "R6",                             # U2 block, boot cap, TX bias
     "C22", "C1",                                 # VBUS bulk
+    "R1", "R2",                                  # 5.1k CC pulldowns at J1
 ]
 EXPLICIT = {"C3": "U2@/+3V3", "C17": "U3@/+3V3", "C18": "U6@/+3V3",
             "C16": "U7@/+3V3", "C14": "U8@/+3V3",

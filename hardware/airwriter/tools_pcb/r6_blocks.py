@@ -32,11 +32,17 @@ BLOCKS = [
     ("U6",  127.000, 148.500,   0),   # LocalTalk Y/Z transceiver
     ("U3",  114.695, 141.495,   0),   # RS-232 (printer handshake)
     ("U2",  113.395, 150.595,  90),   # printer differential driver
-    ("U5",  133.045, 140.695,   0),   # USB ESD, at U1's USB pads
-    # --- H4, region E
-    ("H4",  143.700, 158.391,   0),
-    ("R1",  142.200, 162.512,  90),   # 5.1k /CC1
-    ("R2",  144.000, 162.512,  90),   # 5.1k /CC2
+    # --- region E, between J4 and J1. The ESD clamp goes as close to J1's data
+    # pins as J1's own body allows -- J1's courtyard is already 4.57mm wide
+    # before its first data pad, so 5.7mm is the floor from this side. Sitting
+    # U5 at the TOP of the pocket rather than level with J1's pad row costs
+    # 0.02mm on /USB_DM and 0.48mm on /USB_DP, and buys the room H4 needs.
+    ("U5",  144.440, 156.340, 180),   # USBLC6-2SC6, hard against J1's courtyard;
+                                      # rot 180 turns its pin-1 silk marker away from
+                                      # U1's pad row and lowers the worse of the two
+                                      # data-pin distances (6.73 -> 6.27mm)
+    ("H4",  143.948, 160.741,   0),   # see r6_h4.py: every frame-legal spot
+                                      # elsewhere gives a far worse support hull
     # --- region F, east of J1 below the antenna zone
     ("R17", 158.240, 162.560,  90),   # 1k, the power indicator's series pair
     ("D3",  160.025, 162.560,  90),   # green PWR LED
