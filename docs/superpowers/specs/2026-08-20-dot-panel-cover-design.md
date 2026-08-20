@@ -3,6 +3,7 @@
 2026-08-20 · Linear W-573 · supersedes the LCARS okudagram direction and, before it,
 the dithered-mist cover. Approved by Wells in the brainstorm of 2026-08-20; scale
 settled in hand with true-scale thermal prints (62 × 100 mm, variant D lineage).
+[amended: panel is 62.0 × 104.27 mm - see amendment block below]
 
 ## What changes, in one paragraph
 
@@ -15,10 +16,43 @@ translucent dot plus an 8-position DIP bank for persistent config. A 3D-printed 
 lattice between the boards guides each LED to its dot. Firmware animates printer
 state on the grid.
 
+## Amendment, 2026-08-20 (post-generator)
+
+The generator (Tasks 1-4, `hardware/panel/`) is built and DRC-clean; several
+working values below are superseded by what actually came out of Wells's
+Figma export and the generator's own measurements. `[amended]` marks the
+stale lines in place; this block is the correction:
+
+- **Panel is 62.0 × 104.27 mm**, not 62 × 100/101.51 — the Frame 9 re-export's
+  viewBox is `0 0 1100 1850` px, not 1801.
+- **Grid pitch 8.4545 mm, dots Ø5.6364 mm** (not "~7.9 mm pitch / ~5.2 mm dots"
+  — those were pre-export estimates; the real numbers come straight out of
+  the SVG's circle spacing).
+- **Test hole is 2.25 mm NPTH, not 3.5 mm.** A tact switch plunger must be
+  **≤ ~2.0 mm** to pass it, not ≤ 3.2 mm — this changes the main-board switch
+  selection in §2.
+- **Generator is `panel_layout.py` + `svg2poly.py` + `floors.py` +
+  `emit_board.py`, run via `generate.sh`** — not a single `gen_panel.py`.
+  `floors.py` is the fab-floor advisory pass (Task 4 follow-up): it warns,
+  but does not fail the build, on any same-class poly gap or hole-to-outline
+  pinch between 0.02 mm and 0.101 mm.
+- **Microprint risk, accepted pending quote:** the AirWriter subtitle's
+  thinnest strokes measure ~0.10 mm at their tightest hole-to-outline pinch
+  (e.g. near x 6.87, y 83.93) — `floors.py` warns on this every run. Below
+  the 0.10 mm mask-sliver floor stated in §1, so it's a real risk, not a
+  false positive; whether a given fab can actually resolve it is a
+  quote-time question, not resolved here.
+- **The `test` tag currently sits on exposed copper, not black mask.** The
+  white silk `test` label overlaps the gold dot's F.Mask opening (§1's
+  original assumption), so on a real fab run that silk gets clipped where it
+  crosses the copper — legible in the Task 4 render but not the clean
+  silk-on-black look. Pending a designer re-export moving the tag onto
+  adjacent black mask.
+
 ## 1. Art panel
 
 **62 × 100 × 1.6 mm FR4, matte black soldermask, ENIG, 2-layer, zero components,
-zero nets.** It is pure materials. Corner radius and mounting features follow the
+zero nets.** [amended: 62.0 × 104.27 mm - see amendment block above] It is pure materials. Corner radius and mounting features follow the
 enclosure design (§3); panel proportions and exact element spacing are Wells's,
 exported from Figma.
 
@@ -26,7 +60,9 @@ exported from Figma.
 
 Wells owns the artwork. He exports SVGs (as with `Frame 25.svg` / `Frame 27.svg` /
 `Frame 7`); a generator — `hardware/panel/gen_panel.py`, same philosophy as the old
-`artwork.py` — converts them into the `.kicad_pcb`:
+`artwork.py` — converts them into the `.kicad_pcb`.
+[amended: the generator is `panel_layout.py` + `svg2poly.py` + `floors.py` +
+`emit_board.py` via `generate.sh` - see amendment block above]
 
 - One SVG (or layer-tagged group) per material class. The generator maps them to
   mask openings, copper zones, silk polygons, and drills.
@@ -61,6 +97,7 @@ Teal hue varies with mask pigment batch — accepted fab risk, noted on W-568's 
 near 7.9 mm and dots near 5.2 mm; final numbers come from the Figma export and are
 not constrained by anything except the fab floors and the LED package (§2) — dots
 down to ~4 mm are safe.
+[amended: pitch is 8.4545 mm, dots Ø5.6364 mm - see amendment block above]
 
 ### The test dot
 
@@ -68,6 +105,7 @@ One gold dot in the grid is the test button: a **3.5 mm NPTH** through its centr
 gold ring around it, white silk `test` beneath. The plunger of a tact switch on the
 main board passes through it (§2). The hole is plain drilled fibreglass — no plating,
 so no electrical path to the panel.
+[amended: hole is 2.25 mm NPTH, not 3.5 mm - see amendment block above]
 
 ### Lockup and labels
 
@@ -102,6 +140,7 @@ so no electrical path to the panel.
   length chosen as lattice height + 1.6 mm panel + ~1.5 mm proud (the TS1102-style
   family runs 4.3–25 mm; exact MPN picked with the enclosure stack in the plan).
   Plunger ≤ 3.2 mm diameter to pass the 3.5 mm panel hole.
+  [amended: hole is 2.25 mm, so plunger must be ≤ ~2.0 mm - see amendment block above]
 - **DIP bank:** 8-position right-angle (piano) DIP switch at a board edge, actuators
   facing out through a slot in the case side. 8 GPIOs, internal pull-ups, closed = GND.
   Boot-read and runtime-polled. Initial map: 1–2 transport mode (AirPrint /
@@ -173,6 +212,9 @@ All of this runs on the devkit with a strip of SK6812s before any board exists.
 ## 6. Verification
 
 - `gen_panel.py` output passes `kicad-cli pcb drc`; floors enforced in the generator.
+  [amended: generator is `generate.sh` (panel_layout.py/svg2poly.py/floors.py/
+  emit_board.py); floors.py asserts hard fab floors and warns (not fails) on
+  0.02-0.101mm gaps/pinches - see amendment block above]
 - Main board: ERC, DRC with `--refill-zones` and `--schematic-parity`, the
   unconnected-items split from the handoff, drill grep, model-path check.
 - `led_grid` and `dip_config` get host-side checks in the existing test harness;

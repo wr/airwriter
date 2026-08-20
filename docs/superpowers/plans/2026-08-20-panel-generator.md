@@ -1,5 +1,8 @@
 # Panel Generator Implementation Plan
 
+> Amended 2026-08-20: the Frame 9 re-export supersedes the stated 1801px/101.51mm
+> height with 1850px/104.27mm; the SVG is the truth.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Build `hardware/panel/` — a generator that turns Wells's single full-panel Figma SVG export into a DRC-clean, fab-ready art-panel `.kicad_pcb` (62 × 101.51 mm, matte black, ENIG, zero components).
