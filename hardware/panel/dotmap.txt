@@ -1,8 +1,9 @@
-GPBGLP.
-GBPBG.P
+# generated from svg/panel.svg - do not edit
+PBGLP.G
+BPBG.GP
 LPGLBLG
-GBGPTPB
-G.LBLGB
-PBGPG.G
-GGP.BPL
-B.GBGPG
+GBGTPGP
+BG.LBLG
+BPBGPG.
+GGGP.BP
+LB.GBGP
