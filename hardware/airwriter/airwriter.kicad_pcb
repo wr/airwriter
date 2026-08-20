@@ -457,7 +457,7 @@
 	(footprint "Capacitor_SMD:C_0603_1608Metric"
 		(layer "F.Cu")
 		(uuid "05917da8-cd32-4a22-a782-7b9c9ce8a419")
-		(at 159.0886 62.886399)
+		(at 150.6341 62.886399)
 		(descr "Capacitor SMD 0603 (1608 Metric), square (rectangular) end terminal, IPC-7351 nominal, (Body size source: IPC-SM-782 page 76, https://www.pcb-3d.com/wordpress/wp-content/uploads/ipc-sm-782a_amendment_1_and_2.pdf)")
 		(tags "capacitor")
 		(property "Reference" "C66"
@@ -603,7 +603,7 @@
 	(footprint "Capacitor_SMD:C_0603_1608Metric"
 		(layer "F.Cu")
 		(uuid "06d1b139-1bc6-4d9d-9537-3e869709078a")
-		(at 153.1891 90.25)
+		(at 159.0886 88.25)
 		(descr "Capacitor SMD 0603 (1608 Metric), square (rectangular) end terminal, IPC-7351 nominal, (Body size source: IPC-SM-782 page 76, https://www.pcb-3d.com/wordpress/wp-content/uploads/ipc-sm-782a_amendment_1_and_2.pdf)")
 		(tags "capacitor")
 		(property "Reference" "C49"
@@ -933,7 +933,7 @@
 	(footprint "airwriter:LED_SK6812MINI-E_3.2x2.8mm_P1.5mm_TopFiring"
 		(layer "F.Cu")
 		(uuid "0c94072f-83ca-4090-8add-9b4a72ce391e")
-		(at 139.4545 107.9091)
+		(at 122.5455 107.9091)
 		(descr "RGB LED with integrated controller (https://www.lcsc.com/datasheet/C5149201.pdf) - top-firing, no board cutout (derived from the stock ReverseMount footprint by stripping its Edge.Cuts slot)")
 		(tags "RGB LED NeoPixel Mini addressable")
 		(property "Reference" "D21"
@@ -1683,7 +1683,7 @@
 	(footprint "Capacitor_SMD:C_0603_1608Metric"
 		(layer "F.Cu")
 		(uuid "12085144-8f87-4177-a1ef-db3438eee689")
-		(at 142.1795 96.7045)
+		(at 142.1795 102.2045)
 		(descr "Capacitor SMD 0603 (1608 Metric), square (rectangular) end terminal, IPC-7351 nominal, (Body size source: IPC-SM-782 page 76, https://www.pcb-3d.com/wordpress/wp-content/uploads/ipc-sm-782a_amendment_1_and_2.pdf)")
 		(tags "capacitor")
 		(property "Reference" "C47"
@@ -2185,7 +2185,7 @@
 	(footprint "airwriter:LED_SK6812MINI-E_3.2x2.8mm_P1.5mm_TopFiring"
 		(layer "F.Cu")
 		(uuid "190c724a-9fda-4c67-a229-4d8e50ee6de7")
-		(at 139.4545 74.0909)
+		(at 122.5455 74.0909)
 		(descr "RGB LED with integrated controller (https://www.lcsc.com/datasheet/C5149201.pdf) - top-firing, no board cutout (derived from the stock ReverseMount footprint by stripping its Edge.Cuts slot)")
 		(tags "RGB LED NeoPixel Mini addressable")
 		(property "Reference" "D39"
@@ -2567,7 +2567,7 @@
 	(footprint "Capacitor_SMD:C_0603_1608Metric"
 		(layer "F.Cu")
 		(uuid "19d4045d-e4dc-4cc3-a6bf-391ef5de8235")
-		(at 117.2655 90.25)
+		(at 144.7345 90.25)
 		(descr "Capacitor SMD 0603 (1608 Metric), square (rectangular) end terminal, IPC-7351 nominal, (Body size source: IPC-SM-782 page 76, https://www.pcb-3d.com/wordpress/wp-content/uploads/ipc-sm-782a_amendment_1_and_2.pdf)")
 		(tags "capacitor")
 		(property "Reference" "C50"
@@ -2713,11 +2713,11 @@
 	(footprint "Button_Switch_THT:SW_PUSH_6mm_H13mm"
 		(layer "F.Cu")
 		(uuid "1e875e44-e832-4662-a88b-54fe4f94883b")
-		(at 131 91)
+		(at 131 91 180)
 		(descr "tactile push button, 6x6mm e.g. PHAP33xx series, height=13mm")
 		(tags "tact sw push 6mm")
 		(property "Reference" "SW3"
-			(at 3.25 -2 0)
+			(at 3.25 -2 180)
 			(layer "F.SilkS")
 			(uuid "7cdc6bfe-0849-4bc6-8bc4-842bafe2eaa6")
 			(effects
@@ -2728,7 +2728,7 @@
 			)
 		)
 		(property "Value" "TS-1002-BR16026"
-			(at 3.75 6.7 0)
+			(at 3.75 6.7 180)
 			(layer "F.Fab")
 			(uuid "8a879646-49d4-4297-9006-916d435a80a7")
 			(effects
@@ -2739,7 +2739,7 @@
 			)
 		)
 		(property "Datasheet" ""
-			(at 0 0 0)
+			(at 0 0 180)
 			(unlocked yes)
 			(layer "F.Fab")
 			(hide yes)
@@ -2752,7 +2752,7 @@
 			)
 		)
 		(property "Description" ""
-			(at 0 0 0)
+			(at 0 0 180)
 			(unlocked yes)
 			(layer "F.Fab")
 			(hide yes)
@@ -2767,24 +2767,14 @@
 		(attr through_hole)
 		(duplicate_pad_numbers_are_jumpers no)
 		(fp_line
-			(start -0.25 1.5)
-			(end -0.25 3)
+			(start 6.75 3)
+			(end 6.75 1.5)
 			(stroke
 				(width 0.12)
 				(type solid)
 			)
 			(layer "F.SilkS")
-			(uuid "dbbc5ada-fcb9-41ff-ad7c-57c88495d47f")
-		)
-		(fp_line
-			(start 1 5.5)
-			(end 5.5 5.5)
-			(stroke
-				(width 0.12)
-				(type solid)
-			)
-			(layer "F.SilkS")
-			(uuid "7384239e-6e45-4c74-84cf-455e0ab791d7")
+			(uuid "894608fa-86f2-4a5c-b62a-93f81172e212")
 		)
 		(fp_line
 			(start 5.5 -1)
@@ -2797,124 +2787,24 @@
 			(uuid "be896a92-d421-4791-9453-c6ef28c97f39")
 		)
 		(fp_line
-			(start 6.75 3)
-			(end 6.75 1.5)
+			(start 1 5.5)
+			(end 5.5 5.5)
 			(stroke
 				(width 0.12)
 				(type solid)
 			)
 			(layer "F.SilkS")
-			(uuid "894608fa-86f2-4a5c-b62a-93f81172e212")
+			(uuid "7384239e-6e45-4c74-84cf-455e0ab791d7")
 		)
 		(fp_line
-			(start -1.5 -1.5)
-			(end -1.25 -1.5)
+			(start -0.25 1.5)
+			(end -0.25 3)
 			(stroke
-				(width 0.05)
+				(width 0.12)
 				(type solid)
 			)
-			(layer "F.CrtYd")
-			(uuid "66b43926-3e6a-4c4c-8602-d20de9d19c4e")
-		)
-		(fp_line
-			(start -1.5 -1.25)
-			(end -1.5 -1.5)
-			(stroke
-				(width 0.05)
-				(type solid)
-			)
-			(layer "F.CrtYd")
-			(uuid "d82ef771-9186-42cb-91b0-8ef2fbce3e2c")
-		)
-		(fp_line
-			(start -1.5 5.75)
-			(end -1.5 -1.25)
-			(stroke
-				(width 0.05)
-				(type solid)
-			)
-			(layer "F.CrtYd")
-			(uuid "9fd658ea-717a-45f3-987b-73e21f47cc0e")
-		)
-		(fp_line
-			(start -1.5 5.75)
-			(end -1.5 6)
-			(stroke
-				(width 0.05)
-				(type solid)
-			)
-			(layer "F.CrtYd")
-			(uuid "3304f5ba-459c-4296-93e2-d1d01ee49bf2")
-		)
-		(fp_line
-			(start -1.5 6)
-			(end -1.25 6)
-			(stroke
-				(width 0.05)
-				(type solid)
-			)
-			(layer "F.CrtYd")
-			(uuid "456273d3-27d0-453f-9ece-e42c395d0a07")
-		)
-		(fp_line
-			(start -1.25 -1.5)
-			(end 7.75 -1.5)
-			(stroke
-				(width 0.05)
-				(type solid)
-			)
-			(layer "F.CrtYd")
-			(uuid "f22814be-de22-4d0d-ac15-7d9e91bd84bf")
-		)
-		(fp_line
-			(start 7.75 -1.5)
-			(end 8 -1.5)
-			(stroke
-				(width 0.05)
-				(type solid)
-			)
-			(layer "F.CrtYd")
-			(uuid "103a3dd2-47b3-485d-b8ed-dfca156eec4b")
-		)
-		(fp_line
-			(start 7.75 6)
-			(end -1.25 6)
-			(stroke
-				(width 0.05)
-				(type solid)
-			)
-			(layer "F.CrtYd")
-			(uuid "6fc72dd2-5f1d-46e8-8503-17eec74c26c3")
-		)
-		(fp_line
-			(start 7.75 6)
-			(end 8 6)
-			(stroke
-				(width 0.05)
-				(type solid)
-			)
-			(layer "F.CrtYd")
-			(uuid "5bd25b28-fbb3-48be-94e3-8f364c6c8951")
-		)
-		(fp_line
-			(start 8 -1.5)
-			(end 8 -1.25)
-			(stroke
-				(width 0.05)
-				(type solid)
-			)
-			(layer "F.CrtYd")
-			(uuid "6c3a9da2-4532-40b3-8045-c0341ebc5dcf")
-		)
-		(fp_line
-			(start 8 -1.25)
-			(end 8 5.75)
-			(stroke
-				(width 0.05)
-				(type solid)
-			)
-			(layer "F.CrtYd")
-			(uuid "6bcf5384-6b0e-4d2e-ba46-d4b6786105d9")
+			(layer "F.SilkS")
+			(uuid "dbbc5ada-fcb9-41ff-ad7c-57c88495d47f")
 		)
 		(fp_line
 			(start 8 6)
@@ -2927,34 +2817,124 @@
 			(uuid "e021ebca-2845-4fe1-a10a-76568719f7ce")
 		)
 		(fp_line
-			(start 0.25 -0.75)
-			(end 3.25 -0.75)
+			(start 8 -1.25)
+			(end 8 5.75)
 			(stroke
-				(width 0.1)
+				(width 0.05)
 				(type solid)
 			)
-			(layer "F.Fab")
-			(uuid "2a508249-3b55-47a4-a936-e8cf8fccd1f3")
+			(layer "F.CrtYd")
+			(uuid "6bcf5384-6b0e-4d2e-ba46-d4b6786105d9")
 		)
 		(fp_line
-			(start 0.25 5.25)
-			(end 0.25 -0.75)
+			(start 8 -1.5)
+			(end 8 -1.25)
 			(stroke
-				(width 0.1)
+				(width 0.05)
 				(type solid)
 			)
-			(layer "F.Fab")
-			(uuid "9252b480-98bf-4d19-9470-c7b4516fe910")
+			(layer "F.CrtYd")
+			(uuid "6c3a9da2-4532-40b3-8045-c0341ebc5dcf")
 		)
 		(fp_line
-			(start 3.25 -0.75)
-			(end 6.25 -0.75)
+			(start 7.75 6)
+			(end 8 6)
+			(stroke
+				(width 0.05)
+				(type solid)
+			)
+			(layer "F.CrtYd")
+			(uuid "5bd25b28-fbb3-48be-94e3-8f364c6c8951")
+		)
+		(fp_line
+			(start 7.75 6)
+			(end -1.25 6)
+			(stroke
+				(width 0.05)
+				(type solid)
+			)
+			(layer "F.CrtYd")
+			(uuid "6fc72dd2-5f1d-46e8-8503-17eec74c26c3")
+		)
+		(fp_line
+			(start 7.75 -1.5)
+			(end 8 -1.5)
+			(stroke
+				(width 0.05)
+				(type solid)
+			)
+			(layer "F.CrtYd")
+			(uuid "103a3dd2-47b3-485d-b8ed-dfca156eec4b")
+		)
+		(fp_line
+			(start -1.25 -1.5)
+			(end 7.75 -1.5)
+			(stroke
+				(width 0.05)
+				(type solid)
+			)
+			(layer "F.CrtYd")
+			(uuid "f22814be-de22-4d0d-ac15-7d9e91bd84bf")
+		)
+		(fp_line
+			(start -1.5 6)
+			(end -1.25 6)
+			(stroke
+				(width 0.05)
+				(type solid)
+			)
+			(layer "F.CrtYd")
+			(uuid "456273d3-27d0-453f-9ece-e42c395d0a07")
+		)
+		(fp_line
+			(start -1.5 5.75)
+			(end -1.5 6)
+			(stroke
+				(width 0.05)
+				(type solid)
+			)
+			(layer "F.CrtYd")
+			(uuid "3304f5ba-459c-4296-93e2-d1d01ee49bf2")
+		)
+		(fp_line
+			(start -1.5 5.75)
+			(end -1.5 -1.25)
+			(stroke
+				(width 0.05)
+				(type solid)
+			)
+			(layer "F.CrtYd")
+			(uuid "9fd658ea-717a-45f3-987b-73e21f47cc0e")
+		)
+		(fp_line
+			(start -1.5 -1.25)
+			(end -1.5 -1.5)
+			(stroke
+				(width 0.05)
+				(type solid)
+			)
+			(layer "F.CrtYd")
+			(uuid "d82ef771-9186-42cb-91b0-8ef2fbce3e2c")
+		)
+		(fp_line
+			(start -1.5 -1.5)
+			(end -1.25 -1.5)
+			(stroke
+				(width 0.05)
+				(type solid)
+			)
+			(layer "F.CrtYd")
+			(uuid "66b43926-3e6a-4c4c-8602-d20de9d19c4e")
+		)
+		(fp_line
+			(start 6.25 5.25)
+			(end 0.25 5.25)
 			(stroke
 				(width 0.1)
 				(type solid)
 			)
 			(layer "F.Fab")
-			(uuid "920e575b-ef89-4bfd-a1b1-b2a39548d1df")
+			(uuid "ad9a7ae5-3f90-47bb-837d-7a7a040cf22d")
 		)
 		(fp_line
 			(start 6.25 -0.75)
@@ -2967,14 +2947,34 @@
 			(uuid "56850ff2-4520-4427-8282-bb3de42e396c")
 		)
 		(fp_line
-			(start 6.25 5.25)
-			(end 0.25 5.25)
+			(start 3.25 -0.75)
+			(end 6.25 -0.75)
 			(stroke
 				(width 0.1)
 				(type solid)
 			)
 			(layer "F.Fab")
-			(uuid "ad9a7ae5-3f90-47bb-837d-7a7a040cf22d")
+			(uuid "920e575b-ef89-4bfd-a1b1-b2a39548d1df")
+		)
+		(fp_line
+			(start 0.25 5.25)
+			(end 0.25 -0.75)
+			(stroke
+				(width 0.1)
+				(type solid)
+			)
+			(layer "F.Fab")
+			(uuid "9252b480-98bf-4d19-9470-c7b4516fe910")
+		)
+		(fp_line
+			(start 0.25 -0.75)
+			(end 3.25 -0.75)
+			(stroke
+				(width 0.1)
+				(type solid)
+			)
+			(layer "F.Fab")
+			(uuid "2a508249-3b55-47a4-a936-e8cf8fccd1f3")
 		)
 		(fp_circle
 			(center 3.25 2.25)
@@ -2988,7 +2988,7 @@
 			(uuid "8dbf3d25-5816-4654-94d6-7e58d85e89e1")
 		)
 		(fp_text user "${REFERENCE}"
-			(at 3.25 2.25 0)
+			(at 3.25 2.25 180)
 			(layer "F.Fab")
 			(uuid "f6156baa-4e07-4b2e-aee1-60a02dcc1fec")
 			(effects
@@ -2999,7 +2999,7 @@
 			)
 		)
 		(pad "1" thru_hole circle
-			(at 0 0 90)
+			(at 0 0 270)
 			(size 2 2)
 			(drill 1.1)
 			(layers "*.Cu" "*.Mask")
@@ -3008,7 +3008,7 @@
 			(uuid "9003f6f4-4cd9-416a-a167-66bc4b2e79d7")
 		)
 		(pad "1" thru_hole circle
-			(at 6.5 0 90)
+			(at 6.5 0 270)
 			(size 2 2)
 			(drill 1.1)
 			(layers "*.Cu" "*.Mask")
@@ -3017,7 +3017,7 @@
 			(uuid "363a90df-9de2-47c8-825b-082c9201323f")
 		)
 		(pad "2" thru_hole circle
-			(at 0 4.5 90)
+			(at 0 4.5 270)
 			(size 2 2)
 			(drill 1.1)
 			(layers "*.Cu" "*.Mask")
@@ -3026,7 +3026,7 @@
 			(uuid "c3aed3c0-76b0-40e4-bd18-2499906974a5")
 		)
 		(pad "2" thru_hole circle
-			(at 6.5 4.5 90)
+			(at 6.5 4.5 270)
 			(size 2 2)
 			(drill 1.1)
 			(layers "*.Cu" "*.Mask")
@@ -3576,7 +3576,7 @@
 	(footprint "Capacitor_SMD:C_0603_1608Metric"
 		(layer "F.Cu")
 		(uuid "2875282d-fa49-4bd1-a9e6-81cdeafe7058")
-		(at 150.6341 76.8409)
+		(at 144.7345 73.3409)
 		(descr "Capacitor SMD 0603 (1608 Metric), square (rectangular) end terminal, IPC-7351 nominal, (Body size source: IPC-SM-782 page 76, https://www.pcb-3d.com/wordpress/wp-content/uploads/ipc-sm-782a_amendment_1_and_2.pdf)")
 		(tags "capacitor")
 		(property "Reference" "C58"
@@ -3722,7 +3722,7 @@
 	(footprint "Capacitor_SMD:C_0603_1608Metric"
 		(layer "F.Cu")
 		(uuid "291ab31c-b411-4ec6-ba32-9a204a28517e")
-		(at 125.2705 62.886399)
+		(at 116.8159 62.886399)
 		(descr "Capacitor SMD 0603 (1608 Metric), square (rectangular) end terminal, IPC-7351 nominal, (Body size source: IPC-SM-782 page 76, https://www.pcb-3d.com/wordpress/wp-content/uploads/ipc-sm-782a_amendment_1_and_2.pdf)")
 		(tags "capacitor")
 		(property "Reference" "C63"
@@ -4542,7 +4542,7 @@
 	(footprint "Capacitor_SMD:C_0603_1608Metric"
 		(layer "F.Cu")
 		(uuid "30fb64d9-3f4c-4cb4-878d-e38e2cb5a119")
-		(at 116.8159 96.7045)
+		(at 108.361399 96.7045)
 		(descr "Capacitor SMD 0603 (1608 Metric), square (rectangular) end terminal, IPC-7351 nominal, (Body size source: IPC-SM-782 page 76, https://www.pcb-3d.com/wordpress/wp-content/uploads/ipc-sm-782a_amendment_1_and_2.pdf)")
 		(tags "capacitor")
 		(property "Reference" "C44"
@@ -5491,7 +5491,7 @@
 	(footprint "airwriter:LED_SK6812MINI-E_3.2x2.8mm_P1.5mm_TopFiring"
 		(layer "F.Cu")
 		(uuid "37d120b6-05b4-453c-bf49-b5815a71e6a3")
-		(at 139.4545 124.8182)
+		(at 122.5455 124.8182)
 		(descr "RGB LED with integrated controller (https://www.lcsc.com/datasheet/C5149201.pdf) - top-firing, no board cutout (derived from the stock ReverseMount footprint by stripping its Edge.Cuts slot)")
 		(tags "RGB LED NeoPixel Mini addressable")
 		(property "Reference" "D12"
@@ -5689,7 +5689,7 @@
 	(footprint "airwriter:LED_SK6812MINI-E_3.2x2.8mm_P1.5mm_TopFiring"
 		(layer "F.Cu")
 		(uuid "389f1e4a-c108-4e66-88aa-25ee574abd7d")
-		(at 114.0909 65.636399)
+		(at 105.6364 65.636399)
 		(descr "RGB LED with integrated controller (https://www.lcsc.com/datasheet/C5149201.pdf) - top-firing, no board cutout (derived from the stock ReverseMount footprint by stripping its Edge.Cuts slot)")
 		(tags "RGB LED NeoPixel Mini addressable")
 		(property "Reference" "D42"
@@ -5887,7 +5887,7 @@
 	(footprint "airwriter:LED_SK6812MINI-E_3.2x2.8mm_P1.5mm_TopFiring"
 		(layer "F.Cu")
 		(uuid "3b1230ec-5b3f-4910-aa20-a05fcb6f2a2e")
-		(at 147.9091 65.636399)
+		(at 139.4545 65.636399)
 		(descr "RGB LED with integrated controller (https://www.lcsc.com/datasheet/C5149201.pdf) - top-firing, no board cutout (derived from the stock ReverseMount footprint by stripping its Edge.Cuts slot)")
 		(tags "RGB LED NeoPixel Mini addressable")
 		(property "Reference" "D45"
@@ -6085,7 +6085,7 @@
 	(footprint "Capacitor_SMD:C_0603_1608Metric"
 		(layer "F.Cu")
 		(uuid "3c0b3a90-b732-4815-8df9-848ab77409da")
-		(at 116.8159 79.7955)
+		(at 108.361399 85.2955)
 		(descr "Capacitor SMD 0603 (1608 Metric), square (rectangular) end terminal, IPC-7351 nominal, (Body size source: IPC-SM-782 page 76, https://www.pcb-3d.com/wordpress/wp-content/uploads/ipc-sm-782a_amendment_1_and_2.pdf)")
 		(tags "capacitor")
 		(property "Reference" "C52"
@@ -6231,7 +6231,7 @@
 	(footprint "airwriter:LED_SK6812MINI-E_3.2x2.8mm_P1.5mm_TopFiring"
 		(layer "F.Cu")
 		(uuid "3c561179-013b-4d29-a8b6-fd8412b65a1b")
-		(at 147.9091 91)
+		(at 156.3636 91)
 		(descr "RGB LED with integrated controller (https://www.lcsc.com/datasheet/C5149201.pdf) - top-firing, no board cutout (derived from the stock ReverseMount footprint by stripping its Edge.Cuts slot)")
 		(tags "RGB LED NeoPixel Mini addressable")
 		(property "Reference" "D29"
@@ -6535,7 +6535,7 @@
 	(footprint "Capacitor_SMD:C_0603_1608Metric"
 		(layer "F.Cu")
 		(uuid "429f9394-c74d-48ef-a54a-26bf5b90d9b9")
-		(at 159.0886 122.0682)
+		(at 151.0836 124.0682)
 		(descr "Capacitor SMD 0603 (1608 Metric), square (rectangular) end terminal, IPC-7351 nominal, (Body size source: IPC-SM-782 page 76, https://www.pcb-3d.com/wordpress/wp-content/uploads/ipc-sm-782a_amendment_1_and_2.pdf)")
 		(tags "capacitor")
 		(property "Reference" "C30"
@@ -6681,7 +6681,7 @@
 	(footprint "Capacitor_SMD:C_0603_1608Metric"
 		(layer "F.Cu")
 		(uuid "442a8973-d283-4ee5-bc73-82419eb9e055")
-		(at 125.2705 119.113599)
+		(at 150.6341 113.613599)
 		(descr "Capacitor SMD 0603 (1608 Metric), square (rectangular) end terminal, IPC-7351 nominal, (Body size source: IPC-SM-782 page 76, https://www.pcb-3d.com/wordpress/wp-content/uploads/ipc-sm-782a_amendment_1_and_2.pdf)")
 		(tags "capacitor")
 		(property "Reference" "C37"
@@ -7180,7 +7180,7 @@
 	(footprint "airwriter:LED_SK6812MINI-E_3.2x2.8mm_P1.5mm_TopFiring"
 		(layer "F.Cu")
 		(uuid "47bc6482-508b-43b9-8803-9718b628e9a4")
-		(at 105.6364 116.363599)
+		(at 131 116.363599)
 		(descr "RGB LED with integrated controller (https://www.lcsc.com/datasheet/C5149201.pdf) - top-firing, no board cutout (derived from the stock ReverseMount footprint by stripping its Edge.Cuts slot)")
 		(tags "RGB LED NeoPixel Mini addressable")
 		(property "Reference" "D15"
@@ -7576,7 +7576,7 @@
 	(footprint "airwriter:LED_SK6812MINI-E_3.2x2.8mm_P1.5mm_TopFiring"
 		(layer "F.Cu")
 		(uuid "51376a5a-b056-4284-b6b1-887f35bae760")
-		(at 122.5455 124.8182)
+		(at 114.0909 124.8182)
 		(descr "RGB LED with integrated controller (https://www.lcsc.com/datasheet/C5149201.pdf) - top-firing, no board cutout (derived from the stock ReverseMount footprint by stripping its Edge.Cuts slot)")
 		(tags "RGB LED NeoPixel Mini addressable")
 		(property "Reference" "D13"
@@ -7774,7 +7774,7 @@
 	(footprint "Capacitor_SMD:C_0603_1608Metric"
 		(layer "F.Cu")
 		(uuid "5477f205-628b-4ee2-acfd-4551f8d759b9")
-		(at 125.2705 85.2955)
+		(at 119.3709 81.7955)
 		(descr "Capacitor SMD 0603 (1608 Metric), square (rectangular) end terminal, IPC-7351 nominal, (Body size source: IPC-SM-782 page 76, https://www.pcb-3d.com/wordpress/wp-content/uploads/ipc-sm-782a_amendment_1_and_2.pdf)")
 		(tags "capacitor")
 		(property "Reference" "C53"
@@ -8224,7 +8224,7 @@
 	(footprint "Capacitor_SMD:C_0603_1608Metric"
 		(layer "F.Cu")
 		(uuid "59b46605-57ae-4d51-941f-b3924a90ef52")
-		(at 125.2705 102.2045)
+		(at 125.2705 96.7045)
 		(descr "Capacitor SMD 0603 (1608 Metric), square (rectangular) end terminal, IPC-7351 nominal, (Body size source: IPC-SM-782 page 76, https://www.pcb-3d.com/wordpress/wp-content/uploads/ipc-sm-782a_amendment_1_and_2.pdf)")
 		(tags "capacitor")
 		(property "Reference" "C45"
@@ -9392,7 +9392,7 @@
 	(footprint "airwriter:LED_SK6812MINI-E_3.2x2.8mm_P1.5mm_TopFiring"
 		(layer "F.Cu")
 		(uuid "65550fd3-75bf-46f9-8496-38ebded2c76c")
-		(at 122.5455 107.9091)
+		(at 114.0909 107.9091)
 		(descr "RGB LED with integrated controller (https://www.lcsc.com/datasheet/C5149201.pdf) - top-firing, no board cutout (derived from the stock ReverseMount footprint by stripping its Edge.Cuts slot)")
 		(tags "RGB LED NeoPixel Mini addressable")
 		(property "Reference" "D22"
@@ -9587,194 +9587,10 @@
 		)
 		(embedded_fonts no)
 	)
-	(footprint "airwriter:EVQP44B3M_SidePress"
-		(layer "F.Cu")
-		(uuid "68a83874-9b00-4266-a117-f7d574ea50c6")
-		(at 116.925 135.675)
-		(descr "Panasonic EVQP44B3M side-press (edge-mount) SMD tactile switch, LCSC C79164, in stock. Body 6.2 (X, length) x 3.0mm (Y, width), 3.5mm tall, 1.35mm standoff, actuator protrudes ~0.45mm past the +X edge (edge-mount convention: overhang faces the board edge/case pinhole). DERIVED, NOT TRACED: Panasonic's outline drawing PDF is image-based, same class of gap as the DP-08RP lookup earlier in this project -- pad positions below are a conservative edge-mount-family estimate (2 switch pads inboard, 2 ground/anchor pads at the actuator end), not read off the real drawing. Verify against a physical part before a fab run that depends on exact pad geometry.")
-		(tags "tactile switch side press edge mount EVQP4 C79164")
-		(property "Reference" "SW1"
-			(at 0 -2.3 0)
-			(layer "F.SilkS")
-			(uuid "50df0c2a-1ff2-47b6-a1d7-1e1266ca0acb")
-			(effects
-				(font
-					(size 1 1)
-					(thickness 0.15)
-				)
-			)
-		)
-		(property "Value" "EVQP44B3M side-press"
-			(at 0 2.3 0)
-			(layer "F.Fab")
-			(uuid "90da0883-603b-4b68-9f67-0794e3fabbca")
-			(effects
-				(font
-					(size 1 1)
-					(thickness 0.15)
-				)
-			)
-		)
-		(property "Datasheet" ""
-			(at 0 0 0)
-			(layer "F.Fab")
-			(hide yes)
-			(uuid "19579498-afa8-4f26-b30f-1b53b205462d")
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Description" ""
-			(at 0 0 0)
-			(layer "F.Fab")
-			(hide yes)
-			(uuid "4fa93d7f-1450-4f8b-b54c-154bebc42585")
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(attr smd)
-		(duplicate_pad_numbers_are_jumpers no)
-		(fp_line
-			(start -3.3 -1.7)
-			(end 3.75 -1.7)
-			(stroke
-				(width 0.05)
-				(type solid)
-			)
-			(layer "F.CrtYd")
-			(uuid "648d295d-cd90-4870-978e-ea5221defc5e")
-		)
-		(fp_line
-			(start -3.3 1.7)
-			(end -3.3 -1.7)
-			(stroke
-				(width 0.05)
-				(type solid)
-			)
-			(layer "F.CrtYd")
-			(uuid "3fa54091-7f6f-4423-a358-d3be184d95e3")
-		)
-		(fp_line
-			(start 3.75 -1.7)
-			(end 3.75 1.7)
-			(stroke
-				(width 0.05)
-				(type solid)
-			)
-			(layer "F.CrtYd")
-			(uuid "8d85c8a0-e105-4249-9a1e-4fa2698421ae")
-		)
-		(fp_line
-			(start 3.75 1.7)
-			(end -3.3 1.7)
-			(stroke
-				(width 0.05)
-				(type solid)
-			)
-			(layer "F.CrtYd")
-			(uuid "09890c3b-93c1-482a-93c3-81c408b95225")
-		)
-		(fp_line
-			(start -3.1 -0.6)
-			(end -3.1 0.6)
-			(stroke
-				(width 0.1)
-				(type solid)
-			)
-			(layer "F.Fab")
-			(uuid "b7beda27-0ca5-4183-a5ab-660a65de30e0")
-		)
-		(fp_line
-			(start 3.1 -1.5)
-			(end 3.55 -0.45)
-			(stroke
-				(width 0.1)
-				(type solid)
-			)
-			(layer "F.Fab")
-			(uuid "4320eb8f-3b9d-46f4-a7d5-cd9a6f0ef0e4")
-		)
-		(fp_line
-			(start 3.55 -0.45)
-			(end 3.55 0.45)
-			(stroke
-				(width 0.1)
-				(type solid)
-			)
-			(layer "F.Fab")
-			(uuid "43ada9d3-89fc-4c1e-bd54-b808dd24144e")
-		)
-		(fp_line
-			(start 3.55 0.45)
-			(end 3.1 1.5)
-			(stroke
-				(width 0.1)
-				(type solid)
-			)
-			(layer "F.Fab")
-			(uuid "a2df5636-2458-4147-8312-f7f2a7e848b2")
-		)
-		(fp_rect
-			(start -3.1 -1.5)
-			(end 3.1 1.5)
-			(stroke
-				(width 0.1)
-				(type solid)
-			)
-			(fill no)
-			(layer "F.Fab")
-			(uuid "d4a91f34-f38c-4857-947d-9e9f4b424707")
-		)
-		(fp_text user "${REFERENCE}"
-			(at 0 0 0)
-			(layer "F.Fab")
-			(uuid "74e3863e-564c-45d6-8075-187351a4049b")
-			(effects
-				(font
-					(size 0.8 0.8)
-					(thickness 0.12)
-				)
-			)
-		)
-		(pad "1" smd rect
-			(at -2.55 -1)
-			(size 1.3 0.9)
-			(layers "F.Cu" "F.Mask" "F.Paste")
-			(net "/BOOT_CFG")
-			(uuid "1f655be4-9d70-4c50-91e5-8ae092b43227")
-		)
-		(pad "1" smd rect
-			(at -2.55 1)
-			(size 1.3 0.9)
-			(layers "F.Cu" "F.Mask" "F.Paste")
-			(net "/BOOT_CFG")
-			(uuid "e4e3f63f-e065-46c1-965f-ba31440fcf93")
-		)
-		(pad "2" smd rect
-			(at 2.55 -1)
-			(size 1.3 0.9)
-			(layers "F.Cu" "F.Mask" "F.Paste")
-			(net "/GND")
-			(uuid "4b97c387-a9f5-4e90-968e-ad65dabb1ec8")
-		)
-		(pad "2" smd rect
-			(at 2.55 1)
-			(size 1.3 0.9)
-			(layers "F.Cu" "F.Mask" "F.Paste")
-			(net "/GND")
-			(uuid "eeb4603d-3029-49ca-b54d-97621b1b93d3")
-		)
-		(embedded_fonts no)
-	)
 	(footprint "airwriter:LED_SK6812MINI-E_3.2x2.8mm_P1.5mm_TopFiring"
 		(layer "F.Cu")
 		(uuid "6bba0c53-1cd2-4381-a113-c57c4dff19ed")
-		(at 122.5455 74.0909)
+		(at 114.0909 74.0909)
 		(descr "RGB LED with integrated controller (https://www.lcsc.com/datasheet/C5149201.pdf) - top-firing, no board cutout (derived from the stock ReverseMount footprint by stripping its Edge.Cuts slot)")
 		(tags "RGB LED NeoPixel Mini addressable")
 		(property "Reference" "D40"
@@ -9972,7 +9788,7 @@
 	(footprint "Capacitor_SMD:C_0603_1608Metric"
 		(layer "F.Cu")
 		(uuid "6ffbb278-e60a-4041-b61d-993a3c88c6e1")
-		(at 110.9164 124.0682)
+		(at 108.361399 122.0682)
 		(descr "Capacitor SMD 0603 (1608 Metric), square (rectangular) end terminal, IPC-7351 nominal, (Body size source: IPC-SM-782 page 76, https://www.pcb-3d.com/wordpress/wp-content/uploads/ipc-sm-782a_amendment_1_and_2.pdf)")
 		(tags "capacitor")
 		(property "Reference" "C34"
@@ -10646,7 +10462,7 @@
 	(footprint "airwriter:LED_SK6812MINI-E_3.2x2.8mm_P1.5mm_TopFiring"
 		(layer "F.Cu")
 		(uuid "716517f7-2799-4e28-a171-1ec41dd9881c")
-		(at 122.5455 82.5455)
+		(at 114.0909 82.5455)
 		(descr "RGB LED with integrated controller (https://www.lcsc.com/datasheet/C5149201.pdf) - top-firing, no board cutout (derived from the stock ReverseMount footprint by stripping its Edge.Cuts slot)")
 		(tags "RGB LED NeoPixel Mini addressable")
 		(property "Reference" "D33"
@@ -10844,7 +10660,7 @@
 	(footprint "Capacitor_SMD:C_0603_1608Metric"
 		(layer "F.Cu")
 		(uuid "765e8181-ab2d-4d8b-85f4-997a813eafac")
-		(at 116.8159 62.886399)
+		(at 108.361399 62.886399)
 		(descr "Capacitor SMD 0603 (1608 Metric), square (rectangular) end terminal, IPC-7351 nominal, (Body size source: IPC-SM-782 page 76, https://www.pcb-3d.com/wordpress/wp-content/uploads/ipc-sm-782a_amendment_1_and_2.pdf)")
 		(tags "capacitor")
 		(property "Reference" "C62"
@@ -10990,7 +10806,7 @@
 	(footprint "airwriter:LED_SK6812MINI-E_3.2x2.8mm_P1.5mm_TopFiring"
 		(layer "F.Cu")
 		(uuid "78d25070-15cf-4e2f-9a48-8d77021c185e")
-		(at 114.0909 82.5455)
+		(at 105.6364 82.5455)
 		(descr "RGB LED with integrated controller (https://www.lcsc.com/datasheet/C5149201.pdf) - top-firing, no board cutout (derived from the stock ReverseMount footprint by stripping its Edge.Cuts slot)")
 		(tags "RGB LED NeoPixel Mini addressable")
 		(property "Reference" "D32"
@@ -11188,7 +11004,7 @@
 	(footprint "Capacitor_SMD:C_0603_1608Metric"
 		(layer "F.Cu")
 		(uuid "7a62467f-bf24-4307-9adb-4f52404e1da2")
-		(at 159.0886 76.8409)
+		(at 159.0886 71.3409)
 		(descr "Capacitor SMD 0603 (1608 Metric), square (rectangular) end terminal, IPC-7351 nominal, (Body size source: IPC-SM-782 page 76, https://www.pcb-3d.com/wordpress/wp-content/uploads/ipc-sm-782a_amendment_1_and_2.pdf)")
 		(tags "capacitor")
 		(property "Reference" "C57"
@@ -11599,7 +11415,7 @@
 	(footprint "airwriter:LED_SK6812MINI-E_3.2x2.8mm_P1.5mm_TopFiring"
 		(layer "F.Cu")
 		(uuid "7bcd9a2d-1aee-46e8-b812-9fecd07a69b4")
-		(at 156.3636 99.4545)
+		(at 147.9091 99.4545)
 		(descr "RGB LED with integrated controller (https://www.lcsc.com/datasheet/C5149201.pdf) - top-firing, no board cutout (derived from the stock ReverseMount footprint by stripping its Edge.Cuts slot)")
 		(tags "RGB LED NeoPixel Mini addressable")
 		(property "Reference" "D28"
@@ -12179,7 +11995,7 @@
 	(footprint "airwriter:LED_SK6812MINI-E_3.2x2.8mm_P1.5mm_TopFiring"
 		(layer "F.Cu")
 		(uuid "840be5a3-6753-432e-a288-c59832c7da6c")
-		(at 131 116.363599)
+		(at 156.3636 116.363599)
 		(descr "RGB LED with integrated controller (https://www.lcsc.com/datasheet/C5149201.pdf) - top-firing, no board cutout (derived from the stock ReverseMount footprint by stripping its Edge.Cuts slot)")
 		(tags "RGB LED NeoPixel Mini addressable")
 		(property "Reference" "D18"
@@ -12561,7 +12377,7 @@
 	(footprint "Capacitor_SMD:C_0603_1608Metric"
 		(layer "F.Cu")
 		(uuid "895a9d61-82ac-45b3-a946-b496dbb3230b")
-		(at 150.6341 122.0682)
+		(at 144.7345 124.0682)
 		(descr "Capacitor SMD 0603 (1608 Metric), square (rectangular) end terminal, IPC-7351 nominal, (Body size source: IPC-SM-782 page 76, https://www.pcb-3d.com/wordpress/wp-content/uploads/ipc-sm-782a_amendment_1_and_2.pdf)")
 		(tags "capacitor")
 		(property "Reference" "C31"
@@ -12707,7 +12523,7 @@
 	(footprint "Capacitor_SMD:C_0603_1608Metric"
 		(layer "F.Cu")
 		(uuid "8bd130b9-dca3-4183-ba02-a0fc5dbb794c")
-		(at 150.6341 105.1591)
+		(at 144.7345 107.1591)
 		(descr "Capacitor SMD 0603 (1608 Metric), square (rectangular) end terminal, IPC-7351 nominal, (Body size source: IPC-SM-782 page 76, https://www.pcb-3d.com/wordpress/wp-content/uploads/ipc-sm-782a_amendment_1_and_2.pdf)")
 		(tags "capacitor")
 		(property "Reference" "C40"
@@ -12853,7 +12669,7 @@
 	(footprint "airwriter:LED_SK6812MINI-E_3.2x2.8mm_P1.5mm_TopFiring"
 		(layer "F.Cu")
 		(uuid "8ebfb35f-9e57-4b85-a87d-6e12a6e6946b")
-		(at 147.9091 82.5455)
+		(at 139.4545 82.5455)
 		(descr "RGB LED with integrated controller (https://www.lcsc.com/datasheet/C5149201.pdf) - top-firing, no board cutout (derived from the stock ReverseMount footprint by stripping its Edge.Cuts slot)")
 		(tags "RGB LED NeoPixel Mini addressable")
 		(property "Reference" "D35"
@@ -13051,7 +12867,7 @@
 	(footprint "airwriter:LED_SK6812MINI-E_3.2x2.8mm_P1.5mm_TopFiring"
 		(layer "F.Cu")
 		(uuid "9053cd9a-3c95-4af5-92ac-106763bd91e5")
-		(at 122.5455 91)
+		(at 139.4545 91)
 		(descr "RGB LED with integrated controller (https://www.lcsc.com/datasheet/C5149201.pdf) - top-firing, no board cutout (derived from the stock ReverseMount footprint by stripping its Edge.Cuts slot)")
 		(tags "RGB LED NeoPixel Mini addressable")
 		(property "Reference" "D30"
@@ -13249,7 +13065,7 @@
 	(footprint "Capacitor_SMD:C_0603_1608Metric"
 		(layer "F.Cu")
 		(uuid "9194aad4-d82a-4b0e-bf1a-f8c781617379")
-		(at 127.8255 107.1591)
+		(at 116.8159 105.1591)
 		(descr "Capacitor SMD 0603 (1608 Metric), square (rectangular) end terminal, IPC-7351 nominal, (Body size source: IPC-SM-782 page 76, https://www.pcb-3d.com/wordpress/wp-content/uploads/ipc-sm-782a_amendment_1_and_2.pdf)")
 		(tags "capacitor")
 		(property "Reference" "C42"
@@ -13975,7 +13791,7 @@
 	(footprint "Capacitor_SMD:C_0603_1608Metric"
 		(layer "F.Cu")
 		(uuid "93371053-c488-4527-b8ce-424afcd1e14f")
-		(at 108.3614 88.25)
+		(at 119.3709 90.25)
 		(descr "Capacitor SMD 0603 (1608 Metric), square (rectangular) end terminal, IPC-7351 nominal, (Body size source: IPC-SM-782 page 76, https://www.pcb-3d.com/wordpress/wp-content/uploads/ipc-sm-782a_amendment_1_and_2.pdf)")
 		(tags "capacitor")
 		(property "Reference" "C51"
@@ -14121,7 +13937,7 @@
 	(footprint "Capacitor_SMD:C_0603_1608Metric"
 		(layer "F.Cu")
 		(uuid "9538baad-c5d0-492b-97f2-ffecf50f360c")
-		(at 159.0886 85.2955)
+		(at 150.6341 79.7955)
 		(descr "Capacitor SMD 0603 (1608 Metric), square (rectangular) end terminal, IPC-7351 nominal, (Body size source: IPC-SM-782 page 76, https://www.pcb-3d.com/wordpress/wp-content/uploads/ipc-sm-782a_amendment_1_and_2.pdf)")
 		(tags "capacitor")
 		(property "Reference" "C56"
@@ -14465,7 +14281,7 @@
 	(footprint "airwriter:LED_SK6812MINI-E_3.2x2.8mm_P1.5mm_TopFiring"
 		(layer "F.Cu")
 		(uuid "9737f6eb-a79c-4f9a-b7e3-f25f5d4c0cdb")
-		(at 156.3636 82.5455)
+		(at 147.9091 82.5455)
 		(descr "RGB LED with integrated controller (https://www.lcsc.com/datasheet/C5149201.pdf) - top-firing, no board cutout (derived from the stock ReverseMount footprint by stripping its Edge.Cuts slot)")
 		(tags "RGB LED NeoPixel Mini addressable")
 		(property "Reference" "D36"
@@ -14809,7 +14625,7 @@
 	(footprint "airwriter:LED_SK6812MINI-E_3.2x2.8mm_P1.5mm_TopFiring"
 		(layer "F.Cu")
 		(uuid "9d6938d3-5a3e-4e1e-8b10-93e0f945ff93")
-		(at 114.0909 116.363599)
+		(at 139.4545 116.363599)
 		(descr "RGB LED with integrated controller (https://www.lcsc.com/datasheet/C5149201.pdf) - top-firing, no board cutout (derived from the stock ReverseMount footprint by stripping its Edge.Cuts slot)")
 		(tags "RGB LED NeoPixel Mini addressable")
 		(property "Reference" "D16"
@@ -15191,7 +15007,7 @@
 	(footprint "airwriter:LED_SK6812MINI-E_3.2x2.8mm_P1.5mm_TopFiring"
 		(layer "F.Cu")
 		(uuid "a072485f-2241-4e50-b5da-a41c51b3e359")
-		(at 156.3636 65.636399)
+		(at 147.9091 65.636399)
 		(descr "RGB LED with integrated controller (https://www.lcsc.com/datasheet/C5149201.pdf) - top-firing, no board cutout (derived from the stock ReverseMount footprint by stripping its Edge.Cuts slot)")
 		(tags "RGB LED NeoPixel Mini addressable")
 		(property "Reference" "D46"
@@ -15389,7 +15205,7 @@
 	(footprint "Capacitor_SMD:C_0603_1608Metric"
 		(layer "F.Cu")
 		(uuid "a42271e1-d1cb-45e0-a29c-1969f0d5d4a3")
-		(at 127.8255 73.3409)
+		(at 116.8159 76.8409)
 		(descr "Capacitor SMD 0603 (1608 Metric), square (rectangular) end terminal, IPC-7351 nominal, (Body size source: IPC-SM-782 page 76, https://www.pcb-3d.com/wordpress/wp-content/uploads/ipc-sm-782a_amendment_1_and_2.pdf)")
 		(tags "capacitor")
 		(property "Reference" "C60"
@@ -15535,7 +15351,7 @@
 	(footprint "Capacitor_SMD:C_0603_1608Metric"
 		(layer "F.Cu")
 		(uuid "a62f244d-4cfb-47d2-b290-3855f46333c8")
-		(at 116.8159 113.613599)
+		(at 142.1795 119.113599)
 		(descr "Capacitor SMD 0603 (1608 Metric), square (rectangular) end terminal, IPC-7351 nominal, (Body size source: IPC-SM-782 page 76, https://www.pcb-3d.com/wordpress/wp-content/uploads/ipc-sm-782a_amendment_1_and_2.pdf)")
 		(tags "capacitor")
 		(property "Reference" "C36"
@@ -15985,7 +15801,7 @@
 	(footprint "Capacitor_SMD:C_0603_1608Metric"
 		(layer "F.Cu")
 		(uuid "ac740185-7b23-441e-af67-f1053785e013")
-		(at 142.6291 81.7955)
+		(at 142.1795 85.2955)
 		(descr "Capacitor SMD 0603 (1608 Metric), square (rectangular) end terminal, IPC-7351 nominal, (Body size source: IPC-SM-782 page 76, https://www.pcb-3d.com/wordpress/wp-content/uploads/ipc-sm-782a_amendment_1_and_2.pdf)")
 		(tags "capacitor")
 		(property "Reference" "C55"
@@ -16499,7 +16315,7 @@
 	(footprint "Capacitor_SMD:C_0603_1608Metric"
 		(layer "F.Cu")
 		(uuid "b2370ae3-a311-4669-9d12-9d95014fd91e")
-		(at 159.0886 96.7045)
+		(at 150.6341 96.7045)
 		(descr "Capacitor SMD 0603 (1608 Metric), square (rectangular) end terminal, IPC-7351 nominal, (Body size source: IPC-SM-782 page 76, https://www.pcb-3d.com/wordpress/wp-content/uploads/ipc-sm-782a_amendment_1_and_2.pdf)")
 		(tags "capacitor")
 		(property "Reference" "C48"
@@ -17695,7 +17511,7 @@
 	(footprint "Capacitor_SMD:C_0603_1608Metric"
 		(layer "F.Cu")
 		(uuid "ba228490-cd70-46b6-9a7a-d2e04134a78e")
-		(at 127.8255 124.0682)
+		(at 116.8159 122.0682)
 		(descr "Capacitor SMD 0603 (1608 Metric), square (rectangular) end terminal, IPC-7351 nominal, (Body size source: IPC-SM-782 page 76, https://www.pcb-3d.com/wordpress/wp-content/uploads/ipc-sm-782a_amendment_1_and_2.pdf)")
 		(tags "capacitor")
 		(property "Reference" "C33"
@@ -17841,7 +17657,7 @@
 	(footprint "airwriter:LED_SK6812MINI-E_3.2x2.8mm_P1.5mm_TopFiring"
 		(layer "F.Cu")
 		(uuid "bb5fbc12-be1e-477f-92a8-0b86aca27457")
-		(at 122.5455 116.363599)
+		(at 147.9091 116.363599)
 		(descr "RGB LED with integrated controller (https://www.lcsc.com/datasheet/C5149201.pdf) - top-firing, no board cutout (derived from the stock ReverseMount footprint by stripping its Edge.Cuts slot)")
 		(tags "RGB LED NeoPixel Mini addressable")
 		(property "Reference" "D17"
@@ -18039,7 +17855,7 @@
 	(footprint "Capacitor_SMD:C_0603_1608Metric"
 		(layer "F.Cu")
 		(uuid "bf896c86-b142-4d29-b212-ade591597b3a")
-		(at 108.3614 119.113599)
+		(at 133.725 113.613599)
 		(descr "Capacitor SMD 0603 (1608 Metric), square (rectangular) end terminal, IPC-7351 nominal, (Body size source: IPC-SM-782 page 76, https://www.pcb-3d.com/wordpress/wp-content/uploads/ipc-sm-782a_amendment_1_and_2.pdf)")
 		(tags "capacitor")
 		(property "Reference" "C35"
@@ -18185,7 +18001,7 @@
 	(footprint "Capacitor_SMD:C_0603_1608Metric"
 		(layer "F.Cu")
 		(uuid "bfc6c123-5e81-47f4-b60e-b305dd0d9548")
-		(at 108.3614 71.3409)
+		(at 108.361399 76.8409)
 		(descr "Capacitor SMD 0603 (1608 Metric), square (rectangular) end terminal, IPC-7351 nominal, (Body size source: IPC-SM-782 page 76, https://www.pcb-3d.com/wordpress/wp-content/uploads/ipc-sm-782a_amendment_1_and_2.pdf)")
 		(tags "capacitor")
 		(property "Reference" "C61"
@@ -18529,7 +18345,7 @@
 	(footprint "airwriter:LED_SK6812MINI-E_3.2x2.8mm_P1.5mm_TopFiring"
 		(layer "F.Cu")
 		(uuid "c34e1447-a346-4413-b179-627300d54c18")
-		(at 147.9091 124.8182)
+		(at 139.4545 124.8182)
 		(descr "RGB LED with integrated controller (https://www.lcsc.com/datasheet/C5149201.pdf) - top-firing, no board cutout (derived from the stock ReverseMount footprint by stripping its Edge.Cuts slot)")
 		(tags "RGB LED NeoPixel Mini addressable")
 		(property "Reference" "D11"
@@ -19377,7 +19193,7 @@
 			(at 8.75 8.71 270)
 			(size 1.5 0.9)
 			(layers "F.Cu" "F.Mask" "F.Paste")
-			(net "/I2C_SDA")
+			(net "unconnected-(U1-IO36-Pad29)")
 			(pinfunction "IO36_29")
 			(pintype "bidirectional+no_connect")
 			(uuid "1d6bc3c6-4b5a-4bf5-b95f-75afc700632d")
@@ -19386,7 +19202,7 @@
 			(at 8.75 7.44 270)
 			(size 1.5 0.9)
 			(layers "F.Cu" "F.Mask" "F.Paste")
-			(net "/I2C_SCL")
+			(net "unconnected-(U1-IO37-Pad30)")
 			(pinfunction "IO37_30")
 			(pintype "bidirectional+no_connect")
 			(uuid "1c86fe56-db31-441b-9b03-015f12c0683f")
@@ -19650,7 +19466,7 @@
 		)
 		(zone
 			(layers "F.Cu" "B.Cu")
-			(uuid "258507d8-7e95-40e2-9891-773c68c2c4fd")
+			(uuid "8e006d71-e6a1-44c8-99ff-a76404710add")
 			(name "WROOM ANTENNA KEEPOUT")
 			(hatch edge 0.5)
 			(connect_pads yes
@@ -20387,7 +20203,7 @@
 	(footprint "Capacitor_SMD:C_0603_1608Metric"
 		(layer "F.Cu")
 		(uuid "cd1fb0fc-6fd9-4254-9597-dc3625fb9c50")
-		(at 133.725 113.613599)
+		(at 159.0886 119.113599)
 		(descr "Capacitor SMD 0603 (1608 Metric), square (rectangular) end terminal, IPC-7351 nominal, (Body size source: IPC-SM-782 page 76, https://www.pcb-3d.com/wordpress/wp-content/uploads/ipc-sm-782a_amendment_1_and_2.pdf)")
 		(tags "capacitor")
 		(property "Reference" "C38"
@@ -20533,7 +20349,7 @@
 	(footprint "airwriter:LED_SK6812MINI-E_3.2x2.8mm_P1.5mm_TopFiring"
 		(layer "F.Cu")
 		(uuid "cdee8c40-4021-4f1f-bd9b-480b8672c334")
-		(at 122.5455 65.636399)
+		(at 114.0909 65.636399)
 		(descr "RGB LED with integrated controller (https://www.lcsc.com/datasheet/C5149201.pdf) - top-firing, no board cutout (derived from the stock ReverseMount footprint by stripping its Edge.Cuts slot)")
 		(tags "RGB LED NeoPixel Mini addressable")
 		(property "Reference" "D43"
@@ -21257,7 +21073,7 @@
 	(footprint "Capacitor_SMD:C_0603_1608Metric"
 		(layer "F.Cu")
 		(uuid "d7dd38c1-d110-489a-b8c8-eaf168df63ac")
-		(at 159.0886 110.6591)
+		(at 159.0886 105.1591)
 		(descr "Capacitor SMD 0603 (1608 Metric), square (rectangular) end terminal, IPC-7351 nominal, (Body size source: IPC-SM-782 page 76, https://www.pcb-3d.com/wordpress/wp-content/uploads/ipc-sm-782a_amendment_1_and_2.pdf)")
 		(tags "capacitor")
 		(property "Reference" "C39"
@@ -21545,6 +21361,190 @@
 				(xyz 0 0 0)
 			)
 		)
+	)
+	(footprint "airwriter:EVQP44B3M_SidePress"
+		(layer "F.Cu")
+		(uuid "daa7b24f-3227-4b11-8076-c506d634e684")
+		(at 119 141 180)
+		(descr "Panasonic EVQP44B3M side-press (edge-mount) SMD tactile switch, LCSC C79164, in stock. Body 6.2 (X, length) x 3.0mm (Y, width), 3.5mm tall, 1.35mm standoff, actuator protrudes ~0.45mm past the +X edge (edge-mount convention: overhang faces the board edge/case pinhole). DERIVED, NOT TRACED: Panasonic's outline drawing PDF is image-based, same class of gap as the DP-08RP lookup earlier in this project -- pad positions below are a conservative edge-mount-family estimate (2 switch pads inboard, 2 ground/anchor pads at the actuator end), not read off the real drawing. Verify against a physical part before a fab run that depends on exact pad geometry.")
+		(tags "tactile switch side press edge mount EVQP4 C79164")
+		(property "Reference" "SW1"
+			(at 0 -2.3 180)
+			(layer "F.SilkS")
+			(uuid "24abdada-ecac-4998-9cc1-240665bb198d")
+			(effects
+				(font
+					(size 1 1)
+					(thickness 0.15)
+				)
+			)
+		)
+		(property "Value" "EVQP44B3M side-press"
+			(at 0 2.3 180)
+			(layer "F.Fab")
+			(uuid "2d9b9253-e85b-44fc-828b-6d4d019f5bed")
+			(effects
+				(font
+					(size 1 1)
+					(thickness 0.15)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 0 0 180)
+			(layer "F.Fab")
+			(hide yes)
+			(uuid "0b8ca9fc-fbf0-4b90-b578-0d50066b4e6f")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" ""
+			(at 0 0 180)
+			(layer "F.Fab")
+			(hide yes)
+			(uuid "176b3952-bf52-486a-9390-e01d1025ce62")
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(attr smd)
+		(duplicate_pad_numbers_are_jumpers no)
+		(fp_line
+			(start 3.75 1.7)
+			(end -3.3 1.7)
+			(stroke
+				(width 0.05)
+				(type solid)
+			)
+			(layer "F.CrtYd")
+			(uuid "dad0c633-0960-402c-a5d9-6cbb7e73c44a")
+		)
+		(fp_line
+			(start 3.75 -1.7)
+			(end 3.75 1.7)
+			(stroke
+				(width 0.05)
+				(type solid)
+			)
+			(layer "F.CrtYd")
+			(uuid "3461fcaa-e5c0-4bf7-b756-3d5e5c9a729d")
+		)
+		(fp_line
+			(start -3.3 1.7)
+			(end -3.3 -1.7)
+			(stroke
+				(width 0.05)
+				(type solid)
+			)
+			(layer "F.CrtYd")
+			(uuid "ac176470-28d0-478e-b425-62721e1f60ea")
+		)
+		(fp_line
+			(start -3.3 -1.7)
+			(end 3.75 -1.7)
+			(stroke
+				(width 0.05)
+				(type solid)
+			)
+			(layer "F.CrtYd")
+			(uuid "4bd0058b-e7ee-4d5f-8003-1aae7395e742")
+		)
+		(fp_line
+			(start 3.55 0.45)
+			(end 3.1 1.5)
+			(stroke
+				(width 0.1)
+				(type solid)
+			)
+			(layer "F.Fab")
+			(uuid "7b24f246-32a5-4312-8b58-bf105d8f2984")
+		)
+		(fp_line
+			(start 3.55 -0.45)
+			(end 3.55 0.45)
+			(stroke
+				(width 0.1)
+				(type solid)
+			)
+			(layer "F.Fab")
+			(uuid "939c1ee1-0254-40db-9b25-0b49b6f23c4e")
+		)
+		(fp_line
+			(start 3.1 -1.5)
+			(end 3.55 -0.45)
+			(stroke
+				(width 0.1)
+				(type solid)
+			)
+			(layer "F.Fab")
+			(uuid "a9b7acd1-71f7-4278-a768-8e20e76c15e5")
+		)
+		(fp_line
+			(start -3.1 -0.6)
+			(end -3.1 0.6)
+			(stroke
+				(width 0.1)
+				(type solid)
+			)
+			(layer "F.Fab")
+			(uuid "c6c90bef-1685-4693-b8b1-cca4733b24cc")
+		)
+		(fp_rect
+			(start -3.1 -1.5)
+			(end 3.1 1.5)
+			(stroke
+				(width 0.1)
+				(type solid)
+			)
+			(fill no)
+			(layer "F.Fab")
+			(uuid "ee97f969-68e5-49fd-930f-214446aafe08")
+		)
+		(fp_text user "${REFERENCE}"
+			(at 0 0 180)
+			(layer "F.Fab")
+			(uuid "209daf4e-18ab-43a2-8581-27c8444ec6bb")
+			(effects
+				(font
+					(size 0.8 0.8)
+					(thickness 0.12)
+				)
+			)
+		)
+		(pad "1" smd rect
+			(at -2.55 -1 180)
+			(size 1.3 0.9)
+			(layers "F.Cu" "F.Mask" "F.Paste")
+			(net "/BOOT_CFG")
+			(uuid "4a6f60ed-b3a6-4ff7-9634-823a5f48efd9")
+		)
+		(pad "1" smd rect
+			(at -2.55 1 180)
+			(size 1.3 0.9)
+			(layers "F.Cu" "F.Mask" "F.Paste")
+			(net "/BOOT_CFG")
+			(uuid "79e24650-c4fb-4bbf-9f5c-4c199bbd7802")
+		)
+		(pad "2" smd rect
+			(at 2.55 -1 180)
+			(size 1.3 0.9)
+			(layers "F.Cu" "F.Mask" "F.Paste")
+			(net "/GND")
+			(uuid "4d953ce6-01c1-4c99-91a6-49ff8056e2d0")
+		)
+		(pad "2" smd rect
+			(at 2.55 1 180)
+			(size 1.3 0.9)
+			(layers "F.Cu" "F.Mask" "F.Paste")
+			(net "/GND")
+			(uuid "464d752d-f7da-484a-84e1-cb5a251443c6")
+		)
+		(embedded_fonts no)
 	)
 	(footprint "Resistor_SMD:R_0603_1608Metric"
 		(layer "F.Cu")
@@ -22471,7 +22471,7 @@
 	(footprint "Capacitor_SMD:C_0603_1608Metric"
 		(layer "F.Cu")
 		(uuid "e8b7217d-ce2f-4376-b56d-a081559b6ab6")
-		(at 142.1795 110.6591)
+		(at 127.8255 107.1591)
 		(descr "Capacitor SMD 0603 (1608 Metric), square (rectangular) end terminal, IPC-7351 nominal, (Body size source: IPC-SM-782 page 76, https://www.pcb-3d.com/wordpress/wp-content/uploads/ipc-sm-782a_amendment_1_and_2.pdf)")
 		(tags "capacitor")
 		(property "Reference" "C41"
@@ -22617,7 +22617,7 @@
 	(footprint "Capacitor_SMD:C_0603_1608Metric"
 		(layer "F.Cu")
 		(uuid "e8de396b-3bbb-49a1-a844-f1f314564510")
-		(at 142.1795 71.3409)
+		(at 125.2705 71.3409)
 		(descr "Capacitor SMD 0603 (1608 Metric), square (rectangular) end terminal, IPC-7351 nominal, (Body size source: IPC-SM-782 page 76, https://www.pcb-3d.com/wordpress/wp-content/uploads/ipc-sm-782a_amendment_1_and_2.pdf)")
 		(tags "capacitor")
 		(property "Reference" "C59"
@@ -22947,7 +22947,7 @@
 	(footprint "airwriter:LED_SK6812MINI-E_3.2x2.8mm_P1.5mm_TopFiring"
 		(layer "F.Cu")
 		(uuid "ea8147b6-b2b9-47c5-8985-1d1476bc6ff9")
-		(at 147.9091 74.0909)
+		(at 139.4545 74.0909)
 		(descr "RGB LED with integrated controller (https://www.lcsc.com/datasheet/C5149201.pdf) - top-firing, no board cutout (derived from the stock ReverseMount footprint by stripping its Edge.Cuts slot)")
 		(tags "RGB LED NeoPixel Mini addressable")
 		(property "Reference" "D38"
@@ -23251,7 +23251,7 @@
 	(footprint "Capacitor_SMD:C_0603_1608Metric"
 		(layer "F.Cu")
 		(uuid "ede6bcd0-b45c-4421-ac38-962eb67f7b03")
-		(at 142.1795 122.0682)
+		(at 125.2705 122.0682)
 		(descr "Capacitor SMD 0603 (1608 Metric), square (rectangular) end terminal, IPC-7351 nominal, (Body size source: IPC-SM-782 page 76, https://www.pcb-3d.com/wordpress/wp-content/uploads/ipc-sm-782a_amendment_1_and_2.pdf)")
 		(tags "capacitor")
 		(property "Reference" "C32"
@@ -23397,7 +23397,7 @@
 	(footprint "Button_Switch_THT:SW_DIP_SPSTx08_Slide_9.78x22.5mm_W7.62mm_P2.54mm"
 		(layer "F.Cu")
 		(uuid "f09add02-230e-4bcb-bb20-5289a0d8084f")
-		(at 106 131)
+		(at 105.62 131)
 		(descr "8x-dip-switch SPST , Slide, row spacing 7.62 mm (300 mils), body size 9.78x22.5mm (see e.g. https://www.ctscorp.com/wp-content/uploads/206-208.pdf)")
 		(tags "DIP Switch SPST Slide 7.62mm 300mil")
 		(property "Reference" "S1"
@@ -24114,7 +24114,7 @@
 			)
 		)
 		(point
-			(at 109.81 139.89)
+			(at 109.43 139.89)
 			(size 1.27)
 			(layer "F.Fab")
 			(uuid "e7d70165-7fd6-4b7c-bb87-30499edbf489")
@@ -24280,7 +24280,7 @@
 	(footprint "Capacitor_SMD:C_0603_1608Metric"
 		(layer "F.Cu")
 		(uuid "f38e8098-92c7-437d-b727-d923a6ffbd23")
-		(at 150.6341 62.886399)
+		(at 142.1795 62.886399)
 		(descr "Capacitor SMD 0603 (1608 Metric), square (rectangular) end terminal, IPC-7351 nominal, (Body size source: IPC-SM-782 page 76, https://www.pcb-3d.com/wordpress/wp-content/uploads/ipc-sm-782a_amendment_1_and_2.pdf)")
 		(tags "capacitor")
 		(property "Reference" "C65"
@@ -24573,7 +24573,7 @@
 	(footprint "Capacitor_SMD:C_0603_1608Metric"
 		(layer "F.Cu")
 		(uuid "f476140b-e34e-43f5-8b1e-cbad91e7fd0c")
-		(at 108.3614 105.1591)
+		(at 108.361399 110.6591)
 		(descr "Capacitor SMD 0603 (1608 Metric), square (rectangular) end terminal, IPC-7351 nominal, (Body size source: IPC-SM-782 page 76, https://www.pcb-3d.com/wordpress/wp-content/uploads/ipc-sm-782a_amendment_1_and_2.pdf)")
 		(tags "capacitor")
 		(property "Reference" "C43"
@@ -25030,7 +25030,7 @@
 	(footprint "airwriter:LED_SK6812MINI-E_3.2x2.8mm_P1.5mm_TopFiring"
 		(layer "F.Cu")
 		(uuid "f6935c38-6dcd-4e83-a795-785d295b35a9")
-		(at 114.0909 99.4545)
+		(at 105.6364 99.4545)
 		(descr "RGB LED with integrated controller (https://www.lcsc.com/datasheet/C5149201.pdf) - top-firing, no board cutout (derived from the stock ReverseMount footprint by stripping its Edge.Cuts slot)")
 		(tags "RGB LED NeoPixel Mini addressable")
 		(property "Reference" "D24"
@@ -25228,7 +25228,7 @@
 	(footprint "airwriter:LED_SK6812MINI-E_3.2x2.8mm_P1.5mm_TopFiring"
 		(layer "F.Cu")
 		(uuid "f6dcc308-37c7-46a2-85fe-ff8ba94700f5")
-		(at 147.9091 107.9091)
+		(at 139.4545 107.9091)
 		(descr "RGB LED with integrated controller (https://www.lcsc.com/datasheet/C5149201.pdf) - top-firing, no board cutout (derived from the stock ReverseMount footprint by stripping its Edge.Cuts slot)")
 		(tags "RGB LED NeoPixel Mini addressable")
 		(property "Reference" "D20"
@@ -25426,7 +25426,7 @@
 	(footprint "airwriter:LED_SK6812MINI-E_3.2x2.8mm_P1.5mm_TopFiring"
 		(layer "F.Cu")
 		(uuid "f80c44dc-6f15-48da-a733-994e4158d2a3")
-		(at 105.6364 91)
+		(at 114.0909 91)
 		(descr "RGB LED with integrated controller (https://www.lcsc.com/datasheet/C5149201.pdf) - top-firing, no board cutout (derived from the stock ReverseMount footprint by stripping its Edge.Cuts slot)")
 		(tags "RGB LED NeoPixel Mini addressable")
 		(property "Reference" "D31"
@@ -26152,28 +26152,6 @@
 		)
 		(layer "Edge.Cuts")
 		(uuid "3f130af6-9cb4-4808-8d8e-ba94bb57497b")
-	)
-	(gr_text "USB"
-		(at 105.375 125.152822 0)
-		(layer "F.SilkS")
-		(uuid "5cfb33dd-4cca-472d-bd15-32e757f48703")
-		(effects
-			(font
-				(size 0.8 0.8)
-				(thickness 0.15)
-			)
-		)
-	)
-	(gr_text "I2C DISPLAY"
-		(at 119.475 146.105 0)
-		(layer "F.SilkS")
-		(uuid "80b31097-b206-47e7-8dfb-cd9ff3ff3f2d")
-		(effects
-			(font
-				(size 0.8 0.8)
-				(thickness 0.15)
-			)
-		)
 	)
 	(gr_text "PWR"
 		(at 149.805 162.305 0)

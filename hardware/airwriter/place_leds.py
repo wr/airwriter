@@ -11,17 +11,22 @@ an LED) and the schematic netlist (kicad-cli sch export netlist) for the
 per-LED chain nets, so the physical walk order can be asserted against the
 actual wiring rather than assumed.
 
-Coordinate mapping (Global Constraints, plan 2026-08-20-mainboard-rework.md):
-    board position = (board_origin_x + (62.0 - dot.x), board_origin_y + dot.y)
-i.e. one mirror flip in X (the panel is face-up above the component side),
-Y unchanged. board_origin is the board outline's top-left corner, (100, 60).
+Coordinate mapping, CORRECTED round 5 (the round-2/3/4 mirror was a controller
+error -- the panel sits face-up ABOVE the board and both are viewed from the
+same side, so nothing flips):
+    board position = (board_origin_x + dot.x, board_origin_y + dot.y)
+board_origin is the board outline's top-left corner, (100, 60).
 
 Chain order: serpentine by rows, starting at the row nearest U9 (row 7 --
 closest to the lower band where U9 lives) and walking outward to row 0.
 Within a row the walk alternates direction so consecutive LEDs are always
-adjacent, minimizing total chain trace length. D10 is chain position 0
-(net /LED_DATA5 in), D11..D46 are positions 1..36 (nets /LED_CH01../LED_CH36
-in, matching T1's schematic wiring exactly -- see the assertion below).
+adjacent, minimizing total chain trace length. Under the corrected (unmirrored)
+mapping, the physical corner nearest U9's east-side position is now panel
+column 6 (high x_p), not column 0 -- so the row-7 leg walks column DESCENDING
+first (round 5 fix; round 2-4 walked ascending, which was correct only under
+the old, wrong mirror math). D10 is chain position 0 (net /LED_DATA5 in),
+D11..D46 are positions 1..36 (nets /LED_CH01../LED_CH36 in, matching T1's
+schematic wiring exactly -- see the assertion below).
 """
 import json
 import subprocess
@@ -90,7 +95,9 @@ def serpentine_order(dots):
     row_walk = sorted(rows_present, key=lambda r: -r)
     order = []
     for i, r in enumerate(row_walk):
-        row_dots = sorted(by_row[r], key=lambda d: d["c"])
+        # round 5: descending column first (matches U9's board-east position
+        # under the corrected, unmirrored coordinate map -- see module docstring)
+        row_dots = sorted(by_row[r], key=lambda d: -d["c"])
         if i % 2 == 1:
             row_dots = list(reversed(row_dots))
         order.extend(row_dots)
@@ -98,20 +105,21 @@ def serpentine_order(dots):
 
 
 def board_pos(dot):
-    bx = BOARD_ORIGIN_X + (PANEL_W - dot["x"])
+    bx = BOARD_ORIGIN_X + dot["x"]
     by = BOARD_ORIGIN_Y + dot["y"]
     return bx, by
 
 
-TEST_BUTTON_RC = (3, 3)  # SW3 sits here (panel mirror of (31,31)) though led:false
+TEST_BUTTON_RC = (3, 3)  # SW3 sits here (panel dot (31,31) -> board (131,91)) though led:false
 
 
 def free_neighbor_dirs(dot, dots_by_rc):
     """Which of the 4 panel-grid neighbors of `dot` are NOT a lit LED
     (either off-grid or led:false). Returns board-space directions --
-    the mirror flips X, so a free panel "left" (c-1) neighbor is a free
-    BOARD +x direction, and so on. The test-button cell is led:false but
-    is NOT free -- SW3 (a real, fairly large THT part) sits there."""
+    round 5: X is no longer mirrored, so a free panel "left" (c-1) neighbor
+    is a free BOARD -x direction (not +x, as the old mirrored math had it).
+    The test-button cell is led:false but is NOT free -- SW3 (a real,
+    fairly large THT part) sits there."""
     r, c = dot["r"], dot["c"]
 
     def occupied(rr, cc):
@@ -122,9 +130,9 @@ def free_neighbor_dirs(dot, dots_by_rc):
 
     free = set()
     if not occupied(r, c - 1):
-        free.add("+x")   # panel left -> board +x (toward VDD/DOUT pads)
+        free.add("-x")   # panel left -> board -x
     if not occupied(r, c + 1):
-        free.add("-x")   # panel right -> board -x
+        free.add("+x")   # panel right -> board +x
     if not occupied(r - 1, c):
         free.add("-y")   # panel up -> board -y
     if not occupied(r + 1, c):
@@ -154,6 +162,15 @@ def cap_offset_for_dir(direction):
 # footprint geometry above), falling back toward the GND/DIN side last.
 DIR_PRIORITY = ["-y", "+x", "+y", "-x"]
 
+# D10 sits in the grid-zone corner right next to U9/C29 (the chain-entry
+# level shifter, an allowed grid-zone exception -- see the report). The
+# panel-grid neighbor check has no idea U9/C29 are there, so it happily
+# offers +y for D10's cap even though that lands C30 on top of U9's
+# courtyard under the round-5 (corrected, unmirrored) chain entry. Forbid
+# it explicitly rather than teach the whole heuristic about board-level
+# fixed obstacles for one cell.
+FORBIDDEN_CAP_DIRS = {"D10": {"+y"}}
+
 
 def main():
     layout = json.loads(PANEL_LAYOUT.read_text())
@@ -164,6 +181,15 @@ def main():
 
     order = serpentine_order(dots)
     assert len(order) == 37
+
+    # SW3 sanity check (round 5): the test dot (31,31) is led:false and not
+    # walked, but its board position must still land at the centre column
+    # (131, 91) under the corrected mapping, matching SW3's fixed placement.
+    test_dot = dots_by_rc[TEST_BUTTON_RC]
+    assert not test_dot["led"]
+    tx, ty = board_pos(test_dot)
+    assert abs(tx - 131.0) < 1e-6 and abs(ty - 91.0) < 1e-6, (
+        f"test dot mapped to ({tx},{ty}), expected (131,91)")
 
     nets = export_netlist()
 
@@ -202,7 +228,9 @@ def main():
             cx = bx + ox
             return (BOARD_ORIGIN_X + 0.6) <= cx <= (BOARD_ORIGIN_X + PANEL_W - 0.6)
 
-        candidates = [d for d in DIR_PRIORITY if d in free_dirs and fits_on_board(d)]
+        forbidden = FORBIDDEN_CAP_DIRS.get(led_ref, set())
+        candidates = [d for d in DIR_PRIORITY
+                      if d in free_dirs and d not in forbidden and fits_on_board(d)]
         chosen_dir = candidates[0] if candidates else None
         if chosen_dir is None:
             # every panel-free direction would run the cap off the board
