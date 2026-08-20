@@ -119,41 +119,6 @@ def _mask_rect_bboxes(svg_text):
         boxes[mask_id] = bbox
     return boxes
 
-def _sh_clip_edge(points, inside, isect):
-    # One Sutherland-Hodgman clip pass against a single half-plane.
-    if not points:
-        return []
-    out = []
-    prev = points[-1]
-    prev_in = inside(prev)
-    for cur in points:
-        cur_in = inside(cur)
-        if cur_in:
-            if not prev_in:
-                out.append(isect(prev, cur))
-            out.append(cur)
-        elif prev_in:
-            out.append(isect(prev, cur))
-        prev, prev_in = cur, cur_in
-    return out
-
-def _clip_to_rect(ring, rect):
-    # Sutherland-Hodgman polygon clip against an axis-aligned rectangle:
-    # clip the ring against each of the rect's 4 half-planes in turn.
-    xmin, ymin, xmax, ymax = rect
-    def isect_x(a, b, x):
-        t = (x - a[0]) / (b[0] - a[0])
-        return [x, a[1] + t * (b[1] - a[1])]
-    def isect_y(a, b, y):
-        t = (y - a[1]) / (b[1] - a[1])
-        return [a[0] + t * (b[0] - a[0]), y]
-    pts = list(ring)
-    pts = _sh_clip_edge(pts, lambda p: p[0] >= xmin, lambda a, b: isect_x(a, b, xmin))
-    pts = _sh_clip_edge(pts, lambda p: p[0] <= xmax, lambda a, b: isect_x(a, b, xmax))
-    pts = _sh_clip_edge(pts, lambda p: p[1] >= ymin, lambda a, b: isect_y(a, b, ymin))
-    pts = _sh_clip_edge(pts, lambda p: p[1] <= ymax, lambda a, b: isect_y(a, b, ymax))
-    return pts
-
 def flatten(svg_path, scale, fills):
     fills = {f.lower() for f in fills}
     with open(svg_path) as f:
@@ -174,17 +139,30 @@ def flatten(svg_path, scale, fills):
             continue                       # background-sized shape
         if len(el) == 0:
             continue
-        el_rings = list(_subpaths_to_points(el, scale))
         mask_url = el.values.get("mask") if hasattr(el, "values") else None
+        mask_id = None
         if mask_url:
             m = _MASK_URL_RE.search(mask_url)
             mask_id = m.group(1) if m else None
-            if mask_id and mask_id in mask_boxes_raw:
-                rx0, ry0, rx1, ry1 = mask_boxes_raw[mask_id]
-                rect_mm = (rx0 * scale, ry0 * scale, rx1 * scale, ry1 * scale)
-                el_rings = [c for c in (_clip_to_rect(r, rect_mm) for r in el_rings)
-                            if len(c) >= 3]
-        rings.extend(el_rings)
+        if mask_id and mask_id in mask_boxes_raw:
+            # The masked shapes here (label-cell rule bars) are, per the
+            # designer, plain axis-aligned rectangles - the mask exists only
+            # to inset-crop them to the cell's top edge. Both the element's
+            # own bbox and the mask rect are axis-aligned, so their
+            # intersection *is* the exact visible rectangle: no need to
+            # sample the source path's curve/segment geometry at all.
+            rx0, ry0, rx1, ry1 = mask_boxes_raw[mask_id]
+            ix0, iy0 = max(bb[0], rx0), max(bb[1], ry0)
+            ix1, iy1 = min(bb[2], rx1), min(bb[3], ry1)
+            if ix1 > ix0 and iy1 > iy0:
+                rings.append([
+                    [round(ix0 * scale, 4), round(iy0 * scale, 4)],
+                    [round(ix1 * scale, 4), round(iy0 * scale, 4)],
+                    [round(ix1 * scale, 4), round(iy1 * scale, 4)],
+                    [round(ix0 * scale, 4), round(iy1 * scale, 4)],
+                ])
+            continue
+        rings.extend(_subpaths_to_points(el, scale))
     return _classify(rings)
 
 def _classify(rings):

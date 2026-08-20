@@ -109,9 +109,18 @@ class TestFlatten(unittest.TestCase):
         # Only the clipped band should appear - not the mask's own rect content
         # (which would otherwise leak in as a second, much bigger, solid plate).
         self.assertEqual(len(polys), 1)
-        ys = [y for x, y in polys[0]["outline"]]
-        self.assertAlmostEqual(min(ys), 40.0, delta=0.5)   # clipped to the mask rect...
-        self.assertAlmostEqual(max(ys), 44.0, delta=0.5)   # ...not the band's own 32-44 extent
+        outline = polys[0]["outline"]
+        # The rule is a plain rectangle: the band's own bbox (x=[0,100], y=[32,44])
+        # intersected with the mask rect (x=[0,100], y=[40,200]) is exactly
+        # x=[0,100], y=[40,44] - emitted as a plain 4-point rectangle, not a
+        # clipped copy of the band path's own (collinear-point-bearing) outline.
+        self.assertEqual(len(outline), 4)
+        xs = [x for x, y in outline]
+        ys = [y for x, y in outline]
+        self.assertAlmostEqual(min(xs), 0.0, places=2)
+        self.assertAlmostEqual(max(xs), 100.0, places=2)
+        self.assertAlmostEqual(min(ys), 40.0, places=2)
+        self.assertAlmostEqual(max(ys), 44.0, places=2)
 
     def test_silk_has_no_leaked_mask_plates(self):
         # A leaked mask-definition rect (the defect this fix targets) shows up
