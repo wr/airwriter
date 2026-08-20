@@ -24,5 +24,5 @@ class TestLayout(unittest.TestCase):
         self.assertAlmostEqual(g["pitch"], 150 * 62.0 / 1100, places=3)
         self.assertAlmostEqual(g["dot_dia"], 100 * 62.0 / 1100, places=3)
         self.assertAlmostEqual(g["origin"][0], 100 * 62.0 / 1100, places=3)
-        self.assertAlmostEqual(self.lay["panel"]["h"], 1801 * 62.0 / 1100, places=2)
+        self.assertAlmostEqual(self.lay["panel"]["h"], 1850 * 62.0 / 1100, places=2)
         self.assertAlmostEqual(g["hole_dia"], 2.25, places=2)

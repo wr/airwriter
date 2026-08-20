@@ -1,9 +1,23 @@
 #!/usr/bin/env python3
 """Flatten fill-filtered SVG <path> art to polygons in absolute mm."""
-import json, sys
-from svgelements import SVG, Path
+import json, re, sys
+from io import StringIO
+from svgelements import SVG, Path, Line, Close
 
 TOL = 0.05  # mm sampling tolerance
+
+# svgelements yields the CONTENT of <mask> definitions as ordinary elements
+# during traversal - a mask's inner rect (which defines what to keep, not
+# what to paint) inherits the mask's own fill="white" default and otherwise
+# looks exactly like a real painted shape, so it leaks into fill-filtered
+# output as a solid plate. Figma's masks here are always a single rect used
+# to inset-crop a masked path (e.g. a label cell's rule bar clipped to the
+# cell's own bounds), so: strip the <mask> definitions out of the raw SVG
+# text before parsing (their content must never become an element), and
+# separately read each mask's own rect bbox from the raw text so any element
+# that still carries mask="url(#id)" can be clipped to it after flattening.
+_MASK_DEF_RE = re.compile(r'<mask\b[^>]*\bid="([^"]+)"[^>]*>(.*?)</mask>', re.S)
+_MASK_URL_RE = re.compile(r'url\(#([^)]+)\)')
 
 # svgelements has no scipy available in this environment, so Segment.length()
 # falls back to a recursive subdivider with a default error of 1e-12 - absurd
@@ -56,9 +70,97 @@ def _interior_point(ring):
     a, b, c = ring[i - 1], ring[i], ring[(i + 1) % len(ring)]
     return ((a[0] + b[0] + c[0]) / 3, (a[1] + b[1] + c[1]) / 3)
 
+def _mask_rect_bboxes(svg_text):
+    # Parse each <mask id=...>...</mask> block's own content (before it gets
+    # stripped out of the document) into an axis-aligned rect bbox, raw SVG
+    # units. Raises if a mask's content isn't a single simple rectangle -
+    # this module doesn't implement general SVG masking, only this one
+    # inset-crop pattern.
+    boxes = {}
+    for mask_id, content in _MASK_DEF_RE.findall(svg_text):
+        frag = SVG.parse(
+            StringIO(f'<svg xmlns="http://www.w3.org/2000/svg">{content}</svg>'),
+            reify=True,
+        )
+        seen = {}
+        for el in frag.elements():
+            if isinstance(el, Path) and len(el) > 0:
+                seen[tuple(round(v, 6) for v in el.bbox())] = el
+        paths = list(seen.values())
+        if len(paths) != 1:
+            raise ValueError(
+                f"mask #{mask_id}: expected exactly one shape in its content, "
+                f"found {len(paths)} - svg2poly only supports single-rect "
+                "masks; ask Wells for a flattened re-export without this mask."
+            )
+        corners = []
+        for seg in paths[0]:
+            if isinstance(seg, (Line, Close)):
+                corners.append((seg.end.x, seg.end.y))
+            elif type(seg).__name__ == "Move":
+                continue
+            else:
+                raise ValueError(
+                    f"mask #{mask_id}: content has a curved segment - "
+                    "svg2poly only supports single-rect masks; ask Wells for "
+                    "a flattened re-export without this mask."
+                )
+        xs = [c[0] for c in corners]
+        ys = [c[1] for c in corners]
+        bbox = (min(xs), min(ys), max(xs), max(ys))
+        bbox_area = (bbox[2] - bbox[0]) * (bbox[3] - bbox[1])
+        ring_area = abs(_area(corners))
+        if bbox_area <= 0 or abs(ring_area - bbox_area) > 1e-3 * bbox_area:
+            raise ValueError(
+                f"mask #{mask_id}: content is not an axis-aligned rectangle - "
+                "svg2poly only supports single-rect masks; ask Wells for a "
+                "flattened re-export without this mask."
+            )
+        boxes[mask_id] = bbox
+    return boxes
+
+def _sh_clip_edge(points, inside, isect):
+    # One Sutherland-Hodgman clip pass against a single half-plane.
+    if not points:
+        return []
+    out = []
+    prev = points[-1]
+    prev_in = inside(prev)
+    for cur in points:
+        cur_in = inside(cur)
+        if cur_in:
+            if not prev_in:
+                out.append(isect(prev, cur))
+            out.append(cur)
+        elif prev_in:
+            out.append(isect(prev, cur))
+        prev, prev_in = cur, cur_in
+    return out
+
+def _clip_to_rect(ring, rect):
+    # Sutherland-Hodgman polygon clip against an axis-aligned rectangle:
+    # clip the ring against each of the rect's 4 half-planes in turn.
+    xmin, ymin, xmax, ymax = rect
+    def isect_x(a, b, x):
+        t = (x - a[0]) / (b[0] - a[0])
+        return [x, a[1] + t * (b[1] - a[1])]
+    def isect_y(a, b, y):
+        t = (y - a[1]) / (b[1] - a[1])
+        return [a[0] + t * (b[0] - a[0]), y]
+    pts = list(ring)
+    pts = _sh_clip_edge(pts, lambda p: p[0] >= xmin, lambda a, b: isect_x(a, b, xmin))
+    pts = _sh_clip_edge(pts, lambda p: p[0] <= xmax, lambda a, b: isect_x(a, b, xmax))
+    pts = _sh_clip_edge(pts, lambda p: p[1] >= ymin, lambda a, b: isect_y(a, b, ymin))
+    pts = _sh_clip_edge(pts, lambda p: p[1] <= ymax, lambda a, b: isect_y(a, b, ymax))
+    return pts
+
 def flatten(svg_path, scale, fills):
     fills = {f.lower() for f in fills}
-    svg = SVG.parse(svg_path, reify=True)
+    with open(svg_path) as f:
+        svg_text = f.read()
+    mask_boxes_raw = _mask_rect_bboxes(svg_text)
+    stripped = _MASK_DEF_RE.sub("", svg_text)
+    svg = SVG.parse(StringIO(stripped), reify=True)
     vb = svg.viewbox
     rings = []
     for el in svg.elements():
@@ -72,7 +174,17 @@ def flatten(svg_path, scale, fills):
             continue                       # background-sized shape
         if len(el) == 0:
             continue
-        rings.extend(_subpaths_to_points(el, scale))
+        el_rings = list(_subpaths_to_points(el, scale))
+        mask_url = el.values.get("mask") if hasattr(el, "values") else None
+        if mask_url:
+            m = _MASK_URL_RE.search(mask_url)
+            mask_id = m.group(1) if m else None
+            if mask_id and mask_id in mask_boxes_raw:
+                rx0, ry0, rx1, ry1 = mask_boxes_raw[mask_id]
+                rect_mm = (rx0 * scale, ry0 * scale, rx1 * scale, ry1 * scale)
+                el_rings = [c for c in (_clip_to_rect(r, rect_mm) for r in el_rings)
+                            if len(c) >= 3]
+        rings.extend(el_rings)
     return _classify(rings)
 
 def _classify(rings):

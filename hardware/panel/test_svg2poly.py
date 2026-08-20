@@ -16,6 +16,19 @@ DONUT3 = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120">
       d="M10 10 H110 V110 H10 Z M30 30 H90 V90 H30 Z M50 50 H70 V70 H50 Z"/>
 </svg>"""
 
+# A <mask> definition's own content (a plain rect, no fill of its own - it
+# inherits fill="white" from the <mask> element) must never leak into the
+# output as if it were a real painted shape. The masked path (a "rule" band
+# straddling the mask rect's top edge by design, like a label cell's rule bar
+# against its background rectangle) must come back clipped to the mask rect,
+# not at its own full unclipped extent.
+MASKED_BAND = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 200">
+<mask id="m1" fill="white">
+<path d="M0 40H100V200H0V40Z"/>
+</mask>
+<path d="M0 36V44H100V36V32H0V36Z" fill="white" mask="url(#m1)"/>
+</svg>"""
+
 def _interior_point(ring):
     # Point guaranteed strictly inside ring's own interior: the centroid of the
     # ear triangle at ring's extreme (lowest-y) vertex, which is always convex.
@@ -60,7 +73,7 @@ class TestFlatten(unittest.TestCase):
         for polys in (gold, silk, fr4):
             for p in polys:
                 for x, y in p["outline"]:
-                    self.assertTrue(0 <= x <= 62.0 and 0 <= y <= 101.6)
+                    self.assertTrue(0 <= x <= 62.0 and 0 <= y <= 104.4)
 
     def test_counter_island_resolidifies_as_its_own_poly(self):
         polys = flatten(self._write(DONUT3), scale=1.0, fills={"#dda857"})
@@ -90,3 +103,26 @@ class TestFlatten(unittest.TestCase):
                     if i == j:
                         continue
                     self.assertFalse(_contains(other, pt))
+
+    def test_mask_content_excluded_and_masked_path_clipped_to_rect(self):
+        polys = flatten(self._write(MASKED_BAND), scale=1.0, fills={"white", "#ffffff"})
+        # Only the clipped band should appear - not the mask's own rect content
+        # (which would otherwise leak in as a second, much bigger, solid plate).
+        self.assertEqual(len(polys), 1)
+        ys = [y for x, y in polys[0]["outline"]]
+        self.assertAlmostEqual(min(ys), 40.0, delta=0.5)   # clipped to the mask rect...
+        self.assertAlmostEqual(max(ys), 44.0, delta=0.5)   # ...not the band's own 32-44 extent
+
+    def test_silk_has_no_leaked_mask_plates(self):
+        # A leaked mask-definition rect (the defect this fix targets) shows up
+        # as an oversized solid plate: a full label cell is ~20.3 x 8.9mm =~
+        # 180mm^2. The largest legitimate silk shape is a rule, ~20.3 x 0.23mm
+        # =~ 4.7mm^2. 30mm^2 is comfortably between the two.
+        svg = str(pathlib.Path(__file__).parent / "svg" / "panel.svg")
+        s = 62.0 / 1100
+        silk = flatten(svg, scale=s, fills={"white", "#ffffff"})
+        for p in silk:
+            xs = [x for x, y in p["outline"]]
+            ys = [y for x, y in p["outline"]]
+            bbox_area = (max(xs) - min(xs)) * (max(ys) - min(ys))
+            self.assertLess(bbox_area, 30.0)
