@@ -120,6 +120,29 @@ def part_pads(ref):
         return None                      # not placed yet -- unusable as an anchor
     return p["pads"]
 
+def net_targets(ref):
+    """For each of this part's signal nets, where its partners actually are.
+
+    Placement that only scores the part's centre is orientation-blind: R15 and
+    R16 both came out mounted backwards, with the pad that talks to U1 facing
+    away from U1, which forces their two nets to cross at the resistor.
+    """
+    p = G["parts"][ref]
+    out = {}
+    for n in p["pads"]:
+        if n in SKIP_NETS or n.startswith("unconnected-"):
+            continue
+        pts = []
+        for other in G["nets"].get(n, []):
+            if other == ref:
+                continue
+            op = part_pads(other)
+            if op and n in op:
+                pts += op[n]
+        if pts:
+            out[n] = (sum(q[0] for q in pts) / len(pts), sum(q[1] for q in pts) / len(pts))
+    return out
+
 def anchor(ref):
     p = G["parts"][ref]
     pts = []
@@ -152,6 +175,7 @@ report = []
 for ref in ORDER:
     p = G["parts"][ref]
     ax, ay = anchor(ref)
+    tgt = net_targets(ref)
     best = None
     for rot in ROTS.get(ref, (0, 90)):
         r = p["rots"][str(rot)]
@@ -164,7 +188,13 @@ for ref in ORDER:
         if len(ox) == 0 or len(oy) == 0:
             continue
         OX, OY = np.meshgrid(ox, oy, indexing="ij")
-        cost = (OX + (cx0 + cx1) / 2 - ax) ** 2 + (OY + (cy0 + cy1) / 2 - ay) ** 2
+        legs = [(dx, dy, tgt[n]) for n, dx, dy in r.get("padoff", []) if n in tgt]
+        if legs:
+            cost = np.zeros_like(OX)
+            for dx, dy, (tx, ty) in legs:
+                cost = cost + np.sqrt((OX + dx - tx) ** 2 + (OY + dy - ty) ** 2)
+        else:
+            cost = np.sqrt((OX + (cx0 + cx1) / 2 - ax) ** 2 + (OY + (cy0 + cy1) / 2 - ay) ** 2)
         flat = cost.ravel(); order = np.argsort(flat)
         fx = OX.ravel(); fy = OY.ravel()
         for k in order:

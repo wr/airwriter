@@ -25,9 +25,19 @@ def probe(fp):
         fp.SetOrientationDegrees(rot)
         rects = L.courtyard_rects(fp) or [L.cy_bbox(fp)]
         pb = L.pads_bbox(fp)
+        # per-pad offsets too: placement has to know which pad ends up facing
+        # which partner, not just where the part's centre lands.
+        po = []
+        for pad in fp.Pads():
+            n = pad.GetNetname()
+            if not n:
+                continue
+            q = pad.GetPosition()
+            po.append([n, L.mm(q.x) - ox, L.mm(q.y) - oy])
         out[str(rot)] = dict(
             cy=[[r[0] - ox, r[1] - oy, r[2] - ox, r[3] - oy] for r in rects],
-            pads=[pb[0] - ox, pb[1] - oy, pb[2] - ox, pb[3] - oy] if pb else None)
+            pads=[pb[0] - ox, pb[1] - oy, pb[2] - ox, pb[3] - oy] if pb else None,
+            padoff=po)
     fp.SetOrientationDegrees(r0); fp.SetPosition(p0)
     return out
 

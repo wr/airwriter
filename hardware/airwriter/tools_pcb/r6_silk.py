@@ -9,7 +9,7 @@ sys.path.insert(0, "/Users/wells/Projects/airwriter/hardware/airwriter/tools_pcb
 import pcbnew, r6_lib as L
 
 TEXTS = ["USB-C", "LOCALTALK", "PWR", "PRINTER"]
-REFS = ["U7", "U8", "U5", "SW1", "SW3", "S1", "U2", "U6", "U3", "U4"]
+REFS = ["U7", "U8", "U5", "SW1", "SW3", "U2", "U6", "U3", "U4"]  # S1 placed by hand
 PAD_CLR = 0.15
 SILK_CLR = 0.15
 
@@ -31,6 +31,14 @@ for f in b.Footprints():
 for d in b.GetDrawings():
     if d.GetLayer() == pcbnew.F_SilkS:
         silks.append((id(d), bb(d)))
+
+MAX_REF_OFFSET = 2.5   # a designator further than this from its own courtyard
+                       # is labelling the wrong part, whatever DRC says
+
+def off_own(box, cy):
+    dx = max(cy[0] - box[2], box[0] - cy[2], 0.0)
+    dy = max(cy[1] - box[3], box[1] - cy[3], 0.0)
+    return math.hypot(dx, dy)
 
 movers = []
 for d in b.GetDrawings():
@@ -56,7 +64,12 @@ def clash(box, me):
 for name, item, fp in movers:
     p0 = item.GetPosition()
     x0, y0 = L.mm(p0.x), L.mm(p0.y)
-    if not clash(bb(item), id(item)):
+    own = L.cy_bbox(fp) if fp is not None else None
+    if own is not None and off_own(bb(item), own) > MAX_REF_OFFSET:
+        # already adrift; restart the search from the part's own centre
+        x0, y0 = (own[0] + own[2]) / 2, (own[1] + own[3]) / 2
+        item.SetPosition(pcbnew.VECTOR2I(L.nm(x0), L.nm(y0)))
+    if not clash(bb(item), id(item)) and (own is None or off_own(bb(item), own) <= MAX_REF_OFFSET):
         print("  %-12s already clear at (%.2f, %.2f)" % (name, x0, y0))
         continue
     best = None
@@ -65,6 +78,8 @@ for name, item, fp in movers:
             x = x0 + r * math.cos(math.radians(a))
             y = y0 + r * math.sin(math.radians(a))
             item.SetPosition(pcbnew.VECTOR2I(L.nm(x), L.nm(y)))
+            if own is not None and off_own(bb(item), own) > MAX_REF_OFFSET:
+                continue
             if not clash(bb(item), id(item)):
                 best = (x, y, r); break
         if best: break
@@ -74,6 +89,13 @@ for name, item, fp in movers:
         silks[:] = [(k, q) for k, q in silks if k != id(item)]
         silks.append((id(item), bb(item)))
         print("  %-12s (%.2f, %.2f) -> (%.2f, %.2f)  moved %.2fmm" % (name, x0, y0, x, y, r))
+    elif fp is not None:
+        # no clear silk spot close enough to be honest about what it labels --
+        # drop it to F.Fab, the project's own convention for R/C designators
+        item.SetPosition(pcbnew.VECTOR2I(L.nm(x0), L.nm(y0)))
+        item.SetLayer(pcbnew.F_Fab)
+        print("  %-12s no clear silk spot within %.1fmm of its part -> moved to F.Fab"
+              % (name, MAX_REF_OFFSET))
     else:
         item.SetPosition(p0)
         print("  %-12s NO CLEAR SPOT within 15mm -- left at (%.2f, %.2f)" % (name, x0, y0))
