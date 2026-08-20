@@ -1,8 +1,24 @@
 # AirWriter handoff
 
-Written 2026-08-04, last updated 2026-08-09.
+Written 2026-08-04, last updated 2026-08-20.
 
 ## Where the project stands
+
+**2026-08-20: the cover pivoted to a dot-grid art panel and its generator is built (W-573).**
+The show face is now a separate passive PCB — see
+`docs/superpowers/specs/2026-08-20-dot-panel-cover-design.md` (read its amendment block first)
+— which supersedes everything below about the back-face artwork, MODE touch pad, BOOT bullseye
+and indicator windows. `hardware/panel/generate.sh` turns Wells's Figma export
+(`hardware/panel/svg/panel.svg`, the single source of truth — fill colour is the material)
+into a DRC-clean `panel.kicad_pcb`, deterministically. Traps that cost time there, for whoever
+touches it next: svgelements yields `<mask>` *content* as ordinary elements (the generator
+strips mask defs and rect-clips masked paths — don't undo that); `board.Save()` randomizes
+UUIDs (derandomized post-pass, keep it or diffs explode); fabs clip silk over exposed copper
+and neither DRC nor `kicad-cli render` shows it (the `test` tag is a mask knockout for this
+reason); KiCad's `Fracture()` turns polygon holes into slit-connected outlines on save, so
+`HoleCount()` reads 0 on reload. Rev A of the main board must not be ordered as-is: it still
+carries the old show face, and the panel spec's §2 rework (31 LEDs from `panel_layout.json`,
+DIP bank, test switch with plunger ≤ ~2.0 mm for the 2.25 mm panel hole) comes first.
 
 **Hardware rev A is finished and not yet ordered.** The board routes clean, the fab package is
 generated, and the mini-DIN is settled — Kycon KMDGX-8S-BS from Mouser. Nothing blocks the order.

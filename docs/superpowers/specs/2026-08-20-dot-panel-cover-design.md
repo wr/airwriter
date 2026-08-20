@@ -179,7 +179,7 @@ A 3D-printed matte black lattice sits between the boards:
   case height. Chosen in the plan alongside the tallest component (the DIP socketed
   PIC at ~9 mm proud is the current ceiling).
 
-The case itself: panel is the lid (62 × 100 outer), main board sits below
+The case itself: panel is the lid (62 × 104.27 outer *[amended]*), main board sits below
 component-side-up, ports out the front wall, DIP slot in one side wall. The old
 "board is the case lid" assumption is dead; the mini-DIN plug forces now land in the
 case walls, not the panel.
