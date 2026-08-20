@@ -1,3 +1,5 @@
 freerouting*.dsn
 temp-freerouting.dsn
 *.ses
+tools_pcb/r6_geom.json
+tools_pcb/r6_placement.json

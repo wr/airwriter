@@ -196,6 +196,21 @@ def main():
     board = pcbnew.LoadBoard(str(BOARD))
     fps = {fp.GetReference(): fp for fp in board.GetFootprints()}
 
+    # SW_PUSH_6mm_H13mm's origin is pin 1, not the button centre -- the plunger
+    # is the F.Fab circle 3.25/2.25mm away from it. Rounds before r6 aligned the
+    # origin to the test dot, which left the physical button ~3.95mm off it.
+    # Check the plunger, never the origin.
+    sw3 = fps["SW3"]
+    plunger = None
+    for item in sw3.GraphicalItems():
+        if (item.GetClass() == "PCB_SHAPE" and item.GetLayer() == pcbnew.F_Fab
+                and item.GetShape() == pcbnew.SHAPE_T_CIRCLE):
+            c = item.GetCenter()
+            plunger = (c.x / 1e6, c.y / 1e6)
+    assert plunger, "SW3 has no F.Fab plunger circle to check against"
+    assert abs(plunger[0] - tx) < 1e-4 and abs(plunger[1] - ty) < 1e-4, (
+        f"SW3 plunger centre is at {plunger}, must be on the test dot ({tx},{ty})")
+
     placements = []
     for idx, dot in enumerate(order):
         led_ref = f"D{10 + idx}"
