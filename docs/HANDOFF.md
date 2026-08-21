@@ -1,24 +1,116 @@
 # AirWriter handoff
 
-Written 2026-08-04, last updated 2026-08-20.
+Written 2026-08-04, last updated 2026-08-20 (evening).
 
 ## Where the project stands
 
-**2026-08-20: the cover pivoted to a dot-grid art panel and its generator is built (W-573).**
-The show face is now a separate passive PCB — see
-`docs/superpowers/specs/2026-08-20-dot-panel-cover-design.md` (read its amendment block first)
-— which supersedes everything below about the back-face artwork, MODE touch pad, BOOT bullseye
-and indicator windows. `hardware/panel/generate.sh` turns Wells's Figma export
-(`hardware/panel/svg/panel.svg`, the single source of truth — fill colour is the material)
-into a DRC-clean `panel.kicad_pcb`, deterministically. Traps that cost time there, for whoever
-touches it next: svgelements yields `<mask>` *content* as ordinary elements (the generator
-strips mask defs and rect-clips masked paths — don't undo that); `board.Save()` randomizes
-UUIDs (derandomized post-pass, keep it or diffs explode); fabs clip silk over exposed copper
-and neither DRC nor `kicad-cli render` shows it (the `test` tag is a mask knockout for this
-reason); KiCad's `Fracture()` turns polygon holes into slit-connected outlines on save, so
-`HoleCount()` reads 0 on reload. Rev A of the main board must not be ordered as-is: it still
-carries the old show face, and the panel spec's §2 rework (31 LEDs from `panel_layout.json`,
-DIP bank, test switch with plunger ≤ ~2.0 mm for the 2.25 mm panel hole) comes first.
+**2026-08-20: the cover pivoted to a dot-grid art panel; the panel is BUILT and the main
+board is deep into its rework (W-573, branch `wells/w-573-dot-panel-cover`).** Everything
+below this section about the back-face artwork, MODE touch pad, BOOT bullseye and indicator
+windows is superseded. The spec is
+`docs/superpowers/specs/2026-08-20-dot-panel-cover-design.md` — **read its amendment block
+before its body**; several working values in the body are marked `[amended]`. The SDD
+execution ledger with every ruling is
+`.superpowers/sdd/2026-08-20-mainboard-rework/progress.md` (git-ignored scratch — read it
+before resuming, it is the true sequence of what happened).
+
+### What exists now
+
+**The art panel is done.** `hardware/panel/generate.sh` turns Wells's Figma export
+(`hardware/panel/svg/panel.svg` — the single source of truth; fill colour IS the material)
+into a DRC-clean, byte-deterministic `panel.kicad_pcb`, 62 × 104.27 mm, matte black, ENIG,
+zero components except four blind reflow-standoff seats. Current export lineage: **Frame 9b**
+— 56 dots = 19 gold (one is the `test` dot, 2.25 mm NPTH, black mask-knockout letters),
+14 bare-FR4 (`#E7BA9B`, full-RGB pixels), 9 single-mask bright teal (`#14BABA`), 14
+double-mask deep teal (`#176767`); both top corners are gold so mounting bosses hide under
+them; **37 lit dots total**. The back face is a solid copper flood (the black mask transmits
+teal — without copper the LEDs bleed across the whole face) with windows only at the 37 lit
+dots, the fr4 slash, and the test NPTH. Four exposed rings in the flood take **PEM
+SMTSO-M25-3ET-class blind nuts** so M2.5 screws climb from rubber feet through case floor,
+main board, and printed lattice into the panel — no hardware on the art face; hole/seat
+coaxiality between the boards is load-bearing, change them together or not at all
+(`STANDOFFS` in `hardware/panel/emit_board.py`).
+
+**The main board rework is placement-complete pending one in-flight adjustment.** 62 ×
+104.27 (matches the panel; it grew, it did not shrink), ports on the bottom edge at 19.5 mm
+even centers, LED field placed from `panel_layout.json` (identity mapping
+`board = panel + (100, 60)` — an earlier mirror rule was WRONG and is dead), each LED's
+100 nF cap at one uniform offset 2.6 mm north (Wells's light-grille needs the cells clear),
+LED and passive designators on F.Fab. West edge is the control edge: S1 (DP-08RP right-angle
+piano DIP, real measured footprint, keys overhang to x=97.8 — case wall 2.25 mm thick puts
+key tips flush with the outside; DIP 1 at the BOTTOM) and SW1 (Panasonic EVQP44B3M side
+reset, actuator flush at x=100, case pinhole). SW3 test switch's PLUNGER (not origin —
+3.95 mm offset, footprint origin is pin 1) centred at (131, 91) under the panel's test dot.
+U9 level shifter lives inside the grid under a gold dot; U4 stays near (144.3, 130.8) by
+ruling (gold cells cost 25–100 mm of power run). U5 ESD sits at its geometric floor from J1
+(~6.3 mm — J1's own courtyard makes < 5.7 impossible). WROOM antenna is FLUSH at x=162
+(no case bump — Wells chose flush), keepout narrowed to module width + 5 mm/side.
+
+**In flight when this was written** (agent `mb-r7`): restoring the LED chain to **37** (a
+controller misread briefly "retired" two — Wells said *move*, and his 9b art did the moving),
+lifting **U1 north ~3.5 mm** so mounting hole H4 lands at Wells's intended SE corner
+(156.364, ~155), antenna keepout riding along trimmed clear of dot (7,6). Mount pattern
+after that lands: H1 (105.636, 65.636) under the gold corner dot, H2 (156.364, 65.636) under
+the other, H3 (105.636, ~152) west-low, H4 (156.364, ~155) east-low — all M2.5 clearance
+(2.75 mm), non-plated, panel seats coaxial. Verify with the alignment proof
+(37/37 LEDs + plunger + holes at 0.0000 mm) before believing anything.
+
+### The working pipeline (all of it exists, use it)
+
+`hardware/panel/generate.sh` (panel; idempotent, floors.py advisory warnings are expected —
+8 known, incl. the accepted 0.101 mm microprint pinch and 0.089 mm test-glyph mask ridge).
+Main board: `place_leds.py` (re-sync LEDs to the panel json; asserts serpentine chain and
+plunger), then **strip → `route.py --passes 60` (run DETACHED with nohup; tool-shell resets
+kill plain background runs; it wipes and re-routes from scratch every time) → `stitch.py`
+ONCE (its lattice box is hardcoded around U1 — update it when U1 moves) → prune vias in
+via-barred areas → refill → DRC `--refill-zones --schematic-parity --severity-all`** and
+split unconnected into real-vs-Zone↔Zone (the handoff snippet below still applies). Benign
+DRC baseline: 5 silk-edge + 5 lib_footprint_mismatch (U1's vias + the four enlarged holes)
++ Wells's own TASHTALK silk overlap. Routing lesson that repeatedly paid: every "impossible"
+net was a single-track keyhole — **widen the approach, never shorten the path**.
+
+### New traps from this rework (each cost real time)
+
+- svgelements yields `<mask>` *content* as ordinary elements (the plates bug) and ignores
+  mask attributes; the generator strips defs and rect-crops masked paths. The Figma export's
+  final `<rect fill="white">` lives inside `<clipPath>` — hiding or deleting it clips the
+  whole SVG to nothing.
+- Fabs clip silk over exposed copper; neither DRC nor renders show it. That is why the
+  `test` tag is a mask knockout.
+- `board.Save()` randomizes every UUID (panel generator derandomizes; keep it), and KiCad's
+  `Fracture()` converts polygon holes to slit outlines on save — `HoleCount()` reads 0 on
+  reload; verify by vertex count or render.
+- A board footprint keeps its OWN copy of the 3D model reference — adding a model to the
+  library does nothing for already-placed parts. Hand-written `.wrl` bodies render in KiCad
+  but are absent from STEP/STL exports; the LED model needed a +0.84 mm z-lift because the
+  reverse-mount package hangs through a cutout our top-firing footprint doesn't have.
+- pcbnew: `board.Remove()` corrupts later `FootprintLoad`/`GetNetInfo` in-process (split
+  scripts); `FootprintLoad` drops the library nickname from the FPID; footprint-owned rule
+  areas are not in `board.Zones()`; deleting routed tracks leaves their clearance cut-outs
+  frozen in the stored zone fill (refill via `ZONE_FILLER` — `kicad-cli --refill-zones`
+  does not write back).
+- The stock WROOM courtyard fuses the module body with a 48 mm RF-recommendation rectangle;
+  splitting them (body = courtyard, RF = rule area notched around fixed parts) is what made
+  the flush antenna placeable at all.
+- The SMTSO seats need SOLID back-flood copper — a dot window under a seat leaves nothing
+  to solder to (corner dots being gold in 9b is what makes the top seats work).
+
+### Next, in order
+
+1. Land the in-flight U1-lift/37-LED restore; Wells reviews renders; then the committed
+   route + full battery (this file's checks) — that closes the board plan's Task 3.
+2. Task 4: regenerate `hardware/airwriter/fab/` (BOM must show C5149201 ×37, C151417,
+   C458097, C920211, EVQP44B3M, and none of the removed parts — J6/R18/R19/J3 are GONE,
+   IO36/37 freed), renders/STEP checks, whole-branch final review, fresh Desktop exports.
+3. Plan 3, firmware: `led_grid` (37 px, material map from `panel_layout.json`, mask dots
+   brightness-only teal, FR4 dots full RGB), `dip_config` (IO38/39/40/41/42/47/21/13,
+   pull-ups, DIP1=mode…), `/BTN_TEST` on IO14. Runs on the devkit.
+4. Plan 4, lattice + case: every number it needs is in the ledger and §2/§3 of the spec —
+   hole positions (from the final board), SMTSO stack, DIP key tips x=97.75 / z 8.11–9.01 /
+   2.25 mm wall, reset pinhole at x=100, plunger through the 2.25 mm panel hole, carve-outs
+   for S1's top corner, U4, R3, U9 (1.1 mm tall under its gold dot).
+5. Fab: panel + board snap-apart at PCBWay, swatch rail on the margin, quote to Wells
+   before ANY order (standing rule), single-mask teal verified by the swatch.
 
 **Hardware rev A is finished and not yet ordered.** The board routes clean, the fab package is
 generated, and the mini-DIN is settled — Kycon KMDGX-8S-BS from Mouser. Nothing blocks the order.
