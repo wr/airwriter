@@ -1,6 +1,6 @@
 PCB statistics report
 =====================
-- Date: Friday, August 21, 2026 at 02:46:15 PM
+- Date: Friday, August 21, 2026 at 03:15:23 PM
 - Project: airwriter
 - Board name: airwriter
 
@@ -9,21 +9,21 @@ Board
 - Width: 62.0000 mm
 - Height: 104.2700 mm
 - Area: 6461.298 mm²
-- Front copper area: 5437.262 mm²
-- Back copper area: 5547.221 mm²
+- Front copper area: 5436.065 mm²
+- Back copper area: 5547.497 mm²
 - Min track clearance: 0.1500 mm
 - Min track width: 0.2000 mm
 - Min drill diameter: 0.3000 mm
 - Board stackup thickness: 1.6000 mm
 
-- Front footprint area: 3156.985 mm²
+- Front footprint area: 3163.195 mm²
 - Back footprint area: 232.778 mm²
-- Front component density: 48.86 %
+- Front component density: 48.96 %
 - Back component density: 3.60 %
 Pads
 ----
 - Through hole: 67
-- SMD: 433
+- SMD: 435
 - Connector: 0
 - NPTH: 6
 - Castellated: 0
@@ -31,7 +31,7 @@ Pads
 
 Vias
 ----
-- Through vias: 118
+- Through vias: 119
 - Blind vias: 0
 - Buried vias: 0
 - Micro vias: 0
@@ -43,8 +43,8 @@ Components
 |--------------|------------|-----------|-------|
 |THT:          |          5 |         0 |     5 |
 |SMD:          |        124 |         0 |   124 |
-|Unspecified:  |         11 |         0 |    11 |
-|Total:        |        140 |         0 |   140 |
+|Unspecified:  |         13 |         0 |    13 |
+|Total:        |        142 |         0 |   142 |
 
 Drill holes
 -----------
@@ -52,7 +52,7 @@ Drill holes
 | Count | Shape |    X Size |    Y Size | Plated | Via/Pad | Start Layer | Stop Layer |
 |-------|-------|-----------|-----------|--------|---------|-------------|------------|
 |    70 | Round | 0.3000 mm | 0.3000 mm |    PTH |     Via |        F.Cu |       B.Cu |
-|    48 | Round | 0.4000 mm | 0.4000 mm |    PTH |     Via |        F.Cu |       B.Cu |
+|    49 | Round | 0.4000 mm | 0.4000 mm |    PTH |     Via |        F.Cu |       B.Cu |
 |    20 | Round | 1.1000 mm | 1.1000 mm |    PTH |     Pad |        F.Cu |       B.Cu |
 |    17 | Round | 1.0000 mm | 1.0000 mm |    PTH |     Pad |        F.Cu |       B.Cu |
 |    12 | Round | 0.3000 mm | 0.3000 mm |    PTH |     Pad |        F.Cu |       B.Cu |
