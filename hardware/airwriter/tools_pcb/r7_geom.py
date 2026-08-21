@@ -7,10 +7,14 @@ obstacle that spans that y becomes a forbidden x-interval -- its courtyard grown
 by the part's own half-width plus the packing gap, a Minkowski sum, so the test
 is on the part's origin rather than on its body. What is left is where it may go.
 
-Obstacles are real courtyard rectangles (decomposed, never bounding-boxed) plus
-a disc around every dot that still carries an LED: an LED's courtyard is wider
+Obstacles are real courtyard rectangles (decomposed, never bounding-boxed),
+a disc around every dot that still carries an LED (an LED's courtyard is wider
 than its dot but shorter, so the disc is what stops a part creeping under lit
-glass.
+glass), and every rule area that bars footprints -- the WROOM antenna keepout
+bars them and is owned by U1's footprint, so it is invisible to both
+board.Zones() and to any check that only walks courtyards. Leaving it out let a
+sweep park two passives inside the antenna keepout, which DRC would have caught
+and a reader would not.
 """
 import json
 import pcbnew
@@ -36,6 +40,12 @@ class Space:
         self.led_at = {(round(L.mm(f.GetPosition().x), 2), round(L.mm(f.GetPosition().y), 2))
                        for f in board.Footprints() if "SK6812" in f.GetValue()}
         self.reset()
+
+    def _rule_areas(self):
+        out = [z for z in self.b.Zones() if z.GetIsRuleArea()]
+        for f in self.b.Footprints():
+            out += [z for z in f.Zones() if z.GetIsRuleArea()]
+        return [z for z in out if z.GetDoNotAllowFootprints()]
 
     def _probe(self, ref):
         f = self.fps[ref]
@@ -63,6 +73,11 @@ class Space:
             if f.GetReference() in skip:
                 continue
             self.obst += (L.courtyard_rects(f) or [L.cy_bbox(f)])
+        for z in self._rule_areas():
+            o = z.Outline().Outline(0)
+            pts = [(L.mm(o.CPoint(i).x), L.mm(o.CPoint(i).y)) for i in range(o.PointCount())]
+            self.obst += L.decompose(pts) or [(min(p[0] for p in pts), min(p[1] for p in pts),
+                                               max(p[0] for p in pts), max(p[1] for p in pts))]
         for d in self.lay["dots"]:
             bx, by = ORIGIN[0] + d["x"], ORIGIN[1] + d["y"]
             if (round(bx, 2), round(by, 2)) in self.led_at:
@@ -98,7 +113,11 @@ class Space:
         g = self.gap
         spans = None
         for cx0, cy0, cx1, cy1 in self.geom[ref][rot][0]:
-            if y + cy0 - g < ylo or y + cy1 + g > yhi:
+            # The window is the region the courtyard must lie INSIDE -- a board
+            # edge or a reserved channel, not a neighbour. The 0.2mm packing gap
+            # is for real obstacles; charging it against a soft boundary too
+            # cost an 0805 its slot in a 2.09mm band that genuinely fits it.
+            if y + cy0 < ylo or y + cy1 > yhi:
                 return []
             lo, hi = xlo - cx0, xhi - cx1
             blocked = sorted((ox0 - cx1 - g, ox1 - cx0 + g)
