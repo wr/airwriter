@@ -639,6 +639,23 @@ real = [u for u in drc['unconnected_items']
 The router also says so plainly if you read the whole line: `completed ... (11 unrouted and 10
 violations)`. A finished board has no `unrouted` clause at all.
 
+**CORRECTION (2026-08-21, W-573): a `Zone↔Zone` unconnected item is NOT automatically benign.**
+The rule above splits them out as harmless "pour islands" — that is only true when the island
+carries no pad. KiCad's ratsnest calls a pad *connected* the moment it touches ANY GND copper,
+even a stranded island that reaches nothing else — so a fragmented GND pour can strand real pads
+(their only ground is an island wired to nothing) while DRC shows just a few benign-looking
+`Zone↔Zone` lines. This board had exactly that: **44 GND fill islands → 18 disconnected
+components; 22 GND pads stranded off the main plane**, including decoupling caps and the U5 ESD
+ground (J1's USB-C GND turned out fine — on the main plane). Each `Zone↔Zone` ratsnest edge is a
+real GND disconnection: N edges ⇒ N+1 GND clusters. **Verify GND properly**: compute connected
+components of GND copper (zone-fill islands + pads + tracks + vias, overlap = edge, vias bridge
+layers) and confirm every GND pad shares the main-plane component — `tools_pcb/r12_gnd.py` does
+this and its component count matches KiCad's ratsnest exactly. Fix = one GND stitch via per
+stranded F.Cu fragment down to the main B.Cu flood (`r12_fix.py`); fragments over a B.Cu window /
+back-signal routing get an F.Cu GND track to a nearby over-main-B via spot (`r12_bridge.py`). The
+back flood itself is not one solid island — dense B.Cu (LocalTalk) routing splits it, so some F.Cu
+fragments sit over non-GND back copper and are genuinely hard to reach.
+
 **What actually broke it: the wordmark reserve was 49mm wide on a 52mm board.** Barring tracks on
 *both* layers across a band that wide leaves 0.5mm at one edge and 2.5mm at the other — the router
 simply could not cross. The fix is two-part and both halves matter:
