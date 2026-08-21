@@ -1,9 +1,141 @@
-ERC report (2026-08-21T14:41:58, Encoding UTF8)
-Report includes: Errors
+ERC report (2026-08-21T16:35:31, Encoding UTF8)
+Report includes: Errors, Warnings
 
 ***** Sheet /
+[isolated_pin_label]: Label connected to only one pin
+    ; warning
+    @(219.71 mm, 116.84 mm): Label 'TXD0'
+[isolated_pin_label]: Label connected to only one pin
+    ; warning
+    @(219.71 mm, 119.38 mm): Label 'RXD0'
+[lib_symbol_mismatch]: Symbol 'MAX3485' doesn't match copy in library 'Interface_UART'
+    ; warning
+    @(335.28 mm, 224.79 mm): Symbol U6 [MAX3485]
+[lib_symbol_mismatch]: Symbol 'MAX3485' doesn't match copy in library 'Interface_UART'
+    ; warning
+    @(335.28 mm, 265.43 mm): Symbol U8 [MAX3485]
+[lib_symbol_mismatch]: Symbol 'Mini-DIN-8_Shielded' doesn't match copy in library 'airwriter'
+    ; warning
+    @(439.42 mm, 110.49 mm): Symbol J2 [Mini-DIN-8_Shielded]
+[lib_symbol_mismatch]: Symbol 'Mini-DIN-8_Shielded' doesn't match copy in library 'airwriter'
+    ; warning
+    @(439.42 mm, 229.87 mm): Symbol J4 [Mini-DIN-8_Shielded]
+[lib_symbol_mismatch]: Symbol '74AHCT1G125' doesn't match copy in library '74xGxx'
+    ; warning
+    @(457.20 mm, 25.40 mm): Symbol U9 [74AHCT1G125]
+[lib_symbol_mismatch]: Symbol 'SK6812MINI-E' doesn't match copy in library 'LED'
+    ; warning
+    @(457.20 mm, 114.30 mm): Symbol D10 [SK6812MINI-E]
+[lib_symbol_mismatch]: Symbol 'SK6812MINI-E' doesn't match copy in library 'LED'
+    ; warning
+    @(457.20 mm, 132.08 mm): Symbol D18 [SK6812MINI-E]
+[lib_symbol_mismatch]: Symbol 'SK6812MINI-E' doesn't match copy in library 'LED'
+    ; warning
+    @(457.20 mm, 149.86 mm): Symbol D26 [SK6812MINI-E]
+[lib_symbol_mismatch]: Symbol 'SK6812MINI-E' doesn't match copy in library 'LED'
+    ; warning
+    @(457.20 mm, 167.64 mm): Symbol D34 [SK6812MINI-E]
+[lib_symbol_mismatch]: Symbol 'SK6812MINI-E' doesn't match copy in library 'LED'
+    ; warning
+    @(457.20 mm, 185.42 mm): Symbol D42 [SK6812MINI-E]
+[lib_symbol_mismatch]: Symbol 'SK6812MINI-E' doesn't match copy in library 'LED'
+    ; warning
+    @(474.98 mm, 114.30 mm): Symbol D11 [SK6812MINI-E]
+[lib_symbol_mismatch]: Symbol 'SK6812MINI-E' doesn't match copy in library 'LED'
+    ; warning
+    @(474.98 mm, 132.08 mm): Symbol D19 [SK6812MINI-E]
+[lib_symbol_mismatch]: Symbol 'SK6812MINI-E' doesn't match copy in library 'LED'
+    ; warning
+    @(474.98 mm, 149.86 mm): Symbol D27 [SK6812MINI-E]
+[lib_symbol_mismatch]: Symbol 'SK6812MINI-E' doesn't match copy in library 'LED'
+    ; warning
+    @(474.98 mm, 167.64 mm): Symbol D35 [SK6812MINI-E]
+[lib_symbol_mismatch]: Symbol 'SK6812MINI-E' doesn't match copy in library 'LED'
+    ; warning
+    @(474.98 mm, 185.42 mm): Symbol D43 [SK6812MINI-E]
+[lib_symbol_mismatch]: Symbol 'SK6812MINI-E' doesn't match copy in library 'LED'
+    ; warning
+    @(492.76 mm, 114.30 mm): Symbol D12 [SK6812MINI-E]
+[lib_symbol_mismatch]: Symbol 'SK6812MINI-E' doesn't match copy in library 'LED'
+    ; warning
+    @(492.76 mm, 132.08 mm): Symbol D20 [SK6812MINI-E]
+[lib_symbol_mismatch]: Symbol 'SK6812MINI-E' doesn't match copy in library 'LED'
+    ; warning
+    @(492.76 mm, 149.86 mm): Symbol D28 [SK6812MINI-E]
+[lib_symbol_mismatch]: Symbol 'SK6812MINI-E' doesn't match copy in library 'LED'
+    ; warning
+    @(492.76 mm, 167.64 mm): Symbol D36 [SK6812MINI-E]
+[lib_symbol_mismatch]: Symbol 'SK6812MINI-E' doesn't match copy in library 'LED'
+    ; warning
+    @(492.76 mm, 185.42 mm): Symbol D44 [SK6812MINI-E]
+[lib_symbol_mismatch]: Symbol 'SK6812MINI-E' doesn't match copy in library 'LED'
+    ; warning
+    @(510.54 mm, 114.30 mm): Symbol D13 [SK6812MINI-E]
+[lib_symbol_mismatch]: Symbol 'SK6812MINI-E' doesn't match copy in library 'LED'
+    ; warning
+    @(510.54 mm, 132.08 mm): Symbol D21 [SK6812MINI-E]
+[lib_symbol_mismatch]: Symbol 'SK6812MINI-E' doesn't match copy in library 'LED'
+    ; warning
+    @(510.54 mm, 149.86 mm): Symbol D29 [SK6812MINI-E]
+[lib_symbol_mismatch]: Symbol 'SK6812MINI-E' doesn't match copy in library 'LED'
+    ; warning
+    @(510.54 mm, 167.64 mm): Symbol D37 [SK6812MINI-E]
+[lib_symbol_mismatch]: Symbol 'SK6812MINI-E' doesn't match copy in library 'LED'
+    ; warning
+    @(510.54 mm, 185.42 mm): Symbol D45 [SK6812MINI-E]
+[lib_symbol_mismatch]: Symbol 'SK6812MINI-E' doesn't match copy in library 'LED'
+    ; warning
+    @(528.32 mm, 114.30 mm): Symbol D14 [SK6812MINI-E]
+[lib_symbol_mismatch]: Symbol 'SK6812MINI-E' doesn't match copy in library 'LED'
+    ; warning
+    @(528.32 mm, 132.08 mm): Symbol D22 [SK6812MINI-E]
+[lib_symbol_mismatch]: Symbol 'SK6812MINI-E' doesn't match copy in library 'LED'
+    ; warning
+    @(528.32 mm, 149.86 mm): Symbol D30 [SK6812MINI-E]
+[lib_symbol_mismatch]: Symbol 'SK6812MINI-E' doesn't match copy in library 'LED'
+    ; warning
+    @(528.32 mm, 167.64 mm): Symbol D38 [SK6812MINI-E]
+[lib_symbol_mismatch]: Symbol 'SK6812MINI-E' doesn't match copy in library 'LED'
+    ; warning
+    @(528.32 mm, 185.42 mm): Symbol D46 [SK6812MINI-E]
+[lib_symbol_mismatch]: Symbol 'SK6812MINI-E' doesn't match copy in library 'LED'
+    ; warning
+    @(546.10 mm, 114.30 mm): Symbol D15 [SK6812MINI-E]
+[lib_symbol_mismatch]: Symbol 'SK6812MINI-E' doesn't match copy in library 'LED'
+    ; warning
+    @(546.10 mm, 132.08 mm): Symbol D23 [SK6812MINI-E]
+[lib_symbol_mismatch]: Symbol 'SK6812MINI-E' doesn't match copy in library 'LED'
+    ; warning
+    @(546.10 mm, 149.86 mm): Symbol D31 [SK6812MINI-E]
+[lib_symbol_mismatch]: Symbol 'SK6812MINI-E' doesn't match copy in library 'LED'
+    ; warning
+    @(546.10 mm, 167.64 mm): Symbol D39 [SK6812MINI-E]
+[lib_symbol_mismatch]: Symbol 'SK6812MINI-E' doesn't match copy in library 'LED'
+    ; warning
+    @(563.88 mm, 114.30 mm): Symbol D16 [SK6812MINI-E]
+[lib_symbol_mismatch]: Symbol 'SK6812MINI-E' doesn't match copy in library 'LED'
+    ; warning
+    @(563.88 mm, 132.08 mm): Symbol D24 [SK6812MINI-E]
+[lib_symbol_mismatch]: Symbol 'SK6812MINI-E' doesn't match copy in library 'LED'
+    ; warning
+    @(563.88 mm, 149.86 mm): Symbol D32 [SK6812MINI-E]
+[lib_symbol_mismatch]: Symbol 'SK6812MINI-E' doesn't match copy in library 'LED'
+    ; warning
+    @(563.88 mm, 167.64 mm): Symbol D40 [SK6812MINI-E]
+[lib_symbol_mismatch]: Symbol 'SK6812MINI-E' doesn't match copy in library 'LED'
+    ; warning
+    @(581.66 mm, 114.30 mm): Symbol D17 [SK6812MINI-E]
+[lib_symbol_mismatch]: Symbol 'SK6812MINI-E' doesn't match copy in library 'LED'
+    ; warning
+    @(581.66 mm, 132.08 mm): Symbol D25 [SK6812MINI-E]
+[lib_symbol_mismatch]: Symbol 'SK6812MINI-E' doesn't match copy in library 'LED'
+    ; warning
+    @(581.66 mm, 149.86 mm): Symbol D33 [SK6812MINI-E]
+[lib_symbol_mismatch]: Symbol 'SK6812MINI-E' doesn't match copy in library 'LED'
+    ; warning
+    @(581.66 mm, 167.64 mm): Symbol D41 [SK6812MINI-E]
 
- ** ERC messages: 0  Errors 0  Warnings 0
+ ** ERC messages: 44  Errors 0  Warnings 44
 
  ** Ignored checks:
     - Global label only appears once in the schematic
