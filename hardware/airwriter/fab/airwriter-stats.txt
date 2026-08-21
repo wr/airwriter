@@ -1,62 +1,6 @@
-PCB statistics report
-=====================
-- Date: Tuesday, August 04, 2026 at 03:13:26 PM
-- Project: airwriter
-- Board name: airwriter
-
-Board
------
-- Width: 52.0000 mm
-- Height: 54.0000 mm
-- Area: 2800.256 mm²
-- Front copper area: 2182.89 mm²
-- Back copper area: 2405.965 mm²
-- Min track clearance: 0.1216 mm
-- Min track width: 0.2000 mm
-- Min drill diameter: 0.3000 mm
-- Board stackup thickness: 1.6000 mm
-
-- Front footprint area: 2435.377 mm²
-- Back footprint area: 142.002 mm²
-- Front component density: 86.97 %
-- Back component density: 5.07 %
-Pads
-----
-- Through hole: 47
-- SMD: 196
-- Connector: 0
-- NPTH: 6
-- Castellated: 0
-- Press-fit: 0
-
-Vias
-----
-- Through vias: 34
-- Blind vias: 0
-- Buried vias: 0
-- Micro vias: 0
-
-Components
-----------
-
-|              | Front Side | Back Side | Total |
-|--------------|------------|-----------|-------|
-|THT:          |          4 |         0 |     4 |
-|SMD:          |         44 |         0 |    44 |
-|Unspecified:  |          4 |         0 |     4 |
-|Total:        |         52 |         0 |    52 |
-
-Drill holes
------------
-
-| Count | Shape |    X Size |    Y Size | Plated | Via/Pad | Start Layer | Stop Layer |
-|-------|-------|-----------|-----------|--------|---------|-------------|------------|
-|    34 | Round | 0.3000 mm | 0.3000 mm |    PTH |     Via |        F.Cu |       B.Cu |
-|    16 | Round | 1.1000 mm | 1.1000 mm |    PTH |     Pad |        F.Cu |       B.Cu |
-|    12 | Round | 0.3000 mm | 0.3000 mm |    PTH |     Pad |        F.Cu |       B.Cu |
-|     9 | Round | 0.6500 mm | 0.6500 mm |    PTH |     Pad |        F.Cu |       B.Cu |
-|     6 | Round | 2.3000 mm | 2.3000 mm |    PTH |     Pad |        F.Cu |       B.Cu |
-|     4 | Round | 2.2000 mm | 2.2000 mm |   NPTH |     Pad |        F.Cu |       B.Cu |
-|     2 | Round | 0.6500 mm | 0.6500 mm |   NPTH |     Pad |        F.Cu |       B.Cu |
-|     2 |  Slot | 0.6000 mm | 1.7000 mm |    PTH |     Pad |        F.Cu |       B.Cu |
-|     2 |  Slot | 0.6000 mm | 1.2000 mm |    PTH |     Pad |        F.Cu |       B.Cu |
+AirWriter main board — fab stats (regenerated)
+footprints: 130
+pads: 493
+vias: 0
+tracks(segments): 0
+board: 62 x 104.27 mm, 2 layer, 1.6mm FR4, 1oz, matte black, ENIG
