@@ -12704,9 +12704,9 @@
 		(at 141.6 151.4)
 		(descr "Ultra-small-sized Tactile Switch with High Contact Reliability, Top-actuated Model, without Ground Terminal, without Boss")
 		(tags "Tactile Switch")
-		(property "Reference" "BOOT"
+		(property "Reference" "SW2"
 			(at 0 2.2 0)
-			(layer "F.SilkS")
+			(layer "F.Fab")
 			(uuid "a2eb2fb8-00ef-44fd-91e0-e9f7ee72916d")
 			(effects
 				(font
@@ -12791,6 +12791,7 @@
 				)
 			)
 		)
+		(path "/d3b426cc-b930-488c-a9f4-61605692636e")
 		(sheetname "/")
 		(sheetfile "airwriter.kicad_sch")
 		(units
@@ -12951,6 +12952,17 @@
 			(fill no)
 			(layer "F.Fab")
 			(uuid "af688dbf-5168-44f1-93ce-fa0bd2adfd4c")
+		)
+		(fp_text user "BOOT"
+			(at 0 2.2 0)
+			(layer "F.SilkS")
+			(uuid "4420e6cc-712b-4677-870a-4fdba9831006")
+			(effects
+				(font
+					(size 1 1)
+					(thickness 0.15)
+				)
+			)
 		)
 		(fp_text user "${REFERENCE}"
 			(at 0 -2.5 0)
@@ -25891,7 +25903,7 @@
 				)
 			)
 		)
-		(property "Value" "B3U-1000P"
+		(property "Value" "EVQP44B3M"
 			(at 0 2.3 0)
 			(layer "F.Fab")
 			(uuid "2d9b9253-e85b-44fc-828b-6d4d019f5bed")
@@ -25913,7 +25925,7 @@
 				)
 			)
 		)
-		(property "Description" "RESET momentary switch (Omron B3U-1000P top-actuated SMD, near U1, case-bottom access), grounds EN through R3/C6 POR"
+		(property "Description" "RESET momentary side-press switch (Panasonic EVQP44B3M), east edge, actuator flush at case pinhole, grounds EN through R3/C6 POR"
 			(at 0 0 0)
 			(layer "F.Fab")
 			(hide yes)
@@ -25924,7 +25936,7 @@
 				)
 			)
 		)
-		(property "LCSC" "C231329"
+		(property "LCSC" "C79164"
 			(at 0 0 0)
 			(unlocked yes)
 			(layer "F.Fab")
@@ -25950,7 +25962,7 @@
 				)
 			)
 		)
-		(property "Manufacturer" "Omron"
+		(property "Manufacturer" "Panasonic"
 			(at 0 0 0)
 			(unlocked yes)
 			(layer "F.Fab")
