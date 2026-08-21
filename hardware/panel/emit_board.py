@@ -215,7 +215,7 @@ def back_copper_flood(board, p, dots, g, fr4):
 # there and no exception is needed. A seat over a flood window would have no
 # copper to reflow onto, which is what check_seats proves against the real
 # hole list rather than by inspection.
-STANDOFFS = [(5.6364, 5.6364), (56.3636, 5.6364), (5.6364, 91.93), (56.3636, 94.214)]
+STANDOFFS = [(5.6364, 5.6364), (56.3636, 5.6364), (5.6364, 91.93), (56.3636, 91.93)]
 STANDOFF_SEAT_DIA = 5.0   # exposed ENIG ring in the flood
 STANDOFF_PASTE_DIA = 4.6
 

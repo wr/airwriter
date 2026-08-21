@@ -5305,8 +5305,8 @@
 		(uuid "c95538ca-2ae4-5bdf-be6f-3febe5e5c44d")
 	)
 	(gr_circle
-		(center 56.3636 94.214)
-		(end 58.8636 94.214)
+		(center 56.3636 91.93)
+		(end 58.8636 91.93)
 		(stroke
 			(width 0)
 			(type default)
@@ -5811,8 +5811,8 @@
 		(uuid "bbafdfe6-2411-5066-b817-15b4d09caf47")
 	)
 	(gr_circle
-		(center 56.3636 94.214)
-		(end 58.663599 94.214)
+		(center 56.3636 91.93)
+		(end 58.663599 91.93)
 		(stroke
 			(width 0)
 			(type default)
