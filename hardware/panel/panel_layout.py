@@ -14,6 +14,10 @@ CFG = dict(w=62.0, corner_r=2.0)
 MAT_BY_FILL = {"#dda857": "G", "#e7ba9b": "P", "#14baba": "B", "#176767": "L"}
 LED_MATS = set("PBL")
 GRID0_PX, PITCH_PX = 100.0, 150.0
+# The test NPTH is a mechanical dimension, not artwork: SW3's plunger has to poke
+# up through it. The SVG's black marker circle only locates the test dot; Wells
+# sets the drill here so it survives a Figma re-export. 3.6mm clears the button.
+TEST_HOLE_DIA = 3.6
 
 def _circles(svg_text):
     for tag in re.findall(r"<circle[^>]*>", svg_text):
@@ -56,7 +60,7 @@ def load_layout():
                           pitch=round(PITCH_PX * SCALE, 4),
                           dot_dia=round(100.0 * SCALE, 4),
                           origin=[round(GRID0_PX * SCALE, 4)] * 2,
-                          hole_dia=hole[1]),
+                          hole_dia=TEST_HOLE_DIA),
                 dots=dots, _cells={f"{r},{c}": m for (r, c), m in sorted(cells.items())})
 
 if __name__ == "__main__":
