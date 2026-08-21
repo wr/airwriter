@@ -31096,6 +31096,14 @@
 		(net "/+3V3")
 		(uuid "e02938f5-42f8-4b79-88fa-a04b0cfa2fcb")
 	)
+	(segment
+		(start 146.4 155)
+		(end 146.6 155.2)
+		(width 0.15)
+		(layer "F.Cu")
+		(net "/GND")
+		(uuid "cae7124c-3dff-4f11-8d05-1cff8e5cead1")
+	)
 	(via
 		(at 122.95 117.3)
 		(size 0.6)
@@ -31217,6 +31225,14 @@
 		(uuid "1b6a7dfc-0a7c-4283-914e-0173ca929d19")
 	)
 	(via
+		(at 142.595595 128.8635)
+		(size 0.5)
+		(drill 0.3)
+		(layers "F.Cu" "B.Cu")
+		(net "/GND")
+		(uuid "220d0db7-46ea-4dff-b3ab-eef48c4e80ab")
+	)
+	(via
 		(at 110.381351 114.6005)
 		(size 0.5)
 		(drill 0.3)
@@ -31311,6 +31327,14 @@
 		(layers "F.Cu" "B.Cu")
 		(net "/GND")
 		(uuid "5e4aba9f-be6b-4ee8-a0a2-525d5f4e05ba")
+	)
+	(via
+		(at 146.6 155.2)
+		(size 0.5)
+		(drill 0.3)
+		(layers "F.Cu" "B.Cu")
+		(net "/GND")
+		(uuid "5f0952ab-b3cb-46ba-9523-1275abcbbccc")
 	)
 	(via
 		(at 128.2585 139.6955)
@@ -41935,6 +41959,68 @@
 				(xy 156.289499 71.442649) (xy 156.289499 71.195521) (xy 156.289357 71.192874) (xy 156.289499 71.192866)
 				(xy 156.289499 71.192865) (xy 156.289525 71.192865) (xy 156.290507 71.192812) (xy 156.30221 71.137028)
 				(xy 156.347571 71.095966) (xy 156.388078 71.0873) (xy 157.696816 71.0873)
+			)
+		)
+	)
+	(zone
+		(layers "F.Cu" "B.Cu")
+		(uuid "1076829d-3e84-4b9a-aa77-1414e88e7fdd")
+		(name "GND_STITCH_012")
+		(hatch edge 0.5)
+		(connect_pads yes
+			(clearance 0)
+		)
+		(min_thickness 0.2)
+		(keepout
+			(tracks allowed)
+			(vias allowed)
+			(pads allowed)
+			(copperpour allowed)
+			(footprints allowed)
+		)
+		(placement
+			(enabled no)
+			(sheetname "")
+		)
+		(fill
+			(thermal_gap 0.5)
+			(thermal_bridge_width 0.5)
+			(island_removal_mode 0)
+		)
+		(polygon
+			(pts
+				(xy 141.996 128.263) (xy 143.196 128.263) (xy 143.196 129.463) (xy 141.996 129.463)
+			)
+		)
+	)
+	(zone
+		(layers "F.Cu" "B.Cu")
+		(uuid "19297185-1b97-4b78-bc6f-6f51135587aa")
+		(name "GND_STITCH_012")
+		(hatch edge 0.5)
+		(connect_pads yes
+			(clearance 0)
+		)
+		(min_thickness 0.2)
+		(keepout
+			(tracks allowed)
+			(vias allowed)
+			(pads allowed)
+			(copperpour allowed)
+			(footprints allowed)
+		)
+		(placement
+			(enabled no)
+			(sheetname "")
+		)
+		(fill
+			(thermal_gap 0.5)
+			(thermal_bridge_width 0.5)
+			(island_removal_mode 0)
+		)
+		(polygon
+			(pts
+				(xy 145.8 154.4) (xy 147.2 154.4) (xy 147.2 155.8) (xy 145.8 155.8)
 			)
 		)
 	)
