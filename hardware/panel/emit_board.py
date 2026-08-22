@@ -216,11 +216,18 @@ def back_copper_flood(board, p, dots, g, fr4):
 # copper to reflow onto, which is what check_seats proves against the real
 # hole list rather than by inspection.
 STANDOFFS = [(5.6364, 5.6364), (56.3636, 5.6364), (5.6364, 91.93), (53.3636, 91.93)]
-STANDOFF_SEAT_DIA = 5.0   # exposed ENIG ring in the flood
-STANDOFF_PASTE_DIA = 4.6
+STANDOFF_SEAT_DIA = 6.0     # exposed ENIG seat; Wurth wants a 6.0mm land
+STANDOFF_PASTE_OD = 5.8     # paste is a RING: solid paste would wick into the
+STANDOFF_PASTE_ID = 3.9     # bottom-resident M2.5 thread (bore ~3.5)
 
-STANDOFF_PART = "SMTSO-M2.5-3ET"   # value shown in BOM; verify against sourcing
-STANDOFF_LCSC = ""                 # filled at order time from live sourcing
+# Wurth WA-SMSI 9774030151R: M2.5 x 3.0mm SMT steel spacer, FLAT bottom, no
+# pilot boss, so it solders to the solid back flood with no hole in the art
+# face -- the only M2.5x3 part in distribution that can (PEM SMTSO and all
+# clones need a 4.2mm hole). Digi-Key ~48k stock, ~$0.60 @ reel. Screw spec
+# for the case plan: tip must stop ~0.5mm short of the seat -- the thread
+# lives in the bottom ~1.8mm of the bore.
+STANDOFF_PART = "9774030151R"
+STANDOFF_LCSC = ""          # not an LCSC part; PCBWay sources from Digi-Key
 
 def standoff_pads(board):
     # Real footprints (MT1-MT4), not bare mask windows, so the standoff nuts
@@ -234,7 +241,7 @@ def standoff_pads(board):
         fp.SetPosition(pcbnew.VECTOR2I(mm(x), mm(y)))
         fp.SetReference(f"MT{i}"); fp.Reference().SetVisible(False)
         fp.SetValue(STANDOFF_PART); fp.Value().SetVisible(False)
-        fp.SetFPIDAsString("panel:SMT_Standoff_M2.5_D5.0mm")
+        fp.SetFPIDAsString("panel:SMT_Standoff_M2.5_D6.0mm")
         fp.SetAttributes(pcbnew.FP_SMD)
         if STANDOFF_LCSC:
             fp.SetField("LCSC", STANDOFF_LCSC)
@@ -247,11 +254,12 @@ def standoff_pads(board):
         pad.SetSize(pcbnew.VECTOR2I(mm(STANDOFF_SEAT_DIA), mm(STANDOFF_SEAT_DIA)))
         pad.SetPosition(pcbnew.VECTOR2I(mm(x), mm(y)))
         ls = pcbnew.LSET()
-        for l in (pcbnew.B_Mask, pcbnew.B_Paste):
-            ls.AddLayer(l)
+        ls.AddLayer(pcbnew.B_Mask)
         pad.SetLayerSet(ls)
-        pad.SetLocalSolderPasteMargin(mm((STANDOFF_PASTE_DIA - STANDOFF_SEAT_DIA) / 2))
         fp.Add(pad)
+        # ring paste aperture as board graphics (a single pad cannot hold a
+        # donut); the stencil gerber reads B.Paste either way
+        filled_ring(board, pcbnew.B_Paste, x, y, STANDOFF_PASTE_OD, STANDOFF_PASTE_ID)
         fp.SetLayer(pcbnew.B_Cu)
         board.Add(fp)
 
