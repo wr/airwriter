@@ -257,6 +257,9 @@ def standoff_pads(board):
         ls.AddLayer(pcbnew.B_Mask)
         pad.SetLayerSet(ls)
         fp.Add(pad)
+        m = pcbnew.FP_3DMODEL()
+        m.m_Filename = "${KIPRJMOD}/standoff-m25x3.wrl"
+        fp.Models().push_back(m)
         # ring paste aperture as board graphics (a single pad cannot hold a
         # donut); the stencil gerber reads B.Paste either way
         filled_ring(board, pcbnew.B_Paste, x, y, STANDOFF_PASTE_OD, STANDOFF_PASTE_ID)

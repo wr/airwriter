@@ -5,7 +5,9 @@
 
 Layout: panel sits ABOVE the main board (both 62mm wide), butted FLUSH so
 one straight V-score at y=60 separates them (the art panel's seam edge sands
-smoother than mouse-bite nubs). The corner-radius voids at both ends are
+smoother than mouse-bite nubs). The panel is FLIPPED art-face-down so its
+standoff nuts reflow on the same side as the main board's SMT — one-sided
+assembly. The corner-radius voids at both ends are
 routed; PCBWay handles route + V-cut panels as "2 designs". Output:
 hardware/combined/combined.kicad_pcb.
 
@@ -24,7 +26,35 @@ from sexp import parse, serialize, Sym, unquote, quote
 
 MAIN = os.path.join(HERE, 'airwriter', 'airwriter.kicad_pcb')
 PANEL = os.path.join(HERE, 'panel', 'panel.kicad_pcb')
+PANEL_FLIPPED = os.path.join(HERE, 'combined', 'panel-flipped.kicad_pcb')
 OUT = os.path.join(HERE, 'combined', 'combined.kicad_pcb')
+KIPY = ('/Applications/KiCad/KiCad.app/Contents/Frameworks/Python.framework'
+        '/Versions/3.9/bin/python3')
+
+FLIP_SNIPPET = """
+import pcbnew
+b = pcbnew.LoadBoard({src!r})
+c = pcbnew.VECTOR2I(31000000, 0)   # panel centreline x=31mm
+for coll in (list(b.GetFootprints()), list(b.GetDrawings()),
+             list(b.GetTracks()), list(b.Zones())):
+    for it in coll:
+        it.Flip(c, pcbnew.FLIP_DIRECTION_LEFT_RIGHT)
+pcbnew.SaveBoard({dst!r}, b)
+print('flipped panel written')
+"""
+
+
+def flip_panel():
+    """Mirror the whole panel left-right so its solder side (nut seats, paste)
+    lands on the SAME face as the main board's components — one-sided
+    assembly. The physical panel is unchanged; only its orientation inside
+    the production panel flips (art face down)."""
+    import subprocess
+    os.makedirs(os.path.dirname(PANEL_FLIPPED), exist_ok=True)
+    r = subprocess.run([KIPY, '-c', FLIP_SNIPPET.format(src=PANEL, dst=PANEL_FLIPPED)],
+                       capture_output=True, text=True)
+    if 'flipped panel written' not in r.stdout:
+        raise SystemExit('panel flip failed:\n' + r.stdout + r.stderr)
 
 DX, DY = 100.0, -44.27          # panel translate: (0,0)-(62,104.27) -> (100,-44.27)-(162,60)
 VCUT_Y = 60.0
@@ -97,8 +127,9 @@ def find_edge(items, x1, y1, x2, y2):
 
 
 def main():
+    flip_panel()
     base = parse(open(MAIN).read())[0]
-    panel = parse(open(PANEL).read())[0]
+    panel = parse(open(PANEL_FLIPPED).read())[0]
 
     copied = []
     for n in panel[1:]:
@@ -121,6 +152,9 @@ def main():
 
     os.makedirs(os.path.dirname(OUT), exist_ok=True)
     open(OUT, 'w').write(serialize(base))
+    import shutil
+    shutil.copy(os.path.join(HERE, 'panel', 'standoff-m25x3.wrl'),
+                os.path.join(HERE, 'combined', 'standoff-m25x3.wrl'))
     print(f'wrote {OUT}: +{len(copied)} panel items, V-cut seam at y={VCUT_Y}')
     print('overall: 62.1 x 208.6 mm, 2 designs, route + V-cut. NEVER refill zones here.')
 

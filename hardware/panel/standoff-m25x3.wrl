@@ -1,0 +1,19 @@
+#VRML V2.0 utf8
+# Wurth 9774030151R stand-in: 5.1mm dia x 3.0mm steel cylinder.
+# KiCad wrl units: 1 unit = 2.54mm.
+Transform {
+  translation 0 0 0.59055
+  rotation 1 0 0 1.5708
+  children [
+    Shape {
+      appearance Appearance {
+        material Material {
+          diffuseColor 0.75 0.75 0.78
+          specularColor 0.9 0.9 0.9
+          shininess 0.6
+        }
+      }
+      geometry Cylinder { radius 1.00394 height 1.1811 }
+    }
+  ]
+}
