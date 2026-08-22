@@ -4,6 +4,19 @@ Written 2026-08-04, last updated 2026-08-20 (evening).
 
 ## Where the project stands
 
+**2026-08-22: full pre-order board review done; three blockers found and fixed; the fab
+package is regenerated and order-ready.** Read `docs/review-2026-08-22-pre-order.md` —
+short version: the SK6812MINI-E was a reverse-mount part that would have fired into the
+board (all 37 now SK6812MINI-C, C7423117, stock PLCC4 footprint, positions unchanged);
+four "GND" pads were routed to 5V (U9 ~OE among them — no LED data, dead USB ESD);
+U6's ~RE-high shutdown trap and inverted LocalTalk A/B polarity are fixed; U2/U3 are now
+SP3490/SP3232; the fab BOM's R8-in-the-DNP-row regression is fixed and every line has an
+LCSC number. Board re-routed from scratch, DRC 0 errors / 0 parity / 0 real unconnected.
+Order package: `hardware/airwriter-fab.zip` + `hardware/airwriter/production/{bom,positions}.csv`
+(J2/J4 hand-solder, U7 socket-only). Quote to Wells before ordering, as ever. Case-plan
+flags: SW3 is 16mm tall (not 13), LED body is now 3.5x3.7mm.
+
+
 **2026-08-20: the cover pivoted to a dot-grid art panel; the panel is BUILT and the main
 board is deep into its rework (W-573, branch `wells/w-573-dot-panel-cover`).** Everything
 below this section about the back-face artwork, MODE touch pad, BOOT bullseye and indicator
