@@ -3,10 +3,11 @@
 
     python3 hardware/combine_boards.py
 
-Layout: panel sits ABOVE the main board (both 62mm wide), 2mm routed gap,
-three 5mm tabs bridging the main board's top edge (y=60) to the panel's
-bottom edge (y=58), each tab lined with 0.5mm mouse-bite drills on both
-break lines. Output: hardware/combined/combined.kicad_pcb.
+Layout: panel sits ABOVE the main board (both 62mm wide), butted FLUSH so
+one straight V-score at y=60 separates them (the art panel's seam edge sands
+smoother than mouse-bite nubs). The corner-radius voids at both ends are
+routed; PCBWay handles route + V-cut panels as "2 designs". Output:
+hardware/combined/combined.kicad_pcb.
 
 Re-run after any change to either source board — the output is derived,
 never hand-edited. Pure text/s-expression merge: copied panel copper keeps
@@ -25,9 +26,8 @@ MAIN = os.path.join(HERE, 'airwriter', 'airwriter.kicad_pcb')
 PANEL = os.path.join(HERE, 'panel', 'panel.kicad_pcb')
 OUT = os.path.join(HERE, 'combined', 'combined.kicad_pcb')
 
-DX, DY = 100.0, -46.27          # panel translate: (0,0)-(62,104.27) -> (100,-46.27)-(162,58)
-MAIN_EDGE_Y, PANEL_EDGE_Y = 60.0, 58.0
-TABS = [(107.5, 112.5), (128.5, 133.5), (149.5, 154.5)]   # x spans of the 3 tabs
+DX, DY = 100.0, -44.27          # panel translate: (0,0)-(62,104.27) -> (100,-44.27)-(162,60)
+VCUT_Y = 60.0
 COPY_TAGS = {'footprint', 'gr_line', 'gr_arc', 'gr_rect', 'gr_circle', 'gr_poly',
              'gr_curve', 'gr_text', 'gr_text_box', 'segment', 'arc', 'via', 'zone',
              'dimension', 'image'}
@@ -81,15 +81,6 @@ def edge_line(x1, y1, x2, y2):
             [Sym('layer'), quote('Edge.Cuts')]]
 
 
-def bite(x, y):
-    """One 0.5mm NPTH mouse-bite hole as a bare-pad footprint."""
-    return parse(
-        f'(footprint "combined:MouseBite" (layer "F.Cu") (at {x:g} {y:g})'
-        f' (attr exclude_from_pos_files exclude_from_bom)'
-        f' (pad "" np_thru_hole circle (at 0 0) (size 0.5 0.5) (drill 0.5)'
-        f' (layers "F.Cu" "B.Cu" "F.Mask" "B.Mask")))')[0]
-
-
 def find_edge(items, x1, y1, x2, y2):
     for n in items:
         if not is_tag(n, 'gr_line'):
@@ -105,16 +96,6 @@ def find_edge(items, x1, y1, x2, y2):
     raise SystemExit(f'edge line ({x1},{y1})-({x2},{y2}) not found')
 
 
-def split_edge(y, x_lo, x_hi):
-    """Return the straight edge at height y broken around the tab spans."""
-    out, cur = [], x_lo
-    for a, b in TABS:
-        out.append(edge_line(cur, y, a, y))
-        cur = b
-    out.append(edge_line(cur, y, x_hi, y))
-    return out
-
-
 def main():
     base = parse(open(MAIN).read())[0]
     panel = parse(open(PANEL).read())[0]
@@ -127,33 +108,21 @@ def main():
             translate(n, DX, DY, top_footprint=is_tag(n, 'footprint'))
             copied.append(n)
 
-    # outline surgery: break the two facing edges around the tabs
-    main_edge = find_edge(base[1:], 102.0, 60.0, 160.0, 60.0)
-    base.remove(main_edge)
-    # panel bottom edge was (2,104.27)-(60,104.27); translated to y=58, x 102..160
-    panel_edge = find_edge(copied, 102.0, 58.0, 160.0, 58.0)
-    copied.remove(panel_edge)
-
-    new_edges = split_edge(MAIN_EDGE_Y, 102.0, 160.0)
-    new_edges += split_edge(PANEL_EDGE_Y, 102.0, 160.0)
-    for a, b in TABS:                       # tab side walls across the gap
-        new_edges.append(edge_line(a, PANEL_EDGE_Y, a, MAIN_EDGE_Y))
-        new_edges.append(edge_line(b, PANEL_EDGE_Y, b, MAIN_EDGE_Y))
-
-    bites = []
-    for a, b in TABS:
-        for i in range(4):
-            x = a + 1.0 + i * (b - a - 2.0) / 3.0
-            bites.append(bite(x, MAIN_EDGE_Y))
-            bites.append(bite(x, PANEL_EDGE_Y))
+    # No outline surgery: both closed outlines stay intact, butted flush at
+    # y=60. One V-score line spans the full panel width, plus a label PCBWay's
+    # CAM can read. The four 2mm corner radii at the seam leave small voids
+    # that get routed; the score crosses them.
+    new_edges = [edge_line(99.95, VCUT_Y, 162.05, VCUT_Y)]
+    label = parse('(gr_text "V-CUT" (at 166 60 0) (layer "Edge.Cuts")'
+                  ' (effects (font (size 2 2) (thickness 0.3))))')[0]
+    bites = [label]
 
     base.extend(copied + new_edges + bites)
 
     os.makedirs(os.path.dirname(OUT), exist_ok=True)
     open(OUT, 'w').write(serialize(base))
-    print(f'wrote {OUT}: +{len(copied)} panel items, {len(new_edges)} edge segments, '
-          f'{len(bites)} mouse bites')
-    print('overall: 62.1 x 210.6 mm, 2 designs, 3 tabs. NEVER refill zones here.')
+    print(f'wrote {OUT}: +{len(copied)} panel items, V-cut seam at y={VCUT_Y}')
+    print('overall: 62.1 x 208.6 mm, 2 designs, route + V-cut. NEVER refill zones here.')
 
 
 if __name__ == '__main__':

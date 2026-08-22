@@ -219,10 +219,41 @@ STANDOFFS = [(5.6364, 5.6364), (56.3636, 5.6364), (5.6364, 91.93), (53.3636, 91.
 STANDOFF_SEAT_DIA = 5.0   # exposed ENIG ring in the flood
 STANDOFF_PASTE_DIA = 4.6
 
+STANDOFF_PART = "SMTSO-M2.5-3ET"   # value shown in BOM; verify against sourcing
+STANDOFF_LCSC = ""                 # filled at order time from live sourcing
+
 def standoff_pads(board):
-    for x, y in STANDOFFS:
-        filled_circle(board, pcbnew.B_Mask, x, y, STANDOFF_SEAT_DIA)
-        filled_circle(board, pcbnew.B_Paste, x, y, STANDOFF_PASTE_DIA)
+    # Real footprints (MT1-MT4), not bare mask windows, so the standoff nuts
+    # appear in the BOM and pick-and-place files and PCBWay can reflow them.
+    # One SMD circle pad on the back: 5.0mm copper/mask seat, paste pulled in
+    # to 4.6mm via a -0.2mm local paste margin. The pad overlaps the graphic
+    # back-copper flood, which merges in the gerbers - no clearance carving,
+    # the seat stays part of the light barrier.
+    for i, (x, y) in enumerate(STANDOFFS, 1):
+        fp = pcbnew.FOOTPRINT(board)
+        fp.SetPosition(pcbnew.VECTOR2I(mm(x), mm(y)))
+        fp.SetReference(f"MT{i}"); fp.Reference().SetVisible(False)
+        fp.SetValue(STANDOFF_PART); fp.Value().SetVisible(False)
+        fp.SetFPIDAsString("panel:SMT_Standoff_M2.5_D5.0mm")
+        fp.SetAttributes(pcbnew.FP_SMD)
+        if STANDOFF_LCSC:
+            fp.SetField("LCSC", STANDOFF_LCSC)
+        # Aperture pad: mask + paste only, NO copper layer. The copper seat is
+        # the graphic back flood itself (already solid here, check_seats
+        # asserts it); adding pad copper on top reads as a short to DRC.
+        pad = pcbnew.PAD(fp)
+        pad.SetAttribute(pcbnew.PAD_ATTRIB_SMD)
+        pad.SetShape(pcbnew.PAD_SHAPE_CIRCLE)
+        pad.SetSize(pcbnew.VECTOR2I(mm(STANDOFF_SEAT_DIA), mm(STANDOFF_SEAT_DIA)))
+        pad.SetPosition(pcbnew.VECTOR2I(mm(x), mm(y)))
+        ls = pcbnew.LSET()
+        for l in (pcbnew.B_Mask, pcbnew.B_Paste):
+            ls.AddLayer(l)
+        pad.SetLayerSet(ls)
+        pad.SetLocalSolderPasteMargin(mm((STANDOFF_PASTE_DIA - STANDOFF_SEAT_DIA) / 2))
+        fp.Add(pad)
+        fp.SetLayer(pcbnew.B_Cu)
+        board.Add(fp)
 
 def check_seats(p, dots, g, fr4):
     # Every seat must land on solid back copper: no dot window, no slash relief,
