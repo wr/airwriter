@@ -24,7 +24,7 @@ def in_any(P,polys): return any(ps.Contains(P) for ps in polys)
 M=Model('airwriter.kicad_pcb')
 # via sizes to try, largest first: (drill, pad, radius). 0.3/0.5 = 0.1 annular fallback.
 VIA_SIZES=[(mm(0.4),mm(0.6),mm(0.3)),(mm(0.3),mm(0.5),mm(0.25))]
-CLRV=mm(0.155)
+CLRV=mm(0.15)
 # hole list
 holes=[(t.GetPosition().x,t.GetPosition().y,t.GetDrill()//2) for t in b.GetTracks() if t.Type()==pcbnew.PCB_VIA_T]
 for f in b.GetFootprints():
