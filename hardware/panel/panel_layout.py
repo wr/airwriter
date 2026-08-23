@@ -17,7 +17,7 @@ GRID0_PX, PITCH_PX = 100.0, 150.0
 # The test NPTH is a mechanical dimension, not artwork: SW3's plunger has to poke
 # up through it. The SVG's black marker circle only locates the test dot; Wells
 # sets the drill here so it survives a Figma re-export. 3.6mm clears the button.
-TEST_HOLE_DIA = 3.6
+TEST_HOLE_DIA = 3.8
 
 def _circles(svg_text):
     for tag in re.findall(r"<circle[^>]*>", svg_text):
