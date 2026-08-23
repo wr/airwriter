@@ -411,8 +411,14 @@ def main():
                 filled_circle(board, pcbnew.F_Cu, d["x"], d["y"], dia)
         if mf:
             if i in mask_knockouts:
-                mask_knockout(board, d["x"], d["y"], dia, mask_knockouts[i],
-                              g["hole_mark_dia"] if d["mat"] == "T" else None)
+                # keep mask closed out to wherever copper actually starts:
+                # the marker circle if the annulus reaches it, else the
+                # hole-clearance-relieved copper edge (hole + 0.6) - never
+                # leave a bare-FR4 sliver between drill and gold.
+                keep = None
+                if d["mat"] == "T":
+                    keep = max(g["hole_mark_dia"], g["hole_dia"] + 0.6)
+                mask_knockout(board, d["x"], d["y"], dia, mask_knockouts[i], keep)
             else:
                 filled_circle(board, pcbnew.F_Mask, d["x"], d["y"], dia)
         if mb: filled_circle(board, pcbnew.B_Mask, d["x"], d["y"], dia)
