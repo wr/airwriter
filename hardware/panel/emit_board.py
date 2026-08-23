@@ -128,7 +128,7 @@ def split_mask_knockouts(silk, dots, dot_r):
             knockouts.setdefault(owner, []).append(poly)
     return remaining, knockouts
 
-def mask_knockout(board, cx, cy, dia, glyphs):
+def mask_knockout(board, cx, cy, dia, glyphs, keep_dia=None):
     # Mask KEPT (not opened) over each glyph's own outline - dark letters on
     # exposed gold copper. One gr_poly: the dot's disc with each glyph's
     # outline as a hole (a "hole" here in the geometric sense of pcbnew's own
@@ -147,6 +147,14 @@ def mask_knockout(board, cx, cy, dia, glyphs):
     # (they continue onto the gold tab), and a "hole" poking outside its
     # outline is invalid geometry that silently voids the whole opening.
     cut = pcbnew.SHAPE_POLY_SET()
+    if keep_dia:
+        # Frame 26 paints the hole surround black: keep mask closed out to the
+        # marker circle, so no bare-FR4 ring shows between drill and gold.
+        kc = pcbnew.SHAPE_LINE_CHAIN()
+        for px, py in _circle_pts(cx, cy, keep_dia / 2):
+            kc.Append(mm(px), mm(py))
+        kc.SetClosed(True)
+        cut.AddOutline(kc)
     for glyph in glyphs:
         hl = pcbnew.SHAPE_LINE_CHAIN()
         for x, y in glyph["outline"]:
@@ -403,7 +411,8 @@ def main():
                 filled_circle(board, pcbnew.F_Cu, d["x"], d["y"], dia)
         if mf:
             if i in mask_knockouts:
-                mask_knockout(board, d["x"], d["y"], dia, mask_knockouts[i])
+                mask_knockout(board, d["x"], d["y"], dia, mask_knockouts[i],
+                              g["hole_mark_dia"] if d["mat"] == "T" else None)
             else:
                 filled_circle(board, pcbnew.F_Mask, d["x"], d["y"], dia)
         if mb: filled_circle(board, pcbnew.B_Mask, d["x"], d["y"], dia)

@@ -60,7 +60,10 @@ def load_layout():
                           pitch=round(PITCH_PX * SCALE, 4),
                           dot_dia=round(100.0 * SCALE, 4),
                           origin=[round(GRID0_PX * SCALE, 4)] * 2,
-                          hole_dia=TEST_HOLE_DIA),
+                          hole_dia=TEST_HOLE_DIA,
+                          # the black marker's own diameter: mask stays closed
+                          # inside it (Frame 26 draws the hole surround black)
+                          hole_mark_dia=hole[1]),
                 dots=dots, _cells={f"{r},{c}": m for (r, c), m in sorted(cells.items())})
 
 if __name__ == "__main__":
