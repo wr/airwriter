@@ -184,8 +184,8 @@
 	(footprint "panel:SMT_Standoff_M2.5_D6.0mm"
 		(layer "B.Cu")
 		(uuid "70d7f33d-be0d-5082-a46c-d212019b33cd")
-		(at 53.3636 91.93)
-		(property "Reference" "MT4"
+		(at 5.6364 5.6364)
+		(property "Reference" "MT1"
 			(at 0 0 0)
 			(layer "F.SilkS")
 			(hide yes)
@@ -253,8 +253,8 @@
 	(footprint "panel:SMT_Standoff_M2.5_D6.0mm"
 		(layer "B.Cu")
 		(uuid "5a2a56dd-b291-5b82-916c-5e022c655ee8")
-		(at 5.6364 5.6364)
-		(property "Reference" "MT1"
+		(at 53.3636 91.93)
+		(property "Reference" "MT4"
 			(at 0 0 0)
 			(layer "F.SilkS")
 			(hide yes)
