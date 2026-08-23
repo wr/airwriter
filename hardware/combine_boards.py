@@ -152,9 +152,7 @@ def main():
 
     os.makedirs(os.path.dirname(OUT), exist_ok=True)
     open(OUT, 'w').write(serialize(base))
-    import shutil
-    shutil.copy(os.path.join(HERE, 'panel', 'standoff-m25x3.wrl'),
-                os.path.join(HERE, 'combined', 'standoff-m25x3.wrl'))
+
     print(f'wrote {OUT}: +{len(copied)} panel items, V-cut seam at y={VCUT_Y}')
     print('overall: 62.1 x 208.6 mm, 2 designs, route + V-cut. NEVER refill zones here.')
 

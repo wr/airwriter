@@ -258,7 +258,8 @@ def standoff_pads(board):
         pad.SetLayerSet(ls)
         fp.Add(pad)
         m = pcbnew.FP_3DMODEL()
-        m.m_Filename = "${KIPRJMOD}/standoff-m25x3.wrl"
+        m.m_Filename = ("${KICAD10_3DMODEL_DIR}/Mounting_Wuerth.3dshapes/"
+                        "Mounting_Wuerth_WA-SMSI-M2.5_H3mm_9774030151.step")
         fp.Models().push_back(m)
         # ring paste aperture as board graphics (a single pad cannot hold a
         # donut); the stencil gerber reads B.Paste either way
