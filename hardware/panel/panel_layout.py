@@ -40,7 +40,7 @@ def load_layout():
         assert abs(col - round(col)) < 0.01 and abs(row - round(row)) < 0.01, \
             f"circle off-grid at ({cx},{cy})"
         rc = (int(round(row)), int(round(col)))
-        if fill == "black" and r < 30:
+        if fill == "black" and r < 40:  # hole marker (r34 since the 3.8mm hole)
             hole = (rc, round(2 * r * SCALE, 2)); continue
         cells[rc] = MAT_BY_FILL[fill]
     assert hole, "no test hole circle found"

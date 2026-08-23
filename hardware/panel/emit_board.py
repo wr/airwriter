@@ -116,8 +116,11 @@ def split_mask_knockouts(silk, dots, dot_r):
     remaining = []
     knockouts = {}
     for poly in silk:
+        # 1.45r reach: Frame 26 hangs the test glyphs on a squared-off tab
+        # whose far corner sits at r*sqrt(2); nothing else silk-like comes
+        # within 1.45r of a gold dot (the lockup is >300px away).
         owner = next((i for i in gold_idxs
-                      if all(math.hypot(x - dots[i]["x"], y - dots[i]["y"]) < dot_r
+                      if all(math.hypot(x - dots[i]["x"], y - dots[i]["y"]) < dot_r * 1.45
                              for x, y in poly["outline"])), None)
         if owner is None:
             remaining.append(poly)
@@ -140,12 +143,17 @@ def mask_knockout(board, cx, cy, dia, glyphs):
         ol.Append(mm(px), mm(py))
     ol.SetClosed(True)
     chain.AddOutline(ol)
+    # Boolean subtract, not AddHole: Frame 26 lets glyphs cross the disc edge
+    # (they continue onto the gold tab), and a "hole" poking outside its
+    # outline is invalid geometry that silently voids the whole opening.
+    cut = pcbnew.SHAPE_POLY_SET()
     for glyph in glyphs:
         hl = pcbnew.SHAPE_LINE_CHAIN()
         for x, y in glyph["outline"]:
             hl.Append(mm(x), mm(y))
         hl.SetClosed(True)
-        chain.AddHole(hl)
+        cut.AddOutline(hl)
+    chain.BooleanSubtract(cut)
     chain.Fracture()
     s = pcbnew.PCB_SHAPE(board, pcbnew.SHAPE_T_POLY)
     s.SetPolyShape(chain); s.SetFilled(True); s.SetWidth(0); s.SetLayer(pcbnew.F_Mask)
@@ -403,8 +411,33 @@ def main():
             npth(board, d["x"], d["y"], g["hole_dia"])
 
     silk_clip = panel_interior(p["w"], p["h"], p["corner_r"], 0.15)
-    poly_shape(board, pcbnew.F_Cu, gold)     # gold = copper...
-    poly_shape(board, pcbnew.F_Mask, gold)   # ...plus mask opening
+    # Gold art may run over the test NPTH (Frame 26 squares the test dot off
+    # with a solid tab); clip the COPPER around the drill so hole clearance
+    # holds. The mask stays unclipped - the annulus is what the art shows.
+    gold_cu_clip = panel_interior(p["w"], p["h"], p["corner_r"], 0.0)
+    tdot = next(d for d in lay["dots"] if d["mat"] == "T")
+    hole_relief = pcbnew.SHAPE_POLY_SET()
+    hc = pcbnew.SHAPE_LINE_CHAIN()
+    for px_, py_ in _circle_pts(tdot["x"], tdot["y"], (g["hole_dia"] + 0.6) / 2, 128):
+        hc.Append(mm(px_), mm(py_))
+    hc.SetClosed(True)
+    hole_relief.AddOutline(hc)
+    gold_cu_clip.BooleanSubtract(hole_relief)
+    poly_shape(board, pcbnew.F_Cu, gold, clip=gold_cu_clip)  # gold = copper...
+    # The gold-art mask opening must keep mask OVER the knockout glyph
+    # strokes (they may sit on the tab, outside the disc that mask_knockout
+    # already handles) - subtract every knockout glyph from the opening.
+    mask_clip = panel_interior(p["w"], p["h"], p["corner_r"], 0.0)
+    glyph_cut = pcbnew.SHAPE_POLY_SET()
+    for glyphs_ in mask_knockouts.values():
+        for glyph_ in glyphs_:
+            gl = pcbnew.SHAPE_LINE_CHAIN()
+            for x_, y_ in glyph_["outline"]:
+                gl.Append(mm(x_), mm(y_))
+            gl.SetClosed(True)
+            glyph_cut.AddOutline(gl)
+    mask_clip.BooleanSubtract(glyph_cut)
+    poly_shape(board, pcbnew.F_Mask, gold, clip=mask_clip)   # ...plus mask opening
     poly_shape(board, pcbnew.F_SilkS, silk, clip=silk_clip)   # excludes mask knockouts
     poly_shape(board, pcbnew.F_Mask, fr4)    # bare FR4 = open both faces
     poly_shape(board, pcbnew.B_Mask, fr4)
