@@ -12,15 +12,14 @@ GND islands had no via to the plane — SP3490, both SP3485s, LED 20 onward, the
 unconnected item as real from now on). Fixed with 12 vias and three short bottom-side
 track jogs; DRC now 0 errors / 0 unconnected and the GND net is one copper cluster. The
 second DOA: SW1's EVQP44B3M footprint was a guess (its descr said so) and would have
-bonded EN to a frame tab — redrawn from Panasonic ANCTB27E, SW1 now sits with its plate
-flush at the east edge x=162 (origin 160.275, 99.454); the lattice carve-out moves with it. Also
+bonded EN to a frame tab — redrawn from Panasonic ANCTB27E, SW1 sits inboard of the case wall where
+Wells put it (origin 157.225, 99.454; plate face at x=159.35). Also
 fixed: 3V3 track and VBUS via under the H4 screw head, a second via on the 5 V layer
 crossing, "V-CUT" text moved off Edge.Cuts, H_TEST out of the pos file, and
 `CONFIG_AIRWRITER_INVERT_CTS` in firmware. Regenerate the package with
 `sh hardware/combined/make_fab.sh` (after `python3 hardware/combine_boards.py`); upload
 `hardware/combined-fab.zip` + `hardware/combined/combined-top.png`. Order notes are in the
-review doc. Open decision for Wells: the panel's back copper sits over the WiFi antenna
-(window it, or accept some range loss). ESP-IDF is no longer installed on this Mac; the
+review doc. Wells decided to keep the panel's back copper over the WiFi antenna; measure range on board 1. ESP-IDF is no longer installed on this Mac; the
 firmware edit is uncompiled and `firmware/sdkconfig` is still a C6 build.
 
 **2026-08-22: full pre-order board review done; three blockers found and fixed; the fab

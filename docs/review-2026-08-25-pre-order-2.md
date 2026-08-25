@@ -74,10 +74,9 @@ GND to the other. If the frame commons the tabs (usual, and Panasonic does not s
 otherwise), EN is tied to GND and the ESP32 never leaves reset.
 
 **Fix:** footprint redrawn from the drawing (pads 1/2 = contacts, two un-netted anchor
-tabs, body/plate on F.Fab, courtyard), SW1 moved to (160.275, 99.454) so the tabs sit
-0.45 mm from the east edge and the push plate is flush with x = 162, EN rerouted to the
-south contact, GND via + stub to the north contact. The case pinhole stays at the east
-edge; the lattice carve-out for SW1 moves 2.3 mm east with it.
+tabs, body/plate on F.Fab, courtyard), SW1 placed inboard of the case wall by Wells (origin 157.225, 99.454; push plate at
+x = 159.35), EN rerouted to the
+south contact, GND via + stub to the north contact. The case pinhole and lattice carve-out are unchanged.
 
 ## DEGRADED — fixed
 
@@ -108,8 +107,8 @@ edge; the lattice carve-out for SW1 moves 2.3 mm east with it.
    wants >=15 mm clear of metal. Expect some detuning / a few dB of range. Options: window
    the flood over the antenna rectangle (nearest lit dot ends 2.6 mm away; the front has no
    copper there so a window shows as a bare-FR4 patch under the black mask), or ground the
-   flood (nothing connects it today). This changes how the panel looks, so it is Wells's
-   call.
+   flood (nothing connects it today). **Decision (Wells, 2026-08-25): keep the copper.**
+   Measure WiFi range on board 1.
 2. **No LED current cap in hardware.** 37 LEDs all-white is 1.33 A on top of ~0.5 A WiFi
    peaks. A 500 mA USB-A host will brown out the S3 in ~26 us. The `led_grid` firmware
    must cap global brightness at 48/255 unless it can prove a 1.5 A / 3 A source (163/255
