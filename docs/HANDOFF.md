@@ -4,6 +4,22 @@ Written 2026-08-04, last updated 2026-08-20 (evening).
 
 ## Where the project stands
 
+**2026-08-25: second adversarial pre-order review; one DOA found and fixed; package
+regenerated.** Read `docs/review-2026-08-25-pre-order-2.md`. Short version: ten top-side
+GND islands had no via to the plane — SP3490, both SP3485s, LED 20 onward, the WROOM's
+100 nF caps and CC1's pulldown were all ungrounded (KiCad reported them as ten
+`Zone<->Zone` unconnected items, which the 08-22 rule wrongly called benign — treat ANY
+unconnected item as real from now on). Fixed with 11 vias and three short bottom-side
+track jogs; DRC now 0 errors / 0 unconnected and the GND net is one copper cluster. Also
+fixed: 3V3 track and VBUS via under the H4 screw head, a second via on the 5 V layer
+crossing, "V-CUT" text moved off Edge.Cuts, H_TEST out of the pos file, and
+`CONFIG_AIRWRITER_INVERT_CTS` in firmware. Regenerate the package with
+`sh hardware/combined/make_fab.sh` (after `python3 hardware/combine_boards.py`); upload
+`hardware/combined-fab.zip` + `hardware/combined/combined-top.png`. Order notes are in the
+review doc. Open decision for Wells: the panel's back copper sits over the WiFi antenna
+(window it, or accept some range loss). ESP-IDF is no longer installed on this Mac; the
+firmware edit is uncompiled and `firmware/sdkconfig` is still a C6 build.
+
 **2026-08-22: full pre-order board review done; three blockers found and fixed; the fab
 package is regenerated and order-ready.** Read `docs/review-2026-08-22-pre-order.md` —
 short version: the SK6812MINI-E was a reverse-mount part that would have fired into the

@@ -30,14 +30,16 @@ static uint32_t crc32_up(uint32_t crc, const uint8_t *buf, size_t n)
     return ~crc;
 }
 
-// HSKo idles asserted when the printer can accept data. RS-232 receivers
-// invert, so the MAX3232 hands the ESP32 a logic high for an asserted line --
-// which is also what the UART peripheral wants CTS to look like when it is
-// clear to send.
+// HSKo is driven positive (RS-232 "space") when the printer can accept data.
+// RS-232 receivers invert, so the SP3232 hands the ESP32 a logic LOW for an
+// asserted line -- which is what the UART peripheral's active-low CTS wants.
+// invert_cts flips both this check and the peripheral's CTS sense, for the
+// case where the real printer turns out to idle the other way.
 static int clear_to_send(void)
 {
     if (s_cfg.cts_pin < 0) return 1;
-    return gpio_get_level(s_cfg.cts_pin) == 0;
+    int level = gpio_get_level(s_cfg.cts_pin);
+    return s_cfg.invert_cts ? level == 1 : level == 0;
 }
 
 // The printer stalls constantly and briefly while its head returns; only a
@@ -120,12 +122,15 @@ esp_err_t serial_out_init(const serial_out_cfg_t *cfg)
     uint32_t inv = 0;
     if (s_cfg.invert_tx) inv |= UART_SIGNAL_TXD_INV;
     if (s_cfg.invert_rx) inv |= UART_SIGNAL_RXD_INV;
+    if (s_cfg.invert_cts && s_cfg.cts_pin >= 0 && !s_cfg.loopback)
+        inv |= UART_SIGNAL_CTS_INV;
     if (inv) {
         err = uart_set_line_inverse(s_cfg.uart_num, inv);
         if (err != ESP_OK) return err;
-        ESP_LOGI(TAG, "line inversion: tx %s, rx %s",
+        ESP_LOGI(TAG, "line inversion: tx %s, rx %s, cts %s",
                  s_cfg.invert_tx ? "inverted" : "normal",
-                 s_cfg.invert_rx ? "inverted" : "normal");
+                 s_cfg.invert_rx ? "inverted" : "normal",
+                 s_cfg.invert_cts ? "inverted" : "normal");
     }
 
     if (s_cfg.loopback) {

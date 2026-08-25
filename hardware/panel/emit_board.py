@@ -54,6 +54,7 @@ def npth(board, x, y, dia):
     fp = pcbnew.FOOTPRINT(board)
     fp.SetPosition(pcbnew.VECTOR2I(mm(x), mm(y)))
     fp.SetReference("H_TEST"); fp.Reference().SetVisible(False)
+    fp.SetExcludedFromPosFiles(True); fp.SetExcludedFromBOM(True)  # a hole, not a part
     pad = pcbnew.PAD(fp)
     pad.SetAttribute(pcbnew.PAD_ATTRIB_NPTH)
     pad.SetShape(pcbnew.PAD_SHAPE_CIRCLE)

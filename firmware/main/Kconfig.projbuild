@@ -73,6 +73,16 @@ config AIRWRITER_INVERT_RX
     bool "Invert the receive line"
     default n
 
+config AIRWRITER_INVERT_CTS
+    bool "Invert the CTS (printer HSKo) line"
+    default n
+    help
+        Insurance for the handshake polarity. The board expects HSKo asserted
+        (printer ready) to reach IO8 as logic LOW through the SP3232
+        receiver. If a scope on the real printer shows the opposite, turn
+        this on: it flips both the UART peripheral's CTS sense and the
+        watchdog's paper sensor. SPEC.md 3.9.
+
 config AIRWRITER_STALL_TIMEOUT
     int "Seconds of HSKo deassertion before the printer is called out of paper"
     default 30

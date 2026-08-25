@@ -44,6 +44,11 @@ static const char *TAG = "airwriter";
 #else
 #define AW_INVERT_RX 0
 #endif
+#ifdef CONFIG_AIRWRITER_INVERT_CTS
+#define AW_INVERT_CTS 1
+#else
+#define AW_INVERT_CTS 0
+#endif
 #ifdef CONFIG_AIRWRITER_UART_LOOPBACK
 #define AW_LOOPBACK 1
 #else
@@ -395,6 +400,7 @@ void app_main(void)
         .baud            = CONFIG_AIRWRITER_BAUD,
         .invert_tx       = AW_INVERT_TX,
         .invert_rx       = AW_INVERT_RX,
+        .invert_cts      = AW_INVERT_CTS,
         .stall_timeout_s = CONFIG_AIRWRITER_STALL_TIMEOUT,
         .on_state        = printer_state_changed,
         .loopback        = AW_LOOPBACK,

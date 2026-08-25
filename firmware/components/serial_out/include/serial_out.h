@@ -30,6 +30,7 @@ typedef struct {
     // the differential pair, and the same holds for the receiver. SPEC.md 2.4.
     int      invert_tx;
     int      invert_rx;
+    int      invert_cts;   // HSKo reaches IO8 active-high instead of active-low
 
     // Seconds of continuous HSKo deassertion before the printer is called
     // blocked. 0 uses the default of 30.

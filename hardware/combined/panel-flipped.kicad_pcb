@@ -127,8 +127,8 @@
 	(footprint "panel:SMT_Standoff_M2.5_D6.0mm"
 		(layer "F.Cu")
 		(uuid "4f823919-75ad-5cfc-848e-a8f83bd426b2")
-		(at 56.3636 91.93 180)
-		(property "Reference" "MT3"
+		(at 5.6364 5.6364 180)
+		(property "Reference" "MT2"
 			(at 0 0 0)
 			(layer "B.SilkS")
 			(hide yes)
@@ -200,8 +200,8 @@
 	(footprint "panel:SMT_Standoff_M2.5_D6.0mm"
 		(layer "F.Cu")
 		(uuid "5a2a56dd-b291-5b82-916c-5e022c655ee8")
-		(at 8.6364 91.93 180)
-		(property "Reference" "MT4"
+		(at 56.3636 5.6364 180)
+		(property "Reference" "MT1"
 			(at 0 0 0)
 			(layer "B.SilkS")
 			(hide yes)
@@ -273,8 +273,8 @@
 	(footprint "panel:SMT_Standoff_M2.5_D6.0mm"
 		(layer "F.Cu")
 		(uuid "70d7f33d-be0d-5082-a46c-d212019b33cd")
-		(at 56.3636 5.6364 180)
-		(property "Reference" "MT1"
+		(at 56.3636 91.93 180)
+		(property "Reference" "MT3"
 			(at 0 0 0)
 			(layer "B.SilkS")
 			(hide yes)
@@ -346,8 +346,8 @@
 	(footprint "panel:SMT_Standoff_M2.5_D6.0mm"
 		(layer "F.Cu")
 		(uuid "fc9807d0-e630-53b9-a202-7f83544f49a7")
-		(at 5.6364 5.6364 180)
-		(property "Reference" "MT2"
+		(at 8.6364 91.93 180)
+		(property "Reference" "MT4"
 			(at 0 0 0)
 			(layer "B.SilkS")
 			(hide yes)
@@ -467,6 +467,7 @@
 				(justify mirror)
 			)
 		)
+		(attr exclude_from_pos_files exclude_from_bom)
 		(duplicate_pad_numbers_are_jumpers no)
 		(pad "" np_thru_hole circle
 			(at 0 0 180)

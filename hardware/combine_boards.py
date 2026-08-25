@@ -103,12 +103,12 @@ def strip_nets(node):
             strip_nets(c)
 
 
-def edge_line(x1, y1, x2, y2):
+def edge_line(x1, y1, x2, y2, layer='Edge.Cuts'):
     return [Sym('gr_line'),
             [Sym('start'), Sym(f'{x1:g}'), Sym(f'{y1:g}')],
             [Sym('end'), Sym(f'{x2:g}'), Sym(f'{y2:g}')],
             [Sym('stroke'), [Sym('width'), Sym('0.05')], [Sym('type'), Sym('default')]],
-            [Sym('layer'), quote('Edge.Cuts')]]
+            [Sym('layer'), quote(layer)]]
 
 
 def find_edge(items, x1, y1, x2, y2):
@@ -143,8 +143,13 @@ def main():
     # y=60. One V-score line spans the full panel width, plus a label PCBWay's
     # CAM can read. The four 2mm corner radii at the seam leave small voids
     # that get routed; the score crosses them.
-    new_edges = [edge_line(99.95, VCUT_Y, 162.05, VCUT_Y)]
-    label = parse('(gr_text "V-CUT" (at 166 60 0) (layer "Edge.Cuts")'
+    # The score line and its label live on User.Comments, NOT Edge.Cuts: text
+    # and a third coincident line on the profile layer make CAM stop and ask
+    # (KiCad DRC: text_on_edge_cuts + invalid_outline). The two closed
+    # outlines already share the y=60 edge; the order note names it as the
+    # V-score.
+    new_edges = [edge_line(99.95, VCUT_Y, 162.05, VCUT_Y, 'Cmts.User')]
+    label = parse('(gr_text "V-CUT" (at 166 60 0) (layer "Cmts.User")'
                   ' (effects (font (size 2 2) (thickness 0.3))))')[0]
     bites = [label]
 
