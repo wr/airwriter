@@ -4,13 +4,16 @@ Written 2026-08-04, last updated 2026-08-20 (evening).
 
 ## Where the project stands
 
-**2026-08-25: second adversarial pre-order review; one DOA found and fixed; package
+**2026-08-25: second adversarial pre-order review; two DOAs found and fixed; package
 regenerated.** Read `docs/review-2026-08-25-pre-order-2.md`. Short version: ten top-side
 GND islands had no via to the plane — SP3490, both SP3485s, LED 20 onward, the WROOM's
 100 nF caps and CC1's pulldown were all ungrounded (KiCad reported them as ten
 `Zone<->Zone` unconnected items, which the 08-22 rule wrongly called benign — treat ANY
-unconnected item as real from now on). Fixed with 11 vias and three short bottom-side
-track jogs; DRC now 0 errors / 0 unconnected and the GND net is one copper cluster. Also
+unconnected item as real from now on). Fixed with 12 vias and three short bottom-side
+track jogs; DRC now 0 errors / 0 unconnected and the GND net is one copper cluster. The
+second DOA: SW1's EVQP44B3M footprint was a guess (its descr said so) and would have
+bonded EN to a frame tab — redrawn from Panasonic ANCTB27E, SW1 now sits with its plate
+flush at the east edge x=162 (origin 160.275, 99.454); the lattice carve-out moves with it. Also
 fixed: 3V3 track and VBUS via under the H4 screw head, a second via on the 5 V layer
 crossing, "V-CUT" text moved off Edge.Cuts, H_TEST out of the pos file, and
 `CONFIG_AIRWRITER_INVERT_CTS` in firmware. Regenerate the package with

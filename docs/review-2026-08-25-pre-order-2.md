@@ -59,6 +59,26 @@ it and the UART_CTS track. Result: 12 new vias, DRC 0 errors / 0 unconnected, an
 net is ONE copper cluster (pcbnew connectivity clustering over filled polygons, real pad
 and via shapes, both layers).
 
+### SW1 (side-press reset switch) footprint matched no real terminal — risk of EN shorted to GND
+
+`EVQP44B3M_SidePress.kicad_mod` said so itself ("DERIVED, NOT TRACED ... verify against a
+physical part before a fab run"). It had four 1.3 x 0.9 pads at (+-2.55, +-1.0), left pair
+= EN, right pair = GND. Panasonic ANCTB27E (page 2, "PWB land pattern for reference",
+short-push-travel variant — read from the drawing at 600 dpi, and cross-checked against
+LCSC's C79164 footprint) puts the two switch contacts 1.45 x 1.05 mm at +-2.275 mm across
+the body, 2.05-3.1 mm back from the board edge, and two 0.6 x 0.8 mm anchor tabs at
++-3.2 mm, 0.45-1.25 mm from the edge, with the push plate facing the edge. On the old
+pattern each contact landed in the gap between two pads (missing each by ~0.05 mm) and
+each anchor tab overlapped one pad by 0.3 x 0.18 mm — so EN bonded to one frame tab and
+GND to the other. If the frame commons the tabs (usual, and Panasonic does not say
+otherwise), EN is tied to GND and the ESP32 never leaves reset.
+
+**Fix:** footprint redrawn from the drawing (pads 1/2 = contacts, two un-netted anchor
+tabs, body/plate on F.Fab, courtyard), SW1 moved to (160.275, 99.454) so the tabs sit
+0.45 mm from the east edge and the push plate is flush with x = 162, EN rerouted to the
+south contact, GND via + stub to the north contact. The case pinhole stays at the east
+edge; the lattice carve-out for SW1 moves 2.3 mm east with it.
+
 ## DEGRADED — fixed
 
 - **H4 screw head sat over a 3V3 track and the VBUS layer-change via** (0.39 mm and
@@ -116,7 +136,7 @@ and via shapes, both layers).
 ## Verified OK (by name, so nobody re-derives them)
 
 - ERC 0 errors (44 benign lib-mismatch warnings). Main-board DRC with project rules,
-  refill and schematic parity: 0 errors, 0 unconnected. Combined-file DRC
+  refill and schematic parity: 0 errors, 0 unconnected, 3 warnings (lib mismatch). Combined-file DRC
   under the combined project's default rules shows ~320 false clearance errors — the
   combined `.kicad_pro` has no netclasses; the source board is clean under its own rules.
 - Combined file = main board + panel: 138/138 footprints, every pad->net, 968 segments, 90
@@ -154,9 +174,18 @@ and via shapes, both layers).
 
 ## Datasheet pinout pass
 
-The dedicated datasheet reviewer did not return a report (it ran out of session budget
-twice while chasing the Kycon mini-DIN drawing). What was covered by the other reviewers
-and the controller instead: AP7361C SOT-223 pinout, SP3490, SP3485 x2, SP3232 (pin map,
+The datasheet reviewer reported late but in full. Its one blocker (SW1, above) is fixed.
+Confirmed correct pin-by-pin against datasheets: ESP32-S3-WROOM-1 (every used pad vs
+Table 3-1, IO35 legal on the quad-PSRAM N8R2), SP3490 (5 Y, 6 Z, 7 B, 8 A — not the order
+one assumes; polarity correct end to end), SP3232 (all 16 pins, narrow-body EN suffix is
+right), AP7361C SOT-223 (IN/GND/OUT; the reversed part is the -ER), USBLC6-2SC6, SP3485
+x2 (non-inverting A on the "+" line; meets TashTalk's "receiver floats high" rule),
+PIC12F1840 vs TashTalk's `one-chip.asm` header (UART not crossed; TashTalk runs the UART
+at 1 Mbps), 74AHCT1G125, USB-C HRO TYPE-C-31-M-12 (A6/B6 and A7/B7 are separate contacts
+and are correctly shorted on the board), mini-DIN-8 numbering (verified against CUI
+MD-80SKS's "PCB LAYOUT TOP VIEW": no mirror error), DP-08RP, B3U-1000P (2-terminal),
+TS-1002 pad pairing, D3 polarity, all 38 LED bypass caps. Also covered by the other
+reviewers and the controller: AP7361C SOT-223 pinout, SP3490, SP3485 x2, SP3232 (pin map,
 0.1 uF charge-pump caps at 3.3 V, internal 5 k receiver pulldown; transmitter inputs have
 NO pull-up and must not float — which is why the U3.10 island was fixed rather than
 waived), PIC12F1840 PDIP-8 and TashTalk's RA0-RA5 use, 74AHCT1G125, ESP32-S3-WROOM-1 pad
@@ -166,7 +195,11 @@ Kycon KMDGX-8S-BS footprint's pin numbering was derived from the socket-face vie
 cross-checked against two other vendors' drawings in the 08-2x work (HANDOFF "pin-numbering
 discrepancy is resolved"); it was not re-derived here.
 
-Still unverified on real hardware: HSKo polarity (firmware now has the invert switch) and
+Two residual notes from that pass: the Kycon 8-pin shield-post span (13.5 mm on the board;
+the 9S/10S drawings say 14.5, the 8S drawing was unreachable; the STEP render and Adam
+Tech's 8-pin drawing both agree with 13.5) and the mini-DIN footprint's descr, which calls
+its source "(Top View)" where Kycon's sibling drawings say "(Bottom View)" — numbering is
+right, fix the note. Still unverified on real hardware: HSKo polarity (firmware now has the invert switch) and
 the RS-422 pair polarity (firmware has had those switches since the start).
 
 ## PCBWay order notes (paste into the order)
