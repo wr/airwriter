@@ -33,7 +33,7 @@ def _circle_pts(cx, cy, r, segs=64):
     return [(cx + r * math.cos(2 * math.pi * i / segs),
              cy + r * math.sin(2 * math.pi * i / segs)) for i in range(segs)]
 
-def filled_ring(board, layer, x, y, od, idia, segs=64):
+def filled_ring(board, layer, x, y, od, idia, segs=64, net=None):
     chain = pcbnew.SHAPE_POLY_SET()
     ol = pcbnew.SHAPE_LINE_CHAIN()
     for px, py in _circle_pts(x, y, od / 2, segs):
@@ -48,20 +48,28 @@ def filled_ring(board, layer, x, y, od, idia, segs=64):
     chain.Fracture()
     s = pcbnew.PCB_SHAPE(board, pcbnew.SHAPE_T_POLY)
     s.SetPolyShape(chain); s.SetFilled(True); s.SetWidth(0); s.SetLayer(layer)
+    if net is not None: s.SetNetCode(net.GetNetCode())
     board.Add(s)
 
-def npth(board, x, y, dia):
+def pth(board, x, y, dia, pad_dia, net=None):
+    # Plated, netless: the hole wall plates copper and takes ENIG, so the bore
+    # itself reads gold ("a big via" - Wells, 2026-08-28). The pad's annulus
+    # carries the gold right to the drill edge; the art annulus takes over at
+    # pad_dia. Mask apertures are NOT drawn by the pad (copper layers only) -
+    # the mask_knockout graphic owns the front opening so the dark test-tag
+    # glyphs survive, and the back annulus stays tented (hidden face).
     fp = pcbnew.FOOTPRINT(board)
     fp.SetPosition(pcbnew.VECTOR2I(mm(x), mm(y)))
     fp.SetReference("H_TEST"); fp.Reference().SetVisible(False)
     fp.SetExcludedFromPosFiles(True); fp.SetExcludedFromBOM(True)  # a hole, not a part
     pad = pcbnew.PAD(fp)
-    pad.SetAttribute(pcbnew.PAD_ATTRIB_NPTH)
+    pad.SetAttribute(pcbnew.PAD_ATTRIB_PTH)
     pad.SetShape(pcbnew.PAD_SHAPE_CIRCLE)
-    pad.SetSize(pcbnew.VECTOR2I(mm(dia), mm(dia)))
+    pad.SetSize(pcbnew.VECTOR2I(mm(pad_dia), mm(pad_dia)))
     pad.SetDrillSize(pcbnew.VECTOR2I(mm(dia), mm(dia)))
     pad.SetPosition(pcbnew.VECTOR2I(mm(x), mm(y)))
-    pad.SetLayerSet(pcbnew.PAD.UnplatedHoleMask())
+    pad.SetLayerSet(pcbnew.LSET.AllCuMask(2))
+    if net is not None: pad.SetNetCode(net.GetNetCode())
     fp.Add(pad)
     board.Add(fp)
 
@@ -86,7 +94,7 @@ def panel_interior(w, h, r, margin, segs_per_corner=24):
     poly.AddOutline(chain)
     return poly
 
-def poly_shape(board, layer, polys, clip=None):
+def poly_shape(board, layer, polys, clip=None, net=None):
     for p in polys:
         chain = pcbnew.SHAPE_POLY_SET()
         ol = pcbnew.SHAPE_LINE_CHAIN()
@@ -105,6 +113,7 @@ def poly_shape(board, layer, polys, clip=None):
         chain.Fracture()
         s = pcbnew.PCB_SHAPE(board, pcbnew.SHAPE_T_POLY)
         s.SetPolyShape(chain); s.SetFilled(True); s.SetWidth(0); s.SetLayer(layer)
+        if net is not None: s.SetNetCode(net.GetNetCode())
         board.Add(s)
 
 def split_mask_knockouts(silk, dots, dot_r):
@@ -190,13 +199,11 @@ def back_copper_flood(board, p, dots, g, fr4):
         if d["mat"] in ("P", "B", "L"):
             r, segs = (g["dot_dia"] + 0.15) / 2, 64
         elif d["mat"] == "T":
-            # This hole's clearance to the NPTH is exactly the 0.25mm board
-            # minimum at the specified drill+0.5mm diameter - a 64-gon's
-            # inscribed-circle sagitta alone ate enough of that margin to
-            # fail DRC (0.2483mm actual). More segments shrinks the error
-            # roughly with the square of the count instead of changing the
-            # specified diameter.
-            r, segs = (g["hole_dia"] + 0.5) / 2, 256
+            # The test hole is a plated pad now (copper both sides), so the
+            # flood window clears the PAD, not the drill: pad diameter plus
+            # 0.5mm keeps 0.25mm of graphic-to-pad clearance. 256 segments so
+            # the polygon's sagitta error doesn't eat the margin (it did at 64).
+            r, segs = (g["hole_dia"] + 0.6 + 0.5) / 2, 256
         else:
             continue
         hl = pcbnew.SHAPE_LINE_CHAIN()
@@ -296,7 +303,7 @@ def check_seats(p, dots, g, fr4):
             if d["mat"] in ("P", "B", "L"):
                 hole_r = (g["dot_dia"] + 0.15) / 2
             elif d["mat"] == "T":
-                hole_r = (g["hole_dia"] + 0.5) / 2
+                hole_r = (g["hole_dia"] + 0.6 + 0.5) / 2
             else:
                 continue
             assert math.hypot(x - d["x"], y - d["y"]) > r + hole_r, \
@@ -398,34 +405,43 @@ def main():
     check_seats(p, lay["dots"], g, fr4)
     silk, mask_knockouts = split_mask_knockouts(silk, lay["dots"], g["dot_dia"] / 2)
 
+    # One decorative net ties the test dot's contacting copper (plated pad,
+    # annulus ring, tab art) together, so DRC reads the contact as one node
+    # instead of "items shorting two nets". Everything else stays netless.
+    au = pcbnew.NETINFO_ITEM(board, "PANEL_AU")
+    board.Add(au)
+    tdot = next(d for d in lay["dots"] if d["mat"] == "T")
+
     for i, d in enumerate(lay["dots"]):
         cu, mf, mb = RECIPE[d["mat"]]
         dia = g["dot_dia"]
         if cu:
             if d["mat"] == "T":
-                # Relieve copper around the NPTH: a solid disc drilled through
-                # its centre leaves 0mm hole clearance under DRC even though the
-                # physical result is the same gold annulus. Draw the annulus
-                # directly, sized to clear the board's 0.25mm hole clearance rule.
-                filled_ring(board, pcbnew.F_Cu, d["x"], d["y"], dia, g["hole_dia"] + 0.6)
+                # The plated pad carries copper from the drill edge out to
+                # hole_dia+0.6; the art annulus takes over from there to the
+                # dot edge, meeting the pad rim with no gap. Gold is continuous
+                # from the bore to the dot edge.
+                filled_ring(board, pcbnew.F_Cu, d["x"], d["y"], dia,
+                            g["hole_dia"] + 0.6, net=au)
             else:
                 filled_circle(board, pcbnew.F_Cu, d["x"], d["y"], dia)
         if mf:
             if i in mask_knockouts:
-                mask_knockout(board, d["x"], d["y"], dia, mask_knockouts[i],
-                              g["hole_mark_dia"] if d["mat"] == "T" else None)
+                # keep_dia is gone: no black surround at the test hole any
+                # more - mask opens all the way to the plated bore, so the
+                # gold runs to the edge (decision, Wells 2026-08-28).
+                mask_knockout(board, d["x"], d["y"], dia, mask_knockouts[i], None)
             else:
                 filled_circle(board, pcbnew.F_Mask, d["x"], d["y"], dia)
         if mb: filled_circle(board, pcbnew.B_Mask, d["x"], d["y"], dia)
         if d["mat"] == "T":
-            npth(board, d["x"], d["y"], g["hole_dia"])
+            pth(board, d["x"], d["y"], g["hole_dia"], g["hole_dia"] + 0.6, net=au)
 
     silk_clip = panel_interior(p["w"], p["h"], p["corner_r"], 0.15)
     # Gold art may run over the test NPTH (Frame 26 squares the test dot off
     # with a solid tab); clip the COPPER around the drill so hole clearance
     # holds. The mask stays unclipped - the annulus is what the art shows.
     gold_cu_clip = panel_interior(p["w"], p["h"], p["corner_r"], 0.0)
-    tdot = next(d for d in lay["dots"] if d["mat"] == "T")
     hole_relief = pcbnew.SHAPE_POLY_SET()
     hc = pcbnew.SHAPE_LINE_CHAIN()
     for px_, py_ in _circle_pts(tdot["x"], tdot["y"], (g["hole_dia"] + 0.6) / 2, 128):
@@ -433,7 +449,13 @@ def main():
     hc.SetClosed(True)
     hole_relief.AddOutline(hc)
     gold_cu_clip.BooleanSubtract(hole_relief)
-    poly_shape(board, pcbnew.F_Cu, gold, clip=gold_cu_clip)  # gold = copper...
+    import math as _m
+    t_gold = [q for q in gold
+              if any(_m.hypot(x - tdot["x"], y - tdot["y"]) < g["dot_dia"]
+                     for x, y in q["outline"])]
+    rest_gold = [q for q in gold if q not in t_gold]
+    poly_shape(board, pcbnew.F_Cu, rest_gold, clip=gold_cu_clip)  # gold = copper...
+    poly_shape(board, pcbnew.F_Cu, t_gold, clip=gold_cu_clip, net=au)  # tab touches the pad
     # The gold-art mask opening must keep mask OVER the knockout glyph
     # strokes (they may sit on the tab, outside the disc that mask_knockout
     # already handles) - subtract every knockout glyph from the opening.

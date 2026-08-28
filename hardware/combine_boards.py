@@ -92,7 +92,19 @@ def translate(node, dx, dy, *, top_footprint):
 def strip_nets(node):
     if not isinstance(node, list):
         return
+    if is_tag(node, 'pad'):
+        # A pad's (net ...) needs BOTH code and name to parse; a netless pad
+        # simply omits the node. Delete rather than rewrite — except the
+        # decorative PANEL_AU net, which is kept (below) on all its items.
+        node[:] = [c for c in node
+                   if not is_tag(c, 'net') or 'PANEL_AU' in ' '.join(map(str, c[1:]))]
     for c in node[1:]:
+        if is_tag(c, 'net') and 'PANEL_AU' in ' '.join(map(str, c[1:])):
+            # The test dot's plated pad, annulus ring and tab art share this
+            # one decorative net so their deliberate contact doesn't read as
+            # a short. KiCad 10 declares nets by name on items; carrying the
+            # nodes over verbatim is sufficient — no net-table surgery.
+            continue
         if is_tag(c, 'net'):
             del c[1:]
             c.append(Sym('0'))
