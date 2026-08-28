@@ -25,6 +25,7 @@
 #include "imagewriter.h"
 #include "ipp_server.h"
 #include "job_pipe.h"
+#include "printer_state.h"
 #include "serial_out.h"
 #include "settings.h"
 #include "webui.h"
@@ -167,6 +168,8 @@ static void printer_state_changed(void *ctx, serial_out_state_t st)
 {
     (void)ctx;
     ipp_server_set_stopped(st == SERIAL_OUT_BLOCKED ? "media-empty" : NULL);
+    printer_state_post_ev(st == SERIAL_OUT_BLOCKED ? PS_EV_PRINTER_BLOCKED
+                                                    : PS_EV_PRINTER_CLEARED);
 }
 
 static esp_err_t doc_begin(void *ctx, const char *format, const char *name)
@@ -178,6 +181,7 @@ static esp_err_t doc_begin(void *ctx, const char *format, const char *name)
     s_stream_crc = 0;
     s_printer_failed = 0;
     s_printing = 1;
+    printer_state_post_ev(PS_EV_JOB_START);
     serial_out_loopback_reset();
     return job_pipe_begin(name);
 }
@@ -206,9 +210,11 @@ static void doc_end(void *ctx, int ok)
                  (unsigned)st.doc_bytes, st.rc,
                  s_printer_failed ? ", printer timeout"
                                   : ok ? "" : ", transfer truncated");
+        printer_state_post_ev(PS_EV_JOB_FAIL);
         return;
     }
 
+    printer_state_post_ev(PS_EV_JOB_DONE);
     s_last_pages = (size_t)st.pages;
     s_last_bytes = st.printer_bytes;
     ESP_LOGI(TAG, "ripped %d page%s, %ux%u dots, %u bytes in -> %u printer bytes in %ums",
@@ -261,6 +267,7 @@ static void wifi_event(void *arg, esp_event_base_t base, int32_t id, void *data)
         ESP_LOGI(TAG, "got ip " IPSTR, IP2STR(&e->ip_info.ip));
         snprintf(s_ip, sizeof s_ip, IPSTR, IP2STR(&e->ip_info.ip));
         s_retries = 0;
+        printer_state_post_ev(PS_EV_WIFI_UP);
         xEventGroupSetBits(s_wifi_events, WIFI_CONNECTED_BIT);
     }
 }
@@ -360,14 +367,16 @@ static void status_json(void *ctx, char *buf, size_t cap)
         snprintf(job, sizeof job, "none yet");
 
     snprintf(buf, cap,
-        "{\"state\":\"%s\",\"stopped\":%s,\"setup\":%s,\"job\":\"%s\","
+        "{\"state\":\"%s\",\"ps\":\"%s\",\"stopped\":%s,\"setup\":%s,\"job\":\"%s\","
         "\"fault\":%s,\"printer\":%s,\"printing\":%s,"
         "\"queue\":\"%s\",\"host\":\"%s.local\",\"ip\":\"%s\","
         "\"ssid\":\"%s\",\"dither\":\"%s\",\"signal\":\"%s\","
         "\"channel\":\"%s\",\"security\":\"%s\",\"uri\":\"%s\","
         "\"uptime\":\"%uh %02um\",\"version\":\"%s\",\"heap\":\"%u KB\","
         "\"model\":\"Apple ImageWriter II\"}",
-        s_ap_mode ? "Waiting for setup" : blocked ? "Out of paper" : "Ready",
+        s_ap_mode ? "Waiting for setup" : blocked ? "Out of paper"
+                : s_printing ? "Printing" : "Ready",
+        ps_name(printer_state_get()),
         blocked ? "true" : "false",
         s_ap_mode ? "true" : "false",
         job,
@@ -387,6 +396,13 @@ static void status_json(void *ctx, char *buf, size_t cap)
 
 // ----------------------------------------------------------------- main
 
+// Fires outside printer_state's lock, only on an actual state change.
+// Task 7 adds led_grid_set_state(st) here; for now this is just visibility.
+static void on_ps_change(ps_state_t st)
+{
+    ESP_LOGI(TAG, "state -> %s", ps_name(st));
+}
+
 void app_main(void)
 {
     // Before anything else: U9's level-shifter input has no pull, so from
@@ -403,6 +419,8 @@ void app_main(void)
     gpio_set_level(CONFIG_AIRWRITER_LED_DATA_PIN, 0);
     gpio_config(&led_clamp);
 #endif
+
+    printer_state_start(on_ps_change);
 
     ESP_LOGI(TAG, "AirWriter starting, %u bytes free", (unsigned)esp_get_free_heap_size());
 
@@ -446,11 +464,13 @@ void app_main(void)
     // No credentials, or they no longer work: become an access point and let
     // the user fix it from a phone. This is the only path a person who did not
     // build the firmware can take.
+    printer_state_post_ev(PS_EV_WIFI_CONNECTING);
     if (!s_set.ssid[0] || wifi_start() != ESP_OK) {
         char ap[32];
         snprintf(ap, sizeof ap, "AirWriter-%s", suffix);
         s_ap_mode = 1;
         strncpy(s_ip, "192.168.4.1", sizeof s_ip - 1);
+        printer_state_post_ev(PS_EV_SETUP_MODE);
 
         if (!s_set.ssid[0]) ESP_LOGW(TAG, "no wi-fi credentials stored");
         else                ESP_LOGW(TAG, "could not join \"%s\"", s_set.ssid);
