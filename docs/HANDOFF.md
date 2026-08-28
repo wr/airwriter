@@ -1,8 +1,56 @@
 # AirWriter handoff
 
-Written 2026-08-04, last updated 2026-08-20 (evening).
+Written 2026-08-04, last updated 2026-08-28.
 
 ## Where the project stands
+
+**2026-08-28: third pre-order review (machine battery + 21 adversarial agents); every
+finding fixed the same day; the order package is final.** The verified review report is
+an artifact: https://claude.ai/code/artifact/906e3ccc-a3d1-490d-bf9d-19e78b7fe92b.
+What changed, in one pass over the source board and the panel generator:
+
+- **GND pour pulled back from the V-score**: seam edge of both /GND zone outlines moved
+  y 60.3 → 60.5 (PCBWay rejects copper within 0.4 mm of a score; KiCad's DRC checks the
+  wrong rule and stays green either way). Verified in the shipped gerbers: closest copper
+  is now Y-60500000 on both layers.
+- **The second VBUS via** (added 08-25 at 153.967, 126.846) sat 0.186 mm wall-to-wall from
+  its partner — under PCBWay's 11 mil and the project's own 0.25 mm rule, hidden because
+  `hole_to_hole` was severity *warning*. Moved to x = 153.82 (0.733 mm centres). Both
+  projects now set `hole_to_hole` to **error** — run `drc --severity-all` anyway.
+- **J2/J4 excluded from the position file** (`exclude_from_pos_files`, same mechanism as
+  H_TEST); pos is 127 placements and PCBWay's line can no longer try to place the
+  hand-soldered mini-DINs. They stay in the BOM with their DO-NOT-ASSEMBLE notes.
+- **The test hole is a 3.8 mm PLATED bore now, gold to the edge** (Wells: "a big via").
+  `emit_board.py` emits a netless plated pad (Ø4.4 pad / Ø3.8 drill, copper layers only),
+  the black hole-surround (`keep_dia`) is gone, and the pad + annulus ring + tab art share
+  a decorative net **PANEL_AU** so their deliberate contact doesn't DRC as a short.
+  `combine_boards.py` keeps that one net and strips all others — do not "fix" either end.
+- **Swatch rail cancelled** (Wells, 2026-08-28): the single-mask-teal risk is accepted
+  unmitigated for this order; the spec's swatch references are amended out.
+- **SPEC §4 assumptions 3 and 4 are both resolved from the Technical Reference already in
+  `docs/reference/`** (Appendix E pp. 204-209): TxD polarity corroborated, HSKo is half a
+  26LS30 off ±5 V — the SP3232 receiver is sound on paper. Board-1 scoping is confirmation.
+- **U8's shutdown-on-transmit wiring is deliberate and safe** — ~RE rides LT_DE, so U8
+  drops to shutdown while the PIC transmits; wake is ≤1.8 µs against LocalTalk's ~200 µs
+  minimum inter-dialogue gap. It mirrors the U6 bug fixed on 08-22 but is NOT that bug;
+  do not "fix" it.
+- **Firmware must** (new item, alongside the brightness cap and CTS deadline): first
+  statements of `app_main()` drive **IO48 low** — U9's input has no pull and floats from
+  power-on until firmware claims the pin; a brief LED flicker at boot is expected on this
+  rev. Rev B: 100 k from U9.2 to GND, filed with the LT_DE 10 k.
+- **Stale packages deleted**: `hardware/airwriter-fab.zip` and
+  `hardware/combined/combined.kicad_pcb.zip` (a mislabeled 08-24 PCBWay-plugin export) are
+  gone from the tree. Upload **only** `hardware/combined-fab.zip` +
+  `hardware/combined/combined-top.png`. The paste-ready order notes live in
+  **`docs/ORDER-NOTES.md`** (supersedes the notes inside the 08-25 review doc).
+- U2/U3's schematic MPN/Manufacturer fields finally match the parts bought since 08-22
+  (SP3490EN-L / SP3232EEN, MaxLinear).
+
+Full battery after all of it: ERC 0; source-board DRC 0/0/0 with parity under
+`--severity-all` (5 benign lib notes); combined board under the real rules 0 clearance /
+0 unconnected (the 6 seam `invalid_outline` notices are the two-outlines-sharing-an-edge
+construction, traced unambiguous); drill floor 0.30; pos 127 rows, no J2/J4; the 3.8 in
+the PTH file, NPTH is pegs + mounting only.
 
 **2026-08-25: second adversarial pre-order review; two DOAs found and fixed; package
 regenerated.** Read `docs/review-2026-08-25-pre-order-2.md`. Short version: ten top-side
@@ -30,7 +78,8 @@ four "GND" pads were routed to 5V (U9 ~OE among them — no LED data, dead USB E
 U6's ~RE-high shutdown trap and inverted LocalTalk A/B polarity are fixed; U2/U3 are now
 SP3490/SP3232; the fab BOM's R8-in-the-DNP-row regression is fixed and every line has an
 LCSC number. Board re-routed from scratch, DRC 0 errors / 0 parity / 0 real unconnected.
-Order package: `hardware/airwriter-fab.zip` + `hardware/airwriter/production/{bom,positions}.csv`
+Order package: ~~`hardware/airwriter-fab.zip` + production CSVs~~ [superseded — the
+single-board package is deleted; the order is the combined panel, see `docs/ORDER-NOTES.md`]
 (J2/J4 hand-solder, U7 socket-only). Quote to Wells before ordering, as ever. Case-plan
 flags: SW3 is 16mm tall (not 13), LED body is now 3.5x3.7mm.
 
@@ -51,7 +100,7 @@ before resuming, it is the true sequence of what happened).
 (`hardware/panel/svg/panel.svg` — the single source of truth; fill colour IS the material)
 into a DRC-clean, byte-deterministic `panel.kicad_pcb`, 62 × 104.27 mm, matte black, ENIG,
 zero components except four blind reflow-standoff seats. Current export lineage: **Frame 9b**
-— 56 dots = 19 gold (one is the `test` dot, 2.25 mm NPTH, black mask-knockout letters),
+— 56 dots = 19 gold (one is the `test` dot, 3.8 mm plated bore, black mask-knockout letters),
 14 bare-FR4 (`#E7BA9B`, full-RGB pixels), 9 single-mask bright teal (`#14BABA`), 14
 double-mask deep teal (`#176767`); both top corners are gold so mounting bosses hide under
 them; **37 lit dots total**. The back face is a solid copper flood (the black mask transmits
@@ -138,10 +187,10 @@ net was a single-track keyhole — **widen the approach, never shorten the path*
    pull-ups, DIP1=mode…), `/BTN_TEST` on IO14. Runs on the devkit.
 4. Plan 4, lattice + case: every number it needs is in the ledger and §2/§3 of the spec —
    hole positions (from the final board), SMTSO stack, DIP key tips x=97.75 / z 8.11–9.01 /
-   2.25 mm wall, reset pinhole at x=100, plunger through the 2.25 mm panel hole, carve-outs
+   2.25 mm wall, reset pinhole at x=100, plunger through the 3.8 mm plated panel hole, carve-outs
    for S1's top corner, U4, R3, U9 (1.1 mm tall under its gold dot).
-5. Fab: panel + board snap-apart at PCBWay, swatch rail on the margin, quote to Wells
-   before ANY order (standing rule), single-mask teal verified by the swatch.
+5. Fab: panel + board snap-apart at PCBWay; quote to Wells before ANY order (standing
+   rule). [swatch rail cancelled 2026-08-28 — teal risk accepted unmitigated, see top entry]
 
 **Hardware rev A is finished and not yet ordered.** The board routes clean, the fab package is
 generated, and the mini-DIN is settled — Kycon KMDGX-8S-BS from Mouser. Nothing blocks the order.

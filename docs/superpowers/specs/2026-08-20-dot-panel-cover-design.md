@@ -99,8 +99,10 @@ material at the dot location itself is unchanged - see `emit_board.py`'s
 `back_copper_flood()`.]
 
 **Unverified:** single-mask teal (B) was reasoned from coupon #1, not observed.
-The panel margin (the snap-off rail) carries a swatch line of B, L, and P dots at
-final dot size so the material reads are confirmed on the same order that uses them.
+[amended 2026-08-28: the planned swatch line on the snap-off rail was never built —
+the panel is packed edge to edge with no room for it. Wells explicitly accepted the
+single-mask-teal risk unmitigated for the first order and cancelled the swatch;
+material B rests on coupon #1 alone until board 1 arrives.]
 Teal hue varies with mask pigment batch — accepted fab risk, noted on W-568's log.
 
 ### Grid
@@ -120,6 +122,11 @@ main board passes through it (§2). The hole is plain drilled fibreglass — no 
 so no electrical path to the panel.
 [amended: hole is 2.25 mm NPTH, not 3.5 mm; `test` is a black-mask knockout
 on the gold ring, not white silk beneath it - see amendment block above]
+[amended 2026-08-28: the hole is now **3.8 mm PLATED**, not 2.25 NPTH — grown for
+the TS-1002's 3.5 ± 0.2 mm plunger (commit 0cd7bde), then plated so the bore wall
+takes ENIG and the gold runs to the drill edge with no black surround and no bare-FR4
+ring (Wells's call). The pad, its annulus and the tab art share a decorative net
+`PANEL_AU` so their contact doesn't read as a short; the panel is still passive.]
 
 ### Lockup and labels
 
@@ -202,7 +209,6 @@ case walls, not the panel.
   separate proto orders, order separately instead — decided at quote time, and the
   quote is shown to Wells before any order (standing rule: nothing is ordered
   without the render and price).
-- The panel margin rail carries the material swatch line (§1).
 - All existing pre-order checks apply to both boards: drill grep, clearance DRC,
   parity DRC, 3D model path check, render review.
 
@@ -238,8 +244,8 @@ All of this runs on the devkit with a strip of SK6812s before any board exists.
 - `led_grid` and `dip_config` get host-side checks in the existing test harness;
   `tools/rip` regression must stay byte-identical (this work never touches the
   raster path).
-- Physical: swatch rail on the panel margin validates material B before the panel
-  is trusted; light-guide bleed judged by eye on the first print.
+- Physical: material B is judged on board 1 itself (the swatch rail was cancelled —
+  see §1 amendment); light-guide bleed judged by eye on the first print.
 
 ## Open items (tracked in the plan, not blockers to it)
 
