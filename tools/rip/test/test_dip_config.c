@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Host test for the DIP bank decode + debounce (dip_decode, dip_stable).
 #include <assert.h>
 #include <stdio.h>
 #include "dip_config_core.h"

@@ -67,24 +67,38 @@ esp_err_t dip_config_start(const dip_config_cb_t *cb)
     s_on_change      = cb ? cb->on_change      : NULL;
     s_on_test_button = cb ? cb->on_test_button : NULL;
 
-    int any = s_btn_pin >= 0;
-    for (int i = 0; i < 8; i++)
-        if (s_dip_pin[i] >= 0) any = 1;
-    if (!any) return ESP_OK;
+    // DIP2-5 sit on IO39-42 -- MTCK/MTDO/MTDI/MTMS, still routed to the JTAG
+    // IO-MUX function at reset -- and the DIP commons go straight to GND with
+    // no series resistor. gpio_set_direction()/gpio_set_pull_mode() never call
+    // the IO-MUX func-sel, so on those pins the JTAG function (MTDO is a
+    // driven output) would stay live under a switch that shorts it to ground.
+    // gpio_config() does select GPIO function; one call for every pin here
+    // keeps that intact. Do not "simplify" this back to per-pin calls.
+    //
+    // Pins are gathered into an array and shifted through a runtime index
+    // rather than shifted by s_btn_pin directly: on boards where every DIP
+    // and button pin is compile-time -1 (no bank on this target), GCC folds
+    // a bare `1ULL << s_btn_pin` to a provably-negative constant shift and
+    // warns even though the `>= 0` guard means it never executes.
+    int all_pin[9];
+    for (int i = 0; i < 8; i++) all_pin[i] = s_dip_pin[i];
+    all_pin[8] = s_btn_pin;
 
-    for (int i = 0; i < 8; i++) {
-        if (s_dip_pin[i] < 0) continue;
-        esp_err_t err = gpio_set_direction(s_dip_pin[i], GPIO_MODE_INPUT);
-        if (err != ESP_OK) return err;
-        err = gpio_set_pull_mode(s_dip_pin[i], GPIO_PULLUP_ONLY);
-        if (err != ESP_OK) return err;
-    }
-    if (s_btn_pin >= 0) {
-        esp_err_t err = gpio_set_direction(s_btn_pin, GPIO_MODE_INPUT);
-        if (err != ESP_OK) return err;
-        err = gpio_set_pull_mode(s_btn_pin, GPIO_PULLUP_ONLY);
-        if (err != ESP_OK) return err;
-    }
+    uint64_t mask = 0;
+    for (int i = 0; i < 9; i++)
+        if (all_pin[i] >= 0) mask |= 1ULL << all_pin[i];
+
+    if (!mask) return ESP_OK;
+
+    gpio_config_t io = {
+        .pin_bit_mask = mask,
+        .mode         = GPIO_MODE_INPUT,
+        .pull_up_en   = GPIO_PULLUP_ENABLE,
+        .pull_down_en = GPIO_PULLDOWN_DISABLE,
+        .intr_type    = GPIO_INTR_DISABLE,
+    };
+    esp_err_t err = gpio_config(&io);
+    if (err != ESP_OK) return err;
 
     return xTaskCreate(dip_task, "dip_config", DIP_STACK, NULL, DIP_PRIO, NULL) == pdPASS
                ? ESP_OK : ESP_ERR_NO_MEM;

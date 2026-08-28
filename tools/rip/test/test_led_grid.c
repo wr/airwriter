@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Host test for the led_grid frame renderer (lg_render): brightness cap,
+// per-state color and blink/breathe/sweep behavior.
 #include <assert.h>
 #include <stdio.h>
 #include "led_grid_core.h"

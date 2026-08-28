@@ -68,7 +68,7 @@ static esp_err_t page_get(httpd_req_t *req)
 
 static esp_err_t status_get(httpd_req_t *req)
 {
-    static char json[640];
+    static char json[1024];
     json[0] = '\0';
     if (s_cfg.status_json) s_cfg.status_json(s_cfg.ctx, json, sizeof json);
     if (!json[0]) strcpy(json, "{}");

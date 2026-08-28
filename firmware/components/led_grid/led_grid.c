@@ -9,19 +9,21 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "led_strip.h"
+#include "printer_state.h"
 
 static led_strip_handle_t s_strip;
-static volatile int s_state = PS_BOOT;
 static int s_count;
-
-void led_grid_set_state(ps_state_t st) { s_state = (int)st; }
 
 static void lg_task(void *arg)
 {
     (void)arg;
     uint8_t frame[LG_NUM_LEDS][3];
     for (;;) {
-        lg_render((ps_state_t)s_state,
+        // Reads printer_state directly each tick rather than being pushed a
+        // state, so two racing posters can never deliver an update to this
+        // task out of order -- the next 30ms tick just re-reads whatever is
+        // current.
+        lg_render(printer_state_get(),
                   (uint32_t)(esp_timer_get_time() / 1000), frame);
         for (int i = 0; i < s_count && i < LG_NUM_LEDS; i++)
             led_strip_set_pixel(s_strip, (uint32_t)i,
@@ -33,9 +35,8 @@ static void lg_task(void *arg)
 
 esp_err_t led_grid_start(void)
 {
-#if CONFIG_AIRWRITER_LED_DATA_PIN < 0
-    return ESP_OK;
-#else
+    if (CONFIG_AIRWRITER_LED_DATA_PIN < 0) return ESP_OK;
+
     s_count = CONFIG_AIRWRITER_LED_COUNT;
     led_strip_config_t sc = {
         .strip_gpio_num = CONFIG_AIRWRITER_LED_DATA_PIN,
@@ -49,5 +50,4 @@ esp_err_t led_grid_start(void)
     led_strip_clear(s_strip);
     return xTaskCreate(lg_task, "led_grid", 3072, NULL, 3, NULL) == pdPASS
                ? ESP_OK : ESP_ERR_NO_MEM;
-#endif
 }

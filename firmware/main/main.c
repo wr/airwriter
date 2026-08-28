@@ -154,6 +154,11 @@ static uint32_t s_stream_crc;
 // doc_end() reads it for the post-mortem.
 static int s_printer_failed;
 
+// Set by doc_begin to record whether job_pipe_begin actually started the
+// pipeline task. doc_end reads it to decide whether job_pipe_end is safe to
+// call.
+static int s_job_pipe_ok;
+
 // The printer stream: checksummed so the device can be compared with tools/rip
 // byte for byte, then put on the wire. A write failure means the watchdog
 // called the printer gone; abort the job so the rip task winds down instead
@@ -199,7 +204,9 @@ static esp_err_t doc_begin(void *ctx, const char *format, const char *name)
     s_printing = 1;
     printer_state_post_ev(PS_EV_JOB_START);
     serial_out_loopback_reset();
-    return job_pipe_begin(name);
+    esp_err_t err = job_pipe_begin(name);
+    s_job_pipe_ok = (err == ESP_OK);
+    return err;
 }
 
 static esp_err_t doc_data(void *ctx, const uint8_t *buf, size_t n)
@@ -217,8 +224,14 @@ static void doc_cancel(void *ctx)
 static void doc_end(void *ctx, int ok)
 {
     (void)ctx;
-    job_pipe_stats_t st;
-    job_pipe_end(ok, &st);
+    job_pipe_stats_t st = {0};
+    // A failed job_pipe_begin never created the pipeline task, so job_pipe_end
+    // would block on a semaphore nothing can ever give -- up to its 600s
+    // stuck-pipeline timeout -- while holding s_job_lock the whole time. Skip
+    // the call and report zeroed stats instead. ipp_server still calls
+    // doc_end exactly once even after a failed begin, so the give below still
+    // balances doc_begin's take.
+    if (s_job_pipe_ok) job_pipe_end(ok, &st);
     s_printing = 0;
 
     if (st.rc != 0 || !ok || s_printer_failed) {
@@ -512,7 +525,6 @@ static void status_json(void *ctx, char *buf, size_t cap)
 static void on_ps_change(ps_state_t st)
 {
     ESP_LOGI(TAG, "state -> %s", ps_name(st));
-    led_grid_set_state(st);
 }
 
 void app_main(void)

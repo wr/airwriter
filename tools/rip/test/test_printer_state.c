@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 // Host test for the printer_state reducer. Mirrors test_serial_writer.c style.
 #include <assert.h>
 #include <stdio.h>

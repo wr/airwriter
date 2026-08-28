@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Pure reducer: derives one ps_state_t from the sticky flags an event sets or
+// clears. No FreeRTOS, no I/O -- printer_state.c wraps this with the mutex
+// and change callback the rest of the firmware actually calls.
 #pragma once
 
 typedef enum {                 // priority order, highest wins
