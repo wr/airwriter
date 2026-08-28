@@ -6,8 +6,13 @@ than the minimal fix sketched below — adversarial review proved both that sket
 first ring-bounded implementation unsound (`uart_get_tx_buffer_free_size` only tracks
 the ring item in service, so `uart_write_bytes` could still park forever mid-stall).
 The shipped design writes FIFO-direct via `uart_tx_chars` with no TX ring at all; see
-the HANDOFF's 08-28 late entry and `serial_writer.h`. Items 5–6 and the "later" gaps
-remain as written.
+the HANDOFF's 08-28 late entry and `serial_writer.h`.
+
+**Status update 2 (same day, W-586):** item 6 is done (the 48/255 cap shipped in
+`led_grid`'s first commit, applied as the renderer's final multiply), and the "later"
+gaps for DIP1-8 + the test button are closed (`dip_config` + the button's test page,
+serialized against real jobs by `s_job_lock`). Item 5 stands as resolved-no-code. The
+PIC/LocalTalk bridge remains the one open "later" item.
 
 Three parallel auditors (pin map, serial path, boot safety) over `firmware/` while the
 boards are at PCBWay. Nothing was edited; this is the work list. The good news first:

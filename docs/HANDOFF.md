@@ -4,6 +4,39 @@ Written 2026-08-04, last updated 2026-08-28.
 
 ## Where the project stands
 
+**2026-08-28 (later still): the no-hardware-needed firmware is written — W-586, branch
+`wells/w-586-firmware-status-controls` (stacked on W-585's branch, both unmerged).**
+Four new pieces, every core pure C with host tests in `tools/rip` (subagent-driven, each
+task adversarially reviewed; plan in
+`docs/superpowers/plans/2026-08-28-firmware-status-controls.md`):
+
+- **`printer_state`**: flags-in, one-derived-state-out reducer (setup > no-wifi > blocked
+  > printing > error > ready) + a mutex-guarded ESP glue; main.c posts events from wifi,
+  AP fallback, doc begin/end and the serial watchdog. `status_json` gained a machine
+  field `"ps"`.
+- **`led_grid`**: chain-order material map GENERATED from the schematic netlist + board
+  positions (`hardware/panel/gen_led_map.py` -> committed `led_map.c/h`; the netlist walk
+  caught KiCad-10 regex traps — see the script's comments). Pure renderer `lg_render`
+  (state x time -> 37xRGB; FR4 dots full RGB, mask dots forced monochrome, ERROR drops
+  mask dots dark, **global cap 48/255 applied as the last multiply — the board has no
+  hardware current limit**). Glue drives the chain over RMT via `espressif/led_strip`
+  3.0.3 at ~33 fps; devkit strips use `AIRWRITER_LED_COUNT` + `AIRWRITER_LED_DATA_PIN`.
+- **`dip_config`**: decode + 3-sample debounce core; glue polls DIP1-8 + the test button
+  at 100 ms with internal pull-ups (S3 pins 38/39/40/41/42/47/21/13, button 14; all −1
+  off-S3). Provisional bit semantics live in `dip_config_core.h`: DIP1-2 mode, DIP3 dev,
+  DIP4 test-on-boot, DIP5-6 dither override, DIP7-8 spare — firmware-level defaults, the
+  silk only numbers the switches.
+- **Test page**: button (or DIP4 at boot) prints a 64-row checkerboard+gradient page at
+  1152 dots through the real ht/iw/printer_out path. **A new `s_job_lock` mutex in
+  main.c serializes it against real IPP jobs** — review caught that `s_printing` was
+  never the real lock (ipp_server's `s_print_lock` was), and a mid-test-page phone job
+  would have interleaved bytes on the wire.
+
+What the devkit can demo now: every LED state pattern on a strip, DIP/button on jumpers,
+the full IPP->raster->serial path in loopback. Still hardware-gated: everything through
+the transceivers. Not started (unchanged): PIC/LocalTalk bridge (PAP-gated), consumers of
+`mode`/`dither_ovr`.
+
 **2026-08-28 (late): the firmware audit's must-dos are implemented and verified —
 W-585, branch `wells/w-585-firmware-preboard-hardening`.** All three must-dos plus the
 host-test seam landed the same day the audit was filed:
