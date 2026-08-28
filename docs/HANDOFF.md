@@ -4,6 +4,39 @@ Written 2026-08-04, last updated 2026-08-28.
 
 ## Where the project stands
 
+**2026-08-28 (evening): boards waiting on the PCBWay quote; firmware audited for the
+wait; parts sourcing settled.** The session after the review below did four things:
+
+1. **The in-flight PCBWay order W654223ASS53 must not build as uploaded.** Wells started
+   it 08-24 with the pre-review files (they still have the ten stranded-ground DOAs) and
+   it has sat at an engineering query since 08-25. The reply is drafted and in
+   `docs/ORDER-NOTES.md`: replace the files with `hardware/combined-fab.zip` +
+   `combined-top.png`, and answer the soldermask-bridge question with "gang-open the
+   USB-C pin rows" (its 0.20 mm dams are under their 0.22 mm matte-black minimum;
+   everything else clears). Wells sends that email; nothing is paid until he sees the
+   re-quote (standing rule). Pay only through the PCBWay site, never to bank details
+   from an email signature.
+2. **Firmware was audited for pre-board work — read `docs/firmware-audit-2026-08-28.md`
+   before touching firmware.** Headline: no pin is wrong anywhere; three must-dos are
+   (a) reinstall ESP-IDF (it is NOT on this Mac — the "v5.5.1 installed" stratum below
+   is stale) and later `idf.py set-target esp32s3` + `fullclean` (sdkconfig is still the
+   C6 devkit build), (b) the IO48 output-low clamp as app_main's first statements,
+   S3-guarded (C6 has no GPIO48), `esp_driver_gpio` added to main's REQUIRES,
+   (c) a deadline in `serial_out_write()` — as written, one job to a stalled printer
+   permanently bricks the print service ~10 minutes later (traced through job_pipe's
+   never-exiting task; the audit doc has the minimal fix design). None of it is written
+   yet; Wells asked for the audit to be filed, not implemented.
+3. **Parts Wells buys himself (links in the session log/artifact):** Kycon KMDGX-8S-BS
+   ×6 from Mouser (sole channel with stock — order first), PIC12F1840-I/P DIP ×3 from
+   Digi-Key, Wurth 9774030151R ×6 if consigning. Programmer decision: a ~$26 PICkit 3
+   clone (eBay, US seller tommyvdp) driven by **PICkitminus** (kair.us; macOS CLI;
+   PIC12F1840 confirmed on its device list) — chosen because TashTalk's config word sets
+   `_LVP_OFF`, which requires high-voltage programming and rules out the MPLAB Snap and
+   every LVP-only cheapie; the TL866II universal programmer was checked and does NOT
+   support the 12F1840 at all. The PICkit 5 ($78) is the fallback if the clone is a dud.
+4. The teal swatch was cancelled and the test hole went gold-plated in the review pass
+   below; W-573's memory and the spec amendments carry both decisions.
+
 **2026-08-28: third pre-order review (machine battery + 21 adversarial agents); every
 finding fixed the same day; the order package is final.** The verified review report is
 an artifact: https://claude.ai/code/artifact/906e3ccc-a3d1-490d-bf9d-19e78b7fe92b.
