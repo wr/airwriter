@@ -7,6 +7,7 @@
 #include <string.h>
 #include <stdio.h>
 
+#include "driver/gpio.h"
 #include "esp_log.h"
 #include "esp_system.h"
 #include "esp_timer.h"
@@ -137,13 +138,27 @@ static uint32_t crc32_up(uint32_t crc, const uint8_t *buf, size_t n)
 
 static uint32_t s_stream_crc;
 
+// Set when serial_out gave up on a stalled printer mid-job. job_pipe_cfg_t's
+// out callback returns void, so the failure travels in this flag instead and
+// doc_end() reads it for the post-mortem.
+static int s_printer_failed;
+
 // The printer stream: checksummed so the device can be compared with tools/rip
-// byte for byte, then put on the wire.
+// byte for byte, then put on the wire. A write failure means the watchdog
+// called the printer gone; abort the job so the rip task winds down instead
+// of pushing the rest of the page at a dead line.
 static void printer_out(void *ctx, const uint8_t *buf, size_t n)
 {
     (void)ctx;
     s_stream_crc = crc32_up(s_stream_crc, buf, n);
-    serial_out_write(buf, n);
+    if (s_printer_failed) return;
+    if (serial_out_write(buf, n) != ESP_OK) {
+        s_printer_failed = 1;
+        // The dead job's queued tail must not reach the printer when paper
+        // returns -- it would print garbage ahead of the next job.
+        serial_out_purge();
+        job_pipe_abort();
+    }
 }
 
 // HSKo has been low too long. SPEC.md 3.9: that becomes a real alert on the
@@ -161,6 +176,7 @@ static esp_err_t doc_begin(void *ctx, const char *format, const char *name)
     strncpy(s_last_job, name && name[0] ? name : "Untitled", sizeof s_last_job - 1);
     s_last_job[sizeof s_last_job - 1] = '\0';
     s_stream_crc = 0;
+    s_printer_failed = 0;
     s_printing = 1;
     serial_out_loopback_reset();
     return job_pipe_begin(name);
@@ -185,9 +201,11 @@ static void doc_end(void *ctx, int ok)
     job_pipe_end(ok, &st);
     s_printing = 0;
 
-    if (st.rc != 0 || !ok) {
+    if (st.rc != 0 || !ok || s_printer_failed) {
         ESP_LOGE(TAG, "job failed: %u bytes in, rc %d%s",
-                 (unsigned)st.doc_bytes, st.rc, ok ? "" : ", transfer truncated");
+                 (unsigned)st.doc_bytes, st.rc,
+                 s_printer_failed ? ", printer timeout"
+                                  : ok ? "" : ", transfer truncated");
         return;
     }
 
@@ -371,6 +389,21 @@ static void status_json(void *ctx, char *buf, size_t cap)
 
 void app_main(void)
 {
+    // Before anything else: U9's level-shifter input has no pull, so from
+    // power-on until this line the LED chain sees noise (a brief flicker at
+    // boot is expected on rev A; rev B adds a 100k pulldown on U9.2). It must
+    // run before wifi_start() especially -- the join loop can block for 60s.
+    // Compile-time guard: the pin is -1 off the S3, and the C6 devkit's
+    // headers have no GPIO 48.
+#if CONFIG_AIRWRITER_LED_DATA_PIN >= 0
+    gpio_config_t led_clamp = {
+        .pin_bit_mask = 1ULL << CONFIG_AIRWRITER_LED_DATA_PIN,
+        .mode         = GPIO_MODE_OUTPUT,
+    };
+    gpio_set_level(CONFIG_AIRWRITER_LED_DATA_PIN, 0);
+    gpio_config(&led_clamp);
+#endif
+
     ESP_LOGI(TAG, "AirWriter starting, %u bytes free", (unsigned)esp_get_free_heap_size());
 
     esp_err_t err = nvs_flash_init();

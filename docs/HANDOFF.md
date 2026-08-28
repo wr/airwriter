@@ -4,6 +4,49 @@ Written 2026-08-04, last updated 2026-08-28.
 
 ## Where the project stands
 
+**2026-08-28 (late): the firmware audit's must-dos are implemented and verified —
+W-585, branch `wells/w-585-firmware-preboard-hardening`.** All three must-dos plus the
+host-test seam landed the same day the audit was filed:
+
+1. **ESP-IDF v5.5.1 is reinstalled** at `~/esp/esp-idf` and the project is retargeted:
+   `idf.py set-target esp32s3` + `fullclean` done, regenerated `sdkconfig` verified
+   TX=17 / RX=18 / CTS=8, `LED_DATA_PIN=48`, loopback off. The C6 devkit build lives in
+   its own tree now — `idf.py -B build_c6 -D SDKCONFIG=sdkconfig.c6 build` (config
+   verified TX=4/RX=5, CTS −1, loopback on). Both targets build clean. The old devkit
+   sdkconfig was preserved as `sdkconfig.old`.
+2. **The IO48 clamp is in**: first statements of `app_main()`, before the log line and
+   `nvs_flash_init()`, compile-guarded by the new Kconfig `AIRWRITER_LED_DATA_PIN`
+   (48 on S3, −1 elsewhere — the C6 block compiles out entirely). `esp_driver_gpio`
+   added to main's REQUIRES.
+3. **The stalled-printer brick is dead, and NOT by the audit's sketched fix.** Two
+   adversarial review rounds shaped this (9 agents, then 3 clean skeptics):
+   - **Trap, recorded for good: `uart_get_tx_buffer_free_size` is not a capacity
+     probe.** In IDF v5.5.1 it returns `tx_buf_size - tx_len_tot`, and `tx_len_tot`
+     counts only the ring item the ISR is currently draining — queued items behind it
+     are invisible. A first implementation that bounded `uart_write_bytes` (which has
+     NO timeout — it blocks in `xRingbufferSend(portMAX_DELAY)`) by that probe still
+     parked the rip task forever when CTS stalled mid-job. The audit's clear_to_send
+     poll had the same class of hole.
+   - **Shipped design: no TX ring at all** (`uart_driver_install` tx size 0). Writes go
+     FIFO-direct through `uart_tx_chars` — a spinlocked `uart_hal_write_txfifo` that
+     takes what the 128-byte FIFO fits and returns the count; it cannot block. The loop
+     lives in `serial_out/serial_writer.c`, pure C behind injectable ops, host-tested
+     (28 checks incl. a no-busy-spin invariant): fail fast once the watchdog says
+     BLOCKED, delay one 100 ms watchdog period on any remainder. Pacing is lossless at
+     9600 baud (96 bytes drain per period < 128 FIFO).
+   - **Failure now propagates**: `printer_out()` checks the write, sets a failure flag,
+     **purges the FIFO** (`serial_out_purge`, `uart_ll_txfifo_rst`) so a dead job's
+     ≤128-byte tail can't print garbage ahead of the next job when paper returns, and
+     calls `job_pipe_abort()`; the rip task unwinds, `s_task` clears, the next job is
+     accepted. `doc_end` says "printer timeout".
+4. **Host suite is 277 checks across 8 binaries** (`make test` in `tools/rip`), stream
+   regressions byte-identical. `tools/rip/Makefile` now compiles `serial_writer.c`
+   (named explicitly — the rest of serial_out is IDF-bound).
+
+Audit items 5–6 (MCLR: resolved-no-code; brightness cap: waits for `led_grid`) and the
+feature gaps (dip_config, PIC bridge) are unchanged. Order state below is unchanged:
+W654223ASS53 still needs Wells's file-replacement email; nothing is paid.
+
 **2026-08-28 (evening): boards waiting on the PCBWay quote; firmware audited for the
 wait; parts sourcing settled.** The session after the review below did four things:
 

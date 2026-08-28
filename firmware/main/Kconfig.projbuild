@@ -87,6 +87,17 @@ config AIRWRITER_STALL_TIMEOUT
     int "Seconds of HSKo deassertion before the printer is called out of paper"
     default 30
 
+config AIRWRITER_LED_DATA_PIN
+    int "LED chain data pin, -1 if absent"
+    default 48 if IDF_TARGET_ESP32S3
+    default -1
+    help
+        Board net LED_DATA: IO48 into U9, the 3.3-to-5V level shifter feeding
+        the SK6812 chain. U9's input has no pull-down on rev A, so the chain
+        sees noise from power-on until app_main clamps this pin low as its
+        first act. led_grid takes the pin over when that component lands.
+        Devkits without the level shifter leave it at -1.
+
 config AIRWRITER_UART_LOOPBACK
     bool "Loop the printer UART back on itself"
     default y if !IDF_TARGET_ESP32S3

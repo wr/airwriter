@@ -1,16 +1,23 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "serial_out.h"
+#include "serial_writer.h"
 
 #include <string.h>
 #include "esp_log.h"
 #include "driver/uart.h"
 #include "driver/gpio.h"
+#include "hal/uart_ll.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
 static const char *TAG = "serial";
 
-#define TX_RING      2048
+// No TX ring, deliberately. serial_out_write feeds the hardware FIFO directly
+// through uart_tx_chars, so writes are non-blocking by construction and a
+// failed job leaves at most one FIFO (128 bytes) of residue to purge -- a
+// ring would reintroduce both problems (uart_write_bytes has no timeout, and
+// uart_get_tx_buffer_free_size only tracks the ring item in service).
+#define TX_RING      0
 #define RX_RING      1024   // only used for the loopback self-check
 #define WATCH_PERIOD pdMS_TO_TICKS(100)
 
@@ -148,15 +155,43 @@ esp_err_t serial_out_init(const serial_out_cfg_t *cfg)
     return ESP_OK;
 }
 
+// The loop itself lives in serial_writer.c, pure C so the host tests cover
+// it. These ops bind it to the driver and the watchdog. The rule that
+// matters: every op is non-blocking. uart_tx_chars fills what the hardware
+// FIFO can take and reports the count -- unlike uart_write_bytes, which has
+// no timeout and would park the rip task inside the driver forever the
+// moment a dead printer's CTS stalled the drain.
+static int ops_tx_write(void *ctx, const uint8_t *buf, size_t n)
+{
+    (void)ctx;
+    return uart_tx_chars(s_cfg.uart_num, (const char *)buf, n);
+}
+
+static int ops_blocked(void *ctx)
+{
+    (void)ctx;
+    return s_state == SERIAL_OUT_BLOCKED;
+}
+
+static void ops_delay(void *ctx)
+{
+    (void)ctx;
+    vTaskDelay(WATCH_PERIOD);
+}
+
 esp_err_t serial_out_write(const uint8_t *buf, size_t n)
 {
-    while (n) {
-        int w = uart_write_bytes(s_cfg.uart_num, (const char *)buf, n);
-        if (w < 0) return ESP_FAIL;
-        buf += w;
-        n   -= (size_t)w;
-    }
-    return ESP_OK;
+    static const serial_writer_ops_t ops = {
+        .tx_write = ops_tx_write,
+        .blocked  = ops_blocked,
+        .delay    = ops_delay,
+    };
+    return serial_writer_write(&ops, buf, n) == 0 ? ESP_OK : ESP_FAIL;
+}
+
+void serial_out_purge(void)
+{
+    uart_ll_txfifo_rst(UART_LL_GET_HW(s_cfg.uart_num));
 }
 
 esp_err_t serial_out_flush(uint32_t timeout_ms)

@@ -47,14 +47,25 @@ typedef struct {
 
 esp_err_t serial_out_init(const serial_out_cfg_t *cfg);
 
-// Blocks until every byte is queued. With CTS flow control that means it
+// Blocks until every byte is queued -- with CTS flow control that means it
 // blocks while the printer is busy, which is exactly the backpressure the
-// raster pipeline wants -- it propagates all the way to the phone.
+// raster pipeline wants -- but not past the watchdog: once the stall outlasts
+// the timeout and the state flips to BLOCKED, this returns ESP_FAIL with the
+// rest of the payload abandoned. The caller owns failing the job; without
+// that bound, one job to a stalled printer parks the rip task inside the
+// UART driver forever.
 esp_err_t serial_out_write(const uint8_t *buf, size_t n);
 
 // Waits for the last byte to leave the shift register. At 9600 baud the FIFO
 // can hold a second of data, so a job is not finished when the write returns.
 esp_err_t serial_out_flush(uint32_t timeout_ms);
+
+// Discards whatever is still queued in the hardware TX FIFO. For the moment a
+// job is failed: without this, a dead job's tail (mid-escape-sequence, up to
+// one FIFO) sits queued until paper returns and then prints ahead of the next
+// job, leaving the printer in whatever mode the truncation happened in. Call
+// only from the writing task with no write in flight.
+void serial_out_purge(void);
 
 serial_out_state_t serial_out_state(void);
 
