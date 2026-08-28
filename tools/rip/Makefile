@@ -32,6 +32,13 @@ build/rip: main.c png_write.c $(SRCS) | build
 build/test_printer_state: test/test_printer_state.c ../../firmware/components/printer_state/printer_state_core.c | build
 	$(CC) $(CFLAGS) $(INCS) -I../../firmware/components/printer_state/include -Itest -o $@ $^
 
+build/test_led_grid: test/test_led_grid.c \
+                      ../../firmware/components/led_grid/led_grid_core.c \
+                      ../../firmware/components/led_grid/led_map.c \
+                      ../../firmware/components/printer_state/printer_state_core.c | build
+	$(CC) $(CFLAGS) $(INCS) -I../../firmware/components/led_grid/include \
+	  -I../../firmware/components/printer_state/include -Itest -o $@ $^ -lm
+
 build/%: test/%.c $(SRCS) | build
 	$(CC) $(CFLAGS) $(INCS) -Itest -o $@ $^
 
