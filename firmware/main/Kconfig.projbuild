@@ -98,6 +98,14 @@ config AIRWRITER_LED_DATA_PIN
         first act. led_grid takes the pin over when that component lands.
         Devkits without the level shifter leave it at -1.
 
+config AIRWRITER_LED_COUNT
+    int "LED chain length"
+    default 37
+    help
+        37 on the AirWriter board (D10-D46). A devkit with a shorter SK6812
+        strip sets its real count; frames are rendered for the board's 37
+        dots and truncated to the strip.
+
 config AIRWRITER_UART_LOOPBACK
     bool "Loop the printer UART back on itself"
     default y if !IDF_TARGET_ESP32S3

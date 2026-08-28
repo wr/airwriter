@@ -25,6 +25,7 @@
 #include "imagewriter.h"
 #include "ipp_server.h"
 #include "job_pipe.h"
+#include "led_grid.h"
 #include "printer_state.h"
 #include "serial_out.h"
 #include "settings.h"
@@ -397,10 +398,10 @@ static void status_json(void *ctx, char *buf, size_t cap)
 // ----------------------------------------------------------------- main
 
 // Fires outside printer_state's lock, only on an actual state change.
-// Task 7 adds led_grid_set_state(st) here; for now this is just visibility.
 static void on_ps_change(ps_state_t st)
 {
     ESP_LOGI(TAG, "state -> %s", ps_name(st));
+    led_grid_set_state(st);
 }
 
 void app_main(void)
@@ -421,6 +422,9 @@ void app_main(void)
 #endif
 
     printer_state_start(on_ps_change);
+    // After the clamp above: the RMT driver takes IO48 over from here, and
+    // by the first frame the line is driven, never floating.
+    ESP_ERROR_CHECK(led_grid_start());
 
     ESP_LOGI(TAG, "AirWriter starting, %u bytes free", (unsigned)esp_get_free_heap_size());
 
