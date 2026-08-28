@@ -20,6 +20,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/event_groups.h"
+#include "freertos/semphr.h"
 
 #include "dip_config.h"
 #include "halftone.h"
@@ -78,6 +79,13 @@ static int  s_ap_mode;
 static char   s_last_job[64];
 static int    s_printing;
 static size_t s_last_pages, s_last_bytes;
+
+// The real mutual exclusion between a real IPP job and a test page: taken
+// (blocking) at the top of doc_begin and (non-blocking) in test_page, given
+// back at the bottom of doc_end and test_page_task. s_printing above is
+// merely the status page's idea of "busy" -- it is not itself a lock, since
+// checking it and then setting it is not atomic across tasks.
+static SemaphoreHandle_t s_job_lock;
 
 // ---------------------------------------------------------------- raster
 // A bring-up check that the raster components run on this silicon, not just
@@ -177,6 +185,12 @@ static void printer_state_changed(void *ctx, serial_out_state_t st)
 static esp_err_t doc_begin(void *ctx, const char *format, const char *name)
 {
     (void)ctx;
+    // A real job waits out a test page rather than interleaving with it,
+    // mirroring how ipp_server's own s_print_lock makes a second phone job
+    // wait for the first. ipp_server always pairs this call with exactly one
+    // doc_end -- including when job_pipe_begin below fails -- so the give in
+    // doc_end balances every take here, refusals included.
+    xSemaphoreTake(s_job_lock, portMAX_DELAY);
     ESP_LOGI(TAG, "job \"%s\" format %s", name, format[0] ? format : "(unspecified)");
     strncpy(s_last_job, name && name[0] ? name : "Untitled", sizeof s_last_job - 1);
     s_last_job[sizeof s_last_job - 1] = '\0';
@@ -213,6 +227,7 @@ static void doc_end(void *ctx, int ok)
                  s_printer_failed ? ", printer timeout"
                                   : ok ? "" : ", transfer truncated");
         printer_state_post_ev(PS_EV_JOB_FAIL);
+        xSemaphoreGive(s_job_lock);
         return;
     }
 
@@ -243,6 +258,8 @@ static void doc_end(void *ctx, int ok)
     // At 9600 baud, 8N1, one byte costs 10 bit times.
     ESP_LOGI(TAG, "that is %u seconds of printing at 9600 baud",
              (unsigned)(st.printer_bytes * 10 / 9600));
+
+    xSemaphoreGive(s_job_lock);
 }
 
 // ------------------------------------------------------------- dip / test
@@ -300,6 +317,7 @@ static void test_page_task(void *arg)
     serial_out_flush(120000);
     printer_state_post_ev(s_printer_failed ? PS_EV_JOB_FAIL : PS_EV_JOB_DONE);
     s_printing = 0;
+    xSemaphoreGive(s_job_lock);
     vTaskDelete(NULL);
 }
 
@@ -308,16 +326,19 @@ static void test_page_task(void *arg)
 // doing it here: the poll loop has to stay free to keep debouncing.
 static void test_page(void)
 {
-    if (s_printing) {
+    // Non-blocking: a test page refuses rather than queuing behind whatever
+    // is printing, real job or another test page. s_job_lock is the actual
+    // mutual exclusion; the take-then-spawn sequencing below (not s_printing)
+    // is what makes two back-to-back presses refuse rather than both print.
+    if (xSemaphoreTake(s_job_lock, 0) != pdTRUE) {
         ESP_LOGW(TAG, "test page requested but the printer is already busy");
         return;
     }
-    // Set before the task exists, not inside it: two presses back to back
-    // must not both see s_printing clear and both spawn a page.
     s_printing = 1;
     if (xTaskCreate(test_page_task, "test_page", 4096, NULL, 3, NULL) != pdPASS) {
         ESP_LOGE(TAG, "test page: could not create task");
         s_printing = 0;
+        xSemaphoreGive(s_job_lock);
     }
 }
 
@@ -510,6 +531,11 @@ void app_main(void)
     gpio_set_level(CONFIG_AIRWRITER_LED_DATA_PIN, 0);
     gpio_config(&led_clamp);
 #endif
+
+    // Before anything that can call doc_begin or test_page: dip_config's poll
+    // task starts soon and a button press must not race the lock into
+    // existence.
+    s_job_lock = xSemaphoreCreateMutex();
 
     printer_state_start(on_ps_change);
     // After the clamp above: the RMT driver takes IO48 over from here, and
