@@ -39,6 +39,9 @@ build/test_led_grid: test/test_led_grid.c \
 	$(CC) $(CFLAGS) $(INCS) -I../../firmware/components/led_grid/include \
 	  -I../../firmware/components/printer_state/include -Itest -o $@ $^ -lm
 
+build/test_dip_config: test/test_dip_config.c ../../firmware/components/dip_config/dip_config_core.c | build
+	$(CC) $(CFLAGS) $(INCS) -I../../firmware/components/dip_config/include -Itest -o $@ $^
+
 build/%: test/%.c $(SRCS) | build
 	$(CC) $(CFLAGS) $(INCS) -Itest -o $@ $^
 
