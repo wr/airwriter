@@ -29,6 +29,9 @@ build:
 build/rip: main.c png_write.c $(SRCS) | build
 	$(CC) $(CFLAGS) $(INCS) -Itest -o $@ $^
 
+build/test_printer_state: test/test_printer_state.c ../../firmware/components/printer_state/printer_state_core.c | build
+	$(CC) $(CFLAGS) $(INCS) -I../../firmware/components/printer_state/include -Itest -o $@ $^
+
 build/%: test/%.c $(SRCS) | build
 	$(CC) $(CFLAGS) $(INCS) -Itest -o $@ $^
 
