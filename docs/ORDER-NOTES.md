@@ -41,6 +41,17 @@ Standing rule: quote to Wells before the order is placed.
 7. Please confirm polarity of U2, U3, U6, U8 (SOIC pin-1 dot), the U7 socket notch, D3
    and J1 against `combined-top.png` before placement.
 
+## Known engineering-query answers
+
+- **Soldermask bridges (asked 2026-08-25 on order W654223ASS53):** no bridges needed on
+  the fine-pitch USB-C (J1) pin rows — gang-open them. The file's 0.20 mm dams there are
+  under PCBWay's 0.22 mm matte-black-ink minimum, and shrinking apertures onto 0.3 mm pads
+  is worse than no dams. Every other IC's dams clear 0.22 mm; keep the mask as designed.
+  The art-panel half's fine mask features are decorative — produce as-is.
+- **Order W654223ASS53 was placed 08-24 with superseded files** (pre-dating the 08-25 DOA
+  fixes and everything since). It must never build as uploaded: replace its files with the
+  current `combined-fab.zip` or cancel it.
+
 ## Files
 
 | Upload | Never upload |
