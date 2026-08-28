@@ -116,4 +116,68 @@ config AIRWRITER_UART_LOOPBACK
         bytes are checksummed and compared with what was sent. Never enable
         this on a real board: nothing reaches the printer.
 
+config AIRWRITER_DIP1_PIN
+    int "DIP1 pin, -1 if absent"
+    default 38 if IDF_TARGET_ESP32S3
+    default -1
+    help
+        Board net DIP1, closed = GND, internal pull-up.
+
+config AIRWRITER_DIP2_PIN
+    int "DIP2 pin, -1 if absent"
+    default 39 if IDF_TARGET_ESP32S3
+    default -1
+    help
+        Board net DIP2, closed = GND, internal pull-up.
+
+config AIRWRITER_DIP3_PIN
+    int "DIP3 pin, -1 if absent"
+    default 40 if IDF_TARGET_ESP32S3
+    default -1
+    help
+        Board net DIP3, closed = GND, internal pull-up.
+
+config AIRWRITER_DIP4_PIN
+    int "DIP4 pin, -1 if absent"
+    default 41 if IDF_TARGET_ESP32S3
+    default -1
+    help
+        Board net DIP4, closed = GND, internal pull-up.
+
+config AIRWRITER_DIP5_PIN
+    int "DIP5 pin, -1 if absent"
+    default 42 if IDF_TARGET_ESP32S3
+    default -1
+    help
+        Board net DIP5, closed = GND, internal pull-up.
+
+config AIRWRITER_DIP6_PIN
+    int "DIP6 pin, -1 if absent"
+    default 47 if IDF_TARGET_ESP32S3
+    default -1
+    help
+        Board net DIP6, closed = GND, internal pull-up.
+
+config AIRWRITER_DIP7_PIN
+    int "DIP7 pin, -1 if absent"
+    default 21 if IDF_TARGET_ESP32S3
+    default -1
+    help
+        Board net DIP7, closed = GND, internal pull-up.
+
+config AIRWRITER_DIP8_PIN
+    int "DIP8 pin, -1 if absent"
+    default 13 if IDF_TARGET_ESP32S3
+    default -1
+    help
+        Board net DIP8, closed = GND, internal pull-up.
+
+config AIRWRITER_TEST_BTN_PIN
+    int "Test-page button pin, -1 if absent"
+    default 14 if IDF_TARGET_ESP32S3
+    default -1
+    help
+        Board net TEST_BTN, closed = GND, internal pull-up. A press prints a
+        self-test page through the same raster and serial path as a real job.
+
 endmenu

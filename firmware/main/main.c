@@ -21,6 +21,7 @@
 #include "freertos/task.h"
 #include "freertos/event_groups.h"
 
+#include "dip_config.h"
 #include "halftone.h"
 #include "imagewriter.h"
 #include "ipp_server.h"
@@ -244,6 +245,95 @@ static void doc_end(void *ctx, int ok)
              (unsigned)(st.printer_bytes * 10 / 9600));
 }
 
+// ------------------------------------------------------------- dip / test
+// DIP1-8 select mode/dev-mode/test-on-boot/dither-override/spare; a press of
+// the test button prints a self-test page. dev_mode and dither_ovr land in
+// later milestones -- for this rev dev_mode is a log note only, and the
+// printer-uuid behaviour it names stays Kconfig's AIRWRITER_DEV_MODE.
+
+#define TESTPAGE_W 1152
+#define TESTPAGE_H 64
+
+static void test_page_task(void *arg)
+{
+    (void)arg;
+    s_stream_crc = 0;
+    s_printer_failed = 0;
+    printer_state_post_ev(PS_EV_JOB_START);
+
+    ht_algo_t algo;
+    if (ht_algo_from_name(s_set.dither, &algo)) algo = HT_ATKINSON;
+
+    ht_t h;
+    if (ht_init(&h, algo, TESTPAGE_W) != 0) {
+        ESP_LOGE(TAG, "test page: ht_init failed");
+        s_printer_failed = 1;
+    } else {
+        static iw_t w;
+        iw_init(&w, TESTPAGE_W, printer_out, NULL);
+        iw_begin_page(&w);
+
+        uint8_t gray[TESTPAGE_W];
+        uint8_t bits[(TESTPAGE_W + 7) / 8];
+        for (uint32_t y = 0; y < TESTPAGE_H; y++) {
+            if (y < TESTPAGE_H - 8) {
+                // 8px checkerboard bands, alternating phase band to band, so a
+                // dot-alignment error shows as a shifted grid rather than a
+                // gray smear.
+                int phase = (int)(y / 8) & 1;
+                for (uint32_t x = 0; x < TESTPAGE_W; x++)
+                    gray[x] = (((x / 8) & 1) == (uint32_t)phase) ? 0 : 255;
+            } else {
+                // Final band: a 0->255 gradient, one dithered level per column
+                // group, to check the algorithm across the whole gray range.
+                for (uint32_t x = 0; x < TESTPAGE_W; x++)
+                    gray[x] = (uint8_t)(x * 255 / (TESTPAGE_W - 1));
+            }
+            ht_row(&h, gray, bits);
+            iw_row(&w, bits);
+        }
+
+        iw_end_page(&w);
+        ht_free(&h);
+    }
+
+    serial_out_flush(120000);
+    printer_state_post_ev(s_printer_failed ? PS_EV_JOB_FAIL : PS_EV_JOB_DONE);
+    s_printing = 0;
+    vTaskDelete(NULL);
+}
+
+// Runs on whatever task calls it -- normally dip_config's poll task, for a
+// button press, which is why this only ever spawns the real work rather than
+// doing it here: the poll loop has to stay free to keep debouncing.
+static void test_page(void)
+{
+    if (s_printing) {
+        ESP_LOGW(TAG, "test page requested but the printer is already busy");
+        return;
+    }
+    // Set before the task exists, not inside it: two presses back to back
+    // must not both see s_printing clear and both spawn a page.
+    s_printing = 1;
+    if (xTaskCreate(test_page_task, "test_page", 4096, NULL, 3, NULL) != pdPASS) {
+        ESP_LOGE(TAG, "test page: could not create task");
+        s_printing = 0;
+    }
+}
+
+// Latched by dip_on_change from the boot-time read, consumed once app_main
+// has brought the servers up.
+static int s_test_on_boot;
+
+static void dip_on_change(const dip_config_t *cfg)
+{
+    ESP_LOGI(TAG, "dip: mode=%u dev_mode=%u test_on_boot=%u dither_ovr=%u spare=%u",
+             cfg->mode, cfg->dev_mode, cfg->test_on_boot, cfg->dither_ovr, cfg->spare);
+    if (cfg->dev_mode)
+        ESP_LOGI(TAG, "dip: dev_mode is on, but the printer uuid stays Kconfig-driven this rev");
+    if (cfg->test_on_boot) s_test_on_boot = 1;
+}
+
 // ----------------------------------------------------------------- wifi
 
 static void wifi_event(void *arg, esp_event_base_t base, int32_t id, void *data)
@@ -465,6 +555,12 @@ void app_main(void)
     job_pipe_cfg_t pipe = { .out = printer_out, .dither = algo };
     ESP_ERROR_CHECK(job_pipe_init(&pipe));
 
+    // Before wifi_start, which can block up to 60s joining: the debounce
+    // settles in ~300ms, so the boot-time read is long ready by the time
+    // test_on_boot is checked below, whichever path gets there.
+    dip_config_cb_t dip_cb = { .on_change = dip_on_change, .on_test_button = test_page };
+    ESP_ERROR_CHECK(dip_config_start(&dip_cb));
+
     // No credentials, or they no longer work: become an access point and let
     // the user fix it from a phone. This is the only path a person who did not
     // build the firmware can take.
@@ -498,6 +594,12 @@ void app_main(void)
 
     webui_cfg_t wcfg = { .status_json = status_json, .captive = 0 };
     ESP_ERROR_CHECK(webui_start(&wcfg));
+
+    if (s_test_on_boot) {
+        s_test_on_boot = 0;
+        ESP_LOGI(TAG, "DIP4 was on at boot; printing a test page");
+        test_page();
+    }
 
     ESP_LOGI(TAG, "ready: %s", ipp_server_uri());
     ESP_LOGI(TAG, "settings at http://%s.local/", s_set.hostname);
