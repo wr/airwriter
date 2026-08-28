@@ -17,4 +17,5 @@ void dip_decode(uint8_t on_bits, dip_config_t *out);  // bit i = DIP(i+1) ON
 
 typedef struct { uint8_t s[3]; uint8_t n; } dip_deb_t; // 3-sample debouncer
 
+// Caller seeds *out with 0xFF (an impossible sample) so the first stable read always reports.
 int dip_stable(dip_deb_t *d, uint8_t sample, uint8_t *out); // 1 when settled+changed
