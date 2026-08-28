@@ -1,0 +1,78 @@
+<main>
+
+<div class=unit>
+
+  <div class=sec>
+    <div class=grooves></div>
+    <div class=ledge></div>
+    <div class=plate>
+      <div><h1>AirWriter</h1><p class=model id=model>&nbsp;</p></div>
+      <div class=stack>
+        <!-- Each lamp is two LEDs: the left one is state, the right one is
+             the thing that changes. -->
+        <div class=lamp><span class=bar>
+          <span class=seg id=ledfault data-tip="no fault"></span>
+          <span class="seg g" data-tip="powered"></span></span><b>error / pwr</b></div>
+        <div class=lamp><span class=bar>
+          <span class=seg id=ledlink data-tip="not on a network"></span>
+          <span class=seg id=ledact data-tip="network traffic"></span></span><b>network</b></div>
+        <div class=lamp><span class=bar>
+          <span class=seg id=ledprn data-tip="no printer"></span>
+          <span class=seg id=ledjob data-tip="idle"></span></span><b>printer / job</b></div>
+      </div>
+    </div>
+    <p class=job id=job>&nbsp;</p>
+  </div>
+
+  <div class=sec>
+    <h2>wi-fi</h2>
+    <div class="paper bars"><div class=sheet><div class=nets>
+      <div class=scroll id=rows></div></div></div></div>
+    <div id=extra></div>
+    <div class=keys style="margin-top:18px">
+      <div class=key><span class=legend>scan</span>
+        <span class=keyrow>
+          <span class="bar keylamp"><span class=seg id=scanled></span></span>
+          <span class=slot><button id=scan aria-label=Scan></button></span>
+        </span></div>
+      <div class="key is-quiet" id=joinkey><span class=legend>join</span>
+        <span class='slot momentary'><button id=join aria-label=Join disabled></button></span></div>
+    </div>
+  </div>
+
+  <div class=sec id=sec-halftone>
+    <h2>halftone</h2>
+    <div class=keys id=tabs style="margin-bottom:16px"></div>
+    <div class=paper><div class=sheet><canvas id=prev></canvas></div></div>
+  </div>
+
+  <div class=sec id=sec-printer>
+    <h2>printer</h2>
+    <div class=grid2>
+      <div><label for=devsel>model</label><select id=devsel></select></div>
+      <div><label for=host>hostname</label><input id=host autocomplete=off></div>
+    </div>
+    <div><label for=queue id=qlbl class=hide>name</label>
+      <input id=queue class=hide autocomplete=off placeholder="Printer name"></div>
+    <div class=keys style="margin-top:18px">
+      <div class=key><span class=legend>save</span>
+        <span class='slot momentary'><button id=savegen aria-label=Save></button></span></div>
+    </div>
+    <p class=say id=uri></p>
+  </div>
+
+</div>
+
+<p class=foot>
+  <a id=cups>copy printer address</a>
+  <span class=sep>&middot;</span><a id=upd>update firmware</a>
+  <span class=sep>&middot;</span><span id=ver></span>
+</p>
+<input id=fw type=file accept=.bin class=hide>
+</main>
+
+<div id=tip></div>
+
+<div id=over class=hide><div id=big></div>
+  <div id=ovt>Restarting</div><p id=ovs></p>
+  <button id=ovbtn class=q type=button>Reload</button></div>

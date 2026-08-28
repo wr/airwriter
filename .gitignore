@@ -26,3 +26,4 @@ __pycache__/
 
 # KiCad 10 auto-versioning
 .history/
+.superpowers/

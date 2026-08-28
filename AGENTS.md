@@ -28,7 +28,8 @@ docs/SPEC.md          the build spec
 ## Toolchain
 - `kicad-cli` is not on PATH. It lives at
   `/Applications/KiCad/KiCad.app/Contents/MacOS/kicad-cli` (KiCad 10.0.2).
-- ESP-IDF is not installed yet.
+- ESP-IDF v5.5.1 is at `~/esp/esp-idf`. Run `. ~/esp/esp-idf/export.sh` first, then
+  `idf.py build` from `firmware/`. Target is already set to esp32s3.
 - The `konnect` MCP tools resolve `lib_id` only against KiCad's install directory —
   they ignore project and global `sym-lib-table`. The project libraries are therefore
   symlinked into the app bundle so placement tools can see them:

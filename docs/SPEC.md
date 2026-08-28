@@ -48,7 +48,7 @@ than hand-writing s-expressions from memory.
 - A 3D render PNG for the README
 
 Two-layer, 1.6mm FR4, 1oz copper, HASL. Standard process — no controlled impedance, no
-blind vias. Outline 52 x 66mm, rectangular with 3mm corner radii and four M2
+blind vias, matte black soldermask, ENIG finish. Outline 52 x 78mm, rectangular with 3mm corner radii and four M2
 mounting holes inset 3mm from the corners.
 
 **As built: 32 x 54mm** (1728mm² against the target's 1925), rectangular, four M2 holes.
@@ -129,8 +129,11 @@ Apple's own cables were unterminated, but the pads cost nothing.
   pour, no traces under the antenna region on either layer.
 - Star-ground the DIN8 shell to signal ground through a single 0R jumper plus a footprint
   for a 1nF capacitor in parallel, so the shield strategy can be changed after testing.
-- USB-C is power only. Flashing and console go over the S3's native USB peripheral on
-  GPIO19/20 — expose those on a 4-pin 1.27mm header for bring-up.
+- **USB-C carries data as well as power.** D+ and D- go to the S3's native USB peripheral
+  on GPIO19/20 through U5, so the same cable that powers the board also flashes and
+  consoles it. Both flip orientations are tied (A6+B6, A7+B7). J3, the 4-pin 1.27mm
+  header, stays as a parallel tap on the same two nets for bring-up.
+  *Amended: the original draft made the USB-C power-only and put USB on the header alone.*
 
 ---
 
@@ -372,17 +375,31 @@ almost right, which is the worst failure mode.
    Confidence: good, not certain. Both sources are secondary (Mac serial references, not the
    ImageWriter II Technical Reference), and they document the Macintosh port rather than the
    printer specifically. The two are the same Apple serial family so the convention should
-   hold, but JP3/JP4 remain the cheap insurance.
+   hold; the firmware invert switches (`uart_set_line_inverse`) remain the cheap insurance
+   now that the solder jumpers are gone.
+
+   **2026-08-28: corroborated by the primary source.** The ImageWriter II Technical
+   Reference (`docs/reference/ImageWriter_II_Technical_Reference.pdf`) Appendix E,
+   "Transmitted Data" / "Received Data" (PDF pp. 206-207): "When no data is being
+   transmitted, the TxD- line is held in the logic 1 state", and TxD-/RxD- are "of the
+   proper polarity to serve as the single ... data line for an RS423 or an RS232
+   interface". Under the RS-232/RS-423 mark-negative convention that fixes TxD+ as the
+   non-inverting line — exactly the corrected mapping above. Status: resolved from the
+   printer's own manual; the bench check on board 1 is confirmation, not discovery.
 
    Impact is limited: the ImageWriter talks back over HSKo hardware handshaking rather than
    the serial receive path, so a wrong receiver polarity does not block M1 or M5. Bias
    resistors R6/R7 already pull A high and B low, which matches the corrected mapping.
-4. **HSKo electrical levels.** Still open, but narrowed. Appendix E of the technical
-   reference says the printer's output stage is a **26LS30**, with DTR driven from a
-   separate single-ended section of it. The 26LS30 is a dual-mode RS-422/RS-423 driver, so
-   in single-ended mode the swing is RS-423-ish rather than TTL — consistent with the
-   MAX3232 receiver assumption, but scope it before trusting it. If the swing turns out
-   modest, a divider and clamp into a GPIO deletes U3.
+4. ~~**HSKo electrical levels.** Still open, but narrowed.~~ **RESOLVED on paper
+   (2026-08-28), from the primary source.** Appendix E Figure E-3 ("Output Circuits",
+   PDF pp. 204-209) draws DTR/HSKo driven by **one half of a 26LS30 in single-ended
+   mode off ±5 V rails** shared with the TxD driver half. A ±5 V RS-423-style swing is
+   well inside the SP3232 receiver's ±25 V absolute maximum and comfortably past its
+   ~1.2-1.5 V threshold, and Appendix E's "Data Terminal Ready" text ("true (logic 0)
+   when the printer is on and able to receive data") matches the design's
+   true = logic 0 = ready sense exactly. The SP3232 receiver choice is sound; scoping
+   HSKo on board 1 is a confirmation step. (`CONFIG_AIRWRITER_INVERT_CTS` stays as the
+   insurance either way.)
 
    **The handshake timing is a hard firmware constraint.** DTR goes false when the buffer
    has room for fewer than 30 characters, and the host must stop within 27 more characters

@@ -1,0 +1,115 @@
+(footprint "EVQP44B3M_SidePress"
+	(version 20260206)
+	(generator "pcbnew")
+	(generator_version "10.0")
+	(layer "F.Cu")
+	(descr "Panasonic EVQP44B3M side-operational edge-mount tactile switch, 6.2 x 2.55 x 3.5 mm, LCSC C79164. Pads TRACED from Panasonic ANCTB27E (2016.09) page 2, \"PWB land pattern for reference\", short-push-travel variant: contacts 1/2 are 1.45 x 1.05 mm on 6.0 mm outer / 3.1 mm inner span, sitting 2.05-3.1 mm from the PWB edge; anchor tabs 3/4 are 0.6 x 0.8 mm on 7.0 outer / 5.8 inner span, 0.45-1.25 mm from the edge; push plate faces the edge. Footprint frame: +X toward the board edge, edge at x = +1.725. Tabs carry no net.")
+	(tags "tactile switch side push edge mount Panasonic EVQP4")
+	(property "Reference" "SW1"
+		(at -2.6 0 90)
+		(layer "F.SilkS")
+		(uuid "e575f393-c77b-472f-b2dc-69cae8677b04")
+		(effects
+			(font
+				(size 0.8 0.8)
+				(thickness 0.12)
+			)
+		)
+	)
+	(property "Value" "EVQP44B3M"
+		(at 0 4.5 0)
+		(layer "F.Fab")
+		(uuid "e8a28f9e-015d-411d-a729-7e424480633a")
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+		)
+	)
+	(property "Datasheet" ""
+		(at 0 0 0)
+		(layer "F.Fab")
+		(hide yes)
+		(uuid "94fbbf83-4ca6-4d63-9a22-c957a7ccdc56")
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+		)
+	)
+	(property "Description" ""
+		(at 0 0 0)
+		(layer "F.Fab")
+		(hide yes)
+		(uuid "d7bfc8e5-ff95-4e0f-9cf6-d0f199e39499")
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+		)
+	)
+	(attr smd)
+	(duplicate_pad_numbers_are_jumpers no)
+	(fp_rect
+		(start -1.625 -3.75)
+		(end 2.375 3.75)
+		(stroke
+			(width 0.05)
+			(type default)
+		)
+		(fill no)
+		(layer "F.CrtYd")
+		(uuid "0924d61d-b5c4-4214-9b6d-b8ee1dfbda62")
+	)
+	(fp_rect
+		(start -0.825 -2.85)
+		(end 1.725 2.85)
+		(stroke
+			(width 0.1)
+			(type default)
+		)
+		(fill no)
+		(layer "F.Fab")
+		(uuid "30a09cd1-516c-4b6c-b920-0f796a111875")
+	)
+	(fp_rect
+		(start 1.725 -1.3)
+		(end 2.125 1.3)
+		(stroke
+			(width 0.1)
+			(type default)
+		)
+		(fill no)
+		(layer "F.Fab")
+		(uuid "4386b911-3a09-4337-99b0-b982578c0fd7")
+	)
+	(pad "" smd rect
+		(at 0.875 -3.2)
+		(size 0.8 0.6)
+		(layers "F.Cu" "F.Mask" "F.Paste")
+		(thermal_bridge_angle 45)
+		(uuid "a50a89a9-5004-45e5-b4f7-2ab222b6c993")
+	)
+	(pad "" smd rect
+		(at 0.875 3.2)
+		(size 0.8 0.6)
+		(layers "F.Cu" "F.Mask" "F.Paste")
+		(thermal_bridge_angle 45)
+		(uuid "b1fbfa95-a86e-4d4a-af2f-d838cc5313e9")
+	)
+	(pad "1" smd rect
+		(at -0.85 2.275)
+		(size 1.05 1.45)
+		(layers "F.Cu" "F.Mask" "F.Paste")
+		(thermal_bridge_angle 45)
+		(uuid "5e8301c0-2739-4392-88c4-5b281094ae18")
+	)
+	(pad "2" smd rect
+		(at -0.85 -2.275)
+		(size 1.05 1.45)
+		(layers "F.Cu" "F.Mask" "F.Paste")
+		(thermal_bridge_angle 45)
+		(uuid "edeed9bd-5bcd-4420-ac66-65a66c0f50a9")
+	)
+	(embedded_fonts no)
+)

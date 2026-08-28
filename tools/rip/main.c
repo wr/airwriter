@@ -1,50 +1,60 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
+//
+// Host front end for the raster pipeline. The page loop itself lives in the
+// ripjob component so this tool and the firmware run the same code -- which is
+// what makes the byte-for-byte regression here mean something for the device.
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include "urf_decode.h"
-#include "resample.h"
-#include "halftone.h"
-#include "imagewriter.h"
+#include "ripjob.h"
 #include "png_write.h"
 
-#define DPI_X 144
-#define DPI_Y  72
+typedef struct {
+    FILE    *stream;
+    int      write_failed;
+    uint8_t *preview;          // dst_w * dst_h of page 1, or NULL
+    uint32_t dst_w, dst_h;
+} host_t;
 
 static int file_read(void *ctx, uint8_t *buf, size_t n)
 {
     return fread(buf, 1, n, (FILE *)ctx) == n;
 }
 
-typedef struct {
-    ht_t     ht;
-    iw_t     iw;
-    FILE    *stream;
-    uint8_t *bits;
-    uint8_t *preview;      // dst_w * dst_h, grown as rows arrive
-    uint32_t dst_w, dst_h, prev_y;
-    int      write_failed;
-} pipe_t;
-
 static void stream_out(void *ctx, const uint8_t *b, size_t n)
 {
-    pipe_t *p = (pipe_t *)ctx;
-    if (p->stream && fwrite(b, 1, n, p->stream) != n) p->write_failed = 1;
+    host_t *h = (host_t *)ctx;
+    if (h->stream && fwrite(b, 1, n, h->stream) != n) h->write_failed = 1;
 }
 
-/* One resampled row: halftone it, feed the printer, record the preview. */
-static void on_row(void *ctx, const uint8_t *row, uint32_t w)
+static void say(void *ctx, const char *msg)
 {
-    pipe_t *p = (pipe_t *)ctx;
-    ht_row(&p->ht, row, p->bits);
-    iw_row(&p->iw, p->bits);
+    (void)ctx;
+    fprintf(stderr, "rip: %s\n", msg);
+}
 
-    if (p->preview && p->prev_y < p->dst_h) {
-        uint8_t *dst = p->preview + (size_t)p->prev_y * w;
-        for (uint32_t x = 0; x < w; x++)
-            dst[x] = (p->bits[x >> 3] & (0x80 >> (x & 7))) ? 0 : 255;
-        p->prev_y++;
-    }
+/* Only page 1 is previewed. ripjob reports the geometry before any row of that
+ * page arrives, which is when the buffer can be sized. */
+static int on_page(void *ctx, int index, uint32_t dst_w, uint32_t dst_h)
+{
+    host_t *h = (host_t *)ctx;
+    if (index != 0) return 0;
+
+    h->dst_w = dst_w;
+    h->dst_h = dst_h;
+    h->preview = calloc((size_t)dst_w * dst_h, 1);
+    return h->preview ? 0 : -1;
+}
+
+static void on_row(void *ctx, const uint8_t *bits, uint32_t w, uint32_t y)
+{
+    host_t *h = (host_t *)ctx;
+    if (!h->preview || y >= h->dst_h || w != h->dst_w) return;
+
+    uint8_t *dst = h->preview + (size_t)y * w;
+    for (uint32_t x = 0; x < w; x++)
+        dst[x] = (bits[x >> 3] & (0x80 >> (x & 7))) ? 0 : 255;
 }
 
 static void usage(void)
@@ -89,116 +99,40 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    pipe_t p;
-    memset(&p, 0, sizeof p);
-    p.stream = out_stream ? fopen(out_stream, "wb") : NULL;
-    if (out_stream && !p.stream) { perror(out_stream); fclose(f); return 1; }
+    host_t h;
+    memset(&h, 0, sizeof h);
+    h.stream = out_stream ? fopen(out_stream, "wb") : NULL;
+    if (out_stream && !h.stream) { perror(out_stream); fclose(f); return 1; }
 
-    int pages = 0;
-    while ((rc = urf_next_page(&u)) == URF_OK) {
-        if (u.page.bits_per_pixel != 8 || u.page.num_colors != 1) {
-            fprintf(stderr, "rip: page %d is %u bpp / %u colours; only 8-bit "
-                            "grayscale is supported\n",
-                    pages + 1, u.page.bits_per_pixel, u.page.num_colors);
-            rc = -1;
-            break;
-        }
+    ripjob_cfg_t cfg = {
+        .out      = stream_out,
+        .out_ctx  = &h,
+        .dither   = algo,
+        .page     = out_preview ? on_page : NULL,
+        .page_ctx = &h,
+        .row      = out_preview ? on_row : NULL,
+        .row_ctx  = &h,
+        .log      = say,
+    };
 
-        uint32_t res    = u.page.res_x ? u.page.res_x : DPI_X;
-        uint32_t full_w = (uint32_t)((uint64_t)u.page.width * DPI_X / res);
+    ripjob_stats_t st;
+    memset(&st, 0, sizeof st);
 
-        // SPEC.md 3.5 declares a 0.25in left/right margin to iOS, so the
-        // outermost res/4 source pixels per side are white by construction.
-        // A page wider than the printer's 8in / 1152 dots is US Letter
-        // (8.5in) arriving at full bleed; crop the margin instead of
-        // squashing the whole page down to fit.
-        uint32_t src_w = u.page.width, crop_left = 0, crop_per_side = 0;
-        if (full_w > IW_MAX_DOTS) {
-            uint32_t shortfall_dst  = full_w - IW_MAX_DOTS;
-            uint32_t shortfall_src  = (uint32_t)((uint64_t)shortfall_dst * res / DPI_X);
-            uint32_t max_per_side   = res / 4;             // 0.25in in source px
-            crop_per_side = shortfall_src / 2;
-            if (crop_per_side > max_per_side) crop_per_side = max_per_side;
-            crop_left = crop_per_side;
-            src_w = u.page.width - 2 * crop_per_side;
-        }
+    rc = ripjob_run(&u, &cfg, &st);
 
-        p.dst_w = (uint32_t)((uint64_t)src_w * DPI_X / res);
-        p.dst_h = (uint32_t)((uint64_t)u.page.height * DPI_Y / res);
+    if (h.preview && png_write_gray(out_preview, h.preview, h.dst_w, h.dst_h))
+        fprintf(stderr, "rip: could not write %s\n", out_preview);
 
-        int still_wide = 0;
-        if (p.dst_w > IW_MAX_DOTS) {
-            p.dst_w = IW_MAX_DOTS;
-            still_wide = 1;
-        }
-        if (crop_per_side || still_wide) {
-            fprintf(stderr, "rip: page %d width %u dots exceeds %u; cropped %u "
-                            "source px per side (0.25in margin)%s\n",
-                    pages + 1, full_w, (unsigned)IW_MAX_DOTS, crop_per_side,
-                    still_wide ? ", still scaled to fit" : "");
-        }
-        if (!p.dst_w || !p.dst_h) { fprintf(stderr, "rip: empty page\n"); rc = -1; break; }
-
-        /* From here on, every failure jumps to page_cleanup instead of
-         * breaking directly, so nothing allocated for this page is ever
-         * leaked and ht_free/rs_free only run on state that was actually
-         * initialised. */
-        int  ht_ready = 0, rs_ready = 0;
-        rs_t rs;
-
-        p.bits    = calloc((p.dst_w + 7) / 8, 1);
-        p.prev_y  = 0;
-        p.preview = out_preview ? calloc((size_t)p.dst_w * p.dst_h, 1) : NULL;
-        if (!p.bits || (out_preview && !p.preview)) { rc = -1; goto page_cleanup; }
-
-        if (ht_init(&p.ht, algo, p.dst_w)) { rc = -1; goto page_cleanup; }
-        ht_ready = 1;
-        iw_init(&p.iw, p.dst_w, stream_out, &p);
-        iw_begin_page(&p.iw);
-
-        if (rs_init(&rs, src_w, u.page.height, p.dst_w, p.dst_h, on_row, &p)) {
-            rc = -1; goto page_cleanup;
-        }
-        rs_ready = 1;
-
-        {
-            const uint8_t *row;
-            int r;
-            // 8-bit grayscale, one byte per pixel: the pointer offset is the
-            // pixel offset.
-            while ((r = urf_next_row(&u, &row)) == URF_OK) rs_push(&rs, row + crop_left);
-            if (r < 0) {
-                fprintf(stderr, "rip: page %d incomplete, stream is truncated\n", pages + 1);
-                rc = r;
-            } else {
-                iw_end_page(&p.iw);
-                if (p.write_failed) {
-                    fprintf(stderr, "rip: short write to %s\n", out_stream);
-                    rc = -1;
-                }
-            }
-        }
-
-page_cleanup:
-        if (rs_ready) rs_free(&rs);
-        if (ht_ready) ht_free(&p.ht);
-
-        if (p.preview && rs_ready && pages == 0) {
-            if (png_write_gray(out_preview, p.preview, p.dst_w, p.dst_h))
-                fprintf(stderr, "rip: could not write %s\n", out_preview);
-        }
-        free(p.preview); p.preview = NULL;
-        free(p.bits);    p.bits    = NULL;
-
-        pages++;
-        if (rc < 0) break;
+    if (h.stream) fclose(h.stream);
+    if (h.write_failed) {
+        fprintf(stderr, "rip: short write to %s\n", out_stream);
+        rc = -1;
     }
-
-    if (p.stream) fclose(p.stream);
+    free(h.preview);
     urf_free(&u);
     fclose(f);
 
     if (rc < 0) return 1;
-    fprintf(stderr, "rip: %d page%s\n", pages, pages == 1 ? "" : "s");
+    fprintf(stderr, "rip: %d page%s\n", st.pages, st.pages == 1 ? "" : "s");
     return 0;
 }

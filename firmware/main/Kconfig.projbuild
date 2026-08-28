@@ -1,0 +1,100 @@
+menu "AirWriter"
+
+config AIRWRITER_WIFI_SSID
+    string "WiFi SSID"
+    default ""
+    help
+        Development credentials only. They land in sdkconfig, which is
+        gitignored. Improv-over-BLE provisioning replaces this in M6, and
+        credentials stored in NVS already take precedence over this value.
+
+config AIRWRITER_WIFI_PASSWORD
+    string "WiFi password"
+    default ""
+
+config AIRWRITER_QUEUE_NAME
+    string "Print queue name"
+    default "ImageWriter II"
+    help
+        What the iOS print sheet shows. This is the printer's name, not the
+        bridge's: AirWriter is the dongle, and a user picking a printer is
+        looking for the machine the paper comes out of.
+
+config AIRWRITER_DEV_MODE
+    bool "Development mode"
+    default y
+    help
+        Regenerates printer-uuid on every boot. iOS caches printer
+        capabilities against the UUID aggressively, and with a stable UUID a
+        changed media list or URF string can take an afternoon to show up.
+        Turn this off for a real device: a UUID that moves makes the printer
+        appear as a new queue after every reboot.
+
+config AIRWRITER_UART_NUM
+    int "Printer UART port"
+    default 1
+
+config AIRWRITER_TX_PIN
+    int "Printer TX pin"
+    default 17 if IDF_TARGET_ESP32S3
+    default 4
+    help
+        Board net UART_TX. On the AirWriter PCB this is IO17 into the
+        MAX3490's DI. Devkits without a transceiver can use anything.
+
+config AIRWRITER_RX_PIN
+    int "Printer RX pin"
+    default 18 if IDF_TARGET_ESP32S3
+    default 5
+
+config AIRWRITER_CTS_PIN
+    int "Printer CTS pin (the printer's HSKo), -1 to disable"
+    default 8 if IDF_TARGET_ESP32S3
+    default -1
+    help
+        Board net UART_CTS, IO8, fed by the MAX3232 receiver. With this wired
+        the UART peripheral stalls its own FIFO when the printer is busy, and
+        the same line doubles as the paper sensor.
+
+config AIRWRITER_BAUD
+    int "Printer baud rate"
+    default 9600
+
+config AIRWRITER_INVERT_TX
+    bool "Invert the transmit line"
+    default n
+    help
+        Insurance for the differential polarity, which is resolved from
+        secondary sources but not yet confirmed against hardware. Inverting DI
+        swaps Y and Z together and is electrically identical to swapping the
+        pair. SPEC.md 2.4, assumption 3.
+
+config AIRWRITER_INVERT_RX
+    bool "Invert the receive line"
+    default n
+
+config AIRWRITER_INVERT_CTS
+    bool "Invert the CTS (printer HSKo) line"
+    default n
+    help
+        Insurance for the handshake polarity. The board expects HSKo asserted
+        (printer ready) to reach IO8 as logic LOW through the SP3232
+        receiver. If a scope on the real printer shows the opposite, turn
+        this on: it flips both the UART peripheral's CTS sense and the
+        watchdog's paper sensor. SPEC.md 3.9.
+
+config AIRWRITER_STALL_TIMEOUT
+    int "Seconds of HSKo deassertion before the printer is called out of paper"
+    default 30
+
+config AIRWRITER_UART_LOOPBACK
+    bool "Loop the printer UART back on itself"
+    default y if !IDF_TARGET_ESP32S3
+    default n
+    help
+        Feeds TX straight back into RX inside the peripheral so the whole path
+        can be checked on a devkit with no transceiver attached. The received
+        bytes are checksummed and compared with what was sent. Never enable
+        this on a real board: nothing reaches the printer.
+
+endmenu

@@ -1,0 +1,61 @@
+import json, pathlib, unittest
+from floors import WARN, check_floors, check_mask_ridges, class_gap, knockout_glyphs
+
+SQUARE = lambda x0, y0, x1, y1: dict(
+    outline=[[x0, y0], [x1, y0], [x1, y1], [x0, y1]], holes=[])
+
+class TestFloors(unittest.TestCase):
+    def test_warn_band_gap_triggers(self):
+        # Two 1x1mm squares 0.05mm apart - inside the 0.02-0.101mm warn band.
+        a, b = SQUARE(0, 0, 1, 1), SQUARE(1.05, 0, 2.05, 1)
+        warnings = check_floors({"test": [a, b]})
+        self.assertTrue(any("gap" in w for w in warnings), warnings)
+
+    def test_sub_ignore_gap_is_silent(self):
+        # 0.005mm apart - below the ignore floor, reads as a designed touch.
+        a, b = SQUARE(0, 0, 1, 1), SQUARE(1.005, 0, 2.005, 1)
+        warnings = check_floors({"test": [a, b]})
+        self.assertEqual(warnings, [])
+
+    def test_real_panel_reports_known_subtitle_pinch(self):
+        here = pathlib.Path(__file__).parent
+        classes = {name: json.loads((here / f"{name}.polys.json").read_text())
+                   for name in ("gold", "silk", "fr4")}
+        warnings = check_floors(classes)
+        pinches = [w for w in warnings if w.startswith("gold pinch")]
+        self.assertTrue(pinches, warnings)
+        # The known microprint pinch sits near x=6.87, y=83.93 (subtitle glyph
+        # counter close to its own outline) - allow a couple mm of slack since
+        # the exact sample point depends on svg2poly's curve sampling.
+        self.assertTrue(
+            any(abs(float(w.split("x ")[1].split(",")[0]) - 6.87) < 2
+                and abs(float(w.split("y ")[1]) - 83.93) < 2
+                for w in pinches),
+            pinches)
+
+    def test_knockout_glyphs_finds_only_the_test_tag(self):
+        # The test tag ("test", 4 letters) is the only ink fully inside a
+        # gold-family dot's disc - everything else (wordmark, subtitle, bottom
+        # labels) sits well outside any dot. Frame 9b draws the tag in #111111
+        # instead of white, so this also guards the generate.sh fill list.
+        here = pathlib.Path(__file__).parent
+        silk = json.loads((here / "silk.polys.json").read_text())
+        layout = json.loads((here / "panel_layout.json").read_text())
+        glyphs = knockout_glyphs(silk, layout)
+        self.assertEqual(len(glyphs), 4, glyphs)
+
+    def test_mask_ridge_of_the_test_tag_clears_the_warn_band(self):
+        # The ridge is the kept mask between two letter strokes, and it is the
+        # narrowest feature on the panel's front face. Frame 9b redrew the tag
+        # with wider spacing, so the check now asserts the measurement rather
+        # than the warning: the old art sat at 0.089mm, inside the warn band,
+        # and this one has to stay clear of it.
+        here = pathlib.Path(__file__).parent
+        silk = json.loads((here / "silk.polys.json").read_text())
+        layout = json.loads((here / "panel_layout.json").read_text())
+        glyphs = knockout_glyphs(silk, layout)
+        self.assertEqual(len(glyphs), 4, glyphs)
+        ridge = class_gap(glyphs)
+        self.assertIsNotNone(ridge)
+        self.assertGreater(ridge[0], WARN, f"mask ridge back in the warn band: {ridge}")
+        self.assertEqual(check_mask_ridges(glyphs), [])

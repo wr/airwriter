@@ -1,0 +1,27 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(rm *)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(git push *)",
+      "Bash(/Applications/KiCad/KiCad.app/Contents/MacOS/kicad-cli *)",
+      "Bash(idf.py build *)",
+      "Bash(idf.py set-target *)",
+      "Bash(idf.py --version)",
+      "Bash(source ~/esp/esp-idf/export.sh)",
+      "Bash(source ~/esp/esp-idf/export.sh *)",
+      "Bash(make)",
+      "Bash(make test *)",
+      "Bash(make clean *)",
+      "Bash(make regress *)",
+      "Bash(make -C tools/rip *)",
+      "Bash(make build/rip *)",
+      "Bash(open *)",
+      "Bash(sips *)",
+      "Bash(rsvg-convert *)",
+      "Bash(ipptool *)",
+      "mcp__konnect"
+    ]
+  }
+}

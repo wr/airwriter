@@ -1,0 +1,367 @@
+
+@font-face{font-family:'Apple Garamond';font-style:normal;font-weight:300;font-display:swap;src:url(data:font/woff2;base64,d09GMgABAAAAAAU8AAsAAAAACSwAAATuAAIAAAAAAAAAAAAAAAAAAAAAAAAAAAAABk4AVAqJRIdsATYCJAMcEzYLEAAEIAWECAcgG4EHo6JmL0p4mL9K4Ml4NZ4RohJf1A3UNtP/VVXVMmAcMmTYk04gnDcYuPTF/Xj4//vY73PebZgHDizLs8CbqTCwlqeBTcuHUeDrFzqDdVYySiYZbTf1Gker14OwxLRn6cmpcwuSB9r50xKk+TMWBSqzUaU3l7ygF6jKC2ZeezUZemHE0Q9N14D/AlT/72o6f7HjBOzN88QCThOana6b5ndctkVjvcVuDPObowXpOqyXZxZZgDkmkE4V1ZR4TydxzAsuJDxAHMNVRPz5I1aJY1CCVmq92FYR/MNc3IwbD0qVI3dXZDXolvmM0AkMa44kRvVLvQ4tGGVz1H8W3tFvY/nltKbVIDf1OTOKAeKN+M8tDYacEHfm/USsEtOU6/Thu2I5M9dlZkJIzEn8Akj3W0Ceo0MWia1TRg4kU6DslXzW9GxnR5FgHdLMj6tbRgZPcsq3wdk1P5/q7pxJtXbk03vnbrNXK4Z1STNmWXt3MCK2HTv0hteeDdnA6Y46dh696Lh9/bbuzo071EvHtmURWev324sunrwLyaU364EN1E2QjR3JIFkflWYC6VQwpsmb+6h7aMKo38fgyurU9PS5msVMks8RSEaG35aRA5vSbZueZHoFPUmdk0YCdxtS3vH1AA1nwQk5UTi0KXcd00xT0hgyaclGk0GOhvfnxDTWJS+PKSbSgGJ5f0wrs+7OM057tl52NmBGmfshGYWtId3aHyWjALH391ccNFuKTfYIp+YhTUc+ZvVJikL2vt6ncP03h7RpI0q9o0e2iJSUfbd2E42K85jDY1g0JXzeuafe5g+YiqpUSOstCW2W+5hTVPa93ENUisdb7AMDsE2VXzVoM9H/7tNlEXnbvq0uijUqm58PSZK3CFjfM1C4NQ9phnTGbvGgsm2n9hHLr/FHa/vLtGxwBQq0pg0cKdNO7Mhbq/P7HIGhi58ZwQU97AEXaEiTYZMj4xqH9QztUrmSq3Nwg/D4qHWz2lGM+F/7SkMjls23tSznbKOCAR6tJWPNNb1FIOtpnKIOUTpw7OJggtbg0OhAltohAqM5mEbagyMl3BdjroFmBdN2UEWUZow+3wQjSXpxySK7hpwWMSKoH1Z4FnpaNSjqd73s6Tcely/hUKW+VPn99RNRmzB20Jma5azACwhM/20oAnqz6y2WdV1uRLivqTW2xAaG+9+KWOAPKd3VMi2iSCO5OW4sC7iC3ExuRMDvVu8oimtUW/Ox9PPkxRW4Ulk1VIm5B1OLQhu3u/FRN4aEem0TxUySGDOtThxvCGV/6HgtDehgj7uDmSrN23Gj3b34PUfH1bsCRUKnyoiz1hh0PXZ4AALJ9WnU3Vuv8WNn/h6e7v4jRnWNzdpuGRfBQq1YATkLk26+IPEF6fNNPtbHPS4XjS8yYQMWdqnXCByAes3jDAtZx0Ctzgu9dVKKuqZppkiifCD6PEDuCCVTeW0+kYsmA16BPzTs20/TqH+0c+sbbSLaY3NDnu21vSXqC6LXRhGkA1BWVVV/PGH62sGDByJiVgw7MnTIXsHGAPt571i9MB72BzfsZXDQFIliyGHqsiyJlGRiBTACLHEl5oNvDz0OpBiFAxEb1uqK4qVngMaQrZQq55vKtEiOPUYLJytSD8TRHREwdEMQAAdSfBQ2M97pcOzrVoJBOSnKqE4SSdsZERTlPFCtkQIAAAA=) format('woff2')}
+@font-face{font-family:'Univers Condensed';font-style:italic;font-weight:300;font-display:swap;src:url(data:font/woff2;base64,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) format('woff2')}
+@font-face{font-family:'Univers Condensed';font-style:italic;font-weight:400;font-display:swap;src:url(data:font/woff2;base64,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) format('woff2')}
+
+/* ═══════════════════════════════════════════════════════════════════
+   AirWriter — Snow White (frog design for Apple, 1984-90)
+
+   Everything below is expressed in tokens. No rule carries a literal
+   size, colour or metric of its own; if a value appears twice it is a
+   token. Apple set product names in Apple Garamond and hardware
+   legends in Univers Light Condensed Oblique — Garamond is bundled,
+   Barlow Semi Condensed Italic stands in for Univers.
+   ═══════════════════════════════════════════════════════════════════ */
+:root{
+  /* ── type ─────────────────────────────────────────────────────── */
+  --font-display:'Apple Garamond','Hoefler Text',Palatino,Georgia,serif;
+  --font-ui:'Univers Condensed','Helvetica Neue Condensed','Helvetica Neue',Helvetica,Arial,sans-serif;
+  /* Paper is fixed pitch and aliased. Menlo has the weight to survive with
+     no antialiasing where Courier goes spindly, and the columns line up.
+     Univers is a case legend -- never something a printer put on a page. */
+  --font-paper:Menlo,Monaco,'Courier New',monospace;
+  --size-display:54px;   /* the nameplate, and only the nameplate */
+  --size-text:18px;      /* one size for every word in the interface */
+  --weight-text:300;     /* Univers Light Condensed Italic */
+  --lead-tight:1.2;
+  --lead-body:1.55;
+  --track:.25px;
+  --size-paper:16px;     /* fixed pitch runs large; hold it a step down */
+
+  /* ── space ────────────────────────────────────────────────────── */
+  --sp-1:4px; --sp-2:7px; --sp-3:11px; --sp-4:16px; --sp-5:22px; --sp-6:30px;
+  --pad-sec:29px;
+
+  /* ── material ─────────────────────────────────────────────────── */
+  --desk:#d3d1c9;        /* the surface the unit sits on */
+  --case:#e9e7e0;        /* case plastic */
+  --hi:#faf9f5;          /* lit edge of a moulding */
+  --lo:#c0bdb3;          /* shadowed edge */
+  --seam:#bcb9ae;        /* where two mouldings meet */
+  --hair:#dcd9d0;        /* a scored line */
+  --ink:#211f1a;
+  --dim:#7e7b72;
+  --slot-wall:#e0ddd3;   /* the lit wall at the top of a housing */
+  --slotbg:#bab7ac;      /* the shadow at the bottom of a housing */
+  --keyface:#f4f2ec; --keyhover:#faf9f4; --keydown:#eeece6; --keyoff:#efece5;
+  --lamp-body:#9d9a8f;
+  --paper:#fff; --paper-bar:#e7efe4; --paper-edge:#c9c6bb; --paper-perf:#b9b6ab;
+  /* Paper does not invert with the colour scheme. Ink on a page is dark in a
+     dark room too, so these are deliberately the same in both. */
+  --paper-ink:#1b1a17; --paper-dim:#6f6c64;
+  /* Lit plastic, not painted plastic: a saturated body, a core the light
+     blows out to near white, and a little of it spilling onto the case. */
+  --lamp-green:#33bf1f; --lamp-green-top:#5cdc3c; --lamp-green-core:#9df07a;
+  --lamp-red:#cf2f26;   --lamp-red-top:#e8564a;   --lamp-red-core:#f2887a;
+  --lamp-amber:#d4931a; --lamp-amber-top:#eeb440; --lamp-amber-core:#f7cf80;
+  --glow-green:rgba(70,215,40,.34);
+  --glow-red:rgba(215,60,45,.30);
+  --glow-amber:rgba(220,160,30,.30);
+
+  /* ── controls ─────────────────────────────────────────────────── */
+  --r-panel:2px; --r-control:2px; --r-hair:1px;
+  --lamp-w:100px; --lamp-h:15px;
+  --key-w:var(--lamp-w); --key-h:var(--lamp-h); --key-travel:16px;
+  --gap-press:0px;       /* nothing of the housing shows above a cap */
+  --press-down:110ms;    /* a key goes down faster than it comes back */
+  --press-up:260ms;
+  --press-over:4px;      /* over-travel held while the finger is down */
+  /* How far a cap moves. A latching key runs its full travel and seats in the
+     detent; a momentary one only breaks contact, so it goes about halfway. */
+  --travel-latch:calc(var(--key-travel) + 1px - var(--gap-press) - var(--press-below));
+  --travel-over:calc(var(--travel-latch) + var(--press-over));
+  --travel-momentary:calc(var(--travel-over) / 4);
+  --press-ease:cubic-bezier(.2,.9,.3,1);
+  --press-below:6px;     /* it still stands proud by this much */
+  --slot-h:calc(var(--key-h) + var(--key-travel) + 1px);   /* 1px stays visible */
+  --field-h:34px;
+  --row-h:42px;
+  --icon:16px;
+  --feed-w:24px;         /* the tractor strip down each edge */
+  --hole:13px; --hole-pitch:26px;
+  --vent-h:88px; --vent-pitch:19px; --vent-line:2.6px;   /* slot : pitch about 1:7 */
+  --ledge-h:10px;
+
+  /* ── elevation ────────────────────────────────────────────────── */
+  --lift-key:0 1px 2px rgba(0,0,0,.18);
+  --lift-unit:0 2px 5px rgba(0,0,0,.15);
+  --sink-slot:inset 0 -2px 2px rgba(0,0,0,.13), inset 0 -3px 3px rgba(0,0,0,.18);
+  --sink-field:inset 0 1px 2px rgba(0,0,0,.08);
+  --edge-cap:inset 0 1px 0 rgba(255,255,255,.85);   /* a raised cap catches light */
+}
+@media(prefers-color-scheme:dark){:root{
+  --desk:#0f0e0c; --case:#1d1c19; --hi:#2a2925; --lo:#0c0b0a;
+  --seam:#33322c; --hair:#282722; --ink:#eceae3; --dim:#8a877e;
+  --slot-wall:#1b1a15; --slotbg:#070603;
+  --keyface:#2a2921; --keyhover:#333125; --keydown:#252420; --keyoff:#232219;
+  --lamp-body:#302f28;
+  --paper:#ded9cd; --paper-bar:#cdd9c8; --paper-edge:#a9a49a; --paper-perf:#918d84;
+}}
+
+/* ── base ───────────────────────────────────────────────────────── */
+*{box-sizing:border-box}
+/* iOS paints its own grey wash over anything tapped and offers to select the
+   text inside it. A moulded key does neither. */
+button,.key,.legend,.n,.foot a,.say a,.bar{
+  -webkit-tap-highlight-color:transparent;
+  -webkit-touch-callout:none;
+  -webkit-user-select:none;user-select:none}
+body{margin:0;padding:var(--sp-6) var(--sp-4) calc(var(--sp-6)*2);
+  background:var(--desk);color:var(--ink);
+  font:italic var(--weight-text) var(--size-text)/var(--lead-body) var(--font-ui);
+  letter-spacing:var(--track);
+  -webkit-text-size-adjust:100%;
+  display:flex;flex-direction:column;align-items:center}
+main{width:100%;max-width:42rem}
+.hide{display:none!important}
+
+/* ── the unit ───────────────────────────────────────────────────── */
+.unit{background:var(--case);border-radius:var(--r-panel);
+  box-shadow:0 0 0 1px var(--seam), 0 1px 0 var(--hi) inset,
+             0 -1px 0 var(--lo) inset, var(--lift-unit)}
+.sec{padding:var(--pad-sec);border-top:1px solid var(--seam);overflow:hidden}
+.sec:first-child{border-top:0}
+.ledge{height:var(--ledge-h);margin:0 calc(var(--pad-sec)*-1) var(--sp-5);
+  border-top:1px solid var(--seam);
+  background:linear-gradient(180deg,rgba(0,0,0,.20) 0,rgba(0,0,0,.05) 40%,
+             var(--hi) 52%,var(--case) 100%)}
+
+/* vents: 2 mm slots on 10 mm centres, tapered at both ends */
+.grooves{height:var(--vent-h);margin:var(--sp-4) 0;
+  background:repeating-linear-gradient(to right,
+    transparent 0 calc(var(--vent-pitch) - var(--vent-line) - 1.2px),
+    rgba(0,0,0,.40) calc(var(--vent-pitch) - var(--vent-line) - 1.2px)
+                   calc(var(--vent-pitch) - 1.2px),
+    rgba(255,255,255,.8) calc(var(--vent-pitch) - 1.2px) var(--vent-pitch));
+  /* after the shorthand, which resets it */
+  background-position:50% 50%;
+  -webkit-mask-image:linear-gradient(to bottom,transparent 0,#000 7%,#000 93%,transparent);
+  mask-image:linear-gradient(to bottom,transparent 0,#000 7%,#000 93%,transparent)}
+
+/* ── nameplate and lamps ────────────────────────────────────────── */
+.plate{display:flex;align-items:flex-start;justify-content:space-between;gap:var(--sp-5)}
+h1{margin:0;font:normal 300 var(--size-display)/.9 var(--font-display);
+  letter-spacing:normal;text-shadow:0 1px 0 var(--hi)}
+.model{margin:var(--sp-1) 0 0;font-size:var(--size-text);color:var(--dim);
+  line-height:var(--lead-tight);text-shadow:0 1px 0 var(--hi)}
+
+/* The stack is the grid, not each lamp: separate grids line their own
+   columns up independently, so the bars drift as the legends change width. */
+.stack{display:grid;grid-template-columns:var(--lamp-w) auto;
+  gap:var(--sp-3);align-items:center;padding-top:var(--sp-1);
+  justify-content:end}
+.lamp{display:contents}
+.lamp b{font-weight:var(--weight-text);font-size:var(--size-text);line-height:var(--lead-tight);
+  color:var(--ink);opacity:.78;white-space:nowrap;text-align:right}
+/* an LED behind an acrylic pipe */
+.bar{position:relative;width:var(--lamp-w);height:var(--lamp-h);display:flex;
+  overflow:hidden;border-radius:var(--r-hair);background:var(--lamp-body);
+  box-shadow:0 1px 0 rgba(255,255,255,.75)}
+.bar .seg{position:relative;flex:1;overflow:hidden;background:var(--lamp-body)}
+/* Two LEDs, not one long one: a moulding line between them so the pair still
+   reads as two when both are lit or both are dark. */
+.bar .seg + .seg{box-shadow:inset 1px 0 0 rgba(0,0,0,.30),
+                             inset 2px 0 0 rgba(255,255,255,.16)}
+.bar .seg:before{content:'';position:absolute;left:50%;top:48%;
+  width:62%;height:190%;margin:0;transform:translate(-50%,-50%);
+  border-radius:50%;filter:blur(5px);opacity:.55}
+.bar .seg.g{background:linear-gradient(180deg,var(--lamp-green-top),var(--lamp-green))}
+.bar .seg.g:before{background:var(--lamp-green-core)}
+.bar .seg.r{background:linear-gradient(180deg,var(--lamp-red-top),var(--lamp-red))}
+.bar .seg.r:before{background:var(--lamp-red-core)}
+.bar .seg.a{background:linear-gradient(180deg,var(--lamp-amber-top),var(--lamp-amber))}
+.bar .seg.a:before{background:var(--lamp-amber-core)}
+/* the activity LED: lit only while packets are moving */
+.bar .seg.act{background:linear-gradient(180deg,var(--lamp-green-top),var(--lamp-green))}
+.bar .seg.act:before{background:var(--lamp-green-core)}
+.bar .seg.act-a{background:linear-gradient(180deg,var(--lamp-amber-top),var(--lamp-amber))}
+.bar .seg.act-a:before{background:var(--lamp-amber-core)}
+/* the moulded top edge of the pipe, and nothing darkening the bottom */
+.bar:after{content:'';position:absolute;inset:0;pointer-events:none;
+  background:linear-gradient(rgba(255,255,255,.30) 0,rgba(255,255,255,.05) 34%,
+             rgba(255,255,255,0) 60%)}
+/* light spilling onto the case around the pipe */
+.lamp.on .bar{box-shadow:0 0 9px -1px var(--glow-green), 0 1px 0 rgba(255,255,255,.75)}
+.lamp.err .bar{box-shadow:0 0 9px -1px var(--glow-red), 0 1px 0 rgba(255,255,255,.75)}
+.lamp.amber .bar{box-shadow:0 0 9px -1px var(--glow-amber), 0 1px 0 rgba(255,255,255,.75)}
+
+/* ── tooltip ────────────────────────────────────────────────────────
+   Rendered on the body, not inside the lamp: the pipe clips its own
+   contents to keep the LED bloom inside the plastic. */
+#tip{position:fixed;z-index:20;pointer-events:none;opacity:0;
+  transform:translate(-50%,-100%);transition:opacity .12s;
+  padding:5px 9px;border-radius:var(--r-hair);
+  background:var(--ink);color:var(--case);white-space:nowrap;
+  font:italic var(--weight-text) calc(var(--size-text) - 2px)/1 var(--font-ui);
+  box-shadow:0 2px 6px rgba(0,0,0,.28)}
+#tip.on{opacity:1}
+[data-tip]{cursor:help}
+
+.job{margin:var(--sp-4) 0 0;color:var(--dim)}
+.n .ip{color:var(--paper-dim);white-space:nowrap;font:inherit}
+.n[aria-selected=true] .ip{color:var(--paper)}
+
+/* ── headings, labels, fields ───────────────────────────────────── */
+h2{margin:0 0 var(--sp-3);font-weight:var(--weight-text);font-size:var(--size-text);
+  line-height:1;color:var(--dim);text-align:right}
+label{display:block;margin:var(--sp-3) 0 var(--sp-1);font-size:var(--size-text);
+  line-height:1;color:var(--dim)}
+input,select{width:100%;height:var(--field-h);padding:0 var(--sp-3);
+  font:inherit;color:var(--ink);background:var(--case);
+  border:1px solid var(--seam);border-radius:var(--r-hair);
+  -webkit-appearance:none;appearance:none;box-shadow:var(--sink-field)}
+input:focus,select:focus{outline:0;border-color:var(--ink)}
+select{padding-right:var(--sp-6);background-repeat:no-repeat;background-size:5px 5px;
+  background-position:calc(100% - 17px) 15px,calc(100% - 12px) 15px;
+  background-image:linear-gradient(45deg,transparent 50%,var(--dim) 50%),
+                   linear-gradient(135deg,var(--dim) 50%,transparent 50%)}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:0 var(--sp-3)}
+#extra{margin:0 var(--feed-w)}
+#extra input{background:var(--paper);color:var(--paper-ink);letter-spacing:0;
+  font:normal 400 var(--size-paper)/1 var(--font-paper);
+  -webkit-font-smoothing:none;font-smooth:never}
+.say{margin:var(--sp-3) 0 0;color:var(--dim)}
+.say a{color:var(--ink);cursor:pointer;border-bottom:1px solid var(--seam)}
+
+/* ── keys ───────────────────────────────────────────────────────────
+   One component, everywhere. A cap in a moulded housing with its legend
+   printed on the case above it. Pressing shortens the housing so the cap
+   sinks flush; the bottom edge never moves, so no row ever shifts.
+     rest · pressed · latched (a press that stays) · disabled              */
+.keys{display:flex;gap:var(--sp-3);align-items:flex-end;justify-content:flex-end}
+.key{display:flex;flex-direction:column;align-items:flex-end;gap:0;min-width:0}
+.keyrow{display:flex;align-items:flex-end;gap:var(--sp-2)}
+.keylamp{width:calc(var(--lamp-w)/2);height:var(--lamp-h);flex:0 0 auto}
+.key>.legend{font-size:var(--size-text);line-height:var(--lead-tight);color:var(--ink);
+  opacity:.72;text-align:right;white-space:nowrap;padding-right:.08em;
+  cursor:pointer;transition:opacity .1s}
+.key.is-lit>.legend{opacity:1}
+.key.is-quiet>.legend{opacity:.3;cursor:default}
+
+.slot{position:relative;width:var(--key-w);height:var(--slot-h);margin-top:0;
+  border-radius:var(--r-control);box-shadow:var(--sink-slot);
+  background:linear-gradient(180deg,var(--slot-wall) 0,var(--slotbg) 100%);
+  transition:height var(--press-up) var(--press-ease),
+             margin-top var(--press-up) var(--press-ease)}
+/* Pressed, the cap sits down its slot and the housing it travelled through
+   shows above it. The bottom edge is unmoved: the margin takes up the rest. */
+/* Seated in the detent: a latching key, or one the firmware is holding down
+   while it works. :where() keeps this weak enough that a finger always wins. */
+.slot:where(:has(button[aria-pressed=true])),
+.slot:where(.is-held){
+  height:calc(var(--slot-h) - var(--travel-latch));margin-top:var(--travel-latch)}
+/* Pushed past the detent, for as long as the finger is down. */
+.slot.is-down{transition-duration:var(--press-down);
+  height:calc(var(--slot-h) - var(--travel-over));margin-top:var(--travel-over)}
+/* A momentary key has no detent to seat into: it travels far enough to make
+   contact and no further. */
+.slot.momentary.is-down,
+.slot.momentary.is-held{
+  height:calc(var(--slot-h) - var(--travel-momentary));
+  margin-top:var(--travel-momentary)}
+
+.slot button{position:absolute;left:0;right:0;top:0;height:var(--key-h);
+  padding:0;border:0;border-radius:var(--r-control);background:var(--keyface);
+  cursor:pointer;box-shadow:var(--edge-cap), var(--lift-key);
+  transition:top var(--press-up) var(--press-ease),
+             background var(--press-up), box-shadow var(--press-up)}
+.slot button:hover{background:var(--keyhover)}
+.slot.is-down button,
+.slot.is-held button,
+.slot button[aria-pressed=true]{top:var(--gap-press);background:var(--keydown);
+  box-shadow:var(--edge-cap), var(--lift-key)}
+.slot button:disabled{cursor:default;background:var(--keyoff);
+  box-shadow:var(--edge-cap), 0 1px 2px rgba(0,0,0,.14)}
+/* held down by the firmware rather than by a finger: still a pressed key */
+.slot.is-held button:disabled{background:var(--keydown)}
+
+/* ── continuous feed paper ──────────────────────────────────────────
+   A sheet with a tractor strip down each edge: sprocket holes on a
+   fixed pitch and a perforation running beside them. `.bars` adds the
+   green bar ruling; the halftone sheet leaves it off. */
+.paper{position:relative;background:var(--paper);border:1px solid var(--seam);
+  border-radius:var(--r-hair);padding:0 var(--feed-w);box-shadow:var(--sink-field)}
+.paper:before,.paper:after{content:'';position:absolute;top:0;bottom:0;
+  width:var(--feed-w);pointer-events:none;z-index:2;
+  background-image:radial-gradient(circle at 50% calc(var(--hole-pitch)/2),
+    var(--paper-edge) calc(var(--hole)/2), transparent calc(var(--hole)/2 + .5px));
+  background-size:100% var(--hole-pitch)}
+.paper:before{left:0;border-right:1px dashed var(--paper-perf)}
+.paper:after{right:0;border-left:1px dashed var(--paper-perf)}
+.sheet{position:relative;overflow:hidden}
+
+/* ── network list ───────────────────────────────────────────────── */
+.nets{overflow:hidden}
+/* Fixed height: the sheet is the same size before and after a scan, so
+   the page does not jump when the first list arrives. */
+.scroll{height:calc(var(--row-h)*5 + var(--row-h)/2);overflow-y:auto}
+.n.empty{color:var(--paper-dim);cursor:default}
+.n{display:flex;align-items:center;gap:var(--sp-3);width:100%;height:var(--row-h);
+  padding:0 var(--sp-3);background:var(--paper);border:0;
+  border-radius:0;color:var(--paper-ink);text-align:left;cursor:pointer;
+  font:normal 400 var(--size-paper)/1 var(--font-paper);letter-spacing:0;
+  /* no antialiasing: a printed glyph is on the paper or it is not */
+  -webkit-font-smoothing:none;font-smooth:never}
+.bars .n:nth-child(odd){background:var(--paper-bar)}
+/* after the ruling, so selecting a green row still turns it black */
+.bars .n[aria-selected=true]{background:var(--paper-ink);color:var(--paper)}
+.n:hover{filter:brightness(.96)}
+.n[aria-selected=true]{background:var(--paper-ink);color:var(--paper)}
+.n .t{flex:0 0 var(--icon);display:flex;align-items:center}
+.n .s{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.n .l{flex:0 0 calc(var(--icon) - 2px);display:flex;align-items:center;color:var(--paper-dim)}
+.n[aria-selected=true] .l,.n[aria-selected=true] .t{color:var(--paper)}
+svg{display:block;shape-rendering:crispEdges}
+.off{opacity:.17}          /* an unlit arc on the signal glyph */
+
+/* ── halftone ───────────────────────────────────────────────────── */
+#prev{display:block;margin:0 auto;max-width:100%;background:var(--paper);
+  image-rendering:pixelated}
+
+/* ── footer ─────────────────────────────────────────────────────── */
+.foot{margin:var(--sp-3) var(--sp-1) 0;color:var(--dim);line-height:1.7}
+.foot a{color:var(--ink);text-decoration:none;border-bottom:1px solid var(--seam);
+  cursor:pointer}
+.sep{margin:0 var(--sp-2);color:var(--seam)}
+
+/* ── narrow screens ─────────────────────────────────────────────────
+   A phone is where this page is opened first, and often the only place
+   it is opened at all: the setup portal is reached by joining the
+   printer's own access point. Nothing here is a different design, only
+   the same one with its metrics turned down and its rows unstacked. */
+@media (max-width:34rem){
+  :root{
+    --size-display:38px;
+    --pad-sec:15px;
+    --feed-w:17px; --hole:9px; --hole-pitch:20px;
+    --lamp-w:72px; --lamp-h:13px;
+    --vent-h:54px; --vent-pitch:16px;
+    --row-h:38px; --field-h:38px;   /* a finger, not a pointer */
+  }
+  body{padding:var(--sp-4) var(--sp-3) var(--sp-6)}
+
+  /* the nameplate and the indicator stack stop competing for one line */
+  .plate{flex-direction:column;align-items:stretch;gap:var(--sp-4)}
+  .stack{justify-content:end}
+
+  /* four halftone keys will not sit across a phone: two rows of two */
+  #tabs{flex-wrap:wrap;gap:var(--sp-3);margin-left:auto;
+        width:calc(var(--key-w)*2 + var(--sp-3))}
+  #tabs .key{flex:0 0 var(--key-w)}
+
+  .grid2{grid-template-columns:1fr}
+  /* the name of the network matters more than its address: on the narrowest
+     screens the address goes rather than truncating the name to one letter */
+  .n .ip{font-size:calc(var(--size-paper) - 1px)}
+  .keys{flex-wrap:wrap}
+  .foot{line-height:2}
+}
+
+/* Nothing may push the page sideways: a horizontal scrollbar on a phone
+   means something has a width it cannot honour. */
+html,body{max-width:100%;overflow-x:hidden}
+main,.sec,.paper,.sheet,.key{min-width:0}
+
+@media (max-width:24rem){
+  .n .ip{display:none}
+}
