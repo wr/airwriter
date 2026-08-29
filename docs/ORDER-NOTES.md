@@ -52,6 +52,10 @@ Standing rule: quote to Wells before the order is placed.
   fixes and everything since). It must never build as uploaded: replace its files with the
   current `combined-fab.zip` or cancel it.
 
+- **Via fill (asked 2026-08-29):** no resin fill — all vias standard plated, unfilled.
+  The "vias on SMD pads" are 0.3 mm thermal vias in ground pads (U1's center paddle,
+  U4's tab); minor wicking is acceptable. Do not add the via-fill/cap process.
+
 ## Files
 
 | Upload | Never upload |
