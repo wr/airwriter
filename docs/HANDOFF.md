@@ -4,6 +4,57 @@ Written 2026-08-04, last updated 2026-08-28.
 
 ## Where the project stands
 
+**2026-09-01/02: fourth adversarial review (layout + LCSC parts + circuit); no DOA; the
+pre-order fixes are APPLIED and the package is regenerated.** Read
+`docs/review-2026-09-01-pre-order-4.md` (artifact:
+https://claude.ai/code/artifact/35bbcd2f-19d1-444e-9cd5-aa7d5ebd8674). What changed on 09-02,
+uncommitted on branch `claude/adversarial-pcb-review-ccb17d` at the time of writing:
+
+- **Both /GND zones now use THT thermal reliefs** (were solid — J4's three 2.3 mm shield
+  posts sat in full 1 oz flood on both layers, and J2/J4 are hand-soldered). The change
+  stranded one F.Cu island (U6.2/U8.3/U8.4/C17.2 + C16.2's B.Cu sliver had been tied only
+  through a THT pad's solid fill); `tools_pcb/r12_fix.py` added one GND via at
+  (119.626, 131.048). `r12_gnd.py`: 1 component, 153/153 pads on plane.
+- **D3 is LCSC C12624 (KT-0603G)** in the schematic; C72043 had 1 unit in stock.
+- **ORDER-NOTES now carries the 0.12 mm (4.7 mil) space exception around U4's tab**
+  (`GND_STITCH_012` in `airwriter.kicad_dru` — the rule file always demanded it, the notes
+  never said it) and a corrected via-fill answer: 13 vias touch SMD pads, four 0.30 mm
+  drills fully inside U3.10 / C9.2 / C12.2 / U1.1; no fill, wicking accepted.
+- Package regenerated (`combine_boards.py` + `make_fab.sh`): pos 127 rows, BOM shows
+  C12624, drill floor 0.30, 3.8 PTH, seam copper still ≥ 0.5 mm off the score.
+  `hardware/airwriter/fab/` (the single-board package, last regenerated 08-22) is stale and
+  is NOT the order source — ignore it or delete it.
+- **New DRC baseline**: source board with `--severity-all --schematic-parity --refill-zones`
+  = 0 errors / 0 unconnected / 5 lib notes / 80 field-parity notes (unchanged). Combined
+  file under its default rules = the known ~274 false clearance items + 14 copper_edge +
+  12 hole_clearance + 6 seam invalid_outline (all pre-existing) **plus 1 new benign
+  `starved_thermal`** (U7.8 on F.Cu: one spoke to a fill sliver; the pad is fully grounded
+  through its B.Cu spokes).
+- **J2 is now a Mac-style serial port (flipped 2026-09-02).** Review #4 found J2 was
+  the mirror image of the printer's socket, which only works with a pin-to-pin straight
+  cable — and Apple's ImageWriter II cable (590-0552-A/M0197, the one Wells has) is a
+  crossover (1↔2, 3↔5, 6↔8); with it the board would have reported a false "out of paper".
+  Rather than document a cable trap, J2's six signal pins were swapped in the schematic
+  (1↔2, 3↔5, 6↔8), the six nets hand re-routed (RXD_P/RXD_N/TXD_N partly on B.Cu, three
+  new signal vias, one GND stitch via at 111.45,152.6), and the DNP termination/bias
+  resistors R5 and R7 rotated 180° so their pad order suits the new pin map. J2 and J4 now
+  read the same way. SPEC §2.4 carries the new table. **Use the Apple crossover cable; a
+  straight cable does NOT work — and many reproduction "ImageWriter II" cables are wired
+  straight (colino.net tested Pro Signal and CableLeader), so buzz pin 1→2 before trusting
+  a non-Apple one.** Other traps found, no copper change: (2) `LT_DE`
+  floats AS SHIPPED (socket, no PIC): tack 10 k across U6 pins 3–5 before a LocalTalk box
+  goes on. (3) Firmware must also drive **IO35 low** at boot (T1IN floats). (4) Never ICSP
+  the PIC in the socket — `_LVP_OFF` puts ~9 V VPP onto ESP32 IO2. (5) IO48 float is a
+  possible brownout loop on a 500 mA port, not just a flicker: the rev-B 100 k is required.
+- **Doc drift corrected in this file**: LED caps are **2.87 mm** north (not 2.6 — the case
+  lattice must use 2.87), SW1 is on the EAST edge (plate x≈159.4), H4 = (153.364, 151.930),
+  J4's shell is direct to GND. KiCad is 10.0.6 and the konnect library symlinks are gone
+  (recreate per AGENTS.md before the next placement session).
+- Still open from this review (rev B unless noted): partner VBUS via at the H4 crossing (a
+  single 0.4 mm via carries a modelled 1.94 A worst case); U5 on an 8 mm stub on D−;
+  74LVC1G125 for U9 (AHCT's 4.5 V minimum vs USB's 4.40 V); IO3 pulldown; 1 k series in the
+  switch/DIP legs; port legends print under the connector bodies and SW1 has no silk.
+
 **2026-08-28 (evening): boards waiting on the PCBWay quote; firmware audited for the
 wait; parts sourcing settled.** The session after the review below did four things:
 
@@ -70,7 +121,9 @@ What changed, in one pass over the source board and the panel generator:
 - **Firmware must** (new item, alongside the brightness cap and CTS deadline): first
   statements of `app_main()` drive **IO48 low** — U9's input has no pull and floats from
   power-on until firmware claims the pin; a brief LED flicker at boot is expected on this
-  rev. Rev B: 100 k from U9.2 to GND, filed with the LT_DE 10 k.
+  rev. Rev B: 100 k from U9.2 to GND, filed with the LT_DE 10 k. **Review #4 adds IO35 to
+  the same block (drive it low): U3.11 T1IN floats otherwise — SP3232 driver inputs have no
+  pull-ups and must be tied.**
 - **Stale packages deleted**: `hardware/airwriter-fab.zip` and
   `hardware/combined/combined.kicad_pcb.zip` (a mislabeled 08-24 PCBWay-plugin export) are
   gone from the tree. Upload **only** `hardware/combined-fab.zip` +
@@ -148,11 +201,11 @@ coaxiality between the boards is load-bearing, change them together or not at al
 104.27 (matches the panel; it grew, it did not shrink), ports on the bottom edge at 19.5 mm
 even centers, LED field placed from `panel_layout.json` (identity mapping
 `board = panel + (100, 60)` — an earlier mirror rule was WRONG and is dead), each LED's
-100 nF cap at one uniform offset 2.6 mm north (Wells's light-grille needs the cells clear),
+100 nF cap at one uniform offset **2.87 mm** north (measured 2026-09-01 — NOT 2.6; the 08-22 courtyard nudge moved them and this line lagged) (Wells's light-grille needs the cells clear),
 LED and passive designators on F.Fab. West edge is the control edge: S1 (DP-08RP right-angle
 piano DIP, real measured footprint, keys overhang to x=97.8 — case wall 2.25 mm thick puts
 key tips flush with the outside; DIP 1 at the BOTTOM) and SW1 (Panasonic EVQP44B3M side
-reset, actuator flush at x=100, case pinhole). SW3 test switch's PLUNGER (not origin —
+reset — SUPERSEDED: SW1 now sits on the EAST edge, plate face at x≈159.4, 2.6 mm inboard of x=162; the case pinhole goes on the east wall). SW3 test switch's PLUNGER (not origin —
 3.95 mm offset, footprint origin is pin 1) centred at (131, 91) under the panel's test dot.
 U9 level shifter lives inside the grid under a gold dot; U4 stays near (144.3, 130.8) by
 ruling (gold cells cost 25–100 mm of power run). U5 ESD sits at its geometric floor from J1
@@ -162,9 +215,9 @@ ruling (gold cells cost 25–100 mm of power run). U5 ESD sits at its geometric 
 **In flight when this was written** (agent `mb-r7`): restoring the LED chain to **37** (a
 controller misread briefly "retired" two — Wells said *move*, and his 9b art did the moving),
 lifting **U1 north ~3.5 mm** so mounting hole H4 lands at Wells's intended SE corner
-(156.364, ~155), antenna keepout riding along trimmed clear of dot (7,6). Mount pattern
+(153.364, 151.930 as built — the seat pattern is deliberately asymmetric; panel seats match to 4 dp), antenna keepout riding along trimmed clear of dot (7,6). Mount pattern
 after that lands: H1 (105.636, 65.636) under the gold corner dot, H2 (156.364, 65.636) under
-the other, H3 (105.636, ~152) west-low, H4 (156.364, ~155) east-low — all M2.5 clearance
+the other, H3 (105.636, ~152) west-low, H4 (153.364, 151.930 as built — the seat pattern is deliberately asymmetric; panel seats match to 4 dp) east-low — all M2.5 clearance
 (2.75 mm), non-plated, panel seats coaxial. Verify with the alignment proof
 (37/37 LEDs + plunger + holes at 0.0000 mm) before believing anything.
 
@@ -220,7 +273,7 @@ net was a single-track keyhole — **widen the approach, never shorten the path*
    pull-ups, DIP1=mode…), `/BTN_TEST` on IO14. Runs on the devkit.
 4. Plan 4, lattice + case: every number it needs is in the ledger and §2/§3 of the spec —
    hole positions (from the final board), SMTSO stack, DIP key tips x=97.75 / z 8.11–9.01 /
-   2.25 mm wall, reset pinhole at x=100, plunger through the 3.8 mm plated panel hole, carve-outs
+   2.25 mm wall, reset pinhole on the EAST wall at SW1's plate (x≈159.4, NOT x=100), plunger through the 3.8 mm plated panel hole, carve-outs
    for S1's top corner, U4, R3, U9 (1.1 mm tall under its gold dot).
 5. Fab: panel + board snap-apart at PCBWay; quote to Wells before ANY order (standing
    rule). [swatch rail cancelled 2026-08-28 — teal risk accepted unmitigated, see top entry]
@@ -389,7 +442,7 @@ to add afterwards, which is why it went in before the order rather than after th
 
 **The mounting holes are not grounded, deliberately.** A ground ring buys nothing in a printed
 plastic case, and it would create a second path to ground that cannot be broken. The mini-DIN shells
-already reach GND through R8, which is a 0R precisely so that tie can be lifted; the ImageWriter II
+already reach GND through R8 (J2 only — J4's shell is hard-tied to GND, found in review #4; decide whether that is deliberate), which is a 0R precisely so that tie can be lifted; the ImageWriter II
 is mains-powered with a metal chassis, so a second, unbreakable ground path is exactly what puts
 noise on the serial link. The holes stay non-plated.
 

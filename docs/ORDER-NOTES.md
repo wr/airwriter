@@ -14,7 +14,11 @@ Standing rule: quote to Wells before the order is placed.
   of the score (rounded corners). Copper is set back **0.5 mm** from the score line on
   both sides and both layers, by design.
 - **2 layer, 1.6 mm FR4, 1 oz, matte BLACK soldermask both sides, white silkscreen, ENIG.**
-- Min trace/space **6/6 mil**. Vias 0.6 mm pad / 0.3 mm drill; drill floor 0.30 mm.
+- Min trace/space **0.15 mm (6 mil)** generally. **Exception: four spots need 0.12 mm
+  (4.7 mil) space**, all around U4's SOT-223 tab at approx. x 115–120 / y 113–120 mm of
+  the main-board half (the project's `GND_STITCH_012` rule area). Please quote/accept
+  4.7 mil space at those points; everywhere else is ≥ 0.15 mm. Vias 0.6 mm pad / 0.3 mm
+  drill; drill floor 0.30 mm.
 - **NPTH:** 2 × 0.65 mm (J1 pegs) and 4 × 2.75 mm (mounting) only.
   The **3.8 mm hole is PLATED on purpose** (netless gold bore on the art panel — it is in
   the PTH drill file; do not convert it to NPTH).
@@ -34,7 +38,7 @@ Standing rule: quote to Wells before the order is placed.
    sit on the footprint's chamfer/notch corner — the top-left corner of every LED in the
    top-view image. The footprint's pad numbering is rotated 180° from the datasheet's pin
    numbers: align by the chamfer, not by "pad 1". A 180° placement breaks the whole chain.
-6. Substitutions allowed: D3 (LCSC C72043, if still out of stock — any 0603 green LED,
+6. Substitutions allowed: D3 (LCSC C12624 KT-0603G; if out of stock — any 0603 green LED,
    cathode per the silk bar) and R3/R14 (C25804 was restocked 2026-08-28; any 10 k 1%
    0603 stays pre-authorised as fallback). **No substitution** for U1–U9, J1, S1, SW1–SW3
    — and U1 must be the quad-PSRAM **N8R2** module, never an octal-PSRAM variant.
@@ -53,8 +57,21 @@ Standing rule: quote to Wells before the order is placed.
   current `combined-fab.zip` or cancel it.
 
 - **Via fill (asked 2026-08-29):** no resin fill — all vias standard plated, unfilled.
-  The "vias on SMD pads" are 0.3 mm thermal vias in ground pads (U1's center paddle,
-  U4's tab); minor wicking is acceptable. Do not add the via-fill/cap process.
+  Do not add the via-fill/cap process. For the record, **13 vias touch SMD pads**, all on
+  GND: the 0.3 mm thermal vias in U1's centre paddle and the five in U4's tab, plus GND
+  stitch vias whose 0.3 mm drill sits fully inside the pad on **U3.10, C9.2, C12.2 and
+  U1.1**, and four more tangent to a pad edge (D29.2, D37.2, U8.5, R1.2). Minor paste
+  wicking into those barrels is acceptable; no fill, no cap, no plug.
+
+## Not part of the order, but buy alongside it
+
+- **Printer cable (J2):** use Apple's own Mac-to-printer cable (590-0552-A / M0197, null-modem: 1↔2,
+3↔5, 6↔8) or any cable that works between a real Mac and the printer; many reproduction
+"ImageWriter II" cables are wired straight-through and will not work with either (buzz
+pin 1 on one end to pin 2 on the other before trusting one). Avoid mini-DIN-8 cables sold
+for S-Video or Roland gear — they may drop conductors. (Research 2026-09-02: pinouts.ru,
+colino.net's bench trace, VCF forum thread; colino.net found Pro Signal and CableLeader
+"ImageWriter" cables wired straight.)
 
 ## Files
 

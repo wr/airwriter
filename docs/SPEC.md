@@ -92,22 +92,40 @@ USB-C (5V) ─┬─ ESD ─ LDO 3.3V ─┬─ ESP32-S3-WROOM-1
 
 ### 2.4 Connector wiring
 
-Mini-DIN-8 pinout on the printer (female on the board, so a straight DIN8-to-DIN8 cable
-works — these are cheap and plentiful on eBay):
+**J2 is wired as a Macintosh serial port (flipped 2026-09-02, review #4), so the cable is
+Apple's own crossover — 590-0552-A / M0197 "System/Peripheral-8", the cable every
+ImageWriter II owner already has (1↔2, 3↔5, 6↔8, 4↔4, 7↔7). A pin-to-pin straight cable
+does NOT work: the drivers fight (harmlessly, ~75 mA through the printer's 54 Ω) and the
+handshake lands on the printer's DSR input, so the board reports "out of paper". J4
+(LocalTalk) uses the same convention, so both sockets read the same way.**
 
-| Pin | Signal | Direction (printer's POV) | Goes to |
+**Cable:** use Apple's own Mac-to-printer cable (590-0552-A / M0197, null-modem: 1↔2,
+3↔5, 6↔8) or any cable that works between a real Mac and the printer; many reproduction
+"ImageWriter II" cables are wired straight-through and will not work with either (buzz
+pin 1 on one end to pin 2 on the other before trusting one). Avoid mini-DIN-8 cables sold
+for S-Video or Roland gear — they may drop conductors. (Research 2026-09-02: pinouts.ru,
+colino.net's bench trace, VCF forum thread; colino.net found Pro Signal and CableLeader
+"ImageWriter" cables wired straight.)
+
+| J2 pin | Board signal (Mac convention) | Goes to | Reaches printer pin (via the crossover) |
 |---|---|---|---|
-| 1 | HSKo | out | U3 R1IN → ESP32 UART1 CTS |
-| 2 | HSKi | in | U3 T1OUT (DNP) |
-| 3 | TxD- | out | U2 B (receiver) |
-| 4 | GND | — | GND |
-| 5 | RxD- | in | U2 Z (driver) |
-| 6 | TxD+ | out | U2 A (receiver) |
-| 7 | GPi | in | not connected |
-| 8 | RxD+ | in | U2 Y (driver) |
+| 1 | HSKo, out | U3 T1OUT via R9 (DNP) | 2 DSR (ignored by the printer) |
+| 2 | HSKi, in | U3 R1IN → ESP32 UART1 CTS | 1 DTR / HSKo (the flow-control line) |
+| 3 | TxD−, out | U2 Z (driver) | 5 RxD− |
+| 4 | GND | GND | 4 GND |
+| 5 | RxD−, in | U2 B (receiver) | 3 TxD− |
+| 6 | TxD+, out | U2 Y (driver) | 8 RxD+ |
+| 7 | GPi | not connected | 7 |
+| 8 | RxD+, in | U2 A (receiver) | 6 TxD+ |
 
-*(The receiver mapping above is corrected. The original draft had A←TxD- and B←TxD+, which
-inverts every received byte. See assumption 3 in section 4.)*
+Printer-side polarity is unchanged from the corrected mapping below: the printer's TxD+
+still reaches U2's non-inverting A input and TxD− reaches B; U2's Y drives the printer's
+RxD+ and Z its RxD−. Net names stay printer-centric (`PR_TXD_*` = the printer's transmit
+pair, on J2's RxD pins).
+
+*(Before 2026-09-02 J2 was the mirror image of the printer's socket and needed a straight
+cable, which nobody has; the original draft's receiver mapping was also inverted — see
+assumption 3 in section 4.)*
 
 **No polarity jumpers.** The draft called for solder jumpers on each pair so A/B and Y/Z
 could be swapped without cutting traces. They were built and then removed, because the

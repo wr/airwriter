@@ -67,8 +67,11 @@ Kconfig is already target-aware. Every problem found is an omission, not a miswi
 - DIP1-8 (IO38/39/40/41/42/47/21/13), test button (IO14): zero firmware — no pull-up
   config, no readers. `dip_config` is unwritten.
 - PIC/LocalTalk bridge (IO4/IO5/IO2/IO6, 1 Mbps UART): zero firmware.
-- IO35 (HSKI_DRV): moot this rev — R9 is DNP so the path to the SP3232 is open. A
-  one-line TODO belongs wherever R9 ever gets populated.
+- IO35 (HSKI_DRV): ~~moot this rev — R9 is DNP so the path to the SP3232 is open.~~
+  **Corrected by review #4 (2026-09-01): NOT moot.** U3.11 (T1IN) is a CMOS driver input
+  with no internal pull-up (SP3232E datasheet: "connect unused inputs to VCC or GND"), and
+  IO35 floats from power-on. Drive IO35 output-low in the same first-statements block as
+  the IO48 clamp. R9 being DNP only means nothing leaves the board.
 
 ## Bring-up checklist additions (hardware day)
 
