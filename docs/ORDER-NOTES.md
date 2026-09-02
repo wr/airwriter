@@ -63,6 +63,18 @@ Standing rule: quote to Wells before the order is placed.
   U1.1**, and four more tangent to a pad edge (D29.2, D37.2, U8.5, R1.2). Minor paste
   wicking into those barrels is acceptable; no fill, no cap, no plug.
 
+- **File replacement (2026-09-02, order T-S54W654223A):** PCBWay's 09-02 BOM quote and
+  centroid were generated from the 08-28 upload (identical to main's zip at the time).
+  Message sent with `combined-fab-rev4-32859f3.zip`: "Please replace the Gerber/drill files
+  with the attached zip. Same outline, same BOM and centroid (no parts or positions
+  changed); the update adds thermal reliefs on the through-hole pads, re-routes J2, and adds
+  four 0.3 mm vias. Board spec: four spots around U4's SOT-223 tab need 0.12 mm (4.7 mil)
+  space, everywhere else ≥ 0.15 mm. Via fill: none; 13 vias touch SMD ground pads, minor
+  wicking acceptable. Question: your centroid places SW1 at X 157.95 vs 157.225 in our file
+  — confirm that is your body-centre correction and the push plate faces the board edge."
+  Their BOM was checked line by line against ours: all parts, quantities and DNP flags
+  match; D3 substituted with NCD0603G1 (fine); MT1–4 sourced at $0.48; $57.29 for 3 units.
+
 ## Not part of the order, but buy alongside it
 
 - **Printer cable (J2):** use Apple's own Mac-to-printer cable (590-0552-A / M0197, null-modem: 1↔2,
