@@ -1,3 +1,4 @@
+import math
 import unittest
 
 import params as p
@@ -28,12 +29,18 @@ class TestShell(unittest.TestCase):
         self.assertAlmostEqual(bb.max.Z, p.Z_WALL_TOP, places=3)
 
     def test_cavity_is_hollow_from_floor_top_upward(self):
-        # A probe block filling the pocket must not intersect the shell.
-        from build123d import Box, Pos
+        # A probe filling the pocket must not intersect the shell. The
+        # pocket itself is rounded at POCKET_R (the board's own corners are
+        # round, see TestCornerRounding below), so the probe is too --
+        # unlike a square probe, which would now find the shell's retained
+        # corner material and wrongly fail.
+        from build123d import Axis, Box, Pos
         probe = Pos(p.BOARD_W / 2, p.BOARD_L / 2,
                     (p.Z_WALL_TOP + p.Z_FLOOR_TOP) / 2) * Box(
             p.POCKET_W, p.POCKET_L, p.Z_WALL_TOP - p.Z_FLOOR_TOP)
-        self.assertAlmostEqual((self.s & probe).volume, 0.0, places=3)
+        probe = probe.fillet(p.POCKET_R, probe.edges().filter_by(Axis.Z))
+        hit = self.s & probe
+        self.assertAlmostEqual(hit.volume if hit else 0.0, 0.0, places=3)
 
     def test_floor_is_solid_under_the_pocket(self):
         from build123d import Box, Pos
@@ -518,7 +525,13 @@ class TestLiteLid(unittest.TestCase):
         self.assertAlmostEqual(bb.size.Z, p.CAVITY + p.PANEL, places=3)
 
     def test_it_fits_the_tray_with_no_interference(self):
-        self.assertAlmostEqual((case.tray() & self.lid).volume, 0.0, places=3)
+        # With the pocket and plate both genuinely rounded now (rather than
+        # square shapes that happened to touch at a corner within float
+        # noise), a clean miss returns None rather than a zero-volume shape
+        # -- same guard used throughout this file (e.g.
+        # test_no_connector_touches_the_tray).
+        hit = case.tray() & self.lid
+        self.assertAlmostEqual(hit.volume if hit else 0.0, 0.0, places=3)
 
     def test_plunger_bore_sits_over_SW3(self):
         # SW3's plunger is 3.95 from the footprint origin; HANDOFF puts it at
@@ -527,7 +540,8 @@ class TestLiteLid(unittest.TestCase):
         import board_geom as bg
         x, y = bg.to_case(131.0, 91.0)
         probe = Pos(x, y, p.Z_WALL_TOP - p.PANEL / 2) * Cylinder(0.4, p.PANEL)
-        self.assertAlmostEqual((self.lid & probe).volume, 0.0, places=3)
+        hit = self.lid & probe
+        self.assertAlmostEqual(hit.volume if hit else 0.0, 0.0, places=3)
 
     def test_insert_bores_open_downward_at_the_board_face(self):
         import board_geom as bg
@@ -535,7 +549,179 @@ class TestLiteLid(unittest.TestCase):
         for x, y in bg.mount_holes().values():
             probe = Pos(x, y, p.INSERT_DEPTH / 2) * Cylinder(
                 p.INSERT_D / 2 - 0.1, p.INSERT_DEPTH)
-            self.assertAlmostEqual((self.lid & probe).volume, 0.0, places=3)
+            hit = self.lid & probe
+            self.assertAlmostEqual(hit.volume if hit else 0.0, 0.0, places=3)
+
+
+def _corners(x0, y0, x1, y1):
+    """The four corners of a box spanning x0..x1, y0..y1, each with the unit
+    sign (sx, sy) that points INWARD from that corner -- the direction its
+    fillet arc centre sits in, and the direction a probe must step to move
+    off the sharp corner and into the box."""
+    return [
+        (x0, y0, 1, 1),
+        (x0, y1, 1, -1),
+        (x1, y0, -1, 1),
+        (x1, y1, -1, -1),
+    ]
+
+
+class TestCornerRounding(unittest.TestCase):
+    """Task 10: the board (hardware/airwriter/airwriter.kicad_pcb) and the
+    art panel it shares an outline with both have R2.0 corners, not square
+    ones (board_geom.corner_radius()). shell()'s exterior is rounded at
+    EXT_R, its pocket at POCKET_R, and lite_lid()'s plate at POCKET_R too
+    (params.py derives all three from CORNER_R). Only the vertical edges are
+    filleted -- top and bottom rims stay sharp, since a rounded bottom rim
+    on the tray (which prints floor-down) would be an unsupported overhang.
+
+    Every probe here targets ONE of the four corners along its own 45-degree
+    diagonal: a point just off the sharp corner tip (always outside any
+    fillet arc, regardless of radius) and a point just inside the fillet
+    arc's own radius (always on the rounded surface, regardless of radius).
+    A square-cornered part and a rounded one disagree at both points, which
+    is exactly why this failed loudly against the pre-Task-10 square
+    geometry (see task-10-report.md for the recorded red/green run).
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.shell = case.shell()
+        cls.lid = case.lite_lid()
+
+    def _assert_solid_corner_rounded(self, part, x0, y0, x1, y1, radius, z,
+                                      label):
+        """For a SOLID part whose outer footprint is x0..x1, y0..y1: the
+        square-corner wedge a fillet cuts away must be empty, and the
+        fillet's own rounded body must be solid. Used for the tray's
+        exterior and the lite lid's plate -- both solids with a rounded
+        outer edge."""
+        from build123d import Box, Pos
+        for cx, cy, sx, sy in _corners(x0, y0, x1, y1):
+            centre_x, centre_y = cx + sx * radius, cy + sy * radius
+
+            tip = Pos(cx + sx * 0.03, cy + sy * 0.03, z) * Box(0.05, 0.05, 1.0)
+            hit = part & tip
+            vol = hit.volume if hit else 0.0
+            self.assertAlmostEqual(
+                vol, 0.0, places=4,
+                msg=f"{label} corner ({cx:.2f},{cy:.2f}): {vol:.4f}mm^3 of "
+                    "square-corner material where a rounded corner should "
+                    "be empty")
+
+            # Step from the arc CENTRE back toward the corner tip (-sx,-sy)
+            # by just under `radius` -- that point is inside the arc (still
+            # on the rounded surface, still solid) but as close to the
+            # corner as the fillet body reaches.
+            diag = 1 / math.sqrt(2)
+            body = Pos(centre_x - sx * (radius - 0.5) * diag,
+                       centre_y - sy * (radius - 0.5) * diag,
+                       z) * Box(0.3, 0.3, 1.0)
+            hit = part & body
+            vol = hit.volume if hit else 0.0
+            self.assertGreater(
+                vol, 0.5 * body.volume,
+                msg=f"{label} corner ({cx:.2f},{cy:.2f}): only {vol:.4f}mm^3 "
+                    f"of {body.volume:.4f}mm^3 on the fillet's own body is "
+                    "solid")
+
+    def test_tray_exterior_corners_are_rounded_at_ext_r(self):
+        self._assert_solid_corner_rounded(
+            self.shell, -p.WALL, -p.WALL, p.BOARD_W + p.WALL,
+            p.BOARD_L + p.WALL, p.EXT_R, z=5.0, label="tray exterior")
+
+    def test_pocket_corners_are_rounded_at_pocket_r(self):
+        # The pocket is a VOID cut into the shell, so the polarity is
+        # reversed from the solid case above: the square-corner wedge a
+        # rounded pocket LEAVES BEHIND is solid shell material (the pocket
+        # never reaches it), and the fillet's own body -- the pocket's
+        # actual rounded corner -- is empty.
+        from build123d import Box, Pos
+        x0 = p.BOARD_W / 2 - p.POCKET_W / 2
+        y0 = p.BOARD_L / 2 - p.POCKET_L / 2
+        x1 = p.BOARD_W / 2 + p.POCKET_W / 2
+        y1 = p.BOARD_L / 2 + p.POCKET_L / 2
+        z = (p.Z_WALL_TOP + p.Z_FLOOR_TOP) / 2
+        diag = 1 / math.sqrt(2)
+
+        for cx, cy, sx, sy in _corners(x0, y0, x1, y1):
+            centre_x, centre_y = cx + sx * p.POCKET_R, cy + sy * p.POCKET_R
+
+            tip = Pos(cx + sx * 0.03, cy + sy * 0.03, z) * Box(0.05, 0.05, 1.0)
+            hit = self.shell & tip
+            vol = hit.volume if hit else 0.0
+            self.assertAlmostEqual(
+                vol, tip.volume, places=4,
+                msg=f"pocket corner ({cx:.2f},{cy:.2f}): the square-corner "
+                    "wedge a rounded pocket should retain as material is "
+                    f"only {vol:.4f}/{tip.volume:.4f}mm^3 solid")
+
+            body = Pos(centre_x - sx * (p.POCKET_R - 0.5) * diag,
+                       centre_y - sy * (p.POCKET_R - 0.5) * diag,
+                       z) * Box(0.3, 0.3, 1.0)
+            hit = self.shell & body
+            vol = hit.volume if hit else 0.0
+            self.assertAlmostEqual(
+                vol, 0.0, places=3,
+                msg=f"pocket corner ({cx:.2f},{cy:.2f}): {vol:.4f}mm^3 of "
+                    "material inside the pocket's own rounded region")
+
+    def test_lite_lid_plate_corners_are_rounded_at_pocket_r(self):
+        x0 = p.BOARD_W / 2 - p.POCKET_W / 2
+        y0 = p.BOARD_L / 2 - p.POCKET_L / 2
+        x1 = p.BOARD_W / 2 + p.POCKET_W / 2
+        y1 = p.BOARD_L / 2 + p.POCKET_L / 2
+        z = p.Z_WALL_TOP - p.PANEL / 2
+        self._assert_solid_corner_rounded(
+            self.lid, x0, y0, x1, y1, p.POCKET_R, z, label="lite lid plate")
+
+    def test_lid_outline_matches_the_pocket_it_seats_in(self):
+        # The Pro's art panel and the Lite's lid both seat in the same
+        # POCKET_W x POCKET_L pocket, rounded at POCKET_R -- the panel's own
+        # R2.0 grown by POCKET_CLEAR. Build that exact rounded rectangle
+        # independently (Box + fillet on its vertical edges, not by calling
+        # into case.py's own construction) and require the lid's plate to
+        # match it exactly: nothing sticking out past the rounded pocket
+        # (a square-cornered plate WOULD stick out at all four corners --
+        # a square footprint always contains the smaller rounded one, so
+        # only checking "the pocket fits inside the lid" can't catch this;
+        # it has to be checked in this direction), and nothing missing from
+        # inside it either.
+        from build123d import Axis, Box, Cylinder, Pos
+        import board_geom as bg
+        z = p.Z_WALL_TOP - p.PANEL / 2
+        pocket_shape = Pos(p.BOARD_W / 2, p.BOARD_L / 2, z) * Box(
+            p.POCKET_W, p.POCKET_L, p.PANEL)
+        pocket_shape = pocket_shape.fillet(
+            p.POCKET_R, pocket_shape.edges().filter_by(Axis.Z))
+        # lite_lid() also cuts SW3's plunger bore through the plate -- a
+        # real, intentional hole, not a corner defect. Cut the same bore
+        # out of the reference shape so it isn't mistaken for one.
+        px, py = bg.to_case(131.0, 91.0)
+        plunger = Pos(px, py, z) * Cylinder(p.PLUNGER_BORE_D / 2, p.PANEL + 0.5)
+        pocket_shape = pocket_shape - plunger
+
+        # Isolate the lid's PLATE within the pocket's own Z band -- the legs
+        # sit entirely below it (topping out exactly at the plate's
+        # underside) and must not be swept into this comparison.
+        plate_zband = Pos(p.BOARD_W / 2, p.BOARD_L / 2, z) * Box(
+            p.POCKET_W + 2.0, p.POCKET_L + 2.0, p.PANEL)
+        plate = self.lid & plate_zband
+        self.assertIsNotNone(plate, "no lid material in the plate's own Z band")
+
+        extra = plate - pocket_shape
+        extra_vol = extra.volume if extra else 0.0
+        self.assertAlmostEqual(
+            extra_vol, 0.0, delta=1.0,
+            msg=f"{extra_vol:.3f}mm^3 of the lid plate sticks out past the "
+                "pocket's own rounded footprint (a square corner?)")
+
+        missing = pocket_shape - plate
+        missing_vol = missing.volume if missing else 0.0
+        self.assertAlmostEqual(
+            missing_vol, 0.0, delta=1.0,
+            msg=f"{missing_vol:.3f}mm^3 of the pocket's rounded footprint "
+                "has no lid material under it")
 
 
 if __name__ == "__main__":

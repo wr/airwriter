@@ -110,5 +110,94 @@ class TestFootprints(unittest.TestCase):
         self.assertEqual(j1.model_scale, (1.0, 1.0, 1.0))
 
 
+class TestCornerRadius(unittest.TestCase):
+    """board_geom.outline() is a bounding box -- it says nothing about the
+    four Edge.Cuts arcs that actually round the board's corners. corner_
+    radius() derives that radius from the arcs' own start/mid/end points
+    rather than assuming the 2.0mm the board happens to use today."""
+
+    def test_reads_2_0_from_the_file_not_a_hardcoded_constant(self):
+        # Read directly off the four gr_arc blocks, independent of
+        # corner_radius() itself: start (100, 62), mid (100.585786,
+        # 60.585786), end (102, 60) is one of the board's real corners
+        # (hardware/airwriter/airwriter.kicad_pcb around line 31545). Three
+        # points on a circle are enough to recover its radius without
+        # knowing the centre.
+        r = bg._circumradius((100.0, 62.0), (100.585786, 60.585786), (102.0, 60.0))
+        self.assertAlmostEqual(r, 2.0, places=3)
+        # And corner_radius() itself must agree, reading the live file.
+        self.assertAlmostEqual(bg.corner_radius(), 2.0, places=3)
+
+    def test_reflects_a_different_consistent_radius_not_stuck_at_2_0(self):
+        # A hardcoded `return 2.0` would pass the test above for free. Prove
+        # corner_radius() actually tracks the file: scale every Edge.Cuts
+        # arc's start/mid/end coordinates by 1.5x in a scratch copy (a
+        # uniform scale about the origin multiplies every circumradius by
+        # the same factor, regardless of where that particular circle's own
+        # centre sits), and confirm the derived radius scales with it to
+        # ~3.0mm, not stuck at 2.0.
+        import re
+        import pathlib
+        import tempfile
+
+        factor = 1.5
+        src = bg.BOARD_PCB.read_text()
+        coord = re.compile(r"\((start|mid|end) ([-\d.]+) ([-\d.]+)\)")
+        scaled_src = src
+        touched = 0
+        for blk in bg._blocks(src, "gr_arc"):
+            if '"Edge.Cuts"' not in blk:
+                continue
+            new_blk = coord.sub(
+                lambda m: f"({m.group(1)} {float(m.group(2)) * factor:.6f} "
+                          f"{float(m.group(3)) * factor:.6f})",
+                blk)
+            self.assertNotEqual(new_blk, blk)
+            self.assertIn(blk, scaled_src)
+            scaled_src = scaled_src.replace(blk, new_blk, 1)
+            touched += 1
+        self.assertEqual(touched, 4, "expected all four corner arcs")
+
+        with tempfile.TemporaryDirectory() as d:
+            scratch = pathlib.Path(d) / "airwriter.kicad_pcb"
+            scratch.write_text(scaled_src)
+            orig_board_pcb = bg.BOARD_PCB
+            bg.BOARD_PCB = scratch
+            try:
+                self.assertAlmostEqual(bg.corner_radius(), 2.0 * factor, places=2)
+            finally:
+                bg.BOARD_PCB = orig_board_pcb
+
+    def test_raises_on_arcs_with_mismatched_radii(self):
+        # A board with mismatched corner radii needs a human, not a silent
+        # average. Corrupt ONE of the four arcs' `mid` point in a scratch
+        # copy of the real board file so that arc alone traces a ~2.85mm
+        # radius instead of the other three's 2.0mm (verified directly:
+        # _circumradius((100,62), (101.0,61.5), (102,60)) == 2.850mm), and
+        # confirm corner_radius() refuses to return anything for it.
+        src = bg.BOARD_PCB.read_text()
+        needle = "(mid 100.585786 60.585786)"
+        self.assertIn(needle, src, "fixture arc not found in the real board file")
+        corrupted = src.replace(needle, "(mid 101.0 61.5)", 1)
+
+        import pathlib
+        import tempfile
+        with tempfile.TemporaryDirectory() as d:
+            scratch = pathlib.Path(d) / "airwriter.kicad_pcb"
+            scratch.write_text(corrupted)
+            orig_board_pcb = bg.BOARD_PCB
+            bg.BOARD_PCB = scratch
+            try:
+                with self.assertRaises(ValueError):
+                    bg.corner_radius()
+            finally:
+                bg.BOARD_PCB = orig_board_pcb
+
+        # And the unmodified file must still be clean -- proves the raise
+        # above came from the corruption, not from some permanent state
+        # corner_radius() left behind.
+        self.assertAlmostEqual(bg.corner_radius(), 2.0, places=3)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -99,6 +99,54 @@ def outline() -> tuple[float, float, float, float]:
     return min(xs), min(ys), max(xs), max(ys)
 
 
+_ARC_PT = re.compile(r"\((start|mid|end) ([-\d.]+) ([-\d.]+)\)")
+
+
+def _circumradius(p1: tuple[float, float], p2: tuple[float, float],
+                   p3: tuple[float, float]) -> float:
+    """The radius of the circle through three points, via Heron's formula on
+    the triangle they form: R = (a*b*c) / (4*area)."""
+    a = math.dist(p2, p3)
+    b = math.dist(p1, p3)
+    c = math.dist(p1, p2)
+    s = (a + b + c) / 2
+    area = math.sqrt(max(s * (s - a) * (s - b) * (s - c), 0.0))
+    if area < 1e-9:
+        raise RuntimeError(f"degenerate Edge.Cuts arc (collinear points) in {BOARD_PCB}")
+    return (a * b * c) / (4 * area)
+
+
+def corner_radius(tol: float = 1e-3) -> float:
+    """The board's own corner radius, derived from its Edge.Cuts arcs rather
+    than assumed.
+
+    Each Edge.Cuts corner is one `gr_arc`; its start/mid/end are three
+    points on the circle it traces, which is enough to recover the radius
+    without knowing the centre. Every arc found must agree to within `tol`
+    mm -- a board with mismatched corner radii needs a human to look at it,
+    not an average that quietly picks a number nobody chose.
+    """
+    src = _text()
+    radii: list[float] = []
+    for blk in _blocks(src, "gr_arc"):
+        if '"Edge.Cuts"' not in blk:
+            continue
+        pts = {kind: (float(x), float(y)) for kind, x, y in _ARC_PT.findall(blk)}
+        if not {"start", "mid", "end"} <= pts.keys():
+            continue
+        radii.append(_circumradius(pts["start"], pts["mid"], pts["end"]))
+    if not radii:
+        raise RuntimeError(f"no Edge.Cuts arcs in {BOARD_PCB}")
+    r0 = radii[0]
+    for r in radii[1:]:
+        if abs(r - r0) > tol:
+            raise ValueError(
+                f"Edge.Cuts corner radii disagree in {BOARD_PCB}: {radii} "
+                f"(tolerance {tol}mm) -- a board with mixed corner radii "
+                "needs a human, not an averaged number.")
+    return round(sum(radii) / len(radii), 6)
+
+
 def to_case(kx: float, ky: float) -> tuple[float, float]:
     """KiCad mm -> case-frame X, Y. Y flips, so the frame is right-handed."""
     return round(kx - ORIGIN_X, 6), round(ORIGIN_Y - ky, 6)

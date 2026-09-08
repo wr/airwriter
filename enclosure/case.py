@@ -7,6 +7,7 @@ board's top face with +Z up.
 import math
 
 from build123d import (
+    Axis,
     Box,
     Cone,
     ConvexPolyhedron,
@@ -23,23 +24,42 @@ import board_geom as bg
 import params as p
 
 
+def _rounded_box(w: float, l: float, h: float, cx: float, cy: float,
+                  cz: float, radius: float) -> Part:
+    """A Box(w, l, h) centred at (cx, cy, cz), with its four VERTICAL edges
+    filleted to `radius` -- a rounded rectangle extruded through h. Only the
+    vertical edges are touched (top and bottom rims stay sharp): both the
+    tray's exterior/pocket and the lite lid's plate print with this shape
+    flat-side-down, and a rounded bottom rim would be an overhang."""
+    box = Pos(cx, cy, cz) * Box(w, l, h)
+    verticals = box.edges().filter_by(Axis.Z)
+    return box.fillet(radius, verticals)
+
+
 def shell() -> Part:
     """Floor plus four walls, hollow from the floor's top face upward.
+
+    The board (and the art panel it shares its outline with) has R2.0
+    corners, not square ones -- board_geom.corner_radius() reads that off
+    the board file rather than assuming it. The tray's exterior corners are
+    that radius grown by WALL (EXT_R, what offsetting the board outline by
+    the wall thickness naturally produces); the pocket's corners are that
+    radius grown by POCKET_CLEAR (POCKET_R), so the board's own rounded
+    corners register against the pocket instead of floating in a square
+    one. Only the vertical edges are filleted -- see `_rounded_box`.
 
     No openings: the port cutouts, the DIP slot, the pinhole, the screw holes
     and the carve-outs are all subtracted by tray().
     """
-    outer = Pos(
-        p.BOARD_W / 2,
-        p.BOARD_L / 2,
-        (p.Z_WALL_TOP + p.Z_FLOOR_BOTTOM) / 2,
-    ) * Box(p.EXT_W, p.EXT_L, p.EXT_H)
+    outer = _rounded_box(
+        p.EXT_W, p.EXT_L, p.EXT_H,
+        p.BOARD_W / 2, p.BOARD_L / 2, (p.Z_WALL_TOP + p.Z_FLOOR_BOTTOM) / 2,
+        p.EXT_R)
 
-    cavity = Pos(
-        p.BOARD_W / 2,
-        p.BOARD_L / 2,
-        (p.Z_WALL_TOP + p.Z_FLOOR_TOP) / 2,
-    ) * Box(p.POCKET_W, p.POCKET_L, p.Z_WALL_TOP - p.Z_FLOOR_TOP)
+    cavity = _rounded_box(
+        p.POCKET_W, p.POCKET_L, p.Z_WALL_TOP - p.Z_FLOOR_TOP,
+        p.BOARD_W / 2, p.BOARD_L / 2, (p.Z_WALL_TOP + p.Z_FLOOR_TOP) / 2,
+        p.POCKET_R)
 
     return outer - cavity
 
@@ -408,12 +428,13 @@ def reset_pinhole() -> Part:
 def lite_lid() -> Part:
     """The panel stand-in for boards built without the dot-grid art panel.
 
-    A plate the panel's size and thickness, seating in the same place, on four
-    legs that reproduce in plastic the 14.34mm the lattice and the panel's
-    SMTSO nuts span on a Pro. Each leg takes an M2.5 heat-set insert at its
-    BOTTOM, level with the board's top face, so the screw from below engages
-    brass after a few millimetres instead of threading 14mm of printed
-    plastic.
+    A plate the panel's size, thickness AND corner radius (POCKET_R -- the
+    panel's own R2.0 grown by POCKET_CLEAR, same as the pocket it seats in),
+    seating in the same place, on four legs that reproduce in plastic the
+    14.34mm the lattice and the panel's SMTSO nuts span on a Pro. Each leg
+    takes an M2.5 heat-set insert at its BOTTOM, level with the board's top
+    face, so the screw from below engages brass after a few millimetres
+    instead of threading 14mm of printed plastic.
 
     Prints plate-down (the plate's own Z_WALL_TOP face on the bed, legs
     pointing up into the air), so any OTHER model surface facing +Z becomes,
@@ -424,11 +445,10 @@ def lite_lid() -> Part:
     coincident union with no exposed shoulder, and the insert bore is cut
     from the leg's free (Z=0) end, opening the same direction the leg does.
     """
-    plate = Pos(
-        p.BOARD_W / 2,
-        p.BOARD_L / 2,
-        p.Z_WALL_TOP - p.PANEL / 2,
-    ) * Box(p.POCKET_W, p.POCKET_L, p.PANEL)
+    plate = _rounded_box(
+        p.POCKET_W, p.POCKET_L, p.PANEL,
+        p.BOARD_W / 2, p.BOARD_L / 2, p.Z_WALL_TOP - p.PANEL / 2,
+        p.POCKET_R)
 
     body = plate
     for x, y in bg.mount_holes().values():

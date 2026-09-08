@@ -137,3 +137,19 @@ EXT_H = round(Z_WALL_TOP - Z_FLOOR_BOTTOM, 6)
 
 POCKET_W = round(BOARD_W + 2 * POCKET_CLEAR, 6)
 POCKET_L = round(BOARD_L + 2 * POCKET_CLEAR, 6)
+
+CORNER_R = bg.corner_radius()
+"""The board's own corner radius, read from its Edge.Cuts arcs (2.00mm as
+drawn). The art panel (hardware/panel/panel.kicad_pcb) shares this exact
+outline -- same 62 x 104.27 footprint, same R2.0 corners -- so this one
+number, read only off the main board, also governs the panel/lid seat."""
+
+POCKET_R = round(CORNER_R + POCKET_CLEAR, 6)
+"""The board's corner radius grown by the pocket clearance: the board pocket
+and the panel/lid seat's corner radius. What the board's rounded corner
+naturally sweeps out at POCKET_CLEAR standoff."""
+
+EXT_R = round(CORNER_R + WALL, 6)
+"""The board's corner radius grown by the wall thickness: what offsetting
+the board outline outward by WALL naturally produces at the tray's exterior
+corner, and a better printed part than a sharp vertical arris."""
