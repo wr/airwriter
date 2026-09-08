@@ -723,6 +723,68 @@ class TestCornerRounding(unittest.TestCase):
             msg=f"{missing_vol:.3f}mm^3 of the pocket's rounded footprint "
                 "has no lid material under it")
 
+    def test_corner_fillets_are_concentric_with_2_80_radial_wall(self):
+        """Carried over from review: a fillet is exactly where a wall gets
+        thin, and test_printable.py's wall probes are all at mid-wall (e.g.
+        y=90, x=31) -- nowhere near a corner. shell()'s exterior fillet
+        (EXT_R) and pocket fillet (POCKET_R) at each of the four corners
+        only make a uniform 2.80mm radial wall (WALL - POCKET_CLEAR)
+        because they're both CORNER_R grown by a different constant
+        (params.py) -- nothing stops a future edit from giving EXT_R and
+        POCKET_R independent corner radii, which would silently thin (or
+        thicken) the wall exactly where it's already weakest, and none of
+        the volume-probe corner tests above would notice (they check "is
+        there material/void here", with margin, not the wall's actual
+        thickness).
+
+        Read the two fillet faces at each corner back as real cylinder
+        geometry -- geom_adaptor().Cylinder() -- rather than probing volume:
+        their axes must coincide (same vertical line) and their radii must
+        differ by exactly WALL - POCKET_CLEAR.
+        """
+        from build123d import GeomType
+
+        cyl_faces = self.shell.faces().filter_by(GeomType.CYLINDER)
+
+        # Group the fillet faces by corner: each corner's exterior and
+        # pocket fillet share one vertical axis line, identified by that
+        # axis's (X, Y) -- Z is just an arbitrary point on an infinite
+        # line, not meaningful, so it's left out of the key.
+        by_corner: dict[tuple[float, float], list] = {}
+        for f in cyl_faces:
+            cyl = f.geom_adaptor().Cylinder()
+            axis = cyl.Axis()
+            loc = axis.Location()
+            key = (round(loc.X(), 3), round(loc.Y(), 3))
+            by_corner.setdefault(key, []).append((cyl.Radius(), loc, axis.Direction()))
+
+        self.assertEqual(
+            len(by_corner), 4,
+            f"expected the tray's 4 rounded corners, found fillet faces "
+            f"grouped into {len(by_corner)}: {sorted(by_corner)}")
+
+        want_radial_wall = p.WALL - p.POCKET_CLEAR
+        for (x, y), entries in by_corner.items():
+            self.assertEqual(
+                len(entries), 2,
+                f"corner ({x},{y}): expected 2 fillet faces (exterior + "
+                f"pocket), found {len(entries)}")
+            (r0, loc0, d0), (r1, loc1, d1) = entries
+
+            # Same axis: parallel direction, and one axis's location point
+            # lies on the other axis's (X, Y) line.
+            self.assertAlmostEqual(d0.X(), d1.X(), places=6, msg=f"corner ({x},{y}) axis direction X")
+            self.assertAlmostEqual(d0.Y(), d1.Y(), places=6, msg=f"corner ({x},{y}) axis direction Y")
+            self.assertAlmostEqual(d0.Z(), d1.Z(), places=6, msg=f"corner ({x},{y}) axis direction Z")
+            self.assertAlmostEqual(loc0.X(), loc1.X(), places=6, msg=f"corner ({x},{y}) axis location X")
+            self.assertAlmostEqual(loc0.Y(), loc1.Y(), places=6, msg=f"corner ({x},{y}) axis location Y")
+
+            radial_wall = abs(r0 - r1)
+            self.assertAlmostEqual(
+                radial_wall, want_radial_wall, places=4,
+                msg=f"corner ({x},{y}): radial wall is {radial_wall:.6f}mm "
+                    f"(radii {r0:.6f} and {r1:.6f}), want {want_radial_wall}mm")
+
 
 if __name__ == "__main__":
     unittest.main()

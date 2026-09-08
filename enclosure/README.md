@@ -65,3 +65,33 @@ before it costs you the ones further down the list.
 
 `out/*.step` opens in KiCad's 3D viewer alongside the real board. That check is
 why this is build123d and not OpenSCAD.
+
+## Shop model
+
+    cd ~/Projects/shop && node scripts/addon-models/stl2glb.mjs \
+      ~/Projects/airwriter/enclosure/out/airwriter-tray.stl \
+      public/models/airwriter-case.glb \
+      --name case --color 0.025,0.025,0.025 --rough 0.8 --metal 0 --lay-flat
+
+Converts the tray (not the lid) to a GLB for the shop's product viewer, at
+`shop/public/models/airwriter-case.glb`. `--color`/`--rough`/`--metal` match
+the shop's existing convention for a matte black FDM part
+(`scripts/addon-models/build.sh`'s bezel: 0.025 linear grey reads as black
+plastic once the viewer's room light hits it — a true 0/0/0 goes visually
+flat). No `--flip`: the tray is modelled with the board's own +Z toward the
+open top and prints floor-down at model -Z (see `test_printable.py`'s module
+docstring), so `--lay-flat` alone (printer/model Z → glTF Y) already puts the
+open top — the ports, the pocket — facing up, and the closed floor slab
+resting on the ground plane. Checked two ways: (1) traced stl2glb.mjs's
+`orient()` — with `--lay-flat` and no `--flip`, old +Z maps to new +Y, and
+`export.py` writes the STL straight from `case.tray()` with no
+reorientation, so model +Z (open top) really is glTF +Y (up); (2) probed
+`case.tray()` directly — a thin Z-slice 0.3mm off the top is ~13% filled (an
+open rim), one 0.3mm off the bottom is ~99% filled (the closed floor slab),
+confirming which end is which before it ever reaches the converter.
+Following `scripts/addon-models/build.sh`'s own optimize step
+(`join-prims.mjs` then gltf-transform `dedup`/`prune`/`weld`/`meshopt`)
+after conversion took it from 1.28MB to 188KB.
+
+Nothing on the site references it yet — making the case a purchasable add-on is
+a product decision, not part of this design.
