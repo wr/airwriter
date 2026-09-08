@@ -20,9 +20,13 @@ uniform over honouring S1's 2.25mm west-wall placement, so S1's piano keys sit
 FLOOR = 2.40
 """12 layers at 0.2mm."""
 
-STANDOFF = 2.00
+STANDOFF = 3.00
 """Board sits this far off the floor, clearing the through-hole tails of
-J2/J4/S1/SW3/U7."""
+J2/J4/S1/SW3/U7. Measured off the vendor STEP (Task 5): J2/J4's pin tips
+reach 2.150mm below the board's underside on the Kycon MiniDIN-8 STEP, so
+3.00 leaves 0.85mm under the tips for hand-soldered fillets the STEP
+doesn't model. The original 2.00 was an estimate that left the pins
+poking 0.15mm into the floor slab -- see task-5-report.md."""
 
 PCB = 1.60
 PANEL = 1.60

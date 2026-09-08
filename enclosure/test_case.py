@@ -169,6 +169,58 @@ class TestPorts(unittest.TestCase):
         probe = Pos(22.75, -p.WALL / 2, 5.0) * Box(1.0, p.WALL, 2.0)
         self.assertGreater((self.tray_shell & probe).volume, 0.5)
 
+    def test_connectors_clear_the_floor_by_at_least_0_50(self):
+        # Derives the requirement instead of restating a number (Finding 1,
+        # task-5-report.md): whatever STANDOFF happens to be, every
+        # connector with real STEP geometry has to clear Z_FLOOR_TOP by a
+        # working margin, so the pins don't touch the floor and there is
+        # room left for a hand-soldered fillet. STANDOFF went 2.00 -> 3.00
+        # because J2/J4's real pin tips (measured off the Kycon STEP) were
+        # found punching 0.15mm into the floor at the old value -- a future
+        # board revision or connector swap that eats this margin again
+        # fails here instead of silently interfering with the floor.
+        margin = 0.50
+        for ref in ("J2", "J4", "J1"):
+            bb = case.connector_solid(ref).bounding_box()
+            clearance = bb.min.Z - p.Z_FLOOR_TOP
+            self.assertGreaterEqual(
+                clearance, margin,
+                f"{ref} clears the floor (Z_FLOOR_TOP={p.Z_FLOOR_TOP}) by "
+                f"only {clearance:.3f}mm, need >= {margin}mm")
+
+    def test_front_wall_retains_material_above_and_below_each_port(self):
+        # Finding 2, task-5-report.md: _grown() uses a convex hull, so an
+        # opening can over-cut where the real connector is concave, and
+        # nothing previously checked that the wall itself survives that.
+        # Anchor each probe to the *live* grown envelope (not a hand-typed
+        # Z) so the test tracks the real geometry: if a future PORT_CLEAR
+        # bump or connector STEP revision pushes an opening far enough to
+        # reach the wall's own floor/top boundary, the wall there is eaten
+        # and a probe placed just past the envelope's edge finds nothing.
+        # The probe stops at -POCKET_CLEAR, not Y=0 -- past that the shell
+        # is already hollow (the board pocket), not wall, regardless of any
+        # port cutout, so including it would make the probe fail for a
+        # reason that has nothing to do with port_cutouts().
+        from build123d import Box, Pos
+
+        wall_y0, wall_y1 = -p.WALL, -p.POCKET_CLEAR
+        wall_yc = (wall_y0 + wall_y1) / 2
+        wall_yh = wall_y1 - wall_y0
+        h = 0.4  # thinner than the smallest measured margin (~0.85mm)
+
+        for ref in ("J2", "J4", "J1"):
+            gbb = case._grown(ref, p.PORT_CLEAR).bounding_box()
+            xc = (gbb.min.X + gbb.max.X) / 2
+            xw = gbb.max.X - gbb.min.X
+            above = Pos(xc, wall_yc, gbb.max.Z + h / 2) * Box(xw, wall_yh, h)
+            below = Pos(xc, wall_yc, gbb.min.Z - h / 2) * Box(xw, wall_yh, h)
+            for label, probe in (("above", above), ("below", below)):
+                hit = self.tray_shell & probe
+                self.assertGreater(
+                    hit.volume, 0.1 * probe.volume,
+                    f"{ref} {label}: only {hit.volume:.3f} of "
+                    f"{probe.volume:.3f}mm^3 of wall remains there")
+
 
 if __name__ == "__main__":
     unittest.main()

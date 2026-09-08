@@ -9,7 +9,7 @@ class TestFixedByTheSpec(unittest.TestCase):
     def test_wall_floor_and_stack(self):
         self.assertEqual(p.WALL, 3.00)
         self.assertEqual(p.FLOOR, 2.40)
-        self.assertEqual(p.STANDOFF, 2.00)
+        self.assertEqual(p.STANDOFF, 3.00)
         self.assertEqual(p.PCB, 1.60)
         self.assertEqual(p.PANEL, 1.60)
         self.assertEqual(p.CAVITY, 14.34)
@@ -28,12 +28,12 @@ class TestDerived(unittest.TestCase):
     def test_external_size(self):
         self.assertAlmostEqual(p.EXT_W, 68.00, places=3)
         self.assertAlmostEqual(p.EXT_L, 110.27, places=3)
-        self.assertAlmostEqual(p.EXT_H, 21.94, places=3)
+        self.assertAlmostEqual(p.EXT_H, 22.94, places=3)
 
     def test_z_landmarks(self):
         self.assertAlmostEqual(p.Z_BOARD_BOTTOM, -1.60, places=3)
-        self.assertAlmostEqual(p.Z_FLOOR_TOP, -3.60, places=3)
-        self.assertAlmostEqual(p.Z_FLOOR_BOTTOM, -6.00, places=3)
+        self.assertAlmostEqual(p.Z_FLOOR_TOP, -4.60, places=3)
+        self.assertAlmostEqual(p.Z_FLOOR_BOTTOM, -7.00, places=3)
         self.assertAlmostEqual(p.Z_LID_UNDER, 14.34, places=3)
         self.assertAlmostEqual(p.Z_WALL_TOP, 15.94, places=3)
 
