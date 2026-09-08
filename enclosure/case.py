@@ -269,6 +269,20 @@ def _usbc_flare() -> Part:
 
     # Where the flare meets the straight _grown() envelope (matches the old
     # cone's chamfer depth), and the wall's own outer face.
+    #
+    # y_inner is hardcoded to -WALL + USBC_CHAMFER (currently -1.800) rather
+    # than derived from _grown("J1", PORT_CLEAR)'s own reach (currently
+    # -1.891), so the two must be kept in sync by hand: this flare has to
+    # start at or before the point where the straight envelope actually
+    # ends, or a gap opens between them. At today's values there's a 0.109mm
+    # overlap (safe -- the flare and the envelope both cover -1.891..-1.800,
+    # so the union is unbroken). If USBC_CHAMFER is ever lowered, y_inner
+    # moves toward the wall's outer face and can cross past -1.891, which
+    # reopens a blind pocket of material between the flare and the straight
+    # envelope; test_ports_are_actually_open catches that today (confirmed:
+    # at USBC_CHAMFER=1.0, port_cutouts() leaves a 0.436mm^3 plug in the
+    # port). No test currently asserts the overlap margin itself, only its
+    # symptom.
     y_inner = -p.WALL + p.USBC_CHAMFER
     y_outer = -p.WALL
 

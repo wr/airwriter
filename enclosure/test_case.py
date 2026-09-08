@@ -289,6 +289,59 @@ class TestPorts(unittest.TestCase):
                     f"{ref} {label}: only {thickness:.3f}mm of wall survives "
                     f"there, need >= {min_thickness}mm")
 
+    def test_usbc_flare_widens_from_the_wall_interior_to_the_exterior(self):
+        # Finding 3's flare fix (task-5-report.md) is only correct if the
+        # opening is WIDER at the wall's outer face than it is just inside
+        # it -- a plug's overmould enters from outside, so that's the whole
+        # point of the chamfer. Nothing before this pinned the direction:
+        # the old, inverted cone (Cone(rotation=(90,0,0)), radius from
+        # j1.size.X) is a completely different construction and the full
+        # suite stayed green with it in place. Measure the real cut opening
+        # (not the flare's own construction parameters) by slicing
+        # port_cutouts() with a thin Y slab at J1's Z centre and reading the
+        # surviving X width, at the wall's outer face (Y=-2.99, WALL=3.00)
+        # and just inside the flare-to-straight-envelope transition
+        # (Y=-1.81, y_inner=-WALL+USBC_CHAMFER=-1.80).
+        from build123d import Box, Pos
+
+        j1 = case.connector_solid("J1").bounding_box()
+        xc = (j1.min.X + j1.max.X) / 2
+        zc = (j1.min.Z + j1.max.Z) / 2
+
+        def opening_width(y):
+            # xspan=15 stays clear of J2/J4's own openings (case X ~13 and
+            # ~32.5 against J1's ~52), so this isolates J1's cut alone.
+            probe = Pos(xc, y, zc) * Box(15, 0.02, 10)
+            hit = case.port_cutouts() & probe
+            self.assertTrue(hit and hit.volume > 1e-9, f"no opening at Y={y}")
+            return hit.bounding_box().size.X
+
+        outer = opening_width(-2.99)
+        inner = opening_width(-1.81)
+        self.assertGreater(
+            outer - inner, 1.0,
+            f"outer opening ({outer:.3f}mm) should be at least 1mm wider "
+            f"than the inner one ({inner:.3f}mm) -- a narrower-outside "
+            "flare is inverted")
+
+    def test_port_cutouts_do_not_intersect_the_floor_slab(self):
+        # The old inverted cone (see previous test) also over-cut
+        # vertically: its Z reach was swept from J1's X width rather than
+        # its own Z extent, and dipped into the floor slab (0.147mm^3 in
+        # this exact geometry -- reproduced below). port_cutouts() must
+        # remove nothing from the floor slab at all.
+        from build123d import Box, Pos
+
+        floor = Pos(
+            p.BOARD_W / 2, p.BOARD_L / 2,
+            (p.Z_FLOOR_TOP + p.Z_FLOOR_BOTTOM) / 2,
+        ) * Box(p.EXT_W, p.EXT_L, p.Z_FLOOR_TOP - p.Z_FLOOR_BOTTOM)
+        hit = case.port_cutouts() & floor
+        vol = hit.volume if hit else 0.0
+        self.assertAlmostEqual(
+            vol, 0.0, places=4,
+            msg=f"port_cutouts() removes {vol:.4f}mm^3 from the floor slab")
+
 
 if __name__ == "__main__":
     unittest.main()

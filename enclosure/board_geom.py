@@ -142,7 +142,7 @@ def _all() -> dict[str, Footprint]:
             model_offset = _model_sub_block(model_blk, "offset") or _IDENTITY_OFFSET
             model_scale = _model_sub_block(model_blk, "scale") or _IDENTITY_SCALE
             model_rotate = _model_sub_block(model_blk, "rotate") or _IDENTITY_ROTATE
-        layer_m = _FP_LAYER.match(blk)
+        layer_m = _FP_LAYER.search(blk)
         out[ref.group(1)] = Footprint(
             ref=ref.group(1),
             x=float(at.group(1)),

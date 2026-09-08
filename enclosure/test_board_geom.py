@@ -79,6 +79,23 @@ class TestFootprints(unittest.TestCase):
         self.assertAlmostEqual(fp.model_scale[1], 1.0, places=6)
         self.assertAlmostEqual(fp.model_scale[2], 1.153846154, places=6)
 
+    def test_back_side_footprints_read_b_cu_through_the_real_parser(self):
+        # _FP_LAYER used to be applied with re.match, which anchors at
+        # position 0 -- but _blocks() yields blocks that begin with the
+        # literal characters "\n\t(footprint ...", so the pattern (which
+        # starts with a literal "(footprint") never matched anything, on
+        # ANY block, front or back. Every footprint silently fell through to
+        # the dataclass default layer="F.Cu", so a genuinely back-side part
+        # could never trip connector_solid()'s NotImplementedError guard.
+        # This has to go through footprint()/the real board-file parser, not
+        # a fixture, or it re-creates the exact blind spot that hid the bug:
+        # a previous round "fixed and verified" this by monkeypatching a
+        # cached Footprint straight to B.Cu, which bypassed the parser
+        # entirely and would have passed on the broken .match() code too.
+        for ref in ("TP2", "TP4", "TP5", "TP7", "TP8"):
+            self.assertEqual(bg.footprint(ref).layer, "B.Cu", ref)
+        self.assertEqual(bg.footprint("J2").layer, "F.Cu")
+
     def test_model_transform_j2_and_j1(self):
         # Read directly off the board file's (model ...) sub-blocks for the
         # two MiniDIN/USB-C connectors, per the Task 1 amendment.
