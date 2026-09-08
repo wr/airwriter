@@ -67,8 +67,15 @@ class TestStandoffsAndScrews(unittest.TestCase):
     def test_counterbore_transition_is_coned_not_a_flat_ledge(self):
         # Printed floor-down, a flat annulus between a 5.0 counterbore and a
         # 2.8 clearance hole is an unsupported bridge. It must be a 45 cone.
-        h = case.screw_holes()
-        flats = [f for f in h.faces()
+        #
+        # This has to be checked on the assembled result, not on the
+        # screw_holes() tool by itself: a tool solid has no downward-facing
+        # flat at that shoulder -- the tool's own material sits below and
+        # wider there, so the face's outward normal there is +Z. The
+        # unsupported ledge only exists on the boolean result, where the
+        # corresponding face has flipped to face -Z.
+        result = (case.shell() + case.standoffs()) - case.screw_holes()
+        flats = [f for f in result.faces()
                  if abs(f.normal_at(f.center()).Z + 1.0) < 1e-6
                  and f.area > 2.0
                  and f.center().Z > p.Z_FLOOR_BOTTOM + 1e-6]
