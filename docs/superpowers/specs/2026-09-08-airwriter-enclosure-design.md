@@ -72,7 +72,7 @@ the same number because they describe different walls:
   edge — the wall thickness that puts the key tips flush with the outside.
 
 Wells ruled for **one uniform 3.00 mm wall** over honouring both literally. The
-consequence, accepted: S1's key tips sit **0.75 mm recessed** in their slot rather than
+consequence, accepted: S1's key tips sit **0.80 mm recessed** in their slot rather than
 flush. That is a config bank set once at assembly, and recessing it makes it harder to
 knock. The 2.25 mm west-wall ruling in HANDOFF is superseded by this document.
 
@@ -98,7 +98,7 @@ cable before anything else is trusted.
 
 **West wall, x = 100.** One slot for S1's eight piano keys, spanning the key band and
 z 8.11–9.01 above the board's top face, sized so a fingernail or pen tip reaches a key
-recessed 0.75 mm.
+recessed 0.80 mm.
 
 **East wall, x = 162.** A 1.2 mm reset pinhole on SW1's plate face at x ≈ 159.4. HANDOFF
 carries a superseded note putting this on the west wall at x = 100; it is **east**.
