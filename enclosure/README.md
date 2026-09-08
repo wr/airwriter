@@ -15,11 +15,15 @@ each constant commented with where it came from.
 
 FDM, 0.4 mm nozzle, 0.2 mm layers, matte black. **No supports.** Tray floor-down
 (68.00 x 110.27 x 22.94 mm), lid plate-down (62.40 x 104.67 x 15.94 mm).
-`test_printable.py` fails the build on any unsupported downward-facing flat, so
-if it passes, it slices — see that file's docstring, and its own comments on
-`downward_flats()`, for what it does and doesn't catch (a curved overhang, e.g.
-a round pinhole through a wall, is fine and deliberately not flagged; a flat
-one is not).
+`test_printable.py` fails the build on any face steeper than the real
+45-degree FDM overhang limit, checked in each part's own print orientation —
+a geometric proxy for printability, not a guarantee it slices clean: it can't
+see warping, first-layer adhesion, or your printer/filament's actual bridging
+distance, only unsupported flats and minimum wall thickness. See that file's
+module docstring, and its own comments on `downward_flats()`/`upward_flats()`,
+for what it does and doesn't catch (a curved overhang, e.g. a round pinhole
+through a wall, is fine and deliberately not flagged; a flat one is not). The
+first-print checklist below is the backstop for what the gate can't see.
 
 ## Hardware
 

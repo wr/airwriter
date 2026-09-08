@@ -441,13 +441,18 @@ def lite_lid() -> Part:
         # sliver of material sealing it.
         bore = Pos(x, y, p.INSERT_DEPTH / 2 - 0.01) * Cylinder(
             p.INSERT_D / 2, p.INSERT_DEPTH + 0.02)
-        # The insert doesn't reach past INSERT_DEPTH, but a flat-bottomed
-        # blind bore leaves a flat ceiling INSIDE the leg at that depth --
-        # solid above, void below, an unsupported bridge once the lid prints
-        # plate-down (see test_printable.py). Cone the blind end to a point
-        # at 45 degrees instead, the same idea as screw_holes()'s
-        # counterbore cone: radius and height both INSERT_D/2, so it closes
-        # over exactly as fast as it rises.
+        # The insert doesn't reach past INSERT_DEPTH, so a flat-bottomed
+        # blind bore leaves a flat cap INSIDE the leg at that depth, model
+        # normal -Z (solid above, toward Z=CAVITY; void below). That is NOT
+        # a bridge: the lid prints plate-down, which makes print-down model
+        # +Z (see this function's own docstring and test_printable.py), so
+        # a model -Z face is print-UP -- this cap sits on solid material in
+        # the print's own down direction and comes out as an ordinary
+        # supported floor. Coned to a point anyway, the same idea as
+        # screw_holes()'s counterbore cone (radius and height both
+        # INSERT_D/2, so it closes over exactly as fast as it rises), so
+        # the insert has a lead-in and nothing to hang up on going in --
+        # not required by the printability gate.
         tip_r = p.INSERT_D / 2
         tip = Pos(x, y, p.INSERT_DEPTH + tip_r / 2) * Cone(tip_r, 0, tip_r)
         body = body - bore - tip

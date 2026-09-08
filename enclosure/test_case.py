@@ -101,6 +101,14 @@ class TestPorts(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.tray_shell = case.shell() - case.port_cutouts()
+        # The real, fully-assembled tray -- shell() + standoffs() minus
+        # every cut INCLUDING _print_reliefs() (the 45-degree roofs over
+        # the DIP slot and each port opening, tray()-only, see case.tray()'s
+        # docstring). tray_shell above never sees those roofs, so nothing
+        # here previously caught a roof eating into the front wall's own
+        # retained material or a connector's clearance (task-8-report.md
+        # Finding 4). The probes below re-run against this too.
+        cls.tray_full = case.tray()
 
     def test_each_connector_has_real_step_geometry(self):
         # J1's own vendor STEP (USB_C_Receptacle_HRO_TYPE-C-31-M-12.step)
@@ -288,6 +296,55 @@ class TestPorts(unittest.TestCase):
                     thickness, min_thickness,
                     f"{ref} {label}: only {thickness:.3f}mm of wall survives "
                     f"there, need >= {min_thickness}mm")
+
+    def test_openings_clear_each_connector_by_at_least_0_30_on_the_full_tray(self):
+        # Finding 4, task-8-report.md: _print_reliefs() (the 45-degree roofs
+        # over each port opening, tray()-only -- see case.tray()'s
+        # docstring) is invisible to every check above, because they all run
+        # against tray_shell = shell() - port_cutouts(), which never
+        # subtracts it. A roof widens the opening near the wall's outer
+        # face; nothing previously re-checked the 0.30mm clearance spec
+        # floor against the roofed opening a real print actually has.
+        # Same probe as test_openings_clear_each_connector_by_at_least_0_30,
+        # against cls.tray_full instead of cls.tray_shell.
+        from build123d import Box, Pos
+        for ref in ("J2", "J4", "J1"):
+            solid = case.connector_solid(ref)
+            bb = solid.bounding_box()
+            xc = (bb.min.X + bb.max.X) / 2
+            local = self.tray_full & (
+                Pos(xc, -p.WALL / 2, 4.5) * Box(20, p.WALL, 26))
+            self.assertGreaterEqual(local.distance_to(solid), 0.30, ref)
+
+    def test_front_wall_retains_material_above_and_below_each_port_on_the_full_tray(self):
+        # Finding 4, task-8-report.md: the top/bottom band probes above run
+        # against tray_shell, which never sees _print_reliefs() -- so
+        # nothing guards a future roof eating into the retained material
+        # this test exists to protect. Same probes as
+        # test_front_wall_retains_material_above_and_below_each_port,
+        # against cls.tray_full instead of cls.tray_shell.
+        from build123d import Box, Pos
+
+        wall_y0, wall_y1 = -p.WALL, -p.POCKET_CLEAR
+        wall_yc = (wall_y0 + wall_y1) / 2
+        wall_yh = wall_y1 - wall_y0
+        h = 0.8
+        min_thickness = 0.5
+
+        for ref in ("J2", "J4", "J1"):
+            bb = case.connector_solid(ref).bounding_box()
+            xc = (bb.min.X + bb.max.X) / 2
+            xw = bb.size.X + 4.0
+            top = Pos(xc, wall_yc, p.Z_WALL_TOP - h / 2) * Box(xw, wall_yh, h)
+            bottom = Pos(xc, wall_yc, p.Z_FLOOR_TOP + h / 2) * Box(xw, wall_yh, h)
+            for label, probe in (("top", top), ("bottom", bottom)):
+                hit = self.tray_full & probe
+                vol = hit.volume if hit else 0.0
+                thickness = (vol / probe.volume) * h
+                self.assertGreaterEqual(
+                    thickness, min_thickness,
+                    f"{ref} {label}: only {thickness:.3f}mm of wall survives "
+                    f"there (full tray), need >= {min_thickness}mm")
 
     def test_usbc_flare_widens_from_the_wall_interior_to_the_exterior(self):
         # Finding 3's flare fix (task-5-report.md) is only correct if the
