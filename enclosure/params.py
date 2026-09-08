@@ -15,7 +15,7 @@ WALL = 3.00
 """Uniform, all four walls. Set by the mini-DIN mating faces, which stand
 2.75mm proud of the board edge and want to land 0.25mm recessed. Wells ruled
 uniform over honouring S1's 2.25mm west-wall placement, so S1's piano keys sit
-0.75mm recessed -- spec section 3."""
+0.80mm recessed -- spec section 3."""
 
 FLOOR = 2.40
 """12 layers at 0.2mm."""
@@ -50,6 +50,13 @@ SCREW_HEAD_D = 5.00
 
 SCREW_HEAD_DEPTH = 1.40
 
+STANDOFF_D = 6.00
+"""Boss diameter under each mounting hole, in the tray. Wide enough to carry
+the board and to leave a printable wall around the 2.80 clearance bore."""
+
+LEG_D = 6.00
+"""Lite lid leg diameter -- enough plastic round a 3.60 insert bore."""
+
 INSERT_D = 3.60
 """Bore for an M2.5 brass heat-set insert in the Lite lid's legs. Final MPN is
 an open item in the spec; re-cut this if the chosen insert differs."""
@@ -78,7 +85,7 @@ DIP_SLOT_Z0 = 7.60
 DIP_SLOT_Z1 = 9.50
 """S1's key slot, z above the board's top face. HANDOFF records the key tips
 travelling 8.11-9.01; 0.5mm of reach is added each way so a pen tip can work a
-key recessed 0.75mm. Confirm against the STEP interference check."""
+key recessed 0.80mm. Confirm against the STEP interference check."""
 
 DIP_SLOT_MARGIN = 0.60
 """Added at each end of the key band (the pad columns at footprint-local
@@ -90,11 +97,19 @@ board's top face. SW1 has no 3D model placed on the board, so this can't be
 booleaned from a STEP; its footprint's own descr instead records the body as
 6.2 x 2.55 x 3.5mm. A side-press switch's SMD body sits flush on the board
 like any other SMD part (Z=0 at its base), and the side button is centred on
-the body's own height, so the axis lands at half of 3.5mm. Cross-checked
-against EVQP44B3M_SidePress.wrl (hand-authored, not wired to the footprint --
-OCCT can't import .wrl anyway): its actuator Transform's Z translation is
-0.689 (the file's own header: values are mm/2.54) = 1.7499mm, matching to
-within the file's own rounding. Task 6 report has the full derivation.
+the body's own height, so the axis lands at half of 3.5mm -- a derivation
+from the footprint descr, unverified against a Panasonic mechanical drawing
+(not in this repo). This is consistent with (NOT confirmed by)
+EVQP44B3M_SidePress.wrl (hand-authored, not wired to the footprint -- OCCT
+can't import .wrl anyway): its actuator Transform's Z translation is 0.689
+(the file's own header: values are mm/2.54) = 1.7499mm, matching to within
+the file's own rounding. That agreement is NOT independent evidence -- the
+WRL was hand-written from measured dimensions with the actuator's Z set
+equal to the body's centre Z, the same "centred on the body" assumption used
+above, so the two were guaranteed to agree to four decimal places regardless
+of whether the assumption is right. The number (1.75mm) stands; task 6 report
+has the full derivation and the ruling that struck the "independently
+confirmed" framing.
 
 RULING 1 (task-6-report.md) drops carveouts() and its CARVEOUT_R/
 CARVEOUT_CLEAR params: the tray's interior is one open prism, and U4/R3/U9

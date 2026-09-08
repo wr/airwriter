@@ -109,7 +109,7 @@ wall tops. One rebate serves both builds.
 **Floor.** Four M2.5 clearance holes with counterbores for the screw heads, at board-local
 H1 (5.636, 5.636), H2 (56.364, 5.636), H3 (5.636, 91.930), H4 (53.364, 91.930). The
 pattern is deliberately asymmetric at H4 — the tray keys off that asymmetry, so the board
-can only go in one way. Four 2.00 mm bosses at the same positions carry the board.
+can only go in one way. Four 3.00 mm bosses at the same positions carry the board.
 
 **Internal carve-outs**, from the ledger: S1's top corner, U4 (119.3, 116.1), R3
 (151.8, 128.8), U9 (146.7, 124.818). SW3's plunger passes up through the lattice and the
@@ -120,7 +120,7 @@ panel's 2.25 mm bore at (131, 91); the Lite lid carries the same bore at the sam
 - **Pro:** M2.5 × 20 from below — rubber foot, floor, standoff, board, lattice, into the
   panel's SMTSO blind nuts. Unchanged from the panel design; hole/seat coaxiality between
   the two boards is load-bearing and is not this document's to move.
-- **Lite:** M2.5 × 8 from below into an M2.5 heat-set insert pressed into the **bottom** of
+- **Lite:** M2.5 × 10 from below into an M2.5 heat-set insert pressed into the **bottom** of
   each lid leg, level with the board's top face. Short engagement into brass; the 14.34 mm
   of leg above the insert is a plain spacer that also guides the screw. Threading M2.5
   straight into printed plastic on a lid meant to be opened is what this avoids.

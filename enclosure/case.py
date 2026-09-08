@@ -44,17 +44,12 @@ def shell() -> Part:
     return outer - cavity
 
 
-STANDOFF_D = 6.00
-"""Boss diameter under each mounting hole. Wide enough to carry the board and
-to leave a printable wall around the 2.80 clearance bore."""
-
-
 def standoffs() -> Part:
     """Four bosses from the floor's top face up to the board's underside."""
     h = p.Z_BOARD_BOTTOM - p.Z_FLOOR_TOP
     out = None
     for x, y in bg.mount_holes().values():
-        boss = Pos(x, y, p.Z_FLOOR_TOP + h / 2) * Cylinder(STANDOFF_D / 2, h)
+        boss = Pos(x, y, p.Z_FLOOR_TOP + h / 2) * Cylinder(p.STANDOFF_D / 2, h)
         out = boss if out is None else out + boss
     return out
 
@@ -345,6 +340,50 @@ def reset_pinhole() -> Part:
     length = p.WALL + 2.0  # overshoot both ends so the cut is clean
     return Pos(p.BOARD_W + p.WALL - length / 2 + 1.0, y, z) * Cylinder(
         p.RESET_PINHOLE_D / 2, length, rotation=(0, 90, 0))
+
+
+def lite_lid() -> Part:
+    """The panel stand-in for boards built without the dot-grid art panel.
+
+    A plate the panel's size and thickness, seating in the same place, on four
+    legs that reproduce in plastic the 14.34mm the lattice and the panel's
+    SMTSO nuts span on a Pro. Each leg takes an M2.5 heat-set insert at its
+    BOTTOM, level with the board's top face, so the screw from below engages
+    brass after a few millimetres instead of threading 14mm of printed
+    plastic.
+
+    Prints plate-down (the plate's own Z_WALL_TOP face on the bed, legs
+    pointing up into the air), so any OTHER model surface facing +Z becomes,
+    once flipped for the print, an unsupported overhang -- a downward flat
+    that isn't the bed-contact plate face. There isn't one here: each leg is
+    a constant-diameter cylinder from the board face (Z=0) up to exactly the
+    plate's underside (Z=CAVITY), so the leg-to-plate junction is a clean
+    coincident union with no exposed shoulder, and the insert bore is cut
+    from the leg's free (Z=0) end, opening the same direction the leg does.
+    """
+    plate = Pos(
+        p.BOARD_W / 2,
+        p.BOARD_L / 2,
+        p.Z_WALL_TOP - p.PANEL / 2,
+    ) * Box(p.POCKET_W, p.POCKET_L, p.PANEL)
+
+    body = plate
+    for x, y in bg.mount_holes().values():
+        leg = Pos(x, y, p.CAVITY / 2) * Cylinder(p.LEG_D / 2, p.CAVITY)
+        body = body + leg
+
+    for x, y in bg.mount_holes().values():
+        # Overshoots 0.02 below Z=0 so the bore opens all the way through the
+        # leg's free end (the board-face-level face) rather than leaving a
+        # sliver of material sealing it.
+        bore = Pos(x, y, p.INSERT_DEPTH / 2 - 0.01) * Cylinder(
+            p.INSERT_D / 2, p.INSERT_DEPTH + 0.02)
+        body = body - bore
+
+    px, py = bg.to_case(131.0, 91.0)
+    plunger = Pos(px, py, p.Z_WALL_TOP - p.PANEL / 2) * Cylinder(
+        p.PLUNGER_BORE_D / 2, p.PANEL + 0.02)
+    return body - plunger
 
 
 def tray() -> Part:

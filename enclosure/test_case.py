@@ -440,5 +440,46 @@ class TestSideFeaturesAndTray(unittest.TestCase):
                                         "within 1mm of this part")
 
 
+class TestLiteLid(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.lid = case.lite_lid()
+
+    def test_is_one_valid_solid(self):
+        self.assertTrue(self.lid.is_valid)
+        self.assertEqual(len(self.lid.solids()), 1)
+
+    def test_plate_matches_the_art_panel_and_seats_flush(self):
+        bb = self.lid.bounding_box()
+        self.assertAlmostEqual(bb.size.X, p.POCKET_W, places=3)
+        self.assertAlmostEqual(bb.size.Y, p.POCKET_L, places=3)
+        self.assertAlmostEqual(bb.max.Z, p.Z_WALL_TOP, places=3)
+
+    def test_legs_span_the_cavity_to_the_board_face(self):
+        bb = self.lid.bounding_box()
+        self.assertAlmostEqual(bb.min.Z, 0.0, places=3)
+        self.assertAlmostEqual(bb.size.Z, p.CAVITY + p.PANEL, places=3)
+
+    def test_it_fits_the_tray_with_no_interference(self):
+        self.assertAlmostEqual((case.tray() & self.lid).volume, 0.0, places=3)
+
+    def test_plunger_bore_sits_over_SW3(self):
+        # SW3's plunger is 3.95 from the footprint origin; HANDOFF puts it at
+        # KiCad (131, 91), under the art panel's test dot.
+        from build123d import Cylinder, Pos
+        import board_geom as bg
+        x, y = bg.to_case(131.0, 91.0)
+        probe = Pos(x, y, p.Z_WALL_TOP - p.PANEL / 2) * Cylinder(0.4, p.PANEL)
+        self.assertAlmostEqual((self.lid & probe).volume, 0.0, places=3)
+
+    def test_insert_bores_open_downward_at_the_board_face(self):
+        import board_geom as bg
+        from build123d import Cylinder, Pos
+        for x, y in bg.mount_holes().values():
+            probe = Pos(x, y, p.INSERT_DEPTH / 2) * Cylinder(
+                p.INSERT_D / 2 - 0.1, p.INSERT_DEPTH)
+            self.assertAlmostEqual((self.lid & probe).volume, 0.0, places=3)
+
+
 if __name__ == "__main__":
     unittest.main()
