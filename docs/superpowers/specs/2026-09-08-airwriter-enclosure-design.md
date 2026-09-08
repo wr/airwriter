@@ -36,16 +36,24 @@ Putting the spanning pillars on the lid keeps that space free in the shared part
 |---|---|---|
 | rubber feet | ~2.0 (off-part) | off-the-shelf |
 | floor | 2.40 | 12 layers at 0.2 |
-| standoff bosses at H1–H4 | 2.00 | through-hole tails of J2/J4/S1/SW3/U7 |
+| standoff bosses at H1–H4 | 3.00 | through-hole tails of J2/J4/S1/SW3/U7 — see the amendment below |
 | PCB | 1.60 | fab |
 | cavity, board top face → lid underside | **14.34** | see below |
 | panel or lid | 1.60 | fab / matched by the printed lid |
-| **external height** | **21.94** | |
+| **external height** | **22.94** | |
 
 **14.34 is not a free variable.** The mini-DIN shells top out 12.74 mm above the board's
 top face; the lattice is squashed to exactly that height; the panel's PEM SMTSO-M25-3ET
 blind nuts stand 1.6 mm proud of the panel's underside and land on the lattice. 12.74 +
 1.6 = 14.34. The Lite lid's legs reproduce that number in plastic.
+
+**Amendment, 2026-09-08 (during implementation).** The standoff was specified
+at 2.00 mm from an estimate of the through-hole tails. Measured off the Kycon
+vendor STEP once the model could import it, J2/J4's pins protrude **2.150 mm**
+below the board — the floor's top face would have sat 0.15 mm inside them and
+the board could not have seated. Raised to **3.00 mm**, which leaves 0.85 mm
+under the pin tips for the hand-soldered fillets the STEP does not model. The
+external height follows: 21.94 → **22.94 mm**. Nothing else in the stack moves.
 
 External footprint **68.00 × 110.27 mm** — the board's 62.00 × 104.27 outline plus 3.00 mm
 of wall each side. The board pocket is cut 0.20 mm oversize inward on each side (62.40 ×

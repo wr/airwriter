@@ -13,9 +13,9 @@
 ## Global Constraints
 
 - **Wall thickness: uniform 3.00 mm.** Nominal; the 0.20 mm pocket clearance makes the effective wall 2.80 mm.
-- **External size: 68.00 × 110.27 × 21.94 mm.**
+- **External size: 68.00 × 110.27 × 22.94 mm.**
 - **Cavity, board top face → lid underside: 14.34 mm.** Not a free variable (mini-DIN shells 12.74 + SMTSO nut 1.6).
-- **Floor 2.40 mm. Board standoffs 2.00 mm. PCB 1.60 mm. Panel/lid 1.60 mm.**
+- **Floor 2.40 mm. Board standoffs 3.00 mm. PCB 1.60 mm. Panel/lid 1.60 mm.** (standoff raised from 2.00 during Task 5: J2/J4's pins measure 2.150 mm below the board)
 - **Board pocket clearance: 0.20 mm per side.**
 - **Print process assumed: FDM, 0.4 mm nozzle, 0.2 mm layers, tray printed floor-down, no supports.**
 - **Screws: M2.5. Pro M2.5 × 20 into the panel's SMTSO nuts; Lite M2.5 × 8 into heat-set inserts at the bottom of each lid leg.**
@@ -32,7 +32,7 @@ Y = 164.27 - kicad_y           # 0 .. 104.27,  Y=0 is the FRONT wall (the ports)
 Z = 0 at the board's TOP face, +Z up
 ```
 
-Derived Z landmarks: board bottom −1.60, floor top −3.60, floor bottom −6.00, lid underside +14.34, wall top +15.94.
+Derived Z landmarks: board bottom −1.60, floor top −4.60, floor bottom −7.00, lid underside +14.34, wall top +15.94.
 
 Everything below is quoted in the case frame unless it says "KiCad".
 
