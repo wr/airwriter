@@ -79,13 +79,13 @@ b = Box(10, 20, 30)
 print('volume', b.volume)
 bb = b.bounding_box()
 print('size', bb.size.X, bb.size.Y, bb.size.Z)
-print('valid', b.is_valid())
+print('valid', b.is_valid)
 "
 ```
 
 Expected: `volume 6000.0`, `size 10.0 20.0 30.0`, `valid True`.
 
-If any name here does not exist, STOP and report the actual build123d 0.11.1 API before continuing — every later task uses `Box`, `bounding_box()`, `.volume`, `.is_valid()`, `export_step`, `export_stl`.
+If any name here does not exist, STOP and report the actual build123d 0.11.1 API before continuing — every later task uses `Box`, `bounding_box()`, `.volume`, `.is_valid`, `export_step`, `export_stl`.
 
 - [ ] **Step 3: Write the failing test**
 
@@ -564,7 +564,7 @@ class TestShell(unittest.TestCase):
         cls.s = case.shell()
 
     def test_is_a_valid_single_solid(self):
-        self.assertTrue(self.s.is_valid())
+        self.assertTrue(self.s.is_valid)
         self.assertEqual(len(self.s.solids()), 1)
 
     def test_external_bounding_box(self):
@@ -798,7 +798,7 @@ class TestPorts(unittest.TestCase):
     def test_each_connector_has_real_step_geometry(self):
         for ref in ("J2", "J4", "J1"):
             solid = case.connector_solid(ref)
-            self.assertTrue(solid.is_valid(), ref)
+            self.assertTrue(solid.is_valid, ref)
             self.assertGreater(solid.volume, 100.0, ref)
 
     def test_minidin_mating_faces_stand_2_75_proud_of_the_board_edge(self):
@@ -953,7 +953,7 @@ class TestSideFeaturesAndTray(unittest.TestCase):
         self.assertAlmostEqual(bb.size.Z, p.RESET_PINHOLE_D, places=3)
 
     def test_tray_is_one_valid_watertight_solid(self):
-        self.assertTrue(self.t.is_valid())
+        self.assertTrue(self.t.is_valid)
         self.assertEqual(len(self.t.solids()), 1)
 
     def test_tray_keeps_its_external_envelope(self):
@@ -1081,7 +1081,7 @@ class TestLiteLid(unittest.TestCase):
         cls.lid = case.lite_lid()
 
     def test_is_one_valid_solid(self):
-        self.assertTrue(self.lid.is_valid())
+        self.assertTrue(self.lid.is_valid)
         self.assertEqual(len(self.lid.solids()), 1)
 
     def test_plate_matches_the_art_panel_and_seats_flush(self):
@@ -1226,7 +1226,7 @@ class TestTray(unittest.TestCase):
         cls.t = case.tray()
 
     def test_single_watertight_solid(self):
-        self.assertTrue(self.t.is_valid())
+        self.assertTrue(self.t.is_valid)
         self.assertEqual(len(self.t.solids()), 1)
 
     def test_no_unsupported_downward_flats(self):
@@ -1256,7 +1256,7 @@ class TestLid(unittest.TestCase):
         cls.lid = case.lite_lid()
 
     def test_single_watertight_solid(self):
-        self.assertTrue(self.lid.is_valid())
+        self.assertTrue(self.lid.is_valid)
         self.assertEqual(len(self.lid.solids()), 1)
 
     def test_no_unsupported_downward_flats_printed_plate_down(self):
