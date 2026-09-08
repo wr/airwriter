@@ -274,7 +274,7 @@ def _usbc_flare() -> Part:
     # than derived from _grown("J1", PORT_CLEAR)'s own reach (currently
     # -1.891), so the two must be kept in sync by hand: this flare has to
     # start at or before the point where the straight envelope actually
-    # ends, or a gap opens between them. At today's values there's a 0.109mm
+    # ends, or a gap opens between them. At today's values there's a 0.091mm
     # overlap (safe -- the flare and the envelope both cover -1.891..-1.800,
     # so the union is unbroken). If USBC_CHAMFER is ever lowered, y_inner
     # moves toward the wall's outer face and can cross past -1.891, which
@@ -307,3 +307,54 @@ def port_cutouts() -> Part:
         cut = _grown(ref, p.PORT_CLEAR)
         out = cut if out is None else out + cut
     return out + _usbc_flare()
+
+
+def dip_slot() -> Part:
+    """S1's eight piano keys, out through the west wall.
+
+    S1's footprint origin is the centre of its pin field; the pad columns run
+    footprint-local x = -8.89 .. +8.89 and the keys align with them. The tips
+    reach local y = -7.205 (body 9.61 deep centred on the 7.62 pin rows, keys
+    2.40 proud), which lands at KiCad x = 97.80 -- 2.20mm past the board edge,
+    so behind a 3.00 wall the keys sit 0.80mm recessed by design.
+    """
+    fp = bg.footprint("S1")
+    ys = [bg.to_case(*bg.local_to_board(fp, lx, 0.0))[1] for lx in (-8.89, 8.89)]
+    y0, y1 = min(ys) - p.DIP_SLOT_MARGIN, max(ys) + p.DIP_SLOT_MARGIN
+    depth = p.WALL + 1.0  # overshoot inward so the cut is clean
+    return Pos(
+        -p.WALL / 2 + 0.5,  # spans x = -WALL .. +1.0
+        (y0 + y1) / 2,
+        (p.DIP_SLOT_Z0 + p.DIP_SLOT_Z1) / 2,
+    ) * Box(depth, y1 - y0, p.DIP_SLOT_Z1 - p.DIP_SLOT_Z0)
+
+
+def reset_pinhole() -> Part:
+    """A pinhole through the EAST wall on SW1's actuator axis.
+
+    HANDOFF has a superseded line putting this on the west wall at x=100; the
+    live ruling is the east edge, with SW1's plate face at KiCad x ~ 159.4.
+
+    SW1 has no 3D model placed on the board, so its Z can't be booleaned from
+    a STEP -- p.RESET_ACTUATOR_Z is derived from its footprint's own descr
+    (body 6.2 x 2.55 x 3.5mm) instead; see params.py and task-6-report.md.
+    """
+    fp = bg.footprint("SW1")
+    _, y = bg.to_case(fp.x, fp.y)
+    z = p.RESET_ACTUATOR_Z
+    length = p.WALL + 2.0  # overshoot both ends so the cut is clean
+    return Pos(p.BOARD_W + p.WALL - length / 2 + 1.0, y, z) * Cylinder(
+        p.RESET_PINHOLE_D / 2, length, rotation=(0, 90, 0))
+
+
+def tray() -> Part:
+    """The finished tray, shared by Pro and Lite.
+
+    No carveouts() term: RULING 1 (task-6-report.md) found the brief's
+    version vacuous -- the cavity is one open prism and U4/R3/U9 all sit well
+    inboard of it, so subtracting cylinders there would subtract air from
+    air. test_case.TestSideFeaturesAndTray checks the real requirement (each
+    part keeps >=1mm of air to the tray) without a no-op boolean term.
+    """
+    body = shell() + standoffs()
+    return body - screw_holes() - port_cutouts() - dip_slot() - reset_pinhole()

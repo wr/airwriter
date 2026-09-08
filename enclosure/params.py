@@ -84,8 +84,24 @@ DIP_SLOT_MARGIN = 0.60
 """Added at each end of the key band (the pad columns at footprint-local
 x = -8.89 .. +8.89)."""
 
-CARVEOUT_CLEAR = 0.50
-"""Radial air added around an internal part's keep-out cylinder."""
+RESET_ACTUATOR_Z = 3.5 / 2
+"""Height of SW1's (Panasonic EVQP44B3M side-press) actuator axis above the
+board's top face. SW1 has no 3D model placed on the board, so this can't be
+booleaned from a STEP; its footprint's own descr instead records the body as
+6.2 x 2.55 x 3.5mm. A side-press switch's SMD body sits flush on the board
+like any other SMD part (Z=0 at its base), and the side button is centred on
+the body's own height, so the axis lands at half of 3.5mm. Cross-checked
+against EVQP44B3M_SidePress.wrl (hand-authored, not wired to the footprint --
+OCCT can't import .wrl anyway): its actuator Transform's Z translation is
+0.689 (the file's own header: values are mm/2.54) = 1.7499mm, matching to
+within the file's own rounding. Task 6 report has the full derivation.
+
+RULING 1 (task-6-report.md) drops carveouts() and its CARVEOUT_R/
+CARVEOUT_CLEAR params: the tray's interior is one open prism, and U4/R3/U9
+all sit well inboard of every wall, so subtracting cylinders there would
+subtract air from air. test_case.TestSideFeaturesAndTray covers the
+requirement's real intent instead -- see its
+test_internal_parts_keep_at_least_1mm_of_air_to_the_tray."""
 
 # --- derived ---------------------------------------------------------------
 

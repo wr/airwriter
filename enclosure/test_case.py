@@ -343,5 +343,102 @@ class TestPorts(unittest.TestCase):
             msg=f"port_cutouts() removes {vol:.4f}mm^3 from the floor slab")
 
 
+class TestSideFeaturesAndTray(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.t = case.tray()
+
+    def test_dip_slot_is_in_the_west_wall_at_the_key_band(self):
+        import board_geom as bg
+        bb = case.dip_slot().bounding_box()
+        self.assertLessEqual(bb.min.X, -p.WALL)
+        self.assertGreaterEqual(bb.max.X, 0.0)
+        self.assertAlmostEqual(bb.min.Z, p.DIP_SLOT_Z0, places=3)
+        self.assertAlmostEqual(bb.max.Z, p.DIP_SLOT_Z1, places=3)
+        # Key band: S1's pad columns at footprint-local x = -8.89 .. +8.89.
+        fp = bg.footprint("S1")
+        lo = bg.to_case(*bg.local_to_board(fp, -8.89, 0.0))[1]
+        hi = bg.to_case(*bg.local_to_board(fp, 8.89, 0.0))[1]
+        lo, hi = min(lo, hi), max(lo, hi)
+        self.assertAlmostEqual(bb.min.Y, lo - p.DIP_SLOT_MARGIN, places=2)
+        self.assertAlmostEqual(bb.max.Y, hi + p.DIP_SLOT_MARGIN, places=2)
+
+    def test_dip_slot_spans_the_wall_with_a_1mm_inward_overshoot(self):
+        # RULING 2 (task-6-report.md): the brief's expression had a stray
+        # "- 0.5" that cancelled the +0.5, leaving the slot centred on the
+        # wall's OUTER face instead of overshooting 1mm past the inner face.
+        # Pin the exact span so that typo can't silently come back: flush
+        # with the outer face at -WALL, 1mm past the inner face at 0.0.
+        bb = case.dip_slot().bounding_box()
+        self.assertAlmostEqual(bb.min.X, -p.WALL, places=3)
+        self.assertAlmostEqual(bb.max.X, 1.0, places=3)
+
+    def test_reset_pinhole_is_in_the_EAST_wall(self):
+        # HANDOFF carries a superseded note putting this on the west wall.
+        import board_geom as bg
+        bb = case.reset_pinhole().bounding_box()
+        self.assertGreaterEqual(bb.max.X, p.BOARD_W + p.WALL)
+        self.assertLessEqual(bb.min.X, p.BOARD_W)
+        _, cy = bg.to_case(*[bg.footprint("SW1").x, bg.footprint("SW1").y])
+        self.assertAlmostEqual((bb.min.Y + bb.max.Y) / 2, cy, places=2)
+        self.assertAlmostEqual(bb.size.Z, p.RESET_PINHOLE_D, places=3)
+
+    def test_reset_pinhole_z_matches_sw1s_derived_actuator_height(self):
+        # SW1 (Panasonic EVQP44B3M side-press, see task-6-report.md) has no
+        # 3D model on the board, so its actuator axis can't be booleaned
+        # from a placed STEP. Its footprint's own descr records the body as
+        # 6.2 x 2.55 x 3.5mm; a side-press body sits flush on the board like
+        # any SMD part (Z=0 at its base), so its actuator is centred at half
+        # the body height above the board's top face. The brief's guess
+        # ((DIP_SLOT_Z0+DIP_SLOT_Z1)/2 - 5.0 = 3.55) is a different number
+        # from that derivation and must not silently come back.
+        bb = case.reset_pinhole().bounding_box()
+        z_centre = (bb.min.Z + bb.max.Z) / 2
+        self.assertAlmostEqual(z_centre, 3.5 / 2, places=2)
+
+    def test_tray_is_one_valid_watertight_solid(self):
+        self.assertTrue(self.t.is_valid)
+        self.assertEqual(len(self.t.solids()), 1)
+
+    def test_tray_keeps_its_external_envelope(self):
+        bb = self.t.bounding_box()
+        self.assertAlmostEqual(bb.size.X, p.EXT_W, places=3)
+        self.assertAlmostEqual(bb.size.Y, p.EXT_L, places=3)
+        self.assertAlmostEqual(bb.size.Z, p.EXT_H, places=3)
+
+    def test_internal_parts_keep_at_least_1mm_of_air_to_the_tray(self):
+        # RULING 1 (task-6-report.md): the brief's carveouts() would be
+        # vacuous -- the tray's interior is one open prism and all three of
+        # U4/R3/U9 sit well inboard of every wall, so subtracting cylinders
+        # there subtracts air from air. This test proves the requirement's
+        # actual intent instead: each part, grown by exactly the 1.0mm this
+        # test claims, must still clear the tray. Sizes are each part's own
+        # vendor STEP bounding box (X-extent, Z-height), measured via
+        # KiCad's bundled 3D library (Package_TO_SOT_SMD.3dshapes/SOT-223.
+        # step 7.0x6.5x1.7, Resistor_SMD.3dshapes/R_0603_1608Metric.step
+        # 1.6x0.8x0.45, Package_TO_SOT_SMD.3dshapes/SOT-353_SC-70-5.step
+        # 2.1x2.0x1.1mm) -- not committed here since board_geom only
+        # resolves ${KIPRJMOD} paths, not the system ${KICAD10_3DMODEL_DIR}
+        # these three use.
+        import board_geom as bg
+        from build123d import Cylinder, Pos
+
+        # ref -> (largest planar (X or Y) extent, height), from the part's
+        # own vendor STEP.
+        sizes = {"U4": (7.0, 1.7), "R3": (1.6, 0.45), "U9": (2.1, 1.1)}
+        margin = 1.0
+        for ref, (xy, h) in sizes.items():
+            fp = bg.footprint(ref)
+            x, y = bg.to_case(fp.x, fp.y)
+            radius = xy / 2 + margin
+            top = h + margin
+            probe = Pos(x, y, top / 2) * Cylinder(radius, top)
+            hit = self.t & probe
+            vol = hit.volume if hit else 0.0
+            self.assertAlmostEqual(vol, 0.0, places=3,
+                                    msg=f"{ref}: {vol:.4f}mm^3 of tray is "
+                                        "within 1mm of this part")
+
+
 if __name__ == "__main__":
     unittest.main()
