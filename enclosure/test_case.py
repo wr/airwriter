@@ -43,5 +43,37 @@ class TestShell(unittest.TestCase):
         self.assertAlmostEqual((self.s & probe).volume, probe.volume, places=2)
 
 
+class TestStandoffsAndScrews(unittest.TestCase):
+    def test_standoffs_sit_at_the_mount_holes_and_reach_the_board(self):
+        import board_geom as bg
+        s = case.standoffs()
+        bb = s.bounding_box()
+        self.assertAlmostEqual(bb.min.Z, p.Z_FLOOR_TOP, places=3)
+        self.assertAlmostEqual(bb.max.Z, p.Z_BOARD_BOTTOM, places=3)
+        self.assertEqual(len(s.solids()), 4)
+        holes = bg.mount_holes()
+        centres = sorted((round(sl.center().X, 3), round(sl.center().Y, 3))
+                         for sl in s.solids())
+        want = sorted((round(x, 3), round(y, 3)) for x, y in holes.values())
+        self.assertEqual(centres, want)
+
+    def test_screw_holes_pass_right_through_the_floor(self):
+        h = case.screw_holes()
+        bb = h.bounding_box()
+        self.assertLessEqual(bb.min.Z, p.Z_FLOOR_BOTTOM)
+        self.assertGreaterEqual(bb.max.Z, p.Z_BOARD_BOTTOM)
+        self.assertEqual(len(h.solids()), 4)
+
+    def test_counterbore_transition_is_coned_not_a_flat_ledge(self):
+        # Printed floor-down, a flat annulus between a 5.0 counterbore and a
+        # 2.8 clearance hole is an unsupported bridge. It must be a 45 cone.
+        h = case.screw_holes()
+        flats = [f for f in h.faces()
+                 if abs(f.normal_at(f.center()).Z + 1.0) < 1e-6
+                 and f.area > 2.0
+                 and f.center().Z > p.Z_FLOOR_BOTTOM + 1e-6]
+        self.assertEqual(flats, [], "downward flat inside a screw hole")
+
+
 if __name__ == "__main__":
     unittest.main()
