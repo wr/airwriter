@@ -397,7 +397,9 @@ def dip_slot() -> Part:
     so behind a 3.00 wall the keys sit 0.80mm recessed by design.
     """
     fp = bg.footprint("S1")
-    ys = [bg.to_case(*bg.local_to_board(fp, lx, 0.0))[1] for lx in (-8.89, 8.89)]
+    pad_xs = [lx for lx, _ in bg.pad_positions("S1")]
+    ys = [bg.to_case(*bg.local_to_board(fp, lx, 0.0))[1]
+          for lx in (min(pad_xs), max(pad_xs))]
     y0, y1 = min(ys) - p.DIP_SLOT_MARGIN, max(ys) + p.DIP_SLOT_MARGIN
     depth = p.WALL + 1.0  # overshoot inward so the cut is clean
     return Pos(
@@ -425,16 +427,38 @@ def reset_pinhole() -> Part:
         p.RESET_PINHOLE_D / 2, length, rotation=(0, 90, 0))
 
 
+def _sw3_plunger_centre() -> tuple[float, float]:
+    """SW3's body centre, in KiCad mm -- where the Lite lid's test-plunger
+    bore lands (HANDOFF: under the art panel's test dot).
+
+    SW3's four through-hole pads sit at footprint-local (0,0), (6.5,0),
+    (0,4.5), (6.5,4.5): a rectangle centred on the body's own middle at
+    local (3.25, 2.25). Deriving the centre from those pads (rather than
+    writing KiCad (131.0, 91.0) directly, which is what this used to do)
+    means a future SW3 move or rotation moves the bore with it instead of
+    leaving it silently behind."""
+    fp = bg.footprint("SW3")
+    xs = [x for x, _ in bg.pad_positions("SW3")]
+    ys = [y for _, y in bg.pad_positions("SW3")]
+    lx, ly = (min(xs) + max(xs)) / 2, (min(ys) + max(ys)) / 2
+    return bg.local_to_board(fp, lx, ly)
+
+
 def lite_lid() -> Part:
     """The panel stand-in for boards built without the dot-grid art panel.
 
-    A plate the panel's size, thickness AND corner radius (POCKET_R -- the
-    panel's own R2.0 grown by POCKET_CLEAR, same as the pocket it seats in),
-    seating in the same place, on four legs that reproduce in plastic the
-    14.34mm the lattice and the panel's SMTSO nuts span on a Pro. Each leg
-    takes an M2.5 heat-set insert at its BOTTOM, level with the board's top
-    face, so the screw from below engages brass after a few millimetres
-    instead of threading 14mm of printed plastic.
+    A plate at the panel's OWN size (BOARD_W x BOARD_L, the board's outline,
+    which the art panel shares -- see params.CORNER_R) and corner radius
+    (CORNER_R), seating in the pocket that was cut POCKET_CLEAR oversize for
+    it. Sized at the panel's own outline rather than at the pocket's, this
+    lands the same 0.20mm/side the pocket gives every other seated part --
+    at the pocket's own size, the plate would need zero clearance to drop
+    in, which does not print (see test_it_fits_the_tray_with_no_interference).
+    Thickness on four legs that reproduce in plastic the 14.34mm the lattice
+    and the panel's SMTSO nuts span on a Pro. Each leg takes an M2.5
+    heat-set insert at its BOTTOM, level with the board's top face, so the
+    screw from below engages brass after a few millimetres instead of
+    threading 14mm of printed plastic.
 
     Prints plate-down (the plate's own Z_WALL_TOP face on the bed, legs
     pointing up into the air), so any OTHER model surface facing +Z becomes,
@@ -446,9 +470,9 @@ def lite_lid() -> Part:
     from the leg's free (Z=0) end, opening the same direction the leg does.
     """
     plate = _rounded_box(
-        p.POCKET_W, p.POCKET_L, p.PANEL,
+        p.BOARD_W, p.BOARD_L, p.PANEL,
         p.BOARD_W / 2, p.BOARD_L / 2, p.Z_WALL_TOP - p.PANEL / 2,
-        p.POCKET_R)
+        p.CORNER_R)
 
     body = plate
     for x, y in bg.mount_holes().values():
@@ -477,7 +501,7 @@ def lite_lid() -> Part:
         tip = Pos(x, y, p.INSERT_DEPTH + tip_r / 2) * Cone(tip_r, 0, tip_r)
         body = body - bore - tip
 
-    px, py = bg.to_case(131.0, 91.0)
+    px, py = bg.to_case(*_sw3_plunger_centre())
     plunger = Pos(px, py, p.Z_WALL_TOP - p.PANEL / 2) * Cylinder(
         p.PLUNGER_BORE_D / 2, p.PANEL + 0.02)
     return body - plunger

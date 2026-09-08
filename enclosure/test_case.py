@@ -237,10 +237,14 @@ class TestPorts(unittest.TestCase):
 
     def test_front_wall_still_exists_between_the_two_minidins(self):
         # J2 and J4 are centred at case X 13.0 and 32.5; there must be
-        # plastic between their openings at the midpoint.
+        # plastic between their openings at the midpoint. The probe is
+        # 1.0 * WALL(3.0) * 2.0 = 6.0mm^3; real geometry leaves 5.600mm^3
+        # (93.3% full) here, so the threshold is set close to that rather
+        # than at 0.5 (an 8.3% floor that would also pass a web reduced to
+        # a sliver by a wider connector or a tighter PORT_CLEAR).
         from build123d import Box, Pos
         probe = Pos(22.75, -p.WALL / 2, 5.0) * Box(1.0, p.WALL, 2.0)
-        self.assertGreater((self.tray_shell & probe).volume, 0.5)
+        self.assertGreater((self.tray_shell & probe).volume, 4.0)
 
     def test_connectors_clear_the_floor_by_at_least_0_50(self):
         # Derives the requirement instead of restating a number (Finding 1,
@@ -419,10 +423,13 @@ class TestSideFeaturesAndTray(unittest.TestCase):
         self.assertGreaterEqual(bb.max.X, 0.0)
         self.assertAlmostEqual(bb.min.Z, p.DIP_SLOT_Z0, places=3)
         self.assertAlmostEqual(bb.max.Z, p.DIP_SLOT_Z1, places=3)
-        # Key band: S1's pad columns at footprint-local x = -8.89 .. +8.89.
+        # Key band: S1's own pad columns, read from the board rather than
+        # mirroring dip_slot()'s literal -- a footprint move must be able
+        # to fail this test (Finding 2).
         fp = bg.footprint("S1")
-        lo = bg.to_case(*bg.local_to_board(fp, -8.89, 0.0))[1]
-        hi = bg.to_case(*bg.local_to_board(fp, 8.89, 0.0))[1]
+        pad_xs = [lx for lx, _ in bg.pad_positions("S1")]
+        lo = bg.to_case(*bg.local_to_board(fp, min(pad_xs), 0.0))[1]
+        hi = bg.to_case(*bg.local_to_board(fp, max(pad_xs), 0.0))[1]
         lo, hi = min(lo, hi), max(lo, hi)
         self.assertAlmostEqual(bb.min.Y, lo - p.DIP_SLOT_MARGIN, places=2)
         self.assertAlmostEqual(bb.max.Y, hi + p.DIP_SLOT_MARGIN, places=2)
@@ -514,9 +521,12 @@ class TestLiteLid(unittest.TestCase):
         self.assertEqual(len(self.lid.solids()), 1)
 
     def test_plate_matches_the_art_panel_and_seats_flush(self):
+        # The plate is sized to the panel's own outline (BOARD_W x
+        # BOARD_L), not the pocket's -- the pocket is POCKET_CLEAR bigger
+        # on every side so a printed plate actually drops in (Finding 1).
         bb = self.lid.bounding_box()
-        self.assertAlmostEqual(bb.size.X, p.POCKET_W, places=3)
-        self.assertAlmostEqual(bb.size.Y, p.POCKET_L, places=3)
+        self.assertAlmostEqual(bb.size.X, p.BOARD_W, places=3)
+        self.assertAlmostEqual(bb.size.Y, p.BOARD_L, places=3)
         self.assertAlmostEqual(bb.max.Z, p.Z_WALL_TOP, places=3)
 
     def test_legs_span_the_cavity_to_the_board_face(self):
@@ -525,20 +535,31 @@ class TestLiteLid(unittest.TestCase):
         self.assertAlmostEqual(bb.size.Z, p.CAVITY + p.PANEL, places=3)
 
     def test_it_fits_the_tray_with_no_interference(self):
-        # With the pocket and plate both genuinely rounded now (rather than
-        # square shapes that happened to touch at a corner within float
-        # noise), a clean miss returns None rather than a zero-volume shape
-        # -- same guard used throughout this file (e.g.
-        # test_no_connector_touches_the_tray).
-        hit = case.tray() & self.lid
-        self.assertAlmostEqual(hit.volume if hit else 0.0, 0.0, places=3)
+        # A zero-volume intersection (the old assertion here) is satisfied
+        # identically by "clears by 2mm" and "touches exactly" -- it can't
+        # tell a real air gap from a plate cut at the pocket's own size
+        # (Finding 1: that was the actual bug, and this test passed right
+        # through it). Assert an actual margin instead: the plate is cut
+        # POCKET_CLEAR undersize from the pocket on every side, so it must
+        # clear by close to that all around.
+        margin = case.tray().distance_to(self.lid)
+        self.assertGreaterEqual(margin, 0.15,
+                                 f"lid clears the pocket by only {margin:.4f}mm")
 
     def test_plunger_bore_sits_over_SW3(self):
-        # SW3's plunger is 3.95 from the footprint origin; HANDOFF puts it at
-        # KiCad (131, 91), under the art panel's test dot.
+        # SW3's own pad centroid (its four through-hole pads sit at
+        # footprint-local (0,0)/(6.5,0)/(0,4.5)/(6.5,4.5), centred on the
+        # body at local (3.25, 2.25)), not the hardcoded KiCad (131, 91)
+        # this test used to mirror (Finding 2) -- so a footprint move is
+        # caught here instead of leaving the bore silently behind it.
         from build123d import Cylinder, Pos
         import board_geom as bg
-        x, y = bg.to_case(131.0, 91.0)
+        fp = bg.footprint("SW3")
+        pad_xs = [lx for lx, _ in bg.pad_positions("SW3")]
+        pad_ys = [ly for _, ly in bg.pad_positions("SW3")]
+        lx = (min(pad_xs) + max(pad_xs)) / 2
+        ly = (min(pad_ys) + max(pad_ys)) / 2
+        x, y = bg.to_case(*bg.local_to_board(fp, lx, ly))
         probe = Pos(x, y, p.Z_WALL_TOP - p.PANEL / 2) * Cylinder(0.4, p.PANEL)
         hit = self.lid & probe
         self.assertAlmostEqual(hit.volume if hit else 0.0, 0.0, places=3)
@@ -570,10 +591,13 @@ class TestCornerRounding(unittest.TestCase):
     """Task 10: the board (hardware/airwriter/airwriter.kicad_pcb) and the
     art panel it shares an outline with both have R2.0 corners, not square
     ones (board_geom.corner_radius()). shell()'s exterior is rounded at
-    EXT_R, its pocket at POCKET_R, and lite_lid()'s plate at POCKET_R too
-    (params.py derives all three from CORNER_R). Only the vertical edges are
-    filleted -- top and bottom rims stay sharp, since a rounded bottom rim
-    on the tray (which prints floor-down) would be an unsupported overhang.
+    EXT_R, its pocket at POCKET_R, and lite_lid()'s plate at CORNER_R --
+    the panel's own outline, not the pocket's (Finding 1: cutting the plate
+    at POCKET_R/POCKET_W/POCKET_L, the pocket's own size, leaves it zero
+    clearance to seat in) (params.py derives all three from CORNER_R). Only
+    the vertical edges are filleted -- top and bottom rims stay sharp, since
+    a rounded bottom rim on the tray (which prints floor-down) would be an
+    unsupported overhang.
 
     Every probe here targets ONE of the four corners along its own 45-degree
     diagonal: a point just off the sharp corner tip (always outside any
@@ -666,61 +690,72 @@ class TestCornerRounding(unittest.TestCase):
                 msg=f"pocket corner ({cx:.2f},{cy:.2f}): {vol:.4f}mm^3 of "
                     "material inside the pocket's own rounded region")
 
-    def test_lite_lid_plate_corners_are_rounded_at_pocket_r(self):
-        x0 = p.BOARD_W / 2 - p.POCKET_W / 2
-        y0 = p.BOARD_L / 2 - p.POCKET_L / 2
-        x1 = p.BOARD_W / 2 + p.POCKET_W / 2
-        y1 = p.BOARD_L / 2 + p.POCKET_L / 2
+    def test_lite_lid_plate_corners_are_rounded_at_corner_r(self):
+        # The plate is cut at the panel's OWN outline (BOARD_W x BOARD_L,
+        # CORNER_R), not the pocket's (Finding 1) -- so this checks the
+        # plate's real footprint and radius, not the pocket's.
+        x0 = 0.0
+        y0 = 0.0
+        x1 = p.BOARD_W
+        y1 = p.BOARD_L
         z = p.Z_WALL_TOP - p.PANEL / 2
         self._assert_solid_corner_rounded(
-            self.lid, x0, y0, x1, y1, p.POCKET_R, z, label="lite lid plate")
+            self.lid, x0, y0, x1, y1, p.CORNER_R, z, label="lite lid plate")
 
-    def test_lid_outline_matches_the_pocket_it_seats_in(self):
-        # The Pro's art panel and the Lite's lid both seat in the same
-        # POCKET_W x POCKET_L pocket, rounded at POCKET_R -- the panel's own
-        # R2.0 grown by POCKET_CLEAR. Build that exact rounded rectangle
-        # independently (Box + fillet on its vertical edges, not by calling
-        # into case.py's own construction) and require the lid's plate to
-        # match it exactly: nothing sticking out past the rounded pocket
-        # (a square-cornered plate WOULD stick out at all four corners --
-        # a square footprint always contains the smaller rounded one, so
-        # only checking "the pocket fits inside the lid" can't catch this;
-        # it has to be checked in this direction), and nothing missing from
-        # inside it either.
+    def test_lid_outline_matches_the_panel_it_stands_in_for(self):
+        # The lid's plate is cut to the art panel's OWN outline -- BOARD_W x
+        # BOARD_L, rounded at CORNER_R -- not the pocket's (Finding 1: a
+        # plate cut to the pocket's own POCKET_W x POCKET_L/POCKET_R has
+        # ZERO clearance in the pocket it's meant to seat in, which does not
+        # print). Build that exact rounded rectangle independently (Box +
+        # fillet on its vertical edges, not by calling into case.py's own
+        # construction) and require the lid's plate to match it exactly:
+        # nothing sticking out past it (a square-cornered plate WOULD stick
+        # out at all four corners -- a square footprint always contains the
+        # smaller rounded one, so only checking "the panel outline fits
+        # inside the lid" can't catch this; it has to be checked in this
+        # direction), and nothing missing from inside it either.
         from build123d import Axis, Box, Cylinder, Pos
         import board_geom as bg
         z = p.Z_WALL_TOP - p.PANEL / 2
-        pocket_shape = Pos(p.BOARD_W / 2, p.BOARD_L / 2, z) * Box(
-            p.POCKET_W, p.POCKET_L, p.PANEL)
-        pocket_shape = pocket_shape.fillet(
-            p.POCKET_R, pocket_shape.edges().filter_by(Axis.Z))
+        panel_shape = Pos(p.BOARD_W / 2, p.BOARD_L / 2, z) * Box(
+            p.BOARD_W, p.BOARD_L, p.PANEL)
+        panel_shape = panel_shape.fillet(
+            p.CORNER_R, panel_shape.edges().filter_by(Axis.Z))
         # lite_lid() also cuts SW3's plunger bore through the plate -- a
         # real, intentional hole, not a corner defect. Cut the same bore
-        # out of the reference shape so it isn't mistaken for one.
-        px, py = bg.to_case(131.0, 91.0)
+        # out of the reference shape so it isn't mistaken for one. Derived
+        # from SW3's own pad centroid (Finding 2), not a hardcoded KiCad
+        # coordinate, so this stays in sync with case.py's own derivation.
+        sw3 = bg.footprint("SW3")
+        pad_xs = [lx for lx, _ in bg.pad_positions("SW3")]
+        pad_ys = [ly for _, ly in bg.pad_positions("SW3")]
+        lx = (min(pad_xs) + max(pad_xs)) / 2
+        ly = (min(pad_ys) + max(pad_ys)) / 2
+        px, py = bg.to_case(*bg.local_to_board(sw3, lx, ly))
         plunger = Pos(px, py, z) * Cylinder(p.PLUNGER_BORE_D / 2, p.PANEL + 0.5)
-        pocket_shape = pocket_shape - plunger
+        panel_shape = panel_shape - plunger
 
-        # Isolate the lid's PLATE within the pocket's own Z band -- the legs
-        # sit entirely below it (topping out exactly at the plate's
-        # underside) and must not be swept into this comparison.
+        # Isolate the lid's PLATE within its own Z band -- the legs sit
+        # entirely below it (topping out exactly at the plate's underside)
+        # and must not be swept into this comparison.
         plate_zband = Pos(p.BOARD_W / 2, p.BOARD_L / 2, z) * Box(
             p.POCKET_W + 2.0, p.POCKET_L + 2.0, p.PANEL)
         plate = self.lid & plate_zband
         self.assertIsNotNone(plate, "no lid material in the plate's own Z band")
 
-        extra = plate - pocket_shape
+        extra = plate - panel_shape
         extra_vol = extra.volume if extra else 0.0
         self.assertAlmostEqual(
             extra_vol, 0.0, delta=1.0,
             msg=f"{extra_vol:.3f}mm^3 of the lid plate sticks out past the "
-                "pocket's own rounded footprint (a square corner?)")
+                "panel's own rounded footprint (a square corner?)")
 
-        missing = pocket_shape - plate
+        missing = panel_shape - plate
         missing_vol = missing.volume if missing else 0.0
         self.assertAlmostEqual(
             missing_vol, 0.0, delta=1.0,
-            msg=f"{missing_vol:.3f}mm^3 of the pocket's rounded footprint "
+            msg=f"{missing_vol:.3f}mm^3 of the panel's rounded footprint "
                 "has no lid material under it")
 
     def test_corner_fillets_are_concentric_with_2_80_radial_wall(self):

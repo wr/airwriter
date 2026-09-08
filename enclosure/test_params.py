@@ -42,5 +42,28 @@ class TestDerived(unittest.TestCase):
         self.assertAlmostEqual(p.WALL - p.POCKET_CLEAR, 2.80, places=3)
 
 
+class TestLiteScrewLength(unittest.TestCase):
+    def test_screw_reaches_the_insert_with_engagement_to_spare(self):
+        # README.md ships M2.5 x 10 for the Lite lid, derived by hand from
+        # Z_FLOOR_BOTTOM/SCREW_HEAD_DEPTH/INSERT_DEPTH arithmetic that
+        # nothing in the suite ties back to params.py -- it already went
+        # wrong once, silently, when STANDOFF moved 2.00 -> 3.00 (an 8mm
+        # screw would have only reached 2.40mm into the insert). Guard the
+        # arithmetic here instead of trusting the README's prose.
+        screw_length = 10.0  # README's Lite screw: M2.5 x 10
+        seat_z = p.Z_FLOOR_BOTTOM + p.SCREW_HEAD_DEPTH  # under the screw head
+        tip_z = seat_z + screw_length
+        # The insert bore opens at the board's top face (Z=0, the leg's own
+        # free end) and runs up INSERT_DEPTH into the leg.
+        engagement = tip_z - 0.0
+        self.assertLessEqual(
+            tip_z, p.INSERT_DEPTH,
+            f"a {screw_length}mm screw's tip reaches {tip_z:.3f}mm past Z=0, "
+            f"past the insert's own {p.INSERT_DEPTH}mm depth")
+        self.assertGreaterEqual(
+            engagement, 3.0,
+            f"only {engagement:.3f}mm of engagement in the insert")
+
+
 if __name__ == "__main__":
     unittest.main()

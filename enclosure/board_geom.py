@@ -43,8 +43,12 @@ class Footprint:
     model_rotate: tuple[float, float, float] = _IDENTITY_ROTATE
 
 
-def _text() -> str:
-    return BOARD_PCB.read_text()
+def _text(path: pathlib.Path | None = None) -> str:
+    # `path` defaults dynamically to the CURRENT module-level BOARD_PCB
+    # (looked up here, not bound as a default at def-time) so that tests
+    # which monkeypatch board_geom.BOARD_PCB to a scratch file still take
+    # effect on every no-argument caller.
+    return (path or BOARD_PCB).read_text()
 
 
 def _blocks(src: str, opener: str):
@@ -84,16 +88,21 @@ def _blocks(src: str, opener: str):
 _COORD = re.compile(r"\((?:start|end|mid|xy) ([-\d.]+) ([-\d.]+)\)")
 
 
-def outline() -> tuple[float, float, float, float]:
-    """The Edge.Cuts bounding box in KiCad mm: (min_x, min_y, max_x, max_y)."""
-    src = _text()
+def outline(path: pathlib.Path | None = None) -> tuple[float, float, float, float]:
+    """The Edge.Cuts bounding box in KiCad mm: (min_x, min_y, max_x, max_y).
+
+    `path` defaults to the main board, but takes any KiCad board file --
+    used by test_board_geom.py to read the art panel's own outline off
+    hardware/panel/panel.kicad_pcb without a second parser."""
+    path = path or BOARD_PCB
+    src = _text(path)
     pts: list[tuple[float, float]] = []
     for kind in ("line", "rect", "arc", "poly"):
         for blk in _blocks(src, "gr_" + kind):
             if '"Edge.Cuts"' in blk:
                 pts += [(float(a), float(b)) for a, b in _COORD.findall(blk)]
     if not pts:
-        raise RuntimeError(f"no Edge.Cuts geometry in {BOARD_PCB}")
+        raise RuntimeError(f"no Edge.Cuts geometry in {path}")
     xs = [p[0] for p in pts]
     ys = [p[1] for p in pts]
     return min(xs), min(ys), max(xs), max(ys)
@@ -103,20 +112,22 @@ _ARC_PT = re.compile(r"\((start|mid|end) ([-\d.]+) ([-\d.]+)\)")
 
 
 def _circumradius(p1: tuple[float, float], p2: tuple[float, float],
-                   p3: tuple[float, float]) -> float:
+                   p3: tuple[float, float],
+                   path: pathlib.Path | None = None) -> float:
     """The radius of the circle through three points, via Heron's formula on
     the triangle they form: R = (a*b*c) / (4*area)."""
+    path = path or BOARD_PCB
     a = math.dist(p2, p3)
     b = math.dist(p1, p3)
     c = math.dist(p1, p2)
     s = (a + b + c) / 2
     area = math.sqrt(max(s * (s - a) * (s - b) * (s - c), 0.0))
     if area < 1e-9:
-        raise RuntimeError(f"degenerate Edge.Cuts arc (collinear points) in {BOARD_PCB}")
+        raise RuntimeError(f"degenerate Edge.Cuts arc (collinear points) in {path}")
     return (a * b * c) / (4 * area)
 
 
-def corner_radius(tol: float = 1e-3) -> float:
+def corner_radius(tol: float = 1e-3, path: pathlib.Path | None = None) -> float:
     """The board's own corner radius, derived from its Edge.Cuts arcs rather
     than assumed.
 
@@ -125,8 +136,10 @@ def corner_radius(tol: float = 1e-3) -> float:
     without knowing the centre. Every arc found must agree to within `tol`
     mm -- a board with mismatched corner radii needs a human to look at it,
     not an average that quietly picks a number nobody chose.
-    """
-    src = _text()
+
+    `path` defaults to the main board; see `outline()`."""
+    path = path or BOARD_PCB
+    src = _text(path)
     radii: list[float] = []
     for blk in _blocks(src, "gr_arc"):
         if '"Edge.Cuts"' not in blk:
@@ -134,14 +147,14 @@ def corner_radius(tol: float = 1e-3) -> float:
         pts = {kind: (float(x), float(y)) for kind, x, y in _ARC_PT.findall(blk)}
         if not {"start", "mid", "end"} <= pts.keys():
             continue
-        radii.append(_circumradius(pts["start"], pts["mid"], pts["end"]))
+        radii.append(_circumradius(pts["start"], pts["mid"], pts["end"], path))
     if not radii:
-        raise RuntimeError(f"no Edge.Cuts arcs in {BOARD_PCB}")
+        raise RuntimeError(f"no Edge.Cuts arcs in {path}")
     r0 = radii[0]
     for r in radii[1:]:
         if abs(r - r0) > tol:
             raise ValueError(
-                f"Edge.Cuts corner radii disagree in {BOARD_PCB}: {radii} "
+                f"Edge.Cuts corner radii disagree in {path}: {radii} "
                 f"(tolerance {tol}mm) -- a board with mixed corner radii "
                 "needs a human, not an averaged number.")
     return round(sum(radii) / len(radii), 6)

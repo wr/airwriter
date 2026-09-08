@@ -23,8 +23,8 @@ build time rather than retyped, so the case cannot drift from the board.
 
 The Lite board is the same main board with the 37 SK6812MINI and their 100 nF caps
 unpopulated. It has no panel, so the lid reproduces the panel's outline, its 1.6 mm
-thickness and its position in the tray's top rebate: from the outside the two builds are
-identical except the top face.
+thickness and its position at the top of the tray's pocket: from the outside the two
+builds are identical except the top face.
 
 One tray, not two. The Lite's legs — not the tray — span the cavity, because the Pro's
 lattice already occupies the four mounting-hole positions with its own indexing posts.
@@ -68,7 +68,7 @@ the same number because they describe different walls:
   face (`MiniDIN-8_Kycon_KMDGX-8S-BS_RightAngle.kicad_mod`: "Origin at connector
   centreline (X) and mating face (Y)"). They sit at y = 167.02, so the faces stand
   **2.75 mm** proud of the board edge and need a 3 mm wall to land 0.25 mm recessed.
-- **West (x = 100), 2.25 mm.** S1's piano keys reach x = 97.75, which is 2.25 mm past the
+- **West (x = 100), 2.20 mm.** S1's piano keys reach x = 97.80, which is 2.20 mm past the
   edge — the wall thickness that puts the key tips flush with the outside.
 
 Wells ruled for **one uniform 3.00 mm wall** over honouring both literally. The
@@ -103,8 +103,11 @@ recessed 0.80 mm.
 **East wall, x = 162.** A 1.2 mm reset pinhole on SW1's plate face at x ≈ 159.4. HANDOFF
 carries a superseded note putting this on the west wall at x = 100; it is **east**.
 
-**Top.** A 1.6 mm deep, 62.40 × 104.67 rebate so the panel or the lid drops flush with the
-wall tops. One rebate serves both builds.
+**Top.** Not a separate rebate: the 62.40 × 104.67 pocket is one constant cross-section
+prism from the floor top up to the wall tops, and the panel or lid — 1.6 mm thick, at the
+panel's own 62.00 × 104.27 outline — simply occupies the top 1.6 mm of it, landing flush
+with the wall tops and held in place by its own screws rather than resting on a shelf. One
+pocket serves both builds.
 
 **Floor.** Four M2.5 clearance holes with counterbores for the screw heads, at board-local
 H1 (5.636, 5.636), H2 (56.364, 5.636), H3 (5.636, 91.930), H4 (53.364, 91.930). The

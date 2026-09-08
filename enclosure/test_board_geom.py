@@ -5,6 +5,8 @@ import unittest
 
 import board_geom as bg
 
+PANEL_PCB = bg.REPO / "hardware" / "panel" / "panel.kicad_pcb"
+
 
 class TestOutline(unittest.TestCase):
     def test_outline_is_62_by_104_27(self):
@@ -197,6 +199,26 @@ class TestCornerRadius(unittest.TestCase):
         # above came from the corruption, not from some permanent state
         # corner_radius() left behind.
         self.assertAlmostEqual(bg.corner_radius(), 2.0, places=3)
+
+
+class TestPanelSharesTheBoardOutline(unittest.TestCase):
+    """params.CORNER_R's docstring claims the art panel (hardware/panel/
+    panel.kicad_pcb) shares the main board's exact outline -- same
+    62.00 x 104.27 footprint, same R2.0 corners -- and case.lite_lid()'s
+    fix for Finding 1 (the Lite lid's zero-clearance pocket fit) depends on
+    that being literally true: the lid is now sized at BOARD_W x BOARD_L /
+    CORNER_R specifically because the panel is assumed to match. Read the
+    panel file directly, with the same parser used on the main board,
+    rather than trusting the hand-verified claim in prose."""
+
+    def test_panel_outline_matches_the_board(self):
+        self.assertTrue(PANEL_PCB.exists(), PANEL_PCB)
+        min_x, min_y, max_x, max_y = bg.outline(PANEL_PCB)
+        self.assertAlmostEqual(max_x - min_x, 62.00, places=3)
+        self.assertAlmostEqual(max_y - min_y, 104.27, places=3)
+
+    def test_panel_corners_match_the_board_s_r2_0(self):
+        self.assertAlmostEqual(bg.corner_radius(path=PANEL_PCB), 2.0, places=3)
 
 
 if __name__ == "__main__":

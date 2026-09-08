@@ -14,7 +14,9 @@ each constant commented with where it came from.
 ## Print
 
 FDM, 0.4 mm nozzle, 0.2 mm layers, matte black. **No supports.** Tray floor-down
-(68.00 x 110.27 x 22.94 mm), lid plate-down (62.40 x 104.67 x 15.94 mm).
+(68.00 x 110.27 x 22.94 mm), lid plate-down (62.00 x 104.27 x 15.94 mm — the
+art panel's own outline, not the pocket's; see "First print" below for the
+0.20 mm/side it should clear by).
 `test_printable.py` fails the build on any face steeper than the real
 45-degree FDM overhang limit, checked in each part's own print orientation —
 a geometric proxy for printability, not a guarantee it slices clean: it can't
@@ -24,6 +26,13 @@ module docstring, and its own comments on `downward_flats()`/`upward_flats()`,
 for what it does and doesn't catch (a curved overhang, e.g. a round pinhole
 through a wall, is fine and deliberately not flagged; a flat one is not). The
 first-print checklist below is the backstop for what the gate can't see.
+
+**The gate assumes the print orientation stated above and nothing checks that
+you sliced it that way.** It walks each part's own downward faces in ITS
+orientation — tray floor-down, lid plate-down — so reprinting the tray any
+other way, or the lid any way but plate-down, invalidates every claim
+`test_printable.py` makes: faces it never flagged as overhangs can turn into
+real unsupported ceilings once the part is reoriented in the slicer.
 
 ## Hardware
 
@@ -59,7 +68,13 @@ before it costs you the ones further down the list.
    set equal to the body's centre Z — the same assumption `RESET_ACTUATOR_Z`
    makes — so the two were always going to agree (see `params.py` and
    task-6-report.md for the full derivation).
-5. The full stack screwed together.
+5. (Lite only) The lid into the tray's pocket, by hand, before any screws go
+   in. It should drop in with a light push and lift back out — expect about
+   0.20 mm of clearance per side (`POCKET_CLEAR`), not a press fit and not a
+   rattle. Too tight almost always means the pocket printed a little
+   undersize (common on the first layers of a part this size); too loose
+   past a wobble means something upstream drifted.
+6. The full stack screwed together.
 
 ## Interference check
 

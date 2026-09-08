@@ -2,6 +2,12 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+> **Note on staleness:** the per-task bodies below are the as-dispatched briefs, kept
+> verbatim for their historical value — most are pre-amendment (`21.94`, `STANDOFF = 2.00`,
+> "0.75mm recessed", "M2.5 × 8", `carveouts()` as a deliverable) and do not reflect later
+> rulings. The **Global Constraints** block just below is the live summary; trust it, not
+> the task bodies, for current numbers.
+
 **Goal:** A parametric build123d model in `enclosure/` that exports a printable tray shared by both AirWriter builds and a Lite lid that replaces the dot-grid art panel, with every board-derived dimension read out of `airwriter.kicad_pcb` at build time.
 
 **Architecture:** Three Python modules and a shell driver. `board_geom.py` parses the KiCad board and hands back positions in a case-local right-handed frame. `params.py` holds the numbers this project *chooses* (wall, floor, clearances), each commented with where it came from. `case.py` builds two solids — `tray()` and `lite_lid()` — using `board_geom` for anything the board decides and importing the real connector STEP files to cut the port openings, so no connector diameter is ever guessed. `build.sh` exports STEP and STL and runs the printability assertions.
@@ -18,7 +24,7 @@
 - **Floor 2.40 mm. Board standoffs 3.00 mm. PCB 1.60 mm. Panel/lid 1.60 mm.** (standoff raised from 2.00 during Task 5: J2/J4's pins measure 2.150 mm below the board)
 - **Board pocket clearance: 0.20 mm per side.**
 - **Print process assumed: FDM, 0.4 mm nozzle, 0.2 mm layers, tray printed floor-down, no supports.**
-- **Screws: M2.5. Pro M2.5 × 20 into the panel's SMTSO nuts; Lite M2.5 × 8 into heat-set inserts at the bottom of each lid leg.**
+- **Screws: M2.5. Pro M2.5 × 20 into the panel's SMTSO nuts; Lite M2.5 × 10 into heat-set inserts at the bottom of each lid leg.**
 - **Never modify anything under `hardware/`.** This project reads the board; it does not write it.
 - Board file is at `hardware/airwriter/airwriter.kicad_pcb`; connector STEPs at `hardware/airwriter/lib/airwriter.3dshapes/`.
 
