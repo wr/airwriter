@@ -138,29 +138,87 @@ class TestPorts(unittest.TestCase):
         self.assertAlmostEqual(bb.min.Y, -1.5, delta=0.2)
 
     def test_no_connector_touches_the_tray(self):
-        # Scoped to the cavity/wall region (Z >= Z_FLOOR_TOP): that's what
-        # port_cutouts() can affect, and what Task 5 owns. Unclipped, J2/J4
-        # fail this by a sliver -- their real STEP pins dip ~0.15mm into the
-        # floor slab (bb.min.Z = -3.75 vs Z_FLOOR_TOP = -3.6), a pre-existing
-        # shortfall in Task 2's STANDOFF clearance for through-hole tails,
-        # not a port-cutout defect. Reported in task-5-report.md rather than
-        # patched here.
-        from build123d import Box, Pos
-        above_floor = Pos(0, 0, (p.Z_WALL_TOP + p.Z_FLOOR_TOP) / 2) * Box(
-            1000, 1000, p.Z_WALL_TOP - p.Z_FLOOR_TOP)
+        # STANDOFF (params.py) now leaves >=0.85mm between every connector's
+        # real STEP geometry and the floor (see
+        # test_connectors_clear_the_floor_by_at_least_0_50 below), so this no
+        # longer needs the above-the-floor clip a previous round used to
+        # dodge a genuine 0.15mm floor interference -- that interference is
+        # fixed at the source now, not worked around here.
         for ref in ("J2", "J4", "J1"):
-            hit = self.tray_shell & (case.connector_solid(ref) & above_floor)
-            self.assertAlmostEqual(hit.volume, 0.0, places=3, msg=ref)
+            hit = self.tray_shell & case.connector_solid(ref)
+            self.assertAlmostEqual(hit.volume if hit else 0.0, 0.0, places=3, msg=ref)
 
     def test_openings_clear_each_connector_by_at_least_0_30(self):
-        # offset() on the raw vendor STEP itself fails (see case._grown's
-        # docstring and task-5-report.md) -- grow the connector's convex
-        # hull instead, the same robust technique port_cutouts() uses, at
-        # the spec's assertion floor of 0.30 (below the production 0.40).
+        # Finding 2, task-5-report.md: the previous version intersected the
+        # tray with case._grown(ref, 0.30), but the tray was built by
+        # SUBTRACTING case._grown(ref, 0.40) -- the 0.30 envelope is a
+        # geometric subset of the 0.40 one that was already cut away, so the
+        # intersection was empty by construction for any geometry, including
+        # a connector mis-placed by 6mm. Assert on real distance instead: the
+        # nearest point of whatever wall survives around this connector to
+        # the connector's own (real, not grown) solid.
+        from build123d import Box, Pos
         for ref in ("J2", "J4", "J1"):
-            grown = case._grown(ref, 0.30)
-            hit = self.tray_shell & grown
-            self.assertAlmostEqual(hit.volume, 0.0, places=3, msg=ref)
+            solid = case.connector_solid(ref)
+            bb = solid.bounding_box()
+            xc = (bb.min.X + bb.max.X) / 2
+            local = self.tray_shell & (
+                Pos(xc, -p.WALL / 2, 4.5) * Box(20, p.WALL, 26))
+            self.assertGreaterEqual(local.distance_to(solid), 0.30, ref)
+
+    def test_ports_are_actually_open(self):
+        # Finding 4, task-5-report.md: nothing previously checked that a
+        # connector's opening actually reaches the wall's outer face.
+        # _grown(ref, PORT_CLEAR) alone spans Y -1.90..6.80 for J1 and never
+        # reaches Y=-3.00 (the wall's outer face) -- only the USB-C flare
+        # punches the rest of the way through. A bar spanning the full wall
+        # thickness at each connector's centre must find (almost) no
+        # material: a "port" that is still plugged with plastic is not open.
+        from build123d import Box, Pos
+        for ref in ("J2", "J4", "J1"):
+            solid = case.connector_solid(ref)
+            bb = solid.bounding_box()
+            xc = (bb.min.X + bb.max.X) / 2
+            zc = (bb.min.Z + bb.max.Z) / 2
+            bar = Pos(xc, -p.WALL / 2, zc) * Box(2.0, p.WALL, 2.0)
+            hit = self.tray_shell & bar
+            self.assertAlmostEqual(
+                hit.volume if hit else 0.0, 0.0, places=3,
+                msg=f"{ref}: port is blind, {(hit.volume if hit else 0.0):.3f}"
+                    f"mm^3 of plastic blocks it")
+
+    def test_j2_placement_registers_against_the_boards_own_pads(self):
+        # Finding 6, task-5-report.md: a deliberate +6mm X mis-placement of
+        # all three connectors was previously caught by exactly one test.
+        # This check is independent of connector_solid()'s own placement
+        # transform -- it parses J2's 11 through-hole pads (8 signal pins +
+        # 3 shield/mounting posts) straight out of the board file and maps
+        # each footprint-local position to the case frame via
+        # board_geom.local_to_board() + to_case(), the same primitives
+        # mount_holes() uses, not the STEP-placement code under test. A
+        # small probe just below the board's underside at each pad's real
+        # (x, y) must find real material: if connector_solid("J2") ever
+        # drifts off the board's actual copper, some pins go dark.
+        from build123d import Box, Pos
+        import board_geom as bg
+
+        fp = bg.footprint("J2")
+        pads = bg.pad_positions("J2")
+        self.assertEqual(len(pads), 11)
+
+        solid = case.connector_solid("J2")
+        for i, (lx, ly) in enumerate(pads):
+            bx, by = bg.local_to_board(fp, lx, ly)
+            cx, cy = bg.to_case(bx, by)
+            probe = Pos(cx, cy, p.Z_BOARD_BOTTOM - 0.5) * Box(0.6, 0.6, 1.0)
+            hit = solid & probe
+            vol = hit.volume if hit else 0.0
+            # Physics, not the measured value: a pin's tail either passes
+            # through this probe or it doesn't. 0.005 is far below every
+            # real hit measured here (0.025 - 0.18mm^3) and far above the
+            # exact 0.0 a miss produces.
+            self.assertGreater(vol, 0.005, f"J2 pad {i} at case ({cx:.2f}, "
+                                f"{cy:.2f}): only {vol:.4f}mm^3, not really there")
 
     def test_front_wall_still_exists_between_the_two_minidins(self):
         # J2 and J4 are centred at case X 13.0 and 32.5; there must be
@@ -189,37 +247,47 @@ class TestPorts(unittest.TestCase):
                 f"only {clearance:.3f}mm, need >= {margin}mm")
 
     def test_front_wall_retains_material_above_and_below_each_port(self):
-        # Finding 2, task-5-report.md: _grown() uses a convex hull, so an
-        # opening can over-cut where the real connector is concave, and
-        # nothing previously checked that the wall itself survives that.
-        # Anchor each probe to the *live* grown envelope (not a hand-typed
-        # Z) so the test tracks the real geometry: if a future PORT_CLEAR
-        # bump or connector STEP revision pushes an opening far enough to
-        # reach the wall's own floor/top boundary, the wall there is eaten
-        # and a probe placed just past the envelope's edge finds nothing.
-        # The probe stops at -POCKET_CLEAR, not Y=0 -- past that the shell
-        # is already hollow (the board pocket), not wall, regardless of any
-        # port cutout, so including it would make the probe fail for a
-        # reason that has nothing to do with port_cutouts().
+        # Finding 5, task-5-report.md: the previous version anchored both
+        # probes to case._grown(ref, PORT_CLEAR)'s own live bounding box, so
+        # they always sat just outside whatever the opening happened to be
+        # -- at PORT_CLEAR=3.0 the opening ate the entire front wall from
+        # floor top to wall top and this test still passed; it only failed
+        # once the opening reached 6.0. Anchoring to the live envelope can
+        # never catch "the envelope grew too tall", because the probe grows
+        # right along with it.
+        #
+        # Anchor to the wall's own FIXED structural limits instead --
+        # Z_WALL_TOP and Z_FLOOR_TOP don't move when PORT_CLEAR or a
+        # connector's STEP does -- and require a minimum absolute surviving
+        # thickness, not a fraction of an arbitrarily-sized probe. Measured
+        # today, real geometry leaves the full 0.8mm probe intact at every
+        # band for all three connectors (thickness_mm ~= 0.8); the 0.5mm
+        # floor is comfortably below that and comfortably above what a
+        # genuinely eaten wall leaves (~0.28-0.31mm at PORT_CLEAR=3.0 in
+        # this same geometry, 0.0mm at PORT_CLEAR=6.0 -- see
+        # task-5-report.md for the deliberate-break measurements).
         from build123d import Box, Pos
 
         wall_y0, wall_y1 = -p.WALL, -p.POCKET_CLEAR
         wall_yc = (wall_y0 + wall_y1) / 2
         wall_yh = wall_y1 - wall_y0
-        h = 0.4  # thinner than the smallest measured margin (~0.85mm)
+        h = 0.8
+        min_thickness = 0.5
 
         for ref in ("J2", "J4", "J1"):
-            gbb = case._grown(ref, p.PORT_CLEAR).bounding_box()
-            xc = (gbb.min.X + gbb.max.X) / 2
-            xw = gbb.max.X - gbb.min.X
-            above = Pos(xc, wall_yc, gbb.max.Z + h / 2) * Box(xw, wall_yh, h)
-            below = Pos(xc, wall_yc, gbb.min.Z - h / 2) * Box(xw, wall_yh, h)
-            for label, probe in (("above", above), ("below", below)):
+            bb = case.connector_solid(ref).bounding_box()
+            xc = (bb.min.X + bb.max.X) / 2
+            xw = bb.size.X + 4.0  # margin around the connector's own width
+            top = Pos(xc, wall_yc, p.Z_WALL_TOP - h / 2) * Box(xw, wall_yh, h)
+            bottom = Pos(xc, wall_yc, p.Z_FLOOR_TOP + h / 2) * Box(xw, wall_yh, h)
+            for label, probe in (("top", top), ("bottom", bottom)):
                 hit = self.tray_shell & probe
-                self.assertGreater(
-                    hit.volume, 0.1 * probe.volume,
-                    f"{ref} {label}: only {hit.volume:.3f} of "
-                    f"{probe.volume:.3f}mm^3 of wall remains there")
+                vol = hit.volume if hit else 0.0
+                thickness = (vol / probe.volume) * h
+                self.assertGreaterEqual(
+                    thickness, min_thickness,
+                    f"{ref} {label}: only {thickness:.3f}mm of wall survives "
+                    f"there, need >= {min_thickness}mm")
 
 
 if __name__ == "__main__":

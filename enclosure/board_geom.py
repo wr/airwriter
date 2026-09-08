@@ -37,6 +37,7 @@ class Footprint:
     rot: float
     lib: str
     model: str | None
+    layer: str = "F.Cu"
     model_offset: tuple[float, float, float] = _IDENTITY_OFFSET
     model_scale: tuple[float, float, float] = _IDENTITY_SCALE
     model_rotate: tuple[float, float, float] = _IDENTITY_ROTATE
@@ -106,8 +107,10 @@ def to_case(kx: float, ky: float) -> tuple[float, float]:
 _REF = re.compile(r'\(property "Reference" "([^"]+)"')
 _AT = re.compile(r"\n\t\t\(at ([-\d.]+) ([-\d.]+)(?: ([-\d.]+))?\)")
 _LIB = re.compile(r'\(footprint "([^"]+)"')
+_FP_LAYER = re.compile(r'\(footprint "[^"]+"\s*\n\s*\(layer "([^"]+)"')
 _MODEL = re.compile(r'\(model "([^"]+)"')
 _XYZ = re.compile(r"\(xyz ([-\d.]+) ([-\d.]+) ([-\d.]+)\)")
+_PAD_AT = re.compile(r'\(pad "[^"]+" thru_hole \w+\s*\(at ([-\d.]+) ([-\d.]+)')
 
 
 def _model_sub_block(blk: str, name: str) -> tuple[float, float, float] | None:
@@ -139,6 +142,7 @@ def _all() -> dict[str, Footprint]:
             model_offset = _model_sub_block(model_blk, "offset") or _IDENTITY_OFFSET
             model_scale = _model_sub_block(model_blk, "scale") or _IDENTITY_SCALE
             model_rotate = _model_sub_block(model_blk, "rotate") or _IDENTITY_ROTATE
+        layer_m = _FP_LAYER.match(blk)
         out[ref.group(1)] = Footprint(
             ref=ref.group(1),
             x=float(at.group(1)),
@@ -146,6 +150,7 @@ def _all() -> dict[str, Footprint]:
             rot=float(at.group(3) or 0.0),
             lib=_LIB.search(blk).group(1),
             model=path,
+            layer=layer_m.group(1) if layer_m else "F.Cu",
             model_offset=model_offset,
             model_scale=model_scale,
             model_rotate=model_rotate,
@@ -182,3 +187,23 @@ def local_to_board(fp: Footprint, lx: float, ly: float) -> tuple[float, float]:
 def mount_holes() -> dict[str, tuple[float, float]]:
     """H1-H4 in the case frame."""
     return {r: to_case(footprint(r).x, footprint(r).y) for r in ("H1", "H2", "H3", "H4")}
+
+
+def pad_positions(ref: str) -> list[tuple[float, float]]:
+    """Every through-hole pad's LOCAL (footprint-relative, unrotated) x, y for
+    a footprint, read straight out of the board file.
+
+    This is deliberately independent of the STEP-placement machinery in
+    case.connector_solid(): it exists so a placement-registration check can
+    verify the connector lands where the board's own copper says it should,
+    without trusting the same transform it is meant to be checking. Pad
+    positions are given in the footprint's local frame (before fp.rot is
+    applied) -- feed them through local_to_board() then to_case() to reach
+    the case frame, same as mount_holes() does for H1-H4.
+    """
+    src = _text()
+    for blk in _blocks(src, "footprint"):
+        m = _REF.search(blk)
+        if m and m.group(1) == ref:
+            return [(float(x), float(y)) for x, y in _PAD_AT.findall(blk)]
+    raise KeyError(f"{ref} is not a footprint on {BOARD_PCB.name}")
