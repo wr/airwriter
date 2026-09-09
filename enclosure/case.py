@@ -65,8 +65,17 @@ def shell() -> Part:
 
 
 def standoffs() -> Part:
-    """Four bosses from the floor's top face up to the board's underside."""
-    h = p.Z_BOARD_BOTTOM - p.Z_FLOOR_TOP
+    """Four bosses from the floor's top face up to BOSS_RELIEF short of the
+    board's underside.
+
+    Stopping short of Z_BOARD_BOTTOM, rather than running flush to it, is
+    deliberate: the board's exported bottom mask/copper sheets sit at case Z
+    -1.68, 0.08mm below the nominal -1.60 underside, so a boss running flush
+    to -1.60 penetrated those sheets by 0.08mm -- the boss should seat on
+    laminate, not on solder mask or a copper pour. See params.BOSS_RELIEF.
+    Does not change STANDOFF (the board's stand-off height itself), only
+    where this boss's own top face stops."""
+    h = p.Z_BOARD_BOTTOM - p.BOSS_RELIEF - p.Z_FLOOR_TOP
     out = None
     for x, y in bg.mount_holes().values():
         boss = Pos(x, y, p.Z_FLOOR_TOP + h / 2) * Cylinder(p.STANDOFF_D / 2, h)
@@ -395,12 +404,23 @@ def dip_slot() -> Part:
     reach local y = -7.205 (body 9.61 deep centred on the 7.62 pin rows, keys
     2.40 proud), which lands at KiCad x = 97.80 -- 2.20mm past the board edge,
     so behind a 3.00 wall the keys sit 0.80mm recessed by design.
+
+    The slot's Y span is built from the KEY BAND'S OWN EDGES, not the pad
+    column centres: each outer key extends DIP_KEY_HALF_WIDTH past its pad
+    column's centre (vendor VRML, see params.DIP_KEY_HALF_WIDTH), and only
+    then does DIP_SLOT_MARGIN get added, past that real edge. S1's rotation
+    is a pure 90-degree turn, so a local-x distance carries over to case-Y
+    unscaled -- DIP_KEY_HALF_WIDTH can be added directly in case-frame mm.
+    (The old code added the margin straight onto the pad centres, with no
+    allowance for the key's own width, and the two outer keys ended up
+    0.05mm inside the wall material -- see params.DIP_SLOT_MARGIN.)
     """
     fp = bg.footprint("S1")
     pad_xs = [lx for lx, _ in bg.pad_positions("S1")]
     ys = [bg.to_case(*bg.local_to_board(fp, lx, 0.0))[1]
           for lx in (min(pad_xs), max(pad_xs))]
-    y0, y1 = min(ys) - p.DIP_SLOT_MARGIN, max(ys) + p.DIP_SLOT_MARGIN
+    edge = p.DIP_KEY_HALF_WIDTH + p.DIP_SLOT_MARGIN
+    y0, y1 = min(ys) - edge, max(ys) + edge
     depth = p.WALL + 1.0  # overshoot inward so the cut is clean
     return Pos(
         -p.WALL / 2 + 0.5,  # spans x = -WALL .. +1.0
@@ -454,11 +474,13 @@ def lite_lid() -> Part:
     lands the same 0.20mm/side the pocket gives every other seated part --
     at the pocket's own size, the plate would need zero clearance to drop
     in, which does not print (see test_it_fits_the_tray_with_no_interference).
-    Thickness on four legs that reproduce in plastic the 14.34mm the lattice
-    and the panel's SMTSO nuts span on a Pro. Each leg takes an M2.5
-    heat-set insert at its BOTTOM, level with the board's top face, so the
-    screw from below engages brass after a few millimetres instead of
-    threading 14mm of printed plastic.
+    Thickness on four legs that reproduce in plastic the CAVITY (12.74mm) the
+    Pro's mini-DIN lattice spans, so the plate's own top lands flush with
+    Z_WALL_TOP -- the same face the Pro's panel top registers against (see
+    params.CAVITY for the nut-stack correction and its open flag). Each leg
+    takes an M2.5 heat-set insert at its BOTTOM, level with the board's top
+    face, so the screw from below engages brass after a few millimetres
+    instead of threading through the full leg.
 
     Prints plate-down (the plate's own Z_WALL_TOP face on the bed, legs
     pointing up into the air), so any OTHER model surface facing +Z becomes,

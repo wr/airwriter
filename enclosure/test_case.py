@@ -56,13 +56,27 @@ class TestStandoffsAndScrews(unittest.TestCase):
         s = case.standoffs()
         bb = s.bounding_box()
         self.assertAlmostEqual(bb.min.Z, p.Z_FLOOR_TOP, places=3)
-        self.assertAlmostEqual(bb.max.Z, p.Z_BOARD_BOTTOM, places=3)
+        # The boss stops BOSS_RELIEF short of the board's underside by
+        # design (params.BOSS_RELIEF) -- it does not run flush to
+        # Z_BOARD_BOTTOM.
+        self.assertAlmostEqual(
+            bb.max.Z, p.Z_BOARD_BOTTOM - p.BOSS_RELIEF, places=3)
         self.assertEqual(len(s.solids()), 4)
         holes = bg.mount_holes()
         centres = sorted((round(sl.center().X, 3), round(sl.center().Y, 3))
                          for sl in s.solids())
         want = sorted((round(x, 3), round(y, 3)) for x, y in holes.values())
         self.assertEqual(centres, want)
+
+    def test_standoffs_clear_the_boards_underside_by_boss_relief(self):
+        # Would have caught the boss penetrating the board's exported
+        # bottom mask/copper sheets (measured at case Z -1.68, 0.08mm below
+        # the nominal -1.60 underside): the boss's own top face must sit
+        # exactly BOSS_RELIEF below Z_BOARD_BOTTOM, not flush with it.
+        s = case.standoffs()
+        gap = p.Z_BOARD_BOTTOM - s.bounding_box().max.Z
+        self.assertAlmostEqual(gap, p.BOSS_RELIEF, places=3)
+        self.assertGreater(gap, 0.0)
 
     def test_screw_holes_pass_right_through_the_floor(self):
         h = case.screw_holes()
@@ -425,14 +439,65 @@ class TestSideFeaturesAndTray(unittest.TestCase):
         self.assertAlmostEqual(bb.max.Z, p.DIP_SLOT_Z1, places=3)
         # Key band: S1's own pad columns, read from the board rather than
         # mirroring dip_slot()'s literal -- a footprint move must be able
-        # to fail this test (Finding 2).
+        # to fail this test (Finding 2). The slot's edge is the pad column
+        # PLUS the key's own half-width, THEN the margin -- not the margin
+        # added straight onto the pad column (that was the bug).
         fp = bg.footprint("S1")
         pad_xs = [lx for lx, _ in bg.pad_positions("S1")]
         lo = bg.to_case(*bg.local_to_board(fp, min(pad_xs), 0.0))[1]
         hi = bg.to_case(*bg.local_to_board(fp, max(pad_xs), 0.0))[1]
         lo, hi = min(lo, hi), max(lo, hi)
-        self.assertAlmostEqual(bb.min.Y, lo - p.DIP_SLOT_MARGIN, places=2)
-        self.assertAlmostEqual(bb.max.Y, hi + p.DIP_SLOT_MARGIN, places=2)
+        edge = p.DIP_KEY_HALF_WIDTH + p.DIP_SLOT_MARGIN
+        self.assertAlmostEqual(bb.min.Y, lo - edge, places=2)
+        self.assertAlmostEqual(bb.max.Y, hi + edge, places=2)
+
+    def test_dip_slot_fully_contains_the_key_band_with_real_margin(self):
+        # Would have caught the outer keys sitting inside the wall
+        # material: build the KEY BAND itself (pad column centres +-
+        # DIP_KEY_HALF_WIDTH -- the keys' own physical extent, not the pad
+        # columns), and require the slot to contain it with margin > 0 on
+        # both sides. Proven red at the old MARGIN=0.60 below.
+        import board_geom as bg
+        bb = case.dip_slot().bounding_box()
+        fp = bg.footprint("S1")
+        pad_xs = [lx for lx, _ in bg.pad_positions("S1")]
+        lo = bg.to_case(*bg.local_to_board(fp, min(pad_xs), 0.0))[1]
+        hi = bg.to_case(*bg.local_to_board(fp, max(pad_xs), 0.0))[1]
+        lo, hi = min(lo, hi), max(lo, hi)
+        key_lo = lo - p.DIP_KEY_HALF_WIDTH
+        key_hi = hi + p.DIP_KEY_HALF_WIDTH
+
+        self.assertLess(
+            bb.min.Y, key_lo,
+            "slot's own edge does not clear the outer key's edge")
+        self.assertGreater(
+            bb.max.Y, key_hi,
+            "slot's own edge does not clear the outer key's edge")
+
+        margin_lo = key_lo - bb.min.Y
+        margin_hi = bb.max.Y - key_hi
+        self.assertGreater(margin_lo, 0.0)
+        self.assertGreater(margin_hi, 0.0)
+
+        # At the old MARGIN=0.60 (added onto the pad columns, no
+        # DIP_KEY_HALF_WIDTH), the outer keys sat inside the wall: prove
+        # that combination is red rather than trusting this test's own
+        # logic to have caught it.
+        old_margin = 0.60
+        old_y0 = lo - old_margin
+        old_y1 = hi + old_margin
+        # old_margin (0.60) < DIP_KEY_HALF_WIDTH (0.65), so the old slot's
+        # own edge lands INSIDE the real key edge on both ends -- it does
+        # NOT reach out to key_lo/key_hi. That gap is exactly the 0.05mm of
+        # key sitting inside the wall material that Wells saw.
+        self.assertGreater(
+            old_y0, key_lo,
+            "old margin=0.60 was expected to fail to clear the key band, "
+            "but didn't reproduce the bug")
+        self.assertLess(
+            old_y1, key_hi,
+            "old margin=0.60 was expected to fail to clear the key band, "
+            "but didn't reproduce the bug")
 
     def test_dip_slot_spans_the_wall_with_a_1mm_inward_overshoot(self):
         # RULING 2 (task-6-report.md): the brief's expression had a stray
@@ -533,6 +598,19 @@ class TestLiteLid(unittest.TestCase):
         bb = self.lid.bounding_box()
         self.assertAlmostEqual(bb.min.Z, 0.0, places=3)
         self.assertAlmostEqual(bb.size.Z, p.CAVITY + p.PANEL, places=3)
+
+    def test_lid_top_matches_the_walls_own_top_nothing_stands_proud(self):
+        # Would have caught the wall standing 1.6mm proud of the panel:
+        # compares the TRAY's own built wall geometry against the LID's own
+        # built plate geometry directly (not just each against p.Z_WALL_TOP
+        # separately, which both derive from the same constant and so can't
+        # catch one of the two code paths drifting from the other). The
+        # spec's promise is that Pro and Lite look identical from outside --
+        # this is that promise, checked on the actual solids.
+        wall_top = case.shell().bounding_box().max.Z
+        lid_top = self.lid.bounding_box().max.Z
+        self.assertAlmostEqual(wall_top, lid_top, places=3)
+        self.assertAlmostEqual(lid_top, p.Z_WALL_TOP, places=3)
 
     def test_it_fits_the_tray_with_no_interference(self):
         # A zero-volume intersection (the old assertion here) is satisfied

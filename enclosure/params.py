@@ -28,14 +28,49 @@ reach 2.150mm below the board's underside on the Kycon MiniDIN-8 STEP, so
 doesn't model. The original 2.00 was an estimate that left the pins
 poking 0.15mm into the floor slab -- see task-5-report.md."""
 
+BOSS_RELIEF = 0.10
+"""Added 2026-09-08: each standoff boss stops this far SHORT of
+Z_BOARD_BOTTOM instead of running flush to it. The board's exported bottom
+mask/copper sheets (~/Projects/shop's board_geom GLB) sit at case Z -1.68,
+0.08mm below the nominal -1.60 underside -- with the boss running flush to
+-1.60 it penetrated those sheets by 0.08mm (z-fighting in the 3D viewer,
+and physically the boss would be seating on solder mask or a copper pour,
+not laminate). 0.10 clears the measured 0.08mm with a little margin. Does
+NOT change STANDOFF -- only where the boss's own top face stops; see
+case.standoffs()."""
+
 PCB = 1.60
 PANEL = 1.60
 """The art panel, and the Lite lid that stands in for it."""
 
-CAVITY = 14.34
-"""Board top face to lid underside. NOT a free variable: the mini-DIN shells
-top out 12.74mm above the board face, the lattice is squashed to exactly that,
-and the panel's PEM SMTSO-M25-3ET nuts stand 1.60mm proud of its underside."""
+CAVITY = 12.74
+"""Board top face to lid underside.
+
+CORRECTED 2026-09-08: this used to be 14.34 -- the spec's derivation of
+"mini-DIN shells top out 12.74mm above the board face, plus 1.60mm for the
+panel's PEM SMTSO-M25-3ET nuts standing proud of its underside" -- which
+made Z_WALL_TOP (= CAVITY + PANEL, the panel's own thickness) double-count
+that 1.60mm: once inside CAVITY, once again as PANEL. The wall stood 1.6mm
+proud of the panel's top edge as a result -- visible in the assembled 3D
+viewer.
+
+Measured directly off the two real GLBs instead (shop's board_geom, board
+frame -> this project's case frame, ~/Projects/shop/public/models/
+airwriter-pro.glb):
+    LATTICE   case Z  0.00 .. 12.74
+    J2 shell  case Z -3.75 .. 12.74
+    PANEL     case Z  9.65 .. 14.32      (panel top ~14.32, PANEL=1.60 thick)
+The panel rests directly on the lattice at 12.74, not on top of proud nuts --
+so CAVITY is that lattice height, board top face to lid underside, full
+stop, and Z_WALL_TOP (CAVITY + PANEL = 14.34) comes out flush with the
+panel's own measured top (14.32, within GLB/print rounding).
+
+FLAG: this contradicts the spec's own nut-stack derivation above. If the
+physical PEM nuts really do stand proud of the panel's UNDERSIDE by 1.60mm
+(as opposed to sitting in a lattice counterbore, which the GLB doesn't
+model), the panel would not seat flush at 12.74 and this case would come out
+1.60mm short of clearing the nuts -- re-check against a real panel + real
+nuts before printing, not just against the GLB."""
 
 POCKET_CLEAR = 0.20
 """Per side, on the board pocket and the panel/lid seat."""
@@ -81,15 +116,35 @@ PLUNGER_BORE_D = 2.25
 """SW3's test plunger. Matches the art panel's own 2.25mm NPTH so the Lite lid
 behaves identically -- the plunger is <= 2.0mm."""
 
-DIP_SLOT_Z0 = 7.60
-DIP_SLOT_Z1 = 9.50
+DIP_SLOT_Z0 = 6.60
+DIP_SLOT_Z1 = 10.60
 """S1's key slot, z above the board's top face. HANDOFF records the key tips
-travelling 8.11-9.01; 0.5mm of reach is added each way so a pen tip can work a
-key recessed 0.80mm. Confirm against the STEP interference check."""
+travelling 8.11-9.01.
 
-DIP_SLOT_MARGIN = 0.60
-"""Added at each end of the key band (the pad columns at footprint-local
-x = -8.89 .. +8.89)."""
+CORRECTED 2026-09-08: this used to be 7.60/9.50 (1.90mm open), which left
+only ~0.5mm of reach above and below the 8.11-9.01 key band -- not enough to
+get a tool onto a key at the bottom of a 3mm-deep tunnel and rock it. Widened
+to 6.60/10.60 (4.00mm open, ~1.5mm of access each side of the key band) for
+finger/tool access down the slot, not just key clearance. Confirm against
+the STEP interference check."""
+
+DIP_KEY_HALF_WIDTH = 0.65
+"""Half the key's own width, traced from the vendor VRML (hardware/airwriter/
+lib/airwriter.3dshapes/SW_DIP_8_RightAngle_DP-08RP.wrl, authored in mm/2.54):
+each of the eight keys is 1.300mm wide (x 2.400 protrusion x 0.900 tall)."""
+
+DIP_SLOT_MARGIN = 0.80
+"""Added at each end of the key BAND'S OWN EDGE (outermost key centre +-
+DIP_KEY_HALF_WIDTH), not at the pad column centres directly.
+
+CORRECTED 2026-09-08: this used to be 0.60, added straight onto the pad
+column centres (footprint-local x = -8.89 .. +8.89) with no allowance for
+the key's own 1.30mm width -- so the outer two keys' own edges, at
+centre +- DIP_KEY_HALF_WIDTH (0.65), poked 0.05mm past the old margin and
+into the wall material (0.65 - 0.60 = 0.05mm overlap), which is what showed
+as the side-surface glitch. Raised to 0.80 so there is real margin (0.15mm)
+outside each key's own edge once DIP_KEY_HALF_WIDTH is subtracted first --
+see case.dip_slot()."""
 
 RESET_ACTUATOR_Z = 3.5 / 2
 """Height of SW1's (Panasonic EVQP44B3M side-press) actuator axis above the

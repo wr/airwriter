@@ -38,14 +38,41 @@ Putting the spanning pillars on the lid keeps that space free in the shared part
 | floor | 2.40 | 12 layers at 0.2 |
 | standoff bosses at H1–H4 | 3.00 | through-hole tails of J2/J4/S1/SW3/U7 — see the amendment below |
 | PCB | 1.60 | fab |
-| cavity, board top face → lid underside | **14.34** | see below |
+| cavity, board top face → lid underside | **12.74** | see below |
 | panel or lid | 1.60 | fab / matched by the printed lid |
-| **external height** | **22.94** | |
+| **external height** | **21.34** | |
 
-**14.34 is not a free variable.** The mini-DIN shells top out 12.74 mm above the board's
-top face; the lattice is squashed to exactly that height; the panel's PEM SMTSO-M25-3ET
-blind nuts stand 1.6 mm proud of the panel's underside and land on the lattice. 12.74 +
-1.6 = 14.34. The Lite lid's legs reproduce that number in plastic.
+**12.74 is not a free variable, and this number was corrected 2026-09-08 (post-implementation,
+against the real GLBs).** The original derivation below stacked the mini-DIN shell height
+*and* the panel's nut stand-off into cavity, then added the panel's own thickness a second
+time on top (`Z_WALL_TOP = CAVITY + PANEL`), which put the wall 1.6 mm proud of the panel —
+visible once the case and the board's real 3D model were viewed together.
+
+Measured directly off the board's own exported GLB instead (`~/Projects/shop/public/models/
+airwriter-pro.glb`, board frame → this project's case frame):
+
+```
+LATTICE   case Z  0.00 .. 12.74
+J2 shell  case Z -3.75 .. 12.74
+PANEL     case Z  9.65 .. 14.32      (panel top ~14.32, panel 1.60 thick)
+```
+
+The panel rests directly on the lattice at 12.74 — cavity is that lattice height, full
+stop, and `Z_WALL_TOP` (cavity + panel = 14.34) lands flush with the panel's own measured
+top (14.32, within GLB/print rounding).
+
+**Original derivation (superseded, kept for the record — see the flag below):** the
+mini-DIN shells top out 12.74 mm above the board's top face; the lattice is squashed to
+exactly that height; the panel's PEM SMTSO-M25-3ET blind nuts stand 1.6 mm proud of the
+panel's underside and land on the lattice. 12.74 + 1.6 = 14.34 was cavity itself, board
+top face to lid underside — which is what double-counted the panel's 1.6 mm a second time
+in `Z_WALL_TOP`.
+
+**Open flag, not resolved by this correction:** if the physical PEM nuts really do stand
+proud of the panel's *underside* by 1.6 mm (rather than sitting in a lattice counterbore,
+which the GLB doesn't model), the panel will not seat flush at 12.74 and the case will come
+out 1.6 mm short of clearing the nuts. Re-check against a real panel and real nuts before
+printing — do not trust the GLB measurement alone for this one dimension.
 
 **Amendment, 2026-09-08 (during implementation).** The standoff was specified
 at 2.00 mm from an estimate of the through-hole tails. Measured off the Kycon
@@ -53,7 +80,18 @@ vendor STEP once the model could import it, J2/J4's pins protrude **2.150 mm**
 below the board — the floor's top face would have sat 0.15 mm inside them and
 the board could not have seated. Raised to **3.00 mm**, which leaves 0.85 mm
 under the pin tips for the hand-soldered fillets the STEP does not model. The
-external height follows: 21.94 → **22.94 mm**. Nothing else in the stack moves.
+external height at the time became 21.94 → 22.94 mm; the cavity correction above
+brings it down again to **21.34 mm**. Nothing else in the stack moves.
+
+**Also corrected 2026-09-08, same pass:** each standoff boss now stops 0.10 mm short of
+the board's underside (`BOSS_RELIEF`) rather than running flush to it — the board's
+exported bottom mask/copper sheets sit 0.08 mm below the nominal underside, and a flush
+boss penetrated them. And the DIP slot behind S1 (the piano-key switch) was widened: its
+Y span now clears the key band by real margin measured off the key's own vendor VRML
+width (not the pad-column centres, which left the outer two keys 0.05 mm inside the wall),
+and its Z span opened from 1.90 mm to 4.00 mm so a tool can actually reach a key at the
+bottom of the slot. See `enclosure/params.py` (`CAVITY`, `BOSS_RELIEF`, `DIP_KEY_HALF_WIDTH`,
+`DIP_SLOT_MARGIN`, `DIP_SLOT_Z0`/`DIP_SLOT_Z1`) for the full derivations.
 
 External footprint **68.00 × 110.27 mm** — the board's 62.00 × 104.27 outline plus 3.00 mm
 of wall each side. The board pocket is cut 0.20 mm oversize inward on each side (62.40 ×
@@ -124,7 +162,7 @@ panel's 2.25 mm bore at (131, 91); the Lite lid carries the same bore at the sam
   panel's SMTSO blind nuts. Unchanged from the panel design; hole/seat coaxiality between
   the two boards is load-bearing and is not this document's to move.
 - **Lite:** M2.5 × 10 from below into an M2.5 heat-set insert pressed into the **bottom** of
-  each lid leg, level with the board's top face. Short engagement into brass; the 14.34 mm
+  each lid leg, level with the board's top face. Short engagement into brass; the 12.74 mm
   of leg above the insert is a plain spacer that also guides the screw. Threading M2.5
   straight into printed plastic on a lid meant to be opened is what this avoids.
 

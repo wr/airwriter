@@ -12,12 +12,19 @@ class TestFixedByTheSpec(unittest.TestCase):
         self.assertEqual(p.STANDOFF, 3.00)
         self.assertEqual(p.PCB, 1.60)
         self.assertEqual(p.PANEL, 1.60)
-        self.assertEqual(p.CAVITY, 14.34)
+        self.assertEqual(p.CAVITY, 12.74)
         self.assertEqual(p.POCKET_CLEAR, 0.20)
 
-    def test_cavity_is_the_minidin_plus_the_smtso_nut(self):
-        # 12.74 shell top + 1.60 nut = 14.34. Not a free variable.
-        self.assertAlmostEqual(p.CAVITY, 12.74 + 1.60, places=6)
+    def test_cavity_is_the_minidin_lattice_height_not_nut_plus_lattice(self):
+        # CORRECTED 2026-09-08: CAVITY is the mini-DIN/lattice height alone
+        # (12.74, measured off the board's own GLB in the case frame -- see
+        # params.CAVITY), NOT 12.74 shell top + 1.60 nut stacked on top of
+        # it. That double-counted the panel's own 1.60mm thickness (already
+        # added separately as PANEL in Z_WALL_TOP = CAVITY + PANEL), which
+        # is what put the wall 1.6mm proud of the panel. Pin the corrected
+        # relationship so the old double-count can't silently come back.
+        self.assertAlmostEqual(p.CAVITY, 12.74, places=6)
+        self.assertNotAlmostEqual(p.CAVITY, 12.74 + 1.60, places=2)
 
 
 class TestDerived(unittest.TestCase):
@@ -28,14 +35,22 @@ class TestDerived(unittest.TestCase):
     def test_external_size(self):
         self.assertAlmostEqual(p.EXT_W, 68.00, places=3)
         self.assertAlmostEqual(p.EXT_L, 110.27, places=3)
-        self.assertAlmostEqual(p.EXT_H, 22.94, places=3)
+        # EXT_H derives from Z_WALL_TOP - Z_FLOOR_BOTTOM; check it against
+        # that derivation rather than a pasted literal, so a future CAVITY/
+        # WALL/FLOOR/STANDOFF/PCB/PANEL change can't silently drift EXT_H
+        # without this test noticing.
+        self.assertAlmostEqual(
+            p.EXT_H, p.Z_WALL_TOP - p.Z_FLOOR_BOTTOM, places=6)
+        self.assertAlmostEqual(p.EXT_H, 21.34, places=3)
 
     def test_z_landmarks(self):
         self.assertAlmostEqual(p.Z_BOARD_BOTTOM, -1.60, places=3)
         self.assertAlmostEqual(p.Z_FLOOR_TOP, -4.60, places=3)
         self.assertAlmostEqual(p.Z_FLOOR_BOTTOM, -7.00, places=3)
-        self.assertAlmostEqual(p.Z_LID_UNDER, 14.34, places=3)
-        self.assertAlmostEqual(p.Z_WALL_TOP, 15.94, places=3)
+        self.assertAlmostEqual(p.Z_LID_UNDER, p.CAVITY, places=6)
+        self.assertAlmostEqual(p.Z_LID_UNDER, 12.74, places=3)
+        self.assertAlmostEqual(p.Z_WALL_TOP, p.CAVITY + p.PANEL, places=6)
+        self.assertAlmostEqual(p.Z_WALL_TOP, 14.34, places=3)
 
     def test_effective_wall_after_pocket_clearance(self):
         # 3.00 nominal, 0.20 eaten by pocket clearance -> 2.80 of plastic.
