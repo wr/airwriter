@@ -437,6 +437,7 @@ class TestSideFeaturesAndTray(unittest.TestCase):
         self.assertGreaterEqual(bb.max.X, 0.0)
         self.assertAlmostEqual(bb.min.Z, p.DIP_SLOT_Z0, places=3)
         self.assertAlmostEqual(bb.max.Z, p.DIP_SLOT_Z1, places=3)
+
         # Key band: S1's own pad columns, read from the board rather than
         # mirroring dip_slot()'s literal -- a footprint move must be able
         # to fail this test (Finding 2). The slot's edge is the pad column
@@ -450,6 +451,25 @@ class TestSideFeaturesAndTray(unittest.TestCase):
         edge = p.DIP_KEY_HALF_WIDTH + p.DIP_SLOT_MARGIN
         self.assertAlmostEqual(bb.min.Y, lo - edge, places=2)
         self.assertAlmostEqual(bb.max.Y, hi + edge, places=2)
+
+    def test_dip_slot_never_opens_above_the_switch_body(self):
+        # S1's moulded body tops out 9.41 above the board (dp08rp.mjs / the
+        # footprint descr's 9.41mm height). A slot reaching past that opens the
+        # wall onto empty cavity -- it showed up in the viewer as a black bar
+        # above the keys. Stay under it.
+        S1_BODY_TOP = 9.41
+        bb = case.dip_slot().bounding_box()
+        self.assertLess(bb.max.Z, S1_BODY_TOP,
+                        f"slot top {bb.max.Z:.2f} is above S1's body top {S1_BODY_TOP}")
+
+    def test_dip_slot_clears_the_whole_key_lever(self):
+        # The levers run from z 5.8 (the lip) to 9.01 (the key top), inside the
+        # switch's own 5.6-9.0 recess. A slot that starts above the lip cuts the
+        # travel off mid-stroke.
+        LEVER_BOTTOM, KEY_TOP = 5.8, 9.01
+        bb = case.dip_slot().bounding_box()
+        self.assertLessEqual(bb.min.Z, LEVER_BOTTOM, "slot starts above the lever lip")
+        self.assertGreaterEqual(bb.max.Z, KEY_TOP, "slot ends below the key top")
 
     def test_dip_slot_fully_contains_the_key_band_with_real_margin(self):
         # Would have caught the outer keys sitting inside the wall
