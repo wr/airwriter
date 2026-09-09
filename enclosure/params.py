@@ -134,6 +134,15 @@ the keys, which was the case looking past the part into empty cavity. The one
 before that, 7.60-9.50, was only 1.90mm and could not be worked with a tool.
 """
 
+FOOT_RELIEF = 0.60
+FOOT_RELIEF_H = 1.60
+"""The Lite lid's legs are trimmed by FOOT_RELIEF for their first
+FOOT_RELIEF_H, so a leg does not stand on a small SMD part crowding a
+mounting hole. C22 (a 0603, 1.24mm tall) reaches within 2.844mm of H4's
+centre against the 3.00mm leg radius; 0.60 of relief clears it by 0.44.
+Above the relief the leg keeps its full LEG_D, so the heat-set insert has
+1.20mm of wall over most of INSERT_DEPTH."""
+
 DIP_KEY_HALF_WIDTH = 0.65
 """Half a key's width. The DP-08RP's keys are 1.30mm wide (dp08rp.mjs's KEY.w,
 traced from the footprint's F.Fab rectangles), so the key BAND reaches this far

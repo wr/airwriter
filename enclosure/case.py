@@ -496,10 +496,33 @@ def lite_lid() -> Part:
         p.BOARD_W / 2, p.BOARD_L / 2, p.Z_WALL_TOP - p.PANEL / 2,
         p.CORNER_R)
 
-    body = plate
+    # Build the legs on their own so the connector trim below cannot bite
+    # into the plate: J2's grown envelope reaches 0.40 above the shell's
+    # 12.74, which is inside the plate's own 12.74..14.34 band.
+    legs = None
     for x, y in bg.mount_holes().values():
         leg = Pos(x, y, p.CAVITY / 2) * Cylinder(p.LEG_D / 2, p.CAVITY)
-        body = body + leg
+        # The foot is relieved where small SMD parts crowd a mounting hole.
+        # C22, a 0603, comes within 2.844mm of H4's centre against a 3.00mm
+        # leg radius -- a 0.156mm bite, and a leg standing on a capacitor
+        # cracks it. The insert keeps its full wall over the rest of its depth.
+        cut = Pos(x, y, p.FOOT_RELIEF_H / 2) * Cylinder(p.LEG_D / 2, p.FOOT_RELIEF_H)
+        foot = Pos(x, y, p.FOOT_RELIEF_H / 2) * Cylinder(
+            p.LEG_D / 2 - p.FOOT_RELIEF, p.FOOT_RELIEF_H)
+        one = (leg - cut) + foot
+        legs = one if legs is None else legs + one
+
+    # Anything tall near a mounting hole is in a leg's way. J2's shell reaches
+    # within 2.220mm of H3's centre against a 3.00mm radius, for the leg's
+    # whole 12.74mm height. Trim to the connectors we hold real vendor
+    # geometry for rather than guessing a diameter that clears -- this
+    # self-corrects if a connector moves. Parts with no STEP (see the
+    # ${KICAD10_3DMODEL_DIR} note in board_geom) are not covered; FOOT_RELIEF
+    # handles the short ones.
+    for ref in ("J2", "J4", "J1"):
+        legs = legs - _grown(ref, p.PORT_CLEAR)
+
+    body = plate + legs
 
     for x, y in bg.mount_holes().values():
         # Overshoots 0.02 below Z=0 so the bore opens all the way through the

@@ -662,6 +662,47 @@ class TestLiteLid(unittest.TestCase):
         hit = self.lid & probe
         self.assertAlmostEqual(hit.volume if hit else 0.0, 0.0, places=3)
 
+    def test_legs_do_not_run_through_a_connector(self):
+        # The legs stand where the board does. J2's shell comes within 2.220mm
+        # of H3's centre against a 3.00mm leg radius, for the leg's whole
+        # height -- about 27mm^3 of solid overlap, and the lid would not have
+        # gone on.
+        #
+        # Scoped to the LEGS: the plate's underside is meant to touch the
+        # mini-DIN shells at CAVITY (that contact sets the lid's height,
+        # exactly as the Pro's panel rests on them), and the shells'
+        # tessellation puts a micron or so of that contact on the wrong side
+        # of a strict overlap test. The legs have no business touching
+        # anything.
+        import board_geom as bg
+        from build123d import Cylinder, Pos
+        for ref in ("J2", "J4", "J1"):
+            conn = case.connector_solid(ref)
+            for h, (x, y) in bg.mount_holes().items():
+                envelope = Pos(x, y, p.CAVITY / 2) * Cylinder(p.LEG_D / 2 + 0.1, p.CAVITY)
+                region = self.lid & envelope
+                if not region:
+                    continue
+                hit = region & conn
+                vol = hit.volume if hit else 0.0
+                self.assertAlmostEqual(vol, 0.0, places=2,
+                                       msg=f"{h}'s leg puts {vol:.3f}mm^3 inside {ref}")
+
+    def test_leg_feet_are_relieved_for_parts_crowding_a_hole(self):
+        # C22, a 0603 1.24mm tall, reaches within 2.844mm of H4's centre. A
+        # full-diameter leg stands on it and cracks it. Check the foot is
+        # actually narrower than the leg over the part's height.
+        import board_geom as bg
+        from build123d import Cylinder, Pos
+        x, y = bg.mount_holes()["H4"]
+        # A ring at the part's height, between the relieved and full radii:
+        # must be empty if the relief is really there.
+        ring = (Pos(x, y, p.FOOT_RELIEF_H / 2) * Cylinder(p.LEG_D / 2, p.FOOT_RELIEF_H)
+                - Pos(x, y, p.FOOT_RELIEF_H / 2) * Cylinder(p.LEG_D / 2 - p.FOOT_RELIEF, p.FOOT_RELIEF_H))
+        hit = self.lid & ring
+        self.assertAlmostEqual(hit.volume if hit else 0.0, 0.0, places=3,
+                               msg="leg foot is not relieved")
+
     def test_insert_bores_open_downward_at_the_board_face(self):
         import board_geom as bg
         from build123d import Cylinder, Pos
