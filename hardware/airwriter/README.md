@@ -148,3 +148,10 @@ in its ground pad. That is within JLCPCB capability.
   script moves the pads but strands any keepout polygon. The WROOM-1 antenna keepout sat 46mm off
   the board until corrected, so DRC was never enforcing it.
 - **Freerouting does not repour zones.** Always DRC with `--refill-zones`.
+
+## Trademarks
+
+AirPrint, AppleTalk, LocalTalk, EtherTalk and ImageWriter are trademarks of Apple Inc.
+AirWriter is an independent project and is not affiliated with, authorised, sponsored or
+endorsed by Apple Inc. These marks are used only descriptively, to state what the board
+interoperates with.
