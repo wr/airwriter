@@ -123,12 +123,10 @@ class TestPorts(unittest.TestCase):
     def setUpClass(cls):
         cls.tray_shell = case.shell() - case.port_cutouts()
         # The real, fully-assembled tray -- shell() + standoffs() minus
-        # every cut INCLUDING _print_reliefs() (the 45-degree roofs over
-        # the DIP slot and each port opening, tray()-only, see case.tray()'s
-        # docstring). tray_shell above never sees those roofs, so nothing
-        # here previously caught a roof eating into the front wall's own
-        # retained material or a connector's clearance (task-8-report.md
-        # Finding 4). The probes below re-run against this too.
+        # every cut. tray_shell above only sees port_cutouts(), so the
+        # probes below re-run against this too: anything tray() subtracts
+        # later must not eat the front wall's retained material or a
+        # connector's clearance (task-8-report.md Finding 4).
         cls.tray_full = case.tray()
 
     def test_each_connector_has_real_step_geometry(self):
@@ -323,13 +321,10 @@ class TestPorts(unittest.TestCase):
                     f"there, need >= {min_thickness}mm")
 
     def test_openings_clear_each_connector_by_at_least_0_30_on_the_full_tray(self):
-        # Finding 4, task-8-report.md: _print_reliefs() (the 45-degree roofs
-        # over each port opening, tray()-only -- see case.tray()'s
-        # docstring) is invisible to every check above, because they all run
-        # against tray_shell = shell() - port_cutouts(), which never
-        # subtracts it. A roof widens the opening near the wall's outer
-        # face; nothing previously re-checked the 0.30mm clearance spec
-        # floor against the roofed opening a real print actually has.
+        # Finding 4, task-8-report.md: every check above runs against
+        # tray_shell = shell() - port_cutouts(), so a cut only tray() makes
+        # is invisible to them. Re-check the 0.30mm clearance spec floor
+        # against the opening a real print actually has.
         # Same probe as test_openings_clear_each_connector_by_at_least_0_30,
         # against cls.tray_full instead of cls.tray_shell.
         from build123d import Box, Pos
@@ -343,9 +338,9 @@ class TestPorts(unittest.TestCase):
 
     def test_front_wall_retains_material_above_and_below_each_port_on_the_full_tray(self):
         # Finding 4, task-8-report.md: the top/bottom band probes above run
-        # against tray_shell, which never sees _print_reliefs() -- so
-        # nothing guards a future roof eating into the retained material
-        # this test exists to protect. Same probes as
+        # against tray_shell, so nothing guards a tray()-only cut eating
+        # into the retained material this test exists to protect. Same
+        # probes as
         # test_front_wall_retains_material_above_and_below_each_port,
         # against cls.tray_full instead of cls.tray_shell.
         from build123d import Box, Pos
@@ -370,6 +365,20 @@ class TestPorts(unittest.TestCase):
                     thickness, min_thickness,
                     f"{ref} {label}: only {thickness:.3f}mm of wall survives "
                     f"there (full tray), need >= {min_thickness}mm")
+
+    def test_no_cut_breaks_the_top_rim(self):
+        # The rim is what the panel / Lite lid sits against and the first
+        # thing anyone sees. The old 45-degree print roofs over J2/J4 peaked
+        # at Z 14.55, above Z_WALL_TOP (14.34), and notched triangles out of
+        # it; the averaged band probes above let that through. Nothing the
+        # tray subtracts may touch the top 0.5mm of the shell.
+        from build123d import Box, Pos
+        h = 0.5
+        slab = Pos(p.BOARD_W / 2, p.BOARD_L / 2, p.Z_WALL_TOP - h / 2) * Box(
+            p.BOARD_W + 4 * p.WALL, p.BOARD_L + 4 * p.WALL, h)
+        want = (case.shell() & slab).volume
+        self.assertGreater(want, 0.0)
+        self.assertAlmostEqual((self.tray_full & slab).volume, want, places=3)
 
     def test_usbc_flare_widens_from_the_wall_interior_to_the_exterior(self):
         # Finding 3's flare fix (task-5-report.md) is only correct if the

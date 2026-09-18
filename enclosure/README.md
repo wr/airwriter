@@ -25,7 +25,11 @@ distance, only unsupported flats and minimum wall thickness. See that file's
 module docstring, and its own comments on `downward_flats()`/`upward_flats()`,
 for what it does and doesn't catch (a curved overhang, e.g. a round pinhole
 through a wall, is fine and deliberately not flagged; a flat one is not). The
-first-print checklist below is the backstop for what the gate can't see.
+one flat it allows is a lintel: the DIP slot and the three port openings keep
+flat tops, each a bridge across its own opening and only a wall deep (20.7 mm
+at the DIP slot, 14.0 at J2/J4, 6.5 at J1; the gate caps the span at 25). Print
+them with part cooling on. The first-print checklist below is the backstop for
+what the gate can't see.
 
 **The gate assumes the print orientation stated above and nothing checks that
 you sliced it that way.** It walks each part's own downward faces in ITS

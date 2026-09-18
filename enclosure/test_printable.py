@@ -3,7 +3,9 @@
 Both parts print flat-side-down with no supports. The check that matters is
 unsupported flats steeper than the real FDM 45-degree overhang limit: a
 curved overhang (a port hole's top arc) prints fine at these diameters, a
-horizontal or near-horizontal ledge in mid-air does not.
+horizontal or near-horizontal ledge in mid-air does not. The one flat that IS
+allowed is a lintel: the flat top of an opening cut clean through a wall, a
+bridge no deeper than the wall and anchored at both ends (`wall_lintels`).
 
 The two parts print in OPPOSITE orientations relative to their own model:
 
@@ -32,31 +34,53 @@ FDM_OVERHANG_LIMIT = math.cos(math.radians(45))
 as a face normal's Z component. A face tilted exactly 45 degrees off
 horizontal has |n.Z| == this value; flatter (|n.Z| bigger, closer to a pure
 ceiling) can't bridge without support, steeper (|n.Z| smaller, closer to a
-vertical wall) prints fine. This project's own 45-degree ridge roofs
-(_ridge_roof) and insert-bore cones sit exactly at this limit by
-construction, so the comparison in `_overhangs` below is a strict '>':
+vertical wall) prints fine. This project's own counterbore cones sit
+exactly at this limit by construction, so the comparison in `_overhangs` below is a strict '>':
 exactly 45 degrees passes, anything flatter fails."""
 
 MIN_BAND_AREA = 5.0
 """Per Z-band (see `_overhangs`), an unsupported area under this genuinely
-bridges at this project's 0.4mm nozzle / 0.2mm layers -- not a guess: the
-shipped tray's own J2/J4 port roofs leave exactly this kind of harmless
-residue. `_port_roof()` roofs a RECTANGLE sized to each grown connector
-hull's full bounding box, but the hull's actual top is domed/tapering, not
-flat all the way to that bbox -- so the roof's own dead-flat rectangular
-base sticks out past the hull's real (smaller) apex footprint in a few
-places, leaving small facets of the roof's OWN underside exposed on the
-finished tray, not just leftover bits of the hull. Measured on the shipped
-geometry: 52 such facets, 9.70mm^2 total, spread across 3 Z-bands
-(2.16/3.37/4.17mm^2 each, mixing J2 and J4 since both land at nearly
-identical heights) -- comfortably under this threshold, and comfortably
-above what a single facet could hide under the OLD per-face-only check
-(every one of the 52 is < 2.0mm^2 alone; see task-8-report.md Finding 3).
-5.0 clears that real, accepted residue while staying far below every
-genuine offender this gate has ever caught (32.9/8.4/53.1mm^2 for the
-unroofed port and DIP-slot ceilings -- see the deliberately-broken-variant
-numbers in the follow-up report), so reverting the roof fix still fails
-loudly."""
+bridges at this project's 0.4mm nozzle / 0.2mm layers. It clears the slivers
+a hull-derived opening leaves (each well under 1mm^2) while staying far below
+every genuine offender this gate has caught."""
+
+MAX_BRIDGE_SPAN = 25.0
+"""The longest lintel the tray may ask a printer to bridge, in mm. The DIP
+slot is the longest at 20.7; J2/J4 are 14.0 and J1 6.5. A bridge this short
+and only a wall deep (2.8mm) prints clean with part cooling on; the README's
+first-print checklist is the backstop."""
+
+
+def wall_lintels():
+    """(name, bounding box, span) for each opening cut clean through a tray
+    wall, clipped to that wall's own thickness. A downward flat inside one of
+    these is the opening's lintel -- a bridge across `span`, anchored in the
+    wall at both ends -- not a ledge in mid-air. These used to be capped
+    with 45-degree ridge roofs instead; the J2/J4 ridges came out above
+    Z_WALL_TOP and notched the rim, and each roof layer bridged the same
+    span anyway."""
+    from build123d import Box, Pos
+    depth = p.WALL - p.POCKET_CLEAR
+    mid = -(p.WALL + p.POCKET_CLEAR) / 2
+    out = []
+    bb = case.dip_slot().bounding_box()
+    wall = Pos(mid, (bb.min.Y + bb.max.Y) / 2, (bb.min.Z + bb.max.Z) / 2) * Box(
+        depth, bb.size.Y, bb.size.Z)
+    out.append(("S1", wall.bounding_box(), bb.size.Y))
+    for ref in ("J2", "J4", "J1"):
+        bb = case._grown(ref, p.PORT_CLEAR).bounding_box()
+        wall = Pos((bb.min.X + bb.max.X) / 2, mid, (bb.min.Z + bb.max.Z) / 2) * Box(
+            bb.size.X, depth, bb.size.Z)
+        out.append((ref, wall.bounding_box(), bb.size.X))
+    return out
+
+
+def _inside(face, box, tol=0.02):
+    fb = face.bounding_box()
+    return all(
+        getattr(fb.min, a) >= getattr(box.min, a) - tol
+        and getattr(fb.max, a) <= getattr(box.max, a) + tol
+        for a in "XYZ")
 
 
 def _overhangs(part, sign, bed_z, min_area=MIN_BAND_AREA):
@@ -134,10 +158,16 @@ class TestTray(unittest.TestCase):
         self.assertEqual(len(self.t.solids()), 1)
 
     def test_no_unsupported_downward_flats(self):
-        flats = downward_flats(self.t, p.Z_FLOOR_BOTTOM)
+        lintels = [box for _, box, _ in wall_lintels()]
+        flats = [f for f in downward_flats(self.t, p.Z_FLOOR_BOTTOM)
+                 if not any(_inside(f, box) for box in lintels)]
         self.assertEqual(
             [(round(f.center().X, 1), round(f.center().Y, 1),
               round(f.center().Z, 1), round(f.area, 1)) for f in flats], [])
+
+    def test_every_lintel_is_a_short_bridge(self):
+        for name, _, span in wall_lintels():
+            self.assertLessEqual(span, MAX_BRIDGE_SPAN, name)
 
     def test_walls_are_at_least_2_80_thick(self):
         # Probe each wall mid-height, and the floor mid-span, away from any

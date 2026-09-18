@@ -317,69 +317,6 @@ def _usbc_flare() -> Part:
     return loft([inner_face, outer_face])
 
 
-def _ridge_roof(x0: float, x1: float, y0: float, y1: float, z0: float,
-                 rise: float, taper_axis: str) -> Part:
-    """A 45-degree ridge-roof prism over the rectangle (x0..x1, y0..y1) at
-    z0, rising to a ridge LINE at z0+rise -- unioned onto a cutting tool so
-    its own flat top doesn't leave an unsupported horizontal ceiling in
-    whatever it's subtracted from. `taper_axis` is the SHORT dimension that
-    supplies the rise (`rise` should be half of it, for 45 degrees); the
-    ridge runs the length of the other, long dimension. Same idea as
-    screw_holes()'s counterbore cone, just a ridge instead of a point of
-    revolution because these caps are long and thin, not round."""
-    base = [(x0, y0, z0), (x1, y0, z0), (x1, y1, z0), (x0, y1, z0)]
-    if taper_axis == "x":
-        xm = (x0 + x1) / 2
-        ridge = [(xm, y0, z0 + rise), (xm, y1, z0 + rise)]
-    elif taper_axis == "y":
-        ym = (y0 + y1) / 2
-        ridge = [(x0, ym, z0 + rise), (x1, ym, z0 + rise)]
-    else:
-        raise ValueError(taper_axis)
-    return ConvexPolyhedron(base + ridge)
-
-
-def _dip_slot_roof() -> Part:
-    """dip_slot() cuts a plain box into the west wall; its own top face is a
-    ~19mm-wide, dead flat ceiling sitting mid-wall (see test_printable.py) --
-    a real unsupported bridge, not a curved-overhang false alarm. Roofed the
-    same way the port openings are below: taper across the wall's own
-    thickness (WALL to POCKET_CLEAR, the short dimension), ridge running the
-    length of the key band."""
-    bb = dip_slot().bounding_box()
-    x0, x1 = -p.WALL, -p.POCKET_CLEAR
-    rise = (x1 - x0) / 2
-    return _ridge_roof(x0, x1, bb.min.Y, bb.max.Y, bb.max.Z, rise, "x")
-
-
-def _port_roof(ref: str) -> Part:
-    """_grown(ref, PORT_CLEAR)'s own top is frequently flat -- a connector's
-    mating flange or shield top, grown outward, stays flat -- leaving an
-    unsupported ceiling inside the front wall once it's subtracted (see
-    test_printable.py). Roofed the same way _dip_slot_roof() is, just
-    rotated 90 degrees: this wall's short (depth) dimension is Y, so the
-    ridge runs along X instead. Clipped to the wall's own real Y bounds
-    (WALL..POCKET_CLEAR) rather than the connector's full grown bounding
-    box, which reaches well past the wall into the open cavity."""
-    bb = _grown(ref, p.PORT_CLEAR).bounding_box()
-    y0, y1 = -p.WALL, -p.POCKET_CLEAR
-    rise = (y1 - y0) / 2
-    return _ridge_roof(bb.min.X, bb.max.X, y0, y1, bb.max.Z, rise, "y")
-
-
-def _print_reliefs() -> Part:
-    """Extra material removed above dip_slot() and each port opening so
-    tray() has no unsupported downward-facing ceiling once printed
-    floor-down -- see test_printable.py. Not part of dip_slot()/
-    port_cutouts() themselves: those two describe the FUNCTIONAL opening
-    (what the switch/connector needs); this is a printability-only add-on,
-    invisible to anything that fits through the real opening."""
-    out = _dip_slot_roof()
-    for ref in ("J2", "J4", "J1"):
-        out = out + _port_roof(ref)
-    return out
-
-
 def port_cutouts() -> Part:
     """What the front wall gives up to J2, J4 and J1.
 
@@ -561,12 +498,13 @@ def tray() -> Part:
     air. test_case.TestSideFeaturesAndTray checks the real requirement (each
     part keeps >=1mm of air to the tray) without a no-op boolean term.
 
-    _print_reliefs() is last: it only widens holes screw_holes()/
-    port_cutouts()/dip_slot() already opened, so order doesn't matter for
-    the result, just for reading this as "the real openings, then the
-    print-only touch-ups" (task-8-report.md; test_printable.py is the gate
-    this earns).
+    The DIP slot and the port openings keep their flat tops: each is a short
+    bridge across its own opening, within the wall's thickness, which FDM
+    prints without support (test_printable.py bounds the span). They used to
+    be capped with 45-degree ridge roofs; the J2/J4 ridges peaked above
+    Z_WALL_TOP and notched the rim, and a roof's layers bridge the same span
+    anyway.
     """
     body = shell() + standoffs()
     return (body - screw_holes() - port_cutouts() - dip_slot()
-            - reset_pinhole() - _print_reliefs())
+            - reset_pinhole())
