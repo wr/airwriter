@@ -49,6 +49,37 @@ class TestShell(unittest.TestCase):
             p.BOARD_W, p.BOARD_L, p.FLOOR)
         self.assertAlmostEqual((self.s & probe).volume, probe.volume, places=2)
 
+    def test_bottom_outside_rim_is_chamfered_at_45_degrees(self):
+        # The underside face is the exterior outline pulled in by the
+        # chamfer all round; the full outline is only reached BOTTOM_CHAMFER
+        # above it. Equal setbacks in plan and in Z are what make it 45
+        # degrees -- the steepest unsupported face test_printable allows.
+        from build123d import Axis
+        c = p.BOTTOM_CHAMFER
+        underside = self.s.faces().sort_by(Axis.Z)[0]
+        bb = underside.bounding_box()
+        self.assertAlmostEqual(bb.max.Z, p.Z_FLOOR_BOTTOM, places=3)
+        self.assertAlmostEqual(bb.size.X, p.EXT_W - 2 * c, places=3)
+        self.assertAlmostEqual(bb.size.Y, p.EXT_L - 2 * c, places=3)
+        slopes = [f for f in self.s.faces()
+                  if abs(f.center().Z - (p.Z_FLOOR_BOTTOM + c / 2)) < 0.05]
+        self.assertEqual(len(slopes), 8)  # four flats, four corner cones
+        for f in slopes:
+            self.assertAlmostEqual(
+                f.normal_at(f.center()).Z, -math.cos(math.radians(45)), places=3)
+            self.assertAlmostEqual(f.bounding_box().size.Z, c, places=3)
+
+    def test_bottom_chamfer_leaves_the_floor_and_feet_alone(self):
+        # Well short of the floor's thickness, and the underside it leaves
+        # still carries every screw counterbore (where the feet go) whole.
+        import board_geom as bg
+        c = p.BOTTOM_CHAMFER
+        self.assertLess(c, p.FLOOR / 2)
+        for x, y in bg.mount_holes().values():
+            edge = min(x + p.WALL, y + p.WALL,
+                       p.BOARD_W + p.WALL - x, p.BOARD_L + p.WALL - y)
+            self.assertGreater(edge - p.SCREW_HEAD_D / 2 - c, 1.0)
+
 
 class TestStandoffsAndScrews(unittest.TestCase):
     def test_standoffs_sit_at_the_mount_holes_and_reach_the_board(self):

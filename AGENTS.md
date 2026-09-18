@@ -21,7 +21,7 @@ hardware/airwriter/   KiCad 10 project (sch, pcb, lib/, fab/)
 firmware/             ESP-IDF 5.x app; components/ per spec 3.1
 tools/rip/            host build of urf_decode + halftone + imagewriter
 fixtures/             captured URF/PWG samples
-enclosure/            3D printed case, later
+enclosure/            3D printed case (build123d): tray + Lite lid, out/*.stl committed
 docs/SPEC.md          the build spec
 ```
 

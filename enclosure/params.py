@@ -20,6 +20,14 @@ uniform over honouring S1's 2.25mm west-wall placement, so S1's piano keys sit
 FLOOR = 2.40
 """12 layers at 0.2mm."""
 
+BOTTOM_CHAMFER = 0.80
+"""45-degree chamfer around the tray's bottom outside edge, 4 layers tall. It
+softens the arris the case rests and slides on, and it keeps the first
+layers' elephant's-foot flare inside the wall line instead of proud of it. 45
+degrees is exactly the unsupported-overhang limit (test_printable), so it
+prints floor-down with no supports; a fillet there would start flatter than
+that. Under a third of FLOOR and of WALL, so neither gets thin."""
+
 STANDOFF = 3.00
 """Board sits this far off the floor, clearing the through-hole tails of
 J2/J4/S1/SW3/U7. Measured off the vendor STEP (Task 5): J2/J4's pin tips

@@ -30,4 +30,6 @@ __pycache__/
 
 # enclosure
 enclosure/.venv/
-enclosure/out/
+# the STEPs rebuild with enclosure/build.sh; the printable STLs are committed
+enclosure/out/*
+!enclosure/out/*.stl

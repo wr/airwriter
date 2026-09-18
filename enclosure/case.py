@@ -30,7 +30,8 @@ def _rounded_box(w: float, l: float, h: float, cx: float, cy: float,
     filleted to `radius` -- a rounded rectangle extruded through h. Only the
     vertical edges are touched (top and bottom rims stay sharp): both the
     tray's exterior/pocket and the lite lid's plate print with this shape
-    flat-side-down, and a rounded bottom rim would be an overhang."""
+    flat-side-down, and a rounded bottom rim would be an overhang. (The
+    tray's bottom rim gets a 45-degree chamfer instead -- see shell().)"""
     box = Pos(cx, cy, cz) * Box(w, l, h)
     verticals = box.edges().filter_by(Axis.Z)
     return box.fillet(radius, verticals)
@@ -46,7 +47,9 @@ def shell() -> Part:
     the wall thickness naturally produces); the pocket's corners are that
     radius grown by POCKET_CLEAR (POCKET_R), so the board's own rounded
     corners register against the pocket instead of floating in a square
-    one. Only the vertical edges are filleted -- see `_rounded_box`.
+    one. Only the vertical edges are filleted -- see `_rounded_box`. The
+    underside's outside rim is chamfered by BOTTOM_CHAMFER at 45 degrees,
+    which prints floor-down without support where a fillet would not.
 
     No openings: the port cutouts, the DIP slot, the pinhole, the screw holes
     and the carve-outs are all subtracted by tray().
@@ -55,6 +58,10 @@ def shell() -> Part:
         p.EXT_W, p.EXT_L, p.EXT_H,
         p.BOARD_W / 2, p.BOARD_L / 2, (p.Z_WALL_TOP + p.Z_FLOOR_BOTTOM) / 2,
         p.EXT_R)
+    # The bottom outside rim: every edge of the underside face (four lines,
+    # four corner arcs), chamfered at 45 degrees -- see params.BOTTOM_CHAMFER.
+    underside = outer.faces().sort_by(Axis.Z)[0]
+    outer = outer.chamfer(p.BOTTOM_CHAMFER, None, underside.edges())
 
     cavity = _rounded_box(
         p.POCKET_W, p.POCKET_L, p.Z_WALL_TOP - p.Z_FLOOR_TOP,
