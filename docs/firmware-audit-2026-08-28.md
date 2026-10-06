@@ -1,5 +1,19 @@
 # Firmware pre-board audit — 2026-08-28
 
+**Status (same day, W-585): must-dos 1–3 and should-do 4 are implemented** on branch
+`wells/w-585-firmware-preboard-hardening`. Item 3 landed with a different mechanism
+than the minimal fix sketched below — adversarial review proved both that sketch and a
+first ring-bounded implementation unsound (`uart_get_tx_buffer_free_size` only tracks
+the ring item in service, so `uart_write_bytes` could still park forever mid-stall).
+The shipped design writes FIFO-direct via `uart_tx_chars` with no TX ring at all; see
+the HANDOFF's 08-28 late entry and `serial_writer.h`.
+
+**Status update 2 (same day, W-586):** item 6 is done (the 48/255 cap shipped in
+`led_grid`'s first commit, applied as the renderer's final multiply), and the "later"
+gaps for DIP1-8 + the test button are closed (`dip_config` + the button's test page,
+serialized against real jobs by `s_job_lock`). Item 5 stands as resolved-no-code. The
+PIC/LocalTalk bridge remains the one open "later" item.
+
 Three parallel auditors (pin map, serial path, boot safety) over `firmware/` while the
 boards are at PCBWay. Nothing was edited; this is the work list. The good news first:
 **no pin in the firmware is wrong.** Every configured pin matches the final board

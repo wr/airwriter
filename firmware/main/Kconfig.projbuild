@@ -87,6 +87,25 @@ config AIRWRITER_STALL_TIMEOUT
     int "Seconds of HSKo deassertion before the printer is called out of paper"
     default 30
 
+config AIRWRITER_LED_DATA_PIN
+    int "LED chain data pin, -1 if absent"
+    default 48 if IDF_TARGET_ESP32S3
+    default -1
+    help
+        Board net LED_DATA: IO48 into U9, the 3.3-to-5V level shifter feeding
+        the SK6812 chain. U9's input has no pull-down on rev A, so the chain
+        sees noise from power-on until app_main clamps this pin low as its
+        first act. led_grid takes the pin over when that component lands.
+        Devkits without the level shifter leave it at -1.
+
+config AIRWRITER_LED_COUNT
+    int "LED chain length"
+    default 37
+    help
+        37 on the AirWriter board (D10-D46). A devkit with a shorter SK6812
+        strip sets its real count; frames are rendered for the board's 37
+        dots and truncated to the strip.
+
 config AIRWRITER_UART_LOOPBACK
     bool "Loop the printer UART back on itself"
     default y if !IDF_TARGET_ESP32S3
@@ -96,5 +115,69 @@ config AIRWRITER_UART_LOOPBACK
         can be checked on a devkit with no transceiver attached. The received
         bytes are checksummed and compared with what was sent. Never enable
         this on a real board: nothing reaches the printer.
+
+config AIRWRITER_DIP1_PIN
+    int "DIP1 pin, -1 if absent"
+    default 38 if IDF_TARGET_ESP32S3
+    default -1
+    help
+        Board net DIP1, closed = GND, internal pull-up.
+
+config AIRWRITER_DIP2_PIN
+    int "DIP2 pin, -1 if absent"
+    default 39 if IDF_TARGET_ESP32S3
+    default -1
+    help
+        Board net DIP2, closed = GND, internal pull-up.
+
+config AIRWRITER_DIP3_PIN
+    int "DIP3 pin, -1 if absent"
+    default 40 if IDF_TARGET_ESP32S3
+    default -1
+    help
+        Board net DIP3, closed = GND, internal pull-up.
+
+config AIRWRITER_DIP4_PIN
+    int "DIP4 pin, -1 if absent"
+    default 41 if IDF_TARGET_ESP32S3
+    default -1
+    help
+        Board net DIP4, closed = GND, internal pull-up.
+
+config AIRWRITER_DIP5_PIN
+    int "DIP5 pin, -1 if absent"
+    default 42 if IDF_TARGET_ESP32S3
+    default -1
+    help
+        Board net DIP5, closed = GND, internal pull-up.
+
+config AIRWRITER_DIP6_PIN
+    int "DIP6 pin, -1 if absent"
+    default 47 if IDF_TARGET_ESP32S3
+    default -1
+    help
+        Board net DIP6, closed = GND, internal pull-up.
+
+config AIRWRITER_DIP7_PIN
+    int "DIP7 pin, -1 if absent"
+    default 21 if IDF_TARGET_ESP32S3
+    default -1
+    help
+        Board net DIP7, closed = GND, internal pull-up.
+
+config AIRWRITER_DIP8_PIN
+    int "DIP8 pin, -1 if absent"
+    default 13 if IDF_TARGET_ESP32S3
+    default -1
+    help
+        Board net DIP8, closed = GND, internal pull-up.
+
+config AIRWRITER_TEST_BTN_PIN
+    int "Test-page button pin, -1 if absent"
+    default 14 if IDF_TARGET_ESP32S3
+    default -1
+    help
+        Board net TEST_BTN, closed = GND, internal pull-up. A press prints a
+        self-test page through the same raster and serial path as a real job.
 
 endmenu

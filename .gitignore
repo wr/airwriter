@@ -9,8 +9,12 @@ fp-info-cache
 
 # ESP-IDF
 firmware/build/
+firmware/build_c6/
+firmware/.cache/
 firmware/sdkconfig
 firmware/sdkconfig.old
+firmware/sdkconfig.c6
+firmware/sdkconfig.c6.old
 firmware/managed_components/
 firmware/dependencies.lock
 

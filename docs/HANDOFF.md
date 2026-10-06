@@ -55,6 +55,82 @@ uncommitted on branch `claude/adversarial-pcb-review-ccb17d` at the time of writ
   74LVC1G125 for U9 (AHCT's 4.5 V minimum vs USB's 4.40 V); IO3 pulldown; 1 k series in the
   switch/DIP legs; port legends print under the connector bodies and SW1 has no silk.
 
+**2026-08-28 (later still): the no-hardware-needed firmware is written — W-586, branch
+`wells/w-586-firmware-status-controls` (stacked on W-585's branch; both merged to main 2026-10-05).**
+Four new pieces, every core pure C with host tests in `tools/rip` (subagent-driven, each
+task adversarially reviewed; plan in
+`docs/superpowers/plans/2026-08-28-firmware-status-controls.md`):
+
+- **`printer_state`**: flags-in, one-derived-state-out reducer (setup > no-wifi > blocked
+  > printing > error > ready) + a mutex-guarded ESP glue; main.c posts events from wifi,
+  AP fallback, doc begin/end and the serial watchdog. `status_json` gained a machine
+  field `"ps"`.
+- **`led_grid`**: chain-order material map GENERATED from the schematic netlist + board
+  positions (`hardware/panel/gen_led_map.py` -> committed `led_map.c/h`; the netlist walk
+  caught KiCad-10 regex traps — see the script's comments). Pure renderer `lg_render`
+  (state x time -> 37xRGB; FR4 dots full RGB, mask dots forced monochrome, ERROR drops
+  mask dots dark, **global cap 48/255 applied as the last multiply — the board has no
+  hardware current limit**). Glue drives the chain over RMT via `espressif/led_strip`
+  3.0.3 at ~33 fps; devkit strips use `AIRWRITER_LED_COUNT` + `AIRWRITER_LED_DATA_PIN`.
+- **`dip_config`**: decode + 3-sample debounce core; glue polls DIP1-8 + the test button
+  at 100 ms with internal pull-ups (S3 pins 38/39/40/41/42/47/21/13, button 14; all −1
+  off-S3). Provisional bit semantics live in `dip_config_core.h`: DIP1-2 mode, DIP3 dev,
+  DIP4 test-on-boot, DIP5-6 dither override, DIP7-8 spare — firmware-level defaults, the
+  silk only numbers the switches.
+- **Test page**: button (or DIP4 at boot) prints a 64-row checkerboard+gradient page at
+  1152 dots through the real ht/iw/printer_out path. **A new `s_job_lock` mutex in
+  main.c serializes it against real IPP jobs** — review caught that `s_printing` was
+  never the real lock (ipp_server's `s_print_lock` was), and a mid-test-page phone job
+  would have interleaved bytes on the wire.
+
+What the devkit can demo now: every LED state pattern on a strip, DIP/button on jumpers,
+the full IPP->raster->serial path in loopback. Still hardware-gated: everything through
+the transceivers. Not started (unchanged): PIC/LocalTalk bridge (PAP-gated), consumers of
+`mode`/`dither_ovr`.
+
+**2026-08-28 (late): the firmware audit's must-dos are implemented and verified —
+W-585, branch `wells/w-585-firmware-preboard-hardening`.** All three must-dos plus the
+host-test seam landed the same day the audit was filed:
+
+1. **ESP-IDF v5.5.1 is reinstalled** at `~/esp/esp-idf` and the project is retargeted:
+   `idf.py set-target esp32s3` + `fullclean` done, regenerated `sdkconfig` verified
+   TX=17 / RX=18 / CTS=8, `LED_DATA_PIN=48`, loopback off. The C6 devkit build lives in
+   its own tree now — `idf.py -B build_c6 -D SDKCONFIG=sdkconfig.c6 build` (config
+   verified TX=4/RX=5, CTS −1, loopback on). Both targets build clean. The old devkit
+   sdkconfig was preserved as `sdkconfig.old`.
+2. **The IO48 clamp is in**: first statements of `app_main()`, before the log line and
+   `nvs_flash_init()`, compile-guarded by the new Kconfig `AIRWRITER_LED_DATA_PIN`
+   (48 on S3, −1 elsewhere — the C6 block compiles out entirely). `esp_driver_gpio`
+   added to main's REQUIRES.
+3. **The stalled-printer brick is dead, and NOT by the audit's sketched fix.** Two
+   adversarial review rounds shaped this (9 agents, then 3 clean skeptics):
+   - **Trap, recorded for good: `uart_get_tx_buffer_free_size` is not a capacity
+     probe.** In IDF v5.5.1 it returns `tx_buf_size - tx_len_tot`, and `tx_len_tot`
+     counts only the ring item the ISR is currently draining — queued items behind it
+     are invisible. A first implementation that bounded `uart_write_bytes` (which has
+     NO timeout — it blocks in `xRingbufferSend(portMAX_DELAY)`) by that probe still
+     parked the rip task forever when CTS stalled mid-job. The audit's clear_to_send
+     poll had the same class of hole.
+   - **Shipped design: no TX ring at all** (`uart_driver_install` tx size 0). Writes go
+     FIFO-direct through `uart_tx_chars` — a spinlocked `uart_hal_write_txfifo` that
+     takes what the 128-byte FIFO fits and returns the count; it cannot block. The loop
+     lives in `serial_out/serial_writer.c`, pure C behind injectable ops, host-tested
+     (28 checks incl. a no-busy-spin invariant): fail fast once the watchdog says
+     BLOCKED, delay one 100 ms watchdog period on any remainder. Pacing is lossless at
+     9600 baud (96 bytes drain per period < 128 FIFO).
+   - **Failure now propagates**: `printer_out()` checks the write, sets a failure flag,
+     **purges the FIFO** (`serial_out_purge`, `uart_ll_txfifo_rst`) so a dead job's
+     ≤128-byte tail can't print garbage ahead of the next job when paper returns, and
+     calls `job_pipe_abort()`; the rip task unwinds, `s_task` clears, the next job is
+     accepted. `doc_end` says "printer timeout".
+4. **Host suite is 277 checks across 8 binaries** (`make test` in `tools/rip`), stream
+   regressions byte-identical. `tools/rip/Makefile` now compiles `serial_writer.c`
+   (named explicitly — the rest of serial_out is IDF-bound).
+
+Audit items 5–6 (MCLR: resolved-no-code; brightness cap: waits for `led_grid`) and the
+feature gaps (dip_config, PIC bridge) are unchanged. Order state below is unchanged:
+W654223ASS53 still needs Wells's file-replacement email; nothing is paid.
+
 **2026-08-28 (evening): boards waiting on the PCBWay quote; firmware audited for the
 wait; parts sourcing settled.** The session after the review below did four things:
 

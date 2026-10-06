@@ -7,12 +7,16 @@ INCS    := -I$(COMP)/ripjob/include \
            -I$(COMP)/resample/include \
            -I$(COMP)/halftone/include \
            -I$(COMP)/imagewriter/include \
+           -I$(COMP)/serial_out/include \
            -I.
+# serial_out is IDF-bound except for serial_writer.c, which is pure by design
+# so the deadline loop can be tested here. Name it, don't wildcard the dir.
 SRCS    := $(wildcard $(COMP)/ripjob/*.c) \
            $(wildcard $(COMP)/urf_decode/*.c) \
            $(wildcard $(COMP)/resample/*.c) \
            $(wildcard $(COMP)/halftone/*.c) \
-           $(wildcard $(COMP)/imagewriter/*.c)
+           $(wildcard $(COMP)/imagewriter/*.c) \
+           $(COMP)/serial_out/serial_writer.c
 TESTSRC := $(wildcard test/test_*.c)
 TESTBIN := $(patsubst test/%.c,build/%,$(TESTSRC))
 
@@ -24,6 +28,19 @@ build:
 
 build/rip: main.c png_write.c $(SRCS) | build
 	$(CC) $(CFLAGS) $(INCS) -Itest -o $@ $^
+
+build/test_printer_state: test/test_printer_state.c ../../firmware/components/printer_state/printer_state_core.c | build
+	$(CC) $(CFLAGS) $(INCS) -I../../firmware/components/printer_state/include -Itest -o $@ $^
+
+build/test_led_grid: test/test_led_grid.c \
+                      ../../firmware/components/led_grid/led_grid_core.c \
+                      ../../firmware/components/led_grid/led_map.c \
+                      ../../firmware/components/printer_state/printer_state_core.c | build
+	$(CC) $(CFLAGS) $(INCS) -I../../firmware/components/led_grid/include \
+	  -I../../firmware/components/printer_state/include -Itest -o $@ $^ -lm
+
+build/test_dip_config: test/test_dip_config.c ../../firmware/components/dip_config/dip_config_core.c | build
+	$(CC) $(CFLAGS) $(INCS) -I../../firmware/components/dip_config/include -Itest -o $@ $^
 
 build/%: test/%.c $(SRCS) | build
 	$(CC) $(CFLAGS) $(INCS) -Itest -o $@ $^
