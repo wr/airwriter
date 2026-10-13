@@ -80,6 +80,34 @@ class TestShell(unittest.TestCase):
                        p.BOARD_W + p.WALL - x, p.BOARD_L + p.WALL - y)
             self.assertGreater(edge - p.SCREW_HEAD_D / 2 - c, 1.0)
 
+    def test_top_outside_rim_is_chamfered_at_45_degrees(self):
+        # Mirror of the bottom: the wall-top ring's outer outline is pulled
+        # in by TOP_CHAMFER, its pocket edge is not (the panel sits there).
+        from build123d import Axis
+        c = p.TOP_CHAMFER
+        top = self.s.faces().sort_by(Axis.Z)[-1]
+        bb = top.bounding_box()
+        self.assertAlmostEqual(bb.min.Z, p.Z_WALL_TOP, places=3)
+        self.assertAlmostEqual(bb.size.X, p.EXT_W - 2 * c, places=3)
+        self.assertAlmostEqual(bb.size.Y, p.EXT_L - 2 * c, places=3)
+        self.assertEqual(len(top.inner_wires()), 1)  # the pocket, sharp
+        slopes = [f for f in self.s.faces()
+                  if abs(f.center().Z - (p.Z_WALL_TOP - c / 2)) < 0.05]
+        self.assertEqual(len(slopes), 8)  # four flats, four corner cones
+        for f in slopes:
+            self.assertAlmostEqual(
+                f.normal_at(f.center()).Z, math.cos(math.radians(45)), places=3)
+            self.assertAlmostEqual(f.bounding_box().size.Z, c, places=3)
+
+    def test_top_chamfer_leaves_the_port_lintels_standing(self):
+        # At the wall's outer face a 45-degree chamfer takes its own depth
+        # off whatever wall sits over an opening. J2/J4's lintels are the
+        # shallow ones; keep at least three 0.2mm layers of them there.
+        for ref in ("J2", "J4", "J1"):
+            opening_top = case._grown(ref, p.PORT_CLEAR).bounding_box().max.Z
+            left = p.Z_WALL_TOP - p.TOP_CHAMFER - opening_top
+            self.assertGreaterEqual(left, 0.6, ref)
+
 
 class TestStandoffsAndScrews(unittest.TestCase):
     def test_standoffs_sit_at_the_mount_holes_and_reach_the_board(self):

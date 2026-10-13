@@ -28,6 +28,16 @@ degrees is exactly the unsupported-overhang limit (test_printable), so it
 prints floor-down with no supports; a fillet there would start flatter than
 that. Under a third of FLOOR and of WALL, so neither gets thin."""
 
+TOP_CHAMFER = 0.40
+"""45-degree chamfer around the tray's top outside edge, 2 layers. Added
+2026-10-13 (Wells: "a small top chamfer"). Outside edge only: the pocket edge
+the panel / Lite lid sits against stays sharp, so no groove opens round the
+panel. Sized by the J2/J4 lintels, whose openings top out 1.19mm under
+Z_WALL_TOP: a 45-degree chamfer takes its own depth off a lintel at the
+wall's outer face, so 0.40 leaves 0.79mm there, where matching
+BOTTOM_CHAMFER's 0.80 would leave two layers of bridge over a mini-DIN. It
+faces up when printed floor-down, so the overhang gate has no say in it."""
+
 STANDOFF = 3.00
 """Board sits this far off the floor, clearing the through-hole tails of
 J2/J4/S1/SW3/U7. Measured off the vendor STEP (Task 5): J2/J4's pin tips
