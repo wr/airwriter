@@ -85,7 +85,8 @@ Kconfig is already target-aware. Every problem found is an omission, not a miswi
   **Corrected by review #4 (2026-09-01): NOT moot.** U3.11 (T1IN) is a CMOS driver input
   with no internal pull-up (SP3232E datasheet: "connect unused inputs to VCC or GND"), and
   IO35 floats from power-on. Drive IO35 output-low in the same first-statements block as
-  the IO48 clamp. R9 being DNP only means nothing leaves the board.
+  the IO48 clamp. R9 being DNP only means nothing leaves the board. **Done (W-1029):**
+  `CONFIG_AIRWRITER_HSKI_DRV_PIN`, alongside an IO4 output-high clamp for TashTalk's RX.
 
 ## Bring-up checklist additions (hardware day)
 

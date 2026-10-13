@@ -71,8 +71,8 @@ static void pins_claim(void)
     gpio_set_direction(PIN_DAT, GPIO_MODE_INPUT);
 }
 
-// Back to the boot state: inputs with pull-ups. MCLR rises and TashTalk runs;
-// IO4 idles high, which is its UART's idle level.
+// Back to inputs with pull-ups. MCLR rises and TashTalk runs; IO4 idles high,
+// which is its UART's idle level and what app_main's boot clamp drove.
 static void pins_release(void)
 {
     gpio_reset_pin(PIN_CLK);

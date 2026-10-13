@@ -43,7 +43,7 @@ uncommitted on branch `claude/adversarial-pcb-review-ccb17d` at the time of writ
   straight (colino.net tested Pro Signal and CableLeader), so buzz pin 1→2 before trusting
   a non-Apple one.** Other traps found, no copper change: (2) `LT_DE`
   floats AS SHIPPED (socket, no PIC): tack 10 k across U6 pins 3–5 before a LocalTalk box
-  goes on. (3) Firmware must also drive **IO35 low** at boot (T1IN floats). (4) Never ICSP
+  goes on. (3) Firmware must also drive **IO35 low** at boot (T1IN floats) — done, W-1029. (4) Never ICSP
   the PIC in the socket — `_LVP_OFF` puts ~9 V VPP onto ESP32 IO2. (5) IO48 float is a
   possible brownout loop on a 500 mA port, not just a flicker: the rev-B 100 k is required.
 - **Doc drift corrected in this file**: LED caps are **2.87 mm** north (not 2.6 — the case

@@ -553,6 +553,33 @@ void app_main(void)
     gpio_set_level(CONFIG_AIRWRITER_LED_DATA_PIN, 0);
     gpio_config(&led_clamp);
 #endif
+    // IO4 runs through R15 to the PIC's RA1, TashTalk's UART receive. Left
+    // floating, TashTalk can decode noise as host commands and put garbage
+    // on a LocalTalk bus. High is the UART idle level; low would be a break.
+    // pic_prog borrows the pin for a flash and hands it back as a pulled-up
+    // input; a LocalTalk UART driver will own it once that lands. Off the S3
+    // the default is -1 (IO4 is the C6 devkit's printer TX); a devkit wired
+    // to a breadboard PIC sets its own pin and gets the same clamp.
+#if CONFIG_AIRWRITER_PIC_CLK_PIN >= 0
+    gpio_config_t lt_tx_clamp = {
+        .pin_bit_mask = 1ULL << CONFIG_AIRWRITER_PIC_CLK_PIN,
+        .mode         = GPIO_MODE_OUTPUT,
+    };
+    gpio_set_level(CONFIG_AIRWRITER_PIC_CLK_PIN, 1);
+    gpio_config(&lt_tx_clamp);
+#endif
+    // IO35 is the SP3232's T1IN, a driver input with no pull-up that must be
+    // tied. T1OUT reaches only the DNP R9 on rev A, but a floating CMOS input
+    // can idle at threshold, on the same chip that carries the CTS receiver.
+    // Rev B ties T1IN to GND.
+#if CONFIG_AIRWRITER_HSKI_DRV_PIN >= 0
+    gpio_config_t hski_clamp = {
+        .pin_bit_mask = 1ULL << CONFIG_AIRWRITER_HSKI_DRV_PIN,
+        .mode         = GPIO_MODE_OUTPUT,
+    };
+    gpio_set_level(CONFIG_AIRWRITER_HSKI_DRV_PIN, 0);
+    gpio_config(&hski_clamp);
+#endif
 
     // Before anything that can call doc_begin or test_page: dip_config's poll
     // task starts soon and a button press must not race the lock into
