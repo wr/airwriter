@@ -180,4 +180,30 @@ config AIRWRITER_TEST_BTN_PIN
         Board net TEST_BTN, closed = GND, internal pull-up. A press prints a
         self-test page through the same raster and serial path as a real job.
 
+config AIRWRITER_PIC_MCLR_PIN
+    int "LocalTalk PIC MCLR pin, -1 if absent"
+    default 2 if IDF_TARGET_ESP32S3
+    default -1
+    help
+        Board net LT_RESET, straight to U7 pin 4 (RA3/MCLR). Low holds TashTalk
+        in reset; low plus the LVP key puts the PIC in programming mode. The
+        three PIC pins together enable the web UI's "flash TashTalk" button.
+        On a devkit, wire them to a breadboard PIC and set them here.
+
+config AIRWRITER_PIC_CLK_PIN
+    int "LocalTalk PIC ICSPCLK pin, -1 if absent"
+    default 4 if IDF_TARGET_ESP32S3
+    default -1
+    help
+        Board net LT_UART_TX, through R15 (100R) to U7 pin 6 (RA1/ICSPCLK).
+        TashTalk's UART receive line in normal running.
+
+config AIRWRITER_PIC_DAT_PIN
+    int "LocalTalk PIC ICSPDAT pin, -1 if absent"
+    default 5 if IDF_TARGET_ESP32S3
+    default -1
+    help
+        Board net LT_UART_RX, through R16 (100R) to U7 pin 7 (RA0/ICSPDAT).
+        TashTalk's UART transmit line in normal running.
+
 endmenu

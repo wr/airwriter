@@ -219,6 +219,20 @@ static esp_err_t update_post(httpd_req_t *req)
     return ESP_OK;
 }
 
+// Blocks for the couple of seconds the flash takes. Rare and deliberate, so
+// it isn't worth a task and a polling endpoint of its own.
+static esp_err_t localtalk_flash_post(httpd_req_t *req)
+{
+    if (!s_cfg.localtalk_flash) {
+        httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "no localtalk");
+        return ESP_FAIL;
+    }
+    char out[256];
+    s_cfg.localtalk_flash(s_cfg.ctx, out, sizeof out);
+    httpd_resp_set_type(req, "application/json");
+    return httpd_resp_sendstr(req, out);
+}
+
 // In captive mode every unknown path serves the page, so whatever the phone
 // probes for on joining the access point opens the setup screen.
 static esp_err_t catch_all(httpd_req_t *req)
@@ -254,6 +268,7 @@ esp_err_t webui_start(const webui_cfg_t *cfg)
         { .uri = "/api/wifi",     .method = HTTP_POST, .handler = wifi_post },
         { .uri = "/api/general",  .method = HTTP_POST, .handler = general_post },
         { .uri = "/update",       .method = HTTP_POST, .handler = update_post },
+        { .uri = "/api/localtalk/flash", .method = HTTP_POST, .handler = localtalk_flash_post },
         { .uri = "/*",            .method = HTTP_GET,  .handler = catch_all },
     };
     for (size_t i = 0; i < sizeof routes / sizeof routes[0]; i++)
