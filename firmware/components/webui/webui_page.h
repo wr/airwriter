@@ -341,7 +341,7 @@ static const char WEBUI_HTML[] =
 "      <div class=key><span class=legend>flash</span>\n"
 "        <span class='slot momentary'><button id=ltflash aria-label=\"Flash TashTalk\"></button></span></div>\n"
 "    </div>\n"
-"    <p class=say id=ltsay>Writes TashTalk 2.1.3 into the LocalTalk chip and checks it.</p>\n"
+"    <p class=say id=ltsay>Writes TashTalk 2.1.3 into the LocalTalk chip and checks it. Unplug the LocalTalk cable first.</p>\n"
 "  </div>\n"
 "\n"
 "</div>\n"

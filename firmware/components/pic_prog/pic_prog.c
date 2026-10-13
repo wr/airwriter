@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "pic_prog.h"
 
+#include <stdatomic.h>
 #include <stdlib.h>
 #include "sdkconfig.h"
 #include "driver/gpio.h"
 #include "esp_log.h"
 #include "esp_rom_sys.h"
 #include "freertos/FreeRTOS.h"
-#include "freertos/semphr.h"
 #include "freertos/task.h"
 
 static const char *TAG = "pic_prog";
@@ -49,22 +49,30 @@ static void h_delay(void *ctx, uint32_t us)
     vTaskDelay(t + 1);
 }
 
+// Starts from gpio_reset_pin so a pad some peripheral had routed through the
+// GPIO matrix becomes a plain GPIO again. MCLR goes low before the others are
+// driven: the PIC sits in reset, outputs tristated, before IO5 drives RA0.
+// DAT gets a pull-down so an empty socket reads 0x0000 ("no PIC") rather than
+// whatever a floating pin makes up; a real PIC drives through it easily.
 static void pins_claim(void)
 {
-    // MCLR low first: the PIC sits in reset with its outputs tristated before
-    // the ESP32 starts driving the lines its UART would otherwise use.
+    gpio_reset_pin(PIN_MCLR);
+    gpio_set_pull_mode(PIN_MCLR, GPIO_FLOATING);
     gpio_set_level(PIN_MCLR, 0);
     gpio_set_direction(PIN_MCLR, GPIO_MODE_OUTPUT);
-    gpio_set_pull_mode(PIN_MCLR, GPIO_FLOATING);
+
+    gpio_reset_pin(PIN_CLK);
+    gpio_set_pull_mode(PIN_CLK, GPIO_FLOATING);
     gpio_set_level(PIN_CLK, 0);
     gpio_set_direction(PIN_CLK, GPIO_MODE_OUTPUT);
-    gpio_set_pull_mode(PIN_CLK, GPIO_FLOATING);
-    gpio_set_level(PIN_DAT, 0);
-    gpio_set_direction(PIN_DAT, GPIO_MODE_INPUT_OUTPUT);
-    gpio_set_pull_mode(PIN_DAT, GPIO_FLOATING);
+
+    gpio_reset_pin(PIN_DAT);
+    gpio_set_pull_mode(PIN_DAT, GPIO_PULLDOWN_ONLY);
+    gpio_set_direction(PIN_DAT, GPIO_MODE_INPUT);
 }
 
-// Back to the boot state: inputs with pull-ups. MCLR rises and TashTalk runs.
+// Back to the boot state: inputs with pull-ups. MCLR rises and TashTalk runs;
+// IO4 idles high, which is its UART's idle level.
 static void pins_release(void)
 {
     gpio_reset_pin(PIN_CLK);
@@ -74,18 +82,13 @@ static void pins_release(void)
 
 pic_err_t pic_prog_flash_tashtalk(pic_result_t *res)
 {
-    static SemaphoreHandle_t lock;
-    static portMUX_TYPE init_mux = portMUX_INITIALIZER_UNLOCKED;
-    taskENTER_CRITICAL(&init_mux);
-    if (!lock) lock = xSemaphoreCreateMutex();
-    taskEXIT_CRITICAL(&init_mux);
+    static atomic_flag busy = ATOMIC_FLAG_INIT;
 
     *res = (pic_result_t){0};
-    if (!lock) return res->err = PIC_ERR_NOMEM;
-    if (xSemaphoreTake(lock, 0) != pdTRUE) return res->err = PIC_ERR_BUSY;
+    if (atomic_flag_test_and_set(&busy)) return res->err = PIC_ERR_BUSY;
 
     pic_image_t *img = malloc(sizeof *img);
-    if (!img) { xSemaphoreGive(lock); return res->err = PIC_ERR_NOMEM; }
+    if (!img) { atomic_flag_clear(&busy); return res->err = PIC_ERR_NOMEM; }
 
     int line = 0;
     pic_hex_err_t he = pic_hex_parse(tashtalk_hex_start,
@@ -94,7 +97,7 @@ pic_err_t pic_prog_flash_tashtalk(pic_result_t *res)
         // The image is compiled in and host-tested; this means a bad build.
         ESP_LOGE(TAG, "embedded hex: error %d at line %d", he, line);
         free(img);
-        xSemaphoreGive(lock);
+        atomic_flag_clear(&busy);
         return res->err = PIC_ERR_IMAGE;
     }
     pic_image_enable_lvp(img);
@@ -106,15 +109,20 @@ pic_err_t pic_prog_flash_tashtalk(pic_result_t *res)
     pins_release();
     free(img);
 
-    if (e == PIC_OK)
+    if (e == PIC_OK) {
+        const uint16_t *c = res->cfg;
         ESP_LOGI(TAG, "flashed and verified, device ID 0x%04X", res->devid);
+        ESP_LOGI(TAG, "config 8000..800A: %04X %04X %04X %04X | %04X %04X | %04X | "
+                 "%04X %04X | %04X %04X", c[0], c[1], c[2], c[3], c[4], c[5], c[6],
+                 c[7], c[8], c[9], c[10]);
+    }
     else if (e == PIC_ERR_VERIFY)
         ESP_LOGE(TAG, "verify failed at 0x%04X: want 0x%04X got 0x%04X",
                  (unsigned)res->bad_addr, res->want, res->got);
     else
         ESP_LOGE(TAG, "%s (device ID read 0x%04X)", pic_err_str(e), res->devid);
 
-    xSemaphoreGive(lock);
+    atomic_flag_clear(&busy);
     return e;
 }
 

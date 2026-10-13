@@ -35,7 +35,8 @@ typedef struct {
     uint16_t stuck_mask;
 
     // Rule breaks seen; a well-behaved programmer leaves these at zero
-    int err_contention;           // programmer drove DAT while the PIC did
+    int err_contention;           // programmer drove DAT while the PIC did,
+                                  // or while it was out of reset (RA0 = UART TX)
     int err_busy;                 // clocked during TPINT or TERAB
     int err_tdly;                 // payload started inside TDLY
     int err_tenth;                // key started inside TENTH

@@ -13,6 +13,7 @@
 #define PIC_ADDR_CONFIG1 0x8007u
 #define PIC_ADDR_CONFIG2 0x8008u
 #define PIC_ADDR_DEVID   0x8006u
+#define PIC_CFG_WORDS    11u       // 0x8000..0x800A: user IDs to calibration
 
 #define PIC_DEVID_MASK   0x3FE0u   // DEV<8:0>; REV<4:0> is the low five bits
 #define PIC_DEVID_12F1840 0x1B80u
@@ -60,7 +61,8 @@ typedef struct {
 
 typedef enum {
     PIC_OK = 0,
-    PIC_ERR_NO_DEVICE,     // ID read as all zeros or all ones: nothing answered
+    PIC_ERR_NO_DEVICE,     // ID read as all zeros or all ones: nothing answered,
+                           // or a part with LVP off (only 9 V reaches it then)
     PIC_ERR_WRONG_DEVICE,  // something answered, but it is not a PIC12F1840
     PIC_ERR_VERIFY,        // read-back differs from the image
     PIC_ERR_IMAGE,         // the image has no configuration words
@@ -75,15 +77,15 @@ typedef struct {
     uint16_t  devid;       // raw word at 0x8006 (REV in the low five bits)
     uint32_t  bad_addr;    // first mismatch: word address, or 0x8007/0x8008
     uint16_t  want, got;
+    uint16_t  cfg[PIC_CFG_WORDS];  // 0x8000..0x800A as read back after success
 } pic_result_t;
 
-// Enters LVP, reads the ID, leaves programming mode. MCLR is left driven low
-// (PIC held in reset); the caller decides when to let it run.
+// Enters LVP, reads the ID, leaves programming mode. MCLR is left high and DAT
+// released, so the part runs whatever it holds.
 pic_err_t pic_read_id(const pic_hal_t *hal, uint16_t *devid);
 
 // Identify, bulk erase, program, verify, write and verify the configuration
-// words. Refuses to erase anything that is not a PIC12F1840. MCLR is left
-// driven low, as above.
+// words. Refuses to erase anything that is not a PIC12F1840. Exits as above.
 pic_err_t pic_flash(const pic_hal_t *hal, const pic_image_t *img, pic_result_t *res);
 
 const char *pic_err_str(pic_err_t e);

@@ -163,6 +163,8 @@ static void h_mclr(void *ctx, int level)
 {
     pic_sim_t *s = ctx;
     if (s->mclr == level) return;
+    // Out of reset the part runs TashTalk, which drives RA0 as its UART TX.
+    if (level && s->dat_driving && !s->absent) s->err_contention++;
     s->mclr = level;
     s->in_prog = 0;
     s->key_sr = 0;
@@ -185,6 +187,7 @@ static void h_dat_out(void *ctx, int level)
 {
     pic_sim_t *s = ctx;
     if (s->dev_driving) s->err_contention++;
+    if (s->mclr && !s->in_prog && !s->absent) s->err_contention++;  // TashTalk's TX
     s->dat_driving = 1;
     s->dat_prog = level;
 }

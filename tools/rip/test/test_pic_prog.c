@@ -92,7 +92,10 @@ static void test_flash_blank(void)
     assert(sim.cfg[7] == 0x09C4 && sim.cfg[8] == 0x3FFF);
     assert(sim.cfg[9] == 0x28D7 && sim.cfg[10] == 0x1D48);   // calibration untouched
     assert(pic_sim_errors(&sim) == 0);
-    assert(!sim.in_prog && !sim.mclr);                       // out of LVP, held in reset
+    assert(!sim.in_prog && sim.mclr && !sim.dat_driving);   // out of LVP, running
+    const uint16_t cfg[PIC_CFG_WORDS] = { 0x3FFF, 0x3FFF, 0x3FFF, 0x3FFF, 0x3FFF, 0x3FFF,
+                                          0x1B85, 0x09C4, 0x3FFF, 0x28D7, 0x1D48 };
+    assert(memcmp(r.cfg, cfg, sizeof cfg) == 0);             // the logged read-back
     printf("  flash blank: ok in %.2f s simulated\n", sim.now_us / 1e6);
 }
 
@@ -182,8 +185,22 @@ static void test_read_id(void)
     assert(sim.lvp_entries == 1 && pic_sim_errors(&sim) == 0);
 }
 
+// The simulator's contention rule has to bite, or the ordering tests above
+// prove nothing: driving DAT while the part runs TashTalk is a short.
+static void test_sim_catches_contention(void)
+{
+    pic_sim_init(&sim, 0x1B85);
+    pic_hal_t h = pic_sim_hal(&sim);
+    h.dat_out(h.ctx, 0);                  // MCLR still high: RA0 is a UART TX
+    assert(sim.err_contention == 1);
+    h.mclr(h.ctx, 0);
+    h.mclr(h.ctx, 1);                     // released into a driven DAT
+    assert(sim.err_contention == 2);
+}
+
 int main(void)
 {
+    test_sim_catches_contention();
     test_parse_tashtalk();
     test_parse_errors();
     test_read_id();

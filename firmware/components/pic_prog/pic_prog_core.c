@@ -161,27 +161,28 @@ static uint16_t read_word(const pic_hal_t *h)
     return w;
 }
 
+// MCLR goes low before CLK or DAT is driven: while the part runs, RA0 is
+// TashTalk's UART TX, and driving it from here would be a short through R16.
+// No rising edge first -- key matching starts without one (Fig. 8-9, note 1).
 static void enter_lvp(const pic_hal_t *h)
 {
+    h->mclr(h->ctx, 0);
     h->clk(h->ctx, 0);
     h->dat_out(h->ctx, 0);
-    h->mclr(h->ctx, 1);                 // a clean falling edge, whatever came before
-    h->delay_us(h->ctx, T_EXIT_US);
-    h->mclr(h->ctx, 0);
     h->delay_us(h->ctx, T_ENTH_US);
     clock_out(h, LVP_KEY, 32);
     clock_out(h, 0, 1);                 // the 33rd clock (Fig. 8-8)
     h->delay_us(h->ctx, T_DLY_US);
 }
 
-// Leaves Program/Verify mode by raising MCLR, then holds the part in reset.
+// Leaves Program/Verify mode by letting MCLR rise. DAT is released first for
+// the same reason as above: the part starts running TashTalk straight away.
 static void exit_lvp(const pic_hal_t *h)
 {
     h->clk(h->ctx, 0);
-    h->dat_out(h->ctx, 0);
+    h->dat_release(h->ctx);
     h->mclr(h->ctx, 1);
     h->delay_us(h->ctx, T_EXIT_US);
-    h->mclr(h->ctx, 0);
 }
 
 static void inc(const pic_hal_t *h, unsigned n)
@@ -282,6 +283,14 @@ static pic_err_t flash_body(const pic_hal_t *h, const pic_image_t *img, pic_resu
     if ((got ^ img->config2) & PIC_CONFIG2_MASK)
         return mismatch(r, PIC_ADDR_CONFIG2, img->config2, got);
 
+    // Read the whole configuration block back for the log. The two
+    // single-word writes above should leave the user IDs blank and can't
+    // touch the calibration words; this is where a surprise would show.
+    load_word(h, CMD_LOAD_CONFIG, PIC_BLANK);
+    for (unsigned i = 0; i < PIC_CFG_WORDS; i++) {
+        r->cfg[i] = read_word(h);
+        command(h, CMD_INC_ADDR);
+    }
     return PIC_OK;
 }
 
@@ -301,7 +310,7 @@ const char *pic_err_str(pic_err_t e)
 {
     switch (e) {
     case PIC_OK:               return "ok";
-    case PIC_ERR_NO_DEVICE:    return "no PIC answered";
+    case PIC_ERR_NO_DEVICE:    return "no PIC answered, or its LVP bit is off";
     case PIC_ERR_WRONG_DEVICE: return "not a PIC12F1840";
     case PIC_ERR_VERIFY:       return "verify failed";
     case PIC_ERR_IMAGE:        return "image has no configuration words";
