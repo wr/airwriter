@@ -56,6 +56,16 @@ config AIRWRITER_CTS_PIN
         the UART peripheral stalls its own FIFO when the printer is busy, and
         the same line doubles as the paper sensor.
 
+config AIRWRITER_HSKI_DRV_PIN
+    int "SP3232 T1IN pin, -1 if absent"
+    default 35 if IDF_TARGET_ESP32S3
+    default -1
+    help
+        Board net HSKI_DRV: IO35 into U3.11, the SP3232's T1IN. Driver inputs
+        have no pull-ups and must be tied, so app_main clamps this pin low as
+        one of its first acts. T1OUT reaches only the DNP R9 on rev A; rev B
+        ties T1IN to GND. Devkits without the transceiver leave it at -1.
+
 config AIRWRITER_BAUD
     int "Printer baud rate"
     default 9600
@@ -196,7 +206,8 @@ config AIRWRITER_PIC_CLK_PIN
     default -1
     help
         Board net LT_UART_TX, through R15 (100R) to U7 pin 6 (RA1/ICSPCLK).
-        TashTalk's UART receive line in normal running.
+        TashTalk's UART receive line in normal running, so app_main clamps it
+        high (UART idle) at boot rather than leave TashTalk decoding a float.
 
 config AIRWRITER_PIC_DAT_PIN
     int "LocalTalk PIC ICSPDAT pin, -1 if absent"
