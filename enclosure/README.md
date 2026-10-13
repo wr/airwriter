@@ -24,7 +24,9 @@ art panel's own outline, not the pocket's; see "First print" below for the
 0.20 mm/side it should clear by).
 The tray's bottom outside edge carries a 0.80 mm 45-degree chamfer
 (`BOTTOM_CHAMFER`): exactly the overhang limit, so it needs no support, and it
-keeps first-layer squish inside the wall line.
+keeps first-layer squish inside the wall line. The top outside edge carries a
+smaller 0.40 mm one (`TOP_CHAMFER`), held small so the lintels over J2/J4
+(1.19 mm tall) keep 0.79 mm at the wall face; the pocket edge stays sharp.
 `test_printable.py` fails the build on any face steeper than the real
 45-degree FDM overhang limit, checked in each part's own print orientation —
 a geometric proxy for printability, not a guarantee it slices clean: it can't
@@ -127,5 +129,5 @@ cased AirWriter" in the shop's `scripts/board-model/README.md`; then
 - After that branch: three measured fit fixes (wall/panel flush, DIP slot,
   boss relief), the DIP slot resized to the switch's key recess, the Lite
   lid's legs pulled clear of the board, flat port lintels in place of the
-  45-degree ridge roofs (shop W-806), and the bottom chamfer. `git log --
-  enclosure` has each one with its reasoning.
+  45-degree ridge roofs (shop W-806), the bottom chamfer, and the top
+  chamfer. `git log -- enclosure` has each one with its reasoning.

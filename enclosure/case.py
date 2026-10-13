@@ -49,7 +49,8 @@ def shell() -> Part:
     corners register against the pocket instead of floating in a square
     one. Only the vertical edges are filleted -- see `_rounded_box`. The
     underside's outside rim is chamfered by BOTTOM_CHAMFER at 45 degrees,
-    which prints floor-down without support where a fillet would not.
+    which prints floor-down without support where a fillet would not; the
+    top outside rim by the smaller TOP_CHAMFER.
 
     No openings: the port cutouts, the DIP slot, the pinhole, the screw holes
     and the carve-outs are all subtracted by tray().
@@ -62,6 +63,11 @@ def shell() -> Part:
     # four corner arcs), chamfered at 45 degrees -- see params.BOTTOM_CHAMFER.
     underside = outer.faces().sort_by(Axis.Z)[0]
     outer = outer.chamfer(p.BOTTOM_CHAMFER, None, underside.edges())
+    # The top outside rim likewise, by TOP_CHAMFER. Cut before the pocket
+    # is, so the top face's edges are the outer outline only and the
+    # panel-side edge stays sharp.
+    top = outer.faces().sort_by(Axis.Z)[-1]
+    outer = outer.chamfer(p.TOP_CHAMFER, None, top.edges())
 
     cavity = _rounded_box(
         p.POCKET_W, p.POCKET_L, p.Z_WALL_TOP - p.Z_FLOOR_TOP,
