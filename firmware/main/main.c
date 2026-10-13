@@ -33,6 +33,7 @@
 #include "settings.h"
 #include "webui.h"
 #include "net_provision.h"
+#include "pic_prog.h"
 #include "esp_app_desc.h"
 
 static const char *TAG = "airwriter";
@@ -498,7 +499,7 @@ static void status_json(void *ctx, char *buf, size_t cap)
         "\"ssid\":\"%s\",\"dither\":\"%s\",\"signal\":\"%s\","
         "\"channel\":\"%s\",\"security\":\"%s\",\"uri\":\"%s\","
         "\"uptime\":\"%uh %02um\",\"version\":\"%s\",\"heap\":\"%u KB\","
-        "\"model\":\"Apple ImageWriter II\"}",
+        "\"model\":\"Apple ImageWriter II\",\"pic\":%s}",
         s_ap_mode ? "Waiting for setup" : blocked ? "Out of paper"
                 : s_printing ? "Printing" : "Ready",
         ps_name(printer_state_get()),
@@ -516,7 +517,16 @@ static void status_json(void *ctx, char *buf, size_t cap)
         joined ? auth_name(ap.authmode) : "",
         s_ap_mode ? "" : ipp_server_uri(),
         (unsigned)(up / 3600), (unsigned)((up / 60) % 60),
-        app->version, (unsigned)(esp_get_free_heap_size() / 1024));
+        app->version, (unsigned)(esp_get_free_heap_size() / 1024),
+        pic_prog_available() ? "true" : "false");
+}
+
+static void localtalk_flash(void *ctx, char *buf, size_t cap)
+{
+    (void)ctx;
+    pic_result_t r;
+    pic_prog_flash_tashtalk(&r);
+    pic_result_json(&r, buf, cap);
 }
 
 // ----------------------------------------------------------------- main
@@ -614,7 +624,8 @@ void app_main(void)
         else                ESP_LOGW(TAG, "could not join \"%s\"", s_set.ssid);
 
         ESP_ERROR_CHECK(net_provision_start(ap));
-        webui_cfg_t wcfg = { .status_json = status_json, .captive = 1 };
+        webui_cfg_t wcfg = { .status_json = status_json, .captive = 1,
+                              .localtalk_flash = localtalk_flash };
         ESP_ERROR_CHECK(webui_start(&wcfg));
 
         for (;;) vTaskDelay(pdMS_TO_TICKS(30000));
@@ -630,7 +641,8 @@ void app_main(void)
     };
     ESP_ERROR_CHECK(ipp_server_start(&cfg));
 
-    webui_cfg_t wcfg = { .status_json = status_json, .captive = 0 };
+    webui_cfg_t wcfg = { .status_json = status_json, .captive = 0,
+                          .localtalk_flash = localtalk_flash };
     ESP_ERROR_CHECK(webui_start(&wcfg));
 
     if (s_test_on_boot) {
