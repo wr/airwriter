@@ -398,16 +398,30 @@ static void wifi_event(void *arg, esp_event_base_t base, int32_t id, void *data)
     }
 }
 
-static esp_err_t wifi_start(void)
+static esp_netif_t *s_sta_netif;
+
+// Everything both the join and the setup-portal paths stand on. Runs whether or
+// not credentials exist: a fresh board has none, skips the join entirely, and
+// net_provision_start() aborts in esp_netif_create_default_wifi_ap() if the
+// event loop and driver were never brought up (W-1032).
+static void wifi_init(void)
 {
     s_wifi_events = xEventGroupCreate();
     ESP_ERROR_CHECK(esp_netif_init());
     ESP_ERROR_CHECK(esp_event_loop_create_default());
-    esp_netif_t *netif = esp_netif_create_default_wifi_sta();
-    esp_netif_set_hostname(netif, s_set.hostname);
+    s_sta_netif = esp_netif_create_default_wifi_sta();
+    esp_netif_set_hostname(s_sta_netif, s_set.hostname);
 
     wifi_init_config_t ic = WIFI_INIT_CONFIG_DEFAULT();
     ESP_ERROR_CHECK(esp_wifi_init(&ic));
+}
+
+// The handlers are registered here, not in wifi_init(), because wifi_event()
+// calls esp_wifi_connect() on STA_START -- in setup mode that would send the
+// station chasing an empty SSID and drag the access point's channel with it.
+static esp_err_t wifi_start(void)
+{
+    esp_netif_t *netif = s_sta_netif;
     ESP_ERROR_CHECK(esp_event_handler_instance_register(WIFI_EVENT, ESP_EVENT_ANY_ID,
                                                         wifi_event, NULL, NULL));
     ESP_ERROR_CHECK(esp_event_handler_instance_register(IP_EVENT, IP_EVENT_STA_GOT_IP,
@@ -640,6 +654,7 @@ void app_main(void)
     // the user fix it from a phone. This is the only path a person who did not
     // build the firmware can take.
     printer_state_post_ev(PS_EV_WIFI_CONNECTING);
+    wifi_init();
     if (!s_set.ssid[0] || wifi_start() != ESP_OK) {
         char ap[32];
         snprintf(ap, sizeof ap, "AirWriter-%s", suffix);
