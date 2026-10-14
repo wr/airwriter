@@ -17,6 +17,14 @@ was **byte-identical to `checker.expected.bin`** (2672 bytes, crc32 `8ee84844`).
 - **HSKo polarity is right as designed:** IO8 reads LOW with the printer ready (read live over
   JTAG, `GPIO_IN` bit 8). `CONFIG_AIRWRITER_INVERT_CTS` stays off. The first job was aborted
   because the printer had held HSKo not-ready for 30 s after boot; once ready it printed.
+- **W-1033 (fixed):** the test button rebooted the board after every strip — `s_job_lock`
+  was a mutex taken on the button task and given from `test_page_task`. Now a binary
+  semaphore. The iPhone full page (a photo, 6.4 MB URF → 114,848 printer bytes, ~2 min)
+  printed fine; IPP jobs were never affected.
+- **Flashing leaves the printer not-ready; power-cycling does not.** After `idf.py flash` the
+  ImageWriter dropped HSKo until SELECT was toggled — the S3 sits ~10 s in download mode with
+  IO17 (UART1 TX → U2 DI) floating. Unplugging and replugging the board left HSKo ready
+  throughout. Dev-only; rev B candidate: a pull-up on IO17 so TX idles at mark through reset.
 - **Rev A works on `the home network`.** Unlike the C6 devkit, the S3 got a lease and is reachable;
   it advertises `imagewriter-2434.local`. Home Assistant's IPP integration found it at once.
 - **Range:** RSSI read −91 dBm ("Weak") at first, "Excellent" after the board was moved. That
