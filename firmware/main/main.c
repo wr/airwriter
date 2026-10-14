@@ -86,6 +86,10 @@ static size_t s_last_pages, s_last_bytes;
 // back at the bottom of doc_end and test_page_task. s_printing above is
 // merely the status page's idea of "busy" -- it is not itself a lock, since
 // checking it and then setting it is not atomic across tasks.
+//
+// A binary semaphore, not a mutex: test_page takes it on dip_config's poll
+// task and test_page_task gives it back, and a mutex given by a task that
+// does not hold it trips FreeRTOS's priority-disinherit assert (W-1033).
 static SemaphoreHandle_t s_job_lock;
 
 // ---------------------------------------------------------------- raster
@@ -598,7 +602,8 @@ void app_main(void)
     // Before anything that can call doc_begin or test_page: dip_config's poll
     // task starts soon and a button press must not race the lock into
     // existence.
-    s_job_lock = xSemaphoreCreateMutex();
+    s_job_lock = xSemaphoreCreateBinary();
+    xSemaphoreGive(s_job_lock);             // created empty; start it free
 
     printer_state_start(on_ps_change);
     // After the clamp above: the RMT driver takes IO48 over from here, and
