@@ -1,8 +1,31 @@
 # AirWriter handoff
 
-Written 2026-08-04, last updated 2026-08-28.
+Written 2026-08-04, last updated 2026-10-14.
 
 ## Where the project stands
+
+**2026-10-14: rev A is alive and has printed.** Board 1 arrived from PCBWay; the THT joints,
+J2/J4 holes and debris from the 10-05 photo review were checked and fixed before power. Over
+USB-C the S3 enumerated, reads back as N8R2 (8 MB flash, 2 MB PSRAM, PSRAM test passes), and
+every firmware pin matched the netlist. A Print-Job of `fixtures/checker.urf` from `ipptool`
+printed on the ImageWriter II through J2 and the Apple crossover cable, and the board's stream
+was **byte-identical to `checker.expected.bin`** (2672 bytes, crc32 `8ee84844`).
+
+- **W-1032 (fixed, merged):** a blank board boot-looped instead of starting the setup AP,
+  because the Wi-Fi init only ran on the join path. Setup mode (`AirWriter-xxxx`, open,
+  192.168.4.1) now works from a fresh flash.
+- **HSKo polarity is right as designed:** IO8 reads LOW with the printer ready (read live over
+  JTAG, `GPIO_IN` bit 8). `CONFIG_AIRWRITER_INVERT_CTS` stays off. The first job was aborted
+  because the printer had held HSKo not-ready for 30 s after boot; once ready it printed.
+- **Rev A works on `the home network`.** Unlike the C6 devkit, the S3 got a lease and is reachable;
+  it advertises `imagewriter-2434.local`. Home Assistant's IPP integration found it at once.
+- **Range:** RSSI read −91 dBm ("Weak") at first, "Excellent" after the board was moved. That
+  is the board-1 range measurement for the panel copper over the antenna; still to quantify.
+- **Console trap:** a raw pyserial open on macOS drops the S3 into download mode. Use
+  `idf.py monitor` (under `script` from a non-TTY shell). OpenOCD
+  (`board/esp32s3-builtin.cfg`) reads registers live without a reset.
+- **Next:** print a full page from an iPhone, scope HSKo during a long job (SPEC §3.9 stall
+  timing), then the LocalTalk path (U7 still empty; tack 10 k across U6 3–5 first).
 
 **2026-09-01/02: fourth adversarial review (layout + LCSC parts + circuit); no DOA; the
 pre-order fixes are APPLIED and the package is regenerated.** Read
