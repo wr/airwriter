@@ -785,6 +785,12 @@ static void lt_echo(void *ctx, int node)
 // Mac's driver reads with PAP SendStatus.
 static uint16_t lt_status(ps_state_t st)
 {
+#if CONFIG_AIRWRITER_LT_BENCH
+    // Bench: ready whatever the printer line says, so a Mac sends its job for
+    // GET /api/lt/job even with nothing on J2 (one crossover cable, on J4).
+    (void)st;
+    return 0;
+#endif
     switch (st) {
     case PS_ATTENTION: return LT_IW_PAPER_OUT | LT_IW_OFFLINE | LT_IW_FAULT;
     case PS_OFFLINE:   return LT_IW_OFFLINE;

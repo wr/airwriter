@@ -278,7 +278,9 @@ config AIRWRITER_LT_BENCH
     help
         The LocalTalk node (W-1051) normally runs only in DIP mode 2. This
         starts it at boot regardless, for a bench board whose DIPs are set
-        for something else. Either way it holds the PIC's pins, so the web
-        UI's TashTalk flash refuses while it runs.
+        for something else, and reports the printer ready over PAP whatever
+        its line says, so a Mac sends a job to capture with no printer on J2.
+        Either way the node holds the PIC's pins, so the web UI's TashTalk
+        flash refuses while it runs.
 
 endmenu
