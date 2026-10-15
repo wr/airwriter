@@ -22,13 +22,17 @@ config AIRWRITER_QUEUE_NAME
 
 config AIRWRITER_DEV_MODE
     bool "Development mode"
-    default y
+    default n
     help
         Regenerates printer-uuid on every boot. iOS caches printer
         capabilities against the UUID aggressively, and with a stable UUID a
         changed media list or URF string can take an afternoon to show up.
-        Turn this off for a real device: a UUID that moves makes the printer
-        appear as a new queue after every reboot.
+        Off by default: a UUID that moves leaves the iPhone and the Mac
+        holding the printer under an old UUID after every reboot. On the
+        rev A bench (a dozen reboots in a morning) the iPhone listed two
+        "ImageWriter II" entries and, printing to the stale one, polled
+        Get-Printer-Attributes forever without sending a job. Turn it on
+        only while iterating on advertised capabilities.
 
 config AIRWRITER_UART_NUM
     int "Printer UART port"
