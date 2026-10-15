@@ -170,10 +170,10 @@ class TestPorts(unittest.TestCase):
          -- the mini-DIN footprint's own descr says its origin IS the mating
          face, and the footprint sits at KiCad y=167.02 against the front
          edge at y=164.27.
-      2. J2/J4's shells top out ~12.74 mm above the board's top face --
-         scripts/board-model/README.md (shop repo) and this project's own
-         design spec (docs/superpowers/specs/2026-09-08-airwriter-enclosure-
-         design.md, section 2).
+      2. J2/J4's shells top out 13.04 mm above the board's top face --
+         measured on rev A by Wells, 2026-10-14 (params.MINIDIN_TOP). The
+         vendor STEP says 12.75; connector_solid() lifts the mini-DINs to
+         the measurement.
       3. J1's F.Fab shell face lands near case Y = -1.5 -- body ±3.65 about
          an origin at KiCad y=162.12, against the front edge at y=164.27.
     """
@@ -205,17 +205,36 @@ class TestPorts(unittest.TestCase):
             bb = case.connector_solid(ref).bounding_box()
             self.assertAlmostEqual(bb.min.Y, -2.75, places=2, msg=ref)
 
-    def test_minidin_shells_top_out_around_12_74_above_the_board(self):
-        # Ground truth 2. The real vendor STEP measures 12.75 mm here --
-        # 0.01 mm off the documented 12.74. Every axis-order/sign variant
-        # tried during development other than the one implemented lands far
-        # off (3.75, -3.75, 16.5 mm...), so the 0.01 mm gap is display/
-        # measurement rounding in the hand-written design note, not a wrong
-        # axis -- see task-5-report.md for the alternates that were ruled
-        # out and why.
+    def test_minidin_shells_top_out_at_the_measured_height(self):
+        # Ground truth 2. The vendor STEP measures 12.75 here, and every
+        # axis-order/sign variant tried during development other than the
+        # one implemented lands far off (3.75, -3.75, 16.5 mm...; see
+        # task-5-report.md). Rev A measured 13.04, so the mini-DINs are
+        # lifted 0.29 to match.
         for ref in ("J2", "J4"):
             bb = case.connector_solid(ref).bounding_box()
-            self.assertAlmostEqual(bb.max.Z, 12.74, delta=0.02, msg=ref)
+            self.assertAlmostEqual(bb.max.Z, p.MINIDIN_TOP, places=3, msg=ref)
+
+    def test_minidin_windows_have_flat_bottoms(self):
+        # 2026-10-14 print: the windows' bottoms sloped down to -2.4 at the
+        # wall's inner face, because the hull reached back to the pins.
+        # Built from the connector's front part only, a window's bottom never
+        # drops more than PORT_CLEAR under the connector inside the wall, and
+        # slopes only as much as the connector's own underside does (it
+        # steps down 0.25 near the board edge), not 2.1.
+        from build123d import Box, Pos
+        cuts = case.port_cutouts()
+        for ref in ("J2", "J4"):
+            bb = case.connector_solid(ref).bounding_box()
+            xc = (bb.min.X + bb.max.X) / 2
+            front = case.connector_solid(ref) & (Pos(xc, -1.5, 5) * Box(20, 2.4, 30))
+            lowest = front.bounding_box().min.Z - p.PORT_CLEAR
+            bottoms = []
+            for y in (-2.8, -1.5, -0.4):
+                sl = cuts & (Pos(xc, y, 5) * Box(bb.size.X + 2, 0.05, 30))
+                bottoms.append(sl.bounding_box().min.Z)
+            self.assertGreaterEqual(min(bottoms), lowest - 0.05, f"{ref}: {bottoms}")
+            self.assertLess(max(bottoms) - min(bottoms), 0.40, f"{ref}: {bottoms}")
 
     def test_j1_shell_face_lands_near_case_y_minus_1_5(self):
         # Ground truth 3. Approximate by design: F.Fab is a drawn body
@@ -520,15 +539,24 @@ class TestSideFeaturesAndTray(unittest.TestCase):
         self.assertAlmostEqual(bb.min.Y, lo - edge, places=2)
         self.assertAlmostEqual(bb.max.Y, hi + edge, places=2)
 
-    def test_dip_slot_never_opens_above_the_switch_body(self):
+    def test_dip_slot_stays_close_to_the_switch_body_top(self):
         # S1's moulded body tops out 9.41 above the board (dp08rp.mjs / the
         # footprint descr's 9.41mm height). A slot reaching past that opens the
-        # wall onto empty cavity -- it showed up in the viewer as a black bar
-        # above the keys. Stay under it.
+        # wall onto the cavity -- a black bar above the keys. It used to stay
+        # under 9.41; since the 2026-10-14 print (keys couldn't rock) it may
+        # pass it by at most 0.5, the price of keys that toggle.
         S1_BODY_TOP = 9.41
         bb = case.dip_slot().bounding_box()
-        self.assertLess(bb.max.Z, S1_BODY_TOP,
-                        f"slot top {bb.max.Z:.2f} is above S1's body top {S1_BODY_TOP}")
+        self.assertLessEqual(bb.max.Z, S1_BODY_TOP + 0.5,
+                             f"slot top {bb.max.Z:.2f} is more than 0.5 above S1's body top")
+
+    def test_dip_keys_have_room_to_rock(self):
+        # The keys and their levers span z 5.6-9.01. On the first print a slot
+        # 0.4 below and 0.3 above them pinned them. Ask for 0.85 each way.
+        KEYS_BOTTOM, KEYS_TOP = 5.6, 9.01
+        bb = case.dip_slot().bounding_box()
+        self.assertGreaterEqual(KEYS_BOTTOM - bb.min.Z, 0.85)
+        self.assertGreaterEqual(bb.max.Z - KEYS_TOP, 0.85)
 
     def test_dip_slot_clears_the_whole_key_lever(self):
         # The levers run from z 5.8 (the lip) to 9.01 (the key top), inside the
@@ -689,7 +717,7 @@ class TestWestFlexWall(unittest.TestCase):
     def test_thin_below_the_seat_full_at_it(self):
         for y in (12.0, 50.0, 90.0):
             self.assertAlmostEqual(self._wall(y, 2.0), p.WEST_FLEX_T, places=2, msg=f"y={y}")
-            self.assertAlmostEqual(self._wall(y, 13.4), p.WALL - p.POCKET_CLEAR, places=2, msg=f"y={y}")
+            self.assertAlmostEqual(self._wall(y, 13.7), p.WALL - p.POCKET_CLEAR, places=2, msg=f"y={y}")
 
     def test_ramp_returns_to_full_thickness_by_the_seat(self):
         # 45 degrees: the ramp's height equals its run.

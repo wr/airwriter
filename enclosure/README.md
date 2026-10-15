@@ -20,14 +20,14 @@ each constant commented with where it came from.
 
 FDM, 0.4 mm nozzle, 0.2 mm layers, matte black, **PETG** for the tray (see
 "Fitting the board"). **No supports.** Tray floor-down
-(68.00 x 110.27 x 21.34 mm), lid plate-down (62.00 x 104.27 x 14.34 mm — the
+(68.00 x 110.27 x 21.64 mm), lid plate-down (62.00 x 104.27 x 14.64 mm — the
 art panel's own outline, not the pocket's; see "First print" below for the
 0.30 mm/side it should clear by).
 The tray's bottom outside edge carries a 0.80 mm 45-degree chamfer
 (`BOTTOM_CHAMFER`): exactly the overhang limit, so it needs no support, and it
 keeps first-layer squish inside the wall line. The top outside edge carries a
 smaller 0.40 mm one (`TOP_CHAMFER`), held small so the lintels over J2/J4
-(1.19 mm tall) keep 0.79 mm at the wall face; the pocket edge stays sharp.
+(1.20 mm tall) keep 0.80 mm at the wall face; the pocket edge stays sharp.
 `test_printable.py` fails the build on any face steeper than the real
 45-degree FDM overhang limit, checked in each part's own print orientation —
 a geometric proxy for printability, not a guarantee it slices clean: it can't
@@ -53,13 +53,18 @@ real unsupported ceilings once the part is reoriented in the slicer.
 
 | Build | Screws | Into |
 |---|---|---|
-| Pro | 4 × M2.5 × 20 | the art panel's PEM SMTSO-M25-3ET blind nuts |
+| Pro | 4 × M2.5 × 18 | the art panel's Würth 9774030151R blind standoffs |
 | Lite | 4 × M2.5 × 10 | M2.5 brass heat-set inserts in the lid legs |
 
 Lite is **M2.5 × 10, not × 8**: with `STANDOFF` at 3.00 the counterbore seat
 sits at Z = -5.60, so an 8mm screw only reaches 2.40mm into the lid's 4.50mm
-insert bore. 10mm reaches 4.40mm — most of the insert's own length. The Pro's
-M2.5 × 20 is unchanged (it runs the full 14.34mm cavity plus panel).
+insert bore. 10mm reaches 4.40mm — most of the insert's own length.
+
+Pro is **M2.5 × 18, not × 20**. The panel's standoffs are blind: 3.0 mm tall,
+thread in the bottom 1.8 mm, and the screw tip must stop about 0.5 mm short of
+the seat. From the same Z = -5.60 head seat, an 18 mm screw ends at Z 12.40,
+0.64 short of the panel's underside at 13.04 and 2.36 mm into the standoff. A
+20 mm screw would end at 14.40, past the panel's underside, and bottom out.
 
 Press the four inserts into the **bottom** of the lid's legs before assembly.
 Rubber feet go on the floor's underside, over the screw counterbores.
@@ -78,14 +83,14 @@ way of the keys:
    keys are down in their window. Near the end the board slides forward
    another millimetre or so as the USB-C finds its opening.
 
-Below the panel seat the west wall is only `WEST_FLEX_T` (0.80 mm) thick,
+Below the panel seat the west wall is only `WEST_FLEX_T` (1.20 mm) thick,
 ramping back to the full wall at the seat, so the rim, the seat and the
-outside look the same as before. Bowing it 2 mm takes about 21 N in PETG and
-37 N in PLA, with peak strain 1.65% at the DIP window's corners and at J2's
-lintel (FEA, `docs/enclosure-build-log/flex-wall-report.md`). PETG takes that
-comfortably. PLA should survive a handful of assemblies but is stiffer and
-more brittle. If the keys still catch at the rim, push the board 0.3 mm east
-while it goes down.
+outside look the same as before. Bowing it 2 mm takes about 32 N in PETG
+(about 56 N in PLA) and puts about 1% vertical strain where the wall meets the
+floor (FEA, `docs/enclosure-build-log/flex-wall-report.md`). That strain pulls
+the print's layers apart, so **print the tray in PETG**. A 0.80 mm wall split
+there on the first print. If the keys still catch at the rim, push the board
+0.3 mm east while it goes down.
 
 ## First print, check in this order
 

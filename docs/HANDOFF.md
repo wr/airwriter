@@ -41,8 +41,11 @@ was **byte-identical to `checker.expected.bin`** (2672 bytes, crc32 `8ee84844`).
 - **W-1036 (fix on `wells/w-1036-tray-board-fit`, unprinted):** the board could not be
   fitted into the printed tray at all. S1's keys stand 2.2 mm into the west wall, at right
   angles to the ports standing into the front wall, which pin the board side to side. The west
-  wall is now 0.8 mm thick below the panel seat so it bows out past the keys (~21 N in PETG),
-  and `POCKET_CLEAR` is 0.30. The fitting sequence is in `enclosure/README.md`, "Fitting the
+  wall is thinned below the panel seat so it bows out past the keys, and `POCKET_CLEAR` is
+  0.30. Second print: the 0.8 wall split at the floor (now 1.2, print in PETG), the DIP slot
+  pinned the keys (now 4.6–9.9) and the mini-DIN windows were too deep at the bottom (now
+  front-part hulls). Wells measured the mini-DINs at 13.04, so `CAVITY` = 13.04 and the Pro
+  screws are M2.5 × 18. The fitting sequence is in `enclosure/README.md`, "Fitting the
   board"; the sweep and FEA are in `docs/enclosure-build-log/flex-wall-report.md`. The
   shop's cased GLBs still show the old tray.
 - **Next:** print a full page from an iPhone, scope HSKo during a long job (SPEC §3.9 stall

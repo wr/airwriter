@@ -5,7 +5,7 @@ over the keys' path is moved u_x = -D. Reports peak principal strain (and
 where), and the force it takes. P2 tets on a gmsh mesh, scikit-fem.
 Needs gmsh, scikit-fem, meshio (not in enclosure/requirements.txt):
     python3 -m venv fea && fea/bin/pip install gmsh scikit-fem meshio
-    fea/bin/python fea.py ../../../enclosure/out/airwriter-tray.step 2.0 0.8 2000
+    fea/bin/python fea.py ../../../enclosure/out/airwriter-tray.step 2.0 0.8 2000 1.2
 usage: fea.py tray.step D(mm) h_fine(mm) E(MPa) [WEST_FLEX_T]"""
 import sys, time
 import numpy as np
@@ -15,7 +15,6 @@ from skfem.models.elasticity import linear_elasticity, lame_parameters
 
 step, D, h, E = sys.argv[1], float(sys.argv[2]), float(sys.argv[3]), float(sys.argv[4])
 NU, PC = 0.38, 0.30
-T = float(sys.argv[5]) if len(sys.argv) > 5 else 0.80
 Y0, Y1 = 19.0, 42.0          # where the hand pulls
 K0, K1 = 20.0, 40.5          # keys' path at the rim (A-phase rock-in)
 
@@ -54,10 +53,10 @@ X = ib.doflocs  # (3, ndofs): location of each DOF; DOFs interleave u_x,u_y,u_z
 nd = X.shape[1]
 comp = np.arange(nd) % 3
 floor = np.where(X[2] < -6.999)[0]
-patch = np.where((np.abs(X[0] + PC) < 1e-3) & (X[2] > 12.74 - 1e-3) & (X[1] > Y0) & (X[1] < Y1) & (comp == 0))[0]
+patch = np.where((np.abs(X[0] + PC) < 1e-3) & (X[2] > 13.04 - 1e-3) & (X[1] > Y0) & (X[1] < Y1) & (comp == 0))[0]
 F = np.zeros(nd); F[patch] = -1.0 / len(patch)   # 1 N spread over the patch
 u = solve(*condense(K, F, D=floor))
-keys = np.where((np.abs(X[0] + PC) < 1e-3) & (X[2] > 12.74 - 1e-3) & (X[1] > K0) & (X[1] < K1) & (comp == 0))[0]
+keys = np.where((np.abs(X[0] + PC) < 1e-3) & (X[2] > 13.04 - 1e-3) & (X[1] > K0) & (X[1] < K1) & (comp == 0))[0]
 scale = D / (-u[keys]).min()          # pull until the WHOLE key path is out by D
 u *= scale
 print(f"solved, {time.time()-t0:.0f}s; patch dofs {len(patch)}", flush=True)
@@ -80,19 +79,33 @@ for i in order:
     seen.append(loc); print(f"  {100*p1[i]:.2f}%  ({loc[0]:.1f}, {loc[1]:.1f}, {loc[2]:.1f})")
     if len(seen) == 6: break
 print(f"peak compressive {100*p3.min():.2f}%")
+# Root zone: west wall within ~3.4 of the floor top -- where rev A's print split.
+# eps_zz (vertical) is what pulls layers apart on a floor-down print.
+ezz = eps[2, 2].max(axis=1)
+root = (c[0] < -0.25) & (c[2] < -1.2) & (c[1] > 4) & (c[1] < 100)
+i = np.argmax(np.where(root, ezz, -1))
+print(f"ROOT: max eps_zz {100*ezz[i]:.2f}% at ({c[0,i]:.1f}, {c[1,i]:.1f}, {c[2,i]:.1f}); max principal {100*np.where(root, p1, 0).max():.2f}%")
 
 # Outward displacement vs what the front key needs on the ramp/rim near y 18.5-20
 # (keys' tips at x = -2.2 with the board centred; 0.05 margin).
 ramp_x = lambda z: max(-p_xin, min(-PC, -p_xin + (z - z_rb)))
-p_xin, z_rb = 3.0 - T, 12.74 - (3.0 - T - PC)
+p_xin, z_rb = 3.0 - 0.8, 12.74 - (3.0 - 0.8 - PC)
 P = []
 for y in (18.5, 19.0, 19.5, 20.0):
     for z in (11.0, 11.6, 12.3, 13.0, 14.0):
         P.append((ramp_x(z) - 0.05, y, z))
 P = np.array(P).T
 sb = ib.split_bases()[0]
-ux = sb.probes(P) @ u[ib.split_indices()[0]]
+try:
+    ux = sb.probes(P) @ u[ib.split_indices()[0]]
+except ValueError:
+    ux = np.full(P.shape[1], np.nan)
 print("front-key clearance check (y, z, face x, outward u, needed):")
 for (x_, y, z), d in zip(P.T, ux):
     need = (x_ + 0.05) + 2.2 + 0.05
     print(f"  y{y:5.1f} z{z:5.1f}  face {x_+0.05:6.2f}  u {-d:5.2f}  need {max(need,0):5.2f}  {'ok' if -d >= need else 'SHORT'}")
+wall = (c[0] < -0.25) & (c[1] > 4) & (c[1] < 100)
+win = (c[1] > 18) & (c[1] < 42) & (c[2] > 3.6) & (c[2] < 10.9)   # DIP window + corners
+bands = [(-4.6, -2), (-2, 0), (0, 2), (2, 4), (4, 7), (7, 10), (10, 13.1)]
+print("EZZ by z band (wall, excl. window):", "  ".join(
+    f"{a:+.0f}..{b:+.0f}:{100*np.where(wall & ~win & (c[2]>=a) & (c[2]<b), ezz, 0).max():.2f}" for a, b in bands))

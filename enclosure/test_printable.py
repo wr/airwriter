@@ -179,11 +179,13 @@ class TestTray(unittest.TestCase):
         # every probe below, so a generic "* volume / p.WALL" cancels to
         # the same constant for all of them and checks nothing extra.
         from build123d import Box, Pos
-        # The west wall's seat band sits under the 0.40 top chamfer from
-        # 13.94 up, so its probe stops at 13.90.
+        # The west wall's seat band runs Z_LID_UNDER..Z_WALL_TOP, under the
+        # 0.40 top chamfer, so its probe sits 0.1 inside both.
+        seat_z = (p.Z_LID_UNDER + p.Z_WALL_TOP - p.TOP_CHAMFER) / 2
+        seat_h = p.Z_WALL_TOP - p.TOP_CHAMFER - p.Z_LID_UNDER - 0.2
         probes = [
-            ("west seat", Pos(-p.WALL / 2, 90.0, 13.4), (p.WALL, 4.0, 1.0),
-             MIN_WALL * 4.0 * 1.0),
+            ("west seat", Pos(-p.WALL / 2, 90.0, seat_z), (p.WALL, 4.0, seat_h),
+             MIN_WALL * 4.0 * seat_h),
             ("west flex", Pos(-p.WALL / 2, 90.0, 4.0), (p.WALL, 4.0, 2.0),
              p.WEST_FLEX_T * 4.0 * 2.0),
             ("east", Pos(p.BOARD_W + p.WALL / 2, 90.0, 12.0), (p.WALL, 4.0, 2.0),

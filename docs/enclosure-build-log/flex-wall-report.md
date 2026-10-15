@@ -73,3 +73,40 @@ Nothing here is a physical print. The material is not pinned down (the README
 now says PETG for the tray). The 2.0 mm requirement assumes the board is
 centred; the FEA fixes the floor rigidly, which is slightly stiffer than a
 hand holding the case.
+
+## Second print (2026-10-14, same day)
+
+Wells printed the 0.80 tray and reported three problems:
+
+1. **The DIP keys touched the top and bottom of their slot** and could barely be toggled.
+   Piano keys rock, so the tip needs room both ways. The slot goes from 5.20–9.30 to
+   **4.60–9.90**, which gives 1.0 below and 0.89 above the keys' 5.6–9.01. Its top now sits
+   0.49 above S1's body.
+2. **The thin wall split near the floor.** The FEA, with a vertical (layer-pulling)
+   strain profile, at the same 2 mm bow:
+
+   | Wall | Vertical strain, worst band | Force (PETG) |
+   |---|---|---|
+   | 0.80 uniform (the one that split) | 0.99% at the floor | 21 N |
+   | 1.20 uniform | 1.04% at the floor | 32 N |
+   | 1.60 → 0.80 over the bottom 6 mm, 2 mm cove | 1.14% at z 2–4 | 24 N |
+   | 2.20 → 0.80 over the bottom 6 mm, 2 mm cove | 1.29% at z 2–4 | 26 N |
+
+   For an imposed bow, about 1% is inherent: strain ≈ 3tδ/2H². Thickening the bottom only
+   moves the peak up the wall. **1.20 uniform** (Wells's suggestion) is no gentler, but it
+   is 2.25× stronger against being pushed past 2 mm. The cove goes to 1.5. 1% across the
+   layers is comfortable for PETG and marginal for PLA, so the README now asks for PETG.
+3. **The mini-DIN windows were ~0.9 too tall at the bottom.** The window was the
+   connector's whole hull, which reaches back to the through-hole pins, so its bottom
+   sloped from −0.3 at the outer face to −2.4 at the inner face. The windows are now built
+   from the part of the connector in front of the board edge, and the bottom runs
+   −0.06 to −0.36.
+
+Also from that print: Wells measured the mini-DIN shells at **13.04** above the board
+(the STEP says 12.75). `MINIDIN_TOP` lifts J2/J4 to 13.04, and `CAVITY` follows, so the
+panel sits flush. The tray grows to 21.64 tall, and the Pro screws become M2.5 × 18
+(× 20 would bottom out in the blind Würth standoffs).
+
+The sweep (connector hulls now split front and back, see `flex-wall/sweep.py`) still finds
+the board clear at home and a clean rock-in with the rim bowed. The mini-DINs graze
+0.1 mm³ for an instant near the end of the slide, a ~0.05 mm brush.

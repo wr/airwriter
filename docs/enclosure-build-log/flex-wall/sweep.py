@@ -21,8 +21,16 @@ import params as p  # noqa: E402
 
 def board_parts():
     def hull(ref):
-        v, _ = case.connector_solid(ref).tessellate(0.05)
-        return ConvexPolyhedron([tuple(x) for x in v])
+        # Front (y <= 0) and back hulled apart: one hull over the whole body
+        # reaches from the mating face down to the pins and would cut the
+        # windows' bottoms, which are built from the front part alone.
+        s = case.connector_solid(ref)
+        out = None
+        for y in (-10, 10):
+            v, _ = (s & (Pos(0, y, 0) * Box(200, 20, 100))).tessellate(0.05)
+            h = ConvexPolyhedron([tuple(x) for x in v])
+            out = h if out is None else out + h
+        return out
     parts = {"slab": case._rounded_box(p.BOARD_W, p.BOARD_L, p.PCB, p.BOARD_W / 2,
                                         p.BOARD_L / 2, -p.PCB / 2, p.CORNER_R)}
     for r in ("J1", "J2", "J4"):
