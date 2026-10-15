@@ -18,6 +18,24 @@ def _vol(a, b):
     return x.volume if x is not None else 0.0
 
 
+def _d3_wall_gaps(part):
+    """Points 0.59 out from the D3 tube's interior (its thinnest allowed
+    wall is 0.6) that are not inside the part, at heights from just above the
+    board to just under the panel."""
+    x0, x1, y0, y1 = lattice.d3_window()
+    c = p.D3_TUBE_CLEAR
+    ix0, ix1, iy0, iy1 = x0 - c, x1 + c, y0 - c, y1 + c
+    t = 0.6 - 0.01
+    d = t / 2 ** 0.5
+    pts = [(ix0 - d, iy0 - d), (ix1 + d, iy0 - d), (ix0 - d, iy1 + d), (ix1 + d, iy1 + d)]
+    for k in range(1, 10):
+        fx = ix0 + k / 10 * (ix1 - ix0)
+        fy = iy0 + k / 10 * (iy1 - iy0)
+        pts += [(fx, iy0 - t), (fx, iy1 + t), (ix0 - t, fy), (ix1 + t, fy)]
+    return [(round(px, 2), round(py, 2), z) for z in (0.2, 0.6, 1.0, 1.5, H / 2, H - 0.5)
+            for px, py in pts if not part.is_inside(Vector(px, py, z))]
+
+
 class TestLattice(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -86,19 +104,24 @@ class TestLattice(unittest.TestCase):
         x0, x1, y0, y1 = lattice.d3_window()
         col = Pos((x0 + x1) / 2, (y0 + y1) / 2, H / 2) * Box(x1 - x0, y1 - y0, H + 2)
         self.assertLess(_vol(self.L, col), 1e-3)
+        self.assertEqual(_d3_wall_gaps(self.L), [])
+
+    def test_d3_wall_check_catches_a_breach_near_the_board(self):
+        # The part voids that could breach the tube all sit low (<= 1.3), so
+        # the check must look there, not only near the top.
+        x0, x1, y0, y1 = lattice.d3_window()
         c = p.D3_TUBE_CLEAR
-        ix0, ix1, iy0, iy1 = x0 - c, x1 + c, y0 - c, y1 + c
-        t = 0.6 - 0.01  # the thinnest wall the spec allows
-        pts = []
-        for k in range(1, 10):
-            fx = ix0 + k / 10 * (ix1 - ix0)
-            fy = iy0 + k / 10 * (iy1 - iy0)
-            pts += [(fx, iy0 - t), (fx, iy1 + t), (ix0 - t, fy), (ix1 + t, fy)]
-        d = t / 2 ** 0.5
-        pts += [(ix0 - d, iy0 - d), (ix1 + d, iy0 - d), (ix0 - d, iy1 + d), (ix1 + d, iy1 + d)]
-        for px, py in pts:
-            self.assertTrue(self.L.is_inside(Vector(px, py, H - 0.5)),
-                            f"no wall at ({px:.2f}, {py:.2f})")
+        breach = Pos(x0 - c - p.LATTICE_WALL / 2, (y0 + y1) / 2, 0.5) * Box(2.0, 1.0, 1.0)
+        self.assertNotEqual(_d3_wall_gaps(self.L - breach), [])
+
+    def test_d3_and_its_resistor_sit_inside_the_tube(self):
+        x0, x1, y0, y1 = lattice.d3_window()
+        c = p.D3_TUBE_CLEAR
+        env = components.envelopes()
+        for ref in ("D3", "R17"):
+            (bx0, bx1, by0, by1, _), = env[ref]
+            self.assertTrue(x0 - c <= bx0 and bx1 <= x1 + c and y0 - c <= by0 and by1 <= y1 + c,
+                            ref)
 
     def test_grid_walls_are_lattice_wall_thick(self):
         xs, _ = lattice.wall_lines()
@@ -118,6 +141,25 @@ class TestLattice(unittest.TestCase):
         notch = Pos(x1 + p.LATTICE_WALL / 2, (y0 + y1) / 2, 1.0) * Box(2.0, 2.0, 2.0)
         leaks = lattice.leaky_walls(self.L - notch)
         self.assertIn(f"r{t['r']}c{t['c'] + 1} west lit|test", leaks)
+
+    def _wall_between(self, r, c):
+        # The wall between cell (r, c) and (r, c + 1), mid-height, mid-cell.
+        xs, _ = lattice.wall_lines()
+        _, _, y0, y1 = lattice.cell_bounds()[(r, c)]
+        return xs[c + 1], (y0 + y1) / 2
+
+    def test_leak_report_catches_a_small_hole_right_through_a_wall(self):
+        # A 1 x 1 mm hole through the wall between two lit cells (r2c3 L,
+        # r2c4 P) is 1% of the wall: big enough to see, small by volume.
+        x, y = self._wall_between(2, 3)
+        hole = Pos(x, y, 6.0) * Box(2.0, 1.0, 1.0)
+        self.assertIn("r2c3 east lit|lit", lattice.leaky_walls(self.L - hole))
+
+    def test_leak_report_ignores_a_notch_that_stops_inside_the_wall(self):
+        # Thinning a wall (a part's envelope grazing it) lets no light through.
+        x, y = self._wall_between(2, 3)
+        dent = Pos(x - p.LATTICE_WALL / 2 + 0.15, y, 6.0) * Box(0.3, 3.0, 3.0)
+        self.assertNotIn("r2c3 east lit|lit", lattice.leaky_walls(self.L - dent))
 
     def test_d3_window_is_the_one_over_d3(self):
         x0, x1, y0, y1 = lattice.d3_window()

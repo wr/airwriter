@@ -24,6 +24,26 @@ class TestExportCache(unittest.TestCase):
             self.assertFalse(components.needs_export(step, board))
 
 
+class TestExport(unittest.TestCase):
+    # A real kicad-cli run against the real board (a few seconds each).
+    def test_writes_a_step_although_the_sk6812_models_are_missing(self):
+        # KiCad 10 ships no SK6812MINI model, so kicad-cli exits 2 on every
+        # export; those 37 are covered by NO_MODEL_LIB and must not fail it.
+        with tempfile.TemporaryDirectory() as d:
+            step = pathlib.Path(d, "c.step")
+            self.assertEqual(components.export(force=True, step=step), step)
+            self.assertTrue(step.exists())
+
+    def test_a_broken_model_library_fails_and_leaves_no_cache(self):
+        with tempfile.TemporaryDirectory() as d:
+            step = pathlib.Path(d, "c.step")
+            with self.assertRaises(RuntimeError) as e:
+                components.export(force=True, step=step, model_dir="/nonexistent")
+            self.assertIn("C3", str(e.exception))
+            self.assertFalse(step.exists())
+            self.assertEqual(list(pathlib.Path(d).iterdir()), [])
+
+
 class TestEnvelopes(unittest.TestCase):
     @classmethod
     def setUpClass(cls):

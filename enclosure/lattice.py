@@ -180,15 +180,41 @@ def leaky_walls(part: Part) -> list[str]:
     out = []
     for (r, c) in sorted(lit):
         x0, x1, y0, y1 = cells[(r, c)]
-        sides = {"west": ((x0 - w, x0, y0, y1), (r, c - 1)),
-                 "east": ((x1, x1 + w, y0, y1), (r, c + 1)),
-                 "back": ((x0, x1, y1, y1 + w), (r - 1, c)),
-                 "front": ((x0, x1, y0 - w, y0), (r + 1, c))}
-        for side, ((a, b, cc, d), nb) in sides.items():
-            probe = _box(a, b, cc, d, 0, H)
-            got = part & probe
-            if (got.volume if got is not None else 0.0) < 0.98 * probe.volume:
+        sides = {"west": ((x0 - w, x0, y0, y1), (r, c - 1), "x"),
+                 "east": ((x1, x1 + w, y0, y1), (r, c + 1), "x"),
+                 "back": ((x0, x1, y1, y1 + w), (r - 1, c), "y"),
+                 "front": ((x0, x1, y0 - w, y0), (r + 1, c), "y")}
+        for side, (wall, nb, across) in sides.items():
+            if _opened_through(part, *wall, across):
                 kind = ("lit|lit" if nb in lit else
                         "lit|test" if nb in test else "lit|dark")
                 out.append(f"r{r}c{c} {side} {kind}")
     return out
+
+
+def _opened_through(part: Part, x0, x1, y0, y1, across: str) -> bool:
+    """Whether something cut a hole straight through this wall box (full
+    height), across X or across Y. A notch that only thins the wall lets no
+    light through and does not count, however big; one that goes through
+    counts, however small. The cuts are boxes and hulls, so a hole is
+    straight: what is missing from a thin slice at one face of the wall is
+    also missing from the slice at the other face."""
+    probe = _box(x0, x1, y0, y1, 0, H)
+    got = part & probe
+    if got is not None and got.volume >= probe.volume - 1e-4:
+        return False
+    missing = probe - part if got is not None else probe
+    s = 0.05
+    if across == "x":
+        near = _box(x0, x0 + s, y0, y1, -1, H + 1)
+        far = _box(x1 - s, x1, y0, y1, -1, H + 1)
+        shift = Pos(-(x1 - x0 - s), 0, 0)
+    else:
+        near = _box(x0, x1, y0, y0 + s, -1, H + 1)
+        far = _box(x0, x1, y1 - s, y1, -1, H + 1)
+        shift = Pos(0, -(y1 - y0 - s), 0)
+    a, b = missing & near, missing & far
+    if a is None or b is None or a.volume < 1e-6 or b.volume < 1e-6:
+        return False
+    both = a & (shift * b)
+    return both is not None and both.volume > s * 0.01  # >= 0.01 mm^2 through

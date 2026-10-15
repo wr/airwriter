@@ -52,19 +52,40 @@ def needs_export(step: pathlib.Path, board: pathlib.Path) -> bool:
     return not step.exists() or step.stat().st_mtime < board.stat().st_mtime
 
 
-def export(force: bool = False) -> pathlib.Path:
-    """out/components.step, re-exported with kicad-cli when the board is newer."""
-    if force or needs_export(STEP, bg.BOARD_PCB):
+def export(force: bool = False, step: pathlib.Path = STEP,
+           model_dir: str = MODEL_DIR) -> pathlib.Path:
+    """out/components.step, re-exported with kicad-cli when the board is newer.
+
+    kicad-cli exits non-zero whenever a 3D model is missing, and the 37
+    SK6812MINIs always are, so the exit code alone can't tell a good export
+    from a broken one. Instead every part it reports missing must be one
+    NO_MODEL / NO_MODEL_LIB covers. The export goes to a temporary file and
+    replaces the cache only when it passes, so a failed run never leaves a
+    "fresh" cache behind for the next build to trust."""
+    if force or needs_export(step, bg.BOARD_PCB):
         if not os.path.exists(KICAD_CLI):
             raise RuntimeError(f"kicad-cli not found at {KICAD_CLI}; set KICAD_CLI")
-        STEP.parent.mkdir(exist_ok=True)
+        step.parent.mkdir(exist_ok=True)
+        tmp = step.with_name(step.stem + ".partial.step")
         r = subprocess.run(
             [KICAD_CLI, "pcb", "export", "step", "--no-board-body", "--subst-models",
-             "-D", f"KICAD10_3DMODEL_DIR={MODEL_DIR}", "-f", "-o", str(STEP),
+             "-D", f"KICAD10_3DMODEL_DIR={model_dir}", "-f", "-o", str(tmp),
              str(bg.BOARD_PCB)], capture_output=True, text=True)
-        if r.returncode or not STEP.exists():
-            raise RuntimeError(f"kicad-cli STEP export failed:\n{r.stdout}\n{r.stderr}")
-    return STEP
+        log = r.stdout + r.stderr
+        missing = set(_MISSING.findall(log))
+        covered = {ref for ref, f in bg._all().items()
+                   if ref in NO_MODEL or f.lib.split(":")[-1] in NO_MODEL_LIB}
+        bad = sorted(missing - covered)
+        if bad or not tmp.exists() or (r.returncode and not missing):
+            tmp.unlink(missing_ok=True)
+            why = (f"no 3D model for {', '.join(bad)} (model dir: {model_dir})"
+                   if bad else f"kicad-cli exit {r.returncode}:\n{log}")
+            raise RuntimeError(f"kicad-cli STEP export failed: {why}")
+        os.replace(tmp, step)
+    return step
+
+
+_MISSING = re.compile(r"Could not add 3D model for ([^\s.]+)")
 
 
 def _norm(s: str) -> str:
