@@ -313,6 +313,26 @@ static void doc_end(void *ctx, int ok)
 // later milestones -- for this rev dev_mode is a log note only, and the
 // printer-uuid behaviour it names stays Kconfig's AIRWRITER_DEV_MODE.
 
+// W-1039: unstick a printer that serial-line noise (a cable replug, power-up)
+// left busy with SELECT lit -- CTRL-X cancels the unprinted line in its
+// buffer. printer_state decides when (idle, busy 5 s, then every 60 s at
+// most); the job lock, taken without waiting, keeps it clear of any job's
+// writes or a test page.
+static void kick_task(void *arg)
+{
+    (void)arg;
+    static const uint8_t ctrl_x = 0x18;     // ImageWriter II: cancel current line
+    for (;;) {
+        vTaskDelay(pdMS_TO_TICKS(500));
+        if (!printer_state_want_kick()) continue;
+        if (xSemaphoreTake(s_job_lock, 0) != pdTRUE) continue;
+        esp_err_t err = serial_out_send_unflowed(&ctrl_x, 1);
+        printer_state_kicked();
+        xSemaphoreGive(s_job_lock);
+        ESP_LOGI(TAG, "printer busy while idle; sent CTRL-X (%s)", esp_err_to_name(err));
+    }
+}
+
 // A person did something; wake the panel. From the IPP, DIP and test-button paths.
 static void on_activity(void)
 {
@@ -733,6 +753,7 @@ void app_main(void)
         .loopback        = AW_LOOPBACK,
     };
     ESP_ERROR_CHECK(serial_out_init(&ser));
+    xTaskCreate(kick_task, "kick", 3072, NULL, 3, NULL);
 
     job_pipe_cfg_t pipe = { .out = printer_out, .dither = algo };
     ESP_ERROR_CHECK(job_pipe_init(&pipe));

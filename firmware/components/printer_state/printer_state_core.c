@@ -20,7 +20,7 @@ void ps_post(ps_t *ps, ps_event_t ev, uint64_t now)
     case PS_EV_WIFI_DOWN:      ps->wifi_up = 0; break;
     case PS_EV_WIFI_UP:        ps->wifi_up = 1; break;
     case PS_EV_LINE_READY:
-        if (!ps->line_ready) { ps->line_ready = 1; ps->line_since = now; }
+        if (!ps->line_ready) { ps->line_ready = 1; ps->line_since = now; ps->kicked = 0; }
         break;
     case PS_EV_LINE_NOT_READY:
         if (ps->line_ready) { ps->line_ready = 0; ps->line_since = now; }
@@ -94,4 +94,17 @@ const char *ps_name(ps_state_t st)
     case PS_READY:     return "ready";
     }
     return "?";
+}
+
+int ps_want_kick(const ps_t *ps, uint64_t now)
+{
+    if (ps->job || ps->line_ready || ps->setup) return 0;
+    if (now - ps->line_since < ps->tm.kick_after_ms) return 0;
+    return !ps->kicked || now - ps->kicked_at >= ps->tm.kick_every_ms;
+}
+
+void ps_kicked(ps_t *ps, uint64_t now)
+{
+    ps->kicked = 1;
+    ps->kicked_at = now;
 }

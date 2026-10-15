@@ -181,6 +181,37 @@ int main(void)
         assert(ps_update(&ps, W + 11000).since_ms > 0);
     }
 
+    // W-1039: noise on the serial line (a cable replug) can leave the
+    // ImageWriter stuck busy with SELECT lit; CTRL-X clears it (bench: stuck
+    // 120 s without, ready in 4.1 s with). Kick when idle and not ready for
+    // kick_after_ms, then at most every kick_every_ms; never during a job.
+    up_and_ready(&ps, 0);
+    st(&ps, 4000);
+    ps_post(&ps, PS_EV_LINE_NOT_READY, 10000);
+    assert(!ps_want_kick(&ps, 14999));
+    assert(ps_want_kick(&ps, 15000));
+    ps_kicked(&ps, 15000);
+    assert(!ps_want_kick(&ps, 74999));
+    assert(ps_want_kick(&ps, 75000));
+    ps_kicked(&ps, 75000);
+    // The line coming back resets it: a later stall is kicked 5 s in again.
+    ps_post(&ps, PS_EV_LINE_READY, 80000);
+    assert(!ps_want_kick(&ps, 80000));
+    ps_post(&ps, PS_EV_LINE_NOT_READY, 100000);
+    assert(!ps_want_kick(&ps, 104999));
+    assert(ps_want_kick(&ps, 105000));
+    // Never mid-job: there a low line is paper or a jam, and CTRL-X would
+    // erase a line of the page.
+    up_and_ready(&ps, 0);
+    ps_post(&ps, PS_EV_JOB_START, 5000);
+    ps_post(&ps, PS_EV_LINE_NOT_READY, 6000);
+    assert(!ps_want_kick(&ps, 60000));
+    // Busy from power-up past the boot settle: kicked like any other stall.
+    ps_init(&ps, &TM, 0);
+    ps_post(&ps, PS_EV_WIFI_UP, 2000);
+    assert(!ps_want_kick(&ps, 4999));
+    assert(ps_want_kick(&ps, 5000));
+
     assert(strcmp(ps_name(PS_READY), "ready") == 0);
     assert(strcmp(ps_name(PS_OFFLINE), "offline") == 0);
     assert(strcmp(ps_name(PS_ATTENTION), "attention") == 0);

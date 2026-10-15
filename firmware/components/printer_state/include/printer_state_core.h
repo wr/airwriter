@@ -33,14 +33,16 @@ typedef struct {
     uint32_t stall_attention_ms;   // mid-job and not ready this long -> attention
     uint32_t failed_hold_ms;       // how long a failed job stays on the panel
     uint32_t sleep_after_ms;       // ready or offline with no activity -> asleep
+    uint32_t kick_after_ms;        // idle and not ready this long -> send CTRL-X (W-1039)
+    uint32_t kick_every_ms;        // and again at most this often while it stays stuck
 } ps_timing_t;
 
-#define PS_TIMING_DEFAULT { 3000, 3000, 30000, 60000, 300000 }
+#define PS_TIMING_DEFAULT { 3000, 3000, 30000, 60000, 300000, 5000, 60000 }
 
 typedef struct {
     ps_timing_t tm;
-    uint64_t    boot_at, line_since, failed_at, activity_at, state_since;
-    uint8_t     setup, wifi_up, line_ready, job, failed, ap_stations, greeted;
+    uint64_t    boot_at, line_since, failed_at, activity_at, state_since, kicked_at;
+    uint8_t     setup, wifi_up, line_ready, job, failed, ap_stations, greeted, kicked;
     ps_state_t  last;
 } ps_t;
 
@@ -61,3 +63,12 @@ void        ps_set_ap_stations(ps_t *ps, unsigned n);
 // counts as activity, so the panel wakes to show it.
 ps_view_t   ps_update(ps_t *ps, uint64_t now_ms);
 const char *ps_name(ps_state_t st);   // "ready", "offline", ...
+
+// W-1039: noise on the serial line (a cable replug, power-up) can leave the
+// ImageWriter stuck busy with SELECT lit -- an unprinted line in its buffer --
+// and CTRL-X (cancel current line) clears it. ps_want_kick() says when to send
+// one: no job, line not ready for kick_after_ms, at most every kick_every_ms.
+// Never mid-job, where a low line is paper or a jam. Call ps_kicked() after
+// sending.
+int         ps_want_kick(const ps_t *ps, uint64_t now_ms);
+void        ps_kicked(ps_t *ps, uint64_t now_ms);

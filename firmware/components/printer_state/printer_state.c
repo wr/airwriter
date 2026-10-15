@@ -55,3 +55,18 @@ ps_view_t printer_state_view(void)
     xSemaphoreGive(s_mtx);
     return v;
 }
+
+int printer_state_want_kick(void)
+{
+    xSemaphoreTake(s_mtx, portMAX_DELAY);
+    int want = ps_want_kick(&s_ps, now_ms());
+    xSemaphoreGive(s_mtx);
+    return want;
+}
+
+void printer_state_kicked(void)
+{
+    xSemaphoreTake(s_mtx, portMAX_DELAY);
+    ps_kicked(&s_ps, now_ms());
+    xSemaphoreGive(s_mtx);
+}

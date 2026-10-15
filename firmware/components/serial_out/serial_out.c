@@ -224,3 +224,13 @@ void serial_out_loopback_reset(void)
     s_lb_bytes = 0;
     s_lb_crc   = 0;
 }
+
+esp_err_t serial_out_send_unflowed(const uint8_t *buf, size_t n)
+{
+    if (s_cfg.cts_pin < 0 || s_cfg.loopback) return ESP_ERR_INVALID_STATE;
+    uart_set_hw_flow_ctrl(s_cfg.uart_num, UART_HW_FLOWCTRL_DISABLE, 0);
+    int w = uart_tx_chars(s_cfg.uart_num, (const char *)buf, n);
+    uart_wait_tx_done(s_cfg.uart_num, pdMS_TO_TICKS(100));
+    uart_set_hw_flow_ctrl(s_cfg.uart_num, UART_HW_FLOWCTRL_CTS, 0);
+    return w == (int)n ? ESP_OK : ESP_FAIL;
+}

@@ -16,3 +16,7 @@ void      printer_state_start(const ps_timing_t *tm,
 void      printer_state_post(ps_event_t ev);          // any task
 void      printer_state_set_ap_stations(unsigned n);   // any task
 ps_view_t printer_state_view(void);                    // any task
+
+// W-1039: whether to send the printer a CTRL-X now, and that one was sent.
+int       printer_state_want_kick(void);               // any task
+void      printer_state_kicked(void);                  // any task

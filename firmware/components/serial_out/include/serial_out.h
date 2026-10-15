@@ -68,6 +68,14 @@ void serial_out_purge(void);
 // the cancelling task; clear it when the next job starts.
 void serial_out_set_abort(int on);
 
+// Sends bytes with CTS flow control briefly off, for unsticking a printer
+// that holds HSKo false while idle (W-1039: CTRL-X clears an unprinted line
+// that serial-line noise left in its buffer). The ImageWriter keeps ~27
+// characters of slack after dropping DTR. Never while a job is writing --
+// callers hold the job lock. ESP_ERR_INVALID_STATE with no CTS line or in
+// loopback.
+esp_err_t serial_out_send_unflowed(const uint8_t *buf, size_t n);
+
 // The printer's HSKo line right now. A printer that is attached and online
 // holds this asserted; nothing plugged in reads the same as offline, which is
 // the honest answer -- the line cannot tell those apart.

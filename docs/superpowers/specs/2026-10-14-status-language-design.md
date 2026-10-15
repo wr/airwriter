@@ -78,6 +78,11 @@ the registered `other` is used. Check on an iPhone what the print sheet shows in
   printer. **Risk:** the phone's upload connection is held open for the whole pause; whether iOS
   tolerates a multi-minute stall is unverified. If it does not, the follow-up is to spool the
   ripped printer stream (~115 KB per page) in PSRAM so the upload can finish independently.
+- **A printer stuck busy while idle gets a CTRL-X (W-1039).** Serial-line noise (a cable replug,
+  power-up) can leave the ImageWriter holding DTR false with SELECT lit -- an unprinted line in
+  its buffer. On board 1 it stayed stuck 120 s without help and cleared 4.1 s after a CTRL-X
+  (cancel current line), sent past the flow control. Rule: no job, line not ready for 5 s, then
+  at most every 60 s while it stays stuck; never mid-job, where a low line is paper or a jam.
 - **Wi-Fi reconnects forever after a drop**, with backoff 1, 2, 4 … 30 s. Today the station
   gives up after 8 retries and the panel keeps showing Ready. A drop never flips the board into
   setup mode; only a failed boot-time join does (unchanged).
