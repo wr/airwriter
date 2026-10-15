@@ -54,6 +54,11 @@ What works on `main`:
   with good FCS. The bench build `CONFIG_AIRWRITER_LT_SNIFF` (default off) logs every frame and
   serves the latest at `GET /api/lt`.
 
+**Enclosure** (`enclosure/`, in use on board 1): tray (print in PETG; the board goes
+in by the sequence in `enclosure/README.md`, thumbing the thin west wall out past the DIP keys),
+Lite lid, and the Pro build's light-guide lattice. Cavity 13.04 (measured mini-DIN height);
+Pro screws M2.5 × 18. The shop's cased GLBs still show the pre-W-1036 tray.
+
 Not built: LocalTalk transmit and the AppleTalk stack (node ID, NBP, ATP/PAP; next step is
 appearing in the Chooser), EtherTalk, consumers of DIP mode and dither override, PWG raster.
 
@@ -78,15 +83,6 @@ Known issues, open:
 ## Open work
 
 Linear is the queue; these are the live items.
-- `W-1036 Tray: rev A board can't be fitted (DIP keys vs west wall)`: fixes on
-  `wells/w-1036-tray-board-fit`, unprinted, unmerged. Its fitting sequence lives in that branch's
-  `enclosure/README.md`; the shop's cased GLBs still show the old tray. Pro screws are
-  M2.5 × 18 (mini-DINs measured 13.04), not the × 20 in main's enclosure spec §5.
-- `W-1038 Light-guide lattice for the Pro build (incl. power LED)`: v3 on
-  `wells/w-1038-light-guide-lattice`, stacked on the tray branch, unprinted, unmerged. Its `build.sh` needs
-  kicad-cli (part clearances come from the STEP export).
-- Both branches edit the old `docs/HANDOFF.md`; on merge, keep the retired stub (their facts are
-  already here).
 - `W-1043 Rev B: through-hole dome LED for the power indicator`, and the rest of the rev B list
   in `docs/hardware-rev-a.md` (not in Linear yet).
 - `W-573 Dot-panel cover: passive art panel, LED grid, DIP config` (umbrella, in progress).
@@ -117,6 +113,7 @@ Linear is the queue; these are the live items.
   menu); NVS namespace `wifi` overrides it. `sdkconfig.defaults{,.esp32s3,.esp32c6}` only seed a
   new one. The C6 has no PSRAM, so it is the stricter target for memory.
 - **Enclosure:** build123d; `enclosure/build.sh` runs the tests then writes `out/*.{step,stl}`.
+  The lattice's part clearances come from kicad-cli's STEP export, so the build needs kicad-cli.
 
 ## Verification
 - **Host tests:** `make -C tools/rip test` (raster path, serial writer, printer_state, led_grid,
@@ -161,7 +158,7 @@ tools/ipp/            IPP host tests and gpa_server (the real encoder on localho
 tools/ippcap/         stub IPP server that captures a Print-Job body (how fixtures were made)
 tools/webui/          web UI sources; mkheader.py generates firmware's webui_page.h (never hand-edit)
 fixtures/             captured URF samples and expected streams
-enclosure/            3D printed case (build123d): tray + Lite lid, out/*.stl committed
+enclosure/            3D printed case (build123d): tray, Lite lid, Pro lattice; out/*.stl committed
 ```
 
 ## Licence

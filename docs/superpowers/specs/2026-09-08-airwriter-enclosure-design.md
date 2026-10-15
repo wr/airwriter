@@ -158,7 +158,7 @@ panel's 2.25 mm bore at (131, 91); the Lite lid carries the same bore at the sam
 
 ## 5. Fastening
 
-- **Pro:** M2.5 × 20 from below — rubber foot, floor, standoff, board, lattice, into the
+- **Pro:** M2.5 × 18 from below *(amended 2026-10-14: × 20 bottoms out in the blind Würth standoffs once the cavity is the measured 13.04)* — rubber foot, floor, standoff, board, lattice, into the
   panel's SMTSO blind nuts. Unchanged from the panel design; hole/seat coaxiality between
   the two boards is load-bearing and is not this document's to move.
 - **Lite:** M2.5 × 10 from below into an M2.5 heat-set insert pressed into the **bottom** of
