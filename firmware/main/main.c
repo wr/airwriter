@@ -292,6 +292,10 @@ static void job_finished(const job_pipe_stats_t *st, int ok)
 
     if (!clean) {
         iw_link_job_end(&s_link, 0);
+        // The rip may have stopped between writes, leaving up to a FIFO of
+        // the dead job queued behind a paused printer. This is the writing
+        // task, or no write ever ran.
+        serial_out_purge();
         if (s_job_cancelled) {
             ESP_LOGI(TAG, "job canceled after %u bytes in", (unsigned)st->doc_bytes);
             printer_state_post(PS_EV_JOB_DONE);

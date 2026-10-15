@@ -266,6 +266,15 @@ static int run_document(work_t *w, int fd, const ipp_req_t *r, hbody_t *body,
     if (s_sink.begin && s_sink.begin(s_sink.ctx, r->document_format, kept.name) != ESP_OK)
         ok = 0;
 
+    // begin() can wait out a test page, and a Cancel-Job in that time reached
+    // a sink with nothing started, which begin() then cleared. Pass it on
+    // again now that there is a job to stop.
+    if (ok) {
+        xSemaphoreTake(s_job_lock, portMAX_DELAY);
+        if (s_job.canceled && s_sink.cancel) s_sink.cancel(s_sink.ctx);
+        xSemaphoreGive(s_job_lock);
+    }
+
     size_t total = 0;
     if (ok) {
         // The attribute section and the first document bytes usually arrive in
@@ -389,6 +398,10 @@ static int dispatch(work_t *w, int fd, const ipp_req_t *r, hbody_t *body,
         xSemaphoreTake(s_job_lock, portMAX_DELAY);
         ipp_cancel_t c = ipp_job_cancel(&s_job, r->job_id);
         int32_t id = s_job.id;
+        // Stop the paper, not just the bookkeeping. Under the lock, so the job
+        // cannot finish in between and hand the printer to the next one, which
+        // the cancel would then land on.
+        if (c == IPP_CANCEL_STOP_PRINT && s_sink.cancel) s_sink.cancel(s_sink.ctx);
         xSemaphoreGive(s_job_lock);
 
         if (c == IPP_CANCEL_NOT_FOUND)
@@ -396,9 +409,6 @@ static int dispatch(work_t *w, int fd, const ipp_req_t *r, hbody_t *body,
         if (c == IPP_CANCEL_NOT_POSSIBLE)
             return send_status(w, fd, r, IPP_STATUS_ERR_NOT_POSSIBLE, keep_alive);
         ESP_LOGI(TAG, "job %d canceled", (int)id);
-        // Stop the paper, not just the bookkeeping. Called outside the lock:
-        // the pipeline takes it too as it unwinds.
-        if (c == IPP_CANCEL_STOP_PRINT && s_sink.cancel) s_sink.cancel(s_sink.ctx);
         return send_status(w, fd, r, IPP_STATUS_OK, keep_alive);
     }
 

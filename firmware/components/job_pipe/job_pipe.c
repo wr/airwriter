@@ -135,7 +135,11 @@ esp_err_t job_pipe_begin(const char *job_name)
 {
     if (s_task) return ESP_ERR_INVALID_STATE;
 
-    xStreamBufferReset(s_ring);
+    // The last job's task drained the ring before it finished, so this is
+    // belt and braces. Not xStreamBufferReset: with assertions on it memsets
+    // the whole 1MB inside a critical section, interrupts off.
+    uint8_t junk[64];
+    while (xStreamBufferReceive(s_ring, junk, sizeof junk, 0) > 0) {}
     memset(&s_st, 0, sizeof s_st);
     s_eof = s_aborted = 0;
     strncpy(s_name, job_name && job_name[0] ? job_name : "Untitled", sizeof s_name - 1);

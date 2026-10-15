@@ -27,7 +27,8 @@ typedef struct {
     // returning if there is nothing to print.
     void      (*end)(void *ctx, int ok);
     // Called when the client cancels a job that is still printing. Runs on the
-    // canceling request's task, not the one streaming the document.
+    // canceling request's task, not the one streaming the document, with the
+    // server's job lock held: it must not block or call back into the server.
     void      (*cancel)(void *ctx);
     void       *ctx;
 } ipp_doc_sink_t;
