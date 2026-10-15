@@ -465,20 +465,21 @@ static void lt_print_end(void *ctx, int normal)
     iw_link_job_end(&s_link, flushed == ESP_OK);
     s_last_bytes = s_lt_bytes;
     s_last_pages = 0;
-    ESP_LOGI(TAG, "LocalTalk job %s: %u bytes, stream crc32 %08x",
+    // In /api/lt too: the console is not always attached.
+    char line[100];
+    snprintf(line, sizeof line, "job %s: %u bytes, crc32 %08x",
              flushed == ESP_OK ? "printed" : s_printer_failed ? "failed"
              : normal ? "cut short" : "abandoned",
              (unsigned)s_lt_bytes, (unsigned)s_stream_crc);
+    localtalk_note(line);
     if (AW_LOOPBACK && flushed == ESP_OK) {
         size_t got; uint32_t crc;
         serial_out_loopback_wait(s_lt_bytes, 3000);
         serial_out_loopback_stats(&got, &crc);
-        if (got == s_lt_bytes && crc == s_stream_crc)
-            ESP_LOGI(TAG, "uart loopback: %u bytes returned intact, crc32 %08x",
-                     (unsigned)got, (unsigned)crc);
-        else
-            ESP_LOGE(TAG, "uart loopback MISMATCH: sent %u/%08x, got %u/%08x",
-                     (unsigned)s_lt_bytes, (unsigned)s_stream_crc, (unsigned)got, (unsigned)crc);
+        snprintf(line, sizeof line, "uart loopback: %u/%u bytes back, crc32 %08x: %s",
+                 (unsigned)got, (unsigned)s_lt_bytes, (unsigned)crc,
+                 got == s_lt_bytes && crc == s_stream_crc ? "intact" : "MISMATCH");
+        localtalk_note(line);
     }
     // A Mac that cancels is a done job, as Cancel-Job is; a printer that gave
     // up is a failed one.

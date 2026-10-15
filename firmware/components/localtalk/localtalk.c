@@ -301,6 +301,14 @@ void localtalk_set_status(uint16_t status)
     xSemaphoreGive(s_lock);
 }
 
+void localtalk_note(const char *line)
+{
+    if (!s_running) return;
+    xSemaphoreTake(s_lock, portMAX_DELAY);
+    op_log(NULL, line);
+    xSemaphoreGive(s_lock);
+}
+
 void localtalk_echo(uint8_t node)
 {
     if (!s_running) return;
