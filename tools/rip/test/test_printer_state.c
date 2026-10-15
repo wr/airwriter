@@ -35,6 +35,26 @@ int main(void)
     ps_post(&ps, PS_EV_WIFI_UP, 3200);
     assert(st(&ps, 3200) == PS_READY);
 
+    // Power-up: the ImageWriter reports busy for ~3.5 s after the AirWriter
+    // powers on (measured on board 1, W-1039), then clears on its own. That
+    // must not flash offline after the spin, and the green Wi-Fi moment still
+    // plays: offline is counted from the end of the boot animation, not from
+    // power-on.
+    ps_init(&ps, &TM, 0);
+    ps_post(&ps, PS_EV_WIFI_JOINING, 0);
+    ps_post(&ps, PS_EV_WIFI_UP, 2000);
+    for (uint64_t t = 3000; t < 3500; t += 100) assert(st(&ps, t) == PS_READY);
+    ps_post(&ps, PS_EV_LINE_READY, 3500);
+    v = ps_update(&ps, 3600);
+    assert(v.state == PS_READY && v.greeted);
+
+    // A printer genuinely off at power-up still shows offline, a debounce
+    // after the boot animation ends.
+    ps_init(&ps, &TM, 0);
+    ps_post(&ps, PS_EV_WIFI_UP, 2000);
+    assert(st(&ps, 5999) == PS_READY);
+    assert(st(&ps, 6000) == PS_OFFLINE);
+
     // Idle and not ready: still ready inside the debounce, then offline; back on, ready.
     up_and_ready(&ps, 0);
     st(&ps, 4000);

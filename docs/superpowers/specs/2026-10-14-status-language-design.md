@@ -53,7 +53,7 @@ Display states, highest priority first:
 | 4 | **Needs attention** | a job is active and HSKo has been false for `STALL_ATTENTION` (30 s) | HSKo true (the job resumes), or `STALL_ABORT` (600 s) passes → job fails | stopped, `media-empty` |
 | 5 | **Job failed** | a job ends in failure (transfer cut, rip error, stall abort) | `FAILED_HOLD` (60 s) passes, or the next job starts | idle; the job is aborted |
 | 6 | **Printing** | a job starts | the job ends | processing |
-| 7 | **Printer offline** | no job, HSKo false for `OFFLINE_DEBOUNCE` (3 s) | HSKo true | stopped, `other`¹ |
+| 7 | **Printer offline** | no job, HSKo false for `OFFLINE_DEBOUNCE` (3 s), counted from the end of the boot animation (the ImageWriter reports busy for ~3.5 s after the AirWriter powers up, W-1039) | HSKo true | stopped, `other`¹ |
 | 8 | **Ready** | Wi-Fi up, HSKo true, nothing above applies | — | idle |
 
 **Asleep** is a modifier, not a state: after `SLEEP_AFTER` (300 s) with no activity while in

@@ -47,7 +47,14 @@ static ps_state_t derive(const ps_t *ps, uint64_t now)
         return PS_ATTENTION;
     if (ps->failed && now - ps->failed_at < ps->tm.failed_hold_ms) return PS_FAILED;
     if (ps->job) return PS_PRINTING;
-    if (!ps->line_ready && low_for >= ps->tm.offline_debounce_ms) return PS_OFFLINE;
+    // Offline is counted from the end of the boot animation, not power-on: the
+    // ImageWriter reports busy for ~3.5 s after the AirWriter powers up and
+    // then clears by itself (W-1039), which must not flash embers after the
+    // spin or swallow the green Wi-Fi moment.
+    uint64_t settled = ps->boot_at + ps->tm.boot_ms;
+    uint64_t from = ps->line_since > settled ? ps->line_since : settled;
+    if (!ps->line_ready && now >= from && now - from >= ps->tm.offline_debounce_ms)
+        return PS_OFFLINE;
     return PS_READY;
 }
 
