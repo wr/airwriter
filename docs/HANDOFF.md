@@ -63,11 +63,11 @@ Merge order: W-1037, W-1041, W-1040, W-1042. W-1042 already sits on
   in W-1040.
 - **Trap — never OTA while a job prints.** Two jobs were cut this way. Check `printing=false`
   and tell whoever is printing first.
-- **Open — iPhone stall.** On builds carrying W-1040's job model (601743a, fe40a96, dff65f6)
-  the iPhone polled Get-Printer-Attributes and never sent a job, even with a fresh UUID and
-  name. a67119f (W-1037 plus the connection fix) printed from it, and the Mac prints on
-  every build. Retest the iPhone on the merged main before closing W-1040. Notes: W-1040's
-  HANDOFF entry.
+- **iPhone stall (W-1044), resolved on main 3ec4259.** On builds carrying W-1040's job
+  model (601743a, fe40a96, dff65f6) the iPhone polled Get-Printer-Attributes and never sent a
+  job, even with a fresh UUID and name. On merged main it prints. The cause wasn't isolated;
+  the likely factors are W-1042's early reply, the strongest-AP fix, and stale mDNS twins
+  aging out. If it comes back, W-1044 has the bisect plan.
 - **Open, cosmetic:** the Mac's CUPS shows "printer is offline" a few seconds into an
   out-of-paper pause. Board 1's queue is named "ImageWriter" in NVS, from the stale-twin
   workaround; the Kconfig default is still "ImageWriter II".
