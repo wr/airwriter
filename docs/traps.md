@@ -86,6 +86,18 @@ Traps already explained in a code comment are listed only when the comment is ea
 - **Never high-voltage program the PIC in its socket.** VPP (~9 V) lands on ESP32 IO2
   (`LT_RESET`). The ESP32 flashes it over LVP and keeps CONFIG2.LVP set so it stays
   reprogrammable without high voltage (`pic_prog.h`).
+- **TashTalk never says whether a frame went out.** It does the RTS/CTS handshake itself and
+  drops a frame silently after 32 failed attempts, and it relays every frame but its own. Prove
+  the transmit path with `POST /api/lt/echo` (body: a Mac's node number) and look for the echo
+  reply in `GET /api/lt`.
+- **TashTalk's CTS (RA2 → IO6) is low when it can take bytes**, the ESP32 UART's own CTS
+  polarity: no inversion. Its queue is 128 bytes and a frame can be 605, so flow control is not
+  optional.
+- **The LocalTalk node owns IO4/IO5, which are also the PIC's ICSP lines.** The web UI's
+  TashTalk flash refuses while the node runs: set DIP1-2 off mode 2 (and build without
+  `CONFIG_AIRWRITER_LT_BENCH`), restart, then flash.
+- **The Option Card's PAP status is a two-byte word, low byte first, not a string** (Apple TN
+  NW20; `LT_IW_*` in `lt_node.h`). A LaserWriter-style `%%[ status: ... ]%%` string is wrong here.
 - **U8's ~RE rides `LT_DE`, so U8 shuts down while the PIC transmits.** Deliberate: wake is
   ≤ 1.8 µs against LocalTalk's ~200 µs inter-dialogue gap. It mirrors the U6 bug fixed on 08-22
   but is not that bug; don't "fix" it.
