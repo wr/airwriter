@@ -535,12 +535,28 @@ static const char *auth_name(wifi_auth_mode_t m)
     }
 }
 
+static const char *state_text(ps_state_t st)
+{
+    switch (st) {
+    case PS_BOOTING:   return "Starting";
+    case PS_SETUP:     return "Waiting for setup";
+    case PS_JOINING:   return "Joining Wi-Fi";
+    case PS_ATTENTION: return "Needs attention";
+    case PS_FAILED:    return "Last job failed";
+    case PS_PRINTING:  return "Printing";
+    case PS_OFFLINE:   return "Printer offline";
+    case PS_READY:     return "Ready";
+    }
+    return "?";
+}
+
 static void status_json(void *ctx, char *buf, size_t cap)
 {
     (void)ctx;
     const esp_app_desc_t *app = esp_app_get_description();
     ps_view_t v = printer_state_view();
-    int blocked = v.state == PS_ATTENTION || v.state == PS_OFFLINE;
+    int attention = v.state == PS_ATTENTION, offline = v.state == PS_OFFLINE;
+    int failed    = v.state == PS_FAILED;
     uint32_t up = (uint32_t)(esp_timer_get_time() / 1000000);
 
     // Details of the network actually joined, for the Wi-Fi panel. Absent in
@@ -556,20 +572,20 @@ static void status_json(void *ctx, char *buf, size_t cap)
         snprintf(job, sizeof job, "none yet");
 
     snprintf(buf, cap,
-        "{\"state\":\"%s\",\"ps\":\"%s\",\"stopped\":%s,\"setup\":%s,\"job\":\"%s\","
+        "{\"state\":\"%s\",\"ps\":\"%s\",\"asleep\":%s,\"stopped\":%s,\"setup\":%s,\"job\":\"%s\","
         "\"fault\":%s,\"printer\":%s,\"printing\":%s,"
         "\"queue\":\"%s\",\"host\":\"%s.local\",\"ip\":\"%s\","
         "\"ssid\":\"%s\",\"dither\":\"%s\",\"signal\":\"%s\","
         "\"channel\":\"%s\",\"security\":\"%s\",\"uri\":\"%s\","
         "\"uptime\":\"%uh %02um\",\"version\":\"%s\",\"heap\":\"%u KB\","
         "\"model\":\"Apple ImageWriter II\",\"pic\":%s}",
-        s_ap_mode ? "Waiting for setup" : blocked ? "Out of paper"
-                : s_printing ? "Printing" : "Ready",
+        state_text(v.state),
         ps_name(v.state),
-        blocked ? "true" : "false",
+        v.asleep ? "true" : "false",
+        attention || offline ? "true" : "false",
         s_ap_mode ? "true" : "false",
         job,
-        blocked ? "true" : "false",
+        attention || failed ? "true" : "false",
         serial_out_clear() ? "true" : "false",
         s_printing ? "true" : "false", s_set.queue, s_set.hostname, s_ip,
         joined ? (char *)ap.ssid : (s_ap_mode ? "" : s_set.ssid),
