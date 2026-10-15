@@ -10,6 +10,7 @@ exists inside KiCad's own bundled Python.
 """
 from __future__ import annotations
 
+import json
 import math
 import pathlib
 import re
@@ -268,3 +269,113 @@ def pad_positions(ref: str) -> list[tuple[float, float]]:
         if m and m.group(1) == ref:
             return [(float(x), float(y)) for x, y in _PAD_AT.findall(blk)]
     raise KeyError(f"{ref} is not a footprint on {BOARD_PCB.name}")
+
+
+PANEL_DIR = REPO / "hardware" / "panel"
+PANEL_DX, PANEL_DY = 100.0, 60.0
+"""The board's KiCad frame is the panel's plus (100, 60): the boards share an
+outline and their holes are coaxial (hardware/panel/gen_led_map.py)."""
+
+
+def panel_to_case(px: float, py: float) -> tuple[float, float]:
+    """Panel mm (panel_layout.json, *.polys.json) -> case-frame X, Y."""
+    return to_case(px + PANEL_DX, py + PANEL_DY)
+
+
+def _panel_layout() -> dict:
+    return json.loads((PANEL_DIR / "panel_layout.json").read_text())
+
+
+def panel_grid() -> dict:
+    """panel_layout.json's grid block: cols, rows, pitch, dot_dia, origin, hole_dia."""
+    return _panel_layout()["grid"]
+
+
+def panel_dots() -> list[dict]:
+    """Every dot, case frame: {"r", "c", "mat", "led", "x", "y"}."""
+    out = []
+    for d in _panel_layout()["dots"]:
+        x, y = panel_to_case(d["x"], d["y"])
+        out.append({"r": d["r"], "c": d["c"], "mat": d["mat"], "led": d["led"],
+                    "x": x, "y": y})
+    return out
+
+
+def fr4_windows() -> list[tuple[float, float, float, float]]:
+    """The panel's bare-FR4 windows (hardware/panel/fr4.polys.json) as case-frame
+    boxes (x0, x1, y0, y1). Rev A has one, over the power LED D3."""
+    out = []
+    for poly in json.loads((PANEL_DIR / "fr4.polys.json").read_text()):
+        pts = [panel_to_case(px, py) for px, py in poly["outline"]]
+        xs = [q[0] for q in pts]
+        ys = [q[1] for q in pts]
+        out.append((min(xs), max(xs), min(ys), max(ys)))
+    return out
+
+
+def _sexpr(src: str, i: int) -> str:
+    """The balanced (...) expression that opens at src[i], strings skipped."""
+    depth, j = 0, i
+    while True:
+        c = src[j]
+        if c == '"':
+            j += 1
+            while src[j] != '"' or src[j - 1] == "\\":
+                j += 1
+        elif c == "(":
+            depth += 1
+        elif c == ")":
+            depth -= 1
+            if depth == 0:
+                return src[i:j + 1]
+        j += 1
+
+
+def _footprint_block(ref: str) -> str:
+    for blk in _blocks(_text(), "footprint"):
+        m = _REF.search(blk)
+        if m and m.group(1) == ref:
+            return blk
+    raise KeyError(f"{ref} is not a footprint on {BOARD_PCB.name}")
+
+
+_GR_PT = re.compile(r"\((start|end|mid|xy|center) ([-\d.]+) ([-\d.]+)\)")
+
+
+def courtyard(ref: str) -> tuple[float, float, float, float] | None:
+    """A footprint's F.CrtYd bounding box in the case frame (x0, x1, y0, y1),
+    or None when it draws no courtyard. Footprint graphics are stored in the
+    footprint's own unrotated frame, so each point goes through
+    local_to_board()."""
+    fp = footprint(ref)
+    blk = _footprint_block(ref)
+    pts: list[tuple[float, float]] = []
+    for m in re.finditer(r"\((fp_line|fp_rect|fp_poly|fp_arc|fp_circle)\b", blk):
+        sub = _sexpr(blk, m.start())
+        if '"F.CrtYd"' not in sub:
+            continue
+        if m.group(1) == "fp_circle":
+            got = {k: (float(a), float(b)) for k, a, b in _GR_PT.findall(sub)}
+            (cx, cy), (ex, ey) = got["center"], got["end"]
+            r = math.hypot(ex - cx, ey - cy)
+            local = [(cx - r, cy - r), (cx + r, cy + r), (cx - r, cy + r), (cx + r, cy - r)]
+        else:
+            local = [(float(a), float(b)) for _, a, b in _GR_PT.findall(sub)]
+        pts += [to_case(*local_to_board(fp, lx, ly)) for lx, ly in local]
+    if not pts:
+        return None
+    xs = [q[0] for q in pts]
+    ys = [q[1] for q in pts]
+    return min(xs), max(xs), min(ys), max(ys)
+
+
+def keepout_zones(ref: str) -> list[list[tuple[float, float]]]:
+    """Zones drawn inside a footprint (U1's antenna keepout) as case-frame
+    polygons. KiCad stores footprint zones in board coordinates."""
+    blk = _footprint_block(ref)
+    out = []
+    for m in re.finditer(r"\(zone\b", blk):
+        sub = _sexpr(blk, m.start())
+        out.append([to_case(float(a), float(b))
+                    for a, b in re.findall(r"\(xy ([-\d.]+) ([-\d.]+)\)", sub)])
+    return out
