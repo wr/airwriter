@@ -35,6 +35,7 @@
 #include "webui.h"
 #include "net_provision.h"
 #include "pic_prog.h"
+#include "lt_sniff.h"
 #include "esp_app_desc.h"
 
 static const char *TAG = "airwriter";
@@ -756,6 +757,12 @@ static void status_json(void *ctx, char *buf, size_t cap)
         pic_prog_available() ? "true" : "false");
 }
 
+static void lt_json(void *ctx, char *buf, size_t cap)
+{
+    (void)ctx;
+    lt_sniff_json(buf, cap);
+}
+
 static void localtalk_flash(void *ctx, char *buf, size_t cap)
 {
     (void)ctx;
@@ -845,6 +852,7 @@ void app_main(void)
 
     ESP_LOGI(TAG, "AirWriter starting after %s reset, %u bytes free",
              reset_name(esp_reset_reason()), (unsigned)esp_get_free_heap_size());
+    lt_sniff_start();   // no-op unless CONFIG_AIRWRITER_LT_SNIFF (bench builds)
 
     esp_err_t err = nvs_flash_init();
     if (err == ESP_ERR_NVS_NO_FREE_PAGES || err == ESP_ERR_NVS_NEW_VERSION_FOUND) {
@@ -929,7 +937,11 @@ void app_main(void)
     ESP_ERROR_CHECK(ipp_server_start(&cfg));
 
     webui_cfg_t wcfg = { .status_json = status_json, .captive = 0,
-                          .localtalk_flash = localtalk_flash };
+                          .localtalk_flash = localtalk_flash,
+#if CONFIG_AIRWRITER_LT_SNIFF
+                          .lt_json = lt_json,
+#endif
+                        };
     ESP_ERROR_CHECK(webui_start(&wcfg));
 
     if (s_test_on_boot) {

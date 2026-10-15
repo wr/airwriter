@@ -217,6 +217,16 @@ config AIRWRITER_TEST_BTN_PIN
         Board net TEST_BTN, closed = GND, internal pull-up. A press prints a
         self-test page through the same raster and serial path as a real job.
 
+config AIRWRITER_LT_SNIFF
+    bool "LocalTalk bring-up: log the frames TashTalk relays"
+    default n
+    depends on AIRWRITER_PIC_CLK_PIN >= 0 && AIRWRITER_PIC_DAT_PIN >= 0
+    help
+        Bench builds only (W-1050). Opens UART2 at 1 Mbaud on the TashTalk
+        link and logs every LocalTalk frame on the console. Transmits nothing,
+        and holds the PIC pins, so the web UI's TashTalk flash must not be
+        used while it is on.
+
 config AIRWRITER_PIC_MCLR_PIN
     int "LocalTalk PIC MCLR pin, -1 if absent"
     default 2 if IDF_TARGET_ESP32S3
