@@ -197,11 +197,15 @@ static lg_c3 state_dot(const ps_view_t *v, const lg_opts_t *o, int i, uint32_t t
     }
 
     case PS_ATTENTION: {
-        // Two amber rings out of the test button, 300 ms apart, every 2 s.
+        // Two wide amber rings out of the test button, 350 ms apart, every
+        // 2 s, over a dim amber floor so the panel is never dark while it
+        // needs a person. Deep amber: at hue 36 the green die (brighter per
+        // count) washed it toward white through the FR4.
         uint32_t ph = t % 2000;
-        float lv = ph < 900 ? gauss(dist - (float)ph / 1000.0f * 9, 0.9f) : 0;
-        if (ph >= 300 && ph < 1200) lv += gauss(dist - (float)(ph - 300) / 1000.0f * 9, 0.9f);
-        return hsv(jitter(r, c, 36, 8, t, 0), 1, clampf(lv));
+        float lv = 0.12f;
+        if (ph < 1200) lv += gauss(dist - (float)ph / 1000.0f * 6, 1.6f);
+        if (ph >= 350 && ph < 1550) lv += gauss(dist - (float)(ph - 350) / 1000.0f * 6, 1.6f);
+        return hsv(jitter(r, c, 24, 6, t, 0), 1, clampf(lv));
     }
 
     case PS_FAILED: {
@@ -242,7 +246,8 @@ void lg_render(const ps_view_t *v, const lg_opts_t *o, uint32_t t_ms,
         int fr4 = LG_MAP[i].mat == 'P';
         if (!fr4 && !all) continue;            // FR4-only state: mask dot stays dark
         lg_c3 c = sc(state_dot(v, o, i, t_ms), 1 - sleep_k);
-        float cap = fr4 ? LG_BRIGHTNESS_CAP : LG_MASK_CAP;
+        float cap = !fr4 ? LG_MASK_CAP
+                  : v->state == PS_ATTENTION ? LG_ALERT_CAP : LG_BRIGHTNESS_CAP;
         out[i][0] = drive(c.r, cap);
         out[i][1] = drive(c.g, cap);
         out[i][2] = drive(c.b, cap);

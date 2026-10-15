@@ -86,7 +86,8 @@ the registered `other` is used. Check on an iPhone what the print sheet shows in
 
 ## Panel language
 
-Colours are drive targets before the global cap (`LG_BRIGHTNESS_CAP` 48/255 on FR4 dots).
+Colours are drive targets before the cap: `LG_BRIGHTNESS_CAP` 48/255 on FR4 dots, except Needs
+attention, which gets `LG_ALERT_CAP` 96/255 (tuned on board 1: at 48 it was too dim to notice).
 "FR4 only" means mask dots stay dark.
 
 Every pattern uses the array: position drives sweeps, ripples and the print head, and each dot
@@ -104,7 +105,7 @@ state reads as one big LED. Hue offsets stay inside each state's colour family.
 | Ready, gamer mode | FR4 only | DIP7 on: hue from position plus time, a slow RGB drift (one wheel per ~14 s), saturation 75%, the same breathing |
 | Printer offline | FR4 only | **warm embers**: hue 25–43°, saturation 50–62%, each dot on its own 7–13 s cycle, mostly at 5% and swelling to 32% |
 | Printing | all; mask at 4× | **print head**: a bright white dot crosses the current row in 1.5 s, inking it warm (hue 28–48°) behind; rows advance top to bottom and alternate direction like the ImageWriter's bidirectional head; the two rows above hold fading ink (25%, 12%), the rest 3% |
-| Needs attention | all; mask at 4× | amber (hue 28–44°) **double ripple** from the test button: two rings 300 ms apart every 2 s |
+| Needs attention | all; FR4 at the alert cap (96/255), mask at 4× | deep amber (hue 18–30°: at 36° the bright green die washed it toward white) **double ripple** from the test button: two wide rings 350 ms apart every 2 s over a 12% amber floor, so the panel is never dark while it needs a person |
 | Job failed | all; mask at 4× | red (hue 352–12°): three 200 ms **glitch flashes**, each on a different random ~65% of dots, then a pulse 20%→60% whose period varies ±15% per dot, until the hold ends |
 | Asleep | the pilot, plus a rare twinkle | the FR4 dot right of the test button (row 3, col 4) breathes 3%→12% of the cap, driven linearly (gamma would round these levels to zero), on a 6 s period: neutral white, or a slowly cycling hue in gamer mode. Every 30 s one other FR4 dot twinkles once (1.5 s, peak 8% linear). Fade into sleep over 10 s; wake instantly. |
 

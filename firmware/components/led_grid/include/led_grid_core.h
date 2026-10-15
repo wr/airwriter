@@ -8,6 +8,7 @@
 
 #define LG_BRIGHTNESS_CAP 48    // of 255, FR4 dots -- no hardware current limit on rev A
 #define LG_MASK_CAP       192   // mask dots in the all-dot states: 4x, they pass ~10% / ~5%
+#define LG_ALERT_CAP      96    // FR4 dots in Needs attention: it has to read across the room
 #define LG_BOOT_MS        3000  // the boot spin; main sets printer_state's boot_ms to this
 
 typedef struct {

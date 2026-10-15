@@ -73,8 +73,9 @@ int main(void)
                 lg_render(&v, mode ? &GAMER_MODE : &WHITE_MODE, t, f);
                 for (int i = 0; i < LG_NUM_LEDS; i++)
                     for (int ch = 0; ch < 3; ch++)
-                        assert(f[i][ch] <= (LG_MAP[i].mat == 'P' ? LG_BRIGHTNESS_CAP
-                                                                 : LG_MASK_CAP));
+                        assert(f[i][ch] <= (LG_MAP[i].mat != 'P' ? LG_MASK_CAP
+                                          : all[s] == PS_ATTENTION ? LG_ALERT_CAP
+                                                                   : LG_BRIGHTNESS_CAP));
             }
 
     // FR4-only states leave every mask dot dark and always light some FR4 dot.
@@ -183,26 +184,29 @@ int main(void)
         assert(jhi - jlo <= 10 && jlo > 0);
     }
 
-    // Attention: amber (red over green, no blue), mask dots too, in a ring
-    // burst; dark between bursts.
+    // Attention must read from across the room: deep amber, not whitish
+    // (somewhere red is at least 4x green, never any blue), brighter than the
+    // calm states' cap at the burst, mask dots joining in, and never dark --
+    // between bursts every dot holds a dim amber floor.
     {
-        // (At a ring's faint edge red and green both sit on the one-count
-        // floor, so red is only >= there; somewhere it must be clearly more.)
-        int mask = 0, amber = 0;
-        for (uint32_t t = 0; t < 900; t += 30) {
+        int mask = 0, deep = 0, peak = 0;
+        for (uint32_t t = 0; t < 1600; t += 20) {
             ps_view_t v = view(PS_ATTENTION, t);
             lg_render(&v, &WHITE_MODE, t, f);
             for (int i = 0; i < LG_NUM_LEDS; i++) {
-                if (!max3(f[i])) continue;
+                assert(max3(f[i]) > 0);
                 assert(f[i][0] >= f[i][1] && f[i][2] == 0);
-                if (f[i][0] > f[i][1] + 2) amber = 1;
-                if (LG_MAP[i].mat != 'P') mask = 1;
+                if (f[i][0] >= 4 * f[i][1] && f[i][0] > 20) deep = 1;
+                if (LG_MAP[i].mat == 'P' && f[i][0] > peak) peak = f[i][0];
+                if (LG_MAP[i].mat != 'P' && f[i][0] > 20) mask = 1;
             }
         }
-        assert(mask && amber);
+        assert(mask && deep);
+        assert(peak > LG_BRIGHTNESS_CAP);
         ps_view_t v = view(PS_ATTENTION, 0);
-        lg_render(&v, &WHITE_MODE, 1500, f);
-        assert(lit_count(f) == 0);
+        lg_render(&v, &WHITE_MODE, 1900, f);
+        for (int i = 0; i < LG_NUM_LEDS; i++)
+            if (LG_MAP[i].mat == 'P') assert(f[i][0] > 0 && f[i][0] < peak / 3);
     }
 
     // Failed: a glitch flash lights a scattered subset, not all and not
