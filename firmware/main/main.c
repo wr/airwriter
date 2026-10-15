@@ -35,6 +35,7 @@
 #include "webui.h"
 #include "net_provision.h"
 #include "pic_prog.h"
+#include "lt_sniff.h"
 #include "esp_app_desc.h"
 
 static const char *TAG = "airwriter";
@@ -845,6 +846,7 @@ void app_main(void)
 
     ESP_LOGI(TAG, "AirWriter starting after %s reset, %u bytes free",
              reset_name(esp_reset_reason()), (unsigned)esp_get_free_heap_size());
+    lt_sniff_start();   // no-op unless CONFIG_AIRWRITER_LT_SNIFF (bench builds)
 
     esp_err_t err = nvs_flash_init();
     if (err == ESP_ERR_NVS_NO_FREE_PAGES || err == ESP_ERR_NVS_NEW_VERSION_FOUND) {
