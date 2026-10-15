@@ -20,6 +20,8 @@ typedef struct {
     // Flashes TashTalk into the LocalTalk PIC and writes the result JSON into
     // `buf`. NULL leaves POST /api/localtalk/flash answering 404.
     void  (*localtalk_flash)(void *ctx, char *buf, size_t cap);
+    // LocalTalk bring-up log for GET /api/lt (bench builds). NULL answers 404.
+    void  (*lt_json)(void *ctx, char *buf, size_t cap);
 
     // Serves the setup page for every unknown host, so joining the device's
     // access point opens the page by itself.

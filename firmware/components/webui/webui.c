@@ -77,6 +77,15 @@ static esp_err_t status_get(httpd_req_t *req)
     return httpd_resp_sendstr(req, json);
 }
 
+static esp_err_t lt_get(httpd_req_t *req)
+{
+    if (!s_cfg.lt_json) return httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "no localtalk log");
+    static char json[3200];
+    s_cfg.lt_json(s_cfg.ctx, json, sizeof json);
+    httpd_resp_set_type(req, "application/json");
+    return httpd_resp_sendstr(req, json);
+}
+
 static esp_err_t scan_get(httpd_req_t *req)
 {
     wifi_scan_config_t sc = { .show_hidden = false };
@@ -265,6 +274,7 @@ esp_err_t webui_start(const webui_cfg_t *cfg)
         { .uri = "/",             .method = HTTP_GET,  .handler = page_get },
         { .uri = "/api/status",   .method = HTTP_GET,  .handler = status_get },
         { .uri = "/api/scan",     .method = HTTP_GET,  .handler = scan_get },
+        { .uri = "/api/lt",       .method = HTTP_GET,  .handler = lt_get },
         { .uri = "/api/wifi",     .method = HTTP_POST, .handler = wifi_post },
         { .uri = "/api/general",  .method = HTTP_POST, .handler = general_post },
         { .uri = "/update",       .method = HTTP_POST, .handler = update_post },

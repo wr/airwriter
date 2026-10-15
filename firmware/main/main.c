@@ -757,6 +757,12 @@ static void status_json(void *ctx, char *buf, size_t cap)
         pic_prog_available() ? "true" : "false");
 }
 
+static void lt_json(void *ctx, char *buf, size_t cap)
+{
+    (void)ctx;
+    lt_sniff_json(buf, cap);
+}
+
 static void localtalk_flash(void *ctx, char *buf, size_t cap)
 {
     (void)ctx;
@@ -931,7 +937,11 @@ void app_main(void)
     ESP_ERROR_CHECK(ipp_server_start(&cfg));
 
     webui_cfg_t wcfg = { .status_json = status_json, .captive = 0,
-                          .localtalk_flash = localtalk_flash };
+                          .localtalk_flash = localtalk_flash,
+#if CONFIG_AIRWRITER_LT_SNIFF
+                          .lt_json = lt_json,
+#endif
+                        };
     ESP_ERROR_CHECK(webui_start(&wcfg));
 
     if (s_test_on_boot) {

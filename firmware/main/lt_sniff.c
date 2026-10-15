@@ -19,6 +19,7 @@
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "freertos/semphr.h"
 
 static const char *TAG = "lt";
 
@@ -27,6 +28,24 @@ static const char *TAG = "lt";
 #define LT_TX_PIN   CONFIG_AIRWRITER_PIC_CLK_PIN    // LT_UART_TX, TashTalk's RX
 #define LT_RX_PIN   CONFIG_AIRWRITER_PIC_DAT_PIN    // LT_UART_RX, TashTalk's TX
 #define FRAME_MAX   640                             // LLAP's largest is 605
+#define RING_LINES  24                              // recent lines for GET /api/lt
+#define LT_LINE_MAX    112
+
+// The console is not always attached on the bench, so the latest lines are
+// also kept for the web UI. Taken and given on the same task every time.
+static SemaphoreHandle_t s_lock;
+static char     s_ring[RING_LINES][LT_LINE_MAX];
+static unsigned s_head, s_lines, s_frames, s_good, s_errors;
+
+static void remember(const char *line)
+{
+    xSemaphoreTake(s_lock, portMAX_DELAY);
+    strncpy(s_ring[s_head], line, LT_LINE_MAX - 1);
+    s_ring[s_head][LT_LINE_MAX - 1] = '\0';
+    s_head = (s_head + 1) % RING_LINES;
+    if (s_lines < RING_LINES) s_lines++;
+    xSemaphoreGive(s_lock);
+}
 
 static uint16_t fcs16(const uint8_t *p, size_t n)
 {
@@ -53,14 +72,31 @@ static const char *llap_type(uint8_t t)
 
 static void log_frame(const uint8_t *f, size_t n, const char *how)
 {
-    if (n < 3) { ESP_LOGW(TAG, "%s: runt, %u bytes", how, (unsigned)n); return; }
-    // dst, src, LLAP type; data frames then carry the FCS in their last two.
+    char line[LT_LINE_MAX];
+    if (n < 3) {
+        snprintf(line, sizeof line, "%s: runt, %u bytes", how, (unsigned)n);
+        ESP_LOGW(TAG, "%s", line);
+        remember(line);
+        return;
+    }
+    // dst, src, LLAP type; the FCS rides in the last two bytes.
     int good = n >= 5 && fcs16(f, n) == 0xF0B8;
-    char hex[3 * 24 + 1] = {0};
-    size_t show = n < 24 ? n : 24;
+    if (good) s_good++;
+    char hex[3 * 16 + 1] = {0};
+    size_t show = n < 16 ? n : 16;
     for (size_t i = 0; i < show; i++) sprintf(hex + 3 * i, "%02x ", f[i]);
-    ESP_LOGI(TAG, "%s %3u B  dst %3u src %3u  %-9s fcs %s  | %s%s", how, (unsigned)n,
-             f[0], f[1], llap_type(f[2]), good ? "ok " : "BAD", hex, n > show ? "..." : "");
+    snprintf(line, sizeof line, "%s %uB dst %u src %u %s fcs %s | %s%s", how, (unsigned)n,
+             f[0], f[1], llap_type(f[2]), good ? "ok" : "BAD", hex, n > show ? "..." : "");
+    ESP_LOGI(TAG, "%s", line);
+    remember(line);
+}
+
+static void note(const char *what, size_t n)
+{
+    char line[LT_LINE_MAX];
+    snprintf(line, sizeof line, "%s (%u)", what, (unsigned)n);
+    ESP_LOGW(TAG, "%s", line);
+    remember(line);
 }
 
 static void sniff_task(void *arg)
@@ -70,7 +106,6 @@ static void sniff_task(void *arg)
     uint8_t buf[256];
     size_t len = 0;
     int esc = 0;
-    unsigned frames = 0, errors = 0;
 
     for (;;) {
         int n = uart_read_bytes(LT_UART, buf, sizeof buf, pdMS_TO_TICKS(1000));
@@ -84,16 +119,16 @@ static void sniff_task(void *arg)
             esc = 0;
             switch (b) {
             case 0xFF: if (len < FRAME_MAX) frame[len++] = 0x00; break;
-            case 0xFD: frames++; log_frame(frame, len, "frame"); len = 0; break;
-            case 0xFC: frames++; log_frame(frame, len, "crc!!"); len = 0; break;
-            case 0xFE: errors++; ESP_LOGW(TAG, "framing error after %u bytes", (unsigned)len); len = 0; break;
-            case 0xFA: errors++; ESP_LOGW(TAG, "aborted frame after %u bytes", (unsigned)len); len = 0; break;
-            default:   errors++; ESP_LOGW(TAG, "unknown escape 00 %02x", b); len = 0; break;
+            case 0xFD: s_frames++; log_frame(frame, len, "frame"); len = 0; break;
+            case 0xFC: s_frames++; log_frame(frame, len, "crc!!"); len = 0; break;
+            case 0xFE: s_errors++; note("framing error", len); len = 0; break;
+            case 0xFA: s_errors++; note("aborted frame", len); len = 0; break;
+            default:   s_errors++; note("unknown escape", b); len = 0; break;
             }
         }
         static unsigned quiet;
         if (n <= 0 && ++quiet % 30 == 0)
-            ESP_LOGI(TAG, "listening: %u frames, %u errors so far", frames, errors);
+            ESP_LOGI(TAG, "listening: %u frames, %u errors so far", s_frames, s_errors);
     }
 }
 
@@ -107,6 +142,7 @@ void lt_sniff_start(void)
         .flow_ctrl  = UART_HW_FLOWCTRL_DISABLE,
         .source_clk = UART_SCLK_DEFAULT,
     };
+    s_lock = xSemaphoreCreateMutex();
     ESP_ERROR_CHECK(uart_driver_install(LT_UART, 8192, 0, 0, NULL, 0));
     ESP_ERROR_CHECK(uart_param_config(LT_UART, &uc));
     // TX idles high, as app_main's clamp left it; nothing is ever sent.
@@ -117,6 +153,32 @@ void lt_sniff_start(void)
              LT_BAUD, LT_RX_PIN);
 }
 
+static void json_str(char **p, char *end, const char *v)
+{
+    if (*p < end) *(*p)++ = '"';
+    for (; *v && *p < end - 2; v++) {
+        if (*v == '"' || *v == '\\') *(*p)++ = '\\';
+        *(*p)++ = *v;
+    }
+    if (*p < end) *(*p)++ = '"';
+}
+
+void lt_sniff_json(char *buf, size_t cap)
+{
+    char *p = buf, *end = buf + cap - 4;
+    xSemaphoreTake(s_lock, portMAX_DELAY);
+    p += snprintf(p, end - p, "{\"frames\":%u,\"fcs_ok\":%u,\"errors\":%u,\"recent\":[",
+                  s_frames, s_good, s_errors);
+    for (unsigned i = 0; i < s_lines && p < end; i++) {
+        unsigned k = (s_head + RING_LINES - s_lines + i) % RING_LINES;
+        if (i && p < end) *p++ = ',';
+        json_str(&p, end, s_ring[k]);
+    }
+    xSemaphoreGive(s_lock);
+    snprintf(p, buf + cap - p, "]}");
+}
+
 #else
 void lt_sniff_start(void) {}
+void lt_sniff_json(char *buf, size_t cap) { snprintf(buf, cap, "{\"sniff\":false}"); }
 #endif
