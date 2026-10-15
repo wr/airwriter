@@ -278,7 +278,7 @@ build flag that regenerates it on every boot — iOS caches capabilities against
 aggressively, and during development you will otherwise spend an afternoon staring at a
 print sheet showing yesterday's media list with no way to flush it.
 
-*Amended (W-1037): dev mode is off by default — a UUID that moves every boot left the iPhone
+*Amended (`W-1037 Status language v2: discrete states, idle sleep, Spin boot`): dev mode is off by default — a UUID that moves every boot left the iPhone
 with stale twins and stuck jobs. Instead the UUID is MAC plus `CONFIG_AIRWRITER_UUID_EPOCH`,
 bumped only when advertised capabilities change (a new UUID strands the Mac's CUPS queue).*
 

@@ -39,19 +39,24 @@ router; AirPrint is IP and runs alongside either. Only mode 1 exists in firmware
 - Mounting holes, M2.5 clearance (2.75 mm), non-plated, coaxial with the panel seats:
   H1 (105.636, 65.636) and H2 (156.364, 65.636) under the two gold top-corner dots,
   H3 (105.636, 151.930), H4 (153.364, 151.930). The pattern is deliberately asymmetric.
-- S1's keys overhang the west edge to x = 97.8; DIP 1 is at the bottom. SW1 (Panasonic
+- S1's keys overhang the west edge to x = 97.8. Net `/DIP1` (S1 pin 1) is at the bottom, but
+  the part's printed numbers run the other way: net DIPn sits under label 9−n, and firmware reads
+  switches by printed label (`dip_config_core.h`). SW1 (Panasonic
   EVQP44B3M side-press, EN reset) is on the east edge, plate face x ≈ 159.4. SW2 (B3U-1000P) is
   BOOT on IO0, on the component side. SW3's plunger is centred under the test dot.
 - The WROOM antenna is flush at x = 162 (no case bump); its keepout is the module width + 5 mm a
   side. Wells kept the panel's back copper over the antenna; board-1 range is unquantified.
 - R/C and LED designators live on F.Fab; chips, connectors and switches keep silk designators.
-- Before believing a placement change, run the alignment proof (37/37 LEDs, plunger and holes
-  coaxial with the panel at 0.0000 mm).
+- Before believing a placement change, run the alignment proof: `tools_pcb/r7_verify.py`
+  (writes nothing) and the `r7_align.py` overlay. 37/37 LEDs, plunger and holes must sit coaxial
+  with the panel at 0.0000 mm.
 
 ## Deviations from the spec, and why
 
 SPEC §2.4's J2 table, the receiver polarity (§4.3) and the dropped polarity jumpers are already
-amended in the spec. The rest:
+amended in the spec. **Gone since the 08-20 pivot**, though SPEC §2.2/§2.3/§2.5 still name some:
+D1/D2 WS2812B status LEDs, the D4–D6 logo LEDs, J3 (USB header), J6 (I2C/Qwiic), the MODE touch
+pad, the BOOT pads and the back-face artwork. The rest:
 
 - **U2 is an SP3490 (MAX3490 class), not a MAX3491.** The spec tied DE high and RE low, so the
   enable pins were dead weight. U3 is an SP3232. Both MaxLinear, bought since 08-22.
@@ -102,16 +107,26 @@ amended in the spec. The rest:
 
 ## Rev B candidates
 
-Not in Linear yet except where named.
+Not in Linear yet except where named. Most come from review #4
+(`docs/review-2026-09-01-pre-order-4.md`, "Rev-B list"), which has the reasoning.
 
+- 10 k pulldown on `LT_DE` (across U6 pins 3–5; it floats with the PIC absent or in reset).
 - 100 k from U9.2 to GND (IO48 floats until firmware claims it; brownout loop risk on 500 mA ports).
-- 10 k across U6 pins 3–5 (`LT_DE` floats with the PIC absent or in reset).
+- Tie U3.11 T1IN to GND, or pull `HSKI_DRV` (IO35) low; firmware clamps it today.
+- 1 k in series in `LT_RESET`, to protect IO2 from a mistaken high-voltage ICSP.
+- 10 k pulldown on IO3.
+- 1 k in series in every switch and DIP leg: in USB-OTG download boot the ROM drives GPIO40
+  (DIP3) high.
 - Pull-up on IO17 so UART TX idles at mark through reset and download mode.
 - A partner VBUS via at the H4 crossing (one 0.4 mm via carries a modelled 1.94 A worst case).
-- U5 (USB ESD) sits on an 8 mm stub on D−; move it inline.
+- U5 (USB ESD) sits on an 8 mm stub on D−; put it in line.
 - 74LVC1G125 for U9: the AHCT part wants 4.5 V minimum against USB's 4.40 V.
-- IO3 pulldown; 1 k series in the switch and DIP legs.
+- Decide J4's shell: an R/C tie like J2's R8, or document why it is hard GND.
 - Port legends print under the connector bodies; SW1 has no silk.
-- Decide J4's shell: through R8-style 0 R like J2, or hard GND on purpose.
+- A GND test pad beside TP7/TP8.
+- Rename the `LT_A/LT_B/LT_Y/LT_Z` nets: the names are swapped but U6/U8 polarity is right.
+  Rename, do not rewire.
+- 0 Ω cable-option pads on J2.
+- Inrush soft-start, if USB compliance ever matters (VBUS bulk is ~4× the inrush budget).
 - Through-hole dome power LED: `W-1043 Rev B: through-hole dome LED for the power indicator`.
 - Scope HSKo first: if its swing is modest, a divider and clamp into a GPIO could delete U3.

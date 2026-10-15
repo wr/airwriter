@@ -35,11 +35,13 @@ current BOM is `hardware/combined/fab/combined-assembly-bom.csv`; order notes fo
     centre slot; unusable without a new footprint.
 - **U7: PIC12F1840-I/P (PDIP-8) from Digi-Key or Mouser.** LCSC stocks only the SOIC. PCBWay fits
   the socket only (CONNFLY DS1009-08AT1NX-0A2, LCSC C72124).
-- **Standoffs: Würth 9774030151R (WA-SMSI M2.5 × 3)**, four per panel, from Digi-Key; consigned.
+- **Standoffs: Würth 9774030151R (WA-SMSI M2.5 × 3)**, four per panel. Not on LCSC; PCBWay
+  sourced them for rev A ($0.48 each). Consign from Digi-Key only as the fallback.
 
 ## Programming the PIC
 
-The ESP32 flashes TashTalk into U7 in its socket over LVP (`pic_prog`, W-1028), so no external
+The ESP32 flashes TashTalk into U7 in its socket over LVP (`pic_prog`,
+`W-1028 Firmware: flash TashTalk into the PIC from the ESP32 over LVP`), so no external
 programmer is needed. Upstream TashTalk's config clears LVP, so a stock-programmed part needs
 high-voltage programming, off the board (never in the socket, `docs/traps.md`). For that: a
 PICkit 3 clone driven by PICkitminus (kair.us, macOS CLI, lists the 12F1840), PICkit 5 as

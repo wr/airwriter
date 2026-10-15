@@ -65,6 +65,9 @@ Known issues, open:
 - Wi-Fi range with the panel's copper over the antenna: −91 dBm in one spot, "Excellent" after
   moving the board. Unquantified.
 - HSKo never scoped (SPEC §4.4). Board-reboot-mid-strip resync is untested.
+- `W-1044 iPhone never submits a job on builds with W-1040's job model` is Done, but its cause
+  was never isolated (likely the early reply, the strongest-AP fix and stale mDNS twins aging
+  out). If the iPhone stalls again, that issue has the bisect plan.
 - The 37 LEDs reference a 3D model KiCad 10 doesn't ship, so they are absent from STEP
   exports (`docs/library.md`).
 
@@ -73,9 +76,10 @@ Known issues, open:
 Linear is the queue; these are the live items.
 - `W-1036 Tray: rev A board can't be fitted (DIP keys vs west wall)`: fixes on
   `wells/w-1036-tray-board-fit`, unprinted, unmerged. Its fitting sequence lives in that branch's
-  `enclosure/README.md`; the shop's cased GLBs still show the old tray.
+  `enclosure/README.md`; the shop's cased GLBs still show the old tray. Pro screws are
+  M2.5 × 18 (mini-DINs measured 13.04), not the × 20 in main's enclosure spec §5.
 - `W-1038 Light-guide lattice for the Pro build (incl. power LED)`: v3 on
-  `wells/w-1038-light-guide-lattice`, stacked on W-1036, unprinted, unmerged. Its `build.sh` needs
+  `wells/w-1038-light-guide-lattice`, stacked on the tray branch, unprinted, unmerged. Its `build.sh` needs
   kicad-cli (part clearances come from the STEP export).
 - Both branches edit the old `docs/HANDOFF.md`; on merge, keep the retired stub (their facts are
   already here).
@@ -118,11 +122,13 @@ Linear is the queue; these are the live items.
   for byte. No ESP32 needed.
 - **Firmware:** `idf.py build` clean for the S3; build the C6 tree too when touching shared code.
 - **On board 1:** an `ipptool` Print-Job of `fixtures/checker.urf` prints crc32 `8ee84844`.
-- **Schematic:** `kicad-cli sch erc` → 0 errors.
+- **Schematic:** `kicad-cli sch erc` → 0 errors; 44 known warnings (42 `lib_symbol_mismatch`,
+  2 `isolated_pin_label`).
 - **Board:** `kicad-cli pcb drc --severity-all --schematic-parity --refill-zones` on
-  `hardware/airwriter/airwriter.kicad_pcb` → 0 errors, 0 unconnected, 5 library notes, 80
-  field-parity notes. Treat any unconnected item as real; `tools_pcb/r12_gnd.py` checks that every
-  GND pad is on the main plane. The combined panel under its default rules shows only known
+  `hardware/airwriter/airwriter.kicad_pcb` → 0 errors, 0 unconnected, 5 `lib_footprint_mismatch`
+  warnings, 80 field-parity notes (both re-run 2026-10-15). Treat any unconnected item as real;
+  `tools_pcb/r12_gnd.py` checks that every GND pad is on the main plane. The combined panel
+  under its default rules shows only known
   items (~274 false clearance, 14 copper_edge, 12 hole_clearance, 6 seam invalid_outline, 1
   benign starved_thermal on U7.8).
 - **Fab package:** `python3 hardware/combine_boards.py` then `sh hardware/combined/make_fab.sh`;
@@ -149,6 +155,8 @@ hardware/combined/    the snap-apart order panel and make_fab.sh; combined-fab.z
 firmware/             ESP-IDF 5.5 app; components/ per SPEC §3.1 plus job_pipe, led_grid, pic_prog …
 tools/rip/            host build of the raster path + host tests for the pure-C cores
 tools/ipp/            IPP host tests and gpa_server (the real encoder on localhost for ipptool)
+tools/ippcap/         stub IPP server that captures a Print-Job body (how fixtures were made)
+tools/webui/          web UI sources; mkheader.py generates firmware's webui_page.h (never hand-edit)
 fixtures/             captured URF samples and expected streams
 enclosure/            3D printed case (build123d): tray + Lite lid, out/*.stl committed
 ```

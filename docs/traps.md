@@ -8,10 +8,13 @@ Traps already explained in a code comment are listed only when the comment is ea
 
 - **A semaphore taken on one task and given on another must be binary, not a mutex.** A mutex
   given by a non-holder trips `xTaskPriorityDisinherit` and panics the board after every job.
-  Bit `s_job_lock` (W-1033) and `s_print_lock` (W-1042); both carry the comment now.
+  Both carry the comment now. Bit `s_job_lock`
+  (`W-1033 Test button reboots the board after the test page prints`) and `s_print_lock`
+  (`W-1042 Buffer the whole job in PSRAM and reply when the upload is done`).
 - **`pdMS_TO_TICKS()` rounds down at 100 Hz.** 3 and 6 ms become 0 ticks, so a "wait" ends at
   the next tick, 0–10 ms later. Round up to whole ticks plus one (`pic_sleep_ticks()`); the PIC
-  config write failed verify until it did (W-1035).
+  config write failed verify until it did
+  (`W-1035 PIC flash: config word verify fails because ms waits round to one tick`).
 - **`uart_get_tx_buffer_free_size` is not a capacity probe, and `uart_write_bytes` has no
   timeout.** The probe sees only the ring item in service. That is why `serial_out` has no TX
   ring and writes FIFO-direct (comment in `serial_out.c`).
@@ -54,8 +57,11 @@ Traps already explained in a code comment are listed only when the comment is ea
   and `run_document`'s upload-time / longest-wait / longest-push logs before debugging code.
   At rssi −80 an upload crawled at 270 B/s and a cut was seen 16 s late.
 - **Killing `ipptool` does not cut a transfer on macOS.** The kernel delivers the buffered file,
-  and since W-1042 a small upload is already in. To cut mid-document use Cancel-Job, starve
+  and with the PSRAM job buffer a small upload is already in. To cut mid-document use Cancel-Job, starve
   `ipptool` through a FIFO, or `curl --limit-rate` with a hand-built IPP request.
+- **Documents over 1 MB bypass the PSRAM buffer** and stream with TCP backpressure (an iPhone
+  photo page is 6.4 MB of URF). For those a dropped upload during a pause still looks like a
+  healthy pause until paper returns: the client's FIN waits behind its unsent data.
 - **`fixtures/checker.urf` cannot show printer desync.** Its 0x00/0xFF bytes print nothing when
   read out of sync; test resync with a mid-gray band.
 
@@ -72,8 +78,9 @@ Traps already explained in a code comment are listed only when the comment is ea
 - **J2 needs Apple's crossover cable (590-0552-A / M0197).** Many reproduction "ImageWriter II"
   cables are wired straight and give a false "out of paper"; buzz pin 1 → pin 2 first (SPEC §2.4).
 - **An aborted mid-strip write leaves the printer counting `ESC G` bytes**, so it prints the next
-  job's header as dots. The next job resyncs with 1280 NULs + CTRL-X (W-1041, `iw_resync`). Not
-  covered: a board reboot mid-strip.
+  job's header as dots. The next job resyncs with 1280 NULs + CTRL-X (`iw_resync`,
+  `W-1041 Resync the printer after an aborted job so the next job doesn't print garbage`).
+  Not covered: a board reboot mid-strip.
 - **`LT_DE` floats whenever the PIC is not driving it** (no PIC, or PIC held in reset, which
   tristates it). Tack 10 k across U6 pins 3–5 before connecting a LocalTalk network.
 - **Never high-voltage program the PIC in its socket.** VPP (~9 V) lands on ESP32 IO2
@@ -120,6 +127,10 @@ Traps already explained in a code comment are listed only when the comment is ea
   STEP/STL exports. A missing model is silent; run the check in `docs/library.md`.
 
 **Routing**
+- **The main-board order is fixed:** `place_leds.py` → strip wiring → `route.py --passes 60`
+  (default 25) run detached → `stitch.py` once → prune vias in via-barred areas → refill with
+  `ZONE_FILLER` → DRC `--refill-zones --schematic-parity --severity-all`. A finished route has no
+  "unrouted" clause in Freerouting's completion line.
 - **Freerouting hangs on KiCad's DSN** (fractional coordinates under `(resolution um 10)`; it
   spins forever in `normalize_traces`). `route.py` rounds every number. Recovery:
   `pkill -f freerouting.jar`.
@@ -160,8 +171,8 @@ Traps already explained in a code comment are listed only when the comment is ea
   generator strips defs and rect-crops masked paths.
 - **The Figma export's final `<rect fill="white">` lives inside `<clipPath>`.** Hiding or deleting
   it clips the whole SVG to nothing.
-- **`floors.py` warnings are expected** (8 known, incl. the accepted 0.101 mm subtitle pinch and
-  0.089 mm test-glyph mask ridge); it advises, it does not fail.
+- **`floors.py` warnings are expected**: 7 known, all 0.101 mm pinches (4 gold, 3 silk), accepted
+  by Wells. It advises; it does not fail the build.
 - **The SMTSO standoff seats need solid back-flood copper.** A dot window under a seat leaves
   nothing to solder to.
 - **Board holes and panel seats are coaxial by construction** (`STANDOFFS` in
@@ -175,3 +186,5 @@ Traps already explained in a code comment are listed only when the comment is ea
   proud" line was intent, not measurement.
 - **The east-wall reset pinhole is at SW1's plate face, x ≈ 159.4**, not on the west wall at
   x = 100 as an old note said.
+- **Heights the KiCad models get wrong.** SW3's footprint is `SW_PUSH_6mm_H13mm`, but the
+  TS-1002-BR16026 stands 16 mm. U7's model is the empty socket; a seated PIC stands ~9 mm.
