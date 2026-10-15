@@ -92,8 +92,11 @@ Linear is the queue; these are the live items.
   in `docs/hardware-rev-a.md` (not in Linear yet).
 - `W-573 Dot-panel cover: passive art panel, LED grid, DIP config` (umbrella, in progress).
 - `W-567 M6 — Manners: paper-out, cancel, web UI, provisioning, OTA` (backlog).
-- `W-1051 LocalTalk node: show up in the Chooser as an ImageWriter`: on
-  `wells/w-1051-localtalk-node`, unmerged; board 1 runs it. Printing over PAP is the next ticket.
+- `W-1051 LocalTalk node: show up in the Chooser as an ImageWriter`: in review on
+  `wells/w-1051-localtalk-node`, unmerged; board 1 runs it and the bench Mac (Mac OS 8.1, Apple's
+  AppleTalk ImageWriter 7.0.1) lists it in the Chooser.
+- `W-1053 LocalTalk: print PAP jobs from the Mac's AppleTalk ImageWriter driver`: next; starts
+  by capturing a real job at `GET /api/lt/job` with the printer selected.
 - Not in Linear: scope HSKo during a long job (SPEC §3.9 timing).
 
 ## Toolchain
