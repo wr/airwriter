@@ -98,6 +98,12 @@ Traps already explained in a code comment are listed only when the comment is ea
   `CONFIG_AIRWRITER_LT_BENCH`), restart, then flash.
 - **The Option Card's PAP status is a two-byte word, low byte first, not a string** (Apple TN
   NW20; `LT_IW_*` in `lt_node.h`). A LaserWriter-style `%%[ status: ... ]%%` string is wrong here.
+- **Never report busy (bit 15) to a Mac about its own connection.** Mac OS 8.1's AppleTalk
+  ImageWriter 7.0.1 opened PAP, read 0x8008 (busy + off line) and sent nothing until the
+  connection timed out. Busy is only for the board printing someone else's job.
+- **The bench Mac's 8.1 install had no AppleTalk ImageWriter driver**, and the plain
+  "ImageWriter" Chooser driver is serial only.
+  Apple's `AppleTalk_ImageWriter_7.0.1.sea.bin` (Wayback copy of download.info.apple.com) works.
 - **U8's ~RE rides `LT_DE`, so U8 shuts down while the PIC transmits.** Deliberate: wake is
   ≤ 1.8 µs against LocalTalk's ~200 µs inter-dialogue gap. It mirrors the U6 bug fixed on 08-22
   but is not that bug; don't "fix" it.
