@@ -592,6 +592,27 @@ static const char *state_text(ps_state_t st)
     return "?";
 }
 
+// Why the chip last started. A reboot on the bench is otherwise a mystery: the
+// USB console re-enumerates with the chip and loses the ROM's rst: line, so
+// power-on (a pulled cable) and brownout or panic look the same from outside.
+static const char *reset_name(esp_reset_reason_t r)
+{
+    switch (r) {
+    case ESP_RST_POWERON:   return "power-on";
+    case ESP_RST_EXT:       return "reset pin";
+    case ESP_RST_SW:        return "software";      // esp_restart: OTA, settings
+    case ESP_RST_PANIC:     return "panic";
+    case ESP_RST_INT_WDT:   return "interrupt watchdog";
+    case ESP_RST_TASK_WDT:  return "task watchdog";
+    case ESP_RST_WDT:       return "watchdog";
+    case ESP_RST_DEEPSLEEP: return "deep sleep";
+    case ESP_RST_BROWNOUT:  return "brownout";
+    case ESP_RST_USB:       return "usb";           // a console attach resets
+    case ESP_RST_JTAG:      return "jtag";
+    default:                return "unknown";
+    }
+}
+
 static void status_json(void *ctx, char *buf, size_t cap)
 {
     (void)ctx;
@@ -619,7 +640,7 @@ static void status_json(void *ctx, char *buf, size_t cap)
         "\"queue\":\"%s\",\"host\":\"%s.local\",\"ip\":\"%s\","
         "\"ssid\":\"%s\",\"dither\":\"%s\",\"signal\":\"%s\","
         "\"channel\":\"%s\",\"security\":\"%s\",\"uri\":\"%s\","
-        "\"uptime\":\"%uh %02um\",\"version\":\"%s\",\"heap\":\"%u KB\","
+        "\"uptime\":\"%uh %02um\",\"reset\":\"%s\",\"version\":\"%s\",\"heap\":\"%u KB\","
         "\"model\":\"Apple ImageWriter II\",\"pic\":%s}",
         state_text(v.state),
         ps_name(v.state),
@@ -638,7 +659,7 @@ static void status_json(void *ctx, char *buf, size_t cap)
         joined ? auth_name(ap.authmode) : "",
         s_ap_mode ? "" : ipp_server_uri(),
         (unsigned)(up / 3600), (unsigned)((up / 60) % 60),
-        app->version, (unsigned)(esp_get_free_heap_size() / 1024),
+        reset_name(esp_reset_reason()), app->version, (unsigned)(esp_get_free_heap_size() / 1024),
         pic_prog_available() ? "true" : "false");
 }
 
@@ -723,7 +744,8 @@ void app_main(void)
     // by the first frame the line is driven, never floating.
     ESP_ERROR_CHECK(led_grid_start());
 
-    ESP_LOGI(TAG, "AirWriter starting, %u bytes free", (unsigned)esp_get_free_heap_size());
+    ESP_LOGI(TAG, "AirWriter starting after %s reset, %u bytes free",
+             reset_name(esp_reset_reason()), (unsigned)esp_get_free_heap_size());
 
     esp_err_t err = nvs_flash_init();
     if (err == ESP_ERR_NVS_NO_FREE_PAGES || err == ESP_ERR_NVS_NEW_VERSION_FOUND) {
