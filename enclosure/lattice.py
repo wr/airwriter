@@ -103,9 +103,11 @@ def _rails() -> Part:
 
 
 def test_plunger_axis() -> tuple[float, float]:
-    """SW3's plunger centre, from the top band of its STEP envelope."""
+    """Where SW3's plunger really stands: the top band of its STEP envelope,
+    moved by the measured TEST_PLUNGER_OFFSET."""
     x0, x1, y0, y1, _ = components.envelopes()["SW3"][-1]
-    return (x0 + x1) / 2, (y0 + y1) / 2
+    dx, dy = p.TEST_PLUNGER_OFFSET
+    return (x0 + x1) / 2 + dx, (y0 + y1) / 2 + dy
 
 
 def d3_window() -> tuple[float, float, float, float]:
@@ -143,23 +145,6 @@ def _d3_tube() -> tuple[Part, Part]:
     return tube + arm, _box(ix0, ix1, iy0, iy1, -1, H + 1)
 
 
-def light_pipe() -> Part:
-    """The clear-PETG light pipe that drops into the D3 tube: the tube's
-    interior less PIPE_CLEAR, standing on the board, PIPE_TOP_GAP under the
-    panel, with a slot right across it over each part inside (D3 and R17) so
-    the LED sits inside the pipe. Every face is flat and square, so it prints
-    on any side; lying on a wide face keeps the layers along the light."""
-    (ix0, ix1, iy0, iy1), _ = _d3_tube_rects()
-    c, k = p.PIPE_CLEAR, p.PIPE_POCKET_CLEAR
-    px0, px1, py0, py1 = ix0 + c, ix1 - c, iy0 + c, iy1 - c
-    pipe = _box(px0, px1, py0, py1, 0, H - p.PIPE_TOP_GAP)
-    slots = [_box(px0 - 1, px1 + 1, y0 - k, y1 + k, -1, top + k)
-             for bands in components.envelopes().values()
-             for x0, x1, y0, y1, top in bands
-             if x1 + k > px0 and x0 - k < px1 and y1 + k > py0 and y0 - k < py1]
-    return pipe - _union(slots) if slots else pipe
-
-
 def _collar() -> Part:
     """A ring round the test plunger in the lattice's top COLLAR_H, tied to
     the test cell's four walls by LATTICE_WALL ribs."""
@@ -178,11 +163,19 @@ def _collar() -> Part:
     return _union([ring] + ribs) - bore
 
 
+def _front_skin() -> Part:
+    """A RIDGE_H skin under the panel over the front region, in front of the
+    grid: it gives the lip a wall to hang from along the front and east
+    edges, and carries the panel there. Everything under it stands below
+    10 mm except J2/J4, whose hulls cut it."""
+    return _box(0, p.BOARD_W, 0, front_line(), H - p.RIDGE_H, H)
+
+
 def _ridge() -> Part:
     """The lip round the lattice's top edge: from just inside the lattice's
-    perimeter wall out to RIDGE_CLEAR short of the tray's pocket, along every
-    edge the lattice reaches -- the grid's back and sides, the west rail and
-    the D3 corner."""
+    perimeter wall out to RIDGE_CLEAR short of the tray's pocket, all the way
+    round. J2/J4's hulls cut it at the serial ports (Wells, 2026-10-15: the
+    biggest gap is along the front)."""
     o = p.POCKET_CLEAR - p.RIDGE_CLEAR
     i = p.LATTICE_INSET + 0.05
     z0 = H - p.RIDGE_H
@@ -192,13 +185,7 @@ def _ridge() -> Part:
     inner = case._rounded_box(p.BOARD_W - 2 * i, p.BOARD_L - 2 * i, p.RIDGE_H + 2,
                               p.BOARD_W / 2, p.BOARD_L / 2, z0 + p.RIDGE_H / 2,
                               p.CORNER_R - i)
-    yf = front_line() - p.LATTICE_WALL / 2
-    _, y3 = bg.mount_holes()["H3"]
-    _, (tx0, _, _, ty1) = _d3_tube_rects()
-    keep = (_box(-5, p.BOARD_W + 5, yf, p.BOARD_L + 5, z0 - 1, H + 1)
-            + _box(-5, 1.0, y3, yf + 0.01, z0 - 1, H + 1)
-            + _box(tx0, p.BOARD_W + 5, -5, ty1, z0 - 1, H + 1))
-    return (outer - inner) & keep
+    return outer - inner
 
 
 def _part_voids() -> Part:
@@ -219,13 +206,16 @@ def _part_voids() -> Part:
 def _keepout_void() -> Part:
     """U1's antenna keepout, grown by KEEPOUT_CLEAR, clipped at the grid's
     front wall: the zone runs 1.85 into the grid, but the module's antenna
-    ends 1.7 short of it, and cutting the grid there opened a lit cell."""
+    ends 1.7 short of it, and cutting the grid there opened a lit cell. It
+    stops under the top RIDGE_H too, so the front skin and the lip can cross
+    it 10 mm above the module: the zone is a copper rule, and that much
+    plastic that far up is no load on the antenna."""
     (zone,) = bg.keepout_zones("U1")
     k = p.KEEPOUT_CLEAR
     xs = [q[0] for q in zone]
     ys = [q[1] for q in zone]
     y1 = min(max(ys) + k, front_line() - p.LATTICE_WALL / 2)
-    return _box(min(xs) - k, max(xs) + k, min(ys) - k, y1, -1, H + 1)
+    return _box(min(xs) - k, max(xs) + k, min(ys) - k, y1, -1, H - p.RIDGE_H)
 
 
 def _reset_path_void() -> Part:
@@ -239,7 +229,7 @@ def _reset_path_void() -> Part:
 
 def lattice() -> Part:
     tube, tube_void = _d3_tube()
-    body = ((_grid() + _posts() + _rails() + tube) & _outline()) + _ridge()
+    body = ((_grid() + _posts() + _rails() + tube + _front_skin()) & _outline()) + _ridge()
     body = (body - _post_voids() - tube_void - _part_voids() - _keepout_void()
             - _reset_path_void())
     # The collar goes on last: SW3's model envelope (a plain 3.5 plunger to

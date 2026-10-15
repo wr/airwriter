@@ -1,7 +1,7 @@
 """The light-guide lattice: fit, light paths, clearances, printability."""
 import unittest
 
-from build123d import Box, Cone, Cylinder, GeomType, Pos, Vector
+from build123d import Box, Cone, Cylinder, Pos, Vector
 
 import board_geom as bg
 import case
@@ -76,6 +76,22 @@ class TestLattice(unittest.TestCase):
             p.TEST_PLUNGER_D_BASE / 2 + c, p.TEST_PLUNGER_D_TOP / 2 + c, h)
         self.assertLess(_vol(self.L, plunger), 1e-3)
 
+    def test_collar_sits_where_the_real_plunger_stands(self):
+        # 2026-10-15 print: centred on the KiCad model's plunger, the collar
+        # pushed the real one 0.4 west and 0.4 back. Its bore is now centred
+        # 0.4 east and 0.4 forward of the model's axis.
+        x0, x1, y0, y1, _ = components.envelopes()["SW3"][-1]
+        x = (x0 + x1) / 2 + p.TEST_PLUNGER_OFFSET[0]
+        y = (y0 + y1) / 2 + p.TEST_PLUNGER_OFFSET[1]
+        self.assertEqual(p.TEST_PLUNGER_OFFSET, (0.40, -0.40))
+        r = p.COLLAR_BORE_D / 2
+        z = H - p.COLLAR_H / 2
+        for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+            self.assertFalse(self.L.is_inside(Vector(x + dx * (r - 0.1), y + dy * (r - 0.1), z)),
+                             f"bore not open {dx},{dy}")
+            self.assertTrue(self.L.is_inside(Vector(x + dx * (r + 0.3), y + dy * (r + 0.3), z)),
+                            f"no collar {dx},{dy}")
+
     def test_collar_braces_the_plunger_near_the_top(self):
         x, y = lattice.test_plunger_axis()
         r = p.COLLAR_BORE_D / 2
@@ -96,8 +112,19 @@ class TestLattice(unittest.TestCase):
         z = H - p.RIDGE_H / 2
         yf = lattice.front_line()
         for px, py in ((31.0, p.BOARD_L + o), (p.BOARD_W + o, 60.0), (p.BOARD_W + o, yf + 5),
-                       (-o, 60.0), (-o, 25.0), (p.BOARD_W + o, 3.0)):
+                       (-o, 60.0), (-o, 25.0), (p.BOARD_W + o, 3.0),
+                       # the front edge (Wells: the biggest gap is there), and
+                       # the east edge in front of the grid
+                       (2.5, -o), (22.75, -o), (43.5, -o), (52.0, -o), (59.0, -o),
+                       (-o, 5.0), (p.BOARD_W + o, 20.0)):
             self.assertTrue(self.L.is_inside(Vector(px, py, z)), f"no ridge at ({px}, {py})")
+
+    def test_ridge_stops_at_the_mini_dins(self):
+        o = 0.18
+        z = H - p.RIDGE_H / 2
+        for ref in ("J2", "J4"):
+            bb = case.connector_solid(ref).bounding_box()
+            self.assertFalse(self.L.is_inside(Vector((bb.min.X + bb.max.X) / 2, -o, z)), ref)
 
     def test_posts_bores_and_standoff_pockets(self):
         for ref, (x, y) in bg.mount_holes().items():
@@ -126,8 +153,11 @@ class TestLattice(unittest.TestCase):
         xs = [q[0] for q in zone]
         ys = [q[1] for q in zone]
         y1 = min(max(ys), lattice.front_line() - p.LATTICE_WALL / 2)
-        ko = Pos((min(xs) + max(xs)) / 2, (min(ys) + y1) / 2, H / 2) * Box(
-            max(xs) - min(xs), y1 - min(ys), H)
+        # Below the top band only: the front skin and the lip may cross the
+        # zone 10 mm above the module (copper keepout, not plastic).
+        top = H - p.RIDGE_H
+        ko = Pos((min(xs) + max(xs)) / 2, (min(ys) + y1) / 2, top / 2) * Box(
+            max(xs) - min(xs), y1 - min(ys), top)
         self.assertLess(_vol(self.L, ko), 1e-3)
 
     def test_clears_the_reset_paperclip_path(self):
@@ -211,48 +241,6 @@ class TestLattice(unittest.TestCase):
         self.assertEqual([(round(f.center().X, 1), round(f.center().Y, 1),
                            round(f.center().Z, 1), round(f.area, 1)) for f in flats], [])
 
-
-
-class TestLightPipe(unittest.TestCase):
-    """The clear-PETG pipe that drops into the D3 tube."""
-
-    @classmethod
-    def setUpClass(cls):
-        cls.L = lattice.lattice()
-        cls.P = lattice.light_pipe()
-
-    def test_one_valid_solid_on_the_board_just_under_the_panel(self):
-        self.assertTrue(self.P.is_valid)
-        self.assertEqual(len(self.P.solids()), 1)
-        bb = self.P.bounding_box()
-        self.assertAlmostEqual(bb.min.Z, 0.0, places=3)
-        self.assertAlmostEqual(bb.max.Z, H - p.PIPE_TOP_GAP, places=3)
-
-    def test_drops_into_the_tube_without_touching_the_lattice(self):
-        self.assertLess(_vol(self.L, self.P), 1e-3)
-
-    def test_covers_the_whole_window_at_the_top(self):
-        x0, x1, y0, y1 = lattice.d3_window()
-        for i in range(11):
-            for j in range(11):
-                q = Vector(x0 + i / 10 * (x1 - x0), y0 + j / 10 * (y1 - y0), H - 0.3)
-                self.assertTrue(self.P.is_inside(q), f"window not covered at {q}")
-
-    def test_clears_d3_and_r17_and_wraps_d3(self):
-        env = components.envelopes()
-        for ref in ("D3", "R17"):
-            (x0, x1, y0, y1, top), = env[ref]
-            box = Pos((x0 + x1) / 2, (y0 + y1) / 2, top / 2) * Box(x1 - x0, y1 - y0, top)
-            self.assertLess(_vol(self.P, box), 1e-3, ref)
-        (x0, x1, y0, y1, top), = env["D3"]
-        above = Vector((x0 + x1) / 2, (y0 + y1) / 2, top + p.PIPE_POCKET_CLEAR + 0.1)
-        self.assertTrue(self.P.is_inside(above), "no pipe right over D3")
-
-    def test_every_face_is_flat_and_square_so_it_prints_on_any_side(self):
-        for f in self.P.faces():
-            self.assertEqual(f.geom_type, GeomType.PLANE)
-            n = f.normal_at(f.center())
-            self.assertAlmostEqual(max(abs(n.X), abs(n.Y), abs(n.Z)), 1.0, places=6)
 
 
 if __name__ == "__main__":

@@ -368,6 +368,11 @@ TEST_BODY_TOP = 3.20
 to 3.5 where it enters the switch body, which stands about 3.2. (The KiCad
 model's plunger is a plain 3.5 cylinder.)"""
 
+TEST_PLUNGER_OFFSET = (0.40, -0.40)
+"""Where the real plunger stands relative to the KiCad model's axis (east,
+north), from the 2026-10-15 print: a collar on the model's axis pushed the
+plunger about 0.4 west and 0.4 back (Wells)."""
+
 COLLAR_H = 2.00
 COLLAR_BORE_D = 3.60
 COLLAR_WALL = 1.00
@@ -384,9 +389,3 @@ tray's pocket wall, so the lattice sits snug and the gap round the panel's
 edge shows black plastic instead of the inside of the case (Wells,
 2026-10-15)."""
 
-PIPE_CLEAR = 0.15
-PIPE_TOP_GAP = 0.10
-PIPE_POCKET_CLEAR = 0.25
-"""The clear-PETG light pipe in the D3 tube: PIPE_CLEAR off the tube walls,
-PIPE_TOP_GAP under the panel so it never holds the panel up, and a pocket
-PIPE_POCKET_CLEAR round D3 and R17 so the LED sits inside the pipe."""

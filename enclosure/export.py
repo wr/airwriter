@@ -14,7 +14,6 @@ PARTS = {
     "airwriter-tray": case.tray,
     "airwriter-lite-lid": case.lite_lid,
     "airwriter-lattice": lattice.lattice,
-    "airwriter-light-pipe": lattice.light_pipe,
 }
 
 

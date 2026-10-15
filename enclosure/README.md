@@ -1,14 +1,13 @@
 # Enclosure (enclosure/out/*.stl)
 
-Four printed parts. The **tray** is shared by both builds. The **Lite lid**
+Three printed parts. The **tray** is shared by both builds. The **Lite lid**
 replaces the dot-grid art panel on boards built without it. The **lattice**
-is the Pro build's light guide, between the board and the panel, and the
-**light pipe** (clear PETG) drops into its power-LED tube.
+is the Pro build's light guide, between the board and the panel.
 
     ./build.sh          # runs the tests, then writes out/*.{step,stl}
 
-`out/airwriter-tray.stl`, `out/airwriter-lite-lid.stl`,
-`out/airwriter-lattice.stl` and `out/airwriter-light-pipe.stl` are committed, so the case can be printed without a
+`out/airwriter-tray.stl`, `out/airwriter-lite-lid.stl` and
+`out/airwriter-lattice.stl` are committed, so the case can be printed without a
 build123d install; re-run `./build.sh` and commit
 them again after any change here or to the board. The STEPs are not (6 MB, and
 the same command rebuilds them).
@@ -85,14 +84,18 @@ shells' measured height; the panel rests on both). Spec:
   lattice, not the standoffs.
 - Side rails forward to the front posts: the west one over S1, the east one
   over U1's shield (clear of its antenna).
-- A walled tube from the power LED D3 up to the panel's FR4 window, with a
-  clear light pipe inside (below).
+- A walled tube from the power LED D3 up to the panel's FR4 window. (A clear
+  PETG light pipe in it came out slightly dimmer than the open tube on the
+  2026-10-15 print, so it was dropped; rev B may move to a through-hole dome
+  LED.)
 - A collar round the test button's plunger in the top 2 mm (Ø3.6 bore on its
   measured 3.1–3.2), tied to the cell walls by ribs, to steady it without
-  drag.
-- A 1.5 mm lip round the top edge, 0.1 mm short of the tray wall, so the
-  lattice sits snug and the gap round the panel shows black plastic instead
-  of the inside of the case.
+  drag. It sits on where the real plunger stands, 0.4 east and 0.4 forward of
+  the KiCad model's (`TEST_PLUNGER_OFFSET`).
+- A 1.5 mm lip round the whole top edge, less the two mini-DINs, 0.1 mm short
+  of the tray wall, so the lattice sits snug and the gap round the panel
+  shows black plastic instead of the inside of the case. A 1.5 mm skin under
+  the panel over the front region carries it along the front.
 
 Every part on the board is cleared using KiCad's own STEP export
 (`components.py`), so `./build.sh` needs kicad-cli (path in AGENTS.md; set
@@ -105,12 +108,6 @@ the build.
 
 **Print** in matte black PLA or PETG, **panel face down** (the flattest face
 seals against the panel), no supports.
-
-**Light pipe** (`out/airwriter-light-pipe.stl`, 2.1 × 5.4 × 12.9 mm): print in
-clear PETG, lying on a wide face so the layers run along the light, 100%
-infill. Drop it into the D3 tube after the lattice goes on and before the
-panel. It stands on the board with D3 and R17 in slots in its foot, 0.1 mm
-under the panel.
 
 **First print, check:** the panel seats flush on lattice and mini-DINs
 together; the posts drop over the screws; with the LEDs on, no dot lights its
