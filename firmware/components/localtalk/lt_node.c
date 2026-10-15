@@ -261,6 +261,9 @@ static void pap_open(lt_node_t *n, const ddp_t *d, const atp_t *a, const lt_rout
     ws.addr.sock = a->data[0];                 // the workstation's ATP responding socket
 
     int same_conn = p->open && p->connid == a->user[0] && same_route(&p->ws, &ws);
+    if (p->open && !same_conn && ws.addr.node == p->ws.addr.node && ws.addr.net == p->ws.addr.net &&
+        now - p->wrote >= LT_PAP_STALE_MS)
+        pap_close(n, "the Mac opened another");
     uint16_t result = (p->open && !same_conn) ? PAP_RESULT_BUSY : PAP_RESULT_OK;
 
     uint8_t data[4 + 3];

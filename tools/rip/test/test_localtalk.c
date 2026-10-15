@@ -618,6 +618,47 @@ static void test_pap_mac_reads(void)
     CHECK_EQ_INT(atp_of(0)[6], 0);
 }
 
+// The Mac gives up a connection without CloseConn and opens another.
+static void test_pap_superseded(void)
+{
+    lt_node_t n;
+    uint64_t t = online(&n, 200);
+    uint8_t f[LLAP_MAX];
+    const uint8_t oc[] = { 0xF4, 1, 0, 0 };
+    size_t fl = mac_atp(f, 200, LT_SOCK_SLS, ATP_TREQ | ATP_XO, 0x01, 0x0100, 0xAD, PAP_OPEN_CONN, 0, 0, oc, sizeof oc);
+    lt_node_rx(&n, f, fl, t);
+    CHECK(n.pap.open);
+
+    // Soon after: still busy, even from the same Mac.
+    reset_fake();
+    fl = mac_atp(f, 200, LT_SOCK_SLS, ATP_TREQ | ATP_XO, 0x01, 0x0101, 0x01, PAP_OPEN_CONN, 0, 0, oc, sizeof oc);
+    lt_node_rx(&n, f, fl, t + LT_PAP_STALE_MS - 1);
+    CHECK_EQ_INT(atp_of(0)[10], 0xFF);
+    CHECK_EQ_INT(n.pap.connid, 0xAD);
+
+    // Another Mac, however long the quiet: busy.
+    reset_fake();
+    uint8_t g[LLAP_MAX];
+    size_t gl = mac_atp(g, 200, LT_SOCK_SLS, ATP_TREQ | ATP_XO, 0x01, 0x0102, 0x02, PAP_OPEN_CONN, 0, 0, oc, sizeof oc);
+    g[1] = 84;
+    lt_node_rx(&n, g, gl, t + LT_PAP_STALE_MS + 5000);
+    CHECK_EQ_INT(atp_of(0)[10], 0xFF);
+    CHECK_EQ_INT(n.pap.connid, 0xAD);
+
+    // The same Mac after LT_PAP_STALE_MS with no data: the old one closes and
+    // the new one opens.
+    reset_fake();
+    job_eof = 0;
+    fl = mac_atp(f, 200, LT_SOCK_SLS, ATP_TREQ | ATP_XO, 0x01, 0x0103, 0x01, PAP_OPEN_CONN, 0, 0, oc, sizeof oc);
+    lt_node_rx(&n, f, fl, t + LT_PAP_STALE_MS + 6000);
+    CHECK_EQ_INT(atp_of(0)[10], 0x00);
+    CHECK_EQ_INT(atp_of(0)[11], 0x00);
+    CHECK(n.pap.open);
+    CHECK_EQ_INT(n.pap.connid, 0x01);
+    CHECK_EQ_INT(job_eof, 1);                             // the old job was ended
+    CHECK_EQ_INT(n.st.opens, 2);
+}
+
 int main(void)
 {
     test_fcs();
@@ -630,5 +671,6 @@ int main(void)
     test_pap();
     test_pap_timers();
     test_pap_mac_reads();
+    test_pap_superseded();
     TEST_END;
 }

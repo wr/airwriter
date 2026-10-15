@@ -60,6 +60,11 @@
 // held stops writing at the end of the page and never sends EOF (bench,
 // 2026-10-15). TailTalk's PAP server, tested on hardware, uses 2 s.
 #define LT_PAP_READ_IDLE_MS      2000
+// An OpenConn from the Mac that holds the open connection, which has sent no
+// data for this long, means it gave that one up (the Mac kept tickling a dead
+// connection and retried OpenConn 18 times against "busy" on the bench). The
+// old connection is closed and the new one accepted. Another Mac still gets busy.
+#define LT_PAP_STALE_MS         10000
 
 typedef struct {
     void *ctx;
