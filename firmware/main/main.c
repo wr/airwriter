@@ -282,8 +282,8 @@ static void doc_end(void *ctx, int ok)
     // the call and report zeroed stats instead. ipp_server still calls
     // doc_end exactly once even after a failed begin, so the give below still
     // balances doc_begin's take.
-    // A cut transfer (the iPhone cancels by dropping the upload -- it has no
-    // job id to Cancel-Job with) means nothing more will arrive: stop a write
+    // A cut transfer (a client that cancels by dropping the upload rather
+    // than with Cancel-Job) means nothing more will arrive: stop a write
     // that is waiting out a paused printer, or job_pipe_end below would wait
     // the whole stall limit holding the job lock.
     if (!ok) serial_out_set_abort(1);
@@ -717,12 +717,18 @@ static void on_ps_change(const ps_view_t *v)
 {
     ESP_LOGI(TAG, "state -> %s", ps_name(v->state));
     // SPEC.md 3.9: a stall mid-job becomes a real alert on the phone.
-    // Mid-job stall: media-empty, the real "out of paper" alert on the phone.
+    // Mid-job stall: media-empty, the real "out of paper" alert. The -error
+    // suffix (RFC 8011 5.4.12) says it outright: a stopped printer MUST carry
+    // an error reason, and a bare one is only "assumed" to be one.
     // Idle and not ready: printer off, unplugged or deselected. offline-report
     // is CUPS-only (not in the IANA registry), so it reports the registered
-    // "other".
-    ipp_server_set_stopped(v->state == PS_ATTENTION ? "media-empty"
-                         : v->state == PS_OFFLINE   ? "other" : NULL);
+    // "other", which on a stopped printer reads as an error all the same.
+    if (v->state == PS_ATTENTION)
+        ipp_server_set_stopped("media-empty-error", "Needs attention: check paper and SELECT");
+    else if (v->state == PS_OFFLINE)
+        ipp_server_set_stopped("other", "Printer offline");
+    else
+        ipp_server_set_stopped(NULL, NULL);
 }
 
 void app_main(void)

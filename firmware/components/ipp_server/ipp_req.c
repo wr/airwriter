@@ -37,6 +37,22 @@ static int name_is(const uint8_t *name, size_t nlen, const char *want)
     return nlen == strlen(want) && memcmp(name, want, nlen) == 0;
 }
 
+// The job-id a job-uri names: its last path segment, which is how
+// ipp_job_start builds it. 0 -- never a job we issued -- if that is not a
+// number.
+static int32_t job_uri_id(const uint8_t *val, size_t n)
+{
+    size_t i = n;
+    while (i > 0 && val[i - 1] != '/') i--;
+    if (i == n || n - i > 9) return 0;
+    int32_t id = 0;
+    for (; i < n; i++) {
+        if (val[i] < '0' || val[i] > '9') return 0;
+        id = id * 10 + (val[i] - '0');
+    }
+    return id;
+}
+
 int ipp_req_parse(ipp_req_t *r, const uint8_t *buf, size_t len)
 {
     memset(r, 0, sizeof *r);
@@ -54,6 +70,8 @@ int ipp_req_parse(ipp_req_t *r, const uint8_t *buf, size_t len)
     // must continue far enough to have read it.
 
     uint8_t group = 0;
+    int have_job_id = 0;   // an explicit job-id outranks a job-uri
+    int in_requested = 0;  // the values being walked extend requested-attributes
     for (;;) {
         if (!need(&c, 1)) return IPP_REQ_SHORT;
         uint8_t tag = c.p[c.pos++];
@@ -65,6 +83,7 @@ int ipp_req_parse(ipp_req_t *r, const uint8_t *buf, size_t len)
             continue;
         }
 
+        size_t attr_at = c.pos - 1;   // this attribute's value tag
         if (!need(&c, 2)) return IPP_REQ_SHORT;
         size_t nlen = rd_u16(&c);
         if (!need(&c, nlen)) return IPP_REQ_SHORT;
@@ -79,14 +98,27 @@ int ipp_req_parse(ipp_req_t *r, const uint8_t *buf, size_t len)
 
         // nlen 0 is an additional value for the previous attribute. Every
         // field below is single-valued, so the first value wins and the rest
-        // are skipped -- which the length walk above has already done.
-        if (nlen == 0) continue;
+        // are skipped -- which the length walk above has already done --
+        // except requested-attributes, which is a list.
+        if (nlen == 0) {
+            if (in_requested) {
+                r->requested.len = c.pos - (size_t)(r->requested.p - buf);
+                r->requested.n++;
+            }
+            continue;
+        }
+        in_requested = 0;
 
         // Job attributes may legally repeat operation-attribute names with
         // different meaning, so only read from the operation group.
         if (group != IPP_TAG_OPERATION) continue;
 
-        if (name_is(name, nlen, "printer-uri"))
+        if (name_is(name, nlen, "requested-attributes") && !r->requested.n) {
+            r->requested.p   = buf + attr_at;
+            r->requested.len = c.pos - attr_at;
+            r->requested.n   = 1;
+            in_requested     = 1;
+        } else if (name_is(name, nlen, "printer-uri"))
             store(r, r->printer_uri, sizeof r->printer_uri, val, vlen);
         else if (name_is(name, nlen, "job-name"))
             store(r, r->job_name, sizeof r->job_name, val, vlen);
@@ -94,8 +126,11 @@ int ipp_req_parse(ipp_req_t *r, const uint8_t *buf, size_t len)
             store(r, r->requesting_user, sizeof r->requesting_user, val, vlen);
         else if (name_is(name, nlen, "document-format"))
             store(r, r->document_format, sizeof r->document_format, val, vlen);
-        else if (name_is(name, nlen, "job-id") && vlen == 4)
+        else if (name_is(name, nlen, "job-id") && vlen == 4) {
             r->job_id = (int32_t)(((uint32_t)val[0] << 24) | ((uint32_t)val[1] << 16) |
                                   ((uint32_t)val[2] << 8) | (uint32_t)val[3]);
+            have_job_id = 1;
+        } else if (name_is(name, nlen, "job-uri") && !have_job_id)
+            r->job_id = job_uri_id(val, vlen);
     }
 }

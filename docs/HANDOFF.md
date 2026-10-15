@@ -72,6 +72,54 @@ Merge order: W-1037, W-1041, W-1040, W-1042. W-1042 already sits on
   out-of-paper pause. Board 1's queue is named "ImageWriter" in NVS, from the stale-twin
   workaround; the Kconfig default is still "ImageWriter II".
 
+**2026-10-15: a stalled job now shows on the Mac as a paused job — W-1040, branch
+`wells/w-1040-iphone-paused-alert` (stacked on W-1037 `a151fe9`, not merged).** Bench on
+board 1, Mac print, SELECT off mid-page: the Mac's print window raised the paper/SELECT
+alert; SELECT on finished the page. On the W-1037 baseline the same test showed nothing.
+
+- **What changed:** while the printer is stopped, a printing job reads `job-state`
+  processing-stopped with `job-state-reasons` printer-stopped (RFC 8011 5.3.7), and the
+  printer carries `media-empty-error` (explicit `-error`: a stopped printer must carry an
+  error reason) plus `printer-state-message` "Needs attention: check paper and SELECT".
+  The job slot is a pure core, `ipp_server/ipp_job.c`, host-tested in `tools/ipp`.
+  Keywords were checked against the IANA IPP registry.
+- **Print-Job only, by evidence.** Create-Job + Send-Document were built first, on the theory
+  that iOS needs a job-id before the upload. The theory was wrong: during a Print-Job upload
+  iOS and macOS find the job with Get-Jobs and poll Get-Job-Attributes. Worse, with
+  Create-Job advertised the iPhone held every job at "Waiting" and only re-polled
+  Get-Printer-Attributes. They are gone; SPEC 3.4 says why.
+- **IPP worker starvation fixed (it is what made nothing print mid-bench).** Three workers each
+  sat 30 s on an idle keep-alive connection; iOS/macOS bursts of 25–50 connections queued
+  behind them and the clients gave up before sending a job. Now 4 workers, backlog 8
+  (`CONFIG_LWIP_TCP_ACCEPTMBOX_SIZE=8`), `CONFIG_LWIP_MAX_SOCKETS=16`, and an idle connection
+  closes after 300 ms once no worker is free (it keeps 30 s while one is). A 30-connection
+  burst: 30 ok, max 3.5 s (was 20–60 s, some failing). **Set the two lwIP values in an
+  existing `sdkconfig` too** — `sdkconfig.defaults` only seeds a new one.
+- Also: one request waits for a busy printer (30 s), the rest get `server-error-busy`;
+  Cancel-Job of a finished job is `client-error-not-possible`; `job-uri` targets a job.
+- **Open, not chased (iPhone ruled out of scope by Wells):** after a build advertising
+  Create-Job had been up, the iPhone kept every job at "Waiting" (GPA-only) even on builds
+  without it and on a fresh UUID; a67119f (never advertised it) printed. Suspects: iOS's
+  per-`printer-uuid` capability cache, and stale mDNS TXT twins (ESP mdns seems not to set
+  cache-flush on TXT, so an old UUID lingers for the TTL). Details:
+  side-session notes `w1040-open-iphone-stall.md`. The iPhone SELECT-off test is untested.
+- **Get-Printer-Attributes honours requested-attributes** (groups, names, `none`;
+  `media-col-database` only when named), which cleared macOS's
+  `cups-ipp-conformance-failure-report`. `tools/ipp/build/gpa_server` serves the real encoder
+  on localhost for ipptool's suites (7/7 with the fifth test's request corrected; macOS's copy
+  of that test is self-contradictory). The UUID epoch stays 1: filtering changes no
+  advertised value, and a new UUID would strand the Mac's CUPS queue (device-uri pins it).
+- **Trap: `tools/ipp/build/` holds committed binaries.** `git checkout -- tools/ipp/build`
+  leaves them newer than the sources, and `make test` then runs the stale ones without a
+  rebuild. Use `make -B -C tools/ipp test`.
+- **Cosmetic follow-up:** with SELECT off the Mac showed "out of paper" for a few seconds,
+  then "printer is offline", while the board held `stopped` + `media-empty-error` for the
+  whole 67 s and answered every Get-Job-Attributes. Best guess: CUPS's ipp backend, whose
+  Print-Job write blocks once the board stops reading the socket (paused printer, TCP
+  window full); after its write timeout the backend reports `offline-report` itself, which
+  the Mac shows over our reason. Untested. Buffering the job in PSRAM (the PSRAM job-buffer
+  work) would let the upload finish during a pause and likely removes it; not fixed here.
+
 **2026-10-14: rev A is alive and has printed.** Board 1 arrived from PCBWay; the THT joints,
 J2/J4 holes and debris from the 10-05 photo review were checked and fixed before power. Over
 USB-C the S3 enumerated, reads back as N8R2 (8 MB flash, 2 MB PSRAM, PSRAM test passes), and
