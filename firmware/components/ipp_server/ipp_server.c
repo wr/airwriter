@@ -268,11 +268,13 @@ static int dispatch(work_t *w, int fd, const ipp_req_t *r, hbody_t *body,
     }
 
     case IPP_OP_VALIDATE_JOB:
+        if (s_cfg.on_job_op) s_cfg.on_job_op();
         if (!format_supported(r->document_format))
             return send_status(w, fd, r, IPP_STATUS_ERR_FORMAT_NOT_SUPPORTED, keep_alive);
         return send_status(w, fd, r, IPP_STATUS_OK, keep_alive);
 
     case IPP_OP_PRINT_JOB:
+        if (s_cfg.on_job_op) s_cfg.on_job_op();
         return op_print_job(w, fd, r, body, pre, pre_len, keep_alive);
 
     case IPP_OP_GET_JOB_ATTRIBUTES: {

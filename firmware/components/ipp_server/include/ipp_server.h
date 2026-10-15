@@ -31,6 +31,10 @@ typedef struct {
     uint16_t        port;         // 631
     ipp_doc_sink_t  sink;         // all-NULL callbacks discard the document
     int             dev_mode;     // regenerate the UUID every boot
+    // A job operation arrived (Validate-Job, Print-Job): a person is printing,
+    // so the panel should wake. Deliberately not called for
+    // Get-Printer-Attributes, which Home Assistant polls every 30 s. May be NULL.
+    void          (*on_job_op)(void);
 } ipp_server_cfg_t;
 
 // Starts the HTTP server and publishes the mDNS records. Call after the

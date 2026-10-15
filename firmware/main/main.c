@@ -297,6 +297,12 @@ static void doc_end(void *ctx, int ok)
 // later milestones -- for this rev dev_mode is a log note only, and the
 // printer-uuid behaviour it names stays Kconfig's AIRWRITER_DEV_MODE.
 
+// A person did something; wake the panel. From the IPP, DIP and test-button paths.
+static void on_activity(void)
+{
+    printer_state_post(PS_EV_ACTIVITY);
+}
+
 #define TESTPAGE_W 1152
 #define TESTPAGE_H 64
 
@@ -355,6 +361,7 @@ static void test_page_task(void *arg)
 // doing it here: the poll loop has to stay free to keep debouncing.
 static void test_page(void)
 {
+    on_activity();
     // Non-blocking: a test page refuses rather than queuing behind whatever
     // is printing, real job or another test page. s_job_lock is the actual
     // mutual exclusion; the take-then-spawn sequencing below (not s_printing)
@@ -377,6 +384,7 @@ static int s_test_on_boot;
 
 static void dip_on_change(const dip_config_t *cfg)
 {
+    on_activity();
     ESP_LOGI(TAG, "dip: mode=%u dev_mode=%u test_on_boot=%u dither_ovr=%u spare=%u",
              cfg->mode, cfg->dev_mode, cfg->test_on_boot, cfg->dither_ovr, cfg->spare);
     if (cfg->dev_mode)
@@ -588,7 +596,12 @@ static void on_ps_change(const ps_view_t *v)
 {
     ESP_LOGI(TAG, "state -> %s", ps_name(v->state));
     // SPEC.md 3.9: a stall mid-job becomes a real alert on the phone.
-    ipp_server_set_stopped(v->state == PS_ATTENTION ? "media-empty" : NULL);
+    // Mid-job stall: media-empty, the real "out of paper" alert on the phone.
+    // Idle and not ready: printer off, unplugged or deselected. offline-report
+    // is CUPS-only (not in the IANA registry), so it reports the registered
+    // "other".
+    ipp_server_set_stopped(v->state == PS_ATTENTION ? "media-empty"
+                         : v->state == PS_OFFLINE   ? "other" : NULL);
 }
 
 void app_main(void)
@@ -725,6 +738,7 @@ void app_main(void)
         .hostname   = s_set.hostname,
         .port       = 631,
         .dev_mode   = AW_DEV_MODE,
+        .on_job_op  = on_activity,
         .sink = { .begin = doc_begin, .data = doc_data, .end = doc_end,
                   .cancel = doc_cancel, .ctx = NULL },
     };
