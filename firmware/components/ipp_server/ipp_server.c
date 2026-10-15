@@ -34,9 +34,16 @@ static const char *TAG = "ipp";
 
 // iOS polls Get-Job-Attributes on a second connection while the document is
 // still streaming on the first. One worker would make those polls queue behind
-// the transfer, and the phone would call the printer unresponsive.
-#define WORKERS       3
+// the transfer, and the phone would call the printer unresponsive. A paused
+// job holds its worker for minutes, so there are three beyond that.
+#define WORKERS       4
 #define WORKER_STACK  5120
+
+// Connections lwIP completes and holds for accept() while every worker is
+// busy. Past this a SYN is dropped and the client retries it a second later.
+// CONFIG_LWIP_TCP_ACCEPTMBOX_SIZE must be at least this, or the overflow is
+// reset instead.
+#define LISTEN_BACKLOG 8
 
 // How long a kept-alive connection may sit between requests. A worker serves
 // one connection at a time, so an idle one blocks every connection queued
@@ -216,8 +223,8 @@ static void reap_abandoned(void)
 // first. Polls once a second so an abandoned Create-Job ahead of it is reaped.
 //
 // Only one request waits at a time; the rest are told server-error-busy at
-// once. Each waiter pins a worker, and while a paused job holds a third, the
-// phone's Get-Job-Attributes polls and Cancel-Job need the last one free.
+// once. Each waiter pins a worker, and a paused job holds another for
+// minutes; the phone's Get-Job-Attributes polls and Cancel-Job need the rest.
 static int acquire_printer(void)
 {
     if (xSemaphoreTake(s_print_lock, 0) == pdTRUE) return 1;
@@ -671,7 +678,7 @@ static esp_err_t start_listener(void)
         s_listen_fd = -1;
         return ESP_FAIL;
     }
-    if (listen(s_listen_fd, WORKERS + 2) < 0) {
+    if (listen(s_listen_fd, LISTEN_BACKLOG) < 0) {
         close(s_listen_fd);
         s_listen_fd = -1;
         return ESP_FAIL;
