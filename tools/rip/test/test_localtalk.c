@@ -447,20 +447,25 @@ static void test_pap(void)
     lt_node_rx(&n, g, gl, t + 2100);
     CHECK_EQ_INT(nsent, 1);
     const uint8_t busy[] = { ATP_TRESP | ATP_EOM, 0, 0x03, 0x03, 0x43, PAP_OPEN_CONN_REPLY, 0, 0,
-                             0, LT_FLOW, 0xFF, 0xFF, 2, 0x00, 0x80 };   // the busy bit is ours
+                             0, LT_FLOW, 0xFF, 0xFF, 2, 0x00, 0x00 };
     CHECK_EQ_MEM(atp_of(0), busy, sizeof busy);
     CHECK_EQ_INT(sent[0][0], 84);
     CHECK_EQ_INT(n.st.busy, 1);
 
-    // SendStatus while open shows busy too; the set word is kept underneath.
+    // SendStatus while a Mac's connection is open does not say busy: a Mac
+    // told so about its own connection never sends (bench). Busy is only set
+    // from outside, while the board prints someone else's job.
     reset_fake();
     gl = mac_atp(g, 200, LT_SOCK_SLS, ATP_TREQ, 0x01, 0x0304, 0, PAP_SEND_STATUS, 0, 0, NULL, 0);
-    g[1] = 84;
-    lt_node_set_status(&n, LT_IW_OFFLINE | LT_IW_BUSY);
     lt_node_rx(&n, g, gl, t + 2200);
+    CHECK_EQ_INT(atp_of(0)[13], 0x00);
+    CHECK_EQ_INT(atp_of(0)[14], 0x00);
+    reset_fake();
+    lt_node_set_status(&n, LT_IW_OFFLINE | LT_IW_BUSY);
+    lt_node_rx(&n, g, gl, t + 2300);
     CHECK_EQ_INT(atp_of(0)[13], 0x08);
     CHECK_EQ_INT(atp_of(0)[14], 0x80);
-    CHECK_EQ_INT(n.status, LT_IW_OFFLINE);
+    lt_node_set_status(&n, 0x0000);
 
     // The job: two Data packets, the second with EOM and EOF.
     reset_fake();

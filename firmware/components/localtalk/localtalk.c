@@ -271,7 +271,7 @@ void localtalk_json(char *buf, size_t cap)
         "{\"on\":true,\"phase\":\"%s\",\"node\":%u,\"net\":%u,\"status\":\"0x%04x\","
         "\"object\":",
         n->phase == LT_ONLINE ? "online" : "acquiring", n->node, n->net,
-        n->status | (n->pap.open ? LT_IW_BUSY : 0));
+        n->status);
     json_str(&p, end, s_obj);
     p += snprintf(p, end - p, ",\"type\":");
     json_str(&p, end, s_type);

@@ -158,7 +158,7 @@ static uint16_t next_tid(lt_node_t *n) { return n->tid++; }
 // The status as the card sends it: a Pascal string of the word, low byte first.
 static void status_bytes(const lt_node_t *n, uint8_t out[3])
 {
-    uint16_t w = n->status | (n->pap.open ? LT_IW_BUSY : 0);
+    uint16_t w = n->status;
     out[0] = 2;
     out[1] = (uint8_t)w;
     out[2] = (uint8_t)(w >> 8);
@@ -416,7 +416,7 @@ void lt_node_echo(lt_node_t *n, uint8_t node, uint64_t now)
 
 void lt_node_set_status(lt_node_t *n, uint16_t status)
 {
-    n->status = status & (uint16_t)~LT_IW_BUSY;
+    n->status = status;
 }
 
 void lt_node_rx(lt_node_t *n, const uint8_t *f, size_t len, uint64_t now)

@@ -38,8 +38,9 @@
 // The Option Card's status word (Apple TN NW20; bits confirmed on a real
 // ImageWriter II by TailTalk). It goes on the wire as a two-byte Pascal
 // string, low byte first. Ready with a black ribbon is 0x0000; a deselected
-// printer reads 0x0008, out of paper 0x002A. The node adds LT_IW_BUSY itself
-// while a connection is open, as the card does.
+// printer reads 0x0008, out of paper 0x002A. LT_IW_BUSY is for the board
+// printing someone else's job: a Mac told "busy" on its own open connection
+// sits on it and never sends (bench, 2026-10-15). TailTalk never sets it.
 #define LT_IW_BUSY      0x8000
 #define LT_IW_RIBBON    0x0080   // colour ribbon fitted
 #define LT_IW_FEEDER    0x0040
