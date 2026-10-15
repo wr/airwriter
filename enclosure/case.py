@@ -13,11 +13,14 @@ from build123d import (
     ConvexPolyhedron,
     Cylinder,
     Part,
+    Polyline,
     Pos,
     RectangleRounded,
     Rot,
+    extrude,
     import_step,
     loft,
+    make_face,
 )
 
 import board_geom as bg
@@ -74,7 +77,51 @@ def shell() -> Part:
         p.BOARD_W / 2, p.BOARD_L / 2, (p.Z_WALL_TOP + p.Z_FLOOR_TOP) / 2,
         p.POCKET_R)
 
-    return outer - cavity
+    return outer - cavity - west_flex_relief()
+
+
+def west_flex_relief() -> Part:
+    """What comes off the inside of the west wall so it can flex: from the
+    floor up to the panel seat, the wall's inner face moves out to
+    WEST_FLEX_T from the outer face, then a 45-degree ramp returns it to the
+    full wall at Z_LID_UNDER. See params.WEST_FLEX_T for why.
+
+    Built as the wall's cross-section (XZ) extruded along the straight edge,
+    then trimmed in plan so each end tapers back to the full wall. The ramp faces down at
+    exactly 45 degrees, the overhang limit, so the tray still prints floor-down
+    with no supports. The cove at the floor and the rounded ends are strain
+    relief: that is where the wall bends."""
+    x_in = -(p.WALL - p.WEST_FLEX_T)
+    run = -p.POCKET_CLEAR - x_in  # thin face out to the pocket face, = ramp height
+    # Overshoot into the pocket, which is air already, far enough that the
+    # floor edge outruns the cove fillet. Stops short of the H1/H3 bosses
+    # (x >= 2.64), though they are added after this cut anyway.
+    x1 = 2.5
+    z0, z1 = p.Z_FLOOR_TOP, p.Z_LID_UNDER
+    y0 = p.CORNER_R + p.FLEX_END
+    y1 = p.BOARD_L - p.CORNER_R - p.FLEX_END
+
+    section = make_face(Polyline(
+        (x_in, z0), (x1, z0), (x1, z1), (x_in + run, z1), (x_in, z1 - run),
+        close=True)).face()
+    cove = [v for v in section.vertices()
+            if abs(v.X - x_in) < 1e-6 and abs(v.Y - z0) < 1e-6]
+    section = section.fillet_2d(p.FLEX_COVE_R, cove)
+    # Drawn in XY as (x, z); Rot(90, 0, 0) stands it up in XZ, and extrude()
+    # then runs toward -Y, hence the start at y1. It overshoots both ends;
+    # the plan trim below sets them.
+    prism = Pos(0, y1 + 1, 0) * extrude(Rot(90, 0, 0) * section, y1 - y0 + 2)
+    # Plan trim: each end tapers from the full wall at y0/y1 to the thin wall
+    # over FLEX_TAPER, so the wall stiffens gradually instead of stepping.
+    # Its outboard side sits 0.5 past x_in -- OCCT returns nothing for an
+    # intersection whose faces coincide.
+    xo = x_in - 0.5
+    reach = p.FLEX_TAPER * (x_in - xo + run) / run  # taper line, extended to xo
+    plan = Pos(0, 0, z0 - 1) * extrude(make_face(Polyline(
+        (x1 + 1, y0), (-p.POCKET_CLEAR, y0), (xo, y0 + reach),
+        (xo, y1 - reach), (-p.POCKET_CLEAR, y1), (x1 + 1, y1),
+        close=True)), z1 - z0 + 2)
+    return prism & plan
 
 
 def standoffs() -> Part:
@@ -177,7 +224,12 @@ def connector_solid(ref: str) -> Part:
 
     part = Rot(0, 0, fp.rot) * part
     x, y = bg.to_case(fp.x, fp.y)
-    return Pos(x, y, 0) * part
+    part = Pos(x, y, 0) * part
+    if ref in ("J2", "J4"):
+        # Measured on rev A: the shells top out at MINIDIN_TOP, 0.29 above
+        # the STEP's 12.75. See params.MINIDIN_TOP.
+        part = Pos(0, 0, p.MINIDIN_TOP - part.bounding_box().max.Z) * part
+    return part
 
 
 def _sphere_directions(n: int) -> list[tuple[float, float, float]]:
@@ -207,7 +259,7 @@ thinner margin: 98 is the number the fix was verified against, kept for
 one-to-one parity with that verification."""
 
 
-def _grown(ref: str, amount: float) -> Part:
+def _grown(ref: str, amount: float, front_only: bool = False) -> Part:
     """A connector's solid, grown outward by `amount` -- what gets cut from
     the front wall for a `amount`-mm-clearance opening.
 
@@ -247,11 +299,18 @@ def _grown(ref: str, amount: float) -> Part:
     See task-5-report.md for the measured before/after clearances and the
     failed direct-`offset()`-on-the-STEP attempts from the prior round.
     """
-    key = (ref, round(amount, 6))
+    key = (ref, round(amount, 6), front_only)
     if key in _GROWN_CACHE:
         return _GROWN_CACHE[key]
 
     solid = connector_solid(ref)
+    if front_only:
+        # Only the part of the connector in front of the board edge (case
+        # Y <= 0), which is all a front-wall window has to pass. The whole
+        # body's hull reaches back to the through-hole pins, 3.75 below the
+        # board, and dragged the mini-DIN windows' bottoms down to -2.4 at
+        # the wall's inner face (2026-10-14 print: ~0.9 too tall there).
+        solid = solid & (Pos(0, -10, 0) * Box(200, 20, 100))
     verts, _ = solid.tessellate(0.05)
     surface_pts = [tuple(v) for v in verts]
     corners = [tuple(v) for v in ConvexPolyhedron(surface_pts).vertices()]
@@ -264,7 +323,7 @@ def _grown(ref: str, amount: float) -> Part:
     return grown
 
 
-_GROWN_CACHE: dict[tuple[str, float], Part] = {}
+_GROWN_CACHE: dict[tuple[str, float, bool], Part] = {}
 """_grown() is a pure function of (ref, amount), but a full call costs ~2s
 (dominated by tessellate()'s ~30000-point mesh), and the test suite calls it
 several times per ref at the same amount (setUpClass builds port_cutouts(),
@@ -340,10 +399,10 @@ def port_cutouts() -> Part:
     gets an outside flare wide enough for a plug's overmould (`_usbc_flare`).
     """
     out = None
-    for ref in ("J2", "J4", "J1"):
-        cut = _grown(ref, p.PORT_CLEAR)
+    for ref in ("J2", "J4"):
+        cut = _grown(ref, p.PORT_CLEAR, front_only=True)
         out = cut if out is None else out + cut
-    return out + _usbc_flare()
+    return out + _grown("J1", p.PORT_CLEAR) + _usbc_flare()
 
 
 def dip_slot() -> Part:
@@ -372,11 +431,16 @@ def dip_slot() -> Part:
     edge = p.DIP_KEY_HALF_WIDTH + p.DIP_SLOT_MARGIN
     y0, y1 = min(ys) - edge, max(ys) + edge
     depth = p.WALL + 1.0  # overshoot inward so the cut is clean
-    return Pos(
+    slot = Pos(
         -p.WALL / 2 + 0.5,  # spans x = -WALL .. +1.0
         (y0 + y1) / 2,
         (p.DIP_SLOT_Z0 + p.DIP_SLOT_Z1) / 2,
     ) * Box(depth, y1 - y0, p.DIP_SLOT_Z1 - p.DIP_SLOT_Z0)
+    if p.DIP_SLOT_R:
+        # The west wall flexes (params.WEST_FLEX_T): round the window's
+        # corners so they don't concentrate the bending strain.
+        slot = slot.fillet(p.DIP_SLOT_R, slot.edges().filter_by(Axis.X))
+    return slot
 
 
 def reset_pinhole() -> Part:
@@ -421,10 +485,10 @@ def lite_lid() -> Part:
     which the art panel shares -- see params.CORNER_R) and corner radius
     (CORNER_R), seating in the pocket that was cut POCKET_CLEAR oversize for
     it. Sized at the panel's own outline rather than at the pocket's, this
-    lands the same 0.20mm/side the pocket gives every other seated part --
+    lands the same POCKET_CLEAR per side the pocket gives every other seated part --
     at the pocket's own size, the plate would need zero clearance to drop
     in, which does not print (see test_it_fits_the_tray_with_no_interference).
-    Thickness on four legs that reproduce in plastic the CAVITY (12.74mm) the
+    Thickness on four legs that reproduce in plastic the CAVITY (13.04mm) the
     Pro's mini-DIN lattice spans, so the plate's own top lands flush with
     Z_WALL_TOP -- the same face the Pro's panel top registers against (see
     params.CAVITY for the nut-stack correction and its open flag). Each leg
@@ -448,7 +512,7 @@ def lite_lid() -> Part:
 
     # Build the legs on their own so the connector trim below cannot bite
     # into the plate: J2's grown envelope reaches 0.40 above the shell's
-    # 12.74, which is inside the plate's own 12.74..14.34 band.
+    # MINIDIN_TOP, which is inside the plate's own CAVITY..Z_WALL_TOP band.
     legs = None
     for x, y in bg.mount_holes().values():
         leg = Pos(x, y, p.CAVITY / 2) * Cylinder(p.LEG_D / 2, p.CAVITY)
@@ -464,7 +528,7 @@ def lite_lid() -> Part:
 
     # Anything tall near a mounting hole is in a leg's way. J2's shell reaches
     # within 2.220mm of H3's centre against a 3.00mm radius, for the leg's
-    # whole 12.74mm height. Trim to the connectors we hold real vendor
+    # whole CAVITY height. Trim to the connectors we hold real vendor
     # geometry for rather than guessing a diameter that clears -- this
     # self-corrects if a connector moves. Parts with no STEP (see the
     # ${KICAD10_3DMODEL_DIR} note in board_geom) are not covered; FOOT_RELIEF

@@ -12,8 +12,8 @@ class TestFixedByTheSpec(unittest.TestCase):
         self.assertEqual(p.STANDOFF, 3.00)
         self.assertEqual(p.PCB, 1.60)
         self.assertEqual(p.PANEL, 1.60)
-        self.assertEqual(p.CAVITY, 12.74)
-        self.assertEqual(p.POCKET_CLEAR, 0.20)
+        self.assertEqual(p.CAVITY, 13.04)
+        self.assertEqual(p.POCKET_CLEAR, 0.30)
 
     def test_cavity_is_the_minidin_lattice_height_not_nut_plus_lattice(self):
         # CORRECTED 2026-09-08: CAVITY is the mini-DIN/lattice height alone
@@ -23,8 +23,11 @@ class TestFixedByTheSpec(unittest.TestCase):
         # added separately as PANEL in Z_WALL_TOP = CAVITY + PANEL), which
         # is what put the wall 1.6mm proud of the panel. Pin the corrected
         # relationship so the old double-count can't silently come back.
-        self.assertAlmostEqual(p.CAVITY, 12.74, places=6)
-        self.assertNotAlmostEqual(p.CAVITY, 12.74 + 1.60, places=2)
+        # MEASURED 2026-10-14: the shells stand 13.04 on rev A, and the panel
+        # rests on them, so CAVITY is that measured height (MINIDIN_TOP).
+        self.assertAlmostEqual(p.CAVITY, p.MINIDIN_TOP, places=6)
+        self.assertAlmostEqual(p.CAVITY, 13.04, places=6)
+        self.assertNotAlmostEqual(p.CAVITY, 13.04 + 1.60, places=2)
 
 
 class TestDerived(unittest.TestCase):
@@ -41,20 +44,21 @@ class TestDerived(unittest.TestCase):
         # without this test noticing.
         self.assertAlmostEqual(
             p.EXT_H, p.Z_WALL_TOP - p.Z_FLOOR_BOTTOM, places=6)
-        self.assertAlmostEqual(p.EXT_H, 21.34, places=3)
+        self.assertAlmostEqual(p.EXT_H, 21.64, places=3)
 
     def test_z_landmarks(self):
         self.assertAlmostEqual(p.Z_BOARD_BOTTOM, -1.60, places=3)
         self.assertAlmostEqual(p.Z_FLOOR_TOP, -4.60, places=3)
         self.assertAlmostEqual(p.Z_FLOOR_BOTTOM, -7.00, places=3)
         self.assertAlmostEqual(p.Z_LID_UNDER, p.CAVITY, places=6)
-        self.assertAlmostEqual(p.Z_LID_UNDER, 12.74, places=3)
+        self.assertAlmostEqual(p.Z_LID_UNDER, 13.04, places=3)
         self.assertAlmostEqual(p.Z_WALL_TOP, p.CAVITY + p.PANEL, places=6)
-        self.assertAlmostEqual(p.Z_WALL_TOP, 14.34, places=3)
+        self.assertAlmostEqual(p.Z_WALL_TOP, 14.64, places=3)
 
     def test_effective_wall_after_pocket_clearance(self):
-        # 3.00 nominal, 0.20 eaten by pocket clearance -> 2.80 of plastic.
-        self.assertAlmostEqual(p.WALL - p.POCKET_CLEAR, 2.80, places=3)
+        # 3.00 nominal, 0.30 eaten by pocket clearance -> 2.70 of plastic
+        # at the panel seat (the west wall is thinner below it: WEST_FLEX_T).
+        self.assertAlmostEqual(p.WALL - p.POCKET_CLEAR, 2.70, places=3)
 
 
 class TestLiteScrewLength(unittest.TestCase):
