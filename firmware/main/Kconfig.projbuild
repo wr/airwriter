@@ -217,16 +217,6 @@ config AIRWRITER_TEST_BTN_PIN
         Board net TEST_BTN, closed = GND, internal pull-up. A press prints a
         self-test page through the same raster and serial path as a real job.
 
-config AIRWRITER_LT_SNIFF
-    bool "LocalTalk bring-up: log the frames TashTalk relays"
-    default n
-    depends on AIRWRITER_PIC_CLK_PIN >= 0 && AIRWRITER_PIC_DAT_PIN >= 0
-    help
-        Bench builds only (W-1050). Opens UART2 at 1 Mbaud on the TashTalk
-        link and logs every LocalTalk frame on the console. Transmits nothing,
-        and holds the PIC pins, so the web UI's TashTalk flash must not be
-        used while it is on.
-
 config AIRWRITER_PIC_MCLR_PIN
     int "LocalTalk PIC MCLR pin, -1 if absent"
     default 2 if IDF_TARGET_ESP32S3
@@ -253,5 +243,44 @@ config AIRWRITER_PIC_DAT_PIN
     help
         Board net LT_UART_RX, through R16 (100R) to U7 pin 7 (RA0/ICSPDAT).
         TashTalk's UART transmit line in normal running.
+
+config AIRWRITER_LT_UART_NUM
+    int "LocalTalk UART"
+    default 2 if IDF_TARGET_ESP32S3
+    default 0
+    help
+        The UART the LocalTalk node talks to TashTalk on, at 1 Mbaud. UART2 on
+        the S3 (UART1 is the printer's). The C6 has only two, and UART1 is
+        the printer's there too; its console is USB-Serial-JTAG, so UART0.
+
+config AIRWRITER_LT_CTS_PIN
+    int "LocalTalk CTS pin from TashTalk, -1 if absent"
+    default 6 if IDF_TARGET_ESP32S3
+    default -1
+    help
+        Board net LT_CTS, straight from U7 pin 5 (RA2), TashTalk's CTS out:
+        low when its 128-byte queue can take more. The node's UART uses it
+        for hardware flow control; a frame can be 605 bytes, so without it
+        (-1, a devkit) a long frame can overrun TashTalk.
+
+config AIRWRITER_LT_NBP_TYPE
+    string "LocalTalk NBP type"
+    default "ImageWriter"
+    help
+        What the node registers as, object:type@*. "ImageWriter" is what
+        Apple's ImageWriter II/LQ LocalTalk Option Card registers and what
+        the Chooser's AppleTalk ImageWriter driver looks up (W-1051).
+
+config AIRWRITER_LT_BENCH
+    bool "LocalTalk: run the node whatever DIP1-2 say (bench)"
+    default n
+    depends on AIRWRITER_PIC_CLK_PIN >= 0 && AIRWRITER_PIC_DAT_PIN >= 0
+    help
+        The LocalTalk node (W-1051) normally runs only in DIP mode 2. This
+        starts it at boot regardless, for a bench board whose DIPs are set
+        for something else, and reports the printer ready over PAP whatever
+        its line says, so a Mac sends a job to capture with no printer on J2.
+        Either way the node holds the PIC's pins, so the web UI's TashTalk
+        flash refuses while it runs.
 
 endmenu

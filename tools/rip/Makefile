@@ -45,6 +45,10 @@ build/test_dip_config: test/test_dip_config.c ../../firmware/components/dip_conf
 build/test_pic_prog: test/test_pic_prog.c test/pic_sim.c ../../firmware/components/pic_prog/pic_prog_core.c | build
 	$(CC) $(CFLAGS) -I../../firmware/components/pic_prog/include -Itest -o $@ $^
 
+LT := ../../firmware/components/localtalk
+build/test_localtalk: test/test_localtalk.c $(LT)/lt_proto.c $(LT)/lt_node.c $(LT)/lt_tashtalk.c | build
+	$(CC) $(CFLAGS) -I$(LT)/include -Itest -o $@ $^
+
 build/%: test/%.c $(SRCS) | build
 	$(CC) $(CFLAGS) $(INCS) -Itest -o $@ $^
 

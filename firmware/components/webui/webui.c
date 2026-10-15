@@ -80,10 +80,30 @@ static esp_err_t status_get(httpd_req_t *req)
 static esp_err_t lt_get(httpd_req_t *req)
 {
     if (!s_cfg.lt_json) return httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "no localtalk log");
-    static char json[3200];
+    static char json[4608];
     s_cfg.lt_json(s_cfg.ctx, json, sizeof json);
     httpd_resp_set_type(req, "application/json");
     return httpd_resp_sendstr(req, json);
+}
+
+static esp_err_t lt_echo_post(httpd_req_t *req)
+{
+    char body[8] = {0};
+    int got = req->content_len < sizeof body ? httpd_req_recv(req, body, req->content_len) : -1;
+    int node = got > 0 ? atoi(body) : 0;
+    if (!s_cfg.lt_echo || node < 1 || node > 254)
+        return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "body: a node number, 1-254");
+    s_cfg.lt_echo(s_cfg.ctx, node);
+    return httpd_resp_sendstr(req, "sent");
+}
+
+static esp_err_t lt_job_get(httpd_req_t *req)
+{
+    size_t len = 0;
+    const uint8_t *job = s_cfg.lt_job ? s_cfg.lt_job(s_cfg.ctx, &len) : NULL;
+    if (!job) return httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "no localtalk job");
+    httpd_resp_set_type(req, "application/octet-stream");
+    return httpd_resp_send(req, (const char *)job, (ssize_t)len);
 }
 
 static esp_err_t scan_get(httpd_req_t *req)
@@ -260,7 +280,7 @@ esp_err_t webui_start(const webui_cfg_t *cfg)
     httpd_config_t hc = HTTPD_DEFAULT_CONFIG();
     hc.server_port      = 80;
     hc.ctrl_port        = 32080;
-    hc.max_uri_handlers = 10;
+    hc.max_uri_handlers = 12;
     hc.stack_size       = 6144;
     hc.lru_purge_enable = true;
     hc.uri_match_fn     = httpd_uri_match_wildcard;
@@ -275,6 +295,8 @@ esp_err_t webui_start(const webui_cfg_t *cfg)
         { .uri = "/api/status",   .method = HTTP_GET,  .handler = status_get },
         { .uri = "/api/scan",     .method = HTTP_GET,  .handler = scan_get },
         { .uri = "/api/lt",       .method = HTTP_GET,  .handler = lt_get },
+        { .uri = "/api/lt/job",   .method = HTTP_GET,  .handler = lt_job_get },
+        { .uri = "/api/lt/echo",  .method = HTTP_POST, .handler = lt_echo_post },
         { .uri = "/api/wifi",     .method = HTTP_POST, .handler = wifi_post },
         { .uri = "/api/general",  .method = HTTP_POST, .handler = general_post },
         { .uri = "/update",       .method = HTTP_POST, .handler = update_post },

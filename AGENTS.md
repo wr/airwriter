@@ -51,23 +51,27 @@ What works on `main`:
   80: `/api/status`, Wi-Fi, settings, `/update` (OTA), `/api/localtalk/flash`.
 - Wi-Fi scans all channels and joins the strongest AP; printer-uuid is stable (MAC + epoch).
 - TashTalk 2.1.3 is in U7, flashed in place by the ESP32 over LVP.
-- LocalTalk receive works (W-1050): a Mac's Chooser broadcasts arrive through J4 and TashTalk
-  with good FCS. The bench build `CONFIG_AIRWRITER_LT_SNIFF` (default off) logs every frame and
-  serves the latest at `GET /api/lt`.
+- A LocalTalk node in DIP mode 2 (or always, with `CONFIG_AIRWRITER_LT_BENCH`), on UART2 to
+  TashTalk at 1 Mbaud with its CTS on IO6 (`components/localtalk`): acquires a server node ID,
+  answers NBP LkUp as `<queue>:ImageWriter@*`, and answers PAP as Apple's ImageWriter LocalTalk
+  Option Card does (status word, one connection, read to EOF). Job bytes are captured in PSRAM
+  for `GET /api/lt/job`, not printed. `GET /api/lt` shows its state and log; `POST /api/lt/echo`
+  with a node number pings that Mac (AEP).
 
 **Enclosure** (`enclosure/`, in use on board 1): tray (print in PETG; the board goes
 in by the sequence in `enclosure/README.md`, thumbing the thin west wall out past the DIP keys),
 Lite lid, and the Pro build's light-guide lattice. Cavity 13.04 (measured mini-DIN height);
 Pro screws M2.5 × 18. The shop's cased GLBs still show the pre-W-1036 tray.
 
-Not built: LocalTalk transmit and the AppleTalk stack (node ID, NBP, ATP/PAP; next step is
-appearing in the Chooser), EtherTalk, consumers of DIP mode and dither override, PWG raster.
+Not built: printing a LocalTalk job (PAP data to the printer), EtherTalk, consumers of the
+dither override, PWG raster.
 
 **Board 1:** ESP32-S3-WROOM-1-N8R2 (8 MB flash, 2 MB PSRAM). On Wi-Fi `the home network` at
 10.0.1.115, mDNS `imagewriter-2434.local`. Console on USB-C as `/dev/cu.usbmodem*` (the number
-follows the Mac's port). Its queue name
-is "ImageWriter" in NVS (a stale-twin workaround; the Kconfig default is "ImageWriter II"). U7's
-PIC calibration words: `16E0 1DA8`. Printer: an ImageWriter II on J2 via Apple's crossover cable.
+follows the Mac's port). Its queue name reads "ImageWriter II" in `/api/status`, which is also
+its name in the Chooser. U7's PIC calibration words: `16E0 1DA8`. Its LocalTalk node ID is 214
+(kept in NVS `lt`/`node`); the bench Mac is node 83. Printer: an ImageWriter II on J2 via
+Apple's crossover cable.
 
 Known issues, open:
 - The Mac's CUPS shows "printer is offline" a few seconds into an out-of-paper pause while the
@@ -88,6 +92,11 @@ Linear is the queue; these are the live items.
   in `docs/hardware-rev-a.md` (not in Linear yet).
 - `W-573 Dot-panel cover: passive art panel, LED grid, DIP config` (umbrella, in progress).
 - `W-567 M6 — Manners: paper-out, cancel, web UI, provisioning, OTA` (backlog).
+- `W-1051 LocalTalk node: show up in the Chooser as an ImageWriter`: in review on
+  `wells/w-1051-localtalk-node`, unmerged; board 1 runs it and the bench Mac (Mac OS 8.1, Apple's
+  AppleTalk ImageWriter 7.0.1) lists it in the Chooser.
+- `W-1053 LocalTalk: print PAP jobs from the Mac's AppleTalk ImageWriter driver`: next. A real
+  job is captured in `fixtures/pap-iw701-page.bin`; the PAP exchange is in `docs/traps.md`.
 - Not in Linear: scope HSKo during a long job (SPEC §3.9 timing).
 
 ## Toolchain
@@ -120,7 +129,7 @@ Linear is the queue; these are the live items.
 
 ## Verification
 - **Host tests:** `make -C tools/rip test` (raster path, serial writer, printer_state, led_grid,
-  dip_config, pic_prog) and `make -B -C tools/ipp test` (`-B`: `tools/ipp/build/` is committed).
+  dip_config, pic_prog, localtalk) and `make -B -C tools/ipp test` (`-B`: `tools/ipp/build/` is committed).
 - **Raster regression:** `make -C tools/rip regress`; `stream.bin` must match the fixtures byte
   for byte. No ESP32 needed.
 - **Firmware:** `idf.py build` clean for the S3; build the C6 tree too when touching shared code.

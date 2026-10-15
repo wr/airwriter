@@ -35,7 +35,8 @@
 #include "webui.h"
 #include "net_provision.h"
 #include "pic_prog.h"
-#include "lt_sniff.h"
+#include "localtalk.h"
+#include "lt_node.h"
 #include "esp_app_desc.h"
 
 static const char *TAG = "airwriter";
@@ -513,6 +514,8 @@ static void test_page(void)
 // has brought the servers up.
 static int s_test_on_boot;
 
+static void lt_start(const char *why);
+
 static void dip_on_change(const dip_config_t *cfg)
 {
     on_activity();
@@ -523,6 +526,9 @@ static void dip_on_change(const dip_config_t *cfg)
     if (cfg->dev_mode)
         ESP_LOGI(TAG, "dip: dev_mode is on, but the printer uuid stays Kconfig-driven this rev");
     if (cfg->test_on_boot) s_test_on_boot = 1;
+    if (cfg->mode == 2) lt_start("DIP mode 2");
+    else if (localtalk_running())
+        ESP_LOGI(TAG, "dip: LocalTalk stays on until the board restarts");
 }
 
 // ----------------------------------------------------------------- wifi
@@ -757,17 +763,74 @@ static void status_json(void *ctx, char *buf, size_t cap)
         pic_prog_available() ? "true" : "false");
 }
 
-#if CONFIG_AIRWRITER_LT_SNIFF
 static void lt_json(void *ctx, char *buf, size_t cap)
 {
     (void)ctx;
-    lt_sniff_json(buf, cap);
+    localtalk_json(buf, cap);
 }
+
+static const uint8_t *lt_job(void *ctx, size_t *len)
+{
+    (void)ctx;
+    return localtalk_job(len);
+}
+
+static void lt_echo(void *ctx, int node)
+{
+    (void)ctx;
+    localtalk_echo((uint8_t)node);
+}
+
+// The printer's state as the LocalTalk Option Card's status word, which the
+// Mac's driver reads with PAP SendStatus.
+static uint16_t lt_status(ps_state_t st)
+{
+#if CONFIG_AIRWRITER_LT_BENCH
+    // Bench: ready whatever the printer line says, so a Mac sends its job for
+    // GET /api/lt/job even with nothing on J2 (one crossover cable, on J4).
+    (void)st;
+    return 0;
 #endif
+    switch (st) {
+    case PS_ATTENTION: return LT_IW_PAPER_OUT | LT_IW_OFFLINE | LT_IW_FAULT;
+    case PS_OFFLINE:   return LT_IW_OFFLINE;
+    case PS_PRINTING:  return LT_IW_BUSY;
+    default:           return 0;
+    }
+}
+
+// W-1051: the LocalTalk node, in DIP mode 2 or on a bench build. It owns its
+// UART and the PIC's pins from here until reboot.
+static void lt_start(const char *why)
+{
+#if CONFIG_AIRWRITER_PIC_CLK_PIN >= 0 && CONFIG_AIRWRITER_PIC_DAT_PIN >= 0
+    if (localtalk_running()) return;
+    localtalk_cfg_t c = {
+        .uart_num = CONFIG_AIRWRITER_LT_UART_NUM,
+        .tx_pin   = CONFIG_AIRWRITER_PIC_CLK_PIN,
+        .rx_pin   = CONFIG_AIRWRITER_PIC_DAT_PIN,
+        .cts_pin  = CONFIG_AIRWRITER_LT_CTS_PIN,
+        .object   = s_set.queue,
+        .type     = CONFIG_AIRWRITER_LT_NBP_TYPE,
+        .status   = lt_status(printer_state_view().state),
+    };
+    esp_err_t err = localtalk_start(&c);
+    if (err != ESP_OK) ESP_LOGE(TAG, "LocalTalk (%s) did not start: %s", why, esp_err_to_name(err));
+    else               ESP_LOGI(TAG, "LocalTalk on (%s)", why);
+#else
+    (void)why;
+#endif
+}
 
 static void localtalk_flash(void *ctx, char *buf, size_t cap)
 {
     (void)ctx;
+    // The node holds the PIC's UART pins; flashing would fight it.
+    if (localtalk_running()) {
+        snprintf(buf, cap, "{\"ok\":false,\"error\":\"LocalTalk is running: set DIP1-2 to "
+                 "another mode and restart, then flash\"}");
+        return;
+    }
     pic_result_t r;
     pic_prog_flash_tashtalk(&r);
     pic_result_json(&r, buf, cap);
@@ -792,6 +855,7 @@ static void on_ps_change(const ps_view_t *v)
         ipp_server_set_stopped("other", "Printer offline");
     else
         ipp_server_set_stopped(NULL, NULL);
+    localtalk_set_status(lt_status(v->state));
 }
 
 void app_main(void)
@@ -854,7 +918,6 @@ void app_main(void)
 
     ESP_LOGI(TAG, "AirWriter starting after %s reset, %u bytes free",
              reset_name(esp_reset_reason()), (unsigned)esp_get_free_heap_size());
-    lt_sniff_start();   // no-op unless CONFIG_AIRWRITER_LT_SNIFF (bench builds)
 
     esp_err_t err = nvs_flash_init();
     if (err == ESP_ERR_NVS_NO_FREE_PAGES || err == ESP_ERR_NVS_NEW_VERSION_FOUND) {
@@ -869,6 +932,9 @@ void app_main(void)
     char suffix[8];
     snprintf(suffix, sizeof suffix, "%02x%02x", mac[4], mac[5]);
     settings_load(&s_set, suffix);
+#if CONFIG_AIRWRITER_LT_BENCH
+    lt_start("bench build");
+#endif
 
     raster_selftest();
 
@@ -921,7 +987,8 @@ void app_main(void)
             WIFI_EVENT, WIFI_EVENT_AP_STADISCONNECTED, ap_event, NULL, NULL));
         ESP_ERROR_CHECK(net_provision_start(ap));
         webui_cfg_t wcfg = { .status_json = status_json, .captive = 1,
-                              .localtalk_flash = localtalk_flash };
+                              .localtalk_flash = localtalk_flash,
+                              .lt_json = lt_json, .lt_job = lt_job, .lt_echo = lt_echo };
         ESP_ERROR_CHECK(webui_start(&wcfg));
 
         for (;;) vTaskDelay(pdMS_TO_TICKS(30000));
@@ -940,10 +1007,7 @@ void app_main(void)
 
     webui_cfg_t wcfg = { .status_json = status_json, .captive = 0,
                           .localtalk_flash = localtalk_flash,
-#if CONFIG_AIRWRITER_LT_SNIFF
-                          .lt_json = lt_json,
-#endif
-                        };
+                          .lt_json = lt_json, .lt_job = lt_job, .lt_echo = lt_echo };
     ESP_ERROR_CHECK(webui_start(&wcfg));
 
     if (s_test_on_boot) {

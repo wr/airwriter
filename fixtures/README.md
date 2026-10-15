@@ -10,6 +10,12 @@ and say why in the commit message.
 `make regress` alongside the synthetic one, and `test/test_ios_capture.c`
 decodes the raw capture header for header-field regressions.
 
+`pap-iw701-page.bin` — one short page as Apple's AppleTalk ImageWriter 7.0.1 (Mac OS 8.1, an
+SE/30) sent it over PAP to board 1's LocalTalk node, captured with `GET /api/lt/job` (W-1051).
+Two prints were byte-identical. It is native ImageWriter II commands, the serial driver's
+stream: no `ESC ?`, no PAP EOF (the job ends with CloseConn); `docs/traps.md` has the exchange.
+The input for `W-1053 LocalTalk: print PAP jobs from the Mac's AppleTalk ImageWriter driver`.
+
 ## What iOS sent
 
 Fill this in from the ippcap log after the first capture. It answers the
