@@ -241,6 +241,13 @@ Get-Job-Attributes, so they see a paused job anyway (3.9).
 
 ### 3.5 Printer attributes worth getting right
 
+**requested-attributes.** Get-Printer-Attributes returns what was asked for: the groups `all`,
+`printer-description` and `job-template`, explicit names, or `none` (RFC 8011 4.2.5.1), and
+`media-col-database` only when named. macOS marks a printer that ignores this with
+`cups-ipp-conformance-failure-report`. Check with `tools/ipp/build/gpa_server` and CUPS's
+`get-printer-attributes-suite.test`; macOS's copy of that suite has a broken fifth test (it
+requests `all` but expects only `media-col-database`), which no printer can pass.
+
 **Margins.** The tractor feed means this printer physically cannot print to the edges.
 Declare honest values or iOS will lay out edge-to-edge content and silently clip it.
 Start with 6.35mm (0.25in) left and right, 12.7mm top and bottom, in hundredths of a

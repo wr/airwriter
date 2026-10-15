@@ -38,11 +38,27 @@ typedef struct {
     uint32_t    time_at_creation;
 } ipp_job_t;
 
-// Writes a printer-attributes group. `requested` is the client's
-// requested-attributes list, honoured only to the extent of the all/none
-// distinction: iOS asks for "all" in practice, and filtering attribute by
-// attribute costs more code than sending the set.
-void ipp_write_printer_attrs(ipp_enc_t *e, const ipp_printer_t *p);
+// A request's requested-attributes, left where the parser found it: `p`
+// points at the attribute's first value-tag byte inside the request buffer
+// (which must outlive this), `len` spans it and its additional values, `n`
+// counts the values. n == 0 means the client did not send the attribute.
+typedef struct {
+    const uint8_t *p;
+    size_t         len;
+    uint16_t       n;
+} ipp_names_t;
+
+// Whether `name` is one of the requested names.
+int ipp_names_has(const ipp_names_t *names, const char *name);
+
+// Writes a printer-attributes group holding what `requested` asks for
+// (RFC 8011 4.2.5.1): the groups 'all', 'printer-description' and
+// 'job-template', explicit names, or 'none'. NULL or an empty list means
+// 'all'. media-col-database is sent only when named: it is large, and
+// IPP Everywhere clients that want it ask. The group delimiter is written
+// only if at least one attribute is.
+void ipp_write_printer_attrs(ipp_enc_t *e, const ipp_printer_t *p,
+                             const ipp_names_t *requested);
 
 // Writes a job-attributes group, the subset iOS polls during a job.
 void ipp_write_job_attrs(ipp_enc_t *e, const ipp_job_t *j);

@@ -35,6 +35,14 @@ alert; SELECT on finished the page. On the W-1037 baseline the same test showed 
   per-`printer-uuid` capability cache, and stale mDNS TXT twins (ESP mdns seems not to set
   cache-flush on TXT, so an old UUID lingers for the TTL). Details:
   side-session notes `w1040-open-iphone-stall.md`. The iPhone SELECT-off test is untested.
+- **Get-Printer-Attributes honours requested-attributes** (groups, names, `none`;
+  `media-col-database` only when named), which cleared macOS's
+  `cups-ipp-conformance-failure-report`. `tools/ipp/build/gpa_server` serves the real encoder
+  on localhost for ipptool's suites (7/7 with the fifth test's request corrected; macOS's copy
+  of that test is self-contradictory). UUID epoch is now 2.
+- **Trap: `tools/ipp/build/` holds committed binaries.** `git checkout -- tools/ipp/build`
+  leaves them newer than the sources, and `make test` then runs the stale ones without a
+  rebuild. Use `make -B -C tools/ipp test`.
 - **Cosmetic follow-up:** with SELECT off the Mac showed "out of paper" for a few seconds,
   then "printer is offline", while the board held `stopped` + `media-empty-error` for the
   whole 67 s and answered every Get-Job-Attributes. Best guess: CUPS's ipp backend, whose
