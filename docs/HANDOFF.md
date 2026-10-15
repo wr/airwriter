@@ -48,6 +48,11 @@ was **byte-identical to `checker.expected.bin`** (2672 bytes, crc32 `8ee84844`).
   screws are M2.5 × 18. The fitting sequence is in `enclosure/README.md`, "Fitting the
   board"; the sweep and FEA are in `docs/enclosure-build-log/flex-wall-report.md`. The
   shop's cased GLBs still show the old tray.
+- **W-1038 (on `wells/w-1038-light-guide-lattice`, stacked on W-1036, unprinted):** the Pro
+  build's light-guide lattice is now parametric source (`enclosure/lattice.py`), replacing the
+  lost hand-drawn STL: 13.04 mm egg-crate grid, posts with standoff pockets, rails to the
+  front posts, and a tube for the power LED. `./build.sh` now needs kicad-cli (part
+  clearances come from its STEP export).
 - **Next:** print a full page from an iPhone, scope HSKo during a long job (SPEC §3.9 stall
   timing), then the LocalTalk path (U7 still empty; tack 10 k across U6 3–5 first).
 

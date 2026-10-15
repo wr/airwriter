@@ -1,12 +1,14 @@
 # Enclosure (enclosure/out/*.stl)
 
-Two printed parts. The **tray** is shared by both builds. The **Lite lid**
-replaces the dot-grid art panel on boards built without it.
+Three printed parts. The **tray** is shared by both builds. The **Lite lid**
+replaces the dot-grid art panel on boards built without it. The **lattice**
+is the Pro build's light guide, between the board and the panel.
 
     ./build.sh          # runs the tests, then writes out/*.{step,stl}
 
-`out/airwriter-tray.stl` and `out/airwriter-lite-lid.stl` are committed, so the
-case can be printed without a build123d install; re-run `./build.sh` and commit
+`out/airwriter-tray.stl`, `out/airwriter-lite-lid.stl` and
+`out/airwriter-lattice.stl` are committed, so the case can be printed without a
+build123d install; re-run `./build.sh` and commit
 them again after any change here or to the board. The STEPs are not (6 MB, and
 the same command rebuilds them).
 
@@ -68,6 +70,34 @@ the seat. From the same Z = -5.60 head seat, an 18 mm screw ends at Z 12.40,
 
 Press the four inserts into the **bottom** of the lid's legs before assembly.
 Rubber feet go on the floor's underside, over the screw counterbores.
+
+## Light-guide lattice (Pro)
+
+`out/airwriter-lattice.stl` sits on the board, under the art panel, and keeps
+each lit dot's light in its own cell. It is 13.04 mm tall (the mini-DIN
+shells' measured height; the panel rests on both). Spec:
+`docs/superpowers/specs/2026-10-14-light-guide-lattice-design.md`.
+
+- A 7 x 8 grid of open cells on the dot pitch, 0.80 mm walls.
+- Posts at H1–H4. The Pro screws pass up through them into the panel's
+  standoffs, which sit in pockets in the post tops; the panel bears on the
+  lattice, not the standoffs.
+- Side rails forward to the front posts: the west one over S1, the east one
+  over U1's shield (clear of its antenna).
+- A walled tube from the power LED D3 up to the panel's FR4 window.
+
+Every part on the board is cleared using KiCad's own STEP export
+(`components.py`), so `./build.sh` needs kicad-cli (path in AGENTS.md; set
+`KICAD_CLI` to override). The build prints any wall a clearance notch opened;
+all four today let a lit cell into a gold cell or the front region, which
+shows nothing.
+
+**Print** in matte black PLA or PETG, **panel face down** (the flattest face
+seals against the panel), no supports.
+
+**First print, check:** the panel seats flush on lattice and mini-DINs
+together; the posts drop over the screws; with the LEDs on, no dot lights its
+neighbours and the power window glows only from D3.
 
 ## Fitting the board
 

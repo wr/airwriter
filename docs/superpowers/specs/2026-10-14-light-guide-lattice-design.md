@@ -102,12 +102,16 @@ front edge, Z up from its top face). Dot centres: case x = panel x, case y =
 - **SW1's reset path.** A box from SW1's plate face (x 59.35) out through the perimeter at
   y = SW1, z 0.75–2.75, so the paperclip from the east-wall pinhole reaches the switch.
 - **Antenna keepout.** U1's keepout zone, read from its footprint (case x 56–62,
-  y 9.7–36.7) and grown by 0.25, is cut from the whole part. The grid's front-east corner
-  and the H4 post lose a sliver; the D3 tube sits south of it.
+  y 9.7–36.7) and grown by 0.25, is cut from the whole part in front of the grid. The H4
+  post loses a sliver; the D3 tube sits south of the zone. *Amended during build:* the zone
+  overlaps the grid by 1.85 mm, the module's antenna ends 1.7 mm short of the grid, and
+  cutting there opened lit cell r7c6, so the cut stops at the grid's front wall.
 - **J2 at the H3 post.** J2's body (the same grown hull the tray and Lite lid use) trims the
   post's front-east side, as it trims the Lite lid's leg there.
 - **SW3 and the test cell.** SW3 sits in cell r3c3 under the panel's Ø3.8 hole. The cell
-  stays open; its envelope only notches the walls if it has to. The plunger is guided by
+  stays open. *Amended during build:* envelopes are stepped (`components.py`: one box per
+  1 mm slice for parts over 2.5 mm), because one box from the board to the plunger tip cut
+  the test cell's side walls away along their full height. The plunger is guided by
   the switch and the panel hole, not the lattice.
 
 Light leaks through a notch are acceptable between two unlit cells, or into the front
