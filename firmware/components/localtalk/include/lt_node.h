@@ -16,7 +16,9 @@
 //     it: answers SendStatus with the card's two-byte status word, accepts
 //     one connection at a time (OpenConn), reads the job with SendData, keeps
 //     the connection tickled, and answers CloseConn. The job's bytes -- raw
-//     ImageWriter commands -- go to ops.pap_data.
+//     ImageWriter commands -- go to ops.job_data, and the next SendData waits
+//     until ops.job_room has a whole read's worth of space: that is the
+//     back-pressure from a slow or paused printer to the Mac.
 // Also: AEP echo (socket 4), and the network number from RTMP when a router
 // speaks.
 #pragma once
@@ -27,6 +29,7 @@
 #define LT_SOCK_SLS   0x81      // PAP server listening socket, registered with NBP
 #define LT_SOCK_CONN  0x82      // the one connection's ATP responding socket
 #define LT_FLOW       8         // our flow quantum: 512-byte packets per SendData
+#define LT_READ_MAX   (LT_FLOW * PAP_QUANTUM)   // the most one SendData can bring
 
 // LLAP node acquisition. Appendix B has servers send 120 back-to-back ENQs,
 // 200 us apart, and TailTalk sends 8; tashrouter spaces its 8 by 250 ms. A
@@ -75,9 +78,16 @@ typedef struct {
     void (*claim)(void *ctx, uint8_t node);
     // A line for the log and the web view.
     void (*log)(void *ctx, const char *line);
-    // Job bytes from the open PAP connection, in order; eof on the last call.
-    // May be NULL.
-    void (*pap_data)(void *ctx, const uint8_t *d, size_t n, int eof);
+    // The printer, for a PAP job; each may be NULL (accept and discard).
+    // job_begin takes the printer for a new connection: 0, or nonzero for
+    // busy (another job holds it), which OpenConnReply reports. job_data gets
+    // the job's bytes in order, never more than job_room last said. job_end
+    // ends the job once: normal is 1 when the Mac ended it (CloseConn or EOF),
+    // 0 when it was abandoned (timed out, superseded, or lt_node_pap_abort).
+    int    (*job_begin)(void *ctx);
+    void   (*job_data)(void *ctx, const uint8_t *d, size_t n);
+    size_t (*job_room)(void *ctx);
+    void   (*job_end)(void *ctx, int normal);
 } lt_ops_t;
 
 typedef struct {
@@ -117,6 +127,7 @@ typedef struct {
     uint16_t   seq, rd_tid;
     uint8_t    rd_want;        // response packets still wanted; 0 = no read out
     uint8_t    rd_eof, done;   // done: EOF delivered, nothing more to read
+    uint8_t    ended;          // job_end has been called for this connection
     uint64_t   rd_sent;
     uint16_t   rd_len[LT_FLOW];
     uint8_t    rd_buf[LT_FLOW][PAP_QUANTUM];
@@ -164,6 +175,9 @@ void lt_node_init(lt_node_t *n, const lt_cfg_t *cfg, const lt_ops_t *ops, uint64
 void lt_node_rx(lt_node_t *n, const uint8_t *f, size_t len, uint64_t now);
 // Timers: enquiries while acquiring, PAP retries, tickles and timeouts.
 void lt_node_tick(lt_node_t *n, uint64_t now);
+// The printer gave up on the job (a stall past the limit): tell the Mac with
+// CloseConn and end the job abandoned. Nothing without an open connection.
+void lt_node_pap_abort(lt_node_t *n, uint64_t now);
 // Send an AEP echo request to `node` (socket 4); its reply is logged. A bench
 // check that frames get out and back. Does nothing until the node is online.
 void lt_node_echo(lt_node_t *n, uint8_t node, uint64_t now);

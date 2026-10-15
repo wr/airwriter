@@ -399,6 +399,95 @@ static void doc_end(void *ctx, int ok)
     job_finished(&st, 0);
 }
 
+// ---------------------------------------------------------- LocalTalk jobs
+// W-1053: a PAP job is the Mac driver's own ImageWriter stream, so it goes to
+// the printer as it is -- no rip -- under the same job lock as an IPP job or a
+// test page. localtalk.c spools it and calls these from its print task (begin
+// from the LocalTalk task). Whether a job that ended was cut mid-command is
+// read off its bytes (iw_scan): a Mac that cancels just closes the connection,
+// wherever its stream is, and W-1041's resync then runs before the next job.
+
+static volatile int s_lt_job;      // a LocalTalk job holds s_job_lock
+static iw_scan_t    s_lt_scan;
+static size_t       s_lt_bytes;
+
+static int lt_print_begin(void *ctx)
+{
+    (void)ctx;
+    // Never waits: the LocalTalk task must keep answering the Mac, which is
+    // told "busy" and asks again.
+    if (xSemaphoreTake(s_job_lock, 0) != pdTRUE) return 1;
+    s_lt_job = 1;
+    strncpy(s_last_job, "LocalTalk job", sizeof s_last_job - 1);
+    s_stream_crc = 0;
+    s_printer_failed = 0;
+    s_job_cancelled = 0;
+    s_lt_bytes = 0;
+    iw_scan_init(&s_lt_scan);
+    serial_out_set_abort(0);
+    iw_link_job_start(&s_link);
+    s_printing = 1;
+    printer_state_post(PS_EV_JOB_START);
+    serial_out_loopback_reset();
+    printer_state_post(PS_EV_ACTIVITY);
+    ESP_LOGI(TAG, "LocalTalk job starts");
+    return 0;
+}
+
+static int lt_print_write(void *ctx, const uint8_t *d, size_t n)
+{
+    (void)ctx;
+    s_stream_crc = crc32_up(s_stream_crc, d, n);
+    iw_scan(&s_lt_scan, d, n);
+    s_lt_bytes += n;
+    if (s_printer_failed) return 1;
+    if (iw_link_need_resync(&s_link) && !AW_LOOPBACK) {
+        ESP_LOGW(TAG, "last job was cut short; resyncing the printer first");
+        esp_err_t err = ESP_OK;
+        iw_resync(resync_out, &err);
+        if (err != ESP_OK) goto fail;
+    }
+    if (serial_out_write(d, n) == ESP_OK) return 0;
+fail:
+    // Paused past STALL_ABORT: the Mac is told (CloseConn) and its queued
+    // tail must not print ahead of the next job.
+    s_printer_failed = 1;
+    serial_out_purge();
+    return 1;
+}
+
+static void lt_print_end(void *ctx, int normal)
+{
+    (void)ctx;
+    int clean = normal && !s_printer_failed && iw_scan_between(&s_lt_scan);
+    esp_err_t flushed = clean ? serial_out_flush(CONFIG_AIRWRITER_STALL_ABORT * 1000u) : ESP_FAIL;
+    if (flushed != ESP_OK) serial_out_purge();
+    iw_link_job_end(&s_link, flushed == ESP_OK);
+    s_last_bytes = s_lt_bytes;
+    s_last_pages = 0;
+    ESP_LOGI(TAG, "LocalTalk job %s: %u bytes, stream crc32 %08x",
+             flushed == ESP_OK ? "printed" : s_printer_failed ? "failed"
+             : normal ? "cut short" : "abandoned",
+             (unsigned)s_lt_bytes, (unsigned)s_stream_crc);
+    if (AW_LOOPBACK && flushed == ESP_OK) {
+        size_t got; uint32_t crc;
+        serial_out_loopback_wait(s_lt_bytes, 3000);
+        serial_out_loopback_stats(&got, &crc);
+        if (got == s_lt_bytes && crc == s_stream_crc)
+            ESP_LOGI(TAG, "uart loopback: %u bytes returned intact, crc32 %08x",
+                     (unsigned)got, (unsigned)crc);
+        else
+            ESP_LOGE(TAG, "uart loopback MISMATCH: sent %u/%08x, got %u/%08x",
+                     (unsigned)s_lt_bytes, (unsigned)s_stream_crc, (unsigned)got, (unsigned)crc);
+    }
+    // A Mac that cancels is a done job, as Cancel-Job is; a printer that gave
+    // up is a failed one.
+    printer_state_post(s_printer_failed ? PS_EV_JOB_FAILED : PS_EV_JOB_DONE);
+    s_printing = 0;
+    s_lt_job = 0;
+    xSemaphoreGive(s_job_lock);
+}
+
 // ------------------------------------------------------------- dip / test
 // DIP1-8 select mode/dev-mode/test-on-boot/dither-override/spare; a press of
 // the test button prints a self-test page. dev_mode and dither_ovr land in
@@ -785,16 +874,12 @@ static void lt_echo(void *ctx, int node)
 // Mac's driver reads with PAP SendStatus.
 static uint16_t lt_status(ps_state_t st)
 {
-#if CONFIG_AIRWRITER_LT_BENCH
-    // Bench: ready whatever the printer line says, so a Mac sends its job for
-    // GET /api/lt/job even with nothing on J2 (one crossover cable, on J4).
-    (void)st;
-    return 0;
-#endif
     switch (st) {
     case PS_ATTENTION: return LT_IW_PAPER_OUT | LT_IW_OFFLINE | LT_IW_FAULT;
     case PS_OFFLINE:   return LT_IW_OFFLINE;
-    case PS_PRINTING:  return LT_IW_BUSY;
+    // Busy is for someone else's job. A Mac told "busy" about its own sits on
+    // the connection and never sends (W-1051 bench).
+    case PS_PRINTING:  return s_lt_job ? 0 : LT_IW_BUSY;
     default:           return 0;
     }
 }
@@ -813,6 +898,7 @@ static void lt_start(const char *why)
         .object   = s_set.queue,
         .type     = CONFIG_AIRWRITER_LT_NBP_TYPE,
         .status   = lt_status(printer_state_view().state),
+        .printer  = { .begin = lt_print_begin, .write = lt_print_write, .end = lt_print_end },
     };
     esp_err_t err = localtalk_start(&c);
     if (err != ESP_OK) ESP_LOGE(TAG, "LocalTalk (%s) did not start: %s", why, esp_err_to_name(err));

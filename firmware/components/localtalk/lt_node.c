@@ -164,11 +164,23 @@ static void status_bytes(const lt_node_t *n, uint8_t out[3])
     out[2] = (uint8_t)(w >> 8);
 }
 
-static void pap_close(lt_node_t *n, const char *why)
+static void job_end(lt_node_t *n, int normal)
+{
+    if (n->pap.ended) return;
+    n->pap.ended = 1;
+    if (n->ops.job_end) n->ops.job_end(n->ops.ctx, normal);
+}
+
+static void pap_close(lt_node_t *n, const char *why, int normal)
 {
     say(n, "PAP %u closed (%s) after %lu bytes", n->pap.connid, why, (unsigned long)n->pap.bytes);
-    if (!n->pap.done && n->ops.pap_data) n->ops.pap_data(n->ops.ctx, NULL, 0, 1);
+    job_end(n, normal);
     n->pap.open = 0;
+}
+
+static size_t job_room(lt_node_t *n)
+{
+    return n->ops.job_room ? n->ops.job_room(n->ops.ctx) : (size_t)-1;
 }
 
 static void pap_send_read(lt_node_t *n, uint64_t now)
@@ -182,6 +194,9 @@ static void pap_send_read(lt_node_t *n, uint64_t now)
 static void pap_start_read(lt_node_t *n, uint64_t now)
 {
     lt_pap_t *p = &n->pap;
+    // Back-pressure: a read can bring LT_READ_MAX bytes, so it waits for that
+    // much room. A paused printer holds the Mac here, not in our buffers.
+    if (!p->open || p->done || p->rd_want || job_room(n) < LT_READ_MAX) return;
     p->rd_tid = next_tid(n);
     p->rd_want = (uint8_t)((1u << LT_FLOW) - 1);
     memset(p->rd_len, 0, sizeof p->rd_len);
@@ -236,12 +251,12 @@ static void pap_read_done(lt_node_t *n, uint64_t now)
     }
     for (int i = 0; i < LT_FLOW; i++) {
         if (!p->rd_len[i]) continue;
-        if (n->ops.pap_data) n->ops.pap_data(n->ops.ctx, p->rd_buf[i], p->rd_len[i], 0);
+        if (n->ops.job_data) n->ops.job_data(n->ops.ctx, p->rd_buf[i], p->rd_len[i]);
     }
     p->bytes += (uint32_t)got;
     p->rd_want = 0;
     if (p->rd_eof) {
-        if (n->ops.pap_data) n->ops.pap_data(n->ops.ctx, NULL, 0, 1);
+        job_end(n, 1);
         p->done = 1;
         say(n, "PAP %u EOF after %lu bytes", p->connid, (unsigned long)p->bytes);
         pap_answer_ws_read(n, now);
@@ -262,8 +277,15 @@ static void pap_open(lt_node_t *n, const ddp_t *d, const atp_t *a, const lt_rout
     int same_conn = p->open && p->connid == a->user[0] && same_route(&p->ws, &ws);
     if (p->open && !same_conn && ws.addr.node == p->ws.addr.node && ws.addr.net == p->ws.addr.net &&
         now - p->wrote >= LT_PAP_STALE_MS)
-        pap_close(n, "the Mac opened another");
+        pap_close(n, "the Mac opened another", 0);
     uint16_t result = (p->open && !same_conn) ? PAP_RESULT_BUSY : PAP_RESULT_OK;
+    // The printer may be someone else's: an IPP job, a test page, or the
+    // last LocalTalk job still draining.
+    int printer_busy = 0;
+    if (result == PAP_RESULT_OK && !same_conn && n->ops.job_begin && n->ops.job_begin(n->ops.ctx)) {
+        result = PAP_RESULT_BUSY;
+        printer_busy = 1;
+    }
 
     uint8_t data[4 + 3];
     data[0] = result == PAP_RESULT_OK ? LT_SOCK_CONN : 0;
@@ -275,9 +297,14 @@ static void pap_open(lt_node_t *n, const ddp_t *d, const atp_t *a, const lt_rout
     respond(n, from, LT_SOCK_SLS, a, user, data, sizeof data, now);
 
     if (result == PAP_RESULT_BUSY) {
-        if (n->st.busy++ == 0 || !(n->st.busy % 10))
-            say(n, "PAP OpenConn from %u while %u is open (%lu so far)", d->src.node, p->connid,
-                (unsigned long)n->st.busy);
+        if (n->st.busy++ == 0 || !(n->st.busy % 10)) {
+            if (printer_busy)
+                say(n, "PAP OpenConn from %u while the printer is busy (%lu so far)", d->src.node,
+                    (unsigned long)n->st.busy);
+            else
+                say(n, "PAP OpenConn from %u while %u is open (%lu so far)", d->src.node,
+                    p->connid, (unsigned long)n->st.busy);
+        }
         return;
     }
     if (same_conn) return;
@@ -371,7 +398,7 @@ static void on_atp(lt_node_t *n, const ddp_t *d, uint64_t now)
     case PAP_CLOSE_CONN: {
         uint8_t user[4] = { p->connid, PAP_CLOSE_CONN_REPLY, 0, 0 };
         respond(n, &from, LT_SOCK_CONN, &a, user, NULL, 0, now);
-        pap_close(n, "by the Mac");
+        pap_close(n, "by the Mac", 1);
         break;
     }
     default:
@@ -384,7 +411,7 @@ static void pap_tick(lt_node_t *n, uint64_t now)
     lt_pap_t *p = &n->pap;
     if (!p->open) return;
     if (now - p->heard >= LT_PAP_CONN_TIMEOUT_MS) {
-        pap_close(n, "timed out");
+        pap_close(n, "timed out", 0);
         return;
     }
     if (now - p->tickled >= LT_PAP_TICKLE_MS) {
@@ -393,6 +420,7 @@ static void pap_tick(lt_node_t *n, uint64_t now)
         p->tickled = now;
     }
     if (p->rd_want && now - p->rd_sent >= LT_PAP_SENDDATA_RETRY_MS) pap_send_read(n, now);
+    pap_start_read(n, now);                        // when room has come back
     pap_answer_ws_read(n, now);
 }
 
@@ -439,6 +467,16 @@ void lt_node_init(lt_node_t *n, const lt_cfg_t *cfg, const lt_ops_t *ops, uint64
     n->candidates = 1;
     n->enq_at = now;
     n->ops.claim(n->ops.ctx, 0);
+}
+
+void lt_node_pap_abort(lt_node_t *n, uint64_t now)
+{
+    (void)now;
+    lt_pap_t *p = &n->pap;
+    if (!p->open) return;
+    uint8_t user[4] = { p->connid, PAP_CLOSE_CONN, 0, 0 };
+    send_atp(n, &p->ws, LT_SOCK_CONN, ATP_TREQ, 0x01, next_tid(n), user, NULL, 0);
+    pap_close(n, "the printer gave up", 0);
 }
 
 void lt_node_echo(lt_node_t *n, uint8_t node, uint64_t now)

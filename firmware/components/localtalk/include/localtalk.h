@@ -4,14 +4,29 @@
 // node in lt_node.c, and what the web UI shows of it. Runs in DIP mode 2, or
 // always on a bench build (CONFIG_AIRWRITER_LT_BENCH).
 //
-// This ticket's scope is being seen: the Chooser lists the board, and a PAP
-// connection opens, reads to EOF and closes. The job's bytes are kept in
-// PSRAM for GET /api/lt/job -- what the Mac's driver sends -- and are not
-// printed yet.
+// A PAP job is the Mac driver's own ImageWriter stream (W-1053): spooled in
+// a 16 KB buffer and written to the printer through cfg->printer by a print
+// task, so a paused printer holds the Mac (no next SendData until the spool
+// has room) and never the LocalTalk task. The last job's bytes are also kept
+// in PSRAM for GET /api/lt/job.
 #pragma once
 #include <stddef.h>
 #include <stdint.h>
 #include "esp_err.h"
+
+// The printer, as main.c owns it. All run on the print task except begin.
+typedef struct {
+    void *ctx;
+    // Take the printer for a job without waiting (the LocalTalk task): 0, or
+    // nonzero when busy (an IPP job, a test page), which the Mac is told.
+    int  (*begin)(void *ctx);
+    // Write job bytes, blocking while the printer is paused. 0, or nonzero
+    // when the printer gave up (stalled past the limit): the job is aborted.
+    int  (*write)(void *ctx, const uint8_t *d, size_t n);
+    // The job is over and its bytes are written or dropped: normal is 1 when
+    // the Mac ended it (CloseConn, EOF), 0 when it was abandoned or aborted.
+    void (*end)(void *ctx, int normal);
+} localtalk_printer_t;
 
 typedef struct {
     int         uart_num;
@@ -21,6 +36,7 @@ typedef struct {
     const char *object;      // NBP object: the queue name
     const char *type;        // NBP type the Chooser looks up
     uint16_t    status;      // Option Card status word to start with (lt_node.h)
+    localtalk_printer_t printer;   // NULL begin: jobs are captured and dropped
 } localtalk_cfg_t;
 
 // Starts the node once; later calls do nothing.

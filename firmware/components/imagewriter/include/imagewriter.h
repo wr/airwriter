@@ -61,3 +61,22 @@ void iw_link_job_start(iw_link_t *l);
 int  iw_link_need_resync(iw_link_t *l);
 // clean: every byte of the job was queued and its last page ended normally.
 void iw_link_job_end(iw_link_t *l, int clean);
+
+// Where a stream someone else wrote stands between commands (W-1053). A
+// LocalTalk job is the Mac driver's own ImageWriter stream, passed through,
+// so whether it was cut mid-command has to be read off the bytes: a Mac that
+// cancels just closes the connection, wherever the stream is. Argument
+// lengths from Appendix A of the Technical Reference: ESC G/S nnnn and
+// ESC g nnn (x8) carry graphics, ESC V nnnn c and ESC R nnn c one character,
+// ESC H/F nnnn, ESC L/u nnn, ESC T nn, ESC Z/D two bytes, ESC a/s/l/K one,
+// ESC ( and ESC ) a tab list ending '.', ESC I custom characters ending
+// CTRL-D, and CTRL-_ one count byte.
+typedef struct {
+    uint8_t  state, cmd, digits;
+    uint32_t num, left;
+} iw_scan_t;
+
+void iw_scan_init(iw_scan_t *s);
+void iw_scan(iw_scan_t *s, const uint8_t *buf, size_t n);
+// 1 when the bytes so far end between commands (the printer is in text).
+int  iw_scan_between(const iw_scan_t *s);

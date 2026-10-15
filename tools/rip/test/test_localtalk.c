@@ -5,6 +5,7 @@
 #include "lt_proto.h"
 #include "lt_node.h"
 #include "lt_tashtalk.h"
+#include "serial_writer.h"
 
 // ------------------------------------------------------------- the fake
 
@@ -15,9 +16,12 @@ static int      nsent;
 static int      claimed = -1;
 static char     lastlog[160];
 static int      nlogs;
-static uint8_t  job[8192];
+static uint8_t  job[16384];
 static size_t   job_len;
-static int      job_eof;
+static int      job_eof;                  // job_end calls
+static int      job_normal = -1;          // the last job_end's verdict
+static int      job_begins, fake_busy;
+static size_t   fake_room = (size_t)-1;   // the printer's free space
 
 static void f_send(void *ctx, const uint8_t *f, size_t n)
 {
@@ -32,14 +36,20 @@ static void f_log(void *ctx, const char *line)
     strncpy(lastlog, line, sizeof lastlog - 1);
     nlogs++;
 }
-static void f_data(void *ctx, const uint8_t *d, size_t n, int eof)
+static int f_begin(void *ctx) { (void)ctx; job_begins++; return fake_busy; }
+static void f_data(void *ctx, const uint8_t *d, size_t n)
 {
     (void)ctx;
+    if (fake_room != (size_t)-1) {
+        CHECK(n <= fake_room);                            // never more than room said
+        fake_room -= n < fake_room ? n : fake_room;
+    }
     if (n && job_len + n <= sizeof job) { memcpy(job + job_len, d, n); job_len += n; }
-    if (eof) job_eof++;
 }
+static size_t f_room(void *ctx) { (void)ctx; return fake_room; }
+static void f_end(void *ctx, int normal) { (void)ctx; job_eof++; job_normal = normal; }
 
-static const lt_ops_t OPS = { NULL, f_send, f_claim, f_log, f_data };
+static const lt_ops_t OPS = { NULL, f_send, f_claim, f_log, f_begin, f_data, f_room, f_end };
 
 static void reset_fake(void) { nsent = 0; nlogs = 0; lastlog[0] = 0; }
 
@@ -486,6 +496,7 @@ static void test_pap(void)
     CHECK_EQ_MEM(job, d0, 512);
     CHECK_EQ_MEM(job + 512, d1, 100);
     CHECK_EQ_INT(job_eof, 1);
+    CHECK_EQ_INT(job_normal, 1);                          // EOF ends it normally
     CHECK_EQ_INT(n.pap.bytes, 612);
 
     // The Mac reads us back: an empty EOF.
@@ -544,6 +555,7 @@ static void test_pap_timers(void)
     lt_node_tick(&n, t + 59000 + LT_PAP_CONN_TIMEOUT_MS);
     CHECK(!n.pap.open);
     CHECK_EQ_INT(job_eof, 1);
+    CHECK_EQ_INT(job_normal, 0);                          // abandoned
     CHECK(strstr(lastlog, "timed out") != NULL);
 }
 
@@ -656,7 +668,178 @@ static void test_pap_superseded(void)
     CHECK(n.pap.open);
     CHECK_EQ_INT(n.pap.connid, 0x01);
     CHECK_EQ_INT(job_eof, 1);                             // the old job was ended
+    CHECK_EQ_INT(job_normal, 0);
     CHECK_EQ_INT(n.st.opens, 2);
+}
+
+// The printer's side: busy, back-pressure, and giving up.
+static void test_pap_printer(void)
+{
+    lt_node_t n;
+    uint64_t t = online(&n, 200);
+    uint8_t f[LLAP_MAX];
+    const uint8_t oc[] = { 0xF4, 1, 0, 0 };
+
+    // An IPP job holds the printer: busy, and no connection.
+    fake_busy = 1;
+    job_begins = 0;
+    size_t fl = mac_atp(f, 200, LT_SOCK_SLS, ATP_TREQ | ATP_XO, 0x01, 0x0300, 0x10, PAP_OPEN_CONN, 0, 0, oc, sizeof oc);
+    lt_node_rx(&n, f, fl, t);
+    CHECK_EQ_INT(job_begins, 1);
+    CHECK(!n.pap.open);
+    CHECK_EQ_INT(atp_of(0)[10], 0xFF);
+    CHECK_EQ_INT(atp_of(0)[11], 0xFF);
+    CHECK(strstr(lastlog, "while the printer is busy") != NULL);
+
+    // Free again, but with less room than a read can bring: open, no read.
+    fake_busy = 0;
+    fake_room = LT_READ_MAX - 1;
+    reset_fake();
+    fl = mac_atp(f, 200, LT_SOCK_SLS, ATP_TREQ | ATP_XO, 0x01, 0x0301, 0x11, PAP_OPEN_CONN, 0, 0, oc, sizeof oc);
+    lt_node_rx(&n, f, fl, t + 2000);
+    CHECK(n.pap.open);
+    CHECK_EQ_INT(job_begins, 2);
+    CHECK_EQ_INT(nsent, 1);                               // OpenConnReply only
+    lt_node_tick(&n, t + 2100);
+    CHECK_EQ_INT(nsent, 1);
+    fake_room = LT_READ_MAX;                              // the printer caught up
+    lt_node_tick(&n, t + 2200);
+    CHECK_EQ_INT(nsent, 2);
+    CHECK_EQ_INT(atp_of(1)[5], PAP_SEND_DATA);
+    CHECK_EQ_INT(atp_of(1)[7], 1);
+
+    // The printer gave up: CloseConn to the Mac, the job ends abandoned.
+    reset_fake();
+    job_eof = 0;
+    lt_node_pap_abort(&n, t + 3000);
+    CHECK(!n.pap.open);
+    CHECK_EQ_INT(job_eof, 1);
+    CHECK_EQ_INT(job_normal, 0);
+    CHECK_EQ_INT(nsent, 1);
+    CHECK_EQ_INT(sent[0][3 + 2], 0xF4);                   // the Mac's responding socket
+    CHECK_EQ_INT(atp_of(0)[0], ATP_TREQ);
+    CHECK_EQ_INT(atp_of(0)[4], 0x11);
+    CHECK_EQ_INT(atp_of(0)[5], PAP_CLOSE_CONN);
+    lt_node_pap_abort(&n, t + 3001);                      // nothing open: nothing sent
+    CHECK_EQ_INT(nsent, 1);
+    fake_room = (size_t)-1;
+}
+
+// The captured page, fed as the Mac sends it (one ~88-byte Data per read,
+// flow quantum 1, CloseConn at the end), through a spool and serial_writer
+// into a printer FIFO that takes 16 bytes at a time: what reaches the wire
+// must be the page, byte for byte, with reads held while the spool is full.
+static uint8_t  spool[6000];
+static size_t   sp_head, sp_used;
+static uint8_t  wire[16384];
+static size_t   wire_len;
+
+static int sp_begin(void *ctx) { (void)ctx; return 0; }
+static void sp_data(void *ctx, const uint8_t *d, size_t n)
+{
+    (void)ctx;
+    CHECK(n <= sizeof spool - sp_used);
+    for (size_t i = 0; i < n && sp_used < sizeof spool; i++, sp_used++)
+        spool[(sp_head + sp_used) % sizeof spool] = d[i];
+}
+static size_t sp_room(void *ctx) { (void)ctx; return sizeof spool - sp_used; }
+
+static int fifo_write(void *ctx, const uint8_t *buf, size_t n)
+{
+    (void)ctx;
+    size_t k = n < 16 ? n : 16;
+    if (wire_len + k <= sizeof wire) memcpy(wire + wire_len, buf, k);
+    wire_len += k;
+    return (int)k;
+}
+static void fifo_delay(void *ctx) { (void)ctx; }
+
+static void printer_drain(size_t most)
+{
+    serial_writer_ops_t w = { NULL, fifo_write, fifo_delay, NULL, 0 };
+    uint8_t buf[256];
+    while (most && sp_used) {
+        size_t k = most < sp_used ? most : sp_used;
+        if (k > sizeof buf) k = sizeof buf;
+        for (size_t i = 0; i < k; i++) buf[i] = spool[(sp_head + i) % sizeof spool];
+        sp_head = (sp_head + k) % sizeof spool;
+        sp_used -= k;
+        most -= k;
+        CHECK_EQ_INT(serial_writer_write(&w, buf, k), 0);
+    }
+}
+
+static void test_pap_fixture(void)
+{
+    static uint8_t page[16384];
+    FILE *fp = fopen("../../fixtures/pap-iw701-page.bin", "rb");
+    CHECK(fp != NULL);
+    size_t len = fp ? fread(page, 1, sizeof page, fp) : 0;
+    if (fp) fclose(fp);
+    CHECK_EQ_INT(len, 11968);
+
+    lt_ops_t ops = OPS;
+    ops.job_begin = sp_begin;
+    ops.job_data = sp_data;
+    ops.job_room = sp_room;
+    lt_node_t n;
+    lt_cfg_t cfg = { "ImageWriter II", "ImageWriter", 0x0000, 200, 1 };
+    lt_node_init(&n, &cfg, &ops, 0);
+    uint64_t t = 0;
+    for (int i = 0; i <= LT_ENQ_TRIES; i++, t += LT_ENQ_GAP_MS) lt_node_tick(&n, t);
+    sp_head = sp_used = wire_len = 0;
+    job_eof = 0;
+    job_normal = -1;
+
+    uint8_t f[LLAP_MAX];
+    const uint8_t oc[] = { 0xF4, 1, 0, 0 };
+    reset_fake();
+    size_t fl = mac_atp(f, 200, LT_SOCK_SLS, ATP_TREQ | ATP_XO, 0x01, 0x0400, 0xAD, PAP_OPEN_CONN, 0, 0, oc, sizeof oc);
+    lt_node_rx(&n, f, fl, t);
+
+    size_t off = 0;
+    int reads = 0, held = 0, pending = 0;
+    uint16_t tid = 0, last_seq = 0;
+    for (int step = 0; step < 200000 && (off < len || sp_used); step++) {
+        t += 10;
+        // Collect the node's newest SendData, if it sent one.
+        for (int i = 0; i < nsent && i < MAXSENT; i++) {
+            const uint8_t *a = atp_of(i);
+            if (sent[i][3 + 4] != DDP_ATP || (a[0] & ATP_FN_MASK) != ATP_TREQ || a[5] != PAP_SEND_DATA)
+                continue;
+            uint16_t seq = (uint16_t)(a[6] << 8 | a[7]);
+            if (pending && seq == last_seq) continue;     // a retry of the one we hold
+            CHECK_EQ_INT(seq, last_seq + 1);              // 1, 2, 3, ...
+            tid = (uint16_t)(a[2] << 8 | a[3]);
+            last_seq = seq;
+            pending = 1;
+        }
+        reset_fake();
+        if (pending && off < len) {
+            size_t k = len - off < 88 ? len - off : 88;
+            fl = mac_atp(f, 200, LT_SOCK_CONN, ATP_TRESP | ATP_EOM, 0, tid, 0xAD, PAP_DATA, 0, 0, page + off, k);
+            lt_node_rx(&n, f, fl, t);
+            off += k;
+            reads++;
+            pending = 0;
+        } else if (!pending && off < len) {
+            held++;                                       // back-pressure: no read out
+        }
+        printer_drain(step % 3 ? 0 : 30);                 // slower than the Mac
+        lt_node_tick(&n, t);
+    }
+    CHECK_EQ_INT(off, len);
+    // The last Data is in; the Mac closes, as 7.0.1 does, without EOF.
+    fl = mac_atp(f, 200, LT_SOCK_CONN, ATP_TREQ, 0x01, 0x0500, 0xAD, PAP_CLOSE_CONN, 0, 0, NULL, 0);
+    lt_node_rx(&n, f, fl, t + 10);
+    printer_drain(sizeof spool);
+    CHECK_EQ_INT(reads, 136);
+    CHECK(held > 0);
+    CHECK_EQ_INT(wire_len, len);
+    CHECK_EQ_MEM(wire, page, len);
+    CHECK_EQ_INT(job_eof, 1);
+    CHECK_EQ_INT(job_normal, 1);
+    CHECK(!n.pap.open);
 }
 
 int main(void)
@@ -672,5 +855,7 @@ int main(void)
     test_pap_timers();
     test_pap_mac_reads();
     test_pap_superseded();
+    test_pap_printer();
+    test_pap_fixture();
     TEST_END;
 }
