@@ -53,20 +53,21 @@ Display states, highest priority first:
 | 4 | **Needs attention** | a job is active and HSKo has been false for `STALL_ATTENTION` (30 s) | HSKo true (the job resumes), or `STALL_ABORT` (600 s) passes → job fails | stopped, `media-empty` |
 | 5 | **Job failed** | a job ends in failure (transfer cut, rip error, stall abort) | `FAILED_HOLD` (60 s) passes, or the next job starts | idle; the job is aborted |
 | 6 | **Printing** | a job starts | the job ends | processing |
-| 7 | **Printer offline** | no job, HSKo false for `OFFLINE_DEBOUNCE` (3 s) | HSKo true | stopped, `offline-report`¹ |
+| 7 | **Printer offline** | no job, HSKo false for `OFFLINE_DEBOUNCE` (3 s) | HSKo true | stopped, `other`¹ |
 | 8 | **Ready** | Wi-Fi up, HSKo true, nothing above applies | — | idle |
 
 **Asleep** is a modifier, not a state: after `SLEEP_AFTER` (300 s) with no activity while in
 *Ready* or *Printer offline*, the panel fades to a pilot light. States 1–6 never sleep.
 
 **Activity** (wakes the panel and resets the sleep timer): any display-state change, a job
-operation arriving (Print-Job, Validate-Job, Create-Job), a test-button press, a DIP change.
+operation arriving (Print-Job, Validate-Job; the server has no Create-Job), a test-button press,
+a DIP change.
 Get-Printer-Attributes does **not** count: Home Assistant's IPP integration polls it every
 30 s and would keep the panel awake forever. (This trades away "lights up when the print sheet
 opens"; Validate-Job still lights it the moment you tap Print.)
 
-¹ Verify `offline-report` against the PWG IPP registry at implementation; fall back to `other`
-if it is not registered. Check on an iPhone what the print sheet shows in this state.
+¹ Checked 2026-10-14: `offline-report` is a CUPS keyword, absent from the IANA IPP registry, so
+the registered `other` is used. Check on an iPhone what the print sheet shows in this state.
 
 ### Behaviour changes that come with it
 
@@ -94,14 +95,15 @@ Colours are drive targets before the global cap (`LG_BRIGHTNESS_CAP` 48/255 on F
 | Setup | FR4 only | blue `(0.10, 0.35, 1.0)`, slow pulse 10%→80%, 2.5 s period |
 | Setup, phone joined | FR4 only | the same blue, steady at 60% |
 | Joining Wi-Fi | FR4 only | the same blue, quick pulse 10%→80%, 0.8 s period |
-| Ready | FR4 only | green `(0.15, 1.0, 0.25)` steady at 35%; on entering from Joining, a swell to 100% over 0.5 s and back over 1.0 s |
+| Ready | FR4 only | green `(0.15, 1.0, 0.25)` steady at 35%; on entering Ready (after joining, or when a job finishes), a swell to 100% over 0.5 s and back over 1.0 s |
 | Printer offline | FR4 only | warm white `(1.0, 0.75, 0.45)`, slow breathe 12%→30%, 6 s period |
 | Printing | all; mask at 4× | white row sweeping top to bottom every 1.5 s, neighbours at 25%/6%, like paper feeding |
 | Needs attention | all; mask at 4× | amber `(1.0, 0.55, 0.0)` double-blink at 100%: 150 ms on, 150 off, 150 on, rest dark, every 2 s |
 | Job failed | all; mask at 4× | red `(1.0, 0.05, 0.02)`: three flashes (200 ms on, 200 off), then a pulse 20%→60% on a 2 s period until the hold ends |
-| Asleep | one FR4 dot | the FR4 dot right of the test button (row 3, col 4) breathes 3%→12% on a 6 s period in the underlying state's colour; fade into sleep over 10 s, wake in 300 ms |
+| Asleep | one FR4 dot | the FR4 dot right of the test button (row 3, col 4) breathes 3%→12% of the cap, driven linearly (gamma would round these levels to zero), on a 6 s period in the underlying state's colour; fade into sleep over 10 s, wake instantly |
 
-Mask dots render with **gamma 2.2** like the FR4 dots, so animation curves look the same on both.
+Levels in this table are perceptual: every pattern except the pilot light goes through **gamma 2.2**
+before the cap, on FR4 and mask dots alike, and the numbers get a final tune on the board.
 No per-hue colour correction for the mask: calibration was tried and dropped (the cast is
 hue-dependent and not worth a lookup table).
 
@@ -114,29 +116,31 @@ on average. Steady states drive FR4 dots only, so the steady draw falls well bel
 Units and their interfaces. Pure cores stay host-testable in `tools/rip`, as now.
 
 **`printer_state_core`** (rewritten, pure C)
-- Inputs are events: `WIFI_SETUP_AP`, `WIFI_AP_STATIONS(n)`, `WIFI_JOINING`, `WIFI_UP`,
-  `WIFI_DOWN`, `PRINTER_LINE(ready)`, `JOB_START`, `JOB_DONE`, `JOB_FAILED`, `ACTIVITY`,
-  `BOOT_ANIM_DONE`.
-- `ps_tick(now_ms)` drives every timer: offline debounce, stall attention, failed hold, sleep.
-  The core owns time-since-line-change, so `serial_out` no longer decides "blocked".
-- Output: `ps_view_t { state; setup_phone_joined; asleep; sleep_fade; since_ms }`. One
-  function, `ps_view(now)`, used by the LEDs, IPP and the web status alike.
-- `STALL_ABORT` is not the core's to enforce; it exposes `ps_stalled_for_ms()` and the
-  writer decides when to give up.
+- Inputs are events: `WIFI_SETUP_AP`, `WIFI_JOINING`, `WIFI_UP`, `WIFI_DOWN`, `LINE_READY`,
+  `LINE_NOT_READY`, `JOB_START`, `JOB_DONE`, `JOB_FAILED`, `ACTIVITY`, plus
+  `ps_set_ap_stations(n)`.
+- `ps_update(now_ms)` derives the view and runs every timer lazily: boot length, offline
+  debounce, stall attention, failed hold, sleep. A state change counts as activity. The core
+  owns time-since-line-change, so `serial_out` no longer decides "blocked".
+- Output: `ps_view_t { state; phone_joined; asleep; since_ms; asleep_ms }`, the one view the
+  LEDs, IPP and the web status all read.
+- Booting ends on the core's own timer (`boot_ms` = the Spin's 3.0 s); no event is needed.
+- `STALL_ABORT` is not the core's to enforce: the serial writer fails a write after that long
+  without FIFO progress.
 
 **`serial_out`**
-- Reports HSKo edges (`on_line(ready)`, debounced to 50 ms) instead of `on_state(BLOCKED)`.
-- `serial_writer` blocks while HSKo is false and fails only after `STALL_ABORT`
+- Reports HSKo edges (`on_line(ready)`, sampled every 100 ms) instead of `on_state(BLOCKED)`.
+- `serial_writer` rides out a stall and fails only after `STALL_ABORT` with no FIFO progress
   (new Kconfig `AIRWRITER_STALL_ABORT`, default 600). `AIRWRITER_STALL_TIMEOUT` (30) becomes
   the attention threshold and keeps its name.
 
-**`job_pipe`**: `PUSH_TIMEOUT` follows `STALL_ABORT` + margin.
+**`job_pipe`**: `PUSH_TIMEOUT` and the end-of-job wait both follow `STALL_ABORT` + margin.
 
 **`main`**
 - Wi-Fi: backoff reconnect after `WIFI_UP` has been seen; AP station events; posts the
   matching events. The boot-time 60 s join → setup-AP path is unchanged.
-- Starts the boot animation before Wi-Fi so the two overlap; posts `BOOT_ANIM_DONE`.
-- A 100 ms timer calls `ps_tick`.
+- The boot animation runs while Wi-Fi starts, so the two overlap.
+- A 100 ms task calls `ps_update`, logs state changes and maps them to IPP.
 - `test_page`, DIP changes and IPP job operations post `ACTIVITY`.
 
 **`ipp_server`**
@@ -160,8 +164,8 @@ Host (`tools/rip`, `make test`):
   overlapping states, activity resetting sleep, and a job surviving a stall and resuming.
 - `test_led_grid`: per state — the cap holds; FR4-only states leave mask dots dark; the Spin
   ends dark at 3.0 s; asleep lights exactly one dot.
-- `test_serial_writer`: a write blocks across a stall and succeeds when the line returns; fails
-  only past `STALL_ABORT`.
+- `test_serial_writer`: a write rides out a stall and succeeds when the line returns; fails only
+  past the stall limit.
 - `make regress`: both `stream.bin` regressions unchanged (the raster path is untouched).
 
 On board 1:
