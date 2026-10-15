@@ -44,9 +44,9 @@ static int  h_dat_in(void *ctx)      { return gpio_get_level(PIN_DAT); }
 // on any of these gaps, so oversleeping by a tick costs only time.
 static void h_delay(void *ctx, uint32_t us)
 {
-    if (us < 1000) { esp_rom_delay_us(us); return; }
-    TickType_t t = pdMS_TO_TICKS((us + 999) / 1000);
-    vTaskDelay(t + 1);
+    uint32_t t = pic_sleep_ticks(us, portTICK_PERIOD_MS * 1000u);
+    if (t) vTaskDelay(t);
+    else   esp_rom_delay_us(us);
 }
 
 // Starts from gpio_reset_pin so a pad some peripheral had routed through the

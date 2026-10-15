@@ -21,6 +21,12 @@ was **byte-identical to `checker.expected.bin`** (2672 bytes, crc32 `8ee84844`).
   was a mutex taken on the button task and given from `test_page_task`. Now a binary
   semaphore. The iPhone full page (a photo, 6.4 MB URF → 114,848 printer bytes, ~2 min)
   printed fine; IPP jobs were never affected.
+- **W-1035 (fixed): TashTalk is in U7.** The first in-socket LVP flash failed `verify
+  failed at 0x8007: wanted 0x09C4, read 0x3FFF`. Program memory had verified; the
+  CONFIG1 write was cut short because `pdMS_TO_TICKS()` makes 3 and 6 ms zero ticks at
+  100 Hz, so TPINT was "until the next tick", 0–10 ms. Waits now round up to whole ticks
+  plus one (`pic_sleep_ticks()`, host-tested on a tick-accurate HAL). Re-flash: ok in
+  2.9 s, config `09C4 3FFF`, LVP still on. This part's calibration words: `16E0 1DA8`.
 - **Flashing leaves the printer not-ready; power-cycling does not.** After `idf.py flash` the
   ImageWriter dropped HSKo until SELECT was toggled — the S3 sits ~10 s in download mode with
   IO17 (UART1 TX → U2 DI) floating. Unplugging and replugging the board left HSKo ready
