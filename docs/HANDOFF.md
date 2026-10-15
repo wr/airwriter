@@ -783,7 +783,7 @@ run `route.py`, then run `stitch.py`.
 
 ## The unverified assumptions, current status
 
-Spec §4 lists five. Three are now resolved, all from primary sources.
+Spec §4 lists five. All five are now resolved or confirmed on rev A; HSKo was never scoped.
 
 1. **Bit order within a graphics byte** — **resolved.** Bit 0 is the top pin, bit 7 the bottom,
    read off the ImageWriter II Technical Reference p. 107 and independently confirmed against
@@ -793,12 +793,15 @@ Spec §4 lists five. Three are now resolved, all from primary sources.
    Table 8-2, p. 106, cross-checked against `gdevadmp.c` and re-verified against the scan by a
    reviewer. The full table is in `SPEC.md` §4.
 3. **Differential polarity** — **resolved by research**, and it found the spec error described above.
-   Not yet confirmed against hardware.
-4. **HSKo electrical levels** — open. Scope it before trusting the MAX3232 receiver assumption. If the
-   swing turns out modest, a divider and clamp into a GPIO could delete U3 entirely.
+   Confirmed on rev A (2026-10-14): prints come out right through J2 and the Apple crossover cable.
+4. **HSKo electrical levels** — **confirmed in practice on rev A**, never scoped. IO8 reads LOW with
+   the printer ready (live over JTAG), and CTS flow control pauses and resumes correctly across
+   SELECT off/on (2026-10-15 bench). Still worth a scope trace before rev B; if the swing is
+   modest, a divider and clamp into a GPIO could delete U3 entirely.
 5. **URF page header field offsets** — **resolved.** Taken from `cups/raster-stream.c` in
    OpenPrinting/cups, not from memory, and implemented in `urf_decode.c` with the offsets cited
-   in comments. Still unconfirmed against a real iOS capture — see below.
+   in comments. Confirmed against real iOS captures (`fixtures/ios-*.urf`) and iPhone prints on
+   rev A.
 
 ## Traps that cost real time
 
