@@ -22,12 +22,16 @@ typedef struct {
     int (*tx_write)(void *ctx, const uint8_t *buf, size_t n);
     // Sleep one poll period.
     void (*delay)(void *ctx);
+    // The job was cancelled: give up now rather than waiting out a paused
+    // printer (Cancel-Job on paper-out must free it at once). May be NULL.
+    int (*aborted)(void *ctx);
     // Consecutive delays with nothing accepted before the write gives up.
     // 0 = never.
     unsigned stall_limit;
 } serial_writer_ops_t;
 
 // 0 with every byte queued, or -1 with bytes abandoned because the FIFO took
-// nothing for stall_limit delays in a row, or the driver failed. Paced: any
+// nothing for stall_limit delays in a row, the job was aborted, or the driver
+// failed. Paced: any
 // call that leaves a remainder is followed by one delay, never a hot retry.
 int serial_writer_write(const serial_writer_ops_t *ops, const uint8_t *buf, size_t n);

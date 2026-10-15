@@ -20,6 +20,7 @@ typedef struct {
     int     delays;
     int     writes;
     int     write_err;         // force tx_write to fail
+    int     abort_after;       // delay periods until the job is cancelled, 0 never
 } fake_t;
 
 static int f_tx_write(void *ctx, const uint8_t *buf, size_t n)
@@ -46,12 +47,19 @@ static void f_delay(void *ctx)
     if (f->free > FAKE_FIFO) f->free = FAKE_FIFO;
 }
 
+static int f_aborted(void *ctx)
+{
+    fake_t *f = (fake_t *)ctx;
+    return f->abort_after > 0 && f->delays >= f->abort_after;
+}
+
 static serial_writer_ops_t ops_for(fake_t *f, unsigned stall_limit)
 {
     serial_writer_ops_t ops = {
         .ctx         = f,
         .tx_write    = f_tx_write,
         .delay       = f_delay,
+        .aborted     = f_aborted,
         .stall_limit = stall_limit,
     };
     return ops;
@@ -157,6 +165,25 @@ int main(void)
         serial_writer_ops_t ops = ops_for(&f, 0);
         const uint8_t msg[] = "hello";
         CHECK_EQ_INT(serial_writer_write(&ops, msg, 5), 0);
+    }
+
+    // Cancel-Job on a paused printer: the write gives up as soon as the job
+    // is aborted, not after the 10-minute stall limit.
+    {
+        fake_t f = { .free = 0, .drain_after = 1 << 30, .abort_after = 5 };
+        serial_writer_ops_t ops = ops_for(&f, 6000);
+        const uint8_t msg[] = "hello";
+        CHECK_EQ_INT(serial_writer_write(&ops, msg, 5), -1);
+        CHECK_EQ_INT(f.delays, 5);
+    }
+
+    // A cancel mid-stream stops a draining write too.
+    {
+        fake_t f = { .free = FAKE_FIFO, .drain_per_delay = 2, .abort_after = 3 };
+        serial_writer_ops_t ops = ops_for(&f, 6000);
+        uint8_t msg[64] = {0};
+        CHECK_EQ_INT(serial_writer_write(&ops, msg, sizeof msg), -1);
+        CHECK(f.taken < sizeof msg);
     }
 
     // Driver failure is fatal, not retried.

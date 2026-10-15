@@ -23,6 +23,7 @@ static const char *TAG = "serial";
 
 static serial_out_cfg_t s_cfg;
 static unsigned s_stall_limit;   // poll periods; see serial_writer.h
+static volatile int s_abort;     // see serial_out_set_abort()
 static volatile size_t   s_lb_bytes;
 static volatile uint32_t s_lb_crc;
 
@@ -156,6 +157,12 @@ static int ops_tx_write(void *ctx, const uint8_t *buf, size_t n)
     return uart_tx_chars(s_cfg.uart_num, (const char *)buf, n);
 }
 
+static int ops_aborted(void *ctx)
+{
+    (void)ctx;
+    return s_abort;
+}
+
 static void ops_delay(void *ctx)
 {
     (void)ctx;
@@ -167,9 +174,15 @@ esp_err_t serial_out_write(const uint8_t *buf, size_t n)
     const serial_writer_ops_t ops = {
         .tx_write    = ops_tx_write,
         .delay       = ops_delay,
+        .aborted     = ops_aborted,
         .stall_limit = s_stall_limit,
     };
     return serial_writer_write(&ops, buf, n) == 0 ? ESP_OK : ESP_FAIL;
+}
+
+void serial_out_set_abort(int on)
+{
+    s_abort = on;
 }
 
 void serial_out_purge(void)

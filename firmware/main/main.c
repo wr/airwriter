@@ -173,6 +173,10 @@ static uint32_t s_stream_crc;
 // doc_end() reads it for the post-mortem.
 static int s_printer_failed;
 
+// Set by doc_cancel: the job ended because the person cancelled it, which the
+// panel shows as done, not as a red failure.
+static volatile int s_job_cancelled;
+
 // Set by doc_begin to record whether job_pipe_begin actually started the
 // pipeline task. doc_end reads it to decide whether job_pipe_end is safe to
 // call.
@@ -218,6 +222,8 @@ static esp_err_t doc_begin(void *ctx, const char *format, const char *name)
     s_last_job[sizeof s_last_job - 1] = '\0';
     s_stream_crc = 0;
     s_printer_failed = 0;
+    s_job_cancelled = 0;
+    serial_out_set_abort(0);
     s_printing = 1;
     printer_state_post(PS_EV_JOB_START);
     serial_out_loopback_reset();
@@ -235,6 +241,8 @@ static esp_err_t doc_data(void *ctx, const uint8_t *buf, size_t n)
 static void doc_cancel(void *ctx)
 {
     (void)ctx;
+    s_job_cancelled = 1;
+    serial_out_set_abort(1);    // a paused printer must not hold the job hostage
     job_pipe_abort();
 }
 
@@ -252,16 +260,20 @@ static void doc_end(void *ctx, int ok)
     s_printing = 0;
 
     if (st.rc != 0 || !ok || s_printer_failed) {
-        ESP_LOGE(TAG, "job failed: %u bytes in, rc %d%s",
-                 (unsigned)st.doc_bytes, st.rc,
-                 s_printer_failed ? ", printer timeout"
-                                  : ok ? "" : ", transfer truncated");
-        printer_state_post(PS_EV_JOB_FAILED);
+        if (s_job_cancelled) {
+            ESP_LOGI(TAG, "job canceled after %u bytes in", (unsigned)st.doc_bytes);
+            printer_state_post(PS_EV_JOB_DONE);
+        } else {
+            ESP_LOGE(TAG, "job failed: %u bytes in, rc %d%s",
+                     (unsigned)st.doc_bytes, st.rc,
+                     s_printer_failed ? ", printer timeout"
+                                      : ok ? "" : ", transfer truncated");
+            printer_state_post(PS_EV_JOB_FAILED);
+        }
         xSemaphoreGive(s_job_lock);
         return;
     }
 
-    printer_state_post(PS_EV_JOB_DONE);
     s_last_pages = (size_t)st.pages;
     s_last_bytes = st.printer_bytes;
     ESP_LOGI(TAG, "ripped %d page%s, %ux%u dots, %u bytes in -> %u printer bytes in %ums",
@@ -270,7 +282,10 @@ static void doc_end(void *ctx, int ok)
     ESP_LOGI(TAG, "printer stream crc32 %08x", (unsigned)s_stream_crc);
 
     // Let the last byte clear the shift register before calling it printed.
-    serial_out_flush(120000);
+    // Paper running out on the last sheet is still this job's stall, so the
+    // flush waits as long as a paused job does, and Done comes after it.
+    serial_out_flush(CONFIG_AIRWRITER_STALL_ABORT * 1000u);
+    printer_state_post(PS_EV_JOB_DONE);
 
     if (AW_LOOPBACK) {
         size_t got; uint32_t crc;
@@ -312,6 +327,8 @@ static void test_page_task(void *arg)
     (void)arg;
     s_stream_crc = 0;
     s_printer_failed = 0;
+    s_job_cancelled = 0;
+    serial_out_set_abort(0);
     printer_state_post(PS_EV_JOB_START);
 
     ht_algo_t algo;
@@ -350,7 +367,7 @@ static void test_page_task(void *arg)
         ht_free(&h);
     }
 
-    serial_out_flush(120000);
+    serial_out_flush(CONFIG_AIRWRITER_STALL_ABORT * 1000u);
     printer_state_post(s_printer_failed ? PS_EV_JOB_FAILED : PS_EV_JOB_DONE);
     s_printing = 0;
     xSemaphoreGive(s_job_lock);

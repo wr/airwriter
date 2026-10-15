@@ -10,7 +10,7 @@
 static const ps_timing_t TM = PS_TIMING_DEFAULT;
 
 // Booted at t0, joining, a ready printer, Wi-Fi up a second later.
-static void up_and_ready(ps_t *ps, uint32_t t0)
+static void up_and_ready(ps_t *ps, uint64_t t0)
 {
     ps_init(ps, &TM, t0);
     ps_post(ps, PS_EV_WIFI_JOINING, t0);
@@ -18,7 +18,7 @@ static void up_and_ready(ps_t *ps, uint32_t t0)
     ps_post(ps, PS_EV_WIFI_UP, t0 + 1000);
 }
 
-static ps_state_t st(ps_t *ps, uint32_t t) { return ps_update(ps, t).state; }
+static ps_state_t st(ps_t *ps, uint64_t t) { return ps_update(ps, t).state; }
 
 int main(void)
 {
@@ -141,14 +141,24 @@ int main(void)
     ps_post(&ps, PS_EV_JOB_START, 640000);
     assert(!ps_update(&ps, 1040000).asleep);
 
-    // The 49-day wrap: timers measured across zero still work.
+    // Past 2^32 ms of uptime (49.7 days) stale stamps stay stale: the boot
+    // spin does not replay, an expired failure stays expired, and an old
+    // offline stays offline.
     {
-        uint32_t t0 = 0xFFFFFFFFu - 1000u;
-        up_and_ready(&ps, t0);
-        st(&ps, t0 + 4000u);
-        ps_post(&ps, PS_EV_LINE_NOT_READY, t0 + 5000u);
-        assert(st(&ps, t0 + 7999u) == PS_READY);
-        assert(st(&ps, t0 + 8000u) == PS_OFFLINE);
+        const uint64_t W = 1ull << 32;
+        up_and_ready(&ps, 0);
+        st(&ps, 4000);
+        assert(st(&ps, W + 1000) == PS_READY);
+        up_and_ready(&ps, 0);
+        ps_post(&ps, PS_EV_JOB_START, 5000);
+        ps_post(&ps, PS_EV_JOB_FAILED, 6000);
+        assert(st(&ps, 66000) == PS_READY);
+        assert(st(&ps, W + 7000) == PS_READY);
+        up_and_ready(&ps, 0);
+        ps_post(&ps, PS_EV_LINE_NOT_READY, 10000);
+        assert(st(&ps, 13000) == PS_OFFLINE);
+        assert(st(&ps, W + 11000) == PS_OFFLINE);
+        assert(ps_update(&ps, W + 11000).since_ms > 0);
     }
 
     assert(strcmp(ps_name(PS_READY), "ready") == 0);

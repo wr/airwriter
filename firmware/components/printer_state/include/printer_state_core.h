@@ -2,8 +2,9 @@
 // Pure reducer: events and the clock in, one display state out. No FreeRTOS,
 // no I/O -- printer_state.c wraps it with a mutex and a poll task, and the host
 // tests drive it with a fake clock. Every timer is evaluated lazily in
-// ps_update() against the caller's `now`. Times are uint32 milliseconds and
-// only ever compared by subtraction, so the 49-day wrap is harmless.
+// ps_update() against the caller's `now`. The clock is uint64 milliseconds
+// (esp_timer never wraps in practice): with uint32, every stamp older than
+// 49.7 days of uptime would alias back into its window.
 // docs/superpowers/specs/2026-10-14-status-language-design.md
 #pragma once
 #include <stdint.h>
@@ -38,7 +39,7 @@ typedef struct {
 
 typedef struct {
     ps_timing_t tm;
-    uint32_t    boot_at, line_since, failed_at, activity_at, state_since;
+    uint64_t    boot_at, line_since, failed_at, activity_at, state_since;
     uint8_t     setup, wifi_up, line_ready, job, failed, ap_stations, greeted;
     ps_state_t  last;
 } ps_t;
@@ -49,14 +50,14 @@ typedef struct {
     uint8_t    greeted;       // READY only: entered straight from JOINING or BOOTING,
                               // i.e. Wi-Fi just connected -- the panel's green moment
     uint8_t    asleep;        // READY or OFFLINE only, after sleep_after_ms idle
-    uint32_t   since_ms;      // time spent in `state` so far
-    uint32_t   asleep_ms;     // time since falling asleep, 0 when awake
+    uint32_t   since_ms;      // time spent in `state` so far (saturates)
+    uint32_t   asleep_ms;     // time since falling asleep, 0 when awake (saturates)
 } ps_view_t;
 
-void        ps_init(ps_t *ps, const ps_timing_t *tm, uint32_t now_ms);
-void        ps_post(ps_t *ps, ps_event_t ev, uint32_t now_ms);
+void        ps_init(ps_t *ps, const ps_timing_t *tm, uint64_t now_ms);
+void        ps_post(ps_t *ps, ps_event_t ev, uint64_t now_ms);
 void        ps_set_ap_stations(ps_t *ps, unsigned n);
 // Derives the view. Not const: a change of state is recorded for since_ms and
 // counts as activity, so the panel wakes to show it.
-ps_view_t   ps_update(ps_t *ps, uint32_t now_ms);
+ps_view_t   ps_update(ps_t *ps, uint64_t now_ms);
 const char *ps_name(ps_state_t st);   // "ready", "offline", ...

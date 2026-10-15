@@ -12,6 +12,7 @@ int serial_writer_write(const serial_writer_ops_t *ops, const uint8_t *buf, size
         if (!n) break;
         if (w > 0) idle = 0;
         else if (ops->stall_limit && ++idle > ops->stall_limit) return -1;
+        if (ops->aborted && ops->aborted(ops->ctx)) return -1;
         ops->delay(ops->ctx);
     }
     return 0;

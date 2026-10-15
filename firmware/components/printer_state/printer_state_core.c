@@ -4,7 +4,7 @@
 #include "printer_state_core.h"
 #include <string.h>
 
-void ps_init(ps_t *ps, const ps_timing_t *tm, uint32_t now)
+void ps_init(ps_t *ps, const ps_timing_t *tm, uint64_t now)
 {
     memset(ps, 0, sizeof *ps);
     ps->tm = *tm;
@@ -12,7 +12,7 @@ void ps_init(ps_t *ps, const ps_timing_t *tm, uint32_t now)
     ps->last = PS_BOOTING;
 }
 
-void ps_post(ps_t *ps, ps_event_t ev, uint32_t now)
+void ps_post(ps_t *ps, ps_event_t ev, uint64_t now)
 {
     switch (ev) {
     case PS_EV_WIFI_SETUP_AP:  ps->setup = 1;   break;
@@ -37,12 +37,12 @@ void ps_set_ap_stations(ps_t *ps, unsigned n)
     ps->ap_stations = (uint8_t)(n > 255 ? 255 : n);
 }
 
-static ps_state_t derive(const ps_t *ps, uint32_t now)
+static ps_state_t derive(const ps_t *ps, uint64_t now)
 {
     if (now - ps->boot_at < ps->tm.boot_ms) return PS_BOOTING;
     if (ps->setup)    return PS_SETUP;
     if (!ps->wifi_up) return PS_JOINING;
-    uint32_t low_for = ps->line_ready ? 0 : now - ps->line_since;
+    uint64_t low_for = ps->line_ready ? 0 : now - ps->line_since;
     if (ps->job && !ps->line_ready && low_for >= ps->tm.stall_attention_ms)
         return PS_ATTENTION;
     if (ps->failed && now - ps->failed_at < ps->tm.failed_hold_ms) return PS_FAILED;
@@ -51,7 +51,9 @@ static ps_state_t derive(const ps_t *ps, uint32_t now)
     return PS_READY;
 }
 
-ps_view_t ps_update(ps_t *ps, uint32_t now)
+static uint32_t sat32(uint64_t x) { return x > 0xFFFFFFFFu ? 0xFFFFFFFFu : (uint32_t)x; }
+
+ps_view_t ps_update(ps_t *ps, uint64_t now)
 {
     ps_state_t st = derive(ps, now);
     if (st != ps->last) {
@@ -61,13 +63,13 @@ ps_view_t ps_update(ps_t *ps, uint32_t now)
         ps->state_since = now;
         ps->activity_at = now;
     }
-    ps_view_t v = { .state = st, .since_ms = now - ps->state_since };
+    ps_view_t v = { .state = st, .since_ms = sat32(now - ps->state_since) };
     v.phone_joined = st == PS_SETUP && ps->ap_stations > 0;
     v.greeted      = st == PS_READY && ps->greeted;
     if ((st == PS_READY || st == PS_OFFLINE) &&
         now - ps->activity_at >= ps->tm.sleep_after_ms) {
         v.asleep    = 1;
-        v.asleep_ms = now - ps->activity_at - ps->tm.sleep_after_ms;
+        v.asleep_ms = sat32(now - ps->activity_at - ps->tm.sleep_after_ms);
     }
     return v;
 }

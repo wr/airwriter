@@ -63,6 +63,11 @@ esp_err_t serial_out_flush(uint32_t timeout_ms);
 // only from the writing task with no write in flight.
 void serial_out_purge(void);
 
+// Cancel: an in-flight or later write gives up at once instead of waiting out
+// a paused printer, so Cancel-Job on a paper-out printer frees it. Set from
+// the cancelling task; clear it when the next job starts.
+void serial_out_set_abort(int on);
+
 // The printer's HSKo line right now. A printer that is attached and online
 // holds this asserted; nothing plugged in reads the same as offline, which is
 // the honest answer -- the line cannot tell those apart.

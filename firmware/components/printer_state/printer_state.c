@@ -10,7 +10,7 @@ static ps_t s_ps;
 static SemaphoreHandle_t s_mtx;
 static void (*s_cb)(const ps_view_t *);
 
-static uint32_t now_ms(void) { return (uint32_t)(esp_timer_get_time() / 1000); }
+static uint64_t now_ms(void) { return (uint64_t)esp_timer_get_time() / 1000; }
 
 static void poll_task(void *arg)
 {
