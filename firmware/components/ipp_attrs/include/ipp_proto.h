@@ -47,8 +47,6 @@
 // Operations. Section 3.4 of SPEC.md lists the set iOS needs.
 #define IPP_OP_PRINT_JOB            0x0002
 #define IPP_OP_VALIDATE_JOB         0x0004
-#define IPP_OP_CREATE_JOB           0x0005
-#define IPP_OP_SEND_DOCUMENT        0x0006
 #define IPP_OP_CANCEL_JOB           0x0008
 #define IPP_OP_GET_JOB_ATTRIBUTES   0x0009
 #define IPP_OP_GET_JOBS             0x000A

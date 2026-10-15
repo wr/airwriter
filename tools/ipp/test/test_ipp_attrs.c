@@ -78,32 +78,24 @@ int main(void)
     CHECK_EQ_INT(f.nvalues, 8);
     CHECK(ipp_val_is(&f, "V1.4"));
 
-    /* Eight operations, matching SPEC.md 3.4. Create-Job and Send-Document
-     * are what give the phone a job-id before the upload, so it can see a
-     * paused printer while the document is still streaming (W-1040). */
+    /* Six operations, matching SPEC.md 3.4. Not Create-Job (0x0005) or
+     * Send-Document (0x0006): advertising them made the iPhone hold every
+     * job at "Waiting" (W-1040). */
     CHECK(ipp_find(buf, n, "operations-supported", &f));
-    CHECK_EQ_INT(f.nvalues, 8);
+    CHECK_EQ_INT(f.nvalues, 6);
     CHECK_EQ_INT(ipp_val_int(&f), IPP_OP_PRINT_JOB);
     {
-        int seen_create = 0, seen_send = 0;
+        int seen_create_or_send = 0;
         const uint8_t *v = f.val;
         for (int i = 0; i < f.nvalues; i++) {
             int32_t op = (int32_t)(((uint32_t)v[0] << 24) | ((uint32_t)v[1] << 16) |
                                    ((uint32_t)v[2] << 8) | (uint32_t)v[3]);
-            seen_create |= op == IPP_OP_CREATE_JOB;
-            seen_send   |= op == IPP_OP_SEND_DOCUMENT;
+            seen_create_or_send |= op == 0x0005 || op == 0x0006;
             v += 4 + 1 + 2 + 2;   /* this value, then the next's tag, name-len, value-len */
         }
-        CHECK(seen_create);
-        CHECK(seen_send);
+        CHECK(!seen_create_or_send);
     }
-
-    /* RFC 8011 requires multiple-operation-time-out of a Create-Job printer;
-     * the action says what happens when it runs out (PWG 5100.13). */
-    CHECK(ipp_find(buf, n, "multiple-operation-time-out", &f));
-    CHECK_EQ_INT(ipp_val_int(&f), IPP_MULTI_OP_TIMEOUT_S);
-    CHECK(ipp_find(buf, n, "multiple-operation-time-out-action", &f));
-    CHECK(ipp_val_is(&f, "abort-job"));
+    CHECK(!ipp_find(buf, n, "multiple-operation-time-out", &f));
 
     /* A printer with nothing to say sends no printer-state-message. */
     CHECK(!ipp_find(buf, n, "printer-state-message", &f));
