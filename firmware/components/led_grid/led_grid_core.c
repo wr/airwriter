@@ -95,16 +95,29 @@ static float ready_level(int r, int c, uint32_t t)
                                 + dot_hash(r, c, 2) * TAU);
 }
 
-// Gamma 2.2, then the cap, at 8.8 fixed point. At a cap of 48 the bottom of a
-// slow breathe would fall below one count and the dot would blink off, so any
-// lit level gets at least one whole count.
-static uint16_t drive16(float level, float cap)
+// Gamma 2.2, then the cap, at 8.8 fixed point.
+static float level16(float level, float cap)
 {
     level = clampf(level);
-    if (level <= 0) return 0;
-    float o = powf(level, 2.2f) * cap * 256.0f;
-    if (o < 256) o = 256;
-    return (uint16_t)(o > 65280 ? 65280 : o);
+    return level <= 0 ? 0 : powf(level, 2.2f) * cap * 256.0f;
+}
+
+// At a cap of 48 the bottom of a slow fade drops below one count and the dot
+// would blink off. Lift the dot's brightest channel to one count and scale the
+// others with it, so the dither keeps its hue -- lifting every channel to one
+// count turned dim embers and dim blue pulses white on board 1.
+static void put_dot(uint16_t px[3], float r, float g, float b)
+{
+    float m = r > g ? (r > b ? r : b) : (g > b ? g : b);
+    if (m < 1) {                    // under 1/256 of a count (a ripple's far tail,
+        r = g = b = 0;              // even a subnormal): dark, not lifted
+    } else if (m < 256) {
+        float k = 256.0f / m;
+        r *= k; g *= k; b *= k;
+    }
+    float ch[3] = { r, g, b };
+    for (int i = 0; i < 3; i++)
+        px[i] = (uint16_t)(ch[i] > 65280 ? 65280 : ch[i] + 0.5f);
 }
 
 static int all_dots(ps_state_t st)
@@ -250,9 +263,7 @@ void lg_render16(const ps_view_t *v, const lg_opts_t *o, uint32_t t_ms,
         lg_c3 c = sc(state_dot(v, o, i, t_ms), 1 - sleep_k);
         float cap = !fr4 ? LG_MASK_CAP
                   : v->state == PS_ATTENTION ? LG_ALERT_CAP : LG_BRIGHTNESS_CAP;
-        out[i][0] = drive16(c.r, cap);
-        out[i][1] = drive16(c.g, cap);
-        out[i][2] = drive16(c.b, cap);
+        put_dot(out[i], level16(c.r, cap), level16(c.g, cap), level16(c.b, cap));
     }
 
     if (!v->asleep) return;

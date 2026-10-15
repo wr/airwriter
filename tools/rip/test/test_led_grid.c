@@ -321,6 +321,46 @@ int main(void)
         assert(sum0 == 300);                // 200 frames x 1.5
     }
 
+    // Dim dots keep their hue. At the bottom of a fade a dot is under one
+    // count; the floor must lift its brightest channel and scale the rest, not
+    // lift every channel to one count -- that turned dim warm embers and dim
+    // blue pulses white on board 1. Averaged through the dither: embers at
+    // their dim floor stay warm (red > green > blue), the joining pulse at its
+    // dim floor stays blue (blue > green > red).
+    {
+        static uint16_t hi[LG_NUM_LEDS][3];
+        lg_dither_t d;
+        double sum[3];
+
+        memset(&d, 0, sizeof d);
+        memset(sum, 0, sizeof sum);
+        ps_view_t v = view(PS_OFFLINE, 5000);
+        int dim = -1;                       // an FR4 dot sitting at the ember floor
+        for (int i = 0; i < LG_NUM_LEDS && dim < 0; i++) {
+            if (LG_MAP[i].mat != 'P') continue;
+            lg_render16(&v, &WHITE_MODE, 0, hi);
+            if (hi[i][0] > 0 && hi[i][0] <= 256) dim = i;
+        }
+        assert(dim >= 0);
+        for (int k = 0; k < 400; k++) {
+            lg_render16(&v, &WHITE_MODE, 0, hi);   // frozen time: the floor
+            lg_dither(&d, hi, f);
+            for (int ch = 0; ch < 3; ch++) sum[ch] += f[dim][ch];
+        }
+        assert(sum[0] > sum[1] && sum[1] > sum[2]);
+
+        memset(&d, 0, sizeof d);
+        memset(sum, 0, sizeof sum);
+        v = view(PS_JOINING, 0);
+        int far = idx(7, 4);
+        for (int k = 0; k < 400; k++) {
+            lg_render16(&v, &WHITE_MODE, 0, hi);   // t=0: ring at the centre, far dot at the floor
+            lg_dither(&d, hi, f);
+            for (int ch = 0; ch < 3; ch++) sum[ch] += f[far][ch];
+        }
+        assert(sum[2] > sum[1] && sum[1] > sum[0]);
+    }
+
     printf("test_led_grid: ok\n");
     return 0;
 }
