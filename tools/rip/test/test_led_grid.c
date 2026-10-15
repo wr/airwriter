@@ -106,8 +106,7 @@ int main(void)
                 if (LG_MAP[j].mat == 'P' && memcmp(f[i], f[j], 3) == 0) seen = 1;
             distinct += !seen;
         }
-        // Ready is deliberately plain (Wells, board 1); attention may be between rings.
-        if (all[s] != PS_ATTENTION && all[s] != PS_READY) assert(distinct >= 3);
+        if (all[s] != PS_ATTENTION) assert(distinct >= 3);   // attention may be between rings
     }
 
     // Boot spin: lit mid-way, mask dots included; dark by LG_BOOT_MS.
@@ -140,17 +139,21 @@ int main(void)
         assert(abs(f[p][1] - f[p][0]) <= 3 && abs(f[p][1] - f[p][2]) <= 3);
     }
 
-    // Ready is plain white: every FR4 dot the same, red = green = blue, and
-    // steady -- no per-dot tint, no breathing (tried both on board 1).
+    // Ready is a neutral white that breathes: no dot strongly tinted, and the
+    // pilot's brightness moves over a breath (each dot on its own phase).
     {
         ps_view_t v = view(PS_READY, 5000);
-        lg_render(&v, &WHITE_MODE, 0, g);
-        assert(g[p][0] > 0 && g[p][0] == g[p][1] && g[p][1] == g[p][2]);
-        for (uint32_t t = 0; t < 12000; t += 97) {
+        int lo = 255, hi8 = 0;
+        for (uint32_t t = 0; t < 9000; t += 50) {
             lg_render(&v, &WHITE_MODE, t, f);
-            for (int i = 0; i < LG_NUM_LEDS; i++)
-                if (LG_MAP[i].mat == 'P') assert(memcmp(f[i], g[p], 3) == 0);
+            for (int i = 0; i < LG_NUM_LEDS; i++) {
+                if (LG_MAP[i].mat != 'P') continue;
+                assert(abs(f[i][0] - f[i][2]) <= 3 && abs(f[i][1] - f[i][2]) <= 3);
+            }
+            if (max3(f[p]) < lo) lo = max3(f[p]);
+            if (max3(f[p]) > hi8) hi8 = max3(f[p]);
         }
+        assert(hi8 - lo >= 2);
     }
 
     // Gamer mode: Ready drifts through colour -- saturated dots, and the
