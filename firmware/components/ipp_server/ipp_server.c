@@ -277,6 +277,13 @@ static int run_document(work_t *w, int fd, const ipp_req_t *r, hbody_t *body,
         xSemaphoreGive(s_job_lock);
     }
 
+    // Where the upload's time goes: waiting on the network, or on the sink.
+    // With the job buffered the sink should never hold the socket up, so a
+    // slow upload with short pushes is the Wi-Fi link (W-1042 bench).
+    int64_t t0 = esp_timer_get_time();
+    int64_t wait_max = 0, push_max = 0;
+    size_t wait_at = 0;
+
     size_t total = 0;
     if (ok) {
         // The attribute section and the first document bytes usually arrive in
@@ -286,7 +293,13 @@ static int run_document(work_t *w, int fd, const ipp_req_t *r, hbody_t *body,
         total += pre_len;
 
         while (ok) {
+            int64_t a = esp_timer_get_time();
             int n = hbody_read(body, w->chunk, CHUNK);
+            int64_t b = esp_timer_get_time();
+            if (b - a > wait_max) { wait_max = b - a; wait_at = total; }
+            if (b - a > 2000000)
+                ESP_LOGW(TAG, "job %d: no data for %u ms at byte %u", (int)job_id,
+                         (unsigned)((b - a) / 1000), (unsigned)total);
             if (n == 0) break;
             if (n < 0) {
                 // The client hung up mid-document. With the job buffered the
@@ -298,12 +311,17 @@ static int run_document(work_t *w, int fd, const ipp_req_t *r, hbody_t *body,
             }
             if (s_sink.data && s_sink.data(s_sink.ctx, w->chunk, (size_t)n) != ESP_OK)
                 ok = 0;
+            int64_t c = esp_timer_get_time();
+            if (c - b > push_max) push_max = c - b;
             total += (size_t)n;
         }
     }
 
-    ESP_LOGI(TAG, "job %d: %u document bytes, %s",
-             (int)job_id, (unsigned)total, ok ? "received" : "failed");
+    ESP_LOGI(TAG, "job %d: %u document bytes in %u ms, %s; longest wait for data "
+             "%u ms at byte %u, longest push %u ms",
+             (int)job_id, (unsigned)total, (unsigned)((esp_timer_get_time() - t0) / 1000),
+             ok ? "received" : "failed", (unsigned)(wait_max / 1000), (unsigned)wait_at,
+             (unsigned)(push_max / 1000));
     if (s_sink.end) s_sink.end(s_sink.ctx, ok);
     else ipp_server_job_done(ok);
 

@@ -248,7 +248,12 @@ static esp_err_t doc_begin(void *ctx, const char *format, const char *name)
     // doc_end leads to exactly one job_finished, whose give balances every
     // take here, refusals included.
     xSemaphoreTake(s_job_lock, portMAX_DELAY);
-    ESP_LOGI(TAG, "job \"%s\" format %s", name, format[0] ? format : "(unspecified)");
+    // The link's strength with each job: a weak one is what a slow upload
+    // usually is (W-1042 bench).
+    wifi_ap_record_t ap;
+    int rssi = esp_wifi_sta_get_ap_info(&ap) == ESP_OK ? ap.rssi : 0;
+    ESP_LOGI(TAG, "job \"%s\" format %s, rssi %d", name,
+             format[0] ? format : "(unspecified)", rssi);
     strncpy(s_last_job, name && name[0] ? name : "Untitled", sizeof s_last_job - 1);
     s_last_job[sizeof s_last_job - 1] = '\0';
     s_stream_crc = 0;
