@@ -8,7 +8,6 @@
 #include <stdio.h>
 
 #include "driver/gpio.h"
-#include "driver/uart.h"
 #include "esp_log.h"
 #include "esp_system.h"
 #include "esp_timer.h"
@@ -794,14 +793,14 @@ static uint16_t lt_status(ps_state_t st)
     }
 }
 
-// W-1051: the LocalTalk node, in DIP mode 2 or on a bench build. It owns UART2
-// and the PIC's pins from here until reboot.
+// W-1051: the LocalTalk node, in DIP mode 2 or on a bench build. It owns its
+// UART and the PIC's pins from here until reboot.
 static void lt_start(const char *why)
 {
 #if CONFIG_AIRWRITER_PIC_CLK_PIN >= 0 && CONFIG_AIRWRITER_PIC_DAT_PIN >= 0
     if (localtalk_running()) return;
     localtalk_cfg_t c = {
-        .uart_num = UART_NUM_2,
+        .uart_num = CONFIG_AIRWRITER_LT_UART_NUM,
         .tx_pin   = CONFIG_AIRWRITER_PIC_CLK_PIN,
         .rx_pin   = CONFIG_AIRWRITER_PIC_DAT_PIN,
         .cts_pin  = CONFIG_AIRWRITER_LT_CTS_PIN,

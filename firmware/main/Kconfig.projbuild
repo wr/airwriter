@@ -244,6 +244,15 @@ config AIRWRITER_PIC_DAT_PIN
         Board net LT_UART_RX, through R16 (100R) to U7 pin 7 (RA0/ICSPDAT).
         TashTalk's UART transmit line in normal running.
 
+config AIRWRITER_LT_UART_NUM
+    int "LocalTalk UART"
+    default 2 if IDF_TARGET_ESP32S3
+    default 0
+    help
+        The UART the LocalTalk node talks to TashTalk on, at 1 Mbaud. UART2 on
+        the S3 (UART1 is the printer's). The C6 has only two, and UART1 is
+        the printer's there too; its console is USB-Serial-JTAG, so UART0.
+
 config AIRWRITER_LT_CTS_PIN
     int "LocalTalk CTS pin from TashTalk, -1 if absent"
     default 6 if IDF_TARGET_ESP32S3
@@ -251,7 +260,8 @@ config AIRWRITER_LT_CTS_PIN
     help
         Board net LT_CTS, straight from U7 pin 5 (RA2), TashTalk's CTS out:
         low when its 128-byte queue can take more. The node's UART uses it
-        for hardware flow control; a frame can be 605 bytes.
+        for hardware flow control; a frame can be 605 bytes, so without it
+        (-1, a devkit) a long frame can overrun TashTalk.
 
 config AIRWRITER_LT_NBP_TYPE
     string "LocalTalk NBP type"
