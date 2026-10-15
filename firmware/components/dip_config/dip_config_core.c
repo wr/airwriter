@@ -26,3 +26,11 @@ int dip_stable(dip_deb_t *d, uint8_t sample, uint8_t *out)
     }
     return 0;
 }
+
+uint8_t dip_physical(uint8_t net_bits)
+{
+    uint8_t out = 0;
+    for (int i = 0; i < 8; i++)
+        if (net_bits & (1u << i)) out = (uint8_t)(out | (1u << (7 - i)));
+    return out;
+}

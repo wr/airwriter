@@ -14,7 +14,12 @@ typedef struct {
     uint8_t spare;        // DIP8 raw
 } dip_config_t;
 
-void dip_decode(uint8_t on_bits, dip_config_t *out);  // bit i = DIP(i+1) ON
+void dip_decode(uint8_t on_bits, dip_config_t *out);  // bit i = switch labelled i+1 ON
+
+// Rev A: S1 pin n sits under the switch labelled 9-n (the part's printed
+// numbers run opposite to its pins), so net DIPn is label 9-n. Turns bits in
+// net order (bit i = net DIP(i+1)) into label order. Check S1's pin 1 on rev B.
+uint8_t dip_physical(uint8_t net_bits);
 
 typedef struct { uint8_t s[3]; uint8_t n; } dip_deb_t; // 3-sample debouncer
 
