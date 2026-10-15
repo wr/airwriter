@@ -106,7 +106,8 @@ int main(void)
                 if (LG_MAP[j].mat == 'P' && memcmp(f[i], f[j], 3) == 0) seen = 1;
             distinct += !seen;
         }
-        if (all[s] != PS_ATTENTION) assert(distinct >= 3);   // attention may be between rings
+        // Ready is deliberately plain (Wells, board 1); attention may be between rings.
+        if (all[s] != PS_ATTENTION && all[s] != PS_READY) assert(distinct >= 3);
     }
 
     // Boot spin: lit mid-way, mask dots included; dark by LG_BOOT_MS.
@@ -139,35 +140,16 @@ int main(void)
         assert(abs(f[p][1] - f[p][0]) <= 3 && abs(f[p][1] - f[p][2]) <= 3);
     }
 
-    // Ready's white must not read amber through the tan FR4: no dot ever
-    // drives more red than blue (tuned on board 1).
-    for (uint32_t t = 0; t < 12000; t += 97) {
-        ps_view_t v = view(PS_READY, 5000);
-        lg_render(&v, &WHITE_MODE, t, f);
-        for (int i = 0; i < LG_NUM_LEDS; i++)
-            if (LG_MAP[i].mat == 'P') assert(f[i][2] >= f[i][0]);
-    }
-
-    // Ready's white point, as actually sent: averaged over a breath through
-    // the dither, red at most half of blue and green at least 0.8 of it.
-    // Tuned on board 1, where (0.6, 0.74, 1) still read reddish.
+    // Ready is plain white: every FR4 dot the same, red = green = blue, and
+    // steady -- no per-dot tint, no breathing (tried both on board 1).
     {
-        static uint16_t hi[LG_NUM_LEDS][3];
-        lg_dither_t d;
-        memset(&d, 0, sizeof d);
-        double sum[LG_NUM_LEDS][3];
-        memset(sum, 0, sizeof sum);
         ps_view_t v = view(PS_READY, 5000);
-        for (uint32_t t = 0; t < 9000; t += 10) {
-            lg_render16(&v, &WHITE_MODE, t, hi);
-            lg_dither(&d, hi, f);
+        lg_render(&v, &WHITE_MODE, 0, g);
+        assert(g[p][0] > 0 && g[p][0] == g[p][1] && g[p][1] == g[p][2]);
+        for (uint32_t t = 0; t < 12000; t += 97) {
+            lg_render(&v, &WHITE_MODE, t, f);
             for (int i = 0; i < LG_NUM_LEDS; i++)
-                for (int ch = 0; ch < 3; ch++) sum[i][ch] += f[i][ch];
-        }
-        for (int i = 0; i < LG_NUM_LEDS; i++) {
-            if (LG_MAP[i].mat != 'P') continue;
-            assert(sum[i][0] <= 0.5 * sum[i][2]);
-            assert(sum[i][1] >= 0.8 * sum[i][2]);
+                if (LG_MAP[i].mat == 'P') assert(memcmp(f[i], g[p], 3) == 0);
         }
     }
 
@@ -297,18 +279,19 @@ int main(void)
         assert(memcmp(f[p], g[p], 3) != 0);
     }
 
-    // Smooth fades: the 16-bit render resolves a Ready breath far more finely
-    // than the 6 whole counts an 8-bit frame gets at this brightness, and
+    // Smooth fades: the 16-bit render resolves a slow fade (the offline
+    // embers) far more finely than the few whole counts an 8-bit frame gets
+    // at this brightness, and
     // agrees with the 8-bit frame to within rounding.
     {
         static uint16_t hi[LG_NUM_LEDS][3];
-        ps_view_t v = view(PS_READY, 5000);
+        ps_view_t v = view(PS_OFFLINE, 5000);
         static unsigned char seen[65536];
         int distinct = 0;
-        for (uint32_t t = 0; t < 9000; t += 10) {
+        for (uint32_t t = 0; t < 13000; t += 10) {
             lg_render16(&v, &WHITE_MODE, t, hi);
             lg_render(&v, &WHITE_MODE, t, f);
-            int b = hi[p][2];
+            int b = hi[p][0];          // red: the embers' dominant channel
             if (!seen[b]) { seen[b] = 1; distinct++; }
             for (int i = 0; i < LG_NUM_LEDS; i++)
                 for (int ch = 0; ch < 3; ch++)

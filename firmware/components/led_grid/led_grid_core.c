@@ -82,18 +82,12 @@ static float jitter(int r, int c, float base, float spread, uint32_t t, float dr
     return h;
 }
 
-// Ready's neutral white, each dot a touch warmer or cooler than the next.
-// Tuned on board 1, where these LEDs need far less red than a nominal white:
-// (1, .92, .82) read amber and (.76, .86, 1) still read reddish.
-static lg_c3 white_of(int r, int c)
-{
-    static const lg_c3 warm = {0.70f, 0.98f, 1.00f}, cool = {0.62f, 0.92f, 1.00f};
-    return mix(warm, cool, dot_hash(r, c, 5));
-}
+// Ready is plain white: equal drive, the same steady level on every FR4 dot.
+// Per-dot warm/cool tints and per-dot breathing were tried on board 1 and
+// read as a colour cast; Wells chose plain.
+#define READY_LEVEL 0.34f
 
-// Each dot breathes on its own 5-9 s period, 24% to 44%: high enough that
-// the dimmest channel rarely sits on the one-count floor, where the colour
-// collapses to the LEDs' native equal-RGB white.
+// Gamer mode keeps a per-dot breathe: its own 5-9 s period, 24% to 44%.
 static float ready_level(int r, int c, uint32_t t)
 {
     uint32_t period = 5000 + (uint32_t)(dot_hash(r, c, 1) * 4000);
@@ -167,7 +161,7 @@ static lg_c3 state_dot(const ps_view_t *v, const lg_opts_t *o, int i, uint32_t t
     case PS_READY: {
         lg_c3 base = o && o->gamer
             ? hsv((float)c * 28 + (float)r * 14 + (float)t / 40.0f, 0.75f, ready_level(r, c, t) + 0.05f)
-            : sc(white_of(r, c), ready_level(r, c, t));
+            : sc(FULL, READY_LEVEL);
         if (!v->greeted || s >= 3200) return base;
         // Wi-Fi just connected: green, with a ripple outward, then into base.
         float ring = (float)s / 1400.0f * 5.2f;
@@ -264,7 +258,7 @@ void lg_render16(const ps_view_t *v, const lg_opts_t *o, uint32_t t_ms,
     if (!v->asleep) return;
 
     int p = lg_pilot_index();
-    lg_c3 pilot = gamer ? hsv((float)t_ms / 60.0f, 0.75f, 1) : white_of(LG_MAP[p].r, LG_MAP[p].c);
+    lg_c3 pilot = gamer ? hsv((float)t_ms / 60.0f, 0.75f, 1) : FULL;
     put_linear(out[p], pilot, pulse(t_ms, 6000, 0.03f, 0.12f) * sleep_k);
 
     // Every 30 s one other FR4 dot twinkles once, so the panel reads as alive.
@@ -274,8 +268,7 @@ void lg_render16(const ps_view_t *v, const lg_opts_t *o, uint32_t t_ms,
         for (int i = 0; i < LG_NUM_LEDS; i++)
             if (LG_MAP[i].mat == 'P' && i != p) fr4[n++] = i;
         int tw = fr4[(t_ms / 30000 * 5 + 3) % (uint32_t)n];
-        lg_c3 col = gamer ? hsv((float)t_ms / 60.0f + 120, 0.75f, 1)
-                          : white_of(LG_MAP[tw].r, LG_MAP[tw].c);
+        lg_c3 col = gamer ? hsv((float)t_ms / 60.0f + 120, 0.75f, 1) : FULL;
         put_linear(out[tw], col, 0.08f * sinf(3.1415927f * (float)ph / 1500.0f) * sleep_k);
     }
 }
