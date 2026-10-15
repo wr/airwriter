@@ -114,6 +114,56 @@ static void test_flash_over_old_code(void)
     assert(pic_sim_errors(&sim) == 0);
 }
 
+// The ESP32's delay_us, in simulated time. vTaskDelay(n) wakes on the n-th
+// tick interrupt after the call, so it sleeps anywhere from n-1 to n tick
+// periods. Spins overshoot by spin_ns, standing in for the GPIO calls the
+// core doesn't count; on the board that overhead is what puts each long
+// wait at an unpredictable phase of the tick.
+static uint32_t tick_us, spin_ns, spin_acc_ns;
+
+static void rtos_delay(void *ctx, uint32_t us)
+{
+    pic_sim_t *s = ctx;
+    uint32_t n = pic_sleep_ticks(us, tick_us);
+    if (n == 0) {
+        spin_acc_ns += spin_ns;
+        s->now_us += us + spin_acc_ns / 1000;
+        spin_acc_ns %= 1000;
+    } else {
+        s->now_us = (s->now_us / tick_us + n) * tick_us;
+    }
+}
+
+static void test_flash_on_rtos_ticks(void)
+{
+    // The bulk erase sleep lines everything up with a tick, and the verify
+    // after it spins for a quarter of a second, so the overhead per spin
+    // sweeps the configuration write right round the tick.
+    load_tashtalk(1);
+    const uint32_t hz[] = { 100, 1000 };
+    int runs = 0, bad = 0;
+    for (unsigned k = 0; k < 2; k++) {
+        tick_us = 1000000 / hz[k];
+        for (spin_ns = 0; spin_ns < 60; spin_ns += 2) {
+            pic_sim_init(&sim, 0x1B85);
+            spin_acc_ns = 0;
+            pic_hal_t h = pic_sim_hal(&sim);
+            h.delay_us = rtos_delay;
+            pic_result_t r;
+            pic_err_t e = pic_flash(&h, &img, &r);
+            runs++;
+            if (e == PIC_OK && pic_sim_errors(&sim) == 0) continue;
+            bad++;
+            printf("  %u Hz, +%u ns a spin: %s at 0x%04X, %d clocks inside a write\n",
+                   (unsigned)hz[k], (unsigned)spin_ns, pic_err_str(e),
+                   (unsigned)r.bad_addr, sim.err_busy);
+        }
+    }
+    assert(bad == 0);
+    assert(pic_sleep_ticks(999, 10000) == 0);       // spun, not slept
+    printf("  flash on 100 Hz and 1 kHz ticks: %d runs ok\n", runs);
+}
+
 static void test_unpatched_image_fails_config_verify(void)
 {
     // Upstream TashTalk clears LVP, which LVP mode is not allowed to do: the
@@ -206,6 +256,7 @@ int main(void)
     test_read_id();
     test_flash_blank();
     test_flash_over_old_code();
+    test_flash_on_rtos_ticks();
     test_unpatched_image_fails_config_verify();
     test_wrong_device_is_not_erased();
     test_no_device();

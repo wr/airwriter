@@ -306,6 +306,16 @@ pic_err_t pic_flash(const pic_hal_t *h, const pic_image_t *img, pic_result_t *r)
     return e;
 }
 
+// Whole ticks, rounded up, plus one: the first tick of a sleep is partial and
+// can be any fraction of a period. Rounding to milliseconds first is wrong at
+// 100 Hz, where pdMS_TO_TICKS() makes 3 and 6 ms zero ticks and a TPINT wait
+// became "until the next tick", 0-10 ms (W-1035).
+uint32_t pic_sleep_ticks(uint32_t us, uint32_t tick_us)
+{
+    if (us < 1000) return 0;
+    return (us + tick_us - 1) / tick_us + 1;
+}
+
 const char *pic_err_str(pic_err_t e)
 {
     switch (e) {

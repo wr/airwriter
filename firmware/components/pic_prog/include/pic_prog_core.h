@@ -88,6 +88,10 @@ pic_err_t pic_read_id(const pic_hal_t *hal, uint16_t *devid);
 // words. Refuses to erase anything that is not a PIC12F1840. Exits as above.
 pic_err_t pic_flash(const pic_hal_t *hal, const pic_image_t *img, pic_result_t *res);
 
+// For a delay_us that sleeps on an RTOS tick of tick_us: the tick count that
+// sleeps at least us, or 0 when the wait is short enough to spin instead.
+uint32_t pic_sleep_ticks(uint32_t us, uint32_t tick_us);
+
 const char *pic_err_str(pic_err_t e);
 
 // {"ok":true|false,"err":"..","devid":"0x1B85","rev":5} plus, after a verify
