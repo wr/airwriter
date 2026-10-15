@@ -3,13 +3,16 @@
 
 int serial_writer_write(const serial_writer_ops_t *ops, const uint8_t *buf, size_t n)
 {
+    unsigned idle = 0;
     while (n) {
-        if (ops->blocked(ops->ctx)) return -1;
         int w = ops->tx_write(ops->ctx, buf, n);
         if (w < 0) return -1;
         buf += w;
         n   -= (size_t)w;
-        if (n) ops->delay(ops->ctx);
+        if (!n) break;
+        if (w > 0) idle = 0;
+        else if (ops->stall_limit && ++idle > ops->stall_limit) return -1;
+        ops->delay(ops->ctx);
     }
     return 0;
 }

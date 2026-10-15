@@ -2,12 +2,9 @@
 //
 // The serial_out write loop, off the hardware. The fake models what
 // uart_tx_chars really gives us: a hardware FIFO that accepts what fits and
-// reports the count -- the return value is ground truth, there is no free-
-// space probe to go stale. (The first cut of this loop bounded writes with
-// uart_get_tx_buffer_free_size, which only tracks the ring item currently in
-// service; review traced a CTS stall re-wedging the write inside the driver.
-// Ring gone, probe gone.) The watchdog verdict flips after a set number of
-// poll periods.
+// reports the count. The printer can pause (drain_after) and resume. The loop
+// must ride out any pause shorter than stall_limit delays without progress,
+// and give up only after that -- a paused job (paper out, SELECT) resumes.
 #include <stdlib.h>
 #include "test_util.h"
 #include "serial_writer.h"
@@ -19,7 +16,7 @@ typedef struct {
     size_t  taken;
     size_t  free;              // FIFO space right now
     size_t  drain_per_delay;   // bytes the "printer" absorbs each delay period
-    int     blocked_after;     // delay periods until watchdog says BLOCKED, -1 never
+    int     drain_after;       // delay periods before the printer starts draining
     int     delays;
     int     writes;
     int     write_err;         // force tx_write to fail
@@ -37,32 +34,25 @@ static int f_tx_write(void *ctx, const uint8_t *buf, size_t n)
     return (int)take;
 }
 
-static int f_blocked(void *ctx)
-{
-    fake_t *f = (fake_t *)ctx;
-    return f->blocked_after >= 0 && f->delays >= f->blocked_after;
-}
-
 static void f_delay(void *ctx)
 {
     fake_t *f = (fake_t *)ctx;
-    if (f->delays > 1000) {
-        fprintf(stderr, "FAIL fake: writer is spinning forever on a printer "
-                        "that will never drain\n");
+    if (f->delays > 100000) {
+        fprintf(stderr, "FAIL fake: writer is spinning forever\n");
         exit(1);
     }
     f->delays++;
-    f->free += f->drain_per_delay;
+    if (f->delays > f->drain_after) f->free += f->drain_per_delay;
     if (f->free > FAKE_FIFO) f->free = FAKE_FIFO;
 }
 
-static serial_writer_ops_t ops_for(fake_t *f)
+static serial_writer_ops_t ops_for(fake_t *f, unsigned stall_limit)
 {
     serial_writer_ops_t ops = {
-        .ctx      = f,
-        .tx_write = f_tx_write,
-        .blocked  = f_blocked,
-        .delay    = f_delay,
+        .ctx         = f,
+        .tx_write    = f_tx_write,
+        .delay       = f_delay,
+        .stall_limit = stall_limit,
     };
     return ops;
 }
@@ -71,8 +61,8 @@ int main(void)
 {
     // A payload that fits the FIFO goes through in one write, no delays.
     {
-        fake_t f = { .free = FAKE_FIFO, .blocked_after = -1 };
-        serial_writer_ops_t ops = ops_for(&f);
+        fake_t f = { .free = FAKE_FIFO };
+        serial_writer_ops_t ops = ops_for(&f, 5);
         const uint8_t msg[] = "hello";
         CHECK_EQ_INT(serial_writer_write(&ops, msg, 5), 0);
         CHECK_EQ_INT(f.taken, 5);
@@ -81,71 +71,98 @@ int main(void)
         CHECK_EQ_INT(f.delays, 0);
     }
 
-    // A payload bigger than the FIFO drains through in order as the printer
-    // absorbs bytes between polls -- and every write that leaves a remainder
-    // is followed by a delay, never a hot retry.
+    // A payload bigger than the FIFO drains through in order, paced.
     {
-        fake_t f = { .free = FAKE_FIFO, .blocked_after = -1, .drain_per_delay = 4 };
-        serial_writer_ops_t ops = ops_for(&f);
+        fake_t f = { .free = FAKE_FIFO, .drain_per_delay = 4 };
+        serial_writer_ops_t ops = ops_for(&f, 5);
         uint8_t msg[20];
         for (size_t i = 0; i < sizeof msg; i++) msg[i] = (uint8_t)i;
         CHECK_EQ_INT(serial_writer_write(&ops, msg, sizeof msg), 0);
         CHECK_EQ_INT(f.taken, sizeof msg);
         CHECK_EQ_MEM(f.fifo_taken, msg, sizeof msg);
         CHECK(f.delays > 0);
-        CHECK(f.writes <= f.delays + 1);   // paced, not spinning
+        CHECK(f.writes <= f.delays + 1);
     }
 
-    // The watchdog already called the printer blocked: fail before touching
-    // the FIFO, so a dead printer costs nothing per call.
+    // A full FIFO that never drains: poll stall_limit times, then give up.
     {
-        fake_t f = { .free = FAKE_FIFO, .blocked_after = 0 };
-        serial_writer_ops_t ops = ops_for(&f);
-        const uint8_t msg[] = "hello";
-        CHECK_EQ_INT(serial_writer_write(&ops, msg, 5), -1);
-        CHECK_EQ_INT(f.writes, 0);
-        CHECK_EQ_INT(f.delays, 0);
-    }
-
-    // A full FIFO that never drains: poll at the watchdog cadence until the
-    // watchdog flips, then give up. This is the stalled-printer brick from
-    // the audit -- the old loop sat inside uart_write_bytes forever.
-    {
-        fake_t f = { .free = 0, .blocked_after = 3 };
-        serial_writer_ops_t ops = ops_for(&f);
+        fake_t f = { .free = 0, .drain_after = 1 << 30 };
+        serial_writer_ops_t ops = ops_for(&f, 3);
         const uint8_t msg[] = "hello";
         CHECK_EQ_INT(serial_writer_write(&ops, msg, 5), -1);
         CHECK_EQ_INT(f.taken, 0);
         CHECK_EQ_INT(f.delays, 3);
-        CHECK(f.writes <= f.delays + 1);   // paced while stalled too
+        CHECK_EQ_INT(f.writes, 4);
     }
 
-    // The printer dies mid-stream: what fit in the FIFO is gone, the rest is
-    // abandoned once the watchdog flips.
+    // A fresh write to a printer that has been dead a long time still waits
+    // the full limit: nothing is remembered across calls, so a job sent while
+    // the printer is off gets its whole pause, not an instant failure.
     {
-        fake_t f = { .free = 4, .blocked_after = 2 };
-        serial_writer_ops_t ops = ops_for(&f);
+        fake_t f = { .free = 0, .drain_after = 1 << 30 };
+        serial_writer_ops_t ops = ops_for(&f, 3);
+        const uint8_t msg[] = "hello";
+        CHECK_EQ_INT(serial_writer_write(&ops, msg, 5), -1);
+        f.delays = 0;
+        f.writes = 0;
+        CHECK_EQ_INT(serial_writer_write(&ops, msg, 5), -1);
+        CHECK_EQ_INT(f.delays, 3);
+    }
+
+    // The printer dies mid-stream: the delay after real progress does not
+    // count; then stall_limit delays with nothing taken, then give up.
+    {
+        fake_t f = { .free = 4, .drain_after = 1 << 30 };
+        serial_writer_ops_t ops = ops_for(&f, 2);
         uint8_t msg[20] = {0};
         CHECK_EQ_INT(serial_writer_write(&ops, msg, sizeof msg), -1);
         CHECK_EQ_INT(f.taken, 4);
-        CHECK_EQ_INT(f.delays, 2);
+        CHECK_EQ_INT(f.delays, 3);
     }
 
-    // A stall shorter than the watchdog timeout is a head return, not paper
-    // out: the FIFO drains slowly but steadily and the write rides it out.
+    // Paper out and back: a 50-period pause inside a 100-period limit resumes
+    // and delivers every byte in order.
     {
-        fake_t f = { .free = 0, .blocked_after = 10, .drain_per_delay = 1 };
-        serial_writer_ops_t ops = ops_for(&f);
+        fake_t f = { .free = 0, .drain_after = 50, .drain_per_delay = 4 };
+        serial_writer_ops_t ops = ops_for(&f, 100);
+        uint8_t msg[20];
+        for (size_t i = 0; i < sizeof msg; i++) msg[i] = (uint8_t)(0xA0 + i);
+        CHECK_EQ_INT(serial_writer_write(&ops, msg, sizeof msg), 0);
+        CHECK_EQ_INT(f.taken, sizeof msg);
+        CHECK_EQ_MEM(f.fifo_taken, msg, sizeof msg);
+        CHECK(f.delays > 50);
+    }
+
+    // A pause longer than the limit fails.
+    {
+        fake_t f = { .free = 0, .drain_after = 50, .drain_per_delay = 4 };
+        serial_writer_ops_t ops = ops_for(&f, 10);
+        const uint8_t msg[] = "hello";
+        CHECK_EQ_INT(serial_writer_write(&ops, msg, 5), -1);
+        CHECK_EQ_INT(f.delays, 10);
+    }
+
+    // A slow trickle (head returns) never trips the limit: any progress resets it.
+    {
+        fake_t f = { .free = 0, .drain_per_delay = 1 };
+        serial_writer_ops_t ops = ops_for(&f, 1);
         const uint8_t msg[] = "hello";
         CHECK_EQ_INT(serial_writer_write(&ops, msg, 5), 0);
         CHECK_EQ_INT(f.taken, 5);
-        CHECK(f.delays < 10);
+    }
+
+    // stall_limit 0 means never give up (with a printer that does come back).
+    {
+        fake_t f = { .free = 0, .drain_after = 500, .drain_per_delay = 8 };
+        serial_writer_ops_t ops = ops_for(&f, 0);
+        const uint8_t msg[] = "hello";
+        CHECK_EQ_INT(serial_writer_write(&ops, msg, 5), 0);
     }
 
     // Driver failure is fatal, not retried.
     {
-        fake_t f = { .free = FAKE_FIFO, .blocked_after = -1, .write_err = 1 };
-        serial_writer_ops_t ops = ops_for(&f);
+        fake_t f = { .free = FAKE_FIFO, .write_err = 1 };
+        serial_writer_ops_t ops = ops_for(&f, 5);
         const uint8_t msg[] = "hello";
         CHECK_EQ_INT(serial_writer_write(&ops, msg, 5), -1);
         CHECK_EQ_INT(f.writes, 1);
@@ -153,8 +170,8 @@ int main(void)
 
     // Nothing to send is success and touches nothing.
     {
-        fake_t f = { .free = 0, .blocked_after = 0 };
-        serial_writer_ops_t ops = ops_for(&f);
+        fake_t f = { .free = 0 };
+        serial_writer_ops_t ops = ops_for(&f, 5);
         CHECK_EQ_INT(serial_writer_write(&ops, NULL, 0), 0);
         CHECK_EQ_INT(f.writes, 0);
         CHECK_EQ_INT(f.delays, 0);

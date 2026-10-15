@@ -1,16 +1,16 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// The deadline loop of serial_out_write(), pure C so it runs under the host
-// tests in tools/rip. serial_out.c binds these ops to the UART driver and the
-// watchdog; the tests bind them to a fake.
+// The write loop of serial_out_write(), pure C so it runs under the host
+// tests in tools/rip. serial_out.c binds these ops to the UART driver; the
+// tests bind them to a fake.
 //
-// The contract that keeps a stalled printer from wedging the rip task: every
-// op is non-blocking. tx_write is best-effort -- it takes what fits in the
-// hardware FIFO and reports the count, and that return value is ground truth.
-// (A first cut bounded uart_write_bytes with uart_get_tx_buffer_free_size;
-// that probe only tracks the ring item currently in service, so a CTS stall
-// mid-job still parked the write inside the driver forever. No ring, no
-// probe, nothing to go stale.)
+// Every op is non-blocking: tx_write takes what fits in the hardware FIFO and
+// reports the count, and that return value is ground truth. A printer that
+// holds HSKo false (paper out, SELECT, powered off) simply stops the FIFO
+// draining; the loop waits it out and gives up only after stall_limit delays
+// in a row with nothing accepted. Nothing is remembered across calls, so every
+// write -- including the first one to a printer that has been off for an
+// hour -- gets the whole limit.
 #pragma once
 #include <stdint.h>
 #include <stddef.h>
@@ -20,14 +20,14 @@ typedef struct {
     // Queue up to n bytes into the hardware FIFO without blocking. Returns
     // bytes accepted (0 when the FIFO is full), or negative on driver error.
     int (*tx_write)(void *ctx, const uint8_t *buf, size_t n);
-    // The watchdog's verdict: the printer has stalled past the timeout.
-    int (*blocked)(void *ctx);
-    // Sleep one watchdog period.
+    // Sleep one poll period.
     void (*delay)(void *ctx);
+    // Consecutive delays with nothing accepted before the write gives up.
+    // 0 = never.
+    unsigned stall_limit;
 } serial_writer_ops_t;
 
-// 0 with every byte queued, or -1 with bytes abandoned because the watchdog
-// called the printer blocked or the driver failed. Paced: any call that
-// leaves a remainder is followed by one delay, so a busy FIFO is polled at
-// the watchdog cadence, never spun on.
+// 0 with every byte queued, or -1 with bytes abandoned because the FIFO took
+// nothing for stall_limit delays in a row, or the driver failed. Paced: any
+// call that leaves a remainder is followed by one delay, never a hot retry.
 int serial_writer_write(const serial_writer_ops_t *ops, const uint8_t *buf, size_t n);

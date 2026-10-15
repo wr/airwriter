@@ -94,8 +94,16 @@ config AIRWRITER_INVERT_CTS
         watchdog's paper sensor. SPEC.md 3.9.
 
 config AIRWRITER_STALL_TIMEOUT
-    int "Seconds of HSKo deassertion before the printer is called out of paper"
+    int "Seconds of HSKo deassertion mid-job before the panel asks for attention"
     default 30
+    help
+        The printer holds HSKo false briefly on every line; only a stall this
+        long mid-job means paper, a jam or SELECT. The job pauses, it is not
+        failed -- see AIRWRITER_STALL_ABORT.
+
+config AIRWRITER_STALL_ABORT
+    int "Seconds a paused job waits for the printer before it is failed"
+    default 600
 
 config AIRWRITER_LED_DATA_PIN
     int "LED chain data pin, -1 if absent"

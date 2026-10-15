@@ -4,19 +4,15 @@
 // printer's HSKo line wired to the ESP32's CTS so the peripheral stalls the
 // FIFO on its own. SPEC.md 3.9 -- no polling loop and no software watermark.
 //
-// That same line is the paper sensor. An ImageWriter II deasserts HSKo while
-// it is busy, which is normal and brief; if it stays deasserted past the
-// watchdog timeout the printer is out of paper, jammed, or switched offline.
-// That is reported up so the phone shows a real alert.
+// That same line is the printer's only status. serial_out reports its edges
+// and nothing more; printer_state decides what a low line means (offline when
+// idle, needs attention mid-job). A write waits out a low line -- a paused job
+// resumes when paper returns -- and fails only after stall_abort_s with no
+// progress.
 #pragma once
 #include <stdint.h>
 #include <stddef.h>
 #include "esp_err.h"
-
-typedef enum {
-    SERIAL_OUT_READY,      // clear to send, or idle
-    SERIAL_OUT_BLOCKED,    // HSKo deasserted longer than the watchdog allows
-} serial_out_state_t;
 
 typedef struct {
     int      uart_num;
@@ -32,13 +28,15 @@ typedef struct {
     int      invert_rx;
     int      invert_cts;   // HSKo reaches IO8 active-high instead of active-low
 
-    // Seconds of continuous HSKo deassertion before the printer is called
-    // blocked. 0 uses the default of 30.
-    int      stall_timeout_s;
+    // Seconds a write waits with nothing accepted before failing the job.
+    // 0 uses the default of 600.
+    int      stall_abort_s;
 
-    // Reports a state change. Called from the watchdog task.
-    void   (*on_state)(void *ctx, serial_out_state_t st);
-    void    *on_state_ctx;
+    // Reports HSKo edges (1 = ready), sampled every 100 ms, plus the level at
+    // start. Called from serial_out's line task. With loopback on it reports
+    // ready once (bytes do flow); with no CTS pin it reports not-ready once.
+    void   (*on_line)(void *ctx, int ready);
+    void    *on_line_ctx;
 
     // Loops TX back into RX inside the peripheral, so the byte stream can be
     // verified on a devkit with no transceiver and no printer attached.
@@ -47,13 +45,11 @@ typedef struct {
 
 esp_err_t serial_out_init(const serial_out_cfg_t *cfg);
 
-// Blocks until every byte is queued -- with CTS flow control that means it
-// blocks while the printer is busy, which is exactly the backpressure the
-// raster pipeline wants -- but not past the watchdog: once the stall outlasts
-// the timeout and the state flips to BLOCKED, this returns ESP_FAIL with the
-// rest of the payload abandoned. The caller owns failing the job; without
-// that bound, one job to a stalled printer parks the rip task inside the
-// UART driver forever.
+// Blocks until every byte is queued. With CTS flow control that means it
+// waits while the printer is busy or paused, which is the backpressure the
+// raster pipeline wants -- but not past stall_abort_s with no progress, when
+// it returns ESP_FAIL with the rest of the payload abandoned. The caller owns
+// failing the job.
 esp_err_t serial_out_write(const uint8_t *buf, size_t n);
 
 // Waits for the last byte to leave the shift register. At 9600 baud the FIFO
@@ -66,8 +62,6 @@ esp_err_t serial_out_flush(uint32_t timeout_ms);
 // job, leaving the printer in whatever mode the truncation happened in. Call
 // only from the writing task with no write in flight.
 void serial_out_purge(void);
-
-serial_out_state_t serial_out_state(void);
 
 // The printer's HSKo line right now. A printer that is attached and online
 // holds this asserted; nothing plugged in reads the same as offline, which is

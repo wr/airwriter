@@ -165,8 +165,8 @@ static int s_printer_failed;
 static int s_job_pipe_ok;
 
 // The printer stream: checksummed so the device can be compared with tools/rip
-// byte for byte, then put on the wire. A write failure means the watchdog
-// called the printer gone; abort the job so the rip task winds down instead
+// byte for byte, then put on the wire. A write failure means the printer
+// stayed paused past STALL_ABORT; abort the job so the rip task winds down instead
 // of pushing the rest of the page at a dead line.
 static void printer_out(void *ctx, const uint8_t *buf, size_t n)
 {
@@ -182,13 +182,12 @@ static void printer_out(void *ctx, const uint8_t *buf, size_t n)
     }
 }
 
-// Interim (Task 3 replaces it): serial_out's 30 s BLOCKED verdict stands in
-// for the line level until serial_out reports HSKo edges itself.
-static void printer_state_changed(void *ctx, serial_out_state_t st)
+// HSKo edges from serial_out. printer_state turns a low line into "printer
+// offline" (idle) or "needs attention" (mid-job) on its own clock.
+static void printer_line_changed(void *ctx, int ready)
 {
     (void)ctx;
-    printer_state_post(st == SERIAL_OUT_BLOCKED ? PS_EV_LINE_NOT_READY
-                                                 : PS_EV_LINE_READY);
+    printer_state_post(ready ? PS_EV_LINE_READY : PS_EV_LINE_NOT_READY);
 }
 
 static esp_err_t doc_begin(void *ctx, const char *format, const char *name)
@@ -644,12 +643,11 @@ void app_main(void)
         .invert_tx       = AW_INVERT_TX,
         .invert_rx       = AW_INVERT_RX,
         .invert_cts      = AW_INVERT_CTS,
-        .stall_timeout_s = CONFIG_AIRWRITER_STALL_TIMEOUT,
-        .on_state        = printer_state_changed,
+        .stall_abort_s   = CONFIG_AIRWRITER_STALL_ABORT,
+        .on_line         = printer_line_changed,
         .loopback        = AW_LOOPBACK,
     };
     ESP_ERROR_CHECK(serial_out_init(&ser));
-    printer_state_post(serial_out_clear() ? PS_EV_LINE_READY : PS_EV_LINE_NOT_READY);
 
     job_pipe_cfg_t pipe = { .out = printer_out, .dither = algo };
     ESP_ERROR_CHECK(job_pipe_init(&pipe));

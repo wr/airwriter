@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "job_pipe.h"
+#include "sdkconfig.h"
 #include "ripjob.h"
 #include "urf_decode.h"
 
@@ -18,7 +19,10 @@ static const char *TAG = "job";
 // 1.9MB; nothing here ever holds more than this.
 #define RING_BYTES   8192
 #define PIPE_STACK   6144
-#define PUSH_TIMEOUT pdMS_TO_TICKS(20000)
+// A paused job (paper out, SELECT) backs the upload up behind the printer, so
+// the push waits as long as the serial writer will, plus a margin.
+#define PUSH_SECONDS (CONFIG_AIRWRITER_STALL_ABORT + 30)
+#define PUSH_TIMEOUT pdMS_TO_TICKS(PUSH_SECONDS * 1000)
 
 static job_pipe_cfg_t   s_cfg;
 static StreamBufferHandle_t s_ring;
@@ -131,7 +135,7 @@ esp_err_t job_pipe_data(const uint8_t *buf, size_t n)
         if (s_aborted) return ESP_FAIL;
         size_t w = xStreamBufferSend(s_ring, buf + sent, n - sent, PUSH_TIMEOUT);
         if (w == 0) {
-            ESP_LOGE(TAG, "pipeline stalled for 20s; abandoning the job");
+            ESP_LOGE(TAG, "pipeline stalled for %ds; abandoning the job", PUSH_SECONDS);
             s_aborted = 1;
             return ESP_FAIL;
         }
@@ -156,7 +160,7 @@ void job_pipe_end(int ok, job_pipe_stats_t *st)
     // pipeline blocks on the UART the whole time. Waiting 30s here would
     // abandon every real job a third of the way through.
     for (int waited = 0; !xSemaphoreTake(s_done, pdMS_TO_TICKS(15000)); waited += 15) {
-        if (waited >= 600) { ESP_LOGE(TAG, "pipeline stuck for 10 minutes"); break; }
+        if (waited >= CONFIG_AIRWRITER_STALL_ABORT + 600) { ESP_LOGE(TAG, "pipeline stuck past the stall limit"); break; }
         ESP_LOGI(TAG, "still printing: %us elapsed, %u bytes out",
                  (unsigned)waited + 15, (unsigned)s_st.printer_bytes);
     }

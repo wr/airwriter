@@ -22,7 +22,7 @@ static const char *TAG = "serial";
 #define WATCH_PERIOD pdMS_TO_TICKS(100)
 
 static serial_out_cfg_t s_cfg;
-static volatile serial_out_state_t s_state = SERIAL_OUT_READY;
+static unsigned s_stall_limit;   // poll periods; see serial_writer.h
 static volatile size_t   s_lb_bytes;
 static volatile uint32_t s_lb_crc;
 
@@ -49,36 +49,20 @@ static int clear_to_send(void)
     return s_cfg.invert_cts ? level == 1 : level == 0;
 }
 
-// The printer stalls constantly and briefly while its head returns; only a
-// stall that outlasts the timeout means paper. SPEC.md 3.9.
-static void watchdog_task(void *arg)
+// Reports HSKo edges. Mid-job the line toggles on every printed line, so the
+// callback must stay cheap; printer_state does the judging on its own clock.
+static void line_task(void *arg)
 {
     (void)arg;
-    TickType_t blocked_since = 0;
-    const TickType_t limit = pdMS_TO_TICKS(1000 * (s_cfg.stall_timeout_s ?: 30));
-
+    int last = -1;
     for (;;) {
+        int now = clear_to_send();
+        if (now != last) {
+            last = now;
+            ESP_LOGD(TAG, "printer %s", now ? "ready" : "not ready");
+            if (s_cfg.on_line) s_cfg.on_line(s_cfg.on_line_ctx, now);
+        }
         vTaskDelay(WATCH_PERIOD);
-
-        if (clear_to_send()) {
-            if (s_state != SERIAL_OUT_READY) {
-                ESP_LOGI(TAG, "printer ready again");
-                s_state = SERIAL_OUT_READY;
-                if (s_cfg.on_state) s_cfg.on_state(s_cfg.on_state_ctx, s_state);
-            }
-            blocked_since = 0;
-            continue;
-        }
-
-        if (blocked_since == 0) {
-            blocked_since = xTaskGetTickCount();
-        } else if (s_state == SERIAL_OUT_READY &&
-                   xTaskGetTickCount() - blocked_since > limit) {
-            ESP_LOGW(TAG, "printer has held HSKo low for %ds: out of paper, jammed "
-                          "or offline", s_cfg.stall_timeout_s ?: 30);
-            s_state = SERIAL_OUT_BLOCKED;
-            if (s_cfg.on_state) s_cfg.on_state(s_cfg.on_state_ctx, s_state);
-        }
     }
 }
 
@@ -101,6 +85,8 @@ esp_err_t serial_out_init(const serial_out_cfg_t *cfg)
 {
     s_cfg = *cfg;
     if (!s_cfg.baud) s_cfg.baud = 9600;
+    s_stall_limit = (unsigned)(s_cfg.stall_abort_s > 0 ? s_cfg.stall_abort_s : 600)
+                    * (1000u / 100u);   // WATCH_PERIOD is 100 ms
 
     uart_config_t uc = {
         .baud_rate = s_cfg.baud,
@@ -147,8 +133,11 @@ esp_err_t serial_out_init(const serial_out_cfg_t *cfg)
         ESP_LOGW(TAG, "loopback on: TX feeds RX inside the peripheral, nothing "
                       "reaches a printer");
     } else if (s_cfg.cts_pin >= 0) {
-        xTaskCreate(watchdog_task, "ser_wd", 3072, NULL, 3, NULL);
+        xTaskCreate(line_task, "ser_line", 3072, NULL, 3, NULL);
     }
+    // No line to watch: say so once, so the state is not left unknown.
+    if (s_cfg.loopback && s_cfg.on_line)         s_cfg.on_line(s_cfg.on_line_ctx, 1);
+    else if (s_cfg.cts_pin < 0 && s_cfg.on_line) s_cfg.on_line(s_cfg.on_line_ctx, 0);
 
     ESP_LOGI(TAG, "uart%d at %d baud, tx %d rx %d cts %d",
              s_cfg.uart_num, s_cfg.baud, s_cfg.tx_pin, s_cfg.rx_pin, s_cfg.cts_pin);
@@ -167,12 +156,6 @@ static int ops_tx_write(void *ctx, const uint8_t *buf, size_t n)
     return uart_tx_chars(s_cfg.uart_num, (const char *)buf, n);
 }
 
-static int ops_blocked(void *ctx)
-{
-    (void)ctx;
-    return s_state == SERIAL_OUT_BLOCKED;
-}
-
 static void ops_delay(void *ctx)
 {
     (void)ctx;
@@ -181,10 +164,10 @@ static void ops_delay(void *ctx)
 
 esp_err_t serial_out_write(const uint8_t *buf, size_t n)
 {
-    static const serial_writer_ops_t ops = {
-        .tx_write = ops_tx_write,
-        .blocked  = ops_blocked,
-        .delay    = ops_delay,
+    const serial_writer_ops_t ops = {
+        .tx_write    = ops_tx_write,
+        .delay       = ops_delay,
+        .stall_limit = s_stall_limit,
     };
     return serial_writer_write(&ops, buf, n) == 0 ? ESP_OK : ESP_FAIL;
 }
@@ -198,8 +181,6 @@ esp_err_t serial_out_flush(uint32_t timeout_ms)
 {
     return uart_wait_tx_done(s_cfg.uart_num, pdMS_TO_TICKS(timeout_ms));
 }
-
-serial_out_state_t serial_out_state(void) { return s_state; }
 
 int serial_out_clear(void)
 {
