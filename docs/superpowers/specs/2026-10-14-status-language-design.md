@@ -50,7 +50,7 @@ Display states, highest priority first:
 | 1 | **Booting** | power-on | the boot animation finishes (3.0 s) | idle |
 | 2 | **Setup** | no credentials, or the boot-time join failed; sub-state *phone joined* while ≥1 station is on the AP | credentials saved (the board reboots) | — |
 | 3 | **Joining Wi-Fi** | at boot, and after any disconnect once joined | got an IP | — |
-| 4 | **Needs attention** | a job is active and HSKo has been false for `STALL_ATTENTION` (30 s) | HSKo true (the job resumes), or `STALL_ABORT` (600 s) passes → job fails | stopped, `media-empty` |
+| 4 | **Needs attention** | a job is active and HSKo has been false for `STALL_ATTENTION` (30 s) -- or for `OFFLINE_DEBOUNCE` (3 s) if it was already false when the job started: no printer to wait for | HSKo true (the job resumes), or `STALL_ABORT` (600 s) passes → job fails | stopped, `media-empty` |
 | 5 | **Job failed** | a job ends in failure (transfer cut, rip error, stall abort) | `FAILED_HOLD` (60 s) passes, or the next job starts | idle; the job is aborted |
 | 6 | **Printing** | a job starts | the job ends | processing |
 | 7 | **Printer offline** | no job, HSKo false for `OFFLINE_DEBOUNCE` (3 s), counted from the end of the boot animation (the ImageWriter reports busy for ~3.5 s after the AirWriter powers up, W-1039) | HSKo true | stopped, `other`¹ |

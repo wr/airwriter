@@ -43,6 +43,7 @@ typedef struct {
     ps_timing_t tm;
     uint64_t    boot_at, line_since, failed_at, activity_at, state_since, kicked_at;
     uint8_t     setup, wifi_up, line_ready, job, failed, ap_stations, greeted, kicked;
+    uint8_t     job_started_low;   // the line was down when this job began: no printer to wait for
     ps_state_t  last;
 } ps_t;
 

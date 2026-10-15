@@ -90,6 +90,31 @@ int main(void)
     ps_post(&ps, PS_EV_JOB_START, 45000);
     assert(st(&ps, 45000) == PS_ATTENTION);
 
+    // A job started while the line is already down has no printer to wait
+    // for -- after an idle spell the printer's buffer is empty, so it is off,
+    // unplugged or deselected -- and asks for attention after the offline
+    // debounce, not the 30 s mid-page allowance (board 1: a test print with
+    // the cable out showed "printing" for 26 s).
+    up_and_ready(&ps, 0);
+    st(&ps, 4000);
+    ps_post(&ps, PS_EV_LINE_NOT_READY, 10000);
+    ps_post(&ps, PS_EV_JOB_START, 11000);           // 1 s after the cable came out
+    assert(st(&ps, 12999) == PS_PRINTING);
+    assert(st(&ps, 13000) == PS_ATTENTION);         // 3 s after the line dropped
+    // The printer turning up resumes; a later stall in that job gets 30 s.
+    ps_post(&ps, PS_EV_LINE_READY, 20000);
+    assert(st(&ps, 20000) == PS_PRINTING);
+    ps_post(&ps, PS_EV_LINE_NOT_READY, 21000);
+    assert(st(&ps, 50999) == PS_PRINTING);
+    assert(st(&ps, 51000) == PS_ATTENTION);
+    // The next job starts with the line up: the 30 s rule again.
+    ps_post(&ps, PS_EV_LINE_READY, 52000);
+    ps_post(&ps, PS_EV_JOB_DONE, 53000);
+    ps_post(&ps, PS_EV_JOB_START, 54000);
+    ps_post(&ps, PS_EV_LINE_NOT_READY, 55000);
+    assert(st(&ps, 84999) == PS_PRINTING);
+    assert(st(&ps, 85000) == PS_ATTENTION);
+
     // A failed job holds for failed_hold_ms; the next job clears it at once.
     up_and_ready(&ps, 0);
     ps_post(&ps, PS_EV_JOB_START, 5000);
