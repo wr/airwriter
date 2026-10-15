@@ -321,3 +321,42 @@ EXT_R = round(CORNER_R + WALL, 6)
 """The board's corner radius grown by the wall thickness: what offsetting
 the board outline outward by WALL naturally produces at the tray's exterior
 corner, and a better printed part than a sharp vertical arris."""
+
+# --- light-guide lattice ---------------------------------------------------
+# docs/superpowers/specs/2026-10-14-light-guide-lattice-design.md. Its height
+# is CAVITY: the panel rests on lattice and mini-DIN shells together.
+
+LATTICE_WALL = 0.80
+"""Cell walls: two 0.4mm perimeters, opaque in black (Wells, 2026-10-14; his
+earlier hand-drawn lattice used 0.60)."""
+
+LATTICE_INSET = 0.25
+"""Lattice outline inside the board outline; with POCKET_CLEAR that is 0.55
+to the tray walls."""
+
+CELL_R = 1.00
+"""Inner corner radius of each cell, as Wells's earlier lattice had."""
+
+POST_D = 8.00
+"""Posts at H1-H4: a 0.80 wall round the standoff pocket."""
+
+NUT_POCKET_D = 6.40
+NUT_POCKET_DEPTH = 3.30
+"""Pocket in each post top for the panel's Würth 9774030151R standoff (Ø5.1
+x 3.0, soldered to a 6.0 land): the land plus fillet, and 0.3 below the
+standoff's end so the panel bears on the lattice, not on the standoffs."""
+
+PART_CLEAR = 0.40
+PART_TOP_CLEAR = 0.50
+"""Grown onto each part envelope sideways / on top (components.py)."""
+
+D3_TUBE_CLEAR = 0.25
+"""The power LED's tube: the panel's FR4 window plus this, inside."""
+
+WEST_RAIL_X1 = 7.00
+EAST_RAIL_X0 = 50.00
+EAST_RAIL_X1 = 55.75
+"""Rails forward to the H3 / H4 posts. East: over U1's shield, west of the
+antenna keepout (56.00) by KEEPOUT_CLEAR."""
+
+KEEPOUT_CLEAR = 0.25
