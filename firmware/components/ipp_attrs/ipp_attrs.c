@@ -35,8 +35,9 @@ static const char *const k_job_creation[] = {
 };
 
 static const int32_t k_operations[] = {
-    IPP_OP_PRINT_JOB, IPP_OP_VALIDATE_JOB, IPP_OP_CANCEL_JOB,
-    IPP_OP_GET_JOB_ATTRIBUTES, IPP_OP_GET_JOBS, IPP_OP_GET_PRINTER_ATTRIBUTES
+    IPP_OP_PRINT_JOB, IPP_OP_VALIDATE_JOB, IPP_OP_CREATE_JOB, IPP_OP_SEND_DOCUMENT,
+    IPP_OP_CANCEL_JOB, IPP_OP_GET_JOB_ATTRIBUTES, IPP_OP_GET_JOBS,
+    IPP_OP_GET_PRINTER_ATTRIBUTES
 };
 
 // 3 draft, 4 normal, 5 high. One pass at 144x72 is the only mode v1 has, so
@@ -185,6 +186,7 @@ void ipp_write_printer_attrs(ipp_enc_t *e, const ipp_printer_t *p)
     ipp_attr_int(e, IPP_TAG_INTEGER, "pages-per-minute", 1);
     ipp_attr_str(e, IPP_TAG_KEYWORD, "pdl-override-supported", "attempted");
     ipp_attr_bool(e, "multiple-document-jobs-supported", 0);
+    ipp_attr_int(e, IPP_TAG_INTEGER, "multiple-operation-time-out", IPP_MULTI_OP_TIMEOUT_S);
     ipp_attr_strs(e, IPP_TAG_KEYWORD, "job-creation-attributes-supported",
                   k_job_creation, NELEM(k_job_creation));
     ipp_attr_strs(e, IPP_TAG_KEYWORD, "which-jobs-supported",

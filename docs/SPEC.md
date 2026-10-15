@@ -226,6 +226,13 @@ Minimum viable set for iOS:
   gives up
 - `Validate-Job` (0x0004)
 - `Print-Job` (0x0002) — body arrives chunked; decode as it streams, do not buffer the page
+- `Create-Job` (0x0005) + `Send-Document` (0x0006) — the same job in two requests. The
+  Print-Job response, and with it the job-id, can only go back after the whole document is
+  in, so a stalled printer (which backs the upload up) leaves the phone nothing to poll.
+  Create-Job hands over the job-id first; while Send-Document streams, the phone polls
+  Get-Job-Attributes and sees `processing-stopped` / `printer-stopped` (W-1040). A
+  Create-Job whose document has not arrived within `multiple-operation-time-out` (60 s) is
+  aborted so it cannot hold the printer.
 - `Get-Job-Attributes` (0x0009) — iOS polls this for progress
 - `Get-Jobs` (0x000A)
 - `Cancel-Job` (0x0008)

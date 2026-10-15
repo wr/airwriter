@@ -37,6 +37,22 @@ static int name_is(const uint8_t *name, size_t nlen, const char *want)
     return nlen == strlen(want) && memcmp(name, want, nlen) == 0;
 }
 
+// The job-id a job-uri names: its last path segment, which is how
+// ipp_job_start builds it. 0 -- never a job we issued -- if that is not a
+// number.
+static int32_t job_uri_id(const uint8_t *val, size_t n)
+{
+    size_t i = n;
+    while (i > 0 && val[i - 1] != '/') i--;
+    if (i == n || n - i > 9) return 0;
+    int32_t id = 0;
+    for (; i < n; i++) {
+        if (val[i] < '0' || val[i] > '9') return 0;
+        id = id * 10 + (val[i] - '0');
+    }
+    return id;
+}
+
 int ipp_req_parse(ipp_req_t *r, const uint8_t *buf, size_t len)
 {
     memset(r, 0, sizeof *r);
@@ -54,6 +70,7 @@ int ipp_req_parse(ipp_req_t *r, const uint8_t *buf, size_t len)
     // must continue far enough to have read it.
 
     uint8_t group = 0;
+    int have_job_id = 0;   // an explicit job-id outranks a job-uri
     for (;;) {
         if (!need(&c, 1)) return IPP_REQ_SHORT;
         uint8_t tag = c.p[c.pos++];
@@ -94,8 +111,11 @@ int ipp_req_parse(ipp_req_t *r, const uint8_t *buf, size_t len)
             store(r, r->requesting_user, sizeof r->requesting_user, val, vlen);
         else if (name_is(name, nlen, "document-format"))
             store(r, r->document_format, sizeof r->document_format, val, vlen);
-        else if (name_is(name, nlen, "job-id") && vlen == 4)
+        else if (name_is(name, nlen, "job-id") && vlen == 4) {
             r->job_id = (int32_t)(((uint32_t)val[0] << 24) | ((uint32_t)val[1] << 16) |
                                   ((uint32_t)val[2] << 8) | (uint32_t)val[3]);
+            have_job_id = 1;
+        } else if (name_is(name, nlen, "job-uri") && !have_job_id)
+            r->job_id = job_uri_id(val, vlen);
     }
 }

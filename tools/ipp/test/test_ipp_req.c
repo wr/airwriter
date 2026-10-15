@@ -101,6 +101,48 @@ int main(void)
     CHECK_EQ_INT(ipp_req_parse(&r, m.b, m.n), IPP_REQ_OK);
     CHECK_EQ_INT(r.job_id, 7);
 
+    /* Send-Document: job-id in the operation group, document after the end
+     * tag, exactly like Print-Job. */
+    hdr(&m, IPP_OP_SEND_DOCUMENT, 4);
+    u8(&m, IPP_TAG_OPERATION);
+    attr(&m, IPP_TAG_URI, "printer-uri", "ipp://aw.local/ipp/print");
+    attr_i(&m, IPP_TAG_INTEGER, "job-id", 12);
+    attr(&m, IPP_TAG_MIMETYPE, "document-format", "image/urf");
+    u8(&m, IPP_TAG_BOOLEAN); u16(&m, 13); bytes(&m, "last-document"); u16(&m, 1); u8(&m, 1);
+    u8(&m, IPP_TAG_END);
+    body_at = m.n;
+    bytes(&m, "UNIRAST");
+    CHECK_EQ_INT(ipp_req_parse(&r, m.b, m.n), IPP_REQ_OK);
+    CHECK_EQ_INT(r.op, IPP_OP_SEND_DOCUMENT);
+    CHECK_EQ_INT(r.job_id, 12);
+    CHECK_EQ_INT(r.header_len, body_at);
+
+    /* A job may be named by job-uri instead of printer-uri + job-id
+     * (RFC 8011 4.1.5); the id is the URI's last path segment. */
+    hdr(&m, IPP_OP_GET_JOB_ATTRIBUTES, 5);
+    u8(&m, IPP_TAG_OPERATION);
+    attr(&m, IPP_TAG_URI, "job-uri", "ipp://aw.local:631/ipp/print/42");
+    u8(&m, IPP_TAG_END);
+    CHECK_EQ_INT(ipp_req_parse(&r, m.b, m.n), IPP_REQ_OK);
+    CHECK_EQ_INT(r.job_id, 42);
+
+    /* An explicit job-id wins over a job-uri, whichever comes first. */
+    hdr(&m, IPP_OP_GET_JOB_ATTRIBUTES, 6);
+    u8(&m, IPP_TAG_OPERATION);
+    attr(&m, IPP_TAG_URI, "job-uri", "ipp://aw.local:631/ipp/print/42");
+    attr_i(&m, IPP_TAG_INTEGER, "job-id", 43);
+    u8(&m, IPP_TAG_END);
+    CHECK_EQ_INT(ipp_req_parse(&r, m.b, m.n), IPP_REQ_OK);
+    CHECK_EQ_INT(r.job_id, 43);
+
+    /* A job-uri with no number on the end names no job we have. */
+    hdr(&m, IPP_OP_GET_JOB_ATTRIBUTES, 7);
+    u8(&m, IPP_TAG_OPERATION);
+    attr(&m, IPP_TAG_URI, "job-uri", "ipp://aw.local:631/ipp/print/");
+    u8(&m, IPP_TAG_END);
+    CHECK_EQ_INT(ipp_req_parse(&r, m.b, m.n), IPP_REQ_OK);
+    CHECK_EQ_INT(r.job_id, 0);
+
     /* A job-name longer than the field is truncated and flagged, not rejected:
      * an over-long name is not a reason to refuse to print. */
     char longname[IPP_NAME_MAX + 40];

@@ -78,10 +78,29 @@ int main(void)
     CHECK_EQ_INT(f.nvalues, 8);
     CHECK(ipp_val_is(&f, "V1.4"));
 
-    /* Six operations, matching SPEC.md 3.4. */
+    /* Eight operations, matching SPEC.md 3.4. Create-Job and Send-Document
+     * are what give the phone a job-id before the upload, so it can see a
+     * paused printer while the document is still streaming (W-1040). */
     CHECK(ipp_find(buf, n, "operations-supported", &f));
-    CHECK_EQ_INT(f.nvalues, 6);
+    CHECK_EQ_INT(f.nvalues, 8);
     CHECK_EQ_INT(ipp_val_int(&f), IPP_OP_PRINT_JOB);
+    {
+        int seen_create = 0, seen_send = 0;
+        const uint8_t *v = f.val;
+        for (int i = 0; i < f.nvalues; i++) {
+            int32_t op = (int32_t)(((uint32_t)v[0] << 24) | ((uint32_t)v[1] << 16) |
+                                   ((uint32_t)v[2] << 8) | (uint32_t)v[3]);
+            seen_create |= op == IPP_OP_CREATE_JOB;
+            seen_send   |= op == IPP_OP_SEND_DOCUMENT;
+            v += 4 + 1 + 2 + 2;   /* this value, then the next's tag, name-len, value-len */
+        }
+        CHECK(seen_create);
+        CHECK(seen_send);
+    }
+
+    /* RFC 8011 requires multiple-operation-time-out of a Create-Job printer. */
+    CHECK(ipp_find(buf, n, "multiple-operation-time-out", &f));
+    CHECK_EQ_INT(ipp_val_int(&f), IPP_MULTI_OP_TIMEOUT_S);
 
     /* Honest margins. The tractor feed cannot reach the edge, and declaring
      * zero would make iOS lay out edge-to-edge and clip silently. */

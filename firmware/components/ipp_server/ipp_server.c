@@ -4,6 +4,7 @@
 #include "ipp_attrs.h"
 #include "ipp_http.h"
 #include "sdkconfig.h"
+#include "ipp_job.h"
 
 #include <string.h>
 #include <stdio.h>
@@ -24,9 +25,8 @@
 
 static const char *TAG = "ipp";
 
-// One job at a time. printer_state owns the real queue later; M4 only needs
-// enough to answer Get-Job-Attributes while a job is in flight.
-#define JOB_NAME_MAX  IPP_NAME_MAX
+// One job at a time, in ipp_job's slot: enough to answer Get-Job-Attributes
+// while a job is in flight.
 #define RESP_MAX      5120   // printer attributes measure ~3.2KB with media-col
 #define HDRBUF_MAX    2048   // the IPP attribute section, before the document
 #define CHUNK         1024
@@ -36,16 +36,6 @@ static const char *TAG = "ipp";
 // the transfer, and the phone would call the printer unresponsive.
 #define WORKERS       3
 #define WORKER_STACK  5120
-
-typedef struct {
-    int32_t  id;
-    uint8_t  state;
-    char     name[JOB_NAME_MAX];
-    char     user[JOB_NAME_MAX];
-    char     uri[160];
-    uint32_t created_s;
-    int      canceled;
-} job_t;
 
 // Per-connection scratch, too big for a task stack and allocated once per
 // worker rather than once per request.
@@ -65,11 +55,14 @@ static char s_adminurl[96];
 static char s_uuid[64];
 static char s_hostname[40];
 
-static job_t s_job;
+static ipp_job_rec_t s_job;
 static int32_t s_next_job_id = 1;
 static const char *s_stop_reason;   // NULL when the printer is fine
-static SemaphoreHandle_t s_job_lock;     // guards s_job and s_next_job_id
-static SemaphoreHandle_t s_print_lock;   // one document in the sink at a time
+static SemaphoreHandle_t s_job_lock;     // guards s_job, s_next_job_id, s_stop_reason
+// Held by the job that owns the printer, from Print-Job or Create-Job until
+// its document is done. Binary, not a mutex: Create-Job takes it and
+// Send-Document -- often on another worker -- gives it back.
+static SemaphoreHandle_t s_print_lock;
 
 static uint32_t uptime_s(void)
 {
@@ -109,24 +102,33 @@ static void fill_printer(ipp_printer_t *p)
     // Still accepting: the job queues and prints when paper goes back in,
     // which is what a user expects after clearing the alert.
     p->accepting_jobs = 1;
-    p->queued_jobs    = (s_job.state == IPP_JSTATE_PROCESSING) ? 1 : 0;
+    p->queued_jobs    = ipp_job_active(&s_job) ? 1 : 0;
     p->uptime_s       = uptime_s();
 }
 
-static void fill_job(ipp_job_t *j, const job_t *src)
+// `src` and `printer_stopped` are a snapshot taken under s_job_lock; the
+// strings point into `src`, so it must outlive the encode.
+static void fill_job(ipp_job_t *j, const ipp_job_rec_t *src, int printer_stopped)
 {
     j->id               = src->id;
     j->uri              = src->uri;
     j->printer_uri      = s_uri;
     j->name             = src->name[0] ? src->name : "Untitled";
     j->user             = src->user[0] ? src->user : "anonymous";
-    j->state            = src->state;
-    j->state_reason     = src->state == IPP_JSTATE_COMPLETED ? "job-completed-successfully"
-                        : src->state == IPP_JSTATE_CANCELED  ? "job-canceled-by-user"
-                        : src->state == IPP_JSTATE_PROCESSING ? "job-printing"
-                        : "none";
+    ipp_job_view(src, printer_stopped, &j->state, &j->state_reason);
     j->impressions_done = 0;
     j->time_at_creation = src->created_s;
+}
+
+// A copy of the job and whether the printer is stopped, consistent with each
+// other.
+static ipp_job_rec_t job_snapshot(int *printer_stopped)
+{
+    xSemaphoreTake(s_job_lock, portMAX_DELAY);
+    ipp_job_rec_t snap = s_job;
+    *printer_stopped = s_stop_reason != NULL;
+    xSemaphoreGive(s_job_lock);
+    return snap;
 }
 
 // The response must carry the version the client asked for. A 2.0 client that
@@ -160,6 +162,61 @@ static int send_status(work_t *w, int fd, const ipp_req_t *r, uint16_t status,
     return send_ipp(fd, &e, keep_alive);
 }
 
+// A response carrying one job's attributes: Print-Job, Create-Job,
+// Send-Document and Get-Job-Attributes all answer with this.
+static int send_job(work_t *w, int fd, const ipp_req_t *r, const ipp_job_rec_t *job,
+                    int printer_stopped, int keep_alive)
+{
+    ipp_job_t j;
+    fill_job(&j, job, printer_stopped);
+    ipp_enc_t e;
+    ipp_enc_init(&e, w->resp, RESP_MAX);
+    ipp_resp_begin(&e, resp_version(r), IPP_STATUS_OK, r->request_id);
+    ipp_write_op_attrs(&e);
+    ipp_write_job_attrs(&e, &j);
+    ipp_end(&e);
+    return send_ipp(fd, &e, keep_alive);
+}
+
+// A Create-Job whose Send-Document never came holds the printer. Give it up
+// once the advertised multiple-operation-time-out has passed. Every request
+// runs this, so the job reads aborted on time even if nothing else is queued.
+static void reap_abandoned(void)
+{
+    xSemaphoreTake(s_job_lock, portMAX_DELAY);
+    int freed = ipp_job_reap(&s_job, uptime_s());
+    int32_t id = s_job.id;
+    xSemaphoreGive(s_job_lock);
+    if (freed) {
+        ESP_LOGW(TAG, "job %d: no document after %d s, aborted", (int)id,
+                 IPP_MULTI_OP_TIMEOUT_S);
+        xSemaphoreGive(s_print_lock);
+    }
+}
+
+// Waits for the printer, as long as a client will reasonably wait for an
+// answer. A second job waits here rather than interleaving its raster with the
+// first. Polls once a second so an abandoned Create-Job ahead of it is reaped.
+static int acquire_printer(void)
+{
+    for (int waited_s = 0; waited_s < 30; waited_s++) {
+        reap_abandoned();
+        if (xSemaphoreTake(s_print_lock, pdMS_TO_TICKS(1000)) == pdTRUE) return 1;
+    }
+    return 0;
+}
+
+// Puts a new job in the slot. The caller holds s_print_lock.
+static int32_t start_job(const ipp_req_t *r, int awaiting_doc)
+{
+    xSemaphoreTake(s_job_lock, portMAX_DELAY);
+    int32_t id = s_next_job_id++;
+    ipp_job_start(&s_job, id, uptime_s(), awaiting_doc, r->job_name,
+                  r->requesting_user, s_uri);
+    xSemaphoreGive(s_job_lock);
+    return id;
+}
+
 static int format_supported(const char *fmt)
 {
     // An absent or unspecified format means "you decide", which for this
@@ -169,33 +226,13 @@ static int format_supported(const char *fmt)
         || strcmp(fmt, "application/octet-stream") == 0;
 }
 
-static int op_print_job(work_t *w, int fd, const ipp_req_t *r, hbody_t *body,
-                        const uint8_t *pre, size_t pre_len, int keep_alive)
+// Streams the document into the sink, finishes the job and frees the printer,
+// then answers with the job's final attributes. The caller holds s_print_lock
+// and the job is processing.
+static int run_document(work_t *w, int fd, const ipp_req_t *r, hbody_t *body,
+                        const uint8_t *pre, size_t pre_len, int32_t job_id,
+                        int keep_alive)
 {
-    if (!format_supported(r->document_format)) {
-        ESP_LOGW(TAG, "refusing document-format %s", r->document_format);
-        hbody_drain(body);
-        return send_status(w, fd, r, IPP_STATUS_ERR_FORMAT_NOT_SUPPORTED, keep_alive);
-    }
-
-    // Only one document may be in the sink at a time. A second job waits here
-    // rather than interleaving its raster into the same printer.
-    if (xSemaphoreTake(s_print_lock, pdMS_TO_TICKS(30000)) != pdTRUE) {
-        hbody_drain(body);
-        return send_status(w, fd, r, IPP_STATUS_ERR_NOT_ACCEPTING_JOBS, keep_alive);
-    }
-
-    xSemaphoreTake(s_job_lock, portMAX_DELAY);
-    memset(&s_job, 0, sizeof s_job);
-    s_job.id        = s_next_job_id++;
-    s_job.state     = IPP_JSTATE_PROCESSING;
-    s_job.created_s = uptime_s();
-    strncpy(s_job.name, r->job_name, sizeof s_job.name - 1);
-    strncpy(s_job.user, r->requesting_user, sizeof s_job.user - 1);
-    snprintf(s_job.uri, sizeof s_job.uri, "%s/%d", s_uri, (int)s_job.id);
-    int32_t job_id = s_job.id;
-    xSemaphoreGive(s_job_lock);
-
     int ok = 1;
     if (s_sink.begin && s_sink.begin(s_sink.ctx, r->document_format, s_job.name) != ESP_OK)
         ok = 0;
@@ -224,10 +261,9 @@ static int op_print_job(work_t *w, int fd, const ipp_req_t *r, hbody_t *body,
     if (s_sink.end) s_sink.end(s_sink.ctx, ok);
 
     xSemaphoreTake(s_job_lock, portMAX_DELAY);
-    s_job.state = s_job.canceled ? IPP_JSTATE_CANCELED
-                : ok             ? IPP_JSTATE_COMPLETED
-                                 : IPP_JSTATE_ABORTED;
-    job_t snapshot = s_job;
+    ipp_job_finish(&s_job, ok);
+    ipp_job_rec_t snapshot = s_job;
+    int stopped = s_stop_reason != NULL;
     xSemaphoreGive(s_job_lock);
     xSemaphoreGive(s_print_lock);
 
@@ -236,15 +272,72 @@ static int op_print_job(work_t *w, int fd, const ipp_req_t *r, hbody_t *body,
 
     // Respond only now. A client that sees the response while it is still
     // sending treats the connection as finished, and the rest is lost.
-    ipp_job_t j;
-    fill_job(&j, &snapshot);
-    ipp_enc_t e;
-    ipp_enc_init(&e, w->resp, RESP_MAX);
-    ipp_resp_begin(&e, resp_version(r), IPP_STATUS_OK, r->request_id);
-    ipp_write_op_attrs(&e);
-    ipp_write_job_attrs(&e, &j);
-    ipp_end(&e);
-    return send_ipp(fd, &e, keep_alive);
+    return send_job(w, fd, r, &snapshot, stopped, keep_alive);
+}
+
+static int op_print_job(work_t *w, int fd, const ipp_req_t *r, hbody_t *body,
+                        const uint8_t *pre, size_t pre_len, int keep_alive)
+{
+    if (!format_supported(r->document_format)) {
+        ESP_LOGW(TAG, "refusing document-format %s", r->document_format);
+        hbody_drain(body);
+        return send_status(w, fd, r, IPP_STATUS_ERR_FORMAT_NOT_SUPPORTED, keep_alive);
+    }
+
+    if (!acquire_printer()) {
+        hbody_drain(body);
+        return send_status(w, fd, r, IPP_STATUS_ERR_NOT_ACCEPTING_JOBS, keep_alive);
+    }
+    int32_t job_id = start_job(r, 0);
+    return run_document(w, fd, r, body, pre, pre_len, job_id, keep_alive);
+}
+
+// Create-Job answers at once with a pending job and its id. The printer is
+// reserved for it until Send-Document delivers the document, it is canceled,
+// or IPP_MULTI_OP_TIMEOUT_S passes.
+static int op_create_job(work_t *w, int fd, const ipp_req_t *r, int keep_alive)
+{
+    if (!format_supported(r->document_format))
+        return send_status(w, fd, r, IPP_STATUS_ERR_FORMAT_NOT_SUPPORTED, keep_alive);
+    if (!acquire_printer())
+        return send_status(w, fd, r, IPP_STATUS_ERR_NOT_ACCEPTING_JOBS, keep_alive);
+
+    int32_t job_id = start_job(r, 1);
+    ESP_LOGI(TAG, "job %d created, waiting for its document", (int)job_id);
+    int stopped;
+    ipp_job_rec_t snapshot = job_snapshot(&stopped);
+    return send_job(w, fd, r, &snapshot, stopped, keep_alive);
+}
+
+static int op_send_document(work_t *w, int fd, const ipp_req_t *r, hbody_t *body,
+                            const uint8_t *pre, size_t pre_len, int keep_alive)
+{
+    xSemaphoreTake(s_job_lock, portMAX_DELAY);
+    uint16_t st = ipp_job_claim_doc(&s_job, r->job_id);
+    int32_t job_id = s_job.id;
+    // A format we cannot print ends the job here: there is only ever one
+    // document, and it is refused.
+    int refuse = (st == IPP_STATUS_OK && !format_supported(r->document_format));
+    if (refuse) ipp_job_finish(&s_job, 0);
+    xSemaphoreGive(s_job_lock);
+
+    if (st != IPP_STATUS_OK || refuse) {
+        if (refuse) {
+            ESP_LOGW(TAG, "job %d: refusing document-format %s", (int)job_id,
+                     r->document_format);
+            xSemaphoreGive(s_print_lock);
+            st = IPP_STATUS_ERR_FORMAT_NOT_SUPPORTED;
+        } else {
+            ESP_LOGW(TAG, "Send-Document for job %d refused: 0x%04x",
+                     (int)r->job_id, st);
+        }
+        hbody_drain(body);
+        return send_status(w, fd, r, st, keep_alive);
+    }
+
+    // The printer has been ours since Create-Job; the document goes the same
+    // way a Print-Job's does.
+    return run_document(w, fd, r, body, pre, pre_len, job_id, keep_alive);
 }
 
 static int dispatch(work_t *w, int fd, const ipp_req_t *r, hbody_t *body,
@@ -253,9 +346,13 @@ static int dispatch(work_t *w, int fd, const ipp_req_t *r, hbody_t *body,
     ipp_enc_t e;
     ipp_enc_init(&e, w->resp, RESP_MAX);
 
-    // Print-Job owns the body. Every other operation must consume it before
-    // replying, or the next request on this connection starts mid-document.
-    if (r->op != IPP_OP_PRINT_JOB && hbody_drain(body) < 0) return -1;
+    // Print-Job and Send-Document own the body. Every other operation must
+    // consume it before replying, or the next request on this connection
+    // starts mid-document.
+    int owns_body = r->op == IPP_OP_PRINT_JOB || r->op == IPP_OP_SEND_DOCUMENT;
+    if (!owns_body && hbody_drain(body) < 0) return -1;
+
+    reap_abandoned();
 
     switch (r->op) {
     case IPP_OP_GET_PRINTER_ATTRIBUTES: {
@@ -280,33 +377,32 @@ static int dispatch(work_t *w, int fd, const ipp_req_t *r, hbody_t *body,
         if (s_cfg.on_job_op) s_cfg.on_job_op();
         return op_print_job(w, fd, r, body, pre, pre_len, keep_alive);
 
+    case IPP_OP_CREATE_JOB:
+        if (s_cfg.on_job_op) s_cfg.on_job_op();
+        return op_create_job(w, fd, r, keep_alive);
+
+    case IPP_OP_SEND_DOCUMENT:
+        if (s_cfg.on_job_op) s_cfg.on_job_op();
+        return op_send_document(w, fd, r, body, pre, pre_len, keep_alive);
+
     case IPP_OP_GET_JOB_ATTRIBUTES: {
-        xSemaphoreTake(s_job_lock, portMAX_DELAY);
-        int found = (r->job_id < 0 || r->job_id == s_job.id);
-        job_t snapshot = s_job;
-        xSemaphoreGive(s_job_lock);
-        if (!found)
+        int stopped;
+        ipp_job_rec_t snapshot = job_snapshot(&stopped);
+        if (!ipp_job_matches(&snapshot, r->job_id))
             return send_status(w, fd, r, IPP_STATUS_ERR_NOT_FOUND, keep_alive);
-        ipp_job_t j;
-        fill_job(&j, &snapshot);
-        ipp_resp_begin(&e, resp_version(r), IPP_STATUS_OK, r->request_id);
-        ipp_write_op_attrs(&e);
-        ipp_write_job_attrs(&e, &j);
-        ipp_end(&e);
-        return send_ipp(fd, &e, keep_alive);
+        return send_job(w, fd, r, &snapshot, stopped, keep_alive);
     }
 
     case IPP_OP_GET_JOBS: {
-        xSemaphoreTake(s_job_lock, portMAX_DELAY);
-        job_t snapshot = s_job;
-        xSemaphoreGive(s_job_lock);
+        int stopped;
+        ipp_job_rec_t snapshot = job_snapshot(&stopped);
         ipp_resp_begin(&e, resp_version(r), IPP_STATUS_OK, r->request_id);
         ipp_write_op_attrs(&e);
         // An empty list is a complete answer, and the only honest one while no
         // job is in flight.
-        if (snapshot.state == IPP_JSTATE_PROCESSING) {
+        if (ipp_job_active(&snapshot)) {
             ipp_job_t j;
-            fill_job(&j, &snapshot);
+            fill_job(&j, &snapshot, stopped);
             ipp_write_job_attrs(&e, &j);
         }
         ipp_end(&e);
@@ -315,19 +411,21 @@ static int dispatch(work_t *w, int fd, const ipp_req_t *r, hbody_t *body,
 
     case IPP_OP_CANCEL_JOB: {
         xSemaphoreTake(s_job_lock, portMAX_DELAY);
-        int found = (r->job_id < 0 || r->job_id == s_job.id);
-        int was_printing = found && s_job.state == IPP_JSTATE_PROCESSING;
-        if (found) {
-            s_job.canceled = 1;
-            if (was_printing) s_job.state = IPP_JSTATE_CANCELED;
-        }
+        ipp_cancel_t c = ipp_job_cancel(&s_job, r->job_id);
+        int32_t id = s_job.id;
         xSemaphoreGive(s_job_lock);
 
+        if (c == IPP_CANCEL_NOT_FOUND)
+            return send_status(w, fd, r, IPP_STATUS_ERR_NOT_FOUND, keep_alive);
+        if (c == IPP_CANCEL_NOT_POSSIBLE)
+            return send_status(w, fd, r, IPP_STATUS_ERR_NOT_POSSIBLE, keep_alive);
+        ESP_LOGI(TAG, "job %d canceled", (int)id);
+        // A job with no document yet only has the printer to give back.
+        if (c == IPP_CANCEL_RELEASE) xSemaphoreGive(s_print_lock);
         // Stop the paper, not just the bookkeeping. Called outside the lock:
         // the pipeline takes it too as it unwinds.
-        if (was_printing && s_sink.cancel) s_sink.cancel(s_sink.ctx);
-        return send_status(w, fd, r,
-                           found ? IPP_STATUS_OK : IPP_STATUS_ERR_NOT_FOUND, keep_alive);
+        if (c == IPP_CANCEL_STOP_PRINT && s_sink.cancel) s_sink.cancel(s_sink.ctx);
+        return send_status(w, fd, r, IPP_STATUS_OK, keep_alive);
     }
 
     default:
@@ -539,8 +637,9 @@ esp_err_t ipp_server_start(const ipp_server_cfg_t *cfg)
     make_uuid(cfg->dev_mode);
 
     s_job_lock   = xSemaphoreCreateMutex();
-    s_print_lock = xSemaphoreCreateMutex();
+    s_print_lock = xSemaphoreCreateBinary();
     if (!s_job_lock || !s_print_lock) return ESP_ERR_NO_MEM;
+    xSemaphoreGive(s_print_lock);         // a binary semaphore starts taken
     s_job.state = IPP_JSTATE_COMPLETED;   // no job yet; nothing is pending
 
     esp_err_t err = start_mdns();

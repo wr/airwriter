@@ -32,7 +32,7 @@ typedef struct {
     char requesting_user[IPP_NAME_MAX];
     char document_format[IPP_FMT_MAX];
 
-    int32_t job_id;          // -1 when absent
+    int32_t job_id;          // -1 when absent; also read from job-uri
     int     truncated;       // a value was longer than its field
 
     // Offset of the first document byte, i.e. one past the end-of-attributes

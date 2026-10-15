@@ -11,7 +11,8 @@ INCS    := -I$(COMP)/ipp_attrs/include \
            -I../rip/test
 SRCS    := $(COMP)/ipp_attrs/ipp_enc.c \
            $(COMP)/ipp_attrs/ipp_attrs.c \
-           $(COMP)/ipp_server/ipp_req.c
+           $(COMP)/ipp_server/ipp_req.c \
+           $(COMP)/ipp_server/ipp_job.c
 TESTSRC := $(wildcard test/test_*.c)
 TESTBIN := $(patsubst test/%.c,build/%,$(TESTSRC))
 

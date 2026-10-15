@@ -11,6 +11,12 @@
 #define IPP_URF_VERSION   "V1.4"
 #define IPP_URF_STRING    IPP_URF_VERSION ",CP1,RS72-144,W8,DM1,IS1,MT1,FN3"
 
+// How long a job made by Create-Job waits for its Send-Document before it is
+// aborted and the printer freed for the next job. Advertised as
+// multiple-operation-time-out, which RFC 8011 requires of a printer with
+// Create-Job. A client sends the document straight after Create-Job.
+#define IPP_MULTI_OP_TIMEOUT_S 60
+
 typedef struct {
     const char *uri;        // ipp://host.local:631/ipp/print
     const char *name;       // queue name shown in the print sheet

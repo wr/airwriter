@@ -256,8 +256,8 @@ static void doc_end(void *ctx, int ok)
     // the call and report zeroed stats instead. ipp_server still calls
     // doc_end exactly once even after a failed begin, so the give below still
     // balances doc_begin's take.
-    // A cut transfer (the iPhone cancels by dropping the upload -- it has no
-    // job id to Cancel-Job with) means nothing more will arrive: stop a write
+    // A cut transfer (a client that cancels by dropping the upload rather
+    // than with Cancel-Job) means nothing more will arrive: stop a write
     // that is waiting out a paused printer, or job_pipe_end below would wait
     // the whole stall limit holding the job lock.
     if (!ok) serial_out_set_abort(1);
