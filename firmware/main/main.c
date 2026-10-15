@@ -757,11 +757,13 @@ static void status_json(void *ctx, char *buf, size_t cap)
         pic_prog_available() ? "true" : "false");
 }
 
+#if CONFIG_AIRWRITER_LT_SNIFF
 static void lt_json(void *ctx, char *buf, size_t cap)
 {
     (void)ctx;
     lt_sniff_json(buf, cap);
 }
+#endif
 
 static void localtalk_flash(void *ctx, char *buf, size_t cap)
 {

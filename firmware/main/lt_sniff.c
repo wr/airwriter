@@ -11,9 +11,10 @@
 #include "lt_sniff.h"
 #include "sdkconfig.h"
 
+#include <stdio.h>
+
 #if CONFIG_AIRWRITER_LT_SNIFF
 
-#include <stdio.h>
 #include <string.h>
 #include "driver/uart.h"
 #include "esp_log.h"
