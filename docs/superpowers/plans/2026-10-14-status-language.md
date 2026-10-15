@@ -21,6 +21,7 @@
 - Timers: boot 3000 ms, offline debounce 3000 ms, stall attention `CONFIG_AIRWRITER_STALL_TIMEOUT` (30 s), failed hold 60000 ms, sleep 300000 ms, stall abort `CONFIG_AIRWRITER_STALL_ABORT` (600 s).
 - IPP reasons: Needs attention → stopped + `media-empty`; Printer offline → stopped + `other` (`offline-report` is not IANA-registered).
 - Commit messages end with a `Refs: W-1037` trailer and carry no attribution lines.
+- No test patterns ship: no W-1034 rainbow, no boot-animation demo or spike code, no LED test endpoints. W-1034 is not merged into this branch.
 
 ## Review Focus
 
@@ -32,38 +33,25 @@
 
 ---
 
-### Task 1: Bring in the W-1034 rainbow test and make the worktree buildable
+### Task 1: Make the worktree buildable
 
 **Files:**
-- Modify (by merge): everything on `wells/w-1034-rainbow-led-test`
 - Create (untracked): `firmware/sdkconfig` (copied)
 
-**Interfaces:**
-- Produces: `lg_render_rainbow(uint32_t t_ms, uint8_t out[LG_NUM_LEDS][3])` and `LG_RAINBOW_PERIOD_MS` in `led_grid_core.h`; `led_grid_test(unsigned seconds)` in `led_grid.h`; `POST /api/leds/test`. Later tasks keep these working.
+**Interfaces:** none.
 
-- [ ] **Step 1: Merge the rainbow-test branch into this branch**
-
-```bash
-cd /private/tmp/claude-501/-Users-wells-Projects-airwriter/62a73e06-37c7-416a-913b-4d30c93e93a8/scratchpad/aw-status
-git merge --no-ff wells/w-1034-rainbow-led-test -m "Merge wells/w-1034-rainbow-led-test into the status-language branch
-
-The status renderer keeps the rainbow bring-up test as an override.
-
-Refs: W-1037"
-```
-Expected: a merge commit with no conflicts (this branch was cut from `main` after W-1034's base).
-
-- [ ] **Step 2: Copy the S3 build config into the worktree**
+- [ ] **Step 1: Copy the S3 build config into the worktree**
 
 `firmware/sdkconfig` is untracked, so a fresh worktree would build for the wrong chip.
 
 ```bash
+cd /private/tmp/claude-501/-Users-wells-Projects-airwriter/62a73e06-37c7-416a-913b-4d30c93e93a8/scratchpad/aw-status
 cp /Users/wells/Projects/airwriter/firmware/sdkconfig firmware/sdkconfig
 grep -E '^CONFIG_IDF_TARGET="esp32s3"' firmware/sdkconfig
 ```
 Expected: the grep prints the target line.
 
-- [ ] **Step 3: Verify host tests and firmware build**
+- [ ] **Step 2: Verify host tests and firmware build on the untouched branch**
 
 ```bash
 make -C tools/rip test && make -C tools/rip regress
@@ -71,7 +59,7 @@ make -C tools/rip test && make -C tools/rip regress
 ```
 Expected: every test prints `ok`, both regressions are unchanged, and the build completes. (The first build in a fresh worktree downloads managed components and takes a few minutes.)
 
-No commit beyond the merge commit.
+No commit (nothing tracked changes).
 
 ---
 
@@ -1329,7 +1317,7 @@ Refs: W-1037"
 
 **Interfaces:**
 - Consumes: `ps_view_t`, `printer_state_view()` from Task 2.
-- Produces: `lg_render(const ps_view_t *v, uint32_t t_ms, uint8_t out[LG_NUM_LEDS][3])`, `int lg_pilot_index(void)`, `LG_MASK_CAP`, `LG_BOOT_MS`. Keeps `lg_render_rainbow` and `LG_RAINBOW_PERIOD_MS` from Task 1.
+- Produces: `lg_render(const ps_view_t *v, uint32_t t_ms, uint8_t out[LG_NUM_LEDS][3])`, `int lg_pilot_index(void)`, `LG_MASK_CAP`, `LG_BOOT_MS`.
 
 - [ ] **Step 1: Write the failing renderer test**
 
@@ -1339,7 +1327,7 @@ Replace `tools/rip/test/test_led_grid.c` with:
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Host test for the led_grid frame renderer: caps, which dots each state may
 // light, the boot spin, ready's swell, setup's two cues, attention, failure,
-// printing's sweep, the pilot light, and the W-1034 rainbow test pattern.
+// printing's sweep, and the pilot light.
 #include <assert.h>
 #include <stdio.h>
 #include <string.h>
@@ -1498,31 +1486,6 @@ int main(void)
         assert(f[p][0] >= f[p][1] && f[p][1] >= f[p][2]);
     }
 
-    // RAINBOW (W-1034): every dot -- mask dots too -- lights every channel at
-    // some point in one cycle, under the FR4 cap; neighbours do not move in
-    // lockstep; one full cycle later the frame is identical.
-    {
-        int seen[LG_NUM_LEDS][3] = {{0}};
-        for (uint32_t t = 0; t < LG_RAINBOW_PERIOD_MS; t += 20) {
-            lg_render_rainbow(t, f);
-            for (int i = 0; i < LG_NUM_LEDS; i++)
-                for (int ch = 0; ch < 3; ch++) {
-                    assert(f[i][ch] <= LG_BRIGHTNESS_CAP);
-                    if (f[i][ch] == LG_BRIGHTNESS_CAP) seen[i][ch] = 1;
-                }
-        }
-        for (int i = 0; i < LG_NUM_LEDS; i++)
-            for (int ch = 0; ch < 3; ch++) assert(seen[i][ch]);
-        lg_render_rainbow(1000, f);
-        int differ = 0;
-        for (int i = 1; i < LG_NUM_LEDS; i++)
-            if (memcmp(f[i], f[0], 3) != 0) differ++;
-        assert(differ > LG_NUM_LEDS / 2);
-        lg_render_rainbow(1234, f);
-        lg_render_rainbow(1234 + LG_RAINBOW_PERIOD_MS, g);
-        assert(memcmp(f, g, sizeof f) == 0);
-    }
-
     printf("test_led_grid: ok\n");
     return 0;
 }
@@ -1552,12 +1515,6 @@ Replace `firmware/components/led_grid/include/led_grid_core.h` with:
 
 void lg_render(const ps_view_t *v, uint32_t t_ms, uint8_t out[LG_NUM_LEDS][3]);
 int  lg_pilot_index(void);      // the FR4 dot right of the test button (row 3, col 4)
-
-// Bring-up test pattern (W-1034): a full-saturation hue wheel on every dot,
-// phase offset by panel position so it sweeps diagonally. Raw RGB on mask
-// dots too, so every die gets lit; LG_BRIGHTNESS_CAP still applies.
-#define LG_RAINBOW_PERIOD_MS 3000
-void lg_render_rainbow(uint32_t t_ms, uint8_t out[LG_NUM_LEDS][3]);
 ```
 
 - [ ] **Step 4: Write the renderer**
@@ -1713,34 +1670,6 @@ void lg_render(const ps_view_t *v, uint32_t t_ms, uint8_t out[LG_NUM_LEDS][3])
             if (px[ch] > out[p][ch]) out[p][ch] = px[ch];
     }
 }
-
-// Hue 0..1535 (six 256-step sectors) to full-saturation, full-value RGB.
-static void lg_hue(uint32_t h, uint8_t px[3])
-{
-    uint8_t x = (uint8_t)(h & 0xFF);
-    switch ((h >> 8) % 6) {
-    case 0: px[0] = 255;                px[1] = x;                  px[2] = 0;   break;
-    case 1: px[0] = (uint8_t)(255 - x); px[1] = 255;                px[2] = 0;   break;
-    case 2: px[0] = 0;                  px[1] = 255;                px[2] = x;   break;
-    case 3: px[0] = 0;                  px[1] = (uint8_t)(255 - x); px[2] = 255; break;
-    case 4: px[0] = x;                  px[1] = 0;                  px[2] = 255; break;
-    default: px[0] = 255;               px[1] = 0;                  px[2] = (uint8_t)(255 - x); break;
-    }
-}
-
-void lg_render_rainbow(uint32_t t_ms, uint8_t out[LG_NUM_LEDS][3])
-{
-    uint32_t base = (t_ms % LG_RAINBOW_PERIOD_MS) * 1536 / LG_RAINBOW_PERIOD_MS;
-    for (int i = 0; i < LG_NUM_LEDS; i++) {
-        // One wheel across the panel's diagonal, so neighbours are distinct
-        // hues and a swapped or dead link in the chain shows as a break.
-        uint32_t off = (uint32_t)(LG_MAP[i].r + LG_MAP[i].c) * 1536
-                       / (LG_ROWS + LG_COLS - 1);
-        lg_hue((base + off) % 1536, out[i]);
-        for (int ch = 0; ch < 3; ch++)
-            out[i][ch] = (uint8_t)((uint32_t)out[i][ch] * LG_BRIGHTNESS_CAP / 255);
-    }
-}
 ```
 
 - [ ] **Step 5: Run the renderer test to verify it passes**
@@ -1752,16 +1681,14 @@ Expected: `test_led_grid: ok`
 
 In `firmware/components/led_grid/led_grid.c`, in `lg_task`, replace
 ```c
-            lg_render(printer_state_view().state, (uint32_t)(now / 1000), frame);
+        lg_render(printer_state_view().state,
+                  (uint32_t)(esp_timer_get_time() / 1000), frame);
 ```
 with
 ```c
-        {
-            ps_view_t v = printer_state_view();
-            lg_render(&v, (uint32_t)(now / 1000), frame);
-        }
+        ps_view_t v = printer_state_view();
+        lg_render(&v, (uint32_t)(esp_timer_get_time() / 1000), frame);
 ```
-(It is the `else` arm under `if (now < s_test_until) lg_render_rainbow(...)`. If Task 2 left the call as `lg_render(printer_state_view().state,` on a different line shape, replace that call the same way.)
 
 In `firmware/main/main.c`:
 - After `#include "led_grid.h"`, add `#include "led_grid_core.h"`.

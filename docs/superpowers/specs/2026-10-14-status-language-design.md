@@ -150,7 +150,8 @@ Units and their interfaces. Pure cores stay host-testable in `tools/rip`, as now
 **`led_grid_core`**
 - `lg_render(const ps_view_t *, t_ms, frame)`: one renderer per state, materials as above,
   the Spin as a one-shot keyed off `since_ms`.
-- The rainbow bring-up test (W-1034) stays as the override it is today.
+- **Test patterns do not ship.** The W-1034 rainbow and the boot-animation spike stay on their
+  branches; patterns are previewed rendered in chat, not on the device.
 
 **Web status JSON**: `"ps"` takes the new names (`booting`, `setup`, `joining`, `attention`,
 `failed`, `printing`, `offline`, `ready`) plus `"asleep": bool`; the human `"state"` strings
