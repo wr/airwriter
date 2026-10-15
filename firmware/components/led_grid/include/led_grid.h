@@ -11,3 +11,7 @@
 // The render task reads printer_state directly every 30 ms tick; there is no
 // push entry point here.
 esp_err_t led_grid_start(void);
+
+// Gamer mode (DIP7): Ready and Asleep drift through RGB instead of white.
+// Safe from any task; the render task picks it up on its next frame.
+void led_grid_set_gamer(int on);

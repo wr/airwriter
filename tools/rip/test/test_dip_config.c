@@ -14,7 +14,9 @@ int main(void)
     dip_decode(0x04, &c); assert(c.dev_mode == 1);        // DIP3
     dip_decode(0x08, &c); assert(c.test_on_boot == 1);    // DIP4
     dip_decode(0x30, &c); assert(c.dither_ovr == 3);      // DIP5+6
-    dip_decode(0xC0, &c); assert(c.spare == 3);           // DIP7+8
+    dip_decode(0x40, &c); assert(c.gamer == 1 && c.spare == 0);   // DIP7: gamer mode
+    dip_decode(0x80, &c); assert(c.spare == 1 && c.gamer == 0);   // DIP8: spare
+    dip_decode(0xC0, &c); assert(c.gamer == 1 && c.spare == 1);
 
     // Debounce: a value must be seen 3 polls straight; report change once.
     dip_deb_t d = {0};

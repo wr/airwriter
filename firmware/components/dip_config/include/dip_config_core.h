@@ -10,7 +10,8 @@ typedef struct {
     uint8_t dev_mode;     // DIP3
     uint8_t test_on_boot; // DIP4
     uint8_t dither_ovr;   // DIP5-6: 0 none, 1 floyd, 2 bayer, 3 threshold
-    uint8_t spare;        // DIP7-8 raw
+    uint8_t gamer;        // DIP7: Ready and Asleep drift through RGB instead of white
+    uint8_t spare;        // DIP8 raw
 } dip_config_t;
 
 void dip_decode(uint8_t on_bits, dip_config_t *out);  // bit i = DIP(i+1) ON

@@ -13,6 +13,7 @@
 
 static led_strip_handle_t s_strip;
 static int s_count;
+static volatile uint8_t s_gamer;   // DIP7, set from dip_config's task
 
 static void lg_task(void *arg)
 {
@@ -23,8 +24,9 @@ static void lg_task(void *arg)
         // state, so two racing posters can never deliver an update to this
         // task out of order -- the next 30ms tick just re-reads whatever is
         // current.
-        lg_render(printer_state_view().state,
-                  (uint32_t)(esp_timer_get_time() / 1000), frame);
+        ps_view_t v = printer_state_view();
+        lg_opts_t o = { .gamer = s_gamer };
+        lg_render(&v, &o, (uint32_t)(esp_timer_get_time() / 1000), frame);
         for (int i = 0; i < s_count && i < LG_NUM_LEDS; i++)
             led_strip_set_pixel(s_strip, (uint32_t)i,
                                  frame[i][0], frame[i][1], frame[i][2]);
@@ -50,4 +52,9 @@ esp_err_t led_grid_start(void)
     led_strip_clear(s_strip);
     return xTaskCreate(lg_task, "led_grid", 3072, NULL, 3, NULL) == pdPASS
                ? ESP_OK : ESP_ERR_NO_MEM;
+}
+
+void led_grid_set_gamer(int on)
+{
+    s_gamer = on ? 1 : 0;
 }

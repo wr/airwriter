@@ -1,10 +1,19 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Host test for the led_grid frame renderer (lg_render): brightness cap,
-// per-state color and blink/breathe/sweep behavior.
+// Host test for the led_grid frame renderer, panel language v4
+// (docs/superpowers/specs/2026-10-14-status-language-design.md): caps, which
+// dots each state may light, that the array varies dot to dot, the boot spin,
+// the Wi-Fi-connected green moment, gamer mode, joining's outward rings,
+// setup's two cues, attention, failure, the bidirectional print head, and
+// the pilot light with its twinkle.
 #include <assert.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 #include "led_grid_core.h"
 #include "printer_state_core.h"
+
+static const lg_opts_t WHITE_MODE = { .gamer = 0 };
+static const lg_opts_t GAMER_MODE = { .gamer = 1 };
 
 static int max3(const uint8_t px[3])
 {
@@ -14,60 +23,243 @@ static int max3(const uint8_t px[3])
     return m;
 }
 
+static int min3(const uint8_t px[3])
+{
+    int m = px[0];
+    if (px[1] < m) m = px[1];
+    if (px[2] < m) m = px[2];
+    return m;
+}
+
+static ps_view_t view(ps_state_t st, uint32_t since)
+{
+    ps_view_t v;
+    memset(&v, 0, sizeof v);
+    v.state = st;
+    v.since_ms = since;
+    return v;
+}
+
+static int idx(int r, int c)
+{
+    for (int i = 0; i < LG_NUM_LEDS; i++)
+        if (LG_MAP[i].r == r && LG_MAP[i].c == c) return i;
+    return -1;
+}
+
+static int lit_count(uint8_t f[LG_NUM_LEDS][3])
+{
+    int n = 0;
+    for (int i = 0; i < LG_NUM_LEDS; i++) n += max3(f[i]) > 0;
+    return n;
+}
+
 int main(void)
 {
-    uint8_t f[LG_NUM_LEDS][3];
+    uint8_t f[LG_NUM_LEDS][3], g[LG_NUM_LEDS][3];
+    const ps_state_t all[] = { PS_BOOTING, PS_SETUP, PS_JOINING, PS_ATTENTION,
+                               PS_FAILED, PS_PRINTING, PS_OFFLINE, PS_READY };
+    const int n_all = (int)(sizeof all / sizeof all[0]);
+    const int p = lg_pilot_index();
+    assert(p == idx(3, 4) && LG_MAP[p].mat == 'P');
 
-    // Cap: no channel ever exceeds LG_BRIGHTNESS_CAP in any state/phase.
-    ps_state_t all[] = { PS_BOOTING, PS_SETUP, PS_JOINING, PS_READY,
-                         PS_PRINTING, PS_ATTENTION, PS_FAILED, PS_OFFLINE };
-    for (unsigned s = 0; s < sizeof all / sizeof all[0]; s++)
-        for (uint32_t t = 0; t < 5000; t += 97) {
-            lg_render(all[s], t, f);
-            for (int i = 0; i < LG_NUM_LEDS; i++)
-                for (int ch = 0; ch < 3; ch++)
-                    assert(f[i][ch] <= LG_BRIGHTNESS_CAP);
+    // Caps: FR4 dots never exceed LG_BRIGHTNESS_CAP, mask dots LG_MASK_CAP,
+    // in any state, phase or mode.
+    for (int mode = 0; mode < 2; mode++)
+        for (int s = 0; s < n_all; s++)
+            for (uint32_t t = 0; t < 12000; t += 37) {
+                ps_view_t v = view(all[s], t);
+                v.greeted = t < 6000;
+                lg_render(&v, mode ? &GAMER_MODE : &WHITE_MODE, t, f);
+                for (int i = 0; i < LG_NUM_LEDS; i++)
+                    for (int ch = 0; ch < 3; ch++)
+                        assert(f[i][ch] <= (LG_MAP[i].mat == 'P' ? LG_BRIGHTNESS_CAP
+                                                                 : LG_MASK_CAP));
+            }
+
+    // FR4-only states leave every mask dot dark and always light some FR4 dot.
+    const ps_state_t fr4_only[] = { PS_SETUP, PS_JOINING, PS_OFFLINE, PS_READY };
+    for (int s = 0; s < 4; s++)
+        for (uint32_t t = 0; t < 14000; t += 113) {
+            ps_view_t v = view(fr4_only[s], t);
+            lg_render(&v, &WHITE_MODE, t, f);
+            int any = 0;
+            for (int i = 0; i < LG_NUM_LEDS; i++) {
+                if (LG_MAP[i].mat != 'P') assert(max3(f[i]) == 0);
+                else if (max3(f[i])) any = 1;
+            }
+            assert(any);
         }
 
-    // BOOT is dark.
-    lg_render(PS_BOOTING, 1234, f);
-    for (int i = 0; i < LG_NUM_LEDS; i++) assert(max3(f[i]) == 0);
+    // An array, not one LED: in every state the FR4 dots show several
+    // different colours at once. (A failed job is probed in its pulse phase:
+    // between glitch flashes it is dark by design.)
+    for (int s = 0; s < n_all; s++) {
+        ps_view_t v = view(all[s], all[s] == PS_FAILED ? 5000 : 1000);
+        lg_render(&v, &WHITE_MODE, 4321, f);
+        int distinct = 0;
+        for (int i = 0; i < LG_NUM_LEDS; i++) {
+            if (LG_MAP[i].mat != 'P') continue;
+            int seen = 0;
+            for (int j = 0; j < i; j++)
+                if (LG_MAP[j].mat == 'P' && memcmp(f[i], f[j], 3) == 0) seen = 1;
+            distinct += !seen;
+        }
+        if (all[s] != PS_ATTENTION) assert(distinct >= 3);   // attention may be between rings
+    }
 
-    // Mask dots are monochrome in every state (r==g==b).
-    for (uint32_t t = 0; t < 4000; t += 501) {
-        lg_render(PS_PRINTING, t, f);
+    // Boot spin: lit mid-way, mask dots included; dark by LG_BOOT_MS.
+    {
+        ps_view_t v = view(PS_BOOTING, 1000);
+        lg_render(&v, &WHITE_MODE, 1000, f);
+        int fr4 = 0, mask = 0;
+        for (int i = 0; i < LG_NUM_LEDS; i++) {
+            if (!max3(f[i])) continue;
+            if (LG_MAP[i].mat == 'P') fr4 = 1; else mask = 1;
+        }
+        assert(fr4 && mask);
+        v = view(PS_BOOTING, LG_BOOT_MS);
+        lg_render(&v, &WHITE_MODE, LG_BOOT_MS, f);
+        assert(lit_count(f) == 0);
+    }
+
+    // Ready is neutral white. A greeted Ready opens green (Wi-Fi just
+    // connected) and is white again by 3.2 s; an ungreeted one never greens.
+    {
+        ps_view_t v = view(PS_READY, 800);
+        v.greeted = 1;
+        lg_render(&v, &WHITE_MODE, 800, f);
+        assert(f[p][1] > 2 * f[p][0] && f[p][1] > 2 * f[p][2]);
+        v.since_ms = 4000;
+        lg_render(&v, &WHITE_MODE, 4000, f);
+        assert(abs(f[p][1] - f[p][0]) <= 3 && abs(f[p][1] - f[p][2]) <= 3);
+        v = view(PS_READY, 800);
+        lg_render(&v, &WHITE_MODE, 800, f);
+        assert(abs(f[p][1] - f[p][0]) <= 3 && abs(f[p][1] - f[p][2]) <= 3);
+    }
+
+    // Gamer mode: Ready drifts through colour -- saturated dots, and the
+    // pilot's hue moves over time.
+    {
+        ps_view_t v = view(PS_READY, 5000);
+        lg_render(&v, &GAMER_MODE, 0, f);
+        int chroma = 0;
         for (int i = 0; i < LG_NUM_LEDS; i++)
-            if (LG_MAP[i].mat != 'P')
-                assert(f[i][0] == f[i][1] && f[i][1] == f[i][2]);
+            if (LG_MAP[i].mat == 'P' && max3(f[i]) - min3(f[i]) >= 3) chroma = 1;
+        assert(chroma);
+        lg_render(&v, &GAMER_MODE, 7000, g);
+        assert(memcmp(f[p], g[p], 3) != 0);
     }
 
-    // ERROR: mask dots dark, FR4 dots red-only during the on phase.
-    lg_render(PS_FAILED, 250, f);   // first half-second = on
-    int lit_p = 0;
-    for (int i = 0; i < LG_NUM_LEDS; i++) {
-        if (LG_MAP[i].mat == 'P') {
-            if (max3(f[i])) { lit_p++; assert(f[i][1] == 0 && f[i][2] == 0); }
-        } else {
-            assert(max3(f[i]) == 0);
+    // Joining: rings move outward -- a near dot peaks before a far one.
+    {
+        int near = p, far = idx(7, 4);
+        assert(far >= 0 && LG_MAP[far].mat == 'P');
+        int best_near = -1, best_far = -1, t_near = 0, t_far = 0;
+        for (uint32_t t = 0; t < 900; t += 5) {
+            ps_view_t v = view(PS_JOINING, t);
+            lg_render(&v, &WHITE_MODE, t, f);
+            if (max3(f[near]) > best_near) { best_near = max3(f[near]); t_near = (int)t; }
+            if (max3(f[far])  > best_far)  { best_far  = max3(f[far]);  t_far  = (int)t; }
+        }
+        assert(t_near < t_far);
+    }
+
+    // Setup: the radar sweep swings a dot from dim to bright; with a phone
+    // joined it holds steady with only a shimmer.
+    {
+        int lo = 255, hi = 0, jlo = 255, jhi = 0;
+        for (uint32_t t = 0; t < 6000; t += 50) {
+            ps_view_t v = view(PS_SETUP, t);
+            lg_render(&v, &WHITE_MODE, t, f);
+            if (max3(f[p]) < lo) lo = max3(f[p]);
+            if (max3(f[p]) > hi) hi = max3(f[p]);
+            v.phone_joined = 1;
+            lg_render(&v, &WHITE_MODE, t, f);
+            if (max3(f[p]) < jlo) jlo = max3(f[p]);
+            if (max3(f[p]) > jhi) jhi = max3(f[p]);
+        }
+        assert(hi - lo >= 15);
+        assert(jhi - jlo <= 10 && jlo > 0);
+    }
+
+    // Attention: amber (red over green, no blue), mask dots too, in a ring
+    // burst; dark between bursts.
+    {
+        // (At a ring's faint edge red and green both sit on the one-count
+        // floor, so red is only >= there; somewhere it must be clearly more.)
+        int mask = 0, amber = 0;
+        for (uint32_t t = 0; t < 900; t += 30) {
+            ps_view_t v = view(PS_ATTENTION, t);
+            lg_render(&v, &WHITE_MODE, t, f);
+            for (int i = 0; i < LG_NUM_LEDS; i++) {
+                if (!max3(f[i])) continue;
+                assert(f[i][0] >= f[i][1] && f[i][2] == 0);
+                if (f[i][0] > f[i][1] + 2) amber = 1;
+                if (LG_MAP[i].mat != 'P') mask = 1;
+            }
+        }
+        assert(mask && amber);
+        ps_view_t v = view(PS_ATTENTION, 0);
+        lg_render(&v, &WHITE_MODE, 1500, f);
+        assert(lit_count(f) == 0);
+    }
+
+    // Failed: a glitch flash lights a scattered subset, not all and not
+    // none; between flashes it is dark; afterwards the red never goes dark.
+    {
+        ps_view_t v = view(PS_FAILED, 100);
+        lg_render(&v, &WHITE_MODE, 0, f);
+        int n = lit_count(f);
+        assert(n > 3 && n < LG_NUM_LEDS - 3);
+        for (int i = 0; i < LG_NUM_LEDS; i++)
+            if (max3(f[i])) assert(f[i][0] >= f[i][1] && f[i][0] >= f[i][2]);
+        v.since_ms = 300;
+        lg_render(&v, &WHITE_MODE, 0, f);
+        assert(lit_count(f) == 0);
+        for (uint32_t s = 1200; s < 8000; s += 100) {
+            v.since_ms = s;
+            lg_render(&v, &WHITE_MODE, 0, f);
+            assert(f[p][0] > 0);
         }
     }
-    assert(lit_p > 0);
-    lg_render(PS_FAILED, 750, f);   // second half-second = off
-    for (int i = 0; i < LG_NUM_LEDS; i++) assert(max3(f[i]) == 0);
 
-    // READY never fully blanks (floor), and breathes (two phases differ).
-    lg_render(PS_READY, 0, f);
-    int a = 0;
-    for (int i = 0; i < LG_NUM_LEDS; i++) a += max3(f[i]);
-    assert(a > 0);
-    lg_render(PS_READY, 2000, f);
-    int b = 0;
-    for (int i = 0; i < LG_NUM_LEDS; i++) b += max3(f[i]);
-    assert(a != b);
+    // Printing: rows advance top to bottom, and odd rows print right to left.
+    {
+        int r0 = idx(0, 2), r4 = idx(4, 2), a = idx(1, 1), b = idx(1, 6);
+        assert(r0 >= 0 && r4 >= 0 && a >= 0 && b >= 0);
+        ps_view_t v = view(PS_PRINTING, 0);
+        lg_render(&v, &WHITE_MODE, 450, f);                 // row 0, head near col 2
+        assert(max3(f[r0]) > max3(f[r4]));
+        lg_render(&v, &WHITE_MODE, 4 * 1500 + 750, f);      // row 4
+        assert(max3(f[r4]) > max3(f[r0]));
+        lg_render(&v, &WHITE_MODE, 1500 + 100, f);          // row 1 starts at the right
+        assert(max3(f[b]) > max3(f[a]));
+    }
 
-    // PRINTING sweeps: the bright row moves with time.
-    lg_render(PS_PRINTING, 0, f);
-    lg_render(PS_PRINTING, 700, f);
+    // Asleep: after the fade, only the pilot -- dim, near-white -- except
+    // for a once-every-30 s twinkle on one other FR4 dot.
+    {
+        ps_view_t v = view(PS_READY, 400000);
+        v.asleep = 1;
+        v.asleep_ms = 20000;
+        for (uint32_t t = 2000; t < 29500; t += 500) {
+            lg_render(&v, &WHITE_MODE, t, f);
+            for (int i = 0; i < LG_NUM_LEDS; i++)
+                assert(i == p ? max3(f[i]) > 0 : max3(f[i]) == 0);
+            assert(max3(f[p]) <= 7);
+            assert(max3(f[p]) - min3(f[p]) <= 2);
+        }
+        lg_render(&v, &WHITE_MODE, 750, f);
+        assert(lit_count(f) == 2);
+        v.state = PS_OFFLINE;
+        lg_render(&v, &WHITE_MODE, 5000, f);
+        assert(lit_count(f) == 1 && max3(f[p]) > 0);
+        v.state = PS_READY;
+        lg_render(&v, &GAMER_MODE, 2000, f);
+        lg_render(&v, &GAMER_MODE, 12000, g);
+        assert(memcmp(f[p], g[p], 3) != 0);
+    }
 
     printf("test_led_grid: ok\n");
     return 0;

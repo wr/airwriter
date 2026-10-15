@@ -28,6 +28,7 @@
 #include "ipp_server.h"
 #include "job_pipe.h"
 #include "led_grid.h"
+#include "led_grid_core.h"
 #include "printer_state.h"
 #include "serial_out.h"
 #include "settings.h"
@@ -385,8 +386,10 @@ static int s_test_on_boot;
 static void dip_on_change(const dip_config_t *cfg)
 {
     on_activity();
-    ESP_LOGI(TAG, "dip: mode=%u dev_mode=%u test_on_boot=%u dither_ovr=%u spare=%u",
-             cfg->mode, cfg->dev_mode, cfg->test_on_boot, cfg->dither_ovr, cfg->spare);
+    ESP_LOGI(TAG, "dip: mode=%u dev_mode=%u test_on_boot=%u dither_ovr=%u gamer=%u spare=%u",
+             cfg->mode, cfg->dev_mode, cfg->test_on_boot, cfg->dither_ovr, cfg->gamer,
+             cfg->spare);
+    led_grid_set_gamer(cfg->gamer);
     if (cfg->dev_mode)
         ESP_LOGI(TAG, "dip: dev_mode is on, but the printer uuid stays Kconfig-driven this rev");
     if (cfg->test_on_boot) s_test_on_boot = 1;
@@ -656,6 +659,7 @@ void app_main(void)
 
     ps_timing_t tm = PS_TIMING_DEFAULT;
     tm.stall_attention_ms = CONFIG_AIRWRITER_STALL_TIMEOUT * 1000u;
+    tm.boot_ms = LG_BOOT_MS;
     printer_state_start(&tm, on_ps_change);
     // After the clamp above: the RMT driver takes IO48 over from here, and
     // by the first frame the line is driven, never floating.
