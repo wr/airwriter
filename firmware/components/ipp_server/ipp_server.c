@@ -58,6 +58,7 @@ static char s_hostname[40];
 static ipp_job_rec_t s_job;
 static int32_t s_next_job_id = 1;
 static const char *s_stop_reason;   // NULL when the printer is fine
+static const char *s_stop_message;  // printer-state-message while stopped
 static SemaphoreHandle_t s_job_lock;     // guards s_job, s_next_job_id, s_stop_reason
 // Held by the job that owns the printer, from Print-Job or Create-Job until
 // its document is done. Binary, not a mutex: Create-Job takes it and
@@ -99,6 +100,7 @@ static void fill_printer(ipp_printer_t *p)
                       : (s_job.state == IPP_JSTATE_PROCESSING) ? IPP_PSTATE_PROCESSING
                                                                : IPP_PSTATE_IDLE;
     p->state_reason   = s_stop_reason ? s_stop_reason : "none";
+    p->state_message  = s_stop_reason ? s_stop_message : NULL;
     // Still accepting: the job queues and prints when paper goes back in,
     // which is what a user expects after clearing the alert.
     p->accepting_jobs = 1;
@@ -662,11 +664,12 @@ void ipp_server_stop(void)
 
 const char *ipp_server_uri(void) { return s_uri; }
 
-void ipp_server_set_stopped(const char *reason_or_null)
+void ipp_server_set_stopped(const char *reason_or_null, const char *message)
 {
-    if (!s_job_lock) { s_stop_reason = reason_or_null; return; }
+    if (!s_job_lock) { s_stop_reason = reason_or_null; s_stop_message = message; return; }
     xSemaphoreTake(s_job_lock, portMAX_DELAY);
-    s_stop_reason = reason_or_null;
+    s_stop_reason  = reason_or_null;
+    s_stop_message = message;
     xSemaphoreGive(s_job_lock);
     ESP_LOGW(TAG, "printer-state-reasons now %s", reason_or_null ? reason_or_null : "none");
 }

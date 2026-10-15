@@ -678,12 +678,18 @@ static void on_ps_change(const ps_view_t *v)
 {
     ESP_LOGI(TAG, "state -> %s", ps_name(v->state));
     // SPEC.md 3.9: a stall mid-job becomes a real alert on the phone.
-    // Mid-job stall: media-empty, the real "out of paper" alert on the phone.
+    // Mid-job stall: media-empty, the real "out of paper" alert. The -error
+    // suffix (RFC 8011 5.4.12) says it outright: a stopped printer MUST carry
+    // an error reason, and a bare one is only "assumed" to be one.
     // Idle and not ready: printer off, unplugged or deselected. offline-report
     // is CUPS-only (not in the IANA registry), so it reports the registered
-    // "other".
-    ipp_server_set_stopped(v->state == PS_ATTENTION ? "media-empty"
-                         : v->state == PS_OFFLINE   ? "other" : NULL);
+    // "other", which on a stopped printer reads as an error all the same.
+    if (v->state == PS_ATTENTION)
+        ipp_server_set_stopped("media-empty-error", "Needs attention: check paper and SELECT");
+    else if (v->state == PS_OFFLINE)
+        ipp_server_set_stopped("other", "Printer offline");
+    else
+        ipp_server_set_stopped(NULL, NULL);
 }
 
 void app_main(void)

@@ -98,9 +98,15 @@ int main(void)
         CHECK(seen_send);
     }
 
-    /* RFC 8011 requires multiple-operation-time-out of a Create-Job printer. */
+    /* RFC 8011 requires multiple-operation-time-out of a Create-Job printer;
+     * the action says what happens when it runs out (PWG 5100.13). */
     CHECK(ipp_find(buf, n, "multiple-operation-time-out", &f));
     CHECK_EQ_INT(ipp_val_int(&f), IPP_MULTI_OP_TIMEOUT_S);
+    CHECK(ipp_find(buf, n, "multiple-operation-time-out-action", &f));
+    CHECK(ipp_val_is(&f, "abort-job"));
+
+    /* A printer with nothing to say sends no printer-state-message. */
+    CHECK(!ipp_find(buf, n, "printer-state-message", &f));
 
     /* Honest margins. The tractor feed cannot reach the edge, and declaring
      * zero would make iOS lay out edge-to-edge and clip silently. */
@@ -136,6 +142,26 @@ int main(void)
      * against, and media-col is not cheap. */
     printf("    printer attributes encode to %zu bytes\n", n);
     CHECK(n < 4096);
+
+    /* Stopped mid-job: the state, an explicit -error reason (RFC 8011
+     * 5.4.12: a stopped printer MUST carry an error reason), and the words. */
+    p.state         = IPP_PSTATE_STOPPED;
+    p.state_reason  = "media-empty-error";
+    p.state_message = "Out of paper";
+    ipp_enc_init(&e, buf, sizeof buf);
+    ipp_resp_begin(&e, IPP_VERSION_1_1, IPP_STATUS_OK, 1);
+    ipp_write_op_attrs(&e);
+    ipp_write_printer_attrs(&e, &p);
+    ipp_end(&e);
+    CHECK(ipp_enc_ok(&e));
+    n = ipp_enc_len(&e);
+    CHECK(ipp_find(buf, n, "printer-state", &f));
+    CHECK_EQ_INT(ipp_val_int(&f), IPP_PSTATE_STOPPED);
+    CHECK(ipp_find(buf, n, "printer-state-reasons", &f));
+    CHECK(ipp_val_is(&f, "media-empty-error"));
+    CHECK(ipp_find(buf, n, "printer-state-message", &f));
+    CHECK_EQ_INT(f.tag, IPP_TAG_TEXT);
+    CHECK(ipp_val_is(&f, "Out of paper"));
 
     /* Job attributes, the subset iOS polls while printing. */
     ipp_job_t j = {

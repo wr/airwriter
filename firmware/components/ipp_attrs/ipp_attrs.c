@@ -113,6 +113,8 @@ void ipp_write_printer_attrs(ipp_enc_t *e, const ipp_printer_t *p)
 
     ipp_attr_int(e, IPP_TAG_ENUM, "printer-state", p->state);
     ipp_attr_str(e, IPP_TAG_KEYWORD, "printer-state-reasons", p->state_reason);
+    if (p->state_message && p->state_message[0])
+        ipp_attr_str(e, IPP_TAG_TEXT, "printer-state-message", p->state_message);
     ipp_attr_bool(e, "printer-is-accepting-jobs", p->accepting_jobs);
     ipp_attr_int(e, IPP_TAG_INTEGER, "queued-job-count", p->queued_jobs);
     ipp_attr_int(e, IPP_TAG_INTEGER, "printer-up-time", (int32_t)p->uptime_s);
@@ -187,6 +189,7 @@ void ipp_write_printer_attrs(ipp_enc_t *e, const ipp_printer_t *p)
     ipp_attr_str(e, IPP_TAG_KEYWORD, "pdl-override-supported", "attempted");
     ipp_attr_bool(e, "multiple-document-jobs-supported", 0);
     ipp_attr_int(e, IPP_TAG_INTEGER, "multiple-operation-time-out", IPP_MULTI_OP_TIMEOUT_S);
+    ipp_attr_str(e, IPP_TAG_KEYWORD, "multiple-operation-time-out-action", "abort-job");
     ipp_attr_strs(e, IPP_TAG_KEYWORD, "job-creation-attributes-supported",
                   k_job_creation, NELEM(k_job_creation));
     ipp_attr_strs(e, IPP_TAG_KEYWORD, "which-jobs-supported",

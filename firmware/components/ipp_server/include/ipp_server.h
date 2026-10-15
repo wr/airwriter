@@ -45,7 +45,9 @@ void      ipp_server_stop(void);
 // The printer URI the server answers on, for logging. Valid after start.
 const char *ipp_server_uri(void);
 
-// Reports the printer stopped, with an IPP state reason keyword such as
-// "media-empty". Pass NULL to clear it. This is what turns a stalled HSKo line
-// into an alert on the phone -- SPEC.md 3.9.
-void ipp_server_set_stopped(const char *reason_or_null);
+// Reports the printer stopped, with an IPP printer-state-reasons keyword such
+// as "media-empty-error" and a printer-state-message to go with it. Pass NULL
+// to clear both. A job printing meanwhile reads processing-stopped. This is
+// what turns a stalled HSKo line into an alert on the phone -- SPEC.md 3.9.
+// The strings must outlive the call: pass literals.
+void ipp_server_set_stopped(const char *reason_or_null, const char *message);

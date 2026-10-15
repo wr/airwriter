@@ -25,7 +25,8 @@ typedef struct {
     const char *adminurl;   // http://host.local/
     const char *location;
     uint8_t     state;              // IPP_PSTATE_*
-    const char *state_reason;       // "none", "media-empty", ...
+    const char *state_reason;       // "none", "media-empty-error", ...
+    const char *state_message;      // printer-state-message; NULL or "" omits it
     int         accepting_jobs;
     int32_t     queued_jobs;
     uint32_t    uptime_s;

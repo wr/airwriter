@@ -312,8 +312,12 @@ The printer has a 2KB input buffer. Wire HSKo to the ESP32's UART CTS pin and le
 peripheral stall the FIFO — no polling loop, no software watermark.
 
 Then use that same line for status. If DTR stays deasserted past a timeout (start at 30
-seconds, make it configurable), set `printer-state-reasons` to `media-empty` and
-`printer-stopped`. That surfaces as a real alert on the phone. A 1985 dot matrix telling an
+seconds, make it configurable), set `printer-state` to `stopped` and `printer-state-reasons`
+to `media-empty-error` (the `-error` suffix of RFC 8011 5.4.12; a stopped printer must carry an
+error reason), with a `printer-state-message`. The printing job then reads `job-state`
+`processing-stopped` with `job-state-reasons` `printer-stopped` (RFC 8011 5.3.7), which the
+phone can only poll for because the job was made with Create-Job (3.4). That surfaces as a
+real alert on the phone. A 1985 dot matrix telling an
 iPhone it's out of paper is the demo shot for the video.
 
 ### 3.10 Host-side test harness
