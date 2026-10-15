@@ -109,6 +109,10 @@ state reads as one big LED. Hue offsets stay inside each state's colour family.
 | Job failed | all; mask at 4× | red (hue 352–12°): three 200 ms **glitch flashes**, each on a different random ~65% of dots, then a pulse 20%→60% whose period varies ±15% per dot, until the hold ends |
 | Asleep | the pilot, plus a rare twinkle | the FR4 dot right of the test button (row 3, col 4) breathes 3%→12% of the cap, driven linearly (gamma would round these levels to zero), on a 6 s period: neutral white, or a slowly cycling hue in gamer mode. Every 30 s one other FR4 dot twinkles once (1.5 s, peak 8% linear). Fade into sleep over 10 s; wake instantly. |
 
+Frames are rendered at 8.8 fixed point and temporally dithered to the LEDs' 8 bits at a steady
+100 fps (tuned on board 1: at a few counts of drive an 8-bit Ready breathe had ~6 levels and
+stuttered).
+
 Levels in this table are perceptual: every pattern except the pilot light goes through **gamma 2.2**
 before the cap, on FR4 and mask dots alike, and the numbers get a final tune on the board.
 No per-hue colour correction for the mask: calibration was tried and dropped (the cast is

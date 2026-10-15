@@ -99,15 +99,16 @@ static float ready_level(int r, int c, uint32_t t)
                                 + dot_hash(r, c, 2) * TAU);
 }
 
-// Gamma 2.2, then the cap. At a cap of 48 the bottom of a slow breathe would
-// round to zero and the dot would blink off, so any lit level gets one count.
-static uint8_t drive(float level, float cap)
+// Gamma 2.2, then the cap, at 8.8 fixed point. At a cap of 48 the bottom of a
+// slow breathe would fall below one count and the dot would blink off, so any
+// lit level gets at least one whole count.
+static uint16_t drive16(float level, float cap)
 {
     level = clampf(level);
     if (level <= 0) return 0;
-    float o = powf(level, 2.2f) * cap + 0.5f;
-    if (o < 1) o = 1;
-    return (uint8_t)(o > 255 ? 255 : o);
+    float o = powf(level, 2.2f) * cap * 256.0f;
+    if (o < 256) o = 256;
+    return (uint16_t)(o > 65280 ? 65280 : o);
 }
 
 static int all_dots(ps_state_t st)
@@ -225,21 +226,24 @@ static lg_c3 state_dot(const ps_view_t *v, const lg_opts_t *o, int i, uint32_t t
 }
 
 // The asleep pilot (and the rare twinkle): neutral white, or a slowly cycling
-// hue in gamer mode. Linear drive, as a fraction of LG_BRIGHTNESS_CAP.
-static void put_linear(uint8_t px[3], lg_c3 col, float frac)
+// hue in gamer mode. Linear drive, as a fraction of LG_BRIGHTNESS_CAP. A
+// channel under one count snaps to 0 or 1 rather than being dithered, which
+// at these levels would read as a flicker.
+static void put_linear(uint16_t px[3], lg_c3 col, float frac)
 {
-    float lvl = frac * LG_BRIGHTNESS_CAP;
-    uint8_t v[3] = {
-        (uint8_t)(col.r * lvl + 0.5f), (uint8_t)(col.g * lvl + 0.5f), (uint8_t)(col.b * lvl + 0.5f),
-    };
-    for (int ch = 0; ch < 3; ch++)
-        if (v[ch] > px[ch]) px[ch] = v[ch];
+    float lvl = frac * LG_BRIGHTNESS_CAP * 256.0f;
+    float ch3[3] = { col.r * lvl, col.g * lvl, col.b * lvl };
+    for (int ch = 0; ch < 3; ch++) {
+        float x = ch3[ch];
+        uint16_t v = x < 256 ? (x >= 128 ? 256 : 0) : (uint16_t)(x > 65280 ? 65280 : x);
+        if (v > px[ch]) px[ch] = v;
+    }
 }
 
-void lg_render(const ps_view_t *v, const lg_opts_t *o, uint32_t t_ms,
-               uint8_t out[LG_NUM_LEDS][3])
+void lg_render16(const ps_view_t *v, const lg_opts_t *o, uint32_t t_ms,
+                 uint16_t out[LG_NUM_LEDS][3])
 {
-    memset(out, 0, LG_NUM_LEDS * 3);
+    memset(out, 0, sizeof(uint16_t) * LG_NUM_LEDS * 3);
     int all = all_dots(v->state);
     int gamer = o && o->gamer;
     float sleep_k = v->asleep ? clampf((float)v->asleep_ms / 10000.0f) : 0;   // 10 s fade
@@ -250,9 +254,9 @@ void lg_render(const ps_view_t *v, const lg_opts_t *o, uint32_t t_ms,
         lg_c3 c = sc(state_dot(v, o, i, t_ms), 1 - sleep_k);
         float cap = !fr4 ? LG_MASK_CAP
                   : v->state == PS_ATTENTION ? LG_ALERT_CAP : LG_BRIGHTNESS_CAP;
-        out[i][0] = drive(c.r, cap);
-        out[i][1] = drive(c.g, cap);
-        out[i][2] = drive(c.b, cap);
+        out[i][0] = drive16(c.r, cap);
+        out[i][1] = drive16(c.g, cap);
+        out[i][2] = drive16(c.b, cap);
     }
 
     if (!v->asleep) return;
@@ -272,4 +276,28 @@ void lg_render(const ps_view_t *v, const lg_opts_t *o, uint32_t t_ms,
                           : white_of(LG_MAP[tw].r, LG_MAP[tw].c);
         put_linear(out[tw], col, 0.08f * sinf(3.1415927f * (float)ph / 1500.0f) * sleep_k);
     }
+}
+
+void lg_render(const ps_view_t *v, const lg_opts_t *o, uint32_t t_ms,
+               uint8_t out[LG_NUM_LEDS][3])
+{
+    uint16_t hi[LG_NUM_LEDS][3];
+    lg_render16(v, o, t_ms, hi);
+    for (int i = 0; i < LG_NUM_LEDS; i++)
+        for (int ch = 0; ch < 3; ch++) {
+            uint32_t x = ((uint32_t)hi[i][ch] + 128u) >> 8;
+            out[i][ch] = (uint8_t)(x > 255 ? 255 : x);
+        }
+}
+
+void lg_dither(lg_dither_t *d, const uint16_t in[LG_NUM_LEDS][3],
+               uint8_t out[LG_NUM_LEDS][3])
+{
+    for (int i = 0; i < LG_NUM_LEDS; i++)
+        for (int ch = 0; ch < 3; ch++) {
+            uint32_t acc = (uint32_t)in[i][ch] + d->err[i][ch];
+            uint32_t x = acc >> 8;
+            out[i][ch] = (uint8_t)(x > 255 ? 255 : x);
+            d->err[i][ch] = (uint8_t)(acc & 0xFF);
+        }
 }

@@ -274,6 +274,47 @@ int main(void)
         assert(memcmp(f[p], g[p], 3) != 0);
     }
 
+    // Smooth fades: the 16-bit render resolves a Ready breath far more finely
+    // than the 6 whole counts an 8-bit frame gets at this brightness, and
+    // agrees with the 8-bit frame to within rounding.
+    {
+        static uint16_t hi[LG_NUM_LEDS][3];
+        ps_view_t v = view(PS_READY, 5000);
+        static unsigned char seen[65536];
+        int distinct = 0;
+        for (uint32_t t = 0; t < 9000; t += 10) {
+            lg_render16(&v, &WHITE_MODE, t, hi);
+            lg_render(&v, &WHITE_MODE, t, f);
+            int b = hi[p][2];
+            if (!seen[b]) { seen[b] = 1; distinct++; }
+            for (int i = 0; i < LG_NUM_LEDS; i++)
+                for (int ch = 0; ch < 3; ch++)
+                    assert(abs((int)((hi[i][ch] + 128) >> 8) - (int)f[i][ch]) <= 1);
+        }
+        assert(distinct >= 100);
+    }
+
+    // Temporal dither: over time the 8-bit output averages to the 16-bit
+    // level; whole counts pass through untouched (no shimmer); zero stays dark.
+    {
+        static uint16_t hi[LG_NUM_LEDS][3];
+        lg_dither_t d;
+        memset(&d, 0, sizeof d);
+        for (int i = 0; i < LG_NUM_LEDS; i++) {
+            hi[i][0] = 384;                 // 1.5 counts
+            hi[i][1] = 3 * 256;             // exactly 3
+            hi[i][2] = 0;
+        }
+        long sum0 = 0;
+        for (int k = 0; k < 200; k++) {
+            lg_dither(&d, hi, f);
+            sum0 += f[0][0];
+            assert(f[0][1] == 3 && f[0][2] == 0);
+            assert(f[0][0] == 1 || f[0][0] == 2);
+        }
+        assert(sum0 == 300);                // 200 frames x 1.5
+    }
+
     printf("test_led_grid: ok\n");
     return 0;
 }
