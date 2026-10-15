@@ -93,5 +93,5 @@ colino.net's bench trace, VCF forum thread; colino.net found Pro Signal and Cabl
 | `hardware/combined/combined-top.png` (assembly/polarity reference) | |
 
 Regenerate the package only via `python3 hardware/combine_boards.py` then
-`sh hardware/combined/make_fab.sh`; verify with the battery in `docs/HANDOFF.md`
+`sh hardware/combined/make_fab.sh`; verify with the battery in `AGENTS.md` (Verification)
 (ERC, both DRCs with `--severity-all`, drill grep, pos row count 127).
