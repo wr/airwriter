@@ -82,20 +82,22 @@ static float jitter(int r, int c, float base, float spread, uint32_t t, float dr
     return h;
 }
 
-// Ready's neutral white, each dot a touch warmer or cooler than the next. The
-// whole range is biased blue: through the tan FR4, and at these few counts of
-// drive, a nominal white came out amber on board 1.
+// Ready's neutral white, each dot a touch warmer or cooler than the next.
+// Tuned on board 1, where these LEDs need far less red than a nominal white:
+// (1, .92, .82) read amber and (.76, .86, 1) still read reddish.
 static lg_c3 white_of(int r, int c)
 {
-    static const lg_c3 warm = {0.82f, 0.88f, 1.00f}, cool = {0.70f, 0.84f, 1.00f};
+    static const lg_c3 warm = {0.70f, 0.98f, 1.00f}, cool = {0.62f, 0.92f, 1.00f};
     return mix(warm, cool, dot_hash(r, c, 5));
 }
 
-// Each dot breathes on its own 5-9 s period, 16% to 38%.
+// Each dot breathes on its own 5-9 s period, 24% to 44%: high enough that
+// the dimmest channel rarely sits on the one-count floor, where the colour
+// collapses to the LEDs' native equal-RGB white.
 static float ready_level(int r, int c, uint32_t t)
 {
     uint32_t period = 5000 + (uint32_t)(dot_hash(r, c, 1) * 4000);
-    return 0.27f + 0.11f * sinf(TAU * (float)(t % period) / (float)period
+    return 0.34f + 0.10f * sinf(TAU * (float)(t % period) / (float)period
                                 + dot_hash(r, c, 2) * TAU);
 }
 

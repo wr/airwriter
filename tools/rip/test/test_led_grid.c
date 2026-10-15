@@ -148,6 +148,29 @@ int main(void)
             if (LG_MAP[i].mat == 'P') assert(f[i][2] >= f[i][0]);
     }
 
+    // Ready's white point, as actually sent: averaged over a breath through
+    // the dither, red at most half of blue and green at least 0.8 of it.
+    // Tuned on board 1, where (0.6, 0.74, 1) still read reddish.
+    {
+        static uint16_t hi[LG_NUM_LEDS][3];
+        lg_dither_t d;
+        memset(&d, 0, sizeof d);
+        double sum[LG_NUM_LEDS][3];
+        memset(sum, 0, sizeof sum);
+        ps_view_t v = view(PS_READY, 5000);
+        for (uint32_t t = 0; t < 9000; t += 10) {
+            lg_render16(&v, &WHITE_MODE, t, hi);
+            lg_dither(&d, hi, f);
+            for (int i = 0; i < LG_NUM_LEDS; i++)
+                for (int ch = 0; ch < 3; ch++) sum[i][ch] += f[i][ch];
+        }
+        for (int i = 0; i < LG_NUM_LEDS; i++) {
+            if (LG_MAP[i].mat != 'P') continue;
+            assert(sum[i][0] <= 0.5 * sum[i][2]);
+            assert(sum[i][1] >= 0.8 * sum[i][2]);
+        }
+    }
+
     // Gamer mode: Ready drifts through colour -- saturated dots, and the
     // pilot's hue moves over time.
     {
