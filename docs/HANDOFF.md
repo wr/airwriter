@@ -39,7 +39,8 @@ alert; SELECT on finished the page. On the W-1037 baseline the same test showed 
   `media-col-database` only when named), which cleared macOS's
   `cups-ipp-conformance-failure-report`. `tools/ipp/build/gpa_server` serves the real encoder
   on localhost for ipptool's suites (7/7 with the fifth test's request corrected; macOS's copy
-  of that test is self-contradictory). UUID epoch is now 2.
+  of that test is self-contradictory). The UUID epoch stays 1: filtering changes no
+  advertised value, and a new UUID would strand the Mac's CUPS queue (device-uri pins it).
 - **Trap: `tools/ipp/build/` holds committed binaries.** `git checkout -- tools/ipp/build`
   leaves them newer than the sources, and `make test` then runs the stale ones without a
   rebuild. Use `make -B -C tools/ipp test`.

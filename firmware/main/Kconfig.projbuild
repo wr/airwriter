@@ -37,7 +37,7 @@ config AIRWRITER_DEV_MODE
 config AIRWRITER_UUID_EPOCH
     int "printer-uuid epoch"
     range 0 65535
-    default 2
+    default 1
     help
         The printer-uuid is fixed per board (from its MAC) plus this number.
         iOS keys everything about a printer on its UUID, including a cached
@@ -46,7 +46,8 @@ config AIRWRITER_UUID_EPOCH
         "Waiting" and only re-polled Get-Printer-Attributes. Bump this when
         the advertised capabilities change, so phones meet a new printer.
         Ignored in development mode, which picks a random UUID every boot.
-        2: Get-Printer-Attributes honours requested-attributes (W-1040).
+        Not for changes that only filter what is sent: a new UUID also
+        strands every Mac queue whose device-uri pins the old one.
 
 config AIRWRITER_UART_NUM
     int "Printer UART port"
