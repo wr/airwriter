@@ -101,6 +101,12 @@ Traps already explained in a code comment are listed only when the comment is ea
 - **Never report busy (bit 15) to a Mac about its own connection.** Mac OS 8.1's AppleTalk
   ImageWriter 7.0.1 opened PAP, read 0x8008 (busy + off line) and sent nothing until the
   connection timed out. Busy is only for the board printing someone else's job.
+- **AppleTalk ImageWriter 7.0.1 ends a job with CloseConn, never PAP EOF**, after its last Data.
+  It never reads back (no SendData to us), polls SendStatus about twice per chunk, writes ~88
+  bytes per read with a flow quantum of 1, and sends the same native ImageWriter stream as serial
+  (one short page: 11968 bytes, identical across prints). Once, the Mac sent a whole page and
+  then tickled the connection for 10+ minutes without closing; its next job's OpenConn now
+  supersedes a connection silent for 10 s (`LT_PAP_STALE_MS`). Cause not found.
 - **The bench Mac's 8.1 install had no AppleTalk ImageWriter driver**, and the plain
   "ImageWriter" Chooser driver is serial only.
   Apple's `AppleTalk_ImageWriter_7.0.1.sea.bin` (Wayback copy of download.info.apple.com) works.

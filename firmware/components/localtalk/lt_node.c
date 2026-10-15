@@ -192,8 +192,7 @@ static void pap_start_read(lt_node_t *n, uint64_t now)
 // Answer the workstation's own SendData (it reads us back). We have nothing
 // to say -- the Option Card has no reverse channel -- so the answer is empty:
 // EOF once our side has seen the job's EOF, otherwise a keep-alive once the
-// workstation has been quiet LT_PAP_READ_IDLE_MS. Holding it instead stalls
-// the Mac's driver at the end of a page (see LT_PAP_READ_IDLE_MS).
+// workstation has been quiet LT_PAP_READ_IDLE_MS.
 static void pap_reply_ws(lt_node_t *n, uint16_t tid, const lt_route_t *to, uint8_t eof,
                          uint64_t now)
 {

@@ -55,10 +55,10 @@
 #define LT_PAP_CONN_TIMEOUT_MS 120000   // nothing from the other end: tear down
 #define LT_PAP_TICKLE_MS        60000   // half the connection timer
 #define LT_PAP_SENDDATA_RETRY_MS 15000
-// The Mac's own read of us (its SendData) is answered empty once it has sent
-// nothing for this long, so the read does not time out. A Mac whose read is
-// held stops writing at the end of the page and never sends EOF (bench,
-// 2026-10-15). TailTalk's PAP server, tested on hardware, uses 2 s.
+// A workstation's own read of us (its SendData) is answered empty once it has
+// sent nothing for this long, so the read does not time out; TailTalk's PAP
+// server, tested on hardware, uses 2 s. Apple's AppleTalk ImageWriter 7.0.1
+// never reads (bench, 2026-10-15); a LaserWriter-style client does.
 #define LT_PAP_READ_IDLE_MS      2000
 // An OpenConn from the Mac that holds the open connection, which has sent no
 // data for this long, means it gave that one up (the Mac kept tickling a dead
