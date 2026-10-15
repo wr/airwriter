@@ -189,14 +189,34 @@ static void pap_start_read(lt_node_t *n, uint64_t now)
     pap_send_read(n, now);
 }
 
-// Answer the workstation's own SendData (it reads us back) with an empty EOF.
+// Answer the workstation's own SendData (it reads us back). We have nothing
+// to say -- the Option Card has no reverse channel -- so the answer is empty:
+// EOF once our side has seen the job's EOF, otherwise a keep-alive once the
+// workstation has been quiet LT_PAP_READ_IDLE_MS. Holding it instead stalls
+// the Mac's driver at the end of a page (see LT_PAP_READ_IDLE_MS).
+static void pap_reply_ws(lt_node_t *n, uint16_t tid, const lt_route_t *to, uint8_t eof,
+                         uint64_t now)
+{
+    lt_pap_t *p = &n->pap;
+    uint8_t user[4] = { p->connid, PAP_DATA, eof, 0 };
+    atp_t req = { .ctl = ATP_TREQ | ATP_XO, .tid = tid };
+    respond(n, to, LT_SOCK_CONN, &req, user, NULL, 0, now);
+    n->st.ws_answers++;
+}
+
 static void pap_answer_ws_read(lt_node_t *n, uint64_t now)
 {
     lt_pap_t *p = &n->pap;
-    if (!p->ws_read || !p->done) return;
-    uint8_t user[4] = { p->connid, PAP_DATA, 1, 0 };
-    atp_t req = { .ctl = ATP_TREQ | ATP_XO, .tid = p->ws_read_tid };
-    respond(n, &p->ws_read_from, LT_SOCK_CONN, &req, user, NULL, 0, now);
+    if (!p->ws_read) return;
+    uint8_t eof = p->done && !p->eof_sent;
+    if (!eof && now - p->wrote < LT_PAP_READ_IDLE_MS) return;
+    pap_reply_ws(n, p->ws_read_tid, &p->ws_read_from, eof, now);
+    if (eof) {
+        p->eof_sent = 1;
+        say(n, "PAP %u: EOF to the Mac's read", p->connid);
+    }
+    p->ws_answered_seq = p->ws_read_seq;
+    p->ws_answered_eof = eof;
     p->ws_read = 0;
 }
 
@@ -253,8 +273,9 @@ static void pap_open(lt_node_t *n, const ddp_t *d, const atp_t *a, const lt_rout
     respond(n, from, LT_SOCK_SLS, a, user, data, sizeof data, now);
 
     if (result == PAP_RESULT_BUSY) {
-        n->st.busy++;
-        say(n, "PAP OpenConn from %u while busy", d->src.node);
+        if (n->st.busy++ == 0 || !(n->st.busy % 10))
+            say(n, "PAP OpenConn from %u while %u is open (%lu so far)", d->src.node, p->connid,
+                (unsigned long)n->st.busy);
         return;
     }
     if (same_conn) return;
@@ -262,7 +283,7 @@ static void pap_open(lt_node_t *n, const ddp_t *d, const atp_t *a, const lt_rout
     p->open = 1;
     p->connid = a->user[0];
     p->ws = ws;
-    p->heard = p->tickled = now;
+    p->heard = p->tickled = p->wrote = now;
     p->tickle_tid = next_tid(n);
     p->seq = 1;
     n->st.opens++;
@@ -312,6 +333,7 @@ static void on_atp(lt_node_t *n, const ddp_t *d, uint64_t now)
 
     if (fn == ATP_TRESP && a.tid == p->rd_tid && p->rd_want && a.user[1] == PAP_DATA) {
         uint8_t seq = a.bitmap;
+        p->wrote = now;
         if (seq >= LT_FLOW || !(p->rd_want & (1u << seq))) return;
         size_t len = a.len < PAP_QUANTUM ? a.len : PAP_QUANTUM;
         memcpy(p->rd_buf[seq], a.data, len);
@@ -326,12 +348,24 @@ static void on_atp(lt_node_t *n, const ddp_t *d, uint64_t now)
     switch (a.user[1]) {
     case PAP_TICKLE:
         break;                                     // heard; no response, by the spec
-    case PAP_SEND_DATA:
+    case PAP_SEND_DATA: {
+        uint16_t seq = (uint16_t)(a.user[2] << 8 | a.user[3]);
+        n->st.ws_reads++;
+        if (!p->ws_read && !p->ws_answered_seq)
+            say(n, "PAP %u: the Mac reads us too (seq %u)", p->connid, seq);
+        // A PAP-level retransmit of a read already answered (fresh TID, same
+        // sequence number) gets the same answer again.
+        if (seq && seq == p->ws_answered_seq) {
+            pap_reply_ws(n, a.tid, &from, p->ws_answered_eof, now);
+            break;
+        }
         p->ws_read = 1;
         p->ws_read_tid = a.tid;
+        p->ws_read_seq = seq;
         p->ws_read_from = from;
         pap_answer_ws_read(n, now);
         break;
+    }
     case PAP_CLOSE_CONN: {
         uint8_t user[4] = { p->connid, PAP_CLOSE_CONN_REPLY, 0, 0 };
         respond(n, &from, LT_SOCK_CONN, &a, user, NULL, 0, now);
@@ -357,6 +391,7 @@ static void pap_tick(lt_node_t *n, uint64_t now)
         p->tickled = now;
     }
     if (p->rd_want && now - p->rd_sent >= LT_PAP_SENDDATA_RETRY_MS) pap_send_read(n, now);
+    pap_answer_ws_read(n, now);
 }
 
 // ------------------------------------------------------------- the rest

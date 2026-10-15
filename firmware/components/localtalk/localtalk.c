@@ -285,12 +285,13 @@ void localtalk_json(char *buf, size_t cap)
     p += snprintf(p, end - p,
         ",\"frames\":%lu,\"fcs_bad\":%u,\"errors\":%u,\"tx\":%u,\"for_us\":%lu,"
         "\"lookups\":%lu,\"replies\":%lu,\"statuses\":%lu,\"opens\":%lu,\"busy\":%lu,"
-        "\"dup\":%lu,\"echoes\":%lu,\"pap\":{\"open\":%s,\"conn\":%u,\"bytes\":%lu},"
+        "\"dup\":%lu,\"echoes\":%lu,\"mac_reads\":%lu,\"mac_answers\":%lu,\"pap\":{\"open\":%s,\"conn\":%u,\"bytes\":%lu},"
         "\"job\":{\"captured\":%u,\"total\":%lu,\"done\":%s},\"events\":[",
         (unsigned long)n->st.frames, s_fcs_bad, s_errors, s_tx, (unsigned long)n->st.for_us,
         (unsigned long)n->st.lookups, (unsigned long)n->st.replies,
         (unsigned long)n->st.statuses, (unsigned long)n->st.opens, (unsigned long)n->st.busy,
-        (unsigned long)n->st.dup_suspect, (unsigned long)n->st.echoes, n->pap.open ? "true" : "false", n->pap.connid,
+        (unsigned long)n->st.dup_suspect, (unsigned long)n->st.echoes,
+        (unsigned long)n->st.ws_reads, (unsigned long)n->st.ws_answers, n->pap.open ? "true" : "false", n->pap.connid,
         (unsigned long)n->pap.bytes, (unsigned)s_job_len, (unsigned long)s_job_total,
         s_job_done ? "true" : "false");
     json_ring(&p, end, s_ev, EV_LINES, s_ev_head, s_ev_n);

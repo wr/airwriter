@@ -547,6 +547,77 @@ static void test_pap_timers(void)
     CHECK(strstr(lastlog, "timed out") != NULL);
 }
 
+// The Mac reads us while it writes. Its read must not be held to the end:
+// held, the driver stops at the end of the page and never sends EOF (bench).
+static void test_pap_mac_reads(void)
+{
+    lt_node_t n;
+    uint64_t t = online(&n, 200);
+    uint8_t f[LLAP_MAX];
+    const uint8_t oc[] = { 0xF4, 1, 0, 0 };
+    size_t fl = mac_atp(f, 200, LT_SOCK_SLS, ATP_TREQ | ATP_XO, 0x01, 0x0202, 0xAD, PAP_OPEN_CONN, 0, 0, oc, sizeof oc);
+    lt_node_rx(&n, f, fl, t);
+    uint16_t tid1 = (uint16_t)(atp_of(1)[2] << 8 | atp_of(1)[3]);
+
+    // A chunk arrives, and the Mac's read (seq 1) comes in behind it.
+    const uint8_t chunk[] = { 0x1B, 'G', '0', '0', '0', '1', 0x55 };
+    fl = mac_atp(f, 200, LT_SOCK_CONN, ATP_TRESP | ATP_EOM, 0, tid1, 0xAD, PAP_DATA, 0, 0, chunk, sizeof chunk);
+    lt_node_rx(&n, f, fl, t + 100);
+    reset_fake();
+    fl = mac_atp(f, 200, LT_SOCK_CONN, ATP_TREQ | ATP_XO, 0x01, 0x0700, 0xAD, PAP_SEND_DATA, 0, 1, NULL, 0);
+    lt_node_rx(&n, f, fl, t + 150);
+    CHECK_EQ_INT(nsent, 0);                               // still writing: held
+    CHECK(strstr(lastlog, "the Mac reads us too (seq 1)") != NULL);
+    CHECK_EQ_INT(n.st.ws_reads, 1);
+    lt_node_tick(&n, t + 100 + LT_PAP_READ_IDLE_MS - 1);
+    CHECK_EQ_INT(nsent, 0);
+
+    // Quiet for LT_PAP_READ_IDLE_MS: answered empty, no EOF.
+    lt_node_tick(&n, t + 100 + LT_PAP_READ_IDLE_MS);
+    CHECK_EQ_INT(nsent, 1);
+    const uint8_t keep[] = { ATP_TRESP | ATP_EOM, 0, 0x07, 0x00, 0xAD, PAP_DATA, 0, 0 };
+    CHECK_EQ_INT(sent_len[0], 3 + 5 + sizeof keep);
+    CHECK_EQ_MEM(atp_of(0), keep, sizeof keep);
+    CHECK_EQ_INT(sent[0][3 + 2], 0xFB);                   // to the socket that asked
+    CHECK_EQ_INT(n.st.ws_answers, 1);
+
+    // A PAP-level retransmit (fresh TID, same sequence) gets the same answer
+    // at once; an ATP-level one (same TID) comes from the XO cache.
+    reset_fake();
+    fl = mac_atp(f, 200, LT_SOCK_CONN, ATP_TREQ | ATP_XO, 0x01, 0x0701, 0xAD, PAP_SEND_DATA, 0, 1, NULL, 0);
+    lt_node_rx(&n, f, fl, t + 2200);
+    CHECK_EQ_INT(nsent, 1);
+    CHECK_EQ_INT((atp_of(0)[2] << 8 | atp_of(0)[3]), 0x0701);
+    CHECK_EQ_INT(atp_of(0)[6], 0);
+
+    // The next read (seq 2) waits for the next quiet spell.
+    reset_fake();
+    fl = mac_atp(f, 200, LT_SOCK_CONN, ATP_TREQ | ATP_XO, 0x01, 0x0702, 0xAD, PAP_SEND_DATA, 0, 2, NULL, 0);
+    lt_node_rx(&n, f, fl, t + 2300);
+    CHECK_EQ_INT(nsent, 1);                               // quiet since t+100: answered now
+    CHECK_EQ_INT((atp_of(0)[2] << 8 | atp_of(0)[3]), 0x0702);
+
+    // The job's EOF arrives on our read; the Mac's next read gets EOF, once.
+    reset_fake();
+    const uint8_t last[] = { 0x0C };
+    fl = mac_atp(f, 200, LT_SOCK_CONN, ATP_TRESP | ATP_EOM, 0, n.pap.rd_tid, 0xAD, PAP_DATA, 1, 0, last, sizeof last);
+    lt_node_rx(&n, f, fl, t + 3000);
+    CHECK(n.pap.done);
+    reset_fake();
+    fl = mac_atp(f, 200, LT_SOCK_CONN, ATP_TREQ | ATP_XO, 0x01, 0x0703, 0xAD, PAP_SEND_DATA, 0, 3, NULL, 0);
+    lt_node_rx(&n, f, fl, t + 3010);
+    CHECK_EQ_INT(nsent, 1);
+    CHECK_EQ_INT(atp_of(0)[6], 1);                        // EOF
+    CHECK(strstr(lastlog, "EOF to the Mac's read") != NULL);
+    reset_fake();
+    fl = mac_atp(f, 200, LT_SOCK_CONN, ATP_TREQ | ATP_XO, 0x01, 0x0704, 0xAD, PAP_SEND_DATA, 0, 4, NULL, 0);
+    lt_node_rx(&n, f, fl, t + 3020);
+    CHECK_EQ_INT(nsent, 0);                               // after EOF: keep-alives only
+    lt_node_tick(&n, t + 3000 + LT_PAP_READ_IDLE_MS);
+    CHECK_EQ_INT(nsent, 1);
+    CHECK_EQ_INT(atp_of(0)[6], 0);
+}
+
 int main(void)
 {
     test_fcs();
@@ -558,5 +629,6 @@ int main(void)
     test_aep();
     test_pap();
     test_pap_timers();
+    test_pap_mac_reads();
     TEST_END;
 }

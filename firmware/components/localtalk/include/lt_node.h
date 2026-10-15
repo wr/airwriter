@@ -55,6 +55,11 @@
 #define LT_PAP_CONN_TIMEOUT_MS 120000   // nothing from the other end: tear down
 #define LT_PAP_TICKLE_MS        60000   // half the connection timer
 #define LT_PAP_SENDDATA_RETRY_MS 15000
+// The Mac's own read of us (its SendData) is answered empty once it has sent
+// nothing for this long, so the read does not time out. A Mac whose read is
+// held stops writing at the end of the page and never sends EOF (bench,
+// 2026-10-15). TailTalk's PAP server, tested on hardware, uses 2 s.
+#define LT_PAP_READ_IDLE_MS      2000
 
 typedef struct {
     void *ctx;
@@ -110,15 +115,20 @@ typedef struct {
     uint64_t   rd_sent;
     uint16_t   rd_len[LT_FLOW];
     uint8_t    rd_buf[LT_FLOW][PAP_QUANTUM];
-    // The workstation's read of us, held until we have something to say.
-    uint8_t    ws_read;
-    uint16_t   ws_read_tid;
+    // The workstation's read of us (its SendData), answered empty once it
+    // has been quiet LT_PAP_READ_IDLE_MS, or with EOF once our side is done.
+    uint8_t    ws_read, eof_sent;
+    uint16_t   ws_read_tid, ws_read_seq;
     lt_route_t ws_read_from;
+    uint16_t   ws_answered_seq;  // the last one answered, for PAP-level retransmits
+    uint8_t    ws_answered_eof;
+    uint64_t   wrote;            // when the workstation last sent us Data
     uint32_t   bytes;
 } lt_pap_t;
 
 typedef struct {
     uint32_t frames, for_us, lookups, replies, opens, busy, statuses, jobs, dup_suspect, echoes;
+    uint32_t ws_reads, ws_answers;   // the Mac's reads of us, and our answers
 } lt_stats_t;
 
 typedef struct {
