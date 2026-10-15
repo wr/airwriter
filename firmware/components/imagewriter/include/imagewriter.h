@@ -33,3 +33,31 @@ void iw_begin_page(iw_t *w);
 void iw_row(iw_t *w, const uint8_t *bits);
 void iw_end_page(iw_t *w);
 void iw_transpose(const uint8_t *rows[8], uint8_t *cols, uint32_t width_dots);
+
+// Recovery from a stream cut mid-command (W-1041). A job aborted mid-page --
+// cancelled, its transfer cut, or a stall -- stops wherever it was, almost
+// always inside a strip's 1152 column bytes. The printer is then still
+// counting graphics data and prints the start of the next job (ESC c, ESC p,
+// ESC T16, ESC G ...) as dots. The fix is the Technical Reference's own
+// (Cancel Current Line, p. 85): 1280 NULs, which run out any graphics count
+// and are ignored as text, then CTRL-X, which erases the half-received line.
+#define IW_RESYNC_NULS  1280
+#define IW_RESYNC_BYTES (IW_RESYNC_NULS + 1)
+void iw_resync(iw_out_fn out, void *ctx);
+
+// Whether the printer may be left mid-command. One per printer, zeroed at
+// start. A job's stream that sent its first byte and did not end cleanly
+// leaves the link dirty; the next job resyncs before its own first byte. A
+// job that sends nothing changes nothing, so a clean job's stream is exactly
+// what it always was.
+typedef struct {
+    int dirty;     // the last stream to start was cut short
+    int started;   // the current job has sent its first byte
+} iw_link_t;
+
+void iw_link_job_start(iw_link_t *l);
+// Before each write of a job's bytes. 1 at most once per job, before its first
+// byte, when the last stream was cut: send iw_resync first.
+int  iw_link_need_resync(iw_link_t *l);
+// clean: every byte of the job was queued and its last page ended normally.
+void iw_link_job_end(iw_link_t *l, int clean);

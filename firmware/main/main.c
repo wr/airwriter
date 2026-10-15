@@ -182,22 +182,47 @@ static volatile int s_job_cancelled;
 // call.
 static int s_job_pipe_ok;
 
+// Whether the last job's stream was cut mid-command (W-1041). Only the task
+// holding s_job_lock touches it: doc_begin through doc_end, or a test page.
+static iw_link_t s_link;
+
+static void resync_out(void *ctx, const uint8_t *buf, size_t n)
+{
+    esp_err_t *err = (esp_err_t *)ctx;
+    if (*err == ESP_OK) *err = serial_out_write(buf, n);
+}
+
+// A write failed: the printer stayed paused past STALL_ABORT, or the job was
+// cancelled. Abort the job so the rip task winds down instead of pushing the
+// rest of the page at a dead line.
+static void printer_fail(void)
+{
+    s_printer_failed = 1;
+    // The dead job's queued tail must not reach the printer when paper
+    // returns -- it would print garbage ahead of the next job.
+    serial_out_purge();
+    job_pipe_abort();
+}
+
 // The printer stream: checksummed so the device can be compared with tools/rip
-// byte for byte, then put on the wire. A write failure means the printer
-// stayed paused past STALL_ABORT; abort the job so the rip task winds down instead
-// of pushing the rest of the page at a dead line.
+// byte for byte, then put on the wire.
 static void printer_out(void *ctx, const uint8_t *buf, size_t n)
 {
     (void)ctx;
     s_stream_crc = crc32_up(s_stream_crc, buf, n);
     if (s_printer_failed) return;
-    if (serial_out_write(buf, n) != ESP_OK) {
-        s_printer_failed = 1;
-        // The dead job's queued tail must not reach the printer when paper
-        // returns -- it would print garbage ahead of the next job.
-        serial_out_purge();
-        job_pipe_abort();
+    // The last job was cut short, so the printer may still be counting a
+    // strip's graphics bytes: flush that before this job's first byte. Flow
+    // controlled like the job, so it waits out a paused printer; outside the
+    // CRC, which is the job's stream alone. Loopback has no printer to resync,
+    // and the extra bytes would fail its byte count.
+    if (iw_link_need_resync(&s_link) && !AW_LOOPBACK) {
+        ESP_LOGW(TAG, "last job was cut short; resyncing the printer first");
+        esp_err_t err = ESP_OK;
+        iw_resync(resync_out, &err);
+        if (err != ESP_OK) { printer_fail(); return; }
     }
+    if (serial_out_write(buf, n) != ESP_OK) printer_fail();
 }
 
 // HSKo edges from serial_out. printer_state turns a low line into "printer
@@ -224,6 +249,7 @@ static esp_err_t doc_begin(void *ctx, const char *format, const char *name)
     s_printer_failed = 0;
     s_job_cancelled = 0;
     serial_out_set_abort(0);
+    iw_link_job_start(&s_link);
     s_printing = 1;
     printer_state_post(PS_EV_JOB_START);
     serial_out_loopback_reset();
@@ -264,7 +290,12 @@ static void doc_end(void *ctx, int ok)
     if (s_job_pipe_ok) job_pipe_end(ok, &st);
     s_printing = 0;
 
-    if (st.rc != 0 || !ok || s_printer_failed) {
+    // Clean only if the rip finished every page and every byte was queued;
+    // anything else may have stopped mid-strip.
+    int clean = st.rc == 0 && ok && !s_printer_failed;
+    iw_link_job_end(&s_link, clean);
+
+    if (!clean) {
         if (s_job_cancelled) {
             ESP_LOGI(TAG, "job canceled after %u bytes in", (unsigned)st.doc_bytes);
             printer_state_post(PS_EV_JOB_DONE);
@@ -354,6 +385,7 @@ static void test_page_task(void *arg)
     s_printer_failed = 0;
     s_job_cancelled = 0;
     serial_out_set_abort(0);
+    iw_link_job_start(&s_link);
     printer_state_post(PS_EV_JOB_START);
 
     ht_algo_t algo;
@@ -391,6 +423,7 @@ static void test_page_task(void *arg)
         iw_end_page(&w);
         ht_free(&h);
     }
+    iw_link_job_end(&s_link, !s_printer_failed);
 
     serial_out_flush(CONFIG_AIRWRITER_STALL_ABORT * 1000u);
     printer_state_post(s_printer_failed ? PS_EV_JOB_FAILED : PS_EV_JOB_DONE);

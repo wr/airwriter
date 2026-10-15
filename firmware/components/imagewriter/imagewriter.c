@@ -77,3 +77,35 @@ void iw_end_page(iw_t *w)
     static const uint8_t ff[] = { 0x0C };
     w->out(w->ctx, ff, sizeof ff);
 }
+
+void iw_resync(iw_out_fn out, void *ctx)
+{
+    static const uint8_t nuls[128];
+    for (uint32_t left = IW_RESYNC_NULS; left; ) {
+        uint32_t n = left < sizeof nuls ? left : sizeof nuls;
+        out(ctx, nuls, n);
+        left -= n;
+    }
+    static const uint8_t can[] = { 0x18 };   // CTRL-X: cancel current line
+    out(ctx, can, sizeof can);
+}
+
+void iw_link_job_start(iw_link_t *l)
+{
+    l->started = 0;
+}
+
+int iw_link_need_resync(iw_link_t *l)
+{
+    if (l->started) return 0;
+    l->started = 1;
+    int need = l->dirty;
+    l->dirty = 1;          // in flight: a cut from here on leaves it mid-command
+    return need;
+}
+
+void iw_link_job_end(iw_link_t *l, int clean)
+{
+    if (clean && l->started) l->dirty = 0;
+    l->started = 0;
+}
