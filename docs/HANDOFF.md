@@ -27,6 +27,14 @@ was **byte-identical to `checker.expected.bin`** (2672 bytes, crc32 `8ee84844`).
   100 Hz, so TPINT was "until the next tick", 0–10 ms. Waits now round up to whole ticks
   plus one (`pic_sleep_ticks()`, host-tested on a tick-accurate HAL). Re-flash: ok in
   2.9 s, config `09C4 3FFF`, LVP still on. This part's calibration words: `16E0 1DA8`.
+- **W-1041: an aborted job no longer garbles the next one.** A write failed mid-strip
+  (Cancel-Job, stall abort, or a cut transfer while the rip is printer-bound) leaves the
+  printer counting `ESC G` bytes, so it printed the next job's header as dots. The next job
+  now starts with 1280 NULs + CTRL-X (Tech Ref p. 85; `iw_link`/`iw_resync`, host-tested at
+  every cut point) and logs `last job was cut short; resyncing the printer first`. Not
+  covered: a board reboot mid-strip (the link starts clean). Test trap: killing `ipptool`
+  does not cut a transfer on macOS — the kernel delivers the buffered file. Use Cancel-Job,
+  or `curl --limit-rate` with a hand-built IPP request.
 - **Flashing leaves the printer not-ready; power-cycling does not.** After `idf.py flash` the
   ImageWriter dropped HSKo until SELECT was toggled — the S3 sits ~10 s in download mode with
   IO17 (UART1 TX → U2 DI) floating. Unplugging and replugging the board left HSKo ready
