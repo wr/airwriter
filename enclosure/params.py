@@ -368,10 +368,11 @@ TEST_BODY_TOP = 3.20
 to 3.5 where it enters the switch body, which stands about 3.2. (The KiCad
 model's plunger is a plain 3.5 cylinder.)"""
 
-TEST_PLUNGER_OFFSET = (0.40, -0.40)
+TEST_PLUNGER_OFFSET = (0.20, -0.20)
 """Where the real plunger stands relative to the KiCad model's axis (east,
-north), from the 2026-10-15 print: a collar on the model's axis pushed the
-plunger about 0.4 west and 0.4 back (Wells)."""
+north). A collar on the model's axis pushed the plunger about 0.4 west and
+0.4 back; moved 0.4 east and forward, it pushed it east and forward instead.
+So, split the difference (Wells, 2026-10-15)."""
 
 COLLAR_H = 2.00
 COLLAR_BORE_D = 3.60

@@ -169,7 +169,7 @@ flush on lattice and shells together; the posts dropping onto the screws.
 
 - **Test-button collar.** A ring in the test cell's top 2 mm (Ø3.6 bore on the plunger's
   measured 3.1–3.2), tied to the four walls by ribs. It's centred where the real plunger
-  stands: 0.4 east and 0.4 forward of the KiCad model's axis (`TEST_PLUNGER_OFFSET`). A
+  stands: 0.2 east and 0.2 forward of the KiCad model's axis (`TEST_PLUNGER_OFFSET`, found over two prints). A
   collar on the model's axis pushed the plunger off centre.
 - **Edge lip, whole perimeter.** A 1.5 mm lip round the top edge, 0.1 short of the tray's
   pocket, cut only by J2/J4. A 1.5 mm skin under the panel over the front region carries it

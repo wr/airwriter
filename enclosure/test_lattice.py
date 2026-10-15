@@ -77,13 +77,13 @@ class TestLattice(unittest.TestCase):
         self.assertLess(_vol(self.L, plunger), 1e-3)
 
     def test_collar_sits_where_the_real_plunger_stands(self):
-        # 2026-10-15 print: centred on the KiCad model's plunger, the collar
-        # pushed the real one 0.4 west and 0.4 back. Its bore is now centred
-        # 0.4 east and 0.4 forward of the model's axis.
+        # 2026-10-15 prints: on the KiCad model's axis the collar pushed the
+        # real plunger 0.4 west and back; 0.4 east and forward overshot. The
+        # bore is centred halfway, 0.2 east and 0.2 forward.
         x0, x1, y0, y1, _ = components.envelopes()["SW3"][-1]
         x = (x0 + x1) / 2 + p.TEST_PLUNGER_OFFSET[0]
         y = (y0 + y1) / 2 + p.TEST_PLUNGER_OFFSET[1]
-        self.assertEqual(p.TEST_PLUNGER_OFFSET, (0.40, -0.40))
+        self.assertEqual(p.TEST_PLUNGER_OFFSET, (0.20, -0.20))
         r = p.COLLAR_BORE_D / 2
         z = H - p.COLLAR_H / 2
         for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):

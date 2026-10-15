@@ -90,8 +90,8 @@ shells' measured height; the panel rests on both). Spec:
   LED.)
 - A collar round the test button's plunger in the top 2 mm (Ø3.6 bore on its
   measured 3.1–3.2), tied to the cell walls by ribs, to steady it without
-  drag. It sits on where the real plunger stands, 0.4 east and 0.4 forward of
-  the KiCad model's (`TEST_PLUNGER_OFFSET`).
+  drag. It sits on where the real plunger stands, 0.2 east and 0.2 forward of
+  the KiCad model's (`TEST_PLUNGER_OFFSET`, found over two prints).
 - A 1.5 mm lip round the whole top edge, less the two mini-DINs, 0.1 mm short
   of the tray wall, so the lattice sits snug and the gap round the panel
   shows black plastic instead of the inside of the case. A 1.5 mm skin under

@@ -53,7 +53,7 @@ was **byte-identical to `checker.expected.bin`** (2672 bytes, crc32 `8ee84844`).
   lost hand-drawn STL: 13.04 mm egg-crate grid, posts with standoff pockets, rails to the
   front posts, and a tube for the power LED. `./build.sh` now needs kicad-cli (part
   clearances come from its STEP export). v3 after two prints: a collar steadies the test
-  plunger (centred 0.4 E / 0.4 S of the KiCad model's axis, where the real one stands), and a
+  plunger (centred 0.2 E / 0.2 S of the KiCad model's axis, where the real one stands), and a
   lip runs round the whole top edge except the mini-DINs. A clear-PETG light pipe for D3
   came out *dimmer* and was dropped; a THT dome power LED is W-1043 for rev B.
 - **Next:** print a full page from an iPhone, scope HSKo during a long job (SPEC §3.9 stall
