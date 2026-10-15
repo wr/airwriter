@@ -35,6 +35,13 @@ alert; SELECT on finished the page. On the W-1037 baseline the same test showed 
   per-`printer-uuid` capability cache, and stale mDNS TXT twins (ESP mdns seems not to set
   cache-flush on TXT, so an old UUID lingers for the TTL). Details:
   side-session notes `w1040-open-iphone-stall.md`. The iPhone SELECT-off test is untested.
+- **Cosmetic follow-up:** with SELECT off the Mac showed "out of paper" for a few seconds,
+  then "printer is offline", while the board held `stopped` + `media-empty-error` for the
+  whole 67 s and answered every Get-Job-Attributes. Best guess: CUPS's ipp backend, whose
+  Print-Job write blocks once the board stops reading the socket (paused printer, TCP
+  window full); after its write timeout the backend reports `offline-report` itself, which
+  the Mac shows over our reason. Untested. Buffering the job in PSRAM (the PSRAM job-buffer
+  work) would let the upload finish during a pause and likely removes it; not fixed here.
 
 **2026-10-14: rev A is alive and has printed.** Board 1 arrived from PCBWay; the THT joints,
 J2/J4 holes and debris from the 10-05 photo review were checked and fixed before power. Over
