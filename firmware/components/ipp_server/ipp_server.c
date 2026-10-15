@@ -3,6 +3,7 @@
 #include "ipp_req.h"
 #include "ipp_attrs.h"
 #include "ipp_http.h"
+#include "sdkconfig.h"
 
 #include <string.h>
 #include <stdio.h>
@@ -78,13 +79,15 @@ static uint32_t uptime_s(void)
 // printer-uuid must survive a reflash, so it is derived from the eFuse MAC.
 // In dev mode it is random every boot instead: iOS caches capabilities against
 // the UUID hard enough that a stale media list otherwise outlives any number
-// of reflashes. SPEC.md 3.5.
+// of reflashes. SPEC.md 3.5. Outside dev mode the third group is the UUID
+// epoch, bumped by hand when the advertised capabilities change.
 static void make_uuid(int dev_mode)
 {
     uint8_t mac[6] = {0};
     esp_read_mac(mac, ESP_MAC_WIFI_STA);
 
-    uint16_t rnd = dev_mode ? (uint16_t)(esp_random() & 0xFFFF) : 0;
+    uint16_t rnd = dev_mode ? (uint16_t)(esp_random() & 0xFFFF)
+                            : (uint16_t)CONFIG_AIRWRITER_UUID_EPOCH;
     snprintf(s_uuid, sizeof s_uuid,
              "urn:uuid:41575254-4552-%04x-%02x%02x-%02x%02x%02x%02x",
              rnd, mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);

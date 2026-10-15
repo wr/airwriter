@@ -34,6 +34,19 @@ config AIRWRITER_DEV_MODE
         Get-Printer-Attributes forever without sending a job. Turn it on
         only while iterating on advertised capabilities.
 
+config AIRWRITER_UUID_EPOCH
+    int "printer-uuid epoch"
+    range 0 65535
+    default 1
+    help
+        The printer-uuid is fixed per board (from its MAC) plus this number.
+        iOS keys everything about a printer on its UUID, including a cached
+        copy of its capabilities: when operations-supported changed under an
+        unchanged UUID on the rev A bench, the iPhone held every job at
+        "Waiting" and only re-polled Get-Printer-Attributes. Bump this when
+        the advertised capabilities change, so phones meet a new printer.
+        Ignored in development mode, which picks a random UUID every boot.
+
 config AIRWRITER_UART_NUM
     int "Printer UART port"
     default 1
