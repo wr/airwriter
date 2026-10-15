@@ -93,6 +93,11 @@ Traps already explained in a code comment are listed only when the comment is ea
 - **TashTalk's CTS (RA2 → IO6) is low when it can take bytes**, the ESP32 UART's own CTS
   polarity: no inversion. Its queue is 128 bytes and a frame can be 605, so flow control is not
   optional.
+- **A LocalTalk job with no printer on J2 cannot finish.** The line reads off line and the status
+  word says so; whatever the Mac sends fills the spool and holds its reads, and after
+  `CONFIG_AIRWRITER_STALL_ABORT` the job is aborted (CloseConn). To take a job on the bench without
+  a printer, build with `CONFIG_AIRWRITER_UART_LOOPBACK`: the line reads ready and the log checks
+  the job's bytes as they come back (never on a board that should print).
 - **The LocalTalk node owns IO4/IO5, which are also the PIC's ICSP lines.** The web UI's
   TashTalk flash refuses while the node runs: set DIP1-2 off mode 2 (and build without
   `CONFIG_AIRWRITER_LT_BENCH`), restart, then flash.

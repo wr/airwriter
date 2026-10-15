@@ -56,17 +56,18 @@ What works on `main`:
 - A LocalTalk node in DIP mode 2 (or always, with `CONFIG_AIRWRITER_LT_BENCH`), on UART2 to
   TashTalk at 1 Mbaud with its CTS on IO6 (`components/localtalk`): acquires a server node ID,
   answers NBP LkUp as `<queue>:ImageWriter@*`, and answers PAP as Apple's ImageWriter LocalTalk
-  Option Card does (status word, one connection, read to EOF). Job bytes are captured in PSRAM
-  for `GET /api/lt/job`, not printed. `GET /api/lt` shows its state and log; `POST /api/lt/echo`
-  with a node number pings that Mac (AEP).
+  Option Card does (status word, one connection). A PAP job is the Mac driver's own ImageWriter
+  stream and goes to the printer as it is, under the job lock: an IPP job or test page makes the
+  Mac wait ("busy"), a paused printer holds the Mac's reads (16 KB spool), and a job cut short
+  gets W-1041's resync. The last job's bytes are also kept for `GET /api/lt/job`. `GET /api/lt`
+  shows state and log; `POST /api/lt/echo` with a node number pings that Mac (AEP).
 
 **Enclosure** (`enclosure/`, in use on board 1): tray (print in PETG; the board goes
 in by the sequence in `enclosure/README.md`, thumbing the thin west wall out past the DIP keys),
 Lite lid, and the Pro build's light-guide lattice. Cavity 13.04 (measured mini-DIN height);
 Pro screws M2.5 × 18. The shop's cased GLBs still show the pre-W-1036 tray.
 
-Not built: printing a LocalTalk job (PAP data to the printer), EtherTalk, consumers of the
-dither override, PWG raster.
+Not built: EtherTalk, consumers of the dither override, PWG raster.
 
 **Board 1:** ESP32-S3-WROOM-1-N8R2 (8 MB flash, 2 MB PSRAM). On the home Wi-Fi at
 10.0.1.115, mDNS `imagewriter-2434.local`. Console on USB-C as `/dev/cu.usbmodem*` (the number
@@ -94,11 +95,10 @@ Linear is the queue; these are the live items.
   in `docs/hardware-rev-a.md` (not in Linear yet).
 - `W-573 Dot-panel cover: passive art panel, LED grid, DIP config` (umbrella, in progress).
 - `W-567 M6 — Manners: paper-out, cancel, web UI, provisioning, OTA` (backlog).
-- `W-1051 LocalTalk node: show up in the Chooser as an ImageWriter`: in review on
-  `wells/w-1051-localtalk-node`, unmerged; board 1 runs it and the bench Mac (Mac OS 8.1, Apple's
-  AppleTalk ImageWriter 7.0.1) lists it in the Chooser.
-- `W-1053 LocalTalk: print PAP jobs from the Mac's AppleTalk ImageWriter driver`: next. A real
-  job is captured in `fixtures/pap-iw701-page.bin`; the PAP exchange is in `docs/traps.md`.
+- `W-1053 LocalTalk: print PAP jobs from the Mac's AppleTalk ImageWriter driver`: on
+  `wells/w-1053-localtalk-print-pap-jobs`, unmerged. Host-tested against
+  `fixtures/pap-iw701-page.bin`; not yet printed on paper (needs a second crossover cable for
+  J2, since the bench Mac's is on J4).
 - Not in Linear: scope HSKo during a long job (SPEC §3.9 timing).
 
 ## Toolchain
