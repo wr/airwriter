@@ -38,6 +38,13 @@ was **byte-identical to `checker.expected.bin`** (2672 bytes, crc32 `8ee84844`).
 - **Console trap:** a raw pyserial open on macOS drops the S3 into download mode. Use
   `idf.py monitor` (under `script` from a non-TTY shell). OpenOCD
   (`board/esp32s3-builtin.cfg`) reads registers live without a reset.
+- **W-1036 (fix on `wells/w-1036-tray-board-fit`, unprinted):** the board could not be
+  fitted into the printed tray at all. S1's keys stand 2.2 mm into the west wall, at right
+  angles to the ports standing into the front wall, which pin the board side to side. The west
+  wall is now 0.8 mm thick below the panel seat so it bows out past the keys (~21 N in PETG),
+  and `POCKET_CLEAR` is 0.30. The fitting sequence is in `enclosure/README.md`, "Fitting the
+  board"; the sweep and FEA are in `docs/enclosure-build-log/flex-wall-report.md`. The
+  shop's cased GLBs still show the old tray.
 - **Next:** print a full page from an iPhone, scope HSKo during a long job (SPEC §3.9 stall
   timing), then the LocalTalk path (U7 still empty; tack 10 k across U6 3–5 first).
 

@@ -18,10 +18,11 @@ each constant commented with where it came from.
 
 ## Print
 
-FDM, 0.4 mm nozzle, 0.2 mm layers, matte black. **No supports.** Tray floor-down
+FDM, 0.4 mm nozzle, 0.2 mm layers, matte black, **PETG** for the tray (see
+"Fitting the board"). **No supports.** Tray floor-down
 (68.00 x 110.27 x 21.34 mm), lid plate-down (62.00 x 104.27 x 14.34 mm — the
 art panel's own outline, not the pocket's; see "First print" below for the
-0.20 mm/side it should clear by).
+0.30 mm/side it should clear by).
 The tray's bottom outside edge carries a 0.80 mm 45-degree chamfer
 (`BOTTOM_CHAMFER`): exactly the overhang limit, so it needs no support, and it
 keeps first-layer squish inside the wall line. The top outside edge carries a
@@ -63,17 +64,42 @@ M2.5 × 20 is unchanged (it runs the full 14.34mm cavity plus panel).
 Press the four inserts into the **bottom** of the lid's legs before assembly.
 Rubber feet go on the floor's underside, over the screw counterbores.
 
+## Fitting the board
+
+The board does not drop in. The mini-DINs and USB-C stand into closed windows
+in the front wall, and S1's keys stand 2.2 mm into the west wall, at right
+angles to them. So the ports go in first, and the west wall bows out of the
+way of the keys:
+
+1. Hold the board steep, back edge up (~45°), ports toward the front wall.
+2. Slide it forward so the mini-DIN tops tuck under their lintels.
+3. Rock the back down. As S1's keys reach the west rim, pull the rim outward
+   about 2 mm with a thumb over the key band, and let it spring back once the
+   keys are down in their window. Near the end the board slides forward
+   another millimetre or so as the USB-C finds its opening.
+
+Below the panel seat the west wall is only `WEST_FLEX_T` (0.80 mm) thick,
+ramping back to the full wall at the seat, so the rim, the seat and the
+outside look the same as before. Bowing it 2 mm takes about 21 N in PETG and
+37 N in PLA, with peak strain 1.65% at the DIP window's corners and at J2's
+lintel (FEA, `docs/enclosure-build-log/flex-wall-report.md`). PETG takes that
+comfortably. PLA should survive a handful of assemblies but is stiffer and
+more brittle. If the keys still catch at the rim, push the board 0.3 mm east
+while it goes down.
+
 ## First print, check in this order
 
 Cheapest-to-verify first — cheap checks first so an early failure is caught
 before it costs you the ones further down the list.
 
-1. A real USB-C cable into the chamfered opening. The receptacle sits 1.5 mm
+1. The board in, per "Fitting the board". The west wall should bow and spring
+   back without whitening at the DIP window's corners.
+2. A real USB-C cable into the chamfered opening. The receptacle sits 1.5 mm
    behind the wall; this is the one clearance the board file could not settle
    — `USBC_CHAMFER` was tuned by eye, not measured.
-2. Both mini-DIN plugs.
-3. A pen tip on S1's keys (they sit 0.80 mm recessed by design).
-4. A paperclip on the east-wall reset pinhole. Its Z (1.75mm, half of SW1's
+3. Both mini-DIN plugs.
+4. A pen tip on S1's keys (they sit 0.80 mm recessed by design).
+5. A paperclip on the east-wall reset pinhole. Its Z (1.75mm, half of SW1's
    footprint-descr body height) is a **derivation, not a measurement** — SW1
    has no 3D model on the board, so nothing here booleaned it off real
    geometry, and no Panasonic mechanical drawing is in this repo. The
@@ -82,13 +108,13 @@ before it costs you the ones further down the list.
    set equal to the body's centre Z — the same assumption `RESET_ACTUATOR_Z`
    makes — so the two were always going to agree (see `params.py` and
    task-6-report.md for the full derivation).
-5. (Lite only) The lid into the tray's pocket, by hand, before any screws go
+6. (Lite only) The lid into the tray's pocket, by hand, before any screws go
    in. It should drop in with a light push and lift back out — expect about
-   0.20 mm of clearance per side (`POCKET_CLEAR`), not a press fit and not a
+   0.30 mm of clearance per side (`POCKET_CLEAR`), not a press fit and not a
    rattle. Too tight almost always means the pocket printed a little
    undersize (common on the first layers of a part this size); too loose
    past a wobble means something upstream drifted.
-6. The full stack screwed together.
+7. The full stack screwed together.
 
 ## Interference check
 
@@ -129,5 +155,7 @@ cased AirWriter" in the shop's `scripts/board-model/README.md`; then
 - After that branch: three measured fit fixes (wall/panel flush, DIP slot,
   boss relief), the DIP slot resized to the switch's key recess, the Lite
   lid's legs pulled clear of the board, flat port lintels in place of the
-  45-degree ridge roofs (shop W-806), the bottom chamfer, and the top
-  chamfer. `git log -- enclosure` has each one with its reasoning.
+  45-degree ridge roofs (shop W-806), the bottom chamfer, the top
+  chamfer, and (2026-10-14, after rev A would not go in) 0.30 pocket
+  clearance with a thinned, flexing west wall. `git log -- enclosure` has
+  each one with its reasoning.

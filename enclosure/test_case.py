@@ -664,6 +664,60 @@ class TestSideFeaturesAndTray(unittest.TestCase):
                                         "within 1mm of this part")
 
 
+class TestWestFlexWall(unittest.TestCase):
+    """The west wall bows outward so S1's keys can pass its rim on the way in
+    (params.WEST_FLEX_T). Thin below the panel seat, full at it, and the thin
+    stretch has to cover the keys' whole path past the rim."""
+
+    @classmethod
+    def setUpClass(cls):
+        import board_geom as bg
+        cls.t = case.tray()
+        fp = bg.footprint("S1")
+        pad_xs = [lx for lx, _ in bg.pad_positions("S1")]
+        ys = [bg.to_case(*bg.local_to_board(fp, lx, 0.0))[1]
+              for lx in (min(pad_xs), max(pad_xs))]
+        cls.key_lo = min(ys) - p.DIP_KEY_HALF_WIDTH
+        cls.key_hi = max(ys) + p.DIP_KEY_HALF_WIDTH
+
+    def _wall(self, y, z, h=0.5):
+        from build123d import Box, Pos
+        probe = Pos(-p.WALL / 2, y, z) * Box(p.WALL, 1.0, h)
+        hit = self.t & probe
+        return (hit.volume if hit else 0.0) / (1.0 * h)
+
+    def test_thin_below_the_seat_full_at_it(self):
+        for y in (12.0, 50.0, 90.0):
+            self.assertAlmostEqual(self._wall(y, 2.0), p.WEST_FLEX_T, places=2, msg=f"y={y}")
+            self.assertAlmostEqual(self._wall(y, 13.4), p.WALL - p.POCKET_CLEAR, places=2, msg=f"y={y}")
+
+    def test_ramp_returns_to_full_thickness_by_the_seat(self):
+        # 45 degrees: the ramp's height equals its run.
+        run = p.WALL - p.WEST_FLEX_T - p.POCKET_CLEAR
+        mid = p.Z_LID_UNDER - run / 2
+        self.assertAlmostEqual(self._wall(50.0, mid, h=0.05), p.WEST_FLEX_T + run / 2, places=1)
+        self.assertAlmostEqual(self._wall(50.0, p.Z_LID_UNDER - run - 0.3, h=0.2), p.WEST_FLEX_T, places=2)
+
+    def test_thin_stretch_covers_the_keys_path_past_the_rim(self):
+        # Rocked in about the front ports, the keys wander about 1mm along the
+        # wall while they pass the rim (2026-10-14 sweep); allow 2.
+        for y in (self.key_lo - 2.0, self.key_hi + 2.0):
+            self.assertAlmostEqual(self._wall(y, 2.0), p.WEST_FLEX_T, places=2, msg=f"y={y:.2f}")
+
+    def test_corners_keep_the_full_wall(self):
+        for y in (1.0, p.BOARD_L - 1.0):
+            self.assertGreater(self._wall(y, 2.0), p.WALL - p.POCKET_CLEAR - 0.05, f"y={y}")
+
+    def test_keys_clear_the_wall_at_rest(self):
+        # The keys' tips land on the thin wall's inner face, inside the DIP
+        # window: nothing may touch them once the wall springs back.
+        from build123d import Box, Pos
+        keys = Pos(-1.0, (self.key_lo + self.key_hi) / 2, (5.6 + 9.01) / 2) * Box(
+            2.4, self.key_hi - self.key_lo, 9.01 - 5.6)
+        hit = self.t & keys
+        self.assertAlmostEqual(hit.volume if hit else 0.0, 0.0, places=3)
+
+
 class TestLiteLid(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -965,12 +1019,12 @@ class TestCornerRounding(unittest.TestCase):
             msg=f"{missing_vol:.3f}mm^3 of the panel's rounded footprint "
                 "has no lid material under it")
 
-    def test_corner_fillets_are_concentric_with_2_80_radial_wall(self):
+    def test_corner_fillets_are_concentric_with_a_uniform_radial_wall(self):
         """Carried over from review: a fillet is exactly where a wall gets
         thin, and test_printable.py's wall probes are all at mid-wall (e.g.
         y=90, x=31) -- nowhere near a corner. shell()'s exterior fillet
         (EXT_R) and pocket fillet (POCKET_R) at each of the four corners
-        only make a uniform 2.80mm radial wall (WALL - POCKET_CLEAR)
+        only make a uniform 2.70mm radial wall (WALL - POCKET_CLEAR)
         because they're both CORNER_R grown by a different constant
         (params.py) -- nothing stops a future edit from giving EXT_R and
         POCKET_R independent corner radii, which would silently thin (or
@@ -996,6 +1050,8 @@ class TestCornerRounding(unittest.TestCase):
         for f in cyl_faces:
             cyl = f.geom_adaptor().Cylinder()
             axis = cyl.Axis()
+            if abs(abs(axis.Direction().Z()) - 1.0) > 1e-6:
+                continue  # the west flex cove runs along Y; not a corner
             loc = axis.Location()
             key = (round(loc.X(), 3), round(loc.Y(), 3))
             by_corner.setdefault(key, []).append((cyl.Radius(), loc, axis.Direction()))

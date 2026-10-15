@@ -90,8 +90,50 @@ model), the panel would not seat flush at 12.74 and this case would come out
 1.60mm short of clearing the nuts -- re-check against a real panel + real
 nuts before printing, not just against the GLB."""
 
-POCKET_CLEAR = 0.20
-"""Per side, on the board pocket and the panel/lid seat."""
+POCKET_CLEAR = 0.30
+"""Per side, on the board pocket and the panel/lid seat.
+
+Raised from 0.20 on 2026-10-14, after the first rev A board would not go into
+a printed tray. PCBWay routes the outline to +-0.2mm and an FDM pocket comes
+out a little undersize, so 0.20 left no margin for either. The panel/lid gap
+grows by the same 0.10."""
+
+WEST_FLEX_T = 0.80
+"""Thickness of the west wall below the panel seat, where it is thinned so it
+can flex. Two perimeters at 0.4mm.
+
+Added 2026-10-14 (Wells: the side walls are thicker than they need to be, so
+widen the cavity and ramp back to full thickness at the top). S1's keys stand
+2.20mm past the board's west edge, into the west wall. The mini-DINs and USB-C
+stand into closed windows in the front wall, which hold the board within 0.40mm
+side to side, so the board can never shift east far enough for the keys to
+clear a rigid west wall. Sweeping the board through the old tray found no path
+in at all. So the west wall bows outward while the keys pass its rim, then
+springs back over them.
+
+Below Z_LID_UNDER the wall's inner face moves out to WEST_FLEX_T from its outer
+face, then a 45-degree ramp returns it to the full wall, so the panel seat, the
+rim seen from above and the outside are unchanged. The keys' tips land in the
+thinned wall's inner face, in the DIP window.
+
+FEA (linear, floor fixed, P2 tets, converged at 0.8mm mesh): pulling the rim
+out far enough that the keys' whole path (y 20-40.5) clears by 2.0mm takes
+~21 N in PETG (E 2 GPa), ~37 N in PLA. Peak strain 1.65%, at the DIP window's
+corners and at J2's lintel. At 1.20 it took 32 N with the same peaks."""
+
+FLEX_END = 0.50
+"""How far short of the board's straight west edge (CORNER_R in from each
+corner) the thinned stretch starts tapering. Starting close to the corner
+gave a lower peak at the front-west corner than starting 3.00 in (FEA)."""
+
+FLEX_TAPER = 8.00
+"""Length over which each end of the thinned stretch tapers back to the full
+wall, in plan. An abrupt end put a strain peak at the front-west corner (FEA,
+2026-10-14); a taper spreads it."""
+
+FLEX_COVE_R = 1.00
+"""Fillet where the thinned wall meets the floor. The wall bends there, and
+across the print's layers, so the corner is rounded to spread the strain."""
 
 # --- fasteners -------------------------------------------------------------
 
@@ -160,6 +202,13 @@ mounting hole. C22 (a 0603, 1.24mm tall) reaches within 2.844mm of H4's
 centre against the 3.00mm leg radius; 0.60 of relief clears it by 0.44.
 Above the relief the leg keeps its full LEG_D, so the heat-set insert has
 1.20mm of wall over most of INSERT_DEPTH."""
+
+DIP_SLOT_R = 1.00
+"""Corner radius of the DIP slot window, seen from the side. The window sits
+in the flexing west wall (WEST_FLEX_T) and its square corners were the peak
+strain there, 2.0%; rounded, 1.65%. The rounding fills back only the very
+corners: the outer keys' own corners sit DIP_SLOT_MARGIN (0.80) in from the
+window's ends and 0.30 below its top, 0.63mm inside the 1.00 arc."""
 
 DIP_KEY_HALF_WIDTH = 0.65
 """Half a key's width. The DP-08RP's keys are 1.30mm wide (dp08rp.mjs's KEY.w,

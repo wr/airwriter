@@ -13,7 +13,7 @@ class TestFixedByTheSpec(unittest.TestCase):
         self.assertEqual(p.PCB, 1.60)
         self.assertEqual(p.PANEL, 1.60)
         self.assertEqual(p.CAVITY, 12.74)
-        self.assertEqual(p.POCKET_CLEAR, 0.20)
+        self.assertEqual(p.POCKET_CLEAR, 0.30)
 
     def test_cavity_is_the_minidin_lattice_height_not_nut_plus_lattice(self):
         # CORRECTED 2026-09-08: CAVITY is the mini-DIN/lattice height alone
@@ -53,8 +53,9 @@ class TestDerived(unittest.TestCase):
         self.assertAlmostEqual(p.Z_WALL_TOP, 14.34, places=3)
 
     def test_effective_wall_after_pocket_clearance(self):
-        # 3.00 nominal, 0.20 eaten by pocket clearance -> 2.80 of plastic.
-        self.assertAlmostEqual(p.WALL - p.POCKET_CLEAR, 2.80, places=3)
+        # 3.00 nominal, 0.30 eaten by pocket clearance -> 2.70 of plastic
+        # at the panel seat (the west wall is thinner below it: WEST_FLEX_T).
+        self.assertAlmostEqual(p.WALL - p.POCKET_CLEAR, 2.70, places=3)
 
 
 class TestLiteScrewLength(unittest.TestCase):
