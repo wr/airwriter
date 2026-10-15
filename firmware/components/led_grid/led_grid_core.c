@@ -91,11 +91,13 @@ static lg_c3 white_of(int r, int c)
     return mix(warm, cool, dot_hash(r, c, 5));
 }
 
-// Each dot breathes on its own 5-9 s period, 16% to 38%.
+// Each dot breathes on its own 5-9 s period, 30% to 70%. (Was 16-38%: on
+// board 1 that peaked under 6 counts and vanished in daylight; this is the
+// same breath at 4x the drive.)
 static float ready_level(int r, int c, uint32_t t)
 {
     uint32_t period = 5000 + (uint32_t)(dot_hash(r, c, 1) * 4000);
-    return 0.27f + 0.11f * sinf(TAU * (float)(t % period) / (float)period
+    return 0.50f + 0.20f * sinf(TAU * (float)(t % period) / (float)period
                                 + dot_hash(r, c, 2) * TAU);
 }
 
@@ -190,7 +192,9 @@ static lg_c3 state_dot(const ps_view_t *v, const lg_opts_t *o, int i, uint32_t t
         uint32_t period = 7000 + (uint32_t)(h1 * 6000);
         float ph = sinf(TAU * (float)(t % period) / (float)period + h2 * TAU);
         float ember = ph > 0 ? ph * ph * ph : 0;
-        return hsv(jitter(r, c, 34, 9, t, 0), 0.5f + 0.12f * h1, 0.05f + 0.27f * ember);
+        // 9% swelling to 60%: 4x the drive of the first tune (5-32%), which
+        // was lost in daylight like Ready's.
+        return hsv(jitter(r, c, 34, 9, t, 0), 0.5f + 0.12f * h1, 0.09f + 0.51f * ember);
     }
 
     case PS_PRINTING: {

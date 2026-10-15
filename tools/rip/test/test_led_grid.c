@@ -31,6 +31,14 @@ static int min3(const uint8_t px[3])
     return m;
 }
 
+// Near-white: Ready's warmest or coolest dot keeps every channel above ~65%
+// of its brightest (0.82^2.2), so 60% less a count of rounding is a tint, not
+// a colour. Relative, so it holds at any drive level.
+static int neutral(const uint8_t px[3])
+{
+    return 5 * min3(px) + 5 >= 3 * max3(px);
+}
+
 static ps_view_t view(ps_state_t st, uint32_t since)
 {
     ps_view_t v;
@@ -133,10 +141,10 @@ int main(void)
         assert(f[p][1] > 2 * f[p][0] && f[p][1] > 2 * f[p][2]);
         v.since_ms = 4000;
         lg_render(&v, &WHITE_MODE, 4000, f);
-        assert(abs(f[p][1] - f[p][0]) <= 3 && abs(f[p][1] - f[p][2]) <= 3);
+        assert(neutral(f[p]));
         v = view(PS_READY, 800);
         lg_render(&v, &WHITE_MODE, 800, f);
-        assert(abs(f[p][1] - f[p][0]) <= 3 && abs(f[p][1] - f[p][2]) <= 3);
+        assert(neutral(f[p]));
     }
 
     // Ready is a neutral white that breathes: no dot strongly tinted, and the
@@ -148,7 +156,7 @@ int main(void)
             lg_render(&v, &WHITE_MODE, t, f);
             for (int i = 0; i < LG_NUM_LEDS; i++) {
                 if (LG_MAP[i].mat != 'P') continue;
-                assert(abs(f[i][0] - f[i][2]) <= 3 && abs(f[i][1] - f[i][2]) <= 3);
+                assert(neutral(f[i]));
             }
             if (max3(f[p]) < lo) lo = max3(f[p]);
             if (max3(f[p]) > hi8) hi8 = max3(f[p]);
