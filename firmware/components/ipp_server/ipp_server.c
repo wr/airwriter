@@ -11,6 +11,7 @@
 #include <stdlib.h>
 #include <errno.h>
 #include <sys/socket.h>
+#include <sys/select.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
 
@@ -37,6 +38,18 @@ static const char *TAG = "ipp";
 #define WORKERS       3
 #define WORKER_STACK  5120
 
+// How long a kept-alive connection may sit between requests. A worker serves
+// one connection at a time, so an idle one blocks every connection queued
+// behind it: iOS and macOS open bursts of a dozen or more after a new
+// printer-uuid, and with each idle connection held for 30 s they timed out
+// before ever sending a job (W-1040 bench). While another worker is free the
+// connection keeps the whole window; once all are busy it gets a short grace
+// and is closed, and the client reconnects -- HTTP/1.1 lets either side close
+// an idle keep-alive connection.
+#define KEEPALIVE_IDLE_MS  30000
+#define BUSY_GRACE_MS        300
+#define FIRST_REQ_GRACE_MS  3000   // a fresh connection's request is still in flight
+
 // Per-connection scratch, too big for a task stack and allocated once per
 // worker rather than once per request.
 typedef struct {
@@ -48,6 +61,7 @@ typedef struct {
 
 static int s_listen_fd = -1;
 static int s_running;
+static int s_idle_workers;   // workers in accept(), free for a new connection
 static ipp_server_cfg_t s_cfg;
 static ipp_doc_sink_t   s_sink;
 static char s_uri[128];
@@ -503,6 +517,27 @@ static int handle_post(work_t *w, int fd, const hreq_t *hr)
                     hr->keep_alive);
 }
 
+// Waits for the next request on a connection to start arriving. Returns 1 when
+// there is something to read (or the peer closed, which the read will see),
+// 0 when the connection should be closed instead.
+static int wait_for_request(work_t *w, int fd, int first)
+{
+    if (w->rb.pos < w->rb.have) return 1;   // pipelined: already buffered
+
+    int grace_ms = first ? FIRST_REQ_GRACE_MS : BUSY_GRACE_MS;
+    for (int waited_ms = 0; waited_ms < KEEPALIVE_IDLE_MS; waited_ms += 100) {
+        fd_set rf;
+        FD_ZERO(&rf);
+        FD_SET(fd, &rf);
+        struct timeval tv = { .tv_sec = 0, .tv_usec = 100 * 1000 };
+        int n = select(fd + 1, &rf, NULL, NULL, &tv);
+        if (n != 0) return n > 0;
+        if (waited_ms >= grace_ms && __atomic_load_n(&s_idle_workers, __ATOMIC_RELAXED) == 0)
+            return 0;
+    }
+    return 0;
+}
+
 static void handle_conn(work_t *w, int fd)
 {
     struct timeval tv = { .tv_sec = 30, .tv_usec = 0 };
@@ -513,8 +548,11 @@ static void handle_conn(work_t *w, int fd)
 
     hrb_init(&w->rb, fd);
 
+    int first = 1;
     for (;;) {
         hreq_t hr;
+        if (!wait_for_request(w, fd, first)) break;
+        first = 0;
         if (hreq_read(&w->rb, &hr) < 0) break;
 
         int rc;
@@ -548,7 +586,9 @@ static void worker_task(void *arg)
     while (s_running) {
         struct sockaddr_in peer;
         socklen_t plen = sizeof peer;
+        __atomic_add_fetch(&s_idle_workers, 1, __ATOMIC_RELAXED);
         int fd = accept(s_listen_fd, (struct sockaddr *)&peer, &plen);
+        __atomic_sub_fetch(&s_idle_workers, 1, __ATOMIC_RELAXED);
         if (fd < 0) {
             if (!s_running) break;
             vTaskDelay(pdMS_TO_TICKS(100));
