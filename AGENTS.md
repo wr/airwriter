@@ -3,11 +3,24 @@
 AirPrint bridge for Apple serial printers. ESP32-S3 dongle on the ImageWriter II's
 mini-DIN-8 serial port, presenting as a native IPP Everywhere printer.
 
-**Start with `docs/HANDOFF.md`** — current state, decisions, traps and next actions.
+**This file is current state only. Edit it in place; never append dated entries.** History is
+`git log` and Linear; designs are `docs/superpowers/specs/` and `plans/`. When a fact here stops
+being true, change or delete it in the same commit that made it false.
 
-The full build spec is `docs/SPEC.md`. Read it before touching hardware or firmware —
-it carries the pinout, part list, escape-code plan, and a list of unverified assumptions
-that must not be guessed at.
+## Docs
+
+| | |
+|---|---|
+| `docs/SPEC.md` | The build spec, amended in place. Read before touching hardware or firmware. |
+| `docs/traps.md` | Gotchas still true, by topic. Read the section for what you are about to touch. |
+| `docs/hardware-rev-a.md` | Rev A as built: geometry, deviations from the spec and why, rev B list. |
+| `docs/library.md` | The custom KiCad library and 3D models. |
+| `docs/sourcing.md` | Fab, parts, mini-DIN and PIC decisions. |
+| `docs/prior-art.md` | TashTalk, TailTalk, AirTalk, ImageScribbler. |
+| `docs/ORDER-NOTES.md` | PCBWay order notes for rev A. |
+| `docs/KICAD-TOOLING.md` | General KiCad 10 / konnect / pcbnew playbook. |
+| `docs/superpowers/specs/` | Printer scope, dot-panel cover (read its amendment block first), enclosure, status language. |
+| `docs/review-*.md`, `docs/firmware-audit-*.md` | Dated reviews. Historical; their findings are applied. |
 
 ## Source of truth
 - GitHub: none (local only)
@@ -15,36 +28,130 @@ that must not be guessed at.
 - Branch prefix: wells/
 - PR mode: none
 
-## Layout
-```
-hardware/airwriter/   KiCad 10 project (sch, pcb, lib/, fab/)
-firmware/             ESP-IDF 5.x app; components/ per spec 3.1
-tools/rip/            host build of urf_decode + halftone + imagewriter
-fixtures/             captured URF/PWG samples
-enclosure/            3D printed case (build123d): tray + Lite lid, out/*.stl committed
-docs/SPEC.md          the build spec
-```
+## State
+
+**Rev A board 1 is built and prints from an iPhone and a Mac.** Its stream for
+`fixtures/checker.urf` is byte-identical to `checker.expected.bin` (2672 bytes, crc32 `8ee84844`).
+
+What works on `main`:
+- AirPrint discovery and printing (`image/urf`, Print-Job only, SPEC §3.4); Home Assistant's
+  IPP integration finds it.
+- The whole job is buffered in 1 MB PSRAM and the client is answered when the upload ends
+  (`W-1042 Buffer the whole job in PSRAM and reply when the upload is done`).
+- Out of paper or SELECT off pauses the job; clients show "Needs attention: check paper and
+  SELECT" (processing-stopped, `media-empty-error`); the job aborts after
+  `CONFIG_AIRWRITER_STALL_ABORT` (600 s).
+- After an aborted job the next one resyncs the printer first (1280 NULs + CTRL-X); a printer
+  left busy by line noise at power-up gets a CTRL-X.
+- The 37-dot status panel per the status-language spec: Spin at boot, discrete printer and Wi-Fi
+  states, per-dot white Ready, DIP7 gamer RGB, pilot dot after 5 min idle.
+- DIP switches read by their printed numbers; the `test` button prints a test page.
+- Setup AP `AirWriter-xxxx` (open, 192.168.4.1) on a board with no credentials; web UI on port
+  80: `/api/status`, Wi-Fi, settings, `/update` (OTA), `/api/localtalk/flash`.
+- Wi-Fi scans all channels and joins the strongest AP; printer-uuid is stable (MAC + epoch).
+- TashTalk 2.1.3 is in U7, flashed in place by the ESP32 over LVP.
+
+Not built: the LocalTalk/EtherTalk side (gated on what PAP delivers, `docs/prior-art.md`),
+consumers of DIP mode and dither override, PWG raster.
+
+**Board 1:** ESP32-S3-WROOM-1-N8R2 (8 MB flash, 2 MB PSRAM). On Wi-Fi `the home network` at
+10.0.1.115, mDNS `imagewriter-2434.local`. Console on `/dev/cu.usbmodem1101`. Its queue name
+is "ImageWriter" in NVS (a stale-twin workaround; the Kconfig default is "ImageWriter II"). U7's
+PIC calibration words: `16E0 1DA8`. Printer: an ImageWriter II on J2 via Apple's crossover cable.
+
+Known issues, open:
+- The Mac's CUPS shows "printer is offline" a few seconds into an out-of-paper pause while the
+  board holds `stopped` + `media-empty-error`. Best guess: the CUPS ipp backend's write timeout.
+- Wi-Fi range with the panel's copper over the antenna: −91 dBm in one spot, "Excellent" after
+  moving the board. Unquantified.
+- HSKo never scoped (SPEC §4.4). Board-reboot-mid-strip resync is untested.
+- The 37 LEDs reference a 3D model KiCad 10 doesn't ship, so they are absent from STEP
+  exports (`docs/library.md`).
+
+## Open work
+
+Linear is the queue; these are the live items.
+- `W-1036 Tray: rev A board can't be fitted (DIP keys vs west wall)`: fixes on
+  `wells/w-1036-tray-board-fit`, unprinted, unmerged. Its fitting sequence lives in that branch's
+  `enclosure/README.md`; the shop's cased GLBs still show the old tray.
+- `W-1038 Light-guide lattice for the Pro build (incl. power LED)`: v3 on
+  `wells/w-1038-light-guide-lattice`, stacked on W-1036, unprinted, unmerged. Its `build.sh` needs
+  kicad-cli (part clearances come from the STEP export).
+- Both branches edit the old `docs/HANDOFF.md`; on merge, keep the retired stub (their facts are
+  already here).
+- `W-1043 Rev B: through-hole dome LED for the power indicator`, and the rest of the rev B list
+  in `docs/hardware-rev-a.md` (not in Linear yet).
+- `W-573 Dot-panel cover: passive art panel, LED grid, DIP config` (umbrella, in progress).
+- `W-567 M6 — Manners: paper-out, cancel, web UI, provisioning, OTA` (backlog).
+- Not in Linear: scope HSKo during a long job (SPEC §3.9 timing); the LocalTalk path (tack 10 k
+  across U6 pins 3–5 first, `docs/traps.md`).
 
 ## Toolchain
-- `kicad-cli` is not on PATH. It lives at
-  `/Applications/KiCad/KiCad.app/Contents/MacOS/kicad-cli` (KiCad 10.0.2).
-- ESP-IDF v5.5.1 is at `~/esp/esp-idf`. Run `. ~/esp/esp-idf/export.sh` first, then
-  `idf.py build` from `firmware/`. Target is already set to esp32s3.
-- The `konnect` MCP tools resolve `lib_id` only against KiCad's install directory —
-  they ignore project and global `sym-lib-table`. The project libraries are therefore
-  symlinked into the app bundle so placement tools can see them:
-  `/Applications/KiCad/KiCad.app/Contents/SharedSupport/{symbols/airwriter.kicad_sym,footprints/airwriter.pretty}`.
-  KiCad itself uses the project table, so the symlinks are a tooling workaround, not a
-  dependency — but they will disappear on a KiCad upgrade and need recreating.
-- Always run `kicad-cli <sub> --help` before using a subcommand. KiCad 10's CLI differs
-  from the 8/9-era flags in most training data. Generate `.kicad_sch` / `.kicad_pcb`
-  with the tool rather than hand-writing s-expressions.
+- **KiCad 10.0.6.** `kicad-cli` is not on PATH: `/Applications/KiCad/KiCad.app/Contents/MacOS/kicad-cli`.
+  Run `kicad-cli <sub> --help` before each subcommand (KiCad 10's CLI differs from 8/9-era
+  training data); generate `.kicad_sch` / `.kicad_pcb` with the tools, never by hand.
+- **pcbnew scripts** run on KiCad's bundled interpreter:
+  `/Applications/KiCad/KiCad.app/Contents/Frameworks/Python.framework/Versions/3.9/bin/python3`.
+  `hardware/airwriter/route.py` does export DSN → round → Freerouting → import → DRC headless.
+- **Freerouting 2.2.4** at `~/.local/share/freerouting/freerouting.jar`, Java 25.
+- **konnect** resolves `lib_id` only against KiCad's install directory, so the project libraries
+  must be symlinked into the app bundle. **The symlinks are gone since the 10.0.6 upgrade**;
+  recreate them before any konnect placement:
+  `ln -s "$PWD/hardware/airwriter/lib/airwriter.kicad_sym" /Applications/KiCad/KiCad.app/Contents/SharedSupport/symbols/`
+  and the same for `lib/airwriter.pretty` into `.../SharedSupport/footprints/`.
+- **ESP-IDF v5.5.1** at `~/esp/esp-idf` (esp32s3 and esp32c6 tools). `. ~/esp/esp-idf/export.sh`
+  first, then from `firmware/`:
+  - build (S3, board): `idf.py build`
+  - C6 devkit: `idf.py -B build_c6 -D SDKCONFIG=sdkconfig.c6 build`
+  - flash over USB: `idf.py -p /dev/cu.usbmodem1101 flash` (leaves the printer not-ready until
+    SELECT is toggled)
+  - OTA: `curl -m 180 --data-binary @build/airwriter.bin http://10.0.1.115/update` (bench rules first)
+- `firmware/sdkconfig` is gitignored and holds the Wi-Fi credentials (menuconfig, AirWriter
+  menu); NVS namespace `wifi` overrides it. `sdkconfig.defaults{,.esp32s3,.esp32c6}` only seed a
+  new one. The C6 has no PSRAM, so it is the stricter target for memory.
+- **Enclosure:** build123d; `enclosure/build.sh` runs the tests then writes `out/*.{step,stl}`.
 
 ## Verification
-- Schematic: `kicad-cli sch erc` must pass.
-- Board: `kicad-cli pcb drc` must pass.
-- Raster pipeline: `tools/rip` runs on the host against `fixtures/` — regression by
-  diffing `stream.bin` byte for byte. No ESP32 needed.
+- **Host tests:** `make -C tools/rip test` (raster path, serial writer, printer_state, led_grid,
+  dip_config, pic_prog) and `make -B -C tools/ipp test` (`-B`: `tools/ipp/build/` is committed).
+- **Raster regression:** `make -C tools/rip regress`; `stream.bin` must match the fixtures byte
+  for byte. No ESP32 needed.
+- **Firmware:** `idf.py build` clean for the S3; build the C6 tree too when touching shared code.
+- **On board 1:** an `ipptool` Print-Job of `fixtures/checker.urf` prints crc32 `8ee84844`.
+- **Schematic:** `kicad-cli sch erc` → 0 errors.
+- **Board:** `kicad-cli pcb drc --severity-all --schematic-parity --refill-zones` on
+  `hardware/airwriter/airwriter.kicad_pcb` → 0 errors, 0 unconnected, 5 library notes, 80
+  field-parity notes. Treat any unconnected item as real; `tools_pcb/r12_gnd.py` checks that every
+  GND pad is on the main plane. The combined panel under its default rules shows only known
+  items (~274 false clearance, 14 copper_edge, 12 hole_clearance, 6 seam invalid_outline, 1
+  benign starved_thermal on U7.8).
+- **Fab package:** `python3 hardware/combine_boards.py` then `sh hardware/combined/make_fab.sh`;
+  drill floor 0.30 (`grep -E '^T[0-9]+C'`), pos file 127 rows with no J2/J4.
+
+## Bench rules (board 1)
+- **Never OTA while a job prints.** Tell Wells to hold prints, read `/api/status`, confirm
+  `printing=false` with no job in the last ~10 s, then OTA. Two jobs were cut on 2026-10-15.
+  Side sessions flash only on the main session's go.
+- **Console only through `idf.py monitor` under `script`.** A raw pyserial open drops the S3 into
+  download mode. From a non-TTY shell:
+  `script -q LOG idf.py -p /dev/cu.usbmodem1101 monitor </dev/null &`, then `pkill -f idf_monitor`
+  and strip ANSI from `LOG`. OpenOCD (`board/esp32s3-builtin.cfg`) reads registers live without
+  a reset.
+- Read `/api/status` (`ps`) before judging the panel: a deselected printer shows offline embers,
+  not Ready.
+- A slow upload is the link until proven otherwise: check `rssi` in the `doc_begin` log.
+
+## Layout
+```
+hardware/airwriter/   KiCad 10 main board (sch, pcb, lib/, route.py, stitch.py, tools_pcb/)
+hardware/panel/       art panel generator (Figma SVG → panel.kicad_pcb)
+hardware/combined/    the snap-apart order panel and make_fab.sh; combined-fab.zip is the order
+firmware/             ESP-IDF 5.5 app; components/ per SPEC §3.1 plus job_pipe, led_grid, pic_prog …
+tools/rip/            host build of the raster path + host tests for the pure-C cores
+tools/ipp/            IPP host tests and gpa_server (the real encoder on localhost for ipptool)
+fixtures/             captured URF samples and expected streams
+enclosure/            3D printed case (build123d): tray + Lite lid, out/*.stl committed
+```
 
 ## Licence
 Hardware CERN-OHL-S, firmware GPLv3.

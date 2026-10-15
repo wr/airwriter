@@ -51,10 +51,10 @@ Two-layer, 1.6mm FR4, 1oz copper, HASL. Standard process — no controlled imped
 blind vias, matte black soldermask, ENIG finish. Outline 52 x 78mm, rectangular with 3mm corner radii and four M2
 mounting holes inset 3mm from the corners.
 
-**As built: 32 x 54mm** (1728mm² against the target's 1925), rectangular, four M2 holes.
-The aspect ratio flipped to portrait because the WROOM-1 wants its antenna overhanging a
-short edge while the mini-DIN and USB-C both need the opposite short edge. Corner radii
-are not cut yet. See `hardware/airwriter/README.md` for the size derivation.
+**As built (rev A, first powered 2026-10-14):** a 62 x 104.27mm main board plus a
+snap-apart passive art panel, matte black, ENIG, four M2.5 holes. Rev A departs from this
+section in many places — parts, LEDs, controls, outline. `docs/hardware-rev-a.md` lists every
+deviation and why; the current BOM is `hardware/combined/fab/combined-assembly-bom.csv`.
 
 ### 2.2 Block diagram
 
@@ -82,7 +82,7 @@ USB-C (5V) ─┬─ ESD ─ LDO 3.3V ─┬─ ESP32-S3-WROOM-1
 | U4 | AP7361C-33E | SOT-223 | 1A LDO. Do not use a 600mA part — S3 WiFi TX peaks near 500mA and margin matters |
 | U5 | USBLC6-2SC6 | SOT-23-6 | USB ESD |
 | J1 | USB-C receptacle, 16-pin | SMD | 5.1k CC1/CC2 pulldowns |
-| J2, J4 | **Kycon KMDGX-8S-BS** | THT | Mini-DIN-8 female, right-angle, fully shielded. Buy from Mouser, not Digi-Key, which is backordered. Footprint is custom — KiCad ships none — and was drawn from Kycon's drawing and verified against their STEP model. **Do not substitute Same Sky MD-80S/MD-80SM**, listed here in the original draft: their mounting is a rectangular-slot and earth-blade arrangement that does not fit this footprint. Solder by hand; see `HANDOFF.md` |
+| J2, J4 | **Kycon KMDGX-8S-BS** | THT | Mini-DIN-8 female, right-angle, fully shielded. Buy from Mouser, not Digi-Key, which is backordered. Footprint is custom — KiCad ships none — and was drawn from Kycon's drawing and verified against their STEP model. **Do not substitute Same Sky MD-80S/MD-80SM**, listed here in the original draft: their mounting is a rectangular-slot and earth-blade arrangement that does not fit this footprint. Solder by hand; see `docs/sourcing.md` |
 | D1, D2 | WS2812B-2020 | 2020 | Status. D2 chains off D1's DOUT, so the second costs no GPIO. D1 = network, D2 = printer/job |
 | D3 | green LED + 1k | 0603 | Power. Straight across the 3V3 rail, no GPIO. Separates "board is dead" from "firmware is dead" during bring-up |
 | SW2 | Omron B3U-1000P | SMD | Mode / test page, on IO38. Cannot share IO0 with SW1: IO0 is a strapping pin, so holding it at reset means USB download mode |
@@ -218,6 +218,10 @@ can actually hit. Some clients ignore anything but `RS300`; if iOS refuses the j
 300dpi anyway, keep a downsample path in `urf_decode` and fall back to advertising
 `RS300`. Make this a compile-time flag, not a rewrite.
 
+*Settled 2026-08-04: iOS honours `RS72-144` and renders at exactly 144 dpi
+(`fixtures/ios-20260804-232652.urf`, asserted in `test/test_ios_capture.c`), so no
+downsample path or `RS300` is needed.*
+
 ### 3.4 IPP operations to implement
 
 Minimum viable set for iOS:
@@ -273,6 +277,10 @@ PNG. Placeholder assets are fine for now; final artwork comes from the silkscree
 build flag that regenerates it on every boot — iOS caches capabilities against the UUID
 aggressively, and during development you will otherwise spend an afternoon staring at a
 print sheet showing yesterday's media list with no way to flush it.
+
+*Amended (W-1037): dev mode is off by default — a UUID that moves every boot left the iPhone
+with stale twins and stuck jobs. Instead the UUID is MAC plus `CONFIG_AIRWRITER_UUID_EPOCH`,
+bumped only when advertised capabilities change (a new UUID strands the Mac's CUPS queue).*
 
 ### 3.6 Raster decode
 
@@ -360,6 +368,11 @@ These are marked because they must be checked against hardware or Apple's *Image
 Technical Reference*, not inferred. Any of them being wrong will produce output that looks
 almost right, which is the worst failure mode.
 
+**Status 2026-10-15: all five are resolved, and all five are confirmed by correct prints on
+rev A** (iPhone, Mac and `ipptool` jobs through J2 and Apple's crossover cable; the board's
+stream for `fixtures/checker.urf` is byte-identical to `checker.expected.bin`). HSKo has
+never been scoped; see 4.
+
 1. ~~**Bit order within a graphics byte.**~~ **RESOLVED FROM PRIMARY SOURCE.**
 
    *ImageWriter II Technical Reference*, p. 107, verbatim: "Bit 7 causes the dot at the
@@ -436,6 +449,9 @@ almost right, which is the worst failure mode.
    Impact is limited: the ImageWriter talks back over HSKo hardware handshaking rather than
    the serial receive path, so a wrong receiver polarity does not block M1 or M5. Bias
    resistors R6/R7 already pull A high and B low, which matches the corrected mapping.
+
+   **Confirmed on rev A (2026-10-14):** prints come out right through J2 and the Apple
+   crossover cable.
 4. ~~**HSKo electrical levels.** Still open, but narrowed.~~ **RESOLVED on paper
    (2026-08-28), from the primary source.** Appendix E Figure E-3 ("Output Circuits",
    PDF pp. 204-209) draws DTR/HSKo driven by **one half of a 26LS30 in single-ended
@@ -456,8 +472,16 @@ almost right, which is the worst failure mode.
 
    XON/XOFF is the forgiving alternative if the hardware path disappoints: XOFF at fewer
    than 266 free, with 256 characters of slack, XON at 337 free. Appendix E, pp. 187-193.
-5. **URF 32-byte page header field offsets.** Take these from cups-filters source, not from
-   memory.
+
+   **Confirmed in practice on rev A, never scoped.** IO8 reads LOW with the printer ready
+   (read live over JTAG, `GPIO_IN` bit 8), so `CONFIG_AIRWRITER_INVERT_CTS` stays off, and CTS
+   pauses and resumes correctly across SELECT off/on (2026-10-15). Still worth a scope trace
+   during a long job before rev B: if the swing is modest, a divider and clamp into a GPIO
+   could delete U3.
+5. ~~**URF 32-byte page header field offsets.** Take these from cups-filters source, not from
+   memory.~~ **RESOLVED.** Taken from `cups/raster-stream.c` in OpenPrinting/cups and
+   implemented in `urf_decode.c` with the offsets cited in comments. Confirmed against real iOS
+   captures (`fixtures/ios-*.urf`) and iPhone prints on rev A.
 
 ---
 

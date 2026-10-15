@@ -1,0 +1,59 @@
+# Custom KiCad library
+
+`hardware/airwriter/lib/` holds what KiCad 10 does not ship. konnect only sees it through
+symlinks into the KiCad app bundle (AGENTS.md, Toolchain). Edit in place.
+
+## In use on rev A
+
+- **`MiniDIN-8_Kycon_KMDGX-8S-BS_RightAngle`** (J2, J4). KiCad has no mini-DIN footprint. Drawn
+  from Kycon drawing KMDGX-xS-BS rev C6 (ECO#18-013), 8-position "Recommended PCB Layout (Top
+  View)", cross-checked against three dimension chains. Origin is the connector centreline (X)
+  and mating face (Y).
+  - **The lower row is asymmetric: pin 7 sits +0.90 mm off the centreline, pin 2 directly above
+    it +1.30 mm.** Easy to get wrong by eye. Kycon's STEP has the same asymmetry, and it is an
+    industry pattern (Adam Tech and Same Sky show 0.90/1.30 on 7- and 8-pin parts, not 6-pin).
+  - Pin numbering is right; the HOOYA/Legion DIN-802 footprint is mirrored (it transposes 1 and 2,
+    puts 3 on the wrong side, and swaps centre pin 4 with outer pin 5). Ours is derived from the
+    socket-face view in KiCad's +Y-down frame and predicts all eight pads.
+- **`airwriter.3dshapes/MiniDIN-8_Kycon_KMDGX-8S-BS_RightAngle.step`**, Kycon's own model from
+  `kycon.com/website/Extranet/3D/KMDGX-8S-BS_rC6.STEP` (not linked from the product page). Placed
+  at `rotate -90 0 180`, offset zero; render-verified, all pins and posts centred in their holes.
+- **`airwriter.3dshapes/USB_C_Receptacle_HRO_TYPE-C-31-M-12.step`** for J1. KiCad 10 ships the
+  footprint but not the model, and the stock footprint points at a nonexistent
+  `${KICAD10_3DMODEL_DIR}` path (KiCad issue #22139), so J1 vanished from STEP exports. Taken from
+  NabuCasa/yellow-3dshapes, **which carries no licence: check provenance before publishing the
+  hardware.** Origin is a corner: `rotate -90 0 0`, `offset -4.47 -3.65 0`, derived from the
+  shield tabs and legs and render-verified (the asymmetric tabs rule out a 180° error).
+  **J1's model path lives on the board footprint, not in a library**: re-importing J1 from
+  stock `Connector_USB` restores the dead path and J1 silently disappears again.
+- **`Mini-DIN-8_Shielded`** symbol: the stock one has no shield pin. Pin 9 is SHIELD, tied to all
+  three mounting posts in the footprint.
+- **`EVQP44B3M_SidePress`** (SW1) + `.wrl`. Redrawn from Panasonic ANCTB27E on 08-25; the first
+  footprint was a guess and would have bonded EN to a frame tab.
+- **`SW_DIP_8_RightAngle_DP-08RP`** (S1) + `.wrl`, from a measured part.
+
+The two `.wrl` bodies render in KiCad but are absent from STEP/STL exports.
+
+## Not placed (leftovers from superseded designs)
+
+`SN65HVD1473DGSR` (credited to FeralFirmware/TailTalk; kept because TashTalkUSB ships it),
+`LED_SK6812MINI-E_3.2x2.8mm_P1.5mm_TopFiring`, `BootPads_Service`, `TouchPad_Core_D9mm` and its
+generator `gen_touchpads.py`, `LED_WS2812B-2020_PLCC4_2.0x2.0mm.step`.
+
+## Check every model path before trusting a STEP export
+
+A missing model is silent. On 2026-10-15 this reports the 37 LEDs' stock
+`LED_SK6812MINI_PLCC4_3.5x3.5mm_P1.75mm.step`, which KiCad 10 does not ship, so the LEDs are
+absent from the board's STEP (an earlier board pointed such LEDs at
+`LED_WS2812B-Mini_PLCC4_3.5x3.5mm.step`, the same package).
+
+```
+python3 - <<'EOF'
+import re, os
+b = open('hardware/airwriter/airwriter.kicad_pcb').read()
+base = '/Applications/KiCad/KiCad.app/Contents/SharedSupport/3dmodels'
+for p in sorted(set(re.findall(r'\(model "([^"]+)"', b))):
+    real = p.replace('${KICAD10_3DMODEL_DIR}', base).replace('${KIPRJMOD}', 'hardware/airwriter')
+    if not os.path.exists(real): print('MISSING', p)
+EOF
+```
