@@ -188,3 +188,14 @@ Traps already explained in a code comment are listed only when the comment is ea
   x = 100 as an old note said.
 - **Heights the KiCad models get wrong.** SW3's footprint is `SW_PUSH_6mm_H13mm`, but the
   TS-1002-BR16026 stands 16 mm. U7's model is the empty socket; a seated PIC stands ~9 mm.
+- **Measure the parts the case touches; the models are off.** Mini-DIN shells stand 13.04, not the
+  STEP's 12.75 (`MINIDIN_TOP`). SW3's plunger is 3.1 at the lattice top tapering to 3.5, and it
+  stands 0.2 E / 0.2 S of the model's axis (`TEST_PLUNGER_*`).
+- **build123d `Compound & Box` returns an empty Compound** (0.11.1); `Solid & Box` works. Slice
+  STEP assemblies one solid at a time (`components._bands`).
+- **A boolean whose faces all coincide returns nothing** (OCCT). Let one body overshoot the other.
+- **`fillet_2d` fails when the radius is longer than an adjacent edge.** Lengthen the edge (an
+  overshoot into air costs nothing).
+- **kicad-cli's STEP export exits 2 on every run**, because KiCad 10 ships no SK6812MINI model.
+  `components.export()` accepts exactly the NO_MODEL parts and names anything else; don't loosen
+  that by trusting a stale `out/components.step`.

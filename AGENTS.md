@@ -13,6 +13,7 @@ being true, change or delete it in the same commit that made it false.
 |---|---|
 | `docs/SPEC.md` | The build spec, amended in place. Read before touching hardware or firmware. |
 | `docs/traps.md` | Gotchas still true, by topic. Read the section for what you are about to touch. |
+| `docs/cad-routine.md` | How to design, check and iterate printed parts. Follow it for any `enclosure/` change. |
 | `docs/hardware-rev-a.md` | Rev A as built: geometry, deviations from the spec and why, rev B list. |
 | `docs/library.md` | The custom KiCad library and 3D models. |
 | `docs/sourcing.md` | Fab, parts, mini-DIN and PIC decisions. |
@@ -114,6 +115,8 @@ Linear is the queue; these are the live items.
   new one. The C6 has no PSRAM, so it is the stricter target for memory.
 - **Enclosure:** build123d; `enclosure/build.sh` runs the tests then writes `out/*.{step,stl}`.
   The lattice's part clearances come from kicad-cli's STEP export, so the build needs kicad-cli.
+  `enclosure/tools/render.py` (PNG views) and `tools/coupon.py` (fit-test cut-outs) need
+  `tools/requirements.txt`. Work by `docs/cad-routine.md`.
 
 ## Verification
 - **Host tests:** `make -C tools/rip test` (raster path, serial writer, printer_state, led_grid,
