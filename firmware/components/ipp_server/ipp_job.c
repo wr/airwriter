@@ -16,6 +16,7 @@ void ipp_job_start(ipp_job_rec_t *j, int32_t id, uint32_t now_s,
     memset(j, 0, sizeof *j);
     j->id        = id;
     j->state     = IPP_JSTATE_PROCESSING;
+    j->printing  = 1;
     j->created_s = now_s;
     copy(j->name, sizeof j->name, name);
     copy(j->user, sizeof j->user, user);
@@ -35,9 +36,17 @@ int ipp_job_active(const ipp_job_rec_t *j)
 
 void ipp_job_finish(ipp_job_rec_t *j, int ok)
 {
+    j->printing = 0;
     j->state = j->canceled ? IPP_JSTATE_CANCELED
              : ok          ? IPP_JSTATE_COMPLETED
                            : IPP_JSTATE_ABORTED;
+}
+
+int ipp_job_done(ipp_job_rec_t *j, int ok)
+{
+    if (!j->printing) return 0;
+    ipp_job_finish(j, ok);
+    return 1;
 }
 
 ipp_cancel_t ipp_job_cancel(ipp_job_rec_t *j, int32_t id)

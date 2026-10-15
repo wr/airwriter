@@ -97,7 +97,8 @@ static size_t s_last_pages, s_last_bytes;
 
 // The real mutual exclusion between a real IPP job and a test page: taken
 // (blocking) at the top of doc_begin and (non-blocking) in test_page, given
-// back at the bottom of doc_end and test_page_task. s_printing above is
+// back in job_finished -- when the job has printed, not when its upload
+// ended -- and at the bottom of test_page_task. s_printing above is
 // merely the status page's idea of "busy" -- it is not itself a lock, since
 // checking it and then setting it is not atomic across tasks.
 //
@@ -170,7 +171,7 @@ static uint32_t s_stream_crc;
 
 // Set when serial_out gave up on a stalled printer mid-job. job_pipe_cfg_t's
 // out callback returns void, so the failure travels in this flag instead and
-// doc_end() reads it for the post-mortem.
+// job_finished() reads it for the post-mortem.
 static int s_printer_failed;
 
 // Set by doc_cancel: the job ended because the person cancelled it, which the
@@ -183,7 +184,8 @@ static volatile int s_job_cancelled;
 static int s_job_pipe_ok;
 
 // Whether the last job's stream was cut mid-command (W-1041). Only the task
-// holding s_job_lock touches it: doc_begin through doc_end, or a test page.
+// holding s_job_lock touches it: doc_begin through job_finished, or a test
+// page.
 static iw_link_t s_link;
 
 static void resync_out(void *ctx, const uint8_t *buf, size_t n)
@@ -203,6 +205,9 @@ static void printer_fail(void)
     serial_out_purge();
     job_pipe_abort();
 }
+
+// doc_end's verdict on the transfer, for job_finished on the pipeline task.
+static volatile int s_doc_ok;
 
 // The printer stream: checksummed so the device can be compared with tools/rip
 // byte for byte, then put on the wire.
@@ -239,8 +244,9 @@ static esp_err_t doc_begin(void *ctx, const char *format, const char *name)
     // A real job waits out a test page rather than interleaving with it,
     // mirroring how ipp_server's own s_print_lock makes a second phone job
     // wait for the first. ipp_server always pairs this call with exactly one
-    // doc_end -- including when job_pipe_begin below fails -- so the give in
-    // doc_end balances every take here, refusals included.
+    // doc_end -- including when job_pipe_begin below fails -- and every
+    // doc_end leads to exactly one job_finished, whose give balances every
+    // take here, refusals included.
     xSemaphoreTake(s_job_lock, portMAX_DELAY);
     ESP_LOGI(TAG, "job \"%s\" format %s", name, format[0] ? format : "(unspecified)");
     strncpy(s_last_job, name && name[0] ? name : "Untitled", sizeof s_last_job - 1);
@@ -272,75 +278,114 @@ static void doc_cancel(void *ctx)
     job_pipe_abort();
 }
 
-static void doc_end(void *ctx, int ok)
+// The job is over: ripped and written, or abandoned. Runs on the pipeline
+// task once it has finished with the document (or on the IPP worker, if the
+// pipeline never started), and is what ends the job everywhere -- the panel,
+// the job lock, and the IPP job record with the printer it holds.
+static void job_finished(const job_pipe_stats_t *st, int ok)
 {
-    (void)ctx;
-    job_pipe_stats_t st = {0};
-    // A failed job_pipe_begin never created the pipeline task, so job_pipe_end
-    // would block on a semaphore nothing can ever give -- up to its 600s
-    // stuck-pipeline timeout -- while holding s_job_lock the whole time. Skip
-    // the call and report zeroed stats instead. ipp_server still calls
-    // doc_end exactly once even after a failed begin, so the give below still
-    // balances doc_begin's take.
-    // A cut transfer (a client that cancels by dropping the upload rather
-    // than with Cancel-Job) means nothing more will arrive: stop a write
-    // that is waiting out a paused printer, or job_pipe_end below would wait
-    // the whole stall limit holding the job lock.
-    if (!ok) serial_out_set_abort(1);
-    if (s_job_pipe_ok) job_pipe_end(ok, &st);
     s_printing = 0;
 
     // Clean only if the rip finished every page and every byte was queued;
     // anything else may have stopped mid-strip.
-    int clean = st.rc == 0 && ok && !s_printer_failed;
-    iw_link_job_end(&s_link, clean);
+    int clean = st->rc == 0 && ok && !s_printer_failed;
 
     if (!clean) {
+        iw_link_job_end(&s_link, 0);
         if (s_job_cancelled) {
-            ESP_LOGI(TAG, "job canceled after %u bytes in", (unsigned)st.doc_bytes);
+            ESP_LOGI(TAG, "job canceled after %u bytes in", (unsigned)st->doc_bytes);
             printer_state_post(PS_EV_JOB_DONE);
         } else {
             ESP_LOGE(TAG, "job failed: %u bytes in, rc %d%s",
-                     (unsigned)st.doc_bytes, st.rc,
+                     (unsigned)st->doc_bytes, st->rc,
                      s_printer_failed ? ", printer timeout"
                                       : ok ? "" : ", transfer truncated");
             printer_state_post(PS_EV_JOB_FAILED);
         }
         xSemaphoreGive(s_job_lock);
+        ipp_server_job_done(0);
         return;
     }
 
-    s_last_pages = (size_t)st.pages;
-    s_last_bytes = st.printer_bytes;
+    s_last_pages = (size_t)st->pages;
+    s_last_bytes = st->printer_bytes;
     ESP_LOGI(TAG, "ripped %d page%s, %ux%u dots, %u bytes in -> %u printer bytes in %ums",
-             st.pages, st.pages == 1 ? "" : "s", (unsigned)st.dst_w, (unsigned)st.dst_h,
-             (unsigned)st.doc_bytes, (unsigned)st.printer_bytes, (unsigned)st.ms);
+             st->pages, st->pages == 1 ? "" : "s", (unsigned)st->dst_w, (unsigned)st->dst_h,
+             (unsigned)st->doc_bytes, (unsigned)st->printer_bytes, (unsigned)st->ms);
     ESP_LOGI(TAG, "printer stream crc32 %08x", (unsigned)s_stream_crc);
 
     // Let the last byte clear the shift register before calling it printed.
     // Paper running out on the last sheet is still this job's stall, so the
-    // flush waits as long as a paused job does, and Done comes after it.
-    serial_out_flush(CONFIG_AIRWRITER_STALL_ABORT * 1000u);
+    // flush waits as long as a paused job does, and Done comes after it. A
+    // cancel stops the wait, and the tail must not print ahead of the next job.
+    esp_err_t flushed = serial_out_flush(CONFIG_AIRWRITER_STALL_ABORT * 1000u);
+    // A purged tail is a cut stream too, so the link is settled only here.
+    iw_link_job_end(&s_link, flushed == ESP_OK);
+    if (flushed != ESP_OK) {
+        serial_out_purge();
+        if (s_job_cancelled) {
+            ESP_LOGI(TAG, "job canceled with its last bytes still queued");
+            printer_state_post(PS_EV_JOB_DONE);
+        } else {
+            ESP_LOGE(TAG, "job failed: the printer never took its last bytes");
+            printer_state_post(PS_EV_JOB_FAILED);
+        }
+        xSemaphoreGive(s_job_lock);
+        ipp_server_job_done(0);
+        return;
+    }
     printer_state_post(PS_EV_JOB_DONE);
 
     if (AW_LOOPBACK) {
         size_t got; uint32_t crc;
-        serial_out_loopback_wait(st.printer_bytes, 3000);
+        serial_out_loopback_wait(st->printer_bytes, 3000);
         serial_out_loopback_stats(&got, &crc);
-        if (got == st.printer_bytes && crc == s_stream_crc)
+        if (got == st->printer_bytes && crc == s_stream_crc)
             ESP_LOGI(TAG, "uart loopback: %u bytes returned intact, crc32 %08x",
                      (unsigned)got, (unsigned)crc);
         else
             ESP_LOGE(TAG, "uart loopback MISMATCH: sent %u/%08x, got %u/%08x",
-                     (unsigned)st.printer_bytes, (unsigned)s_stream_crc,
+                     (unsigned)st->printer_bytes, (unsigned)s_stream_crc,
                      (unsigned)got, (unsigned)crc);
     }
 
     // At 9600 baud, 8N1, one byte costs 10 bit times.
     ESP_LOGI(TAG, "that is %u seconds of printing at 9600 baud",
-             (unsigned)(st.printer_bytes * 10 / 9600));
+             (unsigned)(st->printer_bytes * 10 / 9600));
 
     xSemaphoreGive(s_job_lock);
+    ipp_server_job_done(1);
+}
+
+// job_pipe's done callback: the pipeline has printed the document or let it go.
+static void pipe_done(void *ctx, const job_pipe_stats_t *st)
+{
+    (void)ctx;
+    job_finished(st, s_doc_ok);
+}
+
+// The upload is over; the printing usually is not. Returns at once so the
+// client gets its answer while the pipeline prints from the job buffer, and
+// pipe_done finishes the job when the paper stops.
+static void doc_end(void *ctx, int ok)
+{
+    (void)ctx;
+    s_doc_ok = ok;
+    // A cut transfer (a client that cancels by dropping the upload rather
+    // than with Cancel-Job) means nothing more will arrive: stop a write
+    // that is waiting out a paused printer, so the pipeline unwinds now
+    // instead of after the stall limit.
+    if (!ok) serial_out_set_abort(1);
+    if (s_job_pipe_ok) {
+        job_pipe_end(ok);
+        return;
+    }
+    // A failed job_pipe_begin never created the pipeline task, so nothing
+    // will call pipe_done: finish here, with zeroed stats. ipp_server still
+    // calls doc_end exactly once after a failed begin, so the give in
+    // job_finished balances doc_begin's take.
+    job_pipe_stats_t st = {0};
+    job_finished(&st, 0);
 }
 
 // ------------------------------------------------------------- dip / test
@@ -821,7 +866,7 @@ void app_main(void)
     ESP_ERROR_CHECK(serial_out_init(&ser));
     xTaskCreate(kick_task, "kick", 3072, NULL, 3, NULL);
 
-    job_pipe_cfg_t pipe = { .out = printer_out, .dither = algo };
+    job_pipe_cfg_t pipe = { .out = printer_out, .dither = algo, .done = pipe_done };
     ESP_ERROR_CHECK(job_pipe_init(&pipe));
 
     // Before wifi_start, which can block up to 60s joining: the debounce

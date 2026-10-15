@@ -4,6 +4,21 @@ Written 2026-08-04, last updated 2026-10-15.
 
 ## Where the project stands
 
+**2026-10-15: a whole job goes into PSRAM, and the client is answered when the upload
+ends (W-1042).** `job_pipe`'s ring is now 1 MB of PSRAM (`heap_caps_malloc` +
+`xStreamBufferCreateStatic`; 8 KB internal if that fails, as on the C6). Print-Job replies
+as soon as the body is in, with the job `processing`; the rip and serial
+output finish on the pipeline task, whose `done` callback (`job_finished` in main.c) ends the
+job everywhere — panel, `s_job_lock`, and `ipp_server_job_done()`, which moves the IPP job to
+completed / aborted / canceled and only then frees `s_print_lock`. Why: with an 8 KB ring a
+paused printer stalled the upload behind a zero window, so a dropped upload looked exactly
+like a healthy paused one until paper came back (the client's FIN sits behind its unsent
+data; no socket peek can see it). Now the socket is read to the end and a hang-up
+mid-document is `hbody_read` -1 at once → `doc_end(0)` → `serial_out_set_abort(1)`.
+`serial_out_flush` also honours the abort now, so Cancel-Job stops a job whose last FIFO is
+stuck behind a paused printer. Documents over 1 MB still stream with TCP backpressure, and
+for those the old blind spot remains.
+
 **2026-10-15: a stalled job now shows on the Mac as a paused job — W-1040, branch
 `wells/w-1040-iphone-paused-alert` (stacked on W-1037 `a151fe9`, not merged).** Bench on
 board 1, Mac print, SELECT off mid-page: the Mac's print window raised the paper/SELECT

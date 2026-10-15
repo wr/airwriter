@@ -66,6 +66,37 @@ int main(void)
     ipp_job_finish(&j, 0);
     CHECK_EQ_INT(j.state, IPP_JSTATE_CANCELED);
 
+    /* W-1042: the reply goes back when the upload ends, and the job stays
+     * processing -- holding the printer -- until the sink reports it printed.
+     * That report ends it once; a second one frees nothing. A separate record,
+     * so the slot above keeps job 7 for the matching checks below. */
+    ipp_job_rec_t k = {0};
+    CHECK_EQ_INT(ipp_job_done(&k, 1), 0);             /* empty slot: nothing printing */
+    ipp_job_start(&k, 12, 600, "", "", URI);
+    CHECK_EQ_INT(k.printing, 1);
+    ipp_job_view(&k, 1, &st, &why);
+    CHECK_EQ_INT(st, IPP_JSTATE_STOPPED);             /* paused after the reply */
+    CHECK_EQ_INT(ipp_job_done(&k, 1), 1);
+    CHECK_EQ_INT(k.state, IPP_JSTATE_COMPLETED);
+    CHECK_EQ_INT(ipp_job_done(&k, 0), 0);
+    CHECK_EQ_INT(k.state, IPP_JSTATE_COMPLETED);
+
+    /* A print that fails after the reply ends aborted. */
+    ipp_job_start(&k, 13, 700, "", "", URI);
+    CHECK_EQ_INT(ipp_job_done(&k, 0), 1);
+    CHECK_EQ_INT(k.state, IPP_JSTATE_ABORTED);
+
+    /* Cancel-Job while the buffered job prints: canceled at once, but the
+     * printer stays held until the paper stops, and the done that follows
+     * keeps it canceled. */
+    ipp_job_start(&k, 14, 800, "", "", URI);
+    CHECK_EQ_INT(ipp_job_cancel(&k, 14), IPP_CANCEL_STOP_PRINT);
+    CHECK_EQ_INT(k.state, IPP_JSTATE_CANCELED);
+    CHECK_EQ_INT(k.printing, 1);
+    CHECK_EQ_INT(ipp_job_done(&k, 0), 1);
+    CHECK_EQ_INT(k.state, IPP_JSTATE_CANCELED);
+    CHECK_EQ_INT(ipp_job_cancel(&k, 14), IPP_CANCEL_NOT_POSSIBLE);
+
     /* Job matching: -1 is the current job, anything else must be exact. */
     CHECK(ipp_job_matches(&j, -1));
     CHECK(ipp_job_matches(&j, 7));
