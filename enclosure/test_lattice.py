@@ -1,7 +1,7 @@
 """The light-guide lattice: fit, light paths, clearances, printability."""
 import unittest
 
-from build123d import Box, Cylinder, Pos, Vector
+from build123d import Box, Cone, Cylinder, GeomType, Pos, Vector
 
 import board_geom as bg
 import case
@@ -47,8 +47,11 @@ class TestLattice(unittest.TestCase):
         bb = self.L.bounding_box()
         self.assertAlmostEqual(bb.min.Z, 0.0, places=3)
         self.assertAlmostEqual(bb.max.Z, H, places=3)
-        self.assertGreaterEqual(bb.min.X, p.LATTICE_INSET - 1e-3)
-        self.assertLessEqual(bb.max.X, p.BOARD_W - p.LATTICE_INSET + 1e-3)
+        # The edge ridge reaches RIDGE_CLEAR short of the tray's pocket.
+        reach = p.POCKET_CLEAR - p.RIDGE_CLEAR
+        self.assertAlmostEqual(bb.min.X, -reach, places=3)
+        self.assertAlmostEqual(bb.max.X, p.BOARD_W + reach, places=3)
+        self.assertAlmostEqual(bb.max.Y, p.BOARD_L + reach, places=3)
 
     def test_every_lit_dot_has_an_open_column_the_dot_wide(self):
         r = bg.panel_grid()["dot_dia"] / 2 - 0.01
@@ -57,10 +60,44 @@ class TestLattice(unittest.TestCase):
                 col = Pos(d["x"], d["y"], H / 2) * Cylinder(r, H + 2)
                 self.assertLess(_vol(self.L, col), 1e-3, f"r{d['r']}c{d['c']}")
 
-    def test_the_test_plunger_cell_is_open(self):
+    def test_the_test_cell_is_open_below_the_collar(self):
         (t,) = [d for d in bg.panel_dots() if d["mat"] == "T"]
-        col = Pos(t["x"], t["y"], H / 2) * Cylinder(bg.panel_grid()["hole_dia"] / 2, H + 2)
+        top = H - p.COLLAR_H - 0.05
+        col = Pos(t["x"], t["y"], top / 2) * Cylinder(bg.panel_grid()["hole_dia"] / 2, top)
         self.assertLess(_vol(self.L, col), 1e-3)
+
+    def test_collar_clears_the_measured_plunger(self):
+        # Wells's caliper: 3.1 at the lattice top, 3.5 where the plunger
+        # enters the 3.2-tall body. 0.15 a side must stay free all the way.
+        x, y = lattice.test_plunger_axis()
+        c = 0.15
+        h = H - p.TEST_BODY_TOP
+        plunger = Pos(x, y, p.TEST_BODY_TOP + h / 2) * Cone(
+            p.TEST_PLUNGER_D_BASE / 2 + c, p.TEST_PLUNGER_D_TOP / 2 + c, h)
+        self.assertLess(_vol(self.L, plunger), 1e-3)
+
+    def test_collar_braces_the_plunger_near_the_top(self):
+        x, y = lattice.test_plunger_axis()
+        r = p.COLLAR_BORE_D / 2
+        ring = Pos(x, y, H - p.COLLAR_H / 2) * (
+            Cylinder(r + 0.8, p.COLLAR_H - 0.1) - Cylinder(r + 0.05, p.COLLAR_H - 0.1))
+        self.assertGreater(_vol(self.L, ring) / ring.volume, 0.95)
+        # held to all four cell walls at mid-collar
+        x0, x1, y0, y1 = lattice.cell_bounds()[(3, 3)]
+        z = H - p.COLLAR_H / 2
+        for px, py in (((x0 + x - r) / 2 - 0.5, y), ((x1 + x + r) / 2 + 0.5, y),
+                       (x, (y0 + y - r) / 2 - 0.5), (x, (y1 + y + r) / 2 + 0.5)):
+            self.assertTrue(self.L.is_inside(Vector(px, py, z)), f"no rib at ({px:.1f}, {py:.1f})")
+
+    def test_ridge_hides_the_panel_edge_gap(self):
+        # 0.18 past the board edge: inside the gap round the panel (the
+        # pocket is 0.30 out), so looking down it you see the ridge.
+        o = 0.18
+        z = H - p.RIDGE_H / 2
+        yf = lattice.front_line()
+        for px, py in ((31.0, p.BOARD_L + o), (p.BOARD_W + o, 60.0), (p.BOARD_W + o, yf + 5),
+                       (-o, 60.0), (-o, 25.0), (p.BOARD_W + o, 3.0)):
+            self.assertTrue(self.L.is_inside(Vector(px, py, z)), f"no ridge at ({px}, {py})")
 
     def test_posts_bores_and_standoff_pockets(self):
         for ref, (x, y) in bg.mount_holes().items():
@@ -77,6 +114,8 @@ class TestLattice(unittest.TestCase):
             if ref in ("J1", "J2", "J4"):
                 continue
             for x0, x1, y0, y1, top in bands:
+                if ref == "SW3" and top > H - p.COLLAR_H:
+                    continue  # the model's plunger; the measured one is tested above
                 shadow = Pos((x0 + x1) / 2, (y0 + y1) / 2, top / 2) * Box(x1 - x0, y1 - y0, top)
                 self.assertLess(_vol(self.L, shadow), 1e-3, ref)
         for ref in ("J1", "J2", "J4"):
@@ -171,6 +210,49 @@ class TestLattice(unittest.TestCase):
         flats = upward_flats(self.L, ceiling_z=H)
         self.assertEqual([(round(f.center().X, 1), round(f.center().Y, 1),
                            round(f.center().Z, 1), round(f.area, 1)) for f in flats], [])
+
+
+
+class TestLightPipe(unittest.TestCase):
+    """The clear-PETG pipe that drops into the D3 tube."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.L = lattice.lattice()
+        cls.P = lattice.light_pipe()
+
+    def test_one_valid_solid_on_the_board_just_under_the_panel(self):
+        self.assertTrue(self.P.is_valid)
+        self.assertEqual(len(self.P.solids()), 1)
+        bb = self.P.bounding_box()
+        self.assertAlmostEqual(bb.min.Z, 0.0, places=3)
+        self.assertAlmostEqual(bb.max.Z, H - p.PIPE_TOP_GAP, places=3)
+
+    def test_drops_into_the_tube_without_touching_the_lattice(self):
+        self.assertLess(_vol(self.L, self.P), 1e-3)
+
+    def test_covers_the_whole_window_at_the_top(self):
+        x0, x1, y0, y1 = lattice.d3_window()
+        for i in range(11):
+            for j in range(11):
+                q = Vector(x0 + i / 10 * (x1 - x0), y0 + j / 10 * (y1 - y0), H - 0.3)
+                self.assertTrue(self.P.is_inside(q), f"window not covered at {q}")
+
+    def test_clears_d3_and_r17_and_wraps_d3(self):
+        env = components.envelopes()
+        for ref in ("D3", "R17"):
+            (x0, x1, y0, y1, top), = env[ref]
+            box = Pos((x0 + x1) / 2, (y0 + y1) / 2, top / 2) * Box(x1 - x0, y1 - y0, top)
+            self.assertLess(_vol(self.P, box), 1e-3, ref)
+        (x0, x1, y0, y1, top), = env["D3"]
+        above = Vector((x0 + x1) / 2, (y0 + y1) / 2, top + p.PIPE_POCKET_CLEAR + 0.1)
+        self.assertTrue(self.P.is_inside(above), "no pipe right over D3")
+
+    def test_every_face_is_flat_and_square_so_it_prints_on_any_side(self):
+        for f in self.P.faces():
+            self.assertEqual(f.geom_type, GeomType.PLANE)
+            n = f.normal_at(f.center())
+            self.assertAlmostEqual(max(abs(n.X), abs(n.Y), abs(n.Z)), 1.0, places=6)
 
 
 if __name__ == "__main__":

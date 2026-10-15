@@ -102,6 +102,12 @@ def _rails() -> Part:
             + _box(p.EAST_RAIL_X0, p.EAST_RAIL_X1, y4, yf, 0, H))
 
 
+def test_plunger_axis() -> tuple[float, float]:
+    """SW3's plunger centre, from the top band of its STEP envelope."""
+    x0, x1, y0, y1, _ = components.envelopes()["SW3"][-1]
+    return (x0 + x1) / 2, (y0 + y1) / 2
+
+
 def d3_window() -> tuple[float, float, float, float]:
     """The panel FR4 window that D3 sits under."""
     f = bg.footprint("D3")
@@ -112,15 +118,87 @@ def d3_window() -> tuple[float, float, float, float]:
     return hits[0]
 
 
-def _d3_tube() -> tuple[Part, Part]:
-    """(tube + arm to the H4 post, the tube's void)."""
+def _d3_tube_rects() -> tuple[tuple[float, float, float, float],
+                              tuple[float, float, float, float]]:
+    """(interior, outer) of the D3 tube as (x0, x1, y0, y1). The outer runs on
+    to the board edge on any side within 1 mm of it, so the edge ridge has a
+    wall to hang from at the corner."""
     x0, x1, y0, y1 = d3_window()
     c, w = p.D3_TUBE_CLEAR, p.LATTICE_WALL
-    ix0, ix1, iy0, iy1 = x0 - c, x1 + c, y0 - c, y1 + c
-    tube = _box(ix0 - w, ix1 + w, iy0 - w, iy1 + w, 0, H)
+    inner = (x0 - c, x1 + c, y0 - c, y1 + c)
+    ox0, ox1, oy0, oy1 = inner[0] - w, inner[1] + w, inner[2] - w, inner[3] + w
+    ox0 = 0.0 if ox0 < 1.0 else ox0
+    ox1 = p.BOARD_W if ox1 > p.BOARD_W - 1.0 else ox1
+    oy0 = 0.0 if oy0 < 1.0 else oy0
+    oy1 = p.BOARD_L if oy1 > p.BOARD_L - 1.0 else oy1
+    return inner, (ox0, ox1, oy0, oy1)
+
+
+def _d3_tube() -> tuple[Part, Part]:
+    """(tube + arm to the H4 post, the tube's void)."""
+    (ix0, ix1, iy0, iy1), outer = _d3_tube_rects()
+    tube = _box(*outer, 0, H)
     hx, hy = bg.mount_holes()["H4"]
     arm = _box(hx, ix0, iy1 - 1.0, hy, 0, H)
     return tube + arm, _box(ix0, ix1, iy0, iy1, -1, H + 1)
+
+
+def light_pipe() -> Part:
+    """The clear-PETG light pipe that drops into the D3 tube: the tube's
+    interior less PIPE_CLEAR, standing on the board, PIPE_TOP_GAP under the
+    panel, with a slot right across it over each part inside (D3 and R17) so
+    the LED sits inside the pipe. Every face is flat and square, so it prints
+    on any side; lying on a wide face keeps the layers along the light."""
+    (ix0, ix1, iy0, iy1), _ = _d3_tube_rects()
+    c, k = p.PIPE_CLEAR, p.PIPE_POCKET_CLEAR
+    px0, px1, py0, py1 = ix0 + c, ix1 - c, iy0 + c, iy1 - c
+    pipe = _box(px0, px1, py0, py1, 0, H - p.PIPE_TOP_GAP)
+    slots = [_box(px0 - 1, px1 + 1, y0 - k, y1 + k, -1, top + k)
+             for bands in components.envelopes().values()
+             for x0, x1, y0, y1, top in bands
+             if x1 + k > px0 and x0 - k < px1 and y1 + k > py0 and y0 - k < py1]
+    return pipe - _union(slots) if slots else pipe
+
+
+def _collar() -> Part:
+    """A ring round the test plunger in the lattice's top COLLAR_H, tied to
+    the test cell's four walls by LATTICE_WALL ribs."""
+    x, y = test_plunger_axis()
+    (t,) = [d for d in bg.panel_dots() if d["mat"] == "T"]
+    x0, x1, y0, y1 = cell_bounds()[(t["r"], t["c"])]
+    w, h = p.LATTICE_WALL, p.COLLAR_H
+    z0 = H - h
+    r = p.COLLAR_BORE_D / 2
+    ring = Pos(x, y, z0 + h / 2) * Cylinder(r + p.COLLAR_WALL, h)
+    ribs = [_box(x0 - w / 2, x, y - w / 2, y + w / 2, z0, H),
+            _box(x, x1 + w / 2, y - w / 2, y + w / 2, z0, H),
+            _box(x - w / 2, x + w / 2, y0 - w / 2, y, z0, H),
+            _box(x - w / 2, x + w / 2, y, y1 + w / 2, z0, H)]
+    bore = Pos(x, y, H / 2) * Cylinder(r, H + 2)
+    return _union([ring] + ribs) - bore
+
+
+def _ridge() -> Part:
+    """The lip round the lattice's top edge: from just inside the lattice's
+    perimeter wall out to RIDGE_CLEAR short of the tray's pocket, along every
+    edge the lattice reaches -- the grid's back and sides, the west rail and
+    the D3 corner."""
+    o = p.POCKET_CLEAR - p.RIDGE_CLEAR
+    i = p.LATTICE_INSET + 0.05
+    z0 = H - p.RIDGE_H
+    outer = case._rounded_box(p.BOARD_W + 2 * o, p.BOARD_L + 2 * o, p.RIDGE_H,
+                              p.BOARD_W / 2, p.BOARD_L / 2, z0 + p.RIDGE_H / 2,
+                              p.CORNER_R + o)
+    inner = case._rounded_box(p.BOARD_W - 2 * i, p.BOARD_L - 2 * i, p.RIDGE_H + 2,
+                              p.BOARD_W / 2, p.BOARD_L / 2, z0 + p.RIDGE_H / 2,
+                              p.CORNER_R - i)
+    yf = front_line() - p.LATTICE_WALL / 2
+    _, y3 = bg.mount_holes()["H3"]
+    _, (tx0, _, _, ty1) = _d3_tube_rects()
+    keep = (_box(-5, p.BOARD_W + 5, yf, p.BOARD_L + 5, z0 - 1, H + 1)
+            + _box(-5, 1.0, y3, yf + 0.01, z0 - 1, H + 1)
+            + _box(tx0, p.BOARD_W + 5, -5, ty1, z0 - 1, H + 1))
+    return (outer - inner) & keep
 
 
 def _part_voids() -> Part:
@@ -161,9 +239,12 @@ def _reset_path_void() -> Part:
 
 def lattice() -> Part:
     tube, tube_void = _d3_tube()
-    body = (_grid() + _posts() + _rails() + tube) & _outline()
-    return (body - _post_voids() - tube_void - _part_voids() - _keepout_void()
+    body = ((_grid() + _posts() + _rails() + tube) & _outline()) + _ridge()
+    body = (body - _post_voids() - tube_void - _part_voids() - _keepout_void()
             - _reset_path_void())
+    # The collar goes on last: SW3's model envelope (a plain 3.5 plunger to
+    # 15 mm) would otherwise void it. It clears the measured plunger instead.
+    return body + _collar()
 
 
 def leaky_walls(part: Part) -> list[str]:

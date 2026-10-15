@@ -360,3 +360,33 @@ EAST_RAIL_X1 = 55.75
 antenna keepout (56.00) by KEEPOUT_CLEAR."""
 
 KEEPOUT_CLEAR = 0.25
+
+TEST_PLUNGER_D_TOP = 3.10
+TEST_PLUNGER_D_BASE = 3.50
+TEST_BODY_TOP = 3.20
+"""SW3's plunger, measured by Wells on rev A: 3.1 at the lattice top, tapering
+to 3.5 where it enters the switch body, which stands about 3.2. (The KiCad
+model's plunger is a plain 3.5 cylinder.)"""
+
+COLLAR_H = 2.00
+COLLAR_BORE_D = 3.60
+COLLAR_WALL = 1.00
+"""Collar bracing the tall test plunger in the lattice's top COLLAR_H only:
+0.25 a side on the plunger's 3.1 at the top, 0.21 on its 3.18 at the collar's
+foot, so it steadies the plunger without dragging on it. Held to the cell's
+four walls by LATTICE_WALL ribs. (Wells, 2026-10-15: "really tall and
+wobbly".)"""
+
+RIDGE_H = 1.50
+RIDGE_CLEAR = 0.10
+"""Lip round the lattice's top edge, reaching to RIDGE_CLEAR short of the
+tray's pocket wall, so the lattice sits snug and the gap round the panel's
+edge shows black plastic instead of the inside of the case (Wells,
+2026-10-15)."""
+
+PIPE_CLEAR = 0.15
+PIPE_TOP_GAP = 0.10
+PIPE_POCKET_CLEAR = 0.25
+"""The clear-PETG light pipe in the D3 tube: PIPE_CLEAR off the tube walls,
+PIPE_TOP_GAP under the panel so it never holds the panel up, and a pocket
+PIPE_POCKET_CLEAR round D3 and R17 so the LED sits inside the pipe."""
