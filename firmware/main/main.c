@@ -776,6 +776,12 @@ static const uint8_t *lt_job(void *ctx, size_t *len)
     return localtalk_job(len);
 }
 
+static void lt_echo(void *ctx, int node)
+{
+    (void)ctx;
+    localtalk_echo((uint8_t)node);
+}
+
 // The printer's state as the LocalTalk Option Card's status word, which the
 // Mac's driver reads with PAP SendStatus.
 static uint16_t lt_status(ps_state_t st)
@@ -977,7 +983,7 @@ void app_main(void)
         ESP_ERROR_CHECK(net_provision_start(ap));
         webui_cfg_t wcfg = { .status_json = status_json, .captive = 1,
                               .localtalk_flash = localtalk_flash,
-                              .lt_json = lt_json, .lt_job = lt_job };
+                              .lt_json = lt_json, .lt_job = lt_job, .lt_echo = lt_echo };
         ESP_ERROR_CHECK(webui_start(&wcfg));
 
         for (;;) vTaskDelay(pdMS_TO_TICKS(30000));
@@ -996,7 +1002,7 @@ void app_main(void)
 
     webui_cfg_t wcfg = { .status_json = status_json, .captive = 0,
                           .localtalk_flash = localtalk_flash,
-                          .lt_json = lt_json, .lt_job = lt_job };
+                          .lt_json = lt_json, .lt_job = lt_job, .lt_echo = lt_echo };
     ESP_ERROR_CHECK(webui_start(&wcfg));
 
     if (s_test_on_boot) {

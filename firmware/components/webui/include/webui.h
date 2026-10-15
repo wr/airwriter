@@ -25,6 +25,8 @@ typedef struct {
     void  (*lt_json)(void *ctx, char *buf, size_t cap);
     // The last PAP job's bytes for GET /api/lt/job; NULL (or no job) is 404.
     const uint8_t *(*lt_job)(void *ctx, size_t *len);
+    // POST /api/lt/echo with a node number as the body: an AEP echo request.
+    void  (*lt_echo)(void *ctx, int node);
 
     // Serves the setup page for every unknown host, so joining the device's
     // access point opens the page by itself.

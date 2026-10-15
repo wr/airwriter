@@ -6,6 +6,7 @@
 #include "localtalk.h"
 #include <stdio.h>
 #include <string.h>
+#include "driver/gpio.h"
 #include "driver/uart.h"
 #include "esp_heap_caps.h"
 #include "esp_log.h"
@@ -27,7 +28,7 @@ static const char *TAG = "lt";
 #define LINE_LEN  100
 
 static SemaphoreHandle_t s_lock;
-static int        s_uart = -1;
+static int        s_uart = -1, s_cts_pin = -1;
 static int        s_running;
 static lt_node_t  s_node;
 static tt_rx_t    s_rx;
@@ -170,6 +171,7 @@ esp_err_t localtalk_start(const localtalk_cfg_t *cfg)
     esp_err_t err = uart_driver_install(cfg->uart_num, 8192, 4096, 0, NULL, 0);
     if (err != ESP_OK) return err;
     s_uart = cfg->uart_num;
+    s_cts_pin = cfg->cts_pin;
     ESP_ERROR_CHECK(uart_param_config(s_uart, &uc));
     ESP_ERROR_CHECK(uart_set_pin(s_uart, cfg->tx_pin, cfg->rx_pin, UART_PIN_NO_CHANGE,
                                  cfg->cts_pin >= 0 ? cfg->cts_pin : UART_PIN_NO_CHANGE));
@@ -219,6 +221,14 @@ void localtalk_set_status(uint16_t status)
     xSemaphoreGive(s_lock);
 }
 
+void localtalk_echo(uint8_t node)
+{
+    if (!s_running) return;
+    xSemaphoreTake(s_lock, portMAX_DELAY);
+    lt_node_echo(&s_node, node, now_ms());
+    xSemaphoreGive(s_lock);
+}
+
 const uint8_t *localtalk_job(size_t *len)
 {
     *len = s_job_len;
@@ -252,6 +262,9 @@ void localtalk_json(char *buf, size_t cap)
         return;
     }
     char *p = buf, *end = buf + cap - 8;
+    size_t tx_free = 0;
+    uart_get_tx_buffer_free_size(s_uart, &tx_free);
+    int cts = s_cts_pin >= 0 ? gpio_get_level(s_cts_pin) : -1;
     xSemaphoreTake(s_lock, portMAX_DELAY);
     const lt_node_t *n = &s_node;
     p += snprintf(p, end - p,
@@ -262,15 +275,22 @@ void localtalk_json(char *buf, size_t cap)
     json_str(&p, end, s_obj);
     p += snprintf(p, end - p, ",\"type\":");
     json_str(&p, end, s_type);
+    p += snprintf(p, end - p, ",\"cts\":%d,\"tx_free\":%u,\"heard\":[", cts, (unsigned)tx_free);
+    for (int id = 1, first = 1; id < 255 && p < end; id++) {
+        if (!(n->heard[id / 8] & (1u << (id % 8)))) continue;
+        p += snprintf(p, end - p, "%s%d", first ? "" : ",", id);
+        first = 0;
+    }
+    if (p < end) *p++ = ']';
     p += snprintf(p, end - p,
         ",\"frames\":%lu,\"fcs_bad\":%u,\"errors\":%u,\"tx\":%u,\"for_us\":%lu,"
         "\"lookups\":%lu,\"replies\":%lu,\"statuses\":%lu,\"opens\":%lu,\"busy\":%lu,"
-        "\"dup\":%lu,\"pap\":{\"open\":%s,\"conn\":%u,\"bytes\":%lu},"
+        "\"dup\":%lu,\"echoes\":%lu,\"pap\":{\"open\":%s,\"conn\":%u,\"bytes\":%lu},"
         "\"job\":{\"captured\":%u,\"total\":%lu,\"done\":%s},\"events\":[",
         (unsigned long)n->st.frames, s_fcs_bad, s_errors, s_tx, (unsigned long)n->st.for_us,
         (unsigned long)n->st.lookups, (unsigned long)n->st.replies,
         (unsigned long)n->st.statuses, (unsigned long)n->st.opens, (unsigned long)n->st.busy,
-        (unsigned long)n->st.dup_suspect, n->pap.open ? "true" : "false", n->pap.connid,
+        (unsigned long)n->st.dup_suspect, (unsigned long)n->st.echoes, n->pap.open ? "true" : "false", n->pap.connid,
         (unsigned long)n->pap.bytes, (unsigned)s_job_len, (unsigned long)s_job_total,
         s_job_done ? "true" : "false");
     json_ring(&p, end, s_ev, EV_LINES, s_ev_head, s_ev_n);

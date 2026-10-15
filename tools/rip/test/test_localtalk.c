@@ -370,6 +370,23 @@ static void test_aep(void)
     CHECK_EQ_INT(nsent, 1);
     const uint8_t want[] = { 83, 150, LLAP_SHORT, 0, 8, 0xFB, SOCK_AEP, DDP_AEP, 2, 'h', 'i' };
     CHECK_EQ_MEM(sent[0], want, sizeof want);
+    CHECK(n.heard[83 / 8] & (1u << (83 % 8)));
+
+    // Our own echo request, and the Mac's reply.
+    reset_fake();
+    lt_node_echo(&n, 83, t + 100);
+    CHECK_EQ_INT(nsent, 1);
+    CHECK_EQ_INT(sent[0][0], 83);
+    CHECK_EQ_INT(sent[0][3 + 2], SOCK_AEP);
+    CHECK_EQ_INT(sent[0][3 + 3], SOCK_AEP);
+    CHECK_EQ_INT(sent[0][3 + 5], 1);
+    uint8_t rep[] = { 2, 'x' };
+    lt_addr_t to = { 0, 150, SOCK_AEP }, from = { 0, 83, SOCK_AEP };
+    fl = ddp_build(f, sizeof f, 150, 83, 0, &to, &from, DDP_AEP, rep, sizeof rep);
+    lt_node_rx(&n, f, fl, t + 112);
+    CHECK_EQ_INT(n.st.echoes, 1);
+    CHECK_EQ_INT(nsent, 1);                               // a reply is not echoed back
+    CHECK(strstr(lastlog, "echo reply from 83, 2 bytes, 12 ms") != NULL);
 }
 
 // The ATP header of sent frame i (short DDP): ctl, bitmap, tid, user[4].

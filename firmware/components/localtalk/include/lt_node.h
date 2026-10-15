@@ -117,7 +117,7 @@ typedef struct {
 } lt_pap_t;
 
 typedef struct {
-    uint32_t frames, for_us, lookups, replies, opens, busy, statuses, jobs, dup_suspect;
+    uint32_t frames, for_us, lookups, replies, opens, busy, statuses, jobs, dup_suspect, echoes;
 } lt_stats_t;
 
 typedef struct {
@@ -139,6 +139,8 @@ typedef struct {
     // The last LkUp logged, so a Chooser asking every second logs once.
     uint8_t    last_lkup[3 * (NBP_NAME_MAX + 1) + 2];
     uint64_t   last_lkup_at;
+    uint8_t    heard[32];      // bit n: node n has sent a frame
+    uint64_t   echo_at;        // when lt_node_echo last asked
 } lt_node_t;
 
 void lt_node_init(lt_node_t *n, const lt_cfg_t *cfg, const lt_ops_t *ops, uint64_t now);
@@ -146,5 +148,8 @@ void lt_node_init(lt_node_t *n, const lt_cfg_t *cfg, const lt_ops_t *ops, uint64
 void lt_node_rx(lt_node_t *n, const uint8_t *f, size_t len, uint64_t now);
 // Timers: enquiries while acquiring, PAP retries, tickles and timeouts.
 void lt_node_tick(lt_node_t *n, uint64_t now);
+// Send an AEP echo request to `node` (socket 4); its reply is logged. A bench
+// check that frames get out and back. Does nothing until the node is online.
+void lt_node_echo(lt_node_t *n, uint8_t node, uint64_t now);
 // The Option Card status word, e.g. when the printer goes offline.
 void lt_node_set_status(lt_node_t *n, uint16_t status);

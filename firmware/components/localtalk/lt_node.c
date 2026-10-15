@@ -371,9 +371,16 @@ static void on_rtmp(lt_node_t *n, const ddp_t *d)
     }
 }
 
-static void on_aep(lt_node_t *n, const ddp_t *d)
+static void on_aep(lt_node_t *n, const ddp_t *d, uint64_t now)
 {
-    if (d->dst.sock != SOCK_AEP || d->len < 1 || d->data[0] != 1) return;
+    if (d->dst.sock != SOCK_AEP || d->len < 1) return;
+    if (d->data[0] == 2) {
+        n->st.echoes++;
+        say(n, "echo reply from %u, %u bytes, %lu ms", d->src.node, (unsigned)d->len,
+            (unsigned long)(now - n->echo_at));
+        return;
+    }
+    if (d->data[0] != 1) return;
     uint8_t buf[DDP_MAX_DATA];
     memcpy(buf, d->data, d->len);
     buf[0] = 2;                                    // echo reply
@@ -397,6 +404,16 @@ void lt_node_init(lt_node_t *n, const lt_cfg_t *cfg, const lt_ops_t *ops, uint64
     n->ops.claim(n->ops.ctx, 0);
 }
 
+void lt_node_echo(lt_node_t *n, uint8_t node, uint64_t now)
+{
+    if (n->phase != LT_ONLINE || !node || node == LLAP_BCAST) return;
+    static const uint8_t req[] = { 1, 'A', 'i', 'r', 'W', 'r', 'i', 't', 'e', 'r' };
+    lt_route_t to = { { n->net, node, SOCK_AEP }, node, 0 };
+    send_ddp(n, &to, SOCK_AEP, DDP_AEP, req, sizeof req);
+    n->echo_at = now;
+    say(n, "echo request to %u", node);
+}
+
 void lt_node_set_status(lt_node_t *n, uint16_t status)
 {
     n->status = status & (uint16_t)~LT_IW_BUSY;
@@ -407,6 +424,8 @@ void lt_node_rx(lt_node_t *n, const uint8_t *f, size_t len, uint64_t now)
     if (len < LLAP_HDR) return;
     n->st.frames++;
     uint8_t dst = f[0], src = f[1], type = f[2];
+    // ENQs carry the prober's candidate as their source: not a node yet.
+    if (type != LLAP_ENQ) n->heard[src / 8] |= (uint8_t)(1u << (src % 8));
 
     if (n->phase == LT_ACQUIRING) {
         // Appendix B: while the ID is tentative, anything addressed to it --
@@ -430,7 +449,7 @@ void lt_node_rx(lt_node_t *n, const uint8_t *f, size_t len, uint64_t now)
     case DDP_NBP:  on_nbp(n, &d, now); break;
     case DDP_ATP:  on_atp(n, &d, now); break;
     case DDP_RTMP: on_rtmp(n, &d); break;
-    case DDP_AEP:  on_aep(n, &d); break;
+    case DDP_AEP:  on_aep(n, &d, now); break;
     default: break;
     }
 }

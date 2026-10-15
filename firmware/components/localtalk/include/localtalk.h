@@ -30,5 +30,7 @@ int       localtalk_running(void);
 void      localtalk_set_status(uint16_t status);
 // State, counters and the latest lines, for GET /api/lt.
 void      localtalk_json(char *buf, size_t cap);
+// Bench check: an AEP echo request to `node`; the reply shows in the log.
+void      localtalk_echo(uint8_t node);
 // The last PAP job's bytes as captured (up to the capture size), or NULL.
 const uint8_t *localtalk_job(size_t *len);
