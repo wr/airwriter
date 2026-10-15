@@ -95,8 +95,8 @@ Linear is the queue; these are the live items.
 - `W-1051 LocalTalk node: show up in the Chooser as an ImageWriter`: in review on
   `wells/w-1051-localtalk-node`, unmerged; board 1 runs it and the bench Mac (Mac OS 8.1, Apple's
   AppleTalk ImageWriter 7.0.1) lists it in the Chooser.
-- `W-1053 LocalTalk: print PAP jobs from the Mac's AppleTalk ImageWriter driver`: next; starts
-  by capturing a real job at `GET /api/lt/job` with the printer selected.
+- `W-1053 LocalTalk: print PAP jobs from the Mac's AppleTalk ImageWriter driver`: next. A real
+  job is captured in `fixtures/pap-iw701-page.bin`; the PAP exchange is in `docs/traps.md`.
 - Not in Linear: scope HSKo during a long job (SPEC §3.9 timing).
 
 ## Toolchain
