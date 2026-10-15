@@ -39,7 +39,7 @@ void ipp_job_start(ipp_job_rec_t *j, int32_t id, uint32_t now_s, int awaiting_do
                    const char *name, const char *user, const char *printer_uri);
 
 // Whether `id` names the job in the slot. -1 (job-id absent) means the
-// current job.
+// current job. An empty slot (id 0, before the first job) matches nothing.
 int ipp_job_matches(const ipp_job_rec_t *j, int32_t id);
 
 // Pending or processing: the job still holds the printer.

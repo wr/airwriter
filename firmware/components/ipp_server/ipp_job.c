@@ -26,7 +26,8 @@ void ipp_job_start(ipp_job_rec_t *j, int32_t id, uint32_t now_s, int awaiting_do
 
 int ipp_job_matches(const ipp_job_rec_t *j, int32_t id)
 {
-    return id < 0 || id == j->id;
+    // Ids start at 1; a slot still at 0 has never held a job.
+    return j->id > 0 && (id < 0 || id == j->id);
 }
 
 int ipp_job_active(const ipp_job_rec_t *j)

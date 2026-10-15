@@ -66,6 +66,7 @@
 #define IPP_STATUS_ERR_INTERNAL             0x0500
 #define IPP_STATUS_ERR_OP_NOT_SUPPORTED     0x0501
 #define IPP_STATUS_ERR_NOT_ACCEPTING_JOBS   0x0506
+#define IPP_STATUS_ERR_BUSY                 0x0507
 
 // printer-state (RFC 8011 5.4.11) and job-state (5.3.7) enums.
 #define IPP_PSTATE_IDLE       3

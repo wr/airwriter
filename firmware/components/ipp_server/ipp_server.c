@@ -57,6 +57,7 @@ static char s_hostname[40];
 
 static ipp_job_rec_t s_job;
 static int32_t s_next_job_id = 1;
+static int s_printer_waiters;       // requests blocked in acquire_printer
 static const char *s_stop_reason;   // NULL when the printer is fine
 static const char *s_stop_message;  // printer-state-message while stopped
 static SemaphoreHandle_t s_job_lock;     // guards s_job, s_next_job_id, s_stop_reason
@@ -199,13 +200,30 @@ static void reap_abandoned(void)
 // Waits for the printer, as long as a client will reasonably wait for an
 // answer. A second job waits here rather than interleaving its raster with the
 // first. Polls once a second so an abandoned Create-Job ahead of it is reaped.
+//
+// Only one request waits at a time; the rest are told server-error-busy at
+// once. Each waiter pins a worker, and while a paused job holds a third, the
+// phone's Get-Job-Attributes polls and Cancel-Job need the last one free.
 static int acquire_printer(void)
 {
-    for (int waited_s = 0; waited_s < 30; waited_s++) {
+    if (xSemaphoreTake(s_print_lock, 0) == pdTRUE) return 1;
+
+    xSemaphoreTake(s_job_lock, portMAX_DELAY);
+    int first = (s_printer_waiters == 0);
+    if (first) s_printer_waiters++;
+    xSemaphoreGive(s_job_lock);
+    if (!first) return 0;
+
+    int got = 0;
+    for (int waited_s = 0; waited_s < 30 && !got; waited_s++) {
         reap_abandoned();
-        if (xSemaphoreTake(s_print_lock, pdMS_TO_TICKS(1000)) == pdTRUE) return 1;
+        got = xSemaphoreTake(s_print_lock, pdMS_TO_TICKS(1000)) == pdTRUE;
     }
-    return 0;
+
+    xSemaphoreTake(s_job_lock, portMAX_DELAY);
+    s_printer_waiters--;
+    xSemaphoreGive(s_job_lock);
+    return got;
 }
 
 // Puts a new job in the slot. The caller holds s_print_lock.
@@ -286,9 +304,11 @@ static int op_print_job(work_t *w, int fd, const ipp_req_t *r, hbody_t *body,
         return send_status(w, fd, r, IPP_STATUS_ERR_FORMAT_NOT_SUPPORTED, keep_alive);
     }
 
+    // Busy, not not-accepting: printer-is-accepting-jobs stays true, and
+    // RFC 8011 has busy mean "try the same request again later".
     if (!acquire_printer()) {
         hbody_drain(body);
-        return send_status(w, fd, r, IPP_STATUS_ERR_NOT_ACCEPTING_JOBS, keep_alive);
+        return send_status(w, fd, r, IPP_STATUS_ERR_BUSY, keep_alive);
     }
     int32_t job_id = start_job(r, 0);
     return run_document(w, fd, r, body, pre, pre_len, job_id, keep_alive);
@@ -302,7 +322,7 @@ static int op_create_job(work_t *w, int fd, const ipp_req_t *r, int keep_alive)
     if (!format_supported(r->document_format))
         return send_status(w, fd, r, IPP_STATUS_ERR_FORMAT_NOT_SUPPORTED, keep_alive);
     if (!acquire_printer())
-        return send_status(w, fd, r, IPP_STATUS_ERR_NOT_ACCEPTING_JOBS, keep_alive);
+        return send_status(w, fd, r, IPP_STATUS_ERR_BUSY, keep_alive);
 
     int32_t job_id = start_job(r, 1);
     ESP_LOGI(TAG, "job %d created, waiting for its document", (int)job_id);

@@ -20,6 +20,13 @@ int main(void)
     uint8_t st;
     const char *why;
 
+    /* Before any job, the empty slot is not a job: nothing matches it, not
+     * even "the current job", and there is nothing to cancel. */
+    CHECK(!ipp_job_matches(&j, -1));
+    CHECK(!ipp_job_matches(&j, 0));
+    CHECK_EQ_INT(ipp_job_cancel(&j, -1), IPP_CANCEL_NOT_FOUND);
+    CHECK_EQ_INT(ipp_job_claim_doc(&j, 0), IPP_STATUS_ERR_NOT_FOUND);
+
     /* Create-Job: pending, waiting for its document, with a job-uri the phone
      * can poll from the first response. */
     ipp_job_start(&j, 5, 100, 1, "Safari", "wells", URI);
