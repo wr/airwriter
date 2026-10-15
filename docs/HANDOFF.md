@@ -1,8 +1,40 @@
 # AirWriter handoff
 
-Written 2026-08-04, last updated 2026-10-14.
+Written 2026-08-04, last updated 2026-10-15.
 
 ## Where the project stands
+
+**2026-10-15: a stalled job now shows on the Mac as a paused job — W-1040, branch
+`wells/w-1040-iphone-paused-alert` (stacked on W-1037 `a151fe9`, not merged).** Bench on
+board 1, Mac print, SELECT off mid-page: the Mac's print window raised the paper/SELECT
+alert; SELECT on finished the page. On the W-1037 baseline the same test showed nothing.
+
+- **What changed:** while the printer is stopped, a printing job reads `job-state`
+  processing-stopped with `job-state-reasons` printer-stopped (RFC 8011 5.3.7), and the
+  printer carries `media-empty-error` (explicit `-error`: a stopped printer must carry an
+  error reason) plus `printer-state-message` "Needs attention: check paper and SELECT".
+  The job slot is a pure core, `ipp_server/ipp_job.c`, host-tested in `tools/ipp`.
+  Keywords were checked against the IANA IPP registry.
+- **Print-Job only, by evidence.** Create-Job + Send-Document were built first, on the theory
+  that iOS needs a job-id before the upload. The theory was wrong: during a Print-Job upload
+  iOS and macOS find the job with Get-Jobs and poll Get-Job-Attributes. Worse, with
+  Create-Job advertised the iPhone held every job at "Waiting" and only re-polled
+  Get-Printer-Attributes. They are gone; SPEC 3.4 says why.
+- **IPP worker starvation fixed (it is what made nothing print mid-bench).** Three workers each
+  sat 30 s on an idle keep-alive connection; iOS/macOS bursts of 25–50 connections queued
+  behind them and the clients gave up before sending a job. Now 4 workers, backlog 8
+  (`CONFIG_LWIP_TCP_ACCEPTMBOX_SIZE=8`), `CONFIG_LWIP_MAX_SOCKETS=16`, and an idle connection
+  closes after 300 ms once no worker is free (it keeps 30 s while one is). A 30-connection
+  burst: 30 ok, max 3.5 s (was 20–60 s, some failing). **Set the two lwIP values in an
+  existing `sdkconfig` too** — `sdkconfig.defaults` only seeds a new one.
+- Also: one request waits for a busy printer (30 s), the rest get `server-error-busy`;
+  Cancel-Job of a finished job is `client-error-not-possible`; `job-uri` targets a job.
+- **Open, not chased (iPhone ruled out of scope by Wells):** after a build advertising
+  Create-Job had been up, the iPhone kept every job at "Waiting" (GPA-only) even on builds
+  without it and on a fresh UUID; a67119f (never advertised it) printed. Suspects: iOS's
+  per-`printer-uuid` capability cache, and stale mDNS TXT twins (ESP mdns seems not to set
+  cache-flush on TXT, so an old UUID lingers for the TTL). Details:
+  side-session notes `w1040-open-iphone-stall.md`. The iPhone SELECT-off test is untested.
 
 **2026-10-14: rev A is alive and has printed.** Board 1 arrived from PCBWay; the THT joints,
 J2/J4 holes and debris from the 10-05 photo review were checked and fixed before power. Over
