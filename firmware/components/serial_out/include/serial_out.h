@@ -54,6 +54,9 @@ esp_err_t serial_out_write(const uint8_t *buf, size_t n);
 
 // Waits for the last byte to leave the shift register. At 9600 baud the FIFO
 // can hold a second of data, so a job is not finished when the write returns.
+// ESP_ERR_TIMEOUT if the printer stays paused past timeout_ms, ESP_FAIL at
+// once if serial_out_set_abort is set; either way the tail is still queued
+// for serial_out_purge.
 esp_err_t serial_out_flush(uint32_t timeout_ms);
 
 // Discards whatever is still queued in the hardware TX FIFO. For the moment a

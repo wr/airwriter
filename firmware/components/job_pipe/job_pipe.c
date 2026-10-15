@@ -5,28 +5,33 @@
 #include "urf_decode.h"
 
 #include <string.h>
+#include "esp_heap_caps.h"
 #include "esp_log.h"
 #include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/stream_buffer.h"
-#include "freertos/semphr.h"
 
 static const char *TAG = "job";
 
-// Big enough that a normal WiFi burst does not stall on every packet, small
-// enough that it is not a page buffer in disguise. A Letter page decodes to
-// 1.9MB; nothing here ever holds more than this.
+// The whole job, in PSRAM: an iPhone Letter page is ~140KB of URF, so this
+// holds several. job_pipe.h has why the upload should not wait on the paper.
+#define RING_PSRAM_BYTES (1024 * 1024)
+// The fallback with no PSRAM: big enough that a normal WiFi burst does not
+// stall on every packet, small enough not to matter in internal RAM.
 #define RING_BYTES   8192
-#define PIPE_STACK   6144
-// A paused job (paper out, SELECT) backs the upload up behind the printer, so
-// the push waits as long as the serial writer will, plus a margin.
+// The rip, then job_finished's flush and logging on top of it since W-1042:
+// a canceled iOS page left 944 bytes spare at 6144 on the bench.
+#define PIPE_STACK   7168
+// A paused job (paper out, SELECT) bigger than the ring backs the upload up
+// behind the printer, so the push waits as long as the serial writer will,
+// plus a margin.
 #define PUSH_SECONDS (CONFIG_AIRWRITER_STALL_ABORT + 30)
 #define PUSH_TIMEOUT pdMS_TO_TICKS(PUSH_SECONDS * 1000)
 
 static job_pipe_cfg_t   s_cfg;
 static StreamBufferHandle_t s_ring;
-static SemaphoreHandle_t s_done;
+static StaticStreamBuffer_t s_ring_ctl;
 static TaskHandle_t      s_task;
 
 static volatile int s_eof;        // producer has no more bytes
@@ -96,24 +101,47 @@ static void pipe_task(void *arg)
     }
 
     s_st.ms = (uint32_t)((esp_timer_get_time() - t0) / 1000);
-    xSemaphoreGive(s_done);
+    job_pipe_stats_t st = s_st;
+
+    // Free for the next job before reporting: `done` is where the caller gives
+    // the printer back, and the next job_pipe_begin may come the moment it
+    // does. Nothing below touches the shared state.
     s_task = NULL;
+    if (s_cfg.done) s_cfg.done(s_cfg.done_ctx, &st);
+    // `done` runs here too now, so watch the margin.
+    ESP_LOGI(TAG, "rip task: %u bytes of stack to spare",
+             (unsigned)uxTaskGetStackHighWaterMark(NULL));
     vTaskDelete(NULL);
 }
 
 esp_err_t job_pipe_init(const job_pipe_cfg_t *cfg)
 {
-    s_cfg  = *cfg;
+    s_cfg = *cfg;
+
+    // Static, because the storage has to come from PSRAM explicitly: a plain
+    // xStreamBufferCreate would put a 1MB ring in internal RAM, or fail.
+    uint8_t *store = heap_caps_malloc(RING_PSRAM_BYTES, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    if (store) s_ring = xStreamBufferCreateStatic(RING_PSRAM_BYTES, 1, store, &s_ring_ctl);
+    if (s_ring) {
+        ESP_LOGI(TAG, "job buffer %u KB in PSRAM", RING_PSRAM_BYTES / 1024);
+        return ESP_OK;
+    }
+
+    heap_caps_free(store);
     s_ring = xStreamBufferCreate(RING_BYTES, 1);
-    s_done = xSemaphoreCreateBinary();
-    return (s_ring && s_done) ? ESP_OK : ESP_ERR_NO_MEM;
+    ESP_LOGW(TAG, "no PSRAM for the job buffer; streaming through %u bytes", RING_BYTES);
+    return s_ring ? ESP_OK : ESP_ERR_NO_MEM;
 }
 
 esp_err_t job_pipe_begin(const char *job_name)
 {
     if (s_task) return ESP_ERR_INVALID_STATE;
 
-    xStreamBufferReset(s_ring);
+    // The last job's task drained the ring before it finished, so this is
+    // belt and braces. Not xStreamBufferReset: with assertions on it memsets
+    // the whole 1MB inside a critical section, interrupts off.
+    uint8_t junk[64];
+    while (xStreamBufferReceive(s_ring, junk, sizeof junk, 0) > 0) {}
     memset(&s_st, 0, sizeof s_st);
     s_eof = s_aborted = 0;
     strncpy(s_name, job_name && job_name[0] ? job_name : "Untitled", sizeof s_name - 1);
@@ -151,19 +179,8 @@ void job_pipe_abort(void)
     s_aborted = 1;
 }
 
-void job_pipe_end(int ok, job_pipe_stats_t *st)
+void job_pipe_end(int ok)
 {
     if (!ok) s_aborted = 1;
     s_eof = 1;
-
-    // A Letter page is 119 seconds of transmission at 9600 baud, and the
-    // pipeline blocks on the UART the whole time. Waiting 30s here would
-    // abandon every real job a third of the way through.
-    for (int waited = 0; !xSemaphoreTake(s_done, pdMS_TO_TICKS(15000)); waited += 15) {
-        if (waited >= CONFIG_AIRWRITER_STALL_ABORT + 600) { ESP_LOGE(TAG, "pipeline stuck past the stall limit"); break; }
-        ESP_LOGI(TAG, "still printing: %us elapsed, %u bytes out",
-                 (unsigned)waited + 15, (unsigned)s_st.printer_bytes);
-    }
-
-    if (st) *st = s_st;
 }

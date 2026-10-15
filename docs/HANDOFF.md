@@ -4,7 +4,7 @@ Written 2026-08-04, last updated 2026-10-15.
 
 ## Where the project stands
 
-**2026-10-15: status language v2 (W-1037) benched on board 1; four branches wait to merge.**
+**2026-10-15: status language v2 (W-1037) benched on board 1; W-1037, W-1041, W-1040 and W-1042 merged to main the same day, in that order.**
 `wells/w-1037-status-language` (e2125a0) carries the spec
 `docs/superpowers/specs/2026-10-14-status-language-design.md`, as follows.
 
@@ -71,6 +71,44 @@ Merge order: W-1037, W-1041, W-1040, W-1042. W-1042 already sits on
 - **Open, cosmetic:** the Mac's CUPS shows "printer is offline" a few seconds into an
   out-of-paper pause. Board 1's queue is named "ImageWriter" in NVS, from the stale-twin
   workaround; the Kconfig default is still "ImageWriter II".
+
+**2026-10-15: a whole job goes into PSRAM, and the client is answered when the upload
+ends — W-1042, branch `wells/w-1042-psram-job-buffer` (on `wells/bench-integration`
+1e5598b, not merged).** Benched on board 1 (3854517 = this branch + the W-1037 strongest-AP
+fix): a normal page replied in 0.14 s and printed crc `8ee84844`; three pages in one job,
+crc `e16a25f3`; a Print-Job on a deselected printer replied in 0.16 s with
+processing-stopped / printer-stopped, Cancel-Job ended it canceled and SELECT on printed
+nothing; an upload cut mid-document (ipptool killed while starved by a FIFO) aborted
+within 3 s; the Mac print passed. Not run: the iPhone deselected-print-and-cancel check
+(the iPhone is out of scope per W-1040's notes); Cancel-Job was exercised from ipptool.
+
+- **What changed:** `job_pipe`'s ring is 1 MB of PSRAM (`heap_caps_malloc` +
+  `xStreamBufferCreateStatic`; 8 KB internal if that fails, as on the C6). Print-Job replies
+  as soon as the body is in, with the job `processing`; the rip and serial output finish on
+  the pipeline task, whose `done` callback (`job_finished` in main.c) ends the job
+  everywhere — panel, `s_job_lock`, W-1041's `iw_link_job_end`, and `ipp_server_job_done()`,
+  which moves the IPP job to completed / aborted / canceled (`ipp_job_done`, exactly once,
+  host-tested) and only then frees `s_print_lock`. `serial_out_flush` honours the abort, so
+  Cancel-Job also stops a job whose last FIFO is stuck behind a paused printer; a failed or
+  canceled job purges the FIFO.
+- **Why:** with an 8 KB ring a paused printer stalled the upload behind a zero window, so a
+  dropped upload looked exactly like a healthy paused one until paper came back (the
+  client's FIN sits behind its unsent data; no socket peek can see it). Now the socket is
+  read to the end and a hang-up mid-document is `hbody_read` -1 → `doc_end(0)` →
+  `serial_out_set_abort(1)`. Documents over 1 MB still stream with TCP backpressure, and for
+  those the old blind spot remains.
+- **Trap: `s_print_lock` must be binary.** The Print-Job worker takes it and the rip task
+  gives it back; as a mutex that tripped `xTaskPriorityDisinherit` and panicked the board
+  after every job (same class as W-1033).
+- **Trap: a slow upload is usually the link, not the firmware.** On the first bench run the
+  board had joined a far mesh node at rssi -80: an upload crawled at 270 B/s and a cut was
+  seen 16 s late (the FIN queued behind 131 KB at ~6.7 KB/s). `run_document` now logs each
+  upload's time, its longest wait for data and longest push into the sink, and `doc_begin`
+  logs the RSSI; at -56 the cut was seen in 3 s with pushes of 0 ms. Killing `ipptool` after
+  a small upload no longer cuts anything — the upload is already in; starve it through a
+  FIFO to cut it mid-document (`side-session-notes/…/w1042-bench/bench.sh cut`).
+- **Rip task stack** is 7168 (was 6144): `job_finished` runs on it now. A canceled iOS page
+  left 944 bytes spare at 6144; 1924 at 7168 on the bench.
 
 **2026-10-15: a stalled job now shows on the Mac as a paused job — W-1040, branch
 `wells/w-1040-iphone-paused-alert` (stacked on W-1037 `a151fe9`, not merged).** Bench on

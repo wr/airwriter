@@ -35,7 +35,8 @@ static const char *TAG = "ipp";
 // iOS polls Get-Job-Attributes on a second connection while the document is
 // still streaming on the first. One worker would make those polls queue behind
 // the transfer, and the phone would call the printer unresponsive. A paused
-// job holds its worker for minutes, so there are three beyond that.
+// job bigger than the job buffer holds its worker for minutes, so there are
+// three beyond that.
 #define WORKERS       4
 #define WORKER_STACK  5120
 
@@ -82,7 +83,13 @@ static int s_printer_waiters;       // requests blocked in acquire_printer
 static const char *s_stop_reason;   // NULL when the printer is fine
 static const char *s_stop_message;  // printer-state-message while stopped
 static SemaphoreHandle_t s_job_lock;     // guards s_job, s_next_job_id, s_stop_reason
-static SemaphoreHandle_t s_print_lock;   // one document in the sink at a time
+// Held by the printing job, from Print-Job until its document has printed --
+// well after the reply, which goes back when the upload ends (W-1042).
+// Binary, not a mutex: the Print-Job worker takes it and the sink's pipeline
+// task gives it back, and a mutex given by a task that does not hold it trips
+// FreeRTOS's xTaskPriorityDisinherit assert -- a panic after every job on the
+// W-1042 bench, the same trap as main.c's job lock in W-1033.
+static SemaphoreHandle_t s_print_lock;
 
 static uint32_t uptime_s(void)
 {
@@ -204,8 +211,9 @@ static int send_job(work_t *w, int fd, const ipp_req_t *r, const ipp_job_rec_t *
 // first.
 //
 // Only one request waits at a time; the rest are told server-error-busy at
-// once. Each waiter pins a worker, and a paused job holds another for
-// minutes; the phone's Get-Job-Attributes polls and Cancel-Job need the rest.
+// once. Each waiter pins a worker, and a paused job bigger than the job
+// buffer holds another for minutes; the phone's Get-Job-Attributes polls and
+// Cancel-Job need the rest.
 static int acquire_printer(void)
 {
     if (xSemaphoreTake(s_print_lock, 0) == pdTRUE) return 1;
@@ -243,16 +251,38 @@ static int format_supported(const char *fmt)
         || strcmp(fmt, "application/octet-stream") == 0;
 }
 
-// Streams the document into the sink, finishes the job and frees the printer,
-// then answers with the job's final attributes. The caller holds s_print_lock
-// and the job is processing.
+// Streams the document into the sink and answers as soon as the whole body is
+// in, with the job processing: the sink prints it from its buffer in the
+// background, and ipp_server_job_done finishes the job and frees the printer
+// when the paper stops. The caller holds s_print_lock and the job is
+// processing.
 static int run_document(work_t *w, int fd, const ipp_req_t *r, hbody_t *body,
                         const uint8_t *pre, size_t pre_len, int32_t job_id,
                         int keep_alive)
 {
+    xSemaphoreTake(s_job_lock, portMAX_DELAY);
+    ipp_job_rec_t kept = s_job;
+    xSemaphoreGive(s_job_lock);
+
     int ok = 1;
-    if (s_sink.begin && s_sink.begin(s_sink.ctx, r->document_format, s_job.name) != ESP_OK)
+    if (s_sink.begin && s_sink.begin(s_sink.ctx, r->document_format, kept.name) != ESP_OK)
         ok = 0;
+
+    // begin() can wait out a test page, and a Cancel-Job in that time reached
+    // a sink with nothing started, which begin() then cleared. Pass it on
+    // again now that there is a job to stop.
+    if (ok) {
+        xSemaphoreTake(s_job_lock, portMAX_DELAY);
+        if (s_job.canceled && s_sink.cancel) s_sink.cancel(s_sink.ctx);
+        xSemaphoreGive(s_job_lock);
+    }
+
+    // Where the upload's time goes: waiting on the network, or on the sink.
+    // With the job buffered the sink should never hold the socket up, so a
+    // slow upload with short pushes is the Wi-Fi link (W-1042 bench).
+    int64_t t0 = esp_timer_get_time();
+    int64_t wait_max = 0, push_max = 0;
+    size_t wait_at = 0;
 
     size_t total = 0;
     if (ok) {
@@ -263,33 +293,49 @@ static int run_document(work_t *w, int fd, const ipp_req_t *r, hbody_t *body,
         total += pre_len;
 
         while (ok) {
+            int64_t a = esp_timer_get_time();
             int n = hbody_read(body, w->chunk, CHUNK);
+            int64_t b = esp_timer_get_time();
+            if (b - a > wait_max) { wait_max = b - a; wait_at = total; }
+            if (b - a > 2000000)
+                ESP_LOGW(TAG, "job %d: no data for %u ms at byte %u", (int)job_id,
+                         (unsigned)((b - a) / 1000), (unsigned)total);
             if (n == 0) break;
             if (n < 0) {
+                // The client hung up mid-document. With the job buffered the
+                // socket is read to the end, so this is seen at once rather
+                // than when the printer next takes a byte.
                 ESP_LOGW(TAG, "job %d: body truncated", (int)job_id);
                 ok = 0;
                 break;
             }
             if (s_sink.data && s_sink.data(s_sink.ctx, w->chunk, (size_t)n) != ESP_OK)
                 ok = 0;
+            int64_t c = esp_timer_get_time();
+            if (c - b > push_max) push_max = c - b;
             total += (size_t)n;
         }
     }
-    if (s_sink.end) s_sink.end(s_sink.ctx, ok);
 
+    ESP_LOGI(TAG, "job %d: %u document bytes in %u ms, %s; longest wait for data "
+             "%u ms at byte %u, longest push %u ms",
+             (int)job_id, (unsigned)total, (unsigned)((esp_timer_get_time() - t0) / 1000),
+             ok ? "received" : "failed", (unsigned)(wait_max / 1000), (unsigned)wait_at,
+             (unsigned)(push_max / 1000));
+    if (s_sink.end) s_sink.end(s_sink.ctx, ok);
+    else ipp_server_job_done(ok);
+
+    // Respond only now, with the whole body in. A client that sees the
+    // response while it is still sending treats the connection as finished,
+    // and the rest is lost. The job may already be over -- a sink that could
+    // not take it -- and its printer handed to the next job, in which case
+    // the slot holds that one and the copy kept here is finished instead.
     xSemaphoreTake(s_job_lock, portMAX_DELAY);
-    ipp_job_finish(&s_job, ok);
-    ipp_job_rec_t snapshot = s_job;
+    if (s_job.id == job_id) kept = s_job;
+    else ipp_job_finish(&kept, 0);
     int stopped = s_stop_reason != NULL;
     xSemaphoreGive(s_job_lock);
-    xSemaphoreGive(s_print_lock);
-
-    ESP_LOGI(TAG, "job %d: %u document bytes, %s",
-             (int)job_id, (unsigned)total, ok ? "complete" : "failed");
-
-    // Respond only now. A client that sees the response while it is still
-    // sending treats the connection as finished, and the rest is lost.
-    return send_job(w, fd, r, &snapshot, stopped, keep_alive);
+    return send_job(w, fd, r, &kept, stopped, keep_alive);
 }
 
 static int op_print_job(work_t *w, int fd, const ipp_req_t *r, hbody_t *body,
@@ -372,6 +418,10 @@ static int dispatch(work_t *w, int fd, const ipp_req_t *r, hbody_t *body,
         xSemaphoreTake(s_job_lock, portMAX_DELAY);
         ipp_cancel_t c = ipp_job_cancel(&s_job, r->job_id);
         int32_t id = s_job.id;
+        // Stop the paper, not just the bookkeeping. Under the lock, so the job
+        // cannot finish in between and hand the printer to the next one, which
+        // the cancel would then land on.
+        if (c == IPP_CANCEL_STOP_PRINT && s_sink.cancel) s_sink.cancel(s_sink.ctx);
         xSemaphoreGive(s_job_lock);
 
         if (c == IPP_CANCEL_NOT_FOUND)
@@ -379,9 +429,6 @@ static int dispatch(work_t *w, int fd, const ipp_req_t *r, hbody_t *body,
         if (c == IPP_CANCEL_NOT_POSSIBLE)
             return send_status(w, fd, r, IPP_STATUS_ERR_NOT_POSSIBLE, keep_alive);
         ESP_LOGI(TAG, "job %d canceled", (int)id);
-        // Stop the paper, not just the bookkeeping. Called outside the lock:
-        // the pipeline takes it too as it unwinds.
-        if (c == IPP_CANCEL_STOP_PRINT && s_sink.cancel) s_sink.cancel(s_sink.ctx);
         return send_status(w, fd, r, IPP_STATUS_OK, keep_alive);
     }
 
@@ -620,8 +667,9 @@ esp_err_t ipp_server_start(const ipp_server_cfg_t *cfg)
     make_uuid(cfg->dev_mode);
 
     s_job_lock   = xSemaphoreCreateMutex();
-    s_print_lock = xSemaphoreCreateMutex();
+    s_print_lock = xSemaphoreCreateBinary();
     if (!s_job_lock || !s_print_lock) return ESP_ERR_NO_MEM;
+    xSemaphoreGive(s_print_lock);         // a binary semaphore starts taken
     s_job.state = IPP_JSTATE_COMPLETED;   // no job yet; nothing is pending
 
     esp_err_t err = start_mdns();
@@ -643,6 +691,24 @@ void ipp_server_stop(void)
 }
 
 const char *ipp_server_uri(void) { return s_uri; }
+
+void ipp_server_job_done(int ok)
+{
+    uint8_t state;
+    const char *reason;
+    xSemaphoreTake(s_job_lock, portMAX_DELAY);
+    int ended = ipp_job_done(&s_job, ok);
+    int32_t id = s_job.id;
+    ipp_job_view(&s_job, 0, &state, &reason);
+    xSemaphoreGive(s_job_lock);
+
+    if (!ended) {
+        ESP_LOGE(TAG, "job done reported with no job printing");
+        return;
+    }
+    ESP_LOGI(TAG, "job %d: %s", (int)id, reason);
+    xSemaphoreGive(s_print_lock);
+}
 
 void ipp_server_set_stopped(const char *reason_or_null, const char *message)
 {

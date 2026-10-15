@@ -192,7 +192,14 @@ void serial_out_purge(void)
 
 esp_err_t serial_out_flush(uint32_t timeout_ms)
 {
-    return uart_wait_tx_done(s_cfg.uart_num, pdMS_TO_TICKS(timeout_ms));
+    // In WATCH_PERIOD slices, so a cancel ends the wait: a job whose last
+    // FIFO is stuck behind a paused printer has ripped everything already,
+    // and nothing else would be checking.
+    for (uint32_t waited = 0; ; waited += 100) {
+        if (uart_wait_tx_done(s_cfg.uart_num, WATCH_PERIOD) == ESP_OK) return ESP_OK;
+        if (s_abort) return ESP_FAIL;
+        if (waited >= timeout_ms) return ESP_ERR_TIMEOUT;
+    }
 }
 
 int serial_out_clear(void)

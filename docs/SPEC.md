@@ -225,7 +225,16 @@ Minimum viable set for iOS:
 - `Get-Printer-Attributes` (0x000B) — must respond in under two seconds or the print sheet
   gives up
 - `Validate-Job` (0x0004)
-- `Print-Job` (0x0002) — body arrives chunked; decode as it streams, do not buffer the page
+- `Print-Job` (0x0002) — body arrives chunked. The whole document goes into a ~1 MB PSRAM
+  buffer as fast as Wi-Fi delivers it (an iPhone Letter page is ~140 KB of URF; decoded it
+  would be 1.9 MB, which is why the buffer holds URF, not pixels), and the rip decodes from
+  there at the printer's pace. The response goes back as soon as the upload is complete,
+  with the job `processing`; the job ends `completed`, `aborted` or `canceled` when the
+  paper stops, and holds the printer until then (W-1042). Reading the socket to the end is
+  also what makes a dropped upload visible at once: without the buffer a paused printer
+  stalls the upload behind a zero window, and the client's FIN waits behind its unsent
+  data until paper returns. A document bigger than the buffer, or a board with no PSRAM
+  (8 KB internal ring), falls back to streaming with TCP backpressure.
 - `Get-Job-Attributes` (0x0009) — iOS polls this for progress
 - `Get-Jobs` (0x000A)
 - `Cancel-Job` (0x0008)
@@ -237,7 +246,8 @@ connection.
 job-id before the upload. With them in `operations-supported` the iPhone held every job at
 "Waiting" and never submitted it, re-polling Get-Printer-Attributes. They are not needed: while
 a Print-Job body is still uploading, iOS and macOS find the job with Get-Jobs and poll
-Get-Job-Attributes, so they see a paused job anyway (3.9).
+Get-Job-Attributes, so they see a paused job anyway (3.9); with the job buffered they have
+its job-id from the early reply as well.
 
 ### 3.5 Printer attributes worth getting right
 
@@ -322,8 +332,9 @@ seconds, make it configurable), set `printer-state` to `stopped` and `printer-st
 to `media-empty-error` (the `-error` suffix of RFC 8011 5.4.12; a stopped printer must carry an
 error reason), with a `printer-state-message`. The printing job then reads `job-state`
 `processing-stopped` with `job-state-reasons` `printer-stopped` (RFC 8011 5.3.7), which iOS
-and macOS poll for with Get-Jobs and Get-Job-Attributes while the Print-Job upload is still
-running. That surfaces as a real alert on the phone. A 1985 dot matrix telling an
+and macOS poll for with Get-Jobs and Get-Job-Attributes, during the Print-Job upload and,
+with the job buffered, after the early reply while it prints (3.4). That surfaces as a
+real alert on the phone. A 1985 dot matrix telling an
 iPhone it's out of paper is the demo shot for the video.
 
 ### 3.10 Host-side test harness
