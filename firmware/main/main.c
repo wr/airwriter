@@ -526,6 +526,12 @@ static esp_err_t wifi_start(void)
     // associated and never sees the broadcast DHCP offer.
     wc.sta.sae_pwe_h2e = WPA3_SAE_PWE_BOTH;
     wc.sta.pmf_cfg.capable = true;
+    // The default fast scan joins the first access point that answers, and
+    // channels are scanned in order. With a mesh, that is often a far node on
+    // channel 1: rev A on the bench joined one at -80 to -87 dBm with a node at
+    // -46 on channel 11 in the same room, and uploads crawled at 6 KB/s.
+    wc.sta.scan_method = WIFI_ALL_CHANNEL_SCAN;
+    wc.sta.sort_method = WIFI_CONNECT_AP_BY_SIGNAL;
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wc));
     ESP_ERROR_CHECK(esp_wifi_start());
