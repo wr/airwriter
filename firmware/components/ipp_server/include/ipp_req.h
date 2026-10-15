@@ -10,6 +10,7 @@
 #pragma once
 #include <stdint.h>
 #include <stddef.h>
+#include "ipp_attrs.h"
 
 #define IPP_REQ_OK     0
 #define IPP_REQ_SHORT -1   // ran off the end; read more and call again
@@ -33,6 +34,10 @@ typedef struct {
     char document_format[IPP_FMT_MAX];
 
     int32_t job_id;          // -1 when absent; also read from job-uri
+
+    // requested-attributes, pointing into the parsed buffer: valid as long
+    // as that buffer is. n == 0 when absent.
+    ipp_names_t requested;
     int     truncated;       // a value was longer than its field
 
     // Offset of the first document byte, i.e. one past the end-of-attributes

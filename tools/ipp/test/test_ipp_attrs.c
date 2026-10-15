@@ -29,7 +29,7 @@ int main(void)
     ipp_enc_init(&e, buf, sizeof buf);
     ipp_resp_begin(&e, IPP_VERSION_1_1, IPP_STATUS_OK, 1);
     ipp_write_op_attrs(&e);
-    ipp_write_printer_attrs(&e, &p);
+    ipp_write_printer_attrs(&e, &p, NULL);
     ipp_end(&e);
     CHECK(ipp_enc_ok(&e));
 
@@ -143,7 +143,7 @@ int main(void)
     ipp_enc_init(&e, buf, sizeof buf);
     ipp_resp_begin(&e, IPP_VERSION_1_1, IPP_STATUS_OK, 1);
     ipp_write_op_attrs(&e);
-    ipp_write_printer_attrs(&e, &p);
+    ipp_write_printer_attrs(&e, &p, NULL);
     ipp_end(&e);
     CHECK(ipp_enc_ok(&e));
     n = ipp_enc_len(&e);

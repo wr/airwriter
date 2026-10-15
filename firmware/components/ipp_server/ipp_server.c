@@ -329,7 +329,7 @@ static int dispatch(work_t *w, int fd, const ipp_req_t *r, hbody_t *body,
         xSemaphoreGive(s_job_lock);
         ipp_resp_begin(&e, resp_version(r), IPP_STATUS_OK, r->request_id);
         ipp_write_op_attrs(&e);
-        ipp_write_printer_attrs(&e, &p);
+        ipp_write_printer_attrs(&e, &p, &r->requested);
         ipp_end(&e);
         return send_ipp(fd, &e, keep_alive);
     }

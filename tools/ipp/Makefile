@@ -25,6 +25,11 @@ build:
 build/%: test/%.c $(SRCS) | build
 	$(CC) $(CFLAGS) $(INCS) -Itest -o $@ $^
 
+# Not part of `test`: a host stand-in for ipptool's conformance suites (see
+# the comment at the top of gpa_server.c).
+build/gpa_server: gpa_server.c $(SRCS) | build
+	$(CC) $(CFLAGS) -D_GNU_SOURCE $(INCS) -o $@ $^
+
 test: $(TESTBIN)
 	@fail=0; for t in $(TESTBIN); do ./$$t || fail=1; done; exit $$fail
 

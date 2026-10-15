@@ -71,6 +71,7 @@ int ipp_req_parse(ipp_req_t *r, const uint8_t *buf, size_t len)
 
     uint8_t group = 0;
     int have_job_id = 0;   // an explicit job-id outranks a job-uri
+    int in_requested = 0;  // the values being walked extend requested-attributes
     for (;;) {
         if (!need(&c, 1)) return IPP_REQ_SHORT;
         uint8_t tag = c.p[c.pos++];
@@ -82,6 +83,7 @@ int ipp_req_parse(ipp_req_t *r, const uint8_t *buf, size_t len)
             continue;
         }
 
+        size_t attr_at = c.pos - 1;   // this attribute's value tag
         if (!need(&c, 2)) return IPP_REQ_SHORT;
         size_t nlen = rd_u16(&c);
         if (!need(&c, nlen)) return IPP_REQ_SHORT;
@@ -96,14 +98,27 @@ int ipp_req_parse(ipp_req_t *r, const uint8_t *buf, size_t len)
 
         // nlen 0 is an additional value for the previous attribute. Every
         // field below is single-valued, so the first value wins and the rest
-        // are skipped -- which the length walk above has already done.
-        if (nlen == 0) continue;
+        // are skipped -- which the length walk above has already done --
+        // except requested-attributes, which is a list.
+        if (nlen == 0) {
+            if (in_requested) {
+                r->requested.len = c.pos - (size_t)(r->requested.p - buf);
+                r->requested.n++;
+            }
+            continue;
+        }
+        in_requested = 0;
 
         // Job attributes may legally repeat operation-attribute names with
         // different meaning, so only read from the operation group.
         if (group != IPP_TAG_OPERATION) continue;
 
-        if (name_is(name, nlen, "printer-uri"))
+        if (name_is(name, nlen, "requested-attributes") && !r->requested.n) {
+            r->requested.p   = buf + attr_at;
+            r->requested.len = c.pos - attr_at;
+            r->requested.n   = 1;
+            in_requested     = 1;
+        } else if (name_is(name, nlen, "printer-uri"))
             store(r, r->printer_uri, sizeof r->printer_uri, val, vlen);
         else if (name_is(name, nlen, "job-name"))
             store(r, r->job_name, sizeof r->job_name, val, vlen);
