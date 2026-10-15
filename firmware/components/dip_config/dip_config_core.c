@@ -12,7 +12,8 @@ void dip_decode(uint8_t on, dip_config_t *out)
     out->dev_mode     = (uint8_t)((on >> 2) & 1);
     out->test_on_boot = (uint8_t)((on >> 3) & 1);
     out->dither_ovr   = (uint8_t)((on >> 4) & 0x03);
-    out->spare        = (uint8_t)((on >> 6) & 0x03);
+    out->gamer        = (uint8_t)((on >> 6) & 1);
+    out->spare        = (uint8_t)((on >> 7) & 1);
 }
 
 int dip_stable(dip_deb_t *d, uint8_t sample, uint8_t *out)
@@ -24,4 +25,12 @@ int dip_stable(dip_deb_t *d, uint8_t sample, uint8_t *out)
         return 1;
     }
     return 0;
+}
+
+uint8_t dip_physical(uint8_t net_bits)
+{
+    uint8_t out = 0;
+    for (int i = 0; i < 8; i++)
+        if (net_bits & (1u << i)) out = (uint8_t)(out | (1u << (7 - i)));
+    return out;
 }

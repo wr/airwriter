@@ -13,23 +13,33 @@
 
 static led_strip_handle_t s_strip;
 static int s_count;
+static volatile uint8_t s_gamer;   // DIP7, set from dip_config's task
 
 static void lg_task(void *arg)
 {
     (void)arg;
+    // Rendered at 8.8 fixed point and temporally dithered down to 8 bits, at
+    // a steady 100 fps: at a few counts of drive an 8-bit breathe has only a
+    // handful of levels and visibly stutters; the dither carries each
+    // channel's fraction into the next frame, and at 100 fps it blends.
+    static uint16_t hi[LG_NUM_LEDS][3];
+    static lg_dither_t dith;
     uint8_t frame[LG_NUM_LEDS][3];
+    TickType_t last = xTaskGetTickCount();
     for (;;) {
-        // Reads printer_state directly each tick rather than being pushed a
+        // Reads printer_state directly each frame rather than being pushed a
         // state, so two racing posters can never deliver an update to this
-        // task out of order -- the next 30ms tick just re-reads whatever is
+        // task out of order -- the next frame just re-reads whatever is
         // current.
-        lg_render(printer_state_get(),
-                  (uint32_t)(esp_timer_get_time() / 1000), frame);
+        ps_view_t v = printer_state_view();
+        lg_opts_t o = { .gamer = s_gamer };
+        lg_render16(&v, &o, (uint32_t)(esp_timer_get_time() / 1000), hi);
+        lg_dither(&dith, hi, frame);
         for (int i = 0; i < s_count && i < LG_NUM_LEDS; i++)
             led_strip_set_pixel(s_strip, (uint32_t)i,
                                  frame[i][0], frame[i][1], frame[i][2]);
         led_strip_refresh(s_strip);
-        vTaskDelay(pdMS_TO_TICKS(30));
+        xTaskDelayUntil(&last, pdMS_TO_TICKS(10));
     }
 }
 
@@ -50,4 +60,9 @@ esp_err_t led_grid_start(void)
     led_strip_clear(s_strip);
     return xTaskCreate(lg_task, "led_grid", 3072, NULL, 3, NULL) == pdPASS
                ? ESP_OK : ESP_ERR_NO_MEM;
+}
+
+void led_grid_set_gamer(int on)
+{
+    s_gamer = on ? 1 : 0;
 }

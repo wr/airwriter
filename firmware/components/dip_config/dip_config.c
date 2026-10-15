@@ -41,6 +41,7 @@ static void dip_task(void *arg)
             if (s_dip_pin[i] >= 0 && gpio_get_level(s_dip_pin[i]) == 0)
                 on_bits = (uint8_t)(on_bits | (1u << i));
 
+        on_bits = dip_physical(on_bits);   // net order -> the switches' printed labels
         if (dip_stable(&dip_deb, on_bits, &dip_out) && s_on_change) {
             dip_config_t cfg;
             dip_decode(dip_out, &cfg);

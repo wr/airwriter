@@ -28,6 +28,7 @@
 #include "ipp_server.h"
 #include "job_pipe.h"
 #include "led_grid.h"
+#include "led_grid_core.h"
 #include "printer_state.h"
 #include "serial_out.h"
 #include "settings.h"
@@ -75,6 +76,19 @@ static int s_retries;
 static settings_t s_set;
 static char s_ip[16] = "0.0.0.0";
 static int  s_ap_mode;
+
+// Reconnect after a drop. Once the board has had the network it never falls
+// back to setup mode on its own -- a router reboot is no reason to make the
+// user re-provision -- it keeps trying, backing off 1, 2, 4 ... 30 s.
+static int s_wifi_was_up;
+static uint32_t s_backoff_ms = 1000;
+static esp_timer_handle_t s_reconnect;
+
+static void reconnect_cb(void *arg)
+{
+    (void)arg;
+    esp_wifi_connect();
+}
 
 // Last job, for the status page.
 static char   s_last_job[64];
@@ -159,14 +173,18 @@ static uint32_t s_stream_crc;
 // doc_end() reads it for the post-mortem.
 static int s_printer_failed;
 
+// Set by doc_cancel: the job ended because the person cancelled it, which the
+// panel shows as done, not as a red failure.
+static volatile int s_job_cancelled;
+
 // Set by doc_begin to record whether job_pipe_begin actually started the
 // pipeline task. doc_end reads it to decide whether job_pipe_end is safe to
 // call.
 static int s_job_pipe_ok;
 
 // The printer stream: checksummed so the device can be compared with tools/rip
-// byte for byte, then put on the wire. A write failure means the watchdog
-// called the printer gone; abort the job so the rip task winds down instead
+// byte for byte, then put on the wire. A write failure means the printer
+// stayed paused past STALL_ABORT; abort the job so the rip task winds down instead
 // of pushing the rest of the page at a dead line.
 static void printer_out(void *ctx, const uint8_t *buf, size_t n)
 {
@@ -182,14 +200,12 @@ static void printer_out(void *ctx, const uint8_t *buf, size_t n)
     }
 }
 
-// HSKo has been low too long. SPEC.md 3.9: that becomes a real alert on the
-// phone rather than a job that quietly never finishes.
-static void printer_state_changed(void *ctx, serial_out_state_t st)
+// HSKo edges from serial_out. printer_state turns a low line into "printer
+// offline" (idle) or "needs attention" (mid-job) on its own clock.
+static void printer_line_changed(void *ctx, int ready)
 {
     (void)ctx;
-    ipp_server_set_stopped(st == SERIAL_OUT_BLOCKED ? "media-empty" : NULL);
-    printer_state_post_ev(st == SERIAL_OUT_BLOCKED ? PS_EV_PRINTER_BLOCKED
-                                                    : PS_EV_PRINTER_CLEARED);
+    printer_state_post(ready ? PS_EV_LINE_READY : PS_EV_LINE_NOT_READY);
 }
 
 static esp_err_t doc_begin(void *ctx, const char *format, const char *name)
@@ -206,8 +222,10 @@ static esp_err_t doc_begin(void *ctx, const char *format, const char *name)
     s_last_job[sizeof s_last_job - 1] = '\0';
     s_stream_crc = 0;
     s_printer_failed = 0;
+    s_job_cancelled = 0;
+    serial_out_set_abort(0);
     s_printing = 1;
-    printer_state_post_ev(PS_EV_JOB_START);
+    printer_state_post(PS_EV_JOB_START);
     serial_out_loopback_reset();
     esp_err_t err = job_pipe_begin(name);
     s_job_pipe_ok = (err == ESP_OK);
@@ -223,6 +241,8 @@ static esp_err_t doc_data(void *ctx, const uint8_t *buf, size_t n)
 static void doc_cancel(void *ctx)
 {
     (void)ctx;
+    s_job_cancelled = 1;
+    serial_out_set_abort(1);    // a paused printer must not hold the job hostage
     job_pipe_abort();
 }
 
@@ -236,20 +256,29 @@ static void doc_end(void *ctx, int ok)
     // the call and report zeroed stats instead. ipp_server still calls
     // doc_end exactly once even after a failed begin, so the give below still
     // balances doc_begin's take.
+    // A cut transfer (the iPhone cancels by dropping the upload -- it has no
+    // job id to Cancel-Job with) means nothing more will arrive: stop a write
+    // that is waiting out a paused printer, or job_pipe_end below would wait
+    // the whole stall limit holding the job lock.
+    if (!ok) serial_out_set_abort(1);
     if (s_job_pipe_ok) job_pipe_end(ok, &st);
     s_printing = 0;
 
     if (st.rc != 0 || !ok || s_printer_failed) {
-        ESP_LOGE(TAG, "job failed: %u bytes in, rc %d%s",
-                 (unsigned)st.doc_bytes, st.rc,
-                 s_printer_failed ? ", printer timeout"
-                                  : ok ? "" : ", transfer truncated");
-        printer_state_post_ev(PS_EV_JOB_FAIL);
+        if (s_job_cancelled) {
+            ESP_LOGI(TAG, "job canceled after %u bytes in", (unsigned)st.doc_bytes);
+            printer_state_post(PS_EV_JOB_DONE);
+        } else {
+            ESP_LOGE(TAG, "job failed: %u bytes in, rc %d%s",
+                     (unsigned)st.doc_bytes, st.rc,
+                     s_printer_failed ? ", printer timeout"
+                                      : ok ? "" : ", transfer truncated");
+            printer_state_post(PS_EV_JOB_FAILED);
+        }
         xSemaphoreGive(s_job_lock);
         return;
     }
 
-    printer_state_post_ev(PS_EV_JOB_DONE);
     s_last_pages = (size_t)st.pages;
     s_last_bytes = st.printer_bytes;
     ESP_LOGI(TAG, "ripped %d page%s, %ux%u dots, %u bytes in -> %u printer bytes in %ums",
@@ -258,7 +287,10 @@ static void doc_end(void *ctx, int ok)
     ESP_LOGI(TAG, "printer stream crc32 %08x", (unsigned)s_stream_crc);
 
     // Let the last byte clear the shift register before calling it printed.
-    serial_out_flush(120000);
+    // Paper running out on the last sheet is still this job's stall, so the
+    // flush waits as long as a paused job does, and Done comes after it.
+    serial_out_flush(CONFIG_AIRWRITER_STALL_ABORT * 1000u);
+    printer_state_post(PS_EV_JOB_DONE);
 
     if (AW_LOOPBACK) {
         size_t got; uint32_t crc;
@@ -286,6 +318,32 @@ static void doc_end(void *ctx, int ok)
 // later milestones -- for this rev dev_mode is a log note only, and the
 // printer-uuid behaviour it names stays Kconfig's AIRWRITER_DEV_MODE.
 
+// W-1039: unstick a printer that serial-line noise (a cable replug, power-up)
+// left busy with SELECT lit -- CTRL-X cancels the unprinted line in its
+// buffer. printer_state decides when (idle, busy 5 s, then every 60 s at
+// most); the job lock, taken without waiting, keeps it clear of any job's
+// writes or a test page.
+static void kick_task(void *arg)
+{
+    (void)arg;
+    static const uint8_t ctrl_x = 0x18;     // ImageWriter II: cancel current line
+    for (;;) {
+        vTaskDelay(pdMS_TO_TICKS(500));
+        if (!printer_state_want_kick()) continue;
+        if (xSemaphoreTake(s_job_lock, 0) != pdTRUE) continue;
+        esp_err_t err = serial_out_send_unflowed(&ctrl_x, 1);
+        printer_state_kicked();
+        xSemaphoreGive(s_job_lock);
+        ESP_LOGI(TAG, "printer busy while idle; sent CTRL-X (%s)", esp_err_to_name(err));
+    }
+}
+
+// A person did something; wake the panel. From the IPP, DIP and test-button paths.
+static void on_activity(void)
+{
+    printer_state_post(PS_EV_ACTIVITY);
+}
+
 #define TESTPAGE_W 1152
 #define TESTPAGE_H 64
 
@@ -294,7 +352,9 @@ static void test_page_task(void *arg)
     (void)arg;
     s_stream_crc = 0;
     s_printer_failed = 0;
-    printer_state_post_ev(PS_EV_JOB_START);
+    s_job_cancelled = 0;
+    serial_out_set_abort(0);
+    printer_state_post(PS_EV_JOB_START);
 
     ht_algo_t algo;
     if (ht_algo_from_name(s_set.dither, &algo)) algo = HT_ATKINSON;
@@ -332,8 +392,8 @@ static void test_page_task(void *arg)
         ht_free(&h);
     }
 
-    serial_out_flush(120000);
-    printer_state_post_ev(s_printer_failed ? PS_EV_JOB_FAIL : PS_EV_JOB_DONE);
+    serial_out_flush(CONFIG_AIRWRITER_STALL_ABORT * 1000u);
+    printer_state_post(s_printer_failed ? PS_EV_JOB_FAILED : PS_EV_JOB_DONE);
     s_printing = 0;
     xSemaphoreGive(s_job_lock);
     vTaskDelete(NULL);
@@ -344,6 +404,7 @@ static void test_page_task(void *arg)
 // doing it here: the poll loop has to stay free to keep debouncing.
 static void test_page(void)
 {
+    on_activity();
     // Non-blocking: a test page refuses rather than queuing behind whatever
     // is printing, real job or another test page. s_job_lock is the actual
     // mutual exclusion; the take-then-spawn sequencing below (not s_printing)
@@ -366,8 +427,11 @@ static int s_test_on_boot;
 
 static void dip_on_change(const dip_config_t *cfg)
 {
-    ESP_LOGI(TAG, "dip: mode=%u dev_mode=%u test_on_boot=%u dither_ovr=%u spare=%u",
-             cfg->mode, cfg->dev_mode, cfg->test_on_boot, cfg->dither_ovr, cfg->spare);
+    on_activity();
+    ESP_LOGI(TAG, "dip: mode=%u dev_mode=%u test_on_boot=%u dither_ovr=%u gamer=%u spare=%u",
+             cfg->mode, cfg->dev_mode, cfg->test_on_boot, cfg->dither_ovr, cfg->gamer,
+             cfg->spare);
+    led_grid_set_gamer(cfg->gamer);
     if (cfg->dev_mode)
         ESP_LOGI(TAG, "dip: dev_mode is on, but the printer uuid stays Kconfig-driven this rev");
     if (cfg->test_on_boot) s_test_on_boot = 1;
@@ -384,7 +448,14 @@ static void wifi_event(void *arg, esp_event_base_t base, int32_t id, void *data)
         ESP_LOGI(TAG, "associated; waiting for dhcp");
     } else if (base == WIFI_EVENT && id == WIFI_EVENT_STA_DISCONNECTED) {
         wifi_event_sta_disconnected_t *d = (wifi_event_sta_disconnected_t *)data;
-        if (s_retries < WIFI_MAX_RETRY) {
+        if (s_wifi_was_up) {
+            printer_state_post(PS_EV_WIFI_DOWN);
+            strncpy(s_ip, "0.0.0.0", sizeof s_ip - 1);
+            ESP_LOGW(TAG, "wifi lost (reason %d); retrying in %us",
+                     d ? d->reason : -1, (unsigned)(s_backoff_ms / 1000));
+            esp_timer_start_once(s_reconnect, (uint64_t)s_backoff_ms * 1000);
+            s_backoff_ms = s_backoff_ms >= 15000 ? 30000 : s_backoff_ms * 2;
+        } else if (s_retries < WIFI_MAX_RETRY) {
             s_retries++;
             ESP_LOGW(TAG, "wifi retry %d/%d, reason %d", s_retries, WIFI_MAX_RETRY,
                      d ? d->reason : -1);
@@ -397,7 +468,9 @@ static void wifi_event(void *arg, esp_event_base_t base, int32_t id, void *data)
         ESP_LOGI(TAG, "got ip " IPSTR, IP2STR(&e->ip_info.ip));
         snprintf(s_ip, sizeof s_ip, IPSTR, IP2STR(&e->ip_info.ip));
         s_retries = 0;
-        printer_state_post_ev(PS_EV_WIFI_UP);
+        s_wifi_was_up = 1;
+        s_backoff_ms  = 1000;
+        printer_state_post(PS_EV_WIFI_UP);
         xEventGroupSetBits(s_wifi_events, WIFI_CONNECTED_BIT);
     }
 }
@@ -418,6 +491,19 @@ static void wifi_init(void)
 
     wifi_init_config_t ic = WIFI_INIT_CONFIG_DEFAULT();
     ESP_ERROR_CHECK(esp_wifi_init(&ic));
+
+    const esp_timer_create_args_t ta = { .callback = reconnect_cb, .name = "wifi_rejoin" };
+    ESP_ERROR_CHECK(esp_timer_create(&ta, &s_reconnect));
+}
+
+// Setup mode: count phones on the access point, for the solid-blue cue.
+static void ap_event(void *arg, esp_event_base_t base, int32_t id, void *data)
+{
+    (void)arg; (void)base; (void)data;
+    static unsigned n;
+    if (id == WIFI_EVENT_AP_STACONNECTED) n++;
+    else if (id == WIFI_EVENT_AP_STADISCONNECTED && n) n--;
+    printer_state_set_ap_stations(n);
 }
 
 // The handlers are registered here, not in wifi_init(), because wifi_event()
@@ -440,6 +526,12 @@ static esp_err_t wifi_start(void)
     // associated and never sees the broadcast DHCP offer.
     wc.sta.sae_pwe_h2e = WPA3_SAE_PWE_BOTH;
     wc.sta.pmf_cfg.capable = true;
+    // The default fast scan joins the first access point that answers, and
+    // channels are scanned in order. With a mesh, that is often a far node on
+    // channel 1: rev A on the bench joined one at -80 to -87 dBm with a node at
+    // -46 on channel 11 in the same room, and uploads crawled at 6 KB/s.
+    wc.sta.scan_method = WIFI_ALL_CHANNEL_SCAN;
+    wc.sta.sort_method = WIFI_CONNECT_AP_BY_SIGNAL;
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wc));
     ESP_ERROR_CHECK(esp_wifi_start());
@@ -491,11 +583,49 @@ static const char *auth_name(wifi_auth_mode_t m)
     }
 }
 
+static const char *state_text(ps_state_t st)
+{
+    switch (st) {
+    case PS_BOOTING:   return "Starting";
+    case PS_SETUP:     return "Waiting for setup";
+    case PS_JOINING:   return "Joining Wi-Fi";
+    case PS_ATTENTION: return "Needs attention";
+    case PS_FAILED:    return "Last job failed";
+    case PS_PRINTING:  return "Printing";
+    case PS_OFFLINE:   return "Printer offline";
+    case PS_READY:     return "Ready";
+    }
+    return "?";
+}
+
+// Why the chip last started. A reboot on the bench is otherwise a mystery: the
+// USB console re-enumerates with the chip and loses the ROM's rst: line, so
+// power-on (a pulled cable) and brownout or panic look the same from outside.
+static const char *reset_name(esp_reset_reason_t r)
+{
+    switch (r) {
+    case ESP_RST_POWERON:   return "power-on";
+    case ESP_RST_EXT:       return "reset pin";
+    case ESP_RST_SW:        return "software";      // esp_restart: OTA, settings
+    case ESP_RST_PANIC:     return "panic";
+    case ESP_RST_INT_WDT:   return "interrupt watchdog";
+    case ESP_RST_TASK_WDT:  return "task watchdog";
+    case ESP_RST_WDT:       return "watchdog";
+    case ESP_RST_DEEPSLEEP: return "deep sleep";
+    case ESP_RST_BROWNOUT:  return "brownout";
+    case ESP_RST_USB:       return "usb";           // a console attach resets
+    case ESP_RST_JTAG:      return "jtag";
+    default:                return "unknown";
+    }
+}
+
 static void status_json(void *ctx, char *buf, size_t cap)
 {
     (void)ctx;
     const esp_app_desc_t *app = esp_app_get_description();
-    int blocked = serial_out_state() == SERIAL_OUT_BLOCKED;
+    ps_view_t v = printer_state_view();
+    int attention = v.state == PS_ATTENTION, offline = v.state == PS_OFFLINE;
+    int failed    = v.state == PS_FAILED;
     uint32_t up = (uint32_t)(esp_timer_get_time() / 1000000);
 
     // Details of the network actually joined, for the Wi-Fi panel. Absent in
@@ -511,20 +641,20 @@ static void status_json(void *ctx, char *buf, size_t cap)
         snprintf(job, sizeof job, "none yet");
 
     snprintf(buf, cap,
-        "{\"state\":\"%s\",\"ps\":\"%s\",\"stopped\":%s,\"setup\":%s,\"job\":\"%s\","
+        "{\"state\":\"%s\",\"ps\":\"%s\",\"asleep\":%s,\"stopped\":%s,\"setup\":%s,\"job\":\"%s\","
         "\"fault\":%s,\"printer\":%s,\"printing\":%s,"
         "\"queue\":\"%s\",\"host\":\"%s.local\",\"ip\":\"%s\","
         "\"ssid\":\"%s\",\"dither\":\"%s\",\"signal\":\"%s\","
         "\"channel\":\"%s\",\"security\":\"%s\",\"uri\":\"%s\","
-        "\"uptime\":\"%uh %02um\",\"version\":\"%s\",\"heap\":\"%u KB\","
+        "\"uptime\":\"%uh %02um\",\"reset\":\"%s\",\"version\":\"%s\",\"heap\":\"%u KB\","
         "\"model\":\"Apple ImageWriter II\",\"pic\":%s}",
-        s_ap_mode ? "Waiting for setup" : blocked ? "Out of paper"
-                : s_printing ? "Printing" : "Ready",
-        ps_name(printer_state_get()),
-        blocked ? "true" : "false",
+        state_text(v.state),
+        ps_name(v.state),
+        v.asleep ? "true" : "false",
+        attention || offline ? "true" : "false",
         s_ap_mode ? "true" : "false",
         job,
-        blocked ? "true" : "false",
+        attention || failed ? "true" : "false",
         serial_out_clear() ? "true" : "false",
         s_printing ? "true" : "false", s_set.queue, s_set.hostname, s_ip,
         joined ? (char *)ap.ssid : (s_ap_mode ? "" : s_set.ssid),
@@ -535,7 +665,7 @@ static void status_json(void *ctx, char *buf, size_t cap)
         joined ? auth_name(ap.authmode) : "",
         s_ap_mode ? "" : ipp_server_uri(),
         (unsigned)(up / 3600), (unsigned)((up / 60) % 60),
-        app->version, (unsigned)(esp_get_free_heap_size() / 1024),
+        reset_name(esp_reset_reason()), app->version, (unsigned)(esp_get_free_heap_size() / 1024),
         pic_prog_available() ? "true" : "false");
 }
 
@@ -549,10 +679,17 @@ static void localtalk_flash(void *ctx, char *buf, size_t cap)
 
 // ----------------------------------------------------------------- main
 
-// Fires outside printer_state's lock, only on an actual state change.
-static void on_ps_change(ps_state_t st)
+// Runs on printer_state's poll task, once per change of display state.
+static void on_ps_change(const ps_view_t *v)
 {
-    ESP_LOGI(TAG, "state -> %s", ps_name(st));
+    ESP_LOGI(TAG, "state -> %s", ps_name(v->state));
+    // SPEC.md 3.9: a stall mid-job becomes a real alert on the phone.
+    // Mid-job stall: media-empty, the real "out of paper" alert on the phone.
+    // Idle and not ready: printer off, unplugged or deselected. offline-report
+    // is CUPS-only (not in the IANA registry), so it reports the registered
+    // "other".
+    ipp_server_set_stopped(v->state == PS_ATTENTION ? "media-empty"
+                         : v->state == PS_OFFLINE   ? "other" : NULL);
 }
 
 void app_main(void)
@@ -605,12 +742,16 @@ void app_main(void)
     s_job_lock = xSemaphoreCreateBinary();
     xSemaphoreGive(s_job_lock);             // created empty; start it free
 
-    printer_state_start(on_ps_change);
+    ps_timing_t tm = PS_TIMING_DEFAULT;
+    tm.stall_attention_ms = CONFIG_AIRWRITER_STALL_TIMEOUT * 1000u;
+    tm.boot_ms = LG_BOOT_MS;
+    printer_state_start(&tm, on_ps_change);
     // After the clamp above: the RMT driver takes IO48 over from here, and
     // by the first frame the line is driven, never floating.
     ESP_ERROR_CHECK(led_grid_start());
 
-    ESP_LOGI(TAG, "AirWriter starting, %u bytes free", (unsigned)esp_get_free_heap_size());
+    ESP_LOGI(TAG, "AirWriter starting after %s reset, %u bytes free",
+             reset_name(esp_reset_reason()), (unsigned)esp_get_free_heap_size());
 
     esp_err_t err = nvs_flash_init();
     if (err == ESP_ERR_NVS_NO_FREE_PAGES || err == ESP_ERR_NVS_NEW_VERSION_FOUND) {
@@ -640,11 +781,12 @@ void app_main(void)
         .invert_tx       = AW_INVERT_TX,
         .invert_rx       = AW_INVERT_RX,
         .invert_cts      = AW_INVERT_CTS,
-        .stall_timeout_s = CONFIG_AIRWRITER_STALL_TIMEOUT,
-        .on_state        = printer_state_changed,
+        .stall_abort_s   = CONFIG_AIRWRITER_STALL_ABORT,
+        .on_line         = printer_line_changed,
         .loopback        = AW_LOOPBACK,
     };
     ESP_ERROR_CHECK(serial_out_init(&ser));
+    xTaskCreate(kick_task, "kick", 3072, NULL, 3, NULL);
 
     job_pipe_cfg_t pipe = { .out = printer_out, .dither = algo };
     ESP_ERROR_CHECK(job_pipe_init(&pipe));
@@ -658,18 +800,22 @@ void app_main(void)
     // No credentials, or they no longer work: become an access point and let
     // the user fix it from a phone. This is the only path a person who did not
     // build the firmware can take.
-    printer_state_post_ev(PS_EV_WIFI_CONNECTING);
+    printer_state_post(PS_EV_WIFI_JOINING);
     wifi_init();
     if (!s_set.ssid[0] || wifi_start() != ESP_OK) {
         char ap[32];
         snprintf(ap, sizeof ap, "AirWriter-%s", suffix);
         s_ap_mode = 1;
         strncpy(s_ip, "192.168.4.1", sizeof s_ip - 1);
-        printer_state_post_ev(PS_EV_SETUP_MODE);
+        printer_state_post(PS_EV_WIFI_SETUP_AP);
 
         if (!s_set.ssid[0]) ESP_LOGW(TAG, "no wi-fi credentials stored");
         else                ESP_LOGW(TAG, "could not join \"%s\"", s_set.ssid);
 
+        ESP_ERROR_CHECK(esp_event_handler_instance_register(
+            WIFI_EVENT, WIFI_EVENT_AP_STACONNECTED, ap_event, NULL, NULL));
+        ESP_ERROR_CHECK(esp_event_handler_instance_register(
+            WIFI_EVENT, WIFI_EVENT_AP_STADISCONNECTED, ap_event, NULL, NULL));
         ESP_ERROR_CHECK(net_provision_start(ap));
         webui_cfg_t wcfg = { .status_json = status_json, .captive = 1,
                               .localtalk_flash = localtalk_flash };
@@ -683,6 +829,7 @@ void app_main(void)
         .hostname   = s_set.hostname,
         .port       = 631,
         .dev_mode   = AW_DEV_MODE,
+        .on_job_op  = on_activity,
         .sink = { .begin = doc_begin, .data = doc_data, .end = doc_end,
                   .cancel = doc_cancel, .ctx = NULL },
     };

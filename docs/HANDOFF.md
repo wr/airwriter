@@ -1,8 +1,76 @@
 # AirWriter handoff
 
-Written 2026-08-04, last updated 2026-10-14.
+Written 2026-08-04, last updated 2026-10-15.
 
 ## Where the project stands
+
+**2026-10-15: status language v2 (W-1037) benched on board 1; four branches wait to merge.**
+`wells/w-1037-status-language` (e2125a0) carries the spec
+`docs/superpowers/specs/2026-10-14-status-language-design.md`, as follows.
+
+- **States and panel:** discrete printer and Wi-Fi states from a pure reducer
+  (`printer_state_core`), drawn on the 37-dot panel per that spec. Ready is per-dot white;
+  DIP7 is gamer RGB; the panel sleeps to a pilot dot after 5 min; Spin at boot.
+- **Paused jobs:** a stalled job pauses instead of failing. Needs attention shows after 30 s
+  (3 s if the printer was already down when the job started), and the job aborts at
+  `CONFIG_AIRWRITER_STALL_ABORT` (600 s).
+- **Unsticking the printer (W-1039):** a printer left busy by line noise gets a CTRL-X.
+- **DIP labels:** the switches are read by their printed numbers.
+- **Diagnostics:** `/api/status` and the boot log name the reset reason.
+- **Identity and Wi-Fi:** printer-uuid is stable by default, with a UUID epoch, and Wi-Fi
+  joins the strongest access point.
+
+The other three branches:
+
+- `wells/w-1041-resync-after-abort` (dd130ba) resyncs the printer before the job after an
+  aborted one.
+- `wells/w-1040-iphone-paused-alert` (30ea6b9) maps the pause to IPP: processing-stopped,
+  media-empty-error, "Needs attention: check paper and SELECT". It also fixes connection
+  starvation and filters requested-attributes.
+- `wells/w-1042-psram-job-buffer` (a1a1dd6) buffers the job in 1 MB of PSRAM and replies when
+  the upload ends.
+
+Merge order: W-1037, W-1041, W-1040, W-1042. W-1042 already sits on
+`wells/bench-integration` (W-1037 a151fe9 + W-1040 + W-1041), and e2125a0 rides with W-1037.
+
+- **Bench, combined build (3854517 = W-1042 + e2125a0), all pass:**
+  - Prints: normal (reply in 0.14 s, crc `8ee84844`), 3 pages (`e16a25f3`) and a Mac page.
+  - W-1041: a mid-strip cancel, then the resync line and a clean gray band (`c0022cb5`).
+  - Dropped upload on a paused printer: aborted within 3 s.
+  - Print while paused: reply in 0.16 s with processing-stopped.
+  - Cancel works. SELECT back on prints nothing.
+  - Mac: the out-of-paper alert shows.
+  - 30-connection burst: no failures, max 4.4 s.
+  - CUPS get-printer-attributes suite: all pass except its broken test 5.
+- **Panel, all pass:** boot Spin, then green, then white; DIP7 rainbow; pilot dot after
+  5 min idle. **Not run:** router Wi-Fi off for a minute (expect Joining, no setup AP, then
+  green).
+- **Trap — iOS keys a printer on printer-uuid, capabilities included.**
+  - Dev mode's per-boot UUID left the iPhone with two "ImageWriter II" entries and jobs stuck
+    at Waiting.
+  - So did changing operations-supported under a fixed UUID.
+  - Dev mode is now off by default. Bump `CONFIG_AIRWRITER_UUID_EPOCH` only when advertised
+    values change: a new UUID orphans the Mac's CUPS queue, whose device-uri pins `uuid=`.
+- **Trap — stale UUIDs linger.** ESP mDNS doesn't flush the previous boot's TXT record, so a
+  UUID change shows as two printers until clients' caches expire (~75 min).
+- **Trap — the mesh.** The default fast scan joined a far node on channel 1 (−80 to −87 dBm)
+  over a −46 dBm node in the same room.
+  - Uploads ran at ~6 KB/s and an OTA failed.
+  - A paused job's upload stalled at twice lwIP's window and looked like a firmware coupling.
+  - Fixed in e2125a0. W-1042's per-job `rssi` and upload-wait logs tell link from firmware.
+- **Trap — three IPP workers with a 30 s keep-alive starved discovery bursts.** iOS and macOS
+  send 25–50 parallel Get-Printer-Attributes, so prints timed out before Print-Job. Fixed
+  in W-1040.
+- **Trap — never OTA while a job prints.** Two jobs were cut this way. Check `printing=false`
+  and tell whoever is printing first.
+- **Open — iPhone stall.** On builds carrying W-1040's job model (601743a, fe40a96, dff65f6)
+  the iPhone polled Get-Printer-Attributes and never sent a job, even with a fresh UUID and
+  name. a67119f (W-1037 plus the connection fix) printed from it, and the Mac prints on
+  every build. Retest the iPhone on the merged main before closing W-1040. Notes: W-1040's
+  HANDOFF entry.
+- **Open, cosmetic:** the Mac's CUPS shows "printer is offline" a few seconds into an
+  out-of-paper pause. Board 1's queue is named "ImageWriter" in NVS, from the stale-twin
+  workaround; the Kconfig default is still "ImageWriter II".
 
 **2026-10-14: rev A is alive and has printed.** Board 1 arrived from PCBWay; the THT joints,
 J2/J4 holes and debris from the 10-05 photo review were checked and fixed before power. Over

@@ -22,13 +22,30 @@ config AIRWRITER_QUEUE_NAME
 
 config AIRWRITER_DEV_MODE
     bool "Development mode"
-    default y
+    default n
     help
         Regenerates printer-uuid on every boot. iOS caches printer
         capabilities against the UUID aggressively, and with a stable UUID a
         changed media list or URF string can take an afternoon to show up.
-        Turn this off for a real device: a UUID that moves makes the printer
-        appear as a new queue after every reboot.
+        Off by default: a UUID that moves leaves the iPhone and the Mac
+        holding the printer under an old UUID after every reboot. On the
+        rev A bench (a dozen reboots in a morning) the iPhone listed two
+        "ImageWriter II" entries and, printing to the stale one, polled
+        Get-Printer-Attributes forever without sending a job. Turn it on
+        only while iterating on advertised capabilities.
+
+config AIRWRITER_UUID_EPOCH
+    int "printer-uuid epoch"
+    range 0 65535
+    default 1
+    help
+        The printer-uuid is fixed per board (from its MAC) plus this number.
+        iOS keys everything about a printer on its UUID, including a cached
+        copy of its capabilities: when operations-supported changed under an
+        unchanged UUID on the rev A bench, the iPhone held every job at
+        "Waiting" and only re-polled Get-Printer-Attributes. Bump this when
+        the advertised capabilities change, so phones meet a new printer.
+        Ignored in development mode, which picks a random UUID every boot.
 
 config AIRWRITER_UART_NUM
     int "Printer UART port"
@@ -94,8 +111,16 @@ config AIRWRITER_INVERT_CTS
         watchdog's paper sensor. SPEC.md 3.9.
 
 config AIRWRITER_STALL_TIMEOUT
-    int "Seconds of HSKo deassertion before the printer is called out of paper"
+    int "Seconds of HSKo deassertion mid-job before the panel asks for attention"
     default 30
+    help
+        The printer holds HSKo false briefly on every line; only a stall this
+        long mid-job means paper, a jam or SELECT. The job pauses, it is not
+        failed -- see AIRWRITER_STALL_ABORT.
+
+config AIRWRITER_STALL_ABORT
+    int "Seconds a paused job waits for the printer before it is failed"
+    default 600
 
 config AIRWRITER_LED_DATA_PIN
     int "LED chain data pin, -1 if absent"

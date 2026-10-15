@@ -128,17 +128,21 @@ function draw(s){
   $('ver').textContent=s.version||'';
   if(s.uri) $('uri').textContent=s.uri;
 
-  /* Nothing on the serial port is a fault, not an idle state: this device
-     exists to drive a printer, and without one it cannot do its job. */
-  const noprinter=!s.printer, fault=!!s.fault||noprinter;
+  /* A printer that is off or unplugged is not a fault -- the board is fine and
+     says so on its panel in warm white. Faults are the two states that need a
+     person: a job stalled mid-page, or one that failed. */
+  const ps=s.ps||'', offline=ps==='offline';
+  const fault=ps==='attention'||ps==='failed';
   lamp($('ledfault'),fault,'r',
-    s.fault?'fault':noprinter?'no printer on the serial port':'no fault');
+    ps==='attention'?'needs attention: paper, jam or SELECT':
+    ps==='failed'?'the last job failed':'no fault');
   lamp($('ledlink'),!setup,'g',setup?'not on a network':'joined “'+(s.ssid||'')+'”');
   const prn=$('ledprn');
-  prn.classList.toggle('g',!noprinter);
-  prn.classList.toggle('r',noprinter);
-  prn.dataset.tip=noprinter?'no printer on the serial port'
-                           :'printer connected and online';
+  prn.classList.toggle('g',!!s.printer);
+  prn.classList.remove('r');
+  prn.dataset.tip=s.printer?'printer connected and ready'
+                 :offline?'printer offline: off, unplugged or deselected'
+                 :'printer busy';
   lamp($('ledjob'),s.printing,'a',s.printing?'printing':'idle');
   if(!s.printing) $('ledjob').classList.remove('act-a');
 
@@ -151,6 +155,7 @@ function draw(s){
   }
   $('sec-halftone').classList.toggle('hide',setup);
   $('sec-printer').classList.toggle('hide',setup);
+  $('sec-localtalk').classList.toggle('hide',!s.pic);
 
   if(s.host){const h=s.host.replace('.local','');
     const i=h.lastIndexOf('-'); if(i>0) suffix=h.slice(i+1);
@@ -206,6 +211,20 @@ $('savegen').onclick=async()=>{
   const ok=await post('/api/general',
     {queue:$('queue').value,host:$('host').value,dither:dither});
   noted('sec-printer', ok?'saved':'failed');
+};
+
+$('ltflash').onclick=async()=>{
+  const b=$('ltflash'); if(b.disabled) return; b.disabled=true;
+  $('ltsay').textContent='Flashing… about two seconds.';
+  let r=null;
+  try{ r=await(await fetch('/api/localtalk/flash',{method:'POST'})).json(); }catch(e){}
+  b.disabled=false;
+  if(!r){ noted('sec-localtalk','failed'); $('ltsay').textContent='No answer from the dongle.'; return; }
+  noted('sec-localtalk', r.ok?'done':'failed');
+  $('ltsay').textContent = r.ok
+    ? 'TashTalk 2.1.3 written and verified · PIC12F1840 rev '+r.rev+'.'
+    : r.err+(r.addr?' at '+r.addr+': wanted '+r.want+', read '+r.got:'')
+      +(r.devid&&r.devid!=='0x0000'?' · device ID '+r.devid:'')+'.';
 };
 
 /* ── overlay ───────────────────────────────────────────────────────── */
