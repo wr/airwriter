@@ -76,6 +76,19 @@ static settings_t s_set;
 static char s_ip[16] = "0.0.0.0";
 static int  s_ap_mode;
 
+// Reconnect after a drop. Once the board has had the network it never falls
+// back to setup mode on its own -- a router reboot is no reason to make the
+// user re-provision -- it keeps trying, backing off 1, 2, 4 ... 30 s.
+static int s_wifi_was_up;
+static uint32_t s_backoff_ms = 1000;
+static esp_timer_handle_t s_reconnect;
+
+static void reconnect_cb(void *arg)
+{
+    (void)arg;
+    esp_wifi_connect();
+}
+
 // Last job, for the status page.
 static char   s_last_job[64];
 static int    s_printing;
@@ -382,7 +395,14 @@ static void wifi_event(void *arg, esp_event_base_t base, int32_t id, void *data)
         ESP_LOGI(TAG, "associated; waiting for dhcp");
     } else if (base == WIFI_EVENT && id == WIFI_EVENT_STA_DISCONNECTED) {
         wifi_event_sta_disconnected_t *d = (wifi_event_sta_disconnected_t *)data;
-        if (s_retries < WIFI_MAX_RETRY) {
+        if (s_wifi_was_up) {
+            printer_state_post(PS_EV_WIFI_DOWN);
+            strncpy(s_ip, "0.0.0.0", sizeof s_ip - 1);
+            ESP_LOGW(TAG, "wifi lost (reason %d); retrying in %us",
+                     d ? d->reason : -1, (unsigned)(s_backoff_ms / 1000));
+            esp_timer_start_once(s_reconnect, (uint64_t)s_backoff_ms * 1000);
+            s_backoff_ms = s_backoff_ms >= 15000 ? 30000 : s_backoff_ms * 2;
+        } else if (s_retries < WIFI_MAX_RETRY) {
             s_retries++;
             ESP_LOGW(TAG, "wifi retry %d/%d, reason %d", s_retries, WIFI_MAX_RETRY,
                      d ? d->reason : -1);
@@ -395,6 +415,8 @@ static void wifi_event(void *arg, esp_event_base_t base, int32_t id, void *data)
         ESP_LOGI(TAG, "got ip " IPSTR, IP2STR(&e->ip_info.ip));
         snprintf(s_ip, sizeof s_ip, IPSTR, IP2STR(&e->ip_info.ip));
         s_retries = 0;
+        s_wifi_was_up = 1;
+        s_backoff_ms  = 1000;
         printer_state_post(PS_EV_WIFI_UP);
         xEventGroupSetBits(s_wifi_events, WIFI_CONNECTED_BIT);
     }
@@ -416,6 +438,19 @@ static void wifi_init(void)
 
     wifi_init_config_t ic = WIFI_INIT_CONFIG_DEFAULT();
     ESP_ERROR_CHECK(esp_wifi_init(&ic));
+
+    const esp_timer_create_args_t ta = { .callback = reconnect_cb, .name = "wifi_rejoin" };
+    ESP_ERROR_CHECK(esp_timer_create(&ta, &s_reconnect));
+}
+
+// Setup mode: count phones on the access point, for the solid-blue cue.
+static void ap_event(void *arg, esp_event_base_t base, int32_t id, void *data)
+{
+    (void)arg; (void)base; (void)data;
+    static unsigned n;
+    if (id == WIFI_EVENT_AP_STACONNECTED) n++;
+    else if (id == WIFI_EVENT_AP_STADISCONNECTED && n) n--;
+    printer_state_set_ap_stations(n);
 }
 
 // The handlers are registered here, not in wifi_init(), because wifi_event()
@@ -673,6 +708,10 @@ void app_main(void)
         if (!s_set.ssid[0]) ESP_LOGW(TAG, "no wi-fi credentials stored");
         else                ESP_LOGW(TAG, "could not join \"%s\"", s_set.ssid);
 
+        ESP_ERROR_CHECK(esp_event_handler_instance_register(
+            WIFI_EVENT, WIFI_EVENT_AP_STACONNECTED, ap_event, NULL, NULL));
+        ESP_ERROR_CHECK(esp_event_handler_instance_register(
+            WIFI_EVENT, WIFI_EVENT_AP_STADISCONNECTED, ap_event, NULL, NULL));
         ESP_ERROR_CHECK(net_provision_start(ap));
         webui_cfg_t wcfg = { .status_json = status_json, .captive = 1,
                               .localtalk_flash = localtalk_flash };
