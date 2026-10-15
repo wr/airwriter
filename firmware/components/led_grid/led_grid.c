@@ -23,7 +23,7 @@ static void lg_task(void *arg)
         // state, so two racing posters can never deliver an update to this
         // task out of order -- the next 30ms tick just re-reads whatever is
         // current.
-        lg_render(printer_state_get(),
+        lg_render(printer_state_view().state,
                   (uint32_t)(esp_timer_get_time() / 1000), frame);
         for (int i = 0; i < s_count && i < LG_NUM_LEDS; i++)
             led_strip_set_pixel(s_strip, (uint32_t)i,

@@ -1,47 +1,88 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Device-state reducer: flags in, one derived state out. Pure C on purpose --
-// the ESP glue and the host tests share this file. Priority does the work;
-// there is no transition table to get wrong.
+// Device-state reducer. Pure C on purpose -- the ESP glue and the host tests
+// share this file. Priority does the work; there is no transition table.
 #include "printer_state_core.h"
 #include <string.h>
 
-void ps_init(ps_t *ps) { memset(ps, 0, sizeof *ps); }
-
-ps_state_t ps_state(const ps_t *ps)
+void ps_init(ps_t *ps, const ps_timing_t *tm, uint32_t now)
 {
-    if (ps->setup)     return PS_SETUP;
-    if (!ps->wifi_up)  return ps->connecting ? PS_WIFI_CONNECTING : PS_BOOT;
-    if (ps->blocked)   return PS_BLOCKED;
-    if (ps->printing)  return PS_PRINTING;
-    if (ps->error)     return PS_ERROR;
+    memset(ps, 0, sizeof *ps);
+    ps->tm = *tm;
+    ps->boot_at = ps->line_since = ps->activity_at = ps->state_since = now;
+    ps->last = PS_BOOTING;
+}
+
+void ps_post(ps_t *ps, ps_event_t ev, uint32_t now)
+{
+    switch (ev) {
+    case PS_EV_WIFI_SETUP_AP:  ps->setup = 1;   break;
+    case PS_EV_WIFI_JOINING:
+    case PS_EV_WIFI_DOWN:      ps->wifi_up = 0; break;
+    case PS_EV_WIFI_UP:        ps->wifi_up = 1; break;
+    case PS_EV_LINE_READY:
+        if (!ps->line_ready) { ps->line_ready = 1; ps->line_since = now; }
+        break;
+    case PS_EV_LINE_NOT_READY:
+        if (ps->line_ready) { ps->line_ready = 0; ps->line_since = now; }
+        break;
+    case PS_EV_JOB_START:  ps->job = 1; ps->failed = 0; ps->activity_at = now; break;
+    case PS_EV_JOB_DONE:   ps->job = 0; break;
+    case PS_EV_JOB_FAILED: ps->job = 0; ps->failed = 1; ps->failed_at = now; break;
+    case PS_EV_ACTIVITY:   ps->activity_at = now; break;
+    }
+}
+
+void ps_set_ap_stations(ps_t *ps, unsigned n)
+{
+    ps->ap_stations = (uint8_t)(n > 255 ? 255 : n);
+}
+
+static ps_state_t derive(const ps_t *ps, uint32_t now)
+{
+    if (now - ps->boot_at < ps->tm.boot_ms) return PS_BOOTING;
+    if (ps->setup)    return PS_SETUP;
+    if (!ps->wifi_up) return PS_JOINING;
+    uint32_t low_for = ps->line_ready ? 0 : now - ps->line_since;
+    if (ps->job && !ps->line_ready && low_for >= ps->tm.stall_attention_ms)
+        return PS_ATTENTION;
+    if (ps->failed && now - ps->failed_at < ps->tm.failed_hold_ms) return PS_FAILED;
+    if (ps->job) return PS_PRINTING;
+    if (!ps->line_ready && low_for >= ps->tm.offline_debounce_ms) return PS_OFFLINE;
     return PS_READY;
 }
 
-ps_state_t ps_post(ps_t *ps, ps_event_t ev)
+ps_view_t ps_update(ps_t *ps, uint32_t now)
 {
-    switch (ev) {
-    case PS_EV_WIFI_CONNECTING: ps->connecting = 1;                  break;
-    case PS_EV_WIFI_UP:         ps->wifi_up = 1; ps->connecting = 0; break;
-    case PS_EV_SETUP_MODE:      ps->setup = 1;                       break;
-    case PS_EV_JOB_START:       ps->printing = 1; ps->error = 0;     break;
-    case PS_EV_JOB_DONE:        ps->printing = 0;                    break;
-    case PS_EV_JOB_FAIL:        ps->printing = 0; ps->error = 1;     break;
-    case PS_EV_PRINTER_BLOCKED: ps->blocked = 1;                     break;
-    case PS_EV_PRINTER_CLEARED: ps->blocked = 0;                     break;
+    ps_state_t st = derive(ps, now);
+    if (st != ps->last) {
+        if (st == PS_READY)
+            ps->greeted = ps->last == PS_JOINING || ps->last == PS_BOOTING;
+        ps->last = st;
+        ps->state_since = now;
+        ps->activity_at = now;
     }
-    return ps_state(ps);
+    ps_view_t v = { .state = st, .since_ms = now - ps->state_since };
+    v.phone_joined = st == PS_SETUP && ps->ap_stations > 0;
+    v.greeted      = st == PS_READY && ps->greeted;
+    if ((st == PS_READY || st == PS_OFFLINE) &&
+        now - ps->activity_at >= ps->tm.sleep_after_ms) {
+        v.asleep    = 1;
+        v.asleep_ms = now - ps->activity_at - ps->tm.sleep_after_ms;
+    }
+    return v;
 }
 
 const char *ps_name(ps_state_t st)
 {
     switch (st) {
-    case PS_BOOT:            return "boot";
-    case PS_SETUP:           return "setup";
-    case PS_WIFI_CONNECTING: return "connecting";
-    case PS_BLOCKED:         return "blocked";
-    case PS_PRINTING:        return "printing";
-    case PS_ERROR:           return "error";
-    case PS_READY:           return "ready";
+    case PS_BOOTING:   return "booting";
+    case PS_SETUP:     return "setup";
+    case PS_JOINING:   return "joining";
+    case PS_ATTENTION: return "attention";
+    case PS_FAILED:    return "failed";
+    case PS_PRINTING:  return "printing";
+    case PS_OFFLINE:   return "offline";
+    case PS_READY:     return "ready";
     }
     return "?";
 }

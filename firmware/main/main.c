@@ -182,14 +182,13 @@ static void printer_out(void *ctx, const uint8_t *buf, size_t n)
     }
 }
 
-// HSKo has been low too long. SPEC.md 3.9: that becomes a real alert on the
-// phone rather than a job that quietly never finishes.
+// Interim (Task 3 replaces it): serial_out's 30 s BLOCKED verdict stands in
+// for the line level until serial_out reports HSKo edges itself.
 static void printer_state_changed(void *ctx, serial_out_state_t st)
 {
     (void)ctx;
-    ipp_server_set_stopped(st == SERIAL_OUT_BLOCKED ? "media-empty" : NULL);
-    printer_state_post_ev(st == SERIAL_OUT_BLOCKED ? PS_EV_PRINTER_BLOCKED
-                                                    : PS_EV_PRINTER_CLEARED);
+    printer_state_post(st == SERIAL_OUT_BLOCKED ? PS_EV_LINE_NOT_READY
+                                                 : PS_EV_LINE_READY);
 }
 
 static esp_err_t doc_begin(void *ctx, const char *format, const char *name)
@@ -207,7 +206,7 @@ static esp_err_t doc_begin(void *ctx, const char *format, const char *name)
     s_stream_crc = 0;
     s_printer_failed = 0;
     s_printing = 1;
-    printer_state_post_ev(PS_EV_JOB_START);
+    printer_state_post(PS_EV_JOB_START);
     serial_out_loopback_reset();
     esp_err_t err = job_pipe_begin(name);
     s_job_pipe_ok = (err == ESP_OK);
@@ -244,12 +243,12 @@ static void doc_end(void *ctx, int ok)
                  (unsigned)st.doc_bytes, st.rc,
                  s_printer_failed ? ", printer timeout"
                                   : ok ? "" : ", transfer truncated");
-        printer_state_post_ev(PS_EV_JOB_FAIL);
+        printer_state_post(PS_EV_JOB_FAILED);
         xSemaphoreGive(s_job_lock);
         return;
     }
 
-    printer_state_post_ev(PS_EV_JOB_DONE);
+    printer_state_post(PS_EV_JOB_DONE);
     s_last_pages = (size_t)st.pages;
     s_last_bytes = st.printer_bytes;
     ESP_LOGI(TAG, "ripped %d page%s, %ux%u dots, %u bytes in -> %u printer bytes in %ums",
@@ -294,7 +293,7 @@ static void test_page_task(void *arg)
     (void)arg;
     s_stream_crc = 0;
     s_printer_failed = 0;
-    printer_state_post_ev(PS_EV_JOB_START);
+    printer_state_post(PS_EV_JOB_START);
 
     ht_algo_t algo;
     if (ht_algo_from_name(s_set.dither, &algo)) algo = HT_ATKINSON;
@@ -333,7 +332,7 @@ static void test_page_task(void *arg)
     }
 
     serial_out_flush(120000);
-    printer_state_post_ev(s_printer_failed ? PS_EV_JOB_FAIL : PS_EV_JOB_DONE);
+    printer_state_post(s_printer_failed ? PS_EV_JOB_FAILED : PS_EV_JOB_DONE);
     s_printing = 0;
     xSemaphoreGive(s_job_lock);
     vTaskDelete(NULL);
@@ -397,7 +396,7 @@ static void wifi_event(void *arg, esp_event_base_t base, int32_t id, void *data)
         ESP_LOGI(TAG, "got ip " IPSTR, IP2STR(&e->ip_info.ip));
         snprintf(s_ip, sizeof s_ip, IPSTR, IP2STR(&e->ip_info.ip));
         s_retries = 0;
-        printer_state_post_ev(PS_EV_WIFI_UP);
+        printer_state_post(PS_EV_WIFI_UP);
         xEventGroupSetBits(s_wifi_events, WIFI_CONNECTED_BIT);
     }
 }
@@ -495,7 +494,8 @@ static void status_json(void *ctx, char *buf, size_t cap)
 {
     (void)ctx;
     const esp_app_desc_t *app = esp_app_get_description();
-    int blocked = serial_out_state() == SERIAL_OUT_BLOCKED;
+    ps_view_t v = printer_state_view();
+    int blocked = v.state == PS_ATTENTION || v.state == PS_OFFLINE;
     uint32_t up = (uint32_t)(esp_timer_get_time() / 1000000);
 
     // Details of the network actually joined, for the Wi-Fi panel. Absent in
@@ -520,7 +520,7 @@ static void status_json(void *ctx, char *buf, size_t cap)
         "\"model\":\"Apple ImageWriter II\",\"pic\":%s}",
         s_ap_mode ? "Waiting for setup" : blocked ? "Out of paper"
                 : s_printing ? "Printing" : "Ready",
-        ps_name(printer_state_get()),
+        ps_name(v.state),
         blocked ? "true" : "false",
         s_ap_mode ? "true" : "false",
         job,
@@ -549,10 +549,12 @@ static void localtalk_flash(void *ctx, char *buf, size_t cap)
 
 // ----------------------------------------------------------------- main
 
-// Fires outside printer_state's lock, only on an actual state change.
-static void on_ps_change(ps_state_t st)
+// Runs on printer_state's poll task, once per change of display state.
+static void on_ps_change(const ps_view_t *v)
 {
-    ESP_LOGI(TAG, "state -> %s", ps_name(st));
+    ESP_LOGI(TAG, "state -> %s", ps_name(v->state));
+    // SPEC.md 3.9: a stall mid-job becomes a real alert on the phone.
+    ipp_server_set_stopped(v->state == PS_ATTENTION ? "media-empty" : NULL);
 }
 
 void app_main(void)
@@ -605,7 +607,9 @@ void app_main(void)
     s_job_lock = xSemaphoreCreateBinary();
     xSemaphoreGive(s_job_lock);             // created empty; start it free
 
-    printer_state_start(on_ps_change);
+    ps_timing_t tm = PS_TIMING_DEFAULT;
+    tm.stall_attention_ms = CONFIG_AIRWRITER_STALL_TIMEOUT * 1000u;
+    printer_state_start(&tm, on_ps_change);
     // After the clamp above: the RMT driver takes IO48 over from here, and
     // by the first frame the line is driven, never floating.
     ESP_ERROR_CHECK(led_grid_start());
@@ -645,6 +649,7 @@ void app_main(void)
         .loopback        = AW_LOOPBACK,
     };
     ESP_ERROR_CHECK(serial_out_init(&ser));
+    printer_state_post(serial_out_clear() ? PS_EV_LINE_READY : PS_EV_LINE_NOT_READY);
 
     job_pipe_cfg_t pipe = { .out = printer_out, .dither = algo };
     ESP_ERROR_CHECK(job_pipe_init(&pipe));
@@ -658,14 +663,14 @@ void app_main(void)
     // No credentials, or they no longer work: become an access point and let
     // the user fix it from a phone. This is the only path a person who did not
     // build the firmware can take.
-    printer_state_post_ev(PS_EV_WIFI_CONNECTING);
+    printer_state_post(PS_EV_WIFI_JOINING);
     wifi_init();
     if (!s_set.ssid[0] || wifi_start() != ESP_OK) {
         char ap[32];
         snprintf(ap, sizeof ap, "AirWriter-%s", suffix);
         s_ap_mode = 1;
         strncpy(s_ip, "192.168.4.1", sizeof s_ip - 1);
-        printer_state_post_ev(PS_EV_SETUP_MODE);
+        printer_state_post(PS_EV_WIFI_SETUP_AP);
 
         if (!s_set.ssid[0]) ESP_LOGW(TAG, "no wi-fi credentials stored");
         else                ESP_LOGW(TAG, "could not join \"%s\"", s_set.ssid);

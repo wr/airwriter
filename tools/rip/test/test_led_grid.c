@@ -19,8 +19,8 @@ int main(void)
     uint8_t f[LG_NUM_LEDS][3];
 
     // Cap: no channel ever exceeds LG_BRIGHTNESS_CAP in any state/phase.
-    ps_state_t all[] = { PS_BOOT, PS_SETUP, PS_WIFI_CONNECTING, PS_READY,
-                         PS_PRINTING, PS_BLOCKED, PS_ERROR };
+    ps_state_t all[] = { PS_BOOTING, PS_SETUP, PS_JOINING, PS_READY,
+                         PS_PRINTING, PS_ATTENTION, PS_FAILED, PS_OFFLINE };
     for (unsigned s = 0; s < sizeof all / sizeof all[0]; s++)
         for (uint32_t t = 0; t < 5000; t += 97) {
             lg_render(all[s], t, f);
@@ -30,7 +30,7 @@ int main(void)
         }
 
     // BOOT is dark.
-    lg_render(PS_BOOT, 1234, f);
+    lg_render(PS_BOOTING, 1234, f);
     for (int i = 0; i < LG_NUM_LEDS; i++) assert(max3(f[i]) == 0);
 
     // Mask dots are monochrome in every state (r==g==b).
@@ -42,7 +42,7 @@ int main(void)
     }
 
     // ERROR: mask dots dark, FR4 dots red-only during the on phase.
-    lg_render(PS_ERROR, 250, f);   // first half-second = on
+    lg_render(PS_FAILED, 250, f);   // first half-second = on
     int lit_p = 0;
     for (int i = 0; i < LG_NUM_LEDS; i++) {
         if (LG_MAP[i].mat == 'P') {
@@ -52,7 +52,7 @@ int main(void)
         }
     }
     assert(lit_p > 0);
-    lg_render(PS_ERROR, 750, f);   // second half-second = off
+    lg_render(PS_FAILED, 750, f);   // second half-second = off
     for (int i = 0; i < LG_NUM_LEDS; i++) assert(max3(f[i]) == 0);
 
     // READY never fully blanks (floor), and breathes (two phases differ).

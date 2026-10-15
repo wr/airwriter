@@ -26,7 +26,7 @@ void lg_render(ps_state_t st, uint32_t t_ms, uint8_t out[LG_NUM_LEDS][3])
     memset(out, 0, LG_NUM_LEDS * 3);
 
     switch (st) {
-    case PS_BOOT:
+    case PS_BOOTING:
         break;
     case PS_SETUP:
         set_all(out, lg_tri(t_ms, 1200), lg_tri(t_ms, 1200), lg_tri(t_ms, 1200));
@@ -36,7 +36,7 @@ void lg_render(ps_state_t st, uint32_t t_ms, uint8_t out[LG_NUM_LEDS][3])
         set_all(out, v, v, v);
         break;
     }
-    case PS_WIFI_CONNECTING:
+    case PS_JOINING:
         for (int i = 0; i < LG_NUM_LEDS; i++) {
             float d = hypotf((float)LG_MAP[i].c - 3.0f, (float)LG_MAP[i].r - 3.5f);
             uint32_t ph = (uint32_t)(t_ms / 6 + 4096) - (uint32_t)(d * 32.0f);
@@ -55,13 +55,14 @@ void lg_render(ps_state_t st, uint32_t t_ms, uint8_t out[LG_NUM_LEDS][3])
         }
         break;
     }
-    case PS_BLOCKED: {
+    case PS_ATTENTION:
+    case PS_OFFLINE: {
         uint32_t ph = t_ms % 2000;
         int on = ph < 150 || (ph >= 300 && ph < 450);
         if (on) for (int i = 0; i < LG_NUM_LEDS; i++) out[i][0] = 255;
         break;
     }
-    case PS_ERROR: {
+    case PS_FAILED: {
         int on = (t_ms % 1000) < 500;
         if (on)
             for (int i = 0; i < LG_NUM_LEDS; i++)
@@ -77,7 +78,7 @@ void lg_render(ps_state_t st, uint32_t t_ms, uint8_t out[LG_NUM_LEDS][3])
             if (out[i][2] > v) v = out[i][2];
             // ERROR wants mask dots dark, and its red never reaches them:
             // monochrome conversion happens only on what the state painted.
-            if (st == PS_ERROR) v = 0;
+            if (st == PS_FAILED) v = 0;
             out[i][0] = out[i][1] = out[i][2] = v;
         }
         for (int ch = 0; ch < 3; ch++)

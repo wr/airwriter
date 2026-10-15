@@ -1,19 +1,18 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
 // ESP glue around the pure printer_state_core reducer: a mutex-guarded
-// instance plus a change callback, so any task can post an event and the
-// rest of the firmware (status page, LED grid) can read or react to the
-// derived state without touching FreeRTOS primitives itself.
+// instance on the esp_timer clock, plus a 100 ms poll task -- the core's
+// timers are lazy, so something has to look for a state that changes on its
+// own (offline after 3 s, a failure expiring).
 #pragma once
 #include "printer_state_core.h"
 
-// Creates the mutex and the underlying reducer. Call once, before any task
-// can call printer_state_post_ev(). on_change may be NULL; when set, it is
-// invoked outside the lock, only when ps_post() derives a new state.
-void printer_state_start(void (*on_change)(ps_state_t));
+// Creates the lock, the reducer and the poll task. on_change runs on the poll
+// task, outside the lock, once per change of display state (and once at
+// start). It may be NULL. Call once, before any other function here.
+void      printer_state_start(const ps_timing_t *tm,
+                              void (*on_change)(const ps_view_t *v));
 
-// Thread-safe: posts an event from any task.
-void printer_state_post_ev(ps_event_t ev);
-
-// Thread-safe: current derived state.
-ps_state_t printer_state_get(void);
+void      printer_state_post(ps_event_t ev);          // any task
+void      printer_state_set_ap_stations(unsigned n);   // any task
+ps_view_t printer_state_view(void);                    // any task
