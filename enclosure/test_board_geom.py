@@ -221,5 +221,48 @@ class TestPanelSharesTheBoardOutline(unittest.TestCase):
         self.assertAlmostEqual(bg.corner_radius(path=PANEL_PCB), 2.0, places=3)
 
 
+class TestPanelAndFootprintReaders(unittest.TestCase):
+    def test_panel_and_board_holes_are_coaxial(self):
+        # MT1-MT4 (hardware/panel/emit_board.py STANDOFFS) sit on H1-H4.
+        panel = [(5.6364, 5.6364), (56.3636, 5.6364), (5.6364, 91.93), (53.3636, 91.93)]
+        holes = sorted(bg.mount_holes().values())
+        for got, want in zip(sorted(bg.panel_to_case(*q) for q in panel), holes):
+            self.assertAlmostEqual(got[0], want[0], places=3)
+            self.assertAlmostEqual(got[1], want[1], places=3)
+
+    def test_every_lit_dot_sits_on_exactly_one_sk6812(self):
+        leds = [bg.to_case(f.x, f.y) for f in bg._all().values() if "SK6812" in f.lib]
+        lit = [d for d in bg.panel_dots() if d["led"]]
+        self.assertEqual(len(lit), 37)
+        for d in lit:
+            near = [q for q in leds if abs(q[0] - d["x"]) < 0.05 and abs(q[1] - d["y"]) < 0.05]
+            self.assertEqual(len(near), 1, f"dot r{d['r']}c{d['c']}")
+
+    def test_the_fr4_window_sits_over_d3(self):
+        f = bg.footprint("D3")
+        x, y = bg.to_case(f.x, f.y)
+        hits = [w for w in bg.fr4_windows() if w[0] < x < w[1] and w[2] < y < w[3]]
+        self.assertEqual(len(hits), 1)
+
+    def test_courtyard_reads_the_footprint_in_the_case_frame(self):
+        # SW3's courtyard spans its 6 x 6 body and pin field, rotated into
+        # the case frame round the pin-1 origin.
+        x0, x1, y0, y1 = bg.courtyard("SW3")
+        self.assertLess(x1 - x0, 9.0)
+        self.assertGreater(x1 - x0, 6.0)
+        self.assertIsNone(bg.courtyard("TP2"))
+        # S1's courtyard includes the keys, 2.2 past the board's west edge.
+        self.assertLess(bg.courtyard("S1")[0], -2.0)
+
+    def test_u1_carries_the_antenna_keepout(self):
+        (zone,) = bg.keepout_zones("U1")
+        xs = [q[0] for q in zone]
+        ys = [q[1] for q in zone]
+        self.assertAlmostEqual(min(xs), 56.0, places=2)
+        self.assertAlmostEqual(max(xs), 62.0, places=2)
+        self.assertAlmostEqual(min(ys), 9.726, places=2)
+        self.assertAlmostEqual(max(ys), 36.67, places=2)
+
+
 if __name__ == "__main__":
     unittest.main()

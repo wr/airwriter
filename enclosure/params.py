@@ -321,3 +321,72 @@ EXT_R = round(CORNER_R + WALL, 6)
 """The board's corner radius grown by the wall thickness: what offsetting
 the board outline outward by WALL naturally produces at the tray's exterior
 corner, and a better printed part than a sharp vertical arris."""
+
+# --- light-guide lattice ---------------------------------------------------
+# docs/superpowers/specs/2026-10-14-light-guide-lattice-design.md. Its height
+# is CAVITY: the panel rests on lattice and mini-DIN shells together.
+
+LATTICE_WALL = 0.80
+"""Cell walls: two 0.4mm perimeters, opaque in black (Wells, 2026-10-14; his
+earlier hand-drawn lattice used 0.60)."""
+
+LATTICE_INSET = 0.25
+"""Lattice outline inside the board outline; with POCKET_CLEAR that is 0.55
+to the tray walls."""
+
+CELL_R = 1.00
+"""Inner corner radius of each cell, as Wells's earlier lattice had."""
+
+POST_D = 8.00
+"""Posts at H1-H4: a 0.80 wall round the standoff pocket."""
+
+NUT_POCKET_D = 6.40
+NUT_POCKET_DEPTH = 3.30
+"""Pocket in each post top for the panel's Würth 9774030151R standoff (Ø5.1
+x 3.0, soldered to a 6.0 land): the land plus fillet, and 0.3 below the
+standoff's end so the panel bears on the lattice, not on the standoffs."""
+
+PART_CLEAR = 0.40
+PART_TOP_CLEAR = 0.50
+"""Grown onto each part envelope sideways / on top (components.py)."""
+
+D3_TUBE_CLEAR = 0.25
+"""The power LED's tube: the panel's FR4 window plus this, inside."""
+
+WEST_RAIL_X1 = 7.00
+EAST_RAIL_X0 = 50.00
+EAST_RAIL_X1 = 55.75
+"""Rails forward to the H3 / H4 posts. East: over U1's shield, west of the
+antenna keepout (56.00) by KEEPOUT_CLEAR."""
+
+KEEPOUT_CLEAR = 0.25
+
+TEST_PLUNGER_D_TOP = 3.10
+TEST_PLUNGER_D_BASE = 3.50
+TEST_BODY_TOP = 3.20
+"""SW3's plunger, measured by Wells on rev A: 3.1 at the lattice top, tapering
+to 3.5 where it enters the switch body, which stands about 3.2. (The KiCad
+model's plunger is a plain 3.5 cylinder.)"""
+
+TEST_PLUNGER_OFFSET = (0.20, -0.20)
+"""Where the real plunger stands relative to the KiCad model's axis (east,
+north). A collar on the model's axis pushed the plunger about 0.4 west and
+0.4 back; moved 0.4 east and forward, it pushed it east and forward instead.
+So, split the difference (Wells, 2026-10-15)."""
+
+COLLAR_H = 2.00
+COLLAR_BORE_D = 3.60
+COLLAR_WALL = 1.00
+"""Collar bracing the tall test plunger in the lattice's top COLLAR_H only:
+0.25 a side on the plunger's 3.1 at the top, 0.21 on its 3.18 at the collar's
+foot, so it steadies the plunger without dragging on it. Held to the cell's
+four walls by LATTICE_WALL ribs. (Wells, 2026-10-15: "really tall and
+wobbly".)"""
+
+RIDGE_H = 1.50
+RIDGE_CLEAR = 0.10
+"""Lip round the lattice's top edge, reaching to RIDGE_CLEAR short of the
+tray's pocket wall, so the lattice sits snug and the gap round the panel's
+edge shows black plastic instead of the inside of the case (Wells,
+2026-10-15)."""
+

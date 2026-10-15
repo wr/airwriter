@@ -6,12 +6,14 @@ import sys
 from build123d import export_step, export_stl
 
 import case
+import lattice
 
 OUT = pathlib.Path(__file__).resolve().parent / "out"
 
 PARTS = {
     "airwriter-tray": case.tray,
     "airwriter-lite-lid": case.lite_lid,
+    "airwriter-lattice": lattice.lattice,
 }
 
 
@@ -24,6 +26,10 @@ def main() -> int:
         bb = part.bounding_box()
         print(f"{name}: {bb.size.X:.2f} x {bb.size.Y:.2f} x {bb.size.Z:.2f} mm, "
               f"{part.volume / 1000:.1f} cm3")
+        if name == "airwriter-lattice":
+            # Accepted bleed (a lit cell into a gold cell or the front), for a look.
+            for leak in lattice.leaky_walls(part):
+                print(f"  notched wall: {leak}")
     return 0
 
 
