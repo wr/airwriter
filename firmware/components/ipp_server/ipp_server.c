@@ -86,7 +86,9 @@ static SemaphoreHandle_t s_job_lock;     // guards s_job, s_next_job_id, s_stop_
 // Held by the printing job, from Print-Job until its document has printed --
 // well after the reply, which goes back when the upload ends (W-1042).
 // Binary, not a mutex: the Print-Job worker takes it and the sink's pipeline
-// task gives it back.
+// task gives it back, and a mutex given by a task that does not hold it trips
+// FreeRTOS's xTaskPriorityDisinherit assert -- a panic after every job on the
+// W-1042 bench, the same trap as main.c's job lock in W-1033.
 static SemaphoreHandle_t s_print_lock;
 
 static uint32_t uptime_s(void)
@@ -647,8 +649,9 @@ esp_err_t ipp_server_start(const ipp_server_cfg_t *cfg)
     make_uuid(cfg->dev_mode);
 
     s_job_lock   = xSemaphoreCreateMutex();
-    s_print_lock = xSemaphoreCreateMutex();
+    s_print_lock = xSemaphoreCreateBinary();
     if (!s_job_lock || !s_print_lock) return ESP_ERR_NO_MEM;
+    xSemaphoreGive(s_print_lock);         // a binary semaphore starts taken
     s_job.state = IPP_JSTATE_COMPLETED;   // no job yet; nothing is pending
 
     esp_err_t err = start_mdns();
