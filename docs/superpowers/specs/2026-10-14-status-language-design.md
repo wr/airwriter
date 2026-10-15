@@ -89,18 +89,24 @@ the registered `other` is used. Check on an iPhone what the print sheet shows in
 Colours are drive targets before the global cap (`LG_BRIGHTNESS_CAP` 48/255 on FR4 dots).
 "FR4 only" means mask dots stay dark.
 
+Every pattern uses the array: position drives sweeps, ripples and the print head, and each dot
+carries a fixed per-dot variation (a hash of its row and column) in phase, period and hue, so no
+state reads as one big LED. Hue offsets stay inside each state's colour family.
+
 | State | Dots | Pattern |
 |---|---|---|
-| Booting | all; mask at 4× | **Spin**: a full-saturation hue wheel around the test button, spinning up from dark (dots fade in by distance), then collapsing inward to the test button and ending dark. Maths as in the spike, `wells/spike-boot-anims` `led_demo.c` case 3, period-free and run once. |
-| Setup | FR4 only | blue `(0.10, 0.35, 1.0)`, slow pulse 10%→80%, 2.5 s period |
-| Setup, phone joined | FR4 only | the same blue, steady at 60% |
-| Joining Wi-Fi | FR4 only | the same blue, quick pulse 10%→80%, 0.8 s period |
-| Ready | FR4 only | green `(0.15, 1.0, 0.25)` steady at 35%; on entering Ready (after joining, or when a job finishes), a swell to 100% over 0.5 s and back over 1.0 s |
-| Printer offline | FR4 only | warm white `(1.0, 0.75, 0.45)`, slow breathe 12%→30%, 6 s period |
-| Printing | all; mask at 4× | white row sweeping top to bottom every 1.5 s, neighbours at 25%/6%, like paper feeding |
-| Needs attention | all; mask at 4× | amber `(1.0, 0.55, 0.0)` double-blink at 100%: 150 ms on, 150 off, 150 on, rest dark, every 2 s |
-| Job failed | all; mask at 4× | red `(1.0, 0.05, 0.02)`: three flashes (200 ms on, 200 off), then a pulse 20%→60% on a 2 s period until the hold ends |
-| Asleep | one FR4 dot | the FR4 dot right of the test button (row 3, col 4) breathes 3%→12% of the cap, driven linearly (gamma would round these levels to zero), on a 6 s period in the underlying state's colour; fade into sleep over 10 s, wake instantly |
+| Booting | all; mask at 4× | **Spin**: a full-saturation hue wheel around the test button, spinning up from dark (dots fade in by distance), then collapsing inward to the test button and ending dark at 3.0 s. |
+| Setup | FR4 only | blue (hue 220° ±16° per dot, drifting ±6°) **radar sweep**: an arm turns around the test button once per 2.6 s; each dot flares to 88% as it passes and decays behind it (e-folding over 55°), floor 8% |
+| Setup, phone joined | FR4 only | the same blues, steady at 58% with a per-dot shimmer of ±8% on its own 3–5.5 s period |
+| Joining Wi-Fi | FR4 only | blue (hue 215° ±18°) **rings pulsing outward** from the test button every 0.9 s, 8% floor, 83% at the ring |
+| Wi-Fi connected | FR4 only | the first moments of a Ready entered straight from Joining or Booting (`greeted`): a green field (hue 130° ±14°) with a ripple outward over 1.4 s, held, then cross-fading to Ready's white between 2.2 s and 3.2 s. Green means "Wi-Fi just connected" and nothing else. |
+| Ready | FR4 only | **neutral white**, each dot slightly warm or cool, breathing on its own 5–9 s period between 16% and 38% |
+| Ready, gamer mode | FR4 only | DIP7 on: hue from position plus time, a slow RGB drift (one wheel per ~14 s), saturation 75%, the same breathing |
+| Printer offline | FR4 only | **warm embers**: hue 25–43°, saturation 50–62%, each dot on its own 7–13 s cycle, mostly at 5% and swelling to 32% |
+| Printing | all; mask at 4× | **print head**: a bright white dot crosses the current row in 1.5 s, inking it warm (hue 28–48°) behind; rows advance top to bottom and alternate direction like the ImageWriter's bidirectional head; the two rows above hold fading ink (25%, 12%), the rest 3% |
+| Needs attention | all; mask at 4× | amber (hue 28–44°) **double ripple** from the test button: two rings 300 ms apart every 2 s |
+| Job failed | all; mask at 4× | red (hue 352–12°): three 200 ms **glitch flashes**, each on a different random ~65% of dots, then a pulse 20%→60% whose period varies ±15% per dot, until the hold ends |
+| Asleep | the pilot, plus a rare twinkle | the FR4 dot right of the test button (row 3, col 4) breathes 3%→12% of the cap, driven linearly (gamma would round these levels to zero), on a 6 s period: neutral white, or a slowly cycling hue in gamer mode. Every 30 s one other FR4 dot twinkles once (1.5 s, peak 8% linear). Fade into sleep over 10 s; wake instantly. |
 
 Levels in this table are perceptual: every pattern except the pilot light goes through **gamma 2.2**
 before the cap, on FR4 and mask dots alike, and the numbers get a final tune on the board.
@@ -122,8 +128,9 @@ Units and their interfaces. Pure cores stay host-testable in `tools/rip`, as now
 - `ps_update(now_ms)` derives the view and runs every timer lazily: boot length, offline
   debounce, stall attention, failed hold, sleep. A state change counts as activity. The core
   owns time-since-line-change, so `serial_out` no longer decides "blocked".
-- Output: `ps_view_t { state; phone_joined; asleep; since_ms; asleep_ms }`, the one view the
-  LEDs, IPP and the web status all read.
+- Output: `ps_view_t { state; phone_joined; greeted; asleep; since_ms; asleep_ms }`, the one
+  view the LEDs, IPP and the web status all read. `greeted` marks a stretch of Ready entered
+  straight from Joining or Booting, which the panel opens with the green Wi-Fi-connected moment.
 - Booting ends on the core's own timer (`boot_ms` = the Spin's 3.0 s); no event is needed.
 - `STALL_ABORT` is not the core's to enforce: the serial writer fails a write after that long
   without FIFO progress.
@@ -148,8 +155,10 @@ Units and their interfaces. Pure cores stay host-testable in `tools/rip`, as now
 - `ipp_server_set_stopped(reason)` stays; `main` maps the attention and offline states to it.
 
 **`led_grid_core`**
-- `lg_render(const ps_view_t *, t_ms, frame)`: one renderer per state, materials as above,
-  the Spin as a one-shot keyed off `since_ms`.
+- `lg_render(const ps_view_t *, const lg_opts_t *, t_ms, frame)`: one renderer per state,
+  materials as above, the Spin as a one-shot keyed off `since_ms`. `lg_opts_t { gamer }`.
+- Gamer mode is DIP7 (`dip_config_t.gamer`; DIP8 stays spare), read live like the other
+  switches and handed to the LED task with `led_grid_set_gamer()`.
 - **Test patterns do not ship.** The W-1034 rainbow and the boot-animation spike stay on their
   branches; patterns are previewed rendered in chat, not on the device.
 
