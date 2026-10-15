@@ -139,6 +139,15 @@ int main(void)
         assert(abs(f[p][1] - f[p][0]) <= 3 && abs(f[p][1] - f[p][2]) <= 3);
     }
 
+    // Ready's white must not read amber through the tan FR4: no dot ever
+    // drives more red than blue (tuned on board 1).
+    for (uint32_t t = 0; t < 12000; t += 97) {
+        ps_view_t v = view(PS_READY, 5000);
+        lg_render(&v, &WHITE_MODE, t, f);
+        for (int i = 0; i < LG_NUM_LEDS; i++)
+            if (LG_MAP[i].mat == 'P') assert(f[i][2] >= f[i][0]);
+    }
+
     // Gamer mode: Ready drifts through colour -- saturated dots, and the
     // pilot's hue moves over time.
     {

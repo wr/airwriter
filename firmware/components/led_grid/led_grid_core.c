@@ -82,10 +82,12 @@ static float jitter(int r, int c, float base, float spread, uint32_t t, float dr
     return h;
 }
 
-// Ready's neutral white: each dot a touch warm or a touch cool.
+// Ready's neutral white, each dot a touch warmer or cooler than the next. The
+// whole range is biased blue: through the tan FR4, and at these few counts of
+// drive, a nominal white came out amber on board 1.
 static lg_c3 white_of(int r, int c)
 {
-    static const lg_c3 warm = {1.00f, 0.92f, 0.82f}, cool = {0.86f, 0.92f, 1.00f};
+    static const lg_c3 warm = {0.82f, 0.88f, 1.00f}, cool = {0.70f, 0.84f, 1.00f};
     return mix(warm, cool, dot_hash(r, c, 5));
 }
 
