@@ -107,6 +107,25 @@ unsigned kg_ota_untrusted(const kg_ota_t e[2], int nslots, int *kept)
     return bad;
 }
 
+int kg_ota_write_sector(const kg_ota_t e[2], int nslots, uint32_t *after)
+{
+    int kept, keep = -1, active = -1;
+    kg_ota_untrusted(e, nslots, &kept);
+    *after = 0;
+    for (int i = 0; i < 2; i++) {
+        if (!e[i].ok || nslots <= 0) continue;
+        if (e[i].seq > *after) *after = e[i].seq;
+        int s = (int)((e[i].seq - 1) % (uint32_t)nslots);
+        int good = e[i].state == KG_IMG_VALID || e[i].state == KG_IMG_UNDEFINED;
+        if (good && s == kept && (keep < 0 || e[i].seq > e[keep].seq)) keep = i;
+        // What the bootloader boots: the newest entry not marked failed.
+        int boots = e[i].state != KG_IMG_INVALID && e[i].state != KG_IMG_ABORTED;
+        if (boots && (active < 0 || e[i].seq > e[active].seq)) active = i;
+    }
+    if (keep >= 0) return !keep;
+    return active < 0 ? 0 : !active;
+}
+
 int kg_reset_order(int good, int kept, unsigned untrusted, int nslots, int order[])
 {
     int n = 0;

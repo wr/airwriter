@@ -73,14 +73,14 @@ static const uint8_t *running_sha(void)
 
 // The record was read or written: what the status page shows is what the
 // power-up reset would trust, or nothing if the named slot holds another
-// image now (the reset then boots the newest kept one).
+// image now, or none (the reset then boots the newest kept one).
 static void describe_good(const kg_rec_t two[2])
 {
     const esp_partition_t *p = slot_part(s_good);
     esp_app_desc_t d;
     int ok = p && esp_ota_get_partition_description(p, &d) == ESP_OK;
     s_good_slot[0] = s_good_ver[0] = '\0';
-    if (kg_vouches(two, s_nslots, s_good, ok ? d.app_elf_sha256 : NULL)) {
+    if (ok && kg_vouches(two, s_nslots, s_good, d.app_elf_sha256)) {
         strncpy(s_good_slot, p->label, sizeof s_good_slot - 1);
         strncpy(s_good_ver, d.version, sizeof s_good_ver - 1);
     }

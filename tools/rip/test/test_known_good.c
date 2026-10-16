@@ -195,6 +195,32 @@ int main(void)
     kg_reset_order(-1, kept, bad, 3, o);
     assert(o[0] == 1 && o[2] == 2);
 
+    // Where the reset writes: never over the newest kept entry, so a cut
+    // mid-write leaves that one in charge. The review's case: the kept entry
+    // is not the active one while an update is new or on trial.
+    uint32_t after;
+    e[0] = ent(5, VALID); e[1] = ent(6, PENDING);
+    assert(kg_ota_write_sector(e, 3, &after) == 1 && after == 6);
+    e[0] = ent(6, NEW); e[1] = ent(5, VALID);
+    assert(kg_ota_write_sector(e, 3, &after) == 0 && after == 6);
+    e[0] = ent(5, VALID); e[1] = ent(7, ABORTED);                // past the failed one too
+    assert(kg_ota_write_sector(e, 3, &after) == 1 && after == 7);
+    e[0] = ent(4, VALID); e[1] = ent(5, VALID);                  // both kept: over the older,
+    assert(kg_ota_write_sector(e, 3, &after) == 0 && after == 5); // as IDF does
+    e[0] = ent(8, KG_IMG_UNDEFINED); e[1] = ent(7, VALID);
+    assert(kg_ota_write_sector(e, 3, &after) == 1 && after == 8);
+    e[0] = ent(5, PENDING); e[1] = NONE;                         // nothing kept: not over the
+    assert(kg_ota_write_sector(e, 3, &after) == 1 && after == 5); // one it boots
+    e[0] = ent(5, INVALID); e[1] = ent(4, ABORTED);              // nothing it would boot
+    assert(kg_ota_write_sector(e, 3, &after) == 0 && after == 5);
+    e[0] = NONE; e[1] = NONE;                                    // blank otadata
+    assert(kg_ota_write_sector(e, 3, &after) == 0 && after == 0);
+    // The entry written beats every entry left, so the bootloader takes it.
+    e[0] = ent(5, VALID); e[1] = ent(6, PENDING);
+    int sec = kg_ota_write_sector(e, 3, &after);
+    uint32_t q = kg_ota_seq(after, 0, 3);
+    assert(q > e[!sec].seq && ota_slot(q, 3) == 0);
+
     // otadata: the number written boots the slot, and beats the active one.
     assert(kg_ota_seq(0, 0, 3) == 1 && kg_ota_seq(0, 2, 3) == 3);  // blank: slot + 1, as IDF
     for (uint32_t act = 0; act < 50; act++)

@@ -122,9 +122,12 @@ In `bootloader_after_init`, after the existing pin clamps:
    check the bootloader makes before it boots one). So an update on trial, or one that failed,
    is never made permanent ahead of an image that was kept. *(Changed after review: the first
    draft tried "the slot otadata boots" second, which can be the update on trial.)*
-5. Write an otadata entry that boots it: state `VALID`, `seq` the smallest past the active
-   entry's with `(seq - 1) % 3 == slot`, into the sector *not* holding the active entry
-   (exactly as `esp_ota_set_boot_partition` does). A cut here leaves the old entry in charge.
+5. Write an otadata entry that boots it: state `VALID`, `seq` the smallest past both entries'
+   with `(seq - 1) % 3 == slot`, over the sector that does *not* hold the newest kept entry
+   (with none kept, the one not holding the entry the bootloader would boot). A cut here leaves
+   the kept entry in charge. *(Changed after review: `esp_ota_set_boot_partition`'s rule,
+   "overwrite whatever is not active", would erase the kept entry exactly when an update on
+   trial is the active one, and a cut would leave that update with nothing to roll back to.)*
 6. Erase nvs (`bootloader_common_erase_part_type_data("nvs", false)`).
 7. Set the RTC retain flag the app already reads (`bootloader_common_set_rtc_retain_mem_
    factory_reset_state`); the panel's reset confirmation follows from it as today.

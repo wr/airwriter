@@ -413,7 +413,8 @@ slot the power-up reset boots) and `known_good_version`.
   it, then the newest image otadata says was kept, then the rest from ota_0 up, and last any
   image otadata says is new, on trial or failed, checking each the way the bootloader checks
   any image. It writes an otadata entry for the first that checks out (state valid,
-  in the sector not holding the active entry, as `esp_ota_set_boot_partition` does), erases
+  over the sector that does not hold the newest kept entry, so a cut leaves that entry in
+  charge rather than an update on trial), erases
   nvs, and leaves the RTC flag the app reads for the panel cue; the bootloader's own slot
   choice then boots it. The bootloader never writes the record: a fallback image becomes
   known-good after its first real print. The panel stays dark while the button is held (the

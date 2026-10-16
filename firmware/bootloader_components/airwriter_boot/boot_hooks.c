@@ -112,18 +112,21 @@ static int read_good(const layout_t *l)
     return -1;
 }
 
-// Makes `slot` the one the bootloader boots next, as esp_ota_set_boot_partition
-// does: a new entry past the active one, in the sector that does not hold it.
-// Cut short, the active entry still decides.
-static bool point_otadata(const layout_t *l, const esp_ota_select_entry_t od[2], int active,
-                          int slot)
+// Makes `slot` the one the bootloader boots next: a valid entry past both,
+// over the sector that does not hold the newest kept entry. Unlike
+// esp_ota_set_boot_partition, which overwrites whatever is not active, a cut
+// here leaves the kept entry in charge rather than an update on trial, whose
+// entry is the active one when this reset is most needed.
+static bool point_otadata(const layout_t *l, const kg_ota_t ent[2], int slot)
 {
+    uint32_t after;
+    int sector = kg_ota_write_sector(ent, l->nslots, &after);
     esp_ota_select_entry_t e;
     memset(&e, 0xff, sizeof e);
-    e.ota_seq = kg_ota_seq(active < 0 ? 0 : od[active].ota_seq, slot, l->nslots);
+    e.ota_seq = kg_ota_seq(after, slot, l->nslots);
     e.ota_state = ESP_OTA_IMG_VALID;
     e.crc = bootloader_common_ota_select_crc(&e);
-    uint32_t at = l->otadata.offset + (active < 0 ? 0 : !active) * KG_SECTOR;
+    uint32_t at = l->otadata.offset + sector * KG_SECTOR;
 
     esp_ota_select_entry_t back;
     bool enc = esp_flash_encryption_enabled();
@@ -153,9 +156,7 @@ static void known_good_reset(void)
     } else {
         esp_ota_select_entry_t od[2];
         memset(od, 0xff, sizeof od);
-        int active = -1;
-        if (bootloader_common_read_otadata(&l.otadata, od) == ESP_OK)
-            active = bootloader_common_get_active_otadata(od);
+        bootloader_common_read_otadata(&l.otadata, od);
         // What otadata says each slot holds: an image someone kept, or one
         // new, on trial or failed, which goes last whatever otadata boots.
         kg_ota_t e[2];
@@ -180,7 +181,7 @@ static void known_good_reset(void)
         }
         if (pick < 0)
             ESP_LOGE(TAG, "no valid image in any slot; a USB flash is the way back");
-        else if (!point_otadata(&l, od, active, pick))
+        else if (!point_otadata(&l, e, pick))
             ESP_LOGE(TAG, "could not set ota_%d to boot", pick);
         else
             ESP_LOGW(TAG, "booting ota_%d%s", pick, pick == good ? "" : ", not the known-good slot");

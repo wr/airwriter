@@ -70,6 +70,8 @@ typedef struct {
 } kg_ota_t;
 
 #define KG_IMG_VALID        0x2u
+#define KG_IMG_INVALID      0x3u
+#define KG_IMG_ABORTED      0x4u
 #define KG_IMG_UNDEFINED    0xffffffffu
 
 // Reads what otadata says about each slot. Returns a bit per slot whose
@@ -77,6 +79,14 @@ typedef struct {
 // `*kept` to the slot of the newest entry that is valid or undefined (one
 // kept, or written without a trial), -1 if none.
 unsigned kg_ota_untrusted(const kg_ota_t e[2], int nslots, int *kept);
+
+// Where the power-up reset writes its otadata entry: the sector that does not
+// hold the newest kept entry, so a cut mid-write leaves that entry, not an
+// update on trial, in charge. With no kept entry, the sector that does not
+// hold the one the bootloader would boot (as esp_ota_set_boot_partition
+// does). `*after` is the newest seq in either sector, which the new entry
+// must pass.
+int  kg_ota_write_sector(const kg_ota_t e[2], int nslots, uint32_t *after);
 
 // The order the power-up reset tries slots in: the known-good one (`good`,
 // -1 when the record does not vouch for it), then the newest kept one, then
