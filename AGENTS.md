@@ -24,7 +24,9 @@ being true, change or delete it in the same commit that made it false.
 | `docs/review-*.md`, `docs/firmware-audit-*.md` | Dated reviews. Historical; their findings are applied. |
 
 ## Source of truth
-- GitHub: none (local only)
+- GitHub: github.com/wr/airwriter (public). It was seeded from a purged copy of main, so this
+  local repository's history is not the published one yet: a pre-push hook blocks pushing until
+  `tools/release/purge-history.sh` has been run here (W-1054). No remote is set until then.
 - Linear project: AirWriter (id: 9c428072-e8eb-4c3d-88e6-b3eadf604eed), team Personal
 - Branch prefix: wells/
 - PR mode: none
