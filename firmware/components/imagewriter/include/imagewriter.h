@@ -69,10 +69,11 @@ void iw_link_job_end(iw_link_t *l, int clean);
 // lengths from Appendix A of the Technical Reference: ESC G/S nnnn and
 // ESC g nnn (x8) carry graphics, ESC V nnnn c and ESC R nnn c one character,
 // ESC H/F nnnn, ESC L/u nnn, ESC T nn, ESC Z/D two bytes, ESC a/s/l/K one,
-// ESC ( and ESC ) a tab list ending '.', ESC I custom characters ending
-// CTRL-D, and CTRL-_ one count byte.
+// ESC ( and ESC ) a tab list ending '.', ESC I custom characters (KEY,
+// WIDTH A-P or a-p for 1-16 data bytes, the DATA, repeated, then CTRL-D where
+// a KEY would be: Table 7-1, p. 95), and CTRL-_ one count byte.
 typedef struct {
-    uint8_t  state, cmd, digits;
+    uint8_t  state, cmd, digits, after;   // after: where a skip returns to
     uint32_t num, left;
 } iw_scan_t;
 

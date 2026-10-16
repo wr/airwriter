@@ -68,6 +68,13 @@
 // connection and retried OpenConn 18 times against "busy" on the bench). The
 // old connection is closed and the new one accepted. Another Mac still gets busy.
 #define LT_PAP_STALE_MS         10000
+// A Mac that has sent part of a job, then nothing for this long while we were
+// asking (a read out) and the printer was ready, has stopped: the bench Mac
+// once sat on a finished page for 10+ minutes, tickling, never closing, and
+// holding the printer from every other job. The connection is closed (normal:
+// the bytes print if they end between commands). A Mac waiting out paper-out
+// or off line is waiting on the status word and is never cut off.
+#define LT_PAP_QUIET_MS        300000
 
 typedef struct {
     void *ctx;
@@ -139,6 +146,7 @@ typedef struct {
     uint16_t   ws_answered_seq;  // the last one answered, for PAP-level retransmits
     uint8_t    ws_answered_eof;
     uint64_t   wrote;            // when the workstation last sent us Data
+    uint64_t   waiting;          // since when it has owed us data with the printer ready
     uint32_t   bytes;
 } lt_pap_t;
 

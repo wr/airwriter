@@ -25,7 +25,8 @@ typedef struct {
     int  (*write)(void *ctx, const uint8_t *d, size_t n);
     // The job is over and its bytes are written or dropped: normal is 1 when
     // the Mac ended it (CloseConn, EOF), 0 when it was abandoned or aborted.
-    void (*end)(void *ctx, int normal);
+    // Returns 1 when the whole job reached the printer.
+    int  (*end)(void *ctx, int normal);
 } localtalk_printer_t;
 
 typedef struct {

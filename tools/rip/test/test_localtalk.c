@@ -725,6 +725,54 @@ static void test_pap_printer(void)
     fake_room = (size_t)-1;
 }
 
+// A Mac that stops sending mid-job, tickling all the while, is closed after
+// LT_PAP_QUIET_MS -- unless the printer is not ready, which it is waiting out.
+static void test_pap_quiet(void)
+{
+    for (int offline = 0; offline <= 1; offline++) {
+        lt_node_t n;
+        uint64_t t = online(&n, 200);
+        uint8_t f[LLAP_MAX];
+        const uint8_t oc[] = { 0xF4, 1, 0, 0 };
+        size_t fl = mac_atp(f, 200, LT_SOCK_SLS, ATP_TREQ | ATP_XO, 0x01, 0x0600, 0x21, PAP_OPEN_CONN, 0, 0, oc, sizeof oc);
+        lt_node_rx(&n, f, fl, t);
+        uint16_t tid1 = (uint16_t)(atp_of(1)[2] << 8 | atp_of(1)[3]);
+        const uint8_t chunk[] = { 0x0D, 0x0A };
+        fl = mac_atp(f, 200, LT_SOCK_CONN, ATP_TRESP | ATP_EOM, 0, tid1, 0x21, PAP_DATA, 0, 0, chunk, sizeof chunk);
+        lt_node_rx(&n, f, fl, t + 100);
+        CHECK(n.pap.rd_want);                             // the next read is out
+        if (offline) lt_node_set_status(&n, LT_IW_OFFLINE);
+        job_eof = 0;
+        job_normal = -1;
+        // Tickles keep the connection alive; ticks run the clock.
+        uint64_t end = t + 100 + LT_PAP_QUIET_MS * (offline ? 2 : 1);
+        for (uint64_t now = t + 1000; now < end; now += 1000) {
+            if ((now - t) % 30000 == 0) {
+                fl = mac_atp(f, 200, LT_SOCK_CONN, ATP_TREQ, 0x01, (uint16_t)now, 0x21, PAP_TICKLE, 0, 0, NULL, 0);
+                lt_node_rx(&n, f, fl, now);
+            }
+            lt_node_tick(&n, now);
+        }
+        CHECK(n.pap.open);
+        reset_fake();
+        lt_node_tick(&n, end + 1000);
+        if (offline) {
+            CHECK(n.pap.open);                            // paper-out is not quiet
+            CHECK_EQ_INT(job_eof, 0);
+            lt_node_set_status(&n, 0);
+        } else {
+            CHECK(!n.pap.open);
+            CHECK_EQ_INT(job_eof, 1);
+            CHECK_EQ_INT(job_normal, 1);                  // what came prints
+            int closes = 0;
+            for (int i = 0; i < nsent && i < MAXSENT; i++)
+                closes += atp_of(i)[5] == PAP_CLOSE_CONN && atp_of(i)[0] == ATP_TREQ;
+            CHECK_EQ_INT(closes, 1);
+            CHECK(strstr(lastlog, "went quiet") != NULL);
+        }
+    }
+}
+
 // The captured page, fed as the Mac sends it (one ~88-byte Data per read,
 // flow quantum 1, CloseConn at the end), through a spool and serial_writer
 // into a printer FIFO that takes 16 bytes at a time: what reaches the wire
@@ -856,6 +904,7 @@ int main(void)
     test_pap_mac_reads();
     test_pap_superseded();
     test_pap_printer();
+    test_pap_quiet();
     test_pap_fixture();
     TEST_END;
 }

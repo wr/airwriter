@@ -421,6 +421,14 @@ static void pap_tick(lt_node_t *n, uint64_t now)
     }
     if (p->rd_want && now - p->rd_sent >= LT_PAP_SENDDATA_RETRY_MS) pap_send_read(n, now);
     pap_start_read(n, now);                        // when room has come back
+
+    // Owed data: a read out, the printer ready, and the job begun.
+    if (!(p->rd_want && n->status == 0 && p->bytes) || p->wrote > p->waiting) p->waiting = now;
+    if (p->open && now - p->waiting >= LT_PAP_QUIET_MS) {
+        uint8_t user[4] = { p->connid, PAP_CLOSE_CONN, 0, 0 };
+        send_atp(n, &p->ws, LT_SOCK_CONN, ATP_TREQ, 0x01, next_tid(n), user, NULL, 0);
+        pap_close(n, "the Mac went quiet", 1);
+    }
     pap_answer_ws_read(n, now);
 }
 

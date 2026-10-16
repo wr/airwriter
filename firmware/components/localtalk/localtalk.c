@@ -175,7 +175,7 @@ static void print_task(void *arg)
         }
         if (s_job_active && s_job_ended && xStreamBufferIsEmpty(s_spool)) {
             int ok = s_job_normal && !s_job_failed;
-            if (s_printer.end) s_printer.end(s_printer.ctx, ok);
+            if (s_printer.end) ok = s_printer.end(s_printer.ctx, ok);
             if (ok) s_jobs_printed++; else s_jobs_failed++;
             s_job_active = 0;
             continue;

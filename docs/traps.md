@@ -110,8 +110,10 @@ Traps already explained in a code comment are listed only when the comment is ea
   It never reads back (no SendData to us), polls SendStatus about twice per chunk, writes ~88
   bytes per read with a flow quantum of 1, and sends the same native ImageWriter stream as serial
   (one short page: 11968 bytes, identical across prints). Once, the Mac sent a whole page and
-  then tickled the connection for 10+ minutes without closing; its next job's OpenConn now
-  supersedes a connection silent for 10 s (`LT_PAP_STALE_MS`). Cause not found.
+  then tickled the connection for 10+ minutes without closing. Cause not found. Its next job's
+  OpenConn now supersedes a connection silent for 10 s (`LT_PAP_STALE_MS`), and a job that has
+  owed data for 5 min with the printer ready is closed (`LT_PAP_QUIET_MS`), so the printer is
+  never held indefinitely.
 - **The bench Mac's 8.1 install had no AppleTalk ImageWriter driver**, and the plain
   "ImageWriter" Chooser driver is serial only.
   Apple's `AppleTalk_ImageWriter_7.0.1.sea.bin` (Wayback copy of download.info.apple.com) works.

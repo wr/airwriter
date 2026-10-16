@@ -308,8 +308,14 @@ int main(void)
             { "\x1b(010,020.", 10, 1 },
             { "\x1bZ\x00", 3, 0 },
             { "\x1bZ\x00\x20", 4, 1 },
-            { "\x1bI\x1b\x00\x7f", 5, 0 }, /* custom characters end at CTRL-D */
-            { "\x1bI\x1b\x00\x7f\x04", 6, 1 },
+            /* ESC I: KEY 'A', WIDTH 'B' = two data bytes (0x04 and ESC are
+             * data here, not the end or a command), KEY 'C', WIDTH 'a' = one
+             * byte, then CTRL-D where a KEY would be. */
+            { "\x1bI" "AB\x04", 5, 0 },
+            { "\x1bI" "AB\x04\x1b", 6, 0 },
+            { "\x1bI" "AB\x04\x1b" "Ca\x1f", 9, 0 },
+            { "\x1bI" "AB\x04\x1b" "Ca\x1f\x04", 10, 1 },
+            { "\x1bI\x04", 3, 1 },
             { "\x1f", 1, 0 },               /* CTRL-_ n */
             { "\x1f\x03", 2, 1 },
             { "\x1bG0000", 6, 1 },        /* an empty strip */
