@@ -8,6 +8,7 @@
 #include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "freertos/semphr.h"
 #include "led_strip.h"
 #include "printer_state.h"
 
@@ -31,9 +32,24 @@ static volatile uint8_t s_src;     // lg_src_t, whose job Printing is
 
 static uint64_t now_ms(void) { return (uint64_t)(esp_timer_get_time() / 1000); }
 
+// Core 1, away from Wi-Fi: the Wi-Fi task is pinned to core 0, and on board 1
+// the WPA3 handshake kept core 0 busy from 2.7 s to 3.8 s after power-on.
+// Unpinned, this task ran every frame on core 0 there, and frames came up to
+// 316 ms apart: the Spin stuttered (W-1060 frame log). The strip is created on
+// this task too, so its RMT interrupt is allocated on core 1 as well.
+#define LG_CORE (portNUM_PROCESSORS > 1 ? 1 : 0)
+
+static SemaphoreHandle_t s_started;
+static esp_err_t s_start_err;
+
+static esp_err_t strip_start(void);
+
 static void lg_task(void *arg)
 {
     (void)arg;
+    s_start_err = strip_start();
+    xSemaphoreGive(s_started);
+    if (s_start_err != ESP_OK) vTaskDelete(NULL);
     // Rendered at 8.8 fixed point and temporally dithered down to 8 bits, at
     // a steady 100 fps: at a few counts of drive an 8-bit breathe has only a
     // handful of levels and visibly stutters; the dither carries each
@@ -69,10 +85,8 @@ static void lg_task(void *arg)
     }
 }
 
-esp_err_t led_grid_start(void)
+static esp_err_t strip_start(void)
 {
-    if (CONFIG_AIRWRITER_LED_DATA_PIN < 0) return ESP_OK;
-
     s_count = CONFIG_AIRWRITER_LED_COUNT;
     led_strip_config_t sc = {
         .strip_gpio_num = CONFIG_AIRWRITER_LED_DATA_PIN,
@@ -90,9 +104,20 @@ esp_err_t led_grid_start(void)
                                   .mem_block_symbols = LG_RMT_SYMBOLS, .flags.with_dma = true };
     esp_err_t err = led_strip_new_rmt_device(&sc, &rc, &s_strip);
     if (err != ESP_OK) return err;
-    led_strip_clear(s_strip);
-    return xTaskCreate(lg_task, "led_grid", 3072, NULL, 3, NULL) == pdPASS
-               ? ESP_OK : ESP_ERR_NO_MEM;
+    return led_strip_clear(s_strip);
+}
+
+esp_err_t led_grid_start(void)
+{
+    if (CONFIG_AIRWRITER_LED_DATA_PIN < 0) return ESP_OK;
+    // Waits for the task to have the strip, so the RMT driver owns IO48 by
+    // the time this returns, as the boot clamp in main expects.
+    s_started = xSemaphoreCreateBinary();
+    if (!s_started) return ESP_ERR_NO_MEM;
+    if (xTaskCreatePinnedToCore(lg_task, "led_grid", 3072, NULL, 3, NULL, LG_CORE) != pdPASS)
+        return ESP_ERR_NO_MEM;
+    xSemaphoreTake(s_started, portMAX_DELAY);
+    return s_start_err;
 }
 
 void led_grid_set_gamer(int on)
