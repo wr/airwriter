@@ -97,8 +97,9 @@ Linear is the queue; these are the live items.
 - `W-567 M6 — Manners: paper-out, cancel, web UI, provisioning, OTA` (backlog).
 - `W-1053 LocalTalk: print PAP jobs from the Mac's AppleTalk ImageWriter driver`: on
   `wells/w-1053-localtalk-print-pap-jobs`, unmerged. Host-tested against
-  `fixtures/pap-iw701-page.bin`; not yet printed on paper (needs a second crossover cable for
-  J2, since the bench Mac's is on J4).
+  `fixtures/pap-iw701-page.bin`, and on board 1 a real Mac job went from PAP through
+  `serial_out` byte for byte (UART loopback, `CONFIG_AIRWRITER_LT_BENCH`). Not yet on paper:
+  that needs a second crossover cable for J2, since the bench Mac's is on J4.
 - Not in Linear: scope HSKo during a long job (SPEC §3.9 timing).
 
 ## Toolchain
