@@ -42,6 +42,9 @@ build/test_led_grid: test/test_led_grid.c \
 build/test_dip_config: test/test_dip_config.c ../../firmware/components/dip_config/dip_config_core.c | build
 	$(CC) $(CFLAGS) $(INCS) -I../../firmware/components/dip_config/include -Itest -o $@ $^
 
+build/test_ota_health: test/test_ota_health.c ../../firmware/components/ota_health/ota_health_core.c | build
+	$(CC) $(CFLAGS) -I../../firmware/components/ota_health/include -Itest -o $@ $^
+
 build/test_pic_prog: test/test_pic_prog.c test/pic_sim.c ../../firmware/components/pic_prog/pic_prog_core.c | build
 	$(CC) $(CFLAGS) -I../../firmware/components/pic_prog/include -Itest -o $@ $^
 

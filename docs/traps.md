@@ -29,6 +29,10 @@ Traps already explained in a code comment are listed only when the comment is ea
   `led_grid_core.h` are the only limit on 37 SK6812s; raise them knowingly.
 - **A raw pyserial open on macOS drops the S3 into download mode** (the driver asserts DTR at
   open). Read the console only with `idf.py monitor` under `script` (AGENTS.md, bench rules).
+- **An image built without W-1046 is rolled back at its next reboot** when a W-1046 image
+  installs it over the air: the installer marks it on trial, and nothing in it ever keeps
+  itself. It runs fine until then. Rebase a branch on W-1046 before OTAing it to a W-1046 board,
+  or USB-flash it (which also puts the old bootloader and table back).
 - **`idf.py flash` over USB leaves the printer not-ready until SELECT is toggled.** The S3 sits
   ~10 s in download mode with IO17 (UART1 TX → U2 DI) floating. Power-cycling does not do it.
   Dev-only; rev B candidate pull-up on IO17.

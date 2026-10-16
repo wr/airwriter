@@ -242,6 +242,92 @@ static lg_c3 state_dot(const ps_view_t *v, const lg_opts_t *o, int i, uint32_t t
     return DARK;
 }
 
+// ---------------------------------------------------------------- actions
+// The factory reset (W-1045), drawn over every state. Orange turning red
+// because it is a warning a person is choosing to walk into; mask dots join
+// in, since red and amber survive the mask. FR4 dots take the alert cap in the
+// red phases; the white beats stay at the normal cap, which keeps the frame's
+// draw under the boot spin's (no current limit on rev A).
+
+int lg_act_over(uint8_t act, uint32_t act_ms)
+{
+    switch (act) {
+    case LG_ACT_RESET_CANCEL:  return act_ms >= LG_RESET_CANCEL_MS;
+    case LG_ACT_RESET_CONFIRM: return act_ms >= LG_RESET_DONE_MS;
+    case LG_ACT_RESET_FAILED:  return act_ms >= LG_RESET_FAILED_MS;
+    case LG_ACT_NONE:          return 1;
+    default:                   return 0;    // HOLD and DONE last until replaced
+    }
+}
+
+// The countdown at fill p (0..1): a hand sweeps clockwise from 12 o'clock
+// round the test button, lighting each dot it passes, so the panel reads as a
+// clock running out. The newest dots glow; the rest beat faster as it fills.
+static lg_c3 reset_fill(int r, int c, float p, uint32_t s, uint32_t t)
+{
+    float dr = (float)r - 3, dc = (float)c - 3;
+    float turn = atan2f(dc, -dr) / TAU;                 // 0 at 12 o'clock, clockwise
+    if (turn < 0) turn += 1;
+    // Orange to red, late: through gamma 2.2 anything under ~30 degrees
+    // already reads red on the FR4, so the hue holds near orange for the first
+    // half and runs to red in the second.
+    float hue = jitter(r, c, 38 - 38 * p * sqrtf(p), 3, t, 0);
+    float ahead = p - turn;                            // > 0: the hand has passed it
+    float lit = clampf(ahead / 0.03f + 0.5f);
+    float glow = ahead > 0 ? expf(-ahead / 0.06f) : 1;
+    // 1 Hz rising to 3 Hz across the fill, as a phase so the rate can climb
+    // without a jump.
+    float sec = (float)s / 1000.0f, fill = LG_RESET_FILL_MS / 1000.0f;
+    float beat = 0.88f + 0.12f * cosf(TAU * (sec + sec * sec / fill));
+    float lvl = lit * (0.55f + 0.45f * glow) * beat;
+    return hsv(hue, 1, lvl > 0.05f ? lvl : 0.05f);
+}
+
+static void reset_frame(const lg_opts_t *o, uint32_t t, uint16_t out[LG_NUM_LEDS][3])
+{
+    uint32_t s = o->act_ms;
+    for (int i = 0; i < LG_NUM_LEDS; i++) {
+        int r = LG_MAP[i].r, c = LG_MAP[i].c, fr4 = LG_MAP[i].mat == 'P';
+        float dist = hypotf((float)r - 3, (float)c - 3);
+        lg_c3 col = DARK;
+        int white = 0;
+        switch (o->act) {
+        case LG_ACT_RESET_HOLD: {
+            float p = clampf((float)s / LG_RESET_FILL_MS);
+            col = reset_fill(r, c, p, s, t);
+            break;
+        }
+        case LG_ACT_RESET_CANCEL: {
+            float p = (float)o->act_from / 1000.0f * (1 - ss(0, LG_RESET_CANCEL_MS, (float)s));
+            col = sc(reset_fill(r, c, p, 0, t), 1 - ss(0, LG_RESET_CANCEL_MS, (float)s));
+            break;
+        }
+        case LG_ACT_RESET_DONE:
+        case LG_ACT_RESET_CONFIRM: {
+            lg_c3 red = hsv(jitter(r, c, 2, 4, t, 0), 1, 1);
+            if (s < 180) {                              // the point of no return
+                col = fr4 ? white_of(r, c) : red;
+                white = fr4;
+            } else if (s < 1180) {                      // drains into the test button
+                float radius = 5.3f * (1 - (float)(s - 180) / 1000.0f);
+                col = sc(red, clampf((radius - dist) / 0.8f + 0.5f));
+            } else if (fr4 && ((s >= 1300 && s < 1480) || (s >= 1660 && s < 1840))) {
+                col = sc(white_of(r, c), 0.7f);         // done: two beats of white
+                white = 1;
+            }
+            break;
+        }
+        case LG_ACT_RESET_FAILED: {
+            ps_view_t f = { .state = PS_FAILED, .since_ms = s };
+            col = state_dot(&f, NULL, i, t);
+            break;
+        }
+        }
+        float cap = !fr4 ? LG_MASK_CAP : white ? LG_BRIGHTNESS_CAP : LG_ALERT_CAP;
+        put_dot(out[i], level16(col.r, cap), level16(col.g, cap), level16(col.b, cap));
+    }
+}
+
 // The asleep pilot (and the rare twinkle): neutral white, or a slowly cycling
 // hue in gamer mode. Linear drive, as a fraction of LG_BRIGHTNESS_CAP. A
 // channel under one count snaps to 0 or 1 rather than being dithered, which
@@ -261,6 +347,10 @@ void lg_render16(const ps_view_t *v, const lg_opts_t *o, uint32_t t_ms,
                  uint16_t out[LG_NUM_LEDS][3])
 {
     memset(out, 0, sizeof(uint16_t) * LG_NUM_LEDS * 3);
+    if (o && !lg_act_over(o->act, o->act_ms)) {
+        reset_frame(o, t_ms, out);
+        return;
+    }
     int all = all_dots(v->state);
     int gamer = o && o->gamer;
     float sleep_k = v->asleep ? clampf((float)v->asleep_ms / 10000.0f) : 0;   // 10 s fade

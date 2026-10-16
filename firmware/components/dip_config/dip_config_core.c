@@ -27,6 +27,39 @@ int dip_stable(dip_deb_t *d, uint8_t sample, uint8_t *out)
     return 0;
 }
 
+btn_ev_t btn_step(btn_t *b, int pressed, uint32_t now_ms)
+{
+    uint8_t s = pressed ? 1 : 0;
+    if (!b->seeded) {
+        b->seeded = 1;
+        b->last = b->down = s;
+        b->armed = !s;
+        return BTN_EV_NONE;
+    }
+    // A deliberate press does not need the DIPs' three settled samples to be
+    // believed: two equal samples in a row change the level.
+    uint8_t same = s == b->last;
+    b->last = s;
+    if (same && s != b->down) {
+        b->down = s;
+        if (s) {
+            b->t_down = now_ms;
+            b->holding = b->committed = 0;
+            return BTN_EV_NONE;
+        }
+        if (!b->armed) { b->armed = 1; return BTN_EV_NONE; }
+        return b->committed ? BTN_EV_RELEASE : b->holding ? BTN_EV_CANCEL : BTN_EV_TAP;
+    }
+    if (!b->down || !b->armed) return BTN_EV_NONE;
+    uint32_t held = now_ms - b->t_down;
+    if (!b->holding && held >= BTN_TAP_MAX_MS) { b->holding = 1; return BTN_EV_HOLD; }
+    if (b->holding && !b->committed && held >= BTN_COMMIT_MS) {
+        b->committed = 1;
+        return BTN_EV_COMMIT;
+    }
+    return BTN_EV_NONE;
+}
+
 uint8_t dip_physical(uint8_t net_bits)
 {
     uint8_t out = 0;

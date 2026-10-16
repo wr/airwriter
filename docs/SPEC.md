@@ -85,9 +85,10 @@ USB-C (5V) ─┬─ ESD ─ LDO 3.3V ─┬─ ESP32-S3-WROOM-1
 | J2, J4 | **Kycon KMDGX-8S-BS** | THT | Mini-DIN-8 female, right-angle, fully shielded. Buy from Mouser, not Digi-Key, which is backordered. Footprint is custom — KiCad ships none — and was drawn from Kycon's drawing and verified against their STEP model. **Do not substitute Same Sky MD-80S/MD-80SM**, listed here in the original draft: their mounting is a rectangular-slot and earth-blade arrangement that does not fit this footprint. Solder by hand; see `docs/sourcing.md` |
 | D1, D2 | WS2812B-2020 | 2020 | Status. D2 chains off D1's DOUT, so the second costs no GPIO. D1 = network, D2 = printer/job |
 | D3 | green LED + 1k | 0603 | Power. Straight across the 3V3 rail, no GPIO. Separates "board is dead" from "firmware is dead" during bring-up |
-| SW2 | Omron B3U-1000P | SMD | Mode / test page, on IO38. Cannot share IO0 with SW1: IO0 is a strapping pin, so holding it at reset means USB download mode |
+| SW2 | Omron B3U-1000P | SMD | BOOT, on IO0: a strapping pin, so holding it at reset means USB download mode. Component side, not reachable through the case |
+| SW3 | 6 mm tactile, 16 mm tall | THT | The `test` button, under the panel's test dot, on IO14. A tap prints a test page; held, it is the factory reset (§3.11) |
 | J6 | JST-SH 4-pin, Qwiic pin order | SMD | I2C on IO36/IO37 with 4.7k pullups. A display module plugs in if one is ever wanted; the board does not commit 27 x 27mm to a screen that may never be fitted |
-| SW1 | Omron B3U-1000P | SMD | Config / factory reset, wired to GPIO0. **Changed from a generic 4.5mm tactile** — the closest KiCad stock footprint (B3S-1100) has a 10 x 8.9mm courtyard, which became the binding constraint on the pocket beside the mini-DIN. The B3U-1000P is 4.8 x 3.4mm |
+| SW1 | Panasonic EVQP44B3M | SMD | EN reset, side-press, east edge (reached through the case's pinhole). No code runs while it is held, so it cannot be the factory reset; that is SW3 (§3.11) |
 | — | 22uF + 10uF + 0.1uF | 0805/0603 | Bulk on 3.3V rail, one 0.1uF per IC pin pair |
 
 ### 2.4 Connector wiring
@@ -359,6 +360,52 @@ raster pipeline can be developed and regression-tested without an ESP32 or a pri
 loop, and `stream.bin` can be diffed byte-for-byte between changes. Capture a real URF
 sample from iOS early (point the print sheet at a stub IPP server that dumps the body to
 flash) and commit it as a fixture.
+
+### 3.11 Recovery: partitions, rollback, factory reset
+
+An owner must always be able to get back to a working printer without a computer
+(`W-1046 Factory reset must always work, even with broken firmware`,
+`W-1045 Long-press factory reset with live feedback on the LED panel`).
+
+**Partitions** (`firmware/partitions.csv`, 8 MB): nvs 24K at 0x9000, otadata at 0xf000,
+phy_init, **factory** 2M at 0x20000, ota_0 2M at 0x220000, ota_1 2M at 0x420000, storage 1.9M.
+The factory slot holds the image the board shipped with and is never written over the air.
+The C6 devkit keeps the old two-slot 4 MB table (`partitions-4mb.csv`).
+
+**Rollback** (`CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE`). A new OTA image boots on trial and keeps
+itself only after 15 s of unbroken health: with Wi-Fi credentials, joined and with IPP and the
+web UI listening; without them, the setup AP and web UI up (`components/ota_health`). Not
+healthy 120 s after boot, it marks itself invalid and reboots into the image before it; a
+crash or reboot during the trial is rolled back by the bootloader itself. While an image is
+on trial `/update` refuses another. `/api/status` carries `slot`, `trial` and `rolled_back`
+(the version last rolled back from, or empty).
+
+**Factory reset, two levels, both on the test button** (SW3, IO14):
+
+- *Settings*, in the app (W-1045). A tap (under 1 s) prints a test page, on release. Held
+  past 1 s the panel counts down; letting go cancels. At 8 s the whole nvs partition is erased
+  (Wi-Fi, queue name, hostname, dither, the LocalTalk node ID) and the board restarts once the
+  button is let go. The firmware stays.
+- *Everything*, in the bootloader (W-1046). Hold the button while powering up (plug in, or
+  the reset pinhole) and keep holding for 5 s: the bootloader erases nvs and otadata and boots
+  the factory slot, whatever state the app is in. The panel stays dark while the button is
+  held (the bootloader has no LED driver; a bootloader hook clamps IO48, IO35 and IO4 so the
+  hold does not leave them floating), then spins, then shows the reset's confirmation.
+
+IO14 is not a strapping pin (the S3's are IO0, IO3, IO45, IO46), and SW3 shorts it straight to
+GND with no external pull-up or capacitor; the bootloader enables the internal pull-up before
+it reads. A press already down when the app starts is the tail of the bootloader's hold, and
+the app ignores it until it is let go. A build with Wi-Fi credentials in its `sdkconfig` (board
+1's) rejoins them after either reset; a shipping build has none and comes back in setup mode.
+
+**Moving a board from the old table takes one USB flash**, because an OTA cannot rewrite the
+bootloader or the partition table. `idf.py -p PORT flash` writes the bootloader, the table, a
+blank otadata and the app into the factory slot; nvs, otadata and phy_init kept their offsets,
+so Wi-Fi credentials and settings survive it. An existing `sdkconfig` needs the options from
+`sdkconfig.defaults` and `sdkconfig.defaults.esp32s3` (main.c refuses to build without them),
+and an existing `sdkconfig.c6` needs `CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions-4mb.csv"`.
+The new app OTA'd onto a board still on the old table runs, but logs that it has no factory
+slot.
 
 ---
 

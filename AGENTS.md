@@ -48,7 +48,11 @@ What works on `main`:
   left busy by line noise at power-up gets a CTRL-X.
 - The 37-dot status panel per the status-language spec: Spin at boot, discrete printer and Wi-Fi
   states, per-dot white Ready, DIP7 gamer RGB, pilot dot after 5 min idle.
-- DIP switches read by their printed numbers; the `test` button prints a test page.
+- DIP switches read by their printed numbers; a tap of the `test` button prints a test page.
+- Recovery (SPEC §3.11): a `factory` slot beside ota_0/ota_1; a new OTA image runs on trial and
+  rolls back unless healthy (`/api/status` `slot`, `trial`, `rolled_back`). Holding `test` 8 s
+  erases the settings with a countdown on the panel; holding it through power-up for 5 s makes
+  the bootloader erase them and boot the factory slot.
 - Setup AP `AirWriter-xxxx` (open, 192.168.4.1) on a board with no credentials; web UI on port
   80: `/api/status`, Wi-Fi, settings, `/update` (OTA), `/api/localtalk/flash`.
 - Wi-Fi scans all channels and joins the strongest AP; printer-uuid is stable (MAC + epoch).
@@ -118,12 +122,16 @@ Linear is the queue; these are the live items.
   first, then from `firmware/`:
   - build (S3, board): `idf.py build`
   - C6 devkit: `idf.py -B build_c6 -D SDKCONFIG=sdkconfig.c6 build`
-  - flash over USB: `idf.py -p /dev/cu.usbmodem1101 flash` (leaves the printer not-ready until
-    SELECT is toggled)
-  - OTA: `curl -m 180 --data-binary @build/airwriter.bin http://10.0.1.115/update` (bench rules first)
+  - flash over USB: `idf.py -p /dev/cu.usbmodem1101 flash` writes the bootloader, partition
+    table, a blank otadata and the app into the factory slot, so the board boots that (leaves the
+    printer not-ready until SELECT is toggled)
+  - OTA: `curl -m 180 --data-binary @build/airwriter.bin http://10.0.1.115/update` (bench rules
+    first). It lands in ota_0/ota_1 on trial: `/update` refuses another until `/api/status`
+    shows `"trial":false` (up to 2 min)
 - `firmware/sdkconfig` is gitignored and holds the Wi-Fi credentials (menuconfig, AirWriter
   menu); NVS namespace `wifi` overrides it. `sdkconfig.defaults{,.esp32s3,.esp32c6}` only seed a
-  new one. The C6 has no PSRAM, so it is the stricter target for memory.
+  new one; main.c refuses to build an S3 sdkconfig without rollback and the factory reset. The
+  C6 has no PSRAM, so it is the stricter target for memory; it has its own 4 MB partition table.
 - **Enclosure:** build123d; `enclosure/build.sh` runs the tests then writes `out/*.{step,stl}`.
   The lattice's part clearances come from kicad-cli's STEP export, so the build needs kicad-cli.
   `enclosure/tools/render.py` (PNG views) and `tools/coupon.py` (fit-test cut-outs) need
@@ -136,6 +144,7 @@ Linear is the queue; these are the live items.
   for byte. No ESP32 needed.
 - **Firmware:** `idf.py build` clean for the S3; build the C6 tree too when touching shared code.
 - **On board 1:** an `ipptool` Print-Job of `fixtures/checker.urf` prints crc32 `8ee84844`.
+  After an OTA, `/api/status` reaches `"trial":false` with the new `version`.
 - **Schematic:** `kicad-cli sch erc` → 0 errors; 44 known warnings (42 `lib_symbol_mismatch`,
   2 `isolated_pin_label`).
 - **Board:** `kicad-cli pcb drc --severity-all --schematic-parity --refill-zones` on
@@ -166,7 +175,8 @@ Linear is the queue; these are the live items.
 hardware/airwriter/   KiCad 10 main board (sch, pcb, lib/, route.py, stitch.py, tools_pcb/)
 hardware/panel/       art panel generator (Figma SVG → panel.kicad_pcb)
 hardware/combined/    the snap-apart order panel and make_fab.sh; combined-fab.zip is the order
-firmware/             ESP-IDF 5.5 app; components/ per SPEC §3.1 plus job_pipe, led_grid, pic_prog …
+firmware/             ESP-IDF 5.5 app; components/ per SPEC §3.1 plus job_pipe, led_grid, pic_prog,
+                      ota_health …; bootloader_components/ holds the bootloader's pin-clamp hook
 tools/rip/            host build of the raster path + host tests for the pure-C cores
 tools/ipp/            IPP host tests and gpa_server (the real encoder on localhost for ipptool)
 tools/ippcap/         stub IPP server that captures a Print-Job body (how fixtures were made)

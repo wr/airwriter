@@ -11,9 +11,32 @@
 #define LG_ALERT_CAP      96    // FR4 dots in Needs attention: it has to read across the room
 #define LG_BOOT_MS        3000  // the boot spin; main sets printer_state's boot_ms to this
 
+// Actions a person started, shown over whatever state the panel is in, sleep
+// included (W-1045's factory reset; W-1049 adds the others).
+typedef enum {
+    LG_ACT_NONE,
+    LG_ACT_RESET_HOLD,      // test button held: a sweep fills the panel, orange to red
+    LG_ACT_RESET_CANCEL,    // let go during the countdown: the sweep winds back
+    LG_ACT_RESET_DONE,      // past the point of no return: flash, drain, two blinks, dark
+                            // until the board restarts
+    LG_ACT_RESET_CONFIRM,   // the same at boot, after the bootloader's reset; then the state
+    LG_ACT_RESET_FAILED,    // the erase failed: Job failed's red glitch, then the state
+} lg_act_t;
+
+#define LG_RESET_FILL_MS    7000    // the countdown; main checks it is BTN_FILL_MS
+#define LG_RESET_CANCEL_MS  400
+#define LG_RESET_DONE_MS    2000    // CONFIRM ends here; DONE stays dark after it
+#define LG_RESET_FAILED_MS  3000
+
 typedef struct {
-    uint8_t gamer;              // DIP7: Ready and Asleep drift through RGB instead of white
+    uint8_t  gamer;             // DIP7: Ready and Asleep drift through RGB instead of white
+    uint8_t  act;               // lg_act_t
+    uint16_t act_from;          // RESET_CANCEL: the fill it winds back from, 0..1000
+    uint32_t act_ms;            // time since the action began
 } lg_opts_t;
+
+// Whether a one-shot action has run its course and the state shows again.
+int  lg_act_over(uint8_t act, uint32_t act_ms);
 
 void lg_render(const ps_view_t *v, const lg_opts_t *o, uint32_t t_ms,
                uint8_t out[LG_NUM_LEDS][3]);

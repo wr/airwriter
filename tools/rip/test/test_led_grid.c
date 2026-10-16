@@ -62,6 +62,136 @@ static int lit_count(uint8_t f[LG_NUM_LEDS][3])
     return n;
 }
 
+static int frame_sum(uint8_t f[LG_NUM_LEDS][3])
+{
+    int s = 0;
+    for (int i = 0; i < LG_NUM_LEDS; i++) s += f[i][0] + f[i][1] + f[i][2];
+    return s;
+}
+
+static lg_opts_t act(lg_act_t a, uint32_t ms)
+{
+    lg_opts_t o = { .gamer = 0, .act = (uint8_t)a, .act_ms = ms };
+    return o;
+}
+
+// The factory-reset overlay (W-1045): it covers every state, sleep included;
+// the countdown fills clockwise and goes orange to red; the point of no return
+// and the confirmation; caps, and a draw no worse than the boot spin's.
+static void test_reset(uint8_t f[LG_NUM_LEDS][3], uint8_t g[LG_NUM_LEDS][3])
+{
+    const lg_act_t acts[] = { LG_ACT_RESET_HOLD, LG_ACT_RESET_CANCEL, LG_ACT_RESET_DONE,
+                              LG_ACT_RESET_CONFIRM, LG_ACT_RESET_FAILED };
+
+    // The boot spin's heaviest frame is the budget.
+    int spin_max = 0;
+    for (uint32_t s = 0; s < LG_BOOT_MS; s += 10) {
+        ps_view_t v = view(PS_BOOTING, s);
+        lg_render(&v, &WHITE_MODE, s, f);
+        if (frame_sum(f) > spin_max) spin_max = frame_sum(f);
+    }
+    for (int a = 0; a < 5; a++)
+        for (uint32_t s = 0; s < 9000; s += 10) {
+            ps_view_t v = view(PS_READY, 0);
+            lg_opts_t o = act(acts[a], s);
+            o.act_from = 1000;
+            lg_render(&v, &o, s, f);
+            assert(frame_sum(f) <= spin_max);
+            for (int i = 0; i < LG_NUM_LEDS; i++)
+                for (int ch = 0; ch < 3; ch++)
+                    assert(f[i][ch] <= (LG_MAP[i].mat != 'P' ? LG_MASK_CAP : LG_ALERT_CAP));
+        }
+
+    // Over any state, asleep or not: the same frame.
+    {
+        ps_view_t a = view(PS_PRINTING, 5000), b = view(PS_READY, 400000);
+        b.asleep = 1; b.asleep_ms = 60000;
+        lg_opts_t o = act(LG_ACT_RESET_HOLD, 3000);
+        lg_render(&a, &o, 3000, f);
+        lg_render(&b, &o, 3000, g);
+        assert(memcmp(f, g, LG_NUM_LEDS * 3) == 0);
+    }
+
+    // The countdown: a few dots near 12 o'clock at the start, about half the
+    // panel half way (the right side, the hand running clockwise), all of it
+    // at the end. Orange at the start, red at the end.
+    {
+        ps_view_t v = view(PS_READY, 0);
+        int bright[3];
+        const uint32_t at[3] = { 300, LG_RESET_FILL_MS / 2, LG_RESET_FILL_MS };
+        for (int k = 0; k < 3; k++) {
+            lg_opts_t o = act(LG_ACT_RESET_HOLD, at[k]);
+            lg_render(&v, &o, at[k], f);
+            bright[k] = 0;
+            for (int i = 0; i < LG_NUM_LEDS; i++)
+                bright[k] += LG_MAP[i].mat == 'P' ? f[i][0] > 8 : f[i][0] > 16;
+        }
+        assert(bright[0] <= 4);
+        assert(bright[1] >= 12 && bright[1] <= 26);
+        assert(bright[2] == LG_NUM_LEDS);
+
+        lg_opts_t o = act(LG_ACT_RESET_HOLD, LG_RESET_FILL_MS / 2);
+        lg_render(&v, &o, 0, f);
+        assert(max3(f[idx(3, 4)]) > 8 && max3(f[idx(3, 2)]) <= 2);   // 3 o'clock lit, 9 not
+
+        int orange = idx(0, 4), red = orange;           // just right of 12 o'clock
+        o = act(LG_ACT_RESET_HOLD, 900);
+        lg_render(&v, &o, 0, f);
+        o = act(LG_ACT_RESET_HOLD, LG_RESET_FILL_MS);
+        lg_render(&v, &o, 0, g);
+        assert(f[orange][0] > 0 && f[orange][1] * 5 > f[orange][0]);  // green in it: orange
+        assert(g[red][0] > 0 && g[red][1] * 8 < g[red][0]);           // barely any: red
+    }
+
+    // Cancel winds back to dark; then the state shows again.
+    {
+        ps_view_t v = view(PS_READY, 0);
+        lg_opts_t o = act(LG_ACT_RESET_CANCEL, LG_RESET_CANCEL_MS - 1);
+        o.act_from = 800;
+        lg_render(&v, &o, 0, f);
+        for (int i = 0; i < LG_NUM_LEDS; i++) assert(max3(f[i]) <= 1);
+        assert(!lg_act_over(LG_ACT_RESET_CANCEL, LG_RESET_CANCEL_MS - 1));
+        assert(lg_act_over(LG_ACT_RESET_CANCEL, LG_RESET_CANCEL_MS));
+        o.act_ms = LG_RESET_CANCEL_MS;
+        lg_render(&v, &o, 1000, f);
+        lg_render(&v, &WHITE_MODE, 1000, g);
+        assert(memcmp(f, g, LG_NUM_LEDS * 3) == 0);
+    }
+
+    // Point of no return: FR4 white, mask red, at once. Then the drain, the
+    // two white beats on FR4 dots only, and dark. DONE stays dark until the
+    // restart; CONFIRM hands back to the state.
+    {
+        ps_view_t v = view(PS_READY, 0);
+        lg_opts_t o = act(LG_ACT_RESET_DONE, 50);
+        lg_render(&v, &o, 0, f);
+        assert(lit_count(f) == LG_NUM_LEDS);
+        for (int i = 0; i < LG_NUM_LEDS; i++) {
+            if (LG_MAP[i].mat == 'P') assert(neutral(f[i]));
+            else assert(f[i][0] > 4 * (f[i][1] + f[i][2]));
+        }
+        o.act_ms = 1250;
+        lg_render(&v, &o, 0, f);
+        assert(lit_count(f) == 0);
+        o.act_ms = 1400;
+        lg_render(&v, &o, 0, f);
+        for (int i = 0; i < LG_NUM_LEDS; i++)
+            assert((max3(f[i]) > 0) == (LG_MAP[i].mat == 'P'));
+        o.act_ms = 1550;
+        lg_render(&v, &o, 0, f);
+        assert(lit_count(f) == 0);
+        for (uint32_t s = 1900; s < 60000; s += 997) {
+            o.act_ms = s;
+            lg_render(&v, &o, s, f);
+            assert(lit_count(f) == 0);
+        }
+        assert(!lg_act_over(LG_ACT_RESET_DONE, 600000));
+        assert(!lg_act_over(LG_ACT_RESET_CONFIRM, LG_RESET_DONE_MS - 1));
+        assert(lg_act_over(LG_ACT_RESET_CONFIRM, LG_RESET_DONE_MS));
+        assert(lg_act_over(LG_ACT_RESET_FAILED, LG_RESET_FAILED_MS));
+    }
+}
+
 int main(void)
 {
     uint8_t f[LG_NUM_LEDS][3], g[LG_NUM_LEDS][3];
@@ -372,6 +502,7 @@ int main(void)
         assert(sum[2] > sum[1] && sum[1] > sum[0]);
     }
 
+    test_reset(f, g);
     printf("test_led_grid: ok\n");
     return 0;
 }

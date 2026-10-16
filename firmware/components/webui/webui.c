@@ -200,6 +200,12 @@ static esp_err_t update_post(httpd_req_t *req)
 
     esp_ota_handle_t ota;
     esp_err_t err = esp_ota_begin(part, req->content_len, &ota);
+    // The last update is still on trial (W-1046) until the health gate keeps
+    // it, up to two minutes after it booted; the slot it would roll back to
+    // must not be written over meanwhile.
+    if (err == ESP_ERR_OTA_ROLLBACK_INVALID_STATE)
+        return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR,
+                                   "the last update is still being checked; try again in two minutes");
     if (err != ESP_OK)
         return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "ota begin");
 
