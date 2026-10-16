@@ -1835,7 +1835,7 @@ Refs: W-1037"
 
 ### Task 8: Verify on board 1, then record it
 
-Needs Wells at the bench for the physical steps. The board is on the home network at `imagewriter-2434.local` (10.0.1.115), with the ImageWriter II on J2.
+Needs Wells at the bench for the physical steps. The board is on the home Wi-Fi at `imagewriter-2434.local` (10.0.1.115), with the ImageWriter II on J2.
 
 **Files:**
 - Modify: `docs/HANDOFF.md`

@@ -381,7 +381,7 @@ never been scoped; see 4.
    most raster code assumes. Ghostscript's `gdevadmp.c` does an explicit 8x8 transpose plus
    a bit reversal for exactly this reason, which independently confirms it.
 
-   Scan: `docs/reference/ImageWriter_II_Technical_Reference.pdf`. PDF page = book page + 20 for
+   Scan: the ImageWriter II Technical Reference Manual (see `docs/reference/README.md`). PDF page = book page + 20 for
    chapters 1-7; the offset drifts to +19 partway through the appendices, so Table A-15 on book
    p. 144 is PDF page 163, not 164.
 
@@ -438,7 +438,7 @@ never been scoped; see 4.
    now that the solder jumpers are gone.
 
    **2026-08-28: corroborated by the primary source.** The ImageWriter II Technical
-   Reference (`docs/reference/ImageWriter_II_Technical_Reference.pdf`) Appendix E,
+   Reference Manual (`docs/reference/README.md`) Appendix E,
    "Transmitted Data" / "Received Data" (PDF pp. 206-207): "When no data is being
    transmitted, the TxD- line is held in the logic 1 state", and TxD-/RxD- are "of the
    proper polarity to serve as the single ... data line for an RS423 or an RS232

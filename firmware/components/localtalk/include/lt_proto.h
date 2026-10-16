@@ -3,7 +3,7 @@
 // AppleTalk packet layouts the LocalTalk node needs: LLAP, DDP, NBP, ATP and
 // PAP. Parse and build only, pure C, no state -- lt_node.c holds the state and
 // the host tests in tools/rip drive both. Layouts are Inside AppleTalk, 2nd ed.
-// (docs/reference/): LLAP ch. 1 and appendix B, DDP ch. 4, NBP ch. 7, ATP
+// (cited in docs/reference/README.md): LLAP ch. 1 and appendix B, DDP ch. 4, NBP ch. 7, ATP
 // ch. 9, PAP ch. 10. Multi-byte fields are big-endian on the wire.
 #pragma once
 #include <stdint.h>
