@@ -101,6 +101,11 @@ Linear is the queue; these are the live items.
 - `W-1051 LocalTalk node: show up in the Chooser as an ImageWriter`: in review on
   `wells/w-1051-localtalk-node`, unmerged; board 1 runs it and the bench Mac (Mac OS 8.1, Apple's
   AppleTalk ImageWriter 7.0.1) lists it in the Chooser.
+- `W-1046 Factory reset must always work, even with broken firmware` and
+  `W-1045 Long-press factory reset with live feedback on the LED panel`: in review on
+  `wells/w-1046-factory-reset`, unmerged, benched on board 1 2026-10-15 (all pass). Board 1 has
+  the W-1046 bootloader and partition table and runs that branch from its factory slot, so a
+  branch without W-1046 OTA'd onto it is rolled back at its next reboot (`docs/traps.md`).
 - `W-1053 LocalTalk: print PAP jobs from the Mac's AppleTalk ImageWriter driver`: next. A real
   job is captured in `fixtures/pap-iw701-page.bin`; the PAP exchange is in `docs/traps.md`.
 - Not in Linear: scope HSKo during a long job (SPEC §3.9 timing).
