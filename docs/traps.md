@@ -33,6 +33,18 @@ Traps already explained in a code comment are listed only when the comment is ea
   installs it over the air: the installer marks it on trial, and nothing in it ever keeps
   itself. It runs fine until then. Rebase a branch on W-1046 before OTAing it to a W-1046 board,
   or USB-flash it (which also puts the old bootloader and table back).
+- **A board running a signed image refuses every image not signed with the same key**
+  (`W-1048 OTA updates from GitHub releases: signed, verified, optional auto-update`), and
+  `/update` says "not signed with this board's key, or damaged". A branch without W-1048 needs
+  no rebase to OTA board 1: the five `CONFIG_SECURE_*` lines of `sdkconfig.defaults`, with the
+  key's absolute path, in its own sdkconfig sign its build. An image running unsigned (one
+  flashed as `airwriter-unsigned.bin`) refuses everything; USB-flash a signed one.
+- **Never publish an image built with `idf.py` by hand.** The local sdkconfig may carry Wi-Fi
+  credentials and bench options. `tools/release/release.sh` builds from `sdkconfig.defaults`
+  alone and checks the image before it tags. Never rebase a branch after a release tag lands
+  on it.
+- **The C6 image fills about 92% of its 1.5 MB slot** since W-1048's TLS client and certificate
+  bundle; the S3 has 37% of 2 MB free. The C6's sdkconfig is the one that runs out first.
 - **Any reboot while an OTA image is on trial rolls it back** (up to 2 min after it boots;
   `/api/status` `trial`): a crash, a Wi-Fi change from the web UI, the long-press reset, and
   `idf.py monitor` without `--no-reset`, which resets the chip when it attaches.
@@ -78,7 +90,9 @@ Traps already explained in a code comment are listed only when the comment is ea
   channel 1 (−80 to −87 dBm) over a −46 dBm node in the same room; uploads ran at ~6 KB/s and an
   OTA failed. Firmware now scans all channels and joins the strongest AP; don't revert that.
 - **The C6 devkit must be on the IoT network**; the main home network drops it. Rev A (S3) works on the main network.
-- **Never OTA while a job prints.** It cuts the job (twice on 2026-10-15). Bench rule in AGENTS.md.
+- **Never OTA while a job prints.** It cut two jobs on 2026-10-15. Since W-1048 `/update` refuses
+  (409) while a job holds the job lock and gives way to one that arrives mid-upload, but an
+  image from before W-1048 still on a board does not. Bench rule in AGENTS.md.
 
 ## Serial, printer, LocalTalk
 
