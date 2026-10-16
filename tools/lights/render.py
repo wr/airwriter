@@ -8,7 +8,8 @@ W-1049's previews): the FR4 dots crisp at full strength with a little glow; a
 single-mask dot (B) passes ~10% and a double-mask dot (L) ~5%, both fuzzy and
 with a green cast, so blue goes teal, yellow goes olive and red passes well.
 The dots with no LED behind them are drawn dim, so a lit dot never reads as
-one of the gold ones.
+one of the gold ones. The corners are rounded by transparency (GIF has no
+partial alpha), so they sit on a light or a dark page alike.
 """
 import argparse, json, os, shutil, subprocess
 import numpy as np
@@ -57,6 +58,11 @@ class Panel:
                 a = disc(d['x'] * sc, d['y'] * sc, g['hole_dia'] * sc / 2)[..., None]
                 base = base * (1 - a) + a * 6
         self.base = base
+        # Rounded corners, radius a twentieth of the width: transparent outside.
+        cr = width / 20
+        cx = np.clip(xx + 0.5, cr, self.W - cr)
+        cy = np.clip(yy + 0.5, cr, self.H - cr)
+        self.outside = np.hypot(xx + 0.5 - cx, yy + 0.5 - cy) > cr
 
         # One coverage map per LED, on its layer: FR4 crisp, mask a little wider.
         self.fr4 = np.array([m == 'P' for _, _, m in chain])
@@ -101,10 +107,10 @@ def loop(frames, xfade_ms):
 
 
 def palette(imgs):
-    """One palette for the whole GIF, so frames diff well and a slow fade
+    """One palette for a run of frames, so they diff well and a slow fade
     doesn't shimmer. 96 colours by area (the background and unlit dots
     exactly), 159 from the distinct colours each counted once and refined by
-    k-means: by area alone, a mostly red scene spends the palette on red and
+    k-means: by area alone, a mostly red stretch spends the palette on red and
     tints Ready's small white dots."""
     px = np.concatenate([f.reshape(-1, 3) for f in imgs])
     by_area = Image.fromarray(px[::5][None]).quantize(96, method=Image.Quantize.MEDIANCUT)
@@ -113,18 +119,30 @@ def palette(imgs):
     uniq = (np.stack([key >> 10, key >> 5 & 31, key & 31], 1) << 3).astype(np.uint8)
     by_colour = Image.fromarray(uniq[None]).quantize(159, method=Image.Quantize.MEDIANCUT, kmeans=3)
     entries = by_area.getpalette()[:96 * 3] + by_colour.getpalette()[:159 * 3]
-    pal = Image.new('P', (1, 1))
-    pal.putpalette(entries + [0] * (768 - len(entries)))
-    return pal
+    return entries + [0] * (765 - len(entries))
 
 
-def save_gif(frames, path):
+PAL_FRAMES = 50     # a fresh palette every 2 s: one for a whole 16 s scene turns Ready pink
+
+
+def save_gif(frames, outside, path):
     imgs = [np.clip(f, 0, 255).astype(np.uint8) for f in frames]
-    pal = palette(imgs)
-    q = [Image.fromarray(f).quantize(palette=pal, dither=Image.Dither.NONE) for f in imgs]
-    q[0].save(path, save_all=True, append_images=q[1:], duration=STEP_MS, loop=0, optimize=False)
+    q = []
+    for c0 in range(0, len(imgs), PAL_FRAMES):
+        run = imgs[c0:c0 + PAL_FRAMES]
+        entries = palette(run) + [0, 0, 0]      # entries 0-254; 255 is the clear corner
+        pal = Image.new('P', (1, 1))
+        pal.putpalette(entries)
+        for f in run:
+            a = np.asarray(Image.fromarray(f).quantize(palette=pal, dither=Image.Dither.NONE)).copy()
+            a[outside] = 255
+            im = Image.fromarray(a, 'P')
+            im.putpalette(entries)
+            q.append(im)
+    q[0].save(path, save_all=True, append_images=q[1:], duration=STEP_MS, loop=0, optimize=False,
+              transparency=255, disposal=1)
     if shutil.which('gifsicle'):
-        subprocess.run(['gifsicle', '-b', '-O3', path], check=True)
+        subprocess.run(['gifsicle', '-b', '-O3', path], check=True, stderr=subprocess.DEVNULL)
 
 
 def main():
@@ -143,7 +161,7 @@ def main():
             continue
         frames = loop([panel.draw(f) for f in s['frames']], s['xfade'])
         path = os.path.join(a.outdir, s['name'] + '.gif')
-        save_gif(frames, path)
+        save_gif(frames, panel.outside, path)
         print(f"{s['name']:20s} {len(frames) * STEP_MS / 1000:5.1f} s {os.path.getsize(path) // 1024:5d} KB")
 
 
