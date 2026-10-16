@@ -58,10 +58,12 @@ What works on `main`:
 - DIP switches read by their printed numbers; a tap of the `test` button prints a test page, or
   with the printer not ready runs the cable test; a second tap cancels the test page; a tap during
   another job shows Busy.
-- Recovery (SPEC §3.11): a `factory` slot beside ota_0/ota_1; a new OTA image runs on trial and
-  rolls back unless healthy (`/api/status` `slot`, `trial`, `rolled_back`). Holding `test` 8 s
-  erases the settings with a countdown on the panel; holding it through power-up for 5 s makes
-  the bootloader erase them and boot the factory slot.
+- Recovery (SPEC §3.11): three equal app slots and a `known_good` record naming the last image
+  that was kept and finished a real print; updates never write the running or known-good slot.
+  A new OTA image runs on trial and rolls back unless healthy (`/api/status` `slot`, `trial`,
+  `rolled_back`, `known_good`). Holding `test` 8 s erases the settings with a countdown on the
+  panel; holding it through power-up for 5 s makes the bootloader hook erase them and boot the
+  known-good slot.
 - Signed updates (SPEC §3.12): only images signed with the release key install, from GitHub
   releases or `/update`; the web page's firmware section checks, installs and switches
   auto-update (off by default). An update holds the job lock to its restart and gives way to a
@@ -123,21 +125,23 @@ Linear is the queue; these are the live items.
 - `W-567 M6 — Manners: paper-out, cancel, web UI, provisioning, OTA` (backlog).
 - `W-1046 Factory reset must always work, even with broken firmware` and
   `W-1045 Long-press factory reset with live feedback on the LED panel`: merged 2026-10-15, benched
-  on board 1 (all pass). Board 1 has the W-1046 bootloader and partition table, so an image
-  without W-1046 OTA'd onto it is rolled back at its next reboot (`docs/traps.md`).
+  on board 1 (all pass). Board 1 has the W-1059 bootloader and partition table, so an image
+  without W-1046 OTA'd onto it is rolled back at its next reboot, and one without W-1059 may
+  overwrite the known-good slot (`docs/traps.md`).
 - `W-1053 LocalTalk: print PAP jobs from the Mac's AppleTalk ImageWriter driver`: merged
   2026-10-15. Host-tested against `fixtures/pap-iw701-page.bin`, and on board 1 a real Mac job went
   from PAP through `serial_out` byte for byte (UART loopback, `CONFIG_AIRWRITER_LT_BENCH`). Still
   owed: a paper test, which needs a second crossover cable for J2 while the Mac's is on J4.
 - `W-1048 OTA updates from GitHub releases: signed, verified, optional auto-update`: merged
   2026-10-16, benched on board 1 (all pass): `/update` and GitHub both refuse tampered, foreign-key
-  and unsigned images, auto-update found and kept v0.1.1, and a job mid-download wins. Board 1's
-  factory slot still holds an unsigned W-1046 build; it is not being replaced, because
-  `W-1059 Known-good slot: factory reset boots the last version that worked` removes the fixed
-  factory slot.
-- `W-1059 Known-good slot: factory reset boots the last version that worked`: three equal slots
-  and a record of the last good one, which the power-up reset boots. Needs a bootloader hook and
-  one USB flash of board 1.
+  and unsigned images, auto-update found and kept v0.1.1, and a job mid-download wins.
+- `W-1059 Known-good slot: factory reset boots the last version that worked`: benched on board 1
+  2026-10-16, all pass. After its one USB flash (Wi-Fi kept), B went to ota_1, printed and became
+  known-good, and C went to ota_2. A power cut 61% into D's upload left C running, and D then went
+  to ota_0, not B's slot. Three power-up resets: the first booted B (0.25 s after the 5 s hold),
+  one with the record blanked booted ota_0, and one with the known-good image damaged booted the
+  last kept image. The panel showed the reset. No release carries it yet: the next one should,
+  and the wiki edits (Test Button, Troubleshooting, Settings and Updates) are pushed with the merge.
 - `W-1049 Panel feedback for every action: OTA, reset, cables, TashTalk flash`: merged 2026-10-16,
   benched on board 1 (Wells by eye), quiet power-on included: a normal boot shows only the Spin
   until Wi-Fi and the printer settle (3-30 s). Held back by Wells: update kept, update refused,
@@ -165,12 +169,14 @@ Linear is the queue; these are the live items.
   first, then from `firmware/`:
   - build: `idf.py build`
   - flash over USB: `idf.py -p /dev/cu.usbmodem1101 flash` writes the bootloader, partition
-    table, a blank otadata and the app into the factory slot, so the board boots that (leaves the
-    printer not-ready until SELECT is toggled)
+    table, a blank otadata, a blank known-good record and the app into ota_0, so the board boots
+    that and its power-up reset returns to it (leaves the printer not-ready until SELECT is
+    toggled)
   - OTA: `curl -m 180 --data-binary @build/airwriter.bin http://10.0.1.115/update` (bench rules
-    first). It lands in ota_0/ota_1 on trial: `/update` refuses another until `/api/status`
-    shows `"trial":false` (up to 2 min). The image must be signed with the key that signed the
-    running one (409 while a job prints, 400 for an unsigned or tampered image)
+    first). It lands on trial in the slot that is neither running nor known-good: `/update`
+    refuses another until `/api/status` shows `"trial":false` (up to 2 min). The image must be
+    signed with the key that signed the running one (409 while a job prints, 400 for an
+    unsigned or tampered image)
   - release: `tools/release/release.sh vX.Y.Z [notes]` from a clean `main` level with origin
     (`--dry-run` builds and checks only). It builds from `sdkconfig.defaults` alone, never the
     local sdkconfig, and publishes `airwriter-esp32s3.bin` + `airwriter.json`
@@ -181,7 +187,8 @@ Linear is the queue; these are the live items.
   refuses to build without them. Losing the key means a USB flash for every board.
 - `firmware/sdkconfig` is gitignored and holds the Wi-Fi credentials (menuconfig, AirWriter
   menu); NVS namespace `wifi` overrides it. `sdkconfig.defaults{,.esp32s3}` only seed a new one;
-  main.c refuses to build an sdkconfig without rollback and the factory reset, or without signing.
+  main.c refuses to build an sdkconfig without rollback, with IDF's own factory reset, or without
+  signing.
 - **Enclosure:** build123d; `enclosure/build.sh` runs the tests then writes `out/*.{step,stl}`.
   The lattice's part clearances come from kicad-cli's STEP export, so the build needs kicad-cli.
   `enclosure/tools/render.py` (PNG views) and `tools/coupon.py` (fit-test cut-outs) need
@@ -189,7 +196,8 @@ Linear is the queue; these are the live items.
 
 ## Verification
 - **Host tests:** `make -C tools/rip test` (raster path, serial writer, printer_state, led_grid,
-  dip_config, pic_prog, localtalk, cable, fw_update) and `make -B -C tools/ipp test` (`-B`: `tools/ipp/build/` is committed).
+  dip_config, pic_prog, localtalk, cable, fw_update, known_good) and `make -B -C tools/ipp test`
+  (`-B`: `tools/ipp/build/` is committed).
 - **Raster regression:** `make -C tools/rip regress`; `stream.bin` must match the fixtures byte
   for byte. No ESP32 needed.
 - **Firmware:** `idf.py build` clean.
@@ -219,6 +227,10 @@ Linear is the queue; these are the live items.
 - Read `/api/status` (`ps`) before judging the panel: a deselected printer shows offline embers,
   not Ready.
 - A slow upload is the link until proven otherwise: check `rssi` in the `doc_begin` log.
+- A power-up reset erases board 1's Wi-Fi (no credentials in its sdkconfig): it comes back on the
+  open `AirWriter-2434` network, and Wells sets it up again at http://192.168.4.1/. Read its
+  console with `idf.py monitor --no-reset` attached before the reset, which keeps the reset's
+  own log.
 
 ## Layout
 ```
@@ -226,7 +238,8 @@ hardware/airwriter/   KiCad 10 main board (sch, pcb, lib/, route.py, stitch.py, 
 hardware/panel/       art panel generator (Figma SVG → panel.kicad_pcb)
 hardware/combined/    the snap-apart order panel and make_fab.sh; combined-fab.zip is the order
 firmware/             ESP-IDF 5.5 app; components/ per SPEC §3.1 plus job_pipe, led_grid, pic_prog,
-                      ota_health …; bootloader_components/ holds the bootloader's pin-clamp hook
+                      ota_health …; bootloader_components/ holds the bootloader's pin clamps
+                      and power-up reset
 tools/rip/            host build of the raster path + host tests for the pure-C cores
 tools/ipp/            IPP host tests and gpa_server (the real encoder on localhost for ipptool)
 tools/ippcap/         stub IPP server that captures a Print-Job body (how fixtures were made)

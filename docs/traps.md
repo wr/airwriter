@@ -38,6 +38,21 @@ Traps already explained in a code comment are listed only when the comment is ea
   installs it over the air: the installer marks it on trial, and nothing in it ever keeps
   itself. It runs fine until then. Rebase a branch on W-1046 before OTAing it to a W-1046 board,
   or USB-flash it (which also puts the old bootloader and table back).
+- **An image without W-1059 OTA'd onto a W-1059 board can overwrite the known-good slot.** It
+  updates into IDF's next slot, which may be the known-good one, and never promotes itself. The
+  record then vouches for nothing and the power-up reset boots the newest kept image instead.
+  It also logs "no factory slot". Rebase a branch on W-1059 before OTAing it to board 1.
+- **The bootloader hook (`bootloader_components/airwriter_boot`) cannot be updated over the
+  air.** A bug there needs a USB flash on every board. Bench every reset path after changing it
+  (`docs/superpowers/specs/2026-10-16-known-good-slot-design.md`), and keep it inside the
+  bootloader's 9 s watchdog: the 5 s hold, the image checks and the app's start all count.
+- **`esp_image_verify` in the app checks the RSA signature too** (signed updates), and that
+  overflows `app_main`'s stack: the board crash-loops at boot. Board 1 did, once, from a status
+  check on the known-good slot (W-1059). The bootloader's check has no such cost; leave whole-
+  image checks to it, or run them on a task with a large stack.
+- **`idf.py app-flash` writes ota_0 and nothing else.** otadata may boot another slot, so the
+  board can keep running the old image, and ota_0 may be the known-good slot. Use `idf.py flash`,
+  which also blanks otadata and the record.
 - **A board running a signed image refuses every image not signed with the same key**
   (`W-1048 OTA updates from GitHub releases: signed, verified, optional auto-update`), and
   `/update` says "not signed with this board's key, or damaged". A branch without W-1048 needs

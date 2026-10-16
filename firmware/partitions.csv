@@ -2,23 +2,27 @@
 #
 # The board's 8MB.
 #
-# factory holds the image a board shipped with and is never written over the
-# air: the bootloader's factory reset (the test button held through power-up,
-# W-1046) erases nvs and otadata and boots it. Over-the-air updates alternate
-# between ota_0 and ota_1, and a new image runs on trial until the health gate
-# keeps it (components/ota_health); one that fails rolls back on its own.
-# Three 2MB slots against an image of about 1MB leave room for W-1048's TLS.
+# Three equal app slots and no factory slot (W-1059). `known_good` names the
+# slot that last worked: kept by the trial gate and through a real print. The
+# power-up reset (the test button held through power-up) erases nvs and boots
+# it, and an update never writes it or the running slot, so the board always
+# holds one good copy without anything being copied (SPEC.md 3.11). A new
+# image runs on trial until the health gate keeps it (components/ota_health);
+# one that fails rolls back on its own. 2MB slots against an image of about
+# 1.3MB leave room to grow.
 #
-# nvs, otadata and phy_init sit where the old two-slot table had them, so the
-# one USB flash that moves a board to this table keeps its Wi-Fi credentials
-# and settings (SPEC.md 3.11).
+# nvs, otadata and phy_init sit where every earlier table had them, so the one
+# USB flash that moves a board to this table keeps its Wi-Fi credentials and
+# settings. `known_good` fills part of the gap below the first app slot, and
+# ota_0 is where the factory slot was: `idf.py flash` puts the app there.
 #
 # `storage` holds the printer-icon PNGs the print sheet renders (SPEC.md 3.5).
-# Name,     Type, SubType, Offset,   Size
-nvs,        data, nvs,     0x9000,   0x6000
-otadata,    data, ota,     0xf000,   0x2000
-phy_init,   data, phy,     0x11000,  0x1000
-factory,    app,  factory, 0x20000,  0x200000
-ota_0,      app,  ota_0,   0x220000, 0x200000
-ota_1,      app,  ota_1,   0x420000, 0x200000
-storage,    data, spiffs,  0x620000, 0x1e0000
+# Name,     Type, SubType,   Offset,   Size
+nvs,        data, nvs,       0x9000,   0x6000
+otadata,    data, ota,       0xf000,   0x2000
+phy_init,   data, phy,       0x11000,  0x1000
+known_good, data, undefined, 0x12000,  0x2000
+ota_0,      app,  ota_0,     0x20000,  0x200000
+ota_1,      app,  ota_1,     0x220000, 0x200000
+ota_2,      app,  ota_2,     0x420000, 0x200000
+storage,    data, spiffs,    0x620000, 0x1e0000

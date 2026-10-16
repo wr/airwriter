@@ -2,7 +2,7 @@
 #
 # Defaults for the board, an ESP32-S3-WROOM-1-N8R2. ESP-IDF merges
 # sdkconfig.defaults.esp32s3 on top of this file; chip-specific settings
-# (flash size, PSRAM, the bootloader's factory-reset pin) go there.
+# (flash size, PSRAM, the bootloader's power-up reset) go there.
 
 # Console goes over the native USB serial/JTAG peripheral, not a UART -- UART1
 # belongs to the printer. See SPEC.md 2.5.
