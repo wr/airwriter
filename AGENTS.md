@@ -136,9 +136,11 @@ Linear is the queue; these are the live items.
 - `W-1059 Known-good slot: factory reset boots the last version that worked`: three equal slots
   and a record of the last good one, which the power-up reset boots. Needs a bootloader hook and
   one USB flash of board 1.
-- `W-1049 Panel feedback for every action: OTA, reset, cables, TashTalk flash`: on its branch,
-  rebased onto W-1048 and host-tested; each pattern still to be checked on board 1. Held back by
-  Wells: update kept, update refused, rolled back, DIP switch flipped (their acts draw the state).
+- `W-1049 Panel feedback for every action: OTA, reset, cables, TashTalk flash`: benched on board 1
+  2026-10-16 (all pass, Wells by eye). Held back by Wells: update kept, update refused, rolled back,
+  DIP switch flipped (their acts draw the state). Deferred from review: the amber ahead of
+  "printer back" drops from the alert cap to the normal cap at its first frame, and Saved does
+  not wake a sleeping panel.
 - Not in Linear: scope HSKo during a long job (SPEC §3.9 timing).
 
 ## Toolchain
