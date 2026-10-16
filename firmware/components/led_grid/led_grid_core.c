@@ -280,8 +280,9 @@ int lg_act_over(uint8_t act, uint32_t act_ms)
     case LG_ACT_RESET_CANCEL:  return act_ms >= LG_RESET_CANCEL_MS;
     case LG_ACT_RESET_CONFIRM: return act_ms >= LG_RESET_DONE_MS;
     case LG_ACT_RESET_FAILED:  return act_ms >= LG_RESET_FAILED_MS;
-    case LG_ACT_NONE:          return 1;
-    default:                   return 0;    // HOLD and DONE last until replaced
+    case LG_ACT_RESET_HOLD:
+    case LG_ACT_RESET_DONE:    return 0;    // these last until replaced
+    default:                   return 1;    // NONE; the firmware acts draw nothing yet (W-1049)
     }
 }
 
