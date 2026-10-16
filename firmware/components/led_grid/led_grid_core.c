@@ -214,7 +214,7 @@ static lg_c3 state_dot(const ps_view_t *v, const lg_opts_t *o, int i, uint32_t t
             lv = 0.08f + 0.92f * gauss((float)c - x, 0.8f);
         } else if (pass) {
             float g = (float)(cs - 2 * sweep);
-            lv = 0.85f * ss(0, 200, g) * (1 - ss(500, 1100, g));
+            lv = ss(0, 200, g) * (1 - ss(500, 1100, g));
         } else {
             uint32_t b = cs - 2 * sweep;                 // 200 on, 200 off, 200 on
             lv = b < 200 || (b >= 400 && b < 600) ? 1 : 0;
