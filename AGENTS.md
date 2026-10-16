@@ -138,12 +138,14 @@ Linear is the queue; these are the live items.
 - `W-1059 Known-good slot: factory reset boots the last version that worked`: three equal slots
   and a record of the last good one, which the power-up reset boots. Needs a bootloader hook and
   one USB flash of board 1.
-- `W-1049 Panel feedback for every action: OTA, reset, cables, TashTalk flash`: benched on board 1
-  2026-10-16 (all pass, Wells by eye); the quiet power-on added after, still to bench (power-up
-  with the printer on, with it off, and the restart after setup). Held back by Wells: update kept, update refused, rolled back,
-  DIP switch flipped (their acts draw the state). Deferred from review: the amber ahead of
-  "printer back" drops from the alert cap to the normal cap at its first frame, and Saved does
-  not wake a sleeping panel.
+- `W-1049 Panel feedback for every action: OTA, reset, cables, TashTalk flash`: merged 2026-10-16,
+  benched on board 1 (Wells by eye), quiet power-on included: a normal boot shows only the Spin
+  until Wi-Fi and the printer settle (3-30 s). Held back by Wells: update kept, update refused,
+  rolled back, DIP switch flipped (their acts draw the state). Deferred from review: the amber
+  ahead of "printer back" drops from the alert cap to the normal cap at its first frame, and Saved
+  does not wake a sleeping panel.
+- `W-1060 Boot Spin still stutters a little while Wi-Fi joins`: RMT DMA helped, not cured; next is
+  a frame-gap log on board 1.
 - Not in Linear: scope HSKo during a long job (SPEC §3.9 timing).
 
 ## Toolchain
