@@ -195,28 +195,31 @@ static lg_c3 state_dot(const ps_view_t *v, const lg_opts_t *o, int i, uint32_t t
         return on ? hsv(jitter(r, c, 2, 10, t, 0), 0.95f, 1) : DARK;
     }
     if (v->cable) {
-        // A cable test's answer (W-1055): a band sweeps the panel left to
-        // right and back, 700 ms each way. Green, the cable works: a ring
-        // pulses out of the test button and the panel fades. Red, it doesn't
-        // or there isn't one: the six dots around the button blink twice.
+        // A cable test's answer (W-1055) stays between the two sockets: the
+        // bottom three rows, columns 0-4, the rest dark. A band runs from the
+        // LocalTalk socket to the printer's and back, 600 ms each way, as the
+        // test does (J4 -> J2, then J2 -> J4). Green, the cable works: the
+        // strip glows and fades. Red, it doesn't or there isn't one: the strip
+        // blinks twice.
+        if (r < 5 || c > 4) return DARK;
         uint32_t cs = v->cable_ms;
-        const uint32_t sweep = 700;
+        const uint32_t sweep = 600;
+        int pass = v->cable == PS_CABLE_PASS;
+        float hue = pass ? jitter(r, c, 130, 14, t, 0) : jitter(r, c, 2, 10, t, 0);
         float lv;
         if (cs < 2 * sweep) {
-            float x = cs < sweep ? -1.0f + 8.0f * (float)cs / (float)sweep
-                                 : 7.0f - 8.0f * (float)(cs - sweep) / (float)sweep;
-            lv = gauss((float)c - x, 1.0f);
-        } else if (v->cable == PS_CABLE_PASS) {
-            lv = gauss(dist - (float)(cs - 2 * sweep) / 1000.0f * 7.0f, 1.4f);
+            const float a = LT_COL + 1.3f, b = PRINTER_COL - 1.3f;
+            float x = cs < sweep ? a + (b - a) * (float)cs / (float)sweep
+                                 : b + (a - b) * (float)(cs - sweep) / (float)sweep;
+            lv = 0.08f + 0.92f * gauss((float)c - x, 0.8f);
+        } else if (pass) {
+            float g = (float)(cs - 2 * sweep);
+            lv = 0.85f * ss(0, 200, g) * (1 - ss(500, 1100, g));
         } else {
             uint32_t b = cs - 2 * sweep;                 // 200 on, 200 off, 200 on
-            int on = dist < 1.5f && (b < 200 || (b >= 400 && b < 600));
-            return on ? hsv(jitter(r, c, 2, 10, t, 0), 0.95f, 1) : DARK;
+            lv = b < 200 || (b >= 400 && b < 600) ? 1 : 0;
         }
-        float hue = v->cable == PS_CABLE_PASS ? jitter(r, c, 130, 14, t, 0)
-                                              : jitter(r, c, 2, 10, t, 0);
-        float fade = 1 - ss((float)PS_CABLE_MS - 300, (float)PS_CABLE_MS, (float)cs);
-        return hsv(hue, 0.9f, (0.08f + 0.92f * lv) * fade);
+        return hsv(hue, 0.9f, lv);
     }
 
     switch (v->state) {
@@ -641,7 +644,7 @@ void lg_render16(const ps_view_t *v, const lg_opts_t *o, uint32_t t_ms,
                 task_frame(&o->task[f], t_ms, out);
                 return;
             }
-    int all = all_dots(v->state) || moment_all(v) || v->cable;   // the cable sweep uses every dot
+    int all = all_dots(v->state) || moment_all(v) || v->cable;   // the cable strip's mask dots too
     int gamer = o && o->gamer;
     int blip = o && !lg_blip_over(o->blip, o->blip_ms) && v->state != PS_BOOTING
                && v->state != PS_ATTENTION && v->state != PS_FAILED && !busy_panel(v);

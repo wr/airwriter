@@ -51,7 +51,7 @@ typedef struct {
 #define PS_CABLE_PASS    1
 #define PS_CABLE_FAIL    2
 #define PS_CABLE_NO_CHIP 3      // no cable was tested: TashTalk didn't answer (W-1063)
-#define PS_CABLE_MS      2400   // sweep left to right and back, then a pulse from the middle
+#define PS_CABLE_MS      2400   // a sweep between the sockets and back, then the answer there
 #define PS_CABLE_NO_CHIP_MS 1000   // no sweep: two red blinks by the LocalTalk socket
 
 typedef struct {
