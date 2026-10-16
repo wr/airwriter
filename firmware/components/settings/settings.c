@@ -35,6 +35,8 @@ esp_err_t settings_load(settings_t *out, const char *mac_suffix)
         get_str(h, "hostname", out->hostname, sizeof out->hostname, default_host);
         get_str(h, "queue",    out->queue,    sizeof out->queue, CONFIG_AIRWRITER_QUEUE_NAME);
         get_str(h, "dither",   out->dither,   sizeof out->dither, "atkinson");
+        uint8_t au = 0;
+        if (nvs_get_u8(h, "autoupd", &au) == ESP_OK) out->auto_update = au ? 1 : 0;
         nvs_close(h);
     } else {
         strncpy(out->hostname, default_host, sizeof out->hostname - 1);
@@ -79,6 +81,18 @@ esp_err_t settings_save_general(const char *hostname, const char *queue,
     if (dither   && dither[0])   nvs_set_str(h, "dither",   dither);
     err = nvs_commit(h);
     nvs_close(h);
+    return err;
+}
+
+esp_err_t settings_save_auto_update(int on)
+{
+    nvs_handle_t h;
+    esp_err_t err = nvs_open(NS, NVS_READWRITE, &h);
+    if (err != ESP_OK) return err;
+    nvs_set_u8(h, "autoupd", on ? 1 : 0);
+    err = nvs_commit(h);
+    nvs_close(h);
+    ESP_LOGI(TAG, "auto-update %s", on ? "on" : "off");
     return err;
 }
 

@@ -38,6 +38,7 @@
 #include "localtalk.h"
 #include "lt_node.h"
 #include "ota_health.h"
+#include "fw_update.h"
 #include "cable_test.h"
 #include "esp_app_desc.h"
 #include "esp_partition.h"
@@ -141,6 +142,20 @@ static size_t s_last_pages, s_last_bytes;
 // task and test_page_task gives it back, and a mutex given by a task that
 // does not hold it trips FreeRTOS's priority-disinherit assert (W-1033).
 static SemaphoreHandle_t s_job_lock;
+
+// W-1048: a firmware update holds s_job_lock from its start to the restart,
+// and gives way to a job that arrives meanwhile. A job that finds the lock
+// taken raises this; the update reads it between chunks and lets go. Only
+// jobs raise it -- a refused CTRL-X kick or TashTalk flash is not a job.
+static volatile int s_job_waiting;
+// Uptime seconds of the last job's start or end, -1 for none yet:
+// auto-update installs only once the board has been idle for a while.
+static volatile int32_t s_last_job_s = -1;
+
+static void job_touch(void)
+{
+    s_last_job_s = (int32_t)(esp_timer_get_time() / 1000000);
+}
 
 // ---------------------------------------------------------------- raster
 // A bring-up check that the raster components run on this silicon, not just
@@ -288,7 +303,10 @@ static esp_err_t doc_begin(void *ctx, const char *format, const char *name)
     // doc_end -- including when job_pipe_begin below fails -- and every
     // doc_end leads to exactly one job_finished, whose give balances every
     // take here, refusals included.
-    xSemaphoreTake(s_job_lock, portMAX_DELAY);
+    if (xSemaphoreTake(s_job_lock, 0) != pdTRUE) {
+        s_job_waiting = 1;
+        xSemaphoreTake(s_job_lock, portMAX_DELAY);
+    }
     s_ipp_owns = 1;
     // The link's strength with each job: a weak one is what a slow upload
     // usually is (W-1042 bench).
@@ -304,6 +322,7 @@ static esp_err_t doc_begin(void *ctx, const char *format, const char *name)
     serial_out_set_abort(0);
     iw_link_job_start(&s_link);
     s_printing = 1;
+    job_touch();
     printer_state_post(PS_EV_JOB_START);
     serial_out_loopback_reset();
     esp_err_t err = job_pipe_begin(name);
@@ -333,6 +352,7 @@ static void doc_cancel(void *ctx)
 static void job_finished(const job_pipe_stats_t *st, int ok)
 {
     s_printing = 0;
+    job_touch();
 
     // Clean only if the rip finished every page and every byte was queued;
     // anything else may have stopped mid-strip.
@@ -460,7 +480,10 @@ static int lt_print_begin(void *ctx)
     (void)ctx;
     // Never waits: the LocalTalk task must keep answering the Mac, which is
     // told "busy" and asks again.
-    if (xSemaphoreTake(s_job_lock, 0) != pdTRUE) return 1;
+    if (xSemaphoreTake(s_job_lock, 0) != pdTRUE) {
+        s_job_waiting = 1;
+        return 1;
+    }
     s_lt_job = 1;
     strncpy(s_last_job, "LocalTalk job", sizeof s_last_job - 1);
     s_stream_crc = 0;
@@ -471,6 +494,7 @@ static int lt_print_begin(void *ctx)
     serial_out_set_abort(0);
     iw_link_job_start(&s_link);
     s_printing = 1;
+    job_touch();
     printer_state_post(PS_EV_JOB_START);
     serial_out_loopback_reset();
     printer_state_post(PS_EV_ACTIVITY);
@@ -531,6 +555,7 @@ static int lt_print_end(void *ctx, int normal)
     // up is a failed one.
     printer_state_post(s_printer_failed ? PS_EV_JOB_FAILED : PS_EV_JOB_DONE);
     s_printing = 0;
+    job_touch();
     s_lt_job = 0;
     xSemaphoreGive(s_job_lock);
     return flushed == ESP_OK;
@@ -621,6 +646,7 @@ static void test_page_task(void *arg)
     serial_out_flush(CONFIG_AIRWRITER_STALL_ABORT * 1000u);
     printer_state_post(s_printer_failed ? PS_EV_JOB_FAILED : PS_EV_JOB_DONE);
     s_printing = 0;
+    job_touch();
     xSemaphoreGive(s_job_lock);
     vTaskDelete(NULL);
 }
@@ -637,12 +663,15 @@ static void test_page(void)
     // is what makes two back-to-back presses refuse rather than both print.
     if (xSemaphoreTake(s_job_lock, 0) != pdTRUE) {
         ESP_LOGW(TAG, "test page requested but the printer is already busy");
+        s_job_waiting = 1;
         return;
     }
     s_printing = 1;
+    job_touch();
     if (xTaskCreate(test_page_task, "test_page", 4096, NULL, 3, NULL) != pdPASS) {
         ESP_LOGE(TAG, "test page: could not create task");
         s_printing = 0;
+        job_touch();
         xSemaphoreGive(s_job_lock);
     }
 }
@@ -677,6 +706,7 @@ static void test_button(void)
         on_activity();
         if (xSemaphoreTake(s_job_lock, 0) != pdTRUE) {
             ESP_LOGW(TAG, "cable test requested but the printer port is busy");
+            s_job_waiting = 1;
             return;
         }
         ESP_LOGI(TAG, "test button with the printer not ready: testing the cable");
@@ -827,6 +857,7 @@ static void wifi_event(void *arg, esp_event_base_t base, int32_t id, void *data)
         s_backoff_ms  = 1000;
         printer_state_post(PS_EV_WIFI_UP);
         ota_health_set(OH_STA_UP, 1);
+        fw_update_net_up();
         xEventGroupSetBits(s_wifi_events, WIFI_CONNECTED_BIT);
     }
 }
@@ -1154,6 +1185,25 @@ static void on_ps_change(const ps_view_t *v)
     localtalk_set_status(lt_status(v->state));
 }
 
+// ------------------------------------------------------- firmware updates
+// fw_update borrows the job lock: an update holds it to the restart (W-1048).
+
+static int     fwu_try_lock(void)   { return xSemaphoreTake(s_job_lock, 0) == pdTRUE; }
+static void    fwu_unlock(void)     { xSemaphoreGive(s_job_lock); }
+static int     fwu_waiting(void)    { return s_job_waiting; }
+static void    fwu_wait_clear(void) { s_job_waiting = 0; }
+static int64_t fwu_last_job(void)   { return s_last_job_s; }
+
+static void fwu_start(int setup_mode)
+{
+    fw_update_cfg_t fc = {
+        .try_lock = fwu_try_lock, .unlock = fwu_unlock,
+        .job_waiting = fwu_waiting, .job_waiting_clear = fwu_wait_clear,
+        .last_job_s = fwu_last_job, .setup_mode = setup_mode, .auto_on = s_set.auto_update,
+    };
+    ESP_ERROR_CHECK(fw_update_start(&fc));
+}
+
 void app_main(void)
 {
     // Before anything else: U9's level-shifter input has no pull, so from
@@ -1308,6 +1358,7 @@ void app_main(void)
             WIFI_EVENT, WIFI_EVENT_AP_STADISCONNECTED, ap_event, NULL, NULL));
         ESP_ERROR_CHECK(net_provision_start(ap));
         ota_health_set(OH_AP_UP, 1);
+        fwu_start(1);
         webui_cfg_t wcfg = { .status_json = status_json, .captive = 1,
                               .localtalk_flash = localtalk_flash,
                               .lt_json = lt_json, .lt_job = lt_job, .lt_echo = lt_echo,
@@ -1329,6 +1380,9 @@ void app_main(void)
     };
     ESP_ERROR_CHECK(ipp_server_start(&cfg));
     ota_health_set(OH_IPP_UP, 1);
+    // wifi_start returned joined, before this could hear the join.
+    fwu_start(0);
+    fw_update_net_up();
 
     webui_cfg_t wcfg = { .status_json = status_json, .captive = 0,
                           .localtalk_flash = localtalk_flash,
