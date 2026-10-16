@@ -154,6 +154,15 @@ static lg_c3 state_dot(const ps_view_t *v, const lg_opts_t *o, int i, uint32_t t
     float h1 = dot_hash(r, c, 1), h2 = dot_hash(r, c, 2);
     uint32_t s = v->since_ms;
 
+    if (v->cable == PS_CABLE_PASS) {
+        // A cable test passed (W-1055): two white rings out of the test
+        // button, 400 ms apart, over a white field that fades by 3 s.
+        uint32_t cs = v->cable_ms;
+        float lv = 0.45f + gauss(dist - (float)cs / 1000.0f * 6, 1.6f);
+        if (cs >= 400) lv += gauss(dist - (float)(cs - 400) / 1000.0f * 6, 1.6f);
+        return sc(white_of(r, c), clampf(lv) * (1 - ss(2000, PS_CABLE_PASS_MS, (float)cs)));
+    }
+
     switch (v->state) {
     case PS_BOOTING:
         return spin(dist, ang, (float)s / 1000.0f);
@@ -350,6 +359,16 @@ void lg_render16(const ps_view_t *v, const lg_opts_t *o, uint32_t t_ms,
     if (o && !lg_act_over(o->act, o->act_ms)) {
         reset_frame(o, t_ms, out);
         return;
+    }
+    // A failed cable test (W-1055) shows as Job failed does: red means it
+    // did not work, whatever "it" was.
+    ps_view_t failed;
+    if (v->cable == PS_CABLE_FAIL) {
+        failed = *v;
+        failed.state = PS_FAILED;
+        failed.since_ms = v->cable_ms;
+        failed.cable = 0;
+        v = &failed;
     }
     int all = all_dots(v->state);
     int gamer = o && o->gamer;

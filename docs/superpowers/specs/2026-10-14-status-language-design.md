@@ -59,9 +59,14 @@ Display states, highest priority first:
 **Asleep** is a modifier, not a state: after `SLEEP_AFTER` (300 s) with no activity while in
 *Ready* or *Printer offline*, the panel fades to a pilot light. States 1–6 never sleep.
 
+**Cable result** (W-1055) is a modifier too: after a cable test, its result shows over Setup,
+Joining, Ready or Printer offline for 3 s (pass) or 6 s (fail); a job hides it. The test runs
+from the test button while the printer is not ready (a cable from J2 to J4 holds HSKo false), or
+from the web page.
+
 **Activity** (wakes the panel and resets the sleep timer): any display-state change, a job
 operation arriving (Print-Job, Validate-Job; the server has no Create-Job), a test-button press,
-a DIP change.
+a DIP change, a cable test's result.
 Get-Printer-Attributes does **not** count: Home Assistant's IPP integration polls it every
 30 s and would keep the panel awake forever. (This trades away "lights up when the print sheet
 opens"; Validate-Job still lights it the moment you tap Print.)
@@ -112,6 +117,8 @@ state reads as one big LED. Hue offsets stay inside each state's colour family.
 | Printing | all; mask at 4× | **print head**: a bright white dot crosses the current row in 1.5 s, inking it warm (hue 28–48°) behind; rows advance top to bottom and alternate direction like the ImageWriter's bidirectional head; the two rows above hold fading ink (25%, 12%), the rest 3% |
 | Needs attention | all; FR4 at the alert cap (96/255), mask at 4× | deep amber (hue 18–30°: at 36° the bright green die washed it toward white) **double ripple** from the test button: two wide rings 350 ms apart every 2 s over a 12% amber floor, so the panel is never dark while it needs a person |
 | Job failed | all; mask at 4× | red (hue 352–12°): three 200 ms **glitch flashes**, each on a different random ~65% of dots, then a pulse 20%→60% whose period varies ±15% per dot, until the hold ends |
+| Cable test passed | FR4 only | two **white rings** out of the test button, 400 ms apart, over a 45% white field (each dot's own warm or cool white) that fades out between 2 s and 3 s |
+| Cable test failed | all; mask at 4× | exactly **Job failed**, timed from the result: red means it did not work, whatever "it" was |
 | Asleep | the pilot, plus a rare twinkle | the FR4 dot right of the test button (row 3, col 4) breathes 3%→12% of the cap, driven linearly (gamma would round these levels to zero), on a 6 s period: neutral white, or a slowly cycling hue in gamer mode. Every 30 s one other FR4 dot twinkles once (1.5 s, peak 8% linear). Fade into sleep over 10 s; wake instantly. |
 
 Below one count of drive a dot's brightest channel is lifted to one count and the others scale

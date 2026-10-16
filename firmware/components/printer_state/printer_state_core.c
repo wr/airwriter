@@ -41,6 +41,13 @@ void ps_set_ap_stations(ps_t *ps, unsigned n)
     ps->ap_stations = (uint8_t)(n > 255 ? 255 : n);
 }
 
+void ps_cable(ps_t *ps, int pass, uint64_t now)
+{
+    ps->cable = pass ? PS_CABLE_PASS : PS_CABLE_FAIL;
+    ps->cable_at = now;
+    ps->activity_at = now;
+}
+
 static ps_state_t derive(const ps_t *ps, uint64_t now)
 {
     if (now - ps->boot_at < ps->tm.boot_ms) return PS_BOOTING;
@@ -82,6 +89,12 @@ ps_view_t ps_update(ps_t *ps, uint64_t now)
     ps_view_t v = { .state = st, .since_ms = sat32(now - ps->state_since) };
     v.phone_joined = st == PS_SETUP && ps->ap_stations > 0;
     v.greeted      = st == PS_READY && ps->greeted;
+    uint32_t hold = ps->cable == PS_CABLE_PASS ? PS_CABLE_PASS_MS : PS_CABLE_FAIL_MS;
+    if (ps->cable && now - ps->cable_at < hold &&
+        (st == PS_SETUP || st == PS_JOINING || st == PS_READY || st == PS_OFFLINE)) {
+        v.cable    = ps->cable;
+        v.cable_ms = sat32(now - ps->cable_at);
+    }
     if ((st == PS_READY || st == PS_OFFLINE) &&
         now - ps->activity_at >= ps->tm.sleep_after_ms) {
         v.asleep    = 1;

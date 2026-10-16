@@ -502,6 +502,32 @@ int main(void)
         assert(sum[2] > sum[1] && sum[1] > sum[0]);
     }
 
+    // W-1055: a passed cable test is white on the FR4 dots only and gone by
+    // its hold; a failed one is Job failed's red, mask dots included.
+    {
+        ps_view_t v = view(PS_OFFLINE, 60000);
+        v.cable = PS_CABLE_PASS;
+        v.cable_ms = 1500;
+        lg_render(&v, &WHITE_MODE, 0, f);
+        int fr4 = 0;
+        for (int i = 0; i < LG_NUM_LEDS; i++) {
+            if (LG_MAP[i].mat != 'P') { assert(max3(f[i]) == 0); continue; }
+            assert(max3(f[i]) <= LG_BRIGHTNESS_CAP);
+            if (max3(f[i]) > 0) { fr4++; assert(neutral(f[i])); }
+        }
+        assert(fr4 == 14);
+        v.cable_ms = PS_CABLE_PASS_MS;
+        lg_render(&v, &WHITE_MODE, 0, f);
+        assert(lit_count(f) == 0);
+
+        ps_view_t fail = view(PS_OFFLINE, 60000), red = view(PS_FAILED, 3000);
+        fail.cable = PS_CABLE_FAIL;
+        fail.cable_ms = 3000;
+        lg_render(&fail, &WHITE_MODE, 777, f);
+        lg_render(&red, &WHITE_MODE, 777, g);
+        assert(memcmp(f, g, sizeof f) == 0);
+    }
+
     test_reset(f, g);
     printf("test_led_grid: ok\n");
     return 0;

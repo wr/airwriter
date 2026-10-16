@@ -38,6 +38,7 @@
 #include "localtalk.h"
 #include "lt_node.h"
 #include "ota_health.h"
+#include "cable_test.h"
 #include "esp_app_desc.h"
 #include "esp_partition.h"
 #if CONFIG_BOOTLOADER_FACTORY_RESET
@@ -640,6 +641,47 @@ static void test_page(void)
     }
 }
 
+// W-1055: the cable test, from the button or the web page, under the job lock
+// (it borrows the printer port's pins). The panel shows the answer.
+#if CONFIG_AIRWRITER_PIC_CLK_PIN >= 0
+static void cable_test_locked(cable_result_t *r)
+{
+    cable_test_run(r);
+    printer_state_cable(r->err == ESP_OK && r->verdict == CT_PASS);
+}
+
+static void cable_button_task(void *arg)
+{
+    (void)arg;
+    cable_result_t r;
+    cable_test_locked(&r);
+    xSemaphoreGive(s_job_lock);
+    vTaskDelete(NULL);
+}
+#endif
+
+// A cable from J2 to J4 leaves the printer's handshake line down, so a press
+// while the printer is not ready tests the cable instead of printing. With no
+// crossover plugged in that shows the fail, which is also the honest answer
+// to "print a test page" with no printer ready.
+static void test_button(void)
+{
+#if CONFIG_AIRWRITER_PIC_CLK_PIN >= 0
+    if (!serial_out_clear()) {
+        on_activity();
+        if (xSemaphoreTake(s_job_lock, 0) != pdTRUE) {
+            ESP_LOGW(TAG, "cable test requested but the printer port is busy");
+            return;
+        }
+        ESP_LOGI(TAG, "test button with the printer not ready: testing the cable");
+        if (xTaskCreate(cable_button_task, "cable", 4096, NULL, 3, NULL) != pdPASS)
+            xSemaphoreGive(s_job_lock);
+        return;
+    }
+#endif
+    test_page();
+}
+
 // Latched by dip_on_change from the boot-time read, consumed once app_main
 // has brought the servers up.
 static int s_test_on_boot;
@@ -1038,15 +1080,43 @@ static void lt_start(const char *why)
 static void localtalk_flash(void *ctx, char *buf, size_t cap)
 {
     (void)ctx;
-    // The node holds the PIC's UART pins; flashing would fight it.
+    // The node holds the PIC's UART pins; flashing would fight it. "err", as
+    // pic_result_json has it, is what the page shows.
     if (localtalk_running()) {
-        snprintf(buf, cap, "{\"ok\":false,\"error\":\"LocalTalk is running: set DIP1-2 to "
+        snprintf(buf, cap, "{\"ok\":false,\"err\":\"LocalTalk is running: set DIP1-2 to "
                  "another mode and restart, then flash\"}");
+        return;
+    }
+    // A cable test borrows the same pins, under the job lock.
+    if (xSemaphoreTake(s_job_lock, 0) != pdTRUE) {
+        snprintf(buf, cap, "{\"ok\":false,\"err\":\"The printer port is busy; try again "
+                 "when the job is done\"}");
         return;
     }
     pic_result_t r;
     pic_prog_flash_tashtalk(&r);
+    xSemaphoreGive(s_job_lock);
     pic_result_json(&r, buf, cap);
+}
+
+// POST /api/cable. Refuses rather than waits while a job holds the port.
+static void cable_web(void *ctx, char *buf, size_t cap)
+{
+    (void)ctx;
+#if CONFIG_AIRWRITER_PIC_CLK_PIN >= 0
+    if (xSemaphoreTake(s_job_lock, 0) != pdTRUE) {
+        snprintf(buf, cap, "{\"ok\":false,\"error\":\"The printer port is busy; try again "
+                 "when the job is done\"}");
+        return;
+    }
+    on_activity();
+    cable_result_t r;
+    cable_test_locked(&r);
+    xSemaphoreGive(s_job_lock);
+    cable_result_json(&r, buf, cap);
+#else
+    snprintf(buf, cap, "{\"ok\":false,\"error\":\"no LocalTalk port\"}");
+#endif
 }
 
 // ----------------------------------------------------------------- main
@@ -1186,6 +1256,15 @@ void app_main(void)
         .loopback        = AW_LOOPBACK,
     };
     ESP_ERROR_CHECK(serial_out_init(&ser));
+#if CONFIG_AIRWRITER_PIC_CLK_PIN >= 0
+    cable_test_cfg_t ct = {
+        .tx_pin  = CONFIG_AIRWRITER_TX_PIN,       .rx_pin = CONFIG_AIRWRITER_RX_PIN,
+        .invert_tx = AW_INVERT_TX,
+        .lt_uart = CONFIG_AIRWRITER_LT_UART_NUM,  .lt_tx  = CONFIG_AIRWRITER_PIC_CLK_PIN,
+        .lt_rx   = CONFIG_AIRWRITER_PIC_DAT_PIN,  .lt_cts = CONFIG_AIRWRITER_LT_CTS_PIN,
+    };
+    cable_test_init(&ct);
+#endif
     xTaskCreate(kick_task, "kick", 3072, NULL, 3, NULL);
 
     job_pipe_cfg_t pipe = { .out = printer_out, .dither = algo, .done = pipe_done };
@@ -1194,7 +1273,7 @@ void app_main(void)
     // Before wifi_start, which can block up to 60s joining: the debounce
     // settles in ~300ms, so the boot-time read is long ready by the time
     // test_on_boot is checked below, whichever path gets there.
-    dip_config_cb_t dip_cb = { .on_change = dip_on_change, .on_test_button = test_page,
+    dip_config_cb_t dip_cb = { .on_change = dip_on_change, .on_test_button = test_button,
                                .on_hold = on_hold };
     ESP_ERROR_CHECK(dip_config_start(&dip_cb));
 
@@ -1221,7 +1300,8 @@ void app_main(void)
         ota_health_set(OH_AP_UP, 1);
         webui_cfg_t wcfg = { .status_json = status_json, .captive = 1,
                               .localtalk_flash = localtalk_flash,
-                              .lt_json = lt_json, .lt_job = lt_job, .lt_echo = lt_echo };
+                              .lt_json = lt_json, .lt_job = lt_job, .lt_echo = lt_echo,
+                          .cable_test = cable_web };
         ESP_ERROR_CHECK(webui_start(&wcfg));
         ota_health_set(OH_WEB_UP, 1);
 
@@ -1242,7 +1322,8 @@ void app_main(void)
 
     webui_cfg_t wcfg = { .status_json = status_json, .captive = 0,
                           .localtalk_flash = localtalk_flash,
-                          .lt_json = lt_json, .lt_job = lt_job, .lt_echo = lt_echo };
+                          .lt_json = lt_json, .lt_job = lt_job, .lt_echo = lt_echo,
+                          .cable_test = cable_web };
     ESP_ERROR_CHECK(webui_start(&wcfg));
     ota_health_set(OH_WEB_UP, 1);
 

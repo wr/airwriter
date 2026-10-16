@@ -49,13 +49,18 @@ What works on `main`:
   left busy by line noise at power-up gets a CTRL-X.
 - The 37-dot status panel per the status-language spec: Spin at boot, discrete printer and Wi-Fi
   states, per-dot white Ready, DIP7 gamer RGB, pilot dot after 5 min idle.
-- DIP switches read by their printed numbers; a tap of the `test` button prints a test page.
+- DIP switches read by their printed numbers; a tap of the `test` button prints a test page, or
+  with the printer not ready runs the cable test.
 - Recovery (SPEC §3.11): a `factory` slot beside ota_0/ota_1; a new OTA image runs on trial and
   rolls back unless healthy (`/api/status` `slot`, `trial`, `rolled_back`). Holding `test` 8 s
   erases the settings with a countdown on the panel; holding it through power-up for 5 s makes
   the bootloader erase them and boot the factory slot.
+- Cable test (`components/cable_test`): one cable from J2 to J4 and a press of test (or
+  `POST /api/cable`) tells Apple's crossover from anything else. TashTalk sends a frame out J4
+  that RMT decodes off J2's RxD; only then does RMT send one out J2's TxD for TashTalk to relay
+  back. The panel shows white rings (pass) or Job failed red.
 - Setup AP `AirWriter-xxxx` (open, 192.168.4.1) on a board with no credentials; web UI on port
-  80: `/api/status`, Wi-Fi, settings, `/update` (OTA), `/api/localtalk/flash`.
+  80: `/api/status`, Wi-Fi, settings, `/update` (OTA), `/api/localtalk/flash`, `/api/cable`.
 - Wi-Fi scans all channels and joins the strongest AP; printer-uuid is stable (MAC + epoch).
 - TashTalk 2.1.3 is in U7, flashed in place by the ESP32 over LVP.
 - A LocalTalk node in DIP mode 2 (or always, with `CONFIG_AIRWRITER_LT_BENCH`), on UART2 to
@@ -108,6 +113,8 @@ Linear is the queue; these are the live items.
   2026-10-15. Host-tested against `fixtures/pap-iw701-page.bin`, and on board 1 a real Mac job went
   from PAP through `serial_out` byte for byte (UART loopback, `CONFIG_AIRWRITER_LT_BENCH`). Still
   owed: a paper test, which needs a second crossover cable for J2 while the Mac's is on J4.
+- `W-1055 Cable tester: tell a crossover from a straight cable through J2↔J4`: on
+  `wells/w-1055-cable-tester`, unmerged; host-tested and built, not yet run on board 1.
 - Not in Linear: scope HSKo during a long job (SPEC §3.9 timing).
 
 ## Toolchain
@@ -144,7 +151,7 @@ Linear is the queue; these are the live items.
 
 ## Verification
 - **Host tests:** `make -C tools/rip test` (raster path, serial writer, printer_state, led_grid,
-  dip_config, pic_prog, localtalk) and `make -B -C tools/ipp test` (`-B`: `tools/ipp/build/` is committed).
+  dip_config, pic_prog, localtalk, cable) and `make -B -C tools/ipp test` (`-B`: `tools/ipp/build/` is committed).
 - **Raster regression:** `make -C tools/rip regress`; `stream.bin` must match the fixtures byte
   for byte. No ESP32 needed.
 - **Firmware:** `idf.py build` clean for the S3; build the C6 tree too when touching shared code.

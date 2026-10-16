@@ -83,7 +83,12 @@ Traps already explained in a code comment are listed only when the comment is ea
 ## Serial, printer, LocalTalk
 
 - **J2 needs Apple's crossover cable (590-0552-A / M0197).** Many reproduction "ImageWriter II"
-  cables are wired straight and give a false "out of paper"; buzz pin 1 → pin 2 first (SPEC §2.4).
+  cables are wired straight and give a false "out of paper"; buzz pin 1 → pin 2 first (SPEC §2.4),
+  or plug it from J2 to J4 and press test (the cable test, W-1055). The test can't reach pins 1/2
+  (J4's are not connected), so a cable crossed on data but straight on the handshake passes.
+- **`uart_set_pin` releases every pin the UART had, CTS included, before routing new ones.**
+  Re-routing TX and RX alone (after lending them to RMT, which also moves IO18 off the IOMUX)
+  leaves CTS tied to "clear" and overruns the printer; `serial_out_lend(0)` passes all three.
 - **An aborted mid-strip write leaves the printer counting `ESC G` bytes**, so it prints the next
   job's header as dots. The next job resyncs with 1280 NULs + CTRL-X (`iw_resync`,
   `W-1041 Resync the printer after an aborted job so the next job doesn't print garbage`).

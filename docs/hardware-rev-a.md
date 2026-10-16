@@ -127,6 +127,8 @@ Not in Linear yet except where named. Most come from review #4
 - Rename the `LT_A/LT_B/LT_Y/LT_Z` nets: the names are swapped but U6/U8 polarity is right.
   Rename, do not rewire.
 - 0 Ω cable-option pads on J2.
+- J4 pin 1 to a spare GPIO through 1 k, so the cable test reaches the handshake leg: through a
+  crossover it lands on J2 pin 2 (HSKi, read through U3).
 - Inrush soft-start, if USB compliance ever matters (VBUS bulk is ~4× the inrush budget).
 - Through-hole dome power LED: `W-1043 Rev B: through-hole dome LED for the power indicator`.
 - Scope HSKo first: if its swing is modest, a divider and clamp into a GPIO could delete U3.

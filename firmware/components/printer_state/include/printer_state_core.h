@@ -39,11 +39,18 @@ typedef struct {
 
 #define PS_TIMING_DEFAULT { 3000, 3000, 30000, 60000, 300000, 5000, 60000 }
 
+// W-1055: a cable test's result, shown over the idle states for a moment.
+#define PS_CABLE_PASS    1
+#define PS_CABLE_FAIL    2
+#define PS_CABLE_PASS_MS 3000
+#define PS_CABLE_FAIL_MS 6000
+
 typedef struct {
     ps_timing_t tm;
-    uint64_t    boot_at, line_since, failed_at, activity_at, state_since, kicked_at;
+    uint64_t    boot_at, line_since, failed_at, activity_at, state_since, kicked_at, cable_at;
     uint8_t     setup, wifi_up, line_ready, job, failed, ap_stations, greeted, kicked;
     uint8_t     job_started_low;   // the line was down when this job began: no printer to wait for
+    uint8_t     cable;             // PS_CABLE_*, the last test's result, or 0
     ps_state_t  last;
 } ps_t;
 
@@ -55,11 +62,16 @@ typedef struct {
     uint8_t    asleep;        // READY or OFFLINE only, after sleep_after_ms idle
     uint32_t   since_ms;      // time spent in `state` so far (saturates)
     uint32_t   asleep_ms;     // time since falling asleep, 0 when awake (saturates)
+    uint8_t    cable;         // PS_CABLE_* while a cable test's result shows, else 0
+    uint32_t   cable_ms;      // time since that result
 } ps_view_t;
 
 void        ps_init(ps_t *ps, const ps_timing_t *tm, uint64_t now_ms);
 void        ps_post(ps_t *ps, ps_event_t ev, uint64_t now_ms);
 void        ps_set_ap_stations(ps_t *ps, unsigned n);
+// A cable test finished (W-1055). Its result shows for PS_CABLE_PASS_MS or
+// PS_CABLE_FAIL_MS over Setup, Joining, Ready and Offline; a job hides it.
+void        ps_cable(ps_t *ps, int pass, uint64_t now_ms);
 // Derives the view. Not const: a change of state is recorded for since_ms and
 // counts as activity, so the panel wakes to show it.
 ps_view_t   ps_update(ps_t *ps, uint64_t now_ms);
