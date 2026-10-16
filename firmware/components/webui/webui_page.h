@@ -663,7 +663,7 @@ static const char WEBUI_HTML[] =
 "    case 'installing': return 'Checking the signature…';\n"
 "    case 'restarting': return 'Installed. Restarting…';\n"
 "  }\n"
-"  let t=u.version+(u.release?'. ':' (a development build). ');\n"
+"  let t='Running '+u.version+(u.release?'. ':', a development build. ');\n"
 "  if(u.error) t+=cap(u.error)+'. ';\n"
 "  if(u.newer) t+=u.latest+' is available.';\n"
 "  else if(u.no_target) t+='The newest release has no image for this board.';\n"

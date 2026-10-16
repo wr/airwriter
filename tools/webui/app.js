@@ -301,7 +301,7 @@ function fwSay(u){
     case 'installing': return 'Checking the signature…';
     case 'restarting': return 'Installed. Restarting…';
   }
-  let t=u.version+(u.release?'. ':' (a development build). ');
+  let t='Running '+u.version+(u.release?'. ':', a development build. ');
   if(u.error) t+=cap(u.error)+'. ';
   if(u.newer) t+=u.latest+' is available.';
   else if(u.no_target) t+='The newest release has no image for this board.';
