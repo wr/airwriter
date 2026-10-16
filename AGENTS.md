@@ -231,6 +231,8 @@ tools/rip/            host build of the raster path + host tests for the pure-C 
 tools/ipp/            IPP host tests and gpa_server (the real encoder on localhost for ipptool)
 tools/ippcap/         stub IPP server that captures a Print-Job body (how fixtures were made)
 tools/webui/          web UI sources; mkheader.py generates firmware's webui_page.h (never hand-edit)
+tools/lights/         the wiki's GIF of every panel light effect, played through led_grid_core;
+                      after changing an effect, `make -C tools/lights OUT=<wiki>/images/lights`
 tools/release/        release.sh (build, check, sign, publish), tamper.py (refusal-test images)
 fixtures/             captured URF samples and expected streams
 enclosure/            3D printed case (build123d): tray, Lite lid, Pro lattice; out/*.stl committed
