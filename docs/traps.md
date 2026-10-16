@@ -100,6 +100,11 @@ Traps already explained in a code comment are listed only when the comment is ea
 - **TashTalk's CTS (RA2 → IO6) is low when it can take bytes**, the ESP32 UART's own CTS
   polarity: no inversion. Its queue is 128 bytes and a frame can be 605, so flow control is not
   optional.
+- **A LocalTalk job with no printer on J2 cannot finish.** The line reads off line and the status
+  word says so; whatever the Mac sends fills the spool and holds its reads, and after
+  `CONFIG_AIRWRITER_STALL_ABORT` the job is aborted (CloseConn). To take a job on the bench without
+  a printer, build with `CONFIG_AIRWRITER_UART_LOOPBACK`: the line reads ready and the log checks
+  the job's bytes as they come back (never on a board that should print).
 - **The LocalTalk node owns IO4/IO5, which are also the PIC's ICSP lines.** The web UI's
   TashTalk flash refuses while the node runs: set DIP1-2 off mode 2 (and build without
   `CONFIG_AIRWRITER_LT_BENCH`), restart, then flash.
@@ -112,8 +117,10 @@ Traps already explained in a code comment are listed only when the comment is ea
   It never reads back (no SendData to us), polls SendStatus about twice per chunk, writes ~88
   bytes per read with a flow quantum of 1, and sends the same native ImageWriter stream as serial
   (one short page: 11968 bytes, identical across prints). Once, the Mac sent a whole page and
-  then tickled the connection for 10+ minutes without closing; its next job's OpenConn now
-  supersedes a connection silent for 10 s (`LT_PAP_STALE_MS`). Cause not found.
+  then tickled the connection for 10+ minutes without closing. Cause not found. Its next job's
+  OpenConn now supersedes a connection silent for 10 s (`LT_PAP_STALE_MS`), and a job that has
+  owed data for 5 min with the printer ready is closed (`LT_PAP_QUIET_MS`), so the printer is
+  never held indefinitely.
 - **The bench Mac's 8.1 install had no AppleTalk ImageWriter driver**, and the plain
   "ImageWriter" Chooser driver is serial only.
   Apple's `AppleTalk_ImageWriter_7.0.1.sea.bin` (Wayback copy of download.info.apple.com) works.

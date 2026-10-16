@@ -109,3 +109,90 @@ void iw_link_job_end(iw_link_t *l, int clean)
     if (clean && l->started) l->dirty = 0;
     l->started = 0;
 }
+
+enum { SC_TEXT = 0, SC_ESC, SC_DIGITS, SC_SKIP, SC_LIST, SC_KEY, SC_WIDTH };
+
+void iw_scan_init(iw_scan_t *s)
+{
+    memset(s, 0, sizeof *s);
+}
+
+static void scan_byte(iw_scan_t *s, uint8_t b)
+{
+    switch (s->state) {
+    case SC_TEXT:
+        if (b == 0x1B) s->state = SC_ESC;
+        else if (b == 0x1F) { s->state = SC_SKIP; s->left = 1; s->after = SC_TEXT; }   // CTRL-_ n
+        return;
+    case SC_ESC:
+        s->cmd = b;
+        s->num = 0;
+        s->after = SC_TEXT;
+        switch (b) {
+        case 'G': case 'S': case 'V': case 'H': case 'F':
+            s->state = SC_DIGITS; s->digits = 4; return;
+        case 'g': case 'L': case 'u': case 'R':
+            s->state = SC_DIGITS; s->digits = 3; return;
+        case 'T':
+            s->state = SC_DIGITS; s->digits = 2; return;
+        case 'Z': case 'D':
+            s->state = SC_SKIP; s->left = 2; return;
+        case 'a': case 's': case 'l': case 'K':
+            s->state = SC_SKIP; s->left = 1; return;
+        case '(': case ')':
+            s->state = SC_LIST; return;
+        case 'I':
+            s->state = SC_KEY; return;
+        default:
+            s->state = SC_TEXT; return;
+        }
+    case SC_DIGITS:
+        s->num = s->num * 10 + (b >= '0' && b <= '9' ? (uint32_t)(b - '0') : 0);
+        if (--s->digits) return;
+        switch (s->cmd) {
+        case 'G': case 'S': s->left = s->num;     break;
+        case 'g':           s->left = s->num * 8; break;
+        case 'V': case 'R': s->left = 1;          break;
+        default:            s->left = 0;          break;
+        }
+        s->state = s->left ? SC_SKIP : SC_TEXT;
+        return;
+    case SC_SKIP:
+        if (!--s->left) s->state = s->after;
+        return;
+    case SC_LIST:
+        if (b == '.') s->state = SC_TEXT;
+        return;
+    case SC_KEY:                               // a character to define, or CTRL-D
+        s->state = b == 0x04 ? SC_TEXT : SC_WIDTH;
+        return;
+    case SC_WIDTH: {                           // its data bytes: A-P or a-p is 1-16
+        uint32_t w = (b >= 'A' && b <= 'P') ? (uint32_t)(b - 'A' + 1)
+                   : (b >= 'a' && b <= 'p') ? (uint32_t)(b - 'a' + 1) : 0;
+        if (w) { s->state = SC_SKIP; s->left = w; s->after = SC_KEY; }
+        else   s->state = SC_KEY;
+        return;
+    }
+    }
+}
+
+void iw_scan(iw_scan_t *s, const uint8_t *buf, size_t n)
+{
+    // A graphics payload is most of a stream: skip it whole.
+    while (n) {
+        if (s->state == SC_SKIP && s->left > 1) {
+            size_t k = s->left - 1 < n ? s->left - 1 : n;
+            s->left -= (uint32_t)k;
+            buf += k;
+            n -= k;
+            continue;
+        }
+        scan_byte(s, *buf++);
+        n--;
+    }
+}
+
+int iw_scan_between(const iw_scan_t *s)
+{
+    return s->state == SC_TEXT;
+}

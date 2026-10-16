@@ -234,6 +234,102 @@ int main(void)
         }
         CHECK(stuck > page_n / 2);      /* the bug: most cuts are mid-strip */
         CHECK_EQ_INT(bad, 0);           /* the fix: every cut recovers */
+
+        /* iw_scan agrees with the printer model at every cut of our page. */
+        size_t disagree = 0;
+        for (size_t cut = 0; cut <= page_n; cut++) {
+            iwm_t a = { 0 };
+            iwm_feed(&a, page, cut);
+            iw_scan_t sc;
+            iw_scan_init(&sc);
+            iw_scan(&sc, page, cut);
+            disagree += iw_scan_between(&sc) != (a.st == M_TEXT);
+        }
+        CHECK_EQ_INT(disagree, 0);
+    }
+
+    /* -- iw_scan on a stream the Mac wrote (W-1053): the AppleTalk ImageWriter
+     *    7.0.1 page, which ends in text, and is mid-command inside each of its
+     *    graphics strips and their counts -- */
+    {
+        static uint8_t mac[16384];
+        FILE *f = fopen("../../fixtures/pap-iw701-page.bin", "rb");
+        CHECK(f != NULL);
+        size_t mn = f ? fread(mac, 1, sizeof mac, f) : 0;
+        if (f) fclose(f);
+        CHECK_EQ_INT(mn, 11968);
+
+        iw_scan_t sc;
+        iw_scan_init(&sc);
+        iw_scan(&sc, mac, mn);
+        CHECK(iw_scan_between(&sc));
+
+        /* Byte at a time agrees with whole buffers. */
+        iw_scan_t one;
+        iw_scan_init(&one);
+        size_t strips = 0, inside = 0, mid_strip = 0, ends_clean = 0;
+        for (size_t i = 0; i < mn; i++) {
+            int was = iw_scan_between(&one);
+            iw_scan(&one, mac + i, 1);
+            if (was && mac[i] == 0x1B && i + 1 < mn && mac[i + 1] == 'G') strips++;
+            inside += !iw_scan_between(&one);
+            if (i + 6 < mn && mac[i] == 0x1B && mac[i + 1] == 'G' && was) {
+                /* Cut inside the count, one byte short of the strip's end
+                 * (mid-command both), and exactly at its end (between). */
+                size_t cnt = (size_t)(mac[i + 2] - '0') * 1000 + (size_t)(mac[i + 3] - '0') * 100 +
+                             (size_t)(mac[i + 4] - '0') * 10 + (size_t)(mac[i + 5] - '0');
+                iw_scan_t c;
+                iw_scan_init(&c);
+                iw_scan(&c, mac, i + 4);
+                mid_strip += !iw_scan_between(&c);
+                iw_scan_init(&c);
+                iw_scan(&c, mac, i + 6 + cnt - 1);
+                mid_strip += !iw_scan_between(&c);
+                iw_scan_init(&c);
+                iw_scan(&c, mac, i + 6 + cnt);
+                ends_clean += iw_scan_between(&c);
+            }
+        }
+        CHECK(iw_scan_between(&one));
+        CHECK_EQ_INT(strips, 40);
+        CHECK_EQ_INT(mid_strip, 80);
+        CHECK_EQ_INT(ends_clean, 40);
+        CHECK(inside > mn / 2);          /* graphics are most of the page */
+
+        /* The other argument shapes. */
+        static const struct { const char *s; size_t n; int between; } cases[] = {
+            { "\x1bV0003", 6, 0 },        /* ESC V nnnn c: the c is owed */
+            { "\x1bV0003x", 7, 1 },
+            { "\x1bR005", 5, 0 },
+            { "\x1bR005*", 6, 1 },
+            { "\x1bg002", 5, 0 },         /* 2 x 8 graphics bytes owed */
+            { "\x1bg002ABCDEFGHIJKLMNOP", 21, 1 },
+            { "\x1b(010,020", 9, 0 },     /* a tab list ends at '.' */
+            { "\x1b(010,020.", 10, 1 },
+            { "\x1bZ\x00", 3, 0 },
+            { "\x1bZ\x00\x20", 4, 1 },
+            /* ESC I: KEY 'A', WIDTH 'B' = two data bytes (0x04 and ESC are
+             * data here, not the end or a command), KEY 'C', WIDTH 'a' = one
+             * byte, then CTRL-D where a KEY would be. */
+            { "\x1bI" "AB\x04", 5, 0 },
+            { "\x1bI" "AB\x04\x1b", 6, 0 },
+            { "\x1bI" "AB\x04\x1b" "Ca\x1f", 9, 0 },
+            { "\x1bI" "AB\x04\x1b" "Ca\x1f\x04", 10, 1 },
+            { "\x1bI\x04", 3, 1 },
+            { "\x1f", 1, 0 },               /* CTRL-_ n */
+            { "\x1f\x03", 2, 1 },
+            { "\x1bG0000", 6, 1 },        /* an empty strip */
+            { "\x1b" "c" "\x1b" "p" "\x1bT16", 8, 1 },
+            { "\x1b", 1, 0 },
+        };
+        for (size_t k = 0; k < sizeof cases / sizeof cases[0]; k++) {
+            iw_scan_t c;
+            iw_scan_init(&c);
+            iw_scan(&c, (const uint8_t *)cases[k].s, cases[k].n);
+            if (iw_scan_between(&c) != cases[k].between)
+                fprintf(stderr, "  iw_scan case %zu\n", k);
+            CHECK_EQ_INT(iw_scan_between(&c), cases[k].between);
+        }
     }
 
     TEST_END;
