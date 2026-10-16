@@ -9,10 +9,11 @@ fp-info-cache
 
 # ESP-IDF
 firmware/build/
-firmware/build_c6/
 firmware/.cache/
 firmware/sdkconfig
 firmware/sdkconfig.old
+# Left over from the retired ESP32-C6 devkit target; sdkconfig.c6 can hold Wi-Fi credentials.
+firmware/build_c6/
 firmware/sdkconfig.c6
 firmware/sdkconfig.c6.old
 firmware/managed_components/

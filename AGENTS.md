@@ -132,10 +132,9 @@ Linear is the queue; these are the live items.
   recreate them before any konnect placement:
   `ln -s "$PWD/hardware/airwriter/lib/airwriter.kicad_sym" /Applications/KiCad/KiCad.app/Contents/SharedSupport/symbols/`
   and the same for `lib/airwriter.pretty` into `.../SharedSupport/footprints/`.
-- **ESP-IDF v5.5.1** at `~/esp/esp-idf` (esp32s3 and esp32c6 tools). `. ~/esp/esp-idf/export.sh`
+- **ESP-IDF v5.5.1** at `~/esp/esp-idf` (esp32s3 tools). `. ~/esp/esp-idf/export.sh`
   first, then from `firmware/`:
-  - build (S3, board): `idf.py build`
-  - C6 devkit: `idf.py -B build_c6 -D SDKCONFIG=sdkconfig.c6 build`
+  - build: `idf.py build`
   - flash over USB: `idf.py -p /dev/cu.usbmodem1101 flash` writes the bootloader, partition
     table, a blank otadata and the app into the factory slot, so the board boots that (leaves the
     printer not-ready until SELECT is toggled)
@@ -143,9 +142,8 @@ Linear is the queue; these are the live items.
     first). It lands in ota_0/ota_1 on trial: `/update` refuses another until `/api/status`
     shows `"trial":false` (up to 2 min)
 - `firmware/sdkconfig` is gitignored and holds the Wi-Fi credentials (menuconfig, AirWriter
-  menu); NVS namespace `wifi` overrides it. `sdkconfig.defaults{,.esp32s3,.esp32c6}` only seed a
-  new one; main.c refuses to build an S3 sdkconfig without rollback and the factory reset. The
-  C6 has no PSRAM, so it is the stricter target for memory; it has its own 4 MB partition table.
+  menu); NVS namespace `wifi` overrides it. `sdkconfig.defaults{,.esp32s3}` only seed a new one;
+  main.c refuses to build an sdkconfig without rollback and the factory reset.
 - **Enclosure:** build123d; `enclosure/build.sh` runs the tests then writes `out/*.{step,stl}`.
   The lattice's part clearances come from kicad-cli's STEP export, so the build needs kicad-cli.
   `enclosure/tools/render.py` (PNG views) and `tools/coupon.py` (fit-test cut-outs) need
@@ -156,7 +154,7 @@ Linear is the queue; these are the live items.
   dip_config, pic_prog, localtalk, cable) and `make -B -C tools/ipp test` (`-B`: `tools/ipp/build/` is committed).
 - **Raster regression:** `make -C tools/rip regress`; `stream.bin` must match the fixtures byte
   for byte. No ESP32 needed.
-- **Firmware:** `idf.py build` clean for the S3; build the C6 tree too when touching shared code.
+- **Firmware:** `idf.py build` clean.
 - **On board 1:** an `ipptool` Print-Job of `fixtures/checker.urf` prints crc32 `8ee84844`.
   After an OTA, `/api/status` reaches `"trial":false` with the new `version`.
 - **Schematic:** `kicad-cli sch erc` → 0 errors; 44 known warnings (42 `lib_symbol_mismatch`,

@@ -1154,8 +1154,7 @@ void app_main(void)
     // power-on until this line the LED chain sees noise (a brief flicker at
     // boot is expected on rev A; rev B adds a 100k pulldown on U9.2). It must
     // run before wifi_start() especially -- the join loop can block for 60s.
-    // Compile-time guard: the pin is -1 off the S3, and the C6 devkit's
-    // headers have no GPIO 48.
+    // Compile-time guard: the pin is -1 on a devkit with no strip.
 #if CONFIG_AIRWRITER_LED_DATA_PIN >= 0
     gpio_config_t led_clamp = {
         .pin_bit_mask = 1ULL << CONFIG_AIRWRITER_LED_DATA_PIN,
@@ -1169,8 +1168,8 @@ void app_main(void)
     // on a LocalTalk bus. High is the UART idle level; low would be a break.
     // pic_prog borrows the pin for a flash and hands it back as a pulled-up
     // input; a LocalTalk UART driver will own it once that lands. Off the S3
-    // the default is -1 (IO4 is the C6 devkit's printer TX); a devkit wired
-    // to a breadboard PIC sets its own pin and gets the same clamp.
+    // the default is -1; a devkit wired to a breadboard PIC sets its own pin
+    // and gets the same clamp.
 #if CONFIG_AIRWRITER_PIC_CLK_PIN >= 0
     gpio_config_t lt_tx_clamp = {
         .pin_bit_mask = 1ULL << CONFIG_AIRWRITER_PIC_CLK_PIN,
