@@ -532,6 +532,16 @@ int main(void)
         v.cable_ms = PS_CABLE_MS - 1;                        // faded out
         lg_render(&v, &WHITE_MODE, 0, f);
         assert(lit_count(f) == 0);
+        // Red instead blinks the six dots around the button twice, the rest dark.
+        v.cable = PS_CABLE_FAIL;
+        const uint32_t at[] = { 1500, 1700, 1900, 2100 };
+        const int lit[] = { 1, 0, 1, 0 };
+        for (int k = 0; k < 4; k++) {
+            v.cable_ms = at[k];
+            lg_render(&v, &WHITE_MODE, 0, f);
+            assert(lit_count(f) == (lit[k] ? 6 : 0));
+            if (lit[k]) assert(f[near][0] > f[near][1] && max3(f[far]) == 0);
+        }
     }
 
     test_reset(f, g);

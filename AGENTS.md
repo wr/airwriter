@@ -58,8 +58,8 @@ What works on `main`:
 - Cable test (`components/cable_test`): one cable from J2 to J4 and a press of test (or
   `POST /api/cable`) tells Apple's crossover from anything else. TashTalk sends a frame out J4
   that RMT decodes off J2's RxD; only then does RMT send one out J2's TxD for TashTalk to relay
-  back. The panel answers with a sweep left, right, then a pulse from the middle: green for a
-  crossover, red for anything else.
+  back. The panel sweeps left and right, then pulses green from the test button for a crossover,
+  or blinks the dots around it red twice for anything else.
 - Setup AP `AirWriter-xxxx` (open, 192.168.4.1) on a board with no credentials; web UI on port
   80: `/api/status`, Wi-Fi, settings, `/update` (OTA), `/api/localtalk/flash`, `/api/cable`.
 - Wi-Fi scans all channels and joins the strongest AP; printer-uuid is stable (MAC + epoch).
