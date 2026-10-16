@@ -15,7 +15,7 @@ typedef struct {
     int tx_pin, rx_pin;     // the printer port: UART1 TX into U2's driver, RX from its receiver
     int invert_tx;          // as serial_out has it, so the borrowed TX idles where the UART left it
     // TashTalk's UART, for when the LocalTalk node is not running
-    int lt_uart, lt_tx, lt_rx, lt_cts;
+    int lt_uart, lt_tx, lt_rx, lt_cts, lt_mclr;
 } cable_test_cfg_t;
 
 typedef struct {
@@ -27,11 +27,13 @@ typedef struct {
 
 void cable_test_init(const cable_test_cfg_t *cfg);
 
-// Runs the test: 30 ms with a crossover, about 100 ms without. The caller
+// Runs the test: 30 ms with a crossover, up to ~400 ms without (a fail on
+// our own TashTalk link is retried once after resetting TashTalk). The caller
 // holds the job lock, so nothing writes to the printer port while its pins
 // are borrowed. J2 only listens until a frame from J4 has come back through
 // the cable, so a printer on J2 never sees a test frame.
-void cable_test_run(cable_result_t *r);
+// both: try J2 -> J4 even when J4 -> J2 failed (a bench check, with no printer on J2).
+void cable_test_run(cable_result_t *r, int both);
 
 void cable_result_json(const cable_result_t *r, char *buf, size_t cap);
 

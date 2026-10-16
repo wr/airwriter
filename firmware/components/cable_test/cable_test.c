@@ -48,6 +48,16 @@ static uint8_t       s_fwd[LLAP_HDR + 4];
 static volatile int  s_fwd_seen;
 static volatile int  s_lt_owned;      // UART2 is ours right now; see cable_test_lt_busy
 
+// Evidence reported with each result (dbg in the JSON): what each leg saw.
+static struct {
+    int     caps, syms[6];           // J4->J2: RMT captures and their symbol counts
+    int     tt_frames, tt_bad, tt_err;   // J2->J4: what TashTalk relayed, own link only
+    int     nfirst;
+    uint8_t first[12];               // the first relayed frame's bytes
+    int     cts;                     // TashTalk's CTS when the ENQ went out
+    int     reset;                   // 1: TashTalk was reset after a fail; 2: and then passed
+} s_dbg;
+
 static TickType_t ms_ticks(int ms)
 {
     TickType_t t = pdMS_TO_TICKS(ms);
@@ -69,8 +79,17 @@ static void on_tap(void *ctx, const uint8_t *f, size_t n)
 
 static void on_tt(void *ctx, tt_event_t ev, const uint8_t *f, size_t n)
 {
-    if (ev == TT_FRAME && llap_fcs_ok(f, n)) on_tap(ctx, f, n - 2);
+    if (ev != TT_FRAME) { s_dbg.tt_err++; return; }
+    if (!s_dbg.nfirst) {
+        s_dbg.nfirst = n < sizeof s_dbg.first ? (int)n : (int)sizeof s_dbg.first;
+        memcpy(s_dbg.first, f, (size_t)s_dbg.nfirst);
+    }
+    if (!llap_fcs_ok(f, n)) { s_dbg.tt_bad++; return; }
+    s_dbg.tt_frames++;
+    on_tap(ctx, f, n - 2);
 }
+
+static void tt_sync(void);
 
 static esp_err_t link_open(link_t *lk)
 {
@@ -101,6 +120,30 @@ static esp_err_t link_open(link_t *lk)
     uart_param_config(s_cfg.lt_uart, &uc);
     uart_set_pin(s_cfg.lt_uart, s_cfg.lt_tx, s_cfg.lt_rx, UART_PIN_NO_CHANGE,
                  s_cfg.lt_cts >= 0 ? s_cfg.lt_cts : UART_PIN_NO_CHANGE);
+    tt_sync();
+    err = uart_wait_tx_done(s_cfg.lt_uart, ms_ticks(100));     // 11 ms of bytes at 1 Mbaud
+    uart_flush_input(s_cfg.lt_uart);
+    tt_rx_init(&lk->rx);
+    return err == ESP_OK ? ESP_OK : ESP_ERR_TIMEOUT;
+}
+
+// Holds TashTalk in reset for 2 ms and lets it run again (its pull-up on
+// MCLR; a 64 ms power-up timer), then syncs it as link_open does. Only on our
+// own link: with the node off nothing else is talking to TashTalk.
+static void tt_reset(void)
+{
+    gpio_set_level(s_cfg.lt_mclr, 0);
+    gpio_set_direction(s_cfg.lt_mclr, GPIO_MODE_OUTPUT);
+    vTaskDelay(ms_ticks(2));
+    gpio_set_direction(s_cfg.lt_mclr, GPIO_MODE_INPUT);
+    vTaskDelay(ms_ticks(150));
+    tt_sync();
+    uart_wait_tx_done(s_cfg.lt_uart, ms_ticks(100));
+    uart_flush_input(s_cfg.lt_uart);
+}
+
+static void tt_sync(void)
+{
     static const uint8_t nops[64];
     for (int i = 0; i < TT_SYNC_LEN / (int)sizeof nops; i++)
         uart_write_bytes(s_cfg.lt_uart, nops, sizeof nops);
@@ -108,10 +151,6 @@ static esp_err_t link_open(link_t *lk)
     uart_write_bytes(s_cfg.lt_uart, features, sizeof features);
     uint8_t nodes[33];
     uart_write_bytes(s_cfg.lt_uart, nodes, tt_nodes_cmd(nodes, 0));
-    err = uart_wait_tx_done(s_cfg.lt_uart, ms_ticks(100));     // 11 ms of bytes at 1 Mbaud
-    uart_flush_input(s_cfg.lt_uart);
-    tt_rx_init(&lk->rx);
-    return err == ESP_OK ? ESP_OK : ESP_ERR_TIMEOUT;
 }
 
 static void link_send(link_t *lk, const uint8_t *f, size_t n)
@@ -202,14 +241,17 @@ static int back_leg(link_t *lk, esp_err_t *err)
         rmt_enable(rx);
         xQueueReset(s_rx_q);
         rmt_receive(rx, s_rx_syms, sizeof s_rx_syms, &rcv);
+        if (s_cfg.lt_cts >= 0) s_dbg.cts = gpio_get_level(s_cfg.lt_cts);
         link_send(lk, BACK, sizeof BACK);
         int64_t until = esp_timer_get_time() + BACK_WAIT_MS * 1000;
         while (!ok) {
             int64_t left_ms = (until - esp_timer_get_time()) / 1000;
             size_t n;
             if (left_ms <= 0 || xQueueReceive(s_rx_q, &n, ms_ticks((int)left_ms)) != pdTRUE) break;
-            ok = ct_capture_has(s_ticks, syms_to_ticks(s_rx_syms, n, s_ticks), RES_HZ,
-                                BACK, sizeof BACK);
+            size_t k = syms_to_ticks(s_rx_syms, n, s_ticks);
+            if (s_dbg.caps < 6) s_dbg.syms[s_dbg.caps] = (int)n;
+            s_dbg.caps++;
+            ok = ct_capture_has(s_ticks, k, RES_HZ, BACK, sizeof BACK);
             // Noise on the open pair ended that capture early: listen again.
             if (!ok) rmt_receive(rx, s_rx_syms, sizeof s_rx_syms, &rcv);
         }
@@ -284,9 +326,10 @@ void cable_test_init(const cable_test_cfg_t *cfg)
     if (!s_rx_q) s_rx_q = xQueueCreate(4, sizeof(size_t));
 }
 
-void cable_test_run(cable_result_t *r)
+void cable_test_run(cable_result_t *r, int both)
 {
     memset(r, 0, sizeof *r);
+    memset(&s_dbg, 0, sizeof s_dbg);
     int64_t t0 = esp_timer_get_time();
     link_t lk;
     r->err = link_open(&lk);
@@ -294,7 +337,18 @@ void cable_test_run(cable_result_t *r)
     if (r->err == ESP_OK) {
         serial_out_lend(1);
         r->back_ok = back_leg(&lk, &r->err);
-        if (r->back_ok) r->fwd_ok = fwd_leg(&lk, &r->err);
+        // On the bench, before the node had ever run that boot, TashTalk once
+        // sent and relayed nothing over our own link while its CTS said it
+        // was alive; the cause was never found (W-1055). A fail on our own
+        // link gets one more try from a reset TashTalk, and the log says if
+        // that is what passed.
+        if (!r->back_ok && lk.owned && r->err == ESP_OK && s_cfg.lt_mclr >= 0) {
+            tt_reset();
+            r->back_ok = back_leg(&lk, &r->err);
+            s_dbg.reset = 1 + r->back_ok;
+            if (r->back_ok) ESP_LOGW(TAG, "TashTalk answered only after a reset");
+        }
+        if (r->back_ok || both) r->fwd_ok = fwd_leg(&lk, &r->err);
         serial_out_lend(0);
         link_close(&lk);
     }
@@ -309,11 +363,19 @@ void cable_test_run(cable_result_t *r)
 
 void cable_result_json(const cable_result_t *r, char *buf, size_t cap)
 {
-    if (r->err != ESP_OK) {
-        snprintf(buf, cap, "{\"ok\":false,\"error\":\"%s\"}", esp_err_to_name(r->err));
-        return;
-    }
-    snprintf(buf, cap, "{\"ok\":true,\"verdict\":\"%s\",\"back\":%s,\"fwd\":%s,\"text\":\"%s\"}",
-             ct_verdict_name(r->verdict), r->back_ok ? "true" : "false",
-             r->fwd_ok ? "true" : "false", ct_verdict_text(r->verdict));
+    int k;
+    if (r->err != ESP_OK)
+        k = snprintf(buf, cap, "{\"ok\":false,\"error\":\"%s\"", esp_err_to_name(r->err));
+    else
+        k = snprintf(buf, cap, "{\"ok\":true,\"verdict\":\"%s\",\"back\":%s,\"fwd\":%s,\"text\":\"%s\"",
+                     ct_verdict_name(r->verdict), r->back_ok ? "true" : "false",
+                     r->fwd_ok ? "true" : "false", ct_verdict_text(r->verdict));
+    if (k < 0 || (size_t)k >= cap) return;
+    k += snprintf(buf + k, cap - k, ",\"dbg\":{\"caps\":%d,\"syms\":[%d,%d,%d,%d,%d,%d],\"cts\":%d,"
+                  "\"tt\":[%d,%d,%d],\"reset\":%d,\"first\":\"", s_dbg.caps, s_dbg.syms[0], s_dbg.syms[1],
+                  s_dbg.syms[2], s_dbg.syms[3], s_dbg.syms[4], s_dbg.syms[5], s_dbg.cts,
+                  s_dbg.tt_frames, s_dbg.tt_bad, s_dbg.tt_err, s_dbg.reset);
+    for (int i = 0; i < s_dbg.nfirst && (size_t)k < cap; i++)
+        k += snprintf(buf + k, cap - k, "%02x", s_dbg.first[i]);
+    if ((size_t)k < cap) snprintf(buf + k, cap - k, "\"}}");
 }

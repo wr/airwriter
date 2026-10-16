@@ -268,15 +268,18 @@ static esp_err_t localtalk_flash_post(httpd_req_t *req)
     return httpd_resp_sendstr(req, out);
 }
 
-// Blocks for the test's 30-100 ms.
+// Blocks for the test's 30-400 ms.
 static esp_err_t cable_post(httpd_req_t *req)
 {
     if (!s_cfg.cable_test) {
         httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "no cable test");
         return ESP_FAIL;
     }
-    char out[384];
-    s_cfg.cable_test(s_cfg.ctx, out, sizeof out);
+    char body[8] = {0};
+    if (req->content_len > 0 && req->content_len < sizeof body)
+        httpd_req_recv(req, body, req->content_len);
+    char out[640];
+    s_cfg.cable_test(s_cfg.ctx, !strcmp(body, "both"), out, sizeof out);
     httpd_resp_set_type(req, "application/json");
     return httpd_resp_sendstr(req, out);
 }

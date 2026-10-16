@@ -644,9 +644,9 @@ static void test_page(void)
 // W-1055: the cable test, from the button or the web page, under the job lock
 // (it borrows the printer port's pins). The panel shows the answer.
 #if CONFIG_AIRWRITER_PIC_CLK_PIN >= 0
-static void cable_test_locked(cable_result_t *r)
+static void cable_test_locked(cable_result_t *r, int both)
 {
-    cable_test_run(r);
+    cable_test_run(r, both);
     printer_state_cable(r->err == ESP_OK && r->verdict == CT_PASS);
 }
 
@@ -654,7 +654,7 @@ static void cable_button_task(void *arg)
 {
     (void)arg;
     cable_result_t r;
-    cable_test_locked(&r);
+    cable_test_locked(&r, 0);
     xSemaphoreGive(s_job_lock);
     vTaskDelete(NULL);
 }
@@ -1102,9 +1102,10 @@ static void localtalk_flash(void *ctx, char *buf, size_t cap)
 }
 
 // POST /api/cable. Refuses rather than waits while a job holds the port.
-static void cable_web(void *ctx, char *buf, size_t cap)
+static void cable_web(void *ctx, int both, char *buf, size_t cap)
 {
     (void)ctx;
+    (void)both;
 #if CONFIG_AIRWRITER_PIC_CLK_PIN >= 0
     if (xSemaphoreTake(s_job_lock, 0) != pdTRUE) {
         snprintf(buf, cap, "{\"ok\":false,\"error\":\"The printer port is busy; try again "
@@ -1113,7 +1114,7 @@ static void cable_web(void *ctx, char *buf, size_t cap)
     }
     on_activity();
     cable_result_t r;
-    cable_test_locked(&r);
+    cable_test_locked(&r, both);
     xSemaphoreGive(s_job_lock);
     cable_result_json(&r, buf, cap);
 #else
@@ -1264,6 +1265,7 @@ void app_main(void)
         .invert_tx = AW_INVERT_TX,
         .lt_uart = CONFIG_AIRWRITER_LT_UART_NUM,  .lt_tx  = CONFIG_AIRWRITER_PIC_CLK_PIN,
         .lt_rx   = CONFIG_AIRWRITER_PIC_DAT_PIN,  .lt_cts = CONFIG_AIRWRITER_LT_CTS_PIN,
+        .lt_mclr = CONFIG_AIRWRITER_PIC_MCLR_PIN,
     };
     cable_test_init(&ct);
 #endif
