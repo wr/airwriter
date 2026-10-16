@@ -241,7 +241,9 @@ fw_update and keeps the calls there, and the merge takes W-1049's lines out of w
   `docs/traps.md`, like W-1046's.
 - Every bench build is signed by Wells's sdkconfig, so `curl --data-binary @build/airwriter.bin`
   keeps working.
-- **The factory slot must hold a signed release build**, or a factory reset brings back
+- *(Superseded by `W-1059 Known-good slot: factory reset boots the last version that worked`:
+  there is no factory slot, and this USB write was never made.)*
+  **The factory slot must hold a signed release build**, or a factory reset brings back
   firmware that takes any image. Shipped boards get a release in the factory slot at their
   first USB flash. Board 1's factory slot holds an unsigned W-1046 build. After the bench test
   it gets the v0.1.0 asset over USB (`esptool.py write_flash 0x20000 airwriter-esp32s3.bin`,

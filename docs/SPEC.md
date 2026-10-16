@@ -427,8 +427,11 @@ needs a USB flash on every board.
 **Moving a board from an older table takes one USB flash**, because an OTA cannot rewrite the
 bootloader or the partition table. `idf.py -p PORT flash` writes the bootloader, the table, a
 blank otadata, a blank record and the app into ota_0 (where the factory slot was); nvs, otadata
-and phy_init kept their offsets, so Wi-Fi credentials and settings survive it, and whatever the
-old slots held now sits in ota_1 and ota_2 until updates overwrite it. An existing `sdkconfig`
+and phy_init kept their offsets, so Wi-Fi credentials and settings survive it. Whatever the old
+slots held would now sit in ota_1 and ota_2, where a fallback could boot it, so the move also
+erases 0x220000–0x61ffff. Any USB flash writes all five images of the build's `flash_args`
+(`idf.py flash`, or `esptool write_flash @flash_args`); the app alone leaves otadata and the
+record naming other slots. An existing `sdkconfig`
 needs the options from `sdkconfig.defaults` and `sdkconfig.defaults.esp32s3` (main.c refuses to
 build without them). This firmware OTA'd onto a board still on the W-1046 table runs, logs that
 it has no `known_good` partition, updates into IDF's next slot and never promotes; that board's

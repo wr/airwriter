@@ -60,9 +60,13 @@ Writing a new slot: erase the sector that does *not* hold the current copy, writ
 there with `seq + 1`, read it back. A cut during the erase or write leaves that copy invalid
 and the old one current. This is how otadata itself is written.
 
-`idf.py flash` writes a blank (all 0xFF) `known_good` alongside the blank otadata, so a USB
-flash always starts at "known-good is ota_0", which is where `idf.py flash` puts the app
-(ESP-IDF picks the factory slot if there is one, else ota_0).
+`idf.py flash` writes a blank (all 0xFF) `known_good` alongside the blank otadata (a rule in
+`components/ota_health/CMakeLists.txt`, made the way app_update makes the blank otadata), so a
+USB flash always starts at "known-good is ota_0", which is where `idf.py flash` puts the app
+(ESP-IDF picks the factory slot if there is one, else ota_0). Any USB recipe must write all
+five images of the build's `flash_args`; writing the app alone (`idf.py app-flash`,
+`esptool write_flash 0x20000 …`, as W-1048's spec had it for the factory slot) leaves otadata
+and the record naming other slots. *(My call: a documented rule and a trap, not a guard.)*
 
 ## Promotion (firmware, `components/ota_health`)
 
@@ -113,7 +117,9 @@ In `bootloader_after_init`, after the existing pin clamps:
    factory_reset_state`); the panel's reset confirmation follows from it as today.
    `CONFIG_BOOTLOADER_CUSTOM_RESERVE_RTC=y` keeps that RTC area reserved without the stock reset.
 
-Then the stock selection boots the slot just written. If no slot verifies, the hook changes
+The hook feeds the bootloader's 9 s watchdog once the hold is seen, so the image checks, the
+erase and the app's start get a fresh count after the 5 s hold. Then the stock selection boots
+the slot just written. If no slot verifies, the hook changes
 nothing but nvs and the stock code tries every slot and resets, as it would have anyway; a USB
 flash is the way back. The record is never written by the bootloader: a fallback image becomes
 known-good the normal way, after its first real print.
@@ -138,8 +144,10 @@ and every running/known-good pair for the target.
 ## Moving board 1
 
 One USB flash (`idf.py flash`): new bootloader, new table, blank otadata, blank record, the app
-into ota_0 (where its factory slot was). Its old ota_0 and ota_1 contents now sit in ota_1 and
-ota_2 and are harmless: the record says ota_0, and updates overwrite them.
+into ota_0 (where its factory slot was). Its old ota_0 and ota_1 contents would now sit in ota_1
+and ota_2, where a fallback could boot them, and board 1's may be unsigned dev builds (which
+take any image). So the move also erases 0x220000–0x61ffff. *(My call: once, for board 1; a new
+board is erased whole before its first flash.)*
 
 ## Bench (board 1, through the main session)
 
