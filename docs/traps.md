@@ -70,7 +70,7 @@ Traps already explained in a code comment are listed only when the comment is ea
 - **The home mesh: a fast scan joins the first node that answers.** It took a far node on
   channel 1 (−80 to −87 dBm) over a −46 dBm node in the same room; uploads ran at ~6 KB/s and an
   OTA failed. Firmware now scans all channels and joins the strongest AP; don't revert that.
-- **The C6 devkit must be on `iot`**; `the home network` drops it. Rev A (S3) works on `the home network`.
+- **The C6 devkit must be on the IoT network**; the main home network drops it. Rev A (S3) works on the main network.
 - **Never OTA while a job prints.** It cuts the job (twice on 2026-10-15). Bench rule in AGENTS.md.
 
 ## Serial, printer, LocalTalk

@@ -66,7 +66,7 @@ Pro screws M2.5 × 18. The shop's cased GLBs still show the pre-W-1036 tray.
 Not built: printing a LocalTalk job (PAP data to the printer), EtherTalk, consumers of the
 dither override, PWG raster.
 
-**Board 1:** ESP32-S3-WROOM-1-N8R2 (8 MB flash, 2 MB PSRAM). On Wi-Fi `the home network` at
+**Board 1:** ESP32-S3-WROOM-1-N8R2 (8 MB flash, 2 MB PSRAM). On the home Wi-Fi at
 10.0.1.115, mDNS `imagewriter-2434.local`. Console on USB-C as `/dev/cu.usbmodem*` (the number
 follows the Mac's port). Its queue name reads "ImageWriter II" in `/api/status`, which is also
 its name in the Chooser. U7's PIC calibration words: `16E0 1DA8`. Its LocalTalk node ID is 214
@@ -174,4 +174,7 @@ enclosure/            3D printed case (build123d): tray, Lite lid, Pro lattice; 
 ```
 
 ## Licence
-Hardware CERN-OHL-S, firmware GPLv3.
+`LICENSE.md` maps paths to licences (texts in `LICENSES/`): firmware, tools and fixtures
+GPL-3.0-or-later; hardware and enclosure CERN-OHL-S-2.0; docs CC-BY-SA-4.0. The AirWriter name
+and logo are not licensed. New source files carry an SPDX header; anything third-party goes in
+`LICENSE.md`'s table before it's committed.
