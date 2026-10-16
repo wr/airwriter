@@ -88,6 +88,9 @@ its name in the Chooser. U7's PIC calibration words: `16E0 1DA8`. Its LocalTalk 
 Apple's crossover cable.
 
 Known issues, open:
+- With the node off, TashTalk once sent and relayed nothing over the cable test's own UART2 link
+  while its CTS read ready; it never recurred after a node-mode boot and the cause is unknown. The
+  test retries from a reset TashTalk and logs "TashTalk answered only after a reset" (`docs/traps.md`).
 - The Mac's CUPS shows "printer is offline" a few seconds into an out-of-paper pause while the
   board holds `stopped` + `media-empty-error`. Best guess: the CUPS ipp backend's write timeout.
 - Wi-Fi range with the panel's copper over the antenna: −91 dBm in one spot, "Excellent" after
@@ -114,8 +117,6 @@ Linear is the queue; these are the live items.
   2026-10-15. Host-tested against `fixtures/pap-iw701-page.bin`, and on board 1 a real Mac job went
   from PAP through `serial_out` byte for byte (UART loopback, `CONFIG_AIRWRITER_LT_BENCH`). Still
   owed: a paper test, which needs a second crossover cable for J2 while the Mac's is on J4.
-- `W-1055 Cable tester: tell a crossover from a straight cable through J2↔J4`: on
-  `wells/w-1055-cable-tester`, unmerged; host-tested and built, not yet run on board 1.
 - Not in Linear: scope HSKo during a long job (SPEC §3.9 timing).
 
 ## Toolchain

@@ -86,6 +86,10 @@ Traps already explained in a code comment are listed only when the comment is ea
   cables are wired straight and give a false "out of paper"; buzz pin 1 → pin 2 first (SPEC §2.4),
   or plug it from J2 to J4 and press test (the cable test, W-1055). The test can't reach pins 1/2
   (J4's are not connected), so a cable crossed on data but straight on the handshake passes.
+- **TashTalk can go deaf to a fresh UART2 link with the node off** (seen once on board 1, W-1055):
+  no transmit and no relay, while its CTS read ready and it took the 1024-NUL sync. A node-mode
+  boot in between cleared it; the PIC is never reset by an ESP32 reboot. The cable test retries
+  from a reset TashTalk (MCLR low 2 ms); its `dbg.reset` is 2 when the reset is what passed.
 - **`uart_set_pin` releases every pin the UART had, CTS included, before routing new ones.**
   Re-routing TX and RX alone (after lending them to RMT, which also moves IO18 off the IOMUX)
   leaves CTS tied to "clear" and overruns the printer; `serial_out_lend(0)` passes all three.
