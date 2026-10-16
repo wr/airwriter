@@ -69,11 +69,16 @@ static int frame_sum(uint8_t f[LG_NUM_LEDS][3])
     return s;
 }
 
+// Options with one action running, in its family's slot.
 static lg_opts_t act(lg_act_t a, uint32_t ms)
 {
-    lg_opts_t o = { .gamer = 0, .act = (uint8_t)a, .act_ms = ms };
+    lg_opts_t o;
+    memset(&o, 0, sizeof o);
+    o.task[lg_family(a)] = (lg_slot_t){ .act = (uint8_t)a, .ms = ms };
     return o;
 }
+
+static lg_slot_t *slot(lg_opts_t *o, lg_act_t a) { return &o->task[lg_family(a)]; }
 
 // The factory-reset overlay (W-1045): it covers every state, sleep included;
 // the countdown fills clockwise and goes orange to red; the point of no return
@@ -94,7 +99,7 @@ static void test_reset(uint8_t f[LG_NUM_LEDS][3], uint8_t g[LG_NUM_LEDS][3])
         for (uint32_t s = 0; s < 9000; s += 10) {
             ps_view_t v = view(PS_READY, 0);
             lg_opts_t o = act(acts[a], s);
-            o.act_from = 1000;
+            slot(&o, acts[a])->arg = 1000;
             lg_render(&v, &o, s, f);
             assert(frame_sum(f) <= spin_max);
             for (int i = 0; i < LG_NUM_LEDS; i++)
@@ -147,12 +152,12 @@ static void test_reset(uint8_t f[LG_NUM_LEDS][3], uint8_t g[LG_NUM_LEDS][3])
     {
         ps_view_t v = view(PS_READY, 0);
         lg_opts_t o = act(LG_ACT_RESET_CANCEL, LG_RESET_CANCEL_MS - 1);
-        o.act_from = 800;
+        slot(&o, LG_ACT_RESET_CANCEL)->arg = 800;
         lg_render(&v, &o, 0, f);
         for (int i = 0; i < LG_NUM_LEDS; i++) assert(max3(f[i]) <= 1);
         assert(!lg_act_over(LG_ACT_RESET_CANCEL, LG_RESET_CANCEL_MS - 1));
         assert(lg_act_over(LG_ACT_RESET_CANCEL, LG_RESET_CANCEL_MS));
-        o.act_ms = LG_RESET_CANCEL_MS;
+        slot(&o, LG_ACT_RESET_CANCEL)->ms = LG_RESET_CANCEL_MS;
         lg_render(&v, &o, 1000, f);
         lg_render(&v, &WHITE_MODE, 1000, g);
         assert(memcmp(f, g, LG_NUM_LEDS * 3) == 0);
@@ -170,18 +175,18 @@ static void test_reset(uint8_t f[LG_NUM_LEDS][3], uint8_t g[LG_NUM_LEDS][3])
             if (LG_MAP[i].mat == 'P') assert(neutral(f[i]));
             else assert(f[i][0] > 4 * (f[i][1] + f[i][2]));
         }
-        o.act_ms = 1250;
+        slot(&o, LG_ACT_RESET_DONE)->ms = 1250;
         lg_render(&v, &o, 0, f);
         assert(lit_count(f) == 0);
-        o.act_ms = 1400;
+        slot(&o, LG_ACT_RESET_DONE)->ms = 1400;
         lg_render(&v, &o, 0, f);
         for (int i = 0; i < LG_NUM_LEDS; i++)
             assert((max3(f[i]) > 0) == (LG_MAP[i].mat == 'P'));
-        o.act_ms = 1550;
+        slot(&o, LG_ACT_RESET_DONE)->ms = 1550;
         lg_render(&v, &o, 0, f);
         assert(lit_count(f) == 0);
         for (uint32_t s = 1900; s < 60000; s += 997) {
-            o.act_ms = s;
+            slot(&o, LG_ACT_RESET_DONE)->ms = s;
             lg_render(&v, &o, s, f);
             assert(lit_count(f) == 0);
         }
@@ -189,6 +194,286 @@ static void test_reset(uint8_t f[LG_NUM_LEDS][3], uint8_t g[LG_NUM_LEDS][3])
         assert(!lg_act_over(LG_ACT_RESET_CONFIRM, LG_RESET_DONE_MS - 1));
         assert(lg_act_over(LG_ACT_RESET_CONFIRM, LG_RESET_DONE_MS));
         assert(lg_act_over(LG_ACT_RESET_FAILED, LG_RESET_FAILED_MS));
+    }
+}
+
+// ------------------------------------------------------------ W-1049
+
+static ps_view_t moment(ps_state_t st, ps_state_t prev, uint32_t since)
+{
+    ps_view_t v = view(st, since);
+    v.prev = prev;
+    return v;
+}
+
+static lg_opts_t blip(lg_blip_t b, uint32_t ms)
+{
+    lg_opts_t o;
+    memset(&o, 0, sizeof o);
+    o.blip = (uint8_t)b;
+    o.blip_ms = ms;
+    return o;
+}
+
+static int spin_heaviest(void)
+{
+    uint8_t f[LG_NUM_LEDS][3];
+    int m = 0;
+    for (uint32_t s = 0; s < LG_BOOT_MS; s += 10) {
+        ps_view_t v = view(PS_BOOTING, s);
+        lg_render(&v, &WHITE_MODE, s, f);
+        if (frame_sum(f) > m) m = frame_sum(f);
+    }
+    return m;
+}
+
+// Caps (the alert cap only where red is allowed), the boot spin's draw as the
+// budget, and, for FR4-only patterns, dark mask dots.
+static void check_frame(uint8_t f[LG_NUM_LEDS][3], int spin_max, int alert_ok, int fr4_only)
+{
+    assert(frame_sum(f) <= spin_max);
+    for (int i = 0; i < LG_NUM_LEDS; i++) {
+        int fr4 = LG_MAP[i].mat == 'P';
+        if (fr4_only && !fr4) assert(max3(f[i]) == 0);
+        for (int ch = 0; ch < 3; ch++)
+            assert(f[i][ch] <= (!fr4 ? LG_MASK_CAP : alert_ok ? LG_ALERT_CAP : LG_BRIGHTNESS_CAP));
+    }
+}
+
+static int same(uint8_t a[LG_NUM_LEDS][3], uint8_t b[LG_NUM_LEDS][3])
+{
+    return memcmp(a, b, LG_NUM_LEDS * 3) == 0;
+}
+
+static int fr4_lit(uint8_t f[LG_NUM_LEDS][3], int over)
+{
+    int n = 0;
+    for (int i = 0; i < LG_NUM_LEDS; i++) n += LG_MAP[i].mat == 'P' && max3(f[i]) > over;
+    return n;
+}
+
+static void test_w1049(uint8_t f[LG_NUM_LEDS][3], uint8_t g[LG_NUM_LEDS][3])
+{
+    const int spin_max = spin_heaviest();
+
+    // Moments: within the caps and the spin's draw, FR4-only where the state
+    // they open is, drawn (not the plain state) mid-way, and the plain state
+    // exactly once they end.
+    struct { ps_state_t st, prev; uint8_t cancelled, src; uint32_t len; int alert, fr4_only; } M[] = {
+        { PS_OFFLINE,  PS_READY,     0, 0, LG_GONE_MS,     0, 1 },   // printer gone
+        { PS_READY,    PS_OFFLINE,   0, 0, LG_BACK_MS,     0, 1 },   // printer back
+        { PS_PRINTING, PS_ATTENTION, 0, 0, LG_BACK_MS,     0, 0 },   // paper back, resumes
+        { PS_READY,    PS_PRINTING,  0, LG_SRC_AIRPRINT,  LG_PAGE_MS, 0, 0 },   // page out
+        { PS_READY,    PS_PRINTING,  0, LG_SRC_LOCALTALK, LG_PAGE_MS, 0, 0 },
+        { PS_READY,    PS_PRINTING,  1, LG_SRC_AIRPRINT,  LG_CANCEL_MS, 0, 0 }, // cancelled
+        { PS_SETUP,    PS_JOINING,   0, 0, LG_JOINFAIL_MS, 1, 0 },   // could not join
+    };
+    for (unsigned m = 0; m < sizeof M / sizeof M[0]; m++) {
+        lg_opts_t o;
+        memset(&o, 0, sizeof o);
+        o.src = M[m].src;
+        for (uint32_t s = 0; s < M[m].len + 300; s += 37) {
+            ps_view_t v = moment(M[m].st, M[m].prev, s);
+            v.cancelled = M[m].cancelled;
+            lg_render(&v, &o, 50000 + s, f);
+            check_frame(f, spin_max, M[m].alert, M[m].fr4_only);
+        }
+        ps_view_t v = moment(M[m].st, M[m].prev, 500), plain = view(M[m].st, 500);
+        v.cancelled = M[m].cancelled;
+        lg_render(&v, &o, 50500, f);
+        lg_render(&plain, &o, 50500, g);
+        assert(!same(f, g));
+        v.since_ms = plain.since_ms = M[m].len;
+        lg_render(&v, &o, 50000 + M[m].len, f);
+        lg_render(&plain, &o, 50000 + M[m].len, g);
+        assert(same(f, g));
+    }
+
+    // Any other change of state has no moment.
+    {
+        ps_view_t a = moment(PS_OFFLINE, PS_ATTENTION, 300), b = view(PS_OFFLINE, 300);
+        a.cancelled = 1;
+        lg_render(&a, &WHITE_MODE, 9000, f);
+        lg_render(&b, &WHITE_MODE, 9000, g);
+        assert(same(f, g));
+        a = moment(PS_READY, PS_FAILED, 300); b = view(PS_READY, 300);
+        lg_render(&a, &WHITE_MODE, 9000, f);
+        lg_render(&b, &WHITE_MODE, 9000, g);
+        assert(same(f, g));
+    }
+
+    // Cancelled is not page out, and both still show ink on the mask dots.
+    {
+        ps_view_t a = moment(PS_READY, PS_PRINTING, 300), b = a;
+        b.cancelled = 1;
+        lg_render(&a, &WHITE_MODE, 7000, f);
+        lg_render(&b, &WHITE_MODE, 7000, g);
+        assert(!same(f, g));
+        int fm = 0, gm = 0;
+        for (int i = 0; i < LG_NUM_LEDS; i++)
+            if (LG_MAP[i].mat != 'P') { fm |= max3(f[i]) > 0; gm |= max3(g[i]) > 0; }
+        assert(fm && gm);
+    }
+
+    // LocalTalk inks in the stripes: green at the top, blue at the bottom.
+    // AirPrint inks warm on the same dots. The head is on row 3 here.
+    {
+        static uint16_t hi[LG_NUM_LEDS][3];
+        ps_view_t v = view(PS_PRINTING, 5000);
+        lg_opts_t o;
+        memset(&o, 0, sizeof o);
+        const int top = idx(0, 2), bottom = idx(7, 4);
+        o.src = LG_SRC_LOCALTALK;
+        lg_render16(&v, &o, 5250, hi);
+        assert(hi[top][1] > hi[top][0]);
+        assert(hi[bottom][2] > hi[bottom][0]);
+        o.src = LG_SRC_AIRPRINT;
+        lg_render16(&v, &o, 5250, hi);
+        for (int k = 0; k < 2; k++) {
+            int i = k ? bottom : top;
+            assert(hi[i][0] >= hi[i][1] && hi[i][1] >= hi[i][2] && hi[i][0] > 0);
+        }
+    }
+
+    // Tasks: caps and draw, FR4-only for firmware.
+    struct { lg_act_t a; uint16_t arg; uint32_t len; int alert, fr4_only; } T[] = {
+        { LG_ACT_FW_DOWNLOADING, 0,    6000, 0, 1 },
+        { LG_ACT_FW_DOWNLOADING, 1000, 6000, 0, 1 },
+        { LG_ACT_FW_DOWNLOADING, LG_PROGRESS_NONE, 6000, 0, 1 },
+        { LG_ACT_FW_INSTALLING,  500,  6000, 0, 1 },
+        { LG_ACT_FW_VERIFYING,   0,    6000, 0, 1 },
+        { LG_ACT_FW_VERIFIED,    0,    6000, 0, 1 },
+        { LG_ACT_PIC_FLASHING,   0,    6000, 0, 0 },
+        { LG_ACT_PIC_OK,         0,    LG_PIC_OK_MS, 0, 0 },
+        { LG_ACT_PIC_FAILED,     0,    LG_PIC_FAILED_MS, 1, 0 },
+    };
+    for (unsigned k = 0; k < sizeof T / sizeof T[0]; k++)
+        for (uint32_t s = 0; s < T[k].len; s += 37) {
+            ps_view_t v = view(PS_READY, 100000);
+            lg_opts_t o = act(T[k].a, s);
+            slot(&o, T[k].a)->arg = T[k].arg;
+            lg_render(&v, &o, 20000 + s, f);
+            check_frame(f, spin_max, T[k].alert, T[k].fr4_only);
+        }
+    assert(lg_act_over(LG_ACT_PIC_OK, LG_PIC_OK_MS) && !lg_act_over(LG_ACT_PIC_OK, LG_PIC_OK_MS - 1));
+    assert(lg_act_over(LG_ACT_PIC_FAILED, LG_PIC_FAILED_MS));
+    assert(!lg_act_over(LG_ACT_PIC_FLASHING, 600000) && !lg_act_over(LG_ACT_FW_VERIFIED, 600000));
+    assert(!lg_act_over(LG_ACT_FW_DOWNLOADING, 600000) && !lg_act_over(LG_ACT_FW_VERIFYING, 600000));
+
+    // Verified goes dark and stays dark until the restart.
+    {
+        ps_view_t v = view(PS_READY, 100000);
+        lg_opts_t o = act(LG_ACT_FW_VERIFIED, LG_FW_VERIFIED_MS + 100);
+        lg_render(&v, &o, 0, f);
+        assert(lit_count(f) == 0);
+    }
+
+    // Firmware progress: more of the panel lit as it rises; a length-unknown
+    // download still shows.
+    {
+        ps_view_t v = view(PS_READY, 100000);
+        lg_opts_t o = act(LG_ACT_FW_DOWNLOADING, 0);
+        slot(&o, LG_ACT_FW_DOWNLOADING)->arg = 100;
+        lg_render(&v, &o, 300, f);
+        slot(&o, LG_ACT_FW_DOWNLOADING)->arg = 900;
+        lg_render(&v, &o, 300, g);
+        assert(fr4_lit(g, 4) > fr4_lit(f, 4));
+        slot(&o, LG_ACT_FW_DOWNLOADING)->arg = LG_PROGRESS_NONE;
+        lg_render(&v, &o, 300, f);
+        assert(fr4_lit(f, 4) > 0);
+    }
+
+    // Priority: the reset covers firmware, which shows again once the cancel
+    // has wound back; firmware covers a TashTalk flash.
+    {
+        ps_view_t v = view(PS_READY, 100000);
+        lg_opts_t both = act(LG_ACT_RESET_HOLD, 3000), one = both;
+        *slot(&both, LG_ACT_FW_DOWNLOADING) = (lg_slot_t){ LG_ACT_FW_DOWNLOADING, 500, 4000 };
+        lg_render(&v, &both, 1000, f);
+        lg_render(&v, &one, 1000, g);
+        assert(same(f, g));
+        *slot(&both, LG_ACT_RESET_CANCEL) = (lg_slot_t){ LG_ACT_RESET_CANCEL, 400, LG_RESET_CANCEL_MS };
+        one = act(LG_ACT_FW_DOWNLOADING, 4000);
+        slot(&one, LG_ACT_FW_DOWNLOADING)->arg = 500;
+        lg_render(&v, &both, 1000, f);
+        lg_render(&v, &one, 1000, g);
+        assert(same(f, g));
+        *slot(&one, LG_ACT_PIC_FLASHING) = (lg_slot_t){ LG_ACT_PIC_FLASHING, 0, 700 };
+        lg_render(&v, &one, 1000, f);
+        assert(same(f, g));
+    }
+
+    // Held back: refused and rolled back draw the state.
+    {
+        ps_view_t v = view(PS_READY, 100000);
+        lg_render(&v, &WHITE_MODE, 4000, g);
+        const lg_act_t held[] = { LG_ACT_FW_REFUSED, LG_ACT_FW_ROLLED_BACK, LG_ACT_FW_NONE, LG_ACT_PIC_NONE };
+        for (int k = 0; k < 4; k++) {
+            assert(lg_act_over(held[k], 0));
+            lg_opts_t o = act(held[k], 100);
+            lg_render(&v, &o, 4000, f);
+            assert(same(f, g));
+        }
+    }
+
+    // Acknowledgements: caps and draw over Ready and Printing; over on time;
+    // dropped in Booting, Needs attention and Job failed, and under a task.
+    {
+        const lg_blip_t B[] = { LG_BLIP_MAC, LG_BLIP_LT_ON, LG_BLIP_BUSY, LG_BLIP_SAVED };
+        const uint32_t L[] = { LG_BLIP_MAC_MS, LG_BLIP_LT_ON_MS, LG_BLIP_BUSY_MS, LG_BLIP_SAVED_MS };
+        for (int k = 0; k < 4; k++) {
+            assert(!lg_blip_over(B[k], L[k] - 1) && lg_blip_over(B[k], L[k]));
+            for (uint32_t s = 0; s < L[k]; s += 23) {
+                lg_opts_t o = blip(B[k], s);
+                ps_view_t v = view(PS_READY, 100000);
+                lg_render(&v, &o, 30000 + s, f);
+                check_frame(f, spin_max, 0, 0);
+                v = view(PS_PRINTING, 100000);
+                lg_render(&v, &o, 30000 + s, f);
+                check_frame(f, spin_max, 0, 0);
+            }
+            const ps_state_t quiet[] = { PS_BOOTING, PS_ATTENTION, PS_FAILED };
+            for (int q = 0; q < 3; q++) {
+                ps_view_t v = view(quiet[q], 1500);
+                lg_opts_t o = blip(B[k], L[k] / 3);
+                lg_render(&v, &o, 31000, f);
+                lg_render(&v, &WHITE_MODE, 31000, g);
+                assert(same(f, g));
+            }
+            ps_view_t v = view(PS_READY, 100000);
+            lg_opts_t o = blip(B[k], L[k] / 3), t = act(LG_ACT_FW_VERIFYING, 900);
+            o.task[LG_FAM_FW] = t.task[LG_FAM_FW];
+            lg_render(&v, &o, 31000, f);
+            lg_render(&v, &t, 31000, g);
+            assert(same(f, g));
+        }
+    }
+
+    // Busy: orange, and only round the test button.
+    {
+        ps_view_t v = view(PS_READY, 100000);
+        lg_opts_t o = blip(LG_BLIP_BUSY, 150);
+        lg_render(&v, &o, 40000, f);
+        lg_render(&v, &WHITE_MODE, 40000, g);
+        for (int i = 0; i < LG_NUM_LEDS; i++) {
+            float d = (float)((LG_MAP[i].r - 3) * (LG_MAP[i].r - 3) + (LG_MAP[i].c - 3) * (LG_MAP[i].c - 3));
+            if (d > 1.6f * 1.6f) assert(memcmp(f[i], g[i], 3) == 0);
+        }
+        int b = idx(3, 4);
+        assert(f[b][0] > f[b][1] && f[b][1] > f[b][2]);
+    }
+
+    // Asleep: a task shows at once at full level, and so does an
+    // acknowledgement.
+    {
+        ps_view_t v = view(PS_READY, 400000);
+        v.asleep = 1; v.asleep_ms = 20000;
+        lg_opts_t o = act(LG_ACT_FW_VERIFYING, 400);
+        lg_render(&v, &o, 0, f);
+        assert(fr4_lit(f, 2) >= 6);
+        o = blip(LG_BLIP_SAVED, 300);
+        lg_render(&v, &o, 0, f);
+        assert(lit_count(f) > 2);
     }
 }
 
@@ -545,6 +830,7 @@ int main(void)
     }
 
     test_reset(f, g);
+    test_w1049(f, g);
     printf("test_led_grid: ok\n");
     return 0;
 }

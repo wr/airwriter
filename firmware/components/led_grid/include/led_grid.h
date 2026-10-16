@@ -17,7 +17,18 @@ esp_err_t led_grid_start(void);
 // Safe from any task; the render task picks it up on its next frame.
 void led_grid_set_gamer(int on);
 
-// Shows an action over the state from now (lg_act_t, led_grid_core.h): it
-// replaces whatever action was showing, and LG_ACT_NONE clears it. `from` is
-// RESET_CANCEL's starting fill, 0..1000. Safe from any task.
-void led_grid_action(lg_act_t act, uint16_t from);
+// Shows a task (lg_act_t, led_grid_core.h) in its family's slot: the factory
+// reset, a firmware update or a TashTalk flash. A different act restarts the
+// slot's clock; the same act again only updates `arg` (firmware progress), so
+// its animation runs on. `arg` is RESET_CANCEL's starting fill or the
+// firmware's progress, 0..1000. A family's NONE clears its slot. Safe from any
+// task.
+void led_grid_action(lg_act_t act, uint16_t arg);
+
+// Shows an acknowledgement over the state from now, replacing the one showing.
+// One raised while the panel is booting waits for the Spin to end, then plays
+// whole. Safe from any task.
+void led_grid_blip(lg_blip_t b);
+
+// Whose job the next Printing is: set it before posting PS_EV_JOB_START.
+void led_grid_set_source(lg_src_t s);
