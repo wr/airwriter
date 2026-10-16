@@ -323,6 +323,7 @@ static esp_err_t doc_begin(void *ctx, const char *format, const char *name)
     iw_link_job_start(&s_link);
     s_printing = 1;
     job_touch();
+    led_grid_set_source(LG_SRC_AIRPRINT);
     printer_state_post(PS_EV_JOB_START);
     serial_out_loopback_reset();
     esp_err_t err = job_pipe_begin(name);
@@ -366,7 +367,7 @@ static void job_finished(const job_pipe_stats_t *st, int ok)
         serial_out_purge();
         if (s_job_cancelled) {
             ESP_LOGI(TAG, "job canceled after %u bytes in", (unsigned)st->doc_bytes);
-            printer_state_post(PS_EV_JOB_DONE);
+            printer_state_post(PS_EV_JOB_CANCELLED);
         } else {
             ESP_LOGE(TAG, "job failed: %u bytes in, rc %d%s",
                      (unsigned)st->doc_bytes, st->rc,
@@ -398,7 +399,7 @@ static void job_finished(const job_pipe_stats_t *st, int ok)
         serial_out_purge();
         if (s_job_cancelled) {
             ESP_LOGI(TAG, "job canceled with its last bytes still queued");
-            printer_state_post(PS_EV_JOB_DONE);
+            printer_state_post(PS_EV_JOB_CANCELLED);
         } else {
             ESP_LOGE(TAG, "job failed: the printer never took its last bytes");
             printer_state_post(PS_EV_JOB_FAILED);
@@ -495,6 +496,7 @@ static int lt_print_begin(void *ctx)
     iw_link_job_start(&s_link);
     s_printing = 1;
     job_touch();
+    led_grid_set_source(LG_SRC_LOCALTALK);     // W-1049: the stripes, not AirPrint's ink
     printer_state_post(PS_EV_JOB_START);
     serial_out_loopback_reset();
     printer_state_post(PS_EV_ACTIVITY);
@@ -596,14 +598,17 @@ static void on_activity(void)
 #define TESTPAGE_W 1152
 #define TESTPAGE_H 64
 
+// The test page holds s_job_lock: a tap now cancels it rather than being
+// refused (W-1049). Set and cleared only while the lock is held.
+static volatile int s_test_running;
+
 static void test_page_task(void *arg)
 {
     (void)arg;
     s_stream_crc = 0;
     s_printer_failed = 0;
-    s_job_cancelled = 0;
-    serial_out_set_abort(0);
     iw_link_job_start(&s_link);
+    led_grid_set_source(LG_SRC_AIRPRINT);
     printer_state_post(PS_EV_JOB_START);
 
     ht_algo_t algo;
@@ -644,7 +649,11 @@ static void test_page_task(void *arg)
     iw_link_job_end(&s_link, !s_printer_failed);
 
     serial_out_flush(CONFIG_AIRWRITER_STALL_ABORT * 1000u);
-    printer_state_post(s_printer_failed ? PS_EV_JOB_FAILED : PS_EV_JOB_DONE);
+    s_test_running = 0;
+    // A cancelled page stopped on an aborted write, so it reads as failed
+    // here; it is a cancel, which the panel shows as one.
+    printer_state_post(s_job_cancelled ? PS_EV_JOB_CANCELLED
+                       : s_printer_failed ? PS_EV_JOB_FAILED : PS_EV_JOB_DONE);
     s_printing = 0;
     job_touch();
     xSemaphoreGive(s_job_lock);
@@ -657,19 +666,32 @@ static void test_page_task(void *arg)
 static void test_page(void)
 {
     on_activity();
-    // Non-blocking: a test page refuses rather than queuing behind whatever
-    // is printing, real job or another test page. s_job_lock is the actual
-    // mutual exclusion; the take-then-spawn sequencing below (not s_printing)
-    // is what makes two back-to-back presses refuse rather than both print.
+    // Non-blocking: a test page never queues behind whatever is printing.
+    // s_job_lock is the actual mutual exclusion; the take-then-spawn
+    // sequencing below (not s_printing) is what makes two back-to-back
+    // presses act on one page rather than print two.
     if (xSemaphoreTake(s_job_lock, 0) != pdTRUE) {
-        ESP_LOGW(TAG, "test page requested but the printer is already busy");
-        s_job_waiting = 1;
+        if (s_test_running) {
+            // A second tap cancels the test page: the write in progress is
+            // aborted, and W-1041's resync runs before the next job.
+            ESP_LOGI(TAG, "test button tapped again: cancelling the test page");
+            s_job_cancelled = 1;
+            serial_out_set_abort(1);
+        } else {
+            ESP_LOGW(TAG, "test page requested but the printer is already busy");
+            s_job_waiting = 1;
+            led_grid_blip(LG_BLIP_BUSY);
+        }
         return;
     }
     s_printing = 1;
     job_touch();
+    s_job_cancelled = 0;
+    serial_out_set_abort(0);
+    s_test_running = 1;
     if (xTaskCreate(test_page_task, "test_page", 4096, NULL, 3, NULL) != pdPASS) {
         ESP_LOGE(TAG, "test page: could not create task");
+        s_test_running = 0;
         s_printing = 0;
         job_touch();
         xSemaphoreGive(s_job_lock);
@@ -1090,6 +1112,27 @@ static uint16_t lt_status(ps_state_t st)
     }
 }
 
+// W-1049: what the LocalTalk node saw, on the panel. A Chooser asks again
+// every second or so while it is open, so "a Mac heard" shows at most every
+// 6 s; each one still keeps the panel awake.
+#define MAC_BLIP_EVERY_MS 6000
+
+#if CONFIG_AIRWRITER_PIC_CLK_PIN >= 0 && CONFIG_AIRWRITER_PIC_DAT_PIN >= 0
+static void lt_event(lt_event_t ev)
+{
+    static uint32_t last;
+    if (ev == LT_EV_ONLINE) {
+        led_grid_blip(LG_BLIP_LT_ON);
+        return;
+    }
+    printer_state_post(PS_EV_ACTIVITY);
+    uint32_t now = uptime_ms();
+    if (last && now - last < MAC_BLIP_EVERY_MS) return;
+    last = now;
+    led_grid_blip(LG_BLIP_MAC);
+}
+#endif
+
 // W-1051: the LocalTalk node, in DIP mode 2 or on a bench build. It owns its
 // UART and the PIC's pins from here until reboot.
 static void lt_start(const char *why)
@@ -1107,6 +1150,7 @@ static void lt_start(const char *why)
         .type     = CONFIG_AIRWRITER_LT_NBP_TYPE,
         .status   = lt_status(printer_state_view().state),
         .printer  = { .begin = lt_print_begin, .write = lt_print_write, .end = lt_print_end },
+        .on_event = lt_event,
     };
     esp_err_t err = localtalk_start(&c);
     if (err != ESP_OK) ESP_LOGE(TAG, "LocalTalk (%s) did not start: %s", why, esp_err_to_name(err));
@@ -1133,8 +1177,11 @@ static void localtalk_flash(void *ctx, char *buf, size_t cap)
         return;
     }
     pic_result_t r;
-    pic_prog_flash_tashtalk(&r);
+    on_activity();
+    led_grid_action(LG_ACT_PIC_FLASHING, 0);
+    pic_err_t err = pic_prog_flash_tashtalk(&r);
     xSemaphoreGive(s_job_lock);
+    led_grid_action(err == PIC_OK ? LG_ACT_PIC_OK : LG_ACT_PIC_FAILED, 0);
     pic_result_json(&r, buf, cap);
 }
 

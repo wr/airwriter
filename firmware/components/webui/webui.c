@@ -10,6 +10,7 @@
 #include "esp_log.h"
 #include "esp_wifi.h"
 #include "esp_system.h"
+#include "led_grid.h"
 #include "esp_http_server.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -167,6 +168,7 @@ static esp_err_t wifi_post(httpd_req_t *req)
     }
 
     settings_save_wifi(ssid, pass);
+    led_grid_blip(LG_BLIP_SAVED);       // W-1049: taken; the restart follows
     httpd_resp_sendstr(req, "{\"ok\":true}");
     xTaskCreate(reboot_task, "reboot", 2048, NULL, 5, NULL);
     return ESP_OK;
@@ -184,6 +186,7 @@ static esp_err_t general_post(httpd_req_t *req)
     json_str(body, "dither", dither, sizeof dither);
 
     settings_save_general(host, queue, dither);
+    led_grid_blip(LG_BLIP_SAVED);
     return httpd_resp_sendstr(req, "{\"ok\":true}");
 }
 

@@ -56,6 +56,13 @@ static TaskHandle_t s_print_task;
 static volatile int s_job_active, s_job_ended, s_job_normal, s_job_failed;
 static uint32_t   s_jobs_printed, s_jobs_failed;
 
+// W-1049: the node's counters as last seen, to tell the panel what changed.
+// The LocalTalk task alone touches these.
+static void     (*s_on_event)(lt_event_t ev);
+static lt_phase_t s_seen_phase;
+static uint32_t   s_seen_replies;
+static uint8_t    s_seen_heard[sizeof s_node.heard];
+
 static uint64_t now_ms(void) { return (uint64_t)(esp_timer_get_time() / 1000); }
 
 static void push(char ring[][LINE_LEN], unsigned lines, unsigned *head, unsigned *n,
@@ -225,7 +232,22 @@ static void lt_task(void *arg)
         xSemaphoreTake(s_lock, portMAX_DELAY);
         if (n > 0) tt_rx_feed(&s_rx, buf, (size_t)n, on_frame, NULL);
         lt_node_tick(&s_node, now_ms());
+        int online = s_node.phase == LT_ONLINE && s_seen_phase != LT_ONLINE;
+        int lookup = s_node.st.replies != s_seen_replies;
+        int fresh = 0;
+        for (size_t k = 0; k < sizeof s_seen_heard; k++) {
+            if (s_node.heard[k] & ~s_seen_heard[k]) fresh = 1;
+            s_seen_heard[k] = s_node.heard[k];
+        }
+        s_seen_phase = s_node.phase;
+        s_seen_replies = s_node.st.replies;
         xSemaphoreGive(s_lock);
+        // Outside the lock: the panel's side takes its own.
+        if (s_on_event) {
+            if (online) s_on_event(LT_EV_ONLINE);
+            if (lookup) s_on_event(LT_EV_LOOKUP);
+            if (fresh)  s_on_event(LT_EV_NEW_NODE);
+        }
     }
 }
 
@@ -269,6 +291,7 @@ esp_err_t localtalk_start(const localtalk_cfg_t *cfg)
     uart_write_bytes(s_uart, features, sizeof features);
 
     s_printer = cfg->printer;
+    s_on_event = cfg->on_event;
     uint8_t *spool = heap_caps_malloc(SPOOL + 1, MALLOC_CAP_SPIRAM);
     if (!spool) spool = malloc(SPOOL + 1);              // a chip with no PSRAM
     static StaticStreamBuffer_t spool_cb;
