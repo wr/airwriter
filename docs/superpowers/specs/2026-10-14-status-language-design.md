@@ -129,6 +129,23 @@ hue-dependent and not worth a lookup table).
 on average. Steady states drive FR4 dots only, so the steady draw falls well below today's
 37-dot breathe.
 
+### Actions
+
+Things a person starts show over every display state, asleep included, until they end
+(`lg_opts_t.act`). The factory reset is the first (`W-1045 Long-press factory reset with live
+feedback on the LED panel`, SPEC.md §3.11); `W-1049 Panel feedback for every action: OTA,
+reset, cables, TashTalk flash` adds the rest and their priorities. The reset uses all dots,
+mask at 4×, FR4 at the alert cap in its red phases and at the normal cap for white; no frame
+draws more than the boot spin's heaviest (host test).
+
+| Action | When | Pattern |
+|---|---|---|
+| Reset countdown | test button held past a tap (1 s) | a hand sweeps clockwise from 12 o'clock round the test button over 7 s, lighting each dot it passes (soft edge, the newest dots glowing, a 5% floor on the rest of the track); orange (hue 38°) through the first half, running to red by the end (`38·(1 − p^1.5)`, ±3° per dot); the lit dots beat 1 Hz rising to 3 Hz |
+| Reset cancelled | let go during the countdown | the sweep winds back to 12 o'clock and fades in 0.4 s; the state returns |
+| Point of no return, then done | 8 s held: settings erased | FR4 dots flash white and mask dots red (180 ms); the red drains inward into the test button (1 s); two white beats on the FR4 dots (180 ms each); dark until the button is let go and the board restarts (Spin, then Setup) |
+| Reset confirmed at boot | after the bootloader's factory reset (button held through power-up) | the same flash, drain and beats once the Spin ends (2 s), then the state |
+| Reset failed | the erase failed | Job failed's red glitch and pulse for 3 s, then the board restarts |
+
 ## Architecture
 
 Units and their interfaces. Pure cores stay host-testable in `tools/rip`, as now.

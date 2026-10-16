@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // ESP glue for the DIP bank and test button: owns the GPIOs and the 100ms
-// poll task. Decode and the DIP debounce are the pure code in
-// dip_config_core.c; the button gets its own, shorter debounce here since a
-// deliberate press does not need three settled samples to be believed.
+// poll task. Decode, the DIP debounce and the button's tap / hold / reset
+// timing are the pure code in dip_config_core.c.
 #include "dip_config.h"
 #include "driver/gpio.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "esp_timer.h"
 
 #define DIP_POLL_MS   100
 #define DIP_STACK     2560
@@ -22,6 +22,7 @@ static const int s_btn_pin = CONFIG_AIRWRITER_TEST_BTN_PIN;
 
 static void (*s_on_change)(const dip_config_t *cfg);
 static void (*s_on_test_button)(void);
+static void (*s_on_hold)(btn_ev_t ev);
 
 static void dip_task(void *arg)
 {
@@ -29,11 +30,9 @@ static void dip_task(void *arg)
     dip_deb_t dip_deb = {0};
     uint8_t   dip_out = 0xFF;   // impossible sample -- first settled read reports
 
-    // Idle reads 1 (pulled up, not pressed); seeding the same value means a
-    // press already held at boot is what it looks like -- a 1->0 edge on the
-    // first settled sample -- rather than being swallowed.
-    uint8_t btn_hist[2]  = {1, 1};
-    uint8_t btn_stable   = 1;
+    // A press already down at the first sample is the tail of the
+    // bootloader's factory-reset hold, and btn_step ignores it until release.
+    btn_t btn = {0};
 
     for (;;) {
         uint8_t on_bits = 0;
@@ -49,13 +48,12 @@ static void dip_task(void *arg)
         }
 
         if (s_btn_pin >= 0) {
-            btn_hist[0] = btn_hist[1];
-            btn_hist[1] = (uint8_t)gpio_get_level(s_btn_pin);
-            if (btn_hist[0] == btn_hist[1] && btn_hist[1] != btn_stable) {
-                uint8_t was = btn_stable;
-                btn_stable = btn_hist[1];
-                if (was == 1 && btn_stable == 0 && s_on_test_button)
-                    s_on_test_button();
+            uint32_t now = (uint32_t)(esp_timer_get_time() / 1000);
+            btn_ev_t ev = btn_step(&btn, gpio_get_level(s_btn_pin) == 0, now);
+            if (ev == BTN_EV_TAP) {
+                if (s_on_test_button) s_on_test_button();
+            } else if (ev != BTN_EV_NONE && s_on_hold) {
+                s_on_hold(ev);
             }
         }
 
@@ -67,6 +65,7 @@ esp_err_t dip_config_start(const dip_config_cb_t *cb)
 {
     s_on_change      = cb ? cb->on_change      : NULL;
     s_on_test_button = cb ? cb->on_test_button : NULL;
+    s_on_hold        = cb ? cb->on_hold        : NULL;
 
     // DIP2-5 sit on IO39-42 -- MTCK/MTDO/MTDI/MTMS, still routed to the JTAG
     // IO-MUX function at reset -- and the DIP commons go straight to GND with

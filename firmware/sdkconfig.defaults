@@ -9,9 +9,15 @@
 # belongs to the printer. See SPEC.md 2.5. Both chips have this peripheral.
 CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y
 
-# The default 1MB app partition is already 90% full at M4. See partitions.csv.
+# The default 1MB app partition is already 90% full at M4. See partitions.csv
+# (the C6 overrides the file name in its own defaults).
 CONFIG_PARTITION_TABLE_CUSTOM=y
 CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
+
+# W-1046: a new OTA image runs on trial and marks itself valid only once it is
+# healthy (components/ota_health); one that crashes or never gets there is
+# rolled back by the bootloader. main.c refuses to build without it.
+CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=y
 
 # Two servers share lwIP's socket table. The webui's esp_http_server takes its
 # listen and control sockets plus up to 7 connections (a browser keeps several

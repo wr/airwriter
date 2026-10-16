@@ -5,3 +5,14 @@ CONFIG_ESPTOOLPY_FLASHSIZE_8MB=y
 CONFIG_SPIRAM=y
 CONFIG_SPIRAM_MODE_QUAD=y
 CONFIG_SPIRAM_SPEED_80M=y
+
+# W-1046: the test button (IO14, SW3 under the panel's test dot) held through
+# power-up for 5 s makes the bootloader erase nvs and otadata and boot the
+# factory slot. IO14 is no strapping pin. main.c checks the pin matches
+# AIRWRITER_TEST_BTN_PIN.
+CONFIG_BOOTLOADER_FACTORY_RESET=y
+CONFIG_BOOTLOADER_NUM_PIN_FACTORY_RESET=14
+CONFIG_BOOTLOADER_FACTORY_RESET_PIN_LOW=y
+CONFIG_BOOTLOADER_OTA_DATA_ERASE=y
+CONFIG_BOOTLOADER_DATA_FACTORY_RESET="nvs"
+CONFIG_BOOTLOADER_HOLD_TIME_GPIO=5

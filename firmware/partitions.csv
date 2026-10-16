@@ -1,17 +1,24 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
-# Sized for the 4MB C6 devkit so the same table works on the 8MB S3 board.
+# The S3 board's 8MB (the C6 devkit has its own 4MB table, partitions-4mb.csv).
 #
-# Two app slots, because the web UI installs firmware over the air and a
-# printer that bricks on a bad upload is worse than no update at all. The
-# inactive slot holds the new image until esp_ota_end has verified it.
-# 1.5MB each against an image of about 0.95MB leaves real headroom.
+# factory holds the image a board shipped with and is never written over the
+# air: the bootloader's factory reset (the test button held through power-up,
+# W-1046) erases nvs and otadata and boots it. Over-the-air updates alternate
+# between ota_0 and ota_1, and a new image runs on trial until the health gate
+# keeps it (components/ota_health); one that fails rolls back on its own.
+# Three 2MB slots against an image of about 1MB leave room for W-1048's TLS.
+#
+# nvs, otadata and phy_init sit where the old two-slot table had them, so the
+# one USB flash that moves a board to this table keeps its Wi-Fi credentials
+# and settings (SPEC.md 3.11).
 #
 # `storage` holds the printer-icon PNGs the print sheet renders (SPEC.md 3.5).
 # Name,     Type, SubType, Offset,   Size
 nvs,        data, nvs,     0x9000,   0x6000
 otadata,    data, ota,     0xf000,   0x2000
 phy_init,   data, phy,     0x11000,  0x1000
-ota_0,      app,  ota_0,   0x20000,  0x180000
-ota_1,      app,  ota_1,   0x1a0000, 0x180000
-storage,    data, spiffs,  0x320000, 0xe0000
+factory,    app,  factory, 0x20000,  0x200000
+ota_0,      app,  ota_0,   0x220000, 0x200000
+ota_1,      app,  ota_1,   0x420000, 0x200000
+storage,    data, spiffs,  0x620000, 0x1e0000

@@ -37,7 +37,12 @@
 #include "pic_prog.h"
 #include "localtalk.h"
 #include "lt_node.h"
+#include "ota_health.h"
 #include "esp_app_desc.h"
+#include "esp_partition.h"
+#if CONFIG_BOOTLOADER_FACTORY_RESET
+#include "bootloader_common.h"
+#endif
 
 static const char *TAG = "airwriter";
 
@@ -68,6 +73,27 @@ static const char *TAG = "airwriter";
 #else
 #define AW_DEV_MODE 0
 #endif
+
+// W-1046: the way back lives below the app, in the bootloader and the
+// partition table, so the sdkconfig has to carry it. sdkconfig.defaults only
+// seed a new sdkconfig; an older one keeps its old values, and this is where
+// that shows rather than on a board that cannot recover.
+#if !CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE
+#error "sdkconfig predates W-1046: enable CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE (sdkconfig.defaults)"
+#endif
+#if CONFIG_IDF_TARGET_ESP32S3 && !CONFIG_BOOTLOADER_FACTORY_RESET
+#error "sdkconfig predates W-1046: copy the factory-reset options from sdkconfig.defaults.esp32s3"
+#endif
+#if CONFIG_BOOTLOADER_FACTORY_RESET
+#if CONFIG_BOOTLOADER_NUM_PIN_FACTORY_RESET != CONFIG_AIRWRITER_TEST_BTN_PIN
+#error "the bootloader's factory-reset pin must be the test button"
+#endif
+#if !CONFIG_BOOTLOADER_FACTORY_RESET_PIN_LOW || !CONFIG_BOOTLOADER_OTA_DATA_ERASE
+#error "the factory reset must trigger on a pressed (low) button and boot the factory slot"
+#endif
+#endif
+_Static_assert(LG_RESET_FILL_MS == BTN_FILL_MS,
+               "the panel's countdown must run out when the button commits");
 
 #define WIFI_CONNECTED_BIT BIT0
 #define WIFI_FAILED_BIT    BIT1
@@ -531,6 +557,88 @@ static void dip_on_change(const dip_config_t *cfg)
         ESP_LOGI(TAG, "dip: LocalTalk stays on until the board restarts");
 }
 
+// --------------------------------------------------------- factory reset
+// W-1045: hold the test button. Past a tap (1 s) the panel counts down; at
+// 8 s every setting is erased -- the point of no return -- and the board
+// restarts once the button is let go. Not before: a button still down at
+// restart reads to the bootloader as the start of its own factory reset,
+// which would also put the factory firmware back (W-1046).
+
+#define RESET_RELEASE_WAIT_MS 30000     // a button stuck down still restarts
+
+static volatile int s_reset_released;
+static uint32_t s_hold_t0;
+
+static uint32_t uptime_ms(void)
+{
+    return (uint32_t)(esp_timer_get_time() / 1000);
+}
+
+static void restart_when_released(void)
+{
+    for (uint32_t waited = 0; !s_reset_released && waited < RESET_RELEASE_WAIT_MS; waited += 50)
+        vTaskDelay(pdMS_TO_TICKS(50));
+    vTaskDelay(pdMS_TO_TICKS(200));
+    esp_restart();
+}
+
+static void reset_task(void *arg)
+{
+    (void)arg;
+    // Wi-Fi first, so the driver is not writing its own NVS keys while the
+    // partition goes. Everything after this restarts anyway.
+    esp_wifi_stop();
+    esp_err_t err = nvs_flash_erase();
+    if (err != ESP_OK) {
+        // Back on the network with whatever survived.
+        ESP_LOGE(TAG, "factory reset: erasing settings failed (%s)", esp_err_to_name(err));
+        led_grid_action(LG_ACT_RESET_FAILED, 0);
+        vTaskDelay(pdMS_TO_TICKS(LG_RESET_FAILED_MS));
+        restart_when_released();
+    }
+    ESP_LOGW(TAG, "factory reset: settings erased; restarting when the button is let go");
+    led_grid_action(LG_ACT_RESET_DONE, 0);
+    vTaskDelay(pdMS_TO_TICKS(LG_RESET_DONE_MS));
+    restart_when_released();
+}
+
+// On dip_config's poll task: start work, never wait on it.
+static void on_hold(btn_ev_t ev)
+{
+    switch (ev) {
+    case BTN_EV_HOLD:
+        on_activity();
+        s_hold_t0 = uptime_ms();
+        led_grid_action(LG_ACT_RESET_HOLD, 0);
+        ESP_LOGW(TAG, "test button held: factory reset in %us unless it is let go",
+                 (unsigned)(BTN_FILL_MS / 1000));
+        break;
+    case BTN_EV_CANCEL: {
+        uint32_t held = uptime_ms() - s_hold_t0;
+        uint16_t fill = (uint16_t)(held >= BTN_FILL_MS ? 1000 : held * 1000 / BTN_FILL_MS);
+        led_grid_action(LG_ACT_RESET_CANCEL, fill);
+        ESP_LOGI(TAG, "test button let go: factory reset cancelled");
+        break;
+    }
+    case BTN_EV_COMMIT:
+        s_reset_released = 0;
+        if (xTaskCreate(reset_task, "reset", 3072, NULL, 5, NULL) != pdPASS) {
+            ESP_LOGE(TAG, "factory reset: could not start");
+            led_grid_action(LG_ACT_RESET_FAILED, 0);
+        }
+        break;
+    case BTN_EV_RELEASE:
+        s_reset_released = 1;
+        break;
+    default:
+        break;
+    }
+}
+
+// The bootloader erased the settings at power-up (test button held through
+// it): show the reset's confirmation once the boot spin is over.
+static volatile int s_boot_reset;
+
 // ----------------------------------------------------------------- wifi
 
 static void wifi_event(void *arg, esp_event_base_t base, int32_t id, void *data)
@@ -544,6 +652,7 @@ static void wifi_event(void *arg, esp_event_base_t base, int32_t id, void *data)
         wifi_event_sta_disconnected_t *d = (wifi_event_sta_disconnected_t *)data;
         if (s_wifi_was_up) {
             printer_state_post(PS_EV_WIFI_DOWN);
+            ota_health_set(OH_STA_UP, 0);
             strncpy(s_ip, "0.0.0.0", sizeof s_ip - 1);
             ESP_LOGW(TAG, "wifi lost (reason %d); retrying in %us",
                      d ? d->reason : -1, (unsigned)(s_backoff_ms / 1000));
@@ -565,6 +674,7 @@ static void wifi_event(void *arg, esp_event_base_t base, int32_t id, void *data)
         s_wifi_was_up = 1;
         s_backoff_ms  = 1000;
         printer_state_post(PS_EV_WIFI_UP);
+        ota_health_set(OH_STA_UP, 1);
         xEventGroupSetBits(s_wifi_events, WIFI_CONNECTED_BIT);
     }
 }
@@ -741,6 +851,7 @@ static void status_json(void *ctx, char *buf, size_t cap)
         "\"ssid\":\"%s\",\"dither\":\"%s\",\"signal\":\"%s\","
         "\"channel\":\"%s\",\"security\":\"%s\",\"uri\":\"%s\","
         "\"uptime\":\"%uh %02um\",\"reset\":\"%s\",\"version\":\"%s\",\"heap\":\"%u KB\","
+        "\"slot\":\"%s\",\"trial\":%s,\"rolled_back\":\"%s\","
         "\"model\":\"Apple ImageWriter II\",\"pic\":%s}",
         state_text(v.state),
         ps_name(v.state),
@@ -760,6 +871,7 @@ static void status_json(void *ctx, char *buf, size_t cap)
         s_ap_mode ? "" : ipp_server_uri(),
         (unsigned)(up / 3600), (unsigned)((up / 60) % 60),
         reset_name(esp_reset_reason()), app->version, (unsigned)(esp_get_free_heap_size() / 1024),
+        ota_health_slot(), ota_health_on_trial() ? "true" : "false", ota_health_rolled_back(),
         pic_prog_available() ? "true" : "false");
 }
 
@@ -842,6 +954,10 @@ static void localtalk_flash(void *ctx, char *buf, size_t cap)
 static void on_ps_change(const ps_view_t *v)
 {
     ESP_LOGI(TAG, "state -> %s", ps_name(v->state));
+    if (s_boot_reset && v->state != PS_BOOTING) {
+        s_boot_reset = 0;
+        led_grid_action(LG_ACT_RESET_CONFIRM, 0);
+    }
     // SPEC.md 3.9: a stall mid-job becomes a real alert on the phone.
     // Mid-job stall: media-empty, the real "out of paper" alert. The -error
     // suffix (RFC 8011 5.4.12) says it outright: a stopped printer MUST carry
@@ -918,6 +1034,19 @@ void app_main(void)
 
     ESP_LOGI(TAG, "AirWriter starting after %s reset, %u bytes free",
              reset_name(esp_reset_reason()), (unsigned)esp_get_free_heap_size());
+#if CONFIG_BOOTLOADER_FACTORY_RESET
+    if (bootloader_common_get_rtc_retain_mem_factory_reset_state()) {
+        ESP_LOGW(TAG, "factory reset by the bootloader: settings erased, factory firmware");
+        s_boot_reset = 1;
+    }
+    // An OTA cannot rewrite the partition table, so a board updated over the
+    // air from before W-1046 runs this firmware on the old two-slot table:
+    // no factory slot, and a bootloader without rollback. One USB flash
+    // fixes it (SPEC.md 3.11).
+    if (!esp_partition_find_first(ESP_PARTITION_TYPE_APP, ESP_PARTITION_SUBTYPE_APP_FACTORY, NULL))
+        ESP_LOGE(TAG, "no factory slot: this board needs one USB flash to get the W-1046 "
+                      "partition table and bootloader");
+#endif
 
     esp_err_t err = nvs_flash_init();
     if (err == ESP_ERR_NVS_NO_FREE_PAGES || err == ESP_ERR_NVS_NEW_VERSION_FOUND) {
@@ -932,6 +1061,7 @@ void app_main(void)
     char suffix[8];
     snprintf(suffix, sizeof suffix, "%02x%02x", mac[4], mac[5]);
     settings_load(&s_set, suffix);
+    ota_health_start(s_set.ssid[0] != 0);
 #if CONFIG_AIRWRITER_LT_BENCH
     lt_start("bench build");
 #endif
@@ -963,7 +1093,8 @@ void app_main(void)
     // Before wifi_start, which can block up to 60s joining: the debounce
     // settles in ~300ms, so the boot-time read is long ready by the time
     // test_on_boot is checked below, whichever path gets there.
-    dip_config_cb_t dip_cb = { .on_change = dip_on_change, .on_test_button = test_page };
+    dip_config_cb_t dip_cb = { .on_change = dip_on_change, .on_test_button = test_page,
+                               .on_hold = on_hold };
     ESP_ERROR_CHECK(dip_config_start(&dip_cb));
 
     // No credentials, or they no longer work: become an access point and let
@@ -986,10 +1117,12 @@ void app_main(void)
         ESP_ERROR_CHECK(esp_event_handler_instance_register(
             WIFI_EVENT, WIFI_EVENT_AP_STADISCONNECTED, ap_event, NULL, NULL));
         ESP_ERROR_CHECK(net_provision_start(ap));
+        ota_health_set(OH_AP_UP, 1);
         webui_cfg_t wcfg = { .status_json = status_json, .captive = 1,
                               .localtalk_flash = localtalk_flash,
                               .lt_json = lt_json, .lt_job = lt_job, .lt_echo = lt_echo };
         ESP_ERROR_CHECK(webui_start(&wcfg));
+        ota_health_set(OH_WEB_UP, 1);
 
         for (;;) vTaskDelay(pdMS_TO_TICKS(30000));
     }
@@ -1004,11 +1137,13 @@ void app_main(void)
                   .cancel = doc_cancel, .ctx = NULL },
     };
     ESP_ERROR_CHECK(ipp_server_start(&cfg));
+    ota_health_set(OH_IPP_UP, 1);
 
     webui_cfg_t wcfg = { .status_json = status_json, .captive = 0,
                           .localtalk_flash = localtalk_flash,
                           .lt_json = lt_json, .lt_job = lt_job, .lt_echo = lt_echo };
     ESP_ERROR_CHECK(webui_start(&wcfg));
+    ota_health_set(OH_WEB_UP, 1);
 
     if (s_test_on_boot) {
         s_test_on_boot = 0;
