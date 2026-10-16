@@ -384,7 +384,7 @@ void localtalk_json(char *buf, size_t cap)
         (unsigned long)n->st.ws_reads, (unsigned long)n->st.ws_answers, n->pap.open ? "true" : "false", n->pap.connid,
         (unsigned long)n->pap.bytes, (unsigned)s_job_len, (unsigned long)s_job_total,
         s_job_done ? "true" : "false", s_job_active ? "true" : "false",
-        (unsigned)(SPOOL - xStreamBufferSpacesAvailable(s_spool)), s_job_failed ? "true" : "false",
+        (unsigned)xStreamBufferBytesAvailable(s_spool), s_job_failed ? "true" : "false",
         (unsigned long)s_jobs_printed, (unsigned long)s_jobs_failed);
     json_ring(&p, end, s_ev, EV_LINES, s_ev_head, s_ev_n);
     if (p < end) p += snprintf(p, end - p, "],\"frames_recent\":[");
