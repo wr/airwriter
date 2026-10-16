@@ -172,7 +172,8 @@ just below the grid (the sockets themselves are 4.6 rows lower), so the wave ent
    still shows the old state.
 3. **Acknowledgements**: at most 1.6 s, drawn over the state (screen blend), on any dots they
    need. Never during a task, and not in Needs attention or Job failed, so an alert is never
-   hidden. One raised during Booting waits for the Spin to end, then plays from its start (the
+   hidden. Not over an all-dot moment (Page out, Cancelled, Could not join, Printer back into
+   Printing) or a cable test's answer either: together they would draw more than the Spin. One raised during Booting waits for the Spin to end, then plays from its start (the
    LocalTalk node comes online about 2 s into a mode-2 boot). A newer one replaces the one
    showing. They show over sleep without waking the panel; the ones a person causes also post
    `ACTIVITY` from their call site.
@@ -226,11 +227,13 @@ holds until the restart. The update's own flow decides when; W-1048 drives it.
 | Busy | the test button tapped during an IPP or LocalTalk job | two orange pulses (hue 30° ±4°, 300 ms each, peak 85%) on the dots around the test button (distance 0.5–1.6) | 0.6 s |
 | Saved | settings saved on the web page; for Wi-Fi, just before its restart | a white ring closes into the test button in 0.6 s (80% at the ring), then the dots around the button glow 60% and fade out by 0.9 s | 0.9 s |
 
-**The test button.** A tap with nothing printing prints the test page (unchanged). A tap while
-the test page prints cancels it: the page stops (the write is aborted and the queue purged, as a
-Cancel-Job does), it ends as cancelled, and W-1041's resync runs before the next job. A tap
-during an IPP or LocalTalk job shows Busy and does nothing else. A hold is the factory reset
-(unchanged).
+**The test button.** A tap while the test page prints cancels it: the page stops (the write is
+aborted and the queue purged, as a Cancel-Job does), it ends as cancelled, and W-1041's resync
+runs before the next job. A cancel that comes too late to cut anything is a page that printed.
+A tap during an IPP or LocalTalk job, or a cable test, shows Busy and does nothing else.
+Otherwise a tap tests the cable when the printer is not ready (W-1055) and prints the test page
+when it is. The tap and the page's end decide under one lock, so a tap as the page finishes
+never lands on the next job. A hold is the factory reset (unchanged).
 
 **Held back** (Wells, 2026-10-16), not built: update kept (the trial passed), update refused,
 update rolled back, and DIP switch flipped. Their `lg_act_t` values stay, because W-1048 calls
