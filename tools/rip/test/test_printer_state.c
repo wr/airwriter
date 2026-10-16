@@ -304,16 +304,20 @@ int main(void)
     up_and_ready(&ps, 0);
     ps_post(&ps, PS_EV_LINE_NOT_READY, 4000);       // the cable, not a printer, is on J2
     assert(st(&ps, 8000) == PS_OFFLINE);
-    ps_cable(&ps, 1, 400000);                       // long idle: asleep until now
+    ps_cable(&ps, PS_CABLE_PASS, 400000);           // long idle: asleep until now
     v = ps_update(&ps, 400000);
     assert(v.cable == PS_CABLE_PASS && v.cable_ms == 0 && !v.asleep && v.state == PS_OFFLINE);
     v = ps_update(&ps, 400000 + PS_CABLE_MS - 1);
     assert(v.cable == PS_CABLE_PASS && v.cable_ms == PS_CABLE_MS - 1);
     assert(ps_update(&ps, 400000 + PS_CABLE_MS).cable == 0);
-    ps_cable(&ps, 0, 500000);
+    ps_cable(&ps, PS_CABLE_FAIL, 500000);
     assert(ps_update(&ps, 500000 + PS_CABLE_MS - 1).cable == PS_CABLE_FAIL);
     assert(ps_update(&ps, 500000 + PS_CABLE_MS).cable == 0);
-    ps_cable(&ps, 0, 600000);
+    // W-1063: no cable tested (no TashTalk) is shorter: no sweep, two blinks.
+    ps_cable(&ps, PS_CABLE_NO_CHIP, 550000);
+    assert(ps_update(&ps, 550000 + PS_CABLE_NO_CHIP_MS - 1).cable == PS_CABLE_NO_CHIP);
+    assert(ps_update(&ps, 550000 + PS_CABLE_NO_CHIP_MS).cable == 0);
+    ps_cable(&ps, PS_CABLE_FAIL, 600000);
     ps_post(&ps, PS_EV_LINE_READY, 600500);         // the printer back on J2
     ps_post(&ps, PS_EV_JOB_START, 601000);
     v = ps_update(&ps, 601000);
@@ -321,7 +325,7 @@ int main(void)
     // In setup mode too: a new owner may test the cable before joining Wi-Fi.
     ps_init(&ps, &TM, 0);
     ps_post(&ps, PS_EV_WIFI_SETUP_AP, 0);
-    ps_cable(&ps, 1, 10000);
+    ps_cable(&ps, PS_CABLE_PASS, 10000);
     v = ps_update(&ps, 10000);
     assert(v.state == PS_SETUP && v.cable == PS_CABLE_PASS);
 

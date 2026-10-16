@@ -127,6 +127,13 @@ Traps already explained in a code comment are listed only when the comment is ea
   no transmit and no relay, while its CTS read ready and it took the 1024-NUL sync. A node-mode
   boot in between cleared it; the PIC is never reset by an ESP32 reboot. The cable test retries
   from a reset TashTalk (MCLR low 2 ms); its `dbg.reset` is 2 when the reset is what passed.
+- **The LocalTalk node runs with U7 empty.** Its bytes wait in UART2's ring behind CTS, which
+  floats up through `uart_set_pin`'s pull-up; 20 unanswered ENQs and it claims a node ID and the
+  panel plays "LocalTalk on". Anything sending through it must check `localtalk_tt_alive()` first
+  (the cable test does, W-1063) or it fills the 4 KB ring and blocks with the node's lock held.
+- **An empty U7 and a PIC with LVP off both read device ID 0x0000** (DAT is pulled down). Only
+  with TashTalk silent too does 0x0000 mean an empty socket; a chip flashed with stock TashTalk
+  elsewhere answers on the UART and reads 0x0000 over ICSP.
 - **`uart_set_pin` releases every pin the UART had, CTS included, before routing new ones.**
   Re-routing TX and RX alone (after lending them to RMT, which also moves IO18 off the IOMUX)
   leaves CTS tied to "clear" and overruns the printer; `serial_out_lend(0)` passes all three.

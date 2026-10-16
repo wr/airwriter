@@ -164,6 +164,20 @@ static lg_c3 stripe(int r, int c)
     return hsv(hue[k] + (dot_hash(r, c, 3) - 0.5f) * 8, 0.85f, 1);
 }
 
+// The sockets are on the bottom edge: the printer (J2) under column 0.9,
+// LocalTalk (J4) under 3.2. Waves start from row 8.6, just below the grid (the
+// sockets are 4.6 rows lower), so they enter at once.
+#define PORT_ROW    8.6f
+#define PRINTER_COL 0.9f
+#define LT_COL      3.2f
+#define FAR         10.5f       // a socket to the far corner, in rows
+#define CROSS_MS    1100.0f     // a cable wave's time to cross the panel
+
+static float dist_to(int r, int c, float pr, float pc)
+{
+    return hypotf((float)r - pr, (float)c - pc);
+}
+
 static lg_c3 state_dot(const ps_view_t *v, const lg_opts_t *o, int i, uint32_t t)
 {
     int r = LG_MAP[i].r, c = LG_MAP[i].c;
@@ -172,29 +186,41 @@ static lg_c3 state_dot(const ps_view_t *v, const lg_opts_t *o, int i, uint32_t t
     float h1 = dot_hash(r, c, 1), h2 = dot_hash(r, c, 2);
     uint32_t s = v->since_ms;
 
-    if (v->cable) {
-        // A cable test's answer (W-1055): a band sweeps the panel left to
-        // right and back, 700 ms each way. Green, the cable works: a ring
-        // pulses out of the test button and the panel fades. Red, it doesn't
-        // or there isn't one: the six dots around the button blink twice.
+    if (v->cable == PS_CABLE_NO_CHIP) {
+        // No cable was tested: TashTalk didn't answer (W-1063). No sweep; the
+        // dots by the LocalTalk socket blink red twice (200 ms dark, 200 on,
+        // 200 off, 200 on), the rest dark.
         uint32_t cs = v->cable_ms;
-        const uint32_t sweep = 700;
+        int on = dist_to(r, c, PORT_ROW, LT_COL) < 2.8f
+              && ((cs >= 200 && cs < 400) || (cs >= 600 && cs < 800));
+        return on ? hsv(jitter(r, c, 2, 10, t, 0), 0.95f, 1) : DARK;
+    }
+    if (v->cable) {
+        // A cable test's answer (W-1055) stays between the two sockets: the
+        // bottom three rows, columns 0-4, the rest dark. A band runs from the
+        // LocalTalk socket to the printer's and back, 600 ms each way, as the
+        // test does (J4 -> J2, then J2 -> J4). Green, the cable works: the
+        // strip glows and fades. Red, it doesn't or there isn't one: the strip
+        // blinks twice.
+        if (r < 5 || c > 4) return DARK;
+        uint32_t cs = v->cable_ms;
+        const uint32_t sweep = 600;
+        int pass = v->cable == PS_CABLE_PASS;
+        float hue = pass ? jitter(r, c, 130, 14, t, 0) : jitter(r, c, 2, 10, t, 0);
         float lv;
         if (cs < 2 * sweep) {
-            float x = cs < sweep ? -1.0f + 8.0f * (float)cs / (float)sweep
-                                 : 7.0f - 8.0f * (float)(cs - sweep) / (float)sweep;
-            lv = gauss((float)c - x, 1.0f);
-        } else if (v->cable == PS_CABLE_PASS) {
-            lv = gauss(dist - (float)(cs - 2 * sweep) / 1000.0f * 7.0f, 1.4f);
+            const float a = LT_COL + 1.3f, b = PRINTER_COL - 1.3f;
+            float x = cs < sweep ? a + (b - a) * (float)cs / (float)sweep
+                                 : b + (a - b) * (float)(cs - sweep) / (float)sweep;
+            lv = 0.08f + 0.92f * gauss((float)c - x, 0.8f);
+        } else if (pass) {
+            float g = (float)(cs - 2 * sweep);
+            lv = ss(0, 200, g) * (1 - ss(500, 1100, g));
         } else {
             uint32_t b = cs - 2 * sweep;                 // 200 on, 200 off, 200 on
-            int on = dist < 1.5f && (b < 200 || (b >= 400 && b < 600));
-            return on ? hsv(jitter(r, c, 2, 10, t, 0), 0.95f, 1) : DARK;
+            lv = b < 200 || (b >= 400 && b < 600) ? 1 : 0;
         }
-        float hue = v->cable == PS_CABLE_PASS ? jitter(r, c, 130, 14, t, 0)
-                                              : jitter(r, c, 2, 10, t, 0);
-        float fade = 1 - ss((float)PS_CABLE_MS - 300, (float)PS_CABLE_MS, (float)cs);
-        return hsv(hue, 0.9f, (0.08f + 0.92f * lv) * fade);
+        return hsv(hue, 0.9f, lv);
     }
 
     switch (v->state) {
@@ -292,21 +318,8 @@ static lg_c3 state_dot(const ps_view_t *v, const lg_opts_t *o, int i, uint32_t t
 // ---------------------------------------------------------------- moments
 // W-1049: some states open with a moment drawn from the state before
 // (ps_view_t.prev), keyed off since_ms. Wherever its wave has not reached yet
-// still shows the old state. Any other change of state has none.
-//
-// The sockets are on the bottom edge: the printer (J2) under column 0.9,
-// LocalTalk (J4) under 3.2. Waves start from row 8.6, just below the grid (the
-// sockets are 4.6 rows lower), so they enter at once.
-#define PORT_ROW    8.6f
-#define PRINTER_COL 0.9f
-#define LT_COL      3.2f
-#define FAR         10.5f       // a socket to the far corner, in rows
-#define CROSS_MS    1100.0f     // a cable wave's time to cross the panel
-
-static float dist_to(int r, int c, float pr, float pc)
-{
-    return hypotf((float)r - pr, (float)c - pc);
-}
+// still shows the old state. Any other change of state has none. The
+// sockets they start from are above state_dot.
 
 // Light added over light: an acknowledgement on top of the state.
 static lg_c3 screen(lg_c3 a, lg_c3 b)
@@ -633,7 +646,7 @@ void lg_render16(const ps_view_t *v, const lg_opts_t *o, uint32_t t_ms,
                 task_frame(&o->task[f], t_ms, out);
                 return;
             }
-    int all = all_dots(v->state) || moment_all(v) || v->cable;   // the cable sweep uses every dot
+    int all = all_dots(v->state) || moment_all(v) || v->cable;   // the cable strip's mask dots too
     int gamer = o && o->gamer;
     int blip = o && !lg_blip_over(o->blip, o->blip_ms) && v->state != PS_BOOTING
                && v->state != PS_ATTENTION && v->state != PS_FAILED && !busy_panel(v);

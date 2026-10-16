@@ -709,12 +709,15 @@ static void test_page(void)
 }
 
 // W-1055: the cable test, from the button or the web page, under the job lock
-// (it borrows the printer port's pins). The panel shows the answer.
+// (it borrows the printer port's pins). The panel shows the answer, and with
+// no TashTalk to run the test, says that instead of blaming the cable (W-1063).
 #if CONFIG_AIRWRITER_PIC_CLK_PIN >= 0
 static void cable_test_locked(cable_result_t *r, int both)
 {
     cable_test_run(r, both);
-    printer_state_cable(r->err == ESP_OK && r->verdict == CT_PASS);
+    printer_state_cable(r->err == ESP_OK && !ct_verdict_tested(r->verdict) ? PS_CABLE_NO_CHIP
+                        : r->err == ESP_OK && r->verdict == CT_PASS        ? PS_CABLE_PASS
+                                                                           : PS_CABLE_FAIL);
 }
 
 static void cable_button_task(void *arg)

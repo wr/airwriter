@@ -140,6 +140,11 @@ int main(void)
     SEG(.len = PS_CABLE_MS, .st = PS_OFFLINE, .prev = PS_READY, .since0 = 61000, .cable = PS_CABLE_FAIL);
     SEG(.len = 1000, .st = PS_OFFLINE, .prev = PS_READY, .since0 = 61000 + PS_CABLE_MS);
 
+    scene("cable-no-chip", "cut", 100000);      // the same tap with no LocalTalk chip (W-1063)
+    OFFLINE(1200);
+    SEG(.len = PS_CABLE_NO_CHIP_MS, .st = PS_OFFLINE, .prev = PS_READY, .since0 = 61200, .cable = PS_CABLE_NO_CHIP);
+    SEG(.len = 1200, .st = PS_OFFLINE, .prev = PS_READY, .since0 = 61200 + PS_CABLE_NO_CHIP_MS);
+
     scene("asleep", "cut", 113000);             // two 6 s breaths of the pilot, and a twinkle
     SEG(.len = 12000, .st = PS_READY, .prev = PS_JOINING, .since0 = 400000, .asleep = 1, .asleep0 = 60000);
 

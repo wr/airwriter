@@ -19,6 +19,12 @@
 // 1 when all three pins are configured for this build.
 int pic_prog_available(void);
 
+// Reads U7's device ID and lets it run again: a few milliseconds, and the
+// PIC restarts. PIC_ERR_NO_DEVICE (ID 0x0000) for an empty socket; the cable
+// test uses it to tell one from a bad cable (W-1063). Same pin rules as a
+// flash.
+pic_err_t pic_prog_read_id(uint16_t *devid);
+
 // Blocks for about two seconds. Returns PIC_OK or the reason it stopped (a
 // second caller gets PIC_ERR_BUSY); *res carries the device ID and, on a
 // verify failure, the first bad address.

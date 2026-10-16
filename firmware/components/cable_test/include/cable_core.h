@@ -43,6 +43,18 @@ void ct_fm0_decode(const uint32_t *ticks, size_t n, uint32_t res_hz, ct_frame_fn
 int ct_capture_has(const uint32_t *ticks, size_t n, uint32_t res_hz,
                    const uint8_t *want, size_t want_n);
 
+// Both legs run through TashTalk, so first: did it take the test's bytes?
+// An empty U7 socket and a PIC not running TashTalk look alike from its UART
+// (CTS floats up through its pull-up), so when it didn't, the ESP side asks
+// U7 for its device ID over ICSP: DAT's pull-down makes an empty socket read
+// 0x0000 (W-1063).
+typedef enum {
+    CT_TT_OK = 0,        // TashTalk took them: the two legs decide
+    CT_TT_NO_CHIP,       // it didn't, and no PIC answered: the socket is empty
+    CT_TT_NO_TASHTALK,   // it didn't, but a PIC answered: blank, or not running TashTalk
+    CT_TT_UNCHECKED,     // it didn't, and U7 couldn't be read (the node holds its pins)
+} ct_tt_t;
+
 // Only Apple's crossover works with the ImageWriter II, so the test answers
 // that and no more: a straight cable and an unplugged one both fail.
 //   back: J4 -> J2, TashTalk's frame heard on the printer port's RxD.
@@ -52,8 +64,13 @@ typedef enum {
     CT_PASS = 0,     // both ways: a crossover
     CT_NO_LOOP,      // nothing came back: straight-through, broken, or not in both ports
     CT_ONE_WAY,      // crossed, but J2's transmit pair (the print data) is broken
+    // No cable was tested: TashTalk didn't answer.
+    CT_NO_CHIP,      // U7 is empty
+    CT_NO_TASHTALK,  // U7 holds a PIC that isn't running TashTalk
+    CT_CHIP_SILENT,  // TashTalk didn't answer and U7 couldn't be read
 } ct_verdict_t;
 
-ct_verdict_t ct_verdict(int back_ok, int fwd_ok);
-const char  *ct_verdict_name(ct_verdict_t v);   // "pass", "no_loop", "one_way"
+ct_verdict_t ct_verdict(ct_tt_t tt, int back_ok, int fwd_ok);
+int          ct_verdict_tested(ct_verdict_t v); // 1 if a cable was tested: pass, no_loop, one_way
+const char  *ct_verdict_name(ct_verdict_t v);   // "pass", "no_loop", "one_way", "no_chip", ...
 const char  *ct_verdict_text(ct_verdict_t v);   // a sentence for the web page

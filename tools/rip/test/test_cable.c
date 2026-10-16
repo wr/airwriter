@@ -163,14 +163,30 @@ static void test_two_frames(void)
 
 static void test_verdict(void)
 {
-    CHECK_EQ_INT(ct_verdict(1, 1), CT_PASS);
-    CHECK_EQ_INT(ct_verdict(0, 0), CT_NO_LOOP);
-    CHECK_EQ_INT(ct_verdict(0, 1), CT_NO_LOOP);     // fwd is never tried without back
-    CHECK_EQ_INT(ct_verdict(1, 0), CT_ONE_WAY);
+    CHECK_EQ_INT(ct_verdict(CT_TT_OK, 1, 1), CT_PASS);
+    CHECK_EQ_INT(ct_verdict(CT_TT_OK, 0, 0), CT_NO_LOOP);
+    CHECK_EQ_INT(ct_verdict(CT_TT_OK, 0, 1), CT_NO_LOOP);     // fwd is never tried without back
+    CHECK_EQ_INT(ct_verdict(CT_TT_OK, 1, 0), CT_ONE_WAY);
     CHECK(!strcmp(ct_verdict_name(CT_PASS), "pass"));
     CHECK(!strcmp(ct_verdict_name(CT_NO_LOOP), "no_loop"));
     CHECK(!strcmp(ct_verdict_name(CT_ONE_WAY), "one_way"));
     CHECK(strlen(ct_verdict_text(CT_ONE_WAY)) > 10);
+
+    // W-1063: TashTalk silent means no cable was tested, whatever the legs
+    // say, and the verdict names what U7 holds instead of blaming the cable.
+    const ct_tt_t tt[] = { CT_TT_NO_CHIP, CT_TT_NO_TASHTALK, CT_TT_UNCHECKED };
+    const ct_verdict_t want[] = { CT_NO_CHIP, CT_NO_TASHTALK, CT_CHIP_SILENT };
+    const char *name[] = { "no_chip", "no_tashtalk", "chip_silent" };
+    for (int k = 0; k < 3; k++) {
+        for (int legs = 0; legs < 4; legs++)
+            CHECK_EQ_INT(ct_verdict(tt[k], legs & 1, legs >> 1), want[k]);
+        CHECK(!ct_verdict_tested(want[k]));
+        CHECK(!strcmp(ct_verdict_name(want[k]), name[k]));
+        CHECK(strstr(ct_verdict_text(want[k]), "No cable was tested") != NULL);
+        CHECK(!strchr(ct_verdict_text(want[k]), '"'));       // it goes into JSON as is
+    }
+    CHECK(ct_verdict_tested(CT_PASS) && ct_verdict_tested(CT_NO_LOOP) && ct_verdict_tested(CT_ONE_WAY));
+    CHECK(strstr(ct_verdict_text(CT_NO_TASHTALK), "flash") != NULL);
 }
 
 int main(void)

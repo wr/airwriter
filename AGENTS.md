@@ -71,8 +71,13 @@ What works on `main`:
 - Cable test (`components/cable_test`): one cable from J2 to J4 and a press of test (or
   `POST /api/cable`) tells Apple's crossover from anything else. TashTalk sends a frame out J4
   that RMT decodes off J2's RxD; only then does RMT send one out J2's TxD for TashTalk to relay
-  back. The panel sweeps left and right, then pulses green from the test button for a crossover,
-  or blinks the dots around it red twice for anything else.
+  back. The panel answers in the bottom three rows between the two sockets: a band sweeps from
+  LocalTalk to the printer and back, then the strip glows green for a crossover, or blinks red
+  twice for anything else. When TashTalk takes none of the test's bytes it tests nothing and
+  says why (W-1063): with the node off, U7's device ID over ICSP tells an empty socket
+  (`no_chip`) from a PIC not running TashTalk (`no_tashtalk`); with the node on, only
+  `chip_silent`. The panel then skips the sweep and blinks the dots by the LocalTalk socket red
+  twice.
 - Setup AP `AirWriter-xxxx` (open, 192.168.4.1) on a board with no credentials; web UI on port
   80: `/api/status`, Wi-Fi, settings, `/update` (OTA), `/api/update` (GitHub releases),
   `/api/localtalk/flash`, `/api/cable`.
@@ -152,6 +157,10 @@ Linear is the queue; these are the live items.
   its RMT interrupt, on core 1 (a frame-gap log on board 1 showed the WPA3 handshake starving it
   on core 0). Benched 2026-10-16: no frame gap over 15 ms through a power cycle, Wells "perfect
   now".
+- `W-1063 Cable test: tell an empty LocalTalk chip socket apart from a bad cable`: merged
+  2026-10-16, with Wells's smaller cable answer (the strip between the sockets). Host-tested and
+  built; not yet on board 1. Owed, on Wells's go with prints held: a crossover test (the strip,
+  nothing regressed), then one with U7 pulled (`no_chip`, the blink by the LocalTalk socket).
 - Not in Linear: scope HSKo during a long job (SPEC §3.9 timing).
 
 ## Toolchain

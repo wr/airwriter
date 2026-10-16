@@ -17,6 +17,7 @@
 #include "localtalk.h"
 #include "lt_proto.h"
 #include "lt_tashtalk.h"
+#include "pic_prog.h"
 #include "serial_out.h"
 
 static const char *TAG = "cable";
@@ -28,6 +29,9 @@ static const char *TAG = "cable";
 // then sends a 5-byte control frame in about 0.5 ms.
 #define BACK_WAIT_MS 30
 #define FWD_WAIT_MS  20
+// The node's UART drains within this when TashTalk is there, even with the
+// bus carrying a long frame (~25 ms).
+#define ALIVE_WAIT_MS 50
 #define RX_SYMS      192                  // all four RX blocks: a frame is ~65
 #define TX_SYMS      (CT_RUNS_MAX / 2 + 1)
 
@@ -56,6 +60,7 @@ static struct {
     uint8_t first[12];               // the first relayed frame's bytes
     int     cts;                     // TashTalk's CTS when the ENQ went out
     int     reset;                   // 1: TashTalk was reset after a fail; 2: and then passed
+    int     devid;                   // U7's device ID when TashTalk took nothing, else -1
 } s_dbg;
 
 static TickType_t ms_ticks(int ms)
@@ -189,10 +194,31 @@ static void link_close(link_t *lk)
     gpio_config_t io = { .pin_bit_mask = 1ULL << s_cfg.lt_tx, .mode = GPIO_MODE_OUTPUT };
     gpio_set_level(s_cfg.lt_tx, 1);
     gpio_config(&io);
-    s_lt_owned = 0;
 }
 
 int cable_test_lt_busy(void) { return s_lt_owned; }
+
+// TashTalk took none of link_open's bytes: no chip in U7, or one not running
+// TashTalk. Its device ID tells them apart (cable_core.h); the read resets the
+// PIC. Called with the link closed, and s_lt_owned still set: the pins are
+// the same, so a node starting now waits.
+static ct_tt_t chip_check(void)
+{
+    uint16_t id = 0;
+    pic_err_t e = pic_prog_read_id(&id);
+    ESP_LOGW(TAG, "TashTalk took no bytes; U7 reads 0x%04X: %s", id, pic_err_str(e));
+    switch (e) {
+    case PIC_ERR_NO_DEVICE:
+        s_dbg.devid = id;
+        return CT_TT_NO_CHIP;
+    case PIC_OK:
+    case PIC_ERR_WRONG_DEVICE:
+        s_dbg.devid = id;
+        return CT_TT_NO_TASHTALK;
+    default:
+        return CT_TT_UNCHECKED;
+    }
+}
 
 // ------------------------------------------------------------- J4 -> J2
 
@@ -330,11 +356,24 @@ void cable_test_run(cable_result_t *r, int both)
 {
     memset(r, 0, sizeof *r);
     memset(&s_dbg, 0, sizeof s_dbg);
+    s_dbg.devid = -1;
     int64_t t0 = esp_timer_get_time();
     link_t lk;
+    ct_tt_t tt = CT_TT_OK;
     r->err = link_open(&lk);
-    if (r->err != ESP_OK && lk.owned) link_close(&lk);     // TashTalk took no bytes
-    if (r->err == ESP_OK) {
+    if (r->err != ESP_OK && lk.owned) {                     // TashTalk took no bytes
+        link_close(&lk);
+        tt = chip_check();
+        r->err = ESP_OK;
+    } else if (r->err == ESP_OK && !lk.owned && !localtalk_tt_alive(ALIVE_WAIT_MS)) {
+        // The node runs whether or not TashTalk is there, and holds U7's
+        // pins: say so without asking U7, and add nothing to a UART that
+        // isn't draining.
+        if (s_cfg.lt_cts >= 0) s_dbg.cts = gpio_get_level(s_cfg.lt_cts);
+        link_close(&lk);
+        tt = CT_TT_UNCHECKED;
+    }
+    if (r->err == ESP_OK && tt == CT_TT_OK) {
         serial_out_lend(1);
         r->back_ok = back_leg(&lk, &r->err);
         // On the bench, before the node had ever run that boot, TashTalk once
@@ -352,11 +391,13 @@ void cable_test_run(cable_result_t *r, int both)
         serial_out_lend(0);
         link_close(&lk);
     }
-    r->verdict = ct_verdict(r->back_ok, r->fwd_ok);
+    s_lt_owned = 0;
+    r->verdict = ct_verdict(tt, r->back_ok, r->fwd_ok);
     if (r->err != ESP_OK)
         ESP_LOGE(TAG, "could not run: %s", esp_err_to_name(r->err));
     ESP_LOGI(TAG, "J4->J2 %s, J2->J4 %s: %s (%lld ms, %s link)",
-             r->back_ok ? "ok" : "nothing", r->fwd_ok ? "ok" : r->back_ok ? "nothing" : "not tried",
+             !ct_verdict_tested(r->verdict) ? "not tried" : r->back_ok ? "ok" : "nothing",
+             r->fwd_ok ? "ok" : r->back_ok ? "nothing" : "not tried",
              ct_verdict_name(r->verdict), (esp_timer_get_time() - t0) / 1000,
              lk.owned ? "own" : "node's");
 }
@@ -372,9 +413,10 @@ void cable_result_json(const cable_result_t *r, char *buf, size_t cap)
                      r->fwd_ok ? "true" : "false", ct_verdict_text(r->verdict));
     if (k < 0 || (size_t)k >= cap) return;
     k += snprintf(buf + k, cap - k, ",\"dbg\":{\"caps\":%d,\"syms\":[%d,%d,%d,%d,%d,%d],\"cts\":%d,"
-                  "\"tt\":[%d,%d,%d],\"reset\":%d,\"first\":\"", s_dbg.caps, s_dbg.syms[0], s_dbg.syms[1],
-                  s_dbg.syms[2], s_dbg.syms[3], s_dbg.syms[4], s_dbg.syms[5], s_dbg.cts,
-                  s_dbg.tt_frames, s_dbg.tt_bad, s_dbg.tt_err, s_dbg.reset);
+                  "\"tt\":[%d,%d,%d],\"reset\":%d,\"devid\":%d,\"first\":\"", s_dbg.caps,
+                  s_dbg.syms[0], s_dbg.syms[1], s_dbg.syms[2], s_dbg.syms[3], s_dbg.syms[4],
+                  s_dbg.syms[5], s_dbg.cts, s_dbg.tt_frames, s_dbg.tt_bad, s_dbg.tt_err, s_dbg.reset,
+                  s_dbg.devid);
     for (int i = 0; i < s_dbg.nfirst && (size_t)k < cap; i++)
         k += snprintf(buf + k, cap - k, "%02x", s_dbg.first[i]);
     if ((size_t)k < cap) snprintf(buf + k, cap - k, "\"}}");

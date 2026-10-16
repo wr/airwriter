@@ -498,7 +498,7 @@ static void test_w1049(uint8_t f[LG_NUM_LEDS][3], uint8_t g[LG_NUM_LEDS][3])
                                 : m == 2 ? moment(PS_SETUP, PS_JOINING, s)
                                          : view(PS_READY, 100000);
                     if (m == 1) v.cancelled = s & 1;
-                    if (m == 3) { v.cable = 1 + (s & 1); v.cable_ms = s; }
+                    if (m == 3) { v.cable = 1 + s % 3; v.cable_ms = s; }
                     lg_opts_t o = blip(B[k], s % L[k]);
                     lg_render(&v, &o, 60000 + s, f);
                     check_frame(f, spin_max, m == 2, 0);
@@ -868,45 +868,72 @@ int main(void)
         assert(sum[2] > sum[1] && sum[1] > sum[0]);
     }
 
-    // W-1055: a cable test's answer sweeps left to right and back over every
-    // dot, then pulses out of the test button: green for a crossover, red for
-    // anything else. The band is on column 3 at 350 ms and again at 1050 ms.
+    // W-1055: a cable test's answer stays in the bottom three rows between
+    // the sockets (columns 0-4), the rest dark. A band runs from the LocalTalk
+    // end to the printer end and back; then green glows there, or red blinks
+    // twice.
     {
         ps_view_t v = view(PS_OFFLINE, 60000);
-        int mid = idx(6, 3), edge = idx(6, 0), mask = idx(4, 3), near = idx(3, 4), far = idx(7, 4);
+        int lt_end = idx(5, 4), pr_end = idx(5, 1), mask = idx(7, 2);
+        const int outside[] = { idx(4, 2), idx(3, 4), idx(6, 6), idx(5, 6), idx(0, 4) };
         for (int k = 0; k < 2; k++) {
             v.cable = k ? PS_CABLE_FAIL : PS_CABLE_PASS;
-            v.cable_ms = 350;
+            for (uint32_t ms = 0; ms < PS_CABLE_MS; ms += 37) {
+                v.cable_ms = ms;
+                lg_render(&v, &WHITE_MODE, 0, f);
+                for (int i = 0; i < LG_NUM_LEDS; i++)
+                    assert(max3(f[i]) <= (LG_MAP[i].mat == 'P' ? LG_BRIGHTNESS_CAP : LG_MASK_CAP));
+                for (size_t j = 0; j < sizeof outside / sizeof outside[0]; j++)
+                    assert(max3(f[outside[j]]) == 0);
+                assert(lit_count(f) <= 10);
+            }
+            v.cable_ms = 30;                                 // the band starts at the LocalTalk end
             lg_render(&v, &WHITE_MODE, 0, f);
-            for (int i = 0; i < LG_NUM_LEDS; i++)
-                assert(max3(f[i]) <= (LG_MAP[i].mat == 'P' ? LG_BRIGHTNESS_CAP : LG_MASK_CAP));
-            assert(max3(f[mid]) > 2 * max3(f[edge]));        // a band, not a fill
+            assert(max3(f[lt_end]) > 2 * max3(f[pr_end]));
+            v.cable_ms = 430;                                // and reaches the printer end
+            lg_render(&v, &WHITE_MODE, 0, f);
+            assert(max3(f[pr_end]) > 2 * max3(f[lt_end]));
             assert(max3(f[mask]) > 0);                       // mask dots join in
-            if (!k) assert(f[mid][1] > f[mid][0] && f[mid][1] > f[mid][2]);
-            else    assert(f[mid][0] > f[mid][1] && f[mid][0] > f[mid][2]);
+            if (!k) assert(f[pr_end][1] > f[pr_end][0] && f[pr_end][1] > f[pr_end][2]);
+            else    assert(f[pr_end][0] > f[pr_end][1] && f[pr_end][0] > f[pr_end][2]);
+            v.cable_ms = 1030;                               // and back
+            lg_render(&v, &WHITE_MODE, 0, f);
+            assert(max3(f[lt_end]) > 2 * max3(f[pr_end]));
         }
-        v.cable = PS_CABLE_PASS;
-        v.cable_ms = 1050;
+        v.cable = PS_CABLE_PASS;                             // green glows over the strip
+        v.cable_ms = 1500;
         lg_render(&v, &WHITE_MODE, 0, f);
-        assert(max3(f[mid]) > 2 * max3(f[edge]));
-        v.cable_ms = 1400;                                   // the pulse starts at the button
-        lg_render(&v, &WHITE_MODE, 0, f);
-        assert(max3(f[near]) > 2 * max3(f[far]));
-        v.cable_ms = 1400 + 590;                             // and reaches the bottom row
-        lg_render(&v, &WHITE_MODE, 0, f);
-        assert(max3(f[far]) > max3(f[near]));
+        assert(lit_count(f) == 10);
+        assert(f[lt_end][1] > f[lt_end][0] && f[pr_end][1] > f[pr_end][2]);
         v.cable_ms = PS_CABLE_MS - 1;                        // faded out
         lg_render(&v, &WHITE_MODE, 0, f);
         assert(lit_count(f) == 0);
-        // Red instead blinks the six dots around the button twice, the rest dark.
+        // Red instead blinks the strip twice.
         v.cable = PS_CABLE_FAIL;
-        const uint32_t at[] = { 1500, 1700, 1900, 2100 };
+        const uint32_t at[] = { 1300, 1500, 1700, 1900 };
         const int lit[] = { 1, 0, 1, 0 };
         for (int k = 0; k < 4; k++) {
             v.cable_ms = at[k];
             lg_render(&v, &WHITE_MODE, 0, f);
-            assert(lit_count(f) == (lit[k] ? 6 : 0));
-            if (lit[k]) assert(f[near][0] > f[near][1] && max3(f[far]) == 0);
+            assert(lit_count(f) == (lit[k] ? 10 : 0));
+            if (lit[k]) assert(f[lt_end][0] > f[lt_end][1]);
+        }
+    }
+
+    // W-1063: with no TashTalk to run the test, no sweep: the five dots by the
+    // LocalTalk socket blink red twice, the rest dark, and that's all.
+    {
+        ps_view_t v = view(PS_OFFLINE, 60000);
+        v.cable = PS_CABLE_NO_CHIP;
+        int lt = idx(7, 4), button = idx(3, 4), top = idx(0, 4);
+        const uint32_t at[] = { 100, 300, 500, 700, 900 };
+        const int lit[] = { 0, 1, 0, 1, 0 };
+        for (int k = 0; k < 5; k++) {
+            v.cable_ms = at[k];
+            lg_render(&v, &WHITE_MODE, 0, f);
+            assert(lit_count(f) == (lit[k] ? 5 : 0));
+            if (lit[k]) assert(f[lt][0] > f[lt][1] && f[lt][0] > f[lt][2]);
+            assert(max3(f[button]) == 0 && max3(f[top]) == 0);
         }
     }
 

@@ -174,18 +174,32 @@ int ct_capture_has(const uint32_t *ticks, size_t n, uint32_t res_hz,
 
 // ------------------------------------------------------------- verdict
 
-ct_verdict_t ct_verdict(int back_ok, int fwd_ok)
+ct_verdict_t ct_verdict(ct_tt_t tt, int back_ok, int fwd_ok)
 {
+    switch (tt) {
+    case CT_TT_OK:          break;
+    case CT_TT_NO_CHIP:     return CT_NO_CHIP;
+    case CT_TT_NO_TASHTALK: return CT_NO_TASHTALK;
+    case CT_TT_UNCHECKED:   return CT_CHIP_SILENT;
+    }
     if (!back_ok) return CT_NO_LOOP;
     return fwd_ok ? CT_PASS : CT_ONE_WAY;
+}
+
+int ct_verdict_tested(ct_verdict_t v)
+{
+    return v == CT_PASS || v == CT_NO_LOOP || v == CT_ONE_WAY;
 }
 
 const char *ct_verdict_name(ct_verdict_t v)
 {
     switch (v) {
-    case CT_PASS:    return "pass";
-    case CT_NO_LOOP: return "no_loop";
-    case CT_ONE_WAY: return "one_way";
+    case CT_PASS:        return "pass";
+    case CT_NO_LOOP:     return "no_loop";
+    case CT_ONE_WAY:     return "one_way";
+    case CT_NO_CHIP:     return "no_chip";
+    case CT_NO_TASHTALK: return "no_tashtalk";
+    case CT_CHIP_SILENT: return "chip_silent";
     }
     return "?";
 }
@@ -203,6 +217,16 @@ const char *ct_verdict_text(ct_verdict_t v)
     case CT_ONE_WAY:
         return "The cable is crossed but one wire pair is broken: the one that carries "
                "print data to the printer.";
+    case CT_NO_CHIP:
+        return "No cable was tested: AirWriter can't find a LocalTalk chip, and the test "
+               "runs through it. See LocalTalk Chip (TashTalk) in the AirWriter wiki.";
+    case CT_NO_TASHTALK:
+        return "No cable was tested: the LocalTalk chip isn't running TashTalk, and the "
+               "test runs through it. Press flash, then test again.";
+    case CT_CHIP_SILENT:
+        return "No cable was tested: the LocalTalk chip isn't answering, and the test runs "
+               "through it. It may be missing or need TashTalk: turn LocalTalk off (DIP "
+               "switch 2), restart, and test again to find out.";
     }
     return "";
 }
