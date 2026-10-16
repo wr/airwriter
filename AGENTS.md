@@ -122,6 +122,15 @@ Linear is the queue; these are the live items.
   2026-10-15. Host-tested against `fixtures/pap-iw701-page.bin`, and on board 1 a real Mac job went
   from PAP through `serial_out` byte for byte (UART loopback, `CONFIG_AIRWRITER_LT_BENCH`). Still
   owed: a paper test, which needs a second crossover cable for J2 while the Mac's is on J4.
+- `W-1048 OTA updates from GitHub releases: signed, verified, optional auto-update`: benched on
+  board 1 on 2026-10-16, all pass. v0.1.0 went on by `/update`; with auto on, the board found,
+  installed and kept v0.1.1 by itself; `/update` refused a tampered image, one signed with
+  another key and an unsigned one; a tampered release was refused from GitHub; a print job sent
+  mid-download stopped the download and printed. Releases v0.1.0 and v0.1.1 were cut from the
+  branch before its merge. Still owed: board 1's factory slot holds an unsigned W-1046 build, so
+  a full factory reset brings back firmware that takes any image, until a USB write of a release
+  (`esptool.py write_flash 0x20000 airwriter-esp32s3.bin`). The panel overlays for an update are
+  `W-1049 Panel feedback for every action: OTA, reset, cables, TashTalk flash`.
 - Not in Linear: scope HSKo during a long job (SPEC §3.9 timing).
 
 ## Toolchain
