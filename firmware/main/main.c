@@ -93,6 +93,12 @@ static const char *TAG = "airwriter";
 #error "the factory reset must trigger on a pressed (low) button and boot the factory slot"
 #endif
 #endif
+// W-1048: an image that is not signed would refuse every update after it
+// (IDF trusts the key that signed the running image), so every build is.
+#if !CONFIG_SECURE_SIGNED_APPS_NO_SECURE_BOOT || !CONFIG_SECURE_SIGNED_APPS_RSA_SCHEME || \
+    !CONFIG_SECURE_SIGNED_ON_UPDATE_NO_SECURE_BOOT || !CONFIG_SECURE_BOOT_BUILD_SIGNED_BINARIES
+#error "sdkconfig predates W-1048: copy the signing options from sdkconfig.defaults"
+#endif
 _Static_assert(LG_RESET_FILL_MS == BTN_FILL_MS,
                "the panel's countdown must run out when the button commits");
 
