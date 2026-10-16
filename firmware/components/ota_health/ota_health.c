@@ -11,7 +11,6 @@
 
 #include <string.h>
 #include "esp_app_desc.h"
-#include "esp_image_format.h"
 #include "esp_log.h"
 #include "esp_ota_ops.h"
 #include "esp_timer.h"
@@ -74,23 +73,17 @@ static const uint8_t *running_sha(void)
 
 // The record was read or written: what the status page shows is what the
 // power-up reset would trust, or nothing if the named slot holds another
-// image now, a damaged one, or none (the reset then boots the newest kept
-// one). The whole-image check is the bootloader's own, about 0.2 s.
+// image now, or none (the reset then boots the newest kept one).
 static void describe_good(const kg_rec_t two[2])
 {
     const esp_partition_t *p = slot_part(s_good);
     esp_app_desc_t d;
     int ok = p && esp_ota_get_partition_description(p, &d) == ESP_OK;
     s_good_slot[0] = s_good_ver[0] = '\0';
-    if (!ok || !kg_vouches(two, s_nslots, s_good, d.app_elf_sha256)) return;
-    esp_image_metadata_t md;
-    const esp_partition_pos_t pos = { .offset = p->address, .size = p->size };
-    if (esp_image_verify(ESP_IMAGE_VERIFY_SILENT, &pos, &md) != ESP_OK) {
-        ESP_LOGE(TAG, "%s, the known-good image, is damaged", p->label);
-        return;
+    if (ok && kg_vouches(two, s_nslots, s_good, d.app_elf_sha256)) {
+        strncpy(s_good_slot, p->label, sizeof s_good_slot - 1);
+        strncpy(s_good_ver, d.version, sizeof s_good_ver - 1);
     }
-    strncpy(s_good_slot, p->label, sizeof s_good_slot - 1);
-    strncpy(s_good_ver, d.version, sizeof s_good_ver - 1);
 }
 
 static void kg_start(const esp_partition_t *run)
@@ -118,7 +111,7 @@ static void kg_start(const esp_partition_t *run)
         ESP_LOGI(TAG, "known-good firmware: %s %s%s", s_good_slot, s_good_ver,
                  kg_current(two) < 0 ? " (blank record: what a USB flash wrote)" : "");
     else
-        ESP_LOGW(TAG, "ota_%d does not hold the known-good image now", s_good);
+        ESP_LOGW(TAG, "ota_%d no longer holds the known-good image", s_good);
 }
 
 // Takes over the record if this image has earned it. Any task.

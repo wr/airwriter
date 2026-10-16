@@ -46,6 +46,10 @@ Traps already explained in a code comment are listed only when the comment is ea
   air.** A bug there needs a USB flash on every board. Bench every reset path after changing it
   (`docs/superpowers/specs/2026-10-16-known-good-slot-design.md`), and keep it inside the
   bootloader's 9 s watchdog: the 5 s hold, the image checks and the app's start all count.
+- **`esp_image_verify` in the app checks the RSA signature too** (signed updates), and that
+  overflows `app_main`'s stack: the board crash-loops at boot. Board 1 did, once, from a status
+  check on the known-good slot (W-1059). The bootloader's check has no such cost; leave whole-
+  image checks to it, or run them on a task with a large stack.
 - **`idf.py app-flash` writes ota_0 and nothing else.** otadata may boot another slot, so the
   board can keep running the old image, and ota_0 may be the known-good slot. Use `idf.py flash`,
   which also blanks otadata and the record.
