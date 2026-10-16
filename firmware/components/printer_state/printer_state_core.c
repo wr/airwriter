@@ -9,7 +9,7 @@ void ps_init(ps_t *ps, const ps_timing_t *tm, uint64_t now)
     memset(ps, 0, sizeof *ps);
     ps->tm = *tm;
     ps->boot_at = ps->line_since = ps->activity_at = ps->state_since = now;
-    ps->last = PS_BOOTING;
+    ps->last = ps->prev = PS_BOOTING;
 }
 
 void ps_post(ps_t *ps, ps_event_t ev, uint64_t now)
@@ -27,10 +27,11 @@ void ps_post(ps_t *ps, ps_event_t ev, uint64_t now)
         if (ps->line_ready) { ps->line_ready = 0; ps->line_since = now; }
         break;
     case PS_EV_JOB_START:
-        ps->job = 1; ps->failed = 0; ps->activity_at = now;
+        ps->job = 1; ps->failed = 0; ps->cancelled = 0; ps->activity_at = now;
         ps->job_started_low = !ps->line_ready;
         break;
     case PS_EV_JOB_DONE:   ps->job = 0; break;
+    case PS_EV_JOB_CANCELLED: ps->job = 0; ps->cancelled = 1; break;
     case PS_EV_JOB_FAILED: ps->job = 0; ps->failed = 1; ps->failed_at = now; break;
     case PS_EV_ACTIVITY:   ps->activity_at = now; break;
     }
@@ -82,11 +83,13 @@ ps_view_t ps_update(ps_t *ps, uint64_t now)
     if (st != ps->last) {
         if (st == PS_READY)
             ps->greeted = ps->last == PS_JOINING || ps->last == PS_BOOTING;
+        ps->prev = ps->last;
         ps->last = st;
         ps->state_since = now;
         ps->activity_at = now;
     }
-    ps_view_t v = { .state = st, .since_ms = sat32(now - ps->state_since) };
+    ps_view_t v = { .state = st, .prev = ps->prev, .cancelled = ps->cancelled,
+                    .since_ms = sat32(now - ps->state_since) };
     v.phone_joined = st == PS_SETUP && ps->ap_stations > 0;
     v.greeted      = st == PS_READY && ps->greeted;
     if (ps->cable && now - ps->cable_at < PS_CABLE_MS &&

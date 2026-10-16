@@ -25,6 +25,7 @@ typedef enum {
     PS_EV_JOB_DONE,
     PS_EV_JOB_FAILED,
     PS_EV_ACTIVITY,         // a person did something: wake the panel
+    PS_EV_JOB_CANCELLED,    // the job was cancelled: ends it as JOB_DONE does (W-1049)
 } ps_event_t;
 
 typedef struct {
@@ -50,11 +51,15 @@ typedef struct {
     uint8_t     setup, wifi_up, line_ready, job, failed, ap_stations, greeted, kicked;
     uint8_t     job_started_low;   // the line was down when this job began: no printer to wait for
     uint8_t     cable;             // PS_CABLE_*, the last test's result, or 0
-    ps_state_t  last;
+    uint8_t     cancelled;         // the last job was cancelled, not finished
+    ps_state_t  last, prev;
 } ps_t;
 
 typedef struct {
     ps_state_t state;
+    ps_state_t prev;          // the state before this one (BOOTING at first): the panel's
+                              // moments are drawn from it (W-1049)
+    uint8_t    cancelled;     // the last job was cancelled, not finished
     uint8_t    phone_joined;  // SETUP only: a station is on the access point
     uint8_t    greeted;       // READY only: entered straight from JOINING or BOOTING,
                               // i.e. Wi-Fi just connected -- the panel's green moment

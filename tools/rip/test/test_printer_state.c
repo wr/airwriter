@@ -263,6 +263,38 @@ int main(void)
     v = ps_update(&ps, 10000);
     assert(v.state == PS_SETUP && v.cable == PS_CABLE_PASS);
 
+    // W-1049: the view carries the state before this one, which the panel's
+    // moments are drawn from.
+    up_and_ready(&ps, 0);
+    v = ps_update(&ps, 3000);             // Wi-Fi came up during the Spin
+    assert(v.state == PS_READY && v.prev == PS_BOOTING);
+    ps_post(&ps, PS_EV_LINE_NOT_READY, 4000);
+    v = ps_update(&ps, 7000);
+    assert(v.state == PS_OFFLINE && v.prev == PS_READY);
+    ps_post(&ps, PS_EV_LINE_READY, 8000);
+    v = ps_update(&ps, 8000);
+    assert(v.state == PS_READY && v.prev == PS_OFFLINE);
+    // Still the state before this one, however long this one lasts.
+    v = ps_update(&ps, 20000);
+    assert(v.state == PS_READY && v.prev == PS_OFFLINE);
+    ps_init(&ps, &TM, 0);
+    assert(ps_update(&ps, 0).prev == PS_BOOTING);
+
+    // A cancelled job ends as a done one does, and says so until the next
+    // job starts.
+    up_and_ready(&ps, 0);
+    ps_post(&ps, PS_EV_JOB_START, 5000);
+    assert(st(&ps, 5000) == PS_PRINTING);
+    ps_post(&ps, PS_EV_JOB_CANCELLED, 6000);
+    v = ps_update(&ps, 6000);
+    assert(v.state == PS_READY && v.prev == PS_PRINTING && v.cancelled);
+    ps_post(&ps, PS_EV_JOB_START, 7000);
+    v = ps_update(&ps, 7000);
+    assert(v.state == PS_PRINTING && !v.cancelled);
+    ps_post(&ps, PS_EV_JOB_DONE, 8000);
+    v = ps_update(&ps, 8000);
+    assert(v.state == PS_READY && v.prev == PS_PRINTING && !v.cancelled);
+
     assert(strcmp(ps_name(PS_READY), "ready") == 0);
     assert(strcmp(ps_name(PS_OFFLINE), "offline") == 0);
     assert(strcmp(ps_name(PS_ATTENTION), "attention") == 0);
