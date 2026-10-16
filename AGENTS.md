@@ -125,21 +125,23 @@ Linear is the queue; these are the live items.
 - `W-567 M6 — Manners: paper-out, cancel, web UI, provisioning, OTA` (backlog).
 - `W-1046 Factory reset must always work, even with broken firmware` and
   `W-1045 Long-press factory reset with live feedback on the LED panel`: merged 2026-10-15, benched
-  on board 1 (all pass). Board 1 has the W-1046 bootloader and partition table, so an image
-  without W-1046 OTA'd onto it is rolled back at its next reboot (`docs/traps.md`).
+  on board 1 (all pass). Board 1 has the W-1059 bootloader and partition table, so an image
+  without W-1046 OTA'd onto it is rolled back at its next reboot, and one without W-1059 may
+  overwrite the known-good slot (`docs/traps.md`).
 - `W-1053 LocalTalk: print PAP jobs from the Mac's AppleTalk ImageWriter driver`: merged
   2026-10-15. Host-tested against `fixtures/pap-iw701-page.bin`, and on board 1 a real Mac job went
   from PAP through `serial_out` byte for byte (UART loopback, `CONFIG_AIRWRITER_LT_BENCH`). Still
   owed: a paper test, which needs a second crossover cable for J2 while the Mac's is on J4.
 - `W-1048 OTA updates from GitHub releases: signed, verified, optional auto-update`: merged
   2026-10-16, benched on board 1 (all pass): `/update` and GitHub both refuse tampered, foreign-key
-  and unsigned images, auto-update found and kept v0.1.1, and a job mid-download wins. Board 1's
-  factory slot still holds an unsigned W-1046 build; it is not being replaced, because
-  `W-1059 Known-good slot: factory reset boots the last version that worked` removes the fixed
-  factory slot.
-- `W-1059 Known-good slot: factory reset boots the last version that worked`: three equal slots
-  and a record of the last good one, which the power-up reset boots. Needs a bootloader hook and
-  one USB flash of board 1.
+  and unsigned images, auto-update found and kept v0.1.1, and a job mid-download wins.
+- `W-1059 Known-good slot: factory reset boots the last version that worked`: benched on board 1
+  2026-10-16, all pass. After its one USB flash (Wi-Fi kept), B went to ota_1, printed and became
+  known-good, and C went to ota_2. A power cut 61% into D's upload left C running, and D then went
+  to ota_0, not B's slot. Three power-up resets: the first booted B (0.25 s after the 5 s hold),
+  one with the record blanked booted ota_0, and one with the known-good image damaged booted the
+  last kept image. The panel showed the reset. No release carries it yet: the next one should,
+  and the wiki edits (Test Button, Troubleshooting, Settings and Updates) are pushed with the merge.
 - `W-1049 Panel feedback for every action: OTA, reset, cables, TashTalk flash`: merged 2026-10-16,
   benched on board 1 (Wells by eye), quiet power-on included: a normal boot shows only the Spin
   until Wi-Fi and the printer settle (3-30 s). Held back by Wells: update kept, update refused,
@@ -185,7 +187,8 @@ Linear is the queue; these are the live items.
   refuses to build without them. Losing the key means a USB flash for every board.
 - `firmware/sdkconfig` is gitignored and holds the Wi-Fi credentials (menuconfig, AirWriter
   menu); NVS namespace `wifi` overrides it. `sdkconfig.defaults{,.esp32s3}` only seed a new one;
-  main.c refuses to build an sdkconfig without rollback and the factory reset, or without signing.
+  main.c refuses to build an sdkconfig without rollback, with IDF's own factory reset, or without
+  signing.
 - **Enclosure:** build123d; `enclosure/build.sh` runs the tests then writes `out/*.{step,stl}`.
   The lattice's part clearances come from kicad-cli's STEP export, so the build needs kicad-cli.
   `enclosure/tools/render.py` (PNG views) and `tools/coupon.py` (fit-test cut-outs) need
@@ -224,6 +227,10 @@ Linear is the queue; these are the live items.
 - Read `/api/status` (`ps`) before judging the panel: a deselected printer shows offline embers,
   not Ready.
 - A slow upload is the link until proven otherwise: check `rssi` in the `doc_begin` log.
+- A power-up reset erases board 1's Wi-Fi (no credentials in its sdkconfig): it comes back on the
+  open `AirWriter-2434` network, and Wells sets it up again at http://192.168.4.1/. Read its
+  console with `idf.py monitor --no-reset` attached before the reset, which keeps the reset's
+  own log.
 
 ## Layout
 ```
