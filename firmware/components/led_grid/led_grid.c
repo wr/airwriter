@@ -11,6 +11,8 @@
 #include "led_strip.h"
 #include "printer_state.h"
 
+#define LG_RMT_SYMBOLS 1024    // the DMA buffer: one frame of 37 LEDs is 888
+
 static led_strip_handle_t s_strip;
 static int s_count;
 static volatile uint8_t s_gamer;   // DIP7, set from dip_config's task
@@ -78,7 +80,14 @@ esp_err_t led_grid_start(void)
         .led_model = LED_MODEL_SK6812,
         .color_component_format = LED_STRIP_COLOR_COMPONENT_FMT_GRB,
     };
-    led_strip_rmt_config_t rc = { .resolution_hz = 10 * 1000 * 1000 };
+    // The whole frame (24 bits a LED) goes out of one DMA buffer. With the
+    // default 48-symbol RMT block an interrupt has to refill it every ~30 us,
+    // and that interrupt is not cache-safe: during a Wi-Fi join (the scan, the
+    // handshake, NVS writes with the cache off) a late refill sent stale bits
+    // and the Spin stuttered (W-1049 bench). The S3 has one DMA TX channel.
+    _Static_assert(CONFIG_AIRWRITER_LED_COUNT * 24 < LG_RMT_SYMBOLS, "frame must fit the DMA buffer");
+    led_strip_rmt_config_t rc = { .resolution_hz = 10 * 1000 * 1000,
+                                  .mem_block_symbols = LG_RMT_SYMBOLS, .flags.with_dma = true };
     esp_err_t err = led_strip_new_rmt_device(&sc, &rc, &s_strip);
     if (err != ESP_OK) return err;
     led_strip_clear(s_strip);
