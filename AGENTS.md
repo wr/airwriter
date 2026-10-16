@@ -58,10 +58,12 @@ What works on `main`:
 - DIP switches read by their printed numbers; a tap of the `test` button prints a test page, or
   with the printer not ready runs the cable test; a second tap cancels the test page; a tap during
   another job shows Busy.
-- Recovery (SPEC §3.11): a `factory` slot beside ota_0/ota_1; a new OTA image runs on trial and
-  rolls back unless healthy (`/api/status` `slot`, `trial`, `rolled_back`). Holding `test` 8 s
-  erases the settings with a countdown on the panel; holding it through power-up for 5 s makes
-  the bootloader erase them and boot the factory slot.
+- Recovery (SPEC §3.11): three equal app slots and a `known_good` record naming the last image
+  that was kept and finished a real print; updates never write the running or known-good slot.
+  A new OTA image runs on trial and rolls back unless healthy (`/api/status` `slot`, `trial`,
+  `rolled_back`, `known_good`). Holding `test` 8 s erases the settings with a countdown on the
+  panel; holding it through power-up for 5 s makes the bootloader hook erase them and boot the
+  known-good slot.
 - Signed updates (SPEC §3.12): only images signed with the release key install, from GitHub
   releases or `/update`; the web page's firmware section checks, installs and switches
   auto-update (off by default). An update holds the job lock to its restart and gives way to a
@@ -165,12 +167,14 @@ Linear is the queue; these are the live items.
   first, then from `firmware/`:
   - build: `idf.py build`
   - flash over USB: `idf.py -p /dev/cu.usbmodem1101 flash` writes the bootloader, partition
-    table, a blank otadata and the app into the factory slot, so the board boots that (leaves the
-    printer not-ready until SELECT is toggled)
+    table, a blank otadata, a blank known-good record and the app into ota_0, so the board boots
+    that and its power-up reset returns to it (leaves the printer not-ready until SELECT is
+    toggled)
   - OTA: `curl -m 180 --data-binary @build/airwriter.bin http://10.0.1.115/update` (bench rules
-    first). It lands in ota_0/ota_1 on trial: `/update` refuses another until `/api/status`
-    shows `"trial":false` (up to 2 min). The image must be signed with the key that signed the
-    running one (409 while a job prints, 400 for an unsigned or tampered image)
+    first). It lands on trial in the slot that is neither running nor known-good: `/update`
+    refuses another until `/api/status` shows `"trial":false` (up to 2 min). The image must be
+    signed with the key that signed the running one (409 while a job prints, 400 for an
+    unsigned or tampered image)
   - release: `tools/release/release.sh vX.Y.Z [notes]` from a clean `main` level with origin
     (`--dry-run` builds and checks only). It builds from `sdkconfig.defaults` alone, never the
     local sdkconfig, and publishes `airwriter-esp32s3.bin` + `airwriter.json`
@@ -189,7 +193,8 @@ Linear is the queue; these are the live items.
 
 ## Verification
 - **Host tests:** `make -C tools/rip test` (raster path, serial writer, printer_state, led_grid,
-  dip_config, pic_prog, localtalk, cable, fw_update) and `make -B -C tools/ipp test` (`-B`: `tools/ipp/build/` is committed).
+  dip_config, pic_prog, localtalk, cable, fw_update, known_good) and `make -B -C tools/ipp test`
+  (`-B`: `tools/ipp/build/` is committed).
 - **Raster regression:** `make -C tools/rip regress`; `stream.bin` must match the fixtures byte
   for byte. No ESP32 needed.
 - **Firmware:** `idf.py build` clean.
@@ -226,7 +231,8 @@ hardware/airwriter/   KiCad 10 main board (sch, pcb, lib/, route.py, stitch.py, 
 hardware/panel/       art panel generator (Figma SVG → panel.kicad_pcb)
 hardware/combined/    the snap-apart order panel and make_fab.sh; combined-fab.zip is the order
 firmware/             ESP-IDF 5.5 app; components/ per SPEC §3.1 plus job_pipe, led_grid, pic_prog,
-                      ota_health …; bootloader_components/ holds the bootloader's pin-clamp hook
+                      ota_health …; bootloader_components/ holds the bootloader's pin clamps
+                      and power-up reset
 tools/rip/            host build of the raster path + host tests for the pure-C cores
 tools/ipp/            IPP host tests and gpa_server (the real encoder on localhost for ipptool)
 tools/ippcap/         stub IPP server that captures a Print-Job body (how fixtures were made)

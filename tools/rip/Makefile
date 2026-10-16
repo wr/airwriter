@@ -45,6 +45,9 @@ build/test_dip_config: test/test_dip_config.c ../../firmware/components/dip_conf
 build/test_ota_health: test/test_ota_health.c ../../firmware/components/ota_health/ota_health_core.c | build
 	$(CC) $(CFLAGS) -I../../firmware/components/ota_health/include -Itest -o $@ $^
 
+build/test_known_good: test/test_known_good.c ../../firmware/components/ota_health/known_good_core.c | build
+	$(CC) $(CFLAGS) -I../../firmware/components/ota_health/include -Itest -o $@ $^
+
 build/test_fw_update: test/test_fw_update.c ../../firmware/components/fw_update/fw_update_core.c | build
 	$(CC) $(CFLAGS) -I../../firmware/components/fw_update/include -Itest -o $@ $^
 

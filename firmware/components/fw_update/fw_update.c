@@ -142,7 +142,8 @@ esp_err_t fw_update_stream_begin(size_t len, const char **why)
 {
     esp_err_t err = claim(why);
     if (err != ESP_OK) return err;
-    const esp_partition_t *part = s_part = esp_ota_get_next_update_partition(NULL);
+    // Never the running slot or the known-good one (W-1059).
+    const esp_partition_t *part = s_part = ota_health_update_target();
     err = part ? esp_ota_begin(part, len, &s_ota) : ESP_ERR_NOT_FOUND;
     if (err != ESP_OK) {
         *why = err == ESP_ERR_OTA_ROLLBACK_INVALID_STATE
@@ -371,9 +372,14 @@ static void do_install(const char *tag, int automatic)
     progress(0, 0);
     esp_http_client_config_t hc;
     http_cfg(&hc, url);
-    esp_https_ota_config_t oc = { .http_config = &hc };
+    // Left NULL, esp_https_ota would pick IDF's next slot, which may be the
+    // known-good one (W-1059).
+    esp_https_ota_config_t oc = { .http_config = &hc,
+                                  .partition.staging = ota_health_update_target() };
     esp_https_ota_handle_t h = NULL;
-    esp_err_t err = esp_https_ota_begin(&oc, &h);
+    esp_err_t err = ESP_ERR_NOT_FOUND;
+    if (!oc.partition.staging) { why = "no slot to install into"; goto fail; }
+    err = esp_https_ota_begin(&oc, &h);
     if (err != ESP_OK) { why = "could not download the release"; goto fail; }
 
     // The image's own description, before the rest of it comes down. It is

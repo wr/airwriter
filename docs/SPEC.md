@@ -365,19 +365,36 @@ flash) and commit it as a fixture.
 
 An owner must always be able to get back to a working printer without a computer
 (`W-1046 Factory reset must always work, even with broken firmware`,
-`W-1045 Long-press factory reset with live feedback on the LED panel`).
+`W-1045 Long-press factory reset with live feedback on the LED panel`,
+`W-1059 Known-good slot: factory reset boots the last version that worked`; design in
+`docs/superpowers/specs/2026-10-16-known-good-slot-design.md`).
 
 **Partitions** (`firmware/partitions.csv`, 8 MB): nvs 24K at 0x9000, otadata at 0xf000,
-phy_init, **factory** 2M at 0x20000, ota_0 2M at 0x220000, ota_1 2M at 0x420000, storage 1.9M.
-The factory slot holds the image the board shipped with and is never written over the air.
+phy_init, **known_good** 8K at 0x12000, ota_0 2M at 0x20000, ota_1 2M at 0x220000, ota_2 2M at
+0x420000, storage 1.9M. Three equal app slots, no factory slot.
+
+**The known-good slot.** `known_good` holds a 16-byte record (magic, sequence number, slot,
+CRC-32) twice, one per 4 KB sector; the valid copy with the higher number names the slot, and a
+blank or damaged record means ota_0. A new copy goes into the sector that does not hold the
+current one, so a power cut leaves the old one in charge (`components/ota_health/
+known_good_core.c`, which the bootloader hook builds too). The running image points the record
+at its own slot once it is kept (not on trial) and has finished a real print: an IPP or
+LocalTalk job that ran to its end with every byte taken by the printer, not the test page or a
+cancelled, failed or cut-short job. That is one small write per update, made under the job
+lock. Nothing is ever copied between slots. An update goes into the first slot after the
+running one that is neither the running slot nor the known-good one, so the known-good image is
+never overwritten. `idf.py flash` writes a blank record beside the blank otadata, so a USB
+flash starts with the app it wrote (ota_0) as known-good.
 
 **Rollback** (`CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE`). A new OTA image boots on trial and keeps
 itself only after 15 s of unbroken health: with Wi-Fi credentials, joined and with IPP and the
 web UI listening; without them, the setup AP and web UI up (`components/ota_health`). Not
 healthy 120 s after boot, it marks itself invalid and reboots into the image before it; a
 crash or reboot during the trial is rolled back by the bootloader itself. While an image is
-on trial `/update` refuses another. `/api/status` carries `slot`, `trial` and `rolled_back`
-(the version last rolled back from, or empty).
+on trial `/update` refuses another. A failed trial goes back to the image that was running
+before the update (otadata's other entry), not to the known-good one. `/api/status` carries
+`slot`, `trial`, `rolled_back` (the version last rolled back from, or empty), `known_good` (the
+slot the power-up reset boots) and `known_good_version`.
 
 **Factory reset, two levels, both on the test button** (SW3, IO14):
 
@@ -385,29 +402,40 @@ on trial `/update` refuses another. `/api/status` carries `slot`, `trial` and `r
   past 1 s the panel counts down; letting go cancels. At 8 s the whole nvs partition is erased
   (Wi-Fi, queue name, hostname, dither, the LocalTalk node ID) and the board restarts once the
   button is let go. The firmware stays.
-- *Everything*, in the bootloader (W-1046). Hold the button while powering up (plug in, or
-  the reset pinhole) and keep holding for 5 s: the bootloader erases nvs and otadata and boots
-  the factory slot, whatever state the app is in. The panel stays dark while the button is
-  held (the bootloader has no LED driver; a bootloader hook clamps IO48, IO35 and IO4 so the
-  hold does not leave them floating), then spins, then shows the reset's confirmation.
+- *Settings and firmware*, in the bootloader (W-1046, W-1059). Hold the button while powering
+  up (plug in, or the reset pinhole) and keep holding for 5 s: the bootloader erases nvs and
+  boots the known-good slot, whatever state the app is in. A hook does it
+  (`bootloader_components/airwriter_boot`; IDF's `CONFIG_BOOTLOADER_FACTORY_RESET` is off,
+  because it would boot ota_0): it reads the record, checks the known-good image the way the
+  bootloader checks any image, and if that fails tries the slot otadata was booting, then the
+  rest from ota_0 up. It writes an otadata entry for the first that checks out (state valid,
+  in the sector not holding the active entry, as `esp_ota_set_boot_partition` does), erases
+  nvs, and leaves the RTC flag the app reads for the panel cue; the bootloader's own slot
+  choice then boots it. The bootloader never writes the record: a fallback image becomes
+  known-good after its first real print. The panel stays dark while the button is held (the
+  bootloader has no LED driver; the hook first clamps IO48, IO35 and IO4 so the hold does not
+  leave them floating), then spins, then shows the reset's confirmation.
 
 IO14 is not a strapping pin (the S3's are IO0, IO3, IO45, IO46), and SW3 shorts it straight to
 GND with no external pull-up or capacitor; the bootloader enables the internal pull-up before
 it reads. A press already down when the app starts is the tail of the bootloader's hold, and
-the app ignores it until it is let go. A build with Wi-Fi credentials in its `sdkconfig` (board
-1's) rejoins them after either reset; a shipping build has none and comes back in setup mode.
+the app ignores it until it is let go. A build with Wi-Fi credentials in its `sdkconfig` rejoins
+them after either reset; one without (board 1's, and every release) comes back in setup mode.
+The bootloader cannot be updated over the air, so the hook is the one piece a mistake in which
+needs a USB flash on every board.
 
-**Moving a board from the old table takes one USB flash**, because an OTA cannot rewrite the
+**Moving a board from an older table takes one USB flash**, because an OTA cannot rewrite the
 bootloader or the partition table. `idf.py -p PORT flash` writes the bootloader, the table, a
-blank otadata and the app into the factory slot; nvs, otadata and phy_init kept their offsets,
-so Wi-Fi credentials and settings survive it. An existing `sdkconfig` needs the options from
-`sdkconfig.defaults` and `sdkconfig.defaults.esp32s3` (main.c refuses to build without them).
-The new app OTA'd onto a board still on the old table runs, but logs that it has no factory
-slot.
+blank otadata, a blank record and the app into ota_0 (where the factory slot was); nvs, otadata
+and phy_init kept their offsets, so Wi-Fi credentials and settings survive it, and whatever the
+old slots held now sits in ota_1 and ota_2 until updates overwrite it. An existing `sdkconfig`
+needs the options from `sdkconfig.defaults` and `sdkconfig.defaults.esp32s3` (main.c refuses to
+build without them). This firmware OTA'd onto a board still on the W-1046 table runs, logs that
+it has no `known_good` partition, updates into IDF's next slot and never promotes; that board's
+power-up reset still boots its factory slot.
 
 Over the air, only signed images install (§3.12), and an update waits for, and gives way to,
-a print job. The factory slot must hold a signed release build, or a factory reset brings back
-firmware that takes any image.
+a print job. A USB flash must write a signed build, or the board takes any image once.
 
 ### 3.12 Updates: signed images, GitHub releases, auto-update
 
@@ -441,7 +469,8 @@ anything else (`v0.1.0-3-gabc1234-dirty`) is a dev build, and a release is newer
 **When.** An update takes the job lock without waiting and holds it to the restart. A job that
 finds the lock taken raises a flag, and the update aborts at its next chunk and lets the job
 print; `/update` answers 409. Not while the last update is on trial, never in setup mode
-(GitHub path), never into the factory slot.
+(GitHub path), never into the running or the known-good slot (§3.11; `esp_https_ota` gets the
+slot as `partition.staging`).
 
 **Auto-update** (`airwriter`/`autoupd` in NVS, off by default, the web page's auto key). Off,
 the board never contacts GitHub by itself; opening the web page checks at most hourly. On, it

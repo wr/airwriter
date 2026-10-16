@@ -42,7 +42,7 @@
 #include "cable_test.h"
 #include "esp_app_desc.h"
 #include "esp_partition.h"
-#if CONFIG_BOOTLOADER_FACTORY_RESET
+#if CONFIG_BOOTLOADER_RESERVE_RTC_MEM
 #include "bootloader_common.h"
 #endif
 
@@ -83,16 +83,16 @@ static const char *TAG = "airwriter";
 #if !CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE
 #error "sdkconfig predates W-1046: enable CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE (sdkconfig.defaults)"
 #endif
-#if CONFIG_IDF_TARGET_ESP32S3 && !CONFIG_BOOTLOADER_FACTORY_RESET
-#error "sdkconfig predates W-1046: copy the factory-reset options from sdkconfig.defaults.esp32s3"
-#endif
+// W-1059: the power-up reset is the bootloader hook's (airwriter_boot). IDF's
+// own would erase otadata and boot ota_0 instead of the known-good slot.
 #if CONFIG_BOOTLOADER_FACTORY_RESET
-#if CONFIG_BOOTLOADER_NUM_PIN_FACTORY_RESET != CONFIG_AIRWRITER_TEST_BTN_PIN
-#error "the bootloader's factory-reset pin must be the test button"
+#error "sdkconfig predates W-1059: turn CONFIG_BOOTLOADER_FACTORY_RESET off (sdkconfig.defaults.esp32s3)"
 #endif
-#if !CONFIG_BOOTLOADER_FACTORY_RESET_PIN_LOW || !CONFIG_BOOTLOADER_OTA_DATA_ERASE
-#error "the factory reset must trigger on a pressed (low) button and boot the factory slot"
+#if !CONFIG_BOOTLOADER_RESERVE_RTC_MEM
+#error "sdkconfig predates W-1059: set CONFIG_BOOTLOADER_CUSTOM_RESERVE_RTC (sdkconfig.defaults.esp32s3)"
 #endif
+#if CONFIG_AIRWRITER_TEST_BTN_PIN != 14
+#error "the bootloader hook's reset pin (airwriter_boot, RESET_PIN) must be the test button"
 #endif
 // W-1048: an image that is not signed would refuse every update after it
 // (IDF trusts the key that signed the running image), so every build is.
@@ -428,6 +428,7 @@ static void job_finished(const job_pipe_stats_t *st, int ok)
     ESP_LOGI(TAG, "that is %u seconds of printing at 9600 baud",
              (unsigned)(st->printer_bytes * 10 / 9600));
 
+    ota_health_printed();       // W-1059: this firmware prints; under the job lock
     s_ipp_owns = 0;
     xSemaphoreGive(s_job_lock);
     ipp_server_job_done(1);
@@ -559,6 +560,7 @@ static int lt_print_end(void *ctx, int normal)
     s_printing = 0;
     job_touch();
     s_lt_job = 0;
+    if (flushed == ESP_OK) ota_health_printed();   // W-1059, under the job lock
     xSemaphoreGive(s_job_lock);
     return flushed == ESP_OK;
 }
@@ -790,8 +792,8 @@ static void dip_on_change(const dip_config_t *cfg)
 // W-1045: hold the test button. Past a tap (1 s) the panel counts down; at
 // 8 s every setting is erased -- the point of no return -- and the board
 // restarts once the button is let go. Not before: a button still down at
-// restart reads to the bootloader as the start of its own factory reset,
-// which would also put the factory firmware back (W-1046).
+// restart reads to the bootloader as the start of its own power-up reset,
+// which would also put the known-good firmware back (W-1046, W-1059).
 
 #define RESET_RELEASE_WAIT_MS 30000     // a button stuck down still restarts
 
@@ -1082,6 +1084,7 @@ static void status_json(void *ctx, char *buf, size_t cap)
         "\"channel\":\"%s\",\"security\":\"%s\",\"uri\":\"%s\","
         "\"uptime\":\"%uh %02um\",\"reset\":\"%s\",\"version\":\"%s\",\"heap\":\"%u KB\","
         "\"slot\":\"%s\",\"trial\":%s,\"rolled_back\":\"%s\","
+        "\"known_good\":\"%s\",\"known_good_version\":\"%s\","
         "\"model\":\"Apple ImageWriter II\",\"pic\":%s}",
         state_text(v.state),
         ps_name(v.state),
@@ -1102,6 +1105,7 @@ static void status_json(void *ctx, char *buf, size_t cap)
         (unsigned)(up / 3600), (unsigned)((up / 60) % 60),
         reset_name(esp_reset_reason()), app->version, (unsigned)(esp_get_free_heap_size() / 1024),
         ota_health_slot(), ota_health_on_trial() ? "true" : "false", ota_health_rolled_back(),
+        ota_health_known_good(), ota_health_known_good_version(),
         pic_prog_available() ? "true" : "false");
 }
 
@@ -1336,19 +1340,10 @@ void app_main(void)
 
     ESP_LOGI(TAG, "AirWriter starting after %s reset, %u bytes free",
              reset_name(esp_reset_reason()), (unsigned)esp_get_free_heap_size());
-#if CONFIG_BOOTLOADER_FACTORY_RESET
     if (bootloader_common_get_rtc_retain_mem_factory_reset_state()) {
-        ESP_LOGW(TAG, "factory reset by the bootloader: settings erased, factory firmware");
+        ESP_LOGW(TAG, "power-up reset by the bootloader: settings erased, known-good firmware");
         s_boot_reset = 1;
     }
-    // An OTA cannot rewrite the partition table, so a board updated over the
-    // air from before W-1046 runs this firmware on the old two-slot table:
-    // no factory slot, and a bootloader without rollback. One USB flash
-    // fixes it (SPEC.md 3.11).
-    if (!esp_partition_find_first(ESP_PARTITION_TYPE_APP, ESP_PARTITION_SUBTYPE_APP_FACTORY, NULL))
-        ESP_LOGE(TAG, "no factory slot: this board needs one USB flash to get the W-1046 "
-                      "partition table and bootloader");
-#endif
 
     esp_err_t err = nvs_flash_init();
     if (err == ESP_ERR_NVS_NO_FREE_PAGES || err == ESP_ERR_NVS_NEW_VERSION_FOUND) {
