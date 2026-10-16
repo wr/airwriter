@@ -21,7 +21,20 @@ typedef enum {
                             // until the board restarts
     LG_ACT_RESET_CONFIRM,   // the same at boot, after the bootloader's reset; then the state
     LG_ACT_RESET_FAILED,    // the erase failed: Job failed's red glitch, then the state
+
+    // A firmware update (W-1048, POST /update). Call again with the same act
+    // to move its progress on; the animation keeps its clock.
+    LG_ACT_FW_NONE,         // clear: the update was dropped with nothing to show
+    LG_ACT_FW_DOWNLOADING,  // arg: progress 0..1000, or LG_PROGRESS_NONE
+    LG_ACT_FW_INSTALLING,   // arg: progress, for a flow that writes flash after the download
+    LG_ACT_FW_VERIFYING,    // the image is in; its signature is being checked
+    LG_ACT_FW_VERIFIED,     // installed and set to boot: a done moment, dark until the restart
+    LG_ACT_FW_REFUSED,      // bad signature, wrong image or a write error: ~3 s, then the
+                            // state; the old firmware keeps running
+    LG_ACT_FW_ROLLED_BACK,  // at boot: the bootloader rolled the last update back
 } lg_act_t;
+
+#define LG_PROGRESS_NONE    0xFFFF  // FW_DOWNLOADING / INSTALLING: length unknown
 
 #define LG_RESET_FILL_MS    7000    // the countdown; main checks it is BTN_FILL_MS
 #define LG_RESET_CANCEL_MS  400

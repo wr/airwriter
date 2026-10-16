@@ -20,7 +20,7 @@ being true, change or delete it in the same commit that made it false.
 | `docs/prior-art.md` | TashTalk, TailTalk, AirTalk, ImageScribbler. |
 | `docs/ORDER-NOTES.md` | PCBWay order notes for rev A. |
 | `docs/KICAD-TOOLING.md` | General KiCad 10 / konnect / pcbnew playbook. |
-| `docs/superpowers/specs/` | Printer scope, dot-panel cover (read its amendment block first), enclosure, status language. |
+| `docs/superpowers/specs/` | Printer scope, dot-panel cover (read its amendment block first), enclosure, status language, signed updates. |
 | `docs/review-*.md`, `docs/firmware-audit-*.md` | Dated reviews. Historical; their findings are applied. |
 
 ## Source of truth
@@ -55,13 +55,18 @@ What works on `main`:
   rolls back unless healthy (`/api/status` `slot`, `trial`, `rolled_back`). Holding `test` 8 s
   erases the settings with a countdown on the panel; holding it through power-up for 5 s makes
   the bootloader erase them and boot the factory slot.
+- Signed updates (SPEC §3.12): only images signed with the release key install, from GitHub
+  releases or `/update`; the web page's firmware section checks, installs and switches
+  auto-update (off by default). An update holds the job lock to its restart and gives way to a
+  job that arrives first. Releases are cut only by `tools/release/release.sh`.
 - Cable test (`components/cable_test`): one cable from J2 to J4 and a press of test (or
   `POST /api/cable`) tells Apple's crossover from anything else. TashTalk sends a frame out J4
   that RMT decodes off J2's RxD; only then does RMT send one out J2's TxD for TashTalk to relay
   back. The panel sweeps left and right, then pulses green from the test button for a crossover,
   or blinks the dots around it red twice for anything else.
 - Setup AP `AirWriter-xxxx` (open, 192.168.4.1) on a board with no credentials; web UI on port
-  80: `/api/status`, Wi-Fi, settings, `/update` (OTA), `/api/localtalk/flash`, `/api/cable`.
+  80: `/api/status`, Wi-Fi, settings, `/update` (OTA), `/api/update` (GitHub releases),
+  `/api/localtalk/flash`, `/api/cable`.
 - Wi-Fi scans all channels and joins the strongest AP; printer-uuid is stable (MAC + epoch).
 - TashTalk 2.1.3 is in U7, flashed in place by the ESP32 over LVP.
 - A LocalTalk node in DIP mode 2 (or always, with `CONFIG_AIRWRITER_LT_BENCH`), on UART2 to
@@ -117,6 +122,17 @@ Linear is the queue; these are the live items.
   2026-10-15. Host-tested against `fixtures/pap-iw701-page.bin`, and on board 1 a real Mac job went
   from PAP through `serial_out` byte for byte (UART loopback, `CONFIG_AIRWRITER_LT_BENCH`). Still
   owed: a paper test, which needs a second crossover cable for J2 while the Mac's is on J4.
+- `W-1048 OTA updates from GitHub releases: signed, verified, optional auto-update`: merged
+  2026-10-16, benched on board 1 (all pass): `/update` and GitHub both refuse tampered, foreign-key
+  and unsigned images, auto-update found and kept v0.1.1, and a job mid-download wins. Board 1's
+  factory slot still holds an unsigned W-1046 build; it is not being replaced, because
+  `W-1059 Known-good slot: factory reset boots the last version that worked` removes the fixed
+  factory slot.
+- `W-1059 Known-good slot: factory reset boots the last version that worked`: three equal slots
+  and a record of the last good one, which the power-up reset boots. Needs a bootloader hook and
+  one USB flash of board 1.
+- `W-1049 Panel feedback for every action: OTA, reset, cables, TashTalk flash`: built, waiting to
+  rebase onto W-1048 and bench on board 1.
 - Not in Linear: scope HSKo during a long job (SPEC §3.9 timing).
 
 ## Toolchain
@@ -140,10 +156,19 @@ Linear is the queue; these are the live items.
     printer not-ready until SELECT is toggled)
   - OTA: `curl -m 180 --data-binary @build/airwriter.bin http://10.0.1.115/update` (bench rules
     first). It lands in ota_0/ota_1 on trial: `/update` refuses another until `/api/status`
-    shows `"trial":false` (up to 2 min)
+    shows `"trial":false` (up to 2 min). The image must be signed with the key that signed the
+    running one (409 while a job prints, 400 for an unsigned or tampered image)
+  - release: `tools/release/release.sh vX.Y.Z [notes]` from a clean `main` level with origin
+    (`--dry-run` builds and checks only). It builds from `sdkconfig.defaults` alone, never the
+    local sdkconfig, and publishes `airwriter-esp32s3.bin` + `airwriter.json`
+- **Signing key:** `~/.config/airwriter/firmware-signing-key.pem` (RSA-3072, mode 600; Wells keeps
+  a copy in 1Password), never in the repo. Its public half is
+  `firmware/keys/airwriter-release.pub.pem`. Every build is signed: an sdkconfig needs the five
+  `CONFIG_SECURE_*` lines of `sdkconfig.defaults` with the key's absolute path, and main.c
+  refuses to build without them. Losing the key means a USB flash for every board.
 - `firmware/sdkconfig` is gitignored and holds the Wi-Fi credentials (menuconfig, AirWriter
   menu); NVS namespace `wifi` overrides it. `sdkconfig.defaults{,.esp32s3}` only seed a new one;
-  main.c refuses to build an sdkconfig without rollback and the factory reset.
+  main.c refuses to build an sdkconfig without rollback and the factory reset, or without signing.
 - **Enclosure:** build123d; `enclosure/build.sh` runs the tests then writes `out/*.{step,stl}`.
   The lattice's part clearances come from kicad-cli's STEP export, so the build needs kicad-cli.
   `enclosure/tools/render.py` (PNG views) and `tools/coupon.py` (fit-test cut-outs) need
@@ -151,7 +176,7 @@ Linear is the queue; these are the live items.
 
 ## Verification
 - **Host tests:** `make -C tools/rip test` (raster path, serial writer, printer_state, led_grid,
-  dip_config, pic_prog, localtalk, cable) and `make -B -C tools/ipp test` (`-B`: `tools/ipp/build/` is committed).
+  dip_config, pic_prog, localtalk, cable, fw_update) and `make -B -C tools/ipp test` (`-B`: `tools/ipp/build/` is committed).
 - **Raster regression:** `make -C tools/rip regress`; `stream.bin` must match the fixtures byte
   for byte. No ESP32 needed.
 - **Firmware:** `idf.py build` clean.
@@ -193,6 +218,7 @@ tools/rip/            host build of the raster path + host tests for the pure-C 
 tools/ipp/            IPP host tests and gpa_server (the real encoder on localhost for ipptool)
 tools/ippcap/         stub IPP server that captures a Print-Job body (how fixtures were made)
 tools/webui/          web UI sources; mkheader.py generates firmware's webui_page.h (never hand-edit)
+tools/release/        release.sh (build, check, sign, publish), tamper.py (refusal-test images)
 fixtures/             captured URF samples and expected streams
 enclosure/            3D printed case (build123d): tray, Lite lid, Pro lattice; out/*.stl committed
 ```

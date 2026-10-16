@@ -38,3 +38,6 @@ enclosure/.venv/
 # the STEPs rebuild with enclosure/build.sh; the printable STLs are committed
 enclosure/out/*
 !enclosure/out/*.stl
+
+# W-1048: a signing key never goes in the repo (the public key is in firmware/keys/)
+firmware/*.pem

@@ -61,6 +61,22 @@
     <p class=say id=uri></p>
   </div>
 
+  <div class=sec id=sec-firmware>
+    <h2>firmware</h2>
+    <div class=keys>
+      <div class=key><span class=legend>check</span>
+        <span class=keyrow>
+          <span class="bar keylamp"><span class=seg id=fwled></span></span>
+          <span class='slot momentary'><button id=fwcheck aria-label="Look for a new release"></button></span>
+        </span></div>
+      <div class="key is-quiet" id=fwinstkey><span class=legend>install</span>
+        <span class='slot momentary'><button id=fwinst aria-label="Install the new release" disabled></button></span></div>
+      <div class=key id=fwautokey><span class=legend>auto</span>
+        <span class=slot><button id=fwauto aria-label="Install new releases automatically" aria-pressed=false></button></span></div>
+    </div>
+    <p class=say id=fwsay>&nbsp;</p>
+  </div>
+
   <div class='sec hide' id=sec-localtalk>
     <h2>localtalk</h2>
     <div class=keys>

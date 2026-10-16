@@ -2,6 +2,7 @@
 #include "webui.h"
 #include "webui_page.h"
 #include "settings.h"
+#include "fw_update.h"
 
 #include <string.h>
 #include <stdio.h>
@@ -9,7 +10,6 @@
 #include "esp_log.h"
 #include "esp_wifi.h"
 #include "esp_system.h"
-#include "esp_ota_ops.h"
 #include "esp_http_server.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -187,71 +187,101 @@ static esp_err_t general_post(httpd_req_t *req)
     return httpd_resp_sendstr(req, "{\"ok\":true}");
 }
 
+// An update refusal, as the page shows it: 409 for "not now", 400 for an
+// image or a request that will never do, 500 for the board's own failure.
+static esp_err_t update_err(httpd_req_t *req, esp_err_t err, const char *why)
+{
+    const char *status = err == ESP_ERR_INVALID_STATE ? "409 Conflict"
+                       : err == ESP_ERR_OTA_VALIDATE_FAILED || err == ESP_ERR_INVALID_ARG
+                         ? "400 Bad Request" : "500 Internal Server Error";
+    httpd_resp_set_status(req, status);
+    httpd_resp_set_type(req, "text/plain");
+    return httpd_resp_sendstr(req, why ? why : "update failed");
+}
+
 // Raw firmware image in the request body. The browser sends a File, so there
-// is a Content-Length and no multipart wrapper to unpick.
+// is a Content-Length and no multipart wrapper to unpick. fw_update holds the
+// job lock from here to the restart, gives way to a print job that arrives
+// meanwhile, and installs nothing esp_ota_end refuses: since W-1048, an
+// image not signed with the key that signed the running one.
 static esp_err_t update_post(httpd_req_t *req)
 {
-    const esp_partition_t *part = esp_ota_get_next_update_partition(NULL);
-    if (!part) return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR,
-                                          "no ota partition");
-
-    ESP_LOGW(TAG, "firmware update: %u bytes into %s",
-             (unsigned)req->content_len, part->label);
-
-    esp_ota_handle_t ota;
-    esp_err_t err = esp_ota_begin(part, req->content_len, &ota);
-    // The last update is still on trial (W-1046) until the health gate keeps
-    // it, up to two minutes after it booted; the slot it would roll back to
-    // must not be written over meanwhile.
-    if (err == ESP_ERR_OTA_ROLLBACK_INVALID_STATE)
-        return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR,
-                                   "the last update is still being checked; try again in two minutes");
-    if (err != ESP_OK)
-        return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "ota begin");
+    const char *why = NULL;
+    esp_err_t err = fw_update_stream_begin(req->content_len, &why);
+    if (err != ESP_OK) return update_err(req, err, why);
 
     char *buf = malloc(OTA_CHUNK);
     if (!buf) {
-        esp_ota_abort(ota);
-        return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "no memory");
+        fw_update_stream_abort();
+        return update_err(req, ESP_ERR_NO_MEM, "no memory");
     }
-
-    size_t left = req->content_len, done = 0, next_log = 128 * 1024;
+    size_t left = req->content_len;
+    int timeouts = 0;
     while (left) {
         int n = httpd_req_recv(req, buf, left < OTA_CHUNK ? left : OTA_CHUNK);
-        if (n == HTTPD_SOCK_ERR_TIMEOUT) continue;
-        if (n <= 0) { err = ESP_FAIL; break; }
-        err = esp_ota_write(ota, buf, (size_t)n);
-        if (err != ESP_OK) break;
-        left -= (size_t)n;
-        done += (size_t)n;
-        if (done >= next_log) {
-            ESP_LOGI(TAG, "update: %u KB of %u", (unsigned)(done >> 10),
-                     (unsigned)(req->content_len >> 10));
-            next_log += 128 * 1024;
+        if (n == HTTPD_SOCK_ERR_TIMEOUT) {
+            // The job lock is held: a stalled upload, or a job waiting on
+            // one, must not keep it.
+            err = fw_update_stream_idle(++timeouts, &why);
+            if (err != ESP_OK) { free(buf); return update_err(req, err, why); }
+            continue;
         }
+        timeouts = 0;
+        if (n <= 0) {
+            free(buf);
+            fw_update_stream_abort();
+            ESP_LOGE(TAG, "update: upload cut with %u bytes left", (unsigned)left);
+            return ESP_FAIL;            // no one is left to answer
+        }
+        err = fw_update_stream_write(buf, (size_t)n, &why);
+        if (err != ESP_OK) { free(buf); return update_err(req, err, why); }
+        left -= (size_t)n;
     }
     free(buf);
 
-    if (err != ESP_OK) {
-        esp_ota_abort(ota);
-        ESP_LOGE(TAG, "update failed with %u bytes left", (unsigned)left);
-        return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "write failed");
-    }
-
-    // esp_ota_end verifies the image before anything is made bootable, so a
-    // truncated or foreign upload cannot brick the printer.
-    err = esp_ota_end(ota);
-    if (err != ESP_OK)
-        return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "image rejected");
-
-    err = esp_ota_set_boot_partition(part);
-    if (err != ESP_OK)
-        return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "set boot");
-
-    ESP_LOGW(TAG, "update installed, restarting");
+    err = fw_update_stream_end(&why);
+    if (err != ESP_OK) return update_err(req, err, why);
     httpd_resp_sendstr(req, "ok");
-    xTaskCreate(reboot_task, "reboot", 2048, NULL, 5, NULL);
+    fw_update_restart();
     return ESP_OK;
+}
+
+static esp_err_t update_get(httpd_req_t *req)
+{
+    char json[512];
+    fw_update_json(json, sizeof json);
+    httpd_resp_set_type(req, "application/json");
+    return httpd_resp_sendstr(req, json);
+}
+
+static esp_err_t update_check_post(httpd_req_t *req)
+{
+    const char *why = NULL;
+    esp_err_t err = fw_update_check(&why);
+    return err == ESP_OK ? httpd_resp_sendstr(req, "{\"ok\":true}") : update_err(req, err, why);
+}
+
+// Body {"tag":"v0.1.0"} for a release by name; empty for the newest.
+static esp_err_t update_install_post(httpd_req_t *req)
+{
+    char body[BODY_MAX] = "", tag[32] = "";
+    if (req->content_len && read_body(req, body, sizeof body) < 0)
+        return update_err(req, ESP_ERR_INVALID_ARG, "short body");
+    json_str(body, "tag", tag, sizeof tag);
+    const char *why = NULL;
+    esp_err_t err = fw_update_install(tag[0] ? tag : NULL, &why);
+    return err == ESP_OK ? httpd_resp_sendstr(req, "{\"ok\":true}") : update_err(req, err, why);
+}
+
+static esp_err_t update_auto_post(httpd_req_t *req)
+{
+    char body[BODY_MAX];
+    if (read_body(req, body, sizeof body) < 0)
+        return update_err(req, ESP_ERR_INVALID_ARG, "short body");
+    int on = strstr(body, "\"auto\":true") != NULL;
+    if (fw_update_set_auto(on) != ESP_OK)
+        return update_err(req, ESP_FAIL, "could not save the setting");
+    return httpd_resp_sendstr(req, on ? "{\"auto\":true}" : "{\"auto\":false}");
 }
 
 // Blocks for the couple of seconds the flash takes. Rare and deliberate, so
@@ -302,7 +332,7 @@ esp_err_t webui_start(const webui_cfg_t *cfg)
     httpd_config_t hc = HTTPD_DEFAULT_CONFIG();
     hc.server_port      = 80;
     hc.ctrl_port        = 32080;
-    hc.max_uri_handlers = 14;
+    hc.max_uri_handlers = 18;
     hc.stack_size       = 6144;
     hc.lru_purge_enable = true;
     hc.uri_match_fn     = httpd_uri_match_wildcard;
@@ -322,6 +352,10 @@ esp_err_t webui_start(const webui_cfg_t *cfg)
         { .uri = "/api/wifi",     .method = HTTP_POST, .handler = wifi_post },
         { .uri = "/api/general",  .method = HTTP_POST, .handler = general_post },
         { .uri = "/update",       .method = HTTP_POST, .handler = update_post },
+        { .uri = "/api/update",   .method = HTTP_GET,  .handler = update_get },
+        { .uri = "/api/update/check",   .method = HTTP_POST, .handler = update_check_post },
+        { .uri = "/api/update/install", .method = HTTP_POST, .handler = update_install_post },
+        { .uri = "/api/update/auto",    .method = HTTP_POST, .handler = update_auto_post },
         { .uri = "/api/localtalk/flash", .method = HTTP_POST, .handler = localtalk_flash_post },
         { .uri = "/api/cable",    .method = HTTP_POST, .handler = cable_post },
         { .uri = "/*",            .method = HTTP_GET,  .handler = catch_all },

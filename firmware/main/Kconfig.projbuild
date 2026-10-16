@@ -282,4 +282,35 @@ config AIRWRITER_LT_BENCH
         with no printer on J2, add AIRWRITER_UART_LOOPBACK: the line then
         reads ready and the job's bytes are checked as they come back.
 
+config AIRWRITER_UPDATE_REPO
+    string "Firmware updates: GitHub repository (owner/name)"
+    default "wr/airwriter"
+    help
+        Where the board looks for releases (W-1048): the newest release's
+        airwriter.json, then the image it names. A fork that publishes its
+        own releases, signed with its own key, names its repository here and
+        its key's digest below.
+
+config AIRWRITER_UPDATE_KEY_DIGEST
+    string "Firmware updates: release key digest (64 hex digits)"
+    default "6f11af9cd8eec9923985957400aa753ba034e7e057e18ebf61033cb4d327ad89"
+    help
+        SHA-256 of the release key's public part, as espsecure.py
+        digest_sbv2_public_key prints it. A board whose running image is
+        signed with another key cannot take these releases, and the web page
+        says so instead of downloading one to have it refused. The check that
+        matters is esp_ota_end's; this only spares the download.
+
+config AIRWRITER_UPDATE_FIRST_MIN
+    int "Auto-update: first check, minutes after joining Wi-Fi"
+    default 10
+
+config AIRWRITER_UPDATE_INTERVAL_H
+    int "Auto-update: hours between checks"
+    default 24
+
+config AIRWRITER_UPDATE_IDLE_MIN
+    int "Auto-update: minutes without a job before installing"
+    default 10
+
 endmenu

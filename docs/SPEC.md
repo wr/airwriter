@@ -405,6 +405,55 @@ so Wi-Fi credentials and settings survive it. An existing `sdkconfig` needs the 
 The new app OTA'd onto a board still on the old table runs, but logs that it has no factory
 slot.
 
+Over the air, only signed images install (§3.12), and an update waits for, and gives way to,
+a print job. The factory slot must hold a signed release build, or a factory reset brings back
+firmware that takes any image.
+
+### 3.12 Updates: signed images, GitHub releases, auto-update
+
+`W-1048 OTA updates from GitHub releases: signed, verified, optional auto-update`; design in
+`docs/superpowers/specs/2026-10-16-signed-github-updates-design.md`.
+
+**Signing.** IDF's signed apps without secure boot (`CONFIG_SECURE_SIGNED_APPS_NO_SECURE_BOOT`,
+RSA-3072, `SECURE_SIGNED_ON_UPDATE_NO_SECURE_BOOT`, `SECURE_BOOT_BUILD_SIGNED_BINARIES`; main.c
+refuses to build without them). `esp_ota_end` checks the new image's signature block against the
+key that signed the *running* image, so `/update` and the GitHub path share one check. No eFuse
+is burned and the bootloader is unchanged. A board running an unsigned image accepts any valid
+image once; after that only images signed with the same key. Changing the key takes a USB
+flash. The release key is `~/.config/airwriter/firmware-signing-key.pem` on Wells's Mac (backed
+up in 1Password), never in the repo; its public half is `firmware/keys/airwriter-release.pub.pem`,
+digest `6f11af9cd8eec9923985957400aa753ba034e7e057e18ebf61033cb4d327ad89`
+(`CONFIG_AIRWRITER_UPDATE_KEY_DIGEST`). A build from someone else's key makes a board that takes
+only their builds, and its web page says it can't install AirWriter releases.
+
+**Releases.** A tag `vX.Y.Z` with two assets, `airwriter-esp32s3.bin` (the signed app image) and
+`airwriter.json` (`{"version":"vX.Y.Z","esp32s3":"airwriter-esp32s3.bin"}`), made only by
+`tools/release/release.sh`: it builds from `sdkconfig.defaults` alone in a throwaway worktree,
+checks the version, the bench options, the signature and that no local Wi-Fi credential or
+purge-list string is in the image, then tags and publishes. The board reads
+`github.com/<repo>/releases/latest/download/airwriter.json` (no API, no rate limit;
+`CONFIG_AIRWRITER_UPDATE_REPO`, default `wr/airwriter`) and installs with `esp_https_ota`.
+The manifest is a hint: the image's own version and project name are checked as it starts to
+download, and its signature at the end. A release build's version is exactly `vX.Y.Z`;
+anything else (`v0.1.0-3-gabc1234-dirty`) is a dev build, and a release is newer only if its
+`vX.Y.Z` is past the running one's.
+
+**When.** An update takes the job lock without waiting and holds it to the restart. A job that
+finds the lock taken raises a flag, and the update aborts at its next chunk and lets the job
+print; `/update` answers 409. Not while the last update is on trial, never in setup mode
+(GitHub path), never into the factory slot.
+
+**Auto-update** (`airwriter`/`autoupd` in NVS, off by default, the web page's auto key). Off,
+the board never contacts GitHub by itself; opening the web page checks at most hourly. On, it
+checks 10 minutes after the first Wi-Fi join and every 24 hours of uptime (a failed check
+retries after an hour), and installs a newer release once the board has had no job for
+10 minutes. It never replaces a dev build, never installs the version the bootloader last
+rolled back, and tries each release once per check. The panel shows progress through W-1049's
+`LG_ACT_FW_*` overlays.
+
+**Web.** `GET /api/update`; `POST /api/update/check`, `/api/update/install` (optional
+`{"tag":"vX.Y.Z"}`, which may be older or a prerelease), `/api/update/auto` (`{"auto":true}`).
+
 ---
 
 ## 4. Unverified assumptions

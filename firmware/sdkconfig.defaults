@@ -26,3 +26,18 @@ CONFIG_LWIP_MAX_SOCKETS=16
 # At least ipp_server's LISTEN_BACKLOG: a completed connection that finds the
 # accept mailbox full is reset rather than queued.
 CONFIG_LWIP_TCP_ACCEPTMBOX_SIZE=8
+
+# W-1048: only signed images install over the air, from GitHub or /update.
+# IDF's signed apps without secure boot: esp_ota_end checks the RSA-3072
+# signature block on the new image, and trusts the key that signed the
+# running one. No eFuses, and the bootloader is unchanged. Every build is
+# signed, because a running image without a signature would refuse every
+# update; main.c refuses to build without these.
+CONFIG_SECURE_SIGNED_APPS_NO_SECURE_BOOT=y
+CONFIG_SECURE_SIGNED_APPS_RSA_SCHEME=y
+CONFIG_SECURE_SIGNED_ON_UPDATE_NO_SECURE_BOOT=y
+CONFIG_SECURE_BOOT_BUILD_SIGNED_BINARIES=y
+# Relative to firmware/ and gitignored. The release key lives off the repo
+# (SPEC.md 3.12); a build with a key of your own makes a board that takes
+# only your builds. The build says how to make one if it is missing.
+CONFIG_SECURE_BOOT_SIGNING_KEY="firmware_signing_key.pem"

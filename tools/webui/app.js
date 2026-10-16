@@ -238,13 +238,16 @@ $('cabletest').onclick=async()=>{
 };
 
 /* ── overlay ───────────────────────────────────────────────────────── */
+let ovh=0;
 function overlay(title,text,secs){
   $('ovt').textContent=title; $('over').classList.remove('hide');
-  let left=secs;
+  let left=secs; clearInterval(ovh);
   const tick=()=>{$('ovs').textContent=text+'  ·  '+left+'s';
-    if(left--<=0){clearInterval(h);location.reload();}};
-  tick(); const h=setInterval(tick,1000);
+    if(left--<=0){clearInterval(ovh);location.reload();}};
+  tick(); ovh=setInterval(tick,1000);
 }
+/* A refusal takes the overlay down, and its countdown with it. */
+function unoverlay(){ clearInterval(ovh); $('over').classList.add('hide'); }
 $('ovbtn').onclick=()=>location.reload();
 
 $('join').onclick=async()=>{
@@ -270,9 +273,80 @@ $('fw').onchange=async()=>{
   const f=$('fw').files[0]; if(!f) return;
   overlay('Installing','Uploading '+(f.size>>10)+' KB',45);
   try{ const r=await fetch('/update',{method:'POST',body:f});
-    if(!r.ok){$('over').classList.add('hide');alert('Rejected: '+await r.text());}
-  }catch(e){ $('over').classList.add('hide'); alert('Upload failed.'); }
+    if(!r.ok){unoverlay();alert('Rejected: '+await r.text());}
+  }catch(e){ unoverlay(); alert('Upload failed.'); }
+  $('fw').value='';
 };
+
+/* ── firmware ──────────────────────────────────────────────────────── */
+/* Releases come from GitHub, and the board installs only what is signed with
+   the AirWriter key. With auto off it never looks by itself: opening this page
+   looks, at most once an hour, and so does the check key. */
+let fwu={}, fwfast=0, fwblink=0;
+const FW_BUSY=['checking','downloading','installing','restarting'];
+const cap=s=>s?s[0].toUpperCase()+s.slice(1):'';
+function ago(s){
+  if(s<90) return 'just now';
+  const m=Math.round(s/60); if(m<90) return m+' minutes ago';
+  const h=Math.round(s/3600); if(h<36) return h+(h===1?' hour':' hours')+' ago';
+  return Math.round(s/86400)+' days ago';
+}
+function fwSay(u){
+  if(u.setup) return 'In setup mode the board is off the internet. Join a network to look for updates.';
+  if(u.key==='other') return 'This firmware is signed with a different key, so it can’t install '
+    +'AirWriter releases. Flash a release over USB to switch back.';
+  if(u.key==='unsigned') return 'This firmware isn’t signed, so it can’t take updates. '
+    +'Flash a release over USB.';
+  switch(u.state){
+    case 'checking': return 'Looking for a new release…';
+    case 'downloading': return 'Downloading'+(u.progress>=0?': '+u.progress+'%.':'…');
+    case 'installing': return 'Checking the signature…';
+    case 'restarting': return 'Installed. Restarting…';
+  }
+  let t='Running '+u.version+(u.release?'. ':', a development build. ');
+  if(u.error) t+=cap(u.error)+'. ';
+  if(u.newer) t+=u.latest+' is available.';
+  else if(u.no_target) t+='The newest release has no image for this board.';
+  else if(u.checked>=0 && !u.error) t+='Up to date, checked '+ago(u.checked)+'.';
+  return t;
+}
+function fwDraw(u){
+  fwu=u;
+  $('fwsay').textContent=fwSay(u);
+  const net=!u.setup&&u.key==='airwriter', busy=FW_BUSY.includes(u.state);
+  $('fwcheck').disabled=!net||busy;
+  $('fwinst').disabled=!net||busy||!u.newer;
+  $('fwinstkey').classList.toggle('is-quiet',$('fwinst').disabled);
+  $('fwauto').disabled=!net;
+  $('fwautokey').classList.toggle('is-lit',!!u.auto);
+  $('fwauto').setAttribute('aria-pressed',!!u.auto);
+  if(busy&&!fwblink) fwblink=setInterval(()=>$('fwled').classList.toggle('act'),160);
+  if(!busy&&fwblink){ clearInterval(fwblink); fwblink=0; $('fwled').classList.remove('act'); }
+  if(u.state==='restarting') overlay('Installing','Restarting into the new firmware',30);
+  clearTimeout(fwfast); if(busy) fwfast=setTimeout(fwPoll,1500);
+}
+async function fwPoll(){
+  try{ fwDraw(await(await fetch('/api/update')).json()); return 1; }catch(e){ return 0; }
+}
+/* The answer to a press, in the say line: the board's own sentence if it said no. */
+async function fwPost(url,body){
+  try{
+    const r=await fetch(url,{method:'POST',body:body?JSON.stringify(body):''});
+    if(!r.ok){ $('fwsay').textContent=cap(await r.text())+'.'; return 0; }
+    setTimeout(fwPoll,300); return 1;
+  }catch(e){ $('fwsay').textContent='No answer from the dongle.'; return 0; }
+}
+$('fwcheck').onclick=()=>fwPost('/api/update/check');
+$('fwinst').onclick=()=>fwPost('/api/update/install');
+$('fwauto').onclick=async()=>{
+  const on=!fwu.auto;
+  if(await fwPost('/api/update/auto',{auto:on})) noted('sec-firmware', on?'auto on':'auto off');
+};
+fwPoll().then(ok=>{
+  if(ok && !fwu.setup && fwu.key==='airwriter' && !FW_BUSY.includes(fwu.state)
+     && (fwu.checked<0 || fwu.checked>3600)) fwPost('/api/update/check');
+});
+setInterval(()=>{ if(!FW_BUSY.includes(fwu.state)) fwPoll(); },15000);
 
 /* ── keys: press, hold, latch ──────────────────────────────────────── */
 document.addEventListener('click',e=>{
