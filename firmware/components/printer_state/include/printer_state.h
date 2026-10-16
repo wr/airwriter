@@ -15,7 +15,7 @@ void      printer_state_start(const ps_timing_t *tm,
 
 void      printer_state_post(ps_event_t ev);          // any task
 void      printer_state_set_ap_stations(unsigned n);   // any task
-void      printer_state_cable(int pass);               // any task; W-1055
+void      printer_state_cable(uint8_t result);         // any task; PS_CABLE_*, W-1055
 ps_view_t printer_state_view(void);                    // any task
 
 // W-1039: whether to send the printer a CTRL-X now, and that one was sent.

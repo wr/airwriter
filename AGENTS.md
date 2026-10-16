@@ -72,7 +72,11 @@ What works on `main`:
   `POST /api/cable`) tells Apple's crossover from anything else. TashTalk sends a frame out J4
   that RMT decodes off J2's RxD; only then does RMT send one out J2's TxD for TashTalk to relay
   back. The panel sweeps left and right, then pulses green from the test button for a crossover,
-  or blinks the dots around it red twice for anything else.
+  or blinks the dots around it red twice for anything else. When TashTalk takes none of the
+  test's bytes it tests nothing and says why (W-1063): with the node off, U7's device ID over ICSP
+  tells an empty socket (`no_chip`) from a PIC not running TashTalk (`no_tashtalk`); with the
+  node on, only `chip_silent`. The panel then skips the sweep and blinks the dots by the
+  LocalTalk socket red twice.
 - Setup AP `AirWriter-xxxx` (open, 192.168.4.1) on a board with no credentials; web UI on port
   80: `/api/status`, Wi-Fi, settings, `/update` (OTA), `/api/update` (GitHub releases),
   `/api/localtalk/flash`, `/api/cable`.

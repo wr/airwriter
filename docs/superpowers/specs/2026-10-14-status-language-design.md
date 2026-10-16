@@ -79,9 +79,10 @@ After the Spin, every moment plays for real changes as before.
 *Ready* or *Printer offline*, the panel fades to a pilot light. States 1–6 never sleep.
 
 **Cable result** (W-1055) is a modifier too: after a cable test, its result shows over Setup,
-Joining, Ready or Printer offline for 2.4 s; a job hides it. The test runs
-from the test button while the printer is not ready (a cable from J2 to J4 holds HSKo false), or
-from the web page.
+Joining, Ready or Printer offline for 2.4 s (1 s when no cable was tested); a job hides it. The
+test runs from the test button while the printer is not ready (a cable from J2 to J4 holds HSKo
+false), or from the web page. It runs through TashTalk, so with no chip in U7, or one not running
+TashTalk, no cable is tested and the panel says that instead of red (W-1063).
 
 **Activity** (wakes the panel and resets the sleep timer): any display-state change, a job
 operation arriving (Print-Job, Validate-Job; the server has no Create-Job), a test-button press,
@@ -136,7 +137,7 @@ state reads as one big LED. Hue offsets stay inside each state's colour family.
 | Printing | all; mask at 4× | **print head**: a bright white dot crosses the current row in 1.5 s, inking it warm (hue 28–48°) behind; rows advance top to bottom and alternate direction like the ImageWriter's bidirectional head; the two rows above hold fading ink (25%, 12%), the rest 3% |
 | Needs attention | all; FR4 at the alert cap (96/255), mask at 4× | deep amber (hue 18–30°: at 36° the bright green die washed it toward white) **double ripple** from the test button: two wide rings 350 ms apart every 2 s over a 12% amber floor, so the panel is never dark while it needs a person |
 | Job failed | all; mask at 4× | red (hue 352–12°): three 200 ms **glitch flashes**, each on a different random ~65% of dots, then a pulse 20%→60% whose period varies ±15% per dot, until the hold ends |
-| Cable test | all; mask at 4× | a band **sweeps** the panel left to right and back (700 ms each way) over an 8% floor. Green (hue 130° ±14°), a crossover: then a ring **pulses** out of the test button and the panel fades by 2.4 s. Red (hue 352–12°), a straight, broken or missing cable: then the six dots around the test button **blink twice** (200 ms on, 200 off, 200 on), the rest dark |
+| Cable test | all; mask at 4× | a band **sweeps** the panel left to right and back (700 ms each way) over an 8% floor. Green (hue 130° ±14°), a crossover: then a ring **pulses** out of the test button and the panel fades by 2.4 s. Red (hue 352–12°), a straight, broken or missing cable: then the six dots around the test button **blink twice** (200 ms on, 200 off, 200 on), the rest dark. **No cable tested** (TashTalk didn't answer, W-1063): no sweep; after 200 ms dark the five dots within 2.8 rows of the LocalTalk socket blink red twice (200 on, 200 off, 200 on), the rest dark, 1 s in all. Red says no; where it blinks says LocalTalk |
 | Asleep | the pilot, plus a rare twinkle | the FR4 dot right of the test button (row 3, col 4) breathes 3%→12% of the cap, driven linearly (gamma would round these levels to zero), on a 6 s period: neutral white, or a slowly cycling hue in gamer mode. Every 30 s one other FR4 dot twinkles once (1.5 s, peak 8% linear). Fade into sleep over 10 s; wake instantly. |
 
 Below one count of drive a dot's brightest channel is lifted to one count and the others scale

@@ -50,7 +50,9 @@ typedef struct {
 // W-1055: a cable test's result, shown over the idle states for a moment.
 #define PS_CABLE_PASS    1
 #define PS_CABLE_FAIL    2
+#define PS_CABLE_NO_CHIP 3      // no cable was tested: TashTalk didn't answer (W-1063)
 #define PS_CABLE_MS      2400   // sweep left to right and back, then a pulse from the middle
+#define PS_CABLE_NO_CHIP_MS 1000   // no sweep: two red blinks by the LocalTalk socket
 
 typedef struct {
     ps_timing_t tm;
@@ -89,9 +91,10 @@ typedef struct {
 void        ps_init(ps_t *ps, const ps_timing_t *tm, uint64_t now_ms);
 void        ps_post(ps_t *ps, ps_event_t ev, uint64_t now_ms);
 void        ps_set_ap_stations(ps_t *ps, unsigned n);
-// A cable test finished (W-1055). Its result shows for PS_CABLE_MS over
-// Setup, Joining, Ready and Offline; a job hides it.
-void        ps_cable(ps_t *ps, int pass, uint64_t now_ms);
+// A cable test finished (W-1055); result is a PS_CABLE_*. It shows for
+// PS_CABLE_MS (PS_CABLE_NO_CHIP_MS) over Setup, Joining, Ready and Offline; a
+// job hides it.
+void        ps_cable(ps_t *ps, uint8_t result, uint64_t now_ms);
 // Derives the view. Not const: a change of state is recorded for since_ms and
 // counts as activity, so the panel wakes to show it.
 ps_view_t   ps_update(ps_t *ps, uint64_t now_ms);

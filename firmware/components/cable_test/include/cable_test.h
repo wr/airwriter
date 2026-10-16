@@ -6,6 +6,8 @@
 // code and the verdict are cable_core.h's; this file borrows the printer
 // port's pins for RMT, and TashTalk for the LocalTalk side: the running
 // node's link through localtalk.h, or UART2 directly while the node is off.
+// When TashTalk isn't there to answer, the verdict says so instead of
+// blaming the cable (W-1063).
 #pragma once
 #include <stddef.h>
 #include "esp_err.h"
@@ -28,7 +30,9 @@ typedef struct {
 void cable_test_init(const cable_test_cfg_t *cfg);
 
 // Runs the test: 30 ms with a crossover, up to ~400 ms without (a fail on
-// our own TashTalk link is retried once after resetting TashTalk). The caller
+// our own TashTalk link is retried once after resetting TashTalk), ~100 ms
+// with TashTalk silent (then U7's device ID is read over ICSP, unless the
+// node is running). The caller
 // holds the job lock, so nothing writes to the printer port while its pins
 // are borrowed. J2 only listens until a frame from J4 has come back through
 // the cable, so a printer on J2 never sees a test frame.

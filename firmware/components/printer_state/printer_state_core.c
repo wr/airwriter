@@ -84,9 +84,9 @@ void ps_set_ap_stations(ps_t *ps, unsigned n)
     ps->ap_stations = (uint8_t)(n > 255 ? 255 : n);
 }
 
-void ps_cable(ps_t *ps, int pass, uint64_t now)
+void ps_cable(ps_t *ps, uint8_t result, uint64_t now)
 {
-    ps->cable = pass ? PS_CABLE_PASS : PS_CABLE_FAIL;
+    ps->cable = result;
     ps->cable_at = now;
     ps->activity_at = now;
 }
@@ -140,7 +140,8 @@ ps_view_t ps_update(ps_t *ps, uint64_t now)
         v.spin_out_ms = sat32(now - ps->out_at);
     }
     v.greeted      = st == PS_READY && ps->greeted;
-    if (ps->cable && now - ps->cable_at < PS_CABLE_MS &&
+    uint32_t cable_hold = ps->cable == PS_CABLE_NO_CHIP ? PS_CABLE_NO_CHIP_MS : PS_CABLE_MS;
+    if (ps->cable && now - ps->cable_at < cable_hold &&
         (st == PS_SETUP || st == PS_JOINING || st == PS_READY || st == PS_OFFLINE)) {
         v.cable    = ps->cable;
         v.cable_ms = sat32(now - ps->cable_at);

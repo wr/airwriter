@@ -498,7 +498,7 @@ static void test_w1049(uint8_t f[LG_NUM_LEDS][3], uint8_t g[LG_NUM_LEDS][3])
                                 : m == 2 ? moment(PS_SETUP, PS_JOINING, s)
                                          : view(PS_READY, 100000);
                     if (m == 1) v.cancelled = s & 1;
-                    if (m == 3) { v.cable = 1 + (s & 1); v.cable_ms = s; }
+                    if (m == 3) { v.cable = 1 + s % 3; v.cable_ms = s; }
                     lg_opts_t o = blip(B[k], s % L[k]);
                     lg_render(&v, &o, 60000 + s, f);
                     check_frame(f, spin_max, m == 2, 0);
@@ -906,6 +906,23 @@ int main(void)
             lg_render(&v, &WHITE_MODE, 0, f);
             assert(lit_count(f) == (lit[k] ? 6 : 0));
             if (lit[k]) assert(f[near][0] > f[near][1] && max3(f[far]) == 0);
+        }
+    }
+
+    // W-1063: with no TashTalk to run the test, no sweep: the five dots by the
+    // LocalTalk socket blink red twice, the rest dark, and that's all.
+    {
+        ps_view_t v = view(PS_OFFLINE, 60000);
+        v.cable = PS_CABLE_NO_CHIP;
+        int lt = idx(7, 4), button = idx(3, 4), top = idx(0, 4);
+        const uint32_t at[] = { 100, 300, 500, 700, 900 };
+        const int lit[] = { 0, 1, 0, 1, 0 };
+        for (int k = 0; k < 5; k++) {
+            v.cable_ms = at[k];
+            lg_render(&v, &WHITE_MODE, 0, f);
+            assert(lit_count(f) == (lit[k] ? 5 : 0));
+            if (lit[k]) assert(f[lt][0] > f[lt][1] && f[lt][0] > f[lt][2]);
+            assert(max3(f[button]) == 0 && max3(f[top]) == 0);
         }
     }
 

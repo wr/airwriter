@@ -233,7 +233,8 @@ $('cabletest').onclick=async()=>{
   try{ r=await(await fetch('/api/cable',{method:'POST'})).json(); }catch(e){}
   b.disabled=false;
   if(!r){ noted('sec-localtalk','failed'); $('cablesay').textContent='No answer from the dongle.'; return; }
-  noted('sec-localtalk', !r.ok?'failed':r.verdict==='pass'?'crossover':'no good');
+  const untested=r.ok&&['no_chip','no_tashtalk','chip_silent'].includes(r.verdict);
+  noted('sec-localtalk', !r.ok?'failed':untested?'not tested':r.verdict==='pass'?'crossover':'no good');
   $('cablesay').textContent = r.ok ? r.text : 'Could not test: '+r.error+'.';
 };
 

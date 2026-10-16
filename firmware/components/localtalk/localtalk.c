@@ -366,6 +366,13 @@ void localtalk_send_raw(const uint8_t *f, size_t n)
     xSemaphoreGive(s_lock);
 }
 
+int localtalk_tt_alive(int wait_ms)
+{
+    if (!s_running) return 0;
+    TickType_t t = pdMS_TO_TICKS(wait_ms);
+    return uart_wait_tx_done(s_uart, t ? t : 1) == ESP_OK;
+}
+
 static void json_str(char **p, char *end, const char *v)
 {
     if (*p < end) *(*p)++ = '"';

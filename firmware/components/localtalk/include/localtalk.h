@@ -68,3 +68,8 @@ const uint8_t *localtalk_job(size_t *len);
 // node's own are. A NULL tap removes it.
 void localtalk_set_tap(void (*tap)(void *ctx, const uint8_t *f, size_t n), void *ctx);
 void localtalk_send_raw(const uint8_t *f, size_t n);
+
+// 1 if TashTalk drains the node's UART within wait_ms. The node runs whether
+// or not a chip is in U7, its bytes held in the UART behind CTS; the cable
+// test asks before it sends (W-1063).
+int  localtalk_tt_alive(int wait_ms);

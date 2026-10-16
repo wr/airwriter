@@ -163,6 +163,20 @@ static lg_c3 stripe(int r, int c)
     return hsv(hue[k] + (dot_hash(r, c, 3) - 0.5f) * 8, 0.85f, 1);
 }
 
+// The sockets are on the bottom edge: the printer (J2) under column 0.9,
+// LocalTalk (J4) under 3.2. Waves start from row 8.6, just below the grid (the
+// sockets are 4.6 rows lower), so they enter at once.
+#define PORT_ROW    8.6f
+#define PRINTER_COL 0.9f
+#define LT_COL      3.2f
+#define FAR         10.5f       // a socket to the far corner, in rows
+#define CROSS_MS    1100.0f     // a cable wave's time to cross the panel
+
+static float dist_to(int r, int c, float pr, float pc)
+{
+    return hypotf((float)r - pr, (float)c - pc);
+}
+
 static lg_c3 state_dot(const ps_view_t *v, const lg_opts_t *o, int i, uint32_t t)
 {
     int r = LG_MAP[i].r, c = LG_MAP[i].c;
@@ -171,6 +185,15 @@ static lg_c3 state_dot(const ps_view_t *v, const lg_opts_t *o, int i, uint32_t t
     float h1 = dot_hash(r, c, 1), h2 = dot_hash(r, c, 2);
     uint32_t s = v->since_ms;
 
+    if (v->cable == PS_CABLE_NO_CHIP) {
+        // No cable was tested: TashTalk didn't answer (W-1063). No sweep; the
+        // dots by the LocalTalk socket blink red twice (200 ms dark, 200 on,
+        // 200 off, 200 on), the rest dark.
+        uint32_t cs = v->cable_ms;
+        int on = dist_to(r, c, PORT_ROW, LT_COL) < 2.8f
+              && ((cs >= 200 && cs < 400) || (cs >= 600 && cs < 800));
+        return on ? hsv(jitter(r, c, 2, 10, t, 0), 0.95f, 1) : DARK;
+    }
     if (v->cable) {
         // A cable test's answer (W-1055): a band sweeps the panel left to
         // right and back, 700 ms each way. Green, the cable works: a ring
@@ -290,21 +313,8 @@ static lg_c3 state_dot(const ps_view_t *v, const lg_opts_t *o, int i, uint32_t t
 // ---------------------------------------------------------------- moments
 // W-1049: some states open with a moment drawn from the state before
 // (ps_view_t.prev), keyed off since_ms. Wherever its wave has not reached yet
-// still shows the old state. Any other change of state has none.
-//
-// The sockets are on the bottom edge: the printer (J2) under column 0.9,
-// LocalTalk (J4) under 3.2. Waves start from row 8.6, just below the grid (the
-// sockets are 4.6 rows lower), so they enter at once.
-#define PORT_ROW    8.6f
-#define PRINTER_COL 0.9f
-#define LT_COL      3.2f
-#define FAR         10.5f       // a socket to the far corner, in rows
-#define CROSS_MS    1100.0f     // a cable wave's time to cross the panel
-
-static float dist_to(int r, int c, float pr, float pc)
-{
-    return hypotf((float)r - pr, (float)c - pc);
-}
+// still shows the old state. Any other change of state has none. The
+// sockets they start from are above state_dot.
 
 // Light added over light: an acknowledgement on top of the state.
 static lg_c3 screen(lg_c3 a, lg_c3 b)
