@@ -24,9 +24,10 @@ being true, change or delete it in the same commit that made it false.
 | `docs/review-*.md`, `docs/firmware-audit-*.md` | Dated reviews. Historical; their findings are applied. |
 
 ## Source of truth
-- GitHub: github.com/wr/airwriter (public). It was seeded from a purged copy of main, so this
-  local repository's history is not the published one yet: a pre-push hook blocks pushing until
-  `tools/release/purge-history.sh` has been run here (W-1054). No remote is set until then.
+- GitHub: github.com/wr/airwriter (public), remote `origin`. Push `main` there directly. History
+  was purged on 2026-10-15 (`tools/release/purge-history.sh`, W-1054): never commit the Apple
+  manuals, third-party 3D models without a licence, or the private strings listed in
+  `~/.config/airwriter/purge-scrub.txt`. Run `gitleaks git` before pushing anything unusual.
 - Linear project: AirWriter (id: 9c428072-e8eb-4c3d-88e6-b3eadf604eed), team Personal
 - Branch prefix: wells/
 - PR mode: none
