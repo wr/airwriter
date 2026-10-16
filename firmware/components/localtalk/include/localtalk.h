@@ -29,6 +29,13 @@ typedef struct {
     int  (*end)(void *ctx, int normal);
 } localtalk_printer_t;
 
+// What the node saw that the panel shows (W-1049), on the LocalTalk task.
+typedef enum {
+    LT_EV_ONLINE,       // the node ID is ours
+    LT_EV_LOOKUP,       // an NBP LkUp for us was answered: a Chooser is looking
+    LT_EV_NEW_NODE,     // a node's first frame (not an ENQ) since boot: a Mac is on the cable
+} lt_event_t;
+
 typedef struct {
     int         uart_num;
     int         tx_pin;      // LT_UART_TX, TashTalk's RX
@@ -38,6 +45,7 @@ typedef struct {
     const char *type;        // NBP type the Chooser looks up
     uint16_t    status;      // Option Card status word to start with (lt_node.h)
     localtalk_printer_t printer;   // NULL begin: jobs are captured and dropped
+    void      (*on_event)(lt_event_t ev);  // may be NULL; must not block
 } localtalk_cfg_t;
 
 // Starts the node once; later calls do nothing.

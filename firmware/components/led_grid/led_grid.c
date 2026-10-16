@@ -11,15 +11,25 @@
 #include "led_strip.h"
 #include "printer_state.h"
 
+#define LG_RMT_SYMBOLS 1024    // the DMA buffer: one frame of 37 LEDs is 888
+
 static led_strip_handle_t s_strip;
 static int s_count;
 static volatile uint8_t s_gamer;   // DIP7, set from dip_config's task
 
-// The action over the state, set from other tasks (led_grid_action).
+// The tasks and the acknowledgement over the state, set from other tasks
+// (led_grid_action, led_grid_blip): what each shows and when it began.
+// The clocks are 64-bit milliseconds (lg_elapsed): a 32-bit difference goes
+// negative after 24.8 days and would freeze a finished one-shot on its first
+// frame.
+typedef struct { uint8_t act; uint16_t arg; uint64_t t0; } slot_t;
 static portMUX_TYPE s_act_mux = portMUX_INITIALIZER_UNLOCKED;
-static uint8_t  s_act;
-static uint16_t s_act_from;
-static uint32_t s_act_t0;
+static slot_t   s_task[LG_FAMS];
+static uint8_t  s_blip;
+static uint64_t s_blip_t0;
+static volatile uint8_t s_src;     // lg_src_t, whose job Printing is
+
+static uint64_t now_ms(void) { return (uint64_t)(esp_timer_get_time() / 1000); }
 
 static void lg_task(void *arg)
 {
@@ -38,16 +48,18 @@ static void lg_task(void *arg)
         // task out of order -- the next frame just re-reads whatever is
         // current.
         ps_view_t v = printer_state_view();
-        uint32_t now = (uint32_t)(esp_timer_get_time() / 1000);
-        lg_opts_t o = { .gamer = s_gamer };
+        uint64_t now = now_ms();
+        lg_opts_t o = { .gamer = s_gamer, .src = s_src };
         portENTER_CRITICAL(&s_act_mux);
-        o.act = s_act;
-        o.act_from = s_act_from;
-        // An action set between reading the clock and taking the lock
-        // starts after `now`: show it at 0, not 49 days in.
-        o.act_ms = (int32_t)(now - s_act_t0) < 0 ? 0 : now - s_act_t0;
+        for (int f = 0; f < LG_FAMS; f++)
+            o.task[f] = (lg_slot_t){ s_task[f].act, s_task[f].arg, lg_elapsed(now, s_task[f].t0) };
+        // An acknowledgement raised during the Spin waits it out: its clock
+        // starts again every frame until the panel has booted.
+        if (v.state == PS_BOOTING) s_blip_t0 = now;
+        o.blip = s_blip;
+        o.blip_ms = lg_elapsed(now, s_blip_t0);
         portEXIT_CRITICAL(&s_act_mux);
-        lg_render16(&v, &o, now, hi);
+        lg_render16(&v, &o, (uint32_t)now, hi);    // animation phase: wraps harmlessly
         lg_dither(&dith, hi, frame);
         for (int i = 0; i < s_count && i < LG_NUM_LEDS; i++)
             led_strip_set_pixel(s_strip, (uint32_t)i,
@@ -68,7 +80,14 @@ esp_err_t led_grid_start(void)
         .led_model = LED_MODEL_SK6812,
         .color_component_format = LED_STRIP_COLOR_COMPONENT_FMT_GRB,
     };
-    led_strip_rmt_config_t rc = { .resolution_hz = 10 * 1000 * 1000 };
+    // The whole frame (24 bits a LED) goes out of one DMA buffer. With the
+    // default 48-symbol RMT block an interrupt has to refill it every ~30 us,
+    // and that interrupt is not cache-safe: during a Wi-Fi join (the scan, the
+    // handshake, NVS writes with the cache off) a late refill sent stale bits
+    // and the Spin stuttered (W-1049 bench). The S3 has one DMA TX channel.
+    _Static_assert(CONFIG_AIRWRITER_LED_COUNT * 24 < LG_RMT_SYMBOLS, "frame must fit the DMA buffer");
+    led_strip_rmt_config_t rc = { .resolution_hz = 10 * 1000 * 1000,
+                                  .mem_block_symbols = LG_RMT_SYMBOLS, .flags.with_dma = true };
     esp_err_t err = led_strip_new_rmt_device(&sc, &rc, &s_strip);
     if (err != ESP_OK) return err;
     led_strip_clear(s_strip);
@@ -81,12 +100,29 @@ void led_grid_set_gamer(int on)
     s_gamer = on ? 1 : 0;
 }
 
-void led_grid_action(lg_act_t act, uint16_t from)
+void led_grid_action(lg_act_t act, uint16_t arg)
 {
-    uint32_t now = (uint32_t)(esp_timer_get_time() / 1000);
+    uint64_t now = now_ms();
+    slot_t *s = &s_task[lg_family((uint8_t)act)];
     portENTER_CRITICAL(&s_act_mux);
-    s_act = (uint8_t)act;
-    s_act_from = from;
-    s_act_t0 = now;
+    if (s->act != (uint8_t)act) {
+        s->act = (uint8_t)act;
+        s->t0 = now;
+    }
+    s->arg = arg;
     portEXIT_CRITICAL(&s_act_mux);
+}
+
+void led_grid_blip(lg_blip_t b)
+{
+    uint64_t now = now_ms();
+    portENTER_CRITICAL(&s_act_mux);
+    s_blip = (uint8_t)b;
+    s_blip_t0 = now;
+    portEXIT_CRITICAL(&s_act_mux);
+}
+
+void led_grid_set_source(lg_src_t s)
+{
+    s_src = (uint8_t)s;
 }

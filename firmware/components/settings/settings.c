@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include "nvs.h"
 #include "esp_log.h"
+#include "esp_attr.h"
 #include "sdkconfig.h"
 
 static const char *TAG = "settings";
@@ -13,6 +14,12 @@ static const char *NS  = "airwriter";
 // The wifi credentials keep their own namespace because main.c read them from
 // there before this component existed, and devices in the field may have them.
 static const char *NS_WIFI = "wifi";
+
+// W-1049: set by a Wi-Fi save, read once at the next boot. RTC memory is left
+// alone by a software restart and lost on a power cut, which is the point:
+// only the restart right after setup greets the join.
+#define FRESH_MAGIC 0x57494649u     // "WIFI"
+static RTC_NOINIT_ATTR uint32_t s_fresh;
 
 static void get_str(nvs_handle_t h, const char *key, char *dst, size_t cap,
                     const char *fallback)
@@ -65,8 +72,16 @@ esp_err_t settings_save_wifi(const char *ssid, const char *pass)
     nvs_set_str(h, "pass", pass ? pass : "");
     err = nvs_commit(h);
     nvs_close(h);
+    if (err == ESP_OK) s_fresh = FRESH_MAGIC;
     ESP_LOGI(TAG, "wifi credentials saved for \"%s\"", ssid ? ssid : "");
     return err;
+}
+
+int settings_take_wifi_fresh(void)
+{
+    int fresh = s_fresh == FRESH_MAGIC;
+    s_fresh = 0;
+    return fresh;
 }
 
 esp_err_t settings_save_general(const char *hostname, const char *queue,

@@ -48,9 +48,16 @@ What works on `main`:
 - After an aborted job the next one resyncs the printer first (1280 NULs + CTRL-X); a printer
   left busy by line noise at power-up gets a CTRL-X.
 - The 37-dot status panel per the status-language spec: Spin at boot, discrete printer and Wi-Fi
-  states, per-dot white Ready, DIP7 gamer RGB, pilot dot after 5 min idle.
+  states, per-dot white Ready, DIP7 gamer RGB, pilot dot after 5 min idle. W-1049 puts the board's
+  actions on it in FeatherFrame's colours: tasks (firmware update, TashTalk flash) beside the
+  reset, moments opening states (printer gone and back, page out, cancelled, could not join),
+  short acknowledgements (LocalTalk on, a Mac heard, Busy, Saved), and LocalTalk jobs inked in the
+  six Apple stripes. `led_grid_action()` per family, `led_grid_blip()`, `led_grid_set_source()`.
+  A quiet power-on: the Spin alone until Wi-Fi is up and the printer line has settled (3–30 s),
+  then straight into the state; the Wi-Fi green only after a fresh setup or a real rejoin.
 - DIP switches read by their printed numbers; a tap of the `test` button prints a test page, or
-  with the printer not ready runs the cable test.
+  with the printer not ready runs the cable test; a second tap cancels the test page; a tap during
+  another job shows Busy.
 - Recovery (SPEC §3.11): a `factory` slot beside ota_0/ota_1; a new OTA image runs on trial and
   rolls back unless healthy (`/api/status` `slot`, `trial`, `rolled_back`). Holding `test` 8 s
   erases the settings with a countdown on the panel; holding it through power-up for 5 s makes
@@ -131,8 +138,12 @@ Linear is the queue; these are the live items.
 - `W-1059 Known-good slot: factory reset boots the last version that worked`: three equal slots
   and a record of the last good one, which the power-up reset boots. Needs a bootloader hook and
   one USB flash of board 1.
-- `W-1049 Panel feedback for every action: OTA, reset, cables, TashTalk flash`: built, waiting to
-  rebase onto W-1048 and bench on board 1.
+- `W-1049 Panel feedback for every action: OTA, reset, cables, TashTalk flash`: benched on board 1
+  2026-10-16 (all pass, Wells by eye); the quiet power-on added after, still to bench (power-up
+  with the printer on, with it off, and the restart after setup). Held back by Wells: update kept, update refused, rolled back,
+  DIP switch flipped (their acts draw the state). Deferred from review: the amber ahead of
+  "printer back" drops from the alert cap to the normal cap at its first frame, and Saved does
+  not wake a sleeping panel.
 - Not in Linear: scope HSKo during a long job (SPEC §3.9 timing).
 
 ## Toolchain

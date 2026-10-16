@@ -25,6 +25,11 @@ Traps already explained in a code comment are listed only when the comment is ea
   (SP3232 T1IN, a driver input with no pull) are driven low as the first statements of
   `app_main()`. IO48 floating can brownout-loop the board on a 500 mA port, not just flicker the
   LEDs. Keep the clamps first; rev B adds the resistors (`docs/hardware-rev-a.md`).
+- **The LED chain needs RMT DMA.** 37 SK6812s are an 888-bit frame; without DMA the RMT driver
+  refills a 48-symbol block from an interrupt every ~30 us, and that interrupt is masked while
+  the flash cache is off. A Wi-Fi join (scan, handshake, NVS writes) delayed it and sent stale
+  bits: the boot Spin stuttered. `led_grid.c` sends each frame from one DMA buffer (the S3's only
+  DMA TX channel, so nothing else may ask for RMT DMA).
 - **Rev A has no hardware LED current limit.** `LG_BRIGHTNESS_CAP` and friends in
   `led_grid_core.h` are the only limit on 37 SK6812s; raise them knowingly.
 - **A raw pyserial open on macOS drops the S3 into download mode** (the driver asserts DTR at

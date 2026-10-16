@@ -47,14 +47,33 @@ Display states, highest priority first:
 
 | # | State | Entered when | Left when | IPP |
 |---|---|---|---|---|
-| 1 | **Booting** | power-on | the boot animation finishes (3.0 s) | idle |
+| 1 | **Booting** | power-on | the Spin ends: once the board has settled (below, W-1049's quiet power-on), at the earliest 3.0 s and at the latest 30 s after power-on | idle |
 | 2 | **Setup** | no credentials, or the boot-time join failed; sub-state *phone joined* while ≥1 station is on the AP | credentials saved (the board reboots) | — |
-| 3 | **Joining Wi-Fi** | at boot, and after any disconnect once joined | got an IP | — |
+| 3 | **Joining Wi-Fi** | the Spin ended without Wi-Fi (the 30 s cap), and after any disconnect once joined | got an IP | — |
 | 4 | **Needs attention** | a job is active and HSKo has been false for `STALL_ATTENTION` (30 s) -- or for `OFFLINE_DEBOUNCE` (3 s) if it was already false when the job started: no printer to wait for | HSKo true (the job resumes), or `STALL_ABORT` (600 s) passes → job fails | stopped, `media-empty` |
 | 5 | **Job failed** | a job ends in failure (transfer cut, rip error, stall abort) | `FAILED_HOLD` (60 s) passes, or the next job starts | idle; the job is aborted |
 | 6 | **Printing** | a job starts | the job ends | processing |
-| 7 | **Printer offline** | no job, HSKo false for `OFFLINE_DEBOUNCE` (3 s), counted from the end of the boot animation (the ImageWriter reports busy for ~3.5 s after the AirWriter powers up, W-1039) | HSKo true | stopped, `other`¹ |
+| 7 | **Printer offline** | no job, HSKo false for `OFFLINE_DEBOUNCE` (3 s), counted from the end of the Spin (the ImageWriter reports busy for ~3.5 s after the AirWriter powers up, W-1039) | HSKo true | stopped, `other`¹ |
 | 8 | **Ready** | Wi-Fi up, HSKo true, nothing above applies | — | idle |
+
+**Quiet power-on** (W-1049; Wells, 2026-10-16: a normal power-on showed the Spin, Joining, the
+green, the printer gone and back, then Ready). The Spin is all a normal power-on shows. It runs
+until the board has **settled**, then goes out (1.3 s) straight into the state:
+
+- settled means Wi-Fi is up and the printer line has held still: ready for `BOOT_SETTLE_READY`
+  (1 s), or not ready for `BOOT_SETTLE_OFFLINE` (10 s, counted from power-on: a printer switched on
+  with the board keeps its line down for a few seconds while it starts). Setup mode or a job
+  starting settles it at once;
+- the Spin runs at least `BOOT_MS` (3.0 s, its own show) and at most `BOOT_CAP` (30 s), so it
+  never looks hung;
+- after it: Ready with nothing else, or Printer offline's embers directly (no "gone"), or Setup
+  (no credentials), or Setup opened by the two red pulses (the saved network was tried and
+  failed), or Joining (still no Wi-Fi at the cap);
+- the green Wi-Fi moment opens the Ready after the Spin only on the first power-on after Wi-Fi
+  was saved from the web page (the restart that follows; a flag that survives the restart, not a
+  power cut), as confirmation. Otherwise it opens a Ready entered from Joining: a real rejoin.
+
+After the Spin, every moment plays for real changes as before.
 
 **Asleep** is a modifier, not a state: after `SLEEP_AFTER` (300 s) with no activity while in
 *Ready* or *Printer offline*, the panel fades to a pilot light. States 1–6 never sleep.
@@ -106,11 +125,11 @@ state reads as one big LED. Hue offsets stay inside each state's colour family.
 
 | State | Dots | Pattern |
 |---|---|---|
-| Booting | all; mask at 4× | **Spin**: a full-saturation hue wheel around the test button, spinning up from dark (dots fade in by distance), then collapsing inward to the test button and ending dark at 3.0 s. |
+| Booting | all; mask at 4× | **Spin**: a full-saturation hue wheel around the test button, spinning up from dark (dots fade in by distance), then collapsing inward to the test button: the far dots go first and the centre last, over 1.3 s from when the board settles (so a board settled by 1.7 s ends dark at 3.0 s, as before). While it waits longer, the wheel keeps turning at its 2.5 s pace (100°/s) and eases to 60% between 3 and 4 s, which also keeps the draw down while Wi-Fi joins. |
 | Setup | FR4 only | blue (hue 220° ±16° per dot, drifting ±6°) **radar sweep**: an arm turns around the test button once per 2.6 s; each dot flares to 88% as it passes and decays behind it (e-folding over 55°), floor 8% |
 | Setup, phone joined | FR4 only | the same blues, steady at 58% with a per-dot shimmer of ±8% on its own 3–5.5 s period |
 | Joining Wi-Fi | FR4 only | blue (hue 215° ±18°) **rings pulsing outward** from the test button every 0.9 s, 8% floor, 83% at the ring |
-| Wi-Fi connected | FR4 only | the first moments of a Ready entered straight from Joining or Booting (`greeted`): a green field (hue 130° ±14°) with a ripple outward over 1.4 s, held, then cross-fading to Ready's white between 2.2 s and 3.2 s. Green means "Wi-Fi just connected", or, as a sweep and a pulse, "this cable works" (W-1055). |
+| Wi-Fi connected | FR4 only | the first moments of a Ready entered from Joining, or from Booting on the first power-on after Wi-Fi was saved (`greeted`): a green field (hue 130° ±14°) with a ripple outward over 1.4 s, held, then cross-fading to Ready's white between 2.2 s and 3.2 s. Green means "connected, or it worked" (W-1049, FeatherFrame's green): here, Wi-Fi; as a sweep and a pulse, "this cable works" (W-1055). |
 | Ready | FR4 only | **neutral white**, each dot slightly warm or cool, breathing on its own 5–9 s period between 30% and 70% (first tuned at 16–38%, which peaked under 6 counts and was invisible in daylight on board 1; 30–70% is 4× the drive). (Colour tweaks made on 10-14/15 were judged while the board was actually in Printer offline, so they were reverted to this.) |
 | Ready, gamer mode | FR4 only | DIP7 on: hue from position plus time, a slow RGB drift (one wheel per ~14 s), saturation 75%, the same breathing |
 | Printer offline | FR4 only | **warm embers**: hue 25–43°, saturation 50–62%, each dot on its own 7–13 s cycle, mostly at 9% and swelling to 60% (4× the drive of the first 5–32% tune, for daylight) |
@@ -135,14 +154,118 @@ hue-dependent and not worth a lookup table).
 on average. Steady states drive FR4 dots only, so the steady draw falls well below today's
 37-dot breathe.
 
-### Actions
+### Actions, moments and acknowledgements (W-1049)
 
-Things a person starts show over every display state, asleep included, until they end
-(`lg_opts_t.act`). The factory reset is the first (`W-1045 Long-press factory reset with live
-feedback on the LED panel`, SPEC.md §3.11); `W-1049 Panel feedback for every action: OTA,
-reset, cables, TashTalk flash` adds the rest and their priorities. The reset uses all dots,
-mask at 4×, FR4 at the alert cap in its red phases and at the normal cap for white; no frame
-draws more than the boot spin's heaviest (host test).
+`W-1049 Panel feedback for every action: OTA, reset, cables, TashTalk flash` puts everything the
+board does on the panel. Wells approved the patterns on 2026-10-16 from previews rendered by the
+renderer itself (the W-1049 panel-patterns page), with four held back (below).
+
+**Colours, shared with FeatherFrame's status LED.**
+
+| Colour | Means | On FeatherFrame |
+|---|---|---|
+| blue | setting up, joining | the setup portal, joining |
+| green | connected, or it worked | on Wi-Fi, paired |
+| amber, orange | needs a person, or not now | waiting to be added |
+| purple | updating firmware | writing an update |
+| red | something went wrong | the join failed, no Wi-Fi |
+| white | ready, done, taken | (off in normal running) |
+| the six stripes | LocalTalk | — |
+
+The boot stays AirWriter's RGB Spin (FeatherFrame breathes white). The six stripes are the
+classic Apple logo's, top to bottom over the eight rows: hue 104°, 41°, 28°, 358°, 299°, 197°
+(stripe `⌊(row + 0.5)·6/8⌋`), saturation 85%, ±4° per dot.
+
+**The sockets are on the bottom edge**: the printer (J2) under column 0.9, LocalTalk (J4) under
+column 3.2, USB-C under 5.5. A pattern about a cable starts at its socket, drawn from row 8.6,
+just below the grid (the sockets themselves are 4.6 rows lower), so the wave enters at once.
+
+**Priority**, highest first:
+
+1. **Tasks** own the panel while they run: the factory reset, then a firmware update, then a
+   TashTalk flash. Each has its own slot; the highest-priority running one shows, so letting go
+   of a reset hold uncovers an update still in progress. Tasks show over every state, asleep
+   included.
+2. **The display state**, with the **moments** that open some states. A moment is drawn from
+   the state before (`ps_view_t.prev`) and `since_ms`: wherever its wave has not reached yet
+   still shows the old state.
+3. **Acknowledgements**: at most 1.6 s, drawn over the state (screen blend), on any dots they
+   need. Never during a task, and not in Needs attention or Job failed, so an alert is never
+   hidden. Not over an all-dot moment (Page out, Cancelled, Could not join, Printer back into
+   Printing) or a cable test's answer either: together they would draw more than the Spin. One raised during Booting waits for the Spin to end, then plays from its start (the
+   LocalTalk node comes online about 2 s into a mode-2 boot). A newer one replaces the one
+   showing. They show over sleep without waking the panel; the ones a person causes also post
+   `ACTIVITY` from their call site.
+
+No frame of any of these draws more than the boot spin's heaviest (host test). FR4 dots use the
+normal cap except in red phases (alert cap); mask dots use the mask cap.
+
+**Moments.**
+
+| Moment | When | Pattern | Length |
+|---|---|---|---|
+| Printer gone | Ready → Printer offline | the white drains toward the printer socket: a front runs from the far corner to the socket in 1.1 s with a white glint (85%, ±130 ms), each dot going dark as it passes, the embers fading in 250–900 ms behind it. FR4 only. | 2 s |
+| Printer back | Printer offline → Ready, or Needs attention → Printing | a green wave (hue 130° ±14°, 85%) rolls out of the printer socket, crossing the panel in 1.1 s; ahead of it the old state, behind it green cross-fading to the new state over 150–900 ms after it passes. FR4 only from offline; all dots from attention (Printing's dots). | 2 s |
+| Page out | Printing → Ready, the job finished | the inked sheet rises off the top: its bottom edge climbs from row 8.5 to −1.5 in 0.9 s, the ink in bands (10–30%, period 3 rows) scrolling up with it; the job's ink (warm, or the stripes for LocalTalk); Ready below the edge; mask dots carry the ink and go dark below it. | 1 s |
+| Cancelled | Printing → Ready, the job cancelled | the print freezes where it stood (Printing's frame at the moment of the cancel) and fades out over 0.6 s; Ready fades in 0.3–0.9 s. No page out. | 0.9 s |
+| Could not join | Setup after the saved network was tried and failed (from Joining, or straight from the Spin; `ps_view_t.join_failed`) | two red pulses (hue 2° ±8°, 500 ms each, peak 85%) on all dots, FR4 at the alert cap, then Setup fades in 1.0–1.6 s. FeatherFrame's failed-join signal. | 1.6 s |
+
+Any other change of state opens with no moment: the new state shows as it is (a job cancelled
+while it waits for paper goes from Needs attention straight to Printer offline's embers).
+
+"Cancelled" covers a second tap of the test button during its page and an IPP Cancel-Job. A
+LocalTalk job always ends as finished: a Mac that cancels closes the connection like one that is
+done, and the two can't be told apart.
+
+**LocalTalk printing.** Printing keeps its print head for every job, and the ink says whose job
+it is: AirPrint and the test page ink warm (as above); a LocalTalk (PAP) job inks each row in
+its stripe, the head's row at 35%, the two rows behind at 35% and 22%, the rest at 12% (so the
+stripes show across the panel, not only near the head).
+
+**Tasks** (besides the reset, above).
+
+| Task | When | Pattern |
+|---|---|---|
+| Firmware downloading / installing | an update is arriving or being written; arg is progress 0..1000 | purple (hue 280° ±10°, saturation 90%) fills the FR4 dots from the bottom: the level's line sits at row `8 − 8.6p`, soft over one row; below it 45%, plus a shimmer band (+30%) running up through the filled part every 0.8 s; above it 6%. Mask dark. |
+| … length unknown | arg is `LG_PROGRESS_NONE` | a purple band (60% over a 8% floor) climbs from below the grid to above it every 1.2 s |
+| Verifying | the image is in; checking it | the FR4 dots pulse purple, 30% to 85%, every 0.8 s, each dot offset up to 250 ms |
+| Verified | installed, set to boot | green rises through the purple from the bottom in 0.5 s, holds, fades out 1.2–2.0 s; dark until the restart |
+| TashTalk flashing | the PIC is being written (about 2 s) | the six stripes at 35% on all dots, with a white bar sweeping left to right across the columns every 0.5 s |
+| TashTalk OK | the flash verified | a green ripple out of the LocalTalk socket, crossing the panel in 0.9 s and leaving a 35% wash behind, fading out 0.8–1.6 s; then the state |
+| TashTalk failed | the flash failed | Job failed's red glitch and pulse for 3 s, then the state |
+
+A firmware task holds its slot until it is replaced or cleared (`LG_ACT_FW_NONE`); Verified
+holds until the restart. The update's own flow decides when; W-1048 drives it.
+
+**Acknowledgements.**
+
+| Acknowledgement | When | Pattern | Length |
+|---|---|---|---|
+| LocalTalk on | the node has its node ID (at boot in DIP mode 2, or when mode 2 is switched on) | the stripes rise out of the LocalTalk socket: a front climbs from row 8.5 to −1.5 in 0.7 s, rows below it at 60% with a 35% crest; holds; fades out 1.0–1.6 s. All dots. | 1.6 s |
+| A Mac heard | an NBP LkUp answered (a Chooser looking), or a frame from a node not heard since boot; at most once every 6 s | an arc of stripes out of the LocalTalk socket, crossing the panel in 0.9 s (90% at the crest, ±0.7 rows), fading out 0.8–1.1 s. All dots. | 1.1 s |
+| Busy | the test button tapped during an IPP or LocalTalk job | two orange pulses (hue 30° ±4°, 300 ms each, peak 85%) on the dots around the test button (distance 0.5–1.6) | 0.6 s |
+| Saved | settings saved on the web page; for Wi-Fi, just before its restart | a white ring closes into the test button in 0.6 s (80% at the ring), then the dots around the button glow 60% and fade out by 0.9 s | 0.9 s |
+
+**The test button.** A tap while the test page prints cancels it: the page stops (the write is
+aborted and the queue purged, as a Cancel-Job does), it ends as cancelled, and W-1041's resync
+runs before the next job. A cancel that comes too late to cut anything is a page that printed.
+A tap during an IPP or LocalTalk job, or a cable test, shows Busy and does nothing else.
+Otherwise a tap tests the cable when the printer is not ready (W-1055) and prints the test page
+when it is. The tap and the page's end decide under one lock, so a tap as the page finishes
+never lands on the next job. A hold is the factory reset (unchanged).
+
+**Held back** (Wells, 2026-10-16), not built: update kept (the trial passed), update refused,
+update rolled back, and DIP switch flipped. Their `lg_act_t` values stay, because W-1048 calls
+them, and they draw nothing: the state shows.
+
+**Stays dark on purpose**: Get-Printer-Attributes polls (Home Assistant's every 30 s), W-1039's
+CTRL-X unstick, W-1041's resync, the bench AEP echo. **Can't be seen on rev A**: a LocalTalk
+cable on its own. Nothing is on the bus until a Mac speaks, and "A Mac heard" covers that.
+
+#### The factory reset (W-1045)
+
+The reset uses all dots, mask at 4×, FR4 at the alert cap in its red phases and at the normal
+cap for white.
 
 | Action | When | Pattern |
 |---|---|---|
@@ -163,10 +286,23 @@ Units and their interfaces. Pure cores stay host-testable in `tools/rip`, as now
 - `ps_update(now_ms)` derives the view and runs every timer lazily: boot length, offline
   debounce, stall attention, failed hold, sleep. A state change counts as activity. The core
   owns time-since-line-change, so `serial_out` no longer decides "blocked".
-- Output: `ps_view_t { state; phone_joined; greeted; asleep; since_ms; asleep_ms }`, the one
-  view the LEDs, IPP and the web status all read. `greeted` marks a stretch of Ready entered
-  straight from Joining or Booting, which the panel opens with the green Wi-Fi-connected moment.
-- Booting ends on the core's own timer (`boot_ms` = the Spin's 3.0 s); no event is needed.
+- Output: `ps_view_t { state; prev; cancelled; join_failed; spin_out; spin_out_ms;
+  phone_joined; greeted; asleep; since_ms; asleep_ms }`, the one view the LEDs, IPP and the web
+  status all read. `greeted` marks a stretch of Ready entered from Joining, or from Booting after
+  `PS_EV_WIFI_FRESH`, which the panel opens with the green Wi-Fi-connected moment. `spin_out` and
+  `spin_out_ms` say the Spin is going out and for how long; `join_failed` that Setup follows a
+  failed join of the saved network. `prev` is the display state before this one (Booting at first),
+  which the panel's moments key off (W-1049).
+- `PS_EV_JOB_CANCELLED` ends a job as `JOB_DONE` does and sets `cancelled`; `JOB_START` clears
+  it. Only the panel reads it (Cancelled instead of Page out).
+- Booting ends on the core's own clock (W-1049's quiet power-on): the Spin starts going out at
+  the latest of `boot_ms − boot_out_ms` and the moment the board settled, or at
+  `boot_cap_ms − boot_out_ms`, whichever is earlier, and Booting ends `boot_out_ms` later.
+  `ps_timing_t` gains `boot_cap_ms` (30 000), `boot_out_ms` (1 300), `settle_ready_ms` (1 000) and
+  `settle_offline_ms` (10 000), appended to `PS_TIMING_DEFAULT`.
+- `PS_EV_WIFI_JOINING` is posted only when there are credentials to try, so Setup after it is a
+  failed join (`join_failed`). `PS_EV_WIFI_FRESH` (main, at power-on, when `settings` says Wi-Fi
+  was saved before this restart) lets the green open the first Ready.
 - `STALL_ABORT` is not the core's to enforce: the serial writer fails a write after that long
   without FIFO progress.
 
@@ -196,6 +332,34 @@ Units and their interfaces. Pure cores stay host-testable in `tools/rip`, as now
   switches and handed to the LED task with `led_grid_set_gamer()`.
 - **Test patterns do not ship.** The W-1034 rainbow and the boot-animation spike stay on their
   branches; patterns are previewed rendered in chat, not on the device.
+- W-1049: `lg_opts_t { gamer; src; task[LG_FAMS]; blip; blip_ms }`. `task` holds one
+  `lg_slot_t { act; arg; ms }` per family (reset, firmware, TashTalk, in priority order) and
+  `lg_family(act)` says which. `lg_act_over()` and `lg_blip_over()` say when a one-shot is done.
+  `src` (`LG_SRC_AIRPRINT`, `LG_SRC_LOCALTALK`) picks Printing's ink. The renderer draws the
+  first running task if there is one, else the state with its moment and the acknowledgement.
+
+**`led_grid`** (the ESP glue), all callable from any task:
+- `led_grid_action(lg_act_t act, uint16_t arg)` sets that act's family slot. The same act again
+  updates `arg` and keeps its clock (firmware progress); a different act restarts it.
+- `led_grid_blip(lg_blip_t b)` shows an acknowledgement from now.
+- `led_grid_set_source(lg_src_t s)`: whose job the next Printing is; set before `JOB_START`.
+
+**`localtalk`**: `localtalk_cfg_t.on_event(lt_event_t)`, called on the LocalTalk task:
+`LT_EV_ONLINE` (the node ID is ours), `LT_EV_LOOKUP` (an NBP LkUp answered: `st.replies` went
+up), `LT_EV_NEW_NODE` (a node's first non-ENQ frame since boot: its `heard` bit was set). Raised
+in `localtalk.c` by comparing the node's counters after each frame and tick; `lt_node` itself
+does not change. `main` turns LOOKUP and NEW_NODE into one "A Mac heard" at most every 6 s (and
+`ACTIVITY`), and ONLINE into "LocalTalk on".
+
+**`webui`** calls `led_grid` directly (it `REQUIRES led_grid`): saving settings or Wi-Fi shows
+Saved. `POST /update` is W-1048's: it moves into `fw_update.c` and drives the firmware task
+there, so W-1049 leaves it alone and its firmware patterns are checked on the bench once both
+branches are in.
+
+**`main`** (W-1049): sets the source at each job's begin (`doc_begin`, `lt_print_begin`, the
+test page); posts `JOB_CANCELLED` for a cancelled IPP job or test page; runs the test button as
+above (tap: print, cancel or Busy); wraps the TashTalk flash in `PIC_FLASHING` then `PIC_OK` or
+`PIC_FAILED`; maps the LocalTalk events.
 
 **Web status JSON**: `"ps"` takes the new names (`booting`, `setup`, `joining`, `attention`,
 `failed`, `printing`, `offline`, `ready`) plus `"asleep": bool`; the human `"state"` strings
@@ -209,6 +373,21 @@ Host (`tools/rip`, `make test`):
   overlapping states, activity resetting sleep, and a job surviving a stall and resuming.
 - `test_led_grid`: per state — the cap holds; FR4-only states leave mask dots dark; the Spin
   ends dark at 3.0 s; asleep lights exactly one dot.
+- `test_led_grid`, W-1049: for every moment, task and acknowledgement — caps hold (alert cap
+  only in red phases), no frame draws more than the Spin's heaviest, FR4-only patterns leave
+  mask dots dark, and each one ends on time with the state's own frame after it. Task priority
+  (a reset hold covers an update, which shows again after the cancel; firmware covers
+  TashTalk). Acknowledgements are dropped during a task and in Booting, Needs attention and
+  Job failed. LocalTalk ink differs from AirPrint ink. Firmware progress lights more as it rises.
+  The held-back acts draw the state.
+- `test_printer_state`, W-1049: `prev` across transitions; `cancelled` set by `JOB_CANCELLED`
+  and cleared by `JOB_START`. The power-on paths: a quiet boot (Wi-Fi and a ready printer) goes
+  Booting → Ready with nothing between and no green; no printer goes Booting → Printer offline;
+  no credentials goes to Setup at 3.0 s; a failed join goes to Setup with `join_failed`; no Wi-Fi
+  by the cap goes to Joining at 30 s; the green opens the first Ready only after
+  `PS_EV_WIFI_FRESH`; a fast boot still ends at 3.0 s exactly.
+- `test_led_grid`, W-1049: the Spin waiting past 3 s stays lit at no more than its heaviest
+  frame, and goes dark `boot_out_ms` after it starts going out.
 - `test_serial_writer`: a write rides out a stall and succeeds when the line returns; fails only
   past the stall limit.
 - `make regress`: both `stream.bin` regressions unchanged (the raster path is untouched).
@@ -220,6 +399,11 @@ On board 1:
   page prints complete. Note what iOS shows during the pause, and whether its upload survives.
 - Router Wi-Fi off for 1 minute → Joining; back on → Ready, with no setup AP.
 - Leave idle 5 minutes → pilot light; a print or the test button wakes it.
+- W-1049, each by eye: printer cable out and in (gone, back); a job to the end (page out); the
+  test button tapped twice (cancelled) and during a phone job (Busy); a LocalTalk job (stripes);
+  DIP mode 2 on (LocalTalk on) and the Chooser open on the Mac (A Mac heard); a TashTalk flash;
+  an OTA once W-1048 is in (purple fill, verified, restart); settings saved; Wi-Fi credentials
+  for a network that isn't there (could not join, then Setup).
 
 ## Out of scope
 
