@@ -117,6 +117,9 @@ the registered `other` is used. Check on an iPhone what the print sheet shows in
 
 Colours are drive targets before the cap: `LG_BRIGHTNESS_CAP` 48/255 on FR4 dots, except Needs
 attention, which gets `LG_ALERT_CAP` 96/255 (tuned on board 1: at 48 it was too dim to notice).
+Every pattern peaks at 100% of its cap: peaks of 60–90% read too dim on board 1, so each was
+scaled up to full with its lower levels in proportion (the same animation, brighter). The
+Spin's 60% hold and the pilot light are the exceptions.
 "FR4 only" means mask dots stay dark.
 
 Every pattern uses the array: position drives sweeps, ripples and the print head, and each dot
@@ -126,16 +129,16 @@ state reads as one big LED. Hue offsets stay inside each state's colour family.
 | State | Dots | Pattern |
 |---|---|---|
 | Booting | all; mask at 4× | **Spin**: a full-saturation hue wheel around the test button, spinning up from dark (dots fade in by distance), then collapsing inward to the test button: the far dots go first and the centre last, over 1.3 s from when the board settles (so a board settled by 1.7 s ends dark at 3.0 s, as before). While it waits longer, the wheel keeps turning at its 2.5 s pace (100°/s) and eases to 60% between 3 and 4 s, which also keeps the draw down while Wi-Fi joins. |
-| Setup | FR4 only | blue (hue 220° ±16° per dot, drifting ±6°) **radar sweep**: an arm turns around the test button once per 2.6 s; each dot flares to 88% as it passes and decays behind it (e-folding over 55°), floor 8% |
-| Setup, phone joined | FR4 only | the same blues, steady at 58% with a per-dot shimmer of ±8% on its own 3–5.5 s period |
-| Joining Wi-Fi | FR4 only | blue (hue 215° ±18°) **rings pulsing outward** from the test button every 0.9 s, 8% floor, 83% at the ring |
+| Setup | FR4 only | blue (hue 220° ±16° per dot, drifting ±6°) **radar sweep**: an arm turns around the test button once per 2.6 s; each dot flares to 100% as it passes and decays behind it (e-folding over 55°), floor 9% |
+| Setup, phone joined | FR4 only | the same blues, steady at 88% with a per-dot shimmer of ±12% on its own 3–5.5 s period |
+| Joining Wi-Fi | FR4 only | blue (hue 215° ±18°) **rings pulsing outward** from the test button every 0.9 s, 10% floor, 100% at the ring |
 | Wi-Fi connected | FR4 only | the first moments of a Ready entered from Joining, or from Booting on the first power-on after Wi-Fi was saved (`greeted`): a green field (hue 130° ±14°) with a ripple outward over 1.4 s, held, then cross-fading to Ready's white between 2.2 s and 3.2 s. Green means "connected, or it worked" (W-1049, FeatherFrame's green): here, Wi-Fi; as a sweep and a pulse, "this cable works" (W-1055). |
-| Ready | FR4 only | **neutral white**, each dot slightly warm or cool, breathing on its own 5–9 s period between 30% and 70% (first tuned at 16–38%, which peaked under 6 counts and was invisible in daylight on board 1; 30–70% is 4× the drive). (Colour tweaks made on 10-14/15 were judged while the board was actually in Printer offline, so they were reverted to this.) |
-| Ready, gamer mode | FR4 only | DIP7 on: hue from position plus time, a slow RGB drift (one wheel per ~14 s), saturation 75%, the same breathing |
-| Printer offline | FR4 only | **warm embers**: hue 25–43°, saturation 50–62%, each dot on its own 7–13 s cycle, mostly at 9% and swelling to 60% (4× the drive of the first 5–32% tune, for daylight) |
+| Ready | FR4 only | **neutral white**, each dot slightly warm or cool, breathing on its own 5–9 s period between 43% and 100% (first tuned at 16–38%, which peaked under 6 counts and was invisible in daylight on board 1, then 30–70%, still too dim; 43–100% is 2.2× the drive of that). (Colour tweaks made on 10-14/15 were judged while the board was actually in Printer offline, so they were reverted to this.) |
+| Ready, gamer mode | FR4 only | DIP7 on: hue from position plus time, a slow RGB drift (one wheel per ~14 s), saturation 75%, the same breathing (7% + 93% of it) |
+| Printer offline | FR4 only | **warm embers**: hue 25–43°, saturation 50–62%, each dot on its own 7–13 s cycle, mostly at 15% and swelling to 100% (the first 5–32% tune and the second 9–60% were lost in daylight) |
 | Printing | all; mask at 4× | **print head**: a bright white dot crosses the current row in 1.5 s, inking it warm (hue 28–48°) behind; rows advance top to bottom and alternate direction like the ImageWriter's bidirectional head; the two rows above hold fading ink (25%, 12%), the rest 3% |
 | Needs attention | all; FR4 at the alert cap (96/255), mask at 4× | deep amber (hue 18–30°: at 36° the bright green die washed it toward white) **double ripple** from the test button: two wide rings 350 ms apart every 2 s over a 12% amber floor, so the panel is never dark while it needs a person |
-| Job failed | all; mask at 4× | red (hue 352–12°): three 200 ms **glitch flashes**, each on a different random ~65% of dots, then a pulse 20%→60% whose period varies ±15% per dot, until the hold ends |
+| Job failed | all; mask at 4× | red (hue 352–12°): three 200 ms **glitch flashes**, each on a different random ~65% of dots, then a pulse 33%→100% whose period varies ±15% per dot, until the hold ends |
 | Cable test | all; mask at 4× | a band **sweeps** the panel left to right and back (700 ms each way) over an 8% floor. Green (hue 130° ±14°), a crossover: then a ring **pulses** out of the test button and the panel fades by 2.4 s. Red (hue 352–12°), a straight, broken or missing cable: then the six dots around the test button **blink twice** (200 ms on, 200 off, 200 on), the rest dark |
 | Asleep | the pilot, plus a rare twinkle | the FR4 dot right of the test button (row 3, col 4) breathes 3%→12% of the cap, driven linearly (gamma would round these levels to zero), on a 6 s period: neutral white, or a slowly cycling hue in gamer mode. Every 30 s one other FR4 dot twinkles once (1.5 s, peak 8% linear). Fade into sleep over 10 s; wake instantly. |
 
@@ -204,11 +207,11 @@ normal cap except in red phases (alert cap); mask dots use the mask cap.
 
 | Moment | When | Pattern | Length |
 |---|---|---|---|
-| Printer gone | Ready → Printer offline | the white drains toward the printer socket: a front runs from the far corner to the socket in 1.1 s with a white glint (85%, ±130 ms), each dot going dark as it passes, the embers fading in 250–900 ms behind it. FR4 only. | 2 s |
-| Printer back | Printer offline → Ready, or Needs attention → Printing | a green wave (hue 130° ±14°, 85%) rolls out of the printer socket, crossing the panel in 1.1 s; ahead of it the old state, behind it green cross-fading to the new state over 150–900 ms after it passes. FR4 only from offline; all dots from attention (Printing's dots). | 2 s |
-| Page out | Printing → Ready, the job finished | the inked sheet rises off the top: its bottom edge climbs from row 8.5 to −1.5 in 0.9 s, the ink in bands (10–30%, period 3 rows) scrolling up with it; the job's ink (warm, or the stripes for LocalTalk); Ready below the edge; mask dots carry the ink and go dark below it. | 1 s |
+| Printer gone | Ready → Printer offline | the white drains toward the printer socket: a front runs from the far corner to the socket in 1.1 s with a white glint (100%, ±130 ms), each dot going dark as it passes, the embers fading in 250–900 ms behind it. FR4 only. | 2 s |
+| Printer back | Printer offline → Ready, or Needs attention → Printing | a green wave (hue 130° ±14°, 100%) rolls out of the printer socket, crossing the panel in 1.1 s; ahead of it the old state, behind it green cross-fading to the new state over 150–900 ms after it passes. FR4 only from offline; all dots from attention (Printing's dots). | 2 s |
+| Page out | Printing → Ready, the job finished | the inked sheet rises off the top: its bottom edge climbs from row 8.5 to −1.5 in 0.9 s, the ink in bands (33–100%, period 3 rows) scrolling up with it; the job's ink (warm, or the stripes for LocalTalk); Ready below the edge; mask dots carry the ink and go dark below it. | 1 s |
 | Cancelled | Printing → Ready, the job cancelled | the print freezes where it stood (Printing's frame at the moment of the cancel) and fades out over 0.6 s; Ready fades in 0.3–0.9 s. No page out. | 0.9 s |
-| Could not join | Setup after the saved network was tried and failed (from Joining, or straight from the Spin; `ps_view_t.join_failed`) | two red pulses (hue 2° ±8°, 500 ms each, peak 85%) on all dots, FR4 at the alert cap, then Setup fades in 1.0–1.6 s. FeatherFrame's failed-join signal. | 1.6 s |
+| Could not join | Setup after the saved network was tried and failed (from Joining, or straight from the Spin; `ps_view_t.join_failed`) | two red pulses (hue 2° ±8°, 500 ms each, peak 100%) on all dots, FR4 at the alert cap, then Setup fades in 1.0–1.6 s. FeatherFrame's failed-join signal. | 1.6 s |
 
 Any other change of state opens with no moment: the new state shows as it is (a job cancelled
 while it waits for paper goes from Needs attention straight to Printer offline's embers).
@@ -226,10 +229,10 @@ stripes show across the panel, not only near the head).
 
 | Task | When | Pattern |
 |---|---|---|
-| Firmware downloading / installing | an update is arriving or being written; arg is progress 0..1000 | purple (hue 280° ±10°, saturation 90%) fills the FR4 dots from the bottom: the level's line sits at row `8 − 8.6p`, soft over one row; below it 45%, plus a shimmer band (+30%) running up through the filled part every 0.8 s; above it 6%. Mask dark. |
-| … length unknown | arg is `LG_PROGRESS_NONE` | a purple band (60% over a 8% floor) climbs from below the grid to above it every 1.2 s |
-| Verifying | the image is in; checking it | the FR4 dots pulse purple, 30% to 85%, every 0.8 s, each dot offset up to 250 ms |
-| Verified | installed, set to boot | green rises through the purple from the bottom in 0.5 s, holds, fades out 1.2–2.0 s; dark until the restart |
+| Firmware downloading / installing | an update is arriving or being written; arg is progress 0..1000 | purple (hue 280° ±10°, saturation 90%) fills the FR4 dots from the bottom: the level's line sits at row `8 − 8.6p`, soft over one row; below it 56%, plus a shimmer band (+37%, to 100%) running up through the filled part every 0.8 s; above it 7%. Mask dark. |
+| … length unknown | arg is `LG_PROGRESS_NONE` | a purple band (100% over a 12% floor) climbs from below the grid to above it every 1.2 s |
+| Verifying | the image is in; checking it | the FR4 dots pulse purple, 35% to 100%, every 0.8 s, each dot offset up to 250 ms |
+| Verified | installed, set to boot | green (100%) rises through the purple (71%) from the bottom in 0.5 s, holds, fades out 1.2–2.0 s; dark until the restart |
 | TashTalk flashing | the PIC is being written (about 2 s) | the six stripes at 35% on all dots, with a white bar sweeping left to right across the columns every 0.5 s |
 | TashTalk OK | the flash verified | a green ripple out of the LocalTalk socket, crossing the panel in 0.9 s and leaving a 35% wash behind, fading out 0.8–1.6 s; then the state |
 | TashTalk failed | the flash failed | Job failed's red glitch and pulse for 3 s, then the state |
@@ -241,10 +244,10 @@ holds until the restart. The update's own flow decides when; W-1048 drives it.
 
 | Acknowledgement | When | Pattern | Length |
 |---|---|---|---|
-| LocalTalk on | the node has its node ID (at boot in DIP mode 2, or when mode 2 is switched on) | the stripes rise out of the LocalTalk socket: a front climbs from row 8.5 to −1.5 in 0.7 s, rows below it at 60% with a 35% crest; holds; fades out 1.0–1.6 s. All dots. | 1.6 s |
-| A Mac heard | an NBP LkUp answered (a Chooser looking), or a frame from a node not heard since boot; at most once every 6 s | an arc of stripes out of the LocalTalk socket, crossing the panel in 0.9 s (90% at the crest, ±0.7 rows), fading out 0.8–1.1 s. All dots. | 1.1 s |
-| Busy | the test button tapped during an IPP or LocalTalk job | two orange pulses (hue 30° ±4°, 300 ms each, peak 85%) on the dots around the test button (distance 0.5–1.6) | 0.6 s |
-| Saved | settings saved on the web page; for Wi-Fi, just before its restart | a white ring closes into the test button in 0.6 s (80% at the ring), then the dots around the button glow 60% and fade out by 0.9 s | 0.9 s |
+| LocalTalk on | the node has its node ID (at boot in DIP mode 2, or when mode 2 is switched on) | the stripes rise out of the LocalTalk socket: a front climbs from row 8.5 to −1.5 in 0.7 s, rows below it at 72% with a crest to 100%; holds; fades out 1.0–1.6 s. All dots. | 1.6 s |
+| A Mac heard | an NBP LkUp answered (a Chooser looking), or a frame from a node not heard since boot; at most once every 6 s | an arc of stripes out of the LocalTalk socket, crossing the panel in 0.9 s (100% at the crest, ±0.7 rows), fading out 0.8–1.1 s. All dots. | 1.1 s |
+| Busy | the test button tapped during an IPP or LocalTalk job | two orange pulses (hue 30° ±4°, 300 ms each, peak 100%) on the dots around the test button (distance 0.5–1.6) | 0.6 s |
+| Saved | settings saved on the web page; for Wi-Fi, just before its restart | a white ring closes into the test button in 0.6 s (100% at the ring), then the dots around the button glow 75% and fade out by 0.9 s | 0.9 s |
 
 **The test button.** A tap while the test page prints cancels it: the page stops (the write is
 aborted and the queue purged, as a Cancel-Job does), it ends as cancelled, and W-1041's resync
@@ -271,7 +274,7 @@ cap for white.
 |---|---|---|
 | Reset countdown | test button held past a tap (1 s) | a hand sweeps clockwise from 12 o'clock round the test button over 7 s, lighting each dot it passes (soft edge, the newest dots glowing, a 5% floor on the rest of the track); orange (hue 38°) through the first half, running to red by the end (`38·(1 − p^1.5)`, ±3° per dot); the lit dots beat 1 Hz rising to 3 Hz |
 | Reset cancelled | let go during the countdown | the sweep winds back to 12 o'clock and fades in 0.4 s; the state returns |
-| Point of no return, then done | 8 s held: settings erased | FR4 dots flash white and mask dots red (180 ms); the red drains inward into the test button (1 s); two white beats on the FR4 dots (180 ms each); dark until the button is let go and the board restarts (Spin, then Setup) |
+| Point of no return, then done | 8 s held: settings erased | FR4 dots flash white and mask dots red (180 ms); the red drains inward into the test button (1 s); two full white beats on the FR4 dots (180 ms each); dark until the button is let go and the board restarts (Spin, then Setup) |
 | Reset confirmed at boot | after the bootloader's factory reset (button held through power-up) | the same flash, drain and beats once the Spin ends (2 s), then the state |
 | Reset failed | the erase failed | Job failed's red glitch and pulse for 3 s, then the board restarts |
 

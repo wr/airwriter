@@ -687,7 +687,8 @@ int main(void)
     }
 
     // Setup: the radar sweep swings a dot from dim to bright; with a phone
-    // joined it holds steady with only a shimmer.
+    // joined it holds steady with only a shimmer, under half its level (relative,
+    // so it holds at any drive).
     {
         int lo = 255, hi = 0, jlo = 255, jhi = 0;
         for (uint32_t t = 0; t < 6000; t += 50) {
@@ -701,7 +702,7 @@ int main(void)
             if (max3(f[p]) > jhi) jhi = max3(f[p]);
         }
         assert(hi - lo >= 15);
-        assert(jhi - jlo <= 10 && jlo > 0);
+        assert(2 * (jhi - jlo) <= jhi && jlo > 0);
     }
 
     // Attention must read from across the room: deep amber, not whitish

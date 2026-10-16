@@ -92,14 +92,15 @@ static lg_c3 white_of(int r, int c)
     return mix(warm, cool, dot_hash(r, c, 5));
 }
 
-// Each dot breathes on its own 5-9 s period, 30% to 70%. (Was 16-38%: on
-// board 1 that peaked under 6 counts and vanished in daylight; this is the
-// same breath at 4x the drive.)
+// Each dot breathes on its own 5-9 s period, 43% to 100%. (Was 16-38%, then
+// 30-70%: both read too dim on board 1. Every effect now peaks at 100% of its
+// cap, its lower levels scaled with it, so this is the 30-70% breath at 2.2x
+// the drive.)
 static float ready_level(int r, int c, uint32_t t)
 {
     uint32_t period = 5000 + (uint32_t)(dot_hash(r, c, 1) * 4000);
-    return 0.50f + 0.20f * sinf(TAU * (float)(t % period) / (float)period
-                                + dot_hash(r, c, 2) * TAU);
+    return 0.715f + 0.285f * sinf(TAU * (float)(t % period) / (float)period
+                                  + dot_hash(r, c, 2) * TAU);
 }
 
 // Gamma 2.2, then the cap, at 8.8 fixed point.
@@ -204,24 +205,25 @@ static lg_c3 state_dot(const ps_view_t *v, const lg_opts_t *o, int i, uint32_t t
         float hue = jitter(r, c, 220, 16, t, 6);
         if (v->phone_joined) {
             uint32_t period = 3000 + (uint32_t)(h1 * 2500);
-            float lvl = 0.58f + 0.08f * sinf(TAU * (float)(t % period) / (float)period + h2 * TAU);
+            float lvl = 0.88f + 0.12f * sinf(TAU * (float)(t % period) / (float)period + h2 * TAU);
             return hsv(hue, 0.85f, lvl);
         }
         // Radar sweep: the arm turns once per 2.6 s; a dot flares as it passes
         // and decays behind it.
         float arm = (float)(t % 2600) / 2600.0f * 360.0f;
         float behind = fmodf(fmodf(arm - ang, 360.0f) + 360.0f, 360.0f);
-        return hsv(hue, 0.85f, 0.08f + 0.80f * expf(-behind / 55.0f));
+        return hsv(hue, 0.85f, 0.09f + 0.91f * expf(-behind / 55.0f));
     }
 
     case PS_JOINING: {
         float ring = (float)(t % 900) / 900.0f * 4.8f;          // outward from the test button
-        return hsv(jitter(r, c, 215, 18, t, 0), 0.85f, 0.08f + 0.75f * gauss(dist - ring, 1.1f));
+        return hsv(jitter(r, c, 215, 18, t, 0), 0.85f, 0.10f + 0.90f * gauss(dist - ring, 1.1f));
     }
 
     case PS_READY: {
         lg_c3 base = o && o->gamer
-            ? hsv((float)c * 28 + (float)r * 14 + (float)t / 40.0f, 0.75f, ready_level(r, c, t) + 0.05f)
+            ? hsv((float)c * 28 + (float)r * 14 + (float)t / 40.0f, 0.75f,
+                  0.07f + 0.93f * ready_level(r, c, t))
             : sc(white_of(r, c), ready_level(r, c, t));
         if (!v->greeted || s >= 3200) return base;
         // Wi-Fi just connected: green, with a ripple outward, then into base.
@@ -234,9 +236,9 @@ static lg_c3 state_dot(const ps_view_t *v, const lg_opts_t *o, int i, uint32_t t
         uint32_t period = 7000 + (uint32_t)(h1 * 6000);
         float ph = sinf(TAU * (float)(t % period) / (float)period + h2 * TAU);
         float ember = ph > 0 ? ph * ph * ph : 0;
-        // 9% swelling to 60%: 4x the drive of the first tune (5-32%), which
-        // was lost in daylight like Ready's.
-        return hsv(jitter(r, c, 34, 9, t, 0), 0.5f + 0.12f * h1, 0.09f + 0.51f * ember);
+        // 15% swelling to 100%: the first tune (5-32%) and the second (9-60%)
+        // were lost in daylight like Ready's.
+        return hsv(jitter(r, c, 34, 9, t, 0), 0.5f + 0.12f * h1, 0.15f + 0.85f * ember);
     }
 
     case PS_PRINTING: {
@@ -281,7 +283,7 @@ static lg_c3 state_dot(const ps_view_t *v, const lg_opts_t *o, int i, uint32_t t
         }
         float period = 2000 * (0.85f + 0.3f * h1);
         float ph = fmodf((float)(s - 1200), period) / period;
-        return sc(red, 0.2f + 0.4f * (0.5f - 0.5f * cosf(TAU * ph + h2 * 1.5f)));
+        return sc(red, 0.33f + 0.67f * (0.5f - 0.5f * cosf(TAU * ph + h2 * 1.5f)));
     }
     }
     return DARK;
@@ -362,7 +364,7 @@ static lg_c3 view_dot(const ps_view_t *v, const lg_opts_t *o, int i, uint32_t t)
     if (((v->state == PS_READY && v->prev == PS_OFFLINE) ||
          (v->state == PS_PRINTING && v->prev == PS_ATTENTION)) && s < LG_BACK_MS) {
         float ds = s - dist_to(r, c, PORT_ROW, PRINTER_COL) / FAR * CROSS_MS;
-        lg_c3 green = sc(green_of(r, c, t), 0.85f);
+        lg_c3 green = green_of(r, c, t);
         if (ds < 0) return mix(state_dot(&was, o, i, t), green, gauss(ds / 160.0f, 1));
         return mix(green, now, ss(150, 900, ds));
     }
@@ -370,7 +372,7 @@ static lg_c3 view_dot(const ps_view_t *v, const lg_opts_t *o, int i, uint32_t t)
     // front, the embers coming up behind it.
     if (v->state == PS_OFFLINE && v->prev == PS_READY && s < LG_GONE_MS) {
         float ds = s - (FAR - dist_to(r, c, PORT_ROW, PRINTER_COL)) / FAR * CROSS_MS;
-        lg_c3 glint = sc(white_of(r, c), 0.85f * gauss(ds / 130.0f, 1));
+        lg_c3 glint = sc(white_of(r, c), gauss(ds / 130.0f, 1));
         if (ds < 0) return screen(state_dot(&was, o, i, t), glint);
         return screen(sc(now, ss(250, 900, ds)), glint);
     }
@@ -385,7 +387,7 @@ static lg_c3 view_dot(const ps_view_t *v, const lg_opts_t *o, int i, uint32_t t)
         float off = s / 900.0f * 10.0f;
         lg_c3 ink = o && o->src == LG_SRC_LOCALTALK ? stripe(r, c)
                                                     : hsv(jitter(r, c, 38, 10, t, 0), 0.4f, 1);
-        float band = 0.10f + 0.20f * (0.5f + 0.5f * cosf(TAU * ((float)r + off) / 3.0f));
+        float band = 0.33f + 0.67f * (0.5f + 0.5f * cosf(TAU * ((float)r + off) / 3.0f));
         float k = ss(-0.5f, 0.5f, (float)r - edge);     // 1 below the sheet
         return mix(sc(ink, band), fr4 ? sc(now, ss(0, 1, k)) : DARK, k);
     }
@@ -394,7 +396,7 @@ static lg_c3 view_dot(const ps_view_t *v, const lg_opts_t *o, int i, uint32_t t)
     if (v->state == PS_SETUP && v->join_failed && s < LG_JOINFAIL_MS) {
         if (s < 1000) {
             float x = sinf(3.1415927f * fmodf(s, 500) / 500.0f);
-            return hsv(jitter(r, c, 2, 8, t, 0), 0.95f, 0.85f * x * x);
+            return hsv(jitter(r, c, 2, 8, t, 0), 0.95f, x * x);
         }
         return sc(now, ss(1000, LG_JOINFAIL_MS, s));
     }
@@ -460,15 +462,15 @@ static lg_c3 reset_fill(int r, int c, float p, uint32_t s, uint32_t t)
 
 // The firmware fill at p (0..1): purple rising from the bottom like a level,
 // soft over a row, with a quick shimmer running up through it every 0.8 s
-// (FeatherFrame's "working" pace).
+// (FeatherFrame's "working" pace) that peaks at 100%.
 static float fw_fill(int r, float p, uint32_t t)
 {
     float line = 8.0f - p * 8.6f;
     float in = ss(-0.5f, 0.5f, (float)r - line);
     float span = 8.0f - line;
     float band = 8.0f - (float)(t % 800) / 800.0f * (span + 1.0f);
-    float shimmer = span > 0.3f ? 0.3f * gauss((float)r - band, 0.6f) : 0;
-    return 0.06f + in * (0.45f + shimmer);
+    float shimmer = span > 0.3f ? 0.37f * gauss((float)r - band, 0.6f) : 0;
+    return 0.07f + in * (0.56f + shimmer);
 }
 
 static void task_frame(const lg_slot_t *k, uint32_t t, uint16_t out[LG_NUM_LEDS][3])
@@ -501,7 +503,7 @@ static void task_frame(const lg_slot_t *k, uint32_t t, uint16_t out[LG_NUM_LEDS]
                 float radius = 5.3f * (1 - (float)(s - 180) / 1000.0f);
                 col = sc(rd, clampf((radius - dist) / 0.8f + 0.5f));
             } else if (fr4 && ((s >= 1300 && s < 1480) || (s >= 1660 && s < 1840))) {
-                col = sc(white_of(r, c), 0.7f);         // done: two beats of white
+                col = white_of(r, c);                   // done: two beats of white
                 white = 1;
             }
             break;
@@ -519,7 +521,7 @@ static void task_frame(const lg_slot_t *k, uint32_t t, uint16_t out[LG_NUM_LEDS]
             float lvl;
             if (k->arg == LG_PROGRESS_NONE) {           // length unknown: a band climbs
                 float band = 9.0f - (float)(t % 1200) / 1200.0f * 11.0f;
-                lvl = 0.08f + 0.6f * gauss((float)r - band, 1.0f);
+                lvl = 0.12f + 0.88f * gauss((float)r - band, 1.0f);
             } else {
                 lvl = fw_fill(r, (float)(k->arg > 1000 ? 1000 : k->arg) / 1000.0f, t);
             }
@@ -528,12 +530,12 @@ static void task_frame(const lg_slot_t *k, uint32_t t, uint16_t out[LG_NUM_LEDS]
         }
         case LG_ACT_FW_VERIFYING:
             if (fr4) col = sc(purple_of(r, c, t),
-                              pulse(t + (uint32_t)(dot_hash(r, c, 1) * 250), 800, 0.3f, 0.85f));
+                              pulse(t + (uint32_t)(dot_hash(r, c, 1) * 250), 800, 0.35f, 1));
             break;
         case LG_ACT_FW_VERIFIED: {                      // green rises through the purple
             if (!fr4) break;
             float edge = 8.5f - (float)s / 500.0f * 10.0f;
-            col = mix(sc(purple_of(r, c, t), 0.6f), sc(green_of(r, c, t), 0.85f),
+            col = mix(sc(purple_of(r, c, t), 0.71f), green_of(r, c, t),
                       ss(-0.5f, 0.5f, (float)r - edge));
             col = sc(col, 1 - ss(1200, LG_FW_VERIFIED_MS, (float)s));
             break;
@@ -582,24 +584,24 @@ static lg_c3 blip_dot(uint8_t blip, uint32_t ms, int i, uint32_t t)
     switch (blip) {
     case LG_BLIP_MAC: {             // an arc of stripes out of the LocalTalk socket
         float front = s / 900.0f * FAR;
-        float lvl = 0.9f * gauss(dist_to(r, c, PORT_ROW, LT_COL) - front, 0.7f);
+        float lvl = gauss(dist_to(r, c, PORT_ROW, LT_COL) - front, 0.7f);
         return sc(stripe(r, c), lvl * (1 - ss(800, LG_BLIP_MAC_MS, s)));
     }
     case LG_BLIP_LT_ON: {           // the stripes rise out of it and fade
         float edge = 8.5f - s / 700.0f * 10.0f;
         float lit = ss(-0.5f, 0.5f, (float)r - edge);
-        float lvl = 0.6f * lit + 0.35f * gauss((float)r - edge, 0.5f);
+        float lvl = 0.715f * lit + 0.415f * gauss((float)r - edge, 0.5f);   // peaks at 100%
         return sc(stripe(r, c), lvl * (1 - ss(1000, LG_BLIP_LT_ON_MS, s)));
     }
     case LG_BLIP_BUSY: {            // two orange pulses round the test button: not now
         if (dist < 0.5f || dist > 1.6f) return DARK;
         float x = sinf(3.1415927f * fmodf(s, 300) / 300.0f);
-        return hsv(jitter(r, c, 30, 4, t, 0), 1, 0.85f * x * x);
+        return hsv(jitter(r, c, 30, 4, t, 0), 1, x * x);
     }
     case LG_BLIP_SAVED: {           // a white ring closes into the test button
         if (s < 600)
-            return sc(white_of(r, c), 0.8f * gauss(dist - 4.5f * (1 - s / 600.0f), 0.5f));
-        return sc(white_of(r, c), dist < 1.6f ? 0.6f * (1 - ss(600, LG_BLIP_SAVED_MS, s)) : 0);
+            return sc(white_of(r, c), gauss(dist - 4.5f * (1 - s / 600.0f), 0.5f));
+        return sc(white_of(r, c), dist < 1.6f ? 0.75f * (1 - ss(600, LG_BLIP_SAVED_MS, s)) : 0);
     }
     }
     return DARK;
