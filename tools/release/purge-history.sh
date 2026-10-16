@@ -5,7 +5,7 @@
 # Validated as a dry run on a mirror on 2026-10-15: 120 MB -> 45 MB, no PDFs,
 # no old USB-C model, gitleaks clean.
 set -e
-REPO=${1:-/Users/wells/Projects/airwriter}
+REPO=${1:-/Users/wells/Projects/airwriter}   # usage: purge-history.sh [repo] [scrub-file]
 cd "$REPO"
 REL=main   # the branch holding the replacement files
 LIST=$(mktemp)
@@ -20,7 +20,12 @@ git log --all --pretty=format: --raw --no-abbrev -- \
   awk 'NF>=5 {print $3; print $4}' | grep -v '^0\{40\}$' | sort -u |
   grep -v -e "$keep_model" -e "$keep_step" -e "$keep_zip" > "$LIST"
 echo "stripping $(wc -l < "$LIST") blobs"
+# Private strings (e.g. the home Wi-Fi name) to replace in old files and commit
+# messages, one `old==>new` per line. Kept outside the repository on purpose.
+SCRUB=${2:-$HOME/.config/airwriter/purge-scrub.txt}
+[ -f "$SCRUB" ] || { echo "missing $SCRUB" >&2; exit 1; }
 git filter-repo --force --invert-paths \
+    --replace-text "$SCRUB" --replace-message "$SCRUB" \
     --path docs/reference/ImageWriter_II_Technical_Reference.pdf \
     --path docs/reference/Inside_AppleTalk_2nd_ed.pdf \
     --path-glob 'hardware/airwriter/_restore_backup_*' \
