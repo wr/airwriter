@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
-# The S3 board's 8MB (the C6 devkit has its own 4MB table, partitions-4mb.csv).
+# The board's 8MB.
 #
 # factory holds the image a board shipped with and is never written over the
 # air: the bootloader's factory reset (the test button held through power-up,

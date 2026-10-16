@@ -370,7 +370,6 @@ An owner must always be able to get back to a working printer without a computer
 **Partitions** (`firmware/partitions.csv`, 8 MB): nvs 24K at 0x9000, otadata at 0xf000,
 phy_init, **factory** 2M at 0x20000, ota_0 2M at 0x220000, ota_1 2M at 0x420000, storage 1.9M.
 The factory slot holds the image the board shipped with and is never written over the air.
-The C6 devkit keeps the old two-slot 4 MB table (`partitions-4mb.csv`).
 
 **Rollback** (`CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE`). A new OTA image boots on trial and keeps
 itself only after 15 s of unbroken health: with Wi-Fi credentials, joined and with IPP and the
@@ -402,8 +401,7 @@ the app ignores it until it is let go. A build with Wi-Fi credentials in its `sd
 bootloader or the partition table. `idf.py -p PORT flash` writes the bootloader, the table, a
 blank otadata and the app into the factory slot; nvs, otadata and phy_init kept their offsets,
 so Wi-Fi credentials and settings survive it. An existing `sdkconfig` needs the options from
-`sdkconfig.defaults` and `sdkconfig.defaults.esp32s3` (main.c refuses to build without them),
-and an existing `sdkconfig.c6` needs `CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions-4mb.csv"`.
+`sdkconfig.defaults` and `sdkconfig.defaults.esp32s3` (main.c refuses to build without them).
 The new app OTA'd onto a board still on the old table runs, but logs that it has no factory
 slot.
 

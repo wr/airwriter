@@ -1,16 +1,14 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
-# Target-independent defaults. The real board is an ESP32-S3-WROOM-1-N8R2, but
-# the network side (ipp_server, mDNS, webui) is developed on an ESP32-C6 devkit
-# while boards are unordered. ESP-IDF merges sdkconfig.defaults.<target> on top
-# of this file, so keep anything chip-specific out of here.
+# Defaults for the board, an ESP32-S3-WROOM-1-N8R2. ESP-IDF merges
+# sdkconfig.defaults.esp32s3 on top of this file; chip-specific settings
+# (flash size, PSRAM, the bootloader's factory-reset pin) go there.
 
 # Console goes over the native USB serial/JTAG peripheral, not a UART -- UART1
-# belongs to the printer. See SPEC.md 2.5. Both chips have this peripheral.
+# belongs to the printer. See SPEC.md 2.5.
 CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y
 
-# The default 1MB app partition is already 90% full at M4. See partitions.csv
-# (the C6 overrides the file name in its own defaults).
+# The default 1MB app partition is already 90% full at M4. See partitions.csv.
 CONFIG_PARTITION_TABLE_CUSTOM=y
 CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
 

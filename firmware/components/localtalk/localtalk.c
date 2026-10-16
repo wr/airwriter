@@ -270,7 +270,7 @@ esp_err_t localtalk_start(const localtalk_cfg_t *cfg)
 
     s_printer = cfg->printer;
     uint8_t *spool = heap_caps_malloc(SPOOL + 1, MALLOC_CAP_SPIRAM);
-    if (!spool) spool = malloc(SPOOL + 1);              // the C6 has no PSRAM
+    if (!spool) spool = malloc(SPOOL + 1);              // a chip with no PSRAM
     static StaticStreamBuffer_t spool_cb;
     if (!spool) return ESP_ERR_NO_MEM;
     s_spool = xStreamBufferCreateStatic(SPOOL, 1, spool, &spool_cb);

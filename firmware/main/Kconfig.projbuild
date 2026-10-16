@@ -250,8 +250,7 @@ config AIRWRITER_LT_UART_NUM
     default 0
     help
         The UART the LocalTalk node talks to TashTalk on, at 1 Mbaud. UART2 on
-        the S3 (UART1 is the printer's). The C6 has only two, and UART1 is
-        the printer's there too; its console is USB-Serial-JTAG, so UART0.
+        the S3 (UART1 is the printer's).
 
 config AIRWRITER_LT_CTS_PIN
     int "LocalTalk CTS pin from TashTalk, -1 if absent"
