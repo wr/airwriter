@@ -20,6 +20,8 @@
 #include "hal/wdt_hal.h"
 #include "soc/gpio_sig_map.h"
 #include "bootloader_common.h"
+#include "esp_app_desc.h"
+#include "esp_app_format.h"
 #include "bootloader_flash_priv.h"
 #include "esp_flash_encrypt.h"
 #include "esp_flash_partitions.h"
@@ -79,7 +81,21 @@ static bool read_layout(layout_t *l)
     return ok;
 }
 
-// The slot the record names; a missing or unreadable record reads as blank.
+// The first bytes of the app_elf_sha256 in the image's description, which
+// is what the record names. False when the slot holds no image.
+static bool image_sha(const esp_partition_pos_t *p, uint8_t sha[KG_SHA_LEN])
+{
+    esp_app_desc_t d;
+    uint32_t at = p->offset + sizeof(esp_image_header_t) + sizeof(esp_image_segment_header_t);
+    if (!p->size || bootloader_flash_read(at, &d, sizeof d, true) != ESP_OK ||
+        d.magic_word != ESP_APP_DESC_MAGIC_WORD)
+        return false;
+    memcpy(sha, d.app_elf_sha256, KG_SHA_LEN);
+    return true;
+}
+
+// The known-good slot, or -1 when the record does not vouch for what is in
+// it now. A missing or unreadable record reads as blank: ota_0.
 static int read_good(const layout_t *l)
 {
     kg_rec_t two[2];
@@ -88,7 +104,12 @@ static int read_good(const layout_t *l)
         bootloader_flash_read(l->record.offset, &two[0], sizeof two[0], false);
         bootloader_flash_read(l->record.offset + KG_SECTOR, &two[1], sizeof two[1], false);
     }
-    return kg_slot(two, l->nslots);
+    int slot = kg_slot(two, l->nslots);
+    uint8_t sha[KG_SHA_LEN];
+    if (kg_vouches(two, l->nslots, slot, image_sha(&l->ota[slot], sha) ? sha : NULL))
+        return slot;
+    ESP_LOGW(TAG, "ota_%d no longer holds the known-good image", slot);
+    return -1;
 }
 
 // Makes `slot` the one the bootloader boots next, as esp_ota_set_boot_partition
@@ -131,15 +152,25 @@ static void known_good_reset(void)
         ESP_LOGE(TAG, "no usable partition table; erasing settings only");
     } else {
         esp_ota_select_entry_t od[2];
+        memset(od, 0xff, sizeof od);
         int active = -1;
         if (bootloader_common_read_otadata(&l.otadata, od) == ESP_OK)
             active = bootloader_common_get_active_otadata(od);
-        int booting = active < 0 ? -1 : (int)((od[active].ota_seq - 1) % (uint32_t)l.nslots);
+        // What otadata says each slot holds: an image someone kept, or one
+        // new, on trial or failed, which goes last whatever otadata boots.
+        kg_ota_t e[2];
+        for (int i = 0; i < 2; i++)
+            e[i] = (kg_ota_t){ od[i].ota_seq, od[i].ota_state,
+                               od[i].ota_seq != UINT32_MAX &&
+                               od[i].crc == bootloader_common_ota_select_crc(&od[i]) };
+        int kept;
+        unsigned untrusted = kg_ota_untrusted(e, l.nslots, &kept);
         int good = read_good(&l);
-        ESP_LOGI(TAG, "known-good firmware: ota_%d; otadata boots ota_%d (-1: none)", good, booting);
+        ESP_LOGI(TAG, "known-good: ota_%d, last kept: ota_%d, not kept: 0x%x (-1: none)",
+                 good, kept, untrusted);
 
         int order[MAX_SLOTS], pick = -1;
-        int n = kg_reset_order(good, booting, l.nslots, order);
+        int n = kg_reset_order(good, kept, untrusted, l.nslots, order);
         for (int i = 0; i < n && pick < 0; i++) {
             esp_image_metadata_t md;
             if (esp_image_verify(ESP_IMAGE_VERIFY_SILENT, &l.ota[order[i]], &md) == ESP_OK)

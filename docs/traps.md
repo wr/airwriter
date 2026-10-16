@@ -39,9 +39,9 @@ Traps already explained in a code comment are listed only when the comment is ea
   itself. It runs fine until then. Rebase a branch on W-1046 before OTAing it to a W-1046 board,
   or USB-flash it (which also puts the old bootloader and table back).
 - **An image without W-1059 OTA'd onto a W-1059 board can overwrite the known-good slot.** It
-  updates into IDF's next slot, which may be the one the power-up reset boots, and it never
-  promotes itself. It also logs "no factory slot". Rebase a branch on W-1059 before OTAing it
-  to board 1.
+  updates into IDF's next slot, which may be the known-good one, and never promotes itself. The
+  record then vouches for nothing and the power-up reset boots the newest kept image instead.
+  It also logs "no factory slot". Rebase a branch on W-1059 before OTAing it to board 1.
 - **The bootloader hook (`bootloader_components/airwriter_boot`) cannot be updated over the
   air.** A bug there needs a USB flash on every board. Bench every reset path after changing it
   (`docs/superpowers/specs/2026-10-16-known-good-slot-design.md`), and keep it inside the

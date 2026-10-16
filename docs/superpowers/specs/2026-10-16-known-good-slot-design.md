@@ -51,10 +51,14 @@ Wi-Fi credentials and settings. `known_good` sits in the unused gap below 0x2000
 
 ## The record
 
-Each sector starts with one 16-byte copy: `magic` (`AWKG`), `seq`, `slot`, and a CRC-32 of the
-first 12 bytes. A copy is valid if magic and CRC match and `seq` is not all ones. The current
-copy is the valid one with the higher `seq`. The known-good slot is the current copy's `slot`;
-no valid copy, or a slot past the table's last OTA slot, means ota_0.
+Each sector starts with one 32-byte copy: `magic` (`AWKG`), `seq`, `slot`, the first 16 bytes
+of the image's `app_elf_sha256`, and a CRC-32 of the rest. A copy is valid if magic and CRC
+match and `seq` is not all ones. The current copy is the valid one with the higher `seq`. The
+known-good slot is the current copy's `slot`; no valid copy, or a slot past the table's last
+OTA slot, means ota_0. The record vouches for an image, not a slot: if the named slot now holds
+a different image (written by older firmware, or a USB flash of the app alone), the record
+vouches for nothing. A blank record vouches for whatever ota_0 holds, which is what a USB flash
+wrote. *(Added after review: the slot alone could vouch for an image that never printed.)*
 
 Writing a new slot: erase the sector that does *not* hold the current copy, write the new copy
 there with `seq + 1`, read it back. A cut during the erase or write leaves that copy invalid
@@ -70,16 +74,19 @@ and the record naming other slots. *(My call: a documented rule and a trap, not 
 
 ## Promotion (firmware, `components/ota_health`)
 
-The running image writes the record to name its own slot when both are true:
-- it is kept: not on trial (ESP-IDF's `PENDING_VERIFY`), whether the trial gate just passed or
-  it was never on trial (a USB flash, a reset);
+The running image writes the record to name its own slot and image when both are true, and
+the record does not name it already:
+- it is kept: it booted as `VALID` or `UNDEFINED` (or with no otadata entry: a USB flash), or
+  the trial gate's mark-valid succeeded. Not merely "not on trial": a gate that never started,
+  or a mark-valid that failed, leaves the image to be rolled back;
 - it has finished a real print since boot: an IPP job or a LocalTalk job that ran to its end,
   every byte taken by the printer. Not the test page, the cable test, a cancelled, failed or
   cut-short job. *(My call: the test page proves the serial path but not the job path, and
   "real" reads as a print someone sent.)*
 
 It checks at the end of each such job and when the gate keeps the image. Nothing is written if
-the record already names the running slot, so it is one small write per update. The write
+the record already names the running image, so it is one small write per update (and one after
+a USB flash, which leaves the record blank). The write
 happens before the job lets go of the job lock, so it never races an update's target choice.
 
 ## Where updates go (`components/fw_update`)
@@ -104,16 +111,22 @@ is none, so it is turned off and the hook does the reset itself.
 In `bootloader_after_init`, after the existing pin clamps:
 1. `bootloader_common_check_long_hold_gpio_level(14, 5, low)`. Not held: return at once (the
    normal boot is untouched).
-2. Read the partition table (own scan, silent) for the OTA slots, otadata, nvs and
-   `known_good`. Read the record: known-good slot K.
-3. Try slots in order — K, then the slot otadata currently boots, then the rest ascending — and
-   take the first that passes `esp_image_verify` (the same image check the bootloader makes
-   before it boots one).
-4. Write an otadata entry that boots it: state `VALID`, `seq` the smallest past the active
+2. Read the partition table (own scan) for the OTA slots, otadata, nvs and `known_good`. Read
+   the record: known-good slot K, if the record vouches for the image in it (its description's
+   `app_elf_sha256`, read straight from flash).
+3. Read otadata's two entries: the newest one that is `VALID` or `UNDEFINED` is the last kept
+   image; a slot whose newest entry is `NEW`, `PENDING_VERIFY`, `ABORTED` or `INVALID` holds an
+   image nobody kept.
+4. Try slots in order — K, then the last kept image, then the rest ascending, and last any slot
+   holding an image nobody kept — and take the first that passes `esp_image_verify` (the same
+   check the bootloader makes before it boots one). So an update on trial, or one that failed,
+   is never made permanent ahead of an image that was kept. *(Changed after review: the first
+   draft tried "the slot otadata boots" second, which can be the update on trial.)*
+5. Write an otadata entry that boots it: state `VALID`, `seq` the smallest past the active
    entry's with `(seq - 1) % 3 == slot`, into the sector *not* holding the active entry
    (exactly as `esp_ota_set_boot_partition` does). A cut here leaves the old entry in charge.
-5. Erase nvs (`bootloader_common_erase_part_type_data("nvs", false)`).
-6. Set the RTC retain flag the app already reads (`bootloader_common_set_rtc_retain_mem_
+6. Erase nvs (`bootloader_common_erase_part_type_data("nvs", false)`).
+7. Set the RTC retain flag the app already reads (`bootloader_common_set_rtc_retain_mem_
    factory_reset_state`); the panel's reset confirmation follows from it as today.
    `CONFIG_BOOTLOADER_CUSTOM_RESERVE_RTC=y` keeps that RTC area reserved without the stock reset.
 
@@ -131,10 +144,12 @@ see main's Kconfig); main.c fails the build if `CONFIG_AIRWRITER_TEST_BTN_PIN` i
 ## Pure core and tests
 
 `components/ota_health/known_good_core.{c,h}`, no ESP-IDF: the record (CRC, make, valid,
-current copy, slot, next write), the update target, the reset order, the otadata `seq` for a
-slot, and the promote decision. The bootloader component compiles the same file by relative
-path. `tools/rip/test/test_known_good.c` covers each, including a cut write (one copy garbage)
-and every running/known-good pair for the target.
+current copy, slot, whether it names or vouches for an image, next write), the update target,
+what otadata says was kept, the reset order, the otadata `seq` for a slot, and the promote
+decision. The bootloader component compiles the same file by relative path.
+`tools/rip/test/test_known_good.c` covers each, including a cut write (one copy garbage), a slot
+rewritten under the record, every running/known-good pair for the target, and the review's
+case (an update on trial while the known-good image is damaged).
 
 ## Status
 
@@ -157,9 +172,9 @@ board is erased whole before its first flash.)*
    (the known-good). Power-up reset → boots ota_1 (B), settings erased, panel shows the reset.
 4. Power cut mid-update (during `/update`'s upload): boots the image that was running; the next
    update goes to the same slot.
-5. Corrupt the known-good slot over USB (one sector in its image): power-up reset falls back to
-   the slot otadata was booting.
-6. Blank record (erase `known_good` over USB): power-up reset boots ota_0.
+5. Blank record (erase `known_good` over USB) while running ota_1: power-up reset boots ota_0.
+6. Corrupt the known-good slot over USB (one sector in its image): power-up reset skips it and
+   boots the next image that checks out.
 
 ## Left to the builder
 

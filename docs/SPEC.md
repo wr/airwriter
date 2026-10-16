@@ -373,12 +373,15 @@ An owner must always be able to get back to a working printer without a computer
 phy_init, **known_good** 8K at 0x12000, ota_0 2M at 0x20000, ota_1 2M at 0x220000, ota_2 2M at
 0x420000, storage 1.9M. Three equal app slots, no factory slot.
 
-**The known-good slot.** `known_good` holds a 16-byte record (magic, sequence number, slot,
-CRC-32) twice, one per 4 KB sector; the valid copy with the higher number names the slot, and a
-blank or damaged record means ota_0. A new copy goes into the sector that does not hold the
+**The known-good slot.** `known_good` holds a 32-byte record (magic, sequence number, slot, the
+first 16 bytes of the image's `app_elf_sha256`, CRC-32) twice, one per 4 KB sector; the valid
+copy with the higher number names the slot and the image, and a blank or damaged record means
+ota_0. The record vouches for that image only: if the slot now holds another one, it vouches
+for nothing. A new copy goes into the sector that does not hold the
 current one, so a power cut leaves the old one in charge (`components/ota_health/
 known_good_core.c`, which the bootloader hook builds too). The running image points the record
-at its own slot once it is kept (not on trial) and has finished a real print: an IPP or
+at itself once it is kept (it booted valid, or its trial's mark-valid succeeded) and has
+finished a real print: an IPP or
 LocalTalk job that ran to its end with every byte taken by the printer, not the test page or a
 cancelled, failed or cut-short job. That is one small write per update, made under the job
 lock. Nothing is ever copied between slots. An update goes into the first slot after the
@@ -406,9 +409,10 @@ slot the power-up reset boots) and `known_good_version`.
   up (plug in, or the reset pinhole) and keep holding for 5 s: the bootloader erases nvs and
   boots the known-good slot, whatever state the app is in. A hook does it
   (`bootloader_components/airwriter_boot`; IDF's `CONFIG_BOOTLOADER_FACTORY_RESET` is off,
-  because it would boot ota_0): it reads the record, checks the known-good image the way the
-  bootloader checks any image, and if that fails tries the slot otadata was booting, then the
-  rest from ota_0 up. It writes an otadata entry for the first that checks out (state valid,
+  because it would boot ota_0): it tries the known-good image if the record still vouches for
+  it, then the newest image otadata says was kept, then the rest from ota_0 up, and last any
+  image otadata says is new, on trial or failed, checking each the way the bootloader checks
+  any image. It writes an otadata entry for the first that checks out (state valid,
   in the sector not holding the active entry, as `esp_ota_set_boot_partition` does), erases
   nvs, and leaves the RTC flag the app reads for the panel cue; the bootloader's own slot
   choice then boots it. The bootloader never writes the record: a fallback image becomes

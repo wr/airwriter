@@ -10,6 +10,7 @@
 #include "ota_health.h"
 
 #include <string.h>
+#include "esp_app_desc.h"
 #include "esp_log.h"
 #include "esp_ota_ops.h"
 #include "esp_timer.h"
@@ -23,6 +24,10 @@ static const char *TAG = "ota_health";
 static portMUX_TYPE s_mux = portMUX_INITIALIZER_UNLOCKED;
 static oh_gate_t s_gate;
 static volatile int s_trial;
+// Kept: this image was not on trial at boot, or the gate's mark-valid took.
+// Not the same as !s_trial: a gate that never started, or a mark-valid that
+// failed, leaves the image to be rolled back at the next reboot.
+static volatile int s_kept;
 static const char *s_slot = "?";
 static char s_rolled_back[32];
 
@@ -30,7 +35,9 @@ static char s_rolled_back[32];
 // flash write.
 static SemaphoreHandle_t s_kg;
 static const esp_partition_t *s_rec;    // the known_good partition; NULL on an old table
-static int s_nslots, s_running = -1, s_good = -1, s_printed;
+static int s_nslots, s_running = -1, s_printed;
+static int s_good = -1;     // the slot the record names (ota_0 when blank); updates avoid it
+static int s_named;         // the record names this running image
 static char s_good_slot[8], s_good_ver[32];
 
 static uint32_t now_ms(void)
@@ -59,15 +66,24 @@ static int read_record(kg_rec_t two[2])
            esp_partition_read(s_rec, KG_SECTOR, &two[1], sizeof two[1]) == ESP_OK;
 }
 
-// s_good changed: the names the status page shows.
-static void describe_good(void)
+static const uint8_t *running_sha(void)
+{
+    return esp_app_get_description()->app_elf_sha256;
+}
+
+// The record was read or written: what the status page shows is what the
+// power-up reset would trust, or nothing if the named slot holds another
+// image now (the reset then boots the newest kept one).
+static void describe_good(const kg_rec_t two[2])
 {
     const esp_partition_t *p = slot_part(s_good);
     esp_app_desc_t d;
-    strncpy(s_good_slot, p ? p->label : "", sizeof s_good_slot - 1);
-    s_good_ver[0] = '\0';
-    if (p && esp_ota_get_partition_description(p, &d) == ESP_OK)
+    int ok = p && esp_ota_get_partition_description(p, &d) == ESP_OK;
+    s_good_slot[0] = s_good_ver[0] = '\0';
+    if (kg_vouches(two, s_nslots, s_good, ok ? d.app_elf_sha256 : NULL)) {
+        strncpy(s_good_slot, p->label, sizeof s_good_slot - 1);
         strncpy(s_good_ver, d.version, sizeof s_good_ver - 1);
+    }
 }
 
 static void kg_start(const esp_partition_t *run)
@@ -89,9 +105,13 @@ static void kg_start(const esp_partition_t *run)
     kg_rec_t two[2];
     if (!read_record(two)) memset(two, 0xff, sizeof two);
     s_good = kg_slot(two, s_nslots);
-    describe_good();
-    ESP_LOGI(TAG, "known-good firmware: %s %s%s", s_good_slot, s_good_ver,
-             kg_current(two) < 0 ? " (blank record)" : "");
+    s_named = kg_names(two, s_nslots, s_running, running_sha());
+    describe_good(two);
+    if (s_good_slot[0])
+        ESP_LOGI(TAG, "known-good firmware: %s %s%s", s_good_slot, s_good_ver,
+                 kg_current(two) < 0 ? " (blank record: what a USB flash wrote)" : "");
+    else
+        ESP_LOGW(TAG, "ota_%d no longer holds the known-good image", s_good);
 }
 
 // Takes over the record if this image has earned it. Any task.
@@ -99,21 +119,23 @@ static void kg_promote(void)
 {
     if (!s_rec || !s_kg) return;
     xSemaphoreTake(s_kg, portMAX_DELAY);
-    if (kg_should_promote(!s_trial, s_printed, s_running, s_good)) {
+    if (kg_should_promote(s_kept, s_printed, s_running, s_named)) {
         kg_rec_t two[2], r, back;
         int copy = -1;
         esp_err_t err = read_record(two) ? ESP_OK : ESP_FAIL;
         if (err == ESP_OK) {
             // Never the current copy: cut short, this leaves the old record.
-            copy = kg_next(two, s_running, &r);
+            copy = kg_next(two, s_running, running_sha(), &r);
             err = esp_partition_erase_range(s_rec, copy * KG_SECTOR, KG_SECTOR);
         }
         if (err == ESP_OK) err = esp_partition_write(s_rec, copy * KG_SECTOR, &r, sizeof r);
         if (err == ESP_OK) err = esp_partition_read(s_rec, copy * KG_SECTOR, &back, sizeof back);
         if (err == ESP_OK && memcmp(&back, &r, sizeof r)) err = ESP_ERR_INVALID_CRC;
         if (err == ESP_OK) {
+            two[copy] = r;
             s_good = s_running;
-            describe_good();
+            s_named = 1;
+            describe_good(two);
             ESP_LOGW(TAG, "%s %s is now the known-good firmware: the power-up reset boots it",
                      s_good_slot, s_good_ver);
         } else {
@@ -139,6 +161,7 @@ static void gate_task(void *arg)
             esp_err_t err = esp_ota_mark_app_valid_cancel_rollback();
             ESP_LOGI(TAG, "this firmware is healthy; keeping it (%s)", esp_err_to_name(err));
             if (err != ESP_OK) vTaskDelete(NULL);   // still on trial, and the status says so
+            s_kept = 1;
         } else {
             ESP_LOGE(TAG, "this firmware never became healthy (up 0x%x of 0x%x); rolling back",
                      (unsigned)up, (unsigned)need);
@@ -147,7 +170,7 @@ static void gate_task(void *arg)
             // this one is the best the board has: keep it rather than leave
             // it on trial for the next reboot to discard.
             ESP_LOGE(TAG, "no image to roll back to (%s); keeping this one", esp_err_to_name(err));
-            esp_ota_mark_app_valid_cancel_rollback();
+            s_kept = esp_ota_mark_app_valid_cancel_rollback() == ESP_OK;
         }
         s_trial = 0;
         kg_promote();       // a job may have printed during the trial
@@ -168,9 +191,14 @@ void ota_health_start(int has_creds)
     }
 
     esp_ota_img_states_t st;
-    int trial = run && esp_ota_get_state_partition(run, &st) == ESP_OK &&
-                st == ESP_OTA_IMG_PENDING_VERIFY;
+    esp_err_t se = run ? esp_ota_get_state_partition(run, &st) : ESP_FAIL;
+    int trial = se == ESP_OK && st == ESP_OTA_IMG_PENDING_VERIFY;
     s_trial = trial;
+    // No otadata entry for this slot: a USB flash, or a boot that fell past
+    // otadata to the next good image. One that failed its trial and still
+    // runs (nothing else would boot) is not kept.
+    s_kept = se == ESP_ERR_NOT_FOUND ||
+             (se == ESP_OK && (st == ESP_OTA_IMG_VALID || st == ESP_OTA_IMG_UNDEFINED));
     kg_start(run);
     if (!trial) {
         ESP_LOGI(TAG, "running %s", s_slot);    // an image already kept, or USB-flashed
