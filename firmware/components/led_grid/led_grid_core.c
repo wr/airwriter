@@ -333,6 +333,14 @@ static int moment_all(const ps_view_t *v)       // the moment lights mask dots t
     return page_out(v) || cancel_out(v) || join_failed(v);
 }
 
+// An acknowledgement over an all-dot moment or a cable test's answer would
+// draw more than the boot spin (review of W-1049): it is not drawn then.
+static int busy_panel(const ps_view_t *v)
+{
+    return moment_all(v) || v->cable
+        || (v->state == PS_PRINTING && v->prev == PS_ATTENTION && v->since_ms < LG_BACK_MS);
+}
+
 static lg_c3 view_dot(const ps_view_t *v, const lg_opts_t *o, int i, uint32_t t)
 {
     int r = LG_MAP[i].r, c = LG_MAP[i].c, fr4 = LG_MAP[i].mat == 'P';
@@ -541,6 +549,13 @@ static void task_frame(const lg_slot_t *k, uint32_t t, uint16_t out[LG_NUM_LEDS]
 
 // ---------------------------------------------------------------- acknowledgements
 
+uint32_t lg_elapsed(uint64_t now_ms, uint64_t t0_ms)
+{
+    if (t0_ms > now_ms) return 0;
+    uint64_t d = now_ms - t0_ms;
+    return d > UINT32_MAX ? UINT32_MAX : (uint32_t)d;
+}
+
 int lg_blip_over(uint8_t blip, uint32_t ms)
 {
     switch (blip) {
@@ -611,7 +626,7 @@ void lg_render16(const ps_view_t *v, const lg_opts_t *o, uint32_t t_ms,
     int all = all_dots(v->state) || moment_all(v) || v->cable;   // the cable sweep uses every dot
     int gamer = o && o->gamer;
     int blip = o && !lg_blip_over(o->blip, o->blip_ms) && v->state != PS_BOOTING
-               && v->state != PS_ATTENTION && v->state != PS_FAILED;
+               && v->state != PS_ATTENTION && v->state != PS_FAILED && !busy_panel(v);
     float sleep_k = v->asleep ? clampf((float)v->asleep_ms / 10000.0f) : 0;   // 10 s fade
 
     for (int i = 0; i < LG_NUM_LEDS; i++) {

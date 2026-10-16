@@ -598,9 +598,12 @@ static void on_activity(void)
 #define TESTPAGE_W 1152
 #define TESTPAGE_H 64
 
-// The test page holds s_job_lock: a tap now cancels it rather than being
-// refused (W-1049). Set and cleared only while the lock is held.
-static volatile int s_test_running;
+// The test page holds s_job_lock, and a second tap cancels it (W-1049). The
+// tap and the page's end decide under s_tap_mux, so a tap landing as the page
+// finishes can never set its cancel on the next job instead.
+static portMUX_TYPE s_tap_mux = portMUX_INITIALIZER_UNLOCKED;
+static int s_test_running;      // the test page holds the lock
+static int s_test_cancel;       // a second tap asked to stop it
 
 static void test_page_task(void *arg)
 {
@@ -646,56 +649,61 @@ static void test_page_task(void *arg)
         iw_end_page(&w);
         ht_free(&h);
     }
-    iw_link_job_end(&s_link, !s_printer_failed);
+    // As job_finished does: the last byte has to clear before the page counts
+    // as printed, a cancel stops that wait, and a tail that did not go out is
+    // purged so it cannot print ahead of the next job, which then resyncs.
+    esp_err_t flushed = s_printer_failed ? ESP_FAIL
+                                         : serial_out_flush(CONFIG_AIRWRITER_STALL_ABORT * 1000u);
+    if (flushed != ESP_OK) serial_out_purge();
+    iw_link_job_end(&s_link, flushed == ESP_OK);
 
-    serial_out_flush(CONFIG_AIRWRITER_STALL_ABORT * 1000u);
+    portENTER_CRITICAL(&s_tap_mux);
     s_test_running = 0;
-    // A cancelled page stopped on an aborted write, so it reads as failed
-    // here; it is a cancel, which the panel shows as one.
-    printer_state_post(s_job_cancelled ? PS_EV_JOB_CANCELLED
-                       : s_printer_failed ? PS_EV_JOB_FAILED : PS_EV_JOB_DONE);
+    int cancelled = s_test_cancel;
+    portEXIT_CRITICAL(&s_tap_mux);
+    // A cancel that came too late to cut anything is a page that printed.
+    printer_state_post(flushed == ESP_OK ? PS_EV_JOB_DONE
+                       : cancelled ? PS_EV_JOB_CANCELLED : PS_EV_JOB_FAILED);
     s_printing = 0;
     job_touch();
     xSemaphoreGive(s_job_lock);
     vTaskDelete(NULL);
 }
 
-// Runs on whatever task calls it -- normally dip_config's poll task, for a
-// button press, which is why this only ever spawns the real work rather than
-// doing it here: the poll loop has to stay free to keep debouncing.
-static void test_page(void)
+// Starts the test page; s_job_lock is held, and the page's task gives it
+// back. Only ever spawns the real work: the caller is normally dip_config's
+// poll task, which has to stay free to keep debouncing.
+static void test_page_locked(void)
 {
-    on_activity();
-    // Non-blocking: a test page never queues behind whatever is printing.
-    // s_job_lock is the actual mutual exclusion; the take-then-spawn
-    // sequencing below (not s_printing) is what makes two back-to-back
-    // presses act on one page rather than print two.
-    if (xSemaphoreTake(s_job_lock, 0) != pdTRUE) {
-        if (s_test_running) {
-            // A second tap cancels the test page: the write in progress is
-            // aborted, and W-1041's resync runs before the next job.
-            ESP_LOGI(TAG, "test button tapped again: cancelling the test page");
-            s_job_cancelled = 1;
-            serial_out_set_abort(1);
-        } else {
-            ESP_LOGW(TAG, "test page requested but the printer is already busy");
-            s_job_waiting = 1;
-            led_grid_blip(LG_BLIP_BUSY);
-        }
-        return;
-    }
     s_printing = 1;
     job_touch();
-    s_job_cancelled = 0;
     serial_out_set_abort(0);
+    portENTER_CRITICAL(&s_tap_mux);
     s_test_running = 1;
+    s_test_cancel = 0;
+    portEXIT_CRITICAL(&s_tap_mux);
     if (xTaskCreate(test_page_task, "test_page", 4096, NULL, 3, NULL) != pdPASS) {
         ESP_LOGE(TAG, "test page: could not create task");
+        portENTER_CRITICAL(&s_tap_mux);
         s_test_running = 0;
+        portEXIT_CRITICAL(&s_tap_mux);
         s_printing = 0;
         job_touch();
         xSemaphoreGive(s_job_lock);
     }
+}
+
+// DIP4 at boot. Non-blocking: a test page never queues behind whatever is
+// printing; s_job_lock is the actual mutual exclusion.
+static void test_page(void)
+{
+    on_activity();
+    if (xSemaphoreTake(s_job_lock, 0) != pdTRUE) {
+        ESP_LOGW(TAG, "test page requested but the printer is already busy");
+        s_job_waiting = 1;
+        return;
+    }
+    test_page_locked();
 }
 
 // W-1055: the cable test, from the button or the web page, under the job lock
@@ -717,27 +725,44 @@ static void cable_button_task(void *arg)
 }
 #endif
 
-// A cable from J2 to J4 leaves the printer's handshake line down, so a press
-// while the printer is not ready tests the cable instead of printing. With no
-// crossover plugged in that shows the fail, which is also the honest answer
-// to "print a test page" with no printer ready.
+// A tap of the test button. While the test page prints, a second tap cancels
+// it (W-1049); during anyone else's job the panel says busy. Otherwise a cable
+// from J2 to J4 leaves the printer's handshake line down, so a tap while the
+// printer is not ready tests the cable instead of printing (W-1055). With no
+// crossover plugged in that shows the fail, which is also the honest answer to
+// "print a test page" with no printer ready.
 static void test_button(void)
 {
+    on_activity();
+    if (xSemaphoreTake(s_job_lock, 0) != pdTRUE) {
+        int cancel = 0;
+        portENTER_CRITICAL(&s_tap_mux);
+        if (s_test_running) {
+            // The write in progress is aborted; W-1041's resync runs before
+            // the next job.
+            s_test_cancel = 1;
+            serial_out_set_abort(1);
+            cancel = 1;
+        }
+        portEXIT_CRITICAL(&s_tap_mux);
+        if (cancel) {
+            ESP_LOGI(TAG, "test button tapped again: cancelling the test page");
+        } else {
+            ESP_LOGW(TAG, "test button tapped but the printer is busy");
+            s_job_waiting = 1;          // an update in progress gives way (W-1048)
+            led_grid_blip(LG_BLIP_BUSY);
+        }
+        return;
+    }
 #if CONFIG_AIRWRITER_PIC_CLK_PIN >= 0
     if (!serial_out_clear()) {
-        on_activity();
-        if (xSemaphoreTake(s_job_lock, 0) != pdTRUE) {
-            ESP_LOGW(TAG, "cable test requested but the printer port is busy");
-            s_job_waiting = 1;
-            return;
-        }
         ESP_LOGI(TAG, "test button with the printer not ready: testing the cable");
         if (xTaskCreate(cable_button_task, "cable", 4096, NULL, 3, NULL) != pdPASS)
             xSemaphoreGive(s_job_lock);
         return;
     }
 #endif
-    test_page();
+    test_page_locked();
 }
 
 // Latched by dip_on_change from the boot-time read, consumed once app_main

@@ -58,6 +58,11 @@ typedef enum {
 } lg_blip_t;
 int lg_blip_over(uint8_t blip, uint32_t ms);
 
+// Milliseconds from t0 to now for a slot's clock: 0 when t0 is after now (set
+// while now was being read), saturating at UINT32_MAX so a one-shot set long
+// ago stays over. 64-bit in: a 32-bit difference goes negative after 24.8 days.
+uint32_t lg_elapsed(uint64_t now_ms, uint64_t t0_ms);
+
 // Whose job Printing shows: the ink is warm for AirPrint and the test page,
 // the six stripes for a LocalTalk (PAP) job.
 typedef enum { LG_SRC_AIRPRINT, LG_SRC_LOCALTALK } lg_src_t;

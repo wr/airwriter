@@ -463,6 +463,43 @@ static void test_w1049(uint8_t f[LG_NUM_LEDS][3], uint8_t g[LG_NUM_LEDS][3])
         assert(f[b][0] > f[b][1] && f[b][1] > f[b][2]);
     }
 
+    // Review fix: the glue's clocks are 64-bit and saturate, so a one-shot set
+    // early in a long uptime stays over (a 32-bit difference went negative
+    // after 24.8 days and froze its first frame until day 49.7).
+    {
+        const uint64_t day = 86400000ull;
+        assert(lg_elapsed(25 * day + 5000, 5000) == (uint32_t)(25 * day));
+        assert(lg_elapsed(60 * day, 5000) == UINT32_MAX);
+        assert(lg_elapsed(5000, 6000) == 0);                 // set after `now` was read
+        assert(lg_act_over(LG_ACT_PIC_OK, lg_elapsed(30 * day, 5000)));
+        assert(lg_blip_over(LG_BLIP_SAVED, lg_elapsed(30 * day, 5000)));
+    }
+
+    // Review fix: an acknowledgement is not drawn over an all-dot moment or a
+    // cable test's answer, whose frames would then draw more than the Spin.
+    {
+        const lg_blip_t B[] = { LG_BLIP_MAC, LG_BLIP_LT_ON, LG_BLIP_BUSY, LG_BLIP_SAVED };
+        const uint32_t L[] = { LG_BLIP_MAC_MS, LG_BLIP_LT_ON_MS, LG_BLIP_BUSY_MS, LG_BLIP_SAVED_MS };
+        for (int k = 0; k < 4; k++)
+            for (int m = 0; m < 4; m++)
+                for (uint32_t s = 0; s < 2000; s += 41) {
+                    ps_view_t v = m == 0 ? moment(PS_PRINTING, PS_ATTENTION, s)
+                                : m == 1 ? moment(PS_READY, PS_PRINTING, s)
+                                : m == 2 ? moment(PS_SETUP, PS_JOINING, s)
+                                         : view(PS_READY, 100000);
+                    if (m == 1) v.cancelled = s & 1;
+                    if (m == 3) { v.cable = 1 + (s & 1); v.cable_ms = s; }
+                    lg_opts_t o = blip(B[k], s % L[k]);
+                    lg_render(&v, &o, 60000 + s, f);
+                    check_frame(f, spin_max, m == 2, 0);
+                }
+        ps_view_t v = moment(PS_PRINTING, PS_ATTENTION, 500);
+        lg_opts_t o = blip(LG_BLIP_LT_ON, 500);
+        lg_render(&v, &o, 61000, f);
+        lg_render(&v, &WHITE_MODE, 61000, g);
+        assert(same(f, g));
+    }
+
     // Asleep: a task shows at once at full level, and so does an
     // acknowledgement.
     {
