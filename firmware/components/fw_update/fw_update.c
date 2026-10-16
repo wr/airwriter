@@ -33,6 +33,11 @@ static const char *TAG = "fw_update";
 #define HTTP_TIMEOUT_MS 20000
 #define MANIFEST_MAX    512
 #define TICK_MS  30000          // how often auto-update looks at the clock
+// A download that has not moved for this long is a dead connection (a Wi-Fi
+// blip leaves TCP half-open, and esp_https_ota_perform keeps saying "in
+// progress"). An upload gets the same, in timeouts of the web server's 20 s.
+#define STALL_S  60
+#define UPLOAD_STALL_TIMEOUTS 3
 #define WHY_MAX  112
 
 typedef enum { ST_IDLE, ST_CHECKING, ST_DOWNLOADING, ST_INSTALLING, ST_RESTARTING, ST_FAILED } st_t;
@@ -185,6 +190,23 @@ esp_err_t fw_update_stream_write(const void *buf, size_t n, const char **why)
     return ESP_OK;
 }
 
+esp_err_t fw_update_stream_idle(int timeouts, const char **why)
+{
+    if (s_cfg.job_waiting()) {
+        ESP_LOGW(TAG, "upload stopped for a print job");
+        led_grid_action(LG_ACT_FW_NONE, 0);
+        *why = WHY_JOB;
+        stream_fail(ST_IDLE, WHY_JOB);
+        return ESP_ERR_INVALID_STATE;
+    }
+    if (timeouts < UPLOAD_STALL_TIMEOUTS) return ESP_OK;
+    ESP_LOGE(TAG, "upload stalled");
+    led_grid_action(LG_ACT_FW_NONE, 0);
+    *why = "the upload stalled";
+    stream_fail(ST_FAILED, *why);
+    return ESP_ERR_TIMEOUT;
+}
+
 void fw_update_stream_abort(void)
 {
     led_grid_action(LG_ACT_FW_NONE, 0);
@@ -305,6 +327,8 @@ static void do_check(void)
     }
     int newer = s_newer;
     UNLOCK();
+    // The TLS handshake is this task's deepest call; say how close it came.
+    ESP_LOGI(TAG, "task stack: %u bytes never used", (unsigned)uxTaskGetStackHighWaterMark(NULL));
     if (why) { set_state(ST_FAILED, why); return; }
     set_state(ST_IDLE, NULL);
     ESP_LOGI(TAG, "check: newest release %s%s; running %s", ver,
@@ -315,7 +339,7 @@ static void do_check(void)
 // `tag` empty: the newest release, which must carry the version its manifest
 // promised. Otherwise that tag's image, whatever version it is: an owner
 // choosing an older or a pre-release build by name.
-static void do_install(const char *tag)
+static void do_install(const char *tag, int automatic)
 {
     char want[32], file[65], url[200];
     LOCK();
@@ -334,14 +358,15 @@ static void do_install(const char *tag)
     }
     const char *why = NULL;
     if (claim(&why) != ESP_OK) {
-        // Not now is not a failed install: auto-update tries again once the
-        // job is over and the board has been idle long enough.
+        // Not now is not a failed install. A long job reads as idle ten
+        // minutes after it began, so auto-update asks every tick until it
+        // ends; it says nothing, and tries again once the board is idle.
         LOCK(); s_install_tried = 0; UNLOCK();
-        set_state(ST_FAILED, why);
+        if (!automatic) set_state(ST_FAILED, why);
         return;
     }
 
-    ESP_LOGW(TAG, "installing %s from %s", want, url);
+    ESP_LOGW(TAG, "%sinstalling %s from %s", automatic ? "auto-update: " : "", want, url);
     set_state(ST_DOWNLOADING, NULL);
     progress(0, 0);
     esp_http_client_config_t hc;
@@ -365,9 +390,18 @@ static void do_install(const char *tag)
         goto refuse;
     }
 
+    int last_len = -1;
+    int64_t moved_s = now_s();
     for (;;) {
         err = esp_https_ota_perform(h);
         if (err != ESP_ERR_HTTPS_OTA_IN_PROGRESS) break;
+        int len = esp_https_ota_get_image_len_read(h);
+        if (len != last_len) { last_len = len; moved_s = now_s(); }
+        else if (now_s() - moved_s >= STALL_S) {
+            err = ESP_ERR_TIMEOUT;
+            why = "the download stalled";
+            goto fail;
+        }
         if (s_cfg.job_waiting()) {
             ESP_LOGW(TAG, "download stopped for a print job");
             esp_https_ota_abort(h);
@@ -378,7 +412,7 @@ static void do_install(const char *tag)
             return;
         }
         int total = esp_https_ota_get_image_size(h);
-        progress((size_t)esp_https_ota_get_image_len_read(h), total > 0 ? (size_t)total : 0);
+        progress((size_t)len, total > 0 ? (size_t)total : 0);
     }
     if (err != ESP_OK || !esp_https_ota_is_complete_data_received(h)) {
         why = "the download was cut short";
@@ -458,13 +492,12 @@ static void task(void *arg)
         fwu_inputs_t in = inputs();
         UNLOCK();
 
-        if (install)    { do_install(tag); continue; }
-        if (check)      { do_check(); continue; }
-        switch (fwu_policy(&in, &tm)) {
-        case FWU_CHECK:   do_check(); break;
-        case FWU_INSTALL: ESP_LOGW(TAG, "auto-update: idle; installing %s", s_latest);
-                          do_install(""); break;
-        default: break;
+        if (install)    do_install(tag, 0);
+        else if (check) do_check();
+        else switch (fwu_policy(&in, &tm)) {
+            case FWU_CHECK:   do_check(); break;
+            case FWU_INSTALL: do_install("", 1); break;
+            default: break;
         }
     }
 }
@@ -476,6 +509,10 @@ static const char *ready_for_github(void)
     if (s_cfg.setup_mode) return "the board is in setup mode, off the internet";
     if (s_key == KEY_OTHER)
         return "this firmware is signed with a different key, so it can't install AirWriter releases";
+    // IDF trusts the key that signed the running image; with none, it
+    // refuses every image (only an image flashed unsigned by hand gets here).
+    if (s_key == KEY_UNSIGNED)
+        return "this firmware isn't signed, so it can't take updates; flash a release over USB";
     return NULL;
 }
 
@@ -588,7 +625,9 @@ esp_err_t fw_update_start(const fw_update_cfg_t *cfg)
                                                                   : "no",
              s_auto ? "on" : "off");
     if (cfg->setup_mode) return ESP_OK;     // /update still works; GitHub is out of reach
-    if (xTaskCreate(task, "fw_update", 6144, NULL, 2, &s_task) != pdPASS) return ESP_ERR_NO_MEM;
+    // 8 KB, as IDF's own OTA examples give theirs: a TLS handshake with the
+    // certificate bundle, then esp_ota_end's RSA-3072 check.
+    if (xTaskCreate(task, "fw_update", 8192, NULL, 2, &s_task) != pdPASS) return ESP_ERR_NO_MEM;
     return ESP_OK;
 }
 

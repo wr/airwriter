@@ -295,6 +295,8 @@ function fwSay(u){
   if(u.setup) return 'In setup mode the board is off the internet. Join a network to look for updates.';
   if(u.key==='other') return 'This firmware is signed with a different key, so it can’t install '
     +'AirWriter releases. Flash a release over USB to switch back.';
+  if(u.key==='unsigned') return 'This firmware isn’t signed, so it can’t take updates. '
+    +'Flash a release over USB.';
   switch(u.state){
     case 'checking': return 'Looking for a new release…';
     case 'downloading': return 'Downloading'+(u.progress>=0?': '+u.progress+'%.':'…');
@@ -306,13 +308,12 @@ function fwSay(u){
   if(u.newer) t+=u.latest+' is available.';
   else if(u.no_target) t+='The newest release has no image for this board.';
   else if(u.checked>=0 && !u.error) t+='Up to date, checked '+ago(u.checked)+'.';
-  if(u.key==='unsigned') t+=' This firmware isn’t signed, so it takes any image.';
   return t;
 }
 function fwDraw(u){
   fwu=u;
   $('fwsay').textContent=fwSay(u);
-  const net=!u.setup&&u.key!=='other', busy=FW_BUSY.includes(u.state);
+  const net=!u.setup&&u.key==='airwriter', busy=FW_BUSY.includes(u.state);
   $('fwcheck').disabled=!net||busy;
   $('fwinst').disabled=!net||busy||!u.newer;
   $('fwinstkey').classList.toggle('is-quiet',$('fwinst').disabled);
@@ -342,7 +343,7 @@ $('fwauto').onclick=async()=>{
   if(await fwPost('/api/update/auto',{auto:on})) noted('sec-firmware', on?'auto on':'auto off');
 };
 fwPoll().then(ok=>{
-  if(ok && !fwu.setup && fwu.key!=='other' && !FW_BUSY.includes(fwu.state)
+  if(ok && !fwu.setup && fwu.key==='airwriter' && !FW_BUSY.includes(fwu.state)
      && (fwu.checked<0 || fwu.checked>3600)) fwPost('/api/update/check');
 });
 setInterval(()=>{ if(!FW_BUSY.includes(fwu.state)) fwPoll(); },15000);

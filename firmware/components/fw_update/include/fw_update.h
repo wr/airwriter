@@ -45,5 +45,8 @@ esp_err_t fw_update_stream_begin(size_t len, const char **why);
 esp_err_t fw_update_stream_write(const void *buf, size_t n, const char **why);
 // Verified and set to boot: reply, then fw_update_restart().
 esp_err_t fw_update_stream_end(const char **why);
+// The upload timed out `timeouts` times in a row. ESP_OK to keep waiting;
+// otherwise the update is over (a job is waiting, or the upload stalled).
+esp_err_t fw_update_stream_idle(int timeouts, const char **why);
 void      fw_update_stream_abort(void);
 void      fw_update_restart(void);

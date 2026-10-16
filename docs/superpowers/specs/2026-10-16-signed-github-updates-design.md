@@ -92,9 +92,10 @@ What follows from that:
 **The official key's digest is compiled in** as `CONFIG_AIRWRITER_UPDATE_KEY_DIGEST` (hex
 string; a fork changes it with `CONFIG_AIRWRITER_UPDATE_REPO`). At boot the firmware reads the
 running image's key digest. If it differs, the GitHub path is off and the web UI says "This
-firmware is signed with a different key, so it can't install AirWriter releases." If the running
-image is unsigned, the UI says it takes any image until a signed release is installed. This only
-avoids doomed downloads; the check that matters is still `esp_ota_end`'s.
+firmware is signed with a different key, so it can't install AirWriter releases." A W-1048 image
+running without a signature (flashed unsigned by hand) refuses every update, so the UI says so
+and points to a USB flash. This only avoids doomed downloads; the check that matters is still
+`esp_ota_end`'s.
 
 ## Releases
 

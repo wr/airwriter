@@ -216,9 +216,17 @@ static esp_err_t update_post(httpd_req_t *req)
         return update_err(req, ESP_ERR_NO_MEM, "no memory");
     }
     size_t left = req->content_len;
+    int timeouts = 0;
     while (left) {
         int n = httpd_req_recv(req, buf, left < OTA_CHUNK ? left : OTA_CHUNK);
-        if (n == HTTPD_SOCK_ERR_TIMEOUT) continue;
+        if (n == HTTPD_SOCK_ERR_TIMEOUT) {
+            // The job lock is held: a stalled upload, or a job waiting on
+            // one, must not keep it.
+            err = fw_update_stream_idle(++timeouts, &why);
+            if (err != ESP_OK) { free(buf); return update_err(req, err, why); }
+            continue;
+        }
+        timeouts = 0;
         if (n <= 0) {
             free(buf);
             fw_update_stream_abort();

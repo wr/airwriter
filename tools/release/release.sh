@@ -43,11 +43,12 @@ VER=$1 NOTES=${2:-}
 ROOT=$(git rev-parse --show-toplevel)
 cd "$ROOT"
 [ -z "$(git status --porcelain)" ] || die "the working tree is not clean"
+SHA=$(git rev-parse HEAD)        # what is built is what is tagged
 BR=$(git rev-parse --abbrev-ref HEAD)
 [ "$BR" = main ] || [ $branch_ok = 1 ] || die "on $BR, not main (--branch to allow)"
 if [ $dry = 0 ]; then
     git fetch -q origin
-    [ "$(git rev-parse HEAD)" = "$(git rev-parse "@{u}" 2>/dev/null)" ] ||
+    [ "$SHA" = "$(git rev-parse "@{u}" 2>/dev/null)" ] ||
         die "$BR is not pushed, or not level with origin"
     git rev-parse -q --verify "refs/tags/$VER" >/dev/null && die "tag $VER exists"
     [ -z "$(git ls-remote --tags origin "refs/tags/$VER")" ] || die "tag $VER exists on origin"
@@ -62,7 +63,7 @@ fi
 TMP=$(mktemp -d "${TMPDIR:-/tmp}/airwriter-release.XXXXXX")
 cleanup() { git -C "$ROOT" worktree remove --force "$TMP/src" 2>/dev/null || true; }
 trap cleanup EXIT
-git worktree add -q --detach "$TMP/src" HEAD
+git worktree add -q --detach "$TMP/src" "$SHA"
 FW=$TMP/src/firmware
 # version.txt wins over git describe (IDF), so the image reads exactly $VER.
 echo "$VER" > "$FW/version.txt"
@@ -105,6 +106,14 @@ if [ -f "$SCRUB" ]; then
     done < "$SCRUB"
 fi
 
+# The digest boards compare the running image's key with (Kconfig) must be the
+# committed key's, or every board would read the release as someone else's.
+espsecure.py digest_sbv2_public_key --keyfile "$FW/keys/airwriter-release.pub.pem" \
+    --output "$TMP/key.digest" > /dev/null 2>&1 || bad "could not digest the committed key"
+want=$(xxd -p -c64 "$TMP/key.digest" 2>/dev/null || true)
+grep -q "^CONFIG_AIRWRITER_UPDATE_KEY_DIGEST=\"$want\"$" "$TMP/sdkconfig" ||
+    bad "CONFIG_AIRWRITER_UPDATE_KEY_DIGEST is not the committed key's digest ($want)"
+
 espsecure.py verify_signature --version 2 \
     --keyfile "$FW/keys/airwriter-release.pub.pem" "$IMG" > "$TMP/verify.log" 2>&1 ||
     { cat "$TMP/verify.log"; bad "the signature does not verify against the committed key"; }
@@ -123,9 +132,14 @@ if [ $dry = 1 ]; then
     exit 0
 fi
 
-git tag -a "$VER" -m "AirWriter $VER" HEAD
+git tag -a "$VER" -m "AirWriter $VER" "$SHA"
 git push -q origin "refs/tags/$VER"
 if [ -n "$NOTES" ]; then notes=(--notes-file "$NOTES"); else notes=(--notes ""); fi
-gh release create "$VER" "$OUT/airwriter-$TARGET.bin" "$OUT/airwriter.json" \
-    --title "AirWriter $VER" --verify-tag "${notes[@]}"
+if ! gh release create "$VER" "$OUT/airwriter-$TARGET.bin" "$OUT/airwriter.json" \
+        --title "AirWriter $VER" --verify-tag "${notes[@]}"; then
+    # Leave nothing half-made: a tag with no release is a retry that fails.
+    git push -q origin ":refs/tags/$VER" || true
+    git tag -d "$VER" > /dev/null
+    die "gh release create failed; the tag is removed again"
+fi
 echo "release: published $VER"
