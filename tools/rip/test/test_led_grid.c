@@ -502,30 +502,28 @@ int main(void)
         assert(sum[2] > sum[1] && sum[1] > sum[0]);
     }
 
-    // W-1055: a passed cable test is white on the FR4 dots only and gone by
-    // its hold; a failed one is Job failed's red, mask dots included.
+    // W-1055: a cable test's answer is one sweep, left to right and back,
+    // over every dot: green for a crossover, red for anything else. Halfway
+    // out (450 ms) the band is on column 3.
     {
         ps_view_t v = view(PS_OFFLINE, 60000);
-        v.cable = PS_CABLE_PASS;
-        v.cable_ms = 1500;
-        lg_render(&v, &WHITE_MODE, 0, f);
-        int fr4 = 0;
-        for (int i = 0; i < LG_NUM_LEDS; i++) {
-            if (LG_MAP[i].mat != 'P') { assert(max3(f[i]) == 0); continue; }
-            assert(max3(f[i]) <= LG_BRIGHTNESS_CAP);
-            if (max3(f[i]) > 0) { fr4++; assert(neutral(f[i])); }
+        int mid = idx(6, 3), edge = idx(6, 0), mask = idx(4, 3);
+        for (int k = 0; k < 2; k++) {
+            v.cable = k ? PS_CABLE_FAIL : PS_CABLE_PASS;
+            v.cable_ms = 450;
+            lg_render(&v, &WHITE_MODE, 0, f);
+            for (int i = 0; i < LG_NUM_LEDS; i++)
+                assert(max3(f[i]) <= (LG_MAP[i].mat == 'P' ? LG_BRIGHTNESS_CAP : LG_MASK_CAP));
+            assert(max3(f[mid]) > 2 * max3(f[edge]));        // the band, not a fill
+            assert(max3(f[mask]) > 0);                       // mask dots join in
+            if (!k) assert(f[mid][1] > f[mid][0] && f[mid][1] > f[mid][2]);
+            else    assert(f[mid][0] > f[mid][1] && f[mid][0] > f[mid][2]);
         }
-        assert(fr4 == 14);
-        v.cable_ms = PS_CABLE_PASS_MS;
+        // On the way back (1350 ms) the band is on column 3 again.
+        v.cable = PS_CABLE_PASS;
+        v.cable_ms = 1350;
         lg_render(&v, &WHITE_MODE, 0, f);
-        assert(lit_count(f) == 0);
-
-        ps_view_t fail = view(PS_OFFLINE, 60000), red = view(PS_FAILED, 3000);
-        fail.cable = PS_CABLE_FAIL;
-        fail.cable_ms = 3000;
-        lg_render(&fail, &WHITE_MODE, 777, f);
-        lg_render(&red, &WHITE_MODE, 777, g);
-        assert(memcmp(f, g, sizeof f) == 0);
+        assert(max3(f[mid]) > 2 * max3(f[edge]));
     }
 
     test_reset(f, g);

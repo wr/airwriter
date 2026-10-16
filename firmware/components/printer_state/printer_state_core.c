@@ -89,8 +89,7 @@ ps_view_t ps_update(ps_t *ps, uint64_t now)
     ps_view_t v = { .state = st, .since_ms = sat32(now - ps->state_since) };
     v.phone_joined = st == PS_SETUP && ps->ap_stations > 0;
     v.greeted      = st == PS_READY && ps->greeted;
-    uint32_t hold = ps->cable == PS_CABLE_PASS ? PS_CABLE_PASS_MS : PS_CABLE_FAIL_MS;
-    if (ps->cable && now - ps->cable_at < hold &&
+    if (ps->cable && now - ps->cable_at < PS_CABLE_MS &&
         (st == PS_SETUP || st == PS_JOINING || st == PS_READY || st == PS_OFFLINE)) {
         v.cable    = ps->cable;
         v.cable_ms = sat32(now - ps->cable_at);

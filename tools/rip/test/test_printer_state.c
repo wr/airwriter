@@ -245,12 +245,12 @@ int main(void)
     ps_cable(&ps, 1, 400000);                       // long idle: asleep until now
     v = ps_update(&ps, 400000);
     assert(v.cable == PS_CABLE_PASS && v.cable_ms == 0 && !v.asleep && v.state == PS_OFFLINE);
-    v = ps_update(&ps, 400000 + PS_CABLE_PASS_MS - 1);
-    assert(v.cable == PS_CABLE_PASS && v.cable_ms == PS_CABLE_PASS_MS - 1);
-    assert(ps_update(&ps, 400000 + PS_CABLE_PASS_MS).cable == 0);
+    v = ps_update(&ps, 400000 + PS_CABLE_MS - 1);
+    assert(v.cable == PS_CABLE_PASS && v.cable_ms == PS_CABLE_MS - 1);
+    assert(ps_update(&ps, 400000 + PS_CABLE_MS).cable == 0);
     ps_cable(&ps, 0, 500000);
-    assert(ps_update(&ps, 500000 + PS_CABLE_FAIL_MS - 1).cable == PS_CABLE_FAIL);
-    assert(ps_update(&ps, 500000 + PS_CABLE_FAIL_MS).cable == 0);
+    assert(ps_update(&ps, 500000 + PS_CABLE_MS - 1).cable == PS_CABLE_FAIL);
+    assert(ps_update(&ps, 500000 + PS_CABLE_MS).cable == 0);
     ps_cable(&ps, 0, 600000);
     ps_post(&ps, PS_EV_LINE_READY, 600500);         // the printer back on J2
     ps_post(&ps, PS_EV_JOB_START, 601000);

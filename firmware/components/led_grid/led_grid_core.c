@@ -154,13 +154,16 @@ static lg_c3 state_dot(const ps_view_t *v, const lg_opts_t *o, int i, uint32_t t
     float h1 = dot_hash(r, c, 1), h2 = dot_hash(r, c, 2);
     uint32_t s = v->since_ms;
 
-    if (v->cable == PS_CABLE_PASS) {
-        // A cable test passed (W-1055): two white rings out of the test
-        // button, 400 ms apart, over a white field that fades by 3 s.
-        uint32_t cs = v->cable_ms;
-        float lv = 0.45f + gauss(dist - (float)cs / 1000.0f * 6, 1.6f);
-        if (cs >= 400) lv += gauss(dist - (float)(cs - 400) / 1000.0f * 6, 1.6f);
-        return sc(white_of(r, c), clampf(lv) * (1 - ss(2000, PS_CABLE_PASS_MS, (float)cs)));
+    if (v->cable) {
+        // A cable test's answer (W-1055): one sweep across the whole panel,
+        // left to right and back, 900 ms each way. Green, the cable works;
+        // red, it doesn't or there isn't one.
+        uint32_t cs = v->cable_ms, half = PS_CABLE_MS / 2;
+        float x = cs < half ? -1.0f + 8.0f * (float)cs / (float)half
+                            : 7.0f - 8.0f * (float)(cs - half) / (float)half;
+        float hue = v->cable == PS_CABLE_PASS ? jitter(r, c, 130, 14, t, 0)
+                                              : jitter(r, c, 2, 10, t, 0);
+        return hsv(hue, 0.9f, 0.08f + 0.92f * gauss((float)c - x, 1.0f));
     }
 
     switch (v->state) {
@@ -360,17 +363,7 @@ void lg_render16(const ps_view_t *v, const lg_opts_t *o, uint32_t t_ms,
         reset_frame(o, t_ms, out);
         return;
     }
-    // A failed cable test (W-1055) shows as Job failed does: red means it
-    // did not work, whatever "it" was.
-    ps_view_t failed;
-    if (v->cable == PS_CABLE_FAIL) {
-        failed = *v;
-        failed.state = PS_FAILED;
-        failed.since_ms = v->cable_ms;
-        failed.cable = 0;
-        v = &failed;
-    }
-    int all = all_dots(v->state);
+    int all = all_dots(v->state) || v->cable;   // the cable sweep uses every dot
     int gamer = o && o->gamer;
     float sleep_k = v->asleep ? clampf((float)v->asleep_ms / 10000.0f) : 0;   // 10 s fade
 
