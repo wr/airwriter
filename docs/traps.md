@@ -30,6 +30,10 @@ Traps already explained in a code comment are listed only when the comment is ea
   the flash cache is off. A Wi-Fi join (scan, handshake, NVS writes) delayed it and sent stale
   bits: the boot Spin stuttered. `led_grid.c` sends each frame from one DMA buffer (the S3's only
   DMA TX channel, so nothing else may ask for RMT DMA).
+- **The LED task belongs on core 1.** Unpinned, it ran every frame on core 0 with the Wi-Fi task,
+  and the WPA3 handshake starved it for about a second during the join (frames up to 316 ms
+  apart, W-1060's frame log). It is pinned to core 1 and creates the strip there, so the RMT
+  interrupt is on core 1 too. An unpinned task is not "free to use the idle core".
 - **Rev A has no hardware LED current limit.** `LG_BRIGHTNESS_CAP` and friends in
   `led_grid_core.h` are the only limit on 37 SK6812s; raise them knowingly.
 - **A raw pyserial open on macOS drops the S3 into download mode** (the driver asserts DTR at
