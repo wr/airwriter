@@ -53,6 +53,8 @@ What works on `main`:
   reset, moments opening states (printer gone and back, page out, cancelled, could not join),
   short acknowledgements (LocalTalk on, a Mac heard, Busy, Saved), and LocalTalk jobs inked in the
   six Apple stripes. `led_grid_action()` per family, `led_grid_blip()`, `led_grid_set_source()`.
+  A quiet power-on: the Spin alone until Wi-Fi is up and the printer line has settled (3–30 s),
+  then straight into the state; the Wi-Fi green only after a fresh setup or a real rejoin.
 - DIP switches read by their printed numbers; a tap of the `test` button prints a test page, or
   with the printer not ready runs the cable test; a second tap cancels the test page; a tap during
   another job shows Busy.
@@ -137,7 +139,8 @@ Linear is the queue; these are the live items.
   and a record of the last good one, which the power-up reset boots. Needs a bootloader hook and
   one USB flash of board 1.
 - `W-1049 Panel feedback for every action: OTA, reset, cables, TashTalk flash`: benched on board 1
-  2026-10-16 (all pass, Wells by eye). Held back by Wells: update kept, update refused, rolled back,
+  2026-10-16 (all pass, Wells by eye); the quiet power-on added after, still to bench (power-up
+  with the printer on, with it off, and the restart after setup). Held back by Wells: update kept, update refused, rolled back,
   DIP switch flipped (their acts draw the state). Deferred from review: the amber ahead of
   "printer back" drops from the alert cap to the normal cap at its first frame, and Saved does
   not wake a sleeping panel.
