@@ -268,6 +268,22 @@ static esp_err_t localtalk_flash_post(httpd_req_t *req)
     return httpd_resp_sendstr(req, out);
 }
 
+// Blocks for the test's 30-400 ms.
+static esp_err_t cable_post(httpd_req_t *req)
+{
+    if (!s_cfg.cable_test) {
+        httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "no cable test");
+        return ESP_FAIL;
+    }
+    char body[8] = {0};
+    if (req->content_len > 0 && req->content_len < sizeof body)
+        httpd_req_recv(req, body, req->content_len);
+    char out[640];
+    s_cfg.cable_test(s_cfg.ctx, !strcmp(body, "both"), out, sizeof out);
+    httpd_resp_set_type(req, "application/json");
+    return httpd_resp_sendstr(req, out);
+}
+
 // In captive mode every unknown path serves the page, so whatever the phone
 // probes for on joining the access point opens the setup screen.
 static esp_err_t catch_all(httpd_req_t *req)
@@ -286,7 +302,7 @@ esp_err_t webui_start(const webui_cfg_t *cfg)
     httpd_config_t hc = HTTPD_DEFAULT_CONFIG();
     hc.server_port      = 80;
     hc.ctrl_port        = 32080;
-    hc.max_uri_handlers = 12;
+    hc.max_uri_handlers = 14;
     hc.stack_size       = 6144;
     hc.lru_purge_enable = true;
     hc.uri_match_fn     = httpd_uri_match_wildcard;
@@ -307,6 +323,7 @@ esp_err_t webui_start(const webui_cfg_t *cfg)
         { .uri = "/api/general",  .method = HTTP_POST, .handler = general_post },
         { .uri = "/update",       .method = HTTP_POST, .handler = update_post },
         { .uri = "/api/localtalk/flash", .method = HTTP_POST, .handler = localtalk_flash_post },
+        { .uri = "/api/cable",    .method = HTTP_POST, .handler = cable_post },
         { .uri = "/*",            .method = HTTP_GET,  .handler = catch_all },
     };
     for (size_t i = 0; i < sizeof routes / sizeof routes[0]; i++)

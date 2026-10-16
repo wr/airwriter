@@ -202,6 +202,21 @@ esp_err_t serial_out_flush(uint32_t timeout_ms)
     }
 }
 
+void serial_out_lend(int lend)
+{
+    if (lend) {
+        uart_wait_tx_done(s_cfg.uart_num, pdMS_TO_TICKS(200));
+        return;
+    }
+    // The same routing serial_out_init set up, CTS included: uart_set_pin
+    // releases every pin it had before routing the new ones, so leaving CTS
+    // out would tie the flow control to "clear" and overrun the printer.
+    // Line inversion lives in the UART, so it survived the loan.
+    uart_set_pin(s_cfg.uart_num, s_cfg.tx_pin, s_cfg.rx_pin, UART_PIN_NO_CHANGE,
+                 (s_cfg.cts_pin >= 0 && !s_cfg.loopback) ? s_cfg.cts_pin : UART_PIN_NO_CHANGE);
+    uart_flush_input(s_cfg.uart_num);
+}
+
 int serial_out_clear(void)
 {
     // With no handshake line wired there is nothing to read, and "no idea"

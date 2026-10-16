@@ -154,6 +154,31 @@ static lg_c3 state_dot(const ps_view_t *v, const lg_opts_t *o, int i, uint32_t t
     float h1 = dot_hash(r, c, 1), h2 = dot_hash(r, c, 2);
     uint32_t s = v->since_ms;
 
+    if (v->cable) {
+        // A cable test's answer (W-1055): a band sweeps the panel left to
+        // right and back, 700 ms each way. Green, the cable works: a ring
+        // pulses out of the test button and the panel fades. Red, it doesn't
+        // or there isn't one: the six dots around the button blink twice.
+        uint32_t cs = v->cable_ms;
+        const uint32_t sweep = 700;
+        float lv;
+        if (cs < 2 * sweep) {
+            float x = cs < sweep ? -1.0f + 8.0f * (float)cs / (float)sweep
+                                 : 7.0f - 8.0f * (float)(cs - sweep) / (float)sweep;
+            lv = gauss((float)c - x, 1.0f);
+        } else if (v->cable == PS_CABLE_PASS) {
+            lv = gauss(dist - (float)(cs - 2 * sweep) / 1000.0f * 7.0f, 1.4f);
+        } else {
+            uint32_t b = cs - 2 * sweep;                 // 200 on, 200 off, 200 on
+            int on = dist < 1.5f && (b < 200 || (b >= 400 && b < 600));
+            return on ? hsv(jitter(r, c, 2, 10, t, 0), 0.95f, 1) : DARK;
+        }
+        float hue = v->cable == PS_CABLE_PASS ? jitter(r, c, 130, 14, t, 0)
+                                              : jitter(r, c, 2, 10, t, 0);
+        float fade = 1 - ss((float)PS_CABLE_MS - 300, (float)PS_CABLE_MS, (float)cs);
+        return hsv(hue, 0.9f, (0.08f + 0.92f * lv) * fade);
+    }
+
     switch (v->state) {
     case PS_BOOTING:
         return spin(dist, ang, (float)s / 1000.0f);
@@ -351,7 +376,7 @@ void lg_render16(const ps_view_t *v, const lg_opts_t *o, uint32_t t_ms,
         reset_frame(o, t_ms, out);
         return;
     }
-    int all = all_dots(v->state);
+    int all = all_dots(v->state) || v->cable;   // the cable sweep uses every dot
     int gamer = o && o->gamer;
     float sleep_k = v->asleep ? clampf((float)v->asleep_ms / 10000.0f) : 0;   // 10 s fade
 

@@ -79,6 +79,12 @@ void serial_out_set_abort(int on);
 // loopback.
 esp_err_t serial_out_send_unflowed(const uint8_t *buf, size_t n);
 
+// The cable tester (W-1055) borrows TX and RX for RMT. serial_out_lend(1)
+// waits for the transmitter to drain and leaves both pins to the caller;
+// serial_out_lend(0) routes them back to the UART and drops whatever RX
+// picked up meanwhile. Callers hold the job lock.
+void serial_out_lend(int lend);
+
 // The printer's HSKo line right now. A printer that is attached and online
 // holds this asserted; nothing plugged in reads the same as offline, which is
 // the honest answer -- the line cannot tell those apart.

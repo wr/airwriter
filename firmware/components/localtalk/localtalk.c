@@ -43,6 +43,8 @@ static uint8_t   *s_job;
 static size_t     s_job_len;
 static uint32_t   s_job_total;
 static int        s_job_done;
+static void     (*s_tap)(void *ctx, const uint8_t *f, size_t n);
+static void      *s_tap_ctx;
 
 // The print side. s_spool is single-producer (the LocalTalk task, under
 // s_lock) and single-consumer (the print task), as a stream buffer must be.
@@ -196,6 +198,7 @@ static void on_frame(void *ctx, tt_event_t ev, const uint8_t *f, size_t n)
         return;
     }
     n -= 2;
+    if (s_tap) s_tap(s_tap_ctx, f, n);
     // Frames to us, not the Chooser's broadcasts or other nodes' traffic.
     if (s_node.phase == LT_ONLINE && f[0] == s_node.node) note_frame("rx", f, n);
     lt_node_rx(&s_node, f, n, now_ms());
@@ -321,6 +324,23 @@ const uint8_t *localtalk_job(size_t *len)
 {
     *len = s_job_len;
     return s_job_len ? s_job : NULL;
+}
+
+void localtalk_set_tap(void (*tap)(void *ctx, const uint8_t *f, size_t n), void *ctx)
+{
+    if (!s_running) return;
+    xSemaphoreTake(s_lock, portMAX_DELAY);
+    s_tap = tap;
+    s_tap_ctx = ctx;
+    xSemaphoreGive(s_lock);
+}
+
+void localtalk_send_raw(const uint8_t *f, size_t n)
+{
+    if (!s_running) return;
+    xSemaphoreTake(s_lock, portMAX_DELAY);
+    op_send(NULL, f, n);
+    xSemaphoreGive(s_lock);
 }
 
 static void json_str(char **p, char *end, const char *v)

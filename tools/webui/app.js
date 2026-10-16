@@ -227,6 +227,16 @@ $('ltflash').onclick=async()=>{
       +(r.devid&&r.devid!=='0x0000'?' · device ID '+r.devid:'')+'.';
 };
 
+$('cabletest').onclick=async()=>{
+  const b=$('cabletest'); if(b.disabled) return; b.disabled=true;
+  let r=null;
+  try{ r=await(await fetch('/api/cable',{method:'POST'})).json(); }catch(e){}
+  b.disabled=false;
+  if(!r){ noted('sec-localtalk','failed'); $('cablesay').textContent='No answer from the dongle.'; return; }
+  noted('sec-localtalk', !r.ok?'failed':r.verdict==='pass'?'crossover':'no good');
+  $('cablesay').textContent = r.ok ? r.text : 'Could not test: '+r.error+'.';
+};
+
 /* ── overlay ───────────────────────────────────────────────────────── */
 function overlay(title,text,secs){
   $('ovt').textContent=title; $('over').classList.remove('hide');

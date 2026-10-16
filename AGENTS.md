@@ -49,13 +49,19 @@ What works on `main`:
   left busy by line noise at power-up gets a CTRL-X.
 - The 37-dot status panel per the status-language spec: Spin at boot, discrete printer and Wi-Fi
   states, per-dot white Ready, DIP7 gamer RGB, pilot dot after 5 min idle.
-- DIP switches read by their printed numbers; a tap of the `test` button prints a test page.
+- DIP switches read by their printed numbers; a tap of the `test` button prints a test page, or
+  with the printer not ready runs the cable test.
 - Recovery (SPEC §3.11): a `factory` slot beside ota_0/ota_1; a new OTA image runs on trial and
   rolls back unless healthy (`/api/status` `slot`, `trial`, `rolled_back`). Holding `test` 8 s
   erases the settings with a countdown on the panel; holding it through power-up for 5 s makes
   the bootloader erase them and boot the factory slot.
+- Cable test (`components/cable_test`): one cable from J2 to J4 and a press of test (or
+  `POST /api/cable`) tells Apple's crossover from anything else. TashTalk sends a frame out J4
+  that RMT decodes off J2's RxD; only then does RMT send one out J2's TxD for TashTalk to relay
+  back. The panel sweeps left and right, then pulses green from the test button for a crossover,
+  or blinks the dots around it red twice for anything else.
 - Setup AP `AirWriter-xxxx` (open, 192.168.4.1) on a board with no credentials; web UI on port
-  80: `/api/status`, Wi-Fi, settings, `/update` (OTA), `/api/localtalk/flash`.
+  80: `/api/status`, Wi-Fi, settings, `/update` (OTA), `/api/localtalk/flash`, `/api/cable`.
 - Wi-Fi scans all channels and joins the strongest AP; printer-uuid is stable (MAC + epoch).
 - TashTalk 2.1.3 is in U7, flashed in place by the ESP32 over LVP.
 - A LocalTalk node in DIP mode 2 (or always, with `CONFIG_AIRWRITER_LT_BENCH`), on UART2 to
@@ -82,6 +88,9 @@ its name in the Chooser. U7's PIC calibration words: `16E0 1DA8`. Its LocalTalk 
 Apple's crossover cable.
 
 Known issues, open:
+- With the node off, TashTalk once sent and relayed nothing over the cable test's own UART2 link
+  while its CTS read ready; it never recurred after a node-mode boot and the cause is unknown. The
+  test retries from a reset TashTalk and logs "TashTalk answered only after a reset" (`docs/traps.md`).
 - The Mac's CUPS shows "printer is offline" a few seconds into an out-of-paper pause while the
   board holds `stopped` + `media-empty-error`. Best guess: the CUPS ipp backend's write timeout.
 - Wi-Fi range with the panel's copper over the antenna: −91 dBm in one spot, "Excellent" after
@@ -144,7 +153,7 @@ Linear is the queue; these are the live items.
 
 ## Verification
 - **Host tests:** `make -C tools/rip test` (raster path, serial writer, printer_state, led_grid,
-  dip_config, pic_prog, localtalk) and `make -B -C tools/ipp test` (`-B`: `tools/ipp/build/` is committed).
+  dip_config, pic_prog, localtalk, cable) and `make -B -C tools/ipp test` (`-B`: `tools/ipp/build/` is committed).
 - **Raster regression:** `make -C tools/rip regress`; `stream.bin` must match the fixtures byte
   for byte. No ESP32 needed.
 - **Firmware:** `idf.py build` clean for the S3; build the C6 tree too when touching shared code.

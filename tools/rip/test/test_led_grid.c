@@ -502,6 +502,48 @@ int main(void)
         assert(sum[2] > sum[1] && sum[1] > sum[0]);
     }
 
+    // W-1055: a cable test's answer sweeps left to right and back over every
+    // dot, then pulses out of the test button: green for a crossover, red for
+    // anything else. The band is on column 3 at 350 ms and again at 1050 ms.
+    {
+        ps_view_t v = view(PS_OFFLINE, 60000);
+        int mid = idx(6, 3), edge = idx(6, 0), mask = idx(4, 3), near = idx(3, 4), far = idx(7, 4);
+        for (int k = 0; k < 2; k++) {
+            v.cable = k ? PS_CABLE_FAIL : PS_CABLE_PASS;
+            v.cable_ms = 350;
+            lg_render(&v, &WHITE_MODE, 0, f);
+            for (int i = 0; i < LG_NUM_LEDS; i++)
+                assert(max3(f[i]) <= (LG_MAP[i].mat == 'P' ? LG_BRIGHTNESS_CAP : LG_MASK_CAP));
+            assert(max3(f[mid]) > 2 * max3(f[edge]));        // a band, not a fill
+            assert(max3(f[mask]) > 0);                       // mask dots join in
+            if (!k) assert(f[mid][1] > f[mid][0] && f[mid][1] > f[mid][2]);
+            else    assert(f[mid][0] > f[mid][1] && f[mid][0] > f[mid][2]);
+        }
+        v.cable = PS_CABLE_PASS;
+        v.cable_ms = 1050;
+        lg_render(&v, &WHITE_MODE, 0, f);
+        assert(max3(f[mid]) > 2 * max3(f[edge]));
+        v.cable_ms = 1400;                                   // the pulse starts at the button
+        lg_render(&v, &WHITE_MODE, 0, f);
+        assert(max3(f[near]) > 2 * max3(f[far]));
+        v.cable_ms = 1400 + 590;                             // and reaches the bottom row
+        lg_render(&v, &WHITE_MODE, 0, f);
+        assert(max3(f[far]) > max3(f[near]));
+        v.cable_ms = PS_CABLE_MS - 1;                        // faded out
+        lg_render(&v, &WHITE_MODE, 0, f);
+        assert(lit_count(f) == 0);
+        // Red instead blinks the six dots around the button twice, the rest dark.
+        v.cable = PS_CABLE_FAIL;
+        const uint32_t at[] = { 1500, 1700, 1900, 2100 };
+        const int lit[] = { 1, 0, 1, 0 };
+        for (int k = 0; k < 4; k++) {
+            v.cable_ms = at[k];
+            lg_render(&v, &WHITE_MODE, 0, f);
+            assert(lit_count(f) == (lit[k] ? 6 : 0));
+            if (lit[k]) assert(f[near][0] > f[near][1] && max3(f[far]) == 0);
+        }
+    }
+
     test_reset(f, g);
     printf("test_led_grid: ok\n");
     return 0;

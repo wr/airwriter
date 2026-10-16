@@ -53,3 +53,10 @@ void      localtalk_note(const char *line);
 void      localtalk_echo(uint8_t node);
 // The last PAP job's bytes as captured (up to the capture size), or NULL.
 const uint8_t *localtalk_job(size_t *len);
+
+// The cable tester (W-1055) borrows the running node's link: every frame
+// TashTalk relays, FCS checked and stripped, also goes to `tap` (on the
+// LocalTalk task), and localtalk_send_raw queues a frame for TashTalk as the
+// node's own are. A NULL tap removes it.
+void localtalk_set_tap(void (*tap)(void *ctx, const uint8_t *f, size_t n), void *ctx);
+void localtalk_send_raw(const uint8_t *f, size_t n);

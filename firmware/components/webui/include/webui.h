@@ -27,6 +27,10 @@ typedef struct {
     const uint8_t *(*lt_job)(void *ctx, size_t *len);
     // POST /api/lt/echo with a node number as the body: an AEP echo request.
     void  (*lt_echo)(void *ctx, int node);
+    // POST /api/cable: runs the cable test (W-1055) and writes its JSON into
+    // `buf`; a body of "both" tries J2 -> J4 whatever J4 -> J2 found. NULL
+    // answers 404.
+    void  (*cable_test)(void *ctx, int both, char *buf, size_t cap);
 
     // Serves the setup page for every unknown host, so joining the device's
     // access point opens the page by itself.

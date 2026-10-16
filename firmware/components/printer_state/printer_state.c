@@ -48,6 +48,13 @@ void printer_state_set_ap_stations(unsigned n)
     xSemaphoreGive(s_mtx);
 }
 
+void printer_state_cable(int pass)
+{
+    xSemaphoreTake(s_mtx, portMAX_DELAY);
+    ps_cable(&s_ps, pass, now_ms());
+    xSemaphoreGive(s_mtx);
+}
+
 ps_view_t printer_state_view(void)
 {
     xSemaphoreTake(s_mtx, portMAX_DELAY);
