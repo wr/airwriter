@@ -148,8 +148,10 @@ Linear is the queue; these are the live items.
   rolled back, DIP switch flipped (their acts draw the state). Deferred from review: the amber
   ahead of "printer back" drops from the alert cap to the normal cap at its first frame, and Saved
   does not wake a sleeping panel.
-- `W-1060 Boot Spin still stutters a little while Wi-Fi joins`: RMT DMA helped, not cured; next is
-  a frame-gap log on board 1.
+- `W-1060 Boot Spin still stutters a little while Wi-Fi joins`: fixed by running the LED task, and
+  its RMT interrupt, on core 1 (a frame-gap log on board 1 showed the WPA3 handshake starving it
+  on core 0). Benched 2026-10-16: no frame gap over 15 ms through a power cycle, Wells "perfect
+  now".
 - Not in Linear: scope HSKo during a long job (SPEC §3.9 timing).
 
 ## Toolchain
