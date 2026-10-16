@@ -4,7 +4,7 @@
 // dots each state may light, that the array varies dot to dot, the boot spin,
 // the Wi-Fi-connected green moment, gamer mode, joining's outward rings,
 // setup's two cues, attention, failure, the bidirectional print head, and
-// the pilot light with its twinkle.
+// the asleep breath.
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -762,28 +762,44 @@ int main(void)
         assert(max3(f[b]) > max3(f[a]));
     }
 
-    // Asleep: after the fade, only the pilot -- dim, near-white -- except
-    // for a once-every-30 s twinkle on one other FR4 dot.
+    // Asleep: after the fade, one FR4 dot breathes, near-white, from off up
+    // to the cap and out again; each breath at a new dot, every FR4 dot taking
+    // a turn before any repeats.
     {
         ps_view_t v = view(PS_READY, 400000);
         v.asleep = 1;
         v.asleep_ms = 20000;
-        for (uint32_t t = 2000; t < 29500; t += 500) {
+        int peak = 0, d = lg_sleep_dot(0);
+        for (uint32_t t = 0; t < LG_BREATH_MS; t += 50) {
             lg_render(&v, &WHITE_MODE, t, f);
             for (int i = 0; i < LG_NUM_LEDS; i++)
-                assert(i == p ? max3(f[i]) > 0 : max3(f[i]) == 0);
-            assert(max3(f[p]) <= 7);
-            assert(max3(f[p]) - min3(f[p]) <= 2);
+                if (i != d) assert(max3(f[i]) == 0);
+            assert(neutral(f[d]));
+            if (max3(f[d]) > peak) peak = max3(f[d]);
         }
-        lg_render(&v, &WHITE_MODE, 750, f);
-        assert(lit_count(f) == 2);
+        assert(peak * 10 >= LG_BRIGHTNESS_CAP * 9 && peak <= LG_BRIGHTNESS_CAP);
+        lg_render(&v, &WHITE_MODE, 3 * LG_BREATH_MS, f);
+        assert(lit_count(f) == 0);                          // off between breaths
+
+        int n = 0;
+        for (int i = 0; i < LG_NUM_LEDS; i++) n += LG_MAP[i].mat == 'P';
+        for (uint32_t k = 0; k < 2000; k++) {
+            assert(LG_MAP[lg_sleep_dot(k)].mat == 'P');
+            if (k) assert(lg_sleep_dot(k) != lg_sleep_dot(k - 1));
+            if (k % (uint32_t)n == 0) {
+                int seen[LG_NUM_LEDS] = {0};
+                for (uint32_t j = k; j < k + (uint32_t)n; j++) seen[lg_sleep_dot(j)]++;
+                for (int i = 0; i < LG_NUM_LEDS; i++)
+                    assert(seen[i] == (LG_MAP[i].mat == 'P'));
+            }
+        }
+
         v.state = PS_OFFLINE;
-        lg_render(&v, &WHITE_MODE, 5000, f);
-        assert(lit_count(f) == 1 && max3(f[p]) > 0);
-        v.state = PS_READY;
-        lg_render(&v, &GAMER_MODE, 2000, f);
-        lg_render(&v, &GAMER_MODE, 12000, g);
-        assert(memcmp(f[p], g[p], 3) != 0);
+        lg_render(&v, &WHITE_MODE, 3 * LG_BREATH_MS + LG_BREATH_MS / 2, f);
+        assert(lit_count(f) == 1 && max3(f[lg_sleep_dot(3)]) > 0);
+        v.state = PS_READY;                                 // gamer: a colour, not white
+        lg_render(&v, &GAMER_MODE, LG_BREATH_MS / 2, f);
+        assert(max3(f[d]) - min3(f[d]) >= 3);
     }
 
     // Smooth fades: the 16-bit render resolves a slow fade (the offline

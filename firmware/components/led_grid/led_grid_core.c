@@ -13,9 +13,9 @@
 // the print head), and each dot carries a fixed variation from a hash of its
 // row and column -- its own phase, period and hue within the state's family.
 //
-// Levels are perceptual and go through gamma 2.2 before the cap; the pilot
-// light and its twinkle are driven linearly, because gamma would round those
-// few counts to zero.
+// Levels are perceptual and go through gamma 2.2 before the cap; the asleep
+// breath is driven linearly, since its curve (the old Mac laptops') is already
+// shaped for linear drive.
 #include "led_grid_core.h"
 #include <math.h>
 #include <string.h>
@@ -620,10 +620,46 @@ static lg_c3 blip_dot(uint8_t blip, uint32_t ms, int i, uint32_t t)
     return DARK;
 }
 
-// The asleep pilot (and the rare twinkle): neutral white, or a slowly cycling
-// hue in gamer mode. Linear drive, as a fraction of LG_BRIGHTNESS_CAP. A
-// channel under one count snaps to 0 or 1 rather than being dithered, which
-// at these levels would read as a flicker.
+static uint32_t mix32(uint32_t x)
+{
+    x ^= x >> 16; x *= 0x7feb352du;
+    x ^= x >> 15; x *= 0x846ca68bu;
+    x ^= x >> 16;
+    return x;
+}
+
+// The FR4 dots in a shuffled order for each round of n breaths, so every dot
+// takes a turn before any repeats.
+static int sleep_round(uint32_t round, int order[LG_NUM_LEDS])
+{
+    int n = 0;
+    for (int i = 0; i < LG_NUM_LEDS; i++)
+        if (LG_MAP[i].mat == 'P') order[n++] = i;
+    for (int i = n - 1; i > 0; i--) {
+        int j = (int)(mix32(round * 64u + (uint32_t)i) % (uint32_t)(i + 1));
+        int x = order[i]; order[i] = order[j]; order[j] = x;
+    }
+    return n;
+}
+
+int lg_sleep_dot(uint32_t breath)
+{
+    int order[LG_NUM_LEDS], prev[LG_NUM_LEDS];
+    int n = sleep_round(0, order);
+    uint32_t round = breath / (uint32_t)n;
+    sleep_round(round, order);
+    // A round never opens on the dot the last one closed on.
+    if (round > 0) {
+        sleep_round(round - 1, prev);
+        if (order[0] == prev[n - 1]) { int x = order[0]; order[0] = order[1]; order[1] = x; }
+    }
+    return order[breath % (uint32_t)n];
+}
+
+// The asleep breath: neutral white, or a slowly cycling hue in gamer mode.
+// Linear drive, as a fraction of LG_BRIGHTNESS_CAP. A channel under one count
+// snaps to 0 or 1 rather than being dithered, which at these levels would
+// read as a flicker.
 static void put_linear(uint16_t px[3], lg_c3 col, float frac)
 {
     float lvl = frac * LG_BRIGHTNESS_CAP * 256.0f;
@@ -664,21 +700,14 @@ void lg_render16(const ps_view_t *v, const lg_opts_t *o, uint32_t t_ms,
 
     if (!v->asleep) return;
 
-    int p = lg_pilot_index();
-    lg_c3 pilot = gamer ? hsv((float)t_ms / 60.0f, 0.75f, 1) : white_of(LG_MAP[p].r, LG_MAP[p].c);
-    put_linear(out[p], pilot, pulse(t_ms, 6000, 0.03f, 0.12f) * sleep_k);
-
-    // Every 30 s one other FR4 dot twinkles once, so the panel reads as alive.
-    uint32_t ph = t_ms % 30000;
-    if (ph < 1500) {
-        int fr4[LG_NUM_LEDS], n = 0;
-        for (int i = 0; i < LG_NUM_LEDS; i++)
-            if (LG_MAP[i].mat == 'P' && i != p) fr4[n++] = i;
-        int tw = fr4[(t_ms / 30000 * 5 + 3) % (uint32_t)n];
-        lg_c3 col = gamer ? hsv((float)t_ms / 60.0f + 120, 0.75f, 1)
-                          : white_of(LG_MAP[tw].r, LG_MAP[tw].c);
-        put_linear(out[tw], col, 0.08f * sinf(3.1415927f * (float)ph / 1500.0f) * sleep_k);
-    }
+    // One breath per LG_BREATH_MS (12 a minute), in the curve of the old Mac
+    // laptops' sleep light, (e^sin - 1/e) / (e - 1/e): off at the start of
+    // each breath, full at its middle. Each breath is at a new FR4 dot.
+    float ph = (float)(t_ms % LG_BREATH_MS) / (float)LG_BREATH_MS;
+    float breath = (expf(sinf(TAU * ph - TAU / 4)) - 0.36787944f) / (2.71828183f - 0.36787944f);
+    int d = lg_sleep_dot(t_ms / LG_BREATH_MS);
+    lg_c3 col = gamer ? hsv((float)t_ms / 60.0f, 0.75f, 1) : white_of(LG_MAP[d].r, LG_MAP[d].c);
+    put_linear(out[d], col, breath * sleep_k);
 }
 
 void lg_render(const ps_view_t *v, const lg_opts_t *o, uint32_t t_ms,

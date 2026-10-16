@@ -48,8 +48,8 @@ What works on `main`:
 - After an aborted job the next one resyncs the printer first (1280 NULs + CTRL-X); a printer
   left busy by line noise at power-up gets a CTRL-X.
 - The 37-dot status panel per the status-language spec: Spin at boot, discrete printer and Wi-Fi
-  states, per-dot white Ready, DIP7 gamer RGB, pilot dot after 5 min idle. W-1049 puts the board's
-  actions on it in FeatherFrame's colours: tasks (firmware update, TashTalk flash) beside the
+  states, per-dot white Ready, DIP7 gamer RGB, and after 5 min idle one dot breathing like an
+  old Mac laptop's sleep light, a new dot each breath. W-1049 puts the board's actions on it in FeatherFrame's colours: tasks (firmware update, TashTalk flash) beside the
   reset, moments opening states (printer gone and back, page out, cancelled, could not join),
   short acknowledgements (LocalTalk on, a Mac heard, Busy, Saved), and LocalTalk jobs inked in the
   six Apple stripes. `led_grid_action()` per family, `led_grid_blip()`, `led_grid_set_source()`.

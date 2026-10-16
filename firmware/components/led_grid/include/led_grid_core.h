@@ -112,6 +112,12 @@ void lg_render(const ps_view_t *v, const lg_opts_t *o, uint32_t t_ms,
                uint8_t out[LG_NUM_LEDS][3]);
 int  lg_pilot_index(void);      // the FR4 dot right of the test button (row 3, col 4)
 
+// Asleep: one breath every LG_BREATH_MS, each at a new FR4 dot. The dot of
+// breath k (t_ms / LG_BREATH_MS): every FR4 dot takes a turn, in a shuffled
+// order, before any repeats, and never the same dot twice running.
+#define LG_BREATH_MS 5000
+int  lg_sleep_dot(uint32_t breath);
+
 // The same frame at 8.8 fixed point (value x 256). Slow fades at a few counts
 // of drive need the fraction: an 8-bit Ready breath has only ~6 levels, and
 // each step is a visible jump. lg_render() is this, rounded.
