@@ -155,15 +155,24 @@ static lg_c3 state_dot(const ps_view_t *v, const lg_opts_t *o, int i, uint32_t t
     uint32_t s = v->since_ms;
 
     if (v->cable) {
-        // A cable test's answer (W-1055): one sweep across the whole panel,
-        // left to right and back, 900 ms each way. Green, the cable works;
-        // red, it doesn't or there isn't one.
-        uint32_t cs = v->cable_ms, half = PS_CABLE_MS / 2;
-        float x = cs < half ? -1.0f + 8.0f * (float)cs / (float)half
-                            : 7.0f - 8.0f * (float)(cs - half) / (float)half;
+        // A cable test's answer (W-1055): a band sweeps the panel left to
+        // right and back, 700 ms each way, then a ring pulses out of the test
+        // button and the panel fades. Green, the cable works; red, it doesn't
+        // or there isn't one.
+        uint32_t cs = v->cable_ms;
+        const uint32_t sweep = 700;
+        float lv;
+        if (cs < 2 * sweep) {
+            float x = cs < sweep ? -1.0f + 8.0f * (float)cs / (float)sweep
+                                 : 7.0f - 8.0f * (float)(cs - sweep) / (float)sweep;
+            lv = gauss((float)c - x, 1.0f);
+        } else {
+            lv = gauss(dist - (float)(cs - 2 * sweep) / 1000.0f * 7.0f, 1.4f);
+        }
         float hue = v->cable == PS_CABLE_PASS ? jitter(r, c, 130, 14, t, 0)
                                               : jitter(r, c, 2, 10, t, 0);
-        return hsv(hue, 0.9f, 0.08f + 0.92f * gauss((float)c - x, 1.0f));
+        float fade = 1 - ss((float)PS_CABLE_MS - 300, (float)PS_CABLE_MS, (float)cs);
+        return hsv(hue, 0.9f, (0.08f + 0.92f * lv) * fade);
     }
 
     switch (v->state) {

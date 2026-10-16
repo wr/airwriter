@@ -42,7 +42,7 @@ typedef struct {
 // W-1055: a cable test's result, shown over the idle states for a moment.
 #define PS_CABLE_PASS    1
 #define PS_CABLE_FAIL    2
-#define PS_CABLE_MS      1800   // one sweep, left to right and back, 900 ms each way
+#define PS_CABLE_MS      2400   // sweep left to right and back, then a pulse from the middle
 
 typedef struct {
     ps_timing_t tm;

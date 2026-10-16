@@ -60,7 +60,7 @@ Display states, highest priority first:
 *Ready* or *Printer offline*, the panel fades to a pilot light. States 1–6 never sleep.
 
 **Cable result** (W-1055) is a modifier too: after a cable test, its result shows over Setup,
-Joining, Ready or Printer offline for 1.8 s; a job hides it. The test runs
+Joining, Ready or Printer offline for 2.4 s; a job hides it. The test runs
 from the test button while the printer is not ready (a cable from J2 to J4 holds HSKo false), or
 from the web page.
 
@@ -110,14 +110,14 @@ state reads as one big LED. Hue offsets stay inside each state's colour family.
 | Setup | FR4 only | blue (hue 220° ±16° per dot, drifting ±6°) **radar sweep**: an arm turns around the test button once per 2.6 s; each dot flares to 88% as it passes and decays behind it (e-folding over 55°), floor 8% |
 | Setup, phone joined | FR4 only | the same blues, steady at 58% with a per-dot shimmer of ±8% on its own 3–5.5 s period |
 | Joining Wi-Fi | FR4 only | blue (hue 215° ±18°) **rings pulsing outward** from the test button every 0.9 s, 8% floor, 83% at the ring |
-| Wi-Fi connected | FR4 only | the first moments of a Ready entered straight from Joining or Booting (`greeted`): a green field (hue 130° ±14°) with a ripple outward over 1.4 s, held, then cross-fading to Ready's white between 2.2 s and 3.2 s. Green means "Wi-Fi just connected", or, as a left-right sweep, "this cable works" (W-1055). |
+| Wi-Fi connected | FR4 only | the first moments of a Ready entered straight from Joining or Booting (`greeted`): a green field (hue 130° ±14°) with a ripple outward over 1.4 s, held, then cross-fading to Ready's white between 2.2 s and 3.2 s. Green means "Wi-Fi just connected", or, as a sweep and a pulse, "this cable works" (W-1055). |
 | Ready | FR4 only | **neutral white**, each dot slightly warm or cool, breathing on its own 5–9 s period between 30% and 70% (first tuned at 16–38%, which peaked under 6 counts and was invisible in daylight on board 1; 30–70% is 4× the drive). (Colour tweaks made on 10-14/15 were judged while the board was actually in Printer offline, so they were reverted to this.) |
 | Ready, gamer mode | FR4 only | DIP7 on: hue from position plus time, a slow RGB drift (one wheel per ~14 s), saturation 75%, the same breathing |
 | Printer offline | FR4 only | **warm embers**: hue 25–43°, saturation 50–62%, each dot on its own 7–13 s cycle, mostly at 9% and swelling to 60% (4× the drive of the first 5–32% tune, for daylight) |
 | Printing | all; mask at 4× | **print head**: a bright white dot crosses the current row in 1.5 s, inking it warm (hue 28–48°) behind; rows advance top to bottom and alternate direction like the ImageWriter's bidirectional head; the two rows above hold fading ink (25%, 12%), the rest 3% |
 | Needs attention | all; FR4 at the alert cap (96/255), mask at 4× | deep amber (hue 18–30°: at 36° the bright green die washed it toward white) **double ripple** from the test button: two wide rings 350 ms apart every 2 s over a 12% amber floor, so the panel is never dark while it needs a person |
 | Job failed | all; mask at 4× | red (hue 352–12°): three 200 ms **glitch flashes**, each on a different random ~65% of dots, then a pulse 20%→60% whose period varies ±15% per dot, until the hold ends |
-| Cable test | all; mask at 4× | one **sweep**: a band crosses the panel left to right and back, 900 ms each way, over an 8% floor. Green (hue 130° ±14°) for a crossover; red (hue 352–12°) for a straight, broken or missing cable |
+| Cable test | all; mask at 4× | a band **sweeps** the panel left to right and back (700 ms each way), then a ring **pulses** out of the test button and the panel fades by 2.4 s, over an 8% floor. Green (hue 130° ±14°) for a crossover; red (hue 352–12°) for a straight, broken or missing cable |
 | Asleep | the pilot, plus a rare twinkle | the FR4 dot right of the test button (row 3, col 4) breathes 3%→12% of the cap, driven linearly (gamma would round these levels to zero), on a 6 s period: neutral white, or a slowly cycling hue in gamer mode. Every 30 s one other FR4 dot twinkles once (1.5 s, peak 8% linear). Fade into sleep over 10 s; wake instantly. |
 
 Below one count of drive a dot's brightest channel is lifted to one count and the others scale
