@@ -50,7 +50,9 @@ btn_ev_t btn_step(btn_t *b, int pressed, uint32_t now_ms)
         if (!b->armed) { b->armed = 1; return BTN_EV_NONE; }
         return b->committed ? BTN_EV_RELEASE : b->holding ? BTN_EV_CANCEL : BTN_EV_TAP;
     }
-    if (!b->down || !b->armed) return BTN_EV_NONE;
+    // Only a sample that is itself down moves the countdown on: the first
+    // sample of a release must not start a countdown or commit a reset.
+    if (!b->down || !b->armed || !s) return BTN_EV_NONE;
     uint32_t held = now_ms - b->t_down;
     if (!b->holding && held >= BTN_TAP_MAX_MS) { b->holding = 1; return BTN_EV_HOLD; }
     if (b->holding && !b->committed && held >= BTN_COMMIT_MS) {

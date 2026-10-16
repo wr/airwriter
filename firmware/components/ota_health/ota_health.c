@@ -39,6 +39,7 @@ static void gate_task(void *arg)
         if (a == OH_MARK_VALID) {
             esp_err_t err = esp_ota_mark_app_valid_cancel_rollback();
             ESP_LOGI(TAG, "this firmware is healthy; keeping it (%s)", esp_err_to_name(err));
+            if (err != ESP_OK) vTaskDelete(NULL);   // still on trial, and the status says so
         } else {
             ESP_LOGE(TAG, "this firmware never became healthy (up 0x%x of 0x%x); rolling back",
                      (unsigned)up, (unsigned)need);

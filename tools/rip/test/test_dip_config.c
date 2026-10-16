@@ -36,6 +36,12 @@ static void test_button(void)
     assert(run(&b, 1, &t, pressed_at + 100 + 900) == BTN_EV_NONE);
     assert(run(&b, 0, &t, t + 500) == BTN_EV_TAP);
 
+    // Let go just as 1 s comes up: the first sample of the release is not
+    // down, so it neither starts the countdown nor eats the tap.
+    pressed_at = t;
+    assert(run(&b, 1, &t, pressed_at + 100 + BTN_TAP_MAX_MS) == BTN_EV_NONE);
+    assert(run(&b, 0, &t, t + 500) == BTN_EV_TAP);
+
     // Past 1 s the countdown starts, and releasing cancels with no test page.
     pressed_at = t;
     assert(run(&b, 1, &t, pressed_at + 100 + BTN_TAP_MAX_MS) == BTN_EV_NONE);

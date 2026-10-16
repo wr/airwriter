@@ -43,7 +43,9 @@ static void lg_task(void *arg)
         portENTER_CRITICAL(&s_act_mux);
         o.act = s_act;
         o.act_from = s_act_from;
-        o.act_ms = now - s_act_t0;
+        // An action set between reading the clock and taking the lock
+        // starts after `now`: show it at 0, not 49 days in.
+        o.act_ms = (int32_t)(now - s_act_t0) < 0 ? 0 : now - s_act_t0;
         portEXIT_CRITICAL(&s_act_mux);
         lg_render16(&v, &o, now, hi);
         lg_dither(&dith, hi, frame);

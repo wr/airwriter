@@ -33,6 +33,9 @@ Traps already explained in a code comment are listed only when the comment is ea
   installs it over the air: the installer marks it on trial, and nothing in it ever keeps
   itself. It runs fine until then. Rebase a branch on W-1046 before OTAing it to a W-1046 board,
   or USB-flash it (which also puts the old bootloader and table back).
+- **Any reboot while an OTA image is on trial rolls it back** (up to 2 min after it boots;
+  `/api/status` `trial`): a crash, a Wi-Fi change from the web UI, the long-press reset, and
+  `idf.py monitor` without `--no-reset`, which resets the chip when it attaches.
 - **`idf.py flash` over USB leaves the printer not-ready until SELECT is toggled.** The S3 sits
   ~10 s in download mode with IO17 (UART1 TX → U2 DI) floating. Power-cycling does not do it.
   Dev-only; rev B candidate pull-up on IO17.

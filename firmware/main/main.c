@@ -574,6 +574,14 @@ static uint32_t uptime_ms(void)
     return (uint32_t)(esp_timer_get_time() / 1000);
 }
 
+static void restart_when_released(void)
+{
+    for (uint32_t waited = 0; !s_reset_released && waited < RESET_RELEASE_WAIT_MS; waited += 50)
+        vTaskDelay(pdMS_TO_TICKS(50));
+    vTaskDelay(pdMS_TO_TICKS(200));
+    esp_restart();
+}
+
 static void reset_task(void *arg)
 {
     (void)arg;
@@ -582,18 +590,16 @@ static void reset_task(void *arg)
     esp_wifi_stop();
     esp_err_t err = nvs_flash_erase();
     if (err != ESP_OK) {
+        // Back on the network with whatever survived.
         ESP_LOGE(TAG, "factory reset: erasing settings failed (%s)", esp_err_to_name(err));
         led_grid_action(LG_ACT_RESET_FAILED, 0);
         vTaskDelay(pdMS_TO_TICKS(LG_RESET_FAILED_MS));
-        esp_restart();      // back on the network with whatever survived
+        restart_when_released();
     }
     ESP_LOGW(TAG, "factory reset: settings erased; restarting when the button is let go");
     led_grid_action(LG_ACT_RESET_DONE, 0);
     vTaskDelay(pdMS_TO_TICKS(LG_RESET_DONE_MS));
-    for (uint32_t waited = 0; !s_reset_released && waited < RESET_RELEASE_WAIT_MS; waited += 50)
-        vTaskDelay(pdMS_TO_TICKS(50));
-    vTaskDelay(pdMS_TO_TICKS(200));
-    esp_restart();
+    restart_when_released();
 }
 
 // On dip_config's poll task: start work, never wait on it.
