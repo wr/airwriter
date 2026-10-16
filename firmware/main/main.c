@@ -1059,6 +1059,8 @@ static void lt_start(const char *why)
 {
 #if CONFIG_AIRWRITER_PIC_CLK_PIN >= 0 && CONFIG_AIRWRITER_PIC_DAT_PIN >= 0
     if (localtalk_running()) return;
+    // A DIP flip mid cable test: let the test give UART2 back first.
+    for (int i = 0; i < 30 && cable_test_lt_busy(); i++) vTaskDelay(pdMS_TO_TICKS(10));
     localtalk_cfg_t c = {
         .uart_num = CONFIG_AIRWRITER_LT_UART_NUM,
         .tx_pin   = CONFIG_AIRWRITER_PIC_CLK_PIN,
@@ -1301,7 +1303,7 @@ void app_main(void)
         webui_cfg_t wcfg = { .status_json = status_json, .captive = 1,
                               .localtalk_flash = localtalk_flash,
                               .lt_json = lt_json, .lt_job = lt_job, .lt_echo = lt_echo,
-                          .cable_test = cable_web };
+                              .cable_test = cable_web };
         ESP_ERROR_CHECK(webui_start(&wcfg));
         ota_health_set(OH_WEB_UP, 1);
 

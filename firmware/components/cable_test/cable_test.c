@@ -46,6 +46,7 @@ static const uint8_t BACK[] = { 0x00, 0x00, LLAP_ENQ };
 // (it is not node 0, and an ENQ marks no node as heard).
 static uint8_t       s_fwd[LLAP_HDR + 4];
 static volatile int  s_fwd_seen;
+static volatile int  s_lt_owned;      // UART2 is ours right now; see cable_test_lt_busy
 
 static TickType_t ms_ticks(int ms)
 {
@@ -96,6 +97,7 @@ static esp_err_t link_open(link_t *lk)
     esp_err_t err = uart_driver_install(s_cfg.lt_uart, 1024, 2048, 0, NULL, 0);
     if (err != ESP_OK) return err;
     lk->owned = 1;
+    s_lt_owned = 1;
     uart_param_config(s_cfg.lt_uart, &uc);
     uart_set_pin(s_cfg.lt_uart, s_cfg.lt_tx, s_cfg.lt_rx, UART_PIN_NO_CHANGE,
                  s_cfg.lt_cts >= 0 ? s_cfg.lt_cts : UART_PIN_NO_CHANGE);
@@ -148,7 +150,10 @@ static void link_close(link_t *lk)
     gpio_config_t io = { .pin_bit_mask = 1ULL << s_cfg.lt_tx, .mode = GPIO_MODE_OUTPUT };
     gpio_set_level(s_cfg.lt_tx, 1);
     gpio_config(&io);
+    s_lt_owned = 0;
 }
+
+int cable_test_lt_busy(void) { return s_lt_owned; }
 
 // ------------------------------------------------------------- J4 -> J2
 
@@ -188,8 +193,9 @@ static int back_leg(link_t *lk, esp_err_t *err)
     rmt_rx_event_callbacks_t cbs = { .on_recv_done = on_rx_done };
     rmt_rx_register_event_callbacks(rx, &cbs, NULL);
     // Up to 2.5 half cells is a run; the gap after TashTalk's sync pulse is
-    // ~13 us, so a capture ends only once the line has been quiet for 30.
-    rmt_receive_config_t rcv = { .signal_range_min_ns = 200, .signal_range_max_ns = 30000 };
+    // ~20 us (159 cycles at 8 MHz), so a capture ends only once the line has
+    // been quiet for 60.
+    rmt_receive_config_t rcv = { .signal_range_min_ns = 200, .signal_range_max_ns = 60000 };
 
     int ok = 0;
     for (int t = 0; t < TRIES && !ok; t++) {

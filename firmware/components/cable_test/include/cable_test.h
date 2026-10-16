@@ -34,3 +34,7 @@ void cable_test_init(const cable_test_cfg_t *cfg);
 void cable_test_run(cable_result_t *r);
 
 void cable_result_json(const cable_result_t *r, char *buf, size_t cap);
+
+// 1 while a test holds UART2 itself (the node off): starting the node then
+// would find the driver taken. Never longer than ~150 ms.
+int  cable_test_lt_busy(void);
