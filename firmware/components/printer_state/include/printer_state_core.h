@@ -26,6 +26,7 @@ typedef enum {
     PS_EV_JOB_FAILED,
     PS_EV_ACTIVITY,         // a person did something: wake the panel
     PS_EV_JOB_CANCELLED,    // the job was cancelled: ends it as JOB_DONE does (W-1049)
+    PS_EV_WIFI_FRESH,       // Wi-Fi was saved before this restart: green opens the first Ready
 } ps_event_t;
 
 typedef struct {
@@ -36,9 +37,15 @@ typedef struct {
     uint32_t sleep_after_ms;       // ready or offline with no activity -> asleep
     uint32_t kick_after_ms;        // idle and not ready this long -> send CTRL-X (W-1039)
     uint32_t kick_every_ms;        // and again at most this often while it stays stuck
+    // W-1049's quiet power-on: the Spin runs until the board has settled.
+    uint32_t boot_cap_ms;          // ... but never longer than this from power-on
+    uint32_t boot_out_ms;          // the Spin's going-out, from settled to the state
+    uint32_t settle_ready_ms;      // the printer line ready this long: settled
+    uint32_t settle_offline_ms;    // or not ready this long (a printer starting up holds it down)
 } ps_timing_t;
 
-#define PS_TIMING_DEFAULT { 3000, 3000, 30000, 60000, 300000, 5000, 60000 }
+#define PS_TIMING_DEFAULT { 3000, 3000, 30000, 60000, 300000, 5000, 60000, \
+                            30000, 1300, 1000, 10000 }
 
 // W-1055: a cable test's result, shown over the idle states for a moment.
 #define PS_CABLE_PASS    1
@@ -48,6 +55,12 @@ typedef struct {
 typedef struct {
     ps_timing_t tm;
     uint64_t    boot_at, line_since, failed_at, activity_at, state_since, kicked_at, cable_at;
+    uint64_t    wifi_at, setup_at, job_at, out_at;  // W-1049: when each happened; out_at is
+                                                     // when the Spin started going out
+    uint8_t     out;               // out_at is set
+    uint8_t     tried;             // the saved network was tried (PS_EV_WIFI_JOINING)
+    uint8_t     join_failed;       // setup mode after a failed try
+    uint8_t     fresh;             // PS_EV_WIFI_FRESH: Wi-Fi was just saved
     uint8_t     setup, wifi_up, line_ready, job, failed, ap_stations, greeted, kicked;
     uint8_t     job_started_low;   // the line was down when this job began: no printer to wait for
     uint8_t     cable;             // PS_CABLE_*, the last test's result, or 0
@@ -60,6 +73,9 @@ typedef struct {
     ps_state_t prev;          // the state before this one (BOOTING at first): the panel's
                               // moments are drawn from it (W-1049)
     uint8_t    cancelled;     // the last job was cancelled, not finished
+    uint8_t    join_failed;   // SETUP only: the saved network was tried and failed
+    uint8_t    spin_out;      // BOOTING only: the Spin is going out (the board has settled)
+    uint32_t   spin_out_ms;   // ... for this long
     uint8_t    phone_joined;  // SETUP only: a station is on the access point
     uint8_t    greeted;       // READY only: entered straight from JOINING or BOOTING,
                               // i.e. Wi-Fi just connected -- the panel's green moment

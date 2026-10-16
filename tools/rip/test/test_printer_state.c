@@ -25,35 +25,97 @@ int main(void)
     ps_t ps;
     ps_view_t v;
 
-    // Booting lasts boot_ms, then the Wi-Fi state shows.
-    ps_init(&ps, &TM, 0);
-    ps_post(&ps, PS_EV_WIFI_JOINING, 0);
-    assert(st(&ps, 0) == PS_BOOTING);
+    // W-1049 quiet power-on: the Spin is all a normal power-on shows. It runs
+    // until Wi-Fi is up and the printer line has held still, then goes out
+    // (boot_out_ms) straight into the state. A fast boot still ends at 3.0 s.
+    up_and_ready(&ps, 0);
     assert(st(&ps, 2999) == PS_BOOTING);
-    assert(st(&ps, 3000) == PS_JOINING);
-    ps_post(&ps, PS_EV_LINE_READY, 3100);
-    ps_post(&ps, PS_EV_WIFI_UP, 3200);
-    assert(st(&ps, 3200) == PS_READY);
+    v = ps_update(&ps, 3000);
+    assert(v.state == PS_READY && v.prev == PS_BOOTING && !v.greeted);
 
-    // Power-up: the ImageWriter reports busy for ~3.5 s after the AirWriter
-    // powers on (measured on board 1, W-1039), then clears on its own. That
-    // must not flash offline after the spin, and the green Wi-Fi moment still
-    // plays: offline is counted from the end of the boot animation, not from
-    // power-on.
+    // The usual power-on: the ImageWriter busy for ~3.5 s after the AirWriter
+    // powers up (measured on board 1, W-1039), Wi-Fi up at 6 s. The Spin
+    // alone, going out from 6 s, then Ready: no Joining, no green, no printer
+    // gone or back.
     ps_init(&ps, &TM, 0);
     ps_post(&ps, PS_EV_WIFI_JOINING, 0);
-    ps_post(&ps, PS_EV_WIFI_UP, 2000);
-    for (uint64_t t = 3000; t < 3500; t += 100) assert(st(&ps, t) == PS_READY);
-    ps_post(&ps, PS_EV_LINE_READY, 3500);
-    v = ps_update(&ps, 3600);
+    for (uint64_t t = 0; t < 7300; t += 50) {
+        if (t == 3500) ps_post(&ps, PS_EV_LINE_READY, t);
+        if (t == 6000) ps_post(&ps, PS_EV_WIFI_UP, t);
+        v = ps_update(&ps, t);
+        assert(v.state == PS_BOOTING);
+        assert(v.spin_out == (t >= 6000));
+        if (t >= 6000) assert(v.spin_out_ms == t - 6000);
+    }
+    v = ps_update(&ps, 7300);
+    assert(v.state == PS_READY && v.prev == PS_BOOTING && !v.greeted);
+
+    // No printer: the line never comes up. The Spin waits out the offline
+    // settle (10 s from power-on), then the embers come straight up.
+    ps_init(&ps, &TM, 0);
+    ps_post(&ps, PS_EV_WIFI_JOINING, 0);
+    for (uint64_t t = 0; t < 11300; t += 50) {
+        if (t == 5000) ps_post(&ps, PS_EV_WIFI_UP, t);
+        assert(st(&ps, t) == PS_BOOTING);
+    }
+    v = ps_update(&ps, 11300);
+    assert(v.state == PS_OFFLINE && v.prev == PS_BOOTING);
+
+    // No credentials: Setup as soon as the Spin has had its 3.0 s.
+    ps_init(&ps, &TM, 0);
+    ps_post(&ps, PS_EV_WIFI_SETUP_AP, 0);
+    assert(st(&ps, 2999) == PS_BOOTING);
+    v = ps_update(&ps, 3000);
+    assert(v.state == PS_SETUP && !v.join_failed);
+
+    // A failed join of the saved network during the Spin: it goes out, then
+    // Setup with join_failed (the two red pulses).
+    ps_init(&ps, &TM, 0);
+    ps_post(&ps, PS_EV_WIFI_JOINING, 0);
+    ps_post(&ps, PS_EV_LINE_READY, 500);
+    assert(st(&ps, 10000) == PS_BOOTING);
+    ps_post(&ps, PS_EV_WIFI_SETUP_AP, 12000);
+    assert(st(&ps, 12000) == PS_BOOTING);
+    v = ps_update(&ps, 13300);
+    assert(v.state == PS_SETUP && v.prev == PS_BOOTING && v.join_failed);
+
+    // No Wi-Fi by the cap: the Spin goes out so that Joining shows at 30 s.
+    // A join after that is a real one, and the green opens its Ready.
+    ps_init(&ps, &TM, 0);
+    ps_post(&ps, PS_EV_WIFI_JOINING, 0);
+    ps_post(&ps, PS_EV_LINE_READY, 500);
+    assert(!ps_update(&ps, 28699).spin_out);
+    assert(ps_update(&ps, 28700).spin_out);
+    assert(st(&ps, 29999) == PS_BOOTING);
+    assert(st(&ps, 30000) == PS_JOINING);
+    ps_post(&ps, PS_EV_WIFI_UP, 40000);
+    v = ps_update(&ps, 40000);
+    assert(v.state == PS_READY && v.prev == PS_JOINING && v.greeted);
+    // ... and a join that fails after the cap: Setup from Joining, join_failed.
+    ps_init(&ps, &TM, 0);
+    ps_post(&ps, PS_EV_WIFI_JOINING, 0);
+    ps_post(&ps, PS_EV_LINE_READY, 500);
+    assert(st(&ps, 30000) == PS_JOINING);
+    ps_post(&ps, PS_EV_WIFI_SETUP_AP, 60000);
+    v = ps_update(&ps, 60000);
+    assert(v.state == PS_SETUP && v.prev == PS_JOINING && v.join_failed);
+
+    // The green opens the first Ready only on the power-on after Wi-Fi was
+    // saved from the web page.
+    up_and_ready(&ps, 0);
+    ps_post(&ps, PS_EV_WIFI_FRESH, 0);
+    v = ps_update(&ps, 3000);
     assert(v.state == PS_READY && v.greeted);
 
-    // A printer genuinely off at power-up still shows offline, a debounce
-    // after the boot animation ends.
+    // A job starting during the Spin (a LocalTalk one needs no Wi-Fi)
+    // settles it at once.
     ps_init(&ps, &TM, 0);
-    ps_post(&ps, PS_EV_WIFI_UP, 2000);
-    assert(st(&ps, 5999) == PS_READY);
-    assert(st(&ps, 6000) == PS_OFFLINE);
+    ps_post(&ps, PS_EV_WIFI_JOINING, 0);
+    assert(!ps_update(&ps, 4999).spin_out);
+    ps_post(&ps, PS_EV_JOB_START, 5000);
+    assert(ps_update(&ps, 5000).spin_out);
+    assert(st(&ps, 6299) == PS_BOOTING);
+    assert(st(&ps, 6300) != PS_BOOTING);
 
     // Idle and not ready: still ready inside the debounce, then offline; back on, ready.
     up_and_ready(&ps, 0);
@@ -151,10 +213,10 @@ int main(void)
     st(&ps, 4000);                                  // READY from 4000
     assert(ps_update(&ps, 4500).since_ms == 500);
 
-    // greeted: Ready entered straight from Joining or Booting opens with the
-    // Wi-Fi-connected moment; Ready after a job or after offline does not.
+    // greeted: Ready entered from Joining opens with the Wi-Fi-connected
+    // moment; Ready after the Spin (W-1049), a job or offline does not.
     up_and_ready(&ps, 0);
-    assert(ps_update(&ps, 4000).greeted);           // BOOTING -> READY
+    assert(!ps_update(&ps, 4000).greeted);          // BOOTING -> READY: a quiet power-on
     ps_post(&ps, PS_EV_JOB_START, 5000);
     st(&ps, 5000);
     ps_post(&ps, PS_EV_JOB_DONE, 6000);

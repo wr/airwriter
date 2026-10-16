@@ -259,14 +259,15 @@ static void test_w1049(uint8_t f[LG_NUM_LEDS][3], uint8_t g[LG_NUM_LEDS][3])
     // Moments: within the caps and the spin's draw, FR4-only where the state
     // they open is, drawn (not the plain state) mid-way, and the plain state
     // exactly once they end.
-    struct { ps_state_t st, prev; uint8_t cancelled, src; uint32_t len; int alert, fr4_only; } M[] = {
-        { PS_OFFLINE,  PS_READY,     0, 0, LG_GONE_MS,     0, 1 },   // printer gone
-        { PS_READY,    PS_OFFLINE,   0, 0, LG_BACK_MS,     0, 1 },   // printer back
-        { PS_PRINTING, PS_ATTENTION, 0, 0, LG_BACK_MS,     0, 0 },   // paper back, resumes
-        { PS_READY,    PS_PRINTING,  0, LG_SRC_AIRPRINT,  LG_PAGE_MS, 0, 0 },   // page out
-        { PS_READY,    PS_PRINTING,  0, LG_SRC_LOCALTALK, LG_PAGE_MS, 0, 0 },
-        { PS_READY,    PS_PRINTING,  1, LG_SRC_AIRPRINT,  LG_CANCEL_MS, 0, 0 }, // cancelled
-        { PS_SETUP,    PS_JOINING,   0, 0, LG_JOINFAIL_MS, 1, 0 },   // could not join
+    struct { ps_state_t st, prev; uint8_t cancelled, src; uint32_t len; int alert, fr4_only; uint8_t jf; } M[] = {
+        { PS_OFFLINE,  PS_READY,     0, 0,                LG_GONE_MS,     0, 1, 0 },   // printer gone
+        { PS_READY,    PS_OFFLINE,   0, 0,                LG_BACK_MS,     0, 1, 0 },   // printer back
+        { PS_PRINTING, PS_ATTENTION, 0, 0,                LG_BACK_MS,     0, 0, 0 },   // paper back
+        { PS_READY,    PS_PRINTING,  0, LG_SRC_AIRPRINT,  LG_PAGE_MS,     0, 0, 0 },   // page out
+        { PS_READY,    PS_PRINTING,  0, LG_SRC_LOCALTALK, LG_PAGE_MS,     0, 0, 0 },
+        { PS_READY,    PS_PRINTING,  1, LG_SRC_AIRPRINT,  LG_CANCEL_MS,   0, 0, 0 },   // cancelled
+        { PS_SETUP,    PS_JOINING,   0, 0,                LG_JOINFAIL_MS, 1, 0, 1 },   // could not join
+        { PS_SETUP,    PS_BOOTING,   0, 0,                LG_JOINFAIL_MS, 1, 0, 1 },   // ... straight from the Spin
     };
     for (unsigned m = 0; m < sizeof M / sizeof M[0]; m++) {
         lg_opts_t o;
@@ -275,11 +276,13 @@ static void test_w1049(uint8_t f[LG_NUM_LEDS][3], uint8_t g[LG_NUM_LEDS][3])
         for (uint32_t s = 0; s < M[m].len + 300; s += 37) {
             ps_view_t v = moment(M[m].st, M[m].prev, s);
             v.cancelled = M[m].cancelled;
+            v.join_failed = M[m].jf;
             lg_render(&v, &o, 50000 + s, f);
             check_frame(f, spin_max, M[m].alert, M[m].fr4_only);
         }
         ps_view_t v = moment(M[m].st, M[m].prev, 500), plain = view(M[m].st, 500);
         v.cancelled = M[m].cancelled;
+        v.join_failed = M[m].jf;
         lg_render(&v, &o, 50500, f);
         lg_render(&plain, &o, 50500, g);
         assert(!same(f, g));
@@ -289,7 +292,14 @@ static void test_w1049(uint8_t f[LG_NUM_LEDS][3], uint8_t g[LG_NUM_LEDS][3])
         assert(same(f, g));
     }
 
-    // Any other change of state has no moment.
+    // Any other change of state has no moment: Setup with no failed join
+    // (no credentials) opens plainly, whatever came before.
+    {
+        ps_view_t s = moment(PS_SETUP, PS_JOINING, 300), q = view(PS_SETUP, 300);
+        lg_render(&s, &WHITE_MODE, 9000, f);
+        lg_render(&q, &WHITE_MODE, 9000, g);
+        assert(same(f, g));
+    }
     {
         ps_view_t a = moment(PS_OFFLINE, PS_ATTENTION, 300), b = view(PS_OFFLINE, 300);
         a.cancelled = 1;
@@ -579,8 +589,41 @@ int main(void)
             if (LG_MAP[i].mat == 'P') fr4 = 1; else mask = 1;
         }
         assert(fr4 && mask);
+        // A board settled early starts going out at 1.7 s and is dark at 3.0 s.
         v = view(PS_BOOTING, LG_BOOT_MS);
+        v.spin_out = 1;
+        v.spin_out_ms = LG_SPIN_OUT_MS;
         lg_render(&v, &WHITE_MODE, LG_BOOT_MS, f);
+        assert(lit_count(f) == 0);
+    }
+
+    // W-1049's quiet power-on: a Spin still waiting keeps turning, lit but
+    // eased down after 3 s, never heavier than its opening; once the board
+    // settles it goes out over LG_SPIN_OUT_MS.
+    {
+        int heaviest = 0;
+        for (uint32_t s = 0; s < 3000; s += 10) {
+            ps_view_t v = view(PS_BOOTING, s);
+            lg_render(&v, &WHITE_MODE, s, f);
+            if (frame_sum(f) > heaviest) heaviest = frame_sum(f);
+        }
+        int waiting = 0;
+        for (uint32_t s = 3000; s < 30000; s += 97) {
+            ps_view_t v = view(PS_BOOTING, s);
+            lg_render(&v, &WHITE_MODE, s, f);
+            assert(lit_count(f) > LG_NUM_LEDS / 2);
+            assert(frame_sum(f) <= heaviest);
+            if (s >= 4000 && frame_sum(f) > waiting) waiting = frame_sum(f);
+        }
+        assert(waiting < heaviest * 2 / 3);         // eased to 60% while it waits
+        ps_view_t v = view(PS_BOOTING, 20000);
+        v.spin_out = 1;
+        v.spin_out_ms = 900;
+        lg_render(&v, &WHITE_MODE, 20000, f);
+        assert(max3(f[idx(3, 4)]) > 0);              // the middle still lit ...
+        assert(max3(f[idx(7, 4)]) == 0);             // ... the far dots gone first
+        v.spin_out_ms = LG_SPIN_OUT_MS;
+        lg_render(&v, &WHITE_MODE, 20000, f);
         assert(lit_count(f) == 0);
     }
 

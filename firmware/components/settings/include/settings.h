@@ -27,6 +27,10 @@ typedef struct {
 esp_err_t settings_load(settings_t *out, const char *mac_suffix);
 
 esp_err_t settings_save_wifi(const char *ssid, const char *pass);
+// Whether Wi-Fi was saved before this restart, once: the panel greets the
+// first join with green as confirmation (W-1049). Kept in RTC memory, so it
+// survives the restart that follows the save, not a power cut.
+int       settings_take_wifi_fresh(void);
 esp_err_t settings_save_general(const char *hostname, const char *queue,
                                 const char *dither);
 esp_err_t settings_save_auto_update(int on);

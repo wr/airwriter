@@ -12,13 +12,54 @@ void ps_init(ps_t *ps, const ps_timing_t *tm, uint64_t now)
     ps->last = ps->prev = PS_BOOTING;
 }
 
+static uint64_t max64(uint64_t a, uint64_t b) { return a > b ? a : b; }
+static uint64_t min64(uint64_t a, uint64_t b) { return a < b ? a : b; }
+
+// W-1049's quiet power-on: when the Spin starts going out, or 0 while it is
+// still waiting at `now`. The board has settled once Wi-Fi is up and the
+// printer line has held still (ready a moment, or down long enough to be no
+// printer), or at once on setup mode or a job. The Spin shows at least
+// boot_ms and at most boot_cap_ms, going out for the last boot_out_ms.
+static uint64_t out_start(const ps_t *ps, uint64_t now)
+{
+    const ps_timing_t *tm = &ps->tm;
+    uint64_t first = ps->boot_at + (tm->boot_ms > tm->boot_out_ms ? tm->boot_ms - tm->boot_out_ms : 0);
+    uint64_t last  = ps->boot_at + (tm->boot_cap_ms > tm->boot_out_ms ? tm->boot_cap_ms - tm->boot_out_ms : 0);
+    uint64_t at = last;
+    if (ps->setup) at = min64(at, ps->setup_at);
+    if (ps->job)   at = min64(at, ps->job_at);
+    if (ps->wifi_up) {
+        uint64_t line = ps->line_since + (ps->line_ready ? tm->settle_ready_ms : tm->settle_offline_ms);
+        at = min64(at, max64(ps->wifi_at, line));
+    }
+    at = max64(at, first);
+    return at <= now ? at : 0;
+}
+
+// Latches the Spin's going-out once the board has settled. Run before each
+// event, so the moment is judged on what held until then, and on each update.
+static void latch_out(ps_t *ps, uint64_t now)
+{
+    if (ps->out) return;
+    uint64_t at = out_start(ps, now);
+    if (at) { ps->out = 1; ps->out_at = at; }
+}
+
 void ps_post(ps_t *ps, ps_event_t ev, uint64_t now)
 {
+    latch_out(ps, now);
     switch (ev) {
-    case PS_EV_WIFI_SETUP_AP:  ps->setup = 1;   break;
-    case PS_EV_WIFI_JOINING:
+    case PS_EV_WIFI_SETUP_AP:
+        ps->setup = 1; ps->setup_at = now;
+        ps->join_failed = ps->tried;    // JOINING is posted only when there is a network to try
+        break;
+    case PS_EV_WIFI_JOINING:   ps->wifi_up = 0; ps->tried = 1; break;
     case PS_EV_WIFI_DOWN:      ps->wifi_up = 0; break;
-    case PS_EV_WIFI_UP:        ps->wifi_up = 1; break;
+    case PS_EV_WIFI_UP:
+        if (!ps->wifi_up) ps->wifi_at = now;
+        ps->wifi_up = 1;
+        break;
+    case PS_EV_WIFI_FRESH:     ps->fresh = 1; break;
     case PS_EV_LINE_READY:
         if (!ps->line_ready) { ps->line_ready = 1; ps->line_since = now; ps->kicked = 0; }
         ps->job_started_low = 0;
@@ -28,6 +69,7 @@ void ps_post(ps_t *ps, ps_event_t ev, uint64_t now)
         break;
     case PS_EV_JOB_START:
         ps->job = 1; ps->failed = 0; ps->cancelled = 0; ps->activity_at = now;
+        ps->job_at = now;
         ps->job_started_low = !ps->line_ready;
         break;
     case PS_EV_JOB_DONE:   ps->job = 0; break;
@@ -51,7 +93,7 @@ void ps_cable(ps_t *ps, int pass, uint64_t now)
 
 static ps_state_t derive(const ps_t *ps, uint64_t now)
 {
-    if (now - ps->boot_at < ps->tm.boot_ms) return PS_BOOTING;
+    if (!ps->out || now - ps->out_at < ps->tm.boot_out_ms) return PS_BOOTING;
     if (ps->setup)    return PS_SETUP;
     if (!ps->wifi_up) return PS_JOINING;
     uint64_t low_for = ps->line_ready ? 0 : now - ps->line_since;
@@ -64,13 +106,11 @@ static ps_state_t derive(const ps_t *ps, uint64_t now)
         return PS_ATTENTION;
     if (ps->failed && now - ps->failed_at < ps->tm.failed_hold_ms) return PS_FAILED;
     if (ps->job) return PS_PRINTING;
-    // Offline is counted from the end of the boot animation, not power-on: the
-    // ImageWriter reports busy for ~3.5 s after the AirWriter powers up and
-    // then clears by itself (W-1039), which must not flash embers after the
-    // spin or swallow the green Wi-Fi moment.
-    uint64_t settled = ps->boot_at + ps->tm.boot_ms;
-    uint64_t from = ps->line_since > settled ? ps->line_since : settled;
-    if (!ps->line_ready && now >= from && now - from >= ps->tm.offline_debounce_ms)
+    // The ImageWriter reports busy for ~3.5 s after the AirWriter powers up
+    // and then clears by itself (W-1039). The Spin waits for the line to
+    // settle (out_start), so after it a down line is a real one: the embers
+    // come straight up for a printer that never came, with no Ready first.
+    if (!ps->line_ready && now - ps->line_since >= ps->tm.offline_debounce_ms)
         return PS_OFFLINE;
     return PS_READY;
 }
@@ -79,10 +119,13 @@ static uint32_t sat32(uint64_t x) { return x > 0xFFFFFFFFu ? 0xFFFFFFFFu : (uint
 
 ps_view_t ps_update(ps_t *ps, uint64_t now)
 {
+    latch_out(ps, now);
     ps_state_t st = derive(ps, now);
     if (st != ps->last) {
+        // The green Wi-Fi moment is for a real join, or the first one after
+        // Wi-Fi was set up; a normal power-on is the Spin alone (W-1049).
         if (st == PS_READY)
-            ps->greeted = ps->last == PS_JOINING || ps->last == PS_BOOTING;
+            ps->greeted = ps->last == PS_JOINING || (ps->last == PS_BOOTING && ps->fresh);
         ps->prev = ps->last;
         ps->last = st;
         ps->state_since = now;
@@ -91,6 +134,11 @@ ps_view_t ps_update(ps_t *ps, uint64_t now)
     ps_view_t v = { .state = st, .prev = ps->prev, .cancelled = ps->cancelled,
                     .since_ms = sat32(now - ps->state_since) };
     v.phone_joined = st == PS_SETUP && ps->ap_stations > 0;
+    v.join_failed  = st == PS_SETUP && ps->join_failed;
+    if (st == PS_BOOTING && ps->out && now >= ps->out_at) {
+        v.spin_out    = 1;
+        v.spin_out_ms = sat32(now - ps->out_at);
+    }
     v.greeted      = st == PS_READY && ps->greeted;
     if (ps->cable && now - ps->cable_at < PS_CABLE_MS &&
         (st == PS_SETUP || st == PS_JOINING || st == PS_READY || st == PS_OFFLINE)) {

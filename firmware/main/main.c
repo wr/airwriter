@@ -1328,6 +1328,7 @@ void app_main(void)
     ps_timing_t tm = PS_TIMING_DEFAULT;
     tm.stall_attention_ms = CONFIG_AIRWRITER_STALL_TIMEOUT * 1000u;
     tm.boot_ms = LG_BOOT_MS;
+    tm.boot_out_ms = LG_SPIN_OUT_MS;
     printer_state_start(&tm, on_ps_change);
     // After the clamp above: the RMT driver takes IO48 over from here, and
     // by the first frame the line is driven, never floating.
@@ -1362,6 +1363,8 @@ void app_main(void)
     char suffix[8];
     snprintf(suffix, sizeof suffix, "%02x%02x", mac[4], mac[5]);
     settings_load(&s_set, suffix);
+    // Wi-Fi saved before this restart: green greets the join (W-1049).
+    if (settings_take_wifi_fresh()) printer_state_post(PS_EV_WIFI_FRESH);
     ota_health_start(s_set.ssid[0] != 0);
 #if CONFIG_AIRWRITER_LT_BENCH
     lt_start("bench build");
@@ -1411,7 +1414,9 @@ void app_main(void)
     // No credentials, or they no longer work: become an access point and let
     // the user fix it from a phone. This is the only path a person who did not
     // build the firmware can take.
-    printer_state_post(PS_EV_WIFI_JOINING);
+    // Joining only when there is a network to try: setup mode after it is a
+    // failed join, which the panel opens with two red pulses (W-1049).
+    if (s_set.ssid[0]) printer_state_post(PS_EV_WIFI_JOINING);
     wifi_init();
     if (!s_set.ssid[0] || wifi_start() != ESP_OK) {
         char ap[32];

@@ -140,11 +140,18 @@ int lg_pilot_index(void)
 }
 
 // The boot spin: a hue wheel around the test button (row 3, col 3) that fades
-// in by distance, spins, then collapses inward and is dark by LG_BOOT_MS.
-static lg_c3 spin(float dist, float ang, float t)
+// in by distance and spins. W-1049's quiet power-on keeps it turning until the
+// board has settled, at the pace it had reached by 2.5 s and eased to 60%
+// after 3 s (less draw while Wi-Fi joins); then it collapses inward over
+// LG_SPIN_OUT_MS (`out`, `e` seconds in), the far dots first and the test
+// button last. A board settled early starts going out at 1.7 s, which is the
+// original 3.0 s Spin exactly.
+static lg_c3 spin(float dist, float ang, float t, int out, float e)
 {
-    float v = ss(0, 0.6f, t - dist * 0.08f) * (1 - ss(2.3f, 3.0f, t + dist * 0.12f));
-    return hsv(ang + t * 300 - t * t * 40, 0.9f, v);
+    float v = ss(0, 0.6f, t - dist * 0.08f) * (1 - 0.4f * ss(3.0f, 4.0f, t));
+    if (out) v *= 1 - ss(0.6f, 1.3f, e + dist * 0.12f);
+    float turn = t <= 2.5f ? t * 300 - t * t * 40 : 500 + (t - 2.5f) * 100;
+    return hsv(ang + turn, 0.9f, v);
 }
 
 // LocalTalk's colours: the six stripes of the classic Apple logo, top to
@@ -191,7 +198,7 @@ static lg_c3 state_dot(const ps_view_t *v, const lg_opts_t *o, int i, uint32_t t
 
     switch (v->state) {
     case PS_BOOTING:
-        return spin(dist, ang, (float)s / 1000.0f);
+        return spin(dist, ang, (float)s / 1000.0f, v->spin_out, (float)v->spin_out_ms / 1000.0f);
 
     case PS_SETUP: {
         float hue = jitter(r, c, 220, 16, t, 6);
@@ -313,7 +320,7 @@ static lg_c3 purple_of(int r, int c, uint32_t t) { return hsv(jitter(r, c, 280, 
 
 static int join_failed(const ps_view_t *v)      // its two red pulses, before Setup fades in
 {
-    return v->state == PS_SETUP && v->prev == PS_JOINING && v->since_ms < 1000;
+    return v->state == PS_SETUP && v->join_failed && v->since_ms < 1000;
 }
 
 static int page_out(const ps_view_t *v)
@@ -382,8 +389,9 @@ static lg_c3 view_dot(const ps_view_t *v, const lg_opts_t *o, int i, uint32_t t)
         float k = ss(-0.5f, 0.5f, (float)r - edge);     // 1 below the sheet
         return mix(sc(ink, band), fr4 ? sc(now, ss(0, 1, k)) : DARK, k);
     }
-    // Could not join: two red pulses (FeatherFrame's), then Setup.
-    if (v->state == PS_SETUP && v->prev == PS_JOINING && s < LG_JOINFAIL_MS) {
+    // Could not join: two red pulses (FeatherFrame's), then Setup. After the
+    // saved network was tried, from Joining or straight from the Spin.
+    if (v->state == PS_SETUP && v->join_failed && s < LG_JOINFAIL_MS) {
         if (s < 1000) {
             float x = sinf(3.1415927f * fmodf(s, 500) / 500.0f);
             return hsv(jitter(r, c, 2, 8, t, 0), 0.95f, 0.85f * x * x);
