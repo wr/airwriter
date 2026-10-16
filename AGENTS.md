@@ -157,10 +157,11 @@ Linear is the queue; these are the live items.
   its RMT interrupt, on core 1 (a frame-gap log on board 1 showed the WPA3 handshake starving it
   on core 0). Benched 2026-10-16: no frame gap over 15 ms through a power cycle, Wells "perfect
   now".
-- `W-1063 Cable test: tell an empty LocalTalk chip socket apart from a bad cable`: merged
+- `W-1063 Cable test: tell an empty LocalTalk chip socket apart from a bad cable`: Done
   2026-10-16, with Wells's smaller cable answer (the strip between the sockets). Host-tested and
-  built; not yet on board 1. Owed, on Wells's go with prints held: a crossover test (the strip,
-  nothing regressed), then one with U7 pulled (`no_chip`, the blink by the LocalTalk socket).
+  built, untested on hardware (Wells closed it without a bench run). When convenient on board 1:
+  a crossover test (the strip, nothing regressed), then one with U7 pulled (`no_chip`, the blink
+  by the LocalTalk socket).
 - Not in Linear: scope HSKo during a long job (SPEC §3.9 timing).
 
 ## Toolchain
