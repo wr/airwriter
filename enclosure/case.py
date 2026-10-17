@@ -13,14 +13,11 @@ from build123d import (
     ConvexPolyhedron,
     Cylinder,
     Part,
-    Polyline,
     Pos,
     RectangleRounded,
     Rot,
-    extrude,
     import_step,
     loft,
-    make_face,
 )
 
 import board_geom as bg
@@ -55,6 +52,8 @@ def shell() -> Part:
     which prints floor-down without support where a fillet would not; the
     top outside rim by the smaller TOP_CHAMFER.
 
+    Below the panel seat every wall is thinner (`wall_relief`).
+
     No openings: the port cutouts, the DIP slot, the pinhole, the screw holes
     and the carve-outs are all subtracted by tray().
     """
@@ -77,51 +76,32 @@ def shell() -> Part:
         p.BOARD_W / 2, p.BOARD_L / 2, (p.Z_WALL_TOP + p.Z_FLOOR_TOP) / 2,
         p.POCKET_R)
 
-    return outer - cavity - west_flex_relief()
+    return outer - cavity - wall_relief()
 
 
-def west_flex_relief() -> Part:
-    """What comes off the inside of the west wall so it can flex: from the
-    floor up to the panel seat, the wall's inner face moves out to
-    WEST_FLEX_T from the outer face, then a 45-degree ramp returns it to the
-    full wall at Z_LID_UNDER. See params.WEST_FLEX_T for why.
+def wall_relief() -> Part:
+    """What comes off the inside of all four walls: from the floor up to the
+    panel seat, each wall's inner face moves out to THIN_WALL from its outer
+    face, then a 45-degree ramp returns it to the full wall at Z_LID_UNDER.
+    See params.THIN_WALL for why.
 
-    Built as the wall's cross-section (XZ) extruded along the straight edge,
-    then trimmed in plan so each end tapers back to the full wall. The ramp faces down at
-    exactly 45 degrees, the overhang limit, so the tray still prints floor-down
-    with no supports. The cove at the floor and the rounded ends are strain
-    relief: that is where the wall bends."""
-    x_in = -(p.WALL - p.WEST_FLEX_T)
-    run = -p.POCKET_CLEAR - x_in  # thin face out to the pocket face, = ramp height
-    # Overshoot into the pocket, which is air already, far enough that the
-    # floor edge outruns the cove fillet. Stops short of the H1/H3 bosses
-    # (x >= 2.64), though they are added after this cut anyway.
-    x1 = 2.5
+    The exterior outline shrunk by THIN_WALL, so the corners keep the same
+    thickness as the straights (radius EXT_R - THIN_WALL, on the exterior
+    fillet's axis). Its top edges are chamfered by the ramp's run, which lands
+    them exactly on the pocket's outline and POCKET_R corners at Z_LID_UNDER;
+    the ramp faces down at 45 degrees, the overhang limit, so the tray still
+    prints floor-down with no supports. Its bottom edges are filleted by
+    COVE_R, which leaves a cove where each wall meets the floor."""
+    run = p.WALL - p.THIN_WALL - p.POCKET_CLEAR
     z0, z1 = p.Z_FLOOR_TOP, p.Z_LID_UNDER
-    y0 = p.CORNER_R + p.FLEX_END
-    y1 = p.BOARD_L - p.CORNER_R - p.FLEX_END
-
-    section = make_face(Polyline(
-        (x_in, z0), (x1, z0), (x1, z1), (x_in + run, z1), (x_in, z1 - run),
-        close=True)).face()
-    cove = [v for v in section.vertices()
-            if abs(v.X - x_in) < 1e-6 and abs(v.Y - z0) < 1e-6]
-    section = section.fillet_2d(p.FLEX_COVE_R, cove)
-    # Drawn in XY as (x, z); Rot(90, 0, 0) stands it up in XZ, and extrude()
-    # then runs toward -Y, hence the start at y1. It overshoots both ends;
-    # the plan trim below sets them.
-    prism = Pos(0, y1 + 1, 0) * extrude(Rot(90, 0, 0) * section, y1 - y0 + 2)
-    # Plan trim: each end tapers from the full wall at y0/y1 to the thin wall
-    # over FLEX_TAPER, so the wall stiffens gradually instead of stepping.
-    # Its outboard side sits 0.5 past x_in -- OCCT returns nothing for an
-    # intersection whose faces coincide.
-    xo = x_in - 0.5
-    reach = p.FLEX_TAPER * (x_in - xo + run) / run  # taper line, extended to xo
-    plan = Pos(0, 0, z0 - 1) * extrude(make_face(Polyline(
-        (x1 + 1, y0), (-p.POCKET_CLEAR, y0), (xo, y0 + reach),
-        (xo, y1 - reach), (-p.POCKET_CLEAR, y1), (x1 + 1, y1),
-        close=True)), z1 - z0 + 2)
-    return prism & plan
+    relief = _rounded_box(
+        p.EXT_W - 2 * p.THIN_WALL, p.EXT_L - 2 * p.THIN_WALL, z1 - z0,
+        p.BOARD_W / 2, p.BOARD_L / 2, (z0 + z1) / 2,
+        p.EXT_R - p.THIN_WALL)
+    top = relief.faces().sort_by(Axis.Z)[-1]
+    relief = relief.chamfer(run, None, top.edges())
+    bottom = relief.faces().sort_by(Axis.Z)[0]
+    return relief.fillet(p.COVE_R, bottom.edges())
 
 
 def standoffs() -> Part:
@@ -437,7 +417,7 @@ def dip_slot() -> Part:
         (p.DIP_SLOT_Z0 + p.DIP_SLOT_Z1) / 2,
     ) * Box(depth, y1 - y0, p.DIP_SLOT_Z1 - p.DIP_SLOT_Z0)
     if p.DIP_SLOT_R:
-        # The west wall flexes (params.WEST_FLEX_T): round the window's
+        # The west wall flexes (params.THIN_WALL): round the window's
         # corners so they don't concentrate the bending strain.
         slot = slot.fillet(p.DIP_SLOT_R, slot.edges().filter_by(Axis.X))
     return slot

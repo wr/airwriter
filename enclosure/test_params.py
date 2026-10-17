@@ -57,7 +57,7 @@ class TestDerived(unittest.TestCase):
 
     def test_effective_wall_after_pocket_clearance(self):
         # 3.00 nominal, 0.30 eaten by pocket clearance -> 2.70 of plastic
-        # at the panel seat (the west wall is thinner below it: WEST_FLEX_T).
+        # at the panel seat (every wall is thinner below it: THIN_WALL).
         self.assertAlmostEqual(p.WALL - p.POCKET_CLEAR, 2.70, places=3)
 
 

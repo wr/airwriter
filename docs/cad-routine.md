@@ -56,5 +56,5 @@ How to design, check and iterate a printed part. Follow it for any new part or c
 | Guiding fit (steadies, no drag) | 0.20–0.25 a side | test-button collar |
 | Snug against the tray | 0.10 | lattice lip |
 | Light-tight wall | 0.80 (two perimeters) | lattice walls |
-| Wall that flexes in use | 1.20 PETG (0.80 split) | tray west wall |
+| Wall that flexes in use | 1.70 PETG, the same on every wall (0.80 split; 1.20 on one wall only showed lines) | tray walls below the rim |
 | Light pipe in clear PETG | made D3 dimmer | dropped; rev B dome LED, W-1043 |

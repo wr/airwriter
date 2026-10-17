@@ -111,50 +111,36 @@ a printed tray. PCBWay routes the outline to +-0.2mm and an FDM pocket comes
 out a little undersize, so 0.20 left no margin for either. The panel/lid gap
 grows by the same 0.10."""
 
-WEST_FLEX_T = 1.20
-"""Thickness of the west wall below the panel seat, where it is thinned so it
-can flex. Three perimeters at 0.4mm.
+THIN_WALL = 1.70
+"""Thickness of all four walls from the floor up to the panel seat. A 45-degree
+ramp returns each to the full wall at Z_LID_UNDER, so the panel seat, the rim
+seen from above and the outside are unchanged.
 
-RAISED 2026-10-14 from 0.80 after the first print split near the floor
-(Wells: "slightly thicker would probably work"). The FEA says bowing the rim
-the needed 2.0mm puts about 1% vertical strain at the floor junction whatever
-the thickness: 0.99% at 0.80, 1.04% at 1.20. That strain pulls the print's
-layers apart, which is fine for PETG and marginal for PLA's layer bonds. A wall
-thicker only near the floor just moved the peak up the wall (1.1-1.3% at
-z 0-7). So 1.20 is not gentler, but it is 2.25x stronger against being pushed
-past 2mm, and takes 32 N to bow in PETG (21 N at 0.80). Print the tray in PETG.
+The west wall has to bow outward while S1's keys pass its rim. The keys stand
+2.20mm past the board's west edge, into the wall, and the front-wall windows
+hold the board within 0.40mm side to side, so a rigid west wall leaves no path
+in (docs/enclosure-build-log/flex-wall-report.md). Thinned, it springs back
+over the keys, whose tips then stand in the DIP window. Print the tray in
+PETG: the bend pulls at the layers near the floor, and the first print, at
+0.80, split there.
 
-Added 2026-10-14 (Wells: the side walls are thicker than they need to be, so
-widen the cavity and ramp back to full thickness at the top). S1's keys stand
-2.20mm past the board's west edge, into the west wall. The mini-DINs and USB-C
-stand into closed windows in the front wall, which hold the board within 0.40mm
-side to side, so the board can never shift east far enough for the keys to
-clear a rigid west wall. Sweeping the board through the old tray found no path
-in at all. So the west wall bows outward while the keys pass its rim, then
-springs back over them.
+ALL FOUR walls, the whole of each, since 2026-10-17 (Wells). The thinning used
+to be on the west wall only, tapering back to the full wall near each corner,
+and every print had raised lines up the outside at both ends of the taper. The
+slicer stops and restarts its wall lines where a wall changes thickness, at the
+same spot on every layer, and translucent PETG shows the change itself. One
+thickness all round leaves no change behind any flat face; only the ramp's
+horizontal line under the rim remains. Printed 2026-10-17 in translucent PETG:
+no lines, and the board slips in as before (Wells).
 
-Below Z_LID_UNDER the wall's inner face moves out to WEST_FLEX_T from its outer
-face, then a 45-degree ramp returns it to the full wall, so the panel seat, the
-rim seen from above and the outside are unchanged. The keys' tips land in the
-thinned wall's inner face, in the DIP window.
+1.70 is four 0.4mm lines. On a test piece of the old taper, 1.70 felt almost
+smooth where 1.20 had a ridge. FEA (flex-wall/fea.py, PETG E 2 GPa, 0.8mm
+mesh, the rim moved out 2.0mm over the keys' path): 46 N, peak strain 2.16% at
+the DIP window's corners, 1.17% vertical at the floor. The old west-only
+thinning took 32 N and 1.99% at 1.20, 53 N and 2.31% at 1.70."""
 
-First FEA, at 0.80 (linear, floor fixed, P2 tets, converged at 0.8mm mesh):
-clearing the keys' whole path (y 20-40.5) by 2.0mm took ~21 N in PETG
-(E 2 GPa), ~37 N in PLA, peak strain 1.65% at the DIP window's corners and
-J2's lintel."""
-
-FLEX_END = 0.50
-"""How far short of the board's straight west edge (CORNER_R in from each
-corner) the thinned stretch starts tapering. Starting close to the corner
-gave a lower peak at the front-west corner than starting 3.00 in (FEA)."""
-
-FLEX_TAPER = 8.00
-"""Length over which each end of the thinned stretch tapers back to the full
-wall, in plan. An abrupt end put a strain peak at the front-west corner (FEA,
-2026-10-14); a taper spreads it."""
-
-FLEX_COVE_R = 1.50
-"""Fillet where the thinned wall meets the floor. The wall bends there, and
+COVE_R = 1.50
+"""Fillet where each thin wall meets the floor. The west wall bends there, and
 across the print's layers, so the corner is rounded to spread the strain."""
 
 # --- fasteners -------------------------------------------------------------
@@ -235,7 +221,7 @@ Above the relief the leg keeps its full LEG_D, so the heat-set insert has
 
 DIP_SLOT_R = 1.00
 """Corner radius of the DIP slot window, seen from the side. The window sits
-in the flexing west wall (WEST_FLEX_T) and its square corners were the peak
+in the flexing west wall (THIN_WALL) and its square corners were the peak
 strain there, 2.0%; rounded, 1.65%. The rounding fills back only the very
 corners: the outer keys' own corners sit DIP_SLOT_MARGIN (0.80) in from the
 window's ends and 0.30 below its top, 0.63mm inside the 1.00 arc."""

@@ -304,6 +304,13 @@ Traps already explained in a code comment are listed only when the comment is ea
 - **A boolean whose faces all coincide returns nothing** (OCCT). Let one body overshoot the other.
 - **`fillet_2d` fails when the radius is longer than an adjacent edge.** Lengthen the edge (an
   overshoot into air costs nothing).
+- **A wall that changes thickness behind a flat outside face prints a line up the outside
+  there**, and no slicer setting removes it. The slicer stops and restarts its wall lines where
+  the thickness changes, at the same spot on every layer, which stacks into a ridge you can
+  feel; translucent PETG shows the change itself too. The old west-wall taper did this at both
+  ends (2026-10-17). Keep each wall one thickness along its faces (`THIN_WALL`); change it only
+  in height, or behind an opening. To check a design, slice it and look for path ends stacked
+  near the outer wall.
 - **kicad-cli's STEP export exits 2 on every run**, because KiCad 10 ships no SK6812MINI model.
   `components.export()` accepts exactly the NO_MODEL parts and names anything else; don't loosen
   that by trusting a stale `out/components.step`.

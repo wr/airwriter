@@ -113,10 +113,11 @@ What works on `main`:
   gets W-1041's resync. The last job's bytes are also kept for `GET /api/lt/job`. `GET /api/lt`
   shows state and log; `POST /api/lt/echo` with a node number pings that Mac (AEP).
 
-**Enclosure** (`enclosure/`, in use on board 1): tray (print in PETG; the board goes
-in by the sequence in `enclosure/README.md`, thumbing the thin west wall out past the DIP keys),
-Lite lid, and the Pro build's light-guide lattice. Cavity 13.04 (measured mini-DIN height);
-Pro screws M2.5 × 18. The shop's cased GLBs still show the pre-W-1036 tray.
+**Enclosure** (`enclosure/`, in use on board 1): tray (print in PETG with Arachne walls;
+every wall 1.70 below the rim, one thickness all round so no lines show up the outside; the
+board goes in by the sequence in `enclosure/README.md`, thumbing the west wall out past the
+DIP keys), Lite lid, and the Pro build's light-guide lattice. Cavity 13.04 (measured mini-DIN
+height); Pro screws M2.5 × 18. The shop's cased GLBs still show the pre-W-1036 tray.
 
 Not built: EtherTalk, consumers of the dither override, PWG raster.
 

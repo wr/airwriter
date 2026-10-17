@@ -25,6 +25,11 @@ FDM, 0.4 mm nozzle, 0.2 mm layers, matte black, **PETG** for the tray (see
 (68.00 x 110.27 x 21.64 mm), lid plate-down (62.00 x 104.27 x 14.64 mm — the
 art panel's own outline, not the pocket's; see "First print" below for the
 0.30 mm/side it should clear by).
+Slice the tray with Arachne walls and 4 wall loops: below the rim every wall
+is 1.70 mm, which Arachne fills with exactly four lines, where Classic adds a
+hair-thin filler line down the middle. In translucent PETG also give it 12
+bottom layers (the floor's full 2.4 mm), or the floor's infill grid shows
+through.
 The tray's bottom outside edge carries a 0.80 mm 45-degree chamfer
 (`BOTTOM_CHAMFER`): exactly the overhang limit, so it needs no support, and it
 keeps first-layer squish inside the wall line. The top outside edge carries a
@@ -127,13 +132,14 @@ way of the keys:
    keys are down in their window. Near the end the board slides forward
    another millimetre or so as the USB-C finds its opening.
 
-Below the panel seat the west wall is only `WEST_FLEX_T` (1.20 mm) thick,
-ramping back to the full wall at the seat, so the rim, the seat and the
-outside look the same as before. Bowing it 2 mm takes about 32 N in PETG
-(about 56 N in PLA) and puts about 1% vertical strain where the wall meets the
-floor (FEA, `docs/enclosure-build-log/flex-wall-report.md`). That strain pulls
-the print's layers apart, so **print the tray in PETG**. A 0.80 mm wall split
-there on the first print. If the keys still catch at the rim, push the board
+Below the panel seat every wall is `THIN_WALL` (1.70 mm) thick, ramping back
+to the full wall at the seat, so the rim, the seat and the outside look the
+same as before. One thickness all round: a wall that changes thickness behind
+a flat face prints a line up the outside there (`docs/traps.md`). Bowing the
+west wall 2 mm takes about 46 N in PETG (about 80 N in PLA) and puts about
+1.2% vertical strain where the wall meets the floor (FEA, `params.THIN_WALL`).
+That strain pulls the print's layers apart, so **print the tray in PETG**. A
+0.80 mm west wall split there on the first print. If the keys still catch at the rim, push the board
 0.3 mm east while it goes down.
 
 ## First print, check in this order
@@ -206,5 +212,6 @@ cased AirWriter" in the shop's `scripts/board-model/README.md`; then
   lid's legs pulled clear of the board, flat port lintels in place of the
   45-degree ridge roofs (shop W-806), the bottom chamfer, the top
   chamfer, and (2026-10-14, after rev A would not go in) 0.30 pocket
-  clearance with a thinned, flexing west wall. `git log -- enclosure` has
-  each one with its reasoning.
+  clearance with a thinned, flexing west wall, then (2026-10-17) every wall
+  thinned to 1.70 below the rim so no flat face shows a line. `git log --
+  enclosure` has each one with its reasoning.

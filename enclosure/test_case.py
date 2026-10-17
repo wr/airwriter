@@ -327,14 +327,15 @@ class TestPorts(unittest.TestCase):
 
     def test_front_wall_still_exists_between_the_two_minidins(self):
         # J2 and J4 are centred at case X 13.0 and 32.5; there must be
-        # plastic between their openings at the midpoint. The probe is
-        # 1.0 * WALL(3.0) * 2.0 = 6.0mm^3; real geometry leaves 5.600mm^3
-        # (93.3% full) here, so the threshold is set close to that rather
-        # than at 0.5 (an 8.3% floor that would also pass a web reduced to
-        # a sliver by a wider connector or a tighter PORT_CLEAR).
+        # plastic between their openings at the midpoint. At z 5 the wall is
+        # THIN_WALL, so a full web fills 1.0 * THIN_WALL * 2.0 of the probe
+        # (3.4mm^3 at 1.70; real geometry leaves all of it). The threshold
+        # is 90% of that rather than a token floor, which would also pass a
+        # web reduced to a sliver by a wider connector or a tighter
+        # PORT_CLEAR.
         from build123d import Box, Pos
         probe = Pos(22.75, -p.WALL / 2, 5.0) * Box(1.0, p.WALL, 2.0)
-        self.assertGreater((self.tray_shell & probe).volume, 4.0)
+        self.assertGreater((self.tray_shell & probe).volume, 0.9 * p.THIN_WALL * 2.0)
 
     def test_connectors_clear_the_floor_by_at_least_0_50(self):
         # Derives the requirement instead of restating a number (Finding 1,
@@ -692,10 +693,23 @@ class TestSideFeaturesAndTray(unittest.TestCase):
                                         "within 1mm of this part")
 
 
-class TestWestFlexWall(unittest.TestCase):
-    """The west wall bows outward so S1's keys can pass its rim on the way in
-    (params.WEST_FLEX_T). Thin below the panel seat, full at it, and the thin
-    stretch has to cover the keys' whole path past the rim."""
+class TestThinWalls(unittest.TestCase):
+    """Every wall is THIN_WALL thick from the floor up to the panel seat, then
+    a 45-degree ramp returns it to the full wall under the rim
+    (params.THIN_WALL). One thickness all the way round, so no flat outside
+    face has a change of thickness behind it; the west wall still bows so
+    S1's keys can pass its rim on the way in."""
+
+    # Positions along each wall's straight run (case Y for west/east, case X
+    # for front/back), clear of the port windows, the DIP slot (it starts at
+    # z 4.6), the reset pinhole and the bosses. The ends sit 0.5 past where
+    # each corner's arc meets the straight.
+    ALONG = {
+        "west": (2.5, 12.0, 50.0, 90.0, p.BOARD_L - 2.5),
+        "east": (2.5, 12.0, 50.0, 90.0, p.BOARD_L - 2.5),
+        "front": (3.0, 22.5, 42.5, 59.0),
+        "back": (2.5, 12.0, 31.0, 50.0, p.BOARD_W - 2.5),
+    }
 
     @classmethod
     def setUpClass(cls):
@@ -708,36 +722,39 @@ class TestWestFlexWall(unittest.TestCase):
         cls.key_lo = min(ys) - p.DIP_KEY_HALF_WIDTH
         cls.key_hi = max(ys) + p.DIP_KEY_HALF_WIDTH
 
-    def _wall(self, y, z, h=0.5):
+    def _wall(self, side, s, z, h=0.5):
+        """Plastic through one wall, at position s along it and height z."""
         from build123d import Box, Pos
-        probe = Pos(-p.WALL / 2, y, z) * Box(p.WALL, 1.0, h)
+        if side in ("west", "east"):
+            x = -p.WALL / 2 if side == "west" else p.BOARD_W + p.WALL / 2
+            probe = Pos(x, s, z) * Box(p.WALL, 1.0, h)
+        else:
+            y = -p.WALL / 2 if side == "front" else p.BOARD_L + p.WALL / 2
+            probe = Pos(s, y, z) * Box(1.0, p.WALL, h)
         hit = self.t & probe
         return (hit.volume if hit else 0.0) / (1.0 * h)
 
-    def test_thin_below_the_seat_full_at_it(self):
-        for y in (12.0, 50.0, 90.0):
-            self.assertAlmostEqual(self._wall(y, 2.0), p.WEST_FLEX_T, places=2, msg=f"y={y}")
-            self.assertAlmostEqual(self._wall(y, 13.7), p.WALL - p.POCKET_CLEAR, places=2, msg=f"y={y}")
+    def test_every_wall_is_thin_below_the_seat_and_full_at_it(self):
+        for side, along in self.ALONG.items():
+            for s in along:
+                self.assertAlmostEqual(self._wall(side, s, 2.0), p.THIN_WALL, places=2,
+                                       msg=f"{side} at {s}")
+                self.assertAlmostEqual(self._wall(side, s, 13.7), p.WALL - p.POCKET_CLEAR,
+                                       places=2, msg=f"{side} seat at {s}")
 
     def test_ramp_returns_to_full_thickness_by_the_seat(self):
         # 45 degrees: the ramp's height equals its run.
-        run = p.WALL - p.WEST_FLEX_T - p.POCKET_CLEAR
+        run = p.WALL - p.THIN_WALL - p.POCKET_CLEAR
         mid = p.Z_LID_UNDER - run / 2
-        self.assertAlmostEqual(self._wall(50.0, mid, h=0.05), p.WEST_FLEX_T + run / 2, places=1)
-        self.assertAlmostEqual(self._wall(50.0, p.Z_LID_UNDER - run - 0.3, h=0.2), p.WEST_FLEX_T, places=2)
-
-    def test_thin_stretch_covers_the_keys_path_past_the_rim(self):
-        # Rocked in about the front ports, the keys wander about 1mm along the
-        # wall while they pass the rim (2026-10-14 sweep); allow 2.
-        for y in (self.key_lo - 2.0, self.key_hi + 2.0):
-            self.assertAlmostEqual(self._wall(y, 2.0), p.WEST_FLEX_T, places=2, msg=f"y={y:.2f}")
-
-    def test_corners_keep_the_full_wall(self):
-        for y in (1.0, p.BOARD_L - 1.0):
-            self.assertGreater(self._wall(y, 2.0), p.WALL - p.POCKET_CLEAR - 0.05, f"y={y}")
+        for side, along in self.ALONG.items():
+            s = along[1]
+            self.assertAlmostEqual(self._wall(side, s, mid, h=0.05), p.THIN_WALL + run / 2,
+                                   places=1, msg=side)
+            self.assertAlmostEqual(self._wall(side, s, p.Z_LID_UNDER - run - 0.3, h=0.2),
+                                   p.THIN_WALL, places=2, msg=side)
 
     def test_keys_clear_the_wall_at_rest(self):
-        # The keys' tips land on the thin wall's inner face, inside the DIP
+        # The keys' tips stand into the thin wall, inside the DIP
         # window: nothing may touch them once the wall springs back.
         from build123d import Box, Pos
         keys = Pos(-1.0, (self.key_lo + self.key_hi) / 2, (5.6 + 9.01) / 2) * Box(
@@ -954,7 +971,9 @@ class TestCornerRounding(unittest.TestCase):
         y0 = p.BOARD_L / 2 - p.POCKET_L / 2
         x1 = p.BOARD_W / 2 + p.POCKET_W / 2
         y1 = p.BOARD_L / 2 + p.POCKET_L / 2
-        z = (p.Z_WALL_TOP + p.Z_FLOOR_TOP) / 2
+        # In the seat band: below it the thin walls' own corners take over
+        # (case.wall_relief; TestThinWalls and the fillet test below).
+        z = (p.Z_LID_UNDER + p.Z_WALL_TOP - p.TOP_CHAMFER) / 2
         diag = 1 / math.sqrt(2)
 
         for cx, cy, sx, sy in _corners(x0, y0, x1, y1):
@@ -1061,10 +1080,12 @@ class TestCornerRounding(unittest.TestCase):
         there material/void here", with margin, not the wall's actual
         thickness).
 
-        Read the two fillet faces at each corner back as real cylinder
-        geometry -- geom_adaptor().Cylinder() -- rather than probing volume:
-        their axes must coincide (same vertical line) and their radii must
-        differ by exactly WALL - POCKET_CLEAR.
+        Read the fillet faces at each corner back as real cylinder geometry
+        -- geom_adaptor().Cylinder() -- rather than probing volume: their
+        axes must coincide (same vertical line) and their radii must differ
+        by exactly WALL - POCKET_CLEAR at the seat, and by THIN_WALL below
+        it, where the thin wall's own corner fillet (EXT_R - THIN_WALL) is
+        the third face on the same axis.
         """
         from build123d import GeomType
 
@@ -1079,7 +1100,7 @@ class TestCornerRounding(unittest.TestCase):
             cyl = f.geom_adaptor().Cylinder()
             axis = cyl.Axis()
             if abs(abs(axis.Direction().Z()) - 1.0) > 1e-6:
-                continue  # the west flex cove runs along Y; not a corner
+                continue  # the floor cove runs along the walls; not a corner
             loc = axis.Location()
             key = (round(loc.X(), 3), round(loc.Y(), 3))
             by_corner.setdefault(key, []).append((cyl.Radius(), loc, axis.Direction()))
@@ -1089,27 +1110,25 @@ class TestCornerRounding(unittest.TestCase):
             f"expected the tray's 4 rounded corners, found fillet faces "
             f"grouped into {len(by_corner)}: {sorted(by_corner)}")
 
-        want_radial_wall = p.WALL - p.POCKET_CLEAR
         for (x, y), entries in by_corner.items():
+            # The pocket's fillet can come back as more than one face.
+            radii = sorted({round(r, 4) for r, _, _ in entries})
             self.assertEqual(
-                len(entries), 2,
-                f"corner ({x},{y}): expected 2 fillet faces (exterior + "
-                f"pocket), found {len(entries)}")
-            (r0, loc0, d0), (r1, loc1, d1) = entries
-
-            # Same axis: parallel direction, and one axis's location point
-            # lies on the other axis's (X, Y) line.
-            self.assertAlmostEqual(d0.X(), d1.X(), places=6, msg=f"corner ({x},{y}) axis direction X")
-            self.assertAlmostEqual(d0.Y(), d1.Y(), places=6, msg=f"corner ({x},{y}) axis direction Y")
-            self.assertAlmostEqual(d0.Z(), d1.Z(), places=6, msg=f"corner ({x},{y}) axis direction Z")
-            self.assertAlmostEqual(loc0.X(), loc1.X(), places=6, msg=f"corner ({x},{y}) axis location X")
-            self.assertAlmostEqual(loc0.Y(), loc1.Y(), places=6, msg=f"corner ({x},{y}) axis location Y")
-
-            radial_wall = abs(r0 - r1)
-            self.assertAlmostEqual(
-                radial_wall, want_radial_wall, places=4,
-                msg=f"corner ({x},{y}): radial wall is {radial_wall:.6f}mm "
-                    f"(radii {r0:.6f} and {r1:.6f}), want {want_radial_wall}mm")
+                radii, sorted(round(r, 4) for r in (p.EXT_R, p.POCKET_R, p.EXT_R - p.THIN_WALL)),
+                f"corner ({x},{y}): expected the exterior, pocket and thin-wall "
+                f"fillets, found radii {radii}")
+            _, loc0, d0 = entries[0]
+            for _, loc1, d1 in entries[1:]:
+                # Same axis: parallel direction, and one axis's location
+                # point lies on the other axis's (X, Y) line.
+                self.assertAlmostEqual(d0.X(), d1.X(), places=6, msg=f"corner ({x},{y}) axis direction X")
+                self.assertAlmostEqual(d0.Y(), d1.Y(), places=6, msg=f"corner ({x},{y}) axis direction Y")
+                self.assertAlmostEqual(d0.Z(), d1.Z(), places=6, msg=f"corner ({x},{y}) axis direction Z")
+                self.assertAlmostEqual(loc0.X(), loc1.X(), places=6, msg=f"corner ({x},{y}) axis location X")
+                self.assertAlmostEqual(loc0.Y(), loc1.Y(), places=6, msg=f"corner ({x},{y}) axis location Y")
+            # The radii check above, read as walls: the exterior fillet less
+            # each inner one.
+            self.assertAlmostEqual(p.EXT_R - p.POCKET_R, p.WALL - p.POCKET_CLEAR, places=4)
 
 
 if __name__ == "__main__":

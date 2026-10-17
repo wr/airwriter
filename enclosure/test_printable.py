@@ -27,8 +27,8 @@ import case
 import params as p
 
 MIN_WALL = p.WALL - p.POCKET_CLEAR
-"""3.00 nominal minus the 0.30 pocket clearance. The west wall is held to this
-only at the panel seat; below it, it is thinned on purpose (WEST_FLEX_T)."""
+"""3.00 nominal minus the 0.30 pocket clearance. Every wall is held to this
+only at the panel seat; below it, all four are THIN_WALL on purpose."""
 
 FDM_OVERHANG_LIMIT = math.cos(math.radians(45))
 """cos(45 deg) ~= 0.70711: the real FDM unsupported-overhang limit, expressed
@@ -179,19 +179,22 @@ class TestTray(unittest.TestCase):
         # every probe below, so a generic "* volume / p.WALL" cancels to
         # the same constant for all of them and checks nothing extra.
         from build123d import Box, Pos
-        # The west wall's seat band runs Z_LID_UNDER..Z_WALL_TOP, under the
-        # 0.40 top chamfer, so its probe sits 0.1 inside both.
+        # The seat band runs Z_LID_UNDER..Z_WALL_TOP, under the 0.40 top
+        # chamfer, so its probes sit 0.1 inside both. Below the seat every
+        # wall is THIN_WALL.
         seat_z = (p.Z_LID_UNDER + p.Z_WALL_TOP - p.TOP_CHAMFER) / 2
         seat_h = p.Z_WALL_TOP - p.TOP_CHAMFER - p.Z_LID_UNDER - 0.2
         probes = [
             ("west seat", Pos(-p.WALL / 2, 90.0, seat_z), (p.WALL, 4.0, seat_h),
              MIN_WALL * 4.0 * seat_h),
-            ("west flex", Pos(-p.WALL / 2, 90.0, 4.0), (p.WALL, 4.0, 2.0),
-             p.WEST_FLEX_T * 4.0 * 2.0),
-            ("east", Pos(p.BOARD_W + p.WALL / 2, 90.0, 12.0), (p.WALL, 4.0, 2.0),
-             MIN_WALL * 4.0 * 2.0),
-            ("back", Pos(31.0, p.BOARD_L + p.WALL / 2, 12.0), (4.0, p.WALL, 2.0),
-             MIN_WALL * 4.0 * 2.0),
+            ("east seat", Pos(p.BOARD_W + p.WALL / 2, 90.0, seat_z), (p.WALL, 4.0, seat_h),
+             MIN_WALL * 4.0 * seat_h),
+            ("west", Pos(-p.WALL / 2, 90.0, 4.0), (p.WALL, 4.0, 2.0),
+             p.THIN_WALL * 4.0 * 2.0),
+            ("east", Pos(p.BOARD_W + p.WALL / 2, 90.0, 4.0), (p.WALL, 4.0, 2.0),
+             p.THIN_WALL * 4.0 * 2.0),
+            ("back", Pos(31.0, p.BOARD_L + p.WALL / 2, 4.0), (4.0, p.WALL, 2.0),
+             p.THIN_WALL * 4.0 * 2.0),
             ("floor", Pos(31.0, 52.0, (p.Z_FLOOR_TOP + p.Z_FLOOR_BOTTOM) / 2),
              (4.0, 4.0, p.FLOOR), p.FLOOR * 4.0 * 4.0),
         ]
