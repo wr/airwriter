@@ -3,20 +3,24 @@
 
 usage: render.py FRAMES LAYOUT OUTDIR [--width PX] [--only NAME ...]
 
-The look is the measured panel material model (docs: the dot-panel spec and
-W-1049's previews): the FR4 dots crisp at full strength with a little glow; a
-single-mask dot (B) passes ~10% and a double-mask dot (L) ~5%, both fuzzy and
-with a green cast, so blue goes teal, yellow goes olive and red passes well.
-The dots with no LED behind them are drawn dim, so a lit dot never reads as
-one of the gold ones. The corners are rounded by transparency (GIF has no
-partial alpha), so they sit on a light or a dark page alike.
+Each dot is drawn in the colour board 1's panel was photographed showing
+(panel_colours.json: 40 colours on every kind of dot, 2026-10-17). A dot's
+drive goes back through the firmware's gamma to a hue, saturation and level;
+the hue picks between the 24 measured hues, the saturation mixes in the
+measured white, and the level scales the light. So blue reads sky blue only at
+hue 240, purple comes out lavender or pink, and white turns mint under the
+mask, as on the panel. The FR4 dots are crisp with a little glow; the mask
+dots (B single, L double) are fuzzy. The dots with no LED behind them are drawn
+dim, so a lit dot never reads as one of the gold ones. The corners are rounded
+by transparency (GIF has no partial alpha), so they sit on a light or a dark
+page alike.
 """
-import argparse, json, os, shutil, subprocess
+import argparse, colorsys, json, os, shutil, subprocess
 import numpy as np
 from PIL import Image, ImageFilter
 
 STEP_MS = 40                    # scenes.c's STEP_MS
-FULL = 64.0                     # 8-bit drive that reads as full white on screen (the caps are 48-192)
+CAP = {'P': 48.0, 'B': 192.0, 'L': 192.0}      # led_grid_core.h's caps: a level of 1
 BG = (14, 14, 16)
 UNLIT = {'G': (58, 48, 24), 'T': (58, 48, 24), 'P': (36, 33, 27), 'B': (20, 24, 22), 'L': (16, 18, 17)}
 
@@ -65,8 +69,8 @@ class Panel:
         self.outside = np.hypot(xx + 0.5 - cx, yy + 0.5 - cy) > cr
 
         # One coverage map per LED, on its layer: FR4 crisp, mask a little wider.
-        self.fr4 = np.array([m == 'P' for _, _, m in chain])
-        self.tr = np.array([1.0 if m == 'P' else 0.10 if m == 'B' else 0.05 for _, _, m in chain], np.float32)
+        self.mat = [m for _, _, m in chain]
+        self.fr4 = np.array([m == 'P' for m in self.mat])
         maps = []
         for r, c, m in chain:
             d = dots[(r, c)]
@@ -78,15 +82,39 @@ class Panel:
 
     def draw(self, lv):
         """lv: (37, 3) 8-bit drive levels -> (H, W, 3) float screen RGB."""
-        lin = lv / FULL
-        # the mask's cast: blue goes teal, yellow goes olive, red passes
-        cast = np.stack([lin[:, 0], lin[:, 1] + 0.35 * lin[:, 2], 0.55 * lin[:, 2]], 1) * (self.tr * 1.5)[:, None]
-        fr4 = np.einsum('khw,kc->hwc', self.maps[self.fr4], lin[self.fr4])
-        mask = np.einsum('khw,kc->hwc', self.maps[~self.fr4], cast[~self.fr4])
+        col = np.stack([look(lv[i], m) for i, m in enumerate(self.mat)])
+        fr4 = np.einsum('khw,kc->hwc', self.maps[self.fr4], col[self.fr4])
+        mask = np.einsum('khw,kc->hwc', self.maps[~self.fr4], col[~self.fr4])
         f = Image.fromarray(screen(fr4))
         glow = np.asarray(f.filter(ImageFilter.GaussianBlur(self.glow_r)), np.float32) * 0.35
-        haze = np.asarray(Image.fromarray(screen(mask)).filter(ImageFilter.GaussianBlur(self.haze_r)), np.float32)
-        return np.maximum(self.base, np.asarray(f, np.float32)) + glow + haze * 1.2
+        haze = np.asarray(Image.fromarray(screen(mask)).filter(ImageFilter.GaussianBlur(self.haze_r * 0.7)), np.float32)
+        return np.maximum(self.base, np.asarray(f, np.float32)) + glow + haze * 0.9
+
+
+def linear(srgb):
+    c = np.asarray(srgb, np.float32) / 255
+    return np.where(c <= 0.04045, c / 12.92, ((c + 0.055) / 1.055) ** 2.4)
+
+
+# The measured colours, per material: the 24-hue ring at full saturation and
+# the neutral white, in linear light.
+COLOURS = json.load(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'panel_colours.json')))
+RING = {m: np.stack([linear(e[m]) for e in COLOURS[:24]]) for m in 'PBL'}
+WHITE = {m: linear(next(e[m] for e in COLOURS if e['name'] == 'neutral')) for m in 'PBL'}
+
+
+def look(drive, mat):
+    """One dot's 8-bit drive -> its measured colour in linear light."""
+    if drive.max() < 0.5:
+        return np.zeros(3, np.float32)
+    p = (np.maximum(drive, 0) / CAP[mat]) ** (1 / 2.2)     # back to the firmware's levels
+    v = p.max()
+    h, s, _ = colorsys.rgb_to_hsv(*(p / v))
+    x = h * 24 % 24
+    i, f = int(x), x % 1
+    hue = RING[mat][i] * (1 - f) + RING[mat][(i + 1) % 24] * f
+    w = (1 - s) ** 2.2                                      # the white in it, as light
+    return (hue * (1 - w) + WHITE[mat] * w) * v ** 2.2
 
 
 def screen(lin):

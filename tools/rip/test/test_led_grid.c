@@ -564,10 +564,12 @@ int main(void)
 
     // An array, not one LED: in every state the FR4 dots show several
     // different colours at once. (A failed job is probed in its pulse phase:
-    // between glitch flashes it is dark by design.)
+    // between glitch flashes it is dark by design. Setup is probed in a flash
+    // of its pairing blink: its glow between flashes is too dim for the dots'
+    // own hues to show.)
     for (int s = 0; s < n_all; s++) {
         ps_view_t v = view(all[s], all[s] == PS_FAILED ? 5000 : 1000);
-        lg_render(&v, &WHITE_MODE, 4321, f);
+        lg_render(&v, &WHITE_MODE, all[s] == PS_SETUP ? 4890 : 4321, f);
         int distinct = 0;
         for (int i = 0; i < LG_NUM_LEDS; i++) {
             if (LG_MAP[i].mat != 'P') continue;
@@ -686,9 +688,16 @@ int main(void)
         assert(t_near < t_far);
     }
 
-    // Setup: the radar sweep swings a dot from dim to bright; with a phone
-    // joined it holds steady with only a shimmer, under half its level (relative,
-    // so it holds at any drive).
+    // Setup: the pairing blink swings a dot from dim to bright, every clear
+    // dot flashing together; with a phone joined it holds steady with only a
+    // shimmer, under half its level (relative, so it holds at any drive).
+    {
+        ps_view_t v = view(PS_SETUP, 0);
+        lg_render(&v, &WHITE_MODE, 90, f);                  // the first flash
+        lg_render(&v, &WHITE_MODE, 1200, g);                // the glow between
+        for (int i = 0; i < LG_NUM_LEDS; i++)
+            if (LG_MAP[i].mat == 'P') assert(max3(f[i]) > 3 * max3(g[i]) && max3(g[i]) > 0);
+    }
     {
         int lo = 255, hi = 0, jlo = 255, jhi = 0;
         for (uint32_t t = 0; t < 6000; t += 50) {
@@ -849,7 +858,7 @@ int main(void)
     // lift every channel to one count -- that turned dim warm embers and dim
     // blue pulses white on board 1. Averaged through the dither: embers at
     // their dim floor stay warm (red > green > blue), the joining pulse at its
-    // dim floor stays blue (blue > green > red).
+    // dim floor stays blue (blue at least twice red and twice green).
     {
         static uint16_t hi[LG_NUM_LEDS][3];
         lg_dither_t d;
@@ -881,7 +890,7 @@ int main(void)
             lg_dither(&d, hi, f);
             for (int ch = 0; ch < 3; ch++) sum[ch] += f[far][ch];
         }
-        assert(sum[2] > sum[1] && sum[1] > sum[0]);
+        assert(sum[2] > 2 * sum[1] && sum[2] > 2 * sum[0]);
     }
 
     // W-1055: a cable test's answer stays in the bottom three rows between

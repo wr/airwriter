@@ -28,13 +28,18 @@ Firmware separates them by context instead:
 Rev B could do better: HSKo sits at about −5 V when deselected, 0 V when off and +5 V when
 ready, so an ADC tap on it would separate all three. Out of scope here; noted for rev B.
 
-**The panel's materials (measured on board 1, by eye).**
+**The panel's materials (measured on board 1, by eye, and in the 2026-10-17 colour map).**
 
 | Material | Count | Brightness vs FR4 | Colour behaviour |
 |---|---|---|---|
-| P — bare FR4 | 14 | 100% | crisp, true RGB |
-| B — single mask | 9 | ~10% | fuzzy, larger halo with a yellow-green rim; red passes well, blue shifts to teal, yellow goes olive |
-| L — double mask | 14 | ~5% | as B, dimmer and smaller |
+| P — bare FR4 | 14 | 100% | crisp; red, orange, yellow and green true; blue reads sky blue at hue 240 only (195–230 cyan), 270 pale lavender, 285–315 pink; every white cream |
+| B — single mask | 9 | ~10% | fuzzy, larger halo with a yellow-green rim; red passes well, 240 stays blue, yellow goes lime, white goes mint green |
+| L — double mask | 14 | ~5% | as B, dimmer and smaller; orange goes brown, pink and lavender fade to grey |
+
+The mask is matte black. The panel, not the LEDs, shifts blue: a bare LED shows pure blue, and
+through the FR4 the same LED reads cyan-blue (the laminate dims blue and likely fluoresces
+green-yellow under it). The colour map is 40 colours on every kind of dot, photographed; its
+readings are `tools/lights/panel_colours.json`, which the wiki's animations are drawn from.
 
 The gap cannot be closed: even at full drive a B dot reaches about half an FR4 dot and an L dot
 about a quarter, at a current rev A cannot hold as a steady state (no hardware current limit).
@@ -125,14 +130,19 @@ Spin's 60% hold is the exception.
 
 Every pattern uses the array: position drives sweeps, ripples and the print head, and each dot
 carries a fixed per-dot variation (a hash of its row and column) in phase, period and hue, so no
-state reads as one big LED. Hue offsets stay inside each state's colour family.
+state reads as one big LED. Hue offsets stay inside each state's colour family. Setup's pairing
+blink is the one pattern that flashes every dot together; its dots still differ in hue.
+
+**The palette's rules** (from the colour map): red means a failure and nothing else (330 round
+to 15 all read red); blue is hue 240 exactly; there is no purple; white goes on the FR4 dots
+only, since under the mask it turns mint.
 
 | State | Dots | Pattern |
 |---|---|---|
 | Booting | all; mask at 4× | **Spin**: a full-saturation hue wheel around the test button, spinning up from dark (dots fade in by distance), then collapsing inward to the test button: the far dots go first and the centre last, over 1.3 s from when the board settles (so a board settled by 1.7 s ends dark at 3.0 s, as before). While it waits longer, the wheel keeps turning at its 2.5 s pace (100°/s) and eases to 60% between 3 and 4 s, which also keeps the draw down while Wi-Fi joins. |
-| Setup | FR4 only | blue (hue 220° ±16° per dot, drifting ±6°) **radar sweep**: an arm turns around the test button once per 2.6 s; each dot flares to 100% as it passes and decays behind it (e-folding over 55°), floor 9% |
+| Setup | FR4 only | sky blue (hue 240° ±6° per dot, drifting ±3°) **pairing blink**: a 25% glow, and every 2.4 s every dot flashes to 100% twice together (90 ms and 390 ms in, ±70 ms), like a gadget waiting to pair. (A radar sweep, an arm turning round the test button, never read on the scattered FR4 dots.) |
 | Setup, phone joined | FR4 only | the same blues, steady at 88% with a per-dot shimmer of ±12% on its own 3–5.5 s period |
-| Joining Wi-Fi | FR4 only | blue (hue 215° ±18°) **rings pulsing outward** from the test button every 0.9 s, 10% floor, 100% at the ring |
+| Joining Wi-Fi | FR4 only | sky blue (hue 240° ±6°) **rings pulsing outward** from the test button every 0.9 s, 10% floor, 100% at the ring |
 | Wi-Fi connected | FR4 only | the first moments of a Ready entered from Joining, or from Booting on the first power-on after Wi-Fi was saved (`greeted`): a green field (hue 130° ±14°) with a ripple outward over 1.4 s, held, then cross-fading to Ready's white between 2.2 s and 3.2 s. Green means "connected, or it worked" (W-1049, FeatherFrame's green): here, Wi-Fi; as a sweep and a glow between the sockets, "this cable works" (W-1055). |
 | Ready | FR4 only | **neutral white**, each dot slightly warm or cool, breathing on its own 5–9 s period between 43% and 100% (first tuned at 16–38%, which peaked under 6 counts and was invisible in daylight on board 1, then 30–70%, still too dim; 43–100% is 2.2× the drive of that). (Colour tweaks made on 10-14/15 were judged while the board was actually in Printer offline, so they were reverted to this.) |
 | Ready, gamer mode | FR4 only | DIP7 on: hue from position plus time, a slow RGB drift (one wheel per ~14 s), saturation 75%, the same breathing (7% + 93% of it) |
@@ -168,17 +178,18 @@ renderer itself (the W-1049 panel-patterns page), with four held back (below).
 
 | Colour | Means | On FeatherFrame |
 |---|---|---|
-| blue | setting up, joining | the setup portal, joining |
+| sky blue (hue 240) | setting up, joining | the setup portal, joining |
 | green | connected, or it worked | on Wi-Fi, paired |
 | amber, orange | needs a person, or not now | waiting to be added |
-| purple | updating firmware | writing an update |
+| pink, with a lavender shimmer | updating firmware | writing an update (purple there; the panel has no purple) |
 | red | something went wrong | the join failed, no Wi-Fi |
 | white | ready, done, taken | (off in normal running) |
-| the six stripes | LocalTalk | — |
+| the four stripes | LocalTalk | — |
 
-The boot stays AirWriter's RGB Spin (FeatherFrame breathes white). The six stripes are the
-classic Apple logo's, top to bottom over the eight rows: hue 104°, 41°, 28°, 358°, 299°, 197°
-(stripe `⌊(row + 0.5)·6/8⌋`), saturation 85%, ±4° per dot.
+The boot stays AirWriter's RGB Spin (FeatherFrame breathes white). The stripes are the classic
+Apple logo's without its red and purple (red is for failures, and purple reads as the update's
+pink), top to bottom over the eight rows, two rows each: hue 104°, 55°, 28°, 240° (stripe
+`⌊(row + 0.5)·4/8⌋`), saturation 85%, ±4° per dot.
 
 **The sockets are on the bottom edge**: the printer (J2) under column 0.9, LocalTalk (J4) under
 column 3.2, USB-C under 5.5. A pattern about a cable starts at its socket, drawn from row 8.6,
@@ -230,11 +241,11 @@ stripes show across the panel, not only near the head).
 
 | Task | When | Pattern |
 |---|---|---|
-| Firmware downloading / installing | an update is arriving or being written; arg is progress 0..1000 | purple (hue 280° ±10°, saturation 90%) fills the FR4 dots from the bottom: the level's line sits at row `8 − 8.6p`, soft over one row; below it 56%, plus a shimmer band (+37%, to 100%) running up through the filled part every 0.8 s; above it 7%. Mask dark. |
-| … length unknown | arg is `LG_PROGRESS_NONE` | a purple band (100% over a 12% floor) climbs from below the grid to above it every 1.2 s |
-| Verifying | the image is in; checking it | the FR4 dots pulse purple, 35% to 100%, every 0.8 s, each dot offset up to 250 ms |
-| Verified | installed, set to boot | green (100%) rises through the purple (71%) from the bottom in 0.5 s, holds, fades out 1.2–2.0 s; dark until the restart |
-| TashTalk flashing | the PIC is being written (about 2 s) | the six stripes at 35% on all dots, with a white bar sweeping left to right across the columns every 0.5 s |
+| Firmware downloading / installing | an update is arriving or being written; arg is progress 0..1000 | pink (hue 300° ±8°, saturation 90%) fills the FR4 dots from the bottom: the level's line sits at row `8 − 8.6p`, soft over one row; below it 56%, with a lavender (hue 270° ±4°) shimmer band running up through the filled part every 0.8 s, mixing to full lavender at its crest; above it 7%. Mask dark. |
+| … length unknown | arg is `LG_PROGRESS_NONE` | a lavender band climbs from below the grid to above it every 1.2 s over a 12% pink floor |
+| Verifying | the image is in; checking it | the FR4 dots pulse pink, 35% to 100%, every 0.8 s, each dot offset up to 250 ms |
+| Verified | installed, set to boot | green (100%) rises through the pink (71%) from the bottom in 0.5 s, holds, fades out 1.2–2.0 s; dark until the restart |
+| TashTalk flashing | the PIC is being written (about 2 s) | the four stripes at 35% on all dots, with a white bar sweeping left to right across the columns every 0.5 s |
 | TashTalk OK | the flash verified | a green ripple out of the LocalTalk socket, crossing the panel in 0.9 s and leaving a 35% wash behind, fading out 0.8–1.6 s; then the state |
 | TashTalk failed | the flash failed | Job failed's red glitch and pulse for 3 s, then the state |
 
@@ -248,7 +259,7 @@ holds until the restart. The update's own flow decides when; W-1048 drives it.
 | LocalTalk on | the node has its node ID (at boot in DIP mode 2, or when mode 2 is switched on) | the stripes rise out of the LocalTalk socket: a front climbs from row 8.5 to −1.5 in 0.7 s, rows below it at 72% with a crest to 100%; holds; fades out 1.0–1.6 s. All dots. | 1.6 s |
 | A Mac heard | an NBP LkUp answered (a Chooser looking), or a frame from a node not heard since boot; at most once every 6 s | an arc of stripes out of the LocalTalk socket, crossing the panel in 0.9 s (100% at the crest, ±0.7 rows), fading out 0.8–1.1 s. All dots. | 1.1 s |
 | Busy | the test button tapped during an IPP or LocalTalk job | two orange pulses (hue 30° ±4°, 300 ms each, peak 100%) on the dots around the test button (distance 0.5–1.6) | 0.6 s |
-| Saved | settings saved on the web page; for Wi-Fi, just before its restart | a white ring closes into the test button in 0.6 s (100% at the ring), then the dots around the button glow 75% and fade out by 0.9 s | 0.9 s |
+| Saved | settings saved on the web page; for Wi-Fi, just before its restart | a white ring closes into the test button in 0.6 s (100% at the ring), then the dots around the button glow 75% and fade out by 0.9 s. FR4 only: under the mask white turns mint. | 0.9 s |
 
 **The test button.** A tap while the test page prints cancels it: the page stops (the write is
 aborted and the queue purged, as a Cancel-Job does), it ends as cancelled, and W-1041's resync
@@ -406,7 +417,7 @@ On board 1:
 - W-1049, each by eye: printer cable out and in (gone, back); a job to the end (page out); the
   test button tapped twice (cancelled) and during a phone job (Busy); a LocalTalk job (stripes);
   DIP mode 2 on (LocalTalk on) and the Chooser open on the Mac (A Mac heard); a TashTalk flash;
-  an OTA once W-1048 is in (purple fill, verified, restart); settings saved; Wi-Fi credentials
+  an OTA once W-1048 is in (pink fill, verified, restart); settings saved; Wi-Fi credentials
   for a network that isn't there (could not join, then Setup).
 
 ## Out of scope

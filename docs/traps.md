@@ -35,7 +35,12 @@ Traps already explained in a code comment are listed only when the comment is ea
   apart, W-1060's frame log). It is pinned to core 1 and creates the strip there, so the RMT
   interrupt is on core 1 too. An unpinned task is not "free to use the idle core".
 - **Rev A has no hardware LED current limit.** `LG_BRIGHTNESS_CAP` and friends in
-  `led_grid_core.h` are the only limit on 37 SK6812s; raise them knowingly.
+  `led_grid_core.h` are the only limit on 37 SK6812s; raise them knowingly. All 37 lit at
+  about the boot Spin's heaviest draw measured 5.2 V, 0.461 A for the whole board.
+- **The panel is not true RGB.** Through the FR4, blue reads cyan except at hue 240 (sky blue),
+  270 is pale lavender, 285 onward pink, and there is no purple; under the mask white turns
+  mint. Pick colours from the measured map (`tools/lights/panel_colours.json`, the
+  status-language spec's material table), not from a screen.
 - **A raw pyserial open on macOS drops the S3 into download mode** (the driver asserts DTR at
   open). Read the console only with `idf.py monitor` under `script` (AGENTS.md, bench rules).
 - **An image built without W-1046 is rolled back at its next reboot** when a W-1046 image

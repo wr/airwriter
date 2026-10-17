@@ -47,14 +47,17 @@ What works on `main`:
   `CONFIG_AIRWRITER_STALL_ABORT` (600 s).
 - After an aborted job the next one resyncs the printer first (1280 NULs + CTRL-X); a printer
   left busy by line noise at power-up gets a CTRL-X.
-- The 37-dot status panel per the status-language spec: Spin at boot, discrete printer and Wi-Fi
-  states, per-dot white Ready, DIP7 gamer RGB, and after 5 min idle one dot breathing like an
-  old Mac laptop's sleep light, a new dot each breath. W-1049 puts the board's actions on it in FeatherFrame's colours: tasks (firmware update, TashTalk flash) beside the
-  reset, moments opening states (printer gone and back, page out, cancelled, could not join),
+- The 37-dot status panel per the status-language spec, in the palette picked from the panel's
+  measured colour map (red only for failures, sky blue for Wi-Fi, pink for updates): Spin at boot,
+  discrete printer and Wi-Fi states, per-dot white Ready, DIP7 gamer RGB, and after 5 min idle one
+  dot breathing like an old Mac laptop's sleep light, a new dot each breath. W-1049 puts the
+  board's actions on it in FeatherFrame's colours: tasks (firmware update, TashTalk flash) beside
+  the reset, moments opening states (printer gone and back, page out, cancelled, could not join),
   short acknowledgements (LocalTalk on, a Mac heard, Busy, Saved), and LocalTalk jobs inked in the
-  six Apple stripes. `led_grid_action()` per family, `led_grid_blip()`, `led_grid_set_source()`.
-  A quiet power-on: the Spin alone until Wi-Fi is up and the printer line has settled (3–30 s),
-  then straight into the state; the Wi-Fi green only after a fresh setup or a real rejoin.
+  Apple stripes without red and purple. `led_grid_action()` per family, `led_grid_blip()`,
+  `led_grid_set_source()`. A quiet power-on: the Spin alone until Wi-Fi is up and the printer line
+  has settled (3–30 s), then straight into the state; the Wi-Fi green only after a fresh setup or
+  a real rejoin.
 - DIP switches read by their printed numbers; a tap of the `test` button prints a test page, or
   with the printer not ready runs the cable test; a second tap cancels the test page; a tap during
   another job shows Busy.

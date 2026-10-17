@@ -155,12 +155,14 @@ static lg_c3 spin(float dist, float ang, float t, int out, float e)
     return hsv(ang + turn, 0.9f, v);
 }
 
-// LocalTalk's colours: the six stripes of the classic Apple logo, top to
-// bottom over the panel's eight rows.
+// LocalTalk's colours: the stripes of the classic Apple logo without its red
+// and purple, top to bottom over the panel's eight rows, two rows each. Red
+// is for failures only, and through the panel purple reads as the firmware
+// update's pink.
 static lg_c3 stripe(int r, int c)
 {
-    static const float hue[6] = { 104, 41, 28, 358, 299, 197 };
-    int k = (int)(((float)r + 0.5f) * 6.0f / LG_ROWS);
+    static const float hue[4] = { 104, 55, 28, 240 };
+    int k = (int)(((float)r + 0.5f) * 4.0f / LG_ROWS);
     return hsv(hue[k] + (dot_hash(r, c, 3) - 0.5f) * 8, 0.85f, 1);
 }
 
@@ -228,22 +230,23 @@ static lg_c3 state_dot(const ps_view_t *v, const lg_opts_t *o, int i, uint32_t t
         return spin(dist, ang, (float)s / 1000.0f, v->spin_out, (float)v->spin_out_ms / 1000.0f);
 
     case PS_SETUP: {
-        float hue = jitter(r, c, 220, 16, t, 6);
+        float hue = jitter(r, c, 240, 6, t, 3);     // blue is one hue wide on the panel
         if (v->phone_joined) {
             uint32_t period = 3000 + (uint32_t)(h1 * 2500);
             float lvl = 0.88f + 0.12f * sinf(TAU * (float)(t % period) / (float)period + h2 * TAU);
             return hsv(hue, 0.85f, lvl);
         }
-        // Radar sweep: the arm turns once per 2.6 s; a dot flares as it passes
-        // and decays behind it.
-        float arm = (float)(t % 2600) / 2600.0f * 360.0f;
-        float behind = fmodf(fmodf(arm - ang, 360.0f) + 360.0f, 360.0f);
-        return hsv(hue, 0.85f, 0.09f + 0.91f * expf(-behind / 55.0f));
+        // Pairing blink: a low steady glow, and every 2.4 s all the dots flash
+        // twice together, like a gadget waiting to pair. (The radar sweep it
+        // replaced never read on the panel's scattered clear dots.)
+        uint32_t ph = t % 2400;
+        float flash = gauss(((float)ph - 90) / 70.0f, 1) + gauss(((float)ph - 390) / 70.0f, 1);
+        return hsv(hue, 0.85f, 0.25f + 0.75f * clampf(flash));
     }
 
     case PS_JOINING: {
         float ring = (float)(t % 900) / 900.0f * 4.8f;          // outward from the test button
-        return hsv(jitter(r, c, 215, 18, t, 0), 0.85f, 0.10f + 0.90f * gauss(dist - ring, 1.1f));
+        return hsv(jitter(r, c, 240, 6, t, 0), 0.85f, 0.10f + 0.90f * gauss(dist - ring, 1.1f));
     }
 
     case PS_READY: {
@@ -329,9 +332,11 @@ static lg_c3 screen(lg_c3 a, lg_c3 b)
                    1 - (1 - clampf(a.b)) * (1 - clampf(b.b))};
 }
 
-// Green says connected, or it worked (FeatherFrame's); purple, updating.
+// Green says connected, or it worked (FeatherFrame's); pink with a lavender
+// shimmer, updating. (The panel has no purple: 270 reads lavender, 285 on pink.)
 static lg_c3 green_of(int r, int c, uint32_t t) { return hsv(jitter(r, c, 130, 14, t, 0), 0.8f, 1); }
-static lg_c3 purple_of(int r, int c, uint32_t t) { return hsv(jitter(r, c, 280, 10, t, 0), 0.9f, 1); }
+static lg_c3 pink_of(int r, int c, uint32_t t) { return hsv(jitter(r, c, 300, 8, t, 0), 0.9f, 1); }
+static lg_c3 lavender_of(int r, int c, uint32_t t) { return hsv(jitter(r, c, 270, 4, t, 0), 0.9f, 1); }
 
 static int join_failed(const ps_view_t *v)      // its two red pulses, before Setup fades in
 {
@@ -473,17 +478,17 @@ static lg_c3 reset_fill(int r, int c, float p, uint32_t s, uint32_t t)
     return hsv(hue, 1, lvl > 0.05f ? lvl : 0.05f);
 }
 
-// The firmware fill at p (0..1): purple rising from the bottom like a level,
-// soft over a row, with a quick shimmer running up through it every 0.8 s
+// The firmware fill at p (0..1): pink rising from the bottom like a level,
+// soft over a row, with a lavender shimmer running up through it every 0.8 s
 // (FeatherFrame's "working" pace) that peaks at 100%.
-static float fw_fill(int r, float p, uint32_t t)
+static lg_c3 fw_fill(int r, int c, float p, uint32_t t)
 {
     float line = 8.0f - p * 8.6f;
     float in = ss(-0.5f, 0.5f, (float)r - line);
     float span = 8.0f - line;
     float band = 8.0f - (float)(t % 800) / 800.0f * (span + 1.0f);
-    float shimmer = span > 0.3f ? 0.37f * gauss((float)r - band, 0.6f) : 0;
-    return 0.07f + in * (0.56f + shimmer);
+    float shimmer = span > 0.3f ? gauss((float)r - band, 0.6f) : 0;
+    return mix(sc(pink_of(r, c, t), 0.07f + in * 0.56f), lavender_of(r, c, t), in * shimmer);
 }
 
 static void task_frame(const lg_slot_t *k, uint32_t t, uint16_t out[LG_NUM_LEDS][3])
@@ -531,24 +536,23 @@ static void task_frame(const lg_slot_t *k, uint32_t t, uint16_t out[LG_NUM_LEDS]
         case LG_ACT_FW_DOWNLOADING:
         case LG_ACT_FW_INSTALLING: {
             if (!fr4) break;
-            float lvl;
-            if (k->arg == LG_PROGRESS_NONE) {           // length unknown: a band climbs
+            if (k->arg == LG_PROGRESS_NONE) {           // length unknown: a lavender band climbs
                 float band = 9.0f - (float)(t % 1200) / 1200.0f * 11.0f;
-                lvl = 0.12f + 0.88f * gauss((float)r - band, 1.0f);
+                col = mix(sc(pink_of(r, c, t), 0.12f), lavender_of(r, c, t),
+                          gauss((float)r - band, 1.0f));
             } else {
-                lvl = fw_fill(r, (float)(k->arg > 1000 ? 1000 : k->arg) / 1000.0f, t);
+                col = fw_fill(r, c, (float)(k->arg > 1000 ? 1000 : k->arg) / 1000.0f, t);
             }
-            col = sc(purple_of(r, c, t), lvl);
             break;
         }
         case LG_ACT_FW_VERIFYING:
-            if (fr4) col = sc(purple_of(r, c, t),
+            if (fr4) col = sc(pink_of(r, c, t),
                               pulse(t + (uint32_t)(dot_hash(r, c, 1) * 250), 800, 0.35f, 1));
             break;
-        case LG_ACT_FW_VERIFIED: {                      // green rises through the purple
+        case LG_ACT_FW_VERIFIED: {                      // green rises through the pink
             if (!fr4) break;
             float edge = 8.5f - (float)s / 500.0f * 10.0f;
-            col = mix(sc(purple_of(r, c, t), 0.71f), green_of(r, c, t),
+            col = mix(sc(pink_of(r, c, t), 0.71f), green_of(r, c, t),
                       ss(-0.5f, 0.5f, (float)r - edge));
             col = sc(col, 1 - ss(1200, LG_FW_VERIFIED_MS, (float)s));
             break;
@@ -612,6 +616,7 @@ static lg_c3 blip_dot(uint8_t blip, uint32_t ms, int i, uint32_t t)
         return hsv(jitter(r, c, 30, 4, t, 0), 1, x * x);
     }
     case LG_BLIP_SAVED: {           // a white ring closes into the test button
+        if (LG_MAP[i].mat != 'P') return DARK;      // under the mask white turns mint
         if (s < 600)
             return sc(white_of(r, c), gauss(dist - 4.5f * (1 - s / 600.0f), 0.5f));
         return sc(white_of(r, c), dist < 1.6f ? 0.75f * (1 - ss(600, LG_BLIP_SAVED_MS, s)) : 0);
