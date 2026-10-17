@@ -34,6 +34,35 @@ void iw_row(iw_t *w, const uint8_t *bits);
 void iw_end_page(iw_t *w);
 void iw_transpose(const uint8_t *rows[8], uint8_t *cols, uint32_t width_dots);
 
+// Colour (W-1064). The colour ribbon has yellow, magenta, cyan and black
+// bands, chosen by ESC K 1, 2, 3 and 0 (Table 8-6, p. 123). A strip prints
+// one pass per ink it uses, the same columns again after a CR with no LF --
+// the Technical Reference's fastest way to print colour graphics -- yellow
+// first so darker ink on the paper does not dirty the yellow band. Inks are
+// numbered in that print order.
+typedef enum { IW_YELLOW, IW_MAGENTA, IW_CYAN, IW_BLACK, IW_INKS } iw_ink_t;
+
+typedef struct {
+    uint32_t  width_dots;
+    iw_out_fn out;
+    void     *ctx;
+    uint8_t   rows[IW_INKS][8][(IW_MAX_DOTS + 7) / 8];
+    uint32_t  nrows;
+    uint8_t   cols[IW_MAX_DOTS];
+    uint32_t  held_lf;  // LFs owed before the next strip that prints anything
+    int       ink;      // the ink selected now; -1 before the page's first
+} iwc_t;
+
+// As iw_*, with one 1bpp row per ink. A pass stops at its ink's last dot
+// (a shorter ESC G count): at 9600 baud a full-width pass costs 1.2 s, and
+// colour passes are mostly sparse. An ink with no dots in a strip is not
+// printed, and a strip with none at all only moves the paper. The page ends
+// with black selected, so the stream leaves the printer as ESC c found it.
+void iwc_init(iwc_t *w, uint32_t width_dots, iw_out_fn out, void *ctx);
+void iwc_begin_page(iwc_t *w);
+void iwc_row(iwc_t *w, const uint8_t *const bits[IW_INKS]);
+void iwc_end_page(iwc_t *w);
+
 // Recovery from a stream cut mid-command (W-1041). A job aborted mid-page --
 // cancelled, its transfer cut, or a stall -- stops wherever it was, almost
 // always inside a strip's 1152 column bytes. The printer is then still
@@ -55,12 +84,29 @@ typedef struct {
     int started;   // the current job has sent its first byte
 } iw_link_t;
 
+// Which ribbon is in, from the printer's self-ID (W-1064). ESC ? makes it
+// send "IW10CF" (Table 6-7, pp. 88-89): IW, the carriage width in inches,
+// then C only with a colour ribbon in and F only with a SheetFeeder fitted.
+// The colour option turns on by itself when the colour ribbon goes in (p. 123).
+typedef enum {
+    IW_RIBBON_UNKNOWN = 0,   // no reply, or not one we can read
+    IW_RIBBON_BLACK   = 1,
+    IW_RIBBON_COLOUR  = 2,
+} iw_ribbon_t;
+
+// Reads a reply to ESC ?. Bit 7 is ignored (the printer sends space parity)
+// and anything ahead of "IW" is skipped, so line noise does not hide it.
+iw_ribbon_t iw_self_id_ribbon(const uint8_t *reply, size_t n);
+
 void iw_link_job_start(iw_link_t *l);
 // Before each write of a job's bytes. 1 at most once per job, before its first
 // byte, when the last stream was cut: send iw_resync first.
 int  iw_link_need_resync(iw_link_t *l);
 // clean: every byte of the job was queued and its last page ended normally.
 void iw_link_job_end(iw_link_t *l, int clean);
+// An iw_resync went out between jobs, all of it (W-1064: the ribbon check
+// sends one before ESC ?, which a printer mid-graphics would take as dots).
+void iw_link_resynced(iw_link_t *l);
 
 // Where a stream someone else wrote stands between commands (W-1053). A
 // LocalTalk job is the Mac driver's own ImageWriter stream, passed through,

@@ -10,6 +10,8 @@
 // sending 300 -- so no RS300 fallback is advertised.
 #define IPP_URF_VERSION   "V1.4"
 #define IPP_URF_STRING    IPP_URF_VERSION ",CP1,RS72-144,W8,DM1,IS1,MT1,FN3"
+// With the colour ribbon in (W-1064): 24-bit sRGB pages too.
+#define IPP_URF_STRING_COLOUR IPP_URF_VERSION ",CP1,RS72-144,W8,SRGB24,DM1,IS1,MT1,FN3"
 
 typedef struct {
     const char *uri;        // ipp://host.local:631/ipp/print
@@ -24,6 +26,7 @@ typedef struct {
     int         accepting_jobs;
     int32_t     queued_jobs;
     uint32_t    uptime_s;
+    int         colour;             // the colour ribbon is in: offer colour (W-1064)
 } ipp_printer_t;
 
 typedef struct {

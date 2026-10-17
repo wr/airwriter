@@ -14,6 +14,12 @@ typedef struct {
     uint8_t  *bits;
     uint32_t  dst_w;
     uint32_t  y;
+    // A colour page (W-1064): one halftoner, plane and 1bpp row per ink.
+    iwc_t    *iwc;
+    ht_t      ht_ink[IW_INKS];
+    uint8_t  *plane[IW_INKS];
+    uint8_t  *ibits[IW_INKS];
+    uint8_t  *gray;          // an RGB row as gray, for a black ribbon
 } pipe_t;
 
 static void say(const ripjob_cfg_t *cfg, const char *fmt, ...)
@@ -41,6 +47,27 @@ static void on_row(void *ctx, const uint8_t *row, uint32_t w)
     p->y++;
 }
 
+// One resampled RGB row of a colour page: split it into inks, halftone each,
+// and hand the four rows to the colour strip writer.
+static void on_rgb_row(void *ctx, const uint8_t *row, uint32_t w)
+{
+    pipe_t *p = (pipe_t *)ctx;
+    ink_split(row, w, p->plane);
+    for (int i = 0; i < IW_INKS; i++) ht_row(&p->ht_ink[i], p->plane[i], p->ibits[i]);
+    const uint8_t *const *bits = (const uint8_t *const *)p->ibits;
+    if (p->cfg->ink_row) p->cfg->ink_row(p->cfg->row_ctx, bits, w, p->y);
+    iwc_row(p->iwc, bits);
+    p->y++;
+}
+
+// URF colour spaces that are plain RGB: 1 sRGB, 3 AdobeRGB, 5 device RGB.
+// 2 (CIELab) also has three colours and is not.
+static int is_rgb(const urf_page_t *pg)
+{
+    return pg->bits_per_pixel == 24 && pg->num_colors == 3 &&
+           (pg->colorspace == 1 || pg->colorspace == 3 || pg->colorspace == 5);
+}
+
 int ripjob_run(urf_t *u, const ripjob_cfg_t *cfg, ripjob_stats_t *st)
 {
     pipe_t p;
@@ -50,12 +77,15 @@ int ripjob_run(urf_t *u, const ripjob_cfg_t *cfg, ripjob_stats_t *st)
     int pages = 0, rc;
 
     while ((rc = urf_next_page(u)) == URF_OK) {
-        if (u->page.bits_per_pixel != 8 || u->page.num_colors != 1) {
-            say(cfg, "page %d is %u bpp / %u colours; only 8-bit grayscale is supported",
-                pages + 1, u->page.bits_per_pixel, u->page.num_colors);
+        int rgb = is_rgb(&u->page);
+        if (!rgb && (u->page.bits_per_pixel != 8 || u->page.num_colors != 1)) {
+            say(cfg, "page %d is %u bpp / %u colours (space %u); only 8-bit grayscale "
+                     "and 24-bit RGB are supported",
+                pages + 1, u->page.bits_per_pixel, u->page.num_colors, u->page.colorspace);
             rc = -1;
             break;
         }
+        int colour = rgb && cfg->colour;
 
         uint32_t res    = u->page.res_x ? u->page.res_x : RIPJOB_DPI_X;
         uint32_t full_w = (uint32_t)((uint64_t)u->page.width * RIPJOB_DPI_X / res);
@@ -106,31 +136,61 @@ int ripjob_run(urf_t *u, const ripjob_cfg_t *cfg, ripjob_stats_t *st)
          * breaking directly, so nothing allocated for this page is ever
          * leaked and ht_free/rs_free only run on state that was actually
          * initialised. */
-        int  ht_ready = 0, rs_ready = 0;
+        int  ht_ready = 0, inks_ready = 0, rs_ready = 0;
         rs_t rs;
 
-        p.bits = calloc((dst_w + 7) / 8, 1);
-        if (!p.bits) { rc = -1; goto page_cleanup; }
+        if (colour) {
+            p.iwc = calloc(1, sizeof *p.iwc);
+            if (!p.iwc) { rc = -1; goto page_cleanup; }
+            for (; inks_ready < IW_INKS; inks_ready++) {
+                int i = inks_ready;
+                p.plane[i] = malloc(dst_w);
+                p.ibits[i] = calloc((dst_w + 7) / 8, 1);
+                if (!p.plane[i] || !p.ibits[i] || ht_init(&p.ht_ink[i], cfg->dither, dst_w)) {
+                    rc = -1; goto page_cleanup;
+                }
+            }
+            iwc_init(p.iwc, dst_w, cfg->out, cfg->out_ctx);
+            iwc_begin_page(p.iwc);
+            if (rs_init_n(&rs, src_w, u->page.height, dst_w, dst_h, 3, on_rgb_row, &p)) {
+                rc = -1; goto page_cleanup;
+            }
+        } else {
+            p.bits = calloc((dst_w + 7) / 8, 1);
+            if (!p.bits) { rc = -1; goto page_cleanup; }
+            if (rgb && !(p.gray = malloc(src_w))) { rc = -1; goto page_cleanup; }
 
-        if (ht_init(&p.ht, cfg->dither, dst_w)) { rc = -1; goto page_cleanup; }
-        ht_ready = 1;
-        iw_init(&p.iw, dst_w, cfg->out, cfg->out_ctx);
-        iw_begin_page(&p.iw);
+            if (ht_init(&p.ht, cfg->dither, dst_w)) { rc = -1; goto page_cleanup; }
+            ht_ready = 1;
+            iw_init(&p.iw, dst_w, cfg->out, cfg->out_ctx);
+            iw_begin_page(&p.iw);
 
-        if (rs_init(&rs, src_w, u->page.height, dst_w, dst_h, on_row, &p)) {
-            rc = -1; goto page_cleanup;
+            if (rs_init(&rs, src_w, u->page.height, dst_w, dst_h, on_row, &p)) {
+                rc = -1; goto page_cleanup;
+            }
         }
         rs_ready = 1;
 
         {
             const uint8_t *row;
             int r;
-            // 8-bit grayscale, one byte per pixel: the pointer offset is the
-            // pixel offset.
-            while ((r = urf_next_row(u, &row)) == URF_OK) rs_push(&rs, row + crop_left);
+            // One byte per pixel for gray and three for RGB, so the crop is
+            // that many bytes per pixel in.
+            while ((r = urf_next_row(u, &row)) == URF_OK) {
+                if (!rgb) {
+                    rs_push(&rs, row + crop_left);
+                } else if (colour) {
+                    rs_push(&rs, row + crop_left * 3);
+                } else {
+                    ink_gray(row + crop_left * 3, src_w, p.gray);
+                    rs_push(&rs, p.gray);
+                }
+            }
             if (r < 0) {
                 say(cfg, "page %d incomplete, stream is truncated", pages + 1);
                 rc = r;
+            } else if (colour) {
+                iwc_end_page(p.iwc);
             } else {
                 iw_end_page(&p.iw);
             }
@@ -141,6 +201,18 @@ page_cleanup:
         if (ht_ready) ht_free(&p.ht);
         free(p.bits);
         p.bits = NULL;
+        free(p.gray);
+        p.gray = NULL;
+        // A colour setup that failed part way left plane, ibits and ht of
+        // ink inks_ready allocated or not; free() takes NULL, and ht_free
+        // only runs on the ones initialised.
+        for (int i = 0; i < IW_INKS; i++) {
+            if (i < inks_ready) ht_free(&p.ht_ink[i]);
+            free(p.plane[i]); free(p.ibits[i]);
+            p.plane[i] = p.ibits[i] = NULL;
+        }
+        free(p.iwc);
+        p.iwc = NULL;
 
         pages++;
         if (rc < 0) break;

@@ -43,6 +43,8 @@ typedef struct {
     // so the panel should wake. Deliberately not called for
     // Get-Printer-Attributes, which Home Assistant polls every 30 s. May be NULL.
     void          (*on_job_op)(void);
+    // The colour ribbon is in at start: advertise colour (W-1064).
+    int             colour;
 } ipp_server_cfg_t;
 
 // Starts the HTTP server and publishes the mDNS records. Call after the
@@ -65,3 +67,8 @@ void ipp_server_job_done(int ok);
 // what turns a stalled HSKo line into an alert on the phone -- SPEC.md 3.9.
 // The strings must outlive the call: pass literals.
 void ipp_server_set_stopped(const char *reason_or_null, const char *message);
+
+// The colour ribbon came or went (W-1064). The printer attributes change at
+// once and the TXT record's Color and URF keys are re-announced, all under
+// the same printer-uuid. Any task.
+void ipp_server_set_colour(int on);

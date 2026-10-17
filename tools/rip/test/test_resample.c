@@ -15,6 +15,44 @@ static void collect(void *ctx, const uint8_t *row, uint32_t w)
     got_n++;
 }
 
+/* Rows from a multi-channel resampler, and from one per channel. */
+static uint8_t gotn[MAXROWS][3 * MAXW];
+static uint32_t gotn_n;
+static void collect_n(void *ctx, const uint8_t *row, uint32_t w)
+{
+    (void)ctx;
+    if (gotn_n < MAXROWS) memcpy(gotn[gotn_n], row, 3 * w);
+    gotn_n++;
+}
+
+/* Resamples a w x h 3-channel source to dw x dh both ways and checks every
+ * channel of every row agrees with a 1-channel resample of that plane. */
+static void check_three_vs_singles(const uint8_t *src, uint32_t w, uint32_t h,
+                                   uint32_t dw, uint32_t dh)
+{
+    rs_t r;
+    gotn_n = 0;
+    CHECK_EQ_INT(rs_init_n(&r, w, h, dw, dh, 3, collect_n, NULL), 0);
+    for (uint32_t y = 0; y < h; y++) CHECK_EQ_INT(rs_push(&r, src + y * w * 3), 0);
+    rs_free(&r);
+    CHECK_EQ_INT(gotn_n, dh);
+
+    for (uint32_t c = 0; c < 3; c++) {
+        uint8_t plane[MAXW];
+        got_n = 0;
+        CHECK_EQ_INT(rs_init(&r, w, h, dw, dh, collect, NULL), 0);
+        for (uint32_t y = 0; y < h; y++) {
+            for (uint32_t x = 0; x < w; x++) plane[x] = src[(y * w + x) * 3 + c];
+            rs_push(&r, plane);
+        }
+        rs_free(&r);
+        CHECK_EQ_INT(got_n, dh);
+        for (uint32_t y = 0; y < dh; y++)
+            for (uint32_t x = 0; x < dw; x++)
+                CHECK_EQ_INT(gotn[y][x * 3 + c], got[y][x]);
+    }
+}
+
 int main(void)
 {
     /* -- 2:1 downscale in both axes, box averaged -- */
@@ -135,6 +173,16 @@ int main(void)
         CHECK_EQ_INT(got[1][6], 140);
         CHECK_EQ_INT(got[1][7], 140);
         rs_free(&r);
+    }
+
+    /* -- three_channels_match_three_singles: interleaved RGB, down and up -- */
+    {
+        uint8_t src[7 * 5 * 3];
+        uint32_t v = 12345;
+        for (size_t i = 0; i < sizeof src; i++) { v = v * 1103515245u + 12345u; src[i] = (uint8_t)(v >> 16); }
+        check_three_vs_singles(src, 7, 5, 3, 2);
+        check_three_vs_singles(src, 7, 5, 14, 10);
+        check_three_vs_singles(src, 7, 5, 7, 5);
     }
 
     TEST_END;

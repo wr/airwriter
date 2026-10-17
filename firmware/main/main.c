@@ -286,11 +286,91 @@ static void printer_out(void *ctx, const uint8_t *buf, size_t n)
     if (serial_out_write(buf, n) != ESP_OK) printer_fail();
 }
 
+// ------------------------------------------------------------- ribbon
+// W-1064: which ribbon is in, from the printer's self-ID. What AirPrint
+// clients see follows it (the colour attributes and TXT keys, same UUID), and
+// RGB pages print in colour only while it says colour. Saved, so a restart
+// advertises what the printer last said instead of black until it answers.
+static volatile uint8_t    s_ribbon;        // iw_ribbon_t
+static volatile int        s_ribbon_want;   // ask the idle printer, from s_ribbon_due on
+static volatile TickType_t s_ribbon_due;
+static volatile TickType_t s_line_low_at;   // when HSKo last went false
+static volatile int        s_line_seen;     // serial_out has reported the line
+
+static const char *ribbon_name(uint8_t r)
+{
+    return r == IW_RIBBON_COLOUR ? "colour" : r == IW_RIBBON_BLACK ? "black" : "unknown";
+}
+
+// Asks the printer which ribbon is in. The caller holds s_job_lock, with
+// nothing of a job sent yet. ESC ? needs the printer ready (a deselected one
+// does not answer) and between commands (after a stream cut mid-graphics it
+// would be taken as dots). Idle, a printer that is not ready, or one left
+// mid-graphics, is left alone. For a job it must not be: a colour page on a
+// ribbon swapped while the printer was off would print four passes in black.
+// So a job waits for the line as its first write would, and sends the resync
+// its first write would have sent.
+static void ribbon_check(int for_job)
+{
+    if (AW_LOOPBACK) return;
+    for (uint32_t ms = 0; for_job && !serial_out_clear() && !s_job_cancelled &&
+                          ms < CONFIG_AIRWRITER_STALL_ABORT * 1000u; ms += 100)
+        vTaskDelay(pdMS_TO_TICKS(100));
+    if (!serial_out_clear()) return;
+    if (s_link.dirty) {
+        if (!for_job) return;
+        esp_err_t err = ESP_OK;
+        iw_resync(resync_out, &err);
+        if (err != ESP_OK) return;
+        iw_link_resynced(&s_link);
+        ESP_LOGW(TAG, "last job was cut short; resynced the printer before asking its ribbon");
+    }
+    static const uint8_t self_id[] = { 0x1B, '?' }, cr[] = { '\r' };
+    uint8_t reply[16];
+    serial_out_rx_drop();
+    int n = serial_out_query(self_id, sizeof self_id, reply, sizeof reply, 500);
+    // The printer acts on a command when it reaches the line holding it (the
+    // note under Table 6-7), so if it said nothing, end the line. Idle, the
+    // head is at the left margin and a CR moves nothing.
+    if (n == 0) n = serial_out_query(cr, sizeof cr, reply, sizeof reply, 1000);
+    if (n < 0) return;
+    char hex[3 * sizeof reply + 1] = "";
+    for (int i = 0; i < n; i++) snprintf(hex + 3 * i, 4, " %02x", reply[i]);
+    iw_ribbon_t r = iw_self_id_ribbon(reply, (size_t)n);
+    ESP_LOGI(TAG, "self-ID: %d byte%s%s, %s ribbon", n, n == 1 ? "" : "s", hex, ribbon_name(r));
+    if (r == IW_RIBBON_UNKNOWN || r == s_ribbon) return;
+    ESP_LOGI(TAG, "ribbon now %s (was %s)", ribbon_name(r), ribbon_name(s_ribbon));
+    s_ribbon = (uint8_t)r;
+    settings_save_ribbon((uint8_t)r);
+    ipp_server_set_colour(r == IW_RIBBON_COLOUR);
+}
+
+// job_pipe asks as each job's rip starts, on the pipeline task, while the
+// job holds s_job_lock.
+static int colour_ok(void *ctx)
+{
+    (void)ctx;
+    ribbon_check(1);
+    return s_ribbon == IW_RIBBON_COLOUR;
+}
+
 // HSKo edges from serial_out. printer_state turns a low line into "printer
-// offline" (idle) or "needs attention" (mid-job) on its own clock.
+// offline" (idle) or "needs attention" (mid-job) on its own clock. A printer
+// that comes ready may have had its ribbon changed: ask it once it settles.
+// Only after the line was down a second or more (power, SELECT, the lid) or
+// at its first report: the printer's own busy blips are not a ribbon swap,
+// and a check whose CR blipped the line must not schedule the next.
 static void printer_line_changed(void *ctx, int ready)
 {
     (void)ctx;
+    TickType_t now = xTaskGetTickCount();
+    if (!ready) {
+        s_line_low_at = now;
+    } else if (!s_line_seen || now - s_line_low_at >= pdMS_TO_TICKS(1000)) {
+        s_ribbon_due  = now + pdMS_TO_TICKS(2000);
+        s_ribbon_want = 1;
+    }
+    s_line_seen = 1;
     printer_state_post(ready ? PS_EV_LINE_READY : PS_EV_LINE_NOT_READY);
 }
 
@@ -582,6 +662,13 @@ static void kick_task(void *arg)
     static const uint8_t ctrl_x = 0x18;     // ImageWriter II: cancel current line
     for (;;) {
         vTaskDelay(pdMS_TO_TICKS(500));
+        // W-1064: the ribbon, once the line has been ready 2 s with no job.
+        if (s_ribbon_want && (int32_t)(xTaskGetTickCount() - s_ribbon_due) >= 0 &&
+            xSemaphoreTake(s_job_lock, 0) == pdTRUE) {
+            s_ribbon_want = 0;
+            ribbon_check(0);
+            xSemaphoreGive(s_job_lock);
+        }
         if (!printer_state_want_kick()) continue;
         if (xSemaphoreTake(s_job_lock, 0) != pdTRUE) continue;
         esp_err_t err = serial_out_send_unflowed(&ctrl_x, 1);
@@ -1081,7 +1168,7 @@ static void status_json(void *ctx, char *buf, size_t cap)
 
     snprintf(buf, cap,
         "{\"state\":\"%s\",\"ps\":\"%s\",\"asleep\":%s,\"stopped\":%s,\"setup\":%s,\"job\":\"%s\","
-        "\"fault\":%s,\"printer\":%s,\"printing\":%s,"
+        "\"fault\":%s,\"printer\":%s,\"printing\":%s,\"ribbon\":\"%s\","
         "\"queue\":\"%s\",\"host\":\"%s.local\",\"ip\":\"%s\","
         "\"ssid\":\"%s\",\"dither\":\"%s\",\"signal\":\"%s\","
         "\"channel\":\"%s\",\"security\":\"%s\",\"uri\":\"%s\","
@@ -1097,7 +1184,8 @@ static void status_json(void *ctx, char *buf, size_t cap)
         job,
         attention || failed ? "true" : "false",
         serial_out_clear() ? "true" : "false",
-        s_printing ? "true" : "false", s_set.queue, s_set.hostname, s_ip,
+        s_printing ? "true" : "false", ribbon_name(s_ribbon),
+        s_set.queue, s_set.hostname, s_ip,
         joined ? (char *)ap.ssid : (s_ap_mode ? "" : s_set.ssid),
         s_set.dither,
         joined ? (ap.rssi > -55 ? "Excellent" : ap.rssi > -67 ? "Good"
@@ -1361,6 +1449,7 @@ void app_main(void)
     char suffix[8];
     snprintf(suffix, sizeof suffix, "%02x%02x", mac[4], mac[5]);
     settings_load(&s_set, suffix);
+    s_ribbon = s_set.ribbon;
     // Wi-Fi saved before this restart: green greets the join (W-1049).
     if (settings_take_wifi_fresh()) printer_state_post(PS_EV_WIFI_FRESH);
     ota_health_start(s_set.ssid[0] != 0);
@@ -1397,9 +1486,11 @@ void app_main(void)
     };
     cable_test_init(&ct);
 #endif
-    xTaskCreate(kick_task, "kick", 3072, NULL, 3, NULL);
+    // 4 KB: a ribbon change saves to NVS and re-announces mDNS from here.
+    xTaskCreate(kick_task, "kick", 4096, NULL, 3, NULL);
 
-    job_pipe_cfg_t pipe = { .out = printer_out, .dither = algo, .done = pipe_done };
+    job_pipe_cfg_t pipe = { .out = printer_out, .dither = algo, .done = pipe_done,
+                            .colour_ok = colour_ok };
     ESP_ERROR_CHECK(job_pipe_init(&pipe));
 
     // Before wifi_start, which can block up to 60s joining: the debounce
@@ -1449,10 +1540,13 @@ void app_main(void)
         .port       = 631,
         .dev_mode   = AW_DEV_MODE,
         .on_job_op  = on_activity,
+        .colour     = s_ribbon == IW_RIBBON_COLOUR,
         .sink = { .begin = doc_begin, .data = doc_data, .end = doc_end,
                   .cancel = doc_cancel, .ctx = NULL },
     };
     ESP_ERROR_CHECK(ipp_server_start(&cfg));
+    // The ribbon may have been read while the server started; push what it is.
+    ipp_server_set_colour(s_ribbon == IW_RIBBON_COLOUR);
     ota_health_set(OH_IPP_UP, 1);
     // wifi_start returned joined, before this could hear the join.
     fwu_start(0);

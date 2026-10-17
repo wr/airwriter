@@ -38,6 +38,11 @@ typedef struct {
     void     (*out)(void *ctx, const uint8_t *buf, size_t n);
     void      *out_ctx;
     ht_algo_t  dither;
+    // Asked on the pipeline task as each job starts, before its first byte
+    // goes to the printer: may RGB pages print in colour? (W-1064: the
+    // firmware asks the printer which ribbon is in.) NULL prints them gray.
+    int      (*colour_ok)(void *ctx);
+    void      *colour_ctx;
     // The document is finished with: ripped through `out`, or abandoned.
     // Called once per job_pipe_begin, on the pipeline task, some time after
     // job_pipe_end. The pipeline is already free for the next job_pipe_begin.

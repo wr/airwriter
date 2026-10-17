@@ -79,6 +79,18 @@ void serial_out_set_abort(int on);
 // loopback.
 esp_err_t serial_out_send_unflowed(const uint8_t *buf, size_t n);
 
+// Asking the printer something (W-1064: ESC ?, self-ID). The printer answers
+// on its TxD, which reaches the UART's RX; nothing else reads it.
+// serial_out_rx_drop discards whatever RX holds, so a reply is not mistaken
+// for line noise or a late answer to an earlier question. serial_out_query
+// queues `cmd` behind anything already in the FIFO (flow controlled, so a
+// paused printer gets it when it is ready), waits up to wait_ms for a first
+// byte, then reads until 50 ms pass with nothing new or `cap` is full.
+// Returns the bytes read, 0 for no answer, -1 with no CTS line or in
+// loopback. Callers hold the job lock.
+void serial_out_rx_drop(void);
+int  serial_out_query(const uint8_t *cmd, size_t n, uint8_t *reply, size_t cap,
+                      uint32_t wait_ms);
 // The cable tester (W-1055) borrows TX and RX for RMT. serial_out_lend(1)
 // waits for the transmitter to drain and leaves both pins to the caller;
 // serial_out_lend(0) routes them back to the UART and drops whatever RX

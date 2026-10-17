@@ -165,6 +165,14 @@ Linear is the queue; these are the live items.
   built, untested on hardware (Wells closed it without a bench run). When convenient on board 1:
   a crossover test (the strip, nothing regressed), then one with U7 pulled (`no_chip`, the blink
   by the LocalTalk socket).
+- `W-1064 Colour printing over AirPrint with the ImageWriter II colour ribbon`: on
+  `wells/w-1064-colour-printing-over-airprint-with-the-imagewriter-ii-colour`, not merged.
+  Benched on board 1 2026-10-17: self-ID answered "IW10C" at boot and before the job; the
+  iPhone offered colour under the same UUID with no "Waiting" (the automatic version holds; the
+  switch fallback is not needed); an iPhone screenshot printed in colour (960 KB of URF, just
+  under the 1 MB job buffer, 135 KB to the printer, 148 s) and made the build known-good;
+  Not yet tried: a Black & White print on this build (the console logged none), a Mac queue
+  (likely needs re-adding), a colour page bigger than the job buffer.
 - Not in Linear: scope HSKo during a long job (SPEC §3.9 timing).
 
 ## Toolchain
@@ -210,11 +218,12 @@ Linear is the queue; these are the live items.
   `tools/requirements.txt`. Work by `docs/cad-routine.md`.
 
 ## Verification
-- **Host tests:** `make -C tools/rip test` (raster path, serial writer, printer_state, led_grid,
+- **Host tests:** `make -C tools/rip test` (raster path and colour, serial writer, printer_state, led_grid,
   dip_config, pic_prog, localtalk, cable, fw_update, known_good) and `make -B -C tools/ipp test`
   (`-B`: `tools/ipp/build/` is committed).
 - **Raster regression:** `make -C tools/rip regress`; `stream.bin` must match the fixtures byte
-  for byte. No ESP32 needed.
+  for byte (gray, the iOS capture, and a synthetic sRGB page ripped in colour and as gray). No
+  ESP32 needed. `rip --colour --out-preview` shows a colour page in its four inks.
 - **Firmware:** `idf.py build` clean.
 - **On board 1:** an `ipptool` Print-Job of `fixtures/checker.urf` prints crc32 `8ee84844`.
   After an OTA, `/api/status` reaches `"trial":false` with the new `version`.

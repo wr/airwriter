@@ -41,8 +41,10 @@ static int chunk(FILE *f, const char *tag, const uint8_t *data, size_t n)
     return fwrite(c, 1, 4, f) == 4 ? 0 : -1;
 }
 
-int png_write_gray(const char *path, const uint8_t *pix, uint32_t w, uint32_t h)
+// ch 1 is grayscale, 3 is RGB; 8 bits per sample either way.
+static int png_write(const char *path, const uint8_t *pix, uint32_t w, uint32_t h, uint32_t ch)
 {
+    size_t rowb = (size_t)w * ch;
     crc_init();
     FILE *f = fopen(path, "wb");
     if (!f) return -1;
@@ -53,17 +55,17 @@ int png_write_gray(const char *path, const uint8_t *pix, uint32_t w, uint32_t h)
     uint8_t ihdr[13];
     be32w(ihdr, w); be32w(ihdr + 4, h);
     ihdr[8] = 8;                        // bit depth
-    ihdr[9] = 0;                        // colour type 0 = grayscale
+    ihdr[9] = ch == 3 ? 2 : 0;          // colour type 2 = RGB, 0 = grayscale
     ihdr[10] = ihdr[11] = ihdr[12] = 0; // deflate, no filter, no interlace
     if (chunk(f, "IHDR", ihdr, sizeof ihdr)) { fclose(f); return -1; }
 
     // Raw stream: one filter byte (0) per row, then the row.
-    size_t raw_len = (size_t)h * (w + 1);
+    size_t raw_len = (size_t)h * (rowb + 1);
     uint8_t *raw = malloc(raw_len);
     if (!raw) { fclose(f); return -1; }
     for (uint32_t y = 0; y < h; y++) {
-        raw[(size_t)y * (w + 1)] = 0;
-        memcpy(raw + (size_t)y * (w + 1) + 1, pix + (size_t)y * w, w);
+        raw[(size_t)y * (rowb + 1)] = 0;
+        memcpy(raw + (size_t)y * (rowb + 1) + 1, pix + (size_t)y * rowb, rowb);
     }
 
     // zlib wrapper around stored deflate blocks.
@@ -92,4 +94,14 @@ int png_write_gray(const char *path, const uint8_t *pix, uint32_t w, uint32_t h)
     if (rc == 0) rc = chunk(f, "IEND", NULL, 0);
     fclose(f);
     return rc;
+}
+
+int png_write_gray(const char *path, const uint8_t *pix, uint32_t w, uint32_t h)
+{
+    return png_write(path, pix, w, h, 1);
+}
+
+int png_write_rgb(const char *path, const uint8_t *pix, uint32_t w, uint32_t h)
+{
+    return png_write(path, pix, w, h, 3);
 }

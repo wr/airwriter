@@ -76,6 +76,10 @@ static char s_uri[128];
 static char s_adminurl[96];
 static char s_uuid[64];
 static char s_hostname[40];
+static volatile int s_colour;   // W-1064: the colour ribbon is in
+static volatile int s_mdns_up;
+static int s_txt_colour;        // what the TXT record says
+
 
 static ipp_job_rec_t s_job;
 static int32_t s_next_job_id = 1;
@@ -132,6 +136,7 @@ static void fill_printer(ipp_printer_t *p)
     p->accepting_jobs = 1;
     p->queued_jobs    = ipp_job_active(&s_job) ? 1 : 0;
     p->uptime_s       = uptime_s();
+    p->colour         = s_colour;
 }
 
 // `src` and `printer_stopped` are a snapshot taken under s_job_lock; the
@@ -577,6 +582,7 @@ static esp_err_t start_mdns(void)
     ESP_ERROR_CHECK(mdns_hostname_set(s_hostname));
     ESP_ERROR_CHECK(mdns_instance_name_set(s_cfg.queue_name));
 
+    s_txt_colour = s_colour;
     mdns_txt_item_t txt[] = {
         { "txtvers",  "1" },
         { "rp",       "ipp/print" },
@@ -586,9 +592,9 @@ static esp_err_t start_mdns(void)
         { "adminurl", s_adminurl },
         { "priority", "10" },
         { "UUID",     s_uuid },
-        { "Color",    "F" },
+        { "Color",    s_txt_colour ? "T" : "F" },
         { "Duplex",   "F" },
-        { "URF",      IPP_URF_STRING },
+        { "URF",      s_txt_colour ? IPP_URF_STRING_COLOUR : IPP_URF_STRING },
         { "TLS",      "" },
         { "note",     "" },
     };
@@ -665,6 +671,7 @@ esp_err_t ipp_server_start(const ipp_server_cfg_t *cfg)
              s_hostname, (unsigned)s_cfg.port);
     snprintf(s_adminurl, sizeof s_adminurl, "http://%s.local/", s_hostname);
     make_uuid(cfg->dev_mode);
+    s_colour = cfg->colour ? 1 : 0;
 
     s_job_lock   = xSemaphoreCreateMutex();
     s_print_lock = xSemaphoreCreateBinary();
@@ -674,6 +681,7 @@ esp_err_t ipp_server_start(const ipp_server_cfg_t *cfg)
 
     esp_err_t err = start_mdns();
     if (err != ESP_OK) return err;
+    s_mdns_up = 1;
 
     err = start_listener();
     if (err != ESP_OK) return err;
@@ -687,7 +695,24 @@ void ipp_server_stop(void)
 {
     s_running = 0;
     if (s_listen_fd >= 0) { close(s_listen_fd); s_listen_fd = -1; }
+    s_mdns_up = 0;
     mdns_free();
+}
+
+void ipp_server_set_colour(int on)
+{
+    on = on ? 1 : 0;
+    if (on != s_colour) ESP_LOGI(TAG, "colour %s", on ? "on: the colour ribbon is in" : "off");
+    s_colour = on;
+    // The TXT record is tracked on its own: a change during start_mdns lands
+    // in the attributes but not the record, and the call after start fixes it.
+    if (!s_mdns_up || on == s_txt_colour) return;
+    s_txt_colour = on;
+    esp_err_t a = mdns_service_txt_item_set("_ipp", "_tcp", "Color", on ? "T" : "F");
+    esp_err_t b = mdns_service_txt_item_set("_ipp", "_tcp", "URF",
+                                            on ? IPP_URF_STRING_COLOUR : IPP_URF_STRING);
+    if (a != ESP_OK || b != ESP_OK)
+        ESP_LOGW(TAG, "TXT update failed: %s / %s", esp_err_to_name(a), esp_err_to_name(b));
 }
 
 const char *ipp_server_uri(void) { return s_uri; }

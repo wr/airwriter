@@ -20,6 +20,8 @@ typedef struct {
     char queue[SET_QUEUE_MAX];       // what the print sheet shows
     char dither[SET_DITHER_MAX];     // atkinson | floyd | bayer | threshold
     uint8_t auto_update;             // install new releases by itself (W-1048); off
+    uint8_t ribbon;                  // the last ribbon self-ID reported (W-1064):
+                                     // 0 unknown, 1 black, 2 colour (iw_ribbon_t)
 } settings_t;
 
 // Fills every field: NVS first, then the Kconfig default, then a built-in.
@@ -34,6 +36,9 @@ int       settings_take_wifi_fresh(void);
 esp_err_t settings_save_general(const char *hostname, const char *queue,
                                 const char *dither);
 esp_err_t settings_save_auto_update(int on);
+// Kept so a restart advertises what the printer last said, not black until it
+// answers again: what clients see must not flip back and forth (W-1064).
+esp_err_t settings_save_ribbon(uint8_t ribbon);
 
 // Wipes the stored settings. The device falls back to its build defaults on
 // the next boot, which is what the config button holds for.

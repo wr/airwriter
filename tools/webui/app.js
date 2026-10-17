@@ -140,7 +140,8 @@ function draw(s){
   const prn=$('ledprn');
   prn.classList.toggle('g',!!s.printer);
   prn.classList.remove('r');
-  prn.dataset.tip=s.printer?'printer connected and ready'
+  const rib=s.ribbon==='colour'?', colour ribbon':s.ribbon==='black'?', black ribbon':'';
+  prn.dataset.tip=s.printer?'printer connected and ready'+rib
                  :offline?'printer offline: off, unplugged or deselected'
                  :'printer busy';
   lamp($('ledjob'),s.printing,'a',s.printing?'printing':'idle');
