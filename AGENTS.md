@@ -166,8 +166,8 @@ Linear is the queue; these are the live items.
   known-good, and C went to ota_2. A power cut 61% into D's upload left C running, and D then went
   to ota_0, not B's slot. Three power-up resets: the first booted B (0.25 s after the 5 s hold),
   one with the record blanked booted ota_0, and one with the known-good image damaged booted the
-  last kept image. The panel showed the reset. No release carries it yet: the next one should,
-  and the wiki edits (Test Button, Troubleshooting, Settings and Updates) are pushed with the merge.
+  last kept image. The panel showed the reset. v0.2.0 (2026-10-17) is the first release with it;
+  a board still on v0.1.1 runs v0.2.0 over the air but gets the slot only from a USB flash.
 - `W-1049 Panel feedback for every action: OTA, reset, cables, TashTalk flash`: merged 2026-10-16,
   benched on board 1 (Wells by eye), quiet power-on included: a normal boot shows only the Spin
   until Wi-Fi and the printer settle (3-30 s). Held back by Wells: update kept, update refused,
@@ -188,13 +188,14 @@ Linear is the queue; these are the live items.
   cached black-only, offered colour under the same UUID with no "Waiting"; a colour screenshot
   printed (960 KB of URF, just under the 1 MB job buffer). Not yet seen on this build: a Black &
   White print, a Mac queue (likely needs re-adding). Full-page colour photos overflow the job
-  buffer: a side session is measuring that. No release carries it yet.
+  buffer: a side session is measuring that. Released in v0.2.0.
 - `W-1067 Web dashboard shows which ribbon is in: colour or black` and `W-1068 Better halftone:
   dot gain curve, serpentine, blue noise, interleaved colour`: merged 2026-10-17, benched on board 1.
   The dusk page printed through Atkinson and blue noise read the same to Wells; the uncorrected
   page beat 10% and 20% dot-gain curves, so the curve ships off. The sheet is drawn at one device
   pixel per dot (half scale on a retina Mac), its type set to the measure. Five tabs wrap 2/2/1 on
-  a phone. No release carries any of this yet.
+  a phone. Released in v0.2.0 (2026-10-17), cut from main `b0fc219` with `--branch` from a clean
+  worktree because this checkout carried someone's enclosure edits.
 - Not in Linear: scope HSKo during a long job (SPEC §3.9 timing).
 
 ## Toolchain
