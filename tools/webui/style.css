@@ -315,8 +315,7 @@ svg{display:block;shape-rendering:crispEdges}
 .off{opacity:.17}          /* an unlit arc on the signal glyph */
 
 /* ── halftone ───────────────────────────────────────────────────── */
-#prev{display:block;margin:0 auto;max-width:100%;background:var(--paper);
-  image-rendering:pixelated}
+#prev{display:block;margin:0 auto;max-width:100%;background:var(--paper)}
 
 /* ── footer ─────────────────────────────────────────────────────── */
 .foot{margin:var(--sp-3) var(--sp-1) 0;color:var(--dim);line-height:1.7}

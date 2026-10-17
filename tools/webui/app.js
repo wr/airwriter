@@ -472,19 +472,18 @@ const BAYER=[[0,32,8,40,2,34,10,42],[48,16,56,24,50,18,58,26],
    luma, on the colour ribbon yellow, magenta, cyan and black, with what the
    three colours would print in common going to black instead. 255 is bare
    paper, 0 full ink, as in the firmware. */
-const INKS=[[255,225,0],[230,0,120],[0,160,225],[0,0,0]];
+const INKS=[[250,215,0],[225,30,110],[0,150,210],[38,36,34]];
 function sourceAt(W,H,mode,colour){
   const c=document.createElement('canvas');c.width=W;c.height=H;
   const g=c.getContext('2d');
   g.fillStyle='#fff';g.fillRect(0,0,W,H);
   const grd=g.createLinearGradient(0,0,W,0);
   if(colour){
-    /* every mix the ribbon can make, in the order the inks overlap:
-       yellow, yellow+magenta, magenta, magenta+cyan, cyan, cyan+yellow */
-    grd.addColorStop(0,'#ffffff');grd.addColorStop(.14,'#ffe100');
-    grd.addColorStop(.31,'#ff2000');grd.addColorStop(.48,'#e6007a');
-    grd.addColorStop(.65,'#3000c0');grd.addColorStop(.82,'#00a0e1');
-    grd.addColorStop(1,'#00a020');
+    /* a sky at dusk: tints the ribbon makes from a few dots of each ink,
+       yellow through the yellow+magenta reds to a magenta+cyan blue */
+    grd.addColorStop(0,'#fff6dc');grd.addColorStop(.22,'#ffd25c');
+    grd.addColorStop(.46,'#ff8a52');grd.addColorStop(.7,'#e27aa6');
+    grd.addColorStop(1,'#86b4e6');
   }else{grd.addColorStop(0,'#ffffff');grd.addColorStop(1,'#6b6b6b');}
   g.fillStyle=grd;g.fillRect(0,0,W,Math.round(H*.42));
   const r=Math.round(H*.16), cx=Math.round(W*.17), cy=Math.round(H*.21);
@@ -553,23 +552,54 @@ function render(){
       p[y*W+x]=(s[(2*y)*W+x]+s[(2*y+1)*W+x])/2;
     planes.push(halftone(p,W,H,dither));
   }
-  /* A dot of each ink takes from the paper what that ink absorbs, so where
-     dots land on each other they mix as they do on the page. */
-  const inks=colour?INKS:[INKS[3]];
-  const dw=zoom, dh=zoom*2;
-  cv.width=W*dw; cv.height=H*dh;
-  cv.style.width=(W*dw/dpr)+'px'; cv.style.height=(H*dh/dpr)+'px';
-  const g=cv.getContext('2d'), img=g.createImageData(W*dw,H*dh);
-  for(let y=0;y<H;y++)for(let x=0;x<W;x++){
-    const i=y*W+x; let r=255,gg=255,b=255;
-    for(let k=0;k<n;k++) if(planes[k][i]){
-      r=r*inks[k][0]/255; gg=gg*inks[k][1]/255; b=b*inks[k][2]/255;}
-    for(let sy=0;sy<dh;sy++){
-      let o=((y*dh+sy)*W*dw + x*dw)*4;
-      for(let sx=0;sx<dw;sx++,o+=4){
-        img.data[o]=r; img.data[o+1]=gg; img.data[o+2]=b; img.data[o+3]=255;}
+  press(planes,W,H,colour?INKS:[INKS[3]],zoom,cv,dpr);
+}
+
+/* The sheet as it comes off the platen, not as the bitmap. A pin's dot is a
+   round blob wider than its step: about 0.35 mm against 0.18 mm across and
+   0.35 mm down. So neighbours run together, a fill comes out solid with a
+   faint ribbing, and a tone is smoother than its bits. The ribbon never
+   gives quite the same ink twice, each colour pass lands a hair off the
+   last, and the paper is not quite white. */
+const PAPER=[252,250,245];
+function press(planes,W,H,inks,zoom,cv,dpr){
+  const dw=zoom, dh=zoom*2, Wd=W*dw, Hd=H*dh;
+  const r=dh*0.5, R=Math.ceil(r+1), kw=dw+2*R, kh=dh+2*R;
+  const n=planes.length;
+  const px=new Float32Array(Wd*Hd*3);
+  for(let i=0;i<Wd*Hd;i++){
+    const g=(Math.random()-.5)*6;
+    px[i*3]=PAPER[0]+g; px[i*3+1]=PAPER[1]+g; px[i*3+2]=PAPER[2]+g;
+  }
+  const cov=new Float32Array(Wd*Hd);
+  for(let k=0;k<n;k++){
+    /* the colour passes are each a little off the black one */
+    const ox=n>1&&k<n-1?(Math.random()-.5)*1.2:0, oy=n>1&&k<n-1?(Math.random()-.5)*.6:0;
+    const kern=new Float32Array(kw*kh);
+    for(let j=0;j<kh;j++)for(let i=0;i<kw;i++){
+      const dx=i-R+.5-dw/2-ox, dy=j-R+.5-dh/2-oy;
+      kern[j*kw+i]=Math.min(1,Math.max(0,r+.5-Math.hypot(dx,dy)));
+    }
+    cov.fill(0);
+    const bits=planes[k];
+    for(let y=0;y<H;y++)for(let x=0;x<W;x++){
+      if(!bits[y*W+x]) continue;
+      const dens=.8+.2*Math.random(), x0=x*dw-R, y0=y*dh-R;
+      for(let j=0;j<kh;j++){const py=y0+j; if(py<0||py>=Hd) continue;
+        for(let i=0;i<kw;i++){const qx=x0+i; if(qx<0||qx>=Wd) continue;
+          cov[py*Wd+qx]+=kern[j*kw+i]*dens;}}
+    }
+    const tr=1-inks[k][0]/255, tg=1-inks[k][1]/255, tb=1-inks[k][2]/255;
+    for(let i=0;i<Wd*Hd;i++){
+      const a=cov[i]>1?1:cov[i]; if(!a) continue;
+      px[i*3]*=1-a*tr; px[i*3+1]*=1-a*tg; px[i*3+2]*=1-a*tb;
     }
   }
+  cv.width=Wd; cv.height=Hd;
+  cv.style.width=(Wd/dpr)+'px'; cv.style.height=(Hd/dpr)+'px';
+  const g=cv.getContext('2d'), img=g.createImageData(Wd,Hd), d=img.data;
+  for(let i=0,o=0;i<Wd*Hd;i++,o+=4){
+    d[o]=px[i*3]; d[o+1]=px[i*3+1]; d[o+2]=px[i*3+2]; d[o+3]=255;}
   g.putImageData(img,0,0);
 }
 function buildTabs(){
