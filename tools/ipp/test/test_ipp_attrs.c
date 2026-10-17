@@ -32,6 +32,9 @@ int main(void)
         .info           = "Apple ImageWriter II",
         .uuid           = "urn:uuid:564e4552-4f4e-4943-4100-0123456789ab",
         .adminurl       = "http://imagewriter-ab12.local/",
+        .icons          = { "http://imagewriter-ab12.local:631/icon-48.png",
+                            "http://imagewriter-ab12.local:631/icon-128.png",
+                            "http://imagewriter-ab12.local:631/icon-512.png" },
         .location       = "",
         .state          = IPP_PSTATE_IDLE,
         .state_reason   = "none",
@@ -69,6 +72,13 @@ int main(void)
     CHECK(ipp_val_is(&f, p.uuid));
     CHECK(ipp_find(buf, n, "printer-make-and-model", &f));
     CHECK(ipp_val_is(&f, "Apple ImageWriter II"));
+
+    /* The Mac's picture of the printer: three URIs, smallest first. */
+    CHECK(ipp_find(buf, n, "printer-icons", &f));
+    CHECK_EQ_INT(f.tag, IPP_TAG_URI);
+    CHECK_EQ_INT(f.group, IPP_TAG_PRINTER);
+    CHECK_EQ_INT(f.nvalues, 3);
+    CHECK(ipp_val_is(&f, "http://imagewriter-ab12.local:631/icon-48.png"));
 
     /* State. */
     CHECK(ipp_find(buf, n, "printer-state", &f));
@@ -169,6 +179,16 @@ int main(void)
     CHECK(ipp_find(buf, n, "printer-state-message", &f));
     CHECK_EQ_INT(f.tag, IPP_TAG_TEXT);
     CHECK(ipp_val_is(&f, "Out of paper"));
+
+    /* No icons, no printer-icons: an empty 1setOf is not allowed. */
+    p.icons[0] = NULL;
+    ipp_enc_init(&e, buf, sizeof buf);
+    ipp_resp_begin(&e, IPP_VERSION_1_1, IPP_STATUS_OK, 1);
+    ipp_write_op_attrs(&e);
+    ipp_write_printer_attrs(&e, &p, NULL);
+    ipp_end(&e);
+    CHECK(ipp_enc_ok(&e));
+    CHECK(!ipp_find(buf, ipp_enc_len(&e), "printer-icons", &f));
 
     /* Job attributes, the subset iOS polls while printing. */
     ipp_job_t j = {

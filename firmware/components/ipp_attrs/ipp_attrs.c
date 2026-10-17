@@ -171,6 +171,13 @@ void ipp_write_printer_attrs(ipp_enc_t *e, const ipp_printer_t *p,
     if (W("printer-more-info", PD))
         ipp_attr_str(e, IPP_TAG_URI, "printer-more-info", p->adminurl);
 
+    // The Mac takes its picture of the printer from these when it is added
+    // (IPP Everywhere orders them small, large, extra large).
+    size_t n_icons = 0;
+    while (n_icons < NELEM(p->icons) && p->icons[n_icons]) n_icons++;
+    if (n_icons && W("printer-icons", PD))
+        ipp_attr_strs(e, IPP_TAG_URI, "printer-icons", p->icons, n_icons);
+
     // 1284 device id. Some clients match on this instead of the model string.
     if (W("printer-device-id", PD))
         ipp_attr_str(e, IPP_TAG_TEXT, "printer-device-id",

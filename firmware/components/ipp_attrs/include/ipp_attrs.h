@@ -19,6 +19,7 @@ typedef struct {
     const char *info;
     const char *uuid;       // urn:uuid:...
     const char *adminurl;   // http://host.local/
+    const char *icons[3];   // printer-icons at 48, 128, 512 px; NULL ends the list
     const char *location;
     uint8_t     state;              // IPP_PSTATE_*
     const char *state_reason;       // "none", "media-empty-error", ...

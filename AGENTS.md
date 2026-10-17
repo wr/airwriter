@@ -40,6 +40,8 @@ being true, change or delete it in the same commit that made it false.
 What works on `main`:
 - AirPrint discovery and printing (`image/urf`, Print-Job only, SPEC §3.4); Home Assistant's
   IPP integration finds it.
+- `printer-icons`: Apple's colour ImageWriter icon at 48, 128 and 512 px, served on port 631
+  (SPEC §3.5). A Mac takes it only when the printer is added.
 - The whole job is buffered in 1 MB PSRAM and the client is answered when the upload ends
   (`W-1042 Buffer the whole job in PSRAM and reply when the upload is done`).
 - Out of paper or SELECT off pauses the job; clients show "Needs attention: check paper and
@@ -268,6 +270,7 @@ tools/rip/            host build of the raster path + host tests for the pure-C 
 tools/ipp/            IPP host tests and gpa_server (the real encoder on localhost for ipptool)
 tools/ippcap/         stub IPP server that captures a Print-Job body (how fixtures were made)
 tools/webui/          web UI sources; mkheader.py generates firmware's webui_page.h (never hand-edit)
+tools/icon/           the printer icon as a pixel grid; mkicons.py writes ipp_server/icons/*.png
 tools/lights/         the wiki's GIF of every panel light effect, played through led_grid_core;
                       after changing an effect, `make -C tools/lights OUT=<wiki>/images/lights`
 tools/release/        release.sh (build, check, sign, publish), tamper.py (refusal-test images)
