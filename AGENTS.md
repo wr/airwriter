@@ -47,6 +47,12 @@ What works on `main`:
   `CONFIG_AIRWRITER_STALL_ABORT` (600 s).
 - After an aborted job the next one resyncs the printer first (1280 NULs + CTRL-X); a printer
   left busy by line noise at power-up gets a CTRL-X.
+- Colour with Apple's colour ribbon (`W-1064 Colour printing over AirPrint with the ImageWriter
+  II colour ribbon`): the board reads the ribbon with `ESC ?` self-ID (when the printer comes
+  back after a second or more down, and before every AirPrint job), saves it, and reports it in
+  `/api/status` `ribbon`. While it is colour, IPP and TXT advertise colour under the same UUID,
+  and sRGB pages print one pass per ink per strip, yellow, magenta, cyan, black (SPEC §3.8). On a
+  black ribbon an sRGB page prints as gray. Gray pages keep their bytes.
 - The 37-dot status panel per the status-language spec, in the palette picked from the panel's
   measured colour map (red only for failures, sky blue for Wi-Fi, pink for updates): Spin at boot,
   discrete printer and Wi-Fi states, per-dot white Ready, DIP7 gamer RGB, and after 5 min idle one
@@ -165,14 +171,12 @@ Linear is the queue; these are the live items.
   built, untested on hardware (Wells closed it without a bench run). When convenient on board 1:
   a crossover test (the strip, nothing regressed), then one with U7 pulled (`no_chip`, the blink
   by the LocalTalk socket).
-- `W-1064 Colour printing over AirPrint with the ImageWriter II colour ribbon`: on
-  `wells/w-1064-colour-printing-over-airprint-with-the-imagewriter-ii-colour`, not merged.
-  Benched on board 1 2026-10-17: self-ID answered "IW10C" at boot and before the job; the
-  iPhone offered colour under the same UUID with no "Waiting" (the automatic version holds; the
-  switch fallback is not needed); an iPhone screenshot printed in colour (960 KB of URF, just
-  under the 1 MB job buffer, 135 KB to the printer, 148 s) and made the build known-good;
-  Not yet tried: a Black & White print on this build (the console logged none), a Mac queue
-  (likely needs re-adding), a colour page bigger than the job buffer.
+- `W-1064 Colour printing over AirPrint with the ImageWriter II colour ribbon`: merged
+  2026-10-17, benched on board 1: self-ID answered "IW10C"; the iPhone, which had the printer
+  cached black-only, offered colour under the same UUID with no "Waiting"; a colour screenshot
+  printed (960 KB of URF, just under the 1 MB job buffer). Not yet seen on this build: a Black &
+  White print, a Mac queue (likely needs re-adding). Full-page colour photos overflow the job
+  buffer: a side session is measuring that. No release carries it yet.
 - Not in Linear: scope HSKo during a long job (SPEC §3.9 timing).
 
 ## Toolchain
