@@ -44,6 +44,8 @@ esp_err_t settings_load(settings_t *out, const char *mac_suffix)
         get_str(h, "dither",   out->dither,   sizeof out->dither, "atkinson");
         uint8_t au = 0;
         if (nvs_get_u8(h, "autoupd", &au) == ESP_OK) out->auto_update = au ? 1 : 0;
+        uint8_t rb = 0;
+        if (nvs_get_u8(h, "ribbon", &rb) == ESP_OK && rb <= 2) out->ribbon = rb;
         nvs_close(h);
     } else {
         strncpy(out->hostname, default_host, sizeof out->hostname - 1);
@@ -108,6 +110,17 @@ esp_err_t settings_save_auto_update(int on)
     err = nvs_commit(h);
     nvs_close(h);
     ESP_LOGI(TAG, "auto-update %s", on ? "on" : "off");
+    return err;
+}
+
+esp_err_t settings_save_ribbon(uint8_t ribbon)
+{
+    nvs_handle_t h;
+    esp_err_t err = nvs_open(NS, NVS_READWRITE, &h);
+    if (err != ESP_OK) return err;
+    nvs_set_u8(h, "ribbon", ribbon);
+    err = nvs_commit(h);
+    nvs_close(h);
     return err;
 }
 

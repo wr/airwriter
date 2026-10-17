@@ -81,6 +81,7 @@ static void pipe_task(void *arg)
         ripjob_cfg_t cfg = {
             .out     = count_out,
             .dither  = s_cfg.dither,
+            .colour  = s_cfg.colour_ok ? s_cfg.colour_ok(s_cfg.colour_ctx) : 0,
             .log     = pipe_log,
         };
         ripjob_stats_t rst;

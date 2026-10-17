@@ -18,7 +18,7 @@ static const char *TAG = "serial";
 // ring would reintroduce both problems (uart_write_bytes has no timeout, and
 // uart_get_tx_buffer_free_size only tracks the ring item in service).
 #define TX_RING      0
-#define RX_RING      1024   // only used for the loopback self-check
+#define RX_RING      1024   // the loopback self-check, and the printer's self-ID (W-1064)
 #define WATCH_PERIOD pdMS_TO_TICKS(100)
 
 static serial_out_cfg_t s_cfg;
@@ -255,4 +255,25 @@ esp_err_t serial_out_send_unflowed(const uint8_t *buf, size_t n)
     uart_wait_tx_done(s_cfg.uart_num, pdMS_TO_TICKS(100));
     uart_set_hw_flow_ctrl(s_cfg.uart_num, UART_HW_FLOWCTRL_CTS, 0);
     return w == (int)n ? ESP_OK : ESP_FAIL;
+}
+
+void serial_out_rx_drop(void)
+{
+    uart_flush_input(s_cfg.uart_num);
+}
+
+int serial_out_query(const uint8_t *cmd, size_t n, uint8_t *reply, size_t cap,
+                     uint32_t wait_ms)
+{
+    if (s_cfg.cts_pin < 0 || s_cfg.loopback) return -1;
+    if (uart_tx_chars(s_cfg.uart_num, (const char *)cmd, n) != (int)n) return -1;
+    int got = uart_read_bytes(s_cfg.uart_num, reply, 1, pdMS_TO_TICKS(wait_ms));
+    if (got <= 0) return 0;
+    while ((size_t)got < cap) {
+        int more = uart_read_bytes(s_cfg.uart_num, reply + got, cap - (size_t)got,
+                                   pdMS_TO_TICKS(50));
+        if (more <= 0) break;
+        got += more;
+    }
+    return got;
 }
