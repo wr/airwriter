@@ -140,10 +140,17 @@ function draw(s){
   const prn=$('ledprn');
   prn.classList.toggle('g',!!s.printer);
   prn.classList.remove('r');
+  /* The ribbon is what the printer last answered to ESC ?, kept across power
+     cycles, so it is known while the printer is off too. AirPrint follows it:
+     colour pages print in colour on the colour ribbon and as gray on black. */
   const rib=s.ribbon==='colour'?', colour ribbon':s.ribbon==='black'?', black ribbon':'';
-  prn.dataset.tip=s.printer?'printer connected and ready'+rib
+  prn.dataset.tip=(s.printer?'printer connected and ready'
                  :offline?'printer offline: off, unplugged or deselected'
-                 :'printer busy';
+                 :'printer busy')+rib;
+  $('ribbon').textContent=
+    s.ribbon==='colour'?'Colour ribbon. Colour pages print in colour, one pass per ink.'
+   :s.ribbon==='black'?'Black ribbon. Colour pages print as gray.'
+   :'Ribbon not read yet: the board asks the printer the next time it is ready.';
   lamp($('ledjob'),s.printing,'a',s.printing?'printing':'idle');
   if(!s.printing) $('ledjob').classList.remove('act-a');
 
