@@ -9,13 +9,15 @@
 //
 // Nothing here allocates a page. Per page it holds one halftone error ring
 // (3 rows), one resampler row, one 1bpp row and one decoded URF line, so a
-// Letter page costs about 10KB regardless of length.
+// Letter page costs about 10KB regardless of length. A colour page (W-1064)
+// holds the same per ink, four of them, and its strips: about 60KB.
 #pragma once
 #include <stdint.h>
 #include <stddef.h>
 #include "urf_decode.h"
 #include "halftone.h"
 #include "imagewriter.h"
+#include "ink.h"
 
 // The one pass v1 has: 144 dpi across, 72 down. SPEC.md 3.8.
 #define RIPJOB_DPI_X 144
@@ -28,6 +30,11 @@ typedef struct {
 
     ht_algo_t   dither;
 
+    // The colour ribbon is in (W-1064): RGB pages print in four inks. With
+    // 0 they print as gray, as a black ribbon would anyway. Gray pages print
+    // the same either way.
+    int         colour;
+
     // Called as each page starts, with the geometry every later row will
     // have, before any row arrives. Return non-zero to abort the job.
     int       (*page)(void *ctx, int index, uint32_t dst_w, uint32_t dst_h);
@@ -38,6 +45,9 @@ typedef struct {
     // firmware leaves it NULL.
     void      (*row)(void *ctx, const uint8_t *bits, uint32_t w, uint32_t y);
     void       *row_ctx;
+    // The same for a colour page: one 1bpp row per ink, indexed by iw_ink_t.
+    // Gets row_ctx.
+    void      (*ink_row)(void *ctx, const uint8_t *const bits[IW_INKS], uint32_t w, uint32_t y);
 
     // Human-readable diagnostics, already formatted. NULL stays silent.
     void      (*log)(void *ctx, const char *msg);

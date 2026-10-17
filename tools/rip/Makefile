@@ -86,3 +86,12 @@ regress: build/rip
 	@cmp /tmp/ios.bin $(FIX)/$(IOS).expected.bin \
 	  && echo "ok  regression: iOS stream.bin unchanged" \
 	  || (echo "FAIL regression: iOS stream.bin changed"; exit 1)
+	@python3 test/make_colour_fixture.py /tmp/colour.urf >/dev/null
+	@./build/rip --in /tmp/colour.urf --colour --out-stream /tmp/colour.bin 2>/dev/null
+	@cmp /tmp/colour.bin $(FIX)/colour.expected.bin \
+	  && echo "ok  regression: colour stream.bin unchanged" \
+	  || (echo "FAIL regression: colour stream.bin changed"; exit 1)
+	@./build/rip --in /tmp/colour.urf --out-stream /tmp/colour.gray.bin 2>/dev/null
+	@cmp /tmp/colour.gray.bin $(FIX)/colour.gray.expected.bin \
+	  && echo "ok  regression: colour-as-gray stream.bin unchanged" \
+	  || (echo "FAIL regression: colour-as-gray stream.bin changed"; exit 1)
