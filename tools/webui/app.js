@@ -473,7 +473,10 @@ const BAYER=[[0,32,8,40,2,34,10,42],[48,16,56,24,50,18,58,26],
    three colours would print in common going to black instead. 255 is bare
    paper, 0 full ink, as in the firmware. */
 const INKS=[[250,215,0],[225,30,110],[0,150,210],[38,36,34]];
-function sourceAt(W,H,mode,colour){
+/* The page itself, drawn at the printer's 144 dpi: a sky, a ball and a few
+   lines about the screen in use. Kept apart from the split so the very same
+   art can be sent to the printer and held up against the sheet. */
+function art(W,H,mode,colour){
   const c=document.createElement('canvas');c.width=W;c.height=H;
   const g=c.getContext('2d');
   g.fillStyle='#fff';g.fillRect(0,0,W,H);
@@ -498,7 +501,10 @@ function sourceAt(W,H,mode,colour){
   g.font=fs+'px "Times New Roman", Times, serif';
   m.body.forEach((t,i)=>g.fillText(t, pad,
     Math.round(H*.42)+Math.round(fs*3.7)+i*Math.round(fs*1.30)));
-  const d=g.getImageData(0,0,W,H).data, n=colour?4:1,
+  return c;
+}
+function sourceAt(W,H,mode,colour){
+  const d=art(W,H,mode,colour).getContext('2d').getImageData(0,0,W,H).data, n=colour?4:1,
         out=Array.from({length:n},()=>new Float32Array(W*H));
   for(let i=0;i<W*H;i++){
     const r=d[i*4],gg=d[i*4+1],b=d[i*4+2];
