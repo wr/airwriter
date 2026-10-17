@@ -500,15 +500,41 @@ function art(W,H,mode,colour){
   if(colour){rg.addColorStop(0,'#fff');rg.addColorStop(.45,'#ff2000');rg.addColorStop(1,'#500000');}
   else{rg.addColorStop(0,'#fff');rg.addColorStop(.5,'#8d8d8d');rg.addColorStop(1,'#161616');}
   g.fillStyle=rg;g.beginPath();g.arc(cx,cy,r,0,7);g.fill();
-  const m=MODES[mode], fs=22, pad=22;
+  /* the type scales with the page, about 15 points on paper, and the text
+     is set to the measure, so a wider sheet shows more of it */
+  const m=MODES[mode], fs=Math.round(W/36), pad=fs, lead=Math.round(fs*1.3);
   g.fillStyle='#111';
   g.font='italic '+Math.round(fs*1.45)+'px "Times New Roman", Times, serif';
-  g.fillText(m.title, pad, Math.round(H*.42)+Math.round(fs*2.0));
+  let y=Math.round(H*.42)+Math.round(fs*2.0);
+  g.fillText(m.title, pad, y);
   g.font=fs+'px "Times New Roman", Times, serif';
-  m.body.forEach((t,i)=>g.fillText(t, pad,
-    Math.round(H*.42)+Math.round(fs*3.7)+i*Math.round(fs*1.30)));
+  y+=Math.round(fs*1.7);
+  const wrap=text=>{const lines=[]; let line='';
+    for(const word of text.split(' ')){
+      const t=line?line+' '+word:word;
+      if(g.measureText(t).width>W-2*pad&&line){ lines.push(line); line=word; }
+      else line=t;}
+    if(line) lines.push(line); return lines;};
+  for(const para of [m.body.join(' '), PAGE_NOTE]){
+    /* as many whole sentences as fit on the sheet, never a cut one */
+    const room=Math.floor((H-fs-y)/lead)+1, sentences=para.match(/[^.]+\.\s*/g)||[para];
+    let lines=[], n=0;
+    for(;n<sentences.length;n++){
+      const l=wrap(sentences.slice(0,n+1).join('').trim());
+      if(l.length>room) break;
+      lines=l;
+    }
+    for(const l of lines){ g.fillText(l,pad,y); y+=lead; }
+    y+=Math.round(lead*.5);
+    if(n<sentences.length||y>H-fs) break;
+  }
   return c;
 }
+const PAGE_NOTE='The ImageWriter II puts down 144 dots an inch across and 72 down, nine pins '
+ +'at a time, and every one of them is either there or not. Everything with a tone in it, a '
+ +'photograph, a shadow, the sky above, is made of dots the printer was told to leave out, and '
+ +'the screen you pick here decides which ones. Colour comes from a four-band ribbon: yellow, '
+ +'magenta and cyan laid one pass after another, and black on its own.';
 function sourceAt(W,H,mode,colour){
   const d=art(W,H,mode,colour).getContext('2d').getImageData(0,0,W,H).data, n=colour?4:1,
         out=Array.from({length:n},()=>new Float32Array(W*H));
@@ -576,7 +602,10 @@ function render(){
   const cv=$('prev'), host=cv.parentElement;
   if(!host.clientWidth) return;
   const dpr=Math.max(1,Math.round(window.devicePixelRatio||1));
-  const zoom=2, colour=ribbon==='colour';
+  /* one device pixel per dot across: on a retina screen the sheet is about
+     half the size of the page, which is how a print is looked at, and its
+     width is nearly the printer's 1152 dots */
+  const zoom=1, colour=ribbon==='colour';
   const cssW=Math.floor(host.clientWidth-2);
   const W=Math.floor(cssW*dpr/zoom), H=Math.round(W*0.34);
   /* The printer is 144 dpi across and 72 down: the pipeline box-filters every

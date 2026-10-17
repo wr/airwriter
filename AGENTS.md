@@ -189,6 +189,12 @@ Linear is the queue; these are the live items.
   printed (960 KB of URF, just under the 1 MB job buffer). Not yet seen on this build: a Black &
   White print, a Mac queue (likely needs re-adding). Full-page colour photos overflow the job
   buffer: a side session is measuring that. No release carries it yet.
+- `W-1067 Web dashboard shows which ribbon is in: colour or black` and `W-1068 Better halftone:
+  dot gain curve, serpentine, blue noise, interleaved colour`: merged 2026-10-17, benched on board 1.
+  The dusk page printed through Atkinson and blue noise read the same to Wells; the uncorrected
+  page beat 10% and 20% dot-gain curves, so the curve ships off. The sheet is drawn at one device
+  pixel per dot (half scale on a retina Mac), its type set to the measure. Five tabs wrap 2/2/1 on
+  a phone. No release carries any of this yet.
 - Not in Linear: scope HSKo during a long job (SPEC §3.9 timing).
 
 ## Toolchain
