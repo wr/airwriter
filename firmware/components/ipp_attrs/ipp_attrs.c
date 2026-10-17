@@ -18,6 +18,7 @@ static const char *const k_media_source[]  = { "main" };
 static const char *const k_media_type[]    = { "stationery" };
 static const char *const k_sides[]         = { "one-sided" };
 static const char *const k_color_modes[]   = { "monochrome" };
+static const char *const k_color_modes_colour[] = { "monochrome", "color" };
 static const char *const k_output_bin[]    = { "face-up" };
 static const char *const k_uri_auth[]      = { "none" };
 static const char *const k_uri_security[]  = { "none" };
@@ -28,6 +29,9 @@ static const char *const k_which_jobs[]    = { "completed", "not-completed" };
 // split one keyword per value. AirPrint clients read this one, not the TXT.
 static const char *const k_urf[] = {
     IPP_URF_VERSION, "CP1", "RS72-144", "W8", "DM1", "IS1", "MT1", "FN3"
+};
+static const char *const k_urf_colour[] = {
+    IPP_URF_VERSION, "CP1", "RS72-144", "W8", "SRGB24", "DM1", "IS1", "MT1", "FN3"
 };
 
 static const char *const k_job_creation[] = {
@@ -214,7 +218,9 @@ void ipp_write_printer_attrs(ipp_enc_t *e, const ipp_printer_t *p,
         ipp_attr_strs(e, IPP_TAG_KEYWORD, "compression-supported",
                       k_compression, NELEM(k_compression));
     if (W("urf-supported", PD))
-        ipp_attr_strs(e, IPP_TAG_KEYWORD, "urf-supported", k_urf, NELEM(k_urf));
+        ipp_attr_strs(e, IPP_TAG_KEYWORD, "urf-supported",
+                      p->colour ? k_urf_colour : k_urf,
+                      p->colour ? NELEM(k_urf_colour) : NELEM(k_urf));
 
     if (W("media-default", JT))
         ipp_attr_str(e, IPP_TAG_KEYWORD, "media-default", k_media[0]);
@@ -259,10 +265,12 @@ void ipp_write_printer_attrs(ipp_enc_t *e, const ipp_printer_t *p,
         ipp_attr_res(e, "printer-resolution-supported", 144, 72);
 
     if (W("print-color-mode-default", JT))
-        ipp_attr_str(e, IPP_TAG_KEYWORD, "print-color-mode-default", "monochrome");
+        ipp_attr_str(e, IPP_TAG_KEYWORD, "print-color-mode-default",
+                     p->colour ? "color" : "monochrome");
     if (W("print-color-mode-supported", JT))
         ipp_attr_strs(e, IPP_TAG_KEYWORD, "print-color-mode-supported",
-                      k_color_modes, NELEM(k_color_modes));
+                      p->colour ? k_color_modes_colour : k_color_modes,
+                      p->colour ? NELEM(k_color_modes_colour) : NELEM(k_color_modes));
     if (W("print-quality-default", JT))
         ipp_attr_int(e, IPP_TAG_ENUM, "print-quality-default", 4);
     if (W("print-quality-supported", JT))
@@ -286,7 +294,7 @@ void ipp_write_printer_attrs(ipp_enc_t *e, const ipp_printer_t *p,
     if (W("copies-supported", JT))
         ipp_attr_range(e, "copies-supported", 1, 99);
     if (W("color-supported", PD))
-        ipp_attr_bool(e, "color-supported", 0);
+        ipp_attr_bool(e, "color-supported", p->colour ? 1 : 0);
     if (W("pages-per-minute", PD))
         ipp_attr_int(e, IPP_TAG_INTEGER, "pages-per-minute", 1);
     if (W("pdl-override-supported", PD))

@@ -9,6 +9,21 @@
 
 static uint8_t buf[4096];
 
+/* Whether any value of a multi-valued attribute is s: each further value is
+ * its tag, an empty name, its length, then the value. */
+static int has_value(const ipp_found_t *f, const char *s)
+{
+    const uint8_t *v = f->val;
+    size_t vlen = f->vlen;
+    for (int i = 0; i < f->nvalues; i++) {
+        if (vlen == strlen(s) && memcmp(v, s, vlen) == 0) return 1;
+        v += vlen;
+        vlen = (size_t)((v[3] << 8) | v[4]);
+        v += 5;
+    }
+    return 0;
+}
+
 int main(void)
 {
     ipp_printer_t p = {
@@ -179,6 +194,45 @@ int main(void)
     CHECK(ipp_val_is(&f, "job-printing"));
     CHECK(ipp_find(buf, n, "job-uri", &f));
     CHECK(ipp_val_is(&f, "ipp://aw.local:631/ipp/print/7"));
+
+    /* -- colour (W-1064): with the colour ribbon in, the four attributes
+     *    that tell a client it may send colour, and nothing else changes -- */
+    {
+        p.colour = 0;
+        ipp_enc_init(&e, buf, sizeof buf);
+        ipp_resp_begin(&e, IPP_VERSION_1_1, IPP_STATUS_OK, 1);
+        ipp_write_printer_attrs(&e, &p, NULL);
+        ipp_end(&e);
+        size_t n0 = ipp_enc_len(&e);
+        CHECK(ipp_find(buf, n0, "print-color-mode-default", &f));
+        CHECK(ipp_val_is(&f, "monochrome"));
+        CHECK(ipp_find(buf, n0, "print-color-mode-supported", &f));
+        CHECK_EQ_INT(f.nvalues, 1);
+        CHECK(ipp_find(buf, n0, "urf-supported", &f));
+        CHECK(!has_value(&f, "SRGB24"));
+
+        p.colour = 1;
+        ipp_enc_init(&e, buf, sizeof buf);
+        ipp_resp_begin(&e, IPP_VERSION_1_1, IPP_STATUS_OK, 1);
+        ipp_write_printer_attrs(&e, &p, NULL);
+        ipp_end(&e);
+        CHECK(ipp_enc_ok(&e));
+        size_t n1 = ipp_enc_len(&e);
+        CHECK(ipp_find(buf, n1, "color-supported", &f));
+        CHECK_EQ_INT(f.val[0], 1);
+        CHECK(ipp_find(buf, n1, "print-color-mode-default", &f));
+        CHECK(ipp_val_is(&f, "color"));
+        CHECK(ipp_find(buf, n1, "print-color-mode-supported", &f));
+        CHECK_EQ_INT(f.nvalues, 2);
+        CHECK(has_value(&f, "monochrome"));
+        CHECK(has_value(&f, "color"));
+        CHECK(ipp_find(buf, n1, "urf-supported", &f));
+        CHECK_EQ_INT(f.nvalues, 9);
+        CHECK(has_value(&f, "W8"));
+        CHECK(has_value(&f, "SRGB24"));
+        CHECK(has_value(&f, "RS72-144"));
+        printf("    with colour, printer attributes encode to %zu bytes\n", n1);
+    }
 
     TEST_END;
 }
