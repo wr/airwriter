@@ -55,6 +55,20 @@ typedef struct {
     int started;   // the current job has sent its first byte
 } iw_link_t;
 
+// Which ribbon is in, from the printer's self-ID (W-1064). ESC ? makes it
+// send "IW10CF" (Table 6-7, pp. 88-89): IW, the carriage width in inches,
+// then C only with a colour ribbon in and F only with a SheetFeeder fitted.
+// The colour option turns on by itself when the colour ribbon goes in (p. 123).
+typedef enum {
+    IW_RIBBON_UNKNOWN = 0,   // no reply, or not one we can read
+    IW_RIBBON_BLACK   = 1,
+    IW_RIBBON_COLOUR  = 2,
+} iw_ribbon_t;
+
+// Reads a reply to ESC ?. Bit 7 is ignored (the printer sends space parity)
+// and anything ahead of "IW" is skipped, so line noise does not hide it.
+iw_ribbon_t iw_self_id_ribbon(const uint8_t *reply, size_t n);
+
 void iw_link_job_start(iw_link_t *l);
 // Before each write of a job's bytes. 1 at most once per job, before its first
 // byte, when the last stream was cut: send iw_resync first.

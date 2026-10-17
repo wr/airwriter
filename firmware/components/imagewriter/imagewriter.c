@@ -90,6 +90,20 @@ void iw_resync(iw_out_fn out, void *ctx)
     out(ctx, can, sizeof can);
 }
 
+iw_ribbon_t iw_self_id_ribbon(const uint8_t *reply, size_t n)
+{
+    for (size_t i = 0; i + 4 <= n; i++) {
+        uint8_t c[4];
+        for (size_t k = 0; k < 4; k++) c[k] = reply[i + k] & 0x7F;
+        if (c[0] != 'I' || c[1] != 'W') continue;
+        if (c[2] < '0' || c[2] > '9' || c[3] < '0' || c[3] > '9') continue;
+        for (size_t k = i + 4; k < n; k++)
+            if ((reply[k] & 0x7F) == 'C') return IW_RIBBON_COLOUR;
+        return IW_RIBBON_BLACK;
+    }
+    return IW_RIBBON_UNKNOWN;
+}
+
 void iw_link_job_start(iw_link_t *l)
 {
     l->started = 0;

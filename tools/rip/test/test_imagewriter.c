@@ -332,5 +332,28 @@ int main(void)
         }
     }
 
+    /* -- self-ID (ESC ?, Table 6-7): IW, two digits of carriage width, then
+     *    C with a colour ribbon in and F with a SheetFeeder -- */
+    {
+        static const struct { const char *s; size_t n; iw_ribbon_t want; } ids[] = {
+            { "IW10CF", 6, IW_RIBBON_COLOUR },
+            { "IW10C",  5, IW_RIBBON_COLOUR },
+            { "IW10F",  5, IW_RIBBON_BLACK },
+            { "IW10",   4, IW_RIBBON_BLACK },
+            { "IW15C",  5, IW_RIBBON_COLOUR },
+            { "\x00\x00IW10C", 7, IW_RIBBON_COLOUR },   /* line noise ahead of it */
+            { "IW1",    3, IW_RIBBON_UNKNOWN },         /* cut short */
+            { "",       0, IW_RIBBON_UNKNOWN },
+            { "XX10C",  5, IW_RIBBON_UNKNOWN },
+            { "IWxxC",  5, IW_RIBBON_UNKNOWN },
+            { "\xC9\xD7\xB1\xB0\xC3", 5, IW_RIBBON_COLOUR },  /* "IW10C", bit 7 set */
+        };
+        for (size_t k = 0; k < sizeof ids / sizeof ids[0]; k++) {
+            iw_ribbon_t got = iw_self_id_ribbon((const uint8_t *)ids[k].s, ids[k].n);
+            if (got != ids[k].want) fprintf(stderr, "  self-ID case %zu\n", k);
+            CHECK_EQ_INT(got, ids[k].want);
+        }
+    }
+
     TEST_END;
 }
