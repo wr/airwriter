@@ -27,7 +27,7 @@ build:
 	@mkdir -p build
 
 build/rip: main.c png_write.c $(SRCS) | build
-	$(CC) $(CFLAGS) $(INCS) -Itest -o $@ $^
+	$(CC) $(CFLAGS) $(INCS) -Itest -o $@ $^ -lm
 
 build/test_printer_state: test/test_printer_state.c ../../firmware/components/printer_state/printer_state_core.c | build
 	$(CC) $(CFLAGS) $(INCS) -I../../firmware/components/printer_state/include -Itest -o $@ $^
@@ -64,7 +64,7 @@ build/test_cable: test/test_cable.c $(CT)/cable_core.c $(LT)/lt_proto.c | build
 	$(CC) $(CFLAGS) -I$(CT)/include -I$(LT)/include -Itest -o $@ $^
 
 build/%: test/%.c $(SRCS) | build
-	$(CC) $(CFLAGS) $(INCS) -Itest -o $@ $^
+	$(CC) $(CFLAGS) $(INCS) -Itest -o $@ $^ -lm
 
 test: $(TESTBIN)
 	@fail=0; for t in $(TESTBIN); do ./$$t || fail=1; done; exit $$fail

@@ -148,7 +148,9 @@ function draw(s){
                  :offline?'printer offline: off, unplugged or deselected'
                  :'printer busy')+(rib?', '+rib:'');
   $('rib').textContent=rib?' · '+rib:'';
-  if(s.ribbon!==ribbon){ ribbon=s.ribbon; render(); }
+  const g=+s.gain; let again=s.ribbon!==ribbon;
+  if(g>=0&&g<50&&g!==GAIN){ setGain(g); again=1; }
+  if(again){ ribbon=s.ribbon; render(); }
   lamp($('ledjob'),s.printing,'a',s.printing?'printing':'idle');
   if(!s.printing) $('ledjob').classList.remove('act-a');
 
@@ -457,11 +459,15 @@ const MODES={
   body:['A fixed 8 by 8 screen, the same one every','page. Nothing smears into anything else, so',
         'type stays exactly where it was drawn.','You can see the weave in flat areas.',
         'Best for small text.']},
+ bluenoise:{name:'blue noise',title:'Blue noise',
+  body:['A tile of noise with no pattern in it, grown','for this printer\'s tall dots. Nothing smears',
+        'and nothing weaves, so tints come out even','and type stays where it was drawn. Try it',
+        'against Atkinson on a photograph.']},
  threshold:{name:'threshold',title:'Threshold',
   body:['No halftone at all. Every dot is simply on','or off, so line art and logos come out',
         'exactly as drawn and anything with tone in','it collapses to black and white.',
         'Line art and logos only.']}};
-const ORDER=['atkinson','floyd','bayer','threshold'];
+const ORDER=['atkinson','floyd','bluenoise','bayer','threshold'];
 const BAYER=[[0,32,8,40,2,34,10,42],[48,16,56,24,50,18,58,26],
  [12,44,4,36,14,46,6,38],[60,28,52,20,62,30,54,22],
  [3,35,11,43,1,33,9,41],[51,19,59,27,49,17,57,25],
@@ -512,31 +518,56 @@ function sourceAt(W,H,mode,colour){
       const mx=Math.max(r,gg,b);
       out[0][i]=255-(mx-b); out[1][i]=255-(mx-gg); out[2][i]=255-(mx-r); out[3][i]=mx;
     }else out[0][i]=.299*r+.587*gg+.114*b;
-    for(let k=0;k<n;k++) out[k][i]+=(Math.random()-.5)*1.6;
+    /* a grain of noise keeps the diffusion screens from locking into a
+       pattern on a smooth ramp; a mask screen would print it on bare paper */
+    if(mode=='floyd'||mode=='atkinson')
+      for(let k=0;k<n;k++) out[k][i]+=(Math.random()-.5)*1.6;
   }
   return out;
 }
 
-/* One plane through the chosen screen. Each ink is dithered on its own, as
-   the board does it, so each carries its own error. */
-function halftone(p,W,H,mode){
+/* One plane through the chosen screen, as halftone.c does it. The tone
+   curve first: a dot is as wide as its row, so a tint prints darker than its
+   bits, and the curve asks for fewer dots in the midtones (GAIN is the dot
+   gain at a half tint the board reports in its status). The error-diffusion
+   screens scan serpentine and, told to `avoid` another ink's dots, print on
+   one only when a quarter darker. The mask screens start their tile at a
+   `phase` and read it upside down if asked, which keeps two inks apart. */
+let GAIN=20;
+const TONE=new Uint8Array(256);
+function setGain(g){
+  GAIN=g; const k=Math.log(1/(0.5-GAIN/100))/Math.log(2);
+  for(let v=0;v<256;v++)TONE[v]=g>0?Math.min(255,Math.round(255*Math.pow(v/255,1/k))):v;
+  TONE[0]=0;TONE[255]=255;
+}
+setGain(GAIN);
+const MASK=Uint8Array.from(atob(BLUENOISE),c=>c.charCodeAt(0));
+function halftone(p,W,H,mode,avoid,phase){
+  const px=phase?phase[0]:0, py=phase?phase[1]:0, inv=phase?phase[2]:0;
   const add=(i,e)=>{if(i>=0&&i<W*H)p[i]+=e;};
-  const bits=new Uint8Array(W*H);
-  for(let y=0;y<H;y++)for(let x=0;x<W;x++){
-    const i=y*W+x,v=p[i];let on;
-    if(mode=='bayer')on=v<(BAYER[y&7][x&7]+.5)*4;
-    else if(mode=='threshold')on=v<128;
-    else{
-      on=v<128;const err=v-(on?0:255);
-      if(mode=='floyd'){
-        if(x+1<W)add(i+1,err*7/16);
-        if(y+1<H){if(x)add(i+W-1,err*3/16);add(i+W,err*5/16);if(x+1<W)add(i+W+1,err/16);}
-      }else{const e=err/8;
-        if(x+1<W)add(i+1,e); if(x+2<W)add(i+2,e);
-        if(y+1<H){if(x)add(i+W-1,e);add(i+W,e);if(x+1<W)add(i+W+1,e);}
-        if(y+2<H)add(i+2*W,e);}
+  const bits=new Uint8Array(W*H), ed=mode=='floyd'||mode=='atkinson';
+  for(let y=0;y<H;y++){
+    const dir=ed&&(y&1)?-1:1;
+    for(let i=0;i<W;i++){
+      const x=dir>0?i:W-1-i, j=y*W+x;
+      const v=TONE[Math.max(0,Math.min(255,Math.round(p[j])))];let on;
+      if(mode=='bayer'){let b=BAYER[(y+py)&7][(x+px)&7]; if(inv)b=63-b; on=v<(b+.5)*4;}
+      else if(mode=='bluenoise'){let t=MASK[((y+py)&63)*64+((x+px)&63)]; if(inv)t=255-t; on=v<255&&v<=t;}
+      else if(mode=='threshold')on=v<128;
+      else{
+        const cut=avoid&&avoid[j]?64:128;
+        on=v<cut;const err=v-(on?0:255);
+        if(mode=='floyd'){
+          add(x+dir>=0&&x+dir<W?j+dir:-1,err*7/16);
+          if(y+1<H){add(x-dir>=0&&x-dir<W?j+W-dir:-1,err*3/16);add(j+W,err*5/16);
+                    add(x+dir>=0&&x+dir<W?j+W+dir:-1,err/16);}
+        }else{const e=err/8;
+          add(x+dir>=0&&x+dir<W?j+dir:-1,e); add(x+2*dir>=0&&x+2*dir<W?j+2*dir:-1,e);
+          if(y+1<H){add(x-dir>=0&&x-dir<W?j+W-dir:-1,e);add(j+W,e);add(x+dir>=0&&x+dir<W?j+W+dir:-1,e);}
+          if(y+2<H)add(j+2*W,e);}
+      }
+      bits[j]=on?1:0;
     }
-    bits[i]=on?1:0;
   }
   return bits;
 }
@@ -552,11 +583,19 @@ function render(){
      pair of source rows into one printed row, then prints each dot twice as
      tall as it is wide. Square dots at full resolution flatter it badly. */
   const src=sourceAt(W,H*2,dither,colour), n=src.length, planes=[];
-  for(const s of src){
-    const p=new Float32Array(W*H);
+  /* planes are yellow, magenta, cyan, black; screened black first, each
+     keeping off the dots before it, on tiles black/cyan and magenta/yellow
+     upside down to each other (ripjob.c ink_order, ink_phase) */
+  const order=colour?[3,2,1,0]:[0];
+  const phase=[[36,36,1],[36,36,0],[0,0,1],[0,0,0]];
+  let avoid=colour?new Uint8Array(W*H):null;
+  for(const k of order){
+    const s=src[k], p=new Float32Array(W*H);
     for(let y=0;y<H;y++)for(let x=0;x<W;x++)
       p[y*W+x]=(s[(2*y)*W+x]+s[(2*y+1)*W+x])/2;
-    planes.push(halftone(p,W,H,dither));
+    const bits=halftone(p,W,H,dither,avoid,colour?phase[k]:null);
+    planes[k]=bits;
+    if(avoid)for(let i=0;i<W*H;i++)avoid[i]|=bits[i];
   }
   press(planes,W,H,colour?INKS:[INKS[3]],zoom,cv,dpr);
 }

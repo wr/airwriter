@@ -42,6 +42,9 @@ esp_err_t settings_load(settings_t *out, const char *mac_suffix)
         get_str(h, "hostname", out->hostname, sizeof out->hostname, default_host);
         get_str(h, "queue",    out->queue,    sizeof out->queue, CONFIG_AIRWRITER_QUEUE_NAME);
         get_str(h, "dither",   out->dither,   sizeof out->dither, "atkinson");
+        uint8_t gn = CONFIG_AIRWRITER_DOT_GAIN;
+        if (nvs_get_u8(h, "gain", &gn) == ESP_OK && gn > 45) gn = CONFIG_AIRWRITER_DOT_GAIN;
+        out->gain = gn;
         uint8_t au = 0;
         if (nvs_get_u8(h, "autoupd", &au) == ESP_OK) out->auto_update = au ? 1 : 0;
         uint8_t rb = 0;
@@ -51,6 +54,7 @@ esp_err_t settings_load(settings_t *out, const char *mac_suffix)
         strncpy(out->hostname, default_host, sizeof out->hostname - 1);
         strncpy(out->queue, CONFIG_AIRWRITER_QUEUE_NAME, sizeof out->queue - 1);
         strncpy(out->dither, "atkinson", sizeof out->dither - 1);
+        out->gain = CONFIG_AIRWRITER_DOT_GAIN;
     }
 
     if (nvs_open(NS_WIFI, NVS_READONLY, &h) == ESP_OK) {
@@ -87,7 +91,7 @@ int settings_take_wifi_fresh(void)
 }
 
 esp_err_t settings_save_general(const char *hostname, const char *queue,
-                                const char *dither)
+                                const char *dither, int gain)
 {
     nvs_handle_t h;
     esp_err_t err = nvs_open(NS, NVS_READWRITE, &h);
@@ -96,6 +100,7 @@ esp_err_t settings_save_general(const char *hostname, const char *queue,
     if (hostname && hostname[0]) nvs_set_str(h, "hostname", hostname);
     if (queue    && queue[0])    nvs_set_str(h, "queue",    queue);
     if (dither   && dither[0])   nvs_set_str(h, "dither",   dither);
+    if (gain >= 0 && gain <= 45) nvs_set_u8(h, "gain", (uint8_t)gain);
     err = nvs_commit(h);
     nvs_close(h);
     return err;

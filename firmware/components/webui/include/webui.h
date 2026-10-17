@@ -32,6 +32,11 @@ typedef struct {
     // answers 404.
     void  (*cable_test)(void *ctx, int both, char *buf, size_t cap);
 
+    // The general settings (queue, hostname, dither, gain) were just saved:
+    // the app re-reads them so the next job prints with the screen the page
+    // shows. NULL and they wait for a restart.
+    void  (*general_saved)(void *ctx);
+
     // Serves the setup page for every unknown host, so joining the device's
     // access point opens the page by itself.
     int     captive;

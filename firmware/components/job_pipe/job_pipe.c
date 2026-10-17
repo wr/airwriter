@@ -81,6 +81,7 @@ static void pipe_task(void *arg)
         ripjob_cfg_t cfg = {
             .out     = count_out,
             .dither  = s_cfg.dither,
+            .gain    = s_cfg.gain,
             .colour  = s_cfg.colour_ok ? s_cfg.colour_ok(s_cfg.colour_ctx) : 0,
             .log     = pipe_log,
         };
@@ -132,6 +133,12 @@ esp_err_t job_pipe_init(const job_pipe_cfg_t *cfg)
     s_ring = xStreamBufferCreate(RING_BYTES, 1);
     ESP_LOGW(TAG, "no PSRAM for the job buffer; streaming through %u bytes", RING_BYTES);
     return s_ring ? ESP_OK : ESP_ERR_NO_MEM;
+}
+
+void job_pipe_set_screen(ht_algo_t dither, int gain)
+{
+    s_cfg.dither = dither;
+    s_cfg.gain   = gain;
 }
 
 esp_err_t job_pipe_begin(const char *job_name)

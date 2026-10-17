@@ -297,6 +297,24 @@ static volatile TickType_t s_ribbon_due;
 static volatile TickType_t s_line_low_at;   // when HSKo last went false
 static volatile int        s_line_seen;     // serial_out has reported the line
 
+static char s_suffix[8];            // the MAC's last two bytes, the default hostname's
+
+// The page saved queue, hostname, dither or gain (W-1068): re-read them, and
+// give the pipe and the test page the screen they now name. The hostname
+// and queue still take a restart to reach mDNS, as they always have.
+static void general_saved(void *ctx)
+{
+    (void)ctx;
+    settings_t fresh;
+    if (settings_load(&fresh, s_suffix) != ESP_OK) return;
+    strncpy(s_set.dither, fresh.dither, sizeof s_set.dither - 1);
+    s_set.gain = fresh.gain;
+    ht_algo_t algo;
+    if (ht_algo_from_name(s_set.dither, &algo)) algo = HT_ATKINSON;
+    job_pipe_set_screen(algo, s_set.gain);
+    ESP_LOGI(TAG, "screen now %s, gain %u%%", s_set.dither, s_set.gain);
+}
+
 static const char *ribbon_name(uint8_t r)
 {
     return r == IW_RIBBON_COLOUR ? "colour" : r == IW_RIBBON_BLACK ? "black" : "unknown";
@@ -711,6 +729,7 @@ static void test_page_task(void *arg)
         ESP_LOGE(TAG, "test page: ht_init failed");
         s_printer_failed = 1;
     } else {
+        ht_set_gain(&h, s_set.gain);
         static iw_t w;
         iw_init(&w, TESTPAGE_W, printer_out, NULL);
         iw_begin_page(&w);
@@ -1170,7 +1189,7 @@ static void status_json(void *ctx, char *buf, size_t cap)
         "{\"state\":\"%s\",\"ps\":\"%s\",\"asleep\":%s,\"stopped\":%s,\"setup\":%s,\"job\":\"%s\","
         "\"fault\":%s,\"printer\":%s,\"printing\":%s,\"ribbon\":\"%s\","
         "\"queue\":\"%s\",\"host\":\"%s.local\",\"ip\":\"%s\","
-        "\"ssid\":\"%s\",\"dither\":\"%s\",\"signal\":\"%s\","
+        "\"ssid\":\"%s\",\"dither\":\"%s\",\"gain\":%u,\"signal\":\"%s\","
         "\"channel\":\"%s\",\"security\":\"%s\",\"uri\":\"%s\","
         "\"uptime\":\"%uh %02um\",\"reset\":\"%s\",\"version\":\"%s\",\"heap\":\"%u KB\","
         "\"slot\":\"%s\",\"trial\":%s,\"rolled_back\":\"%s\","
@@ -1187,7 +1206,7 @@ static void status_json(void *ctx, char *buf, size_t cap)
         s_printing ? "true" : "false", ribbon_name(s_ribbon),
         s_set.queue, s_set.hostname, s_ip,
         joined ? (char *)ap.ssid : (s_ap_mode ? "" : s_set.ssid),
-        s_set.dither,
+        s_set.dither, (unsigned)s_set.gain,
         joined ? (ap.rssi > -55 ? "Excellent" : ap.rssi > -67 ? "Good"
                 : ap.rssi > -75 ? "Fair" : "Weak") : "",
         joined ? "2.4 GHz" : "",
@@ -1446,9 +1465,8 @@ void app_main(void)
     // Default hostname imagewriter-XXXX, the last two MAC bytes. SPEC.md 3.2.
     uint8_t mac[6] = {0};
     esp_read_mac(mac, ESP_MAC_WIFI_STA);
-    char suffix[8];
-    snprintf(suffix, sizeof suffix, "%02x%02x", mac[4], mac[5]);
-    settings_load(&s_set, suffix);
+    snprintf(s_suffix, sizeof s_suffix, "%02x%02x", mac[4], mac[5]);
+    settings_load(&s_set, s_suffix);
     s_ribbon = s_set.ribbon;
     // Wi-Fi saved before this restart: green greets the join (W-1049).
     if (settings_take_wifi_fresh()) printer_state_post(PS_EV_WIFI_FRESH);
@@ -1489,8 +1507,8 @@ void app_main(void)
     // 4 KB: a ribbon change saves to NVS and re-announces mDNS from here.
     xTaskCreate(kick_task, "kick", 4096, NULL, 3, NULL);
 
-    job_pipe_cfg_t pipe = { .out = printer_out, .dither = algo, .done = pipe_done,
-                            .colour_ok = colour_ok };
+    job_pipe_cfg_t pipe = { .out = printer_out, .dither = algo, .gain = s_set.gain,
+                            .done = pipe_done, .colour_ok = colour_ok };
     ESP_ERROR_CHECK(job_pipe_init(&pipe));
 
     // Before wifi_start, which can block up to 60s joining: the debounce
@@ -1509,7 +1527,7 @@ void app_main(void)
     wifi_init();
     if (!s_set.ssid[0] || wifi_start() != ESP_OK) {
         char ap[32];
-        snprintf(ap, sizeof ap, "AirWriter-%s", suffix);
+        snprintf(ap, sizeof ap, "AirWriter-%s", s_suffix);
         s_ap_mode = 1;
         strncpy(s_ip, "192.168.4.1", sizeof s_ip - 1);
         printer_state_post(PS_EV_WIFI_SETUP_AP);
@@ -1524,7 +1542,7 @@ void app_main(void)
         ESP_ERROR_CHECK(net_provision_start(ap));
         ota_health_set(OH_AP_UP, 1);
         fwu_start(1);
-        webui_cfg_t wcfg = { .status_json = status_json, .captive = 1,
+        webui_cfg_t wcfg = { .status_json = status_json, .general_saved = general_saved, .captive = 1,
                               .localtalk_flash = localtalk_flash,
                               .lt_json = lt_json, .lt_job = lt_job, .lt_echo = lt_echo,
                               .cable_test = cable_web };
@@ -1552,7 +1570,7 @@ void app_main(void)
     fwu_start(0);
     fw_update_net_up();
 
-    webui_cfg_t wcfg = { .status_json = status_json, .captive = 0,
+    webui_cfg_t wcfg = { .status_json = status_json, .general_saved = general_saved, .captive = 0,
                           .localtalk_flash = localtalk_flash,
                           .lt_json = lt_json, .lt_job = lt_job, .lt_echo = lt_echo,
                           .cable_test = cable_web };

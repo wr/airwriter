@@ -124,6 +124,16 @@ config AIRWRITER_STALL_ABORT
     int "Seconds a paused job waits for the printer before it is failed"
     default 600
 
+config AIRWRITER_DOT_GAIN
+    int "Dot gain at a 50% tint, percent"
+    range 0 45
+    default 20
+    help
+        A pin's dot is as wide as its row, so neighbours overlap and a tint
+        prints darker than its bits. The halftone asks for fewer dots in the
+        midtones to make up for it: 20 means a tint asked at half would print
+        at seventy with no curve. 0 prints the bits as they are.
+
 config AIRWRITER_LED_DATA_PIN
     int "LED chain data pin, -1 if absent"
     default 48 if IDF_TARGET_ESP32S3

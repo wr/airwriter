@@ -38,6 +38,7 @@ typedef struct {
     void     (*out)(void *ctx, const uint8_t *buf, size_t n);
     void      *out_ctx;
     ht_algo_t  dither;
+    int        gain;         // dot gain at a 50% tint, percent (ripjob_cfg_t)
     // Asked on the pipeline task as each job starts, before its first byte
     // goes to the printer: may RGB pages print in colour? (W-1064: the
     // firmware asks the printer which ribbon is in.) NULL prints them gray.
@@ -51,6 +52,9 @@ typedef struct {
 } job_pipe_cfg_t;
 
 esp_err_t job_pipe_init(const job_pipe_cfg_t *cfg);
+// The screen and gain the next job prints with (W-1068: the page's pick
+// used to wait for a restart). A job already ripping keeps its own.
+void      job_pipe_set_screen(ht_algo_t dither, int gain);
 
 // Starts the pipeline task for one document.
 esp_err_t job_pipe_begin(const char *job_name);

@@ -329,6 +329,19 @@ Make the algorithm selectable in NVS — Atkinson, Floyd-Steinberg, ordered Baye
 plain threshold. Ordered dithering will look better than error diffusion on the small text
 that dominates real print jobs, and you won't know until you've printed both.
 
+*Amended (W-1068): a pin's dot is about as wide as its row (0.35 mm against a 0.18 mm step
+across and 0.35 mm down), so neighbours overlap and a tint prints darker than its bits. A tone
+curve runs ahead of every screen, the inverse of `1 - (1 - a)^k` for the dot gain at a half
+tint set by `CONFIG_AIRWRITER_DOT_GAIN` (20%), so pure black and white are unchanged and the
+midtones ask for fewer dots. The error-diffusion screens scan serpentine, each row the other
+way with the kernel mirrored, which removes their diagonal worms. A fifth screen, `bluenoise`,
+is a 64x64 void-and-cluster tile (`halftone/tools/make_bluenoise.py`) grown with rows
+counting double, 16 cells per level so a flat tint prints exactly its share. On a colour page
+the inks are screened black first, cyan, magenta, yellow: the diffusion screens print on
+another ink's dot only when a quarter darker and carry the rest on (dot-off-dot), and the mask
+screens put black and cyan on one tile upside down to each other and magenta and yellow on a
+tile far away, so the common two-ink tints never share a dot until they have to.*
+
 ### 3.8 The ImageWriter output stage
 
 Target for v1: **144 dpi horizontal, 72 dpi vertical, single pass.** Printable width 8

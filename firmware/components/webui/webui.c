@@ -174,6 +174,18 @@ static esp_err_t wifi_post(httpd_req_t *req)
     return ESP_OK;
 }
 
+// One JSON number out of a flat object, or `absent` when the key is not there.
+static int json_int(const char *body, const char *key, int absent)
+{
+    char pat[32];
+    snprintf(pat, sizeof pat, "\"%s\"", key);
+    const char *p = strstr(body, pat);
+    if (!p) return absent;
+    p = strchr(p + strlen(pat), ':');
+    if (!p) return absent;
+    return atoi(p + 1);
+}
+
 static esp_err_t general_post(httpd_req_t *req)
 {
     char body[BODY_MAX];
@@ -185,7 +197,11 @@ static esp_err_t general_post(httpd_req_t *req)
     json_str(body, "queue", queue, sizeof queue);
     json_str(body, "dither", dither, sizeof dither);
 
-    settings_save_general(host, queue, dither);
+    int gain = json_int(body, "gain", -1);
+    if (gain > 45) return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "gain is 0 to 45");
+
+    settings_save_general(host, queue, dither, gain);
+    if (s_cfg.general_saved) s_cfg.general_saved(s_cfg.ctx);
     led_grid_blip(LG_BLIP_SAVED);
     return httpd_resp_sendstr(req, "{\"ok\":true}");
 }
