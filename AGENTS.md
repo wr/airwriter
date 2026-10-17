@@ -51,8 +51,9 @@ What works on `main`:
   left busy by line noise at power-up gets a CTRL-X.
 - Colour with Apple's colour ribbon (`W-1064 Colour printing over AirPrint with the ImageWriter
   II colour ribbon`): the board reads the ribbon with `ESC ?` self-ID (when the printer comes
-  back after a second or more down, and before every AirPrint job), saves it, and reports it in
-  `/api/status` `ribbon`. While it is colour, IPP and TXT advertise colour under the same UUID,
+  back after a second or more down, and before every AirPrint job), saves it, reports it in
+  `/api/status` `ribbon`; the web page names it on the nameplate and draws its halftone preview
+  in the four inks while it is colour. While it is colour, IPP and TXT advertise colour under the same UUID,
   and sRGB pages print one pass per ink per strip, yellow, magenta, cyan, black (SPEC §3.8). On a
   black ribbon an sRGB page prints as gray. Gray pages keep their bytes.
 - The 37-dot status panel per the status-language spec, in the palette picked from the panel's
