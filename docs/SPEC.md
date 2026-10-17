@@ -198,6 +198,10 @@ Duplex=F
 URF=<see 3.3>
 ```
 
+*Amended (`W-1064 Colour printing over AirPrint with the ImageWriter II colour ribbon`):
+`Color` is `T`, and `URF` the colour string of §3.3, while the printer's self-ID last reported
+a colour ribbon. Both are re-announced when that changes, under the same UUID (§3.5).*
+
 Only `image/urf` is advertised for now — `urf_decode` recognises the PWG Raster magic
 but rejects it (`URF_ERR_UNSUPPORTED`), and advertising a PDL the firmware can't decode
 fails every job a client sends in that format. Add `image/pwg-raster` back to `pdl=` once
@@ -222,6 +226,9 @@ can actually hit. Some clients ignore anything but `RS300`; if iOS refuses the j
 *Settled 2026-08-04: iOS honours `RS72-144` and renders at exactly 144 dpi
 (`fixtures/ios-20260804-232652.urf`, asserted in `test/test_ios_capture.c`), so no
 downsample path or `RS300` is needed.*
+
+*Amended (W-1064): with the colour ribbon in, `SRGB24` follows `W8`
+(`V1.4,CP1,RS72-144,W8,SRGB24,DM1,IS1,MT1,FN3`), in the TXT record and `urf-supported`.*
 
 ### 3.4 IPP operations to implement
 
@@ -283,6 +290,14 @@ print sheet showing yesterday's media list with no way to flush it.
 with stale twins and stuck jobs. Instead the UUID is MAC plus `CONFIG_AIRWRITER_UUID_EPOCH`,
 bumped only when advertised capabilities change (a new UUID strands the Mac's CUPS queue).*
 
+**Colour (W-1064).** The board asks the printer which ribbon is in with `ESC ?` (self-ID,
+Technical Reference Table 6-7: `IW10CF`, `C` with a colour ribbon in) when the line comes
+ready while idle and before each AirPrint job, and saves the answer. While it is colour:
+`color-supported` true, `print-color-mode-supported` `monochrome, color`, default `color`.
+Otherwise exactly the black-only set. This changes advertised values under one UUID, which
+`docs/traps.md` warns against; it is a deliberate first try, and the fallback (a settings switch
+with a second UUID) is in `docs/superpowers/specs/2026-10-17-colour-printing-design.md`.
+
 ### 3.6 Raster decode
 
 iOS sends `image/urf`. Support `image/pwg-raster` too — same pixel data, different
@@ -327,6 +342,14 @@ Per eight raster rows:
 Set line spacing once per page with `ESC T nn` (nn in 144ths of an inch, ASCII digits).
 End every page with a form feed — the widely reported "you have to press Select to make it
 print" behaviour is almost always a missing FF, not a hardware fault.
+
+*Amended (W-1064): an sRGB page with the colour ribbon in prints in four inks. Each pixel splits
+into yellow, magenta, cyan and black (grey components go to black), each ink is dithered on
+its own, and a strip prints one pass per ink it uses, in that order (yellow first, Technical
+Reference p. 123): `ESC K n` (1 yellow, 2 magenta, 3 cyan, 0 black) when the ink changes,
+`ESC G` with that pass's count trimmed to its last dot, the columns, CR with no LF. A strip
+with no ink only adds its LF. The page ends on black. With a black ribbon an sRGB page is
+turned to gray (Rec. 601 luma) and printed as above.*
 
 Defer 144x144 double-pass mode to v2. It needs half-line feeds and two passes per strip,
 and it doubles the time on a printer that is already slow.

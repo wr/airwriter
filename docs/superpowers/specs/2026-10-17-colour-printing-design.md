@@ -126,7 +126,9 @@ An sRGB page with the colour ribbon in:
    baud a full-width pass is about 1.2 s, so this matters most for colour, where passes are
    often sparse. Colour pages only; the gray path keeps its bytes.
 5. **The page ends on black.** If the last pass printed wasn't black, `ESC K0` before the form
-   feed. A colour job that is cut short also gets `ESC K0` after W-1041's resync.
+   feed. A job cut short needs nothing more: every AirPrint page and the test page start with
+   `ESC c`, which resets the ribbon to black (Table A-2), and the Mac's driver sends `ESC K0`
+   itself (`fixtures/pap-iw701-page.bin`).
 
 An sRGB page with a black ribbon (the switch is on but the colour ribbon is out) is turned
 into gray (standard luma weights) and printed by the gray path.
