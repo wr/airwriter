@@ -347,12 +347,33 @@ int main(void)
             { "XX10C",  5, IW_RIBBON_UNKNOWN },
             { "IWxxC",  5, IW_RIBBON_UNKNOWN },
             { "\xC9\xD7\xB1\xB0\xC3", 5, IW_RIBBON_COLOUR },  /* "IW10C", bit 7 set */
+            /* C counts only where the printer puts it, straight after the
+             * width: noise read out after a black reply must not flip it */
+            { "IW10FC",  6, IW_RIBBON_BLACK },
+            { "IW10\x00" "C", 6, IW_RIBBON_BLACK },
+            { "IW10F\r\nxC", 9, IW_RIBBON_BLACK },
         };
         for (size_t k = 0; k < sizeof ids / sizeof ids[0]; k++) {
             iw_ribbon_t got = iw_self_id_ribbon((const uint8_t *)ids[k].s, ids[k].n);
             if (got != ids[k].want) fprintf(stderr, "  self-ID case %zu\n", k);
             CHECK_EQ_INT(got, ids[k].want);
         }
+    }
+
+    /* -- a resync sent between jobs (W-1064: before asking the ribbon) settles
+     *    the link, so the next job does not send another; a cut still counts -- */
+    {
+        iw_link_t l = { 0 };
+        iw_link_job_start(&l);
+        CHECK_EQ_INT(iw_link_need_resync(&l), 0);
+        iw_link_job_end(&l, 0);                 /* cut short: dirty */
+        CHECK_EQ_INT(l.dirty, 1);
+        iw_link_resynced(&l);
+        CHECK_EQ_INT(l.dirty, 0);
+        iw_link_job_start(&l);
+        CHECK_EQ_INT(iw_link_need_resync(&l), 0);
+        iw_link_job_end(&l, 0);
+        CHECK_EQ_INT(l.dirty, 1);
     }
 
     /* -- four-ink strips (W-1064): yellow, magenta, cyan, black, each pass

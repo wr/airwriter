@@ -77,7 +77,9 @@ static char s_adminurl[96];
 static char s_uuid[64];
 static char s_hostname[40];
 static volatile int s_colour;   // W-1064: the colour ribbon is in
-static int s_mdns_up;
+static volatile int s_mdns_up;
+static int s_txt_colour;        // what the TXT record says
+
 
 static ipp_job_rec_t s_job;
 static int32_t s_next_job_id = 1;
@@ -580,6 +582,7 @@ static esp_err_t start_mdns(void)
     ESP_ERROR_CHECK(mdns_hostname_set(s_hostname));
     ESP_ERROR_CHECK(mdns_instance_name_set(s_cfg.queue_name));
 
+    s_txt_colour = s_colour;
     mdns_txt_item_t txt[] = {
         { "txtvers",  "1" },
         { "rp",       "ipp/print" },
@@ -589,9 +592,9 @@ static esp_err_t start_mdns(void)
         { "adminurl", s_adminurl },
         { "priority", "10" },
         { "UUID",     s_uuid },
-        { "Color",    s_colour ? "T" : "F" },
+        { "Color",    s_txt_colour ? "T" : "F" },
         { "Duplex",   "F" },
-        { "URF",      s_colour ? IPP_URF_STRING_COLOUR : IPP_URF_STRING },
+        { "URF",      s_txt_colour ? IPP_URF_STRING_COLOUR : IPP_URF_STRING },
         { "TLS",      "" },
         { "note",     "" },
     };
@@ -699,10 +702,12 @@ void ipp_server_stop(void)
 void ipp_server_set_colour(int on)
 {
     on = on ? 1 : 0;
-    if (on == s_colour) return;
+    if (on != s_colour) ESP_LOGI(TAG, "colour %s", on ? "on: the colour ribbon is in" : "off");
     s_colour = on;
-    ESP_LOGI(TAG, "colour %s", on ? "on: the colour ribbon is in" : "off");
-    if (!s_mdns_up) return;
+    // The TXT record is tracked on its own: a change during start_mdns lands
+    // in the attributes but not the record, and the call after start fixes it.
+    if (!s_mdns_up || on == s_txt_colour) return;
+    s_txt_colour = on;
     esp_err_t a = mdns_service_txt_item_set("_ipp", "_tcp", "Color", on ? "T" : "F");
     esp_err_t b = mdns_service_txt_item_set("_ipp", "_tcp", "URF",
                                             on ? IPP_URF_STRING_COLOUR : IPP_URF_STRING);

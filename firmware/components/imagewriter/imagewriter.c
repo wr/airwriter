@@ -168,9 +168,10 @@ iw_ribbon_t iw_self_id_ribbon(const uint8_t *reply, size_t n)
         for (size_t k = 0; k < 4; k++) c[k] = reply[i + k] & 0x7F;
         if (c[0] != 'I' || c[1] != 'W') continue;
         if (c[2] < '0' || c[2] > '9' || c[3] < '0' || c[3] > '9') continue;
-        for (size_t k = i + 4; k < n; k++)
-            if ((reply[k] & 0x7F) == 'C') return IW_RIBBON_COLOUR;
-        return IW_RIBBON_BLACK;
+        // C goes straight after the width, ahead of F: a C anywhere else is
+        // line noise read out after the reply, not a colour ribbon.
+        return i + 4 < n && (reply[i + 4] & 0x7F) == 'C' ? IW_RIBBON_COLOUR
+                                                          : IW_RIBBON_BLACK;
     }
     return IW_RIBBON_UNKNOWN;
 }
@@ -193,6 +194,11 @@ void iw_link_job_end(iw_link_t *l, int clean)
 {
     if (clean && l->started) l->dirty = 0;
     l->started = 0;
+}
+
+void iw_link_resynced(iw_link_t *l)
+{
+    l->dirty = 0;
 }
 
 enum { SC_TEXT = 0, SC_ESC, SC_DIGITS, SC_SKIP, SC_LIST, SC_KEY, SC_WIDTH };

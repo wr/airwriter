@@ -291,8 +291,11 @@ static void printer_out(void *ctx, const uint8_t *buf, size_t n)
 // clients see follows it (the colour attributes and TXT keys, same UUID), and
 // RGB pages print in colour only while it says colour. Saved, so a restart
 // advertises what the printer last said instead of black until it answers.
-static volatile uint8_t s_ribbon;          // iw_ribbon_t
-static volatile int64_t s_ribbon_due_us;   // ask the idle printer from then on
+static volatile uint8_t    s_ribbon;        // iw_ribbon_t
+static volatile int        s_ribbon_want;   // ask the idle printer, from s_ribbon_due on
+static volatile TickType_t s_ribbon_due;
+static volatile TickType_t s_line_low_at;   // when HSKo last went false
+static volatile int        s_line_seen;     // serial_out has reported the line
 
 static const char *ribbon_name(uint8_t r)
 {
@@ -300,12 +303,28 @@ static const char *ribbon_name(uint8_t r)
 }
 
 // Asks the printer which ribbon is in. The caller holds s_job_lock, with
-// nothing of a job sent yet: ESC ? needs the printer between commands (after
-// a stream cut mid-graphics it would be printed as dots, and the next job's
-// resync deals with that) and ready (a deselected printer does not answer).
-static void ribbon_check(void)
+// nothing of a job sent yet. ESC ? needs the printer ready (a deselected one
+// does not answer) and between commands (after a stream cut mid-graphics it
+// would be taken as dots). Idle, a printer that is not ready, or one left
+// mid-graphics, is left alone. For a job it must not be: a colour page on a
+// ribbon swapped while the printer was off would print four passes in black.
+// So a job waits for the line as its first write would, and sends the resync
+// its first write would have sent.
+static void ribbon_check(int for_job)
 {
-    if (AW_LOOPBACK || s_link.dirty || !serial_out_clear()) return;
+    if (AW_LOOPBACK) return;
+    for (uint32_t ms = 0; for_job && !serial_out_clear() && !s_job_cancelled &&
+                          ms < CONFIG_AIRWRITER_STALL_ABORT * 1000u; ms += 100)
+        vTaskDelay(pdMS_TO_TICKS(100));
+    if (!serial_out_clear()) return;
+    if (s_link.dirty) {
+        if (!for_job) return;
+        esp_err_t err = ESP_OK;
+        iw_resync(resync_out, &err);
+        if (err != ESP_OK) return;
+        iw_link_resynced(&s_link);
+        ESP_LOGW(TAG, "last job was cut short; resynced the printer before asking its ribbon");
+    }
     static const uint8_t self_id[] = { 0x1B, '?' }, cr[] = { '\r' };
     uint8_t reply[16];
     serial_out_rx_drop();
@@ -331,17 +350,27 @@ static void ribbon_check(void)
 static int colour_ok(void *ctx)
 {
     (void)ctx;
-    ribbon_check();
+    ribbon_check(1);
     return s_ribbon == IW_RIBBON_COLOUR;
 }
 
 // HSKo edges from serial_out. printer_state turns a low line into "printer
 // offline" (idle) or "needs attention" (mid-job) on its own clock. A printer
 // that comes ready may have had its ribbon changed: ask it once it settles.
+// Only after the line was down a second or more (power, SELECT, the lid) or
+// at its first report: the printer's own busy blips are not a ribbon swap,
+// and a check whose CR blipped the line must not schedule the next.
 static void printer_line_changed(void *ctx, int ready)
 {
     (void)ctx;
-    if (ready) s_ribbon_due_us = esp_timer_get_time() + 2000000;
+    TickType_t now = xTaskGetTickCount();
+    if (!ready) {
+        s_line_low_at = now;
+    } else if (!s_line_seen || now - s_line_low_at >= pdMS_TO_TICKS(1000)) {
+        s_ribbon_due  = now + pdMS_TO_TICKS(2000);
+        s_ribbon_want = 1;
+    }
+    s_line_seen = 1;
     printer_state_post(ready ? PS_EV_LINE_READY : PS_EV_LINE_NOT_READY);
 }
 
@@ -634,10 +663,10 @@ static void kick_task(void *arg)
     for (;;) {
         vTaskDelay(pdMS_TO_TICKS(500));
         // W-1064: the ribbon, once the line has been ready 2 s with no job.
-        int64_t due = s_ribbon_due_us;
-        if (due && esp_timer_get_time() >= due && xSemaphoreTake(s_job_lock, 0) == pdTRUE) {
-            s_ribbon_due_us = 0;
-            ribbon_check();
+        if (s_ribbon_want && (int32_t)(xTaskGetTickCount() - s_ribbon_due) >= 0 &&
+            xSemaphoreTake(s_job_lock, 0) == pdTRUE) {
+            s_ribbon_want = 0;
+            ribbon_check(0);
             xSemaphoreGive(s_job_lock);
         }
         if (!printer_state_want_kick()) continue;
@@ -1457,7 +1486,8 @@ void app_main(void)
     };
     cable_test_init(&ct);
 #endif
-    xTaskCreate(kick_task, "kick", 3072, NULL, 3, NULL);
+    // 4 KB: a ribbon change saves to NVS and re-announces mDNS from here.
+    xTaskCreate(kick_task, "kick", 4096, NULL, 3, NULL);
 
     job_pipe_cfg_t pipe = { .out = printer_out, .dither = algo, .done = pipe_done,
                             .colour_ok = colour_ok };
@@ -1515,6 +1545,8 @@ void app_main(void)
                   .cancel = doc_cancel, .ctx = NULL },
     };
     ESP_ERROR_CHECK(ipp_server_start(&cfg));
+    // The ribbon may have been read while the server started; push what it is.
+    ipp_server_set_colour(s_ribbon == IW_RIBBON_COLOUR);
     ota_health_set(OH_IPP_UP, 1);
     // wifi_start returned joined, before this could hear the join.
     fwu_start(0);

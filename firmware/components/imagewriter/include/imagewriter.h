@@ -104,6 +104,9 @@ void iw_link_job_start(iw_link_t *l);
 int  iw_link_need_resync(iw_link_t *l);
 // clean: every byte of the job was queued and its last page ended normally.
 void iw_link_job_end(iw_link_t *l, int clean);
+// An iw_resync went out between jobs, all of it (W-1064: the ribbon check
+// sends one before ESC ?, which a printer mid-graphics would take as dots).
+void iw_link_resynced(iw_link_t *l);
 
 // Where a stream someone else wrote stands between commands (W-1053). A
 // LocalTalk job is the Mac driver's own ImageWriter stream, passed through,
