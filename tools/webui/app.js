@@ -533,7 +533,7 @@ function sourceAt(W,H,mode,colour){
    screens scan serpentine and, told to `avoid` another ink's dots, print on
    one only when a quarter darker. The mask screens start their tile at a
    `phase` and read it upside down if asked, which keeps two inks apart. */
-let GAIN=20;
+let GAIN=0;
 const TONE=new Uint8Array(256);
 function setGain(g){
   GAIN=g; const k=Math.log(1/(0.5-GAIN/100))/Math.log(2);

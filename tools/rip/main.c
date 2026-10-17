@@ -84,7 +84,7 @@ static void usage(void)
           "           [--dither threshold|atkinson|floyd|bayer|bluenoise] [--colour]\n"
           "           [--gain PERCENT]\n"
           "  --colour   print RGB pages in four inks, as with the colour ribbon in\n"
-          "  --gain     dot gain at a 50%% tint the tone curve makes up for (default 20)\n",
+          "  --gain     dot gain at a 50%% tint the tone curve makes up for (default 0, off)\n",
           stderr);
 }
 
@@ -92,7 +92,7 @@ int main(int argc, char **argv)
 {
     const char *in = NULL, *out_stream = NULL, *out_preview = NULL;
     const char *dither = "atkinson";
-    int colour = 0, gain = 20;
+    int colour = 0, gain = 0;
 
     for (int i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "--in") && i + 1 < argc)               in = argv[++i];

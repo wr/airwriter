@@ -871,7 +871,7 @@ static const char WEBUI_HTML[] =
 "  return out;\n"
 "}\n"
 "\n"
-"let GAIN=20;\n"
+"let GAIN=0;\n"
 "const TONE=new Uint8Array(256);\n"
 "function setGain(g){\n"
 "  GAIN=g; const k=Math.log(1/(0.5-GAIN/100))/Math.log(2);\n"

@@ -50,9 +50,10 @@ What works on `main`:
 - After an aborted job the next one resyncs the printer first (1280 NULs + CTRL-X); a printer
   left busy by line noise at power-up gets a CTRL-X.
 - Five screens (SPEC §3.7, W-1068): Atkinson, Floyd–Steinberg (both serpentine), blue noise
-  (`halftone/bluenoise64.h`, generated), Bayer, threshold, all behind a dot-gain tone curve
-  (`CONFIG_AIRWRITER_DOT_GAIN` seeds NVS `gain`, 20%; `POST /api/general {"gain":N}` 0–45,
-  shown in `/api/status` `gain`, no UI yet). On a colour page the inks are screened black, cyan,
+  (`halftone/bluenoise64.h`, generated), Bayer, threshold, with an optional dot-gain tone curve
+  (`CONFIG_AIRWRITER_DOT_GAIN` seeds NVS `gain`; `POST /api/general {"gain":N}` 0–45, shown in
+  `/api/status` `gain`, no UI yet). Default 0: on paper Wells found the uncorrected dusk page
+  closest to the screen, no contest against 10 and 20. On a colour page the inks are screened black, cyan,
   magenta, yellow and kept off each other's dots. A screen or gain saved from the page reaches
   the next job at once (`job_pipe_set_screen`); before W-1068 it waited for a restart. The
   dashboard's halftone sheet screens its art the same way, with the board's gain, and shows it

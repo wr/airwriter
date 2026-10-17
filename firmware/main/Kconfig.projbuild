@@ -127,12 +127,14 @@ config AIRWRITER_STALL_ABORT
 config AIRWRITER_DOT_GAIN
     int "Dot gain at a 50% tint, percent"
     range 0 45
-    default 20
+    default 0
     help
         A pin's dot is as wide as its row, so neighbours overlap and a tint
-        prints darker than its bits. The halftone asks for fewer dots in the
-        midtones to make up for it: 20 means a tint asked at half would print
-        at seventy with no curve. 0 prints the bits as they are.
+        can print darker than its bits. The halftone can ask for fewer dots
+        in the midtones to make up for it: 20 means a tint asked at half
+        would print at seventy with no curve. 0 prints the bits as they are,
+        which is what read best on paper (W-1068: a ribbon's dot gains less
+        than its geometry says).
 
 config AIRWRITER_LED_DATA_PIN
     int "LED chain data pin, -1 if absent"

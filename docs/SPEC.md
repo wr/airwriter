@@ -331,9 +331,10 @@ that dominates real print jobs, and you won't know until you've printed both.
 
 *Amended (W-1068): a pin's dot is about as wide as its row (0.35 mm against a 0.18 mm step
 across and 0.35 mm down), so neighbours overlap and a tint prints darker than its bits. A tone
-curve runs ahead of every screen, the inverse of `1 - (1 - a)^k` for the dot gain at a half
-tint set by `CONFIG_AIRWRITER_DOT_GAIN` (20%), so pure black and white are unchanged and the
-midtones ask for fewer dots. The error-diffusion screens scan serpentine, each row the other
+curve can run ahead of every screen, the inverse of `1 - (1 - a)^k` for the dot gain at a half
+tint (NVS `gain`, seeded by `CONFIG_AIRWRITER_DOT_GAIN`), so pure black and white are unchanged
+and the midtones ask for fewer dots. On paper the uncorrected page read best against the
+screen, so the default is 0 and the curve is there to tune. The error-diffusion screens scan serpentine, each row the other
 way with the kernel mirrored, which removes their diagonal worms. A fifth screen, `bluenoise`,
 is a 64x64 void-and-cluster tile (`halftone/tools/make_bluenoise.py`) grown with rows
 counting double, 16 cells per level so a flat tint prints exactly its share. On a colour page
