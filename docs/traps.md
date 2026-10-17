@@ -81,13 +81,25 @@ Traps already explained in a code comment are listed only when the comment is ea
   ~10 s in download mode with IO17 (UART1 TX → U2 DI) floating. Power-cycling does not do it.
   Dev-only; rev B candidate pull-up on IO17.
 
+## Printer self-ID (W-1064)
+
+- **`ESC ?` answers at once on board 1's ImageWriter II:** `49 57 31 30 43 0d` ("IW10C" and a
+  CR; no F, no SheetFeeder), within ~150 ms, with RX at normal polarity. The CR fallback in
+  `ribbon_check` was not needed. It needs the printer selected and between commands.
+- **The colour ribbon is reported as C straight after the width.** `iw_self_id_ribbon` takes C
+  only there, so noise read out after a black reply cannot flip the board to colour.
+
 ## IPP, iOS, macOS, mDNS
 
 - **iOS keys a printer on `printer-uuid`, cached capabilities included.** Changing
   `operations-supported` under the same UUID left every iPhone job at "Waiting"; a per-boot UUID
   (dev mode) left two "ImageWriter II" entries. Bump `CONFIG_AIRWRITER_UUID_EPOCH` only when
   advertised values change: a new UUID orphans the Mac's CUPS queue, whose device-uri pins
-  `uuid=` (Kconfig help has the detail).
+  `uuid=` (Kconfig help has the detail). The colour attributes are the exception (W-1064):
+  turning `color-supported`, `print-color-mode-*` and `SRGB24` on under the same UUID, after
+  the iPhone had the printer cached black-only, gave a colour option and a colour print with no
+  "Waiting" (board 1, 2026-10-17). The TXT record's old copy (`Color=F`) still showed beside
+  the new one on the Mac for a while.
 - **Stale UUIDs linger as twins.** ESP mDNS does not cache-flush the previous boot's TXT record,
   so a UUID or name change shows two printers until client caches expire (~75 min).
 - **Never advertise Create-Job / Send-Document.** With them in `operations-supported` the

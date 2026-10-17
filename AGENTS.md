@@ -165,13 +165,14 @@ Linear is the queue; these are the live items.
   built, untested on hardware (Wells closed it without a bench run). When convenient on board 1:
   a crossover test (the strip, nothing regressed), then one with U7 pulled (`no_chip`, the blink
   by the LocalTalk socket).
-- `W-1064 Colour printing over AirPrint with the ImageWriter II colour ribbon`: built on
-  `wells/w-1064-colour-printing-over-airprint-with-the-imagewriter-ii-colour`, host-tested and
-  built, not yet on board 1. The board reads the ribbon with `ESC ?` self-ID and advertises
-  colour under the same UUID while it is colour, a first try against the `docs/traps.md`
-  warning. Owed on board 1: does self-ID answer (`/api/status` `ribbon`, the `self-ID:` log
-  line), does the iPhone offer colour without "Waiting", and a colour print. If the iPhone keeps
-  a stale copy, the design's fallback is a settings switch with a second UUID.
+- `W-1064 Colour printing over AirPrint with the ImageWriter II colour ribbon`: on
+  `wells/w-1064-colour-printing-over-airprint-with-the-imagewriter-ii-colour`, not merged.
+  Benched on board 1 2026-10-17: self-ID answered "IW10C" at boot and before the job; the
+  iPhone offered colour under the same UUID with no "Waiting" (the automatic version holds; the
+  switch fallback is not needed); an iPhone screenshot printed in colour (960 KB of URF, just
+  under the 1 MB job buffer, 135 KB to the printer, 148 s) and made the build known-good;
+  Black & White printed as before. Not yet tried: a Mac queue (likely needs re-adding), a
+  colour page bigger than the job buffer.
 - Not in Linear: scope HSKo during a long job (SPEC §3.9 timing).
 
 ## Toolchain
