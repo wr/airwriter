@@ -25,7 +25,7 @@ const bars=r=>r>=-60?3:r>=-70?2:1;
 
 /* ── state ─────────────────────────────────────────────────────────── */
 let nets=[], joined='', ip='', sel=null, other=0, changing=0, first=1, setup=0,
-    suffix='', dither='atkinson';
+    suffix='', dither='atkinson', ribbon='';
 
 /* Scanning takes the radio off channel for a second and drops whatever is
    listening, so the last list is kept and reused. An hour is well past the
@@ -141,16 +141,14 @@ function draw(s){
   prn.classList.toggle('g',!!s.printer);
   prn.classList.remove('r');
   /* The ribbon is what the printer last answered to ESC ?, kept across power
-     cycles, so it is known while the printer is off too. AirPrint follows it:
-     colour pages print in colour on the colour ribbon and as gray on black. */
-  const rib=s.ribbon==='colour'?', colour ribbon':s.ribbon==='black'?', black ribbon':'';
+     cycles, so it is known while the printer is off too. It is named on the
+     nameplate, and the halftone sheet prints in its inks. */
+  const rib=s.ribbon==='colour'?'colour ribbon':s.ribbon==='black'?'black ribbon':'';
   prn.dataset.tip=(s.printer?'printer connected and ready'
                  :offline?'printer offline: off, unplugged or deselected'
-                 :'printer busy')+rib;
-  $('ribbon').textContent=
-    s.ribbon==='colour'?'Colour ribbon. Colour pages print in colour, one pass per ink.'
-   :s.ribbon==='black'?'Black ribbon. Colour pages print as gray.'
-   :'Ribbon not read yet: the board asks the printer the next time it is ready.';
+                 :'printer busy')+(rib?', '+rib:'');
+  $('rib').textContent=rib?' · '+rib:'';
+  if(s.ribbon!==ribbon){ ribbon=s.ribbon; render(); }
   lamp($('ledjob'),s.printing,'a',s.printing?'printing':'idle');
   if(!s.printing) $('ledjob').classList.remove('act-a');
 
@@ -469,16 +467,30 @@ const BAYER=[[0,32,8,40,2,34,10,42],[48,16,56,24,50,18,58,26],
  [3,35,11,43,1,33,9,41],[51,19,59,27,49,17,57,25],
  [15,47,7,39,13,45,5,37],[63,31,55,23,61,29,53,21]];
 
-function sourceAt(W,H,mode){
+/* The sheet is drawn as a page would arrive, then split into ink the way
+   the board splits it (ripjob/ink.c): on a black ribbon one plane of Rec. 601
+   luma, on the colour ribbon yellow, magenta, cyan and black, with what the
+   three colours would print in common going to black instead. 255 is bare
+   paper, 0 full ink, as in the firmware. */
+const INKS=[[255,225,0],[230,0,120],[0,160,225],[0,0,0]];
+function sourceAt(W,H,mode,colour){
   const c=document.createElement('canvas');c.width=W;c.height=H;
   const g=c.getContext('2d');
   g.fillStyle='#fff';g.fillRect(0,0,W,H);
   const grd=g.createLinearGradient(0,0,W,0);
-  grd.addColorStop(0,'#ffffff');grd.addColorStop(1,'#6b6b6b');
+  if(colour){
+    /* every mix the ribbon can make, in the order the inks overlap:
+       yellow, yellow+magenta, magenta, magenta+cyan, cyan, cyan+yellow */
+    grd.addColorStop(0,'#ffffff');grd.addColorStop(.14,'#ffe100');
+    grd.addColorStop(.31,'#ff2000');grd.addColorStop(.48,'#e6007a');
+    grd.addColorStop(.65,'#3000c0');grd.addColorStop(.82,'#00a0e1');
+    grd.addColorStop(1,'#00a020');
+  }else{grd.addColorStop(0,'#ffffff');grd.addColorStop(1,'#6b6b6b');}
   g.fillStyle=grd;g.fillRect(0,0,W,Math.round(H*.42));
   const r=Math.round(H*.16), cx=Math.round(W*.17), cy=Math.round(H*.21);
   const rg=g.createRadialGradient(cx-r*.35,cy-r*.35,r*.06,cx,cy,r);
-  rg.addColorStop(0,'#fff');rg.addColorStop(.5,'#8d8d8d');rg.addColorStop(1,'#161616');
+  if(colour){rg.addColorStop(0,'#fff');rg.addColorStop(.45,'#ff2000');rg.addColorStop(1,'#500000');}
+  else{rg.addColorStop(0,'#fff');rg.addColorStop(.5,'#8d8d8d');rg.addColorStop(1,'#161616');}
   g.fillStyle=rg;g.beginPath();g.arc(cx,cy,r,0,7);g.fill();
   const m=MODES[mode], fs=22, pad=22;
   g.fillStyle='#111';
@@ -487,35 +499,30 @@ function sourceAt(W,H,mode){
   g.font=fs+'px "Times New Roman", Times, serif';
   m.body.forEach((t,i)=>g.fillText(t, pad,
     Math.round(H*.42)+Math.round(fs*3.7)+i*Math.round(fs*1.30)));
-  const d=g.getImageData(0,0,W,H).data,out=new Float32Array(W*H);
-  for(let i=0;i<W*H;i++)
-    out[i]=.299*d[i*4]+.587*d[i*4+1]+.114*d[i*4+2]+(Math.random()-.5)*1.6;
+  const d=g.getImageData(0,0,W,H).data, n=colour?4:1,
+        out=Array.from({length:n},()=>new Float32Array(W*H));
+  for(let i=0;i<W*H;i++){
+    const r=d[i*4],gg=d[i*4+1],b=d[i*4+2];
+    if(colour){
+      const mx=Math.max(r,gg,b);
+      out[0][i]=255-(mx-b); out[1][i]=255-(mx-gg); out[2][i]=255-(mx-r); out[3][i]=mx;
+    }else out[0][i]=.299*r+.587*gg+.114*b;
+    for(let k=0;k<n;k++) out[k][i]+=(Math.random()-.5)*1.6;
+  }
   return out;
 }
 
-function render(){
-  const cv=$('prev'), host=cv.parentElement;
-  if(!host.clientWidth) return;
-  const dpr=Math.max(1,Math.round(window.devicePixelRatio||1));
-  const zoom=2;
-  const cssW=Math.floor(host.clientWidth-2);
-  const W=Math.floor(cssW*dpr/zoom), H=Math.round(W*0.34);
-  /* The printer is 144 dpi across and 72 down: the pipeline box-filters every
-     pair of source rows into one printed row, then prints each dot twice as
-     tall as it is wide. Square dots at full resolution flatter it badly. */
-  const src=sourceAt(W,H*2,dither);
-  const p=new Float32Array(W*H);
-  for(let y=0;y<H;y++)for(let x=0;x<W;x++)
-    p[y*W+x]=(src[(2*y)*W+x]+src[(2*y+1)*W+x])/2;
-
+/* One plane through the chosen screen. Each ink is dithered on its own, as
+   the board does it, so each carries its own error. */
+function halftone(p,W,H,mode){
   const add=(i,e)=>{if(i>=0&&i<W*H)p[i]+=e;};
-  const mode=dither, bits=new Uint8Array(W*H);
+  const bits=new Uint8Array(W*H);
   for(let y=0;y<H;y++)for(let x=0;x<W;x++){
-    const i=y*W+x,v=p[i];let black;
-    if(mode=='bayer')black=v<(BAYER[y&7][x&7]+.5)*4;
-    else if(mode=='threshold')black=v<128;
+    const i=y*W+x,v=p[i];let on;
+    if(mode=='bayer')on=v<(BAYER[y&7][x&7]+.5)*4;
+    else if(mode=='threshold')on=v<128;
     else{
-      black=v<128;const err=v-(black?0:255);
+      on=v<128;const err=v-(on?0:255);
       if(mode=='floyd'){
         if(x+1<W)add(i+1,err*7/16);
         if(y+1<H){if(x)add(i+W-1,err*3/16);add(i+W,err*5/16);if(x+1<W)add(i+W+1,err/16);}
@@ -524,18 +531,43 @@ function render(){
         if(y+1<H){if(x)add(i+W-1,e);add(i+W,e);if(x+1<W)add(i+W+1,e);}
         if(y+2<H)add(i+2*W,e);}
     }
-    bits[i]=black?1:0;
+    bits[i]=on?1:0;
   }
+  return bits;
+}
+
+function render(){
+  const cv=$('prev'), host=cv.parentElement;
+  if(!host.clientWidth) return;
+  const dpr=Math.max(1,Math.round(window.devicePixelRatio||1));
+  const zoom=2, colour=ribbon==='colour';
+  const cssW=Math.floor(host.clientWidth-2);
+  const W=Math.floor(cssW*dpr/zoom), H=Math.round(W*0.34);
+  /* The printer is 144 dpi across and 72 down: the pipeline box-filters every
+     pair of source rows into one printed row, then prints each dot twice as
+     tall as it is wide. Square dots at full resolution flatter it badly. */
+  const src=sourceAt(W,H*2,dither,colour), n=src.length, planes=[];
+  for(const s of src){
+    const p=new Float32Array(W*H);
+    for(let y=0;y<H;y++)for(let x=0;x<W;x++)
+      p[y*W+x]=(s[(2*y)*W+x]+s[(2*y+1)*W+x])/2;
+    planes.push(halftone(p,W,H,dither));
+  }
+  /* A dot of each ink takes from the paper what that ink absorbs, so where
+     dots land on each other they mix as they do on the page. */
+  const inks=colour?INKS:[INKS[3]];
   const dw=zoom, dh=zoom*2;
   cv.width=W*dw; cv.height=H*dh;
   cv.style.width=(W*dw/dpr)+'px'; cv.style.height=(H*dh/dpr)+'px';
   const g=cv.getContext('2d'), img=g.createImageData(W*dw,H*dh);
   for(let y=0;y<H;y++)for(let x=0;x<W;x++){
-    const on=bits[y*W+x]?0:255;
+    const i=y*W+x; let r=255,gg=255,b=255;
+    for(let k=0;k<n;k++) if(planes[k][i]){
+      r=r*inks[k][0]/255; gg=gg*inks[k][1]/255; b=b*inks[k][2]/255;}
     for(let sy=0;sy<dh;sy++){
       let o=((y*dh+sy)*W*dw + x*dw)*4;
       for(let sx=0;sx<dw;sx++,o+=4){
-        img.data[o]=img.data[o+1]=img.data[o+2]=on; img.data[o+3]=255;}
+        img.data[o]=r; img.data[o+1]=gg; img.data[o+2]=b; img.data[o+3]=255;}
     }
   }
   g.putImageData(img,0,0);
