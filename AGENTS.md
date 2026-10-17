@@ -49,6 +49,15 @@ What works on `main`:
   `CONFIG_AIRWRITER_STALL_ABORT` (600 s).
 - After an aborted job the next one resyncs the printer first (1280 NULs + CTRL-X); a printer
   left busy by line noise at power-up gets a CTRL-X.
+- Five screens (SPEC §3.7, W-1068): Atkinson, Floyd–Steinberg (both serpentine), blue noise
+  (`halftone/bluenoise64.h`, generated), Bayer, threshold, with an optional dot-gain tone curve
+  (`CONFIG_AIRWRITER_DOT_GAIN` seeds NVS `gain`; `POST /api/general {"gain":N}` 0–45, shown in
+  `/api/status` `gain`, no UI yet). Default 0: on paper Wells found the uncorrected dusk page
+  closest to the screen, no contest against 10 and 20. On a colour page the inks are screened black, cyan,
+  magenta, yellow and kept off each other's dots. A screen or gain saved from the page reaches
+  the next job at once (`job_pipe_set_screen`); before W-1068 it waited for a restart. The
+  dashboard's halftone sheet screens its art the same way, with the board's gain, and shows it
+  as ink on paper.
 - Colour with Apple's colour ribbon (`W-1064 Colour printing over AirPrint with the ImageWriter
   II colour ribbon`): the board reads the ribbon with `ESC ?` self-ID (when the printer comes
   back after a second or more down, and before every AirPrint job), saves it, reports it in
@@ -180,6 +189,12 @@ Linear is the queue; these are the live items.
   printed (960 KB of URF, just under the 1 MB job buffer). Not yet seen on this build: a Black &
   White print, a Mac queue (likely needs re-adding). Full-page colour photos overflow the job
   buffer: a side session is measuring that. No release carries it yet.
+- `W-1067 Web dashboard shows which ribbon is in: colour or black` and `W-1068 Better halftone:
+  dot gain curve, serpentine, blue noise, interleaved colour`: merged 2026-10-17, benched on board 1.
+  The dusk page printed through Atkinson and blue noise read the same to Wells; the uncorrected
+  page beat 10% and 20% dot-gain curves, so the curve ships off. The sheet is drawn at one device
+  pixel per dot (half scale on a retina Mac), its type set to the measure. Five tabs wrap 2/2/1 on
+  a phone. No release carries any of this yet.
 - Not in Linear: scope HSKo during a long job (SPEC §3.9 timing).
 
 ## Toolchain
@@ -225,12 +240,15 @@ Linear is the queue; these are the live items.
   `tools/requirements.txt`. Work by `docs/cad-routine.md`.
 
 ## Verification
-- **Host tests:** `make -C tools/rip test` (raster path and colour, serial writer, printer_state, led_grid,
+- **Host tests:** `make -C tools/rip test` (raster path, halftone screens and colour, serial writer, printer_state, led_grid,
   dip_config, pic_prog, localtalk, cable, fw_update, known_good) and `make -B -C tools/ipp test`
   (`-B`: `tools/ipp/build/` is committed).
 - **Raster regression:** `make -C tools/rip regress`; `stream.bin` must match the fixtures byte
   for byte (gray, the iOS capture, and a synthetic sRGB page ripped in colour and as gray). No
-  ESP32 needed. `rip --colour --out-preview` shows a colour page in its four inks.
+  ESP32 needed. `rip --colour --out-preview` shows a colour page in its four inks; `--gain 0`
+  turns the dot-gain curve off, `--dither bluenoise` picks the blue-noise screen. The checker
+  fixture is pure black and white and must never change; the other three move with any change
+  to a screen, the curve or the ink order, and are regenerated with the reason in the commit.
 - **Firmware:** `idf.py build` clean.
 - **On board 1:** an `ipptool` Print-Job of `fixtures/checker.urf` prints crc32 `8ee84844`.
   After an OTA, `/api/status` reaches `"trial":false` with the new `version`.

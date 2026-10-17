@@ -29,6 +29,9 @@ typedef struct {
     void       *out_ctx;
 
     ht_algo_t   dither;
+    // Dot gain at a 50% tint, percent (halftone.h ht_set_gain). 0 prints
+    // the bits as they are.
+    int         gain;
 
     // The colour ribbon is in (W-1064): RGB pages print in four inks. With
     // 0 they print as gray, as a black ribbon would anyway. Gray pages print

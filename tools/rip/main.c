@@ -81,15 +81,18 @@ static void on_ink_row(void *ctx, const uint8_t *const bits[IW_INKS], uint32_t w
 static void usage(void)
 {
     fputs("usage: rip --in FILE [--out-stream FILE] [--out-preview FILE]\n"
-          "           [--dither threshold|atkinson|floyd|bayer] [--colour]\n"
-          "  --colour   print RGB pages in four inks, as with the colour ribbon in\n", stderr);
+          "           [--dither threshold|atkinson|floyd|bayer|bluenoise] [--colour]\n"
+          "           [--gain PERCENT]\n"
+          "  --colour   print RGB pages in four inks, as with the colour ribbon in\n"
+          "  --gain     dot gain at a 50%% tint the tone curve makes up for (default 0, off)\n",
+          stderr);
 }
 
 int main(int argc, char **argv)
 {
     const char *in = NULL, *out_stream = NULL, *out_preview = NULL;
     const char *dither = "atkinson";
-    int colour = 0;
+    int colour = 0, gain = 0;
 
     for (int i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "--in") && i + 1 < argc)               in = argv[++i];
@@ -97,6 +100,7 @@ int main(int argc, char **argv)
         else if (!strcmp(argv[i], "--out-preview") && i + 1 < argc) out_preview = argv[++i];
         else if (!strcmp(argv[i], "--dither") && i + 1 < argc)      dither = argv[++i];
         else if (!strcmp(argv[i], "--colour"))                       colour = 1;
+        else if (!strcmp(argv[i], "--gain") && i + 1 < argc)        gain = atoi(argv[++i]);
         else { usage(); return 2; }
     }
     if (!in) { usage(); return 2; }
@@ -133,6 +137,7 @@ int main(int argc, char **argv)
         .out      = stream_out,
         .out_ctx  = &h,
         .dither   = algo,
+        .gain     = gain,
         .colour   = colour,
         .page     = out_preview ? on_page : NULL,
         .page_ctx = &h,

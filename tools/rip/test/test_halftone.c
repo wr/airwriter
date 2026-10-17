@@ -105,7 +105,128 @@ int main(void)
         CHECK_EQ_INT(a, HT_ATKINSON);
         CHECK_EQ_INT(ht_algo_from_name("bayer", &a), 0);
         CHECK_EQ_INT(a, HT_BAYER);
+        CHECK_EQ_INT(ht_algo_from_name("bluenoise", &a), 0);
+        CHECK_EQ_INT(a, HT_BLUENOISE);
         CHECK_EQ_INT(ht_algo_from_name("nonsense", &a), -1);
+    }
+
+    /* -- serpentine: the second row is scanned from the right --
+     *
+     * Floyd-Steinberg, width 3. Row 0 is all paper, so it carries nothing.
+     * Row 1 is { 255, 128, 255 } scanned right to left: x=2 prints paper
+     * with no error, x=1 is 128, prints paper, error -127, and its 7/16 tap
+     * goes the way the scan goes, to x=0 (-55), so x=0 is 200 and still
+     * paper. On a left-to-right row that -55 would have landed on x=2. The
+     * next row's taps mirror too: 3/16 goes to x=2 (-23), 1/16 to x=0 (-7),
+     * then x=0's own -55 spreads 3/16 to x=1 (-10) and 5/16 to x=0 (-17).
+     */
+    {
+        ht_t h;
+        CHECK_EQ_INT(ht_init(&h, HT_FLOYD, 3), 0);
+        const uint8_t paper[3] = { 255, 255, 255 }, row1[3] = { 255, 128, 255 };
+        uint8_t bits[1] = { 0 };
+        ht_row(&h, paper, bits);
+        ht_row(&h, row1, bits);
+        CHECK_EQ_INT(bits[0], 0x00);
+        CHECK_EQ_INT(ht_peek_err(&h, 0, 0), -7 - 17);
+        CHECK_EQ_INT(ht_peek_err(&h, 0, 1), -39 - 10);
+        CHECK_EQ_INT(ht_peek_err(&h, 0, 2), -23);
+        ht_free(&h);
+    }
+
+    /* -- the tone curve lifts the midtones, keeps the ends, stays in order -- */
+    {
+        ht_t h;
+        CHECK_EQ_INT(ht_init(&h, HT_THRESHOLD, 4), 0);
+        ht_set_gain(&h, 20);
+        CHECK_EQ_INT(h.tone[0], 0);
+        CHECK_EQ_INT(h.tone[255], 255);
+        CHECK(h.tone[128] > 160 && h.tone[128] < 180);   /* 50% ink asks for ~33% dots */
+        for (int v = 1; v < 256; v++) CHECK(h.tone[v] >= h.tone[v - 1]);
+        /* a 50% gray through threshold now prints paper, as it should: the
+           curve says it reads as 50% only with a third of the dots */
+        const uint8_t gray[4] = { 128, 128, 128, 128 };
+        uint8_t bits[1] = { 0xFF };
+        ht_row(&h, gray, bits);
+        CHECK_EQ_INT(bits[0], 0x00);
+        ht_set_gain(&h, 0);
+        CHECK_EQ_INT(h.tone[128], 128);
+        ht_free(&h);
+    }
+
+    /* -- blue noise: 16 cells per level, so a flat tint prints its share -- */
+    {
+        int count[256] = { 0 };
+        for (uint32_t y = 0; y < 64; y++)
+            for (uint32_t x = 0; x < 64; x++) count[ht_bluenoise_at(x, y)]++;
+        for (int v = 0; v < 256; v++) CHECK_EQ_INT(count[v], 16);
+
+        ht_t h;
+        CHECK_EQ_INT(ht_init(&h, HT_BLUENOISE, 64), 0);
+        uint8_t gray[64], bits[8];
+        memset(gray, 64, sizeof gray);                /* 75% ink */
+        int dots = 0;
+        for (int y = 0; y < 64; y++) {
+            ht_row(&h, gray, bits);
+            for (int b = 0; b < 8; b++) dots += __builtin_popcount(bits[b]);
+        }
+        CHECK_EQ_INT(dots, (256 - 64) * 16);
+        ht_free(&h);
+
+        /* the tile upside down is its complement: a light tint on each never
+           shares a dot */
+        ht_t a, b;
+        CHECK_EQ_INT(ht_init(&a, HT_BLUENOISE, 64), 0);
+        CHECK_EQ_INT(ht_init(&b, HT_BLUENOISE, 64), 0);
+        ht_set_phase(&b, 0, 0, 1);
+        memset(gray, 200, sizeof gray);               /* 22% ink each */
+        uint8_t ba[8], bb[8];
+        int shared = 0, da = 0;
+        for (int y = 0; y < 64; y++) {
+            ht_row(&a, gray, ba);
+            ht_row(&b, gray, bb);
+            for (int i = 0; i < 8; i++) { shared += __builtin_popcount(ba[i] & bb[i]);
+                                          da += __builtin_popcount(ba[i]); }
+        }
+        CHECK_EQ_INT(shared, 0);
+        CHECK_EQ_INT(da, 56 * 16);
+        ht_free(&a); ht_free(&b);
+    }
+
+    /* -- dot-off-dot: a second ink keeps off the first's dots where it can --
+     *
+     * Two 25% tints through Floyd-Steinberg, 256 wide and 64 rows. Blind to
+     * each other they share about a sixteenth of the cells; told to avoid,
+     * far fewer, and the second still prints as many dots as it did blind.
+     */
+    {
+        enum { W = 256, R = 64, NB = W / 8 };
+        uint8_t gray[W]; memset(gray, 191, sizeof gray);
+        uint8_t ba[NB], bb[NB];
+        int shared_blind = 0, shared_avoid = 0, dots_blind = 0, dots_avoid = 0;
+        ht_t a, b;
+        CHECK_EQ_INT(ht_init(&a, HT_FLOYD, W), 0);
+        CHECK_EQ_INT(ht_init(&b, HT_FLOYD, W), 0);
+        for (int y = 0; y < R; y++) {
+            ht_row(&a, gray, ba);
+            ht_row(&b, gray, bb);
+            for (int i = 0; i < NB; i++) { shared_blind += __builtin_popcount(ba[i] & bb[i]);
+                                           dots_blind += __builtin_popcount(bb[i]); }
+        }
+        ht_free(&a); ht_free(&b);
+        CHECK_EQ_INT(ht_init(&a, HT_FLOYD, W), 0);
+        CHECK_EQ_INT(ht_init(&b, HT_FLOYD, W), 0);
+        for (int y = 0; y < R; y++) {
+            ht_row(&a, gray, ba);
+            ht_row_avoid(&b, gray, ba, bb);
+            for (int i = 0; i < NB; i++) { shared_avoid += __builtin_popcount(ba[i] & bb[i]);
+                                           dots_avoid += __builtin_popcount(bb[i]); }
+        }
+        ht_free(&a); ht_free(&b);
+        CHECK(shared_avoid * 4 < shared_blind);
+        CHECK(dots_avoid > dots_blind * 9 / 10 && dots_avoid < dots_blind * 11 / 10);
+        printf("  dot-off-dot: %d shared blind, %d avoiding; %d dots blind, %d avoiding\n",
+               shared_blind, shared_avoid, dots_blind, dots_avoid);
     }
 
     TEST_END;
