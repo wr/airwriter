@@ -171,8 +171,8 @@ Linear is the queue; these are the live items.
   iPhone offered colour under the same UUID with no "Waiting" (the automatic version holds; the
   switch fallback is not needed); an iPhone screenshot printed in colour (960 KB of URF, just
   under the 1 MB job buffer, 135 KB to the printer, 148 s) and made the build known-good;
-  Black & White printed as before. Not yet tried: a Mac queue (likely needs re-adding), a
-  colour page bigger than the job buffer.
+  Not yet tried: a Black & White print on this build (the console logged none), a Mac queue
+  (likely needs re-adding), a colour page bigger than the job buffer.
 - Not in Linear: scope HSKo during a long job (SPEC §3.9 timing).
 
 ## Toolchain
