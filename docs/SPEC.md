@@ -277,9 +277,15 @@ millimetre as IPP requires. Refine after test prints.
 
 **Media.** `na_letter_8.5x11in` plus the continuous fanfold sizes. Not borderless.
 
-**`printer-icons`.** An array of URLs served by the device's own HTTP server, at 48, 128
-and 512 pixels. iOS renders these in the print sheet. Serve them from SPIFFS/LittleFS as
-PNG. Placeholder assets are fine for now; final artwork comes from the silkscreen design.
+**`printer-icons`.** Three PNGs served on the IPP port itself,
+`http://<host>.local:631/icon-{48,128,512}.png`, smallest first as IPP Everywhere orders
+them. A Mac fetches them once, when the printer is added, and keeps an `.icns` in
+`/Library/Printers/Icons/` that the queue's PPD names (`*APPrinterIconPath`); a new icon
+shows only after the printer is removed and added again. The PNGs are built into the
+firmware by `tools/icon/mkicons.py` from a 32 × 32 pixel grid: 128 and 512 are exact 4× and
+16× enlargements, and 48 is the grid at 1× with a margin, since 1.5× would draw uneven
+pixels. The artwork is Apple's colour ImageWriter icon, redrawn pixel for pixel
+(`LICENSE.md`).
 
 **`printer-uuid`.** Derive from eFuse MAC so it survives reflashing. Add a `DEV_MODE`
 build flag that regenerates it on every boot — iOS caches capabilities against the UUID

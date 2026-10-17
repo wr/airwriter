@@ -74,6 +74,7 @@ static ipp_server_cfg_t s_cfg;
 static ipp_doc_sink_t   s_sink;
 static char s_uri[128];
 static char s_adminurl[96];
+static char s_icon_uri[3][96];
 static char s_uuid[64];
 static char s_hostname[40];
 static volatile int s_colour;   // W-1064: the colour ribbon is in
@@ -117,6 +118,24 @@ static void make_uuid(int dev_mode)
              rnd, mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
 }
 
+// printer-icons, built in from icons/ by tools/icon/mkicons.py and served
+// on the IPP port itself.
+extern const uint8_t icon_48_start[]  asm("_binary_icon_48_png_start");
+extern const uint8_t icon_48_end[]    asm("_binary_icon_48_png_end");
+extern const uint8_t icon_128_start[] asm("_binary_icon_128_png_start");
+extern const uint8_t icon_128_end[]   asm("_binary_icon_128_png_end");
+extern const uint8_t icon_512_start[] asm("_binary_icon_512_png_start");
+extern const uint8_t icon_512_end[]   asm("_binary_icon_512_png_end");
+
+static const struct {
+    unsigned       size;
+    const uint8_t *start, *end;
+} k_icons[3] = {
+    {  48, icon_48_start,  icon_48_end  },
+    { 128, icon_128_start, icon_128_end },
+    { 512, icon_512_start, icon_512_end },
+};
+
 // Callers hold s_job_lock.
 static void fill_printer(ipp_printer_t *p)
 {
@@ -125,6 +144,7 @@ static void fill_printer(ipp_printer_t *p)
     p->info           = "Apple ImageWriter II";
     p->uuid           = s_uuid;
     p->adminurl       = s_adminurl;
+    for (int i = 0; i < 3; i++) p->icons[i] = s_icon_uri[i];
     p->location       = "";
     p->state          = s_stop_reason               ? IPP_PSTATE_STOPPED
                       : (s_job.state == IPP_JSTATE_PROCESSING) ? IPP_PSTATE_PROCESSING
@@ -511,6 +531,29 @@ static int wait_for_request(work_t *w, int fd, int first)
     return 0;
 }
 
+static int handle_get(int fd, const hreq_t *hr)
+{
+    const char *path = hr->uri;
+    if (strncmp(path, "http", 4) == 0) {           // absolute form
+        const char *a = strstr(path, "://");
+        path = a ? strchr(a + 3, '/') : NULL;
+        if (!path) path = "/";
+    }
+    size_t plen = strcspn(path, "?");
+    for (int i = 0; i < 3; i++) {
+        char want[24];
+        int n = snprintf(want, sizeof want, "/icon-%u.png", k_icons[i].size);
+        if ((size_t)n == plen && strncmp(path, want, plen) == 0)
+            return hresp_send(fd, 200, "OK", "image/png", k_icons[i].start,
+                              (size_t)(k_icons[i].end - k_icons[i].start),
+                              hr->keep_alive);
+    }
+    // Some clients probe the queue with a GET before they trust it.
+    static const char page[] = "AirWriter\n";
+    return hresp_send(fd, 200, "OK", "text/plain", page, sizeof page - 1,
+                      hr->keep_alive);
+}
+
 static void handle_conn(work_t *w, int fd)
 {
     struct timeval tv = { .tv_sec = 30, .tv_usec = 0 };
@@ -532,10 +575,7 @@ static void handle_conn(work_t *w, int fd)
         if (strcmp(hr.method, "POST") == 0) {
             rc = handle_post(w, fd, &hr);
         } else if (strcmp(hr.method, "GET") == 0) {
-            // Some clients probe the queue with a GET before they trust it.
-            static const char page[] = "AirWriter\n";
-            rc = hresp_send(fd, 200, "OK", "text/plain", page, sizeof page - 1,
-                            hr.keep_alive);
+            rc = handle_get(fd, &hr);
         } else {
             rc = hresp_send(fd, 405, "Method Not Allowed", "text/plain", "", 0, 0);
         }
@@ -670,6 +710,9 @@ esp_err_t ipp_server_start(const ipp_server_cfg_t *cfg)
     snprintf(s_uri, sizeof s_uri, "ipp://%s.local:%u/ipp/print",
              s_hostname, (unsigned)s_cfg.port);
     snprintf(s_adminurl, sizeof s_adminurl, "http://%s.local/", s_hostname);
+    for (int i = 0; i < 3; i++)
+        snprintf(s_icon_uri[i], sizeof s_icon_uri[i], "http://%s.local:%u/icon-%u.png",
+                 s_hostname, (unsigned)s_cfg.port, k_icons[i].size);
     make_uuid(cfg->dev_mode);
     s_colour = cfg->colour ? 1 : 0;
 
