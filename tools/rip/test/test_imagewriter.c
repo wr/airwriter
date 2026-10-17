@@ -355,5 +355,100 @@ int main(void)
         }
     }
 
+    /* -- four-ink strips (W-1064): yellow, magenta, cyan, black, each pass
+     *    trimmed to its last inked column and ended by CR with no LF -- */
+    static const uint8_t begin8[] = { 0x1B,'c', 0x1B,'p', 0x1B,'T','1','6' };
+
+    /* one_yellow_dot: one pass, and the page still ends on black */
+    {
+        static iwc_t w;
+        uint8_t y[1] = { 0x80 }, none[1] = { 0 };
+        const uint8_t *bits[IW_INKS] = { y, none, none, none };
+        sink_n = 0;
+        iwc_init(&w, 8, collect, NULL);
+        iwc_begin_page(&w);
+        iwc_row(&w, bits);
+        iwc_end_page(&w);
+        const uint8_t want[] = {
+            0x1B,'c', 0x1B,'p', 0x1B,'T','1','6',
+            0x1B,'K','1', 0x1B,'G','0','0','0','1', 0x01, '\r',
+            0x1B,'K','0', 0x0C };
+        CHECK_EQ_INT(sink_n, sizeof want);
+        CHECK_EQ_MEM(sink, want, sizeof want);
+    }
+
+    /* pass_order_and_trim: Y M C K, each count its own last column + 1 */
+    {
+        static iwc_t w;
+        uint8_t y[2] = { 0x10, 0x00 };      /* x = 3  */
+        uint8_t m[2] = { 0x00, 0x40 };      /* x = 9  */
+        uint8_t c[2] = { 0x80, 0x00 };      /* x = 0  */
+        uint8_t k[2] = { 0x00, 0x01 };      /* x = 15 */
+        const uint8_t *bits[IW_INKS] = { y, m, c, k };
+        sink_n = 0;
+        iwc_init(&w, 16, collect, NULL);
+        iwc_begin_page(&w);
+        iwc_row(&w, bits);
+        iwc_end_page(&w);
+        uint8_t want[128];
+        size_t n = 0;
+        memcpy(want, begin8, sizeof begin8); n += sizeof begin8;
+        static const struct { char digit; const char *count; int last; } pass[] = {
+            { '1', "0004", 3 }, { '2', "0010", 9 }, { '3', "0001", 0 }, { '0', "0016", 15 },
+        };
+        for (int p = 0; p < 4; p++) {
+            want[n++] = 0x1B; want[n++] = 'K'; want[n++] = (uint8_t)pass[p].digit;
+            want[n++] = 0x1B; want[n++] = 'G';
+            memcpy(want + n, pass[p].count, 4); n += 4;
+            for (int x = 0; x <= pass[p].last; x++) want[n++] = x == pass[p].last ? 0x01 : 0x00;
+            want[n++] = '\r';
+        }
+        want[n++] = 0x0C;                   /* already on black: no ESC K0 */
+        CHECK_EQ_INT(sink_n, n);
+        CHECK_EQ_MEM(sink, want, n);
+    }
+
+    /* same_ink_not_reselected: two black strips select black once */
+    {
+        static iwc_t w;
+        uint8_t k[1] = { 0x80 }, none[1] = { 0 };
+        const uint8_t *bits[IW_INKS] = { none, none, none, k };
+        sink_n = 0;
+        iwc_init(&w, 8, collect, NULL);
+        iwc_begin_page(&w);
+        for (int i = 0; i < 16; i++) iwc_row(&w, bits);
+        iwc_end_page(&w);
+        const uint8_t want[] = {
+            0x1B,'c', 0x1B,'p', 0x1B,'T','1','6',
+            0x1B,'K','0', 0x1B,'G','0','0','0','1', 0xFF, '\r',
+            '\n',         0x1B,'G','0','0','0','1', 0xFF, '\r',
+            0x0C };
+        CHECK_EQ_INT(sink_n, sizeof want);
+        CHECK_EQ_MEM(sink, want, sizeof want);
+    }
+
+    /* blank_strip_holds_lf: a strip with no ink still moves the paper */
+    {
+        static iwc_t w;
+        uint8_t k[1] = { 0x80 }, none[1] = { 0 };
+        const uint8_t *ink[IW_INKS]   = { none, none, none, k };
+        const uint8_t *blank[IW_INKS] = { none, none, none, none };
+        sink_n = 0;
+        iwc_init(&w, 8, collect, NULL);
+        iwc_begin_page(&w);
+        for (int i = 0; i < 8; i++) iwc_row(&w, i ? blank : ink);
+        for (int i = 0; i < 8; i++) iwc_row(&w, blank);
+        for (int i = 0; i < 8; i++) iwc_row(&w, i ? blank : ink);
+        for (int i = 0; i < 8; i++) iwc_row(&w, blank);   /* trailing: no LF owed */
+        iwc_end_page(&w);
+        const uint8_t want[] = {
+            0x1B,'c', 0x1B,'p', 0x1B,'T','1','6',
+            0x1B,'K','0', 0x1B,'G','0','0','0','1', 0x01, '\r',
+            '\n', '\n',   0x1B,'G','0','0','0','1', 0x01, '\r',
+            0x0C };
+        CHECK_EQ_INT(sink_n, sizeof want);
+        CHECK_EQ_MEM(sink, want, sizeof want);
+    }
+
     TEST_END;
 }

@@ -78,6 +78,77 @@ void iw_end_page(iw_t *w)
     w->out(w->ctx, ff, sizeof ff);
 }
 
+static const char k_ink_digit[IW_INKS] = { '1', '2', '3', '0' };
+
+void iwc_init(iwc_t *w, uint32_t width_dots, iw_out_fn out, void *ctx)
+{
+    memset(w, 0, sizeof *w);
+    w->width_dots = width_dots > IW_MAX_DOTS ? IW_MAX_DOTS : width_dots;
+    w->out = out;
+    w->ctx = ctx;
+    w->ink = -1;
+}
+
+void iwc_begin_page(iwc_t *w)
+{
+    static const uint8_t init[] = { 0x1B, 'c', 0x1B, 'p', 0x1B, 'T', '1', '6' };
+    w->out(w->ctx, init, sizeof init);
+    w->nrows   = 0;
+    w->held_lf = 0;
+    w->ink     = -1;     // ESC c selects black, but only once it has run
+}
+
+static void select_ink(iwc_t *w, int ink)
+{
+    if (w->ink == ink) return;
+    const uint8_t sel[3] = { 0x1B, 'K', (uint8_t)k_ink_digit[ink] };
+    w->out(w->ctx, sel, sizeof sel);
+    w->ink = ink;
+}
+
+static void flush_colour(iwc_t *w)
+{
+    static const uint8_t lf[] = { '\n' }, cr[] = { '\r' };
+    for (int ink = 0; ink < IW_INKS; ink++) {
+        const uint8_t *rows[8];
+        for (uint32_t i = 0; i < 8; i++)
+            rows[i] = i < w->nrows ? w->rows[ink][i] : NULL;
+        iw_transpose(rows, w->cols, w->width_dots);
+
+        uint32_t n = w->width_dots;
+        while (n && !w->cols[n - 1]) n--;
+        if (!n) continue;
+
+        for (; w->held_lf; w->held_lf--) w->out(w->ctx, lf, sizeof lf);
+        select_ink(w, ink);
+        uint8_t hdr[6] = { 0x1B, 'G',
+                           (uint8_t)('0' + (n / 1000) % 10), (uint8_t)('0' + (n / 100) % 10),
+                           (uint8_t)('0' + (n / 10) % 10),   (uint8_t)('0' + n % 10) };
+        w->out(w->ctx, hdr, sizeof hdr);
+        w->out(w->ctx, w->cols, n);
+        w->out(w->ctx, cr, sizeof cr);
+    }
+    // This strip's own LF, owed to whatever prints next; never sent after a
+    // page's last strip (see flush above).
+    w->held_lf++;
+    w->nrows = 0;
+}
+
+void iwc_row(iwc_t *w, const uint8_t *const bits[IW_INKS])
+{
+    for (int ink = 0; ink < IW_INKS; ink++)
+        memcpy(w->rows[ink][w->nrows], bits[ink], (w->width_dots + 7) / 8);
+    if (++w->nrows == 8) flush_colour(w);
+}
+
+void iwc_end_page(iwc_t *w)
+{
+    if (w->nrows) flush_colour(w);
+    if (w->ink >= 0 && w->ink != IW_BLACK) select_ink(w, IW_BLACK);
+    static const uint8_t ff[] = { 0x0C };
+    w->out(w->ctx, ff, sizeof ff);
+}
+
 void iw_resync(iw_out_fn out, void *ctx)
 {
     static const uint8_t nuls[128];
