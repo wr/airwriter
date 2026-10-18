@@ -151,7 +151,28 @@ SCREW_CLEAR_D = 2.80
 SCREW_HEAD_D = 5.00
 """Counterbore for an M2.5 pan head, in the floor's underside."""
 
-SCREW_HEAD_DEPTH = 1.40
+SCREW_HEAD_DEPTH = 1.10
+"""Counterbore depth from the floor's underside: 0.90 above the foot pocket's
+ceiling (FOOT_POCKET_DEPTH), so the head stays out of the foot. 1.40 until
+2026-10-17, when 1.00 pockets left the heads only 0.40 of it; Wells: "make the
+screws go in deeper. Probably just need another .5mm", so 1.90. The pockets
+went to 0.20 on 2026-10-18 and the counterbore came up with them, which also
+keeps the Pro screw's tip clear of the panel's blind standoff."""
+
+FOOT_D = 10.00
+"""The rubber feet's diameter (Wells, 2026-10-17)."""
+
+FOOT_POCKET_CLEAR = 0.20
+"""Per side, round each foot in its pocket: a guiding fit (docs/cad-routine.md)."""
+
+FOOT_POCKET_DEPTH = 0.20
+"""How deep each foot sits in the floor's underside: one first layer, enough
+to locate it. 1.00 until 2026-10-18 (Wells: "make foot recess in bottom case
+.2mm instead of 1mm"). The pocket's ceiling prints as a bridge across it."""
+
+FOOT_COVER = 0.50
+"""How far inside its foot's edge each screw counterbore stays, so the foot
+hides the screw."""
 
 STANDOFF_D = 6.00
 """Boss diameter under each mounting hole, in the tray. Wide enough to carry
@@ -172,13 +193,10 @@ PORT_CLEAR = 0.40
 """Radial clearance added to each connector's own solid when it is subtracted
 from the front wall. The spec's assertion floor is 0.30."""
 
-USBC_CHAMFER = 1.20
-"""45-degree chamfer on the OUTSIDE of the USB-C opening. The receptacle sits
-1.5mm behind the wall, so a plug's overmould needs somewhere to go. Tuned on
-the first print against a real cable -- open item 3 in the spec."""
-
-RESET_PINHOLE_D = 1.20
-"""East wall, on SW1's actuator axis."""
+RESET_PINHOLE_D = 0.80
+"""East wall, on SW1's actuator axis. Only a pilot: "i'm going to drill it out
+to make it perfectly round, but i just need a small dot to serve as a pilot
+hole" (Wells, 2026-10-17). Was 1.20, printed as a hole for the paperclip."""
 
 PLUNGER_BORE_D = 2.25
 """SW3's test plunger. Matches the art panel's own 2.25mm NPTH so the Lite lid

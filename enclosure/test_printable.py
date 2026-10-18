@@ -76,6 +76,19 @@ def wall_lintels():
     return out
 
 
+def foot_bridges():
+    """(name, bounding box, span) for each rubber-foot pocket in the floor's
+    underside. Its ceiling is a bridge across the pocket, anchored all the way
+    round, with the screw counterbore opening up through it."""
+    from build123d import Box, Pos
+    d = p.FOOT_D + 2 * p.FOOT_POCKET_CLEAR
+    out = []
+    for i, (x, y) in enumerate(case.foot_positions()):
+        box = Pos(x, y, p.Z_FLOOR_BOTTOM + p.FOOT_POCKET_DEPTH / 2) * Box(d, d, p.FOOT_POCKET_DEPTH)
+        out.append((f"foot {i}", box.bounding_box(), d))
+    return out
+
+
 def _inside(face, box, tol=0.02):
     fb = face.bounding_box()
     return all(
@@ -159,7 +172,7 @@ class TestTray(unittest.TestCase):
         self.assertEqual(len(self.t.solids()), 1)
 
     def test_no_unsupported_downward_flats(self):
-        lintels = [box for _, box, _ in wall_lintels()]
+        lintels = [box for _, box, _ in wall_lintels() + foot_bridges()]
         flats = [f for f in downward_flats(self.t, p.Z_FLOOR_BOTTOM)
                  if not any(_inside(f, box) for box in lintels)]
         self.assertEqual(
@@ -167,7 +180,7 @@ class TestTray(unittest.TestCase):
               round(f.center().Z, 1), round(f.area, 1)) for f in flats], [])
 
     def test_every_lintel_is_a_short_bridge(self):
-        for name, _, span in wall_lintels():
+        for name, _, span in wall_lintels() + foot_bridges():
             self.assertLessEqual(span, MAX_BRIDGE_SPAN, name)
 
     def test_walls_keep_their_thickness(self):

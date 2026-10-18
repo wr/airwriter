@@ -75,13 +75,30 @@ class TestLiteScrewLength(unittest.TestCase):
         # The insert bore opens at the board's top face (Z=0, the leg's own
         # free end) and runs up INSERT_DEPTH into the leg.
         engagement = tip_z - 0.0
+        # Past the bore's flat end its tip cone (case.lite_lid) still clears
+        # an M2.5 until it narrows to the screw's own 1.25 radius.
+        limit = p.INSERT_DEPTH + (p.INSERT_D / 2 - 1.25)
         self.assertLessEqual(
-            tip_z, p.INSERT_DEPTH,
+            tip_z, limit,
             f"a {screw_length}mm screw's tip reaches {tip_z:.3f}mm past Z=0, "
-            f"past the insert's own {p.INSERT_DEPTH}mm depth")
+            f"past where the insert bore still clears it ({limit:.2f}mm)")
         self.assertGreaterEqual(
             engagement, 3.0,
             f"only {engagement:.3f}mm of engagement in the insert")
+
+
+class TestProScrewLength(unittest.TestCase):
+    def test_screw_threads_the_standoff_without_bottoming_out(self):
+        # README.md ships M2.5 x 18 for the Pro build, into the art panel's
+        # blind standoffs: 3.0 tall under the panel, thread in the bottom
+        # 1.8, and the tip must stop about 0.5 short of the blind end.
+        screw_length = 18.0
+        tip_z = p.Z_FLOOR_BOTTOM + p.SCREW_HEAD_DEPTH + screw_length
+        blind_end = p.CAVITY  # the panel's underside
+        self.assertLessEqual(tip_z, blind_end - 0.5,
+                             f"tip at {tip_z:.2f}, under 0.5 short of {blind_end}")
+        self.assertGreaterEqual(tip_z, blind_end - 3.0 + 1.8,
+                                f"tip at {tip_z:.2f} stops inside the thread")
 
 
 if __name__ == "__main__":

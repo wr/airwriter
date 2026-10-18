@@ -148,6 +148,47 @@ def screw_holes() -> Part:
     return out
 
 
+def foot_positions() -> list[tuple[float, float]]:
+    """Where the four rubber feet go, in the case frame: each over a screw
+    counterbore so it hides the screw, placed as symmetrically as the screws
+    allow (Wells, 2026-10-17).
+
+    The holes are not symmetric: H4 sits 3.00 nearer the middle than H3, and
+    the front pair 6.70 further from their edge than the back pair. Each foot
+    may sit off its hole by up to FOOT_D/2 - SCREW_HEAD_D/2 - FOOT_COVER. Across,
+    the feet are mirrored about the case's centre line at the one spacing
+    that keeps every foot nearest its hole; along, each row moves toward even
+    margins front and back as far as that allows (here, not all the way)."""
+    holes = list(bg.mount_holes().values())
+    cx, cy = p.BOARD_W / 2, p.BOARD_L / 2
+    offs = [abs(x - cx) for x, _ in holes]
+    half_w = (max(offs) + min(offs)) / 2
+    dx = max(abs(o - half_w) for o in offs)
+    reach = math.sqrt((p.FOOT_D / 2 - p.SCREW_HEAD_D / 2 - p.FOOT_COVER) ** 2 - dx ** 2)
+    front = [y for _, y in holes if y < cy]
+    back = [y for _, y in holes if y > cy]
+    to_front = cy - sum(front) / len(front)
+    to_back = sum(back) / len(back) - cy
+    even = (to_front + to_back) / 2
+
+    def toward_even(h):
+        return h + max(-reach, min(reach, even - h))
+
+    rows = (cy - toward_even(to_front), cy + toward_even(to_back))
+    return [(cx + sx * half_w, y) for y in rows for sx in (-1, 1)]
+
+
+def foot_pockets() -> Part:
+    """A FOOT_POCKET_DEPTH pocket in the floor's underside for each foot."""
+    d = p.FOOT_D + 2 * p.FOOT_POCKET_CLEAR
+    h = p.FOOT_POCKET_DEPTH + 0.01  # opens through the underside cleanly
+    out = None
+    for x, y in foot_positions():
+        one = Pos(x, y, p.Z_FLOOR_BOTTOM - 0.01 + h / 2) * Cylinder(d / 2, h)
+        out = one if out is None else out + one
+    return out
+
+
 _STEP_CACHE: dict[str, Part] = {}
 
 
@@ -312,61 +353,49 @@ clearance). Cached the same way _imported_step() is: ConvexPolyhedron
 results aren't mutated by the boolean ops callers apply to them."""
 
 
-def _usbc_flare() -> Part:
-    """The outside flare on J1's USB-C opening: a loft between a
-    port-sized rectangle at the transition into the straight PORT_CLEAR
-    envelope and a larger rectangle at the wall's outer face, so a plug's
-    overmould has somewhere to go.
+def _usbc_opening() -> Part:
+    """The outer part of J1's opening: J1's outline grown by PORT_CLEAR, a
+    rounded rectangle carried straight out through the wall's outer face.
+    The receptacle sits ~1.5mm behind the wall, so its grown envelope
+    (`_grown`) stops short of the outer face; this takes the opening the
+    rest of the way.
 
-    This replaces a cone whose wide end pointed the wrong way (Finding 3,
-    task-5-report.md): with `rotation=(90,0,0)` a Cone's wide (bottom_radius)
-    end lands at the INNER end of the range build123d places it over, so the
-    old code flared toward the *board*, leaving the opening narrowest right
-    where a plug enters -- backwards from the stated purpose. It also grew
-    its cone radius from j1.size.X (the connector's 8.94mm WIDTH) and swept
-    that same radius the full height of a circular cone, so the cut's
-    vertical reach had nothing to do with the port's actual 4.21mm height --
-    it over-cut down into the floor slab and up well past the receptacle.
-
-    Here the flare's rectangles are sized from the connector's real X and Z
-    extents directly (no radius standing in for two different dimensions),
-    so the Z reach is clamped to the port's own height, not derived from its
-    width -- this is what keeps the cut off the floor slab without needing a
-    separate vertical limit.
-    """
+    No flare: it used to widen by 1.20 to the outer face for a plug's
+    overmould, but a typical USB-C plug clears the case without one, and the
+    chamfer read as an indent round the port (Wells, 2026-10-17). Sized from
+    the connector's real X and Z extents, so the cut stays off the floor
+    slab."""
     j1 = connector_solid("J1").bounding_box()
     xc = (j1.min.X + j1.max.X) / 2
     zc = (j1.min.Z + j1.max.Z) / 2
+    w = j1.size.X + 2 * p.PORT_CLEAR
+    h = j1.size.Z + 2 * p.PORT_CLEAR
 
-    inner_w = j1.size.X + 2 * p.PORT_CLEAR
-    inner_h = j1.size.Z + 2 * p.PORT_CLEAR
-    outer_w = inner_w + 2 * p.USBC_CHAMFER
-    outer_h = inner_h + 2 * p.USBC_CHAMFER
+    def section(y):
+        return Pos(xc, y, zc) * Rot(90, 0, 0) * RectangleRounded(w, h, min(w, h) / 2 * 0.9)
 
-    # Where the flare meets the straight _grown() envelope (matches the old
-    # cone's chamfer depth), and the wall's own outer face.
-    #
-    # y_inner is hardcoded to -WALL + USBC_CHAMFER (currently -1.800) rather
-    # than derived from _grown("J1", PORT_CLEAR)'s own reach (currently
-    # -1.891), so the two must be kept in sync by hand: this flare has to
-    # start at or before the point where the straight envelope actually
-    # ends, or a gap opens between them. At today's values there's a 0.091mm
-    # overlap (safe -- the flare and the envelope both cover -1.891..-1.800,
-    # so the union is unbroken). If USBC_CHAMFER is ever lowered, y_inner
-    # moves toward the wall's outer face and can cross past -1.891, which
-    # reopens a blind pocket of material between the flare and the straight
-    # envelope; test_ports_are_actually_open catches that today (confirmed:
-    # at USBC_CHAMFER=1.0, port_cutouts() leaves a 0.436mm^3 plug in the
-    # port). No test currently asserts the overlap margin itself, only its
-    # symptom.
-    y_inner = -p.WALL + p.USBC_CHAMFER
-    y_outer = -p.WALL
+    # From outside the wall to the board edge: past the wall's inner face it
+    # cuts only air.
+    return loft([section(0.0), section(-p.WALL - 0.5)])
 
-    inner_face = Pos(xc, y_inner, zc) * Rot(90, 0, 0) * RectangleRounded(
-        inner_w, inner_h, min(inner_w, inner_h) / 2 * 0.9)
-    outer_face = Pos(xc, y_outer, zc) * Rot(90, 0, 0) * RectangleRounded(
-        outer_w, outer_h, min(outer_w, outer_h) / 2 * 0.9)
-    return loft([inner_face, outer_face])
+
+def _minidin_window(ref: str) -> Part:
+    """J2's or J4's opening: the connector's front grown by PORT_CLEAR
+    (`_grown`), with a flat bottom. The grown hull's bottom slopes ~0.3mm
+    through the wall and curves up toward the corners at the outer face (the
+    shell's rounded front edge), which printed as a rough edge the real port
+    has no use for (Wells, 2026-10-17). The bottom is levelled at the lowest
+    point the hull reaches inside the wall, so the connector keeps at least
+    the clearance it had."""
+    hull = _grown(ref, p.PORT_CLEAR, front_only=True)
+    bb = hull.bounding_box()
+    xc = (bb.min.X + bb.max.X) / 2
+    yc = -p.WALL + p.THIN_WALL / 2  # the window's bottom is below the seat
+    wall = Pos(xc, yc, (bb.min.Z + bb.max.Z) / 2) * Box(bb.size.X + 2, p.THIN_WALL, bb.size.Z + 2)
+    z0 = (hull & wall).bounding_box().min.Z
+    # Tall enough to cover the hull's rounded bottom corners (PORT_CLEAR).
+    h = 1.5
+    return hull + Pos(xc, yc, z0 + h / 2) * Box(bb.size.X, p.THIN_WALL + 2, h)
 
 
 def port_cutouts() -> Part:
@@ -374,15 +403,13 @@ def port_cutouts() -> Part:
 
     Each opening is the connector's own solid grown by PORT_CLEAR (see
     `_grown`), so the barrel diameters, flanges and shell heights come from
-    the vendor geometry rather than from a datasheet reading. The USB-C
-    receptacle sits ~1.5mm behind the wall's outer face, so its opening also
-    gets an outside flare wide enough for a plug's overmould (`_usbc_flare`).
+    the vendor geometry rather than from a datasheet reading. The mini-DIN
+    windows get flat bottoms (`_minidin_window`); the USB-C receptacle sits
+    ~1.5mm behind the wall's outer face, so its opening is carried straight
+    out to it (`_usbc_opening`).
     """
-    out = None
-    for ref in ("J2", "J4"):
-        cut = _grown(ref, p.PORT_CLEAR, front_only=True)
-        out = cut if out is None else out + cut
-    return out + _grown("J1", p.PORT_CLEAR) + _usbc_flare()
+    return (_minidin_window("J2") + _minidin_window("J4")
+            + _grown("J1", p.PORT_CLEAR) + _usbc_opening())
 
 
 def dip_slot() -> Part:
@@ -563,5 +590,5 @@ def tray() -> Part:
     anyway.
     """
     body = shell() + standoffs()
-    return (body - screw_holes() - port_cutouts() - dip_slot()
+    return (body - screw_holes() - foot_pockets() - port_cutouts() - dip_slot()
             - reset_pinhole())

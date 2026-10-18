@@ -275,8 +275,8 @@ class TestPorts(unittest.TestCase):
         # Finding 4, task-5-report.md: nothing previously checked that a
         # connector's opening actually reaches the wall's outer face.
         # _grown(ref, PORT_CLEAR) alone spans Y -1.90..6.80 for J1 and never
-        # reaches Y=-3.00 (the wall's outer face) -- only the USB-C flare
-        # punches the rest of the way through. A bar spanning the full wall
+        # reaches Y=-3.00 (the wall's outer face) -- only J1's straight
+        # opening punches the rest of the way through. A bar spanning the full wall
         # thickness at each connector's centre must find (almost) no
         # material: a "port" that is still plugged with plastic is not open.
         from build123d import Box, Pos
@@ -459,40 +459,48 @@ class TestPorts(unittest.TestCase):
         self.assertGreater(want, 0.0)
         self.assertAlmostEqual((self.tray_full & slab).volume, want, places=3)
 
-    def test_usbc_flare_widens_from_the_wall_interior_to_the_exterior(self):
-        # Finding 3's flare fix (task-5-report.md) is only correct if the
-        # opening is WIDER at the wall's outer face than it is just inside
-        # it -- a plug's overmould enters from outside, so that's the whole
-        # point of the chamfer. Nothing before this pinned the direction:
-        # the old, inverted cone (Cone(rotation=(90,0,0)), radius from
-        # j1.size.X) is a completely different construction and the full
-        # suite stayed green with it in place. Measure the real cut opening
-        # (not the flare's own construction parameters) by slicing
-        # port_cutouts() with a thin Y slab at J1's Z centre and reading the
-        # surviving X width, at the wall's outer face (Y=-2.99, WALL=3.00)
-        # and just inside the flare-to-straight-envelope transition
-        # (Y=-1.81, y_inner=-WALL+USBC_CHAMFER=-1.80).
+    def test_usbc_opening_runs_straight_through_the_wall(self):
+        # No flare (Wells, 2026-10-17: a typical USB-C plug clears the case
+        # without one, and the chamfer only read as an indent round the
+        # port). The opening is the same size at the wall's outer face as
+        # just behind it, and that size is J1's own outline grown by
+        # PORT_CLEAR. Measured on the real cut by slicing port_cutouts()
+        # with a thin Y slab at J1's centre.
         from build123d import Box, Pos
 
         j1 = case.connector_solid("J1").bounding_box()
         xc = (j1.min.X + j1.max.X) / 2
         zc = (j1.min.Z + j1.max.Z) / 2
 
-        def opening_width(y):
+        def opening(y):
             # xspan=15 stays clear of J2/J4's own openings (case X ~13 and
             # ~32.5 against J1's ~52), so this isolates J1's cut alone.
             probe = Pos(xc, y, zc) * Box(15, 0.02, 10)
             hit = case.port_cutouts() & probe
             self.assertTrue(hit and hit.volume > 1e-9, f"no opening at Y={y}")
-            return hit.bounding_box().size.X
+            return hit.bounding_box().size
 
-        outer = opening_width(-2.99)
-        inner = opening_width(-1.81)
-        self.assertGreater(
-            outer - inner, 1.0,
-            f"outer opening ({outer:.3f}mm) should be at least 1mm wider "
-            f"than the inner one ({inner:.3f}mm) -- a narrower-outside "
-            "flare is inverted")
+        outer, inner = opening(-2.99), opening(-1.81)
+        self.assertAlmostEqual(outer.X, inner.X, delta=0.02, msg="wider outside: a flare")
+        self.assertAlmostEqual(outer.Z, inner.Z, delta=0.02, msg="taller outside: a flare")
+        self.assertAlmostEqual(outer.X, j1.size.X + 2 * p.PORT_CLEAR, delta=0.02)
+        self.assertAlmostEqual(outer.Z, j1.size.Z + 2 * p.PORT_CLEAR, delta=0.02)
+
+    def test_minidin_window_bottoms_are_flat(self):
+        # One level face across each window and through the wall (Wells,
+        # 2026-10-17). The grown vendor hull sloped it ~0.3mm through the
+        # wall and curved it up toward the corners at the outer face, which
+        # printed as a rough edge the real port has no use for.
+        from build123d import Box, Pos
+        for ref in ("J2", "J4"):
+            bb = case._grown(ref, p.PORT_CLEAR, front_only=True).bounding_box()
+            tops = []
+            for x in (bb.min.X + 0.6, (bb.min.X + bb.max.X) / 2, bb.max.X - 0.6):
+                for y in (-p.WALL + 0.05, -p.WALL + p.THIN_WALL / 2, -p.WALL + p.THIN_WALL - 0.05):
+                    hit = self.tray_full & (Pos(x, y, 0.0) * Box(0.05, 0.05, 2.0))
+                    tops.append(hit.bounding_box().max.Z)
+            self.assertLess(max(tops) - min(tops), 0.01, f"{ref}: window bottom spans "
+                            f"z {min(tops):.3f}..{max(tops):.3f}")
 
     def test_port_cutouts_do_not_intersect_the_floor_slab(self):
         # The old inverted cone (see previous test) also over-cut
@@ -636,6 +644,13 @@ class TestSideFeaturesAndTray(unittest.TestCase):
         self.assertAlmostEqual((bb.min.Y + bb.max.Y) / 2, cy, places=2)
         self.assertAlmostEqual(bb.size.Z, p.RESET_PINHOLE_D, places=3)
 
+    def test_reset_pinhole_is_only_a_pilot_for_a_drill(self):
+        # Wells drills the hole out round (2026-10-17): printed sideways
+        # through a wall it never comes out round. It only has to centre the
+        # drill, and stay open when sliced (sliced at 0.8: open on 4 layers).
+        self.assertLessEqual(p.RESET_PINHOLE_D, 0.80)
+        self.assertGreaterEqual(p.RESET_PINHOLE_D, 0.60)
+
     def test_reset_pinhole_z_matches_sw1s_derived_actuator_height(self):
         # SW1 (Panasonic EVQP44B3M side-press, see task-6-report.md) has no
         # 3D model on the board, so its actuator axis can't be booleaned
@@ -761,6 +776,64 @@ class TestThinWalls(unittest.TestCase):
             2.4, self.key_hi - self.key_lo, 9.01 - 5.6)
         hit = self.t & keys
         self.assertAlmostEqual(hit.volume if hit else 0.0, 0.0, places=3)
+
+
+class TestFeet(unittest.TestCase):
+    """Four rubber feet sit in pockets in the floor's underside, each over a
+    screw counterbore so it hides the screw, placed as symmetrically as the
+    screws allow (Wells, 2026-10-17)."""
+
+    @classmethod
+    def setUpClass(cls):
+        import board_geom as bg
+        cls.t = case.tray()
+        cls.feet = case.foot_positions()
+        cls.holes = list(bg.mount_holes().values())
+
+    def test_every_foot_covers_a_screw_counterbore(self):
+        self.assertEqual(len(self.feet), 4)
+        for hx, hy in self.holes:
+            gap = min(math.hypot(fx - hx, fy - hy) for fx, fy in self.feet)
+            self.assertLessEqual(gap + p.SCREW_HEAD_D / 2, p.FOOT_D / 2 - p.FOOT_COVER + 1e-6,
+                                 f"hole ({hx},{hy}) pokes out from under its foot")
+
+    def test_feet_are_mirrored_left_to_right_in_two_rows(self):
+        xs = sorted({round(x, 6) for x, _ in self.feet})
+        ys = sorted({round(y, 6) for _, y in self.feet})
+        self.assertEqual(len(xs), 2)
+        self.assertEqual(len(ys), 2)
+        self.assertAlmostEqual(xs[0] + xs[1], p.BOARD_W, places=6)
+
+    def test_feet_sit_as_evenly_front_to_back_as_the_screws_allow(self):
+        # The front holes are 6.70 further from their edge than the back ones;
+        # each row moves as far toward even as it can and still cover its
+        # screw, so the difference shrinks by twice that reach.
+        ys = sorted({y for _, y in self.feet})
+        front = ys[0] + p.WALL
+        back = p.BOARD_L + p.WALL - ys[1]
+        hole_front = min(y for _, y in self.holes) + p.WALL
+        hole_back = p.BOARD_L + p.WALL - max(y for _, y in self.holes)
+        self.assertLess(abs(front - back), abs(hole_front - hole_back) - 2.0)
+
+    def test_pockets_are_cut_and_clear_the_bottom_chamfer(self):
+        from build123d import Box, Pos
+        r = p.FOOT_D / 2 + p.FOOT_POCKET_CLEAR
+        z = p.Z_FLOOR_BOTTOM + p.FOOT_POCKET_DEPTH / 2
+        for fx, fy in self.feet:
+            # Inside the pocket, clear of the counterbore: air.
+            probe = Pos(fx + r - 0.6, fy, z) * Box(0.4, 0.4, p.FOOT_POCKET_DEPTH - 0.1)
+            hit = self.t & probe
+            self.assertAlmostEqual(hit.volume if hit else 0.0, 0.0, places=4)
+            # Just above the pocket's ceiling: plastic.
+            probe = Pos(fx + r - 0.6, fy, p.Z_FLOOR_BOTTOM + p.FOOT_POCKET_DEPTH + 0.2) * Box(0.4, 0.4, 0.2)
+            self.assertAlmostEqual((self.t & probe).volume, probe.volume, places=4)
+            edge = min(fx + p.WALL, fy + p.WALL, p.BOARD_W + p.WALL - fx, p.BOARD_L + p.WALL - fy)
+            self.assertGreater(edge - r - p.BOTTOM_CHAMFER, 1.0)
+
+    def test_screw_heads_clear_the_pocket_floor(self):
+        # Wells, 2026-10-17: with a 1.00 pocket the heads needed "another
+        # .5mm or so" of counterbore, on top of the 0.40 that was left.
+        self.assertAlmostEqual(p.SCREW_HEAD_DEPTH - p.FOOT_POCKET_DEPTH, 0.90, places=6)
 
 
 class TestLiteLid(unittest.TestCase):
