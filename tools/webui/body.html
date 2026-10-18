@@ -24,26 +24,37 @@
     <p class=job id=job>&nbsp;</p>
   </div>
 
+  <!-- Every section is laid out the same way: its heading, what it shows and
+       its settings, then one row with what it has to say on the left and its
+       keys on the right. A key is a section's main action; settings are
+       ordinary fields and checkboxes, and a rarely needed action is a link in
+       the text. -->
+
   <div class=sec>
     <h2>wi-fi</h2>
     <div class="paper bars"><div class=sheet><div class=nets>
       <div class=scroll id=rows></div></div></div></div>
     <div id=extra></div>
-    <div class=keys style="margin-top:18px">
-      <div class=key><span class=legend>scan</span>
-        <span class=keyrow>
-          <span class="bar keylamp"><span class=seg id=scanled></span></span>
-          <span class=slot><button id=scan aria-label=Scan></button></span>
-        </span></div>
-      <div class="key is-quiet" id=joinkey><span class=legend>join</span>
-        <span class='slot momentary'><button id=join aria-label=Join disabled></button></span></div>
+    <div class=row>
+      <p class=say id=wifisay></p>
+      <div class=keys>
+        <div class=key><span class=legend>scan</span>
+          <span class=keyrow>
+            <span class="bar keylamp"><span class=seg id=scanled></span></span>
+            <span class=slot><button id=scan aria-label=Scan></button></span>
+          </span></div>
+        <div class="key is-quiet" id=joinkey><span class=legend>join</span>
+          <span class='slot momentary'><button id=join aria-label=Join disabled></button></span></div>
+      </div>
     </div>
   </div>
 
   <div class=sec id=sec-halftone>
     <h2>halftone</h2>
-    <div class=keys id=tabs style="margin-bottom:16px"></div>
     <div class=paper><div class=sheet><canvas id=prev></canvas></div></div>
+    <div class=row>
+      <div class=keys id=tabs></div>
+    </div>
   </div>
 
   <div class=sec id=sec-printer>
@@ -54,48 +65,63 @@
     </div>
     <div><label for=queue id=qlbl class=hide>name</label>
       <input id=queue class=hide autocomplete=off placeholder="Printer name"></div>
-    <div class=keys style="margin-top:18px">
-      <div class=key><span class=legend>save</span>
-        <span class='slot momentary'><button id=savegen aria-label=Save></button></span></div>
+    <!-- For adding the printer by hand, where AirPrint does not find it. -->
+    <label for=uri>address</label>
+    <div class=withact><input id=uri readonly><button class=act id=copy type=button>copy</button></div>
+    <div class=row>
+      <p class=say id=prnsay></p>
+      <div class=keys>
+        <div class=key><span class=legend>save</span>
+          <span class='slot momentary'><button id=savegen aria-label=Save></button></span></div>
+      </div>
     </div>
-    <p class=say id=uri></p>
   </div>
 
   <div class=sec id=sec-firmware>
     <h2>firmware</h2>
-    <div class=keys>
-      <div class=key><span class=legend>check</span>
-        <span class=keyrow>
-          <span class="bar keylamp"><span class=seg id=fwled></span></span>
-          <span class='slot momentary'><button id=fwcheck aria-label="Look for a new release"></button></span>
-        </span></div>
-      <div class="key is-quiet" id=fwinstkey><span class=legend>install</span>
-        <span class='slot momentary'><button id=fwinst aria-label="Install the new release" disabled></button></span></div>
-      <div class=key id=fwautokey><span class=legend>auto</span>
-        <span class=slot><button id=fwauto aria-label="Install new releases automatically" aria-pressed=false></button></span></div>
+    <label class=check><input type=checkbox id=fwauto>Install new releases automatically</label>
+    <div class=row>
+      <div class=text>
+        <p class=say id=fwsay>&nbsp;</p>
+        <p class=say>Or <a id=upd>install a release from a file</a>.</p>
+      </div>
+      <div class=keys>
+        <div class=key id=fwupdkey><span class=legend>update</span>
+          <span class=keyrow>
+            <span class="bar keylamp"><span class=seg id=fwled></span></span>
+            <span class='slot momentary'><button id=fwupd aria-label="Look for a new release, or install it"></button></span>
+          </span></div>
+      </div>
     </div>
-    <p class=say id=fwsay>&nbsp;</p>
   </div>
 
-  <div class='sec hide' id=sec-localtalk>
-    <h2>localtalk</h2>
-    <div class=keys>
-      <div class=key><span class=legend>flash</span>
-        <span class='slot momentary'><button id=ltflash aria-label="Flash TashTalk"></button></span></div>
-      <div class=key><span class=legend>cable</span>
-        <span class='slot momentary'><button id=cabletest aria-label="Test a cable"></button></span></div>
+  <div class='sec hide' id=sec-cable>
+    <h2>cable</h2>
+    <div class=row>
+      <p class=say id=cablesay></p>
+      <div class=keys>
+        <!-- TashTalk is the LocalTalk chip's firmware. An assembled AirWriter
+             has it, so this key shows only once a test finds the chip blank. -->
+        <div class='key hide' id=flashkey><span class=legend>flash</span>
+          <span class='slot momentary'><button id=ltflash aria-label="Flash TashTalk onto the LocalTalk chip"></button></span></div>
+        <div class=key><span class=legend>test</span>
+          <span class='slot momentary'><button id=cabletest aria-label="Test a cable"></button></span></div>
+      </div>
     </div>
-    <p class=say id=ltsay>Writes TashTalk 2.1.3 into the LocalTalk chip and checks it. Unplug the LocalTalk cable first.</p>
-    <p class=say id=cablesay>To test a printer cable, plug it into the printer port and the LocalTalk port, then press cable (or the test button).</p>
   </div>
 
 </div>
 
-<p class=foot>
-  <a id=cups>copy printer address</a>
-  <span class=sep>&middot;</span><a id=upd>update firmware</a>
-  <span class=sep>&middot;</span><span id=ver></span>
-</p>
+<footer class=foot>
+  <a class=ww href="https://wells.ee" target=_blank rel=noopener
+     aria-label="Made by Wells Workshop"><span class=by>Made by</span>{{ww-logo}}Wells Workshop</a>
+  <span class=out>
+    <!-- The star count arrives from GitHub when the browser can reach it. -->
+    <a id=gh href="https://github.com/wr/airwriter" target=_blank rel=noopener
+       aria-label="AirWriter on GitHub"><svg class=gh aria-hidden="true" viewBox="0 0 16 16"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg><span id=stars>GitHub</span></a>
+    <a href="https://buymeacoffee.com/wellsworkshop" target=_blank rel=noopener>Donate</a>
+  </span>
+</footer>
 <input id=fw type=file accept=.bin class=hide>
 </main>
 

@@ -77,6 +77,8 @@
   --field-h:34px;
   --row-h:42px;
   --icon:16px;
+  /* the network list's tick, as a mask: the colour comes from what it masks */
+  --tick:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 8 6' shape-rendering='crispEdges'%3E%3Cpath d='M0 2h1v1H0zM1 3h1v1H1zM2 4h1v1H2zM3 3h1v1H3zM4 2h1v1H4zM5 1h1v1H5zM6 0h2v1H6z'/%3E%3C/svg%3E");
   --feed-w:24px;         /* the tractor strip down each edge */
   --hole:13px; --hole-pitch:26px;
   --vent-h:88px; --vent-pitch:19px; --vent-line:2.6px;   /* slot : pitch about 1:7 */
@@ -203,7 +205,7 @@ h1{margin:0;font:normal 300 var(--size-display)/.9 var(--font-display);
 
 /* ── headings, labels, fields ───────────────────────────────────── */
 h2{margin:0 0 var(--sp-3);font-weight:var(--weight-text);font-size:var(--size-text);
-  line-height:1;color:var(--dim);text-align:right}
+  line-height:1;color:var(--dim)}
 label{display:block;margin:var(--sp-3) 0 var(--sp-1);font-size:var(--size-text);
   line-height:1;color:var(--dim)}
 input,select{width:100%;height:var(--field-h);padding:0 var(--sp-3);
@@ -211,6 +213,9 @@ input,select{width:100%;height:var(--field-h);padding:0 var(--sp-3);
   border:1px solid var(--seam);border-radius:var(--r-hair);
   -webkit-appearance:none;appearance:none;box-shadow:var(--sink-field)}
 input:focus,select:focus{outline:0;border-color:var(--ink)}
+/* shown to be read and copied, not typed into */
+input[readonly]{background:transparent;box-shadow:none;border-style:dashed}
+input[readonly]:focus{border-color:var(--seam)}
 select{padding-right:var(--sp-6);background-repeat:no-repeat;background-size:5px 5px;
   background-position:calc(100% - 17px) 15px,calc(100% - 12px) 15px;
   background-image:linear-gradient(45deg,transparent 50%,var(--dim) 50%),
@@ -222,6 +227,33 @@ select{padding-right:var(--sp-6);background-repeat:no-repeat;background-size:5px
   -webkit-font-smoothing:none;font-smooth:never}
 .say{margin:var(--sp-3) 0 0;color:var(--dim)}
 .say a{color:var(--ink);cursor:pointer;border-bottom:1px solid var(--seam)}
+
+/* ── the row every section ends with ────────────────────────────────
+   What the section has to say on the left, its keys on the right. The
+   text's last line sits on the keys' bottom edge. */
+.row{display:flex;align-items:flex-end;justify-content:space-between;
+  gap:var(--sp-5);margin-top:var(--sp-5)}
+.row .say{margin:0;flex:1 1 auto;min-width:0}
+.row .text{flex:1 1 auto;min-width:0}
+.row .text .say+.say{margin-top:var(--sp-1)}
+
+/* An ordinary checkbox, drawn to match the fields: a sunken square with the
+   pixel tick the network list uses. */
+label.check{display:flex;align-items:center;gap:var(--sp-3);margin:var(--sp-3) 0 0;
+  color:var(--ink);line-height:var(--lead-tight);cursor:pointer}
+label.check input{position:relative;flex:0 0 auto;width:20px;height:20px;padding:0;margin:0;
+  cursor:pointer}
+label.check input:checked:after{content:'';position:absolute;inset:3px;background:var(--ink);
+  -webkit-mask:var(--tick) center/contain no-repeat;mask:var(--tick) center/contain no-repeat}
+label.check:has(input:disabled){opacity:.4;cursor:default}
+
+/* A field with a small text button inside its right end. */
+.withact{position:relative}
+.withact input{padding-right:calc(var(--sp-6)*2)}
+.act{position:absolute;right:var(--sp-3);top:50%;transform:translateY(-50%);
+  padding:0;border:0;background:none;font:inherit;color:var(--ink);cursor:pointer;
+  border-bottom:1px solid var(--seam);line-height:1.2}
+.row .keys{flex:0 0 auto;margin-left:auto}
 
 /* ── keys ───────────────────────────────────────────────────────────
    One component, everywhere. A cap in a moulded housing with its legend
@@ -317,10 +349,21 @@ svg{display:block;shape-rendering:crispEdges}
 /* ── halftone ───────────────────────────────────────────────────── */
 #prev{display:block;margin:0 auto;max-width:100%;background:var(--paper)}
 
-/* ── footer ─────────────────────────────────────────────────────── */
-.foot{margin:var(--sp-3) var(--sp-1) 0;color:var(--dim);line-height:1.7}
-.foot a{color:var(--ink);text-decoration:none;border-bottom:1px solid var(--seam);
-  cursor:pointer}
+/* ── footer ─────────────────────────────────────────────────────────
+   Who made it on the left, the project and the tip jar on the right. */
+.foot{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;
+  gap:var(--sp-3) var(--sp-5);margin:var(--sp-4) var(--sp-1) 0;color:var(--dim);
+  line-height:var(--lead-tight)}
+.foot a{display:inline-flex;align-items:center;gap:var(--sp-2);color:var(--ink);
+  text-decoration:none;cursor:pointer}
+.foot a:hover{opacity:.75}
+.foot .ww .by{color:var(--dim)}
+/* the mark at the height of the capitals, as the panel sets it */
+.wwmark{height:.72em;width:auto;margin-right:-2px}
+.foot .out{display:inline-flex;align-items:center;gap:var(--sp-5)}
+.gh{width:var(--icon);height:var(--icon)}
+#stars{display:inline-flex;align-items:center;gap:3px}
+#stars svg{width:calc(var(--icon) - 3px);height:calc(var(--icon) - 3px)}
 .sep{margin:0 var(--sp-2);color:var(--seam)}
 
 /* ── narrow screens ─────────────────────────────────────────────────
@@ -349,6 +392,9 @@ svg{display:block;shape-rendering:crispEdges}
   #tabs .key{flex:0 0 var(--key-w)}
 
   .grid2{grid-template-columns:1fr}
+  /* the text over the keys, not squeezed beside them */
+  .row{flex-direction:column;align-items:stretch;gap:var(--sp-3)}
+  .row .say:empty{display:none}
   /* the name of the network matters more than its address: on the narrowest
      screens the address goes rather than truncating the name to one letter */
   .n .ip{font-size:calc(var(--size-paper) - 1px)}

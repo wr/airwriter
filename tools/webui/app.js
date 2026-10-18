@@ -24,8 +24,8 @@ function wf(n){
 const bars=r=>r>=-60?3:r>=-70?2:1;
 
 /* ── state ─────────────────────────────────────────────────────────── */
-let nets=[], joined='', ip='', sel=null, other=0, changing=0, first=1, setup=0,
-    suffix='', dither='atkinson', ribbon='';
+let nets=[], joined='', ip='', sel=null, other=0, first=1, setup=0,
+    suffix='', dither='atkinson', ribbon='', running={};
 
 /* Scanning takes the radio off channel for a second and drops whatever is
    listening, so the last list is kept and reused. An hour is well past the
@@ -67,26 +67,30 @@ function drawNets(){
     const n=nets[i]; if(n) b.querySelector('.s').textContent=n.s;
     if(!b.dataset.s) return;
     b.onclick=()=>{other=b.dataset.s==='__other__';sel=other?null:b.dataset.s;
-      changing=0;drawExtra();};
+      drawExtra();};
   });
   drawExtra();
 }
+/* The fields a join needs go under the list; what to do next goes in the
+   row, beside the keys that do it. */
 function drawExtra(){
-  const e=$('extra');
+  const e=$('extra'), say=$('wifisay');
+  const pw=label=>'<label for=pw>'+label+'</label><input id=pw type=password autocomplete=off>';
   if(other){
-    e.innerHTML='<label for=nm>network name</label><input id=nm autocomplete=off>'
-      +'<label for=pw>password</label><input id=pw type=password autocomplete=off>';
+    e.innerHTML='<label for=nm>network name</label><input id=nm autocomplete=off>'+pw('password');
+    say.textContent='Type the name of a hidden network and its password, then press join.';
     enableJoin(1);
-  }else if(!sel){ e.innerHTML=''; enableJoin(0); }
-  else if(sel===joined&&!changing){
-    e.innerHTML='<p class=say>Connected. <a id=chg>change password</a></p>';
-    $('chg').onclick=()=>{changing=1;drawExtra();}; enableJoin(0);
+  }else if(!sel){
+    e.innerHTML='';
+    say.textContent=joined?'Connected to “'+joined+'”.':'Pick your network.';
+    enableJoin(0);
   }else{
-    const n=nets.find(x=>x.s===sel);
-    e.innerHTML=(n&&n.a)?'<label for=pw>password for &ldquo;'+sel+'&rdquo;</label>'
-      +'<input id=pw type=password autocomplete=off>'
-      :'<p class=say>Open network. No password needed.</p>';
-    enableJoin(1);
+    const n=nets.find(x=>x.s===sel), open=n&&!n.a;
+    e.innerHTML=open?'':pw(sel===joined?'new password':'password');
+    say.textContent=sel===joined
+      ?(open?'Connected to “'+sel+'”.':'Connected. If its password changed, type the new one and press join.')
+      :(open?'Open network. No password needed. Press join.':'Type its password, then press join.');
+    enableJoin(sel!==joined||!open);
   }
   for(const b of $('rows').children)
     if(b.dataset.s)
@@ -125,8 +129,10 @@ function draw(s){
   $('model').textContent=s.queue||'';
   $('job').textContent=s.job&&s.job!=='none yet'
     ? 'Last job — '+s.job : 'No job yet';
-  $('ver').textContent=s.version||'';
-  if(s.uri) $('uri').textContent=s.uri;
+  if(s.uri) $('uri').value=s.uri;
+  /* The name and hostname the board is answering to now: a save takes
+     effect at the next restart, and until then these are what it uses. */
+  running={queue:s.queue||'', host:(s.host||'').replace('.local','')};
 
   /* A printer that is off or unplugged is not a fault -- the board is fine and
      says so on its panel in warm white. Faults are the two states that need a
@@ -154,7 +160,8 @@ function draw(s){
   lamp($('ledjob'),s.printing,'a',s.printing?'printing':'idle');
   if(!s.printing) $('ledjob').classList.remove('act-a');
 
-  joined=setup?'':(s.ssid||''); ip=s.ip||'';
+  const was=joined; joined=setup?'':(s.ssid||''); ip=s.ip||'';
+  if(joined!==was) drawExtra();
   /* Whatever else is known, the network this printer is on belongs in the
      list -- without waiting for a scan to confirm what it is already doing. */
   if(joined && !nets.some(n=>n.s===joined)){
@@ -163,7 +170,7 @@ function draw(s){
   }
   $('sec-halftone').classList.toggle('hide',setup);
   $('sec-printer').classList.toggle('hide',setup);
-  $('sec-localtalk').classList.toggle('hide',!s.pic);
+  $('sec-cable').classList.toggle('hide',!s.pic);
 
   if(s.host){const h=s.host.replace('.local','');
     const i=h.lastIndexOf('-'); if(i>0) suffix=h.slice(i+1);
@@ -216,35 +223,71 @@ function noted(sec,word){
     delete h.dataset.busy;},1800);
 }
 $('savegen').onclick=async()=>{
-  const ok=await post('/api/general',
-    {queue:$('queue').value,host:$('host').value,dither:dither});
+  const queue=$('queue').value, host=$('host').value;
+  const ok=await post('/api/general',{queue:queue,host:host,dither:dither});
   noted('sec-printer', ok?'saved':'failed');
+  /* Nothing on the page changes when a name is saved, and nothing on the
+     network does either until the board restarts: say so, or it looks lost. */
+  const later=ok&&(queue!==running.queue||host!==running.host);
+  $('prnsay').textContent=later?'Saved. AirWriter uses the new name after it restarts: '
+    +'unplug it for a few seconds, then plug it back in.':'';
 };
 
-$('ltflash').onclick=async()=>{
-  const b=$('ltflash'); if(b.disabled) return; b.disabled=true;
-  $('ltsay').textContent='Flashing… about two seconds.';
-  let r=null;
-  try{ r=await(await fetch('/api/localtalk/flash',{method:'POST'})).json(); }catch(e){}
-  b.disabled=false;
-  if(!r){ noted('sec-localtalk','failed'); $('ltsay').textContent='No answer from the dongle.'; return; }
-  noted('sec-localtalk', r.ok?'done':'failed');
-  $('ltsay').textContent = r.ok
-    ? 'TashTalk 2.1.3 written and verified · PIC12F1840 rev '+r.rev+'.'
-    : r.err+(r.addr?' at '+r.addr+': wanted '+r.want+', read '+r.got:'')
-      +(r.devid&&r.devid!=='0x0000'?' · device ID '+r.devid:'')+'.';
-};
-
+/* TashTalk is the LocalTalk chip's firmware. An assembled AirWriter has it
+   already, so the flash key stays out of sight until a cable test finds the
+   chip without it: blank, or no longer running it. */
+/* The port names as the panel prints them. */
+const CABLE_HOW='Plug a printer cable into the “Serial” and “AppleTalk” ports and press the '
+  +'“Test” button to see if the cable will work with AirWriter.';
+$('cablesay').textContent=CABLE_HOW;
 $('cabletest').onclick=async()=>{
-  const b=$('cabletest'); if(b.disabled) return; b.disabled=true;
+  const b=$('cabletest'), say=$('cablesay'); if(b.disabled) return; b.disabled=true;
   let r=null;
   try{ r=await(await fetch('/api/cable',{method:'POST'})).json(); }catch(e){}
   b.disabled=false;
-  if(!r){ noted('sec-localtalk','failed'); $('cablesay').textContent='No answer from the dongle.'; return; }
+  if(!r){ noted('sec-cable','failed'); say.textContent='No answer from AirWriter.'; return; }
   const untested=r.ok&&['no_chip','no_tashtalk','chip_silent'].includes(r.verdict);
-  noted('sec-localtalk', !r.ok?'failed':untested?'not tested':r.verdict==='pass'?'crossover':'no good');
-  $('cablesay').textContent = r.ok ? r.text : 'Could not test: '+r.error+'.';
+  noted('sec-cable', !r.ok?'failed':untested?'not tested':r.verdict==='pass'?'crossover':'no good');
+  say.textContent = r.ok ? r.text : 'Could not test: '+r.error+'.';
+  const blank=r.ok&&r.verdict==='no_tashtalk';
+  $('flashkey').classList.toggle('hide',!blank);
+  if(blank) say.textContent+=' Unplug the cable and press flash.';
 };
+$('ltflash').onclick=async()=>{
+  const b=$('ltflash'), say=$('cablesay'); if(b.disabled) return; b.disabled=true;
+  say.textContent='Flashing… about two seconds.';
+  let r=null;
+  try{ r=await(await fetch('/api/localtalk/flash',{method:'POST'})).json(); }catch(e){}
+  b.disabled=false;
+  if(!r){ noted('sec-cable','failed'); say.textContent='No answer from AirWriter.'; return; }
+  noted('sec-cable', r.ok?'flashed':'failed');
+  say.textContent = r.ok
+    ? 'TashTalk 2.1.3 written and verified · PIC12F1840 rev '+r.rev+'. '
+      +'Plug the cable back into both ports and press test again.'
+    : cap(r.err)+(r.addr?' at '+r.addr+': wanted '+r.want+', read '+r.got:'')
+      +(r.devid&&r.devid!=='0x0000'?' · device ID '+r.devid:'')+'.';
+  if(r.ok) $('flashkey').classList.add('hide');
+};
+
+/* ── footer ────────────────────────────────────────────────────────── */
+/* The project's stars, asked of GitHub by the browser, not the board, and
+   kept an hour like the network list. With no internet (setup mode, or a
+   network without it) the link just says GitHub. */
+const STAR='<svg aria-hidden="true" viewBox="0 0 16 16"><path fill="currentColor" d="M8 .25a.75.75 0 0 1 .673.418l1.882 3.815 4.21.612a.75.75 0 0 1 .416 1.279l-3.046 2.97.719 4.192a.751.751 0 0 1-1.088.791L8 12.347l-3.766 1.98a.75.75 0 0 1-1.088-.79l.72-4.194L.818 6.374a.75.75 0 0 1 .416-1.28l4.21-.611L7.327.668A.75.75 0 0 1 8 .25Z"/></svg>';
+(async function stars(){
+  const KEY='aw.stars'; let n=null;
+  try{ const c=JSON.parse(localStorage.getItem(KEY));
+    if(c && Date.now()-c.t < CACHE_MAX && typeof c.n==='number') n=c.n; }catch(e){}
+  if(n===null) try{
+    const ctl=new AbortController(); setTimeout(()=>ctl.abort(),6000);
+    const r=await fetch('https://api.github.com/repos/wr/airwriter',{signal:ctl.signal});
+    if(r.ok){ n=(await r.json()).stargazers_count;
+      try{ localStorage.setItem(KEY,JSON.stringify({t:Date.now(),n:n})); }catch(e){} }
+  }catch(e){}
+  if(typeof n!=='number') return;
+  $('stars').innerHTML=STAR+n.toLocaleString();
+  $('gh').setAttribute('aria-label','AirWriter on GitHub, '+n+(n===1?' star':' stars'));
+})();
 
 /* ── overlay ───────────────────────────────────────────────────────── */
 let ovh=0;
@@ -268,16 +311,22 @@ $('join').onclick=async()=>{
   overlay('Restarting','Joining “'+name+'”',25);
 };
 
-/* CUPS' own web interface is disabled by default on macOS, so a link to it is
-   a dead end. The address is the thing a person needs to add the printer. */
-$('cups').onclick=async()=>{
-  const uri=$('uri').textContent.trim(); if(!uri) return;
-  try{ await navigator.clipboard.writeText(uri); $('cups').textContent='address copied'; }
-  catch(e){ $('cups').textContent=uri; }
-  setTimeout(()=>{$('cups').textContent='copy printer address';},2200);
+/* The address is for adding the printer by hand, where AirPrint does not
+   find it by itself. CUPS' own web interface is off by default on macOS, so a
+   link to it would be a dead end. A page on plain http gets no clipboard API,
+   so the field is selected and copied the old way. */
+$('copy').onclick=async()=>{
+  const f=$('uri'); if(!f.value) return;
+  let ok=0;
+  try{ await navigator.clipboard.writeText(f.value); ok=1; }
+  catch(e){
+    f.focus(); f.select(); f.setSelectionRange(0,f.value.length);
+    try{ ok=document.execCommand('copy'); }catch(e2){}
+  }
+  noted('sec-printer', ok?'address copied':'address selected');
 };
 
-$('upd').onclick=()=>$('fw').click();
+$('upd').onclick=()=>{ if(!FW_BUSY.includes(fwu.state)) $('fw').click(); };
 $('fw').onchange=async()=>{
   const f=$('fw').files[0]; if(!f) return;
   overlay('Installing','Uploading '+(f.size>>10)+' KB',45);
@@ -314,7 +363,7 @@ function fwSay(u){
   }
   let t='Running '+u.version+(u.release?'. ':', a development build. ');
   if(u.error) t+=cap(u.error)+'. ';
-  if(u.newer) t+=u.latest+' is available.';
+  if(u.newer) t+=u.latest+' is available. Press update to install it.';
   else if(u.no_target) t+='The newest release has no image for this board.';
   else if(u.checked>=0 && !u.error) t+='Up to date, checked '+ago(u.checked)+'.';
   return t;
@@ -323,12 +372,11 @@ function fwDraw(u){
   fwu=u;
   $('fwsay').textContent=fwSay(u);
   const net=!u.setup&&u.key==='airwriter', busy=FW_BUSY.includes(u.state);
-  $('fwcheck').disabled=!net||busy;
-  $('fwinst').disabled=!net||busy||!u.newer;
-  $('fwinstkey').classList.toggle('is-quiet',$('fwinst').disabled);
+  $('fwupd').disabled=!net||busy;
+  $('fwupdkey').classList.toggle('is-quiet',!net);
+  $('fwupdkey').classList.toggle('is-lit',net&&!!u.newer);
   $('fwauto').disabled=!net;
-  $('fwautokey').classList.toggle('is-lit',!!u.auto);
-  $('fwauto').setAttribute('aria-pressed',!!u.auto);
+  $('fwauto').checked=!!u.auto;
   if(busy&&!fwblink) fwblink=setInterval(()=>$('fwled').classList.toggle('act'),160);
   if(!busy&&fwblink){ clearInterval(fwblink); fwblink=0; $('fwled').classList.remove('act'); }
   if(u.state==='restarting') overlay('Installing','Restarting into the new firmware',30);
@@ -343,13 +391,14 @@ async function fwPost(url,body){
     const r=await fetch(url,{method:'POST',body:body?JSON.stringify(body):''});
     if(!r.ok){ $('fwsay').textContent=cap(await r.text())+'.'; return 0; }
     setTimeout(fwPoll,300); return 1;
-  }catch(e){ $('fwsay').textContent='No answer from the dongle.'; return 0; }
+  }catch(e){ $('fwsay').textContent='No answer from AirWriter.'; return 0; }
 }
-$('fwcheck').onclick=()=>fwPost('/api/update/check');
-$('fwinst').onclick=()=>fwPost('/api/update/install');
-$('fwauto').onclick=async()=>{
-  const on=!fwu.auto;
-  if(await fwPost('/api/update/auto',{auto:on})) noted('sec-firmware', on?'auto on':'auto off');
+$('fwupd').onclick=()=>fwPost(fwu.newer?'/api/update/install':'/api/update/check');
+$('fwauto').onchange=async()=>{
+  const box=$('fwauto'), on=box.checked;
+  if(await fwPost('/api/update/auto',{auto:on}))
+    noted('sec-firmware', on?'automatic updates on':'automatic updates off');
+  else box.checked=!on;
 };
 fwPoll().then(ok=>{
   if(ok && !fwu.setup && fwu.key==='airwriter' && !FW_BUSY.includes(fwu.state)
