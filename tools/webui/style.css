@@ -203,7 +203,7 @@ h1{margin:0;font:normal 300 var(--size-display)/.9 var(--font-display);
 
 /* ── headings, labels, fields ───────────────────────────────────── */
 h2{margin:0 0 var(--sp-3);font-weight:var(--weight-text);font-size:var(--size-text);
-  line-height:1;color:var(--dim);text-align:right}
+  line-height:1;color:var(--dim)}
 label{display:block;margin:var(--sp-3) 0 var(--sp-1);font-size:var(--size-text);
   line-height:1;color:var(--dim)}
 input,select{width:100%;height:var(--field-h);padding:0 var(--sp-3);
@@ -211,6 +211,9 @@ input,select{width:100%;height:var(--field-h);padding:0 var(--sp-3);
   border:1px solid var(--seam);border-radius:var(--r-hair);
   -webkit-appearance:none;appearance:none;box-shadow:var(--sink-field)}
 input:focus,select:focus{outline:0;border-color:var(--ink)}
+/* shown to be read and copied, not typed into */
+input[readonly]{background:transparent;box-shadow:none;border-style:dashed}
+input[readonly]:focus{border-color:var(--seam)}
 select{padding-right:var(--sp-6);background-repeat:no-repeat;background-size:5px 5px;
   background-position:calc(100% - 17px) 15px,calc(100% - 12px) 15px;
   background-image:linear-gradient(45deg,transparent 50%,var(--dim) 50%),
@@ -222,8 +225,14 @@ select{padding-right:var(--sp-6);background-repeat:no-repeat;background-size:5px
   -webkit-font-smoothing:none;font-smooth:never}
 .say{margin:var(--sp-3) 0 0;color:var(--dim)}
 .say a{color:var(--ink);cursor:pointer;border-bottom:1px solid var(--seam)}
-/* the printer's address: it may break anywhere rather than push the page wide */
-.say .uri{color:var(--ink);overflow-wrap:anywhere}
+
+/* ── the row every section ends with ────────────────────────────────
+   What the section has to say on the left, its keys on the right. The
+   text's last line sits on the keys' bottom edge. */
+.row{display:flex;align-items:flex-end;justify-content:space-between;
+  gap:var(--sp-5);margin-top:var(--sp-5)}
+.row .say{margin:0;flex:1 1 auto;min-width:0}
+.row .keys{flex:0 0 auto;margin-left:auto}
 
 /* ── keys ───────────────────────────────────────────────────────────
    One component, everywhere. A cap in a moulded housing with its legend
@@ -351,6 +360,9 @@ svg{display:block;shape-rendering:crispEdges}
   #tabs .key{flex:0 0 var(--key-w)}
 
   .grid2{grid-template-columns:1fr}
+  /* the text over the keys, not squeezed beside them */
+  .row{flex-direction:column;align-items:stretch;gap:var(--sp-3)}
+  .row .say:empty{display:none}
   /* the name of the network matters more than its address: on the narrowest
      screens the address goes rather than truncating the name to one letter */
   .n .ip{font-size:calc(var(--size-paper) - 1px)}

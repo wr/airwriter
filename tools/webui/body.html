@@ -24,26 +24,35 @@
     <p class=job id=job>&nbsp;</p>
   </div>
 
+  <!-- Every section is laid out the same way: its heading, what it shows,
+       then one row with what it has to say on the left and its keys on the
+       right. Every action is a key. -->
+
   <div class=sec>
     <h2>wi-fi</h2>
     <div class="paper bars"><div class=sheet><div class=nets>
       <div class=scroll id=rows></div></div></div></div>
     <div id=extra></div>
-    <div class=keys style="margin-top:18px">
-      <div class=key><span class=legend>scan</span>
-        <span class=keyrow>
-          <span class="bar keylamp"><span class=seg id=scanled></span></span>
-          <span class=slot><button id=scan aria-label=Scan></button></span>
-        </span></div>
-      <div class="key is-quiet" id=joinkey><span class=legend>join</span>
-        <span class='slot momentary'><button id=join aria-label=Join disabled></button></span></div>
+    <div class=row>
+      <p class=say id=wifisay></p>
+      <div class=keys>
+        <div class=key><span class=legend>scan</span>
+          <span class=keyrow>
+            <span class="bar keylamp"><span class=seg id=scanled></span></span>
+            <span class=slot><button id=scan aria-label=Scan></button></span>
+          </span></div>
+        <div class="key is-quiet" id=joinkey><span class=legend>join</span>
+          <span class='slot momentary'><button id=join aria-label=Join disabled></button></span></div>
+      </div>
     </div>
   </div>
 
   <div class=sec id=sec-halftone>
     <h2>halftone</h2>
-    <div class=keys id=tabs style="margin-bottom:16px"></div>
     <div class=paper><div class=sheet><canvas id=prev></canvas></div></div>
+    <div class=row>
+      <div class=keys id=tabs></div>
+    </div>
   </div>
 
   <div class=sec id=sec-printer>
@@ -54,44 +63,50 @@
     </div>
     <div><label for=queue id=qlbl class=hide>name</label>
       <input id=queue class=hide autocomplete=off placeholder="Printer name"></div>
-    <div class=keys style="margin-top:18px">
-      <div class=key><span class=legend>save</span>
-        <span class='slot momentary'><button id=savegen aria-label=Save></button></span></div>
-    </div>
-    <p class="say hide" id=prnsay></p>
     <!-- For adding the printer by hand, where AirPrint does not find it. -->
-    <p class=say id=addr>Address <span class=uri id=uri></span><span
-      class=sep>&middot;</span><a id=copy>copy</a></p>
+    <label for=uri>address</label><input id=uri readonly>
+    <div class=row>
+      <p class=say id=prnsay></p>
+      <div class=keys>
+        <div class=key><span class=legend>copy</span>
+          <span class='slot momentary'><button id=copy aria-label="Copy the address"></button></span></div>
+        <div class=key><span class=legend>save</span>
+          <span class='slot momentary'><button id=savegen aria-label=Save></button></span></div>
+      </div>
+    </div>
   </div>
 
   <div class=sec id=sec-firmware>
     <h2>firmware</h2>
-    <div class=keys>
-      <div class=key><span class=legend>check</span>
-        <span class=keyrow>
-          <span class="bar keylamp"><span class=seg id=fwled></span></span>
-          <span class='slot momentary'><button id=fwcheck aria-label="Look for a new release"></button></span>
-        </span></div>
-      <div class="key is-quiet" id=fwinstkey><span class=legend>install</span>
-        <span class='slot momentary'><button id=fwinst aria-label="Install the new release" disabled></button></span></div>
-      <div class=key id=fwautokey><span class=legend>auto</span>
-        <span class=slot><button id=fwauto aria-label="Install new releases automatically" aria-pressed=false></button></span></div>
+    <div class=row>
+      <p class=say id=fwsay>&nbsp;</p>
+      <div class=keys>
+        <div class=key id=fwupdkey><span class=legend>update</span>
+          <span class=keyrow>
+            <span class="bar keylamp"><span class=seg id=fwled></span></span>
+            <span class='slot momentary'><button id=fwupd aria-label="Look for a new release, or install it"></button></span>
+          </span></div>
+        <div class=key id=fwautokey><span class=legend>auto</span>
+          <span class=slot><button id=fwauto aria-label="Install new releases automatically" aria-pressed=false></button></span></div>
+        <div class=key id=fwfilekey><span class=legend>file</span>
+          <span class='slot momentary'><button id=upd aria-label="Install a release from a file"></button></span></div>
+      </div>
     </div>
-    <p class=say id=fwsay>&nbsp;</p>
-    <!-- The rare ways in: a release file by hand, and the LocalTalk chip's own
-         firmware, which a built AirWriter already has. -->
-    <p class=say><a id=upd>Install from a file</a><span id=ltlink class=hide><span
-      class=sep>&middot;</span><a id=ltflash>Flash the LocalTalk chip</a></span></p>
-    <p class="say hide" id=ltsay></p>
   </div>
 
   <div class='sec hide' id=sec-cable>
     <h2>cable</h2>
-    <div class=keys>
-      <div class=key><span class=legend>test</span>
-        <span class='slot momentary'><button id=cabletest aria-label="Test a cable"></button></span></div>
+    <div class=row>
+      <p class=say id=cablesay></p>
+      <div class=keys>
+        <!-- TashTalk is the LocalTalk chip's firmware. An assembled AirWriter
+             has it, so this key shows only once a test finds the chip blank. -->
+        <div class='key hide' id=flashkey><span class=legend>flash</span>
+          <span class='slot momentary'><button id=ltflash aria-label="Flash TashTalk onto the LocalTalk chip"></button></span></div>
+        <div class=key><span class=legend>test</span>
+          <span class='slot momentary'><button id=cabletest aria-label="Test a cable"></button></span></div>
+      </div>
     </div>
-    <p class=say id=cablesay></p>
   </div>
 
 </div>
