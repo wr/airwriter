@@ -236,8 +236,9 @@ $('savegen').onclick=async()=>{
 /* TashTalk is the LocalTalk chip's firmware. An assembled AirWriter has it
    already, so the flash key stays out of sight until a cable test finds the
    chip without it: blank, or no longer running it. */
-const CABLE_HOW='Plug a printer cable into both ports on the AirWriter and press test to '
-  +'find out whether it’s a crossover. The ImageWriter II needs a crossover cable.';
+/* The port names as the panel prints them. */
+const CABLE_HOW='Plug a printer cable into the “Serial” and “AppleTalk” ports and press the '
+  +'“Test” button to see if the cable will work with AirWriter.';
 $('cablesay').textContent=CABLE_HOW;
 $('cabletest').onclick=async()=>{
   const b=$('cabletest'), say=$('cablesay'); if(b.disabled) return; b.disabled=true;
