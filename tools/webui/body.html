@@ -58,7 +58,10 @@
       <div class=key><span class=legend>save</span>
         <span class='slot momentary'><button id=savegen aria-label=Save></button></span></div>
     </div>
-    <p class=say id=uri></p>
+    <p class="say hide" id=prnsay></p>
+    <!-- For adding the printer by hand, where AirPrint does not find it. -->
+    <p class=say id=addr>Address <span class=uri id=uri></span><span
+      class=sep>&middot;</span><a id=copy>copy</a></p>
   </div>
 
   <div class=sec id=sec-firmware>
@@ -75,26 +78,28 @@
         <span class=slot><button id=fwauto aria-label="Install new releases automatically" aria-pressed=false></button></span></div>
     </div>
     <p class=say id=fwsay>&nbsp;</p>
+    <!-- The rare ways in: a release file by hand, and the LocalTalk chip's own
+         firmware, which a built AirWriter already has. -->
+    <p class=say><a id=upd>Install from a file</a><span id=ltlink class=hide><span
+      class=sep>&middot;</span><a id=ltflash>Flash the LocalTalk chip</a></span></p>
+    <p class="say hide" id=ltsay></p>
   </div>
 
-  <div class='sec hide' id=sec-localtalk>
-    <h2>localtalk</h2>
+  <div class='sec hide' id=sec-cable>
+    <h2>cable</h2>
     <div class=keys>
-      <div class=key><span class=legend>flash</span>
-        <span class='slot momentary'><button id=ltflash aria-label="Flash TashTalk"></button></span></div>
-      <div class=key><span class=legend>cable</span>
+      <div class=key><span class=legend>test</span>
         <span class='slot momentary'><button id=cabletest aria-label="Test a cable"></button></span></div>
     </div>
-    <p class=say id=ltsay>Writes TashTalk 2.1.3 into the LocalTalk chip and checks it. Unplug the LocalTalk cable first.</p>
-    <p class=say id=cablesay>To test a printer cable, plug it into the printer port and the LocalTalk port, then press cable (or the test button).</p>
+    <p class=say id=cablesay></p>
   </div>
 
 </div>
 
 <p class=foot>
-  <a id=cups>copy printer address</a>
-  <span class=sep>&middot;</span><a id=upd>update firmware</a>
-  <span class=sep>&middot;</span><span id=ver></span>
+  Made by <a href="https://wells.ee" target=_blank rel=noopener>Wells Workshop</a>
+  <span class=sep>&middot;</span><a href="https://github.com/wr/airwriter" target=_blank
+    rel=noopener>Project home</a>
 </p>
 <input id=fw type=file accept=.bin class=hide>
 </main>

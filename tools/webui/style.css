@@ -222,6 +222,8 @@ select{padding-right:var(--sp-6);background-repeat:no-repeat;background-size:5px
   -webkit-font-smoothing:none;font-smooth:never}
 .say{margin:var(--sp-3) 0 0;color:var(--dim)}
 .say a{color:var(--ink);cursor:pointer;border-bottom:1px solid var(--seam)}
+/* the printer's address: it may break anywhere rather than push the page wide */
+.say .uri{color:var(--ink);overflow-wrap:anywhere}
 
 /* ── keys ───────────────────────────────────────────────────────────
    One component, everywhere. A cap in a moulded housing with its legend

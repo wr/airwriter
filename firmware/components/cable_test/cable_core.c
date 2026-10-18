@@ -222,7 +222,7 @@ const char *ct_verdict_text(ct_verdict_t v)
                "runs through it. See LocalTalk Chip (TashTalk) in the AirWriter wiki.";
     case CT_NO_TASHTALK:
         return "No cable was tested: the LocalTalk chip isn't running TashTalk, and the "
-               "test runs through it. Press flash, then test again.";
+               "test runs through it. It needs flashing first.";
     case CT_CHIP_SILENT:
         return "No cable was tested: the LocalTalk chip isn't answering, and the test runs "
                "through it. It may be missing or need TashTalk: turn LocalTalk off (DIP "

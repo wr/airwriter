@@ -25,7 +25,7 @@ const bars=r=>r>=-60?3:r>=-70?2:1;
 
 /* ── state ─────────────────────────────────────────────────────────── */
 let nets=[], joined='', ip='', sel=null, other=0, changing=0, first=1, setup=0,
-    suffix='', dither='atkinson', ribbon='';
+    suffix='', dither='atkinson', ribbon='', running={};
 
 /* Scanning takes the radio off channel for a second and drops whatever is
    listening, so the last list is kept and reused. An hour is well past the
@@ -125,8 +125,10 @@ function draw(s){
   $('model').textContent=s.queue||'';
   $('job').textContent=s.job&&s.job!=='none yet'
     ? 'Last job — '+s.job : 'No job yet';
-  $('ver').textContent=s.version||'';
   if(s.uri) $('uri').textContent=s.uri;
+  /* The name and hostname the board is answering to now: a save takes
+     effect at the next restart, and until then these are what it uses. */
+  running={queue:s.queue||'', host:(s.host||'').replace('.local','')};
 
   /* A printer that is off or unplugged is not a fault -- the board is fine and
      says so on its panel in warm white. Faults are the two states that need a
@@ -163,7 +165,8 @@ function draw(s){
   }
   $('sec-halftone').classList.toggle('hide',setup);
   $('sec-printer').classList.toggle('hide',setup);
-  $('sec-localtalk').classList.toggle('hide',!s.pic);
+  $('sec-cable').classList.toggle('hide',!s.pic);
+  $('ltlink').classList.toggle('hide',!s.pic);
 
   if(s.host){const h=s.host.replace('.local','');
     const i=h.lastIndexOf('-'); if(i>0) suffix=h.slice(i+1);
@@ -216,34 +219,65 @@ function noted(sec,word){
     delete h.dataset.busy;},1800);
 }
 $('savegen').onclick=async()=>{
-  const ok=await post('/api/general',
-    {queue:$('queue').value,host:$('host').value,dither:dither});
+  const queue=$('queue').value, host=$('host').value;
+  const ok=await post('/api/general',{queue:queue,host:host,dither:dither});
   noted('sec-printer', ok?'saved':'failed');
+  /* Nothing on the page changes when a name is saved, and nothing on the
+     network does either until the board restarts: say so, or it looks lost. */
+  const later=ok&&(queue!==running.queue||host!==running.host);
+  $('prnsay').classList.toggle('hide',!later);
+  if(later) $('prnsay').textContent='Saved. AirWriter uses the new name after it restarts: '
+    +'unplug it for a few seconds, then plug it back in.';
 };
 
-$('ltflash').onclick=async()=>{
-  const b=$('ltflash'); if(b.disabled) return; b.disabled=true;
-  $('ltsay').textContent='Flashing… about two seconds.';
+/* TashTalk is the LocalTalk chip's firmware. An assembled AirWriter has it
+   already, so flashing is for a new chip or a repair: a link with the other
+   firmware, and offered by the cable test when the chip turns out blank. */
+async function flashChip(say,sec){
+  if(!confirm('Flash TashTalk onto the LocalTalk chip?\n\nUnplug the LocalTalk cable '
+    +'first. It takes about two seconds.')) return 0;
+  say.classList.remove('hide');
+  say.textContent='Flashing…';
   let r=null;
   try{ r=await(await fetch('/api/localtalk/flash',{method:'POST'})).json(); }catch(e){}
-  b.disabled=false;
-  if(!r){ noted('sec-localtalk','failed'); $('ltsay').textContent='No answer from the dongle.'; return; }
-  noted('sec-localtalk', r.ok?'done':'failed');
-  $('ltsay').textContent = r.ok
+  if(!r){ noted(sec,'failed'); say.textContent='No answer from AirWriter.'; return 0; }
+  noted(sec, r.ok?'done':'failed');
+  say.textContent = r.ok
     ? 'TashTalk 2.1.3 written and verified · PIC12F1840 rev '+r.rev+'.'
-    : r.err+(r.addr?' at '+r.addr+': wanted '+r.want+', read '+r.got:'')
+    : cap(r.err)+(r.addr?' at '+r.addr+': wanted '+r.want+', read '+r.got:'')
       +(r.devid&&r.devid!=='0x0000'?' · device ID '+r.devid:'')+'.';
+  return r.ok;
+}
+let flashing=0;
+$('ltflash').onclick=async()=>{
+  if(flashing) return; flashing=1;
+  await flashChip($('ltsay'),'sec-firmware');
+  flashing=0;
 };
 
+const CABLE_HOW='To check a printer cable, plug it into both ports on the AirWriter and '
+  +'press test. Only Apple’s crossover cable works with the ImageWriter II.';
+$('cablesay').textContent=CABLE_HOW;
 $('cabletest').onclick=async()=>{
-  const b=$('cabletest'); if(b.disabled) return; b.disabled=true;
+  const b=$('cabletest'), say=$('cablesay'); if(b.disabled) return; b.disabled=true;
   let r=null;
   try{ r=await(await fetch('/api/cable',{method:'POST'})).json(); }catch(e){}
   b.disabled=false;
-  if(!r){ noted('sec-localtalk','failed'); $('cablesay').textContent='No answer from the dongle.'; return; }
+  if(!r){ noted('sec-cable','failed'); say.textContent='No answer from AirWriter.'; return; }
   const untested=r.ok&&['no_chip','no_tashtalk','chip_silent'].includes(r.verdict);
-  noted('sec-localtalk', !r.ok?'failed':untested?'not tested':r.verdict==='pass'?'crossover':'no good');
-  $('cablesay').textContent = r.ok ? r.text : 'Could not test: '+r.error+'.';
+  noted('sec-cable', !r.ok?'failed':untested?'not tested':r.verdict==='pass'?'crossover':'no good');
+  say.textContent = r.ok ? r.text : 'Could not test: '+r.error+'.';
+  /* A blank chip is the one answer the page can fix on the spot. */
+  if(r.ok&&r.verdict==='no_tashtalk'){
+    const a=document.createElement('a'); a.textContent='Flash it now';
+    say.append(' ',a);
+    a.onclick=async()=>{
+      if(flashing) return; flashing=1;
+      if(await flashChip(say,'sec-cable'))
+        say.textContent+=' Plug the cable back into both ports and press test again.';
+      flashing=0;
+    };
+  }
 };
 
 /* ── overlay ───────────────────────────────────────────────────────── */
@@ -268,13 +302,20 @@ $('join').onclick=async()=>{
   overlay('Restarting','Joining “'+name+'”',25);
 };
 
-/* CUPS' own web interface is disabled by default on macOS, so a link to it is
-   a dead end. The address is the thing a person needs to add the printer. */
-$('cups').onclick=async()=>{
-  const uri=$('uri').textContent.trim(); if(!uri) return;
-  try{ await navigator.clipboard.writeText(uri); $('cups').textContent='address copied'; }
-  catch(e){ $('cups').textContent=uri; }
-  setTimeout(()=>{$('cups').textContent='copy printer address';},2200);
+/* The address is for adding the printer by hand, where AirPrint does not
+   find it by itself. CUPS' own web interface is off by default on macOS, so a
+   link to it would be a dead end. */
+$('copy').onclick=async()=>{
+  const uri=$('uri').textContent.trim(), a=$('copy'); if(!uri) return;
+  try{ await navigator.clipboard.writeText(uri); a.textContent='copied'; }
+  catch(e){
+    /* a page on plain http gets no clipboard API: select it and copy the old way */
+    const r=document.createRange(); r.selectNodeContents($('uri'));
+    const sel=getSelection(); sel.removeAllRanges(); sel.addRange(r);
+    let ok=0; try{ ok=document.execCommand('copy'); }catch(e2){}
+    a.textContent=ok?'copied':'selected';
+  }
+  setTimeout(()=>{a.textContent='copy';},2200);
 };
 
 $('upd').onclick=()=>$('fw').click();
@@ -343,7 +384,7 @@ async function fwPost(url,body){
     const r=await fetch(url,{method:'POST',body:body?JSON.stringify(body):''});
     if(!r.ok){ $('fwsay').textContent=cap(await r.text())+'.'; return 0; }
     setTimeout(fwPoll,300); return 1;
-  }catch(e){ $('fwsay').textContent='No answer from the dongle.'; return 0; }
+  }catch(e){ $('fwsay').textContent='No answer from AirWriter.'; return 0; }
 }
 $('fwcheck').onclick=()=>fwPost('/api/update/check');
 $('fwinst').onclick=()=>fwPost('/api/update/install');
