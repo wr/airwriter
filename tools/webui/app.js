@@ -269,6 +269,26 @@ $('ltflash').onclick=async()=>{
   if(r.ok) $('flashkey').classList.add('hide');
 };
 
+/* ── footer ────────────────────────────────────────────────────────── */
+/* The project's stars, asked of GitHub by the browser, not the board, and
+   kept an hour like the network list. With no internet (setup mode, or a
+   network without it) the link just says GitHub. */
+const STAR='<svg aria-hidden="true" viewBox="0 0 16 16"><path fill="currentColor" d="M8 .25a.75.75 0 0 1 .673.418l1.882 3.815 4.21.612a.75.75 0 0 1 .416 1.279l-3.046 2.97.719 4.192a.751.751 0 0 1-1.088.791L8 12.347l-3.766 1.98a.75.75 0 0 1-1.088-.79l.72-4.194L.818 6.374a.75.75 0 0 1 .416-1.28l4.21-.611L7.327.668A.75.75 0 0 1 8 .25Z"/></svg>';
+(async function stars(){
+  const KEY='aw.stars'; let n=null;
+  try{ const c=JSON.parse(localStorage.getItem(KEY));
+    if(c && Date.now()-c.t < CACHE_MAX && typeof c.n==='number') n=c.n; }catch(e){}
+  if(n===null) try{
+    const ctl=new AbortController(); setTimeout(()=>ctl.abort(),6000);
+    const r=await fetch('https://api.github.com/repos/wr/airwriter',{signal:ctl.signal});
+    if(r.ok){ n=(await r.json()).stargazers_count;
+      try{ localStorage.setItem(KEY,JSON.stringify({t:Date.now(),n:n})); }catch(e){} }
+  }catch(e){}
+  if(typeof n!=='number') return;
+  $('stars').innerHTML=STAR+n.toLocaleString();
+  $('gh').setAttribute('aria-label','AirWriter on GitHub, '+n+(n===1?' star':' stars'));
+})();
+
 /* ── overlay ───────────────────────────────────────────────────────── */
 let ovh=0;
 function overlay(title,text,secs){

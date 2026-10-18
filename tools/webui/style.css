@@ -349,10 +349,20 @@ svg{display:block;shape-rendering:crispEdges}
 /* ── halftone ───────────────────────────────────────────────────── */
 #prev{display:block;margin:0 auto;max-width:100%;background:var(--paper)}
 
-/* ── footer ─────────────────────────────────────────────────────── */
-.foot{margin:var(--sp-3) var(--sp-1) 0;color:var(--dim);line-height:1.7}
-.foot a{color:var(--ink);text-decoration:none;border-bottom:1px solid var(--seam);
-  cursor:pointer}
+/* ── footer ─────────────────────────────────────────────────────────
+   Who made it on the left, the project and the tip jar on the right. */
+.foot{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;
+  gap:var(--sp-3) var(--sp-5);margin:var(--sp-4) var(--sp-1) 0;color:var(--dim);
+  line-height:var(--lead-tight)}
+.foot a{display:inline-flex;align-items:center;gap:var(--sp-2);color:var(--ink);
+  text-decoration:none;cursor:pointer}
+.foot a:hover{opacity:.75}
+.foot .ww span{color:var(--dim)}
+.wwlogo{height:var(--size-text);width:auto}
+.foot .out{display:inline-flex;align-items:center;gap:var(--sp-5)}
+.gh{width:var(--icon);height:var(--icon)}
+#stars{display:inline-flex;align-items:center;gap:3px}
+#stars svg{width:calc(var(--icon) - 3px);height:calc(var(--icon) - 3px)}
 .sep{margin:0 var(--sp-2);color:var(--seam)}
 
 /* ── narrow screens ─────────────────────────────────────────────────
