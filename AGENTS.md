@@ -90,7 +90,7 @@ What works on `main`:
   auto-update (off by default). An update holds the job lock to its restart and gives way to a
   job that arrives first. Releases are cut only by `tools/release/release.sh`.
 - Cable test (`components/cable_test`): one cable from J2 to J4 and a press of test (or
-  `POST /api/cable`) tells Apple's crossover from anything else. TashTalk sends a frame out J4
+  `POST /api/cable`) tells a crossover (any, not only Apple's) from anything else. TashTalk sends a frame out J4
   that RMT decodes off J2's RxD; only then does RMT send one out J2's TxD for TashTalk to relay
   back. The panel answers in the bottom three rows between the two sockets: a band sweeps from
   LocalTalk to the printer and back, then the strip glows green for a crossover, or blinks red
@@ -102,6 +102,12 @@ What works on `main`:
 - Setup AP `AirWriter-xxxx` (open, 192.168.4.1) on a board with no credentials; web UI on port
   80: `/api/status`, Wi-Fi, settings, `/update` (OTA), `/api/update` (GitHub releases),
   `/api/localtalk/flash`, `/api/cable`.
+- The settings page (W-1072): every section is its heading, its content and settings, then one
+  row with text left and keys right. Keys are main actions only; auto-update is a checkbox,
+  install-from-file a link, copy a text button in the address field. The flash key shows only
+  after a cable test answers `no_tashtalk` (reflashing a working chip is `curl -X POST
+  /api/localtalk/flash`). The footer's GitHub star count is the page's one request off the
+  board, made by the browser and dropped when offline. The favicon is the printer icon.
 - Wi-Fi scans all channels and joins the strongest AP; printer-uuid is stable (MAC + epoch).
 - TashTalk 2.1.3 is in U7, flashed in place by the ESP32 over LVP.
 - A LocalTalk node in DIP mode 2 (or always, with `CONFIG_AIRWRITER_LT_BENCH`), on UART2 to
@@ -126,7 +132,8 @@ Not built: EtherTalk, consumers of the dither override, PWG raster.
 follows the Mac's port). Its queue name reads "ImageWriter II" in `/api/status`, which is also
 its name in the Chooser. U7's PIC calibration words: `16E0 1DA8`. Its LocalTalk node ID is 214
 (kept in NVS `lt`/`node`); the bench Mac is node 83. Printer: an ImageWriter II on J2 via
-Apple's crossover cable.
+Apple's crossover cable. It runs the W-1072 build (v0.2.0-9-gf4ff8d5), ahead of any release,
+with auto-update on.
 
 Known issues, open:
 - With the node off, TashTalk once sent and relayed nothing over the cable test's own UART2 link
