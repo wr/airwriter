@@ -236,8 +236,8 @@ $('savegen').onclick=async()=>{
 /* TashTalk is the LocalTalk chip's firmware. An assembled AirWriter has it
    already, so the flash key stays out of sight until a cable test finds the
    chip without it: blank, or no longer running it. */
-const CABLE_HOW='Plug a printer cable into both ports on the AirWriter and press test. '
-  +'Only Apple’s crossover cable works with the ImageWriter II.';
+const CABLE_HOW='Plug a printer cable into both ports on the AirWriter and press test to '
+  +'find out whether it’s a crossover. The ImageWriter II needs a crossover cable.';
 $('cablesay').textContent=CABLE_HOW;
 $('cabletest').onclick=async()=>{
   const b=$('cabletest'), say=$('cablesay'); if(b.disabled) return; b.disabled=true;
@@ -305,7 +305,7 @@ $('copy').onclick=async()=>{
   noted('sec-printer', ok?'address copied':'address selected');
 };
 
-$('upd').onclick=()=>$('fw').click();
+$('upd').onclick=()=>{ if(!FW_BUSY.includes(fwu.state)) $('fw').click(); };
 $('fw').onchange=async()=>{
   const f=$('fw').files[0]; if(!f) return;
   overlay('Installing','Uploading '+(f.size>>10)+' KB',45);
@@ -355,10 +355,7 @@ function fwDraw(u){
   $('fwupdkey').classList.toggle('is-quiet',!net);
   $('fwupdkey').classList.toggle('is-lit',net&&!!u.newer);
   $('fwauto').disabled=!net;
-  $('fwautokey').classList.toggle('is-lit',!!u.auto);
-  $('fwautokey').classList.toggle('is-quiet',!net);
-  $('fwauto').setAttribute('aria-pressed',!!u.auto);
-  $('upd').disabled=busy;
+  $('fwauto').checked=!!u.auto;
   if(busy&&!fwblink) fwblink=setInterval(()=>$('fwled').classList.toggle('act'),160);
   if(!busy&&fwblink){ clearInterval(fwblink); fwblink=0; $('fwled').classList.remove('act'); }
   if(u.state==='restarting') overlay('Installing','Restarting into the new firmware',30);
@@ -376,9 +373,11 @@ async function fwPost(url,body){
   }catch(e){ $('fwsay').textContent='No answer from AirWriter.'; return 0; }
 }
 $('fwupd').onclick=()=>fwPost(fwu.newer?'/api/update/install':'/api/update/check');
-$('fwauto').onclick=async()=>{
-  const on=!fwu.auto;
-  if(await fwPost('/api/update/auto',{auto:on})) noted('sec-firmware', on?'auto on':'auto off');
+$('fwauto').onchange=async()=>{
+  const box=$('fwauto'), on=box.checked;
+  if(await fwPost('/api/update/auto',{auto:on}))
+    noted('sec-firmware', on?'automatic updates on':'automatic updates off');
+  else box.checked=!on;
 };
 fwPoll().then(ok=>{
   if(ok && !fwu.setup && fwu.key==='airwriter' && !FW_BUSY.includes(fwu.state)

@@ -77,6 +77,8 @@
   --field-h:34px;
   --row-h:42px;
   --icon:16px;
+  /* the network list's tick, as a mask: the colour comes from what it masks */
+  --tick:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 8 6' shape-rendering='crispEdges'%3E%3Cpath d='M0 2h1v1H0zM1 3h1v1H1zM2 4h1v1H2zM3 3h1v1H3zM4 2h1v1H4zM5 1h1v1H5zM6 0h2v1H6z'/%3E%3C/svg%3E");
   --feed-w:24px;         /* the tractor strip down each edge */
   --hole:13px; --hole-pitch:26px;
   --vent-h:88px; --vent-pitch:19px; --vent-line:2.6px;   /* slot : pitch about 1:7 */
@@ -232,6 +234,25 @@ select{padding-right:var(--sp-6);background-repeat:no-repeat;background-size:5px
 .row{display:flex;align-items:flex-end;justify-content:space-between;
   gap:var(--sp-5);margin-top:var(--sp-5)}
 .row .say{margin:0;flex:1 1 auto;min-width:0}
+.row .text{flex:1 1 auto;min-width:0}
+.row .text .say+.say{margin-top:var(--sp-1)}
+
+/* An ordinary checkbox, drawn to match the fields: a sunken square with the
+   pixel tick the network list uses. */
+label.check{display:flex;align-items:center;gap:var(--sp-3);margin:var(--sp-3) 0 0;
+  color:var(--ink);line-height:var(--lead-tight);cursor:pointer}
+label.check input{position:relative;flex:0 0 auto;width:20px;height:20px;padding:0;margin:0;
+  cursor:pointer}
+label.check input:checked:after{content:'';position:absolute;inset:3px;background:var(--ink);
+  -webkit-mask:var(--tick) center/contain no-repeat;mask:var(--tick) center/contain no-repeat}
+label.check:has(input:disabled){opacity:.4;cursor:default}
+
+/* A field with a small text button inside its right end. */
+.withact{position:relative}
+.withact input{padding-right:calc(var(--sp-6)*2)}
+.act{position:absolute;right:var(--sp-3);top:50%;transform:translateY(-50%);
+  padding:0;border:0;background:none;font:inherit;color:var(--ink);cursor:pointer;
+  border-bottom:1px solid var(--seam);line-height:1.2}
 .row .keys{flex:0 0 auto;margin-left:auto}
 
 /* ── keys ───────────────────────────────────────────────────────────

@@ -24,9 +24,11 @@
     <p class=job id=job>&nbsp;</p>
   </div>
 
-  <!-- Every section is laid out the same way: its heading, what it shows,
-       then one row with what it has to say on the left and its keys on the
-       right. Every action is a key. -->
+  <!-- Every section is laid out the same way: its heading, what it shows and
+       its settings, then one row with what it has to say on the left and its
+       keys on the right. A key is a section's main action; settings are
+       ordinary fields and checkboxes, and a rarely needed action is a link in
+       the text. -->
 
   <div class=sec>
     <h2>wi-fi</h2>
@@ -64,12 +66,11 @@
     <div><label for=queue id=qlbl class=hide>name</label>
       <input id=queue class=hide autocomplete=off placeholder="Printer name"></div>
     <!-- For adding the printer by hand, where AirPrint does not find it. -->
-    <label for=uri>address</label><input id=uri readonly>
+    <label for=uri>address</label>
+    <div class=withact><input id=uri readonly><button class=act id=copy type=button>copy</button></div>
     <div class=row>
       <p class=say id=prnsay></p>
       <div class=keys>
-        <div class=key><span class=legend>copy</span>
-          <span class='slot momentary'><button id=copy aria-label="Copy the address"></button></span></div>
         <div class=key><span class=legend>save</span>
           <span class='slot momentary'><button id=savegen aria-label=Save></button></span></div>
       </div>
@@ -78,18 +79,18 @@
 
   <div class=sec id=sec-firmware>
     <h2>firmware</h2>
+    <label class=check><input type=checkbox id=fwauto>Install new releases automatically</label>
     <div class=row>
-      <p class=say id=fwsay>&nbsp;</p>
+      <div class=text>
+        <p class=say id=fwsay>&nbsp;</p>
+        <p class=say>Or <a id=upd>install a release from a file</a>.</p>
+      </div>
       <div class=keys>
         <div class=key id=fwupdkey><span class=legend>update</span>
           <span class=keyrow>
             <span class="bar keylamp"><span class=seg id=fwled></span></span>
             <span class='slot momentary'><button id=fwupd aria-label="Look for a new release, or install it"></button></span>
           </span></div>
-        <div class=key id=fwautokey><span class=legend>auto</span>
-          <span class=slot><button id=fwauto aria-label="Install new releases automatically" aria-pressed=false></button></span></div>
-        <div class=key id=fwfilekey><span class=legend>file</span>
-          <span class='slot momentary'><button id=upd aria-label="Install a release from a file"></button></span></div>
       </div>
     </div>
   </div>
