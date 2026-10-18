@@ -24,8 +24,8 @@ reset and signed firmware updates are in progress.
 ## Using it
 
 The [wiki](../../wiki) covers setup, the status lights, the DIP switches, settings, updates and
-troubleshooting. You need an ImageWriter II and Apple's 8-pin mini-DIN crossover printer cable;
-straight-wired cables don't work.
+troubleshooting. You need an ImageWriter II and an 8-pin mini-DIN crossover printer cable, wired
+like the one a Mac used (Apple's 590-0552 is one); straight-wired cables don't work.
 
 ## Repository
 
