@@ -357,8 +357,9 @@ svg{display:block;shape-rendering:crispEdges}
 .foot a{display:inline-flex;align-items:center;gap:var(--sp-2);color:var(--ink);
   text-decoration:none;cursor:pointer}
 .foot a:hover{opacity:.75}
-.foot .ww span{color:var(--dim)}
-.wwlogo{height:var(--size-text);width:auto}
+.foot .ww .by{color:var(--dim)}
+/* the mark at the height of the capitals, as the panel sets it */
+.wwmark{height:.72em;width:auto;margin-right:-2px}
 .foot .out{display:inline-flex;align-items:center;gap:var(--sp-5)}
 .gh{width:var(--icon);height:var(--icon)}
 #stars{display:inline-flex;align-items:center;gap:3px}

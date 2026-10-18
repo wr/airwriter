@@ -20,7 +20,7 @@ Source files carry an SPDX header where the format allows one.
 The licences above cover the design, not the brand. "AirWriter" and the AirWriter logo are not
 licensed under any of them. You may build, modify and sell hardware from this design under
 CERN-OHL-S, but please give it a different name and don't use the logo, so nobody mistakes it for
-the original. The same goes for the Wells Workshop name and logo, which the settings page shows in
+the original. The same goes for the Wells Workshop name and mark, which the settings page shows in
 its footer (`tools/webui/wells-workshop.svg`).
 
 ## Third-party material
