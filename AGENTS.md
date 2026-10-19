@@ -117,7 +117,8 @@ What works on `main`:
   stream and goes to the printer as it is, under the job lock: an IPP job or test page makes the
   Mac wait ("busy"), a paused printer holds the Mac's reads (16 KB spool), and a job cut short
   gets W-1041's resync. The last job's bytes are also kept for `GET /api/lt/job`. `GET /api/lt`
-  shows state and log; `POST /api/lt/echo` with a node number pings that Mac (AEP).
+  shows state and log; `POST /api/lt/echo` with a node number pings that Mac (AEP). The bench
+  Mac has printed on paper through it.
 
 **Enclosure** (`enclosure/`, in use on board 1): tray (print in PETG with Arachne walls;
 every wall 1.70 below the rim, one thickness all round so no lines show up the outside; the
@@ -132,7 +133,7 @@ Not built: EtherTalk, consumers of the dither override, PWG raster.
 **Board 1:** ESP32-S3-WROOM-1-N8R2 (8 MB flash, 2 MB PSRAM). On the home Wi-Fi at
 10.0.1.115, mDNS `imagewriter-2434.local`. Console on USB-C as `/dev/cu.usbmodem*` (the number
 follows the Mac's port). Its queue name reads "ImageWriter II" in `/api/status`, which is also
-its name in the Chooser. U7's PIC calibration words: `16E0 1DA8`. Its LocalTalk node ID is 214
+its name in the Chooser. U7's PIC calibration words: `16E0 1DA8`. Its LocalTalk node ID is 198
 (kept in NVS `lt`/`node`); the bench Mac is node 83. Printer: an ImageWriter II on J2 via
 Apple's crossover cable. It runs the W-1072 build (v0.2.0-9-gf4ff8d5), ahead of any release,
 with auto-update on.
@@ -146,6 +147,10 @@ Known issues, open:
 - Wi-Fi range with the panel's copper over the antenna: −91 dBm in one spot, "Excellent" after
   moving the board. Unquantified.
 - HSKo never scoped (SPEC §4.4). Board-reboot-mid-strip resync is untested.
+- The bench Mac froze solid 8.7 in down its second PAP page (2026-10-19), right after a normal
+  SendStatus reply; it then answered nothing, AEP included, and the board timed the connection
+  out after 2 min and went Ready. Once before it sat tickling on a finished page instead
+  (`LT_PAP_QUIET_MS`). If the Mac freezes again, check whether it is the same job.
 - `W-1044 iPhone never submits a job on builds with W-1040's job model` is Done, but its cause
   was never isolated (likely the early reply, the strongest-AP fix and stale mDNS twins aging
   out). If the iPhone stalls again, that issue has the bisect plan.
@@ -164,10 +169,6 @@ Linear is the queue; these are the live items.
   on board 1 (all pass). Board 1 has the W-1059 bootloader and partition table, so an image
   without W-1046 OTA'd onto it is rolled back at its next reboot, and one without W-1059 may
   overwrite the known-good slot (`docs/traps.md`).
-- `W-1053 LocalTalk: print PAP jobs from the Mac's AppleTalk ImageWriter driver`: merged
-  2026-10-15. Host-tested against `fixtures/pap-iw701-page.bin`, and on board 1 a real Mac job went
-  from PAP through `serial_out` byte for byte (UART loopback, `CONFIG_AIRWRITER_LT_BENCH`). Still
-  owed: a paper test, which needs a second crossover cable for J2 while the Mac's is on J4.
 - `W-1048 OTA updates from GitHub releases: signed, verified, optional auto-update`: merged
   2026-10-16, benched on board 1 (all pass): `/update` and GitHub both refuse tampered, foreign-key
   and unsigned images, auto-update found and kept v0.1.1, and a job mid-download wins.
