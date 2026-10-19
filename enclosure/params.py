@@ -151,12 +151,12 @@ SCREW_CLEAR_D = 2.80
 SCREW_HEAD_D = 5.00
 """Counterbore for an M2.5 pan head, in the floor's underside."""
 
-SCREW_HEAD_DEPTH = 1.10
+SCREW_HEAD_DEPTH = 1.30
 """Counterbore depth from the floor's underside: 0.90 above the foot pocket's
 ceiling (FOOT_POCKET_DEPTH), so the head stays out of the foot. 1.40 until
 2026-10-17, when 1.00 pockets left the heads only 0.40 of it; Wells: "make the
 screws go in deeper. Probably just need another .5mm", so 1.90. The pockets
-went to 0.20 on 2026-10-18 and the counterbore came up with them, which also
+went to 0.40 on 2026-10-18 and the counterbore came up with them, which also
 keeps the Pro screw's tip clear of the panel's blind standoff."""
 
 FOOT_D = 10.00
@@ -165,10 +165,10 @@ FOOT_D = 10.00
 FOOT_POCKET_CLEAR = 0.20
 """Per side, round each foot in its pocket: a guiding fit (docs/cad-routine.md)."""
 
-FOOT_POCKET_DEPTH = 0.20
-"""How deep each foot sits in the floor's underside: one first layer, enough
-to locate it. 1.00 until 2026-10-18 (Wells: "make foot recess in bottom case
-.2mm instead of 1mm"). The pocket's ceiling prints as a bridge across it."""
+FOOT_POCKET_DEPTH = 0.40
+"""How deep each foot sits in the floor's underside. 1.00 until 2026-10-18,
+then 0.20 (Wells: "make foot recess in bottom case .2mm instead of 1mm"), then
+0.40 the same day. The pocket's ceiling prints as a bridge across it."""
 
 FOOT_COVER = 0.50
 """How far inside its foot's edge each screw counterbore stays, so the foot

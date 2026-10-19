@@ -123,7 +123,7 @@ What works on `main`:
 every wall 1.70 below the rim, one thickness all round so no lines show up the outside; the
 board goes in by the sequence in `enclosure/README.md`, thumbing the west wall out past the
 DIP keys), Lite lid, and the Pro build's light-guide lattice. Cavity 13.04 (measured mini-DIN
-height); Pro screws M2.5 × 18. Four 10 mm rubber feet sit in 0.20 pockets in the floor's
+height); Pro screws M2.5 × 18. Four 10 mm rubber feet sit in 0.40 pockets in the floor's
 underside, each hiding a screw counterbore. The shop's cased GLBs still show the pre-W-1036
 tray.
 

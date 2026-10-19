@@ -64,14 +64,14 @@ real unsupported ceilings once the part is reoriented in the slicer.
 | Lite | 4 × M2.5 × 10 | M2.5 brass heat-set inserts in the lid legs |
 
 Lite is **M2.5 × 10, not × 8**: with `STANDOFF` at 3.00 the counterbore seat
-sits at Z = -5.90, so an 8mm screw only reaches 2.10mm into the lid's 4.50mm
-insert bore. 10mm reaches 4.10mm — most of the insert's own length.
+sits at Z = -5.70, so an 8mm screw only reaches 2.30mm into the lid's 4.50mm
+insert bore. 10mm reaches 4.30mm — most of the insert's own length.
 
 Pro is **M2.5 × 18, not × 20**. The panel's standoffs are blind: 3.0 mm tall,
 thread in the bottom 1.8 mm, and the screw tip must stop about 0.5 mm short of
-the seat. From the same Z = -5.90 head seat, an 18 mm screw ends at Z 12.10,
-0.94 short of the panel's underside at 13.04 and 2.06 mm into the standoff. A
-20 mm screw would end at 14.10, past the panel's underside, and bottom out.
+the seat. From the same Z = -5.70 head seat, an 18 mm screw ends at Z 12.30,
+0.74 short of the panel's underside at 13.04 and 2.26 mm into the standoff. A
+20 mm screw would end at 14.30, past the panel's underside, and bottom out.
 
 Press the four inserts into the **bottom** of the lid's legs before assembly.
 Rubber feet go on the floor's underside, over the screw counterbores.
