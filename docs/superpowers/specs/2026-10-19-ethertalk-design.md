@@ -52,7 +52,10 @@ Non-goals (this round)
   range. A network with a router (RTMP heard) is logged and otherwise not handled.
 - **The Macintosh Mini installer option** (switching its Basilisk II to the tunnel). That is the
   macintosh-mini repo's job; for the bench the Mini is set up by hand.
-- **LocalTalk over UDP** (LToUDP), considered and set aside for this.
+- **LocalTalk over UDP** (LToUDP), considered and set aside for this. It is what Mini vMac 37
+  speaks (Mini vMac has no Ethernet) and what AirTalk boxes speak, so it is the next link after
+  this one: the cable's LLAP half over a UDP socket, answering ENQ itself. The split below is
+  made with it in mind.
 
 Anti-goals
 - Anything that can stall or break the cable node, AirPrint or a job in progress: a dead relay,
@@ -128,10 +131,10 @@ AEP) is untied from LLAP so it runs over either link layer:
 
 The board runs one node per link: the cable (DIP mode 2, as today), the tunnel and the zone.
 Each has its own AppleTalk address and its own PAP connection; all three answer NBP as the queue
-name, type `ImageWriter`. One task owns every node, so node state stays single-threaded: the
-UART, UDP socket and WebSocket each pass received frames to that task and send what it hands
-them. The cable node's behaviour, timers and logs do not change, and its host tests pass
-unchanged.
+name, type `ImageWriter`. Every node belongs to one task, so node state stays single-threaded:
+the cable node stays on the LocalTalk task as today, and one EtherTalk task owns the tunnel and
+zone nodes, taking frames from the UDP socket and the WebSocket. The cable node's behaviour,
+timers and logs do not change, and its host tests pass unchanged.
 
 ### One printer
 
@@ -191,8 +194,9 @@ AirPrint and the test button wait, as they do today.
   text left and keys right): a checkbox for the tunnel, a field for the zone, a save key, and a
   line saying what each link is doing (listening, connected to the zone, a Mac seen, the last
   error). Its copy is Wells's to approve on the board before it is committed.
-- The JSON API: the settings through the page's existing settings endpoint pattern, and each
-  link's state, address and counters in `/api/lt` beside the cable node's (zone name excluded).
+- The JSON API: `GET /api/et` gives each EtherTalk link's state, address and counters (zone name
+  excluded), beside `/api/lt`, which stays the cable node's as it is. `GET`/`POST
+  /api/et/settings` read and write the two settings for the page.
 
 ### The panel
 
