@@ -59,6 +59,9 @@ build/test_localtalk: test/test_localtalk.c $(LT)/lt_proto.c $(LT)/lt_node.c $(L
                       $(COMP)/serial_out/serial_writer.c | build
 	$(CC) $(CFLAGS) -I$(LT)/include -I$(COMP)/serial_out/include -Itest -o $@ $^
 
+build/test_ethertalk: test/test_ethertalk.c $(LT)/et_proto.c $(LT)/lt_proto.c | build
+	$(CC) $(CFLAGS) -I$(LT)/include -Itest -o $@ $^
+
 CT := ../../firmware/components/cable_test
 build/test_cable: test/test_cable.c $(CT)/cable_core.c $(LT)/lt_proto.c | build
 	$(CC) $(CFLAGS) -I$(CT)/include -I$(LT)/include -Itest -o $@ $^
