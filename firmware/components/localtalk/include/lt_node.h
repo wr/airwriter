@@ -105,6 +105,21 @@ typedef struct {
     uint32_t    seed;       // nonzero random seed for candidate IDs
 } lt_cfg_t;
 
+// The link under the node. LLAP is the cable, as above. ELAP (W-1076) is
+// EtherTalk through et_link.c: no LLAP node acquisition (AARP is et_link's;
+// lt_node_set_address hands over the result), frames arrive as a pseudo-LLAP
+// header {dst node, src node, LLAP_LONG} and a long DDP datagram and leave the
+// same way, a datagram for another network is dropped, and RTMP is only noted.
+enum { LT_LINK_LLAP = 0, LT_LINK_ELAP = 1 };
+
+// The idle hold (W-1076): a connection that sends no data for idle_hold_ms
+// while the status word is 0 is closed (CloseConn, the job ends normal, so
+// what came prints). On the relay a Mac can be anyone with the zone name or
+// an abandoned browser tab, holding the printer from an iPhone. A Mac waiting
+// out paper-out or off line is waiting on the status word and is never cut
+// off. 0 (the cable) leaves today's timers alone.
+#define LT_IDLE_HOLD_MS 60000
+
 typedef enum { LT_ACQUIRING = 0, LT_ONLINE } lt_phase_t;
 
 typedef struct {               // how to answer whoever sent a datagram
@@ -148,6 +163,7 @@ typedef struct {
     uint64_t   wrote;            // when the workstation last sent us Data
     uint64_t   waiting;          // since when it has owed us data with the printer ready
     uint32_t   bytes;
+    uint64_t   idle_since;       // the idle hold's clock: open, Data, or a nonzero status
 } lt_pap_t;
 
 typedef struct {
@@ -176,9 +192,15 @@ typedef struct {
     uint64_t   last_lkup_at;
     uint8_t    heard[32];      // bit n: node n has sent a frame
     uint64_t   echo_at;        // when lt_node_echo last asked
+    uint8_t    link;           // LT_LINK_*
+    uint32_t   idle_hold_ms;
+    uint8_t    router_logged;  // ELAP: a router has been noted once
 } lt_node_t;
 
 void lt_node_init(lt_node_t *n, const lt_cfg_t *cfg, const lt_ops_t *ops, uint64_t now);
+// The same for an ELAP node (W-1076), with its idle hold; cfg->hint is unused.
+void lt_node_init_elap(lt_node_t *n, const lt_cfg_t *cfg, const lt_ops_t *ops,
+                       uint32_t idle_hold_ms, uint64_t now);
 // One frame as TashTalk relayed it, FCS already checked and stripped.
 void lt_node_rx(lt_node_t *n, const uint8_t *f, size_t len, uint64_t now);
 // Timers: enquiries while acquiring, PAP retries, tickles and timeouts.
@@ -191,3 +213,7 @@ void lt_node_pap_abort(lt_node_t *n, uint64_t now);
 void lt_node_echo(lt_node_t *n, uint8_t node, uint64_t now);
 // The Option Card status word, e.g. when the printer goes offline.
 void lt_node_set_status(lt_node_t *n, uint16_t status);
+// ELAP only: AARP made net.node ours, and the node goes online; node 0 means
+// the address is gone (the link's MAC changed) and the node waits for the next.
+// A change while a connection is open ends that job abandoned first.
+void lt_node_set_address(lt_node_t *n, uint16_t net, uint8_t node, uint64_t now);

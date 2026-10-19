@@ -890,6 +890,230 @@ static void test_pap_fixture(void)
     CHECK(!n.pap.open);
 }
 
+// ------------------------------------------------------------- ELAP mode
+// W-1076: the node behind et_link, which hands it each datagram as a
+// pseudo-LLAP header {dst node, src node, LLAP_LONG} and a long DDP header.
+// Here a Mac at 0xFF10.12, socket 0xFD, talks to the node at 0xFF23.77.
+
+#define ENET  0xFF23
+#define ENODE 77
+
+static uint64_t elap_online(lt_node_t *n, uint32_t idle_hold_ms)
+{
+    lt_cfg_t cfg = { "ImageWriter II", "ImageWriter", 0x0000, 0, 1 };
+    lt_node_init_elap(n, &cfg, &OPS, idle_hold_ms, 0);
+    lt_node_set_address(n, ENET, ENODE, 1000);
+    reset_fake();
+    return 1000;
+}
+
+static size_t emac_ddp(uint8_t *f, uint16_t dnet, uint8_t dnode, uint8_t dsock, uint8_t type,
+                       const uint8_t *data, size_t len)
+{
+    lt_addr_t to = { dnet, dnode, dsock }, from = { 0xFF10, 12, 0xFD };
+    return ddp_build(f, LLAP_MAX, dnode, 12, 1, &to, &from, type, data, len);
+}
+
+static size_t emac_atp(uint8_t *f, uint8_t dsock, uint8_t ctl, uint8_t bitmap, uint16_t tid,
+                       uint8_t u0, uint8_t u1, const uint8_t *data, size_t len)
+{
+    uint8_t a[ATP_HDR + ATP_MAX_DATA];
+    uint8_t user[4] = { u0, u1, 0, 0 };
+    size_t al = atp_build(a, sizeof a, ctl, bitmap, tid, user, data, len);
+    return emac_ddp(f, ENET, ENODE, dsock, DDP_ATP, a, al);
+}
+
+static const uint8_t *eatp_of(int i) { return sent[i] + 3 + DDP_LONG_HDR; }
+
+static size_t lkup_from_ff10(uint8_t *nbp)
+{
+    size_t k = 0;
+    nbp[k++] = 0x21; nbp[k++] = 0x1E;                     // LkUp, 1 tuple, id 30
+    nbp[k++] = 0xFF; nbp[k++] = 0x10; nbp[k++] = 12; nbp[k++] = 0xFD; nbp[k++] = 0;
+    nbp[k++] = 1; nbp[k++] = '=';
+    nbp[k++] = 11; memcpy(nbp + k, "ImageWriter", 11); k += 11;
+    nbp[k++] = 1; nbp[k++] = '*';
+    return k;
+}
+
+static void test_elap_init_quiet(void)
+{
+    lt_node_t n;
+    claimed = -1;
+    reset_fake();
+    lt_cfg_t cfg = { "ImageWriter II", "ImageWriter", 0x0000, 0, 1 };
+    lt_node_init_elap(&n, &cfg, &OPS, 0, 0);
+    for (uint64_t t = 0; t <= 2000; t += 10) lt_node_tick(&n, t);
+    CHECK_EQ_INT(nsent, 0);                               // no ENQs: AARP is et_link's
+    CHECK_EQ_INT(claimed, -1);
+    CHECK(n.phase == LT_ACQUIRING);
+    // Nothing is answered before the address is ours.
+    uint8_t nbp[64], f[LLAP_MAX];
+    size_t fl = emac_ddp(f, 0, 0xFF, SOCK_NIS, DDP_NBP, nbp, lkup_from_ff10(nbp));
+    lt_node_rx(&n, f, fl, 2000);
+    CHECK_EQ_INT(nsent, 0);
+    lt_node_set_address(&n, ENET, ENODE, 2000);
+    CHECK(n.phase == LT_ONLINE);
+    CHECK_EQ_INT(n.net, ENET);
+    CHECK_EQ_INT(n.node, ENODE);
+    CHECK(strstr(lastlog, "is ours") != NULL);
+    CHECK_EQ_INT(claimed, -1);
+}
+
+static void test_elap_lookup(void)
+{
+    lt_node_t n;
+    uint64_t t = elap_online(&n, 0);
+    uint8_t nbp[64], f[LLAP_MAX];
+    size_t fl = emac_ddp(f, 0, 0xFF, SOCK_NIS, DDP_NBP, nbp, lkup_from_ff10(nbp));
+    lt_node_rx(&n, f, fl, t);
+    CHECK_EQ_INT(nsent, 1);
+    ddp_t d;
+    CHECK_EQ_INT(ddp_parse(sent[0], sent_len[0], &d), 0);
+    CHECK(d.is_long);
+    CHECK_EQ_INT(d.dst.net, 0xFF10);
+    CHECK_EQ_INT(d.dst.node, 12);
+    CHECK_EQ_INT(d.dst.sock, 0xFD);
+    CHECK_EQ_INT(d.src.net, ENET);
+    CHECK_EQ_INT(d.src.node, ENODE);
+    CHECK_EQ_INT(d.src.sock, SOCK_NIS);
+    CHECK_EQ_INT(d.type, DDP_NBP);
+    nbp_t r;
+    CHECK_EQ_INT(nbp_parse(d.data, d.len, &r), 0);
+    CHECK_EQ_INT(r.fn, NBP_LKUP_REPLY);
+    CHECK_EQ_INT(r.t.addr.net, ENET);
+    CHECK_EQ_INT(r.t.addr.node, ENODE);
+    CHECK_EQ_INT(r.t.addr.sock, LT_SOCK_SLS);
+
+    // An echo goes out with a long header too.
+    reset_fake();
+    lt_node_echo(&n, 12, t);
+    CHECK_EQ_INT(nsent, 1);
+    CHECK_EQ_INT(sent[0][2], LLAP_LONG);
+}
+
+static void test_elap_other_net(void)
+{
+    lt_node_t n;
+    uint64_t t = elap_online(&n, 0);
+    uint8_t nbp[64], f[LLAP_MAX];
+    size_t k = lkup_from_ff10(nbp);
+    size_t fl = emac_ddp(f, 0xFF99, ENODE, SOCK_NIS, DDP_NBP, nbp, k);
+    lt_node_rx(&n, f, fl, t);
+    fl = emac_ddp(f, 0xFF99, 0xFF, SOCK_NIS, DDP_NBP, nbp, k);
+    lt_node_rx(&n, f, fl, t);
+    CHECK_EQ_INT(nsent, 0);
+    fl = emac_ddp(f, ENET, ENODE, SOCK_NIS, DDP_NBP, nbp, k);   // ours, by number
+    lt_node_rx(&n, f, fl, t);
+    CHECK_EQ_INT(nsent, 1);
+}
+
+static void test_elap_rtmp(void)
+{
+    lt_node_t n;
+    uint64_t t = elap_online(&n, 0);
+    const uint8_t rtmp[] = { 0x00, 0x07, 0x08, 0x05 };
+    uint8_t f[LLAP_MAX];
+    lt_addr_t rto = { 0, 0xFF, SOCK_RTMP }, rfrom = { 0xFF10, 5, SOCK_RTMP };
+    size_t fl = ddp_build(f, sizeof f, 0xFF, 5, 1, &rto, &rfrom, DDP_RTMP, rtmp, sizeof rtmp);
+    int logs = nlogs;
+    lt_node_rx(&n, f, fl, t);
+    lt_node_rx(&n, f, fl, t + 10000);
+    CHECK_EQ_INT(n.net, ENET);
+    CHECK_EQ_INT(nlogs, logs + 1);
+    CHECK(strstr(lastlog, "router") != NULL);
+}
+
+static int close_conns_sent(void)
+{
+    int closes = 0;
+    for (int i = 0; i < nsent && i < MAXSENT; i++)
+        closes += eatp_of(i)[5] == PAP_CLOSE_CONN && (eatp_of(i)[0] & ATP_FN_MASK) == ATP_TREQ;
+    return closes;
+}
+
+// Run the clock from `from` to `to` (inclusive) in 10 ms ticks, the Mac
+// tickling every 30 s so only the idle hold can close the connection.
+static void elap_run(lt_node_t *n, uint64_t t0, uint64_t from, uint64_t to)
+{
+    uint8_t f[LLAP_MAX];
+    for (uint64_t now = from; now <= to; now += 10) {
+        if ((now - t0) % 30000 == 0) {
+            size_t fl = emac_atp(f, LT_SOCK_CONN, ATP_TREQ, 0x01, (uint16_t)now, 0x2C, PAP_TICKLE, NULL, 0);
+            lt_node_rx(n, f, fl, now);
+        }
+        lt_node_tick(n, now);
+    }
+}
+
+static void test_idle_hold(void)
+{
+    const uint8_t oc[] = { 0xF4, 1, 0, 0 };
+    uint8_t f[LLAP_MAX];
+    for (int run = 0; run < 3; run++) {
+        lt_node_t n;
+        uint64_t t0 = elap_online(&n, 60000);
+        job_eof = 0;
+        job_normal = -1;
+        size_t fl = emac_atp(f, LT_SOCK_SLS, ATP_TREQ | ATP_XO, 0x01, 0x0700, 0x2C, PAP_OPEN_CONN, oc, sizeof oc);
+        lt_node_rx(&n, f, fl, t0);
+        CHECK(n.pap.open);
+        uint64_t open_until = t0 + 59990, closed_at = t0 + 60000;
+        if (run == 1) {                                   // paper out holds the clock
+            elap_run(&n, t0, t0 + 10, t0 + 9990);
+            lt_node_set_status(&n, LT_IW_PAPER_OUT);
+            elap_run(&n, t0, t0 + 10000, t0 + 99990);
+            lt_node_set_status(&n, 0);
+            elap_run(&n, t0, t0 + 100000, t0 + 159980);
+            CHECK(n.pap.open);
+            reset_fake();
+            elap_run(&n, t0, t0 + 159990, t0 + 160000);
+            CHECK(!n.pap.open);
+            CHECK_EQ_INT(close_conns_sent(), 1);
+            CHECK_EQ_INT(job_eof, 1);
+            continue;
+        }
+        if (run == 2) {                                   // data restarts it
+            uint16_t tid = 0;
+            for (int i = 0; i < nsent && i < MAXSENT; i++)
+                if (eatp_of(i)[5] == PAP_SEND_DATA) tid = (uint16_t)(eatp_of(i)[2] << 8 | eatp_of(i)[3]);
+            elap_run(&n, t0, t0 + 10, t0 + 29990);
+            const uint8_t chunk[] = { 0x0D, 0x0A };
+            fl = emac_atp(f, LT_SOCK_CONN, ATP_TRESP | ATP_EOM, 0, tid, 0x2C, PAP_DATA, chunk, sizeof chunk);
+            lt_node_rx(&n, f, fl, t0 + 30000);
+            CHECK_EQ_INT(n.pap.bytes, 2);
+            elap_run(&n, t0, t0 + 30000, t0 + 89990);
+            CHECK(n.pap.open);
+            reset_fake();
+            elap_run(&n, t0, t0 + 90000, t0 + 90000);
+        } else {
+            elap_run(&n, t0, t0 + 10, open_until);
+            CHECK(n.pap.open);
+            reset_fake();
+            elap_run(&n, t0, closed_at, closed_at);
+        }
+        CHECK(!n.pap.open);
+        CHECK_EQ_INT(close_conns_sent(), 1);
+        CHECK_EQ_INT(job_eof, 1);
+        CHECK_EQ_INT(job_normal, 1);                      // what came prints
+        CHECK(strstr(lastlog, "sent nothing") != NULL);
+    }
+}
+
+static void test_cable_no_idle_hold(void)
+{
+    lt_node_t n;
+    uint64_t t = online(&n, 200);
+    uint8_t f[LLAP_MAX];
+    const uint8_t oc[] = { 0xF4, 1, 0, 0 };
+    size_t fl = mac_atp(f, 200, LT_SOCK_SLS, ATP_TREQ | ATP_XO, 0x01, 0x0800, 0x2D, PAP_OPEN_CONN, 0, 0, oc, sizeof oc);
+    lt_node_rx(&n, f, fl, t);
+    for (uint64_t now = t + 10; now <= t + 60000; now += 10) lt_node_tick(&n, now);
+    CHECK(n.pap.open);
+    for (uint64_t now = t + 60010; now <= t + 119990; now += 10) lt_node_tick(&n, now);
+    CHECK(n.pap.open);                                    // today's 120 s timer, no sooner
+}
+
 int main(void)
 {
     test_fcs();
@@ -906,5 +1130,11 @@ int main(void)
     test_pap_printer();
     test_pap_quiet();
     test_pap_fixture();
+    test_elap_init_quiet();
+    test_elap_lookup();
+    test_elap_other_net();
+    test_elap_rtmp();
+    test_idle_hold();
+    test_cable_no_idle_hold();
     TEST_END;
 }

@@ -312,7 +312,7 @@ static void pap_open(lt_node_t *n, const ddp_t *d, const atp_t *a, const lt_rout
     p->open = 1;
     p->connid = a->user[0];
     p->ws = ws;
-    p->heard = p->tickled = p->wrote = now;
+    p->heard = p->tickled = p->wrote = p->idle_since = now;
     p->tickle_tid = next_tid(n);
     p->seq = 1;
     n->st.opens++;
@@ -362,7 +362,7 @@ static void on_atp(lt_node_t *n, const ddp_t *d, uint64_t now)
 
     if (fn == ATP_TRESP && a.tid == p->rd_tid && p->rd_want && a.user[1] == PAP_DATA) {
         uint8_t seq = a.bitmap;
-        p->wrote = now;
+        p->wrote = p->idle_since = now;
         if (seq >= LT_FLOW || !(p->rd_want & (1u << seq))) return;
         size_t len = a.len < PAP_QUANTUM ? a.len : PAP_QUANTUM;
         memcpy(p->rd_buf[seq], a.data, len);
@@ -414,6 +414,15 @@ static void pap_tick(lt_node_t *n, uint64_t now)
         pap_close(n, "timed out", 0);
         return;
     }
+    if (n->idle_hold_ms) {
+        if (n->status) p->idle_since = now;
+        else if (now - p->idle_since >= n->idle_hold_ms) {
+            uint8_t user[4] = { p->connid, PAP_CLOSE_CONN, 0, 0 };
+            send_atp(n, &p->ws, LT_SOCK_CONN, ATP_TREQ, 0x01, next_tid(n), user, NULL, 0);
+            pap_close(n, "the Mac sent nothing", 1);
+            return;
+        }
+    }
     if (now - p->tickled >= LT_PAP_TICKLE_MS) {
         uint8_t user[4] = { p->connid, PAP_TICKLE, 0, 0 };
         send_atp(n, &p->ws, LT_SOCK_CONN, ATP_TREQ, 0, p->tickle_tid, user, NULL, 0);
@@ -437,6 +446,12 @@ static void pap_tick(lt_node_t *n, uint64_t now)
 static void on_rtmp(lt_node_t *n, const ddp_t *d)
 {
     if (d->src.sock != SOCK_RTMP || d->len < 4) return;
+    if (n->link == LT_LINK_ELAP) {
+        // Startup-range addresses only (W-1076): a router's ranges are not ours.
+        if (!n->router_logged) say(n, "a router is on this network; not supported");
+        n->router_logged = 1;
+        return;
+    }
     uint16_t net = (uint16_t)(d->data[0] << 8 | d->data[1]);
     if (net && net != n->net) {
         say(n, "network %u (router node %u)", net, d->data[3]);
@@ -477,6 +492,22 @@ void lt_node_init(lt_node_t *n, const lt_cfg_t *cfg, const lt_ops_t *ops, uint64
     n->ops.claim(n->ops.ctx, 0);
 }
 
+void lt_node_init_elap(lt_node_t *n, const lt_cfg_t *cfg, const lt_ops_t *ops,
+                       uint32_t idle_hold_ms, uint64_t now)
+{
+    (void)now;
+    memset(n, 0, sizeof *n);
+    n->ops = *ops;
+    nbp_name(n->obj, cfg->object);
+    nbp_name(n->type, cfg->type);
+    lt_node_set_status(n, cfg->status);
+    n->rng = cfg->seed ? cfg->seed : 0x2434u;
+    n->tid = (uint16_t)rnd(n);
+    n->phase = LT_ACQUIRING;                       // until AARP hands over an address
+    n->link = LT_LINK_ELAP;
+    n->idle_hold_ms = idle_hold_ms;
+}
+
 void lt_node_pap_abort(lt_node_t *n, uint64_t now)
 {
     (void)now;
@@ -491,7 +522,7 @@ void lt_node_echo(lt_node_t *n, uint8_t node, uint64_t now)
 {
     if (n->phase != LT_ONLINE || !node || node == LLAP_BCAST) return;
     static const uint8_t req[] = { 1, 'A', 'i', 'r', 'W', 'r', 'i', 't', 'e', 'r' };
-    lt_route_t to = { { n->net, node, SOCK_AEP }, node, 0 };
+    lt_route_t to = { { n->net, node, SOCK_AEP }, node, n->link == LT_LINK_ELAP };
     send_ddp(n, &to, SOCK_AEP, DDP_AEP, req, sizeof req);
     n->echo_at = now;
     say(n, "echo request to %u", node);
@@ -500,6 +531,17 @@ void lt_node_echo(lt_node_t *n, uint8_t node, uint64_t now)
 void lt_node_set_status(lt_node_t *n, uint16_t status)
 {
     n->status = status;
+}
+
+void lt_node_set_address(lt_node_t *n, uint16_t net, uint8_t node, uint64_t now)
+{
+    (void)now;
+    if (n->link != LT_LINK_ELAP) return;
+    if (n->pap.open && (net != n->net || node != n->node)) pap_close(n, "the address changed", 0);
+    n->net = node ? net : 0;
+    n->node = node;
+    n->phase = node ? LT_ONLINE : LT_ACQUIRING;
+    if (node) say(n, "address %u.%u is ours", net, node);
 }
 
 void lt_node_rx(lt_node_t *n, const uint8_t *f, size_t len, uint64_t now)
@@ -511,6 +553,7 @@ void lt_node_rx(lt_node_t *n, const uint8_t *f, size_t len, uint64_t now)
     if (type != LLAP_ENQ) n->heard[src / 8] |= (uint8_t)(1u << (src % 8));
 
     if (n->phase == LT_ACQUIRING) {
+        if (n->link == LT_LINK_ELAP) return;
         // Appendix B: while the ID is tentative, anything addressed to it --
         // an ACK to our ENQ, another node's ENQ for the same ID, data -- or
         // anything sent from it means it is taken.
@@ -521,12 +564,14 @@ void lt_node_rx(lt_node_t *n, const uint8_t *f, size_t len, uint64_t now)
     if (dst != n->node && dst != LLAP_BCAST) return;
     // Someone else sending as us. TashTalk does not hear its own frames (U8 is
     // off while the PIC transmits), so this is a duplicate ID; count it.
-    if (src == n->node && type != LLAP_ENQ && type != LLAP_CTS) n->st.dup_suspect++;
+    if (n->link == LT_LINK_LLAP && src == n->node && type != LLAP_ENQ && type != LLAP_CTS)
+        n->st.dup_suspect++;
     if (type != LLAP_SHORT && type != LLAP_LONG) return;
 
     ddp_t d;
     if (ddp_parse(f, len, &d)) return;
     if (d.dst.node != n->node && d.dst.node != LLAP_BCAST) return;
+    if (n->link == LT_LINK_ELAP && d.dst.net && d.dst.net != n->net) return;
     n->st.for_us++;
     switch (d.type) {
     case DDP_NBP:  on_nbp(n, &d, now); break;
@@ -543,6 +588,7 @@ void lt_node_tick(lt_node_t *n, uint64_t now)
         pap_tick(n, now);
         return;
     }
+    if (n->link == LT_LINK_ELAP) return;
     if (n->clash) {
         uint8_t was = n->node;
         n->node = new_candidate(n);
