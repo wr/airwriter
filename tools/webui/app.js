@@ -471,10 +471,13 @@ const WAYS={
   zone: {card:'c-zone', key:'infinite', side:'zone'}};
 const MAC='<svg><use href="#g-mac"/></svg>';
 const esc=t=>String(t).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'})[c]);
-function macList(macs,label){
+/* A Mac by its name from Sharing Setup when it gave one (System 7 on), its
+   address beside the time; else by its address. */
+function macList(macs,addr){
   const n=macs.length;
   let h='<span class=count>'+(n?plural(n,'Mac','Macs')+' connected':'No Macs connected')+'</span>';
-  if(n) h+='<ul class=macs>'+macs.map(m=>'<li>'+MAC+'<span>'+esc(label(m))+'</span><small>'+ago(m.ago)+'</small></li>').join('')+'</ul>';
+  if(n) h+='<ul class=macs>'+macs.map(m=>'<li>'+MAC+'<span>'+esc(m.name||addr(m))+'</span><small>'
+    +(m.name?esc(addr(m))+' · ':'')+ago(m.ago)+'</small></li>').join('')+'</ul>';
   return h;
 }
 function stLine(cls,text){ return '<span class=st><i class="lamp '+cls+'"></i>'+esc(text)+'</span>'; }

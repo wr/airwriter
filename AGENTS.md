@@ -108,7 +108,14 @@ What works on `main`:
   per setting. Upright system type, Apple Garamond Light titles, platinum, icon tiles in the
   ribbon's inks, status as lit bar lamps, low platinum keys; in a window on a big screen, the
   sidebar first on a phone. AppleTalk is one card per way in (AppleTalk Port, Networked Macs,
-  Basilisk II, Infinite Mac) with its switch and the Macs heard in the last 10 minutes. The
+  Basilisk II, Infinite Mac) with its switch and the Macs heard in the last 10 minutes, each by
+  its Macintosh name when it gives one, its address beside the time. Every link asks each node it
+  hears for `=:Workstation@*` (System 7 registers the Sharing Setup name so), a LkUp straight to
+  that node: 1 s after first hearing it, then backing off from 5 s to 10 minutes until it
+  answers, and 1 s after it is seen registering its name; then every 10 minutes. Names are in
+  PSRAM. Benched 2026-10-20: the SE/30 over BlueSCSI ("SE30") and Basilisk II ("SE/30") answer.
+  On the cable the SE/30 opens AppleTalk long before it registers its name, and the first build
+  gave up first; the fix is untested on the cable. The
   TashTalk flash key shows only after a cable test answers `no_tashtalk`. The page makes no
   request off the board. Sources in `tools/webui`; `mkheader.py` builds `webui_page.h`.
 - AirPrint has an off switch (W-1079): off, `_ipp` and `_printer` leave Bonjour and Print-Job
@@ -150,8 +157,8 @@ of the dither override, PWG raster.
 follows the Mac's port). Its queue name reads "ImageWriter II" in `/api/status`, which is also
 its name in the Chooser. U7's PIC calibration words: `16E0 1DA8`. Its LocalTalk node ID is 198
 (kept in NVS `lt`/`node`); the bench Mac is node 83. Printer: an ImageWriter II on J2 via
-Apple's crossover cable. It runs the W-1079 build (v0.2.0-29, on branch
-`wells/w-1079-settings-page-organise-by-port-like-macos-system-settings`), ahead of any release,
+Apple's crossover cable. It runs the W-1079 build with Mac names (v0.2.0-32-g2238f4d, on branch
+`wells/w-1079-mac-names`), ahead of any release,
 with auto-update on. Its AppleTalk port has been set on the page (`lt_port` 1), so DIP switches
 1-2 no longer decide; Infinite Mac is off, its zone name kept. The page reads its DIP switches as
 2, 6, 7 and 8 on: not yet checked against the part.
@@ -225,9 +232,10 @@ Linear is the queue; these are the live items.
   pixel per dot (half scale on a retina Mac), its type set to the measure. Five tabs wrap 2/2/1 on
   a phone. Released in v0.2.0 (2026-10-17), cut from main `b0fc219` with `--branch` from a clean
   worktree because this checkout carried someone's enclosure edits.
-- `W-1076`, `W-1078` and `W-1079` are on their branches (W-1079 on top), not merged. Owed on
-  the bench: busy both ways between links, a link dropped mid-job, the SE/30 on the cable again,
-  a real Mac on each card, the page's Print Test Page, Erase and Wi-Fi join. Before any release
+- `W-1076`, `W-1078` and `W-1079` are on their branches (W-1079 on top, then
+  `wells/w-1079-mac-names`), not merged. Owed on the bench: busy both ways between links, a link
+  dropped mid-job, the SE/30 on the cable again (and its name on the AppleTalk Port card), an
+  Infinite Mac on its card, the page's Print Test Page, Erase and Wi-Fi join. Before any release
   that turns the relay on for users, give Mihai Parparita (Infinite Mac) a heads-up.
 - Not in Linear: scope HSKo during a long job (SPEC §3.9 timing).
 

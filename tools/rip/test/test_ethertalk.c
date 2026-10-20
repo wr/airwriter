@@ -175,7 +175,7 @@ static const uint8_t OTHER[6]  = { 0xB2, 0x0A, 0x00, 0x01, 0x6F, 0x00 };
 
 static void link_init(et_link_t *l, int *id, const uint8_t mac[6], uint16_t hnet, uint8_t hnode)
 {
-    et_cfg_t cfg = { "ImageWriter II", "ImageWriter", 0x0000, {0}, hnet, hnode, 1, LT_IDLE_HOLD_MS };
+    et_cfg_t cfg = { "ImageWriter II", "ImageWriter", 0x0000, {0}, hnet, hnode, 1, LT_IDLE_HOLD_MS, NULL };
     memcpy(cfg.mac, mac, 6);
     et_ops_t ops = { id, w_send, w_log, w_begin, w_data, w_room, w_end, w_claimed };
     et_link_init(l, &cfg, &ops, 0);
@@ -803,6 +803,77 @@ static void test_peers(void)
     CHECK_EQ_INT(p[0].ago_s, 1);
 }
 
+// Macintosh names (as test_localtalk.c has them on the cable): each peer is
+// asked for its <name>:Workstation, and the name is kept by its address,
+// network and node, since every Mac picks its own startup-range network.
+static lt_name_t enames[LT_SEEN_SLOTS];
+static const uint8_t SE30[] = { 13, 'W','e','l','l','s',0xD5,'s',' ','S','E','/','3','0' };
+
+static void test_peer_names(void)
+{
+    et_link_t l;
+    et_cfg_t cfg = { "ImageWriter II", "ImageWriter", 0x0000, {0}, 0xFF23, 77, 1,
+                     LT_IDLE_HOLD_MS, enames };
+    memcpy(cfg.mac, MAC_A, 6);
+    et_ops_t ops = { &ID_A, w_send, w_log, w_begin, w_data, w_room, w_end, w_claimed };
+    et_link_init(&l, &cfg, &ops, 0);
+    uint64_t t = 0;
+    for (; t <= 2100; t += 10) et_link_tick(&l, t);
+    CHECK(l.node.phase == LT_ONLINE);
+    reset_wire();
+
+    // The Mac at 0xFF10.12 looks the printer up; a moment later it is asked its name.
+    uint8_t nbp[2 + 5 + 3 * (NBP_NAME_MAX + 1)], f[ELAP_MAX_FRAME];
+    size_t fl = mac_dg(f, THEM, ET_AT_MCAST, 0, 0xFF, SOCK_NIS, DDP_NBP, nbp, lkup(nbp));
+    et_link_rx(&l, f, fl, t);
+    CHECK_EQ_INT(nfr, 1);
+    et_link_tick(&l, t + LT_NAME_DELAY_MS - 1);
+    CHECK_EQ_INT(nfr, 1);
+    et_link_tick(&l, t + LT_NAME_DELAY_MS);
+    CHECK_EQ_INT(nfr, 2);
+    ddp_t d;
+    CHECK_EQ_INT(sent_what(1, NULL, &d), 2);
+    CHECK_EQ_MEM(fr[1], THEM, 6);                         // straight to it: no AARP
+    CHECK_EQ_INT(d.dst.net, 0xFF10);
+    CHECK_EQ_INT(d.dst.node, 12);
+    CHECK_EQ_INT(d.dst.sock, SOCK_NIS);
+    CHECK_EQ_INT(d.src.sock, SOCK_NIS);
+    CHECK_EQ_INT(d.type, DDP_NBP);
+    nbp_t q;
+    CHECK_EQ_INT(nbp_parse(d.data, d.len, &q), 0);
+    CHECK_EQ_INT(q.fn, NBP_LKUP);
+    CHECK_EQ_INT(q.t.addr.net, 0xFF23);                   // answers to our NIS
+    CHECK_EQ_INT(q.t.addr.node, 77);
+    CHECK_EQ_INT(q.t.addr.sock, SOCK_NIS);
+    CHECK_EQ_INT(q.t.type[0], 11);
+    CHECK_EQ_INT(memcmp(q.t.type + 1, "Workstation", 11), 0);
+
+    // Its answer names it on the peer list.
+    nbp_tuple_t r = { .addr = { 0xFF10, 12, SOCK_AEP }, .enumerator = 0 };
+    memcpy(r.obj, SE30, sizeof SE30);
+    nbp_name(r.type, "Workstation");
+    r.zone[0] = 1;
+    r.zone[1] = '*';
+    size_t k = nbp_build(nbp, sizeof nbp, NBP_LKUP_REPLY, q.id, &r);
+    fl = mac_dg(f, THEM, MAC_A, 0xFF23, 77, SOCK_NIS, DDP_NBP, nbp, k);
+    et_link_rx(&l, f, fl, t + LT_NAME_DELAY_MS + 30);
+    et_peer_t p[ET_MAP_SLOTS];
+    k = et_link_peers(&l, t + 2000, 600000, p, ET_MAP_SLOTS);
+    CHECK_EQ_INT(k, 1);
+    CHECK(p[0].name != NULL);
+    if (p[0].name) CHECK_EQ_MEM(p[0].name, SE30, sizeof SE30);
+
+    // Node 12 on another network is another Mac, not yet named.
+    fl = aarp_frame(f, OTHER, ET_AT_MCAST, AARP_REQUEST, 0xFF11, 12, 0xFF23, 77);
+    et_link_rx(&l, f, fl, t + 3000);
+    k = et_link_peers(&l, t + 3000, 600000, p, ET_MAP_SLOTS);
+    CHECK_EQ_INT(k, 2);
+    CHECK_EQ_INT(p[0].net, 0xFF11);
+    CHECK(p[0].name == NULL);
+    CHECK_EQ_INT(p[1].net, 0xFF10);
+    CHECK(p[1].name != NULL);
+}
+
 int main(void)
 {
     test_elap_round_trip();
@@ -825,5 +896,6 @@ int main(void)
     test_zone_pong();
     test_radio_normalize();
     test_peers();
+    test_peer_names();
     TEST_END;
 }

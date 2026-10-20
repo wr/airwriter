@@ -92,6 +92,10 @@ size_t nbp_build(uint8_t *out, size_t cap, uint8_t fn, uint8_t id, const nbp_tup
 // A C string into a Pascal NBP name: ASCII kept, anything else becomes '?'
 // (NBP names are MacRoman; the queue name is UTF-8), cut at NBP_NAME_MAX.
 void nbp_name(uint8_t *dst, const char *src);
+// The other way, for the web page: a Pascal NBP name (MacRoman) as a C string
+// in UTF-8, control characters as '?', cut at a whole character when cap is
+// short. Returns the string's length.
+size_t nbp_utf8(char *out, size_t cap, const uint8_t *name);
 
 // ----------------------------------------------------------------- ATP
 #define ATP_HDR       8

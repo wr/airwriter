@@ -10,8 +10,13 @@ driver does (OpenConn, the board's SendData answered with Data, CloseConn).
 
     python3 tools/ethertalk/etpeer.py tunnel lookup
     python3 tools/ethertalk/etpeer.py tunnel print fixtures/pap-iw701-page.bin
+    python3 tools/ethertalk/etpeer.py tunnel named "Wells's iMac" 30
     python3 tools/ethertalk/etpeer.py zone ZONE lookup
     python3 tools/ethertalk/etpeer.py zone ZONE print FILE
+
+`named` registers a Macintosh name, as System 7's Sharing Setup does
+(<name>:Workstation), looks the printer up so the board hears it, and answers
+the board's name lookups for the given seconds.
 
 The file must be an ImageWriter stream: the board prints it as it is. The
 tunnel binds UDP 6066, so it cannot run beside Basilisk II on the same
@@ -24,7 +29,7 @@ BCAST = b"\xff" * 6
 SNAP_DDP = bytes.fromhex("aaaa03080007809b")
 SNAP_AARP = bytes.fromhex("aaaa0300000080f3")
 TUNNEL_PORT = 6066
-NIS, SLS_TYPE = 2, b"ImageWriter"
+NIS, AEP, SLS_TYPE, WS_TYPE = 2, 4, b"ImageWriter", b"Workstation"
 DDP_NBP, DDP_ATP = 2, 3
 TREQ, TRESP, TREL, XO, EOM = 0x40, 0x80, 0xC0, 0x20, 0x10
 PAP_OPEN, PAP_OPEN_REPLY, PAP_SEND_DATA, PAP_DATA, PAP_TICKLE = 1, 2, 3, 4, 5
@@ -150,6 +155,7 @@ class Mac:
         self.tid = random.randrange(0x10000)
         self.inbox = []                                # datagrams for the caller
         self.online = False
+        self.name = None                               # its Macintosh name, MacRoman
 
     def next_tid(self):
         self.tid = (self.tid + 1) & 0xFFFF
@@ -202,8 +208,26 @@ class Mac:
         elif snap == SNAP_DDP and len(payload) >= 13:
             src = struct.unpack(">H", payload[6:8])[0], payload[9]
             self.map[src] = f[6:12]                     # gleaned
+            if self.name and self.online and await self.answer_lkup(payload):
+                return None
             self.inbox.append(payload)
         return None
+
+    async def answer_lkup(self, d):
+        """A LkUp for our Workstation entity, answered as System 7 does."""
+        if d[10] != NIS or d[12] != DDP_NBP or d[13] >> 4 != 2:
+            return False
+        t = d[15:]
+        net, node, sock = struct.unpack(">HBB", t[:4])
+        obj = t[6:6 + t[5]]
+        typ = t[7 + t[5]:7 + t[5] + t[6 + t[5]]]
+        if obj not in (b"=", self.name) or typ.lower() != WS_TYPE.lower():
+            return False
+        rep = bytes([0x31, d[14]]) + struct.pack(">HBBB", self.net, self.node, AEP, 0) + \
+              pstr(self.name) + pstr(WS_TYPE) + pstr(b"*")
+        await self.send_ddp(net, node, sock, NIS, DDP_NBP, rep)
+        print(f"{net}.{node} asked our name: answered {self.name.decode('mac_roman')}")
+        return True
 
     async def send_ddp(self, net, node, sock, src_sock, typ, data):
         d = ddp(net, node, sock, self.net, self.node, src_sock, typ, data)
@@ -332,6 +356,10 @@ async def main(argv):
             await mac.lookup()
         elif rest[0] == "print" and len(rest) == 2:
             await mac.print_file(open(rest[1], "rb").read())
+        elif rest[0] == "named" and len(rest) == 3:
+            mac.name = rest[1].replace("'", "\u2019").encode("mac_roman")[:31]
+            await mac.lookup()
+            await mac.pump(float(rest[2]))
         else:
             sys.exit(__doc__)
     finally:
