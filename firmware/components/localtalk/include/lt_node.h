@@ -97,12 +97,16 @@ typedef struct {
     void   (*job_end)(void *ctx, int normal);
 } lt_ops_t;
 
+typedef uint8_t lt_name_t[NBP_NAME_MAX + 1];   // a Pascal NBP name, MacRoman
+
 typedef struct {
     const char *object;     // NBP object: the queue name (UTF-8; non-ASCII becomes '?')
     const char *type;       // NBP type the Chooser looks up
     uint16_t    status;     // the Option Card status word to start with
     uint8_t     hint;       // the node ID to try first (last boot's), 0 = random
     uint32_t    seed;       // nonzero random seed for candidate IDs
+    lt_name_t  *names;      // room for LT_SEEN_SLOTS Macintosh names (below), or
+                            // NULL to learn none; the ESP keeps it in PSRAM
 } lt_cfg_t;
 
 // The link under the node. LLAP is the cable, as above. ELAP (W-1076) is
@@ -131,9 +135,27 @@ typedef struct {               // how to answer whoever sent a datagram
 #define LT_XO_SLOTS 4
 // The nodes heard lately, for the settings page (W-1079): a node that has
 // sent anything but an ENQ, and when. Full, the one quiet longest makes room.
+// On ELAP a node is its network and node: every Mac picks its own network in
+// the startup range. On the cable the network is left out.
 #define LT_SEEN_SLOTS 16
 #define LT_SEEN_MS    600000      // the page's "connected": heard in the last 10 minutes
-typedef struct { uint8_t node; uint32_t ago_s; } lt_seen_t;
+// name: its Macintosh name while the node is unchanged, or NULL.
+typedef struct { uint8_t node; uint32_t ago_s; const uint8_t *name; } lt_seen_t;
+
+// Macintosh names. System 7 and later register the name from Sharing Setup
+// with NBP as <name>:Workstation. A node given room for names (cfg->names)
+// asks each node it hears for =:Workstation@*, a LkUp sent straight to that
+// node's NIS: LT_NAME_DELAY_MS after first hearing it, again every
+// LT_NAME_RETRY_MS while unanswered (LT_NAME_TRIES asks in all), and every
+// LT_NAME_REFRESH_MS while it stays heard. A name no longer answered for, or
+// a node back after a quiet spell, is forgotten: the ID may be another Mac's.
+// A Mac without a name (System 6, or one never named) shows its address.
+#define LT_NAME_TYPE       "Workstation"
+#define LT_NAME_DELAY_MS   1000
+#define LT_NAME_RETRY_MS   5000
+#define LT_NAME_TRIES      3
+#define LT_NAME_REFRESH_MS 600000
+#define LT_NAME_GAP_MS     250       // between any two asks
 #define LT_XO_PKT   (ATP_HDR + 4 + 256)   // the biggest response we cache: OpenConnReply
 
 typedef struct {               // a sent XO response, kept for duplicate requests
@@ -196,7 +218,16 @@ typedef struct {
     uint8_t    last_lkup[3 * (NBP_NAME_MAX + 1) + 2];
     uint64_t   last_lkup_at;
     uint8_t    heard[32];      // bit n: node n has sent a frame
-    struct { uint8_t node; uint32_t at_s; } seen[LT_SEEN_SLOTS];   // node 0: free
+    struct {
+        uint16_t net;          // ELAP only
+        uint8_t  node;         // 0: free
+        uint8_t  tries;        // name asks since the last answer
+        uint32_t at_s;         // last heard
+        uint64_t ask_at;       // when its name is next asked
+    } seen[LT_SEEN_SLOTS];
+    lt_name_t *names;          // names[i] is seen[i]'s, or NULL: names off
+    uint64_t   name_at;        // the last name ask, for LT_NAME_GAP_MS
+    uint8_t    name_id;
     uint64_t   echo_at;        // when lt_node_echo last asked
     uint8_t    link;           // LT_LINK_*
     uint32_t   idle_hold_ms;
@@ -225,3 +256,6 @@ void lt_node_set_status(lt_node_t *n, uint16_t status);
 void lt_node_set_address(lt_node_t *n, uint16_t net, uint8_t node, uint64_t now);
 // The nodes heard in the last within_ms, newest first, at most max of them.
 size_t lt_node_seen(const lt_node_t *n, uint64_t now, uint32_t within_ms, lt_seen_t *out, size_t max);
+// The Macintosh name of net.node (net is ignored on the cable), or NULL. It
+// points into the node's table: valid until the node next changes.
+const uint8_t *lt_node_name(const lt_node_t *n, uint16_t net, uint8_t node);

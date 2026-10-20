@@ -8,6 +8,7 @@
 #include <string.h>
 #include "driver/gpio.h"
 #include "driver/uart.h"
+#include "esp_heap_caps.h"
 #include "esp_log.h"
 #include "esp_random.h"
 #include "esp_timer.h"
@@ -24,6 +25,7 @@ static const char *TAG = "lt";
 #define EV_LINES  20
 #define FR_LINES  10
 #define LINE_LEN  100
+#define JSON_MACS 8         // Macs in /api/lt: eight, named, keep it inside its 4.5 KB
 
 static SemaphoreHandle_t s_lock;
 static int        s_uart = -1, s_cts_pin = -1;
@@ -222,8 +224,10 @@ esp_err_t localtalk_start(const localtalk_cfg_t *cfg)
     if (err != ESP_OK) return err;
 
     tt_rx_init(&s_rx);
+    // The Macs' names in PSRAM: internal RAM is short.
     s_nc = (lt_cfg_t){ .object = cfg->object, .type = cfg->type, .status = cfg->status,
-                       .hint = hint, .seed = esp_random() | 1 };
+                       .hint = hint, .seed = esp_random() | 1,
+                       .names = heap_caps_calloc(LT_SEEN_SLOTS, sizeof(lt_name_t), MALLOC_CAP_SPIRAM) };
     s_ops = (lt_ops_t){ .send = op_send, .claim = op_claim, .log = op_log,
                         .job_begin = op_job_begin, .job_data = op_job_data,
                         .job_room = op_job_room, .job_end = op_job_end };
@@ -369,15 +373,24 @@ void localtalk_json(char *buf, size_t cap)
         first = 0;
     }
     if (p < end) *p++ = ']';
-    // W-1079: the Macs heard in the last 10 minutes, for the settings page.
-    lt_seen_t seen[LT_SEEN_SLOTS];
-    size_t ns = lt_node_seen(n, now_ms(), LT_SEEN_MS, seen, LT_SEEN_SLOTS);
-    p += snprintf(p, end - p, ",\"macs\":[");
-    for (size_t i = 0; i < ns && p < end; i++)
-        p += snprintf(p, end - p, "%s{\"node\":%u,\"ago\":%lu}", i ? "," : "",
+    // W-1079: the Macs heard in the last 10 minutes, for the settings page,
+    // with the Macintosh name of each that gave one.
+    lt_seen_t seen[JSON_MACS];
+    size_t ns = lt_node_seen(n, now_ms(), LT_SEEN_MS, seen, JSON_MACS);
+    if (p < end) p += snprintf(p, end - p, ",\"macs\":[");
+    for (size_t i = 0; i < ns && p < end; i++) {
+        p += snprintf(p, end - p, "%s{\"node\":%u,\"ago\":%lu", i ? "," : "",
                       seen[i].node, (unsigned long)seen[i].ago_s);
+        if (seen[i].name && p < end) {
+            char u[3 * NBP_NAME_MAX + 1];
+            nbp_utf8(u, sizeof u, seen[i].name);
+            p += snprintf(p, end - p, ",\"name\":");
+            if (p < end) json_str(&p, end, u);
+        }
+        if (p < end) *p++ = '}';
+    }
     if (p < end) *p++ = ']';
-    p += snprintf(p, end - p,
+    if (p < end) p += snprintf(p, end - p,
         ",\"frames\":%lu,\"fcs_bad\":%u,\"errors\":%u,\"tx\":%u,\"for_us\":%lu,"
         "\"lookups\":%lu,\"replies\":%lu,\"statuses\":%lu,\"opens\":%lu,\"busy\":%lu,"
         "\"dup\":%lu,\"echoes\":%lu,\"mac_reads\":%lu,\"mac_answers\":%lu,\"pap\":{\"open\":%s,\"conn\":%u,\"bytes\":%lu},",
@@ -396,5 +409,6 @@ void localtalk_json(char *buf, size_t cap)
     if (p < end) p += snprintf(p, end - p, "],\"frames_recent\":[");
     json_ring(&p, end, s_fr, FR_LINES, s_fr_head, s_fr_n);
     xSemaphoreGive(s_lock);
+    if (p > end) p = end;                          // a cut-short part never runs past buf
     snprintf(p, buf + cap - p, "]}");
 }

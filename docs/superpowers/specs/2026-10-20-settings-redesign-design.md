@@ -99,7 +99,10 @@ Existing routes stay as they were; W-1079 adds:
   button 8 s), `/api/test` (the test page; 409 while the printer is busy).
 - `GET /api/lt` and each `/api/et` link gain `macs`: the nodes heard in the last 10 minutes,
   newest first. The cable's carry their node; an EtherTalk link's carry their address and MAC,
-  and a Basilisk II peer's its computer's IP (its MAC is `B2` and that IP).
+  and a Basilisk II peer's its computer's IP (its MAC is `B2` and that IP). Each carries
+  `name` too once the Mac has given one: the board asks every node it hears for
+  `=:Workstation@*` (System 7 registers the Sharing Setup name so), and the page shows the
+  name with the address beside the time.
 
 **AirPrint off** takes `_ipp` (with `_universal`) and `_printer` out of Bonjour, keeps `_http`
 for the page, and answers Print-Job and Validate-Job with not-accepting-jobs; on puts them

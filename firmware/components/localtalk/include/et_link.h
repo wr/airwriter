@@ -32,6 +32,7 @@ typedef struct {
     uint8_t     hint_node;      // the startup range (FF00-FFFE, 1-253); else random
     uint32_t    seed;           // nonzero
     uint32_t    idle_hold_ms;   // the node's idle hold (LT_IDLE_HOLD_MS)
+    lt_name_t  *names;          // the node's room for Macintosh names, or NULL
 } et_cfg_t;
 
 typedef struct {
@@ -49,8 +50,11 @@ typedef struct {
 } et_ops_t;
 
 typedef struct { uint16_t net; uint8_t node; uint8_t hw[ETH_ALEN]; uint64_t at; } et_map_t;
-// A peer heard lately, from the map: its address, its MAC, how long ago (W-1079).
-typedef struct { uint16_t net; uint8_t node; uint8_t hw[ETH_ALEN]; uint32_t ago_s; } et_peer_t;
+// A peer heard lately, from the map: its address, its MAC, how long ago (W-1079),
+// and its Macintosh name as lt_node_name gives it, or NULL.
+typedef struct {
+    uint16_t net; uint8_t node; uint8_t hw[ETH_ALEN]; uint32_t ago_s; const uint8_t *name;
+} et_peer_t;
 
 typedef struct {
     et_ops_t  ops;

@@ -56,7 +56,7 @@ static void reset_fake(void) { nsent = 0; nlogs = 0; lastlog[0] = 0; }
 // Bring a node online at `id` with no clash: 120 enquiries 10 ms apart.
 static uint64_t online(lt_node_t *n, uint8_t id)
 {
-    lt_cfg_t cfg = { "ImageWriter II", "ImageWriter", 0x0000, id, 1 };
+    lt_cfg_t cfg = { "ImageWriter II", "ImageWriter", 0x0000, id, 1, NULL };
     lt_node_init(n, &cfg, &OPS, 0);
     uint64_t t = 0;
     for (int i = 0; i <= LT_ENQ_TRIES; i++, t += LT_ENQ_GAP_MS) lt_node_tick(n, t);
@@ -249,7 +249,7 @@ static void test_nbp_match(void)
 static void test_acquire(void)
 {
     lt_node_t n;
-    lt_cfg_t cfg = { "ImageWriter II", "ImageWriter", 0x0000, 0, 12345 };
+    lt_cfg_t cfg = { "ImageWriter II", "ImageWriter", 0x0000, 0, 12345, NULL };
     claimed = -1;
     reset_fake();
     lt_node_init(&n, &cfg, &OPS, 0);
@@ -831,7 +831,7 @@ static void test_pap_fixture(void)
     ops.job_data = sp_data;
     ops.job_room = sp_room;
     lt_node_t n;
-    lt_cfg_t cfg = { "ImageWriter II", "ImageWriter", 0x0000, 200, 1 };
+    lt_cfg_t cfg = { "ImageWriter II", "ImageWriter", 0x0000, 200, 1, NULL };
     lt_node_init(&n, &cfg, &ops, 0);
     uint64_t t = 0;
     for (int i = 0; i <= LT_ENQ_TRIES; i++, t += LT_ENQ_GAP_MS) lt_node_tick(&n, t);
@@ -900,7 +900,7 @@ static void test_pap_fixture(void)
 
 static uint64_t elap_online(lt_node_t *n, uint32_t idle_hold_ms)
 {
-    lt_cfg_t cfg = { "ImageWriter II", "ImageWriter", 0x0000, 0, 1 };
+    lt_cfg_t cfg = { "ImageWriter II", "ImageWriter", 0x0000, 0, 1, NULL };
     lt_node_init_elap(n, &cfg, &OPS, idle_hold_ms, 0);
     lt_node_set_address(n, ENET, ENODE, 1000);
     reset_fake();
@@ -941,7 +941,7 @@ static void test_elap_init_quiet(void)
     lt_node_t n;
     claimed = -1;
     reset_fake();
-    lt_cfg_t cfg = { "ImageWriter II", "ImageWriter", 0x0000, 0, 1 };
+    lt_cfg_t cfg = { "ImageWriter II", "ImageWriter", 0x0000, 0, 1, NULL };
     lt_node_init_elap(&n, &cfg, &OPS, 0, 0);
     for (uint64_t t = 0; t <= 2000; t += 10) lt_node_tick(&n, t);
     CHECK_EQ_INT(nsent, 0);                               // no ENQs: AARP is et_link's
@@ -1189,6 +1189,256 @@ static void test_seen(void)
     CHECK_EQ_INT(s[0].ago_s, 0);
 }
 
+// NBP names are MacRoman; the settings page wants UTF-8.
+static void test_nbp_utf8(void)
+{
+    char out[3 * NBP_NAME_MAX + 1];
+    const uint8_t mac[] = { 13, 'W','e','l','l','s',0xD5,'s',' ','S','E','/','3','0' };
+    CHECK_EQ_INT(nbp_utf8(out, sizeof out, mac), 15);
+    CHECK(!strcmp(out, "Wells\xE2\x80\x99s SE/30"));
+    const uint8_t odd[] = { 5, 0x80, 0xF0, 0x07, 0x7F, 'x' };   // Ä, the Apple logo, controls
+    nbp_utf8(out, sizeof out, odd);
+    CHECK(!strcmp(out, "\xC3\x84\xEF\xA3\xBF?" "?x"));
+    CHECK_EQ_INT(nbp_utf8(out, 9, mac), 8);                   // cut at a whole character
+    CHECK(!strcmp(out, "Wells\xE2\x80\x99"));
+    CHECK_EQ_INT(nbp_utf8(out, 8, mac), 5);
+    CHECK(!strcmp(out, "Wells"));
+    const uint8_t empty[] = { 0 };
+    CHECK_EQ_INT(nbp_utf8(out, sizeof out, empty), 0);
+    CHECK_EQ_INT(out[0], 0);
+
+    // All of 0x80-0xFF, as Python's mac_roman codec has them.
+    static const char *const want[4] = {
+        "\xC3\x84\xC3\x85\xC3\x87\xC3\x89\xC3\x91\xC3\x96\xC3\x9C\xC3\xA1\xC3\xA0\xC3\xA2\xC3\xA4\xC3\xA3\xC3\xA5\xC3\xA7\xC3\xA9\xC3\xA8\xC3\xAA\xC3\xAB\xC3\xAD\xC3\xAC\xC3\xAE\xC3\xAF\xC3\xB1\xC3\xB3\xC3\xB2\xC3\xB4\xC3\xB6\xC3\xB5\xC3\xBA\xC3\xB9\xC3\xBB\xC3\xBC",
+        "\xE2\x80\xA0\xC2\xB0\xC2\xA2\xC2\xA3\xC2\xA7\xE2\x80\xA2\xC2\xB6\xC3\x9F\xC2\xAE\xC2\xA9\xE2\x84\xA2\xC2\xB4\xC2\xA8\xE2\x89\xA0\xC3\x86\xC3\x98\xE2\x88\x9E\xC2\xB1\xE2\x89\xA4\xE2\x89\xA5\xC2\xA5\xC2\xB5\xE2\x88\x82\xE2\x88\x91\xE2\x88\x8F\xCF\x80\xE2\x88\xAB\xC2\xAA\xC2\xBA\xCE\xA9\xC3\xA6\xC3\xB8",
+        "\xC2\xBF\xC2\xA1\xC2\xAC\xE2\x88\x9A\xC6\x92\xE2\x89\x88\xE2\x88\x86\xC2\xAB\xC2\xBB\xE2\x80\xA6\xC2\xA0\xC3\x80\xC3\x83\xC3\x95\xC5\x92\xC5\x93\xE2\x80\x93\xE2\x80\x94\xE2\x80\x9C\xE2\x80\x9D\xE2\x80\x98\xE2\x80\x99\xC3\xB7\xE2\x97\x8A\xC3\xBF\xC5\xB8\xE2\x81\x84\xE2\x82\xAC\xE2\x80\xB9\xE2\x80\xBA\xEF\xAC\x81\xEF\xAC\x82",
+        "\xE2\x80\xA1\xC2\xB7\xE2\x80\x9A\xE2\x80\x9E\xE2\x80\xB0\xC3\x82\xC3\x8A\xC3\x81\xC3\x8B\xC3\x88\xC3\x8D\xC3\x8E\xC3\x8F\xC3\x8C\xC3\x93\xC3\x94\xEF\xA3\xBF\xC3\x92\xC3\x9A\xC3\x9B\xC3\x99\xC4\xB1\xCB\x86\xCB\x9C\xC2\xAF\xCB\x98\xCB\x99\xCB\x9A\xC2\xB8\xCB\x9D\xCB\x9B\xCB\x87",
+    };
+    for (int c = 0; c < 4; c++) {
+        uint8_t name[1 + 32] = { 32 };
+        for (int i = 0; i < 32; i++) name[1 + i] = (uint8_t)(0x80 + 32 * c + i);
+        CHECK_EQ_INT(nbp_utf8(out, sizeof out, name), strlen(want[c]));
+        CHECK(!strcmp(out, want[c]));
+    }
+}
+
+// Macintosh names: System 7 and later register the name from Sharing Setup
+// with NBP as <name>:Workstation. A node given room for names asks each node
+// it hears, straight to that node's NIS.
+static lt_name_t names[LT_SEEN_SLOTS];
+static const uint8_t SE30[] = { 13, 'W','e','l','l','s',0xD5,'s',' ','S','E','/','3','0' };
+
+static uint64_t online_named(lt_node_t *n, uint8_t id)
+{
+    lt_cfg_t cfg = { "ImageWriter II", "ImageWriter", 0x0000, id, 1, names };
+    lt_node_init(n, &cfg, &OPS, 0);
+    uint64_t t = 0;
+    for (int i = 0; i <= LT_ENQ_TRIES; i++, t += LT_ENQ_GAP_MS) lt_node_tick(n, t);
+    reset_fake();
+    return t;
+}
+
+// Sent frame i is a LkUp for =:Workstation@* to node's NIS, its replies to ours.
+static int is_name_ask(int i, uint8_t node, uint8_t me)
+{
+    ddp_t d;
+    nbp_t q;
+    uint8_t ws[NBP_NAME_MAX + 1];
+    nbp_name(ws, "Workstation");
+    if (i >= nsent || i >= MAXSENT || ddp_parse(sent[i], sent_len[i], &d) || d.type != DDP_NBP ||
+        nbp_parse(d.data, d.len, &q))
+        return 0;
+    return sent[i][0] == node && d.dst.node == node && d.dst.sock == SOCK_NIS &&
+           d.src.sock == SOCK_NIS && q.fn == NBP_LKUP && q.count == 1 &&
+           q.t.addr.node == me && q.t.addr.sock == SOCK_NIS && q.t.obj[0] == 1 &&
+           q.t.obj[1] == '=' && !memcmp(q.t.type, ws, 1 + ws[0]) && q.t.zone[0] == 1 &&
+           q.t.zone[1] == '*';
+}
+
+// A LkUp-Reply from `from` (its entity on the echo socket, as System 7 has it).
+static size_t name_reply(uint8_t *f, uint8_t from, uint8_t to, const char *type,
+                         const uint8_t *name)
+{
+    nbp_tuple_t t = { .addr = { 0, from, SOCK_AEP }, .enumerator = 0 };
+    memcpy(t.obj, name, 1 + (size_t)name[0]);
+    nbp_name(t.type, type);
+    t.zone[0] = 1;
+    t.zone[1] = '*';
+    uint8_t nbp[2 + 5 + 3 * (NBP_NAME_MAX + 1)];
+    size_t k = nbp_build(nbp, sizeof nbp, NBP_LKUP_REPLY, 1, &t);
+    lt_addr_t dst = { 0, to, SOCK_NIS }, src = { 0, from, SOCK_NIS };
+    return ddp_build(f, LLAP_MAX, to, from, 0, &dst, &src, DDP_NBP, nbp, k);
+}
+
+static const uint8_t *seen_name(const lt_node_t *n, uint8_t node, uint64_t now)
+{
+    lt_seen_t s[LT_SEEN_SLOTS];
+    size_t k = lt_node_seen(n, now, LT_SEEN_MS, s, LT_SEEN_SLOTS);
+    for (size_t i = 0; i < k; i++)
+        if (s[i].node == node) return s[i].name;
+    return NULL;
+}
+
+static void test_name_asked(void)
+{
+    lt_node_t n;
+    uint64_t t = online_named(&n, 150);
+    const uint8_t rts[] = { 150, 83, LLAP_RTS };
+    lt_node_rx(&n, rts, sizeof rts, t);                    // node 83 heard
+    lt_node_tick(&n, t + LT_NAME_DELAY_MS - 1);
+    CHECK_EQ_INT(nsent, 0);                               // a moment's grace first
+    uint64_t at = t + LT_NAME_DELAY_MS;
+    lt_node_tick(&n, at);
+    CHECK_EQ_INT(nsent, 1);
+    CHECK(is_name_ask(0, 83, 150));
+    CHECK_EQ_INT(sent[0][2], LLAP_SHORT);
+
+    // Unanswered: asked again, LT_NAME_TRIES in all.
+    for (int i = 1; i < LT_NAME_TRIES; i++) {
+        lt_node_tick(&n, at + LT_NAME_RETRY_MS - 1);
+        CHECK_EQ_INT(nsent, i);
+        at += LT_NAME_RETRY_MS;
+        lt_node_tick(&n, at);
+        CHECK_EQ_INT(nsent, i + 1);
+        CHECK(is_name_ask(i, 83, 150));
+    }
+    // Then not until the refresh, while the node is still heard.
+    uint64_t s = at;
+    for (int k = 0; s < at + LT_NAME_RETRY_MS + LT_NAME_REFRESH_MS; s += 1000, k++) {
+        if (!(k % 60)) lt_node_rx(&n, rts, sizeof rts, s);
+        lt_node_tick(&n, s);
+    }
+    CHECK_EQ_INT(nsent, LT_NAME_TRIES);
+    lt_node_tick(&n, s);
+    CHECK_EQ_INT(nsent, LT_NAME_TRIES + 1);
+    CHECK(is_name_ask(LT_NAME_TRIES, 83, 150));
+    CHECK(seen_name(&n, 83, at + LT_NAME_REFRESH_MS) == NULL);
+}
+
+static void test_name_answered(void)
+{
+    lt_node_t n;
+    uint64_t t = online_named(&n, 150);
+    uint8_t f[LLAP_MAX];
+    const uint8_t rts[] = { 150, 83, LLAP_RTS };
+    lt_node_rx(&n, rts, sizeof rts, t);
+    uint64_t at = t + LT_NAME_DELAY_MS;
+    lt_node_tick(&n, at);
+    CHECK_EQ_INT(nsent, 1);
+    CHECK(seen_name(&n, 83, at) == NULL);
+
+    size_t fl = name_reply(f, 83, 150, "Workstation", SE30);
+    lt_node_rx(&n, f, fl, at + 20);
+    const uint8_t *name = seen_name(&n, 83, at + 20);
+    CHECK(name != NULL);
+    if (name) CHECK_EQ_MEM(name, SE30, sizeof SE30);
+    CHECK(strstr(lastlog, "node 83 is Wells\xE2\x80\x99s SE/30") != NULL);
+    CHECK_EQ_INT(nsent, 1);                               // a reply is not answered
+
+    // Answered: no retries, only the refresh.
+    int k = 0;
+    for (uint64_t s = at + 1000; s < at + 20 + LT_NAME_REFRESH_MS; s += 1000, k++) {
+        if (!(k % 60)) lt_node_rx(&n, rts, sizeof rts, s);
+        lt_node_tick(&n, s);
+    }
+    CHECK_EQ_INT(nsent, 1);
+    lt_node_tick(&n, at + 20 + LT_NAME_REFRESH_MS);
+    CHECK_EQ_INT(nsent, 2);
+    CHECK(is_name_ask(1, 83, 150));
+    name = seen_name(&n, 83, at + 20 + LT_NAME_REFRESH_MS);
+    CHECK(name != NULL);                                  // kept while the refresh is out
+
+    // A refresh no one answers, LT_NAME_TRIES times: the name goes (the ID
+    // may be another Mac's now).
+    uint64_t s = at + 20 + LT_NAME_REFRESH_MS;
+    lt_node_rx(&n, rts, sizeof rts, s);
+    for (int i = 0; i < LT_NAME_TRIES; i++) {
+        s += LT_NAME_RETRY_MS;
+        lt_node_tick(&n, s);
+    }
+    CHECK_EQ_INT(nsent, 1 + LT_NAME_TRIES);
+    CHECK(seen_name(&n, 83, s) == NULL);
+}
+
+static void test_name_other_replies(void)
+{
+    lt_node_t n;
+    uint64_t t = online_named(&n, 150);
+    uint8_t f[LLAP_MAX];
+    const uint8_t rts[] = { 150, 83, LLAP_RTS };
+    lt_node_rx(&n, rts, sizeof rts, t);
+    lt_node_tick(&n, t + LT_NAME_DELAY_MS);
+
+    // Another type is not the Macintosh name (its file server, say).
+    size_t fl = name_reply(f, 83, 150, "AFPServer", SE30);
+    lt_node_rx(&n, f, fl, t + 1100);
+    CHECK(seen_name(&n, 83, t + 1100) == NULL);
+    // The type is matched as NBP matches, case aside.
+    fl = name_reply(f, 83, 150, "WORKSTATION", SE30);
+    lt_node_rx(&n, f, fl, t + 1200);
+    CHECK(seen_name(&n, 83, t + 1200) != NULL);
+    // A reply to another node is not ours.
+    const uint8_t other[] = { 4, 'I', 'I', 'c', 'i' };
+    fl = name_reply(f, 84, 151, "Workstation", other);
+    lt_node_rx(&n, f, fl, t + 1300);
+    CHECK(seen_name(&n, 84, t + 1300) == NULL);
+}
+
+static void test_name_back_after_quiet(void)
+{
+    lt_node_t n;
+    uint64_t t = online_named(&n, 150);
+    uint8_t f[LLAP_MAX];
+    const uint8_t rts[] = { 150, 83, LLAP_RTS };
+    lt_node_rx(&n, rts, sizeof rts, t);
+    lt_node_tick(&n, t + LT_NAME_DELAY_MS);
+    size_t fl = name_reply(f, 83, 150, "Workstation", SE30);
+    lt_node_rx(&n, f, fl, t + LT_NAME_DELAY_MS + 20);
+    CHECK(seen_name(&n, 83, t + 2000) != NULL);
+
+    // Quiet past the list's 10 minutes: no asks for a node not there, and
+    // back, it is someone new until it says otherwise.
+    uint64_t back = t + LT_NAME_DELAY_MS + 20 + LT_SEEN_MS + 1000;
+    for (uint64_t s = t + 2000; s < back; s += 1000) lt_node_tick(&n, s);
+    reset_fake();
+    lt_node_rx(&n, rts, sizeof rts, back);
+    CHECK(seen_name(&n, 83, back) == NULL);
+    lt_node_tick(&n, back + LT_NAME_DELAY_MS);
+    CHECK_EQ_INT(nsent, 1);
+    CHECK(is_name_ask(0, 83, 150));
+}
+
+static void test_name_paced(void)
+{
+    lt_node_t n;
+    uint64_t t = online_named(&n, 150);
+    for (uint8_t id = 80; id < 84; id++) {
+        const uint8_t rts[] = { 150, id, LLAP_RTS };
+        lt_node_rx(&n, rts, sizeof rts, t);
+    }
+    uint64_t at = t + LT_NAME_DELAY_MS;
+    for (uint64_t s = at; s < at + LT_NAME_GAP_MS; s += 10) lt_node_tick(&n, s);
+    CHECK_EQ_INT(nsent, 1);                               // one ask at a time
+    for (uint64_t s = at + LT_NAME_GAP_MS; s < at + 4 * LT_NAME_GAP_MS; s += 10) lt_node_tick(&n, s);
+    CHECK_EQ_INT(nsent, 4);
+    int asked = 0;                                        // each node once
+    for (int i = 0; i < 4; i++)
+        for (uint8_t id = 80; id < 84; id++)
+            if (is_name_ask(i, id, 150)) asked |= 1 << (id - 80);
+    CHECK_EQ_INT(asked, 0xF);
+}
+
+static void test_names_off(void)
+{
+    lt_node_t n;
+    uint64_t t = online(&n, 150);                         // no room for names given
+    const uint8_t rts[] = { 150, 83, LLAP_RTS };
+    lt_node_rx(&n, rts, sizeof rts, t);
+    for (uint64_t s = t; s < t + 60000; s += 100) lt_node_tick(&n, s);
+    CHECK_EQ_INT(nsent, 0);
+    CHECK(seen_name(&n, 83, t + 60000) == NULL);
+}
+
 int main(void)
 {
     test_fcs();
@@ -1213,5 +1463,12 @@ int main(void)
     test_cable_no_idle_hold();
     test_idle_hold_waits_for_room();
     test_seen();
+    test_nbp_utf8();
+    test_name_asked();
+    test_name_answered();
+    test_name_other_replies();
+    test_name_back_after_quiet();
+    test_name_paced();
+    test_names_off();
     TEST_END;
 }

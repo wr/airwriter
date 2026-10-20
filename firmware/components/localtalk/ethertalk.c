@@ -36,7 +36,8 @@ static const char *TAG = "et";
 #define BACKOFF_MIN_MS  1000
 #define BACKOFF_MAX_MS  60000
 #define STEADY_MS       60000          // a connection this long resets the backoff
-#define ET_JSON_PEERS   6              // peers per link in /api/et: 3 links fit its 4.5 KB
+#define ET_JSON_PEERS   6              // peers per link in /api/et: 3 full links, named,
+                                       // and an ordinary log come to ~4.3 KB of its 4.5
 
 typedef struct { uint16_t n; uint8_t f[ELAP_MAX_FRAME]; } zframe_t;
 
@@ -50,6 +51,7 @@ typedef struct {
                                    // the zone while the relay is connected
     uint32_t    seen_replies;      // what the panel was last told (W-1049)
     uint8_t     seen_heard[32];
+    lt_name_t  *names;             // its Macs' names, in PSRAM (internal RAM is short)
 } et_side_t;
 
 static SemaphoreHandle_t s_lock;           // the links, the settings, the pending flags
@@ -201,7 +203,9 @@ static void side_init(et_side_t *s, const uint8_t mac[ETH_ALEN])
         nvs_get_u8(h, s->nvs_node, &hnode);
         nvs_close(h);
     }
-    et_cfg_t c = { s_obj, s_type, s->status, {0}, hnet, hnode, esp_random() | 1, LT_IDLE_HOLD_MS };
+    if (!s->names) s->names = heap_caps_calloc(LT_SEEN_SLOTS, sizeof *s->names, MALLOC_CAP_SPIRAM);
+    et_cfg_t c = { s_obj, s_type, s->status, {0}, hnet, hnode, esp_random() | 1, LT_IDLE_HOLD_MS,
+                   s->names };
     memcpy(c.mac, mac, ETH_ALEN);
     et_ops_t o = { s, s == &s_tun ? tun_send : s == &s_zone ? zone_send : radio_send, op_log,
                    op_begin, op_data, op_room, op_end, op_claimed };
@@ -743,7 +747,8 @@ static int side_json(char *p, size_t cap, const et_side_t *s, const char *state)
         first = 0;
     }
     // W-1079: the peers heard in the last 10 minutes, newest first, for the
-    // settings page. A Basilisk II peer's MAC is "B2" and its computer's IP.
+    // settings page, with the Macintosh name of each that gave one. A Basilisk
+    // II peer's MAC is "B2" and its computer's IP.
     et_peer_t peers[ET_JSON_PEERS];
     size_t np = et_link_peers(l, now_ms(), LT_SEEN_MS, peers, ET_JSON_PEERS);
     if (k > 0 && (size_t)k < cap) k += snprintf(p + k, cap - k, "],\"macs\":[");
@@ -753,9 +758,21 @@ static int side_json(char *p, size_t cap, const et_side_t *s, const char *state)
         if (e->hw[0] == 'B' && e->hw[1] == '2')
             snprintf(ip, sizeof ip, ",\"ip\":\"%u.%u.%u.%u\"", e->hw[2], e->hw[3], e->hw[4], e->hw[5]);
         k += snprintf(p + k, cap - k,
-            "%s{\"addr\":\"%u.%u\",\"mac\":\"%02x:%02x:%02x:%02x:%02x:%02x\"%s,\"ago\":%lu}",
+            "%s{\"addr\":\"%u.%u\",\"mac\":\"%02x:%02x:%02x:%02x:%02x:%02x\"%s,\"ago\":%lu",
             i ? "," : "", e->net, e->node, e->hw[0], e->hw[1], e->hw[2], e->hw[3], e->hw[4],
             e->hw[5], ip, (unsigned long)e->ago_s);
+        if (e->name && k > 0 && (size_t)k < cap) {
+            char u[3 * NBP_NAME_MAX + 1], q[2 * sizeof u];
+            nbp_utf8(u, sizeof u, e->name);
+            size_t j = 0;
+            for (const char *c = u; *c; c++) {             // quotes and backslashes escaped
+                if (*c == '"' || *c == '\\') q[j++] = '\\';
+                q[j++] = *c;
+            }
+            q[j] = '\0';
+            k += snprintf(p + k, cap - k, ",\"name\":\"%s\"", q);
+        }
+        if (k > 0 && (size_t)k < cap) k += snprintf(p + k, cap - k, "}");
     }
     if (k > 0 && (size_t)k < cap) k += snprintf(p + k, cap - k, "]}");
     return k;
@@ -813,5 +830,6 @@ void ethertalk_json(char *buf, size_t cap)
         if (p < end) *p++ = '"';
     }
     xSemaphoreGive(s_ring_lock);
+    if (p > end) p = end;                          // a cut-short part never runs past buf
     snprintf(p, buf + cap - p, "]}");
 }

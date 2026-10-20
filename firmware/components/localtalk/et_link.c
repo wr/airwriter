@@ -163,7 +163,7 @@ void et_link_init(et_link_t *l, const et_cfg_t *cfg, const et_ops_t *ops, uint64
     memcpy(l->mac, cfg->mac, ETH_ALEN);
     l->rng = cfg->seed ? cfg->seed : 0x2434u;
     l->now = now;
-    lt_cfg_t nc = { cfg->object, cfg->type, cfg->status, 0, cfg->seed };
+    lt_cfg_t nc = { cfg->object, cfg->type, cfg->status, 0, cfg->seed, cfg->names };
     lt_ops_t no = { l, t_send, NULL, t_log, t_begin, t_data, t_room, t_end };
     lt_node_init_elap(&l->node, &nc, &no, cfg->idle_hold_ms, now);
     if (cfg->hint_net >= 0xFF00 && cfg->hint_net <= 0xFFFE && cfg->hint_node >= 1 &&
@@ -296,7 +296,8 @@ size_t et_link_peers(const et_link_t *l, uint64_t now, uint32_t within_ms, et_pe
     for (int i = 0; i < ET_MAP_SLOTS; i++) {
         const et_map_t *m = &l->map[i];
         if (!m->node || now - m->at > within_ms) continue;
-        et_peer_t p = { m->net, m->node, {0}, (uint32_t)((now - m->at) / 1000) };
+        et_peer_t p = { m->net, m->node, {0}, (uint32_t)((now - m->at) / 1000),
+                        lt_node_name(&l->node, m->net, m->node) };
         memcpy(p.hw, m->hw, ETH_ALEN);
         size_t j = k++;
         while (j > 0 && all[j - 1].ago_s > p.ago_s) { all[j] = all[j - 1]; j--; }   // newest first
