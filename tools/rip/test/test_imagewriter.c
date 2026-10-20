@@ -530,5 +530,107 @@ int main(void)
         CHECK_EQ_MEM(sink, want, sizeof want);
     }
 
+    /* -- top of form: a job starts on a fresh page whenever the paper was
+     *    left somewhere else (a cut job, or a Mac's stream that stopped
+     *    mid-page), and only then -- */
+    {
+        iw_link_t l = { 0 };
+
+        /* At power-up the printer set top of form where the paper is. */
+        iw_link_job_start(&l);
+        CHECK_EQ_INT(iw_link_need_resync(&l), 0);
+        CHECK_EQ_INT(iw_link_need_ff(&l), 0);
+        iw_link_job_end(&l, 1);                 /* ours, ended with its FF */
+
+        /* Cut: the next job form-feeds first, once, after any resync. */
+        iw_link_job_start(&l);
+        iw_link_need_resync(&l);
+        CHECK_EQ_INT(iw_link_need_ff(&l), 0);
+        iw_link_job_end(&l, 0);
+        iw_link_job_start(&l);
+        CHECK_EQ_INT(iw_link_need_resync(&l), 1);
+        CHECK_EQ_INT(iw_link_need_ff(&l), 1);
+        CHECK_EQ_INT(iw_link_need_ff(&l), 0);
+        iw_link_job_end(&l, 1);
+        iw_link_job_start(&l);
+        iw_link_need_resync(&l);
+        CHECK_EQ_INT(iw_link_need_ff(&l), 0);
+        iw_link_job_end(&l, 1);
+
+        /* A job that sends nothing moves no paper: it neither clears a
+         * form feed owed nor owes one. */
+        iw_link_job_start(&l);
+        iw_link_need_resync(&l);
+        iw_link_job_end(&l, 0);                 /* cut: owes one */
+        iw_link_job_start(&l);
+        iw_link_job_end(&l, 1);                 /* refused, sent nothing */
+        iw_link_job_start(&l);
+        iw_link_need_resync(&l);
+        CHECK_EQ_INT(iw_link_need_ff(&l), 1);
+        iw_link_job_end(&l, 1);
+
+        /* A stream not ours ends where its scanner says. */
+        iw_link_job_start(&l);
+        iw_link_need_resync(&l);
+        iw_link_need_ff(&l);
+        iw_link_job_end_at(&l, 1, 0);           /* clean, mid-page */
+        iw_link_job_start(&l);
+        iw_link_need_resync(&l);
+        CHECK_EQ_INT(iw_link_need_ff(&l), 1);
+        iw_link_job_end_at(&l, 1, 1);           /* clean, at top of form */
+        iw_link_job_start(&l);
+        iw_link_need_resync(&l);
+        CHECK_EQ_INT(iw_link_need_ff(&l), 0);
+        iw_link_job_end(&l, 1);
+    }
+
+    /* -- the scanner follows the paper: line feeds at the spacing set,
+     *    forward or back, against the page length; FF and ESC v are top of
+     *    form -- */
+    {
+        static const struct { const char *s; size_t n; int at_tof; } cases[] = {
+            { "", 0, 1 },
+            { "Hello\r", 6, 1 },                         /* text, no motion */
+            { "Hello\r\n", 7, 0 },
+            { "Hello\r\n\x0c", 8, 1 },
+            { "\n\x1bv", 3, 1 },                         /* TOF set here */
+            { "\x1f" "3", 2, 0 },                        /* CTRL-_ n: n lines */
+            { "\x1br\n\x1b" "f\n", 6, 1 },               /* back one, on one */
+            { "\x1bH0048\n\n", 8, 1 },                   /* 1/3 in pages, 2 x 1/6 */
+            { "\x1bT72\n\n\n\n", 9, 0 },                 /* 2 in of an 11 in page */
+            { "\x1bG0002\n\x0c", 8, 1 },                 /* graphics bytes are not LFs */
+        };
+        for (size_t k = 0; k < sizeof cases / sizeof cases[0]; k++) {
+            iw_scan_t s;
+            iw_scan_init(&s);
+            iw_scan(&s, (const uint8_t *)cases[k].s, cases[k].n);
+            if (iw_scan_at_tof(&s) != cases[k].at_tof)
+                fprintf(stderr, "  at_tof case %zu\n", k);
+            CHECK_EQ_INT(iw_scan_at_tof(&s), cases[k].at_tof);
+        }
+        /* 22 line feeds of 72/144 in are exactly 11 in: the next page. */
+        iw_scan_t s;
+        iw_scan_init(&s);
+        iw_scan(&s, (const uint8_t *)"\x1bT72", 4);
+        for (int i = 0; i < 21; i++) iw_scan(&s, (const uint8_t *)"\n", 1);
+        CHECK_EQ_INT(iw_scan_at_tof(&s), 0);
+        iw_scan(&s, (const uint8_t *)"\n", 1);
+        CHECK_EQ_INT(iw_scan_at_tof(&s), 1);
+
+        /* The Mac's page never form-feeds: it sets an 11 in page, reverses
+         * and feeds by line, and comes to rest exactly one page on. Its
+         * graphics hold 49 bytes of 0x0C, which are not form feeds. */
+        static uint8_t mac[16384];
+        FILE *f = fopen("../../fixtures/pap-iw701-page.bin", "rb");
+        size_t mn = f ? fread(mac, 1, sizeof mac, f) : 0;
+        if (f) fclose(f);
+        iw_scan_init(&s);
+        iw_scan(&s, mac, mn);
+        CHECK_EQ_INT(iw_scan_at_tof(&s), 1);
+        iw_scan_init(&s);
+        iw_scan(&s, mac, mn - 40);                /* cut before its last feeds */
+        CHECK_EQ_INT(iw_scan_at_tof(&s), 0);
+    }
+
     TEST_END;
 }

@@ -83,6 +83,9 @@ void iw_resync(iw_out_fn out, void *ctx);
 typedef struct {
     int dirty;     // the last stream to start was cut short
     int started;   // the current job has sent its first byte
+    int off_tof;   // the paper may not be at top of form: the last stream to
+                   // move it was cut, or (not ours) stopped mid-page
+    int ff_asked;  // iw_link_need_ff has answered for the current job
 } iw_link_t;
 
 // Which ribbon is in, from the printer's self-ID (W-1064). ESC ? makes it
@@ -103,8 +106,18 @@ void iw_link_job_start(iw_link_t *l);
 // Before each write of a job's bytes. 1 at most once per job, before its first
 // byte, when the last stream was cut: send iw_resync first.
 int  iw_link_need_resync(iw_link_t *l);
-// clean: every byte of the job was queued and its last page ended normally.
+// After iw_link_need_resync, before each write. 1 at most once per job, when
+// the paper was left away from top of form: send a form feed first, so the
+// job starts on a fresh page. ESC c leaves top of form where it is (Technical
+// Reference Table A-2), so without it a job after a cut one starts mid-sheet.
+// At power-up the printer sets top of form where the paper is: 0.
+int  iw_link_need_ff(iw_link_t *l);
+// clean: every byte of the job was queued and its last page ended normally,
+// with its form feed (our own streams).
 void iw_link_job_end(iw_link_t *l, int clean);
+// For a stream not ours (a Mac's): where it left the paper, from its scanner
+// (iw_scan_at_tof).
+void iw_link_job_end_at(iw_link_t *l, int clean, int at_tof);
 // An iw_resync went out between jobs, all of it (W-1064: the ribbon check
 // sends one before ESC ?, which a printer mid-graphics would take as dots).
 void iw_link_resynced(iw_link_t *l);
@@ -122,9 +135,20 @@ void iw_link_resynced(iw_link_t *l);
 typedef struct {
     uint8_t  state, cmd, digits, after;   // after: where a skip returns to
     uint32_t num, left;
+    // The paper (1/144 in): moved since top of form, the line feed (ESC T,
+    // A, B), its direction (ESC r, f) and the page length (ESC H; 11 in by
+    // DIP switch 1-4 open). A Mac's stream never form-feeds: it sets an 11 in
+    // page and feeds by line, forward and back, to exactly the next page.
+    int32_t  moved;
+    uint16_t spacing, page;
+    uint8_t  reverse;
 } iw_scan_t;
 
 void iw_scan_init(iw_scan_t *s);
 void iw_scan(iw_scan_t *s, const uint8_t *buf, size_t n);
 // 1 when the bytes so far end between commands (the printer is in text).
 int  iw_scan_between(const iw_scan_t *s);
+// 1 when the bytes so far leave the paper at a top of form (after a form
+// feed, ESC v, or line feeds that come to whole pages), taking the stream to
+// start at one.
+int  iw_scan_at_tof(const iw_scan_t *s);

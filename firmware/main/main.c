@@ -277,6 +277,17 @@ static volatile int s_ipp_owns;
 
 // The printer stream: checksummed so the device can be compared with tools/rip
 // byte for byte, then put on the wire.
+// The last stream left the paper away from top of form (cut, or a Mac's that
+// stopped mid-page): a form feed first, so this job starts on a fresh page.
+// Outside the CRC, as the resync is; after it, in text mode.
+static esp_err_t paper_to_tof(void)
+{
+    if (!iw_link_need_ff(&s_link) || AW_LOOPBACK) return ESP_OK;
+    ESP_LOGW(TAG, "the paper was left mid-page; a form feed first");
+    static const uint8_t ff[] = { 0x0C };
+    return serial_out_write(ff, sizeof ff);
+}
+
 static void printer_out(void *ctx, const uint8_t *buf, size_t n)
 {
     (void)ctx;
@@ -293,6 +304,7 @@ static void printer_out(void *ctx, const uint8_t *buf, size_t n)
         iw_resync(resync_out, &err);
         if (err != ESP_OK) { printer_fail(); return; }
     }
+    if (paper_to_tof() != ESP_OK) { printer_fail(); return; }
     if (serial_out_write(buf, n) != ESP_OK) printer_fail();
 }
 
@@ -657,6 +669,7 @@ static int lt_print_write(void *ctx, const uint8_t *d, size_t n)
         iw_resync(resync_out, &err);
         if (err != ESP_OK) goto fail;
     }
+    if (paper_to_tof() != ESP_OK) goto fail;
     if (serial_out_write(d, n) == ESP_OK) return 0;
 fail:
     // Paused past STALL_ABORT: the Mac is told (CloseConn) and its queued
@@ -674,7 +687,8 @@ static int lt_print_end(void *ctx, int normal)
     // The last bytes never left: paper out on the last line, past the limit.
     if (clean && flushed != ESP_OK) s_printer_failed = 1;
     if (flushed != ESP_OK) serial_out_purge();
-    iw_link_job_end(&s_link, flushed == ESP_OK);
+    // The Mac's driver feeds to the next page by line, never by form feed.
+    iw_link_job_end_at(&s_link, flushed == ESP_OK, iw_scan_at_tof(&s_lt_scan));
     s_last_bytes = s_lt_bytes;
     s_last_pages = 0;
     // In the link's log too (/api/lt, /api/et): the console is not always attached.
