@@ -415,11 +415,14 @@ static void pap_tick(lt_node_t *n, uint64_t now)
         return;
     }
     if (n->idle_hold_ms) {
-        if (n->status) p->idle_since = now;
+        // Not idle: the printer's status holds the Mac, or we do (no read out
+        // until the spool has room for one).
+        if (n->status || (!p->rd_want && !p->done)) p->idle_since = now;
         else if (now - p->idle_since >= n->idle_hold_ms) {
             uint8_t user[4] = { p->connid, PAP_CLOSE_CONN, 0, 0 };
             send_atp(n, &p->ws, LT_SOCK_CONN, ATP_TREQ, 0x01, next_tid(n), user, NULL, 0);
-            pap_close(n, "the Mac sent nothing", 1);
+            // What came prints; nothing at all is no print (W-1059's known-good mark).
+            pap_close(n, "the Mac sent nothing", p->bytes > 0);
             return;
         }
     }

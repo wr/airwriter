@@ -649,7 +649,7 @@ static int lt_print_end(void *ctx, int normal)
     // In the link's log too (/api/lt, /api/et): the console is not always attached.
     char line[100];
     snprintf(line, sizeof line, "job %s: %u bytes, crc32 %08x",
-             flushed == ESP_OK ? "printed" : s_printer_failed ? "failed"
+             flushed == ESP_OK ? (s_lt_bytes ? "printed" : "empty") : s_printer_failed ? "failed"
              : normal ? "cut short" : "abandoned",
              (unsigned)s_lt_bytes, (unsigned)s_stream_crc);
     at_printer_note(line);
@@ -667,7 +667,9 @@ static int lt_print_end(void *ctx, int normal)
     printer_state_post(s_printer_failed ? PS_EV_JOB_FAILED : PS_EV_JOB_DONE);
     s_printing = 0;
     job_touch();
-    if (flushed == ESP_OK) ota_health_printed();   // W-1059, under the job lock
+    // W-1059, under the job lock; an empty job (a Mac that opened and closed,
+    // or an idle relay peer) proves nothing about this firmware.
+    if (flushed == ESP_OK && s_lt_bytes) ota_health_printed();
     xSemaphoreGive(s_job_lock);
     return flushed == ESP_OK;
 }
@@ -1007,6 +1009,7 @@ static void wifi_event(void *arg, esp_event_base_t base, int32_t id, void *data)
     } else if (base == WIFI_EVENT && id == WIFI_EVENT_STA_DISCONNECTED) {
         wifi_event_sta_disconnected_t *d = (wifi_event_sta_disconnected_t *)data;
         if (s_wifi_was_up) {
+            ethertalk_net_down();                       // W-1076: its jobs end now
             printer_state_post(PS_EV_WIFI_DOWN);
             ota_health_set(OH_STA_UP, 0);
             strncpy(s_ip, "0.0.0.0", sizeof s_ip - 1);
@@ -1605,8 +1608,7 @@ void app_main(void)
         webui_cfg_t wcfg = { .status_json = status_json, .general_saved = general_saved, .captive = 1,
                               .localtalk_flash = localtalk_flash,
                               .lt_json = lt_json, .lt_job = lt_job, .lt_echo = lt_echo,
-                              .cable_test = cable_web, .et_json = et_json,
-                              .et_settings_get = et_settings_get, .et_settings_set = et_settings_set };
+                              .cable_test = cable_web };   // no EtherTalk: the zone stays off the open AP
         ESP_ERROR_CHECK(webui_start(&wcfg));
         ota_health_set(OH_WEB_UP, 1);
 

@@ -63,7 +63,7 @@ static char       s_zone_name[ET_ZONE_MAX + 1];
 static int        s_want_tunnel = -1;      // -1: nothing to do
 static int        s_want_zone;
 static uint32_t   s_ip, s_new_ip;
-static int        s_ip_changed;
+static int        s_ip_changed, s_net_down;
 
 // The tunnel.
 static int        s_sock = -1;
@@ -317,7 +317,12 @@ static void zone_start(const char *zone)
         .task_core_id = 0,
         .reconnect_timeout_ms = BACKOFF_MIN_MS,
         .network_timeout_ms = 10000,
-        .ping_interval_sec = 30,
+        // A relay restart closes cleanly; without this the client's task ends
+        // and the zone stays down until the setting is saved again.
+        .enable_close_reconnect = true,
+        // Wi-Fi gone leaves the TLS socket looking open: pings find it in 45 s.
+        .ping_interval_sec = 15,
+        .pingpong_timeout_sec = 45,
     };
     s_backoff_ms = BACKOFF_MIN_MS;
     s_ws = esp_websocket_client_init(&c);
@@ -351,15 +356,24 @@ static void side_events(et_side_t *s, int *lookup, int *fresh)
 static void apply_pending(void)
 {
     xSemaphoreTake(s_lock, portMAX_DELAY);
-    int want_t = s_want_tunnel, want_z = s_want_zone, ipch = s_ip_changed;
+    int want_t = s_want_tunnel, want_z = s_want_zone, ipch = s_ip_changed, down = s_net_down;
     uint32_t ip = s_new_ip;
     char zone[ET_ZONE_MAX + 1];
     memcpy(zone, s_zone_name, sizeof zone);
     s_want_tunnel = -1;
     s_want_zone = 0;
     s_ip_changed = 0;
+    s_net_down = 0;
     xSemaphoreGive(s_lock);
     uint64_t now = now_ms();
+
+    if (down) {
+        xSemaphoreTake(s_lock, portMAX_DELAY);
+        if (s_tun.link.node.pap.open || s_zone.link.node.pap.open) note("both", "Wi-Fi lost; the job ends");
+        et_link_down(&s_tun.link, now);
+        et_link_down(&s_zone.link, now);
+        xSemaphoreGive(s_lock);
+    }
 
     if (want_t == 0) {
         xSemaphoreTake(s_lock, portMAX_DELAY);
@@ -588,6 +602,14 @@ void ethertalk_ip_changed(uint32_t ip)
     xSemaphoreTake(s_lock, portMAX_DELAY);
     s_new_ip = ip;
     s_ip_changed = 1;
+    xSemaphoreGive(s_lock);
+}
+
+void ethertalk_net_down(void)
+{
+    if (!s_running) return;
+    xSemaphoreTake(s_lock, portMAX_DELAY);
+    s_net_down = 1;
     xSemaphoreGive(s_lock);
 }
 

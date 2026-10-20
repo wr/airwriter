@@ -36,6 +36,9 @@ esp_err_t ethertalk_start(const ethertalk_cfg_t *cfg);
 int       ethertalk_running(void);
 // The station's address changed (host order): the tunnel's MAC follows it.
 void      ethertalk_ip_changed(uint32_t ip);
+// The station lost Wi-Fi: both links' jobs end abandoned at once, not when a
+// PAP or WebSocket timer notices.
+void      ethertalk_net_down(void);
 void      ethertalk_set_status(uint16_t tunnel_status, uint16_t zone_status);
 // Saves and applies at once. A NULL zone keeps it, "" turns the relay off,
 // anything else must pass et_zone_name_ok (ESP_ERR_INVALID_ARG, nothing

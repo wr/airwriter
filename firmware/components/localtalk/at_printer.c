@@ -7,6 +7,7 @@
 #include "esp_heap_caps.h"
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
+#include "freertos/semphr.h"
 #include "freertos/stream_buffer.h"
 #include "freertos/task.h"
 
@@ -26,6 +27,8 @@ static StreamBufferHandle_t s_spool;
 static TaskHandle_t s_print_task;
 static const at_owner_t *volatile s_owner;
 static volatile int s_job_active, s_job_ended, s_job_normal, s_job_failed;
+static volatile int s_job_pending;           // begin is running for s_owner
+static SemaphoreHandle_t s_begin_lock;       // links begin from their own tasks
 static uint32_t     s_jobs_printed, s_jobs_failed;
 static uint8_t     *s_job;
 static size_t       s_job_len;
@@ -69,6 +72,8 @@ esp_err_t at_printer_init(const localtalk_printer_t *p)
     static StaticStreamBuffer_t spool_cb;
     if (!spool) return ESP_ERR_NO_MEM;
     s_spool = xStreamBufferCreateStatic(SPOOL, 1, spool, &spool_cb);
+    s_begin_lock = xSemaphoreCreateMutex();
+    if (!s_begin_lock) return ESP_ERR_NO_MEM;
     if (xTaskCreate(print_task, "lt_print", 4096, NULL, 3, &s_print_task) != pdPASS)
         return ESP_ERR_NO_MEM;
     s_inited = 1;
@@ -79,10 +84,26 @@ int at_job_begin(const at_owner_t *o)
 {
     // The last job's tail still draining counts as busy: one job at a time.
     if (!s_inited || s_job_active) return 1;
-    if (s_printer.begin && s_printer.begin(s_printer.ctx, o->link)) return 1;
+    xSemaphoreTake(s_begin_lock, portMAX_DELAY);   // begin never waits: this is short
+    if (s_job_active) {
+        xSemaphoreGive(s_begin_lock);
+        return 1;
+    }
+    // The holder is named before main.c's begin runs: begin posts the job's
+    // start, and each node's status word asks at_job_link who holds the
+    // printer; a Mac told "busy" about its own job never sends (W-1051).
     s_owner = o;
+    s_job_pending = 1;
+    if (s_printer.begin && s_printer.begin(s_printer.ctx, o->link)) {
+        s_job_pending = 0;
+        s_owner = NULL;
+        xSemaphoreGive(s_begin_lock);
+        return 1;
+    }
     s_job_ended = s_job_normal = s_job_failed = 0;
     s_job_active = 1;
+    s_job_pending = 0;
+    xSemaphoreGive(s_begin_lock);
     s_job_len = 0;
     s_job_total = 0;
     s_job_done = 0;
@@ -123,7 +144,7 @@ void at_job_end(const at_owner_t *o, int normal)
 int at_job_link(void)
 {
     const at_owner_t *o = s_owner;
-    return s_job_active && o ? (int)o->link : -1;
+    return (s_job_active || s_job_pending) && o ? (int)o->link : -1;
 }
 
 void at_printer_note(const char *line)

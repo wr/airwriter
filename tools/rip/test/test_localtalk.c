@@ -1095,9 +1095,44 @@ static void test_idle_hold(void)
         CHECK(!n.pap.open);
         CHECK_EQ_INT(close_conns_sent(), 1);
         CHECK_EQ_INT(job_eof, 1);
-        CHECK_EQ_INT(job_normal, 1);                      // what came prints
+        // What came prints; a connection that sent nothing is no print at all.
+        CHECK_EQ_INT(job_normal, run == 2 ? 1 : 0);
         CHECK(strstr(lastlog, "sent nothing") != NULL);
     }
+}
+
+// The board holding the Mac off (no read out: the spool has no room) is not
+// the Mac being idle: the idle hold waits, however slow the printer drains.
+static void test_idle_hold_waits_for_room(void)
+{
+    const uint8_t oc[] = { 0xF4, 1, 0, 0 };
+    uint8_t f[LLAP_MAX];
+    lt_node_t n;
+    uint64_t t0 = elap_online(&n, 60000);
+    job_eof = 0;
+    job_normal = -1;
+    fake_room = (size_t)-1;
+    size_t fl = emac_atp(f, LT_SOCK_SLS, ATP_TREQ | ATP_XO, 0x01, 0x0900, 0x2C, PAP_OPEN_CONN, oc, sizeof oc);
+    lt_node_rx(&n, f, fl, t0);
+    uint16_t tid = 0;
+    for (int i = 0; i < nsent && i < MAXSENT; i++)
+        if (eatp_of(i)[5] == PAP_SEND_DATA) tid = (uint16_t)(eatp_of(i)[2] << 8 | eatp_of(i)[3]);
+    fake_room = 100;                                      // the printer is behind
+    const uint8_t chunk[] = { 0x0D, 0x0A };
+    fl = emac_atp(f, LT_SOCK_CONN, ATP_TRESP | ATP_EOM, 0, tid, 0x2C, PAP_DATA, chunk, sizeof chunk);
+    lt_node_rx(&n, f, fl, t0 + 1000);
+    CHECK_EQ_INT(n.pap.rd_want, 0);                       // no read out: no room
+    elap_run(&n, t0, t0 + 1010, t0 + 180000);
+    CHECK(n.pap.open);                                    // three minutes, still waiting
+    CHECK_EQ_INT(job_eof, 0);
+    fake_room = (size_t)-1;                               // the printer caught up
+    elap_run(&n, t0, t0 + 180010, t0 + 180010);
+    CHECK(n.pap.rd_want != 0);                            // the next read is out
+    elap_run(&n, t0, t0 + 180020, t0 + 240000);
+    CHECK(n.pap.open);
+    elap_run(&n, t0, t0 + 240010, t0 + 240020);
+    CHECK(!n.pap.open);                                   // and now the Mac is idle
+    CHECK_EQ_INT(job_normal, 1);
 }
 
 static void test_cable_no_idle_hold(void)
@@ -1136,5 +1171,6 @@ int main(void)
     test_elap_rtmp();
     test_idle_hold();
     test_cable_no_idle_hold();
+    test_idle_hold_waits_for_room();
     TEST_END;
 }
