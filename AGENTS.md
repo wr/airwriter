@@ -85,7 +85,7 @@ What works on `main`:
   details, every font, pitch and style in the printer's own type, the seven colours and a
   ray-traced still life in four inks (gray with a note on a black ribbon), the five screens side
   by side, a ruler and four one-inch squares. It asks the ribbon first, as a job does; about
-  57 KB of stream in colour. The colour ink order and phases live in `ink.c` (`ink_screens_*`),
+  64 KB of stream in colour, and never `ESC F` (`docs/traps.md`). The colour ink order and phases live in `ink.c` (`ink_screens_*`),
   shared with jobs.
 - Recovery (SPEC §3.11): three equal app slots and a `known_good` record naming the last image
   that was kept and finished a real print; updates never write the running or known-good slot.

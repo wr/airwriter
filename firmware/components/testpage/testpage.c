@@ -1,11 +1,14 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
 // The test page, top to bottom as the design lays it out. Text is the
-// printer's own: escape codes and characters, a CR and a line feed. Pictures
-// are bands of bit-image strips, 8 rows each, filled a row at a time by the
-// band's own function and sent one pass per ink from its first dot to its
-// last, placed with ESC F in 144 dpi pitch. Text never shares a line with
-// graphics, so NLQ's two passes never meet a bit image.
+// printer's own: escape codes and characters, a CR and a line feed, placed by
+// spaces in a fixed pitch. Pictures are bands of bit-image strips, 8 rows
+// each, filled a row at a time by the band's own function and sent as a
+// colour AirPrint page's are (iwc): one pass per ink from the left margin to
+// its last dot. Never ESC F: on board 1's first print, lines near it landed
+// inches to the right and a character placed by it wrapped to the margin.
+// Text never shares a line with graphics, so NLQ's two passes never meet a
+// bit image, and NLQ never prints in a line of several CR-only passes.
 #include "testpage.h"
 #include "tp_scene.h"
 #include "tp_art.h"
@@ -79,13 +82,6 @@ static void add(ln_t *l, const char *s)
 
 static void addc(ln_t *l, char c) { if (l->n < sizeof l->s) l->s[l->n++] = c; }
 
-static void addf(ln_t *l, const char *fmt, int v)
-{
-    char s[16];
-    snprintf(s, sizeof s, fmt, v);
-    add(l, s);
-}
-
 // A value from outside, as the printer can print it in at most cap
 // characters: printable ASCII kept, anything else one '?' a character
 // (UTF-8's continuation bytes dropped), padded with spaces to pad.
@@ -117,11 +113,15 @@ static void text(tp_t *t, const char *s, int lead)
     line(t, &l, lead);
 }
 
-// A one-dot rule across the page: ESC V repeats a dot column.
+// A one-dot rule across the page: ESC V repeats a dot column. Pin 5, four
+// rows (8/144 in) below the line: board 1's top pin is dead, and a rule on it
+// does not print at all.
+#define RULE_DROP 8
+
 static void rule(tp_t *t, int lead)
 {
     if (halted(t)) return;
-    static const char r[] = ESC "p" ESC "V1152\x01\r";
+    static const char r[] = ESC "p" ESC "V1152\x10\r";
     send(t, r, sizeof r - 1);
     feed(t, lead);
 }
@@ -132,8 +132,8 @@ static void heading(tp_t *t, const char *s)
     add(&l, ESC "a2" ESC "N" ESC "!");
     add(&l, s);
     add(&l, ESC "\"");
-    line(t, &l, 18);
-    rule(t, 14);
+    line(t, &l, 18 - RULE_DROP);
+    rule(t, 14 + RULE_DROP);
 }
 
 // --------------------------------------------------------------- graphics
@@ -167,19 +167,14 @@ static void band(tp_t *t, uint32_t rows, fill_fn fill, void *ctx)
             const uint8_t *rp[8];
             for (int r = 0; r < 8; r++) rp[r] = t->rows[ink][r];
             iw_transpose(rp, t->cols, W);
-            uint32_t a = 0, z = W;
-            while (a < W && !t->cols[a]) a++;
-            if (a == W) continue;
-            while (!t->cols[z - 1]) z--;
+            uint32_t z = W;
+            while (z && !t->cols[z - 1]) z--;
+            if (!z) continue;
             if (t->colour) set_ink(t, ink);
-            char h[16];
-            if (a) {
-                snprintf(h, sizeof h, ESC "F%04u", (unsigned)a);
-                sends(t, h);
-            }
-            snprintf(h, sizeof h, ESC "G%04u", (unsigned)(z - a));
+            char h[8];
+            snprintf(h, sizeof h, ESC "G%04u", (unsigned)z);
             sends(t, h);
-            send(t, t->cols + a, z - a);
+            send(t, t->cols, z);
             sends(t, "\r");
         }
         feed(t, 16);
@@ -261,7 +256,7 @@ static void kv(tp_t *t, const char *k1, const char *v1, const char *k2, const ch
     addv(&l, v1, 34, 36);
     addv(&l, k2, 11, 11);
     addv(&l, v2, 38, 0);
-    line(t, &l, 22);
+    line(t, &l, 20);
 }
 
 static void identity(tp_t *t)
@@ -280,7 +275,22 @@ static void identity(tp_t *t)
     kv(t, "Printer", printer, "Firmware", firmware, 1);
     kv(t, "Name", i->name, "Built", i->built, 0);
     kv(t, i->setup_ssid ? "Wi-Fi" : "Address", addr, "Halftone", screen_name(i->screen), 0);
-    kv(t, "Settings", settings, "AppleTalk", i->appletalk, 0);
+    // The ways into AppleTalk can be more than the right column holds: the
+    // rest goes on a fifth row under it, broken after a comma.
+    const char *at = i->appletalk ? i->appletalk : "";
+    char at1[48], at2[96] = "";
+    snprintf(at1, sizeof at1, "%s", at);
+    if (strlen(at) > 38) {
+        const char *cut = NULL;
+        for (const char *c = at; c[0] && c[1] && c - at < 38; c++)
+            if (c[0] == ',' && c[1] == ' ') cut = c;
+        if (cut) {
+            snprintf(at1, sizeof at1, "%.*s", (int)(cut - at + 1), at);
+            snprintf(at2, sizeof at2, "%s", cut + 2);
+        }
+    }
+    kv(t, "Settings", settings, "AppleTalk", at1, 0);
+    if (at2[0]) kv(t, "", "", "", at2, 0);
 }
 
 // ------------------------------------------------------------------ text
@@ -298,7 +308,7 @@ static void text_section(tp_t *t)
     heading(t, "Text");
     static const struct { const char *name, *cmd; } q[] = {
         { "Draft", ESC "a1" }, { "Correspondence", ESC "a0" }, { "Near letter quality", ESC "a2" },
-        { "Proportional", ESC "a2" ESC "p" ESC "F0288" },
+        { "Proportional", ESC "a2" ESC "p" },
     };
     for (size_t k = 0; k < sizeof q / sizeof q[0]; k++) {
         ln_t l = { .n = 0 };
@@ -431,13 +441,16 @@ static void colour_section(tp_t *t)
             { '1', "Yellow", 0 }, { '4', "Orange", 4 }, { '5', "Green", 5 },
             { '2', "Magenta", 1 }, { '3', "Cyan", 2 }, { '6', "Purple", 6 }, { '0', "Black", 3 },
         };
+        // In correspondence, one pass a word: NLQ's own two passes in a
+        // line of CR-only passes is more than this page needs to ask. At
+        // 12 cpi a swatch's 168 dots are 14 characters.
         if (!halted(t)) {
             for (int k = 0; k < 7; k++) {
                 ln_t l = { .n = 0 };
                 add(&l, ESC "K");
                 addc(&l, w[k].d);
-                add(&l, ESC "p" ESC "a2");
-                addf(&l, ESC "F%04d", w[k].slot * 168);
+                add(&l, ESC "a0" ESC "E");
+                addv(&l, "", 0, (size_t)w[k].slot * 14);
                 add(&l, w[k].name);
                 addc(&l, '\r');
                 send(t, l.s, l.n);
@@ -493,11 +506,15 @@ static void colour_section(tp_t *t)
     free(p);
 
     feed(t, 4);
+    // At 17 cpi a step's 59 dots are 7 characters, near enough; column 60 is
+    // dot 508, 4 into the first step.
     ln_t l = { .n = 0 };
-    add(&l, ESC "a0" ESC "p");
+    add(&l, ESC "a0" ESC "Q");
+    addv(&l, "", 0, 60);
     for (int j = 0; j < 11; j++) {
-        addf(&l, ESC "F%04d", RX + j * STEP_W);
-        addf(&l, "%d%%", j * 10);
+        char pc[8];
+        snprintf(pc, sizeof pc, "%d%%", j * 10);
+        addv(&l, pc, 7, j < 10 ? 7 : 0);
     }
     line(t, &l, 20);
 }
@@ -557,16 +574,23 @@ static void halftone_section(tp_t *t)
 {
     const tp_info_t *i = t->info;
     heading(t, "Halftone");
+    // At 12 cpi a character is 12 dots: the labels start at columns 0, 20,
+    // 39, 59 and 78, within 6 dots of each panel's left edge.
+    static const int col[5] = { 0, 20, 39, 59, 78 };
     ln_t l = { .n = 0 };
-    add(&l, ESC "a0" ESC "p");
+    add(&l, ESC "a0" ESC "E");
+    int at = 0;
     for (int k = 0; k < 5; k++) {
-        addf(&l, ESC "F%04d", k * HG);
+        addv(&l, "", 0, (size_t)(col[k] - at));
+        const char *name = screen_name(screens[k]);
         if (screens[k] == i->screen) {
             add(&l, ESC "!");
-            add(&l, screen_name(screens[k]));
+            add(&l, name);
             add(&l, ESC "\" " ESC "&D" ESC "$");       // MouseText's check mark
+            at = col[k] + (int)strlen(name) + 2;
         } else {
-            add(&l, screen_name(screens[k]));
+            add(&l, name);
+            at = col[k] + (int)strlen(name);
         }
     }
     line(t, &l, 22);
@@ -588,7 +612,7 @@ static int fill_ruler(void *ctx, uint32_t y, uint8_t *const bits[IW_INKS])
 {
     (void)ctx;
     uint8_t *k = bits[IW_BLACK];
-    if (y == 0) memset(k, 0xFF, NB);
+    if (y < 2) memset(k, 0xFF, NB);                     // two rows: one dead pin leaves one
     for (uint32_t x = 0; x < W; x += 9) {               // 1/16 in
         uint32_t h = x % 144 == 0 ? 8 : x % 72 == 0 ? 6 : x % 36 == 0 ? 4 : x % 18 == 0 ? 3 : 2;
         if (y < h) dot(k, x);
@@ -616,13 +640,16 @@ static void alignment_section(tp_t *t)
 {
     heading(t, "Alignment");
     band(t, 8, fill_ruler, NULL);
+    // At 10 cpi an inch is 10 characters: each number starts on its tick,
+    // and the 8, which would start past the line, ends it.
     ln_t l = { .n = 0 };
-    add(&l, ESC "a0" ESC "p");
-    for (int i = 0; i <= 8; i++) {
-        int x = i * 144 - 3;
-        addf(&l, ESC "F%04d", x < 0 ? 0 : x > W - 8 ? W - 8 : x);
-        addf(&l, "%d", i);
+    add(&l, ESC "a0" ESC "N");
+    for (int i = 0; i < 8; i++) {
+        char d[2] = { (char)('0' + i), '\0' };
+        addv(&l, d, 1, 10);
     }
+    l.n--;                                      // the 8 in the 80th column
+    addc(&l, '8');
     line(t, &l, 24);
     band(t, 72, fill_squares, NULL);
     feed(t, 6);
@@ -631,13 +658,10 @@ static void alignment_section(tp_t *t)
         { "Measure it with a ruler", "A white line: a pin is out", "The head is aligned",
           "The paper feeds evenly" },
     };
-    for (int r = 0; r < 2; r++) {
+    for (int r = 0; r < 2; r++) {                // 15 cpi: 2 in is 30 characters
         l.n = 0;
-        add(&l, ESC "a0" ESC "p");
-        for (int i = 0; i < 4; i++) {
-            addf(&l, ESC "F%04d", i * 288);
-            add(&l, caps[r][i]);
-        }
+        add(&l, ESC "a0" ESC "q");
+        for (int i = 0; i < 4; i++) addv(&l, caps[r][i], 30, i < 3 ? 30 : 0);
         line(t, &l, 20);
     }
 }
@@ -655,13 +679,12 @@ tp_result_t tp_print(const tp_info_t *info, const tp_io_t *io)
         free(t.cols);
         return TP_NOMEM;
     }
-    enum { GAP = 14 };
+    enum { GAP = 12 };
 
     sends(&t, ESC "c");
     feed(&t, 72);                                   // the top margin, 1/2 in
     header(&t);
-    feed(&t, 6);
-    rule(&t, 16);
+    rule(&t, 22);                               // its dot 8/144 down, as before
     identity(&t);
     feed(&t, GAP + 4);
     text_section(&t);
@@ -671,8 +694,8 @@ tp_result_t tp_print(const tp_info_t *info, const tp_io_t *io)
     halftone_section(&t);
     feed(&t, GAP);
     alignment_section(&t);
-    feed(&t, 14);
-    rule(&t, 10);
+    feed(&t, 14 - RULE_DROP);
+    rule(&t, 10 + RULE_DROP);
     text(&t, ESC "a0" ESC "E" "AirWriter by Wells Workshop    wells.ee    github.com/wr/airwriter", 0);
 
     tp_result_t rc = t.nomem ? TP_NOMEM : t.stopped ? TP_STOPPED : TP_DONE;

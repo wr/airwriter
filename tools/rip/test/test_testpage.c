@@ -104,6 +104,9 @@ typedef struct {
     int    f_order_bad;         // an ESC F not after the last on its line, or past 1151
     int    max_y;               // the lowest anything prints, its bottom edge
     int    k_used[7], last_k, k_any;
+    int    f_used;              // ESC F anywhere (board 1 misplaced lines near it)
+    int    nlq_overprint;       // NLQ text in a line printed in more than one pass
+    int    rule_top_pin_only;   // an ESC V rule on the top pin alone (a dead pin hides it)
 } page_t;
 
 static int num(const uint8_t *b, int n)
@@ -118,6 +121,7 @@ static page_t read_page(const buf_t *s)
     page_t p = { .last_k = 0 };
     double dpi = 80, cpi = 10;          // ESC c leaves 10 cpi on these DIP switches
     int prop = 0, dw = 0, lf = 24, y = 0, last_f = -1, x_known = 1;
+    int nlq = 0, passes = 0, printed = 0, line_nlq = 0;
     double x = 0;
     const uint8_t *b = s->b;
     for (size_t i = 0; i < s->n;) {
@@ -125,7 +129,7 @@ static page_t read_page(const buf_t *s)
         if (c == 0x1B) {
             uint8_t k = b[i++];
             switch (k) {
-            case 'c': dpi = 80; cpi = 10; prop = 0; dw = 0; lf = 24; break;
+            case 'c': dpi = 80; cpi = 10; prop = 0; dw = 0; lf = 24; nlq = 0; break;
             case 'n': dpi = 72;  cpi = 9;    prop = 0; break;
             case 'N': dpi = 80;  cpi = 10;   prop = 0; break;
             case 'E': dpi = 96;  cpi = 12;   prop = 0; break;
@@ -139,7 +143,8 @@ static page_t read_page(const buf_t *s)
                 if (k == 'A') lf = 24;
                 if (k == 'B') lf = 18;
                 break;
-            case 'a': case 's': i++; break;
+            case 'a': nlq = b[i++] == '2'; break;
+            case 's': i++; break;
             case 'K': {
                 int d = b[i++] - '0';
                 if (d >= 0 && d < 7) p.k_used[d] = 1; else p.bad = 1;
@@ -149,6 +154,7 @@ static page_t read_page(const buf_t *s)
             case 'T': lf = num(b + i, 2); i += 2; break;
             case 'F': {
                 int f = num(b + i, 4); i += 4;
+                p.f_used = 1;
                 if (f <= last_f || f * 144.0 / dpi > 1151) p.f_order_bad = 1;
                 last_f = f;
                 x = f * 144.0 / dpi;
@@ -157,7 +163,9 @@ static page_t read_page(const buf_t *s)
             }
             case 'G': case 'V': {
                 int n = num(b + i, 4); i += 4;
+                if (k == 'V' && b[i] == 0x01) p.rule_top_pin_only = 1;
                 i += k == 'G' ? (size_t)n : 1;
+                printed = 1;
                 x += n * 144.0 / dpi * (dw ? 2 : 1);
                 if (x > p.max_x) p.max_x = x;
                 if (y + 16 > p.max_y) p.max_y = y + 16;
@@ -167,8 +175,12 @@ static page_t read_page(const buf_t *s)
             }
         } else if (c == '\r') {
             x = 0; last_f = -1; x_known = 1;
+            passes += printed;
+            printed = 0;
+            if (line_nlq && passes > 1) p.nlq_overprint = 1;
         } else if (c == '\n') {
             y += lf;
+            passes = printed = line_nlq = 0;
         } else if (c == 0x0C) {
             break;
         } else if (c == 0x0E) {
@@ -176,6 +188,11 @@ static page_t read_page(const buf_t *s)
         } else if (c == 0x0F) {
             dw = 0;
         } else if (c >= 0x20 && c < 0x7F) {
+            if (c != ' ') {
+                printed = 1;
+                line_nlq |= nlq;
+                if (line_nlq && passes) p.nlq_overprint = 1;
+            }
             if (prop) x_known = 0;
             else {
                 x += 144.0 / cpi * (dw ? 2 : 1);
@@ -319,6 +336,40 @@ static void test_page_names_outside_ascii(void)
     free(s.b);
 }
 
+/* Board 1's first print (2026-10-20) put whole strips and colour passes
+ * inches to the right, and wrapped an ESC F-placed "8" to the left margin.
+ * AirPrint's streams, which print right, never place the head; neither does
+ * the page. */
+static void test_page_no_head_placement(void)
+{
+    for (int r = IW_RIBBON_UNKNOWN; r <= IW_RIBBON_COLOUR; r++) {
+        tp_info_t info = info_for((iw_ribbon_t)r);
+        tp_result_t rc;
+        buf_t s = print_page(&info, &rc);
+        page_t p = read_page(&s);
+        CHECK_EQ_INT(p.f_used, 0);
+        CHECK_EQ_INT(p.nlq_overprint, 0);       // NLQ's own passes, never CR-only over them
+        CHECK_EQ_INT(p.rule_top_pin_only, 0);   // board 1's top pin is dead
+        free(s.b);
+    }
+}
+
+/* Every AppleTalk way in, named in full: the line under the right column
+ * goes on to a fifth row rather than being cut. */
+static void test_page_appletalk_in_full(void)
+{
+    tp_info_t info = info_for(IW_RIBBON_COLOUR);
+    info.appletalk = "AppleTalk port, networked Macs, Basilisk II, Infinite Mac";
+    tp_result_t rc;
+    buf_t s = print_page(&info, &rc);
+    page_t p = read_page(&s);
+    CHECK(has(&s, "AppleTalk port, networked Macs,"));
+    CHECK(has(&s, "Basilisk II, Infinite Mac"));
+    CHECK(p.max_x <= 1152.001);
+    CHECK(p.max_y <= 1512);
+    free(s.b);
+}
+
 static int stop_calls;
 static int stop_on_10th(void *ctx) { (void)ctx; return ++stop_calls >= 10; }
 
@@ -346,6 +397,8 @@ int main(void)
     test_page_tick();
     test_page_long_names();
     test_page_names_outside_ascii();
+    test_page_no_head_placement();
+    test_page_appletalk_in_full();
     test_page_stops();
     TEST_END;
 }
