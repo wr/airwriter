@@ -688,7 +688,9 @@ static void test_zone_pong(void)
     uint8_t zm[6];
     static const uint8_t base[6] = { 0x84, 0xF7, 0x03, 0x12, 0x34, 0x56 };
     et_zone_mac(base, zm);
-    static const uint8_t wantzm[6] = { 0x0A, 0xF7, 0x03, 0x12, 0x34, 0x56 };
+    // Infinite Mac's Basilisk II sends unicast only to MACs starting B2
+    // (ether_js.cpp GENERATED_ETHER_ADDR_PREFIX); anything else it drops.
+    static const uint8_t wantzm[6] = { 0xB2, 0xF7, 0x03, 0x12, 0x34, 0x56 };
     CHECK_EQ_MEM(zm, wantzm, 6);
 }
 

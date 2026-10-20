@@ -317,7 +317,7 @@ int    et_zone_pong(const uint8_t *frame, size_t n, const uint8_t mac[ETH_ALEN],
 ```
 
 - Rules: `et_tunnel_dest` gives the IP inside a `42 32 …` MAC, `0xFFFFFFFF` for `ET_BCAST` or
-  `ET_AT_MCAST`, else 0. `et_zone_mac` is `0A` + `base[1..5]`. `et_zone_parse` returns 1 for
+  `ET_AT_MCAST`, else 0. `et_zone_mac` is `B2` + `base[1..5]` (Infinite Mac sends unicast only to `B2…` MACs; this was `0A` until the bench found it). `et_zone_parse` returns 1 for
   a `"receive"` with a valid `packetArray` (every element 0–255, at most `cap`), 0 for any other
   `"type"`, −1 for anything malformed; it accepts JSON whitespace. `et_zone_pong` answers a
   26-byte frame whose bytes 14–21 are `pingPING`: dst = the ping's src, src = `mac`, length

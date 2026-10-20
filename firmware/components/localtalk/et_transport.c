@@ -30,7 +30,7 @@ int et_tunnel_dest(const uint8_t dst[ETH_ALEN], uint32_t *ip)
 void et_zone_mac(const uint8_t base[ETH_ALEN], uint8_t mac[ETH_ALEN])
 {
     memcpy(mac, base, ETH_ALEN);
-    mac[0] = 0x0A;
+    mac[0] = 0xB2;      // the only unicast Infinite Mac's emulators will send
 }
 
 int et_zone_name_ok(const char *zone)

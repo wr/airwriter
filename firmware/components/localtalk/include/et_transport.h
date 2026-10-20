@@ -31,7 +31,10 @@ void   et_tunnel_mac(uint32_t ip, uint8_t mac[ETH_ALEN]);
 // broadcast), or 0 when it goes nowhere.
 int    et_tunnel_dest(const uint8_t dst[ETH_ALEN], uint32_t *ip);
 
-// The board's zone MAC: locally administered (0A) and the station MAC's rest.
+// The board's zone MAC: B2 and the station MAC's rest. Infinite Mac's Basilisk
+// II sends unicast only to MACs starting B2 (its emulators' own; ether_js.cpp
+// GENERATED_ETHER_ADDR_PREFIX) and drops the rest, so a Mac could look the
+// board up but never open a connection to it. B2 is locally administered.
 void   et_zone_mac(const uint8_t base[ETH_ALEN], uint8_t mac[ETH_ALEN]);
 // 1 for 1 to ET_ZONE_MAX of A-Z a-z 0-9 - _ . (what goes into the relay's
 // URL as it is), else 0.
