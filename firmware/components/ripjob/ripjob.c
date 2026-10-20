@@ -19,6 +19,7 @@ typedef struct {
     ink_screens_t inks;
     uint8_t  *ibits[IW_INKS];
     uint8_t  *gray;          // an RGB row as gray, for a black ribbon
+    uint32_t  skip;          // rows of this page still to drop (top_margin < 0)
 } pipe_t;
 
 static void say(const ripjob_cfg_t *cfg, const char *fmt, ...)
@@ -42,7 +43,8 @@ static void on_row(void *ctx, const uint8_t *row, uint32_t w)
     pipe_t *p = (pipe_t *)ctx;
     ht_row(&p->ht, row, p->bits);
     if (p->cfg->row) p->cfg->row(p->cfg->row_ctx, p->bits, w, p->y);
-    iw_row(&p->iw, p->bits);
+    if (p->skip) p->skip--;
+    else iw_row(&p->iw, p->bits);
     p->y++;
 }
 
@@ -54,7 +56,8 @@ static void on_rgb_row(void *ctx, const uint8_t *row, uint32_t w)
     ink_screens_row(&p->inks, row, p->ibits);
     const uint8_t *const *bits = (const uint8_t *const *)p->ibits;
     if (p->cfg->ink_row) p->cfg->ink_row(p->cfg->row_ctx, bits, w, p->y);
-    iwc_row(p->iwc, bits);
+    if (p->skip) p->skip--;
+    else iwc_row(p->iwc, bits);
     p->y++;
 }
 
@@ -122,6 +125,7 @@ int ripjob_run(urf_t *u, const ripjob_cfg_t *cfg, ripjob_stats_t *st)
 
         p.dst_w = dst_w;
         p.y     = 0;
+        p.skip  = cfg->top_margin < 0 ? (uint32_t)(-cfg->top_margin / 2) : 0;
         if (st) { st->dst_w = dst_w; st->dst_h = dst_h; st->crop_per_side = crop_per_side; }
 
         if (cfg->page && cfg->page(cfg->page_ctx, pages, dst_w, dst_h)) {
@@ -148,6 +152,9 @@ int ripjob_run(urf_t *u, const ripjob_cfg_t *cfg, ripjob_stats_t *st)
             inks_ready = 1;
             iwc_init(p.iwc, dst_w, cfg->out, cfg->out_ctx);
             iwc_begin_page(p.iwc);
+            // The margin's blank rows: ibits are still all zeros here.
+            for (int r = 0; r < cfg->top_margin / 2; r++)
+                iwc_row(p.iwc, (const uint8_t *const *)p.ibits);
             if (rs_init_n(&rs, src_w, u->page.height, dst_w, dst_h, 3, on_rgb_row, &p)) {
                 rc = -1; goto page_cleanup;
             }
@@ -161,6 +168,7 @@ int ripjob_run(urf_t *u, const ripjob_cfg_t *cfg, ripjob_stats_t *st)
             ht_set_gain(&p.ht, cfg->gain);
             iw_init(&p.iw, dst_w, cfg->out, cfg->out_ctx);
             iw_begin_page(&p.iw);
+            for (int r = 0; r < cfg->top_margin / 2; r++) iw_row(&p.iw, p.bits);   // still zeros
 
             if (rs_init(&rs, src_w, u->page.height, dst_w, dst_h, on_row, &p)) {
                 rc = -1; goto page_cleanup;

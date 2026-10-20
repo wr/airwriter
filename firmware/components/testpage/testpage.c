@@ -350,7 +350,7 @@ static void text_section(tp_t *t)
 
 // ---------------------------------------------------------------- colour
 
-#define PH     88               // the still life's rows in the colour section
+#define PH     72               // the still life's rows in the colour section, 1 in
 #define PW     432              // and its dots across, 3 in
 #define RX     504              // where the ramps and steps start
 #define RW     (W - RX)
@@ -381,7 +381,7 @@ typedef struct {
 } photo_t;
 
 // The still life in four inks, beside a ramp of each ink, cyan, magenta,
-// yellow and black, 19 rows each on 23.
+// yellow and black, 16 rows each on 18.
 static int fill_colour_photo(void *ctx, uint32_t y, uint8_t *const bits[IW_INKS])
 {
     photo_t *p = ctx;
@@ -391,8 +391,8 @@ static int fill_colour_photo(void *ctx, uint32_t y, uint8_t *const bits[IW_INKS]
     for (int i = 0; i < IW_INKS; i++) memcpy(bits[i], p->ib[i], PW / 8);
 
     static const int order[4] = { IW_CYAN, IW_MAGENTA, IW_YELLOW, IW_BLACK };
-    uint32_t j = y / 23;
-    if (j >= 4 || y % 23 >= 19) return 0;
+    uint32_t j = y / 18;
+    if (j >= 4 || y % 18 >= 16) return 0;
     if (p->ramp_ink != order[j]) {
         if (p->ramp_ink >= 0) ht_free(&p->ramp);
         p->ramp_ink = order[j];
@@ -523,7 +523,7 @@ static void colour_section(tp_t *t)
 
 #define HW  216                     // a panel, 1.5 in
 #define HG  234                     // panel to panel
-#define HH  64                      // the still life's rows
+#define HH  56                      // the still life's rows
 
 static const ht_algo_t screens[5] = { HT_ATKINSON, HT_FLOYD, HT_BLUENOISE, HT_BAYER, HT_THRESHOLD };
 
@@ -601,7 +601,7 @@ static void halftone_section(tp_t *t)
     band(t, HH + 16, fill_panels, p);
     if (p->made) for (int k = 0; k < 5; k++) ht_free(&p->ht[k]);
     free(p);
-    feed(t, 4);
+    feed(t, 2);
     text(t, ESC "a0" ESC "E" "The ticked screen prints your pages. Change it on the Printer page "
             "of the settings.", 22);
 }
@@ -662,7 +662,7 @@ static void alignment_section(tp_t *t)
         l.n = 0;
         add(&l, ESC "a0" ESC "q");
         for (int i = 0; i < 4; i++) addv(&l, caps[r][i], 30, i < 3 ? 30 : 0);
-        line(t, &l, 20);
+        line(t, &l, 18);
     }
 }
 
@@ -679,14 +679,20 @@ tp_result_t tp_print(const tp_info_t *info, const tp_io_t *io)
         free(t.cols);
         return TP_NOMEM;
     }
-    enum { GAP = 12 };
+    enum { GAP = 10 };
 
+    // Laid out as an AirPrint page is, from the sheet's top edge: its content
+    // from 1 in down, where printing starts on paper loaded as Apple says
+    // (under the paper bail). The top margin setting moves it as it moves an
+    // AirPrint page, but drops no more than that blank inch: text cannot be
+    // cropped.
     sends(&t, ESC "c");
-    feed(&t, 72);                                   // the top margin, 1/2 in
+    int top = 144 + info->top_margin;
+    feed(&t, top > 0 ? top : 0);
     header(&t);
     rule(&t, 22);                               // its dot 8/144 down, as before
     identity(&t);
-    feed(&t, GAP + 4);
+    feed(&t, GAP + 2);
     text_section(&t);
     feed(&t, GAP);
     colour_section(&t);
@@ -694,7 +700,7 @@ tp_result_t tp_print(const tp_info_t *info, const tp_io_t *io)
     halftone_section(&t);
     feed(&t, GAP);
     alignment_section(&t);
-    feed(&t, 14 - RULE_DROP);
+    feed(&t, 12 - RULE_DROP);
     rule(&t, 10 + RULE_DROP);
     text(&t, ESC "a0" ESC "E" "AirWriter by Wells Workshop    wells.ee    github.com/wr/airwriter", 0);
 

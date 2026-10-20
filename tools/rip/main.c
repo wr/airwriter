@@ -80,12 +80,12 @@ static void on_ink_row(void *ctx, const uint8_t *const bits[IW_INKS], uint32_t w
 }
 
 /* The test page with board 1's details, for tools/iwview to draw. */
-static int print_testpage(const char *ribbon, const char *path, ht_algo_t algo, int gain)
+static int print_testpage(const char *ribbon, const char *path, ht_algo_t algo, int gain, int top)
 {
     tp_info_t info = {
         .version = "v0.2.0-29", .built = "Oct 20 2026", .model = "ImageWriter II",
         .name = "ImageWriter II", .host = "imagewriter-2434", .ip = "10.0.1.115",
-        .appletalk = "AppleTalk port", .screen = algo, .gain = gain,
+        .appletalk = "AppleTalk port", .screen = algo, .gain = gain, .top_margin = top,
         .ribbon = !strcmp(ribbon, "colour") ? IW_RIBBON_COLOUR
                 : !strcmp(ribbon, "black")  ? IW_RIBBON_BLACK : IW_RIBBON_UNKNOWN,
     };
@@ -108,10 +108,12 @@ static void usage(void)
 {
     fputs("usage: rip --in FILE [--out-stream FILE] [--out-preview FILE]\n"
           "           [--dither threshold|atkinson|floyd|bayer|bluenoise] [--colour]\n"
-          "           [--gain PERCENT]\n"
+          "           [--gain PERCENT] [--top-margin N]\n"
           "       rip --testpage colour|black|unknown --out-stream FILE [--dither ...] [--gain ...]\n"
           "  --colour   print RGB pages in four inks, as with the colour ribbon in\n"
           "  --gain     dot gain at a 50%% tint the tone curve makes up for (default 0, off)\n"
+          "  --top-margin  the board's top margin setting, 1/144 in: + adds paper ahead of\n"
+          "             each page, - drops its first rows (the board's default is -144)\n"
           "  --testpage the board's test page for that ribbon, as board 1 would print it;\n"
           "             tools/iwview/iwview.py draws the stream\n",
           stderr);
@@ -121,7 +123,7 @@ int main(int argc, char **argv)
 {
     const char *in = NULL, *out_stream = NULL, *out_preview = NULL;
     const char *dither = "atkinson", *testpage = NULL;
-    int colour = 0, gain = 0;
+    int colour = 0, gain = 0, top = 0;
 
     for (int i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "--in") && i + 1 < argc)               in = argv[++i];
@@ -131,6 +133,7 @@ int main(int argc, char **argv)
         else if (!strcmp(argv[i], "--colour"))                       colour = 1;
         else if (!strcmp(argv[i], "--gain") && i + 1 < argc)        gain = atoi(argv[++i]);
         else if (!strcmp(argv[i], "--testpage") && i + 1 < argc)    testpage = argv[++i];
+        else if (!strcmp(argv[i], "--top-margin") && i + 1 < argc)  top = atoi(argv[++i]);
         else { usage(); return 2; }
     }
     if (!in && !(testpage && out_stream)) { usage(); return 2; }
@@ -140,7 +143,7 @@ int main(int argc, char **argv)
         fprintf(stderr, "rip: unknown dither '%s'\n", dither);
         return 2;
     }
-    if (testpage) return print_testpage(testpage, out_stream, algo, gain);
+    if (testpage) return print_testpage(testpage, out_stream, algo, gain, top);
 
     FILE *f = fopen(in, "rb");
     if (!f) { perror(in); return 1; }
@@ -170,6 +173,7 @@ int main(int argc, char **argv)
         .dither   = algo,
         .gain     = gain,
         .colour   = colour,
+        .top_margin = top,
         .page     = out_preview ? on_page : NULL,
         .page_ctx = &h,
         .row      = out_preview ? on_row : NULL,

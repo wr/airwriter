@@ -107,6 +107,7 @@ typedef struct {
     int    f_used;              // ESC F anywhere (board 1 misplaced lines near it)
     int    nlq_overprint;       // NLQ text in a line printed in more than one pass
     int    rule_top_pin_only;   // an ESC V rule on the top pin alone (a dead pin hides it)
+    int    first_y;             // where anything first prints, -1 for nothing
 } page_t;
 
 static int num(const uint8_t *b, int n)
@@ -118,7 +119,7 @@ static int num(const uint8_t *b, int n)
 
 static page_t read_page(const buf_t *s)
 {
-    page_t p = { .last_k = 0 };
+    page_t p = { .last_k = 0, .first_y = -1 };
     double dpi = 80, cpi = 10;          // ESC c leaves 10 cpi on these DIP switches
     int prop = 0, dw = 0, lf = 24, y = 0, last_f = -1, x_known = 1;
     int nlq = 0, passes = 0, printed = 0, line_nlq = 0;
@@ -166,6 +167,7 @@ static page_t read_page(const buf_t *s)
                 if (k == 'V' && b[i] == 0x01) p.rule_top_pin_only = 1;
                 i += k == 'G' ? (size_t)n : 1;
                 printed = 1;
+                if (p.first_y < 0) p.first_y = y;
                 x += n * 144.0 / dpi * (dw ? 2 : 1);
                 if (x > p.max_x) p.max_x = x;
                 if (y + 16 > p.max_y) p.max_y = y + 16;
@@ -190,6 +192,7 @@ static page_t read_page(const buf_t *s)
         } else if (c >= 0x20 && c < 0x7F) {
             if (c != ' ') {
                 printed = 1;
+                if (p.first_y < 0) p.first_y = y;
                 line_nlq |= nlq;
                 if (line_nlq && passes) p.nlq_overprint = 1;
             }
@@ -370,6 +373,26 @@ static void test_page_appletalk_in_full(void)
     free(s.b);
 }
 
+/* The page is laid out as an AirPrint page is: from the sheet's top edge,
+ * its content from 1 in down. The top margin setting moves it as it moves an
+ * AirPrint page, but drops no more than that blank inch. */
+static void test_page_top_margin(void)
+{
+    static const struct { int top, first_y; } cases[] = {
+        { 0, 144 }, { -144, 0 }, { 72, 216 }, { -9, 135 }, { -216, 0 }, { 144, 288 },
+    };
+    for (size_t k = 0; k < sizeof cases / sizeof cases[0]; k++) {
+        tp_info_t info = info_for(IW_RIBBON_COLOUR);
+        info.top_margin = cases[k].top;
+        tp_result_t rc;
+        buf_t s = print_page(&info, &rc);
+        page_t p = read_page(&s);
+        CHECK_EQ_INT(rc, TP_DONE);
+        CHECK_EQ_INT(p.first_y, cases[k].first_y);
+        free(s.b);
+    }
+}
+
 static int stop_calls;
 static int stop_on_10th(void *ctx) { (void)ctx; return ++stop_calls >= 10; }
 
@@ -399,6 +422,7 @@ int main(void)
     test_page_names_outside_ascii();
     test_page_no_head_placement();
     test_page_appletalk_in_full();
+    test_page_top_margin();
     test_page_stops();
     TEST_END;
 }

@@ -24,6 +24,7 @@ typedef struct {
     iw_ribbon_t ribbon;
     ht_algo_t   screen;       // the screen pages print with
     int         gain;         // its dot gain curve, halftone.h ht_set_gain
+    int         top_margin;   // the top margin setting, 1/144 in (ripjob_cfg_t)
 } tp_info_t;
 
 typedef struct {
