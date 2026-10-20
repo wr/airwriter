@@ -156,6 +156,20 @@ size_t et_radio_normalize(const uint8_t *in, size_t n, uint8_t *out, size_t cap)
         }
         return elap_build(out, cap, in, in + 6, t == 0x80F3 ? ET_AARP : ET_DDP, in + 14, len);
     }
+    // 802.3 + SNAP. The board's Wi-Fi hands these over with a length field of
+    // 0 (seen from a BlueSCSI's DaynaPORT, W-1078): rebuild it from what the
+    // frame carries, the DDP header's own length or AARP's fixed 28.
+    if (t == 0 && n >= ELAP_HDR + 2 && in[14] == 0xAA && in[15] == 0xAA && in[16] == 0x03) {
+        static const uint8_t ddp[5] = { 0x08, 0x00, 0x07, 0x80, 0x9B };
+        static const uint8_t aarp[5] = { 0x00, 0x00, 0x00, 0x80, 0xF3 };
+        size_t len;
+        if (!memcmp(in + 17, ddp, 5)) len = (size_t)((in[ELAP_HDR] & 0x03) << 8 | in[ELAP_HDR + 1]);
+        else if (!memcmp(in + 17, aarp, 5)) len = AARP_LEN;
+        else return 0;
+        if (len > n - ELAP_HDR) return 0;
+        return elap_build(out, cap, in, in + 6, !memcmp(in + 17, aarp, 5) ? ET_AARP : ET_DDP,
+                          in + ELAP_HDR, len);
+    }
     elap_t e;
     if (n > cap || elap_parse(in, n, &e)) return 0;
     memcpy(out, in, n);

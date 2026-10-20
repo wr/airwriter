@@ -77,7 +77,7 @@ static uint32_t   s_tun_drops;
 // The radio: frames in from lwIP's thread, out through the Wi-Fi driver.
 static QueueHandle_t s_rin;
 static uint8_t    s_sta_mac[ETH_ALEN];
-static volatile uint32_t s_radio_in_drops, s_radio_out_drops;
+static volatile uint32_t s_radio_in_drops, s_radio_out_drops, s_radio_unknown, s_radio_kept;
 
 // The relay.
 static esp_websocket_client_handle_t s_ws;
@@ -177,11 +177,13 @@ err_t ethertalk_radio_input(struct pbuf *p, struct netif *netif)
     (void)netif;
     static uint8_t raw[ELAP_MAX_FRAME + 64];       // lwIP's thread only
     static zframe_t z;
+    s_radio_unknown++;
     if (!s_running || !s_radio_on || !s_rin || p->tot_len > sizeof raw) return ERR_ARG;
     u16_t n = pbuf_copy_partial(p, raw, sizeof raw, 0);
     size_t m = et_radio_normalize(raw, n, z.f, sizeof z.f);
     if (!m) return ERR_ARG;
     z.n = (uint16_t)m;
+    s_radio_kept++;
     if (xQueueSend(s_rin, &z, 0) != pdTRUE) s_radio_in_drops++;
     pbuf_free(p);
     return ERR_OK;
@@ -753,10 +755,12 @@ void ethertalk_json(char *buf, size_t cap)
     xSemaphoreGive(s_lock);
     if (p < end)
         p += snprintf(p, end - p,
-            ",\"radio_drops\":{\"in\":%lu,\"out\":%lu},\"tunnel_drops\":%lu,\"relay\":{\"connected\":%s,\"in_drops\":%lu,\"out_drops\":%lu,"
+            ",\"radio_drops\":{\"in\":%lu,\"out\":%lu,\"unknown_frames\":%lu,\"appletalk_frames\":%lu},"
+            "\"tunnel_drops\":%lu,\"relay\":{\"connected\":%s,\"in_drops\":%lu,\"out_drops\":%lu,"
             "\"bad_messages\":%lu,\"pongs\":%lu,\"last_error\":\"%s\"},"
             "\"internal_ram\":{\"free\":%u,\"largest\":%u,\"lowest\":%u},",
             (unsigned long)s_radio_in_drops, (unsigned long)s_radio_out_drops,
+            (unsigned long)s_radio_unknown, (unsigned long)s_radio_kept,
             (unsigned long)s_tun_drops, s_ws_up ? "true" : "false",
             (unsigned long)s_zone_in_drops, (unsigned long)s_zone_out_drops,
             (unsigned long)s_zone_bad, (unsigned long)s_zone_pongs, s_zone_err,

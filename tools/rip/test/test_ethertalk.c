@@ -730,6 +730,34 @@ static void test_radio_normalize(void)
     CHECK_EQ_INT(et_radio_normalize(e2p, sizeof e2p, out, sizeof out), n);
     CHECK_EQ_MEM(out, in, n);
 
+    // The SE/30's Chooser lookup as board 1's Wi-Fi handed it over (BlueSCSI
+    // DaynaPORT, 2026-10-20): 802.3 + SNAP with a length field of 0. Its
+    // length comes back from the DDP header (36), so 8 + 36.
+    static const uint8_t se30[58] = {
+        0x09,0x00,0x07,0xff,0xff,0xff, 0x00,0x80,0x19,0x64,0xd3,0x64, 0x00,0x00,
+        0xaa,0xaa,0x03,0x08,0x00,0x07,0x80,0x9b,
+        0x00,0x24,0x00,0x00,0x00,0x00,0xff,0x00,0xff,0x53,0x02,0xfd,0x02,
+        0x21,0x30,0xff,0x00,0x53,0xfd,0x00,0x01,'=',0x0b,'I','m','a','g','e','W','r','i','t','e','r',0x01,'*' };
+    m = et_radio_normalize(se30, sizeof se30, out, sizeof out);
+    CHECK_EQ_INT(m, ELAP_MIN_FRAME);
+    CHECK_EQ_INT(out[12], 0);
+    CHECK_EQ_INT(out[13], 8 + 36);
+    elap_t e;
+    CHECK_EQ_INT(elap_parse(out, m, &e), 0);
+    CHECK_EQ_INT(e.proto, ET_DDP);
+    CHECK_EQ_INT(e.len, 36);
+    CHECK_EQ_MEM(e.data, se30 + 22, 36);
+    // A zero-length AARP likewise (28).
+    n = elap_build(in, sizeof in, ET_AT_MCAST, THEM, ET_AARP, aarp, sizeof aarp);
+    in[12] = 0; in[13] = 0;
+    CHECK_EQ_INT(et_radio_normalize(in, n, out, sizeof out), n);
+    CHECK_EQ_INT(out[13], 8 + AARP_LEN);
+    // A DDP length past the frame is still refused.
+    uint8_t bad[58];
+    memcpy(bad, se30, sizeof bad);
+    bad[23] = 0x60;
+    CHECK_EQ_INT(et_radio_normalize(bad, sizeof bad, out, sizeof out), 0);
+
     // Anything else is not ours: IPv4, ARP, other SNAP, runts.
     uint8_t ip[60] = {0};
     ip[12] = 0x08; ip[13] = 0x00;
