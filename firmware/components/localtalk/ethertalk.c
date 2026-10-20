@@ -64,6 +64,7 @@ static unsigned   s_ev_head, s_ev_n;
 static int        s_tunnel_on = 1;
 static volatile int s_radio_on = 1;
 static char       s_zone_name[ET_ZONE_MAX + 1];
+static int        s_zone_on;               // the relay runs when on and named
 static int        s_want_tunnel = -1;      // -1: nothing to do
 static int        s_want_radio = -1;
 static int        s_want_zone;
@@ -398,6 +399,7 @@ static void apply_pending(void)
     uint32_t ip = s_new_ip;
     char zone[ET_ZONE_MAX + 1];
     memcpy(zone, s_zone_name, sizeof zone);
+    if (!s_zone_on) zone[0] = '\0';
     s_want_tunnel = -1;
     s_want_radio = -1;
     s_want_zone = 0;
@@ -549,10 +551,11 @@ static void et_task(void *arg)
 
 // ------------------------------------------------------------- settings
 
-static void load_settings(int *tunnel, int *radio, char *zone, size_t cap)
+static void load_settings(int *tunnel, int *radio, int *infinite, char *zone, size_t cap)
 {
     *tunnel = 1;
     *radio = 1;
+    *infinite = 0;
     zone[0] = '\0';
     nvs_handle_t h;
     if (nvs_open("et", NVS_READONLY, &h) != ESP_OK) return;
@@ -561,10 +564,13 @@ static void load_settings(int *tunnel, int *radio, char *zone, size_t cap)
     if (nvs_get_u8(h, "radio", &t) == ESP_OK) *radio = t != 0;
     size_t l = cap;
     if (nvs_get_str(h, "zone", zone, &l) != ESP_OK || !et_zone_name_ok(zone)) zone[0] = '\0';
+    // Infinite Mac's switch; before it existed, a zone name meant on.
+    if (nvs_get_u8(h, "zone_on", &t) == ESP_OK) *infinite = t != 0;
+    else *infinite = zone[0] != '\0';
     nvs_close(h);
 }
 
-esp_err_t ethertalk_apply(int tunnel, int radio, const char *zone)
+esp_err_t ethertalk_apply(int tunnel, int radio, int infinite, const char *zone)
 {
     if (zone && zone[0] && !et_zone_name_ok(zone)) return ESP_ERR_INVALID_ARG;
     nvs_handle_t h;
@@ -572,6 +578,7 @@ esp_err_t ethertalk_apply(int tunnel, int radio, const char *zone)
     if (err != ESP_OK) return err;
     if (tunnel >= 0) nvs_set_u8(h, "tunnel", tunnel ? 1 : 0);
     if (radio >= 0) nvs_set_u8(h, "radio", radio ? 1 : 0);
+    if (infinite >= 0) nvs_set_u8(h, "zone_on", infinite ? 1 : 0);
     if (zone) nvs_set_str(h, "zone", zone);
     err = nvs_commit(h);
     nvs_close(h);
@@ -591,19 +598,24 @@ esp_err_t ethertalk_apply(int tunnel, int radio, const char *zone)
         s_zone_name[ET_ZONE_MAX] = '\0';
         s_want_zone = 1;
     }
+    if (infinite >= 0 && (infinite != 0) != s_zone_on) {
+        s_zone_on = infinite != 0;
+        s_want_zone = 1;
+    }
     xSemaphoreGive(s_lock);
     return err;
 }
 
-void ethertalk_settings(int *tunnel, int *radio, char *zone, size_t cap)
+void ethertalk_settings(int *tunnel, int *radio, int *infinite, char *zone, size_t cap)
 {
     if (!s_running) {
-        load_settings(tunnel, radio, zone, cap);
+        load_settings(tunnel, radio, infinite, zone, cap);
         return;
     }
     xSemaphoreTake(s_lock, portMAX_DELAY);
     *tunnel = s_tunnel_on;
     *radio = s_radio_on;
+    *infinite = s_zone_on;
     snprintf(zone, cap, "%s", s_zone_name);
     xSemaphoreGive(s_lock);
 }
@@ -626,7 +638,7 @@ esp_err_t ethertalk_start(const ethertalk_cfg_t *cfg)
     strncpy(s_type, cfg->type, sizeof s_type - 1);
     s_on_event = cfg->on_event;
     int radio_on = 1;
-    load_settings(&s_tunnel_on, &radio_on, s_zone_name, sizeof s_zone_name);
+    load_settings(&s_tunnel_on, &radio_on, &s_zone_on, s_zone_name, sizeof s_zone_name);
     s_radio_on = radio_on;
 
     // Field by field: a compound literal would put two links (~7 KB) on this stack.
@@ -662,13 +674,14 @@ esp_err_t ethertalk_start(const ethertalk_cfg_t *cfg)
         if (s_tun.active) note("tunnel", "listening for Basilisk II");
     }
     s_running = 1;
-    if (s_zone_name[0]) zone_start(s_zone_name);
+    if (s_zone_on && s_zone_name[0]) zone_start(s_zone_name);
     if (xTaskCreatePinnedToCore(et_task, "ethertalk", 8192, NULL, 4, NULL, 0) != pdPASS) {
         s_running = 0;
         return ESP_ERR_NO_MEM;
     }
     ESP_LOGI(TAG, "EtherTalk as %s:%s@* (radio %s, tunnel %s, zone %s)", cfg->object, cfg->type,
-             s_radio_on ? "on" : "off", s_tunnel_on ? "on" : "off", s_zone_name[0] ? "set" : "off");
+             s_radio_on ? "on" : "off", s_tunnel_on ? "on" : "off",
+             s_zone_on && s_zone_name[0] ? "on" : "off");
     return ESP_OK;
 }
 
@@ -742,7 +755,7 @@ void ethertalk_json(char *buf, size_t cap)
     xSemaphoreTake(s_lock, portMAX_DELAY);
     const char *ts = !s_tunnel_on ? "off" : s_sock < 0 ? "no socket" : !s_ip ? "no address"
                    : s_tun.link.node.phase == LT_ONLINE ? "online" : "acquiring";
-    const char *zs = !s_zone_name[0] ? "off" : !s_ws_up ? "connecting"
+    const char *zs = !s_zone_on || !s_zone_name[0] ? "off" : !s_ws_up ? "connecting"
                    : s_zone.link.node.phase == LT_ONLINE ? "online" : "acquiring";
     const char *rs = !s_radio_on ? "off" : !s_ip ? "no address"
                    : s_radio.link.node.phase == LT_ONLINE ? "online" : "acquiring";

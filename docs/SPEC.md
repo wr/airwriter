@@ -172,6 +172,7 @@ ESP-IDF 5.x, C. Project at `firmware/`. Components under `firmware/components/`:
 | `imagewriter` | Column transpose, escape code emission |
 | `serial_out` | UART driver with hardware CTS, DTR watchdog |
 | `webui` | Config page on port 80 |
+| `localtalk` | AppleTalk: the cable's LocalTalk node, EtherTalk for Basilisk II and Infinite Mac, the printer they share (§3.13) |
 | `printer_state` | Job queue and state machine |
 
 ### 3.2 Discovery
@@ -533,6 +534,57 @@ rolled back, and tries each release once per check. The panel shows progress thr
 
 **Web.** `GET /api/update`; `POST /api/update/check`, `/api/update/install` (optional
 `{"tag":"vX.Y.Z"}`, which may be older or a prerelease), `/api/update/auto` (`{"auto":true}`).
+
+### 3.13 AppleTalk: the cable, Basilisk II and Infinite Mac
+
+To a Mac, AirWriter is Apple's ImageWriter LocalTalk Option Card: the Chooser's AppleTalk
+ImageWriter finds `<queue>:ImageWriter@*` by NBP and prints over PAP, and the job is the Mac
+driver's own ImageWriter stream, which goes to the printer as it is. Four links reach that
+printer (`components/localtalk`):
+
+- **The cable** (`W-1051 LocalTalk node: show up in the Chooser as an ImageWriter`, `W-1053
+  LocalTalk: print PAP jobs from the Mac's AppleTalk ImageWriter driver`): LocalTalk through
+  TashTalk in U7 on J4, in DIP mode 2. LLAP node acquisition by ENQ (TashTalk answers ENQ and
+  RTS for the claimed ID), short DDP headers.
+- **Basilisk II's UDP tunnel** (W-1076, design `docs/superpowers/specs/2026-10-19-ethertalk-design.md`):
+  EtherTalk frames as UDP datagrams to port 6066 on the home network (`udptunnel true` in
+  Basilisk II's prefs; SheepShaver has no tunnel). The board's MAC there is `42 32` and its IPv4
+  address. On by default; NVS `et`/`tunnel`.
+- **The board's own Wi-Fi** (`W-1078 EtherTalk over Wi-Fi: print from real Macs (BlueSCSI,
+  Ethernet Macs)`): EtherTalk frames to and from the station interface itself, for Macs on the
+  home network (Ethernet, or Wi-Fi through a BlueSCSI's DaynaPORT). lwIP's
+  `LWIP_HOOK_UNKNOWN_ETH_PROTOCOL` hands over the frames it does not know; they go out through
+  `esp_wifi_internal_tx`. The Wi-Fi delivers 802.3 frames with a length of 0, rebuilt from the
+  DDP header (or AARP's 28). On by default; NVS `et`/`radio`.
+- **Infinite Mac's zone relay** (W-1076): EtherTalk frames as JSON over a WebSocket to
+  `wss://infinitemac.org/zone/<zone>/websocket`, as the Basilisk II and SheepShaver Macs in an
+  infinitemac.org tab started with `?appleTalk=<zone>` use. On while NVS `et`/`zone_on` is set
+  and `et`/`zone` holds 1 to 32 of `A-Z a-z 0-9 - _ .` (a board from before `zone_on` reads a
+  zone name as on); the name works like a password and appears only in `/api/et/settings`. The board's MAC there is `B2` and the rest of its station MAC: Infinite Mac's emulators send
+  unicast only to `B2…` MACs, their own kind, and drop the rest. It answers
+  Infinite Mac's ping frames, and reconnects after 1 s, doubling to 60 s.
+
+All three EtherTalk links are AppleTalk Phase 2 with no router: an address in the startup range
+(network FF00-FFFE, node 1-253) taken by 10 AARP probes 200 ms apart and kept in NVS for the
+next boot, AARP answered for it, MACs learned from AARP and every datagram received, long DDP
+headers, broadcasts to `09:00:07:FF:FF:FF`. A network with a router is noted, not joined.
+
+**One printer.** Every link prints through one spool and print task (`at_printer.c`): one job
+at a time under the job lock, so a Mac whose OpenConn finds the printer taken (an IPP job, the
+test page, another link's job) is told busy, and each node's status word says busy unless its
+own job holds the printer. Jobs are named by link ("LocalTalk job", "Basilisk II job",
+"Infinite Mac job"); the last one's bytes are at `GET /api/lt/job`. An EtherTalk connection
+that sends nothing for 60 s while the printer is ready is closed, so an idle relay peer cannot
+hold the printer from AirPrint; the cable keeps its own timers. A link that drops (the relay
+closing, Wi-Fi going, a new IP) ends its job abandoned at once.
+
+**Memory.** mbedTLS allocates from PSRAM (`CONFIG_MBEDTLS_EXTERNAL_MEM_ALLOC`): a held TLS
+session in internal RAM left Wi-Fi and lwIP starving.
+
+**Web.** `GET /api/lt` (the cable node), `GET /api/et` (both EtherTalk links, the shared
+printer, internal RAM, the log), `GET`/`POST /api/et/settings`
+(`{"radio":true,"tunnel":true,"infinite":true,"zone":"…"}`; 400 for a zone name outside the rule
+above).
 
 ---
 

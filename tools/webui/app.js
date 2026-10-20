@@ -269,6 +269,101 @@ $('ltflash').onclick=async()=>{
   if(r.ok) $('flashkey').classList.add('hide');
 };
 
+/* ── classic macs (W-1076, W-1078) ──────────────────────────────── */
+/* Three ways in need nothing set: one sentence names them, and drops or
+   qualifies one only when it is off. Infinite Mac is the one setting; its zone
+   name works like a password, so the page makes one up rather than asking for
+   one; it can be typed over to join a zone someone already uses, and its copy
+   button saves while it is edited. Turning it off keeps the name. */
+const ET_MAC='https://infinitemac.org/1998/Mac%20OS%208.1?appleTalk=';
+const ET_ADJ=['quiet','amber','brisk','calm','dapper','eager','fuzzy','gentle','jolly','lucky','merry',
+  'nimble','plucky','rosy','snug','sunny','tidy','witty','zesty','cosmic','dusty','golden','mellow',
+  'rustic','silver','velvet','woolly','breezy','cheery','frosty','lively','spry'];
+const ET_NOUN=['otter','badger','heron','lynx','marten','newt','owl','puffin','quail','robin','stoat',
+  'tern','vole','wren','yak','zebra','bison','crane','dingo','egret','ferret','gecko','hare','ibis',
+  'koala','lemur','moose','okapi','panda','raven','seal','tapir'];
+const ET_SAY='On the Mac, choose AppleTalk ImageWriter in the Chooser.';
+function etName(){
+  const r=new Uint32Array(3); crypto.getRandomValues(r);
+  return ET_ADJ[r[0]%ET_ADJ.length]+'-'+ET_NOUN[r[1]%ET_NOUN.length]+'-'+(1000+r[2]%9000);
+}
+let etZone='', etOn=false, etErr='';
+function etDraw(e, lt){
+  // The cable's node runs in DIP mode 2 (switch 2 on); the other two are on
+  // unless turned off through /api/et/settings.
+  const ways=[lt&&lt.on?'on the LocalTalk port':'on the LocalTalk port once DIP switch 2 is on'];
+  if(!e||!e.on||e.radio.state!=='off') ways.push('from Ethernet Macs and BlueSCSI Wi-Fi Macs on this network');
+  if(!e||!e.on||e.tunnel.state!=='off') ways.push('from Basilisk II with “Tunnel MacOS Networking over UDP” turned on');
+  const last=ways.pop();
+  $('etbody').textContent='Classic Macs print here over AppleTalk: '
+    +(ways.length?ways.join(', ')+(ways.length>1?',':'')+' and ':'')+last+'.';
+  const z=e&&e.on?e.zone:null;
+  $('etzst').textContent = !etOn||!z ? ''
+    : z.state==='online' ? 'Connected. '
+    : z.state==='acquiring' ? 'Joining the zone… '
+    : e.relay.last_error ? 'Can’t reach Infinite Mac ('+e.relay.last_error+'). Trying again. '
+    : 'Connecting… ';
+  $('etsay').textContent=etErr||ET_SAY;
+}
+function etZoneDraw(){
+  $('etinf').checked=etOn;
+  $('etzonebox').classList.toggle('hide',!etOn);
+  $('etzone').value=etZone;
+  $('etcopy').textContent='copy';
+  $('etopen').href=ET_MAC+encodeURIComponent(etZone);
+}
+async function etPoll(){
+  let e=null, lt=null;
+  try{ e=await(await fetch('/api/et')).json(); }catch(x){}
+  try{ lt=await(await fetch('/api/lt')).json(); }catch(x){}
+  etDraw(e, lt);
+}
+async function etPost(body){
+  etErr='';
+  try{
+    const r=await fetch('/api/et/settings',{method:'POST',body:JSON.stringify(body)});
+    if(r.status===400) etErr='Zone names are 1 to 32 letters, digits, dashes, underscores and dots.';
+    else if(!r.ok) etErr='Not saved.';
+    else{ const s=await r.json(); etOn=!!s.infinite; etZone=s.zone||''; etZoneDraw(); }
+  }catch(x){ etErr='No answer from AirWriter.'; }
+  $('etsay').textContent=etErr||ET_SAY;
+  if(!etErr) setTimeout(etPoll,1500);
+  return !etErr;
+}
+fetch('/api/et/settings').then(r=>r.json()).then(s=>{
+  etOn=!!s.infinite; etZone=s.zone||''; etZoneDraw(); etPoll();
+}).catch(()=>etPoll());
+$('etinf').onchange=async()=>{
+  const on=$('etinf').checked, body={infinite:on};
+  if(on&&!etZone) body.zone=etName();
+  if(await etPost(body)) noted('sec-et', on?'Infinite Mac on':'Infinite Mac off');
+  else $('etinf').checked=!on;
+};
+$('etnew').onclick=async()=>{
+  if(!confirm('Make a new zone name? Infinite Macs using the old one will need the new one.')) return;
+  if(await etPost({zone:etName()})) noted('sec-et','new name');
+};
+const etEdited=()=>$('etzone').value.trim()!==etZone;
+async function etSaveName(){
+  const z=$('etzone').value.trim();
+  if(!z){ etZoneDraw(); return; }
+  if(await etPost({zone:z})) noted('sec-et','saved');
+}
+$('etzone').oninput=()=>{ $('etcopy').textContent=etEdited()?'save':'copy'; };
+$('etzone').onkeydown=e=>{ if(e.key==='Enter'){ e.preventDefault(); if(etEdited()) etSaveName(); } };
+$('etcopy').onclick=async()=>{
+  if(etEdited()){ etSaveName(); return; }
+  const f=$('etzone'); if(!f.value) return;
+  let ok=0;
+  try{ await navigator.clipboard.writeText(f.value); ok=1; }
+  catch(x){
+    f.focus(); f.select(); f.setSelectionRange(0,f.value.length);
+    try{ ok=document.execCommand('copy'); }catch(x2){}
+  }
+  noted('sec-et', ok?'name copied':'name selected');
+};
+setInterval(etPoll,5000);
+
 /* ── footer ────────────────────────────────────────────────────────── */
 /* The project's stars, asked of GitHub by the browser, not the board, and
    kept an hour like the network list. With no internet (setup mode, or a

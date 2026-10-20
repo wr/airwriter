@@ -6,6 +6,18 @@ Traps already explained in a code comment are listed only when the comment is ea
 
 ## Firmware, FreeRTOS, ESP-IDF
 
+- **A held TLS session in internal RAM starves Wi-Fi.** With mbedTLS on internal RAM, Infinite
+  Mac's relay (W-1076) took ~45 KB and left 4-13 KB (91 bytes at a handshake's worst): the
+  settings page stalled 25 s at a time and every reconnect failed. `CONFIG_MBEDTLS_EXTERNAL_MEM_ALLOC`
+  in `sdkconfig.defaults.esp32s3` fixed it (~42 KB free with the relay up). `/api/et`
+  `internal_ram` shows free, largest block and the low mark without a console.
+- **`esp_websocket_client` holds its lock while it runs your event handler.** A handler that
+  takes a lock your own task holds while calling `esp_websocket_client_send_text` deadlocks. The
+  relay handler only queues and sets flags; sends happen outside the EtherTalk lock.
+- **`esp_websocket_client` keeps the last handshake's status after a failed attempt.** An
+  `ERROR` event reads "101" (the previous success) when the real failure is TLS or a socket;
+  report the TLS error first.
+
 - **A semaphore taken on one task and given on another must be binary, not a mutex.** A mutex
   given by a non-holder trips `xTaskPriorityDisinherit` and panics the board after every job.
   Both carry the comment now. Bit `s_job_lock`
@@ -130,6 +142,16 @@ Traps already explained in a code comment are listed only when the comment is ea
 - **The home mesh: a fast scan joins the first node that answers.** It took a far node on
   channel 1 (−80 to −87 dBm) over a −46 dBm node in the same room; uploads ran at ~6 KB/s and an
   OTA failed. Firmware now scans all channels and joins the strongest AP; don't revert that.
+- **The ESP32's Wi-Fi hands EtherTalk frames over with an 802.3 length of 0.** Seen from a
+  BlueSCSI's DaynaPORT (W-1078): the SNAP header and the DDP datagram are intact, the length
+  field is not. `et_radio_normalize` rebuilds it from the DDP header; don't trust it.
+- **Infinite Mac's emulators send unicast only to MACs starting `B2`.** Theirs all do
+  (`ether_js.cpp`); any other destination is dropped, so a board with another MAC answers the
+  Chooser's lookup and never gets the OpenConn. The zone MAC is `B2` and the station MAC's rest.
+- **An OTA refused as "not signed with this board's key, or damaged" can be a cut upload.** Seen
+  once on W-1076's bench with a correctly signed image (`python -m espsecure verify_signature
+  --version 2 --keyfile firmware/keys/airwriter-release.pub.pem build/airwriter.bin` passed); the
+  same file went in on the next try. Verify the image, then retry once.
 - **Never OTA while a job prints.** It cut two jobs on 2026-10-15. Since W-1048 `/update` refuses
   (409) while a job holds the job lock and gives way to one that arrives mid-upload, but an
   image from before W-1048 still on a board does not. Bench rule in AGENTS.md.

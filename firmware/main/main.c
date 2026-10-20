@@ -1265,16 +1265,16 @@ static void et_json(void *ctx, char *buf, size_t cap)
     ethertalk_json(buf, cap);
 }
 
-static void et_settings_get(void *ctx, int *tunnel, int *radio, char *zone, size_t cap)
+static void et_settings_get(void *ctx, int *tunnel, int *radio, int *infinite, char *zone, size_t cap)
 {
     (void)ctx;
-    ethertalk_settings(tunnel, radio, zone, cap);
+    ethertalk_settings(tunnel, radio, infinite, zone, cap);
 }
 
-static int et_settings_set(void *ctx, int tunnel, int radio, const char *zone)
+static int et_settings_set(void *ctx, int tunnel, int radio, int infinite, const char *zone)
 {
     (void)ctx;
-    esp_err_t err = ethertalk_apply(tunnel, radio, zone);
+    esp_err_t err = ethertalk_apply(tunnel, radio, infinite, zone);
     if (err == ESP_ERR_INVALID_ARG) return -1;
     if (err != ESP_OK) ESP_LOGE(TAG, "EtherTalk settings not saved: %s", esp_err_to_name(err));
     return 0;

@@ -110,12 +110,12 @@ static esp_err_t et_get(httpd_req_t *req)
 
 static esp_err_t et_settings_reply(httpd_req_t *req)
 {
-    int tunnel = 1, radio = 1;
+    int tunnel = 1, radio = 1, infinite = 0;
     char zone[40] = "";
-    s_cfg.et_settings_get(s_cfg.ctx, &tunnel, &radio, zone, sizeof zone);
-    char out[112];
-    snprintf(out, sizeof out, "{\"radio\":%s,\"tunnel\":%s,\"zone\":\"%s\"}",
-             radio ? "true" : "false", tunnel ? "true" : "false", zone);
+    s_cfg.et_settings_get(s_cfg.ctx, &tunnel, &radio, &infinite, zone, sizeof zone);
+    char out[136];
+    snprintf(out, sizeof out, "{\"radio\":%s,\"tunnel\":%s,\"infinite\":%s,\"zone\":\"%s\"}",
+             radio ? "true" : "false", tunnel ? "true" : "false", infinite ? "true" : "false", zone);
     httpd_resp_set_type(req, "application/json");
     return httpd_resp_sendstr(req, out);
 }
@@ -258,7 +258,7 @@ static esp_err_t et_settings_post(httpd_req_t *req)
     char zone[64];
     int has_zone = json_str(body, "zone", zone, sizeof zone);
     if (s_cfg.et_settings_set(s_cfg.ctx, json_bool(body, "tunnel"), json_bool(body, "radio"),
-                              has_zone ? zone : NULL))
+                              json_bool(body, "infinite"), has_zone ? zone : NULL))
         return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "zone: 1 to 32 of A-Z a-z 0-9 - _ .");
     led_grid_blip(LG_BLIP_SAVED);
     return et_settings_reply(req);

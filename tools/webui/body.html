@@ -77,6 +77,30 @@
     </div>
   </div>
 
+  <!-- W-1076, W-1078: classic Macs print here over AppleTalk four ways. Three
+       need nothing set, so they are one sentence, which changes only when one is
+       off. Infinite Mac reaches a server off the network, so it alone is a
+       setting; its zone name works like a password and is made up for you, or
+       typed in to join a zone someone already uses. -->
+  <div class=sec id=sec-et>
+    <h2>classic macs</h2>
+    <p class='say plain' id=etbody>Classic Macs print here over AppleTalk: on the LocalTalk port, from
+      Ethernet Macs and BlueSCSI Wi-Fi Macs on this network, and from Basilisk II with “Tunnel
+      MacOS Networking over UDP” turned on.</p>
+    <label class='check top'><input type=checkbox id=etinf>
+      <span>Print from Infinite Mac<small>Macs running in a web browser at infinitemac.org
+        reach the printer through its server.</small></span></label>
+    <div class='hide inset' id=etzonebox>
+      <label for=etzone>zone name</label>
+      <div class=withact><input id=etzone autocomplete=off autocapitalize=off spellcheck=false
+        maxlength=32><button class=act id=etcopy type=button>copy</button></div>
+      <p class=say><span id=etzst></span>Anyone with this name can print here.
+        <a id=etopen target=_blank rel=noopener>Open Infinite Mac with it</a> or
+        <a id=etnew>make a new one</a>.</p>
+    </div>
+    <div class=row><p class=say id=etsay>On the Mac, choose AppleTalk ImageWriter in the Chooser.</p></div>
+  </div>
+
   <div class=sec id=sec-firmware>
     <h2>firmware</h2>
     <label class=check><input type=checkbox id=fwauto>Install new releases automatically</label>
