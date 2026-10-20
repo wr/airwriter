@@ -17,12 +17,14 @@ Inside the 0.5 in top and bottom margins AirPrint pages use, 8 in (1152 dots) wi
    dots by 2 rows, ordered screen, in the four inks on a colour ribbon) beside "AirWriter" in
    Apple Garamond Light, the settings page's title face, and "Test page" right-aligned in the
    same face, both as bit images. A one-dot rule.
-2. **The board**, correspondence at 12 cpi, two columns (labels 11 characters; the right
-   column at character 46). Left: Printer (model and ribbon), Name, Address (host name and IP),
-   Settings (its URL). Right: Firmware (version), Built (build date), Halftone (the screen in
-   use), AppleTalk (the ways in that are on, or Off). A value too long for its column is cut.
-   In setup mode the Address row reads "Wi-Fi  join AirWriter-xxxx" and Settings
-   "http://192.168.4.1".
+2. **The board**, correspondence at 12 cpi, two columns (labels 11 characters; left values at
+   most 34; the right column at character 47, its values at most 38). Left: Printer (model and
+   ribbon), Name, Address (host name and IP), Settings (its URL). Right: Firmware (version),
+   Built (build date), Halftone (the screen in use), AppleTalk (the ways in that are on, as the
+   settings page's cards name them, or Off). A value too long for its column is cut; anything
+   but printable ASCII prints as one '?' a character. Before the network gives an address the
+   IP reads "no IP yet"; in setup mode the Address row reads "Wi-Fi  join AirWriter-xxxx" and
+   Settings "http://192.168.4.1".
 3. **Text**, all in the printer's own fonts: the pangram in draft, correspondence and NLQ at
    10 cpi and in NLQ proportional; the pangram at 9, 10, 12, 13.4, 15 and 17 cpi; every
    printable character at 17 cpi; bold, underline, double width, half height, superscript and
@@ -62,8 +64,10 @@ for the screens to show their differences.
 - About 57 KB of stream on a colour ribbon, 41 KB on black.
 - Cancellable as before: the builder checks a stop flag before every line and strip; a cut
   page is resynced before the next job, as any cut job is.
-- RAM: per strip and per row, never a page. The heaviest band holds four halftoners 432 dots
-  wide and one more for the ramps (about 15 KB of error rows) and the strip buffers.
+- RAM: per strip and per row, never a page. At its heaviest (the colour band: four halftoners
+  432 dots wide, one for the ramps, the strip buffers) the page holds 25.5 KB of heap, 17 KB on
+  a black ribbon, less than a colour AirPrint page's own 31 KB, and the two never run at once.
+  Flash: 12 KB.
 
 ## Decided by the builder
 

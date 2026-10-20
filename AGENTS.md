@@ -79,6 +79,14 @@ What works on `main`:
 - DIP switches read by their printed numbers; a tap of the `test` button prints a test page, or
   with the printer not ready runs the cable test; a second tap cancels the test page; a tap during
   another job shows Busy.
+- The test page (`components/testpage`, design `docs/superpowers/specs/2026-10-20-test-page-design.md`):
+  a full Letter page from the tap, DIP4 at power-on and the page's Print Test Page. Letterhead
+  (the icon and Apple Garamond as dots, `tp_art.h` from `testpage/tools/mkart.py`), the board's
+  details, every font, pitch and style in the printer's own type, the seven colours and a
+  ray-traced still life in four inks (gray with a note on a black ribbon), the five screens side
+  by side, a ruler and four one-inch squares. It asks the ribbon first, as a job does; about
+  57 KB of stream in colour. The colour ink order and phases live in `ink.c` (`ink_screens_*`),
+  shared with jobs.
 - Recovery (SPEC §3.11): three equal app slots and a `known_good` record naming the last image
   that was kept and finished a real print; updates never write the running or known-good slot.
   A new OTA image runs on trial and rolls back unless healthy (`/api/status` `slot`, `trial`,
@@ -230,6 +238,9 @@ Linear is the queue; these are the live items.
   a real Mac on each card, the page's Print Test Page, Erase and Wi-Fi join. Before any release
   that turns the relay on for users, give Mihai Parparita (Infinite Mac) a heads-up.
 - Not in Linear: scope HSKo during a long job (SPEC §3.9 timing).
+- The full test page is on branch `ww/test-page-1e3bb7` (on top of W-1079), host-tested and
+  built, not yet printed on board 1: owed a print from each trigger on the colour ribbon, one on
+  the black ribbon, and a second tap mid-page.
 
 ## Toolchain
 - **KiCad 10.0.6.** `kicad-cli` is not on PATH: `/Applications/KiCad/KiCad.app/Contents/MacOS/kicad-cli`.
@@ -277,8 +288,13 @@ Linear is the queue; these are the live items.
 
 ## Verification
 - **Host tests:** `make -C tools/rip test` (raster path, halftone screens and colour, serial writer, printer_state, led_grid,
-  dip_config, pic_prog, localtalk, cable, fw_update, known_good) and `make -B -C tools/ipp test`
+  dip_config, pic_prog, localtalk, cable, fw_update, known_good, testpage) and `make -B -C tools/ipp test`
   (`-B`: `tools/ipp/build/` is committed).
+- **Test page preview:** `tools/rip/build/rip --testpage colour --out-stream tp.bin` (or `black`,
+  `unknown`), then `python3.14 tools/iwview/iwview.py tp.bin tp.png` draws it as ink on paper.
+  Its text needs the printer's font dot patterns, extracted from the Technical Reference's
+  Appendix C into `~/.config/airwriter/iw-fonts/*.json` on Wells's Mac and never committed;
+  without them text draws as boxes.
 - **Raster regression:** `make -C tools/rip regress`; `stream.bin` must match the fixtures byte
   for byte (gray, the iOS capture, and a synthetic sRGB page ripped in colour and as gray). No
   ESP32 needed. `rip --colour --out-preview` shows a colour page in its four inks; `--gain 0`
@@ -332,6 +348,7 @@ tools/ethertalk/      etpeer.py, a software EtherTalk Mac for the tunnel and the
 tools/webui/          web UI sources and its two emulator icons; mkheader.py generates
                       firmware's webui_page.h (never hand-edit)
 tools/icon/           the printer icon as a pixel grid; mkicons.py writes ipp_server/icons/*.png
+tools/iwview/         iwview.py draws any ImageWriter stream (test page, a LocalTalk capture) as paper
 tools/lights/         the wiki's GIF of every panel light effect, played through led_grid_core;
                       after changing an effect, `make -C tools/lights OUT=<wiki>/images/lights`
 tools/release/        release.sh (build, check, sign, publish), tamper.py (refusal-test images)

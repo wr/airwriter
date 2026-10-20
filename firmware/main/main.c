@@ -41,6 +41,8 @@
 #include "ota_health.h"
 #include "fw_update.h"
 #include "cable_test.h"
+#include "testpage.h"
+#include "esp_heap_caps.h"
 #include "esp_app_desc.h"
 #include "esp_partition.h"
 #if CONFIG_BOOTLOADER_RESERVE_RTC_MEM
@@ -148,6 +150,13 @@ static SemaphoreHandle_t s_job_lock;
 // and gives way to a job that arrives meanwhile. A job that finds the lock
 // taken raises this; the update reads it between chunks and lets go. Only
 // jobs raise it -- a refused CTRL-X kick or TashTalk flash is not a job.
+// The test page holds s_job_lock, and a second tap cancels it (W-1049). The
+// tap and the page's end decide under s_tap_mux, so a tap landing as the page
+// finishes can never set its cancel on the next job instead.
+static portMUX_TYPE s_tap_mux = portMUX_INITIALIZER_UNLOCKED;
+static int s_test_running;      // the test page holds the lock
+static volatile int s_test_cancel;  // a second tap asked to stop it
+
 static volatile int s_job_waiting;
 // Uptime seconds of the last job's start or end, -1 for none yet:
 // auto-update installs only once the board has been idle for a while.
@@ -353,7 +362,7 @@ static const char *ribbon_name(uint8_t r)
 static void ribbon_check(int for_job)
 {
     if (AW_LOOPBACK) return;
-    for (uint32_t ms = 0; for_job && !serial_out_clear() && !s_job_cancelled &&
+    for (uint32_t ms = 0; for_job && !serial_out_clear() && !s_job_cancelled && !s_test_cancel &&
                           ms < CONFIG_AIRWRITER_STALL_ABORT * 1000u; ms += 100)
         vTaskDelay(pdMS_TO_TICKS(100));
     if (!serial_out_clear()) return;
@@ -735,15 +744,43 @@ static void on_activity(void)
     printer_state_post(PS_EV_ACTIVITY);
 }
 
-#define TESTPAGE_W 1152
-#define TESTPAGE_H 64
+// The page's stop: a second tap. Asked before every line and strip, so it
+// also notes how low the internal heap goes while the page holds its bands.
+static size_t s_tp_heap_low;
+static size_t s_tp_bytes;
 
-// The test page holds s_job_lock, and a second tap cancels it (W-1049). The
-// tap and the page's end decide under s_tap_mux, so a tap landing as the page
-// finishes can never set its cancel on the next job instead.
-static portMUX_TYPE s_tap_mux = portMUX_INITIALIZER_UNLOCKED;
-static int s_test_running;      // the test page holds the lock
-static int s_test_cancel;       // a second tap asked to stop it
+static int test_page_stop(void *ctx)
+{
+    (void)ctx;
+    size_t f = heap_caps_get_free_size(MALLOC_CAP_INTERNAL);
+    if (f < s_tp_heap_low) s_tp_heap_low = f;
+    return s_test_cancel;
+}
+
+static void test_page_out(void *ctx, const uint8_t *buf, size_t n)
+{
+    s_tp_bytes += n;
+    printer_out(ctx, buf, n);
+}
+
+// What the page says AppleTalk is: the ways in that are on, as the settings
+// page's cards name them.
+static void appletalk_text(char *out, size_t cap)
+{
+    int tunnel = 0, radio = 0, infinite = 0;
+    char zone[40];
+    if (ethertalk_running()) ethertalk_settings(&tunnel, &radio, &infinite, zone, sizeof zone);
+    const char *on[4];
+    int n = 0;
+    if (localtalk_running() && !localtalk_quiet()) on[n++] = "AppleTalk port";
+    if (radio)    on[n++] = "networked Macs";
+    if (tunnel)   on[n++] = "Basilisk II";
+    if (infinite) on[n++] = "Infinite Mac";
+    out[0] = '\0';
+    for (int i = 0; i < n; i++)
+        snprintf(out + strlen(out), cap - strlen(out), "%s%s", i ? ", " : "", on[i]);
+    if (!n) snprintf(out, cap, "Off");
+}
 
 static void test_page_task(void *arg)
 {
@@ -753,43 +790,36 @@ static void test_page_task(void *arg)
     iw_link_job_start(&s_link);
     led_grid_set_source(LG_SRC_AIRPRINT);
     printer_state_post(PS_EV_JOB_START);
+    // As a job does: the page prints for the ribbon that is in now.
+    ribbon_check(1);
 
     ht_algo_t algo;
     if (ht_algo_from_name(s_set.dither, &algo)) algo = HT_ATKINSON;
+    const esp_app_desc_t *app = esp_app_get_description();
+    char built[sizeof app->date], ap[32], at[80];
+    size_t k = 0;                               // "Oct  5 2026" reads "Oct 5 2026"
+    for (const char *c = app->date; *c && k + 1 < sizeof built; c++)
+        if (!(*c == ' ' && k && built[k - 1] == ' ')) built[k++] = *c;
+    built[k] = '\0';
+    snprintf(ap, sizeof ap, "AirWriter-%s", s_suffix);
+    appletalk_text(at, sizeof at);
+    tp_info_t info = {
+        .version = app->version, .built = built, .model = s_set.model, .name = s_set.queue,
+        .host = s_set.hostname, .ip = s_ip, .setup_ssid = s_ap_mode ? ap : NULL,
+        .appletalk = at, .ribbon = (iw_ribbon_t)s_ribbon, .screen = algo, .gain = s_set.gain,
+    };
+    tp_io_t io = { .out = test_page_out, .stop = test_page_stop };
+    size_t heap0 = heap_caps_get_free_size(MALLOC_CAP_INTERNAL);
+    s_tp_heap_low = heap0;
+    s_tp_bytes = 0;
+    tp_result_t rc = tp_print(&info, &io);
+    if (rc == TP_NOMEM) s_printer_failed = 1;
+    ESP_LOGI(TAG, "test page: %s, %u bytes, crc32 %08x; internal heap %u KB free, "
+                  "%u KB at its lowest; %u bytes of stack to spare",
+             rc == TP_DONE ? "sent" : rc == TP_STOPPED ? "stopped" : "out of memory",
+             (unsigned)s_tp_bytes, (unsigned)s_stream_crc, (unsigned)(heap0 / 1024),
+             (unsigned)(s_tp_heap_low / 1024), (unsigned)uxTaskGetStackHighWaterMark(NULL));
 
-    ht_t h;
-    if (ht_init(&h, algo, TESTPAGE_W) != 0) {
-        ESP_LOGE(TAG, "test page: ht_init failed");
-        s_printer_failed = 1;
-    } else {
-        ht_set_gain(&h, s_set.gain);
-        static iw_t w;
-        iw_init(&w, TESTPAGE_W, printer_out, NULL);
-        iw_begin_page(&w);
-
-        uint8_t gray[TESTPAGE_W];
-        uint8_t bits[(TESTPAGE_W + 7) / 8];
-        for (uint32_t y = 0; y < TESTPAGE_H; y++) {
-            if (y < TESTPAGE_H - 8) {
-                // 8px checkerboard bands, alternating phase band to band, so a
-                // dot-alignment error shows as a shifted grid rather than a
-                // gray smear.
-                int phase = (int)(y / 8) & 1;
-                for (uint32_t x = 0; x < TESTPAGE_W; x++)
-                    gray[x] = (((x / 8) & 1) == (uint32_t)phase) ? 0 : 255;
-            } else {
-                // Final band: a 0->255 gradient, one dithered level per column
-                // group, to check the algorithm across the whole gray range.
-                for (uint32_t x = 0; x < TESTPAGE_W; x++)
-                    gray[x] = (uint8_t)(x * 255 / (TESTPAGE_W - 1));
-            }
-            ht_row(&h, gray, bits);
-            iw_row(&w, bits);
-        }
-
-        iw_end_page(&w);
-        ht_free(&h);
-    }
     // As job_finished does: the last byte has to clear before the page counts
     // as printed, a cancel stops that wait, and a tail that did not go out is
     // purged so it cannot print ahead of the next job, which then resyncs.
@@ -823,7 +853,7 @@ static void test_page_locked(void)
     s_test_running = 1;
     s_test_cancel = 0;
     portEXIT_CRITICAL(&s_tap_mux);
-    if (xTaskCreate(test_page_task, "test_page", 4096, NULL, 3, NULL) != pdPASS) {
+    if (xTaskCreate(test_page_task, "test_page", 6144, NULL, 3, NULL) != pdPASS) {
         ESP_LOGE(TAG, "test page: could not create task");
         portENTER_CRITICAL(&s_tap_mux);
         s_test_running = 0;
