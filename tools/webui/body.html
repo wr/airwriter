@@ -45,7 +45,7 @@
       </div>
       <div class=box>
         <div class=row><span class=txt>Model</span><select class=pop id=model aria-label=Model></select></div>
-        <div class=row><span class=txt>Name</span><input class="fld short" id=pname autocomplete=off spellcheck=false maxlength=40 aria-label=Name></div>
+        <div class=row><span class=txt>Name</span><input class="fld short" id=pname autocomplete=off spellcheck=false maxlength=31 aria-label=Name></div>
       </div>
       <div class=box>
         <div class=row><span class=txt>Halftone</span><select class=pop id=screen aria-label=Halftone></select></div>
@@ -108,7 +108,7 @@
       <div class=hero><span class="ic c"><svg><use href="#g-wifi"/></svg></span>
         <h2>Wi-Fi</h2><p>The network AirWriter prints over. <a href="https://github.com/wr/airwriter/wiki/Setup" target=_blank rel=noopener>Learn More…</a></p></div>
       <div class=box>
-        <div class=row><span class=txt>Wi-Fi network</span><span class=val><i class=lamp id=wifi-lamp></i><span id=ssid></span></span>
+        <div class=row id=ssid-row><span class=txt>Wi-Fi network</span><span class=val><i class=lamp id=wifi-lamp></i><span id=ssid></span></span>
           <span class=glyphs id=wifi-glyphs></span><button class=btn type=button id=change>Change…</button></div>
         <div class=row id=iprow><span class=txt>IP address</span><span class="val mono" id=ip></span></div>
         <div class=row id=hostrow><span class=txt>Host name</span><input class="fld short" id=host autocomplete=off autocapitalize=off spellcheck=false maxlength=32 aria-label="Host name"></div>
@@ -130,7 +130,7 @@
       </div>
       <p class=say id=about-say></p>
       <div class=btnrow><button class="btn danger" type=button data-dlg=d-erase>Erase All Settings…</button><button class=btn type=button data-dlg=d-restart>Restart…</button></div>
-      <div class=grp><h3>DIP Switches</h3><div class=box><div class=dips id=dips></div><div id=dip-rows></div></div></div>
+      <div class=grp id=dipgrp><h3>DIP Switches</h3><div class=box><div class=dips id=dips></div><div id=dip-rows></div></div></div>
       <div class=box>
         <a class="row link" href="https://github.com/wr/airwriter/wiki/Status-Lights" target=_blank rel=noopener><span class=txt>Status lights</span><span class=out aria-hidden=true>↗</span></a>
         <a class="row link" href="https://github.com/wr/airwriter/wiki/Troubleshooting" target=_blank rel=noopener><span class=txt>Troubleshooting</span><span class=out aria-hidden=true>↗</span></a>
@@ -184,7 +184,7 @@
 <dialog id=d-net><div class=dlg>
   <b>Choose a network</b>
   <div class="box nets" id=nets></div>
-  <div class=hide id=joinform><input class="fld hide" id=nm placeholder="Network name" autocomplete=off autocapitalize=off spellcheck=false maxlength=32 aria-label="Network name"><input class=fld type=password id=pw placeholder=Password autocomplete=off aria-label=Password></div>
+  <div class=hide id=joinform><input class="fld hide" id=nm placeholder="Network name" autocomplete=off autocapitalize=off spellcheck=false maxlength=32 aria-label="Network name"><input class=fld type=password id=pw placeholder=Password autocomplete=off maxlength=64 aria-label=Password></div>
   <p class=say id=net-say></p>
   <div class=btnrow><button class=btn type=button id=rescan>Scan Again</button><button class=btn type=button data-close>Cancel</button><button class="btn primary" type=button id=join disabled>Join</button></div>
 </div></dialog>
@@ -204,4 +204,8 @@
 <dialog id=d-wait><div class=dlg>
   <b id=wait-t>Restarting</b>
   <p id=wait-s>This page reloads when AirWriter is back.</p>
+  <div class="btnrow hide" id=wait-keys><button class="btn primary" type=button id=reload>Reload</button></div>
 </div></dialog>
+
+<!-- when the board stops answering: what the page shows is what it last heard -->
+<div class="lost hide" id=lost role=status><i class="lamp a"></i>AirWriter isn’t answering. Trying again…</div>

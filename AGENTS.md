@@ -286,6 +286,8 @@ Linear is the queue; these are the live items.
   fixture is pure black and white and must never change; the other three move with any change
   to a screen, the curve or the ink order, and are regenerated with the reason in the commit.
 - **Firmware:** `idf.py build` clean.
+- **Web page:** `python3 tools/webui/preview.py`, then http://localhost:8079/_states: every state
+  at desktop and phone width, light and dark, before a change to the page goes to the board.
 - **On board 1:** an `ipptool` Print-Job of `fixtures/checker.urf` prints crc32 `8ee84844`.
   After an OTA, `/api/status` reaches `"trial":false` with the new `version`.
 - **Schematic:** `kicad-cli sch erc` → 0 errors; 44 known warnings (42 `lib_symbol_mismatch`,
@@ -330,7 +332,9 @@ tools/ipp/            IPP host tests and gpa_server (the real encoder on localho
 tools/ippcap/         stub IPP server that captures a Print-Job body (how fixtures were made)
 tools/ethertalk/      etpeer.py, a software EtherTalk Mac for the tunnel and the relay
 tools/webui/          web UI sources and its two emulator icons; mkheader.py generates
-                      firmware's webui_page.h (never hand-edit)
+                      firmware's webui_page.h (never hand-edit); preview.py serves the page
+                      in any of states.json's states (no printer, setup mode, a failing
+                      relay, long names...) with no board
 tools/icon/           the printer icon as a pixel grid; mkicons.py writes ipp_server/icons/*.png
 tools/lights/         the wiki's GIF of every panel light effect, played through led_grid_core;
                       after changing an effect, `make -C tools/lights OUT=<wiki>/images/lights`

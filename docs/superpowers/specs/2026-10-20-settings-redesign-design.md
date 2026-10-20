@@ -100,6 +100,34 @@ Existing routes stay as they were; W-1079 adds:
 - `GET /api/lt` and each `/api/et` link gain `macs`: the nodes heard in the last 10 minutes,
   newest first. The cable's carry their node; an EtherTalk link's carry their address and MAC,
   and a Basilisk II peer's its computer's IP (its MAC is `B2` and that IP).
+- `/api/status` `ap` is the board's own network, `AirWriter-xxxx`, for the erase sheet; in setup
+  mode `ssid` is the network it could not join ("" when none was set), which the page shows
+  as "Couldn't join" in red. Host names and the printer's URI are escaped like the rest.
+- `GET /api/scan` escapes network names (a quote in one used to spoil the list) and answers
+  503 when the radio cannot scan. `POST /api/wifi` with no password keeps the stored one only
+  for the same network: for any other it means an open one (IDF will not find an open network
+  while holding a WPA2 password). `POST /api/general` refuses a host name that is not letters,
+  digits and dashes, and every saved string is cut on a character, not mid-emoji.
+
+### Empty, error and edge states
+
+Each was looked at in `tools/webui/preview.py` at desktop and phone width, light and dark:
+
+- Printer offline reads "Check power, cable and SELECT" (off, unplugged and deselected look the
+  same to the board); Print Test Page then says so instead of sending a page. In setup mode the
+  printer's line comes from the printer, not the setup.
+- The page notices when the board stops answering (two polls, 8 s): a note, "AirWriter isn't
+  answering. Trying again…", over what it last heard, at the top on a big screen and the foot
+  on a phone.
+- After Join, Restart or an install, the wait sheet keeps listening; after 90 s it says what to
+  do and offers Reload. Joining from setup mode says up front where the board will be.
+- A weak signal lights the Wi-Fi lamp amber. On a phone the network row leads with the network
+  name, as macOS's list does, and a long name is cut with an ellipsis everywhere.
+- The network list says "No networks found" and tells a failed scan from no answer; Join waits
+  for a password on a locked network other than the current one.
+- Infinite Mac's relay error is "Can't reach infinitemac.org. Trying again.", the detail in its
+  tooltip. An update that failed shows its error even with a newer version waiting. Unread DIP
+  switches hide their group. A build signed with another key shows auto-update off.
 
 **AirPrint off** takes `_ipp` (with `_universal`) and `_printer` out of Bonjour, keeps `_http`
 for the page, and answers Print-Job and Validate-Job with not-accepting-jobs; on puts them
