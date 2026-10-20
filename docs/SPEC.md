@@ -364,6 +364,10 @@ Set line spacing once per page with `ESC T nn` (nn in 144ths of an inch, ASCII d
 End every page with a form feed — the widely reported "you have to press Select to make it
 print" behaviour is almost always a missing FF, not a hardware fault.
 
+*Amended (2026-10-20): a strip with no dots sends no `ESC G`, only the line feed it owes, held
+like any other until a strip below it prints. Board 1 fed a white page at a line a second when
+each blank strip was 1152 zeros at 9600 baud.*
+
 *Amended (W-1064): an sRGB page with the colour ribbon in prints in four inks. Each pixel splits
 into yellow, magenta, cyan and black (grey components go to black), each ink is dithered on
 its own, and a strip prints one pass per ink it uses, in that order (yellow first, Technical

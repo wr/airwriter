@@ -136,6 +136,65 @@ int main(void)
         CHECK_EQ_INT(sink[15], 0x0C);
     }
 
+    /* -- a blank strip sends no graphics, only the line feed it owes, and
+     *    only once something prints below it: board 1 fed a white page at
+     *    a line a second when every blank strip was 1152 zeros -- */
+    {
+        iw_t w;
+        iw_init(&w, 8, collect, NULL);
+        iw_begin_page(&w);
+        sink_n = 0;
+        uint8_t blank[1] = { 0x00 }, dot[1] = { 0x80 };
+        for (int i = 0; i < 8; i++) iw_row(&w, blank);  /* strip 1: blank */
+        CHECK_EQ_INT(sink_n, 0);
+        for (int i = 0; i < 8; i++) iw_row(&w, dot);    /* strip 2 */
+        for (int i = 0; i < 16; i++) iw_row(&w, blank); /* strips 3, 4: blank */
+        for (int i = 0; i < 8; i++) iw_row(&w, dot);    /* strip 5 */
+        for (int i = 0; i < 12; i++) iw_row(&w, blank); /* 6 blank, then half of 7 */
+        iw_end_page(&w);
+        const uint8_t want[] = {
+            '\n',
+            0x1B,'G','0','0','0','8', 0xFF, 0, 0, 0, 0, 0, 0, 0, '\r',
+            '\n', '\n', '\n',
+            0x1B,'G','0','0','0','8', 0xFF, 0, 0, 0, 0, 0, 0, 0, '\r',
+            0x0C,                       /* the trailing blanks' LFs: never sent */
+        };
+        CHECK_EQ_INT(sink_n, sizeof want);
+        CHECK_EQ_MEM(sink, want, sizeof want);
+
+        /* A page with nothing on it is its form feed. */
+        iw_begin_page(&w);
+        sink_n = 0;
+        for (int i = 0; i < 40; i++) iw_row(&w, blank);
+        iw_end_page(&w);
+        CHECK_EQ_INT(sink_n, 1);
+        CHECK_EQ_INT(sink[0], 0x0C);
+    }
+
+    /* -- the colour writer: a strip no ink has a dot in sends nothing but its
+     *    owed line feed, as the gray one now does -- */
+    {
+        static iwc_t c;
+        iwc_init(&c, 8, collect, NULL);
+        iwc_begin_page(&c);
+        sink_n = 0;
+        uint8_t none[1] = { 0x00 }, dot[1] = { 0x80 };
+        const uint8_t *blank4[IW_INKS] = { none, none, none, none };
+        const uint8_t *yellow[IW_INKS] = { dot, none, none, none };
+        for (int i = 0; i < 8; i++) iwc_row(&c, blank4);
+        CHECK_EQ_INT(sink_n, 0);
+        for (int i = 0; i < 8; i++) iwc_row(&c, yellow);
+        for (int i = 0; i < 8; i++) iwc_row(&c, blank4);
+        iwc_end_page(&c);
+        const uint8_t want[] = {
+            '\n', 0x1B,'K','1',
+            0x1B,'G','0','0','0','1', 0xFF, '\r',
+            0x1B,'K','0', 0x0C,
+        };
+        CHECK_EQ_INT(sink_n, sizeof want);
+        CHECK_EQ_MEM(sink, want, sizeof want);
+    }
+
     /* -- resync is 1280 NULs then CTRL-X, the Technical Reference's recovery
      *    for a printer left mid-graphics (Cancel Current Line, p. 85) -- */
     {

@@ -24,8 +24,9 @@ typedef struct {
     uint8_t   rows[8][(IW_MAX_DOTS + 7) / 8];
     uint32_t  nrows;
     uint8_t   cols[IW_MAX_DOTS];
-    int       pending_lf;   // LF from the previous strip, held back in case
-                             // it turns out to be the page's last strip
+    uint32_t  held_lf;      // LFs owed by the strips so far, sent ahead of the
+                             // next strip that prints: never after the page's
+                             // last, and a blank strip costs only its LF
 } iw_t;
 
 void iw_init(iw_t *w, uint32_t width_dots, iw_out_fn out, void *ctx);

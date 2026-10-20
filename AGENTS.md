@@ -300,7 +300,8 @@ Linear is the queue; these are the live items.
   ESP32 needed. `rip --colour --out-preview` shows a colour page in its four inks; `--gain 0`
   turns the dot-gain curve off, `--dither bluenoise` picks the blue-noise screen. The checker
   fixture is pure black and white and must never change; the other three move with any change
-  to a screen, the curve or the ink order, and are regenerated with the reason in the commit.
+  to a screen, the curve, the ink order or how strips are sent, and are regenerated with the
+  reason in the commit. A blank strip is only its held line feed, in gray as in colour.
 - **Firmware:** `idf.py build` clean.
 - **On board 1:** an `ipptool` Print-Job of `fixtures/checker.urf` prints crc32 `8ee84844`.
   After an OTA, `/api/status` reaches `"trial":false` with the new `version`.

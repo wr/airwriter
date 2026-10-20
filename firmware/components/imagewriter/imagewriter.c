@@ -26,8 +26,8 @@ void iw_begin_page(iw_t *w)
 {
     static const uint8_t init[] = { 0x1B, 'c', 0x1B, 'p', 0x1B, 'T', '1', '6' };
     w->out(w->ctx, init, sizeof init);
-    w->nrows      = 0;
-    w->pending_lf = 0;
+    w->nrows   = 0;
+    w->held_lf = 0;
 }
 
 static void flush(iw_t *w)
@@ -38,17 +38,26 @@ static void flush(iw_t *w)
 
     iw_transpose(rows, w->cols, w->width_dots);
 
-    // The LF that separates this strip from the next is held back until we
-    // know there is a next strip: emit the *previous* strip's deferred LF
-    // now, immediately before this strip's header, rather than after this
-    // strip's own CR. That way the page's last strip never gets one. At
-    // 8/72in per line feed, an LF after the final strip pushes 1/9in into
-    // the next form before the form feed fires, ejecting a blank sheet.
+    // The LF that separates this strip from the next is held back until a
+    // strip below it prints: emit the LFs owed so far now, immediately
+    // before this strip's header, rather than after each strip's own CR.
+    // That way the page's last strip never gets one -- at 8/72in per line
+    // feed, an LF after the final strip pushes 1/9in into the next form
+    // before the form feed fires, ejecting a blank sheet -- and a blank
+    // strip is only its LF, not 1152 zeros at 9600 baud (a white page fed at
+    // a line a second).
+    uint32_t n = w->width_dots;                        // one byte per column
+    int blank = 1;
+    for (uint32_t x = 0; x < n && blank; x++) blank = !w->cols[x];
+    w->nrows = 0;
+    if (blank) {
+        w->held_lf++;
+        return;
+    }
     static const uint8_t lf[] = { '\n' };
-    if (w->pending_lf) w->out(w->ctx, lf, sizeof lf);
+    for (; w->held_lf; w->held_lf--) w->out(w->ctx, lf, sizeof lf);
 
     uint8_t hdr[6] = { 0x1B, 'G', 0, 0, 0, 0 };
-    uint32_t n = w->width_dots;                        // one byte per column
     hdr[2] = (uint8_t)('0' + (n / 1000) % 10);
     hdr[3] = (uint8_t)('0' + (n / 100)  % 10);
     hdr[4] = (uint8_t)('0' + (n / 10)   % 10);
@@ -58,9 +67,7 @@ static void flush(iw_t *w)
 
     static const uint8_t cr[] = { '\r' };
     w->out(w->ctx, cr, sizeof cr);
-    w->pending_lf = 1;
-
-    w->nrows = 0;
+    w->held_lf = 1;
 }
 
 void iw_row(iw_t *w, const uint8_t *bits)
