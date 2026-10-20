@@ -31,9 +31,10 @@ function say(id,text,err,ms){
   if(ms) sayTimers[id]=setTimeout(()=>{ el.textContent=''; el.classList.remove('err'); },ms);
 }
 function lamp(el,cls){ el.className='lamp'+(cls?' '+cls:''); }
-/* A page on plain http gets no clipboard API: select the text instead. */
-async function copyFrom(el,btn){
-  const v=el.value!==undefined?el.value:el.textContent; if(!v) return;
+/* A page on plain http gets no clipboard API: select the text instead.
+   Says 'Copied', or 'Selected' when it could only select it. */
+async function copyText(el){
+  const v=el.value!==undefined?el.value:el.textContent; if(!v) return '';
   let ok=0;
   try{ await navigator.clipboard.writeText(v); ok=1; }
   catch(e){
@@ -41,7 +42,11 @@ async function copyFrom(el,btn){
     else{ const r=document.createRange(); r.selectNodeContents(el); getSelection().removeAllRanges(); getSelection().addRange(r); }
     try{ ok=document.execCommand('copy'); }catch(e2){}
   }
-  btn.textContent=ok?'Copied':'Selected';
+  return ok?'Copied':'Selected';
+}
+async function copyFrom(el,btn){
+  const said=await copyText(el); if(!said) return;
+  btn.textContent=said;
   setTimeout(()=>btn.textContent='Copy',1500);
 }
 /* A field's limit is the board's, in bytes, and an emoji is four of them. */
@@ -519,7 +524,31 @@ function macList(macs,label){
   if(n) h+='<ul class=macs>'+macs.map(m=>'<li>'+MAC+'<span>'+esc(label(m))+'</span><small>'+ago(m.ago)+'</small></li>').join('')+'</ul>';
   return h;
 }
-function stLine(cls,text,why){ return '<span class=st'+(why?' title="'+esc(why)+'"':'')+'><i class="lamp '+cls+'"></i>'+esc(text)+'</span>'; }
+function stHTML(cls,html,why){ return '<span class=st'+(why?' title="'+esc(why)+'"':'')+'><i class="lamp '+cls+'"></i><span>'+html+'</span></span>'; }
+function stLine(cls,text,why){ return stHTML(cls,esc(text),why); }
+/* A card's body is redrawn only when it changes, so a selection in it lasts. */
+function put(card,h){ const b=card.querySelector('.body'); if(b._h!==h){ b._h=h; b.innerHTML=h; } }
+/* Infinite Mac's zone name, in a chip that copies it: it is what a friend
+   types into Infinite Mac to print here. */
+function zoneChip(){
+  if(!ETS||!ETS.zone) return 'the zone';
+  return '<span class=chip role=button tabindex=0 title="Copy the zone name" data-zone><span>'+esc(ETS.zone)
+    +'</span><svg aria-hidden=true><use href="#g-copy"/></svg></span>';
+}
+/* The note goes in beside the chip, not through a redraw, which would lose
+   the selection; 'Selected' stays up longer, waiting for a Command-C. */
+let zoneT=0;
+async function copyZone(chip){
+  const said=await copyText(chip.firstChild); if(!said) return;
+  let n=chip.parentNode.querySelector('.copied');
+  if(!n){ n=document.createElement('small'); n.className='copied'; chip.after(' ',n); }
+  n.textContent=said;
+  clearTimeout(zoneT); zoneT=setTimeout(()=>n.remove(),said==='Copied'?1500:6000);
+}
+$('c-zone').addEventListener('click',e=>{ const c=e.target.closest('[data-zone]'); if(c) copyZone(c); });
+$('c-zone').addEventListener('keydown',e=>{
+  const c=e.target.closest('[data-zone]'); if(c&&(e.key==='Enter'||e.key===' ')){ e.preventDefault(); copyZone(c); }
+});
 function atDraw(){
   let macs=0, on=0;
   // the cable
@@ -529,8 +558,8 @@ function atDraw(){
     c.classList.toggle('off',!live);
     if(live){
       on++; macs+=(LT.macs||[]).length;
-      c.querySelector('.body').innerHTML=(LT.phase!=='online'?stLine('a','Joining the AppleTalk network…'):'')
-        +macList(LT.macs||[],m=>'Node '+m.node);
+      put(c,(LT.phase!=='online'?stLine('a','Joining the AppleTalk network…'):'')
+        +macList(LT.macs||[],m=>'Node '+m.node));
     }
   }
   for(const w of ['radio','tun','zone']){
@@ -542,8 +571,8 @@ function atDraw(){
     on++;
     let h='';
     if(w==='zone'){
-      h+=side.state==='online'?stLine('g','Connected to '+(ETS.zone||'the zone'))
-        :side.state==='acquiring'?stLine('a','Joining '+(ETS.zone||'the zone')+'…')
+      h+=side.state==='online'?stHTML('g','Connected to '+zoneChip())
+        :side.state==='acquiring'?stHTML('a','Joining '+zoneChip()+'…')
         :ET.relay&&ET.relay.last_error?stLine('r','Can’t reach infinitemac.org. Trying again.',ET.relay.last_error)
         :stLine('a','Connecting to infinitemac.org…');
     }else if(side.state==='no address') h+=stLine('a','Waiting for a network address');
@@ -551,7 +580,7 @@ function atDraw(){
     else if(side.state==='acquiring') h+=stLine('a','Joining the AppleTalk network…');
     const list=side.macs||[]; macs+=list.length;
     h+=macList(list,m=>m.ip?m.ip:m.addr);
-    c.querySelector('.body').innerHTML=h;
+    put(c,h);
   }
   $('v-appletalk').textContent=macs?plural(macs,'Mac','Macs'):on?'On':'Off';
 }

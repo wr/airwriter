@@ -97,9 +97,6 @@ Existing routes stay as they were; W-1079 adds:
   model, and anything else as a name on an ImageWriter II.
 - `POST /api/restart` (lets a printing page finish first), `/api/erase` (as holding the test
   button 8 s), `/api/test` (the test page; 409 while the printer is busy).
-- `GET /api/lt` and each `/api/et` link gain `macs`: the nodes heard in the last 10 minutes,
-  newest first. The cable's carry their node; an EtherTalk link's carry their address and MAC,
-  and a Basilisk II peer's its computer's IP (its MAC is `B2` and that IP).
 - `/api/status` `ap` is the board's own network, `AirWriter-xxxx`, for the erase sheet; in setup
   mode `ssid` is the network it could not join ("" when none was set), which the page shows
   as "Couldn't join" in red. Host names and the printer's URI are escaped like the rest.
@@ -108,6 +105,18 @@ Existing routes stay as they were; W-1079 adds:
   for the same network: for any other it means an open one (IDF will not find an open network
   while holding a WPA2 password). `POST /api/general` refuses a host name that is not letters,
   digits and dashes, and every saved string is cut on a character, not mid-emoji.
+- `GET /api/lt` and each `/api/et` link gain `macs`: the nodes heard in the last 10 minutes,
+  newest first. The cable's carry their node; an EtherTalk link's carry their address and MAC,
+  and a Basilisk II peer's its computer's IP (its MAC is `B2` and that IP).
+
+**AirPrint off** takes `_ipp` (with `_universal`) and `_printer` out of Bonjour, keeps `_http`
+for the page, and answers Print-Job and Validate-Job with not-accepting-jobs; on puts them
+back under the same printer-uuid. Live, no restart.
+
+**The AppleTalk port's switch** replaces DIP switches 1-2 once used: the node cannot stop once
+started (it keeps UART2 and its task), so off is quiet, with TashTalk answering for no node,
+frames dropped and a job cut short, and on acquires a node again. Until the switch is used, DIP
+mode 2 starts the port as before.
 
 ### Empty, error and edge states
 
@@ -126,17 +135,10 @@ Each was looked at in `tools/webui/preview.py` at desktop and phone width, light
 - The network list says "No networks found" and tells a failed scan from no answer; Join waits
   for a password on a locked network other than the current one.
 - Infinite Mac's relay error is "Can't reach infinitemac.org. Trying again.", the detail in its
-  tooltip. An update that failed shows its error even with a newer version waiting. Unread DIP
+  tooltip. Its status line shows the zone name in a chip (mono, the field's border, a clipboard
+  glyph) that copies it on a click, "Copied" beside it for a moment, or "Selected" where plain
+  http gives the page no clipboard. An update that failed shows its error even with a newer version waiting. Unread DIP
   switches hide their group. A build signed with another key shows auto-update off.
-
-**AirPrint off** takes `_ipp` (with `_universal`) and `_printer` out of Bonjour, keeps `_http`
-for the page, and answers Print-Job and Validate-Job with not-accepting-jobs; on puts them
-back under the same printer-uuid. Live, no restart.
-
-**The AppleTalk port's switch** replaces DIP switches 1-2 once used: the node cannot stop once
-started (it keeps UART2 and its task), so off is quiet, with TashTalk answering for no node,
-frames dropped and a job cut short, and on acquires a node again. Until the switch is used, DIP
-mode 2 starts the port as before.
 
 ## Not in this change
 
