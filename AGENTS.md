@@ -185,7 +185,7 @@ top margin) from branch `wells/w-1079-settings-page-organise-by-port-like-macos-
 ahead of any release, with auto-update on. Its Top margin is calibrated to -7/8 in
 (`top_margin` -126): a page's line 1 in down and one 0.5 in from the bottom landed exactly there.
 Its AppleTalk port has been set on the page (`lt_port` 1), so DIP switches 1-2 no longer decide;
-Infinite Mac is off, its zone name kept. The page reads its DIP switches as 2, 6, 7 and 8 on: not
+Infinite Mac is on (Wells switched it on, with a made-up zone name). The page reads its DIP switches as 2, 6, 7 and 8 on: not
 yet checked against the part. One pin of its print head is dead (a white line in solid fills).
 
 Known issues, open:
