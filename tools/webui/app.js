@@ -3,14 +3,20 @@ const $=i=>document.getElementById(i), $$=s=>[...document.querySelectorAll(s)];
 /* ── helpers ───────────────────────────────────────────────────────── */
 const cap=s=>s?s[0].toUpperCase()+s.slice(1):'';
 const plural=(n,one,many)=>n+' '+(n===1?one:many);
-async function getJSON(url){
-  try{ const r=await fetch(url); return r.ok?await r.json():null; }catch(e){ return null; }
+/* Every ask has a time limit: a board that has gone away never answers at
+   all, and a fetch would wait for minutes. */
+function fetchIn(url,ms,opt){
+  const c=new AbortController(), t=setTimeout(()=>c.abort(),ms||8000);
+  return fetch(url,Object.assign({signal:c.signal,cache:'no-store'},opt)).finally(()=>clearTimeout(t));
+}
+async function getJSON(url,ms){
+  try{ const r=await fetchIn(url,ms); return r.ok?await r.json():null; }catch(e){ return null; }
 }
 /* A POST and its answer: the parsed JSON, or {error} with the board's own
    sentence when it said no. */
 async function postJSON(url,body){
   try{
-    const r=await fetch(url,{method:'POST',body:body===undefined?'':JSON.stringify(body)});
+    const r=await fetchIn(url,30000,{method:'POST',body:body===undefined?'':JSON.stringify(body)});
     const t=await r.text();
     if(!r.ok) return {error:cap(t.trim()||('error '+r.status))};
     try{ return JSON.parse(t); }catch(e){ return {ok:true}; }
@@ -25,9 +31,10 @@ function say(id,text,err,ms){
   if(ms) sayTimers[id]=setTimeout(()=>{ el.textContent=''; el.classList.remove('err'); },ms);
 }
 function lamp(el,cls){ el.className='lamp'+(cls?' '+cls:''); }
-/* A page on plain http gets no clipboard API: select the text instead. */
-async function copyFrom(el,btn){
-  const v=el.value!==undefined?el.value:el.textContent; if(!v) return;
+/* A page on plain http gets no clipboard API: select the text instead.
+   Says 'Copied', or 'Selected' when it could only select it. */
+async function copyText(el){
+  const v=el.value!==undefined?el.value:el.textContent; if(!v) return '';
   let ok=0;
   try{ await navigator.clipboard.writeText(v); ok=1; }
   catch(e){
@@ -35,8 +42,20 @@ async function copyFrom(el,btn){
     else{ const r=document.createRange(); r.selectNodeContents(el); getSelection().removeAllRanges(); getSelection().addRange(r); }
     try{ ok=document.execCommand('copy'); }catch(e2){}
   }
-  btn.textContent=ok?'Copied':'Selected';
+  return ok?'Copied':'Selected';
+}
+async function copyFrom(el,btn){
+  const said=await copyText(el); if(!said) return;
+  btn.textContent=said;
   setTimeout(()=>btn.textContent='Copy',1500);
+}
+/* A field's limit is the board's, in bytes, and an emoji is four of them. */
+const enc=new TextEncoder();
+function byteCap(el,n){
+  el.addEventListener('input',()=>{
+    let v=el.value; while(enc.encode(v).length>n) v=[...v].slice(0,-1).join('');
+    if(v!==el.value) el.value=v;
+  });
 }
 function ago(s){
   if(s<60) return 'now';
@@ -308,25 +327,34 @@ document.querySelector('.back').onclick=()=>{
 for(const b of $$('[data-dlg]')) b.onclick=()=>$(b.dataset.dlg).showModal();
 for(const b of $$('[data-close]')) b.onclick=()=>b.closest('dialog').close();
 for(const d of $$('dialog')) d.addEventListener('click',e=>{ if(e.target===d&&d.id!=='d-wait') d.close(); });
-/* While AirWriter restarts: the page waits for it to answer, then reloads. */
-function waitFor(title,text,reload){
-  $('wait-t').textContent=title; $('wait-s').textContent=text;
+/* While AirWriter restarts: the page waits for it to answer, then reloads.
+   After 90 s it says what to do instead, and keeps listening. */
+function waitFor(title,html,reload,late){
+  $('wait-t').textContent=title; $('wait-s').innerHTML=html; $('wait-keys').classList.add('hide');
   for(const d of $$('dialog')) if(d.open) d.close();
   $('d-wait').showModal();
   if(!reload) return;
   const t0=Date.now();
   setTimeout(function again(){
-    fetch('/api/status',{cache:'no-store'}).then(r=>{ if(r.ok) location.reload(); else throw 0; })
-      .catch(()=>{ if(Date.now()-t0<90000) setTimeout(again,2000); });
+    fetchIn('/api/status',4000).then(r=>{ if(r.ok) location.reload(); else throw 0; })
+      .catch(()=>{
+        if(Date.now()-t0>90000&&$('wait-keys').classList.contains('hide')){
+          $('wait-s').innerHTML=late||'AirWriter hasn’t come back. Check its lights, then reload this page.';
+          $('wait-keys').classList.remove('hide');
+        }
+        setTimeout(again,3000);
+      });
   },6000);
 }
+$('reload').onclick=()=>location.reload();
 
 /* ── status ────────────────────────────────────────────────────────── */
 let S={}, setup=false, first=true;
+/* Offline is off, unplugged or deselected: the board can't tell them apart. */
 const PS={
   ready:['g','Ready'], printing:['g','Printing'], attention:['a','Check paper and SELECT'],
-  failed:['r','The last job failed'], offline:['','Offline'], booting:['','Starting'],
-  joining:['','Joining Wi-Fi'], setup:['','Ready']};
+  failed:['r','The last job failed'], offline:['','Check power, cable and SELECT'], booting:['','Starting'],
+  joining:['','Joining Wi-Fi']};
 const SIDE_PS={attention:'Check paper', failed:'Failed', offline:'Offline', printing:'Printing'};
 const MODELS=['ImageWriter II','ImageWriter','ImageWriter LQ'];
 const BARS={Excellent:3,Good:3,Fair:2,Weak:1};
@@ -336,10 +364,11 @@ const RESET={'power-on':'Plugged in','software':'After a restart','panic':'After
 
 function draw(s){
   S=s; setup=!!s.setup;
-  // the printer
-  const [cls,text]=PS[s.ps]||['',cap(s.state||'')];
+  // the printer; in setup mode the board's state is the setup, so the line says
+  const ps=s.ps==='setup'?(s.printing?'printing':s.printer?'ready':'offline'):s.ps;
+  const [cls,text]=PS[ps]||['',cap(s.state||'')];
   lamp($('prn-lamp'),cls); $('prn-state').textContent=text;
-  $('v-printer').textContent=SIDE_PS[s.ps]||(s.ps==='ready'?'Ready':'');
+  $('v-printer').textContent=SIDE_PS[ps]||(ps==='ready'?'Ready':'');
   const colour=s.ribbon==='colour';
   $('rib-colour').classList.toggle('hide',!colour);
   $('rib').textContent=colour?'Colour':s.ribbon==='black'?'Black':'Not known yet';
@@ -357,9 +386,11 @@ function draw(s){
   $('ap').checked=!!s.airprint;
   $('v-airprint').textContent=s.airprint?'On':'Off';
   $('uri').textContent=s.uri||'';
-  // Wi-Fi
-  $('ssid').textContent=setup?'Not set up':(s.ssid||'Not connected');
-  lamp($('wifi-lamp'),setup?'a':s.ssid?'g':'');
+  // Wi-Fi; in setup mode a network name is the one it could not join
+  const missed=setup&&s.ssid;
+  $('ssid').textContent=missed?'Couldn’t join “'+s.ssid+'”':setup?'Not set up':(s.ssid||'Not connected');
+  $('ssid').title=$('ssid').textContent;
+  lamp($('wifi-lamp'),missed?'r':setup||s.signal==='Weak'?'a':s.ssid?'g':'');
   const n=BARS[s.signal]||0, locked=s.security&&s.security!=='Open';
   $('wifi-glyphs').innerHTML=setup?'':(locked?'<svg><use href="#g-lock"/></svg>':'')
     +(n?'<svg viewBox="0 0 16 16">'+wifiArcs(n)+'</svg>':'');
@@ -367,7 +398,7 @@ function draw(s){
   $('iprow').classList.toggle('hide',setup);
   $('ip').textContent=s.ip||'';
   if(document.activeElement!==$('host')) $('host').value=s.phost||(s.host||'').replace(/\.local$/,'');
-  $('v-wifi').textContent=setup?'Not set up':(s.ssid||'');
+  $('v-wifi').textContent=missed?'Couldn’t join':setup?'Not set up':(s.ssid||'');
   // what waits for a restart
   const pending=(s.pname||s.pmodel)&&((s.pname||s.pmodel)!==s.queue);
   const hostPending=s.phost&&s.phost+'.local'!==s.host;
@@ -379,7 +410,7 @@ function draw(s){
   $('uptime').textContent=upFor(s.uptime);
   $('reset').textContent=RESET[s.reset]||cap(s.reset||'');
   drawDips(s.dip,s.lt_port);
-  $('apname').textContent='AirWriter-'+(((s.host||'').match(/-([0-9a-f]{4})\./)||[])[1]||'');
+  $('apname').textContent=s.ap||'AirWriter';
   // in setup mode only the printer, Wi-Fi and About make sense
   for(const id of ['airprint','appletalk'])
     document.querySelector('.nav [data-go="'+id+'"]').classList.toggle('hide',setup);
@@ -390,6 +421,7 @@ function draw(s){
     else if(PANES.includes(want)) go(want);
     else { go('printer'); if(phone()) document.body.classList.remove('in'); }
   }
+  atDraw();
 }
 function wifiArcs(n){
   const arc=(lvl,d)=>'<path fill=none stroke=currentColor stroke-width=1.7 stroke-linecap=round'
@@ -403,7 +435,16 @@ function upFor(u){
   if(d) return plural(d,'day','days')+(h%24?' '+plural(h%24,'hour','hours'):'');
   return (h?plural(h,'hour','hours')+' ':'')+plural(mi,'minute','minutes');
 }
-function poll(){ getJSON('/api/status').then(s=>{ if(s) draw(s); }); }
+/* Two asks in a row with no answer, and the page says so rather than show
+   what it last heard as if it were now. */
+let misses=0, lost=false;
+function setLost(on){ lost=on; $('lost').classList.toggle('hide',!on); }
+function poll(){
+  getJSON('/api/status',6000).then(s=>{
+    if(s){ misses=0; if(lost) setLost(false); draw(s); }
+    else if(++misses>=2&&!$('d-wait').open) setLost(true);
+  });
+}
 poll(); setInterval(()=>{ if(!document.hidden) poll(); },4000);
 setTimeout(()=>document.body.classList.add('ready'),1500);
 
@@ -418,9 +459,11 @@ $('model').onchange=()=>{ $('pname').placeholder=$('model').value; savePrinter({
 /* A blank name is the model's name. */
 $('pname').onchange=()=>savePrinter({name:$('pname').value.trim()},'Saved.');
 $('pname').onkeydown=e=>{ if(e.key==='Enter') $('pname').blur(); };
+byteCap($('pname'),31);
 for(const k of ['atkinson','floyd','bluenoise','bayer','threshold']) $('screen').append(new Option(MODES[k].title,k));
 $('screen').onchange=()=>{ dither=$('screen').value; render(); savePrinter({dither:dither},'Saved. The next page prints with it.'); };
 $('testpage').onclick=async()=>{
+  if(S.ps==='offline'||S.ps==='setup'&&!S.printer){ say('prn-say','The printer is offline. Check power, cable and SELECT.',1,4000); return; }
   const r=await postJSON('/api/test');
   say('prn-say',r.error?r.error+'.':'Printing a test page.',!!r.error,4000);
 };
@@ -435,7 +478,11 @@ $('cabletest').onclick=async()=>{
   say('cable-say',''); ports('testing');
   const r=await postJSON('/api/cable');
   b.disabled=false;
-  if(r.error||!r.ok){ ports('fail'); say('cable-say',r.error||('Could not test: '+r.error+'.'),1); return; }
+  if(r.error||!r.ok){
+    ports('fail');
+    say('cable-say',r.error&&!/^ESP_/.test(r.error)?cap(r.error).replace(/\.?$/,'.'):'Couldn’t run the test.',1);
+    return;
+  }
   ports(r.verdict==='pass'?'pass':'fail');
   say('cable-say',r.text,r.verdict!=='pass');
   $('ltflash').classList.toggle('hide',r.verdict!=='no_tashtalk');
@@ -480,7 +527,31 @@ function macList(macs,addr){
     +(m.name?esc(addr(m))+' · ':'')+ago(m.ago)+'</small></li>').join('')+'</ul>';
   return h;
 }
-function stLine(cls,text){ return '<span class=st><i class="lamp '+cls+'"></i>'+esc(text)+'</span>'; }
+function stHTML(cls,html,why){ return '<span class=st'+(why?' title="'+esc(why)+'"':'')+'><i class="lamp '+cls+'"></i><span>'+html+'</span></span>'; }
+function stLine(cls,text,why){ return stHTML(cls,esc(text),why); }
+/* A card's body is redrawn only when it changes, so a selection in it lasts. */
+function put(card,h){ const b=card.querySelector('.body'); if(b._h!==h){ b._h=h; b.innerHTML=h; } }
+/* Infinite Mac's zone name, in a chip that copies it: it is what a friend
+   types into Infinite Mac to print here. */
+function zoneChip(){
+  if(!ETS||!ETS.zone) return 'the zone';
+  return '<span class=chip role=button tabindex=0 title="Copy the zone name" data-zone><span>'+esc(ETS.zone)
+    +'</span><svg aria-hidden=true><use href="#g-copy"/></svg></span>';
+}
+/* The note goes in beside the chip, not through a redraw, which would lose
+   the selection; 'Selected' stays up longer, waiting for a Command-C. */
+let zoneT=0;
+async function copyZone(chip){
+  const said=await copyText(chip.firstChild); if(!said) return;
+  let n=chip.parentNode.querySelector('.copied');
+  if(!n){ n=document.createElement('small'); n.className='copied'; chip.after(' ',n); }
+  n.textContent=said;
+  clearTimeout(zoneT); zoneT=setTimeout(()=>n.remove(),said==='Copied'?1500:6000);
+}
+$('c-zone').addEventListener('click',e=>{ const c=e.target.closest('[data-zone]'); if(c) copyZone(c); });
+$('c-zone').addEventListener('keydown',e=>{
+  const c=e.target.closest('[data-zone]'); if(c&&(e.key==='Enter'||e.key===' ')){ e.preventDefault(); copyZone(c); }
+});
 function atDraw(){
   let macs=0, on=0;
   // the cable
@@ -490,8 +561,8 @@ function atDraw(){
     c.classList.toggle('off',!live);
     if(live){
       on++; macs+=(LT.macs||[]).length;
-      c.querySelector('.body').innerHTML=(LT.phase!=='online'?stLine('a','Joining the AppleTalk network…'):'')
-        +macList(LT.macs||[],m=>'Node '+m.node);
+      put(c,(LT.phase!=='online'?stLine('a','Joining the AppleTalk network…'):'')
+        +macList(LT.macs||[],m=>'Node '+m.node));
     }
   }
   for(const w of ['radio','tun','zone']){
@@ -503,22 +574,26 @@ function atDraw(){
     on++;
     let h='';
     if(w==='zone'){
-      h+=side.state==='online'?stLine('g','Connected to '+(ETS.zone||'the zone'))
-        :side.state==='acquiring'?stLine('a','Joining '+(ETS.zone||'the zone')+'…')
-        :ET.relay&&ET.relay.last_error?stLine('r','Can’t reach infinitemac.org ('+ET.relay.last_error+'). Trying again.')
+      h+=side.state==='online'?stHTML('g','Connected to '+zoneChip())
+        :side.state==='acquiring'?stHTML('a','Joining '+zoneChip()+'…')
+        :ET.relay&&ET.relay.last_error?stLine('r','Can’t reach infinitemac.org. Trying again.',ET.relay.last_error)
         :stLine('a','Connecting to infinitemac.org…');
     }else if(side.state==='no address') h+=stLine('a','Waiting for a network address');
     else if(side.state==='no socket') h+=stLine('r','Couldn’t open UDP port 6066');
     else if(side.state==='acquiring') h+=stLine('a','Joining the AppleTalk network…');
     const list=side.macs||[]; macs+=list.length;
     h+=macList(list,m=>m.ip?m.ip:m.addr);
-    c.querySelector('.body').innerHTML=h;
+    put(c,h);
   }
   $('v-appletalk').textContent=macs?plural(macs,'Mac','Macs'):on?'On':'Off';
 }
 async function atPoll(){
   const [lt,et]=await Promise.all([getJSON('/api/lt'),getJSON('/api/et')]);
-  LT=lt; ET=et; atDraw();
+  // no answer from either: keep what they last said (the board may be gone)
+  if(lost||(!lt&&!et&&!setup)) return;
+  LT=lt; ET=et;
+  if(!ETS&&!setup) return etsLoad();
+  atDraw();
 }
 async function etsLoad(){ ETS=await getJSON('/api/et/settings'); atDraw(); }
 etsLoad(); atPoll();
@@ -526,7 +601,11 @@ setInterval(()=>{ if(!document.hidden&&!setup) atPoll(); },5000);
 for(const sw of $$('[data-way]')) sw.onchange=async()=>{
   const w=sw.dataset.way, on=sw.checked;
   let r;
-  if(w==='lt') r=await postJSON('/api/general',{localtalk:on});
+  if(w==='lt'){
+    r=await postJSON('/api/general',{localtalk:on});
+    // the port's node takes a moment: show it starting, not the last answer
+    if(!r.error) LT=on?(LT&&LT.on?LT:{on:true,phase:'acquiring',macs:[]}):{on:false,quiet:true};
+  }
   else{
     const body={}; body[WAYS[w].key]=on;
     // Infinite Mac's zone is a made-up name until someone types one: anyone
@@ -572,8 +651,9 @@ $('zonedone').onclick=async()=>{
 const CACHE='aw.nets';
 function cacheLoad(){ try{ const c=JSON.parse(localStorage.getItem(CACHE)); if(c&&Date.now()-c.t<3600e3) return c.nets; }catch(e){} return null; }
 function cacheSave(n){ try{ localStorage.setItem(CACHE,JSON.stringify({t:Date.now(),nets:n})); }catch(e){} }
-let nets=[], pick=null;
-const barsOf=r=>r>=-60?3:r>=-70?2:1;
+let nets=[], pick=null, scanned=false;
+/* the board's own words for a signal, as bars (main.c status_json) */
+const barsOf=r=>r>-67?3:r>-75?2:1;
 function drawNets(){
   const cur=setup?'':S.ssid;
   let h='';
@@ -583,6 +663,7 @@ function drawNets(){
       +'<span class=glyphs>'+(n.a?'<svg><use href="#g-lock"/></svg>':'')
       +'<svg viewBox="0 0 16 16">'+wifiArcs(barsOf(n.r))+'</svg></span></button>';
   }
+  if(!nets.length&&scanned) h+='<div class="row none"><span class=txt>No networks found</span></div>';
   h+='<button class="row link" type=button data-s=""><span class=txt>Other Network…</span></button>';
   $('nets').innerHTML=h;
   for(const b of $$('#nets [data-s]')) b.onclick=()=>choose(b.dataset.s,b);
@@ -595,9 +676,17 @@ function choose(ssid,btn){
   $('joinform').classList.toggle('hide',!other&&n&&!n.a);
   $('nm').classList.toggle('hide',!other);
   $('pw').value=''; $('nm').value='';
-  $('join').disabled=false;
+  canJoin();
   (other?$('nm'):n&&n.a?$('pw'):$('join')).focus();
 }
+/* A locked network needs its password, unless it is the one AirWriter is on:
+   a blank password there keeps the one it has. */
+function canJoin(){
+  const n=nets.find(x=>x.s===pick), cur=setup?'':S.ssid;
+  $('join').disabled=pick===null||(pick===''?!$('nm').value.trim():!!(n&&n.a&&pick!==cur&&!$('pw').value));
+}
+$('pw').oninput=canJoin; $('nm').oninput=canJoin;
+byteCap($('nm'),32);
 /* While it looks: a row at the top whose arcs light one after another. */
 function scanning(on){
   const box=$('nets'); box.classList.toggle('busy',on);
@@ -609,19 +698,25 @@ function scanning(on){
     +'<circle cx=8 cy=13.6 r=1.05 fill=currentColor /></svg></span></div>');
   if(!on&&row) row.remove();
 }
+let netErr=false;
 async function scan(){
-  say('net-say',''); $('rescan').disabled=true; scanning(true);
-  const raw=await getJSON('/api/scan');
+  if(netErr) say('net-say',''); $('rescan').disabled=true; scanning(true);
+  let raw=null, err='No answer from AirWriter.';
+  try{ const r=await fetchIn('/api/scan',20000); if(r.ok) raw=await r.json(); else err='Couldn’t look for networks. Try again.'; }catch(e){}
   $('rescan').disabled=false; scanning(false);
-  if(!raw){ say('net-say','No answer from AirWriter.',1); return; }
+  netErr=!raw;
+  if(!raw){ say('net-say',err,1); return; }
   const best={};
   for(const n of raw){ if(n.s&&(!best[n.s]||n.r>best[n.s].r)) best[n.s]=n; }
-  nets=Object.values(best).sort((x,y)=>y.r-x.r); cacheSave(nets);
-  say('net-say',''); drawNets();
+  nets=Object.values(best).sort((x,y)=>y.r-x.r); scanned=true;
+  if(nets.length) cacheSave(nets);
+  drawNets();
 }
 function openNets(){
   pick=null; $('join').disabled=true; $('joinform').classList.add('hide');
-  const c=cacheLoad(); nets=c||[];
+  const c=cacheLoad(); nets=c||[]; scanned=!!c;
+  say('net-say',setup&&S.ssid?'Couldn’t join “'+S.ssid+'”. Check the password, or choose another network.':'',setup&&S.ssid);
+  netErr=false;
   drawNets(); $('d-net').showModal();
   if(!c) scan();
 }
@@ -632,7 +727,12 @@ $('join').onclick=async()=>{
   $('join').disabled=true;
   const r=await postJSON('/api/wifi',{ssid:ssid,pass:$('pw').value});
   if(r.error){ say('net-say',r.error,1); $('join').disabled=false; return; }
-  waitFor('Joining “'+ssid+'”','AirWriter restarts on the new network. This page reloads when it answers there.',true);
+  // From its own network the page cannot follow it: say where it will be.
+  const q='“'+esc(ssid)+'”', host=esc(S.host||'airwriter.local'), link='<a href="http://'+host+'/">'+host+'</a>';
+  waitFor('Joining “'+ssid+'”',setup?'AirWriter restarts on it. Join '+q+' here too, then open '+link+'.'
+      :'AirWriter restarts on the new network. This page reloads when it answers there.',true,
+    'No answer here yet. On '+q+', open '+link+'. If AirWriter couldn’t join, it makes its own network, '
+      +esc($('apname').textContent)+', to try again.');
 };
 $('pw').onkeydown=e=>{ if(e.key==='Enter') $('join').click(); };
 /* A host name is letters, digits and dashes. */
@@ -660,15 +760,18 @@ function fwDraw(u){
   else if(u.state==='downloading'){ cls='a'; text='Downloading'+(u.progress>=0?' '+u.progress+'%':'…'); }
   else if(u.state==='installing'){ cls='a'; text='Checking the signature…'; }
   else if(u.state==='restarting'){ cls='a'; text='Restarting…'; }
+  else if(u.state==='failed'&&u.error){ cls='r'; text=cap(u.error); }
   else if(u.newer){ cls='a'; text=u.latest+' is available'; }
   else if(u.error){ cls='r'; text=cap(u.error); }
   else if(u.checked<0){ cls=''; text='Not checked yet'; }
   lamp($('fw-lamp'),cls); $('fw-state').textContent=text;
   $('fw-btn').textContent=u.newer?'Install':'Check Now';
   $('fw-btn').disabled=!net||busy;
-  $('fwauto').checked=!!u.auto; $('fwauto').disabled=!net;
+  // a build signed with another key never updates from GitHub
+  $('fwauto').checked=!!u.auto&&(u.setup||u.key==='airwriter'); $('fwauto').disabled=!net;
   $('v-about').textContent=u.newer?'Update':'';
-  if(u.state==='restarting') waitFor('Installing','Restarting into '+(u.latest||'the new version')+'. This page reloads when AirWriter is back.',true);
+  if(u.state==='restarting'&&!$('d-wait').open)
+    waitFor('Installing','Restarting into '+esc(u.latest||'the new version')+'. This page reloads when AirWriter is back.',true);
   clearTimeout(fwFast); if(busy) fwFast=setTimeout(fwPoll,1500);
 }
 async function fwPoll(){
@@ -705,12 +808,13 @@ $('restart').onclick=async()=>{
 $('erase').onclick=async()=>{
   const r=await postJSON('/api/erase');
   if(r.error){ $('d-erase').close(); say('about-say',r.error,1); return; }
-  waitFor('Erasing','AirWriter is starting over. Join the '+$('apname').textContent+' network to set it up again.',false);
+  waitFor('Erasing','AirWriter is starting over. Join the '+esc($('apname').textContent)+' network to set it up again.',false);
 };
 /* The bank as it sits on the board, switch 1 on the left, and what each
    group of switches does now. */
 function drawDips(bits,ltPort){
-  if(!bits||bits.length!==8){ $('dips').innerHTML=''; $('dip-rows').innerHTML=''; return; }
+  $('dipgrp').classList.toggle('hide',!bits||bits.length!==8);
+  if(!bits||bits.length!==8) return;
   const on=i=>bits[i]==='1';
   $('dips').innerHTML='<div class=dipbody><b>ON</b>'
     +[...bits].map((b,i)=>'<span class="dip'+(b==='1'?' up':'')+'"><i></i>'+(i+1)+'</span>').join('')+'</div>';

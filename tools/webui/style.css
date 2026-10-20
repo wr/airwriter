@@ -90,8 +90,9 @@ button,input,select{font:inherit;color:inherit}
 .nav button:hover{background:var(--hover)}
 .nav button[aria-current=page]{background:var(--accent);color:var(--on-accent)}
 .nav button[aria-current=page] .v{color:var(--on-accent);opacity:.8}
-.nav .l{flex:1;min-width:0}
-.nav .v{color:var(--fg2);font-size:var(--t-small);white-space:nowrap}
+.nav .l{flex:1 0 auto}
+/* a long network name gives way, not the item's own name */
+.nav .v{min-width:0;color:var(--fg2);font-size:var(--t-small);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 
 /* icon tiles, in the ribbon's inks */
 .ic{flex:0 0 auto;width:22px;height:22px;border-radius:6px;display:grid;place-items:center;color:#fff;
@@ -119,8 +120,12 @@ img.ic{background:none;box-shadow:none}
 .box{background:var(--group);border-radius:var(--r-box);box-shadow:var(--shadow);overflow:hidden}
 .row{display:flex;align-items:center;gap:12px;min-height:44px;padding:9px 14px;position:relative}
 .row+.row:before{content:'';position:absolute;top:0;left:14px;right:0;border-top:1px solid var(--line)}
-.row .txt{flex:1;min-width:0;overflow-wrap:anywhere}
-.row .val{color:var(--fg2);text-align:right;font-variant-numeric:tabular-nums;display:flex;align-items:center;gap:7px}
+.row .txt{flex:1 1 auto;min-width:0;overflow-wrap:anywhere}
+.row .val{min-width:0;color:var(--fg2);text-align:right;font-variant-numeric:tabular-nums;display:flex;align-items:center;gap:7px}
+.row .lamp,.row .btn,.row .glyphs,.row .sw,.row select{flex-shrink:0}
+/* a 32-character network name is cut short in its row; the list has it whole */
+#ssid{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#hostrow .txt,#iprow .txt,#ssid-row .txt{flex-shrink:0}
 .row.link{width:100%;border:0;background:none;text-align:left;cursor:pointer;color:inherit;text-decoration:none}
 .row.link:hover{background:var(--hover)}
 .out{color:var(--fg3)}
@@ -197,6 +202,13 @@ body:not(.ready) .sw span,body:not(.ready) .sw span:after{transition:none}
 .card .body{border-top:1px solid var(--line);padding:11px 14px 13px;display:flex;flex-direction:column;gap:8px}
 .card .count{color:var(--fg2);font-size:var(--t-small)}
 .st{display:flex;align-items:center;gap:7px;color:var(--fg2);font-size:var(--t-small)}
+/* Infinite Mac's zone name: a little field, in the page's mono face, that copies itself */
+.chip{display:inline-flex;align-items:center;gap:5px;margin:0 1px;padding:1px 6px 1px 7px;border-radius:var(--r-ctl);
+  background:var(--field);box-shadow:inset 0 1px 2px rgba(0,0,0,.06),0 0 0 1px var(--fieldline);color:var(--fg);
+  font:var(--t-small)/1.4 var(--mono);cursor:pointer;-webkit-user-select:text;user-select:text}
+.chip svg{width:11px;height:11px;flex:0 0 auto;color:var(--fg2)}
+.chip:hover svg{color:var(--fg)}
+.st .copied{color:var(--fg2);font-size:var(--t-small)}
 .macs{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
 .macs li{display:flex;align-items:center;gap:9px}
 .macs li svg{width:13px;height:16px;flex:0 0 auto;color:var(--fg)}
@@ -256,6 +268,7 @@ dialog::backdrop{background:var(--scrim)}
 .dlg .q{font-weight:600;color:var(--fg)}
 .dlg .box{box-shadow:0 0 0 1px var(--line)}
 .nets{max-height:260px;overflow-y:auto}
+.nets .none{color:var(--fg2)}
 /* Scanning: the list waits under a row whose arcs light one after another. */
 .nets.busy .row:not(.scanning){opacity:.4}
 .scanning{color:var(--fg2)}
@@ -273,6 +286,12 @@ dialog::backdrop{background:var(--scrim)}
 .ports.fail .cable{stroke:var(--lamp-r);animation:blink .4s steps(2) 2}
 @keyframes flow{from{stroke-dashoffset:380}to{stroke-dashoffset:0}}
 @keyframes blink{50%{stroke:#cbc7bc}}
+
+/* the board has stopped answering: a note over the page, which keeps what
+   it last heard */
+.lost{position:fixed;top:12px;left:0;right:0;width:max-content;max-width:calc(100vw - 32px);margin:0 auto;z-index:5;
+  display:flex;align-items:center;gap:8px;padding:7px 14px;border-radius:8px;background:var(--group);color:var(--fg);
+  font-size:var(--t-small);box-shadow:0 0 0 .5px rgba(0,0,0,.14),0 4px 14px rgba(0,0,0,.14)}
 
 /* ── phones: the sidebar is the first screen ────────────────────── */
 @media (max-width:760px){
@@ -297,6 +316,17 @@ dialog::backdrop{background:var(--scrim)}
   .card .ctls .btn{grid-column:2;grid-row:2;justify-self:start}
   .card .ctls .sw{grid-column:3;grid-row:1;align-self:center}
   .card .top>.ic{grid-row:1/span 2}
+  /* under the back key's bar, at the foot of the screen */
+  .lost{top:auto;bottom:max(16px,env(safe-area-inset-bottom,0px))}
+  /* a dev build's version is long: it goes under its label */
+  #fw-ver{display:block}
+}
+/* On a phone the network row leads with the network, as macOS's Wi-Fi list
+   does: the pane's title already says what it is, and its label would leave
+   the name two letters. */
+@media (max-width:480px){
+  #ssid-row>.txt{display:none}
+  #ssid-row .val{flex:1 1 auto;justify-content:flex-start;color:var(--fg)}
 }
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}
   .scanning svg *{opacity:1}}

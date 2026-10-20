@@ -43,6 +43,17 @@ static int json_str(const char *body, const char *key, char *out, size_t cap)
         if (*p == '\\' && p[1]) p++;      // the UI never sends escapes, but
         out[n++] = *p++;                   // a password could contain one
     }
+    // Cut short, never in the middle of a character: a name with an emoji
+    // in its last bytes would otherwise end in half of one.
+    if (*p && *p != '"') {
+        size_t k = n;
+        while (k && ((unsigned char)out[k - 1] & 0xC0) == 0x80) k--;
+        if (k && ((unsigned char)out[k - 1] & 0x80)) {
+            unsigned char lead = (unsigned char)out[k - 1];
+            size_t want = lead >= 0xF0 ? 4 : lead >= 0xE0 ? 3 : 2;
+            if (n - (k - 1) < want) n = k - 1;
+        }
+    }
     out[n] = '\0';
     return 1;
 }
@@ -139,26 +150,41 @@ static esp_err_t scan_get(httpd_req_t *req)
 {
     wifi_scan_config_t sc = { .show_hidden = false };
     esp_err_t err = esp_wifi_scan_start(&sc, true);      // blocking
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "scan: %s", esp_err_to_name(err));
+        httpd_resp_set_status(req, "503 Service Unavailable");
+        return httpd_resp_sendstr(req, "the scan failed");
+    }
 
     uint16_t n = 0;
-    if (err == ESP_OK) esp_wifi_scan_get_ap_num(&n);
+    esp_wifi_scan_get_ap_num(&n);
     if (n > 20) n = 20;
 
     wifi_ap_record_t *aps = n ? calloc(n, sizeof *aps) : NULL;
     if (aps) esp_wifi_scan_get_ap_records(&n, aps);
 
     // Each network as {s: name, r: rssi, a: 1 if it needs a password}. The UI
-    // draws a signal glyph and a lock from these, the way a phone does.
+    // draws a signal glyph and a lock from these, the way a phone does. A
+    // network's name is anyone's 32 bytes: quotes and backslashes are escaped,
+    // control characters dropped, so one odd name cannot spoil the list.
     char out[1400];
     size_t len = 0;
     out[len++] = '[';
     for (uint16_t i = 0; i < n && aps; i++) {
         if (!aps[i].ssid[0]) continue;
-        int w = snprintf(out + len, sizeof out - len,
+        char name[2 * sizeof aps[i].ssid + 1];
+        size_t k = 0;
+        for (const unsigned char *c = aps[i].ssid; *c && c < aps[i].ssid + sizeof aps[i].ssid; c++) {
+            if (*c < 0x20) continue;
+            if (*c == '"' || *c == '\\') name[k++] = '\\';
+            name[k++] = (char)*c;
+        }
+        name[k] = '\0';
+        int w = snprintf(out + len, sizeof out - len - 1,      // room for the ]
                          "%s{\"s\":\"%s\",\"r\":%d,\"a\":%d}",
-                         len > 1 ? "," : "", (char *)aps[i].ssid, aps[i].rssi,
+                         len > 1 ? "," : "", name, aps[i].rssi,
                          aps[i].authmode == WIFI_AUTH_OPEN ? 0 : 1);
-        if (w < 0 || (size_t)w >= sizeof out - len) break;
+        if (w < 0 || (size_t)w >= sizeof out - len - 1) break;
         len += (size_t)w;
     }
     out[len++] = ']';
@@ -187,12 +213,15 @@ static esp_err_t wifi_post(httpd_req_t *req)
         return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "no ssid");
     json_str(body, "pass", pass, sizeof pass);
 
-    // An empty password field means "keep the stored one", so a user editing
-    // the network name does not have to retype it.
+    // An empty password field means "keep the stored one" when it is the same
+    // network, so rejoining it needs no retyping. For any other network it
+    // means none: an open network joined with the last one's WPA2 password is
+    // never found (IDF then holds out for WPA2), and the board falls back to
+    // setup mode.
     if (!pass[0]) {
         settings_t cur;
         settings_load(&cur, "0000");
-        strncpy(pass, cur.pass, sizeof pass - 1);
+        if (!strcmp(ssid, cur.ssid)) strncpy(pass, cur.pass, sizeof pass - 1);
     }
 
     settings_save_wifi(ssid, pass);
@@ -224,6 +253,15 @@ static esp_err_t general_post(httpd_req_t *req)
 
     char host[SET_HOST_MAX] = {0}, queue[SET_QUEUE_MAX] = {0}, dither[SET_DITHER_MAX] = {0};
     json_str(body, "host", host, sizeof host);
+    // A host name goes into mDNS and, unescaped, into every status reply: the
+    // page sends only letters, digits and dashes, and so must anything else.
+    for (char *c = host; *c; c++) {
+        if (*c >= 'A' && *c <= 'Z') *c = (char)(*c - 'A' + 'a');
+        if (!((*c >= 'a' && *c <= 'z') || (*c >= '0' && *c <= '9') || *c == '-') ||
+            (*c == '-' && (c == host || !c[1])))
+            return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST,
+                                       "a host name is letters, digits and dashes");
+    }
     json_str(body, "queue", queue, sizeof queue);
     json_str(body, "dither", dither, sizeof dither);
 
