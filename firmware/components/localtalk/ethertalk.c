@@ -259,15 +259,17 @@ static void ws_handler(void *arg, esp_event_base_t base, int32_t id, void *data)
         on_relay_message(d->client, msg, (size_t)d->payload_len);
         break;
     case WEBSOCKET_EVENT_ERROR: {
+        // The handshake status outlives a failed attempt (it is the last
+        // upgrade's), so the TLS and socket errors come first, and a 101 is
+        // never the error.
         const esp_websocket_error_codes_t *e = &d->error_handle;
-        if (e->esp_ws_handshake_status_code)
+        if (e->esp_tls_last_esp_err)
+            snprintf(s_zone_err, sizeof s_zone_err, "TLS: %s (%d)", esp_err_to_name(e->esp_tls_last_esp_err),
+                     e->esp_tls_stack_err);
+        else if (e->esp_ws_handshake_status_code && e->esp_ws_handshake_status_code != 101)
             snprintf(s_zone_err, sizeof s_zone_err, "the relay answered %d", e->esp_ws_handshake_status_code);
-        else if (e->esp_tls_last_esp_err)
-            snprintf(s_zone_err, sizeof s_zone_err, "TLS: %s", esp_err_to_name(e->esp_tls_last_esp_err));
-        else if (e->esp_transport_sock_errno)
-            snprintf(s_zone_err, sizeof s_zone_err, "socket error %d", e->esp_transport_sock_errno);
         else
-            snprintf(s_zone_err, sizeof s_zone_err, "connection error");
+            snprintf(s_zone_err, sizeof s_zone_err, "connection error (type %d)", (int)e->error_type);
         break;
     }
     case WEBSOCKET_EVENT_DISCONNECTED:
@@ -648,10 +650,14 @@ void ethertalk_json(char *buf, size_t cap)
     if (p < end)
         p += snprintf(p, end - p,
             ",\"tunnel_drops\":%lu,\"relay\":{\"connected\":%s,\"in_drops\":%lu,\"out_drops\":%lu,"
-            "\"bad_messages\":%lu,\"pongs\":%lu,\"last_error\":\"%s\"},",
+            "\"bad_messages\":%lu,\"pongs\":%lu,\"last_error\":\"%s\"},"
+            "\"internal_ram\":{\"free\":%u,\"largest\":%u,\"lowest\":%u},",
             (unsigned long)s_tun_drops, s_ws_up ? "true" : "false",
             (unsigned long)s_zone_in_drops, (unsigned long)s_zone_out_drops,
-            (unsigned long)s_zone_bad, (unsigned long)s_zone_pongs, s_zone_err);
+            (unsigned long)s_zone_bad, (unsigned long)s_zone_pongs, s_zone_err,
+            (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
+            (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL),
+            (unsigned)heap_caps_get_minimum_free_size(MALLOC_CAP_INTERNAL));
     if (p < end) {
         at_printer_json(p, end - p);
         p += strlen(p);
