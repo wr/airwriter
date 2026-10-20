@@ -36,6 +36,7 @@
 #include "net_provision.h"
 #include "pic_prog.h"
 #include "localtalk.h"
+#include "ethertalk.h"
 #include "lt_node.h"
 #include "ota_health.h"
 #include "fw_update.h"
@@ -989,6 +990,13 @@ static volatile int s_boot_reset;
 
 // ----------------------------------------------------------------- wifi
 
+// An IPv4 address in host order (W-1076: the tunnel's MAC is made of it).
+static uint32_t ip_host(const esp_ip4_addr_t *a)
+{
+    return (uint32_t)esp_ip4_addr1(a) << 24 | (uint32_t)esp_ip4_addr2(a) << 16 |
+           (uint32_t)esp_ip4_addr3(a) << 8 | esp_ip4_addr4(a);
+}
+
 static void wifi_event(void *arg, esp_event_base_t base, int32_t id, void *data)
 {
     (void)arg;
@@ -1024,6 +1032,7 @@ static void wifi_event(void *arg, esp_event_base_t base, int32_t id, void *data)
         printer_state_post(PS_EV_WIFI_UP);
         ota_health_set(OH_STA_UP, 1);
         fw_update_net_up();
+        ethertalk_ip_changed(ip_host(&e->ip_info.ip));     // the tunnel's MAC is the IP
         xEventGroupSetBits(s_wifi_events, WIFI_CONNECTED_BIT);
     }
 }
@@ -1245,6 +1254,28 @@ static void lt_echo(void *ctx, int node)
     localtalk_echo((uint8_t)node);
 }
 
+// W-1076: the EtherTalk links on the web page.
+static void et_json(void *ctx, char *buf, size_t cap)
+{
+    (void)ctx;
+    ethertalk_json(buf, cap);
+}
+
+static void et_settings_get(void *ctx, int *tunnel, char *zone, size_t cap)
+{
+    (void)ctx;
+    ethertalk_settings(tunnel, zone, cap);
+}
+
+static int et_settings_set(void *ctx, int tunnel, const char *zone)
+{
+    (void)ctx;
+    esp_err_t err = ethertalk_apply(tunnel, zone);
+    if (err == ESP_ERR_INVALID_ARG) return -1;
+    if (err != ESP_OK) ESP_LOGE(TAG, "EtherTalk settings not saved: %s", esp_err_to_name(err));
+    return 0;
+}
+
 // The printer's state as the LocalTalk Option Card's status word, which the
 // Mac's driver reads with PAP SendStatus, for a node on `link`.
 static uint16_t lt_status(ps_state_t st, at_link_t link)
@@ -1264,7 +1295,7 @@ static uint16_t lt_status(ps_state_t st, at_link_t link)
 // 6 s; each one still keeps the panel awake.
 #define MAC_BLIP_EVERY_MS 6000
 
-#if CONFIG_AIRWRITER_PIC_CLK_PIN >= 0 && CONFIG_AIRWRITER_PIC_DAT_PIN >= 0
+// Both the cable's node and the EtherTalk links (W-1076) report here.
 static void lt_event(lt_event_t ev)
 {
     static uint32_t last;
@@ -1278,7 +1309,6 @@ static void lt_event(lt_event_t ev)
     last = now;
     led_grid_blip(LG_BLIP_MAC);
 }
-#endif
 
 // W-1051: the LocalTalk node, in DIP mode 2 or on a bench build. It owns its
 // UART and the PIC's pins from here until reboot.
@@ -1305,6 +1335,27 @@ static void lt_start(const char *why)
 #else
     (void)why;
 #endif
+}
+
+// W-1076: EtherTalk for Infinite Mac and Basilisk II, whatever the DIP mode,
+// once the station has an address. The tunnel and the zone are settings.
+static void et_start(void)
+{
+    ps_state_t st = printer_state_view().state;
+    esp_netif_ip_info_t ip = {0};
+    esp_netif_t *sta = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
+    if (sta) esp_netif_get_ip_info(sta, &ip);
+    ethertalk_cfg_t c = {
+        .object        = s_set.queue,
+        .type          = CONFIG_AIRWRITER_LT_NBP_TYPE,
+        .tunnel_status = lt_status(st, AT_LINK_TUNNEL),
+        .zone_status   = lt_status(st, AT_LINK_ZONE),
+        .ip            = ip_host(&ip.ip),
+        .printer       = { .begin = lt_print_begin, .write = lt_print_write, .end = lt_print_end },
+        .on_event      = lt_event,
+    };
+    esp_err_t err = ethertalk_start(&c);
+    if (err != ESP_OK) ESP_LOGE(TAG, "EtherTalk did not start: %s", esp_err_to_name(err));
 }
 
 static void localtalk_flash(void *ctx, char *buf, size_t cap)
@@ -1377,6 +1428,7 @@ static void on_ps_change(const ps_view_t *v)
     else
         ipp_server_set_stopped(NULL, NULL);
     localtalk_set_status(lt_status(v->state, AT_LINK_CABLE));
+    ethertalk_set_status(lt_status(v->state, AT_LINK_TUNNEL), lt_status(v->state, AT_LINK_ZONE));
 }
 
 // ------------------------------------------------------- firmware updates
@@ -1553,7 +1605,8 @@ void app_main(void)
         webui_cfg_t wcfg = { .status_json = status_json, .general_saved = general_saved, .captive = 1,
                               .localtalk_flash = localtalk_flash,
                               .lt_json = lt_json, .lt_job = lt_job, .lt_echo = lt_echo,
-                              .cable_test = cable_web };
+                              .cable_test = cable_web, .et_json = et_json,
+                              .et_settings_get = et_settings_get, .et_settings_set = et_settings_set };
         ESP_ERROR_CHECK(webui_start(&wcfg));
         ota_health_set(OH_WEB_UP, 1);
 
@@ -1581,9 +1634,11 @@ void app_main(void)
     webui_cfg_t wcfg = { .status_json = status_json, .general_saved = general_saved, .captive = 0,
                           .localtalk_flash = localtalk_flash,
                           .lt_json = lt_json, .lt_job = lt_job, .lt_echo = lt_echo,
-                          .cable_test = cable_web };
+                          .cable_test = cable_web, .et_json = et_json,
+                          .et_settings_get = et_settings_get, .et_settings_set = et_settings_set };
     ESP_ERROR_CHECK(webui_start(&wcfg));
     ota_health_set(OH_WEB_UP, 1);
+    et_start();
 
     if (s_test_on_boot) {
         s_test_on_boot = 0;

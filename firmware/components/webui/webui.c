@@ -98,6 +98,33 @@ static esp_err_t lt_echo_post(httpd_req_t *req)
     return httpd_resp_sendstr(req, "sent");
 }
 
+// W-1076: EtherTalk. The zone name is only ever in the settings pair below.
+static esp_err_t et_get(httpd_req_t *req)
+{
+    if (!s_cfg.et_json) return httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "no ethertalk");
+    static char json[4608];
+    s_cfg.et_json(s_cfg.ctx, json, sizeof json);
+    httpd_resp_set_type(req, "application/json");
+    return httpd_resp_sendstr(req, json);
+}
+
+static esp_err_t et_settings_reply(httpd_req_t *req)
+{
+    int tunnel = 1;
+    char zone[40] = "";
+    s_cfg.et_settings_get(s_cfg.ctx, &tunnel, zone, sizeof zone);
+    char out[96];
+    snprintf(out, sizeof out, "{\"tunnel\":%s,\"zone\":\"%s\"}", tunnel ? "true" : "false", zone);
+    httpd_resp_set_type(req, "application/json");
+    return httpd_resp_sendstr(req, out);
+}
+
+static esp_err_t et_settings_get(httpd_req_t *req)
+{
+    if (!s_cfg.et_settings_get) return httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "no ethertalk");
+    return et_settings_reply(req);
+}
+
 static esp_err_t lt_job_get(httpd_req_t *req)
 {
     size_t len = 0;
@@ -204,6 +231,35 @@ static esp_err_t general_post(httpd_req_t *req)
     if (s_cfg.general_saved) s_cfg.general_saved(s_cfg.ctx);
     led_grid_blip(LG_BLIP_SAVED);
     return httpd_resp_sendstr(req, "{\"ok\":true}");
+}
+
+// A JSON true or false for `key` in a flat object: 1, 0, or -1 when absent.
+static int json_bool(const char *body, const char *key)
+{
+    char pat[32];
+    snprintf(pat, sizeof pat, "\"%s\"", key);
+    const char *p = strstr(body, pat);
+    if (!p) return -1;
+    p = strchr(p + strlen(pat), ':');
+    if (!p) return -1;
+    p++;
+    while (*p == ' ') p++;
+    return !strncmp(p, "true", 4) ? 1 : !strncmp(p, "false", 5) ? 0 : -1;
+}
+
+static esp_err_t et_settings_post(httpd_req_t *req)
+{
+    if (!s_cfg.et_settings_set || !s_cfg.et_settings_get)
+        return httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "no ethertalk");
+    char body[BODY_MAX];
+    if (read_body(req, body, sizeof body) < 0)
+        return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "short body");
+    char zone[64];
+    int has_zone = json_str(body, "zone", zone, sizeof zone);
+    if (s_cfg.et_settings_set(s_cfg.ctx, json_bool(body, "tunnel"), has_zone ? zone : NULL))
+        return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "zone: 1 to 32 of A-Z a-z 0-9 - _ .");
+    led_grid_blip(LG_BLIP_SAVED);
+    return et_settings_reply(req);
 }
 
 // An update refusal, as the page shows it: 409 for "not now", 400 for an
@@ -351,7 +407,7 @@ esp_err_t webui_start(const webui_cfg_t *cfg)
     httpd_config_t hc = HTTPD_DEFAULT_CONFIG();
     hc.server_port      = 80;
     hc.ctrl_port        = 32080;
-    hc.max_uri_handlers = 18;
+    hc.max_uri_handlers = 22;
     hc.stack_size       = 6144;
     hc.lru_purge_enable = true;
     hc.uri_match_fn     = httpd_uri_match_wildcard;
@@ -368,6 +424,9 @@ esp_err_t webui_start(const webui_cfg_t *cfg)
         { .uri = "/api/lt",       .method = HTTP_GET,  .handler = lt_get },
         { .uri = "/api/lt/job",   .method = HTTP_GET,  .handler = lt_job_get },
         { .uri = "/api/lt/echo",  .method = HTTP_POST, .handler = lt_echo_post },
+        { .uri = "/api/et",       .method = HTTP_GET,  .handler = et_get },
+        { .uri = "/api/et/settings", .method = HTTP_GET,  .handler = et_settings_get },
+        { .uri = "/api/et/settings", .method = HTTP_POST, .handler = et_settings_post },
         { .uri = "/api/wifi",     .method = HTTP_POST, .handler = wifi_post },
         { .uri = "/api/general",  .method = HTTP_POST, .handler = general_post },
         { .uri = "/update",       .method = HTTP_POST, .handler = update_post },
