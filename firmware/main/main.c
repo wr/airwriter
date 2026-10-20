@@ -754,7 +754,8 @@ static int test_page_stop(void *ctx)
     (void)ctx;
     size_t f = heap_caps_get_free_size(MALLOC_CAP_INTERNAL);
     if (f < s_tp_heap_low) s_tp_heap_low = f;
-    return s_test_cancel;
+    // A failed write (a cancel, a stall) drops the rest; no point making it.
+    return s_test_cancel || s_printer_failed;
 }
 
 static void test_page_out(void *ctx, const uint8_t *buf, size_t n)
@@ -790,7 +791,10 @@ static void test_page_task(void *arg)
     iw_link_job_start(&s_link);
     led_grid_set_source(LG_SRC_AIRPRINT);
     printer_state_post(PS_EV_JOB_START);
-    // As a job does: the page prints for the ribbon that is in now.
+    // As a job does: the page prints for the ribbon that is in now. The wait
+    // for a printer that is not ready ends on a second tap; an AirPrint
+    // job's cancel, left set by the last one, must not end it.
+    s_job_cancelled = 0;
     ribbon_check(1);
 
     ht_algo_t algo;
@@ -828,9 +832,12 @@ static void test_page_task(void *arg)
     if (flushed != ESP_OK) serial_out_purge();
     iw_link_job_end(&s_link, flushed == ESP_OK);
 
+    // The cancel is cleared with the page: ribbon_check's wait reads it for
+    // every job, and a stale one would skip asking the ribbon.
     portENTER_CRITICAL(&s_tap_mux);
     s_test_running = 0;
     int cancelled = s_test_cancel;
+    s_test_cancel = 0;
     portEXIT_CRITICAL(&s_tap_mux);
     // A cancel that came too late to cut anything is a page that printed.
     printer_state_post(flushed == ESP_OK ? PS_EV_JOB_DONE
