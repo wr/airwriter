@@ -28,6 +28,9 @@ static const char *TAG = "lt";
 static SemaphoreHandle_t s_lock;
 static int        s_uart = -1, s_cts_pin = -1;
 static int        s_running;
+static volatile int s_quiet;        // W-1079: switched off on the settings page
+static lt_cfg_t   s_nc;             // the node's set-up, for coming back on
+static lt_ops_t   s_ops;
 static lt_node_t  s_node;
 static tt_rx_t    s_rx;
 static char       s_obj[NBP_NAME_MAX + 1], s_type[NBP_NAME_MAX + 1];
@@ -129,6 +132,7 @@ static void on_frame(void *ctx, tt_event_t ev, const uint8_t *f, size_t n)
     }
     n -= 2;
     if (s_tap) s_tap(s_tap_ctx, f, n);
+    if (s_quiet) return;
     // Frames to us, not the Chooser's broadcasts or other nodes' traffic.
     if (s_node.phase == LT_ONLINE && f[0] == s_node.node) note_frame("rx", f, n);
     lt_node_rx(&s_node, f, n, now_ms());
@@ -154,7 +158,7 @@ static void lt_task(void *arg)
         }
         xSemaphoreTake(s_lock, portMAX_DELAY);
         if (n > 0) tt_rx_feed(&s_rx, buf, (size_t)n, on_frame, NULL);
-        lt_node_tick(&s_node, now_ms());
+        if (!s_quiet) lt_node_tick(&s_node, now_ms());
         int online = s_node.phase == LT_ONLINE && s_seen_phase != LT_ONLINE;
         int lookup = s_node.st.replies != s_seen_replies;
         int fresh = 0;
@@ -218,13 +222,13 @@ esp_err_t localtalk_start(const localtalk_cfg_t *cfg)
     if (err != ESP_OK) return err;
 
     tt_rx_init(&s_rx);
-    lt_cfg_t nc = { .object = cfg->object, .type = cfg->type, .status = cfg->status,
-                    .hint = hint, .seed = esp_random() | 1 };
-    lt_ops_t ops = { .send = op_send, .claim = op_claim, .log = op_log,
-                     .job_begin = op_job_begin, .job_data = op_job_data,
-                     .job_room = op_job_room, .job_end = op_job_end };
+    s_nc = (lt_cfg_t){ .object = cfg->object, .type = cfg->type, .status = cfg->status,
+                       .hint = hint, .seed = esp_random() | 1 };
+    s_ops = (lt_ops_t){ .send = op_send, .claim = op_claim, .log = op_log,
+                        .job_begin = op_job_begin, .job_data = op_job_data,
+                        .job_room = op_job_room, .job_end = op_job_end };
     xSemaphoreTake(s_lock, portMAX_DELAY);
-    lt_node_init(&s_node, &nc, &ops, now_ms());
+    lt_node_init(&s_node, &s_nc, &s_ops, now_ms());
     xSemaphoreGive(s_lock);
 
     if (xTaskCreate(lt_task, "localtalk", 6144, NULL, 4, NULL) != pdPASS) return ESP_ERR_NO_MEM;
@@ -235,6 +239,35 @@ esp_err_t localtalk_start(const localtalk_cfg_t *cfg)
 }
 
 int localtalk_running(void) { return s_running; }
+int localtalk_quiet(void) { return s_running && s_quiet; }
+
+void localtalk_set_quiet(int quiet)
+{
+    quiet = quiet ? 1 : 0;
+    if (!s_running || quiet == s_quiet) return;
+    xSemaphoreTake(s_lock, portMAX_DELAY);
+    uint64_t now = now_ms();
+    if (quiet) {
+        if (s_node.pap.open) lt_node_pap_abort(&s_node, now);
+        op_claim(NULL, 0);                       // TashTalk answers for no node now
+        s_quiet = 1;
+        op_log(NULL, "the AppleTalk port is off");
+    } else {
+        uint8_t hint = s_node.node;
+        nvs_handle_t h;
+        if (nvs_open("lt", NVS_READONLY, &h) == ESP_OK) {
+            nvs_get_u8(h, "node", &hint);
+            nvs_close(h);
+        }
+        s_nc.hint = hint;
+        s_nc.status = s_node.status;
+        s_nc.seed = esp_random() | 1;
+        lt_node_init(&s_node, &s_nc, &s_ops, now);
+        s_quiet = 0;
+        op_log(NULL, "the AppleTalk port is on");
+    }
+    xSemaphoreGive(s_lock);
+}
 
 void localtalk_set_status(uint16_t status)
 {
@@ -311,8 +344,8 @@ static void json_ring(char **p, char *end, char ring[][LINE_LEN], unsigned lines
 
 void localtalk_json(char *buf, size_t cap)
 {
-    if (!s_running) {
-        snprintf(buf, cap, "{\"on\":false}");
+    if (!s_running || s_quiet) {
+        snprintf(buf, cap, "{\"on\":false,\"quiet\":%s}", s_quiet ? "true" : "false");
         return;
     }
     char *p = buf, *end = buf + cap - 8;
@@ -335,6 +368,14 @@ void localtalk_json(char *buf, size_t cap)
         p += snprintf(p, end - p, "%s%d", first ? "" : ",", id);
         first = 0;
     }
+    if (p < end) *p++ = ']';
+    // W-1079: the Macs heard in the last 10 minutes, for the settings page.
+    lt_seen_t seen[LT_SEEN_SLOTS];
+    size_t ns = lt_node_seen(n, now_ms(), LT_SEEN_MS, seen, LT_SEEN_SLOTS);
+    p += snprintf(p, end - p, ",\"macs\":[");
+    for (size_t i = 0; i < ns && p < end; i++)
+        p += snprintf(p, end - p, "%s{\"node\":%u,\"ago\":%lu}", i ? "," : "",
+                      seen[i].node, (unsigned long)seen[i].ago_s);
     if (p < end) *p++ = ']';
     p += snprintf(p, end - p,
         ",\"frames\":%lu,\"fcs_bad\":%u,\"errors\":%u,\"tx\":%u,\"for_us\":%lu,"

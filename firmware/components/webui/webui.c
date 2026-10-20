@@ -69,7 +69,7 @@ static esp_err_t page_get(httpd_req_t *req)
 
 static esp_err_t status_get(httpd_req_t *req)
 {
-    static char json[1024];
+    static char json[1536];
     json[0] = '\0';
     if (s_cfg.status_json) s_cfg.status_json(s_cfg.ctx, json, sizeof json);
     if (!json[0]) strcpy(json, "{}");
@@ -214,6 +214,8 @@ static int json_int(const char *body, const char *key, int absent)
     return atoi(p + 1);
 }
 
+static int json_bool(const char *body, const char *key);
+
 static esp_err_t general_post(httpd_req_t *req)
 {
     char body[BODY_MAX];
@@ -229,6 +231,15 @@ static esp_err_t general_post(httpd_req_t *req)
     if (gain > 45) return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "gain is 0 to 45");
 
     settings_save_general(host, queue, dither, gain);
+    // W-1079: the model, and a name of the user's own ("" goes back to the
+    // model's); AirPrint and the AppleTalk port.
+    char model[SET_QUEUE_MAX] = {0}, name[SET_QUEUE_MAX] = {0};
+    int has_model = json_str(body, "model", model, sizeof model);
+    int has_name = json_str(body, "name", name, sizeof name);
+    if ((has_model && model[0]) || has_name)
+        settings_save_printer(has_model ? model : NULL, has_name ? name : NULL);
+    int ap = json_bool(body, "airprint"), lt = json_bool(body, "localtalk");
+    if (ap >= 0 || lt >= 0) settings_save_switches(ap, lt);
     if (s_cfg.general_saved) s_cfg.general_saved(s_cfg.ctx);
     led_grid_blip(LG_BLIP_SAVED);
     return httpd_resp_sendstr(req, "{\"ok\":true}");
@@ -376,6 +387,33 @@ static esp_err_t localtalk_flash_post(httpd_req_t *req)
 }
 
 // Blocks for the test's 30-400 ms.
+// W-1079: the page's Restart, Erase All Settings and Print Test Page.
+static esp_err_t restart_post(httpd_req_t *req)
+{
+    if (!s_cfg.restart) return httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "no restart");
+    httpd_resp_sendstr(req, "{\"ok\":true}");
+    s_cfg.restart(s_cfg.ctx);
+    return ESP_OK;
+}
+
+static esp_err_t erase_post(httpd_req_t *req)
+{
+    if (!s_cfg.erase) return httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "no erase");
+    httpd_resp_sendstr(req, "{\"ok\":true}");
+    s_cfg.erase(s_cfg.ctx);
+    return ESP_OK;
+}
+
+static esp_err_t test_post(httpd_req_t *req)
+{
+    if (!s_cfg.test_page) return httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "no test page");
+    if (s_cfg.test_page(s_cfg.ctx)) {
+        httpd_resp_set_status(req, "409 Conflict");
+        return httpd_resp_sendstr(req, "the printer is busy");
+    }
+    return httpd_resp_sendstr(req, "{\"ok\":true}");
+}
+
 static esp_err_t cable_post(httpd_req_t *req)
 {
     if (!s_cfg.cable_test) {
@@ -409,7 +447,7 @@ esp_err_t webui_start(const webui_cfg_t *cfg)
     httpd_config_t hc = HTTPD_DEFAULT_CONFIG();
     hc.server_port      = 80;
     hc.ctrl_port        = 32080;
-    hc.max_uri_handlers = 22;
+    hc.max_uri_handlers = 26;
     hc.stack_size       = 6144;
     hc.lru_purge_enable = true;
     hc.uri_match_fn     = httpd_uri_match_wildcard;
@@ -438,6 +476,9 @@ esp_err_t webui_start(const webui_cfg_t *cfg)
         { .uri = "/api/update/auto",    .method = HTTP_POST, .handler = update_auto_post },
         { .uri = "/api/localtalk/flash", .method = HTTP_POST, .handler = localtalk_flash_post },
         { .uri = "/api/cable",    .method = HTTP_POST, .handler = cable_post },
+        { .uri = "/api/restart",  .method = HTTP_POST, .handler = restart_post },
+        { .uri = "/api/erase",    .method = HTTP_POST, .handler = erase_post },
+        { .uri = "/api/test",     .method = HTTP_POST, .handler = test_post },
         { .uri = "/*",            .method = HTTP_GET,  .handler = catch_all },
     };
     for (size_t i = 0; i < sizeof routes / sizeof routes[0]; i++)

@@ -774,6 +774,35 @@ static void test_radio_normalize(void)
     CHECK_EQ_INT(et_radio_normalize(big, sizeof big, out, sizeof out), 0);
 }
 
+// W-1079: the peers a link has heard lately, with the MAC each came from
+// (a Basilisk II peer's carries its computer's IP).
+static void test_peers(void)
+{
+    et_link_t l;
+    uint64_t t = link_online(&l, &ID_A, MAC_A, 0xFF23, 77);
+    uint8_t nbp[64], f[ELAP_MAX_FRAME];
+    size_t fl = mac_dg(f, THEM, ET_AT_MCAST, 0, 0xFF, SOCK_NIS, DDP_NBP, nbp, lkup(nbp));
+    et_link_rx(&l, f, fl, t);                             // from 0xFF10.12, at THEM
+    et_peer_t p[ET_MAP_SLOTS];
+    size_t k = et_link_peers(&l, t + 3000, 600000, p, ET_MAP_SLOTS);
+    CHECK_EQ_INT(k, 1);
+    CHECK_EQ_INT(p[0].net, 0xFF10);
+    CHECK_EQ_INT(p[0].node, 12);
+    CHECK_EQ_MEM(p[0].hw, THEM, 6);
+    CHECK_EQ_INT(p[0].ago_s, 3);
+    CHECK_EQ_INT(et_link_peers(&l, t + 600001, 600000, p, ET_MAP_SLOTS), 0);
+    CHECK_EQ_INT(et_link_peers(&l, t + 3000, 600000, p, 0), 0);
+
+    // The same computer under a new address (an emulator restarted, or a Mac
+    // that took another node): one peer, at its newest address.
+    fl = aarp_frame(f, THEM, ET_AT_MCAST, AARP_REQUEST, 0xFF10, 99, 0xFF23, 77);
+    et_link_rx(&l, f, fl, t + 5000);
+    k = et_link_peers(&l, t + 6000, 600000, p, ET_MAP_SLOTS);
+    CHECK_EQ_INT(k, 1);
+    CHECK_EQ_INT(p[0].node, 99);
+    CHECK_EQ_INT(p[0].ago_s, 1);
+}
+
 int main(void)
 {
     test_elap_round_trip();
@@ -795,5 +824,6 @@ int main(void)
     test_zone_parse();
     test_zone_pong();
     test_radio_normalize();
+    test_peers();
     TEST_END;
 }

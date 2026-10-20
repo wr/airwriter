@@ -34,6 +34,14 @@ typedef struct {
 // Starts the node once; later calls do nothing.
 esp_err_t localtalk_start(const localtalk_cfg_t *cfg);
 int       localtalk_running(void);
+// The AppleTalk port's switch on the settings page (W-1079). The node cannot
+// stop once started (it keeps UART2 and its task), so off is quiet: a job is
+// cut short, TashTalk answers for no node and frames are dropped, so the
+// board leaves the Chooser. On again acquires a node as at start. Running
+// stays true throughout: the cable test and the TashTalk flash treat a quiet
+// node as a running one.
+void      localtalk_set_quiet(int quiet);
+int       localtalk_quiet(void);
 // The Option Card status word (LT_IW_* in lt_node.h) for SendStatus.
 void      localtalk_set_status(uint16_t status);
 // State, counters and the latest lines, for GET /api/lt.

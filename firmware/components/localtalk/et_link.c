@@ -289,6 +289,32 @@ void et_link_set_mac(et_link_t *l, const uint8_t mac[ETH_ALEN], uint64_t now)
     l->probe_at = now;
 }
 
+size_t et_link_peers(const et_link_t *l, uint64_t now, uint32_t within_ms, et_peer_t *out, size_t max)
+{
+    et_peer_t all[ET_MAP_SLOTS];
+    size_t k = 0;
+    for (int i = 0; i < ET_MAP_SLOTS; i++) {
+        const et_map_t *m = &l->map[i];
+        if (!m->node || now - m->at > within_ms) continue;
+        et_peer_t p = { m->net, m->node, {0}, (uint32_t)((now - m->at) / 1000) };
+        memcpy(p.hw, m->hw, ETH_ALEN);
+        size_t j = k++;
+        while (j > 0 && all[j - 1].ago_s > p.ago_s) { all[j] = all[j - 1]; j--; }   // newest first
+        all[j] = p;
+    }
+    // One computer, one peer: a MAC heard under an older address too (an
+    // emulator restarted, a Mac that took another node) keeps only its newest.
+    size_t n = 0;
+    for (size_t i = 0; i < k; i++) {
+        int dup = 0;
+        for (size_t j = 0; j < n && !dup; j++) dup = !memcmp(all[j].hw, all[i].hw, ETH_ALEN);
+        if (!dup) all[n++] = all[i];
+    }
+    if (n > max) n = max;
+    memcpy(out, all, n * sizeof *out);
+    return n;
+}
+
 void et_link_down(et_link_t *l, uint64_t now)
 {
     l->now = now;

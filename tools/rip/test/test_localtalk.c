@@ -1149,6 +1149,46 @@ static void test_cable_no_idle_hold(void)
     CHECK(n.pap.open);                                    // today's 120 s timer, no sooner
 }
 
+// W-1079: the Macs a link has heard lately, for the settings page's cards.
+static void test_seen(void)
+{
+    lt_node_t n;
+    uint64_t t = online(&n, 150);
+    uint8_t f[LLAP_MAX];
+    const uint8_t echo[] = { 1, 'h', 'i' };
+    size_t fl = mac_ddp(f, 150, SOCK_AEP, DDP_AEP, echo, sizeof echo);    // from node 83
+    lt_node_rx(&n, f, fl, t);
+    const uint8_t enq[] = { 99, 99, LLAP_ENQ };           // a node choosing its ID: not one yet
+    lt_node_rx(&n, enq, sizeof enq, t + 1000);
+    lt_seen_t s[LT_SEEN_SLOTS];
+    size_t k = lt_node_seen(&n, t + 5000, 600000, s, LT_SEEN_SLOTS);
+    CHECK_EQ_INT(k, 1);
+    CHECK_EQ_INT(s[0].node, 83);
+    CHECK_EQ_INT(s[0].ago_s, 5);
+    CHECK_EQ_INT(lt_node_seen(&n, t + 600001, 600000, s, LT_SEEN_SLOTS), 0);   // quiet 10 min
+
+    // More nodes than slots: the one quiet longest makes room. Newest first.
+    for (int id = 1; id <= LT_SEEN_SLOTS + 1; id++) {
+        const uint8_t rts[] = { 150, (uint8_t)id, LLAP_RTS };
+        lt_node_rx(&n, rts, sizeof rts, t + 10000 + (uint64_t)id * 1000);
+    }
+    k = lt_node_seen(&n, t + 40000, 600000, s, LT_SEEN_SLOTS);
+    CHECK_EQ_INT(k, LT_SEEN_SLOTS);
+    CHECK_EQ_INT(s[0].node, LT_SEEN_SLOTS + 1);
+    CHECK_EQ_INT(s[0].ago_s, 40 - 10 - (LT_SEEN_SLOTS + 1));
+    int old = 0;
+    for (size_t i = 0; i < k; i++) old |= s[i].node == 1 || s[i].node == 83;
+    CHECK(!old);
+    CHECK_EQ_INT(lt_node_seen(&n, t + 40000, 600000, s, 3), 3);             // as many as asked
+    // Heard again: the same slot, now newest.
+    const uint8_t again[] = { 150, 5, LLAP_RTS };
+    lt_node_rx(&n, again, sizeof again, t + 41000);
+    k = lt_node_seen(&n, t + 41000, 600000, s, LT_SEEN_SLOTS);
+    CHECK_EQ_INT(k, LT_SEEN_SLOTS);
+    CHECK_EQ_INT(s[0].node, 5);
+    CHECK_EQ_INT(s[0].ago_s, 0);
+}
+
 int main(void)
 {
     test_fcs();
@@ -1172,5 +1212,6 @@ int main(void)
     test_idle_hold();
     test_cable_no_idle_hold();
     test_idle_hold_waits_for_room();
+    test_seen();
     TEST_END;
 }

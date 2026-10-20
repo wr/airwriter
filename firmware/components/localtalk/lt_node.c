@@ -547,13 +547,50 @@ void lt_node_set_address(lt_node_t *n, uint16_t net, uint8_t node, uint64_t now)
     if (node) say(n, "address %u.%u is ours", net, node);
 }
 
+static void seen_note(lt_node_t *n, uint8_t node, uint64_t now)
+{
+    if (!node || node == LLAP_BCAST) return;
+    int k = -1;
+    for (int i = 0; i < LT_SEEN_SLOTS && k < 0; i++)
+        if (n->seen[i].node == node) k = i;
+    for (int i = 0; i < LT_SEEN_SLOTS && k < 0; i++)
+        if (!n->seen[i].node) k = i;
+    if (k < 0) {
+        k = 0;
+        for (int i = 1; i < LT_SEEN_SLOTS; i++)
+            if (n->seen[i].at_s < n->seen[k].at_s) k = i;
+    }
+    n->seen[k].node = node;
+    n->seen[k].at_s = (uint32_t)(now / 1000);
+}
+
+size_t lt_node_seen(const lt_node_t *n, uint64_t now, uint32_t within_ms, lt_seen_t *out, size_t max)
+{
+    uint32_t t = (uint32_t)(now / 1000);
+    lt_seen_t all[LT_SEEN_SLOTS];
+    size_t k = 0;
+    for (int i = 0; i < LT_SEEN_SLOTS; i++) {
+        if (!n->seen[i].node || (uint64_t)(t - n->seen[i].at_s) * 1000 >= within_ms) continue;
+        lt_seen_t s = { n->seen[i].node, t - n->seen[i].at_s };
+        size_t j = k++;
+        while (j > 0 && all[j - 1].ago_s > s.ago_s) { all[j] = all[j - 1]; j--; }   // newest first
+        all[j] = s;
+    }
+    if (k > max) k = max;
+    memcpy(out, all, k * sizeof *out);
+    return k;
+}
+
 void lt_node_rx(lt_node_t *n, const uint8_t *f, size_t len, uint64_t now)
 {
     if (len < LLAP_HDR) return;
     n->st.frames++;
     uint8_t dst = f[0], src = f[1], type = f[2];
     // ENQs carry the prober's candidate as their source: not a node yet.
-    if (type != LLAP_ENQ) n->heard[src / 8] |= (uint8_t)(1u << (src % 8));
+    if (type != LLAP_ENQ) {
+        n->heard[src / 8] |= (uint8_t)(1u << (src % 8));
+        seen_note(n, src, now);
+    }
 
     if (n->phase == LT_ACQUIRING) {
         if (n->link == LT_LINK_ELAP) return;

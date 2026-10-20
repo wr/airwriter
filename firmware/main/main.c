@@ -300,9 +300,18 @@ static volatile int        s_line_seen;     // serial_out has reported the line
 
 static char s_suffix[8];            // the MAC's last two bytes, the default hostname's
 
+// W-1079: what the page last saved, beside s_set's names in use since boot:
+// a new name or hostname reaches mDNS and the Chooser only at a restart.
+static char s_saved_model[SET_QUEUE_MAX], s_saved_name[SET_QUEUE_MAX], s_saved_host[SET_HOST_MAX];
+// The DIP bank as last read, for the page (W-1079). Unknown until the first.
+static dip_config_t s_dip;
+static volatile int s_dip_known;
+
 // The page saved queue, hostname, dither or gain (W-1068): re-read them, and
 // give the pipe and the test page the screen they now name. The hostname
 // and queue still take a restart to reach mDNS, as they always have.
+static void lt_port_apply(int on);
+
 static void general_saved(void *ctx)
 {
     (void)ctx;
@@ -314,6 +323,18 @@ static void general_saved(void *ctx)
     if (ht_algo_from_name(s_set.dither, &algo)) algo = HT_ATKINSON;
     job_pipe_set_screen(algo, s_set.gain);
     ESP_LOGI(TAG, "screen now %s, gain %u%%", s_set.dither, s_set.gain);
+    // W-1079: the names wait for a restart; the switches act now.
+    snprintf(s_saved_model, sizeof s_saved_model, "%s", fresh.model);
+    snprintf(s_saved_name, sizeof s_saved_name, "%s", fresh.name);
+    snprintf(s_saved_host, sizeof s_saved_host, "%s", fresh.hostname);
+    if (fresh.airprint != s_set.airprint) {
+        s_set.airprint = fresh.airprint;
+        ipp_server_set_airprint(s_set.airprint);
+    }
+    if (fresh.lt_port >= 0 && fresh.lt_port != s_set.lt_port) {
+        s_set.lt_port = fresh.lt_port;
+        lt_port_apply(s_set.lt_port);
+    }
 }
 
 static const char *ribbon_name(uint8_t r)
@@ -904,7 +925,10 @@ static void dip_on_change(const dip_config_t *cfg)
     if (cfg->dev_mode)
         ESP_LOGI(TAG, "dip: dev_mode is on, but the printer uuid stays Kconfig-driven this rev");
     if (cfg->test_on_boot) s_test_on_boot = 1;
-    if (cfg->mode == 2) lt_start("DIP mode 2");
+    s_dip = *cfg;
+    s_dip_known = 1;
+    // W-1079: once the page has set the AppleTalk port, its switch decides.
+    if (cfg->mode == 2 && s_set.lt_port < 0) lt_start("DIP mode 2");
     else if (localtalk_running())
         ESP_LOGI(TAG, "dip: LocalTalk stays on until the board restarts");
 }
@@ -952,6 +976,45 @@ static void reset_task(void *arg)
     led_grid_action(LG_ACT_RESET_DONE, 0);
     vTaskDelay(pdMS_TO_TICKS(LG_RESET_DONE_MS));
     restart_when_released();
+}
+
+// W-1079: the settings page's Restart, Erase All Settings and Print Test Page.
+// Restart lets a printing page finish (up to its own 10-minute stall limit).
+static void restart_task(void *arg)
+{
+    (void)arg;
+    for (int i = 0; i < 1300 && s_printing; i++) vTaskDelay(pdMS_TO_TICKS(500));
+    vTaskDelay(pdMS_TO_TICKS(300));                    // the reply goes out first
+    esp_restart();
+}
+
+static void web_restart(void *ctx)
+{
+    (void)ctx;
+    ESP_LOGW(TAG, "restart from the settings page%s", s_printing ? ", after this page" : "");
+    if (xTaskCreate(restart_task, "restart", 2048, NULL, 5, NULL) != pdPASS)
+        ESP_LOGE(TAG, "restart: could not start");
+}
+
+// As the held button's reset, with nothing to wait for being let go.
+static void web_erase(void *ctx)
+{
+    (void)ctx;
+    ESP_LOGW(TAG, "factory reset from the settings page");
+    s_reset_released = 1;
+    if (xTaskCreate(reset_task, "reset", 3072, NULL, 5, NULL) != pdPASS) {
+        ESP_LOGE(TAG, "factory reset: could not start");
+        led_grid_action(LG_ACT_RESET_FAILED, 0);
+    }
+}
+
+static int web_test_page(void *ctx)
+{
+    (void)ctx;
+    on_activity();
+    if (xSemaphoreTake(s_job_lock, 0) != pdTRUE) return 1;
+    test_page_locked();
+    return 0;
 }
 
 // On dip_config's poll task: start work, never wait on it.
@@ -1185,6 +1248,21 @@ static const char *reset_name(esp_reset_reason_t r)
     }
 }
 
+// A string for a JSON value: quotes and backslashes escaped, control
+// characters dropped. Network names and printer names are the user's.
+static const char *json_esc(char *dst, size_t cap, const char *src)
+{
+    size_t k = 0;
+    for (; src && *src && k + 2 < cap; src++) {
+        unsigned char c = (unsigned char)*src;
+        if (c < 0x20) continue;
+        if (c == '"' || c == '\\') dst[k++] = '\\';
+        dst[k++] = (char)c;
+    }
+    dst[k] = '\0';
+    return dst;
+}
+
 static void status_json(void *ctx, char *buf, size_t cap)
 {
     (void)ctx;
@@ -1198,6 +1276,16 @@ static void status_json(void *ctx, char *buf, size_t cap)
     // setup mode, where there is no association to describe.
     wifi_ap_record_t ap;
     int joined = !s_ap_mode && esp_wifi_sta_get_ap_info(&ap) == ESP_OK;
+
+    // W-1079: the DIP bank as switches 1-8, "1" for on; "" before the first read.
+    char dip[9] = "";
+    if (s_dip_known) {
+        uint8_t on = (uint8_t)(s_dip.mode | s_dip.dev_mode << 2 | s_dip.test_on_boot << 3 |
+                               s_dip.dither_ovr << 4 | s_dip.gamer << 6 | s_dip.spare << 7);
+        for (int i = 0; i < 8; i++) dip[i] = (on >> i) & 1 ? '1' : '0';
+        dip[8] = '\0';
+    }
+    char e_ssid[80], e_queue[80], e_job[200], e_model[80], e_name[80];
 
     char job[96];
     if (s_last_job[0])
@@ -1215,18 +1303,20 @@ static void status_json(void *ctx, char *buf, size_t cap)
         "\"uptime\":\"%uh %02um\",\"reset\":\"%s\",\"version\":\"%s\",\"heap\":\"%u KB\","
         "\"slot\":\"%s\",\"trial\":%s,\"rolled_back\":\"%s\","
         "\"known_good\":\"%s\",\"known_good_version\":\"%s\","
-        "\"model\":\"Apple ImageWriter II\",\"pic\":%s}",
+        "\"model\":\"Apple ImageWriter II\",\"pic\":%s,"
+        "\"pmodel\":\"%s\",\"pname\":\"%s\",\"phost\":\"%s\",\"airprint\":%s,"
+        "\"lt_port\":%d,\"lt\":%s,\"dip\":\"%s\"}",
         state_text(v.state),
         ps_name(v.state),
         v.asleep ? "true" : "false",
         attention || offline ? "true" : "false",
         s_ap_mode ? "true" : "false",
-        job,
+        json_esc(e_job, sizeof e_job, job),
         attention || failed ? "true" : "false",
         serial_out_clear() ? "true" : "false",
         s_printing ? "true" : "false", ribbon_name(s_ribbon),
-        s_set.queue, s_set.hostname, s_ip,
-        joined ? (char *)ap.ssid : (s_ap_mode ? "" : s_set.ssid),
+        json_esc(e_queue, sizeof e_queue, s_set.queue), s_set.hostname, s_ip,
+        json_esc(e_ssid, sizeof e_ssid, joined ? (char *)ap.ssid : (s_ap_mode ? "" : s_set.ssid)),
         s_set.dither, (unsigned)s_set.gain,
         joined ? (ap.rssi > -55 ? "Excellent" : ap.rssi > -67 ? "Good"
                 : ap.rssi > -75 ? "Fair" : "Weak") : "",
@@ -1237,7 +1327,10 @@ static void status_json(void *ctx, char *buf, size_t cap)
         reset_name(esp_reset_reason()), app->version, (unsigned)(esp_get_free_heap_size() / 1024),
         ota_health_slot(), ota_health_on_trial() ? "true" : "false", ota_health_rolled_back(),
         ota_health_known_good(), ota_health_known_good_version(),
-        pic_prog_available() ? "true" : "false");
+        pic_prog_available() ? "true" : "false",
+        json_esc(e_model, sizeof e_model, s_saved_model), json_esc(e_name, sizeof e_name, s_saved_name),
+        s_saved_host, s_set.airprint ? "true" : "false", s_set.lt_port,
+        localtalk_running() && !localtalk_quiet() ? "true" : "false", dip);
 }
 
 static void lt_json(void *ctx, char *buf, size_t cap)
@@ -1339,6 +1432,18 @@ static void lt_start(const char *why)
 #else
     (void)why;
 #endif
+}
+
+// W-1079: the AppleTalk port's switch. Off quiets a running node (it cannot
+// stop); on starts one, or wakes a quiet one.
+static void lt_port_apply(int on)
+{
+    if (!on) {
+        localtalk_set_quiet(1);
+        return;
+    }
+    if (localtalk_running()) localtalk_set_quiet(0);
+    else lt_start("the settings page");
 }
 
 // W-1076, W-1078: EtherTalk for Macs on this network, Basilisk II and
@@ -1538,9 +1643,14 @@ void app_main(void)
     // Wi-Fi saved before this restart: green greets the join (W-1049).
     if (settings_take_wifi_fresh()) printer_state_post(PS_EV_WIFI_FRESH);
     ota_health_start(s_set.ssid[0] != 0);
+    snprintf(s_saved_model, sizeof s_saved_model, "%s", s_set.model);
+    snprintf(s_saved_name, sizeof s_saved_name, "%s", s_set.name);
+    snprintf(s_saved_host, sizeof s_saved_host, "%s", s_set.hostname);
 #if CONFIG_AIRWRITER_LT_BENCH
     lt_start("bench build");
+    if (s_set.lt_port == 0) localtalk_set_quiet(1);
 #endif
+    if (s_set.lt_port == 1) lt_start("the settings page");
 
     raster_selftest();
 
@@ -1610,6 +1720,7 @@ void app_main(void)
         ota_health_set(OH_AP_UP, 1);
         fwu_start(1);
         webui_cfg_t wcfg = { .status_json = status_json, .general_saved = general_saved, .captive = 1,
+                              .restart = web_restart, .erase = web_erase, .test_page = web_test_page,
                               .localtalk_flash = localtalk_flash,
                               .lt_json = lt_json, .lt_job = lt_job, .lt_echo = lt_echo,
                               .cable_test = cable_web };   // no EtherTalk: the zone stays off the open AP
@@ -1629,6 +1740,7 @@ void app_main(void)
         .sink = { .begin = doc_begin, .data = doc_data, .end = doc_end,
                   .cancel = doc_cancel, .ctx = NULL },
     };
+    ipp_server_set_airprint(s_set.airprint);          // W-1079
     ESP_ERROR_CHECK(ipp_server_start(&cfg));
     // The ribbon may have been read while the server started; push what it is.
     ipp_server_set_colour(s_ribbon == IW_RIBBON_COLOUR);
@@ -1638,6 +1750,7 @@ void app_main(void)
     fw_update_net_up();
 
     webui_cfg_t wcfg = { .status_json = status_json, .general_saved = general_saved, .captive = 0,
+                          .restart = web_restart, .erase = web_erase, .test_page = web_test_page,
                           .localtalk_flash = localtalk_flash,
                           .lt_json = lt_json, .lt_job = lt_job, .lt_echo = lt_echo,
                           .cable_test = cable_web, .et_json = et_json,

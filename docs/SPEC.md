@@ -558,9 +558,10 @@ printer (`components/localtalk`):
   DDP header (or AARP's 28). On by default; NVS `et`/`radio`.
 - **Infinite Mac's zone relay** (W-1076): EtherTalk frames as JSON over a WebSocket to
   `wss://infinitemac.org/zone/<zone>/websocket`, as the Basilisk II and SheepShaver Macs in an
-  infinitemac.org tab started with `?appleTalk=<zone>` use. On while NVS `et`/`zone_on` is set
-  and `et`/`zone` holds 1 to 32 of `A-Z a-z 0-9 - _ .` (a board from before `zone_on` reads a
-  zone name as on); the name works like a password and appears only in `/api/et/settings`. The board's MAC there is `B2` and the rest of its station MAC: Infinite Mac's emulators send
+  infinitemac.org tab started with `?appleTalk=<zone>` use. Off until NVS `et`/`zone_on` is set
+  (W-1079), and then needs `et`/`zone`: 1 to 32 of `A-Z a-z 0-9 - _ .`. The name works like a
+  password (anyone who opens Infinite Mac with it can print) and appears only in
+  `/api/et/settings`; the page makes one up rather than offering a guessable default. The board's MAC there is `B2` and the rest of its station MAC: Infinite Mac's emulators send
   unicast only to `B2…` MACs, their own kind, and drop the rest. It answers
   Infinite Mac's ping frames, and reconnects after 1 s, doubling to 60 s.
 

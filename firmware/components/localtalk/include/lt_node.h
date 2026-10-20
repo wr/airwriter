@@ -129,6 +129,11 @@ typedef struct {               // how to answer whoever sent a datagram
 } lt_route_t;
 
 #define LT_XO_SLOTS 4
+// The nodes heard lately, for the settings page (W-1079): a node that has
+// sent anything but an ENQ, and when. Full, the one quiet longest makes room.
+#define LT_SEEN_SLOTS 16
+#define LT_SEEN_MS    600000      // the page's "connected": heard in the last 10 minutes
+typedef struct { uint8_t node; uint32_t ago_s; } lt_seen_t;
 #define LT_XO_PKT   (ATP_HDR + 4 + 256)   // the biggest response we cache: OpenConnReply
 
 typedef struct {               // a sent XO response, kept for duplicate requests
@@ -191,6 +196,7 @@ typedef struct {
     uint8_t    last_lkup[3 * (NBP_NAME_MAX + 1) + 2];
     uint64_t   last_lkup_at;
     uint8_t    heard[32];      // bit n: node n has sent a frame
+    struct { uint8_t node; uint32_t at_s; } seen[LT_SEEN_SLOTS];   // node 0: free
     uint64_t   echo_at;        // when lt_node_echo last asked
     uint8_t    link;           // LT_LINK_*
     uint32_t   idle_hold_ms;
@@ -217,3 +223,5 @@ void lt_node_set_status(lt_node_t *n, uint16_t status);
 // the address is gone (the link's MAC changed) and the node waits for the next.
 // A change while a connection is open ends that job abandoned first.
 void lt_node_set_address(lt_node_t *n, uint16_t net, uint8_t node, uint64_t now);
+// The nodes heard in the last within_ms, newest first, at most max of them.
+size_t lt_node_seen(const lt_node_t *n, uint64_t now, uint32_t within_ms, lt_seen_t *out, size_t max);

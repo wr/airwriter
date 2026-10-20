@@ -80,6 +80,8 @@ static char s_hostname[40];
 static volatile int s_colour;   // W-1064: the colour ribbon is in
 static volatile int s_mdns_up;
 static int s_txt_colour;        // what the TXT record says
+static volatile int s_airprint = 1;   // W-1079: advertised and taking jobs
+static int s_print_svcs;        // _ipp and _printer are registered
 
 
 static ipp_job_rec_t s_job;
@@ -153,7 +155,7 @@ static void fill_printer(ipp_printer_t *p)
     p->state_message  = s_stop_reason ? s_stop_message : NULL;
     // Still accepting: the job queues and prints when paper goes back in,
     // which is what a user expects after clearing the alert.
-    p->accepting_jobs = 1;
+    p->accepting_jobs = s_airprint;
     p->queued_jobs    = ipp_job_active(&s_job) ? 1 : 0;
     p->uptime_s       = uptime_s();
     p->colour         = s_colour;
@@ -407,12 +409,17 @@ static int dispatch(work_t *w, int fd, const ipp_req_t *r, hbody_t *body,
 
     case IPP_OP_VALIDATE_JOB:
         if (s_cfg.on_job_op) s_cfg.on_job_op();
+        if (!s_airprint) return send_status(w, fd, r, IPP_STATUS_ERR_NOT_ACCEPTING_JOBS, keep_alive);
         if (!format_supported(r->document_format))
             return send_status(w, fd, r, IPP_STATUS_ERR_FORMAT_NOT_SUPPORTED, keep_alive);
         return send_status(w, fd, r, IPP_STATUS_OK, keep_alive);
 
     case IPP_OP_PRINT_JOB:
         if (s_cfg.on_job_op) s_cfg.on_job_op();
+        if (!s_airprint) {                       // W-1079: AirPrint is switched off
+            hbody_drain(body);
+            return send_status(w, fd, r, IPP_STATUS_ERR_NOT_ACCEPTING_JOBS, keep_alive);
+        }
         return op_print_job(w, fd, r, body, pre, pre_len, keep_alive);
 
     case IPP_OP_GET_JOB_ATTRIBUTES: {
@@ -614,14 +621,11 @@ static void worker_task(void *arg)
     vTaskDelete(NULL);
 }
 
-static esp_err_t start_mdns(void)
+// The printer's own services, _ipp (with its _universal subtype) and _printer:
+// what AirPrint finds, and what switching it off takes away (W-1079).
+static esp_err_t add_print_services(void)
 {
-    esp_err_t err = mdns_init();
-    if (err != ESP_OK) return err;
-
-    ESP_ERROR_CHECK(mdns_hostname_set(s_hostname));
-    ESP_ERROR_CHECK(mdns_instance_name_set(s_cfg.queue_name));
-
+    esp_err_t err;
     s_txt_colour = s_colour;
     mdns_txt_item_t txt[] = {
         { "txtvers",  "1" },
@@ -642,9 +646,10 @@ static esp_err_t start_mdns(void)
     const char *bare_uuid = strstr(s_uuid, "urn:uuid:");
     if (bare_uuid) txt[7].value = bare_uuid + strlen("urn:uuid:");
 
-    // The service has to exist before a subtype can attach to it.
-    ESP_ERROR_CHECK(mdns_service_add(NULL, "_ipp", "_tcp", s_cfg.port,
-                                     txt, sizeof txt / sizeof txt[0]));
+    // The service has to exist before a subtype can attach to it. A failure
+    // returns rather than aborts: this runs again when AirPrint is switched on.
+    err = mdns_service_add(NULL, "_ipp", "_tcp", s_cfg.port, txt, sizeof txt / sizeof txt[0]);
+    if (err != ESP_OK) return err;
 
     // Without the _universal subtype iOS never lists the printer, however
     // correct the rest of the advertisement is. SPEC.md 3.2.
@@ -656,14 +661,46 @@ static esp_err_t start_mdns(void)
     if (err != ESP_OK) ESP_LOGE(TAG, "no _universal subtype: iOS will not list us (%s)",
                                 esp_err_to_name(err));
 
-    // A stub for older clients that probe LPD before IPP. Neither of these is
-    // worth failing the printer over, so they only warn.
+    // A stub for older clients that probe LPD before IPP; not worth failing
+    // the printer over, so it only warns.
     if (mdns_service_add(NULL, "_printer", "_tcp", 515, NULL, 0) != ESP_OK)
         ESP_LOGW(TAG, "no _printer._tcp advertisement");
+    s_print_svcs = 1;
+    return ESP_OK;
+}
+
+static esp_err_t start_mdns(void)
+{
+    esp_err_t err = mdns_init();
+    if (err != ESP_OK) return err;
+
+    ESP_ERROR_CHECK(mdns_hostname_set(s_hostname));
+    ESP_ERROR_CHECK(mdns_instance_name_set(s_cfg.queue_name));
+
+    if (s_airprint) {
+        err = add_print_services();
+        if (err != ESP_OK) return err;
+    }
+    // The settings page, whether or not AirPrint is on.
     if (mdns_service_add(NULL, "_http", "_tcp", 80, NULL, 0) != ESP_OK)
         ESP_LOGW(TAG, "no _http._tcp advertisement");
-
     return ESP_OK;
+}
+
+void ipp_server_set_airprint(int on)
+{
+    on = on ? 1 : 0;
+    if (on == s_airprint) return;
+    s_airprint = on;
+    ESP_LOGI(TAG, "AirPrint %s", on ? "on" : "off: not advertised, not taking jobs");
+    if (!s_mdns_up) return;
+    if (on && !s_print_svcs) {
+        if (add_print_services() != ESP_OK) ESP_LOGE(TAG, "AirPrint: could not advertise again");
+    } else if (!on && s_print_svcs) {
+        mdns_service_remove("_ipp", "_tcp");
+        mdns_service_remove("_printer", "_tcp");
+        s_print_svcs = 0;
+    }
 }
 
 static esp_err_t start_listener(void)
@@ -749,7 +786,7 @@ void ipp_server_set_colour(int on)
     s_colour = on;
     // The TXT record is tracked on its own: a change during start_mdns lands
     // in the attributes but not the record, and the call after start fixes it.
-    if (!s_mdns_up || on == s_txt_colour) return;
+    if (!s_mdns_up || !s_print_svcs || on == s_txt_colour) return;
     s_txt_colour = on;
     esp_err_t a = mdns_service_txt_item_set("_ipp", "_tcp", "Color", on ? "T" : "F");
     esp_err_t b = mdns_service_txt_item_set("_ipp", "_tcp", "URF",
