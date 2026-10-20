@@ -119,6 +119,17 @@ What works on `main`:
   Basilisk II, Infinite Mac) with its switch and the Macs heard in the last 10 minutes. The
   TashTalk flash key shows only after a cable test answers `no_tashtalk`. The page makes no
   request off the board. Sources in `tools/webui`; `mkheader.py` builds `webui_page.h`.
+- Top margin (Printer pane, NVS `topmargin`, `/api/status` `top_margin`, `POST /api/general
+  {"top_margin":N}`), in 1/144 in, -216 to 144, offered in sixteenths of an inch: positive adds
+  paper ahead of each AirPrint page and the test page, negative drops their first rows
+  (`ripjob_cfg_t.top_margin`, `rip --top-margin`). Not LocalTalk jobs: the Mac's driver keeps
+  its own. Default -144 (`CONFIG_AIRWRITER_TOP_MARGIN`): paper loaded as the Owner's Guide says
+  (leading edge under the bail) starts printing about 1 in down, and an AirPrint page arrives
+  as the whole sheet, so dropping that inch lands it where the iPhone laid it out.
+- A job starts at top of form: when the last stream to move the paper was cut, or was a Mac's
+  that stopped mid-page, the next job sends a form feed first (`iw_link_need_ff`). ESC c leaves
+  top of form alone. A Mac's stream never form-feeds (it feeds by line, forward and back, to
+  exactly its 11 in page), so the LocalTalk scanner follows the paper (`iw_scan_at_tof`).
 - AirPrint has an off switch (W-1079): off, `_ipp` and `_printer` leave Bonjour and Print-Job
   is refused as not accepting jobs; on, they come back under the same printer-uuid.
 - Wi-Fi scans all channels and joins the strongest AP; printer-uuid is stable (MAC + epoch).
@@ -303,7 +314,9 @@ Linear is the queue; these are the live items.
   to a screen, the curve, the ink order or how strips are sent, and are regenerated with the
   reason in the commit. A blank strip is only its held line feed, in gray as in colour.
 - **Firmware:** `idf.py build` clean.
-- **On board 1:** an `ipptool` Print-Job of `fixtures/checker.urf` prints crc32 `8ee84844`.
+- **On board 1:** with Top margin at 0 (`POST /api/general {"top_margin":0}`), an `ipptool`
+  Print-Job of `fixtures/checker.urf` prints crc32 `8ee84844`. At the default (-1 in) the
+  checker, which sits in the page's top inch, prints blank (crc32 `0e5fc630`, 9 bytes).
   After an OTA, `/api/status` reaches `"trial":false` with the new `version`.
 - **Schematic:** `kicad-cli sch erc` → 0 errors; 44 known warnings (42 `lib_symbol_mismatch`,
   2 `isolated_pin_label`).

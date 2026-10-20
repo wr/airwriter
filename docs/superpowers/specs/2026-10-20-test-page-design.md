@@ -11,7 +11,10 @@ the test page as shown: keep the letterhead and the footer."
 
 ## The page
 
-Inside the 0.5 in top and bottom margins AirPrint pages use, 8 in (1152 dots) wide:
+Laid out as an AirPrint page is, from the sheet's top edge: its content from 1 in down (where
+printing starts on paper loaded as the Owner's Guide says) to at most 10.5 in, 8 in (1152 dots)
+wide. The Top margin setting moves it as it moves an AirPrint page, but drops no more than that
+blank inch:
 
 1. **Letterhead.** Apple's colour ImageWriter icon (`tools/icon/imagewriter.txt`, each pixel 4
    dots by 2 rows, ordered screen, in the four inks on a colour ribbon) beside "AirWriter" in

@@ -5,6 +5,7 @@
 #include "fw_update.h"
 
 #include <string.h>
+#include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include "esp_log.h"
@@ -229,8 +230,14 @@ static esp_err_t general_post(httpd_req_t *req)
 
     int gain = json_int(body, "gain", -1);
     if (gain > 45) return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "gain is 0 to 45");
+    // 1/144 in, signed: the page offers sixteenths of an inch.
+    int top = json_int(body, "top_margin", INT_MIN);
+    if (top != INT_MIN && (top < SET_TOP_MIN || top > SET_TOP_MAX))
+        return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST,
+                                   "top_margin is -216 to 144, in 1/144 in");
 
     settings_save_general(host, queue, dither, gain);
+    if (top != INT_MIN) settings_save_top_margin(top);
     // W-1079: the model, and a name of the user's own ("" goes back to the
     // model's); AirPrint and the AppleTalk port.
     char model[SET_QUEUE_MAX] = {0}, name[SET_QUEUE_MAX] = {0};

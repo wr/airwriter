@@ -74,6 +74,9 @@ esp_err_t settings_load(settings_t *out, const char *mac_suffix)
         nvs_get_u8(h, "airprint", &ap);
         out->airprint = ap ? 1 : 0;
         out->lt_port = nvs_get_u8(h, "lt_port", &lt) == ESP_OK && lt <= 1 ? (int8_t)lt : -1;
+        int16_t tm;
+        out->top_margin = nvs_get_i16(h, "topmargin", &tm) == ESP_OK && tm >= SET_TOP_MIN &&
+                          tm <= SET_TOP_MAX ? tm : CONFIG_AIRWRITER_TOP_MARGIN;
         printer_names(h, out);
         nvs_close(h);
     } else {
@@ -85,6 +88,7 @@ esp_err_t settings_load(settings_t *out, const char *mac_suffix)
         out->gain = CONFIG_AIRWRITER_DOT_GAIN;
         out->airprint = 1;
         out->lt_port = -1;
+        out->top_margin = CONFIG_AIRWRITER_TOP_MARGIN;
     }
 
     if (nvs_open(NS_WIFI, NVS_READONLY, &h) == ESP_OK) {
@@ -183,6 +187,18 @@ esp_err_t settings_save_ribbon(uint8_t ribbon)
     esp_err_t err = nvs_open(NS, NVS_READWRITE, &h);
     if (err != ESP_OK) return err;
     nvs_set_u8(h, "ribbon", ribbon);
+    err = nvs_commit(h);
+    nvs_close(h);
+    return err;
+}
+
+esp_err_t settings_save_top_margin(int top)
+{
+    if (top < SET_TOP_MIN || top > SET_TOP_MAX) return ESP_ERR_INVALID_ARG;
+    nvs_handle_t h;
+    esp_err_t err = nvs_open(NS, NVS_READWRITE, &h);
+    if (err != ESP_OK) return err;
+    nvs_set_i16(h, "topmargin", (int16_t)top);
     err = nvs_commit(h);
     nvs_close(h);
     return err;

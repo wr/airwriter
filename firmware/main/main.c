@@ -344,6 +344,11 @@ static void general_saved(void *ctx)
     if (ht_algo_from_name(s_set.dither, &algo)) algo = HT_ATKINSON;
     job_pipe_set_screen(algo, s_set.gain);
     ESP_LOGI(TAG, "screen now %s, gain %u%%", s_set.dither, s_set.gain);
+    if (fresh.top_margin != s_set.top_margin) {
+        s_set.top_margin = fresh.top_margin;
+        job_pipe_set_top_margin(s_set.top_margin);
+        ESP_LOGI(TAG, "top margin now %d/144 in", s_set.top_margin);
+    }
     // W-1079: the names wait for a restart; the switches act now.
     snprintf(s_saved_model, sizeof s_saved_model, "%s", fresh.model);
     snprintf(s_saved_name, sizeof s_saved_name, "%s", fresh.name);
@@ -825,6 +830,7 @@ static void test_page_task(void *arg)
         .version = app->version, .built = built, .model = s_set.model, .name = s_set.queue,
         .host = s_set.hostname, .ip = s_ip, .setup_ssid = s_ap_mode ? ap : NULL,
         .appletalk = at, .ribbon = (iw_ribbon_t)s_ribbon, .screen = algo, .gain = s_set.gain,
+        .top_margin = s_set.top_margin,
     };
     tp_io_t io = { .out = test_page_out, .stop = test_page_stop };
     size_t heap0 = heap_caps_get_free_size(MALLOC_CAP_INTERNAL);
@@ -1349,7 +1355,7 @@ static void status_json(void *ctx, char *buf, size_t cap)
         "{\"state\":\"%s\",\"ps\":\"%s\",\"asleep\":%s,\"stopped\":%s,\"setup\":%s,\"job\":\"%s\","
         "\"fault\":%s,\"printer\":%s,\"printing\":%s,\"ribbon\":\"%s\","
         "\"queue\":\"%s\",\"host\":\"%s.local\",\"ip\":\"%s\","
-        "\"ssid\":\"%s\",\"dither\":\"%s\",\"gain\":%u,\"signal\":\"%s\","
+        "\"ssid\":\"%s\",\"dither\":\"%s\",\"gain\":%u,\"top_margin\":%d,\"signal\":\"%s\","
         "\"channel\":\"%s\",\"security\":\"%s\",\"uri\":\"%s\","
         "\"uptime\":\"%uh %02um\",\"reset\":\"%s\",\"version\":\"%s\",\"heap\":\"%u KB\","
         "\"slot\":\"%s\",\"trial\":%s,\"rolled_back\":\"%s\","
@@ -1368,7 +1374,7 @@ static void status_json(void *ctx, char *buf, size_t cap)
         s_printing ? "true" : "false", ribbon_name(s_ribbon),
         json_esc(e_queue, sizeof e_queue, s_set.queue), s_set.hostname, s_ip,
         json_esc(e_ssid, sizeof e_ssid, joined ? (char *)ap.ssid : (s_ap_mode ? "" : s_set.ssid)),
-        s_set.dither, (unsigned)s_set.gain,
+        s_set.dither, (unsigned)s_set.gain, (int)s_set.top_margin,
         joined ? (ap.rssi > -55 ? "Excellent" : ap.rssi > -67 ? "Good"
                 : ap.rssi > -75 ? "Fair" : "Weak") : "",
         joined ? "2.4 GHz" : "",
@@ -1736,6 +1742,7 @@ void app_main(void)
     xTaskCreate(kick_task, "kick", 4096, NULL, 3, NULL);
 
     job_pipe_cfg_t pipe = { .out = printer_out, .dither = algo, .gain = s_set.gain,
+                            .top_margin = s_set.top_margin,
                             .done = pipe_done, .colour_ok = colour_ok };
     ESP_ERROR_CHECK(job_pipe_init(&pipe));
 

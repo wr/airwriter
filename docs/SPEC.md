@@ -364,6 +364,13 @@ Set line spacing once per page with `ESC T nn` (nn in 144ths of an inch, ASCII d
 End every page with a form feed — the widely reported "you have to press Select to make it
 print" behaviour is almost always a missing FF, not a hardware fault.
 
+*Amended (2026-10-20): every job starts at top of form. `ESC c` leaves top of form where it is
+(Table A-2), so after a cut job, or a Mac's that stopped mid-page, the next job sends a form feed
+first. And a Top margin setting, in 1/144 in, signed, moves AirPrint pages and the test page:
+positive adds paper ahead of a page, negative drops its first rows. Paper loaded as the Owner's
+Guide says, its leading edge under the paper bail, prints from about 1 in below its edge, so the
+default is -1 in: a page, which arrives as the whole sheet, then lands where iOS laid it out.*
+
 *Amended (2026-10-20): a strip with no dots sends no `ESC G`, only the line feed it owes, held
 like any other until a strip below it prints. Board 1 fed a white page at a line a second when
 each blank strip was 1152 zeros at 9600 baud.*
