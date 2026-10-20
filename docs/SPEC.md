@@ -276,6 +276,14 @@ Declare honest values or iOS will lay out edge-to-edge content and silently clip
 Start with 6.35mm (0.25in) left and right, 12.7mm top and bottom, in hundredths of a
 millimetre as IPP requires. Refine after test prints.
 
+*Amended (2026-10-20): the top margin is 25.4mm (1in), bottom still 12.7mm. Paper loaded as
+the ImageWriter II Owner's Guide says, its leading edge under the paper bail, prints from about
+an inch below its edge, and Apple left software to allow for it. A page arrives as the whole
+sheet, so the board drops that inch of every page (the Top margin setting, default -1in, §3.8)
+and iOS, told the inch is margin, draws nothing there: every row prints where iOS put it. The
+printable area is 8 x 9.5in. On board 1 the calibration page's lines landed exactly 1in from
+the top and 0.5in from the bottom at -7/8in, which is where its Top margin is set.*
+
 **Media.** `na_letter_8.5x11in` plus the continuous fanfold sizes. Not borderless.
 
 **`printer-icons`.** Three PNGs served on the IPP port itself,
@@ -363,6 +371,17 @@ Per eight raster rows:
 Set line spacing once per page with `ESC T nn` (nn in 144ths of an inch, ASCII digits).
 End every page with a form feed — the widely reported "you have to press Select to make it
 print" behaviour is almost always a missing FF, not a hardware fault.
+
+*Amended (2026-10-20): every job starts at top of form. `ESC c` leaves top of form where it is
+(Table A-2), so after a cut job, or a Mac's that stopped mid-page, the next job sends a form feed
+first. And a Top margin setting, in 1/144 in, signed, moves AirPrint pages and the test page:
+positive adds paper ahead of a page, negative drops its first rows. Paper loaded as the Owner's
+Guide says, its leading edge under the paper bail, prints from about 1 in below its edge, so the
+default is -1 in: a page, which arrives as the whole sheet, then lands where iOS laid it out.*
+
+*Amended (2026-10-20): a strip with no dots sends no `ESC G`, only the line feed it owes, held
+like any other until a strip below it prints. Board 1 fed a white page at a line a second when
+each blank strip was 1152 zeros at 9600 baud.*
 
 *Amended (W-1064): an sRGB page with the colour ribbon in prints in four inks. Each pixel splits
 into yellow, magenta, cyan and black (grey components go to black), each ink is dithered on

@@ -82,6 +82,7 @@ static void pipe_task(void *arg)
             .out     = count_out,
             .dither  = s_cfg.dither,
             .gain    = s_cfg.gain,
+            .top_margin = s_cfg.top_margin,
             .colour  = s_cfg.colour_ok ? s_cfg.colour_ok(s_cfg.colour_ctx) : 0,
             .log     = pipe_log,
         };
@@ -139,6 +140,11 @@ void job_pipe_set_screen(ht_algo_t dither, int gain)
 {
     s_cfg.dither = dither;
     s_cfg.gain   = gain;
+}
+
+void job_pipe_set_top_margin(int top)
+{
+    s_cfg.top_margin = top;
 }
 
 esp_err_t job_pipe_begin(const char *job_name)

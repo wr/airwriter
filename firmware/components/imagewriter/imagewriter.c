@@ -26,8 +26,8 @@ void iw_begin_page(iw_t *w)
 {
     static const uint8_t init[] = { 0x1B, 'c', 0x1B, 'p', 0x1B, 'T', '1', '6' };
     w->out(w->ctx, init, sizeof init);
-    w->nrows      = 0;
-    w->pending_lf = 0;
+    w->nrows   = 0;
+    w->held_lf = 0;
 }
 
 static void flush(iw_t *w)
@@ -38,17 +38,26 @@ static void flush(iw_t *w)
 
     iw_transpose(rows, w->cols, w->width_dots);
 
-    // The LF that separates this strip from the next is held back until we
-    // know there is a next strip: emit the *previous* strip's deferred LF
-    // now, immediately before this strip's header, rather than after this
-    // strip's own CR. That way the page's last strip never gets one. At
-    // 8/72in per line feed, an LF after the final strip pushes 1/9in into
-    // the next form before the form feed fires, ejecting a blank sheet.
+    // The LF that separates this strip from the next is held back until a
+    // strip below it prints: emit the LFs owed so far now, immediately
+    // before this strip's header, rather than after each strip's own CR.
+    // That way the page's last strip never gets one -- at 8/72in per line
+    // feed, an LF after the final strip pushes 1/9in into the next form
+    // before the form feed fires, ejecting a blank sheet -- and a blank
+    // strip is only its LF, not 1152 zeros at 9600 baud (a white page fed at
+    // a line a second).
+    uint32_t n = w->width_dots;                        // one byte per column
+    int blank = 1;
+    for (uint32_t x = 0; x < n && blank; x++) blank = !w->cols[x];
+    w->nrows = 0;
+    if (blank) {
+        w->held_lf++;
+        return;
+    }
     static const uint8_t lf[] = { '\n' };
-    if (w->pending_lf) w->out(w->ctx, lf, sizeof lf);
+    for (; w->held_lf; w->held_lf--) w->out(w->ctx, lf, sizeof lf);
 
     uint8_t hdr[6] = { 0x1B, 'G', 0, 0, 0, 0 };
-    uint32_t n = w->width_dots;                        // one byte per column
     hdr[2] = (uint8_t)('0' + (n / 1000) % 10);
     hdr[3] = (uint8_t)('0' + (n / 100)  % 10);
     hdr[4] = (uint8_t)('0' + (n / 10)   % 10);
@@ -58,9 +67,7 @@ static void flush(iw_t *w)
 
     static const uint8_t cr[] = { '\r' };
     w->out(w->ctx, cr, sizeof cr);
-    w->pending_lf = 1;
-
-    w->nrows = 0;
+    w->held_lf = 1;
 }
 
 void iw_row(iw_t *w, const uint8_t *bits)
@@ -178,7 +185,8 @@ iw_ribbon_t iw_self_id_ribbon(const uint8_t *reply, size_t n)
 
 void iw_link_job_start(iw_link_t *l)
 {
-    l->started = 0;
+    l->started  = 0;
+    l->ff_asked = 0;
 }
 
 int iw_link_need_resync(iw_link_t *l)
@@ -190,10 +198,29 @@ int iw_link_need_resync(iw_link_t *l)
     return need;
 }
 
+int iw_link_need_ff(iw_link_t *l)
+{
+    if (l->ff_asked) return 0;
+    l->ff_asked = 1;
+    int need = l->off_tof;
+    l->off_tof = 1;        // in flight: until it ends clean the paper is wherever it stops
+    return need;
+}
+
 void iw_link_job_end(iw_link_t *l, int clean)
 {
-    if (clean && l->started) l->dirty = 0;
-    l->started = 0;
+    iw_link_job_end_at(l, clean, clean);
+}
+
+void iw_link_job_end_at(iw_link_t *l, int clean, int at_tof)
+{
+    // A job that sent nothing moved nothing.
+    if (l->started) {
+        if (clean) l->dirty = 0;
+        l->off_tof = !(clean && at_tof);
+    }
+    l->started  = 0;
+    l->ff_asked = 0;
 }
 
 void iw_link_resynced(iw_link_t *l)
@@ -201,11 +228,21 @@ void iw_link_resynced(iw_link_t *l)
     l->dirty = 0;
 }
 
-enum { SC_TEXT = 0, SC_ESC, SC_DIGITS, SC_SKIP, SC_LIST, SC_KEY, SC_WIDTH };
+enum { SC_TEXT = 0, SC_ESC, SC_DIGITS, SC_SKIP, SC_LIST, SC_KEY, SC_WIDTH, SC_FEED };
+
+#define PAGE_11IN 1584
 
 void iw_scan_init(iw_scan_t *s)
 {
     memset(s, 0, sizeof *s);
+    s->spacing = 24;            // six lines an inch
+    s->page    = PAGE_11IN;
+}
+
+static void feed(iw_scan_t *s, uint32_t lines)
+{
+    int32_t d = (int32_t)(lines * s->spacing);
+    s->moved += s->reverse ? -d : d;
 }
 
 static void scan_byte(iw_scan_t *s, uint8_t b)
@@ -213,13 +250,28 @@ static void scan_byte(iw_scan_t *s, uint8_t b)
     switch (s->state) {
     case SC_TEXT:
         if (b == 0x1B) s->state = SC_ESC;
-        else if (b == 0x1F) { s->state = SC_SKIP; s->left = 1; s->after = SC_TEXT; }   // CTRL-_ n
+        else if (b == 0x1F) s->state = SC_FEED;                 // CTRL-_ n
+        else if (b == '\n') feed(s, 1);
+        else if (b == 0x0C) s->moved = 0;
+        return;
+    case SC_FEED:                              // n lines: '1'-'9', ':'-'?' are 1-15
+        if (b > '0' && b <= '?') feed(s, (uint32_t)(b - '0'));
+        s->state = SC_TEXT;
         return;
     case SC_ESC:
         s->cmd = b;
         s->num = 0;
         s->after = SC_TEXT;
         switch (b) {
+        case 'A': s->spacing = 24; s->state = SC_TEXT; return;
+        case 'B': s->spacing = 18; s->state = SC_TEXT; return;
+        case 'r': s->reverse = 1;  s->state = SC_TEXT; return;
+        case 'f': s->reverse = 0;  s->state = SC_TEXT; return;
+        case 'v': s->moved = 0;    s->state = SC_TEXT; return;   // top of form, here
+        case 'c':                                               // leaves top of form be
+            s->spacing = 24; s->reverse = 0; s->page = PAGE_11IN;
+            s->state = SC_TEXT;
+            return;
         case 'G': case 'S': case 'V': case 'H': case 'F':
             s->state = SC_DIGITS; s->digits = 4; return;
         case 'g': case 'L': case 'u': case 'R':
@@ -244,6 +296,8 @@ static void scan_byte(iw_scan_t *s, uint8_t b)
         case 'G': case 'S': s->left = s->num;     break;
         case 'g':           s->left = s->num * 8; break;
         case 'V': case 'R': s->left = 1;          break;
+        case 'T': s->spacing = (uint16_t)s->num; s->left = 0; break;
+        case 'H': s->page    = (uint16_t)s->num; s->left = 0; break;
         default:            s->left = 0;          break;
         }
         s->state = s->left ? SC_SKIP : SC_TEXT;
@@ -286,4 +340,10 @@ void iw_scan(iw_scan_t *s, const uint8_t *buf, size_t n)
 int iw_scan_between(const iw_scan_t *s)
 {
     return s->state == SC_TEXT;
+}
+
+int iw_scan_at_tof(const iw_scan_t *s)
+{
+    if (!s->page) return s->moved == 0;
+    return s->moved % (int32_t)s->page == 0;
 }

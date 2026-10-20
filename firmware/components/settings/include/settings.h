@@ -29,7 +29,13 @@ typedef struct {
     uint8_t airprint;                // advertise and take AirPrint jobs (W-1079); on
     int8_t  lt_port;                 // the AppleTalk port (W-1079): 1 on, 0 off, -1 as
                                      // DIP switches 1-2 say (mode 2 on), until set
+    int16_t top_margin;              // 1/144 in: + blank paper ahead of each AirPrint
+                                     // page and the test page, - drops their first
+                                     // rows; CONFIG_AIRWRITER_TOP_MARGIN
 } settings_t;
+
+#define SET_TOP_MIN (-216)           // -1 1/2 in
+#define SET_TOP_MAX 144              // +1 in
 
 // Fills every field: NVS first, then the Kconfig default, then a built-in.
 // `mac_suffix` is the four hex digits used for the default hostname.
@@ -53,6 +59,8 @@ esp_err_t settings_save_switches(int airprint, int lt_port);
 // Kept so a restart advertises what the printer last said, not black until it
 // answers again: what clients see must not flip back and forth (W-1064).
 esp_err_t settings_save_ribbon(uint8_t ribbon);
+// SET_TOP_MIN to SET_TOP_MAX, 1/144 in.
+esp_err_t settings_save_top_margin(int top);
 
 // Wipes the stored settings. The device falls back to its build defaults on
 // the next boot, which is what the config button holds for.

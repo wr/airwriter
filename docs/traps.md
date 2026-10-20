@@ -180,6 +180,15 @@ Traps already explained in a code comment are listed only when the comment is ea
   job's header as dots. The next job resyncs with 1280 NULs + CTRL-X (`iw_resync`,
   `W-1041 Resync the printer after an aborted job so the next job doesn't print garbage`).
   Not covered: a board reboot mid-strip.
+- **Never place the print head with `ESC F`.** On board 1's ImageWriter II (test page, round 1,
+  2026-10-20) lines near one landed inches to the right, whole strips and single colour passes,
+  while AirPrint streams, which never use it, print right. Skip blank columns with zeros (or
+  `ESC V nnnn` + a zero byte, as Ghostscript's driver does) and place text with spaces in a fixed
+  pitch.
+- **A line that runs past 8 in wraps:** its overflow prints from the left margin on the same row
+  (an `ESC F1144` "8" in proportional type landed at 0 in). A line of exactly 1152 dots prints.
+- **Board 1's ImageWriter has a dead top pin.** Every strip's first row is blank, so a one-dot
+  rule on bit 0 does not print at all: the test page's rules use pin 5.
 - **`LT_DE` floats whenever the PIC is not driving it** (no PIC, or PIC held in reset, which
   tristates it). Tack 10 k across U6 pins 3–5 before connecting a LocalTalk network.
 - **Never high-voltage program the PIC in its socket.** VPP (~9 V) lands on ESP32 IO2
