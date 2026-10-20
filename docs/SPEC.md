@@ -276,6 +276,14 @@ Declare honest values or iOS will lay out edge-to-edge content and silently clip
 Start with 6.35mm (0.25in) left and right, 12.7mm top and bottom, in hundredths of a
 millimetre as IPP requires. Refine after test prints.
 
+*Amended (2026-10-20): the top margin is 25.4mm (1in), bottom still 12.7mm. Paper loaded as
+the ImageWriter II Owner's Guide says, its leading edge under the paper bail, prints from about
+an inch below its edge, and Apple left software to allow for it. A page arrives as the whole
+sheet, so the board drops that inch of every page (the Top margin setting, default -1in, §3.8)
+and iOS, told the inch is margin, draws nothing there: every row prints where iOS put it. The
+printable area is 8 x 9.5in. On board 1 the calibration page's lines landed exactly 1in from
+the top and 0.5in from the bottom at -7/8in, which is where its Top margin is set.*
+
 **Media.** `na_letter_8.5x11in` plus the continuous fanfold sizes. Not borderless.
 
 **`printer-icons`.** Three PNGs served on the IPP port itself,

@@ -125,7 +125,10 @@ What works on `main`:
   (`ripjob_cfg_t.top_margin`, `rip --top-margin`). Not LocalTalk jobs: the Mac's driver keeps
   its own. Default -144 (`CONFIG_AIRWRITER_TOP_MARGIN`): paper loaded as the Owner's Guide says
   (leading edge under the bail) starts printing about 1 in down, and an AirPrint page arrives
-  as the whole sheet, so dropping that inch lands it where the iPhone laid it out.
+  as the whole sheet, so dropping that inch lands it where the iPhone laid it out. The board
+  advertises a 1 in top margin (bottom 0.5 in, SPEC §3.5), so iOS draws nothing in that inch.
+  Board 1 is set to -7/8 in (-126): there its calibration lines land exactly 1 in from the top
+  and 0.5 in from the bottom.
 - A job starts at top of form: when the last stream to move the paper was cut, or was a Mac's
   that stopped mid-page, the next job sends a form feed first (`iw_link_need_ff`). ESC c leaves
   top of form alone. A Mac's stream never form-feeds (it feeds by line, forward and back, to
