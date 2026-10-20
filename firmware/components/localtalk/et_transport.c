@@ -139,6 +139,29 @@ int et_zone_parse(const char *msg, size_t len, uint8_t *frame, size_t cap, size_
     return 1;
 }
 
+size_t et_radio_normalize(const uint8_t *in, size_t n, uint8_t *out, size_t cap)
+{
+    if (n < 14) return 0;
+    uint16_t t = (uint16_t)(in[12] << 8 | in[13]);
+    if (t == 0x809B || t == 0x80F3) {
+        size_t len = n - 14;
+        if (len > DDP_LONG_HDR + DDP_MAX_DATA) return 0;
+        if (t == 0x80F3) {
+            if (len < AARP_LEN) return 0;
+            len = AARP_LEN;                        // past it is padding
+        } else {
+            size_t dl = (size_t)((in[14] & 0x03) << 8 | in[15]);
+            if (dl < DDP_LONG_HDR || dl > len) return 0;
+            len = dl;
+        }
+        return elap_build(out, cap, in, in + 6, t == 0x80F3 ? ET_AARP : ET_DDP, in + 14, len);
+    }
+    elap_t e;
+    if (n > cap || elap_parse(in, n, &e)) return 0;
+    memcpy(out, in, n);
+    return n;
+}
+
 int et_zone_pong(const uint8_t *frame, size_t n, const uint8_t mac[ETH_ALEN],
                  uint8_t pong[ET_PONG_LEN])
 {

@@ -694,6 +694,58 @@ static void test_zone_pong(void)
     CHECK_EQ_MEM(zm, wantzm, 6);
 }
 
+// ------------------------------------------------------------- the radio (W-1078)
+// Frames off the board's own Wi-Fi. Macs send 802.3 + SNAP; an access point
+// may hand AppleTalk over as Ethernet II (0x809B, AARP 0x80F3) instead.
+
+static void test_radio_normalize(void)
+{
+    uint8_t out[ELAP_MAX_FRAME], in[ELAP_MAX_FRAME];
+    uint8_t aarp[AARP_LEN] = {0};
+    // 802.3 + SNAP passes through as it is, its length from the 802.3 field.
+    size_t n = elap_build(in, sizeof in, ET_AT_MCAST, THEM, ET_AARP, aarp, sizeof aarp);
+    CHECK_EQ_INT(et_radio_normalize(in, n, out, sizeof out), n);
+    CHECK_EQ_MEM(out, in, n);
+
+    // Ethernet II AARP becomes the same 802.3 + SNAP frame.
+    uint8_t e2[14 + AARP_LEN];
+    memcpy(e2, ET_AT_MCAST, 6); memcpy(e2 + 6, THEM, 6); e2[12] = 0x80; e2[13] = 0xF3;
+    memcpy(e2 + 14, aarp, sizeof aarp);
+    size_t m = et_radio_normalize(e2, sizeof e2, out, sizeof out);
+    CHECK_EQ_INT(m, n);
+    CHECK_EQ_MEM(out, in, n);
+
+    // Ethernet II DDP likewise.
+    uint8_t dg[20];
+    for (int i = 0; i < 20; i++) dg[i] = (uint8_t)i;
+    dg[0] = 0; dg[1] = sizeof dg;                         // its DDP length
+    n = elap_build(in, sizeof in, MAC_A, THEM, ET_DDP, dg, sizeof dg);
+    memcpy(e2, MAC_A, 6); memcpy(e2 + 6, THEM, 6); e2[12] = 0x80; e2[13] = 0x9B;
+    memcpy(e2 + 14, dg, sizeof dg);
+    CHECK_EQ_INT(et_radio_normalize(e2, 14 + sizeof dg, out, sizeof out), n);
+    CHECK_EQ_MEM(out, in, n);
+    // Ethernet padding past the DDP length is dropped, not carried along.
+    uint8_t e2p[60] = {0};
+    memcpy(e2p, e2, 14 + sizeof dg);
+    CHECK_EQ_INT(et_radio_normalize(e2p, sizeof e2p, out, sizeof out), n);
+    CHECK_EQ_MEM(out, in, n);
+
+    // Anything else is not ours: IPv4, ARP, other SNAP, runts.
+    uint8_t ip[60] = {0};
+    ip[12] = 0x08; ip[13] = 0x00;
+    CHECK_EQ_INT(et_radio_normalize(ip, sizeof ip, out, sizeof out), 0);
+    ip[13] = 0x06;
+    CHECK_EQ_INT(et_radio_normalize(ip, sizeof ip, out, sizeof out), 0);
+    n = elap_build(in, sizeof in, ET_AT_MCAST, THEM, ET_AARP, aarp, sizeof aarp);
+    in[21] = 0x37;                                        // SNAP type not AppleTalk
+    CHECK_EQ_INT(et_radio_normalize(in, n, out, sizeof out), 0);
+    CHECK_EQ_INT(et_radio_normalize(e2, 13, out, sizeof out), 0);
+    // An Ethernet II frame too big to become 802.3 + SNAP is dropped.
+    static uint8_t big[14 + DDP_LONG_HDR + DDP_MAX_DATA + 1];
+    memcpy(big, e2, 14);
+    CHECK_EQ_INT(et_radio_normalize(big, sizeof big, out, sizeof out), 0);
+}
+
 int main(void)
 {
     test_elap_round_trip();
@@ -714,5 +766,6 @@ int main(void)
     test_zone_json();
     test_zone_parse();
     test_zone_pong();
+    test_radio_normalize();
     TEST_END;
 }

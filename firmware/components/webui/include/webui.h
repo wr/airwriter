@@ -33,11 +33,12 @@ typedef struct {
     void  (*cable_test)(void *ctx, int both, char *buf, size_t cap);
     // GET /api/et: the EtherTalk links' state (W-1076). NULL answers 404.
     void  (*et_json)(void *ctx, char *buf, size_t cap);
-    // GET and POST /api/et/settings: the Basilisk II tunnel switch and the
-    // Infinite Mac zone. set takes tunnel -1 and zone NULL to keep each, and
-    // returns 0, or nonzero for a zone name it will not take. NULL answers 404.
-    void  (*et_settings_get)(void *ctx, int *tunnel, char *zone, size_t cap);
-    int   (*et_settings_set)(void *ctx, int tunnel, const char *zone);
+    // GET and POST /api/et/settings: the EtherTalk switches (radio: Macs on
+    // this network, W-1078; tunnel: Basilisk II) and the Infinite Mac zone.
+    // set takes -1 and NULL to keep each, and returns 0, or nonzero for a zone
+    // name it will not take. NULL answers 404.
+    void  (*et_settings_get)(void *ctx, int *tunnel, int *radio, char *zone, size_t cap);
+    int   (*et_settings_set)(void *ctx, int tunnel, int radio, const char *zone);
 
     // The general settings (queue, hostname, dither, gain) were just saved:
     // the app re-reads them so the next job prints with the screen the page

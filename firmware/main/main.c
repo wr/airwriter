@@ -582,6 +582,7 @@ static const char *lt_job_name(at_link_t link)
     switch (link) {
     case AT_LINK_TUNNEL: return "Basilisk II job";
     case AT_LINK_ZONE:   return "Infinite Mac job";
+    case AT_LINK_RADIO:  return "EtherTalk job";
     default:             return "LocalTalk job";
     }
 }
@@ -1264,16 +1265,16 @@ static void et_json(void *ctx, char *buf, size_t cap)
     ethertalk_json(buf, cap);
 }
 
-static void et_settings_get(void *ctx, int *tunnel, char *zone, size_t cap)
+static void et_settings_get(void *ctx, int *tunnel, int *radio, char *zone, size_t cap)
 {
     (void)ctx;
-    ethertalk_settings(tunnel, zone, cap);
+    ethertalk_settings(tunnel, radio, zone, cap);
 }
 
-static int et_settings_set(void *ctx, int tunnel, const char *zone)
+static int et_settings_set(void *ctx, int tunnel, int radio, const char *zone)
 {
     (void)ctx;
-    esp_err_t err = ethertalk_apply(tunnel, zone);
+    esp_err_t err = ethertalk_apply(tunnel, radio, zone);
     if (err == ESP_ERR_INVALID_ARG) return -1;
     if (err != ESP_OK) ESP_LOGE(TAG, "EtherTalk settings not saved: %s", esp_err_to_name(err));
     return 0;
@@ -1340,8 +1341,9 @@ static void lt_start(const char *why)
 #endif
 }
 
-// W-1076: EtherTalk for Infinite Mac and Basilisk II, whatever the DIP mode,
-// once the station has an address. The tunnel and the zone are settings.
+// W-1076, W-1078: EtherTalk for Macs on this network, Basilisk II and
+// Infinite Mac, whatever the DIP mode, once the station has an address. Each
+// way in is a setting.
 static void et_start(void)
 {
     ps_state_t st = printer_state_view().state;
@@ -1353,6 +1355,7 @@ static void et_start(void)
         .type          = CONFIG_AIRWRITER_LT_NBP_TYPE,
         .tunnel_status = lt_status(st, AT_LINK_TUNNEL),
         .zone_status   = lt_status(st, AT_LINK_ZONE),
+        .radio_status  = lt_status(st, AT_LINK_RADIO),
         .ip            = ip_host(&ip.ip),
         .printer       = { .begin = lt_print_begin, .write = lt_print_write, .end = lt_print_end },
         .on_event      = lt_event,
@@ -1431,7 +1434,8 @@ static void on_ps_change(const ps_view_t *v)
     else
         ipp_server_set_stopped(NULL, NULL);
     localtalk_set_status(lt_status(v->state, AT_LINK_CABLE));
-    ethertalk_set_status(lt_status(v->state, AT_LINK_TUNNEL), lt_status(v->state, AT_LINK_ZONE));
+    ethertalk_set_status(lt_status(v->state, AT_LINK_TUNNEL), lt_status(v->state, AT_LINK_ZONE),
+                         lt_status(v->state, AT_LINK_RADIO));
 }
 
 // ------------------------------------------------------- firmware updates

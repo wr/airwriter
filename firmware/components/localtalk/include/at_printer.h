@@ -12,7 +12,7 @@
 #include <stdint.h>
 #include "esp_err.h"
 
-typedef enum { AT_LINK_CABLE = 0, AT_LINK_TUNNEL, AT_LINK_ZONE } at_link_t;
+typedef enum { AT_LINK_CABLE = 0, AT_LINK_TUNNEL, AT_LINK_ZONE, AT_LINK_RADIO } at_link_t;
 
 // The printer, as main.c owns it. All run on the print task except begin.
 typedef struct {

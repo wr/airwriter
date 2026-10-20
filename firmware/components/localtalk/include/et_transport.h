@@ -47,6 +47,13 @@ size_t et_zone_send_json(char *out, size_t cap, const uint8_t *frame, size_t n);
 // its packet in frame[0..*n), 0 for another type, -1 for anything malformed
 // or a packet over cap.
 int    et_zone_parse(const char *msg, size_t len, uint8_t *frame, size_t cap, size_t *n);
+// The board's own Wi-Fi (W-1078): a frame as the station interface handed it
+// over, as the 802.3 + SNAP frame et_link reads. Macs send 802.3 + SNAP and it
+// passes as it is; an access point may turn AppleTalk into Ethernet II
+// (0x809B DDP, 0x80F3 AARP), which is rebuilt. Its length, or 0 for anything
+// that is not AppleTalk, malformed, or too big.
+size_t et_radio_normalize(const uint8_t *in, size_t n, uint8_t *out, size_t cap);
+
 // 1 and the pong for a ping frame, from mac back to whoever sent it; else 0.
 int    et_zone_pong(const uint8_t *frame, size_t n, const uint8_t mac[ETH_ALEN],
                     uint8_t pong[ET_PONG_LEN]);

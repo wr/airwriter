@@ -12,6 +12,7 @@
 #include "esp_heap_caps.h"
 #include "esp_log.h"
 #include "esp_mac.h"
+#include "esp_private/wifi.h"
 #include "esp_random.h"
 #include "esp_timer.h"
 #include "esp_websocket_client.h"
@@ -19,10 +20,12 @@
 #include "freertos/queue.h"
 #include "freertos/semphr.h"
 #include "freertos/task.h"
+#include "lwip/pbuf.h"
 #include "lwip/sockets.h"
 #include "nvs.h"
 #include "et_link.h"
 #include "et_transport.h"
+#include "et_radio_hook.h"
 
 static const char *TAG = "et";
 
@@ -51,7 +54,7 @@ typedef struct {
 static SemaphoreHandle_t s_lock;           // the links, the settings, the pending flags
 static SemaphoreHandle_t s_ring_lock;      // the log ring alone; never held around a send
 static int        s_running;
-static et_side_t  s_tun, s_zone;
+static et_side_t  s_tun, s_zone, s_radio;
 static char       s_obj[NBP_NAME_MAX + 1], s_type[NBP_NAME_MAX + 1];
 static void     (*s_on_event)(lt_event_t ev);
 static char       s_ev[EV_LINES][LINE_LEN];
@@ -59,8 +62,10 @@ static unsigned   s_ev_head, s_ev_n;
 
 // Settings, and what the task has yet to act on.
 static int        s_tunnel_on = 1;
+static volatile int s_radio_on = 1;
 static char       s_zone_name[ET_ZONE_MAX + 1];
 static int        s_want_tunnel = -1;      // -1: nothing to do
+static int        s_want_radio = -1;
 static int        s_want_zone;
 static uint32_t   s_ip, s_new_ip;
 static int        s_ip_changed, s_net_down;
@@ -68,6 +73,11 @@ static int        s_ip_changed, s_net_down;
 // The tunnel.
 static int        s_sock = -1;
 static uint32_t   s_tun_drops;
+
+// The radio: frames in from lwIP's thread, out through the Wi-Fi driver.
+static QueueHandle_t s_rin;
+static uint8_t    s_sta_mac[ETH_ALEN];
+static volatile uint32_t s_radio_in_drops, s_radio_out_drops;
 
 // The relay.
 static esp_websocket_client_handle_t s_ws;
@@ -97,6 +107,7 @@ static void note(const char *who, const char *line)
 
 static void tun_note(const char *line)  { note("tunnel", line); }
 static void zone_note(const char *line) { note("zone", line); }
+static void radio_note(const char *line) { note("radio", line); }
 
 // ------------------------------------------------------------- link ops
 // On our task with s_lock held, except abort (the print task).
@@ -152,6 +163,30 @@ static void zone_send(void *ctx, const uint8_t *f, size_t n)
     if (xQueueSend(s_zout, &z, 0) != pdTRUE) s_zone_out_drops++;
 }
 
+static void radio_send(void *ctx, const uint8_t *f, size_t n)
+{
+    (void)ctx;
+    if (!s_radio.active || esp_wifi_internal_tx(WIFI_IF_STA, (void *)f, (uint16_t)n) != 0)
+        s_radio_out_drops++;
+}
+
+// lwIP's thread, for every frame it does not know (et_radio_hook.h): the
+// AppleTalk ones are ours, the rest it drops as it always did.
+err_t ethertalk_radio_input(struct pbuf *p, struct netif *netif)
+{
+    (void)netif;
+    static uint8_t raw[ELAP_MAX_FRAME + 64];       // lwIP's thread only
+    static zframe_t z;
+    if (!s_running || !s_radio_on || !s_rin || p->tot_len > sizeof raw) return ERR_ARG;
+    u16_t n = pbuf_copy_partial(p, raw, sizeof raw, 0);
+    size_t m = et_radio_normalize(raw, n, z.f, sizeof z.f);
+    if (!m) return ERR_ARG;
+    z.n = (uint16_t)m;
+    if (xQueueSend(s_rin, &z, 0) != pdTRUE) s_radio_in_drops++;
+    pbuf_free(p);
+    return ERR_OK;
+}
+
 static void side_init(et_side_t *s, const uint8_t mac[ETH_ALEN])
 {
     uint16_t hnet = 0;
@@ -164,8 +199,8 @@ static void side_init(et_side_t *s, const uint8_t mac[ETH_ALEN])
     }
     et_cfg_t c = { s_obj, s_type, s->status, {0}, hnet, hnode, esp_random() | 1, LT_IDLE_HOLD_MS };
     memcpy(c.mac, mac, ETH_ALEN);
-    et_ops_t o = { s, s == &s_tun ? tun_send : zone_send, op_log, op_begin, op_data, op_room,
-                   op_end, op_claimed };
+    et_ops_t o = { s, s == &s_tun ? tun_send : s == &s_zone ? zone_send : radio_send, op_log,
+                   op_begin, op_data, op_room, op_end, op_claimed };
     et_link_init(&s->link, &c, &o, now_ms());
 }
 
@@ -356,11 +391,13 @@ static void side_events(et_side_t *s, int *lookup, int *fresh)
 static void apply_pending(void)
 {
     xSemaphoreTake(s_lock, portMAX_DELAY);
-    int want_t = s_want_tunnel, want_z = s_want_zone, ipch = s_ip_changed, down = s_net_down;
+    int want_t = s_want_tunnel, want_z = s_want_zone, want_r = s_want_radio;
+    int ipch = s_ip_changed, down = s_net_down;
     uint32_t ip = s_new_ip;
     char zone[ET_ZONE_MAX + 1];
     memcpy(zone, s_zone_name, sizeof zone);
     s_want_tunnel = -1;
+    s_want_radio = -1;
     s_want_zone = 0;
     s_ip_changed = 0;
     s_net_down = 0;
@@ -369,9 +406,11 @@ static void apply_pending(void)
 
     if (down) {
         xSemaphoreTake(s_lock, portMAX_DELAY);
-        if (s_tun.link.node.pap.open || s_zone.link.node.pap.open) note("both", "Wi-Fi lost; the job ends");
+        if (s_tun.link.node.pap.open || s_zone.link.node.pap.open || s_radio.link.node.pap.open)
+            note("all", "Wi-Fi lost; the job ends");
         et_link_down(&s_tun.link, now);
         et_link_down(&s_zone.link, now);
+        et_link_down(&s_radio.link, now);
         xSemaphoreGive(s_lock);
     }
 
@@ -398,6 +437,17 @@ static void apply_pending(void)
         }
         xSemaphoreGive(s_lock);
         if (s_tun.active) note("tunnel", "listening for Basilisk II");
+    }
+    // The radio follows the setting and the station's address; its MAC is the
+    // station's own, so a new IP changes nothing but whether it can talk.
+    if (want_r >= 0 || ipch) {
+        xSemaphoreTake(s_lock, portMAX_DELAY);
+        int was = s_radio.active;
+        s_radio.active = s_radio_on && s_ip;
+        if (s_radio.active && !was) et_link_set_mac(&s_radio.link, s_sta_mac, now);   // acquire again
+        if (!s_radio.active && was) et_link_down(&s_radio.link, now);
+        xSemaphoreGive(s_lock);
+        if (want_r >= 0) note("radio", s_radio.active ? "listening for Macs on this network" : "off");
     }
     if (want_z) {
         zone_stop();
@@ -463,6 +513,11 @@ static void et_task(void *arg)
             if (s_zone.active) et_link_rx(&s_zone.link, z.f, z.n, now_ms());
             xSemaphoreGive(s_lock);
         }
+        while (xQueueReceive(s_rin, &z, 0) == pdTRUE) {
+            xSemaphoreTake(s_lock, portMAX_DELAY);
+            if (s_radio.active) et_link_rx(&s_radio.link, z.f, z.n, now_ms());
+            xSemaphoreGive(s_lock);
+        }
 
         // Timers, and what the panel should hear.
         int lookup = 0, fresh = 0;
@@ -470,8 +525,10 @@ static void et_task(void *arg)
         uint64_t now = now_ms();
         if (s_tun.active) et_link_tick(&s_tun.link, now);
         if (s_zone.active) et_link_tick(&s_zone.link, now);
+        if (s_radio.active) et_link_tick(&s_radio.link, now);
         side_events(&s_tun, &lookup, &fresh);
         side_events(&s_zone, &lookup, &fresh);
+        side_events(&s_radio, &lookup, &fresh);
         xSemaphoreGive(s_lock);
         if (s_on_event) {
             if (lookup) s_on_event(LT_EV_LOOKUP);
@@ -490,26 +547,29 @@ static void et_task(void *arg)
 
 // ------------------------------------------------------------- settings
 
-static void load_settings(int *tunnel, char *zone, size_t cap)
+static void load_settings(int *tunnel, int *radio, char *zone, size_t cap)
 {
     *tunnel = 1;
+    *radio = 1;
     zone[0] = '\0';
     nvs_handle_t h;
     if (nvs_open("et", NVS_READONLY, &h) != ESP_OK) return;
     uint8_t t;
     if (nvs_get_u8(h, "tunnel", &t) == ESP_OK) *tunnel = t != 0;
+    if (nvs_get_u8(h, "radio", &t) == ESP_OK) *radio = t != 0;
     size_t l = cap;
     if (nvs_get_str(h, "zone", zone, &l) != ESP_OK || !et_zone_name_ok(zone)) zone[0] = '\0';
     nvs_close(h);
 }
 
-esp_err_t ethertalk_apply(int tunnel, const char *zone)
+esp_err_t ethertalk_apply(int tunnel, int radio, const char *zone)
 {
     if (zone && zone[0] && !et_zone_name_ok(zone)) return ESP_ERR_INVALID_ARG;
     nvs_handle_t h;
     esp_err_t err = nvs_open("et", NVS_READWRITE, &h);
     if (err != ESP_OK) return err;
     if (tunnel >= 0) nvs_set_u8(h, "tunnel", tunnel ? 1 : 0);
+    if (radio >= 0) nvs_set_u8(h, "radio", radio ? 1 : 0);
     if (zone) nvs_set_str(h, "zone", zone);
     err = nvs_commit(h);
     nvs_close(h);
@@ -520,6 +580,10 @@ esp_err_t ethertalk_apply(int tunnel, const char *zone)
         s_tunnel_on = tunnel != 0;
         s_want_tunnel = s_tunnel_on;
     }
+    if (radio >= 0 && (radio != 0) != s_radio_on) {
+        s_radio_on = radio != 0;
+        s_want_radio = s_radio_on;
+    }
     if (zone && strcmp(zone, s_zone_name)) {
         strncpy(s_zone_name, zone, ET_ZONE_MAX);
         s_zone_name[ET_ZONE_MAX] = '\0';
@@ -529,14 +593,15 @@ esp_err_t ethertalk_apply(int tunnel, const char *zone)
     return err;
 }
 
-void ethertalk_settings(int *tunnel, char *zone, size_t cap)
+void ethertalk_settings(int *tunnel, int *radio, char *zone, size_t cap)
 {
     if (!s_running) {
-        load_settings(tunnel, zone, cap);
+        load_settings(tunnel, radio, zone, cap);
         return;
     }
     xSemaphoreTake(s_lock, portMAX_DELAY);
     *tunnel = s_tunnel_on;
+    *radio = s_radio_on;
     snprintf(zone, cap, "%s", s_zone_name);
     xSemaphoreGive(s_lock);
 }
@@ -552,12 +617,15 @@ esp_err_t ethertalk_start(const ethertalk_cfg_t *cfg)
     s_ring_lock = xSemaphoreCreateMutex();
     s_zin = xQueueCreateWithCaps(ZQ_DEPTH, sizeof(zframe_t), MALLOC_CAP_SPIRAM);
     s_zout = xQueueCreateWithCaps(ZQ_DEPTH, sizeof(zframe_t), MALLOC_CAP_SPIRAM);
-    if (!s_lock || !s_ring_lock || !s_zin || !s_zout) return ESP_ERR_NO_MEM;
+    s_rin = xQueueCreateWithCaps(ZQ_DEPTH, sizeof(zframe_t), MALLOC_CAP_SPIRAM);
+    if (!s_lock || !s_ring_lock || !s_zin || !s_zout || !s_rin) return ESP_ERR_NO_MEM;
 
     strncpy(s_obj, cfg->object, sizeof s_obj - 1);
     strncpy(s_type, cfg->type, sizeof s_type - 1);
     s_on_event = cfg->on_event;
-    load_settings(&s_tunnel_on, s_zone_name, sizeof s_zone_name);
+    int radio_on = 1;
+    load_settings(&s_tunnel_on, &radio_on, s_zone_name, sizeof s_zone_name);
+    s_radio_on = radio_on;
 
     // Field by field: a compound literal would put two links (~7 KB) on this stack.
     s_tun.owner = (at_owner_t){ AT_LINK_TUNNEL, side_abort, tun_note, &s_tun };
@@ -570,13 +638,21 @@ esp_err_t ethertalk_start(const ethertalk_cfg_t *cfg)
     s_zone.nvs_net = "znet";
     s_zone.nvs_node = "znode";
     s_zone.status = cfg->zone_status;
-    uint8_t sta[ETH_ALEN], mac[ETH_ALEN];
-    esp_read_mac(sta, ESP_MAC_WIFI_STA);
-    et_zone_mac(sta, s_zone_mac);
+    s_radio.owner = (at_owner_t){ AT_LINK_RADIO, side_abort, radio_note, &s_radio };
+    s_radio.name = "radio";
+    s_radio.nvs_net = "rnet";
+    s_radio.nvs_node = "rnode";
+    s_radio.status = cfg->radio_status;
+    uint8_t mac[ETH_ALEN];
+    esp_read_mac(s_sta_mac, ESP_MAC_WIFI_STA);
+    et_zone_mac(s_sta_mac, s_zone_mac);
     s_ip = cfg->ip;
     et_tunnel_mac(s_ip, mac);
     side_init(&s_tun, mac);
     side_init(&s_zone, s_zone_mac);
+    side_init(&s_radio, s_sta_mac);
+    s_radio.active = s_radio_on && s_ip;
+    if (s_radio.active) note("radio", "listening for Macs on this network");
 
     if (s_tunnel_on) {
         tunnel_open();
@@ -589,8 +665,8 @@ esp_err_t ethertalk_start(const ethertalk_cfg_t *cfg)
         s_running = 0;
         return ESP_ERR_NO_MEM;
     }
-    ESP_LOGI(TAG, "EtherTalk as %s:%s@* (tunnel %s, zone %s)", cfg->object, cfg->type,
-             s_tunnel_on ? "on" : "off", s_zone_name[0] ? "set" : "off");
+    ESP_LOGI(TAG, "EtherTalk as %s:%s@* (radio %s, tunnel %s, zone %s)", cfg->object, cfg->type,
+             s_radio_on ? "on" : "off", s_tunnel_on ? "on" : "off", s_zone_name[0] ? "set" : "off");
     return ESP_OK;
 }
 
@@ -613,14 +689,16 @@ void ethertalk_net_down(void)
     xSemaphoreGive(s_lock);
 }
 
-void ethertalk_set_status(uint16_t tunnel_status, uint16_t zone_status)
+void ethertalk_set_status(uint16_t tunnel_status, uint16_t zone_status, uint16_t radio_status)
 {
     if (!s_running) return;
     xSemaphoreTake(s_lock, portMAX_DELAY);
     s_tun.status = tunnel_status;
     s_zone.status = zone_status;
+    s_radio.status = radio_status;
     lt_node_set_status(&s_tun.link.node, tunnel_status);
     lt_node_set_status(&s_zone.link.node, zone_status);
+    lt_node_set_status(&s_radio.link.node, radio_status);
     xSemaphoreGive(s_lock);
 }
 
@@ -664,16 +742,21 @@ void ethertalk_json(char *buf, size_t cap)
                    : s_tun.link.node.phase == LT_ONLINE ? "online" : "acquiring";
     const char *zs = !s_zone_name[0] ? "off" : !s_ws_up ? "connecting"
                    : s_zone.link.node.phase == LT_ONLINE ? "online" : "acquiring";
-    p += snprintf(p, end - p, "{\"on\":true,\"tunnel\":");
+    const char *rs = !s_radio_on ? "off" : !s_ip ? "no address"
+                   : s_radio.link.node.phase == LT_ONLINE ? "online" : "acquiring";
+    p += snprintf(p, end - p, "{\"on\":true,\"radio\":");
+    if (p < end) p += side_json(p, end - p, &s_radio, rs);
+    if (p < end) p += snprintf(p, end - p, ",\"tunnel\":");
     if (p < end) p += side_json(p, end - p, &s_tun, ts);
     if (p < end) p += snprintf(p, end - p, ",\"zone\":");
     if (p < end) p += side_json(p, end - p, &s_zone, zs);
     xSemaphoreGive(s_lock);
     if (p < end)
         p += snprintf(p, end - p,
-            ",\"tunnel_drops\":%lu,\"relay\":{\"connected\":%s,\"in_drops\":%lu,\"out_drops\":%lu,"
+            ",\"radio_drops\":{\"in\":%lu,\"out\":%lu},\"tunnel_drops\":%lu,\"relay\":{\"connected\":%s,\"in_drops\":%lu,\"out_drops\":%lu,"
             "\"bad_messages\":%lu,\"pongs\":%lu,\"last_error\":\"%s\"},"
             "\"internal_ram\":{\"free\":%u,\"largest\":%u,\"lowest\":%u},",
+            (unsigned long)s_radio_in_drops, (unsigned long)s_radio_out_drops,
             (unsigned long)s_tun_drops, s_ws_up ? "true" : "false",
             (unsigned long)s_zone_in_drops, (unsigned long)s_zone_out_drops,
             (unsigned long)s_zone_bad, (unsigned long)s_zone_pongs, s_zone_err,
