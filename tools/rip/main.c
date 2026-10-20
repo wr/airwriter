@@ -9,6 +9,7 @@
 #include "urf_decode.h"
 #include "ripjob.h"
 #include "png_write.h"
+#include "testpage.h"
 
 typedef struct {
     FILE    *stream;
@@ -78,20 +79,48 @@ static void on_ink_row(void *ctx, const uint8_t *const bits[IW_INKS], uint32_t w
     }
 }
 
+/* The test page with board 1's details, for tools/iwview to draw. */
+static int print_testpage(const char *ribbon, const char *path, ht_algo_t algo, int gain)
+{
+    tp_info_t info = {
+        .version = "v0.2.0-29", .built = "Oct 20 2026", .model = "ImageWriter II",
+        .name = "ImageWriter II", .host = "imagewriter-2434", .ip = "10.0.1.115",
+        .appletalk = "AppleTalk port", .screen = algo, .gain = gain,
+        .ribbon = !strcmp(ribbon, "colour") ? IW_RIBBON_COLOUR
+                : !strcmp(ribbon, "black")  ? IW_RIBBON_BLACK : IW_RIBBON_UNKNOWN,
+    };
+    host_t h;
+    memset(&h, 0, sizeof h);
+    if (!(h.stream = fopen(path, "wb"))) { perror(path); return 1; }
+    tp_io_t io = { .out = stream_out, .out_ctx = &h };
+    tp_result_t rc = tp_print(&info, &io);
+    long n = ftell(h.stream);
+    fclose(h.stream);
+    if (rc != TP_DONE || h.write_failed) {
+        fprintf(stderr, "rip: test page failed (%d)\n", rc);
+        return 1;
+    }
+    fprintf(stderr, "rip: test page, %ld bytes\n", n);
+    return 0;
+}
+
 static void usage(void)
 {
     fputs("usage: rip --in FILE [--out-stream FILE] [--out-preview FILE]\n"
           "           [--dither threshold|atkinson|floyd|bayer|bluenoise] [--colour]\n"
           "           [--gain PERCENT]\n"
+          "       rip --testpage colour|black|unknown --out-stream FILE [--dither ...] [--gain ...]\n"
           "  --colour   print RGB pages in four inks, as with the colour ribbon in\n"
-          "  --gain     dot gain at a 50%% tint the tone curve makes up for (default 0, off)\n",
+          "  --gain     dot gain at a 50%% tint the tone curve makes up for (default 0, off)\n"
+          "  --testpage the board's test page for that ribbon, as board 1 would print it;\n"
+          "             tools/iwview/iwview.py draws the stream\n",
           stderr);
 }
 
 int main(int argc, char **argv)
 {
     const char *in = NULL, *out_stream = NULL, *out_preview = NULL;
-    const char *dither = "atkinson";
+    const char *dither = "atkinson", *testpage = NULL;
     int colour = 0, gain = 0;
 
     for (int i = 1; i < argc; i++) {
@@ -101,15 +130,17 @@ int main(int argc, char **argv)
         else if (!strcmp(argv[i], "--dither") && i + 1 < argc)      dither = argv[++i];
         else if (!strcmp(argv[i], "--colour"))                       colour = 1;
         else if (!strcmp(argv[i], "--gain") && i + 1 < argc)        gain = atoi(argv[++i]);
+        else if (!strcmp(argv[i], "--testpage") && i + 1 < argc)    testpage = argv[++i];
         else { usage(); return 2; }
     }
-    if (!in) { usage(); return 2; }
+    if (!in && !(testpage && out_stream)) { usage(); return 2; }
 
     ht_algo_t algo;
     if (ht_algo_from_name(dither, &algo)) {
         fprintf(stderr, "rip: unknown dither '%s'\n", dither);
         return 2;
     }
+    if (testpage) return print_testpage(testpage, out_stream, algo, gain);
 
     FILE *f = fopen(in, "rb");
     if (!f) { perror(in); return 1; }
