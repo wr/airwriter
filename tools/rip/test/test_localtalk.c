@@ -1293,26 +1293,84 @@ static void test_name_asked(void)
     CHECK(is_name_ask(0, 83, 150));
     CHECK_EQ_INT(sent[0][2], LLAP_SHORT);
 
-    // Unanswered: asked again, LT_NAME_TRIES in all.
-    for (int i = 1; i < LT_NAME_TRIES; i++) {
-        lt_node_tick(&n, at + LT_NAME_RETRY_MS - 1);
+    // Unanswered: asked again, each wait twice the last, from LT_NAME_RETRY_MS
+    // up to LT_NAME_REFRESH_MS, while the node is still heard.
+    uint32_t gap = LT_NAME_RETRY_MS;
+    int k = 0;
+    for (int i = 1; i <= 10; i++) {
+        uint64_t next = at + gap;
+        for (uint64_t s = at + 1000; s < next; s += 1000) {
+            if (!(++k % 60)) lt_node_rx(&n, rts, sizeof rts, s);
+            lt_node_tick(&n, s);
+        }
         CHECK_EQ_INT(nsent, i);
-        at += LT_NAME_RETRY_MS;
-        lt_node_tick(&n, at);
+        lt_node_tick(&n, next);
         CHECK_EQ_INT(nsent, i + 1);
         CHECK(is_name_ask(i, 83, 150));
+        at = next;
+        gap = 2 * gap < LT_NAME_REFRESH_MS ? 2 * gap : LT_NAME_REFRESH_MS;
     }
-    // Then not until the refresh, while the node is still heard.
-    uint64_t s = at;
-    for (int k = 0; s < at + LT_NAME_RETRY_MS + LT_NAME_REFRESH_MS; s += 1000, k++) {
-        if (!(k % 60)) lt_node_rx(&n, rts, sizeof rts, s);
+    CHECK(seen_name(&n, 83, at) == NULL);
+}
+
+// A Mac at node 83 whose name is registered from `named_at` on, answering the
+// node's asks from then, run from..to in 100 ms ticks. When the node first
+// knows the name, or 0.
+static uint64_t mac_named_from(lt_node_t *n, uint64_t from, uint64_t to, uint64_t named_at)
+{
+    uint8_t f[LLAP_MAX];
+    reset_fake();
+    int done = 0;
+    for (uint64_t s = from; s <= to; s += 100) {
+        lt_node_tick(n, s);
+        for (; done < nsent && done < MAXSENT; done++) {
+            if (!is_name_ask(done, 83, 150) || s < named_at) continue;
+            size_t fl = name_reply(f, 83, 150, "Workstation", SE30);
+            lt_node_rx(n, f, fl, s + 20);
+        }
+        if (seen_name(n, 83, s + 20)) return s;
+    }
+    return 0;
+}
+
+// On the cable a Mac opens AppleTalk early in its startup and registers its
+// name much later (the SE/30, 2026-10-20): the asks must outlast that.
+static void test_name_late_mac(void)
+{
+    lt_node_t n;
+    uint64_t t = online_named(&n, 150);
+    const uint8_t rts[] = { 150, 83, LLAP_RTS };
+    lt_node_rx(&n, rts, sizeof rts, t);
+    uint64_t got = mac_named_from(&n, t, t + 300000, t + 60000);
+    CHECK(got >= t + 60000);
+    CHECK(got && got < t + 60000 + 2 * 40000);           // within the wait then due
+    CHECK(nsent <= 8);                                    // and few asks for it
+}
+
+// Registering its name, a Mac looks that name up first (=its name:Workstation@*,
+// a few times a second apart): the node asks it a moment after the last.
+static void test_name_after_registration(void)
+{
+    lt_node_t n;
+    uint64_t t = online_named(&n, 150);
+    const uint8_t rts[] = { 150, 83, LLAP_RTS };
+    lt_node_rx(&n, rts, sizeof rts, t);
+    CHECK_EQ_INT(mac_named_from(&n, t, t + 40000, (uint64_t)-1), 0);
+
+    uint8_t nbp[2 + 5 + 3 * (NBP_NAME_MAX + 1)], f[LLAP_MAX];
+    nbp_tuple_t q = { .addr = { 0, 83, 0xFB }, .enumerator = 0 };
+    memcpy(q.obj, SE30, sizeof SE30);
+    nbp_name(q.type, "Workstation");
+    q.zone[0] = 1;
+    q.zone[1] = '*';
+    size_t k = nbp_build(nbp, sizeof nbp, NBP_LKUP, 7, &q);
+    size_t fl = mac_ddp(f, 0xFF, SOCK_NIS, DDP_NBP, nbp, k);
+    for (uint64_t s = t + 40000; s < t + 43000; s += 100) {
+        if (!((s - t) % 1000)) lt_node_rx(&n, f, fl, s);    // at 40, 41 and 42 s
         lt_node_tick(&n, s);
     }
-    CHECK_EQ_INT(nsent, LT_NAME_TRIES);
-    lt_node_tick(&n, s);
-    CHECK_EQ_INT(nsent, LT_NAME_TRIES + 1);
-    CHECK(is_name_ask(LT_NAME_TRIES, 83, 150));
-    CHECK(seen_name(&n, 83, at + LT_NAME_REFRESH_MS) == NULL);
+    uint64_t got = mac_named_from(&n, t + 43000, t + 60000, t + 43000);
+    CHECK(got && got <= t + 43000 + LT_NAME_RETRY_MS);
 }
 
 static void test_name_answered(void)
@@ -1348,16 +1406,16 @@ static void test_name_answered(void)
     name = seen_name(&n, 83, at + 20 + LT_NAME_REFRESH_MS);
     CHECK(name != NULL);                                  // kept while the refresh is out
 
-    // A refresh no one answers, LT_NAME_TRIES times: the name goes (the ID
-    // may be another Mac's now).
-    uint64_t s = at + 20 + LT_NAME_REFRESH_MS;
-    lt_node_rx(&n, rts, sizeof rts, s);
-    for (int i = 0; i < LT_NAME_TRIES; i++) {
-        s += LT_NAME_RETRY_MS;
-        lt_node_tick(&n, s);
-    }
+    // A refresh no one answers, LT_NAME_TRIES asks running: the name goes
+    // when the last one's wait is out (the ID may be another Mac's now).
+    uint64_t r = at + 20 + LT_NAME_REFRESH_MS;
+    uint64_t gone = r + (uint64_t)LT_NAME_RETRY_MS * ((1u << LT_NAME_TRIES) - 1);
+    lt_node_rx(&n, rts, sizeof rts, r);
+    for (uint64_t s = r + 1000; s < gone; s += 1000) lt_node_tick(&n, s);
     CHECK_EQ_INT(nsent, 1 + LT_NAME_TRIES);
-    CHECK(seen_name(&n, 83, s) == NULL);
+    CHECK(seen_name(&n, 83, gone - 1000) != NULL);
+    lt_node_tick(&n, gone);
+    CHECK(seen_name(&n, 83, gone) == NULL);
 }
 
 static void test_name_other_replies(void)
@@ -1465,6 +1523,8 @@ int main(void)
     test_seen();
     test_nbp_utf8();
     test_name_asked();
+    test_name_late_mac();
+    test_name_after_registration();
     test_name_answered();
     test_name_other_replies();
     test_name_back_after_quiet();

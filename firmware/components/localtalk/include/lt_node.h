@@ -145,11 +145,15 @@ typedef struct { uint8_t node; uint32_t ago_s; const uint8_t *name; } lt_seen_t;
 // Macintosh names. System 7 and later register the name from Sharing Setup
 // with NBP as <name>:Workstation. A node given room for names (cfg->names)
 // asks each node it hears for =:Workstation@*, a LkUp sent straight to that
-// node's NIS: LT_NAME_DELAY_MS after first hearing it, again every
-// LT_NAME_RETRY_MS while unanswered (LT_NAME_TRIES asks in all), and every
-// LT_NAME_REFRESH_MS while it stays heard. A name no longer answered for, or
-// a node back after a quiet spell, is forgotten: the ID may be another Mac's.
-// A Mac without a name (System 6, or one never named) shows its address.
+// node's NIS: LT_NAME_DELAY_MS after first hearing it, then while unanswered
+// after LT_NAME_RETRY_MS, twice that, and so on up to LT_NAME_REFRESH_MS, and
+// every LT_NAME_REFRESH_MS once answered, while it stays heard. On the cable a
+// Mac opens AppleTalk early in its startup and registers its name a minute or
+// more later; it looks the name up first (<name>:Workstation@*, from it), and
+// its next ask follows LT_NAME_DELAY_MS after the last of those. A name not
+// answered for LT_NAME_TRIES asks running, or a node back after a quiet spell,
+// is forgotten: the ID may be another Mac's. A Mac without a name (System 6,
+// or one never named) shows its address.
 #define LT_NAME_TYPE       "Workstation"
 #define LT_NAME_DELAY_MS   1000
 #define LT_NAME_RETRY_MS   5000

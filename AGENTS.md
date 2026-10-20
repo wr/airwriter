@@ -111,9 +111,11 @@ What works on `main`:
   Basilisk II, Infinite Mac) with its switch and the Macs heard in the last 10 minutes, each by
   its Macintosh name when it gives one, its address beside the time. Every link asks each node it
   hears for `=:Workstation@*` (System 7 registers the Sharing Setup name so), a LkUp straight to
-  that node: 1 s after first hearing it, twice more 5 s apart, then every 10 minutes; names are
-  in PSRAM. Benched 2026-10-20: the SE/30 over BlueSCSI ("SE30") and Basilisk II ("SE/30") answer;
-  no real Mac has been asked on the cable yet. The
+  that node: 1 s after first hearing it, then backing off from 5 s to 10 minutes until it
+  answers, and 1 s after it is seen registering its name; then every 10 minutes. Names are in
+  PSRAM. Benched 2026-10-20: the SE/30 over BlueSCSI ("SE30") and Basilisk II ("SE/30") answer.
+  On the cable the SE/30 opens AppleTalk long before it registers its name, and the first build
+  gave up first; the fix is untested on the cable. The
   TashTalk flash key shows only after a cable test answers `no_tashtalk`. The page makes no
   request off the board. Sources in `tools/webui`; `mkheader.py` builds `webui_page.h`.
 - AirPrint has an off switch (W-1079): off, `_ipp` and `_printer` leave Bonjour and Print-Job

@@ -108,6 +108,7 @@ static void respond(lt_node_t *n, const lt_route_t *to, uint8_t src_sock, const 
 // ------------------------------------------------------------- NBP
 
 static void name_reply(lt_node_t *n, const ddp_t *d, const nbp_t *q, uint64_t now);
+static void name_registering(lt_node_t *n, const ddp_t *d, const nbp_t *q, uint64_t now);
 
 static void on_nbp(lt_node_t *n, const ddp_t *d, uint64_t now)
 {
@@ -119,6 +120,7 @@ static void on_nbp(lt_node_t *n, const ddp_t *d, uint64_t now)
     }
     if (q.fn != NBP_LKUP) return;
     n->st.lookups++;
+    name_registering(n, d, &q, now);
     int hit = nbp_match(q.t.obj, n->obj) && nbp_match(q.t.type, n->type);
 
     // Log a lookup once, not every second the Chooser repeats it.
@@ -645,19 +647,35 @@ static void names_tick(lt_node_t *n, uint64_t now)
     int due = -1;
     for (int i = 0; i < LT_SEEN_SLOTS; i++) {
         if (!seen_live(n, i, now) || n->seen[i].ask_at > now) continue;
-        if (n->seen[i].tries >= LT_NAME_TRIES) {   // the last ask went unanswered too
+        if (n->seen[i].tries >= LT_NAME_TRIES)    // the last ask went unanswered too
             n->names[i][0] = 0;
-            n->seen[i].tries = 0;
-            n->seen[i].ask_at = now + LT_NAME_REFRESH_MS;
-            continue;
-        }
         if (due < 0 || n->seen[i].ask_at < n->seen[due].ask_at) due = i;
     }
     if (due < 0 || now - n->name_at < LT_NAME_GAP_MS) return;
     name_ask(n, n->seen[due].net, n->seen[due].node);
-    n->seen[due].tries++;
-    n->seen[due].ask_at = now + LT_NAME_RETRY_MS;
+    if (n->seen[due].tries < 0xFF) n->seen[due].tries++;
+    // Each wait for an answer twice the last, up to the refresh: a Mac
+    // starting up may be minutes from registering its name.
+    unsigned k = n->seen[due].tries - 1u;
+    uint64_t wait = (uint64_t)LT_NAME_RETRY_MS << (k < 8 ? k : 8);
+    n->seen[due].ask_at = now + (wait < LT_NAME_REFRESH_MS ? wait : LT_NAME_REFRESH_MS);
     n->name_at = now;
+}
+
+// A Mac registering a name looks it up first, a few times a second apart, to
+// see that no one has it: <its name>:Workstation@* from it is its own. Its
+// next ask is a moment after the last of those, when the name is in.
+static void name_registering(lt_node_t *n, const ddp_t *d, const nbp_t *q, uint64_t now)
+{
+    uint8_t ws[NBP_NAME_MAX + 1];
+    nbp_name(ws, LT_NAME_TYPE);
+    if (!n->names || !q->t.obj[0] || (q->t.obj[0] == 1 && q->t.obj[1] == NBP_WILD_ALL) ||
+        !nbp_match(ws, q->t.type))
+        return;
+    int i = seen_find(n, d->src.net, d->src.node);
+    if (i < 0) return;
+    n->seen[i].tries = 0;
+    n->seen[i].ask_at = now + LT_NAME_DELAY_MS;
 }
 
 static void name_reply(lt_node_t *n, const ddp_t *d, const nbp_t *q, uint64_t now)
