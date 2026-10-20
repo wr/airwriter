@@ -1285,7 +1285,7 @@ static void status_json(void *ctx, char *buf, size_t cap)
         for (int i = 0; i < 8; i++) dip[i] = (on >> i) & 1 ? '1' : '0';
         dip[8] = '\0';
     }
-    char e_ssid[80], e_queue[80], e_job[200], e_model[80], e_name[80];
+    char e_ssid[80], e_queue[80], e_job[200], e_model[80], e_name[80], e_host[96], e_phost[96], e_uri[200];
 
     char job[96];
     if (s_last_job[0])
@@ -1305,7 +1305,7 @@ static void status_json(void *ctx, char *buf, size_t cap)
         "\"known_good\":\"%s\",\"known_good_version\":\"%s\","
         "\"model\":\"Apple ImageWriter II\",\"pic\":%s,"
         "\"pmodel\":\"%s\",\"pname\":\"%s\",\"phost\":\"%s\",\"airprint\":%s,"
-        "\"lt_port\":%d,\"lt\":%s,\"dip\":\"%s\"}",
+        "\"lt_port\":%d,\"lt\":%s,\"dip\":\"%s\",\"ap\":\"AirWriter-%s\"}",
         state_text(v.state),
         ps_name(v.state),
         v.asleep ? "true" : "false",
@@ -1315,22 +1315,23 @@ static void status_json(void *ctx, char *buf, size_t cap)
         attention || failed ? "true" : "false",
         serial_out_clear() ? "true" : "false",
         s_printing ? "true" : "false", ribbon_name(s_ribbon),
-        json_esc(e_queue, sizeof e_queue, s_set.queue), s_set.hostname, s_ip,
-        json_esc(e_ssid, sizeof e_ssid, joined ? (char *)ap.ssid : (s_ap_mode ? "" : s_set.ssid)),
+        json_esc(e_queue, sizeof e_queue, s_set.queue), json_esc(e_host, sizeof e_host, s_set.hostname), s_ip,
+        // in setup mode, the network it could not join ("" if none was set)
+        json_esc(e_ssid, sizeof e_ssid, joined ? (char *)ap.ssid : s_set.ssid),
         s_set.dither, (unsigned)s_set.gain,
         joined ? (ap.rssi > -55 ? "Excellent" : ap.rssi > -67 ? "Good"
                 : ap.rssi > -75 ? "Fair" : "Weak") : "",
         joined ? "2.4 GHz" : "",
         joined ? auth_name(ap.authmode) : "",
-        s_ap_mode ? "" : ipp_server_uri(),
+        s_ap_mode ? "" : json_esc(e_uri, sizeof e_uri, ipp_server_uri()),
         (unsigned)(up / 3600), (unsigned)((up / 60) % 60),
         reset_name(esp_reset_reason()), app->version, (unsigned)(esp_get_free_heap_size() / 1024),
         ota_health_slot(), ota_health_on_trial() ? "true" : "false", ota_health_rolled_back(),
         ota_health_known_good(), ota_health_known_good_version(),
         pic_prog_available() ? "true" : "false",
         json_esc(e_model, sizeof e_model, s_saved_model), json_esc(e_name, sizeof e_name, s_saved_name),
-        s_saved_host, s_set.airprint ? "true" : "false", s_set.lt_port,
-        localtalk_running() && !localtalk_quiet() ? "true" : "false", dip);
+        json_esc(e_phost, sizeof e_phost, s_saved_host), s_set.airprint ? "true" : "false", s_set.lt_port,
+        localtalk_running() && !localtalk_quiet() ? "true" : "false", dip, s_suffix);
 }
 
 static void lt_json(void *ctx, char *buf, size_t cap)
