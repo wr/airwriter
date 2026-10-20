@@ -101,16 +101,22 @@ What works on `main`:
   twice.
 - Setup AP `AirWriter-xxxx` (open, 192.168.4.1) on a board with no credentials; web UI on port
   80: `/api/status`, Wi-Fi, settings, `/update` (OTA), `/api/update` (GitHub releases),
-  `/api/localtalk/flash`, `/api/cable`.
-- The settings page (W-1072): every section is its heading, its content and settings, then one
-  row with text left and keys right. Keys are main actions only; auto-update is a checkbox,
-  install-from-file a link, copy a text button in the address field. The flash key shows only
-  after a cable test answers `no_tashtalk` (reflashing a working chip is `curl -X POST
-  /api/localtalk/flash`). The footer's GitHub star count is the page's one request off the
-  board, made by the browser and dropped when offline. The favicon is the printer icon.
+  `/api/localtalk/flash`, `/api/cable`, `/api/restart`, `/api/erase`, `/api/test`.
+- The settings page (`W-1079 Settings page: organise by port, like macOS System Settings`,
+  design `docs/superpowers/specs/2026-10-20-settings-redesign-design.md`): a settings app, a
+  sidebar of Printer, AirPrint, AppleTalk, Wi-Fi and About, each row showing its state; one home
+  per setting. Upright system type, Apple Garamond Light titles, platinum, icon tiles in the
+  ribbon's inks, status as lit bar lamps, low platinum keys; in a window on a big screen, the
+  sidebar first on a phone. AppleTalk is one card per way in (AppleTalk Port, Networked Macs,
+  Basilisk II, Infinite Mac) with its switch and the Macs heard in the last 10 minutes. The
+  TashTalk flash key shows only after a cable test answers `no_tashtalk`. The page makes no
+  request off the board. Sources in `tools/webui`; `mkheader.py` builds `webui_page.h`.
+- AirPrint has an off switch (W-1079): off, `_ipp` and `_printer` leave Bonjour and Print-Job
+  is refused as not accepting jobs; on, they come back under the same printer-uuid.
 - Wi-Fi scans all channels and joins the strongest AP; printer-uuid is stable (MAC + epoch).
 - TashTalk 2.1.3 is in U7, flashed in place by the ESP32 over LVP.
-- A LocalTalk node in DIP mode 2 (or always, with `CONFIG_AIRWRITER_LT_BENCH`), on UART2 to
+- A LocalTalk node behind the AppleTalk port's switch on the settings page (W-1079; until the
+  switch is used, DIP mode 2 starts it, and `CONFIG_AIRWRITER_LT_BENCH` always), on UART2 to
   TashTalk at 1 Mbaud with its CTS on IO6 (`components/localtalk`): acquires a server node ID,
   answers NBP LkUp as `<queue>:ImageWriter@*`, and answers PAP as Apple's ImageWriter LocalTalk
   Option Card does (status word, one connection). A PAP job is the Mac driver's own ImageWriter
@@ -118,7 +124,15 @@ What works on `main`:
   Mac wait ("busy"), a paused printer holds the Mac's reads (16 KB spool), and a job cut short
   gets W-1041's resync. The last job's bytes are also kept for `GET /api/lt/job`. `GET /api/lt`
   shows state and log; `POST /api/lt/echo` with a node number pings that Mac (AEP). The bench
-  Mac has printed on paper through it.
+  Mac has printed on paper through it. The node cannot stop once started, so the switch's off
+  is quiet: TashTalk answers for no node and frames are dropped.
+- EtherTalk (`W-1076 EtherTalk: print from Infinite Mac and Basilisk II`, `W-1078 EtherTalk over
+  Wi-Fi: print from real Macs (BlueSCSI, Ethernet Macs)`, SPEC §3.13): three more links to the
+  same printer, each AppleTalk Phase 2 with its own address: the board's own Wi-Fi for Ethernet
+  and BlueSCSI Macs, Basilisk II's UDP tunnel (port 6066), and Infinite Mac's zone relay over a
+  WebSocket to infinitemac.org (off until switched on; a made-up zone name). One job at a time
+  across all four links (`at_printer.c`). `GET /api/et`, `GET`/`POST /api/et/settings`.
+  `tools/ethertalk/etpeer.py` is a software Mac for the tunnel and the relay (lookup, print).
 
 **Enclosure** (`enclosure/`, in use on board 1): tray (print in PETG with Arachne walls;
 every wall 1.70 below the rim, one thickness all round so no lines show up the outside; the
@@ -128,15 +142,19 @@ height); Pro screws M2.5 × 18. Four 10 mm rubber feet sit in 0.40 pockets in th
 underside, each hiding a screw counterbore. The shop's cased GLBs still show the pre-W-1036
 tray.
 
-Not built: EtherTalk, consumers of the dither override, PWG raster.
+Not built: Mini vMac (LToUDP, `W-1077`), Mac names from NBP on the AppleTalk cards, consumers
+of the dither override, PWG raster.
 
 **Board 1:** ESP32-S3-WROOM-1-N8R2 (8 MB flash, 2 MB PSRAM). On the home Wi-Fi at
 10.0.1.115, mDNS `imagewriter-2434.local`. Console on USB-C as `/dev/cu.usbmodem*` (the number
 follows the Mac's port). Its queue name reads "ImageWriter II" in `/api/status`, which is also
 its name in the Chooser. U7's PIC calibration words: `16E0 1DA8`. Its LocalTalk node ID is 198
 (kept in NVS `lt`/`node`); the bench Mac is node 83. Printer: an ImageWriter II on J2 via
-Apple's crossover cable. It runs the W-1072 build (v0.2.0-9-gf4ff8d5), ahead of any release,
-with auto-update on.
+Apple's crossover cable. It runs the W-1079 build (v0.2.0-29, on branch
+`wells/w-1079-settings-page-organise-by-port-like-macos-system-settings`), ahead of any release,
+with auto-update on. Its AppleTalk port has been set on the page (`lt_port` 1), so DIP switches
+1-2 no longer decide; Infinite Mac is off, its zone name kept. The page reads its DIP switches as
+2, 6, 7 and 8 on: not yet checked against the part.
 
 Known issues, open:
 - With the node off, TashTalk once sent and relayed nothing over the cable test's own UART2 link
@@ -207,6 +225,10 @@ Linear is the queue; these are the live items.
   pixel per dot (half scale on a retina Mac), its type set to the measure. Five tabs wrap 2/2/1 on
   a phone. Released in v0.2.0 (2026-10-17), cut from main `b0fc219` with `--branch` from a clean
   worktree because this checkout carried someone's enclosure edits.
+- `W-1076`, `W-1078` and `W-1079` are on their branches (W-1079 on top), not merged. Owed on
+  the bench: busy both ways between links, a link dropped mid-job, the SE/30 on the cable again,
+  a real Mac on each card, the page's Print Test Page, Erase and Wi-Fi join. Before any release
+  that turns the relay on for users, give Mihai Parparita (Infinite Mac) a heads-up.
 - Not in Linear: scope HSKo during a long job (SPEC §3.9 timing).
 
 ## Toolchain
@@ -222,8 +244,10 @@ Linear is the queue; these are the live items.
   recreate them before any konnect placement:
   `ln -s "$PWD/hardware/airwriter/lib/airwriter.kicad_sym" /Applications/KiCad/KiCad.app/Contents/SharedSupport/symbols/`
   and the same for `lib/airwriter.pretty` into `.../SharedSupport/footprints/`.
-- **ESP-IDF v5.5.1** at `~/esp/esp-idf` (esp32s3 tools). `. ~/esp/esp-idf/export.sh`
-  first, then from `firmware/`:
+- **ESP-IDF v5.5.1** at `~/esp/esp-idf` (esp32s3 tools). Its Python environment was built on
+  Python 3.14 and Homebrew's `python3` is now 3.15: put a directory with `python` and `python3`
+  linked to `/opt/homebrew/bin/python3.14` first in `PATH`, then `. ~/esp/esp-idf/export.sh`,
+  then from `firmware/`:
   - build: `idf.py build`
   - flash over USB: `idf.py -p /dev/cu.usbmodem1101 flash` writes the bootloader, partition
     table, a blank otadata, a blank known-good record and the app into ota_0, so the board boots
@@ -304,7 +328,9 @@ firmware/             ESP-IDF 5.5 app; components/ per SPEC §3.1 plus job_pipe,
 tools/rip/            host build of the raster path + host tests for the pure-C cores
 tools/ipp/            IPP host tests and gpa_server (the real encoder on localhost for ipptool)
 tools/ippcap/         stub IPP server that captures a Print-Job body (how fixtures were made)
-tools/webui/          web UI sources; mkheader.py generates firmware's webui_page.h (never hand-edit)
+tools/ethertalk/      etpeer.py, a software EtherTalk Mac for the tunnel and the relay
+tools/webui/          web UI sources and its two emulator icons; mkheader.py generates
+                      firmware's webui_page.h (never hand-edit)
 tools/icon/           the printer icon as a pixel grid; mkicons.py writes ipp_server/icons/*.png
 tools/lights/         the wiki's GIF of every panel light effect, played through led_grid_core;
                       after changing an effect, `make -C tools/lights OUT=<wiki>/images/lights`

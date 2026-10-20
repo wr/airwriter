@@ -31,5 +31,8 @@ its footer (`tools/webui/wells-workshop.svg`).
 | URF line decoding, ported from `_cupsRasterReadPixels()` in OpenPrinting CUPS `cups/raster-stream.c` | `firmware/components/urf_decode/urf_decode.c` | Apache-2.0 (CUPS); compatible with GPL-3.0 |
 | WS2812B-2020 3D model, KiCad libraries | `hardware/airwriter/lib/airwriter.3dshapes/LED_WS2812B-2020_PLCC4_2.0x2.0mm.step` | CC-BY-SA-4.0 with the KiCad libraries exception |
 | Kycon KMDGX-8S-BS 3D model, from Kycon | `hardware/airwriter/lib/airwriter.3dshapes/MiniDIN-8_Kycon_KMDGX-8S-BS_RightAngle.step` | Manufacturer's model, redistributed for design use |
-| Apple's colour ImageWriter icon, redrawn pixel for pixel, used as the printer's icon and the settings page's favicon | `tools/icon/imagewriter.txt`, `firmware/components/ipp_server/icons/`, and inlined in `firmware/components/webui/webui_page.h` | © Apple; not licensed under this repository's licences |
+| Apple's colour ImageWriter icon, redrawn pixel for pixel, used as the printer's icon and the settings page's favicon and sidebar | `tools/icon/imagewriter.txt`, `firmware/components/ipp_server/icons/`, and inlined in `firmware/components/webui/webui_page.h` | © Apple; not licensed under this repository's licences |
+| Apple Garamond Light, subset to printable ASCII and a few marks, for the settings page's titles | inlined in `tools/webui/style.css` and `firmware/components/webui/webui_page.h` | © Apple; not licensed under this repository's licences |
+| Basilisk II's application icon (macemu, `BasiliskII/src/MacOSX/BasiliskII.icns`), scaled to 72 px | `tools/webui/basilisk-ii.png`, inlined in `firmware/components/webui/webui_page.h` | GPL-2.0-or-later (macemu) |
+| Infinite Mac's favicon (mihaip/infinite-mac, `public/favicon32.png`) | `tools/webui/infinite-mac.png`, inlined in `firmware/components/webui/webui_page.h` | Apache-2.0 |
 | ESP-IDF and its managed components (Espressif) | fetched at build time, not in this repository | Apache-2.0 |
