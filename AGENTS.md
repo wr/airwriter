@@ -126,8 +126,9 @@ What works on `main`:
   gave up first; the fix is untested on the cable. The
   TashTalk flash key shows only after a cable test answers `no_tashtalk`. The page makes no
   request off the board. Sources in `tools/webui`; `mkheader.py` builds `webui_page.h`.
-- Top margin (Printer pane, NVS `topmargin`, `/api/status` `top_margin`, `POST /api/general
-  {"top_margin":N}`), in 1/144 in, -216 to 144, offered in sixteenths of an inch: positive adds
+- Top margin (NVS `topmargin`, `/api/status` `top_margin`, `POST /api/general
+  {"top_margin":N}`; no control on the page: with the paper loaded as the guide says the default
+  is right, and a menu and then a line-up sheet only confused), in 1/144 in, -216 to 144: positive adds
   paper ahead of each AirPrint page and the test page, negative drops their first rows
   (`ripjob_cfg_t.top_margin`, `rip --top-margin`). Not LocalTalk jobs: the Mac's driver keeps
   its own. Default -144 (`CONFIG_AIRWRITER_TOP_MARGIN`): paper loaded as the Owner's Guide says

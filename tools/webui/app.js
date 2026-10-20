@@ -379,7 +379,6 @@ function draw(s){
     if(![...m.options].some(o=>o.value===want)) m.append(new Option(want,want));
     m.value=want;
   }
-  if(document.activeElement!==$('topm')&&s.top_margin!=null) topmSet(s.top_margin);
   $('pname').placeholder=s.pmodel||MODELS[0];
   if(document.activeElement!==$('pname')) $('pname').value=s.pname||'';
   if(document.activeElement!==$('screen')&&s.dither&&s.dither!==dither){ dither=s.dither; $('screen').value=dither; render(); }
@@ -498,22 +497,6 @@ $('ltflash').onclick=async()=>{
   if(r.ok){ say('cable-say','TashTalk is on the chip. Plug the cable back into both ports and test again.'); b.classList.add('hide'); }
   else say('cable-say',cap(r.err)+(r.addr?' at '+r.addr:'')+'.',1);
 };
-/* The top margin, in 1/144 in on the board and sixteenths of an inch here.
-   Paper loaded as Apple's guide says starts printing about an inch below its
-   edge; -1 in then puts a page where the iPhone laid it out. */
-function sixteenths(n){
-  const a=Math.abs(n), w=Math.floor(a/16); let f=a%16, d=16;
-  while(f&&f%2===0&&d>1){ f/=2; d/=2; }
-  const s=(w?w:'')+(w&&f?' ':'')+(f?f+'/'+d:'')||'0';
-  return (n<0?'−':n>0?'+':'')+s+' in';
-}
-for(let n=-24;n<=16;n++) $('topm').append(new Option(sixteenths(n),String(n*9)));
-function topmSet(v){
-  const t=$('topm');
-  if(![...t.options].some(o=>o.value===String(v))) t.append(new Option(v+'/144 in',String(v)));
-  t.value=String(v);
-}
-$('topm').onchange=()=>savePrinter({top_margin:+$('topm').value},'Saved. The next page prints with it.');
 
 /* ── AirPrint ──────────────────────────────────────────────────────── */
 $('ap').onchange=async()=>{

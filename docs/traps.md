@@ -187,6 +187,12 @@ Traps already explained in a code comment are listed only when the comment is ea
   pitch.
 - **A line that runs past 8 in wraps:** its overflow prints from the left margin on the same row
   (an `ESC F1144` "8" in proportional type landed at 0 in). A line of exactly 1152 dots prints.
+- **Nothing prints above where the head sat at power-on.** The board can add paper ahead of a
+  page or drop its top rows, never roll the sheet back, so paper loaded at the tear edge (about
+  2 3/16 in above the head) loses that much of every page whatever the top margin. Load it under
+  the paper bail. The printer can pull paper back (`ESC r`, LFs, `ESC f`: 1 3/8 in of fanfold
+  went back cleanly on board 1, 2026-10-20), but it counts its page from its top of form: pulled
+  back past it, a form feed only returns to it. `ESC v` sets top of form where the head is.
 - **Board 1's ImageWriter has a dead top pin.** Every strip's first row is blank, so a one-dot
   rule on bit 0 does not print at all: the test page's rules use pin 5.
 - **`LT_DE` floats whenever the PIC is not driving it** (no PIC, or PIC held in reset, which
