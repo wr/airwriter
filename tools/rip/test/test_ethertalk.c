@@ -7,6 +7,7 @@
 #include "et_proto.h"
 #include "et_link.h"
 #include "lt_node.h"
+#include "et_transport.h"
 
 static const uint8_t SNAP_DDP[8]  = { 0xAA, 0xAA, 0x03, 0x08, 0x00, 0x07, 0x80, 0x9B };
 static const uint8_t SNAP_AARP[8] = { 0xAA, 0xAA, 0x03, 0x00, 0x00, 0x00, 0x80, 0xF3 };
@@ -558,6 +559,139 @@ static void test_set_mac(void)
     CHECK_EQ_MEM(fr[0] + 6, newmac, 6);
 }
 
+// ------------------------------------------------------------- transports
+
+static void test_tunnel(void)
+{
+    uint8_t mac[6];
+    et_tunnel_mac(0x0A000173, mac);
+    static const uint8_t want[6] = { 0x42, 0x32, 0x0A, 0x00, 0x01, 0x73 };
+    CHECK_EQ_MEM(mac, want, 6);
+    uint32_t ip = 0;
+    CHECK_EQ_INT(et_tunnel_dest(mac, &ip), 1);
+    CHECK_EQ_INT(ip, 0x0A000173);
+    ip = 0;
+    CHECK_EQ_INT(et_tunnel_dest(ET_AT_MCAST, &ip), 1);
+    CHECK(ip == 0xFFFFFFFFu);
+    ip = 0;
+    CHECK_EQ_INT(et_tunnel_dest(ET_BCAST, &ip), 1);
+    CHECK(ip == 0xFFFFFFFFu);
+    CHECK_EQ_INT(et_tunnel_dest(MAC_B, &ip), 0);
+    static const uint8_t zone_mac[6] = { 0xB2, 0xA9, 0xD6, 0x35, 0xFA, 0x4A };
+    CHECK_EQ_INT(et_tunnel_dest(zone_mac, &ip), 0);       // 0xB2, not "B2"
+}
+
+static void test_zone_name_ok(void)
+{
+    char x32[33], x33[34];
+    memset(x32, 'x', 32); x32[32] = 0;
+    memset(x33, 'x', 33); x33[33] = 0;
+    CHECK_EQ_INT(et_zone_name_ok("wells-printer"), 1);
+    CHECK_EQ_INT(et_zone_name_ok("a"), 1);
+    CHECK_EQ_INT(et_zone_name_ok("A.b_c-9"), 1);
+    CHECK_EQ_INT(et_zone_name_ok(x32), 1);
+    CHECK_EQ_INT(et_zone_name_ok(""), 0);
+    CHECK_EQ_INT(et_zone_name_ok(x33), 0);
+    CHECK_EQ_INT(et_zone_name_ok("has space"), 0);
+    CHECK_EQ_INT(et_zone_name_ok("a/b"), 0);
+    CHECK_EQ_INT(et_zone_name_ok("a?b"), 0);
+    CHECK_EQ_INT(et_zone_name_ok("caf\xc3\xa9"), 0);
+    CHECK_EQ_INT(et_zone_name_ok("%2F"), 0);
+    CHECK_EQ_INT(et_zone_name_ok(NULL), 0);
+}
+
+static void test_zone_json(void)
+{
+    char out[4096];
+    size_t n = et_zone_init_json(out, sizeof out, MAC_B);
+    const char *want = "{\"type\":\"init\",\"macAddress\":\"0a:57:57:00:00:01\"}";
+    CHECK_EQ_INT(n, strlen(want));
+    CHECK(!strcmp(out, want));
+
+    uint8_t f[15];
+    for (int i = 0; i < 15; i++) f[i] = (uint8_t)(i * 17);
+    memcpy(f, ET_AT_MCAST, 6);
+    n = et_zone_send_json(out, sizeof out, f, sizeof f);
+    const char *at = "{\"type\":\"send\",\"destination\":\"AT\",\"packetArray\":"
+                     "[9,0,7,255,255,255,102,119,136,153,170,187,204,221,238]}";
+    CHECK_EQ_INT(n, strlen(at));
+    CHECK(!strcmp(out, at));
+    memcpy(f, ET_BCAST, 6);
+    et_zone_send_json(out, sizeof out, f, sizeof f);
+    CHECK(strstr(out, "\"destination\":\"*\"") != NULL);
+    static const uint8_t them[6] = { 0xB2, 0xA9, 0xD6, 0x35, 0xFA, 0x4A };
+    memcpy(f, them, 6);
+    et_zone_send_json(out, sizeof out, f, sizeof f);
+    CHECK(strstr(out, "\"destination\":\"b2:a9:d6:35:fa:4a\"") != NULL);
+    CHECK_EQ_INT(et_zone_send_json(out, 40, f, sizeof f), 0);
+    CHECK_EQ_INT(et_zone_init_json(out, 10, MAC_B), 0);
+}
+
+static void test_zone_parse(void)
+{
+    uint8_t f[8];
+    size_t n = 0;
+    const char *m = "{\"type\":\"receive\",\"packetArray\":[1,2,255]}";
+    CHECK_EQ_INT(et_zone_parse(m, strlen(m), f, sizeof f, &n), 1);
+    CHECK_EQ_INT(n, 3);
+    CHECK_EQ_INT(f[0], 1);
+    CHECK_EQ_INT(f[2], 255);
+    m = "{ \"type\" : \"receive\", \"packetArray\" : [ 4, 5 , 6 ] }";
+    CHECK_EQ_INT(et_zone_parse(m, strlen(m), f, sizeof f, &n), 1);
+    CHECK_EQ_INT(n, 3);
+    CHECK_EQ_INT(f[1], 5);
+    m = "{\"packetArray\":[7],\"type\":\"receive\"}";            // either order
+    CHECK_EQ_INT(et_zone_parse(m, strlen(m), f, sizeof f, &n), 1);
+    CHECK_EQ_INT(n, 1);
+    m = "{\"type\":\"other\"}";
+    CHECK_EQ_INT(et_zone_parse(m, strlen(m), f, sizeof f, &n), 0);
+    m = "{\"type\":\"receive\",\"packetArray\":[1,256]}";
+    CHECK_EQ_INT(et_zone_parse(m, strlen(m), f, sizeof f, &n), -1);
+    m = "{\"type\":\"receive\",\"packetArray\":[1,2";
+    CHECK_EQ_INT(et_zone_parse(m, strlen(m), f, sizeof f, &n), -1);
+    m = "{\"type\":\"receive\",\"packetArray\":[1,x]}";
+    CHECK_EQ_INT(et_zone_parse(m, strlen(m), f, sizeof f, &n), -1);
+    m = "{\"type\":\"receive\",\"packetArray\":[1,2,3,4,5,6,7,8,9]}";
+    CHECK_EQ_INT(et_zone_parse(m, strlen(m), f, sizeof f, &n), -1);
+    m = "{\"type\":\"receive\"}";
+    CHECK_EQ_INT(et_zone_parse(m, strlen(m), f, sizeof f, &n), -1);
+    m = "{\"type\":\"receive\",\"packetArray\":[-1]}";
+    CHECK_EQ_INT(et_zone_parse(m, strlen(m), f, sizeof f, &n), -1);
+    // Not NUL-terminated: only len bytes are read.
+    char buf[64];
+    memcpy(buf, "{\"type\":\"receive\",\"packetArray\":[9]}XXXX", 41);
+    CHECK_EQ_INT(et_zone_parse(buf, 37, f, sizeof f, &n), 1);
+    CHECK_EQ_INT(et_zone_parse(buf, 30, f, sizeof f, &n), -1);
+}
+
+static void test_zone_pong(void)
+{
+    uint8_t ping[26];
+    memcpy(ping, ET_BCAST, 6);
+    memcpy(ping + 6, MAC_B, 6);
+    ping[12] = 0; ping[13] = 12;
+    memcpy(ping + 14, "pingPING", 8);
+    ping[22] = 0x68; ping[23] = 0xF5; ping[24] = 0x6B; ping[25] = 0x10;
+    uint8_t pong[ET_PONG_LEN];
+    static const uint8_t me[6] = { 0x0A, 0x01, 0x02, 0x03, 0x04, 0x05 };
+    CHECK_EQ_INT(et_zone_pong(ping, sizeof ping, me, pong), 1);
+    CHECK_EQ_MEM(pong, MAC_B, 6);
+    CHECK_EQ_MEM(pong + 6, me, 6);
+    CHECK_EQ_INT(pong[12], 0);
+    CHECK_EQ_INT(pong[13], 13);
+    CHECK_EQ_MEM(pong + 14, "pingPONG!", 9);
+    CHECK_EQ_MEM(pong + 23, ping + 22, 4);
+    ping[14] = 'P';
+    CHECK_EQ_INT(et_zone_pong(ping, sizeof ping, me, pong), 0);
+    ping[14] = 'p';
+    CHECK_EQ_INT(et_zone_pong(ping, 25, me, pong), 0);
+    uint8_t zm[6];
+    static const uint8_t base[6] = { 0x84, 0xF7, 0x03, 0x12, 0x34, 0x56 };
+    et_zone_mac(base, zm);
+    static const uint8_t wantzm[6] = { 0x0A, 0xF7, 0x03, 0x12, 0x34, 0x56 };
+    CHECK_EQ_MEM(zm, wantzm, 6);
+}
+
 int main(void)
 {
     test_elap_round_trip();
@@ -573,5 +707,10 @@ int main(void)
     test_link_down_mid_job();
     test_two_links_one_printer();
     test_set_mac();
+    test_tunnel();
+    test_zone_name_ok();
+    test_zone_json();
+    test_zone_parse();
+    test_zone_pong();
     TEST_END;
 }
