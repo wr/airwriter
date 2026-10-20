@@ -255,6 +255,13 @@ static void test_page_identity(void)
     CHECK(has(&s, "AppleTalk port"));
     free(s.b);
 
+    /* DIP4 at power-on can print before the network gives an address */
+    info.ip = "0.0.0.0";
+    s = print_page(&info, &rc);
+    CHECK(has(&s, "imagewriter-2434.local  no IP yet"));
+    CHECK(!has(&s, "0.0.0.0"));
+    free(s.b);
+
     info.setup_ssid = "AirWriter-2434";
     info.ip = "192.168.4.1";
     s = print_page(&info, &rc);

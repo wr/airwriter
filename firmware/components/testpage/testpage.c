@@ -272,7 +272,8 @@ static void identity(tp_t *t)
              i->ribbon == IW_RIBBON_COLOUR ? "colour ribbon"
              : i->ribbon == IW_RIBBON_BLACK ? "black ribbon" : "ribbon not known");
     if (i->setup_ssid) snprintf(addr, sizeof addr, "join %s", i->setup_ssid);
-    else snprintf(addr, sizeof addr, "%s.local  %s", i->host, i->ip);
+    else snprintf(addr, sizeof addr, "%s.local  %s", i->host,
+                  i->ip && i->ip[0] && strcmp(i->ip, "0.0.0.0") ? i->ip : "no IP yet");
     if (i->setup_ssid) snprintf(settings, sizeof settings, "http://%s", i->ip);
     else snprintf(settings, sizeof settings, "http://%s.local", i->host);
     snprintf(firmware, sizeof firmware, "AirWriter %s", i->version);
