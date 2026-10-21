@@ -328,6 +328,24 @@ static char s_saved_model[SET_QUEUE_MAX], s_saved_name[SET_QUEUE_MAX], s_saved_h
 static dip_config_t s_dip;
 static volatile int s_dip_known;
 
+// W-1081: what U7 said the last time the node was wanted and would not
+// start, for the AppleTalk Port card. Unknown until then, and again once the
+// port is switched off.
+typedef enum { LT_CHIP_UNKNOWN, LT_CHIP_OK, LT_CHIP_NONE, LT_CHIP_NO_TASHTALK,
+               LT_CHIP_SILENT } lt_chip_t;
+static volatile lt_chip_t s_lt_chip;
+
+static const char *lt_chip_name(lt_chip_t c)
+{
+    switch (c) {
+    case LT_CHIP_OK:          return "ok";
+    case LT_CHIP_NONE:        return "no_chip";
+    case LT_CHIP_NO_TASHTALK: return "no_tashtalk";
+    case LT_CHIP_SILENT:      return "silent";
+    default:                  return "unknown";
+    }
+}
+
 // The page saved queue, hostname, dither or gain (W-1068): re-read them, and
 // give the pipe and the test page the screen they now name. The hostname
 // and queue still take a restart to reach mDNS, as they always have.
@@ -1362,7 +1380,7 @@ static void status_json(void *ctx, char *buf, size_t cap)
         "\"known_good\":\"%s\",\"known_good_version\":\"%s\","
         "\"model\":\"Apple ImageWriter II\",\"pic\":%s,"
         "\"pmodel\":\"%s\",\"pname\":\"%s\",\"phost\":\"%s\",\"airprint\":%s,"
-        "\"lt_port\":%d,\"lt\":%s,\"dip\":\"%s\",\"ap\":\"AirWriter-%s\"}",
+        "\"lt_port\":%d,\"lt\":%s,\"lt_chip\":\"%s\",\"dip\":\"%s\",\"ap\":\"AirWriter-%s\"}",
         state_text(v.state),
         ps_name(v.state),
         v.asleep ? "true" : "false",
@@ -1388,7 +1406,8 @@ static void status_json(void *ctx, char *buf, size_t cap)
         pic_prog_available() ? "true" : "false",
         json_esc(e_model, sizeof e_model, s_saved_model), json_esc(e_name, sizeof e_name, s_saved_name),
         json_esc(e_phost, sizeof e_phost, s_saved_host), s_set.airprint ? "true" : "false", s_set.lt_port,
-        localtalk_running() && !localtalk_quiet() ? "true" : "false", dip, s_suffix);
+        localtalk_running() && !localtalk_quiet() ? "true" : "false", lt_chip_name(s_lt_chip),
+        dip, s_suffix);
 }
 
 static void lt_json(void *ctx, char *buf, size_t cap)
@@ -1465,8 +1484,26 @@ static void lt_event(lt_event_t ev)
     led_grid_blip(LG_BLIP_MAC);
 }
 
+// TashTalk took none of the node's sync, so the node did not start and the
+// pins are free: U7's device ID tells an empty socket from a PIC without
+// TashTalk, as the cable test does (W-1063). The read resets the PIC.
+static lt_chip_t lt_chip_check(void)
+{
+    if (cable_test_lt_busy()) return LT_CHIP_SILENT;
+    uint16_t id = 0;
+    pic_err_t e = pic_prog_read_id(&id);
+    ESP_LOGW(TAG, "LocalTalk: U7 reads 0x%04X: %s", id, pic_err_str(e));
+    switch (e) {
+    case PIC_ERR_NO_DEVICE:    return LT_CHIP_NONE;
+    case PIC_OK:
+    case PIC_ERR_WRONG_DEVICE: return LT_CHIP_NO_TASHTALK;
+    default:                   return LT_CHIP_SILENT;
+    }
+}
+
 // W-1051: the LocalTalk node, in DIP mode 2 or on a bench build. It owns its
-// UART and the PIC's pins from here until reboot.
+// UART and the PIC's pins from here until reboot, unless TashTalk is not
+// there to take them (W-1081): then it does not start, and says why.
 static void lt_start(const char *why)
 {
 #if CONFIG_AIRWRITER_PIC_CLK_PIN >= 0 && CONFIG_AIRWRITER_PIC_DAT_PIN >= 0
@@ -1485,8 +1522,15 @@ static void lt_start(const char *why)
         .on_event = lt_event,
     };
     esp_err_t err = localtalk_start(&c);
-    if (err != ESP_OK) ESP_LOGE(TAG, "LocalTalk (%s) did not start: %s", why, esp_err_to_name(err));
-    else               ESP_LOGI(TAG, "LocalTalk on (%s)", why);
+    if (err == ESP_ERR_NOT_FOUND) {
+        s_lt_chip = lt_chip_check();
+        ESP_LOGW(TAG, "LocalTalk (%s) not started: %s", why, lt_chip_name(s_lt_chip));
+    } else if (err != ESP_OK) {
+        ESP_LOGE(TAG, "LocalTalk (%s) did not start: %s", why, esp_err_to_name(err));
+    } else {
+        s_lt_chip = LT_CHIP_OK;
+        ESP_LOGI(TAG, "LocalTalk on (%s)", why);
+    }
 #else
     (void)why;
 #endif
@@ -1498,6 +1542,7 @@ static void lt_port_apply(int on)
 {
     if (!on) {
         localtalk_set_quiet(1);
+        if (!localtalk_running()) s_lt_chip = LT_CHIP_UNKNOWN;
         return;
     }
     if (localtalk_running()) localtalk_set_quiet(0);
@@ -1533,8 +1578,8 @@ static void localtalk_flash(void *ctx, char *buf, size_t cap)
     // The node holds the PIC's UART pins; flashing would fight it. "err", as
     // pic_result_json has it, is what the page shows.
     if (localtalk_running()) {
-        snprintf(buf, cap, "{\"ok\":false,\"err\":\"LocalTalk is running: set DIP1-2 to "
-                 "another mode and restart, then flash\"}");
+        snprintf(buf, cap, "{\"ok\":false,\"err\":\"LocalTalk is running: switch the "
+                 "AppleTalk Port off and restart, then flash\"}");
         return;
     }
     // A cable test borrows the same pins, under the job lock.
@@ -1550,6 +1595,8 @@ static void localtalk_flash(void *ctx, char *buf, size_t cap)
     xSemaphoreGive(s_job_lock);
     led_grid_action(err == PIC_OK ? LG_ACT_PIC_OK : LG_ACT_PIC_FAILED, 0);
     pic_result_json(&r, buf, cap);
+    // W-1081: a port that would not start for want of TashTalk starts now.
+    if (err == PIC_OK && s_lt_chip != LT_CHIP_UNKNOWN) lt_start("TashTalk flashed");
 }
 
 // POST /api/cable. Refuses rather than waits while a job holds the port.
@@ -1706,7 +1753,7 @@ void app_main(void)
     snprintf(s_saved_host, sizeof s_saved_host, "%s", s_set.hostname);
 #if CONFIG_AIRWRITER_LT_BENCH
     lt_start("bench build");
-    if (s_set.lt_port == 0) localtalk_set_quiet(1);
+    if (s_set.lt_port == 0) lt_port_apply(0);
 #endif
     if (s_set.lt_port == 1) lt_start("the settings page");
 

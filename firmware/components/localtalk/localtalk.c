@@ -22,6 +22,7 @@
 static const char *TAG = "lt";
 
 #define LT_BAUD   1000000
+#define LT_ALIVE_MS 100     // the sync's 11 ms, with room
 #define EV_LINES  20
 #define FR_LINES  10
 #define LINE_LEN  100
@@ -218,6 +219,23 @@ esp_err_t localtalk_start(const localtalk_cfg_t *cfg)
     for (int i = 0; i < TT_SYNC_LEN / (int)sizeof nops; i++) uart_write_bytes(s_uart, nops, sizeof nops);
     static const uint8_t features[] = { TT_CMD_FEATURES, 0x00 };
     uart_write_bytes(s_uart, features, sizeof features);
+
+    // W-1081: TashTalk takes the sync in about 11 ms. With U7 empty or not
+    // running TashTalk, CTS stays up and none of it goes; a node started now
+    // would claim an ID and look online with no chip. Give UART2 and the
+    // PIC's pins back instead, so the caller can ask U7 over ICSP.
+    if (uart_wait_tx_done(s_uart, pdMS_TO_TICKS(LT_ALIVE_MS)) != ESP_OK) {
+        uart_driver_delete(s_uart);
+        gpio_reset_pin(cfg->tx_pin);
+        gpio_reset_pin(cfg->rx_pin);
+        if (cfg->cts_pin >= 0) gpio_reset_pin(cfg->cts_pin);
+        vSemaphoreDelete(s_lock);
+        s_lock = NULL;
+        s_uart = -1;
+        s_cts_pin = -1;
+        ESP_LOGW(TAG, "TashTalk took none of the sync: not starting");
+        return ESP_ERR_NOT_FOUND;
+    }
 
     s_on_event = cfg->on_event;
     err = at_printer_init(&cfg->printer);

@@ -552,14 +552,31 @@ $('c-zone').addEventListener('click',e=>{ const c=e.target.closest('[data-zone]'
 $('c-zone').addEventListener('keydown',e=>{
   const c=e.target.closest('[data-zone]'); if(c&&(e.key==='Enter'||e.key===' ')){ e.preventDefault(); copyZone(c); }
 });
+/* W-1081: the port is switched on but would not start, for want of a chip
+   running TashTalk; the board asked U7 which. A build with no LocalTalk chip
+   pins has no port to show. */
+const CHIP_HELP=' <a href="https://github.com/wr/airwriter/wiki/LocalTalk-Chip-(TashTalk)" target=_blank rel=noopener>Learn&nbsp;More…</a>';
+const CHIP={
+  no_chip:['r','No LocalTalk chip.'+CHIP_HELP],
+  no_tashtalk:['a','The LocalTalk chip needs TashTalk.'],
+  silent:['r','The LocalTalk chip isn’t answering.'+CHIP_HELP]};
+let flashing=false;
 function atDraw(){
   let macs=0, on=0;
   // the cable
   {
     const c=$('c-lt'), sw=c.querySelector('[data-way=lt]'), live=!!(LT&&LT.on);
-    sw.checked=live; sw.disabled=!S.pic;
-    c.classList.toggle('off',!live);
-    if(live){
+    const chip=!live&&CHIP[S.lt_chip];
+    c.classList.toggle('hide',S.pic===false);
+    $('tt-credit').classList.toggle('hide',S.pic===false);
+    sw.checked=live||!!chip; sw.disabled=!S.pic;
+    c.classList.toggle('off',!live&&!chip);
+    $('lt-flash').classList.toggle('hide',!flashing&&!(chip&&S.lt_chip==='no_tashtalk'));
+    if(chip){
+      on++;
+      put(c,flashing?stLine('a','Flashing TashTalk…'):stHTML(chip[0],chip[1]));
+    }
+    else if(live){
       on++; macs+=(LT.macs||[]).length;
       put(c,(LT.phase!=='online'?stLine('a','Joining the AppleTalk network…'):'')
         +macList(LT.macs||[],m=>'Node '+m.node));
@@ -605,6 +622,8 @@ for(const sw of $$('[data-way]')) sw.onchange=async()=>{
     r=await postJSON('/api/general',{localtalk:on});
     // the port's node takes a moment: show it starting, not the last answer
     if(!r.error) LT=on?(LT&&LT.on?LT:{on:true,phase:'acquiring',macs:[]}):{on:false,quiet:true};
+    // off forgets what the chip said; on asks it again
+    if(!r.error) S.lt_chip='unknown';
   }
   else{
     const body={}; body[WAYS[w].key]=on;
@@ -616,6 +635,17 @@ for(const sw of $$('[data-way]')) sw.onchange=async()=>{
   }
   if(r.error){ sw.checked=!on; say('at-say',r.error,1); }
   else { say('at-say',''); atDraw(); setTimeout(atPoll,1500); setTimeout(poll,600); }
+};
+/* The card's flash key, for a chip that needs TashTalk: once it is on, the
+   board starts the port by itself. */
+$('lt-flash').onclick=async()=>{
+  const b=$('lt-flash'); if(b.disabled) return; b.disabled=true;
+  flashing=true; say('at-say',''); atDraw();
+  const r=await postJSON('/api/localtalk/flash');
+  flashing=false; b.disabled=false;
+  if(r.error||!r.ok) say('at-say',r.error||cap(r.err)+(r.addr?' at '+r.addr:'')+'.',1);
+  else { S.lt_chip='ok'; LT={on:true,phase:'acquiring',macs:[]}; setTimeout(atPoll,1500); setTimeout(poll,600); }
+  atDraw();
 };
 /* Infinite Mac's zone: like a password, so it is only ever on this page. */
 const IM='https://infinitemac.org/1998/Mac%20OS%208.1?appleTalk=';
