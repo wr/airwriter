@@ -39,7 +39,7 @@
     <!-- ── Printer ───────────────────────────────────────────── -->
     <section class=pane id=p-printer>
       <div class=hero><span class="ic k"><svg><use href="#g-printer"/></svg></span>
-        <h2>Printer</h2><p>The ImageWriter on the printer port. <a href="https://github.com/wr/airwriter/wiki/Setup" target=_blank rel=noopener>Learn More…</a></p></div>
+        <h2>Printer</h2><p>The ImageWriter on the printer port. <a href="https://github.com/wr/airwriter/wiki/Setup" target=_blank rel=noopener>Learn&nbsp;More…</a></p></div>
       <div class=box>
         <div class=row><span class=txt>Status</span><span class=val><i class=lamp id=prn-lamp></i><span id=prn-state></span></span></div>
         <div class="row hide" id=prn-jobrow><span class=txt>Printing</span><span class=val id=prn-job></span></div>
@@ -60,7 +60,7 @@
     <!-- ── AirPrint ──────────────────────────────────────────── -->
     <section class=pane id=p-airprint>
       <div class=hero><span class="ic g"><svg><use href="#g-airprint"/></svg></span>
-        <h2>AirPrint</h2><p>iPhones, iPads and Macs find the printer by themselves. <a href="https://github.com/wr/airwriter/wiki/Setup" target=_blank rel=noopener>Learn More…</a></p></div>
+        <h2>AirPrint</h2><p>iPhones, iPads and Macs find the printer by themselves. <a href="https://github.com/wr/airwriter/wiki/Setup" target=_blank rel=noopener>Learn&nbsp;More…</a></p></div>
       <div class=box>
         <div class=row><span class=txt>AirPrint</span><label class=sw><input type=checkbox role=switch id=ap aria-label=AirPrint><span></span></label></div>
         <div class=row><span class="txt mono" id=uri></span><button class=btn type=button id=copyuri>Copy</button></div>
@@ -72,7 +72,7 @@
     <!-- ── AppleTalk ─────────────────────────────────────────── -->
     <section class=pane id=p-appletalk>
       <div class=hero><span class="ic b"><svg><use href="#g-talk"/></svg></span>
-        <h2>AppleTalk</h2><p>Classic Macs print here. On the Mac, choose AppleTalk ImageWriter in the Chooser. <a href="https://github.com/wr/airwriter/wiki/Vintage-Macs-(LocalTalk)" target=_blank rel=noopener>Learn More…</a></p></div>
+        <h2>AppleTalk</h2><p>Classic Macs print here. On the Mac, choose AppleTalk ImageWriter in the Chooser. <a href="https://github.com/wr/airwriter/wiki/Vintage-Macs-(LocalTalk)" target=_blank rel=noopener>Learn&nbsp;More…</a></p></div>
 
       <!-- Wells's layout, from macOS's Wi-Fi network row: the interface and its
            switch, then below a rule how many Macs it can see and which. -->
@@ -100,7 +100,7 @@
           <div class=ctls><button class=btn type=button data-dlg=d-inf>Set Up…</button><label class=sw><input type=checkbox role=switch data-way=zone aria-label="Infinite Mac"><span></span></label></div></div>
         <div class=body></div>
       </div>
-      <p class=foot>SheepShaver and Mini vMac are not supported. <a href="https://github.com/wr/airwriter/wiki/Vintage-Macs-(LocalTalk)" target=_blank rel=noopener>Learn More…</a></p>
+      <p class=foot>SheepShaver and Mini vMac are not supported. <a href="https://github.com/wr/airwriter/wiki/Vintage-Macs-(LocalTalk)" target=_blank rel=noopener>Learn&nbsp;More…</a></p>
       <p class=foot id=tt-credit>The AppleTalk Port runs on <a href="https://github.com/lampmerchant/tashtalk" target=_blank rel=noopener>TashTalk</a>, made by <a href="https://ko-fi.com/tashtari" target=_blank rel=noopener>Tashtari</a>. Thank you!</p>
       <p class=say id=at-say></p>
       <a class=help href="https://github.com/wr/airwriter/wiki/Troubleshooting" target=_blank rel=noopener aria-label="Help with AppleTalk">?</a>
@@ -109,7 +109,7 @@
     <!-- ── Wi-Fi ─────────────────────────────────────────────── -->
     <section class=pane id=p-wifi>
       <div class=hero><span class="ic c"><svg><use href="#g-wifi"/></svg></span>
-        <h2>Wi-Fi</h2><p>The network AirWriter prints over. <a href="https://github.com/wr/airwriter/wiki/Setup" target=_blank rel=noopener>Learn More…</a></p></div>
+        <h2>Wi-Fi</h2><p>The network AirWriter prints over. <a href="https://github.com/wr/airwriter/wiki/Setup" target=_blank rel=noopener>Learn&nbsp;More…</a></p></div>
       <div class=box>
         <div class=row id=ssid-row><span class=txt>Wi-Fi network</span><span class=val><i class=lamp id=wifi-lamp></i><span id=ssid></span></span>
           <span class=glyphs id=wifi-glyphs></span><button class=btn type=button id=change>Change…</button></div>
@@ -168,10 +168,10 @@
 <dialog id=d-bas><div class=dlg>
   <b>Set up Basilisk II</b>
   <ol>
-    <li>In Basilisk II's settings, open Serial/Network and turn on <span class=q>Tunnel MacOS Networking over UDP</span>.</li>
+    <li>In Basilisk II's settings, open Ports and turn on <span class=q>Tunnel Mac OS networking over UDP</span> and <span class=q>Tunnel AppleTalk only</span>.</li>
     <li>Start the Mac and choose EtherTalk in its Network control panel.</li>
   </ol>
-  <p>While the tunnel is on, that Mac can't reach the internet. <a href="https://github.com/wr/airwriter/wiki/Vintage-Macs-(LocalTalk)" target=_blank rel=noopener>Learn More…</a></p>
+  <p>The second keeps that Mac on the internet. Older versions of Basilisk II don't have it, and there the tunnel cuts the Mac off the internet. <a href="https://github.com/wr/airwriter/wiki/Vintage-Macs-(LocalTalk)" target=_blank rel=noopener>Learn&nbsp;More…</a></p>
   <div class=btnrow><button class="btn primary" type=button data-close>Done</button></div>
 </div></dialog>
 
