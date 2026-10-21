@@ -817,7 +817,7 @@ function drawDips(bits,ltPort){
   if(!bits||bits.length!==8) return;
   const on=i=>bits[i]==='1';
   $('dips').innerHTML='<div class=dipbody><b>ON</b>'
-    +[...bits].map((b,i)=>'<span class="dip'+(b==='1'?' up':'')+'"><i></i>'+(i+1)+'</span>').join('')+'</div>';
+    +[...bits].map((b,i)=>'<span class="dip'+(b==='1'?' on':'')+'"><i></i>'+(i+1)+'</span>').join('')+'</div>';
   /* what each switch does, then what it is set to: the AppleTalk port's pair
      stops counting once the port's own switch has been used */
   const mode=(on(0)?1:0)|(on(1)?2:0), yn=x=>x?'On':'Off';
