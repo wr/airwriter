@@ -172,8 +172,7 @@ height); Pro screws M2.5 × 18. Four 10 mm rubber feet sit in 0.40 pockets in th
 underside, each hiding a screw counterbore. The shop's cased GLBs still show the pre-W-1036
 tray.
 
-Not built: Mini vMac (LToUDP, `W-1077`), Mac names from NBP on the AppleTalk cards, consumers
-of the dither override, PWG raster.
+Not built: Mini vMac (LToUDP, `W-1077`), consumers of the dither override, PWG raster.
 
 **Board 1:** ESP32-S3-WROOM-1-N8R2 (8 MB flash, 2 MB PSRAM). On the home Wi-Fi at
 10.0.1.115, mDNS `imagewriter-2434.local`. Console on USB-C as `/dev/cu.usbmodem*` (the number
@@ -181,9 +180,8 @@ follows the Mac's port). Its queue name reads "ImageWriter II" in `/api/status`,
 its name in the Chooser. U7's PIC calibration words: `16E0 1DA8`. Its LocalTalk node ID is 198
 (kept in NVS `lt`/`node`); the bench Mac is node 83. Printer: an ImageWriter II on J2 via
 Apple's crossover cable, fanfold paper loaded as the Owner's Guide says (top edge under the paper
-bail). It runs the combined W-1079 build (settings page, Mac names, edge states, full test page,
-top margin) from branch `wells/w-1079-settings-page-organise-by-port-like-macos-system-settings`,
-ahead of any release, with auto-update on. Its Top margin is calibrated to -7/8 in
+bail). It runs main from the W-1079 merge (EtherTalk, settings page, Mac names, edge states,
+full test page), ahead of any release, with auto-update on. Its Top margin is calibrated to -7/8 in
 (`top_margin` -126): a page's line 1 in down and one 0.5 in from the bottom landed exactly there.
 Its AppleTalk port has been set on the page (`lt_port` 1), so DIP switches 1-2 no longer decide;
 Infinite Mac is on (Wells switched it on, with a made-up zone name). The page reads its DIP switches as 2, 6, 7 and 8 on: not
@@ -258,15 +256,15 @@ Linear is the queue; these are the live items.
   pixel per dot (half scale on a retina Mac), its type set to the measure. Five tabs wrap 2/2/1 on
   a phone. Released in v0.2.0 (2026-10-17), cut from main `b0fc219` with `--branch` from a clean
   worktree because this checkout carried someone's enclosure edits.
-- `W-1076`, `W-1078` and `W-1079` are on their branches (W-1079 on top, then
-  `wells/w-1079-mac-names`), not merged. Owed on the bench: busy both ways between links, a link
-  dropped mid-job, the SE/30 on the cable again (and its name on the AppleTalk Port card), an
-  Infinite Mac on its card, the page's Print Test Page, Erase and Wi-Fi join. Before any release
+- `W-1076` and `W-1078` reached main on 2026-10-20 with `W-1079` (Done), which was built on
+  top of them; both stay In Progress for their bench checks. Owed on the bench: busy both ways
+  between links, a link dropped mid-job, the SE/30 on the cable again (and its name on the
+  AppleTalk Port card), an Infinite Mac on its card, the page's Erase and Wi-Fi join. Before any release
   that turns the relay on for users, give Mihai Parparita (Infinite Mac) a heads-up.
 - Not in Linear: scope HSKo during a long job (SPEC §3.9 timing).
-- The full test page is on branch `ww/test-page-1e3bb7` (on top of W-1079), host-tested and
-  built, not yet printed on board 1: owed a print from each trigger on the colour ribbon, one on
-  the black ribbon, and a second tap mid-page.
+- The full test page has printed on board 1 from the page's Print Test Page, on the colour
+  ribbon. Still owed: a print from the button and from DIP4, one on the black ribbon, and a
+  second tap mid-page.
 
 ## Toolchain
 - **KiCad 10.0.6.** `kicad-cli` is not on PATH: `/Applications/KiCad/KiCad.app/Contents/MacOS/kicad-cli`.
