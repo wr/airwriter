@@ -328,9 +328,8 @@ static char s_saved_model[SET_QUEUE_MAX], s_saved_name[SET_QUEUE_MAX], s_saved_h
 static dip_config_t s_dip;
 static volatile int s_dip_known;
 
-// W-1081: what U7 said the last time the node was wanted and would not
-// start, for the AppleTalk Port card. Unknown until then, and again once the
-// port is switched off.
+// W-1081: whether U7 runs TashTalk, for the AppleTalk Port card: asked at
+// boot, whenever the node starts, and after a flash. Unknown until then.
 typedef enum { LT_CHIP_UNKNOWN, LT_CHIP_OK, LT_CHIP_NONE, LT_CHIP_NO_TASHTALK,
                LT_CHIP_SILENT } lt_chip_t;
 static volatile lt_chip_t s_lt_chip;
@@ -1484,9 +1483,10 @@ static void lt_event(lt_event_t ev)
     led_grid_blip(LG_BLIP_MAC);
 }
 
-// TashTalk took none of the node's sync, so the node did not start and the
-// pins are free: U7's device ID tells an empty socket from a PIC without
-// TashTalk, as the cable test does (W-1063). The read resets the PIC.
+#if CONFIG_AIRWRITER_PIC_CLK_PIN >= 0 && CONFIG_AIRWRITER_PIC_DAT_PIN >= 0
+// TashTalk took none of the sync, so the pins are free: U7's device ID
+// tells an empty socket from a PIC without TashTalk, as the cable test does
+// (W-1063). The read resets the PIC.
 static lt_chip_t lt_chip_check(void)
 {
     if (cable_test_lt_busy()) return LT_CHIP_SILENT;
@@ -1501,16 +1501,11 @@ static lt_chip_t lt_chip_check(void)
     }
 }
 
-// W-1051: the LocalTalk node, in DIP mode 2 or on a bench build. It owns its
-// UART and the PIC's pins from here until reboot, unless TashTalk is not
-// there to take them (W-1081): then it does not start, and says why.
-static void lt_start(const char *why)
+static SemaphoreHandle_t s_lt_mx;   // one start or probe at a time: DIP task, page, boot
+
+static localtalk_cfg_t lt_cfg(void)
 {
-#if CONFIG_AIRWRITER_PIC_CLK_PIN >= 0 && CONFIG_AIRWRITER_PIC_DAT_PIN >= 0
-    if (localtalk_running()) return;
-    // A DIP flip mid cable test: let the test give UART2 back first.
-    for (int i = 0; i < 30 && cable_test_lt_busy(); i++) vTaskDelay(pdMS_TO_TICKS(10));
-    localtalk_cfg_t c = {
+    return (localtalk_cfg_t){
         .uart_num = CONFIG_AIRWRITER_LT_UART_NUM,
         .tx_pin   = CONFIG_AIRWRITER_PIC_CLK_PIN,
         .rx_pin   = CONFIG_AIRWRITER_PIC_DAT_PIN,
@@ -1521,18 +1516,51 @@ static void lt_start(const char *why)
         .printer  = { .begin = lt_print_begin, .write = lt_print_write, .end = lt_print_end },
         .on_event = lt_event,
     };
-    esp_err_t err = localtalk_start(&c);
+}
+#endif
+
+// W-1051: the LocalTalk node, in DIP mode 2 or on a bench build. It owns its
+// UART and the PIC's pins from here until reboot, unless TashTalk is not
+// there to take them (W-1081): then it does not start, and says why.
+// probe_only asks U7 the same way and leaves the node off.
+static void lt_go(const char *why, int probe_only)
+{
+#if CONFIG_AIRWRITER_PIC_CLK_PIN >= 0 && CONFIG_AIRWRITER_PIC_DAT_PIN >= 0
+    xSemaphoreTake(s_lt_mx, portMAX_DELAY);
+    if (localtalk_running()) {
+        xSemaphoreGive(s_lt_mx);
+        return;
+    }
+    // A DIP flip mid cable test: let the test give UART2 back first.
+    for (int i = 0; i < 30 && cable_test_lt_busy(); i++) vTaskDelay(pdMS_TO_TICKS(10));
+    localtalk_cfg_t c = lt_cfg();
+    esp_err_t err = probe_only ? localtalk_probe(&c) : localtalk_start(&c);
     if (err == ESP_ERR_NOT_FOUND) {
         s_lt_chip = lt_chip_check();
-        ESP_LOGW(TAG, "LocalTalk (%s) not started: %s", why, lt_chip_name(s_lt_chip));
+        ESP_LOGW(TAG, "LocalTalk (%s): %s", why, lt_chip_name(s_lt_chip));
     } else if (err != ESP_OK) {
         ESP_LOGE(TAG, "LocalTalk (%s) did not start: %s", why, esp_err_to_name(err));
     } else {
         s_lt_chip = LT_CHIP_OK;
-        ESP_LOGI(TAG, "LocalTalk on (%s)", why);
+        ESP_LOGI(TAG, "LocalTalk %s (%s)", probe_only ? "chip runs TashTalk" : "on", why);
     }
+    xSemaphoreGive(s_lt_mx);
 #else
     (void)why;
+    (void)probe_only;
+#endif
+}
+
+static void lt_start(const char *why) { lt_go(why, 0); }
+
+// Whether the node should run: the page's switch once it has been used, else
+// DIP mode 2. A bench build always runs it, quiet while switched off.
+static int lt_wanted(void)
+{
+#if CONFIG_AIRWRITER_LT_BENCH
+    return 1;
+#else
+    return s_set.lt_port >= 0 ? s_set.lt_port == 1 : s_dip_known && s_dip.mode == 2;
 #endif
 }
 
@@ -1542,7 +1570,6 @@ static void lt_port_apply(int on)
 {
     if (!on) {
         localtalk_set_quiet(1);
-        if (!localtalk_running()) s_lt_chip = LT_CHIP_UNKNOWN;
         return;
     }
     if (localtalk_running()) localtalk_set_quiet(0);
@@ -1595,8 +1622,15 @@ static void localtalk_flash(void *ctx, char *buf, size_t cap)
     xSemaphoreGive(s_job_lock);
     led_grid_action(err == PIC_OK ? LG_ACT_PIC_OK : LG_ACT_PIC_FAILED, 0);
     pic_result_json(&r, buf, cap);
-    // W-1081: a port that would not start for want of TashTalk starts now.
-    if (err == PIC_OK && s_lt_chip != LT_CHIP_UNKNOWN) lt_start("TashTalk flashed");
+    // W-1081: TashTalk is on the chip now. A port that was wanted starts,
+    // with no restart; otherwise U7 is only asked, for the card.
+    if (err == PIC_OK) {
+        if (!lt_wanted()) lt_go("TashTalk flashed", 1);
+        else {
+            lt_start("TashTalk flashed");
+            if (s_set.lt_port == 0) localtalk_set_quiet(1);
+        }
+    }
 }
 
 // POST /api/cable. Refuses rather than waits while a job holds the port.
@@ -1715,6 +1749,9 @@ void app_main(void)
     // existence.
     s_job_lock = xSemaphoreCreateBinary();
     xSemaphoreGive(s_job_lock);             // created empty; start it free
+#if CONFIG_AIRWRITER_PIC_CLK_PIN >= 0 && CONFIG_AIRWRITER_PIC_DAT_PIN >= 0
+    s_lt_mx = xSemaphoreCreateMutex();
+#endif
 
     ps_timing_t tm = PS_TIMING_DEFAULT;
     tm.stall_attention_ms = CONFIG_AIRWRITER_STALL_TIMEOUT * 1000u;
@@ -1753,9 +1790,12 @@ void app_main(void)
     snprintf(s_saved_host, sizeof s_saved_host, "%s", s_set.hostname);
 #if CONFIG_AIRWRITER_LT_BENCH
     lt_start("bench build");
-    if (s_set.lt_port == 0) lt_port_apply(0);
+    if (s_set.lt_port == 0) localtalk_set_quiet(1);
 #endif
     if (s_set.lt_port == 1) lt_start("the settings page");
+    // W-1081: off or not, the card says whether U7 can run the port. DIP
+    // mode 2, read later, starts the node as before.
+    if (!localtalk_running()) lt_go("boot", 1);
 
     raster_selftest();
 
