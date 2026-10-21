@@ -185,8 +185,8 @@ follows the Mac's port). Its queue name reads "ImageWriter II" in `/api/status`,
 its name in the Chooser. U7's PIC calibration words: `16E0 1DA8`. Its LocalTalk node ID is 198
 (kept in NVS `lt`/`node`); the bench Mac is node 83. Printer: an ImageWriter II on J2 via
 Apple's crossover cable, fanfold paper loaded as the Owner's Guide says (top edge under the paper
-bail). It runs main from the W-1081 work (the W-1079 merge plus the chip check on the
-AppleTalk card), ahead of any release, with auto-update on. Its Top margin is calibrated to -7/8 in
+bail). It runs main from the Basilisk II box merge (the W-1079 merge, the chip check on the
+AppleTalk card, the box's Tunnel AppleTalk only checkbox), ahead of any release, with auto-update on. Its Top margin is calibrated to -7/8 in
 (`top_margin` -126): a page's line 1 in down and one 0.5 in from the bottom landed exactly there.
 Its AppleTalk port has been set on the page (`lt_port` 1), so DIP switches 1-2 no longer decide;
 Infinite Mac is on (Wells switched it on, with a made-up zone name). The page reads its DIP switches as 2, 6, 7 and 8 on: not
