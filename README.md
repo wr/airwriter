@@ -4,12 +4,12 @@ AirWriter is a small dongle that turns an Apple ImageWriter II into an AirPrint 
 into the printer's serial port, join it to your Wi-Fi, and your iPhone, iPad or Mac prints to the
 ImageWriter like any modern printer, with no drivers and no computer in the middle.
 
-It also speaks LocalTalk, so a vintage Mac can print to the same printer through Apple's
-AppleTalk ImageWriter driver. That side is in development.
+It also speaks AppleTalk, so a vintage Mac can print to the same printer through Apple's
+AppleTalk ImageWriter driver, over a LocalTalk cable or over Wi-Fi with EtherTalk. Basilisk II
+and Infinite Mac can print to it too.
 
-**Status:** rev A boards are built and printing. AirPrint works from iPhone and Mac, including the
-out-of-paper pause. Vintage Macs find the printer over LocalTalk; printing from them, factory
-reset and signed firmware updates are in progress.
+**Status:** rev A boards are built and printing from iPhones, Macs and vintage Macs, in colour
+with Apple's colour ribbon. Rev B and a v1 release are next.
 
 ## How it works
 
@@ -25,7 +25,10 @@ reset and signed firmware updates are in progress.
 
 The [wiki](../../wiki) covers setup, the status lights, the DIP switches, settings, updates and
 troubleshooting. You need an ImageWriter II and an 8-pin mini-DIN crossover printer cable, wired
-like the one a Mac used (Apple's 590-0552 is one); straight-wired cables don't work.
+like the one a Mac used (Apple's 590-0552 is one); straight-wired cables don't work. The
+original ImageWriter and the ImageWriter LQ take the same commands and should work too, but
+neither has been tested yet. The original has a 25-pin port, so it needs the Mac cable made for
+that.
 
 ## Repository
 

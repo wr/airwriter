@@ -4,15 +4,20 @@ Written 2026-08-04. Decides which printers AirWriter's firmware targets, in what
 what that does to the firmware's shape. It does not describe how to build any of it — that
 belongs in the implementation plan.
 
+*Amended 2026-10-21: the original ImageWriter and the ImageWriter LQ are no longer excluded.
+Both take the II's stream as it is, so both are expected to work. Neither has been tested.*
+
 ## The decision
 
-**v1 supports the ImageWriter II over serial, and nothing else.**
+**v1 is built and tested on the ImageWriter II over serial.**
 
-The StyleWriter family and the ImageWriter LQ are cut. LocalTalk is built second, after the
+The original ImageWriter and the ImageWriter LQ are not targeted, but nothing shuts them out:
+the settings page offers both as the printer's model (a name only; the board drives every
+model the same way). The StyleWriter family is cut. LocalTalk is built second, after the
 serial path prints. No printer-driver abstraction is written until a second printer is
 physically on the bench.
 
-## Why the ImageWriter II alone
+## Why the ImageWriter II first
 
 Three families were candidates. Each was assessed on whether the protocol is documented,
 whether the hardware can drive it, and whether an owner can still buy supplies for it. The
@@ -24,11 +29,22 @@ plentiful, partly because the cartridge shell survived into the receipt-printer 
 chain. Tractor paper is a live commodity, and the printer also takes friction feed. One
 sitting on the desk, which means everything can be verified.
 
-**ImageWriter LQ — out.** Same connector, same electrical interface, and the command set is
-a superset of the II's. But its ribbon cartridges are effectively unobtainable, and the
-graphics commands it adds — `ESC C`, `ESC U`, `ESC a 3` — appear in no Apple document
-anywhere. Ghostscript's `gdevadmp.c` is the only source for them. Supporting the LQ would
-mean building on one secondary source, for a printer nobody can feed.
+**ImageWriter LQ — expected to work, not targeted.** Same connector, same electrical
+interface, and the command set is a superset of the II's, so it should print AirWriter's
+stream as it is, at the II's resolution. What stays cut is driving it natively: its ribbon
+cartridges are effectively unobtainable, and the graphics commands it adds — `ESC C`,
+`ESC U`, `ESC a 3` — appear in no Apple document anywhere. Ghostscript's `gdevadmp.c` is the
+only source for them. Untested: whether it answers `ESC ?` as the II does. The board ignores a
+self-ID reply it can't read and keeps the ribbon it last saved.
+
+**Original ImageWriter — expected to work, untested.** Not weighed in August. The II was made
+to run the original's software, and the AirPrint stream uses only the basic graphics
+commands. It has a 25-pin RS-232 port, so it needs a Mac cable made for that port, and the
+board drives the data line from 0 to 3.3 V where RS-232 expects a negative swing as well;
+most receivers accept that, but it is unverified. It has no colour ribbon and no `ESC ?`, so
+pages print gray. The test page uses the II's fonts and styles and may print oddly. A Mac
+printing over AppleTalk sends the II's stream through the board untouched, which the original
+may not fully understand.
 
 **StyleWriter family — out, and this one is a genuine loss.** Monroe Williams reverse
 engineered the wire format in 1996 and `lpstyl` documents it: the identity query, the buffer

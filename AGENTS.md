@@ -177,6 +177,12 @@ height); Pro screws M2.5 × 18. Four 10 mm rubber feet sit in 0.40 pockets in th
 underside, each hiding a screw counterbore. The shop's cased GLBs still show the pre-W-1036
 tray.
 
+**Printers:** built and tested on the ImageWriter II only. The original ImageWriter and the
+ImageWriter LQ take the same stream and are expected to work, untested (the scope spec's
+amendment); docs say so rather than excluding them. The settings page's Model picker offers
+both, but the model only names the printer: IPP `printer-make-and-model`, Bonjour `ty` and
+`/api/status` `model` still say Apple ImageWriter II. StyleWriters stay out.
+
 Not built: Mini vMac (LToUDP, `W-1077`), consumers of the dither override, PWG raster.
 
 **Board 1:** ESP32-S3-WROOM-1-N8R2 (8 MB flash, 2 MB PSRAM). On the home Wi-Fi at
