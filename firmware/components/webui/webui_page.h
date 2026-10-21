@@ -371,6 +371,7 @@ static const char WEBUI_HTML[] =
 "        <div class=body></div>\n"
 "      </div>\n"
 "      <p class=foot>SheepShaver and Mini vMac are not supported. <a href=\"https://github.com/wr/airwriter/wiki/Vintage-Macs-(LocalTalk)\" target=_blank rel=noopener>Learn More…</a></p>\n"
+"      <p class=foot>The AppleTalk Port runs on <a href=\"https://github.com/lampmerchant/tashtalk\" target=_blank rel=noopener>TashTalk</a>, made by <a href=\"https://ko-fi.com/tashtari\" target=_blank rel=noopener>Tashtari</a>. Thank you!</p>\n"
 "      <p class=say id=at-say></p>\n"
 "      <a class=help href=\"https://github.com/wr/airwriter/wiki/Troubleshooting\" target=_blank rel=noopener aria-label=\"Help with AppleTalk\">?</a>\n"
 "    </section>\n"
