@@ -1,0 +1,859 @@
+{
+ "base": {
+  "GET /api/status": {
+   "state": "Ready",
+   "ps": "ready",
+   "asleep": false,
+   "stopped": false,
+   "setup": false,
+   "job": "none yet",
+   "fault": false,
+   "printer": true,
+   "printing": false,
+   "ribbon": "colour",
+   "queue": "ImageWriter II",
+   "host": "imagewriter-2434.local",
+   "ip": "10.0.1.115",
+   "ssid": "Orchard",
+   "dither": "atkinson",
+   "gain": 0,
+   "signal": "Good",
+   "channel": "2.4 GHz",
+   "security": "WPA2/WPA3",
+   "uri": "ipp://imagewriter-2434.local:631/ipp/print",
+   "uptime": "26h 14m",
+   "reset": "software",
+   "version": "v0.2.0-31-g4a93f60",
+   "heap": "1002 KB",
+   "slot": "ota_2",
+   "trial": false,
+   "rolled_back": "",
+   "known_good": "ota_1",
+   "known_good_version": "v0.2.0-31-g4a93f60",
+   "model": "Apple ImageWriter II",
+   "pic": true,
+   "pmodel": "ImageWriter II",
+   "pname": "",
+   "phost": "imagewriter-2434",
+   "airprint": true,
+   "lt_port": 1,
+   "lt": true,
+   "dip": "01000111",
+   "ap": "AirWriter-2434"
+  },
+  "GET /api/lt": {
+   "on": true,
+   "phase": "online",
+   "node": 198,
+   "net": 0,
+   "status": "0x0000",
+   "object": "ImageWriter II",
+   "type": "ImageWriter",
+   "cts": 0,
+   "tx_free": 4096,
+   "heard": [],
+   "macs": [],
+   "frames": 0,
+   "fcs_bad": 0,
+   "errors": 0,
+   "tx": 20,
+   "for_us": 0,
+   "lookups": 0,
+   "replies": 0,
+   "statuses": 0,
+   "opens": 0,
+   "busy": 0,
+   "dup": 0,
+   "echoes": 0,
+   "mac_reads": 0,
+   "mac_answers": 0,
+   "pap": {
+    "open": false,
+    "conn": 0,
+    "bytes": 0
+   },
+   "job": {
+    "captured": 0,
+    "total": 0,
+    "done": false
+   },
+   "print": {
+    "active": false,
+    "spooled": 0,
+    "failed": false,
+    "printed": 0,
+    "aborted": 0
+   },
+   "events": [
+    "node 198 is ours (20 enquiries, 1 candidate)"
+   ],
+   "frames_recent": []
+  },
+  "GET /api/et": {
+   "on": true,
+   "radio": {
+    "state": "online",
+    "address": "65284.20",
+    "mac": "10:bd:a3:6e:24:34",
+    "heard": [],
+    "macs": []
+   },
+   "tunnel": {
+    "state": "online",
+    "address": "65393.18",
+    "mac": "42:32:0a:00:01:73",
+    "heard": [],
+    "macs": []
+   },
+   "zone": {
+    "state": "off",
+    "address": "",
+    "mac": "b2:bd:a3:6e:24:34",
+    "heard": [],
+    "macs": []
+   },
+   "relay": {
+    "connected": false,
+    "in_drops": 0,
+    "out_drops": 0,
+    "bad_messages": 0,
+    "pongs": 0,
+    "last_error": ""
+   }
+  },
+  "GET /api/et/settings": {
+   "radio": true,
+   "tunnel": true,
+   "infinite": false,
+   "zone": "quiet-otter-4821"
+  },
+  "GET /api/update": {
+   "version": "v0.2.0-31-g4a93f60",
+   "release": false,
+   "latest": "",
+   "newer": false,
+   "no_target": false,
+   "state": "idle",
+   "progress": -1,
+   "error": "",
+   "checked": -1,
+   "auto": true,
+   "key": "airwriter",
+   "repo": "wr/airwriter",
+   "setup": false
+  },
+  "GET /api/scan": {
+   "_delay": 1.5,
+   "_body": [
+    {
+     "s": "Orchard",
+     "r": -58,
+     "a": 1
+    },
+    {
+     "s": "Orchard-Guest",
+     "r": -61,
+     "a": 0
+    },
+    {
+     "s": "NETGEAR42",
+     "r": -72,
+     "a": 1
+    },
+    {
+     "s": "xfinitywifi",
+     "r": -80,
+     "a": 0
+    },
+    {
+     "s": "DIRECT-7B-HP OfficeJet",
+     "r": -84,
+     "a": 1
+    }
+   ]
+  },
+  "POST /api/wifi": {
+   "_then": "normal",
+   "_down": 8
+  },
+  "POST /api/restart": {
+   "_then": "normal",
+   "_down": 8
+  },
+  "POST /api/cable": {
+   "_delay": 1,
+   "_body": {
+    "ok": true,
+    "verdict": "pass",
+    "back": true,
+    "fwd": true,
+    "text": "Crossover: this cable works with the ImageWriter II. (Its handshake wires, pins 1 and 2, can't be tested.)"
+   }
+  },
+  "POST /api/et/settings": {
+   "radio": true,
+   "tunnel": true,
+   "infinite": false,
+   "zone": "quiet-otter-4821"
+  }
+ },
+ "states": {
+  "normal": {
+   "about": "Board 1 as it is: ready, colour ribbon, home Wi-Fi",
+   "patch": {}
+  },
+  "no-printer": {
+   "about": "No cable, or the printer is off",
+   "patch": {
+    "GET /api/status": {
+     "ps": "offline",
+     "state": "Printer offline",
+     "printer": false,
+     "stopped": true,
+     "ribbon": "unknown"
+    }
+   }
+  },
+  "paper": {
+   "about": "Out of paper or SELECT off",
+   "patch": {
+    "GET /api/status": {
+     "ps": "attention",
+     "state": "Needs attention",
+     "fault": true,
+     "stopped": true
+    }
+   }
+  },
+  "failed": {
+   "about": "The last job failed",
+   "patch": {
+    "GET /api/status": {
+     "ps": "failed",
+     "state": "Last job failed",
+     "fault": true,
+     "job": "Holiday card.pdf (2 pages)"
+    }
+   }
+  },
+  "printing": {
+   "about": "Printing a job",
+   "patch": {
+    "GET /api/status": {
+     "ps": "printing",
+     "state": "Printing",
+     "printing": true,
+     "job": "Holiday card.pdf (2 pages)"
+    }
+   }
+  },
+  "ribbon-unknown": {
+   "about": "The ribbon not read yet",
+   "patch": {
+    "GET /api/status": {
+     "ribbon": "unknown"
+    }
+   }
+  },
+  "booting": {
+   "about": "Just started: printer not settled",
+   "patch": {
+    "GET /api/status": {
+     "ps": "booting",
+     "state": "Starting",
+     "printer": false,
+     "ribbon": "unknown",
+     "uptime": "0h 00m"
+    }
+   }
+  },
+  "setup": {
+   "about": "Setup mode: no network, on its own open AP",
+   "patch": {
+    "GET /api/status": {
+     "setup": true,
+     "ps": "setup",
+     "state": "Waiting for setup",
+     "ssid": "",
+     "signal": "",
+     "channel": "",
+     "security": "",
+     "uri": "",
+     "ip": "192.168.4.1",
+     "lt": false
+    },
+    "GET /api/et": {
+     "_status": 404,
+     "_body": "no ethertalk"
+    },
+    "GET /api/et/settings": {
+     "_status": 404,
+     "_body": "no ethertalk"
+    },
+    "GET /api/lt": {
+     "on": false,
+     "quiet": false
+    },
+    "GET /api/update": {
+     "setup": true
+    },
+    "POST /api/wifi": {
+     "_then": "normal",
+     "_down": 12
+    }
+   }
+  },
+  "setup-failed": {
+   "about": "Setup mode after a join failed (wrong password, network gone)",
+   "patch": {
+    "GET /api/status": {
+     "setup": true,
+     "ps": "setup",
+     "state": "Waiting for setup",
+     "ssid": "Orchard",
+     "signal": "",
+     "channel": "",
+     "security": "",
+     "uri": "",
+     "ip": "192.168.4.1",
+     "lt": false
+    },
+    "GET /api/et": {
+     "_status": 404,
+     "_body": "no ethertalk"
+    },
+    "GET /api/et/settings": {
+     "_status": 404,
+     "_body": "no ethertalk"
+    },
+    "GET /api/lt": {
+     "on": false,
+     "quiet": false
+    },
+    "GET /api/update": {
+     "setup": true
+    }
+   }
+  },
+  "join-fails": {
+   "about": "Setup mode; a join restarts and comes back in setup mode",
+   "patch": {
+    "GET /api/status": {
+     "setup": true,
+     "ps": "setup",
+     "state": "Waiting for setup",
+     "ssid": "",
+     "signal": "",
+     "channel": "",
+     "security": "",
+     "uri": "",
+     "ip": "192.168.4.1",
+     "lt": false
+    },
+    "GET /api/et": {
+     "_status": 404,
+     "_body": "no ethertalk"
+    },
+    "GET /api/et/settings": {
+     "_status": 404,
+     "_body": "no ethertalk"
+    },
+    "GET /api/lt": {
+     "on": false,
+     "quiet": false
+    },
+    "GET /api/update": {
+     "setup": true
+    },
+    "POST /api/wifi": {
+     "_then": "setup-failed",
+     "_down": 12
+    }
+   }
+  },
+  "join-gone": {
+   "about": "A join where the board never comes back here (another network)",
+   "patch": {
+    "POST /api/wifi": {
+     "_then": "normal",
+     "_down": 600
+    }
+   }
+  },
+  "weak": {
+   "about": "Weak signal",
+   "patch": {
+    "GET /api/status": {
+     "signal": "Weak"
+    }
+   }
+  },
+  "open-network": {
+   "about": "On an open network",
+   "patch": {
+    "GET /api/status": {
+     "security": "Open",
+     "ssid": "Orchard-Guest"
+    }
+   }
+  },
+  "odd-names": {
+   "about": "Network names with quotes, emoji, 32 characters",
+   "patch": {
+    "GET /api/status": {
+     "ssid": "WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW"
+    },
+    "GET /api/scan": {
+     "_delay": 1,
+     "_body": [
+      {
+       "s": "He said \"hi\"",
+       "r": -50,
+       "a": 1
+      },
+      {
+       "s": "🦄 Unicorn Café ☕️",
+       "r": -55,
+       "a": 1
+      },
+      {
+       "s": "ABCDEFGHIJKLMNOPQRSTUVWXYZ012345",
+       "r": -63,
+       "a": 1
+      },
+      {
+       "s": "back\\slash <b>bold</b> & co",
+       "r": -70,
+       "a": 0
+      },
+      {
+       "s": "WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW",
+       "r": -78,
+       "a": 1
+      },
+      {
+       "s": "Orchard",
+       "r": -58,
+       "a": 1
+      }
+     ]
+    }
+   }
+  },
+  "no-networks": {
+   "about": "A scan that finds nothing",
+   "patch": {
+    "GET /api/scan": {
+     "_delay": 1.5,
+     "_body": []
+    }
+   }
+  },
+  "scan-fails": {
+   "about": "A scan with no answer",
+   "patch": {
+    "GET /api/scan": {
+     "_delay": 1.5,
+     "_drop": true
+    }
+   }
+  },
+  "lost": {
+   "about": "The board stops answering 6 s after the page loads",
+   "patch": {},
+   "_down_after": 6
+  },
+  "no-pic": {
+   "about": "A build with no LocalTalk chip pins",
+   "patch": {
+    "GET /api/status": {
+     "pic": false,
+     "lt": false,
+     "lt_port": -1
+    },
+    "GET /api/lt": {
+     "on": false,
+     "quiet": false
+    }
+   }
+  },
+  "lt-off": {
+   "about": "AppleTalk port switched off (quiet)",
+   "patch": {
+    "GET /api/status": {
+     "lt": false,
+     "lt_port": 0
+    },
+    "GET /api/lt": {
+     "on": false,
+     "quiet": true
+    }
+   }
+  },
+  "acquiring": {
+   "about": "Links joining, one with no address",
+   "patch": {
+    "GET /api/lt": {
+     "phase": "acquiring",
+     "node": 0
+    },
+    "GET /api/et": {
+     "radio": {
+      "state": "acquiring",
+      "address": ""
+     },
+     "tunnel": {
+      "state": "no address",
+      "address": ""
+     }
+    }
+   }
+  },
+  "no-socket": {
+   "about": "Basilisk II's UDP port would not open",
+   "patch": {
+    "GET /api/et": {
+     "tunnel": {
+      "state": "no socket",
+      "address": ""
+     }
+    }
+   }
+  },
+  "zone-connecting": {
+   "about": "Infinite Mac on, connecting",
+   "patch": {
+    "GET /api/et/settings": {
+     "infinite": true
+    },
+    "GET /api/et": {
+     "zone": {
+      "state": "connecting"
+     }
+    },
+    "POST /api/et/settings": {
+     "radio": true,
+     "tunnel": true,
+     "infinite": true,
+     "zone": "quiet-otter-4821"
+    }
+   }
+  },
+  "zone-failing": {
+   "about": "Infinite Mac on, relay failing",
+   "patch": {
+    "GET /api/et/settings": {
+     "infinite": true
+    },
+    "GET /api/et": {
+     "zone": {
+      "state": "connecting"
+     },
+     "relay": {
+      "last_error": "TLS: ESP_ERR_MBEDTLS_SSL_HANDSHAKE_FAILED (-30592)"
+     }
+    }
+   }
+  },
+  "zone-online": {
+   "about": "Infinite Mac on and in its zone",
+   "patch": {
+    "GET /api/et/settings": {
+     "infinite": true
+    },
+    "GET /api/et": {
+     "zone": {
+      "state": "online",
+      "address": "65280.142"
+     },
+     "relay": {
+      "connected": true
+     }
+    }
+   }
+  },
+  "many-macs": {
+   "about": "Many Macs on every card",
+   "patch": {
+    "GET /api/et/settings": {
+     "infinite": true
+    },
+    "GET /api/lt": {
+     "macs": [
+      {
+       "node": 83,
+       "ago": 4
+      },
+      {
+       "node": 12,
+       "ago": 40
+      },
+      {
+       "node": 201,
+       "ago": 95
+      },
+      {
+       "node": 7,
+       "ago": 130
+      },
+      {
+       "node": 54,
+       "ago": 200
+      },
+      {
+       "node": 99,
+       "ago": 260
+      },
+      {
+       "node": 150,
+       "ago": 310
+      },
+      {
+       "node": 3,
+       "ago": 420
+      },
+      {
+       "node": 240,
+       "ago": 500
+      },
+      {
+       "node": 66,
+       "ago": 580
+      }
+     ]
+    },
+    "GET /api/et": {
+     "radio": {
+      "macs": [
+       {
+        "addr": "65284.12",
+        "mac": "08:00:07:1a:2b:0c",
+        "ago": 3
+       },
+       {
+        "addr": "65284.45",
+        "mac": "08:00:07:1a:2b:2d",
+        "ago": 30
+       },
+       {
+        "addr": "65284.101",
+        "mac": "08:00:07:1a:2b:65",
+        "ago": 61
+       },
+       {
+        "addr": "65284.130",
+        "mac": "08:00:07:1a:2b:82",
+        "ago": 200
+       },
+       {
+        "addr": "65284.201",
+        "mac": "08:00:07:1a:2b:c9",
+        "ago": 401
+       },
+       {
+        "addr": "65284.222",
+        "mac": "08:00:07:1a:2b:de",
+        "ago": 590
+       }
+      ]
+     },
+     "tunnel": {
+      "macs": [
+       {
+        "addr": "65393.12",
+        "mac": "08:00:07:1a:2b:0c",
+        "ago": 3,
+        "ip": "10.0.1.12"
+       },
+       {
+        "addr": "65393.45",
+        "mac": "08:00:07:1a:2b:2d",
+        "ago": 30,
+        "ip": "10.0.1.45"
+       },
+       {
+        "addr": "65393.101",
+        "mac": "08:00:07:1a:2b:65",
+        "ago": 61,
+        "ip": "10.0.1.101"
+       },
+       {
+        "addr": "65393.130",
+        "mac": "08:00:07:1a:2b:82",
+        "ago": 200,
+        "ip": "10.0.1.130"
+       },
+       {
+        "addr": "65393.201",
+        "mac": "08:00:07:1a:2b:c9",
+        "ago": 401,
+        "ip": "10.0.1.201"
+       },
+       {
+        "addr": "65393.222",
+        "mac": "08:00:07:1a:2b:de",
+        "ago": 590,
+        "ip": "10.0.1.222"
+       }
+      ]
+     },
+     "zone": {
+      "state": "online",
+      "address": "65280.142",
+      "macs": [
+       {
+        "addr": "65280.12",
+        "mac": "08:00:07:1a:2b:0c",
+        "ago": 3
+       },
+       {
+        "addr": "65280.45",
+        "mac": "08:00:07:1a:2b:2d",
+        "ago": 30
+       },
+       {
+        "addr": "65280.101",
+        "mac": "08:00:07:1a:2b:65",
+        "ago": 61
+       },
+       {
+        "addr": "65280.130",
+        "mac": "08:00:07:1a:2b:82",
+        "ago": 200
+       },
+       {
+        "addr": "65280.201",
+        "mac": "08:00:07:1a:2b:c9",
+        "ago": 401
+       },
+       {
+        "addr": "65280.222",
+        "mac": "08:00:07:1a:2b:de",
+        "ago": 590
+       }
+      ]
+     },
+     "relay": {
+      "connected": true
+     }
+    }
+   }
+  },
+  "et-down": {
+   "about": "/api/et and its settings fail once at load",
+   "patch": {
+    "GET /api/et": {
+     "_drop": true,
+     "_first": 1
+    },
+    "GET /api/et/settings": {
+     "_drop": true,
+     "_first": 1
+    }
+   }
+  },
+  "update": {
+   "about": "An update is available",
+   "patch": {
+    "GET /api/update": {
+     "latest": "v0.3.0",
+     "newer": true,
+     "checked": 120
+    }
+   }
+  },
+  "checking": {
+   "about": "Looking for an update",
+   "patch": {
+    "GET /api/update": {
+     "state": "checking"
+    }
+   }
+  },
+  "downloading": {
+   "about": "Downloading an update",
+   "patch": {
+    "GET /api/update": {
+     "state": "downloading",
+     "progress": 42,
+     "latest": "v0.3.0",
+     "newer": true
+    }
+   }
+  },
+  "other-key": {
+   "about": "A build signed with someone else's key",
+   "patch": {
+    "GET /api/update": {
+     "key": "other"
+    }
+   }
+  },
+  "unsigned": {
+   "about": "An unsigned build",
+   "patch": {
+    "GET /api/update": {
+     "key": "unsigned"
+    }
+   }
+  },
+  "update-error": {
+   "about": "A check that could not reach GitHub",
+   "patch": {
+    "GET /api/update": {
+     "state": "failed",
+     "error": "could not reach GitHub",
+     "checked": 30
+    }
+   }
+  },
+  "install-error": {
+   "about": "An install that failed with an update waiting",
+   "patch": {
+    "GET /api/update": {
+     "state": "failed",
+     "error": "the download stalled",
+     "latest": "v0.3.0",
+     "newer": true,
+     "checked": 30
+    }
+   }
+  },
+  "dip-unknown": {
+   "about": "DIP switches not read yet",
+   "patch": {
+    "GET /api/status": {
+     "dip": ""
+    }
+   }
+  },
+  "long-names": {
+   "about": "Longest printer name, host name and network",
+   "patch": {
+    "GET /api/status": {
+     "pname": "Wells's ImageWriter II (Studio)",
+     "queue": "Wells's ImageWriter II (Studio)",
+     "phost": "imagewriter-studio-upstairs-0123",
+     "host": "imagewriter-studio-upstairs-0123.local",
+     "uri": "ipp://imagewriter-studio-upstairs-0123.local:631/ipp/print",
+     "ssid": "ABCDEFGHIJKLMNOPQRSTUVWXYZ012345",
+     "version": "v0.2.0-31-g4a93f60-dirty"
+    },
+    "GET /api/update": {
+     "version": "v0.2.0-31-g4a93f60-dirty",
+     "latest": "v0.10.12",
+     "newer": true
+    }
+   }
+  },
+  "bad-json": {
+   "about": "Status that is not JSON (an unescaped quote in a host name)",
+   "patch": {
+    "GET /api/status": {
+     "_json": true,
+     "_body": "{\"state\":\"Ready\",\"ps\":\"ready\",\"host\":\"my\"printer.local\"}"
+    }
+   }
+  }
+ }
+}

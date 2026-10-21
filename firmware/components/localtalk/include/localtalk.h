@@ -4,30 +4,13 @@
 // node in lt_node.c, and what the web UI shows of it. Runs in DIP mode 2, or
 // always on a bench build (CONFIG_AIRWRITER_LT_BENCH).
 //
-// A PAP job is the Mac driver's own ImageWriter stream (W-1053): spooled in
-// a 16 KB buffer and written to the printer through cfg->printer by a print
-// task, so a paused printer holds the Mac (no next SendData until the spool
-// has room) and never the LocalTalk task. The last job's bytes are also kept
-// in PSRAM for GET /api/lt/job.
+// A PAP job is the Mac driver's own ImageWriter stream (W-1053), printed
+// through the printer every AppleTalk link shares (at_printer.h, W-1076).
 #pragma once
 #include <stddef.h>
 #include <stdint.h>
 #include "esp_err.h"
-
-// The printer, as main.c owns it. All run on the print task except begin.
-typedef struct {
-    void *ctx;
-    // Take the printer for a job without waiting (the LocalTalk task): 0, or
-    // nonzero when busy (an IPP job, a test page), which the Mac is told.
-    int  (*begin)(void *ctx);
-    // Write job bytes, blocking while the printer is paused. 0, or nonzero
-    // when the printer gave up (stalled past the limit): the job is aborted.
-    int  (*write)(void *ctx, const uint8_t *d, size_t n);
-    // The job is over and its bytes are written or dropped: normal is 1 when
-    // the Mac ended it (CloseConn, EOF), 0 when it was abandoned or aborted.
-    // Returns 1 when the whole job reached the printer.
-    int  (*end)(void *ctx, int normal);
-} localtalk_printer_t;
+#include "at_printer.h"
 
 // What the node saw that the panel shows (W-1049), on the LocalTalk task.
 typedef enum {
@@ -51,6 +34,14 @@ typedef struct {
 // Starts the node once; later calls do nothing.
 esp_err_t localtalk_start(const localtalk_cfg_t *cfg);
 int       localtalk_running(void);
+// The AppleTalk port's switch on the settings page (W-1079). The node cannot
+// stop once started (it keeps UART2 and its task), so off is quiet: a job is
+// cut short, TashTalk answers for no node and frames are dropped, so the
+// board leaves the Chooser. On again acquires a node as at start. Running
+// stays true throughout: the cable test and the TashTalk flash treat a quiet
+// node as a running one.
+void      localtalk_set_quiet(int quiet);
+int       localtalk_quiet(void);
 // The Option Card status word (LT_IW_* in lt_node.h) for SendStatus.
 void      localtalk_set_status(uint16_t status);
 // State, counters and the latest lines, for GET /api/lt.

@@ -38,6 +38,14 @@ typedef struct {
     // the same either way.
     int         colour;
 
+    // The top margin setting, in 1/144 in: positive adds that much blank
+    // paper ahead of each page, negative drops the page's first rows, which
+    // past its own blank margin crops what is on it. In whole printer rows
+    // (1/72 in), rounding toward zero. Only the printer stream moves: every
+    // row is still screened and shown to `row`, so the rows kept print the
+    // bits they would with no margin.
+    int         top_margin;
+
     // Called as each page starts, with the geometry every later row will
     // have, before any row arrives. Return non-zero to abort the job.
     int       (*page)(void *ctx, int index, uint32_t dst_w, uint32_t dst_h);

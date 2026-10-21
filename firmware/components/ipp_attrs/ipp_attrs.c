@@ -4,9 +4,13 @@
 
 // Margins in hundredths of a millimetre, per SPEC.md 3.5. The tractor feed
 // means this printer physically cannot reach the edges, and declaring
-// borderless would make iOS lay out edge-to-edge and silently clip.
-#define MARGIN_SIDE 635    // 6.35mm = 0.25in
-#define MARGIN_ENDS 1270   // 12.7mm = 0.5in
+// borderless would make iOS lay out edge-to-edge and silently clip. The top
+// is the inch above where printing starts on paper loaded as the Owner's
+// Guide says; the top margin setting drops that inch of each page, so what
+// iOS draws below it prints where iOS put it.
+#define MARGIN_SIDE   635    // 6.35mm = 0.25in
+#define MARGIN_TOP    2540   // 25.4mm = 1in
+#define MARGIN_BOTTOM 1270   // 12.7mm = 0.5in
 
 static const char *const k_ipp_versions[]  = { "1.1", "2.0" };
 static const char *const k_charset[]       = { "utf-8" };
@@ -75,9 +79,9 @@ static void write_media_col(ipp_enc_t *e, const char *name)
     ipp_col_end(e);
 
     ipp_col_member(e, "media-bottom-margin");
-    ipp_addl_int(e, IPP_TAG_INTEGER, MARGIN_ENDS);
+    ipp_addl_int(e, IPP_TAG_INTEGER, MARGIN_BOTTOM);
     ipp_col_member(e, "media-top-margin");
-    ipp_addl_int(e, IPP_TAG_INTEGER, MARGIN_ENDS);
+    ipp_addl_int(e, IPP_TAG_INTEGER, MARGIN_TOP);
     ipp_col_member(e, "media-left-margin");
     ipp_addl_int(e, IPP_TAG_INTEGER, MARGIN_SIDE);
     ipp_col_member(e, "media-right-margin");
@@ -260,9 +264,9 @@ void ipp_write_printer_attrs(ipp_enc_t *e, const ipp_printer_t *p,
     if (W("media-right-margin-supported", JT))
         ipp_attr_int(e, IPP_TAG_INTEGER, "media-right-margin-supported",  MARGIN_SIDE);
     if (W("media-top-margin-supported", JT))
-        ipp_attr_int(e, IPP_TAG_INTEGER, "media-top-margin-supported",    MARGIN_ENDS);
+        ipp_attr_int(e, IPP_TAG_INTEGER, "media-top-margin-supported",    MARGIN_TOP);
     if (W("media-bottom-margin-supported", JT))
-        ipp_attr_int(e, IPP_TAG_INTEGER, "media-bottom-margin-supported", MARGIN_ENDS);
+        ipp_attr_int(e, IPP_TAG_INTEGER, "media-bottom-margin-supported", MARGIN_BOTTOM);
 
     // 144 dpi across, 72 down: one pass, bit 0 of a graphics byte is the top
     // pin of eight. SPEC.md 3.8.

@@ -8,6 +8,7 @@ INCS    := -I$(COMP)/ripjob/include \
            -I$(COMP)/halftone/include \
            -I$(COMP)/imagewriter/include \
            -I$(COMP)/serial_out/include \
+           -I$(COMP)/testpage/include \
            -I.
 # serial_out is IDF-bound except for serial_writer.c, which is pure by design
 # so the deadline loop can be tested here. Name it, don't wildcard the dir.
@@ -16,6 +17,7 @@ SRCS    := $(wildcard $(COMP)/ripjob/*.c) \
            $(wildcard $(COMP)/resample/*.c) \
            $(wildcard $(COMP)/halftone/*.c) \
            $(wildcard $(COMP)/imagewriter/*.c) \
+           $(wildcard $(COMP)/testpage/*.c) \
            $(COMP)/serial_out/serial_writer.c
 TESTSRC := $(wildcard test/test_*.c)
 TESTBIN := $(patsubst test/%.c,build/%,$(TESTSRC))
@@ -58,6 +60,9 @@ LT := ../../firmware/components/localtalk
 build/test_localtalk: test/test_localtalk.c $(LT)/lt_proto.c $(LT)/lt_node.c $(LT)/lt_tashtalk.c \
                       $(COMP)/serial_out/serial_writer.c | build
 	$(CC) $(CFLAGS) -I$(LT)/include -I$(COMP)/serial_out/include -Itest -o $@ $^
+
+build/test_ethertalk: test/test_ethertalk.c $(LT)/et_proto.c $(LT)/et_link.c $(LT)/et_transport.c $(LT)/lt_node.c $(LT)/lt_proto.c | build
+	$(CC) $(CFLAGS) -I$(LT)/include -Itest -o $@ $^
 
 CT := ../../firmware/components/cable_test
 build/test_cable: test/test_cable.c $(CT)/cable_core.c $(LT)/lt_proto.c | build

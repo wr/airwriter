@@ -14,27 +14,13 @@ typedef struct {
     uint8_t  *bits;
     uint32_t  dst_w;
     uint32_t  y;
-    // A colour page (W-1064): one halftoner, plane and 1bpp row per ink.
+    // A colour page (W-1064): the ink screens (ink.h) and a 1bpp row per ink.
     iwc_t    *iwc;
-    ht_t      ht_ink[IW_INKS];
-    uint8_t  *plane[IW_INKS];
+    ink_screens_t inks;
     uint8_t  *ibits[IW_INKS];
-    uint8_t  *avoid;         // the dots the inks before this one put down
     uint8_t  *gray;          // an RGB row as gray, for a black ribbon
+    uint32_t  skip;          // rows of this page still to drop (top_margin < 0)
 } pipe_t;
-
-// The inks in the order they are screened, black first so it stays exact
-// and the colours keep off it, and how each sits on the mask tile: black and
-// cyan on the same tile upside down to each other, magenta and yellow the
-// same on a tile far away, so the pairs that make the common tints (a gray
-// cast, a red) never share a dot until they have to.
-static const iw_ink_t ink_order[IW_INKS] = { IW_BLACK, IW_CYAN, IW_MAGENTA, IW_YELLOW };
-static const struct { uint32_t dx, dy; int invert; } ink_phase[IW_INKS] = {
-    [IW_BLACK]   = {  0,  0, 0 },
-    [IW_CYAN]    = {  0,  0, 1 },
-    [IW_MAGENTA] = { 36, 36, 0 },
-    [IW_YELLOW]  = { 36, 36, 1 },
-};
 
 static void say(const ripjob_cfg_t *cfg, const char *fmt, ...)
     __attribute__((format(printf, 2, 3)));
@@ -57,7 +43,8 @@ static void on_row(void *ctx, const uint8_t *row, uint32_t w)
     pipe_t *p = (pipe_t *)ctx;
     ht_row(&p->ht, row, p->bits);
     if (p->cfg->row) p->cfg->row(p->cfg->row_ctx, p->bits, w, p->y);
-    iw_row(&p->iw, p->bits);
+    if (p->skip) p->skip--;
+    else iw_row(&p->iw, p->bits);
     p->y++;
 }
 
@@ -66,17 +53,11 @@ static void on_row(void *ctx, const uint8_t *row, uint32_t w)
 static void on_rgb_row(void *ctx, const uint8_t *row, uint32_t w)
 {
     pipe_t *p = (pipe_t *)ctx;
-    ink_split(row, w, p->plane);
-    size_t nb = (w + 7) / 8;
-    memset(p->avoid, 0, nb);
-    for (int k = 0; k < IW_INKS; k++) {
-        iw_ink_t i = ink_order[k];
-        ht_row_avoid(&p->ht_ink[i], p->plane[i], p->avoid, p->ibits[i]);
-        for (size_t b = 0; b < nb; b++) p->avoid[b] |= p->ibits[i][b];
-    }
+    ink_screens_row(&p->inks, row, p->ibits);
     const uint8_t *const *bits = (const uint8_t *const *)p->ibits;
     if (p->cfg->ink_row) p->cfg->ink_row(p->cfg->row_ctx, bits, w, p->y);
-    iwc_row(p->iwc, bits);
+    if (p->skip) p->skip--;
+    else iwc_row(p->iwc, bits);
     p->y++;
 }
 
@@ -144,6 +125,7 @@ int ripjob_run(urf_t *u, const ripjob_cfg_t *cfg, ripjob_stats_t *st)
 
         p.dst_w = dst_w;
         p.y     = 0;
+        p.skip  = cfg->top_margin < 0 ? (uint32_t)(-cfg->top_margin / 2) : 0;
         if (st) { st->dst_w = dst_w; st->dst_h = dst_h; st->crop_per_side = crop_per_side; }
 
         if (cfg->page && cfg->page(cfg->page_ctx, pages, dst_w, dst_h)) {
@@ -162,20 +144,17 @@ int ripjob_run(urf_t *u, const ripjob_cfg_t *cfg, ripjob_stats_t *st)
         if (colour) {
             p.iwc = calloc(1, sizeof *p.iwc);
             if (!p.iwc) { rc = -1; goto page_cleanup; }
-            for (; inks_ready < IW_INKS; inks_ready++) {
-                int i = inks_ready;
-                p.plane[i] = malloc(dst_w);
-                p.ibits[i] = calloc((dst_w + 7) / 8, 1);
-                if (!p.plane[i] || !p.ibits[i] || ht_init(&p.ht_ink[i], cfg->dither, dst_w)) {
-                    rc = -1; goto page_cleanup;
-                }
-                ht_set_gain(&p.ht_ink[i], cfg->gain);
-                ht_set_phase(&p.ht_ink[i], ink_phase[i].dx, ink_phase[i].dy, ink_phase[i].invert);
+            for (int i = 0; i < IW_INKS; i++)
+                if (!(p.ibits[i] = calloc((dst_w + 7) / 8, 1))) { rc = -1; goto page_cleanup; }
+            if (ink_screens_init(&p.inks, cfg->dither, cfg->gain, dst_w)) {
+                rc = -1; goto page_cleanup;
             }
-            p.avoid = calloc((dst_w + 7) / 8, 1);
-            if (!p.avoid) { rc = -1; goto page_cleanup; }
+            inks_ready = 1;
             iwc_init(p.iwc, dst_w, cfg->out, cfg->out_ctx);
             iwc_begin_page(p.iwc);
+            // The margin's blank rows: ibits are still all zeros here.
+            for (int r = 0; r < cfg->top_margin / 2; r++)
+                iwc_row(p.iwc, (const uint8_t *const *)p.ibits);
             if (rs_init_n(&rs, src_w, u->page.height, dst_w, dst_h, 3, on_rgb_row, &p)) {
                 rc = -1; goto page_cleanup;
             }
@@ -189,6 +168,7 @@ int ripjob_run(urf_t *u, const ripjob_cfg_t *cfg, ripjob_stats_t *st)
             ht_set_gain(&p.ht, cfg->gain);
             iw_init(&p.iw, dst_w, cfg->out, cfg->out_ctx);
             iw_begin_page(&p.iw);
+            for (int r = 0; r < cfg->top_margin / 2; r++) iw_row(&p.iw, p.bits);   // still zeros
 
             if (rs_init(&rs, src_w, u->page.height, dst_w, dst_h, on_row, &p)) {
                 rc = -1; goto page_cleanup;
@@ -228,18 +208,15 @@ page_cleanup:
         p.bits = NULL;
         free(p.gray);
         p.gray = NULL;
-        // A colour setup that failed part way left plane, ibits and ht of
-        // ink inks_ready allocated or not; free() takes NULL, and ht_free
-        // only runs on the ones initialised.
+        // A colour setup that failed part way: free() takes NULL, and the
+        // screens free only once made (ink_screens_init cleans up itself).
+        if (inks_ready) ink_screens_free(&p.inks);
         for (int i = 0; i < IW_INKS; i++) {
-            if (i < inks_ready) ht_free(&p.ht_ink[i]);
-            free(p.plane[i]); free(p.ibits[i]);
-            p.plane[i] = p.ibits[i] = NULL;
+            free(p.ibits[i]);
+            p.ibits[i] = NULL;
         }
         free(p.iwc);
         p.iwc = NULL;
-        free(p.avoid);
-        p.avoid = NULL;
 
         pages++;
         if (rc < 0) break;

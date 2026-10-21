@@ -107,11 +107,20 @@ static void respond(lt_node_t *n, const lt_route_t *to, uint8_t src_sock, const 
 
 // ------------------------------------------------------------- NBP
 
+static void name_reply(lt_node_t *n, const ddp_t *d, const nbp_t *q, uint64_t now);
+static void name_registering(lt_node_t *n, const ddp_t *d, const nbp_t *q, uint64_t now);
+
 static void on_nbp(lt_node_t *n, const ddp_t *d, uint64_t now)
 {
     nbp_t q;
-    if (d->dst.sock != SOCK_NIS || nbp_parse(d->data, d->len, &q) || q.fn != NBP_LKUP) return;
+    if (d->dst.sock != SOCK_NIS || nbp_parse(d->data, d->len, &q)) return;
+    if (q.fn == NBP_LKUP_REPLY) {
+        name_reply(n, d, &q, now);
+        return;
+    }
+    if (q.fn != NBP_LKUP) return;
     n->st.lookups++;
+    name_registering(n, d, &q, now);
     int hit = nbp_match(q.t.obj, n->obj) && nbp_match(q.t.type, n->type);
 
     // Log a lookup once, not every second the Chooser repeats it.
@@ -312,7 +321,7 @@ static void pap_open(lt_node_t *n, const ddp_t *d, const atp_t *a, const lt_rout
     p->open = 1;
     p->connid = a->user[0];
     p->ws = ws;
-    p->heard = p->tickled = p->wrote = now;
+    p->heard = p->tickled = p->wrote = p->idle_since = now;
     p->tickle_tid = next_tid(n);
     p->seq = 1;
     n->st.opens++;
@@ -362,7 +371,7 @@ static void on_atp(lt_node_t *n, const ddp_t *d, uint64_t now)
 
     if (fn == ATP_TRESP && a.tid == p->rd_tid && p->rd_want && a.user[1] == PAP_DATA) {
         uint8_t seq = a.bitmap;
-        p->wrote = now;
+        p->wrote = p->idle_since = now;
         if (seq >= LT_FLOW || !(p->rd_want & (1u << seq))) return;
         size_t len = a.len < PAP_QUANTUM ? a.len : PAP_QUANTUM;
         memcpy(p->rd_buf[seq], a.data, len);
@@ -414,6 +423,18 @@ static void pap_tick(lt_node_t *n, uint64_t now)
         pap_close(n, "timed out", 0);
         return;
     }
+    if (n->idle_hold_ms) {
+        // Not idle: the printer's status holds the Mac, or we do (no read out
+        // until the spool has room for one).
+        if (n->status || (!p->rd_want && !p->done)) p->idle_since = now;
+        else if (now - p->idle_since >= n->idle_hold_ms) {
+            uint8_t user[4] = { p->connid, PAP_CLOSE_CONN, 0, 0 };
+            send_atp(n, &p->ws, LT_SOCK_CONN, ATP_TREQ, 0x01, next_tid(n), user, NULL, 0);
+            // What came prints; nothing at all is no print (W-1059's known-good mark).
+            pap_close(n, "the Mac sent nothing", p->bytes > 0);
+            return;
+        }
+    }
     if (now - p->tickled >= LT_PAP_TICKLE_MS) {
         uint8_t user[4] = { p->connid, PAP_TICKLE, 0, 0 };
         send_atp(n, &p->ws, LT_SOCK_CONN, ATP_TREQ, 0, p->tickle_tid, user, NULL, 0);
@@ -437,6 +458,12 @@ static void pap_tick(lt_node_t *n, uint64_t now)
 static void on_rtmp(lt_node_t *n, const ddp_t *d)
 {
     if (d->src.sock != SOCK_RTMP || d->len < 4) return;
+    if (n->link == LT_LINK_ELAP) {
+        // Startup-range addresses only (W-1076): a router's ranges are not ours.
+        if (!n->router_logged) say(n, "a router is on this network; not supported");
+        n->router_logged = 1;
+        return;
+    }
     uint16_t net = (uint16_t)(d->data[0] << 8 | d->data[1]);
     if (net && net != n->net) {
         say(n, "network %u (router node %u)", net, d->data[3]);
@@ -468,6 +495,8 @@ void lt_node_init(lt_node_t *n, const lt_cfg_t *cfg, const lt_ops_t *ops, uint64
     nbp_name(n->obj, cfg->object);
     nbp_name(n->type, cfg->type);
     lt_node_set_status(n, cfg->status);
+    n->names = cfg->names;
+    if (n->names) memset(n->names, 0, LT_SEEN_SLOTS * sizeof *n->names);
     n->rng = cfg->seed ? cfg->seed : 0x2434u;
     n->tid = (uint16_t)rnd(n);
     n->phase = LT_ACQUIRING;
@@ -475,6 +504,24 @@ void lt_node_init(lt_node_t *n, const lt_cfg_t *cfg, const lt_ops_t *ops, uint64
     n->candidates = 1;
     n->enq_at = now;
     n->ops.claim(n->ops.ctx, 0);
+}
+
+void lt_node_init_elap(lt_node_t *n, const lt_cfg_t *cfg, const lt_ops_t *ops,
+                       uint32_t idle_hold_ms, uint64_t now)
+{
+    (void)now;
+    memset(n, 0, sizeof *n);
+    n->ops = *ops;
+    nbp_name(n->obj, cfg->object);
+    nbp_name(n->type, cfg->type);
+    lt_node_set_status(n, cfg->status);
+    n->names = cfg->names;
+    if (n->names) memset(n->names, 0, LT_SEEN_SLOTS * sizeof *n->names);
+    n->rng = cfg->seed ? cfg->seed : 0x2434u;
+    n->tid = (uint16_t)rnd(n);
+    n->phase = LT_ACQUIRING;                       // until AARP hands over an address
+    n->link = LT_LINK_ELAP;
+    n->idle_hold_ms = idle_hold_ms;
 }
 
 void lt_node_pap_abort(lt_node_t *n, uint64_t now)
@@ -491,7 +538,7 @@ void lt_node_echo(lt_node_t *n, uint8_t node, uint64_t now)
 {
     if (n->phase != LT_ONLINE || !node || node == LLAP_BCAST) return;
     static const uint8_t req[] = { 1, 'A', 'i', 'r', 'W', 'r', 'i', 't', 'e', 'r' };
-    lt_route_t to = { { n->net, node, SOCK_AEP }, node, 0 };
+    lt_route_t to = { { n->net, node, SOCK_AEP }, node, n->link == LT_LINK_ELAP };
     send_ddp(n, &to, SOCK_AEP, DDP_AEP, req, sizeof req);
     n->echo_at = now;
     say(n, "echo request to %u", node);
@@ -502,15 +549,170 @@ void lt_node_set_status(lt_node_t *n, uint16_t status)
     n->status = status;
 }
 
+void lt_node_set_address(lt_node_t *n, uint16_t net, uint8_t node, uint64_t now)
+{
+    (void)now;
+    if (n->link != LT_LINK_ELAP) return;
+    if (n->pap.open && (net != n->net || node != n->node)) pap_close(n, "the address changed", 0);
+    n->net = node ? net : 0;
+    n->node = node;
+    n->phase = node ? LT_ONLINE : LT_ACQUIRING;
+    if (node) say(n, "address %u.%u is ours", net, node);
+}
+
+// A slot's node was heard within LT_SEEN_MS of now.
+static int seen_live(const lt_node_t *n, int i, uint64_t now)
+{
+    return n->seen[i].node && (uint64_t)((uint32_t)(now / 1000) - n->seen[i].at_s) * 1000 < LT_SEEN_MS;
+}
+
+static int seen_find(const lt_node_t *n, uint16_t net, uint8_t node)
+{
+    if (n->link != LT_LINK_ELAP) net = 0;
+    for (int i = 0; i < LT_SEEN_SLOTS; i++)
+        if (n->seen[i].node == node && n->seen[i].net == net) return i;
+    return -1;
+}
+
+static void seen_note(lt_node_t *n, uint16_t net, uint8_t node, uint64_t now)
+{
+    if (!node || node == LLAP_BCAST) return;
+    if (n->link != LT_LINK_ELAP) net = 0;
+    int k = seen_find(n, net, node);
+    for (int i = 0; i < LT_SEEN_SLOTS && k < 0; i++)
+        if (!n->seen[i].node) k = i;
+    if (k < 0) {
+        k = 0;
+        for (int i = 1; i < LT_SEEN_SLOTS; i++)
+            if (n->seen[i].at_s < n->seen[k].at_s) k = i;
+    }
+    // New here, or back after a quiet spell: someone new until it says otherwise.
+    if (n->seen[k].node != node || n->seen[k].net != net || !seen_live(n, k, now)) {
+        n->seen[k].tries = 0;
+        n->seen[k].ask_at = now + LT_NAME_DELAY_MS;
+        if (n->names) n->names[k][0] = 0;
+    }
+    n->seen[k].net = net;
+    n->seen[k].node = node;
+    n->seen[k].at_s = (uint32_t)(now / 1000);
+}
+
+static const uint8_t *seen_name(const lt_node_t *n, int i)
+{
+    return i >= 0 && n->names && n->names[i][0] ? n->names[i] : NULL;
+}
+
+size_t lt_node_seen(const lt_node_t *n, uint64_t now, uint32_t within_ms, lt_seen_t *out, size_t max)
+{
+    uint32_t t = (uint32_t)(now / 1000);
+    lt_seen_t all[LT_SEEN_SLOTS];
+    size_t k = 0;
+    for (int i = 0; i < LT_SEEN_SLOTS; i++) {
+        if (!n->seen[i].node || (uint64_t)(t - n->seen[i].at_s) * 1000 >= within_ms) continue;
+        lt_seen_t s = { n->seen[i].node, t - n->seen[i].at_s, seen_name(n, i) };
+        size_t j = k++;
+        while (j > 0 && all[j - 1].ago_s > s.ago_s) { all[j] = all[j - 1]; j--; }   // newest first
+        all[j] = s;
+    }
+    if (k > max) k = max;
+    memcpy(out, all, k * sizeof *out);
+    return k;
+}
+
+const uint8_t *lt_node_name(const lt_node_t *n, uint16_t net, uint8_t node)
+{
+    return seen_name(n, seen_find(n, net, node));
+}
+
+// ------------------------------------------------------------- names
+
+// Ask net.node for =:Workstation@*, its answer to our NIS.
+static void name_ask(lt_node_t *n, uint16_t net, uint8_t node)
+{
+    nbp_tuple_t q = { .addr = { n->net, n->node, SOCK_NIS }, .enumerator = 0 };
+    q.obj[0] = 1;
+    q.obj[1] = '=';
+    nbp_name(q.type, LT_NAME_TYPE);
+    q.zone[0] = 1;
+    q.zone[1] = '*';
+    uint8_t pkt[2 + 5 + 3 * (NBP_NAME_MAX + 1)];
+    size_t pl = nbp_build(pkt, sizeof pkt, NBP_LKUP, ++n->name_id, &q);
+    lt_route_t to = { { net, node, SOCK_NIS }, node, n->link == LT_LINK_ELAP };
+    if (pl) send_ddp(n, &to, SOCK_NIS, DDP_NBP, pkt, pl);
+}
+
+static void names_tick(lt_node_t *n, uint64_t now)
+{
+    if (!n->names) return;
+    int due = -1;
+    for (int i = 0; i < LT_SEEN_SLOTS; i++) {
+        if (!seen_live(n, i, now) || n->seen[i].ask_at > now) continue;
+        if (n->seen[i].tries >= LT_NAME_TRIES)    // the last ask went unanswered too
+            n->names[i][0] = 0;
+        if (due < 0 || n->seen[i].ask_at < n->seen[due].ask_at) due = i;
+    }
+    if (due < 0 || now - n->name_at < LT_NAME_GAP_MS) return;
+    name_ask(n, n->seen[due].net, n->seen[due].node);
+    if (n->seen[due].tries < 0xFF) n->seen[due].tries++;
+    // Each wait for an answer twice the last, up to the refresh: a Mac
+    // starting up may be minutes from registering its name.
+    unsigned k = n->seen[due].tries - 1u;
+    uint64_t wait = (uint64_t)LT_NAME_RETRY_MS << (k < 8 ? k : 8);
+    n->seen[due].ask_at = now + (wait < LT_NAME_REFRESH_MS ? wait : LT_NAME_REFRESH_MS);
+    n->name_at = now;
+}
+
+// A Mac registering a name looks it up first, a few times a second apart, to
+// see that no one has it: <its name>:Workstation@* from it is its own. Its
+// next ask is a moment after the last of those, when the name is in.
+static void name_registering(lt_node_t *n, const ddp_t *d, const nbp_t *q, uint64_t now)
+{
+    uint8_t ws[NBP_NAME_MAX + 1];
+    nbp_name(ws, LT_NAME_TYPE);
+    if (!n->names || !q->t.obj[0] || (q->t.obj[0] == 1 && q->t.obj[1] == NBP_WILD_ALL) ||
+        !nbp_match(ws, q->t.type))
+        return;
+    int i = seen_find(n, d->src.net, d->src.node);
+    if (i < 0) return;
+    n->seen[i].tries = 0;
+    n->seen[i].ask_at = now + LT_NAME_DELAY_MS;
+}
+
+static void name_reply(lt_node_t *n, const ddp_t *d, const nbp_t *q, uint64_t now)
+{
+    uint8_t ws[NBP_NAME_MAX + 1];
+    nbp_name(ws, LT_NAME_TYPE);
+    if (!n->names || !q->count || !q->t.obj[0] || !nbp_match(ws, q->t.type)) return;
+    uint16_t net = q->t.addr.net ? q->t.addr.net : d->src.net;
+    uint8_t node = q->t.addr.node ? q->t.addr.node : d->src.node;
+    int i = seen_find(n, net, node);
+    if (i < 0) return;
+    n->seen[i].tries = 0;
+    n->seen[i].ask_at = now + LT_NAME_REFRESH_MS;
+    if (!memcmp(n->names[i], q->t.obj, 1 + (size_t)q->t.obj[0])) return;
+    memcpy(n->names[i], q->t.obj, 1 + (size_t)q->t.obj[0]);
+    char u[3 * NBP_NAME_MAX + 1];
+    nbp_utf8(u, sizeof u, q->t.obj);
+    if (n->link == LT_LINK_ELAP) say(n, "%u.%u is %s", net, node, u);
+    else say(n, "node %u is %s", node, u);
+}
+
 void lt_node_rx(lt_node_t *n, const uint8_t *f, size_t len, uint64_t now)
 {
     if (len < LLAP_HDR) return;
     n->st.frames++;
     uint8_t dst = f[0], src = f[1], type = f[2];
     // ENQs carry the prober's candidate as their source: not a node yet.
-    if (type != LLAP_ENQ) n->heard[src / 8] |= (uint8_t)(1u << (src % 8));
+    if (type != LLAP_ENQ) {
+        n->heard[src / 8] |= (uint8_t)(1u << (src % 8));
+        uint16_t net = 0;                          // ELAP: the long header's source network
+        if (n->link == LT_LINK_ELAP && type == LLAP_LONG && len >= LLAP_HDR + DDP_LONG_HDR)
+            net = (uint16_t)(f[LLAP_HDR + 6] << 8 | f[LLAP_HDR + 7]);
+        seen_note(n, net, src, now);
+    }
 
     if (n->phase == LT_ACQUIRING) {
+        if (n->link == LT_LINK_ELAP) return;
         // Appendix B: while the ID is tentative, anything addressed to it --
         // an ACK to our ENQ, another node's ENQ for the same ID, data -- or
         // anything sent from it means it is taken.
@@ -521,12 +723,14 @@ void lt_node_rx(lt_node_t *n, const uint8_t *f, size_t len, uint64_t now)
     if (dst != n->node && dst != LLAP_BCAST) return;
     // Someone else sending as us. TashTalk does not hear its own frames (U8 is
     // off while the PIC transmits), so this is a duplicate ID; count it.
-    if (src == n->node && type != LLAP_ENQ && type != LLAP_CTS) n->st.dup_suspect++;
+    if (n->link == LT_LINK_LLAP && src == n->node && type != LLAP_ENQ && type != LLAP_CTS)
+        n->st.dup_suspect++;
     if (type != LLAP_SHORT && type != LLAP_LONG) return;
 
     ddp_t d;
     if (ddp_parse(f, len, &d)) return;
     if (d.dst.node != n->node && d.dst.node != LLAP_BCAST) return;
+    if (n->link == LT_LINK_ELAP && d.dst.net && d.dst.net != n->net) return;
     n->st.for_us++;
     switch (d.type) {
     case DDP_NBP:  on_nbp(n, &d, now); break;
@@ -541,8 +745,10 @@ void lt_node_tick(lt_node_t *n, uint64_t now)
 {
     if (n->phase == LT_ONLINE) {
         pap_tick(n, now);
+        names_tick(n, now);
         return;
     }
+    if (n->link == LT_LINK_ELAP) return;
     if (n->clash) {
         uint8_t was = n->node;
         n->node = new_candidate(n);

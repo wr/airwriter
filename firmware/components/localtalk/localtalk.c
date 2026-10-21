@@ -5,7 +5,6 @@
 // reads and status updates from other tasks.
 #include "localtalk.h"
 #include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
 #include "driver/gpio.h"
 #include "driver/uart.h"
@@ -15,7 +14,6 @@
 #include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
-#include "freertos/stream_buffer.h"
 #include "freertos/task.h"
 #include "nvs.h"
 #include "lt_node.h"
@@ -24,37 +22,25 @@
 static const char *TAG = "lt";
 
 #define LT_BAUD   1000000
-#define JOB_CAP   (256 * 1024)      // PSRAM capture of the last PAP job
-#define SPOOL     (16 * 1024)       // between the Mac and the printer; > LT_READ_MAX
 #define EV_LINES  20
 #define FR_LINES  10
 #define LINE_LEN  100
+#define JSON_MACS 8         // Macs in /api/lt: eight, named, keep it inside its 4.5 KB
 
 static SemaphoreHandle_t s_lock;
 static int        s_uart = -1, s_cts_pin = -1;
 static int        s_running;
+static volatile int s_quiet;        // W-1079: switched off on the settings page
+static lt_cfg_t   s_nc;             // the node's set-up, for coming back on
+static lt_ops_t   s_ops;
 static lt_node_t  s_node;
 static tt_rx_t    s_rx;
 static char       s_obj[NBP_NAME_MAX + 1], s_type[NBP_NAME_MAX + 1];
 static char       s_ev[EV_LINES][LINE_LEN], s_fr[FR_LINES][LINE_LEN];
 static unsigned   s_ev_head, s_ev_n, s_fr_head, s_fr_n;
 static unsigned   s_fcs_bad, s_errors, s_tx;
-static uint8_t   *s_job;
-static size_t     s_job_len;
-static uint32_t   s_job_total;
-static int        s_job_done;
 static void     (*s_tap)(void *ctx, const uint8_t *f, size_t n);
 static void      *s_tap_ctx;
-
-// The print side. s_spool is single-producer (the LocalTalk task, under
-// s_lock) and single-consumer (the print task), as a stream buffer must be.
-// s_job_active runs from job_begin until the print task has handed the last
-// byte to the printer and called end; the rest are set by the LocalTalk task.
-static localtalk_printer_t s_printer;
-static StreamBufferHandle_t s_spool;
-static TaskHandle_t s_print_task;
-static volatile int s_job_active, s_job_ended, s_job_normal, s_job_failed;
-static uint32_t   s_jobs_printed, s_jobs_failed;
 
 // W-1049: the node's counters as last seen, to tell the panel what changed.
 // The LocalTalk task alone touches these.
@@ -119,79 +105,21 @@ static void op_log(void *ctx, const char *line)
     push(s_ev, EV_LINES, &s_ev_head, &s_ev_n, line);
 }
 
-static int op_job_begin(void *ctx)
+// The printer gave up mid-job (on the print task): tell the Mac.
+static void cable_abort(void *ctx)
 {
     (void)ctx;
-    // The last job's tail still draining counts as busy: one job at a time.
-    if (s_job_active) return 1;
-    if (s_printer.begin && s_printer.begin(s_printer.ctx)) return 1;
-    s_job_ended = s_job_normal = s_job_failed = 0;
-    s_job_active = 1;
-    s_job_len = 0;
-    s_job_total = 0;
-    s_job_done = 0;
-    xTaskNotifyGive(s_print_task);
-    return 0;
+    xSemaphoreTake(s_lock, portMAX_DELAY);
+    lt_node_pap_abort(&s_node, now_ms());
+    xSemaphoreGive(s_lock);
 }
 
-static void op_job_data(void *ctx, const uint8_t *d, size_t n)
-{
-    (void)ctx;
-    if (!s_job) s_job = heap_caps_malloc(JOB_CAP, MALLOC_CAP_SPIRAM);
-    if (s_job) {
-        size_t take = s_job_len + n <= JOB_CAP ? n : JOB_CAP - s_job_len;
-        memcpy(s_job + s_job_len, d, take);
-        s_job_len += take;
-    }
-    s_job_total += (uint32_t)n;
-    // The node asked for no more than op_job_room had, so this never blocks.
-    size_t put = xStreamBufferSend(s_spool, d, n, 0);
-    if (put != n) ESP_LOGE(TAG, "spool overrun: %u of %u bytes", (unsigned)put, (unsigned)n);
-}
+static const at_owner_t s_owner = { AT_LINK_CABLE, cable_abort, localtalk_note, NULL };
 
-static size_t op_job_room(void *ctx)
-{
-    (void)ctx;
-    return xStreamBufferSpacesAvailable(s_spool);
-}
-
-static void op_job_end(void *ctx, int normal)
-{
-    (void)ctx;
-    s_job_normal = normal;
-    s_job_ended = 1;
-    s_job_done = 1;
-    xTaskNotifyGive(s_print_task);
-}
-
-// Drains the spool into the printer. A failed write aborts the job (the Mac
-// is told with CloseConn); an abandoned job's rest is dropped, not printed.
-static void print_task(void *arg)
-{
-    (void)arg;
-    uint8_t buf[256];
-    for (;;) {
-        size_t n = xStreamBufferReceive(s_spool, buf, sizeof buf, pdMS_TO_TICKS(100));
-        if (n) {
-            int drop = s_job_failed || (s_job_ended && !s_job_normal);
-            if (!drop && s_printer.write && s_printer.write(s_printer.ctx, buf, n)) {
-                s_job_failed = 1;
-                xSemaphoreTake(s_lock, portMAX_DELAY);
-                lt_node_pap_abort(&s_node, now_ms());
-                xSemaphoreGive(s_lock);
-            }
-            continue;
-        }
-        if (s_job_active && s_job_ended && xStreamBufferIsEmpty(s_spool)) {
-            int ok = s_job_normal && !s_job_failed;
-            if (s_printer.end) ok = s_printer.end(s_printer.ctx, ok);
-            if (ok) s_jobs_printed++; else s_jobs_failed++;
-            s_job_active = 0;
-            continue;
-        }
-        ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(100));
-    }
-}
+static int op_job_begin(void *ctx) { (void)ctx; return at_job_begin(&s_owner); }
+static void op_job_data(void *ctx, const uint8_t *d, size_t n) { (void)ctx; at_job_data(&s_owner, d, n); }
+static size_t op_job_room(void *ctx) { (void)ctx; return at_job_room(&s_owner); }
+static void op_job_end(void *ctx, int normal) { (void)ctx; at_job_end(&s_owner, normal); }
 
 static void on_frame(void *ctx, tt_event_t ev, const uint8_t *f, size_t n)
 {
@@ -206,6 +134,7 @@ static void on_frame(void *ctx, tt_event_t ev, const uint8_t *f, size_t n)
     }
     n -= 2;
     if (s_tap) s_tap(s_tap_ctx, f, n);
+    if (s_quiet) return;
     // Frames to us, not the Chooser's broadcasts or other nodes' traffic.
     if (s_node.phase == LT_ONLINE && f[0] == s_node.node) note_frame("rx", f, n);
     lt_node_rx(&s_node, f, n, now_ms());
@@ -231,7 +160,7 @@ static void lt_task(void *arg)
         }
         xSemaphoreTake(s_lock, portMAX_DELAY);
         if (n > 0) tt_rx_feed(&s_rx, buf, (size_t)n, on_frame, NULL);
-        lt_node_tick(&s_node, now_ms());
+        if (!s_quiet) lt_node_tick(&s_node, now_ms());
         int online = s_node.phase == LT_ONLINE && s_seen_phase != LT_ONLINE;
         int lookup = s_node.st.replies != s_seen_replies;
         int fresh = 0;
@@ -290,24 +219,20 @@ esp_err_t localtalk_start(const localtalk_cfg_t *cfg)
     static const uint8_t features[] = { TT_CMD_FEATURES, 0x00 };
     uart_write_bytes(s_uart, features, sizeof features);
 
-    s_printer = cfg->printer;
     s_on_event = cfg->on_event;
-    uint8_t *spool = heap_caps_malloc(SPOOL + 1, MALLOC_CAP_SPIRAM);
-    if (!spool) spool = malloc(SPOOL + 1);              // a chip with no PSRAM
-    static StaticStreamBuffer_t spool_cb;
-    if (!spool) return ESP_ERR_NO_MEM;
-    s_spool = xStreamBufferCreateStatic(SPOOL, 1, spool, &spool_cb);
-    if (xTaskCreate(print_task, "lt_print", 4096, NULL, 3, &s_print_task) != pdPASS)
-        return ESP_ERR_NO_MEM;
+    err = at_printer_init(&cfg->printer);
+    if (err != ESP_OK) return err;
 
     tt_rx_init(&s_rx);
-    lt_cfg_t nc = { .object = cfg->object, .type = cfg->type, .status = cfg->status,
-                    .hint = hint, .seed = esp_random() | 1 };
-    lt_ops_t ops = { .send = op_send, .claim = op_claim, .log = op_log,
-                     .job_begin = op_job_begin, .job_data = op_job_data,
-                     .job_room = op_job_room, .job_end = op_job_end };
+    // The Macs' names in PSRAM: internal RAM is short.
+    s_nc = (lt_cfg_t){ .object = cfg->object, .type = cfg->type, .status = cfg->status,
+                       .hint = hint, .seed = esp_random() | 1,
+                       .names = heap_caps_calloc(LT_SEEN_SLOTS, sizeof(lt_name_t), MALLOC_CAP_SPIRAM) };
+    s_ops = (lt_ops_t){ .send = op_send, .claim = op_claim, .log = op_log,
+                        .job_begin = op_job_begin, .job_data = op_job_data,
+                        .job_room = op_job_room, .job_end = op_job_end };
     xSemaphoreTake(s_lock, portMAX_DELAY);
-    lt_node_init(&s_node, &nc, &ops, now_ms());
+    lt_node_init(&s_node, &s_nc, &s_ops, now_ms());
     xSemaphoreGive(s_lock);
 
     if (xTaskCreate(lt_task, "localtalk", 6144, NULL, 4, NULL) != pdPASS) return ESP_ERR_NO_MEM;
@@ -318,6 +243,35 @@ esp_err_t localtalk_start(const localtalk_cfg_t *cfg)
 }
 
 int localtalk_running(void) { return s_running; }
+int localtalk_quiet(void) { return s_running && s_quiet; }
+
+void localtalk_set_quiet(int quiet)
+{
+    quiet = quiet ? 1 : 0;
+    if (!s_running || quiet == s_quiet) return;
+    xSemaphoreTake(s_lock, portMAX_DELAY);
+    uint64_t now = now_ms();
+    if (quiet) {
+        if (s_node.pap.open) lt_node_pap_abort(&s_node, now);
+        op_claim(NULL, 0);                       // TashTalk answers for no node now
+        s_quiet = 1;
+        op_log(NULL, "the AppleTalk port is off");
+    } else {
+        uint8_t hint = s_node.node;
+        nvs_handle_t h;
+        if (nvs_open("lt", NVS_READONLY, &h) == ESP_OK) {
+            nvs_get_u8(h, "node", &hint);
+            nvs_close(h);
+        }
+        s_nc.hint = hint;
+        s_nc.status = s_node.status;
+        s_nc.seed = esp_random() | 1;
+        lt_node_init(&s_node, &s_nc, &s_ops, now);
+        s_quiet = 0;
+        op_log(NULL, "the AppleTalk port is on");
+    }
+    xSemaphoreGive(s_lock);
+}
 
 void localtalk_set_status(uint16_t status)
 {
@@ -345,8 +299,7 @@ void localtalk_echo(uint8_t node)
 
 const uint8_t *localtalk_job(size_t *len)
 {
-    *len = s_job_len;
-    return s_job_len ? s_job : NULL;
+    return at_job_bytes(len);
 }
 
 void localtalk_set_tap(void (*tap)(void *ctx, const uint8_t *f, size_t n), void *ctx)
@@ -395,8 +348,8 @@ static void json_ring(char **p, char *end, char ring[][LINE_LEN], unsigned lines
 
 void localtalk_json(char *buf, size_t cap)
 {
-    if (!s_running) {
-        snprintf(buf, cap, "{\"on\":false}");
+    if (!s_running || s_quiet) {
+        snprintf(buf, cap, "{\"on\":false,\"quiet\":%s}", s_quiet ? "true" : "false");
         return;
     }
     char *p = buf, *end = buf + cap - 8;
@@ -420,25 +373,42 @@ void localtalk_json(char *buf, size_t cap)
         first = 0;
     }
     if (p < end) *p++ = ']';
-    p += snprintf(p, end - p,
+    // W-1079: the Macs heard in the last 10 minutes, for the settings page,
+    // with the Macintosh name of each that gave one.
+    lt_seen_t seen[JSON_MACS];
+    size_t ns = lt_node_seen(n, now_ms(), LT_SEEN_MS, seen, JSON_MACS);
+    if (p < end) p += snprintf(p, end - p, ",\"macs\":[");
+    for (size_t i = 0; i < ns && p < end; i++) {
+        p += snprintf(p, end - p, "%s{\"node\":%u,\"ago\":%lu", i ? "," : "",
+                      seen[i].node, (unsigned long)seen[i].ago_s);
+        if (seen[i].name && p < end) {
+            char u[3 * NBP_NAME_MAX + 1];
+            nbp_utf8(u, sizeof u, seen[i].name);
+            p += snprintf(p, end - p, ",\"name\":");
+            if (p < end) json_str(&p, end, u);
+        }
+        if (p < end) *p++ = '}';
+    }
+    if (p < end) *p++ = ']';
+    if (p < end) p += snprintf(p, end - p,
         ",\"frames\":%lu,\"fcs_bad\":%u,\"errors\":%u,\"tx\":%u,\"for_us\":%lu,"
         "\"lookups\":%lu,\"replies\":%lu,\"statuses\":%lu,\"opens\":%lu,\"busy\":%lu,"
-        "\"dup\":%lu,\"echoes\":%lu,\"mac_reads\":%lu,\"mac_answers\":%lu,\"pap\":{\"open\":%s,\"conn\":%u,\"bytes\":%lu},"
-        "\"job\":{\"captured\":%u,\"total\":%lu,\"done\":%s},"
-        "\"print\":{\"active\":%s,\"spooled\":%u,\"failed\":%s,\"printed\":%lu,\"aborted\":%lu},"
-        "\"events\":[",
+        "\"dup\":%lu,\"echoes\":%lu,\"mac_reads\":%lu,\"mac_answers\":%lu,\"pap\":{\"open\":%s,\"conn\":%u,\"bytes\":%lu},",
         (unsigned long)n->st.frames, s_fcs_bad, s_errors, s_tx, (unsigned long)n->st.for_us,
         (unsigned long)n->st.lookups, (unsigned long)n->st.replies,
         (unsigned long)n->st.statuses, (unsigned long)n->st.opens, (unsigned long)n->st.busy,
         (unsigned long)n->st.dup_suspect, (unsigned long)n->st.echoes,
         (unsigned long)n->st.ws_reads, (unsigned long)n->st.ws_answers, n->pap.open ? "true" : "false", n->pap.connid,
-        (unsigned long)n->pap.bytes, (unsigned)s_job_len, (unsigned long)s_job_total,
-        s_job_done ? "true" : "false", s_job_active ? "true" : "false",
-        (unsigned)xStreamBufferBytesAvailable(s_spool), s_job_failed ? "true" : "false",
-        (unsigned long)s_jobs_printed, (unsigned long)s_jobs_failed);
+        (unsigned long)n->pap.bytes);
+    if (p < end) {
+        at_printer_json(p, end - p);
+        p += strlen(p);
+    }
+    if (p < end) p += snprintf(p, end - p, ",\"events\":[");
     json_ring(&p, end, s_ev, EV_LINES, s_ev_head, s_ev_n);
     if (p < end) p += snprintf(p, end - p, "],\"frames_recent\":[");
     json_ring(&p, end, s_fr, FR_LINES, s_fr_head, s_fr_n);
     xSemaphoreGive(s_lock);
+    if (p > end) p = end;                          // a cut-short part never runs past buf
     snprintf(p, buf + cap - p, "]}");
 }

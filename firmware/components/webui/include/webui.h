@@ -31,11 +31,28 @@ typedef struct {
     // `buf`; a body of "both" tries J2 -> J4 whatever J4 -> J2 found. NULL
     // answers 404.
     void  (*cable_test)(void *ctx, int both, char *buf, size_t cap);
+    // GET /api/et: the EtherTalk links' state (W-1076). NULL answers 404.
+    void  (*et_json)(void *ctx, char *buf, size_t cap);
+    // GET and POST /api/et/settings: the EtherTalk switches (radio: Macs on
+    // this network, W-1078; tunnel: Basilisk II; infinite: Infinite Mac's
+    // relay) and Infinite Mac's zone name.
+    // set takes -1 and NULL to keep each, and returns 0, or nonzero for a zone
+    // name it will not take. NULL answers 404.
+    void  (*et_settings_get)(void *ctx, int *tunnel, int *radio, int *infinite, char *zone, size_t cap);
+    int   (*et_settings_set)(void *ctx, int tunnel, int radio, int infinite, const char *zone);
 
-    // The general settings (queue, hostname, dither, gain) were just saved:
-    // the app re-reads them so the next job prints with the screen the page
-    // shows. NULL and they wait for a restart.
+    // The general settings (model, name, hostname, dither, gain, the AirPrint
+    // and AppleTalk-port switches) were just saved: the app re-reads them, so
+    // the next job prints with the screen the page shows and the switches take
+    // effect. NULL and they wait for a restart.
     void  (*general_saved)(void *ctx);
+
+    // W-1079: POST /api/restart, /api/erase and /api/test. restart and erase
+    // answer before they act (restart waits for a printing page to finish);
+    // test_page returns 0, or nonzero when the printer is busy. NULL answers 404.
+    void  (*restart)(void *ctx);
+    void  (*erase)(void *ctx);
+    int   (*test_page)(void *ctx);
 
     // Serves the setup page for every unknown host, so joining the device's
     // access point opens the page by itself.

@@ -72,3 +72,10 @@ void ipp_server_set_stopped(const char *reason_or_null, const char *message);
 // once and the TXT record's Color and URF keys are re-announced, all under
 // the same printer-uuid. Any task.
 void ipp_server_set_colour(int on);
+
+// AirPrint on or off (W-1079). Off, the printer leaves Bonjour (_ipp and
+// _printer go; _http, the settings page, stays) and refuses Print-Job and
+// Validate-Job as not accepting jobs; on, it comes back under the same
+// printer-uuid. Callable before ipp_server_start, which then starts that way.
+// Any task.
+void ipp_server_set_airprint(int on);

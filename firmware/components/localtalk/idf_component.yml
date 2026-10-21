@@ -1,0 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+dependencies:
+  # Infinite Mac's zone relay is a WebSocket (W-1076).
+  espressif/esp_websocket_client: "^1.4.0"

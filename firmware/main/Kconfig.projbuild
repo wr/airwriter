@@ -136,6 +136,18 @@ config AIRWRITER_DOT_GAIN
         which is what read best on paper (W-1068: a ribbon's dot gains less
         than its geometry says).
 
+config AIRWRITER_TOP_MARGIN
+    int "Top margin in 1/144 in; negative drops the page's first rows"
+    range -216 144
+    default -144
+    help
+        Paper loaded as the ImageWriter II Owner's Guide says, its leading
+        edge under the paper bail, starts printing about an inch below the
+        top edge, and an AirPrint page arrives as the whole sheet, its own
+        blank margin included. -144 drops that inch, so the page lands where
+        the iPhone laid it out. Positive adds blank paper ahead of each page.
+        The settings page sets it in sixteenths of an inch, -1 1/2 to +1 in.
+
 config AIRWRITER_LED_DATA_PIN
     int "LED chain data pin, -1 if absent"
     default 48 if IDF_TARGET_ESP32S3

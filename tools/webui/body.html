@@ -1,132 +1,213 @@
-<main>
+<!-- W-1079: a settings app. The sidebar is what is on the outside of the box
+     and what it does over Wi-Fi; each item's pane holds every setting about
+     it, and nothing about anything else. Each sidebar row shows its pane's
+     state, so the box can be read without opening anything. -->
+<svg width=0 height=0 style="position:absolute" aria-hidden=true>
+  <symbol id=g-printer viewBox="0 0 16 16"><path fill=currentColor d="M4.2 1.5h7.6v3.3H4.2zM2.2 5.6h11.6c.7 0 1.2.5 1.2 1.2v4.7h-2.8v3H3.8v-3H1V6.8c0-.7.5-1.2 1.2-1.2zm2.9 4.9v2.7h5.8v-2.7zm7.2-3.5a.8.8 0 1 0 0 1.6.8.8 0 0 0 0-1.6z"/></symbol>
+  <symbol id=g-airprint viewBox="0 0 16 16"><path fill=currentColor d="M4.2 1.5h7.6v2.8H4.2zM2.2 5.1h11.6c.7 0 1.2.5 1.2 1.2v4.6h-2.6L8 6.4 3.6 10.9H1V6.3c0-.7.5-1.2 1.2-1.2z"/><path fill=currentColor d="M8 8.4 13.2 14.8H2.8z"/></symbol>
+  <symbol id=g-talk viewBox="0 0 16 16"><path fill=none stroke=currentColor stroke-width=1.6 stroke-linecap=round d="M8 4.4V8M8 8l-4.2 3.6M8 8l4.2 3.6"/><circle cx=8 cy=3.2 r=2.1 fill=currentColor /><circle cx=3.2 cy=12.6 r=2.1 fill=currentColor /><circle cx=12.8 cy=12.6 r=2.1 fill=currentColor /></symbol>
+  <symbol id=g-wifi viewBox="0 0 16 16"><path fill=none stroke=currentColor stroke-width=1.7 stroke-linecap=round d="M1.07 6.67A9.8 9.8 0 0 1 14.93 6.67M3.33 8.93A6.6 6.6 0 0 1 12.67 8.93M5.6 11.2A3.4 3.4 0 0 1 10.4 11.2"/><circle cx=8 cy=13.6 r=1.05 fill=currentColor /></symbol>
+  <symbol id=g-info viewBox="0 0 16 16"><circle cx=8 cy=3.9 r=1.5 fill=currentColor /><path fill=currentColor d="M6.1 6.4h3.1v5.7h1.3v1.6H5.6v-1.6H7V8H6.1z"/></symbol>
+  <symbol id=g-lock viewBox="0 0 16 16"><path fill=currentColor d="M5 7V5.2a3 3 0 0 1 6 0V7h.4c.8 0 1.4.6 1.4 1.4v5.2c0 .8-.6 1.4-1.4 1.4H4.6c-.8 0-1.4-.6-1.4-1.4V8.4c0-.8.6-1.4 1.4-1.4zm1.6 0h2.8V5.2a1.4 1.4 0 0 0-2.8 0z"/></symbol>
+  <!-- the AppleTalk port: a mini-DIN 8 socket, as on the case -->
+  <symbol id=g-port viewBox="0 0 16 16"><circle cx=8 cy=8 r=6.5 fill=none stroke=currentColor stroke-width=1.5 /><g fill=currentColor><path d="M6.9 3.4h2.2v1.7H6.9z"/><circle cx=4.7 cy=6.9 r=.95 /><circle cx=11.3 cy=6.9 r=.95 /><circle cx=4.5 cy=9.9 r=.95 /><circle cx=11.5 cy=9.9 r=.95 /><circle cx=6.3 cy=12 r=.95 /><circle cx=9.7 cy=12 r=.95 /><circle cx=8 cy=8.7 r=.95 /></g></symbol>
+  <!-- Networked Macs: an Ethernet socket -->
+  <symbol id=g-rj45 viewBox="0 0 16 16"><path fill=currentColor fill-rule=evenodd d="M2.2 3h11.6c.7 0 1.2.5 1.2 1.2v7.6c0 .7-.5 1.2-1.2 1.2H2.2c-.7 0-1.2-.5-1.2-1.2V4.2C1 3.5 1.5 3 2.2 3zm1.3 1.7v5.6h2.1v1.5h4.8v-1.5h2.1V4.7z"/></symbol>
+  <!-- a clipboard, on what a click copies -->
+  <symbol id=g-copy viewBox="0 0 16 16"><path fill=none stroke=currentColor stroke-width=1.5 stroke-linejoin=round d="M5.4 3H4.3C3.6 3 3 3.6 3 4.3v8.9c0 .7.6 1.3 1.3 1.3h7.4c.7 0 1.3-.6 1.3-1.3V4.3C13 3.6 12.4 3 11.7 3h-1.1"/><rect x=5.4 y=1.5 width=5.2 height=3 rx=.9 fill=none stroke=currentColor stroke-width=1.5 /></symbol>
+  <!-- a compact Mac, one for each Mac a link can see -->
+  <symbol id=g-mac viewBox="0 0 12 15"><path fill=currentColor fill-rule=evenodd d="M1.6 0h8.8c.9 0 1.6.7 1.6 1.6v11.2c0 .6-.4 1-1 1h-.6V15H1.6v-1.2H1c-.6 0-1-.4-1-1V1.6C0 .7.7 0 1.6 0zM2.3 2v5.8h7.4V2zm4.2 8.6v.9h3v-.9z"/></symbol>
+</svg>
 
-<div class=unit>
+<div class=app>
+  <nav class=side aria-label=Settings>
+    <div class=brand><img src="{{icon}}" alt=""><b>AirWriter</b></div>
+    <div class=nav>
+      <button data-go=printer type=button><span class="ic k"><svg><use href="#g-printer"/></svg></span><span class=l>Printer</span><span class=v id=v-printer></span></button>
+      <button data-go=airprint type=button><span class="ic g"><svg><use href="#g-airprint"/></svg></span><span class=l>AirPrint</span><span class=v id=v-airprint></span></button>
+      <button data-go=appletalk type=button><span class="ic b"><svg><use href="#g-talk"/></svg></span><span class=l>AppleTalk</span><span class=v id=v-appletalk></span></button>
+      <button data-go=wifi type=button><span class="ic c"><svg><use href="#g-wifi"/></svg></span><span class=l>Wi-Fi</span><span class=v id=v-wifi></span></button>
+    </div>
+    <div class=nav>
+      <button data-go=about type=button><span class="ic k"><svg><use href="#g-info"/></svg></span><span class=l>About</span><span class=v id=v-about></span></button>
+    </div>
+  </nav>
 
-  <div class=sec>
-    <div class=grooves></div>
-    <div class=ledge></div>
-    <div class=plate>
-      <div><h1>AirWriter</h1><p class=model><span id=model>&nbsp;</span><span id=rib></span></p></div>
-      <div class=stack>
-        <!-- Each lamp is two LEDs: the left one is state, the right one is
-             the thing that changes. -->
-        <div class=lamp><span class=bar>
-          <span class=seg id=ledfault data-tip="no fault"></span>
-          <span class="seg g" data-tip="powered"></span></span><b>error / pwr</b></div>
-        <div class=lamp><span class=bar>
-          <span class=seg id=ledlink data-tip="not on a network"></span>
-          <span class=seg id=ledact data-tip="network traffic"></span></span><b>network</b></div>
-        <div class=lamp><span class=bar>
-          <span class=seg id=ledprn data-tip="no printer"></span>
-          <span class=seg id=ledjob data-tip="idle"></span></span><b>printer / job</b></div>
+  <main class=detail>
+    <header class=bar><button class=back type=button>‹ Settings</button></header>
+
+    <!-- ── Printer ───────────────────────────────────────────── -->
+    <section class=pane id=p-printer>
+      <div class=hero><span class="ic k"><svg><use href="#g-printer"/></svg></span>
+        <h2>Printer</h2><p>The ImageWriter on the printer port. <a href="https://github.com/wr/airwriter/wiki/Setup" target=_blank rel=noopener>Learn More…</a></p></div>
+      <div class=box>
+        <div class=row><span class=txt>Status</span><span class=val><i class=lamp id=prn-lamp></i><span id=prn-state></span></span></div>
+        <div class="row hide" id=prn-jobrow><span class=txt>Printing</span><span class=val id=prn-job></span></div>
+        <div class=row><span class=txt>Ribbon</span><span class=val><span class="ribbon hide" id=rib-colour><i class=y></i><i class=m></i><i class=c></i><i class=k></i></span><span id=rib></span></span></div>
       </div>
-    </div>
-    <p class=job id=job>&nbsp;</p>
-  </div>
-
-  <!-- Every section is laid out the same way: its heading, what it shows and
-       its settings, then one row with what it has to say on the left and its
-       keys on the right. A key is a section's main action; settings are
-       ordinary fields and checkboxes, and a rarely needed action is a link in
-       the text. -->
-
-  <div class=sec>
-    <h2>wi-fi</h2>
-    <div class="paper bars"><div class=sheet><div class=nets>
-      <div class=scroll id=rows></div></div></div></div>
-    <div id=extra></div>
-    <div class=row>
-      <p class=say id=wifisay></p>
-      <div class=keys>
-        <div class=key><span class=legend>scan</span>
-          <span class=keyrow>
-            <span class="bar keylamp"><span class=seg id=scanled></span></span>
-            <span class=slot><button id=scan aria-label=Scan></button></span>
-          </span></div>
-        <div class="key is-quiet" id=joinkey><span class=legend>join</span>
-          <span class='slot momentary'><button id=join aria-label=Join disabled></button></span></div>
+      <div class=box>
+        <div class=row><span class=txt>Model</span><select class=pop id=model aria-label=Model></select></div>
+        <div class=row><span class=txt>Name</span><input class="fld short" id=pname autocomplete=off spellcheck=false maxlength=31 aria-label=Name></div>
       </div>
-    </div>
-  </div>
-
-  <div class=sec id=sec-halftone>
-    <h2>halftone</h2>
-    <div class=paper><div class=sheet><canvas id=prev></canvas></div></div>
-    <div class=row>
-      <div class=keys id=tabs></div>
-    </div>
-  </div>
-
-  <div class=sec id=sec-printer>
-    <h2>printer</h2>
-    <div class=grid2>
-      <div><label for=devsel>model</label><select id=devsel></select></div>
-      <div><label for=host>hostname</label><input id=host autocomplete=off></div>
-    </div>
-    <div><label for=queue id=qlbl class=hide>name</label>
-      <input id=queue class=hide autocomplete=off placeholder="Printer name"></div>
-    <!-- For adding the printer by hand, where AirPrint does not find it. -->
-    <label for=uri>address</label>
-    <div class=withact><input id=uri readonly><button class=act id=copy type=button>copy</button></div>
-    <div class=row>
-      <p class=say id=prnsay></p>
-      <div class=keys>
-        <div class=key><span class=legend>save</span>
-          <span class='slot momentary'><button id=savegen aria-label=Save></button></span></div>
+      <div class=box>
+        <div class=row><span class=txt>Halftone</span><select class=pop id=screen aria-label=Halftone></select></div>
+        <div class=paper><div class=sheet><canvas id=prev aria-label="A sample printed with this halftone"></canvas></div></div>
       </div>
-    </div>
-  </div>
+      <p class=say id=prn-say></p>
+      <div class=btnrow><button class=btn type=button data-dlg=d-cable>Test Cable…</button><button class=btn type=button id=testpage>Print Test Page</button></div>
+    </section>
 
-  <div class=sec id=sec-firmware>
-    <h2>firmware</h2>
-    <label class=check><input type=checkbox id=fwauto>Install new releases automatically</label>
-    <div class=row>
-      <div class=text>
-        <p class=say id=fwsay>&nbsp;</p>
-        <p class=say>Or <a id=upd>install a release from a file</a>.</p>
+    <!-- ── AirPrint ──────────────────────────────────────────── -->
+    <section class=pane id=p-airprint>
+      <div class=hero><span class="ic g"><svg><use href="#g-airprint"/></svg></span>
+        <h2>AirPrint</h2><p>iPhones, iPads and Macs find the printer by themselves. <a href="https://github.com/wr/airwriter/wiki/Setup" target=_blank rel=noopener>Learn More…</a></p></div>
+      <div class=box>
+        <div class=row><span class=txt>AirPrint</span><label class=sw><input type=checkbox role=switch id=ap aria-label=AirPrint><span></span></label></div>
+        <div class=row><span class="txt mono" id=uri></span><button class=btn type=button id=copyuri>Copy</button></div>
       </div>
-      <div class=keys>
-        <div class=key id=fwupdkey><span class=legend>update</span>
-          <span class=keyrow>
-            <span class="bar keylamp"><span class=seg id=fwled></span></span>
-            <span class='slot momentary'><button id=fwupd aria-label="Look for a new release, or install it"></button></span>
-          </span></div>
-      </div>
-    </div>
-  </div>
+      <p class=say id=ap-say></p>
+      <a class=help href="https://github.com/wr/airwriter/wiki/Troubleshooting" target=_blank rel=noopener aria-label="Help with AirPrint">?</a>
+    </section>
 
-  <div class='sec hide' id=sec-cable>
-    <h2>cable</h2>
-    <div class=row>
-      <p class=say id=cablesay></p>
-      <div class=keys>
-        <!-- TashTalk is the LocalTalk chip's firmware. An assembled AirWriter
-             has it, so this key shows only once a test finds the chip blank. -->
-        <div class='key hide' id=flashkey><span class=legend>flash</span>
-          <span class='slot momentary'><button id=ltflash aria-label="Flash TashTalk onto the LocalTalk chip"></button></span></div>
-        <div class=key><span class=legend>test</span>
-          <span class='slot momentary'><button id=cabletest aria-label="Test a cable"></button></span></div>
-      </div>
-    </div>
-  </div>
+    <!-- ── AppleTalk ─────────────────────────────────────────── -->
+    <section class=pane id=p-appletalk>
+      <div class=hero><span class="ic b"><svg><use href="#g-talk"/></svg></span>
+        <h2>AppleTalk</h2><p>Classic Macs print here. On the Mac, choose AppleTalk ImageWriter in the Chooser. <a href="https://github.com/wr/airwriter/wiki/Vintage-Macs-(LocalTalk)" target=_blank rel=noopener>Learn More…</a></p></div>
 
+      <!-- Wells's layout, from macOS's Wi-Fi network row: the interface and its
+           switch, then below a rule how many Macs it can see and which. -->
+      <div class="box card" id=c-lt>
+        <div class=top><span class="ic b"><svg><use href="#g-port"/></svg></span>
+          <div><b>AppleTalk Port</b><p>A Mac plugged in with a LocalTalk cable.</p></div>
+          <div class=ctls><label class=sw><input type=checkbox role=switch data-way=lt aria-label="AppleTalk Port"><span></span></label></div></div>
+        <div class=body></div>
+      </div>
+      <div class="box card" id=c-radio>
+        <div class=top><span class="ic b"><svg><use href="#g-rj45"/></svg></span>
+          <div><b>Networked Macs</b><p>Macs on your network, wired or with a BlueSCSI Wi-Fi adapter.</p></div>
+          <div class=ctls><label class=sw><input type=checkbox role=switch data-way=radio aria-label="Networked Macs"><span></span></label></div></div>
+        <div class=body></div>
+      </div>
+      <div class="box card" id=c-tun>
+        <div class=top><img class=ic src="{{basilisk}}" alt="">
+          <div><b>Basilisk II</b><p>Emulated Macs on computers on your network.</p></div>
+          <div class=ctls><button class=btn type=button data-dlg=d-bas>Set Up…</button><label class=sw><input type=checkbox role=switch data-way=tun aria-label="Basilisk II"><span></span></label></div></div>
+        <div class=body></div>
+      </div>
+      <div class="box card" id=c-zone>
+        <div class=top><img class=ic src="{{infinitemac}}" alt="" style="image-rendering:pixelated">
+          <div><b>Infinite Mac</b><p>Macs in a web browser, through infinitemac.org.</p></div>
+          <div class=ctls><button class=btn type=button data-dlg=d-inf>Set Up…</button><label class=sw><input type=checkbox role=switch data-way=zone aria-label="Infinite Mac"><span></span></label></div></div>
+        <div class=body></div>
+      </div>
+      <p class=foot>SheepShaver and Mini vMac are not supported. <a href="https://github.com/wr/airwriter/wiki/Vintage-Macs-(LocalTalk)" target=_blank rel=noopener>Learn More…</a></p>
+      <p class=say id=at-say></p>
+      <a class=help href="https://github.com/wr/airwriter/wiki/Troubleshooting" target=_blank rel=noopener aria-label="Help with AppleTalk">?</a>
+    </section>
+
+    <!-- ── Wi-Fi ─────────────────────────────────────────────── -->
+    <section class=pane id=p-wifi>
+      <div class=hero><span class="ic c"><svg><use href="#g-wifi"/></svg></span>
+        <h2>Wi-Fi</h2><p>The network AirWriter prints over. <a href="https://github.com/wr/airwriter/wiki/Setup" target=_blank rel=noopener>Learn More…</a></p></div>
+      <div class=box>
+        <div class=row id=ssid-row><span class=txt>Wi-Fi network</span><span class=val><i class=lamp id=wifi-lamp></i><span id=ssid></span></span>
+          <span class=glyphs id=wifi-glyphs></span><button class=btn type=button id=change>Change…</button></div>
+        <div class=row id=iprow><span class=txt>IP address</span><span class="val mono" id=ip></span></div>
+        <div class=row id=hostrow><span class=txt>Host name</span><input class="fld short" id=host autocomplete=off autocapitalize=off spellcheck=false maxlength=32 aria-label="Host name"></div>
+      </div>
+      <p class=say id=wifi-say></p>
+    </section>
+
+    <!-- ── About ─────────────────────────────────────────────── -->
+    <section class=pane id=p-about>
+      <div class=hero><img src="{{icon}}" alt=""><h2>AirWriter</h2><p>Rev A · Wells Workshop</p></div>
+      <div class=box>
+        <div class=row><span class=txt>Version <span class="mono" id=fw-ver></span></span><span class=val><i class=lamp id=fw-lamp></i><span id=fw-state></span></span><button class=btn type=button id=fw-btn>Check Now</button></div>
+        <div class=row><span class=txt>Update automatically</span><label class=sw><input type=checkbox role=switch id=fwauto aria-label="Update automatically"><span></span></label></div>
+        <div class=row><span class=txt>Install from a file</span><button class=btn type=button id=fw-file>Choose File…</button></div>
+      </div>
+      <div class=box>
+        <div class=row><span class=txt>On for</span><span class=val id=uptime></span></div>
+        <div class=row><span class=txt>Last started</span><span class=val id=reset></span></div>
+      </div>
+      <p class=say id=about-say></p>
+      <div class=btnrow><button class="btn danger" type=button data-dlg=d-erase>Erase All Settings…</button><button class=btn type=button data-dlg=d-restart>Restart…</button></div>
+      <div class=grp id=dipgrp><h3>DIP Switches</h3><div class=box><div class=dips id=dips></div><div id=dip-rows></div></div></div>
+      <div class=box>
+        <a class="row link" href="https://github.com/wr/airwriter/wiki/Status-Lights" target=_blank rel=noopener><span class=txt>Status lights</span><span class=out aria-hidden=true>↗</span></a>
+        <a class="row link" href="https://github.com/wr/airwriter/wiki/Troubleshooting" target=_blank rel=noopener><span class=txt>Troubleshooting</span><span class=out aria-hidden=true>↗</span></a>
+        <a class="row link" href="https://github.com/wr/airwriter/wiki" target=_blank rel=noopener><span class=txt>Wiki</span><span class=out aria-hidden=true>↗</span></a>
+        <a class="row link" href="https://github.com/wr/airwriter" target=_blank rel=noopener><span class=txt>Source code</span><span class=out aria-hidden=true>↗</span></a>
+      </div>
+      <div class=mark><a href="https://wells.ee" target=_blank rel=noopener aria-label="Made by Wells Workshop">{{ww-logo}}Wells Workshop</a></div>
+    </section>
+  </main>
 </div>
-
-<footer class=foot>
-  <a class=ww href="https://wells.ee" target=_blank rel=noopener
-     aria-label="Made by Wells Workshop"><span class=by>Made by</span>{{ww-logo}}Wells Workshop</a>
-  <span class=out>
-    <!-- The star count arrives from GitHub when the browser can reach it. -->
-    <a id=gh href="https://github.com/wr/airwriter" target=_blank rel=noopener
-       aria-label="AirWriter on GitHub"><svg class=gh aria-hidden="true" viewBox="0 0 16 16"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg><span id=stars>GitHub</span></a>
-    <a href="https://buymeacoffee.com/wellsworkshop" target=_blank rel=noopener>Donate</a>
-  </span>
-</footer>
 <input id=fw type=file accept=.bin class=hide>
-</main>
 
-<div id=tip></div>
+<!-- ── dialogs ────────────────────────────────────────────────── -->
+<dialog id=d-cable><div class=dlg>
+  <b>Test a cable</b>
+  <!-- the case's port edge as the cover prints it, a cable from the printer
+       port to the AppleTalk port; the test runs along it and colours it -->
+  <svg class=ports id=ports viewBox="0 0 360 150" aria-hidden=true>
+    <g fill=none stroke=#f7f6f2 stroke-width=1.4 opacity=.9><path d="M16 22h104M128 22h104M240 22h104"/></g>
+    <g font-family="-apple-system,BlinkMacSystemFont,'Helvetica Neue',sans-serif" font-size=13 font-style=italic fill=#f7f6f2>
+      <text x=20 y=44>serial</text><text x=132 y=44>appletalk</text><text x=244 y=44>power</text></g>
+    <g fill=#2c2b28 stroke=#8a877e stroke-width=1.5><circle cx=68 cy=82 r=15 /><circle cx=180 cy=82 r=15 /><rect x=276 y=75 width=32 height=14 rx=7 /></g>
+    <path class=cable d="M68 82 C68 150 180 150 180 82"/>
+    <path class=flow id=flow d="M180 82 C180 150 68 150 68 82 C68 150 180 150 180 82"/>
+    <g fill=#e9e7e0><rect x=58 y=72 width=20 height=20 rx=3 /><rect x=170 y=72 width=20 height=20 rx=3 /></g>
+  </svg>
+  <p>Plug one cable into both ports, then click Test.</p>
+  <p class=say id=cable-say></p>
+  <div class=btnrow><button class="btn hide" type=button id=ltflash>Flash TashTalk</button><button class=btn type=button data-close>Cancel</button><button class="btn primary" type=button id=cabletest>Test</button></div>
+</div></dialog>
 
-<div id=over class=hide><div id=big></div>
-  <div id=ovt>Restarting</div><p id=ovs></p>
-  <button id=ovbtn class=q type=button>Reload</button></div>
+<dialog id=d-bas><div class=dlg>
+  <b>Set up Basilisk II</b>
+  <ol>
+    <li>In Basilisk II's settings, open Serial/Network and turn on <span class=q>Tunnel MacOS Networking over UDP</span>.</li>
+    <li>Start the Mac and choose EtherTalk in its Network control panel.</li>
+  </ol>
+  <p>While the tunnel is on, that Mac can't reach the internet. <a href="https://github.com/wr/airwriter/wiki/Vintage-Macs-(LocalTalk)" target=_blank rel=noopener>Learn More…</a></p>
+  <div class=btnrow><button class="btn primary" type=button data-close>Done</button></div>
+</div></dialog>
+
+<dialog id=d-inf><div class=dlg>
+  <b>Set up Infinite Mac</b>
+  <p>Infinite Mac's Macs share AppleTalk in a zone you name. AirWriter joins this one:</p>
+  <div class=box><div class=row><input class="fld mono" id=zone autocomplete=off autocapitalize=off spellcheck=false maxlength=32 aria-label="Zone name"><button class=btn type=button id=copyzone>Copy</button></div></div>
+  <p>Anyone who opens Infinite Mac with this zone name can print here. To join a zone you already use, type its name.</p>
+  <p class=say id=zone-say></p>
+  <div class=btnrow><button class=btn type=button id=newzone>New Name</button><a class=btn id=imopen target=_blank rel=noopener>Open Infinite Mac</a><button class="btn primary" type=button id=zonedone>Done</button></div>
+</div></dialog>
+
+<dialog id=d-net><div class=dlg>
+  <b>Choose a network</b>
+  <div class="box nets" id=nets></div>
+  <div class=hide id=joinform><input class="fld hide" id=nm placeholder="Network name" autocomplete=off autocapitalize=off spellcheck=false maxlength=32 aria-label="Network name"><input class=fld type=password id=pw placeholder=Password autocomplete=off maxlength=64 aria-label=Password></div>
+  <p class=say id=net-say></p>
+  <div class=btnrow><button class=btn type=button id=rescan>Scan Again</button><button class=btn type=button data-close>Cancel</button><button class="btn primary" type=button id=join disabled>Join</button></div>
+</div></dialog>
+
+<dialog id=d-erase><div class=dlg>
+  <b>Erase all settings?</b>
+  <p>AirWriter forgets its Wi-Fi network and every setting, then restarts. Join the <span id=apname>AirWriter</span> network to set it up again.</p>
+  <div class=btnrow><button class=btn type=button data-close>Cancel</button><button class="btn danger primary" type=button id=erase>Erase</button></div>
+</div></dialog>
+
+<dialog id=d-restart><div class=dlg>
+  <b>Restart AirWriter?</b>
+  <p>A page that is printing finishes first.</p>
+  <div class=btnrow><button class=btn type=button data-close>Cancel</button><button class="btn primary" type=button id=restart>Restart</button></div>
+</div></dialog>
+
+<dialog id=d-wait><div class=dlg>
+  <b id=wait-t>Restarting</b>
+  <p id=wait-s>This page reloads when AirWriter is back.</p>
+  <div class="btnrow hide" id=wait-keys><button class="btn primary" type=button id=reload>Reload</button></div>
+</div></dialog>
+
+<!-- when the board stops answering: what the page shows is what it last heard -->
+<div class="lost hide" id=lost role=status><i class="lamp a"></i>AirWriter isn’t answering. Trying again…</div>

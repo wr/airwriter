@@ -14,3 +14,7 @@ CONFIG_SPIRAM_SPEED_80M=y
 # leaves for the app's panel cue. main.c checks both, and the pin.
 # CONFIG_BOOTLOADER_FACTORY_RESET is not set
 CONFIG_BOOTLOADER_CUSTOM_RESERVE_RTC=y
+# W-1076: TLS buffers in PSRAM. A held TLS session (Infinite Mac's relay) took
+# ~45 KB of internal RAM and left Wi-Fi and lwIP starving: the web page stalled
+# and reconnects failed. GitHub update checks use the same allocator.
+CONFIG_MBEDTLS_EXTERNAL_MEM_ALLOC=y

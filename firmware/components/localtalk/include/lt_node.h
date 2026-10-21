@@ -97,13 +97,32 @@ typedef struct {
     void   (*job_end)(void *ctx, int normal);
 } lt_ops_t;
 
+typedef uint8_t lt_name_t[NBP_NAME_MAX + 1];   // a Pascal NBP name, MacRoman
+
 typedef struct {
     const char *object;     // NBP object: the queue name (UTF-8; non-ASCII becomes '?')
     const char *type;       // NBP type the Chooser looks up
     uint16_t    status;     // the Option Card status word to start with
     uint8_t     hint;       // the node ID to try first (last boot's), 0 = random
     uint32_t    seed;       // nonzero random seed for candidate IDs
+    lt_name_t  *names;      // room for LT_SEEN_SLOTS Macintosh names (below), or
+                            // NULL to learn none; the ESP keeps it in PSRAM
 } lt_cfg_t;
+
+// The link under the node. LLAP is the cable, as above. ELAP (W-1076) is
+// EtherTalk through et_link.c: no LLAP node acquisition (AARP is et_link's;
+// lt_node_set_address hands over the result), frames arrive as a pseudo-LLAP
+// header {dst node, src node, LLAP_LONG} and a long DDP datagram and leave the
+// same way, a datagram for another network is dropped, and RTMP is only noted.
+enum { LT_LINK_LLAP = 0, LT_LINK_ELAP = 1 };
+
+// The idle hold (W-1076): a connection that sends no data for idle_hold_ms
+// while the status word is 0 is closed (CloseConn, the job ends normal, so
+// what came prints). On the relay a Mac can be anyone with the zone name or
+// an abandoned browser tab, holding the printer from an iPhone. A Mac waiting
+// out paper-out or off line is waiting on the status word and is never cut
+// off. 0 (the cable) leaves today's timers alone.
+#define LT_IDLE_HOLD_MS 60000
 
 typedef enum { LT_ACQUIRING = 0, LT_ONLINE } lt_phase_t;
 
@@ -114,6 +133,33 @@ typedef struct {               // how to answer whoever sent a datagram
 } lt_route_t;
 
 #define LT_XO_SLOTS 4
+// The nodes heard lately, for the settings page (W-1079): a node that has
+// sent anything but an ENQ, and when. Full, the one quiet longest makes room.
+// On ELAP a node is its network and node: every Mac picks its own network in
+// the startup range. On the cable the network is left out.
+#define LT_SEEN_SLOTS 16
+#define LT_SEEN_MS    600000      // the page's "connected": heard in the last 10 minutes
+// name: its Macintosh name while the node is unchanged, or NULL.
+typedef struct { uint8_t node; uint32_t ago_s; const uint8_t *name; } lt_seen_t;
+
+// Macintosh names. System 7 and later register the name from Sharing Setup
+// with NBP as <name>:Workstation. A node given room for names (cfg->names)
+// asks each node it hears for =:Workstation@*, a LkUp sent straight to that
+// node's NIS: LT_NAME_DELAY_MS after first hearing it, then while unanswered
+// after LT_NAME_RETRY_MS, twice that, and so on up to LT_NAME_REFRESH_MS, and
+// every LT_NAME_REFRESH_MS once answered, while it stays heard. On the cable a
+// Mac opens AppleTalk early in its startup and registers its name a minute or
+// more later; it looks the name up first (<name>:Workstation@*, from it), and
+// its next ask follows LT_NAME_DELAY_MS after the last of those. A name not
+// answered for LT_NAME_TRIES asks running, or a node back after a quiet spell,
+// is forgotten: the ID may be another Mac's. A Mac without a name (System 6,
+// or one never named) shows its address.
+#define LT_NAME_TYPE       "Workstation"
+#define LT_NAME_DELAY_MS   1000
+#define LT_NAME_RETRY_MS   5000
+#define LT_NAME_TRIES      3
+#define LT_NAME_REFRESH_MS 600000
+#define LT_NAME_GAP_MS     250       // between any two asks
 #define LT_XO_PKT   (ATP_HDR + 4 + 256)   // the biggest response we cache: OpenConnReply
 
 typedef struct {               // a sent XO response, kept for duplicate requests
@@ -148,6 +194,7 @@ typedef struct {
     uint64_t   wrote;            // when the workstation last sent us Data
     uint64_t   waiting;          // since when it has owed us data with the printer ready
     uint32_t   bytes;
+    uint64_t   idle_since;       // the idle hold's clock: open, Data, or a nonzero status
 } lt_pap_t;
 
 typedef struct {
@@ -175,10 +222,26 @@ typedef struct {
     uint8_t    last_lkup[3 * (NBP_NAME_MAX + 1) + 2];
     uint64_t   last_lkup_at;
     uint8_t    heard[32];      // bit n: node n has sent a frame
+    struct {
+        uint16_t net;          // ELAP only
+        uint8_t  node;         // 0: free
+        uint8_t  tries;        // name asks since the last answer
+        uint32_t at_s;         // last heard
+        uint64_t ask_at;       // when its name is next asked
+    } seen[LT_SEEN_SLOTS];
+    lt_name_t *names;          // names[i] is seen[i]'s, or NULL: names off
+    uint64_t   name_at;        // the last name ask, for LT_NAME_GAP_MS
+    uint8_t    name_id;
     uint64_t   echo_at;        // when lt_node_echo last asked
+    uint8_t    link;           // LT_LINK_*
+    uint32_t   idle_hold_ms;
+    uint8_t    router_logged;  // ELAP: a router has been noted once
 } lt_node_t;
 
 void lt_node_init(lt_node_t *n, const lt_cfg_t *cfg, const lt_ops_t *ops, uint64_t now);
+// The same for an ELAP node (W-1076), with its idle hold; cfg->hint is unused.
+void lt_node_init_elap(lt_node_t *n, const lt_cfg_t *cfg, const lt_ops_t *ops,
+                       uint32_t idle_hold_ms, uint64_t now);
 // One frame as TashTalk relayed it, FCS already checked and stripped.
 void lt_node_rx(lt_node_t *n, const uint8_t *f, size_t len, uint64_t now);
 // Timers: enquiries while acquiring, PAP retries, tickles and timeouts.
@@ -191,3 +254,12 @@ void lt_node_pap_abort(lt_node_t *n, uint64_t now);
 void lt_node_echo(lt_node_t *n, uint8_t node, uint64_t now);
 // The Option Card status word, e.g. when the printer goes offline.
 void lt_node_set_status(lt_node_t *n, uint16_t status);
+// ELAP only: AARP made net.node ours, and the node goes online; node 0 means
+// the address is gone (the link's MAC changed) and the node waits for the next.
+// A change while a connection is open ends that job abandoned first.
+void lt_node_set_address(lt_node_t *n, uint16_t net, uint8_t node, uint64_t now);
+// The nodes heard in the last within_ms, newest first, at most max of them.
+size_t lt_node_seen(const lt_node_t *n, uint64_t now, uint32_t within_ms, lt_seen_t *out, size_t max);
+// The Macintosh name of net.node (net is ignored on the cable), or NULL. It
+// points into the node's table: valid until the node next changes.
+const uint8_t *lt_node_name(const lt_node_t *n, uint16_t net, uint8_t node);

@@ -79,6 +79,14 @@ What works on `main`:
 - DIP switches read by their printed numbers; a tap of the `test` button prints a test page, or
   with the printer not ready runs the cable test; a second tap cancels the test page; a tap during
   another job shows Busy.
+- The test page (`components/testpage`, design `docs/superpowers/specs/2026-10-20-test-page-design.md`):
+  a full Letter page from the tap, DIP4 at power-on and the page's Print Test Page. Letterhead
+  (the icon and Apple Garamond as dots, `tp_art.h` from `testpage/tools/mkart.py`), the board's
+  details, every font, pitch and style in the printer's own type, the seven colours and a
+  ray-traced still life in four inks (gray with a note on a black ribbon), the five screens side
+  by side, a ruler and four one-inch squares. It asks the ribbon first, as a job does; about
+  64 KB of stream in colour, and never `ESC F` (`docs/traps.md`). The colour ink order and phases live in `ink.c` (`ink_screens_*`),
+  shared with jobs.
 - Recovery (SPEC §3.11): three equal app slots and a `known_good` record naming the last image
   that was kept and finished a real print; updates never write the running or known-good slot.
   A new OTA image runs on trial and rolls back unless healthy (`/api/status` `slot`, `trial`,
@@ -101,16 +109,44 @@ What works on `main`:
   twice.
 - Setup AP `AirWriter-xxxx` (open, 192.168.4.1) on a board with no credentials; web UI on port
   80: `/api/status`, Wi-Fi, settings, `/update` (OTA), `/api/update` (GitHub releases),
-  `/api/localtalk/flash`, `/api/cable`.
-- The settings page (W-1072): every section is its heading, its content and settings, then one
-  row with text left and keys right. Keys are main actions only; auto-update is a checkbox,
-  install-from-file a link, copy a text button in the address field. The flash key shows only
-  after a cable test answers `no_tashtalk` (reflashing a working chip is `curl -X POST
-  /api/localtalk/flash`). The footer's GitHub star count is the page's one request off the
-  board, made by the browser and dropped when offline. The favicon is the printer icon.
+  `/api/localtalk/flash`, `/api/cable`, `/api/restart`, `/api/erase`, `/api/test`.
+- The settings page (`W-1079 Settings page: organise by port, like macOS System Settings`,
+  design `docs/superpowers/specs/2026-10-20-settings-redesign-design.md`): a settings app, a
+  sidebar of Printer, AirPrint, AppleTalk, Wi-Fi and About, each row showing its state; one home
+  per setting. Upright system type, Apple Garamond Light titles, platinum, icon tiles in the
+  ribbon's inks, status as lit bar lamps, low platinum keys; in a window on a big screen, the
+  sidebar first on a phone. AppleTalk is one card per way in (AppleTalk Port, Networked Macs,
+  Basilisk II, Infinite Mac) with its switch and the Macs heard in the last 10 minutes, each by
+  its Macintosh name when it gives one, its address beside the time. Every link asks each node it
+  hears for `=:Workstation@*` (System 7 registers the Sharing Setup name so), a LkUp straight to
+  that node: 1 s after first hearing it, then backing off from 5 s to 10 minutes until it
+  answers, and 1 s after it is seen registering its name; then every 10 minutes. Names are in
+  PSRAM. Benched 2026-10-20: the SE/30 over BlueSCSI ("SE30") and Basilisk II ("SE/30") answer.
+  On the cable the SE/30 opens AppleTalk long before it registers its name, and the first build
+  gave up first; the fix is untested on the cable. The
+  TashTalk flash key shows only after a cable test answers `no_tashtalk`. The page makes no
+  request off the board. Sources in `tools/webui`; `mkheader.py` builds `webui_page.h`.
+- Top margin (NVS `topmargin`, `/api/status` `top_margin`, `POST /api/general
+  {"top_margin":N}`; no control on the page: with the paper loaded as the guide says the default
+  is right, and a menu and then a line-up sheet only confused), in 1/144 in, -216 to 144: positive adds
+  paper ahead of each AirPrint page and the test page, negative drops their first rows
+  (`ripjob_cfg_t.top_margin`, `rip --top-margin`). Not LocalTalk jobs: the Mac's driver keeps
+  its own. Default -144 (`CONFIG_AIRWRITER_TOP_MARGIN`): paper loaded as the Owner's Guide says
+  (leading edge under the bail) starts printing about 1 in down, and an AirPrint page arrives
+  as the whole sheet, so dropping that inch lands it where the iPhone laid it out. The board
+  advertises a 1 in top margin (bottom 0.5 in, SPEC §3.5), so iOS draws nothing in that inch.
+  Board 1 is set to -7/8 in (-126): there its calibration lines land exactly 1 in from the top
+  and 0.5 in from the bottom.
+- A job starts at top of form: when the last stream to move the paper was cut, or was a Mac's
+  that stopped mid-page, the next job sends a form feed first (`iw_link_need_ff`). ESC c leaves
+  top of form alone. A Mac's stream never form-feeds (it feeds by line, forward and back, to
+  exactly its 11 in page), so the LocalTalk scanner follows the paper (`iw_scan_at_tof`).
+- AirPrint has an off switch (W-1079): off, `_ipp` and `_printer` leave Bonjour and Print-Job
+  is refused as not accepting jobs; on, they come back under the same printer-uuid.
 - Wi-Fi scans all channels and joins the strongest AP; printer-uuid is stable (MAC + epoch).
 - TashTalk 2.1.3 is in U7, flashed in place by the ESP32 over LVP.
-- A LocalTalk node in DIP mode 2 (or always, with `CONFIG_AIRWRITER_LT_BENCH`), on UART2 to
+- A LocalTalk node behind the AppleTalk port's switch on the settings page (W-1079; until the
+  switch is used, DIP mode 2 starts it, and `CONFIG_AIRWRITER_LT_BENCH` always), on UART2 to
   TashTalk at 1 Mbaud with its CTS on IO6 (`components/localtalk`): acquires a server node ID,
   answers NBP LkUp as `<queue>:ImageWriter@*`, and answers PAP as Apple's ImageWriter LocalTalk
   Option Card does (status word, one connection). A PAP job is the Mac driver's own ImageWriter
@@ -118,7 +154,15 @@ What works on `main`:
   Mac wait ("busy"), a paused printer holds the Mac's reads (16 KB spool), and a job cut short
   gets W-1041's resync. The last job's bytes are also kept for `GET /api/lt/job`. `GET /api/lt`
   shows state and log; `POST /api/lt/echo` with a node number pings that Mac (AEP). The bench
-  Mac has printed on paper through it.
+  Mac has printed on paper through it. The node cannot stop once started, so the switch's off
+  is quiet: TashTalk answers for no node and frames are dropped.
+- EtherTalk (`W-1076 EtherTalk: print from Infinite Mac and Basilisk II`, `W-1078 EtherTalk over
+  Wi-Fi: print from real Macs (BlueSCSI, Ethernet Macs)`, SPEC §3.13): three more links to the
+  same printer, each AppleTalk Phase 2 with its own address: the board's own Wi-Fi for Ethernet
+  and BlueSCSI Macs, Basilisk II's UDP tunnel (port 6066), and Infinite Mac's zone relay over a
+  WebSocket to infinitemac.org (off until switched on; a made-up zone name). One job at a time
+  across all four links (`at_printer.c`). `GET /api/et`, `GET`/`POST /api/et/settings`.
+  `tools/ethertalk/etpeer.py` is a software Mac for the tunnel and the relay (lookup, print).
 
 **Enclosure** (`enclosure/`, in use on board 1): tray (print in PETG with Arachne walls;
 every wall 1.70 below the rim, one thickness all round so no lines show up the outside; the
@@ -128,15 +172,20 @@ height); Pro screws M2.5 × 18. Four 10 mm rubber feet sit in 0.40 pockets in th
 underside, each hiding a screw counterbore. The shop's cased GLBs still show the pre-W-1036
 tray.
 
-Not built: EtherTalk, consumers of the dither override, PWG raster.
+Not built: Mini vMac (LToUDP, `W-1077`), consumers of the dither override, PWG raster.
 
 **Board 1:** ESP32-S3-WROOM-1-N8R2 (8 MB flash, 2 MB PSRAM). On the home Wi-Fi at
 10.0.1.115, mDNS `imagewriter-2434.local`. Console on USB-C as `/dev/cu.usbmodem*` (the number
 follows the Mac's port). Its queue name reads "ImageWriter II" in `/api/status`, which is also
 its name in the Chooser. U7's PIC calibration words: `16E0 1DA8`. Its LocalTalk node ID is 198
 (kept in NVS `lt`/`node`); the bench Mac is node 83. Printer: an ImageWriter II on J2 via
-Apple's crossover cable. It runs the W-1072 build (v0.2.0-9-gf4ff8d5), ahead of any release,
-with auto-update on.
+Apple's crossover cable, fanfold paper loaded as the Owner's Guide says (top edge under the paper
+bail). It runs main from the W-1079 merge (EtherTalk, settings page, Mac names, edge states,
+full test page), ahead of any release, with auto-update on. Its Top margin is calibrated to -7/8 in
+(`top_margin` -126): a page's line 1 in down and one 0.5 in from the bottom landed exactly there.
+Its AppleTalk port has been set on the page (`lt_port` 1), so DIP switches 1-2 no longer decide;
+Infinite Mac is on (Wells switched it on, with a made-up zone name). The page reads its DIP switches as 2, 6, 7 and 8 on: not
+yet checked against the part. One pin of its print head is dead (a white line in solid fills).
 
 Known issues, open:
 - With the node off, TashTalk once sent and relayed nothing over the cable test's own UART2 link
@@ -207,7 +256,15 @@ Linear is the queue; these are the live items.
   pixel per dot (half scale on a retina Mac), its type set to the measure. Five tabs wrap 2/2/1 on
   a phone. Released in v0.2.0 (2026-10-17), cut from main `b0fc219` with `--branch` from a clean
   worktree because this checkout carried someone's enclosure edits.
+- `W-1076` and `W-1078` reached main on 2026-10-20 with `W-1079` (Done), which was built on
+  top of them; both stay In Progress for their bench checks. Owed on the bench: busy both ways
+  between links, a link dropped mid-job, the SE/30 on the cable again (and its name on the
+  AppleTalk Port card), an Infinite Mac on its card, the page's Erase and Wi-Fi join. Before any release
+  that turns the relay on for users, give Mihai Parparita (Infinite Mac) a heads-up.
 - Not in Linear: scope HSKo during a long job (SPEC §3.9 timing).
+- The full test page has printed on board 1 from the page's Print Test Page, on the colour
+  ribbon. Still owed: a print from the button and from DIP4, one on the black ribbon, and a
+  second tap mid-page.
 
 ## Toolchain
 - **KiCad 10.0.6.** `kicad-cli` is not on PATH: `/Applications/KiCad/KiCad.app/Contents/MacOS/kicad-cli`.
@@ -222,8 +279,10 @@ Linear is the queue; these are the live items.
   recreate them before any konnect placement:
   `ln -s "$PWD/hardware/airwriter/lib/airwriter.kicad_sym" /Applications/KiCad/KiCad.app/Contents/SharedSupport/symbols/`
   and the same for `lib/airwriter.pretty` into `.../SharedSupport/footprints/`.
-- **ESP-IDF v5.5.1** at `~/esp/esp-idf` (esp32s3 tools). `. ~/esp/esp-idf/export.sh`
-  first, then from `firmware/`:
+- **ESP-IDF v5.5.1** at `~/esp/esp-idf` (esp32s3 tools). Its Python environment was built on
+  Python 3.14 and Homebrew's `python3` is now 3.15: put a directory with `python` and `python3`
+  linked to `/opt/homebrew/bin/python3.14` first in `PATH`, then `. ~/esp/esp-idf/export.sh`,
+  then from `firmware/`:
   - build: `idf.py build`
   - flash over USB: `idf.py -p /dev/cu.usbmodem1101 flash` writes the bootloader, partition
     table, a blank otadata, a blank known-good record and the app into ota_0, so the board boots
@@ -253,16 +312,26 @@ Linear is the queue; these are the live items.
 
 ## Verification
 - **Host tests:** `make -C tools/rip test` (raster path, halftone screens and colour, serial writer, printer_state, led_grid,
-  dip_config, pic_prog, localtalk, cable, fw_update, known_good) and `make -B -C tools/ipp test`
+  dip_config, pic_prog, localtalk, cable, fw_update, known_good, testpage) and `make -B -C tools/ipp test`
   (`-B`: `tools/ipp/build/` is committed).
+- **Test page preview:** `tools/rip/build/rip --testpage colour --out-stream tp.bin` (or `black`,
+  `unknown`), then `python3.14 tools/iwview/iwview.py tp.bin tp.png` draws it as ink on paper.
+  Its text needs the printer's font dot patterns, extracted from the Technical Reference's
+  Appendix C into `~/.config/airwriter/iw-fonts/*.json` on Wells's Mac and never committed;
+  without them text draws as boxes.
 - **Raster regression:** `make -C tools/rip regress`; `stream.bin` must match the fixtures byte
   for byte (gray, the iOS capture, and a synthetic sRGB page ripped in colour and as gray). No
   ESP32 needed. `rip --colour --out-preview` shows a colour page in its four inks; `--gain 0`
   turns the dot-gain curve off, `--dither bluenoise` picks the blue-noise screen. The checker
   fixture is pure black and white and must never change; the other three move with any change
-  to a screen, the curve or the ink order, and are regenerated with the reason in the commit.
+  to a screen, the curve, the ink order or how strips are sent, and are regenerated with the
+  reason in the commit. A blank strip is only its held line feed, in gray as in colour.
 - **Firmware:** `idf.py build` clean.
-- **On board 1:** an `ipptool` Print-Job of `fixtures/checker.urf` prints crc32 `8ee84844`.
+- **Web page:** `python3 tools/webui/preview.py`, then http://localhost:8079/_states: every state
+  at desktop and phone width, light and dark, before a change to the page goes to the board.
+- **On board 1:** with Top margin at 0 (`POST /api/general {"top_margin":0}`), an `ipptool`
+  Print-Job of `fixtures/checker.urf` prints crc32 `8ee84844`. At the default (-1 in) the
+  checker, which sits in the page's top inch, prints blank (crc32 `0e5fc630`, 9 bytes).
   After an OTA, `/api/status` reaches `"trial":false` with the new `version`.
 - **Schematic:** `kicad-cli sch erc` → 0 errors; 44 known warnings (42 `lib_symbol_mismatch`,
   2 `isolated_pin_label`).
@@ -304,8 +373,13 @@ firmware/             ESP-IDF 5.5 app; components/ per SPEC §3.1 plus job_pipe,
 tools/rip/            host build of the raster path + host tests for the pure-C cores
 tools/ipp/            IPP host tests and gpa_server (the real encoder on localhost for ipptool)
 tools/ippcap/         stub IPP server that captures a Print-Job body (how fixtures were made)
-tools/webui/          web UI sources; mkheader.py generates firmware's webui_page.h (never hand-edit)
+tools/ethertalk/      etpeer.py, a software EtherTalk Mac for the tunnel and the relay
+tools/webui/          web UI sources and its two emulator icons; mkheader.py generates
+                      firmware's webui_page.h (never hand-edit); preview.py serves the page
+                      in any of states.json's states (no printer, setup mode, a failing
+                      relay, long names...) with no board
 tools/icon/           the printer icon as a pixel grid; mkicons.py writes ipp_server/icons/*.png
+tools/iwview/         iwview.py draws any ImageWriter stream (test page, a LocalTalk capture) as paper
 tools/lights/         the wiki's GIF of every panel light effect, played through led_grid_core;
                       after changing an effect, `make -C tools/lights OUT=<wiki>/images/lights`
 tools/release/        release.sh (build, check, sign, publish), tamper.py (refusal-test images)

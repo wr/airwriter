@@ -6,6 +6,18 @@ Traps already explained in a code comment are listed only when the comment is ea
 
 ## Firmware, FreeRTOS, ESP-IDF
 
+- **A held TLS session in internal RAM starves Wi-Fi.** With mbedTLS on internal RAM, Infinite
+  Mac's relay (W-1076) took ~45 KB and left 4-13 KB (91 bytes at a handshake's worst): the
+  settings page stalled 25 s at a time and every reconnect failed. `CONFIG_MBEDTLS_EXTERNAL_MEM_ALLOC`
+  in `sdkconfig.defaults.esp32s3` fixed it (~42 KB free with the relay up). `/api/et`
+  `internal_ram` shows free, largest block and the low mark without a console.
+- **`esp_websocket_client` holds its lock while it runs your event handler.** A handler that
+  takes a lock your own task holds while calling `esp_websocket_client_send_text` deadlocks. The
+  relay handler only queues and sets flags; sends happen outside the EtherTalk lock.
+- **`esp_websocket_client` keeps the last handshake's status after a failed attempt.** An
+  `ERROR` event reads "101" (the previous success) when the real failure is TLS or a socket;
+  report the TLS error first.
+
 - **A semaphore taken on one task and given on another must be binary, not a mutex.** A mutex
   given by a non-holder trips `xTaskPriorityDisinherit` and panics the board after every job.
   Both carry the comment now. Bit `s_job_lock`
@@ -130,6 +142,16 @@ Traps already explained in a code comment are listed only when the comment is ea
 - **The home mesh: a fast scan joins the first node that answers.** It took a far node on
   channel 1 (−80 to −87 dBm) over a −46 dBm node in the same room; uploads ran at ~6 KB/s and an
   OTA failed. Firmware now scans all channels and joins the strongest AP; don't revert that.
+- **The ESP32's Wi-Fi hands EtherTalk frames over with an 802.3 length of 0.** Seen from a
+  BlueSCSI's DaynaPORT (W-1078): the SNAP header and the DDP datagram are intact, the length
+  field is not. `et_radio_normalize` rebuilds it from the DDP header; don't trust it.
+- **Infinite Mac's emulators send unicast only to MACs starting `B2`.** Theirs all do
+  (`ether_js.cpp`); any other destination is dropped, so a board with another MAC answers the
+  Chooser's lookup and never gets the OpenConn. The zone MAC is `B2` and the station MAC's rest.
+- **An OTA refused as "not signed with this board's key, or damaged" can be a cut upload.** Seen
+  once on W-1076's bench with a correctly signed image (`python -m espsecure verify_signature
+  --version 2 --keyfile firmware/keys/airwriter-release.pub.pem build/airwriter.bin` passed); the
+  same file went in on the next try. Verify the image, then retry once.
 - **Never OTA while a job prints.** It cut two jobs on 2026-10-15. Since W-1048 `/update` refuses
   (409) while a job holds the job lock and gives way to one that arrives mid-upload, but an
   image from before W-1048 still on a board does not. Bench rule in AGENTS.md.
@@ -158,6 +180,21 @@ Traps already explained in a code comment are listed only when the comment is ea
   job's header as dots. The next job resyncs with 1280 NULs + CTRL-X (`iw_resync`,
   `W-1041 Resync the printer after an aborted job so the next job doesn't print garbage`).
   Not covered: a board reboot mid-strip.
+- **Never place the print head with `ESC F`.** On board 1's ImageWriter II (test page, round 1,
+  2026-10-20) lines near one landed inches to the right, whole strips and single colour passes,
+  while AirPrint streams, which never use it, print right. Skip blank columns with zeros (or
+  `ESC V nnnn` + a zero byte, as Ghostscript's driver does) and place text with spaces in a fixed
+  pitch.
+- **A line that runs past 8 in wraps:** its overflow prints from the left margin on the same row
+  (an `ESC F1144` "8" in proportional type landed at 0 in). A line of exactly 1152 dots prints.
+- **Nothing prints above where the head sat at power-on.** The board can add paper ahead of a
+  page or drop its top rows, never roll the sheet back, so paper loaded at the tear edge (about
+  2 3/16 in above the head) loses that much of every page whatever the top margin. Load it under
+  the paper bail. The printer can pull paper back (`ESC r`, LFs, `ESC f`: 1 3/8 in of fanfold
+  went back cleanly on board 1, 2026-10-20), but it counts its page from its top of form: pulled
+  back past it, a form feed only returns to it. `ESC v` sets top of form where the head is.
+- **Board 1's ImageWriter has a dead top pin.** Every strip's first row is blank, so a one-dot
+  rule on bit 0 does not print at all: the test page's rules use pin 5.
 - **`LT_DE` floats whenever the PIC is not driving it** (no PIC, or PIC held in reset, which
   tristates it). Tack 10 k across U6 pins 3–5 before connecting a LocalTalk network.
 - **Never high-voltage program the PIC in its socket.** VPP (~9 V) lands on ESP32 IO2

@@ -56,5 +56,68 @@ int main(void)
         CHECK_EQ_INT(g[2], (77 * 255 + 128) >> 8);
     }
 
+    /* ink_screens: a solid red row prints every magenta and yellow dot and
+     * no cyan or black, through any screen */
+    for (int a = HT_THRESHOLD; a <= HT_BLUENOISE; a++) {
+        enum { W = 64 };
+        uint8_t rgb[W * 3];
+        for (int x = 0; x < W; x++) { rgb[x * 3] = 255; rgb[x * 3 + 1] = 0; rgb[x * 3 + 2] = 0; }
+        uint8_t b[IW_INKS][W / 8];
+        uint8_t *const bits[IW_INKS] = { b[0], b[1], b[2], b[3] };
+        ink_screens_t s;
+        CHECK_EQ_INT(ink_screens_init(&s, (ht_algo_t)a, 0, W), 0);
+        for (int y = 0; y < 3; y++) {
+            ink_screens_row(&s, rgb, bits);
+            int on[IW_INKS] = { 0 };
+            for (int i = 0; i < IW_INKS; i++)
+                for (int x = 0; x < W; x++) on[i] += !!(b[i][x >> 3] & (0x80 >> (x & 7)));
+            CHECK_EQ_INT(on[IW_MAGENTA], W);
+            CHECK_EQ_INT(on[IW_YELLOW], W);
+            CHECK_EQ_INT(on[IW_CYAN], 0);
+            CHECK_EQ_INT(on[IW_BLACK], 0);
+        }
+        ink_screens_free(&s);
+    }
+
+    /* ink_screens: a mid gray prints in black alone */
+    {
+        enum { W = 64 };
+        uint8_t rgb[W * 3];
+        memset(rgb, 128, sizeof rgb);
+        uint8_t b[IW_INKS][W / 8];
+        uint8_t *const bits[IW_INKS] = { b[0], b[1], b[2], b[3] };
+        ink_screens_t s;
+        CHECK_EQ_INT(ink_screens_init(&s, HT_BLUENOISE, 0, W), 0);
+        ink_screens_row(&s, rgb, bits);
+        int k = 0, other = 0;
+        for (int x = 0; x < W / 8; x++) {
+            k += __builtin_popcount(b[IW_BLACK][x]);
+            other += __builtin_popcount(b[IW_CYAN][x] | b[IW_MAGENTA][x] | b[IW_YELLOW][x]);
+        }
+        CHECK(k > W / 4 && k < W * 3 / 4);
+        CHECK_EQ_INT(other, 0);
+        ink_screens_free(&s);
+    }
+
+    /* ink_screen_phase: cyan reads black's tile upside down, so a mid gray
+     * through the two puts their dots in different places */
+    {
+        enum { W = 64 };
+        uint8_t gray[W], bk[W / 8], cy[W / 8];
+        memset(gray, 128, sizeof gray);
+        ht_t hk, hc;
+        ht_init(&hk, HT_BLUENOISE, W);
+        ht_init(&hc, HT_BLUENOISE, W);
+        ink_screen_phase(&hk, IW_BLACK);
+        ink_screen_phase(&hc, IW_CYAN);
+        ht_row(&hk, gray, bk);
+        ht_row(&hc, gray, cy);
+        int shared = 0;
+        for (int x = 0; x < W / 8; x++) shared += __builtin_popcount(bk[x] & cy[x]);
+        CHECK(shared < W / 8);
+        ht_free(&hk);
+        ht_free(&hc);
+    }
+
     TEST_END;
 }

@@ -36,10 +36,13 @@
 #include "net_provision.h"
 #include "pic_prog.h"
 #include "localtalk.h"
+#include "ethertalk.h"
 #include "lt_node.h"
 #include "ota_health.h"
 #include "fw_update.h"
 #include "cable_test.h"
+#include "testpage.h"
+#include "esp_heap_caps.h"
 #include "esp_app_desc.h"
 #include "esp_partition.h"
 #if CONFIG_BOOTLOADER_RESERVE_RTC_MEM
@@ -147,6 +150,13 @@ static SemaphoreHandle_t s_job_lock;
 // and gives way to a job that arrives meanwhile. A job that finds the lock
 // taken raises this; the update reads it between chunks and lets go. Only
 // jobs raise it -- a refused CTRL-X kick or TashTalk flash is not a job.
+// The test page holds s_job_lock, and a second tap cancels it (W-1049). The
+// tap and the page's end decide under s_tap_mux, so a tap landing as the page
+// finishes can never set its cancel on the next job instead.
+static portMUX_TYPE s_tap_mux = portMUX_INITIALIZER_UNLOCKED;
+static int s_test_running;      // the test page holds the lock
+static volatile int s_test_cancel;  // a second tap asked to stop it
+
 static volatile int s_job_waiting;
 // Uptime seconds of the last job's start or end, -1 for none yet:
 // auto-update installs only once the board has been idle for a while.
@@ -267,6 +277,17 @@ static volatile int s_ipp_owns;
 
 // The printer stream: checksummed so the device can be compared with tools/rip
 // byte for byte, then put on the wire.
+// The last stream left the paper away from top of form (cut, or a Mac's that
+// stopped mid-page): a form feed first, so this job starts on a fresh page.
+// Outside the CRC, as the resync is; after it, in text mode.
+static esp_err_t paper_to_tof(void)
+{
+    if (!iw_link_need_ff(&s_link) || AW_LOOPBACK) return ESP_OK;
+    ESP_LOGW(TAG, "the paper was left mid-page; a form feed first");
+    static const uint8_t ff[] = { 0x0C };
+    return serial_out_write(ff, sizeof ff);
+}
+
 static void printer_out(void *ctx, const uint8_t *buf, size_t n)
 {
     (void)ctx;
@@ -283,6 +304,7 @@ static void printer_out(void *ctx, const uint8_t *buf, size_t n)
         iw_resync(resync_out, &err);
         if (err != ESP_OK) { printer_fail(); return; }
     }
+    if (paper_to_tof() != ESP_OK) { printer_fail(); return; }
     if (serial_out_write(buf, n) != ESP_OK) printer_fail();
 }
 
@@ -299,9 +321,18 @@ static volatile int        s_line_seen;     // serial_out has reported the line
 
 static char s_suffix[8];            // the MAC's last two bytes, the default hostname's
 
+// W-1079: what the page last saved, beside s_set's names in use since boot:
+// a new name or hostname reaches mDNS and the Chooser only at a restart.
+static char s_saved_model[SET_QUEUE_MAX], s_saved_name[SET_QUEUE_MAX], s_saved_host[SET_HOST_MAX];
+// The DIP bank as last read, for the page (W-1079). Unknown until the first.
+static dip_config_t s_dip;
+static volatile int s_dip_known;
+
 // The page saved queue, hostname, dither or gain (W-1068): re-read them, and
 // give the pipe and the test page the screen they now name. The hostname
 // and queue still take a restart to reach mDNS, as they always have.
+static void lt_port_apply(int on);
+
 static void general_saved(void *ctx)
 {
     (void)ctx;
@@ -313,6 +344,23 @@ static void general_saved(void *ctx)
     if (ht_algo_from_name(s_set.dither, &algo)) algo = HT_ATKINSON;
     job_pipe_set_screen(algo, s_set.gain);
     ESP_LOGI(TAG, "screen now %s, gain %u%%", s_set.dither, s_set.gain);
+    if (fresh.top_margin != s_set.top_margin) {
+        s_set.top_margin = fresh.top_margin;
+        job_pipe_set_top_margin(s_set.top_margin);
+        ESP_LOGI(TAG, "top margin now %d/144 in", s_set.top_margin);
+    }
+    // W-1079: the names wait for a restart; the switches act now.
+    snprintf(s_saved_model, sizeof s_saved_model, "%s", fresh.model);
+    snprintf(s_saved_name, sizeof s_saved_name, "%s", fresh.name);
+    snprintf(s_saved_host, sizeof s_saved_host, "%s", fresh.hostname);
+    if (fresh.airprint != s_set.airprint) {
+        s_set.airprint = fresh.airprint;
+        ipp_server_set_airprint(s_set.airprint);
+    }
+    if (fresh.lt_port >= 0 && fresh.lt_port != s_set.lt_port) {
+        s_set.lt_port = fresh.lt_port;
+        lt_port_apply(s_set.lt_port);
+    }
 }
 
 static const char *ribbon_name(uint8_t r)
@@ -331,7 +379,7 @@ static const char *ribbon_name(uint8_t r)
 static void ribbon_check(int for_job)
 {
     if (AW_LOOPBACK) return;
-    for (uint32_t ms = 0; for_job && !serial_out_clear() && !s_job_cancelled &&
+    for (uint32_t ms = 0; for_job && !serial_out_clear() && !s_job_cancelled && !s_test_cancel &&
                           ms < CONFIG_AIRWRITER_STALL_ABORT * 1000u; ms += 100)
         vTaskDelay(pdMS_TO_TICKS(100));
     if (!serial_out_clear()) return;
@@ -563,19 +611,30 @@ static void doc_end(void *ctx, int ok)
     job_finished(&st, 0);
 }
 
-// ---------------------------------------------------------- LocalTalk jobs
+// ---------------------------------------------------------- AppleTalk jobs
 // W-1053: a PAP job is the Mac driver's own ImageWriter stream, so it goes to
 // the printer as it is -- no rip -- under the same job lock as an IPP job or a
-// test page. localtalk.c spools it and calls these from its print task (begin
-// from the LocalTalk task). Whether a job that ended was cut mid-command is
-// read off its bytes (iw_scan): a Mac that cancels just closes the connection,
-// wherever its stream is, and W-1041's resync then runs before the next job.
+// test page. at_printer.c spools it for whichever link it came in on (the
+// cable, or W-1076's EtherTalk links) and calls these from its print task
+// (begin from the link's task). Whether a job that ended was cut mid-command
+// is read off its bytes (iw_scan): a Mac that cancels just closes the
+// connection, wherever its stream is, and W-1041's resync then runs before the
+// next job.
 
-static volatile int s_lt_job;      // a LocalTalk job holds s_job_lock
 static iw_scan_t    s_lt_scan;
 static size_t       s_lt_bytes;
 
-static int lt_print_begin(void *ctx)
+static const char *lt_job_name(at_link_t link)
+{
+    switch (link) {
+    case AT_LINK_TUNNEL: return "Basilisk II job";
+    case AT_LINK_ZONE:   return "Infinite Mac job";
+    case AT_LINK_RADIO:  return "EtherTalk job";
+    default:             return "LocalTalk job";
+    }
+}
+
+static int lt_print_begin(void *ctx, at_link_t link)
 {
     (void)ctx;
     // Never waits: the LocalTalk task must keep answering the Mac, which is
@@ -584,8 +643,7 @@ static int lt_print_begin(void *ctx)
         s_job_waiting = 1;
         return 1;
     }
-    s_lt_job = 1;
-    strncpy(s_last_job, "LocalTalk job", sizeof s_last_job - 1);
+    strncpy(s_last_job, lt_job_name(link), sizeof s_last_job - 1);
     s_stream_crc = 0;
     s_printer_failed = 0;
     s_job_cancelled = 0;
@@ -599,7 +657,7 @@ static int lt_print_begin(void *ctx)
     printer_state_post(PS_EV_JOB_START);
     serial_out_loopback_reset();
     printer_state_post(PS_EV_ACTIVITY);
-    ESP_LOGI(TAG, "LocalTalk job starts");
+    ESP_LOGI(TAG, "%s starts", lt_job_name(link));
     return 0;
 }
 
@@ -616,6 +674,7 @@ static int lt_print_write(void *ctx, const uint8_t *d, size_t n)
         iw_resync(resync_out, &err);
         if (err != ESP_OK) goto fail;
     }
+    if (paper_to_tof() != ESP_OK) goto fail;
     if (serial_out_write(d, n) == ESP_OK) return 0;
 fail:
     // Paused past STALL_ABORT: the Mac is told (CloseConn) and its queued
@@ -633,16 +692,17 @@ static int lt_print_end(void *ctx, int normal)
     // The last bytes never left: paper out on the last line, past the limit.
     if (clean && flushed != ESP_OK) s_printer_failed = 1;
     if (flushed != ESP_OK) serial_out_purge();
-    iw_link_job_end(&s_link, flushed == ESP_OK);
+    // The Mac's driver feeds to the next page by line, never by form feed.
+    iw_link_job_end_at(&s_link, flushed == ESP_OK, iw_scan_at_tof(&s_lt_scan));
     s_last_bytes = s_lt_bytes;
     s_last_pages = 0;
-    // In /api/lt too: the console is not always attached.
+    // In the link's log too (/api/lt, /api/et): the console is not always attached.
     char line[100];
     snprintf(line, sizeof line, "job %s: %u bytes, crc32 %08x",
-             flushed == ESP_OK ? "printed" : s_printer_failed ? "failed"
+             flushed == ESP_OK ? (s_lt_bytes ? "printed" : "empty") : s_printer_failed ? "failed"
              : normal ? "cut short" : "abandoned",
              (unsigned)s_lt_bytes, (unsigned)s_stream_crc);
-    localtalk_note(line);
+    at_printer_note(line);
     if (AW_LOOPBACK && flushed == ESP_OK) {
         size_t got; uint32_t crc;
         serial_out_loopback_wait(s_lt_bytes, 3000);
@@ -650,15 +710,16 @@ static int lt_print_end(void *ctx, int normal)
         snprintf(line, sizeof line, "uart loopback: %u/%u bytes back, crc32 %08x: %s",
                  (unsigned)got, (unsigned)s_lt_bytes, (unsigned)crc,
                  got == s_lt_bytes && crc == s_stream_crc ? "intact" : "MISMATCH");
-        localtalk_note(line);
+        at_printer_note(line);
     }
     // A Mac that cancels is a done job, as Cancel-Job is; a printer that gave
     // up is a failed one.
     printer_state_post(s_printer_failed ? PS_EV_JOB_FAILED : PS_EV_JOB_DONE);
     s_printing = 0;
     job_touch();
-    s_lt_job = 0;
-    if (flushed == ESP_OK) ota_health_printed();   // W-1059, under the job lock
+    // W-1059, under the job lock; an empty job (a Mac that opened and closed,
+    // or an idle relay peer) proves nothing about this firmware.
+    if (flushed == ESP_OK && s_lt_bytes) ota_health_printed();
     xSemaphoreGive(s_job_lock);
     return flushed == ESP_OK;
 }
@@ -702,15 +763,44 @@ static void on_activity(void)
     printer_state_post(PS_EV_ACTIVITY);
 }
 
-#define TESTPAGE_W 1152
-#define TESTPAGE_H 64
+// The page's stop: a second tap. Asked before every line and strip, so it
+// also notes how low the internal heap goes while the page holds its bands.
+static size_t s_tp_heap_low;
+static size_t s_tp_bytes;
 
-// The test page holds s_job_lock, and a second tap cancels it (W-1049). The
-// tap and the page's end decide under s_tap_mux, so a tap landing as the page
-// finishes can never set its cancel on the next job instead.
-static portMUX_TYPE s_tap_mux = portMUX_INITIALIZER_UNLOCKED;
-static int s_test_running;      // the test page holds the lock
-static int s_test_cancel;       // a second tap asked to stop it
+static int test_page_stop(void *ctx)
+{
+    (void)ctx;
+    size_t f = heap_caps_get_free_size(MALLOC_CAP_INTERNAL);
+    if (f < s_tp_heap_low) s_tp_heap_low = f;
+    // A failed write (a cancel, a stall) drops the rest; no point making it.
+    return s_test_cancel || s_printer_failed;
+}
+
+static void test_page_out(void *ctx, const uint8_t *buf, size_t n)
+{
+    s_tp_bytes += n;
+    printer_out(ctx, buf, n);
+}
+
+// What the page says AppleTalk is: the ways in that are on, as the settings
+// page's cards name them.
+static void appletalk_text(char *out, size_t cap)
+{
+    int tunnel = 0, radio = 0, infinite = 0;
+    char zone[40];
+    if (ethertalk_running()) ethertalk_settings(&tunnel, &radio, &infinite, zone, sizeof zone);
+    const char *on[4];
+    int n = 0;
+    if (localtalk_running() && !localtalk_quiet()) on[n++] = "AppleTalk port";
+    if (radio)    on[n++] = "networked Macs";
+    if (tunnel)   on[n++] = "Basilisk II";
+    if (infinite) on[n++] = "Infinite Mac";
+    out[0] = '\0';
+    for (int i = 0; i < n; i++)
+        snprintf(out + strlen(out), cap - strlen(out), "%s%s", i ? ", " : "", on[i]);
+    if (!n) snprintf(out, cap, "Off");
+}
 
 static void test_page_task(void *arg)
 {
@@ -720,43 +810,40 @@ static void test_page_task(void *arg)
     iw_link_job_start(&s_link);
     led_grid_set_source(LG_SRC_AIRPRINT);
     printer_state_post(PS_EV_JOB_START);
+    // As a job does: the page prints for the ribbon that is in now. The wait
+    // for a printer that is not ready ends on a second tap; an AirPrint
+    // job's cancel, left set by the last one, must not end it.
+    s_job_cancelled = 0;
+    ribbon_check(1);
 
     ht_algo_t algo;
     if (ht_algo_from_name(s_set.dither, &algo)) algo = HT_ATKINSON;
+    const esp_app_desc_t *app = esp_app_get_description();
+    char built[sizeof app->date], ap[32], at[80];
+    size_t k = 0;                               // "Oct  5 2026" reads "Oct 5 2026"
+    for (const char *c = app->date; *c && k + 1 < sizeof built; c++)
+        if (!(*c == ' ' && k && built[k - 1] == ' ')) built[k++] = *c;
+    built[k] = '\0';
+    snprintf(ap, sizeof ap, "AirWriter-%s", s_suffix);
+    appletalk_text(at, sizeof at);
+    tp_info_t info = {
+        .version = app->version, .built = built, .model = s_set.model, .name = s_set.queue,
+        .host = s_set.hostname, .ip = s_ip, .setup_ssid = s_ap_mode ? ap : NULL,
+        .appletalk = at, .ribbon = (iw_ribbon_t)s_ribbon, .screen = algo, .gain = s_set.gain,
+        .top_margin = s_set.top_margin,
+    };
+    tp_io_t io = { .out = test_page_out, .stop = test_page_stop };
+    size_t heap0 = heap_caps_get_free_size(MALLOC_CAP_INTERNAL);
+    s_tp_heap_low = heap0;
+    s_tp_bytes = 0;
+    tp_result_t rc = tp_print(&info, &io);
+    if (rc == TP_NOMEM) s_printer_failed = 1;
+    ESP_LOGI(TAG, "test page: %s, %u bytes, crc32 %08x; internal heap %u KB free, "
+                  "%u KB at its lowest; %u bytes of stack to spare",
+             rc == TP_DONE ? "sent" : rc == TP_STOPPED ? "stopped" : "out of memory",
+             (unsigned)s_tp_bytes, (unsigned)s_stream_crc, (unsigned)(heap0 / 1024),
+             (unsigned)(s_tp_heap_low / 1024), (unsigned)uxTaskGetStackHighWaterMark(NULL));
 
-    ht_t h;
-    if (ht_init(&h, algo, TESTPAGE_W) != 0) {
-        ESP_LOGE(TAG, "test page: ht_init failed");
-        s_printer_failed = 1;
-    } else {
-        ht_set_gain(&h, s_set.gain);
-        static iw_t w;
-        iw_init(&w, TESTPAGE_W, printer_out, NULL);
-        iw_begin_page(&w);
-
-        uint8_t gray[TESTPAGE_W];
-        uint8_t bits[(TESTPAGE_W + 7) / 8];
-        for (uint32_t y = 0; y < TESTPAGE_H; y++) {
-            if (y < TESTPAGE_H - 8) {
-                // 8px checkerboard bands, alternating phase band to band, so a
-                // dot-alignment error shows as a shifted grid rather than a
-                // gray smear.
-                int phase = (int)(y / 8) & 1;
-                for (uint32_t x = 0; x < TESTPAGE_W; x++)
-                    gray[x] = (((x / 8) & 1) == (uint32_t)phase) ? 0 : 255;
-            } else {
-                // Final band: a 0->255 gradient, one dithered level per column
-                // group, to check the algorithm across the whole gray range.
-                for (uint32_t x = 0; x < TESTPAGE_W; x++)
-                    gray[x] = (uint8_t)(x * 255 / (TESTPAGE_W - 1));
-            }
-            ht_row(&h, gray, bits);
-            iw_row(&w, bits);
-        }
-
-        iw_end_page(&w);
-        ht_free(&h);
-    }
     // As job_finished does: the last byte has to clear before the page counts
     // as printed, a cancel stops that wait, and a tail that did not go out is
     // purged so it cannot print ahead of the next job, which then resyncs.
@@ -765,9 +852,12 @@ static void test_page_task(void *arg)
     if (flushed != ESP_OK) serial_out_purge();
     iw_link_job_end(&s_link, flushed == ESP_OK);
 
+    // The cancel is cleared with the page: ribbon_check's wait reads it for
+    // every job, and a stale one would skip asking the ribbon.
     portENTER_CRITICAL(&s_tap_mux);
     s_test_running = 0;
     int cancelled = s_test_cancel;
+    s_test_cancel = 0;
     portEXIT_CRITICAL(&s_tap_mux);
     // A cancel that came too late to cut anything is a page that printed.
     printer_state_post(flushed == ESP_OK ? PS_EV_JOB_DONE
@@ -790,7 +880,7 @@ static void test_page_locked(void)
     s_test_running = 1;
     s_test_cancel = 0;
     portEXIT_CRITICAL(&s_tap_mux);
-    if (xTaskCreate(test_page_task, "test_page", 4096, NULL, 3, NULL) != pdPASS) {
+    if (xTaskCreate(test_page_task, "test_page", 6144, NULL, 3, NULL) != pdPASS) {
         ESP_LOGE(TAG, "test page: could not create task");
         portENTER_CRITICAL(&s_tap_mux);
         s_test_running = 0;
@@ -892,7 +982,10 @@ static void dip_on_change(const dip_config_t *cfg)
     if (cfg->dev_mode)
         ESP_LOGI(TAG, "dip: dev_mode is on, but the printer uuid stays Kconfig-driven this rev");
     if (cfg->test_on_boot) s_test_on_boot = 1;
-    if (cfg->mode == 2) lt_start("DIP mode 2");
+    s_dip = *cfg;
+    s_dip_known = 1;
+    // W-1079: once the page has set the AppleTalk port, its switch decides.
+    if (cfg->mode == 2 && s_set.lt_port < 0) lt_start("DIP mode 2");
     else if (localtalk_running())
         ESP_LOGI(TAG, "dip: LocalTalk stays on until the board restarts");
 }
@@ -942,6 +1035,45 @@ static void reset_task(void *arg)
     restart_when_released();
 }
 
+// W-1079: the settings page's Restart, Erase All Settings and Print Test Page.
+// Restart lets a printing page finish (up to its own 10-minute stall limit).
+static void restart_task(void *arg)
+{
+    (void)arg;
+    for (int i = 0; i < 1300 && s_printing; i++) vTaskDelay(pdMS_TO_TICKS(500));
+    vTaskDelay(pdMS_TO_TICKS(300));                    // the reply goes out first
+    esp_restart();
+}
+
+static void web_restart(void *ctx)
+{
+    (void)ctx;
+    ESP_LOGW(TAG, "restart from the settings page%s", s_printing ? ", after this page" : "");
+    if (xTaskCreate(restart_task, "restart", 2048, NULL, 5, NULL) != pdPASS)
+        ESP_LOGE(TAG, "restart: could not start");
+}
+
+// As the held button's reset, with nothing to wait for being let go.
+static void web_erase(void *ctx)
+{
+    (void)ctx;
+    ESP_LOGW(TAG, "factory reset from the settings page");
+    s_reset_released = 1;
+    if (xTaskCreate(reset_task, "reset", 3072, NULL, 5, NULL) != pdPASS) {
+        ESP_LOGE(TAG, "factory reset: could not start");
+        led_grid_action(LG_ACT_RESET_FAILED, 0);
+    }
+}
+
+static int web_test_page(void *ctx)
+{
+    (void)ctx;
+    on_activity();
+    if (xSemaphoreTake(s_job_lock, 0) != pdTRUE) return 1;
+    test_page_locked();
+    return 0;
+}
+
 // On dip_config's poll task: start work, never wait on it.
 static void on_hold(btn_ev_t ev)
 {
@@ -981,6 +1113,13 @@ static volatile int s_boot_reset;
 
 // ----------------------------------------------------------------- wifi
 
+// An IPv4 address in host order (W-1076: the tunnel's MAC is made of it).
+static uint32_t ip_host(const esp_ip4_addr_t *a)
+{
+    return (uint32_t)esp_ip4_addr1(a) << 24 | (uint32_t)esp_ip4_addr2(a) << 16 |
+           (uint32_t)esp_ip4_addr3(a) << 8 | esp_ip4_addr4(a);
+}
+
 static void wifi_event(void *arg, esp_event_base_t base, int32_t id, void *data)
 {
     (void)arg;
@@ -991,6 +1130,7 @@ static void wifi_event(void *arg, esp_event_base_t base, int32_t id, void *data)
     } else if (base == WIFI_EVENT && id == WIFI_EVENT_STA_DISCONNECTED) {
         wifi_event_sta_disconnected_t *d = (wifi_event_sta_disconnected_t *)data;
         if (s_wifi_was_up) {
+            ethertalk_net_down();                       // W-1076: its jobs end now
             printer_state_post(PS_EV_WIFI_DOWN);
             ota_health_set(OH_STA_UP, 0);
             strncpy(s_ip, "0.0.0.0", sizeof s_ip - 1);
@@ -1016,6 +1156,7 @@ static void wifi_event(void *arg, esp_event_base_t base, int32_t id, void *data)
         printer_state_post(PS_EV_WIFI_UP);
         ota_health_set(OH_STA_UP, 1);
         fw_update_net_up();
+        ethertalk_ip_changed(ip_host(&e->ip_info.ip));     // the tunnel's MAC is the IP
         xEventGroupSetBits(s_wifi_events, WIFI_CONNECTED_BIT);
     }
 }
@@ -1164,6 +1305,21 @@ static const char *reset_name(esp_reset_reason_t r)
     }
 }
 
+// A string for a JSON value: quotes and backslashes escaped, control
+// characters dropped. Network names and printer names are the user's.
+static const char *json_esc(char *dst, size_t cap, const char *src)
+{
+    size_t k = 0;
+    for (; src && *src && k + 2 < cap; src++) {
+        unsigned char c = (unsigned char)*src;
+        if (c < 0x20) continue;
+        if (c == '"' || c == '\\') dst[k++] = '\\';
+        dst[k++] = (char)c;
+    }
+    dst[k] = '\0';
+    return dst;
+}
+
 static void status_json(void *ctx, char *buf, size_t cap)
 {
     (void)ctx;
@@ -1178,6 +1334,16 @@ static void status_json(void *ctx, char *buf, size_t cap)
     wifi_ap_record_t ap;
     int joined = !s_ap_mode && esp_wifi_sta_get_ap_info(&ap) == ESP_OK;
 
+    // W-1079: the DIP bank as switches 1-8, "1" for on; "" before the first read.
+    char dip[9] = "";
+    if (s_dip_known) {
+        uint8_t on = (uint8_t)(s_dip.mode | s_dip.dev_mode << 2 | s_dip.test_on_boot << 3 |
+                               s_dip.dither_ovr << 4 | s_dip.gamer << 6 | s_dip.spare << 7);
+        for (int i = 0; i < 8; i++) dip[i] = (on >> i) & 1 ? '1' : '0';
+        dip[8] = '\0';
+    }
+    char e_ssid[80], e_queue[80], e_job[200], e_model[80], e_name[80], e_host[96], e_phost[96], e_uri[200];
+
     char job[96];
     if (s_last_job[0])
         snprintf(job, sizeof job, "%s (%u page%s)", s_last_job,
@@ -1189,34 +1355,40 @@ static void status_json(void *ctx, char *buf, size_t cap)
         "{\"state\":\"%s\",\"ps\":\"%s\",\"asleep\":%s,\"stopped\":%s,\"setup\":%s,\"job\":\"%s\","
         "\"fault\":%s,\"printer\":%s,\"printing\":%s,\"ribbon\":\"%s\","
         "\"queue\":\"%s\",\"host\":\"%s.local\",\"ip\":\"%s\","
-        "\"ssid\":\"%s\",\"dither\":\"%s\",\"gain\":%u,\"signal\":\"%s\","
+        "\"ssid\":\"%s\",\"dither\":\"%s\",\"gain\":%u,\"top_margin\":%d,\"signal\":\"%s\","
         "\"channel\":\"%s\",\"security\":\"%s\",\"uri\":\"%s\","
         "\"uptime\":\"%uh %02um\",\"reset\":\"%s\",\"version\":\"%s\",\"heap\":\"%u KB\","
         "\"slot\":\"%s\",\"trial\":%s,\"rolled_back\":\"%s\","
         "\"known_good\":\"%s\",\"known_good_version\":\"%s\","
-        "\"model\":\"Apple ImageWriter II\",\"pic\":%s}",
+        "\"model\":\"Apple ImageWriter II\",\"pic\":%s,"
+        "\"pmodel\":\"%s\",\"pname\":\"%s\",\"phost\":\"%s\",\"airprint\":%s,"
+        "\"lt_port\":%d,\"lt\":%s,\"dip\":\"%s\",\"ap\":\"AirWriter-%s\"}",
         state_text(v.state),
         ps_name(v.state),
         v.asleep ? "true" : "false",
         attention || offline ? "true" : "false",
         s_ap_mode ? "true" : "false",
-        job,
+        json_esc(e_job, sizeof e_job, job),
         attention || failed ? "true" : "false",
         serial_out_clear() ? "true" : "false",
         s_printing ? "true" : "false", ribbon_name(s_ribbon),
-        s_set.queue, s_set.hostname, s_ip,
-        joined ? (char *)ap.ssid : (s_ap_mode ? "" : s_set.ssid),
-        s_set.dither, (unsigned)s_set.gain,
+        json_esc(e_queue, sizeof e_queue, s_set.queue), json_esc(e_host, sizeof e_host, s_set.hostname), s_ip,
+        // in setup mode, the network it could not join ("" if none was set)
+        json_esc(e_ssid, sizeof e_ssid, joined ? (char *)ap.ssid : s_set.ssid),
+        s_set.dither, (unsigned)s_set.gain, (int)s_set.top_margin,
         joined ? (ap.rssi > -55 ? "Excellent" : ap.rssi > -67 ? "Good"
                 : ap.rssi > -75 ? "Fair" : "Weak") : "",
         joined ? "2.4 GHz" : "",
         joined ? auth_name(ap.authmode) : "",
-        s_ap_mode ? "" : ipp_server_uri(),
+        s_ap_mode ? "" : json_esc(e_uri, sizeof e_uri, ipp_server_uri()),
         (unsigned)(up / 3600), (unsigned)((up / 60) % 60),
         reset_name(esp_reset_reason()), app->version, (unsigned)(esp_get_free_heap_size() / 1024),
         ota_health_slot(), ota_health_on_trial() ? "true" : "false", ota_health_rolled_back(),
         ota_health_known_good(), ota_health_known_good_version(),
-        pic_prog_available() ? "true" : "false");
+        pic_prog_available() ? "true" : "false",
+        json_esc(e_model, sizeof e_model, s_saved_model), json_esc(e_name, sizeof e_name, s_saved_name),
+        json_esc(e_phost, sizeof e_phost, s_saved_host), s_set.airprint ? "true" : "false", s_set.lt_port,
+        localtalk_running() && !localtalk_quiet() ? "true" : "false", dip, s_suffix);
 }
 
 static void lt_json(void *ctx, char *buf, size_t cap)
@@ -1237,16 +1409,38 @@ static void lt_echo(void *ctx, int node)
     localtalk_echo((uint8_t)node);
 }
 
+// W-1076: the EtherTalk links on the web page.
+static void et_json(void *ctx, char *buf, size_t cap)
+{
+    (void)ctx;
+    ethertalk_json(buf, cap);
+}
+
+static void et_settings_get(void *ctx, int *tunnel, int *radio, int *infinite, char *zone, size_t cap)
+{
+    (void)ctx;
+    ethertalk_settings(tunnel, radio, infinite, zone, cap);
+}
+
+static int et_settings_set(void *ctx, int tunnel, int radio, int infinite, const char *zone)
+{
+    (void)ctx;
+    esp_err_t err = ethertalk_apply(tunnel, radio, infinite, zone);
+    if (err == ESP_ERR_INVALID_ARG) return -1;
+    if (err != ESP_OK) ESP_LOGE(TAG, "EtherTalk settings not saved: %s", esp_err_to_name(err));
+    return 0;
+}
+
 // The printer's state as the LocalTalk Option Card's status word, which the
-// Mac's driver reads with PAP SendStatus.
-static uint16_t lt_status(ps_state_t st)
+// Mac's driver reads with PAP SendStatus, for a node on `link`.
+static uint16_t lt_status(ps_state_t st, at_link_t link)
 {
     switch (st) {
     case PS_ATTENTION: return LT_IW_PAPER_OUT | LT_IW_OFFLINE | LT_IW_FAULT;
     case PS_OFFLINE:   return LT_IW_OFFLINE;
     // Busy is for someone else's job. A Mac told "busy" about its own sits on
     // the connection and never sends (W-1051 bench).
-    case PS_PRINTING:  return s_lt_job ? 0 : LT_IW_BUSY;
+    case PS_PRINTING:  return at_job_link() == (int)link ? 0 : LT_IW_BUSY;
     default:           return 0;
     }
 }
@@ -1256,7 +1450,7 @@ static uint16_t lt_status(ps_state_t st)
 // 6 s; each one still keeps the panel awake.
 #define MAC_BLIP_EVERY_MS 6000
 
-#if CONFIG_AIRWRITER_PIC_CLK_PIN >= 0 && CONFIG_AIRWRITER_PIC_DAT_PIN >= 0
+// Both the cable's node and the EtherTalk links (W-1076) report here.
 static void lt_event(lt_event_t ev)
 {
     static uint32_t last;
@@ -1270,7 +1464,6 @@ static void lt_event(lt_event_t ev)
     last = now;
     led_grid_blip(LG_BLIP_MAC);
 }
-#endif
 
 // W-1051: the LocalTalk node, in DIP mode 2 or on a bench build. It owns its
 // UART and the PIC's pins from here until reboot.
@@ -1287,7 +1480,7 @@ static void lt_start(const char *why)
         .cts_pin  = CONFIG_AIRWRITER_LT_CTS_PIN,
         .object   = s_set.queue,
         .type     = CONFIG_AIRWRITER_LT_NBP_TYPE,
-        .status   = lt_status(printer_state_view().state),
+        .status   = lt_status(printer_state_view().state, AT_LINK_CABLE),
         .printer  = { .begin = lt_print_begin, .write = lt_print_write, .end = lt_print_end },
         .on_event = lt_event,
     };
@@ -1297,6 +1490,41 @@ static void lt_start(const char *why)
 #else
     (void)why;
 #endif
+}
+
+// W-1079: the AppleTalk port's switch. Off quiets a running node (it cannot
+// stop); on starts one, or wakes a quiet one.
+static void lt_port_apply(int on)
+{
+    if (!on) {
+        localtalk_set_quiet(1);
+        return;
+    }
+    if (localtalk_running()) localtalk_set_quiet(0);
+    else lt_start("the settings page");
+}
+
+// W-1076, W-1078: EtherTalk for Macs on this network, Basilisk II and
+// Infinite Mac, whatever the DIP mode, once the station has an address. Each
+// way in is a setting.
+static void et_start(void)
+{
+    ps_state_t st = printer_state_view().state;
+    esp_netif_ip_info_t ip = {0};
+    esp_netif_t *sta = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
+    if (sta) esp_netif_get_ip_info(sta, &ip);
+    ethertalk_cfg_t c = {
+        .object        = s_set.queue,
+        .type          = CONFIG_AIRWRITER_LT_NBP_TYPE,
+        .tunnel_status = lt_status(st, AT_LINK_TUNNEL),
+        .zone_status   = lt_status(st, AT_LINK_ZONE),
+        .radio_status  = lt_status(st, AT_LINK_RADIO),
+        .ip            = ip_host(&ip.ip),
+        .printer       = { .begin = lt_print_begin, .write = lt_print_write, .end = lt_print_end },
+        .on_event      = lt_event,
+    };
+    esp_err_t err = ethertalk_start(&c);
+    if (err != ESP_OK) ESP_LOGE(TAG, "EtherTalk did not start: %s", esp_err_to_name(err));
 }
 
 static void localtalk_flash(void *ctx, char *buf, size_t cap)
@@ -1368,7 +1596,9 @@ static void on_ps_change(const ps_view_t *v)
         ipp_server_set_stopped("other", "Printer offline");
     else
         ipp_server_set_stopped(NULL, NULL);
-    localtalk_set_status(lt_status(v->state));
+    localtalk_set_status(lt_status(v->state, AT_LINK_CABLE));
+    ethertalk_set_status(lt_status(v->state, AT_LINK_TUNNEL), lt_status(v->state, AT_LINK_ZONE),
+                         lt_status(v->state, AT_LINK_RADIO));
 }
 
 // ------------------------------------------------------- firmware updates
@@ -1471,9 +1701,14 @@ void app_main(void)
     // Wi-Fi saved before this restart: green greets the join (W-1049).
     if (settings_take_wifi_fresh()) printer_state_post(PS_EV_WIFI_FRESH);
     ota_health_start(s_set.ssid[0] != 0);
+    snprintf(s_saved_model, sizeof s_saved_model, "%s", s_set.model);
+    snprintf(s_saved_name, sizeof s_saved_name, "%s", s_set.name);
+    snprintf(s_saved_host, sizeof s_saved_host, "%s", s_set.hostname);
 #if CONFIG_AIRWRITER_LT_BENCH
     lt_start("bench build");
+    if (s_set.lt_port == 0) localtalk_set_quiet(1);
 #endif
+    if (s_set.lt_port == 1) lt_start("the settings page");
 
     raster_selftest();
 
@@ -1508,6 +1743,7 @@ void app_main(void)
     xTaskCreate(kick_task, "kick", 4096, NULL, 3, NULL);
 
     job_pipe_cfg_t pipe = { .out = printer_out, .dither = algo, .gain = s_set.gain,
+                            .top_margin = s_set.top_margin,
                             .done = pipe_done, .colour_ok = colour_ok };
     ESP_ERROR_CHECK(job_pipe_init(&pipe));
 
@@ -1543,9 +1779,10 @@ void app_main(void)
         ota_health_set(OH_AP_UP, 1);
         fwu_start(1);
         webui_cfg_t wcfg = { .status_json = status_json, .general_saved = general_saved, .captive = 1,
+                              .restart = web_restart, .erase = web_erase, .test_page = web_test_page,
                               .localtalk_flash = localtalk_flash,
                               .lt_json = lt_json, .lt_job = lt_job, .lt_echo = lt_echo,
-                              .cable_test = cable_web };
+                              .cable_test = cable_web };   // no EtherTalk: the zone stays off the open AP
         ESP_ERROR_CHECK(webui_start(&wcfg));
         ota_health_set(OH_WEB_UP, 1);
 
@@ -1562,6 +1799,7 @@ void app_main(void)
         .sink = { .begin = doc_begin, .data = doc_data, .end = doc_end,
                   .cancel = doc_cancel, .ctx = NULL },
     };
+    ipp_server_set_airprint(s_set.airprint);          // W-1079
     ESP_ERROR_CHECK(ipp_server_start(&cfg));
     // The ribbon may have been read while the server started; push what it is.
     ipp_server_set_colour(s_ribbon == IW_RIBBON_COLOUR);
@@ -1571,11 +1809,14 @@ void app_main(void)
     fw_update_net_up();
 
     webui_cfg_t wcfg = { .status_json = status_json, .general_saved = general_saved, .captive = 0,
+                          .restart = web_restart, .erase = web_erase, .test_page = web_test_page,
                           .localtalk_flash = localtalk_flash,
                           .lt_json = lt_json, .lt_job = lt_job, .lt_echo = lt_echo,
-                          .cable_test = cable_web };
+                          .cable_test = cable_web, .et_json = et_json,
+                          .et_settings_get = et_settings_get, .et_settings_set = et_settings_set };
     ESP_ERROR_CHECK(webui_start(&wcfg));
     ota_health_set(OH_WEB_UP, 1);
+    et_start();
 
     if (s_test_on_boot) {
         s_test_on_boot = 0;

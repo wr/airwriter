@@ -126,15 +126,26 @@ int main(void)
     CHECK(!ipp_find(buf, n, "printer-state-message", &f));
 
     /* Honest margins. The tractor feed cannot reach the edge, and declaring
-     * zero would make iOS lay out edge-to-edge and clip silently. */
+     * zero would make iOS lay out edge-to-edge and clip silently. The top is
+     * the inch above where printing starts on paper loaded as the Owner's
+     * Guide says (SPEC.md 3.5): the board drops that inch of every page. */
     CHECK(ipp_find(buf, n, "media-left-margin-supported", &f));
     CHECK_EQ_INT(ipp_val_int(&f), 635);
     CHECK(ipp_find(buf, n, "media-right-margin-supported", &f));
     CHECK_EQ_INT(ipp_val_int(&f), 635);
     CHECK(ipp_find(buf, n, "media-top-margin-supported", &f));
-    CHECK_EQ_INT(ipp_val_int(&f), 1270);
+    CHECK_EQ_INT(ipp_val_int(&f), 2540);
     CHECK(ipp_find(buf, n, "media-bottom-margin-supported", &f));
     CHECK_EQ_INT(ipp_val_int(&f), 1270);
+    /* ...and media-col says the same: its media-top-margin member, then an
+     * integer, nameless, four bytes, 2540. */
+    {
+        static const uint8_t member[] = { 'm','e','d','i','a','-','t','o','p','-','m','a','r','g','i','n',
+                                          0x21, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x09, 0xEC };
+        int seen = 0;
+        for (size_t i = 0; i + sizeof member <= n; i++) seen += !memcmp(buf + i, member, sizeof member);
+        CHECK(seen > 0);
+    }
 
     /* 144 across, 72 down, dpi units. This is the one pass the printer has. */
     CHECK(ipp_find(buf, n, "printer-resolution-default", &f));
