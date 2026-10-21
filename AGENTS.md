@@ -266,11 +266,6 @@ Linear is the queue; these are the live items.
   between links, a link dropped mid-job, a print from the SE/30 on the cable again, an Infinite Mac on its card, the page's Erase and Wi-Fi join. Before any release
   that turns the relay on for users, give Mihai Parparita (Infinite Mac) a heads-up.
 - Not in Linear: scope HSKo during a long job (SPEC §3.9 timing).
-- Not in Linear: the settings page's Basilisk II box says the tunnel cuts that Mac off the
-  internet. When kanjitalk755/macemu#323 (a "Tunnel AppleTalk only (use Ethernet for
-  Internet)" checkbox under the UDP port) is merged, merge branch
-  `wells/basilisk-appletalk-only-checkbox`: the box asks for the checkbox too and names the
-  tab Ports, as today's settings window does, not Serial/Network. Built, not on board 1.
 - The full test page has printed on board 1 from the page's Print Test Page, on the colour
   ribbon. Still owed: a print from the button and from DIP4, one on the black ribbon, and a
   second tap mid-page.

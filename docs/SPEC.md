@@ -567,7 +567,8 @@ printer (`components/localtalk`):
   RTS for the claimed ID), short DDP headers.
 - **Basilisk II's UDP tunnel** (W-1076, design `docs/superpowers/specs/2026-10-19-ethertalk-design.md`):
   EtherTalk frames as UDP datagrams to port 6066 on the home network (`udptunnel true` in
-  Basilisk II's prefs; SheepShaver has no tunnel). The board's MAC there is `42 32` and its IPv4
+  Basilisk II's prefs, and `udpappletalkonly true` to keep the Mac's internet through its
+  `ether`; SheepShaver has no tunnel). The board's MAC there is `42 32` and its IPv4
   address. On by default; NVS `et`/`tunnel`.
 - **The board's own Wi-Fi** (`W-1078 EtherTalk over Wi-Fi: print from real Macs (BlueSCSI,
   Ethernet Macs)`): EtherTalk frames to and from the station interface itself, for Macs on the
