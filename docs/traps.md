@@ -166,10 +166,14 @@ Traps already explained in a code comment are listed only when the comment is ea
   no transmit and no relay, while its CTS read ready and it took the 1024-NUL sync. A node-mode
   boot in between cleared it; the PIC is never reset by an ESP32 reboot. The cable test retries
   from a reset TashTalk (MCLR low 2 ms); its `dbg.reset` is 2 when the reset is what passed.
-- **The LocalTalk node runs with U7 empty.** Its bytes wait in UART2's ring behind CTS, which
-  floats up through `uart_set_pin`'s pull-up; 20 unanswered ENQs and it claims a node ID and the
-  panel plays "LocalTalk on". Anything sending through it must check `localtalk_tt_alive()` first
-  (the cable test does, W-1063) or it fills the 4 KB ring and blocks with the node's lock held.
+- **An empty U7 never answers, so silence looks like a free network.** With no PIC (or one not
+  running TashTalk) CTS floats up through `uart_set_pin`'s pull-up and the node's bytes wait in
+  UART2's ring; before W-1081 the node took 20 unanswered ENQs as a free node ID, went "online"
+  and the panel played "LocalTalk on". `localtalk_start` now refuses (`ESP_ERR_NOT_FOUND`) unless
+  TashTalk drains the 1024-NUL sync within 100 ms. A TashTalk that stops answering after the start
+  still leaves the node running: anything sending through it must check `localtalk_tt_alive()`
+  first (the cable test does, W-1063) or it fills the 4 KB ring and blocks with the node's lock
+  held.
 - **An empty U7 and a PIC with LVP off both read device ID 0x0000** (DAT is pulled down). Only
   with TashTalk silent too does 0x0000 mean an empty socket; a chip flashed with stock TashTalk
   elsewhere answers on the UART and reads 0x0000 over ICSP.
@@ -213,8 +217,10 @@ Traps already explained in a code comment are listed only when the comment is ea
   a printer, build with `CONFIG_AIRWRITER_UART_LOOPBACK`: the line reads ready and the log checks
   the job's bytes as they come back (never on a board that should print).
 - **The LocalTalk node owns IO4/IO5, which are also the PIC's ICSP lines.** The web UI's
-  TashTalk flash refuses while the node runs: set DIP1-2 off mode 2 (and build without
-  `CONFIG_AIRWRITER_LT_BENCH`), restart, then flash.
+  TashTalk flash refuses while the node runs: switch the AppleTalk Port off on the page (with
+  the switch never used, set DIP1-2 off mode 2; and build without `CONFIG_AIRWRITER_LT_BENCH`),
+  restart, then flash. A chip without TashTalk never starts the node (W-1081), so it flashes
+  straight from the AppleTalk Port card.
 - **The Option Card's PAP status is a two-byte word, low byte first, not a string** (Apple TN
   NW20; `LT_IW_*` in `lt_node.h`). A LaserWriter-style `%%[ status: ... ]%%` string is wrong here.
 - **Never report busy (bit 15) to a Mac about its own connection.** Mac OS 8.1's AppleTalk

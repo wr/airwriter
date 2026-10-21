@@ -22,6 +22,7 @@
 static const char *TAG = "lt";
 
 #define LT_BAUD   1000000
+#define LT_ALIVE_MS 100     // the sync's 11 ms, with room
 #define EV_LINES  20
 #define FR_LINES  10
 #define LINE_LEN  100
@@ -180,9 +181,24 @@ static void lt_task(void *arg)
     }
 }
 
-esp_err_t localtalk_start(const localtalk_cfg_t *cfg)
+static void tt_close(const localtalk_cfg_t *cfg)
 {
-    if (s_running) return ESP_OK;
+    uart_driver_delete(cfg->uart_num);
+    gpio_reset_pin(cfg->tx_pin);
+    gpio_reset_pin(cfg->rx_pin);
+    if (cfg->cts_pin >= 0) gpio_reset_pin(cfg->cts_pin);
+}
+
+// Opens UART2 to TashTalk and sends the start-up sync. As tashrouter starts
+// it: TashTalk may be halfway through a command from before this boot (an
+// OTA reboot mid-frame), and 1024 no-ops return it to waiting for a command
+// byte; then no optional features (the FCS is ours to compute and check).
+// W-1081: TashTalk takes the sync in about 11 ms. With U7 empty or not
+// running TashTalk, CTS stays up and none of it goes; a node started then
+// would claim an ID and look online with no chip. So ESP_ERR_NOT_FOUND gives
+// UART2 and the PIC's pins back, free for ICSP.
+static esp_err_t tt_open(const localtalk_cfg_t *cfg)
+{
     uart_config_t uc = {
         .baud_rate  = LT_BAUD,
         .data_bits  = UART_DATA_8_BITS,
@@ -193,11 +209,39 @@ esp_err_t localtalk_start(const localtalk_cfg_t *cfg)
     };
     esp_err_t err = uart_driver_install(cfg->uart_num, 8192, 4096, 0, NULL, 0);
     if (err != ESP_OK) return err;
+    ESP_ERROR_CHECK(uart_param_config(cfg->uart_num, &uc));
+    ESP_ERROR_CHECK(uart_set_pin(cfg->uart_num, cfg->tx_pin, cfg->rx_pin, UART_PIN_NO_CHANGE,
+                                 cfg->cts_pin >= 0 ? cfg->cts_pin : UART_PIN_NO_CHANGE));
+
+    static const uint8_t nops[64];
+    for (int i = 0; i < TT_SYNC_LEN / (int)sizeof nops; i++)
+        uart_write_bytes(cfg->uart_num, nops, sizeof nops);
+    static const uint8_t features[] = { TT_CMD_FEATURES, 0x00 };
+    uart_write_bytes(cfg->uart_num, features, sizeof features);
+
+    if (uart_wait_tx_done(cfg->uart_num, pdMS_TO_TICKS(LT_ALIVE_MS)) != ESP_OK) {
+        tt_close(cfg);
+        ESP_LOGW(TAG, "TashTalk took none of the sync");
+        return ESP_ERR_NOT_FOUND;
+    }
+    return ESP_OK;
+}
+
+esp_err_t localtalk_probe(const localtalk_cfg_t *cfg)
+{
+    if (s_running) return ESP_OK;
+    esp_err_t err = tt_open(cfg);
+    if (err == ESP_OK) tt_close(cfg);
+    return err;
+}
+
+esp_err_t localtalk_start(const localtalk_cfg_t *cfg)
+{
+    if (s_running) return ESP_OK;
+    esp_err_t err = tt_open(cfg);
+    if (err != ESP_OK) return err;
     s_uart = cfg->uart_num;
     s_cts_pin = cfg->cts_pin;
-    ESP_ERROR_CHECK(uart_param_config(s_uart, &uc));
-    ESP_ERROR_CHECK(uart_set_pin(s_uart, cfg->tx_pin, cfg->rx_pin, UART_PIN_NO_CHANGE,
-                                 cfg->cts_pin >= 0 ? cfg->cts_pin : UART_PIN_NO_CHANGE));
 
     s_lock = xSemaphoreCreateMutex();
     strncpy(s_obj, cfg->object, sizeof s_obj - 1);
@@ -209,15 +253,6 @@ esp_err_t localtalk_start(const localtalk_cfg_t *cfg)
         nvs_get_u8(h, "node", &hint);
         nvs_close(h);
     }
-
-    // As tashrouter starts it: TashTalk may be halfway through a command from
-    // before this boot (an OTA reboot mid-frame), and 1024 no-ops return it to
-    // waiting for a command byte; then no optional features (the FCS is ours
-    // to compute and check). lt_node_init clears the node bitmap.
-    static const uint8_t nops[64];
-    for (int i = 0; i < TT_SYNC_LEN / (int)sizeof nops; i++) uart_write_bytes(s_uart, nops, sizeof nops);
-    static const uint8_t features[] = { TT_CMD_FEATURES, 0x00 };
-    uart_write_bytes(s_uart, features, sizeof features);
 
     s_on_event = cfg->on_event;
     err = at_printer_init(&cfg->printer);
@@ -232,7 +267,7 @@ esp_err_t localtalk_start(const localtalk_cfg_t *cfg)
                         .job_begin = op_job_begin, .job_data = op_job_data,
                         .job_room = op_job_room, .job_end = op_job_end };
     xSemaphoreTake(s_lock, portMAX_DELAY);
-    lt_node_init(&s_node, &s_nc, &s_ops, now_ms());
+    lt_node_init(&s_node, &s_nc, &s_ops, now_ms());   // clears TashTalk's node bitmap
     xSemaphoreGive(s_lock);
 
     if (xTaskCreate(lt_task, "localtalk", 6144, NULL, 4, NULL) != pdPASS) return ESP_ERR_NO_MEM;

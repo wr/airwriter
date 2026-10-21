@@ -38,6 +38,7 @@
    "airprint": true,
    "lt_port": 1,
    "lt": true,
+   "lt_chip": "ok",
    "dip": "01000111",
    "ap": "AirWriter-2434"
   },
@@ -470,6 +471,81 @@
      "pic": false,
      "lt": false,
      "lt_port": -1
+    },
+    "GET /api/lt": {
+     "on": false,
+     "quiet": false
+    }
+   }
+  },
+  "no-chip": {
+   "about": "AppleTalk port on, U7 empty: the node did not start",
+   "patch": {
+    "GET /api/status": {
+     "lt": false,
+     "lt_chip": "no_chip"
+    },
+    "GET /api/lt": {
+     "on": false,
+     "quiet": false
+    }
+   }
+  },
+  "no-tashtalk": {
+   "about": "AppleTalk port on, U7 blank; Flash TashTalk works and the port starts",
+   "patch": {
+    "GET /api/status": {
+     "lt": false,
+     "lt_chip": "no_tashtalk"
+    },
+    "GET /api/lt": {
+     "on": false,
+     "quiet": false
+    },
+    "POST /api/localtalk/flash": {
+     "_delay": 2,
+     "_then": "normal",
+     "_down": 0,
+     "_body": {
+      "ok": true,
+      "err": "ok",
+      "devid": "0x1B84",
+      "rev": 4
+     }
+    }
+   }
+  },
+  "flash-fails": {
+   "about": "U7 blank, and Flash TashTalk fails to verify",
+   "patch": {
+    "GET /api/status": {
+     "lt": false,
+     "lt_chip": "no_tashtalk"
+    },
+    "GET /api/lt": {
+     "on": false,
+     "quiet": false
+    },
+    "POST /api/localtalk/flash": {
+     "_delay": 2,
+     "_body": {
+      "ok": false,
+      "err": "verify failed",
+      "devid": "0x1B84",
+      "rev": 4,
+      "addr": "0x0123",
+      "want": "0x3001",
+      "got": "0x3FFF"
+     }
+    }
+   }
+  },
+  "chip-silent": {
+   "about": "AppleTalk port on, U7's ID could not be read",
+   "patch": {
+    "GET /api/status": {
+     "lt": false,
+     "lt_chip": "silent"
     },
     "GET /api/lt": {
      "on": false,

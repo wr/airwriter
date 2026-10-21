@@ -31,8 +31,15 @@ typedef struct {
     void      (*on_event)(lt_event_t ev);  // may be NULL; must not block
 } localtalk_cfg_t;
 
-// Starts the node once; later calls do nothing.
+// Starts the node once; later calls do nothing. ESP_ERR_NOT_FOUND when
+// TashTalk takes none of the start-up sync (U7 empty, or not running
+// TashTalk): nothing is left running and the pins are free for ICSP, so a
+// later call tries again (W-1081).
 esp_err_t localtalk_start(const localtalk_cfg_t *cfg);
+// The same sync with the node off, then UART2 and the pins given back:
+// ESP_OK if TashTalk took it, ESP_ERR_NOT_FOUND if not. Only the pins and
+// UART of cfg are used. ESP_OK at once while the node runs.
+esp_err_t localtalk_probe(const localtalk_cfg_t *cfg);
 int       localtalk_running(void);
 // The AppleTalk port's switch on the settings page (W-1079). The node cannot
 // stop once started (it keeps UART2 and its task), so off is quiet: a job is
