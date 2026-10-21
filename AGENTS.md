@@ -123,8 +123,13 @@ What works on `main`:
   answers, and 1 s after it is seen registering its name; then every 10 minutes. Names are in
   PSRAM. Benched 2026-10-20: the SE/30 over BlueSCSI ("SE30") and Basilisk II ("SE/30") answer.
   On the cable the SE/30 opens AppleTalk long before it registers its name, and the first build
-  gave up first; the fix is untested on the cable. The
-  TashTalk flash key shows only after a cable test answers `no_tashtalk`. The page makes no
+  gave up first; with the fix, the cable card named it "SE30" on board 1 (2026-10-20). The
+  board asks U7 at boot, at every node start and after a flash whether it runs TashTalk (the
+  sync drains, else its device ID; `/api/status` `lt_chip`, W-1081); without it the node never
+  starts, and the AppleTalk Port card shows "No LocalTalk chip" or "The LocalTalk chip needs
+  TashTalk" in place of its switch, the latter with a Flash TashTalk key. A good flash starts a
+  wanted port at once. The cable test's flash key still shows after it answers `no_tashtalk`. A
+  build with no PIC pins hides the card and the TashTalk credit. The page makes no
   request off the board. Sources in `tools/webui`; `mkheader.py` builds `webui_page.h`.
 - Top margin (NVS `topmargin`, `/api/status` `top_margin`, `POST /api/general
   {"top_margin":N}`; no control on the page: with the paper loaded as the guide says the default
@@ -180,8 +185,8 @@ follows the Mac's port). Its queue name reads "ImageWriter II" in `/api/status`,
 its name in the Chooser. U7's PIC calibration words: `16E0 1DA8`. Its LocalTalk node ID is 198
 (kept in NVS `lt`/`node`); the bench Mac is node 83. Printer: an ImageWriter II on J2 via
 Apple's crossover cable, fanfold paper loaded as the Owner's Guide says (top edge under the paper
-bail). It runs main from the W-1079 merge (EtherTalk, settings page, Mac names, edge states,
-full test page), ahead of any release, with auto-update on. Its Top margin is calibrated to -7/8 in
+bail). It runs main from the W-1081 work (the W-1079 merge plus the chip check on the
+AppleTalk card), ahead of any release, with auto-update on. Its Top margin is calibrated to -7/8 in
 (`top_margin` -126): a page's line 1 in down and one 0.5 in from the bottom landed exactly there.
 Its AppleTalk port has been set on the page (`lt_port` 1), so DIP switches 1-2 no longer decide;
 Infinite Mac is on (Wells switched it on, with a made-up zone name). The page reads its DIP switches as 2, 6, 7 and 8 on: not
@@ -258,8 +263,7 @@ Linear is the queue; these are the live items.
   worktree because this checkout carried someone's enclosure edits.
 - `W-1076` and `W-1078` reached main on 2026-10-20 with `W-1079` (Done), which was built on
   top of them; both stay In Progress for their bench checks. Owed on the bench: busy both ways
-  between links, a link dropped mid-job, the SE/30 on the cable again (and its name on the
-  AppleTalk Port card), an Infinite Mac on its card, the page's Erase and Wi-Fi join. Before any release
+  between links, a link dropped mid-job, a print from the SE/30 on the cable again, an Infinite Mac on its card, the page's Erase and Wi-Fi join. Before any release
   that turns the relay on for users, give Mihai Parparita (Infinite Mac) a heads-up.
 - Not in Linear: scope HSKo during a long job (SPEC §3.9 timing).
 - The full test page has printed on board 1 from the page's Print Test Page, on the colour

@@ -89,6 +89,8 @@ Existing routes stay as they were; W-1079 adds:
   reaches mDNS and the Chooser only after a restart, so the page says so), `airprint`,
   `lt_port` (1 on, 0 off, -1 not set: DIP switches 1-2 decide, mode 2 on), `lt` (the port's
   node running and not quiet), `dip` (switches 1-8 as "0"/"1", "" before the first read).
+  W-1081 adds `lt_chip`: "ok", "no_chip", "no_tashtalk", "silent" (U7's ID could not be read)
+  or "unknown", what U7 said when last asked (at boot, at a node start, after a flash).
   User strings in it (network, printer and job names) are now escaped.
 - `POST /api/general` takes `model`, `name` (present and empty: back to the model's name),
   `airprint` and `localtalk` (true/false) beside `host`, `queue`, `dither`, `gain`. The model
