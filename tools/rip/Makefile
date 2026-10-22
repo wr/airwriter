@@ -73,6 +73,10 @@ build/test_ethertalk: test/test_ethertalk.c $(LT)/et_proto.c $(LT)/et_link.c $(L
 build/test_pap_client: test/test_pap_client.c $(LT)/lt_proto.c $(LT)/lt_node.c $(LT)/pap_client.c | build
 	$(CC) $(CFLAGS) -I$(LT)/include -Itest -o $@ $^
 
+build/test_lw_core: test/test_lw_core.c $(COMP)/laser/lw_core.c $(COMP)/laser/lw_status.c \
+                    $(LT)/lt_proto.c | build
+	$(CC) $(CFLAGS) -I$(LT)/include -I$(COMP)/laser/include -Itest -o $@ $^
+
 # The board's LaserWriter side on the host, for test_interop.py (W-1082).
 build/lwhost: lwhost.c $(LT)/et_proto.c $(LT)/et_link.c $(LT)/lt_node.c $(LT)/pap_client.c \
               $(LT)/lt_proto.c $(COMP)/laser/lw_query.c | build
