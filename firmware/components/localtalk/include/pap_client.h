@@ -121,6 +121,9 @@ typedef struct pap_client {
     uint64_t     close_at;
     papc_end_t   end;
     uint32_t     sent_bytes, out_bytes;
+    // How the printer pulled: its SendData, those answered again from the
+    // cache (a lost reply), and the time they waited on us (W-1082 bench).
+    uint32_t     n_reads, n_resends, wait_ms;
     uint32_t     rng;
 } pap_client_t;
 

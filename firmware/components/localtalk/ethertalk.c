@@ -6,6 +6,7 @@
 // so the handler only queues what it receives and sets flags, and what the
 // zone link sends is queued under s_lock and written by our task outside it.
 #include "ethertalk.h"
+#include <errno.h>
 #include <stdio.h>
 #include <string.h>
 #include "esp_crt_bundle.h"
@@ -84,6 +85,8 @@ static int        s_ip_changed, s_net_down;
 // The tunnel.
 static int        s_sock = -1;
 static uint32_t   s_tun_drops;
+static uint32_t   s_tun_nomem;      // of those, sendto out of buffers (ENOMEM, ENOBUFS)
+static int        s_tun_errno;      // the last failed sendto's errno
 
 // The radio: frames in from lwIP's thread, out through the Wi-Fi driver.
 static QueueHandle_t s_rin;
@@ -163,7 +166,11 @@ static void tun_send(void *ctx, const uint8_t *f, size_t n)
     }
     struct sockaddr_in to = { .sin_family = AF_INET, .sin_port = htons(ET_TUNNEL_PORT) };
     to.sin_addr.s_addr = htonl(ip);
-    if (sendto(s_sock, f, n, 0, (struct sockaddr *)&to, sizeof to) < 0) s_tun_drops++;
+    if (sendto(s_sock, f, n, 0, (struct sockaddr *)&to, sizeof to) < 0) {
+        s_tun_drops++;
+        s_tun_errno = errno;
+        if (errno == ENOMEM || errno == ENOBUFS) s_tun_nomem++;
+    }
 }
 
 static void zone_send(void *ctx, const uint8_t *f, size_t n)
@@ -890,12 +897,13 @@ void ethertalk_json(char *buf, size_t cap)
     if (p < end)
         p += snprintf(p, end - p,
             ",\"radio_drops\":{\"in\":%lu,\"out\":%lu,\"unknown_frames\":%lu,\"appletalk_frames\":%lu},"
-            "\"tunnel_drops\":%lu,\"relay\":{\"connected\":%s,\"in_drops\":%lu,\"out_drops\":%lu,"
+            "\"tunnel_drops\":%lu,\"tunnel_nomem\":%lu,\"tunnel_errno\":%d,\"relay\":{\"connected\":%s,\"in_drops\":%lu,\"out_drops\":%lu,"
             "\"bad_messages\":%lu,\"pongs\":%lu,\"last_error\":\"%s\"},"
             "\"internal_ram\":{\"free\":%u,\"largest\":%u,\"lowest\":%u},",
             (unsigned long)s_radio_in_drops, (unsigned long)s_radio_out_drops,
             (unsigned long)s_radio_unknown, (unsigned long)s_radio_kept,
-            (unsigned long)s_tun_drops, s_ws_up ? "true" : "false",
+            (unsigned long)s_tun_drops, (unsigned long)s_tun_nomem, s_tun_errno,
+            s_ws_up ? "true" : "false",
             (unsigned long)s_zone_in_drops, (unsigned long)s_zone_out_drops,
             (unsigned long)s_zone_bad, (unsigned long)s_zone_pongs, s_zone_err,
             (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL),

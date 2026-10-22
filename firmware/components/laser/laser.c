@@ -73,6 +73,13 @@ static int       s_gain;
 static uint64_t  s_card_at;
 static char      s_ps_error[128];
 static char      s_last[48] = "";                   // the last job's end, for the card
+// Where the last job's time went (W-1082 bench): the rip waiting on a full
+// spool is the link; the printer waiting on us is the rip or the upload.
+typedef struct {
+    uint32_t ms, rip_wait_ms, printer_wait_ms, reads, resends, ram_low;
+} job_stats_t;
+static job_stats_t s_stats;
+static uint64_t    s_job_t0;
 static int       s_status_idx = -1;                 // the heard[] entry asked last
 
 // The laser task's.
@@ -552,7 +559,9 @@ static void spool_write(void *ctx, const uint8_t *b, size_t n)
             s_job_failed = 1;
             break;
         }
+        int64_t t = esp_timer_get_time();
         size_t k = xStreamBufferSend(s_spool, b, n, pdMS_TO_TICKS(500));
+        if (k < n) s_stats.rip_wait_ms += (uint32_t)((esp_timer_get_time() - t) / 1000);
         b += k;
         n -= k;
         if (k) waited = 0;
@@ -605,6 +614,9 @@ int laser_job_begin(const char *name, job_pipe_target_t *t)
         return -1;
     }
     s_use = USE_JOB;
+    memset(&s_stats, 0, sizeof s_stats);
+    s_job_t0 = now_ms();
+    heap_caps_monitor_local_minimum_free_size_start();
     ps_stage(s_ps, &s_stage);
     ps_job_begin(s_ps);                            // the header, into the empty spool
     xSemaphoreTake(s_mu, portMAX_DELAY);
@@ -620,6 +632,7 @@ int laser_job_begin(const char *name, job_pipe_target_t *t)
     int rc = xSemaphoreTake(s_open_sem, pdMS_TO_TICKS(10000)) == pdTRUE ? s_open_rc : -1;
     if (rc) {
         ESP_LOGE(TAG, "job \"%s\": no connection", name);
+        heap_caps_monitor_local_minimum_free_size_stop();
         ps_free(s_ps);
         s_ps = NULL;
         s_use = USE_NONE;
@@ -651,6 +664,12 @@ int laser_job_end(int ok)
         xSemaphoreGive(s_client_mx);
         xSemaphoreTake(s_ended_sem, pdMS_TO_TICKS(1000));
     }
+    s_stats.ms = (uint32_t)(now_ms() - s_job_t0);
+    s_stats.printer_wait_ms = s_pc->wait_ms;
+    s_stats.reads = s_pc->n_reads;
+    s_stats.resends = s_pc->n_resends;
+    s_stats.ram_low = (uint32_t)heap_caps_get_minimum_free_size(MALLOC_CAP_INTERNAL);
+    heap_caps_monitor_local_minimum_free_size_stop();
     xSemaphoreTake(s_mu, portMAX_DELAY);
     char err[sizeof s_ps_error];
     memcpy(err, s_ps_error, sizeof err);
@@ -737,14 +756,19 @@ void laser_json(char *buf, size_t cap)
             "\"advertised\":%s,\"queried\":%s,\"state\":\"%s\",\"reason\":\"%s\",\"message\":\"%s\","
             "\"product\":\"%s\",\"version\":\"%s\",\"level\":%u,\"binary\":%s,\"page\":\"%s\","
             "\"dpi\":%u,\"dither\":\"%s\",\"gain\":%d,\"uuid\":\"%s\"},"
-            "\"job\":{\"active\":%s,\"sent\":%lu,\"last\":\"%s\"}}",
+            "\"job\":{\"active\":%s,\"sent\":%lu,\"last\":\"%s\",\"ms\":%lu,"
+            "\"rip_wait_ms\":%lu,\"printer_wait_ms\":%lu,\"reads\":%lu,\"resends\":%lu,"
+            "\"ram_low\":%lu}}",
             e_name, link_name(s_link), v.online ? "true" : "false",
             s_advertised ? "true" : "false", s_have_info ? "true" : "false", state_name(&v),
             v.reason, e_msg, e_product, s_have_info ? s_info.version : "",
             s_have_info ? s_info.level : 0, s_have_info && s_info.binary ? "true" : "false",
             lw_page_name(s_have_info ? s_info.page : LW_LETTER), s_have_info ? s_info.dpi : 300,
             s_dither, s_gain, s_uuid, s_use == USE_JOB ? "true" : "false",
-            (unsigned long)s_sent, e_last);
+            (unsigned long)s_sent, e_last, (unsigned long)s_stats.ms,
+            (unsigned long)s_stats.rip_wait_ms, (unsigned long)s_stats.printer_wait_ms,
+            (unsigned long)s_stats.reads, (unsigned long)s_stats.resends,
+            (unsigned long)s_stats.ram_low);
     }
 full:
     xSemaphoreGive(s_mu);

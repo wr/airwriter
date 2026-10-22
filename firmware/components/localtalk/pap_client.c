@@ -223,6 +223,7 @@ static int answer_one(pap_client_t *c, papc_pend_t *p, uint64_t now)
     memmove(c->stage, c->stage + take, c->staged - take);
     c->staged -= take;
     c->sent_bytes += (uint32_t)take;
+    c->wait_ms += (uint32_t)since(now, p->since);
     send_reply(c, r, p->tid, &p->from);
     p->used = 0;
     if (r->eof && !c->eof_sent) {
@@ -256,6 +257,7 @@ static void printer_reads(pap_client_t *c, const atp_t *a, const lt_route_t *fro
     uint16_t seq = (uint16_t)(a->user[2] << 8 | a->user[3]);
     papc_reply_t *r = cached(c, seq);
     if (r) {                                     // a retransmit: the same packets
+        c->n_resends++;
         send_reply(c, r, a->tid, from);
         return;
     }
@@ -272,6 +274,7 @@ static void printer_reads(pap_client_t *c, const atp_t *a, const lt_route_t *fro
     if (!slot) return;                           // more than the quantum allows: dropped
     uint8_t want = 0;
     while (want < PAPC_FLOW && (a->bitmap >> want & 1)) want++;
+    c->n_reads++;
     slot->used = 1;
     slot->want = want ? want : 1;
     slot->seq = seq;
