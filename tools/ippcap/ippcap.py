@@ -14,11 +14,26 @@ Run it, then in another terminal advertise it over Bonjour:
       Color=F Duplex=F
 
 Leave both running, then print from the iPhone to "AirWriterCap".
+
+--urf STRING advertises another URF capability string, e.g. a LaserWriter's
+V1.4,CP1,RS300,W8,DM1,IS1,MT1,FN3 (W-1082): whether iOS honours RS300 is
+what the capture settles. The resolution attributes follow its RS key, and
+the dns-sd line to run is printed at start.
 """
 import http.server, struct, sys, pathlib, datetime
 
-OUT = pathlib.Path(sys.argv[1] if len(sys.argv) > 1 else "fixtures")
+URF = "V1.4,CP1,RS72-144,W8,DM1,IS1,MT1,FN3"
+_args = sys.argv[1:]
+if "--urf" in _args:
+    i = _args.index("--urf")
+    URF = _args[i + 1]
+    del _args[i:i + 2]
+OUT = pathlib.Path(_args[0] if _args else "fixtures")
 PORT = 6631
+# printer-resolution from the RS key: RS300 is 300 x 300; RS72-144 is the
+# ImageWriter's 144 x 72.
+_rs = next((k[2:] for k in URF.split(",") if k.startswith("RS")), "72-144")
+RES = (144, 72) if _rs == "72-144" else (int(_rs.split("-")[-1]),) * 2
 
 # IPP tags
 TAG_OPERATION, TAG_JOB, TAG_PRINTER, TAG_END = 0x01, 0x02, 0x04, 0x03
@@ -75,12 +90,11 @@ def printer_attrs(req_id, host):
     b += txt(KEYWORD, "compression-supported", "none")
     b += txt(KEYWORD, "media-default", "na_letter_8.5x11in")
     b += txt(KEYWORD, "media-supported", "na_letter_8.5x11in")
-    b += res("printer-resolution-default", 144, 72)
-    b += res("printer-resolution-supported", 144, 72)
+    b += res("printer-resolution-default", *RES)
+    b += res("printer-resolution-supported", *RES)
     b += txt(KEYWORD, "print-color-mode-default", "monochrome")
     b += txt(KEYWORD, "print-color-mode-supported", "monochrome")
-    for i, v in enumerate(("V1.4", "CP1", "RS72-144", "W8",
-                           "DM1", "IS1", "MT1", "FN3")):
+    for i, v in enumerate(URF.split(",")):
         b += txt(KEYWORD, "urf-supported" if i == 0 else "", v)
     b.append(TAG_END)
     return bytes(b)
@@ -203,5 +217,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
 
 if __name__ == "__main__":
-    print(f"ippcap on :{PORT}, writing to {OUT}/")
+    print(f"ippcap on :{PORT}, writing to {OUT}/, advertising URF {URF}")
+    print(f"advertise it with:\n  dns-sd -R AirWriterCap _ipp._tcp,_universal local {PORT} "
+          f"txtvers=1 rp=ipp/print ty=\"AirWriter capture\" pdl=image/urf URF={URF} "
+          f"Color=F Duplex=F")
     http.server.ThreadingHTTPServer(("", PORT), Handler).serve_forever()

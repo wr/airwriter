@@ -42,3 +42,15 @@ on the normal path, not an edge case.
 Source was a Safari page in dark mode, which is why the preview is mostly black.
 Useful as a worst-case ribbon and throughput fixture; not representative of a
 typical document.
+
+## 300 dpi pages for a LaserWriter (W-1082)
+
+There is no iOS capture at 300 dpi yet. `tools/rip/test/make_300dpi_fixture.py text|photo`
+writes a Letter page at 300 dpi (2550 x 3300, 8-bit gray) the same way every run: a
+text page of glyph-like strokes between 1 in margins, and a full-bleed photo-like page.
+They are made at test time, not committed. `make -C tools/rip pscheck` rips both for a
+LaserWriter and holds the PostScript to Ghostscript; the text page comes to about 37 %
+of its 1-bit bitmap, the photo page about 92 %. To capture a real one, run
+`tools/ippcap/ippcap.py OUTDIR --urf V1.4,CP1,RS300,W8,DM1,IS1,MT1,FN3` with the
+`dns-sd` line it prints, and print from an iPhone: the capture settles whether iOS
+honours `RS300` as it did `RS72-144`.
