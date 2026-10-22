@@ -18,15 +18,38 @@
 #include "halftone.h"
 #include "imagewriter.h"
 #include "ink.h"
+#include "printer_caps.h"
 
-// The one pass v1 has: 144 dpi across, 72 down. SPEC.md 3.8.
+// The ImageWriter's one pass: 144 dpi across, 72 down. SPEC.md 3.8. The same
+// as printer_caps_imagewriter's rip_dpi_x/y, which is what ripjob uses.
 #define RIPJOB_DPI_X 144
 #define RIPJOB_DPI_Y  72
 
+// An output stage other than the ImageWriter's strips (W-1082): a LaserWriter's
+// PostScript bands (ps_page.h). It takes the page's 1bpp rows in order, MSB
+// the leftmost pixel and a set bit ink, as the halftoner makes them.
 typedef struct {
-    // Printer stream out. Required.
+    // A page starts; w x h rows follow. Non-zero aborts the job.
+    int  (*page_begin)(void *ctx, int index, uint32_t w, uint32_t h);
+    void (*row)(void *ctx, const uint8_t *bits);
+    // The page's last row has been given. Non-zero aborts the job.
+    int  (*page_end)(void *ctx);
+    void  *ctx;
+} rip_stage_t;
+
+typedef struct {
+    // Printer stream out. Required for the ImageWriter; unused with a stage.
     void      (*out)(void *ctx, const uint8_t *buf, size_t n);
     void       *out_ctx;
+
+    // The printer's geometry: resolution, widest row, the ImageWriter's
+    // quarter-inch crop. NULL is printer_caps_imagewriter.
+    const printer_caps_t *caps;
+    // Where rows go instead of the ImageWriter's strips. With a stage, RGB
+    // pages print as gray (colour is ignored) and top_margin is ignored: both
+    // are the ImageWriter's. A page wider than caps->max_dots is clipped on
+    // the right when caps->crop_margin is 0.
+    const rip_stage_t *stage;
 
     ht_algo_t   dither;
     // Dot gain at a 50% tint, percent (halftone.h ht_set_gain). 0 prints

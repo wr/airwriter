@@ -43,7 +43,8 @@ static void on_row(void *ctx, const uint8_t *row, uint32_t w)
     pipe_t *p = (pipe_t *)ctx;
     ht_row(&p->ht, row, p->bits);
     if (p->cfg->row) p->cfg->row(p->cfg->row_ctx, p->bits, w, p->y);
-    if (p->skip) p->skip--;
+    if (p->cfg->stage) p->cfg->stage->row(p->cfg->stage->ctx, p->bits);
+    else if (p->skip) p->skip--;
     else iw_row(&p->iw, p->bits);
     p->y++;
 }
@@ -74,6 +75,9 @@ int ripjob_run(urf_t *u, const ripjob_cfg_t *cfg, ripjob_stats_t *st)
     pipe_t p;
     memset(&p, 0, sizeof p);
     p.cfg = cfg;
+    const printer_caps_t *caps = cfg->caps ? cfg->caps : &printer_caps_imagewriter;
+    const rip_stage_t *stage = cfg->stage;
+    uint32_t dpi_x = caps->rip_dpi_x, dpi_y = caps->rip_dpi_y, max = caps->max_dots;
 
     int pages = 0, rc;
 
@@ -86,50 +90,66 @@ int ripjob_run(urf_t *u, const ripjob_cfg_t *cfg, ripjob_stats_t *st)
             rc = -1;
             break;
         }
-        int colour = rgb && cfg->colour;
+        int colour = rgb && cfg->colour && !stage;
 
-        uint32_t res    = u->page.res_x ? u->page.res_x : RIPJOB_DPI_X;
-        uint32_t full_w = (uint32_t)((uint64_t)u->page.width * RIPJOB_DPI_X / res);
+        uint32_t res    = u->page.res_x ? u->page.res_x : dpi_x;
+        uint32_t full_w = (uint32_t)((uint64_t)u->page.width * dpi_x / res);
 
         // SPEC.md 3.5 declares a 0.25in left/right margin to iOS, so the
         // outermost res/4 source pixels per side are white by construction.
-        // A page wider than the printer's 8in / 1152 dots is US Letter
+        // A page wider than the ImageWriter's 8in / 1152 dots is US Letter
         // (8.5in) arriving at full bleed; crop the margin instead of
-        // squashing the whole page down to fit.
+        // squashing the whole page down to fit. A printer with no such
+        // margin (W-1082) keeps the page's left edge where it is and loses
+        // what lies past its widest row: the paper is the page, top-left.
         uint32_t src_w = u->page.width, crop_left = 0, crop_per_side = 0;
-        if (full_w > IW_MAX_DOTS) {
-            uint32_t shortfall_dst  = full_w - IW_MAX_DOTS;
-            uint32_t shortfall_src  = (uint32_t)((uint64_t)shortfall_dst * res / RIPJOB_DPI_X);
-            uint32_t max_per_side   = res / 4;             // 0.25in in source px
-            crop_per_side = shortfall_src / 2;
-            if (crop_per_side > max_per_side) crop_per_side = max_per_side;
-            crop_left = crop_per_side;
-            src_w = u->page.width - 2 * crop_per_side;
+        int clipped = 0;
+        if (max && full_w > max) {
+            if (caps->crop_margin) {
+                uint32_t shortfall_dst  = full_w - max;
+                uint32_t shortfall_src  = (uint32_t)((uint64_t)shortfall_dst * res / dpi_x);
+                uint32_t max_per_side   = res / 4;             // 0.25in in source px
+                crop_per_side = shortfall_src / 2;
+                if (crop_per_side > max_per_side) crop_per_side = max_per_side;
+                crop_left = crop_per_side;
+                src_w = u->page.width - 2 * crop_per_side;
+            } else {
+                src_w = (uint32_t)((uint64_t)max * res / dpi_x);
+                clipped = 1;
+            }
         }
 
-        uint32_t dst_w = (uint32_t)((uint64_t)src_w * RIPJOB_DPI_X / res);
-        uint32_t dst_h = (uint32_t)((uint64_t)u->page.height * RIPJOB_DPI_Y / res);
+        uint32_t dst_w = (uint32_t)((uint64_t)src_w * dpi_x / res);
+        uint32_t dst_h = (uint32_t)((uint64_t)u->page.height * dpi_y / res);
 
         int still_wide = 0;
-        if (dst_w > IW_MAX_DOTS) {
-            dst_w = IW_MAX_DOTS;
+        if (max && dst_w > max) {
+            dst_w = max;
             still_wide = 1;
         }
-        if (crop_per_side || still_wide) {
+        if (clipped) {
+            say(cfg, "page %d width %u dots exceeds %u; clipped on the right",
+                pages + 1, (unsigned)full_w, (unsigned)max);
+        } else if (crop_per_side || still_wide) {
             say(cfg, "page %d width %u dots exceeds %u; cropped %u source px per side "
                      "(0.25in margin)%s",
-                pages + 1, (unsigned)full_w, (unsigned)IW_MAX_DOTS,
+                pages + 1, (unsigned)full_w, (unsigned)max,
                 (unsigned)crop_per_side, still_wide ? ", still scaled to fit" : "");
         }
         if (!dst_w || !dst_h) { say(cfg, "empty page"); rc = -1; break; }
 
         p.dst_w = dst_w;
         p.y     = 0;
-        p.skip  = cfg->top_margin < 0 ? (uint32_t)(-cfg->top_margin / 2) : 0;
+        p.skip  = !stage && cfg->top_margin < 0 ? (uint32_t)(-cfg->top_margin / 2) : 0;
         if (st) { st->dst_w = dst_w; st->dst_h = dst_h; st->crop_per_side = crop_per_side; }
 
         if (cfg->page && cfg->page(cfg->page_ctx, pages, dst_w, dst_h)) {
             say(cfg, "page %d refused by the caller", pages + 1);
+            rc = -1;
+            break;
+        }
+        if (stage && stage->page_begin(stage->ctx, pages, dst_w, dst_h)) {
+            say(cfg, "page %d refused by the output stage", pages + 1);
             rc = -1;
             break;
         }
@@ -166,9 +186,11 @@ int ripjob_run(urf_t *u, const ripjob_cfg_t *cfg, ripjob_stats_t *st)
             if (ht_init(&p.ht, cfg->dither, dst_w)) { rc = -1; goto page_cleanup; }
             ht_ready = 1;
             ht_set_gain(&p.ht, cfg->gain);
-            iw_init(&p.iw, dst_w, cfg->out, cfg->out_ctx);
-            iw_begin_page(&p.iw);
-            for (int r = 0; r < cfg->top_margin / 2; r++) iw_row(&p.iw, p.bits);   // still zeros
+            if (!stage) {
+                iw_init(&p.iw, dst_w, cfg->out, cfg->out_ctx);
+                iw_begin_page(&p.iw);
+                for (int r = 0; r < cfg->top_margin / 2; r++) iw_row(&p.iw, p.bits);   // still zeros
+            }
 
             if (rs_init(&rs, src_w, u->page.height, dst_w, dst_h, on_row, &p)) {
                 rc = -1; goto page_cleanup;
@@ -196,8 +218,11 @@ int ripjob_run(urf_t *u, const ripjob_cfg_t *cfg, ripjob_stats_t *st)
                 rc = r;
             } else if (colour) {
                 iwc_end_page(p.iwc);
-            } else {
+            } else if (!stage) {
                 iw_end_page(&p.iw);
+            } else if (stage->page_end(stage->ctx)) {
+                say(cfg, "page %d: the output stage failed", pages + 1);
+                rc = -1;
             }
         }
 
