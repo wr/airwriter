@@ -10,6 +10,8 @@
 #include "ripjob.h"
 #include "png_write.h"
 #include "testpage.h"
+#include "printer_caps.h"
+#include "ps_page.h"
 
 typedef struct {
     FILE    *stream;
@@ -17,7 +19,42 @@ typedef struct {
     uint8_t *preview;          // dst_w * dst_h of page 1 (x3 in colour), or NULL
     uint32_t dst_w, dst_h;
     int      colour;           // --colour: the preview is RGB
+    uint8_t *pbm;              // --out-pbm: page 1's dots, 1 = ink, or NULL
+    int      want_pbm;
+    FILE    *ps;               // --ps: the LaserWriter's PostScript
 } host_t;
+
+static void ps_out(void *ctx, const uint8_t *b, size_t n)
+{
+    host_t *h = (host_t *)ctx;
+    if (h->ps && fwrite(b, 1, n, h->ps) != n) h->write_failed = 1;
+}
+
+/* A LaserWriter's page at 300 dpi on the paper named (W-1082): as the board's
+ * would be with that size reported, the rest of its caps unused here. */
+static int laser_caps(const char *paper, printer_caps_t *c, uint32_t *paper_h_pt)
+{
+    static const struct { const char *name, *media; int32_t x, y; uint32_t w_px, h_pt; } k[] = {
+        { "letter", "na_letter_8.5x11in", 21590, 27940, 2550,  792 },
+        { "a4",     "iso_a4_210x297mm",   21000, 29700, 2480,  842 },
+        { "legal",  "na_legal_8.5x14in",  21590, 35560, 2550, 1008 },
+    };
+    for (size_t i = 0; i < sizeof k / sizeof k[0]; i++) {
+        if (strcmp(paper, k[i].name)) continue;
+        memset(c, 0, sizeof *c);
+        c->make_model = "Apple LaserWriter";
+        c->device_id  = "MFG:Apple;MDL:LaserWriter;CMD:URF;";
+        c->urf_rs     = "RS300";
+        c->res_x = c->res_y = c->rip_dpi_x = c->rip_dpi_y = 300;
+        c->media      = k[i].media;
+        c->media_x    = k[i].x;
+        c->media_y    = k[i].y;
+        c->max_dots   = k[i].w_px;
+        *paper_h_pt   = k[i].h_pt;
+        return 0;
+    }
+    return -1;
+}
 
 static int file_read(void *ctx, uint8_t *buf, size_t n)
 {
@@ -45,13 +82,29 @@ static int on_page(void *ctx, int index, uint32_t dst_w, uint32_t dst_h)
 
     h->dst_w = dst_w;
     h->dst_h = dst_h;
+    if (h->want_pbm && !(h->pbm = calloc((size_t)(dst_w + 7) / 8 * dst_h, 1))) return -1;
+    if (h->want_pbm == 2) return 0;            // --out-pbm without --out-preview
     h->preview = calloc((size_t)dst_w * dst_h * (h->colour ? 3 : 1), 1);
     return h->preview ? 0 : -1;
+}
+
+/* Page 1's dots as a raw PBM (P4: 1 = black, rows padded to bytes), the
+ * rip's own answer that pscheck.py holds Ghostscript's rendering to. */
+static int write_pbm(const char *path, const uint8_t *bits, uint32_t w, uint32_t h)
+{
+    FILE *f = fopen(path, "wb");
+    if (!f) return -1;
+    fprintf(f, "P4\n%u %u\n", (unsigned)w, (unsigned)h);
+    size_t n = (size_t)(w + 7) / 8 * h;
+    int bad = fwrite(bits, 1, n, f) != n;
+    return fclose(f) || bad ? -1 : 0;
 }
 
 static void on_row(void *ctx, const uint8_t *bits, uint32_t w, uint32_t y)
 {
     host_t *h = (host_t *)ctx;
+    if (h->pbm && y < h->dst_h && w == h->dst_w)
+        memcpy(h->pbm + (size_t)y * ((w + 7) / 8), bits, (w + 7) / 8);
     if (!h->preview || y >= h->dst_h || w != h->dst_w) return;
 
     uint32_t ch = h->colour ? 3 : 1;
@@ -108,14 +161,19 @@ static void usage(void)
 {
     fputs("usage: rip --in FILE [--out-stream FILE] [--out-preview FILE]\n"
           "           [--dither threshold|atkinson|floyd|bayer|bluenoise] [--colour]\n"
-          "           [--gain PERCENT] [--top-margin N]\n"
+          "           [--gain PERCENT] [--top-margin N] [--out-pbm FILE]\n"
+          "       rip --in FILE --printer laser [--paper letter|a4|legal] [--ps FILE] [--hex]\n"
           "       rip --testpage colour|black|unknown --out-stream FILE [--dither ...] [--gain ...]\n"
           "  --colour   print RGB pages in four inks, as with the colour ribbon in\n"
           "  --gain     dot gain at a 50%% tint the tone curve makes up for (default 0, off)\n"
           "  --top-margin  the board's top margin setting, 1/144 in: + adds paper ahead of\n"
           "             each page, - drops its first rows (the board's default is -144)\n"
           "  --testpage the board's test page for that ribbon, as board 1 would print it;\n"
-          "             tools/iwview/iwview.py draws the stream\n",
+          "             tools/iwview/iwview.py draws the stream\n"
+          "  --out-pbm  page 1's dots as a raw PBM, 1 = ink\n"
+          "  --printer laser  rip at 300 dpi for a LaserWriter (W-1082); --ps writes its\n"
+          "             PostScript, in binary, or with --hex as a Level 1 machine that\n"
+          "             cannot take binary gets it\n",
           stderr);
 }
 
@@ -123,7 +181,8 @@ int main(int argc, char **argv)
 {
     const char *in = NULL, *out_stream = NULL, *out_preview = NULL;
     const char *dither = "atkinson", *testpage = NULL;
-    int colour = 0, gain = 0, top = 0;
+    const char *printer = "imagewriter", *paper = "letter", *out_ps = NULL, *out_pbm = NULL;
+    int colour = 0, gain = 0, top = 0, hex = 0;
 
     for (int i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "--in") && i + 1 < argc)               in = argv[++i];
@@ -134,6 +193,11 @@ int main(int argc, char **argv)
         else if (!strcmp(argv[i], "--gain") && i + 1 < argc)        gain = atoi(argv[++i]);
         else if (!strcmp(argv[i], "--testpage") && i + 1 < argc)    testpage = argv[++i];
         else if (!strcmp(argv[i], "--top-margin") && i + 1 < argc)  top = atoi(argv[++i]);
+        else if (!strcmp(argv[i], "--printer") && i + 1 < argc)     printer = argv[++i];
+        else if (!strcmp(argv[i], "--paper") && i + 1 < argc)       paper = argv[++i];
+        else if (!strcmp(argv[i], "--ps") && i + 1 < argc)          out_ps = argv[++i];
+        else if (!strcmp(argv[i], "--hex"))                          hex = 1;
+        else if (!strcmp(argv[i], "--out-pbm") && i + 1 < argc)     out_pbm = argv[++i];
         else { usage(); return 2; }
     }
     if (!in && !(testpage && out_stream)) { usage(); return 2; }
@@ -164,8 +228,26 @@ int main(int argc, char **argv)
     host_t h;
     memset(&h, 0, sizeof h);
     h.colour = colour;
+    h.want_pbm = out_pbm ? (out_preview ? 1 : 2) : 0;
     h.stream = out_stream ? fopen(out_stream, "wb") : NULL;
     if (out_stream && !h.stream) { perror(out_stream); fclose(f); return 1; }
+
+    int laser = !strcmp(printer, "laser");
+    if (!laser && strcmp(printer, "imagewriter")) { usage(); fclose(f); return 2; }
+    printer_caps_t caps;
+    uint32_t paper_h_pt = 792;
+    ps_t *ps = NULL;
+    rip_stage_t stage;
+    if (laser) {
+        if (laser_caps(paper, &caps, &paper_h_pt)) { usage(); fclose(f); return 2; }
+        h.ps = out_ps ? fopen(out_ps, "wb") : NULL;
+        if (out_ps && !h.ps) { perror(out_ps); fclose(f); return 1; }
+        ps_cfg_t pc = { .out = ps_out, .ctx = &h, .binary = !hex, .paper_h_pt = paper_h_pt,
+                        .title = in, .creator = "AirWriter rip" };
+        if (!(ps = ps_new(&pc))) { fclose(f); return 1; }
+        ps_stage(ps, &stage);
+        ps_job_begin(ps);
+    }
 
     ripjob_cfg_t cfg = {
         .out      = stream_out,
@@ -174,9 +256,11 @@ int main(int argc, char **argv)
         .gain     = gain,
         .colour   = colour,
         .top_margin = top,
-        .page     = out_preview ? on_page : NULL,
+        .caps     = laser ? &caps : NULL,
+        .stage    = laser ? &stage : NULL,
+        .page     = out_preview || out_pbm ? on_page : NULL,
         .page_ctx = &h,
-        .row      = out_preview ? on_row : NULL,
+        .row      = out_preview || out_pbm ? on_row : NULL,
         .row_ctx  = &h,
         .ink_row  = out_preview ? on_ink_row : NULL,
         .log      = say,
@@ -186,6 +270,13 @@ int main(int argc, char **argv)
     memset(&st, 0, sizeof st);
 
     rc = ripjob_run(&u, &cfg, &st);
+    if (ps) {
+        ps_job_end(ps);
+        ps_free(ps);
+        if (h.ps) fclose(h.ps);
+    }
+    if (h.pbm && write_pbm(out_pbm, h.pbm, h.dst_w, h.dst_h))
+        fprintf(stderr, "rip: could not write %s\n", out_pbm);
 
     if (h.preview && (colour ? png_write_rgb(out_preview, h.preview, h.dst_w, h.dst_h)
                              : png_write_gray(out_preview, h.preview, h.dst_w, h.dst_h)))
@@ -197,6 +288,7 @@ int main(int argc, char **argv)
         rc = -1;
     }
     free(h.preview);
+    free(h.pbm);
     urf_free(&u);
     fclose(f);
 

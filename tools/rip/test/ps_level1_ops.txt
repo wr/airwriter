@@ -1,0 +1,31 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# PostScript Level 1 operators and the systemdict names that come with them
+# (PostScript Language Reference Manual, 1st edition, chapter 6), for
+# pscheck.py: anything the LaserWriter prolog runs must be one of these or
+# defined by the prolog itself. Lines starting # are comments; the checker
+# splits on whitespace, so the words below are the list.
+abs add aload anchorsearch and arc arcn arcto array ashow astore atan awidthshow
+banddevice begin bind bitshift bytesavailable cachestatus ceiling charpath clear
+cleartomark clip clippath closefile closepath concat concatmatrix copy copypage cos
+count countdictstack countexecstack counttomark currentdash currentdict currentfile
+currentflat currentfont currentgray currenthsbcolor currentlinecap currentlinejoin
+currentlinewidth currentmatrix currentmiterlimit currentpoint currentrgbcolor
+currentscreen currenttransfer curveto cvi cvlit cvn cvr cvrs cvs cvx def
+defaultmatrix definefont dict dictstack div dtransform dup echo end eoclip eofill eq
+erasepage errordict exch exec execstack executeonly exit exp false file fill
+findfont flattenpath floor flush flushfile FontDirectory for forall framedevice ge
+get getinterval grestore grestoreall gsave gt identmatrix idiv idtransform if
+ifelse image imagemask index initclip initgraphics initmatrix invertmatrix
+itransform known kshow le length lineto ln load log loop lt makefont mark matrix
+maxlength mod moveto mul ne neg newpath noaccess not nulldevice or pathbbox
+pathforall pop print prompt pstack put putinterval quit rand rcheck rcurveto read
+readhexstring readline readonly readstring renderbands repeat resetfile restore
+reversepath rlineto rmoveto roll rotate round rrand run save scale scalefont search
+setcachedevice setcachelimit setcharwidth setdash setflat setfont setgray
+sethsbcolor setlinecap setlinejoin setlinewidth setmatrix setmiterlimit setrgbcolor
+setscreen settransfer show showpage sin sqrt srand stack StandardEncoding start
+status statusdict stop stopped store string stringwidth stroke strokepath sub
+systemdict token transform translate true truncate type usertime userdict
+version vmstatus wcheck where widthshow write writehexstring writestring xcheck xor
+null
+[ ] = ==
