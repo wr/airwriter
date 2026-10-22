@@ -1,6 +1,8 @@
 # Laser printers: AppleTalk LaserWriters first, LaserJets second — design
 
-Linear: none yet. Written 2026-10-21. Design only: no firmware has changed. Supersedes the
+Linear: `W-1082 AirPrint to LaserWriters on AppleTalk` (phase 1), `W-1083 AirPrint to HP
+LaserJets over serial (PCL)` (phase 2). Written 2026-10-21, approved by Wells 2026-10-22. Design
+only: no firmware has changed. Supersedes the
 "LaserWriter — later" paragraph of `2026-08-04-printer-support-scope-design.md` (left untouched
 here because it was being edited in parallel). No laser printer is on the bench; everything this
 needs a printer to settle is listed under "What only a printer settles".
@@ -485,15 +487,14 @@ Comparison Guide and the LaserJet 4/4 Plus/5 service manual.
 - **Ghostscript / GhostPCL**: AGPL. Host test tools, never linked or shipped.
 - **Apple CUPS `pap` backend**: reference for timers and retries.
 
-## Open for Wells
+## Decided by Wells (2026-10-22)
 
-1. **Merge before a LaserWriter has printed?** Phase 1 can be finished and proven against the
-   fake LaserWriter and Ghostscript with no printer. Merged, it reaches boards on auto-update with
-   sharing off by default, but the IPP refactor changes the ImageWriter's path too. Proposed:
-   merge once the fake LaserWriter passes and board 1 prints its ImageWriter regression
-   unchanged, with docs saying LaserWriters are untested; the alternative is a branch that waits
-   for a LaserWriter.
-2. **Network printers over TCP** (the aside above): in AirWriter's scope or not.
+The design is approved as written.
+
+1. **Phase 1 merges before any LaserWriter has printed**, once it passes against the fake
+   LaserWriter and board 1's ImageWriter prints unchanged. Sharing is off by default and the
+   docs say LaserWriters are untested.
+2. **Network printers over TCP are out** for now.
 
 ## Calls made in this design (check while reading)
 
