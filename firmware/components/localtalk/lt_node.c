@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // The LocalTalk node; see lt_node.h.
 #include "lt_node.h"
+#include "pap_client.h"
 #include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
@@ -353,6 +354,12 @@ static void on_atp(lt_node_t *n, const ddp_t *d, uint64_t now)
     uint8_t fn = a.ctl & ATP_FN_MASK;
     lt_pap_t *p = &n->pap;
 
+    // W-1082: the PAP client's sockets are its own, retransmits included.
+    if (d->dst.sock == LT_SOCK_PAPC || d->dst.sock == LT_SOCK_PAPC_ST) {
+        if (n->client) papc_rx(n->client, d, &a, &from, now);
+        return;
+    }
+
     if (fn == ATP_TREL) {
         lt_xo_t *x = xo_find(n, &from, a.tid);
         if (x) x->used = 0;
@@ -500,7 +507,12 @@ void lt_node_send_atp(lt_node_t *n, const lt_route_t *to, uint8_t src_sock, uint
 
 uint16_t lt_node_next_tid(lt_node_t *n) { return next_tid(n); }
 
-void lt_node_attach(lt_node_t *n, struct pap_client *c) { n->client = c; }
+void lt_node_attach(lt_node_t *n, struct pap_client *c)
+{
+    if (n->client && n->client != c) n->client->node = NULL;
+    n->client = c;
+    if (c) c->node = n;
+}
 
 // ------------------------------------------------------------- the rest
 
@@ -797,6 +809,7 @@ void lt_node_tick(lt_node_t *n, uint64_t now)
     if (n->phase == LT_ONLINE) {
         pap_tick(n, now);
         names_tick(n, now);
+        if (n->client) papc_tick(n->client, now);
         return;
     }
     if (n->link == LT_LINK_ELAP) return;

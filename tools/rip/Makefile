@@ -63,11 +63,14 @@ build/test_pic_prog:test/test_pic_prog.c test/pic_sim.c ../../firmware/component
 	$(CC) $(CFLAGS) -I../../firmware/components/pic_prog/include -Itest -o $@ $^
 
 LT := ../../firmware/components/localtalk
-build/test_localtalk: test/test_localtalk.c $(LT)/lt_proto.c $(LT)/lt_node.c $(LT)/lt_tashtalk.c \
+build/test_localtalk: test/test_localtalk.c $(LT)/lt_proto.c $(LT)/lt_node.c $(LT)/pap_client.c $(LT)/lt_tashtalk.c \
                       $(COMP)/serial_out/serial_writer.c | build
 	$(CC) $(CFLAGS) -I$(LT)/include -I$(COMP)/serial_out/include -Itest -o $@ $^
 
-build/test_ethertalk: test/test_ethertalk.c $(LT)/et_proto.c $(LT)/et_link.c $(LT)/et_transport.c $(LT)/lt_node.c $(LT)/lt_proto.c | build
+build/test_ethertalk: test/test_ethertalk.c $(LT)/et_proto.c $(LT)/et_link.c $(LT)/et_transport.c $(LT)/lt_node.c $(LT)/pap_client.c $(LT)/lt_proto.c | build
+	$(CC) $(CFLAGS) -I$(LT)/include -Itest -o $@ $^
+
+build/test_pap_client: test/test_pap_client.c $(LT)/lt_proto.c $(LT)/lt_node.c $(LT)/pap_client.c | build
 	$(CC) $(CFLAGS) -I$(LT)/include -Itest -o $@ $^
 
 CT := ../../firmware/components/cable_test
