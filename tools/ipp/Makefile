@@ -8,8 +8,10 @@ CFLAGS  := -std=c11 -Wall -Wextra -Werror -O2 -g
 COMP    := ../../firmware/components
 INCS    := -I$(COMP)/ipp_attrs/include \
            -I$(COMP)/ipp_server/include \
+           -I$(COMP)/printer_caps/include \
            -I../rip/test
-SRCS    := $(COMP)/ipp_attrs/ipp_enc.c \
+SRCS    := $(COMP)/printer_caps/printer_caps.c \
+           $(COMP)/ipp_attrs/ipp_enc.c \
            $(COMP)/ipp_attrs/ipp_attrs.c \
            $(COMP)/ipp_server/ipp_req.c \
            $(COMP)/ipp_server/ipp_job.c

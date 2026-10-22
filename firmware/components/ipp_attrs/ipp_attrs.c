@@ -2,22 +2,11 @@
 #include "ipp_attrs.h"
 #include <string.h>
 
-// Margins in hundredths of a millimetre, per SPEC.md 3.5. The tractor feed
-// means this printer physically cannot reach the edges, and declaring
-// borderless would make iOS lay out edge-to-edge and silently clip. The top
-// is the inch above where printing starts on paper loaded as the Owner's
-// Guide says; the top margin setting drops that inch of each page, so what
-// iOS draws below it prints where iOS put it.
-#define MARGIN_SIDE   635    // 6.35mm = 0.25in
-#define MARGIN_TOP    2540   // 25.4mm = 1in
-#define MARGIN_BOTTOM 1270   // 12.7mm = 0.5in
-
 static const char *const k_ipp_versions[]  = { "1.1", "2.0" };
 static const char *const k_charset[]       = { "utf-8" };
 static const char *const k_language[]      = { "en-us" };
 static const char *const k_doc_formats[]   = { "image/urf", "application/octet-stream" };
 static const char *const k_compression[]   = { "none" };
-static const char *const k_media[]         = { "na_letter_8.5x11in" };
 static const char *const k_media_source[]  = { "main" };
 static const char *const k_media_type[]    = { "stationery" };
 static const char *const k_sides[]         = { "one-sided" };
@@ -28,15 +17,6 @@ static const char *const k_uri_auth[]      = { "none" };
 static const char *const k_uri_security[]  = { "none" };
 static const char *const k_features[]      = { "ipp-everywhere" };
 static const char *const k_which_jobs[]    = { "completed", "not-completed" };
-
-// urf-supported carries the same capabilities as the TXT record's URF key,
-// split one keyword per value. AirPrint clients read this one, not the TXT.
-static const char *const k_urf[] = {
-    IPP_URF_VERSION, "CP1", "RS72-144", "W8", "DM1", "IS1", "MT1", "FN3"
-};
-static const char *const k_urf_colour[] = {
-    IPP_URF_VERSION, "CP1", "RS72-144", "W8", "SRGB24", "DM1", "IS1", "MT1", "FN3"
-};
 
 static const char *const k_job_creation[] = {
     "copies", "media", "media-col", "print-color-mode", "print-quality",
@@ -52,40 +32,39 @@ static const int32_t k_operations[] = {
     IPP_OP_GET_JOB_ATTRIBUTES, IPP_OP_GET_JOBS, IPP_OP_GET_PRINTER_ATTRIBUTES
 };
 
-// 3 draft, 4 normal, 5 high. One pass at 144x72 is the only mode v1 has, so
-// all three map to the same output for now; iOS wants the choice to exist.
+// 3 draft, 4 normal, 5 high. Each printer has one mode (the ImageWriter one
+// pass at 144x72), so all three map to the same output; iOS wants the choice
+// to exist.
 static const int32_t k_qualities[] = { 3, 4, 5 };
 static const int32_t k_finishings[] = { 3 };   // 'none'
 
 #define NELEM(a) (sizeof (a) / sizeof (a)[0])
 
-// Letter, in hundredths of a millimetre: 8.5 x 11in.
-#define LETTER_X 21590
-#define LETTER_Y 27940
-
 // media-col is how IPP Everywhere carries a sheet size together with the
 // margins that apply to it. iOS lays out against these, so they have to agree
-// with the flat media-*-margin-supported values above.
-static void write_media_col(ipp_enc_t *e, const char *name)
+// with the flat media-*-margin-supported values below. Margins and sizes are
+// the printer's caps (printer_caps.h; the ImageWriter's say why its are what
+// they are).
+static void write_media_col(ipp_enc_t *e, const char *name, const printer_caps_t *c)
 {
     ipp_col_begin(e, name);
 
     ipp_col_member(e, "media-size");
     ipp_col_begin(e, NULL);                  // nested collection, no name
     ipp_col_member(e, "x-dimension");
-    ipp_addl_int(e, IPP_TAG_INTEGER, LETTER_X);
+    ipp_addl_int(e, IPP_TAG_INTEGER, c->media_x);
     ipp_col_member(e, "y-dimension");
-    ipp_addl_int(e, IPP_TAG_INTEGER, LETTER_Y);
+    ipp_addl_int(e, IPP_TAG_INTEGER, c->media_y);
     ipp_col_end(e);
 
     ipp_col_member(e, "media-bottom-margin");
-    ipp_addl_int(e, IPP_TAG_INTEGER, MARGIN_BOTTOM);
+    ipp_addl_int(e, IPP_TAG_INTEGER, c->margin_b);
     ipp_col_member(e, "media-top-margin");
-    ipp_addl_int(e, IPP_TAG_INTEGER, MARGIN_TOP);
+    ipp_addl_int(e, IPP_TAG_INTEGER, c->margin_t);
     ipp_col_member(e, "media-left-margin");
-    ipp_addl_int(e, IPP_TAG_INTEGER, MARGIN_SIDE);
+    ipp_addl_int(e, IPP_TAG_INTEGER, c->margin_l);
     ipp_col_member(e, "media-right-margin");
-    ipp_addl_int(e, IPP_TAG_INTEGER, MARGIN_SIDE);
+    ipp_addl_int(e, IPP_TAG_INTEGER, c->margin_r);
 
     ipp_col_member(e, "media-source");
     ipp_addl_str(e, IPP_TAG_KEYWORD, "main");
@@ -145,6 +124,7 @@ static int want(sel_t *s, const char *name, int group)
 void ipp_write_printer_attrs(ipp_enc_t *e, const ipp_printer_t *p,
                              const ipp_names_t *requested)
 {
+    const printer_caps_t *c = p->caps ? p->caps : &printer_caps_imagewriter;
     sel_t s = { .e = e, .req = (requested && requested->n) ? requested : NULL };
     if (s.req) {
         int all = ipp_names_has(s.req, "all");
@@ -169,7 +149,7 @@ void ipp_write_printer_attrs(ipp_enc_t *e, const ipp_printer_t *p,
     if (W("printer-location", PD))
         ipp_attr_str(e, IPP_TAG_TEXT, "printer-location", p->location);
     if (W("printer-make-and-model", PD))
-        ipp_attr_str(e, IPP_TAG_TEXT, "printer-make-and-model", "Apple ImageWriter II");
+        ipp_attr_str(e, IPP_TAG_TEXT, "printer-make-and-model", c->make_model);
     if (W("printer-uuid", PD))
         ipp_attr_str(e, IPP_TAG_URI, "printer-uuid", p->uuid);
     if (W("printer-more-info", PD))
@@ -184,8 +164,7 @@ void ipp_write_printer_attrs(ipp_enc_t *e, const ipp_printer_t *p,
 
     // 1284 device id. Some clients match on this instead of the model string.
     if (W("printer-device-id", PD))
-        ipp_attr_str(e, IPP_TAG_TEXT, "printer-device-id",
-                     "MFG:Apple;MDL:ImageWriter II;CMD:URF;");
+        ipp_attr_str(e, IPP_TAG_TEXT, "printer-device-id", c->device_id);
 
     if (W("printer-state", PD))
         ipp_attr_int(e, IPP_TAG_ENUM, "printer-state", p->state);
@@ -228,17 +207,20 @@ void ipp_write_printer_attrs(ipp_enc_t *e, const ipp_printer_t *p,
     if (W("compression-supported", PD))
         ipp_attr_strs(e, IPP_TAG_KEYWORD, "compression-supported",
                       k_compression, NELEM(k_compression));
-    if (W("urf-supported", PD))
-        ipp_attr_strs(e, IPP_TAG_KEYWORD, "urf-supported",
-                      p->colour ? k_urf_colour : k_urf,
-                      p->colour ? NELEM(k_urf_colour) : NELEM(k_urf));
+    // urf-supported carries the same capabilities as the TXT record's URF
+    // key, split one keyword per value. AirPrint clients read this one.
+    if (W("urf-supported", PD)) {
+        const char *kw[9];
+        size_t n = printer_caps_urf_keywords(c, p->colour, kw);
+        ipp_attr_strs(e, IPP_TAG_KEYWORD, "urf-supported", kw, n);
+    }
 
     if (W("media-default", JT))
-        ipp_attr_str(e, IPP_TAG_KEYWORD, "media-default", k_media[0]);
+        ipp_attr_str(e, IPP_TAG_KEYWORD, "media-default", c->media);
     if (W("media-supported", JT))
-        ipp_attr_strs(e, IPP_TAG_KEYWORD, "media-supported", k_media, NELEM(k_media));
+        ipp_attr_strs(e, IPP_TAG_KEYWORD, "media-supported", &c->media, 1);
     if (W("media-ready", JT))
-        ipp_attr_strs(e, IPP_TAG_KEYWORD, "media-ready", k_media, NELEM(k_media));
+        ipp_attr_strs(e, IPP_TAG_KEYWORD, "media-ready", &c->media, 1);
     if (W("media-source-supported", JT))
         ipp_attr_strs(e, IPP_TAG_KEYWORD, "media-source-supported",
                       k_media_source, NELEM(k_media_source));
@@ -246,34 +228,34 @@ void ipp_write_printer_attrs(ipp_enc_t *e, const ipp_printer_t *p,
         ipp_attr_strs(e, IPP_TAG_KEYWORD, "media-type-supported",
                       k_media_type, NELEM(k_media_type));
 
-    if (W("media-col-default", JT))  write_media_col(e, "media-col-default");
-    if (W("media-col-ready", JT))    write_media_col(e, "media-col-ready");
-    if (W("media-col-database", EXPLICIT)) write_media_col(e, "media-col-database");
+    if (W("media-col-default", JT))  write_media_col(e, "media-col-default", c);
+    if (W("media-col-ready", JT))    write_media_col(e, "media-col-ready", c);
+    if (W("media-col-database", EXPLICIT)) write_media_col(e, "media-col-database", c);
 
     if (W("media-size-supported", JT)) {
         ipp_col_begin(e, "media-size-supported");
         ipp_col_member(e, "x-dimension");
-        ipp_addl_int(e, IPP_TAG_INTEGER, LETTER_X);
+        ipp_addl_int(e, IPP_TAG_INTEGER, c->media_x);
         ipp_col_member(e, "y-dimension");
-        ipp_addl_int(e, IPP_TAG_INTEGER, LETTER_Y);
+        ipp_addl_int(e, IPP_TAG_INTEGER, c->media_y);
         ipp_col_end(e);
     }
 
     if (W("media-left-margin-supported", JT))
-        ipp_attr_int(e, IPP_TAG_INTEGER, "media-left-margin-supported",   MARGIN_SIDE);
+        ipp_attr_int(e, IPP_TAG_INTEGER, "media-left-margin-supported",   c->margin_l);
     if (W("media-right-margin-supported", JT))
-        ipp_attr_int(e, IPP_TAG_INTEGER, "media-right-margin-supported",  MARGIN_SIDE);
+        ipp_attr_int(e, IPP_TAG_INTEGER, "media-right-margin-supported",  c->margin_r);
     if (W("media-top-margin-supported", JT))
-        ipp_attr_int(e, IPP_TAG_INTEGER, "media-top-margin-supported",    MARGIN_TOP);
+        ipp_attr_int(e, IPP_TAG_INTEGER, "media-top-margin-supported",    c->margin_t);
     if (W("media-bottom-margin-supported", JT))
-        ipp_attr_int(e, IPP_TAG_INTEGER, "media-bottom-margin-supported", MARGIN_BOTTOM);
+        ipp_attr_int(e, IPP_TAG_INTEGER, "media-bottom-margin-supported", c->margin_b);
 
-    // 144 dpi across, 72 down: one pass, bit 0 of a graphics byte is the top
-    // pin of eight. SPEC.md 3.8.
+    // The ImageWriter's 144 dpi across, 72 down: one pass, bit 0 of a
+    // graphics byte is the top pin of eight. SPEC.md 3.8.
     if (W("printer-resolution-default", JT))
-        ipp_attr_res(e, "printer-resolution-default", 144, 72);
+        ipp_attr_res(e, "printer-resolution-default", c->res_x, c->res_y);
     if (W("printer-resolution-supported", JT))
-        ipp_attr_res(e, "printer-resolution-supported", 144, 72);
+        ipp_attr_res(e, "printer-resolution-supported", c->res_x, c->res_y);
 
     if (W("print-color-mode-default", JT))
         ipp_attr_str(e, IPP_TAG_KEYWORD, "print-color-mode-default",
@@ -307,7 +289,7 @@ void ipp_write_printer_attrs(ipp_enc_t *e, const ipp_printer_t *p,
     if (W("color-supported", PD))
         ipp_attr_bool(e, "color-supported", p->colour ? 1 : 0);
     if (W("pages-per-minute", PD))
-        ipp_attr_int(e, IPP_TAG_INTEGER, "pages-per-minute", 1);
+        ipp_attr_int(e, IPP_TAG_INTEGER, "pages-per-minute", c->ppm);
     if (W("pdl-override-supported", PD))
         ipp_attr_str(e, IPP_TAG_KEYWORD, "pdl-override-supported", "attempted");
     if (W("multiple-document-jobs-supported", PD))

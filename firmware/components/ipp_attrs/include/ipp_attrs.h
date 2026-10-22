@@ -4,10 +4,10 @@
 // UUID matter more than they look.
 #pragma once
 #include "ipp_enc.h"
+#include "printer_caps.h"
 
-// URF capability string, SPEC.md 3.3. iOS honoured RS72-144 in the capture at
-// fixtures/ios-20260804-232652.urf -- it rendered at 144 dpi rather than
-// sending 300 -- so no RS300 fallback is advertised.
+// The ImageWriter's URF capability string, SPEC.md 3.3; printer_caps_urf
+// builds it (and any other printer's) from printer_caps_imagewriter.
 #define IPP_URF_VERSION   "V1.4"
 #define IPP_URF_STRING    IPP_URF_VERSION ",CP1,RS72-144,W8,DM1,IS1,MT1,FN3"
 // With the colour ribbon in (W-1064): 24-bit sRGB pages too.
@@ -28,6 +28,7 @@ typedef struct {
     int32_t     queued_jobs;
     uint32_t    uptime_s;
     int         colour;             // the colour ribbon is in: offer colour (W-1064)
+    const printer_caps_t *caps;     // NULL: printer_caps_imagewriter (W-1082)
 } ipp_printer_t;
 
 typedef struct {

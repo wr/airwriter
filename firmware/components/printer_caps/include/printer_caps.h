@@ -1,0 +1,37 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+//
+// What a printer can do, in one place (W-1082): what IPP and Bonjour tell
+// clients (SPEC.md 3.3, 3.5) and how the rip lays a page out for it. The
+// ImageWriter's is a constant; a shared LaserWriter's is filled in from what
+// it answered (laser/lw_caps.h). The scope spec's rule stands: this struct,
+// and no printer-driver framework beyond it.
+#pragma once
+#include <stdint.h>
+#include <stddef.h>
+
+typedef struct {
+    // What clients are told.
+    const char *make_model;      // printer-make-and-model, TXT ty
+    const char *device_id;       // printer-device-id (IEEE 1284)
+    const char *urf_rs;          // the URF resolution keyword: "RS72-144", "RS300"
+    uint16_t    res_x, res_y;    // printer-resolution-*, dpi
+    const char *media;           // the one media keyword: "na_letter_8.5x11in"
+    int32_t     media_x, media_y;                        // its size, 1/100 mm
+    int32_t     margin_l, margin_r, margin_t, margin_b;  // 1/100 mm
+    int32_t     ppm;             // pages-per-minute
+    // How the rip lays a page out.
+    uint16_t    rip_dpi_x, rip_dpi_y;
+    uint32_t    max_dots;        // the widest row the output stage takes; 0 = any
+    uint8_t     crop_margin;     // crop up to 1/4 in a side to reach max_dots
+} printer_caps_t;
+
+// The ImageWriter II as it has always been advertised: one pass at 144 x 72,
+// Letter on the tractor feed, a 0.25 in side margin, 1 in top, 0.5 in bottom.
+extern const printer_caps_t printer_caps_imagewriter;
+
+// The URF capability string (SPEC.md 3.3): "V1.4,CP1,<rs>,W8[,SRGB24],DM1,
+// IS1,MT1,FN3", SRGB24 when `colour`. Its length, or 0 (and "" when cap > 0)
+// when it does not fit.
+size_t printer_caps_urf(const printer_caps_t *c, int colour, char *out, size_t cap);
+// The same keywords one per value, for urf-supported. Returns the count.
+size_t printer_caps_urf_keywords(const printer_caps_t *c, int colour, const char *kw[9]);
