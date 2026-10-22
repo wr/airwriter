@@ -443,6 +443,14 @@ void papc_tick(pap_client_t *c, uint64_t now)
         c->tickled = now;
     }
     answer_pending(c, now);
+    if (c->cancel && !c->eof_sent && since(now, c->cancel_at) >= PAPC_CANCEL_WAIT_MS) {
+        // A paused printer asks for nothing, so our EOF would wait for its
+        // paper: close instead, which ends the job there too.
+        say(c, "PAP %u: canceled, and the printer asked for nothing in %u s; closing",
+            c->connid, PAPC_CANCEL_WAIT_MS / 1000);
+        close_conn(c, PAPC_END_CANCELED, now);
+        return;
+    }
     if (c->phase != PAPC_OPEN && c->phase != PAPC_DRAINING) return;
     if (c->rd_want && since(now, c->rd_sent) >= PAPC_READ_RETRY_MS) send_read(c, now);
     start_read(c, now);
@@ -462,7 +470,10 @@ void papc_cancel(pap_client_t *c, uint64_t now)
         finish(c, PAPC_END_CANCELED);
         return;
     }
-    if (!c->cancel) say(c, "PAP %u: canceled", c->connid);
+    if (!c->cancel) {
+        say(c, "PAP %u: canceled", c->connid);
+        c->cancel_at = now;
+    }
     c->cancel = 1;
     answer_pending(c, now);
 }

@@ -42,6 +42,7 @@
 #define PAPC_READ_RETRY_MS 15000            // our SendData to the printer
 #define PAPC_EOF_WAIT_MS   30000            // after our EOF, for the printer's
 #define PAPC_HOLD_MS       500              // a SendData held for a fuller answer, at most
+#define PAPC_CANCEL_WAIT_MS 10000           // canceled, for a SendData to carry our EOF; then CloseConn
 
 typedef enum {
     PAPC_END_OK,          // sent, EOF given, the printer's EOF (or the wait) after it
@@ -102,6 +103,7 @@ typedef struct pap_client {
     size_t       staged;
     uint8_t      src_eof, eof_sent, eof_got;
     uint64_t     eof_at;
+    uint64_t     cancel_at;      // when papc_cancel came
     // Our reads of the printer
     uint16_t     rd_seq, rd_tid;
     uint8_t      rd_want, rd_eof;

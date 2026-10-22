@@ -477,6 +477,35 @@ static void test_cancel_open(void)
     CHECK_EQ_INT(ended, PAPC_END_CANCELED);
 }
 
+// Canceled while the printer pulls nothing (out of paper): our EOF would wait
+// for paper, and the job with it, holding the board (W-1082 bench). After
+// PAPC_CANCEL_WAIT_MS with no SendData the client closes the connection,
+// which the printer takes as the job's end and flushes.
+static void test_cancel_paused(void)
+{
+    uint64_t t = fresh();
+    uint8_t cid = open_ok(t);
+    src_len = 20000;
+    papc_cancel(pc, t + 10);
+    int from = nsent;
+    for (uint64_t k = 0; k < PAPC_CANCEL_WAIT_MS - 1000; k += 500) {
+        if (k % 5000 == 0)                       // a paused printer still tickles
+            from_printer(&node, PR_SESS, LT_SOCK_PAPC, ATP_TREQ, 0, 0x930, cid, PAP_TICKLE, 0, 0,
+                         NULL, 0, t + 10 + k);
+        lt_node_tick(&node, t + 10 + k);
+    }
+    CHECK_EQ_INT(count_fn(from, PAP_CLOSE_CONN, ATP_TREQ), 0);
+    lt_node_tick(&node, t + 10 + PAPC_CANCEL_WAIT_MS);
+    CHECK_EQ_INT(count_fn(from, PAP_CLOSE_CONN, ATP_TREQ), 1);
+    for (int i = from; i < nsent; i++) {
+        ddp_t d; atp_t a;
+        if (!frame(i, &d, &a) && a.user[1] == PAP_CLOSE_CONN)
+            from_printer(&node, PR_SESS, LT_SOCK_PAPC, ATP_TRESP | ATP_EOM, 0, a.tid, cid,
+                         PAP_CLOSE_CONN_REPLY, 0, 0, NULL, 0, t + 20 + PAPC_CANCEL_WAIT_MS);
+    }
+    CHECK_EQ_INT(ended, PAPC_END_CANCELED);
+}
+
 static void test_status(void)
 {
     uint64_t t = fresh();
@@ -514,6 +543,7 @@ int main(void)
     test_no_printer_eof();
     test_dead_and_dropped();
     test_cancel_open();
+    test_cancel_paused();
     test_status();
     free(pc);
     TEST_END;
