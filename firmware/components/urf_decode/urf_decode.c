@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "urf_decode.h"
+#include "bigmem.h"
 #include <stdlib.h>
 #include <string.h>
 #include <sys/types.h>
@@ -95,7 +96,7 @@ int urf_next_page(urf_t *u)
     if (p->bytes_per_line > URF_MAX_BYTES_PER_LINE) return URF_ERR_UNSUPPORTED;
 
     if (p->bytes_per_line > u->line_cap) {
-        uint8_t *nl = realloc(u->line, p->bytes_per_line);
+        uint8_t *nl = big_realloc(u->line, p->bytes_per_line);
         if (!nl) return URF_ERR_ALLOC;
         u->line     = nl;
         u->line_cap = p->bytes_per_line;

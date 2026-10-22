@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "ripjob.h"
+#include "bigmem.h"
 #include "resample.h"
 
 #include <stdlib.h>
@@ -181,7 +182,7 @@ int ripjob_run(urf_t *u, const ripjob_cfg_t *cfg, ripjob_stats_t *st)
         } else {
             p.bits = calloc((dst_w + 7) / 8, 1);
             if (!p.bits) { rc = -1; goto page_cleanup; }
-            if (rgb && !(p.gray = malloc(src_w))) { rc = -1; goto page_cleanup; }
+            if (rgb && !(p.gray = big_malloc(src_w))) { rc = -1; goto page_cleanup; }
 
             if (ht_init(&p.ht, cfg->dither, dst_w)) { rc = -1; goto page_cleanup; }
             ht_ready = 1;

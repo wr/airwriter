@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "resample.h"
+#include "bigmem.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -12,8 +13,8 @@ int rs_init_n(rs_t *r, uint32_t src_w, uint32_t src_h, uint32_t dst_w, uint32_t 
     r->dst_w = dst_w; r->dst_h = dst_h;
     r->ch    = channels;
     r->emit  = emit;  r->ctx   = ctx;
-    r->acc = calloc((size_t)dst_w * channels, sizeof *r->acc);
-    r->out = calloc((size_t)dst_w * channels, 1);
+    r->acc = big_calloc((size_t)dst_w * channels, sizeof *r->acc);
+    r->out = big_calloc((size_t)dst_w * channels, 1);
     if (!r->acc || !r->out) { rs_free(r); return -1; }
     return 0;
 }

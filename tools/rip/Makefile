@@ -5,6 +5,8 @@ COMP    := ../../firmware/components
 INCS    := -I$(COMP)/ripjob/include \
            -I$(COMP)/printer_caps/include \
            -I$(COMP)/ps_page/include \
+           -I$(COMP)/job_pipe/include \
+           -I$(COMP)/bigmem/include \
            -I$(COMP)/laser/include \
            -I$(COMP)/urf_decode/include \
            -I$(COMP)/resample/include \
@@ -18,6 +20,7 @@ INCS    := -I$(COMP)/ripjob/include \
 SRCS    := $(wildcard $(COMP)/ripjob/*.c) \
            $(COMP)/printer_caps/printer_caps.c \
            $(wildcard $(COMP)/ps_page/*.c) \
+           $(COMP)/job_pipe/job_pipe_rip.c \
            $(COMP)/laser/lw_query.c $(COMP)/laser/lw_status.c $(COMP)/laser/lw_caps.c \
            $(wildcard $(COMP)/urf_decode/*.c) \
            $(wildcard $(COMP)/resample/*.c) \

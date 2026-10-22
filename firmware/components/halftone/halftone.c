@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "halftone.h"
+#include "bigmem.h"
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
@@ -26,7 +27,7 @@ int ht_init(ht_t *h, ht_algo_t algo, uint32_t width)
     h->algo  = algo;
     h->width = width;
     for (int v = 0; v < 256; v++) h->tone[v] = (uint8_t)v;
-    h->err   = calloc((size_t)width * 3, sizeof *h->err);
+    h->err   = big_calloc((size_t)width * 3, sizeof *h->err);
     return h->err ? 0 : -1;
 }
 

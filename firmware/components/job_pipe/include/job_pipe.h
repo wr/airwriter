@@ -24,6 +24,7 @@
 #include "esp_err.h"
 #include "halftone.h"
 #include "ripjob.h"
+#include "job_pipe_rip.h"
 
 typedef struct {
     size_t   doc_bytes;      // URF in
@@ -63,16 +64,8 @@ void      job_pipe_set_top_margin(int top);
 // Starts the pipeline task for one document.
 esp_err_t job_pipe_begin(const char *job_name);
 
-// W-1082: a document for another printer than the ImageWriter: its geometry,
-// the output stage its rows go to (a LaserWriter's PostScript), and its own
-// screen. The colour path, the top margin and cfg.out are the ImageWriter's
-// and unused. The caps and stage must last until cfg.done.
-typedef struct {
-    const printer_caps_t *caps;
-    const rip_stage_t    *stage;
-    ht_algo_t             dither;
-    int                   gain;
-} job_pipe_target_t;
+// W-1082: a document for another printer than the ImageWriter
+// (job_pipe_target_t, in job_pipe_rip.h).
 esp_err_t job_pipe_begin_to(const char *job_name, const job_pipe_target_t *t);
 
 // Returns as soon as the bytes are in the buffer. Blocks only when the buffer

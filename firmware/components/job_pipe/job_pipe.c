@@ -80,22 +80,15 @@ static void pipe_task(void *arg)
                  u.is_pwg ? " -- looks like PWG raster, which is not supported" : "");
         s_st.rc = rc;
     } else {
-        ripjob_cfg_t cfg = {
+        ripjob_cfg_t base = {
             .out     = count_out,
             .dither  = s_cfg.dither,
             .gain    = s_cfg.gain,
             .top_margin = s_cfg.top_margin,
-            .colour  = s_cfg.colour_ok ? s_cfg.colour_ok(s_cfg.colour_ctx) : 0,
             .log     = pipe_log,
         };
-        if (s_has_target) {                    // W-1082: another printer's job
-            cfg.caps   = s_target.caps;
-            cfg.stage  = s_target.stage;
-            cfg.dither = s_target.dither;
-            cfg.gain   = s_target.gain;
-            cfg.colour = 0;
-            cfg.top_margin = 0;
-        }
+        ripjob_cfg_t cfg = job_pipe_rip_cfg(base, s_cfg.colour_ok, s_cfg.colour_ctx,
+                                            s_has_target ? &s_target : NULL);
         ripjob_stats_t rst;
         memset(&rst, 0, sizeof rst);
         s_st.rc     = ripjob_run(&u, &cfg, &rst);
