@@ -12,6 +12,8 @@
 #include <stdint.h>
 #include <stddef.h>
 #include "esp_err.h"
+#include "ipp_req.h"
+#include "printer_caps.h"
 
 typedef struct {
     // Called once per job when the document starts. Return ESP_OK to accept.
@@ -65,7 +67,7 @@ void ipp_server_job_done(int ok);
 // as "media-empty-error" and a printer-state-message to go with it. Pass NULL
 // to clear both. A job printing meanwhile reads processing-stopped. This is
 // what turns a stalled HSKo line into an alert on the phone -- SPEC.md 3.9.
-// The strings must outlive the call: pass literals.
+// The reason must outlive the call (pass a literal); the message is copied.
 void ipp_server_set_stopped(const char *reason_or_null, const char *message);
 
 // The colour ribbon came or went (W-1064). The printer attributes change at
@@ -79,3 +81,29 @@ void ipp_server_set_colour(int on);
 // printer-uuid. Callable before ipp_server_start, which then starts that way.
 // Any task.
 void ipp_server_set_airprint(int on);
+
+// ------------------------------------------------------------- W-1082
+// A second printer: a shared LaserWriter, beside the ImageWriter. The
+// functions above act on the ImageWriter (printer 0); these take the printer.
+// Printer 1 answers at its own resource, under its own Bonjour instance and
+// printer-uuid; one job at a time across both (the job buffer is single), so
+// a job for either waits behind the other as a second ImageWriter job does.
+typedef struct {
+    const char *resource;        // "ipp/laser" (IPP_RESOURCE_LASER): its path, TXT rp
+    const char *name;            // Bonjour instance and printer-name
+    const char *info;            // printer-info: the printer's NBP name
+    const char *uuid;            // urn:uuid:...
+    const printer_caps_t *caps;  // make-and-model, device id, URF, media, margins, resolution
+    const char *icon;            // "laser": served as /laser-48.png and so on
+    ipp_doc_sink_t sink;
+} ipp_printer_cfg_t;
+
+// Puts printer idx (1) on the network, or replaces it, or with NULL takes it
+// off. Strings and caps are copied. ESP_ERR_INVALID_STATE while its job
+// holds the printer. Any task, after ipp_server_start.
+esp_err_t ipp_server_set_printer(int idx, const ipp_printer_cfg_t *cfg);
+void      ipp_server_job_done_for(int idx, int ok);
+void      ipp_server_set_stopped_for(int idx, const char *reason_or_null, const char *message);
+// job-state-message for the printer's job in the slot (copied): a
+// LaserWriter's PostScript error. Cleared when the next job starts.
+void      ipp_server_job_message_for(int idx, const char *msg);

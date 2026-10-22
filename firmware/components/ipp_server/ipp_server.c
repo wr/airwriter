@@ -71,25 +71,43 @@ static int s_listen_fd = -1;
 static int s_running;
 static int s_idle_workers;   // workers in accept(), free for a new connection
 static ipp_server_cfg_t s_cfg;
-static ipp_doc_sink_t   s_sink;
-static char s_uri[128];
 static char s_adminurl[96];
-static char s_icon_uri[3][96];
-static char s_uuid[64];
 static char s_hostname[40];
-static volatile int s_colour;   // W-1064: the colour ribbon is in
 static volatile int s_mdns_up;
-static int s_txt_colour;        // what the TXT record says
-static volatile int s_airprint = 1;   // W-1079: advertised and taking jobs
-static int s_print_svcs;        // _ipp and _printer are registered
 
+// W-1082: each printer the server answers for. Printer 0 is the ImageWriter
+// (ipp_server_cfg_t), set up at start and there for good; printer 1 a shared
+// LaserWriter (ipp_server_set_printer), there while it is shared. Strings
+// are copies. The job slot, ids and stop reason are each printer's; the
+// print lock, below, is one: one job at a time across both, since the job
+// buffer and the rip are single.
+typedef struct {
+    int             on;                  // answering; printer 0 always
+    char            resource[24];        // "ipp/print": its path, TXT rp
+    char            uri[128];
+    char            uuid[64];
+    char            name[64];            // printer-name; printer 1's Bonjour instance too
+    char            info[64];            // printer-info
+    char            icon_uri[3][96];
+    const printer_caps_t *caps;          // NULL: printer_caps_imagewriter
+    printer_caps_t  caps_copy;           // printer 1's, its strings in the two below
+    char            make_model[72], device_id[112];
+    ipp_doc_sink_t  sink;
+    ipp_job_rec_t   job;
+    int32_t         next_job_id;
+    const char     *stop_reason;         // NULL when the printer is fine
+    char            stop_message[128];   // printer-state-message while stopped
+    char            job_message[128];    // job-state-message for the job in the slot
+    volatile int    colour;              // W-1064: the colour ribbon is in (printer 0)
+    int             txt_colour;          // what the TXT record says
+    volatile int    airprint;            // W-1079: advertised and taking jobs (printer 0)
+    int             print_svcs;          // its Bonjour services are registered
+    char            svc_name[64];        // printer 1: the instance they were registered as
+} printer_t;
 
-static ipp_job_rec_t s_job;
-static int32_t s_next_job_id = 1;
+static printer_t s_p[IPP_PRINTERS] = { [0] = { .airprint = 1 } };   // W-1079: on until set
 static int s_printer_waiters;       // requests blocked in acquire_printer
-static const char *s_stop_reason;   // NULL when the printer is fine
-static const char *s_stop_message;  // printer-state-message while stopped
-static SemaphoreHandle_t s_job_lock;     // guards s_job, s_next_job_id, s_stop_reason
+static SemaphoreHandle_t s_job_lock;     // guards s_p's jobs, ids, stops and strings
 // Held by the printing job, from Print-Job until its document has printed --
 // well after the reply, which goes back when the upload ends (W-1042).
 // Binary, not a mutex: the Print-Job worker takes it and the sink's pipeline
@@ -108,14 +126,14 @@ static uint32_t uptime_s(void)
 // the UUID hard enough that a stale media list otherwise outlives any number
 // of reflashes. SPEC.md 3.5. Outside dev mode the third group is the UUID
 // epoch, bumped by hand when the advertised capabilities change.
-static void make_uuid(int dev_mode)
+static void make_uuid(char *out, size_t cap, int dev_mode)
 {
     uint8_t mac[6] = {0};
     esp_read_mac(mac, ESP_MAC_WIFI_STA);
 
     uint16_t rnd = dev_mode ? (uint16_t)(esp_random() & 0xFFFF)
                             : (uint16_t)CONFIG_AIRWRITER_UUID_EPOCH;
-    snprintf(s_uuid, sizeof s_uuid,
+    snprintf(out, cap,
              "urn:uuid:41575254-4552-%04x-%02x%02x-%02x%02x%02x%02x",
              rnd, mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
 }
@@ -128,62 +146,89 @@ extern const uint8_t icon_128_start[] asm("_binary_icon_128_png_start");
 extern const uint8_t icon_128_end[]   asm("_binary_icon_128_png_end");
 extern const uint8_t icon_512_start[] asm("_binary_icon_512_png_start");
 extern const uint8_t icon_512_end[]   asm("_binary_icon_512_png_end");
+// W-1082: a LaserWriter, for a shared one.
+extern const uint8_t laser_48_start[]  asm("_binary_laser_48_png_start");
+extern const uint8_t laser_48_end[]    asm("_binary_laser_48_png_end");
+extern const uint8_t laser_128_start[] asm("_binary_laser_128_png_start");
+extern const uint8_t laser_128_end[]   asm("_binary_laser_128_png_end");
+extern const uint8_t laser_512_start[] asm("_binary_laser_512_png_start");
+extern const uint8_t laser_512_end[]   asm("_binary_laser_512_png_end");
 
 static const struct {
+    const char    *prefix;
     unsigned       size;
     const uint8_t *start, *end;
-} k_icons[3] = {
-    {  48, icon_48_start,  icon_48_end  },
-    { 128, icon_128_start, icon_128_end },
-    { 512, icon_512_start, icon_512_end },
+} k_icons[6] = {
+    { "icon",   48, icon_48_start,   icon_48_end   },
+    { "icon",  128, icon_128_start,  icon_128_end  },
+    { "icon",  512, icon_512_start,  icon_512_end  },
+    { "laser",  48, laser_48_start,  laser_48_end  },
+    { "laser", 128, laser_128_start, laser_128_end },
+    { "laser", 512, laser_512_start, laser_512_end },
 };
 
-// Callers hold s_job_lock.
-static void fill_printer(ipp_printer_t *p)
+static void icon_uris(printer_t *p, const char *prefix)
 {
-    p->uri            = s_uri;
-    p->name           = s_cfg.queue_name;
-    p->info           = "Apple ImageWriter II";
-    p->uuid           = s_uuid;
-    p->adminurl       = s_adminurl;
-    for (int i = 0; i < 3; i++) p->icons[i] = s_icon_uri[i];
-    p->location       = "";
-    p->state          = s_stop_reason               ? IPP_PSTATE_STOPPED
-                      : (s_job.state == IPP_JSTATE_PROCESSING) ? IPP_PSTATE_PROCESSING
-                                                               : IPP_PSTATE_IDLE;
-    p->state_reason   = s_stop_reason ? s_stop_reason : "none";
-    p->state_message  = s_stop_reason ? s_stop_message : NULL;
+    for (int i = 0; i < 3; i++)
+        snprintf(p->icon_uri[i], sizeof p->icon_uri[i], "http://%s.local:%u/%s-%u.png",
+                 s_hostname, (unsigned)s_cfg.port, prefix, k_icons[i].size);
+}
+
+// Callers hold s_job_lock.
+static void fill_printer(const printer_t *p, ipp_printer_t *out)
+{
+    out->uri            = p->uri;
+    out->name           = p->name;
+    out->info           = p->info;
+    out->uuid           = p->uuid;
+    out->adminurl       = s_adminurl;
+    for (int i = 0; i < 3; i++) out->icons[i] = p->icon_uri[i];
+    out->location       = "";
+    out->state          = p->stop_reason               ? IPP_PSTATE_STOPPED
+                        : (p->job.state == IPP_JSTATE_PROCESSING) ? IPP_PSTATE_PROCESSING
+                                                                  : IPP_PSTATE_IDLE;
+    out->state_reason   = p->stop_reason ? p->stop_reason : "none";
+    out->state_message  = p->stop_reason ? p->stop_message : NULL;
     // Still accepting: the job queues and prints when paper goes back in,
     // which is what a user expects after clearing the alert.
-    p->accepting_jobs = s_airprint;
-    p->queued_jobs    = ipp_job_active(&s_job) ? 1 : 0;
-    p->uptime_s       = uptime_s();
-    p->colour         = s_colour;
+    out->accepting_jobs = p->airprint;
+    out->queued_jobs    = ipp_job_active(&p->job) ? 1 : 0;
+    out->uptime_s       = uptime_s();
+    out->colour         = p->colour;
+    out->caps           = p->caps;
 }
 
 // `src` and `printer_stopped` are a snapshot taken under s_job_lock; the
-// strings point into `src`, so it must outlive the encode.
-static void fill_job(ipp_job_t *j, const ipp_job_rec_t *src, int printer_stopped)
+// strings point into `src` and `msg`, so they must outlive the encode.
+static void fill_job(const printer_t *p, ipp_job_t *j, const ipp_job_rec_t *src,
+                     int printer_stopped, const char *msg)
 {
     j->id               = src->id;
     j->uri              = src->uri;
-    j->printer_uri      = s_uri;
+    j->printer_uri      = p->uri;
     j->name             = src->name[0] ? src->name : "Untitled";
     j->user             = src->user[0] ? src->user : "anonymous";
     ipp_job_view(src, printer_stopped, &j->state, &j->state_reason);
+    j->state_message    = msg;
     j->impressions_done = 0;
     j->time_at_creation = src->created_s;
 }
 
-// A copy of the job and whether the printer is stopped, consistent with each
-// other.
-static ipp_job_rec_t job_snapshot(int *printer_stopped)
+// A copy of a printer's job, whether it is stopped and its job message,
+// consistent with each other.
+typedef struct {
+    ipp_job_rec_t job;
+    int           stopped;
+    char          msg[128];
+} job_snap_t;
+
+static void job_snapshot(const printer_t *p, job_snap_t *out)
 {
     xSemaphoreTake(s_job_lock, portMAX_DELAY);
-    ipp_job_rec_t snap = s_job;
-    *printer_stopped = s_stop_reason != NULL;
+    out->job = p->job;
+    out->stopped = p->stop_reason != NULL;
+    memcpy(out->msg, p->job_message, sizeof out->msg);
     xSemaphoreGive(s_job_lock);
-    return snap;
 }
 
 // The response must carry the version the client asked for. A 2.0 client that
@@ -219,11 +264,11 @@ static int send_status(work_t *w, int fd, const ipp_req_t *r, uint16_t status,
 
 // A response carrying one job's attributes: Print-Job and Get-Job-Attributes
 // both answer with this.
-static int send_job(work_t *w, int fd, const ipp_req_t *r, const ipp_job_rec_t *job,
-                    int printer_stopped, int keep_alive)
+static int send_job(work_t *w, int fd, const ipp_req_t *r, const printer_t *p,
+                    const job_snap_t *snap, int keep_alive)
 {
     ipp_job_t j;
-    fill_job(&j, job, printer_stopped);
+    fill_job(p, &j, &snap->job, snap->stopped, snap->msg);
     ipp_enc_t e;
     ipp_enc_init(&e, w->resp, RESP_MAX);
     ipp_resp_begin(&e, resp_version(r), IPP_STATUS_OK, r->request_id);
@@ -260,11 +305,12 @@ static int acquire_printer(void)
 }
 
 // Puts a new job in the slot. The caller holds s_print_lock.
-static int32_t start_job(const ipp_req_t *r)
+static int32_t start_job(printer_t *p, const ipp_req_t *r)
 {
     xSemaphoreTake(s_job_lock, portMAX_DELAY);
-    int32_t id = s_next_job_id++;
-    ipp_job_start(&s_job, id, uptime_s(), r->job_name, r->requesting_user, s_uri);
+    int32_t id = p->next_job_id++;
+    ipp_job_start(&p->job, id, uptime_s(), r->job_name, r->requesting_user, p->uri);
+    p->job_message[0] = '\0';
     xSemaphoreGive(s_job_lock);
     return id;
 }
@@ -285,14 +331,15 @@ static int format_supported(const char *fmt)
 // processing.
 static int run_document(work_t *w, int fd, const ipp_req_t *r, hbody_t *body,
                         const uint8_t *pre, size_t pre_len, int32_t job_id,
-                        int keep_alive)
+                        int keep_alive, printer_t *p)
 {
+    const ipp_doc_sink_t *sink = &p->sink;
     xSemaphoreTake(s_job_lock, portMAX_DELAY);
-    ipp_job_rec_t kept = s_job;
+    ipp_job_rec_t kept = p->job;
     xSemaphoreGive(s_job_lock);
 
     int ok = 1;
-    if (s_sink.begin && s_sink.begin(s_sink.ctx, r->document_format, kept.name) != ESP_OK)
+    if (sink->begin && sink->begin(sink->ctx, r->document_format, kept.name) != ESP_OK)
         ok = 0;
 
     // begin() can wait out a test page, and a Cancel-Job in that time reached
@@ -300,7 +347,7 @@ static int run_document(work_t *w, int fd, const ipp_req_t *r, hbody_t *body,
     // again now that there is a job to stop.
     if (ok) {
         xSemaphoreTake(s_job_lock, portMAX_DELAY);
-        if (s_job.canceled && s_sink.cancel) s_sink.cancel(s_sink.ctx);
+        if (p->job.canceled && sink->cancel) sink->cancel(sink->ctx);
         xSemaphoreGive(s_job_lock);
     }
 
@@ -315,7 +362,7 @@ static int run_document(work_t *w, int fd, const ipp_req_t *r, hbody_t *body,
     if (ok) {
         // The attribute section and the first document bytes usually arrive in
         // one read, so hand that slice over before touching the socket again.
-        if (pre_len && s_sink.data && s_sink.data(s_sink.ctx, pre, pre_len) != ESP_OK)
+        if (pre_len && sink->data && sink->data(sink->ctx, pre, pre_len) != ESP_OK)
             ok = 0;
         total += pre_len;
 
@@ -336,7 +383,7 @@ static int run_document(work_t *w, int fd, const ipp_req_t *r, hbody_t *body,
                 ok = 0;
                 break;
             }
-            if (s_sink.data && s_sink.data(s_sink.ctx, w->chunk, (size_t)n) != ESP_OK)
+            if (sink->data && sink->data(sink->ctx, w->chunk, (size_t)n) != ESP_OK)
                 ok = 0;
             int64_t c = esp_timer_get_time();
             if (c - b > push_max) push_max = c - b;
@@ -349,24 +396,27 @@ static int run_document(work_t *w, int fd, const ipp_req_t *r, hbody_t *body,
              (int)job_id, (unsigned)total, (unsigned)((esp_timer_get_time() - t0) / 1000),
              ok ? "received" : "failed", (unsigned)(wait_max / 1000), (unsigned)wait_at,
              (unsigned)(push_max / 1000));
-    if (s_sink.end) s_sink.end(s_sink.ctx, ok);
-    else ipp_server_job_done(ok);
+    if (sink->end) sink->end(sink->ctx, ok);
+    else ipp_server_job_done_for((int)(p - s_p), ok);
 
     // Respond only now, with the whole body in. A client that sees the
     // response while it is still sending treats the connection as finished,
     // and the rest is lost. The job may already be over -- a sink that could
     // not take it -- and its printer handed to the next job, in which case
     // the slot holds that one and the copy kept here is finished instead.
+    job_snap_t snap;
     xSemaphoreTake(s_job_lock, portMAX_DELAY);
-    if (s_job.id == job_id) kept = s_job;
+    if (p->job.id == job_id) kept = p->job;
     else ipp_job_finish(&kept, 0);
-    int stopped = s_stop_reason != NULL;
+    snap.job = kept;
+    snap.stopped = p->stop_reason != NULL;
+    snprintf(snap.msg, sizeof snap.msg, "%s", p->job.id == job_id ? p->job_message : "");
     xSemaphoreGive(s_job_lock);
-    return send_job(w, fd, r, &kept, stopped, keep_alive);
+    return send_job(w, fd, r, p, &snap, keep_alive);
 }
 
 static int op_print_job(work_t *w, int fd, const ipp_req_t *r, hbody_t *body,
-                        const uint8_t *pre, size_t pre_len, int keep_alive)
+                        const uint8_t *pre, size_t pre_len, int keep_alive, printer_t *p)
 {
     if (!format_supported(r->document_format)) {
         ESP_LOGW(TAG, "refusing document-format %s", r->document_format);
@@ -380,12 +430,18 @@ static int op_print_job(work_t *w, int fd, const ipp_req_t *r, hbody_t *body,
         hbody_drain(body);
         return send_status(w, fd, r, IPP_STATUS_ERR_BUSY, keep_alive);
     }
-    int32_t job_id = start_job(r);
-    return run_document(w, fd, r, body, pre, pre_len, job_id, keep_alive);
+    // A LaserWriter unshared while this request waited for the printer.
+    if (!p->on) {
+        xSemaphoreGive(s_print_lock);
+        hbody_drain(body);
+        return send_status(w, fd, r, IPP_STATUS_ERR_NOT_ACCEPTING_JOBS, keep_alive);
+    }
+    int32_t job_id = start_job(p, r);
+    return run_document(w, fd, r, body, pre, pre_len, job_id, keep_alive, p);
 }
 
 static int dispatch(work_t *w, int fd, const ipp_req_t *r, hbody_t *body,
-                    const uint8_t *pre, size_t pre_len, int keep_alive)
+                    const uint8_t *pre, size_t pre_len, int keep_alive, printer_t *p)
 {
     ipp_enc_t e;
     ipp_enc_init(&e, w->resp, RESP_MAX);
@@ -396,50 +452,50 @@ static int dispatch(work_t *w, int fd, const ipp_req_t *r, hbody_t *body,
 
     switch (r->op) {
     case IPP_OP_GET_PRINTER_ATTRIBUTES: {
-        ipp_printer_t p;
+        ipp_printer_t pa;
         xSemaphoreTake(s_job_lock, portMAX_DELAY);
-        fill_printer(&p);
-        xSemaphoreGive(s_job_lock);
+        fill_printer(p, &pa);
         ipp_resp_begin(&e, resp_version(r), IPP_STATUS_OK, r->request_id);
         ipp_write_op_attrs(&e);
-        ipp_write_printer_attrs(&e, &p, &r->requested);
+        ipp_write_printer_attrs(&e, &pa, &r->requested);
+        xSemaphoreGive(s_job_lock);
         ipp_end(&e);
         return send_ipp(fd, &e, keep_alive);
     }
 
     case IPP_OP_VALIDATE_JOB:
         if (s_cfg.on_job_op) s_cfg.on_job_op();
-        if (!s_airprint) return send_status(w, fd, r, IPP_STATUS_ERR_NOT_ACCEPTING_JOBS, keep_alive);
+        if (!p->airprint) return send_status(w, fd, r, IPP_STATUS_ERR_NOT_ACCEPTING_JOBS, keep_alive);
         if (!format_supported(r->document_format))
             return send_status(w, fd, r, IPP_STATUS_ERR_FORMAT_NOT_SUPPORTED, keep_alive);
         return send_status(w, fd, r, IPP_STATUS_OK, keep_alive);
 
     case IPP_OP_PRINT_JOB:
         if (s_cfg.on_job_op) s_cfg.on_job_op();
-        if (!s_airprint) {                       // W-1079: AirPrint is switched off
+        if (!p->airprint) {                      // W-1079: AirPrint is switched off
             hbody_drain(body);
             return send_status(w, fd, r, IPP_STATUS_ERR_NOT_ACCEPTING_JOBS, keep_alive);
         }
-        return op_print_job(w, fd, r, body, pre, pre_len, keep_alive);
+        return op_print_job(w, fd, r, body, pre, pre_len, keep_alive, p);
 
     case IPP_OP_GET_JOB_ATTRIBUTES: {
-        int stopped;
-        ipp_job_rec_t snapshot = job_snapshot(&stopped);
-        if (!ipp_job_matches(&snapshot, r->job_id))
+        job_snap_t snap;
+        job_snapshot(p, &snap);
+        if (!ipp_job_matches(&snap.job, r->job_id))
             return send_status(w, fd, r, IPP_STATUS_ERR_NOT_FOUND, keep_alive);
-        return send_job(w, fd, r, &snapshot, stopped, keep_alive);
+        return send_job(w, fd, r, p, &snap, keep_alive);
     }
 
     case IPP_OP_GET_JOBS: {
-        int stopped;
-        ipp_job_rec_t snapshot = job_snapshot(&stopped);
+        job_snap_t snap;
+        job_snapshot(p, &snap);
         ipp_resp_begin(&e, resp_version(r), IPP_STATUS_OK, r->request_id);
         ipp_write_op_attrs(&e);
         // An empty list is a complete answer, and the only honest one while no
         // job is in flight.
-        if (ipp_job_active(&snapshot)) {
+        if (ipp_job_active(&snap.job)) {
             ipp_job_t j;
-            fill_job(&j, &snapshot, stopped);
+            fill_job(p, &j, &snap.job, snap.stopped, snap.msg);
             ipp_write_job_attrs(&e, &j);
         }
         ipp_end(&e);
@@ -448,12 +504,12 @@ static int dispatch(work_t *w, int fd, const ipp_req_t *r, hbody_t *body,
 
     case IPP_OP_CANCEL_JOB: {
         xSemaphoreTake(s_job_lock, portMAX_DELAY);
-        ipp_cancel_t c = ipp_job_cancel(&s_job, r->job_id);
-        int32_t id = s_job.id;
+        ipp_cancel_t c = ipp_job_cancel(&p->job, r->job_id);
+        int32_t id = p->job.id;
         // Stop the paper, not just the bookkeeping. Under the lock, so the job
         // cannot finish in between and hand the printer to the next one, which
         // the cancel would then land on.
-        if (c == IPP_CANCEL_STOP_PRINT && s_sink.cancel) s_sink.cancel(s_sink.ctx);
+        if (c == IPP_CANCEL_STOP_PRINT && p->sink.cancel) p->sink.cancel(p->sink.ctx);
         xSemaphoreGive(s_job_lock);
 
         if (c == IPP_CANCEL_NOT_FOUND)
@@ -513,8 +569,18 @@ static int handle_post(work_t *w, int fd, const hreq_t *hr)
         return send_status(w, fd, &r, IPP_STATUS_ERR_BAD_REQUEST, hr->keep_alive);
     }
 
+    // W-1082: which printer, by the request's path.
+    const char *res[IPP_PRINTERS];
+    xSemaphoreTake(s_job_lock, portMAX_DELAY);
+    for (int i = 0; i < IPP_PRINTERS; i++) res[i] = s_p[i].on ? s_p[i].resource : NULL;
+    int idx = ipp_route(hr->uri, res);
+    xSemaphoreGive(s_job_lock);
+    if (idx < 0) {
+        hbody_drain(&body);
+        return send_status(w, fd, &r, IPP_STATUS_ERR_NOT_FOUND, hr->keep_alive);
+    }
     return dispatch(w, fd, &r, &body, w->hdr + r.header_len, have - r.header_len,
-                    hr->keep_alive);
+                    hr->keep_alive, &s_p[idx]);
 }
 
 // Waits for the next request on a connection to start arriving. Returns 1 when
@@ -547,9 +613,9 @@ static int handle_get(int fd, const hreq_t *hr)
         if (!path) path = "/";
     }
     size_t plen = strcspn(path, "?");
-    for (int i = 0; i < 3; i++) {
+    for (size_t i = 0; i < sizeof k_icons / sizeof k_icons[0]; i++) {
         char want[24];
-        int n = snprintf(want, sizeof want, "/icon-%u.png", k_icons[i].size);
+        int n = snprintf(want, sizeof want, "/%s-%u.png", k_icons[i].prefix, k_icons[i].size);
         if ((size_t)n == plen && strncmp(path, want, plen) == 0)
             return hresp_send(fd, 200, "OK", "image/png", k_icons[i].start,
                               (size_t)(k_icons[i].end - k_icons[i].start),
@@ -625,8 +691,9 @@ static void worker_task(void *arg)
 // what AirPrint finds, and what switching it off takes away (W-1079).
 static esp_err_t add_print_services(void)
 {
+    printer_t *p = &s_p[0];
     esp_err_t err;
-    s_txt_colour = s_colour;
+    p->txt_colour = p->colour;
     mdns_txt_item_t txt[] = {
         { "txtvers",  "1" },
         { "rp",       "ipp/print" },
@@ -635,15 +702,15 @@ static esp_err_t add_print_services(void)
         { "pdl",      "image/urf" },
         { "adminurl", s_adminurl },
         { "priority", "10" },
-        { "UUID",     s_uuid },
-        { "Color",    s_txt_colour ? "T" : "F" },
+        { "UUID",     p->uuid },
+        { "Color",    p->txt_colour ? "T" : "F" },
         { "Duplex",   "F" },
-        { "URF",      s_txt_colour ? IPP_URF_STRING_COLOUR : IPP_URF_STRING },
+        { "URF",      p->txt_colour ? IPP_URF_STRING_COLOUR : IPP_URF_STRING },
         { "TLS",      "" },
         { "note",     "" },
     };
     // The TXT UUID has no urn:uuid: prefix, unlike the IPP attribute.
-    const char *bare_uuid = strstr(s_uuid, "urn:uuid:");
+    const char *bare_uuid = strstr(p->uuid, "urn:uuid:");
     if (bare_uuid) txt[7].value = bare_uuid + strlen("urn:uuid:");
 
     // The service has to exist before a subtype can attach to it. A failure
@@ -665,8 +732,51 @@ static esp_err_t add_print_services(void)
     // the printer over, so it only warns.
     if (mdns_service_add(NULL, "_printer", "_tcp", 515, NULL, 0) != ESP_OK)
         ESP_LOGW(TAG, "no _printer._tcp advertisement");
-    s_print_svcs = 1;
+    p->print_svcs = 1;
     return ESP_OK;
+}
+
+// W-1082: a shared LaserWriter's _ipp instance, with the _universal subtype,
+// beside the ImageWriter's on the same port, as CUPS shares many queues. No
+// _printer stub: one is enough. Callers hold s_job_lock or are starting up.
+static void add_laser_services(printer_t *p)
+{
+    char urf[64], bare[sizeof p->uuid];
+    printer_caps_urf(p->caps, 0, urf, sizeof urf);
+    const char *u = strstr(p->uuid, "urn:uuid:");
+    snprintf(bare, sizeof bare, "%s", u ? u + strlen("urn:uuid:") : p->uuid);
+    mdns_txt_item_t txt[] = {
+        { "txtvers",  "1" },
+        { "rp",       p->resource },
+        { "ty",       p->caps->make_model },
+        { "product",  "(AirWriter)" },
+        { "pdl",      "image/urf" },
+        { "adminurl", s_adminurl },
+        { "priority", "20" },
+        { "UUID",     bare },
+        { "Color",    "F" },
+        { "Duplex",   "F" },
+        { "URF",      urf },
+        { "TLS",      "" },
+        { "note",     "" },
+    };
+    esp_err_t err = mdns_service_add_for_host(p->name, "_ipp", "_tcp", NULL, s_cfg.port,
+                                              txt, sizeof txt / sizeof txt[0]);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "LaserWriter \"%s\": not advertised (%s)", p->name, esp_err_to_name(err));
+        return;
+    }
+    err = mdns_service_subtype_add_for_host(p->name, "_ipp", "_tcp", NULL, "_universal");
+    if (err != ESP_OK) ESP_LOGE(TAG, "LaserWriter: no _universal subtype (%s)", esp_err_to_name(err));
+    strncpy(p->svc_name, p->name, sizeof p->svc_name - 1);
+    p->print_svcs = 1;
+}
+
+static void remove_laser_services(printer_t *p)
+{
+    if (!p->print_svcs) return;
+    mdns_service_remove_for_host(p->svc_name, "_ipp", "_tcp", NULL);
+    p->print_svcs = 0;
 }
 
 static esp_err_t start_mdns(void)
@@ -677,7 +787,7 @@ static esp_err_t start_mdns(void)
     ESP_ERROR_CHECK(mdns_hostname_set(s_hostname));
     ESP_ERROR_CHECK(mdns_instance_name_set(s_cfg.queue_name));
 
-    if (s_airprint) {
+    if (s_p[0].airprint) {
         err = add_print_services();
         if (err != ESP_OK) return err;
     }
@@ -689,17 +799,18 @@ static esp_err_t start_mdns(void)
 
 void ipp_server_set_airprint(int on)
 {
+    printer_t *p = &s_p[0];
     on = on ? 1 : 0;
-    if (on == s_airprint) return;
-    s_airprint = on;
+    if (on == p->airprint) return;
+    p->airprint = on;
     ESP_LOGI(TAG, "AirPrint %s", on ? "on" : "off: not advertised, not taking jobs");
     if (!s_mdns_up) return;
-    if (on && !s_print_svcs) {
+    if (on && !p->print_svcs) {
         if (add_print_services() != ESP_OK) ESP_LOGE(TAG, "AirPrint: could not advertise again");
-    } else if (!on && s_print_svcs) {
+    } else if (!on && p->print_svcs) {
         mdns_service_remove("_ipp", "_tcp");
         mdns_service_remove("_printer", "_tcp");
-        s_print_svcs = 0;
+        p->print_svcs = 0;
     }
 }
 
@@ -739,25 +850,31 @@ static esp_err_t start_listener(void)
 
 esp_err_t ipp_server_start(const ipp_server_cfg_t *cfg)
 {
+    printer_t *p = &s_p[0];
     s_cfg  = *cfg;
-    s_sink = cfg->sink;
     if (!s_cfg.port) s_cfg.port = 631;
 
     strncpy(s_hostname, cfg->hostname, sizeof s_hostname - 1);
-    snprintf(s_uri, sizeof s_uri, "ipp://%s.local:%u/ipp/print",
-             s_hostname, (unsigned)s_cfg.port);
     snprintf(s_adminurl, sizeof s_adminurl, "http://%s.local/", s_hostname);
-    for (int i = 0; i < 3; i++)
-        snprintf(s_icon_uri[i], sizeof s_icon_uri[i], "http://%s.local:%u/icon-%u.png",
-                 s_hostname, (unsigned)s_cfg.port, k_icons[i].size);
-    make_uuid(cfg->dev_mode);
-    s_colour = cfg->colour ? 1 : 0;
+    p->on = 1;
+    p->sink = cfg->sink;
+    strcpy(p->resource, "ipp/print");
+    snprintf(p->uri, sizeof p->uri, "ipp://%s.local:%u/ipp/print",
+             s_hostname, (unsigned)s_cfg.port);
+    strncpy(p->name, cfg->queue_name, sizeof p->name - 1);
+    strcpy(p->info, "Apple ImageWriter II");
+    icon_uris(p, "icon");
+    make_uuid(p->uuid, sizeof p->uuid, cfg->dev_mode);
+    p->colour = cfg->colour ? 1 : 0;
+    for (int i = 0; i < IPP_PRINTERS; i++) {
+        s_p[i].next_job_id = 1;
+        s_p[i].job.state = IPP_JSTATE_COMPLETED;   // no job yet; nothing is pending
+    }
 
     s_job_lock   = xSemaphoreCreateMutex();
     s_print_lock = xSemaphoreCreateBinary();
     if (!s_job_lock || !s_print_lock) return ESP_ERR_NO_MEM;
     xSemaphoreGive(s_print_lock);         // a binary semaphore starts taken
-    s_job.state = IPP_JSTATE_COMPLETED;   // no job yet; nothing is pending
 
     esp_err_t err = start_mdns();
     if (err != ESP_OK) return err;
@@ -766,8 +883,8 @@ esp_err_t ipp_server_start(const ipp_server_cfg_t *cfg)
     err = start_listener();
     if (err != ESP_OK) return err;
 
-    ESP_LOGI(TAG, "listening on %s", s_uri);
-    ESP_LOGI(TAG, "uuid %s%s", s_uuid, cfg->dev_mode ? "  (dev mode, new each boot)" : "");
+    ESP_LOGI(TAG, "listening on %s", p->uri);
+    ESP_LOGI(TAG, "uuid %s%s", p->uuid, cfg->dev_mode ? "  (dev mode, new each boot)" : "");
     return ESP_OK;
 }
 
@@ -781,13 +898,14 @@ void ipp_server_stop(void)
 
 void ipp_server_set_colour(int on)
 {
+    printer_t *p = &s_p[0];
     on = on ? 1 : 0;
-    if (on != s_colour) ESP_LOGI(TAG, "colour %s", on ? "on: the colour ribbon is in" : "off");
-    s_colour = on;
+    if (on != p->colour) ESP_LOGI(TAG, "colour %s", on ? "on: the colour ribbon is in" : "off");
+    p->colour = on;
     // The TXT record is tracked on its own: a change during start_mdns lands
     // in the attributes but not the record, and the call after start fixes it.
-    if (!s_mdns_up || !s_print_svcs || on == s_txt_colour) return;
-    s_txt_colour = on;
+    if (!s_mdns_up || !p->print_svcs || on == p->txt_colour) return;
+    p->txt_colour = on;
     esp_err_t a = mdns_service_txt_item_set("_ipp", "_tcp", "Color", on ? "T" : "F");
     esp_err_t b = mdns_service_txt_item_set("_ipp", "_tcp", "URF",
                                             on ? IPP_URF_STRING_COLOUR : IPP_URF_STRING);
@@ -795,32 +913,91 @@ void ipp_server_set_colour(int on)
         ESP_LOGW(TAG, "TXT update failed: %s / %s", esp_err_to_name(a), esp_err_to_name(b));
 }
 
-const char *ipp_server_uri(void) { return s_uri; }
+const char *ipp_server_uri(void) { return s_p[0].uri; }
 
-void ipp_server_job_done(int ok)
+void ipp_server_job_done_for(int idx, int ok)
 {
+    if (idx < 0 || idx >= IPP_PRINTERS) return;
+    printer_t *p = &s_p[idx];
     uint8_t state;
     const char *reason;
     xSemaphoreTake(s_job_lock, portMAX_DELAY);
-    int ended = ipp_job_done(&s_job, ok);
-    int32_t id = s_job.id;
-    ipp_job_view(&s_job, 0, &state, &reason);
+    int ended = ipp_job_done(&p->job, ok);
+    int32_t id = p->job.id;
+    ipp_job_view(&p->job, 0, &state, &reason);
     xSemaphoreGive(s_job_lock);
 
     if (!ended) {
         ESP_LOGE(TAG, "job done reported with no job printing");
         return;
     }
-    ESP_LOGI(TAG, "job %d: %s", (int)id, reason);
+    ESP_LOGI(TAG, "%sjob %d: %s", idx ? "LaserWriter " : "", (int)id, reason);
     xSemaphoreGive(s_print_lock);
+}
+
+void ipp_server_job_done(int ok) { ipp_server_job_done_for(0, ok); }
+
+void ipp_server_set_stopped_for(int idx, const char *reason_or_null, const char *message)
+{
+    if (idx < 0 || idx >= IPP_PRINTERS) return;
+    printer_t *p = &s_p[idx];
+    if (s_job_lock) xSemaphoreTake(s_job_lock, portMAX_DELAY);
+    int changed = p->stop_reason != reason_or_null;
+    p->stop_reason = reason_or_null;
+    snprintf(p->stop_message, sizeof p->stop_message, "%s", message ? message : "");
+    if (s_job_lock) xSemaphoreGive(s_job_lock);
+    if (changed)
+        ESP_LOGW(TAG, "%sprinter-state-reasons now %s", idx ? "LaserWriter " : "",
+                 reason_or_null ? reason_or_null : "none");
 }
 
 void ipp_server_set_stopped(const char *reason_or_null, const char *message)
 {
-    if (!s_job_lock) { s_stop_reason = reason_or_null; s_stop_message = message; return; }
+    ipp_server_set_stopped_for(0, reason_or_null, message);
+}
+
+void ipp_server_job_message_for(int idx, const char *msg)
+{
+    if (idx < 0 || idx >= IPP_PRINTERS || !s_job_lock) return;
     xSemaphoreTake(s_job_lock, portMAX_DELAY);
-    s_stop_reason  = reason_or_null;
-    s_stop_message = message;
+    snprintf(s_p[idx].job_message, sizeof s_p[idx].job_message, "%s", msg ? msg : "");
     xSemaphoreGive(s_job_lock);
-    ESP_LOGW(TAG, "printer-state-reasons now %s", reason_or_null ? reason_or_null : "none");
+}
+
+esp_err_t ipp_server_set_printer(int idx, const ipp_printer_cfg_t *cfg)
+{
+    if (idx < 1 || idx >= IPP_PRINTERS || !s_job_lock) return ESP_ERR_INVALID_ARG;
+    printer_t *p = &s_p[idx];
+    xSemaphoreTake(s_job_lock, portMAX_DELAY);
+    if (ipp_job_active(&p->job)) {
+        xSemaphoreGive(s_job_lock);
+        return ESP_ERR_INVALID_STATE;
+    }
+    if (s_mdns_up) remove_laser_services(p);
+    p->on = 0;
+    p->airprint = 0;
+    p->stop_reason = NULL;
+    if (cfg) {
+        snprintf(p->resource, sizeof p->resource, "%s", cfg->resource);
+        snprintf(p->uri, sizeof p->uri, "ipp://%s.local:%u/%s", s_hostname,
+                 (unsigned)s_cfg.port, cfg->resource);
+        snprintf(p->name, sizeof p->name, "%s", cfg->name);
+        snprintf(p->info, sizeof p->info, "%s", cfg->info);
+        snprintf(p->uuid, sizeof p->uuid, "%s", cfg->uuid);
+        p->caps_copy = *cfg->caps;
+        snprintf(p->make_model, sizeof p->make_model, "%s", cfg->caps->make_model);
+        snprintf(p->device_id, sizeof p->device_id, "%s", cfg->caps->device_id);
+        p->caps_copy.make_model = p->make_model;
+        p->caps_copy.device_id = p->device_id;
+        p->caps = &p->caps_copy;
+        p->sink = cfg->sink;
+        icon_uris(p, cfg->icon ? cfg->icon : "icon");
+        p->on = 1;
+        p->airprint = 1;
+        if (s_mdns_up) add_laser_services(p);
+    }
+    xSemaphoreGive(s_job_lock);
+    if (cfg) ESP_LOGI(TAG, "LaserWriter \"%s\" at %s, uuid %s", p->name, p->uri, p->uuid);
+    else ESP_LOGI(TAG, "LaserWriter no longer shared");
+    return ESP_OK;
 }

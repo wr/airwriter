@@ -265,5 +265,30 @@ int main(void)
         printf("    with colour, printer attributes encode to %zu bytes\n", n1);
     }
 
+    // W-1082: a LaserWriter's PostScript error reaches the phone as the
+    // job's job-state-message; a job without one carries none.
+    {
+        ipp_job_t j = {
+            .id = 4, .uri = "ipp://h/ipp/laser/4", .printer_uri = "ipp://h/ipp/laser",
+            .name = "Letter", .user = "wells", .state = IPP_JSTATE_ABORTED,
+            .state_reason = "job-aborted-by-system",
+            .state_message = "undefined; OffendingCommand: foo",
+        };
+        ipp_enc_t e;
+        ipp_enc_init(&e, buf, sizeof buf);
+        ipp_resp_begin(&e, IPP_VERSION_1_1, IPP_STATUS_OK, 1);
+        ipp_write_job_attrs(&e, &j);
+        ipp_end(&e);
+        ipp_found_t f;
+        CHECK(ipp_find(buf, ipp_enc_len(&e), "job-state-message", &f));
+        CHECK(ipp_val_is(&f, "undefined; OffendingCommand: foo"));
+        j.state_message = "";
+        ipp_enc_init(&e, buf, sizeof buf);
+        ipp_resp_begin(&e, IPP_VERSION_1_1, IPP_STATUS_OK, 1);
+        ipp_write_job_attrs(&e, &j);
+        ipp_end(&e);
+        CHECK(!ipp_find(buf, ipp_enc_len(&e), "job-state-message", &f));
+    }
+
     TEST_END;
 }

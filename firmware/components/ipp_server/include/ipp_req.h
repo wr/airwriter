@@ -46,3 +46,14 @@ typedef struct {
 } ipp_req_t;
 
 int ipp_req_parse(ipp_req_t *r, const uint8_t *buf, size_t len);
+
+// W-1082: the printers one server answers for. 0 is the ImageWriter, at
+// every path it has always answered at; 1 a shared LaserWriter, at its own.
+#define IPP_PRINTERS       2
+#define IPP_RESOURCE_LASER "ipp/laser"
+
+// Which printer a request's HTTP path (or absolute URI) names: a printer
+// other than 0 at its resource (resources[i], without the leading '/'), and
+// printer 0 for anything else. -1 for the LaserWriter's resource while no
+// LaserWriter is shared (resources[1] NULL).
+int ipp_route(const char *path, const char *const resources[IPP_PRINTERS]);

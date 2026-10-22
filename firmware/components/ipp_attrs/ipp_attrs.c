@@ -311,6 +311,8 @@ void ipp_write_job_attrs(ipp_enc_t *e, const ipp_job_t *j)
     ipp_attr_str(e, IPP_TAG_URI, "job-printer-uri", j->printer_uri);
     ipp_attr_int(e, IPP_TAG_ENUM, "job-state", j->state);
     ipp_attr_str(e, IPP_TAG_KEYWORD, "job-state-reasons", j->state_reason);
+    if (j->state_message && j->state_message[0])
+        ipp_attr_str(e, IPP_TAG_TEXT, "job-state-message", j->state_message);
     ipp_attr_str(e, IPP_TAG_NAME, "job-name", j->name);
     ipp_attr_str(e, IPP_TAG_NAME, "job-originating-user-name", j->user);
     ipp_attr_int(e, IPP_TAG_INTEGER, "job-impressions-completed", j->impressions_done);

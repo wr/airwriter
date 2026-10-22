@@ -9,6 +9,7 @@ COMP    := ../../firmware/components
 INCS    := -I$(COMP)/ipp_attrs/include \
            -I$(COMP)/ipp_server/include \
            -I$(COMP)/printer_caps/include \
+           -I$(COMP)/laser/include \
            -I../rip/test
 SRCS    := $(COMP)/printer_caps/printer_caps.c \
            $(COMP)/ipp_attrs/ipp_enc.c \
@@ -27,9 +28,11 @@ build:
 build/%: test/%.c $(SRCS) | build
 	$(CC) $(CFLAGS) $(INCS) -Itest -o $@ $^
 
+LASER   := $(COMP)/laser/lw_caps.c $(COMP)/laser/lw_query.c
+
 # Not part of `test`: a host stand-in for ipptool's conformance suites (see
 # the comment at the top of gpa_server.c).
-build/gpa_server: gpa_server.c $(SRCS) | build
+build/gpa_server: gpa_server.c $(SRCS) $(LASER) | build
 	$(CC) $(CFLAGS) -D_GNU_SOURCE $(INCS) -o $@ $^
 
 test: $(TESTBIN)
