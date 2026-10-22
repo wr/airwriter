@@ -12,6 +12,7 @@
 #include "testpage.h"
 #include "printer_caps.h"
 #include "ps_page.h"
+#include "lw_query.h"
 
 typedef struct {
     FILE    *stream;
@@ -171,6 +172,7 @@ static void usage(void)
           "  --testpage the board's test page for that ribbon, as board 1 would print it;\n"
           "             tools/iwview/iwview.py draws the stream\n"
           "  --out-pbm  page 1's dots as a raw PBM, 1 = ink\n"
+          "       rip --query-job FILE   the LaserWriter query job, probe and all\n"
           "  --printer laser  rip at 300 dpi for a LaserWriter (W-1082); --ps writes its\n"
           "             PostScript, in binary, or with --hex as a Level 1 machine that\n"
           "             cannot take binary gets it\n",
@@ -182,6 +184,7 @@ int main(int argc, char **argv)
     const char *in = NULL, *out_stream = NULL, *out_preview = NULL;
     const char *dither = "atkinson", *testpage = NULL;
     const char *printer = "imagewriter", *paper = "letter", *out_ps = NULL, *out_pbm = NULL;
+    const char *query = NULL;
     int colour = 0, gain = 0, top = 0, hex = 0;
 
     for (int i = 1; i < argc; i++) {
@@ -198,7 +201,16 @@ int main(int argc, char **argv)
         else if (!strcmp(argv[i], "--ps") && i + 1 < argc)          out_ps = argv[++i];
         else if (!strcmp(argv[i], "--hex"))                          hex = 1;
         else if (!strcmp(argv[i], "--out-pbm") && i + 1 < argc)     out_pbm = argv[++i];
+        else if (!strcmp(argv[i], "--query-job") && i + 1 < argc)   query = argv[++i];
         else { usage(); return 2; }
+    }
+    if (query) {
+        static uint8_t q[4096];
+        size_t n = lw_query_job(q, sizeof q);
+        FILE *qf = fopen(query, "wb");
+        if (!qf || fwrite(q, 1, n, qf) != n) { perror(query); return 1; }
+        fclose(qf);
+        return 0;
     }
     if (!in && !(testpage && out_stream)) { usage(); return 2; }
 

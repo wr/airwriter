@@ -1,0 +1,52 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+//
+// The query job (W-1082, laser printers design, "The query job"): an ordinary
+// PAP job that prints nothing and asks the LaserWriter what it is. Level 1
+// PostScript, every question inside `stopped` so a failure answers "?" and
+// the default stands. Its output comes back over PAP (the client's own
+// SendData); lines starting %%[ are the printer's status and are skipped.
+//
+// Each answer is one line, aw:<key>=<value>: product, version, revision,
+// level, res (the device's dots per inch across and down), area (the
+// imageable area, llx lly urx ury in points), size (Level 2's PageSize),
+// probe, end. The probe is 256 bytes 0x00-0xFF read with readstring: its
+// count and whether each byte arrived as itself. Binary goes to this printer
+// only if they did; otherwise every page goes as hex. That is how a Level 1
+// LaserWriter answers the binary question no document does. TailTalk's
+// pap-print query and dump-statusdict are the model.
+#pragma once
+#include <stdint.h>
+#include <stddef.h>
+
+typedef enum { LW_LETTER = 0, LW_A4, LW_LEGAL } lw_page_t;
+
+typedef struct {
+    char      product[64];      // statusdict /product: "LaserWriter II NT"
+    char      version[16];      // the PostScript version: "47.0"
+    int32_t   revision;         // statusdict /revision
+    uint8_t   level;            // PostScript language level: 1, 2 or 3
+    uint8_t   binary;           // the probe came back, 256 bytes in order
+    uint16_t  dpi;              // the device's resolution
+    lw_page_t page;             // the paper: from size on Level 2, else the area
+    int32_t   area[4];          // imageable area llx lly urx ury, 1/100 pt
+    uint8_t   complete;         // aw:end was read: every question answered
+} lw_info_t;
+
+// A LaserWriter that never answered: Level 1, hex, 300 dpi, Letter with a
+// quarter inch all round.
+void   lw_info_default(lw_info_t *i);
+const char *lw_page_name(lw_page_t p);      // "letter", "a4", "legal"
+
+// The query job, probe included. Its length, or 0 when cap is too small.
+size_t lw_query_job(uint8_t *out, size_t cap);
+
+// The printer's output as it comes, split anywhere, CR or LF line ends.
+typedef struct {
+    lw_info_t info;
+    char      line[160];
+    size_t    n;
+    uint8_t   sized;            // aw:size gave the page
+} lw_parse_t;
+
+void lw_parse_init(lw_parse_t *p);
+void lw_parse_feed(lw_parse_t *p, const uint8_t *d, size_t n);

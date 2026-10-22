@@ -5,6 +5,7 @@ COMP    := ../../firmware/components
 INCS    := -I$(COMP)/ripjob/include \
            -I$(COMP)/printer_caps/include \
            -I$(COMP)/ps_page/include \
+           -I$(COMP)/laser/include \
            -I$(COMP)/urf_decode/include \
            -I$(COMP)/resample/include \
            -I$(COMP)/halftone/include \
@@ -17,6 +18,7 @@ INCS    := -I$(COMP)/ripjob/include \
 SRCS    := $(wildcard $(COMP)/ripjob/*.c) \
            $(COMP)/printer_caps/printer_caps.c \
            $(wildcard $(COMP)/ps_page/*.c) \
+           $(COMP)/laser/lw_query.c $(COMP)/laser/lw_status.c $(COMP)/laser/lw_caps.c \
            $(wildcard $(COMP)/urf_decode/*.c) \
            $(wildcard $(COMP)/resample/*.c) \
            $(wildcard $(COMP)/halftone/*.c) \
@@ -108,5 +110,5 @@ regress: build/rip
 # The LaserWriter's PostScript held to Ghostscript dot for dot (W-1082). Needs
 # Ghostscript (brew install ghostscript), a host test tool only.
 .PHONY: pscheck
-pscheck: build/rip
+pscheck: build/rip build/test_lw
 	@python3 test/pscheck.py

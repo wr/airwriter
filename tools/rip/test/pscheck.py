@@ -19,6 +19,10 @@ HERE = pathlib.Path(__file__).resolve().parent
 RIP = HERE.parent / "build" / "rip"
 GS = os.environ.get("GS", "/opt/homebrew/bin/gs")
 LETTER = (612, 792)
+# Level 2 names that are procedures, not operators, in Ghostscript's systemdict.
+LEVEL2_PROCS = ("languagelevel", "currentpagedevice", "setpagedevice", "findresource",
+                "defineresource", "setcolorspace", "setcolor", "selectfont")
+TIMEOUT = 120
 
 
 def pbm(path):
@@ -78,16 +82,18 @@ def level1_ops():
 
 def level1_trap(path):
     """A prefix that hides every operator outside Level 1 behind one that
-    fails, in a dictionary on top of the stack. Ghostscript 10 has no Level 1
+    fails (and the Level 2 names Ghostscript defines as procedures, which
+    trapping every procedure would break Ghostscript itself over), in a dictionary on top of the stack. Ghostscript 10 has no Level 1
     mode (.setlanguagelevel is gone), so this is how a file that strays past
     Level 1 is caught when it runs, binding included."""
     # As strings made names: "/[" would not read as one.
     names = " ".join(f"({w}) cvn true" for w in sorted(level1_ops()))
     pathlib.Path(path).write_text(f"""
 /awl1 << {names} >> def
+/awl2 << {" ".join(f"({w}) true" for w in LEVEL2_PROCS)} >> def
 /awtrap 400 dict def
 systemdict {{
-  dup type /operatortype eq {{
+  dup type /operatortype eq 2 index 128 string cvs awl2 exch known or {{
     pop dup 128 string cvs dup length 0 gt {{ 0 get 46 ne }} {{ pop false }} ifelse
     {{ dup awl1 exch known not {{ awtrap exch {{ /not_level_1 cvx exec }} put }} {{ pop }} ifelse }}
     {{ pop }} ifelse
@@ -107,7 +113,7 @@ def gs_render(ps, out, level1=False):
         cmd += [trap, ps]
     else:
         cmd += [ps]
-    r = subprocess.run(cmd, capture_output=True, text=True)
+    r = subprocess.run(cmd, capture_output=True, text=True, timeout=TIMEOUT)
     if r.returncode or r.stdout.strip() or r.stderr.strip():
         return f"Ghostscript: exit {r.returncode} {r.stdout.strip()} {r.stderr.strip()}"
     return None
@@ -124,6 +130,35 @@ def level1_names(ps_path):
     code = re.sub(r"%[^\n]*", "", prolog + "\n" + "\n".join(setup))
     names = re.findall(r"(?<![/\w.])([A-Za-z][\w.]*)", code)
     return sorted({n for n in names if n not in ops and n not in defined})
+
+
+def query_check(tmp):
+    """The query job through Ghostscript as a LaserWriter would run it, and
+    its answer through the board's parser (test_lw --parse): every question
+    answered, binary intact, Letter; Level 1 with every later operator trapped."""
+    job, out = tmp / "query.ps", tmp / "query.pbm"
+    subprocess.run([RIP, "--query-job", job], check=True)
+    parse = RIP.parent / "test_lw"
+    fails = 0
+    for level1, level in ((False, 3), (True, 1)):
+        cmd = [GS, "-q", "-dSAFER", "-dBATCH", "-dNOPAUSE", "-sDEVICE=pbmraw", "-r300",
+               f"-dDEVICEWIDTHPOINTS={LETTER[0]}", f"-dDEVICEHEIGHTPOINTS={LETTER[1]}",
+               "-dFIXEDMEDIA", f"-sOutputFile={out}"]
+        if level1:
+            trap = tmp / "trap.ps"
+            level1_trap(trap)
+            cmd.append(trap)
+        r = subprocess.run(cmd + [job], capture_output=True, timeout=TIMEOUT)
+        got = subprocess.run([parse, "--parse"], input=r.stdout,
+                             capture_output=True).stdout.decode().strip()
+        want = [f"complete=1", f"level={level}", "binary=1", "page=letter"]
+        what = f"query{' level 1' if level1 else ''}"
+        if r.returncode or not all(w in got.split() for w in want):
+            print(f"FAIL pscheck {what}: {got or r.stderr.decode(errors='replace')[:200]}")
+            fails += 1
+        else:
+            print(f"ok  pscheck {what}: {got}")
+    return fails
 
 
 def pages(tmp):
@@ -151,6 +186,7 @@ def main():
     failed = 0
     with tempfile.TemporaryDirectory() as t:
         tmp = pathlib.Path(t)
+        failed += query_check(tmp)
         for urf in pages(tmp):
             for mode in ("binary", "hex"):
                 ps, mine, theirs = tmp / "a.ps", tmp / "a.pbm", tmp / "g.pbm"
