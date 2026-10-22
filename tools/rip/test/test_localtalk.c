@@ -49,7 +49,7 @@ static void f_data(void *ctx, const uint8_t *d, size_t n)
 static size_t f_room(void *ctx) { (void)ctx; return fake_room; }
 static void f_end(void *ctx, int normal) { (void)ctx; job_eof++; job_normal = normal; }
 
-static const lt_ops_t OPS = { NULL, f_send, f_claim, f_log, f_begin, f_data, f_room, f_end };
+static const lt_ops_t OPS = { NULL, f_send, f_claim, f_log, f_begin, f_data, f_room, f_end, NULL };
 
 static void reset_fake(void) { nsent = 0; nlogs = 0; lastlog[0] = 0; }
 
@@ -1497,6 +1497,143 @@ static void test_names_off(void)
     CHECK(seen_name(&n, 83, t + 60000) == NULL);
 }
 
+
+// ------------------------------------------------------------- W-1082
+
+// A node can run with no ImageWriter on its link: it answers neither the
+// ImageWriter's lookups nor its PAP socket, and still echoes and keeps its ID.
+static void test_serve_off(void)
+{
+    lt_node_t n;
+    lt_cfg_t cfg = { "ImageWriter II", "ImageWriter", 0x0000, 201, 1, NULL };
+    lt_node_init(&n, &cfg, &OPS, 0);
+    lt_node_set_serve(&n, 0);
+    uint64_t t = 0;
+    for (int i = 0; i <= LT_ENQ_TRIES; i++, t += LT_ENQ_GAP_MS) lt_node_tick(&n, t);
+    CHECK_EQ_INT(claimed, 201);
+    CHECK(n.phase == LT_ONLINE);
+    reset_fake();
+
+    uint8_t nbp[64], f[LLAP_MAX];
+    size_t k = 0;
+    nbp[k++] = 0x21; nbp[k++] = 0x1E;
+    nbp[k++] = 0; nbp[k++] = 0; nbp[k++] = 83; nbp[k++] = 0xFB; nbp[k++] = 0;
+    nbp[k++] = 1; nbp[k++] = '=';
+    nbp[k++] = 11; memcpy(nbp + k, "ImageWriter", 11); k += 11;
+    nbp[k++] = 1; nbp[k++] = '*';
+    size_t fl = mac_ddp(f, 0xFF, SOCK_NIS, DDP_NBP, nbp, k);
+    lt_node_rx(&n, f, fl, t);
+    CHECK_EQ_INT(nsent, 0);
+
+    fl = mac_atp(f, 201, LT_SOCK_SLS, ATP_TREQ, 0x01, 7, 0, PAP_SEND_STATUS, 0, 0, NULL, 0);
+    lt_node_rx(&n, f, fl, t);
+    const uint8_t open[] = { 0xFB, 8, 0, 0 };
+    int begins = job_begins;
+    fl = mac_atp(f, 201, LT_SOCK_SLS, ATP_TREQ | ATP_XO, 0x01, 8, 0x42, PAP_OPEN_CONN, 0, 0,
+                 open, sizeof open);
+    lt_node_rx(&n, f, fl, t);
+    CHECK_EQ_INT(nsent, 0);
+    CHECK_EQ_INT(job_begins, begins);
+    CHECK(!n.pap.open);
+
+    const uint8_t echo[] = { 1, 'h', 'i' };
+    fl = mac_ddp(f, 201, SOCK_AEP, DDP_AEP, echo, sizeof echo);
+    lt_node_rx(&n, f, fl, t);
+    CHECK_EQ_INT(nsent, 1);
+
+    // Shared again: the lookup is answered.
+    lt_node_set_serve(&n, 1);
+    fl = mac_ddp(f, 0xFF, SOCK_NIS, DDP_NBP, nbp, k);
+    lt_node_rx(&n, f, fl, t + 10);
+    CHECK_EQ_INT(nsent, 2);
+}
+
+static nbp_tuple_t found_t[4];
+static lt_route_t  found_r[4];
+static int         nfound;
+static void f_found(void *ctx, const nbp_tuple_t *t, const lt_route_t *r)
+{
+    (void)ctx;
+    if (nfound < 4) { found_t[nfound] = *t; found_r[nfound] = *r; }
+    nfound++;
+}
+
+// A lookup of every LaserWriter goes to every node; answers reach `found`.
+static void test_lookup_out(void)
+{
+    lt_ops_t ops = OPS;
+    ops.found = f_found;
+    lt_node_t n;
+    static lt_name_t names[LT_SEEN_SLOTS];
+    lt_cfg_t cfg = { "ImageWriter II", "ImageWriter", 0x0000, 202, 1, names };
+    lt_node_init(&n, &cfg, &ops, 0);
+    uint64_t t = 0;
+    for (int i = 0; i <= LT_ENQ_TRIES; i++, t += LT_ENQ_GAP_MS) lt_node_tick(&n, t);
+    reset_fake();
+    nfound = 0;
+
+    lt_node_lookup(&n, "LaserWriter", t);
+    CHECK_EQ_INT(nsent, 1);
+    ddp_t d;
+    CHECK_EQ_INT(ddp_parse(sent[0], sent_len[0], &d), 0);
+    CHECK_EQ_INT(sent[0][0], LLAP_BCAST);
+    CHECK_EQ_INT(sent[0][2], LLAP_SHORT);
+    CHECK_EQ_INT(d.dst.node, LLAP_BCAST);
+    CHECK_EQ_INT(d.dst.sock, SOCK_NIS);
+    CHECK_EQ_INT(d.src.sock, SOCK_NIS);
+    CHECK_EQ_INT(d.type, DDP_NBP);
+    nbp_t q;
+    CHECK_EQ_INT(nbp_parse(d.data, d.len, &q), 0);
+    CHECK_EQ_INT(q.fn, NBP_LKUP);
+    CHECK_EQ_INT(q.count, 1);
+    CHECK_EQ_INT(q.t.addr.node, 202);
+    CHECK_EQ_INT(q.t.addr.sock, SOCK_NIS);
+    CHECK(q.t.obj[0] == 1 && q.t.obj[1] == '=');
+    CHECK(q.t.type[0] == 11 && !memcmp(q.t.type + 1, "LaserWriter", 11));
+    CHECK(q.t.zone[0] == 1 && q.t.zone[1] == '*');
+
+    // The LaserWriter at node 12 answers from its NIS with its listening socket.
+    nbp_tuple_t lw = { .addr = { 0, 12, 0x85 }, .enumerator = 0 };
+    nbp_name(lw.obj, "LaserWriter II NT");
+    nbp_name(lw.type, "LaserWriter");
+    lw.zone[0] = 1; lw.zone[1] = '*';
+    uint8_t pkt[2 + 5 + 3 * (NBP_NAME_MAX + 1)], f[LLAP_MAX];
+    size_t pl = nbp_build(pkt, sizeof pkt, NBP_LKUP_REPLY, q.id, &lw);
+    lt_addr_t to = { 0, 202, SOCK_NIS }, from = { 0, 12, SOCK_NIS };
+    size_t fl = ddp_build(f, sizeof f, 202, 12, 0, &to, &from, DDP_NBP, pkt, pl);
+    lt_node_rx(&n, f, fl, t + 30);
+    CHECK_EQ_INT(nfound, 1);
+    CHECK_EQ_INT(found_t[0].addr.node, 12);
+    CHECK_EQ_INT(found_t[0].addr.sock, 0x85);
+    CHECK(found_t[0].obj[0] == 17 && !memcmp(found_t[0].obj + 1, "LaserWriter II NT", 17));
+    CHECK_EQ_INT(found_r[0].via, 12);
+    CHECK_EQ_INT(found_r[0].is_long, 0);
+    CHECK_EQ_INT(found_r[0].addr.sock, 0x85);
+
+    // A Macintosh name's answer is the name table's, not `found`'s.
+    nbp_tuple_t ws = { .addr = { 0, 12, 0xFC }, .enumerator = 0 };
+    nbp_name(ws.obj, "SE30");
+    nbp_name(ws.type, "Workstation");
+    ws.zone[0] = 1; ws.zone[1] = '*';
+    pl = nbp_build(pkt, sizeof pkt, NBP_LKUP_REPLY, 9, &ws);
+    fl = ddp_build(f, sizeof f, 202, 12, 0, &to, &from, DDP_NBP, pkt, pl);
+    lt_node_rx(&n, f, fl, t + 40);
+    CHECK_EQ_INT(nfound, 1);
+
+    // The client's sockets and sends: a TReq from 0x83, a fresh TID each.
+    uint16_t tid0 = lt_node_next_tid(&n), tid1 = lt_node_next_tid(&n);
+    CHECK(tid1 == (uint16_t)(tid0 + 1));
+    reset_fake();
+    uint8_t user[4] = { 0x42, PAP_SEND_STATUS, 0, 0 };
+    lt_node_send_atp(&n, &found_r[0], LT_SOCK_PAPC_ST, ATP_TREQ, 0x01, tid1, user, NULL, 0);
+    CHECK_EQ_INT(nsent, 1);
+    CHECK_EQ_INT(ddp_parse(sent[0], sent_len[0], &d), 0);
+    CHECK_EQ_INT(d.dst.node, 12);
+    CHECK_EQ_INT(d.dst.sock, 0x85);
+    CHECK_EQ_INT(d.src.sock, LT_SOCK_PAPC_ST);
+    CHECK_EQ_INT(d.type, DDP_ATP);
+}
+
 int main(void)
 {
     test_fcs();
@@ -1530,5 +1667,7 @@ int main(void)
     test_name_back_after_quiet();
     test_name_paced();
     test_names_off();
+    test_serve_off();
+    test_lookup_out();
     TEST_END;
 }

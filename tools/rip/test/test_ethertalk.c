@@ -177,7 +177,7 @@ static void link_init(et_link_t *l, int *id, const uint8_t mac[6], uint16_t hnet
 {
     et_cfg_t cfg = { "ImageWriter II", "ImageWriter", 0x0000, {0}, hnet, hnode, 1, LT_IDLE_HOLD_MS, NULL };
     memcpy(cfg.mac, mac, 6);
-    et_ops_t ops = { id, w_send, w_log, w_begin, w_data, w_room, w_end, w_claimed };
+    et_ops_t ops = { id, w_send, w_log, w_begin, w_data, w_room, w_end, w_claimed, NULL };
     et_link_init(l, &cfg, &ops, 0);
 }
 
@@ -815,7 +815,7 @@ static void test_peer_names(void)
     et_cfg_t cfg = { "ImageWriter II", "ImageWriter", 0x0000, {0}, 0xFF23, 77, 1,
                      LT_IDLE_HOLD_MS, enames };
     memcpy(cfg.mac, MAC_A, 6);
-    et_ops_t ops = { &ID_A, w_send, w_log, w_begin, w_data, w_room, w_end, w_claimed };
+    et_ops_t ops = { &ID_A, w_send, w_log, w_begin, w_data, w_room, w_end, w_claimed, NULL };
     et_link_init(&l, &cfg, &ops, 0);
     uint64_t t = 0;
     for (; t <= 2100; t += 10) et_link_tick(&l, t);
@@ -874,8 +874,28 @@ static void test_peer_names(void)
     CHECK(p[1].name != NULL);
 }
 
+
+// W-1082: a lookup of every LaserWriter goes to the AppleTalk multicast.
+static void test_lookup_out_elap(void)
+{
+    et_link_t l;
+    int id;
+    uint64_t t = link_online(&l, &id, MAC_A, 0, 0);
+    lt_node_lookup(&l.node, "LaserWriter", t);
+    CHECK_EQ_INT(nfr, 1);
+    CHECK_EQ_MEM(fr[0], ET_AT_MCAST, 6);
+    ddp_t d;
+    CHECK_EQ_INT(sent_what(0, NULL, &d), 2);
+    CHECK(d.is_long);
+    CHECK_EQ_INT(d.dst.net, 0);
+    CHECK_EQ_INT(d.dst.node, 0xFF);
+    CHECK_EQ_INT(d.dst.sock, SOCK_NIS);
+    CHECK_EQ_INT(d.type, DDP_NBP);
+}
+
 int main(void)
 {
+    test_lookup_out_elap();
     test_elap_round_trip();
     test_elap_parse_rejects();
     test_aarp();

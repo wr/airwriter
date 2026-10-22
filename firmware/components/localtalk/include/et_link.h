@@ -47,6 +47,8 @@ typedef struct {
     void   (*job_end)(void *ctx, int normal);
     // The address is ours: keep it as next boot's hint. May be NULL.
     void   (*claimed)(void *ctx, uint16_t net, uint8_t node);
+    // W-1082: the node's NBP answers to lt_node_lookup (lt_ops_t's found). May be NULL.
+    void   (*found)(void *ctx, const nbp_tuple_t *t, const lt_route_t *r);
 } et_ops_t;
 
 typedef struct { uint16_t net; uint8_t node; uint8_t hw[ETH_ALEN]; uint64_t at; } et_map_t;

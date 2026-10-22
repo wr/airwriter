@@ -148,6 +148,12 @@ static size_t t_room(void *ctx)
     et_link_t *l = ctx;
     return l->ops.job_room ? l->ops.job_room(l->ops.ctx) : (size_t)-1;
 }
+static void t_found(void *ctx, const nbp_tuple_t *t, const lt_route_t *r)
+{
+    et_link_t *l = ctx;
+    if (l->ops.found) l->ops.found(l->ops.ctx, t, r);
+}
+
 static void t_end(void *ctx, int normal)
 {
     et_link_t *l = ctx;
@@ -164,7 +170,7 @@ void et_link_init(et_link_t *l, const et_cfg_t *cfg, const et_ops_t *ops, uint64
     l->rng = cfg->seed ? cfg->seed : 0x2434u;
     l->now = now;
     lt_cfg_t nc = { cfg->object, cfg->type, cfg->status, 0, cfg->seed, cfg->names };
-    lt_ops_t no = { l, t_send, NULL, t_log, t_begin, t_data, t_room, t_end };
+    lt_ops_t no = { l, t_send, NULL, t_log, t_begin, t_data, t_room, t_end, t_found };
     lt_node_init_elap(&l->node, &nc, &no, cfg->idle_hold_ms, now);
     if (cfg->hint_net >= 0xFF00 && cfg->hint_net <= 0xFFFE && cfg->hint_node >= 1 &&
         cfg->hint_node <= 253) {

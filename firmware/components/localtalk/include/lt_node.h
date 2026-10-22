@@ -26,8 +26,12 @@
 #include <stddef.h>
 #include "lt_proto.h"
 
+struct pap_client;              // pap_client.h (W-1082)
+
 #define LT_SOCK_SLS   0x81      // PAP server listening socket, registered with NBP
 #define LT_SOCK_CONN  0x82      // the one connection's ATP responding socket
+#define LT_SOCK_PAPC    0x83    // W-1082: the PAP client's connection socket
+#define LT_SOCK_PAPC_ST 0x84    // and the one its SendStatus goes from
 #define LT_FLOW       8         // our flow quantum: 512-byte packets per SendData
 #define LT_READ_MAX   (LT_FLOW * PAP_QUANTUM)   // the most one SendData can bring
 
@@ -76,6 +80,12 @@
 // or off line is waiting on the status word and is never cut off.
 #define LT_PAP_QUIET_MS        300000
 
+typedef struct {               // how to answer whoever sent a datagram
+    lt_addr_t addr;            // their socket
+    uint8_t   via;             // LLAP destination: them, or the router that relayed it
+    uint8_t   is_long;
+} lt_route_t;
+
 typedef struct {
     void *ctx;
     // One LLAP frame (dst, src, type, data), without its FCS.
@@ -95,6 +105,10 @@ typedef struct {
     void   (*job_data)(void *ctx, const uint8_t *d, size_t n);
     size_t (*job_room)(void *ctx);
     void   (*job_end)(void *ctx, int normal);
+    // W-1082: a tuple from an NBP LkUp-Reply to lt_node_lookup (a Macintosh
+    // name's answer is the name table's, not this), and the route to its
+    // socket. May be NULL.
+    void   (*found)(void *ctx, const nbp_tuple_t *t, const lt_route_t *r);
 } lt_ops_t;
 
 typedef uint8_t lt_name_t[NBP_NAME_MAX + 1];   // a Pascal NBP name, MacRoman
@@ -125,12 +139,6 @@ enum { LT_LINK_LLAP = 0, LT_LINK_ELAP = 1 };
 #define LT_IDLE_HOLD_MS 60000
 
 typedef enum { LT_ACQUIRING = 0, LT_ONLINE } lt_phase_t;
-
-typedef struct {               // how to answer whoever sent a datagram
-    lt_addr_t addr;            // their socket
-    uint8_t   via;             // LLAP destination: them, or the router that relayed it
-    uint8_t   is_long;
-} lt_route_t;
 
 #define LT_XO_SLOTS 4
 // The nodes heard lately, for the settings page (W-1079): a node that has
@@ -236,6 +244,11 @@ typedef struct {
     uint8_t    link;           // LT_LINK_*
     uint32_t   idle_hold_ms;
     uint8_t    router_logged;  // ELAP: a router has been noted once
+    // W-1082: answer as the ImageWriter (NBP for obj:type, PAP on the SLS)
+    // only while serve is set; a node can run for a LaserWriter alone.
+    uint8_t    serve;
+    uint8_t    lkup_id;        // the last lt_node_lookup's NBP id
+    struct pap_client *client; // the PAP client riding this node, or NULL
 } lt_node_t;
 
 void lt_node_init(lt_node_t *n, const lt_cfg_t *cfg, const lt_ops_t *ops, uint64_t now);
@@ -263,3 +276,22 @@ size_t lt_node_seen(const lt_node_t *n, uint64_t now, uint32_t within_ms, lt_see
 // The Macintosh name of net.node (net is ignored on the cable), or NULL. It
 // points into the node's table: valid until the node next changes.
 const uint8_t *lt_node_name(const lt_node_t *n, uint16_t net, uint8_t node);
+
+// W-1082, the laser printers design's "AppleTalk roles": a link runs when
+// the ImageWriter or a LaserWriter needs it, and answers as the ImageWriter
+// (its NBP name, SendStatus and OpenConn on the SLS) only where the
+// ImageWriter is shared. On at init. Turning it off leaves an open
+// connection alone: abort it first (lt_node_pap_abort).
+void     lt_node_set_serve(lt_node_t *n, int serve);
+// NBP LkUp of =:type@* to every node on the link (the AppleTalk multicast on
+// EtherTalk); the answers reach ops.found. Nothing until the node is online.
+void     lt_node_lookup(lt_node_t *n, const char *type, uint64_t now);
+// For the PAP client (pap_client.h): an ATP packet from one of our sockets,
+// and a fresh transaction ID.
+void     lt_node_send_atp(lt_node_t *n, const lt_route_t *to, uint8_t src_sock, uint8_t ctl,
+                          uint8_t bitmap, uint16_t tid, const uint8_t user[4],
+                          const uint8_t *data, size_t len);
+uint16_t lt_node_next_tid(lt_node_t *n);
+// The PAP client riding this node: ATP to LT_SOCK_PAPC and LT_SOCK_PAPC_ST
+// goes to it, and lt_node_tick ticks it. NULL detaches.
+void     lt_node_attach(lt_node_t *n, struct pap_client *c);

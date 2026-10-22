@@ -208,7 +208,7 @@ static void side_init(et_side_t *s, const uint8_t mac[ETH_ALEN])
                    s->names };
     memcpy(c.mac, mac, ETH_ALEN);
     et_ops_t o = { s, s == &s_tun ? tun_send : s == &s_zone ? zone_send : radio_send, op_log,
-                   op_begin, op_data, op_room, op_end, op_claimed };
+                   op_begin, op_data, op_room, op_end, op_claimed, NULL };
     et_link_init(&s->link, &c, &o, now_ms());
 }
 

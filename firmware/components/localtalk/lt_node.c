@@ -115,13 +115,27 @@ static void on_nbp(lt_node_t *n, const ddp_t *d, uint64_t now)
     nbp_t q;
     if (d->dst.sock != SOCK_NIS || nbp_parse(d->data, d->len, &q)) return;
     if (q.fn == NBP_LKUP_REPLY) {
-        name_reply(n, d, &q, now);
+        uint8_t ws[NBP_NAME_MAX + 1];
+        nbp_name(ws, LT_NAME_TYPE);
+        if (nbp_match(ws, q.t.type)) {
+            name_reply(n, d, &q, now);
+        } else if (n->ops.found && q.count && q.t.obj[0]) {
+            // W-1082: an answer to lt_node_lookup. Reach its socket as on_nbp
+            // answers a lookup: through the router that relayed it, if any.
+            lt_route_t r = { q.t.addr, q.t.addr.node, 0 };
+            if (!r.addr.net) r.addr.net = d->src.net;
+            if (d->is_long || (q.t.addr.net && q.t.addr.net != n->net)) {
+                r.via = d->llap_src;
+                r.is_long = 1;
+            }
+            n->ops.found(n->ops.ctx, &q.t, &r);
+        }
         return;
     }
     if (q.fn != NBP_LKUP) return;
     n->st.lookups++;
     name_registering(n, d, &q, now);
-    int hit = nbp_match(q.t.obj, n->obj) && nbp_match(q.t.type, n->type);
+    int hit = n->serve && nbp_match(q.t.obj, n->obj) && nbp_match(q.t.type, n->type);
 
     // Log a lookup once, not every second the Chooser repeats it.
     uint8_t key[sizeof n->last_lkup];
@@ -354,6 +368,7 @@ static void on_atp(lt_node_t *n, const ddp_t *d, uint64_t now)
     }
 
     if (d->dst.sock == LT_SOCK_SLS && fn == ATP_TREQ) {
+        if (!n->serve) return;                     // W-1082: no ImageWriter on this link
         if (a.user[1] == PAP_SEND_STATUS) {
             uint8_t data[4 + 3] = {0};
             status_bytes(n, data + 4);
@@ -453,6 +468,40 @@ static void pap_tick(lt_node_t *n, uint64_t now)
     pap_answer_ws_read(n, now);
 }
 
+// ------------------------------------------------------------- W-1082
+
+void lt_node_set_serve(lt_node_t *n, int serve)
+{
+    n->serve = serve ? 1 : 0;
+}
+
+void lt_node_lookup(lt_node_t *n, const char *type, uint64_t now)
+{
+    (void)now;
+    if (n->phase != LT_ONLINE) return;
+    nbp_tuple_t q = { .addr = { n->net, n->node, SOCK_NIS }, .enumerator = 0 };
+    q.obj[0] = 1;
+    q.obj[1] = NBP_WILD_ALL;
+    nbp_name(q.type, type);
+    q.zone[0] = 1;
+    q.zone[1] = '*';
+    uint8_t pkt[2 + 5 + 3 * (NBP_NAME_MAX + 1)];
+    size_t pl = nbp_build(pkt, sizeof pkt, NBP_LKUP, ++n->lkup_id, &q);
+    lt_route_t to = { { 0, LLAP_BCAST, SOCK_NIS }, LLAP_BCAST, n->link == LT_LINK_ELAP };
+    if (pl) send_ddp(n, &to, SOCK_NIS, DDP_NBP, pkt, pl);
+}
+
+void lt_node_send_atp(lt_node_t *n, const lt_route_t *to, uint8_t src_sock, uint8_t ctl,
+                      uint8_t bitmap, uint16_t tid, const uint8_t user[4],
+                      const uint8_t *data, size_t len)
+{
+    send_atp(n, to, src_sock, ctl, bitmap, tid, user, data, len);
+}
+
+uint16_t lt_node_next_tid(lt_node_t *n) { return next_tid(n); }
+
+void lt_node_attach(lt_node_t *n, struct pap_client *c) { n->client = c; }
+
 // ------------------------------------------------------------- the rest
 
 static void on_rtmp(lt_node_t *n, const ddp_t *d)
@@ -492,6 +541,7 @@ void lt_node_init(lt_node_t *n, const lt_cfg_t *cfg, const lt_ops_t *ops, uint64
 {
     memset(n, 0, sizeof *n);
     n->ops = *ops;
+    n->serve = 1;
     nbp_name(n->obj, cfg->object);
     nbp_name(n->type, cfg->type);
     lt_node_set_status(n, cfg->status);
@@ -512,6 +562,7 @@ void lt_node_init_elap(lt_node_t *n, const lt_cfg_t *cfg, const lt_ops_t *ops,
     (void)now;
     memset(n, 0, sizeof *n);
     n->ops = *ops;
+    n->serve = 1;
     nbp_name(n->obj, cfg->object);
     nbp_name(n->type, cfg->type);
     lt_node_set_status(n, cfg->status);
