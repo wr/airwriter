@@ -10,7 +10,14 @@ Traps already explained in a code comment are listed only when the comment is ea
   Mac's relay (W-1076) took ~45 KB and left 4-13 KB (91 bytes at a handshake's worst): the
   settings page stalled 25 s at a time and every reconnect failed. `CONFIG_MBEDTLS_EXTERNAL_MEM_ALLOC`
   in `sdkconfig.defaults.esp32s3` fixed it (~42 KB free with the relay up). `/api/et`
-  `internal_ram` shows free, largest block and the low mark without a console.
+  `internal_ram` shows free, largest block and the low mark without a console; `/api/status`
+  `internal` shows free and the low mark in a reply small enough to fetch when it is short.
+- **Every static buffer is Wi-Fi's loss.** `.bss`, `.data` and task stacks are internal RAM,
+  which Wi-Fi and lwIP buffer in. W-1082's first build added ~15 KB of statics: every reply
+  over one TCP segment (~1.4 KB) crawled or stalled, on ports 80 and 631 alike, with no error
+  but `httpd_sock_err ... 104`, while pings and small replies were fine. Put big state in
+  PSRAM (`heap_caps_calloc(..., MALLOC_CAP_SPIRAM)` at start); a static with an initialiser
+  goes to `.data` whole. Keep internal only what must be: a stack whose task writes NVS.
 - **`esp_websocket_client` holds its lock while it runs your event handler.** A handler that
   takes a lock your own task holds while calling `esp_websocket_client_send_text` deadlocks. The
   relay handler only queues and sets flags; sends happen outside the EtherTalk lock.

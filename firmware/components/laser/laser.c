@@ -44,8 +44,22 @@ static SemaphoreHandle_t s_mu, s_client_mx, s_ended_sem;
 static TaskHandle_t      s_task;
 static int               s_started;
 
+// The bulk of this file's state lives in PSRAM (laser_start allocates it):
+// Wi-Fi and lwIP take their buffers from internal RAM, and with ~20 KB more
+// of it used every TCP reply over one segment stalled on board 1 (W-1082
+// bench, 2026-10-22), as with the relay's TLS buffers (docs/traps.md).
+typedef struct {
+    lwc_t      core;                                // under s_mu
+    lw_parse_t parse;                               // the query's answers (link task, then ours)
+    char       pushed_msg[240];                     // the laser task's
+    uint8_t    query[4096];                         // the query job, probe and padding
+} big_t;
+static big_t *s_big;
+#define s_core       (s_big->core)
+#define s_parse      (s_big->parse)
+#define s_pushed_msg (s_big->pushed_msg)
+
 // Under s_mu.
-static lwc_t     s_core;
 static int       s_shared;
 static uint8_t   s_name[NBP_NAME_MAX + 1];        // the shared one's NBP name (Pascal)
 static int       s_link = -1;                      // where it was last heard (NVS)
@@ -64,7 +78,6 @@ static int       s_status_idx = -1;                 // the heard[] entry asked l
 // The laser task's.
 static int       s_advertised, s_readvertise, s_pc_link = -1, s_pushed_state = -1, s_pushed_busy;
 static const char *s_pushed_reason;
-static char      s_pushed_msg[240];
 static uint8_t   s_query_name[NBP_NAME_MAX + 1];    // whom the query in flight asked (review M12)
 // A job's OpenConn, run on the laser task (its stack is sized for the send
 // path; an IPP worker's is not: review I5).
@@ -82,7 +95,6 @@ static volatile int s_use = USE_NONE;
 static volatile int s_ended = -1;                   // papc_end_t of the connection
 static volatile int s_spool_eof, s_job_abort, s_job_failed, s_cancel_req;
 static volatile uint32_t s_sent;
-static lw_parse_t s_parse;                          // the query's answers (link task, then ours)
 static char      s_line[160];                       // a job's output, a line at a time
 static size_t    s_line_n;
 static ps_t     *s_ps;
@@ -298,8 +310,8 @@ static void found(int link, const nbp_tuple_t *t, const lt_route_t *r)
 
 static void query_start(int link, const lt_route_t *r)
 {
-    static uint8_t q[4096];
-    size_t n = lw_query_job(q, sizeof q);
+    uint8_t *q = s_big->query;
+    size_t n = lw_query_job(q, sizeof s_big->query);
     xSemaphoreTake(s_client_mx, portMAX_DELAY);
     if (s_use != USE_NONE) {
         xSemaphoreGive(s_client_mx);
@@ -492,8 +504,11 @@ esp_err_t laser_start(const laser_cfg_t *cfg)
     s_open_sem = xSemaphoreCreateBinary();
     s_pc = heap_caps_calloc(1, sizeof *s_pc, MALLOC_CAP_SPIRAM);
     if (!s_pc) s_pc = calloc(1, sizeof *s_pc);
+    s_big = heap_caps_calloc(1, sizeof *s_big, MALLOC_CAP_SPIRAM);
+    if (!s_big) s_big = calloc(1, sizeof *s_big);
     uint8_t *spool = heap_caps_malloc(SPOOL + 1, MALLOC_CAP_SPIRAM);
-    if (!s_mu || !s_client_mx || !s_ended_sem || !s_open_sem || !s_pc || !spool) return ESP_ERR_NO_MEM;
+    if (!s_mu || !s_client_mx || !s_ended_sem || !s_open_sem || !s_pc || !s_big || !spool)
+        return ESP_ERR_NO_MEM;
     s_spool = xStreamBufferCreateStatic(SPOOL, 1, spool, &s_spool_cb);
 
     papc_ops_t po = { .read = pc_read, .output = pc_output, .status = pc_status,

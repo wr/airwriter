@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "webui.h"
+#include "esp_heap_caps.h"
 #include "webui_page.h"
 #include "settings.h"
 #include "fw_update.h"
@@ -307,8 +308,12 @@ static int json_bool(const char *body, const char *key)
 static esp_err_t laser_get(httpd_req_t *req)
 {
     if (!s_cfg.laser_json) return httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "no laser");
-    static char json[3072];
-    s_cfg.laser_json(s_cfg.ctx, json, sizeof json);
+    // In PSRAM: internal RAM is Wi-Fi's (W-1082 bench). One httpd task, so one buffer.
+    enum { LASER_JSON = 3072 };
+    static char *json;
+    if (!json) json = heap_caps_malloc(LASER_JSON, MALLOC_CAP_SPIRAM);
+    if (!json) return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "no memory");
+    s_cfg.laser_json(s_cfg.ctx, json, LASER_JSON);
     httpd_resp_set_type(req, "application/json");
     return httpd_resp_sendstr(req, json);
 }

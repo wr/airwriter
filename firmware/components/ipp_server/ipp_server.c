@@ -16,6 +16,7 @@
 #include <netinet/tcp.h>
 
 #include "esp_log.h"
+#include "esp_heap_caps.h"
 #include "esp_random.h"
 #include "esp_mac.h"
 #include "esp_timer.h"
@@ -107,7 +108,13 @@ typedef struct {
     char            svc_name[64];        // printer 1: the instance they were registered as
 } printer_t;
 
-static printer_t s_p[IPP_PRINTERS] = { [0] = { .airprint = 1 } };   // W-1079: on until set
+// In PSRAM, allocated at start (internal RAM is Wi-Fi's: W-1082 bench). What
+// main.c sets for the ImageWriter before then waits in the s_pre_ ones.
+static printer_t *s_p;
+static volatile int s_pre_airprint = 1;     // W-1079: on until set
+static volatile int s_pre_colour;
+static const char  *s_pre_reason;
+static char         s_pre_message[128];
 static int s_printer_waiters;       // requests blocked in acquire_printer
 static SemaphoreHandle_t s_job_lock;     // guards s_p's jobs, ids, stops and strings
 // Held by the printing job, from Print-Job until its document has printed --
@@ -801,8 +808,12 @@ static esp_err_t start_mdns(void)
 
 void ipp_server_set_airprint(int on)
 {
-    printer_t *p = &s_p[0];
     on = on ? 1 : 0;
+    if (!s_p) {                                 // before start: start takes it from here
+        s_pre_airprint = on;
+        return;
+    }
+    printer_t *p = &s_p[0];
     if (on == p->airprint) return;
     p->airprint = on;
     ESP_LOGI(TAG, "AirPrint %s", on ? "on" : "off: not advertised, not taking jobs");
@@ -852,7 +863,13 @@ static esp_err_t start_listener(void)
 
 esp_err_t ipp_server_start(const ipp_server_cfg_t *cfg)
 {
+    s_p = heap_caps_calloc(IPP_PRINTERS, sizeof *s_p, MALLOC_CAP_SPIRAM);
+    if (!s_p) s_p = calloc(IPP_PRINTERS, sizeof *s_p);
+    if (!s_p) return ESP_ERR_NO_MEM;
     printer_t *p = &s_p[0];
+    p->airprint = s_pre_airprint;
+    p->stop_reason = s_pre_reason;
+    snprintf(p->stop_message, sizeof p->stop_message, "%s", s_pre_message);
     s_cfg  = *cfg;
     if (!s_cfg.port) s_cfg.port = 631;
 
@@ -867,7 +884,7 @@ esp_err_t ipp_server_start(const ipp_server_cfg_t *cfg)
     strcpy(p->info, "Apple ImageWriter II");
     icon_uris(p, "icon");
     make_uuid(p->uuid, sizeof p->uuid, cfg->dev_mode);
-    p->colour = cfg->colour ? 1 : 0;
+    p->colour = cfg->colour || s_pre_colour ? 1 : 0;
     for (int i = 0; i < IPP_PRINTERS; i++) {
         s_p[i].next_job_id = 1;
         s_p[i].job.state = IPP_JSTATE_COMPLETED;   // no job yet; nothing is pending
@@ -900,8 +917,12 @@ void ipp_server_stop(void)
 
 void ipp_server_set_colour(int on)
 {
-    printer_t *p = &s_p[0];
     on = on ? 1 : 0;
+    if (!s_p) {
+        s_pre_colour = on;
+        return;
+    }
+    printer_t *p = &s_p[0];
     if (on != p->colour) ESP_LOGI(TAG, "colour %s", on ? "on: the colour ribbon is in" : "off");
     p->colour = on;
     // The TXT record is tracked on its own: a change during start_mdns lands
@@ -915,11 +936,11 @@ void ipp_server_set_colour(int on)
         ESP_LOGW(TAG, "TXT update failed: %s / %s", esp_err_to_name(a), esp_err_to_name(b));
 }
 
-const char *ipp_server_uri(void) { return s_p[0].uri; }
+const char *ipp_server_uri(void) { return s_p ? s_p[0].uri : ""; }
 
 void ipp_server_job_done_for(int idx, int ok)
 {
-    if (idx < 0 || idx >= IPP_PRINTERS) return;
+    if (idx < 0 || idx >= IPP_PRINTERS || !s_p) return;
     printer_t *p = &s_p[idx];
     uint8_t state;
     const char *reason;
@@ -942,6 +963,13 @@ void ipp_server_job_done(int ok) { ipp_server_job_done_for(0, ok); }
 void ipp_server_set_stopped_for(int idx, const char *reason_or_null, const char *message)
 {
     if (idx < 0 || idx >= IPP_PRINTERS) return;
+    if (!s_p) {                                 // before start: the ImageWriter's, kept
+        if (idx == 0) {
+            s_pre_reason = reason_or_null;
+            snprintf(s_pre_message, sizeof s_pre_message, "%s", message ? message : "");
+        }
+        return;
+    }
     printer_t *p = &s_p[idx];
     if (s_job_lock) xSemaphoreTake(s_job_lock, portMAX_DELAY);
     int changed = p->stop_reason != reason_or_null;
@@ -961,7 +989,7 @@ void ipp_server_set_stopped(const char *reason_or_null, const char *message)
 void ipp_server_set_state_for(int idx, const char *reason, const char *message, int stopped,
                               int busy)
 {
-    if (idx < 0 || idx >= IPP_PRINTERS || !s_job_lock) return;
+    if (idx < 0 || idx >= IPP_PRINTERS || !s_p || !s_job_lock) return;
     printer_t *p = &s_p[idx];
     int real = reason && strcmp(reason, "none");
     xSemaphoreTake(s_job_lock, portMAX_DELAY);
@@ -974,7 +1002,7 @@ void ipp_server_set_state_for(int idx, const char *reason, const char *message, 
 
 void ipp_server_job_message_for(int idx, const char *msg)
 {
-    if (idx < 0 || idx >= IPP_PRINTERS || !s_job_lock) return;
+    if (idx < 0 || idx >= IPP_PRINTERS || !s_p || !s_job_lock) return;
     xSemaphoreTake(s_job_lock, portMAX_DELAY);
     snprintf(s_p[idx].job_message, sizeof s_p[idx].job_message, "%s", msg ? msg : "");
     xSemaphoreGive(s_job_lock);
@@ -982,7 +1010,7 @@ void ipp_server_job_message_for(int idx, const char *msg)
 
 esp_err_t ipp_server_set_printer(int idx, const ipp_printer_cfg_t *cfg)
 {
-    if (idx < 1 || idx >= IPP_PRINTERS || !s_job_lock) return ESP_ERR_INVALID_ARG;
+    if (idx < 1 || idx >= IPP_PRINTERS || !s_p || !s_job_lock) return ESP_ERR_INVALID_ARG;
     printer_t *p = &s_p[idx];
     xSemaphoreTake(s_job_lock, portMAX_DELAY);
     if (ipp_job_active(&p->job)) {
