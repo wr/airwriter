@@ -66,6 +66,13 @@ static unsigned   s_ev_head, s_ev_n;
 // Settings, and what the task has yet to act on.
 static int        s_tunnel_on = 1;
 static volatile int s_radio_on = 1;
+// W-1082: a LaserWriter shared on the tunnel or the radio keeps that link
+// running whatever its switch; the switch alone answers as the ImageWriter.
+static volatile int s_laser_tun, s_laser_radio;
+static void     (*s_found)(int link, const nbp_tuple_t *t, const lt_route_t *r);
+
+static int tun_wanted(void)   { return s_tunnel_on || s_laser_tun; }
+static int radio_wanted(void) { return s_radio_on || s_laser_radio; }
 static char       s_zone_name[ET_ZONE_MAX + 1];
 static int        s_zone_on;               // the relay runs when on and named
 static int        s_want_tunnel = -1;      // -1: nothing to do
@@ -133,6 +140,11 @@ static void op_claimed(void *ctx, uint16_t net, uint8_t node)
     nvs_close(h);
 }
 
+static void op_found(void *ctx, const nbp_tuple_t *t, const lt_route_t *r)
+{
+    if (s_found) s_found((int)((et_side_t *)ctx)->owner.link, t, r);
+}
+
 static void side_abort(void *ctx)
 {
     et_side_t *s = ctx;
@@ -182,7 +194,7 @@ err_t ethertalk_radio_input(struct pbuf *p, struct netif *netif)
     static uint8_t raw[ELAP_MAX_FRAME + 64];       // lwIP's thread only
     static zframe_t z;
     s_radio_unknown++;
-    if (!s_running || !s_radio_on || !s_rin || p->tot_len > sizeof raw) return ERR_ARG;
+    if (!s_running || !radio_wanted() || !s_rin || p->tot_len > sizeof raw) return ERR_ARG;
     u16_t n = pbuf_copy_partial(p, raw, sizeof raw, 0);
     size_t m = et_radio_normalize(raw, n, z.f, sizeof z.f);
     if (!m) return ERR_ARG;
@@ -208,7 +220,7 @@ static void side_init(et_side_t *s, const uint8_t mac[ETH_ALEN])
                    s->names };
     memcpy(c.mac, mac, ETH_ALEN);
     et_ops_t o = { s, s == &s_tun ? tun_send : s == &s_zone ? zone_send : radio_send, op_log,
-                   op_begin, op_data, op_room, op_end, op_claimed, NULL };
+                   op_begin, op_data, op_room, op_end, op_claimed, op_found };
     et_link_init(&s->link, &c, &o, now_ms());
 }
 
@@ -410,6 +422,11 @@ static void apply_pending(void)
     s_want_zone = 0;
     s_ip_changed = 0;
     s_net_down = 0;
+    // W-1082: a switch turned off while a LaserWriter needs its link leaves it running.
+    if (want_t == 0 && tun_wanted()) want_t = -1;
+    if (want_r >= 0) want_r = radio_wanted();
+    lt_node_set_serve(&s_tun.link.node, s_tunnel_on);
+    lt_node_set_serve(&s_radio.link.node, s_radio_on);
     xSemaphoreGive(s_lock);
     uint64_t now = now_ms();
 
@@ -433,11 +450,11 @@ static void apply_pending(void)
     }
     if ((ipch && ip != s_ip) || want_t == 1) {
         if (ipch) s_ip = ip;
-        if (s_tunnel_on) tunnel_open();
+        if (tun_wanted()) tunnel_open();
         uint8_t mac[ETH_ALEN];
         et_tunnel_mac(s_ip, mac);
         xSemaphoreTake(s_lock, portMAX_DELAY);
-        if (s_tunnel_on && s_sock >= 0 && s_ip) {
+        if (tun_wanted() && s_sock >= 0 && s_ip) {
             et_link_set_mac(&s_tun.link, mac, now);    // a job on the old address ends
             s_tun.active = 1;
         } else {
@@ -452,7 +469,7 @@ static void apply_pending(void)
     if (want_r >= 0 || ipch) {
         xSemaphoreTake(s_lock, portMAX_DELAY);
         int was = s_radio.active;
-        s_radio.active = s_radio_on && s_ip;
+        s_radio.active = radio_wanted() && s_ip;
         if (s_radio.active && !was) et_link_set_mac(&s_radio.link, s_sta_mac, now);   // acquire again
         if (!s_radio.active && was) et_link_down(&s_radio.link, now);
         xSemaphoreGive(s_lock);
@@ -611,6 +628,65 @@ esp_err_t ethertalk_apply(int tunnel, int radio, int infinite, const char *zone)
     return err;
 }
 
+void ethertalk_set_laser(int link, int on)
+{
+    on = on ? 1 : 0;
+    if (!s_running) {
+        if (link == AT_LINK_TUNNEL) s_laser_tun = on;
+        if (link == AT_LINK_RADIO) s_laser_radio = on;
+        return;
+    }
+    xSemaphoreTake(s_lock, portMAX_DELAY);
+    if (link == AT_LINK_TUNNEL && s_laser_tun != on) {
+        s_laser_tun = on;
+        s_want_tunnel = tun_wanted();
+    }
+    if (link == AT_LINK_RADIO && s_laser_radio != on) {
+        s_laser_radio = on;
+        s_want_radio = radio_wanted();
+    }
+    xSemaphoreGive(s_lock);
+}
+
+void ethertalk_lookup(const char *type)
+{
+    if (!s_running) return;
+    xSemaphoreTake(s_lock, portMAX_DELAY);
+    uint64_t now = now_ms();
+    if (s_tun.active) lt_node_lookup(&s_tun.link.node, type, now);
+    if (s_radio.active) lt_node_lookup(&s_radio.link.node, type, now);
+    if (s_zone.active) lt_node_lookup(&s_zone.link.node, type, now);
+    xSemaphoreGive(s_lock);
+}
+
+void ethertalk_set_found(void (*found)(int link, const nbp_tuple_t *t, const lt_route_t *r))
+{
+    s_found = found;
+}
+
+void ethertalk_attach(int link, pap_client_t *c)
+{
+    if (!s_running) return;
+    xSemaphoreTake(s_lock, portMAX_DELAY);
+    et_side_t *sides[] = { &s_tun, &s_zone, &s_radio };
+    for (int i = 0; i < 3; i++) {
+        lt_node_t *n = &sides[i]->link.node;
+        if (n->client && (!c || n->client == c)) lt_node_attach(n, NULL);
+    }
+    for (int i = 0; c && i < 3; i++)
+        if ((int)sides[i]->owner.link == link) lt_node_attach(&sides[i]->link.node, c);
+    xSemaphoreGive(s_lock);
+}
+
+int ethertalk_locked(void (*fn)(void *arg), void *arg)
+{
+    if (!s_running) return -1;
+    xSemaphoreTake(s_lock, portMAX_DELAY);
+    fn(arg);
+    xSemaphoreGive(s_lock);
+    return 0;
+}
+
 void ethertalk_settings(int *tunnel, int *radio, int *infinite, char *zone, size_t cap)
 {
     if (!s_running) {
@@ -670,10 +746,10 @@ esp_err_t ethertalk_start(const ethertalk_cfg_t *cfg)
     side_init(&s_tun, mac);
     side_init(&s_zone, s_zone_mac);
     side_init(&s_radio, s_sta_mac);
-    s_radio.active = s_radio_on && s_ip;
+    s_radio.active = radio_wanted() && s_ip;
     if (s_radio.active) note("radio", "listening for Macs on this network");
 
-    if (s_tunnel_on) {
+    if (tun_wanted()) {
         tunnel_open();
         s_tun.active = s_sock >= 0 && s_ip;
         if (s_tun.active) note("tunnel", "listening for Basilisk II");

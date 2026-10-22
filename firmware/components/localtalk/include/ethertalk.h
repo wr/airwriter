@@ -23,6 +23,7 @@
 #include <stdint.h>
 #include "esp_err.h"
 #include "at_printer.h"
+#include "pap_client.h"
 #include "localtalk.h"
 
 typedef struct {
@@ -55,3 +56,17 @@ void      ethertalk_settings(int *tunnel, int *radio, int *infinite, char *zone,
 // GET /api/et: each link's state, address, MAC and counters, the shared
 // printer's, and the log. Never the zone name.
 void      ethertalk_json(char *buf, size_t cap);
+
+// W-1082: a LaserWriter on EtherTalk. set_laser keeps the tunnel or the radio
+// running for a LaserWriter shared there whatever its switch says; the switch
+// alone decides whether that link answers as the ImageWriter. The relay has
+// no LaserWriters. lookup sends =:type@* on every running link; the answers
+// go to the found callback. The PAP client rides one link's node (NULL
+// detaches it from all); its callbacks run on the EtherTalk task under its
+// lock and must not block. locked runs fn under that lock (-1, not run,
+// before start).
+void      ethertalk_set_laser(int link, int on);
+void      ethertalk_lookup(const char *type);
+void      ethertalk_set_found(void (*found)(int link, const nbp_tuple_t *t, const lt_route_t *r));
+void      ethertalk_attach(int link, pap_client_t *c);
+int       ethertalk_locked(void (*fn)(void *arg), void *arg);

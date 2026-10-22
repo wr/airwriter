@@ -11,6 +11,7 @@
 #include <stdint.h>
 #include "esp_err.h"
 #include "at_printer.h"
+#include "pap_client.h"
 
 // What the node saw that the panel shows (W-1049), on the LocalTalk task.
 typedef enum {
@@ -66,6 +67,22 @@ const uint8_t *localtalk_job(size_t *len);
 // node's own are. A NULL tap removes it.
 void localtalk_set_tap(void (*tap)(void *ctx, const uint8_t *f, size_t n), void *ctx);
 void localtalk_send_raw(const uint8_t *f, size_t n);
+
+// W-1082: what the cable's node is for. serve: answer as the ImageWriter (the
+// AppleTalk Port card's switch); laser: a LaserWriter is looked for or shared
+// on the cable. Neither is quiet, as localtalk_set_quiet(1); laser alone
+// keeps the node and its ID and answers as nothing. Nothing before start.
+void localtalk_set_roles(int serve, int laser);
+// NBP =:type@* to every node on the cable; the answers go to the found
+// callback (localtalk_set_found).
+void localtalk_lookup(const char *type);
+void localtalk_set_found(void (*found)(int link, const nbp_tuple_t *t, const lt_route_t *r));
+// The PAP client rides the cable's node (NULL detaches). Its callbacks run
+// on the LocalTalk task with the node's lock held: they must not block.
+void localtalk_attach(pap_client_t *c);
+// Runs fn under the node's lock, for calls into the client (papc_open ...).
+// -1 without running it when the node is not running.
+int  localtalk_locked(void (*fn)(void *arg), void *arg);
 
 // 1 if TashTalk drains the node's UART within wait_ms. The node runs whether
 // or not a chip is in U7, its bytes held in the UART behind CTS; the cable

@@ -41,6 +41,14 @@ typedef struct {
     void  (*et_settings_get)(void *ctx, int *tunnel, int *radio, int *infinite, char *zone, size_t cap);
     int   (*et_settings_set)(void *ctx, int tunnel, int radio, int infinite, const char *zone);
 
+    // W-1082: GET /api/laser, the LaserWriters heard and the one shared (the
+    // card is open while the page asks), and POST /api/laser: {"share":"<NBP
+    // name>"} or {"share":null}, {"dither":..,"gain":..} for its screen. set
+    // takes unshare 1, or share, NULL dither and gain < 0 to keep each, and
+    // returns 0 or an HTTP status (400, 409). NULL answers 404.
+    void  (*laser_json)(void *ctx, char *buf, size_t cap);
+    int   (*laser_set)(void *ctx, int unshare, const char *share, const char *dither, int gain);
+
     // The general settings (model, name, hostname, dither, gain, the AirPrint
     // and AppleTalk-port switches) were just saved: the app re-reads them, so
     // the next job prints with the screen the page shows and the switches take

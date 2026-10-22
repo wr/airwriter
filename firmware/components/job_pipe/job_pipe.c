@@ -38,6 +38,8 @@ static volatile int s_eof;        // producer has no more bytes
 static volatile int s_aborted;    // transfer was truncated; abandon the page
 static job_pipe_stats_t s_st;
 static char s_name[64];
+static job_pipe_target_t s_target;    // this job's printer, when not the ImageWriter
+static int s_has_target;
 
 // urf_decode's source. Returns 1 only when all n bytes were delivered, which
 // is what makes a truncated document a decode error rather than a short page.
@@ -86,6 +88,14 @@ static void pipe_task(void *arg)
             .colour  = s_cfg.colour_ok ? s_cfg.colour_ok(s_cfg.colour_ctx) : 0,
             .log     = pipe_log,
         };
+        if (s_has_target) {                    // W-1082: another printer's job
+            cfg.caps   = s_target.caps;
+            cfg.stage  = s_target.stage;
+            cfg.dither = s_target.dither;
+            cfg.gain   = s_target.gain;
+            cfg.colour = 0;
+            cfg.top_margin = 0;
+        }
         ripjob_stats_t rst;
         memset(&rst, 0, sizeof rst);
         s_st.rc     = ripjob_run(&u, &cfg, &rst);
@@ -149,7 +159,14 @@ void job_pipe_set_top_margin(int top)
 
 esp_err_t job_pipe_begin(const char *job_name)
 {
+    return job_pipe_begin_to(job_name, NULL);
+}
+
+esp_err_t job_pipe_begin_to(const char *job_name, const job_pipe_target_t *t)
+{
     if (s_task) return ESP_ERR_INVALID_STATE;
+    s_has_target = t != NULL;
+    if (t) s_target = *t;
 
     // The last job's task drained the ring before it finished, so this is
     // belt and braces. Not xStreamBufferReset: with assertions on it memsets

@@ -81,7 +81,7 @@ static esp_err_t page_get(httpd_req_t *req)
 
 static esp_err_t status_get(httpd_req_t *req)
 {
-    static char json[1536];
+    static char json[2048];
     json[0] = '\0';
     if (s_cfg.status_json) s_cfg.status_json(s_cfg.ctx, json, sizeof json);
     if (!json[0]) strcpy(json, "{}");
@@ -304,6 +304,36 @@ static int json_bool(const char *body, const char *key)
     return !strncmp(p, "true", 4) ? 1 : !strncmp(p, "false", 5) ? 0 : -1;
 }
 
+static esp_err_t laser_get(httpd_req_t *req)
+{
+    if (!s_cfg.laser_json) return httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "no laser");
+    static char json[3072];
+    s_cfg.laser_json(s_cfg.ctx, json, sizeof json);
+    httpd_resp_set_type(req, "application/json");
+    return httpd_resp_sendstr(req, json);
+}
+
+static esp_err_t laser_post(httpd_req_t *req)
+{
+    if (!s_cfg.laser_set) return httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "no laser");
+    char body[BODY_MAX];
+    if (read_body(req, body, sizeof body) < 0)
+        return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "short body");
+    char share[100], dither[16];
+    int has_share = json_str(body, "share", share, sizeof share);
+    int unshare = !has_share && strstr(body, "\"share\":null") != NULL;
+    int has_dither = json_str(body, "dither", dither, sizeof dither);
+    int rc = s_cfg.laser_set(s_cfg.ctx, unshare, has_share ? share : NULL,
+                             has_dither ? dither : NULL, json_int(body, "gain", -1));
+    if (rc == 409) {
+        httpd_resp_set_status(req, "409 Conflict");
+        return httpd_resp_sendstr(req, "a job is printing");
+    }
+    if (rc) return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "no such LaserWriter or screen");
+    led_grid_blip(LG_BLIP_SAVED);
+    return laser_get(req);
+}
+
 static esp_err_t et_settings_post(httpd_req_t *req)
 {
     if (!s_cfg.et_settings_set || !s_cfg.et_settings_get)
@@ -492,7 +522,7 @@ esp_err_t webui_start(const webui_cfg_t *cfg)
     httpd_config_t hc = HTTPD_DEFAULT_CONFIG();
     hc.server_port      = 80;
     hc.ctrl_port        = 32080;
-    hc.max_uri_handlers = 26;
+    hc.max_uri_handlers = 28;
     hc.stack_size       = 6144;
     hc.lru_purge_enable = true;
     hc.uri_match_fn     = httpd_uri_match_wildcard;
@@ -512,6 +542,8 @@ esp_err_t webui_start(const webui_cfg_t *cfg)
         { .uri = "/api/et",       .method = HTTP_GET,  .handler = et_get },
         { .uri = "/api/et/settings", .method = HTTP_GET,  .handler = et_settings_get },
         { .uri = "/api/et/settings", .method = HTTP_POST, .handler = et_settings_post },
+        { .uri = "/api/laser",    .method = HTTP_GET,  .handler = laser_get },
+        { .uri = "/api/laser",    .method = HTTP_POST, .handler = laser_post },
         { .uri = "/api/wifi",     .method = HTTP_POST, .handler = wifi_post },
         { .uri = "/api/general",  .method = HTTP_POST, .handler = general_post },
         { .uri = "/update",       .method = HTTP_POST, .handler = update_post },

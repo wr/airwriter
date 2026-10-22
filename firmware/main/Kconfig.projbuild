@@ -49,6 +49,17 @@ config AIRWRITER_UUID_EPOCH
         Not for changes that only filter what is sent: a new UUID also
         strands every Mac queue whose device-uri pins the old one.
 
+config AIRWRITER_LASER_UUID_EPOCH
+    int "LaserWriter printer-uuid epoch"
+    range 0 65535
+    default 1
+    help
+        W-1082: a shared LaserWriter's printer-uuid is the board's MAC, this
+        number and a hash of the LaserWriter's NBP name, so sharing another
+        LaserWriter is another printer to iOS. Bump it when what a shared
+        LaserWriter advertises changes, as AIRWRITER_UUID_EPOCH is bumped for
+        the ImageWriter; the ImageWriter's UUID does not move with it.
+
 config AIRWRITER_UART_NUM
     int "Printer UART port"
     default 1

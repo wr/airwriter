@@ -41,6 +41,11 @@ static char       s_ev[EV_LINES][LINE_LEN], s_fr[FR_LINES][LINE_LEN];
 static unsigned   s_ev_head, s_ev_n, s_fr_head, s_fr_n;
 static unsigned   s_fcs_bad, s_errors, s_tx;
 static void     (*s_tap)(void *ctx, const uint8_t *f, size_t n);
+// W-1082: answer as the ImageWriter; the PAP client riding the node; where
+// LaserWriters' NBP answers go.
+static int        s_serve = 1;
+static pap_client_t *s_client;
+static void     (*s_found)(int link, const nbp_tuple_t *t, const lt_route_t *r);
 static void      *s_tap_ctx;
 
 // W-1049: the node's counters as last seen, to tell the panel what changed.
@@ -116,6 +121,12 @@ static void cable_abort(void *ctx)
 }
 
 static const at_owner_t s_owner = { AT_LINK_CABLE, cable_abort, localtalk_note, NULL };
+
+static void op_found(void *ctx, const nbp_tuple_t *t, const lt_route_t *r)
+{
+    (void)ctx;
+    if (s_found) s_found(AT_LINK_CABLE, t, r);
+}
 
 static int op_job_begin(void *ctx) { (void)ctx; return at_job_begin(&s_owner); }
 static void op_job_data(void *ctx, const uint8_t *d, size_t n) { (void)ctx; at_job_data(&s_owner, d, n); }
@@ -265,9 +276,11 @@ esp_err_t localtalk_start(const localtalk_cfg_t *cfg)
                        .names = heap_caps_calloc(LT_SEEN_SLOTS, sizeof(lt_name_t), MALLOC_CAP_SPIRAM) };
     s_ops = (lt_ops_t){ .send = op_send, .claim = op_claim, .log = op_log,
                         .job_begin = op_job_begin, .job_data = op_job_data,
-                        .job_room = op_job_room, .job_end = op_job_end };
+                        .job_room = op_job_room, .job_end = op_job_end, .found = op_found };
     xSemaphoreTake(s_lock, portMAX_DELAY);
     lt_node_init(&s_node, &s_nc, &s_ops, now_ms());   // clears TashTalk's node bitmap
+    lt_node_set_serve(&s_node, s_serve);
+    lt_node_attach(&s_node, s_client);
     xSemaphoreGive(s_lock);
 
     if (xTaskCreate(lt_task, "localtalk", 6144, NULL, 4, NULL) != pdPASS) return ESP_ERR_NO_MEM;
@@ -288,6 +301,7 @@ void localtalk_set_quiet(int quiet)
     uint64_t now = now_ms();
     if (quiet) {
         if (s_node.pap.open) lt_node_pap_abort(&s_node, now);
+        if (s_client) papc_link_down(s_client, now);
         op_claim(NULL, 0);                       // TashTalk answers for no node now
         s_quiet = 1;
         op_log(NULL, "the AppleTalk port is off");
@@ -302,10 +316,66 @@ void localtalk_set_quiet(int quiet)
         s_nc.status = s_node.status;
         s_nc.seed = esp_random() | 1;
         lt_node_init(&s_node, &s_nc, &s_ops, now);
+        lt_node_set_serve(&s_node, s_serve);     // a new node: its roles again
+        lt_node_attach(&s_node, s_client);
         s_quiet = 0;
         op_log(NULL, "the AppleTalk port is on");
     }
     xSemaphoreGive(s_lock);
+}
+
+void localtalk_set_roles(int serve, int laser)
+{
+    if (!s_running) return;
+    serve = serve ? 1 : 0;
+    if (!serve && !laser) {
+        localtalk_set_quiet(1);
+        return;
+    }
+    if (s_quiet) localtalk_set_quiet(0);
+    xSemaphoreTake(s_lock, portMAX_DELAY);
+    if (s_serve != serve) {
+        // No ImageWriter here any more: a Mac printing to it is told.
+        if (!serve && s_node.pap.open) lt_node_pap_abort(&s_node, now_ms());
+        s_serve = serve;
+        lt_node_set_serve(&s_node, serve);
+        op_log(NULL, serve ? "answering as the ImageWriter" : "running for a LaserWriter only");
+    }
+    xSemaphoreGive(s_lock);
+}
+
+void localtalk_lookup(const char *type)
+{
+    if (!s_running || s_quiet) return;
+    xSemaphoreTake(s_lock, portMAX_DELAY);
+    lt_node_lookup(&s_node, type, now_ms());
+    xSemaphoreGive(s_lock);
+}
+
+void localtalk_set_found(void (*found)(int link, const nbp_tuple_t *t, const lt_route_t *r))
+{
+    s_found = found;
+}
+
+void localtalk_attach(pap_client_t *c)
+{
+    if (!s_running) {
+        s_client = c;
+        return;
+    }
+    xSemaphoreTake(s_lock, portMAX_DELAY);
+    s_client = c;
+    lt_node_attach(&s_node, c);
+    xSemaphoreGive(s_lock);
+}
+
+int localtalk_locked(void (*fn)(void *arg), void *arg)
+{
+    if (!s_running) return -1;
+    xSemaphoreTake(s_lock, portMAX_DELAY);
+    fn(arg);
+    xSemaphoreGive(s_lock);
+    return 0;
 }
 
 void localtalk_set_status(uint16_t status)
