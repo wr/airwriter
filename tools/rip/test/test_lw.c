@@ -169,6 +169,12 @@ int main(int argc, char **argv)
     CHECK_EQ_INT(lw_ps_error("%%[ Flushing: rest of job (to end-of-file) will be ignored ]%%",
                              msg, sizeof msg), 0);
     CHECK_EQ_INT(lw_ps_error("%%[ status: idle ]%%", msg, sizeof msg), 0);
+    // A paper fault mid-job is the printer's status, not the job's error: the
+    // job prints on once the paper is in (W-1082 bench: board 1 failed a job
+    // the fake LaserWriter had printed whole).
+    CHECK_EQ_INT(lw_ps_error("%%[ PrinterError: out of paper ]%%", msg, sizeof msg), 0);
+    CHECK_EQ_INT(lw_ps_error("%%[ status: PrinterError: paper jam ]%%", msg, sizeof msg), 0);
+    CHECK_EQ_INT(lw_ps_error("%%[ Error: ioerror; OffendingCommand: readstring ]%%", msg, sizeof msg), 1);
 
     // The AirPrint printer the II NT becomes.
     lw_parse_init(&p);

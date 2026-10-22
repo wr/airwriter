@@ -95,9 +95,13 @@ void lw_status_map(const char *status, lw_state_t *out)
 
 int lw_ps_error(const char *line, char *msg, size_t cap)
 {
-    if (!line || !cap || !find_ci(line, "%%[")) return 0;
-    const char *p = find_ci(line, "error:");
+    if (!line || !cap) return 0;
+    const char *p = find_ci(line, "%%[");
     if (!p) return 0;
+    // The message's first key: "PrinterError:" or "status: PrinterError:" is
+    // a paper fault the job waits out, not the job's error.
+    for (p += 3; *p == ' '; p++) {}
+    if (find_ci(p, "error:") != p) return 0;
     p += strlen("error:");
     while (*p == ' ') p++;
     size_t n = 0;
