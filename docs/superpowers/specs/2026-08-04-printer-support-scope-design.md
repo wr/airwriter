@@ -59,6 +59,10 @@ owner buying a second printer as a donor for a corroded carriage cable, after ul
 cleaning failed to revive the head. Ink is not the problem and refill kits are still sold.
 The head is the problem, and firmware cannot fix a dead head.
 
+*Superseded for the plan by `2026-10-21-laser-printers-design.md`: AirPrint to PostScript
+LaserWriters on AppleTalk is built (W-1082) and untested on a real printer; LaserJets over
+serial are next (W-1083). The notes on toner and condition below still stand.*
+
 **LaserWriter — later, and better placed than expected.** Toner is the healthiest of the
 three, because Apple used Canon engines shared with HP LaserJets. The LaserWriter II family
 takes the same cartridge as a LaserJet II or III, currently about $70 for a new-build

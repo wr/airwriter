@@ -168,6 +168,18 @@ What works on `main`:
   WebSocket to infinitemac.org (off until switched on; a made-up zone name). One job at a time
   across all four links (`at_printer.c`). `GET /api/et`, `GET`/`POST /api/et/settings`.
   `tools/ethertalk/etpeer.py` is a software Mac for the tunnel and the relay (lookup, print).
+- LaserWriters on AppleTalk (`W-1082 AirPrint to LaserWriters on AppleTalk`, SPEC §3.14, design
+  `docs/superpowers/specs/2026-10-21-laser-printers-design.md`): **built, tested against a fake
+  LaserWriter only, untested on a real one.** A PostScript LaserWriter heard on the cable, the
+  Wi-Fi link or the tunnel can be shared from the AppleTalk pane's LaserWriters card as a second
+  AirPrint printer (`ipp_server` printer 1 at `ipp/laser`, its own Bonjour name and UUID, the
+  ImageWriter's bytes unchanged). The board queries it (Level 1 PostScript, a binary probe),
+  rips at 300 dpi into Level 1 `imagemask` bands (`ps_page`) and sends them with a PAP client
+  beside the server (`localtalk/pap_client.c`); `components/laser` holds the query, the status
+  words, the caps and UUID, the policy (`lw_core.c`) and the board's side (`laser.c`, NVS
+  `laser`). Sharing is off by default. `GET`/`POST /api/laser`, `/api/status` `laser`. A link
+  answers as the ImageWriter only where its card's switch is on, and runs for a LaserWriter
+  whatever it says. `etpeer.py laserwriter` is the fake.
 
 **Enclosure** (`enclosure/`, in use on board 1): tray (print in PETG with Arachne walls;
 every wall 1.70 below the rim, one thickness all round so no lines show up the outside; the
@@ -181,10 +193,11 @@ tray.
 ImageWriter LQ take the same stream and are expected to work, untested (the scope spec's
 amendment); docs say so rather than excluding them. The settings page's Model picker offers
 both, but the model only names the printer: IPP `printer-make-and-model`, Bonjour `ty` and
-`/api/status` `model` still say Apple ImageWriter II. StyleWriters stay out.
+`/api/status` `model` still say Apple ImageWriter II. StyleWriters stay out. PostScript
+LaserWriters on AppleTalk can be shared beside it (above), untested on a real one.
 
-Not built: Mini vMac (LToUDP, `W-1077`), consumers of the dither override, PWG raster, laser
-printers (designed, below).
+Not built: Mini vMac (LToUDP, `W-1077`), consumers of the dither override, PWG raster, HP
+LaserJets over serial (`W-1083`, designed).
 
 **Board 1:** ESP32-S3-WROOM-1-N8R2 (8 MB flash, 2 MB PSRAM). On the home Wi-Fi at
 10.0.1.115, mDNS `imagewriter-2434.local`. Console on USB-C as `/dev/cu.usbmodem*` (the number
@@ -273,13 +286,14 @@ Linear is the queue; these are the live items.
   between links, a link dropped mid-job, a print from the SE/30 on the cable again, an Infinite Mac on its card, the page's Erase and Wi-Fi join. Before any release
   that turns the relay on for users, give Mihai Parparita (Infinite Mac) a heads-up.
 - Not in Linear: scope HSKo during a long job (SPEC §3.9 timing).
-- Laser printers (design `docs/superpowers/specs/2026-10-21-laser-printers-design.md`, approved
-  2026-10-22; no laser printer on the bench): `W-1082 AirPrint to LaserWriters on AppleTalk` (a
-  PAP client sending a PostScript `imagemask`, the LaserWriter shared as a second AirPrint
-  printer; merges once it passes against a fake LaserWriter and board 1's ImageWriter prints
-  unchanged), then `W-1083 AirPrint to HP LaserJets over serial (PCL)`. Network printers over
-  TCP are out. Open hardware question for any RS-232 printer, the original ImageWriter included:
-  J2's receiver (MAX3490, common-mode −7 to +12 V) against RS-232's −12 V.
+- Laser printers (design `docs/superpowers/specs/2026-10-21-laser-printers-design.md`; no
+  laser printer on the bench): `W-1082 AirPrint to LaserWriters on AppleTalk` is built (plan
+  `docs/superpowers/plans/2026-10-22-laserwriters-appletalk.md`); owed on a real LaserWriter:
+  the design's "What only a printer settles" (cable, long frames through TashTalk, throughput,
+  binary on Level 1, placement, memory, the status texts, the screen, busy both ways). Next
+  `W-1083 AirPrint to HP LaserJets over serial (PCL)`. Network printers over TCP are out. Open
+  hardware question for any RS-232 printer, the original ImageWriter included: J2's receiver
+  (MAX3490, common-mode −7 to +12 V) against RS-232's −12 V.
 - The full test page has printed on board 1 from the page's Print Test Page, on the colour
   ribbon. Still owed: a print from the button and from DIP4, one on the black ribbon, and a
   second tap mid-page.
@@ -330,7 +344,8 @@ Linear is the queue; these are the live items.
 
 ## Verification
 - **Host tests:** `make -C tools/rip test` (raster path, halftone screens and colour, serial writer, printer_state, led_grid,
-  dip_config, pic_prog, localtalk, cable, fw_update, known_good, testpage) and `make -B -C tools/ipp test`
+  dip_config, pic_prog, localtalk, PAP client, LaserWriter query and policy, PostScript writer,
+  cable, fw_update, known_good, testpage) and `make -B -C tools/ipp test`
   (`-B`: `tools/ipp/build/` is committed).
 - **Test page preview:** `tools/rip/build/rip --testpage colour --out-stream tp.bin` (or `black`,
   `unknown`), then `python3.14 tools/iwview/iwview.py tp.bin tp.png` draws it as ink on paper.
@@ -344,6 +359,13 @@ Linear is the queue; these are the live items.
   fixture is pure black and white and must never change; the other three move with any change
   to a screen, the curve, the ink order or how strips are sent, and are regenerated with the
   reason in the commit. A blank strip is only its held line feed, in gray as in colour.
+- **LaserWriters:** `make -C tools/rip pscheck` (needs Ghostscript, called by path: `gs` is a
+  git alias here) renders the LaserWriter PostScript of the checker and two 300 dpi pages and
+  requires the rip's own dots, binary and hex, also with every non-Level-1 operator trapped, and
+  runs the query job; `make -C tools/rip interop` prints with the firmware's PAP client
+  (`build/lwhost`) to `etpeer.py`'s fake LaserWriter over a pipe (lookup, query, print, busy,
+  paper out, PostScript error, cancel, a silent printer). `tools/ipp/test/golden/` pins the
+  ImageWriter's IPP answers byte for byte.
 - **Firmware:** `idf.py build` clean.
 - **Web page:** `python3 tools/webui/preview.py`, then http://localhost:8079/_states: every state
   at desktop and phone width, light and dark, before a change to the page goes to the board.
@@ -386,12 +408,13 @@ hardware/airwriter/   KiCad 10 main board (sch, pcb, lib/, route.py, stitch.py, 
 hardware/panel/       art panel generator (Figma SVG → panel.kicad_pcb)
 hardware/combined/    the snap-apart order panel and make_fab.sh; combined-fab.zip is the order
 firmware/             ESP-IDF 5.5 app; components/ per SPEC §3.1 plus job_pipe, led_grid, pic_prog,
-                      ota_health …; bootloader_components/ holds the bootloader's pin clamps
+                      ota_health, printer_caps, ps_page, laser …; bootloader_components/ holds the bootloader's pin clamps
                       and power-up reset
 tools/rip/            host build of the raster path + host tests for the pure-C cores
 tools/ipp/            IPP host tests and gpa_server (the real encoder on localhost for ipptool)
 tools/ippcap/         stub IPP server that captures a Print-Job body (how fixtures were made)
-tools/ethertalk/      etpeer.py, a software EtherTalk Mac for the tunnel and the relay
+tools/ethertalk/      etpeer.py, a software EtherTalk Mac for the tunnel and the relay, and
+                      a fake LaserWriter; test_interop.py
 tools/webui/          web UI sources and its two emulator icons; mkheader.py generates
                       firmware's webui_page.h (never hand-edit); preview.py serves the page
                       in any of states.json's states (no printer, setup mode, a failing

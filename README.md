@@ -30,6 +30,10 @@ original ImageWriter and the ImageWriter LQ take the same commands and should wo
 neither has been tested yet. The original has a 25-pin port, so it needs the Mac cable made for
 that.
 
+AirWriter can also share a PostScript LaserWriter it hears on AppleTalk (a LocalTalk cable or
+the network) as a second AirPrint printer, beside the ImageWriter. That is built and tested
+against a software LaserWriter, but not yet on a real one.
+
 ## Repository
 
 | Path | What's there |

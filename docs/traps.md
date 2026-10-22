@@ -241,6 +241,27 @@ Traps already explained in a code comment are listed only when the comment is ea
   ≤ 1.8 µs against LocalTalk's ~200 µs inter-dialogue gap. It mirrors the U6 bug fixed on 08-22
   but is not that bug; don't "fix" it.
 
+## LaserWriters (W-1082)
+
+- **`gs` is aliased to `git status` in Wells's shell.** Call Ghostscript by path,
+  `/opt/homebrew/bin/gs` (`brew install ghostscript`); the test scripts do.
+- **Ghostscript 10 has no Level 1 mode** (`.setlanguagelevel` is gone). `pscheck.py` traps every
+  operator outside `tools/rip/test/ps_level1_ops.txt` instead, plus the Level 2 names Ghostscript
+  defines as procedures; trapping every procedure hangs Ghostscript.
+- **Binary PostScript: exactly one LF after the procedure name.** The scanner eats one
+  whitespace byte after a token; CR LF leaves the LF as the first data byte and shifts every
+  row after it.
+- **PAP to a LaserWriter: 512-byte Data packets, one ATP socket.** Bigger upsets a LaserWriter
+  on LocalTalk; and the socket that sends OpenConn must be the responding socket it names, or
+  the printer's SendData never arrives (TailTalk, on hardware, PR #26).
+- **`lt_node_init` resets a node's roles and its PAP client.** Every re-init (the AppleTalk
+  port waking from quiet) re-applies `lt_node_set_serve` and `lt_node_attach`.
+- **`laser.c`'s lock order is `s_client_mx`, a link's lock, `s_mu`.** The client's callbacks
+  run under a link's lock and take only `s_mu`; Cancel-Job reaches the client as a flag, since
+  `ipp_server` calls cancel under its own lock.
+- **The preview server's port 8079 may be another session's.** `preview.py --port` runs one of
+  your own.
+
 ## KiCad, board, fab
 
 **Editing**

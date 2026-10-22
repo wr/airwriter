@@ -607,6 +607,54 @@ printer, internal RAM, the log), `GET`/`POST /api/et/settings`
 (`{"radio":true,"tunnel":true,"infinite":true,"zone":"…"}`; 400 for a zone name outside the rule
 above).
 
+### 3.14 LaserWriters on AppleTalk (W-1082)
+
+Design: `docs/superpowers/specs/2026-10-21-laser-printers-design.md` (phase 1). **Untested on a
+real LaserWriter:** built and proven against a fake one (`tools/ethertalk/etpeer.py
+laserwriter`); the design's "What only a printer settles" is the bench list. Sharing is off
+until a LaserWriter is chosen on the settings page.
+
+A PostScript LaserWriter heard on AppleTalk can be shared as a **second AirPrint printer**
+beside the ImageWriter, which keeps its identity, UUID and bytes (`tools/ipp/test/golden/`).
+
+- **Finding it.** NBP `=:LaserWriter@*` on the cable, the Wi-Fi link and the Basilisk II tunnel
+  (`lt_node_lookup`), when the LaserWriters card is open and every 30 s while one is shared;
+  SendStatus every 5 s (2 s printing). The policy is `laser/lw_core.c`. Heard on two links, the
+  cable's wins. No answer for 30 s is `stopped` + `offline-report`.
+- **Roles.** A link runs when the ImageWriter or a LaserWriter needs it and answers as the
+  ImageWriter (its NBP name, SendStatus and OpenConn on the SLS) only where the ImageWriter is
+  shared: the AppleTalk cards' switches keep that meaning (`lt_node_set_serve`,
+  `localtalk_set_roles`, `ethertalk_set_laser`).
+- **The query job** (`laser/lw_query.c`): a Level 1 PAP job that prints nothing and asks
+  product, version, language level, resolution, imageable area and page size, each inside
+  `stopped`, plus a 256-byte binary probe. Binary goes to the printer only if the probe came
+  back intact; otherwise hex. Answers in NVS `laser`; run again at the first answer after boot
+  and when the printer comes back. The printer is advertised once it has answered.
+- **The AirPrint printer** (`ipp_server` printer 1, `laser/lw_caps.c`): `ipp/laser`, its own
+  Bonjour instance (NBP name), `printer-uuid` `41575254-4c57-<CONFIG_AIRWRITER_LASER_UUID_EPOCH>-
+  <hash of the NBP name>-<MAC>`, URF `RS300`, `W8`, only the paper it reported, margins from its
+  imageable area rounded outward, `laser-*.png` icons. One job at a time across both printers.
+- **The page** (`ps_page`): the rip at 300 dpi (`printer_caps`, `ripjob`'s output stage, the
+  printer's own screen and gain) into Level 1 `imagemask` bands of at most 64 rows, ended by a
+  blank row, trimmed to their ink; one LF before binary data; hex lines of 64 digits. A text
+  page is about 40 % of its bitmap. `make -C tools/rip pscheck` holds it to Ghostscript dot for
+  dot.
+- **PAP client** (`localtalk/pap_client.c`, beside the server on the same node): OpenConn from
+  one socket that is also the responding socket, busy retried every 2 s up to the stall limit
+  (600 s), the printer pulls 8 Data packets of at most 512 bytes per SendData, the last 8 answers
+  kept for retransmits, the printer's output read back from the start, tickles every 30 s,
+  dead after 120 s silent, CloseConn after the printer's EOF (or 30 s without it).
+- **Status.** `PrinterError:` texts map to `media-empty-error`, `media-jam-error`,
+  `door-open-error`, `toner-empty-error`, `other-error` (stopped, the printer's words as the
+  message); `toner-low-warning` does not stop it; busy and warming up are `processing`. A
+  PostScript error in its output becomes the job's `job-state-message`. The texts are guesses
+  until a LaserWriter is benched.
+- **Panel.** A LaserWriter job is an AirPrint job. With the ImageWriter's AirPrint off and a
+  LaserWriter shared, the printer states follow the LaserWriter.
+- **Web.** `GET /api/laser` (heard, shared, query answers, job; asking it keeps the board
+  looking), `POST /api/laser` `{"share":"<NBP name>"}`, `{"share":null}`, `{"dither":…,"gain":…}`;
+  `/api/status` `laser`.
+
 ---
 
 ## 4. Unverified assumptions
