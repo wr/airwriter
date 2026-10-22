@@ -20,7 +20,7 @@ being true, change or delete it in the same commit that made it false.
 | `docs/prior-art.md` | TashTalk, TailTalk, AirTalk, ImageScribbler. |
 | `docs/ORDER-NOTES.md` | PCBWay order notes for rev A. |
 | `docs/KICAD-TOOLING.md` | General KiCad 10 / konnect / pcbnew playbook. |
-| `docs/superpowers/specs/` | Printer scope, dot-panel cover (read its amendment block first), enclosure, status language, signed updates. |
+| `docs/superpowers/specs/` | Printer scope, dot-panel cover (read its amendment block first), enclosure, status language, signed updates, laser printers. |
 | `docs/review-*.md`, `docs/firmware-audit-*.md` | Dated reviews. Historical; their findings are applied. |
 
 ## Source of truth
@@ -183,7 +183,8 @@ amendment); docs say so rather than excluding them. The settings page's Model pi
 both, but the model only names the printer: IPP `printer-make-and-model`, Bonjour `ty` and
 `/api/status` `model` still say Apple ImageWriter II. StyleWriters stay out.
 
-Not built: Mini vMac (LToUDP, `W-1077`), consumers of the dither override, PWG raster.
+Not built: Mini vMac (LToUDP, `W-1077`), consumers of the dither override, PWG raster, laser
+printers (designed, below).
 
 **Board 1:** ESP32-S3-WROOM-1-N8R2 (8 MB flash, 2 MB PSRAM). On the home Wi-Fi at
 10.0.1.115, mDNS `imagewriter-2434.local`. Console on USB-C as `/dev/cu.usbmodem*` (the number
@@ -272,6 +273,13 @@ Linear is the queue; these are the live items.
   between links, a link dropped mid-job, a print from the SE/30 on the cable again, an Infinite Mac on its card, the page's Erase and Wi-Fi join. Before any release
   that turns the relay on for users, give Mihai Parparita (Infinite Mac) a heads-up.
 - Not in Linear: scope HSKo during a long job (SPEC §3.9 timing).
+- Laser printers (design `docs/superpowers/specs/2026-10-21-laser-printers-design.md`, approved
+  2026-10-22; no laser printer on the bench): `W-1082 AirPrint to LaserWriters on AppleTalk` (a
+  PAP client sending a PostScript `imagemask`, the LaserWriter shared as a second AirPrint
+  printer; merges once it passes against a fake LaserWriter and board 1's ImageWriter prints
+  unchanged), then `W-1083 AirPrint to HP LaserJets over serial (PCL)`. Network printers over
+  TCP are out. Open hardware question for any RS-232 printer, the original ImageWriter included:
+  J2's receiver (MAX3490, common-mode −7 to +12 V) against RS-232's −12 V.
 - The full test page has printed on board 1 from the page's Print Test Page, on the colour
   ribbon. Still owed: a print from the button and from DIP4, one on the black ribbon, and a
   second tap mid-page.
