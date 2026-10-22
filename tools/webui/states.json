@@ -196,6 +196,54 @@
    "tunnel": true,
    "infinite": false,
    "zone": "quiet-otter-4821"
+  },
+  "GET /api/laser": {
+   "heard": [],
+   "shared": null,
+   "looking": true
+  },
+  "POST /api/laser": {
+   "heard": [
+    {
+     "name": "LaserWriter II NT",
+     "link": "cable",
+     "status": "status: idle",
+     "ago_s": 4,
+     "shared": true
+    },
+    {
+     "name": "Wells’s LaserWriter Pro 630 in the back room",
+     "link": "radio",
+     "status": "job: Budget; status: busy; source: AppleTalk",
+     "ago_s": 12,
+     "shared": false
+    }
+   ],
+   "looking": true,
+   "shared": {
+    "name": "LaserWriter II NT",
+    "link": "cable",
+    "online": true,
+    "advertised": true,
+    "queried": true,
+    "state": "idle",
+    "reason": "none",
+    "message": "",
+    "product": "LaserWriter II NT",
+    "version": "47.0",
+    "level": 1,
+    "binary": true,
+    "page": "letter",
+    "dpi": 300,
+    "dither": "atkinson",
+    "gain": 0,
+    "uuid": "urn:uuid:41575254-4c57-0001-6b2e-10bda36e2434"
+   },
+   "job": {
+    "active": false,
+    "sent": 0,
+    "last": ""
+   }
   }
  },
  "states": {
@@ -928,6 +976,319 @@
     "GET /api/status": {
      "_json": true,
      "_body": "{\"state\":\"Ready\",\"ps\":\"ready\",\"host\":\"my\"printer.local\"}"
+    }
+   }
+  },
+  "laser-heard": {
+   "about": "LaserWriters: two heard, one with a long curly-quoted name, none shared",
+   "patch": {
+    "GET /api/laser": {
+     "heard": [
+      {
+       "name": "LaserWriter II NT",
+       "link": "cable",
+       "status": "status: idle",
+       "ago_s": 4,
+       "shared": false
+      },
+      {
+       "name": "Wells’s LaserWriter Pro 630 in the back room",
+       "link": "radio",
+       "status": "job: Budget; status: busy; source: AppleTalk",
+       "ago_s": 12,
+       "shared": false
+      }
+     ],
+     "shared": null,
+     "looking": true
+    }
+   }
+  },
+  "laser-asking": {
+   "about": "LaserWriters: just shared, its query job not answered yet",
+   "patch": {
+    "GET /api/laser": {
+     "heard": [
+      {
+       "name": "LaserWriter II NT",
+       "link": "cable",
+       "status": "status: idle",
+       "ago_s": 4,
+       "shared": true
+      },
+      {
+       "name": "Wells’s LaserWriter Pro 630 in the back room",
+       "link": "radio",
+       "status": "job: Budget; status: busy; source: AppleTalk",
+       "ago_s": 12,
+       "shared": false
+      }
+     ],
+     "looking": true,
+     "shared": {
+      "name": "LaserWriter II NT",
+      "link": "cable",
+      "online": true,
+      "advertised": false,
+      "queried": false,
+      "state": "idle",
+      "reason": "none",
+      "message": "",
+      "product": "",
+      "version": "",
+      "level": 1,
+      "binary": true,
+      "page": "letter",
+      "dpi": 300,
+      "dither": "atkinson",
+      "gain": 0,
+      "uuid": "urn:uuid:41575254-4c57-0001-6b2e-10bda36e2434"
+     },
+     "job": {
+      "active": false,
+      "sent": 0,
+      "last": ""
+     }
+    }
+   }
+  },
+  "laser-shared": {
+   "about": "LaserWriters: one shared and idle",
+   "patch": {
+    "GET /api/laser": {
+     "heard": [
+      {
+       "name": "LaserWriter II NT",
+       "link": "cable",
+       "status": "status: idle",
+       "ago_s": 4,
+       "shared": true
+      },
+      {
+       "name": "Wells’s LaserWriter Pro 630 in the back room",
+       "link": "radio",
+       "status": "job: Budget; status: busy; source: AppleTalk",
+       "ago_s": 12,
+       "shared": false
+      }
+     ],
+     "looking": true,
+     "shared": {
+      "name": "LaserWriter II NT",
+      "link": "cable",
+      "online": true,
+      "advertised": true,
+      "queried": true,
+      "state": "idle",
+      "reason": "none",
+      "message": "",
+      "product": "LaserWriter II NT",
+      "version": "47.0",
+      "level": 1,
+      "binary": true,
+      "page": "letter",
+      "dpi": 300,
+      "dither": "atkinson",
+      "gain": 0,
+      "uuid": "urn:uuid:41575254-4c57-0001-6b2e-10bda36e2434"
+     },
+     "job": {
+      "active": false,
+      "sent": 0,
+      "last": ""
+     }
+    }
+   }
+  },
+  "laser-printing": {
+   "about": "LaserWriters: the shared one printing an AirPrint job",
+   "patch": {
+    "GET /api/laser": {
+     "heard": [
+      {
+       "name": "LaserWriter II NT",
+       "link": "cable",
+       "status": "job: Letter; status: busy; source: AppleTalk",
+       "ago_s": 4,
+       "shared": true
+      },
+      {
+       "name": "Wells’s LaserWriter Pro 630 in the back room",
+       "link": "radio",
+       "status": "job: Budget; status: busy; source: AppleTalk",
+       "ago_s": 12,
+       "shared": false
+      }
+     ],
+     "looking": true,
+     "shared": {
+      "name": "LaserWriter II NT",
+      "link": "cable",
+      "online": true,
+      "advertised": true,
+      "queried": true,
+      "state": "printing",
+      "reason": "none",
+      "message": "",
+      "product": "LaserWriter II NT",
+      "version": "47.0",
+      "level": 1,
+      "binary": true,
+      "page": "letter",
+      "dpi": 300,
+      "dither": "atkinson",
+      "gain": 0,
+      "uuid": "urn:uuid:41575254-4c57-0001-6b2e-10bda36e2434"
+     },
+     "job": {
+      "active": true,
+      "sent": 123456,
+      "last": ""
+     }
+    }
+   }
+  },
+  "laser-busy": {
+   "about": "LaserWriters: the shared one busy with another Mac's job",
+   "patch": {
+    "GET /api/laser": {
+     "heard": [
+      {
+       "name": "LaserWriter II NT",
+       "link": "cable",
+       "status": "job: Budget; status: busy; source: AppleTalk",
+       "ago_s": 4,
+       "shared": true
+      },
+      {
+       "name": "Wells’s LaserWriter Pro 630 in the back room",
+       "link": "radio",
+       "status": "job: Budget; status: busy; source: AppleTalk",
+       "ago_s": 12,
+       "shared": false
+      }
+     ],
+     "looking": true,
+     "shared": {
+      "name": "LaserWriter II NT",
+      "link": "cable",
+      "online": true,
+      "advertised": true,
+      "queried": true,
+      "state": "printing",
+      "reason": "none",
+      "message": "job: Budget; status: busy; source: AppleTalk",
+      "product": "LaserWriter II NT",
+      "version": "47.0",
+      "level": 1,
+      "binary": true,
+      "page": "letter",
+      "dpi": 300,
+      "dither": "atkinson",
+      "gain": 0,
+      "uuid": "urn:uuid:41575254-4c57-0001-6b2e-10bda36e2434"
+     },
+     "job": {
+      "active": false,
+      "sent": 0,
+      "last": ""
+     }
+    }
+   }
+  },
+  "laser-paper": {
+   "about": "LaserWriters: the shared one out of paper",
+   "patch": {
+    "GET /api/laser": {
+     "heard": [
+      {
+       "name": "LaserWriter II NT",
+       "link": "cable",
+       "status": "status: PrinterError: out of paper",
+       "ago_s": 4,
+       "shared": true
+      },
+      {
+       "name": "Wells’s LaserWriter Pro 630 in the back room",
+       "link": "radio",
+       "status": "job: Budget; status: busy; source: AppleTalk",
+       "ago_s": 12,
+       "shared": false
+      }
+     ],
+     "looking": true,
+     "shared": {
+      "name": "LaserWriter II NT",
+      "link": "cable",
+      "online": true,
+      "advertised": true,
+      "queried": true,
+      "state": "stopped",
+      "reason": "media-empty-error",
+      "message": "status: PrinterError: out of paper",
+      "product": "LaserWriter II NT",
+      "version": "47.0",
+      "level": 1,
+      "binary": true,
+      "page": "letter",
+      "dpi": 300,
+      "dither": "atkinson",
+      "gain": 0,
+      "uuid": "urn:uuid:41575254-4c57-0001-6b2e-10bda36e2434"
+     },
+     "job": {
+      "active": false,
+      "sent": 0,
+      "last": ""
+     }
+    }
+   }
+  },
+  "laser-offline": {
+   "about": "LaserWriters: the shared one not answering",
+   "patch": {
+    "GET /api/laser": {
+     "heard": [
+      {
+       "name": "LaserWriter II NT",
+       "link": "cable",
+       "status": "status: idle",
+       "ago_s": 4,
+       "shared": true
+      },
+      {
+       "name": "Wells’s LaserWriter Pro 630 in the back room",
+       "link": "radio",
+       "status": "job: Budget; status: busy; source: AppleTalk",
+       "ago_s": 12,
+       "shared": false
+      }
+     ],
+     "looking": true,
+     "shared": {
+      "name": "LaserWriter II NT",
+      "link": "cable",
+      "online": false,
+      "advertised": true,
+      "queried": true,
+      "state": "offline",
+      "reason": "offline-report",
+      "message": "The LaserWriter does not answer",
+      "product": "LaserWriter II NT",
+      "version": "47.0",
+      "level": 1,
+      "binary": true,
+      "page": "letter",
+      "dpi": 300,
+      "dither": "atkinson",
+      "gain": 0,
+      "uuid": "urn:uuid:41575254-4c57-0001-6b2e-10bda36e2434"
+     },
+     "job": {
+      "active": false,
+      "sent": 0,
+      "last": ""
+     }
     }
    }
   }

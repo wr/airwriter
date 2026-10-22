@@ -215,6 +215,13 @@ body:not(.ready) .sw span,body:not(.ready) .sw span:after{transition:none}
 .macs li span{flex:1;min-width:0;overflow-wrap:anywhere}
 .macs li small{color:var(--fg2);font-size:var(--t-small);font-variant-numeric:tabular-nums}
 .card.off .body{display:none}
+/* W-1082: a LaserWriter heard, its share switch at the end of its row */
+.lws li{align-items:flex-start}
+.lws li svg{margin-top:2px}
+.lws li .sw{margin-left:auto;align-self:center}
+#c-lw .body>.row{padding:0;min-height:0}
+#c-lw .body>.row:before{display:none}
+.lw-note{color:var(--fg2);font-size:var(--t-small)}
 
 /* the colour ribbon's four inks, as a glyph */
 .ribbon{display:flex;gap:2px}

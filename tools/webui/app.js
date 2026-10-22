@@ -313,7 +313,7 @@ function go(id){
   document.querySelector('.detail').scrollTop=0;
   try{ history.replaceState(null,'','#'+id); }catch(e){}
   if(id==='printer') requestAnimationFrame(render);
-  if(id==='appletalk') atPoll();
+  if(id==='appletalk'){ atPoll(); lwPoll(); }   // W-1082: opening the card looks for LaserWriters
   if(id==='about') fwPoll();
 }
 for(const b of $$('[data-go]')) b.onclick=()=>go(b.dataset.go);
@@ -633,6 +633,68 @@ for(const sw of $$('[data-way]')) sw.onchange=async()=>{
   if(r.error){ sw.checked=!on; say('at-say',r.error,1); }
   else { say('at-say',''); atDraw(); setTimeout(atPoll,1500); setTimeout(poll,600); }
 };
+/* W-1082: the LaserWriters card. Every LaserWriter heard on AppleTalk, each
+   with a switch to share it over AirPrint (one at a time); the shared one's
+   state and halftone below. The board looks while the card is open (this
+   asking keeps it open) and every 30 s while one is shared. */
+let LW=null, lwBusy=false;
+const LINK={cable:'AppleTalk Port',radio:'this network',tunnel:'Basilisk II',zone:'Infinite Mac'};
+/* A LaserWriter's own status words, plainly: its error, Busy, or what it says. */
+function lwStatus(t){
+  t=String(t||'');
+  const e=t.match(/PrinterError:\s*([^;\]]*)/i); if(e) return cap(e[1].trim());
+  if(/busy|printing|job:/i.test(t)) return 'Busy';
+  const s=t.match(/status:\s*([^;\]]*)/i);
+  return cap((s?s[1]:t).trim());
+}
+function lwDraw(){
+  const c=$('c-lw');
+  c.classList.toggle('hide',!LW);
+  if(!LW) return;
+  const sh=LW.shared, heard=LW.heard||[];
+  let h='';
+  if(!heard.length) h+='<span class=count>No LaserWriters heard yet. Looking on the AppleTalk port and this network…</span>';
+  else h+='<span class=count>'+plural(heard.length,'LaserWriter','LaserWriters')+' heard</span><ul class="macs lws">'
+    +heard.map(p=>{ const prod=p.shared&&sh&&sh.product&&sh.product!==p.name?sh.product:'';
+      return '<li><svg><use href="#g-printer"/></svg><span>'+esc(p.name)+'<br><small>'
+      +(prod?esc(prod)+' · ':'')+esc(LINK[p.link]||p.link)+(p.status?' · '+esc(lwStatus(p.status)):'')+'</small></span>'
+      +'<label class=sw><input type=checkbox role=switch data-lw="'+esc(p.name)+'"'+(p.shared?' checked':'')
+      +(lwBusy||(sh&&sh.name!==p.name&&LW.job&&LW.job.active)?' disabled':'')
+      +' aria-label="Share '+esc(p.name)+'"><span></span></label></li>'; }).join('')+'</ul>';
+  if(sh){
+    const name='“'+esc(sh.name)+'”';
+    h+=!sh.queried?stLine('a','Asking the LaserWriter what it is…')
+      :!sh.online?stLine('r','The LaserWriter isn’t answering.')
+      :sh.state==='stopped'?stLine('r',(lwStatus(sh.message)||'The LaserWriter needs attention')+'.')
+      :sh.state==='printing'?stLine('g',sh.message&&/busy/i.test(sh.message)&&!(LW.job&&LW.job.active)
+          ?'Busy with another Mac’s job.':'Printing…')
+      :stHTML('g','Shared over AirPrint as '+name+'.');
+    if(sh.queried) h+='<div class=row><span class=txt>Halftone</span><select class=pop data-lwscreen aria-label="LaserWriter halftone">'
+      +['atkinson','floyd','bluenoise','bayer','threshold'].map(k=>'<option value='+k+(k===sh.dither?' selected':'')+'>'
+        +esc(MODES[k].title)+'</option>').join('')+'</select></div>';
+  }
+  h+='<p class=lw-note>Untested on a real LaserWriter so far.</p>';
+  put(c,h);
+}
+async function lwPoll(){
+  const r=await getJSON('/api/laser');
+  if(lost) return;
+  LW=r||null; lwDraw();
+}
+setInterval(()=>{ if(!document.hidden&&!setup&&pane==='appletalk') lwPoll(); },3000);
+$('c-lw').addEventListener('change',async e=>{
+  const sw=e.target.closest('[data-lw]'), scr=e.target.closest('[data-lwscreen]');
+  if(!sw&&!scr) return;
+  const body=sw?{share:sw.checked?sw.dataset.lw:null}:{dither:scr.value};
+  lwBusy=true; lwDraw();
+  const r=await postJSON('/api/laser',body);
+  lwBusy=false;
+  if(r.error){ say('at-say',r.error,1); if(sw) sw.checked=!sw.checked; }
+  else { say('at-say',sw?(sw.checked?'Shared. iPhones and Macs see it once it has answered.':'Not shared.')
+      :'Saved. The next page prints with it.',0,2400); LW=r; }
+  lwDraw();
+});
+
 /* The card's flash key, for a chip that needs TashTalk: once it is on, the
    board starts the port by itself. */
 $('lt-flash').onclick=async()=>{
