@@ -38,7 +38,7 @@ typedef struct {
     uint8_t    name[NBP_NAME_MAX + 1];    // Pascal, MacRoman
     lt_route_t route;                     // its listening socket
     uint64_t   heard, asked;              // last answer (NBP or status), last status ask
-    char       status[80];                // its last status string
+    char       status[240];               // its last status string, UTF-8
 } lw_heard_t;
 
 typedef struct {
@@ -47,7 +47,7 @@ typedef struct {
     uint8_t    share_name[NBP_NAME_MAX + 1];
     uint8_t    online, queried, want_query, printing;
     uint64_t   looked, card_at, answered, query_at;
-    char       status[80];                // the shared printer's last status
+    char       status[240];               // the shared printer's last status, UTF-8
     lw_state_t st;
 } lwc_t;
 
@@ -63,6 +63,7 @@ typedef struct {
     uint8_t     ipp_state;                // LWC_IDLE, LWC_PROCESSING, LWC_STOPPED
     const char *reason;                   // printer-state-reasons
     const char *message;                  // printer-state-message ("" for none)
+                                          // (with a warning, busy or a fault: its words)
     uint8_t     busy;
 } lwc_view_t;
 

@@ -50,6 +50,10 @@ int       localtalk_running(void);
 // node as a running one.
 void      localtalk_set_quiet(int quiet);
 int       localtalk_quiet(void);
+// Running, not quiet, and answering as the ImageWriter (W-1082): what the
+// AppleTalk Port card and /api/status call on. A node running for a
+// LaserWriter alone is not.
+int       localtalk_serving(void);
 // The Option Card status word (LT_IW_* in lt_node.h) for SendStatus.
 void      localtalk_set_status(uint16_t status);
 // State, counters and the latest lines, for GET /api/lt.

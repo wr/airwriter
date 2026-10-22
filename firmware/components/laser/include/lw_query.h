@@ -29,7 +29,7 @@ typedef struct {
     uint16_t  dpi;              // the device's resolution
     lw_page_t page;             // the paper: from size on Level 2, else the area
     int32_t   area[4];          // imageable area llx lly urx ury, 1/100 pt
-    uint8_t   complete;         // aw:end was read: every question answered
+    uint8_t   complete;         // the probe (the last question) or aw:end was read
 } lw_info_t;
 
 // A LaserWriter that never answered: Level 1, hex, 300 dpi, Letter with a
@@ -37,7 +37,8 @@ typedef struct {
 void   lw_info_default(lw_info_t *i);
 const char *lw_page_name(lw_page_t p);      // "letter", "a4", "legal"
 
-// The query job, probe included. Its length, or 0 when cap is too small.
+// The query job, probe included, and a line of spaces after the probe as long
+// as it. Its length, or 0 when cap is too small.
 size_t lw_query_job(uint8_t *out, size_t cap);
 
 // The printer's output as it comes, split anywhere, CR or LF line ends.

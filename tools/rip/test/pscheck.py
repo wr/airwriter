@@ -140,6 +140,26 @@ def query_check(tmp):
     subprocess.run([RIP, "--query-job", job], check=True)
     parse = RIP.parent / "test_lw"
     fails = 0
+    # Review I2: a channel that drops probe bytes, or adds some (LF to CR LF),
+    # still gets every answer back, and the printer gets hex.
+    raw = job.read_bytes()
+    at = raw.index(bytes(range(256)))
+    probe = raw[at:at + 256]
+    for what, bad in (("dropped", probe.replace(b"\x00", b"").replace(b"\x04", b"")),
+                      ("added", probe.replace(b"\n", b"\r\n"))):
+        mangled = tmp / f"query-{what}.ps"
+        mangled.write_bytes(raw[:at] + bad + raw[at + 256:])
+        r = subprocess.run([GS, "-q", "-dSAFER", "-dBATCH", "-dNOPAUSE", "-sDEVICE=pbmraw", "-r300",
+                            f"-dDEVICEWIDTHPOINTS={LETTER[0]}", f"-dDEVICEHEIGHTPOINTS={LETTER[1]}",
+                            "-dFIXEDMEDIA", f"-sOutputFile={out}", mangled],
+                           capture_output=True, timeout=TIMEOUT)
+        got = subprocess.run([parse, "--parse"], input=r.stdout,
+                             capture_output=True).stdout.decode().strip()
+        if not all(w in got.split() for w in ("complete=1", "binary=0", "page=letter")):
+            print(f"FAIL pscheck query, probe bytes {what}: {got}")
+            fails += 1
+        else:
+            print(f"ok  pscheck query, probe bytes {what}: {got}")
     for level1, level in ((False, 3), (True, 1)):
         cmd = [GS, "-q", "-dSAFER", "-dBATCH", "-dNOPAUSE", "-sDEVICE=pbmraw", "-r300",
                f"-dDEVICEWIDTHPOINTS={LETTER[0]}", f"-dDEVICEHEIGHTPOINTS={LETTER[1]}",

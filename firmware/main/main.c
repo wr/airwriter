@@ -918,7 +918,7 @@ static void appletalk_text(char *out, size_t cap)
     if (ethertalk_running()) ethertalk_settings(&tunnel, &radio, &infinite, zone, sizeof zone);
     const char *on[4];
     int n = 0;
-    if (localtalk_running() && !localtalk_quiet()) on[n++] = "AppleTalk port";
+    if (localtalk_serving()) on[n++] = "AppleTalk port";
     if (radio)    on[n++] = "networked Macs";
     if (tunnel)   on[n++] = "Basilisk II";
     if (infinite) on[n++] = "Infinite Mac";
@@ -1518,7 +1518,7 @@ static void status_json(void *ctx, char *buf, size_t cap)
         pic_prog_available() ? "true" : "false",
         json_esc(e_model, sizeof e_model, s_saved_model), json_esc(e_name, sizeof e_name, s_saved_name),
         json_esc(e_phost, sizeof e_phost, s_saved_host), s_set.airprint ? "true" : "false", s_set.lt_port,
-        localtalk_running() && !localtalk_quiet() ? "true" : "false", lt_chip_name(s_lt_chip),
+        localtalk_serving() ? "true" : "false", lt_chip_name(s_lt_chip),
         dip, s_suffix, laser);
 }
 

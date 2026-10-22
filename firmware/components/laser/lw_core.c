@@ -99,9 +99,7 @@ void lwc_status(lwc_t *c, int idx, const uint8_t *p, uint64_t now)
 {
     if (idx < 0 || idx >= LW_HEARD_MAX || !c->heard[idx].used) return;
     lw_heard_t *h = &c->heard[idx];
-    size_t n = p[0] < sizeof h->status - 1 ? p[0] : sizeof h->status - 1;
-    memcpy(h->status, p + 1, n);
-    h->status[n] = '\0';
+    nbp_utf8(h->status, sizeof h->status, p);          // MacRoman: a Mac's job name (review I4)
     h->heard = now;
     if (idx != shared_idx(c)) return;
     memcpy(c->status, h->status, sizeof c->status);
@@ -172,12 +170,10 @@ lwc_view_t lwc_view(const lwc_t *c, uint64_t now)
     }
     v.reason = c->st.reason;
     v.busy = c->st.busy;
-    if (c->st.stopped) {
-        v.ipp_state = LWC_STOPPED;
-        v.message = c->status;
-    } else if (c->st.busy || c->printing) {
-        v.ipp_state = LWC_PROCESSING;
-        v.message = c->st.busy ? c->status : "";
-    }
+    // The printer's own words go with a fault, a warning or busy (review I3).
+    int say = c->st.stopped || c->st.busy || strcmp(c->st.reason, "none");
+    v.message = say ? c->status : "";
+    if (c->st.stopped) v.ipp_state = LWC_STOPPED;
+    else if (c->st.busy || c->printing) v.ipp_state = LWC_PROCESSING;
     return v;
 }

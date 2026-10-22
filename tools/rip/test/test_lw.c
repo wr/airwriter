@@ -81,7 +81,24 @@ int main(int argc, char **argv)
     CHECK_EQ_INT(i->level, 2);
     CHECK_EQ_INT(i->page, LW_A4);
     CHECK_EQ_INT(i->binary, 0);
-    CHECK_EQ_INT(i->complete, 0);           // no aw:end: the answer was cut off
+    CHECK_EQ_INT(i->complete, 1);           // the probe is the last question
+
+    // Cut off before the probe: not complete, the defaults stand.
+    lw_parse_init(&p);
+    const char *cut = "aw:product=LaserWriter Pro 630\naw:level=2\n";
+    lw_parse_feed(&p, (const uint8_t *)cut, strlen(cut));
+    CHECK_EQ_INT(i->complete, 0);
+
+    // Review I2: a printer that mangles binary answers the probe, then
+    // chokes on what follows it; every answer came before the probe, so the
+    // query is complete and the printer gets hex.
+    lw_parse_init(&p);
+    const char *mangled = "aw:product=LaserWriter Plus\raw:level=1\raw:area=18 8 594 784\r"
+                          "aw:probe=254 0\r%%[ Error: undefined; OffendingCommand: aw:end ]%%\r";
+    lw_parse_feed(&p, (const uint8_t *)mangled, strlen(mangled));
+    CHECK_EQ_INT(i->complete, 1);
+    CHECK_EQ_INT(i->binary, 0);
+    CHECK(strcmp(i->product, "LaserWriter Plus") == 0);
 
     // A Level 1 machine on Legal paper: the page from the area alone.
     lw_parse_init(&p);
@@ -135,7 +152,18 @@ int main(int argc, char **argv)
     check_map("status: warming up", "none", 0, 1);
     check_map("STATUS: PRINTERERROR: OUT OF PAPER", "media-empty-error", 1, 0);
 
+    // Review I1: the job's own name is not the printer's state.
+    check_map("job: Benjamin's letter; status: busy; source: AppleTalk", "none", 0, 1);
+    check_map("job: Open Door Policy; status: printing", "none", 0, 1);
+    check_map("user: wells; job: Paper out notice; status: busy", "none", 0, 1);
+    check_map("job: Pajamas; status: idle", "none", 0, 0);
+    check_map("job: Pajamas; status: PrinterError: paper jam", "media-jam-error", 1, 0);
+    check_map("%%[ status: PrinterError: out of paper ]%%", "media-empty-error", 1, 0);
+
     char msg[80];
+    // Review M2: ERROR in capitals is still an error, and nothing past the line is read.
+    CHECK_EQ_INT(lw_ps_error("%%[ ERROR: limitcheck; OffendingCommand: image ]%%", msg, sizeof msg), 1);
+    CHECK(strcmp(msg, "limitcheck; OffendingCommand: image") == 0);
     CHECK_EQ_INT(lw_ps_error("%%[ Error: undefined; OffendingCommand: foo ]%%", msg, sizeof msg), 1);
     CHECK(strcmp(msg, "undefined; OffendingCommand: foo") == 0);
     CHECK_EQ_INT(lw_ps_error("%%[ Flushing: rest of job (to end-of-file) will be ignored ]%%",

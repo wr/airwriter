@@ -96,7 +96,9 @@ typedef struct {
     ipp_job_rec_t   job;
     int32_t         next_job_id;
     const char     *stop_reason;         // NULL when the printer is fine
-    char            stop_message[128];   // printer-state-message while stopped
+    const char     *note_reason;         // a reason that does not stop it (toner low), or NULL
+    int             busy;                // working on something not ours: processing
+    char            stop_message[256];   // printer-state-message with either reason or busy
     char            job_message[128];    // job-state-message for the job in the slot
     volatile int    colour;              // W-1064: the colour ribbon is in (printer 0)
     int             txt_colour;          // what the TXT record says
@@ -185,10 +187,10 @@ static void fill_printer(const printer_t *p, ipp_printer_t *out)
     for (int i = 0; i < 3; i++) out->icons[i] = p->icon_uri[i];
     out->location       = "";
     out->state          = p->stop_reason               ? IPP_PSTATE_STOPPED
-                        : (p->job.state == IPP_JSTATE_PROCESSING) ? IPP_PSTATE_PROCESSING
-                                                                  : IPP_PSTATE_IDLE;
-    out->state_reason   = p->stop_reason ? p->stop_reason : "none";
-    out->state_message  = p->stop_reason ? p->stop_message : NULL;
+                        : (p->job.state == IPP_JSTATE_PROCESSING || p->busy) ? IPP_PSTATE_PROCESSING
+                                                                             : IPP_PSTATE_IDLE;
+    out->state_reason   = p->stop_reason ? p->stop_reason : p->note_reason ? p->note_reason : "none";
+    out->state_message  = p->stop_reason || p->note_reason || p->busy ? p->stop_message : NULL;
     // Still accepting: the job queues and prints when paper goes back in,
     // which is what a user expects after clearing the alert.
     out->accepting_jobs = p->airprint;
@@ -956,6 +958,20 @@ void ipp_server_set_stopped(const char *reason_or_null, const char *message)
     ipp_server_set_stopped_for(0, reason_or_null, message);
 }
 
+void ipp_server_set_state_for(int idx, const char *reason, const char *message, int stopped,
+                              int busy)
+{
+    if (idx < 0 || idx >= IPP_PRINTERS || !s_job_lock) return;
+    printer_t *p = &s_p[idx];
+    int real = reason && strcmp(reason, "none");
+    xSemaphoreTake(s_job_lock, portMAX_DELAY);
+    p->stop_reason = stopped && real ? reason : NULL;
+    p->note_reason = !stopped && real ? reason : NULL;
+    p->busy = busy ? 1 : 0;
+    snprintf(p->stop_message, sizeof p->stop_message, "%s", message ? message : "");
+    xSemaphoreGive(s_job_lock);
+}
+
 void ipp_server_job_message_for(int idx, const char *msg)
 {
     if (idx < 0 || idx >= IPP_PRINTERS || !s_job_lock) return;
@@ -976,7 +992,8 @@ esp_err_t ipp_server_set_printer(int idx, const ipp_printer_cfg_t *cfg)
     if (s_mdns_up) remove_laser_services(p);
     p->on = 0;
     p->airprint = 0;
-    p->stop_reason = NULL;
+    p->stop_reason = p->note_reason = NULL;
+    p->busy = 0;
     if (cfg) {
         snprintf(p->resource, sizeof p->resource, "%s", cfg->resource);
         snprintf(p->uri, sizeof p->uri, "ipp://%s.local:%u/%s", s_hostname,

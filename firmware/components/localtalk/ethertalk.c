@@ -425,6 +425,12 @@ static void apply_pending(void)
     // W-1082: a switch turned off while a LaserWriter needs its link leaves it running.
     if (want_t == 0 && tun_wanted()) want_t = -1;
     if (want_r >= 0) want_r = radio_wanted();
+    // A switch turned off with a LaserWriter keeping its link: a Mac printing
+    // to the ImageWriter there is told, as a quiet cable tells it.
+    if (!s_tunnel_on && s_tun.link.node.serve && s_tun.link.node.pap.open)
+        lt_node_pap_abort(&s_tun.link.node, now_ms());
+    if (!s_radio_on && s_radio.link.node.serve && s_radio.link.node.pap.open)
+        lt_node_pap_abort(&s_radio.link.node, now_ms());
     lt_node_set_serve(&s_tun.link.node, s_tunnel_on);
     lt_node_set_serve(&s_radio.link.node, s_radio_on);
     xSemaphoreGive(s_lock);
@@ -607,13 +613,17 @@ esp_err_t ethertalk_apply(int tunnel, int radio, int infinite, const char *zone)
     if (!s_running) return err;
 
     xSemaphoreTake(s_lock, portMAX_DELAY);
+    // W-1082: a link a LaserWriter keeps running stays as it is when its
+    // switch moves; only whether it answers as the ImageWriter changes.
     if (tunnel >= 0 && (tunnel != 0) != s_tunnel_on) {
+        int was = tun_wanted();
         s_tunnel_on = tunnel != 0;
-        s_want_tunnel = s_tunnel_on;
+        if (tun_wanted() != was) s_want_tunnel = tun_wanted();
     }
     if (radio >= 0 && (radio != 0) != s_radio_on) {
+        int was = radio_wanted();
         s_radio_on = radio != 0;
-        s_want_radio = s_radio_on;
+        if (radio_wanted() != was) s_want_radio = radio_wanted();
     }
     if (zone && strcmp(zone, s_zone_name)) {
         strncpy(s_zone_name, zone, ET_ZONE_MAX);
@@ -638,12 +648,14 @@ void ethertalk_set_laser(int link, int on)
     }
     xSemaphoreTake(s_lock, portMAX_DELAY);
     if (link == AT_LINK_TUNNEL && s_laser_tun != on) {
+        int was = tun_wanted();
         s_laser_tun = on;
-        s_want_tunnel = tun_wanted();
+        if (tun_wanted() != was) s_want_tunnel = tun_wanted();   // else running already: leave it
     }
     if (link == AT_LINK_RADIO && s_laser_radio != on) {
+        int was = radio_wanted();
         s_laser_radio = on;
-        s_want_radio = radio_wanted();
+        if (radio_wanted() != was) s_want_radio = radio_wanted();
     }
     xSemaphoreGive(s_lock);
 }

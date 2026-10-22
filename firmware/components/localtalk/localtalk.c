@@ -292,6 +292,7 @@ esp_err_t localtalk_start(const localtalk_cfg_t *cfg)
 
 int localtalk_running(void) { return s_running; }
 int localtalk_quiet(void) { return s_running && s_quiet; }
+int localtalk_serving(void) { return s_running && !s_quiet && s_serve; }
 
 void localtalk_set_quiet(int quiet)
 {
@@ -453,8 +454,12 @@ static void json_ring(char **p, char *end, char ring[][LINE_LEN], unsigned lines
 
 void localtalk_json(char *buf, size_t cap)
 {
-    if (!s_running || s_quiet) {
-        snprintf(buf, cap, "{\"on\":false,\"quiet\":%s}", s_quiet ? "true" : "false");
+    // W-1082: the AppleTalk Port card's "on" is the ImageWriter answering on
+    // the cable, not a node running for a LaserWriter alone (review C1).
+    if (!s_running || s_quiet || !s_serve) {
+        snprintf(buf, cap, "{\"on\":false,\"quiet\":%s,\"laser\":%s}",
+                 s_running && (s_quiet || !s_serve) ? "true" : "false",
+                 s_running && !s_quiet && !s_serve ? "true" : "false");
         return;
     }
     char *p = buf, *end = buf + cap - 8;

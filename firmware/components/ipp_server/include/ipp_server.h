@@ -104,6 +104,13 @@ typedef struct {
 esp_err_t ipp_server_set_printer(int idx, const ipp_printer_cfg_t *cfg);
 void      ipp_server_job_done_for(int idx, int ok);
 void      ipp_server_set_stopped_for(int idx, const char *reason_or_null, const char *message);
+// The whole of a printer's state as its own printer reports it (a LaserWriter,
+// review I3): a reason (literal; "none" for none) that stops it when
+// `stopped`, or is reported with it working on (toner-low-warning); busy for
+// processing with no job of ours (another Mac's job, warming up); its words
+// as printer-state-message (copied).
+void      ipp_server_set_state_for(int idx, const char *reason, const char *message, int stopped,
+                                   int busy);
 // job-state-message for the printer's job in the slot (copied): a
 // LaserWriter's PostScript error. Cleared when the next job starts.
 void      ipp_server_job_message_for(int idx, const char *msg);

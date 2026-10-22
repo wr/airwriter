@@ -105,9 +105,28 @@ int main(void)
     status(&c, idx, "status: idle", 114000);
     CHECK_EQ_INT(lwc_view(&c, 114000).ipp_state, LWC_IDLE);
 
+    // Review I3: toner low is a warning the phone hears with the printer
+    // idle; warming up keeps it processing, with the printer's words.
+    status(&c, idx, "status: PrinterError: toner low", 114100);
+    v = lwc_view(&c, 114100);
+    CHECK_EQ_INT(v.ipp_state, LWC_IDLE);
+    CHECK(!strcmp(v.reason, "toner-low-warning"));
+    CHECK(!strcmp(v.message, "status: PrinterError: toner low"));
+    status(&c, idx, "status: warming up", 114200);
+    v = lwc_view(&c, 114200);
+    CHECK_EQ_INT(v.ipp_state, LWC_PROCESSING);
+    CHECK(!strcmp(v.message, "status: warming up"));
+
+    // Review I4: a classic Mac's job name in the status (MacRoman) comes out UTF-8.
+    status(&c, idx, "job: Wells\xd5s Letter; status: busy; source: AppleTalk", 114300);
+    v = lwc_view(&c, 114300);
+    CHECK(strstr(v.message, "Wells\xe2\x80\x99s Letter") != NULL);
+    CHECK(strstr(c.heard[idx].status, "Wells\xe2\x80\x99s Letter") != NULL);
+    status(&c, idx, "status: idle", 114400);
+
     // Silent for 30 s: offline. Back: the query again.
-    uint64_t t = 114000;
-    for (; t < 144100; t += 500) lwc_tick(&c, t);
+    uint64_t t = 114400;                       // its last answer, above
+    for (; t < 144500; t += 500) lwc_tick(&c, t);
     v = lwc_view(&c, t);
     CHECK(!v.online);
     CHECK_EQ_INT(v.ipp_state, LWC_STOPPED);

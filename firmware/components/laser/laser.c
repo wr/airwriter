@@ -62,8 +62,15 @@ static char      s_last[48] = "";                   // the last job's end, for t
 static int       s_status_idx = -1;                 // the heard[] entry asked last
 
 // The laser task's.
-static int       s_advertised, s_readvertise, s_pc_link = -1, s_pushed_state = -1;
+static int       s_advertised, s_readvertise, s_pc_link = -1, s_pushed_state = -1, s_pushed_busy;
 static const char *s_pushed_reason;
+static char      s_pushed_msg[240];
+static uint8_t   s_query_name[NBP_NAME_MAX + 1];    // whom the query in flight asked (review M12)
+// A job's OpenConn, run on the laser task (its stack is sized for the send
+// path; an IPP worker's is not: review I5).
+static volatile int s_open_req, s_open_rc;
+static lt_route_t s_open_route;
+static SemaphoreHandle_t s_open_sem;
 static int       s_ready = -2;
 static int       s_links[3] = { -1, -1, -1 };
 
@@ -308,6 +315,7 @@ static void query_start(int link, const lt_route_t *r)
     s_use = USE_QUERY;
     xSemaphoreTake(s_mu, portMAX_DELAY);
     s_status_idx = lwc_view(&s_core, now_ms()).idx;
+    memcpy(s_query_name, s_name, sizeof s_query_name);
     xSemaphoreGive(s_mu);
     int rc = call(OP_OPEN, r, QUERY_BUSY_MS);
     xSemaphoreGive(s_client_mx);
@@ -325,6 +333,14 @@ static void query_done(void)
 {
     int ok = s_ended == PAPC_END_OK && s_parse.info.complete;
     xSemaphoreTake(s_mu, portMAX_DELAY);
+    // Another LaserWriter shared since it was asked: its answers are not
+    // this one's (a new query is already wanted for it).
+    if (memcmp(s_query_name, s_name, 1 + (size_t)s_name[0])) {
+        xSemaphoreGive(s_mu);
+        ESP_LOGW(TAG, "query: answered for a LaserWriter no longer shared; dropped");
+        s_use = USE_NONE;
+        return;
+    }
     if (ok) {
         int changed = !s_have_info || memcmp(&s_info, &s_parse.info, sizeof s_info);
         s_info = s_parse.info;
@@ -342,6 +358,7 @@ static void query_done(void)
     } else {
         ESP_LOGW(TAG, "query: no answer (%d)", s_ended);
     }
+    ESP_LOGI(TAG, "laser task: %u bytes of stack to spare", (unsigned)uxTaskGetStackHighWaterMark(NULL));
     s_use = USE_NONE;
 }
 
@@ -387,6 +404,15 @@ static void laser_task(void *arg)
         ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(100));
         uint64_t now = now_ms();
 
+        if (s_open_req) {                          // a job's OpenConn (laser_job_begin)
+            s_open_req = 0;
+            xSemaphoreTake(s_client_mx, portMAX_DELAY);
+            s_open_rc = call(OP_OPEN, &s_open_route, STALL_MS);
+            xSemaphoreGive(s_client_mx);
+            xSemaphoreGive(s_open_sem);
+            ESP_LOGI(TAG, "laser task: %u bytes of stack to spare",
+                     (unsigned)uxTaskGetStackHighWaterMark(NULL));
+        }
         if (s_cancel_req) {
             s_cancel_req = 0;
             xSemaphoreTake(s_client_mx, portMAX_DELAY);
@@ -439,10 +465,14 @@ static void laser_task(void *arg)
         if (w.query && shared_link >= 0) query_start(shared_link, &shared_r);
 
         advertise();
-        if (s_advertised && (v.ipp_state != s_pushed_state || v.reason != s_pushed_reason)) {
-            ipp_server_set_stopped_for(1, v.ipp_state == LWC_STOPPED ? v.reason : NULL, v.message);
+        // The phone hears the whole state: a fault, a warning, busy (review I3).
+        if (s_advertised && (v.ipp_state != s_pushed_state || v.reason != s_pushed_reason ||
+                             v.busy != s_pushed_busy || strcmp(v.message, s_pushed_msg))) {
+            ipp_server_set_state_for(1, v.reason, v.message, v.ipp_state == LWC_STOPPED, v.busy);
             s_pushed_state = v.ipp_state;
             s_pushed_reason = v.reason;
+            s_pushed_busy = v.busy;
+            snprintf(s_pushed_msg, sizeof s_pushed_msg, "%s", v.message);
         }
         int ready = !v.shared ? -1 : v.online && v.ipp_state != LWC_STOPPED;
         if (ready != s_ready) {
@@ -459,10 +489,11 @@ esp_err_t laser_start(const laser_cfg_t *cfg)
     s_mu = xSemaphoreCreateMutex();
     s_client_mx = xSemaphoreCreateMutex();
     s_ended_sem = xSemaphoreCreateBinary();
+    s_open_sem = xSemaphoreCreateBinary();
     s_pc = heap_caps_calloc(1, sizeof *s_pc, MALLOC_CAP_SPIRAM);
     if (!s_pc) s_pc = calloc(1, sizeof *s_pc);
     uint8_t *spool = heap_caps_malloc(SPOOL + 1, MALLOC_CAP_SPIRAM);
-    if (!s_mu || !s_client_mx || !s_ended_sem || !s_pc || !spool) return ESP_ERR_NO_MEM;
+    if (!s_mu || !s_client_mx || !s_ended_sem || !s_open_sem || !s_pc || !spool) return ESP_ERR_NO_MEM;
     s_spool = xStreamBufferCreateStatic(SPOOL, 1, spool, &s_spool_cb);
 
     papc_ops_t po = { .read = pc_read, .output = pc_output, .status = pc_status,
@@ -476,7 +507,9 @@ esp_err_t laser_start(const laser_cfg_t *cfg)
     localtalk_set_found(found);
     ethertalk_set_found(found);
 
-    if (xTaskCreate(laser_task, "laser", 4096, NULL, 3, &s_task) != pdPASS) return ESP_ERR_NO_MEM;
+    // 6 KB: the PAP send path (frames built on the stack, full printf in the
+    // log) and mDNS registration run here (review I5).
+    if (xTaskCreate(laser_task, "laser", 6144, NULL, 3, &s_task) != pdPASS) return ESP_ERR_NO_MEM;
     s_started = 1;
     ESP_LOGI(TAG, "LaserWriters: %s%s", s_shared ? "sharing " : "none shared",
              s_shared ? s_name_utf8 : "");
@@ -562,8 +595,14 @@ int laser_job_begin(const char *name, job_pipe_target_t *t)
     xSemaphoreTake(s_mu, portMAX_DELAY);
     lwc_job(&s_core, 1);
     xSemaphoreGive(s_mu);
-    int rc = call(OP_OPEN, &r, STALL_MS);
     xSemaphoreGive(s_client_mx);
+    // OpenConn on the laser task, which owns the client's sends.
+    xSemaphoreTake(s_open_sem, 0);
+    s_open_route = r;
+    s_open_rc = -1;
+    s_open_req = 1;
+    xTaskNotifyGive(s_task);
+    int rc = xSemaphoreTake(s_open_sem, pdMS_TO_TICKS(10000)) == pdTRUE ? s_open_rc : -1;
     if (rc) {
         ESP_LOGE(TAG, "job \"%s\": no connection", name);
         ps_free(s_ps);

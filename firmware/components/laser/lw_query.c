@@ -31,15 +31,19 @@ static const char k_head[] =
 static const char k_tail[] =
     "\n(aw:end\\n) print flush\n"
     "%%EOF\n";
+// After the probe, a line of spaces as long as it: a channel that drops
+// probe bytes leaves readstring eating spaces, not the end of the job.
+#define PAD 256
 
 size_t lw_query_job(uint8_t *out, size_t cap)
 {
     size_t h = sizeof k_head - 1, t = sizeof k_tail - 1;
-    if (cap < h + 256 + t) return 0;
+    if (cap < h + 256 + PAD + t) return 0;
     memcpy(out, k_head, h);
     for (int i = 0; i < 256; i++) out[h + (size_t)i] = (uint8_t)i;
-    memcpy(out + h + 256, k_tail, t);
-    return h + 256 + t;
+    memset(out + h + 256, ' ', PAD);
+    memcpy(out + h + 256 + PAD, k_tail, t);
+    return h + 256 + PAD + t;
 }
 
 void lw_info_default(lw_info_t *i)
@@ -97,7 +101,10 @@ static void answer(lw_parse_t *p, const char *key, const char *val)
         i->complete = 1;
         return;
     }
-    if (!strcmp(val, "?") || !val[0]) return;          // unanswered: the default stands
+    if (!strcmp(val, "?") || !val[0]) {                 // unanswered: the default stands
+        if (!strcmp(key, "probe")) i->complete = 1;
+        return;
+    }
     double v[4];
     if (!strcmp(key, "product")) {
         strncpy(i->product, val, sizeof i->product - 1);
@@ -128,6 +135,9 @@ static void answer(lw_parse_t *p, const char *key, const char *val)
     } else if (!strcmp(key, "probe")) {
         int k = numbers(val, v, 2);
         i->binary = k == 2 && v[0] == 256 && v[1] == 1;
+        // Every other question comes before it: a printer that mangles
+        // binary may choke on what follows, but has answered (review I2).
+        i->complete = 1;
     }
 }
 
