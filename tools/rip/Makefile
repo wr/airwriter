@@ -73,6 +73,11 @@ build/test_ethertalk: test/test_ethertalk.c $(LT)/et_proto.c $(LT)/et_link.c $(L
 build/test_pap_client: test/test_pap_client.c $(LT)/lt_proto.c $(LT)/lt_node.c $(LT)/pap_client.c | build
 	$(CC) $(CFLAGS) -I$(LT)/include -Itest -o $@ $^
 
+# The board's LaserWriter side on the host, for test_interop.py (W-1082).
+build/lwhost: lwhost.c $(LT)/et_proto.c $(LT)/et_link.c $(LT)/lt_node.c $(LT)/pap_client.c \
+              $(LT)/lt_proto.c $(COMP)/laser/lw_query.c | build
+	$(CC) $(CFLAGS) -I$(LT)/include -I$(COMP)/laser/include -o $@ $^
+
 CT := ../../firmware/components/cable_test
 build/test_cable: test/test_cable.c $(CT)/cable_core.c $(LT)/lt_proto.c | build
 	$(CC) $(CFLAGS) -I$(CT)/include -I$(LT)/include -Itest -o $@ $^
@@ -115,3 +120,10 @@ regress: build/rip
 .PHONY: pscheck
 pscheck: build/rip build/test_lw
 	@python3 test/pscheck.py
+
+# The PAP client, built for the host, printing to etpeer.py's fake
+# LaserWriter over a pipe (W-1082). Ghostscript renders what it gets when
+# installed; the test does not need it.
+.PHONY: interop
+interop: build/lwhost build/rip
+	@python3 ../ethertalk/test_interop.py
