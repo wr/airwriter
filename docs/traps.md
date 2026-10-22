@@ -18,6 +18,8 @@ Traps already explained in a code comment are listed only when the comment is ea
   but `httpd_sock_err ... 104`, while pings and small replies were fine. Put big state in
   PSRAM (`heap_caps_calloc(..., MALLOC_CAP_SPIRAM)` at start); a static with an initialiser
   goes to `.data` whole. Keep internal only what must be: a stack whose task writes NVS.
+  Any `malloc` under 16 KB (`SPIRAM_MALLOC_ALWAYSINTERNAL`) lands internal too: a 300 dpi
+  page's rip rows (~30 KB) took it to 923 bytes, so row buffers come from `bigmem.h`.
 - **`esp_websocket_client` holds its lock while it runs your event handler.** A handler that
   takes a lock your own task holds while calling `esp_websocket_client_send_text` deadlocks. The
   relay handler only queues and sets flags; sends happen outside the EtherTalk lock.

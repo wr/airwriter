@@ -392,8 +392,9 @@ Linear is the queue; these are the live items.
 - **Console only through `idf.py monitor` under `script`.** A raw pyserial open drops the S3 into
   download mode. From a non-TTY shell:
   `script -q LOG idf.py -p /dev/cu.usbmodem1101 monitor </dev/null &`, then `pkill -f idf_monitor`
-  and strip ANSI from `LOG`. OpenOCD (`board/esp32s3-builtin.cfg`) reads registers live without
-  a reset.
+  and strip ANSI from `LOG`. OpenOCD (`board/esp32s3-builtin.cfg`) beside the monitor reads
+  registers live, but a gdb attach halts both cores, and detaching reset board 1 (2026-10-22):
+  never with a job on paper. `thread apply all bt` names where every task waits.
 - Read `/api/status` (`ps`) before judging the panel: a deselected printer shows offline embers,
   not Ready.
 - A slow upload is the link until proven otherwise: check `rssi` in the `doc_begin` log.
