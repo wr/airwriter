@@ -5,6 +5,9 @@
 imagewriter.txt is the icon as a pixel grid, one character per pixel ('.' is
 transparent). It is Apple's colour ImageWriter icon, redrawn pixel for pixel,
 and is not covered by this repository's licences (LICENSE.md).
+laserwriter.txt is a LaserWriter II for a shared LaserWriter (W-1082), drawn
+for AirWriter in the same style and palette (the palette must not grow: the
+ImageWriter's PNGs would change), under this repository's licence.
 
 IPP Everywhere wants 48, 128 and 512 pixel icons. The grid is centred on a
 32 x 32 canvas; 128 and 512 are exact 4x and 16x enlargements of it, and 48 is
@@ -28,8 +31,8 @@ PALETTE = {
 }
 
 
-def canvas():
-    rows = (HERE / "imagewriter.txt").read_text().split()
+def canvas(name):
+    rows = (HERE / name).read_text().split()
     h, w = len(rows), max(len(r) for r in rows)
     assert w <= CANVAS and h <= CANVAS
     oy, ox = (CANVAS - h) // 2, (CANVAS - w) // 2
@@ -71,12 +74,13 @@ def png(grid, size):
 
 
 def main():
-    grid = canvas()
     OUT.mkdir(parents=True, exist_ok=True)
-    for size in SIZES:
-        data = png(grid, size)
-        (OUT / f"icon-{size}.png").write_bytes(data)
-        print(f"icon-{size}.png  {len(data)} bytes")
+    for grid_file, prefix in (("imagewriter.txt", "icon"), ("laserwriter.txt", "laser")):
+        grid = canvas(grid_file)
+        for size in SIZES:
+            data = png(grid, size)
+            (OUT / f"{prefix}-{size}.png").write_bytes(data)
+            print(f"{prefix}-{size}.png  {len(data)} bytes")
 
 
 if __name__ == "__main__":
