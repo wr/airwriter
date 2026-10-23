@@ -205,8 +205,9 @@ follows the Mac's port). Its queue name reads "ImageWriter II" in `/api/status`,
 its name in the Chooser. U7's PIC calibration words: `16E0 1DA8`. Its LocalTalk node ID is 198
 (kept in NVS `lt`/`node`); the bench Mac is node 83. Printer: an ImageWriter II on J2 via
 Apple's crossover cable, fanfold paper loaded as the Owner's Guide says (top edge under the paper
-bail). It runs main from the Basilisk II box merge (the W-1079 merge, the chip check on the
-AppleTalk card, the box's Tunnel AppleTalk only checkbox), ahead of any release, with auto-update on. Its Top margin is calibrated to -7/8 in
+bail). It runs main from the W-1082 merge (LaserWriters), ahead of any release, with
+auto-update on; it shares the fake "LaserWriter II NT" on the Basilisk II tunnel when
+`etpeer.py tunnel laserwriter` runs on the Mac. Its Top margin is calibrated to -7/8 in
 (`top_margin` -126): a page's line 1 in down and one 0.5 in from the bottom landed exactly there.
 Its AppleTalk port has been set on the page (`lt_port` 1), so DIP switches 1-2 no longer decide;
 Infinite Mac is on (Wells switched it on, with a made-up zone name). The page reads its DIP switches as 2, 6, 7 and 8 on: not
@@ -227,7 +228,10 @@ Known issues, open:
   (`LT_PAP_QUIET_MS`). If the Mac freezes again, check whether it is the same job.
 - `W-1044 iPhone never submits a job on builds with W-1040's job model` is Done, but its cause
   was never isolated (likely the early reply, the strongest-AP fix and stale mDNS twins aging
-  out). If the iPhone stalls again, that issue has the bisect plan.
+  out). It recurred once on the W-1082 bench (Print tapped, 348 Get-Printer-Attributes in four
+  minutes, no job) while the shared LaserWriter was offline or the board sat at −86 dBm; once
+  both were right the iPhone printed. `ipp_server` now logs each request's path, asked
+  attributes and answer size, so the next stall says why. The issue has the bisect plan.
 - The 37 LEDs reference a 3D model KiCad 10 doesn't ship, so they are absent from STEP
   exports (`docs/library.md`).
 - `W-1086 LaserWriter: a big upload to an unreachable LaserWriter holds the board ~12 minutes`:
@@ -294,8 +298,11 @@ Linear is the queue; these are the live items.
   that turns the relay on for users, give Mihai Parparita (Infinite Mac) a heads-up.
 - Not in Linear: scope HSKo during a long job (SPEC §3.9 timing).
 - Laser printers (design `docs/superpowers/specs/2026-10-21-laser-printers-design.md`; no
-  laser printer on the bench): `W-1082 AirPrint to LaserWriters on AppleTalk` is built (plan
-  `docs/superpowers/plans/2026-10-22-laserwriters-appletalk.md`); owed on a real LaserWriter:
+  laser printer on the bench): `W-1082 AirPrint to LaserWriters on AppleTalk` merged
+  2026-10-22 (plan `docs/superpowers/plans/2026-10-22-laserwriters-appletalk.md`), benched on
+  board 1 against the fake: a photo page from the iPhone and from the Mac's queue (~100 s), busy,
+  paper out, cancel, a PostScript error, a silent printer; the ImageWriter's checker unchanged
+  on paper. Owed on a real LaserWriter:
   the design's "What only a printer settles" (cable, long frames through TashTalk, throughput,
   binary on Level 1, placement, memory, the status texts, the screen, busy both ways). Next
   `W-1083 AirPrint to HP LaserJets over serial (PCL)`. Network printers over TCP are out. Open
