@@ -168,17 +168,20 @@ void iw_resync(iw_out_fn out, void *ctx)
     out(ctx, can, sizeof can);
 }
 
+static int is_digit(uint8_t c) { return c >= '0' && c <= '9'; }
+
 iw_ribbon_t iw_self_id_ribbon(const uint8_t *reply, size_t n)
 {
-    for (size_t i = 0; i + 4 <= n; i++) {
-        uint8_t c[4];
-        for (size_t k = 0; k < 4; k++) c[k] = reply[i + k] & 0x7F;
-        if (c[0] != 'I' || c[1] != 'W') continue;
-        if (c[2] < '0' || c[2] > '9' || c[3] < '0' || c[3] > '9') continue;
+    for (size_t i = 0; i + 3 <= n; i++) {
+        uint8_t c[4] = { 0 };
+        for (size_t k = 0; k < 4 && i + k < n; k++) c[k] = reply[i + k] & 0x7F;
+        size_t w;   // just past the width
+        if (c[0] == 'I' && c[1] == 'W' && is_digit(c[2]) && is_digit(c[3])) w = i + 4;
+        else if (c[0] == 'L' && c[1] == 'Q' && is_digit(c[2]))               w = i + 3;
+        else continue;
         // C goes straight after the width, ahead of F: a C anywhere else is
         // line noise read out after the reply, not a colour ribbon.
-        return i + 4 < n && (reply[i + 4] & 0x7F) == 'C' ? IW_RIBBON_COLOUR
-                                                          : IW_RIBBON_BLACK;
+        return w < n && (reply[w] & 0x7F) == 'C' ? IW_RIBBON_COLOUR : IW_RIBBON_BLACK;
     }
     return IW_RIBBON_UNKNOWN;
 }

@@ -88,10 +88,14 @@ typedef struct {
     int ff_asked;  // iw_link_need_ff has answered for the current job
 } iw_link_t;
 
-// Which ribbon is in, from the printer's self-ID (W-1064). ESC ? makes it
-// send "IW10CF" (Table 6-7, pp. 88-89): IW, the carriage width in inches,
-// then C only with a colour ribbon in and F only with a SheetFeeder fitted.
-// The colour option turns on by itself when the colour ribbon goes in (p. 123).
+// Which ribbon is in, from the printer's self-ID (W-1064). ESC ? makes the
+// ImageWriter II send "IW10CF" (Table 6-7, pp. 88-89): IW, the carriage width
+// in inches, then C only with a colour ribbon in and F only with a SheetFeeder
+// fitted. The colour option turns on by itself when the colour ribbon goes in
+// (p. 123). The ImageWriter LQ sends "LQ1CF1" and a CR: LQ, one digit of
+// carriage width (1 is 15 in), C, F, then the number of feeder bins. That shape
+// is from GSport's emulator (src/scc_imagewriter.c), not Apple's manual, and is
+// untested on a real LQ (W-1087). The original ImageWriter sends nothing.
 typedef enum {
     IW_RIBBON_UNKNOWN = 0,   // no reply, or not one we can read
     IW_RIBBON_BLACK   = 1,
@@ -99,7 +103,7 @@ typedef enum {
 } iw_ribbon_t;
 
 // Reads a reply to ESC ?. Bit 7 is ignored (the printer sends space parity)
-// and anything ahead of "IW" is skipped, so line noise does not hide it.
+// and anything ahead of "IW" or "LQ" is skipped, so line noise does not hide it.
 iw_ribbon_t iw_self_id_ribbon(const uint8_t *reply, size_t n);
 
 void iw_link_job_start(iw_link_t *l);

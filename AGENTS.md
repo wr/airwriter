@@ -60,7 +60,11 @@ What works on `main`:
   as ink on paper.
 - Colour with Apple's colour ribbon (`W-1064 Colour printing over AirPrint with the ImageWriter
   II colour ribbon`): the board reads the ribbon with `ESC ?` self-ID (when the printer comes
-  back after a second or more down, and before every AirPrint job), saves it, reports it in
+  back after a second or more down, and before every AirPrint job), the ImageWriter II's
+  "IW10CF" and, since `W-1087 Read the ImageWriter LQ's self-ID so a colour ribbon prints in
+  colour`, the LQ's "LQ1CF1" (the shape GSport's emulator sends, untested on a real LQ;
+  NJRoadfan on 68kMLA has offered the LQ technical reference's breakdown, which may correct
+  it), saves it, reports it in
   `/api/status` `ribbon`; the web page names it on the nameplate and draws its halftone preview
   in the four inks while it is colour. While it is colour, IPP and TXT advertise colour under the same UUID,
   and sRGB pages print one pass per ink per strip, yellow, magenta, cyan, black (SPEC §3.8). On a
@@ -191,7 +195,10 @@ tray.
 
 **Printers:** built and tested on the ImageWriter II only. The original ImageWriter and the
 ImageWriter LQ take the same stream and are expected to work, untested (the scope spec's
-amendment); docs say so rather than excluding them. The settings page's Model picker offers
+amendment); docs say so rather than excluding them. The board reads an LQ's self-ID too, so a
+colour ribbon in an LQ prints in colour; the reply's shape is taken from GSport's emulator and
+untested on a real LQ. The original ImageWriter sends no self-ID, so the board never sees a
+colour ribbon in it. The settings page's Model picker offers
 both, but the model only names the printer: IPP `printer-make-and-model`, Bonjour `ty` and
 `/api/status` `model` still say Apple ImageWriter II. StyleWriters stay out. PostScript
 LaserWriters on AppleTalk can be shared beside it (above), untested on a real one.

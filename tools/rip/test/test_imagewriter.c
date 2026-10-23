@@ -392,7 +392,8 @@ int main(void)
     }
 
     /* -- self-ID (ESC ?, Table 6-7): IW, two digits of carriage width, then
-     *    C with a colour ribbon in and F with a SheetFeeder -- */
+     *    C with a colour ribbon in and F with a SheetFeeder; the LQ's (from
+     *    GSport) is LQ, one digit of width, C, F, then the bin count -- */
     {
         static const struct { const char *s; size_t n; iw_ribbon_t want; } ids[] = {
             { "IW10CF", 6, IW_RIBBON_COLOUR },
@@ -411,6 +412,19 @@ int main(void)
             { "IW10FC",  6, IW_RIBBON_BLACK },
             { "IW10\x00" "C", 6, IW_RIBBON_BLACK },
             { "IW10F\r\nxC", 9, IW_RIBBON_BLACK },
+            /* the ImageWriter LQ */
+            { "LQ1CF1\r", 7, IW_RIBBON_COLOUR },
+            { "LQ1C",     4, IW_RIBBON_COLOUR },
+            { "LQ1F1",    5, IW_RIBBON_BLACK },
+            { "LQ1",      3, IW_RIBBON_BLACK },
+            { "LQ",       2, IW_RIBBON_UNKNOWN },        /* cut short */
+            { "LQxC",     4, IW_RIBBON_UNKNOWN },
+            { "\xCC\xD1\xB1\xC3", 4, IW_RIBBON_COLOUR },  /* "LQ1C", bit 7 set */
+            { "\x00\x00LQ1C", 6, IW_RIBBON_COLOUR },     /* line noise ahead of it */
+            { "\x00LQ1CF1\r\x00", 9, IW_RIBBON_COLOUR }, /* GSport's bytes as sent */
+            { "LQ1FC",    5, IW_RIBBON_BLACK },
+            { "LQ1\x00" "C", 5, IW_RIBBON_BLACK },
+            { "LQ1F1\r\nxC", 9, IW_RIBBON_BLACK },
         };
         for (size_t k = 0; k < sizeof ids / sizeof ids[0]; k++) {
             iw_ribbon_t got = iw_self_id_ribbon((const uint8_t *)ids[k].s, ids[k].n);
