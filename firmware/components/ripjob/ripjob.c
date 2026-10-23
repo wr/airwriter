@@ -73,9 +73,12 @@ static int is_rgb(const urf_page_t *pg)
 
 int ripjob_run(urf_t *u, const ripjob_cfg_t *cfg, ripjob_stats_t *st)
 {
-    pipe_t p;
-    memset(&p, 0, sizeof p);
-    p.cfg = cfg;
+    // Off the stack: its ImageWriter encoder and ink screens are ~3.8 KB, and
+    // the rip task has 7 KB of internal RAM for its stack (W-1082 bench: a
+    // LaserWriter's job left 372 bytes of it).
+    pipe_t *p = big_calloc(1, sizeof *p);
+    if (!p) return -1;
+    p->cfg = cfg;
     const printer_caps_t *caps = cfg->caps ? cfg->caps : &printer_caps_imagewriter;
     const rip_stage_t *stage = cfg->stage;
     uint32_t dpi_x = caps->rip_dpi_x, dpi_y = caps->rip_dpi_y, max = caps->max_dots;
@@ -139,9 +142,9 @@ int ripjob_run(urf_t *u, const ripjob_cfg_t *cfg, ripjob_stats_t *st)
         }
         if (!dst_w || !dst_h) { say(cfg, "empty page"); rc = -1; break; }
 
-        p.dst_w = dst_w;
-        p.y     = 0;
-        p.skip  = !stage && cfg->top_margin < 0 ? (uint32_t)(-cfg->top_margin / 2) : 0;
+        p->dst_w = dst_w;
+        p->y     = 0;
+        p->skip  = !stage && cfg->top_margin < 0 ? (uint32_t)(-cfg->top_margin / 2) : 0;
         if (st) { st->dst_w = dst_w; st->dst_h = dst_h; st->crop_per_side = crop_per_side; }
 
         if (cfg->page && cfg->page(cfg->page_ctx, pages, dst_w, dst_h)) {
@@ -163,37 +166,37 @@ int ripjob_run(urf_t *u, const ripjob_cfg_t *cfg, ripjob_stats_t *st)
         rs_t rs;
 
         if (colour) {
-            p.iwc = calloc(1, sizeof *p.iwc);
-            if (!p.iwc) { rc = -1; goto page_cleanup; }
+            p->iwc = calloc(1, sizeof *p->iwc);
+            if (!p->iwc) { rc = -1; goto page_cleanup; }
             for (int i = 0; i < IW_INKS; i++)
-                if (!(p.ibits[i] = calloc((dst_w + 7) / 8, 1))) { rc = -1; goto page_cleanup; }
-            if (ink_screens_init(&p.inks, cfg->dither, cfg->gain, dst_w)) {
+                if (!(p->ibits[i] = calloc((dst_w + 7) / 8, 1))) { rc = -1; goto page_cleanup; }
+            if (ink_screens_init(&p->inks, cfg->dither, cfg->gain, dst_w)) {
                 rc = -1; goto page_cleanup;
             }
             inks_ready = 1;
-            iwc_init(p.iwc, dst_w, cfg->out, cfg->out_ctx);
-            iwc_begin_page(p.iwc);
+            iwc_init(p->iwc, dst_w, cfg->out, cfg->out_ctx);
+            iwc_begin_page(p->iwc);
             // The margin's blank rows: ibits are still all zeros here.
             for (int r = 0; r < cfg->top_margin / 2; r++)
-                iwc_row(p.iwc, (const uint8_t *const *)p.ibits);
-            if (rs_init_n(&rs, src_w, u->page.height, dst_w, dst_h, 3, on_rgb_row, &p)) {
+                iwc_row(p->iwc, (const uint8_t *const *)p->ibits);
+            if (rs_init_n(&rs, src_w, u->page.height, dst_w, dst_h, 3, on_rgb_row, p)) {
                 rc = -1; goto page_cleanup;
             }
         } else {
-            p.bits = calloc((dst_w + 7) / 8, 1);
-            if (!p.bits) { rc = -1; goto page_cleanup; }
-            if (rgb && !(p.gray = big_malloc(src_w))) { rc = -1; goto page_cleanup; }
+            p->bits = calloc((dst_w + 7) / 8, 1);
+            if (!p->bits) { rc = -1; goto page_cleanup; }
+            if (rgb && !(p->gray = big_malloc(src_w))) { rc = -1; goto page_cleanup; }
 
-            if (ht_init(&p.ht, cfg->dither, dst_w)) { rc = -1; goto page_cleanup; }
+            if (ht_init(&p->ht, cfg->dither, dst_w)) { rc = -1; goto page_cleanup; }
             ht_ready = 1;
-            ht_set_gain(&p.ht, cfg->gain);
+            ht_set_gain(&p->ht, cfg->gain);
             if (!stage) {
-                iw_init(&p.iw, dst_w, cfg->out, cfg->out_ctx);
-                iw_begin_page(&p.iw);
-                for (int r = 0; r < cfg->top_margin / 2; r++) iw_row(&p.iw, p.bits);   // still zeros
+                iw_init(&p->iw, dst_w, cfg->out, cfg->out_ctx);
+                iw_begin_page(&p->iw);
+                for (int r = 0; r < cfg->top_margin / 2; r++) iw_row(&p->iw, p->bits);   // still zeros
             }
 
-            if (rs_init(&rs, src_w, u->page.height, dst_w, dst_h, on_row, &p)) {
+            if (rs_init(&rs, src_w, u->page.height, dst_w, dst_h, on_row, p)) {
                 rc = -1; goto page_cleanup;
             }
         }
@@ -210,17 +213,17 @@ int ripjob_run(urf_t *u, const ripjob_cfg_t *cfg, ripjob_stats_t *st)
                 } else if (colour) {
                     rs_push(&rs, row + crop_left * 3);
                 } else {
-                    ink_gray(row + crop_left * 3, src_w, p.gray);
-                    rs_push(&rs, p.gray);
+                    ink_gray(row + crop_left * 3, src_w, p->gray);
+                    rs_push(&rs, p->gray);
                 }
             }
             if (r < 0) {
                 say(cfg, "page %d incomplete, stream is truncated", pages + 1);
                 rc = r;
             } else if (colour) {
-                iwc_end_page(p.iwc);
+                iwc_end_page(p->iwc);
             } else if (!stage) {
-                iw_end_page(&p.iw);
+                iw_end_page(&p->iw);
             } else if (stage->page_end(stage->ctx)) {
                 say(cfg, "page %d: the output stage failed", pages + 1);
                 rc = -1;
@@ -229,25 +232,26 @@ int ripjob_run(urf_t *u, const ripjob_cfg_t *cfg, ripjob_stats_t *st)
 
 page_cleanup:
         if (rs_ready) rs_free(&rs);
-        if (ht_ready) ht_free(&p.ht);
-        free(p.bits);
-        p.bits = NULL;
-        free(p.gray);
-        p.gray = NULL;
+        if (ht_ready) ht_free(&p->ht);
+        free(p->bits);
+        p->bits = NULL;
+        free(p->gray);
+        p->gray = NULL;
         // A colour setup that failed part way: free() takes NULL, and the
         // screens free only once made (ink_screens_init cleans up itself).
-        if (inks_ready) ink_screens_free(&p.inks);
+        if (inks_ready) ink_screens_free(&p->inks);
         for (int i = 0; i < IW_INKS; i++) {
-            free(p.ibits[i]);
-            p.ibits[i] = NULL;
+            free(p->ibits[i]);
+            p->ibits[i] = NULL;
         }
-        free(p.iwc);
-        p.iwc = NULL;
+        free(p->iwc);
+        p->iwc = NULL;
 
         pages++;
         if (rc < 0) break;
     }
 
+    free(p);
     if (st) st->pages = pages;
     return rc < 0 ? rc : 0;
 }
