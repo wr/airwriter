@@ -232,9 +232,11 @@ Known issues, open:
   exports (`docs/library.md`).
 - `W-1086 LaserWriter: a big upload to an unreachable LaserWriter holds the board ~12 minutes`:
   a LaserWriter heard by lookup but deaf to unicast fails a small job in 31 s, but an 8 MB
-  upload (an iPhone photo) holds the job lock ~12 min, the ImageWriter included, with
-  `/api/laser` `job.active` false. Internal RAM touched 171 bytes in the same boot. Seen on board 1
-  when the Mac running `etpeer.py` changed IP under it; the issue has the repro.
+  upload (an iPhone photo) held the job lock ~12 min, the ImageWriter included, with
+  `/api/laser` `job.active` false. Seen once on board 1, when the Mac running `etpeer.py`
+  changed IP under it; unexplained, the issue has the repro. The slow photo prints filed with
+  it are fixed (dropped sends, `docs/traps.md`): a Mac's photo page to the fake LaserWriter
+  now takes ~100 s, bound by the 8.4 MB URF upload (65–100 KB/s) and the rip.
 
 ## Open work
 

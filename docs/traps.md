@@ -20,6 +20,19 @@ Traps already explained in a code comment are listed only when the comment is ea
   goes to `.data` whole. Keep internal only what must be: a stack whose task writes NVS.
   Any `malloc` under 16 KB (`SPIRAM_MALLOC_ALWAYSINTERNAL`) lands internal too: a 300 dpi
   page's rip rows (~30 KB) took it to 923 bytes, so row buffers come from `bigmem.h`.
+- **A failed UDP send is usually only a full queue.** Wi-Fi's TX buffers come from internal RAM
+  one per frame, so a burst (a PAP reply is eight frames) on top of an upload and a rip makes
+  `sendto` fail with ENOMEM. Dropped, each lost PAP reply cost the printer a 2 s retry, and a
+  photo page took 9 minutes at -86 dBm (W-1086). The tunnel and the Wi-Fi link wait 10 ms and
+  try again (`et_send_patiently`); `/api/et` `tunnel_retries` counts the waits.
+- **`SPIRAM_TRY_ALLOCATE_WIFI_LWIP` is not the cure.** It forces Wi-Fi to 16 static TX buffers in
+  internal RAM: idle free fell from 29 KB to 13 KB with a 5 KB largest block, no job could
+  start its rip task, and board 1 fell off Wi-Fi until replugged.
+- **The rip task's stack is internal and tight.** A task that may write flash (the rip's
+  `done` keeps the known-good record) needs an internal stack, and 8 KB in one piece is often
+  not free when a job starts: raising `PIPE_STACK` made jobs fail at once. Keep big state off
+  it: `pipe_t` (ImageWriter encoder, ink screens, ~3.8 KB) is `big_calloc`'d; a LaserWriter job
+  then leaves ~4.2 KB of 7 KB spare.
 - **`esp_websocket_client` holds its lock while it runs your event handler.** A handler that
   takes a lock your own task holds while calling `esp_websocket_client_send_text` deadlocks. The
   relay handler only queues and sets flags; sends happen outside the EtherTalk lock.
