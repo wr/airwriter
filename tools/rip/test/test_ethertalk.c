@@ -581,6 +581,49 @@ static void test_tunnel(void)
     CHECK_EQ_INT(et_tunnel_dest(zone_mac, &ip), 0);       // 0xB2, not "B2"
 }
 
+// A send with no buffer free (ENOMEM: Wi-Fi still holds the last burst) waits
+// and tries again; a frame dropped there cost a PAP printer a 2 s retry, ten
+// of them a minute on board 1 (W-1086). A real failure is not retried.
+static int busy_left, sends, waited_ms;
+static int send_busy_then_ok(void *ctx, const uint8_t *f, size_t n)
+{
+    (void)ctx; (void)f; (void)n;
+    sends++;
+    if (busy_left < 0) return ET_SEND_FAILED;
+    if (busy_left > 0) { busy_left--; return ET_SEND_BUSY; }
+    return ET_SEND_OK;
+}
+static void wait_ms(uint32_t ms) { waited_ms += (int)ms; }
+
+static void test_send_patiently(void)
+{
+    static const uint8_t f[4] = { 1, 2, 3, 4 };
+    int retries;
+    busy_left = 0; sends = 0; waited_ms = 0;
+    CHECK_EQ_INT(et_send_patiently(send_busy_then_ok, NULL, f, sizeof f, wait_ms, &retries), 0);
+    CHECK_EQ_INT(sends, 1);
+    CHECK_EQ_INT(retries, 0);
+    CHECK_EQ_INT(waited_ms, 0);
+
+    busy_left = 3; sends = 0; waited_ms = 0;
+    CHECK_EQ_INT(et_send_patiently(send_busy_then_ok, NULL, f, sizeof f, wait_ms, &retries), 0);
+    CHECK_EQ_INT(sends, 4);
+    CHECK_EQ_INT(retries, 3);
+    CHECK_EQ_INT(waited_ms, 3 * ET_SEND_WAIT_MS);
+
+    // Still no buffer after every try: given up, as a dropped frame.
+    busy_left = 1000; sends = 0; waited_ms = 0;
+    CHECK_EQ_INT(et_send_patiently(send_busy_then_ok, NULL, f, sizeof f, wait_ms, &retries), -1);
+    CHECK_EQ_INT(sends, ET_SEND_TRIES);
+    CHECK_EQ_INT(waited_ms, (ET_SEND_TRIES - 1) * ET_SEND_WAIT_MS);
+
+    // A real failure (no route, a closed socket) is not a burst: no retry.
+    busy_left = -1; sends = 0; waited_ms = 0;
+    CHECK_EQ_INT(et_send_patiently(send_busy_then_ok, NULL, f, sizeof f, wait_ms, &retries), -1);
+    CHECK_EQ_INT(sends, 1);
+    CHECK_EQ_INT(waited_ms, 0);
+}
+
 static void test_zone_name_ok(void)
 {
     char x32[33], x33[34];
@@ -910,6 +953,7 @@ int main(void)
     test_two_links_one_printer();
     test_set_mac();
     test_tunnel();
+    test_send_patiently();
     test_zone_name_ok();
     test_zone_json();
     test_zone_parse();

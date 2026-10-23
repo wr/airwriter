@@ -31,6 +31,20 @@ void   et_tunnel_mac(uint32_t ip, uint8_t mac[ETH_ALEN]);
 // broadcast), or 0 when it goes nowhere.
 int    et_tunnel_dest(const uint8_t dst[ETH_ALEN], uint32_t *ip);
 
+// A frame out the tunnel or the Wi-Fi link. No buffer free (sendto's ENOMEM,
+// esp_wifi_internal_tx's ESP_ERR_NO_MEM) is only a burst Wi-Fi has not sent
+// yet, and a dropped frame costs a PAP printer its 2 s retry (W-1086: a tenth
+// of a LaserWriter job's replies on board 1), so it waits ET_SEND_WAIT_MS and
+// tries again, ET_SEND_TRIES times in all; any other failure is final. 0 sent,
+// -1 not; the waits it took in *retries.
+enum { ET_SEND_OK, ET_SEND_BUSY, ET_SEND_FAILED };
+#define ET_SEND_TRIES   5
+#define ET_SEND_WAIT_MS 10
+typedef int  (*et_send_fn)(void *ctx, const uint8_t *f, size_t n);
+typedef void (*et_wait_fn)(uint32_t ms);
+int    et_send_patiently(et_send_fn send, void *ctx, const uint8_t *f, size_t n, et_wait_fn wait,
+                         int *retries);
+
 // The board's zone MAC: B2 and the station MAC's rest. Infinite Mac's Basilisk
 // II sends unicast only to MACs starting B2 (its emulators' own; ether_js.cpp
 // GENERATED_ETHER_ADDR_PREFIX) and drops the rest, so a Mac could look the

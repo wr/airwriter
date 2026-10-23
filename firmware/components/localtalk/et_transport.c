@@ -27,6 +27,22 @@ int et_tunnel_dest(const uint8_t dst[ETH_ALEN], uint32_t *ip)
     return 0;
 }
 
+int et_send_patiently(et_send_fn send, void *ctx, const uint8_t *f, size_t n, et_wait_fn wait,
+                      int *retries)
+{
+    *retries = 0;
+    for (int i = 0; i < ET_SEND_TRIES; i++) {
+        if (i) {
+            wait(ET_SEND_WAIT_MS);
+            (*retries)++;
+        }
+        int r = send(ctx, f, n);
+        if (r == ET_SEND_OK) return 0;
+        if (r != ET_SEND_BUSY) return -1;
+    }
+    return -1;
+}
+
 void et_zone_mac(const uint8_t base[ETH_ALEN], uint8_t mac[ETH_ALEN])
 {
     memcpy(mac, base, ETH_ALEN);

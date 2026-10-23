@@ -85,8 +85,9 @@ static int        s_ip_changed, s_net_down;
 // The tunnel.
 static int        s_sock = -1;
 static uint32_t   s_tun_drops;
-static uint32_t   s_tun_nomem;      // of those, sendto out of buffers (ENOMEM, ENOBUFS)
+static uint32_t   s_tun_nomem;      // of those, sendto still out of buffers after its tries
 static int        s_tun_errno;      // the last failed sendto's errno
+static uint32_t   s_tun_retries, s_radio_retries;   // sends that waited for a buffer (W-1086)
 
 // The radio: frames in from lwIP's thread, out through the Wi-Fi driver.
 static QueueHandle_t s_rin;
@@ -156,6 +157,21 @@ static void side_abort(void *ctx)
     xSemaphoreGive(s_lock);
 }
 
+// et_send_patiently's: a burst Wi-Fi has not sent yet leaves no buffer.
+static void send_wait(uint32_t ms)
+{
+    TickType_t t = pdMS_TO_TICKS(ms);
+    vTaskDelay(t ? t : 1);
+}
+
+static int tun_sendto(void *ctx, const uint8_t *f, size_t n)
+{
+    if (sendto(s_sock, f, n, 0, (const struct sockaddr *)ctx, sizeof(struct sockaddr_in)) >= 0)
+        return ET_SEND_OK;
+    s_tun_errno = errno;
+    return errno == ENOMEM || errno == ENOBUFS ? ET_SEND_BUSY : ET_SEND_FAILED;
+}
+
 static void tun_send(void *ctx, const uint8_t *f, size_t n)
 {
     (void)ctx;
@@ -166,11 +182,12 @@ static void tun_send(void *ctx, const uint8_t *f, size_t n)
     }
     struct sockaddr_in to = { .sin_family = AF_INET, .sin_port = htons(ET_TUNNEL_PORT) };
     to.sin_addr.s_addr = htonl(ip);
-    if (sendto(s_sock, f, n, 0, (struct sockaddr *)&to, sizeof to) < 0) {
+    int retries;
+    if (et_send_patiently(tun_sendto, &to, f, n, send_wait, &retries)) {
         s_tun_drops++;
-        s_tun_errno = errno;
-        if (errno == ENOMEM || errno == ENOBUFS) s_tun_nomem++;
+        if (s_tun_errno == ENOMEM || s_tun_errno == ENOBUFS) s_tun_nomem++;
     }
+    s_tun_retries += (uint32_t)retries;
 }
 
 static void zone_send(void *ctx, const uint8_t *f, size_t n)
@@ -186,11 +203,20 @@ static void zone_send(void *ctx, const uint8_t *f, size_t n)
     if (xQueueSend(s_zout, &z, 0) != pdTRUE) s_zone_out_drops++;
 }
 
+static int radio_tx(void *ctx, const uint8_t *f, size_t n)
+{
+    (void)ctx;
+    esp_err_t e = esp_wifi_internal_tx(WIFI_IF_STA, (void *)f, (uint16_t)n);
+    return e == ESP_OK ? ET_SEND_OK : e == ESP_ERR_NO_MEM ? ET_SEND_BUSY : ET_SEND_FAILED;
+}
+
 static void radio_send(void *ctx, const uint8_t *f, size_t n)
 {
     (void)ctx;
-    if (!s_radio.active || esp_wifi_internal_tx(WIFI_IF_STA, (void *)f, (uint16_t)n) != 0)
+    int retries = 0;
+    if (!s_radio.active || et_send_patiently(radio_tx, NULL, f, n, send_wait, &retries))
         s_radio_out_drops++;
+    s_radio_retries += (uint32_t)retries;
 }
 
 // lwIP's thread, for every frame it does not know (et_radio_hook.h): the
@@ -896,13 +922,17 @@ void ethertalk_json(char *buf, size_t cap)
     xSemaphoreGive(s_lock);
     if (p < end)
         p += snprintf(p, end - p,
-            ",\"radio_drops\":{\"in\":%lu,\"out\":%lu,\"unknown_frames\":%lu,\"appletalk_frames\":%lu},"
-            "\"tunnel_drops\":%lu,\"tunnel_nomem\":%lu,\"tunnel_errno\":%d,\"relay\":{\"connected\":%s,\"in_drops\":%lu,\"out_drops\":%lu,"
+            ",\"radio_drops\":{\"in\":%lu,\"out\":%lu,\"unknown_frames\":%lu,\"appletalk_frames\":%lu,"
+            "\"retries\":%lu},"
+            "\"tunnel_drops\":%lu,\"tunnel_nomem\":%lu,\"tunnel_errno\":%d,\"tunnel_retries\":%lu,"
+            "\"relay\":{\"connected\":%s,\"in_drops\":%lu,\"out_drops\":%lu,"
             "\"bad_messages\":%lu,\"pongs\":%lu,\"last_error\":\"%s\"},"
             "\"internal_ram\":{\"free\":%u,\"largest\":%u,\"lowest\":%u},",
             (unsigned long)s_radio_in_drops, (unsigned long)s_radio_out_drops,
             (unsigned long)s_radio_unknown, (unsigned long)s_radio_kept,
+            (unsigned long)s_radio_retries,
             (unsigned long)s_tun_drops, (unsigned long)s_tun_nomem, s_tun_errno,
+            (unsigned long)s_tun_retries,
             s_ws_up ? "true" : "false",
             (unsigned long)s_zone_in_drops, (unsigned long)s_zone_out_drops,
             (unsigned long)s_zone_bad, (unsigned long)s_zone_pongs, s_zone_err,
