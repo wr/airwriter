@@ -469,6 +469,8 @@ static int dispatch(work_t *w, int fd, const ipp_req_t *r, hbody_t *body,
         ipp_write_printer_attrs(&e, &pa, &r->requested);
         xSemaphoreGive(s_job_lock);
         ipp_end(&e);
+        ESP_LOGI(TAG, "  attributes of %s: %u bytes, state %d", p->resource,
+                 (unsigned)ipp_enc_len(&e), (int)pa.state);
         return send_ipp(fd, &e, keep_alive);
     }
 
@@ -535,6 +537,30 @@ static int dispatch(work_t *w, int fd, const ipp_req_t *r, hbody_t *body,
     }
 }
 
+// requested-attributes as "a,b,c" for the log, cut to fit.
+static void names_str(const ipp_names_t *nm, char *out, size_t cap)
+{
+    size_t k = 0;
+    const uint8_t *q = nm->p, *end = nm->p ? nm->p + nm->len : NULL;
+    out[0] = '\0';
+    if (!nm->n) {
+        snprintf(out, cap, "-");
+        return;
+    }
+    for (uint16_t i = 0; i < nm->n && q && q + 3 <= end; i++) {
+        size_t nl = (size_t)(q[1] << 8 | q[2]);
+        q += 3 + nl;
+        if (q + 2 > end) break;
+        size_t vl = (size_t)(q[0] << 8 | q[1]);
+        q += 2;
+        if (q + vl > end) break;
+        int w = snprintf(out + k, cap - k, "%s%.*s", i ? "," : "", (int)vl, (const char *)q);
+        if (w < 0 || (size_t)w >= cap - k) break;
+        k += (size_t)w;
+        q += vl;
+    }
+}
+
 static int handle_post(work_t *w, int fd, const hreq_t *hr)
 {
     hbody_t body;
@@ -568,8 +594,6 @@ static int handle_post(work_t *w, int fd, const hreq_t *hr)
     if (rc != IPP_REQ_OK)
         return hresp_send(fd, 400, "Bad Request", "text/plain", "malformed ipp\n", 14, 0);
 
-    ESP_LOGI(TAG, "op 0x%04x id %u from %s", r.op, (unsigned)r.request_id,
-             r.requesting_user[0] ? r.requesting_user : "-");
 
     // Major version 1 and 2 share this encoding; anything else we cannot
     // speak, but the client still needs a well-formed answer.
@@ -584,6 +608,13 @@ static int handle_post(work_t *w, int fd, const hreq_t *hr)
     for (int i = 0; i < IPP_PRINTERS; i++) res[i] = s_p[i].on ? s_p[i].resource : NULL;
     int idx = ipp_route(hr->uri, res);
     xSemaphoreGive(s_job_lock);
+    // Which printer and what was asked: an iPhone that asks and never sends
+    // a job says why only here (W-1044, W-1082 bench).
+    char asked[160];
+    names_str(&r.requested, asked, sizeof asked);
+    ESP_LOGI(TAG, "op 0x%04x id %u v%u.%u from %s to %s (%d) asks %s", r.op,
+             (unsigned)r.request_id, (unsigned)(r.version >> 8), (unsigned)(r.version & 0xFF),
+             r.requesting_user[0] ? r.requesting_user : "-", hr->uri, idx, asked);
     if (idx < 0) {
         hbody_drain(&body);
         return send_status(w, fd, &r, IPP_STATUS_ERR_NOT_FOUND, hr->keep_alive);
