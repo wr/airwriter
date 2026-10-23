@@ -21,9 +21,8 @@ static const char *TAG = "job";
 // stall on every packet, small enough not to matter in internal RAM.
 #define RING_BYTES   8192
 // The rip, then job_finished's flush and logging on top of it since W-1042:
-// a canceled iOS page left 944 bytes spare at 6144 on the bench. A
-// LaserWriter's (W-1082), through ps_page's printf, left 372 to 668 of 7168.
-#define PIPE_STACK   8192
+// a canceled iOS page left 944 bytes spare at 6144 on the bench.
+#define PIPE_STACK   7168
 // A paused job (paper out, SELECT) bigger than the ring backs the upload up
 // behind the printer, so the push waits as long as the serial writer will,
 // plus a margin.
