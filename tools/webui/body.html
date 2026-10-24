@@ -2,34 +2,40 @@
      and what it does over Wi-Fi; each item's pane holds every setting about
      it, and nothing about anything else. Each sidebar row shows its pane's
      state, so the box can be read without opening anything. -->
+<!-- Glyphs, one system: a 16-unit grid drawn inside 1..15; things filled,
+     signals and keys stroked; every stroke 1.5, cut lines 1, round caps; body
+     corners 1.5, sheets 1, small parts .5. Tiles draw them at about 5/8. -->
 <svg width=0 height=0 style="position:absolute" aria-hidden=true>
-  <symbol id=g-printer viewBox="0 0 16 16"><path fill=currentColor d="M4.2 1.5h7.6v3.3H4.2zM2.2 5.6h11.6c.7 0 1.2.5 1.2 1.2v4.7h-2.8v3H3.8v-3H1V6.8c0-.7.5-1.2 1.2-1.2zm2.9 4.9v2.7h5.8v-2.7zm7.2-3.5a.8.8 0 1 0 0 1.6.8.8 0 0 0 0-1.6z"/></symbol>
-  <symbol id=g-airprint viewBox="0 0 16 16"><path fill=currentColor d="M4.2 1.5h7.6v2.8H4.2zM2.2 5.1h11.6c.7 0 1.2.5 1.2 1.2v4.6h-2.6L8 6.4 3.6 10.9H1V6.3c0-.7.5-1.2 1.2-1.2z"/><path fill=currentColor d="M8 8.4 13.2 14.8H2.8z"/></symbol>
-  <symbol id=g-talk viewBox="0 0 16 16"><path fill=none stroke=currentColor stroke-width=1.6 stroke-linecap=round d="M8 4.4V8M8 8l-4.2 3.6M8 8l4.2 3.6"/><circle cx=8 cy=3.2 r=2.1 fill=currentColor /><circle cx=3.2 cy=12.6 r=2.1 fill=currentColor /><circle cx=12.8 cy=12.6 r=2.1 fill=currentColor /></symbol>
-  <symbol id=g-wifi viewBox="0 0 16 16"><path fill=none stroke=currentColor stroke-width=1.7 stroke-linecap=round d="M1.07 6.67A9.8 9.8 0 0 1 14.93 6.67M3.33 8.93A6.6 6.6 0 0 1 12.67 8.93M5.6 11.2A3.4 3.4 0 0 1 10.4 11.2"/><circle cx=8 cy=13.6 r=1.05 fill=currentColor /></symbol>
-  <symbol id=g-info viewBox="0 0 16 16"><circle cx=8 cy=3.9 r=1.5 fill=currentColor /><path fill=currentColor d="M6.1 6.4h3.1v5.7h1.3v1.6H5.6v-1.6H7V8H6.1z"/></symbol>
-  <symbol id=g-lock viewBox="0 0 16 16"><path fill=currentColor d="M5 7V5.2a3 3 0 0 1 6 0V7h.4c.8 0 1.4.6 1.4 1.4v5.2c0 .8-.6 1.4-1.4 1.4H4.6c-.8 0-1.4-.6-1.4-1.4V8.4c0-.8.6-1.4 1.4-1.4zm1.6 0h2.8V5.2a1.4 1.4 0 0 0-2.8 0z"/></symbol>
-  <!-- the AppleTalk port: a mini-DIN 8 socket, as on the case -->
-  <symbol id=g-port viewBox="0 0 16 16"><circle cx=8 cy=8 r=6.5 fill=none stroke=currentColor stroke-width=1.5 /><g fill=currentColor><path d="M6.9 3.4h2.2v1.7H6.9z"/><circle cx=4.7 cy=6.9 r=.95 /><circle cx=11.3 cy=6.9 r=.95 /><circle cx=4.5 cy=9.9 r=.95 /><circle cx=11.5 cy=9.9 r=.95 /><circle cx=6.3 cy=12 r=.95 /><circle cx=9.7 cy=12 r=.95 /><circle cx=8 cy=8.7 r=.95 /></g></symbol>
-  <!-- Networked Macs: an Ethernet socket -->
-  <symbol id=g-rj45 viewBox="0 0 16 16"><path fill=currentColor fill-rule=evenodd d="M2.2 3h11.6c.7 0 1.2.5 1.2 1.2v7.6c0 .7-.5 1.2-1.2 1.2H2.2c-.7 0-1.2-.5-1.2-1.2V4.2C1 3.5 1.5 3 2.2 3zm1.3 1.7v5.6h2.1v1.5h4.8v-1.5h2.1V4.7z"/></symbol>
+  <symbol id=g-printer viewBox="0 0 16 16"><path fill=currentColor fill-rule=evenodd d="M4 4.5V2a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2.5zM2.5 5.5h11A1.5 1.5 0 0 1 15 7v4a1.5 1.5 0 0 1-1.5 1.5H13V8.75H3v3.75h-.5A1.5 1.5 0 0 1 1 11V7a1.5 1.5 0 0 1 1.5-1.5zM11.55 7.1a.7.7 0 1 0 1.4 0 .7.7 0 1 0-1.4 0zM4 9.75h8V14a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1z"/></symbol>
+  <symbol id=g-airprint viewBox="0 0 16 16"><path fill=currentColor fill-rule=evenodd d="M4 4.5V2a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2.5zM2.5 5.5h11A1.5 1.5 0 0 1 15 7v4a1.5 1.5 0 0 1-1.5 1.5h-.9L9.19 8.08a1.5 1.5 0 0 0-2.38 0L3.4 12.5h-.9A1.5 1.5 0 0 1 1 11V7a1.5 1.5 0 0 1 1.5-1.5zM11.55 7.1a.7.7 0 1 0 1.4 0 .7.7 0 1 0-1.4 0z"/><path fill=currentColor stroke=currentColor stroke-linejoin=round d="M8 9.25 12.25 14.5h-8.5z"/></symbol>
+  <symbol id=g-talk viewBox="0 0 16 16"><path fill=none stroke=currentColor stroke-width=1.5 stroke-linecap=round stroke-linejoin=round d="M8 3.75V9.5l-5 2.9M8 9.5l5 2.9"/><circle cx=8 cy=3.75 r=2 fill=currentColor /><circle cx=3 cy=12.4 r=2 fill=currentColor /><circle cx=13 cy=12.4 r=2 fill=currentColor /></symbol>
+  <symbol id=g-wifi viewBox="0 0 16 16"><path fill=none stroke=currentColor stroke-width=1.5 stroke-linecap=round stroke-linejoin=round d="M1.46 5.96a9.25 9.25 0 0 1 13.08 0M3.58 8.08a6.25 6.25 0 0 1 8.84 0M5.7 10.2a3.25 3.25 0 0 1 4.6 0"/><circle cx=8 cy=12.5 r=1.25 fill=currentColor /></symbol>
+  <symbol id=g-info viewBox="0 0 16 16"><circle cx=8 cy=3.25 r=1.5 fill=currentColor /><path fill=currentColor d="M5.75 6.25h3.5v6h1.25V14h-5v-1.75H7V8H5.75z"/></symbol>
+  <symbol id=g-lock viewBox="0 0 16 16"><path fill=currentColor d="M4.5 7h7A1.5 1.5 0 0 1 13 8.5v5a1.5 1.5 0 0 1-1.5 1.5h-7A1.5 1.5 0 0 1 3 13.5v-5A1.5 1.5 0 0 1 4.5 7z"/><path fill=none stroke=currentColor stroke-width=1.5 stroke-linecap=round stroke-linejoin=round d="M5.25 7.25V5a2.75 2.75 0 0 1 5.5 0v2.25"/></symbol>
+  <!-- the AppleTalk port: the face of its mini-DIN 8 socket, measured off
+       Kycon's model of the part: the key at the top, the shoulders at the
+       foot, eight pins three, three and two, the middle one off centre -->
+  <symbol id=g-port viewBox="0 0 16 16"><path fill=currentColor fill-rule=evenodd d="M6.48 1.68v1.69h3.04V1.68a6.5 6.5 0 0 1 4.25 9.31h-1.63v2.02a6.5 6.5 0 0 1-8.28 0v-2.02H2.23a6.5 6.5 0 0 1 4.25-9.31zM4.03 5.06a.85 .85 0 1 0 1.7 0 .85 .85 0 1 0-1.7 0zM7.15 5.06a.85 .85 0 1 0 1.7 0 .85 .85 0 1 0-1.7 0zM10.27 5.06a.85 .85 0 1 0 1.7 0 .85 .85 0 1 0-1.7 0zM2.93 8.61a.85 .85 0 1 0 1.7 0 .85 .85 0 1 0-1.7 0zM7.74 8.61a.85 .85 0 1 0 1.7 0 .85 .85 0 1 0-1.7 0zM11.37 8.61a.85 .85 0 1 0 1.7 0 .85 .85 0 1 0-1.7 0zM5.46 12.07a.85 .85 0 1 0 1.7 0 .85 .85 0 1 0-1.7 0zM8.84 12.07a.85 .85 0 1 0 1.7 0 .85 .85 0 1 0-1.7 0z"/></symbol>
+  <!-- Networked Macs: an Ethernet socket, an 8P8C jack's opening (11.7 by
+       6.6 mm, the latch slot 6.4 wide) with its eight contacts at the top -->
+  <symbol id=g-rj45 viewBox="0 0 16 16"><path fill=currentColor fill-rule=evenodd d="M2.5 2h11A1.5 1.5 0 0 1 15 3.5v9a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 1 12.5v-9A1.5 1.5 0 0 1 2.5 2zm.25 2.25v6h2.5v1.5h5.5v-1.5h2.5v-6z"/><path fill=currentColor d="M4.58 3.75h.45v2.5h-.45zM5.49 3.75h.45v2.5h-.45zM6.4 3.75h.45v2.5h-.45zM7.31 3.75h.45v2.5h-.45zM8.22 3.75h.45v2.5h-.45zM9.13 3.75h.45v2.5h-.45zM10.04 3.75h.45v2.5h-.45zM10.95 3.75h.45v2.5h-.45z"/></symbol>
   <!-- a clipboard, on what a click copies -->
-  <symbol id=g-copy viewBox="0 0 16 16"><path fill=none stroke=currentColor stroke-width=1.5 stroke-linejoin=round d="M5.4 3H4.3C3.6 3 3 3.6 3 4.3v8.9c0 .7.6 1.3 1.3 1.3h7.4c.7 0 1.3-.6 1.3-1.3V4.3C13 3.6 12.4 3 11.7 3h-1.1"/><rect x=5.4 y=1.5 width=5.2 height=3 rx=.9 fill=none stroke=currentColor stroke-width=1.5 /></symbol>
-  <!-- W-1088: a LaserWriter, boxy, its paper out of the top -->
-  <!-- W-1088 (Wells: the old row icon read as a modern inkjet): an ImageWriter,
-       wide and low with tractor paper out of its top, and a LaserWriter, a tall
-       box with a sheet out of the top and its cassette at the foot -->
-  <symbol id=g-iw viewBox="0 0 16 16"><path fill=currentColor fill-rule=evenodd d="M2.9.6h10.2v7.6H2.9zM3.9 1.6a.6.6 0 1 0 0 1.2.6.6 0 0 0 0-1.2zm0 2.3a.6.6 0 1 0 0 1.2.6.6 0 0 0 0-1.2zm0 2.3a.6.6 0 1 0 0 1.2.6.6 0 0 0 0-1.2zm8.2-4.6a.6.6 0 1 0 0 1.2.6.6 0 0 0 0-1.2zm0 2.3a.6.6 0 1 0 0 1.2.6.6 0 0 0 0-1.2zm0 2.3a.6.6 0 1 0 0 1.2.6.6 0 0 0 0-1.2zM2 8h12l1.4 2.4v2.5c0 .6-.4 1-1 1H1.6c-.6 0-1-.4-1-1v-2.5zm1.4 1.2v.8h9.2v-.8zm7.9 2.2v.8h2v-.8z"/></symbol>
-  <symbol id=g-laser viewBox="0 0 16 16"><path fill=currentColor fill-rule=evenodd d="M4.4.8h7.2v3.4H4.4zM3.1 3.6h9.8c.6 0 1 .4 1 1v7.2H2.1V4.6c0-.6.4-1 1-1zm.4 2.3v.7h9v-.7zm7.4 2.4v1h1.5v-1zM1.5 12.5h13c.4 0 .7.3.7.7v1.3c0 .4-.3.7-.7.7h-13c-.4 0-.7-.3-.7-.7v-1.3c0-.4.3-.7.7-.7zm4.9.9v.6h3.2v-.6z"/></symbol>
+  <symbol id=g-copy viewBox="0 0 16 16"><path fill=none stroke=currentColor stroke-width=1.5 stroke-linecap=round stroke-linejoin=round d="M5.5 3h-1A1.5 1.5 0 0 0 3 4.5v8.75a1.5 1.5 0 0 0 1.5 1.5h7a1.5 1.5 0 0 0 1.5-1.5V4.5A1.5 1.5 0 0 0 11.5 3h-1"/><rect x=5.5 y=1.75 width=5 height=2.5 rx=.75 fill=none stroke=currentColor stroke-width=1.5 stroke-linejoin=round /></symbol>
+  <!-- W-1088 (Wells: the old row icon read as a modern inkjet): an ImageWriter
+       as Apple's own icon draws it, wide and low with tractor paper out of its
+       top, and a LaserWriter as tools/icon draws it, a tall box with a sheet
+       out of the top and its paper cassette, narrower, at the foot -->
+  <symbol id=g-iw viewBox="0 0 16 16"><path fill=currentColor fill-rule=evenodd d="M3 1h10v8.75H3zM3.7 2.75a.55 .55 0 1 0 1.1 0 .55 .55 0 1 0-1.1 0zM3.7 4.75a.55 .55 0 1 0 1.1 0 .55 .55 0 1 0-1.1 0zM3.7 6.75a.55 .55 0 1 0 1.1 0 .55 .55 0 1 0-1.1 0zM11.2 2.75a.55 .55 0 1 0 1.1 0 .55 .55 0 1 0-1.1 0zM11.2 4.75a.55 .55 0 1 0 1.1 0 .55 .55 0 1 0-1.1 0zM11.2 6.75a.55 .55 0 1 0 1.1 0 .55 .55 0 1 0-1.1 0zM2.25 9.75h11.5A1.25 1.25 0 0 1 15 11v2.75A1.25 1.25 0 0 1 13.75 15H2.25A1.25 1.25 0 0 1 1 13.75V11a1.25 1.25 0 0 1 1.25-1.25zm.25 1.5v1h11v-1z"/></symbol>
+  <symbol id=g-laser viewBox="0 0 16 16"><path fill=currentColor fill-rule=evenodd d="M4.5 4.25V1.5a.5.5 0 0 1 .5-.5h6a.5.5 0 0 1 .5.5v2.75zM3.25 4.25h9.5A1.25 1.25 0 0 1 14 5.5V12H2V5.5a1.25 1.25 0 0 1 1.25-1.25zM3.5 6.25v1h9v-1zm6.75 2.75v1H12V9zM3.5 13h9v1a1 1 0 0 1-1 1h-7a1 1 0 0 1-1-1z"/></symbol>
   <!-- AirWriter's dots with the test button in the middle -->
-  <symbol id=g-dots viewBox="0 0 16 16"><path fill=currentColor fill-rule=evenodd d="M2.6 2.6a1.4 1.4 0 1 0 2.8 0 1.4 1.4 0 0 0-2.8 0zm4 0a1.4 1.4 0 1 0 2.8 0 1.4 1.4 0 0 0-2.8 0zm4 0a1.4 1.4 0 1 0 2.8 0 1.4 1.4 0 0 0-2.8 0zM2.6 13.4a1.4 1.4 0 1 0 2.8 0 1.4 1.4 0 0 0-2.8 0zm4 0a1.4 1.4 0 1 0 2.8 0 1.4 1.4 0 0 0-2.8 0zm4 0a1.4 1.4 0 1 0 2.8 0 1.4 1.4 0 0 0-2.8 0zM2.6 8a1.4 1.4 0 1 0 2.8 0 1.4 1.4 0 0 0-2.8 0zm8 0a1.4 1.4 0 1 0 2.8 0 1.4 1.4 0 0 0-2.8 0zM5.7 8a2.3 2.3 0 1 0 4.6 0 2.3 2.3 0 0 0-4.6 0zm1.3 0a1 1 0 1 1 2 0 1 1 0 0 1-2 0z"/></symbol>
+  <symbol id=g-dots viewBox="0 0 16 16"><path fill=currentColor d="M2 3.25a1.25 1.25 0 1 0 2.5 0 1.25 1.25 0 1 0-2.5 0zM6.75 3.25a1.25 1.25 0 1 0 2.5 0 1.25 1.25 0 1 0-2.5 0zM11.5 3.25a1.25 1.25 0 1 0 2.5 0 1.25 1.25 0 1 0-2.5 0zM2 8a1.25 1.25 0 1 0 2.5 0 1.25 1.25 0 1 0-2.5 0zM11.5 8a1.25 1.25 0 1 0 2.5 0 1.25 1.25 0 1 0-2.5 0zM2 12.75a1.25 1.25 0 1 0 2.5 0 1.25 1.25 0 1 0-2.5 0zM6.75 12.75a1.25 1.25 0 1 0 2.5 0 1.25 1.25 0 1 0-2.5 0zM11.5 12.75a1.25 1.25 0 1 0 2.5 0 1.25 1.25 0 1 0-2.5 0z"/><circle cx=8 cy=8 r=1.75 fill=none stroke=currentColor stroke-width=1.5 /></symbol>
   <!-- the keys' own: look, add, on, back -->
-  <symbol id=g-look viewBox="0 0 16 16"><circle cx=6.8 cy=6.8 r=4.6 fill=none stroke=currentColor stroke-width=1.8 /><path stroke=currentColor stroke-width=2 stroke-linecap=round d="M10.3 10.3l4 4"/></symbol>
-  <symbol id=g-add viewBox="0 0 16 16"><path stroke=currentColor stroke-width=2 stroke-linecap=round d="M8 2.5v11M2.5 8h11"/></symbol>
-  <symbol id=g-on viewBox="0 0 16 16"><path fill=none stroke=currentColor stroke-width=2 stroke-linecap=round stroke-linejoin=round d="M6 2.8 11.2 8 6 13.2"/></symbol>
-  <symbol id=g-off viewBox="0 0 16 16"><path fill=none stroke=currentColor stroke-width=2 stroke-linecap=round stroke-linejoin=round d="M10 2.8 4.8 8 10 13.2"/></symbol>
+  <symbol id=g-look viewBox="0 0 16 16"><circle cx=6.75 cy=6.75 r=4.75 fill=none stroke=currentColor stroke-width=1.5 /><path fill=none stroke=currentColor stroke-width=1.5 stroke-linecap=round stroke-linejoin=round d="m10.25 10.25 4 4"/></symbol>
+  <symbol id=g-add viewBox="0 0 16 16"><path fill=none stroke=currentColor stroke-width=1.5 stroke-linecap=round stroke-linejoin=round d="M8 2.5v11M2.5 8h11"/></symbol>
+  <symbol id=g-on viewBox="0 0 16 16"><path fill=none stroke=currentColor stroke-width=1.5 stroke-linecap=round stroke-linejoin=round d="M6 2.75 11.25 8 6 13.25"/></symbol>
+  <symbol id=g-off viewBox="0 0 16 16"><path fill=none stroke=currentColor stroke-width=1.5 stroke-linecap=round stroke-linejoin=round d="M10 2.75 4.75 8 10 13.25"/></symbol>
   <!-- a compact Mac, one for each Mac a link can see -->
-  <symbol id=g-mac viewBox="0 0 12 15"><path fill=currentColor fill-rule=evenodd d="M1.6 0h8.8c.9 0 1.6.7 1.6 1.6v11.2c0 .6-.4 1-1 1h-.6V15H1.6v-1.2H1c-.6 0-1-.4-1-1V1.6C0 .7.7 0 1.6 0zM2.3 2v5.8h7.4V2zm4.2 8.6v.9h3v-.9z"/></symbol>
+  <symbol id=g-mac viewBox="0 0 16 16"><path fill=currentColor fill-rule=evenodd d="M4.25 1.5h7.5A1.25 1.25 0 0 1 13 2.75v10.5h-.75v1.25h-8.5v-1.25H3V2.75A1.25 1.25 0 0 1 4.25 1.5zM5 3a.75.75 0 0 0-.75.75v4c0 .41.34.75.75.75h6c.41 0 .75-.34.75-.75v-4A.75.75 0 0 0 11 3zm2.75 7v1h3.75v-1z"/></symbol>
 </svg>
 
 <div class=app>
@@ -205,15 +211,20 @@
 <dialog id=d-cable><div class=dlg>
   <b>Test a cable</b>
   <!-- the case's port edge as the cover prints it, a cable from the printer
-       port to the AppleTalk port; the test runs along it and colours it -->
-  <svg class=ports id=ports viewBox="0 0 360 150" aria-hidden=true>
+       port to the AppleTalk port; the test runs along it and colours it. To
+       scale, 19.5 mm between ports: each plug's moulding (12.7 mm, flat on
+       top and round below, about its socket) hides the socket, the cable
+       leaves its back through the boot and hangs between them, and the USB-C
+       socket sits low, on the board -->
+  <svg class=ports id=ports viewBox="0 0 360 160" aria-hidden=true>
     <g fill=none stroke=#f7f6f2 stroke-width=1.4 opacity=.9><path d="M16 22h104M128 22h104M240 22h104"/></g>
     <g font-family="-apple-system,BlinkMacSystemFont,'Helvetica Neue',sans-serif" font-size=13 font-style=italic fill=#f7f6f2>
       <text x=20 y=44>serial</text><text x=132 y=44>appletalk</text><text x=244 y=44>power</text></g>
-    <g fill=#2c2b28 stroke=#8a877e stroke-width=1.5><circle cx=68 cy=82 r=15 /><circle cx=180 cy=82 r=15 /><rect x=276 y=75 width=32 height=14 rx=7 /></g>
-    <path class=cable d="M68 82 C68 150 180 150 180 82"/>
-    <path class=flow id=flow d="M180 82 C180 150 68 150 68 82 C68 150 180 150 180 82"/>
-    <g fill=#e9e7e0><rect x=58 y=72 width=20 height=20 rx=3 /><rect x=170 y=72 width=20 height=20 rx=3 /></g>
+    <rect x=266.5 y=109.25 width=51 height=19 rx=9.5 fill=#2c2b28 stroke=#8a877e stroke-width=1.5 />
+    <g fill=#e9e7e0 stroke=#aeaa9f><path d="M31.5 92V60.5a5 5 0 0 1 5-5h63a5 5 0 0 1 5 5V92a36.5 36.5 0 0 1-73 0z"/><path d="M143.5 92V60.5a5 5 0 0 1 5-5h63a5 5 0 0 1 5 5V92a36.5 36.5 0 0 1-73 0z"/></g>
+    <g fill=#d6d3c9><circle cx=68 cy=92 r=27 /><circle cx=180 cy=92 r=27 /></g>
+    <path class=cable d="M68 92C68 160 180 160 180 92"/>
+    <path class=flow id=flow d="M180 92C180 160 68 160 68 92C68 160 180 160 180 92"/>
   </svg>
   <p>Plug one cable into both ports, then click Test.</p>
   <p class=say id=cable-say></p>

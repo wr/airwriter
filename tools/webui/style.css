@@ -94,8 +94,8 @@ button,input,select{font:inherit;color:inherit}
 /* a long network name gives way, not the item's own name */
 .nav .v{min-width:0;color:var(--fg2);font-size:var(--t-small);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 
-/* icon tiles, in the ribbon's inks */
-.ic{flex:0 0 auto;width:22px;height:22px;border-radius:6px;display:grid;place-items:center;color:#fff;
+/* icon tiles, in the ribbon's inks: a quarter round, the glyph about 5/8 of the tile */
+.ic{flex:0 0 auto;width:22px;height:22px;border-radius:25%;display:grid;place-items:center;color:#fff;
   box-shadow:inset 0 0 0 .5px rgba(0,0,0,.12),inset 0 1px 0 rgba(255,255,255,.18)}
 .ic svg{width:14px;height:14px}
 .ic.k{background:var(--ink-k)} .ic.c{background:var(--ink-c)} .ic.m{background:var(--ink-m)}
@@ -110,8 +110,8 @@ img.ic{background:none;box-shadow:none}
 
 .hero{display:flex;flex-direction:column;align-items:center;text-align:center;gap:6px;
   padding:20px 22px;background:var(--group);border-radius:var(--r-box);box-shadow:var(--shadow)}
-.hero .ic{width:52px;height:52px;border-radius:13px}
-.hero .ic svg{width:30px;height:30px}
+.hero .ic{width:52px;height:52px}
+.hero .ic svg{width:32px;height:32px}
 .hero h2{margin:4px 0 0;font:300 27px/1.1 var(--display)}
 .hero p{margin:0;max-width:42ch;color:var(--fg2);text-wrap:balance}
 
@@ -193,8 +193,8 @@ body:not(.ready) .sw span,body:not(.ready) .sw span:after{transition:none}
 
 /* ── AppleTalk: one card per way in ─────────────────────────────── */
 .card .top{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:12px;align-items:start;padding:14px}
-.card .top .ic{width:36px;height:36px;border-radius:9px}
-.card .top .ic svg{width:21px;height:21px}
+.card .top .ic{width:36px;height:36px}
+.card .top .ic svg{width:22px;height:22px}
 .card .top img.ic{width:36px;height:36px;border-radius:0;image-rendering:auto}
 .card .top b{display:block;font-size:var(--t-head);font-weight:600}
 .card .top p{margin:2px 0 0;color:var(--fg2)}
@@ -211,15 +211,15 @@ body:not(.ready) .sw span,body:not(.ready) .sw span:after{transition:none}
 .st .copied{color:var(--fg2);font-size:var(--t-small)}
 .macs{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
 .macs li{display:flex;align-items:center;gap:9px}
-.macs li svg{width:13px;height:16px;flex:0 0 auto;color:var(--fg)}
+.macs li svg{width:16px;height:16px;flex:0 0 auto;color:var(--fg)}
 .macs li span{flex:1;min-width:0;overflow-wrap:anywhere}
 .macs li small{color:var(--fg2);font-size:var(--t-small);font-variant-numeric:tabular-nums}
 .card.off .body{display:none}
 /* W-1082: a LaserWriter heard, its share switch at the end of its row */
 /* W-1088: the Printers pane: a row per printer, notices above them */
 .ic.unk{background:var(--fg3)}
-.prow .ic{width:30px;height:30px;border-radius:7px}
-.prow .ic svg{width:18px;height:18px}
+.prow .ic{width:30px;height:30px}
+.prow .ic svg{width:19px;height:19px}
 .row .txt small{display:block;color:var(--fg2);font-size:var(--t-small);overflow-wrap:anywhere}
 .row small.mono{font-family:var(--mono);font-weight:400;color:var(--fg2)}
 .prow .chev{color:var(--fg3);font-size:20px;line-height:1;margin-left:-4px}
@@ -312,13 +312,13 @@ dialog::backdrop{background:var(--scrim)}
 
 /* the cable test: the case's port edge, and a cable from one port to the other */
 .ports{display:block;width:100%;height:auto;border-radius:8px;background:#151514}
-.ports .cable{fill:none;stroke:#cbc7bc;stroke-width:7;stroke-linecap:round}
-.ports .flow{fill:none;stroke-width:7;stroke-linecap:round;stroke-dasharray:20 360;opacity:0}
+.ports .cable{fill:none;stroke:#bdb9ae;stroke-width:24;stroke-linecap:round}
+.ports .flow{fill:none;stroke-width:24;stroke-linecap:round;stroke-dasharray:24 356;opacity:0}
 .ports.testing .flow{opacity:1;stroke:var(--lamp-a-top);animation:flow 1.2s linear infinite}
 .ports.pass .cable{stroke:var(--lamp-g)}
 .ports.fail .cable{stroke:var(--lamp-r);animation:blink .4s steps(2) 2}
 @keyframes flow{from{stroke-dashoffset:380}to{stroke-dashoffset:0}}
-@keyframes blink{50%{stroke:#cbc7bc}}
+@keyframes blink{50%{stroke:#bdb9ae}}
 
 /* the board has stopped answering: a note over the page, which keeps what
    it last heard */
@@ -365,13 +365,13 @@ dialog::backdrop{background:var(--scrim)}
   body.setupmode #su-1,body.setupmode #su-2,body.setupmode #su-3{flex:1 1 auto;gap:22px}
   body.setupmode .hero{padding:32px 22px 28px;gap:10px}
   body.setupmode .hero .awm{width:72px;height:124px}
-  body.setupmode .hero .ic{width:76px;height:76px;border-radius:19px}
-  body.setupmode .hero .ic svg{width:44px;height:44px}
+  body.setupmode .hero .ic{width:76px;height:76px}
+  body.setupmode .hero .ic svg{width:48px;height:48px}
   body.setupmode .hero h2{font-size:34px}
   body.setupmode .hero p{font-size:17px}
   body.setupmode .prow{min-height:64px}
-  body.setupmode .prow .ic{width:40px;height:40px;border-radius:9px}
-  body.setupmode .prow .ic svg{width:24px;height:24px}
+  body.setupmode .prow .ic{width:40px;height:40px}
+  body.setupmode .prow .ic svg{width:25px;height:25px}
   body.setupmode .prow .fld{max-width:none;padding:9px 11px;font-size:17px}
   body.setupmode .prow .fld+small{margin-top:8px}
   body.setupmode .prlist .txt{font-size:17px}
