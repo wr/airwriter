@@ -117,7 +117,6 @@ static volatile int s_box_airprint = 1;
 static volatile int s_pre_colour;
 static const char  *s_pre_reason;
 static char         s_pre_message[128];
-static int s_printer_waiters;       // requests blocked in acquire_printer
 static SemaphoreHandle_t s_job_lock;     // guards s_p's jobs, ids, stops and strings
 // Held by the printing job, from Print-Job until its document has printed --
 // well after the reply, which goes back when the upload ends (W-1042).
@@ -284,30 +283,13 @@ static int send_job(work_t *w, int fd, const ipp_req_t *r, const printer_t *p,
     return send_ipp(fd, &e, keep_alive);
 }
 
-// Waits for the printer, as long as a client will reasonably wait for an
-// answer. A second job waits here rather than interleaving its raster with the
-// first.
-//
-// Only one request waits at a time; the rest are told server-error-busy at
-// once. Each waiter pins a worker, and a paused job bigger than the job
-// buffer holds another for minutes; the phone's Get-Job-Attributes polls and
-// Cancel-Job need the rest.
+// The printer is one job's at a time. A second job is told server-error-busy
+// at once and asks again, never kept waiting: it waited here up to 30 s with
+// its document unread, and frames left unread hold internal RAM (W-1076
+// bench, the sink's claim).
 static int acquire_printer(void)
 {
-    if (xSemaphoreTake(s_print_lock, 0) == pdTRUE) return 1;
-
-    xSemaphoreTake(s_job_lock, portMAX_DELAY);
-    int first = (s_printer_waiters == 0);
-    if (first) s_printer_waiters++;
-    xSemaphoreGive(s_job_lock);
-    if (!first) return 0;
-
-    int got = xSemaphoreTake(s_print_lock, pdMS_TO_TICKS(30000)) == pdTRUE;
-
-    xSemaphoreTake(s_job_lock, portMAX_DELAY);
-    s_printer_waiters--;
-    xSemaphoreGive(s_job_lock);
-    return got;
+    return xSemaphoreTake(s_print_lock, 0) == pdTRUE;
 }
 
 // Puts a new job in the slot. The caller holds s_print_lock.
@@ -348,9 +330,9 @@ static int run_document(work_t *w, int fd, const ipp_req_t *r, hbody_t *body,
     if (sink->begin && sink->begin(sink->ctx, r->document_format, kept.name) != ESP_OK)
         ok = 0;
 
-    // begin() can wait out a test page, and a Cancel-Job in that time reached
-    // a sink with nothing started, which begin() then cleared. Pass it on
-    // again now that there is a job to stop.
+    // A sink without claim waits in begin(), and a Cancel-Job in that time
+    // reached a sink with nothing started, which begin() then cleared. Pass it
+    // on again now that there is a job to stop.
     if (ok) {
         xSemaphoreTake(s_job_lock, portMAX_DELAY);
         if (p->job.canceled && sink->cancel) sink->cancel(sink->ctx);
@@ -441,6 +423,13 @@ static int op_print_job(work_t *w, int fd, const ipp_req_t *r, hbody_t *body,
         xSemaphoreGive(s_print_lock);
         hbody_drain(body);
         return send_status(w, fd, r, IPP_STATUS_ERR_NOT_ACCEPTING_JOBS, keep_alive);
+    }
+    // Another link's job, the test page or an update has the printer: busy
+    // too, read to the end so the frames go at once.
+    if (p->sink.claim && !p->sink.claim(p->sink.ctx)) {
+        xSemaphoreGive(s_print_lock);
+        hbody_drain(body);
+        return send_status(w, fd, r, IPP_STATUS_ERR_BUSY, keep_alive);
     }
     int32_t job_id = start_job(p, r);
     return run_document(w, fd, r, body, pre, pre_len, job_id, keep_alive, p);

@@ -420,7 +420,7 @@ class Mac:
         word = st[5] | st[6] << 8 if len(st) >= 7 else -1
         print(f"status word 0x{word:04x}")
         connid = random.randrange(1, 256)
-        for attempt in range(30):
+        for attempt in range(150):      # five minutes, as long as a page can hold the printer
             user, rep = await self.request(net, node, sls, [connid, PAP_OPEN, 0, 0],
                                            bytes([MY_ATP, 1, 0, 0]))
             result = struct.unpack(">H", rep[2:4])[0]
