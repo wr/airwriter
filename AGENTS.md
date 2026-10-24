@@ -184,16 +184,18 @@ What works on `main`:
   `tools/ethertalk/etpeer.py` is a software Mac for the tunnel and the relay (lookup, print).
 - LaserWriters on AppleTalk (`W-1082 AirPrint to LaserWriters on AppleTalk`, SPEC §3.14, design
   `docs/superpowers/specs/2026-10-21-laser-printers-design.md`): **built, tested against a fake
-  LaserWriter only, untested on a real one.** A PostScript LaserWriter heard on the cable, the
-  Wi-Fi link or the tunnel can be shared from the AppleTalk pane's LaserWriters card as a second
-  AirPrint printer (`ipp_server` printer 1 at `ipp/laser`, its own Bonjour name and UUID, the
-  ImageWriter's bytes unchanged). The board queries it (Level 1 PostScript, a binary probe),
-  rips at 300 dpi into Level 1 `imagemask` bands (`ps_page`) and sends them with a PAP client
-  beside the server (`localtalk/pap_client.c`); `components/laser` holds the query, the status
-  words, the caps and UUID, the policy (`lw_core.c`) and the board's side (`laser.c`, NVS
-  `laser`). Sharing is off by default. `GET`/`POST /api/laser`, `/api/status` `laser`. A link
-  answers as the ImageWriter only where its card's switch is on, and runs for a LaserWriter
-  whatever it says. `etpeer.py laserwriter` is the fake.
+  LaserWriter only, untested on a real one.** Since W-1088 the board looks on every running link
+  (at start after 10 s, every 30 s for 5 minutes, then every 5 minutes) and puts each
+  LaserWriter and AppleTalk ImageWriter it hears in the printer list; one answering from another
+  AirWriter's node is skipped. A LaserWriter is queried (Level 1 PostScript, a binary probe) and,
+  once it answers, shared on AirPrint printer 1-3 at `ipp/p<id>` (W-1082's at `ipp/laser`), its
+  own Bonjour name and UUID. Jobs rip at 300 dpi into Level 1 `imagemask` bands (`ps_page`) and
+  go out through one PAP client beside the server (`localtalk/pap_client.c`); `components/laser`
+  holds the query, the status words, the caps and UUID, the policy (`lw_core.c`: lookups,
+  status in turn, queries) and the board's side (`laser.c`). `GET /api/laser` is diagnostics
+  (heard, targets, the last job's figures); the page reads `/api/printers`. A link answers as
+  the ImageWriter only where its card's switch is on, and runs for a printer in the list
+  whatever it says. `etpeer.py laserwriter` is the fake (`--also NAME` for a second).
 
 **Enclosure** (`enclosure/`, in use on board 1): tray (print in PETG with Arachne walls;
 every wall 1.70 below the rim, one thickness all round so no lines show up the outside; the

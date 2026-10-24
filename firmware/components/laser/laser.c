@@ -1,11 +1,13 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// A LaserWriter shared as a second AirPrint printer (W-1082); see laser.h.
+// The AppleTalk printers (W-1082, W-1088); see laser.h.
 //
 // Locks, in the only order they are taken: s_client_mx (who uses the PAP
 // client, and which link it rides), then a link's own lock (localtalk_locked,
 // ethertalk_locked), then s_mu (everything else here). The client's callbacks
 // run on a link's task under that link's lock, so they take s_mu alone and
-// never call out: what they learn the laser task acts on.
+// never call out: what they learn the laser task acts on. The printer list's
+// callbacks (laser_cfg_t) are called with none of these held; it may call in
+// here holding its own lock, never the other way round.
 #include "laser.h"
 #include "lw_core.h"
 #include "lw_query.h"
@@ -29,13 +31,16 @@
 
 static const char *TAG = "laser";
 
-#ifndef CONFIG_AIRWRITER_LASER_UUID_EPOCH
-#define CONFIG_AIRWRITER_LASER_UUID_EPOCH 1
-#endif
 #define STALL_MS   (CONFIG_AIRWRITER_STALL_ABORT * 1000u)
 #define SPOOL      (16 * 1024)       // between the rip and the client: 4 SendData answers
 #define QUERY_BUSY_MS 60000          // a query waits out a busy printer this long
 #define INFO_VER   1
+// The first look waits for Wi-Fi and Infinite Mac's TLS handshake to settle:
+// lookups and their answers take Wi-Fi buffers from internal RAM, which the
+// handshake's AES needs too (board 1, W-1088: it failed once at boot). Each
+// look sends its three types this far apart.
+#define FIRST_LOOK_MS 10000
+#define LOOK_STEP_MS  300
 
 enum { USE_NONE, USE_QUERY, USE_JOB };
 
@@ -44,35 +49,43 @@ static SemaphoreHandle_t s_mu, s_client_mx, s_ended_sem;
 static TaskHandle_t      s_task;
 static int               s_started;
 
+// A target as the board keeps it, beside lw_core's t[] of the same index.
+typedef struct {
+    uint8_t     id, kind;
+    int8_t      where, slot;
+    uint8_t     name[NBP_NAME_MAX + 1];
+    char        name_utf8[3 * NBP_NAME_MAX + 1];
+    char        dither[12];
+    uint8_t     gain, have_info;
+    lw_info_t   info;
+    lw_caps_t   caps;
+    // What its slot was last told (the laser task's).
+    int8_t      pushed_slot, pushed_state, pushed_busy;
+    const char *pushed_reason;
+    char        pushed_msg[240];
+} tgt_t;
+
 // The bulk of this file's state lives in PSRAM (laser_start allocates it):
 // Wi-Fi and lwIP take their buffers from internal RAM, and with ~20 KB more
 // of it used every TCP reply over one segment stalled on board 1 (W-1082
 // bench, 2026-10-22), as with the relay's TLS buffers (docs/traps.md).
 typedef struct {
     lwc_t      core;                                // under s_mu
+    tgt_t      tg[LWC_TARGETS];                     // under s_mu
+    tgt_t      was[LWC_TARGETS];                    // laser_set_targets' scratch
+    int        n_tg;
+    lw_caps_t  job_caps;                            // the job's, steady while it prints
     lw_parse_t parse;                               // the query's answers (link task, then ours)
-    char       pushed_msg[240];                     // the laser task's
     uint8_t    query[4096];                         // the query job, probe and padding
 } big_t;
 static big_t *s_big;
-#define s_core       (s_big->core)
-#define s_parse      (s_big->parse)
-#define s_pushed_msg (s_big->pushed_msg)
+#define s_core  (s_big->core)
+#define s_tg    (s_big->tg)
+#define s_parse (s_big->parse)
 
 // Under s_mu.
-static int       s_shared;
-static uint8_t   s_name[NBP_NAME_MAX + 1];        // the shared one's NBP name (Pascal)
-static int       s_link = -1;                      // where it was last heard (NVS)
-static char      s_name_utf8[3 * NBP_NAME_MAX + 1];
-static char      s_uuid[46];
-static lw_info_t s_info;
-static int       s_have_info;
-static lw_caps_t s_caps;
-static char      s_dither[12] = "atkinson";
-static int       s_gain;
-static uint64_t  s_card_at;
 static char      s_ps_error[128];
-static char      s_last[48] = "";                   // the last job's end, for the card
+static char      s_last[48] = "";                   // the last job's end
 // Where the last job's time went (W-1082 bench): the rip waiting on a full
 // spool is the link; the printer waiting on us is the rip or the upload.
 typedef struct {
@@ -80,12 +93,15 @@ typedef struct {
 } job_stats_t;
 static job_stats_t s_stats;
 static uint64_t    s_job_t0;
-static int       s_status_idx = -1;                 // the heard[] entry asked last
+static int       s_status_id = -1;                  // whose status was asked last
+static int       s_open_id = -1;                    // whom an OpenConn is for
+static int       s_job_id = -1, s_job_slot = -1;    // the job's target and slot
+static char      s_job_name[3 * NBP_NAME_MAX + 1];
+static int       s_look_now;
 
 // The laser task's.
-static int       s_advertised, s_readvertise, s_pc_link = -1, s_pushed_state = -1, s_pushed_busy;
-static const char *s_pushed_reason;
-static uint8_t   s_query_name[NBP_NAME_MAX + 1];    // whom the query in flight asked (review M12)
+static int       s_pc_link = -1;
+static int       s_query_id = -1;                   // whom the query in flight asked (review M12)
 // A job's OpenConn, run on the laser task (its stack is sized for the send
 // path; an IPP worker's is not: review I5).
 static volatile int s_open_req, s_open_rc;
@@ -120,103 +136,11 @@ static const char *link_name(int link)
     }
 }
 
-// ------------------------------------------------------------- NVS
+static void lock(void)   { xSemaphoreTake(s_mu, portMAX_DELAY); }
+static void unlock(void) { xSemaphoreGive(s_mu); }
 
-static void nvs_save_share(void)
-{
-    nvs_handle_t h;
-    if (nvs_open("laser", NVS_READWRITE, &h) != ESP_OK) return;
-    nvs_set_u8(h, "share", (uint8_t)s_shared);
-    nvs_set_blob(h, "name", s_name, 1 + (size_t)s_name[0]);
-    nvs_set_u8(h, "link", (uint8_t)(s_link < 0 ? 0xFF : s_link));
-    if (!s_have_info) nvs_erase_key(h, "info");
-    nvs_commit(h);
-    nvs_close(h);
-}
-
-static void nvs_save_info(void)
-{
-    struct { uint8_t ver; lw_info_t info; } b = { INFO_VER, s_info };
-    nvs_handle_t h;
-    if (nvs_open("laser", NVS_READWRITE, &h) != ESP_OK) return;
-    nvs_set_blob(h, "info", &b, sizeof b);
-    nvs_commit(h);
-    nvs_close(h);
-}
-
-static void nvs_save_screen(void)
-{
-    nvs_handle_t h;
-    if (nvs_open("laser", NVS_READWRITE, &h) != ESP_OK) return;
-    nvs_set_str(h, "dither", s_dither);
-    nvs_set_u8(h, "gain", (uint8_t)s_gain);
-    nvs_commit(h);
-    nvs_close(h);
-}
-
-static void nvs_load(void)
-{
-    nvs_handle_t h;
-    if (nvs_open("laser", NVS_READONLY, &h) != ESP_OK) return;
-    uint8_t v = 0;
-    if (nvs_get_u8(h, "share", &v) == ESP_OK) s_shared = v;
-    size_t n = sizeof s_name;
-    if (nvs_get_blob(h, "name", s_name, &n) != ESP_OK || !n || s_name[0] + 1u != n) s_shared = 0;
-    if (nvs_get_u8(h, "link", &v) == ESP_OK) s_link = v == 0xFF ? -1 : v;
-    struct { uint8_t ver; lw_info_t info; } b;
-    n = sizeof b;
-    if (nvs_get_blob(h, "info", &b, &n) == ESP_OK && n == sizeof b && b.ver == INFO_VER) {
-        s_info = b.info;
-        s_have_info = 1;
-    }
-    n = sizeof s_dither;
-    nvs_get_str(h, "dither", s_dither, &n);
-    if (nvs_get_u8(h, "gain", &v) == ESP_OK) s_gain = v;
-    nvs_close(h);
-}
-
-int laser_shared_saved(void)
-{
-    nvs_handle_t h;
-    uint8_t v = 0;
-    if (nvs_open("laser", NVS_READONLY, &h) != ESP_OK) return 0;
-    nvs_get_u8(h, "share", &v);
-    nvs_close(h);
-    return v;
-}
-
-int laser_saved(laser_saved_t *out)
-{
-    memset(out, 0, sizeof *out);
-    out->link = -1;
-    snprintf(out->dither, sizeof out->dither, "atkinson");
-    nvs_handle_t h;
-    if (nvs_open("laser", NVS_READONLY, &h) != ESP_OK) return -1;
-    uint8_t v = 0, share = 0;
-    nvs_get_u8(h, "share", &share);
-    size_t n = sizeof out->name;
-    if (nvs_get_blob(h, "name", out->name, &n) != ESP_OK || !n || out->name[0] + 1u != n) share = 0;
-    if (nvs_get_u8(h, "link", &v) == ESP_OK) out->link = v == 0xFF ? -1 : v;
-    struct { uint8_t ver; lw_info_t info; } b;
-    n = sizeof b;
-    if (nvs_get_blob(h, "info", &b, &n) == ESP_OK && n == sizeof b && b.ver == INFO_VER) {
-        out->info = b.info;
-        out->have_info = 1;
-    }
-    n = sizeof out->dither;
-    nvs_get_str(h, "dither", out->dither, &n);
-    if (nvs_get_u8(h, "gain", &v) == ESP_OK) out->gain = v;
-    nvs_close(h);
-    return share ? 0 : -1;
-}
-
-// The shared printer's name in UTF-8, its UUID and its caps. Under s_mu.
-static void derive(void)
-{
-    nbp_utf8(s_name_utf8, sizeof s_name_utf8, s_name);
-    lw_uuid(s_uuid, s_cfg.mac, CONFIG_AIRWRITER_LASER_UUID_EPOCH, s_name);
-    if (s_have_info) lw_caps_fill(&s_caps, &s_info);
-}
+// The t[] index of target id, or -1. Under s_mu.
+static int ti_of(int id) { return id < 0 ? -1 : lwc_target(&s_core, id); }
 
 // ------------------------------------------------------------- the client's links
 
@@ -299,9 +223,9 @@ static void pc_output(void *ctx, const uint8_t *d, size_t n)
         ESP_LOGI(TAG, "printer: %s", s_line);
         char msg[sizeof s_ps_error];
         if (lw_ps_error(s_line, msg, sizeof msg)) {
-            xSemaphoreTake(s_mu, portMAX_DELAY);
+            lock();
             if (!s_ps_error[0]) memcpy(s_ps_error, msg, sizeof s_ps_error);
-            xSemaphoreGive(s_mu);
+            unlock();
         }
     }
 }
@@ -309,12 +233,12 @@ static void pc_output(void *ctx, const uint8_t *d, size_t n)
 static void pc_status(void *ctx, const uint8_t *pstr)
 {
     (void)ctx;
-    xSemaphoreTake(s_mu, portMAX_DELAY);
-    // A busy OpenConn's status is the shared printer's; a SendStatus answer
-    // is for whichever printer was asked last.
-    int idx = s_pc->phase == PAPC_OPENING ? lwc_view(&s_core, now_ms()).idx : s_status_idx;
-    lwc_status(&s_core, idx, pstr, now_ms());
-    xSemaphoreGive(s_mu);
+    lock();
+    // A busy OpenConn's status is its printer's; a SendStatus answer is for
+    // whichever printer was asked last.
+    int id = s_pc->phase == PAPC_OPENING ? s_open_id : s_status_id;
+    lwc_status(&s_core, ti_of(id), pstr, now_ms());
+    unlock();
 }
 
 static void pc_ended(void *ctx, papc_end_t how)
@@ -333,14 +257,67 @@ static void pc_log(void *ctx, const char *line)
 
 static void found(int link, const nbp_tuple_t *t, const lt_route_t *r)
 {
-    xSemaphoreTake(s_mu, portMAX_DELAY);
+    lock();
     lwc_found(&s_core, t, (uint8_t)link, r, now_ms());
-    xSemaphoreGive(s_mu);
+    unlock();
+}
+
+// ------------------------------------------------------------- targets
+
+void laser_set_targets(const laser_target_t *in, int n)
+{
+    if (!s_started) return;
+    if (n > LWC_TARGETS) n = LWC_TARGETS;
+    lwc_target_in_t ci[LWC_TARGETS];
+    lock();
+    tgt_t *old = s_big->was;
+    int old_n = s_big->n_tg;
+    memcpy(old, s_tg, sizeof s_big->was);
+    for (int k = 0; k < n; k++) {
+        ci[k] = (lwc_target_in_t){ .id = in[k].id, .kind = in[k].kind };
+        memcpy(ci[k].name, in[k].name, sizeof ci[k].name);
+        tgt_t *g = &s_tg[k];
+        memset(g, 0, sizeof *g);
+        g->id = in[k].id;
+        g->kind = in[k].kind;
+        g->where = in[k].where;
+        g->slot = in[k].slot;
+        memcpy(g->name, in[k].name, sizeof g->name);
+        nbp_utf8(g->name_utf8, sizeof g->name_utf8, g->name);
+        snprintf(g->dither, sizeof g->dither, "%s", in[k].dither[0] ? in[k].dither : "atkinson");
+        g->gain = in[k].gain;
+        g->have_info = in[k].have_info;
+        g->info = in[k].info;
+        if (g->have_info) lw_caps_fill(&g->caps, &g->info);
+        g->pushed_slot = -1;                       // its slot hears the whole state again
+        for (int j = 0; j < old_n; j++)
+            if (old[j].id == g->id && old[j].slot == g->slot && g->slot > 0) {
+                g->pushed_slot = old[j].pushed_slot;
+                g->pushed_state = old[j].pushed_state;
+                g->pushed_busy = old[j].pushed_busy;
+                g->pushed_reason = old[j].pushed_reason;
+                memcpy(g->pushed_msg, old[j].pushed_msg, sizeof g->pushed_msg);
+            }
+    }
+    s_big->n_tg = n;
+    lwc_targets(&s_core, ci, n, now_ms());
+    unlock();
+    if (s_task) xTaskNotifyGive(s_task);
+}
+
+void laser_look_now(void)
+{
+    if (!s_started) return;
+    lock();
+    lwc_look_now(&s_core, now_ms());
+    s_look_now = 1;
+    unlock();
+    if (s_task) xTaskNotifyGive(s_task);
 }
 
 // ------------------------------------------------------------- the query
 
-static void query_start(int link, const lt_route_t *r)
+static void query_start(int id, int link, const lt_route_t *r)
 {
     uint8_t *q = s_big->query;
     size_t n = lw_query_job(q, sizeof s_big->query);
@@ -357,45 +334,45 @@ static void query_start(int link, const lt_route_t *r)
     s_ended = -1;
     xSemaphoreTake(s_ended_sem, 0);
     s_use = USE_QUERY;
-    xSemaphoreTake(s_mu, portMAX_DELAY);
-    s_status_idx = lwc_view(&s_core, now_ms()).idx;
-    memcpy(s_query_name, s_name, sizeof s_query_name);
-    xSemaphoreGive(s_mu);
+    s_query_id = id;
+    lock();
+    s_status_id = s_open_id = id;
+    unlock();
     int rc = call(OP_OPEN, r, QUERY_BUSY_MS);
     xSemaphoreGive(s_client_mx);
     if (rc) {
         s_use = USE_NONE;
-        xSemaphoreTake(s_mu, portMAX_DELAY);
-        lwc_queried(&s_core, 0, now_ms());
-        xSemaphoreGive(s_mu);
+        lock();
+        lwc_queried(&s_core, ti_of(id), 0, now_ms());
+        unlock();
+        if (s_cfg.queried) s_cfg.queried(id, 0, NULL);
         return;
     }
-    ESP_LOGI(TAG, "asking the LaserWriter what it is");
+    ESP_LOGI(TAG, "asking printer %d what it is", id);
 }
 
 static void query_done(void)
 {
     int ok = s_ended == PAPC_END_OK && s_parse.info.complete;
-    xSemaphoreTake(s_mu, portMAX_DELAY);
-    // Another LaserWriter shared since it was asked: its answers are not
-    // this one's (a new query is already wanted for it).
-    if (memcmp(s_query_name, s_name, 1 + (size_t)s_name[0])) {
-        xSemaphoreGive(s_mu);
-        ESP_LOGW(TAG, "query: answered for a LaserWriter no longer shared; dropped");
+    int id = s_query_id;
+    lock();
+    int ti = ti_of(id);
+    // Taken off the list since it was asked: its answers go nowhere (review M12).
+    if (ti < 0) {
+        unlock();
+        ESP_LOGW(TAG, "query: answered for printer %d, no longer in the list; dropped", id);
         s_use = USE_NONE;
         return;
     }
     if (ok) {
-        int changed = !s_have_info || memcmp(&s_info, &s_parse.info, sizeof s_info);
-        s_info = s_parse.info;
-        s_have_info = 1;
-        derive();
-        if (changed) s_readvertise = 1;
+        tgt_t *g = &s_tg[ti];
+        g->info = s_parse.info;
+        g->have_info = 1;
+        lw_caps_fill(&g->caps, &g->info);
     }
-    lwc_queried(&s_core, ok, now_ms());
-    xSemaphoreGive(s_mu);
+    lwc_queried(&s_core, ti, ok, now_ms());
+    unlock();
     if (ok) {
-        nvs_save_info();
         ESP_LOGI(TAG, "query: %s, PostScript %s level %u, %s, %u dpi, %s", s_parse.info.product,
                  s_parse.info.version, s_parse.info.level, s_parse.info.binary ? "binary" : "hex",
                  s_parse.info.dpi, lw_page_name(s_parse.info.page));
@@ -404,46 +381,78 @@ static void query_done(void)
     }
     ESP_LOGI(TAG, "laser task: %u bytes of stack to spare", (unsigned)uxTaskGetStackHighWaterMark(NULL));
     s_use = USE_NONE;
+    if (s_cfg.queried) s_cfg.queried(id, ok, ok ? &s_parse.info : NULL);
 }
 
 // ------------------------------------------------------------- the task
 
-static void advertise(void)
+static void links(void)
 {
-    xSemaphoreTake(s_mu, portMAX_DELAY);
-    int want = s_shared && s_have_info;
-    ipp_printer_cfg_t c = {
-        .resource = IPP_RESOURCE_LASER, .name = s_name_utf8, .info = s_name_utf8,
-        .uuid = s_uuid, .caps = &s_caps.caps, .icon = "laser", .sink = s_cfg.sink,
-    };
-    xSemaphoreGive(s_mu);
-    if (want && (!s_advertised || s_readvertise)) {
-        // Strings and caps are copied under ipp_server's own lock.
-        if (ipp_server_set_printer(1, &c) == ESP_OK) {
-            s_advertised = 1;
-            s_readvertise = 0;
-            s_pushed_state = -1;
-        }
-    } else if (!want && s_advertised) {
-        if (ipp_server_set_printer(1, NULL) == ESP_OK) s_advertised = 0;
+    int want[3] = { 0, 0, 0 };
+    lock();
+    for (int k = 0; k < s_big->n_tg; k++) {
+        int w = s_tg[k].where;
+        want[0] |= w == AT_LINK_CABLE;
+        want[1] |= w == AT_LINK_TUNNEL;
+        want[2] |= w == AT_LINK_RADIO;
     }
-}
-
-static void links(int shared_link, int card_open)
-{
-    int want[3] = {
-        card_open || (s_shared && shared_link == AT_LINK_CABLE),
-        s_shared && shared_link == AT_LINK_TUNNEL,
-        s_shared && shared_link == AT_LINK_RADIO,
-    };
+    unlock();
     if (!memcmp(want, s_links, sizeof want)) return;
     memcpy(s_links, want, sizeof want);
     if (s_cfg.links) s_cfg.links(want[0], want[1], want[2]);
 }
 
+// Each shared target's slot hears its whole state: a fault, a warning, busy
+// (review I3). The laser task's.
+static void push_states(uint64_t now)
+{
+    int ready = -1;
+    for (int k = 0; k < LWC_TARGETS; k++) {
+        lock();
+        if (k >= s_big->n_tg) { unlock(); break; }
+        tgt_t *g = &s_tg[k];
+        lwc_view_t v = lwc_view(&s_core, k, now);
+        int slot = g->slot;
+        if (slot > 0 && ready < 0) ready = v.online && v.ipp_state != LWC_STOPPED;
+        int push = slot > 0 && (g->pushed_slot != slot || v.ipp_state != g->pushed_state ||
+                                v.reason != g->pushed_reason || v.busy != g->pushed_busy ||
+                                strcmp(v.message, g->pushed_msg));
+        char msg[sizeof g->pushed_msg];
+        if (push) {
+            g->pushed_slot = (int8_t)slot;
+            g->pushed_state = (int8_t)v.ipp_state;
+            g->pushed_reason = v.reason;
+            g->pushed_busy = (int8_t)v.busy;
+            snprintf(g->pushed_msg, sizeof g->pushed_msg, "%s", v.message);
+            memcpy(msg, g->pushed_msg, sizeof msg);
+        }
+        unlock();
+        if (push) ipp_server_set_state_for(slot, v.reason, msg, v.ipp_state == LWC_STOPPED, v.busy);
+    }
+    if (ready != s_ready) {
+        s_ready = ready;
+        if (s_cfg.changed) s_cfg.changed();
+    }
+}
+
+// A look's lookups, one type at a time (the laser task's).
+static void look_step(int *step, uint64_t *at, uint64_t now)
+{
+    static const char *const types[] = { "AirWriter", "LaserWriter", "ImageWriter" };
+    if (!*step || now < *at) return;
+    // AirWriters first: a printer another AirWriter relays answers from its node.
+    localtalk_lookup(types[*step - 1]);
+    ethertalk_lookup(types[*step - 1]);
+    *step = *step < 3 ? *step + 1 : 0;
+    *at = now + LOOK_STEP_MS;
+}
+
 static void laser_task(void *arg)
 {
     (void)arg;
+    int step = 0;
+    uint64_t step_at = 0;
+    vTaskDelay(pdMS_TO_TICKS(FIRST_LOOK_MS));
     for (;;) {
         ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(100));
         uint64_t now = now_ms();
@@ -465,64 +474,67 @@ static void laser_task(void *arg)
         }
         if (s_use == USE_QUERY && s_ended >= 0) query_done();
 
-        xSemaphoreTake(s_mu, portMAX_DELAY);
+        lock();
         lwc_want_t w = lwc_tick(&s_core, now);
-        lwc_view_t v = lwc_view(&s_core, now);
-        int card_open = s_card_at && now - s_card_at < LW_CARD_MS;
-        lt_route_t shared_r = { 0 }, status_r = { 0 };
-        int shared_link = -1, status_link = -1, last_link = s_link;
-        if (v.idx >= 0) {
-            shared_r = s_core.heard[v.idx].route;
-            shared_link = s_core.heard[v.idx].link;
-            if (s_link != shared_link) {
-                s_link = shared_link;
-                xSemaphoreGive(s_mu);
-                nvs_save_share();
-                xSemaphoreTake(s_mu, portMAX_DELAY);
+        lt_route_t status_r = { 0 }, query_r = { 0 };
+        int status_link = -1, query_link = -1, query_id = -1, job_link = -1;
+        if (w.status_ti != LWC_NONE) {
+            int h = lwc_view(&s_core, w.status_ti, now).idx;
+            if (h >= 0) {
+                status_r = s_core.heard[h].route;
+                status_link = s_core.heard[h].link;
+                s_status_id = s_core.t[w.status_ti].id;
             }
         }
-        if (w.status_idx != LWC_NONE) {
-            status_r = s_core.heard[w.status_idx].route;
-            status_link = s_core.heard[w.status_idx].link;
-            s_status_idx = w.status_idx;
+        if (w.query_ti != LWC_NONE) {
+            int h = lwc_view(&s_core, w.query_ti, now).idx;
+            if (h >= 0) {
+                query_r = s_core.heard[h].route;
+                query_link = s_core.heard[h].link;
+                query_id = s_core.t[w.query_ti].id;
+            }
         }
-        xSemaphoreGive(s_mu);
+        if (s_job_id >= 0) {
+            int h = lwc_view(&s_core, ti_of(s_job_id), now).idx;
+            if (h >= 0) job_link = s_core.heard[h].link;
+        }
+        uint8_t tell_link = 0, tell_name[NBP_NAME_MAX + 1], tell_type[NBP_NAME_MAX + 1];
+        int tell = w.tell != LWC_NONE;
+        if (tell) {
+            const lw_heard_t *h = &s_core.heard[w.tell];
+            tell_link = h->link;
+            memcpy(tell_name, h->name, sizeof tell_name);
+            nbp_name(tell_type, h->kind == LWC_KIND_IW ? "ImageWriter" : "LaserWriter");
+        }
+        unlock();
 
-        links(shared_link >= 0 ? shared_link : last_link, card_open);
+        links();
         if (w.look) {
-            localtalk_lookup("LaserWriter");
-            ethertalk_lookup("LaserWriter");
+            step = 1;
+            step_at = now;
+        }
+        look_step(&step, &step_at, now);
+        if (tell) {
+            char n[3 * NBP_NAME_MAX + 1];
+            nbp_utf8(n, sizeof n, tell_name);
+            ESP_LOGI(TAG, "heard \"%s\" (%s) on the %s", n,
+                     tell_type[1] == 'I' ? "ImageWriter" : "LaserWriter", link_name(tell_link));
+            if (s_cfg.found) s_cfg.found(tell_link, tell_name, tell_type);
         }
         if (status_link >= 0) {
             xSemaphoreTake(s_client_mx, portMAX_DELAY);
-            // The client rides the shared printer's link; it moves to ask
-            // another only while it has no connection.
+            // The client moves to ask another only while it has no connection.
             if (s_use == USE_NONE) ride(status_link);
             if (status_link == s_pc_link) call(OP_STATUS, &status_r, 0);
             xSemaphoreGive(s_client_mx);
         }
-        if (s_use == USE_NONE && shared_link >= 0) {
+        if (s_use == USE_NONE && job_link >= 0) {
             xSemaphoreTake(s_client_mx, portMAX_DELAY);
-            if (s_use == USE_NONE && status_link < 0) ride(shared_link);
+            if (s_use == USE_NONE) ride(job_link);
             xSemaphoreGive(s_client_mx);
         }
-        if (w.query && shared_link >= 0) query_start(shared_link, &shared_r);
-
-        advertise();
-        // The phone hears the whole state: a fault, a warning, busy (review I3).
-        if (s_advertised && (v.ipp_state != s_pushed_state || v.reason != s_pushed_reason ||
-                             v.busy != s_pushed_busy || strcmp(v.message, s_pushed_msg))) {
-            ipp_server_set_state_for(1, v.reason, v.message, v.ipp_state == LWC_STOPPED, v.busy);
-            s_pushed_state = v.ipp_state;
-            s_pushed_reason = v.reason;
-            s_pushed_busy = v.busy;
-            snprintf(s_pushed_msg, sizeof s_pushed_msg, "%s", v.message);
-        }
-        int ready = !v.shared ? -1 : v.online && v.ipp_state != LWC_STOPPED;
-        if (ready != s_ready) {
-            s_ready = ready;
-            if (s_cfg.changed) s_cfg.changed();
-        }
+        if (query_link >= 0) query_start(query_id, query_link, &query_r);
+        push_states(now);
     }
 }
 
@@ -548,26 +560,47 @@ esp_err_t laser_start(const laser_cfg_t *cfg)
     papc_init(s_pc, &po, (uint32_t)esp_timer_get_time() | 1);
 
     lwc_init(&s_core, now_ms());
-    nvs_load();
-    derive();
-    if (s_shared) lwc_share(&s_core, s_name, now_ms());
     localtalk_set_found(found);
     ethertalk_set_found(found);
 
     // 6 KB: the PAP send path (frames built on the stack, full printf in the
-    // log) and mDNS registration run here (review I5).
+    // log) and mDNS state pushes run here (review I5).
     if (xTaskCreate(laser_task, "laser", 6144, NULL, 3, &s_task) != pdPASS) return ESP_ERR_NO_MEM;
     s_started = 1;
-    ESP_LOGI(TAG, "LaserWriters: %s%s", s_shared ? "sharing " : "none shared",
-             s_shared ? s_name_utf8 : "");
     return ESP_OK;
 }
 
-int laser_shared(void) { return s_started && s_shared; }
+int laser_shared(void)
+{
+    if (!s_started) return 0;
+    int any = 0;
+    lock();
+    for (int k = 0; k < s_big->n_tg; k++) any |= s_tg[k].slot > 0;
+    unlock();
+    return any;
+}
 
 int laser_ready(void) { return s_started ? s_ready : -1; }
 
 int laser_job_active(void) { return s_use == USE_JOB; }
+
+int laser_state(int id, laser_state_t *out)
+{
+    memset(out, 0, sizeof *out);
+    if (!s_started) return -1;
+    lock();
+    int ti = ti_of(id);
+    if (ti >= 0) {
+        lwc_view_t v = lwc_view(&s_core, ti, now_ms());
+        out->online = (uint8_t)v.online;
+        out->ready = v.online && v.ipp_state != LWC_STOPPED;
+        out->stopped = v.online && v.ipp_state == LWC_STOPPED;
+        out->busy = v.busy;
+        out->printing = s_core.t[ti].printing;
+    }
+    unlock();
+    return ti >= 0 ? 0 : -1;
+}
 
 // ------------------------------------------------------------- jobs
 
@@ -598,27 +631,45 @@ static void spool_write(void *ctx, const uint8_t *b, size_t n)
     if (s_job_failed) job_pipe_abort();
 }
 
-int laser_job_begin(const char *name, job_pipe_target_t *t)
+int laser_job_begin(int id, const char *name, job_pipe_target_t *t)
 {
-    if (!s_started || !s_shared || !s_advertised) return -1;
+    if (!s_started) return -1;
     // A query in flight is short: wait for it, as a second job would.
     for (int i = 0; i < 600 && s_use != USE_NONE; i++) vTaskDelay(pdMS_TO_TICKS(100));
 
     xSemaphoreTake(s_client_mx, portMAX_DELAY);
-    xSemaphoreTake(s_mu, portMAX_DELAY);
-    lwc_view_t v = lwc_view(&s_core, now_ms());
+    lock();
+    int ti = ti_of(id);
+    tgt_t *g = ti >= 0 ? &s_tg[ti] : NULL;
+    lwc_view_t v = lwc_view(&s_core, ti, now_ms());
     lt_route_t r = v.idx >= 0 ? s_core.heard[v.idx].route : (lt_route_t){ 0 };
     int link = v.idx >= 0 ? s_core.heard[v.idx].link : -1;
-    ps_cfg_t pc = { .out = spool_write, .binary = s_info.binary,
-                    .paper_h_pt = lw_paper_h_pt(s_info.page), .title = name };
-    ht_algo_t algo;
-    if (ht_algo_from_name(s_dither, &algo)) algo = HT_ATKINSON;
-    int gain = s_gain;
+    int ok = g && g->kind == LASER_KIND_LW && g->slot > 0 && g->have_info && link >= 0;
+    ps_cfg_t pc = { .out = spool_write };
+    ht_algo_t algo = HT_ATKINSON;
+    int gain = 0;
+    if (ok) {
+        lw_caps_fill(&s_big->job_caps, &g->info);
+        pc.binary = g->info.binary;
+        pc.paper_h_pt = lw_paper_h_pt(g->info.page);
+        if (ht_algo_from_name(g->dither, &algo)) algo = HT_ATKINSON;
+        gain = g->gain;
+        s_job_id = id;
+        s_job_slot = g->slot;
+        snprintf(s_job_name, sizeof s_job_name, "%s", g->name_utf8);
+        s_status_id = s_open_id = id;
+    }
     s_ps_error[0] = '\0';
-    s_status_idx = v.idx;
-    xSemaphoreGive(s_mu);
-    if (s_use != USE_NONE || link < 0) {
-        ESP_LOGW(TAG, "job \"%s\": %s", name, link < 0 ? "the LaserWriter is not heard" : "busy");
+    unlock();
+    pc.title = name;
+    if (!ok || s_use != USE_NONE) {
+        ESP_LOGW(TAG, "job \"%s\" for printer %d: %s", name, id,
+                 !g ? "not in the list" : link < 0 ? "not heard" : !ok ? "not shared" : "busy");
+        if (ok) {
+            lock();
+            s_job_id = s_job_slot = -1;
+            unlock();
+        }
         xSemaphoreGive(s_client_mx);
         return -1;
     }
@@ -635,6 +686,9 @@ int laser_job_begin(const char *name, job_pipe_target_t *t)
     pc.creator = creator;
     s_ps = ps_new(&pc);
     if (!s_ps) {
+        lock();
+        s_job_id = s_job_slot = -1;
+        unlock();
         xSemaphoreGive(s_client_mx);
         return -1;
     }
@@ -644,9 +698,9 @@ int laser_job_begin(const char *name, job_pipe_target_t *t)
     heap_caps_monitor_local_minimum_free_size_start();
     ps_stage(s_ps, &s_stage);
     ps_job_begin(s_ps);                            // the header, into the empty spool
-    xSemaphoreTake(s_mu, portMAX_DELAY);
-    lwc_job(&s_core, 1);
-    xSemaphoreGive(s_mu);
+    lock();
+    lwc_job(&s_core, ti, 1);
+    unlock();
     xSemaphoreGive(s_client_mx);
     // OpenConn on the laser task, which owns the client's sends.
     xSemaphoreTake(s_open_sem, 0);
@@ -661,16 +715,18 @@ int laser_job_begin(const char *name, job_pipe_target_t *t)
         ps_free(s_ps);
         s_ps = NULL;
         s_use = USE_NONE;
-        xSemaphoreTake(s_mu, portMAX_DELAY);
-        lwc_job(&s_core, 0);
-        xSemaphoreGive(s_mu);
+        lock();
+        lwc_job(&s_core, ti_of(id), 0);
+        s_job_id = s_job_slot = -1;
+        unlock();
         return -1;
     }
-    t->caps = &s_caps.caps;
+    // Its own copy, made above: the list may give the targets again while the rip runs.
+    t->caps = &s_big->job_caps.caps;
     t->stage = &s_stage;
     t->dither = algo;
     t->gain = gain;
-    ESP_LOGI(TAG, "job \"%s\" to %s, %s", name, s_name_utf8, s_info.binary ? "binary" : "hex");
+    ESP_LOGI(TAG, "job \"%s\" to %s, %s", name, s_job_name, pc.binary ? "binary" : "hex");
     return 0;
 }
 
@@ -695,16 +751,18 @@ int laser_job_end(int ok)
     s_stats.resends = s_pc->n_resends;
     s_stats.ram_low = (uint32_t)heap_caps_get_minimum_free_size(MALLOC_CAP_INTERNAL);
     heap_caps_monitor_local_minimum_free_size_stop();
-    xSemaphoreTake(s_mu, portMAX_DELAY);
+    lock();
     char err[sizeof s_ps_error];
     memcpy(err, s_ps_error, sizeof err);
     int printed = ok && !s_job_failed && s_ended == PAPC_END_OK && !err[0];
     snprintf(s_last, sizeof s_last, "%s, %lu bytes",
              printed ? "printed" : err[0] ? "PostScript error" : s_ended == PAPC_END_CANCELED
              ? "canceled" : "not printed", (unsigned long)s_sent);
-    lwc_job(&s_core, 0);
-    xSemaphoreGive(s_mu);
-    if (err[0]) ipp_server_job_message_for(1, err);
+    lwc_job(&s_core, ti_of(s_job_id), 0);
+    int slot = s_job_slot;
+    s_job_id = s_job_slot = -1;
+    unlock();
+    if (err[0] && slot > 0) ipp_server_job_message_for(slot, err);
     ps_free(s_ps);
     s_ps = NULL;
     s_use = USE_NONE;
@@ -737,132 +795,101 @@ static size_t esc(char *out, size_t cap, const char *s)
 
 static const char *state_name(const lwc_view_t *v)
 {
-    return !v->shared ? "none" : !v->online ? "offline" : v->ipp_state == LWC_STOPPED ? "stopped"
+    return !v->online ? "offline" : v->ipp_state == LWC_STOPPED ? "stopped"
          : v->ipp_state == LWC_PROCESSING ? "printing" : "idle";
 }
 
 void laser_json(char *buf, size_t cap)
 {
     if (!s_started) {
-        snprintf(buf, cap, "{\"heard\":[],\"shared\":null}");
+        snprintf(buf, cap, "{\"heard\":[],\"targets\":[]}");
         return;
     }
     uint64_t now = now_ms();
-    xSemaphoreTake(s_mu, portMAX_DELAY);
-    lwc_card(&s_core, now);                        // the card is open: look, and keep looking
-    s_card_at = now ? now : 1;
-    lwc_view_t v = lwc_view(&s_core, now);
+    lock();
     size_t k = (size_t)snprintf(buf, cap, "{\"heard\":[");
     int first = 1;
     for (int i = 0; i < LW_HEARD_MAX && k < cap; i++) {
         const lw_heard_t *h = &s_core.heard[i];
         if (!h->used) continue;
-        char name[3 * NBP_NAME_MAX + 1], e_name[200], e_status[200];
+        char name[3 * NBP_NAME_MAX + 1], e_name[200];
         nbp_utf8(name, sizeof name, h->name);
         esc(e_name, sizeof e_name, name);
-        esc(e_status, sizeof e_status, h->status);
         k += (size_t)snprintf(buf + k, cap - k,
-            "%s{\"name\":\"%s\",\"link\":\"%s\",\"status\":\"%s\",\"ago_s\":%lu,\"shared\":%s}",
-            first ? "" : ",", e_name, link_name(h->link), e_status,
-            (unsigned long)((now - h->heard) / 1000), i == v.idx ? "true" : "false");
+            "%s{\"name\":\"%s\",\"kind\":\"%s\",\"link\":\"%s\",\"ago_s\":%lu,\"airwriter\":%s}",
+            first ? "" : ",", e_name, h->kind == LWC_KIND_IW ? "imagewriter" : "laserwriter",
+            link_name(h->link), (unsigned long)((now - h->heard) / 1000), h->aw ? "true" : "false");
         first = 0;
     }
-    if (k >= cap) goto full;
-    if (!s_shared) {
-        k += (size_t)snprintf(buf + k, cap - k, "],\"shared\":null,\"looking\":true}");
-    } else {
-        char e_name[200], e_product[200], e_msg[200], e_last[100];
-        esc(e_name, sizeof e_name, s_name_utf8);
-        esc(e_product, sizeof e_product, s_have_info ? s_info.product : "");
+    if (k < cap) k += (size_t)snprintf(buf + k, cap - k, "],\"targets\":[");
+    for (int i = 0; i < s_big->n_tg && k < cap; i++) {
+        const tgt_t *g = &s_tg[i];
+        lwc_view_t v = lwc_view(&s_core, i, now);
+        char e_name[200], e_msg[300], e_product[200];
+        esc(e_name, sizeof e_name, g->name_utf8);
         esc(e_msg, sizeof e_msg, v.message);
+        esc(e_product, sizeof e_product, g->have_info ? g->info.product : "");
+        k += (size_t)snprintf(buf + k, cap - k,
+            "%s{\"id\":%u,\"name\":\"%s\",\"slot\":%d,\"link\":\"%s\",\"state\":\"%s\","
+            "\"reason\":\"%s\",\"message\":\"%s\",\"product\":\"%s\",\"queried\":%s}",
+            i ? "," : "", g->id, e_name, g->slot,
+            link_name(v.idx >= 0 ? s_core.heard[v.idx].link : g->where), state_name(&v),
+            v.reason, e_msg, e_product, s_core.t[i].queried ? "true" : "false");
+    }
+    if (k < cap) {
+        char e_last[100];
         esc(e_last, sizeof e_last, s_last);
         k += (size_t)snprintf(buf + k, cap - k,
-            "],\"looking\":true,\"shared\":{\"name\":\"%s\",\"link\":\"%s\",\"online\":%s,"
-            "\"advertised\":%s,\"queried\":%s,\"state\":\"%s\",\"reason\":\"%s\",\"message\":\"%s\","
-            "\"product\":\"%s\",\"version\":\"%s\",\"level\":%u,\"binary\":%s,\"page\":\"%s\","
-            "\"dpi\":%u,\"dither\":\"%s\",\"gain\":%d,\"uuid\":\"%s\"},"
-            "\"job\":{\"active\":%s,\"sent\":%lu,\"last\":\"%s\",\"ms\":%lu,"
+            "],\"job\":{\"active\":%s,\"sent\":%lu,\"last\":\"%s\",\"ms\":%lu,"
             "\"rip_wait_ms\":%lu,\"printer_wait_ms\":%lu,\"reads\":%lu,\"resends\":%lu,"
             "\"ram_low\":%lu}}",
-            e_name, link_name(s_link), v.online ? "true" : "false",
-            s_advertised ? "true" : "false", s_have_info ? "true" : "false", state_name(&v),
-            v.reason, e_msg, e_product, s_have_info ? s_info.version : "",
-            s_have_info ? s_info.level : 0, s_have_info && s_info.binary ? "true" : "false",
-            lw_page_name(s_have_info ? s_info.page : LW_LETTER), s_have_info ? s_info.dpi : 300,
-            s_dither, s_gain, s_uuid, s_use == USE_JOB ? "true" : "false",
-            (unsigned long)s_sent, e_last, (unsigned long)s_stats.ms,
-            (unsigned long)s_stats.rip_wait_ms, (unsigned long)s_stats.printer_wait_ms,
-            (unsigned long)s_stats.reads, (unsigned long)s_stats.resends,
-            (unsigned long)s_stats.ram_low);
+            s_use == USE_JOB ? "true" : "false", (unsigned long)s_sent, e_last,
+            (unsigned long)s_stats.ms, (unsigned long)s_stats.rip_wait_ms,
+            (unsigned long)s_stats.printer_wait_ms, (unsigned long)s_stats.reads,
+            (unsigned long)s_stats.resends, (unsigned long)s_stats.ram_low);
     }
-full:
-    xSemaphoreGive(s_mu);
-    if (k >= cap && cap > 2) snprintf(buf, cap, "{\"heard\":[],\"shared\":null,\"full\":true}");
-    if (s_task) xTaskNotifyGive(s_task);
-}
-
-int laser_set(int unshare, const char *share, const char *dither, int gain)
-{
-    if (!s_started) return 400;
-    if (s_use == USE_JOB && (unshare || share)) return 409;
-    if (dither) {
-        ht_algo_t a;
-        if (ht_algo_from_name(dither, &a)) return 400;
-    }
-    if (gain > 45) return 400;
-    xSemaphoreTake(s_mu, portMAX_DELAY);
-    int status = 0;
-    if (share) {
-        int found_i = -1;
-        for (int i = 0; i < LW_HEARD_MAX && found_i < 0; i++) {
-            char name[3 * NBP_NAME_MAX + 1];
-            if (!s_core.heard[i].used) continue;
-            nbp_utf8(name, sizeof name, s_core.heard[i].name);
-            if (!strcmp(name, share)) found_i = i;
-        }
-        if (found_i < 0) {
-            status = 400;
-        } else {
-            const uint8_t *pn = s_core.heard[found_i].name;
-            int same = s_shared && pn[0] == s_name[0] && !memcmp(pn + 1, s_name + 1, pn[0]);
-            memcpy(s_name, pn, 1 + (size_t)pn[0]);
-            s_link = s_core.heard[found_i].link;
-            if (!same) s_have_info = 0;            // another printer: ask it first
-            s_shared = 1;
-            derive();
-            lwc_share(&s_core, s_name, now_ms());
-            s_readvertise = 1;
-        }
-    } else if (unshare) {
-        s_shared = 0;
-        lwc_share(&s_core, NULL, now_ms());
-    }
-    if (!status && dither) snprintf(s_dither, sizeof s_dither, "%s", dither);
-    if (!status && gain >= 0) s_gain = gain;
-    xSemaphoreGive(s_mu);
-    if (status) return status;
-    if (share || unshare) nvs_save_share();
-    if (dither || gain >= 0) nvs_save_screen();
-    if (share || unshare) ESP_LOGI(TAG, "%s", share ? "shared" : "unshared");
-    if (s_task) xTaskNotifyGive(s_task);
-    if (s_cfg.changed) s_cfg.changed();
-    return 0;
+    unlock();
+    if (k >= cap && cap > 2) snprintf(buf, cap, "{\"heard\":[],\"targets\":[],\"full\":true}");
 }
 
 void laser_status_json(char *buf, size_t cap)
 {
     if (!s_started) {
-        snprintf(buf, cap, "{\"shared\":null}");
+        snprintf(buf, cap, "{\"targets\":0,\"online\":0,\"job\":false}");
         return;
     }
-    xSemaphoreTake(s_mu, portMAX_DELAY);
-    lwc_view_t v = lwc_view(&s_core, now_ms());
-    char e_name[200];
-    esc(e_name, sizeof e_name, s_name_utf8);
-    if (s_shared)
-        snprintf(buf, cap, "{\"shared\":\"%s\",\"state\":\"%s\",\"reason\":\"%s\"}", e_name,
-                 state_name(&v), v.reason);
-    else
-        snprintf(buf, cap, "{\"shared\":null}");
-    xSemaphoreGive(s_mu);
+    uint64_t now = now_ms();
+    lock();
+    int online = 0;
+    for (int i = 0; i < s_big->n_tg; i++) online += lwc_view(&s_core, i, now).online;
+    snprintf(buf, cap, "{\"targets\":%d,\"online\":%d,\"job\":%s}", s_big->n_tg, online,
+             s_use == USE_JOB ? "true" : "false");
+    unlock();
+}
+
+// ------------------------------------------------------------- W-1082's NVS
+
+int laser_saved(laser_saved_t *out)
+{
+    memset(out, 0, sizeof *out);
+    out->link = -1;
+    snprintf(out->dither, sizeof out->dither, "atkinson");
+    nvs_handle_t h;
+    if (nvs_open("laser", NVS_READONLY, &h) != ESP_OK) return -1;
+    uint8_t v = 0, share = 0;
+    nvs_get_u8(h, "share", &share);
+    size_t n = sizeof out->name;
+    if (nvs_get_blob(h, "name", out->name, &n) != ESP_OK || !n || out->name[0] + 1u != n) share = 0;
+    if (nvs_get_u8(h, "link", &v) == ESP_OK) out->link = v == 0xFF ? -1 : v;
+    struct { uint8_t ver; lw_info_t info; } b;
+    n = sizeof b;
+    if (nvs_get_blob(h, "info", &b, &n) == ESP_OK && n == sizeof b && b.ver == INFO_VER) {
+        out->info = b.info;
+        out->have_info = 1;
+    }
+    n = sizeof out->dither;
+    nvs_get_str(h, "dither", out->dither, &n);
+    if (nvs_get_u8(h, "gain", &v) == ESP_OK) out->gain = v;
+    nvs_close(h);
+    return share ? 0 : -1;
 }

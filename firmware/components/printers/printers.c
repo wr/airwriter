@@ -1,8 +1,12 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
 // The printer list on the board (W-1088). printers_core holds the rules; this
-// keeps the list in PSRAM under a mutex, stores it in NVS when it changes, and
-// puts the port's printer on AirPrint as its record says.
+// keeps the list in PSRAM under a mutex, stores it in NVS when it changes,
+// puts each shared printer on AirPrint as its record says (the port's at
+// printer 0, AppleTalk's at 1-3), and gives laser.c the AppleTalk printers.
+//
+// Locks: s_apply_mx, then s_mu, then laser.c's and ipp_server's own. Nothing
+// here is called back with s_mu held.
 #include "printers.h"
 
 #include <string.h>
@@ -15,17 +19,34 @@
 #include "imagewriter.h"
 #include "laser.h"
 #include "printer_caps.h"
+#include "lw_caps.h"
+#include "lt_proto.h"
+#include "ipp_req.h"
+#include "at_printer.h"
 
 static const char *TAG = "printers";
 static const char *NS = "printers";
 
 enum { BLOB_MAX = 8 + sizeof(pr_list_t) };
 
+// An AppleTalk printer's AirPrint slot (1-3) as it is wanted, and as it was
+// last put there.
+typedef struct {
+    uint8_t   id, kind, legacy;     // id 0: empty; legacy: answers at ipp/laser (W-1082's)
+    char      name[PR_NAME_MAX];
+    char      info[3 * 32 + 1];     // its NBP name, UTF-8
+    char      uuid[46];
+    lw_info_t lw;
+} slotat_t;
+
 // In PSRAM: internal RAM is Wi-Fi's (docs/traps.md).
 typedef struct {
     pr_list_t list, scratch;        // scratch: a post works on a copy, all or nothing
     uint8_t   blob[BLOB_MAX], saved[BLOB_MAX];
     size_t    saved_n;
+    slotat_t  at_want[IPP_PRINTERS], at_now[IPP_PRINTERS];
+    laser_target_t targets[PR_MAX];
+    lw_caps_t caps;
 } big_t;
 static big_t *s_big;
 #define s_l (&s_big->list)
@@ -95,6 +116,28 @@ static void save(void)
 
 // ------------------------------------------------------------- the port's slot
 
+// The printer list's links and at_printer's.
+static int at_link_of(int where)
+{
+    switch (where) {
+    case PR_WHERE_CABLE:   return AT_LINK_CABLE;
+    case PR_WHERE_NETWORK: return AT_LINK_RADIO;
+    case PR_WHERE_TUNNEL:  return AT_LINK_TUNNEL;
+    case PR_WHERE_ZONE:    return AT_LINK_ZONE;
+    default:               return -1;
+    }
+}
+
+static pr_where_t where_of(int at_link)
+{
+    switch (at_link) {
+    case AT_LINK_TUNNEL: return PR_WHERE_TUNNEL;
+    case AT_LINK_ZONE:   return PR_WHERE_ZONE;
+    case AT_LINK_RADIO:  return PR_WHERE_NETWORK;
+    default:             return PR_WHERE_CABLE;
+    }
+}
+
 // Printer 0 as the record says. Under s_mu.
 static void slot0_want(slot0_t *w)
 {
@@ -130,6 +173,97 @@ const ipp_printer_cfg_t *printers_port_ipp(void)
     return on ? &c : NULL;
 }
 
+// What slots 1-3 should hold: a shared, identified LaserWriter keeps the slot
+// it has; others take the lowest free one. Under s_mu.
+static void at_want(void)
+{
+    slotat_t *want = s_big->at_want, *now = s_big->at_now;
+    memset(want, 0, sizeof s_big->at_want);
+    for (int pass = 0; pass < 2; pass++) {
+        for (int i = 0; i < s_l->n; i++) {
+            const pr_rec_t *r = &s_l->r[i];
+            if (r->where == PR_WHERE_PORT || r->kind != PR_KIND_LASERWRITER || !r->shared ||
+                !r->identified)
+                continue;
+            int k = 0, placed = 0;
+            for (int j = 1; j < IPP_PRINTERS; j++) placed |= want[j].id == r->id;
+            if (placed) continue;
+            for (int j = 1; j < IPP_PRINTERS && !k; j++)
+                if (pass == 0 ? now[j].id == r->id : !want[j].id) k = j;
+            if (!k) continue;
+            slotat_t *w = &want[k];
+            w->id = r->id;
+            w->kind = r->kind;
+            w->legacy = r->ipp_laser;
+            snprintf(w->name, sizeof w->name, "%s", r->name);
+            nbp_utf8(w->info, sizeof w->info, r->nbp);
+            snprintf(w->uuid, sizeof w->uuid, "%s", r->uuid);
+            w->lw = r->lw;
+        }
+    }
+}
+
+// The targets laser.c serves: every AppleTalk printer, with the slot it has.
+// Under s_mu.
+static int targets_fill(void)
+{
+    int n = 0;
+    for (int i = 0; i < s_l->n && n < PR_MAX; i++) {
+        const pr_rec_t *r = &s_l->r[i];
+        if (r->where == PR_WHERE_PORT) continue;
+        if (r->kind != PR_KIND_LASERWRITER && r->kind != PR_KIND_AT_IMAGEWRITER) continue;
+        laser_target_t *t = &s_big->targets[n++];
+        memset(t, 0, sizeof *t);
+        t->id = r->id;
+        t->kind = r->kind == PR_KIND_LASERWRITER ? LASER_KIND_LW : LASER_KIND_IW;
+        t->where = (int8_t)at_link_of(r->where);
+        t->slot = -1;
+        for (int k = 1; k < IPP_PRINTERS; k++) if (s_big->at_now[k].id == r->id) t->slot = (int8_t)k;
+        memcpy(t->name, r->nbp, sizeof t->name);
+        snprintf(t->dither, sizeof t->dither, "%s", r->dither);
+        t->gain = r->gain;
+        t->have_info = r->identified && r->kind == PR_KIND_LASERWRITER;
+        t->info = r->lw;
+    }
+    return n;
+}
+
+// The record id and slot a LaserWriter job's sink carries in its ctx.
+static void *slot_ctx(int slot, int id) { return (void *)(intptr_t)(slot << 8 | id); }
+
+static void at_apply(void)
+{
+    for (int k = 1; k < IPP_PRINTERS; k++) {
+        lock();
+        slotat_t w = s_big->at_want[k];
+        int same = !memcmp(&w, &s_big->at_now[k], sizeof w);
+        unlock();
+        if (same) continue;
+        esp_err_t err;
+        if (w.id) {
+            // W-1082's LaserWriter keeps its path, so a Mac's queue for it still prints.
+            char resource[16];
+            if (w.legacy) snprintf(resource, sizeof resource, "%s", IPP_RESOURCE_LASER);
+            else snprintf(resource, sizeof resource, "ipp/p%u", w.id);
+            lw_caps_fill(&s_big->caps, &w.lw);    // s_apply_mx held: the scratch is ours
+            ipp_printer_cfg_t c = { .resource = resource, .name = w.name, .info = w.info,
+                                    .uuid = w.uuid, .caps = &s_big->caps.caps, .icon = "laser",
+                                    .sink = s_cfg.at_sink };
+            c.sink.ctx = slot_ctx(k, w.id);
+            err = ipp_server_set_printer(k, &c);
+        } else {
+            err = ipp_server_set_printer(k, NULL);
+        }
+        if (err == ESP_OK) {
+            lock();
+            s_big->at_now[k] = w;
+            unlock();
+        } else {
+            ESP_LOGI(TAG, "printer %d changes after its job (%s)", k, esp_err_to_name(err));
+        }
+    }
+}
+
 void printers_apply(void)
 {
     if (!s_started) return;
@@ -137,6 +271,7 @@ void printers_apply(void)
     slot0_t w;
     lock();
     slot0_want(&w);
+    at_want();
     unlock();
     if (!s_slot0_known || memcmp(&w, &s_slot0, sizeof w)) {
         ipp_printer_cfg_t c;
@@ -149,6 +284,11 @@ void printers_apply(void)
             ESP_LOGI(TAG, "the port's printer changes after its job (%s)", esp_err_to_name(err));
         }
     }
+    if (s_slot0_known) at_apply();                 // ipp_server is up (printers_port_ipp)
+    lock();
+    int n = targets_fill();
+    unlock();
+    laser_set_targets(s_big->targets, n);         // s_apply_mx keeps targets[] ours
     xSemaphoreGive(s_apply_mx);
 }
 
@@ -212,8 +352,17 @@ static pr_live_t s_live[PR_MAX];
 static void live_fill(void)
 {
     memset(s_live, 0, sizeof s_live);
-    const pr_rec_t *p = pr_port(s_l);
-    if (p && s_cfg.port_live) s_cfg.port_live(&s_live[pr_index(s_l, p->id)]);
+    for (int i = 0; i < s_l->n; i++) {
+        const pr_rec_t *r = &s_l->r[i];
+        if (r->where == PR_WHERE_PORT) {
+            if (s_cfg.port_live) s_cfg.port_live(&s_live[i]);
+            continue;
+        }
+        laser_state_t st;
+        if (laser_state(r->id, &st)) continue;
+        s_live[i] = (pr_live_t){ .present = st.online, .ready = st.ready, .printing = st.printing,
+                                 .attention = st.stopped };
+    }
 }
 
 // Under s_mu.
@@ -248,6 +397,29 @@ void printers_port_seen(int iw_model, int ready)
         ESP_LOGI(TAG, "the port: %s \"%s\"", pr_kind_name(p->kind), p->name);
     }
     after_change(moved);
+}
+
+void printers_at_seen(int at_link, const uint8_t *name, const uint8_t *type)
+{
+    if (!s_started) return;
+    lock();
+    int before = s_l->n;
+    int id = pr_at_seen(s_l, where_of(at_link), name, type, 0);
+    int added = s_l->n != before;
+    if (added) ESP_LOGI(TAG, "found: %s \"%s\"", pr_kind_name(pr_get(s_l, id)->kind),
+                        pr_get(s_l, id)->name);
+    after_change(added);
+}
+
+void printers_at_queried(int id, int ok, const lw_info_t *info)
+{
+    if (!s_started) return;
+    lock();
+    pr_rec_t *r = pr_get(s_l, id);
+    int was = r && r->identified;
+    pr_at_queried(s_l, id, ok, info);
+    int now = r && pr_get(s_l, id) && pr_get(s_l, id)->identified;
+    after_change(now != was);
 }
 
 port_mode_t printers_port_mode(void)

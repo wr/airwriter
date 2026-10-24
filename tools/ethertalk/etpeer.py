@@ -14,6 +14,7 @@ driver does (OpenConn, the board's SendData answered with Data, CloseConn).
     python3 tools/ethertalk/etpeer.py zone ZONE lookup
     python3 tools/ethertalk/etpeer.py zone ZONE print FILE
     python3 tools/ethertalk/etpeer.py tunnel laserwriter "LaserWriter II NT" [--hex-only] [--out DIR]
+                                         [--also "Office LaserWriter"] ...
 
 `named` registers a Macintosh name, as System 7's Sharing Setup does
 (<name>:Workstation), looks the printer up so the board hears it, and answers
@@ -27,6 +28,9 @@ to job-N.png at 300 dpi when Ghostscript is installed). Lines on stdin fault
 it: `busy SECONDS`, `paper` (out of paper), `jam`, `ok`, `error` (the next job
 gets a PostScript error), `drop` (it answers nothing more). --hex-only answers
 the binary probe as a Level 1 machine that cannot take binary would.
+`--also NAME` adds another fake LaserWriter, at its own AppleTalk address, on
+the same tunnel (one Mac can bind the tunnel's port once); its jobs go in
+DIR/NAME. Stdin's faults go to the first.
 `pipe laserwriter NAME` is the same over stdin and stdout, frames each a
 big-endian u16 length and the frame (test_interop.py).
 
@@ -116,6 +120,45 @@ class Tunnel:
 
     async def close(self):
         self.sock.close()
+
+
+class Hub:
+    """One transport shared by several fakes: each tap hears every frame."""
+
+    def __init__(self, t):
+        self.t, self.mac, self.qs = t, t.mac, []
+
+    def tap(self):
+        q = asyncio.Queue()
+        self.qs.append(q)
+        return Tap(self, q)
+
+    async def pump(self):
+        while True:
+            f = await self.t.recv(0.5)
+            if f:
+                for q in self.qs:
+                    q.put_nowait(f)
+
+
+class Tap:
+    def __init__(self, hub, q):
+        self.hub, self.q, self.mac = hub, q, hub.mac
+
+    async def open(self):
+        return self
+
+    async def send(self, frame):
+        await self.hub.t.send(frame)
+
+    async def recv(self, timeout):
+        try:
+            return await asyncio.wait_for(self.q.get(), timeout)
+        except asyncio.TimeoutError:
+            return None
+
+    async def close(self):
+        pass
 
 
 class Zone:
@@ -482,6 +525,8 @@ class LaserWriter(Mac):
                 await self.tick()
 
     async def dispatch(self, d):
+        if d[8] not in (self.node, 0xFF):              # another fake's, on a shared tunnel
+            return
         src = struct.unpack(">H", d[6:8])[0], d[9]
         if d[12] == DDP_NBP and d[10] == NIS:
             await self.on_nbp(d)
@@ -678,15 +723,27 @@ async def main(argv):
     if rest[0] == "laserwriter" and len(rest) >= 2:
         opts = rest[2:]
         out = opts[opts.index("--out") + 1] if "--out" in opts else None
-        fake = LaserWriter(t, rest[1], hex_only="--hex-only" in opts, out=out)
+        also = [opts[i + 1] for i, o in enumerate(opts) if o == "--also" and i + 1 < len(opts)]
+        hub = Hub(t) if also else None
+        names = [rest[1]] + also
+        fakes = []
+        for k, name in enumerate(names):
+            d = out if not k or not out else os.path.join(out, name)
+            fakes.append(LaserWriter(hub.tap() if hub else t, name, hex_only="--hex-only" in opts,
+                                     out=d))
         try:
-            await fake.acquire()
-            print(f"fake LaserWriter \"{rest[1]}\" at {fake.net}.{fake.node}, socket {LW_SLS}",
-                  file=sys.stderr if argv[0] == "pipe" else sys.stdout)
-            tasks = [fake.serve()]
+            tasks = [hub.pump()] if hub else []
+            pump = asyncio.ensure_future(asyncio.gather(*tasks)) if tasks else None
+            for name, fake in zip(names, fakes):
+                await fake.acquire()
+                print(f"fake LaserWriter \"{name}\" at {fake.net}.{fake.node}, socket {LW_SLS}",
+                      file=sys.stderr if argv[0] == "pipe" else sys.stdout)
+            tasks = [fake.serve() for fake in fakes]
             if argv[0] != "pipe":
-                tasks.append(stdin_commands(fake))
+                tasks.append(stdin_commands(fakes[0]))
             await asyncio.gather(*tasks)
+            if pump:
+                pump.cancel()
         finally:
             await t.close()
         return

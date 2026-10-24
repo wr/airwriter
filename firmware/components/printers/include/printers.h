@@ -27,6 +27,9 @@ typedef struct {
     int         updated_board;
     pr_legacy_t legacy;
     ipp_doc_sink_t port_sink;        // the port printer's jobs
+    // An AppleTalk LaserWriter's jobs: its ctx is set per printer to
+    // (slot << 8 | record id), for laser_job_begin and ipp_server_job_done_for.
+    ipp_doc_sink_t at_sink;
     void (*port_live)(pr_live_t *out);                  // the port printer's state now
     void (*port_screen)(const char *dither, int gain);  // its halftone was changed
     void (*look)(void);              // "Look for printers": ask the port again
@@ -42,6 +45,10 @@ esp_err_t   printers_start(const printers_cfg_t *cfg);
 // What the port said when asked: the self-ID's model (iw_model_t) with the
 // line ready, or not ready.
 void        printers_port_seen(int iw_model, int ready);
+// What laser.c heard (once per printer, its link as at_link_t) and its query.
+void        printers_at_seen(int at_link, const uint8_t *name, const uint8_t *type);
+void        printers_at_queried(int id, int ok, const lw_info_t *info);
+
 port_mode_t printers_port_mode(void);
 int         printers_port_is_imagewriter(void);
 // An ImageWriter on the port, shared over AirPrint: the panel follows its line.
@@ -57,9 +64,10 @@ void        printers_port_set_screen(const char *dither, int gain);
 // The port printer's AirPrint slot as its record says, for ipp_server_start;
 // NULL when it is not shared or not an ImageWriter. Counts as applied.
 const ipp_printer_cfg_t *printers_port_ipp(void);
-// Puts the port printer on AirPrint as its record now says, when that changed
-// since it was last put there. A change that met a job in the slot waits: the
-// job's end calls this again.
+// Puts each shared printer on AirPrint as its record now says, where that
+// changed since it was last put there, and gives laser.c the AppleTalk
+// printers. A change that met a job in its slot waits: the job's end calls
+// this again. After laser_start.
 void        printers_apply(void);
 
 // GET /api/printers and POST /api/printers (pr_post's actions): 0, or an
