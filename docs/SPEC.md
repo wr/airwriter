@@ -164,7 +164,7 @@ ESP-IDF 5.x, C. Project at `firmware/`. Components under `firmware/components/`:
 
 | Component | Responsibility |
 |---|---|
-| `net_provision` | Improv-over-BLE provisioning, NVS credential storage |
+| `net_provision` | Setup network (open AP, every DNS answer pointing at the setup page), NVS credential storage |
 | `ipp_server` | IPP/1.1 over HTTP on port 631 |
 | `ipp_attrs` | Printer attribute set, job attributes, state reasons |
 | `urf_decode` | URF and PWG raster stream decoder |
@@ -853,8 +853,9 @@ and media list. No printing yet — `Print-Job` returns success and discards.
 
 **M5 — Print.** End to end from an iPhone.
 
-**M6 — Manners.** Paper-out detection, job cancel, web config UI, Improv provisioning,
-OTA.
+**M6 — Manners.** Paper-out detection, job cancel, web config UI, Wi-Fi setup through the
+board's own network, OTA. (Improv over BLE was dropped: it needs Web Bluetooth, which Safari
+on iOS lacks.)
 
 Ship M5 as the first video. M6 is the second one.
 

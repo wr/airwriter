@@ -293,10 +293,11 @@ Known issues, open:
 ## Open work
 
 Linear is the queue; these are the live items.
-- `W-1043 Rev B: through-hole dome LED for the power indicator`, and the rest of the rev B list
-  in `docs/hardware-rev-a.md` (not in Linear yet).
-- `W-573 Dot-panel cover: passive art panel, LED grid, DIP config` (umbrella, in progress).
-- `W-567 M6 — Manners: paper-out, cancel, web UI, provisioning, OTA` (backlog).
+- `W-1091 Rev B: the main board's next revision`: the rev B list (`docs/hardware-rev-a.md`),
+  with `W-1043 Rev B: through-hole dome LED for the power indicator` under it.
+- `W-1066 Full-page colour photos overflow the 1 MB job buffer` (Todo): measured; a photo page
+  is ~5 MB of URF, so its upload streams for ~5 min. Next is one full-page colour photo from the
+  iPhone to see whether iOS waits that long (it waited ~100 s for a LaserWriter photo).
 - `W-1046 Factory reset must always work, even with broken firmware` and
   `W-1045 Long-press factory reset with live feedback on the LED panel`: merged 2026-10-15, benched
   on board 1 (all pass). Board 1 has the W-1059 bootloader and partition table, so an image
@@ -332,7 +333,7 @@ Linear is the queue; these are the live items.
   cached black-only, offered colour under the same UUID with no "Waiting"; a colour screenshot
   printed (960 KB of URF, just under the 1 MB job buffer). Not yet seen on this build: a Black &
   White print, a Mac queue (likely needs re-adding). Full-page colour photos overflow the job
-  buffer: a side session is measuring that. Released in v0.2.0.
+  buffer (`W-1066`, above). Released in v0.2.0.
 - `W-1067 Web dashboard shows which ribbon is in: colour or black` and `W-1068 Better halftone:
   dot gain curve, serpentine, blue noise, interleaved colour`: merged 2026-10-17, benched on board 1.
   The dusk page printed through Atkinson and blue noise read the same to Wells; the uncorrected
@@ -341,7 +342,8 @@ Linear is the queue; these are the live items.
   a phone. Released in v0.2.0 (2026-10-17), cut from main `b0fc219` with `--branch` from a clean
   worktree because this checkout carried someone's enclosure edits.
 - `W-1076` and `W-1078` reached main on 2026-10-20 with `W-1079` (Done), which was built on
-  top of them; both stay In Progress for their bench checks. Owed on the bench: busy both ways
+  top of them. `W-1078` is Done (the SE/30 printed over Wi-Fi on 2026-10-20); `W-1076` stays
+  In Progress for the bench checks, which cover every link. Owed on the bench: busy both ways
   between links, a link dropped mid-job, a print from the SE/30 on the cable again, an Infinite Mac on its card, the page's Erase and Wi-Fi join. Before any release
   that turns the relay on for users, give Mihai Parparita (Infinite Mac) a heads-up.
 - Not in Linear: scope HSKo during a long job (SPEC §3.9 timing).

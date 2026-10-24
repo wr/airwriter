@@ -107,7 +107,8 @@ pad, the BOOT pads and the back-face artwork. The rest:
 
 ## Rev B candidates
 
-Not in Linear yet except where named. Most come from review #4
+Tracked as `W-1091 Rev B: the main board's next revision` in Linear, which is the copy kept
+current; this is the list as filed on 2026-10-24. Most come from review #4
 (`docs/review-2026-09-01-pre-order-4.md`, "Rev-B list"), which has the reasoning.
 
 - 10 k pulldown on `LT_DE` (across U6 pins 3–5; it floats with the PIC absent or in reset).
@@ -130,5 +131,8 @@ Not in Linear yet except where named. Most come from review #4
 - J4 pin 1 to a spare GPIO through 1 k, so the cable test reaches the handshake leg: through a
   crossover it lands on J2 pin 2 (HSKi, read through U3).
 - Inrush soft-start, if USB compliance ever matters (VBUS bulk is ~4× the inrush budget).
+- J2's receive pair is a MAX3490 (RS-422, common-mode −7 to +12 V) against RS-232's −12 V:
+  check its absolute maximum, or route J2 pin 5 through U3's spare RS-232 receiver, before an
+  RS-232 printer (a LaserJet, the original ImageWriter) is wired both ways.
 - Through-hole dome power LED: `W-1043 Rev B: through-hole dome LED for the power indicator`.
 - Scope HSKo first: if its swing is modest, a divider and clamp into a GPIO could delete U3.

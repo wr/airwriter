@@ -5,8 +5,8 @@ config AIRWRITER_WIFI_SSID
     default ""
     help
         Development credentials only. They land in sdkconfig, which is
-        gitignored. Improv-over-BLE provisioning replaces this in M6, and
-        credentials stored in NVS already take precedence over this value.
+        gitignored. A board without them opens its setup network, and
+        credentials stored in NVS take precedence over this value.
 
 config AIRWRITER_WIFI_PASSWORD
     string "WiFi password"
