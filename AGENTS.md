@@ -205,9 +205,12 @@ What works on `main`:
   the printer and the printer's output (query answers, errors) back to its reads, 256 bytes a
   read, nothing rewritten. A connection carries any number of jobs, each EOF passed through
   both ways (`W-1095 Relay: a vintage Mac's LaserWriter job stalls after the driver's query`:
-  the LaserWriter driver sends a query, then the document, over one connection). Benched
-  tunnel → cable against a real Personal LaserWriter NTR (a query then a page over one
-  connection, 2026-10-24) and zone → tunnel against the fake; the SE/30 through it is owed.
+  the LaserWriter driver sends a query, then the document, over one connection). A Mac that
+  closes after its last EOF, before the printer's (the SE/30's driver does), has that job
+  finished, every byte to the printer; mid-job it is cancelled. Benched 2026-10-24 radio →
+  cable with the SE/30 to a real Personal LaserWriter NTR (four jobs: query, Laser Prep by
+  `exitserver`, query, document), tunnel → cable with `etpeer.py print-ps --close-early`, and
+  zone → tunnel against the fake.
 - TashTalk 2.1.3 is in U7, flashed in place by the ESP32 over LVP.
 - A LocalTalk node on the AppleTalk port whenever U7 runs TashTalk (W-1088: every look for
   printers runs on it), answering old Macs only while the settings page's switch says so
@@ -277,8 +280,8 @@ its name in the Chooser. U7's PIC calibration words: `16E0 1DA8`. Its LocalTalk 
 2026-10-24, with its settings put back over the API. Its port printer's uuid is now
 `…4c57-0001-0001-10bda36e2434`, which orphans Mac queues added before that date. Printer: an ImageWriter II on J2 via
 Apple's crossover cable, fanfold paper loaded as the Owner's Guide says (top edge under the paper
-bail). It runs a bench build (v0.2.0-157-g7e8cc65: main 593ccf1 with the W-1095 and W-1096
-branches merged, neither on main yet), ahead of any release, with auto-update on; it shares the fake "LaserWriter II NT" on the Basilisk II tunnel when
+bail). It runs a bench build (v0.2.0-160-gd20f49d: main 593ccf1 with the W-1095 and W-1096
+branches merged; W-1096 has since reached main, W-1095 has not), ahead of any release, with auto-update on; it shares the fake "LaserWriter II NT" on the Basilisk II tunnel when
 `etpeer.py tunnel laserwriter` runs on the Mac. On its AppleTalk cable since 2026-10-24: a
 Personal LaserWriter NTR (PostScript 2010.129, Level 2, 3 MB, 300 dpi, takes binary; 10,277
 pages that morning), AirPrint printer 3 at `ipp/p3`. Its toner is spent (more ordered), so
@@ -405,12 +408,12 @@ Linear is the queue; these are the live items.
   AppleTalk` merged 2026-10-22 (plan `docs/superpowers/plans/2026-10-22-laserwriters-appletalk.md`),
   benched on board 1 against the fake, then on the NTR (the design's "What only a printer
   settles" has the figures): the cable, long frames through TashTalk, ~12 KB/s on LocalTalk,
-  binary, full pages in its memory, busy both ways, and the relay's two jobs on one connection
-  (`W-1095 Relay: a vintage Mac's LaserWriter job stalls after the driver's query`, on its
-  branch, benched with `etpeer.py`). Still owed on the NTR: placement and the screen by eye once
-  its toner is in, the status texts mid-job (idle, it says "idle" with its cover open or no
-  paper), and the SE/30 through the relay. Owed on a Level 1 machine (Plus, II NT): hex and a
-  68000's imaging time. Next
+  binary, full pages in its memory, busy both ways, out of paper read mid-job, and the SE/30
+  printing through the relay (`W-1095 Relay: a vintage Mac's LaserWriter job stalls after the
+  driver's query`, on its branch). Still owed on the NTR: placement and the screen by eye once
+  its toner is in, and the cover-open, jam and toner texts mid-job (idle, it says "idle"
+  whatever is wrong). Owed on a Level 1 machine (Plus, II NT): hex and a 68000's imaging
+  time. Next
   `W-1083 AirPrint to HP LaserJets over serial (PCL)`. Network printers over TCP are out. Open
   hardware question for any RS-232 printer, the original ImageWriter included: J2's receiver
   (MAX3490, common-mode −7 to +12 V) against RS-232's −12 V.

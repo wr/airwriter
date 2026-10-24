@@ -439,13 +439,16 @@ relay, confirmed every page. Settled:
   printer's words until the AirPrint job is done; AirPrint is told `server-error-busy` at once.
 - **The printer's EOF** comes after the page is out: ~35-40 s after a page's last byte. The
   board's own jobs close at their 30 s wait first; the page prints regardless.
-- **Many jobs on one connection** (W-1095): the LaserWriter driver sends a query, then the
-  document, on one connection. The relay now passes each EOF through; a query then a page went
-  through to the NTR.
+- **Many jobs on one connection** (W-1095): the SE/30's LaserWriter driver sent four jobs on
+  one connection (a query, Laser Prep by `exitserver`, a query, the 143 KB document) and
+  closed as soon as the last EOF was out, before the printer's. The relay passes each EOF
+  through and finishes a job the Mac has closed on; the SE/30's page printed through it.
+- **Status, out of paper**: mid-job, "status: PrinterError: multipurpose tray: out of paper;
+  source: LocalTalk", mapped to `media-empty-error`. Idle, the NTR says "status: idle"
+  whatever is wrong (cover open, tray empty), so the texts can only be read mid-job.
 
-Still owed: placement and the screen (toner), the status texts (idle, the NTR says "idle" with
-its cover open or its tray empty, so they can only be read mid-job), the SE/30 through the
-relay, and a Level 1, 68000 machine (Plus, II NT) for hex and imaging time.
+Still owed: placement and the screen (toner), the cover-open, jam and toner texts mid-job,
+and a Level 1, 68000 machine (Plus, II NT) for hex and imaging time.
 
 ## Phase 2 sketch: PCL LaserJets over serial
 
