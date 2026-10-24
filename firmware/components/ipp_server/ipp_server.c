@@ -852,8 +852,10 @@ void ipp_server_set_airprint(int on)
     if (on && !p->print_svcs) {
         if (add_print_services() != ESP_OK) ESP_LOGE(TAG, "AirPrint: could not advertise again");
     } else if (!on && p->print_svcs) {
-        mdns_service_remove("_ipp", "_tcp");
-        mdns_service_remove("_printer", "_tcp");
+        // By name: with no instance, mDNS takes the newest _ipp, which is a
+        // shared LaserWriter's once there is one (W-1082).
+        mdns_service_remove_for_host(s_cfg.queue_name, "_ipp", "_tcp", NULL);
+        mdns_service_remove_for_host(s_cfg.queue_name, "_printer", "_tcp", NULL);
         p->print_svcs = 0;
     }
 }
@@ -960,9 +962,11 @@ void ipp_server_set_colour(int on)
     // in the attributes but not the record, and the call after start fixes it.
     if (!s_mdns_up || !p->print_svcs || on == p->txt_colour) return;
     p->txt_colour = on;
-    esp_err_t a = mdns_service_txt_item_set("_ipp", "_tcp", "Color", on ? "T" : "F");
-    esp_err_t b = mdns_service_txt_item_set("_ipp", "_tcp", "URF",
-                                            on ? IPP_URF_STRING_COLOUR : IPP_URF_STRING);
+    // By name, as in ipp_server_set_airprint: not a shared LaserWriter's record.
+    esp_err_t a = mdns_service_txt_item_set_for_host(s_cfg.queue_name, "_ipp", "_tcp", NULL, "Color",
+                                                     on ? "T" : "F");
+    esp_err_t b = mdns_service_txt_item_set_for_host(s_cfg.queue_name, "_ipp", "_tcp", NULL, "URF",
+                                                     on ? IPP_URF_STRING_COLOUR : IPP_URF_STRING);
     if (a != ESP_OK || b != ESP_OK)
         ESP_LOGW(TAG, "TXT update failed: %s / %s", esp_err_to_name(a), esp_err_to_name(b));
 }
