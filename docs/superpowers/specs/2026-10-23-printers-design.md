@@ -304,7 +304,8 @@ Mac, `etpeer.py` for old Macs and printers, `dns-sd` for what phones see. Board 
 over USB before the erase in step 2 and written back after it, so its Wi-Fi, top-margin
 calibration, zone name and switches come back. Wells is needed once, at the end, in one sitting:
 to type his Wi-Fi password into the real setup flow on his phone, print once from the iPhone,
-and look at the pages.
+and look at the pages. During the build the checker and the test pages may print on board 1's ImageWriter
+without asking, in the daytime only (Wells, 2026-10-23); every other print waits for that sitting.
 
 1. Update from the current firmware: nothing changes on the iPhone or the Mac (same printers,
    same names), the ImageWriter prints its checker (crc32 `8ee84844` at top margin 0, read on
