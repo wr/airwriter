@@ -410,12 +410,12 @@ function draw(s){
   prDraw();
   finDraw();
 }
-function wifiArcs(n){
-  const arc=(lvl,d)=>'<path fill=none stroke=currentColor stroke-width=1.7 stroke-linecap=round'
-    +(lvl<=n?'':' stroke-opacity=.25')+' d="'+d+'"/>';
-  return arc(3,'M1.07 6.67A9.8 9.8 0 0 1 14.93 6.67')+arc(2,'M3.33 8.93A6.6 6.6 0 0 1 12.67 8.93')
-    +arc(1,'M5.6 11.2A3.4 3.4 0 0 1 10.4 11.2')+'<circle cx=8 cy=13.6 r=1.05 fill=currentColor />';
-}
+/* g-wifi's arcs, inner first, one by one so each can light */
+const ARCS=['M5.7 10.2a3.25 3.25 0 0 1 4.6 0','M3.58 8.08a6.25 6.25 0 0 1 8.84 0','M1.46 5.96a9.25 9.25 0 0 1 13.08 0'];
+const ARC=(cls,d,dim)=>'<path'+(cls?' class='+cls:'')+' fill=none stroke=currentColor stroke-width=1.5 stroke-linecap=round'
+  +(dim?' stroke-opacity=.25':'')+' d="'+d+'"/>';
+const ARCDOT='<circle cx=8 cy=12.5 r=1.25 fill=currentColor />';
+function wifiArcs(n){ return ARCS.map((d,i)=>ARC('',d,i>=n)).reverse().join('')+ARCDOT; }
 function upFor(u){
   const m=/(\d+)h (\d+)m/.exec(u||''); if(!m) return '';
   const h=+m[1], mi=+m[2], d=Math.floor(h/24);
@@ -938,10 +938,7 @@ function scanning(on){
   const box=$('nets'); box.classList.toggle('busy',on);
   const row=box.querySelector('.scanning');
   if(on&&!row) box.insertAdjacentHTML('afterbegin','<div class="row scanning"><span class=txt>Looking for networks…</span>'
-    +'<span class=glyphs><svg viewBox="0 0 16 16"><path class=a3 fill=none stroke=currentColor stroke-width=1.7 stroke-linecap=round d="M1.07 6.67A9.8 9.8 0 0 1 14.93 6.67"/>'
-    +'<path class=a2 fill=none stroke=currentColor stroke-width=1.7 stroke-linecap=round d="M3.33 8.93A6.6 6.6 0 0 1 12.67 8.93"/>'
-    +'<path class=a1 fill=none stroke=currentColor stroke-width=1.7 stroke-linecap=round d="M5.6 11.2A3.4 3.4 0 0 1 10.4 11.2"/>'
-    +'<circle cx=8 cy=13.6 r=1.05 fill=currentColor /></svg></span></div>');
+    +'<span class=glyphs><svg viewBox="0 0 16 16">'+ARCS.map((d,i)=>ARC('a'+(i+1),d)).reverse().join('')+ARCDOT+'</svg></span></div>');
   if(!on&&row) row.remove();
 }
 let netErr=false;
