@@ -113,7 +113,8 @@ What works on `main`:
   twice.
 - Setup AP `AirWriter-xxxx` (open, 192.168.4.1) on a board with no credentials; web UI on port
   80: `/api/status`, Wi-Fi, settings, `/update` (OTA), `/api/update` (GitHub releases),
-  `/api/localtalk/flash`, `/api/cable`, `/api/restart`, `/api/erase`, `/api/test`.
+  `/api/localtalk/flash`, `/api/cable`, `/api/restart`, `/api/erase`, `/api/test`,
+  `/api/printers`.
 - The settings page (`W-1079 Settings page: organise by port, like macOS System Settings`,
   design `docs/superpowers/specs/2026-10-20-settings-redesign-design.md`): a settings app, a
   sidebar of Printer, AirPrint, AppleTalk, Wi-Fi and About, each row showing its state; one home
@@ -152,7 +153,16 @@ What works on `main`:
   exactly its 11 in page), so the LocalTalk scanner follows the paper (`iw_scan_at_tof`).
 - AirPrint has an off switch (W-1079): off, `_ipp` and `_printer` leave Bonjour and Print-Job
   is refused as not accepting jobs; on, they come back under the same printer-uuid.
-- Wi-Fi scans all channels and joins the strongest AP; printer-uuid is stable (MAC + epoch).
+- Wi-Fi scans all channels and joins the strongest AP.
+- The printer list (`W-1088 Printers: AirWriter finds, sets up and shares whatever printers you have`,
+  design `docs/superpowers/specs/2026-10-23-printers-design.md`, being built on
+  `wells/w-1088-printers`): records in NVS `printers`/`list` (`components/printers`), each
+  with its own printer-uuid, made once. The port's printer is AirPrint printer 0 as its record
+  says; `ESC ?` at line-up finds it, and ImageWriter commands (CTRL-X kick, resync, the job's
+  self-ID, the test page) go to J2 only when it is an ImageWriter. `GET`/`POST /api/printers`.
+  A board's first boot on it makes its records from what it had (the port's old uuid, a
+  W-1082 LaserWriter, the AirPrint switch as the port's Share) and stores its host name, so
+  `imagewriter-xxxx` stays; a new board is `airwriter-xxxx` with the AppleTalk port on.
 - TashTalk 2.1.3 is in U7, flashed in place by the ESP32 over LVP.
 - A LocalTalk node behind the AppleTalk port's switch on the settings page (W-1079; until the
   switch is used, DIP mode 2 starts it, and `CONFIG_AIRWRITER_LT_BENCH` always), on UART2 to

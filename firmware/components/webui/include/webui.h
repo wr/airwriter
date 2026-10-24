@@ -49,6 +49,12 @@ typedef struct {
     void  (*laser_json)(void *ctx, char *buf, size_t cap);
     int   (*laser_set)(void *ctx, int unshare, const char *share, const char *dither, int gain);
 
+    // W-1088: GET /api/printers, the printer list, and POST /api/printers,
+    // one of its actions (printers_core.h's pr_post). post returns 0, or an
+    // HTTP status with a sentence for the page in err. NULL answers 404.
+    void  (*printers_json)(void *ctx, char *buf, size_t cap);
+    int   (*printers_post)(void *ctx, const char *body, char *err, size_t cap);
+
     // The general settings (model, name, hostname, dither, gain, the AirPrint
     // and AppleTalk-port switches) were just saved: the app re-reads them, so
     // the next job prints with the screen the page shows and the switches take

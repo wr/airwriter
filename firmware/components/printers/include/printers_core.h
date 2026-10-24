@@ -120,6 +120,20 @@ int    pr_load(pr_list_t *l, const uint8_t *buf, size_t n);     // -1: refused, 
 
 size_t pr_json(const pr_list_t *l, const pr_live_t live[PR_MAX], char *buf, size_t cap);
 
+// What the Printers section sends: flat JSON, {"look":true}, {"note":N,
+// "accept"|"dismiss":true}, or {"id":N, then any of "name":"...",
+// "shared":bool, "model":"ImageWriter II"|"ImageWriter LQ"|"ImageWriter"|
+// "none", "remove":true, "use_anyway":true, "dither":"...", "gain":0-45}.
+// 0 done; -1 with a sentence for the page in err.
+typedef struct { int changed, look, screen_id; char err[64]; } pr_post_t;
+int pr_post(pr_list_t *l, const char *body, pr_post_t *out);
+
+// A board's first boot on W-1088 (no host name stored yet): one set up before
+// (Wi-Fi saved) keeps "imagewriter-%s" and its DIP rule for the AppleTalk
+// port (-1); a new board is "airwriter-%s" with the port on (1). Stored then.
+const char *pr_default_host_fmt(int has_wifi);
+int         pr_default_lt_port(int has_wifi);
+
 // Names for the page and the log.
 const char *pr_where_name(int where);      // "port", "cable", "network", "tunnel", "zone"
 const char *pr_kind_name(int kind);        // "unknown", "imagewriter", "laserwriter", ...

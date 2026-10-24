@@ -1,0 +1,70 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+//
+// The board's printer list (W-1088): printers_core's records kept in NVS
+// (namespace "printers", key "list"), fed what the port says, and the port's
+// printer put on AirPrint (ipp_server printer 0). A board set up before W-1088
+// gets its records from what it had, once; the old keys stay where they were.
+#pragma once
+#include <stddef.h>
+#include <stdint.h>
+#include "esp_err.h"
+#include "printers_core.h"
+#include "ipp_server.h"
+
+typedef enum {
+    PORT_NONE,              // nothing found on the port yet
+    PORT_IMAGEWRITER,       // ImageWriter commands may go to J2
+    PORT_UNKNOWN_FOUND,     // something that never answered ESC ?: asked again at line-up
+    PORT_UNKNOWN_SAID,      // the person said "Something else": nothing is sent to it
+} port_mode_t;
+
+typedef struct {
+    uint8_t  mac[6];
+    uint16_t epoch;                  // CONFIG_AIRWRITER_LASER_UUID_EPOCH: W-1082's uuids hold
+    // Set up before W-1088 (Wi-Fi saved, no list stored): its records are
+    // made from `legacy`, whose ImageWriter fields the caller fills; the
+    // LaserWriter's and the port's old uuid are read here.
+    int         updated_board;
+    pr_legacy_t legacy;
+    ipp_doc_sink_t port_sink;        // the port printer's jobs
+    void (*port_live)(pr_live_t *out);                  // the port printer's state now
+    void (*port_screen)(const char *dither, int gain);  // its halftone was changed
+    void (*look)(void);              // "Look for printers": ask the port again
+    void (*changed)(void);           // names, sharing or the port's kind changed
+} printers_cfg_t;
+
+// Whether a list is stored and reads back: before printers_start, to tell a
+// board set up before W-1088 from one already on it.
+int         printers_stored(void);
+// Before ipp_server_start: loads (or makes) the list.
+esp_err_t   printers_start(const printers_cfg_t *cfg);
+
+// What the port said when asked: the self-ID's model (iw_model_t) with the
+// line ready, or not ready.
+void        printers_port_seen(int iw_model, int ready);
+port_mode_t printers_port_mode(void);
+int         printers_port_is_imagewriter(void);
+// An ImageWriter on the port, shared over AirPrint: the panel follows its line.
+int         printers_port_shared(void);
+pr_model_t  printers_port_model(void);
+// The port printer's name, "" with none: the Chooser's name and the test page's.
+void        printers_port_name(char *out, size_t cap);
+// The port printer's halftone and gain, from its record: -1 with no port printer.
+int         printers_port_screen(char *dither, size_t cap, int *gain);
+// The page's old Printer pane changed the screen: the port record follows.
+void        printers_port_set_screen(const char *dither, int gain);
+
+// The port printer's AirPrint slot as its record says, for ipp_server_start;
+// NULL when it is not shared or not an ImageWriter. Counts as applied.
+const ipp_printer_cfg_t *printers_port_ipp(void);
+// Puts the port printer on AirPrint as its record now says, when that changed
+// since it was last put there. A change that met a job in the slot waits: the
+// job's end calls this again.
+void        printers_apply(void);
+
+// GET /api/printers and POST /api/printers (pr_post's actions): 0, or an
+// HTTP status with a sentence for the page in err.
+void        printers_json(char *buf, size_t cap);
+int         printers_post(const char *body, char *err, size_t cap);
+// The "printers" member of /api/status: {"count":N,"shared":M,"port":"..."}.
+void        printers_status_json(char *buf, size_t cap);

@@ -6,6 +6,7 @@
 #include <string.h>
 #include <strings.h>
 #include <ctype.h>
+#include <stdlib.h>
 
 #define PR_TOP_DEFAULT (-144)      // CONFIG_AIRWRITER_TOP_MARGIN's default, 1/144 in
 static const char UNKNOWN_NAME[] = "Unknown printer";
@@ -28,6 +29,9 @@ const char *pr_model_name(int m)
     static const char *const n[] = { "", "ImageWriter II", "ImageWriter LQ", "ImageWriter" };
     return m >= 0 && m <= PR_MODEL_IW1 ? n[m] : "";
 }
+
+const char *pr_default_host_fmt(int has_wifi) { return has_wifi ? "imagewriter-%s" : "airwriter-%s"; }
+int pr_default_lt_port(int has_wifi) { return has_wifi ? -1 : 1; }
 
 void pr_init(pr_list_t *l, const uint8_t mac[6], uint16_t epoch)
 {
@@ -379,7 +383,8 @@ int pr_remove(pr_list_t *l, int id)
 int pr_use_anyway(pr_list_t *l, int id)
 {
     pr_rec_t *r = pr_get(l, id);
-    if (!r || r->kind != PR_KIND_LASERWRITER || r->identified) return -1;
+    // Offered only with the "didn't answer" notice: after three unanswered asks.
+    if (!r || r->kind != PR_KIND_LASERWRITER || r->identified || r->query_fails < 3) return -1;
     lw_info_default(&r->lw);
     r->identified = 1;
     notes_clear(l, id, PR_NOTE_NO_ANSWER);
@@ -534,6 +539,146 @@ int pr_load(pr_list_t *l, const uint8_t *buf, size_t n)
     l->n = cnt;
     l->n_notes = notes;
     l->next_id = buf[4] ? buf[4] : 1;
+    return 0;
+}
+
+// ------------------------------------------------------------- the Printers section
+
+// Where "key": starts its value, or NULL.
+static const char *json_at(const char *b, const char *key)
+{
+    char k[32];
+    snprintf(k, sizeof k, "\"%s\"", key);
+    const char *p = strstr(b, k);
+    if (!p) return NULL;
+    p += strlen(k);
+    while (*p == ' ') p++;
+    if (*p != ':') return NULL;
+    p++;
+    while (*p == ' ') p++;
+    return p;
+}
+
+static int json_has_int(const char *b, const char *key, long *v)
+{
+    const char *p = json_at(b, key);
+    if (!p || !(*p == '-' || isdigit((unsigned char)*p))) return 0;
+    *v = strtol(p, NULL, 10);
+    return 1;
+}
+
+static int json_has_bool(const char *b, const char *key, int *v)
+{
+    const char *p = json_at(b, key);
+    if (!p) return 0;
+    if (!strncmp(p, "true", 4)) { *v = 1; return 1; }
+    if (!strncmp(p, "false", 5)) { *v = 0; return 1; }
+    return 0;
+}
+
+// A JSON string's value as UTF-8; 0 when absent or not a string.
+static int json_has_str(const char *b, const char *key, char *out, size_t cap)
+{
+    const char *p = json_at(b, key);
+    if (!p || *p != '"') return 0;
+    size_t k = 0;
+    for (p++; *p && *p != '"' && k + 4 < cap; p++) {
+        if (*p != '\\') { out[k++] = *p; continue; }
+        p++;
+        if (*p == 'u') {
+            unsigned u = 0;
+            for (int i = 1; i <= 4; i++) {
+                char c = p[i];
+                u = u * 16 + (unsigned)(isdigit((unsigned char)c) ? c - '0' : (tolower(c) - 'a' + 10));
+            }
+            p += 4;
+            if (u < 0x80) out[k++] = (char)u;
+            else if (u < 0x800) { out[k++] = (char)(0xC0 | u >> 6); out[k++] = (char)(0x80 | (u & 0x3F)); }
+            else { out[k++] = (char)(0xE0 | u >> 12); out[k++] = (char)(0x80 | ((u >> 6) & 0x3F));
+                   out[k++] = (char)(0x80 | (u & 0x3F)); }
+        } else {
+            out[k++] = *p == 'n' ? '\n' : *p == 't' ? '\t' : *p;
+        }
+        if (!*p) break;
+    }
+    out[k] = '\0';
+    return 1;
+}
+
+static int post_err(pr_post_t *o, const char *msg)
+{
+    snprintf(o->err, sizeof o->err, "%s", msg);
+    return -1;
+}
+
+int pr_post(pr_list_t *l, const char *body, pr_post_t *o)
+{
+    memset(o, 0, sizeof *o);
+    o->screen_id = -1;
+    const char *b = body ? body : "";
+    while (*b == ' ' || *b == '\n' || *b == '\r' || *b == '\t') b++;
+    if (*b != '{') return post_err(o, "That isn't something AirWriter understands.");
+    int v;
+    long n;
+    if (json_has_bool(b, "look", &v) && v) {
+        o->look = 1;
+        return 0;
+    }
+    if (json_has_int(b, "note", &n)) {
+        if (n < 0 || n >= l->n_notes) return post_err(o, "No such notice.");
+        if (json_has_bool(b, "accept", &v) && v) {
+            if (pr_accept_change(l, (int)n)) return post_err(o, "No such notice.");
+        } else {
+            pr_dismiss(l, (int)n);
+        }
+        o->changed = 1;
+        return 0;
+    }
+    if (!json_has_int(b, "id", &n) || !pr_get(l, (int)n)) return post_err(o, "No such printer.");
+    int id = (int)n;
+    char s[PR_NAME_MAX * 2];
+    if (json_has_bool(b, "remove", &v) && v) {
+        pr_remove(l, id);
+        o->changed = 1;
+        return 0;
+    }
+    if (json_has_bool(b, "use_anyway", &v) && v) {
+        if (pr_use_anyway(l, id)) return post_err(o, "Only a LaserWriter that didn't answer.");
+        o->changed = 1;
+    }
+    if (json_has_str(b, "model", s, sizeof s)) {
+        int m = !strcmp(s, "none") ? PR_MODEL_NONE : !strcmp(s, "ImageWriter II") ? PR_MODEL_IW2
+              : !strcmp(s, "ImageWriter LQ") ? PR_MODEL_IWLQ : !strcmp(s, "ImageWriter") ? PR_MODEL_IW1
+              : -1;
+        if (m < 0 || pr_set_model(l, id, (pr_model_t)m)) return post_err(o, "Unknown model.");
+        o->changed = 1;
+    }
+    if (json_has_str(b, "name", s, sizeof s)) {
+        pr_rename(l, id, s);
+        o->changed = 1;
+    }
+    if (json_has_bool(b, "shared", &v)) {
+        pr_rec_t *r = pr_get(l, id);
+        if (v && (r->kind == PR_KIND_UNKNOWN || !r->identified))
+            return post_err(o, "That printer can't be shared until AirWriter knows what it is.");
+        if (pr_set_shared(l, id, v)) return post_err(o, "AirWriter shares up to four printers.");
+        o->changed = 1;
+    }
+    if (json_has_str(b, "dither", s, sizeof s)) {
+        static const char *const ok[] = { "atkinson", "floyd", "bluenoise", "bayer", "threshold" };
+        const char *good = NULL;
+        for (size_t i = 0; i < sizeof ok / sizeof ok[0]; i++) if (!strcmp(s, ok[i])) good = ok[i];
+        if (!good) return post_err(o, "Unknown halftone.");
+        snprintf(pr_get(l, id)->dither, sizeof pr_get(l, id)->dither, "%s", good);
+        o->changed = 1;
+        o->screen_id = id;
+    }
+    if (json_has_int(b, "gain", &n)) {
+        if (n < 0 || n > 45) return post_err(o, "Gain is 0 to 45.");
+        pr_get(l, id)->gain = (uint8_t)n;
+        o->changed = 1;
+        o->screen_id = id;
+    }
     return 0;
 }
 

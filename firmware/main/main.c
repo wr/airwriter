@@ -39,6 +39,7 @@
 #include "ethertalk.h"
 #include "lt_node.h"
 #include "laser.h"
+#include "printers.h"
 #include "ota_health.h"
 #include "fw_update.h"
 #include "cable_test.h"
@@ -73,11 +74,6 @@ static const char *TAG = "airwriter";
 #define AW_LOOPBACK 1
 #else
 #define AW_LOOPBACK 0
-#endif
-#ifdef CONFIG_AIRWRITER_DEV_MODE
-#define AW_DEV_MODE 1
-#else
-#define AW_DEV_MODE 0
 #endif
 
 // W-1046: the way back lives below the app, in the bootloader and the
@@ -365,6 +361,10 @@ static void general_saved(void *ctx)
     (void)ctx;
     settings_t fresh;
     if (settings_load(&fresh, s_suffix) != ESP_OK) return;
+    // W-1088: the port printer's record holds its screen; the old Printer
+    // pane's save reaches it here.
+    if (strcmp(fresh.dither, s_set.dither) || fresh.gain != s_set.gain)
+        printers_port_set_screen(fresh.dither, fresh.gain);
     strncpy(s_set.dither, fresh.dither, sizeof s_set.dither - 1);
     s_set.gain = fresh.gain;
     ht_algo_t algo;
@@ -407,6 +407,11 @@ static const char *ribbon_name(uint8_t r)
 static void ribbon_check(int for_job)
 {
     if (AW_LOOPBACK) return;
+    // W-1088: ESC ? also finds what is on the port, so it goes to anything
+    // but a printer the person said is something else; a job's goes only to
+    // an ImageWriter.
+    port_mode_t mode = printers_port_mode();
+    if (mode == PORT_UNKNOWN_SAID || (for_job && mode != PORT_IMAGEWRITER)) return;
     for (uint32_t ms = 0; for_job && !serial_out_clear() && !s_job_cancelled && !s_test_cancel &&
                           ms < CONFIG_AIRWRITER_STALL_ABORT * 1000u; ms += 100)
         vTaskDelay(pdMS_TO_TICKS(100));
@@ -430,9 +435,13 @@ static void ribbon_check(int for_job)
     if (n < 0) return;
     char hex[3 * sizeof reply + 1] = "";
     for (int i = 0; i < n; i++) snprintf(hex + 3 * i, 4, " %02x", reply[i]);
-    iw_ribbon_t r = iw_self_id_ribbon(reply, (size_t)n);
-    ESP_LOGI(TAG, "self-ID: %d byte%s%s, %s ribbon", n, n == 1 ? "" : "s", hex, ribbon_name(r));
-    if (r == IW_RIBBON_UNKNOWN || r == s_ribbon) return;
+    iw_self_id_t id = iw_self_id(reply, (size_t)n);
+    iw_ribbon_t r = id.ribbon;
+    ESP_LOGI(TAG, "self-ID: %d byte%s%s, %s, %s ribbon", n, n == 1 ? "" : "s", hex,
+             id.model == IW_MODEL_LQ ? "LQ" : id.model == IW_MODEL_II ? "II" : "no model",
+             ribbon_name(r));
+    printers_port_seen(id.model, 1);
+    if (!printers_port_is_imagewriter() || r == IW_RIBBON_UNKNOWN || r == s_ribbon) return;
     ESP_LOGI(TAG, "ribbon now %s (was %s)", ribbon_name(r), ribbon_name(s_ribbon));
     s_ribbon = (uint8_t)r;
     settings_save_ribbon((uint8_t)r);
@@ -444,6 +453,7 @@ static void ribbon_check(int for_job)
 static int colour_ok(void *ctx)
 {
     (void)ctx;
+    if (!printers_port_is_imagewriter()) return 0;
     ribbon_check(1);
     return s_ribbon == IW_RIBBON_COLOUR;
 }
@@ -476,7 +486,7 @@ static void printer_line_changed(void *ctx, int ready)
 // Spin waits for it, to its 30 s cap.
 static void line_source(void)
 {
-    int src = s_laser_owns || (!s_set.airprint && laser_shared()) ? LINE_LASER : LINE_IW;
+    int src = s_laser_owns || (!printers_port_shared() && laser_shared()) ? LINE_LASER : LINE_IW;
     int changed = src != s_line_src;
     s_line_src = src;
     int ready = src == LINE_LASER ? laser_ready() : s_iw_ready;
@@ -630,8 +640,12 @@ static void laser_finished(const job_pipe_stats_t *st, int ok);
 static void pipe_done(void *ctx, const job_pipe_stats_t *st)
 {
     (void)ctx;
-    if (s_laser_owns) laser_finished(st, s_doc_ok);
-    else job_finished(st, s_doc_ok);
+    if (s_laser_owns) {
+        laser_finished(st, s_doc_ok);
+    } else {
+        job_finished(st, s_doc_ok);
+        printers_apply();           // W-1088: a change to the port's printer waited for it
+    }
 }
 
 // The upload is over; the printing usually is not. Returns at once so the
@@ -656,6 +670,7 @@ static void doc_end(void *ctx, int ok)
     // job_finished balances doc_begin's take.
     job_pipe_stats_t st = {0};
     job_finished(&st, 0);
+    printers_apply();
 }
 
 // ------------------------------------------------------------ LaserWriter jobs
@@ -735,6 +750,56 @@ static void laser_doc_end(void *ctx, int ok)
 static void laser_changed(void)
 {
     line_source();
+}
+
+// ------------------------------------------------------------- printers
+// W-1088: the printer list (components/printers) keeps what is where; these
+// are its board's side of the port printer.
+
+static void port_live(pr_live_t *o)
+{
+    ps_view_t v = printer_state_view();
+    int mine = s_line_src == LINE_IW;
+    o->present = o->ready = s_iw_ready == 1;
+    o->printing = s_printing && !s_laser_owns;
+    o->attention = mine && v.state == PS_ATTENTION;
+    o->failed = mine && v.state == PS_FAILED;
+}
+
+// The page changed the port printer's halftone: the next job prints with it.
+static void port_screen(const char *dither, int gain)
+{
+    settings_save_general(NULL, NULL, dither, gain);
+    snprintf(s_set.dither, sizeof s_set.dither, "%s", dither);
+    s_set.gain = (uint8_t)gain;
+    ht_algo_t algo;
+    if (ht_algo_from_name(s_set.dither, &algo)) algo = HT_ATKINSON;
+    job_pipe_set_screen(algo, s_set.gain);
+    ESP_LOGI(TAG, "the port printer's screen now %s, gain %u%%", s_set.dither, s_set.gain);
+}
+
+// "Look for printers": ask the port again once the line is ready.
+static void printers_look(void)
+{
+    s_ribbon_due = xTaskGetTickCount();
+    s_ribbon_want = 1;
+}
+
+static void printers_changed(void)
+{
+    line_source();
+}
+
+static void printers_web_json(void *ctx, char *buf, size_t cap)
+{
+    (void)ctx;
+    printers_json(buf, cap);
+}
+
+static int printers_web_post(void *ctx, const char *body, char *err, size_t cap)
+{
+    (void)ctx;
+    return printers_post(body, err, cap);
 }
 
 // ---------------------------------------------------------- AppleTalk jobs
@@ -853,8 +918,8 @@ static int lt_print_end(void *ctx, int normal)
 // ------------------------------------------------------------- dip / test
 // DIP1-8 select mode/dev-mode/test-on-boot/dither-override/spare; a press of
 // the test button prints a self-test page. dev_mode and dither_ovr land in
-// later milestones -- for this rev dev_mode is a log note only, and the
-// printer-uuid behaviour it names stays Kconfig's AIRWRITER_DEV_MODE.
+// later milestones -- for this rev dev_mode is a log note only (each
+// printer's uuid is its record's since W-1088).
 
 // W-1039: unstick a printer that serial-line noise (a cable replug, power-up)
 // left busy with SELECT lit -- CTRL-X cancels the unprinted line in its
@@ -874,7 +939,12 @@ static void kick_task(void *arg)
             ribbon_check(0);
             xSemaphoreGive(s_job_lock);
         }
-        if (s_line_src != LINE_IW || !printer_state_want_kick()) continue;
+        // W-1088: CTRL-X only to an ImageWriter, or a port nothing has been
+        // found on yet (one left busy at power-up never answers ESC ?).
+        port_mode_t mode = printers_port_mode();
+        if (s_line_src != LINE_IW || (mode != PORT_IMAGEWRITER && mode != PORT_NONE) ||
+            !printer_state_want_kick())
+            continue;
         if (xSemaphoreTake(s_job_lock, 0) != pdTRUE) continue;
         esp_err_t err = serial_out_send_unflowed(&ctrl_x, 1);
         printer_state_kicked();
@@ -952,8 +1022,11 @@ static void test_page_task(void *arg)
     built[k] = '\0';
     snprintf(ap, sizeof ap, "AirWriter-%s", s_suffix);
     appletalk_text(at, sizeof at);
+    char name[PR_NAME_MAX];
+    printers_port_name(name, sizeof name);
     tp_info_t info = {
-        .version = app->version, .built = built, .model = s_set.model, .name = s_set.queue,
+        .version = app->version, .built = built, .model = pr_model_name(printers_port_model()),
+        .name = name,
         .host = s_set.hostname, .ip = s_ip, .setup_ssid = s_ap_mode ? ap : NULL,
         .appletalk = at, .ribbon = (iw_ribbon_t)s_ribbon, .screen = algo, .gain = s_set.gain,
         .top_margin = s_set.top_margin,
@@ -1022,6 +1095,10 @@ static void test_page_locked(void)
 static void test_page(void)
 {
     on_activity();
+    if (!printers_port_is_imagewriter()) {
+        ESP_LOGW(TAG, "test page: no ImageWriter on the printer port");
+        return;
+    }
     if (xSemaphoreTake(s_job_lock, 0) != pdTRUE) {
         ESP_LOGW(TAG, "test page requested but the printer is already busy");
         s_job_waiting = 1;
@@ -1089,6 +1166,14 @@ static void test_button(void)
         return;
     }
 #endif
+    // W-1088: the ImageWriter test page needs an ImageWriter; the other
+    // printers' pages come with the printer list's test target.
+    if (!printers_port_is_imagewriter()) {
+        ESP_LOGW(TAG, "test button: no ImageWriter on the printer port");
+        xSemaphoreGive(s_job_lock);
+        led_grid_blip(LG_BLIP_BUSY);
+        return;
+    }
     test_page_locked();
 }
 
@@ -1106,7 +1191,7 @@ static void dip_on_change(const dip_config_t *cfg)
              cfg->spare);
     led_grid_set_gamer(cfg->gamer);
     if (cfg->dev_mode)
-        ESP_LOGI(TAG, "dip: dev_mode is on, but the printer uuid stays Kconfig-driven this rev");
+        ESP_LOGI(TAG, "dip: dev_mode is on; it changes nothing this rev");
     if (cfg->test_on_boot) s_test_on_boot = 1;
     s_dip = *cfg;
     s_dip_known = 1;
@@ -1195,6 +1280,7 @@ static int web_test_page(void *ctx)
 {
     (void)ctx;
     on_activity();
+    if (!printers_port_is_imagewriter()) return 1;
     if (xSemaphoreTake(s_job_lock, 0) != pdTRUE) return 1;
     test_page_locked();
     return 0;
@@ -1470,8 +1556,9 @@ static void status_json(void *ctx, char *buf, size_t cap)
     }
     char e_ssid[80], e_queue[80], e_job[200], e_model[80], e_name[80], e_host[96], e_phost[96], e_uri[200];
 
-    char laser[300];
+    char laser[300], printers[128];
     laser_status_json(laser, sizeof laser);
+    printers_status_json(printers, sizeof printers);
 
     char job[96];
     if (s_last_job[0])
@@ -1492,7 +1579,7 @@ static void status_json(void *ctx, char *buf, size_t cap)
         "\"model\":\"Apple ImageWriter II\",\"pic\":%s,"
         "\"pmodel\":\"%s\",\"pname\":\"%s\",\"phost\":\"%s\",\"airprint\":%s,"
         "\"lt_port\":%d,\"lt\":%s,\"lt_chip\":\"%s\",\"dip\":\"%s\",\"ap\":\"AirWriter-%s\","
-        "\"laser\":%s,\"internal\":{\"free\":%u,\"lowest\":%u}}",
+        "\"laser\":%s,\"printers\":%s,\"internal\":{\"free\":%u,\"lowest\":%u}}",
         state_text(v.state),
         ps_name(v.state),
         v.asleep ? "true" : "false",
@@ -1519,7 +1606,7 @@ static void status_json(void *ctx, char *buf, size_t cap)
         json_esc(e_model, sizeof e_model, s_saved_model), json_esc(e_name, sizeof e_name, s_saved_name),
         json_esc(e_phost, sizeof e_phost, s_saved_host), s_set.airprint ? "true" : "false", s_set.lt_port,
         localtalk_serving() ? "true" : "false", lt_chip_name(s_lt_chip),
-        dip, s_suffix, laser,
+        dip, s_suffix, laser, printers,
         // Internal RAM is what Wi-Fi and lwIP live on: below ~20 KB, replies stall.
         (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
         (unsigned)heap_caps_get_minimum_free_size(MALLOC_CAP_INTERNAL));
@@ -1932,6 +2019,42 @@ void app_main(void)
     esp_read_mac(mac, ESP_MAC_WIFI_STA);
     snprintf(s_suffix, sizeof s_suffix, "%02x%02x", mac[4], mac[5]);
     settings_load(&s_set, s_suffix);
+    // W-1088: a board's first boot on the printer list. One set up before
+    // (Wi-Fi saved, no list) keeps its host name and DIP rule, and its records
+    // are made from what it had; a new one is airwriter-xxxx, port on.
+    int has_wifi = s_set.ssid[0] != 0;
+    int updated = has_wifi && !printers_stored();
+    settings_first_boot(pr_default_host_fmt(has_wifi), s_suffix, pr_default_lt_port(has_wifi));
+    settings_load(&s_set, s_suffix);
+    printers_cfg_t pc = {
+        .epoch = CONFIG_AIRWRITER_LASER_UUID_EPOCH, .updated_board = updated,
+        .legacy = { .model = s_set.model, .name = s_set.name, .airprint = s_set.airprint,
+                    .dither = s_set.dither, .gain = s_set.gain, .top_margin = s_set.top_margin,
+                    .ribbon = s_set.ribbon },
+        .port_sink = { .begin = doc_begin, .data = doc_data, .end = doc_end,
+                       .cancel = doc_cancel, .ctx = NULL },
+        .port_live = port_live, .port_screen = port_screen, .look = printers_look,
+        .changed = printers_changed,
+    };
+    memcpy(pc.mac, mac, sizeof pc.mac);
+    ESP_ERROR_CHECK(printers_start(&pc));
+    if (updated && !s_set.airprint) {
+        // W-1079's switch was the ImageWriter's alone: its record took it as
+        // Share, and the switch is now the whole box's.
+        settings_save_switches(1, -1);
+        s_set.airprint = 1;
+    }
+    {
+        char dither[sizeof s_set.dither];
+        int gain;
+        if (!printers_port_screen(dither, sizeof dither, &gain)) {
+            snprintf(s_set.dither, sizeof s_set.dither, "%s", dither);
+            s_set.gain = (uint8_t)gain;
+        }
+        // The Chooser's name and mDNS's default instance: the port printer's.
+        printers_port_name(s_set.queue, sizeof s_set.queue);
+        if (!s_set.queue[0]) snprintf(s_set.queue, sizeof s_set.queue, "AirWriter");
+    }
     s_ribbon = s_set.ribbon;
     // Wi-Fi saved before this restart: green greets the join (W-1049).
     if (settings_take_wifi_fresh()) printer_state_post(PS_EV_WIFI_FRESH);
@@ -1951,7 +2074,7 @@ void app_main(void)
     raster_selftest();
     // W-1082: no ImageWriter and a LaserWriter shared: the panel follows the
     // LaserWriter from the first report, not J2's line.
-    if (!s_set.airprint && laser_shared_saved()) s_line_src = LINE_LASER;
+    if (!printers_port_shared() && laser_shared_saved()) s_line_src = LINE_LASER;
 
     ht_algo_t algo;
     if (ht_algo_from_name(s_set.dither, &algo)) algo = HT_ATKINSON;
@@ -2023,7 +2146,8 @@ void app_main(void)
                               .restart = web_restart, .erase = web_erase, .test_page = web_test_page,
                               .localtalk_flash = localtalk_flash,
                               .lt_json = lt_json, .lt_job = lt_job, .lt_echo = lt_echo,
-                              .cable_test = cable_web };   // no EtherTalk: the zone stays off the open AP
+                              .cable_test = cable_web,     // no EtherTalk: the zone stays off the open AP
+                              .printers_json = printers_web_json, .printers_post = printers_web_post };
         ESP_ERROR_CHECK(webui_start(&wcfg));
         ota_health_set(OH_WEB_UP, 1);
 
@@ -2031,14 +2155,12 @@ void app_main(void)
     }
 
     ipp_server_cfg_t cfg = {
-        .queue_name = s_set.queue,
-        .hostname   = s_set.hostname,
-        .port       = 631,
-        .dev_mode   = AW_DEV_MODE,
-        .on_job_op  = on_activity,
-        .colour     = s_ribbon == IW_RIBBON_COLOUR,
-        .sink = { .begin = doc_begin, .data = doc_data, .end = doc_end,
-                  .cancel = doc_cancel, .ctx = NULL },
+        .queue_name   = s_set.queue,
+        .hostname     = s_set.hostname,
+        .port         = 631,
+        .port_printer = printers_port_ipp(),        // W-1088: as its record says
+        .on_job_op    = on_activity,
+        .colour       = s_ribbon == IW_RIBBON_COLOUR,
     };
     ipp_server_set_airprint(s_set.airprint);          // W-1079
     ESP_ERROR_CHECK(ipp_server_start(&cfg));
@@ -2055,7 +2177,8 @@ void app_main(void)
                           .lt_json = lt_json, .lt_job = lt_job, .lt_echo = lt_echo,
                           .cable_test = cable_web, .et_json = et_json,
                           .et_settings_get = et_settings_get, .et_settings_set = et_settings_set,
-                          .laser_json = laser_web_json, .laser_set = laser_web_set };
+                          .laser_json = laser_web_json, .laser_set = laser_web_set,
+                          .printers_json = printers_web_json, .printers_post = printers_web_post };
     ESP_ERROR_CHECK(webui_start(&wcfg));
     ota_health_set(OH_WEB_UP, 1);
     et_start();

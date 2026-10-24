@@ -17,7 +17,6 @@
 
 #include "esp_log.h"
 #include "esp_heap_caps.h"
-#include "esp_random.h"
 #include "esp_mac.h"
 #include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
@@ -133,21 +132,16 @@ static uint32_t uptime_s(void)
     return (uint32_t)(esp_timer_get_time() / 1000000);
 }
 
-// printer-uuid must survive a reflash, so it is derived from the eFuse MAC.
-// In dev mode it is random every boot instead: iOS caches capabilities against
-// the UUID hard enough that a stale media list otherwise outlives any number
-// of reflashes. SPEC.md 3.5. Outside dev mode the third group is the UUID
-// epoch, bumped by hand when the advertised capabilities change.
-static void make_uuid(char *out, size_t cap, int dev_mode)
+// The port printer's printer-uuid before W-1088, derived from the eFuse MAC
+// so it survived a reflash, the third group the UUID epoch (bumped by hand
+// when the advertised capabilities changed). SPEC.md 3.5. A board updated to
+// W-1088 keeps it in its port record; records made since have their own.
+void ipp_server_legacy_uuid(char out[46])
 {
     uint8_t mac[6] = {0};
     esp_read_mac(mac, ESP_MAC_WIFI_STA);
-
-    uint16_t rnd = dev_mode ? (uint16_t)(esp_random() & 0xFFFF)
-                            : (uint16_t)CONFIG_AIRWRITER_UUID_EPOCH;
-    snprintf(out, cap,
-             "urn:uuid:41575254-4552-%04x-%02x%02x-%02x%02x%02x%02x",
-             rnd, mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+    snprintf(out, 46, "urn:uuid:41575254-4552-%04x-%02x%02x-%02x%02x%02x%02x",
+             (unsigned)CONFIG_AIRWRITER_UUID_EPOCH, mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
 }
 
 // printer-icons, built in from icons/ by tools/icon/mkicons.py and served
@@ -864,6 +858,8 @@ static esp_err_t start_listener(void)
     return ESP_OK;
 }
 
+static void fill(printer_t *p, const ipp_printer_cfg_t *cfg);
+
 esp_err_t ipp_server_start(const ipp_server_cfg_t *cfg)
 {
     s_p = heap_caps_calloc(IPP_PRINTERS, sizeof *s_p, MALLOC_CAP_SPIRAM);
@@ -878,15 +874,8 @@ esp_err_t ipp_server_start(const ipp_server_cfg_t *cfg)
 
     strncpy(s_hostname, cfg->hostname, sizeof s_hostname - 1);
     snprintf(s_adminurl, sizeof s_adminurl, "http://%s.local/", s_hostname);
-    p->on = 1;
-    p->sink = cfg->sink;
-    strcpy(p->resource, "ipp/print");
-    snprintf(p->uri, sizeof p->uri, "ipp://%s.local:%u/ipp/print",
-             s_hostname, (unsigned)s_cfg.port);
-    strncpy(p->name, cfg->queue_name, sizeof p->name - 1);
-    strcpy(p->info, "Apple ImageWriter II");
-    icon_uris(p, "icon");
-    make_uuid(p->uuid, sizeof p->uuid, cfg->dev_mode);
+    // W-1088: the port's printer as its record says, or none on the port.
+    if (cfg->port_printer) fill(p, cfg->port_printer);
     p->colour = cfg->colour || s_pre_colour ? 1 : 0;
     p->airprint = s_box_airprint;
     for (int i = 0; i < IPP_PRINTERS; i++) {
@@ -906,8 +895,8 @@ esp_err_t ipp_server_start(const ipp_server_cfg_t *cfg)
     err = start_listener();
     if (err != ESP_OK) return err;
 
-    ESP_LOGI(TAG, "listening on %s", p->uri);
-    ESP_LOGI(TAG, "uuid %s%s", p->uuid, cfg->dev_mode ? "  (dev mode, new each boot)" : "");
+    ESP_LOGI(TAG, "listening on port %u", (unsigned)s_cfg.port);
+    if (p->on) ESP_LOGI(TAG, "printer 0 \"%s\" at %s, uuid %s", p->name, p->uri, p->uuid);
     return ESP_OK;
 }
 
@@ -1015,6 +1004,27 @@ void ipp_server_job_message_for(int idx, const char *msg)
     xSemaphoreGive(s_job_lock);
 }
 
+// A slot's printer from its cfg; strings and caps are copied.
+static void fill(printer_t *p, const ipp_printer_cfg_t *cfg)
+{
+    snprintf(p->resource, sizeof p->resource, "%s", cfg->resource);
+    snprintf(p->legacy, sizeof p->legacy, "%s", cfg->legacy_resource ? cfg->legacy_resource : "");
+    snprintf(p->uri, sizeof p->uri, "ipp://%s.local:%u/%s", s_hostname,
+             (unsigned)s_cfg.port, cfg->resource);
+    snprintf(p->name, sizeof p->name, "%s", cfg->name);
+    snprintf(p->info, sizeof p->info, "%s", cfg->info);
+    snprintf(p->uuid, sizeof p->uuid, "%s", cfg->uuid);
+    p->caps_copy = *cfg->caps;
+    snprintf(p->make_model, sizeof p->make_model, "%s", cfg->caps->make_model);
+    snprintf(p->device_id, sizeof p->device_id, "%s", cfg->caps->device_id);
+    p->caps_copy.make_model = p->make_model;
+    p->caps_copy.device_id = p->device_id;
+    p->caps = &p->caps_copy;
+    p->sink = cfg->sink;
+    icon_uris(p, cfg->icon ? cfg->icon : "icon");
+    p->on = 1;
+}
+
 esp_err_t ipp_server_set_printer(int idx, const ipp_printer_cfg_t *cfg)
 {
     if (idx < 0 || idx >= IPP_PRINTERS || !s_p || !s_job_lock) return ESP_ERR_INVALID_ARG;
@@ -1029,23 +1039,8 @@ esp_err_t ipp_server_set_printer(int idx, const ipp_printer_cfg_t *cfg)
     p->stop_reason = p->note_reason = NULL;
     p->busy = 0;
     if (cfg) {
-        snprintf(p->resource, sizeof p->resource, "%s", cfg->resource);
-        snprintf(p->legacy, sizeof p->legacy, "%s", cfg->legacy_resource ? cfg->legacy_resource : "");
-        snprintf(p->uri, sizeof p->uri, "ipp://%s.local:%u/%s", s_hostname,
-                 (unsigned)s_cfg.port, cfg->resource);
-        snprintf(p->name, sizeof p->name, "%s", cfg->name);
-        snprintf(p->info, sizeof p->info, "%s", cfg->info);
-        snprintf(p->uuid, sizeof p->uuid, "%s", cfg->uuid);
-        p->caps_copy = *cfg->caps;
-        snprintf(p->make_model, sizeof p->make_model, "%s", cfg->caps->make_model);
-        snprintf(p->device_id, sizeof p->device_id, "%s", cfg->caps->device_id);
-        p->caps_copy.make_model = p->make_model;
-        p->caps_copy.device_id = p->device_id;
-        p->caps = &p->caps_copy;
-        p->sink = cfg->sink;
-        icon_uris(p, cfg->icon ? cfg->icon : "icon");
+        fill(p, cfg);
         if (idx) p->colour = 0;               // the port's printer keeps its ribbon's
-        p->on = 1;
     }
     refresh(p);
     xSemaphoreGive(s_job_lock);

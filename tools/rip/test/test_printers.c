@@ -426,8 +426,87 @@ static void test_json(void)
     CHECK(strstr(buf, "\"max_shared\":4") != NULL);
 }
 
+// A board's first boot on W-1088 fixes its host name and AppleTalk port for
+// good: one already set up (Wi-Fi saved) keeps imagewriter-xxxx and its DIP
+// rule; a new one is airwriter-xxxx with the AppleTalk port on.
+static void test_defaults(void)
+{
+    CHECK(strcmp(pr_default_host_fmt(1), "imagewriter-%s") == 0);
+    CHECK(strcmp(pr_default_host_fmt(0), "airwriter-%s") == 0);
+    CHECK_EQ_INT(pr_default_lt_port(1), -1);
+    CHECK_EQ_INT(pr_default_lt_port(0), 1);
+}
+
+// What the Printers section sends, flat JSON: {"id":N, ...one action...}.
+static void test_post(void)
+{
+    fresh();
+    lw_info_t info;
+    lw_info_default(&info);
+    int port = pr_port_seen(&L, PR_PORT_IW2);
+    int lw = pr_at_seen(&L, PR_WHERE_CABLE, P("Office"), P("LaserWriter"), 0);
+    char body[160];
+    pr_post_t r;
+
+    snprintf(body, sizeof body, "{\"id\":%d,\"name\":\"Den \\\"Two\\\"\"}", port);
+    CHECK_EQ_INT(pr_post(&L, body, &r), 0);
+    CHECK(strcmp(pr_get(&L, port)->name, "Den \"Two\"") == 0);
+    CHECK_EQ_INT(r.changed, 1);
+
+    snprintf(body, sizeof body, "{\"id\":%d,\"shared\":true}", lw);   // unidentified yet
+    CHECK_EQ_INT(pr_post(&L, body, &r), -1);
+    CHECK(strstr(r.err, "can't be shared") != NULL);
+    snprintf(body, sizeof body, "{\"id\":%d,\"use_anyway\":true}", lw);
+    CHECK_EQ_INT(pr_post(&L, body, &r), -1);                 // only after it didn't answer
+    pr_at_queried(&L, lw, 0, NULL); pr_at_queried(&L, lw, 0, NULL); pr_at_queried(&L, lw, 0, NULL);
+    CHECK_EQ_INT(pr_post(&L, body, &r), 0);
+    CHECK_EQ_INT(pr_get(&L, lw)->shared, 1);
+    snprintf(body, sizeof body, "{\"id\":%d,\"shared\":false}", lw);
+    CHECK_EQ_INT(pr_post(&L, body, &r), 0);
+    CHECK_EQ_INT(pr_get(&L, lw)->shared, 0);
+
+    snprintf(body, sizeof body, "{\"id\":%d,\"model\":\"ImageWriter LQ\"}", port);
+    CHECK_EQ_INT(pr_post(&L, body, &r), 0);
+    CHECK_EQ_INT(pr_get(&L, port)->model, PR_MODEL_IWLQ);
+    snprintf(body, sizeof body, "{\"id\":%d,\"model\":\"none\"}", port);
+    CHECK_EQ_INT(pr_post(&L, body, &r), 0);
+    CHECK_EQ_INT(pr_get(&L, port)->kind, PR_KIND_UNKNOWN);
+    snprintf(body, sizeof body, "{\"id\":%d,\"model\":\"StyleWriter\"}", port);
+    CHECK_EQ_INT(pr_post(&L, body, &r), -1);
+
+    snprintf(body, sizeof body, "{\"id\":%d,\"dither\":\"floyd\",\"gain\":20}", lw);
+    CHECK_EQ_INT(pr_post(&L, body, &r), 0);
+    CHECK(strcmp(pr_get(&L, lw)->dither, "floyd") == 0);
+    CHECK_EQ_INT(pr_get(&L, lw)->gain, 20);
+    CHECK_EQ_INT(r.screen_id, lw);
+    snprintf(body, sizeof body, "{\"id\":%d,\"dither\":\"sparkle\"}", lw);
+    CHECK_EQ_INT(pr_post(&L, body, &r), -1);
+    snprintf(body, sizeof body, "{\"id\":%d,\"gain\":46}", lw);
+    CHECK_EQ_INT(pr_post(&L, body, &r), -1);
+
+    CHECK_EQ_INT(pr_post(&L, "{\"look\":true}", &r), 0);
+    CHECK_EQ_INT(r.look, 1);
+    CHECK_EQ_INT(r.changed, 0);
+
+    pr_port_seen(&L, PR_PORT_NOTHING);
+    int found = L.n_notes;                                    // a FOUND note for Office
+    CHECK(found > 0);
+    snprintf(body, sizeof body, "{\"note\":%d,\"dismiss\":true}", found - 1);
+    CHECK_EQ_INT(pr_post(&L, body, &r), 0);
+    CHECK_EQ_INT(L.n_notes, found - 1);
+
+    snprintf(body, sizeof body, "{\"id\":%d,\"remove\":true}", lw);
+    CHECK_EQ_INT(pr_post(&L, body, &r), 0);
+    CHECK(pr_get(&L, lw) == NULL);
+    CHECK_EQ_INT(pr_post(&L, "{\"id\":99,\"remove\":true}", &r), -1);
+    CHECK(strstr(r.err, "No such printer") != NULL);
+    CHECK_EQ_INT(pr_post(&L, "not json", &r), -1);
+}
+
 int main(void)
 {
+    test_defaults();
+    test_post();
     test_port_identified();
     test_port_silent();
     test_port_changed();

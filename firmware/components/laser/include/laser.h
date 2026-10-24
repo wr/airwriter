@@ -18,6 +18,7 @@
 #include "esp_err.h"
 #include "ipp_server.h"
 #include "job_pipe.h"
+#include "lw_query.h"
 
 typedef struct {
     uint8_t     mac[6];           // the station's: the LaserWriter's printer-uuid
@@ -38,6 +39,18 @@ esp_err_t laser_start(const laser_cfg_t *cfg);
 // Whether a LaserWriter was shared at the last save, from NVS: before start,
 // for the panel's line source at boot.
 int       laser_shared_saved(void);
+// W-1088: what W-1082 kept in NVS ("laser"), for a board's first boot on the
+// printer list: the shared LaserWriter, where it was heard (at_link_t, -1
+// unknown), its query's answers and its screen. 0, or -1 with none shared.
+typedef struct {
+    uint8_t   name[33];          // Pascal, MacRoman
+    int       link;
+    int       have_info;
+    lw_info_t info;
+    char      dither[12];
+    uint8_t   gain;
+} laser_saved_t;
+int       laser_saved(laser_saved_t *out);
 int       laser_shared(void);
 // -1 none shared, 0 stopped or offline, 1 ready: the panel's printer line.
 int       laser_ready(void);

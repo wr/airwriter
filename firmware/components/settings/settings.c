@@ -56,7 +56,7 @@ esp_err_t settings_load(settings_t *out, const char *mac_suffix)
     memset(out, 0, sizeof *out);
 
     char default_host[SET_HOST_MAX];
-    snprintf(default_host, sizeof default_host, "imagewriter-%s", mac_suffix);
+    snprintf(default_host, sizeof default_host, "airwriter-%s", mac_suffix);
 
     nvs_handle_t h;
     if (nvs_open(NS, NVS_READONLY, &h) == ESP_OK) {
@@ -100,6 +100,26 @@ esp_err_t settings_load(settings_t *out, const char *mac_suffix)
         strncpy(out->pass, CONFIG_AIRWRITER_WIFI_PASSWORD, sizeof out->pass - 1);
     }
     return ESP_OK;
+}
+
+esp_err_t settings_first_boot(const char *host_fmt, const char *mac_suffix, int lt_port)
+{
+    nvs_handle_t h;
+    esp_err_t err = nvs_open(NS, NVS_READWRITE, &h);
+    if (err != ESP_OK) return err;
+    char host[SET_HOST_MAX];
+    size_t len = sizeof host;
+    if (nvs_get_str(h, "hostname", host, &len) != ESP_OK || !host[0]) {
+        snprintf(host, sizeof host, host_fmt, mac_suffix);
+        nvs_set_str(h, "hostname", host);
+        ESP_LOGI(TAG, "host name %s", host);
+    }
+    uint8_t lt;
+    if (lt_port >= 0 && nvs_get_u8(h, "lt_port", &lt) != ESP_OK)
+        nvs_set_u8(h, "lt_port", lt_port ? 1 : 0);
+    err = nvs_commit(h);
+    nvs_close(h);
+    return err;
 }
 
 esp_err_t settings_save_wifi(const char *ssid, const char *pass)

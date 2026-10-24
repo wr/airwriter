@@ -185,6 +185,31 @@ int laser_shared_saved(void)
     return v;
 }
 
+int laser_saved(laser_saved_t *out)
+{
+    memset(out, 0, sizeof *out);
+    out->link = -1;
+    snprintf(out->dither, sizeof out->dither, "atkinson");
+    nvs_handle_t h;
+    if (nvs_open("laser", NVS_READONLY, &h) != ESP_OK) return -1;
+    uint8_t v = 0, share = 0;
+    nvs_get_u8(h, "share", &share);
+    size_t n = sizeof out->name;
+    if (nvs_get_blob(h, "name", out->name, &n) != ESP_OK || !n || out->name[0] + 1u != n) share = 0;
+    if (nvs_get_u8(h, "link", &v) == ESP_OK) out->link = v == 0xFF ? -1 : v;
+    struct { uint8_t ver; lw_info_t info; } b;
+    n = sizeof b;
+    if (nvs_get_blob(h, "info", &b, &n) == ESP_OK && n == sizeof b && b.ver == INFO_VER) {
+        out->info = b.info;
+        out->have_info = 1;
+    }
+    n = sizeof out->dither;
+    nvs_get_str(h, "dither", out->dither, &n);
+    if (nvs_get_u8(h, "gain", &v) == ESP_OK) out->gain = v;
+    nvs_close(h);
+    return share ? 0 : -1;
+}
+
 // The shared printer's name in UTF-8, its UUID and its caps. Under s_mu.
 static void derive(void)
 {
