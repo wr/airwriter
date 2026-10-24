@@ -283,8 +283,8 @@ its name in the Chooser. U7's PIC calibration words: `16E0 1DA8`. Its LocalTalk 
 2026-10-24, with its settings put back over the API. Its port printer's uuid is now
 `…4c57-0001-0001-10bda36e2434`, which orphans Mac queues added before that date. Printer: an ImageWriter II on J2 via
 Apple's crossover cable, fanfold paper loaded as the Owner's Guide says (top edge under the paper
-bail). It runs v0.2.0-160-gd20f49d, a bench build of what main now holds (W-1095 and W-1096
-merged before main had them; the same firmware), ahead of any release, with auto-update on; it shares the fake "LaserWriter II NT" on the Basilisk II tunnel when
+bail). It runs v0.2.0-162-gf193b0d, the same firmware as main (the branch that took the
+LaserWriter detail's untested note off the page, before its merge), ahead of any release, with auto-update on; it shares the fake "LaserWriter II NT" on the Basilisk II tunnel when
 `etpeer.py tunnel laserwriter` runs on the Mac. On its AppleTalk cable since 2026-10-24: a
 Personal LaserWriter NTR (PostScript 2010.129, Level 2, 3 MB, 300 dpi, takes binary; 10,277
 pages that morning), AirPrint printer 3 at `ipp/p3`. Its toner is spent (more ordered), so

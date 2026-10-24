@@ -652,7 +652,6 @@ function pdDraw(){
   $('pd-cant').textContent=ask?'It didn’t say what it is. If it’s an ImageWriter, choose its model.'
     :atiw?'Old Macs on your other AppleTalk ways in can print to it. AirWriter can’t share it with iPhones and Macs yet.'
     :'AirWriter can’t print to this printer yet.';
-  $('pd-note').classList.toggle('hide',p.kind!=='laserwriter');
   $('ht-box').classList.toggle('hide',unk||atiw);
   $('ht-paper').classList.toggle('hide',!iw);       // the sample is the ImageWriter's dots
   if(document.activeElement!==$('screen')&&p.dither&&p.dither!==$('screen').value){
