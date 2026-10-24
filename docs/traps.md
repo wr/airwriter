@@ -20,6 +20,12 @@ Traps already explained in a code comment are listed only when the comment is ea
   goes to `.data` whole. Keep internal only what must be: a stack whose task writes NVS.
   Any `malloc` under 16 KB (`SPIRAM_MALLOC_ALWAYSINTERNAL`) lands internal too: a 300 dpi
   page's rip rows (~30 KB) took it to 923 bytes, so row buffers come from `bigmem.h`.
+- **An unread TCP upload holds internal RAM.** Received frames stay in Wi-Fi's internal
+  buffers until the socket is read, and more than the 5.7 KB window's worth. An AirPrint job
+  left waiting for the job lock with its body unread took internal RAM from 26 KB to 6.8 KB
+  in 25 s. Then it could not start its rip task and was aborted (W-1076 bench). A Print-Job
+  that cannot have the printer now is told busy (the sink's `claim`). Never leave a socket
+  unread for long.
 - **A failed UDP send is usually only a full queue.** Wi-Fi's TX buffers come from internal RAM
   one per frame, so a burst (a PAP reply is eight frames) on top of an upload and a rip makes
   `sendto` fail with ENOMEM. Dropped, each lost PAP reply cost the printer a 2 s retry, and a
@@ -146,10 +152,8 @@ Traps already explained in a code comment are listed only when the comment is ea
 - **iOS and macOS open 25–50 parallel Get-Printer-Attributes connections.** Workers parked on
   idle keep-alives starved them and prints timed out before Print-Job. Fixed in `ipp_server.c`
   (4 workers, backlog 8, 300 ms idle close when no worker is free); keep it when touching workers.
-- **`tools/ipp/build/` holds committed binaries.** `git checkout` leaves them newer than the
-  sources and `make test` runs the stale ones. Use `make -B -C tools/ipp test`, which in turn
-  rewrites the committed binaries: `git checkout -- tools/ipp/build` before committing unless
-  you mean to update them.
+- **`make -C tools/ipp test` can run stale binaries.** After a `git checkout` the build folder
+  may be newer than the sources; use `make -B -C tools/ipp test`.
 - **macOS's `get-printer-attributes-suite.test` has a broken fifth test** (asks for `all`,
   expects only `media-col-database`). No printer passes it (SPEC §3.5).
 - **A slow upload is usually the link, not the firmware.** Read the per-job `rssi` (`doc_begin`)
@@ -158,6 +162,8 @@ Traps already explained in a code comment are listed only when the comment is ea
 - **Killing `ipptool` does not cut a transfer on macOS.** The kernel delivers the buffered file,
   and with the PSRAM job buffer a small upload is already in. To cut mid-document use Cancel-Job, starve
   `ipptool` through a FIFO, or `curl --limit-rate` with a hand-built IPP request.
+- **`ipptool` does not retry `server-error-busy`.** CUPS and iOS ask again; `ipptool` reports
+  the busy and stops. A bench job sent while the printer is taken needs a loop around it.
 - **Documents over 1 MB bypass the PSRAM buffer** and stream with TCP backpressure (an iPhone
   photo page is 6.4 MB of URF). For those a dropped upload during a pause still looks like a
   healthy pause until paper returns: the client's FIN waits behind its unsent data.

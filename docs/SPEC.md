@@ -254,6 +254,11 @@ Minimum viable set for iOS:
   data until paper returns. A document whose half outruns its 512 KB (a LaserWriter's URF
   past 1 MB, an ImageWriter job's printer bytes past 512 KB), or a board with no PSRAM (8 KB
   internal ring), falls back to streaming with TCP backpressure.
+  A Print-Job that finds the printer taken (another phone's job, a Mac's on AppleTalk, the
+  test page, an update) is answered `server-error-busy` at once, its body read to the end,
+  and the client asks again (RFC 8011). It never waits with its document unread: received
+  frames left unread hold internal RAM, and on the W-1076 bench a job that waited behind a
+  Mac's page could not start its rip.
 - `Get-Job-Attributes` (0x0009) — iOS polls this for progress
 - `Get-Jobs` (0x000A)
 - `Cancel-Job` (0x0008)
@@ -599,7 +604,7 @@ headers, broadcasts to `09:00:07:FF:FF:FF`. A network with a router is noted, no
 **One printer.** Every link prints through one spool and print task (`at_printer.c`): one job
 at a time under the job lock, so a Mac whose OpenConn finds the printer taken (an IPP job, the
 test page, another link's job) is told busy, and each node's status word says busy unless its
-own job holds the printer. Jobs are named by link ("LocalTalk job", "Basilisk II job",
+own job holds the printer. An AirPrint job that finds it taken is told busy too (3.4). Jobs are named by link ("LocalTalk job", "Basilisk II job",
 "Infinite Mac job"); the last one's bytes are at `GET /api/lt/job`. An EtherTalk connection
 that sends nothing for 60 s while the printer is ready is closed, so an idle relay peer cannot
 hold the printer from AirPrint; the cable keeps its own timers. A link that drops (the relay
