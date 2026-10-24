@@ -141,17 +141,28 @@ static int under(const char *path, const char *res)
     return strncmp(path, res, k) == 0 && (path[k] == '\0' || path[k] == '/' || path[k] == '?');
 }
 
-int ipp_route(const char *path, const char *const resources[IPP_PRINTERS])
+// ipp/p followed by digits: a slot's path shape (W-1088).
+static int slot_shaped(const char *path)
+{
+    if (strncmp(path, "ipp/p", 5) != 0 || path[5] < '0' || path[5] > '9') return 0;
+    const char *q = path + 5;
+    while (*q >= '0' && *q <= '9') q++;
+    return *q == '\0' || *q == '/' || *q == '?';
+}
+
+int ipp_route(const char *path, const char *const resources[IPP_PRINTERS],
+              const char *const legacy[IPP_PRINTERS])
 {
     if (strncmp(path, "http", 4) == 0) {                     // absolute form
         const char *a = strstr(path, "://");
         path = a ? strchr(a + 3, '/') : NULL;
-        if (!path) return 0;
+        if (!path) return resources[0] ? 0 : -1;
     }
     while (*path == '/') path++;
     for (int i = 1; i < IPP_PRINTERS; i++) {
-        const char *res = resources[i] ? resources[i] : i == 1 ? IPP_RESOURCE_LASER : NULL;
-        if (res && under(path, res)) return resources[i] ? i : -1;
+        if (resources[i] && under(path, resources[i])) return i;
+        if (legacy && legacy[i] && under(path, legacy[i])) return i;
     }
-    return 0;
+    if (slot_shaped(path) || under(path, IPP_RESOURCE_LASER)) return -1;
+    return resources[0] ? 0 : -1;
 }

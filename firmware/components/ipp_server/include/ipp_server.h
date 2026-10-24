@@ -35,12 +35,15 @@ typedef struct {
     void       *ctx;
 } ipp_doc_sink_t;
 
+typedef struct ipp_printer_cfg ipp_printer_cfg_t;
+
 typedef struct {
-    const char     *queue_name;   // shown in the print sheet
+    const char     *queue_name;   // mDNS's default instance name
     const char     *hostname;     // without .local
     uint16_t        port;         // 631
-    ipp_doc_sink_t  sink;         // all-NULL callbacks discard the document
-    int             dev_mode;     // regenerate the UUID every boot
+    // W-1088: the port's printer at start (printer 0), or NULL for none on
+    // the port; ipp_server_set_printer(0, ...) changes it later.
+    const ipp_printer_cfg_t *port_printer;
     // A job operation arrived (Validate-Job, Print-Job): a person is printing,
     // so the panel should wake. Deliberately not called for
     // Get-Printer-Attributes, which Home Assistant polls every 30 s. May be NULL.
@@ -88,18 +91,23 @@ void ipp_server_set_airprint(int on);
 // Printer 1 answers at its own resource, under its own Bonjour instance and
 // printer-uuid; one job at a time across both (the job buffer is single), so
 // a job for either waits behind the other as a second ImageWriter job does.
-typedef struct {
-    const char *resource;        // "ipp/laser" (IPP_RESOURCE_LASER): its path, TXT rp
+struct ipp_printer_cfg {
+    const char *resource;        // "ipp/print" for the port's, "ipp/p<id>": its path, TXT rp
+    const char *legacy_resource; // another path it answers at ("ipp/laser"), or NULL
     const char *name;            // Bonjour instance and printer-name
     const char *info;            // printer-info: the printer's NBP name
     const char *uuid;            // urn:uuid:...
     const printer_caps_t *caps;  // make-and-model, device id, URF, media, margins, resolution
     const char *icon;            // "laser": served as /laser-48.png and so on
     ipp_doc_sink_t sink;
-} ipp_printer_cfg_t;
+};
 
-// Puts printer idx (1) on the network, or replaces it, or with NULL takes it
-// off. Strings and caps are copied. ESP_ERR_INVALID_STATE while its job
+// The port printer's printer-uuid before W-1088 (MAC and UUID epoch), for a
+// board's first boot on the printer list. Any time.
+void      ipp_server_legacy_uuid(char out[46]);
+
+// Puts printer idx (0 the port's, 1-3 AppleTalk's; W-1088) on the network, or
+// replaces it, or with NULL takes it off. Strings and caps are copied. ESP_ERR_INVALID_STATE while its job
 // holds the printer. Any task, after ipp_server_start.
 esp_err_t ipp_server_set_printer(int idx, const ipp_printer_cfg_t *cfg);
 void      ipp_server_job_done_for(int idx, int ok);

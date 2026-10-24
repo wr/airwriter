@@ -181,6 +181,26 @@ def query_check(tmp):
     return fails
 
 
+def testpage_check(tmp):
+    """W-1088: the PostScript test page renders with no error under the Level 1
+    trap, and with ink on it. Its PNG is kept as build/ps-testpage.png."""
+    ps, out = tmp / "tp.ps", tmp / "tp.pbm"
+    subprocess.run([RIP, "--ps-testpage", ps], check=True, capture_output=True)
+    err = gs_render(ps, out, level1=True)
+    if not err:
+        _, _, rows = pbm(out)
+        if not any(any(r) for r in rows):
+            err = "no ink"
+    if err:
+        print(f"FAIL pscheck test page: {err}")
+        return 1
+    png = RIP.parent / "ps-testpage.png"
+    subprocess.run([GS, "-q", "-dSAFER", "-dBATCH", "-dNOPAUSE", "-sDEVICE=pnggray", "-r100",
+                    f"-sOutputFile={png}", ps], capture_output=True)
+    print(f"ok  pscheck test page ({ps.stat().st_size} bytes; {png})")
+    return 0
+
+
 def pages(tmp):
     """The pages to check: the checker, and the 300 dpi text and photo pages
     once make_300dpi_fixture.py exists."""
@@ -207,6 +227,7 @@ def main():
     with tempfile.TemporaryDirectory() as t:
         tmp = pathlib.Path(t)
         failed += query_check(tmp)
+        failed += testpage_check(tmp)
         for urf in pages(tmp):
             for mode in ("binary", "hex"):
                 ps, mine, theirs = tmp / "a.ps", tmp / "a.pbm", tmp / "g.pbm"

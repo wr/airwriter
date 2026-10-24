@@ -77,6 +77,9 @@ void localtalk_send_raw(const uint8_t *f, size_t n);
 // on the cable. Neither is quiet, as localtalk_set_quiet(1); laser alone
 // keeps the node and its ID and answers as nothing. Nothing before start.
 void localtalk_set_roles(int serve, int laser);
+// W-1088: what old Macs on the cable are offered (lt_node_offer), kept for a
+// node started later or anew. Any task.
+void localtalk_set_offers(const lt_offers_t *o);
 // NBP =:type@* to every node on the cable; the answers go to the found
 // callback (localtalk_set_found).
 void localtalk_lookup(const char *type);

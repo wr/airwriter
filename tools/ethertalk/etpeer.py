@@ -9,11 +9,14 @@ as the Chooser does, and prints a file over PAP as the AppleTalk ImageWriter
 driver does (OpenConn, the board's SendData answered with Data, CloseConn).
 
     python3 tools/ethertalk/etpeer.py tunnel lookup
+    python3 tools/ethertalk/etpeer.py zone ZONE chooser LaserWriter
+    python3 tools/ethertalk/etpeer.py zone ZONE print-ps "LaserWriter II NT" page.ps
     python3 tools/ethertalk/etpeer.py tunnel print fixtures/pap-iw701-page.bin
     python3 tools/ethertalk/etpeer.py tunnel named "Wells's iMac" 30
     python3 tools/ethertalk/etpeer.py zone ZONE lookup
     python3 tools/ethertalk/etpeer.py zone ZONE print FILE
     python3 tools/ethertalk/etpeer.py tunnel laserwriter "LaserWriter II NT" [--hex-only] [--out DIR]
+                                         [--also "Office LaserWriter"] ...
 
 `named` registers a Macintosh name, as System 7's Sharing Setup does
 (<name>:Workstation), looks the printer up so the board hears it, and answers
@@ -27,6 +30,10 @@ to job-N.png at 300 dpi when Ghostscript is installed). Lines on stdin fault
 it: `busy SECONDS`, `paper` (out of paper), `jam`, `ok`, `error` (the next job
 gets a PostScript error), `drop` (it answers nothing more). --hex-only answers
 the binary probe as a Level 1 machine that cannot take binary would.
+A tunnel fake starts itself again when this Mac's address changes.
+`--also NAME` adds another fake LaserWriter, at its own AppleTalk address, on
+the same tunnel (one Mac can bind the tunnel's port once); its jobs go in
+DIR/NAME. Stdin's faults go to the first.
 `pipe laserwriter NAME` is the same over stdin and stdout, frames each a
 big-endian u16 length and the frame (test_interop.py).
 
@@ -116,6 +123,45 @@ class Tunnel:
 
     async def close(self):
         self.sock.close()
+
+
+class Hub:
+    """One transport shared by several fakes: each tap hears every frame."""
+
+    def __init__(self, t):
+        self.t, self.mac, self.qs = t, t.mac, []
+
+    def tap(self):
+        q = asyncio.Queue()
+        self.qs.append(q)
+        return Tap(self, q)
+
+    async def pump(self):
+        while True:
+            f = await self.t.recv(0.5)
+            if f:
+                for q in self.qs:
+                    q.put_nowait(f)
+
+
+class Tap:
+    def __init__(self, hub, q):
+        self.hub, self.q, self.mac = hub, q, hub.mac
+
+    async def open(self):
+        return self
+
+    async def send(self, frame):
+        await self.hub.t.send(frame)
+
+    async def recv(self, timeout):
+        try:
+            return await asyncio.wait_for(self.q.get(), timeout)
+        except asyncio.TimeoutError:
+            return None
+
+    async def close(self):
+        pass
 
 
 class Zone:
@@ -333,6 +379,27 @@ class Mac:
                 return net, node, sock
         sys.exit("no ImageWriter answered the lookup")
 
+    async def chooser(self, typ):
+        """Every answer to =:TYPE@* in two seconds, as the Chooser lists them."""
+        nbp = bytes([0x21, 0x2B]) + struct.pack(">HBBB", self.net, self.node, MY_NIS, 0) + \
+              pstr(b"=") + pstr(typ.encode("mac_roman")) + pstr(b"*")
+        await self.send_ddp(0, 0xFF, NIS, MY_NIS, DDP_NBP, nbp)
+        seen, end = set(), time.monotonic() + 2.0
+        while time.monotonic() < end:
+            d = await self.wait_dg(lambda d: d[12] == DDP_NBP and d[10] == MY_NIS and d[13] >> 4 == 3,
+                                   end - time.monotonic())
+            if not d:
+                break
+            t = d[15:]
+            net, node, sock = struct.unpack(">HBB", t[:4])
+            obj = t[6:6 + t[5]].decode("mac_roman")
+            ty = t[7 + t[5]:7 + t[5] + t[6 + t[5]]].decode("mac_roman")
+            if (obj, ty, net, node, sock) not in seen:
+                seen.add((obj, ty, net, node, sock))
+                print(f"{obj}:{ty} at {net}.{node} socket {sock}")
+        if not seen:
+            print(f"nothing answered =:{typ}@*")
+
     async def request(self, net, node, sock, user, data=b"", xo=True, tries=5):
         """An ATP request; the first response packet's (user, data)."""
         tid = self.next_tid()
@@ -389,6 +456,73 @@ class Mac:
         await self.request(net, node, srv, [connid, PAP_CLOSE, 0, 0])
         secs = time.monotonic() - start
         print(f"sent {len(data)} bytes in {secs:.1f} s, crc32 {zlib.crc32(data):08x}")
+
+    async def print_ps(self, name, data):
+        """PostScript to NAME:LaserWriter as a Mac's LaserWriter driver sends it
+        (W-1088): pulled by the printer, with the printer's own output read back
+        and shown, to its EOF; then CloseConn."""
+        nbp = bytes([0x21, 0x2C]) + struct.pack(">HBBB", self.net, self.node, MY_NIS, 0) + \
+              pstr(name.encode("mac_roman")) + pstr(LW_TYPE) + pstr(b"*")
+        for _ in range(5):
+            await self.send_ddp(0, 0xFF, NIS, MY_NIS, DDP_NBP, nbp)
+            d = await self.wait_dg(lambda d: d[12] == DDP_NBP and d[10] == MY_NIS and d[13] >> 4 == 3, 1.0)
+            if d:
+                break
+        else:
+            sys.exit(f"no {name}:LaserWriter answered the lookup")
+        net, node, sls = struct.unpack(">HBB", d[15:19])
+        print(f"found {name}:LaserWriter at {net}.{node} socket {sls}")
+        connid = random.randrange(1, 256)
+        for attempt in range(60):
+            user, rep = await self.request(net, node, sls, [connid, PAP_OPEN, 0, 0],
+                                           bytes([MY_ATP, 8, 0, 0]))
+            if struct.unpack(">H", rep[2:4])[0] == 0:
+                break
+            print(f"busy ({rep[5:5 + rep[4]].decode('mac_roman', 'replace')}); asking again in 2 s")
+            await asyncio.sleep(2)
+        else:
+            sys.exit("the printer stayed busy")
+        srv = rep[0]
+        print(f"connection {connid} open (session socket {srv})")
+        off, sent_eof, got_eof, out = 0, False, False, bytearray()
+        rd_seq, rd_tid, rd_at = 1, None, 0.0
+        start = time.monotonic()
+        while not (sent_eof and got_eof):
+            if time.monotonic() - start > 600:
+                sys.exit(f"gave up: {off} bytes sent, printer EOF {got_eof}")
+            if not got_eof and (rd_tid is None or time.monotonic() - rd_at > 15):
+                rd_tid = rd_tid if rd_tid is not None else self.next_tid()
+                await self.send_ddp(net, node, srv, MY_ATP, DDP_ATP,
+                                    atp(TREQ | XO, 0xFF, rd_tid, [connid, PAP_SEND_DATA, rd_seq >> 8, rd_seq & 0xFF]))
+                rd_at = time.monotonic()
+            d = await self.wait_dg(lambda d: d[12] == DDP_ATP and d[10] == MY_ATP and (
+                (d[13] & 0xC0 == TREQ and d[17] == connid and d[18] in (PAP_SEND_DATA, PAP_TICKLE)) or
+                (d[13] & 0xC0 == TRESP and struct.unpack(">H", d[15:17])[0] == rd_tid)), 2.0)
+            if not d:
+                continue
+            tid = struct.unpack(">H", d[15:17])[0]
+            src = struct.unpack(">H", d[6:8])[0], d[9]
+            if d[13] & 0xC0 == TRESP:                  # the printer's words
+                out += d[21:]
+                if d[19]:
+                    got_eof = True
+                if d[13] & EOM:
+                    await self.send_ddp(net, node, srv, MY_ATP, DDP_ATP, atp(TREL, 0, tid, b"\0" * 4))
+                    rd_tid = None
+                    rd_seq = 1 if rd_seq == 0xFFFF else rd_seq + 1
+                continue
+            if d[18] == PAP_TICKLE or sent_eof:
+                continue
+            chunk = data[off:off + 512]
+            eof = off + len(chunk) >= len(data)
+            await self.send_ddp(src[0], src[1], d[11], MY_ATP, DDP_ATP,
+                                atp(TRESP | EOM, 0, tid, [connid, PAP_DATA, 1 if eof else 0, 0], chunk))
+            off += len(chunk)
+            sent_eof = eof
+        await self.request(net, node, srv, [connid, PAP_CLOSE, 0, 0])
+        secs = time.monotonic() - start
+        print(f"sent {len(data)} bytes in {secs:.1f} s; the printer said:")
+        print(out.decode("mac_roman", "replace").replace("\r", "\n").rstrip() or "(nothing)")
 
 
 # ------------------------------------------------------------------ the LaserWriter
@@ -482,6 +616,8 @@ class LaserWriter(Mac):
                 await self.tick()
 
     async def dispatch(self, d):
+        if d[8] not in (self.node, 0xFF):              # another fake's, on a shared tunnel
+            return
         src = struct.unpack(">H", d[6:8])[0], d[9]
         if d[12] == DDP_NBP and d[10] == NIS:
             await self.on_nbp(d)
@@ -649,6 +785,25 @@ class LaserWriter(Mac):
             self.conn = None
 
 
+async def follow_ip(t, board):
+    """A tunnel fake's MAC is this Mac's IPv4 address: when the address moves
+    under it (W-1086: the board then heard a printer that never answered),
+    start again with the new one."""
+    while True:
+        await asyncio.sleep(10)
+        try:
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            s.connect((board, TUNNEL_PORT))
+            ip = s.getsockname()[0]
+            s.close()
+        except OSError:
+            continue
+        if ip != t.ip:
+            print(f"this Mac's address moved ({t.ip} -> {ip}); starting again", flush=True)
+            await t.close()
+            os.execv(sys.executable, [sys.executable, "-u"] + sys.argv)
+
+
 async def stdin_commands(fake):
     loop = asyncio.get_running_loop()
     while True:
@@ -678,15 +833,29 @@ async def main(argv):
     if rest[0] == "laserwriter" and len(rest) >= 2:
         opts = rest[2:]
         out = opts[opts.index("--out") + 1] if "--out" in opts else None
-        fake = LaserWriter(t, rest[1], hex_only="--hex-only" in opts, out=out)
+        also = [opts[i + 1] for i, o in enumerate(opts) if o == "--also" and i + 1 < len(opts)]
+        hub = Hub(t) if also else None
+        names = [rest[1]] + also
+        fakes = []
+        for k, name in enumerate(names):
+            d = out if not k or not out else os.path.join(out, name)
+            fakes.append(LaserWriter(hub.tap() if hub else t, name, hex_only="--hex-only" in opts,
+                                     out=d))
         try:
-            await fake.acquire()
-            print(f"fake LaserWriter \"{rest[1]}\" at {fake.net}.{fake.node}, socket {LW_SLS}",
-                  file=sys.stderr if argv[0] == "pipe" else sys.stdout)
-            tasks = [fake.serve()]
+            tasks = [hub.pump()] if hub else []
+            pump = asyncio.ensure_future(asyncio.gather(*tasks)) if tasks else None
+            for name, fake in zip(names, fakes):
+                await fake.acquire()
+                print(f"fake LaserWriter \"{name}\" at {fake.net}.{fake.node}, socket {LW_SLS}",
+                      file=sys.stderr if argv[0] == "pipe" else sys.stdout)
+            tasks = [fake.serve() for fake in fakes]
             if argv[0] != "pipe":
-                tasks.append(stdin_commands(fake))
+                tasks.append(stdin_commands(fakes[0]))
+            if argv[0] == "tunnel":
+                tasks.append(follow_ip(t, os.environ.get("AIRWRITER", "10.0.1.115")))
             await asyncio.gather(*tasks)
+            if pump:
+                pump.cancel()
         finally:
             await t.close()
         return
@@ -695,8 +864,12 @@ async def main(argv):
         await mac.acquire()
         if rest[0] == "lookup":
             await mac.lookup()
+        elif rest[0] == "chooser" and len(rest) == 2:
+            await mac.chooser(rest[1])
         elif rest[0] == "print" and len(rest) == 2:
             await mac.print_file(open(rest[1], "rb").read())
+        elif rest[0] == "print-ps" and len(rest) == 3:
+            await mac.print_ps(rest[1], open(rest[2], "rb").read())
         elif rest[0] == "named" and len(rest) == 3:
             mac.name = rest[1].replace("'", "\u2019").encode("mac_roman")[:31]
             await mac.lookup()

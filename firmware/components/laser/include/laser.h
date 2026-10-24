@@ -1,65 +1,101 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// A LaserWriter on AppleTalk shared as a second AirPrint printer (W-1082,
-// docs/superpowers/specs/2026-10-21-laser-printers-design.md). The board's
-// side of it: the LaserWriters heard, the one shared and what its query job
-// said (NVS namespace "laser"), the PAP client and the spool between the rip
-// and it, the AirPrint printer it becomes (ipp_server printer 1), and the
-// JSON for /api/laser. The policy is lw_core's; the PostScript is ps_page's.
+// The AppleTalk printers (W-1082, W-1088 printers design): the board's side of
+// lw_core's policy. It looks for LaserWriters and ImageWriters on every
+// running link and tells the printer list what it hears; for the printers the
+// list gives it (targets) it keeps their state with SendStatus, runs the
+// LaserWriter query job, pushes each shared one's state to its AirPrint slot,
+// and prints a LaserWriter job through one PAP client and a spool between the
+// rip and it (ps_page's PostScript). The printer list owns the records, the
+// slots and what is stored; nothing here is in NVS but what W-1082 left
+// (laser_saved, read once to carry a board over).
 //
-// Sharing is off until a LaserWriter is chosen on the settings page. A shared
-// one is advertised once its query job has answered (its paper, margins and
-// resolution come from it), and from then on at every boot, offline until it
-// answers. LaserWriters are untested on a real printer: the design's "What
-// only a printer settles" lists what a bench must check.
+// LaserWriters are untested on a real printer: the laser printers design's
+// "What only a printer settles" lists what a bench must check.
 #pragma once
 #include <stdint.h>
 #include <stddef.h>
 #include "esp_err.h"
 #include "ipp_server.h"
 #include "job_pipe.h"
+#include "lw_query.h"
+#include "ps_testpage.h"
 
 typedef struct {
-    uint8_t     mac[6];           // the station's: the LaserWriter's printer-uuid
     const char *version;          // %%Creator: AirWriter <version>
-    // The IPP side of a LaserWriter job, main.c's (it holds the job lock).
-    ipp_doc_sink_t sink;
-    // Which links the LaserWriter needs running: the cable while the card is
-    // open or one is shared there, the tunnel or the radio while one is
-    // shared there. main.c starts the cable's node and sets roles from it.
+    // The first look this long after start (10 s with Wi-Fi up, for its TLS
+    // handshakes; 0 in setup mode, where the page waits on it).
+    uint32_t    first_look_ms;
+    // Which links the printers need running (one is on each): main.c starts
+    // the cable's node and sets EtherTalk roles from it.
     void (*links)(int cable, int tunnel, int radio);
-    // The shared LaserWriter's readiness changed (laser_ready), or whether
-    // one is shared: main.c's panel follows it when it has no ImageWriter.
+    // A printer heard (once): its link (at_link_t), NBP name and type, Pascal.
+    void (*found)(int link, const uint8_t *name, const uint8_t *type);
+    // The query job for target `id` ended: answered (info) or not.
+    void (*queried)(int id, int ok, const lw_info_t *info);
+    // A shared printer's readiness changed (laser_ready): the panel may follow.
     void (*changed)(void);
+    // W-1088: a Mac's job relayed to a printer on another link takes the job
+    // lock as any job does (1, without waiting: 0, or nonzero when the box is
+    // busy) and gives it back (0) when both ends are done.
+    int  (*relay)(int take);
 } laser_cfg_t;
 
 // After ipp_server_start, with the network up.
 esp_err_t laser_start(const laser_cfg_t *cfg);
-// Whether a LaserWriter was shared at the last save, from NVS: before start,
-// for the panel's line source at boot.
-int       laser_shared_saved(void);
-int       laser_shared(void);
-// -1 none shared, 0 stopped or offline, 1 ready: the panel's printer line.
-int       laser_ready(void);
 
-// The print path, from main.c's sink for printer 1, under the job lock.
-// begin opens PAP to the shared LaserWriter (waiting out a query job), writes
-// the PostScript header and fills t for job_pipe_begin_to: 0, or -1 when
-// none is shared and advertised. end (on the pipeline task, after the rip)
-// ends the PostScript, gives EOF and waits for the printer (to the stall
-// limit): 1 if the page printed. cancel gives EOF at once, from any task,
-// without blocking.
-int       laser_job_begin(const char *name, job_pipe_target_t *t);
+// A printer of the list's on AppleTalk.
+enum { LASER_KIND_LW = 1, LASER_KIND_IW = 2 };
+typedef struct {
+    uint8_t   id, kind;
+    int8_t    where;              // at_link_t it is reached on, the list's
+    int8_t    slot;               // its AirPrint printer (1-3), or -1 not shared
+    uint8_t   name[33];           // NBP, Pascal, MacRoman
+    char      dither[12];
+    uint8_t   gain;
+    uint8_t   have_info;          // a LaserWriter's query answers (or the defaults)
+    lw_info_t info;
+} laser_target_t;
+void      laser_set_targets(const laser_target_t *t, int n);
+// "Look for printers": lookups every 30 s again for five minutes.
+void      laser_look_now(void);
+
+// Any target shared; the first shared one's line for the panel: -1 none
+// shared, 0 stopped or offline, 1 ready.
+int       laser_shared(void);
+int       laser_ready(void);
+// A target's state now: 0, or -1 for no such target.
+typedef struct { uint8_t online, ready, printing, stopped, busy; } laser_state_t;
+int       laser_state(int id, laser_state_t *out);
+
+// The print path, from main.c's sink for a LaserWriter's slot, under the job
+// lock. begin opens PAP to target id (waiting out a query job), writes the
+// PostScript header and fills t for job_pipe_begin_to: 0, or -1 when it is
+// not shared or not heard. end (on the pipeline task, after the rip) ends the
+// PostScript, gives EOF and waits for the printer (to the stall limit): 1 if
+// the page printed. cancel gives EOF at once, from any task, without blocking.
+int       laser_job_begin(int id, const char *name, job_pipe_target_t *t);
 int       laser_job_end(int ok);
 void      laser_job_cancel(void);
 int       laser_job_active(void);
+// W-1088: the PostScript test page to LaserWriter id, sent as it is, under the
+// job lock: 1 if it printed. laser_job_cancel stops it.
+int       laser_test_page(int id, const ps_tp_info_t *info);
 
-// GET /api/laser (and the card counts as open): the LaserWriters heard, the
-// shared one and its query answers, its job.
+// GET /api/laser: what is heard, the targets and the last job's figures.
 void      laser_json(char *buf, size_t cap);
-// POST /api/laser: share (an NBP name, UTF-8), or none (unshare 1), and the
-// shared one's screen (dither NULL and gain < 0 keep each). 0, 400 for a name
-// not heard or a screen not known, 409 while a job prints.
-int       laser_set(int unshare, const char *share, const char *dither, int gain);
-// The "laser" member of /api/status: {"shared":...,"state":...}.
+// The "laser" member of /api/status: {"targets":N,"online":M,"job":bool}.
 void      laser_status_json(char *buf, size_t cap);
+
+// W-1088: what W-1082 kept in NVS ("laser"), for a board's first boot on the
+// printer list: the shared LaserWriter, where it was heard (at_link_t, -1
+// unknown), its query's answers and its screen. 0, or -1 with none shared.
+typedef struct {
+    uint8_t   name[33];          // Pascal, MacRoman
+    int       link;
+    int       have_info;
+    lw_info_t info;
+    char      dither[12];
+    uint8_t   gain;
+} laser_saved_t;
+int       laser_saved(laser_saved_t *out);

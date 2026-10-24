@@ -16,6 +16,8 @@ OUT = HERE / "../../firmware/components/webui/webui_page.h"
 MASK = HERE / "../../firmware/components/halftone/bluenoise64.h"
 ICON = HERE / "../../firmware/components/ipp_server/icons/icon-128.png"
 LOGO = HERE / "wells-workshop.svg"
+# AirWriter itself, from the shop's render (Wells's own; LICENSE.md, name and logo)
+AIRWRITER = HERE / "airwriter.webp"
 # the AppleTalk cards' two emulator icons (LICENSE.md, third-party material)
 BASILISK = HERE / "basilisk-ii.png"
 INFINITEMAC = HERE / "infinite-mac.png"
@@ -47,7 +49,8 @@ def c_string(text):
 
 def build_page():
     """The whole page as the board serves it (preview.py serves it too)."""
-    css = (HERE / "style.css").read_text()
+    css = (HERE / "style.css").read_text().replace(
+        "{{airwriter}}", "data:image/webp;base64," + base64.b64encode(AIRWRITER.read_bytes()).decode())
     body = (HERE / "body.html").read_text()
     body = body.replace("{{ww-logo}}", LOGO.read_text().strip())
     body = (body.replace("{{icon}}", png_uri(ICON)).replace("{{basilisk}}", png_uri(BASILISK))

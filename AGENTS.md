@@ -113,11 +113,17 @@ What works on `main`:
   twice.
 - Setup AP `AirWriter-xxxx` (open, 192.168.4.1) on a board with no credentials; web UI on port
   80: `/api/status`, Wi-Fi, settings, `/update` (OTA), `/api/update` (GitHub releases),
-  `/api/localtalk/flash`, `/api/cable`, `/api/restart`, `/api/erase`, `/api/test`.
+  `/api/localtalk/flash`, `/api/cable`, `/api/restart`, `/api/erase`, `/api/test`,
+  `/api/printers`.
 - The settings page (`W-1079 Settings page: organise by port, like macOS System Settings`,
   design `docs/superpowers/specs/2026-10-20-settings-redesign-design.md`): a settings app, a
-  sidebar of Printer, AirPrint, AppleTalk, Wi-Fi and About, each row showing its state; one home
-  per setting. Upright system type, Apple Garamond Light titles, platinum, icon tiles in the
+  sidebar of Printers (W-1088: notices, a row per printer, a printer's detail in the pane,
+  `#printers/<id>`), AirPrint (the switch and each shared printer's address), AppleTalk, Wi-Fi
+  and About, each row showing its state; one home per setting. Setup mode is three steps,
+  sized for a phone (printers, Wi-Fi, "You're All Set": print from a phone, the test button for
+  a test page) and the first visit after it opens on "AirWriter is ready". AirWriter's mark is
+  its own render (`tools/webui/airwriter.webp`, from the shop); the ImageWriter icon is the
+  ImageWriter's (IPP, the tab). Printer rows draw an ImageWriter or a LaserWriter. Upright system type, Apple Garamond Light titles, platinum, icon tiles in the
   ribbon's inks, status as lit bar lamps, low platinum keys; in a window on a big screen, the
   sidebar first on a phone. AppleTalk is one card per way in (AppleTalk Port, Networked Macs,
   Basilisk II, Infinite Mac) with its switch and the Macs heard in the last 10 minutes, each by
@@ -152,10 +158,36 @@ What works on `main`:
   exactly its 11 in page), so the LocalTalk scanner follows the paper (`iw_scan_at_tof`).
 - AirPrint has an off switch (W-1079): off, `_ipp` and `_printer` leave Bonjour and Print-Job
   is refused as not accepting jobs; on, they come back under the same printer-uuid.
-- Wi-Fi scans all channels and joins the strongest AP; printer-uuid is stable (MAC + epoch).
+- Wi-Fi scans all channels and joins the strongest AP.
+- The printer list (`W-1088 Printers: AirWriter finds, sets up and shares whatever printers you have`,
+  design `docs/superpowers/specs/2026-10-23-printers-design.md`, SPEC §3.15, merged
+  2026-10-24): records in NVS `printers`/`list` (`components/printers`), each
+  with its own printer-uuid, made once. The port's printer is AirPrint printer 0 as its record
+  says; `ESC ?` at line-up finds it, and ImageWriter commands (CTRL-X kick, resync, the job's
+  self-ID, the test page) go to J2 only when it is an ImageWriter. Identified printers are
+  shared at once, up to four; AppleTalk ones at AirPrint printers 1-3. The test button, DIP4 and
+  the page go to the port's ImageWriter, else the first shared printer (a LaserWriter gets
+  `ps_testpage`). The panel shows the box: ready while any shared printer is; the idle CTRL-X
+  follows the port printer's own line (`printer_state_port_line`). Setup mode looks
+  at once. AirPrint to an AppleTalk ImageWriter was cut: old Macs' only. `GET`/`POST
+  /api/printers`.
+  A board's first boot on it makes its records from what it had (the port's old uuid, a
+  W-1082 LaserWriter, the AirPrint switch as the port's Share) and stores its host name, so
+  `imagewriter-xxxx` stays; a new board is `airwriter-xxxx` with the AppleTalk port on.
+  Old Macs on each AppleTalk way in that is on are offered every identified printer AirWriter
+  can carry (`printers_offers`, `lt_node_offer`): the port's ImageWriter under its name on
+  socket 0x81, printers from other links under their own NBP names on 0x85-0x87, and
+  `<host name>:AirWriter` on 0x88 on every running link, which another AirWriter's lookups use
+  to skip this one's printers. NBP names are the record's in MacRoman (`nbp_name`). A Mac's
+  connection to a printer from another link goes through the relay (`localtalk/pap_relay.c`,
+  run by `laser.c` with the one PAP client, under the job lock): the Mac hears busy, in the
+  printer's own status words, until the printer's connection is open; then its data goes to
+  the printer and the printer's output (query answers, errors) back to its reads, 256 bytes a
+  read, nothing rewritten. Benched zone → tunnel against the fake LaserWriter only.
 - TashTalk 2.1.3 is in U7, flashed in place by the ESP32 over LVP.
-- A LocalTalk node behind the AppleTalk port's switch on the settings page (W-1079; until the
-  switch is used, DIP mode 2 starts it, and `CONFIG_AIRWRITER_LT_BENCH` always), on UART2 to
+- A LocalTalk node on the AppleTalk port whenever U7 runs TashTalk (W-1088: every look for
+  printers runs on it), answering old Macs only while the settings page's switch says so
+  (W-1079; until the switch is used, DIP mode 2, and `CONFIG_AIRWRITER_LT_BENCH` always), on UART2 to
   TashTalk at 1 Mbaud with its CTS on IO6 (`components/localtalk`): acquires a server node ID,
   answers NBP LkUp as `<queue>:ImageWriter@*`, and answers PAP as Apple's ImageWriter LocalTalk
   Option Card does (status word, one connection). A PAP job is the Mac driver's own ImageWriter
@@ -163,8 +195,8 @@ What works on `main`:
   Mac wait ("busy"), a paused printer holds the Mac's reads (16 KB spool), and a job cut short
   gets W-1041's resync. The last job's bytes are also kept for `GET /api/lt/job`. `GET /api/lt`
   shows state and log; `POST /api/lt/echo` with a node number pings that Mac (AEP). The bench
-  Mac has printed on paper through it. The node cannot stop once started, so the switch's off
-  is quiet: TashTalk answers for no node and frames are dropped.
+  Mac has printed on paper through it. Switched off, the node offers old Macs nothing but the
+  AirWriter marker and still looks for printers.
 - EtherTalk (`W-1076 EtherTalk: print from Infinite Mac and Basilisk II`, `W-1078 EtherTalk over
   Wi-Fi: print from real Macs (BlueSCSI, Ethernet Macs)`, SPEC §3.13): three more links to the
   same printer, each AppleTalk Phase 2 with its own address: the board's own Wi-Fi for Ethernet
@@ -174,16 +206,18 @@ What works on `main`:
   `tools/ethertalk/etpeer.py` is a software Mac for the tunnel and the relay (lookup, print).
 - LaserWriters on AppleTalk (`W-1082 AirPrint to LaserWriters on AppleTalk`, SPEC §3.14, design
   `docs/superpowers/specs/2026-10-21-laser-printers-design.md`): **built, tested against a fake
-  LaserWriter only, untested on a real one.** A PostScript LaserWriter heard on the cable, the
-  Wi-Fi link or the tunnel can be shared from the AppleTalk pane's LaserWriters card as a second
-  AirPrint printer (`ipp_server` printer 1 at `ipp/laser`, its own Bonjour name and UUID, the
-  ImageWriter's bytes unchanged). The board queries it (Level 1 PostScript, a binary probe),
-  rips at 300 dpi into Level 1 `imagemask` bands (`ps_page`) and sends them with a PAP client
-  beside the server (`localtalk/pap_client.c`); `components/laser` holds the query, the status
-  words, the caps and UUID, the policy (`lw_core.c`) and the board's side (`laser.c`, NVS
-  `laser`). Sharing is off by default. `GET`/`POST /api/laser`, `/api/status` `laser`. A link
-  answers as the ImageWriter only where its card's switch is on, and runs for a LaserWriter
-  whatever it says. `etpeer.py laserwriter` is the fake.
+  LaserWriter only, untested on a real one.** Since W-1088 the board looks on every running link
+  (at start after 10 s, every 30 s for 5 minutes, then every 5 minutes) and puts each
+  LaserWriter and AppleTalk ImageWriter it hears in the printer list; one answering from another
+  AirWriter's node is skipped. A LaserWriter is queried (Level 1 PostScript, a binary probe) and,
+  once it answers, shared on AirPrint printer 1-3 at `ipp/p<id>` (W-1082's at `ipp/laser`), its
+  own Bonjour name and UUID. Jobs rip at 300 dpi into Level 1 `imagemask` bands (`ps_page`) and
+  go out through one PAP client beside the server (`localtalk/pap_client.c`); `components/laser`
+  holds the query, the status words, the caps and UUID, the policy (`lw_core.c`: lookups,
+  status in turn, queries) and the board's side (`laser.c`). `GET /api/laser` is diagnostics
+  (heard, targets, the last job's figures); the page reads `/api/printers`. A link answers as
+  the ImageWriter only where its card's switch is on, and runs for a printer in the list
+  whatever it says. `etpeer.py laserwriter` is the fake (`--also NAME` for a second).
 
 **Enclosure** (`enclosure/`, in use on board 1): tray (print in PETG with Arachne walls;
 every wall 1.70 below the rim, one thickness all round so no lines show up the outside; the
@@ -198,13 +232,14 @@ ImageWriter LQ take the same stream and are expected to work, untested (the scop
 amendment); docs say so rather than excluding them. The board reads an LQ's self-ID too, so a
 colour ribbon in an LQ prints in colour; the reply's shape is taken from GSport's emulator and
 untested on a real LQ. The original ImageWriter sends no self-ID, so the board never sees a
-colour ribbon in it. The settings page's Model picker offers
-both, but the model only names the printer: IPP `printer-make-and-model`, Bonjour `ty` and
-`/api/status` `model` still say Apple ImageWriter II. StyleWriters stay out. PostScript
-LaserWriters on AppleTalk can be shared beside it (above), untested on a real one.
+colour ribbon in it. The port printer's model (found, or picked in its detail) names it in IPP
+`printer-make-and-model` and Bonjour `ty` (W-1088); `/api/status` `model` still says Apple
+ImageWriter II. StyleWriters stay out. PostScript LaserWriters on AppleTalk are shared as
+printers of their own (above), untested on a real one.
 
 Not built: Mini vMac (LToUDP, `W-1077`), consumers of the dither override, PWG raster, HP
-LaserJets over serial (`W-1083`, designed).
+LaserJets over serial (`W-1083`, designed), AirPrint to an AppleTalk ImageWriter (cut from
+W-1088).
 
 **Board 1:** ESP32-S3-WROOM-1-N8R2 (8 MB flash, 2 MB PSRAM). On the home Wi-Fi at
 10.0.1.115, mDNS `imagewriter-2434.local`. Console on USB-C as `/dev/cu.usbmodem*` (the number
@@ -212,7 +247,7 @@ follows the Mac's port). Its queue name reads "ImageWriter II" in `/api/status`,
 its name in the Chooser. U7's PIC calibration words: `16E0 1DA8`. Its LocalTalk node ID is 198
 (kept in NVS `lt`/`node`); the bench Mac is node 83. Printer: an ImageWriter II on J2 via
 Apple's crossover cable, fanfold paper loaded as the Owner's Guide says (top edge under the paper
-bail). It runs main from the W-1082 merge (LaserWriters), ahead of any release, with
+bail). It runs main from the W-1088 merge (printers), ahead of any release, with
 auto-update on; it shares the fake "LaserWriter II NT" on the Basilisk II tunnel when
 `etpeer.py tunnel laserwriter` runs on the Mac. Its Top margin is calibrated to -7/8 in
 (`top_margin` -126): a page's line 1 in down and one 0.5 in from the bottom landed exactly there.
@@ -221,6 +256,11 @@ Infinite Mac is on (Wells switched it on, with a made-up zone name). The page re
 yet checked against the part. One pin of its print head is dead (a white line in solid fills).
 
 Known issues, open:
+- Twice on 2026-10-24, after board 1 lost power (its USB moved) with the ImageWriter on, the
+  printer sat busy with SELECT lit: the idle CTRL-X did not free it, switching the printer off
+  and on did. A soft restart (`/api/restart`, an OTA) leaves the line ready. A job sent while it
+  is stuck pauses as "Needs attention"; switching the printer off and on mid-page loses what its
+  buffer held (stray characters, colours out of register).
 - With the node off, TashTalk once sent and relayed nothing over the cable test's own UART2 link
   while its CTS read ready; it never recurred after a node-mode boot and the cause is unknown. The
   test retries from a reset TashTalk and logs "TashTalk answered only after a reset" (`docs/traps.md`).

@@ -173,11 +173,15 @@ static const uint8_t MAC_B[6]  = { 0x0A, 0x57, 0x57, 0x00, 0x00, 0x01 };
 static const uint8_t THEM[6]   = { 0xB2, 0x0A, 0x00, 0x01, 0x6E, 0x00 };   // the Mac
 static const uint8_t OTHER[6]  = { 0xB2, 0x0A, 0x00, 0x01, 0x6F, 0x00 };
 
+static lt_reg_t reg_room[4][LT_REG_MAX];
+static int reg_next;
+
 static void link_init(et_link_t *l, int *id, const uint8_t mac[6], uint16_t hnet, uint8_t hnode)
 {
-    et_cfg_t cfg = { "ImageWriter II", "ImageWriter", 0x0000, {0}, hnet, hnode, 1, LT_IDLE_HOLD_MS, NULL };
+    et_cfg_t cfg = { "ImageWriter II", "ImageWriter", 0x0000, {0}, hnet, hnode, 1, LT_IDLE_HOLD_MS, NULL,
+                     reg_room[reg_next++ % 4] };
     memcpy(cfg.mac, mac, 6);
-    et_ops_t ops = { id, w_send, w_log, w_begin, w_data, w_room, w_end, w_claimed, NULL };
+    et_ops_t ops = { id, w_send, w_log, w_begin, w_data, w_room, w_end, w_claimed, NULL, NULL, NULL, NULL };
     et_link_init(l, &cfg, &ops, 0);
 }
 
@@ -345,6 +349,71 @@ static void test_lookup_from_mac(void)
     CHECK_EQ_INT(r.fn, NBP_LKUP_REPLY);
     CHECK_EQ_INT(r.t.obj[0], 14);
     CHECK_EQ_INT(memcmp(r.t.obj + 1, "ImageWriter II", 14), 0);
+}
+
+// An NBP LkUp of =:type@* from the Mac, as lkup() builds it.
+static size_t lkup_type(uint8_t *nbp, const char *type)
+{
+    size_t k = 0, tl = strlen(type);
+    nbp[k++] = 0x21; nbp[k++] = 0x1F;
+    nbp[k++] = 0xFF; nbp[k++] = 0x10; nbp[k++] = 12; nbp[k++] = 0xFD; nbp[k++] = 0;
+    nbp[k++] = 1; nbp[k++] = '=';
+    nbp[k++] = (uint8_t)tl; memcpy(nbp + k, type, tl); k += tl;
+    nbp[k++] = 1; nbp[k++] = '*';
+    return k;
+}
+
+// The replies to one lookup: how many, and the k-th's name and socket.
+static int lkup_replies(et_link_t *l, const char *type, uint64_t t, int k, uint8_t *obj, uint8_t *sock)
+{
+    uint8_t nbp[64], f[ELAP_MAX_FRAME];
+    reset_wire();
+    size_t fl = mac_dg(f, THEM, ET_AT_MCAST, 0, 0xFF, SOCK_NIS, DDP_NBP, nbp, lkup_type(nbp, type));
+    et_link_rx(l, f, fl, t);
+    int n = 0;
+    for (int i = 0; i < nfr; i++) {
+        ddp_t d;
+        nbp_t r;
+        if (sent_what(i, NULL, &d) != 2 || nbp_parse(d.data, d.len, &r) || r.fn != NBP_LKUP_REPLY)
+            continue;
+        if (n == k) {
+            memcpy(obj, r.t.obj, 1 + (size_t)r.t.obj[0]);
+            *sock = r.t.addr.sock;
+        }
+        n++;
+    }
+    return n;
+}
+
+// W-1088: a link offers old Macs the port's ImageWriter under its name, the
+// printers relayed from other links under theirs, and the AirWriter marker.
+static void test_offers_registered(void)
+{
+    et_link_t l;
+    uint64_t t = link_online(&l, &ID_A, MAC_A, 0xFF23, 77);
+    uint8_t own[NBP_NAME_MAX + 1], mark[NBP_NAME_MAX + 1], obj[NBP_NAME_MAX + 1], sock = 0;
+    lt_offer_t rel[1];
+    nbp_name(own, "Den ImageWriter");
+    nbp_name(rel[0].obj, "Office");
+    nbp_name(rel[0].type, "LaserWriter");
+    nbp_name(mark, "airwriter-2434");
+    lt_node_offer(&l.node, own, rel, 1, mark);
+
+    CHECK_EQ_INT(lkup_replies(&l, "LaserWriter", t, 0, obj, &sock), 1);
+    CHECK_EQ_MEM(obj, "\x06" "Office", 7);
+    CHECK_EQ_INT(sock, 0x85);
+    CHECK_EQ_INT(lkup_replies(&l, "ImageWriter", t, 0, obj, &sock), 1);
+    CHECK_EQ_MEM(obj, "\x0F" "Den ImageWriter", 16);
+    CHECK_EQ_INT(sock, LT_SOCK_SLS);
+    CHECK_EQ_INT(lkup_replies(&l, "AirWriter", t, 0, obj, &sock), 1);
+    CHECK_EQ_MEM(obj, "\x0E" "airwriter-2434", 15);
+    CHECK_EQ_INT(sock, 0x88);
+
+    // No ImageWriter on the port and nothing relayed: only the marker answers.
+    lt_node_offer(&l.node, NULL, NULL, 0, mark);
+    CHECK_EQ_INT(lkup_replies(&l, "ImageWriter", t, 0, obj, &sock), 0);
+    CHECK_EQ_INT(lkup_replies(&l, "LaserWriter", t, 0, obj, &sock), 0);
+    CHECK_EQ_INT(lkup_replies(&l, "AirWriter", t, 0, obj, &sock), 1);
 }
 
 static void test_unresolved_then_aarp(void)
@@ -856,9 +925,9 @@ static void test_peer_names(void)
 {
     et_link_t l;
     et_cfg_t cfg = { "ImageWriter II", "ImageWriter", 0x0000, {0}, 0xFF23, 77, 1,
-                     LT_IDLE_HOLD_MS, enames };
+                     LT_IDLE_HOLD_MS, enames, NULL };
     memcpy(cfg.mac, MAC_A, 6);
-    et_ops_t ops = { &ID_A, w_send, w_log, w_begin, w_data, w_room, w_end, w_claimed, NULL };
+    et_ops_t ops = { &ID_A, w_send, w_log, w_begin, w_data, w_room, w_end, w_claimed, NULL, NULL, NULL, NULL };
     et_link_init(&l, &cfg, &ops, 0);
     uint64_t t = 0;
     for (; t <= 2100; t += 10) et_link_tick(&l, t);
@@ -946,6 +1015,7 @@ int main(void)
     test_acquire_hint_and_clash();
     test_answers_aarp();
     test_lookup_from_mac();
+    test_offers_registered();
     test_unresolved_then_aarp();
     test_rx_drops();
     test_pap_fixture_ethertalk();

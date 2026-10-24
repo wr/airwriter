@@ -41,7 +41,8 @@ static void f_log(void *ctx, const char *line)
     (void)ctx;
     strncpy(lastlog, line, sizeof lastlog - 1);
 }
-static const lt_ops_t NODE_OPS = { NULL, f_send, f_claim, f_log, NULL, NULL, NULL, NULL, NULL };
+static const lt_ops_t NODE_OPS = { NULL, f_send, f_claim, f_log, NULL, NULL, NULL, NULL, NULL,
+                                   NULL, NULL, NULL };
 
 // Frame i as DDP and ATP; 0 when it is one.
 static int frame(int i, ddp_t *d, atp_t *a)
@@ -106,7 +107,7 @@ static const lt_route_t SLS = { { 0, PR, PR_SLS }, PR, 0 };
 
 static uint64_t fresh(void)
 {
-    lt_cfg_t cfg = { "ImageWriter II", "ImageWriter", 0, ME, 1, NULL };
+    lt_cfg_t cfg = { "ImageWriter II", "ImageWriter", 0, ME, 1, NULL, NULL };
     lt_node_init(&node, &cfg, &NODE_OPS, 0);
     uint64_t t = 0;
     for (int i = 0; i <= LT_ENQ_TRIES; i++, t += LT_ENQ_GAP_MS) lt_node_tick(&node, t);

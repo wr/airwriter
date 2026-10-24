@@ -128,10 +128,51 @@ static void op_found(void *ctx, const nbp_tuple_t *t, const lt_route_t *r)
     if (s_found) s_found(AT_LINK_CABLE, t, r);
 }
 
+// The node's own connection prints on the ImageWriter; one on another
+// registration is the relay's (W-1088).
+static const at_relay_t *relay_conn(void) { return lt_node_pap_reg(&s_node) ? at_relay() : NULL; }
+
 static int op_job_begin(void *ctx) { (void)ctx; return at_job_begin(&s_owner); }
-static void op_job_data(void *ctx, const uint8_t *d, size_t n) { (void)ctx; at_job_data(&s_owner, d, n); }
-static size_t op_job_room(void *ctx) { (void)ctx; return at_job_room(&s_owner); }
-static void op_job_end(void *ctx, int normal) { (void)ctx; at_job_end(&s_owner, normal); }
+static void op_job_data(void *ctx, const uint8_t *d, size_t n)
+{
+    (void)ctx;
+    const at_relay_t *r = relay_conn();
+    if (r) r->data(d, n);
+    else at_job_data(&s_owner, d, n);
+}
+static size_t op_job_room(void *ctx)
+{
+    (void)ctx;
+    const at_relay_t *r = relay_conn();
+    return r ? r->room() : at_job_room(&s_owner);
+}
+static void op_job_end(void *ctx, int normal)
+{
+    (void)ctx;
+    const at_relay_t *r = relay_conn();
+    if (r) r->end(normal);
+    else at_job_end(&s_owner, normal);
+}
+static int op_pap_open(void *ctx, int reg, uint64_t now)
+{
+    (void)ctx;
+    return at_relay() ? at_relay()->open(AT_LINK_CABLE, &s_node, reg, now) : 1;
+}
+static size_t op_reg_status(void *ctx, int reg, uint8_t *pstr, size_t cap)
+{
+    (void)ctx;
+    return at_relay() ? at_relay()->status(AT_LINK_CABLE, &s_node, reg, pstr, cap) : 0;
+}
+static size_t op_reg_output(void *ctx, int reg, uint8_t *buf, size_t max, int *eof, int again)
+{
+    (void)ctx;
+    (void)reg;
+    if (!at_relay()) {
+        *eof = 1;
+        return 0;
+    }
+    return at_relay()->output(buf, max, eof, again);
+}
 
 static void on_frame(void *ctx, tt_event_t ev, const uint8_t *f, size_t n)
 {
@@ -246,6 +287,8 @@ esp_err_t localtalk_probe(const localtalk_cfg_t *cfg)
     return err;
 }
 
+static void offers_put(void);
+
 esp_err_t localtalk_start(const localtalk_cfg_t *cfg)
 {
     if (s_running) return ESP_OK;
@@ -270,16 +313,20 @@ esp_err_t localtalk_start(const localtalk_cfg_t *cfg)
     if (err != ESP_OK) return err;
 
     tt_rx_init(&s_rx);
-    // The Macs' names in PSRAM: internal RAM is short.
+    // The Macs' names and the node's registrations in PSRAM: internal RAM is short.
     s_nc = (lt_cfg_t){ .object = cfg->object, .type = cfg->type, .status = cfg->status,
                        .hint = hint, .seed = esp_random() | 1,
-                       .names = heap_caps_calloc(LT_SEEN_SLOTS, sizeof(lt_name_t), MALLOC_CAP_SPIRAM) };
+                       .names = heap_caps_calloc(LT_SEEN_SLOTS, sizeof(lt_name_t), MALLOC_CAP_SPIRAM),
+                       .regs = heap_caps_calloc(LT_REG_MAX, sizeof(lt_reg_t), MALLOC_CAP_SPIRAM) };
     s_ops = (lt_ops_t){ .send = op_send, .claim = op_claim, .log = op_log,
                         .job_begin = op_job_begin, .job_data = op_job_data,
-                        .job_room = op_job_room, .job_end = op_job_end, .found = op_found };
+                        .job_room = op_job_room, .job_end = op_job_end, .found = op_found,
+                        .pap_open = op_pap_open, .reg_status = op_reg_status,
+                        .reg_output = op_reg_output };
     xSemaphoreTake(s_lock, portMAX_DELAY);
     lt_node_init(&s_node, &s_nc, &s_ops, now_ms());   // clears TashTalk's node bitmap
     lt_node_set_serve(&s_node, s_serve);
+    offers_put();
     lt_node_attach(&s_node, s_client);
     xSemaphoreGive(s_lock);
 
@@ -318,11 +365,30 @@ void localtalk_set_quiet(int quiet)
         s_nc.seed = esp_random() | 1;
         lt_node_init(&s_node, &s_nc, &s_ops, now);
         lt_node_set_serve(&s_node, s_serve);     // a new node: its roles again
+        offers_put();
         lt_node_attach(&s_node, s_client);
         s_quiet = 0;
         op_log(NULL, "the AppleTalk port is on");
     }
     xSemaphoreGive(s_lock);
+}
+
+// W-1088: the cable's offers, in PSRAM (internal RAM is Wi-Fi's), for each new node.
+static lt_offers_t *s_offers;
+
+static void offers_put(void)
+{
+    if (s_offers) lt_node_offer(&s_node, s_offers->own, s_offers->rel, s_offers->n_rel, s_offers->marker);
+}
+
+void localtalk_set_offers(const lt_offers_t *o)
+{
+    if (!s_offers) s_offers = heap_caps_calloc(1, sizeof *s_offers, MALLOC_CAP_SPIRAM);
+    if (!s_offers) return;
+    if (s_lock) xSemaphoreTake(s_lock, portMAX_DELAY);
+    *s_offers = *o;
+    if (s_running) offers_put();
+    if (s_lock) xSemaphoreGive(s_lock);
 }
 
 void localtalk_set_roles(int serve, int laser)

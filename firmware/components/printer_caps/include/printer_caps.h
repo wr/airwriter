@@ -28,6 +28,9 @@ typedef struct {
 // The ImageWriter II as it has always been advertised: one pass at 144 x 72,
 // Letter on the tractor feed, a 0.25 in side margin, 1 in top, 0.5 in bottom.
 extern const printer_caps_t printer_caps_imagewriter;
+// W-1088: an ImageWriter by model, pr_model_t's numbers: 1 the II (the one
+// above), 2 the LQ, 3 the original; anything else the II.
+const printer_caps_t *printer_caps_imagewriter_model(int model);
 
 // The URF capability string (SPEC.md 3.3): "V1.4,CP1,<rs>,W8[,SRGB24],DM1,
 // IS1,MT1,FN3", SRGB24 when `colour`. Its length, or 0 (and "" when cap > 0)

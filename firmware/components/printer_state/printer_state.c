@@ -71,6 +71,13 @@ int printer_state_want_kick(void)
     return want;
 }
 
+void printer_state_port_line(int ready)
+{
+    xSemaphoreTake(s_mtx, portMAX_DELAY);
+    ps_port_line(&s_ps, ready, now_ms());
+    xSemaphoreGive(s_mtx);
+}
+
 void printer_state_kicked(void)
 {
     xSemaphoreTake(s_mtx, portMAX_DELAY);

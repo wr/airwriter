@@ -66,6 +66,8 @@ void      ethertalk_json(char *buf, size_t cap);
 // lock and must not block. locked runs fn under that lock (-1, not run,
 // before start).
 void      ethertalk_set_laser(int link, int on);
+// W-1088: what old Macs on one link (at_link_t) are offered (lt_node_offer).
+void      ethertalk_set_offers(int link, const lt_offers_t *o);
 void      ethertalk_lookup(const char *type);
 void      ethertalk_set_found(void (*found)(int link, const nbp_tuple_t *t, const lt_route_t *r));
 void      ethertalk_attach(int link, pap_client_t *c);

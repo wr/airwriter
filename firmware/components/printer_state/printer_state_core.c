@@ -8,7 +8,7 @@ void ps_init(ps_t *ps, const ps_timing_t *tm, uint64_t now)
 {
     memset(ps, 0, sizeof *ps);
     ps->tm = *tm;
-    ps->boot_at = ps->line_since = ps->activity_at = ps->state_since = now;
+    ps->boot_at = ps->line_since = ps->activity_at = ps->state_since = ps->port_since = now;
     ps->last = ps->prev = PS_BOOTING;
 }
 
@@ -171,9 +171,18 @@ const char *ps_name(ps_state_t st)
 
 int ps_want_kick(const ps_t *ps, uint64_t now)
 {
-    if (ps->job || ps->line_ready || ps->setup) return 0;
-    if (now - ps->line_since < ps->tm.kick_after_ms) return 0;
+    if (ps->job || ps->port_ready || ps->setup) return 0;
+    if (now - ps->port_since < ps->tm.kick_after_ms) return 0;
     return !ps->kicked || now - ps->kicked_at >= ps->tm.kick_every_ms;
+}
+
+void ps_port_line(ps_t *ps, int ready, uint64_t now)
+{
+    ready = ready ? 1 : 0;
+    if (ready == ps->port_ready) return;
+    ps->port_ready = (uint8_t)ready;
+    ps->port_since = now;
+    if (ready) ps->kicked = 0;
 }
 
 void ps_kicked(ps_t *ps, uint64_t now)

@@ -227,6 +227,7 @@ static esp_err_t wifi_post(httpd_req_t *req)
     }
 
     settings_save_wifi(ssid, pass);
+    if (s_cfg.captive) settings_set_fresh(1);   // W-1088: the finish sheet awaits on the network
     led_grid_blip(LG_BLIP_SAVED);       // W-1049: taken; the restart follows
     httpd_resp_sendstr(req, "{\"ok\":true}");
     xTaskCreate(reboot_task, "reboot", 2048, NULL, 5, NULL);
@@ -286,6 +287,7 @@ static esp_err_t general_post(httpd_req_t *req)
         settings_save_printer(has_model ? model : NULL, has_name ? name : NULL);
     int ap = json_bool(body, "airprint"), lt = json_bool(body, "localtalk");
     if (ap >= 0 || lt >= 0) settings_save_switches(ap, lt);
+    if (json_bool(body, "finish") == 1) settings_set_fresh(0);   // W-1088: the sheet closed
     if (s_cfg.general_saved) s_cfg.general_saved(s_cfg.ctx);
     led_grid_blip(LG_BLIP_SAVED);
     return httpd_resp_sendstr(req, "{\"ok\":true}");
@@ -303,6 +305,36 @@ static int json_bool(const char *body, const char *key)
     p++;
     while (*p == ' ') p++;
     return !strncmp(p, "true", 4) ? 1 : !strncmp(p, "false", 5) ? 0 : -1;
+}
+
+// W-1088: the printer list. In PSRAM, as laser_get's.
+enum { PRINTERS_JSON = 4096 };
+
+static esp_err_t printers_get(httpd_req_t *req)
+{
+    if (!s_cfg.printers_json) return httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "no printers");
+    static char *json;
+    if (!json) json = heap_caps_malloc(PRINTERS_JSON, MALLOC_CAP_SPIRAM);
+    if (!json) return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "no memory");
+    s_cfg.printers_json(s_cfg.ctx, json, PRINTERS_JSON);
+    httpd_resp_set_type(req, "application/json");
+    return httpd_resp_sendstr(req, json);
+}
+
+static esp_err_t printers_post(httpd_req_t *req)
+{
+    if (!s_cfg.printers_post) return httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "no printers");
+    char body[BODY_MAX], err[96];
+    if (read_body(req, body, sizeof body) < 0)
+        return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "short body");
+    int rc = s_cfg.printers_post(s_cfg.ctx, body, err, sizeof err);
+    if (rc) {
+        httpd_resp_set_status(req, rc == 503 ? "503 Service Unavailable" : "400 Bad Request");
+        httpd_resp_set_type(req, "text/plain; charset=utf-8");
+        return httpd_resp_sendstr(req, err);
+    }
+    led_grid_blip(LG_BLIP_SAVED);
+    return printers_get(req);
 }
 
 static esp_err_t laser_get(httpd_req_t *req)
@@ -487,7 +519,12 @@ static esp_err_t erase_post(httpd_req_t *req)
 static esp_err_t test_post(httpd_req_t *req)
 {
     if (!s_cfg.test_page) return httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "no test page");
-    if (s_cfg.test_page(s_cfg.ctx)) {
+    char body[BODY_MAX] = "";
+    if (req->content_len && read_body(req, body, sizeof body) < 0)
+        return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "short body");
+    int rc = s_cfg.test_page(s_cfg.ctx, json_int(body, "id", -1));
+    if (rc == 2) return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "no printer with a test page");
+    if (rc) {
         httpd_resp_set_status(req, "409 Conflict");
         return httpd_resp_sendstr(req, "the printer is busy");
     }
@@ -527,7 +564,7 @@ esp_err_t webui_start(const webui_cfg_t *cfg)
     httpd_config_t hc = HTTPD_DEFAULT_CONFIG();
     hc.server_port      = 80;
     hc.ctrl_port        = 32080;
-    hc.max_uri_handlers = 28;
+    hc.max_uri_handlers = 32;
     hc.stack_size       = 6144;
     hc.lru_purge_enable = true;
     hc.uri_match_fn     = httpd_uri_match_wildcard;
@@ -547,6 +584,8 @@ esp_err_t webui_start(const webui_cfg_t *cfg)
         { .uri = "/api/et",       .method = HTTP_GET,  .handler = et_get },
         { .uri = "/api/et/settings", .method = HTTP_GET,  .handler = et_settings_get },
         { .uri = "/api/et/settings", .method = HTTP_POST, .handler = et_settings_post },
+        { .uri = "/api/printers", .method = HTTP_GET,  .handler = printers_get },
+        { .uri = "/api/printers", .method = HTTP_POST, .handler = printers_post },
         { .uri = "/api/laser",    .method = HTTP_GET,  .handler = laser_get },
         { .uri = "/api/laser",    .method = HTTP_POST, .handler = laser_post },
         { .uri = "/api/wifi",     .method = HTTP_POST, .handler = wifi_post },

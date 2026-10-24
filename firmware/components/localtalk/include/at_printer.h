@@ -11,6 +11,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include "esp_err.h"
+#include "lt_node.h"
 
 typedef enum { AT_LINK_CABLE = 0, AT_LINK_TUNNEL, AT_LINK_ZONE, AT_LINK_RADIO } at_link_t;
 
@@ -38,6 +39,22 @@ typedef struct {
     void    (*note)(const char *line);
     void     *ctx;
 } at_owner_t;
+
+// W-1088: a Mac's connection to a printer offered on this link but living on
+// another, which laser.c's relay carries (pap_relay.h). A node hands it every
+// connection opened on a registration other than its own; each runs on that
+// link's task with its lock held, and must not block.
+typedef struct {
+    int    (*open)(int link, const lt_node_t *node, int reg, uint64_t now);   // 0, or busy
+    void   (*data)(const uint8_t *d, size_t n);
+    size_t (*room)(void);
+    void   (*end)(int normal);
+    size_t (*output)(uint8_t *buf, size_t max, int *eof, int again);
+    // SendStatus on a registration: the printer's own status, Pascal; 0 for none.
+    size_t (*status)(int link, const lt_node_t *node, int reg, uint8_t *pstr, size_t cap);
+} at_relay_t;
+void              at_relay_set(const at_relay_t *r);
+const at_relay_t *at_relay(void);
 
 // Once; later calls keep the first printer.
 esp_err_t at_printer_init(const localtalk_printer_t *p);

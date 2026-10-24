@@ -40,7 +40,14 @@
    "lt": true,
    "lt_chip": "ok",
    "dip": "01000111",
-   "ap": "AirWriter-2434"
+   "ap": "AirWriter-2434",
+   "printers": {
+    "count": 3,
+    "shared": 3,
+    "notes": 0,
+    "port": "imagewriter"
+   },
+   "fresh": false
   },
   "GET /api/lt": {
    "on": true,
@@ -198,52 +205,163 @@
    "zone": "quiet-otter-4821"
   },
   "GET /api/laser": {
-   "heard": [],
-   "shared": null,
-   "looking": true
-  },
-  "POST /api/laser": {
    "heard": [
     {
      "name": "LaserWriter II NT",
-     "link": "cable",
-     "status": "status: idle",
-     "ago_s": 4,
-     "shared": true
+     "kind": "laserwriter",
+     "link": "tunnel",
+     "ago_s": 2,
+     "airwriter": false
     },
     {
-     "name": "Wells’s LaserWriter Pro 630 in the back room",
-     "link": "radio",
-     "status": "job: Budget; status: busy; source: AppleTalk",
-     "ago_s": 12,
-     "shared": false
+     "name": "Office LaserWriter",
+     "kind": "laserwriter",
+     "link": "cable",
+     "ago_s": 3,
+     "airwriter": false
     }
    ],
-   "looking": true,
-   "shared": {
-    "name": "LaserWriter II NT",
-    "link": "cable",
-    "online": true,
-    "advertised": true,
-    "queried": true,
-    "state": "idle",
-    "reason": "none",
-    "message": "",
-    "product": "LaserWriter II NT",
-    "version": "47.0",
-    "level": 1,
-    "binary": true,
-    "page": "letter",
-    "dpi": 300,
-    "dither": "atkinson",
-    "gain": 0,
-    "uuid": "urn:uuid:41575254-4c57-0001-6b2e-10bda36e2434"
-   },
+   "targets": [
+    {
+     "id": 2,
+     "name": "LaserWriter II NT",
+     "slot": 1,
+     "link": "tunnel",
+     "state": "idle",
+     "reason": "none",
+     "message": "",
+     "product": "LaserWriter II NT",
+     "queried": true
+    },
+    {
+     "id": 3,
+     "name": "Office LaserWriter",
+     "slot": 1,
+     "link": "cable",
+     "state": "idle",
+     "reason": "none",
+     "message": "",
+     "product": "LaserWriter Pro 630",
+     "queried": true
+    }
+   ],
    "job": {
     "active": false,
     "sent": 0,
-    "last": ""
+    "last": "",
+    "ms": 0
    }
+  },
+  "GET /api/printers": {
+   "printers": [
+    {
+     "id": 1,
+     "name": "ImageWriter II",
+     "where": "port",
+     "kind": "imagewriter",
+     "model": "ImageWriter II",
+     "shared": true,
+     "identified": true,
+     "found": "person",
+     "state": "ready",
+     "uuid": "urn:uuid:41575254-4552-0001-10bd-a36e2434",
+     "product": "",
+     "dither": "atkinson",
+     "gain": 0,
+     "rp": "ipp/print"
+    },
+    {
+     "id": 2,
+     "name": "LaserWriter II NT",
+     "where": "tunnel",
+     "kind": "laserwriter",
+     "model": "",
+     "shared": true,
+     "identified": true,
+     "found": "person",
+     "state": "ready",
+     "uuid": "urn:uuid:41575254-4c57-0001-99d7-10bda36e2434",
+     "product": "LaserWriter II NT",
+     "dither": "atkinson",
+     "gain": 0,
+     "rp": "ipp/laser"
+    },
+    {
+     "id": 3,
+     "name": "Office LaserWriter",
+     "where": "cable",
+     "kind": "laserwriter",
+     "model": "",
+     "shared": true,
+     "identified": true,
+     "found": "auto",
+     "state": "ready",
+     "uuid": "urn:uuid:41575254-4c57-0001-78fa-10bda36e2434",
+     "product": "LaserWriter Pro 630",
+     "dither": "bluenoise",
+     "gain": 0,
+     "rp": "ipp/p3"
+    }
+   ],
+   "notes": [],
+   "max_shared": 4
+  },
+  "POST /api/printers": {
+   "printers": [
+    {
+     "id": 1,
+     "name": "ImageWriter II",
+     "where": "port",
+     "kind": "imagewriter",
+     "model": "ImageWriter II",
+     "shared": true,
+     "identified": true,
+     "found": "person",
+     "state": "ready",
+     "uuid": "urn:uuid:41575254-4552-0001-10bd-a36e2434",
+     "product": "",
+     "dither": "atkinson",
+     "gain": 0,
+     "rp": "ipp/print"
+    },
+    {
+     "id": 2,
+     "name": "LaserWriter II NT",
+     "where": "tunnel",
+     "kind": "laserwriter",
+     "model": "",
+     "shared": true,
+     "identified": true,
+     "found": "person",
+     "state": "ready",
+     "uuid": "urn:uuid:41575254-4c57-0001-99d7-10bda36e2434",
+     "product": "LaserWriter II NT",
+     "dither": "atkinson",
+     "gain": 0,
+     "rp": "ipp/laser"
+    },
+    {
+     "id": 3,
+     "name": "Office LaserWriter",
+     "where": "cable",
+     "kind": "laserwriter",
+     "model": "",
+     "shared": true,
+     "identified": true,
+     "found": "auto",
+     "state": "ready",
+     "uuid": "urn:uuid:41575254-4c57-0001-78fa-10bda36e2434",
+     "product": "LaserWriter Pro 630",
+     "dither": "bluenoise",
+     "gain": 0,
+     "rp": "ipp/p3"
+    }
+   ],
+   "notes": [],
+   "max_shared": 4
+  },
+  "POST /api/test": {
+   "ok": true
   }
  },
  "states": {
@@ -329,7 +447,9 @@
      "security": "",
      "uri": "",
      "ip": "192.168.4.1",
-     "lt": false
+     "lt": false,
+     "host": "airwriter-2434.local",
+     "phost": "airwriter-2434"
     },
     "GET /api/et": {
      "_status": 404,
@@ -349,6 +469,50 @@
     "POST /api/wifi": {
      "_then": "normal",
      "_down": 12
+    },
+    "GET /api/printers": {
+     "printers": [
+      {
+       "id": 1,
+       "name": "ImageWriter II",
+       "where": "port",
+       "kind": "imagewriter",
+       "model": "ImageWriter II",
+       "shared": true,
+       "identified": true,
+       "found": "auto",
+       "state": "ready",
+       "uuid": "urn:uuid:41575254-4552-0001-10bd-a36e2434",
+       "product": "",
+       "dither": "atkinson",
+       "gain": 0,
+       "rp": "ipp/print"
+      }
+     ],
+     "notes": [],
+     "max_shared": 4
+    },
+    "POST /api/printers": {
+     "printers": [
+      {
+       "id": 1,
+       "name": "ImageWriter II",
+       "where": "port",
+       "kind": "imagewriter",
+       "model": "ImageWriter II",
+       "shared": true,
+       "identified": true,
+       "found": "auto",
+       "state": "ready",
+       "uuid": "urn:uuid:41575254-4552-0001-10bd-a36e2434",
+       "product": "",
+       "dither": "atkinson",
+       "gain": 0,
+       "rp": "ipp/print"
+      }
+     ],
+     "notes": [],
+     "max_shared": 4
     }
    }
   },
@@ -979,71 +1143,32 @@
     }
    }
   },
-  "laser-heard": {
-   "about": "LaserWriters: two heard, one with a long curly-quoted name, none shared",
+  "no-printers": {
+   "about": "Printers: none yet (a new board, nothing plugged in)",
    "patch": {
+    "GET /api/printers": {
+     "printers": [],
+     "notes": [],
+     "max_shared": 4
+    },
+    "POST /api/printers": {
+     "printers": [],
+     "notes": [],
+     "max_shared": 4
+    },
+    "GET /api/status": {
+     "ps": "offline",
+     "printer": false,
+     "printers": {
+      "count": 0,
+      "shared": 0,
+      "notes": 0,
+      "port": "none"
+     }
+    },
     "GET /api/laser": {
-     "heard": [
-      {
-       "name": "LaserWriter II NT",
-       "link": "cable",
-       "status": "status: idle",
-       "ago_s": 4,
-       "shared": false
-      },
-      {
-       "name": "Wells’s LaserWriter Pro 630 in the back room",
-       "link": "radio",
-       "status": "job: Budget; status: busy; source: AppleTalk",
-       "ago_s": 12,
-       "shared": false
-      }
-     ],
-     "shared": null,
-     "looking": true
-    }
-   }
-  },
-  "laser-asking": {
-   "about": "LaserWriters: just shared, its query job not answered yet",
-   "patch": {
-    "GET /api/laser": {
-     "heard": [
-      {
-       "name": "LaserWriter II NT",
-       "link": "cable",
-       "status": "status: idle",
-       "ago_s": 4,
-       "shared": true
-      },
-      {
-       "name": "Wells’s LaserWriter Pro 630 in the back room",
-       "link": "radio",
-       "status": "job: Budget; status: busy; source: AppleTalk",
-       "ago_s": 12,
-       "shared": false
-      }
-     ],
-     "looking": true,
-     "shared": {
-      "name": "LaserWriter II NT",
-      "link": "cable",
-      "online": true,
-      "advertised": false,
-      "queried": false,
-      "state": "idle",
-      "reason": "none",
-      "message": "",
-      "product": "",
-      "version": "",
-      "level": 1,
-      "binary": true,
-      "page": "letter",
-      "dpi": 300,
-      "dither": "atkinson",
-      "gain": 0,
-      "uuid": "urn:uuid:41575254-4c57-0001-6b2e-10bda36e2434"
-     },
+     "heard": [],
+     "targets": [],
      "job": {
       "active": false,
       "sent": 0,
@@ -1052,46 +1177,56 @@
     }
    }
   },
-  "laser-shared": {
-   "about": "LaserWriters: one shared and idle",
+  "one-port": {
+   "about": "Printers: one ImageWriter on the port",
    "patch": {
-    "GET /api/laser": {
-     "heard": [
+    "GET /api/printers": {
+     "printers": [
       {
-       "name": "LaserWriter II NT",
-       "link": "cable",
-       "status": "status: idle",
-       "ago_s": 4,
-       "shared": true
-      },
-      {
-       "name": "Wells’s LaserWriter Pro 630 in the back room",
-       "link": "radio",
-       "status": "job: Budget; status: busy; source: AppleTalk",
-       "ago_s": 12,
-       "shared": false
+       "id": 1,
+       "name": "ImageWriter II",
+       "where": "port",
+       "kind": "imagewriter",
+       "model": "ImageWriter II",
+       "shared": true,
+       "identified": true,
+       "found": "person",
+       "state": "ready",
+       "uuid": "urn:uuid:41575254-4552-0001-10bd-a36e2434",
+       "product": "",
+       "dither": "atkinson",
+       "gain": 0,
+       "rp": "ipp/print"
       }
      ],
-     "looking": true,
-     "shared": {
-      "name": "LaserWriter II NT",
-      "link": "cable",
-      "online": true,
-      "advertised": true,
-      "queried": true,
-      "state": "idle",
-      "reason": "none",
-      "message": "",
-      "product": "LaserWriter II NT",
-      "version": "47.0",
-      "level": 1,
-      "binary": true,
-      "page": "letter",
-      "dpi": 300,
-      "dither": "atkinson",
-      "gain": 0,
-      "uuid": "urn:uuid:41575254-4c57-0001-6b2e-10bda36e2434"
-     },
+     "notes": [],
+     "max_shared": 4
+    },
+    "POST /api/printers": {
+     "printers": [
+      {
+       "id": 1,
+       "name": "ImageWriter II",
+       "where": "port",
+       "kind": "imagewriter",
+       "model": "ImageWriter II",
+       "shared": true,
+       "identified": true,
+       "found": "person",
+       "state": "ready",
+       "uuid": "urn:uuid:41575254-4552-0001-10bd-a36e2434",
+       "product": "",
+       "dither": "atkinson",
+       "gain": 0,
+       "rp": "ipp/print"
+      }
+     ],
+     "notes": [],
+     "max_shared": 4
+    },
+    "GET /api/laser": {
+     "heard": [],
+     "targets": [],
      "job": {
       "active": false,
       "sent": 0,
@@ -1100,94 +1235,803 @@
     }
    }
   },
-  "laser-printing": {
-   "about": "LaserWriters: the shared one printing an AirPrint job",
+  "unknown-port": {
+   "about": "Printers: something on the port that never answered ESC ?",
    "patch": {
-    "GET /api/laser": {
-     "heard": [
+    "GET /api/printers": {
+     "printers": [
       {
-       "name": "LaserWriter II NT",
-       "link": "cable",
-       "status": "job: Letter; status: busy; source: AppleTalk",
-       "ago_s": 4,
-       "shared": true
-      },
-      {
-       "name": "Wells’s LaserWriter Pro 630 in the back room",
-       "link": "radio",
-       "status": "job: Budget; status: busy; source: AppleTalk",
-       "ago_s": 12,
-       "shared": false
+       "id": 1,
+       "name": "Unknown printer",
+       "where": "port",
+       "kind": "unknown",
+       "model": "",
+       "shared": false,
+       "identified": false,
+       "found": "auto",
+       "state": "ready",
+       "uuid": "urn:uuid:41575254-4552-0001-10bd-a36e2434",
+       "product": "",
+       "dither": "atkinson",
+       "gain": 0,
+       "rp": ""
       }
      ],
-     "looking": true,
-     "shared": {
-      "name": "LaserWriter II NT",
-      "link": "cable",
-      "online": true,
-      "advertised": true,
-      "queried": true,
-      "state": "printing",
-      "reason": "none",
-      "message": "",
-      "product": "LaserWriter II NT",
-      "version": "47.0",
-      "level": 1,
-      "binary": true,
-      "page": "letter",
-      "dpi": 300,
-      "dither": "atkinson",
-      "gain": 0,
-      "uuid": "urn:uuid:41575254-4c57-0001-6b2e-10bda36e2434"
-     },
-     "job": {
-      "active": true,
-      "sent": 123456,
-      "last": ""
-     }
+     "notes": [
+      {
+       "kind": "unknown_port",
+       "id": 1,
+       "model": ""
+      }
+     ],
+     "max_shared": 4
+    },
+    "POST /api/printers": {
+     "printers": [
+      {
+       "id": 1,
+       "name": "Unknown printer",
+       "where": "port",
+       "kind": "unknown",
+       "model": "",
+       "shared": false,
+       "identified": false,
+       "found": "auto",
+       "state": "ready",
+       "uuid": "urn:uuid:41575254-4552-0001-10bd-a36e2434",
+       "product": "",
+       "dither": "atkinson",
+       "gain": 0,
+       "rp": ""
+      }
+     ],
+     "notes": [
+      {
+       "kind": "unknown_port",
+       "id": 1,
+       "model": ""
+      }
+     ],
+     "max_shared": 4
     }
    }
   },
-  "laser-busy": {
-   "about": "LaserWriters: the shared one busy with another Mac's job",
+  "found-notice": {
+   "about": "Printers: a LaserWriter just found and shared",
    "patch": {
+    "GET /api/printers": {
+     "printers": [
+      {
+       "id": 1,
+       "name": "ImageWriter II",
+       "where": "port",
+       "kind": "imagewriter",
+       "model": "ImageWriter II",
+       "shared": true,
+       "identified": true,
+       "found": "person",
+       "state": "ready",
+       "uuid": "urn:uuid:41575254-4552-0001-10bd-a36e2434",
+       "product": "",
+       "dither": "atkinson",
+       "gain": 0,
+       "rp": "ipp/print"
+      },
+      {
+       "id": 2,
+       "name": "LaserWriter II NT",
+       "where": "tunnel",
+       "kind": "laserwriter",
+       "model": "",
+       "shared": true,
+       "identified": true,
+       "found": "person",
+       "state": "ready",
+       "uuid": "urn:uuid:41575254-4c57-0001-99d7-10bda36e2434",
+       "product": "LaserWriter II NT",
+       "dither": "atkinson",
+       "gain": 0,
+       "rp": "ipp/laser"
+      },
+      {
+       "id": 3,
+       "name": "Office LaserWriter",
+       "where": "cable",
+       "kind": "laserwriter",
+       "model": "",
+       "shared": true,
+       "identified": true,
+       "found": "auto",
+       "state": "ready",
+       "uuid": "urn:uuid:41575254-4c57-0001-78fa-10bda36e2434",
+       "product": "LaserWriter Pro 630",
+       "dither": "bluenoise",
+       "gain": 0,
+       "rp": "ipp/p3"
+      }
+     ],
+     "notes": [
+      {
+       "kind": "found",
+       "id": 3,
+       "model": ""
+      }
+     ],
+     "max_shared": 4
+    },
+    "POST /api/printers": {
+     "printers": [
+      {
+       "id": 1,
+       "name": "ImageWriter II",
+       "where": "port",
+       "kind": "imagewriter",
+       "model": "ImageWriter II",
+       "shared": true,
+       "identified": true,
+       "found": "person",
+       "state": "ready",
+       "uuid": "urn:uuid:41575254-4552-0001-10bd-a36e2434",
+       "product": "",
+       "dither": "atkinson",
+       "gain": 0,
+       "rp": "ipp/print"
+      },
+      {
+       "id": 2,
+       "name": "LaserWriter II NT",
+       "where": "tunnel",
+       "kind": "laserwriter",
+       "model": "",
+       "shared": true,
+       "identified": true,
+       "found": "person",
+       "state": "ready",
+       "uuid": "urn:uuid:41575254-4c57-0001-99d7-10bda36e2434",
+       "product": "LaserWriter II NT",
+       "dither": "atkinson",
+       "gain": 0,
+       "rp": "ipp/laser"
+      },
+      {
+       "id": 3,
+       "name": "Office LaserWriter",
+       "where": "cable",
+       "kind": "laserwriter",
+       "model": "",
+       "shared": true,
+       "identified": true,
+       "found": "auto",
+       "state": "ready",
+       "uuid": "urn:uuid:41575254-4c57-0001-78fa-10bda36e2434",
+       "product": "LaserWriter Pro 630",
+       "dither": "bluenoise",
+       "gain": 0,
+       "rp": "ipp/p3"
+      }
+     ],
+     "notes": [
+      {
+       "kind": "found",
+       "id": 3,
+       "model": ""
+      }
+     ],
+     "max_shared": 4
+    }
+   }
+  },
+  "changed-notice": {
+   "about": "Printers: the port printer now says it is an LQ",
+   "patch": {
+    "GET /api/printers": {
+     "printers": [
+      {
+       "id": 1,
+       "name": "ImageWriter II",
+       "where": "port",
+       "kind": "imagewriter",
+       "model": "ImageWriter II",
+       "shared": true,
+       "identified": true,
+       "found": "person",
+       "state": "ready",
+       "uuid": "urn:uuid:41575254-4552-0001-10bd-a36e2434",
+       "product": "",
+       "dither": "atkinson",
+       "gain": 0,
+       "rp": "ipp/print"
+      },
+      {
+       "id": 2,
+       "name": "LaserWriter II NT",
+       "where": "tunnel",
+       "kind": "laserwriter",
+       "model": "",
+       "shared": true,
+       "identified": true,
+       "found": "person",
+       "state": "ready",
+       "uuid": "urn:uuid:41575254-4c57-0001-99d7-10bda36e2434",
+       "product": "LaserWriter II NT",
+       "dither": "atkinson",
+       "gain": 0,
+       "rp": "ipp/laser"
+      },
+      {
+       "id": 3,
+       "name": "Office LaserWriter",
+       "where": "cable",
+       "kind": "laserwriter",
+       "model": "",
+       "shared": true,
+       "identified": true,
+       "found": "auto",
+       "state": "ready",
+       "uuid": "urn:uuid:41575254-4c57-0001-78fa-10bda36e2434",
+       "product": "LaserWriter Pro 630",
+       "dither": "bluenoise",
+       "gain": 0,
+       "rp": "ipp/p3"
+      }
+     ],
+     "notes": [
+      {
+       "kind": "changed",
+       "id": 1,
+       "model": "ImageWriter LQ"
+      }
+     ],
+     "max_shared": 4
+    },
+    "POST /api/printers": {
+     "printers": [
+      {
+       "id": 1,
+       "name": "ImageWriter II",
+       "where": "port",
+       "kind": "imagewriter",
+       "model": "ImageWriter II",
+       "shared": true,
+       "identified": true,
+       "found": "person",
+       "state": "ready",
+       "uuid": "urn:uuid:41575254-4552-0001-10bd-a36e2434",
+       "product": "",
+       "dither": "atkinson",
+       "gain": 0,
+       "rp": "ipp/print"
+      },
+      {
+       "id": 2,
+       "name": "LaserWriter II NT",
+       "where": "tunnel",
+       "kind": "laserwriter",
+       "model": "",
+       "shared": true,
+       "identified": true,
+       "found": "person",
+       "state": "ready",
+       "uuid": "urn:uuid:41575254-4c57-0001-99d7-10bda36e2434",
+       "product": "LaserWriter II NT",
+       "dither": "atkinson",
+       "gain": 0,
+       "rp": "ipp/laser"
+      },
+      {
+       "id": 3,
+       "name": "Office LaserWriter",
+       "where": "cable",
+       "kind": "laserwriter",
+       "model": "",
+       "shared": true,
+       "identified": true,
+       "found": "auto",
+       "state": "ready",
+       "uuid": "urn:uuid:41575254-4c57-0001-78fa-10bda36e2434",
+       "product": "LaserWriter Pro 630",
+       "dither": "bluenoise",
+       "gain": 0,
+       "rp": "ipp/p3"
+      }
+     ],
+     "notes": [
+      {
+       "kind": "changed",
+       "id": 1,
+       "model": "ImageWriter LQ"
+      }
+     ],
+     "max_shared": 4
+    }
+   }
+  },
+  "too-many": {
+   "about": "Printers: six, more than AirWriter can share",
+   "patch": {
+    "GET /api/printers": {
+     "printers": [
+      {
+       "id": 1,
+       "name": "ImageWriter II",
+       "where": "port",
+       "kind": "imagewriter",
+       "model": "ImageWriter II",
+       "shared": true,
+       "identified": true,
+       "found": "person",
+       "state": "ready",
+       "uuid": "urn:uuid:41575254-4552-0001-10bd-a36e2434",
+       "product": "",
+       "dither": "atkinson",
+       "gain": 0,
+       "rp": "ipp/print"
+      },
+      {
+       "id": 2,
+       "name": "LaserWriter II NT",
+       "where": "tunnel",
+       "kind": "laserwriter",
+       "model": "",
+       "shared": true,
+       "identified": true,
+       "found": "person",
+       "state": "ready",
+       "uuid": "urn:uuid:41575254-4c57-0001-99d7-10bda36e2434",
+       "product": "LaserWriter II NT",
+       "dither": "atkinson",
+       "gain": 0,
+       "rp": "ipp/laser"
+      },
+      {
+       "id": 3,
+       "name": "Office LaserWriter",
+       "where": "cable",
+       "kind": "laserwriter",
+       "model": "",
+       "shared": true,
+       "identified": true,
+       "found": "auto",
+       "state": "ready",
+       "uuid": "urn:uuid:41575254-4c57-0001-78fa-10bda36e2434",
+       "product": "LaserWriter Pro 630",
+       "dither": "bluenoise",
+       "gain": 0,
+       "rp": "ipp/p3"
+      },
+      {
+       "id": 4,
+       "name": "Studio LaserWriter",
+       "where": "network",
+       "kind": "laserwriter",
+       "model": "",
+       "shared": true,
+       "identified": true,
+       "found": "auto",
+       "state": "ready",
+       "uuid": "urn:uuid:41575254-4c57-0001-78fa-10bda36e2435",
+       "product": "LaserWriter 16/600 PS",
+       "dither": "bluenoise",
+       "gain": 0,
+       "rp": "ipp/p4"
+      },
+      {
+       "id": 5,
+       "name": "Wells’s Personal LaserWriter NTR in the back room",
+       "where": "zone",
+       "kind": "laserwriter",
+       "model": "",
+       "shared": false,
+       "identified": true,
+       "found": "auto",
+       "state": "ready",
+       "uuid": "urn:uuid:41575254-4c57-0001-78fa-10bda36e2434",
+       "product": "Personal LaserWriter NTR",
+       "dither": "bluenoise",
+       "gain": 0,
+       "rp": ""
+      },
+      {
+       "id": 6,
+       "name": "Den ImageWriter",
+       "where": "cable",
+       "kind": "appletalk-imagewriter",
+       "model": "",
+       "shared": false,
+       "identified": true,
+       "found": "auto",
+       "state": "ready",
+       "uuid": "urn:uuid:41575254-4552-0001-10bd-a36e2434",
+       "product": "",
+       "dither": "atkinson",
+       "gain": 0,
+       "rp": ""
+      }
+     ],
+     "notes": [
+      {
+       "kind": "too_many",
+       "id": 5,
+       "model": ""
+      }
+     ],
+     "max_shared": 4
+    },
+    "POST /api/printers": {
+     "printers": [
+      {
+       "id": 1,
+       "name": "ImageWriter II",
+       "where": "port",
+       "kind": "imagewriter",
+       "model": "ImageWriter II",
+       "shared": true,
+       "identified": true,
+       "found": "person",
+       "state": "ready",
+       "uuid": "urn:uuid:41575254-4552-0001-10bd-a36e2434",
+       "product": "",
+       "dither": "atkinson",
+       "gain": 0,
+       "rp": "ipp/print"
+      },
+      {
+       "id": 2,
+       "name": "LaserWriter II NT",
+       "where": "tunnel",
+       "kind": "laserwriter",
+       "model": "",
+       "shared": true,
+       "identified": true,
+       "found": "person",
+       "state": "ready",
+       "uuid": "urn:uuid:41575254-4c57-0001-99d7-10bda36e2434",
+       "product": "LaserWriter II NT",
+       "dither": "atkinson",
+       "gain": 0,
+       "rp": "ipp/laser"
+      },
+      {
+       "id": 3,
+       "name": "Office LaserWriter",
+       "where": "cable",
+       "kind": "laserwriter",
+       "model": "",
+       "shared": true,
+       "identified": true,
+       "found": "auto",
+       "state": "ready",
+       "uuid": "urn:uuid:41575254-4c57-0001-78fa-10bda36e2434",
+       "product": "LaserWriter Pro 630",
+       "dither": "bluenoise",
+       "gain": 0,
+       "rp": "ipp/p3"
+      },
+      {
+       "id": 4,
+       "name": "Studio LaserWriter",
+       "where": "network",
+       "kind": "laserwriter",
+       "model": "",
+       "shared": true,
+       "identified": true,
+       "found": "auto",
+       "state": "ready",
+       "uuid": "urn:uuid:41575254-4c57-0001-78fa-10bda36e2435",
+       "product": "LaserWriter 16/600 PS",
+       "dither": "bluenoise",
+       "gain": 0,
+       "rp": "ipp/p4"
+      },
+      {
+       "id": 5,
+       "name": "Wells’s Personal LaserWriter NTR in the back room",
+       "where": "zone",
+       "kind": "laserwriter",
+       "model": "",
+       "shared": false,
+       "identified": true,
+       "found": "auto",
+       "state": "ready",
+       "uuid": "urn:uuid:41575254-4c57-0001-78fa-10bda36e2434",
+       "product": "Personal LaserWriter NTR",
+       "dither": "bluenoise",
+       "gain": 0,
+       "rp": ""
+      },
+      {
+       "id": 6,
+       "name": "Den ImageWriter",
+       "where": "cable",
+       "kind": "appletalk-imagewriter",
+       "model": "",
+       "shared": false,
+       "identified": true,
+       "found": "auto",
+       "state": "ready",
+       "uuid": "urn:uuid:41575254-4552-0001-10bd-a36e2434",
+       "product": "",
+       "dither": "atkinson",
+       "gain": 0,
+       "rp": ""
+      }
+     ],
+     "notes": [
+      {
+       "kind": "too_many",
+       "id": 5,
+       "model": ""
+      }
+     ],
+     "max_shared": 4
+    }
+   }
+  },
+  "printer-offline": {
+   "about": "Printers: a LaserWriter not answering",
+   "patch": {
+    "GET /api/printers": {
+     "printers": [
+      {
+       "id": 1,
+       "name": "ImageWriter II",
+       "where": "port",
+       "kind": "imagewriter",
+       "model": "ImageWriter II",
+       "shared": true,
+       "identified": true,
+       "found": "person",
+       "state": "ready",
+       "uuid": "urn:uuid:41575254-4552-0001-10bd-a36e2434",
+       "product": "",
+       "dither": "atkinson",
+       "gain": 0,
+       "rp": "ipp/print"
+      },
+      {
+       "id": 2,
+       "name": "LaserWriter II NT",
+       "where": "tunnel",
+       "kind": "laserwriter",
+       "model": "",
+       "shared": true,
+       "identified": true,
+       "found": "person",
+       "state": "ready",
+       "uuid": "urn:uuid:41575254-4c57-0001-99d7-10bda36e2434",
+       "product": "LaserWriter II NT",
+       "dither": "atkinson",
+       "gain": 0,
+       "rp": "ipp/laser"
+      },
+      {
+       "id": 3,
+       "name": "Office LaserWriter",
+       "where": "cable",
+       "kind": "laserwriter",
+       "model": "",
+       "shared": true,
+       "identified": true,
+       "found": "auto",
+       "state": "offline",
+       "uuid": "urn:uuid:41575254-4c57-0001-78fa-10bda36e2434",
+       "product": "LaserWriter Pro 630",
+       "dither": "bluenoise",
+       "gain": 0,
+       "rp": "ipp/p3"
+      }
+     ],
+     "notes": [],
+     "max_shared": 4
+    },
+    "POST /api/printers": {
+     "printers": [
+      {
+       "id": 1,
+       "name": "ImageWriter II",
+       "where": "port",
+       "kind": "imagewriter",
+       "model": "ImageWriter II",
+       "shared": true,
+       "identified": true,
+       "found": "person",
+       "state": "ready",
+       "uuid": "urn:uuid:41575254-4552-0001-10bd-a36e2434",
+       "product": "",
+       "dither": "atkinson",
+       "gain": 0,
+       "rp": "ipp/print"
+      },
+      {
+       "id": 2,
+       "name": "LaserWriter II NT",
+       "where": "tunnel",
+       "kind": "laserwriter",
+       "model": "",
+       "shared": true,
+       "identified": true,
+       "found": "person",
+       "state": "ready",
+       "uuid": "urn:uuid:41575254-4c57-0001-99d7-10bda36e2434",
+       "product": "LaserWriter II NT",
+       "dither": "atkinson",
+       "gain": 0,
+       "rp": "ipp/laser"
+      },
+      {
+       "id": 3,
+       "name": "Office LaserWriter",
+       "where": "cable",
+       "kind": "laserwriter",
+       "model": "",
+       "shared": true,
+       "identified": true,
+       "found": "auto",
+       "state": "offline",
+       "uuid": "urn:uuid:41575254-4c57-0001-78fa-10bda36e2434",
+       "product": "LaserWriter Pro 630",
+       "dither": "bluenoise",
+       "gain": 0,
+       "rp": "ipp/p3"
+      }
+     ],
+     "notes": [],
+     "max_shared": 4
+    }
+   }
+  },
+  "lw-attention": {
+   "about": "Printers: a LaserWriter out of paper, its own words",
+   "patch": {
+    "GET /api/printers": {
+     "printers": [
+      {
+       "id": 1,
+       "name": "ImageWriter II",
+       "where": "port",
+       "kind": "imagewriter",
+       "model": "ImageWriter II",
+       "shared": true,
+       "identified": true,
+       "found": "person",
+       "state": "ready",
+       "uuid": "urn:uuid:41575254-4552-0001-10bd-a36e2434",
+       "product": "",
+       "dither": "atkinson",
+       "gain": 0,
+       "rp": "ipp/print"
+      },
+      {
+       "id": 2,
+       "name": "LaserWriter II NT",
+       "where": "tunnel",
+       "kind": "laserwriter",
+       "model": "",
+       "shared": true,
+       "identified": true,
+       "found": "person",
+       "state": "attention",
+       "uuid": "urn:uuid:41575254-4c57-0001-99d7-10bda36e2434",
+       "product": "LaserWriter II NT",
+       "dither": "atkinson",
+       "gain": 0,
+       "rp": "ipp/laser"
+      },
+      {
+       "id": 3,
+       "name": "Office LaserWriter",
+       "where": "cable",
+       "kind": "laserwriter",
+       "model": "",
+       "shared": true,
+       "identified": true,
+       "found": "auto",
+       "state": "ready",
+       "uuid": "urn:uuid:41575254-4c57-0001-78fa-10bda36e2434",
+       "product": "LaserWriter Pro 630",
+       "dither": "bluenoise",
+       "gain": 0,
+       "rp": "ipp/p3"
+      }
+     ],
+     "notes": [],
+     "max_shared": 4
+    },
+    "POST /api/printers": {
+     "printers": [
+      {
+       "id": 1,
+       "name": "ImageWriter II",
+       "where": "port",
+       "kind": "imagewriter",
+       "model": "ImageWriter II",
+       "shared": true,
+       "identified": true,
+       "found": "person",
+       "state": "ready",
+       "uuid": "urn:uuid:41575254-4552-0001-10bd-a36e2434",
+       "product": "",
+       "dither": "atkinson",
+       "gain": 0,
+       "rp": "ipp/print"
+      },
+      {
+       "id": 2,
+       "name": "LaserWriter II NT",
+       "where": "tunnel",
+       "kind": "laserwriter",
+       "model": "",
+       "shared": true,
+       "identified": true,
+       "found": "person",
+       "state": "attention",
+       "uuid": "urn:uuid:41575254-4c57-0001-99d7-10bda36e2434",
+       "product": "LaserWriter II NT",
+       "dither": "atkinson",
+       "gain": 0,
+       "rp": "ipp/laser"
+      },
+      {
+       "id": 3,
+       "name": "Office LaserWriter",
+       "where": "cable",
+       "kind": "laserwriter",
+       "model": "",
+       "shared": true,
+       "identified": true,
+       "found": "auto",
+       "state": "ready",
+       "uuid": "urn:uuid:41575254-4c57-0001-78fa-10bda36e2434",
+       "product": "LaserWriter Pro 630",
+       "dither": "bluenoise",
+       "gain": 0,
+       "rp": "ipp/p3"
+      }
+     ],
+     "notes": [],
+     "max_shared": 4
+    },
     "GET /api/laser": {
      "heard": [
       {
        "name": "LaserWriter II NT",
-       "link": "cable",
-       "status": "job: Budget; status: busy; source: AppleTalk",
-       "ago_s": 4,
-       "shared": true
+       "kind": "laserwriter",
+       "link": "tunnel",
+       "ago_s": 2,
+       "airwriter": false
       },
       {
-       "name": "Wells’s LaserWriter Pro 630 in the back room",
-       "link": "radio",
-       "status": "job: Budget; status: busy; source: AppleTalk",
-       "ago_s": 12,
-       "shared": false
+       "name": "Office LaserWriter",
+       "kind": "laserwriter",
+       "link": "cable",
+       "ago_s": 3,
+       "airwriter": false
       }
      ],
-     "looking": true,
-     "shared": {
-      "name": "LaserWriter II NT",
-      "link": "cable",
-      "online": true,
-      "advertised": true,
-      "queried": true,
-      "state": "printing",
-      "reason": "none",
-      "message": "job: Budget; status: busy; source: AppleTalk",
-      "product": "LaserWriter II NT",
-      "version": "47.0",
-      "level": 1,
-      "binary": true,
-      "page": "letter",
-      "dpi": 300,
-      "dither": "atkinson",
-      "gain": 0,
-      "uuid": "urn:uuid:41575254-4c57-0001-6b2e-10bda36e2434"
-     },
+     "targets": [
+      {
+       "id": 2,
+       "name": "LaserWriter II NT",
+       "slot": 1,
+       "link": "tunnel",
+       "state": "stopped",
+       "reason": "none",
+       "message": "status: PrinterError: out of paper",
+       "product": "LaserWriter II NT",
+       "queried": true
+      },
+      {
+       "id": 3,
+       "name": "Office LaserWriter",
+       "slot": 1,
+       "link": "cable",
+       "state": "idle",
+       "reason": "none",
+       "message": "",
+       "product": "LaserWriter Pro 630",
+       "queried": true
+      }
+     ],
      "job": {
       "active": false,
       "sent": 0,
@@ -1196,99 +2040,598 @@
     }
    }
   },
-  "laser-paper": {
-   "about": "LaserWriters: the shared one out of paper",
+  "lw-no-answer": {
+   "about": "Printers: a LaserWriter that never answered its query",
    "patch": {
-    "GET /api/laser": {
-     "heard": [
+    "GET /api/printers": {
+     "printers": [
       {
-       "name": "LaserWriter II NT",
-       "link": "cable",
-       "status": "status: PrinterError: out of paper",
-       "ago_s": 4,
-       "shared": true
+       "id": 1,
+       "name": "ImageWriter II",
+       "where": "port",
+       "kind": "imagewriter",
+       "model": "ImageWriter II",
+       "shared": true,
+       "identified": true,
+       "found": "person",
+       "state": "ready",
+       "uuid": "urn:uuid:41575254-4552-0001-10bd-a36e2434",
+       "product": "",
+       "dither": "atkinson",
+       "gain": 0,
+       "rp": "ipp/print"
       },
       {
-       "name": "Wells’s LaserWriter Pro 630 in the back room",
-       "link": "radio",
-       "status": "job: Budget; status: busy; source: AppleTalk",
-       "ago_s": 12,
-       "shared": false
+       "id": 2,
+       "name": "LaserWriter II NT",
+       "where": "tunnel",
+       "kind": "laserwriter",
+       "model": "",
+       "shared": true,
+       "identified": true,
+       "found": "person",
+       "state": "ready",
+       "uuid": "urn:uuid:41575254-4c57-0001-99d7-10bda36e2434",
+       "product": "LaserWriter II NT",
+       "dither": "atkinson",
+       "gain": 0,
+       "rp": "ipp/laser"
+      },
+      {
+       "id": 3,
+       "name": "Office LaserWriter",
+       "where": "cable",
+       "kind": "laserwriter",
+       "model": "",
+       "shared": false,
+       "identified": false,
+       "found": "auto",
+       "state": "ready",
+       "uuid": "urn:uuid:41575254-4c57-0001-78fa-10bda36e2434",
+       "product": "",
+       "dither": "bluenoise",
+       "gain": 0,
+       "rp": ""
       }
      ],
-     "looking": true,
-     "shared": {
-      "name": "LaserWriter II NT",
-      "link": "cable",
-      "online": true,
-      "advertised": true,
-      "queried": true,
-      "state": "stopped",
-      "reason": "media-empty-error",
-      "message": "status: PrinterError: out of paper",
-      "product": "LaserWriter II NT",
-      "version": "47.0",
-      "level": 1,
-      "binary": true,
-      "page": "letter",
-      "dpi": 300,
-      "dither": "atkinson",
-      "gain": 0,
-      "uuid": "urn:uuid:41575254-4c57-0001-6b2e-10bda36e2434"
-     },
-     "job": {
-      "active": false,
-      "sent": 0,
-      "last": ""
-     }
+     "notes": [
+      {
+       "kind": "no_answer",
+       "id": 3,
+       "model": ""
+      }
+     ],
+     "max_shared": 4
+    },
+    "POST /api/printers": {
+     "printers": [
+      {
+       "id": 1,
+       "name": "ImageWriter II",
+       "where": "port",
+       "kind": "imagewriter",
+       "model": "ImageWriter II",
+       "shared": true,
+       "identified": true,
+       "found": "person",
+       "state": "ready",
+       "uuid": "urn:uuid:41575254-4552-0001-10bd-a36e2434",
+       "product": "",
+       "dither": "atkinson",
+       "gain": 0,
+       "rp": "ipp/print"
+      },
+      {
+       "id": 2,
+       "name": "LaserWriter II NT",
+       "where": "tunnel",
+       "kind": "laserwriter",
+       "model": "",
+       "shared": true,
+       "identified": true,
+       "found": "person",
+       "state": "ready",
+       "uuid": "urn:uuid:41575254-4c57-0001-99d7-10bda36e2434",
+       "product": "LaserWriter II NT",
+       "dither": "atkinson",
+       "gain": 0,
+       "rp": "ipp/laser"
+      },
+      {
+       "id": 3,
+       "name": "Office LaserWriter",
+       "where": "cable",
+       "kind": "laserwriter",
+       "model": "",
+       "shared": false,
+       "identified": false,
+       "found": "auto",
+       "state": "ready",
+       "uuid": "urn:uuid:41575254-4c57-0001-78fa-10bda36e2434",
+       "product": "",
+       "dither": "bluenoise",
+       "gain": 0,
+       "rp": ""
+      }
+     ],
+     "notes": [
+      {
+       "kind": "no_answer",
+       "id": 3,
+       "model": ""
+      }
+     ],
+     "max_shared": 4
     }
    }
   },
-  "laser-offline": {
-   "about": "LaserWriters: the shared one not answering",
+  "port-something-else": {
+   "about": "Printers: the person said the port printer is something else",
    "patch": {
-    "GET /api/laser": {
-     "heard": [
+    "GET /api/printers": {
+     "printers": [
       {
-       "name": "LaserWriter II NT",
-       "link": "cable",
-       "status": "status: idle",
-       "ago_s": 4,
-       "shared": true
+       "id": 1,
+       "name": "Unknown printer",
+       "where": "port",
+       "kind": "unknown",
+       "model": "",
+       "shared": false,
+       "identified": false,
+       "found": "person",
+       "state": "ready",
+       "uuid": "urn:uuid:41575254-4552-0001-10bd-a36e2434",
+       "product": "",
+       "dither": "atkinson",
+       "gain": 0,
+       "rp": ""
       },
       {
-       "name": "Wells’s LaserWriter Pro 630 in the back room",
-       "link": "radio",
-       "status": "job: Budget; status: busy; source: AppleTalk",
-       "ago_s": 12,
-       "shared": false
+       "id": 2,
+       "name": "LaserWriter II NT",
+       "where": "tunnel",
+       "kind": "laserwriter",
+       "model": "",
+       "shared": true,
+       "identified": true,
+       "found": "person",
+       "state": "ready",
+       "uuid": "urn:uuid:41575254-4c57-0001-99d7-10bda36e2434",
+       "product": "LaserWriter II NT",
+       "dither": "atkinson",
+       "gain": 0,
+       "rp": "ipp/laser"
       }
      ],
-     "looking": true,
-     "shared": {
-      "name": "LaserWriter II NT",
-      "link": "cable",
-      "online": false,
-      "advertised": true,
-      "queried": true,
-      "state": "offline",
-      "reason": "offline-report",
-      "message": "The LaserWriter does not answer",
-      "product": "LaserWriter II NT",
-      "version": "47.0",
-      "level": 1,
-      "binary": true,
-      "page": "letter",
-      "dpi": 300,
-      "dither": "atkinson",
-      "gain": 0,
-      "uuid": "urn:uuid:41575254-4c57-0001-6b2e-10bda36e2434"
-     },
-     "job": {
-      "active": false,
-      "sent": 0,
-      "last": ""
-     }
+     "notes": [],
+     "max_shared": 4
+    },
+    "POST /api/printers": {
+     "printers": [
+      {
+       "id": 1,
+       "name": "Unknown printer",
+       "where": "port",
+       "kind": "unknown",
+       "model": "",
+       "shared": false,
+       "identified": false,
+       "found": "person",
+       "state": "ready",
+       "uuid": "urn:uuid:41575254-4552-0001-10bd-a36e2434",
+       "product": "",
+       "dither": "atkinson",
+       "gain": 0,
+       "rp": ""
+      },
+      {
+       "id": 2,
+       "name": "LaserWriter II NT",
+       "where": "tunnel",
+       "kind": "laserwriter",
+       "model": "",
+       "shared": true,
+       "identified": true,
+       "found": "person",
+       "state": "ready",
+       "uuid": "urn:uuid:41575254-4c57-0001-99d7-10bda36e2434",
+       "product": "LaserWriter II NT",
+       "dither": "atkinson",
+       "gain": 0,
+       "rp": "ipp/laser"
+      }
+     ],
+     "notes": [],
+     "max_shared": 4
+    }
+   }
+  },
+  "port-printing": {
+   "about": "Printers: the ImageWriter printing, a LaserWriter idle",
+   "patch": {
+    "GET /api/printers": {
+     "printers": [
+      {
+       "id": 1,
+       "name": "ImageWriter II",
+       "where": "port",
+       "kind": "imagewriter",
+       "model": "ImageWriter II",
+       "shared": true,
+       "identified": true,
+       "found": "person",
+       "state": "printing",
+       "uuid": "urn:uuid:41575254-4552-0001-10bd-a36e2434",
+       "product": "",
+       "dither": "atkinson",
+       "gain": 0,
+       "rp": "ipp/print"
+      },
+      {
+       "id": 2,
+       "name": "LaserWriter II NT",
+       "where": "tunnel",
+       "kind": "laserwriter",
+       "model": "",
+       "shared": true,
+       "identified": true,
+       "found": "person",
+       "state": "ready",
+       "uuid": "urn:uuid:41575254-4c57-0001-99d7-10bda36e2434",
+       "product": "LaserWriter II NT",
+       "dither": "atkinson",
+       "gain": 0,
+       "rp": "ipp/laser"
+      },
+      {
+       "id": 3,
+       "name": "Office LaserWriter",
+       "where": "cable",
+       "kind": "laserwriter",
+       "model": "",
+       "shared": true,
+       "identified": true,
+       "found": "auto",
+       "state": "ready",
+       "uuid": "urn:uuid:41575254-4c57-0001-78fa-10bda36e2434",
+       "product": "LaserWriter Pro 630",
+       "dither": "bluenoise",
+       "gain": 0,
+       "rp": "ipp/p3"
+      }
+     ],
+     "notes": [],
+     "max_shared": 4
+    },
+    "POST /api/printers": {
+     "printers": [
+      {
+       "id": 1,
+       "name": "ImageWriter II",
+       "where": "port",
+       "kind": "imagewriter",
+       "model": "ImageWriter II",
+       "shared": true,
+       "identified": true,
+       "found": "person",
+       "state": "printing",
+       "uuid": "urn:uuid:41575254-4552-0001-10bd-a36e2434",
+       "product": "",
+       "dither": "atkinson",
+       "gain": 0,
+       "rp": "ipp/print"
+      },
+      {
+       "id": 2,
+       "name": "LaserWriter II NT",
+       "where": "tunnel",
+       "kind": "laserwriter",
+       "model": "",
+       "shared": true,
+       "identified": true,
+       "found": "person",
+       "state": "ready",
+       "uuid": "urn:uuid:41575254-4c57-0001-99d7-10bda36e2434",
+       "product": "LaserWriter II NT",
+       "dither": "atkinson",
+       "gain": 0,
+       "rp": "ipp/laser"
+      },
+      {
+       "id": 3,
+       "name": "Office LaserWriter",
+       "where": "cable",
+       "kind": "laserwriter",
+       "model": "",
+       "shared": true,
+       "identified": true,
+       "found": "auto",
+       "state": "ready",
+       "uuid": "urn:uuid:41575254-4c57-0001-78fa-10bda36e2434",
+       "product": "LaserWriter Pro 630",
+       "dither": "bluenoise",
+       "gain": 0,
+       "rp": "ipp/p3"
+      }
+     ],
+     "notes": [],
+     "max_shared": 4
+    },
+    "GET /api/status": {
+     "ps": "printing",
+     "printing": true,
+     "state": "Printing"
+    }
+   }
+  },
+  "setup-found": {
+   "about": "Setup step 1: an ImageWriter on the port and a LaserWriter on the cable",
+   "patch": {
+    "GET /api/status": {
+     "setup": true,
+     "ps": "setup",
+     "state": "Waiting for setup",
+     "ssid": "",
+     "signal": "",
+     "channel": "",
+     "security": "",
+     "uri": "",
+     "ip": "192.168.4.1",
+     "lt": false,
+     "host": "airwriter-2434.local",
+     "phost": "airwriter-2434"
+    },
+    "GET /api/et": {
+     "_status": 404,
+     "_body": "no ethertalk"
+    },
+    "GET /api/et/settings": {
+     "_status": 404,
+     "_body": "no ethertalk"
+    },
+    "GET /api/lt": {
+     "on": false,
+     "quiet": false
+    },
+    "GET /api/update": {
+     "setup": true
+    },
+    "POST /api/wifi": {
+     "_then": "normal",
+     "_down": 12
+    },
+    "GET /api/printers": {
+     "printers": [
+      {
+       "id": 1,
+       "name": "ImageWriter II",
+       "where": "port",
+       "kind": "imagewriter",
+       "model": "ImageWriter II",
+       "shared": true,
+       "identified": true,
+       "found": "auto",
+       "state": "ready",
+       "uuid": "urn:uuid:41575254-4552-0001-10bd-a36e2434",
+       "product": "",
+       "dither": "atkinson",
+       "gain": 0,
+       "rp": "ipp/print"
+      },
+      {
+       "id": 3,
+       "name": "Office LaserWriter",
+       "where": "cable",
+       "kind": "laserwriter",
+       "model": "",
+       "shared": true,
+       "identified": true,
+       "found": "auto",
+       "state": "ready",
+       "uuid": "urn:uuid:41575254-4c57-0001-78fa-10bda36e2434",
+       "product": "LaserWriter Pro 630",
+       "dither": "bluenoise",
+       "gain": 0,
+       "rp": "ipp/p3"
+      }
+     ],
+     "notes": [],
+     "max_shared": 4
+    },
+    "POST /api/printers": {
+     "printers": [
+      {
+       "id": 1,
+       "name": "ImageWriter II",
+       "where": "port",
+       "kind": "imagewriter",
+       "model": "ImageWriter II",
+       "shared": true,
+       "identified": true,
+       "found": "auto",
+       "state": "ready",
+       "uuid": "urn:uuid:41575254-4552-0001-10bd-a36e2434",
+       "product": "",
+       "dither": "atkinson",
+       "gain": 0,
+       "rp": "ipp/print"
+      },
+      {
+       "id": 3,
+       "name": "Office LaserWriter",
+       "where": "cable",
+       "kind": "laserwriter",
+       "model": "",
+       "shared": true,
+       "identified": true,
+       "found": "auto",
+       "state": "ready",
+       "uuid": "urn:uuid:41575254-4c57-0001-78fa-10bda36e2434",
+       "product": "LaserWriter Pro 630",
+       "dither": "bluenoise",
+       "gain": 0,
+       "rp": "ipp/p3"
+      }
+     ],
+     "notes": [],
+     "max_shared": 4
+    }
+   }
+  },
+  "setup-nothing": {
+   "about": "Setup step 1: nothing found yet",
+   "patch": {
+    "GET /api/status": {
+     "setup": true,
+     "ps": "setup",
+     "state": "Waiting for setup",
+     "ssid": "",
+     "signal": "",
+     "channel": "",
+     "security": "",
+     "uri": "",
+     "ip": "192.168.4.1",
+     "lt": false,
+     "host": "airwriter-2434.local",
+     "phost": "airwriter-2434",
+     "printer": false
+    },
+    "GET /api/et": {
+     "_status": 404,
+     "_body": "no ethertalk"
+    },
+    "GET /api/et/settings": {
+     "_status": 404,
+     "_body": "no ethertalk"
+    },
+    "GET /api/lt": {
+     "on": false,
+     "quiet": false
+    },
+    "GET /api/update": {
+     "setup": true
+    },
+    "POST /api/wifi": {
+     "_then": "normal",
+     "_down": 12
+    },
+    "GET /api/printers": {
+     "printers": [],
+     "notes": [],
+     "max_shared": 4
+    },
+    "POST /api/printers": {
+     "printers": [],
+     "notes": [],
+     "max_shared": 4
+    }
+   }
+  },
+  "finish": {
+   "about": "On the home network after a fresh setup: AirWriter is ready",
+   "patch": {
+    "GET /api/status": {
+     "fresh": true,
+     "host": "airwriter-2434.local",
+     "phost": "airwriter-2434"
+    }
+   }
+  },
+  "finish-two": {
+   "about": "AirWriter is ready, with an ImageWriter and a LaserWriter found since",
+   "patch": {
+    "GET /api/status": {
+     "fresh": true,
+     "host": "airwriter-2434.local",
+     "phost": "airwriter-2434"
+    },
+    "GET /api/printers": {
+     "printers": [
+      {
+       "id": 1,
+       "name": "ImageWriter II",
+       "where": "port",
+       "kind": "imagewriter",
+       "model": "ImageWriter II",
+       "shared": true,
+       "identified": true,
+       "found": "person",
+       "state": "ready",
+       "uuid": "urn:uuid:41575254-4552-0001-10bd-a36e2434",
+       "product": "",
+       "dither": "atkinson",
+       "gain": 0,
+       "rp": "ipp/print"
+      },
+      {
+       "id": 3,
+       "name": "Office LaserWriter",
+       "where": "cable",
+       "kind": "laserwriter",
+       "model": "",
+       "shared": true,
+       "identified": true,
+       "found": "auto",
+       "state": "ready",
+       "uuid": "urn:uuid:41575254-4c57-0001-78fa-10bda36e2434",
+       "product": "LaserWriter Pro 630",
+       "dither": "bluenoise",
+       "gain": 0,
+       "rp": "ipp/p3"
+      }
+     ],
+     "notes": [
+      {
+       "kind": "found",
+       "id": 3,
+       "model": ""
+      }
+     ],
+     "max_shared": 4
+    },
+    "POST /api/printers": {
+     "printers": [
+      {
+       "id": 1,
+       "name": "ImageWriter II",
+       "where": "port",
+       "kind": "imagewriter",
+       "model": "ImageWriter II",
+       "shared": true,
+       "identified": true,
+       "found": "person",
+       "state": "ready",
+       "uuid": "urn:uuid:41575254-4552-0001-10bd-a36e2434",
+       "product": "",
+       "dither": "atkinson",
+       "gain": 0,
+       "rp": "ipp/print"
+      },
+      {
+       "id": 3,
+       "name": "Office LaserWriter",
+       "where": "cable",
+       "kind": "laserwriter",
+       "model": "",
+       "shared": true,
+       "identified": true,
+       "found": "auto",
+       "state": "ready",
+       "uuid": "urn:uuid:41575254-4c57-0001-78fa-10bda36e2434",
+       "product": "LaserWriter Pro 630",
+       "dither": "bluenoise",
+       "gain": 0,
+       "rp": "ipp/p3"
+      }
+     ],
+     "notes": [
+      {
+       "kind": "found",
+       "id": 3,
+       "model": ""
+      }
+     ],
+     "max_shared": 4
     }
    }
   }

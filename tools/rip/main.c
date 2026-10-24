@@ -12,6 +12,7 @@
 #include "testpage.h"
 #include "printer_caps.h"
 #include "ps_page.h"
+#include "ps_testpage.h"
 #include "lw_query.h"
 
 typedef struct {
@@ -158,6 +159,11 @@ static int print_testpage(const char *ribbon, const char *path, ht_algo_t algo, 
     return 0;
 }
 
+static void write_file(void *ctx, const uint8_t *b, size_t n)
+{
+    fwrite(b, 1, n, (FILE *)ctx);
+}
+
 static void usage(void)
 {
     fputs("usage: rip --in FILE [--out-stream FILE] [--out-preview FILE]\n"
@@ -173,6 +179,7 @@ static void usage(void)
           "             tools/iwview/iwview.py draws the stream\n"
           "  --out-pbm  page 1's dots as a raw PBM, 1 = ink\n"
           "       rip --query-job FILE   the LaserWriter query job, probe and all\n"
+          "       rip --ps-testpage FILE  the PostScript printers' test page (W-1088)\n"
           "  --printer laser  rip at 300 dpi for a LaserWriter (W-1082); --ps writes its\n"
           "             PostScript, in binary, or with --hex as a Level 1 machine that\n"
           "             cannot take binary gets it\n",
@@ -184,7 +191,7 @@ int main(int argc, char **argv)
     const char *in = NULL, *out_stream = NULL, *out_preview = NULL;
     const char *dither = "atkinson", *testpage = NULL;
     const char *printer = "imagewriter", *paper = "letter", *out_ps = NULL, *out_pbm = NULL;
-    const char *query = NULL;
+    const char *query = NULL, *ps_tp = NULL;
     int colour = 0, gain = 0, top = 0, hex = 0;
 
     for (int i = 1; i < argc; i++) {
@@ -202,7 +209,18 @@ int main(int argc, char **argv)
         else if (!strcmp(argv[i], "--hex"))                          hex = 1;
         else if (!strcmp(argv[i], "--out-pbm") && i + 1 < argc)     out_pbm = argv[++i];
         else if (!strcmp(argv[i], "--query-job") && i + 1 < argc)   query = argv[++i];
+        else if (!strcmp(argv[i], "--ps-testpage") && i + 1 < argc) ps_tp = argv[++i];
         else { usage(); return 2; }
+    }
+    if (ps_tp) {
+        FILE *tf = fopen(ps_tp, "wb");
+        if (!tf) { perror(ps_tp); return 1; }
+        ps_tp_info_t ti = { .printer = "LaserWriter II NT", .product = "LaserWriter II NT",
+                            .version = "47.0", .host = "airwriter-2434.local",
+                            .board = "AirWriter (host build) at 10.0.1.115" };
+        int rc = ps_testpage(&ti, write_file, tf);
+        fclose(tf);
+        return rc ? 1 : 0;
     }
     if (query) {
         static uint8_t q[4096];

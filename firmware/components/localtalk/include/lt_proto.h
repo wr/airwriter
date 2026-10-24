@@ -89,8 +89,8 @@ int nbp_parse(const uint8_t *d, size_t n, nbp_t *out);
 int nbp_match(const uint8_t *pattern, const uint8_t *name);
 // One-tuple NBP packet. Returns its length, or 0 when it does not fit.
 size_t nbp_build(uint8_t *out, size_t cap, uint8_t fn, uint8_t id, const nbp_tuple_t *t);
-// A C string into a Pascal NBP name: ASCII kept, anything else becomes '?'
-// (NBP names are MacRoman; the queue name is UTF-8), cut at NBP_NAME_MAX.
+// A C string (UTF-8) into a Pascal NBP name (MacRoman): each character MacRoman
+// has becomes its byte, any other one '?', cut at NBP_NAME_MAX.
 void nbp_name(uint8_t *dst, const char *src);
 // The other way, for the web page: a Pascal NBP name (MacRoman) as a C string
 // in UTF-8, control characters as '?', cut at a whole character when cap is

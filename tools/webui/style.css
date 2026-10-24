@@ -216,11 +216,37 @@ body:not(.ready) .sw span,body:not(.ready) .sw span:after{transition:none}
 .macs li small{color:var(--fg2);font-size:var(--t-small);font-variant-numeric:tabular-nums}
 .card.off .body{display:none}
 /* W-1082: a LaserWriter heard, its share switch at the end of its row */
-.lws li{align-items:flex-start}
-.lws li svg{margin-top:2px}
-.lws li .sw{margin-left:auto;align-self:center}
-#c-lw .body>.row{padding:0;min-height:0}
-#c-lw .body>.row:before{display:none}
+/* W-1088: the Printers pane: a row per printer, notices above them */
+.ic.unk{background:var(--fg3)}
+.prow .ic{width:30px;height:30px;border-radius:7px}
+.prow .ic svg{width:18px;height:18px}
+.row .txt small{display:block;color:var(--fg2);font-size:var(--t-small);overflow-wrap:anywhere}
+.row small.mono{font-family:var(--mono);font-weight:400;color:var(--fg2)}
+.prow .chev{color:var(--fg3);font-size:20px;line-height:1;margin-left:-4px}
+.empty{margin:0;padding:14px;color:var(--fg2);font-size:var(--t-small)}
+.note{padding:12px 14px;display:flex;flex-direction:column;gap:10px}
+.note p{margin:0}
+.note+.note{margin-top:10px}
+#pr-notes:empty{display:none}
+.back2{align-self:flex-start;border:0;background:none;box-shadow:none;color:var(--accent);padding:2px 0;cursor:pointer}
+.back2:hover{text-decoration:underline;background:none}
+#pr-home,#pr-detail{display:flex;flex-direction:column;gap:inherit}
+#pr-home.hide,#pr-detail.hide{display:none}
+/* W-1088: setup is three steps on their own, without the sidebar */
+body.setupmode .side,body.setupmode .bar{display:none}
+body.setupmode .app{grid-template-columns:minmax(0,1fr)}
+#su-1,#su-2,#su-3{display:flex;flex-direction:column;gap:20px}
+#su-1.hide,#su-2.hide,#su-3.hide{display:none}
+/* W-1088: AirWriter's own mark, its render, in place of the ImageWriter's icon
+   (that one is the ImageWriter's: the printer's, on AirPrint) */
+.awm{display:block;flex:none;background:url({{airwriter}}) center/contain no-repeat;width:49px;height:84px}
+.brand .awm{width:20px;height:34px}
+/* a key's icon, before its words (after, for the next step) */
+.btn .bi{width:13px;height:13px;vertical-align:-2px;margin-right:6px}
+.btn .bi.end{margin:0 0 0 6px}
+.prow .fld+small{margin-top:6px}
+.prow .fld{max-width:12em}
+#d-finish .prlist{margin:4px 0}
 .lw-note{color:var(--fg2);font-size:var(--t-small)}
 
 /* the colour ribbon's four inks, as a glyph */
@@ -302,6 +328,7 @@ dialog::backdrop{background:var(--scrim)}
 
 /* ── phones: the sidebar is the first screen ────────────────────── */
 @media (max-width:760px){
+  #pr-back{display:none}
   :root{--t-body:16px;--t-small:13px;--t-head:16px}
   .app{display:block}
   .side{border-right:0;min-height:100%;background:var(--bg);
@@ -327,6 +354,34 @@ dialog::backdrop{background:var(--scrim)}
   .lost{top:auto;bottom:max(16px,env(safe-area-inset-bottom,0px))}
   /* a dev build's version is long: it goes under its label */
   #fw-ver{display:block}
+}
+/* W-1088 (Wells: "proportions are kinda small for mobile"): on a phone, setup
+   fills the screen as a phone's own setup does: a bigger mark and title,
+   roomier rows, and full-width keys at the foot, the next step last, under
+   the thumb. */
+@media (max-width:760px){
+  body.setupmode .pane{min-height:100svh;display:flex;flex-direction:column;
+    padding-top:max(24px,env(safe-area-inset-top,0px));padding-bottom:max(24px,env(safe-area-inset-bottom,0px))}
+  body.setupmode #su-1,body.setupmode #su-2,body.setupmode #su-3{flex:1 1 auto;gap:22px}
+  body.setupmode .hero{padding:32px 22px 28px;gap:10px}
+  body.setupmode .hero .awm{width:72px;height:124px}
+  body.setupmode .hero .ic{width:76px;height:76px;border-radius:19px}
+  body.setupmode .hero .ic svg{width:44px;height:44px}
+  body.setupmode .hero h2{font-size:34px}
+  body.setupmode .hero p{font-size:17px}
+  body.setupmode .prow{min-height:64px}
+  body.setupmode .prow .ic{width:40px;height:40px;border-radius:9px}
+  body.setupmode .prow .ic svg{width:24px;height:24px}
+  body.setupmode .prow .fld{max-width:none;padding:9px 11px;font-size:17px}
+  body.setupmode .prow .fld+small{margin-top:8px}
+  body.setupmode .prlist .txt{font-size:17px}
+  body.setupmode .prlist .txt small{font-size:15px;margin-top:2px}
+  body.setupmode .btnrow .btn .bi{width:17px;height:17px;vertical-align:-3px;margin-right:8px}
+  body.setupmode .btnrow .btn .bi.end{margin:0 0 0 8px}
+  body.setupmode .foot,body.setupmode .say{font-size:15px}
+  body.setupmode .btnrow{margin-top:auto;display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  body.setupmode .btnrow .btn{min-height:50px;font-size:17px}
+  body.setupmode .btnrow .btn.primary,body.setupmode .btnrow.one .btn{grid-column:1/-1}
 }
 /* On a phone the network row leads with the network, as macOS's Wi-Fi list
    does: the pane's title already says what it is, and its label would leave

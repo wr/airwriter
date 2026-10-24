@@ -238,6 +238,8 @@ Minimum viable set for iOS:
 - `Get-Printer-Attributes` (0x000B) — must respond in under two seconds or the print sheet
   gives up
 - `Validate-Job` (0x0004)
+- Each printer answers at its own resource (3.15): `ipp/print` for the port's, `ipp/p<id>`
+  for one on AppleTalk; any other path goes to the port's while it is shared.
 - `Print-Job` (0x0002) — body arrives chunked. The whole document goes into a ~1 MB PSRAM
   buffer as fast as Wi-Fi delivers it (an iPhone Letter page is ~140 KB of URF; decoded it
   would be 1.9 MB, which is why the buffer holds URF, not pixels), and the rip decodes from
@@ -611,29 +613,30 @@ above).
 
 Design: `docs/superpowers/specs/2026-10-21-laser-printers-design.md` (phase 1). **Untested on a
 real LaserWriter:** built and proven against a fake one (`tools/ethertalk/etpeer.py
-laserwriter`); the design's "What only a printer settles" is the bench list. Sharing is off
-until a LaserWriter is chosen on the settings page.
+laserwriter`); the design's "What only a printer settles" is the bench list. Since W-1088 a
+LaserWriter is a record in the printer list (3.15), found and shared like any printer; the
+ImageWriter on the port keeps its identity, UUID and bytes (`tools/ipp/test/golden/`).
 
-A PostScript LaserWriter heard on AppleTalk can be shared as a **second AirPrint printer**
-beside the ImageWriter, which keeps its identity, UUID and bytes (`tools/ipp/test/golden/`).
-
-- **Finding it.** NBP `=:LaserWriter@*` on the cable, the Wi-Fi link and the Basilisk II tunnel
-  (`lt_node_lookup`), when the LaserWriters card is open and every 30 s while one is shared;
-  SendStatus every 5 s (2 s printing). The policy is `laser/lw_core.c`. Heard on two links, the
-  cable's wins. No answer for 30 s is `stopped` + `offline-report`.
-- **Roles.** A link runs when the ImageWriter or a LaserWriter needs it and answers as the
-  ImageWriter (its NBP name, SendStatus and OpenConn on the SLS) only where the ImageWriter is
-  shared: the AppleTalk cards' switches keep that meaning (`lt_node_set_serve`,
-  `localtalk_set_roles`, `ethertalk_set_laser`).
+- **Finding it.** NBP `=:AirWriter@*`, `=:LaserWriter@*` and `=:ImageWriter@*` on every running
+  link (`lt_node_lookup`), 300 ms apart and the three again 1.5 s later: 10 s after start (at
+  once in setup mode), every 30 s for 5 minutes, then every 5 minutes, and again on "Look for
+  Printers". SendStatus to each printer in the list in turn, every 5 s (2 s printing). The
+  policy is `laser/lw_core.c`. Heard on two links, the cable's wins, then the network, the
+  tunnel, the zone. A printer answering from another AirWriter's node is skipped. No answer for
+  30 s is `stopped` + `offline-report`.
+- **Roles.** A link runs when its way in is switched on or a printer in the list lives there;
+  it answers old Macs only where its way in is on (3.15's offers).
 - **The query job** (`laser/lw_query.c`): a Level 1 PAP job that prints nothing and asks
   product, version, language level, resolution, imageable area and page size, each inside
   `stopped`, plus a 256-byte binary probe. Binary goes to the printer only if the probe came
-  back intact; otherwise hex. Answers in NVS `laser`; run again at the first answer after boot
-  and when the printer comes back. The printer is advertised once it has answered.
-- **The AirPrint printer** (`ipp_server` printer 1, `laser/lw_caps.c`): `ipp/laser`, its own
-  Bonjour instance (NBP name), `printer-uuid` `41575254-4c57-<CONFIG_AIRWRITER_LASER_UUID_EPOCH>-
+  back intact; otherwise hex. Answers in its record; run again at the first answer after boot
+  and when the printer comes back, tried again after 60 s twice, then every 5 minutes. Three
+  unanswered make the "didn't answer" notice (Share Anyway takes its defaults).
+- **The AirPrint printer** (`ipp_server` printer 1-3, `laser/lw_caps.c`): `ipp/p<id>` (a board's
+  W-1082 LaserWriter keeps `ipp/laser`), its own Bonjour instance (its name in the list),
+  `printer-uuid` `41575254-4c57-<CONFIG_AIRWRITER_LASER_UUID_EPOCH>-
   <hash of the NBP name>-<MAC>`, URF `RS300`, `W8`, only the paper it reported, margins from its
-  imageable area rounded outward, `laser-*.png` icons. One job at a time across both printers.
+  imageable area rounded outward, `laser-*.png` icons. One job at a time across every printer.
 - **The page** (`ps_page`): the rip at 300 dpi (`printer_caps`, `ripjob`'s output stage, the
   printer's own screen and gain) into Level 1 `imagemask` bands of at most 64 rows, ended by a
   blank row, trimmed to their ink; one LF before binary data; hex lines of 64 digits. A text
@@ -649,11 +652,65 @@ beside the ImageWriter, which keeps its identity, UUID and bytes (`tools/ipp/tes
   message); `toner-low-warning` does not stop it; busy and warming up are `processing`. A
   PostScript error in its output becomes the job's `job-state-message`. The texts are guesses
   until a LaserWriter is benched.
-- **Panel.** A LaserWriter job is an AirPrint job. With the ImageWriter's AirPrint off and a
-  LaserWriter shared, the printer states follow the LaserWriter.
-- **Web.** `GET /api/laser` (heard, shared, query answers, job; asking it keeps the board
-  looking), `POST /api/laser` `{"share":"<NBP name>"}`, `{"share":null}`, `{"dither":…,"gain":…}`;
-  `/api/status` `laser`.
+- **Test page** (`ps_page/ps_testpage.c`): one Letter page of Level 1 PostScript, hex only, in
+  the printer's own Times and Helvetica: the mark, its name and product, the board, a type
+  sample, its gray ramp, AirWriter's five screens as 300 dpi swatches, a ruler and four
+  one-inch squares; sent as it is (`laser_test_page`).
+- **Panel.** A LaserWriter job is an AirPrint job (3.15's box state).
+- **Web.** `GET /api/laser` is diagnostics (heard, targets, the last job's figures); the page
+  reads `/api/printers`. `/api/status` `laser`: `{"targets":N,"online":M,"job":bool}`.
+
+### 3.15 Printers (W-1088)
+
+Design: `docs/superpowers/specs/2026-10-23-printers-design.md`. AirWriter keeps a list of the
+printers it has, found or told (`components/printers`: `printers_core.c` pure and host-tested,
+`printers.c` the board's), in NVS `printers`/`list` (`pr_save`, versioned; a blob that does not
+read back is a list made again). At most 8 records.
+
+- **Records.** id (stable), where (port, or an AppleTalk link), kind (ImageWriter with model II,
+  LQ or original; LaserWriter; AppleTalk ImageWriter; unknown), name (from the printer: the
+  port's model, an AppleTalk printer's NBP name; two the same get " 2"; renamed freely, UTF-8,
+  MacRoman for NBP), uuid (made once: a new port printer `41575254-4c57-<epoch>-0001-<MAC>`, an
+  AppleTalk printer W-1082's form), shared, found (auto or person), halftone and gain, and a
+  LaserWriter's query answers.
+- **The port.** At line-up after 1 s or more down (and at the first report) the board sends
+  `ESC ?` and `CR`: `IW10`… is an ImageWriter II, `LQ`… an LQ, no answer with the line ready an
+  unknown device, named "Unknown printer", never shared. ImageWriter commands (the CTRL-X kick,
+  resync, the job's self-ID, the test page) go to J2 only for an ImageWriter (the kick also with
+  nothing found yet). "Something else" stops even the self-ID. A different model answering is a
+  notice, not a change. "Add a Printer…" makes the port's record by hand (original ImageWriter,
+  one that is off).
+- **Sharing.** Identified printers are shared at once, up to four (the port's, three on
+  AppleTalk), each its own AirPrint printer: the port's at printer 0 (`ipp/print`), AppleTalk's
+  at 1-3 (`ipp/p<id>`), Bonjour by name. A change reaches Bonjour at once, after the job holding
+  its slot. The W-1079 AirPrint switch is the whole box's. AirPrint to an AppleTalk ImageWriter
+  is not built: it is old Macs' only.
+- **Notices.** found, unknown port, changed (accept or dismiss), no answer (Share Anyway), too
+  many; at most 8.
+- **Old Macs.** On each way in that is on, the node's own name is the port's ImageWriter (if
+  any), registrations 1-3 the AppleTalk printers from other links under their own NBP names and
+  types (relayed), and `<host name>:AirWriter` at registration 4 on every running link
+  (`lt_node_offer`, sockets 0x85-0x88). A Mac's connection on a relayed name goes through
+  `localtalk/pap_relay.c`, run by `laser.c` with the one PAP client under the job lock: busy, in
+  the printer's own status words, until the printer's connection is open; then both ways as
+  they are, the printer's output 256 bytes a read.
+- **Panel.** Idle, the box: ready while any shared printer is; while the port prints, its own
+  line; during a LaserWriter job, the LaserWriter's.
+- **Test page.** The button, DIP4 and the page's Print Test Page (without an id) go to the port's
+  ImageWriter, else the first shared printer; `POST /api/test {"id":N}` names one.
+- **Setup.** In setup mode the port is asked and the cable looked on at once, and the page is
+  three steps, sized for a phone: the printers found, Wi-Fi, then "You're All Set" (how to print
+  from a phone, and the test button for a test page; the settings' address for later, nothing
+  to copy). `/api/status` `fresh` (NVS, set by the captive page's Wi-Fi save, cleared by
+  `POST /api/general {"finish":true}`) opens the "AirWriter is ready" sheet on the network.
+- **A board from before.** At its first boot on W-1088 (Wi-Fi saved, no list) its records are
+  made from what it had: the port's ImageWriter with its old uuid and the AirPrint switch as its
+  Share (the switch then on), a W-1082 LaserWriter at `ipp/laser`. Its host name is stored, so
+  `imagewriter-xxxx` stays; a new board is `airwriter-xxxx` with the AppleTalk port on.
+- **Web.** `GET /api/printers` (records with live state and `rp`, notices, `max_shared`);
+  `POST /api/printers` with `{"look":true}`, `{"add_port":"<model>"}`, `{"note":N,"accept"|
+  "dismiss":true}` or `{"id":N, "name", "shared", "model" ("none" for Something else),
+  "remove", "use_anyway", "dither", "gain"}`; 400 with a sentence for the page.
 
 ---
 

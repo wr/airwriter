@@ -19,5 +19,7 @@ void      printer_state_cable(uint8_t result);         // any task; PS_CABLE_*, 
 ps_view_t printer_state_view(void);                    // any task
 
 // W-1039: whether to send the printer a CTRL-X now, and that one was sent.
+// W-1088: judged on the port printer's own line, given here at every report.
+void      printer_state_port_line(int ready);          // any task
 int       printer_state_want_kick(void);               // any task
 void      printer_state_kicked(void);                  // any task

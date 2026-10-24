@@ -102,9 +102,14 @@ typedef enum {
     IW_RIBBON_COLOUR  = 2,
 } iw_ribbon_t;
 
+// Which ImageWriter answered (W-1088): NONE for no reply, or one not read.
+typedef enum { IW_MODEL_NONE = 0, IW_MODEL_II, IW_MODEL_LQ } iw_model_t;
+typedef struct { iw_model_t model; iw_ribbon_t ribbon; } iw_self_id_t;
+
 // Reads a reply to ESC ?. Bit 7 is ignored (the printer sends space parity)
 // and anything ahead of "IW" or "LQ" is skipped, so line noise does not hide it.
-iw_ribbon_t iw_self_id_ribbon(const uint8_t *reply, size_t n);
+iw_self_id_t iw_self_id(const uint8_t *reply, size_t n);
+iw_ribbon_t  iw_self_id_ribbon(const uint8_t *reply, size_t n);   // iw_self_id's ribbon
 
 void iw_link_job_start(iw_link_t *l);
 // Before each write of a job's bytes. 1 at most once per job, before its first

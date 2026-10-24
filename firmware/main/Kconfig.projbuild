@@ -16,23 +16,17 @@ config AIRWRITER_QUEUE_NAME
     string "Print queue name"
     default "ImageWriter II"
     help
-        What the iOS print sheet shows. This is the printer's name, not the
-        bridge's: AirWriter is the dongle, and a user picking a printer is
-        looking for the machine the paper comes out of.
+        Before W-1088, what the iOS print sheet showed. Printers are now
+        named from what they say they are (the printer list, NVS
+        "printers"); this is read only as a board's old queue name, when
+        it has never saved one, at its first boot on the printer list.
 
 config AIRWRITER_DEV_MODE
     bool "Development mode"
     default n
     help
-        Regenerates printer-uuid on every boot. iOS caches printer
-        capabilities against the UUID aggressively, and with a stable UUID a
-        changed media list or URF string can take an afternoon to show up.
-        Off by default: a UUID that moves leaves the iPhone and the Mac
-        holding the printer under an old UUID after every reboot. On the
-        rev A bench (a dozen reboots in a morning) the iPhone listed two
-        "ImageWriter II" entries and, printing to the stale one, polled
-        Get-Printer-Attributes forever without sending a job. Turn it on
-        only while iterating on advertised capabilities.
+        W-1088: no longer used. It regenerated printer-uuid on every boot;
+        each printer's record now keeps the uuid it was made with.
 
 config AIRWRITER_UUID_EPOCH
     int "printer-uuid epoch"
@@ -45,7 +39,8 @@ config AIRWRITER_UUID_EPOCH
         unchanged UUID on the rev A bench, the iPhone held every job at
         "Waiting" and only re-polled Get-Printer-Attributes. Bump this when
         the advertised capabilities change, so phones meet a new printer.
-        Ignored in development mode, which picks a random UUID every boot.
+        W-1088: kept only by a port printer carried over from before the
+        printer list; records made since have their own UUIDs.
         Not for changes that only filter what is sent: a new UUID also
         strands every Mac queue whose device-uri pins the old one.
 

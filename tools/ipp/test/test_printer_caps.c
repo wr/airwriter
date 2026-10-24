@@ -46,5 +46,23 @@ int main(void)
     CHECK_EQ_INT(iw->margin_b, 1270);
     CHECK_EQ_INT(iw->ppm, 1);
 
+        // W-1088: each ImageWriter names itself; the stream, and so the URF, is one.
+    {
+        const printer_caps_t *ii = printer_caps_imagewriter_model(1);
+        const printer_caps_t *lq = printer_caps_imagewriter_model(2);
+        const printer_caps_t *iw = printer_caps_imagewriter_model(3);
+        CHECK(ii == &printer_caps_imagewriter);
+        CHECK(strcmp(lq->make_model, "Apple ImageWriter LQ") == 0);
+        CHECK(strcmp(lq->device_id, "MFG:Apple;MDL:ImageWriter LQ;CMD:URF;") == 0);
+        CHECK(strcmp(iw->make_model, "Apple ImageWriter") == 0);
+        char a[64], b[64];
+        printer_caps_urf(ii, 0, a, sizeof a);
+        printer_caps_urf(lq, 0, b, sizeof b);
+        CHECK(strcmp(a, b) == 0);
+        printer_caps_urf(ii, 1, a, sizeof a);
+        printer_caps_urf(lq, 1, b, sizeof b);
+        CHECK(strcmp(a, b) == 0);
+        CHECK(printer_caps_imagewriter_model(0) == &printer_caps_imagewriter);
+    }
     TEST_END;
 }

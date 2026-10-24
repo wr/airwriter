@@ -41,6 +41,13 @@ typedef struct {
 // `mac_suffix` is the four hex digits used for the default hostname.
 esp_err_t settings_load(settings_t *out, const char *mac_suffix);
 
+// W-1088: stores what a board would otherwise only default to, so a later
+// default cannot move it. With no host name stored, host_fmt's (with the MAC
+// suffix): a board set up before keeps "imagewriter-%s", a new one gets
+// "airwriter-%s". With no AppleTalk port setting and lt_port 0 or 1, that; -1
+// leaves it to the DIP switches. Anything stored is kept.
+esp_err_t settings_first_boot(const char *host_fmt, const char *mac_suffix, int lt_port);
+
 esp_err_t settings_save_wifi(const char *ssid, const char *pass);
 // Whether Wi-Fi was saved before this restart, once: the panel greets the
 // first join with green as confirmation (W-1049). Kept in RTC memory, so it
@@ -61,6 +68,11 @@ esp_err_t settings_save_switches(int airprint, int lt_port);
 esp_err_t settings_save_ribbon(uint8_t ribbon);
 // SET_TOP_MIN to SET_TOP_MAX, 1/144 in.
 esp_err_t settings_save_top_margin(int top);
+
+// W-1088: a fresh setup's finish sheet ("AirWriter is ready"): on once the
+// setup page saves Wi-Fi, off for good when the person closes it.
+int       settings_fresh(void);
+esp_err_t settings_set_fresh(int on);
 
 // Wipes the stored settings. The device falls back to its build defaults on
 // the next boot, which is what the config button holds for.

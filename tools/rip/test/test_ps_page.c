@@ -5,6 +5,7 @@
 // dots is pscheck.py's job (make -C tools/rip pscheck).
 #include "test_util.h"
 #include "ps_page.h"
+#include "ps_testpage.h"
 #include <stdlib.h>
 #include <ctype.h>
 
@@ -93,8 +94,33 @@ static void full_width(uint32_t y, uint8_t *row) { (void)y; memset(row, 0xA5, 51
 
 static int hexval(int c) { return isdigit(c) ? c - '0' : tolower(c) - 'a' + 10; }
 
+// W-1088: the PostScript printers' test page, in the printer's own type.
+static void test_testpage_text(void)
+{
+    out_n = 0;
+    ps_tp_info_t i = { .printer = "Wells\xE2\x80\x99s (Office) LW\\", .product = "LaserWriter II NT",
+                       .version = "47.0", .host = "airwriter-2434.local",
+                       .board = "AirWriter v0.3.0, 10.0.1.115" };
+    ps_testpage(&i, put, NULL);
+    CHECK(memcmp(out, "%!PS-Adobe-3.0\n", 15) == 0);
+    CHECK(count("%%Title: (AirWriter test page)\n") == 1);
+    CHECK(count("%%LanguageLevel: 1\n") == 1);
+    CHECK(count("/Times-Roman findfont") >= 1);
+    CHECK(count("/Helvetica findfont") >= 1);
+    // The name in the printer's StandardEncoding: the curly apostrophe is
+    // quoteright (the ASCII one), parentheses and the backslash escaped.
+    CHECK(count("(Wells's \\(Office\\) LW\\\\)") == 2);     // the heading and the details
+    CHECK(count("(LaserWriter II NT, PostScript version 47.0)") == 1);
+    CHECK(count("imagemask") >= 5);                    // the five screens, at least
+    CHECK(count("showpage") == 1);
+    CHECK(count("rectfill") == 0);                     // Level 2: not on a LaserWriter II
+    const char *tail = "%%EOF\n";
+    CHECK(out_n > 5 && memcmp(out + out_n - strlen(tail), tail, strlen(tail)) == 0);
+}
+
 int main(void)
 {
+    test_testpage_text();
     // Header, prolog, title escaping, trailer.
     ps_t *ps = job(1, "a (b) \\c \xc3\xa9");
     page(ps, 0, 2550, 130, two_bands);

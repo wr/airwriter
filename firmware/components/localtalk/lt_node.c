@@ -136,7 +136,13 @@ static void on_nbp(lt_node_t *n, const ddp_t *d, uint64_t now)
     if (q.fn != NBP_LKUP) return;
     n->st.lookups++;
     name_registering(n, d, &q, now);
-    int hit = n->serve && nbp_match(q.t.obj, n->obj) && nbp_match(q.t.type, n->type);
+    // The node's own name while it serves, and each registration (W-1088).
+    int hits[LT_REG_MAX] = { 0 }, hit = 0;
+    hits[0] = n->serve && n->obj[0] && nbp_match(q.t.obj, n->obj) && nbp_match(q.t.type, n->type);
+    for (int r = 1; r < LT_REG_MAX && n->reg; r++)
+        hits[r] = n->reg[r].sls && nbp_match(q.t.obj, n->reg[r].obj) &&
+                  nbp_match(q.t.type, n->reg[r].type);
+    for (int r = 0; r < LT_REG_MAX; r++) hit |= hits[r];
 
     // Log a lookup once, not every second the Chooser repeats it.
     uint8_t key[sizeof n->last_lkup];
@@ -162,16 +168,20 @@ static void on_nbp(lt_node_t *n, const ddp_t *d, uint64_t now)
         to.via = d->llap_src;
         to.is_long = 1;
     }
-    nbp_tuple_t me = { .addr = { n->net, n->node, LT_SOCK_SLS }, .enumerator = 0 };
-    memcpy(me.obj, n->obj, sizeof me.obj);
-    memcpy(me.type, n->type, sizeof me.type);
-    me.zone[0] = 1;
-    me.zone[1] = '*';
-    uint8_t pkt[2 + 5 + 3 * (NBP_NAME_MAX + 1)];
-    size_t pl = nbp_build(pkt, sizeof pkt, NBP_LKUP_REPLY, q.id, &me);
-    if (pl) {
-        send_ddp(n, &to, SOCK_NIS, DDP_NBP, pkt, pl);
-        n->st.replies++;
+    for (int r = 0; r < LT_REG_MAX; r++) {
+        if (!hits[r]) continue;
+        nbp_tuple_t me = { .addr = { n->net, n->node, r ? n->reg[r].sls : LT_SOCK_SLS },
+                           .enumerator = (uint8_t)r };
+        memcpy(me.obj, r ? n->reg[r].obj : n->obj, sizeof me.obj);
+        memcpy(me.type, r ? n->reg[r].type : n->type, sizeof me.type);
+        me.zone[0] = 1;
+        me.zone[1] = '*';
+        uint8_t pkt[2 + 5 + 3 * (NBP_NAME_MAX + 1)];
+        size_t pl = nbp_build(pkt, sizeof pkt, NBP_LKUP_REPLY, q.id, &me);
+        if (pl) {
+            send_ddp(n, &to, SOCK_NIS, DDP_NBP, pkt, pl);
+            n->st.replies++;
+        }
     }
 }
 
@@ -233,22 +243,44 @@ static void pap_start_read(lt_node_t *n, uint64_t now)
 // EOF once our side has seen the job's EOF, otherwise a keep-alive once the
 // workstation has been quiet LT_PAP_READ_IDLE_MS.
 static void pap_reply_ws(lt_node_t *n, uint16_t tid, const lt_route_t *to, uint8_t eof,
-                         uint64_t now)
+                         const uint8_t *data, size_t len, uint64_t now)
 {
     lt_pap_t *p = &n->pap;
     uint8_t user[4] = { p->connid, PAP_DATA, eof, 0 };
     atp_t req = { .ctl = ATP_TREQ | ATP_XO, .tid = tid };
-    respond(n, to, LT_SOCK_CONN, &req, user, NULL, 0, now);
+    respond(n, to, LT_SOCK_CONN, &req, user, data, len, now);
     n->st.ws_answers++;
+}
+
+// W-1088: a relayed connection has the printer's own output to give.
+static int relayed(const lt_node_t *n)
+{
+    return n->pap.reg && n->ops.reg_output;
 }
 
 static void pap_answer_ws_read(lt_node_t *n, uint64_t now)
 {
     lt_pap_t *p = &n->pap;
     if (!p->ws_read) return;
+    if (relayed(n)) {
+        uint8_t out[LT_RELAY_PKT];
+        int end = 0;
+        size_t k = p->eof_sent ? 0 : n->ops.reg_output(n->ops.ctx, p->reg, out, sizeof out, &end, 0);
+        // Held for the printer's words; a keep-alive once the Mac has been quiet.
+        if (!k && !end && now - p->wrote < LT_PAP_READ_IDLE_MS) return;
+        pap_reply_ws(n, p->ws_read_tid, &p->ws_read_from, (uint8_t)end, out, k, now);
+        if (end) {
+            p->eof_sent = 1;
+            say(n, "PAP %u: the printer's EOF to the Mac's read", p->connid);
+        }
+        p->ws_answered_seq = p->ws_read_seq;
+        p->ws_answered_eof = (uint8_t)end;
+        p->ws_read = 0;
+        return;
+    }
     uint8_t eof = p->done && !p->eof_sent;
     if (!eof && now - p->wrote < LT_PAP_READ_IDLE_MS) return;
-    pap_reply_ws(n, p->ws_read_tid, &p->ws_read_from, eof, now);
+    pap_reply_ws(n, p->ws_read_tid, &p->ws_read_from, eof, NULL, 0, now);
     if (eof) {
         p->eof_sent = 1;
         say(n, "PAP %u: EOF to the Mac's read", p->connid);
@@ -291,7 +323,7 @@ static void pap_read_done(lt_node_t *n, uint64_t now)
 }
 
 static void pap_open(lt_node_t *n, const ddp_t *d, const atp_t *a, const lt_route_t *from,
-                     uint64_t now)
+                     uint64_t now, int reg, uint8_t sls)
 {
     lt_pap_t *p = &n->pap;
     if (a->len < 4) return;
@@ -306,19 +338,29 @@ static void pap_open(lt_node_t *n, const ddp_t *d, const atp_t *a, const lt_rout
     // The printer may be someone else's: an IPP job, a test page, or the
     // last LocalTalk job still draining.
     int printer_busy = 0;
-    if (result == PAP_RESULT_OK && !same_conn && n->ops.job_begin && n->ops.job_begin(n->ops.ctx)) {
-        result = PAP_RESULT_BUSY;
-        printer_busy = 1;
+    if (result == PAP_RESULT_OK && !same_conn) {
+        // W-1088: a registration's printer is its owner's to give.
+        int busy = reg ? (!n->ops.pap_open || n->ops.pap_open(n->ops.ctx, reg, now))
+                       : (n->ops.job_begin && n->ops.job_begin(n->ops.ctx));
+        if (busy) {
+            result = PAP_RESULT_BUSY;
+            printer_busy = 1;
+        }
     }
 
-    uint8_t data[4 + 3];
+    uint8_t data[4 + 256];
     data[0] = result == PAP_RESULT_OK ? LT_SOCK_CONN : 0;
     data[1] = LT_FLOW;
     data[2] = (uint8_t)(result >> 8);
     data[3] = (uint8_t)result;
-    status_bytes(n, data + 4);
+    // A registration's printer speaks for itself (W-1088): its own status words.
+    size_t sl = reg && n->ops.reg_status ? n->ops.reg_status(n->ops.ctx, reg, data + 4, 256) : 0;
+    if (!sl) {
+        status_bytes(n, data + 4);
+        sl = 3;
+    }
     uint8_t user[4] = { a->user[0], PAP_OPEN_CONN_REPLY, 0, 0 };
-    respond(n, from, LT_SOCK_SLS, a, user, data, sizeof data, now);
+    respond(n, from, sls, a, user, data, 4 + sl, now);
 
     if (result == PAP_RESULT_BUSY) {
         if (n->st.busy++ == 0 || !(n->st.busy % 10)) {
@@ -334,6 +376,7 @@ static void pap_open(lt_node_t *n, const ddp_t *d, const atp_t *a, const lt_rout
     if (same_conn) return;
     memset(p, 0, sizeof *p);
     p->open = 1;
+    p->reg = (uint8_t)reg;
     p->connid = a->user[0];
     p->ws = ws;
     p->heard = p->tickled = p->wrote = p->idle_since = now;
@@ -374,16 +417,27 @@ static void on_atp(lt_node_t *n, const ddp_t *d, uint64_t now)
         }
     }
 
-    if (d->dst.sock == LT_SOCK_SLS && fn == ATP_TREQ) {
-        if (!n->serve) return;                     // W-1082: no ImageWriter on this link
+    int reg = -1;
+    // W-1082, W-1088: no ImageWriter here, or none on the port to offer.
+    if (d->dst.sock == LT_SOCK_SLS) reg = n->serve && n->obj[0] ? 0 : -1;
+    else for (int r = 1; r < LT_REG_MAX && n->reg; r++) if (n->reg[r].sls && n->reg[r].sls == d->dst.sock) reg = r;
+    if (reg >= 0 && fn == ATP_TREQ) {
+        uint8_t aw[NBP_NAME_MAX + 1];
+        nbp_name(aw, LT_AIRWRITER_TYPE);
+        if (reg && nbp_match(aw, n->reg[reg].type)) return;   // the marker never opens
+        uint8_t sls = reg ? n->reg[reg].sls : LT_SOCK_SLS;
         if (a.user[1] == PAP_SEND_STATUS) {
-            uint8_t data[4 + 3] = {0};
-            status_bytes(n, data + 4);
+            uint8_t data[4 + 256] = {0};
+            size_t sl = reg && n->ops.reg_status ? n->ops.reg_status(n->ops.ctx, reg, data + 4, 256) : 0;
+            if (!sl) {
+                status_bytes(n, data + 4);
+                sl = 3;
+            }
             uint8_t user[4] = { 0, PAP_STATUS, 0, 0 };
-            respond(n, &from, LT_SOCK_SLS, &a, user, data, sizeof data, now);
+            respond(n, &from, sls, &a, user, data, 4 + sl, now);
             if (n->st.statuses++ == 0) say(n, "PAP SendStatus from %u", d->src.node);
         } else if (a.user[1] == PAP_OPEN_CONN) {
-            pap_open(n, d, &a, &from, now);
+            pap_open(n, d, &a, &from, now, reg, sls);
         }
         return;
     }
@@ -416,7 +470,10 @@ static void on_atp(lt_node_t *n, const ddp_t *d, uint64_t now)
         // A PAP-level retransmit of a read already answered (fresh TID, same
         // sequence number) gets the same answer again.
         if (seq && seq == p->ws_answered_seq) {
-            pap_reply_ws(n, a.tid, &from, p->ws_answered_eof, now);
+            uint8_t out[LT_RELAY_PKT];
+            int end = p->ws_answered_eof;
+            size_t k = relayed(n) ? n->ops.reg_output(n->ops.ctx, p->reg, out, sizeof out, &end, 1) : 0;
+            pap_reply_ws(n, a.tid, &from, p->ws_answered_eof, out, k, now);
             break;
         }
         p->ws_read = 1;
@@ -445,7 +502,7 @@ static void pap_tick(lt_node_t *n, uint64_t now)
         pap_close(n, "timed out", 0);
         return;
     }
-    if (n->idle_hold_ms) {
+    if (n->idle_hold_ms && !relayed(n)) {          // a relay waits on its printer, not idle
         // Not idle: the printer's status holds the Mac, or we do (no read out
         // until the spool has room for one).
         if (n->status || (!p->rd_want && !p->done)) p->idle_since = now;
@@ -476,6 +533,47 @@ static void pap_tick(lt_node_t *n, uint64_t now)
 }
 
 // ------------------------------------------------------------- W-1082
+
+int lt_node_register(lt_node_t *n, int reg, const uint8_t *obj, const uint8_t *type, uint8_t sls)
+{
+    if (reg < 1 || reg >= LT_REG_MAX || !n->reg) return -1;
+    if (!obj || !type || !sls) {
+        memset(&n->reg[reg], 0, sizeof n->reg[reg]);
+        return 0;
+    }
+    size_t ol = obj[0] > NBP_NAME_MAX ? NBP_NAME_MAX : obj[0];
+    size_t tl = type[0] > NBP_NAME_MAX ? NBP_NAME_MAX : type[0];
+    memcpy(n->reg[reg].obj + 1, obj + 1, ol);
+    n->reg[reg].obj[0] = (uint8_t)ol;
+    memcpy(n->reg[reg].type + 1, type + 1, tl);
+    n->reg[reg].type[0] = (uint8_t)tl;
+    n->reg[reg].sls = sls;
+    return 0;
+}
+
+void lt_node_offer(lt_node_t *n, const uint8_t *own, const lt_offer_t *rel, int n_rel,
+                   const uint8_t *marker)
+{
+    memset(n->obj, 0, sizeof n->obj);
+    if (own && own[0]) memcpy(n->obj, own, 1 + (size_t)(own[0] > NBP_NAME_MAX ? NBP_NAME_MAX : own[0]));
+    if (n->obj[0] > NBP_NAME_MAX) n->obj[0] = NBP_NAME_MAX;
+    nbp_name(n->type, "ImageWriter");
+    for (int r = 1; r < LT_REG_MAX - 1; r++) {
+        int k = r - 1;
+        if (k < n_rel && rel && rel[k].obj[0])
+            lt_node_register(n, r, rel[k].obj, rel[k].type, (uint8_t)LT_SOCK_REG(r));
+        else
+            lt_node_register(n, r, NULL, NULL, 0);
+    }
+    uint8_t aw[NBP_NAME_MAX + 1];
+    nbp_name(aw, LT_AIRWRITER_TYPE);
+    if (marker && marker[0])
+        lt_node_register(n, LT_REG_MAX - 1, marker, aw, (uint8_t)LT_SOCK_REG(LT_REG_MAX - 1));
+    else
+        lt_node_register(n, LT_REG_MAX - 1, NULL, NULL, 0);
+}
+
+int lt_node_pap_reg(const lt_node_t *n) { return n->pap.open ? n->pap.reg : 0; }
 
 void lt_node_set_serve(lt_node_t *n, int serve)
 {
@@ -559,6 +657,8 @@ void lt_node_init(lt_node_t *n, const lt_cfg_t *cfg, const lt_ops_t *ops, uint64
     lt_node_set_status(n, cfg->status);
     n->names = cfg->names;
     if (n->names) memset(n->names, 0, LT_SEEN_SLOTS * sizeof *n->names);
+    n->reg = cfg->regs;
+    if (n->reg) memset(n->reg, 0, LT_REG_MAX * sizeof *n->reg);
     n->rng = cfg->seed ? cfg->seed : 0x2434u;
     n->tid = (uint16_t)rnd(n);
     n->phase = LT_ACQUIRING;
@@ -580,6 +680,8 @@ void lt_node_init_elap(lt_node_t *n, const lt_cfg_t *cfg, const lt_ops_t *ops,
     lt_node_set_status(n, cfg->status);
     n->names = cfg->names;
     if (n->names) memset(n->names, 0, LT_SEEN_SLOTS * sizeof *n->names);
+    n->reg = cfg->regs;
+    if (n->reg) memset(n->reg, 0, LT_REG_MAX * sizeof *n->reg);
     n->rng = cfg->seed ? cfg->seed : 0x2434u;
     n->tid = (uint16_t)rnd(n);
     n->phase = LT_ACQUIRING;                       // until AARP hands over an address

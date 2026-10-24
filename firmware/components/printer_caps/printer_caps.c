@@ -26,6 +26,30 @@ const printer_caps_t printer_caps_imagewriter = {
     .crop_margin = 1,
 };
 
+// W-1088: the LQ and the original take the same stream (the scope spec's
+// amendment), so only their names differ.
+static const printer_caps_t imagewriter_lq = {
+    .make_model  = "Apple ImageWriter LQ",
+    .device_id   = "MFG:Apple;MDL:ImageWriter LQ;CMD:URF;",
+    .urf_rs = "RS72-144", .res_x = 144, .res_y = 72, .media = "na_letter_8.5x11in",
+    .media_x = 21590, .media_y = 27940, .margin_l = 635, .margin_r = 635, .margin_t = 2540,
+    .margin_b = 1270, .ppm = 1, .rip_dpi_x = 144, .rip_dpi_y = 72, .max_dots = 1152,
+    .crop_margin = 1,
+};
+static const printer_caps_t imagewriter_1 = {
+    .make_model  = "Apple ImageWriter",
+    .device_id   = "MFG:Apple;MDL:ImageWriter;CMD:URF;",
+    .urf_rs = "RS72-144", .res_x = 144, .res_y = 72, .media = "na_letter_8.5x11in",
+    .media_x = 21590, .media_y = 27940, .margin_l = 635, .margin_r = 635, .margin_t = 2540,
+    .margin_b = 1270, .ppm = 1, .rip_dpi_x = 144, .rip_dpi_y = 72, .max_dots = 1152,
+    .crop_margin = 1,
+};
+
+const printer_caps_t *printer_caps_imagewriter_model(int model)
+{
+    return model == 2 ? &imagewriter_lq : model == 3 ? &imagewriter_1 : &printer_caps_imagewriter;
+}
+
 size_t printer_caps_urf_keywords(const printer_caps_t *c, int colour, const char *kw[9])
 {
     size_t n = 0;
