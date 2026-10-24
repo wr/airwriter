@@ -76,6 +76,11 @@ build/test_ethertalk: test/test_ethertalk.c $(LT)/et_proto.c $(LT)/et_link.c $(L
 build/test_pap_client: test/test_pap_client.c $(LT)/lt_proto.c $(LT)/lt_node.c $(LT)/pap_client.c | build
 	$(CC) $(CFLAGS) -I$(LT)/include -Itest -o $@ $^
 
+# W-1088: the printer list, beside the LaserWriter pieces it names records with.
+build/test_printers: test/test_printers.c $(COMP)/printers/printers_core.c $(COMP)/laser/lw_caps.c \
+                     $(COMP)/laser/lw_query.c $(COMP)/printer_caps/printer_caps.c $(LT)/lt_proto.c | build
+	$(CC) $(CFLAGS) $(INCS) -I$(COMP)/printers/include -I$(LT)/include -Itest -o $@ $^
+
 build/test_lw_core: test/test_lw_core.c $(COMP)/laser/lw_core.c $(COMP)/laser/lw_status.c \
                     $(LT)/lt_proto.c | build
 	$(CC) $(CFLAGS) -I$(LT)/include -I$(COMP)/laser/include -Itest -o $@ $^
