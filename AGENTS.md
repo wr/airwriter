@@ -242,7 +242,15 @@ What works on `main`:
   Since W-1088 the board looks on every running link
   (at start after 10 s, every 30 s for 5 minutes, then every 5 minutes) and puts each
   LaserWriter and AppleTalk ImageWriter it hears in the printer list; one answering from another
-  AirWriter's node is skipped. A LaserWriter is queried (Level 1 PostScript, a binary probe) and,
+  AirWriter's node is skipped. A printer switched on checks no one has its name (the NTR: 8 s
+  of ENQs, then five lookups of its own name 2 s apart); since `W-1098 Find a printer the moment
+  it's switched on, and keep a renamed one` any link hearing that looks once, 3 s after the
+  last check, so a printer is back in seconds and nothing is sent while it is off (the NTR has
+  no sleep mode: off between uses is the power saving). The query also asks the page count; a
+  printer new to the list at the address a silent one of the same product had, with as many
+  pages or more, is that one renamed and keeps its record (uuid, AirPrint printer, settings).
+  Addresses and counts are NVS `printers`/`seen`, beside the list. Host-tested and built;
+  not yet benched on board 1. A LaserWriter is queried (Level 1 PostScript, a binary probe) and,
   once it answers, shared on AirPrint printer 1-3 at `ipp/p<id>` (W-1082's at `ipp/laser`), its
   own Bonjour name and UUID. Jobs rip at 300 dpi into Level 1 `imagemask` bands (`ps_page`) and
   go out through one PAP client beside the server (`localtalk/pap_client.c`); `components/laser`
@@ -250,7 +258,8 @@ What works on `main`:
   status in turn, queries) and the board's side (`laser.c`). `GET /api/laser` is diagnostics
   (heard, targets, the last job's figures); the page reads `/api/printers`. A link answers as
   the ImageWriter only where its card's switch is on, and runs for a printer in the list
-  whatever it says. `etpeer.py laserwriter` is the fake (`--also NAME` for a second).
+  whatever it says. `etpeer.py laserwriter` is the fake (`--also NAME` for a second; it checks
+  its name coming up, and `--addr`/`--pages` make a renamed one).
 
 **Enclosure** (`enclosure/`, in use on board 1): tray (print in PETG with Arachne walls;
 every wall 1.70 below the rim, one thickness all round so no lines show up the outside; the
