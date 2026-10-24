@@ -84,7 +84,8 @@ static void send_open(pap_client_t *c, uint64_t now)
     c->open_at = now;
 }
 
-int papc_open(pap_client_t *c, const lt_route_t *to, uint32_t busy_ms, uint64_t now)
+static int open_conn(pap_client_t *c, const lt_route_t *to, uint32_t busy_ms, int multi,
+                     uint64_t now)
 {
     if (!c->node || c->phase != PAPC_IDLE) return -1;
     lt_node_t *node = c->node;
@@ -102,6 +103,7 @@ int papc_open(pap_client_t *c, const lt_route_t *to, uint32_t busy_ms, uint64_t 
 
     c->sls = *to;
     c->busy_ms = busy_ms;
+    c->multi = (uint8_t)multi;
     do c->connid = (uint8_t)rnd(c); while (!c->connid);
     c->phase = PAPC_OPENING;
     c->first_try = c->answered = now;
@@ -109,6 +111,16 @@ int papc_open(pap_client_t *c, const lt_route_t *to, uint32_t busy_ms, uint64_t 
     say(c, "PAP %u: opening a connection to %u:%u", c->connid, to->addr.node, to->addr.sock);
     send_open(c, now);
     return 0;
+}
+
+int papc_open(pap_client_t *c, const lt_route_t *to, uint32_t busy_ms, uint64_t now)
+{
+    return open_conn(c, to, busy_ms, 0, now);
+}
+
+int papc_open_multi(pap_client_t *c, const lt_route_t *to, uint32_t busy_ms, uint64_t now)
+{
+    return open_conn(c, to, busy_ms, 1, now);
 }
 
 static void start_read(pap_client_t *c, uint64_t now);
@@ -198,10 +210,15 @@ static void top_up(pap_client_t *c)
     }
 }
 
+static void next_job(pap_client_t *c, uint64_t now);
+
 // Answers the oldest pending SendData once there is a full answer, the
 // job's end, or it has waited PAPC_HOLD_MS with something to send.
 static int answer_one(pap_client_t *c, papc_pend_t *p, uint64_t now)
 {
+    // W-1095: after our EOF a multi-job connection's next SendData is the
+    // next job's: it waits for that job's data, not an empty EOF.
+    if (c->multi && c->eof_sent && !c->cancel) return 0;
     size_t room = (size_t)p->want * PAP_QUANTUM;
     int done = c->cancel || c->eof_sent || c->src_eof;
     if (!done && c->staged < room && !(c->staged && since(now, p->since) >= PAPC_HOLD_MS)) return 0;
@@ -231,6 +248,7 @@ static int answer_one(pap_client_t *c, papc_pend_t *p, uint64_t now)
         c->eof_at = now;
         c->phase = PAPC_DRAINING;
         say(c, "PAP %u: EOF sent after %lu bytes", c->connid, (unsigned long)c->sent_bytes);
+        if (c->multi && c->eof_got && !c->cancel) next_job(c, now);   // the printer's came first
     }
     return 1;
 }
@@ -334,9 +352,22 @@ static void read_done(pap_client_t *c, uint64_t now)
         c->eof_got = 1;
         say(c, "PAP %u: the printer's EOF after %lu bytes of output", c->connid,
             (unsigned long)c->out_bytes);
-        if (c->eof_sent) close_conn(c, c->cancel ? PAPC_END_CANCELED : PAPC_END_OK, now);
+        if (c->multi && c->ops.job_eof) c->ops.job_eof(c->ops.ctx);
+        if (c->multi && c->eof_sent && !c->cancel) next_job(c, now);
+        else if (c->eof_sent) close_conn(c, c->cancel ? PAPC_END_CANCELED : PAPC_END_OK, now);
         return;
     }
+    start_read(c, now);
+}
+
+// W-1095: both EOFs are through on a multi-job connection. The next job
+// starts clean; the printer's SendData for it waits for its data (answer_one).
+static void next_job(pap_client_t *c, uint64_t now)
+{
+    c->jobs++;
+    say(c, "PAP %u: job %u done both ways; waiting for the next", c->connid, c->jobs);
+    c->src_eof = c->eof_sent = c->eof_got = 0;
+    c->phase = PAPC_OPEN;
     start_read(c, now);
 }
 
@@ -457,7 +488,10 @@ void papc_tick(pap_client_t *c, uint64_t now)
     if (c->phase != PAPC_OPEN && c->phase != PAPC_DRAINING) return;
     if (c->rd_want && since(now, c->rd_sent) >= PAPC_READ_RETRY_MS) send_read(c, now);
     start_read(c, now);
-    if (c->phase == PAPC_DRAINING && since(now, c->eof_at) >= PAPC_EOF_WAIT_MS) {
+    // A multi-job connection waits as long as the printer images (W-1095);
+    // cancelled, it ends as a one-job one does.
+    if (c->phase == PAPC_DRAINING && (!c->multi || c->cancel) &&
+        since(now, c->eof_at) >= PAPC_EOF_WAIT_MS) {
         say(c, "PAP %u: no EOF from the printer %u s after ours; closing", c->connid,
             PAPC_EOF_WAIT_MS / 1000);
         close_conn(c, c->cancel ? PAPC_END_CANCELED : PAPC_END_OK, now);
@@ -479,6 +513,32 @@ void papc_cancel(pap_client_t *c, uint64_t now)
     }
     c->cancel = 1;
     answer_pending(c, now);
+}
+
+void papc_close(pap_client_t *c, uint64_t now)
+{
+    if (c->phase == PAPC_IDLE || c->phase == PAPC_CLOSING) return;
+    if (c->phase == PAPC_OPENING) {
+        finish(c, PAPC_END_CANCELED);
+        return;
+    }
+    say(c, "PAP %u: closing after %u jobs", c->connid, c->jobs);
+    close_conn(c, PAPC_END_OK, now);
+}
+
+void papc_finish(pap_client_t *c, uint64_t now)
+{
+    if (c->phase == PAPC_IDLE || c->phase == PAPC_CLOSING) return;
+    if (c->phase == PAPC_OPENING) {
+        finish(c, PAPC_END_CANCELED);
+        return;
+    }
+    // One job from here: answer_one sends the rest with its EOF, read_done
+    // closes on the printer's, and the tick's wait bounds it.
+    say(c, "PAP %u: the last job, then closing", c->connid);
+    c->multi = 0;
+    if (c->eof_sent && c->eof_got) close_conn(c, PAPC_END_OK, now);
+    else answer_pending(c, now);
 }
 
 void papc_status(pap_client_t *c, const lt_route_t *to, uint64_t now)

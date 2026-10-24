@@ -34,6 +34,8 @@ static void empty(pap_relay_t *r)
     r->m2p.head = r->m2p.tail = r->p2m.head = r->p2m.tail = 0;
     r->asked = r->mac_eof = r->mac_gone = r->mac_had = r->prn_open = 0;
     r->prn_ended = r->cancelled = r->aborted = 0;
+    r->prn_eof = r->mac_mid = r->told = r->closed = 0;
+    r->answered = 0;
     r->prn_end = -1;
     r->last_n = 0;
     r->last_eof = 0;
@@ -54,7 +56,7 @@ int pap_relay_mac_open(pap_relay_t *r, const lt_node_t *mac, int reg, uint64_t n
     switch (r->state) {
     case PR_RELAY_IDLE:                           // ask the printer; the Mac hears busy until then
         empty(r);
-        r->to_printer = r->to_mac = 0;
+        r->to_printer = r->to_mac = r->jobs = 0;
         r->state = PR_RELAY_ASKING;
         r->mac = mac;
         r->reg = (uint8_t)reg;
@@ -97,20 +99,35 @@ int pap_relay_tick(pap_relay_t *r, uint64_t now)
             act |= PR_RELAY_DO_DONE;
             r->state = PR_RELAY_IDLE;
         } else if (now - r->since >= PR_RELAY_WAIT_MS) {
-            r->cancelled = 1;                     // the Mac never came back
-            act |= PR_RELAY_DO_CANCEL;
+            r->closed = 1;                        // the Mac never came back: nothing was sent
+            act |= PR_RELAY_DO_CLOSE;
             r->state = PR_RELAY_ENDING;
         }
         break;
     case PR_RELAY_BOTH: {
         int mac_open = r->mac->pap.open && r->mac->pap.reg == r->reg;
-        // The Mac is gone, or closed before the printer finished: end the printer's.
-        if ((!mac_open || r->mac_gone) && !r->prn_ended && !r->cancelled) {
-            r->cancelled = 1;
-            act |= PR_RELAY_DO_CANCEL;
+        // W-1095: between jobs the Mac's last EOF has gone to the printer and
+        // the printer has answered it with its own.
+        int between = !r->mac_mid && !r->mac_eof && r->answered >= r->jobs;
+        // The Mac is done or gone: between jobs the printer's closes normally;
+        // after its EOF (its driver closes before the printer's) the job is
+        // all here, and a LaserWriter would print it: the rest goes to the
+        // printer first; mid-job it is cancelled, which ends the printer's job too.
+        if ((!mac_open || r->mac_gone) && !r->prn_ended && !r->cancelled && !r->closed) {
+            if (between) {
+                r->closed = 1;
+                act |= PR_RELAY_DO_CLOSE;
+            } else if (!r->mac_mid) {
+                r->closed = 1;
+                act |= PR_RELAY_DO_FINISH;
+            } else {
+                r->cancelled = 1;
+                act |= PR_RELAY_DO_CANCEL;
+            }
         }
-        // The printer's connection failed: the Mac's ends with it.
-        if (r->prn_ended && r->prn_end != PAPC_END_OK && mac_open && !r->aborted) {
+        // The printer's connection ended: the Mac's ends with it, a failure at
+        // once, a normal end once the printer's words and EOF have reached it.
+        if (r->prn_ended && mac_open && !r->aborted && (r->prn_end != PAPC_END_OK || r->told)) {
             r->aborted = 1;
             act |= PR_RELAY_DO_ABORT_MAC;
         }
@@ -141,13 +158,14 @@ void pap_relay_mac_data(pap_relay_t *r, const uint8_t *d, size_t n)
 {
     L(r);
     r->to_printer += (uint32_t)put(&r->m2p, d, n);
+    if (n) r->mac_mid = 1;
     U(r);
 }
 
 size_t pap_relay_mac_room(pap_relay_t *r)
 {
     L(r);
-    size_t k = room(&r->m2p);
+    size_t k = r->mac_eof ? 0 : room(&r->m2p);   // the next job waits for this one's EOF
     U(r);
     return k;
 }
@@ -155,8 +173,16 @@ size_t pap_relay_mac_room(pap_relay_t *r)
 void pap_relay_mac_end(pap_relay_t *r, int normal)
 {
     L(r);
-    if (normal) r->mac_eof = 1;
-    else r->mac_gone = 1;
+    if (!normal) r->mac_gone = 1;
+    U(r);
+}
+
+void pap_relay_mac_eof(pap_relay_t *r)
+{
+    L(r);
+    r->mac_eof = 1;
+    r->mac_mid = 0;
+    r->jobs++;
     U(r);
 }
 
@@ -171,8 +197,13 @@ size_t pap_relay_mac_output(pap_relay_t *r, uint8_t *buf, size_t max, int *eof, 
     } else {
         if (max > sizeof r->last) max = sizeof r->last;
         n = get(&r->p2m, buf, max);
-        // The printer's EOF reaches the Mac once its words have.
-        *eof = r->prn_ended && r->prn_end == PAPC_END_OK && !used(&r->p2m);
+        // The printer's EOF reaches the Mac once its words have: this job's
+        // (W-1095), or the connection's when it ended normally.
+        *eof = !used(&r->p2m) && (r->prn_eof || (r->prn_ended && r->prn_end == PAPC_END_OK));
+        if (*eof) {
+            r->prn_eof = 0;
+            if (r->prn_ended) r->told = 1;
+        }
         memcpy(r->last, buf, n);
         r->last_n = (uint16_t)n;
         r->last_eof = (uint8_t)*eof;
@@ -199,6 +230,7 @@ size_t pap_relay_prn_read(pap_relay_t *r, uint8_t *buf, size_t max, int *eof)
     L(r);
     size_t n = get(&r->m2p, buf, max);
     *eof = r->mac_eof && !used(&r->m2p);
+    if (*eof) r->mac_eof = 0;                     // passed on: the next read is the next job's
     U(r);
     return n;
 }
@@ -225,6 +257,14 @@ void pap_relay_prn_opened(pap_relay_t *r)
         r->state = PR_RELAY_OPEN;
         r->since = 0;                             // the next tick starts the Mac's wait
     }
+    U(r);
+}
+
+void pap_relay_prn_eof(pap_relay_t *r)
+{
+    L(r);
+    r->prn_eof = 1;
+    r->answered++;
     U(r);
 }
 

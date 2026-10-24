@@ -48,6 +48,8 @@ typedef struct {
     int    (*open)(int link, const lt_node_t *node, int reg, uint64_t now);   // 0, or busy
     void   (*data)(const uint8_t *d, size_t n);
     size_t (*room)(void);
+    // job_end's verdict, LT_JOB_EOF included: the Mac's EOF ends one job of
+    // its connection, which stays open for the next (W-1095).
     void   (*end)(int normal);
     size_t (*output)(uint8_t *buf, size_t max, int *eof, int again);
     // SendStatus on a registration: the printer's own status, Pascal; 0 for none.

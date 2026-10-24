@@ -4,11 +4,13 @@
 (W-1082). tools/rip/build/lwhost runs the firmware's own EtherTalk link and
 PAP client; etpeer.py's LaserWriter answers it over a pipe. Each scenario is
 the board's phase 1 in small: lookup, query (binary and hex), print, busy,
-paper out, a PostScript error, cancel, a printer that goes silent.
+paper out, a PostScript error, cancel, a printer that goes silent. Last,
+etpeer's print-ps sends the fake a query and a page over one connection, as a
+Mac's LaserWriter driver does (W-1095).
 
     make -C tools/rip interop
 """
-import asyncio, os, pathlib, subprocess, sys, tempfile
+import asyncio, contextlib, io, os, pathlib, subprocess, sys, tempfile
 
 HERE = pathlib.Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
@@ -61,6 +63,58 @@ async def scenario(args, fake_kw=None, during=None, timeout=150):
     for t in tasks:
         t.cancel()
     return code, lines, fake
+
+
+class Wire:
+    """Two etpeer peers on one wire in this process: each end hears the other."""
+
+    def __init__(self, mac, q, peer_q):
+        self.mac, self.q, self.peer_q = mac, q, peer_q
+
+    @staticmethod
+    def pair():
+        a, b = asyncio.Queue(), asyncio.Queue()
+        return Wire(b"B2\x00\x00\x00\x02", a, b), Wire(b"B2\x00\x00\x00\x03", b, a)
+
+    async def open(self):
+        return self
+
+    async def send(self, frame):
+        self.peer_q.put_nowait(frame)
+
+    async def recv(self, timeout):
+        try:
+            return await asyncio.wait_for(self.q.get(), timeout)
+        except asyncio.TimeoutError:
+            return None
+
+    async def close(self):
+        pass
+
+
+async def print_ps_jobs(out, jobs):
+    """etpeer's print-ps, a Mac's LaserWriter driver, against the fake
+    (W-1095): every job on one connection. Returns what print-ps printed."""
+    mac_end, lw_end = Wire.pair()
+    fake = etpeer.LaserWriter(lw_end, NAME, out=out)
+    mac = etpeer.Mac(mac_end)
+
+    async def serve():
+        await fake.acquire()
+        await fake.serve()
+
+    task = asyncio.create_task(serve())
+    await asyncio.sleep(2.5)                   # the fake has its address
+    await mac.acquire()
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        try:
+            await asyncio.wait_for(mac.print_ps(NAME, jobs), 60)
+        except (asyncio.TimeoutError, SystemExit):
+            pass                               # a fake that took one job: the check says so
+        await asyncio.sleep(0.5)
+    task.cancel()
+    return buf.getvalue()
 
 
 def has(lines, prefix):
@@ -134,6 +188,16 @@ async def main():
         code, lines, _ = await scenario(["print", NAME, str(big), "--dead-ms", "5000"],
                                         {"paper": True}, during=drop, timeout=60)
         check(has(lines, "ended dead") is not None, "a printer gone silent ends the job")
+
+        # Its fake takes many jobs a connection, as a real LaserWriter does
+        # (W-1095): the driver's query, then the page, then CloseConn.
+        out = tmp / "jobs2"
+        query = b"%!PS-Adobe-2.0 Query\r%%Title: Query for Laser Prep\r%%EndComments\rtrue =\r"
+        said = await print_ps_jobs(out, [query, data])
+        check((out / "job-1.ps").exists() and (out / "job-1.ps").read_bytes() == query
+              and (out / "job-2.ps").exists() and (out / "job-2.ps").read_bytes() == data
+              and "job 2: sent" in said and "closed after 2 jobs" in said,
+              "print-ps: a query and a page over one connection, each its own job")
 
     sys.exit(1 if failed else 0)
 

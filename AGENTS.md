@@ -206,7 +206,14 @@ What works on `main`:
   run by `laser.c` with the one PAP client, under the job lock): the Mac hears busy, in the
   printer's own status words, until the printer's connection is open; then its data goes to
   the printer and the printer's output (query answers, errors) back to its reads, 256 bytes a
-  read, nothing rewritten. Benched zone → tunnel against the fake LaserWriter only.
+  read, nothing rewritten. A connection carries any number of jobs, each EOF passed through
+  both ways (`W-1095 Relay: a vintage Mac's LaserWriter job stalls after the driver's query`:
+  the LaserWriter driver sends a query, then the document, over one connection). A Mac that
+  closes after its last EOF, before the printer's (the SE/30's driver does), has that job
+  finished, every byte to the printer; mid-job it is cancelled. Benched 2026-10-24 radio →
+  cable with the SE/30 to a real Personal LaserWriter NTR (four jobs: query, Laser Prep by
+  `exitserver`, query, document), tunnel → cable with `etpeer.py print-ps --close-early`, and
+  zone → tunnel against the fake.
 - TashTalk 2.1.3 is in U7, flashed in place by the ESP32 over LVP.
 - A LocalTalk node on the AppleTalk port whenever U7 runs TashTalk (W-1088: every look for
   printers runs on it), answering old Macs only while the settings page's switch says so
@@ -230,8 +237,9 @@ What works on `main`:
   A real Infinite Mac (System 7.5.3) printed over the zone on 2026-10-24; it registers as
   `<Unnamed>`, so its card shows it by address.
 - LaserWriters on AppleTalk (`W-1082 AirPrint to LaserWriters on AppleTalk`, SPEC §3.14, design
-  `docs/superpowers/specs/2026-10-21-laser-printers-design.md`): **built, tested against a fake
-  LaserWriter only, untested on a real one.** Since W-1088 the board looks on every running link
+  `docs/superpowers/specs/2026-10-21-laser-printers-design.md`): **built; benched on one real
+  LaserWriter, a Personal LaserWriter NTR on board 1's cable (2026-10-24), and on the fake.**
+  Since W-1088 the board looks on every running link
   (at start after 10 s, every 30 s for 5 minutes, then every 5 minutes) and puts each
   LaserWriter and AppleTalk ImageWriter it hears in the printer list; one answering from another
   AirWriter's node is skipped. A LaserWriter is queried (Level 1 PostScript, a binary probe) and,
@@ -260,7 +268,7 @@ untested on a real LQ. The original ImageWriter sends no self-ID, so the board n
 colour ribbon in it. The port printer's model (found, or picked in its detail) names it in IPP
 `printer-make-and-model` and Bonjour `ty` (W-1088); `/api/status` `model` still says Apple
 ImageWriter II. StyleWriters stay out. PostScript LaserWriters on AppleTalk are shared as
-printers of their own (above), untested on a real one.
+printers of their own (above), benched on a Personal LaserWriter NTR only.
 
 Not built: Mini vMac (LToUDP, `W-1077`), consumers of the dither override, PWG raster, HP
 LaserJets over serial (`W-1083`, designed), AirPrint to an AppleTalk ImageWriter (cut from
@@ -275,9 +283,13 @@ its name in the Chooser. U7's PIC calibration words: `16E0 1DA8`. Its LocalTalk 
 2026-10-24, with its settings put back over the API. Its port printer's uuid is now
 `…4c57-0001-0001-10bda36e2434`, which orphans Mac queues added before that date. Printer: an ImageWriter II on J2 via
 Apple's crossover cable, fanfold paper loaded as the Owner's Guide says (top edge under the paper
-bail). It runs the W-1094 build (v0.2.0-150-g8088a2f: main with the W-1076 bench fixes, plus
-60 KB of statics in PSRAM and `/api/mem`), ahead of any release, with auto-update on; it shares the fake "LaserWriter II NT" on the Basilisk II tunnel when
-`etpeer.py tunnel laserwriter` runs on the Mac. Its Top margin is calibrated to -7/8 in
+bail). It runs v0.2.0-160-gd20f49d, a bench build of what main now holds (W-1095 and W-1096
+merged before main had them; the same firmware), ahead of any release, with auto-update on; it shares the fake "LaserWriter II NT" on the Basilisk II tunnel when
+`etpeer.py tunnel laserwriter` runs on the Mac. On its AppleTalk cable since 2026-10-24: a
+Personal LaserWriter NTR (PostScript 2010.129, Level 2, 3 MB, 300 dpi, takes binary; 10,277
+pages that morning), AirPrint printer 3 at `ipp/p3`. Its toner is spent (more ordered), so
+its pages cannot be judged by eye yet; `statusdict /pagecount` through the relay
+(`etpeer.py tunnel print-ps`) shows each page came out. Its Top margin is calibrated to -7/8 in
 (`top_margin` -126): a page's line 1 in down and one 0.5 in from the bottom landed exactly there.
 Its AppleTalk port has been set on the page (`lt_port` 1), so DIP switches 1-2 no longer decide;
 Infinite Mac is on (Wells switched it on, with a made-up zone name). The page reads its DIP switches as 2, 6, 7 and 8 on: not
@@ -394,14 +406,17 @@ Linear is the queue; these are the live items.
   worker stacks to PSRAM (20 KB), Wi-Fi's IRAM options off (18 KB), the rip stack to PSRAM with
   its flash writes on another task (7 KB), mDNS and the NVS cache to PSRAM.
 - Not in Linear: scope HSKo during a long job (SPEC §3.9 timing).
-- Laser printers (design `docs/superpowers/specs/2026-10-21-laser-printers-design.md`; no
-  laser printer on the bench): `W-1082 AirPrint to LaserWriters on AppleTalk` merged
-  2026-10-22 (plan `docs/superpowers/plans/2026-10-22-laserwriters-appletalk.md`), benched on
-  board 1 against the fake: a photo page from the iPhone and from the Mac's queue (~100 s), busy,
-  paper out, cancel, a PostScript error, a silent printer; the ImageWriter's checker unchanged
-  on paper. Owed on a real LaserWriter:
-  the design's "What only a printer settles" (cable, long frames through TashTalk, throughput,
-  binary on Level 1, placement, memory, the status texts, the screen, busy both ways). Next
+- Laser printers (design `docs/superpowers/specs/2026-10-21-laser-printers-design.md`; a
+  Personal LaserWriter NTR on the bench since 2026-10-24): `W-1082 AirPrint to LaserWriters on
+  AppleTalk` merged 2026-10-22 (plan `docs/superpowers/plans/2026-10-22-laserwriters-appletalk.md`),
+  benched on board 1 against the fake, then on the NTR (the design's "What only a printer
+  settles" has the figures): the cable, long frames through TashTalk, ~12 KB/s on LocalTalk,
+  binary, full pages in its memory, busy both ways, out of paper read mid-job, and the SE/30
+  printing through the relay (`W-1095 Relay: a vintage Mac's LaserWriter job stalls after the
+  driver's query`, merged 2026-10-24). Still owed on the NTR: placement and the screen by eye once
+  its toner is in, and the cover-open, jam and toner texts mid-job (idle, it says "idle"
+  whatever is wrong). Owed on a Level 1 machine (Plus, II NT): hex and a 68000's imaging
+  time. Next
   `W-1083 AirPrint to HP LaserJets over serial (PCL)`. Network printers over TCP are out. Open
   hardware question for any RS-232 printer, the original ImageWriter included: J2's receiver
   (MAX3490, common-mode −7 to +12 V) against RS-232's −12 V.

@@ -17,6 +17,14 @@
 // ends (its EOF) after ours, or 30 s after ours if it never says so (netatalk:
 // some printers do not on big jobs); then CloseConn.
 //
+// W-1095: a multi-job connection (papc_open_multi, the relay's) carries any
+// number of jobs, as a Mac's LaserWriter driver sends them: each EOF ends a
+// job, not the connection. The printer's EOF goes to ops.job_eof; once both
+// EOFs are through the next job starts clean, and the printer's next
+// SendData waits for its data (tickles and the dead timer still watch a
+// silent printer). There is no 30 s wait: a slow LaserWriter may image a page
+// for minutes before its EOF. papc_close ends it, between jobs.
+//
 // Constants checked against TailTalk's pap.rs (FeralFirmware/TailTalk, read
 // as a reference): 512-byte packets, quantum 8, busy retried every 2 s,
 // tickles every 30 s, the connection dead after 120 s silent, 8 replies kept
@@ -56,7 +64,8 @@ typedef enum {
 typedef struct {
     void   *ctx;
     // The job: up to max bytes into buf without waiting; *eof once nothing
-    // more will come. Returns the count.
+    // more will come (multi-job: of this job; the next read is the next
+    // job's). Returns the count.
     size_t (*read)(void *ctx, uint8_t *buf, size_t max, int *eof);
     // The printer's output, in order.
     void   (*output)(void *ctx, const uint8_t *d, size_t n);
@@ -66,6 +75,9 @@ typedef struct {
     // The connection is over; once per papc_open.
     void   (*ended)(void *ctx, papc_end_t how);
     void   (*log)(void *ctx, const char *line);
+    // Multi-job only (W-1095): the printer's EOF, the end of its output for
+    // this job. May be NULL.
+    void   (*job_eof)(void *ctx);
 } papc_ops_t;
 
 enum { PAPC_IDLE = 0, PAPC_OPENING, PAPC_OPEN, PAPC_DRAINING, PAPC_CLOSING };
@@ -88,6 +100,8 @@ typedef struct pap_client {
     papc_ops_t   ops;
     lt_node_t   *node;                   // set by lt_node_attach
     uint8_t      phase, connid, quantum, cancel;
+    uint8_t      multi;                  // W-1095: any number of jobs (papc_open_multi)
+    uint16_t     jobs;                   // and how many have ended both ways
     lt_route_t   sls, sess;              // the printer's listening and session sockets
     uint32_t     busy_ms, dead_ms;
     uint64_t     first_try, answered, heard, tickled;
@@ -132,6 +146,18 @@ void papc_init(pap_client_t *c, const papc_ops_t *ops, uint32_t seed);
 // (ops.read) to its EOF. Busy is retried every 2 s for up to busy_ms. 0, or
 // -1 when a connection is already under way or the client is not attached.
 int  papc_open(pap_client_t *c, const lt_route_t *to, uint32_t busy_ms, uint64_t now);
+// W-1095: the same for a connection that carries any number of jobs, each
+// ended by EOF both ways (the relay's: a Mac's LaserWriter driver sends them
+// so). It stays open until papc_close, papc_cancel, or the printer ends it.
+int  papc_open_multi(pap_client_t *c, const lt_route_t *to, uint32_t busy_ms, uint64_t now);
+// CloseConn, and the connection ends PAPC_END_OK: a multi-job connection
+// between jobs. Before it is open, it ends CANCELED at once.
+void papc_close(pap_client_t *c, uint64_t now);
+// A multi-job connection's last job: what is left of it goes to the printer
+// with its EOF, then the connection closes as a one-job one does (after the
+// printer's EOF, or PAPC_EOF_WAIT_MS after ours), PAPC_END_OK. Before it is
+// open, it ends CANCELED at once.
+void papc_finish(pap_client_t *c, uint64_t now);
 // EOF goes with the next Data answer: the printer meets it inside an
 // imagemask, raises an error and flushes. Before the connection is open, it
 // ends at once.

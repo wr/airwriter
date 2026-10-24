@@ -304,6 +304,17 @@ Traps already explained in a code comment are listed only when the comment is ea
 - **PAP to a LaserWriter: 512-byte Data packets, one ATP socket.** Bigger upsets a LaserWriter
   on LocalTalk; and the socket that sends OpenConn must be the responding socket it names, or
   the printer's SendData never arrives (TailTalk, on hardware, PR #26).
+- **A LaserWriter's PAP connection carries many jobs: EOF ends a job, CloseConn the
+  connection.** A Mac's LaserWriter driver sends a query (is Laser Prep in the printer?), reads
+  the answer to the printer's EOF, then sends the document as the next job on the same
+  connection, and closes only at the end; a LaserWriter, having answered a job's EOF with its
+  own, asks for the next with a new SendData. Take the first EOF as the end and Print Monitor
+  says "starting job" forever (W-1095: an SE/30 through the relay to a Personal LaserWriter
+  NTR). The relay passes each EOF through (`LT_JOB_EOF`, `papc_open_multi`); the ImageWriter's
+  connections and the board's own LaserWriter jobs stay one job each. The SE/30's driver sends
+  four jobs (query, Laser Prep by `exitserver`, query, document) and closes as soon as the
+  last EOF is out, before the printer's: a LaserWriter has every byte by then, so the relay
+  finishes that job (`papc_finish`) rather than cancelling it and dropping what it still holds.
 - **`lt_node_init` resets a node's roles and its PAP client.** Every re-init (the AppleTalk
   port waking from quiet) re-applies `lt_node_set_serve` and `lt_node_attach`.
 - **`laser.c`'s lock order is `s_client_mx`, a link's lock, `s_mu`.** The client's callbacks
