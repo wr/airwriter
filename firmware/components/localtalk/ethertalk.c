@@ -59,13 +59,43 @@ typedef struct {
     lt_offers_t *offers;           // W-1088: what its Macs are offered, in PSRAM
 } et_side_t;
 
+// W-1094: the three links and the buffers each context keeps between calls,
+// ~37 KB, in PSRAM rather than .bss, where they were internal RAM that Wi-Fi
+// and lwIP buffer in (docs/traps.md). None is touched by an interrupt or DMA:
+// the Wi-Fi driver, lwIP and the WebSocket client copy what they are handed.
+// Made by a constructor, before app_main, so every use below finds it.
+typedef struct {
+    et_side_t side[3];                        // s_tun, s_zone, s_radio
+    char      ev[EV_LINES][LINE_LEN];         // the log ring, under s_ring_lock
+    zframe_t  zone_out;                       // zone_send's, s_lock held
+    uint8_t   radio_raw[ELAP_MAX_FRAME + 64]; // ethertalk_radio_input's: lwIP's thread
+    zframe_t  radio_in;
+    zframe_t  relay_in;                       // on_relay_message's: the client's task
+    uint8_t   relay_f[ELAP_MAX_FRAME + 64];
+    char      relay_msg[WS_MSG_MAX];          // ws_handler's: the client's task
+    uint8_t   task_buf[ELAP_MAX_FRAME + 64];  // et_task's
+    zframe_t  task_z;
+    char      task_json[WS_MSG_MAX];
+} et_mem_t;
+
+static et_mem_t *s_mem;
+#define s_tun   (s_mem->side[0])
+#define s_zone  (s_mem->side[1])
+#define s_radio (s_mem->side[2])
+#define s_ev    (s_mem->ev)
+
+__attribute__((constructor)) static void et_mem_make(void)
+{
+    s_mem = heap_caps_calloc(1, sizeof *s_mem, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    if (!s_mem) s_mem = calloc(1, sizeof *s_mem);    // a board with no PSRAM
+    if (!s_mem) abort();
+}
+
 static SemaphoreHandle_t s_lock;           // the links, the settings, the pending flags
 static SemaphoreHandle_t s_ring_lock;      // the log ring alone; never held around a send
 static int        s_running;
-static et_side_t  s_tun, s_zone, s_radio;
 static char       s_obj[NBP_NAME_MAX + 1], s_type[NBP_NAME_MAX + 1];
 static void     (*s_on_event)(lt_event_t ev);
-static char       s_ev[EV_LINES][LINE_LEN];
 static unsigned   s_ev_head, s_ev_n;
 
 // Settings, and what the task has yet to act on.
@@ -239,14 +269,14 @@ static void tun_send(void *ctx, const uint8_t *f, size_t n)
 static void zone_send(void *ctx, const uint8_t *f, size_t n)
 {
     (void)ctx;
-    static zframe_t z;                             // s_lock held
-    if (!s_ws_up || n > sizeof z.f) {
+    zframe_t *z = &s_mem->zone_out;                // s_lock held
+    if (!s_ws_up || n > sizeof z->f) {
         s_zone_out_drops++;
         return;
     }
-    z.n = (uint16_t)n;
-    memcpy(z.f, f, n);
-    if (xQueueSend(s_zout, &z, 0) != pdTRUE) s_zone_out_drops++;
+    z->n = (uint16_t)n;
+    memcpy(z->f, f, n);
+    if (xQueueSend(s_zout, z, 0) != pdTRUE) s_zone_out_drops++;
 }
 
 static int radio_tx(void *ctx, const uint8_t *f, size_t n)
@@ -270,16 +300,17 @@ static void radio_send(void *ctx, const uint8_t *f, size_t n)
 err_t ethertalk_radio_input(struct pbuf *p, struct netif *netif)
 {
     (void)netif;
-    static uint8_t raw[ELAP_MAX_FRAME + 64];       // lwIP's thread only
-    static zframe_t z;
+    uint8_t *raw = s_mem->radio_raw;               // lwIP's thread only
+    zframe_t *z = &s_mem->radio_in;
     s_radio_unknown++;
-    if (!s_running || !radio_wanted() || !s_rin || p->tot_len > sizeof raw) return ERR_ARG;
-    u16_t n = pbuf_copy_partial(p, raw, sizeof raw, 0);
-    size_t m = et_radio_normalize(raw, n, z.f, sizeof z.f);
+    if (!s_running || !radio_wanted() || !s_rin || p->tot_len > sizeof s_mem->radio_raw)
+        return ERR_ARG;
+    u16_t n = pbuf_copy_partial(p, raw, sizeof s_mem->radio_raw, 0);
+    size_t m = et_radio_normalize(raw, n, z->f, sizeof z->f);
     if (!m) return ERR_ARG;
-    z.n = (uint16_t)m;
+    z->n = (uint16_t)m;
     s_radio_kept++;
-    if (xQueueSend(s_rin, &z, 0) != pdTRUE) s_radio_in_drops++;
+    if (xQueueSend(s_rin, z, 0) != pdTRUE) s_radio_in_drops++;
     pbuf_free(p);
     return ERR_OK;
 }
@@ -342,10 +373,10 @@ static void tunnel_close(void)
 
 static void on_relay_message(esp_websocket_client_handle_t c, const char *msg, size_t len)
 {
-    static zframe_t z;                             // the client's task only
-    static uint8_t f[ELAP_MAX_FRAME + 64];
+    zframe_t *z = &s_mem->relay_in;                // the client's task only
+    uint8_t *f = s_mem->relay_f;
     size_t n = 0;
-    int r = et_zone_parse(msg, len, f, sizeof f, &n);
+    int r = et_zone_parse(msg, len, f, sizeof s_mem->relay_f, &n);
     if (r < 0) {
         s_zone_bad++;
         return;
@@ -359,13 +390,13 @@ static void on_relay_message(esp_websocket_client_handle_t c, const char *msg, s
         s_zone_pongs++;
         return;
     }
-    if (n > sizeof z.f) {
+    if (n > sizeof z->f) {
         s_zone_bad++;
         return;
     }
-    z.n = (uint16_t)n;
-    memcpy(z.f, f, n);
-    if (xQueueSend(s_zin, &z, 0) != pdTRUE) s_zone_in_drops++;
+    z->n = (uint16_t)n;
+    memcpy(z->f, f, n);
+    if (xQueueSend(s_zin, z, 0) != pdTRUE) s_zone_in_drops++;
 }
 
 // W-1094: the client's own words for an error, the ERROR event's data. Its
@@ -402,7 +433,7 @@ static void ws_handler(void *arg, esp_event_base_t base, int32_t id, void *data)
 {
     (void)arg;
     (void)base;
-    static char msg[WS_MSG_MAX];
+    char *msg = s_mem->relay_msg;                  // the client's task only
     esp_websocket_event_data_t *d = data;
     switch (id) {
     case WEBSOCKET_EVENT_BEFORE_CONNECT:
@@ -421,8 +452,8 @@ static void ws_handler(void *arg, esp_event_base_t base, int32_t id, void *data)
     }
     case WEBSOCKET_EVENT_DATA:
         if (d->op_code != 0x1 && d->op_code != 0x0) break;   // text, and its continuations
-        if (d->payload_len > (int)sizeof msg || d->payload_offset < 0 ||
-            d->payload_offset + d->data_len > (int)sizeof msg) {
+        if (d->payload_len > WS_MSG_MAX || d->payload_offset < 0 ||
+            d->payload_offset + d->data_len > WS_MSG_MAX) {
             s_zone_bad++;
             break;
         }
@@ -617,9 +648,9 @@ static void apply_pending(void)
 static void et_task(void *arg)
 {
     (void)arg;
-    static uint8_t buf[ELAP_MAX_FRAME + 64];
-    static zframe_t z;
-    static char json[WS_MSG_MAX];
+    uint8_t *buf = s_mem->task_buf;
+    zframe_t *z = &s_mem->task_z;
+    char *json = s_mem->task_json;
     for (;;) {
         apply_pending();
 
@@ -630,7 +661,7 @@ static void et_task(void *arg)
             FD_SET(s_sock, &rf);
             struct timeval tv = { 0, 20000 };
             if (select(s_sock + 1, &rf, NULL, NULL, &tv) > 0) {
-                int n = recv(s_sock, buf, sizeof buf, 0);
+                int n = recv(s_sock, buf, sizeof s_mem->task_buf, 0);
                 if (n > 0) {
                     xSemaphoreTake(s_lock, portMAX_DELAY);
                     if (s_tun.active) et_link_rx(&s_tun.link, buf, (size_t)n, now_ms());
@@ -661,14 +692,14 @@ static void et_task(void *arg)
                      s_zone_err[0] ? s_zone_err : "closed", (unsigned long)(s_backoff_ms / 1000));
             note("zone", l);
         }
-        while (xQueueReceive(s_zin, &z, 0) == pdTRUE) {
+        while (xQueueReceive(s_zin, z, 0) == pdTRUE) {
             xSemaphoreTake(s_lock, portMAX_DELAY);
-            if (s_zone.active) et_link_rx(&s_zone.link, z.f, z.n, now_ms());
+            if (s_zone.active) et_link_rx(&s_zone.link, z->f, z->n, now_ms());
             xSemaphoreGive(s_lock);
         }
-        while (xQueueReceive(s_rin, &z, 0) == pdTRUE) {
+        while (xQueueReceive(s_rin, z, 0) == pdTRUE) {
             xSemaphoreTake(s_lock, portMAX_DELAY);
-            if (s_radio.active) et_link_rx(&s_radio.link, z.f, z.n, now_ms());
+            if (s_radio.active) et_link_rx(&s_radio.link, z->f, z->n, now_ms());
             xSemaphoreGive(s_lock);
         }
 
@@ -689,8 +720,8 @@ static void et_task(void *arg)
         }
 
         // The zone link's frames out, outside s_lock.
-        while (xQueueReceive(s_zout, &z, 0) == pdTRUE) {
-            size_t jl = et_zone_send_json(json, sizeof json, z.f, z.n);
+        while (xQueueReceive(s_zout, z, 0) == pdTRUE) {
+            size_t jl = et_zone_send_json(json, WS_MSG_MAX, z->f, z->n);
             if (!jl || !s_ws || !s_ws_up ||
                 esp_websocket_client_send_text(s_ws, json, (int)jl, pdMS_TO_TICKS(200)) < 0)
                 s_zone_out_drops++;

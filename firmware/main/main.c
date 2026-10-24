@@ -45,6 +45,7 @@
 #include "cable_test.h"
 #include "testpage.h"
 #include "esp_heap_caps.h"
+#include "bigmem.h"
 #include "memdiag.h"
 #include "esp_app_desc.h"
 #include "esp_partition.h"
@@ -186,10 +187,16 @@ static void raster_selftest(void)
         return;
     }
 
-    static iw_t w;
+    // Once at boot: from the heap, not 2.3 KB of .bss held for good (W-1094).
+    iw_t *w = big_calloc(1, sizeof *w);
+    if (!w) {
+        ht_free(&h);
+        ESP_LOGE(TAG, "raster selftest: no memory");
+        return;
+    }
     size_t emitted = 0;
-    iw_init(&w, SELFTEST_W, count_out, &emitted);
-    iw_begin_page(&w);
+    iw_init(w, SELFTEST_W, count_out, &emitted);
+    iw_begin_page(w);
 
     uint8_t gray[SELFTEST_W];
     uint8_t bits[(SELFTEST_W + 7) / 8];
@@ -197,10 +204,11 @@ static void raster_selftest(void)
         for (uint32_t x = 0; x < SELFTEST_W; x++)
             gray[x] = (uint8_t)(x * 255 / (SELFTEST_W - 1));
         ht_row(&h, gray, bits);
-        iw_row(&w, bits);
+        iw_row(w, bits);
     }
 
-    iw_end_page(&w);
+    iw_end_page(w);
+    free(w);
     ht_free(&h);
     ESP_LOGI(TAG, "raster selftest: %ux%u page -> %u printer bytes",
              SELFTEST_W, SELFTEST_H, (unsigned)emitted);

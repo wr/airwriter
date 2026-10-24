@@ -20,7 +20,11 @@ Traps already explained in a code comment are listed only when the comment is ea
   over one TCP segment (~1.4 KB) crawled or stalled, on ports 80 and 631 alike, with no error
   but `httpd_sock_err ... 104`, while pings and small replies were fine. Put big state in
   PSRAM (`heap_caps_calloc(..., MALLOC_CAP_SPIRAM)` at start); a static with an initialiser
-  goes to `.data` whole. Keep internal only what must be: a stack whose task writes NVS.
+  goes to `.data` whole. Keep internal only what must be: a stack whose task writes NVS, and
+  what an interrupt or DMA touches. Statics crept back to 72 KB by W-1088 (the three EtherTalk
+  links alone 22 KB); W-1094 moved 60 KB of them to PSRAM: state used before its owner starts
+  is a block a constructor makes (`et_mem_t`, `lt_mem_t`), reply buffers are made at first
+  use. Check with `idf.py size-components` (`liblocaltalk.a` `.bss` was 48 KB).
   Any `malloc` under 16 KB (`SPIRAM_MALLOC_ALWAYSINTERNAL`) lands internal too: a 300 dpi
   page's rip rows (~30 KB) took it to 923 bytes, so row buffers come from `bigmem.h`.
 - **An unread TCP upload holds internal RAM.** Received frames stay in Wi-Fi's internal

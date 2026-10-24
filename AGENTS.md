@@ -282,9 +282,11 @@ yet checked against the part. One pin of its print head is dead (a white line in
 
 Known issues, open:
 - `W-1094 Internal RAM nearly runs out during AirPrint jobs`: with Infinite Mac on, internal
-  RAM's low mark reaches ~100 bytes during an iPhone job, and the largest free piece can be
-  7.5 KB after, just over what the next job's rip stack needs. Nothing has failed from it
-  since the W-1076 busy fix. The relay reconnects every few minutes while idle.
+  RAM's low mark reached ~100 bytes during an iPhone job on v0.2.0-146, and the largest free
+  piece 7.5 KB after, just over what the next job's rip stack needs. W-1094 moved 60 KB of
+  statics to PSRAM (built, not yet benched on board 1); `/api/mem` shows what holds the rest at
+  its lowest. The relay reconnects every few minutes while idle; `/api/et` `relay` `why` now
+  says why.
 - Twice on 2026-10-24, after board 1 lost power (its USB moved) with the ImageWriter on, the
   printer sat busy with SELECT lit: the idle CTRL-X did not free it, switching the printer off
   and on did. A soft restart (`/api/restart`, an OTA) leaves the line ready. A job sent while it
