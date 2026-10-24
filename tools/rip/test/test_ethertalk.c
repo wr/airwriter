@@ -986,6 +986,39 @@ static void test_peer_names(void)
     CHECK(p[1].name != NULL);
 }
 
+// A printer on the link (the fake LaserWriter on the tunnel, a netatalk
+// box's) answers the board's printer lookups: no peer on the card. It is
+// kept by network and node, so the Mac at the same node on another network
+// stays.
+static void test_peer_printer(void)
+{
+    et_link_t l;
+    uint64_t t = link_online(&l, &ID_A, MAC_A, 0xFF23, 77);
+    uint8_t nbp[2 + 5 + 3 * (NBP_NAME_MAX + 1)], f[ELAP_MAX_FRAME];
+    size_t fl = mac_dg(f, THEM, ET_AT_MCAST, 0, 0xFF, SOCK_NIS, DDP_NBP, nbp, lkup(nbp));
+    et_link_rx(&l, f, fl, t);                             // the Mac, 0xFF10.12
+
+    nbp_tuple_t r = { .addr = { 0xFF11, 12, 0x81 }, .enumerator = 0 };
+    static const uint8_t LW[] = { 14, 'L','a','s','e','r','W','r','i','t','e','r',' ','I','I' };
+    memcpy(r.obj, LW, sizeof LW);
+    nbp_name(r.type, "LaserWriter");
+    r.zone[0] = 1;
+    r.zone[1] = '*';
+    size_t k = nbp_build(nbp, sizeof nbp, NBP_LKUP_REPLY, 1, &r);
+    uint8_t ll[LLAP_MAX];
+    lt_addr_t to = { 0xFF23, 77, SOCK_NIS }, src = { 0xFF11, 12, SOCK_NIS };
+    size_t n = ddp_build(ll, sizeof ll, 77, 12, 1, &to, &src, DDP_NBP, nbp, k);
+    fl = elap_build(f, ELAP_MAX_FRAME, MAC_A, OTHER, ET_DDP, ll + 3, n - 3);
+    et_link_rx(&l, f, fl, t + 100);                       // the printer, 0xFF11.12
+
+    et_peer_t p[ET_MAP_SLOTS];
+    k = et_link_peers(&l, t + 1000, 600000, p, ET_MAP_SLOTS);
+    CHECK_EQ_INT(k, 1);
+    CHECK_EQ_INT(p[0].net, 0xFF10);
+    CHECK_EQ_INT(p[0].node, 12);
+    CHECK_EQ_MEM(p[0].hw, THEM, 6);
+}
+
 
 // W-1082: a lookup of every LaserWriter goes to the AppleTalk multicast.
 static void test_lookup_out_elap(void)
@@ -1030,6 +1063,7 @@ int main(void)
     test_zone_pong();
     test_radio_normalize();
     test_peers();
+    test_peer_printer();
     test_peer_names();
     TEST_END;
 }

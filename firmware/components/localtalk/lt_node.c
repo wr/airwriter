@@ -110,6 +110,7 @@ static void respond(lt_node_t *n, const lt_route_t *to, uint8_t src_sock, const 
 
 static void name_reply(lt_node_t *n, const ddp_t *d, const nbp_t *q, uint64_t now);
 static void name_registering(lt_node_t *n, const ddp_t *d, const nbp_t *q, uint64_t now);
+static void printer_note(lt_node_t *n, const ddp_t *d, const lt_addr_t *a);
 
 static void on_nbp(lt_node_t *n, const ddp_t *d, uint64_t now)
 {
@@ -120,9 +121,12 @@ static void on_nbp(lt_node_t *n, const ddp_t *d, uint64_t now)
         nbp_name(ws, LT_NAME_TYPE);
         if (nbp_match(ws, q.t.type)) {
             name_reply(n, d, &q, now);
-        } else if (n->ops.found && q.count && q.t.obj[0]) {
-            // W-1082: an answer to lt_node_lookup. Reach its socket as on_nbp
-            // answers a lookup: through the router that relayed it, if any.
+        } else if (q.count && q.t.obj[0]) {
+            // The node asks for nothing else: an answer to lt_node_lookup.
+            printer_note(n, d, &q.t.addr);
+            if (!n->ops.found) return;
+            // W-1082: reach its socket as on_nbp answers a lookup: through
+            // the router that relayed it, if any.
             lt_route_t r = { q.t.addr, q.t.addr.node, 0 };
             if (!r.addr.net) r.addr.net = d->src.net;
             if (d->is_long || (q.t.addr.net && q.t.addr.net != n->net)) {
@@ -751,6 +755,7 @@ static void seen_note(lt_node_t *n, uint16_t net, uint8_t node, uint64_t now)
         for (int i = 1; i < LT_SEEN_SLOTS; i++)
             if (n->seen[i].at_s < n->seen[k].at_s) k = i;
     }
+    if (n->seen[k].node != node || n->seen[k].net != net) n->seen[k].printer = 0;
     // New here, or back after a quiet spell: someone new until it says otherwise.
     if (n->seen[k].node != node || n->seen[k].net != net || !seen_live(n, k, now)) {
         n->seen[k].tries = 0;
@@ -767,13 +772,29 @@ static const uint8_t *seen_name(const lt_node_t *n, int i)
     return i >= 0 && n->names && n->names[i][0] ? n->names[i] : NULL;
 }
 
+static int seen_printer(const lt_node_t *n, int i)
+{
+    return i >= 0 && n->seen[i].printer && !seen_name(n, i);
+}
+
+// Its own answer marks a printer: one a router relays comes from the router.
+static void printer_note(lt_node_t *n, const ddp_t *d, const lt_addr_t *a)
+{
+    if (a->node != d->llap_src || d->src.node != d->llap_src) return;
+    n->printers[a->node / 8] |= (uint8_t)(1u << (a->node % 8));
+    int i = seen_find(n, d->src.net, a->node);
+    if (i >= 0) n->seen[i].printer = 1;
+}
+
 size_t lt_node_seen(const lt_node_t *n, uint64_t now, uint32_t within_ms, lt_seen_t *out, size_t max)
 {
     uint32_t t = (uint32_t)(now / 1000);
     lt_seen_t all[LT_SEEN_SLOTS];
     size_t k = 0;
     for (int i = 0; i < LT_SEEN_SLOTS; i++) {
-        if (!n->seen[i].node || (uint64_t)(t - n->seen[i].at_s) * 1000 >= within_ms) continue;
+        if (!n->seen[i].node || (uint64_t)(t - n->seen[i].at_s) * 1000 >= within_ms ||
+            seen_printer(n, i))
+            continue;
         lt_seen_t s = { n->seen[i].node, t - n->seen[i].at_s, seen_name(n, i) };
         size_t j = k++;
         while (j > 0 && all[j - 1].ago_s > s.ago_s) { all[j] = all[j - 1]; j--; }   // newest first
@@ -787,6 +808,11 @@ size_t lt_node_seen(const lt_node_t *n, uint64_t now, uint32_t within_ms, lt_see
 const uint8_t *lt_node_name(const lt_node_t *n, uint16_t net, uint8_t node)
 {
     return seen_name(n, seen_find(n, net, node));
+}
+
+int lt_node_is_printer(const lt_node_t *n, uint16_t net, uint8_t node)
+{
+    return seen_printer(n, seen_find(n, net, node));
 }
 
 // ------------------------------------------------------------- names
@@ -818,7 +844,7 @@ static void names_tick(lt_node_t *n, uint64_t now)
     }
     if (due < 0 || now - n->name_at < LT_NAME_GAP_MS) return;
     name_ask(n, n->seen[due].net, n->seen[due].node);
-    if (n->seen[due].tries < 0xFF) n->seen[due].tries++;
+    if (n->seen[due].tries < 0x7F) n->seen[due].tries++;
     // Each wait for an answer twice the last, up to the refresh: a Mac
     // starting up may be minutes from registering its name.
     unsigned k = n->seen[due].tries - 1u;

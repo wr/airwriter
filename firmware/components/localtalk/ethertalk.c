@@ -554,7 +554,7 @@ static void side_events(et_side_t *s, int *lookup, int *fresh)
     const lt_node_t *n = &s->link.node;
     if (n->st.replies != s->seen_replies) *lookup = 1;
     for (size_t k = 0; k < sizeof s->seen_heard; k++) {
-        if (n->heard[k] & ~s->seen_heard[k]) *fresh = 1;
+        if (n->heard[k] & ~n->printers[k] & ~s->seen_heard[k]) *fresh = 1;
         s->seen_heard[k] = n->heard[k];
     }
     s->seen_replies = n->st.replies;

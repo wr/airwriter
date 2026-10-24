@@ -93,5 +93,5 @@ void et_link_set_mac(et_link_t *l, const uint8_t mac[ETH_ALEN], uint64_t now);
 // now, not when the PAP timers notice.
 void et_link_down(et_link_t *l, uint64_t now);
 // The peers heard in the last within_ms, newest first, one per MAC (its newest
-// address), at most max of them.
+// address), at most max of them, printers aside (lt_node_is_printer).
 size_t et_link_peers(const et_link_t *l, uint64_t now, uint32_t within_ms, et_peer_t *out, size_t max);
