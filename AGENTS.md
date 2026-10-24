@@ -147,7 +147,10 @@ What works on `main`:
   ribbon's inks, status as lit bar lamps, low platinum keys; in a window on a big screen, the
   sidebar first on a phone. AppleTalk is one card per way in (AppleTalk Port, Networked Macs,
   Basilisk II, Infinite Mac) with its switch and the Macs heard in the last 10 minutes, each by
-  its Macintosh name when it gives one, its address beside the time. Every link asks each node it
+  its Macintosh name when it gives one, its address beside the time. A node that answers the
+  board's printer lookups (a printer, another AirWriter) is left off unless it gives a Macintosh
+  name, and the panel's "a Mac heard" skips it (W-1096); a printer switched on while the board
+  runs shows as a Mac until the next look (up to 5 min). Every link asks each node it
   hears for `=:Workstation@*` (System 7 registers the Sharing Setup name so), a LkUp straight to
   that node: 1 s after first hearing it, then backing off from 5 s to 10 minutes until it
   answers, and 1 s after it is seen registering its name; then every 10 minutes. Names are in

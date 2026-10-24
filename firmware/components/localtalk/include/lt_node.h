@@ -169,6 +169,12 @@ typedef enum { LT_ACQUIRING = 0, LT_ONLINE } lt_phase_t;
 // sent anything but an ENQ, and when. Full, the one quiet longest makes room.
 // On ELAP a node is its network and node: every Mac picks its own network in
 // the startup range. On the cable the network is left out.
+// The page lists Macs, so a printer is kept but not listed: a node that
+// answered one of the board's printer lookups (lt_node_lookup), a printer or
+// another AirWriter, unless it also gives a Macintosh name (a Mac sharing a
+// printer). The mark lasts while the slot is that node's, through a quiet
+// spell: a printer switched off and on keeps its ID (on the cable, in the
+// server range, which no Mac takes).
 #define LT_SEEN_SLOTS 16
 #define LT_SEEN_MS    600000      // the page's "connected": heard in the last 10 minutes
 // name: its Macintosh name while the node is unchanged, or NULL.
@@ -256,10 +262,12 @@ typedef struct {
     uint8_t    last_lkup[3 * (NBP_NAME_MAX + 1) + 2];
     uint64_t   last_lkup_at;
     uint8_t    heard[32];      // bit n: node n has sent a frame
+    uint8_t    printers[32];   // bit n: node n answered a printer lookup: not a Mac to the panel
     struct {
         uint16_t net;          // ELAP only
         uint8_t  node;         // 0: free
-        uint8_t  tries;        // name asks since the last answer
+        uint8_t  tries : 7;    // name asks since the last answer
+        uint8_t  printer : 1;  // it answered one of our printer lookups
         uint32_t at_s;         // last heard
         uint64_t ask_at;       // when its name is next asked
     } seen[LT_SEEN_SLOTS];
@@ -302,8 +310,12 @@ void lt_node_set_status(lt_node_t *n, uint16_t status);
 // the address is gone (the link's MAC changed) and the node waits for the next.
 // A change while a connection is open ends that job abandoned first.
 void lt_node_set_address(lt_node_t *n, uint16_t net, uint8_t node, uint64_t now);
-// The nodes heard in the last within_ms, newest first, at most max of them.
+// The Macs heard in the last within_ms, newest first, at most max of them:
+// the nodes heard, printers aside.
 size_t lt_node_seen(const lt_node_t *n, uint64_t now, uint32_t within_ms, lt_seen_t *out, size_t max);
+// net.node answered a printer lookup and gave no Macintosh name: a printer,
+// not a Mac (net is ignored on the cable).
+int lt_node_is_printer(const lt_node_t *n, uint16_t net, uint8_t node);
 // The Macintosh name of net.node (net is ignored on the cable), or NULL. It
 // points into the node's table: valid until the node next changes.
 const uint8_t *lt_node_name(const lt_node_t *n, uint16_t net, uint8_t node);

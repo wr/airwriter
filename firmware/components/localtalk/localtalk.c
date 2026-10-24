@@ -242,7 +242,7 @@ static void lt_task(void *arg)
         int lookup = s_node.st.replies != s_seen_replies;
         int fresh = 0;
         for (size_t k = 0; k < sizeof s_seen_heard; k++) {
-            if (s_node.heard[k] & ~s_seen_heard[k]) fresh = 1;
+            if (s_node.heard[k] & ~s_node.printers[k] & ~s_seen_heard[k]) fresh = 1;
             s_seen_heard[k] = s_node.heard[k];
         }
         s_seen_phase = s_node.phase;

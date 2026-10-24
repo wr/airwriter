@@ -18,6 +18,7 @@ typedef enum {
     LT_EV_ONLINE,       // the node ID is ours
     LT_EV_LOOKUP,       // an NBP LkUp for us was answered: a Chooser is looking
     LT_EV_NEW_NODE,     // a node's first frame (not an ENQ) since boot: a Mac is on the cable
+                        // (a printer's first, its answer to our lookup, is not)
 } lt_event_t;
 
 typedef struct {

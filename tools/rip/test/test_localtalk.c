@@ -1679,6 +1679,83 @@ static void test_names_off(void)
     CHECK(seen_name(&n, 83, t + 60000) == NULL);
 }
 
+// Printers on the cable are heard all day (answers to the board's lookups,
+// status, queries), but they are not Macs: whoever answers one of the
+// board's printer lookups (lt_node_lookup) leaves the list, unless it gives
+// a Macintosh name too (a Mac sharing a printer is still a Mac).
+static int listed(const lt_node_t *n, uint8_t node, uint64_t now)
+{
+    lt_seen_t s[LT_SEEN_SLOTS];
+    size_t k = lt_node_seen(n, now, LT_SEEN_MS, s, LT_SEEN_SLOTS);
+    for (size_t i = 0; i < k; i++)
+        if (s[i].node == node) return 1;
+    return 0;
+}
+
+static int printer_bit(const lt_node_t *n, uint8_t node)
+{
+    return !!(n->printers[node / 8] & (1u << (node % 8)));
+}
+
+static void test_printer_not_a_mac(void)
+{
+    lt_node_t n;
+    uint64_t t = online_named(&n, 184);
+    uint8_t f[LLAP_MAX];
+    static const uint8_t NTR[] = { 24, 'P','e','r','s','o','n','a','l',' ','L','a','s','e','r',
+                                   'W','r','i','t','e','r',' ','N','T','R' };
+    const uint8_t rts83[] = { 184, 83, LLAP_RTS }, rts233[] = { 184, 233, LLAP_RTS };
+    lt_node_rx(&n, rts83, sizeof rts83, t);              // a Mac
+    size_t fl = name_reply(f, 233, 184, "LaserWriter", NTR);
+    lt_node_rx(&n, f, fl, t + 100);                       // the printer answers a lookup
+    CHECK(listed(&n, 83, t + 200));
+    CHECK(!listed(&n, 233, t + 200));
+    CHECK(printer_bit(&n, 233));                          // and "a Mac heard" stays dark
+    CHECK(!printer_bit(&n, 83));
+
+    // It goes on talking: still not a Mac. Switched off past the list's 10
+    // minutes and on again, it is the same printer at the same ID.
+    lt_node_rx(&n, rts233, sizeof rts233, t + 5000);
+    CHECK(!listed(&n, 233, t + 5000));
+    uint64_t back = t + 5000 + LT_SEEN_MS + 1000;
+    lt_node_rx(&n, rts233, sizeof rts233, back);
+    CHECK(!listed(&n, 233, back));
+
+    // Another AirWriter answers its marker the same way.
+    static const uint8_t AW[] = { 15, 'i','m','a','g','e','w','r','i','t','e','r','-','2','4','3' };
+    fl = name_reply(f, 200, 184, "AirWriter", AW);
+    lt_node_rx(&n, f, fl, back + 100);
+    CHECK(!listed(&n, 200, back + 100));
+
+    // A Mac that answers a printer lookup (it shares one) and gives its
+    // Macintosh name is a Mac.
+    fl = name_reply(f, 83, 184, "LaserWriter", SE30);
+    lt_node_rx(&n, f, fl, back + 200);
+    CHECK(!listed(&n, 83, back + 200));
+    fl = name_reply(f, 83, 184, "Workstation", SE30);
+    lt_node_rx(&n, f, fl, back + 300);
+    CHECK(listed(&n, 83, back + 300));
+
+    // An answer a router relays from a printer beyond it (net 5, node 12)
+    // marks neither the router nor node 12 on this cable.
+    const uint8_t rts12[] = { 184, 12, LLAP_RTS };
+    lt_node_rx(&n, rts12, sizeof rts12, back + 400);
+    nbp_tuple_t r = { .addr = { 5, 12, 0x81 }, .enumerator = 0 };
+    memcpy(r.obj, NTR, sizeof NTR);
+    nbp_name(r.type, "LaserWriter");
+    r.zone[0] = 1;
+    r.zone[1] = '*';
+    uint8_t nbp[2 + 5 + 3 * (NBP_NAME_MAX + 1)];
+    size_t k = nbp_build(nbp, sizeof nbp, NBP_LKUP_REPLY, 1, &r);
+    lt_addr_t dst = { 0, 184, SOCK_NIS }, src = { 5, 12, SOCK_NIS };
+    fl = ddp_build(f, LLAP_MAX, 184, 254, 1, &dst, &src, DDP_NBP, nbp, k);
+    lt_node_rx(&n, f, fl, back + 500);
+    CHECK(listed(&n, 12, back + 500));
+    CHECK(listed(&n, 254, back + 500));
+    CHECK(!printer_bit(&n, 12));
+    CHECK(!printer_bit(&n, 254));
+}
+
 
 // ------------------------------------------------------------- W-1082
 
@@ -1854,6 +1931,7 @@ int main(void)
     test_name_back_after_quiet();
     test_name_paced();
     test_names_off();
+    test_printer_not_a_mac();
     test_serve_off();
     test_lookup_out();
     TEST_END;

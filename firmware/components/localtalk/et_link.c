@@ -324,7 +324,8 @@ size_t et_link_peers(const et_link_t *l, uint64_t now, uint32_t within_ms, et_pe
     size_t k = 0;
     for (int i = 0; i < ET_MAP_SLOTS; i++) {
         const et_map_t *m = &l->map[i];
-        if (!m->node || now - m->at > within_ms) continue;
+        if (!m->node || now - m->at > within_ms || lt_node_is_printer(&l->node, m->net, m->node))
+            continue;
         et_peer_t p = { m->net, m->node, {0}, (uint32_t)((now - m->at) / 1000),
                         lt_node_name(&l->node, m->net, m->node) };
         memcpy(p.hw, m->hw, ETH_ALEN);
