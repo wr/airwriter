@@ -10,6 +10,7 @@
 #include "esp_err.h"
 #include "printers_core.h"
 #include "ipp_server.h"
+#include "lt_node.h"
 
 typedef enum {
     PORT_NONE,              // nothing found on the port yet
@@ -48,6 +49,12 @@ void        printers_port_seen(int iw_model, int ready);
 // What laser.c heard (once per printer, its link as at_link_t) and its query.
 void        printers_at_seen(int at_link, const uint8_t *name, const uint8_t *type);
 void        printers_at_queried(int id, int ok, const lw_info_t *info);
+
+// What old Macs are offered on a link (at_link_t): on a way in that is on,
+// every printer AirWriter can carry there (pr_offers): the port's ImageWriter
+// as the node's own name, AppleTalk printers from other links under their own;
+// on one that is off, nothing. The AirWriter marker (host) either way.
+void        printers_offers(int at_link, int on, const char *host, lt_offers_t *o);
 
 port_mode_t printers_port_mode(void);
 int         printers_port_is_imagewriter(void);

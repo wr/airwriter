@@ -239,10 +239,14 @@ static void test_nbp_match(void)
     pat[0] = 5; memcpy(pat + 1, "Im\xC5XX", 5);           CHECK(!nbp_match(pat, name));
     pat[0] = 1; pat[1] = 0xC5;                            CHECK(nbp_match(pat, name));
 
-    // UTF-8 in the queue name: one '?' per character.
+    // UTF-8 in a printer's name: MacRoman where it has the character (W-1088),
+    // one '?' per character where it has not.
     nbp_name(name, "Caf\xC3\xA9 Writer");
     CHECK_EQ_INT(name[0], 11);
-    CHECK_EQ_MEM(name + 1, "Caf? Writer", 11);
+    CHECK_EQ_MEM(name + 1, "Caf\x8E Writer", 11);
+    nbp_name(name, "Wells\xE2\x80\x99s \xE2\x86\x92 IW");      // the curly apostrophe; an arrow
+    CHECK_EQ_INT(name[0], 12);
+    CHECK_EQ_MEM(name + 1, "Wells\xD5s ? IW", 12);
     nbp_name(name, "0123456789012345678901234567890123456789");
     CHECK_EQ_INT(name[0], NBP_NAME_MAX);
 }

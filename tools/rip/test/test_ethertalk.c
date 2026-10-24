@@ -347,6 +347,71 @@ static void test_lookup_from_mac(void)
     CHECK_EQ_INT(memcmp(r.t.obj + 1, "ImageWriter II", 14), 0);
 }
 
+// An NBP LkUp of =:type@* from the Mac, as lkup() builds it.
+static size_t lkup_type(uint8_t *nbp, const char *type)
+{
+    size_t k = 0, tl = strlen(type);
+    nbp[k++] = 0x21; nbp[k++] = 0x1F;
+    nbp[k++] = 0xFF; nbp[k++] = 0x10; nbp[k++] = 12; nbp[k++] = 0xFD; nbp[k++] = 0;
+    nbp[k++] = 1; nbp[k++] = '=';
+    nbp[k++] = (uint8_t)tl; memcpy(nbp + k, type, tl); k += tl;
+    nbp[k++] = 1; nbp[k++] = '*';
+    return k;
+}
+
+// The replies to one lookup: how many, and the k-th's name and socket.
+static int lkup_replies(et_link_t *l, const char *type, uint64_t t, int k, uint8_t *obj, uint8_t *sock)
+{
+    uint8_t nbp[64], f[ELAP_MAX_FRAME];
+    reset_wire();
+    size_t fl = mac_dg(f, THEM, ET_AT_MCAST, 0, 0xFF, SOCK_NIS, DDP_NBP, nbp, lkup_type(nbp, type));
+    et_link_rx(l, f, fl, t);
+    int n = 0;
+    for (int i = 0; i < nfr; i++) {
+        ddp_t d;
+        nbp_t r;
+        if (sent_what(i, NULL, &d) != 2 || nbp_parse(d.data, d.len, &r) || r.fn != NBP_LKUP_REPLY)
+            continue;
+        if (n == k) {
+            memcpy(obj, r.t.obj, 1 + (size_t)r.t.obj[0]);
+            *sock = r.t.addr.sock;
+        }
+        n++;
+    }
+    return n;
+}
+
+// W-1088: a link offers old Macs the port's ImageWriter under its name, the
+// printers relayed from other links under theirs, and the AirWriter marker.
+static void test_offers_registered(void)
+{
+    et_link_t l;
+    uint64_t t = link_online(&l, &ID_A, MAC_A, 0xFF23, 77);
+    uint8_t own[NBP_NAME_MAX + 1], mark[NBP_NAME_MAX + 1], obj[NBP_NAME_MAX + 1], sock = 0;
+    lt_offer_t rel[1];
+    nbp_name(own, "Den ImageWriter");
+    nbp_name(rel[0].obj, "Office");
+    nbp_name(rel[0].type, "LaserWriter");
+    nbp_name(mark, "airwriter-2434");
+    lt_node_offer(&l.node, own, rel, 1, mark);
+
+    CHECK_EQ_INT(lkup_replies(&l, "LaserWriter", t, 0, obj, &sock), 1);
+    CHECK_EQ_MEM(obj, "\x06" "Office", 7);
+    CHECK_EQ_INT(sock, 0x85);
+    CHECK_EQ_INT(lkup_replies(&l, "ImageWriter", t, 0, obj, &sock), 1);
+    CHECK_EQ_MEM(obj, "\x0F" "Den ImageWriter", 16);
+    CHECK_EQ_INT(sock, LT_SOCK_SLS);
+    CHECK_EQ_INT(lkup_replies(&l, "AirWriter", t, 0, obj, &sock), 1);
+    CHECK_EQ_MEM(obj, "\x0E" "airwriter-2434", 15);
+    CHECK_EQ_INT(sock, 0x88);
+
+    // No ImageWriter on the port and nothing relayed: only the marker answers.
+    lt_node_offer(&l.node, NULL, NULL, 0, mark);
+    CHECK_EQ_INT(lkup_replies(&l, "ImageWriter", t, 0, obj, &sock), 0);
+    CHECK_EQ_INT(lkup_replies(&l, "LaserWriter", t, 0, obj, &sock), 0);
+    CHECK_EQ_INT(lkup_replies(&l, "AirWriter", t, 0, obj, &sock), 1);
+}
+
 static void test_unresolved_then_aarp(void)
 {
     et_link_t l;
@@ -946,6 +1011,7 @@ int main(void)
     test_acquire_hint_and_clash();
     test_answers_aarp();
     test_lookup_from_mac();
+    test_offers_registered();
     test_unresolved_then_aarp();
     test_rx_drops();
     test_pap_fixture_ethertalk();

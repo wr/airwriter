@@ -179,19 +179,6 @@ size_t nbp_build(uint8_t *out, size_t cap, uint8_t fn, uint8_t id, const nbp_tup
     return n;
 }
 
-void nbp_name(uint8_t *dst, const char *src)
-{
-    size_t n = 0;
-    for (const unsigned char *s = (const unsigned char *)src; *s && n < NBP_NAME_MAX; s++) {
-        if (*s < 0x80) {
-            dst[1 + n++] = *s;
-        } else if ((*s & 0xC0) != 0x80) {   // one '?' per UTF-8 character, not per byte
-            dst[1 + n++] = '?';
-        }
-    }
-    dst[0] = (uint8_t)n;
-}
-
 // MacRoman 0x80-0xFF in Unicode, as Apple's ROMAN.TXT (and Python's mac_roman)
 // has them: 0xDB is the euro since Mac OS 8.5, the currency sign before.
 static const uint16_t mac_roman[128] = {
@@ -212,6 +199,29 @@ static const uint16_t mac_roman[128] = {
     0xF8FF, 0x00D2, 0x00DA, 0x00DB, 0x00D9, 0x0131, 0x02C6, 0x02DC,
     0x00AF, 0x02D8, 0x02D9, 0x02DA, 0x00B8, 0x02DD, 0x02DB, 0x02C7,
 };
+
+void nbp_name(uint8_t *dst, const char *src)
+{
+    size_t n = 0;
+    const unsigned char *s = (const unsigned char *)src;
+    while (*s && n < NBP_NAME_MAX) {
+        if (*s < 0x80) {
+            dst[1 + n++] = *s++;
+            continue;
+        }
+        // One UTF-8 character: its MacRoman byte, or one '?' for it.
+        uint32_t cp = 0;
+        int more = *s >= 0xF0 ? 3 : *s >= 0xE0 ? 2 : *s >= 0xC0 ? 1 : 0;
+        cp = *s++ & (0x3F >> more);
+        for (int i = 0; i < more && (*s & 0xC0) == 0x80; i++) cp = cp << 6 | (*s++ & 0x3F);
+        while ((*s & 0xC0) == 0x80) s++;          // a stray continuation byte
+        uint8_t b = '?';
+        for (int i = 0; i < 128; i++)
+            if (mac_roman[i] == cp) { b = (uint8_t)(0x80 + i); break; }
+        dst[1 + n++] = b;
+    }
+    dst[0] = (uint8_t)n;
+}
 
 size_t nbp_utf8(char *out, size_t cap, const uint8_t *name)
 {

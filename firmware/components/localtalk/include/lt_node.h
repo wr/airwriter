@@ -32,6 +32,7 @@ struct pap_client;              // pap_client.h (W-1082)
 #define LT_SOCK_CONN  0x82      // the one connection's ATP responding socket
 #define LT_SOCK_PAPC    0x83    // W-1082: the PAP client's connection socket
 #define LT_SOCK_PAPC_ST 0x84    // and the one its SendStatus goes from
+#define LT_SOCK_REG(r)  (0x84 + (r))   // W-1088: registration r's (1..LT_REG_MAX-1) listening socket
 // W-1088: registrations beside the node's own: printers offered to Macs here
 // (listening sockets 0x85..0x88) and the AirWriter marker, whose type is
 // LT_AIRWRITER_TYPE and which never opens.
@@ -308,6 +309,21 @@ void     lt_node_set_serve(lt_node_t *n, int serve);
 // W-1088: registration reg (1..LT_REG_MAX-1) as obj:type (Pascal) on listening
 // socket sls; obj NULL clears it. 0, or -1 for a bad reg.
 int      lt_node_register(lt_node_t *n, int reg, const uint8_t *obj, const uint8_t *type, uint8_t sls);
+// W-1088: what old Macs are offered on this node. own: the port's ImageWriter
+// as the node's own name (type ImageWriter, on LT_SOCK_SLS), or NULL or empty
+// for none; rel: up to LT_REG_MAX-2 printers relayed from other links, at
+// registrations 1.. under their own names and types; marker: this AirWriter's
+// host name, registered as marker:AirWriter at the last registration (it never
+// opens). An open connection is left alone.
+typedef struct { uint8_t obj[NBP_NAME_MAX + 1], type[NBP_NAME_MAX + 1]; } lt_offer_t;
+void     lt_node_offer(lt_node_t *n, const uint8_t *own, const lt_offer_t *rel, int n_rel,
+                       const uint8_t *marker);
+// The same, kept by a link for its next node.
+typedef struct {
+    uint8_t    own[NBP_NAME_MAX + 1], marker[NBP_NAME_MAX + 1];
+    lt_offer_t rel[LT_REG_MAX - 2];
+    int        n_rel;
+} lt_offers_t;
 // Which registration the open connection is on (0 the node's own).
 int      lt_node_pap_reg(const lt_node_t *n);
 // 1 for a node heard answering as an AirWriter in the last ten minutes, or this one.

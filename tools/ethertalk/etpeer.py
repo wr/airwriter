@@ -9,6 +9,7 @@ as the Chooser does, and prints a file over PAP as the AppleTalk ImageWriter
 driver does (OpenConn, the board's SendData answered with Data, CloseConn).
 
     python3 tools/ethertalk/etpeer.py tunnel lookup
+    python3 tools/ethertalk/etpeer.py zone ZONE chooser LaserWriter
     python3 tools/ethertalk/etpeer.py tunnel print fixtures/pap-iw701-page.bin
     python3 tools/ethertalk/etpeer.py tunnel named "Wells's iMac" 30
     python3 tools/ethertalk/etpeer.py zone ZONE lookup
@@ -375,6 +376,27 @@ class Mac:
                 print(f"found {obj[1:].decode('mac_roman')}:ImageWriter at {net}.{node} socket {sock}")
                 return net, node, sock
         sys.exit("no ImageWriter answered the lookup")
+
+    async def chooser(self, typ):
+        """Every answer to =:TYPE@* in two seconds, as the Chooser lists them."""
+        nbp = bytes([0x21, 0x2B]) + struct.pack(">HBBB", self.net, self.node, MY_NIS, 0) + \
+              pstr(b"=") + pstr(typ.encode("mac_roman")) + pstr(b"*")
+        await self.send_ddp(0, 0xFF, NIS, MY_NIS, DDP_NBP, nbp)
+        seen, end = set(), time.monotonic() + 2.0
+        while time.monotonic() < end:
+            d = await self.wait_dg(lambda d: d[12] == DDP_NBP and d[10] == MY_NIS and d[13] >> 4 == 3,
+                                   end - time.monotonic())
+            if not d:
+                break
+            t = d[15:]
+            net, node, sock = struct.unpack(">HBB", t[:4])
+            obj = t[6:6 + t[5]].decode("mac_roman")
+            ty = t[7 + t[5]:7 + t[5] + t[6 + t[5]]].decode("mac_roman")
+            if (obj, ty, net, node, sock) not in seen:
+                seen.add((obj, ty, net, node, sock))
+                print(f"{obj}:{ty} at {net}.{node} socket {sock}")
+        if not seen:
+            print(f"nothing answered =:{typ}@*")
 
     async def request(self, net, node, sock, user, data=b"", xo=True, tries=5):
         """An ATP request; the first response packet's (user, data)."""
@@ -752,6 +774,8 @@ async def main(argv):
         await mac.acquire()
         if rest[0] == "lookup":
             await mac.lookup()
+        elif rest[0] == "chooser" and len(rest) == 2:
+            await mac.chooser(rest[1])
         elif rest[0] == "print" and len(rest) == 2:
             await mac.print_file(open(rest[1], "rb").read())
         elif rest[0] == "named" and len(rest) == 3:

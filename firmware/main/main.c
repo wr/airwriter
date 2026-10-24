@@ -819,9 +819,12 @@ static void printers_look(void)
     laser_look_now();
 }
 
+static void offers_apply(void);
+
 static void printers_changed(void)
 {
     line_source();
+    offers_apply();
 }
 
 static void printers_web_json(void *ctx, char *buf, size_t cap)
@@ -1694,6 +1697,7 @@ static int et_settings_set(void *ctx, int tunnel, int radio, int infinite, const
     esp_err_t err = ethertalk_apply(tunnel, radio, infinite, zone);
     if (err == ESP_ERR_INVALID_ARG) return -1;
     if (err != ESP_OK) ESP_LOGE(TAG, "EtherTalk settings not saved: %s", esp_err_to_name(err));
+    offers_apply();                 // W-1088: a way in on or off changes what Macs see
     return 0;
 }
 
@@ -1812,6 +1816,29 @@ static int lt_wanted(void)
 #endif
 }
 
+// W-1088: what old Macs see on each AppleTalk way in: on one that is on, every
+// printer AirWriter can carry there; on one that is off, only the AirWriter
+// marker (a link may run for a printer on it). Again whenever the printer list
+// or a way-in switch changes.
+static void offers_apply(void)
+{
+    static lt_offers_t *o;
+    if (!o) o = heap_caps_calloc(1, sizeof *o, MALLOC_CAP_SPIRAM);
+    if (!o) return;
+    int tunnel = 0, radio = 0, infinite = 0;
+    char zone[40];
+    if (ethertalk_running()) ethertalk_settings(&tunnel, &radio, &infinite, zone, sizeof zone);
+    printers_offers(AT_LINK_CABLE, lt_wanted(), s_set.hostname, o);
+    localtalk_set_offers(o);
+    if (!ethertalk_running()) return;
+    printers_offers(AT_LINK_TUNNEL, tunnel, s_set.hostname, o);
+    ethertalk_set_offers(AT_LINK_TUNNEL, o);
+    printers_offers(AT_LINK_ZONE, infinite, s_set.hostname, o);
+    ethertalk_set_offers(AT_LINK_ZONE, o);
+    printers_offers(AT_LINK_RADIO, radio, s_set.hostname, o);
+    ethertalk_set_offers(AT_LINK_RADIO, o);
+}
+
 // W-1082: whether a LaserWriter needs the cable (laser.c's links callback).
 static volatile int s_laser_cable;
 
@@ -1828,6 +1855,7 @@ static void lt_roles_apply(void)
     }
     if (!localtalk_running()) lt_start(serve ? "the settings page" : "a LaserWriter");
     localtalk_set_roles(serve, s_laser_cable);
+    offers_apply();
 }
 
 // W-1079: the AppleTalk port's switch. Off quiets a running node (it cannot
@@ -2090,6 +2118,7 @@ void app_main(void)
         printers_port_name(s_set.queue, sizeof s_set.queue);
         if (!s_set.queue[0]) snprintf(s_set.queue, sizeof s_set.queue, "AirWriter");
     }
+    offers_apply();                 // the cable's, kept for its node's start
     s_ribbon = s_set.ribbon;
     // Wi-Fi saved before this restart: green greets the join (W-1049).
     if (settings_take_wifi_fresh()) printer_state_post(PS_EV_WIFI_FRESH);
@@ -2217,6 +2246,7 @@ void app_main(void)
     ESP_ERROR_CHECK(webui_start(&wcfg));
     ota_health_set(OH_WEB_UP, 1);
     et_start();
+    offers_apply();
 
     // W-1082, W-1088: the printers on AppleTalk, each shared on its own slot.
     laser_cfg_t lc = { .version = esp_app_get_description()->version, .links = laser_links,

@@ -246,6 +246,8 @@ esp_err_t localtalk_probe(const localtalk_cfg_t *cfg)
     return err;
 }
 
+static void offers_put(void);
+
 esp_err_t localtalk_start(const localtalk_cfg_t *cfg)
 {
     if (s_running) return ESP_OK;
@@ -280,6 +282,7 @@ esp_err_t localtalk_start(const localtalk_cfg_t *cfg)
     xSemaphoreTake(s_lock, portMAX_DELAY);
     lt_node_init(&s_node, &s_nc, &s_ops, now_ms());   // clears TashTalk's node bitmap
     lt_node_set_serve(&s_node, s_serve);
+    offers_put();
     lt_node_attach(&s_node, s_client);
     xSemaphoreGive(s_lock);
 
@@ -318,11 +321,30 @@ void localtalk_set_quiet(int quiet)
         s_nc.seed = esp_random() | 1;
         lt_node_init(&s_node, &s_nc, &s_ops, now);
         lt_node_set_serve(&s_node, s_serve);     // a new node: its roles again
+        offers_put();
         lt_node_attach(&s_node, s_client);
         s_quiet = 0;
         op_log(NULL, "the AppleTalk port is on");
     }
     xSemaphoreGive(s_lock);
+}
+
+// W-1088: the cable's offers, in PSRAM (internal RAM is Wi-Fi's), for each new node.
+static lt_offers_t *s_offers;
+
+static void offers_put(void)
+{
+    if (s_offers) lt_node_offer(&s_node, s_offers->own, s_offers->rel, s_offers->n_rel, s_offers->marker);
+}
+
+void localtalk_set_offers(const lt_offers_t *o)
+{
+    if (!s_offers) s_offers = heap_caps_calloc(1, sizeof *s_offers, MALLOC_CAP_SPIRAM);
+    if (!s_offers) return;
+    if (s_lock) xSemaphoreTake(s_lock, portMAX_DELAY);
+    *s_offers = *o;
+    if (s_running) offers_put();
+    if (s_lock) xSemaphoreGive(s_lock);
 }
 
 void localtalk_set_roles(int serve, int laser)

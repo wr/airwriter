@@ -422,6 +422,27 @@ void printers_at_queried(int id, int ok, const lw_info_t *info)
     after_change(now != was);
 }
 
+void printers_offers(int at_link, int on, const char *host, lt_offers_t *o)
+{
+    memset(o, 0, sizeof *o);
+    nbp_name(o->marker, host ? host : "");
+    if (!s_started || !on) return;
+    int ids[PR_MAX];
+    lock();
+    int n = pr_offers(s_l, where_of(at_link), ids, PR_MAX);
+    for (int k = 0; k < n; k++) {
+        const pr_rec_t *r = pr_get(s_l, ids[k]);
+        if (r->where == PR_WHERE_PORT) {
+            if (r->kind == PR_KIND_IMAGEWRITER) nbp_name(o->own, r->name);
+        } else if (o->n_rel < (int)(sizeof o->rel / sizeof o->rel[0])) {
+            lt_offer_t *x = &o->rel[o->n_rel++];
+            memcpy(x->obj, r->nbp, sizeof x->obj);
+            memcpy(x->type, r->nbp_type, sizeof x->type);
+        }
+    }
+    unlock();
+}
+
 port_mode_t printers_port_mode(void)
 {
     if (!s_started) return PORT_NONE;

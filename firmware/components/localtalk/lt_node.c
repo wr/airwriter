@@ -142,7 +142,7 @@ static void on_nbp(lt_node_t *n, const ddp_t *d, uint64_t now)
     name_registering(n, d, &q, now);
     // The node's own name while it serves, and each registration (W-1088).
     int hits[LT_REG_MAX] = { 0 }, hit = 0;
-    hits[0] = n->serve && nbp_match(q.t.obj, n->obj) && nbp_match(q.t.type, n->type);
+    hits[0] = n->serve && n->obj[0] && nbp_match(q.t.obj, n->obj) && nbp_match(q.t.type, n->type);
     for (int r = 1; r < LT_REG_MAX; r++)
         hits[r] = n->reg[r].sls && nbp_match(q.t.obj, n->reg[r].obj) &&
                   nbp_match(q.t.type, n->reg[r].type);
@@ -395,7 +395,8 @@ static void on_atp(lt_node_t *n, const ddp_t *d, uint64_t now)
     }
 
     int reg = -1;
-    if (d->dst.sock == LT_SOCK_SLS) reg = n->serve ? 0 : -1;   // W-1082: no ImageWriter here
+    // W-1082, W-1088: no ImageWriter here, or none on the port to offer.
+    if (d->dst.sock == LT_SOCK_SLS) reg = n->serve && n->obj[0] ? 0 : -1;
     else for (int r = 1; r < LT_REG_MAX; r++) if (n->reg[r].sls && n->reg[r].sls == d->dst.sock) reg = r;
     if (reg >= 0 && fn == ATP_TREQ) {
         uint8_t aw[NBP_NAME_MAX + 1];
@@ -522,6 +523,28 @@ int lt_node_register(lt_node_t *n, int reg, const uint8_t *obj, const uint8_t *t
     n->reg[reg].type[0] = (uint8_t)tl;
     n->reg[reg].sls = sls;
     return 0;
+}
+
+void lt_node_offer(lt_node_t *n, const uint8_t *own, const lt_offer_t *rel, int n_rel,
+                   const uint8_t *marker)
+{
+    memset(n->obj, 0, sizeof n->obj);
+    if (own && own[0]) memcpy(n->obj, own, 1 + (size_t)(own[0] > NBP_NAME_MAX ? NBP_NAME_MAX : own[0]));
+    if (n->obj[0] > NBP_NAME_MAX) n->obj[0] = NBP_NAME_MAX;
+    nbp_name(n->type, "ImageWriter");
+    for (int r = 1; r < LT_REG_MAX - 1; r++) {
+        int k = r - 1;
+        if (k < n_rel && rel && rel[k].obj[0])
+            lt_node_register(n, r, rel[k].obj, rel[k].type, (uint8_t)LT_SOCK_REG(r));
+        else
+            lt_node_register(n, r, NULL, NULL, 0);
+    }
+    uint8_t aw[NBP_NAME_MAX + 1];
+    nbp_name(aw, LT_AIRWRITER_TYPE);
+    if (marker && marker[0])
+        lt_node_register(n, LT_REG_MAX - 1, marker, aw, (uint8_t)LT_SOCK_REG(LT_REG_MAX - 1));
+    else
+        lt_node_register(n, LT_REG_MAX - 1, NULL, NULL, 0);
 }
 
 int lt_node_pap_reg(const lt_node_t *n) { return n->pap.open ? n->pap.reg : 0; }

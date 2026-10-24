@@ -53,6 +53,7 @@ typedef struct {
     uint32_t    seen_replies;      // what the panel was last told (W-1049)
     uint8_t     seen_heard[32];
     lt_name_t  *names;             // its Macs' names, in PSRAM (internal RAM is short)
+    lt_offers_t *offers;           // W-1088: what its Macs are offered, in PSRAM
 } et_side_t;
 
 static SemaphoreHandle_t s_lock;           // the links, the settings, the pending flags
@@ -255,6 +256,8 @@ static void side_init(et_side_t *s, const uint8_t mac[ETH_ALEN])
     et_ops_t o = { s, s == &s_tun ? tun_send : s == &s_zone ? zone_send : radio_send, op_log,
                    op_begin, op_data, op_room, op_end, op_claimed, op_found };
     et_link_init(&s->link, &c, &o, now_ms());
+    if (s->offers)
+        lt_node_offer(&s->link.node, s->offers->own, s->offers->rel, s->offers->n_rel, s->offers->marker);
 }
 
 // ------------------------------------------------------------- the tunnel
@@ -669,6 +672,19 @@ esp_err_t ethertalk_apply(int tunnel, int radio, int infinite, const char *zone)
     }
     xSemaphoreGive(s_lock);
     return err;
+}
+
+void ethertalk_set_offers(int link, const lt_offers_t *o)
+{
+    et_side_t *s = link == AT_LINK_TUNNEL ? &s_tun : link == AT_LINK_ZONE ? &s_zone
+                 : link == AT_LINK_RADIO ? &s_radio : NULL;
+    if (!s) return;
+    if (!s->offers) s->offers = heap_caps_calloc(1, sizeof *s->offers, MALLOC_CAP_SPIRAM);
+    if (!s->offers) return;
+    if (s_lock) xSemaphoreTake(s_lock, portMAX_DELAY);
+    *s->offers = *o;
+    if (s_running) lt_node_offer(&s->link.node, o->own, o->rel, o->n_rel, o->marker);
+    if (s_lock) xSemaphoreGive(s_lock);
 }
 
 void ethertalk_set_laser(int link, int on)
