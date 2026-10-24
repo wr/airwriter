@@ -252,8 +252,9 @@ static void resync_out(void *ctx, const uint8_t *buf, size_t n)
 }
 
 // A write failed: the printer stayed paused past STALL_ABORT, or the job was
-// cancelled. Abort the job so the rip task winds down instead of pushing the
-// rest of the page at a dead line.
+// cancelled. Abort the job so the rip task winds down and job_pipe drops the
+// rest of the job's bytes instead of pushing them at a dead line. On the
+// printer task, the one writing.
 static void printer_fail(void)
 {
     s_printer_failed = 1;
@@ -583,8 +584,8 @@ static void job_finished(const job_pipe_stats_t *st, int ok)
     if (!clean) {
         iw_link_job_end(&s_link, 0);
         // The rip may have stopped between writes, leaving up to a FIFO of
-        // the dead job queued behind a paused printer. This is the writing
-        // task, or no write ever ran.
+        // the dead job queued behind a paused printer. The printer task has
+        // stopped writing, or no write ever ran.
         serial_out_purge();
         if (s_job_cancelled) {
             ESP_LOGI(TAG, "job canceled after %u bytes in", (unsigned)st->doc_bytes);
@@ -604,9 +605,10 @@ static void job_finished(const job_pipe_stats_t *st, int ok)
 
     s_last_pages = (size_t)st->pages;
     s_last_bytes = st->printer_bytes;
-    ESP_LOGI(TAG, "ripped %d page%s, %ux%u dots, %u bytes in -> %u printer bytes in %ums",
-             st->pages, st->pages == 1 ? "" : "s", (unsigned)st->dst_w, (unsigned)st->dst_h,
-             (unsigned)st->doc_bytes, (unsigned)st->printer_bytes, (unsigned)st->ms);
+    ESP_LOGI(TAG, "ripped %d page%s, %ux%u dots, %u bytes in -> %u printer bytes in %ums, "
+             "all out in %ums", st->pages, st->pages == 1 ? "" : "s", (unsigned)st->dst_w,
+             (unsigned)st->dst_h, (unsigned)st->doc_bytes, (unsigned)st->printer_bytes,
+             (unsigned)st->rip_ms, (unsigned)st->ms);
     ESP_LOGI(TAG, "printer stream crc32 %08x", (unsigned)s_stream_crc);
 
     // Let the last byte clear the shift register before calling it printed.

@@ -240,16 +240,20 @@ Minimum viable set for iOS:
 - `Validate-Job` (0x0004)
 - Each printer answers at its own resource (3.15): `ipp/print` for the port's, `ipp/p<id>`
   for one on AppleTalk; any other path goes to the port's while it is shared.
-- `Print-Job` (0x0002) — body arrives chunked. The whole document goes into a ~1 MB PSRAM
-  buffer as fast as Wi-Fi delivers it (an iPhone Letter page is ~140 KB of URF; decoded it
-  would be 1.9 MB, which is why the buffer holds URF, not pixels), and the rip decodes from
-  there at the printer's pace. The response goes back as soon as the upload is complete,
+- `Print-Job` (0x0002) — body arrives chunked, into a 1 MB PSRAM buffer as fast as Wi-Fi
+  delivers it. An ImageWriter job holds 512 KB of URF in it, and the rip runs as the URF
+  arrives into the other 512 KB, which holds the printer's bytes and drains to the port at
+  9600 baud (W-1066): an iPhone Letter page is ~140 KB of URF and a full-page colour photo
+  ~5.7 MB, but either rips to under 460 KB of ImageWriter bytes, while pixels would be 1.9 MB
+  (gray) or 5.8 MB (colour). A LaserWriter job holds URF in all of it and rips at the
+  printer's pace. The response goes back as soon as the upload is complete,
   with the job `processing`; the job ends `completed`, `aborted` or `canceled` when the
   paper stops, and holds the printer until then (W-1042). Reading the socket to the end is
   also what makes a dropped upload visible at once: without the buffer a paused printer
   stalls the upload behind a zero window, and the client's FIN waits behind its unsent
-  data until paper returns. A document bigger than the buffer, or a board with no PSRAM
-  (8 KB internal ring), falls back to streaming with TCP backpressure.
+  data until paper returns. A document whose half outruns its 512 KB (a LaserWriter's URF
+  past 1 MB, an ImageWriter job's printer bytes past 512 KB), or a board with no PSRAM (8 KB
+  internal ring), falls back to streaming with TCP backpressure.
 - `Get-Job-Attributes` (0x0009) — iOS polls this for progress
 - `Get-Jobs` (0x000A)
 - `Cancel-Job` (0x0008)

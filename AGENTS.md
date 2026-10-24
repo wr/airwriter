@@ -42,8 +42,16 @@ What works on `main`:
   IPP integration finds it.
 - `printer-icons`: Apple's colour ImageWriter icon at 48, 128 and 512 px, served on port 631
   (SPEC §3.5). A Mac takes it only when the printer is added.
-- The whole job is buffered in 1 MB PSRAM and the client is answered when the upload ends
-  (`W-1042 Buffer the whole job in PSRAM and reply when the upload is done`).
+- The client is answered when its upload ends
+  (`W-1042 Buffer the whole job in PSRAM and reply when the upload is done`), from a 1 MB
+  PSRAM job buffer. An ImageWriter job splits it (`W-1066 Full-page colour photos overflow the
+  1 MB job buffer`): 512 KB of URF ahead of the rip, 512 KB of printer bytes behind it, which
+  the `prn` task feeds to the port, so the rip keeps pace with the upload and the printer
+  prints from memory. Any one page fits, a full-page colour photo included (~5.7 MB of URF,
+  250–350 KB to print; the worst page, colour noise, 460 KB). The upload waits on the printer
+  past 512 KB of printer bytes (a second colour photo page, or about five gray pages), and
+  when the ImageWriter is not ready as the job starts, past 512 KB of URF (the rip asks the
+  ribbon first). A LaserWriter job keeps the whole 1 MB for URF.
 - Out of paper or SELECT off pauses the job; clients show "Needs attention: check paper and
   SELECT" (processing-stopped, `media-empty-error`); the job aborts after
   `CONFIG_AIRWRITER_STALL_ABORT` (600 s).
@@ -301,9 +309,6 @@ Known issues, open:
 Linear is the queue; these are the live items.
 - `W-1091 Rev B: the main board's next revision`: the rev B list (`docs/hardware-rev-a.md`),
   with `W-1043 Rev B: through-hole dome LED for the power indicator` under it.
-- `W-1066 Full-page colour photos overflow the 1 MB job buffer` (Todo): measured; a photo page
-  is ~5 MB of URF, so its upload streams for ~5 min. Next is one full-page colour photo from the
-  iPhone to see whether iOS waits that long (it waited ~100 s for a LaserWriter photo).
 - `W-1046 Factory reset must always work, even with broken firmware` and
   `W-1045 Long-press factory reset with live feedback on the LED panel`: merged 2026-10-15, benched
   on board 1 (all pass). Board 1 has the W-1059 bootloader and partition table, so an image
@@ -338,8 +343,11 @@ Linear is the queue; these are the live items.
   2026-10-17, benched on board 1: self-ID answered "IW10C"; the iPhone, which had the printer
   cached black-only, offered colour under the same UUID with no "Waiting"; a colour screenshot
   printed (960 KB of URF, just under the 1 MB job buffer). Not yet seen on this build: a Black &
-  White print, a Mac queue (likely needs re-adding). Full-page colour photos overflow the job
-  buffer (`W-1066`, above). Released in v0.2.0.
+  White print, a Mac queue (likely needs re-adding). Released in v0.2.0.
+- `W-1066 Full-page colour photos overflow the 1 MB job buffer`: the split buffer (above) is
+  built, host-tested and on board 1, not yet benched with a photo. Owed: a full-page colour
+  photo from the iPhone, whose upload should end in about a minute with ~5 minutes of printing
+  after.
 - `W-1067 Web dashboard shows which ribbon is in: colour or black` and `W-1068 Better halftone:
   dot gain curve, serpentine, blue noise, interleaved colour`: merged 2026-10-17, benched on board 1.
   The dusk page printed through Atkinson and blue noise read the same to Wells; the uncorrected
