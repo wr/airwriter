@@ -4,6 +4,7 @@
 #include "webui_page.h"
 #include "settings.h"
 #include "fw_update.h"
+#include "memdiag.h"
 
 #include <string.h>
 #include <limits.h>
@@ -80,11 +81,23 @@ static esp_err_t page_get(httpd_req_t *req)
     return httpd_resp_send(req, WEBUI_HTML, HTTPD_RESP_USE_STRLEN);
 }
 
+// The JSON replies' buffers are in PSRAM, made at their first use, as
+// printers_get's and laser_get's: as statics they were 11 KB of the internal
+// RAM Wi-Fi buffers in (W-1094). One httpd task, so one buffer each.
+static char *psram_buf(char **p, size_t n)
+{
+    if (!*p) *p = heap_caps_malloc(n, MALLOC_CAP_SPIRAM);
+    return *p;
+}
+
 static esp_err_t status_get(httpd_req_t *req)
 {
-    static char json[2048];
+    enum { STATUS_JSON = 2048 };
+    static char *buf;
+    char *json = psram_buf(&buf, STATUS_JSON);
+    if (!json) return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "no memory");
     json[0] = '\0';
-    if (s_cfg.status_json) s_cfg.status_json(s_cfg.ctx, json, sizeof json);
+    if (s_cfg.status_json) s_cfg.status_json(s_cfg.ctx, json, STATUS_JSON);
     if (!json[0]) strcpy(json, "{}");
 
     httpd_resp_set_type(req, "application/json");
@@ -109,8 +122,11 @@ static esp_err_t panel_get(httpd_req_t *req)
 static esp_err_t lt_get(httpd_req_t *req)
 {
     if (!s_cfg.lt_json) return httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "no localtalk log");
-    static char json[4608];
-    s_cfg.lt_json(s_cfg.ctx, json, sizeof json);
+    enum { LT_JSON = 4608 };
+    static char *buf;
+    char *json = psram_buf(&buf, LT_JSON);
+    if (!json) return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "no memory");
+    s_cfg.lt_json(s_cfg.ctx, json, LT_JSON);
     httpd_resp_set_type(req, "application/json");
     return httpd_resp_sendstr(req, json);
 }
@@ -130,10 +146,32 @@ static esp_err_t lt_echo_post(httpd_req_t *req)
 static esp_err_t et_get(httpd_req_t *req)
 {
     if (!s_cfg.et_json) return httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "no ethertalk");
-    static char json[4608];
-    s_cfg.et_json(s_cfg.ctx, json, sizeof json);
+    enum { ET_JSON = 4608 };
+    static char *buf;
+    char *json = psram_buf(&buf, ET_JSON);
+    if (!json) return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "no memory");
+    s_cfg.et_json(s_cfg.ctx, json, ET_JSON);
     httpd_resp_set_type(req, "application/json");
     return httpd_resp_sendstr(req, json);
+}
+
+// W-1094: what holds internal RAM, now and at its lowest (memdiag.h). In PSRAM.
+static esp_err_t mem_get(httpd_req_t *req)
+{
+    enum { MEM_JSON = 6144 };
+    static char *json;
+    if (!json) json = heap_caps_malloc(MEM_JSON, MALLOC_CAP_SPIRAM);
+    if (!json) return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "no memory");
+    memdiag_json(json, MEM_JSON);
+    httpd_resp_set_type(req, "application/json");
+    return httpd_resp_sendstr(req, json);
+}
+
+// Forgets the low snapshot, so the next job's low is its own.
+static esp_err_t mem_reset_post(httpd_req_t *req)
+{
+    memdiag_reset_low();
+    return httpd_resp_sendstr(req, "ok");
 }
 
 static esp_err_t et_settings_reply(httpd_req_t *req)
@@ -245,7 +283,9 @@ static esp_err_t wifi_post(httpd_req_t *req)
     if (s_cfg.captive) settings_set_fresh(1);   // W-1088: the finish sheet awaits on the network
     led_grid_blip(LG_BLIP_SAVED);       // W-1049: taken; the restart follows
     httpd_resp_sendstr(req, "{\"ok\":true}");
-    xTaskCreate(reboot_task, "reboot", 2048, NULL, 5, NULL);
+    // As fw_update_restart: short of internal RAM, restart from this task
+    // rather than not at all (W-1094).
+    if (xTaskCreate(reboot_task, "reboot", 2048, NULL, 5, NULL) != pdPASS) reboot_task(NULL);
     return ESP_OK;
 }
 
@@ -600,6 +640,8 @@ esp_err_t webui_start(const webui_cfg_t *cfg)
         { .uri = "/api/et",       .method = HTTP_GET,  .handler = et_get },
         { .uri = "/api/et/settings", .method = HTTP_GET,  .handler = et_settings_get },
         { .uri = "/api/et/settings", .method = HTTP_POST, .handler = et_settings_post },
+        { .uri = "/api/mem",      .method = HTTP_GET,  .handler = mem_get },
+        { .uri = "/api/mem/reset", .method = HTTP_POST, .handler = mem_reset_post },
         { .uri = "/api/printers", .method = HTTP_GET,  .handler = printers_get },
         { .uri = "/api/printers", .method = HTTP_POST, .handler = printers_post },
         { .uri = "/api/laser",    .method = HTTP_GET,  .handler = laser_get },

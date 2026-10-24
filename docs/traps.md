@@ -12,12 +12,20 @@ Traps already explained in a code comment are listed only when the comment is ea
   in `sdkconfig.defaults.esp32s3` fixed it (~42 KB free with the relay up). `/api/et`
   `internal_ram` shows free, largest block and the low mark without a console; `/api/status`
   `internal` shows free and the low mark in a reply small enough to fetch when it is short.
+  `/api/mem` (W-1094) shows what held it at its lowest: blocks by size, each task's stack and
+  spare, failed allocations; `POST /api/mem/reset` starts a new low. The console's `mem:` lines
+  give the low between marks (a relay connect, a job).
 - **Every static buffer is Wi-Fi's loss.** `.bss`, `.data` and task stacks are internal RAM,
   which Wi-Fi and lwIP buffer in. W-1082's first build added ~15 KB of statics: every reply
   over one TCP segment (~1.4 KB) crawled or stalled, on ports 80 and 631 alike, with no error
   but `httpd_sock_err ... 104`, while pings and small replies were fine. Put big state in
   PSRAM (`heap_caps_calloc(..., MALLOC_CAP_SPIRAM)` at start); a static with an initialiser
-  goes to `.data` whole. Keep internal only what must be: a stack whose task writes NVS.
+  goes to `.data` whole. Keep internal only what must be: a stack whose task writes NVS, and
+  what an interrupt or DMA touches. Statics crept back to 72 KB by W-1088 (the three EtherTalk
+  links alone 22 KB); W-1094 moved 60 KB of them to PSRAM: state used before its owner starts
+  is a block a constructor makes (`et_mem_t`, `lt_mem_t`), reply buffers are made at first
+  use. On board 1 idle free went from ~26 KB to 86.6 KB, and an iPhone job's low from 107
+  bytes to 68 KB. Check with `idf.py size-components` (`liblocaltalk.a` `.bss` was 48 KB).
   Any `malloc` under 16 KB (`SPIRAM_MALLOC_ALWAYSINTERNAL`) lands internal too: a 300 dpi
   page's rip rows (~30 KB) took it to 923 bytes, so row buffers come from `bigmem.h`.
 - **An unread TCP upload holds internal RAM.** Received frames stay in Wi-Fi's internal
@@ -36,6 +44,12 @@ Traps already explained in a code comment are listed only when the comment is ea
   to allocate, mDNS dropped what it received, the relay's connect failed, and internal RAM's low
   mark was 23 bytes. The first look now waits 10 s and its lookups go 300 ms apart (low mark
   ~6.6 KB). Anything that bursts frames should wait for the handshakes, or space itself.
+- **With internal RAM short, a task cannot be made, and an ignored `xTaskCreate` fails
+  silently.** The OTA that installed W-1094's build (internal low 23 bytes on the old one)
+  answered "ok" and never restarted: `/api/update` sat at "restarting" for 3+ minutes until
+  `/api/restart`, because `fw_update_restart` dropped the failed create of its reboot task.
+  It, and the Wi-Fi save's, now restart from the caller's task instead. Check every
+  `xTaskCreate` whose task must run.
 - **`SPIRAM_TRY_ALLOCATE_WIFI_LWIP` is not the cure.** It forces Wi-Fi to 16 static TX buffers in
   internal RAM: idle free fell from 29 KB to 13 KB with a 5 KB largest block, no job could
   start its rip task, and board 1 fell off Wi-Fi until replugged.
@@ -49,7 +63,10 @@ Traps already explained in a code comment are listed only when the comment is ea
   relay handler only queues and sets flags; sends happen outside the EtherTalk lock.
 - **`esp_websocket_client` keeps the last handshake's status after a failed attempt.** An
   `ERROR` event reads "101" (the previous success) when the real failure is TLS or a socket;
-  report the TLS error first.
+  report the TLS error first. And the event comes before the client records the error's type,
+  so a connection that drops reads "type 0" with no TLS error: the client's own text ("...
+  failed with -1, ... errno=104", "no PONG received") is the event's `data_ptr`. `/api/et`
+  `relay` `why` keeps it (W-1094).
 
 - **A semaphore taken on one task and given on another must be binary, not a mutex.** A mutex
   given by a non-holder trips `xTaskPriorityDisinherit` and panics the board after every job.

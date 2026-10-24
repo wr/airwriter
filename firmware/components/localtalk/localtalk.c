@@ -5,6 +5,7 @@
 // reads and status updates from other tasks.
 #include "localtalk.h"
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include "driver/gpio.h"
 #include "driver/uart.h"
@@ -34,11 +35,34 @@ static int        s_running;
 static volatile int s_quiet;        // W-1079: switched off on the settings page
 static lt_cfg_t   s_nc;             // the node's set-up, for coming back on
 static lt_ops_t   s_ops;
-static lt_node_t  s_node;
-static tt_rx_t    s_rx;
 static char       s_obj[NBP_NAME_MAX + 1], s_type[NBP_NAME_MAX + 1];
-static char       s_ev[EV_LINES][LINE_LEN], s_fr[FR_LINES][LINE_LEN];
 static unsigned   s_ev_head, s_ev_n, s_fr_head, s_fr_n;
+
+// W-1094: the node, the TashTalk decoder, the logs and the send buffer, ~10 KB,
+// in PSRAM rather than .bss, where they were internal RAM that Wi-Fi and lwIP
+// buffer in (docs/traps.md). Tasks alone touch them: the UART driver copies
+// what uart_write_bytes is handed, and reads into the task's own buffer. Made
+// by a constructor, before app_main, so every use below finds it.
+typedef struct {
+    lt_node_t node;
+    tt_rx_t   rx;
+    char      ev[EV_LINES][LINE_LEN];
+    char      fr[FR_LINES][LINE_LEN];
+    uint8_t   cmd[1 + LLAP_MAX + 2];        // op_send's, on the LocalTalk task
+} lt_mem_t;
+
+static lt_mem_t *s_mem;
+#define s_node (s_mem->node)
+#define s_rx   (s_mem->rx)
+#define s_ev   (s_mem->ev)
+#define s_fr   (s_mem->fr)
+
+__attribute__((constructor)) static void lt_mem_make(void)
+{
+    s_mem = heap_caps_calloc(1, sizeof *s_mem, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    if (!s_mem) s_mem = calloc(1, sizeof *s_mem);    // a board with no PSRAM
+    if (!s_mem) abort();
+}
 static unsigned   s_fcs_bad, s_errors, s_tx;
 static void     (*s_tap)(void *ctx, const uint8_t *f, size_t n);
 // W-1082: answer as the ImageWriter; the PAP client riding the node; where
@@ -82,8 +106,8 @@ static void note_frame(const char *dir, const uint8_t *f, size_t n)
 static void op_send(void *ctx, const uint8_t *f, size_t n)
 {
     (void)ctx;
-    static uint8_t cmd[1 + LLAP_MAX + 2];
-    size_t cl = tt_send_cmd(cmd, sizeof cmd, f, n);
+    uint8_t *cmd = s_mem->cmd;
+    size_t cl = tt_send_cmd(cmd, sizeof s_mem->cmd, f, n);
     if (!cl) return;
     uart_write_bytes(s_uart, cmd, cl);       // TashTalk's CTS paces the hardware FIFO
     s_tx++;

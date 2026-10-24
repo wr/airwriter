@@ -253,7 +253,12 @@ static void reboot_task(void *arg)
 
 void fw_update_restart(void)
 {
-    xTaskCreate(reboot_task, "reboot", 2048, NULL, 5, NULL);
+    if (xTaskCreate(reboot_task, "reboot", 2048, NULL, 5, NULL) == pdPASS) return;
+    // W-1094: with internal RAM short (23 bytes at its low on board 1) the
+    // task could not be made, and the board sat "restarting" until someone
+    // restarted it by hand. Then the caller's task does it: same wait, same end.
+    ESP_LOGW(TAG, "no memory for the reboot task; restarting from here");
+    reboot_task(NULL);
 }
 
 // ------------------------------------------------------------- GitHub

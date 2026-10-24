@@ -127,6 +127,7 @@ What works on `main`:
 - Setup AP `AirWriter-xxxx` (open, 192.168.4.1) on a board with no credentials; web UI on port
   80: `/api/status`, Wi-Fi, settings, `/update` (OTA), `/api/update` (GitHub releases),
   `/api/localtalk/flash`, `/api/cable`, `/api/restart`, `/api/erase`, `/api/test`,
+  `/api/mem` (what holds internal RAM at its lowest, W-1094; `POST /api/mem/reset`),
   `/api/printers`, `/api/panel` (the LED frame being driven: 37 × RGB, little-endian 8.8,
   222 bytes; 404 with no strip).
 - The settings page (`W-1079 Settings page: organise by port, like macOS System Settings`,
@@ -271,8 +272,8 @@ its name in the Chooser. U7's PIC calibration words: `16E0 1DA8`. Its LocalTalk 
 2026-10-24, with its settings put back over the API. Its port printer's uuid is now
 `…4c57-0001-0001-10bda36e2434`, which orphans Mac queues added before that date. Printer: an ImageWriter II on J2 via
 Apple's crossover cable, fanfold paper loaded as the Owner's Guide says (top edge under the paper
-bail). It runs main with the W-1076 bench fixes (v0.2.0-146), ahead of any release, with
-auto-update on; it shares the fake "LaserWriter II NT" on the Basilisk II tunnel when
+bail). It runs the W-1094 build (v0.2.0-150-g8088a2f: main with the W-1076 bench fixes, plus
+60 KB of statics in PSRAM and `/api/mem`), ahead of any release, with auto-update on; it shares the fake "LaserWriter II NT" on the Basilisk II tunnel when
 `etpeer.py tunnel laserwriter` runs on the Mac. Its Top margin is calibrated to -7/8 in
 (`top_margin` -126): a page's line 1 in down and one 0.5 in from the bottom landed exactly there.
 Its AppleTalk port has been set on the page (`lt_port` 1), so DIP switches 1-2 no longer decide;
@@ -280,10 +281,10 @@ Infinite Mac is on (Wells switched it on, with a made-up zone name). The page re
 yet checked against the part. One pin of its print head is dead (a white line in solid fills).
 
 Known issues, open:
-- `W-1094 Internal RAM nearly runs out during AirPrint jobs`: with Infinite Mac on, internal
-  RAM's low mark reaches ~100 bytes during an iPhone job, and the largest free piece can be
-  7.5 KB after, just over what the next job's rip stack needs. Nothing has failed from it
-  since the W-1076 busy fix. The relay reconnects every few minutes while idle.
+- Infinite Mac's relay reconnected every few minutes while idle on v0.2.0-146, when internal
+  RAM was short (`W-1094 Internal RAM nearly runs out during AirPrint jobs`). Not seen since
+  the W-1094 build, which has not yet sat idle long on board 1; if it recurs, `/api/et`
+  `relay` `why` has the client's own reason.
 - Twice on 2026-10-24, after board 1 lost power (its USB moved) with the ImageWriter on, the
   printer sat busy with SELECT lit: the idle CTRL-X did not free it, switching the printer off
   and on did. A soft restart (`/api/restart`, an OTA) leaves the line ready. A job sent while it
@@ -380,6 +381,15 @@ Linear is the queue; these are the live items.
   printer was aborted, and the page's Erase said AirWriter had not answered. It also turned up
   `W-1094 Internal RAM nearly runs out during AirPrint jobs`. Before any release that turns
   the relay on for users, give Mihai Parparita (Infinite Mac) a heads-up.
+- `W-1094 Internal RAM nearly runs out during AirPrint jobs`: 60 KB of statics moved to PSRAM
+  (the EtherTalk links, the LocalTalk node, frame, JSON and reply buffers) and `/api/mem` added;
+  benched on board 1 2026-10-24 (v0.2.0-150-g8088a2f). Idle: 86.6 KB free, largest piece
+  31.7 KB, boot low 60.7 KB, where v0.2.0-146 had ~26 KB, 7.5 KB and a 107-byte low. An iPhone
+  page over AirPrint (`fixtures/ios-20260804-232652.urf`, 143 KB, a 5-minute print) never
+  polled below 75.5 KB free; `/api/mem`'s low was 68.2 KB with a 31.7 KB piece, no failed
+  allocations, and the relay stayed connected. Ranked next steps, if RAM is short again: IPP
+  worker stacks to PSRAM (20 KB), Wi-Fi's IRAM options off (18 KB), the rip stack to PSRAM with
+  its flash writes on another task (7 KB), mDNS and the NVS cache to PSRAM.
 - Not in Linear: scope HSKo during a long job (SPEC §3.9 timing).
 - Laser printers (design `docs/superpowers/specs/2026-10-21-laser-printers-design.md`; no
   laser printer on the bench): `W-1082 AirPrint to LaserWriters on AppleTalk` merged
