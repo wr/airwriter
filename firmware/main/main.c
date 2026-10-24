@@ -252,8 +252,9 @@ static void resync_out(void *ctx, const uint8_t *buf, size_t n)
 }
 
 // A write failed: the printer stayed paused past STALL_ABORT, or the job was
-// cancelled. Abort the job so the rip task winds down instead of pushing the
-// rest of the page at a dead line.
+// cancelled. Abort the job so the rip task winds down and job_pipe drops the
+// rest of the job's bytes instead of pushing them at a dead line. On the
+// printer task, the one writing.
 static void printer_fail(void)
 {
     s_printer_failed = 1;
@@ -583,8 +584,8 @@ static void job_finished(const job_pipe_stats_t *st, int ok)
     if (!clean) {
         iw_link_job_end(&s_link, 0);
         // The rip may have stopped between writes, leaving up to a FIFO of
-        // the dead job queued behind a paused printer. This is the writing
-        // task, or no write ever ran.
+        // the dead job queued behind a paused printer. The printer task has
+        // stopped writing, or no write ever ran.
         serial_out_purge();
         if (s_job_cancelled) {
             ESP_LOGI(TAG, "job canceled after %u bytes in", (unsigned)st->doc_bytes);
@@ -604,9 +605,10 @@ static void job_finished(const job_pipe_stats_t *st, int ok)
 
     s_last_pages = (size_t)st->pages;
     s_last_bytes = st->printer_bytes;
-    ESP_LOGI(TAG, "ripped %d page%s, %ux%u dots, %u bytes in -> %u printer bytes in %ums",
-             st->pages, st->pages == 1 ? "" : "s", (unsigned)st->dst_w, (unsigned)st->dst_h,
-             (unsigned)st->doc_bytes, (unsigned)st->printer_bytes, (unsigned)st->ms);
+    ESP_LOGI(TAG, "ripped %d page%s, %ux%u dots, %u bytes in -> %u printer bytes in %ums, "
+             "all out in %ums", st->pages, st->pages == 1 ? "" : "s", (unsigned)st->dst_w,
+             (unsigned)st->dst_h, (unsigned)st->doc_bytes, (unsigned)st->printer_bytes,
+             (unsigned)st->rip_ms, (unsigned)st->ms);
     ESP_LOGI(TAG, "printer stream crc32 %08x", (unsigned)s_stream_crc);
 
     // Let the last byte clear the shift register before calling it printed.
@@ -1708,6 +1710,11 @@ static void status_json(void *ctx, char *buf, size_t cap)
     laser_status_json(laser, sizeof laser);
     printers_status_json(printers, sizeof printers);
 
+    // W-1066: where the AirPrint job in the pipeline (or the last one) has got.
+    job_pipe_stats_t pst;
+    size_t queued;
+    job_pipe_peek(&pst, &queued);
+
     char job[96];
     if (s_last_job[0])
         snprintf(job, sizeof job, "%s (%u page%s)", s_last_job,
@@ -1727,7 +1734,8 @@ static void status_json(void *ctx, char *buf, size_t cap)
         "\"model\":\"Apple ImageWriter II\",\"pic\":%s,"
         "\"pmodel\":\"%s\",\"pname\":\"%s\",\"phost\":\"%s\",\"airprint\":%s,"
         "\"lt_port\":%d,\"lt\":%s,\"lt_chip\":\"%s\",\"dip\":\"%s\",\"ap\":\"AirWriter-%s\","
-        "\"laser\":%s,\"printers\":%s,\"fresh\":%s,\"internal\":{\"free\":%u,\"lowest\":%u}}",
+        "\"laser\":%s,\"printers\":%s,\"fresh\":%s,\"internal\":{\"free\":%u,\"lowest\":%u},"
+        "\"pipe\":{\"in\":%u,\"out\":%u,\"queued\":%u,\"upload_ms\":%u,\"rip_ms\":%u,\"ms\":%u}}",
         state_text(v.state),
         ps_name(v.state),
         v.asleep ? "true" : "false",
@@ -1757,7 +1765,9 @@ static void status_json(void *ctx, char *buf, size_t cap)
         dip, s_suffix, laser, printers, settings_fresh() ? "true" : "false",
         // Internal RAM is what Wi-Fi and lwIP live on: below ~20 KB, replies stall.
         (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
-        (unsigned)heap_caps_get_minimum_free_size(MALLOC_CAP_INTERNAL));
+        (unsigned)heap_caps_get_minimum_free_size(MALLOC_CAP_INTERNAL),
+        (unsigned)pst.doc_bytes, (unsigned)pst.printer_bytes, (unsigned)queued,
+        (unsigned)pst.upload_ms, (unsigned)pst.rip_ms, (unsigned)pst.ms);
 }
 
 static void lt_json(void *ctx, char *buf, size_t cap)
