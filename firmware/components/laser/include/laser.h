@@ -23,6 +23,9 @@
 
 typedef struct {
     const char *version;          // %%Creator: AirWriter <version>
+    // The first look this long after start (10 s with Wi-Fi up, for its TLS
+    // handshakes; 0 in setup mode, where the page waits on it).
+    uint32_t    first_look_ms;
     // Which links the printers need running (one is on each): main.c starts
     // the cable's node and sets EtherTalk roles from it.
     void (*links)(int cable, int tunnel, int radio);

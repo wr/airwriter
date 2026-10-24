@@ -224,6 +224,28 @@ esp_err_t settings_save_top_margin(int top)
     return err;
 }
 
+int settings_fresh(void)
+{
+    nvs_handle_t h;
+    uint8_t v = 0;
+    if (nvs_open(NS, NVS_READONLY, &h) != ESP_OK) return 0;
+    nvs_get_u8(h, "fresh", &v);
+    nvs_close(h);
+    return v ? 1 : 0;
+}
+
+esp_err_t settings_set_fresh(int on)
+{
+    nvs_handle_t h;
+    esp_err_t err = nvs_open(NS, NVS_READWRITE, &h);
+    if (err != ESP_OK) return err;
+    if (on) nvs_set_u8(h, "fresh", 1);
+    else nvs_erase_key(h, "fresh");
+    err = nvs_commit(h);
+    nvs_close(h);
+    return err;
+}
+
 esp_err_t settings_erase(void)
 {
     nvs_handle_t h;

@@ -69,6 +69,11 @@ esp_err_t settings_save_ribbon(uint8_t ribbon);
 // SET_TOP_MIN to SET_TOP_MAX, 1/144 in.
 esp_err_t settings_save_top_margin(int top);
 
+// W-1088: a fresh setup's finish sheet ("AirWriter is ready"): on once the
+// setup page saves Wi-Fi, off for good when the person closes it.
+int       settings_fresh(void);
+esp_err_t settings_set_fresh(int on);
+
 // Wipes the stored settings. The device falls back to its build defaults on
 // the next boot, which is what the config button holds for.
 esp_err_t settings_erase(void);

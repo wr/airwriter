@@ -227,6 +227,7 @@ static esp_err_t wifi_post(httpd_req_t *req)
     }
 
     settings_save_wifi(ssid, pass);
+    if (s_cfg.captive) settings_set_fresh(1);   // W-1088: the finish sheet awaits on the network
     led_grid_blip(LG_BLIP_SAVED);       // W-1049: taken; the restart follows
     httpd_resp_sendstr(req, "{\"ok\":true}");
     xTaskCreate(reboot_task, "reboot", 2048, NULL, 5, NULL);
@@ -286,6 +287,7 @@ static esp_err_t general_post(httpd_req_t *req)
         settings_save_printer(has_model ? model : NULL, has_name ? name : NULL);
     int ap = json_bool(body, "airprint"), lt = json_bool(body, "localtalk");
     if (ap >= 0 || lt >= 0) settings_save_switches(ap, lt);
+    if (json_bool(body, "finish") == 1) settings_set_fresh(0);   // W-1088: the sheet closed
     if (s_cfg.general_saved) s_cfg.general_saved(s_cfg.ctx);
     led_grid_blip(LG_BLIP_SAVED);
     return httpd_resp_sendstr(req, "{\"ok\":true}");

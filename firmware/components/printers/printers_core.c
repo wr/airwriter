@@ -370,6 +370,21 @@ int pr_set_model(pr_list_t *l, int id, pr_model_t m)
     return 0;
 }
 
+int pr_add_port(pr_list_t *l, pr_model_t m)
+{
+    if (m < PR_MODEL_IW2 || m > PR_MODEL_IW1) return -1;
+    pr_rec_t *p = (pr_rec_t *)pr_port(l);
+    if (!p) {
+        p = rec_new(l);
+        if (!p) return -1;
+        p->where = PR_WHERE_PORT;
+        port_uuid(l, p->uuid);
+        set_name(l, p, UNKNOWN_NAME);             // its own name follows the model, below
+        p->kind = PR_KIND_UNKNOWN;
+    }
+    return pr_set_model(l, p->id, m) ? -1 : p->id;
+}
+
 int pr_remove(pr_list_t *l, int id)
 {
     int i = pr_index(l, id);
@@ -634,9 +649,16 @@ int pr_post(pr_list_t *l, const char *body, pr_post_t *o)
         o->changed = 1;
         return 0;
     }
+    char s[PR_NAME_MAX * 2];
+    if (json_has_str(b, "add_port", s, sizeof s)) {
+        int m = !strcmp(s, "ImageWriter II") ? PR_MODEL_IW2 : !strcmp(s, "ImageWriter LQ") ? PR_MODEL_IWLQ
+              : !strcmp(s, "ImageWriter") ? PR_MODEL_IW1 : -1;
+        if (m < 0 || pr_add_port(l, (pr_model_t)m) < 0) return post_err(o, "Unknown model.");
+        o->changed = 1;
+        return 0;
+    }
     if (!json_has_int(b, "id", &n) || !pr_get(l, (int)n)) return post_err(o, "No such printer.");
     int id = (int)n;
-    char s[PR_NAME_MAX * 2];
     if (json_has_bool(b, "remove", &v) && v) {
         pr_remove(l, id);
         o->changed = 1;

@@ -78,6 +78,10 @@ void pr_at_queried(pr_list_t *l, int id, int ok, const lw_info_t *info);
 int  pr_rename(pr_list_t *l, int id, const char *name);     // "" or NULL: the printer's own
 int  pr_set_shared(pr_list_t *l, int id, int on);           // -1 at the cap, or unidentified
 int  pr_set_model(pr_list_t *l, int id, pr_model_t m);      // the port printer only
+// "Add a Printer…" for the port: its model (an original ImageWriter, or one
+// that is off, never answers). Makes the port's record, the person's, shared,
+// or sets the model of the one there. Its id, or -1.
+int  pr_add_port(pr_list_t *l, pr_model_t m);
 int  pr_remove(pr_list_t *l, int id);
 int  pr_use_anyway(pr_list_t *l, int id);                   // a LaserWriter that won't answer
 int  pr_accept_change(pr_list_t *l, int note);
@@ -120,7 +124,8 @@ int    pr_load(pr_list_t *l, const uint8_t *buf, size_t n);     // -1: refused, 
 
 size_t pr_json(const pr_list_t *l, const pr_live_t live[PR_MAX], char *buf, size_t cap);
 
-// What the Printers section sends: flat JSON, {"look":true}, {"note":N,
+// What the Printers section sends: flat JSON, {"look":true}, {"add_port":
+// "ImageWriter II"|"ImageWriter LQ"|"ImageWriter"}, {"note":N,
 // "accept"|"dismiss":true}, or {"id":N, then any of "name":"...",
 // "shared":bool, "model":"ImageWriter II"|"ImageWriter LQ"|"ImageWriter"|
 // "none", "remove":true, "use_anyway":true, "dither":"...", "gain":0-45}.

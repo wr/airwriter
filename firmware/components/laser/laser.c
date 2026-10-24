@@ -37,12 +37,14 @@ static const char *TAG = "laser";
 #define SPOOL      (16 * 1024)       // between the rip and the client: 4 SendData answers
 #define QUERY_BUSY_MS 60000          // a query waits out a busy printer this long
 #define INFO_VER   1
-// The first look waits for Wi-Fi and Infinite Mac's TLS handshake to settle:
-// lookups and their answers take Wi-Fi buffers from internal RAM, which the
-// handshake's AES needs too (board 1, W-1088: it failed once at boot). Each
-// look sends its three types this far apart.
-#define FIRST_LOOK_MS 10000
+// The first look waits (laser_cfg_t's first_look_ms) for Wi-Fi and Infinite
+// Mac's TLS handshake to settle: lookups and their answers take Wi-Fi buffers
+// from internal RAM, which the handshake's AES needs too (board 1, W-1088: it
+// failed once at boot). Each look sends its three types this far apart, and
+// all of them again LOOK_AGAIN_MS later: a lookup is one broadcast, and a
+// cable can lose it.
 #define LOOK_STEP_MS  300
+#define LOOK_AGAIN_MS 1500
 
 enum { USE_NONE, USE_QUERY, USE_JOB, USE_RELAY };
 #define RELAY_BUF  (16 * 1024)       // each way, in PSRAM
@@ -594,10 +596,10 @@ static void look_step(int *step, uint64_t *at, uint64_t now)
     static const char *const types[] = { "AirWriter", "LaserWriter", "ImageWriter" };
     if (!*step || now < *at) return;
     // AirWriters first: a printer another AirWriter relays answers from its node.
-    localtalk_lookup(types[*step - 1]);
-    ethertalk_lookup(types[*step - 1]);
-    *step = *step < 3 ? *step + 1 : 0;
-    *at = now + LOOK_STEP_MS;
+    localtalk_lookup(types[(*step - 1) % 3]);
+    ethertalk_lookup(types[(*step - 1) % 3]);
+    *at = now + (*step == 3 ? LOOK_AGAIN_MS : LOOK_STEP_MS);
+    *step = *step < 6 ? *step + 1 : 0;
 }
 
 static void laser_task(void *arg)
@@ -605,7 +607,7 @@ static void laser_task(void *arg)
     (void)arg;
     int step = 0;
     uint64_t step_at = 0;
-    vTaskDelay(pdMS_TO_TICKS(FIRST_LOOK_MS));
+    if (s_cfg.first_look_ms) vTaskDelay(pdMS_TO_TICKS(s_cfg.first_look_ms));
     for (;;) {
         ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(100));
         uint64_t now = now_ms();

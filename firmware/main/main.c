@@ -1714,7 +1714,7 @@ static void status_json(void *ctx, char *buf, size_t cap)
         "\"model\":\"Apple ImageWriter II\",\"pic\":%s,"
         "\"pmodel\":\"%s\",\"pname\":\"%s\",\"phost\":\"%s\",\"airprint\":%s,"
         "\"lt_port\":%d,\"lt\":%s,\"lt_chip\":\"%s\",\"dip\":\"%s\",\"ap\":\"AirWriter-%s\","
-        "\"laser\":%s,\"printers\":%s,\"internal\":{\"free\":%u,\"lowest\":%u}}",
+        "\"laser\":%s,\"printers\":%s,\"fresh\":%s,\"internal\":{\"free\":%u,\"lowest\":%u}}",
         state_text(v.state),
         ps_name(v.state),
         v.asleep ? "true" : "false",
@@ -1741,7 +1741,7 @@ static void status_json(void *ctx, char *buf, size_t cap)
         json_esc(e_model, sizeof e_model, s_saved_model), json_esc(e_name, sizeof e_name, s_saved_name),
         json_esc(e_phost, sizeof e_phost, s_saved_host), s_set.airprint ? "true" : "false", s_set.lt_port,
         localtalk_serving() ? "true" : "false", lt_chip_name(s_lt_chip),
-        dip, s_suffix, laser, printers,
+        dip, s_suffix, laser, printers, settings_fresh() ? "true" : "false",
         // Internal RAM is what Wi-Fi and lwIP live on: below ~20 KB, replies stall.
         (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
         (unsigned)heap_caps_get_minimum_free_size(MALLOC_CAP_INTERNAL));
@@ -2308,6 +2308,12 @@ void app_main(void)
                               .printers_json = printers_web_json, .printers_post = printers_web_post };
         ESP_ERROR_CHECK(webui_start(&wcfg));
         ota_health_set(OH_WEB_UP, 1);
+        // W-1088: setup shows what is plugged in before there is Wi-Fi: the
+        // port answers as its line comes up, and the cable is looked on at once.
+        laser_cfg_t lc = { .version = esp_app_get_description()->version, .first_look_ms = 0,
+                           .links = laser_links, .found = laser_found, .queried = laser_queried,
+                           .changed = laser_changed, .relay = laser_relay };
+        if (laser_start(&lc) == ESP_OK) printers_apply();
 
         for (;;) vTaskDelay(pdMS_TO_TICKS(30000));
     }
@@ -2343,9 +2349,9 @@ void app_main(void)
     offers_apply();
 
     // W-1082, W-1088: the printers on AppleTalk, each shared on its own slot.
-    laser_cfg_t lc = { .version = esp_app_get_description()->version, .links = laser_links,
-                       .found = laser_found, .queried = laser_queried, .changed = laser_changed,
-                       .relay = laser_relay };
+    laser_cfg_t lc = { .version = esp_app_get_description()->version, .first_look_ms = 10000,
+                       .links = laser_links, .found = laser_found, .queried = laser_queried,
+                       .changed = laser_changed, .relay = laser_relay };
     err = laser_start(&lc);
     if (err != ESP_OK) ESP_LOGE(TAG, "AppleTalk printers did not start: %s", esp_err_to_name(err));
     printers_apply();

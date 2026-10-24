@@ -503,8 +503,37 @@ static void test_post(void)
     CHECK_EQ_INT(pr_post(&L, "not json", &r), -1);
 }
 
+// "Add a Printer…" for the port (W-1088 setup): an original ImageWriter, or
+// one that is off, never answers by itself. With nothing there it makes the
+// port's record, the person's, shared; with something there it sets its model.
+static void test_add_port(void)
+{
+    fresh();
+    pr_post_t r;
+    CHECK_EQ_INT(pr_post(&L, "{\"add_port\":\"ImageWriter\"}", &r), 0);
+    CHECK_EQ_INT(r.changed, 1);
+    const pr_rec_t *p = pr_port(&L);
+    CHECK(p != NULL);
+    CHECK_EQ_INT(p->kind, PR_KIND_IMAGEWRITER);
+    CHECK_EQ_INT(p->model, PR_MODEL_IW1);
+    CHECK_EQ_INT(p->shared, 1);
+    CHECK_EQ_INT(p->found_auto, 0);
+    CHECK(strcmp(p->name, "ImageWriter") == 0);
+    CHECK(strlen(p->uuid) == 45);
+    CHECK_EQ_INT(L.n, 1);
+    // Again, with the port's record there: its model, not a second record.
+    CHECK_EQ_INT(pr_post(&L, "{\"add_port\":\"ImageWriter LQ\"}", &r), 0);
+    CHECK_EQ_INT(L.n, 1);
+    CHECK_EQ_INT(pr_port(&L)->model, PR_MODEL_IWLQ);
+    CHECK_EQ_INT(pr_post(&L, "{\"add_port\":\"Daisywheel\"}", &r), -1);
+    // It then answers ESC ? as an LQ: no churn.
+    pr_port_seen(&L, PR_PORT_IWLQ);
+    CHECK_EQ_INT(L.n_notes, 0);
+}
+
 int main(void)
 {
+    test_add_port();
     test_defaults();
     test_post();
     test_port_identified();
