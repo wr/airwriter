@@ -11,6 +11,7 @@ driver does (OpenConn, the board's SendData answered with Data, CloseConn).
     python3 tools/ethertalk/etpeer.py tunnel lookup
     python3 tools/ethertalk/etpeer.py zone ZONE chooser LaserWriter
     python3 tools/ethertalk/etpeer.py zone ZONE print-ps "LaserWriter II NT" page.ps
+    python3 tools/ethertalk/etpeer.py tunnel status "LaserWriter II NT" 120
     python3 tools/ethertalk/etpeer.py tunnel print fixtures/pap-iw701-page.bin
     python3 tools/ethertalk/etpeer.py tunnel named "Wells's iMac" 30
     python3 tools/ethertalk/etpeer.py zone ZONE lookup
@@ -21,6 +22,10 @@ driver does (OpenConn, the board's SendData answered with Data, CloseConn).
 `named` registers a Macintosh name, as System 7's Sharing Setup does
 (<name>:Workstation), looks the printer up so the board hears it, and answers
 the board's name lookups for the given seconds.
+
+`status` asks NAME:LaserWriter for its status string once a second, as Print
+Monitor does, and prints each new one: through the board's relay, a real
+printer's own words.
 
 `laserwriter` is a fake LaserWriter (W-1082): it registers NAME:LaserWriter,
 answers PAP as a PostScript LaserWriter does (the printer pulls, quantum 8;
@@ -524,6 +529,28 @@ class Mac:
         print(f"sent {len(data)} bytes in {secs:.1f} s; the printer said:")
         print(out.decode("mac_roman", "replace").replace("\r", "\n").rstrip() or "(nothing)")
 
+    async def watch_status(self, name, secs):
+        """NAME:LaserWriter's status string, asked once a second as the Chooser
+        and Print Monitor do, printed each time it changes."""
+        nbp = bytes([0x21, 0x2D]) + struct.pack(">HBBB", self.net, self.node, MY_NIS, 0) + \
+              pstr(name.encode("mac_roman")) + pstr(LW_TYPE) + pstr(b"*")
+        for _ in range(5):
+            await self.send_ddp(0, 0xFF, NIS, MY_NIS, DDP_NBP, nbp)
+            d = await self.wait_dg(lambda d: d[12] == DDP_NBP and d[10] == MY_NIS and d[13] >> 4 == 3, 1.0)
+            if d:
+                break
+        else:
+            sys.exit(f"no {name}:LaserWriter answered the lookup")
+        net, node, sls = struct.unpack(">HBB", d[15:19])
+        last, start = None, time.monotonic()
+        while time.monotonic() - start < secs:
+            user, st = await self.request(net, node, sls, [0, PAP_SEND_STATUS, 0, 0], xo=False)
+            text = st[5:5 + st[4]].decode("mac_roman", "replace") if len(st) > 4 else "(none)"
+            if text != last:
+                print(f"{time.strftime('%H:%M:%S')} {text}", flush=True)
+                last = text
+            await asyncio.sleep(1)
+
 
 # ------------------------------------------------------------------ the LaserWriter
 
@@ -870,6 +897,8 @@ async def main(argv):
             await mac.print_file(open(rest[1], "rb").read())
         elif rest[0] == "print-ps" and len(rest) == 3:
             await mac.print_ps(rest[1], open(rest[2], "rb").read())
+        elif rest[0] == "status" and len(rest) == 3:
+            await mac.watch_status(rest[1], float(rest[2]))
         elif rest[0] == "named" and len(rest) == 3:
             mac.name = rest[1].replace("'", "\u2019").encode("mac_roman")[:31]
             await mac.lookup()
