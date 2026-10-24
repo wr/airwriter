@@ -45,6 +45,7 @@
 #include "cable_test.h"
 #include "testpage.h"
 #include "esp_heap_caps.h"
+#include "memdiag.h"
 #include "esp_app_desc.h"
 #include "esp_partition.h"
 #if CONFIG_BOOTLOADER_RESERVE_RTC_MEM
@@ -540,6 +541,7 @@ static esp_err_t doc_begin(void *ctx, const char *format, const char *name)
     int rssi = esp_wifi_sta_get_ap_info(&ap) == ESP_OK ? ap.rssi : 0;
     ESP_LOGI(TAG, "job \"%s\" format %s, rssi %d", name,
              format[0] ? format : "(unspecified)", rssi);
+    memdiag_mark("job start");          // W-1094
     strncpy(s_last_job, name && name[0] ? name : "Untitled", sizeof s_last_job - 1);
     s_last_job[sizeof s_last_job - 1] = '\0';
     s_stream_crc = 0;
@@ -581,6 +583,7 @@ static void job_finished(const job_pipe_stats_t *st, int ok)
 {
     s_printing = 0;
     job_touch();
+    memdiag_mark("job done");           // W-1094: the low since its start
 
     // Clean only if the rip finished every page and every byte was queued;
     // anything else may have stopped mid-strip.
@@ -718,6 +721,7 @@ static esp_err_t laser_doc_begin(void *ctx, const char *format, const char *name
 {
     int id = (int)((intptr_t)ctx & 0xFF);
     s_laser_owns = 1;                   // doc_claim took s_job_lock
+    memdiag_mark("job start");          // W-1094
     s_laser_slot = (int)((intptr_t)ctx >> 8);
     ESP_LOGI(TAG, "LaserWriter job \"%s\" for printer %d format %s", name, id,
              format[0] ? format : "(unspecified)");
@@ -753,6 +757,7 @@ static void laser_finished(const job_pipe_stats_t *st, int ok)
     int printed = laser_job_end(st->rc == 0 && ok && !s_job_cancelled);
     s_printing = 0;
     job_touch();
+    memdiag_mark("job done");           // W-1094
     s_last_pages = (size_t)st->pages;
     s_last_bytes = 0;
     printer_state_post(printed ? PS_EV_JOB_DONE : s_job_cancelled ? PS_EV_JOB_CANCELLED
@@ -2213,6 +2218,7 @@ void app_main(void)
 
     ESP_LOGI(TAG, "AirWriter starting after %s reset, %u bytes free",
              reset_name(esp_reset_reason()), (unsigned)esp_get_free_heap_size());
+    memdiag_start();                        // W-1094: what holds internal RAM (/api/mem)
     if (bootloader_common_get_rtc_retain_mem_factory_reset_state()) {
         ESP_LOGW(TAG, "power-up reset by the bootloader: settings erased, known-good firmware");
         s_boot_reset = 1;
@@ -2421,6 +2427,7 @@ void app_main(void)
     ESP_LOGI(TAG, "ready: %s", ipp_server_uri());
     ESP_LOGI(TAG, "settings at http://%s.local/", s_set.hostname);
     ESP_LOGI(TAG, "%u bytes free after startup", (unsigned)esp_get_free_heap_size());
+    memdiag_mark("ready");
 
     for (;;) vTaskDelay(pdMS_TO_TICKS(30000));
 }

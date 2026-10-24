@@ -4,6 +4,7 @@
 #include "webui_page.h"
 #include "settings.h"
 #include "fw_update.h"
+#include "memdiag.h"
 
 #include <string.h>
 #include <limits.h>
@@ -134,6 +135,25 @@ static esp_err_t et_get(httpd_req_t *req)
     s_cfg.et_json(s_cfg.ctx, json, sizeof json);
     httpd_resp_set_type(req, "application/json");
     return httpd_resp_sendstr(req, json);
+}
+
+// W-1094: what holds internal RAM, now and at its lowest (memdiag.h). In PSRAM.
+static esp_err_t mem_get(httpd_req_t *req)
+{
+    enum { MEM_JSON = 6144 };
+    static char *json;
+    if (!json) json = heap_caps_malloc(MEM_JSON, MALLOC_CAP_SPIRAM);
+    if (!json) return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "no memory");
+    memdiag_json(json, MEM_JSON);
+    httpd_resp_set_type(req, "application/json");
+    return httpd_resp_sendstr(req, json);
+}
+
+// Forgets the low snapshot, so the next job's low is its own.
+static esp_err_t mem_reset_post(httpd_req_t *req)
+{
+    memdiag_reset_low();
+    return httpd_resp_sendstr(req, "ok");
 }
 
 static esp_err_t et_settings_reply(httpd_req_t *req)
@@ -600,6 +620,8 @@ esp_err_t webui_start(const webui_cfg_t *cfg)
         { .uri = "/api/et",       .method = HTTP_GET,  .handler = et_get },
         { .uri = "/api/et/settings", .method = HTTP_GET,  .handler = et_settings_get },
         { .uri = "/api/et/settings", .method = HTTP_POST, .handler = et_settings_post },
+        { .uri = "/api/mem",      .method = HTTP_GET,  .handler = mem_get },
+        { .uri = "/api/mem/reset", .method = HTTP_POST, .handler = mem_reset_post },
         { .uri = "/api/printers", .method = HTTP_GET,  .handler = printers_get },
         { .uri = "/api/printers", .method = HTTP_POST, .handler = printers_post },
         { .uri = "/api/laser",    .method = HTTP_GET,  .handler = laser_get },

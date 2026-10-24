@@ -12,6 +12,9 @@ Traps already explained in a code comment are listed only when the comment is ea
   in `sdkconfig.defaults.esp32s3` fixed it (~42 KB free with the relay up). `/api/et`
   `internal_ram` shows free, largest block and the low mark without a console; `/api/status`
   `internal` shows free and the low mark in a reply small enough to fetch when it is short.
+  `/api/mem` (W-1094) shows what held it at its lowest: blocks by size, each task's stack and
+  spare, failed allocations; `POST /api/mem/reset` starts a new low. The console's `mem:` lines
+  give the low between marks (a relay connect, a job).
 - **Every static buffer is Wi-Fi's loss.** `.bss`, `.data` and task stacks are internal RAM,
   which Wi-Fi and lwIP buffer in. W-1082's first build added ~15 KB of statics: every reply
   over one TCP segment (~1.4 KB) crawled or stalled, on ports 80 and 631 alike, with no error
@@ -49,7 +52,10 @@ Traps already explained in a code comment are listed only when the comment is ea
   relay handler only queues and sets flags; sends happen outside the EtherTalk lock.
 - **`esp_websocket_client` keeps the last handshake's status after a failed attempt.** An
   `ERROR` event reads "101" (the previous success) when the real failure is TLS or a socket;
-  report the TLS error first.
+  report the TLS error first. And the event comes before the client records the error's type,
+  so a connection that drops reads "type 0" with no TLS error: the client's own text ("...
+  failed with -1, ... errno=104", "no PONG received") is the event's `data_ptr`. `/api/et`
+  `relay` `why` keeps it (W-1094).
 
 - **A semaphore taken on one task and given on another must be binary, not a mutex.** A mutex
   given by a non-holder trips `xTaskPriorityDisinherit` and panics the board after every job.

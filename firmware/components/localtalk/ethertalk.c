@@ -8,6 +8,7 @@
 #include "ethertalk.h"
 #include <errno.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include "esp_crt_bundle.h"
 #include "esp_heap_caps.h"
@@ -23,6 +24,7 @@
 #include "freertos/task.h"
 #include "lwip/pbuf.h"
 #include "lwip/sockets.h"
+#include "memdiag.h"
 #include "nvs.h"
 #include "et_link.h"
 #include "et_transport.h"
@@ -105,6 +107,7 @@ static uint8_t    s_zone_mac[ETH_ALEN];
 static volatile uint32_t s_zone_in_drops, s_zone_out_drops, s_zone_bad, s_zone_pongs;
 static uint32_t   s_backoff_ms = BACKOFF_MIN_MS;
 static char       s_zone_err[64];
+static char       s_zone_why[160];          // the client's own text for the last error
 
 static uint64_t now_ms(void) { return (uint64_t)(esp_timer_get_time() / 1000); }
 
@@ -365,6 +368,36 @@ static void on_relay_message(esp_websocket_client_handle_t c, const char *msg, s
     if (xQueueSend(s_zin, &z, 0) != pdTRUE) s_zone_in_drops++;
 }
 
+// W-1094: the client's own words for an error, the ERROR event's data. Its
+// codes lose them: the event comes before the client records the error's type,
+// so every dropped connection read "connection error (type 0)".
+static void relay_why(const char *m, int n)
+{
+    s_zone_why[0] = '\0';
+    if (!m || n <= 0) return;
+    if (n > (int)sizeof s_zone_why - 1) n = (int)sizeof s_zone_why - 1;
+    memcpy(s_zone_why, m, (size_t)n);
+    s_zone_why[n] = '\0';
+    for (char *c = s_zone_why; *c; c++)            // it goes into JSON as it is
+        if (*c == '"' || *c == '\\' || (unsigned char)*c < ' ') *c = '\'';
+}
+
+// For the event log: "esp_transport_read() failed with -1, ..., errno=104"
+// as "read failed, errno 104"; a missed pong as "no answer to pings".
+static void relay_why_short(char *out, size_t cap)
+{
+    const char *f = strstr(s_zone_why, "esp_transport_");
+    const char *e = strstr(s_zone_why, "errno=");
+    if (f) {
+        f += strlen("esp_transport_");
+        snprintf(out, cap, "%.*s failed, errno %d", (int)strcspn(f, "("), f, e ? atoi(e + 6) : 0);
+    } else if (strstr(s_zone_why, "PONG")) {
+        snprintf(out, cap, "no answer to pings");
+    } else {
+        snprintf(out, cap, "%s", s_zone_why);
+    }
+}
+
 static void ws_handler(void *arg, esp_event_base_t base, int32_t id, void *data)
 {
     (void)arg;
@@ -372,7 +405,11 @@ static void ws_handler(void *arg, esp_event_base_t base, int32_t id, void *data)
     static char msg[WS_MSG_MAX];
     esp_websocket_event_data_t *d = data;
     switch (id) {
+    case WEBSOCKET_EVENT_BEFORE_CONNECT:
+        memdiag_mark("relay connecting");          // W-1094: what a handshake costs
+        break;
     case WEBSOCKET_EVENT_CONNECTED: {
+        memdiag_mark("relay up");
         char init[80];
         size_t n = et_zone_init_json(init, sizeof init, s_zone_mac);
         if (n) esp_websocket_client_send_text(d->client, init, (int)n, pdMS_TO_TICKS(1000));
@@ -398,17 +435,21 @@ static void ws_handler(void *arg, esp_event_base_t base, int32_t id, void *data)
         // upgrade's), so the TLS and socket errors come first, and a 101 is
         // never the error.
         const esp_websocket_error_codes_t *e = &d->error_handle;
+        relay_why(d->data_ptr, d->data_len);
         if (e->esp_tls_last_esp_err)
             snprintf(s_zone_err, sizeof s_zone_err, "TLS: %s (%d)", esp_err_to_name(e->esp_tls_last_esp_err),
                      e->esp_tls_stack_err);
         else if (e->esp_ws_handshake_status_code && e->esp_ws_handshake_status_code != 101)
             snprintf(s_zone_err, sizeof s_zone_err, "the relay answered %d", e->esp_ws_handshake_status_code);
+        else if (s_zone_why[0])
+            relay_why_short(s_zone_err, sizeof s_zone_err);
         else
             snprintf(s_zone_err, sizeof s_zone_err, "connection error (type %d)", (int)e->error_type);
         break;
     }
     case WEBSOCKET_EVENT_DISCONNECTED:
     case WEBSOCKET_EVENT_CLOSED: {
+        memdiag_mark("relay down");
         // 1 s, doubling to 60 s; back to 1 s after a connection that held a minute.
         int64_t now = esp_timer_get_time() / 1000;
         if (s_ws_up && now - s_up_at >= STEADY_MS) s_backoff_ms = BACKOFF_MIN_MS;
@@ -986,7 +1027,7 @@ void ethertalk_json(char *buf, size_t cap)
             "\"retries\":%lu},"
             "\"tunnel_drops\":%lu,\"tunnel_nomem\":%lu,\"tunnel_errno\":%d,\"tunnel_retries\":%lu,"
             "\"relay\":{\"connected\":%s,\"in_drops\":%lu,\"out_drops\":%lu,"
-            "\"bad_messages\":%lu,\"pongs\":%lu,\"last_error\":\"%s\"},"
+            "\"bad_messages\":%lu,\"pongs\":%lu,\"last_error\":\"%s\",\"why\":\"%s\"},"
             "\"internal_ram\":{\"free\":%u,\"largest\":%u,\"lowest\":%u},",
             (unsigned long)s_radio_in_drops, (unsigned long)s_radio_out_drops,
             (unsigned long)s_radio_unknown, (unsigned long)s_radio_kept,
@@ -995,7 +1036,7 @@ void ethertalk_json(char *buf, size_t cap)
             (unsigned long)s_tun_retries,
             s_ws_up ? "true" : "false",
             (unsigned long)s_zone_in_drops, (unsigned long)s_zone_out_drops,
-            (unsigned long)s_zone_bad, (unsigned long)s_zone_pongs, s_zone_err,
+            (unsigned long)s_zone_bad, (unsigned long)s_zone_pongs, s_zone_err, s_zone_why,
             (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
             (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL),
             (unsigned)heap_caps_get_minimum_free_size(MALLOC_CAP_INTERNAL));

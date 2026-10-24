@@ -127,6 +127,7 @@ What works on `main`:
 - Setup AP `AirWriter-xxxx` (open, 192.168.4.1) on a board with no credentials; web UI on port
   80: `/api/status`, Wi-Fi, settings, `/update` (OTA), `/api/update` (GitHub releases),
   `/api/localtalk/flash`, `/api/cable`, `/api/restart`, `/api/erase`, `/api/test`,
+  `/api/mem` (what holds internal RAM at its lowest, W-1094; `POST /api/mem/reset`),
   `/api/printers`, `/api/panel` (the LED frame being driven: 37 × RGB, little-endian 8.8,
   222 bytes; 404 with no strip).
 - The settings page (`W-1079 Settings page: organise by port, like macOS System Settings`,
