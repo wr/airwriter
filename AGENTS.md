@@ -239,7 +239,8 @@ printers of their own (above), untested on a real one.
 
 Not built: Mini vMac (LToUDP, `W-1077`), consumers of the dither override, PWG raster, HP
 LaserJets over serial (`W-1083`, designed), AirPrint to an AppleTalk ImageWriter (cut from
-W-1088).
+W-1088: `W-1090 AirPrint to ImageWriters with the LocalTalk Option Card`), colour on a colour
+LaserWriter (`W-1089 Colour LaserWriters: print in colour over AirPrint`; it prints in gray).
 
 **Board 1:** ESP32-S3-WROOM-1-N8R2 (8 MB flash, 2 MB PSRAM). On the home Wi-Fi at
 10.0.1.115, mDNS `imagewriter-2434.local`. Console on USB-C as `/dev/cu.usbmodem*` (the number
