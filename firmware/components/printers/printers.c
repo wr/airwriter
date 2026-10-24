@@ -458,6 +458,17 @@ int printers_test_target(int *port)
     return id;
 }
 
+int printers_test_kind(int id)
+{
+    if (!s_started) return 0;
+    lock();
+    const pr_rec_t *r = pr_get(s_l, id);
+    int k = !r ? 0 : r->where == PR_WHERE_PORT && r->kind == PR_KIND_IMAGEWRITER ? 1
+          : r->kind == PR_KIND_LASERWRITER && r->identified ? 2 : 0;
+    unlock();
+    return k;
+}
+
 int printers_describe(int id, char *name, size_t ncap, char *product, size_t pcap,
                       char *version, size_t vcap)
 {

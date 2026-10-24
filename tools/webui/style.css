@@ -216,11 +216,22 @@ body:not(.ready) .sw span,body:not(.ready) .sw span:after{transition:none}
 .macs li small{color:var(--fg2);font-size:var(--t-small);font-variant-numeric:tabular-nums}
 .card.off .body{display:none}
 /* W-1082: a LaserWriter heard, its share switch at the end of its row */
-.lws li{align-items:flex-start}
-.lws li svg{margin-top:2px}
-.lws li .sw{margin-left:auto;align-self:center}
-#c-lw .body>.row{padding:0;min-height:0}
-#c-lw .body>.row:before{display:none}
+/* W-1088: the Printers pane: a row per printer, notices above them */
+.ic.unk{background:var(--fg3)}
+.prow .ic{width:30px;height:30px;border-radius:7px}
+.prow .ic svg{width:18px;height:18px}
+.row .txt small{display:block;color:var(--fg2);font-size:var(--t-small);overflow-wrap:anywhere}
+.row small.mono{font-family:var(--mono);font-weight:400;color:var(--fg2)}
+.prow .chev{color:var(--fg3);font-size:20px;line-height:1;margin-left:-4px}
+.empty{margin:0;padding:14px;color:var(--fg2);font-size:var(--t-small)}
+.note{padding:12px 14px;display:flex;flex-direction:column;gap:10px}
+.note p{margin:0}
+.note+.note{margin-top:10px}
+#pr-notes:empty{display:none}
+.back2{align-self:flex-start;border:0;background:none;box-shadow:none;color:var(--accent);padding:2px 0;cursor:pointer}
+.back2:hover{text-decoration:underline;background:none}
+#pr-home,#pr-detail{display:flex;flex-direction:column;gap:inherit}
+#pr-home.hide,#pr-detail.hide{display:none}
 .lw-note{color:var(--fg2);font-size:var(--t-small)}
 
 /* the colour ribbon's four inks, as a glyph */
@@ -302,6 +313,7 @@ dialog::backdrop{background:var(--scrim)}
 
 /* ── phones: the sidebar is the first screen ────────────────────── */
 @media (max-width:760px){
+  #pr-back{display:none}
   :root{--t-body:16px;--t-small:13px;--t-head:16px}
   .app{display:block}
   .side{border-right:0;min-height:100%;background:var(--bg);

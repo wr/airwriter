@@ -519,7 +519,12 @@ static esp_err_t erase_post(httpd_req_t *req)
 static esp_err_t test_post(httpd_req_t *req)
 {
     if (!s_cfg.test_page) return httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "no test page");
-    if (s_cfg.test_page(s_cfg.ctx)) {
+    char body[BODY_MAX] = "";
+    if (req->content_len && read_body(req, body, sizeof body) < 0)
+        return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "short body");
+    int rc = s_cfg.test_page(s_cfg.ctx, json_int(body, "id", -1));
+    if (rc == 2) return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "no printer with a test page");
+    if (rc) {
         httpd_resp_set_status(req, "409 Conflict");
         return httpd_resp_sendstr(req, "the printer is busy");
     }

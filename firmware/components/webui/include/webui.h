@@ -66,7 +66,9 @@ typedef struct {
     // test_page returns 0, or nonzero when the printer is busy. NULL answers 404.
     void  (*restart)(void *ctx);
     void  (*erase)(void *ctx);
-    int   (*test_page)(void *ctx);
+    // W-1088: id is the printer's in the list, or -1 for the one the test
+    // button prints on; 2 for none, or one with no test page.
+    int   (*test_page)(void *ctx, int id);
 
     // Serves the setup page for every unknown host, so joining the device's
     // access point opens the page by itself.

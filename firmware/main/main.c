@@ -1406,12 +1406,18 @@ static void web_erase(void *ctx)
     }
 }
 
-static int web_test_page(void *ctx)
+static int web_test_page(void *ctx, int which)
 {
     (void)ctx;
     on_activity();
     int port, id = printers_test_target(&port);
-    if (id < 0) return 1;
+    if (which >= 0) {                              // W-1088: the page names its printer
+        int k = printers_test_kind(which);
+        if (!k) return 2;
+        id = which;
+        port = k == 1;
+    }
+    if (id < 0) return 2;
     if (xSemaphoreTake(s_job_lock, 0) != pdTRUE) return 1;
     if (!port) {
         ps_test_locked(id);

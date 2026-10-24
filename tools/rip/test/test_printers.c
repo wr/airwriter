@@ -424,6 +424,23 @@ static void test_json(void)
     CHECK(strstr(buf, "\"state\":\"offline\"") != NULL);
     CHECK(strstr(buf, "\"notes\":[") != NULL);
     CHECK(strstr(buf, "\"max_shared\":4") != NULL);
+
+    // W-1088: each shared printer's AirPrint path, for the AirPrint pane.
+    CHECK(strstr(buf, "\"rp\":\"ipp/print\"") != NULL);
+    int lw = pr_at_seen(&L, PR_WHERE_TUNNEL, P("Office"), P("LaserWriter"), 0);
+    lw_info_t info;
+    lw_info_default(&info);
+    pr_at_queried(&L, lw, 1, &info);
+    char want[32];
+    snprintf(want, sizeof want, "\"rp\":\"ipp/p%d\"", lw);
+    n = pr_json(&L, live, buf, sizeof buf);
+    CHECK(strstr(buf, want) != NULL);
+    pr_get(&L, lw)->ipp_laser = 1;                    // W-1082's keeps its path
+    n = pr_json(&L, live, buf, sizeof buf);
+    CHECK(strstr(buf, "\"rp\":\"ipp/laser\"") != NULL);
+    pr_set_shared(&L, a, 0);
+    n = pr_json(&L, live, buf, sizeof buf);
+    CHECK(strstr(buf, "\"rp\":\"ipp/print\"") == NULL);
 }
 
 // A board's first boot on W-1088 fixes its host name and AppleTalk port for

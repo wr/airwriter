@@ -732,13 +732,19 @@ size_t pr_json(const pr_list_t *l, const pr_live_t live[PR_MAX], char *buf, size
         const pr_rec_t *r = &l->r[i];
         esc(e_name, sizeof e_name, r->name);
         esc(e_prod, sizeof e_prod, r->kind == PR_KIND_LASERWRITER ? r->lw.product : "");
+        // Its AirPrint path while it is shared: the port's, W-1082's, or its own.
+        char rp[16] = "";
+        if (r->shared && r->identified && r->where == PR_WHERE_PORT && r->kind == PR_KIND_IMAGEWRITER)
+            snprintf(rp, sizeof rp, "ipp/print");
+        else if (r->shared && r->identified && r->kind == PR_KIND_LASERWRITER)
+            snprintf(rp, sizeof rp, r->ipp_laser ? "ipp/laser" : "ipp/p%u", r->id);
         PUT("%s{\"id\":%u,\"name\":\"%s\",\"where\":\"%s\",\"kind\":\"%s\",\"model\":\"%s\","
             "\"shared\":%s,\"identified\":%s,\"found\":\"%s\",\"state\":\"%s\",\"uuid\":\"%s\","
-            "\"product\":\"%s\",\"dither\":\"%s\",\"gain\":%u}",
+            "\"product\":\"%s\",\"dither\":\"%s\",\"gain\":%u,\"rp\":\"%s\"}",
             i ? "," : "", r->id, e_name, pr_where_name(r->where), pr_kind_name(r->kind),
             pr_model_name(r->model), r->shared ? "true" : "false",
             r->identified ? "true" : "false", r->found_auto ? "auto" : "person",
-            states[one_state(&live[i])], r->uuid, e_prod, r->dither, r->gain);
+            states[one_state(&live[i])], r->uuid, e_prod, r->dither, r->gain, rp);
     }
     PUT("],\"notes\":[");
     for (int i = 0; i < l->n_notes; i++)

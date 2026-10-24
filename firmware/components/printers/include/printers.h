@@ -59,6 +59,9 @@ void        printers_offers(int at_link, int on, const char *host, lt_offers_t *
 // Who gets the test page (the button, DIP4, the page): the port's ImageWriter,
 // else the first shared printer. Its id, *port 1 for the port's; -1 for none.
 int         printers_test_target(int *port);
+// What printer id's test page is: 1 the port's ImageWriter's, 2 a
+// LaserWriter's, 0 none (no such printer, or one with no page).
+int         printers_test_kind(int id);
 // A printer's name, and a LaserWriter's product and PostScript version ("" for
 // none): -1 with no such printer.
 int         printers_describe(int id, char *name, size_t ncap, char *product, size_t pcap,
