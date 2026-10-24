@@ -39,7 +39,10 @@ being true, change or delete it in the same commit that made it false.
 
 What works on `main`:
 - AirPrint discovery and printing (`image/urf`, Print-Job only, SPEC §3.4); Home Assistant's
-  IPP integration finds it.
+  IPP integration finds it. A Print-Job that finds the printer taken (another phone's job, a
+  Mac's, the test page, an update) is told `server-error-busy` at once and the phone asks
+  again; it never waits with its document unread (W-1076 bench; an iPhone waited out a Mac's
+  three pages and printed).
 - `printer-icons`: Apple's colour ImageWriter icon at 48, 128 and 512 px, served on port 631
   (SPEC §3.5). A Mac takes it only when the printer is added.
 - The client is answered when its upload ends
@@ -220,6 +223,8 @@ What works on `main`:
   WebSocket to infinitemac.org (off until switched on; a made-up zone name). One job at a time
   across all four links (`at_printer.c`). `GET /api/et`, `GET`/`POST /api/et/settings`.
   `tools/ethertalk/etpeer.py` is a software Mac for the tunnel and the relay (lookup, print).
+  A real Infinite Mac (System 7.5.3) printed over the zone on 2026-10-24; it registers as
+  `<Unnamed>`, so its card shows it by address.
 - LaserWriters on AppleTalk (`W-1082 AirPrint to LaserWriters on AppleTalk`, SPEC §3.14, design
   `docs/superpowers/specs/2026-10-21-laser-printers-design.md`): **built, tested against a fake
   LaserWriter only, untested on a real one.** Since W-1088 the board looks on every running link
@@ -261,10 +266,12 @@ LaserWriter (`W-1089 Colour LaserWriters: print in colour over AirPrint`; it pri
 **Board 1:** ESP32-S3-WROOM-1-N8R2 (8 MB flash, 2 MB PSRAM). On the home Wi-Fi at
 10.0.1.115, mDNS `imagewriter-2434.local`. Console on USB-C as `/dev/cu.usbmodem*` (the number
 follows the Mac's port). Its queue name reads "ImageWriter II" in `/api/status`, which is also
-its name in the Chooser. U7's PIC calibration words: `16E0 1DA8`. Its LocalTalk node ID is 198
-(kept in NVS `lt`/`node`); the bench Mac is node 83. Printer: an ImageWriter II on J2 via
+its name in the Chooser. U7's PIC calibration words: `16E0 1DA8`. Its LocalTalk node ID is 184
+(kept in NVS `lt`/`node`); the bench Mac is node 83. It was erased and set up again on
+2026-10-24, with its settings put back over the API. Its port printer's uuid is now
+`…4c57-0001-0001-10bda36e2434`, which orphans Mac queues added before that date. Printer: an ImageWriter II on J2 via
 Apple's crossover cable, fanfold paper loaded as the Owner's Guide says (top edge under the paper
-bail). It runs main from the W-1088 merge (printers), ahead of any release, with
+bail). It runs main with the W-1076 bench fixes (v0.2.0-146), ahead of any release, with
 auto-update on; it shares the fake "LaserWriter II NT" on the Basilisk II tunnel when
 `etpeer.py tunnel laserwriter` runs on the Mac. Its Top margin is calibrated to -7/8 in
 (`top_margin` -126): a page's line 1 in down and one 0.5 in from the bottom landed exactly there.
@@ -273,6 +280,10 @@ Infinite Mac is on (Wells switched it on, with a made-up zone name). The page re
 yet checked against the part. One pin of its print head is dead (a white line in solid fills).
 
 Known issues, open:
+- `W-1094 Internal RAM nearly runs out during AirPrint jobs`: with Infinite Mac on, internal
+  RAM's low mark reaches ~100 bytes during an iPhone job, and the largest free piece can be
+  7.5 KB after, just over what the next job's rip stack needs. Nothing has failed from it
+  since the W-1076 busy fix. The relay reconnects every few minutes while idle.
 - Twice on 2026-10-24, after board 1 lost power (its USB moved) with the ImageWriter on, the
   printer sat busy with SELECT lit: the idle CTRL-X did not free it, switching the printer off
   and on did. A soft restart (`/api/restart`, an OTA) leaves the line ready. A job sent while it
@@ -351,8 +362,8 @@ Linear is the queue; these are the live items.
   print) uploaded in 25 s, was ripped at 27 s and printed by 3 min 47 s, fully in colour, with
   no error on the phone. Under the old buffer it would have held the upload for the whole
   print. The fake LaserWriter took a gray page as before. Internal RAM's low mark fell to 567
-  bytes during that upload (27 KB free after); W-1076's session is on internal RAM during
-  uploads.
+  bytes during that upload (27 KB free after); that is
+  `W-1094 Internal RAM nearly runs out during AirPrint jobs`.
 - `W-1067 Web dashboard shows which ribbon is in: colour or black` and `W-1068 Better halftone:
   dot gain curve, serpentine, blue noise, interleaved colour`: merged 2026-10-17, benched on board 1.
   The dusk page printed through Atkinson and blue noise read the same to Wells; the uncorrected
@@ -361,10 +372,14 @@ Linear is the queue; these are the live items.
   a phone. Released in v0.2.0 (2026-10-17), cut from main `b0fc219` with `--branch` from a clean
   worktree because this checkout carried someone's enclosure edits.
 - `W-1076` and `W-1078` reached main on 2026-10-20 with `W-1079` (Done), which was built on
-  top of them. `W-1078` is Done (the SE/30 printed over Wi-Fi on 2026-10-20); `W-1076` stays
-  In Progress for the bench checks, which cover every link. Owed on the bench: busy both ways
-  between links, a link dropped mid-job, a print from the SE/30 on the cable again, an Infinite Mac on its card, the page's Erase and Wi-Fi join. Before any release
-  that turns the relay on for users, give Mihai Parparita (Infinite Mac) a heads-up.
+  top of them. `W-1078` is Done (the SE/30 printed over Wi-Fi on 2026-10-20). `W-1076` was
+  benched on board 1 on 2026-10-24: busy both ways between the tunnel and AirPrint, a Mac
+  vanishing mid-job (cut after the 60 s hold) and the relay dropping mid-job (abandoned within
+  1.5 s), a real Infinite Mac print, and Erase plus setup from a phone. Wells waived the SE/30
+  on the cable. The bench found two bugs, both fixed: an AirPrint job that waited for the
+  printer was aborted, and the page's Erase said AirWriter had not answered. It also turned up
+  `W-1094 Internal RAM nearly runs out during AirPrint jobs`. Before any release that turns
+  the relay on for users, give Mihai Parparita (Infinite Mac) a heads-up.
 - Not in Linear: scope HSKo during a long job (SPEC §3.9 timing).
 - Laser printers (design `docs/superpowers/specs/2026-10-21-laser-printers-design.md`; no
   laser printer on the bench): `W-1082 AirPrint to LaserWriters on AppleTalk` merged
