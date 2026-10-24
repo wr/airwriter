@@ -10,7 +10,7 @@ driver does (OpenConn, the board's SendData answered with Data, CloseConn).
 
     python3 tools/ethertalk/etpeer.py tunnel lookup
     python3 tools/ethertalk/etpeer.py zone ZONE chooser LaserWriter
-    python3 tools/ethertalk/etpeer.py zone ZONE print-ps "LaserWriter II NT" page.ps
+    python3 tools/ethertalk/etpeer.py zone ZONE print-ps "LaserWriter II NT" query.ps page.ps
     python3 tools/ethertalk/etpeer.py tunnel status "LaserWriter II NT" 120
     python3 tools/ethertalk/etpeer.py tunnel print fixtures/pap-iw701-page.bin
     python3 tools/ethertalk/etpeer.py tunnel named "Wells's iMac" 30
@@ -27,14 +27,21 @@ the board's name lookups for the given seconds.
 Monitor does, and prints each new one: through the board's relay, a real
 printer's own words.
 
+`print-ps NAME FILE [FILE ...]` sends each file as its own job over one PAP
+connection, as a Mac's LaserWriter driver does (a query, then the document,
+W-1095): the job and its EOF, the printer's output read to its EOF and shown,
+then the next job; CloseConn after the last.
+
 `laserwriter` is a fake LaserWriter (W-1082): it registers NAME:LaserWriter,
 answers PAP as a PostScript LaserWriter does (the printer pulls, quantum 8;
 its status; its output read back; EOF), answers the board's query job from a
 LaserWriter II NT's values, and saves each job as job-N.ps in --out (rendered
-to job-N.png at 300 dpi when Ghostscript is installed). Lines on stdin fault
-it: `busy SECONDS`, `paper` (out of paper), `jam`, `ok`, `error` (the next job
-gets a PostScript error), `drop` (it answers nothing more). --hex-only answers
-the binary probe as a Level 1 machine that cannot take binary would.
+to job-N.png at 300 dpi when Ghostscript is installed). Like a real one it
+takes any number of jobs on a connection: after its EOF it pulls the next.
+Lines on stdin fault it: `busy SECONDS`, `paper` (out of paper), `jam`, `ok`,
+`error` (the next job gets a PostScript error), `drop` (it answers nothing
+more). --hex-only answers the binary probe as a Level 1 machine that cannot
+take binary would.
 A tunnel fake starts itself again when this Mac's address changes.
 `--also NAME` adds another fake LaserWriter, at its own AppleTalk address, on
 the same tunnel (one Mac can bind the tunnel's port once); its jobs go in
@@ -462,10 +469,11 @@ class Mac:
         secs = time.monotonic() - start
         print(f"sent {len(data)} bytes in {secs:.1f} s, crc32 {zlib.crc32(data):08x}")
 
-    async def print_ps(self, name, data):
+    async def print_ps(self, name, jobs):
         """PostScript to NAME:LaserWriter as a Mac's LaserWriter driver sends it
-        (W-1088): pulled by the printer, with the printer's own output read back
-        and shown, to its EOF; then CloseConn."""
+        (W-1088, W-1095): each of jobs its own job on one connection, pulled by
+        the printer and ended by EOF, the printer's output read back and shown
+        to its EOF before the next; then CloseConn."""
         nbp = bytes([0x21, 0x2C]) + struct.pack(">HBBB", self.net, self.node, MY_NIS, 0) + \
               pstr(name.encode("mac_roman")) + pstr(LW_TYPE) + pstr(b"*")
         for _ in range(5):
@@ -489,45 +497,55 @@ class Mac:
             sys.exit("the printer stayed busy")
         srv = rep[0]
         print(f"connection {connid} open (session socket {srv})")
-        off, sent_eof, got_eof, out = 0, False, False, bytearray()
-        rd_seq, rd_tid, rd_at = 1, None, 0.0
+        rd_seq, rd_tid, rd_at, held = 1, None, 0.0, None
         start = time.monotonic()
-        while not (sent_eof and got_eof):
-            if time.monotonic() - start > 600:
-                sys.exit(f"gave up: {off} bytes sent, printer EOF {got_eof}")
-            if not got_eof and (rd_tid is None or time.monotonic() - rd_at > 15):
-                rd_tid = rd_tid if rd_tid is not None else self.next_tid()
-                await self.send_ddp(net, node, srv, MY_ATP, DDP_ATP,
-                                    atp(TREQ | XO, 0xFF, rd_tid, [connid, PAP_SEND_DATA, rd_seq >> 8, rd_seq & 0xFF]))
-                rd_at = time.monotonic()
-            d = await self.wait_dg(lambda d: d[12] == DDP_ATP and d[10] == MY_ATP and (
-                (d[13] & 0xC0 == TREQ and d[17] == connid and d[18] in (PAP_SEND_DATA, PAP_TICKLE)) or
-                (d[13] & 0xC0 == TRESP and struct.unpack(">H", d[15:17])[0] == rd_tid)), 2.0)
-            if not d:
-                continue
-            tid = struct.unpack(">H", d[15:17])[0]
-            src = struct.unpack(">H", d[6:8])[0], d[9]
-            if d[13] & 0xC0 == TRESP:                  # the printer's words
-                out += d[21:]
-                if d[19]:
-                    got_eof = True
-                if d[13] & EOM:
-                    await self.send_ddp(net, node, srv, MY_ATP, DDP_ATP, atp(TREL, 0, tid, b"\0" * 4))
-                    rd_tid = None
-                    rd_seq = 1 if rd_seq == 0xFFFF else rd_seq + 1
-                continue
-            if d[18] == PAP_TICKLE or sent_eof:
-                continue
-            chunk = data[off:off + 512]
-            eof = off + len(chunk) >= len(data)
-            await self.send_ddp(src[0], src[1], d[11], MY_ATP, DDP_ATP,
-                                atp(TRESP | EOM, 0, tid, [connid, PAP_DATA, 1 if eof else 0, 0], chunk))
-            off += len(chunk)
-            sent_eof = eof
+        for k, data in enumerate(jobs, 1):
+            off, sent_eof, got_eof, out = 0, False, False, bytearray()
+            t0, d0, held = time.monotonic(), held, None
+            while not (sent_eof and got_eof):
+                if time.monotonic() - t0 > 600:
+                    sys.exit(f"gave up on job {k}: {off} bytes sent, printer EOF {got_eof}")
+                if not got_eof and (rd_tid is None or time.monotonic() - rd_at > 15):
+                    rd_tid = rd_tid if rd_tid is not None else self.next_tid()
+                    await self.send_ddp(net, node, srv, MY_ATP, DDP_ATP,
+                                        atp(TREQ | XO, 0xFF, rd_tid, [connid, PAP_SEND_DATA, rd_seq >> 8, rd_seq & 0xFF]))
+                    rd_at = time.monotonic()
+                d, d0 = d0, None                       # the next job's SendData, if it came early
+                if not d:
+                    d = await self.wait_dg(lambda d: d[12] == DDP_ATP and d[10] == MY_ATP and (
+                        (d[13] & 0xC0 == TREQ and d[17] == connid and d[18] in (PAP_SEND_DATA, PAP_TICKLE)) or
+                        (d[13] & 0xC0 == TRESP and struct.unpack(">H", d[15:17])[0] == rd_tid)), 2.0)
+                if not d:
+                    continue
+                tid = struct.unpack(">H", d[15:17])[0]
+                src = struct.unpack(">H", d[6:8])[0], d[9]
+                if d[13] & 0xC0 == TRESP:              # the printer's words
+                    out += d[21:]
+                    if d[19]:
+                        got_eof = True
+                    if d[13] & EOM:
+                        await self.send_ddp(net, node, srv, MY_ATP, DDP_ATP, atp(TREL, 0, tid, b"\0" * 4))
+                        rd_tid = None
+                        rd_seq = 1 if rd_seq == 0xFFFF else rd_seq + 1
+                    continue
+                if d[18] == PAP_TICKLE:
+                    continue
+                if sent_eof:                           # the printer asks for the next job
+                    held = d
+                    continue
+                chunk = data[off:off + 512]
+                eof = off + len(chunk) >= len(data)
+                await self.send_ddp(src[0], src[1], d[11], MY_ATP, DDP_ATP,
+                                    atp(TRESP | EOM, 0, tid, [connid, PAP_DATA, 1 if eof else 0, 0], chunk))
+                off += len(chunk)
+                sent_eof = eof
+            secs = time.monotonic() - t0
+            print(f"job {k}: sent {len(data)} bytes in {secs:.1f} s; the printer said:")
+            print(out.decode("mac_roman", "replace").replace("\r", "\n").rstrip() or "(nothing)",
+                  flush=True)
         await self.request(net, node, srv, [connid, PAP_CLOSE, 0, 0])
-        secs = time.monotonic() - start
-        print(f"sent {len(data)} bytes in {secs:.1f} s; the printer said:")
-        print(out.decode("mac_roman", "replace").replace("\r", "\n").rstrip() or "(nothing)")
+        print(f"closed after {len(jobs)} job{'' if len(jobs) == 1 else 's'}, "
+              f"{time.monotonic() - start:.1f} s in all")
 
     async def watch_status(self, name, secs):
         """NAME:LaserWriter's status string, asked once a second as the Chooser
@@ -564,19 +582,24 @@ PS_ERROR = (b"%%[ Error: undefined; OffendingCommand: aw_x ]%%\r"
 
 
 class Conn:
-    """The one PAP connection the fake takes at a time."""
+    """The one PAP connection the fake takes at a time. It carries any number
+    of jobs, each ended by EOF both ways (W-1095)."""
 
     def __init__(self, cid, client, quantum):
         self.cid, self.client, self.quantum = cid, client, quantum
         self.seq = 1                       # our next SendData to the client
         self.pull = None                   # (tid, sent at, packets {seq: data}, eof)
-        self.job = bytearray()
-        self.eof = False                   # the client's EOF: the job is all here
         self.out = bytearray()             # our output, for the client's reads
-        self.done = False                  # the job is processed: EOF after `out`
         self.read = None                   # the client's read: (tid, (net, node), sock, want, seq)
         self.answered = {}                 # its seq -> the packets we answered with
         self.heard = self.tickled = time.monotonic()
+        self.jobs = 0                      # jobs ended both ways on this connection
+        self.next_job()
+
+    def next_job(self):
+        self.job = bytearray()
+        self.eof = False                   # the client's EOF: the job is all here
+        self.done = False                  # the job is processed: EOF after `out`
         self.error = False
 
 
@@ -731,9 +754,12 @@ class LaserWriter(Mac):
             c.read = (tid, src, sock, max(1, want), seq, ctl & XO)
         elif user[1] == PAP_CLOSE:
             await self.respond(src, sock, our, tid, [([c.cid, PAP_CLOSE_REPLY, 0, 0], b"")], ctl & XO)
-            if not c.eof:
+            if c.job and not c.eof:
                 print(f"fake LaserWriter: connection {c.cid} closed after {len(c.job)} bytes, no EOF")
                 self.save(c.job, complete=False)
+            else:
+                print(f"fake LaserWriter: connection {c.cid} closed after {c.jobs} "
+                      f"job{'' if c.jobs == 1 else 's'}")
             self.conn = None
 
     async def pulled(self, c, src):
@@ -803,6 +829,9 @@ class LaserWriter(Mac):
             if seq:
                 c.answered[seq] = packets
             c.read = None
+            if eof:                            # the job is over both ways: pull the next
+                c.jobs += 1
+                c.next_job()
         if now - c.tickled >= 30:
             await self.send_ddp(c.client[0][0], c.client[0][1], c.client[1], LW_SESS, DDP_ATP,
                                 atp(TREQ, 0, self.next_tid(), [c.cid, PAP_TICKLE, 0, 0]))
@@ -895,8 +924,8 @@ async def main(argv):
             await mac.chooser(rest[1])
         elif rest[0] == "print" and len(rest) == 2:
             await mac.print_file(open(rest[1], "rb").read())
-        elif rest[0] == "print-ps" and len(rest) == 3:
-            await mac.print_ps(rest[1], open(rest[2], "rb").read())
+        elif rest[0] == "print-ps" and len(rest) >= 3:
+            await mac.print_ps(rest[1], [open(f, "rb").read() for f in rest[2:]])
         elif rest[0] == "status" and len(rest) == 3:
             await mac.watch_status(rest[1], float(rest[2]))
         elif rest[0] == "named" and len(rest) == 3:
