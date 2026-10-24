@@ -30,7 +30,8 @@ printer's own words.
 `print-ps NAME FILE [FILE ...]` sends each file as its own job over one PAP
 connection, as a Mac's LaserWriter driver does (a query, then the document,
 W-1095): the job and its EOF, the printer's output read to its EOF and shown,
-then the next job; CloseConn after the last.
+then the next job; CloseConn after the last. `--close-early` closes as soon as
+the last job's EOF is out, before the printer's, as the SE/30's driver does.
 
 `laserwriter` is a fake LaserWriter (W-1082): it registers NAME:LaserWriter,
 answers PAP as a PostScript LaserWriter does (the printer pulls, quantum 8;
@@ -469,11 +470,12 @@ class Mac:
         secs = time.monotonic() - start
         print(f"sent {len(data)} bytes in {secs:.1f} s, crc32 {zlib.crc32(data):08x}")
 
-    async def print_ps(self, name, jobs):
+    async def print_ps(self, name, jobs, close_early=False):
         """PostScript to NAME:LaserWriter as a Mac's LaserWriter driver sends it
         (W-1088, W-1095): each of jobs its own job on one connection, pulled by
         the printer and ended by EOF, the printer's output read back and shown
-        to its EOF before the next; then CloseConn."""
+        to its EOF before the next; then CloseConn. close_early: CloseConn once
+        the last job's EOF is out, not waiting for the printer's."""
         nbp = bytes([0x21, 0x2C]) + struct.pack(">HBBB", self.net, self.node, MY_NIS, 0) + \
               pstr(name.encode("mac_roman")) + pstr(LW_TYPE) + pstr(b"*")
         for _ in range(5):
@@ -502,7 +504,8 @@ class Mac:
         for k, data in enumerate(jobs, 1):
             off, sent_eof, got_eof, out = 0, False, False, bytearray()
             t0, d0, held = time.monotonic(), held, None
-            while not (sent_eof and got_eof):
+            early = close_early and k == len(jobs)
+            while not (sent_eof and (got_eof or early)):
                 if time.monotonic() - t0 > 600:
                     sys.exit(f"gave up on job {k}: {off} bytes sent, printer EOF {got_eof}")
                 if not got_eof and (rd_tid is None or time.monotonic() - rd_at > 15):
@@ -924,8 +927,10 @@ async def main(argv):
             await mac.chooser(rest[1])
         elif rest[0] == "print" and len(rest) == 2:
             await mac.print_file(open(rest[1], "rb").read())
-        elif rest[0] == "print-ps" and len(rest) >= 3:
-            await mac.print_ps(rest[1], [open(f, "rb").read() for f in rest[2:]])
+        elif rest[0] == "print-ps" and len([a for a in rest if a != "--close-early"]) >= 3:
+            files = [a for a in rest[2:] if a != "--close-early"]
+            await mac.print_ps(rest[1], [open(f, "rb").read() for f in files],
+                               close_early="--close-early" in rest)
         elif rest[0] == "status" and len(rest) == 3:
             await mac.watch_status(rest[1], float(rest[2]))
         elif rest[0] == "named" and len(rest) == 3:

@@ -153,6 +153,11 @@ int  papc_open_multi(pap_client_t *c, const lt_route_t *to, uint32_t busy_ms, ui
 // CloseConn, and the connection ends PAPC_END_OK: a multi-job connection
 // between jobs. Before it is open, it ends CANCELED at once.
 void papc_close(pap_client_t *c, uint64_t now);
+// A multi-job connection's last job: what is left of it goes to the printer
+// with its EOF, then the connection closes as a one-job one does (after the
+// printer's EOF, or PAPC_EOF_WAIT_MS after ours), PAPC_END_OK. Before it is
+// open, it ends CANCELED at once.
+void papc_finish(pap_client_t *c, uint64_t now);
 // EOF goes with the next Data answer: the printer meets it inside an
 // imagemask, raises an error and flushes. Before the connection is open, it
 // ends at once.

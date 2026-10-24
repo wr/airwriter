@@ -12,7 +12,9 @@
 // driver sends them (a query, its answer read to the printer's EOF, then the
 // document). Each EOF passes through as a job's end, both ways, and the
 // printer's connection stays open as long as the Mac's: closed normally when
-// the Mac closes between jobs, cancelled when it closes or goes mid-job.
+// the Mac closes between jobs; when it closes after its EOF but before the
+// printer's (the SE/30's driver does), its job is finished first, every byte
+// to the printer; cancelled when it closes or goes mid-job.
 //
 // Pure, like lt_node and pap_client. Each side calls in from its own link's
 // task: the Mac's node (the registration's job_* and reg_* ops) and the
@@ -34,7 +36,8 @@ enum { PR_RELAY_DO_OPEN = 1,         // open the client to the printer (papc_ope
        PR_RELAY_DO_CANCEL = 2,       // end the client's connection (papc_cancel), once
        PR_RELAY_DO_ABORT_MAC = 4,    // end the Mac's (lt_node_pap_abort on its node), once
        PR_RELAY_DO_DONE = 8,         // both ends are over: the job lock and the client are free
-       PR_RELAY_DO_CLOSE = 16 };     // W-1095: close the client's normally (papc_close), once
+       PR_RELAY_DO_CLOSE = 16,       // W-1095: close the client's normally (papc_close), once
+       PR_RELAY_DO_FINISH = 32 };    // W-1095: its last job to the printer, then close (papc_finish), once
 
 typedef struct { uint8_t *buf; size_t cap, head, tail; } pr_ring_t;
 

@@ -526,6 +526,21 @@ void papc_close(pap_client_t *c, uint64_t now)
     close_conn(c, PAPC_END_OK, now);
 }
 
+void papc_finish(pap_client_t *c, uint64_t now)
+{
+    if (c->phase == PAPC_IDLE || c->phase == PAPC_CLOSING) return;
+    if (c->phase == PAPC_OPENING) {
+        finish(c, PAPC_END_CANCELED);
+        return;
+    }
+    // One job from here: answer_one sends the rest with its EOF, read_done
+    // closes on the printer's, and the tick's wait bounds it.
+    say(c, "PAP %u: the last job, then closing", c->connid);
+    c->multi = 0;
+    if (c->eof_sent && c->eof_got) close_conn(c, PAPC_END_OK, now);
+    else answer_pending(c, now);
+}
+
 void papc_status(pap_client_t *c, const lt_route_t *to, uint64_t now)
 {
     if (!c->node) return;

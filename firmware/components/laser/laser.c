@@ -158,7 +158,7 @@ static int ti_of(int id) { return id < 0 ? -1 : lwc_target(&s_core, id); }
 // ------------------------------------------------------------- the client's links
 
 typedef struct { int op; lt_route_t r; uint32_t busy; int rc; } call_t;
-enum { OP_OPEN, OP_OPEN_MULTI, OP_STATUS, OP_CANCEL, OP_CLOSE, OP_DOWN };
+enum { OP_OPEN, OP_OPEN_MULTI, OP_STATUS, OP_CANCEL, OP_CLOSE, OP_FINISH, OP_DOWN };
 
 static void do_call(void *arg)
 {
@@ -170,6 +170,7 @@ static void do_call(void *arg)
     case OP_STATUS: papc_status(s_pc, &c->r, now); break;
     case OP_CANCEL: papc_cancel(s_pc, now); break;
     case OP_CLOSE:  papc_close(s_pc, now); break;
+    case OP_FINISH: papc_finish(s_pc, now); break;
     case OP_DOWN:   papc_link_down(s_pc, now); break;
     }
 }
@@ -536,6 +537,11 @@ static void relay_act(uint64_t now)
     if (act & PR_RELAY_DO_CLOSE) {
         xSemaphoreTake(s_client_mx, portMAX_DELAY);
         if (s_use == USE_RELAY) call(OP_CLOSE, NULL, 0);
+        xSemaphoreGive(s_client_mx);
+    }
+    if (act & PR_RELAY_DO_FINISH) {
+        xSemaphoreTake(s_client_mx, portMAX_DELAY);
+        if (s_use == USE_RELAY) call(OP_FINISH, NULL, 0);
         xSemaphoreGive(s_client_mx);
     }
     if (act & PR_RELAY_DO_ABORT_MAC) {

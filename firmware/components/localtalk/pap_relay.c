@@ -110,11 +110,16 @@ int pap_relay_tick(pap_relay_t *r, uint64_t now)
         // the printer has answered it with its own.
         int between = !r->mac_mid && !r->mac_eof && r->answered >= r->jobs;
         // The Mac is done or gone: between jobs the printer's closes normally;
-        // mid-job it is cancelled, which ends the printer's job too.
+        // after its EOF (its driver closes before the printer's) the job is
+        // all here, and a LaserWriter would print it: the rest goes to the
+        // printer first; mid-job it is cancelled, which ends the printer's job too.
         if ((!mac_open || r->mac_gone) && !r->prn_ended && !r->cancelled && !r->closed) {
             if (between) {
                 r->closed = 1;
                 act |= PR_RELAY_DO_CLOSE;
+            } else if (!r->mac_mid) {
+                r->closed = 1;
+                act |= PR_RELAY_DO_FINISH;
             } else {
                 r->cancelled = 1;
                 act |= PR_RELAY_DO_CANCEL;

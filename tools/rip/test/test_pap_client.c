@@ -640,6 +640,54 @@ static void test_multi_printer_first(void)
     CHECK_EQ_INT(count_fn(from, PAP_CLOSE_CONN, ATP_TREQ), 0);
 }
 
+// W-1095: the Mac closed after its last EOF (the SE/30's driver does): the
+// rest of that job still goes to the printer, then a normal close after the
+// printer's EOF, or the one-job wait for it.
+static void test_multi_finish(void)
+{
+    uint64_t t = fresh();
+    uint8_t cid = open_multi(t);
+    for (size_t i = 0; i < 6000; i++) src[i] = (uint8_t)(i * 5);
+    src_len = 6000; src_eof = 1;                          // the job is all in, its EOF too
+    papc_finish(pc, t + 5);
+    int from = ask(cid, 1, 0xA30, t + 10);
+    lt_node_tick(&node, t + 10);
+    size_t bytes; int eof, eom;
+    CHECK_EQ_INT(answers(from, 0xA30, &bytes, &eof, &eom), 8);
+    CHECK_EQ_INT(eof, 0);
+    from = ask(cid, 2, 0xA31, t + 20);
+    lt_node_tick(&node, t + 20);
+    CHECK_EQ_INT(answers(from, 0xA31, &bytes, &eof, &eom), 4);
+    CHECK_EQ_INT(bytes, 6000 - 4096);                     // nothing dropped
+    CHECK_EQ_INT(eof, 1);
+    CHECK_EQ_INT(pc->sent_bytes, 6000);
+    CHECK_EQ_INT(nended, 0);
+    from = nsent;
+    printer_says(cid, "", 1, t + 30000);                  // a page takes a while
+    CHECK_EQ_INT(count_fn(from, PAP_CLOSE_CONN, ATP_TREQ), 1);
+    CHECK(close_reply(from, cid, t + 30010));
+    CHECK_EQ_INT(ended, PAPC_END_OK);
+    CHECK(papc_idle(pc));
+
+    // Our EOF already out, the printer silent: the one-job wait, then a normal close.
+    t = fresh();
+    cid = open_multi(t);
+    src_len = 100; src_eof = 1;
+    from = ask(cid, 1, 0xA40, t + 10);
+    lt_node_tick(&node, t + 10);
+    CHECK_EQ_INT(answers(from, 0xA40, &bytes, &eof, &eom), 1);
+    CHECK_EQ_INT(eof, 1);
+    papc_finish(pc, t + 20);
+    from = nsent;
+    for (uint64_t k = 1000; k < PAPC_EOF_WAIT_MS; k += 1000) lt_node_tick(&node, t + 10 + k);
+    CHECK_EQ_INT(count_fn(from, PAP_CLOSE_CONN, ATP_TREQ), 0);
+    lt_node_tick(&node, t + 10 + PAPC_EOF_WAIT_MS);
+    CHECK_EQ_INT(count_fn(from, PAP_CLOSE_CONN, ATP_TREQ), 1);
+    for (uint64_t k = PAPC_EOF_WAIT_MS; k < PAPC_EOF_WAIT_MS + 10000 && !nended; k += 500)
+        lt_node_tick(&node, t + 10 + k);
+    CHECK_EQ_INT(ended, PAPC_END_OK);
+}
+
 // W-1095: cancelled, a multi-job connection ends as a one-job one does: EOF
 // at once, CloseConn after the printer's.
 static void test_multi_cancel(void)
@@ -707,6 +755,7 @@ int main(void)
     test_multi_jobs();
     test_multi_printer_first();
     test_multi_cancel();
+    test_multi_finish();
     free(pc);
     TEST_END;
 }

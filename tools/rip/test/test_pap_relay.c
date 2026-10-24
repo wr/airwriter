@@ -86,7 +86,7 @@ static void   bc_ended(void *ctx, papc_end_t how) { (void)ctx; bc_end = (int)how
 static uint8_t p_job[64 * 1024];
 static size_t  p_job_n, p_job_at;           // every job's bytes; where this one began
 static size_t  p_ends[4];                   // where each job's EOF came
-static int     p_jobs, p_job_eof, p_busy_left, p_opens;
+static int     p_jobs, p_job_eof, p_busy_left, p_opens, p_hold;
 static uint8_t p_out[4096];
 static size_t  p_out_len, p_out_pos;
 
@@ -103,7 +103,8 @@ static void   p_data(void *ctx, const uint8_t *d, size_t n)
     (void)ctx;
     if (p_job_n + n <= sizeof p_job) { memcpy(p_job + p_job_n, d, n); p_job_n += n; }
 }
-static size_t p_room(void *ctx) { (void)ctx; return (size_t)-1; }
+// p_hold: a printer still imaging, asking for nothing more yet.
+static size_t p_room(void *ctx) { (void)ctx; return p_hold ? 0 : (size_t)-1; }
 // A job's EOF (W-1095: a LaserWriter's connection carries many); the
 // connection's own end needs nothing.
 static void   p_end(void *ctx, int normal)
@@ -196,6 +197,7 @@ static void step(void)
     if (act & PR_RELAY_DO_OPEN) CHECK_EQ_INT(papc_open_multi(bc, &P_REG, 60000, T), 0);
     if (act & PR_RELAY_DO_CANCEL) papc_cancel(bc, T);
     if (act & PR_RELAY_DO_CLOSE) papc_close(bc, T);
+    if (act & PR_RELAY_DO_FINISH) papc_finish(bc, T);
     if (act & PR_RELAY_DO_ABORT_MAC) lt_node_pap_abort(&node[BOARD_B], T);
     if (act & PR_RELAY_DO_DONE) done_seen++;
     deliver(T);
@@ -247,7 +249,7 @@ static void setup(size_t job, size_t out)
     for (size_t i = 0; i < job; i++) m_src[i] = (uint8_t)(i * 7 + (i >> 9));
     p_out_len = out; p_out_pos = 0;
     for (size_t i = 0; i < out; i++) p_out[i] = (uint8_t)('A' + i % 26);
-    p_job_n = p_job_at = 0; p_jobs = 0; p_job_eof = 0; p_busy_left = 0; p_opens = 0;
+    p_job_n = p_job_at = 0; p_jobs = 0; p_job_eof = 0; p_busy_left = 0; p_opens = 0; p_hold = 0;
     m_out_n = 0; m_end = -1; bc_end = -1; done_seen = 0; acts = 0; m_status[0] = '\0';
 }
 
@@ -327,6 +329,40 @@ static void test_relay_close_mid_job(void)
     CHECK(!node[PRN].pap.open);
 }
 
+// W-1095: the SE/30's driver closes as soon as its last EOF is out, before
+// the printer's, with the document's tail still in the relay. A LaserWriter
+// would have every byte by then and print it: the printer still gets the
+// whole job and its EOF, and its connection closes normally.
+static void test_relay_close_after_eof(void)
+{
+    setup(600 + 12 * 1024, 300);
+    m_jobs = 2;
+    m_ends[0] = 600;
+    m_ends[1] = 600 + 12 * 1024;
+    CHECK_EQ_INT(papc_open_multi(mc, &B_REG, 60000, T), 0);
+    while (T < 60000 && m_job_eofs < 1) step();
+    CHECK_EQ_INT(m_job_eofs, 1);                   // the query answered
+    p_hold = 1;                                    // the printer slows; the relay fills
+    while (T < 120000 && relay.jobs < 2) step();
+    CHECK_EQ_INT((int)relay.jobs, 2);              // the document's EOF is in
+    CHECK(p_job_n < 600 + 12 * 1024);              // and its tail still on the board
+    papc_close(mc, T);                             // the Mac is done with it
+    run_until(T + 2000);
+    CHECK(!(acts & PR_RELAY_DO_CANCEL));
+    p_hold = 0;
+    run_until(T + 60000);
+    CHECK(acts & PR_RELAY_DO_FINISH);
+    CHECK(!(acts & (PR_RELAY_DO_CANCEL | PR_RELAY_DO_ABORT_MAC)));
+    CHECK_EQ_INT(p_jobs, 2);
+    CHECK_EQ_INT((int)p_job_n, 600 + 12 * 1024);
+    CHECK(!memcmp(p_job, m_src, p_job_n));
+    CHECK_EQ_INT(bc_end, PAPC_END_OK);
+    CHECK_EQ_INT(m_end, PAPC_END_OK);
+    CHECK_EQ_INT(done_seen, 1);
+    CHECK(!pap_relay_active(&relay));
+    CHECK(!node[PRN].pap.open);
+}
+
 static void test_relay_status(void)
 {
     setup(1024, 0);
@@ -389,5 +425,6 @@ int main(void)
     test_relay_peer_closes();
     test_relay_jobs();
     test_relay_close_mid_job();
+    test_relay_close_after_eof();
     TEST_END;
 }
