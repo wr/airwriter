@@ -19,6 +19,7 @@
 #include "ipp_server.h"
 #include "job_pipe.h"
 #include "lw_query.h"
+#include "ps_testpage.h"
 
 typedef struct {
     const char *version;          // %%Creator: AirWriter <version>
@@ -74,6 +75,9 @@ int       laser_job_begin(int id, const char *name, job_pipe_target_t *t);
 int       laser_job_end(int ok);
 void      laser_job_cancel(void);
 int       laser_job_active(void);
+// W-1088: the PostScript test page to LaserWriter id, sent as it is, under the
+// job lock: 1 if it printed. laser_job_cancel stops it.
+int       laser_test_page(int id, const ps_tp_info_t *info);
 
 // GET /api/laser: what is heard, the targets and the last job's figures.
 void      laser_json(char *buf, size_t cap);

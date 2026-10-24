@@ -13,6 +13,7 @@
 #include "lw_query.h"
 #include "lw_caps.h"
 #include "ps_page.h"
+#include "ps_testpage.h"
 #include "localtalk.h"
 #include "ethertalk.h"
 #include "pap_client.h"
@@ -792,7 +793,9 @@ static void spool_write(void *ctx, const uint8_t *b, size_t n)
     if (s_job_failed) job_pipe_abort();
 }
 
-int laser_job_begin(int id, const char *name, job_pipe_target_t *t)
+// A job's connection to target id: the PostScript header from the rip's
+// writer, or nothing (raw: the caller writes the whole job with spool_write).
+static int begin(int id, const char *name, job_pipe_target_t *t, int raw)
 {
     if (!s_started) return -1;
     // A query in flight is short: wait for it, as a second job would.
@@ -845,8 +848,8 @@ int laser_job_begin(int id, const char *name, job_pipe_target_t *t)
     char creator[48];
     snprintf(creator, sizeof creator, "AirWriter %s", s_cfg.version ? s_cfg.version : "");
     pc.creator = creator;
-    s_ps = ps_new(&pc);
-    if (!s_ps) {
+    s_ps = raw ? NULL : ps_new(&pc);
+    if (!raw && !s_ps) {
         lock();
         s_job_id = s_job_slot = -1;
         unlock();
@@ -857,8 +860,10 @@ int laser_job_begin(int id, const char *name, job_pipe_target_t *t)
     memset(&s_stats, 0, sizeof s_stats);
     s_job_t0 = now_ms();
     heap_caps_monitor_local_minimum_free_size_start();
-    ps_stage(s_ps, &s_stage);
-    ps_job_begin(s_ps);                            // the header, into the empty spool
+    if (s_ps) {
+        ps_stage(s_ps, &s_stage);
+        ps_job_begin(s_ps);                        // the header, into the empty spool
+    }
     lock();
     lwc_job(&s_core, ti, 1);
     unlock();
@@ -882,20 +887,36 @@ int laser_job_begin(int id, const char *name, job_pipe_target_t *t)
         unlock();
         return -1;
     }
+    ESP_LOGI(TAG, "job \"%s\" to %s, %s", name, s_job_name, raw ? "as it is" : pc.binary ? "binary" : "hex");
+    if (raw) return 0;
     // Its own copy, made above: the list may give the targets again while the rip runs.
     t->caps = &s_big->job_caps.caps;
     t->stage = &s_stage;
     t->dither = algo;
     t->gain = gain;
-    ESP_LOGI(TAG, "job \"%s\" to %s, %s", name, s_job_name, pc.binary ? "binary" : "hex");
     return 0;
+}
+
+int laser_job_begin(int id, const char *name, job_pipe_target_t *t)
+{
+    return begin(id, name, t, 0);
+}
+
+int laser_test_page(int id, const ps_tp_info_t *info)
+{
+    if (begin(id, "AirWriter test page", NULL, 1)) return 0;
+    int ok = !ps_testpage(info, spool_write, NULL);
+    return laser_job_end(ok);
 }
 
 int laser_job_end(int ok)
 {
     if (s_use != USE_JOB) return 0;
-    if (ok && !s_job_failed && !s_job_abort) ps_job_end(s_ps);
-    else s_cancel_req = 1;                         // EOF now: the printer flushes the page
+    if (ok && !s_job_failed && !s_job_abort) {
+        if (s_ps) ps_job_end(s_ps);                // a raw job wrote its own end
+    } else {
+        s_cancel_req = 1;                          // EOF now: the printer flushes the page
+    }
     s_spool_eof = 1;
     if (s_task) xTaskNotifyGive(s_task);
     // The printer prints what is left, paper-out pauses included.

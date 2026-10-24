@@ -1159,13 +1159,69 @@ static void test_page_locked(void)
     }
 }
 
+// W-1088: a LaserWriter's test page (ps_testpage), sent as it is on its own
+// task: the printer takes its time. s_job_lock is held; the task gives it back.
+static volatile int s_ps_test_running;
+
+static void ps_test_task(void *arg)
+{
+    int id = (int)(intptr_t)arg;
+    char name[PR_NAME_MAX] = "", product[64] = "", version[16] = "", board[96], host[64];
+    printers_describe(id, name, sizeof name, product, sizeof product, version, sizeof version);
+    snprintf(board, sizeof board, "AirWriter %s at %s", esp_app_get_description()->version, s_ip);
+    snprintf(host, sizeof host, "http://%s.local/", s_set.hostname);
+    ps_tp_info_t ti = { .printer = name, .product = product, .version = version, .host = host,
+                        .board = board };
+    int printed = laser_test_page(id, &ti);
+    ESP_LOGI(TAG, "test page to \"%s\": %s", name, printed ? "printed" : "not printed");
+    printer_state_post(printed ? PS_EV_JOB_DONE : PS_EV_JOB_FAILED);
+    s_ps_test_running = 0;
+    s_printing = 0;
+    s_laser_owns = 0;
+    job_touch();
+    line_source();
+    xSemaphoreGive(s_job_lock);
+    vTaskDelete(NULL);
+}
+
+static void ps_test_locked(int id)
+{
+    strncpy(s_last_job, "Test page", sizeof s_last_job - 1);
+    s_printing = 1;
+    s_laser_owns = 1;
+    s_ps_test_running = 1;
+    job_touch();
+    led_grid_set_source(LG_SRC_AIRPRINT);
+    line_source();
+    printer_state_post(PS_EV_JOB_START);
+    if (xTaskCreate(ps_test_task, "ps_test", 6144, (void *)(intptr_t)id, 3, NULL) != pdPASS) {
+        ESP_LOGE(TAG, "test page: could not create task");
+        printer_state_post(PS_EV_JOB_FAILED);
+        s_ps_test_running = 0;
+        s_printing = 0;
+        s_laser_owns = 0;
+        job_touch();
+        line_source();
+        xSemaphoreGive(s_job_lock);
+    }
+}
+
+// The test page for whichever printer gets it (printers_test_target): the
+// port's ImageWriter's, or a LaserWriter's. s_job_lock is held.
+static void test_page_to(int id, int port)
+{
+    if (port) test_page_locked();
+    else ps_test_locked(id);
+}
+
 // DIP4 at boot. Non-blocking: a test page never queues behind whatever is
 // printing; s_job_lock is the actual mutual exclusion.
 static void test_page(void)
 {
     on_activity();
-    if (!printers_port_is_imagewriter()) {
-        ESP_LOGW(TAG, "test page: no ImageWriter on the printer port");
+    int port, id = printers_test_target(&port);
+    if (id < 0) {
+        ESP_LOGW(TAG, "test page: no printer to print it on");
         return;
     }
     if (xSemaphoreTake(s_job_lock, 0) != pdTRUE) {
@@ -1173,7 +1229,7 @@ static void test_page(void)
         s_job_waiting = 1;
         return;
     }
-    test_page_locked();
+    test_page_to(id, port);
 }
 
 // W-1055: the cable test, from the button or the web page, under the job lock
@@ -1209,6 +1265,11 @@ static void test_button(void)
     on_activity();
     if (xSemaphoreTake(s_job_lock, 0) != pdTRUE) {
         int cancel = 0;
+        if (s_ps_test_running) {                   // W-1088: a LaserWriter's page
+            ESP_LOGI(TAG, "test button tapped again: cancelling the test page");
+            laser_job_cancel();
+            return;
+        }
         portENTER_CRITICAL(&s_tap_mux);
         if (s_test_running) {
             // The write in progress is aborted; W-1041's resync runs before
@@ -1227,23 +1288,23 @@ static void test_button(void)
         }
         return;
     }
+    // W-1088: the port's ImageWriter, else the first shared printer.
+    int port, id = printers_test_target(&port);
 #if CONFIG_AIRWRITER_PIC_CLK_PIN >= 0
-    if (!serial_out_clear()) {
+    if ((port || id < 0) && !serial_out_clear()) {
         ESP_LOGI(TAG, "test button with the printer not ready: testing the cable");
         if (xTaskCreate(cable_button_task, "cable", 4096, NULL, 3, NULL) != pdPASS)
             xSemaphoreGive(s_job_lock);
         return;
     }
 #endif
-    // W-1088: the ImageWriter test page needs an ImageWriter; the other
-    // printers' pages come with the printer list's test target.
-    if (!printers_port_is_imagewriter()) {
-        ESP_LOGW(TAG, "test button: no ImageWriter on the printer port");
+    if (id < 0) {
+        ESP_LOGW(TAG, "test button: no printer to print the test page on");
         xSemaphoreGive(s_job_lock);
         led_grid_blip(LG_BLIP_BUSY);
         return;
     }
-    test_page_locked();
+    test_page_to(id, port);
 }
 
 // Latched by dip_on_change from the boot-time read, consumed once app_main
@@ -1349,8 +1410,13 @@ static int web_test_page(void *ctx)
 {
     (void)ctx;
     on_activity();
-    if (!printers_port_is_imagewriter()) return 1;
+    int port, id = printers_test_target(&port);
+    if (id < 0) return 1;
     if (xSemaphoreTake(s_job_lock, 0) != pdTRUE) return 1;
+    if (!port) {
+        ps_test_locked(id);
+        return 0;
+    }
     test_page_locked();
     return 0;
 }

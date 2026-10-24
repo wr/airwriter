@@ -56,6 +56,14 @@ void        printers_at_queried(int id, int ok, const lw_info_t *info);
 // on one that is off, nothing. The AirWriter marker (host) either way.
 void        printers_offers(int at_link, int on, const char *host, lt_offers_t *o);
 
+// Who gets the test page (the button, DIP4, the page): the port's ImageWriter,
+// else the first shared printer. Its id, *port 1 for the port's; -1 for none.
+int         printers_test_target(int *port);
+// A printer's name, and a LaserWriter's product and PostScript version ("" for
+// none): -1 with no such printer.
+int         printers_describe(int id, char *name, size_t ncap, char *product, size_t pcap,
+                              char *version, size_t vcap);
+
 port_mode_t printers_port_mode(void);
 int         printers_port_is_imagewriter(void);
 // An ImageWriter on the port, shared over AirPrint: the panel follows its line.

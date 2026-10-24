@@ -443,6 +443,37 @@ void printers_offers(int at_link, int on, const char *host, lt_offers_t *o)
     unlock();
 }
 
+int printers_test_target(int *port)
+{
+    *port = 0;
+    if (!s_started) return -1;
+    lock();
+    live_fill();
+    int id = pr_test_target(s_l, s_live);
+    const pr_rec_t *r = id >= 0 ? pr_get(s_l, id) : NULL;
+    // An AppleTalk ImageWriter's page comes with W-1088's last step; until then, none.
+    if (r && r->where != PR_WHERE_PORT && r->kind != PR_KIND_LASERWRITER) id = -1;
+    *port = r && r->where == PR_WHERE_PORT;
+    unlock();
+    return id;
+}
+
+int printers_describe(int id, char *name, size_t ncap, char *product, size_t pcap,
+                      char *version, size_t vcap)
+{
+    if (!s_started) return -1;
+    lock();
+    const pr_rec_t *r = pr_get(s_l, id);
+    if (r) {
+        snprintf(name, ncap, "%s", r->name);
+        int lw = r->kind == PR_KIND_LASERWRITER;
+        snprintf(product, pcap, "%s", lw ? r->lw.product : "");
+        snprintf(version, vcap, "%s", lw ? r->lw.version : "");
+    }
+    unlock();
+    return r ? 0 : -1;
+}
+
 port_mode_t printers_port_mode(void)
 {
     if (!s_started) return PORT_NONE;
