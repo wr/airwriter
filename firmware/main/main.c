@@ -1367,7 +1367,9 @@ static void restart_when_released(void)
 
 static void reset_task(void *arg)
 {
-    (void)arg;
+    // The settings page's Erase: its reply goes out first, as Restart's does.
+    // Without it the page waited 30 s and said AirWriter had not answered.
+    if (arg) vTaskDelay(pdMS_TO_TICKS(300));
     // Wi-Fi first, so the driver is not writing its own NVS keys while the
     // partition goes. Everything after this restarts anyway.
     esp_wifi_stop();
@@ -1409,7 +1411,7 @@ static void web_erase(void *ctx)
     (void)ctx;
     ESP_LOGW(TAG, "factory reset from the settings page");
     s_reset_released = 1;
-    if (xTaskCreate(reset_task, "reset", 3072, NULL, 5, NULL) != pdPASS) {
+    if (xTaskCreate(reset_task, "reset", 3072, (void *)1, 5, NULL) != pdPASS) {
         ESP_LOGE(TAG, "factory reset: could not start");
         led_grid_action(LG_ACT_RESET_FAILED, 0);
     }
