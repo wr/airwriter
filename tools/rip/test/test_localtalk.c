@@ -1332,6 +1332,162 @@ static void test_marker(void)
     CHECK(!n.pap.open);
 }
 
+// W-1095: a relayed connection carries any number of jobs, as a
+// LaserWriter's does. The Mac's EOF ends one (job_end LT_JOB_EOF, not the
+// once-only end); once the printer's EOF has answered the Mac's read, the Mac
+// is asked for the next with a new SendData.
+static int     jeofs;                      // job_end(LT_JOB_EOF) calls
+static uint8_t ro[64], ro_last[64];        // what the printer has to say; the last answer
+static size_t  ro_len, ro_last_n;
+static int     ro_eof, ro_last_eof;
+static void f_end_jobs(void *ctx, int normal)
+{
+    if (normal == LT_JOB_EOF) jeofs++;
+    else f_end(ctx, normal);
+}
+static size_t f_reg_output(void *ctx, int reg, uint8_t *buf, size_t max, int *eof, int again)
+{
+    (void)ctx; (void)reg;
+    if (!again) {
+        ro_last_n = ro_len < max ? ro_len : max;
+        memcpy(ro_last, ro, ro_last_n);
+        ro_last_eof = ro_eof;
+        ro_len = 0;
+        ro_eof = 0;
+    }
+    memcpy(buf, ro_last, ro_last_n);
+    *eof = ro_last_eof;
+    return ro_last_n;
+}
+static const lt_ops_t OPS_RELAYED = { NULL, f_send, f_claim, f_log, f_begin, f_data, f_room,
+                                      f_end_jobs, NULL, f_pap_open, f_reg_status, f_reg_output };
+
+static uint64_t online_relayed(lt_node_t *n, uint8_t id)
+{
+    lt_cfg_t cfg = { "ImageWriter II", "ImageWriter", 0x0000, id, 1, NULL, reg_room[reg_next++ % 4] };
+    lt_node_init(n, &cfg, &OPS_RELAYED, 0);
+    uint64_t t = 0;
+    for (int i = 0; i <= LT_ENQ_TRIES; i++, t += LT_ENQ_GAP_MS) lt_node_tick(n, t);
+    reset_fake();
+    jeofs = 0; job_eof = 0; job_normal = -1; job_len = 0; po_busy = 0;
+    ro_len = ro_last_n = 0; ro_eof = ro_last_eof = 0;
+    return t;
+}
+
+static uint16_t tid_of(int i) { return (uint16_t)(atp_of(i)[2] << 8 | atp_of(i)[3]); }
+
+static void test_pap_relayed_jobs(void)
+{
+    lt_node_t n;
+    uint64_t t = online_relayed(&n, 200);
+    lt_node_register(&n, 1, PS("Office"), PS("LaserWriter"), 0x85);
+    uint8_t f[LLAP_MAX];
+    const uint8_t oc[] = { 0xFC, 8, 0, 0 };
+    size_t fl = mac_atp(f, 200, 0x85, ATP_TREQ | ATP_XO, 0x01, 0x0901, 0x61, PAP_OPEN_CONN, 0, 0, oc, sizeof oc);
+    lt_node_rx(&n, f, fl, t);
+    CHECK(n.pap.open && n.pap.reg == 1);
+    CHECK_EQ_INT(atp_of(1)[5], PAP_SEND_DATA);
+    CHECK_EQ_INT(atp_of(1)[7], 1);
+    uint16_t tid1 = tid_of(1);
+
+    // Job 1, the query, with EOF: one job over, the connection open, no next read yet.
+    reset_fake();
+    const char q[] = "%!PS-Adobe-2.0 Query\r";
+    fl = mac_atp(f, 200, LT_SOCK_CONN, ATP_TRESP | ATP_EOM, 0, tid1, 0x61, PAP_DATA, 1, 0,
+                 (const uint8_t *)q, 21);
+    lt_node_rx(&n, f, fl, t + 100);
+    CHECK_EQ_INT(nsent, 1);                               // the TRel alone
+    CHECK_EQ_INT(atp_of(0)[0], ATP_TREL);
+    CHECK_EQ_INT(jeofs, 1);
+    CHECK_EQ_INT(job_eof, 0);
+    CHECK_EQ_INT(job_len, 21);
+    CHECK(n.pap.open);
+
+    // The Mac reads the answer: held while the printer has said nothing.
+    reset_fake();
+    fl = mac_atp(f, 200, LT_SOCK_CONN, ATP_TREQ | ATP_XO, 0xFF, 0x0902, 0x61, PAP_SEND_DATA, 0, 1, NULL, 0);
+    lt_node_rx(&n, f, fl, t + 110);
+    CHECK_EQ_INT(nsent, 0);
+    lt_node_tick(&n, t + 1000);
+    CHECK_EQ_INT(nsent, 0);
+
+    // The printer's answer and EOF reach that read; then a SendData for the next job.
+    memcpy(ro, "true\r", 5);
+    ro_len = 5; ro_eof = 1;
+    lt_node_tick(&n, t + 1100);
+    CHECK_EQ_INT(nsent, 2);
+    CHECK_EQ_INT(atp_of(0)[5], PAP_DATA);
+    CHECK_EQ_INT(atp_of(0)[6], 1);                        // EOF
+    CHECK_EQ_INT(sent_len[0], 3 + 5 + 8 + 5);
+    CHECK_EQ_INT(atp_of(1)[0], ATP_TREQ | ATP_XO);
+    CHECK_EQ_INT(atp_of(1)[5], PAP_SEND_DATA);
+    CHECK_EQ_INT(atp_of(1)[7], 2);                        // the next sequence number
+    uint16_t tid2 = tid_of(1);
+    CHECK(tid2 != tid1);
+
+    // A PAP-level retransmit of that read: the same answer, and no third job.
+    reset_fake();
+    fl = mac_atp(f, 200, LT_SOCK_CONN, ATP_TREQ | ATP_XO, 0xFF, 0x0903, 0x61, PAP_SEND_DATA, 0, 1, NULL, 0);
+    lt_node_rx(&n, f, fl, t + 1200);
+    CHECK_EQ_INT(nsent, 1);
+    CHECK_EQ_INT(atp_of(0)[6], 1);
+    CHECK_EQ_MEM(atp_of(0) + 8, "true\r", 5);
+
+    // Job 2, the page, on the new read: its EOF ends it.
+    reset_fake();
+    uint8_t page[100];
+    for (int i = 0; i < 100; i++) page[i] = (uint8_t)('a' + i % 26);
+    fl = mac_atp(f, 200, LT_SOCK_CONN, ATP_TRESP | ATP_EOM, 0, tid2, 0x61, PAP_DATA, 1, 0, page, sizeof page);
+    lt_node_rx(&n, f, fl, t + 2000);
+    CHECK_EQ_INT(jeofs, 2);
+    CHECK_EQ_INT(job_len, 121);
+    CHECK_EQ_MEM(job + 21, page, sizeof page);
+    CHECK_EQ_INT(job_eof, 0);
+
+    // Its EOF to the Mac's next read, then the read for job 3.
+    reset_fake();
+    ro_eof = 1;
+    fl = mac_atp(f, 200, LT_SOCK_CONN, ATP_TREQ | ATP_XO, 0xFF, 0x0904, 0x61, PAP_SEND_DATA, 0, 2, NULL, 0);
+    lt_node_rx(&n, f, fl, t + 2100);
+    CHECK_EQ_INT(nsent, 2);
+    CHECK_EQ_INT(atp_of(0)[6], 1);
+    CHECK_EQ_INT(atp_of(1)[5], PAP_SEND_DATA);
+    CHECK_EQ_INT(atp_of(1)[7], 3);
+    CHECK(strstr(lastlog, "job 2") != NULL);
+
+    // CloseConn ends the connection, once.
+    reset_fake();
+    fl = mac_atp(f, 200, LT_SOCK_CONN, ATP_TREQ | ATP_XO, 0x01, 0x0905, 0x61, PAP_CLOSE_CONN, 0, 0, NULL, 0);
+    lt_node_rx(&n, f, fl, t + 2200);
+    CHECK(!n.pap.open);
+    CHECK_EQ_INT(job_eof, 1);
+    CHECK_EQ_INT(job_normal, 1);
+    CHECK_EQ_INT(jeofs, 2);
+
+    // The node's own registration, the ImageWriter's, still ends its
+    // connection at the Mac's EOF: no next read, however long.
+    t = online_relayed(&n, 201);
+    fl = mac_atp(f, 201, LT_SOCK_SLS, ATP_TREQ | ATP_XO, 0x01, 0x0911, 0x62, PAP_OPEN_CONN, 0, 0, oc, sizeof oc);
+    lt_node_rx(&n, f, fl, t);
+    CHECK(n.pap.open && n.pap.reg == 0);
+    tid1 = tid_of(1);
+    reset_fake();
+    fl = mac_atp(f, 201, LT_SOCK_CONN, ATP_TRESP | ATP_EOM, 0, tid1, 0x62, PAP_DATA, 1, 0, page, sizeof page);
+    lt_node_rx(&n, f, fl, t + 100);
+    CHECK_EQ_INT(job_eof, 1);                             // job_end at EOF, as before
+    CHECK_EQ_INT(job_normal, 1);
+    CHECK_EQ_INT(jeofs, 0);
+    fl = mac_atp(f, 201, LT_SOCK_CONN, ATP_TREQ | ATP_XO, 0xFF, 0x0912, 0x62, PAP_SEND_DATA, 0, 1, NULL, 0);
+    lt_node_rx(&n, f, fl, t + 200);
+    reset_fake();
+    for (uint64_t k = 300; k <= 30000; k += 500) lt_node_tick(&n, t + k);
+    int reads = 0;
+    for (int i = 0; i < nsent && i < MAXSENT; i++)
+        reads += atp_of(i)[0] == (ATP_TREQ | ATP_XO) && atp_of(i)[5] == PAP_SEND_DATA;
+    CHECK_EQ_INT(reads, 0);
+    CHECK(n.pap.open);
+}
+
 // W-1088 review I5: the nodes live in internal RAM (four on the board), so
 // their registrations are the link's room, not each node's. A node given none
 // answers only as itself.
@@ -1844,6 +2000,7 @@ int main(void)
     test_register_two();
     test_open_on_reg();
     test_marker();
+    test_pap_relayed_jobs();
     test_register_needs_room();
     test_register_macroman();
     test_name_asked();

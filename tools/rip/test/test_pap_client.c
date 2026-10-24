@@ -96,10 +96,12 @@ static void f_status(void *ctx, const uint8_t *p)
     status[p[0]] = '\0';
     nstatus++;
 }
-static int opened, ended = -1, nended;
+static int opened, ended = -1, nended, job_eofs;
 static void f_opened(void *ctx) { (void)ctx; opened++; }
 static void f_ended(void *ctx, papc_end_t how) { (void)ctx; ended = (int)how; nended++; }
-static const papc_ops_t OPS = { NULL, f_read, f_output, f_status, f_opened, f_ended, f_log };
+static void f_job_eof(void *ctx) { (void)ctx; job_eofs++; }
+static const papc_ops_t OPS = { NULL, f_read, f_output, f_status, f_opened, f_ended, f_log,
+                                f_job_eof };
 
 static lt_node_t node;
 static pap_client_t *pc;
@@ -116,7 +118,7 @@ static uint64_t fresh(void)
     lt_node_attach(&node, pc);
     nsent = 0;
     src_len = src_pos = 0; src_eof = 0; reads = 0;
-    output_n = 0; nstatus = 0; opened = 0; ended = -1; nended = 0;
+    output_n = 0; nstatus = 0; opened = 0; ended = -1; nended = 0; job_eofs = 0;
     return t;
 }
 
@@ -157,6 +159,18 @@ static void reply_open(uint16_t tid, uint8_t cid, uint16_t result, const char *s
 static uint8_t open_ok(uint64_t t)
 {
     CHECK_EQ_INT(papc_open(pc, &SLS, 600000, t), 0);
+    uint16_t tid, wait;
+    uint8_t cid;
+    last_open(&tid, &cid, &wait);
+    reply_open(tid, cid, 0, "status: idle", t + 5);
+    CHECK_EQ_INT(opened, 1);
+    return cid;
+}
+
+// The same, as the relay opens it (W-1095): any number of jobs.
+static uint8_t open_multi(uint64_t t)
+{
+    CHECK_EQ_INT(papc_open_multi(pc, &SLS, 600000, t), 0);
     uint16_t tid, wait;
     uint8_t cid;
     last_open(&tid, &cid, &wait);
@@ -218,6 +232,30 @@ static int count_fn(int from, uint8_t fn, uint8_t ctl_fn)
         if (!frame(i, &d, &a) && (a.ctl & ATP_FN_MASK) == ctl_fn && a.user[1] == fn) k++;
     }
     return k;
+}
+
+// The printer's output on our last read, its EOF on it or not.
+static void printer_says(uint8_t cid, const char *text, int eof, uint64_t now)
+{
+    uint16_t rtid, rseq;
+    CHECK(last_read(0, &rtid, &rseq));
+    from_printer(&node, PR_SESS, LT_SOCK_PAPC, ATP_TRESP | ATP_EOM, 0, rtid, cid, PAP_DATA,
+                 (uint8_t)eof, 0, (const uint8_t *)text, strlen(text), now);
+}
+
+// The CloseConn sent since frame `from` answered; 1 when there was one.
+static int close_reply(int from, uint8_t cid, uint64_t now)
+{
+    for (int i = from; i < nsent; i++) {
+        ddp_t d; atp_t a;
+        if (frame(i, &d, &a) || (a.ctl & ATP_FN_MASK) != ATP_TREQ || a.user[1] != PAP_CLOSE_CONN)
+            continue;
+        CHECK_EQ_INT(d.dst.sock, PR_SESS);
+        from_printer(&node, PR_SESS, LT_SOCK_PAPC, ATP_TRESP | ATP_EOM, 0, a.tid, cid,
+                     PAP_CLOSE_CONN_REPLY, 0, 0, NULL, 0, now);
+        return 1;
+    }
+    return 0;
 }
 
 // ------------------------------------------------------------- tests
@@ -377,6 +415,7 @@ static void test_data(void)
     CHECK_EQ_INT(ended, PAPC_END_OK);
     CHECK(papc_idle(pc));
     CHECK(biggest_data <= PAP_QUANTUM);
+    CHECK_EQ_INT(job_eofs, 0);                            // one job: the connection's end says it
 }
 
 static void test_seq_wrap(void)
@@ -507,6 +546,125 @@ static void test_cancel_paused(void)
     CHECK_EQ_INT(ended, PAPC_END_CANCELED);
 }
 
+// W-1095: a Mac's LaserWriter driver sends a query, reads the answer to the
+// printer's EOF, then the document as the next job on the same connection.
+// On a multi-job connection (the relay's) each EOF ends a job, not the
+// connection, and the printer's SendData for the next job waits for its data.
+static void test_multi_jobs(void)
+{
+    uint64_t t = fresh();
+    uint8_t cid = open_multi(t);
+    memcpy(src, "%!PS-Adobe-2.0 Query\r", 21);
+    src_len = 21; src_eof = 1;
+    int from = ask(cid, 1, 0xA00, t + 10);
+    lt_node_tick(&node, t + 10);
+    size_t bytes; int eof, eom;
+    CHECK_EQ_INT(answers(from, 0xA00, &bytes, &eof, &eom), 1);
+    CHECK_EQ_INT(bytes, 21);
+    CHECK_EQ_INT(eof, 1);
+    src_eof = 0;                                          // the document is not here yet
+
+    // The answer, then the printer's EOF: the job is over, the connection is not.
+    printer_says(cid, "true\r", 0, t + 100);
+    from = nsent;
+    printer_says(cid, "", 1, t + 110);
+    CHECK_EQ_INT(job_eofs, 1);
+    CHECK_EQ_INT(output_n, 5);
+    CHECK_EQ_INT(count_fn(from, PAP_CLOSE_CONN, ATP_TREQ), 0);
+    CHECK_EQ_INT(nended, 0);
+    uint16_t rtid, rseq;
+    CHECK(last_read(from, &rtid, &rseq));                 // still reading the printer
+    CHECK_EQ_INT(rseq, 3);
+
+    // Its SendData for the next job is held, not answered with an empty EOF,
+    // and nothing closes past the one-job wait for a printer's EOF.
+    from = ask(cid, 2, 0xA01, t + 200);
+    for (uint64_t k = 200; k <= PAPC_EOF_WAIT_MS + 10000; k += 500) lt_node_tick(&node, t + k);
+    CHECK_EQ_INT(answers(from, 0xA01, &bytes, &eof, &eom), 0);
+    CHECK_EQ_INT(count_fn(from, PAP_CLOSE_CONN, ATP_TREQ), 0);
+    CHECK(!papc_idle(pc));
+
+    // The document: the held SendData takes it, with its EOF.
+    uint64_t t2 = t + PAPC_EOF_WAIT_MS + 11000;
+    for (size_t i = 0; i < 2000; i++) src[src_len + i] = (uint8_t)(i * 3);
+    src_len += 2000; src_eof = 1;
+    lt_node_tick(&node, t2);
+    CHECK_EQ_INT(answers(from, 0xA01, &bytes, &eof, &eom), 4);
+    CHECK_EQ_INT(bytes, 2000);
+    CHECK_EQ_INT(eof, 1);
+    CHECK_EQ_INT(pc->sent_bytes, 2021);
+    src_eof = 0;
+    from = nsent;
+    printer_says(cid, "", 1, t2 + 1000);
+    CHECK_EQ_INT(job_eofs, 2);
+    CHECK_EQ_INT(count_fn(from, PAP_CLOSE_CONN, ATP_TREQ), 0);
+
+    // The Mac is done: closed normally.
+    papc_close(pc, t2 + 2000);
+    CHECK_EQ_INT(count_fn(from, PAP_CLOSE_CONN, ATP_TREQ), 1);
+    CHECK_EQ_INT(nended, 0);
+    CHECK(close_reply(from, cid, t2 + 2010));
+    CHECK_EQ_INT(ended, PAPC_END_OK);
+    CHECK_EQ_INT(nended, 1);
+    CHECK(papc_idle(pc));
+}
+
+// W-1095: the printer's EOF before ours (it flushed the job): the job ends
+// once ours follows it, and the next begins.
+static void test_multi_printer_first(void)
+{
+    uint64_t t = fresh();
+    uint8_t cid = open_multi(t);
+    src_len = 6000;
+    int from = ask(cid, 1, 0xA20, t + 10);
+    lt_node_tick(&node, t + 10);
+    size_t bytes; int eof, eom;
+    CHECK_EQ_INT(answers(from, 0xA20, &bytes, &eof, &eom), 8);
+    CHECK_EQ_INT(eof, 0);
+    from = nsent;
+    printer_says(cid, "%%[ Flushing: rest of job (to end-of-file) will be ignored ]%%\r", 1, t + 50);
+    CHECK_EQ_INT(job_eofs, 1);
+    uint16_t rtid, rseq;
+    CHECK(!last_read(from, &rtid, &rseq));                // no read until our EOF
+    src_eof = 1;
+    int at = ask(cid, 2, 0xA21, t + 100);
+    lt_node_tick(&node, t + 100);
+    CHECK_EQ_INT(answers(at, 0xA21, &bytes, &eof, &eom), 4);
+    CHECK_EQ_INT(bytes, 6000 - 4096);
+    CHECK_EQ_INT(eof, 1);
+    CHECK(last_read(from, &rtid, &rseq));                 // both EOFs through: reading again
+    src_eof = 0;
+    at = ask(cid, 3, 0xA22, t + 200);
+    lt_node_tick(&node, t + 1000);
+    CHECK_EQ_INT(answers(at, 0xA22, &bytes, &eof, &eom), 0);   // held for the next job
+    CHECK_EQ_INT(count_fn(from, PAP_CLOSE_CONN, ATP_TREQ), 0);
+}
+
+// W-1095: cancelled, a multi-job connection ends as a one-job one does: EOF
+// at once, CloseConn after the printer's.
+static void test_multi_cancel(void)
+{
+    uint64_t t = fresh();
+    uint8_t cid = open_multi(t);
+    src_len = 20000;
+    int from = ask(cid, 1, 0xA10, t + 10);
+    lt_node_tick(&node, t + 10);
+    size_t bytes; int eof, eom;
+    CHECK_EQ_INT(answers(from, 0xA10, &bytes, &eof, &eom), 8);
+    papc_cancel(pc, t + 20);
+    from = ask(cid, 2, 0xA11, t + 30);
+    lt_node_tick(&node, t + 30);
+    CHECK_EQ_INT(answers(from, 0xA11, &bytes, &eof, &eom), 1);
+    CHECK_EQ_INT(bytes, 0);
+    CHECK_EQ_INT(eof, 1);
+    from = nsent;
+    printer_says(cid, "", 1, t + 100);
+    CHECK_EQ_INT(job_eofs, 1);
+    CHECK_EQ_INT(count_fn(from, PAP_CLOSE_CONN, ATP_TREQ), 1);
+    CHECK(close_reply(from, cid, t + 110));
+    CHECK_EQ_INT(ended, PAPC_END_CANCELED);
+}
+
 static void test_status(void)
 {
     uint64_t t = fresh();
@@ -546,6 +704,9 @@ int main(void)
     test_cancel_open();
     test_cancel_paused();
     test_status();
+    test_multi_jobs();
+    test_multi_printer_first();
+    test_multi_cancel();
     free(pc);
     TEST_END;
 }

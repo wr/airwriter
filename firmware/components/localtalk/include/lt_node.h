@@ -109,6 +109,7 @@ typedef struct {
     // the job's bytes in order, never more than job_room last said. job_end
     // ends the job once: normal is 1 when the Mac ended it (CloseConn or EOF),
     // 0 when it was abandoned (timed out, superseded, or lt_node_pap_abort).
+    // On a relayed connection EOF is LT_JOB_EOF's (below, W-1095).
     int    (*job_begin)(void *ctx);
     void   (*job_data)(void *ctx, const uint8_t *d, size_t n);
     size_t (*job_room)(void *ctx);
@@ -132,6 +133,15 @@ typedef struct {
     // the ImageWriter's, nothing to say and EOF once the Mac's job has ended.
     size_t (*reg_output)(void *ctx, int reg, uint8_t *buf, size_t max, int *eof, int again);
 } lt_ops_t;
+
+// W-1095: a relayed connection carries any number of jobs. A Mac's
+// LaserWriter driver sends a query, reads the answer to the printer's EOF,
+// then sends the document as the next job on the same connection, and closes
+// only at the end. Its EOF ends one job: job_end(ctx, LT_JOB_EOF), once per
+// job, never the once-only end. Once the printer's EOF (reg_output) has
+// reached the Mac's read, the Mac is asked for the next job, as a LaserWriter
+// asks. CloseConn or a timeout ends the connection with job_end's 1 or 0.
+#define LT_JOB_EOF 2
 
 typedef uint8_t lt_name_t[NBP_NAME_MAX + 1];   // a Pascal NBP name, MacRoman
 
@@ -213,8 +223,9 @@ typedef struct {
     // Our read (SendData to the workstation).
     uint16_t   seq, rd_tid;
     uint8_t    rd_want;        // response packets still wanted; 0 = no read out
-    uint8_t    rd_eof, done;   // done: EOF delivered, nothing more to read
+    uint8_t    rd_eof, done;   // done: EOF delivered, nothing more to read (this job's, relayed)
     uint8_t    ended;          // job_end has been called for this connection
+    uint16_t   jobs;           // W-1095: a relayed connection's jobs ended by the Mac's EOF
     uint64_t   rd_sent;
     uint16_t   rd_len[LT_FLOW];
     uint8_t    rd_buf[LT_FLOW][PAP_QUANTUM];
@@ -228,6 +239,7 @@ typedef struct {
     uint64_t   wrote;            // when the workstation last sent us Data
     uint64_t   waiting;          // since when it has owed us data with the printer ready
     uint32_t   bytes;
+    uint32_t   job_at;           // W-1095: bytes before this job began
     uint64_t   idle_since;       // the idle hold's clock: open, Data, or a nonzero status
 } lt_pap_t;
 

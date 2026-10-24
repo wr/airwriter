@@ -158,7 +158,7 @@ static int ti_of(int id) { return id < 0 ? -1 : lwc_target(&s_core, id); }
 // ------------------------------------------------------------- the client's links
 
 typedef struct { int op; lt_route_t r; uint32_t busy; int rc; } call_t;
-enum { OP_OPEN, OP_STATUS, OP_CANCEL, OP_DOWN };
+enum { OP_OPEN, OP_OPEN_MULTI, OP_STATUS, OP_CANCEL, OP_CLOSE, OP_DOWN };
 
 static void do_call(void *arg)
 {
@@ -166,8 +166,10 @@ static void do_call(void *arg)
     uint64_t now = now_ms();
     switch (c->op) {
     case OP_OPEN:   c->rc = papc_open(s_pc, &c->r, c->busy, now); break;
+    case OP_OPEN_MULTI: c->rc = papc_open_multi(s_pc, &c->r, c->busy, now); break;
     case OP_STATUS: papc_status(s_pc, &c->r, now); break;
     case OP_CANCEL: papc_cancel(s_pc, now); break;
+    case OP_CLOSE:  papc_close(s_pc, now); break;
     case OP_DOWN:   papc_link_down(s_pc, now); break;
     }
 }
@@ -180,7 +182,7 @@ static int call(int op, const lt_route_t *r, uint32_t busy)
     if (s_pc_link < 0) return -1;
     int ran = s_pc_link == AT_LINK_CABLE ? localtalk_locked(do_call, &c)
                                          : ethertalk_locked(do_call, &c);
-    return ran < 0 ? -1 : op == OP_OPEN ? c.rc : 0;
+    return ran < 0 ? -1 : op == OP_OPEN || op == OP_OPEN_MULTI ? c.rc : 0;
 }
 
 // The client rides `link` from now: only while it has no connection. Holds s_client_mx.
@@ -266,6 +268,13 @@ static void pc_opened(void *ctx)
 {
     (void)ctx;
     if (s_use == USE_RELAY) pap_relay_prn_opened(&s_big->relay);
+}
+
+// The printer's EOF for one of a relayed connection's jobs (W-1095).
+static void pc_job_eof(void *ctx)
+{
+    (void)ctx;
+    if (s_use == USE_RELAY) pap_relay_prn_eof(&s_big->relay);
 }
 
 static void pc_ended(void *ctx, papc_end_t how)
@@ -460,7 +469,11 @@ static int r_open(int link, const lt_node_t *node, int reg, uint64_t now)
 
 static void r_data(const uint8_t *d, size_t n) { pap_relay_mac_data(&s_big->relay, d, n); }
 static size_t r_room(void) { return pap_relay_mac_room(&s_big->relay); }
-static void r_end(int normal) { pap_relay_mac_end(&s_big->relay, normal); }
+static void r_end(int normal)
+{
+    if (normal == LT_JOB_EOF) pap_relay_mac_eof(&s_big->relay);   // one job's end (W-1095)
+    else pap_relay_mac_end(&s_big->relay, normal);
+}
 static size_t r_output(uint8_t *buf, size_t max, int *eof, int again)
 {
     return pap_relay_mac_output(&s_big->relay, buf, max, eof, again);
@@ -506,7 +519,8 @@ static void relay_act(uint64_t now)
             s_status_id = s_open_id = s_relay_id;
             lwc_job(&s_core, k, 1);
             unlock();
-            if (call(OP_OPEN, &route, QUERY_BUSY_MS)) pap_relay_prn_ended(r, PAPC_END_DEAD);
+            // As many jobs as the Mac sends on its connection (W-1095).
+            if (call(OP_OPEN_MULTI, &route, QUERY_BUSY_MS)) pap_relay_prn_ended(r, PAPC_END_DEAD);
             else ESP_LOGI(TAG, "relay: a Mac's job on the %s for printer %d on the %s",
                           link_name(s_relay_mac_link), s_relay_id, link_name(link));
         } else {
@@ -519,18 +533,25 @@ static void relay_act(uint64_t now)
         if (s_use == USE_RELAY) call(OP_CANCEL, NULL, 0);
         xSemaphoreGive(s_client_mx);
     }
+    if (act & PR_RELAY_DO_CLOSE) {
+        xSemaphoreTake(s_client_mx, portMAX_DELAY);
+        if (s_use == USE_RELAY) call(OP_CLOSE, NULL, 0);
+        xSemaphoreGive(s_client_mx);
+    }
     if (act & PR_RELAY_DO_ABORT_MAC) {
         lt_node_t *node = (lt_node_t *)s_relay_node;
         if (s_relay_mac_link == AT_LINK_CABLE) localtalk_locked(abort_mac, node);
         else ethertalk_locked(abort_mac, node);
     }
     if (act & PR_RELAY_DO_DONE) {
-        ESP_LOGI(TAG, "relay: done, %lu bytes to the printer, %lu back to the Mac",
-                 (unsigned long)r->to_printer, (unsigned long)r->to_mac);
+        ESP_LOGI(TAG, "relay: done, %lu job%s, %lu bytes to the printer, %lu back to the Mac",
+                 (unsigned long)r->jobs, r->jobs == 1 ? "" : "s", (unsigned long)r->to_printer,
+                 (unsigned long)r->to_mac);
         if (s_use == USE_RELAY) s_use = USE_NONE;
         lock();
         lwc_job(&s_core, ti_of(s_relay_id), 0);
-        snprintf(s_last, sizeof s_last, "relayed, %lu bytes", (unsigned long)r->to_printer);
+        snprintf(s_last, sizeof s_last, "relayed, %lu job%s, %lu bytes", (unsigned long)r->jobs,
+                 r->jobs == 1 ? "" : "s", (unsigned long)r->to_printer);
         unlock();
         if (s_relay_locked) {
             s_relay_locked = 0;
@@ -723,7 +744,8 @@ esp_err_t laser_start(const laser_cfg_t *cfg)
     s_spool = xStreamBufferCreateStatic(SPOOL, 1, spool, &s_spool_cb);
 
     papc_ops_t po = { .read = pc_read, .output = pc_output, .status = pc_status,
-                      .opened = pc_opened, .ended = pc_ended, .log = pc_log };
+                      .opened = pc_opened, .ended = pc_ended, .log = pc_log,
+                      .job_eof = pc_job_eof };
     papc_init(s_pc, &po, (uint32_t)esp_timer_get_time() | 1);
 
     lwc_init(&s_core, now_ms());

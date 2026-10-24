@@ -258,6 +258,19 @@ static int relayed(const lt_node_t *n)
     return n->pap.reg && n->ops.reg_output;
 }
 
+// W-1095: a relayed connection carries any number of jobs, as a LaserWriter's
+// does. Once the Mac's EOF and the printer's have both passed, the Mac is
+// asked for the next job (a new SendData, when the relay has room).
+static void pap_next_job(lt_node_t *n, uint64_t now)
+{
+    lt_pap_t *p = &n->pap;
+    if (!relayed(n) || !p->done || !p->eof_sent) return;
+    p->done = p->eof_sent = 0;
+    p->job_at = p->bytes;
+    say(n, "PAP %u: job %u done both ways; reading the next", p->connid, p->jobs);
+    pap_start_read(n, now);
+}
+
 static void pap_answer_ws_read(lt_node_t *n, uint64_t now)
 {
     lt_pap_t *p = &n->pap;
@@ -276,6 +289,7 @@ static void pap_answer_ws_read(lt_node_t *n, uint64_t now)
         p->ws_answered_seq = p->ws_read_seq;
         p->ws_answered_eof = (uint8_t)end;
         p->ws_read = 0;
+        if (end) pap_next_job(n, now);
         return;
     }
     uint8_t eof = p->done && !p->eof_sent;
@@ -298,7 +312,7 @@ static void pap_read_done(lt_node_t *n, uint64_t now)
 
     size_t got = 0;
     for (int i = 0; i < LT_FLOW; i++) got += p->rd_len[i];
-    if (p->bytes == 0 && got) {
+    if (p->bytes == p->job_at && got) {
         // The first bytes of a job are what tells us what PAP delivers.
         char hex[3 * 24 + 1] = {0};
         size_t show_n = p->rd_len[0] < 24 ? p->rd_len[0] : 24;
@@ -311,6 +325,18 @@ static void pap_read_done(lt_node_t *n, uint64_t now)
     }
     p->bytes += (uint32_t)got;
     p->rd_want = 0;
+    p->seq = p->seq == 0xFFFF ? 1 : (uint16_t)(p->seq + 1);
+    if (p->rd_eof && relayed(n)) {
+        // W-1095: one job of the connection's, not its end.
+        p->done = 1;
+        p->jobs++;
+        if (n->ops.job_end) n->ops.job_end(n->ops.ctx, LT_JOB_EOF);
+        say(n, "PAP %u job %u EOF after %lu bytes", p->connid, p->jobs,
+            (unsigned long)(p->bytes - p->job_at));
+        pap_answer_ws_read(n, now);
+        pap_next_job(n, now);                      // the printer's EOF came first
+        return;
+    }
     if (p->rd_eof) {
         job_end(n, 1);
         p->done = 1;
@@ -318,7 +344,6 @@ static void pap_read_done(lt_node_t *n, uint64_t now)
         pap_answer_ws_read(n, now);
         return;
     }
-    p->seq = p->seq == 0xFFFF ? 1 : (uint16_t)(p->seq + 1);
     pap_start_read(n, now);
 }
 
