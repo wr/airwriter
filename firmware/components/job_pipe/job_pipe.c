@@ -51,6 +51,7 @@ static int               s_buffered;  // this job's printer bytes go through s_o
 static SemaphoreHandle_t s_printed;   // the printer task sent the job's last byte
 static volatile int      s_out_eof;   // the rip is over: s_out gets no more
 static TaskHandle_t      s_task;
+static TaskHandle_t      s_prn;       // the printer task, for its stack margin
 
 static volatile int s_eof;        // producer has no more bytes
 static volatile int s_aborted;    // transfer was truncated; abandon the page
@@ -176,9 +177,11 @@ static void pipe_task(void *arg)
     // does. Nothing below touches the shared state.
     s_task = NULL;
     if (s_cfg.done) s_cfg.done(s_cfg.done_ctx, &st);
-    // `done` runs here too now, so watch the margin.
-    ESP_LOGI(TAG, "rip task: %u bytes of stack to spare",
-             (unsigned)uxTaskGetStackHighWaterMark(NULL));
+    // `done` runs here too now, so watch the margin; and the printer task's,
+    // which runs printer_out and its resync.
+    ESP_LOGI(TAG, "rip task: %u bytes of stack to spare; printer task %u",
+             (unsigned)uxTaskGetStackHighWaterMark(NULL),
+             s_prn ? (unsigned)uxTaskGetStackHighWaterMark(s_prn) : 0u);
     vTaskDelete(NULL);
 }
 
@@ -196,7 +199,7 @@ esp_err_t job_pipe_init(const job_pipe_cfg_t *cfg)
         s_out   = xStreamBufferCreateStatic(OUT_BYTES, 1, pool + POOL_BYTES - OUT_BYTES,
                                             &s_out_ctl);
         // Above the rip's 4, so a busy rip never keeps the printer waiting.
-        if (xTaskCreateWithCaps(prn_task, "prn", PRN_STACK, NULL, 5, NULL,
+        if (xTaskCreateWithCaps(prn_task, "prn", PRN_STACK, NULL, 5, &s_prn,
                                 MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT) == pdPASS) {
             ESP_LOGI(TAG, "job buffer %u KB in PSRAM: %u KB of URF and %u KB to print "
                      "for the ImageWriter", POOL_BYTES / 1024,
