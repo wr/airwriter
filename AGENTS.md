@@ -117,8 +117,10 @@ What works on `main`:
   `/api/printers`.
 - The settings page (`W-1079 Settings page: organise by port, like macOS System Settings`,
   design `docs/superpowers/specs/2026-10-20-settings-redesign-design.md`): a settings app, a
-  sidebar of Printer, AirPrint, AppleTalk, Wi-Fi and About, each row showing its state; one home
-  per setting. Upright system type, Apple Garamond Light titles, platinum, icon tiles in the
+  sidebar of Printers (W-1088: notices, a row per printer, a printer's detail in the pane,
+  `#printers/<id>`), AirPrint (the switch and each shared printer's address), AppleTalk, Wi-Fi
+  and About, each row showing its state; one home per setting. Setup mode is three steps
+  (printers, Wi-Fi, joining) and the first visit after it opens on "AirWriter is ready". Upright system type, Apple Garamond Light titles, platinum, icon tiles in the
   ribbon's inks, status as lit bar lamps, low platinum keys; in a window on a big screen, the
   sidebar first on a phone. AppleTalk is one card per way in (AppleTalk Port, Networked Macs,
   Basilisk II, Infinite Mac) with its switch and the Macs heard in the last 10 minutes, each by
@@ -155,11 +157,16 @@ What works on `main`:
   is refused as not accepting jobs; on, they come back under the same printer-uuid.
 - Wi-Fi scans all channels and joins the strongest AP.
 - The printer list (`W-1088 Printers: AirWriter finds, sets up and shares whatever printers you have`,
-  design `docs/superpowers/specs/2026-10-23-printers-design.md`, being built on
-  `wells/w-1088-printers`): records in NVS `printers`/`list` (`components/printers`), each
+  design `docs/superpowers/specs/2026-10-23-printers-design.md`, SPEC §3.15, built on
+  `wells/w-1088-printers`, not yet on main): records in NVS `printers`/`list` (`components/printers`), each
   with its own printer-uuid, made once. The port's printer is AirPrint printer 0 as its record
   says; `ESC ?` at line-up finds it, and ImageWriter commands (CTRL-X kick, resync, the job's
-  self-ID, the test page) go to J2 only when it is an ImageWriter. `GET`/`POST /api/printers`.
+  self-ID, the test page) go to J2 only when it is an ImageWriter. Identified printers are
+  shared at once, up to four; AppleTalk ones at AirPrint printers 1-3. The test button, DIP4 and
+  the page go to the port's ImageWriter, else the first shared printer (a LaserWriter gets
+  `ps_testpage`). The panel shows the box: ready while any shared printer is. Setup mode looks
+  at once. AirPrint to an AppleTalk ImageWriter was cut: old Macs' only. `GET`/`POST
+  /api/printers`.
   A board's first boot on it makes its records from what it had (the port's old uuid, a
   W-1082 LaserWriter, the AirPrint switch as the port's Share) and stores its host name, so
   `imagewriter-xxxx` stays; a new board is `airwriter-xxxx` with the AppleTalk port on.
@@ -220,13 +227,14 @@ ImageWriter LQ take the same stream and are expected to work, untested (the scop
 amendment); docs say so rather than excluding them. The board reads an LQ's self-ID too, so a
 colour ribbon in an LQ prints in colour; the reply's shape is taken from GSport's emulator and
 untested on a real LQ. The original ImageWriter sends no self-ID, so the board never sees a
-colour ribbon in it. The settings page's Model picker offers
-both, but the model only names the printer: IPP `printer-make-and-model`, Bonjour `ty` and
-`/api/status` `model` still say Apple ImageWriter II. StyleWriters stay out. PostScript
-LaserWriters on AppleTalk can be shared beside it (above), untested on a real one.
+colour ribbon in it. The port printer's model (found, or picked in its detail) names it in IPP
+`printer-make-and-model` and Bonjour `ty` (W-1088); `/api/status` `model` still says Apple
+ImageWriter II. StyleWriters stay out. PostScript LaserWriters on AppleTalk are shared as
+printers of their own (above), untested on a real one.
 
 Not built: Mini vMac (LToUDP, `W-1077`), consumers of the dither override, PWG raster, HP
-LaserJets over serial (`W-1083`, designed).
+LaserJets over serial (`W-1083`, designed), AirPrint to an AppleTalk ImageWriter (cut from
+W-1088).
 
 **Board 1:** ESP32-S3-WROOM-1-N8R2 (8 MB flash, 2 MB PSRAM). On the home Wi-Fi at
 10.0.1.115, mDNS `imagewriter-2434.local`. Console on USB-C as `/dev/cu.usbmodem*` (the number

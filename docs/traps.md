@@ -25,6 +25,11 @@ Traps already explained in a code comment are listed only when the comment is ea
   `sendto` fail with ENOMEM. Dropped, each lost PAP reply cost the printer a 2 s retry, and a
   photo page took 9 minutes at -86 dBm (W-1086). The tunnel and the Wi-Fi link wait 10 ms and
   try again (`et_send_patiently`); `/api/et` `tunnel_retries` counts the waits.
+- **Broadcasts at boot starve a TLS handshake.** W-1088's first build sent six AppleTalk
+  lookups the moment the laser task started, beside Infinite Mac's TLS handshake: esp-aes failed
+  to allocate, mDNS dropped what it received, the relay's connect failed, and internal RAM's low
+  mark was 23 bytes. The first look now waits 10 s and its lookups go 300 ms apart (low mark
+  ~6.6 KB). Anything that bursts frames should wait for the handshakes, or space itself.
 - **`SPIRAM_TRY_ALLOCATE_WIFI_LWIP` is not the cure.** It forces Wi-Fi to 16 static TX buffers in
   internal RAM: idle free fell from 29 KB to 13 KB with a 5 KB largest block, no job could
   start its rip task, and board 1 fell off Wi-Fi until replugged.
