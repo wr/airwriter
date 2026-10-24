@@ -232,6 +232,13 @@ body:not(.ready) .sw span,body:not(.ready) .sw span:after{transition:none}
 .back2:hover{text-decoration:underline;background:none}
 #pr-home,#pr-detail{display:flex;flex-direction:column;gap:inherit}
 #pr-home.hide,#pr-detail.hide{display:none}
+/* W-1088: setup is three steps on their own, without the sidebar */
+body.setupmode .side,body.setupmode .bar{display:none}
+body.setupmode .app{grid-template-columns:minmax(0,1fr)}
+#su-1,#su-2,#su-3{display:flex;flex-direction:column;gap:20px}
+#su-1.hide,#su-2.hide,#su-3.hide{display:none}
+.prow .fld{max-width:12em}
+#d-finish .prlist{margin:4px 0}
 .lw-note{color:var(--fg2);font-size:var(--t-small)}
 
 /* the colour ribbon's four inks, as a glyph */

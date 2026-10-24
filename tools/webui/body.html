@@ -38,6 +38,27 @@
   <main class=detail>
     <header class=bar><button class=back type=button>‹ Settings</button></header>
 
+    <!-- ── Setup ───────────────────────────────────────────────── -->
+    <!-- W-1088: the captive page as three steps: the printers, Wi-Fi, joining.
+         The board looks before it has Wi-Fi, so step 1 shows what is plugged in. -->
+    <section class=pane id=p-setup>
+      <div id=su-1>
+        <div class=hero><img src="{{icon}}" alt=""><h2>Let’s find your printer</h2><p id=su-looking></p></div>
+        <div class="box prlist" id=su-list></div>
+        <p class=foot>Don’t see your printer? Make sure it’s switched on and connected, then Look Again. A printer on your home network shows up once AirWriter has joined it.</p>
+        <p class=say id=su-say></p>
+        <div class=btnrow><button class=btn type=button id=su-look>Look Again</button><button class=btn type=button data-dlg=d-add>Add a Printer…</button><button class="btn primary" type=button id=su-next>Continue</button></div>
+      </div>
+      <div id=su-2 class=hide>
+        <div class=hero><span class="ic c"><svg><use href="#g-wifi"/></svg></span><h2>Wi-Fi</h2><p>AirWriter joins your Wi-Fi so your iPhone, iPad and Mac can print to it.</p></div>
+        <div class=btnrow><button class=btn type=button id=su-back>Back</button><button class="btn primary" type=button id=su-nets>Choose a Network…</button></div>
+      </div>
+      <div id=su-3 class=hide>
+        <div class=hero><img src="{{icon}}" alt=""><h2>Joining</h2><p id=su-joining></p></div>
+        <div class=box><div class=row><span class="txt mono" id=su-host></span><button class=btn type=button id=su-copy>Copy</button></div></div>
+      </div>
+    </section>
+
     <!-- ── Printers ──────────────────────────────────────────── -->
     <!-- W-1088: every printer AirWriter has, found or told: notices, one row
          each, and a printer's detail in its place when it is opened. -->
@@ -198,6 +219,15 @@
   <div class=box><div class=row><span class=txt>Model</span><select class=pop id=add-model aria-label=Model><option>ImageWriter II</option><option>ImageWriter LQ</option><option>ImageWriter</option></select></div></div>
   <p class=say id=add-say></p>
   <div class=btnrow><button class=btn type=button data-close>Cancel</button><button class="btn primary" type=button id=add-go>Add</button></div>
+</div></dialog>
+
+<!-- W-1088: the first visit after a fresh setup, on the home network -->
+<dialog id=d-finish><div class=dlg>
+  <b>AirWriter is ready</b>
+  <div class="box prlist" id=fin-list></div>
+  <p id=fin-how></p>
+  <p class=say id=fin-say></p>
+  <div class=btnrow><button class="btn primary" type=button id=fin-done>Done</button></div>
 </div></dialog>
 
 <dialog id=d-bas><div class=dlg>

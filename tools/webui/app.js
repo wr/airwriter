@@ -300,7 +300,7 @@ function press(planes,W,H,inks,zoom,cv,dpr){
 /* ── panes ─────────────────────────────────────────────────────────── */
 /* One pane at a time; on a phone the sidebar is the first screen and a pane
    slides over it. The pane is in the address, so a reload stays put. */
-const PANES=['printers','airprint','appletalk','wifi','about'];
+const PANES=['printers','airprint','appletalk','wifi','about','setup'];
 const phone=()=>matchMedia('(max-width:760px)').matches;
 let pane='', wantSel=null;
 function go(id){
@@ -398,12 +398,17 @@ function draw(s){
   if(first){
     first=false;
     const want=(location.hash||'').slice(1);
-    if(setup){ go('wifi'); openNets(); }
+    if(setup){
+      // W-1088: setup's three steps; back from a join that failed, straight to Wi-Fi
+      document.body.classList.add('setupmode'); go('setup');
+      if(s.ssid){ suStep(2); openNets(); } else { suStep(1); suLook(); }
+    }
     else if(PANES.includes(want)||/^printers\/\d+$/.test(want)) go(want);
     else { go('printers'); if(phone()) document.body.classList.remove('in'); }
   }
   atDraw();
   prDraw();
+  finDraw();
 }
 function wifiArcs(n){
   const arc=(lvl,d)=>'<path fill=none stroke=currentColor stroke-width=1.7 stroke-linecap=round'
@@ -500,6 +505,7 @@ function prDraw(){
   const old=PR.printers.filter(p=>p.identified&&p.kind!=='unknown').map(p=>p.name);
   $('oldmacs').textContent=old.length?'Old Macs see: '+old.join(', ')+'.':'Old Macs see no printers yet.';
   if(sel!==null) pdDraw();
+  suDraw();
 }
 /* A printer's detail, in the pane in place of the list. */
 function prOpen(id){
@@ -548,6 +554,7 @@ async function prPoll(){
   if(lost||!r) return;
   PR=r; prDraw();
   if(wantSel!==null&&pane==='printers'){ const w=wantSel; wantSel=null; prOpen(w); }
+  finDraw();
 }
 /* An AppleTalk printer's own words (its status line), from laser.c's view. */
 async function lwtPoll(){
@@ -820,6 +827,69 @@ $('zonedone').onclick=async()=>{
   ETS=r; atDraw(); setTimeout(atPoll,1500); $('d-inf').close();
 };
 
+/* ── setup ───────────────────────────────────────────────────────── */
+/* W-1088: first-run setup, on AirWriter's own network: what is plugged in
+   (the board looks before it has Wi-Fi), then Wi-Fi, then where to go. */
+let suLooking=0;
+function suStep(n){
+  for(const i of [1,2,3]) $('su-'+i).classList.toggle('hide',i!==n);
+  document.querySelector('.detail').scrollTop=0;
+}
+function suLook(){
+  suLooking=Date.now(); suDraw();
+  postJSON('/api/printers',{look:true}).then(()=>prPoll());
+  setTimeout(prPoll,3500);
+  setTimeout(()=>{ suLooking=0; prPoll(); },7000);
+}
+function suDraw(){
+  if(!setup) return;
+  const ps=PR?PR.printers:[], looking=!!suLooking;
+  $('su-looking').textContent=looking?'Looking on the printer port and the AppleTalk port…'
+    :ps.length?'AirWriter found '+(ps.length===1?'this printer. You can rename it.':'these printers. You can rename them.'):'';
+  const h=ps.length?ps.map(p=>'<div class="row prow">'+icHTML(p)+'<span class=txt><input class=fld data-rename='+p.id
+      +' value="'+esc(p.name)+'" maxlength=32 autocomplete=off spellcheck=false aria-label="Name"><small>'
+      +esc(WHERE[p.where]||p.where)+'</small></span></div>').join('')
+    :'<p class=empty>'+(looking?'Looking…':'No printers found yet.')+'</p>';
+  // a name being typed is kept
+  if(!$('su-list').contains(document.activeElement)&&$('su-list')._h!==h){ $('su-list')._h=h; $('su-list').innerHTML=h; }
+  $('su-next').textContent=ps.length?'Continue':'Continue Without a Printer';
+}
+$('su-list').addEventListener('change',e=>{
+  const f=e.target.closest('[data-rename]'); if(!f) return;
+  prPost({id:+f.dataset.rename,name:f.value.trim()},'Saved.','su-say');
+});
+$('su-list').addEventListener('keydown',e=>{ if(e.key==='Enter'&&e.target.matches('[data-rename]')) e.target.blur(); });
+$('su-look').onclick=suLook;
+$('su-next').onclick=()=>{ suStep(2); openNets(); };
+$('su-back').onclick=()=>suStep(1);
+$('su-nets').onclick=openNets;
+$('su-copy').onclick=()=>copyFrom($('su-host'),$('su-copy'));
+
+/* W-1088: the first visit after a fresh setup opens on this sheet: each
+   printer with its state and a test page, and how to print from a phone
+   and a Mac. Done closes it for good. */
+let finShown=false;
+function finDraw(){
+  if(finShown||setup||!S.fresh||!PR) return;
+  finShown=true;
+  const ps=PR.printers, sh=ps.filter(p=>p.shared);
+  const name=sh.length===1?'<b>'+esc(sh[0].name)+'</b>':'your printer';
+  $('fin-list').innerHTML=ps.length?ps.map(p=>{ const [cls,t]=stWords(p);
+      const can=p.where==='port'?p.kind==='imagewriter':p.kind==='laserwriter'&&p.identified;
+      return '<div class="row prow">'+icHTML(p)+'<span class=txt>'+esc(p.name)+'<small>'+esc(t)
+        +'</small></span><i class="lamp '+cls+'"></i>'+(can?'<button class=btn type=button data-fintest='+p.id+'>Print Test Page</button>':'')+'</div>'; }).join('')
+    :'<p class=empty>No printers yet. Add one in Printers.</p>';
+  $('fin-how').innerHTML='On an iPhone or iPad: tap Share, then Print, and choose '+name+'.<br>'
+    +'On a Mac: choose File &gt; Print, then '+name+' from the Printer menu. If it isn’t listed, add it in System Settings &gt; Printers &amp; Scanners.';
+  $('d-finish').showModal();
+}
+$('fin-list').addEventListener('click',async e=>{
+  const b=e.target.closest('[data-fintest]'); if(!b) return;
+  const r=await postJSON('/api/test',{id:+b.dataset.fintest});
+  say('fin-say',r.error?r.error+'.':'Printing a test page.',!!r.error,4000);
+});
+$('fin-done').onclick=async()=>{ $('d-finish').close(); S.fresh=false; await postJSON('/api/general',{finish:true}); };
+
 /* ── Wi-Fi ─────────────────────────────────────────────────────────── */
 /* A scan takes the radio off its channel for a second or two, so the last
    list is kept for an hour and reused. */
@@ -902,6 +972,16 @@ $('join').onclick=async()=>{
   $('join').disabled=true;
   const r=await postJSON('/api/wifi',{ssid:ssid,pass:$('pw').value});
   if(r.error){ say('net-say',r.error,1); $('join').disabled=false; return; }
+  // W-1088: in setup, the third step says where to go next, with the address to copy
+  if(setup){
+    $('d-net').close();
+    const b='<b>'+esc(ssid)+'</b>', host=S.host||'airwriter.local';
+    $('su-joining').innerHTML='AirWriter is joining '+b+'. Your phone will go back to '+b
+      +' by itself. Then open <b>'+esc(host)+'</b> to print a test page.';
+    $('su-host').textContent=host;
+    suStep(3);
+    return;
+  }
   // From its own network the page cannot follow it: say where it will be.
   const q='“'+esc(ssid)+'”', host=esc(S.host||'airwriter.local'), link='<a href="http://'+host+'/">'+host+'</a>';
   waitFor('Joining “'+ssid+'”',setup?'AirWriter restarts on it. Join '+q+' here too, then open '+link+'.'
