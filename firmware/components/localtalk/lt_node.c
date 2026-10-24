@@ -247,22 +247,44 @@ static void pap_start_read(lt_node_t *n, uint64_t now)
 // EOF once our side has seen the job's EOF, otherwise a keep-alive once the
 // workstation has been quiet LT_PAP_READ_IDLE_MS.
 static void pap_reply_ws(lt_node_t *n, uint16_t tid, const lt_route_t *to, uint8_t eof,
-                         uint64_t now)
+                         const uint8_t *data, size_t len, uint64_t now)
 {
     lt_pap_t *p = &n->pap;
     uint8_t user[4] = { p->connid, PAP_DATA, eof, 0 };
     atp_t req = { .ctl = ATP_TREQ | ATP_XO, .tid = tid };
-    respond(n, to, LT_SOCK_CONN, &req, user, NULL, 0, now);
+    respond(n, to, LT_SOCK_CONN, &req, user, data, len, now);
     n->st.ws_answers++;
+}
+
+// W-1088: a relayed connection has the printer's own output to give.
+static int relayed(const lt_node_t *n)
+{
+    return n->pap.reg && n->ops.reg_output;
 }
 
 static void pap_answer_ws_read(lt_node_t *n, uint64_t now)
 {
     lt_pap_t *p = &n->pap;
     if (!p->ws_read) return;
+    if (relayed(n)) {
+        uint8_t out[LT_RELAY_PKT];
+        int end = 0;
+        size_t k = p->eof_sent ? 0 : n->ops.reg_output(n->ops.ctx, p->reg, out, sizeof out, &end, 0);
+        // Held for the printer's words; a keep-alive once the Mac has been quiet.
+        if (!k && !end && now - p->wrote < LT_PAP_READ_IDLE_MS) return;
+        pap_reply_ws(n, p->ws_read_tid, &p->ws_read_from, (uint8_t)end, out, k, now);
+        if (end) {
+            p->eof_sent = 1;
+            say(n, "PAP %u: the printer's EOF to the Mac's read", p->connid);
+        }
+        p->ws_answered_seq = p->ws_read_seq;
+        p->ws_answered_eof = (uint8_t)end;
+        p->ws_read = 0;
+        return;
+    }
     uint8_t eof = p->done && !p->eof_sent;
     if (!eof && now - p->wrote < LT_PAP_READ_IDLE_MS) return;
-    pap_reply_ws(n, p->ws_read_tid, &p->ws_read_from, eof, now);
+    pap_reply_ws(n, p->ws_read_tid, &p->ws_read_from, eof, NULL, 0, now);
     if (eof) {
         p->eof_sent = 1;
         say(n, "PAP %u: EOF to the Mac's read", p->connid);
@@ -330,14 +352,19 @@ static void pap_open(lt_node_t *n, const ddp_t *d, const atp_t *a, const lt_rout
         }
     }
 
-    uint8_t data[4 + 3];
+    uint8_t data[4 + 256];
     data[0] = result == PAP_RESULT_OK ? LT_SOCK_CONN : 0;
     data[1] = LT_FLOW;
     data[2] = (uint8_t)(result >> 8);
     data[3] = (uint8_t)result;
-    status_bytes(n, data + 4);
+    // A registration's printer speaks for itself (W-1088): its own status words.
+    size_t sl = reg && n->ops.reg_status ? n->ops.reg_status(n->ops.ctx, reg, data + 4, 256) : 0;
+    if (!sl) {
+        status_bytes(n, data + 4);
+        sl = 3;
+    }
     uint8_t user[4] = { a->user[0], PAP_OPEN_CONN_REPLY, 0, 0 };
-    respond(n, from, sls, a, user, data, sizeof data, now);
+    respond(n, from, sls, a, user, data, 4 + sl, now);
 
     if (result == PAP_RESULT_BUSY) {
         if (n->st.busy++ == 0 || !(n->st.busy % 10)) {
@@ -447,7 +474,10 @@ static void on_atp(lt_node_t *n, const ddp_t *d, uint64_t now)
         // A PAP-level retransmit of a read already answered (fresh TID, same
         // sequence number) gets the same answer again.
         if (seq && seq == p->ws_answered_seq) {
-            pap_reply_ws(n, a.tid, &from, p->ws_answered_eof, now);
+            uint8_t out[LT_RELAY_PKT];
+            int end = p->ws_answered_eof;
+            size_t k = relayed(n) ? n->ops.reg_output(n->ops.ctx, p->reg, out, sizeof out, &end, 1) : 0;
+            pap_reply_ws(n, a.tid, &from, p->ws_answered_eof, out, k, now);
             break;
         }
         p->ws_read = 1;
@@ -476,7 +506,7 @@ static void pap_tick(lt_node_t *n, uint64_t now)
         pap_close(n, "timed out", 0);
         return;
     }
-    if (n->idle_hold_ms) {
+    if (n->idle_hold_ms && !relayed(n)) {          // a relay waits on its printer, not idle
         // Not idle: the printer's status holds the Mac, or we do (no read out
         // until the spool has room for one).
         if (n->status || (!p->rd_want && !p->done)) p->idle_since = now;

@@ -124,6 +124,12 @@ typedef struct {
     // Its SendStatus answer as a Pascal string into pstr; 0 for the node's
     // own status word. May be NULL.
     size_t (*reg_status)(void *ctx, int reg, uint8_t *pstr, size_t cap);
+    // W-1088: a relayed connection's printer output, for the Mac's reads of
+    // registration reg: up to max bytes into buf, *eof once it has ended
+    // (with or after the last bytes). again: the last answer once more (the
+    // Mac asked again with the same sequence number). NULL, or registration 0:
+    // the ImageWriter's, nothing to say and EOF once the Mac's job has ended.
+    size_t (*reg_output)(void *ctx, int reg, uint8_t *buf, size_t max, int *eof, int again);
 } lt_ops_t;
 
 typedef uint8_t lt_name_t[NBP_NAME_MAX + 1];   // a Pascal NBP name, MacRoman
@@ -184,6 +190,7 @@ typedef struct { uint8_t node; uint32_t ago_s; const uint8_t *name; } lt_seen_t;
 #define LT_NAME_REFRESH_MS 600000
 #define LT_NAME_GAP_MS     250       // between any two asks
 #define LT_XO_PKT   (ATP_HDR + 4 + 256)   // the biggest response we cache: OpenConnReply
+#define LT_RELAY_PKT 256                   // printer output per answer to a Mac's read: it is cached
 
 typedef struct {               // a sent XO response, kept for duplicate requests
     uint8_t    used, src_sock;

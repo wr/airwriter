@@ -16,6 +16,7 @@
 #include "localtalk.h"
 #include "ethertalk.h"
 #include "pap_client.h"
+#include "pap_relay.h"
 #include "sdkconfig.h"
 
 #include <stdio.h>
@@ -42,7 +43,8 @@ static const char *TAG = "laser";
 #define FIRST_LOOK_MS 10000
 #define LOOK_STEP_MS  300
 
-enum { USE_NONE, USE_QUERY, USE_JOB };
+enum { USE_NONE, USE_QUERY, USE_JOB, USE_RELAY };
+#define RELAY_BUF  (16 * 1024)       // each way, in PSRAM
 
 static laser_cfg_t       s_cfg;
 static SemaphoreHandle_t s_mu, s_client_mx, s_ended_sem;
@@ -59,6 +61,7 @@ typedef struct {
     uint8_t     gain, have_info;
     lw_info_t   info;
     lw_caps_t   caps;
+    uint8_t     raw_status[256];    // its last status as it sent it (Pascal, MacRoman)
     // What its slot was last told (the laser task's).
     int8_t      pushed_slot, pushed_state, pushed_busy;
     const char *pushed_reason;
@@ -75,6 +78,7 @@ typedef struct {
     tgt_t      was[LWC_TARGETS];                    // laser_set_targets' scratch
     int        n_tg;
     lw_caps_t  job_caps;                            // the job's, steady while it prints
+    pap_relay_t relay;                              // W-1088: a Mac's job for another link's printer
     lw_parse_t parse;                               // the query's answers (link task, then ours)
     uint8_t    query[4096];                         // the query job, probe and padding
 } big_t;
@@ -98,6 +102,12 @@ static int       s_open_id = -1;                    // whom an OpenConn is for
 static int       s_job_id = -1, s_job_slot = -1;    // the job's target and slot
 static char      s_job_name[3 * NBP_NAME_MAX + 1];
 static int       s_look_now;
+
+// The relay (W-1088): whose printer, the Mac's link and node, the job lock.
+static SemaphoreHandle_t s_relay_mx;
+static volatile int s_relay_id = -1, s_relay_mac_link = -1;
+static const lt_node_t *volatile s_relay_node;
+static int       s_relay_locked;
 
 // The laser task's.
 static int       s_pc_link = -1;
@@ -195,6 +205,7 @@ static void spool_reset(void)
 static size_t pc_read(void *ctx, uint8_t *buf, size_t max, int *eof)
 {
     (void)ctx;
+    if (s_use == USE_RELAY) return pap_relay_prn_read(&s_big->relay, buf, max, eof);
     if (s_use == USE_NONE) {
         *eof = 1;
         return 0;
@@ -208,6 +219,10 @@ static size_t pc_read(void *ctx, uint8_t *buf, size_t max, int *eof)
 static void pc_output(void *ctx, const uint8_t *d, size_t n)
 {
     (void)ctx;
+    if (s_use == USE_RELAY) {
+        pap_relay_prn_output(&s_big->relay, d, n);
+        return;
+    }
     if (s_use == USE_QUERY) {
         lw_parse_feed(&s_parse, d, n);
         return;
@@ -237,13 +252,27 @@ static void pc_status(void *ctx, const uint8_t *pstr)
     // A busy OpenConn's status is its printer's; a SendStatus answer is for
     // whichever printer was asked last.
     int id = s_pc->phase == PAPC_OPENING ? s_open_id : s_status_id;
-    lwc_status(&s_core, ti_of(id), pstr, now_ms());
+    int ti = ti_of(id);
+    lwc_status(&s_core, ti, pstr, now_ms());
+    if (ti >= 0) memcpy(s_tg[ti].raw_status, pstr, 1 + (size_t)pstr[0]);
     unlock();
+    if (s_use == USE_RELAY && id == s_relay_id) pap_relay_prn_status(&s_big->relay, pstr);
+}
+
+static void pc_opened(void *ctx)
+{
+    (void)ctx;
+    if (s_use == USE_RELAY) pap_relay_prn_opened(&s_big->relay);
 }
 
 static void pc_ended(void *ctx, papc_end_t how)
 {
     (void)ctx;
+    if (s_use == USE_RELAY) {
+        pap_relay_prn_ended(&s_big->relay, how);
+        if (s_task) xTaskNotifyGive(s_task);
+        return;
+    }
     s_ended = (int)how;
     xSemaphoreGive(s_ended_sem);
     if (s_task) xTaskNotifyGive(s_task);
@@ -382,6 +411,129 @@ static void query_done(void)
     ESP_LOGI(TAG, "laser task: %u bytes of stack to spare", (unsigned)uxTaskGetStackHighWaterMark(NULL));
     s_use = USE_NONE;
     if (s_cfg.queried) s_cfg.queried(id, ok, ok ? &s_parse.info : NULL);
+}
+
+// ------------------------------------------------------------- the relay
+// W-1088: a Mac on one link prints to a printer on another. The Mac's node
+// calls these on its link's task (at_relay_t); the laser task opens the
+// client and acts on pap_relay_tick.
+
+static void relay_lock(void *ctx)   { (void)ctx; xSemaphoreTake(s_relay_mx, portMAX_DELAY); }
+static void relay_unlock(void *ctx) { (void)ctx; xSemaphoreGive(s_relay_mx); }
+
+// The target a node's registration offers: its NBP name, of its kind. Under s_mu.
+static int target_of_reg(const lt_node_t *node, int reg)
+{
+    if (reg < 1 || reg >= LT_REG_MAX) return -1;
+    const uint8_t *obj = node->reg[reg].obj, *type = node->reg[reg].type;
+    uint8_t lw[NBP_NAME_MAX + 1], iw[NBP_NAME_MAX + 1];
+    nbp_name(lw, "LaserWriter");
+    nbp_name(iw, "ImageWriter");
+    int kind = nbp_match(lw, type) ? LASER_KIND_LW : nbp_match(iw, type) ? LASER_KIND_IW : 0;
+    for (int k = 0; kind && k < s_big->n_tg; k++)
+        if (s_tg[k].kind == kind && s_tg[k].name[0] == obj[0] &&
+            !memcmp(s_tg[k].name + 1, obj + 1, obj[0]))
+            return k;
+    return -1;
+}
+
+static int r_open(int link, const lt_node_t *node, int reg, uint64_t now)
+{
+    if (!s_started) return 1;
+    if (pap_relay_active(&s_big->relay)) return pap_relay_mac_open(&s_big->relay, node, reg, now);
+    if (s_use != USE_NONE) return 1;                // a LaserWriter job or a query has the client
+    lock();
+    int k = target_of_reg(node, reg);
+    int id = k >= 0 && lwc_view(&s_core, k, now_ms()).idx >= 0 ? s_tg[k].id : -1;
+    unlock();
+    if (id < 0) return 1;                           // not in the list, or not heard
+    s_relay_id = id;
+    s_relay_mac_link = link;
+    s_relay_node = node;
+    int busy = pap_relay_mac_open(&s_big->relay, node, reg, now);
+    if (s_task) xTaskNotifyGive(s_task);
+    return busy;
+}
+
+static void r_data(const uint8_t *d, size_t n) { pap_relay_mac_data(&s_big->relay, d, n); }
+static size_t r_room(void) { return pap_relay_mac_room(&s_big->relay); }
+static void r_end(int normal) { pap_relay_mac_end(&s_big->relay, normal); }
+static size_t r_output(uint8_t *buf, size_t max, int *eof, int again)
+{
+    return pap_relay_mac_output(&s_big->relay, buf, max, eof, again);
+}
+
+// SendStatus on a registration: the printer's own words, as it last said them.
+static size_t r_status(int link, const lt_node_t *node, int reg, uint8_t *pstr, size_t cap)
+{
+    (void)link;
+    if (!s_started) return 0;
+    lock();
+    int k = target_of_reg(node, reg);
+    size_t n = k >= 0 && s_tg[k].raw_status[0] ? 1 + (size_t)s_tg[k].raw_status[0] : 0;
+    if (n > cap) n = 0;
+    if (n) memcpy(pstr, s_tg[k].raw_status, n);
+    unlock();
+    return n;
+}
+
+static const at_relay_t RELAY = { r_open, r_data, r_room, r_end, r_output, r_status };
+
+static void abort_mac(void *arg) { lt_node_pap_abort((lt_node_t *)arg, now_ms()); }
+
+// pap_relay_tick's asks, on the laser task.
+static void relay_act(uint64_t now)
+{
+    pap_relay_t *r = &s_big->relay;
+    int act = pap_relay_tick(r, now);
+    if (act & PR_RELAY_DO_OPEN) {
+        lock();
+        int k = ti_of(s_relay_id);
+        lwc_view_t v = lwc_view(&s_core, k, now);
+        lt_route_t route = v.idx >= 0 ? s_core.heard[v.idx].route : (lt_route_t){ 0 };
+        int link = v.idx >= 0 ? s_core.heard[v.idx].link : -1;
+        unlock();
+        xSemaphoreTake(s_client_mx, portMAX_DELAY);
+        int ok = k >= 0 && link >= 0 && s_use == USE_NONE && s_cfg.relay && !s_cfg.relay(1);
+        if (ok) {
+            s_relay_locked = 1;
+            s_use = USE_RELAY;
+            ride(link);
+            lock();
+            s_status_id = s_open_id = s_relay_id;
+            lwc_job(&s_core, k, 1);
+            unlock();
+            if (call(OP_OPEN, &route, QUERY_BUSY_MS)) pap_relay_prn_ended(r, PAPC_END_DEAD);
+            else ESP_LOGI(TAG, "relay: a Mac's job on the %s for printer %d on the %s",
+                          link_name(s_relay_mac_link), s_relay_id, link_name(link));
+        } else {
+            pap_relay_prn_ended(r, PAPC_END_BUSY);  // the Mac hears busy and asks again
+        }
+        xSemaphoreGive(s_client_mx);
+    }
+    if (act & PR_RELAY_DO_CANCEL) {
+        xSemaphoreTake(s_client_mx, portMAX_DELAY);
+        if (s_use == USE_RELAY) call(OP_CANCEL, NULL, 0);
+        xSemaphoreGive(s_client_mx);
+    }
+    if (act & PR_RELAY_DO_ABORT_MAC) {
+        lt_node_t *node = (lt_node_t *)s_relay_node;
+        if (s_relay_mac_link == AT_LINK_CABLE) localtalk_locked(abort_mac, node);
+        else ethertalk_locked(abort_mac, node);
+    }
+    if (act & PR_RELAY_DO_DONE) {
+        ESP_LOGI(TAG, "relay: done, %lu bytes to the printer, %lu back to the Mac",
+                 (unsigned long)r->to_printer, (unsigned long)r->to_mac);
+        if (s_use == USE_RELAY) s_use = USE_NONE;
+        lock();
+        lwc_job(&s_core, ti_of(s_relay_id), 0);
+        snprintf(s_last, sizeof s_last, "relayed, %lu bytes", (unsigned long)r->to_printer);
+        unlock();
+        if (s_relay_locked) {
+            s_relay_locked = 0;
+            if (s_cfg.relay) s_cfg.relay(0);
+        }
+    }
 }
 
 // ------------------------------------------------------------- the task
@@ -534,6 +686,7 @@ static void laser_task(void *arg)
             xSemaphoreGive(s_client_mx);
         }
         if (query_link >= 0) query_start(query_id, query_link, &query_r);
+        relay_act(now);
         push_states(now);
     }
 }
@@ -546,22 +699,30 @@ esp_err_t laser_start(const laser_cfg_t *cfg)
     s_client_mx = xSemaphoreCreateMutex();
     s_ended_sem = xSemaphoreCreateBinary();
     s_open_sem = xSemaphoreCreateBinary();
+    s_relay_mx = xSemaphoreCreateMutex();
     s_pc = heap_caps_calloc(1, sizeof *s_pc, MALLOC_CAP_SPIRAM);
     if (!s_pc) s_pc = calloc(1, sizeof *s_pc);
     s_big = heap_caps_calloc(1, sizeof *s_big, MALLOC_CAP_SPIRAM);
     if (!s_big) s_big = calloc(1, sizeof *s_big);
     uint8_t *spool = heap_caps_malloc(SPOOL + 1, MALLOC_CAP_SPIRAM);
-    if (!s_mu || !s_client_mx || !s_ended_sem || !s_open_sem || !s_pc || !s_big || !spool)
+    uint8_t *m2p = heap_caps_malloc(RELAY_BUF, MALLOC_CAP_SPIRAM);
+    uint8_t *p2m = heap_caps_malloc(RELAY_BUF, MALLOC_CAP_SPIRAM);
+    if (!s_mu || !s_client_mx || !s_ended_sem || !s_open_sem || !s_relay_mx || !s_pc || !s_big ||
+        !spool || !m2p || !p2m)
         return ESP_ERR_NO_MEM;
+    pap_relay_init(&s_big->relay, m2p, p2m, RELAY_BUF);
+    s_big->relay.lock = relay_lock;
+    s_big->relay.unlock = relay_unlock;
     s_spool = xStreamBufferCreateStatic(SPOOL, 1, spool, &s_spool_cb);
 
     papc_ops_t po = { .read = pc_read, .output = pc_output, .status = pc_status,
-                      .ended = pc_ended, .log = pc_log };
+                      .opened = pc_opened, .ended = pc_ended, .log = pc_log };
     papc_init(s_pc, &po, (uint32_t)esp_timer_get_time() | 1);
 
     lwc_init(&s_core, now_ms());
     localtalk_set_found(found);
     ethertalk_set_found(found);
+    at_relay_set(&RELAY);
 
     // 6 KB: the PAP send path (frames built on the stack, full printf in the
     // log) and mDNS state pushes run here (review I5).

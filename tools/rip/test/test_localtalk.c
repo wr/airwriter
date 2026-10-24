@@ -50,7 +50,7 @@ static size_t f_room(void *ctx) { (void)ctx; return fake_room; }
 static void f_end(void *ctx, int normal) { (void)ctx; job_eof++; job_normal = normal; }
 
 static const lt_ops_t OPS = { NULL, f_send, f_claim, f_log, f_begin, f_data, f_room, f_end, NULL,
-                              NULL, NULL };
+                              NULL, NULL, NULL };
 
 static void reset_fake(void) { nsent = 0; nlogs = 0; lastlog[0] = 0; }
 
@@ -1207,7 +1207,7 @@ static size_t f_reg_status(void *ctx, int reg, uint8_t *pstr, size_t cap)
     return (size_t)n + 1;
 }
 static const lt_ops_t OPS_REG = { NULL, f_send, f_claim, f_log, f_begin, f_data, f_room, f_end, NULL,
-                                  f_pap_open, f_reg_status };
+                                  f_pap_open, f_reg_status, NULL };
 
 static uint64_t online_reg(lt_node_t *n, uint8_t id)
 {

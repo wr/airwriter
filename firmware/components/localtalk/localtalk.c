@@ -128,10 +128,51 @@ static void op_found(void *ctx, const nbp_tuple_t *t, const lt_route_t *r)
     if (s_found) s_found(AT_LINK_CABLE, t, r);
 }
 
+// The node's own connection prints on the ImageWriter; one on another
+// registration is the relay's (W-1088).
+static const at_relay_t *relay_conn(void) { return lt_node_pap_reg(&s_node) ? at_relay() : NULL; }
+
 static int op_job_begin(void *ctx) { (void)ctx; return at_job_begin(&s_owner); }
-static void op_job_data(void *ctx, const uint8_t *d, size_t n) { (void)ctx; at_job_data(&s_owner, d, n); }
-static size_t op_job_room(void *ctx) { (void)ctx; return at_job_room(&s_owner); }
-static void op_job_end(void *ctx, int normal) { (void)ctx; at_job_end(&s_owner, normal); }
+static void op_job_data(void *ctx, const uint8_t *d, size_t n)
+{
+    (void)ctx;
+    const at_relay_t *r = relay_conn();
+    if (r) r->data(d, n);
+    else at_job_data(&s_owner, d, n);
+}
+static size_t op_job_room(void *ctx)
+{
+    (void)ctx;
+    const at_relay_t *r = relay_conn();
+    return r ? r->room() : at_job_room(&s_owner);
+}
+static void op_job_end(void *ctx, int normal)
+{
+    (void)ctx;
+    const at_relay_t *r = relay_conn();
+    if (r) r->end(normal);
+    else at_job_end(&s_owner, normal);
+}
+static int op_pap_open(void *ctx, int reg, uint64_t now)
+{
+    (void)ctx;
+    return at_relay() ? at_relay()->open(AT_LINK_CABLE, &s_node, reg, now) : 1;
+}
+static size_t op_reg_status(void *ctx, int reg, uint8_t *pstr, size_t cap)
+{
+    (void)ctx;
+    return at_relay() ? at_relay()->status(AT_LINK_CABLE, &s_node, reg, pstr, cap) : 0;
+}
+static size_t op_reg_output(void *ctx, int reg, uint8_t *buf, size_t max, int *eof, int again)
+{
+    (void)ctx;
+    (void)reg;
+    if (!at_relay()) {
+        *eof = 1;
+        return 0;
+    }
+    return at_relay()->output(buf, max, eof, again);
+}
 
 static void on_frame(void *ctx, tt_event_t ev, const uint8_t *f, size_t n)
 {
@@ -278,7 +319,9 @@ esp_err_t localtalk_start(const localtalk_cfg_t *cfg)
                        .names = heap_caps_calloc(LT_SEEN_SLOTS, sizeof(lt_name_t), MALLOC_CAP_SPIRAM) };
     s_ops = (lt_ops_t){ .send = op_send, .claim = op_claim, .log = op_log,
                         .job_begin = op_job_begin, .job_data = op_job_data,
-                        .job_room = op_job_room, .job_end = op_job_end, .found = op_found };
+                        .job_room = op_job_room, .job_end = op_job_end, .found = op_found,
+                        .pap_open = op_pap_open, .reg_status = op_reg_status,
+                        .reg_output = op_reg_output };
     xSemaphoreTake(s_lock, portMAX_DELAY);
     lt_node_init(&s_node, &s_nc, &s_ops, now_ms());   // clears TashTalk's node bitmap
     lt_node_set_serve(&s_node, s_serve);

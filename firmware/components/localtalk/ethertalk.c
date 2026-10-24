@@ -129,10 +129,51 @@ static void radio_note(const char *line) { note("radio", line); }
 // On our task with s_lock held, except abort (the print task).
 
 static void op_log(void *ctx, const char *line) { note(((et_side_t *)ctx)->name, line); }
+// The node's own connection prints on the ImageWriter; one on another
+// registration is the relay's (W-1088).
+static const at_relay_t *relay_conn(et_side_t *s)
+{
+    return lt_node_pap_reg(&s->link.node) ? at_relay() : NULL;
+}
+
 static int op_begin(void *ctx) { return at_job_begin(&((et_side_t *)ctx)->owner); }
-static void op_data(void *ctx, const uint8_t *d, size_t n) { at_job_data(&((et_side_t *)ctx)->owner, d, n); }
-static size_t op_room(void *ctx) { return at_job_room(&((et_side_t *)ctx)->owner); }
-static void op_end(void *ctx, int normal) { at_job_end(&((et_side_t *)ctx)->owner, normal); }
+static void op_data(void *ctx, const uint8_t *d, size_t n)
+{
+    const at_relay_t *r = relay_conn(ctx);
+    if (r) r->data(d, n);
+    else at_job_data(&((et_side_t *)ctx)->owner, d, n);
+}
+static size_t op_room(void *ctx)
+{
+    const at_relay_t *r = relay_conn(ctx);
+    return r ? r->room() : at_job_room(&((et_side_t *)ctx)->owner);
+}
+static void op_end(void *ctx, int normal)
+{
+    const at_relay_t *r = relay_conn(ctx);
+    if (r) r->end(normal);
+    else at_job_end(&((et_side_t *)ctx)->owner, normal);
+}
+static int op_pap_open(void *ctx, int reg, uint64_t now)
+{
+    et_side_t *s = ctx;
+    return at_relay() ? at_relay()->open((int)s->owner.link, &s->link.node, reg, now) : 1;
+}
+static size_t op_reg_status(void *ctx, int reg, uint8_t *pstr, size_t cap)
+{
+    et_side_t *s = ctx;
+    return at_relay() ? at_relay()->status((int)s->owner.link, &s->link.node, reg, pstr, cap) : 0;
+}
+static size_t op_reg_output(void *ctx, int reg, uint8_t *buf, size_t max, int *eof, int again)
+{
+    (void)ctx;
+    (void)reg;
+    if (!at_relay()) {
+        *eof = 1;
+        return 0;
+    }
+    return at_relay()->output(buf, max, eof, again);
+}
 
 static void op_claimed(void *ctx, uint16_t net, uint8_t node)
 {
@@ -254,7 +295,8 @@ static void side_init(et_side_t *s, const uint8_t mac[ETH_ALEN])
                    s->names };
     memcpy(c.mac, mac, ETH_ALEN);
     et_ops_t o = { s, s == &s_tun ? tun_send : s == &s_zone ? zone_send : radio_send, op_log,
-                   op_begin, op_data, op_room, op_end, op_claimed, op_found };
+                   op_begin, op_data, op_room, op_end, op_claimed, op_found, op_pap_open,
+                   op_reg_status, op_reg_output };
     et_link_init(&s->link, &c, &o, now_ms());
     if (s->offers)
         lt_node_offer(&s->link.node, s->offers->own, s->offers->rel, s->offers->n_rel, s->offers->marker);

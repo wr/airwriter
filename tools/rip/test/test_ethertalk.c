@@ -177,7 +177,7 @@ static void link_init(et_link_t *l, int *id, const uint8_t mac[6], uint16_t hnet
 {
     et_cfg_t cfg = { "ImageWriter II", "ImageWriter", 0x0000, {0}, hnet, hnode, 1, LT_IDLE_HOLD_MS, NULL };
     memcpy(cfg.mac, mac, 6);
-    et_ops_t ops = { id, w_send, w_log, w_begin, w_data, w_room, w_end, w_claimed, NULL };
+    et_ops_t ops = { id, w_send, w_log, w_begin, w_data, w_room, w_end, w_claimed, NULL, NULL, NULL, NULL };
     et_link_init(l, &cfg, &ops, 0);
 }
 
@@ -923,7 +923,7 @@ static void test_peer_names(void)
     et_cfg_t cfg = { "ImageWriter II", "ImageWriter", 0x0000, {0}, 0xFF23, 77, 1,
                      LT_IDLE_HOLD_MS, enames };
     memcpy(cfg.mac, MAC_A, 6);
-    et_ops_t ops = { &ID_A, w_send, w_log, w_begin, w_data, w_room, w_end, w_claimed, NULL };
+    et_ops_t ops = { &ID_A, w_send, w_log, w_begin, w_data, w_room, w_end, w_claimed, NULL, NULL, NULL, NULL };
     et_link_init(&l, &cfg, &ops, 0);
     uint64_t t = 0;
     for (; t <= 2100; t += 10) et_link_tick(&l, t);

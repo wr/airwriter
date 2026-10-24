@@ -49,6 +49,10 @@ typedef struct {
     void   (*claimed)(void *ctx, uint16_t net, uint8_t node);
     // W-1082: the node's NBP answers to lt_node_lookup (lt_ops_t's found). May be NULL.
     void   (*found)(void *ctx, const nbp_tuple_t *t, const lt_route_t *r);
+    // W-1088: lt_ops_t's pap_open, reg_status and reg_output. May be NULL.
+    int    (*pap_open)(void *ctx, int reg, uint64_t now);
+    size_t (*reg_status)(void *ctx, int reg, uint8_t *pstr, size_t cap);
+    size_t (*reg_output)(void *ctx, int reg, uint8_t *buf, size_t max, int *eof, int again);
 } et_ops_t;
 
 typedef struct { uint16_t net; uint8_t node; uint8_t hw[ETH_ALEN]; uint64_t at; } et_map_t;

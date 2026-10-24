@@ -22,6 +22,10 @@ static const char *TAG = "at";
 // print task has handed the last byte to the printer and called end; the rest
 // are set by the holder's task.
 static localtalk_printer_t s_printer;
+static const at_relay_t  *s_relay;
+
+void              at_relay_set(const at_relay_t *r) { s_relay = r; }
+const at_relay_t *at_relay(void) { return s_relay; }
 static int          s_inited;
 static StreamBufferHandle_t s_spool;
 static TaskHandle_t s_print_task;

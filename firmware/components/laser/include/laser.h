@@ -31,6 +31,10 @@ typedef struct {
     void (*queried)(int id, int ok, const lw_info_t *info);
     // A shared printer's readiness changed (laser_ready): the panel may follow.
     void (*changed)(void);
+    // W-1088: a Mac's job relayed to a printer on another link takes the job
+    // lock as any job does (1, without waiting: 0, or nonzero when the box is
+    // busy) and gives it back (0) when both ends are done.
+    int  (*relay)(int take);
 } laser_cfg_t;
 
 // After ipp_server_start, with the network up.

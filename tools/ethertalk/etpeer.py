@@ -10,6 +10,7 @@ driver does (OpenConn, the board's SendData answered with Data, CloseConn).
 
     python3 tools/ethertalk/etpeer.py tunnel lookup
     python3 tools/ethertalk/etpeer.py zone ZONE chooser LaserWriter
+    python3 tools/ethertalk/etpeer.py zone ZONE print-ps "LaserWriter II NT" page.ps
     python3 tools/ethertalk/etpeer.py tunnel print fixtures/pap-iw701-page.bin
     python3 tools/ethertalk/etpeer.py tunnel named "Wells's iMac" 30
     python3 tools/ethertalk/etpeer.py zone ZONE lookup
@@ -455,6 +456,73 @@ class Mac:
         secs = time.monotonic() - start
         print(f"sent {len(data)} bytes in {secs:.1f} s, crc32 {zlib.crc32(data):08x}")
 
+    async def print_ps(self, name, data):
+        """PostScript to NAME:LaserWriter as a Mac's LaserWriter driver sends it
+        (W-1088): pulled by the printer, with the printer's own output read back
+        and shown, to its EOF; then CloseConn."""
+        nbp = bytes([0x21, 0x2C]) + struct.pack(">HBBB", self.net, self.node, MY_NIS, 0) + \
+              pstr(name.encode("mac_roman")) + pstr(LW_TYPE) + pstr(b"*")
+        for _ in range(5):
+            await self.send_ddp(0, 0xFF, NIS, MY_NIS, DDP_NBP, nbp)
+            d = await self.wait_dg(lambda d: d[12] == DDP_NBP and d[10] == MY_NIS and d[13] >> 4 == 3, 1.0)
+            if d:
+                break
+        else:
+            sys.exit(f"no {name}:LaserWriter answered the lookup")
+        net, node, sls = struct.unpack(">HBB", d[15:19])
+        print(f"found {name}:LaserWriter at {net}.{node} socket {sls}")
+        connid = random.randrange(1, 256)
+        for attempt in range(60):
+            user, rep = await self.request(net, node, sls, [connid, PAP_OPEN, 0, 0],
+                                           bytes([MY_ATP, 8, 0, 0]))
+            if struct.unpack(">H", rep[2:4])[0] == 0:
+                break
+            print(f"busy ({rep[5:5 + rep[4]].decode('mac_roman', 'replace')}); asking again in 2 s")
+            await asyncio.sleep(2)
+        else:
+            sys.exit("the printer stayed busy")
+        srv = rep[0]
+        print(f"connection {connid} open (session socket {srv})")
+        off, sent_eof, got_eof, out = 0, False, False, bytearray()
+        rd_seq, rd_tid, rd_at = 1, None, 0.0
+        start = time.monotonic()
+        while not (sent_eof and got_eof):
+            if time.monotonic() - start > 600:
+                sys.exit(f"gave up: {off} bytes sent, printer EOF {got_eof}")
+            if not got_eof and (rd_tid is None or time.monotonic() - rd_at > 15):
+                rd_tid = rd_tid if rd_tid is not None else self.next_tid()
+                await self.send_ddp(net, node, srv, MY_ATP, DDP_ATP,
+                                    atp(TREQ | XO, 0xFF, rd_tid, [connid, PAP_SEND_DATA, rd_seq >> 8, rd_seq & 0xFF]))
+                rd_at = time.monotonic()
+            d = await self.wait_dg(lambda d: d[12] == DDP_ATP and d[10] == MY_ATP and (
+                (d[13] & 0xC0 == TREQ and d[17] == connid and d[18] in (PAP_SEND_DATA, PAP_TICKLE)) or
+                (d[13] & 0xC0 == TRESP and struct.unpack(">H", d[15:17])[0] == rd_tid)), 2.0)
+            if not d:
+                continue
+            tid = struct.unpack(">H", d[15:17])[0]
+            src = struct.unpack(">H", d[6:8])[0], d[9]
+            if d[13] & 0xC0 == TRESP:                  # the printer's words
+                out += d[21:]
+                if d[19]:
+                    got_eof = True
+                if d[13] & EOM:
+                    await self.send_ddp(net, node, srv, MY_ATP, DDP_ATP, atp(TREL, 0, tid, b"\0" * 4))
+                    rd_tid = None
+                    rd_seq = 1 if rd_seq == 0xFFFF else rd_seq + 1
+                continue
+            if d[18] == PAP_TICKLE or sent_eof:
+                continue
+            chunk = data[off:off + 512]
+            eof = off + len(chunk) >= len(data)
+            await self.send_ddp(src[0], src[1], d[11], MY_ATP, DDP_ATP,
+                                atp(TRESP | EOM, 0, tid, [connid, PAP_DATA, 1 if eof else 0, 0], chunk))
+            off += len(chunk)
+            sent_eof = eof
+        await self.request(net, node, srv, [connid, PAP_CLOSE, 0, 0])
+        secs = time.monotonic() - start
+        print(f"sent {len(data)} bytes in {secs:.1f} s; the printer said:")
+        print(out.decode("mac_roman", "replace").replace("\r", "\n").rstrip() or "(nothing)")
+
 
 # ------------------------------------------------------------------ the LaserWriter
 
@@ -778,6 +846,8 @@ async def main(argv):
             await mac.chooser(rest[1])
         elif rest[0] == "print" and len(rest) == 2:
             await mac.print_file(open(rest[1], "rb").read())
+        elif rest[0] == "print-ps" and len(rest) == 3:
+            await mac.print_ps(rest[1], open(rest[2], "rb").read())
         elif rest[0] == "named" and len(rest) == 3:
             mac.name = rest[1].replace("'", "\u2019").encode("mac_roman")[:31]
             await mac.lookup()

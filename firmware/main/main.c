@@ -784,6 +784,34 @@ static void laser_queried(int id, int ok, const lw_info_t *info)
     printers_at_queried(id, ok, info);
 }
 
+// W-1088: a Mac's job relayed to a printer on another AppleTalk link holds the
+// job lock as any job does, never waiting (the Mac hears busy and asks again),
+// and shows on the panel in the Mac's stripes.
+static int laser_relay(int take)
+{
+    if (take) {
+        if (xSemaphoreTake(s_job_lock, 0) != pdTRUE) {
+            s_job_waiting = 1;
+            return -1;
+        }
+        strncpy(s_last_job, "Relayed job", sizeof s_last_job - 1);
+        s_printing = 1;
+        s_laser_owns = 1;
+        job_touch();
+        led_grid_set_source(LG_SRC_LOCALTALK);
+        line_source();
+        printer_state_post(PS_EV_JOB_START);
+        return 0;
+    }
+    printer_state_post(PS_EV_JOB_DONE);
+    s_printing = 0;
+    s_laser_owns = 0;
+    job_touch();
+    line_source();
+    xSemaphoreGive(s_job_lock);
+    return 0;
+}
+
 // ------------------------------------------------------------- printers
 // W-1088: the printer list (components/printers) keeps what is where; these
 // are its board's side of the port printer.
@@ -2250,7 +2278,8 @@ void app_main(void)
 
     // W-1082, W-1088: the printers on AppleTalk, each shared on its own slot.
     laser_cfg_t lc = { .version = esp_app_get_description()->version, .links = laser_links,
-                       .found = laser_found, .queried = laser_queried, .changed = laser_changed };
+                       .found = laser_found, .queried = laser_queried, .changed = laser_changed,
+                       .relay = laser_relay };
     err = laser_start(&lc);
     if (err != ESP_OK) ESP_LOGE(TAG, "AppleTalk printers did not start: %s", esp_err_to_name(err));
     printers_apply();

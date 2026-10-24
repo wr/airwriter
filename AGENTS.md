@@ -165,10 +165,14 @@ What works on `main`:
   `imagewriter-xxxx` stays; a new board is `airwriter-xxxx` with the AppleTalk port on.
   Old Macs on each AppleTalk way in that is on are offered every identified printer AirWriter
   can carry (`printers_offers`, `lt_node_offer`): the port's ImageWriter under its name on
-  socket 0x81, printers from other links under their own NBP names on 0x85-0x87 (relayed;
-  their OpenConn answers busy until the relay lands), and `<host name>:AirWriter` on 0x88 on
-  every running link, which another AirWriter's lookups use to skip this one's printers. NBP
-  names are the record's in MacRoman (`nbp_name`).
+  socket 0x81, printers from other links under their own NBP names on 0x85-0x87, and
+  `<host name>:AirWriter` on 0x88 on every running link, which another AirWriter's lookups use
+  to skip this one's printers. NBP names are the record's in MacRoman (`nbp_name`). A Mac's
+  connection to a printer from another link goes through the relay (`localtalk/pap_relay.c`,
+  run by `laser.c` with the one PAP client, under the job lock): the Mac hears busy, in the
+  printer's own status words, until the printer's connection is open; then its data goes to
+  the printer and the printer's output (query answers, errors) back to its reads, 256 bytes a
+  read, nothing rewritten. Benched zone → tunnel against the fake LaserWriter only.
 - TashTalk 2.1.3 is in U7, flashed in place by the ESP32 over LVP.
 - A LocalTalk node behind the AppleTalk port's switch on the settings page (W-1079; until the
   switch is used, DIP mode 2 starts it, and `CONFIG_AIRWRITER_LT_BENCH` always), on UART2 to
