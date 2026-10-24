@@ -89,7 +89,8 @@ void ipp_server_set_airprint(int on);
 // printer-uuid; one job at a time across both (the job buffer is single), so
 // a job for either waits behind the other as a second ImageWriter job does.
 typedef struct {
-    const char *resource;        // "ipp/laser" (IPP_RESOURCE_LASER): its path, TXT rp
+    const char *resource;        // "ipp/print" for the port's, "ipp/p<id>": its path, TXT rp
+    const char *legacy_resource; // another path it answers at ("ipp/laser"), or NULL
     const char *name;            // Bonjour instance and printer-name
     const char *info;            // printer-info: the printer's NBP name
     const char *uuid;            // urn:uuid:...
@@ -98,8 +99,8 @@ typedef struct {
     ipp_doc_sink_t sink;
 } ipp_printer_cfg_t;
 
-// Puts printer idx (1) on the network, or replaces it, or with NULL takes it
-// off. Strings and caps are copied. ESP_ERR_INVALID_STATE while its job
+// Puts printer idx (0 the port's, 1-3 AppleTalk's; W-1088) on the network, or
+// replaces it, or with NULL takes it off. Strings and caps are copied. ESP_ERR_INVALID_STATE while its job
 // holds the printer. Any task, after ipp_server_start.
 esp_err_t ipp_server_set_printer(int idx, const ipp_printer_cfg_t *cfg);
 void      ipp_server_job_done_for(int idx, int ok);

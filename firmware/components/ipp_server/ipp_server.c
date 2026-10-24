@@ -83,8 +83,9 @@ static volatile int s_mdns_up;
 // print lock, below, is one: one job at a time across both, since the job
 // buffer and the rip are single.
 typedef struct {
-    int             on;                  // answering; printer 0 always
+    int             on;                  // a printer is in this slot (W-1088: shared)
     char            resource[24];        // "ipp/print": its path, TXT rp
+    char            legacy[24];          // another path it answers at ("ipp/laser"), or 
     char            uri[128];
     char            uuid[64];
     char            name[64];            // printer-name; printer 1's Bonjour instance too
@@ -103,15 +104,17 @@ typedef struct {
     char            job_message[128];    // job-state-message for the job in the slot
     volatile int    colour;              // W-1064: the colour ribbon is in (printer 0)
     int             txt_colour;          // what the TXT record says
-    volatile int    airprint;            // W-1079: advertised and taking jobs (printer 0)
+    volatile int    airprint;            // advertised and taking jobs: on, and AirPrint on (W-1079)
     int             print_svcs;          // its Bonjour services are registered
-    char            svc_name[64];        // printer 1: the instance they were registered as
+    char            svc_name[64];        // the instance they were registered as
 } printer_t;
 
 // In PSRAM, allocated at start (internal RAM is Wi-Fi's: W-1082 bench). What
 // main.c sets for the ImageWriter before then waits in the s_pre_ ones.
 static printer_t *s_p;
 static volatile int s_pre_airprint = 1;     // W-1079: on until set
+// AirPrint for the whole box (W-1079's switch; W-1088: every printer).
+static volatile int s_box_airprint = 1;
 static volatile int s_pre_colour;
 static const char  *s_pre_reason;
 static char         s_pre_message[128];
@@ -603,10 +606,13 @@ static int handle_post(work_t *w, int fd, const hreq_t *hr)
     }
 
     // W-1082: which printer, by the request's path.
-    const char *res[IPP_PRINTERS];
+    const char *res[IPP_PRINTERS], *legacy[IPP_PRINTERS];
     xSemaphoreTake(s_job_lock, portMAX_DELAY);
-    for (int i = 0; i < IPP_PRINTERS; i++) res[i] = s_p[i].on ? s_p[i].resource : NULL;
-    int idx = ipp_route(hr->uri, res);
+    for (int i = 0; i < IPP_PRINTERS; i++) {
+        res[i] = s_p[i].on ? s_p[i].resource : NULL;
+        legacy[i] = s_p[i].on && s_p[i].legacy[0] ? s_p[i].legacy : NULL;
+    }
+    int idx = ipp_route(hr->uri, res, legacy);
     xSemaphoreGive(s_job_lock);
     // Which printer and what was asked: an iPhone that asks and never sends
     // a job says why only here (W-1044, W-1082 bench).
@@ -729,72 +735,31 @@ static void worker_task(void *arg)
 
 // The printer's own services, _ipp (with its _universal subtype) and _printer:
 // what AirPrint finds, and what switching it off takes away (W-1079).
-static esp_err_t add_print_services(void)
+// A printer's Bonjour records: _ipp with the _universal subtype (without it
+// iOS never lists the printer, SPEC.md 3.2), and for the port's printer the
+// _printer stub older clients probe first. Every call names the instance:
+// with none, mDNS takes the newest _ipp, another printer's (W-1082).
+// Callers hold s_job_lock or are starting up.
+static esp_err_t add_services(printer_t *p)
 {
-    printer_t *p = &s_p[0];
-    esp_err_t err;
-    p->txt_colour = p->colour;
-    mdns_txt_item_t txt[] = {
-        { "txtvers",  "1" },
-        { "rp",       "ipp/print" },
-        { "ty",       "Apple ImageWriter II" },
-        { "product",  "(AirWriter)" },
-        { "pdl",      "image/urf" },
-        { "adminurl", s_adminurl },
-        { "priority", "10" },
-        { "UUID",     p->uuid },
-        { "Color",    p->txt_colour ? "T" : "F" },
-        { "Duplex",   "F" },
-        { "URF",      p->txt_colour ? IPP_URF_STRING_COLOUR : IPP_URF_STRING },
-        { "TLS",      "" },
-        { "note",     "" },
-    };
-    // The TXT UUID has no urn:uuid: prefix, unlike the IPP attribute.
-    const char *bare_uuid = strstr(p->uuid, "urn:uuid:");
-    if (bare_uuid) txt[7].value = bare_uuid + strlen("urn:uuid:");
-
-    // The service has to exist before a subtype can attach to it. A failure
-    // returns rather than aborts: this runs again when AirPrint is switched on.
-    err = mdns_service_add(NULL, "_ipp", "_tcp", s_cfg.port, txt, sizeof txt / sizeof txt[0]);
-    if (err != ESP_OK) return err;
-
-    // Without the _universal subtype iOS never lists the printer, however
-    // correct the rest of the advertisement is. SPEC.md 3.2.
-    //
-    // The first argument is the instance name, not the service type. NULL
-    // means the default instance -- passing "_ipp" there looks plausible and
-    // fails with "service doesn't exist".
-    err = mdns_service_subtype_add_for_host(NULL, "_ipp", "_tcp", NULL, "_universal");
-    if (err != ESP_OK) ESP_LOGE(TAG, "no _universal subtype: iOS will not list us (%s)",
-                                esp_err_to_name(err));
-
-    // A stub for older clients that probe LPD before IPP; not worth failing
-    // the printer over, so it only warns.
-    if (mdns_service_add(NULL, "_printer", "_tcp", 515, NULL, 0) != ESP_OK)
-        ESP_LOGW(TAG, "no _printer._tcp advertisement");
-    p->print_svcs = 1;
-    return ESP_OK;
-}
-
-// W-1082: a shared LaserWriter's _ipp instance, with the _universal subtype,
-// beside the ImageWriter's on the same port, as CUPS shares many queues. No
-// _printer stub: one is enough. Callers hold s_job_lock or are starting up.
-static void add_laser_services(printer_t *p)
-{
+    int slot0 = p == &s_p[0];
+    const printer_caps_t *caps = p->caps ? p->caps : &printer_caps_imagewriter;
     char urf[64], bare[sizeof p->uuid];
-    printer_caps_urf(p->caps, 0, urf, sizeof urf);
+    p->txt_colour = p->colour;
+    printer_caps_urf(caps, p->txt_colour, urf, sizeof urf);
+    // The TXT UUID has no urn:uuid: prefix, unlike the IPP attribute.
     const char *u = strstr(p->uuid, "urn:uuid:");
     snprintf(bare, sizeof bare, "%s", u ? u + strlen("urn:uuid:") : p->uuid);
     mdns_txt_item_t txt[] = {
         { "txtvers",  "1" },
         { "rp",       p->resource },
-        { "ty",       p->caps->make_model },
+        { "ty",       caps->make_model },
         { "product",  "(AirWriter)" },
         { "pdl",      "image/urf" },
         { "adminurl", s_adminurl },
-        { "priority", "20" },
+        { "priority", slot0 ? "10" : "20" },
         { "UUID",     bare },
-        { "Color",    "F" },
+        { "Color",    p->txt_colour ? "T" : "F" },
         { "Duplex",   "F" },
         { "URF",      urf },
         { "TLS",      "" },
@@ -803,20 +768,35 @@ static void add_laser_services(printer_t *p)
     esp_err_t err = mdns_service_add_for_host(p->name, "_ipp", "_tcp", NULL, s_cfg.port,
                                               txt, sizeof txt / sizeof txt[0]);
     if (err != ESP_OK) {
-        ESP_LOGE(TAG, "LaserWriter \"%s\": not advertised (%s)", p->name, esp_err_to_name(err));
-        return;
+        ESP_LOGE(TAG, "\"%s\": not advertised (%s)", p->name, esp_err_to_name(err));
+        return err;
     }
-    err = mdns_service_subtype_add_for_host(p->name, "_ipp", "_tcp", NULL, "_universal");
-    if (err != ESP_OK) ESP_LOGE(TAG, "LaserWriter: no _universal subtype (%s)", esp_err_to_name(err));
-    strncpy(p->svc_name, p->name, sizeof p->svc_name - 1);
+    snprintf(p->svc_name, sizeof p->svc_name, "%s", p->name);
     p->print_svcs = 1;
+    err = mdns_service_subtype_add_for_host(p->name, "_ipp", "_tcp", NULL, "_universal");
+    if (err != ESP_OK) ESP_LOGE(TAG, "\"%s\": no _universal subtype, iOS will not list it (%s)",
+                                p->name, esp_err_to_name(err));
+    if (slot0 && mdns_service_add_for_host(p->name, "_printer", "_tcp", NULL, 515, NULL, 0) != ESP_OK)
+        ESP_LOGW(TAG, "no _printer._tcp advertisement");
+    return ESP_OK;
 }
 
-static void remove_laser_services(printer_t *p)
+static void remove_services(printer_t *p)
 {
     if (!p->print_svcs) return;
     mdns_service_remove_for_host(p->svc_name, "_ipp", "_tcp", NULL);
+    if (p == &s_p[0]) mdns_service_remove_for_host(p->svc_name, "_printer", "_tcp", NULL);
     p->print_svcs = 0;
+}
+
+// What a printer offers follows its slot and the box's switch. Callers hold
+// s_job_lock or are starting up.
+static void refresh(printer_t *p)
+{
+    p->airprint = p->on && s_box_airprint;
+    if (!s_mdns_up) return;
+    if (p->airprint && !p->print_svcs) add_services(p);
+    else if (!p->airprint && p->print_svcs) remove_services(p);
 }
 
 static esp_err_t start_mdns(void)
@@ -827,10 +807,8 @@ static esp_err_t start_mdns(void)
     ESP_ERROR_CHECK(mdns_hostname_set(s_hostname));
     ESP_ERROR_CHECK(mdns_instance_name_set(s_cfg.queue_name));
 
-    if (s_p[0].airprint) {
-        err = add_print_services();
-        if (err != ESP_OK) return err;
-    }
+    for (int i = 0; i < IPP_PRINTERS; i++)
+        if (s_p[i].airprint && add_services(&s_p[i]) != ESP_OK && i == 0) return ESP_FAIL;
     // The settings page, whether or not AirPrint is on.
     if (mdns_service_add(NULL, "_http", "_tcp", 80, NULL, 0) != ESP_OK)
         ESP_LOGW(TAG, "no _http._tcp advertisement");
@@ -844,20 +822,12 @@ void ipp_server_set_airprint(int on)
         s_pre_airprint = on;
         return;
     }
-    printer_t *p = &s_p[0];
-    if (on == p->airprint) return;
-    p->airprint = on;
+    if (on == s_box_airprint) return;
     ESP_LOGI(TAG, "AirPrint %s", on ? "on" : "off: not advertised, not taking jobs");
-    if (!s_mdns_up) return;
-    if (on && !p->print_svcs) {
-        if (add_print_services() != ESP_OK) ESP_LOGE(TAG, "AirPrint: could not advertise again");
-    } else if (!on && p->print_svcs) {
-        // By name: with no instance, mDNS takes the newest _ipp, which is a
-        // shared LaserWriter's once there is one (W-1082).
-        mdns_service_remove_for_host(s_cfg.queue_name, "_ipp", "_tcp", NULL);
-        mdns_service_remove_for_host(s_cfg.queue_name, "_printer", "_tcp", NULL);
-        p->print_svcs = 0;
-    }
+    if (s_job_lock) xSemaphoreTake(s_job_lock, portMAX_DELAY);
+    s_box_airprint = on;
+    for (int i = 0; i < IPP_PRINTERS; i++) refresh(&s_p[i]);
+    if (s_job_lock) xSemaphoreGive(s_job_lock);
 }
 
 static esp_err_t start_listener(void)
@@ -900,7 +870,7 @@ esp_err_t ipp_server_start(const ipp_server_cfg_t *cfg)
     if (!s_p) s_p = calloc(IPP_PRINTERS, sizeof *s_p);
     if (!s_p) return ESP_ERR_NO_MEM;
     printer_t *p = &s_p[0];
-    p->airprint = s_pre_airprint;
+    s_box_airprint = s_pre_airprint;
     p->stop_reason = s_pre_reason;
     snprintf(p->stop_message, sizeof p->stop_message, "%s", s_pre_message);
     s_cfg  = *cfg;
@@ -918,6 +888,7 @@ esp_err_t ipp_server_start(const ipp_server_cfg_t *cfg)
     icon_uris(p, "icon");
     make_uuid(p->uuid, sizeof p->uuid, cfg->dev_mode);
     p->colour = cfg->colour || s_pre_colour ? 1 : 0;
+    p->airprint = s_box_airprint;
     for (int i = 0; i < IPP_PRINTERS; i++) {
         s_p[i].next_job_id = 1;
         s_p[i].job.state = IPP_JSTATE_COMPLETED;   // no job yet; nothing is pending
@@ -963,10 +934,11 @@ void ipp_server_set_colour(int on)
     if (!s_mdns_up || !p->print_svcs || on == p->txt_colour) return;
     p->txt_colour = on;
     // By name, as in ipp_server_set_airprint: not a shared LaserWriter's record.
-    esp_err_t a = mdns_service_txt_item_set_for_host(s_cfg.queue_name, "_ipp", "_tcp", NULL, "Color",
+    char urf[64];
+    printer_caps_urf(p->caps ? p->caps : &printer_caps_imagewriter, on, urf, sizeof urf);
+    esp_err_t a = mdns_service_txt_item_set_for_host(p->svc_name, "_ipp", "_tcp", NULL, "Color",
                                                      on ? "T" : "F");
-    esp_err_t b = mdns_service_txt_item_set_for_host(s_cfg.queue_name, "_ipp", "_tcp", NULL, "URF",
-                                                     on ? IPP_URF_STRING_COLOUR : IPP_URF_STRING);
+    esp_err_t b = mdns_service_txt_item_set_for_host(p->svc_name, "_ipp", "_tcp", NULL, "URF", urf);
     if (a != ESP_OK || b != ESP_OK)
         ESP_LOGW(TAG, "TXT update failed: %s / %s", esp_err_to_name(a), esp_err_to_name(b));
 }
@@ -1045,20 +1017,20 @@ void ipp_server_job_message_for(int idx, const char *msg)
 
 esp_err_t ipp_server_set_printer(int idx, const ipp_printer_cfg_t *cfg)
 {
-    if (idx < 1 || idx >= IPP_PRINTERS || !s_p || !s_job_lock) return ESP_ERR_INVALID_ARG;
+    if (idx < 0 || idx >= IPP_PRINTERS || !s_p || !s_job_lock) return ESP_ERR_INVALID_ARG;
     printer_t *p = &s_p[idx];
     xSemaphoreTake(s_job_lock, portMAX_DELAY);
     if (ipp_job_active(&p->job)) {
         xSemaphoreGive(s_job_lock);
         return ESP_ERR_INVALID_STATE;
     }
-    if (s_mdns_up) remove_laser_services(p);
+    if (s_mdns_up) remove_services(p);
     p->on = 0;
-    p->airprint = 0;
     p->stop_reason = p->note_reason = NULL;
     p->busy = 0;
     if (cfg) {
         snprintf(p->resource, sizeof p->resource, "%s", cfg->resource);
+        snprintf(p->legacy, sizeof p->legacy, "%s", cfg->legacy_resource ? cfg->legacy_resource : "");
         snprintf(p->uri, sizeof p->uri, "ipp://%s.local:%u/%s", s_hostname,
                  (unsigned)s_cfg.port, cfg->resource);
         snprintf(p->name, sizeof p->name, "%s", cfg->name);
@@ -1072,12 +1044,12 @@ esp_err_t ipp_server_set_printer(int idx, const ipp_printer_cfg_t *cfg)
         p->caps = &p->caps_copy;
         p->sink = cfg->sink;
         icon_uris(p, cfg->icon ? cfg->icon : "icon");
+        if (idx) p->colour = 0;               // the port's printer keeps its ribbon's
         p->on = 1;
-        p->airprint = 1;
-        if (s_mdns_up) add_laser_services(p);
     }
+    refresh(p);
     xSemaphoreGive(s_job_lock);
-    if (cfg) ESP_LOGI(TAG, "LaserWriter \"%s\" at %s, uuid %s", p->name, p->uri, p->uuid);
-    else ESP_LOGI(TAG, "LaserWriter no longer shared");
+    if (cfg) ESP_LOGI(TAG, "printer %d \"%s\" at %s, uuid %s", idx, p->name, p->uri, p->uuid);
+    else ESP_LOGI(TAG, "printer %d no longer shared", idx);
     return ESP_OK;
 }

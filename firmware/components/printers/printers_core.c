@@ -147,10 +147,12 @@ static void set_name(pr_list_t *l, pr_rec_t *r, const char *want)
     cut_utf8(base, PR_NAME_MAX - 1);
     snprintf(cand, sizeof cand, "%s", base);
     for (int k = 2; name_taken(l, r->id, cand) && k < 100; k++) {
-        char b[PR_NAME_MAX];
+        char b[PR_NAME_MAX + 8];
         snprintf(b, sizeof b, "%s", base);
         cut_utf8(b, PR_NAME_MAX - 1 - (k < 10 ? 2 : 3));
-        snprintf(cand, sizeof cand, "%s %d", b, k);
+        size_t n = strlen(b);
+        snprintf(b + n, sizeof b - n, " %d", k);
+        memcpy(cand, b, strlen(b) + 1);
     }
     snprintf(r->name, sizeof r->name, "%s", cand);
 }

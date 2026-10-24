@@ -47,13 +47,16 @@ typedef struct {
 
 int ipp_req_parse(ipp_req_t *r, const uint8_t *buf, size_t len);
 
-// W-1082: the printers one server answers for. 0 is the ImageWriter, at
-// every path it has always answered at; 1 a shared LaserWriter, at its own.
-#define IPP_PRINTERS       2
+// The printers one server answers for (W-1082, W-1088): slot 0 is the
+// printer port's, at every path it has always answered at; 1-3 printers on
+// AppleTalk, each at its own (ipp/p<id>), and W-1082's LaserWriter also at
+// ipp/laser.
+#define IPP_PRINTERS       4
 #define IPP_RESOURCE_LASER "ipp/laser"
 
-// Which printer a request's HTTP path (or absolute URI) names: a printer
-// other than 0 at its resource (resources[i], without the leading '/'), and
-// printer 0 for anything else. -1 for the LaserWriter's resource while no
-// LaserWriter is shared (resources[1] NULL).
-int ipp_route(const char *path, const char *const resources[IPP_PRINTERS]);
+// Which printer a request's HTTP path (or absolute URI) names: a slot at its
+// resource or its legacy one (without the leading '/'), slot 0 for any other
+// path while it is set, and -1 for none: a path of the ipp/p<n> or ipp/laser
+// shape no slot holds is never slot 0's.
+int ipp_route(const char *path, const char *const resources[IPP_PRINTERS],
+              const char *const legacy[IPP_PRINTERS]);
