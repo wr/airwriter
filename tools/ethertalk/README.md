@@ -45,3 +45,21 @@ computer (`tools/rip/build/lwhost`), against it over a pipe: lookup, the query
 both ways, a print byte for byte, busy, paper out, a PostScript error, cancel,
 and a printer gone silent. `etpeer.py pipe laserwriter NAME` is the fake on
 stdin and stdout for that.
+
+## More than one, and old Macs (W-1088)
+
+`--also NAME` adds a second fake LaserWriter (its own AppleTalk address) on the
+same tunnel: one computer can bind the tunnel's port only once. Its jobs go in
+`--out`/NAME. A tunnel fake starts itself again when this computer's address
+changes, so the board never holds a printer that stopped answering.
+
+Two things an old Mac does, for the printers the board offers it:
+
+```sh
+python3 tools/ethertalk/etpeer.py zone ZONE chooser LaserWriter
+python3 tools/ethertalk/etpeer.py zone ZONE print-ps "LaserWriter II NT" page.ps
+```
+
+`chooser TYPE` lists every answer to `=:TYPE@*`, as the Chooser does. `print-ps`
+prints PostScript to a LaserWriter by name and shows what the printer says
+back: through the board's relay when the printer is on another link.

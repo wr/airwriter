@@ -293,8 +293,10 @@ int pr_at_seen(pr_list_t *l, pr_where_t link, const uint8_t *nbp_name, const uin
     own_name(r, n, sizeof n);
     set_name(l, r, n);
     if (kind == PR_KIND_AT_IMAGEWRITER) {       // its type says what it is
+        // AirPrint to it was cut from W-1088: old Macs on other links print
+        // to it through the relay, and nothing offers it to phones.
         r->identified = 1;
-        announce(l, r);
+        r->announced = 1;
     }
     return r->id;
 }
@@ -340,7 +342,7 @@ int pr_set_shared(pr_list_t *l, int id, int on)
         r->shared = 0;
         return 0;
     }
-    if (r->kind == PR_KIND_UNKNOWN || !r->identified) return -1;
+    if (r->kind == PR_KIND_UNKNOWN || r->kind == PR_KIND_AT_IMAGEWRITER || !r->identified) return -1;
     if (r->shared) return 0;
     if (!can_share(l, r)) return -1;
     r->shared = 1;
@@ -681,6 +683,8 @@ int pr_post(pr_list_t *l, const char *body, pr_post_t *o)
     }
     if (json_has_bool(b, "shared", &v)) {
         pr_rec_t *r = pr_get(l, id);
+        if (v && r->kind == PR_KIND_AT_IMAGEWRITER)
+            return post_err(o, "AirWriter can't share this printer with iPhones and Macs yet.");
         if (v && (r->kind == PR_KIND_UNKNOWN || !r->identified))
             return post_err(o, "That printer can't be shared until AirWriter knows what it is.");
         if (pr_set_shared(l, id, v)) return post_err(o, "AirWriter shares up to four printers.");

@@ -30,6 +30,7 @@ to job-N.png at 300 dpi when Ghostscript is installed). Lines on stdin fault
 it: `busy SECONDS`, `paper` (out of paper), `jam`, `ok`, `error` (the next job
 gets a PostScript error), `drop` (it answers nothing more). --hex-only answers
 the binary probe as a Level 1 machine that cannot take binary would.
+A tunnel fake starts itself again when this Mac's address changes.
 `--also NAME` adds another fake LaserWriter, at its own AppleTalk address, on
 the same tunnel (one Mac can bind the tunnel's port once); its jobs go in
 DIR/NAME. Stdin's faults go to the first.
@@ -784,6 +785,25 @@ class LaserWriter(Mac):
             self.conn = None
 
 
+async def follow_ip(t, board):
+    """A tunnel fake's MAC is this Mac's IPv4 address: when the address moves
+    under it (W-1086: the board then heard a printer that never answered),
+    start again with the new one."""
+    while True:
+        await asyncio.sleep(10)
+        try:
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            s.connect((board, TUNNEL_PORT))
+            ip = s.getsockname()[0]
+            s.close()
+        except OSError:
+            continue
+        if ip != t.ip:
+            print(f"this Mac's address moved ({t.ip} -> {ip}); starting again", flush=True)
+            await t.close()
+            os.execv(sys.executable, [sys.executable, "-u"] + sys.argv)
+
+
 async def stdin_commands(fake):
     loop = asyncio.get_running_loop()
     while True:
@@ -831,6 +851,8 @@ async def main(argv):
             tasks = [fake.serve() for fake in fakes]
             if argv[0] != "pipe":
                 tasks.append(stdin_commands(fakes[0]))
+            if argv[0] == "tunnel":
+                tasks.append(follow_ip(t, os.environ.get("AIRWRITER", "10.0.1.115")))
             await asyncio.gather(*tasks)
             if pump:
                 pump.cancel()

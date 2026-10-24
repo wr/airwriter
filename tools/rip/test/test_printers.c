@@ -172,8 +172,18 @@ static void test_at_imagewriter(void)
     int id = pr_at_seen(&L, PR_WHERE_CABLE, P("Kitchen"), P("ImageWriter"), 0);
     CHECK_EQ_INT(pr_get(&L, id)->kind, PR_KIND_AT_IMAGEWRITER);
     CHECK_EQ_INT(pr_get(&L, id)->identified, 1);
-    CHECK_EQ_INT(pr_get(&L, id)->shared, 1);
-    CHECK_EQ_INT(notes_of(PR_NOTE_FOUND), 1);
+    // W-1088's AirPrint to an AppleTalk ImageWriter was cut: it is old Macs'
+    // (relayed), never shared over AirPrint, and nothing says it is.
+    CHECK_EQ_INT(pr_get(&L, id)->shared, 0);
+    CHECK_EQ_INT(notes_of(PR_NOTE_FOUND), 0);
+    CHECK_EQ_INT(pr_set_shared(&L, id, 1), -1);
+    pr_post_t r;
+    char body[64];
+    snprintf(body, sizeof body, "{\"id\":%d,\"shared\":true}", id);
+    CHECK_EQ_INT(pr_post(&L, body, &r), -1);
+    CHECK(strstr(r.err, "can't share") != NULL);
+    int ids[PR_MAX];
+    CHECK_EQ_INT(pr_offers(&L, PR_WHERE_TUNNEL, ids, PR_MAX), 1);   // old Macs elsewhere see it
     // Other types are not printers AirWriter drives.
     CHECK_EQ_INT(pr_at_seen(&L, PR_WHERE_CABLE, P("Fred"), P("Workstation"), 0), -1);
 }
@@ -242,13 +252,18 @@ static void test_macroman_name(void)
 static void test_remove(void)
 {
     fresh();
-    int id = pr_at_seen(&L, PR_WHERE_CABLE, P("Kitchen"), P("ImageWriter"), 0);
+    lw_info_t info;
+    lw_info_default(&info);
+    int id = pr_at_seen(&L, PR_WHERE_CABLE, P("Kitchen"), P("LaserWriter"), 0);
+    pr_at_queried(&L, id, 1, &info);
+    CHECK_EQ_INT(notes_of(PR_NOTE_FOUND), 1);
     CHECK_EQ_INT(pr_remove(&L, id), 0);
     CHECK(pr_get(&L, id) == NULL);
     CHECK_EQ_INT(L.n, 0);
     CHECK_EQ_INT(notes_of(PR_NOTE_FOUND), 0);               // its notes go with it
-    int again = pr_at_seen(&L, PR_WHERE_CABLE, P("Kitchen"), P("ImageWriter"), 0);
+    int again = pr_at_seen(&L, PR_WHERE_CABLE, P("Kitchen"), P("LaserWriter"), 0);
     CHECK(again != id);
+    pr_at_queried(&L, again, 1, &info);
     CHECK_EQ_INT(notes_of(PR_NOTE_FOUND), 1);
 }
 
@@ -278,7 +293,10 @@ static void test_box_state(void)
 {
     fresh();
     int a = pr_port_seen(&L, PR_PORT_IW2);
-    int b = pr_at_seen(&L, PR_WHERE_CABLE, P("Kitchen"), P("ImageWriter"), 0);
+    int b = pr_at_seen(&L, PR_WHERE_CABLE, P("Kitchen"), P("LaserWriter"), 0);
+    lw_info_t info;
+    lw_info_default(&info);
+    pr_at_queried(&L, b, 1, &info);
     pr_live_t live[PR_MAX];
     memset(live, 0, sizeof live);
     CHECK_EQ_INT(pr_box_state(&L, live), PR_BOX_OFFLINE);

@@ -534,13 +534,15 @@ function pdDraw(){
   const ask=unk&&p.found==='auto';
   $('model-ask').hidden=!ask;
   if(document.activeElement!==$('model')) $('model').value=ask?'':unk?'none':p.model;
-  $('share-row').classList.toggle('hide',unk);
+  const atiw=p.kind==='appletalk-imagewriter';     // W-1088: old Macs' only, for now
+  $('share-row').classList.toggle('hide',unk||atiw);
   $('pshare').checked=!!p.shared; $('pshare').disabled=!p.identified;
-  $('pd-cant').classList.toggle('hide',!unk);
+  $('pd-cant').classList.toggle('hide',!unk&&!atiw);
   $('pd-cant').textContent=ask?'It didn’t say what it is. If it’s an ImageWriter, choose its model.'
+    :atiw?'Old Macs on your other AppleTalk ways in can print to it. AirWriter can’t share it with iPhones and Macs yet.'
     :'AirWriter can’t print to this printer yet.';
   $('pd-note').classList.toggle('hide',p.kind!=='laserwriter');
-  $('ht-box').classList.toggle('hide',unk);
+  $('ht-box').classList.toggle('hide',unk||atiw);
   $('ht-paper').classList.toggle('hide',!iw);       // the sample is the ImageWriter's dots
   if(document.activeElement!==$('screen')&&p.dither&&p.dither!==$('screen').value){
     $('screen').value=p.dither;
