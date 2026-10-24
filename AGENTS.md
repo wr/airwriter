@@ -51,7 +51,9 @@ What works on `main`:
   250–350 KB to print; the worst page, colour noise, 460 KB). The upload waits on the printer
   past 512 KB of printer bytes (a second colour photo page, or about five gray pages), and
   when the ImageWriter is not ready as the job starts, past 512 KB of URF (the rip asks the
-  ribbon first). A LaserWriter job keeps the whole 1 MB for URF.
+  ribbon first). A LaserWriter job keeps the whole 1 MB for URF. `/api/status` `pipe` shows
+  the job in the pipeline, or the last one: bytes in and out, `queued` (still to print), and
+  when its upload, rip and last byte ended (`upload_ms`, `rip_ms`, `ms`, 0 until then).
 - Out of paper or SELECT off pauses the job; clients show "Needs attention: check paper and
   SELECT" (processing-stopped, `media-empty-error`); the job aborts after
   `CONFIG_AIRWRITER_STALL_ABORT` (600 s).

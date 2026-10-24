@@ -40,6 +40,7 @@ typedef struct {
     size_t   printer_bytes;  // ImageWriter out
     int      pages;
     uint32_t dst_w, dst_h;
+    uint32_t upload_ms;      // from job_pipe_begin to job_pipe_end
     uint32_t rip_ms;         // to the rip's end; the printer may be far behind
     uint32_t ms;             // to the last byte out
     int      rc;             // 0 if the job ripped cleanly and none of it was abandoned
@@ -93,3 +94,8 @@ void job_pipe_abort(void);
 // truncated, so the pipeline abandons the page rather than emitting a short
 // one.
 void job_pipe_end(int ok);
+
+// The job in the pipeline, as far as it has got, or the last one once it is
+// done: diagnostics for /api/status. upload_ms, rip_ms and ms read 0 until
+// each has happened; *queued is what the printer task has still to send.
+void job_pipe_peek(job_pipe_stats_t *st, size_t *queued);

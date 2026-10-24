@@ -1710,6 +1710,11 @@ static void status_json(void *ctx, char *buf, size_t cap)
     laser_status_json(laser, sizeof laser);
     printers_status_json(printers, sizeof printers);
 
+    // W-1066: where the AirPrint job in the pipeline (or the last one) has got.
+    job_pipe_stats_t pst;
+    size_t queued;
+    job_pipe_peek(&pst, &queued);
+
     char job[96];
     if (s_last_job[0])
         snprintf(job, sizeof job, "%s (%u page%s)", s_last_job,
@@ -1729,7 +1734,8 @@ static void status_json(void *ctx, char *buf, size_t cap)
         "\"model\":\"Apple ImageWriter II\",\"pic\":%s,"
         "\"pmodel\":\"%s\",\"pname\":\"%s\",\"phost\":\"%s\",\"airprint\":%s,"
         "\"lt_port\":%d,\"lt\":%s,\"lt_chip\":\"%s\",\"dip\":\"%s\",\"ap\":\"AirWriter-%s\","
-        "\"laser\":%s,\"printers\":%s,\"fresh\":%s,\"internal\":{\"free\":%u,\"lowest\":%u}}",
+        "\"laser\":%s,\"printers\":%s,\"fresh\":%s,\"internal\":{\"free\":%u,\"lowest\":%u},"
+        "\"pipe\":{\"in\":%u,\"out\":%u,\"queued\":%u,\"upload_ms\":%u,\"rip_ms\":%u,\"ms\":%u}}",
         state_text(v.state),
         ps_name(v.state),
         v.asleep ? "true" : "false",
@@ -1759,7 +1765,9 @@ static void status_json(void *ctx, char *buf, size_t cap)
         dip, s_suffix, laser, printers, settings_fresh() ? "true" : "false",
         // Internal RAM is what Wi-Fi and lwIP live on: below ~20 KB, replies stall.
         (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
-        (unsigned)heap_caps_get_minimum_free_size(MALLOC_CAP_INTERNAL));
+        (unsigned)heap_caps_get_minimum_free_size(MALLOC_CAP_INTERNAL),
+        (unsigned)pst.doc_bytes, (unsigned)pst.printer_bytes, (unsigned)queued,
+        (unsigned)pst.upload_ms, (unsigned)pst.rip_ms, (unsigned)pst.ms);
 }
 
 static void lt_json(void *ctx, char *buf, size_t cap)

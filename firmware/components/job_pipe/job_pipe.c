@@ -55,6 +55,7 @@ static TaskHandle_t      s_task;
 static volatile int s_eof;        // producer has no more bytes
 static volatile int s_aborted;    // transfer was truncated; abandon the page
 static job_pipe_stats_t s_st;
+static int64_t s_t0;              // job_pipe_begin's time, which the stats count from
 static char s_name[64];
 static job_pipe_target_t s_target;    // this job's printer, when not the ImageWriter
 static int s_has_target;
@@ -120,8 +121,6 @@ static void prn_task(void *arg)
 static void pipe_task(void *arg)
 {
     (void)arg;
-    int64_t t0 = esp_timer_get_time();
-
     urf_t u;
     int rc = urf_open(&u, ring_read, NULL);
     if (rc != URF_OK) {
@@ -146,7 +145,7 @@ static void pipe_task(void *arg)
         s_st.dst_h  = rst.dst_h;
     }
     urf_free(&u);
-    s_st.rip_ms = (uint32_t)((esp_timer_get_time() - t0) / 1000);
+    s_st.rip_ms = (uint32_t)((esp_timer_get_time() - s_t0) / 1000);
     if (s_buffered)
         ESP_LOGI(TAG, "rip done in %u ms; %u KB of %u still to print",
                  (unsigned)s_st.rip_ms, (unsigned)(xStreamBufferBytesAvailable(s_out) / 1024),
@@ -168,7 +167,8 @@ static void pipe_task(void *arg)
         if (s_aborted && s_st.rc == 0) s_st.rc = -1;
     }
 
-    s_st.ms = (uint32_t)((esp_timer_get_time() - t0) / 1000);
+    // Set last: a peek that reads ms has every figure of the job.
+    s_st.ms = (uint32_t)((esp_timer_get_time() - s_t0) / 1000);
     job_pipe_stats_t st = s_st;
 
     // Free for the next job before reporting: `done` is where the caller gives
@@ -246,6 +246,7 @@ esp_err_t job_pipe_begin_to(const char *job_name, const job_pipe_target_t *t)
     uint8_t junk[64];
     while (xStreamBufferReceive(s_ring, junk, sizeof junk, 0) > 0) {}
     memset(&s_st, 0, sizeof s_st);
+    s_t0 = esp_timer_get_time();
     s_eof = s_aborted = 0;
     strncpy(s_name, job_name && job_name[0] ? job_name : "Untitled", sizeof s_name - 1);
     s_name[sizeof s_name - 1] = '\0';
@@ -284,6 +285,13 @@ void job_pipe_abort(void)
 
 void job_pipe_end(int ok)
 {
+    s_st.upload_ms = (uint32_t)((esp_timer_get_time() - s_t0) / 1000);
     if (!ok) s_aborted = 1;
     s_eof = 1;
+}
+
+void job_pipe_peek(job_pipe_stats_t *st, size_t *queued)
+{
+    *st = s_st;
+    *queued = s_buffered ? xStreamBufferBytesAvailable(s_out) : 0;
 }
