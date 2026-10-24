@@ -440,7 +440,7 @@ setTimeout(()=>document.body.classList.add('ready'),1500);
    each, and a printer's detail in the pane when it is opened. */
 let PR=null, sel=null, LWT=null;
 const WHERE={port:'Printer port',cable:'AppleTalk port',network:'Your network',tunnel:'Basilisk II',zone:'Infinite Mac'};
-const KIND_IC={imagewriter:['k','g-printer'],laserwriter:['k','g-laser'],'appletalk-imagewriter':['b','g-printer'],unknown:['unk','g-printer']};
+const KIND_IC={imagewriter:['k','g-iw'],laserwriter:['k','g-laser'],'appletalk-imagewriter':['b','g-iw'],unknown:['unk','g-printer']};
 const ST={ready:['g','Ready'],printing:['g','Printing'],attention:['a','Needs attention'],failed:['r','The last job failed'],offline:['','Offline']};
 const MODELS=['ImageWriter II','ImageWriter LQ','ImageWriter'];
 for(const m of MODELS) $('model').append(new Option(m,m));
@@ -854,7 +854,7 @@ function suDraw(){
     :'<p class=empty>'+(looking?'Looking…':'No printers found yet.')+'</p>';
   // a name being typed is kept
   if(!$('su-list').contains(document.activeElement)&&$('su-list')._h!==h){ $('su-list')._h=h; $('su-list').innerHTML=h; }
-  $('su-next').textContent=ps.length?'Continue':'Continue Without a Printer';
+  $('su-next-t').textContent=ps.length?'Continue':'Continue Without a Printer';
 }
 $('su-list').addEventListener('change',e=>{
   const f=e.target.closest('[data-rename]'); if(!f) return;
@@ -865,7 +865,6 @@ $('su-look').onclick=suLook;
 $('su-next').onclick=()=>{ suStep(2); openNets(); };
 $('su-back').onclick=()=>suStep(1);
 $('su-nets').onclick=openNets;
-$('su-copy').onclick=()=>copyFrom($('su-host'),$('su-copy'));
 
 /* W-1088: the first visit after a fresh setup opens on this sheet: each
    printer with its state and a test page, and how to print from a phone
@@ -974,13 +973,19 @@ $('join').onclick=async()=>{
   $('join').disabled=true;
   const r=await postJSON('/api/wifi',{ssid:ssid,pass:$('pw').value});
   if(r.error){ say('net-say',r.error,1); $('join').disabled=false; return; }
-  // W-1088: in setup, the third step says where to go next, with the address to copy
+  // W-1088: in setup, the third step says what to do next: the test button,
+  // then a print from a phone. The address is for later.
   if(setup){
     $('d-net').close();
-    const b='<b>'+esc(ssid)+'</b>', host=S.host||'airwriter.local';
-    $('su-joining').innerHTML='AirWriter is joining '+b+'. Your phone will go back to '+b
-      +' by itself. Then open <b>'+esc(host)+'</b> to print a test page.';
-    $('su-host').textContent=host;
+    const b='<b>'+esc(ssid)+'</b>', host=esc(S.host||'airwriter.local');
+    const ps=PR?PR.printers:[], one=ps.length===1?esc(ps[0].name):'your printer';
+    const row=(ic,g,t,s)=>'<div class="row prow"><span class="ic '+ic+'"><svg><use href="#'+g+'"/></svg></span><span class=txt>'+t+'<small>'+s+'</small></span></div>';
+    $('su-joining').innerHTML='AirWriter is joining '+b+', and your phone goes back to '+b+' by itself.';
+    $('su-then').innerHTML=ps.length
+      ?row('g','g-airprint','Print from your iPhone, iPad or Mac','Choose Print (File &gt; Print on a Mac), then '+one+'.')
+        +row('k','g-dots','Print a test page','When AirWriter’s lights turn white, press the button in the middle.')
+      :row('k','g-look','Your printers','Once it has joined, AirWriter looks for them on '+b+'. See what it found at <b>'+host+'</b>.');
+    $('su-later').innerHTML=ps.length?'AirWriter’s settings are at <b>'+host+'</b>.':'';
     suStep(3);
     return;
   }

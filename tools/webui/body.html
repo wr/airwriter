@@ -16,14 +16,25 @@
   <!-- a clipboard, on what a click copies -->
   <symbol id=g-copy viewBox="0 0 16 16"><path fill=none stroke=currentColor stroke-width=1.5 stroke-linejoin=round d="M5.4 3H4.3C3.6 3 3 3.6 3 4.3v8.9c0 .7.6 1.3 1.3 1.3h7.4c.7 0 1.3-.6 1.3-1.3V4.3C13 3.6 12.4 3 11.7 3h-1.1"/><rect x=5.4 y=1.5 width=5.2 height=3 rx=.9 fill=none stroke=currentColor stroke-width=1.5 /></symbol>
   <!-- W-1088: a LaserWriter, boxy, its paper out of the top -->
-  <symbol id=g-laser viewBox="0 0 16 16"><path fill=currentColor d="M4.6 1.2h6.8v3.1H4.6zM1.8 5.2h12.4c.6 0 1 .4 1 1v6.6c0 .6-.4 1-1 1H1.8c-.6 0-1-.4-1-1V6.2c0-.6.4-1 1-1zm1.4 1.6v1.4h4V6.8zm8.5 4.3a.9.9 0 1 0 0 1.8.9.9 0 0 0 0-1.8z"/></symbol>
+  <!-- W-1088 (Wells: the old row icon read as a modern inkjet): an ImageWriter,
+       wide and low with tractor paper out of its top, and a LaserWriter, a tall
+       box with a sheet out of the top and its cassette at the foot -->
+  <symbol id=g-iw viewBox="0 0 16 16"><path fill=currentColor fill-rule=evenodd d="M2.9.6h10.2v7.6H2.9zM3.9 1.6a.6.6 0 1 0 0 1.2.6.6 0 0 0 0-1.2zm0 2.3a.6.6 0 1 0 0 1.2.6.6 0 0 0 0-1.2zm0 2.3a.6.6 0 1 0 0 1.2.6.6 0 0 0 0-1.2zm8.2-4.6a.6.6 0 1 0 0 1.2.6.6 0 0 0 0-1.2zm0 2.3a.6.6 0 1 0 0 1.2.6.6 0 0 0 0-1.2zm0 2.3a.6.6 0 1 0 0 1.2.6.6 0 0 0 0-1.2zM2 8h12l1.4 2.4v2.5c0 .6-.4 1-1 1H1.6c-.6 0-1-.4-1-1v-2.5zm1.4 1.2v.8h9.2v-.8zm7.9 2.2v.8h2v-.8z"/></symbol>
+  <symbol id=g-laser viewBox="0 0 16 16"><path fill=currentColor fill-rule=evenodd d="M4.4.8h7.2v3.4H4.4zM3.1 3.6h9.8c.6 0 1 .4 1 1v7.2H2.1V4.6c0-.6.4-1 1-1zm.4 2.3v.7h9v-.7zm7.4 2.4v1h1.5v-1zM1.5 12.5h13c.4 0 .7.3.7.7v1.3c0 .4-.3.7-.7.7h-13c-.4 0-.7-.3-.7-.7v-1.3c0-.4.3-.7.7-.7zm4.9.9v.6h3.2v-.6z"/></symbol>
+  <!-- AirWriter's dots with the test button in the middle -->
+  <symbol id=g-dots viewBox="0 0 16 16"><path fill=currentColor fill-rule=evenodd d="M2.6 2.6a1.4 1.4 0 1 0 2.8 0 1.4 1.4 0 0 0-2.8 0zm4 0a1.4 1.4 0 1 0 2.8 0 1.4 1.4 0 0 0-2.8 0zm4 0a1.4 1.4 0 1 0 2.8 0 1.4 1.4 0 0 0-2.8 0zM2.6 13.4a1.4 1.4 0 1 0 2.8 0 1.4 1.4 0 0 0-2.8 0zm4 0a1.4 1.4 0 1 0 2.8 0 1.4 1.4 0 0 0-2.8 0zm4 0a1.4 1.4 0 1 0 2.8 0 1.4 1.4 0 0 0-2.8 0zM2.6 8a1.4 1.4 0 1 0 2.8 0 1.4 1.4 0 0 0-2.8 0zm8 0a1.4 1.4 0 1 0 2.8 0 1.4 1.4 0 0 0-2.8 0zM5.7 8a2.3 2.3 0 1 0 4.6 0 2.3 2.3 0 0 0-4.6 0zm1.3 0a1 1 0 1 1 2 0 1 1 0 0 1-2 0z"/></symbol>
+  <!-- the keys' own: look, add, on, back -->
+  <symbol id=g-look viewBox="0 0 16 16"><circle cx=6.8 cy=6.8 r=4.6 fill=none stroke=currentColor stroke-width=1.8 /><path stroke=currentColor stroke-width=2 stroke-linecap=round d="M10.3 10.3l4 4"/></symbol>
+  <symbol id=g-add viewBox="0 0 16 16"><path stroke=currentColor stroke-width=2 stroke-linecap=round d="M8 2.5v11M2.5 8h11"/></symbol>
+  <symbol id=g-on viewBox="0 0 16 16"><path fill=none stroke=currentColor stroke-width=2 stroke-linecap=round stroke-linejoin=round d="M6 2.8 11.2 8 6 13.2"/></symbol>
+  <symbol id=g-off viewBox="0 0 16 16"><path fill=none stroke=currentColor stroke-width=2 stroke-linecap=round stroke-linejoin=round d="M10 2.8 4.8 8 10 13.2"/></symbol>
   <!-- a compact Mac, one for each Mac a link can see -->
   <symbol id=g-mac viewBox="0 0 12 15"><path fill=currentColor fill-rule=evenodd d="M1.6 0h8.8c.9 0 1.6.7 1.6 1.6v11.2c0 .6-.4 1-1 1h-.6V15H1.6v-1.2H1c-.6 0-1-.4-1-1V1.6C0 .7.7 0 1.6 0zM2.3 2v5.8h7.4V2zm4.2 8.6v.9h3v-.9z"/></symbol>
 </svg>
 
 <div class=app>
   <nav class=side aria-label=Settings>
-    <div class=brand><img src="{{icon}}" alt=""><b>AirWriter</b></div>
+    <div class=brand><i class=awm></i><b>AirWriter</b></div>
     <div class=nav>
       <button data-go=printers type=button><span class="ic k"><svg><use href="#g-printer"/></svg></span><span class=l>Printers</span><span class=v id=v-printers></span></button>
       <button data-go=airprint type=button><span class="ic g"><svg><use href="#g-airprint"/></svg></span><span class=l>AirPrint</span><span class=v id=v-airprint></span></button>
@@ -43,19 +54,21 @@
          The board looks before it has Wi-Fi, so step 1 shows what is plugged in. -->
     <section class=pane id=p-setup>
       <div id=su-1>
-        <div class=hero><img src="{{icon}}" alt=""><h2>Let’s find your printer</h2><p id=su-looking></p></div>
+        <div class=hero><i class=awm></i><h2>Let’s find your printer</h2><p id=su-looking></p></div>
         <div class="box prlist" id=su-list></div>
         <p class=foot>Don’t see your printer? Make sure it’s switched on and connected, then Look Again. A printer on your home network shows up once AirWriter has joined it.</p>
         <p class=say id=su-say></p>
-        <div class=btnrow><button class=btn type=button id=su-look>Look Again</button><button class=btn type=button data-dlg=d-add>Add a Printer…</button><button class="btn primary" type=button id=su-next>Continue</button></div>
+        <div class=btnrow><button class=btn type=button id=su-look><svg class=bi><use href="#g-look"/></svg>Look Again</button><button class=btn type=button data-dlg=d-add><svg class=bi><use href="#g-add"/></svg>Add a Printer…</button><button class="btn primary" type=button id=su-next><span id=su-next-t>Continue</span><svg class="bi end"><use href="#g-on"/></svg></button></div>
       </div>
       <div id=su-2 class=hide>
         <div class=hero><span class="ic c"><svg><use href="#g-wifi"/></svg></span><h2>Wi-Fi</h2><p>AirWriter joins your Wi-Fi so your iPhone, iPad and Mac can print to it.</p></div>
-        <div class=btnrow><button class=btn type=button id=su-back>Back</button><button class="btn primary" type=button id=su-nets>Choose a Network…</button></div>
+        <div class="btnrow one"><button class=btn type=button id=su-back><svg class=bi><use href="#g-off"/></svg>Back</button><button class="btn primary" type=button id=su-nets><svg class=bi><use href="#g-wifi"/></svg>Choose a Network…</button></div>
       </div>
+      <!-- Wells: the test button, not an address to copy and open -->
       <div id=su-3 class=hide>
-        <div class=hero><img src="{{icon}}" alt=""><h2>Joining</h2><p id=su-joining></p></div>
-        <div class=box><div class=row><span class="txt mono" id=su-host></span><button class=btn type=button id=su-copy>Copy</button></div></div>
+        <div class=hero><i class=awm></i><h2>You’re All Set</h2><p id=su-joining></p></div>
+        <div class="box prlist" id=su-then></div>
+        <p class=foot id=su-later></p>
       </div>
     </section>
 
@@ -69,7 +82,7 @@
         <div id=pr-notes></div>
         <div class="box prlist" id=pr-list></div>
         <p class=say id=prs-say></p>
-        <div class=btnrow><button class=btn type=button data-dlg=d-add>Add a Printer…</button><button class=btn type=button id=pr-look>Look for Printers</button></div>
+        <div class=btnrow><button class=btn type=button data-dlg=d-add><svg class=bi><use href="#g-add"/></svg>Add a Printer…</button><button class=btn type=button id=pr-look><svg class=bi><use href="#g-look"/></svg>Look for Printers</button></div>
       </div>
 
       <div id=pr-detail class=hide>
@@ -163,7 +176,7 @@
 
     <!-- ── About ─────────────────────────────────────────────── -->
     <section class=pane id=p-about>
-      <div class=hero><img src="{{icon}}" alt=""><h2>AirWriter</h2><p>Rev A · Wells Workshop</p></div>
+      <div class=hero><i class=awm></i><h2>AirWriter</h2><p>Rev A · Wells Workshop</p></div>
       <div class=box>
         <div class=row><span class=txt>Version <span class="mono" id=fw-ver></span></span><span class=val><i class=lamp id=fw-lamp></i><span id=fw-state></span></span><button class=btn type=button id=fw-btn>Check Now</button></div>
         <div class=row><span class=txt>Update automatically</span><label class=sw><input type=checkbox role=switch id=fwauto aria-label="Update automatically"><span></span></label></div>

@@ -21,7 +21,8 @@ The licences above cover the design, not the brand. "AirWriter" and the AirWrite
 licensed under any of them. You may build, modify and sell hardware from this design under
 CERN-OHL-S, but please give it a different name and don't use the logo, so nobody mistakes it for
 the original. The same goes for the Wells Workshop name and mark, which the settings page shows in
-its footer (`tools/webui/wells-workshop.svg`).
+its footer (`tools/webui/wells-workshop.svg`), and for the render of AirWriter the page uses as its
+mark (`tools/webui/airwriter.webp`).
 
 ## Third-party material
 

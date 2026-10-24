@@ -699,7 +699,9 @@ read back is a list made again). At most 8 records.
 - **Test page.** The button, DIP4 and the page's Print Test Page (without an id) go to the port's
   ImageWriter, else the first shared printer; `POST /api/test {"id":N}` names one.
 - **Setup.** In setup mode the port is asked and the cable looked on at once, and the page is
-  three steps; `/api/status` `fresh` (NVS, set by the captive page's Wi-Fi save, cleared by
+  three steps, sized for a phone: the printers found, Wi-Fi, then "You're All Set" (how to print
+  from a phone, and the test button for a test page; the settings' address for later, nothing
+  to copy). `/api/status` `fresh` (NVS, set by the captive page's Wi-Fi save, cleared by
   `POST /api/general {"finish":true}`) opens the "AirWriter is ready" sheet on the network.
 - **A board from before.** At its first boot on W-1088 (Wi-Fi saved, no list) its records are
   made from what it had: the port's ImageWriter with its old uuid and the AirPrint switch as its

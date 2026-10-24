@@ -141,9 +141,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--port", type=int, default=8079)
+    ap.add_argument("--host", default="127.0.0.1",
+                    help="0.0.0.0 to try the page on a phone on this network")
     a = ap.parse_args()
-    srv = http.server.ThreadingHTTPServer(("127.0.0.1", a.port), Handler)
-    print("http://localhost:%d/_states" % a.port)
+    srv = http.server.ThreadingHTTPServer((a.host, a.port), Handler)
+    print("http://%s:%d/_states" % ("localhost" if a.host == "127.0.0.1" else a.host, a.port))
     srv.serve_forever()
 
 

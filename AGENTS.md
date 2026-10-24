@@ -119,8 +119,11 @@ What works on `main`:
   design `docs/superpowers/specs/2026-10-20-settings-redesign-design.md`): a settings app, a
   sidebar of Printers (W-1088: notices, a row per printer, a printer's detail in the pane,
   `#printers/<id>`), AirPrint (the switch and each shared printer's address), AppleTalk, Wi-Fi
-  and About, each row showing its state; one home per setting. Setup mode is three steps
-  (printers, Wi-Fi, joining) and the first visit after it opens on "AirWriter is ready". Upright system type, Apple Garamond Light titles, platinum, icon tiles in the
+  and About, each row showing its state; one home per setting. Setup mode is three steps,
+  sized for a phone (printers, Wi-Fi, "You're All Set": print from a phone, the test button for
+  a test page) and the first visit after it opens on "AirWriter is ready". AirWriter's mark is
+  its own render (`tools/webui/airwriter.webp`, from the shop); the ImageWriter icon is the
+  ImageWriter's (IPP, the tab). Printer rows draw an ImageWriter or a LaserWriter. Upright system type, Apple Garamond Light titles, platinum, icon tiles in the
   ribbon's inks, status as lit bar lamps, low platinum keys; in a window on a big screen, the
   sidebar first on a phone. AppleTalk is one card per way in (AppleTalk Port, Networked Macs,
   Basilisk II, Infinite Mac) with its switch and the Macs heard in the last 10 minutes, each by
@@ -157,8 +160,8 @@ What works on `main`:
   is refused as not accepting jobs; on, they come back under the same printer-uuid.
 - Wi-Fi scans all channels and joins the strongest AP.
 - The printer list (`W-1088 Printers: AirWriter finds, sets up and shares whatever printers you have`,
-  design `docs/superpowers/specs/2026-10-23-printers-design.md`, SPEC §3.15, built on
-  `wells/w-1088-printers`, not yet on main): records in NVS `printers`/`list` (`components/printers`), each
+  design `docs/superpowers/specs/2026-10-23-printers-design.md`, SPEC §3.15, merged
+  2026-10-24): records in NVS `printers`/`list` (`components/printers`), each
   with its own printer-uuid, made once. The port's printer is AirPrint printer 0 as its record
   says; `ESC ?` at line-up finds it, and ImageWriter commands (CTRL-X kick, resync, the job's
   self-ID, the test page) go to J2 only when it is an ImageWriter. Identified printers are
@@ -244,7 +247,7 @@ follows the Mac's port). Its queue name reads "ImageWriter II" in `/api/status`,
 its name in the Chooser. U7's PIC calibration words: `16E0 1DA8`. Its LocalTalk node ID is 198
 (kept in NVS `lt`/`node`); the bench Mac is node 83. Printer: an ImageWriter II on J2 via
 Apple's crossover cable, fanfold paper loaded as the Owner's Guide says (top edge under the paper
-bail). It runs main from the W-1082 merge (LaserWriters), ahead of any release, with
+bail). It runs main from the W-1088 merge (printers), ahead of any release, with
 auto-update on; it shares the fake "LaserWriter II NT" on the Basilisk II tunnel when
 `etpeer.py tunnel laserwriter` runs on the Mac. Its Top margin is calibrated to -7/8 in
 (`top_margin` -126): a page's line 1 in down and one 0.5 in from the bottom landed exactly there.
