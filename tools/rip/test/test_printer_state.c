@@ -15,6 +15,7 @@ static void up_and_ready(ps_t *ps, uint64_t t0)
     ps_init(ps, &TM, t0);
     ps_post(ps, PS_EV_WIFI_JOINING, t0);
     ps_post(ps, PS_EV_LINE_READY, t0);
+    ps_port_line(ps, 1, t0);
     ps_post(ps, PS_EV_WIFI_UP, t0 + 1000);
 }
 
@@ -275,6 +276,7 @@ int main(void)
     up_and_ready(&ps, 0);
     st(&ps, 4000);
     ps_post(&ps, PS_EV_LINE_NOT_READY, 10000);
+    ps_port_line(&ps, 0, 10000);
     assert(!ps_want_kick(&ps, 14999));
     assert(ps_want_kick(&ps, 15000));
     ps_kicked(&ps, 15000);
@@ -283,15 +285,29 @@ int main(void)
     ps_kicked(&ps, 75000);
     // The line coming back resets it: a later stall is kicked 5 s in again.
     ps_post(&ps, PS_EV_LINE_READY, 80000);
+    ps_port_line(&ps, 1, 80000);
     assert(!ps_want_kick(&ps, 80000));
     ps_post(&ps, PS_EV_LINE_NOT_READY, 100000);
+    ps_port_line(&ps, 0, 100000);
     assert(!ps_want_kick(&ps, 104999));
     assert(ps_want_kick(&ps, 105000));
+    // W-1088: idle, the box's line is ready while a shared LaserWriter is, but
+    // the kick is for the port's ImageWriter: its own line decides (board 1,
+    // 2026-10-24: stuck busy after a USB replug, never kicked, the next job
+    // stalled at once).
+    up_and_ready(&ps, 0);
+    ps_post(&ps, PS_EV_LINE_READY, 4000);           // the box: a LaserWriter is ready
+    ps_port_line(&ps, 0, 10000);                    // the ImageWriter, stuck busy
+    assert(!ps_want_kick(&ps, 14999));
+    assert(ps_want_kick(&ps, 15000));
+    ps_port_line(&ps, 1, 20000);
+    assert(!ps_want_kick(&ps, 90000));
     // Never mid-job: there a low line is paper or a jam, and CTRL-X would
     // erase a line of the page.
     up_and_ready(&ps, 0);
     ps_post(&ps, PS_EV_JOB_START, 5000);
     ps_post(&ps, PS_EV_LINE_NOT_READY, 6000);
+    ps_port_line(&ps, 0, 6000);
     assert(!ps_want_kick(&ps, 60000));
     // Busy from power-up past the boot settle: kicked like any other stall.
     ps_init(&ps, &TM, 0);

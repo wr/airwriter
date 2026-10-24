@@ -478,6 +478,7 @@ static void printer_line_changed(void *ctx, int ready)
     }
     s_line_seen = 1;
     s_iw_ready = ready;
+    printer_state_port_line(ready);     // the kick's, whatever line the panel follows
     // Mid-job the line toggles every printed line: this stays cheap.
     if (s_line_src == LINE_IW && s_printing) {
         printer_state_post(ready ? PS_EV_LINE_READY : PS_EV_LINE_NOT_READY);
@@ -1013,10 +1014,10 @@ static void kick_task(void *arg)
             xSemaphoreGive(s_job_lock);
         }
         // W-1088: CTRL-X only to an ImageWriter, or a port nothing has been
-        // found on yet (one left busy at power-up never answers ESC ?).
+        // found on yet (one left busy at power-up never answers ESC ?), on its
+        // own line whatever the panel follows; a LaserWriter's job holds the lock.
         port_mode_t mode = printers_port_mode();
-        if (s_line_src != LINE_IW || (mode != PORT_IMAGEWRITER && mode != PORT_NONE) ||
-            !printer_state_want_kick())
+        if ((mode != PORT_IMAGEWRITER && mode != PORT_NONE) || !printer_state_want_kick())
             continue;
         if (xSemaphoreTake(s_job_lock, 0) != pdTRUE) continue;
         esp_err_t err = serial_out_send_unflowed(&ctrl_x, 1);

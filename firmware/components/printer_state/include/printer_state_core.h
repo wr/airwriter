@@ -67,6 +67,8 @@ typedef struct {
     uint8_t     job_started_low;   // the line was down when this job began: no printer to wait for
     uint8_t     cable;             // PS_CABLE_*, the last test's result, or 0
     uint8_t     cancelled;         // the last job was cancelled, not finished
+    uint8_t     port_ready;        // W-1088: the port printer's own line (ps_port_line)
+    uint64_t    port_since;
     ps_state_t  last, prev;
 } ps_t;
 
@@ -103,8 +105,11 @@ const char *ps_name(ps_state_t st);   // "ready", "offline", ...
 // W-1039: noise on the serial line (a cable replug, power-up) can leave the
 // ImageWriter stuck busy with SELECT lit -- an unprinted line in its buffer --
 // and CTRL-X (cancel current line) clears it. ps_want_kick() says when to send
-// one: no job, line not ready for kick_after_ms, at most every kick_every_ms.
-// Never mid-job, where a low line is paper or a jam. Call ps_kicked() after
-// sending.
+// one: no job, the port's line not ready for kick_after_ms, at most every
+// kick_every_ms. Never mid-job, where a low line is paper or a jam. Call
+// ps_kicked() after sending. W-1088: the port's line is its own, given by
+// ps_port_line (not ready from init): idle, the line the events carry is the
+// box's, ready while any shared printer is.
+void        ps_port_line(ps_t *ps, int ready, uint64_t now_ms);
 int         ps_want_kick(const ps_t *ps, uint64_t now_ms);
 void        ps_kicked(ps_t *ps, uint64_t now_ms);

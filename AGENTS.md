@@ -164,7 +164,8 @@ What works on `main`:
   self-ID, the test page) go to J2 only when it is an ImageWriter. Identified printers are
   shared at once, up to four; AppleTalk ones at AirPrint printers 1-3. The test button, DIP4 and
   the page go to the port's ImageWriter, else the first shared printer (a LaserWriter gets
-  `ps_testpage`). The panel shows the box: ready while any shared printer is. Setup mode looks
+  `ps_testpage`). The panel shows the box: ready while any shared printer is; the idle CTRL-X
+  follows the port printer's own line (`printer_state_port_line`). Setup mode looks
   at once. AirPrint to an AppleTalk ImageWriter was cut: old Macs' only. `GET`/`POST
   /api/printers`.
   A board's first boot on it makes its records from what it had (the port's old uuid, a
@@ -252,6 +253,11 @@ Infinite Mac is on (Wells switched it on, with a made-up zone name). The page re
 yet checked against the part. One pin of its print head is dead (a white line in solid fills).
 
 Known issues, open:
+- Twice on 2026-10-24, after board 1 lost power (its USB moved) with the ImageWriter on, the
+  printer sat busy with SELECT lit: the idle CTRL-X did not free it, switching the printer off
+  and on did. A soft restart (`/api/restart`, an OTA) leaves the line ready. A job sent while it
+  is stuck pauses as "Needs attention"; switching the printer off and on mid-page loses what its
+  buffer held (stray characters, colours out of register).
 - With the node off, TashTalk once sent and relayed nothing over the cable test's own UART2 link
   while its CTS read ready; it never recurred after a node-mode boot and the cause is unknown. The
   test retries from a reset TashTalk and logs "TashTalk answered only after a reset" (`docs/traps.md`).
