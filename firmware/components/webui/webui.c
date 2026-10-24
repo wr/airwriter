@@ -283,7 +283,9 @@ static esp_err_t wifi_post(httpd_req_t *req)
     if (s_cfg.captive) settings_set_fresh(1);   // W-1088: the finish sheet awaits on the network
     led_grid_blip(LG_BLIP_SAVED);       // W-1049: taken; the restart follows
     httpd_resp_sendstr(req, "{\"ok\":true}");
-    xTaskCreate(reboot_task, "reboot", 2048, NULL, 5, NULL);
+    // As fw_update_restart: short of internal RAM, restart from this task
+    // rather than not at all (W-1094).
+    if (xTaskCreate(reboot_task, "reboot", 2048, NULL, 5, NULL) != pdPASS) reboot_task(NULL);
     return ESP_OK;
 }
 
