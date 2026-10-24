@@ -424,6 +424,29 @@ On a LaserWriter on the bench, before phase 1 is called done:
 - **The screen** that looks best in toner, and whether the gain curve helps.
 - **Busy**: a Mac printing to the LaserWriter while an iPhone job waits, both ways.
 
+**Bench, 2026-10-24: a Personal LaserWriter NTR** on board 1's cable (PostScript 2010.129,
+Level 2, 3 MB RAM, 1.2 MB VM, 300 dpi; imageable area 14.16 5.40 597.84 773.40 pt on Letter).
+Its toner was spent, so nothing could be judged by eye; its page counter, read through the
+relay, confirmed every page. Settled:
+- **Cable**: J4 to its LocalTalk port; the board found, queried and shared it on its own.
+- **Long frames**: 1 MB pages, 241 SendData answers of eight 512-byte packets, nothing resent.
+- **Throughput** on LocalTalk: ~12 KB/s, the printer saying "waiting" between reads, so the
+  link sets the pace. A full page of bands (~1 MB) takes ~80 s; a phone's full-page photo
+  (7.6 MB of URF) is bound by its upload over Wi-Fi (~70 KB/s at "Weak").
+- **Binary**: the probe passes (Level 2). The 300 dpi pages went binary.
+- **Memory**: full-page bitmaps, no `VMerror`.
+- **Busy**, both ways, AirPrint against a Mac through the relay: the Mac hears busy in the
+  printer's words until the AirPrint job is done; AirPrint is told `server-error-busy` at once.
+- **The printer's EOF** comes after the page is out: ~35-40 s after a page's last byte. The
+  board's own jobs close at their 30 s wait first; the page prints regardless.
+- **Many jobs on one connection** (W-1095): the LaserWriter driver sends a query, then the
+  document, on one connection. The relay now passes each EOF through; a query then a page went
+  through to the NTR.
+
+Still owed: placement and the screen (toner), the status texts (idle, the NTR says "idle" with
+its cover open or its tray empty, so they can only be read mid-job), the SE/30 through the
+relay, and a Level 1, 68000 machine (Plus, II NT) for hex and imaging time.
+
 ## Phase 2 sketch: PCL LaserJets over serial
 
 Enough to plan from once phase 1 is in; facts from HP's PCL 5 Technical Reference, the PCL 5
