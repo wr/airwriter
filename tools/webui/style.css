@@ -313,11 +313,11 @@ dialog::backdrop{background:var(--scrim)}
 /* the cable test: the case's port edge, and a cable from one port to the other */
 .ports{display:block;width:100%;height:auto;border-radius:8px;background:#151514}
 .ports .cable{fill:none;stroke:#bdb9ae;stroke-width:24;stroke-linecap:round}
-.ports .flow{fill:none;stroke-width:24;stroke-linecap:round;stroke-dasharray:24 332;opacity:0}
+.ports .flow{fill:none;stroke-width:24;stroke-linecap:round;stroke-dasharray:24 356;opacity:0}
 .ports.testing .flow{opacity:1;stroke:var(--lamp-a-top);animation:flow 1.2s linear infinite}
 .ports.pass .cable{stroke:var(--lamp-g)}
 .ports.fail .cable{stroke:var(--lamp-r);animation:blink .4s steps(2) 2}
-@keyframes flow{from{stroke-dashoffset:356}to{stroke-dashoffset:0}}
+@keyframes flow{from{stroke-dashoffset:380}to{stroke-dashoffset:0}}
 @keyframes blink{50%{stroke:#bdb9ae}}
 
 /* the board has stopped answering: a note over the page, which keeps what
