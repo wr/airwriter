@@ -464,6 +464,8 @@ static int colour_ok(void *ctx)
 // Only after the line was down a second or more (power, SELECT, the lid) or
 // at its first report: the printer's own busy blips are not a ribbon swap,
 // and a check whose CR blipped the line must not schedule the next.
+static void port_push(ps_state_t box);
+
 static void printer_line_changed(void *ctx, int ready)
 {
     (void)ctx;
@@ -476,10 +478,14 @@ static void printer_line_changed(void *ctx, int ready)
     }
     s_line_seen = 1;
     s_iw_ready = ready;
-    if (s_line_src != LINE_IW) return;
     // Mid-job the line toggles every printed line: this stays cheap.
-    if (s_printing) printer_state_post(ready ? PS_EV_LINE_READY : PS_EV_LINE_NOT_READY);
-    else line_source();
+    if (s_line_src == LINE_IW && s_printing) {
+        printer_state_post(ready ? PS_EV_LINE_READY : PS_EV_LINE_NOT_READY);
+        return;
+    }
+    if (s_line_src == LINE_IW) line_source();
+    // Idle, the box may not change while the port does (W-1088): its printer's own state.
+    if (!s_printing) port_push(printer_state_view().state);
 }
 
 // W-1088: the box's line while idle. Ready while any shared printer is; with
@@ -2056,13 +2062,21 @@ static void cable_web(void *ctx, int both, char *buf, size_t cap)
 // ----------------------------------------------------------------- main
 
 // Runs on printer_state's poll task, once per change of display state.
-static void on_ps_change(const ps_view_t *v)
+// W-1088: the port printer's own state, for AirPrint and old Macs. The panel's
+// machine follows the box while idle (ready while any shared printer is) and
+// a LaserWriter during its job; the port's printer is offline when its own line
+// is down, whatever else is ready.
+static ps_state_t port_state(ps_state_t box)
 {
-    ESP_LOGI(TAG, "state -> %s", ps_name(v->state));
-    if (s_boot_reset && v->state != PS_BOOTING) {
-        s_boot_reset = 0;
-        led_grid_action(LG_ACT_RESET_CONFIRM, 0);
-    }
+    if (s_printing && !s_laser_owns) return box;      // the machine follows the port's line
+    if (s_iw_ready == 0) return PS_OFFLINE;
+    if (s_iw_ready < 0) return box;                    // not heard from yet
+    return box == PS_OFFLINE || box == PS_ATTENTION ? PS_READY : box;
+}
+
+static void port_push(ps_state_t box)
+{
+    ps_state_t st = port_state(box);
     // SPEC.md 3.9: a stall mid-job becomes a real alert on the phone.
     // Mid-job stall: media-empty, the real "out of paper" alert. The -error
     // suffix (RFC 8011 5.4.12) says it outright: a stopped printer MUST carry
@@ -2070,15 +2084,25 @@ static void on_ps_change(const ps_view_t *v)
     // Idle and not ready: printer off, unplugged or deselected. offline-report
     // is CUPS-only (not in the IANA registry), so it reports the registered
     // "other", which on a stopped printer reads as an error all the same.
-    if (v->state == PS_ATTENTION)
+    if (st == PS_ATTENTION)
         ipp_server_set_stopped("media-empty-error", "Needs attention: check paper and SELECT");
-    else if (v->state == PS_OFFLINE)
+    else if (st == PS_OFFLINE)
         ipp_server_set_stopped("other", "Printer offline");
     else
         ipp_server_set_stopped(NULL, NULL);
-    localtalk_set_status(lt_status(v->state, AT_LINK_CABLE));
-    ethertalk_set_status(lt_status(v->state, AT_LINK_TUNNEL), lt_status(v->state, AT_LINK_ZONE),
-                         lt_status(v->state, AT_LINK_RADIO));
+    localtalk_set_status(lt_status(st, AT_LINK_CABLE));
+    ethertalk_set_status(lt_status(st, AT_LINK_TUNNEL), lt_status(st, AT_LINK_ZONE),
+                         lt_status(st, AT_LINK_RADIO));
+}
+
+static void on_ps_change(const ps_view_t *v)
+{
+    ESP_LOGI(TAG, "state -> %s", ps_name(v->state));
+    if (s_boot_reset && v->state != PS_BOOTING) {
+        s_boot_reset = 0;
+        led_grid_action(LG_ACT_RESET_CONFIRM, 0);
+    }
+    port_push(v->state);
 }
 
 // ------------------------------------------------------- firmware updates

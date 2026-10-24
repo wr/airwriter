@@ -1036,7 +1036,10 @@ esp_err_t ipp_server_set_printer(int idx, const ipp_printer_cfg_t *cfg)
     }
     if (s_mdns_up) remove_services(p);
     p->on = 0;
-    p->stop_reason = p->note_reason = NULL;
+    // The port's printer keeps its line's state (W-1088: a rename re-puts the
+    // slot, and the line has not changed); an AppleTalk printer's is pushed
+    // again by laser.c.
+    if (idx) p->stop_reason = p->note_reason = NULL;
     p->busy = 0;
     if (cfg) {
         fill(p, cfg);
