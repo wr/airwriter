@@ -427,7 +427,7 @@ static void relay_unlock(void *ctx) { (void)ctx; xSemaphoreGive(s_relay_mx); }
 // The target a node's registration offers: its NBP name, of its kind. Under s_mu.
 static int target_of_reg(const lt_node_t *node, int reg)
 {
-    if (reg < 1 || reg >= LT_REG_MAX) return -1;
+    if (reg < 1 || reg >= LT_REG_MAX || !node->reg) return -1;
     const uint8_t *obj = node->reg[reg].obj, *type = node->reg[reg].type;
     uint8_t lw[NBP_NAME_MAX + 1], iw[NBP_NAME_MAX + 1];
     nbp_name(lw, "LaserWriter");
@@ -541,9 +541,13 @@ static void relay_act(uint64_t now)
 
 // ------------------------------------------------------------- the task
 
+// The cable always, for the lookups: W-1082 ran it while its card was open,
+// and now every look runs on it (review I2); main.c starts it only where U7
+// runs TashTalk. The tunnel and the radio where a target lives; otherwise
+// they run as their ways in say.
 static void links(void)
 {
-    int want[3] = { 0, 0, 0 };
+    int want[3] = { 1, 0, 0 };
     lock();
     for (int k = 0; k < s_big->n_tg; k++) {
         int w = s_tg[k].where;
@@ -810,7 +814,9 @@ static int begin(int id, const char *name, job_pipe_target_t *t, int raw)
     lwc_view_t v = lwc_view(&s_core, ti, now_ms());
     lt_route_t r = v.idx >= 0 ? s_core.heard[v.idx].route : (lt_route_t){ 0 };
     int link = v.idx >= 0 ? s_core.heard[v.idx].link : -1;
-    int ok = g && g->kind == LASER_KIND_LW && g->slot > 0 && g->have_info && link >= 0;
+    // An AirPrint job comes through a slot; the test page goes to any
+    // LaserWriter of the list's, shared or not (review I3).
+    int ok = g && g->kind == LASER_KIND_LW && (raw || g->slot > 0) && g->have_info && link >= 0;
     ps_cfg_t pc = { .out = spool_write };
     ht_algo_t algo = HT_ATKINSON;
     int gain = 0;

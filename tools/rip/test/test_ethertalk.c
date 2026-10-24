@@ -173,9 +173,13 @@ static const uint8_t MAC_B[6]  = { 0x0A, 0x57, 0x57, 0x00, 0x00, 0x01 };
 static const uint8_t THEM[6]   = { 0xB2, 0x0A, 0x00, 0x01, 0x6E, 0x00 };   // the Mac
 static const uint8_t OTHER[6]  = { 0xB2, 0x0A, 0x00, 0x01, 0x6F, 0x00 };
 
+static lt_reg_t reg_room[4][LT_REG_MAX];
+static int reg_next;
+
 static void link_init(et_link_t *l, int *id, const uint8_t mac[6], uint16_t hnet, uint8_t hnode)
 {
-    et_cfg_t cfg = { "ImageWriter II", "ImageWriter", 0x0000, {0}, hnet, hnode, 1, LT_IDLE_HOLD_MS, NULL };
+    et_cfg_t cfg = { "ImageWriter II", "ImageWriter", 0x0000, {0}, hnet, hnode, 1, LT_IDLE_HOLD_MS, NULL,
+                     reg_room[reg_next++ % 4] };
     memcpy(cfg.mac, mac, 6);
     et_ops_t ops = { id, w_send, w_log, w_begin, w_data, w_room, w_end, w_claimed, NULL, NULL, NULL, NULL };
     et_link_init(l, &cfg, &ops, 0);
@@ -921,7 +925,7 @@ static void test_peer_names(void)
 {
     et_link_t l;
     et_cfg_t cfg = { "ImageWriter II", "ImageWriter", 0x0000, {0}, 0xFF23, 77, 1,
-                     LT_IDLE_HOLD_MS, enames };
+                     LT_IDLE_HOLD_MS, enames, NULL };
     memcpy(cfg.mac, MAC_A, 6);
     et_ops_t ops = { &ID_A, w_send, w_log, w_begin, w_data, w_room, w_end, w_claimed, NULL, NULL, NULL, NULL };
     et_link_init(&l, &cfg, &ops, 0);

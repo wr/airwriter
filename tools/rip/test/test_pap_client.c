@@ -107,7 +107,7 @@ static const lt_route_t SLS = { { 0, PR, PR_SLS }, PR, 0 };
 
 static uint64_t fresh(void)
 {
-    lt_cfg_t cfg = { "ImageWriter II", "ImageWriter", 0, ME, 1, NULL };
+    lt_cfg_t cfg = { "ImageWriter II", "ImageWriter", 0, ME, 1, NULL, NULL };
     lt_node_init(&node, &cfg, &NODE_OPS, 0);
     uint64_t t = 0;
     for (int i = 0; i <= LT_ENQ_TRIES; i++, t += LT_ENQ_GAP_MS) lt_node_tick(&node, t);

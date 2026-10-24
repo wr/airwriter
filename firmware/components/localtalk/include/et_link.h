@@ -33,6 +33,7 @@ typedef struct {
     uint32_t    seed;           // nonzero
     uint32_t    idle_hold_ms;   // the node's idle hold (LT_IDLE_HOLD_MS)
     lt_name_t  *names;          // the node's room for Macintosh names, or NULL
+    lt_reg_t   *regs;           // its room for registrations (W-1088), or NULL
 } et_cfg_t;
 
 typedef struct {

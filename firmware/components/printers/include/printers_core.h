@@ -121,6 +121,10 @@ void pr_migrate(pr_list_t *l, const pr_legacy_t *old);
 
 size_t pr_save(const pr_list_t *l, uint8_t *buf, size_t cap);   // 0: too small
 int    pr_load(pr_list_t *l, const uint8_t *buf, size_t n);     // -1: refused, l untouched
+// 1 when buf is a list stored by a newer firmware (a later PR_BLOB_VER): one
+// pr_load refuses but nothing here may write over, so that an OTA rollback or
+// the known-good reset leaves the newer firmware its printers.
+int    pr_blob_newer(const uint8_t *buf, size_t n);
 
 size_t pr_json(const pr_list_t *l, const pr_live_t live[PR_MAX], char *buf, size_t cap);
 

@@ -422,6 +422,31 @@ static void test_load_garbage(void)
     CHECK(memcmp(&M, &keep, sizeof M) == 0);
 }
 
+// A list stored by a newer firmware (a later stored form) is one this
+// firmware must not write over: an OTA rollback or the known-good reset brings
+// the board back here, and the newer firmware wants its printers back (review I1).
+static void test_load_newer(void)
+{
+    fresh();
+    pr_port_seen(&L, PR_PORT_IW2);
+    static uint8_t buf[4096];
+    size_t n = pr_save(&L, buf, sizeof buf);
+    CHECK_EQ_INT(pr_blob_newer(buf, n), 0);                 // ours
+    uint8_t bad[4096];
+    memcpy(bad, buf, n);
+    bad[2] = PR_BLOB_VER + 1;
+    pr_list_t M;
+    pr_init(&M, MAC, 1);
+    CHECK_EQ_INT(pr_load(&M, bad, n), -1);                  // unreadable here
+    CHECK_EQ_INT(pr_blob_newer(bad, n), 1);                 // and kept
+    CHECK_EQ_INT(pr_blob_newer(bad, 3), 1);                 // the header is enough
+    CHECK_EQ_INT(pr_blob_newer(buf, n - 1), 0);             // ours, damaged: replace it
+    CHECK_EQ_INT(pr_blob_newer(bad, 2), 0);
+    bad[0] = 'X';
+    CHECK_EQ_INT(pr_blob_newer(bad, n), 0);                 // not a printer list
+    CHECK_EQ_INT(pr_blob_newer(NULL, 0), 0);
+}
+
 static void test_json(void)
 {
     fresh();
@@ -590,6 +615,7 @@ int main(void)
     test_migrate_port_off();
     test_save_load();
     test_load_garbage();
+    test_load_newer();
     test_json();
     TEST_END;
 }

@@ -109,7 +109,6 @@ static void respond(lt_node_t *n, const lt_route_t *to, uint8_t src_sock, const 
 // ------------------------------------------------------------- NBP
 
 static void name_reply(lt_node_t *n, const ddp_t *d, const nbp_t *q, uint64_t now);
-static void aw_note(lt_node_t *n, uint16_t net, uint8_t node, uint64_t now);
 static void name_registering(lt_node_t *n, const ddp_t *d, const nbp_t *q, uint64_t now);
 
 static void on_nbp(lt_node_t *n, const ddp_t *d, uint64_t now)
@@ -117,11 +116,8 @@ static void on_nbp(lt_node_t *n, const ddp_t *d, uint64_t now)
     nbp_t q;
     if (d->dst.sock != SOCK_NIS || nbp_parse(d->data, d->len, &q)) return;
     if (q.fn == NBP_LKUP_REPLY) {
-        uint8_t ws[NBP_NAME_MAX + 1], aw[NBP_NAME_MAX + 1];
+        uint8_t ws[NBP_NAME_MAX + 1];
         nbp_name(ws, LT_NAME_TYPE);
-        nbp_name(aw, LT_AIRWRITER_TYPE);
-        if (nbp_match(aw, q.t.type) && q.count) aw_note(n, q.t.addr.net ? q.t.addr.net : d->src.net,
-                                                        q.t.addr.node, now);
         if (nbp_match(ws, q.t.type)) {
             name_reply(n, d, &q, now);
         } else if (n->ops.found && q.count && q.t.obj[0]) {
@@ -143,7 +139,7 @@ static void on_nbp(lt_node_t *n, const ddp_t *d, uint64_t now)
     // The node's own name while it serves, and each registration (W-1088).
     int hits[LT_REG_MAX] = { 0 }, hit = 0;
     hits[0] = n->serve && n->obj[0] && nbp_match(q.t.obj, n->obj) && nbp_match(q.t.type, n->type);
-    for (int r = 1; r < LT_REG_MAX; r++)
+    for (int r = 1; r < LT_REG_MAX && n->reg; r++)
         hits[r] = n->reg[r].sls && nbp_match(q.t.obj, n->reg[r].obj) &&
                   nbp_match(q.t.type, n->reg[r].type);
     for (int r = 0; r < LT_REG_MAX; r++) hit |= hits[r];
@@ -424,7 +420,7 @@ static void on_atp(lt_node_t *n, const ddp_t *d, uint64_t now)
     int reg = -1;
     // W-1082, W-1088: no ImageWriter here, or none on the port to offer.
     if (d->dst.sock == LT_SOCK_SLS) reg = n->serve && n->obj[0] ? 0 : -1;
-    else for (int r = 1; r < LT_REG_MAX; r++) if (n->reg[r].sls && n->reg[r].sls == d->dst.sock) reg = r;
+    else for (int r = 1; r < LT_REG_MAX && n->reg; r++) if (n->reg[r].sls && n->reg[r].sls == d->dst.sock) reg = r;
     if (reg >= 0 && fn == ATP_TREQ) {
         uint8_t aw[NBP_NAME_MAX + 1];
         nbp_name(aw, LT_AIRWRITER_TYPE);
@@ -540,7 +536,7 @@ static void pap_tick(lt_node_t *n, uint64_t now)
 
 int lt_node_register(lt_node_t *n, int reg, const uint8_t *obj, const uint8_t *type, uint8_t sls)
 {
-    if (reg < 1 || reg >= LT_REG_MAX) return -1;
+    if (reg < 1 || reg >= LT_REG_MAX || !n->reg) return -1;
     if (!obj || !type || !sls) {
         memset(&n->reg[reg], 0, sizeof n->reg[reg]);
         return 0;
@@ -578,28 +574,6 @@ void lt_node_offer(lt_node_t *n, const uint8_t *own, const lt_offer_t *rel, int 
 }
 
 int lt_node_pap_reg(const lt_node_t *n) { return n->pap.open ? n->pap.reg : 0; }
-
-static void aw_note(lt_node_t *n, uint16_t net, uint8_t node, uint64_t now)
-{
-    int slot = 0;
-    for (int i = 0; i < (int)(sizeof n->aw / sizeof n->aw[0]); i++) {
-        if (n->aw[i].node == node && n->aw[i].net == net) { slot = i; break; }
-        if (n->aw[i].at < n->aw[slot].at) slot = i;
-    }
-    n->aw[slot].net = net;
-    n->aw[slot].node = node;
-    n->aw[slot].at = now ? now : 1;
-}
-
-int lt_node_is_airwriter(const lt_node_t *n, uint16_t net, uint8_t node)
-{
-    if (node == n->node && (!net || net == n->net)) return 1;
-    for (size_t i = 0; i < sizeof n->aw / sizeof n->aw[0]; i++)
-        if (n->aw[i].at && n->aw[i].node == node && (!net || !n->aw[i].net || n->aw[i].net == net) &&
-            n->last_now - n->aw[i].at < LT_AIRWRITER_MS)
-            return 1;
-    return 0;
-}
 
 void lt_node_set_serve(lt_node_t *n, int serve)
 {
@@ -683,6 +657,8 @@ void lt_node_init(lt_node_t *n, const lt_cfg_t *cfg, const lt_ops_t *ops, uint64
     lt_node_set_status(n, cfg->status);
     n->names = cfg->names;
     if (n->names) memset(n->names, 0, LT_SEEN_SLOTS * sizeof *n->names);
+    n->reg = cfg->regs;
+    if (n->reg) memset(n->reg, 0, LT_REG_MAX * sizeof *n->reg);
     n->rng = cfg->seed ? cfg->seed : 0x2434u;
     n->tid = (uint16_t)rnd(n);
     n->phase = LT_ACQUIRING;
@@ -704,6 +680,8 @@ void lt_node_init_elap(lt_node_t *n, const lt_cfg_t *cfg, const lt_ops_t *ops,
     lt_node_set_status(n, cfg->status);
     n->names = cfg->names;
     if (n->names) memset(n->names, 0, LT_SEEN_SLOTS * sizeof *n->names);
+    n->reg = cfg->regs;
+    if (n->reg) memset(n->reg, 0, LT_REG_MAX * sizeof *n->reg);
     n->rng = cfg->seed ? cfg->seed : 0x2434u;
     n->tid = (uint16_t)rnd(n);
     n->phase = LT_ACQUIRING;                       // until AARP hands over an address
@@ -886,7 +864,6 @@ static void name_reply(lt_node_t *n, const ddp_t *d, const nbp_t *q, uint64_t no
 
 void lt_node_rx(lt_node_t *n, const uint8_t *f, size_t len, uint64_t now)
 {
-    n->last_now = now;
     if (len < LLAP_HDR) return;
     n->st.frames++;
     uint8_t dst = f[0], src = f[1], type = f[2];
@@ -931,7 +908,6 @@ void lt_node_rx(lt_node_t *n, const uint8_t *f, size_t len, uint64_t now)
 
 void lt_node_tick(lt_node_t *n, uint64_t now)
 {
-    n->last_now = now;
     if (n->phase == LT_ONLINE) {
         pap_tick(n, now);
         names_tick(n, now);

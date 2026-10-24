@@ -313,10 +313,11 @@ esp_err_t localtalk_start(const localtalk_cfg_t *cfg)
     if (err != ESP_OK) return err;
 
     tt_rx_init(&s_rx);
-    // The Macs' names in PSRAM: internal RAM is short.
+    // The Macs' names and the node's registrations in PSRAM: internal RAM is short.
     s_nc = (lt_cfg_t){ .object = cfg->object, .type = cfg->type, .status = cfg->status,
                        .hint = hint, .seed = esp_random() | 1,
-                       .names = heap_caps_calloc(LT_SEEN_SLOTS, sizeof(lt_name_t), MALLOC_CAP_SPIRAM) };
+                       .names = heap_caps_calloc(LT_SEEN_SLOTS, sizeof(lt_name_t), MALLOC_CAP_SPIRAM),
+                       .regs = heap_caps_calloc(LT_REG_MAX, sizeof(lt_reg_t), MALLOC_CAP_SPIRAM) };
     s_ops = (lt_ops_t){ .send = op_send, .claim = op_claim, .log = op_log,
                         .job_begin = op_job_begin, .job_data = op_job_data,
                         .job_room = op_job_room, .job_end = op_job_end, .found = op_found,

@@ -80,17 +80,32 @@ int printers_stored(void)
     return ok;
 }
 
+// A newer firmware's list is in NVS: nothing here writes over it (review I1).
+static int s_keep;
+
+// 0 read; -1 none stored; -2 one stored that does not read back here (a
+// newer firmware's sets s_keep).
 static int load(pr_list_t *l)
 {
     nvs_handle_t h;
     if (nvs_open(NS, NVS_READONLY, &h) != ESP_OK) return -1;
-    size_t n = sizeof s_big->saved;
-    esp_err_t err = nvs_get_blob(h, "list", s_big->saved, &n);
+    size_t n = 0;
+    esp_err_t err = nvs_get_blob(h, "list", NULL, &n);
+    if (err == ESP_OK && n > sizeof s_big->saved) {   // bigger than this firmware stores
+        nvs_close(h);
+        ESP_LOGW(TAG, "the stored list (%u bytes) is a newer firmware's", (unsigned)n);
+        s_keep = 1;
+        return -2;
+    }
+    n = sizeof s_big->saved;
+    if (err == ESP_OK) err = nvs_get_blob(h, "list", s_big->saved, &n);
     nvs_close(h);
     if (err != ESP_OK) return -1;
     if (pr_load(l, s_big->saved, n)) {
-        ESP_LOGE(TAG, "the stored list (%u bytes) does not read back", (unsigned)n);
-        return -1;
+        s_keep = pr_blob_newer(s_big->saved, n);
+        ESP_LOGE(TAG, "the stored list (%u bytes) does not read back%s", (unsigned)n,
+                 s_keep ? ": a newer firmware's, kept" : "");
+        return -2;
     }
     s_big->saved_n = n;
     return 0;
@@ -99,6 +114,7 @@ static int load(pr_list_t *l)
 // Stores the list if it differs from what NVS holds. Under s_mu.
 static void save(void)
 {
+    if (s_keep) return;
     size_t n = pr_save(s_l, s_big->blob, sizeof s_big->blob);
     if (!n || (n == s_big->saved_n && !memcmp(s_big->blob, s_big->saved, n))) return;
     nvs_handle_t h;
@@ -325,14 +341,18 @@ esp_err_t printers_start(const printers_cfg_t *cfg)
     if (!s_big || !s_mu || !s_apply_mx) return ESP_ERR_NO_MEM;
     s_cfg = *cfg;
 
-    if (load(s_l) == 0) {
+    int rc = load(s_l);
+    if (rc == 0) {
         // The MAC and epoch are the board's, whatever the blob said.
         memcpy(s_l->mac, cfg->mac, sizeof s_l->mac);
         s_l->epoch = cfg->epoch;
         ESP_LOGI(TAG, "%u printer%s", s_l->n, s_l->n == 1 ? "" : "s");
     } else {
         pr_init(s_l, cfg->mac, cfg->epoch);
-        if (cfg->updated_board) {
+        // A list this firmware can't read: the board's settings from before
+        // the list are still in NVS, so its printers come back from them, the
+        // port's under its old uuid (a newer firmware's list stays as it is).
+        if (cfg->updated_board || rc == -2) {
             pr_legacy_t o = cfg->legacy;
             migrate(&o);
         } else {

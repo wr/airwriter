@@ -57,7 +57,7 @@ static void reset_fake(void) { nsent = 0; nlogs = 0; lastlog[0] = 0; }
 // Bring a node online at `id` with no clash: 120 enquiries 10 ms apart.
 static uint64_t online(lt_node_t *n, uint8_t id)
 {
-    lt_cfg_t cfg = { "ImageWriter II", "ImageWriter", 0x0000, id, 1, NULL };
+    lt_cfg_t cfg = { "ImageWriter II", "ImageWriter", 0x0000, id, 1, NULL, NULL };
     lt_node_init(n, &cfg, &OPS, 0);
     uint64_t t = 0;
     for (int i = 0; i <= LT_ENQ_TRIES; i++, t += LT_ENQ_GAP_MS) lt_node_tick(n, t);
@@ -254,7 +254,7 @@ static void test_nbp_match(void)
 static void test_acquire(void)
 {
     lt_node_t n;
-    lt_cfg_t cfg = { "ImageWriter II", "ImageWriter", 0x0000, 0, 12345, NULL };
+    lt_cfg_t cfg = { "ImageWriter II", "ImageWriter", 0x0000, 0, 12345, NULL, NULL };
     claimed = -1;
     reset_fake();
     lt_node_init(&n, &cfg, &OPS, 0);
@@ -836,7 +836,7 @@ static void test_pap_fixture(void)
     ops.job_data = sp_data;
     ops.job_room = sp_room;
     lt_node_t n;
-    lt_cfg_t cfg = { "ImageWriter II", "ImageWriter", 0x0000, 200, 1, NULL };
+    lt_cfg_t cfg = { "ImageWriter II", "ImageWriter", 0x0000, 200, 1, NULL, NULL };
     lt_node_init(&n, &cfg, &ops, 0);
     uint64_t t = 0;
     for (int i = 0; i <= LT_ENQ_TRIES; i++, t += LT_ENQ_GAP_MS) lt_node_tick(&n, t);
@@ -905,7 +905,7 @@ static void test_pap_fixture(void)
 
 static uint64_t elap_online(lt_node_t *n, uint32_t idle_hold_ms)
 {
-    lt_cfg_t cfg = { "ImageWriter II", "ImageWriter", 0x0000, 0, 1, NULL };
+    lt_cfg_t cfg = { "ImageWriter II", "ImageWriter", 0x0000, 0, 1, NULL, NULL };
     lt_node_init_elap(n, &cfg, &OPS, idle_hold_ms, 0);
     lt_node_set_address(n, ENET, ENODE, 1000);
     reset_fake();
@@ -946,7 +946,7 @@ static void test_elap_init_quiet(void)
     lt_node_t n;
     claimed = -1;
     reset_fake();
-    lt_cfg_t cfg = { "ImageWriter II", "ImageWriter", 0x0000, 0, 1, NULL };
+    lt_cfg_t cfg = { "ImageWriter II", "ImageWriter", 0x0000, 0, 1, NULL, NULL };
     lt_node_init_elap(&n, &cfg, &OPS, 0, 0);
     for (uint64_t t = 0; t <= 2000; t += 10) lt_node_tick(&n, t);
     CHECK_EQ_INT(nsent, 0);                               // no ENQs: AARP is et_link's
@@ -1209,9 +1209,13 @@ static size_t f_reg_status(void *ctx, int reg, uint8_t *pstr, size_t cap)
 static const lt_ops_t OPS_REG = { NULL, f_send, f_claim, f_log, f_begin, f_data, f_room, f_end, NULL,
                                   f_pap_open, f_reg_status, NULL };
 
+// A node's registrations are its link's (cfg.regs, in PSRAM on the board).
+static lt_reg_t reg_room[4][LT_REG_MAX];
+static int reg_next;
+
 static uint64_t online_reg(lt_node_t *n, uint8_t id)
 {
-    lt_cfg_t cfg = { "ImageWriter II", "ImageWriter", 0x0000, id, 1, NULL };
+    lt_cfg_t cfg = { "ImageWriter II", "ImageWriter", 0x0000, id, 1, NULL, reg_room[reg_next++ % 4] };
     lt_node_init(n, &cfg, &OPS_REG, 0);
     uint64_t t = 0;
     for (int i = 0; i <= LT_ENQ_TRIES; i++, t += LT_ENQ_GAP_MS) lt_node_tick(n, t);
@@ -1326,21 +1330,34 @@ static void test_marker(void)
     lt_node_rx(&n, f, fl, t + 5);
     CHECK_EQ_INT(po_calls, 0);
     CHECK(!n.pap.open);
-    // Another AirWriter answers our lookup: its node is remembered.
-    nbp_tuple_t other = { .addr = { 0, 77, 0x89 } };
-    memcpy(other.obj, PS("airwriter-9999"), 15);
-    memcpy(other.type, PS("AirWriter"), 10);
-    other.zone[0] = 1; other.zone[1] = '*';
-    uint8_t pkt[128];
-    size_t pl = nbp_build(pkt, sizeof pkt, NBP_LKUP_REPLY, 9, &other);
-    lt_addr_t to = { 0, 200, SOCK_NIS }, from = { 0, 77, SOCK_NIS };
-    fl = ddp_build(f, sizeof f, 200, 77, 0, &to, &from, DDP_NBP, pkt, pl);
-    lt_node_rx(&n, f, fl, t + 10);
-    CHECK_EQ_INT(lt_node_is_airwriter(&n, 0, 77), 1);
-    CHECK_EQ_INT(lt_node_is_airwriter(&n, 0, 78), 0);
-    CHECK_EQ_INT(lt_node_is_airwriter(&n, 0, 200), 1);    // itself
-    lt_node_tick(&n, t + 10 + 11 * 60 * 1000);           // forgotten after ten minutes
-    CHECK_EQ_INT(lt_node_is_airwriter(&n, 0, 77), 0);
+}
+
+// W-1088 review I5: the nodes live in internal RAM (four on the board), so
+// their registrations are the link's room, not each node's. A node given none
+// answers only as itself.
+static void test_register_needs_room(void)
+{
+    CHECK(sizeof(lt_node_t) <= 6144);                     // 6072 before W-1088 (host)
+    lt_node_t n;
+    lt_cfg_t cfg = { "ImageWriter II", "ImageWriter", 0x0000, 200, 1, NULL, NULL };
+    lt_node_init(&n, &cfg, &OPS_REG, 0);
+    uint64_t t = 0;
+    for (int i = 0; i <= LT_ENQ_TRIES; i++, t += LT_ENQ_GAP_MS) lt_node_tick(&n, t);
+    reset_fake();
+    CHECK_EQ_INT(lt_node_register(&n, 1, PS("Office"), PS("LaserWriter"), 0x85), -1);
+    lt_offer_t rel = { {0}, {0} };
+    memcpy(rel.obj, PS("Office"), 7);
+    memcpy(rel.type, PS("LaserWriter"), 12);
+    lt_node_offer(&n, PS("ImageWriter II"), &rel, 1, PS("airwriter-2434"));
+    lkup(&n, PS("="), PS("="), t);
+    CHECK_EQ_INT(nsent, 1);                               // itself only
+    CHECK_EQ_INT(reply_sock(0), LT_SOCK_SLS);
+    // Given room, the same offer answers for all three.
+    lt_node_t m;
+    t = online_reg(&m, 201);
+    lt_node_offer(&m, PS("ImageWriter II"), &rel, 1, PS("airwriter-2434"));
+    lkup(&m, PS("="), PS("="), t);
+    CHECK_EQ_INT(nsent, 3);
 }
 
 static void test_register_macroman(void)
@@ -1395,7 +1412,7 @@ static const uint8_t SE30[] = { 13, 'W','e','l','l','s',0xD5,'s',' ','S','E','/'
 
 static uint64_t online_named(lt_node_t *n, uint8_t id)
 {
-    lt_cfg_t cfg = { "ImageWriter II", "ImageWriter", 0x0000, id, 1, names };
+    lt_cfg_t cfg = { "ImageWriter II", "ImageWriter", 0x0000, id, 1, names, NULL };
     lt_node_init(n, &cfg, &OPS, 0);
     uint64_t t = 0;
     for (int i = 0; i <= LT_ENQ_TRIES; i++, t += LT_ENQ_GAP_MS) lt_node_tick(n, t);
@@ -1670,7 +1687,7 @@ static void test_names_off(void)
 static void test_serve_off(void)
 {
     lt_node_t n;
-    lt_cfg_t cfg = { "ImageWriter II", "ImageWriter", 0x0000, 201, 1, NULL };
+    lt_cfg_t cfg = { "ImageWriter II", "ImageWriter", 0x0000, 201, 1, NULL, NULL };
     lt_node_init(&n, &cfg, &OPS, 0);
     lt_node_set_serve(&n, 0);
     uint64_t t = 0;
@@ -1730,7 +1747,7 @@ static void test_lookup_out(void)
     ops.found = f_found;
     lt_node_t n;
     static lt_name_t names[LT_SEEN_SLOTS];
-    lt_cfg_t cfg = { "ImageWriter II", "ImageWriter", 0x0000, 202, 1, names };
+    lt_cfg_t cfg = { "ImageWriter II", "ImageWriter", 0x0000, 202, 1, names, NULL };
     lt_node_init(&n, &cfg, &ops, 0);
     uint64_t t = 0;
     for (int i = 0; i <= LT_ENQ_TRIES; i++, t += LT_ENQ_GAP_MS) lt_node_tick(&n, t);
@@ -1827,6 +1844,7 @@ int main(void)
     test_register_two();
     test_open_on_reg();
     test_marker();
+    test_register_needs_room();
     test_register_macroman();
     test_name_asked();
     test_name_late_mac();

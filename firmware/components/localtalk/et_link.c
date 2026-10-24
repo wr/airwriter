@@ -190,7 +190,7 @@ void et_link_init(et_link_t *l, const et_cfg_t *cfg, const et_ops_t *ops, uint64
     memcpy(l->mac, cfg->mac, ETH_ALEN);
     l->rng = cfg->seed ? cfg->seed : 0x2434u;
     l->now = now;
-    lt_cfg_t nc = { cfg->object, cfg->type, cfg->status, 0, cfg->seed, cfg->names };
+    lt_cfg_t nc = { cfg->object, cfg->type, cfg->status, 0, cfg->seed, cfg->names, cfg->regs };
     lt_ops_t no = { l, t_send, NULL, t_log, t_begin, t_data, t_room, t_end, t_found, t_pap_open,
                     t_reg_status, t_reg_output };
     lt_node_init_elap(&l->node, &nc, &no, cfg->idle_hold_ms, now);

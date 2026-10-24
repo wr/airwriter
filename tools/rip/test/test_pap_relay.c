@@ -186,7 +186,8 @@ static void setup(size_t job, size_t out)
             ops.job_data = p_data; ops.job_room = p_room; ops.job_end = p_end;
             ops.pap_open = p_pap_open; ops.reg_status = p_status; ops.reg_output = p_output;
         }
-        lt_cfg_t cfg = { "", "ImageWriter", 0, HINT[i], (uint32_t)(i + 1), NULL };
+        static lt_reg_t regs[NODES][LT_REG_MAX];
+        lt_cfg_t cfg = { "", "ImageWriter", 0, HINT[i], (uint32_t)(i + 1), NULL, regs[i] };
         lt_node_init(&node[i], &cfg, &ops, 0);
     }
     q_n = 0;

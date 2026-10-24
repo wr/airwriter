@@ -181,8 +181,9 @@ What works on `main`:
   the printer and the printer's output (query answers, errors) back to its reads, 256 bytes a
   read, nothing rewritten. Benched zone → tunnel against the fake LaserWriter only.
 - TashTalk 2.1.3 is in U7, flashed in place by the ESP32 over LVP.
-- A LocalTalk node behind the AppleTalk port's switch on the settings page (W-1079; until the
-  switch is used, DIP mode 2 starts it, and `CONFIG_AIRWRITER_LT_BENCH` always), on UART2 to
+- A LocalTalk node on the AppleTalk port whenever U7 runs TashTalk (W-1088: every look for
+  printers runs on it), answering old Macs only while the settings page's switch says so
+  (W-1079; until the switch is used, DIP mode 2, and `CONFIG_AIRWRITER_LT_BENCH` always), on UART2 to
   TashTalk at 1 Mbaud with its CTS on IO6 (`components/localtalk`): acquires a server node ID,
   answers NBP LkUp as `<queue>:ImageWriter@*`, and answers PAP as Apple's ImageWriter LocalTalk
   Option Card does (status word, one connection). A PAP job is the Mac driver's own ImageWriter
@@ -190,8 +191,8 @@ What works on `main`:
   Mac wait ("busy"), a paused printer holds the Mac's reads (16 KB spool), and a job cut short
   gets W-1041's resync. The last job's bytes are also kept for `GET /api/lt/job`. `GET /api/lt`
   shows state and log; `POST /api/lt/echo` with a node number pings that Mac (AEP). The bench
-  Mac has printed on paper through it. The node cannot stop once started, so the switch's off
-  is quiet: TashTalk answers for no node and frames are dropped.
+  Mac has printed on paper through it. Switched off, the node offers old Macs nothing but the
+  AirWriter marker and still looks for printers.
 - EtherTalk (`W-1076 EtherTalk: print from Infinite Mac and Basilisk II`, `W-1078 EtherTalk over
   Wi-Fi: print from real Macs (BlueSCSI, Ethernet Macs)`, SPEC §3.13): three more links to the
   same printer, each AppleTalk Phase 2 with its own address: the board's own Wi-Fi for Ethernet

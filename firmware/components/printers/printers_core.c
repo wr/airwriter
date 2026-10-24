@@ -539,24 +539,32 @@ int pr_load(pr_list_t *l, const uint8_t *buf, size_t n)
     uint8_t cnt = buf[3], notes = buf[5];
     if (cnt > PR_MAX || notes > PR_NOTES_MAX) return -1;
     if (n != HDR + (size_t)cnt * sizeof(pr_rec_t) + (size_t)notes * sizeof(pr_note_t)) return -1;
-    static pr_rec_t r[PR_MAX];
-    pr_note_t nt[PR_NOTES_MAX];
-    memcpy(r, buf + HDR, (size_t)cnt * sizeof(pr_rec_t));
-    memcpy(nt, buf + HDR + (size_t)cnt * sizeof(pr_rec_t), (size_t)notes * sizeof(pr_note_t));
+    // Checked a record at a time from buf, so nothing here takes internal RAM.
+    uint8_t ids[PR_MAX];
     for (int i = 0; i < cnt; i++) {
-        if (!r[i].id || r[i].kind > PR_KIND_AT_IMAGEWRITER || r[i].where > PR_WHERE_ZONE ||
-            r[i].model > PR_MODEL_IW1 || !memchr(r[i].name, 0, sizeof r[i].name) ||
-            !memchr(r[i].uuid, 0, sizeof r[i].uuid) || !memchr(r[i].dither, 0, sizeof r[i].dither))
+        pr_rec_t r;
+        memcpy(&r, buf + HDR + (size_t)i * sizeof r, sizeof r);
+        if (!r.id || r.kind > PR_KIND_AT_IMAGEWRITER || r.where > PR_WHERE_ZONE ||
+            r.model > PR_MODEL_IW1 || !memchr(r.name, 0, sizeof r.name) ||
+            !memchr(r.uuid, 0, sizeof r.uuid) || !memchr(r.dither, 0, sizeof r.dither))
             return -1;
-        for (int j = 0; j < i; j++) if (r[j].id == r[i].id) return -1;
+        for (int j = 0; j < i; j++) if (ids[j] == r.id) return -1;
+        ids[i] = r.id;
     }
+    pr_note_t nt[PR_NOTES_MAX];
+    memcpy(nt, buf + HDR + (size_t)cnt * sizeof(pr_rec_t), (size_t)notes * sizeof(pr_note_t));
     for (int i = 0; i < notes; i++) if (nt[i].kind > PR_NOTE_TOO_MANY) return -1;
-    memcpy(l->r, r, (size_t)cnt * sizeof(pr_rec_t));
+    memcpy(l->r, buf + HDR, (size_t)cnt * sizeof(pr_rec_t));
     memcpy(l->notes, nt, (size_t)notes * sizeof(pr_note_t));
     l->n = cnt;
     l->n_notes = notes;
     l->next_id = buf[4] ? buf[4] : 1;
     return 0;
+}
+
+int pr_blob_newer(const uint8_t *buf, size_t n)
+{
+    return buf && n >= 3 && buf[0] == 'P' && buf[1] == 'R' && buf[2] > PR_BLOB_VER;
 }
 
 // ------------------------------------------------------------- the Printers section

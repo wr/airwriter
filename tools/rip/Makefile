@@ -100,8 +100,17 @@ build/test_cable: test/test_cable.c $(CT)/cable_core.c $(LT)/lt_proto.c | build
 build/%: test/%.c $(SRCS) | build
 	$(CC) $(CFLAGS) $(INCS) -Itest -o $@ $^ -lm
 
-test: $(TESTBIN)
-	@fail=0; for t in $(TESTBIN); do ./$$t || fail=1; done; exit $$fail
+# W-1088 review: the printer list's core takes none of the board's internal
+# RAM of its own (docs/traps.md): no writable statics, its buffers are the
+# caller's (the board's are in PSRAM).
+build/printers_core.o: $(COMP)/printers/printers_core.c | build
+	$(CC) $(CFLAGS) $(INCS) -I$(COMP)/printers/include -I$(LT)/include -c -o $@ $<
+
+test: $(TESTBIN) build/printers_core.o
+	@fail=0; for t in $(TESTBIN); do ./$$t || fail=1; done; \
+	if nm build/printers_core.o | grep -E ' [bBdD] ' | grep -v ' ltmp'; then \
+	  echo "FAIL printers_core.c: writable statics (above)"; fail=1; \
+	else echo "ok  printers_core.c: no writable statics"; fi; exit $$fail
 
 clean:
 	rm -rf build

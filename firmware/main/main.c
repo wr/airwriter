@@ -1922,36 +1922,46 @@ static int lt_wanted(void)
 #endif
 }
 
+static SemaphoreHandle_t s_offers_mx;   // offers_apply, one caller at a time
+
 // W-1088: what old Macs see on each AppleTalk way in: on one that is on, every
 // printer AirWriter can carry there; on one that is off, only the AirWriter
 // marker (a link may run for a printer on it). Again whenever the printer list
 // or a way-in switch changes.
 static void offers_apply(void)
 {
+    // Called from httpd, the laser, kick and rip tasks and app_main: one at a
+    // time, so no link gets another's offers (review I4).
     static lt_offers_t *o;
+    xSemaphoreTake(s_offers_mx, portMAX_DELAY);
     if (!o) o = heap_caps_calloc(1, sizeof *o, MALLOC_CAP_SPIRAM);
-    if (!o) return;
+    if (!o) {
+        xSemaphoreGive(s_offers_mx);
+        return;
+    }
     int tunnel = 0, radio = 0, infinite = 0;
     char zone[40];
     if (ethertalk_running()) ethertalk_settings(&tunnel, &radio, &infinite, zone, sizeof zone);
     printers_offers(AT_LINK_CABLE, lt_wanted(), s_set.hostname, o);
     localtalk_set_offers(o);
-    if (!ethertalk_running()) return;
-    printers_offers(AT_LINK_TUNNEL, tunnel, s_set.hostname, o);
-    ethertalk_set_offers(AT_LINK_TUNNEL, o);
-    printers_offers(AT_LINK_ZONE, infinite, s_set.hostname, o);
-    ethertalk_set_offers(AT_LINK_ZONE, o);
-    printers_offers(AT_LINK_RADIO, radio, s_set.hostname, o);
-    ethertalk_set_offers(AT_LINK_RADIO, o);
+    if (ethertalk_running()) {
+        printers_offers(AT_LINK_TUNNEL, tunnel, s_set.hostname, o);
+        ethertalk_set_offers(AT_LINK_TUNNEL, o);
+        printers_offers(AT_LINK_ZONE, infinite, s_set.hostname, o);
+        ethertalk_set_offers(AT_LINK_ZONE, o);
+        printers_offers(AT_LINK_RADIO, radio, s_set.hostname, o);
+        ethertalk_set_offers(AT_LINK_RADIO, o);
+    }
+    xSemaphoreGive(s_offers_mx);
 }
 
 // W-1082: whether a LaserWriter needs the cable (laser.c's links callback).
 static volatile int s_laser_cable;
 
 // The cable's node runs while the ImageWriter is shared there (the AppleTalk
-// Port card's switch, W-1079) or a LaserWriter needs it (W-1082). It cannot
-// stop once started, so neither is quiet; it answers as the ImageWriter only
-// while the switch says so.
+// Port card's switch, W-1079) or the printers need it (laser.c: always, for
+// the lookups). It cannot stop once started; it answers as the ImageWriter
+// only while the switch says so.
 static void lt_roles_apply(void)
 {
     int serve = lt_wanted();
@@ -1959,7 +1969,7 @@ static void lt_roles_apply(void)
         if (localtalk_running()) localtalk_set_roles(0, 0);
         return;
     }
-    if (!localtalk_running()) lt_start(serve ? "the settings page" : "a LaserWriter");
+    if (!localtalk_running()) lt_start(serve ? "the settings page" : "the printers");
     localtalk_set_roles(serve, s_laser_cable);
     offers_apply();
 }
@@ -2027,13 +2037,14 @@ static void localtalk_flash(void *ctx, char *buf, size_t cap)
     xSemaphoreGive(s_job_lock);
     led_grid_action(err == PIC_OK ? LG_ACT_PIC_OK : LG_ACT_PIC_FAILED, 0);
     pic_result_json(&r, buf, cap);
-    // W-1081: TashTalk is on the chip now. A port that was wanted starts,
-    // with no restart; otherwise U7 is only asked, for the card.
+    // W-1081: TashTalk is on the chip now. A port that was wanted (or the
+    // printers' lookups, W-1088) starts with no restart; otherwise U7 is only
+    // asked, for the card.
     if (err == PIC_OK) {
-        if (!lt_wanted()) lt_go("TashTalk flashed", 1);
+        if (!lt_wanted() && !s_laser_cable) lt_go("TashTalk flashed", 1);
         else {
             lt_start("TashTalk flashed");
-            if (s_set.lt_port == 0) lt_roles_apply();
+            lt_roles_apply();
         }
     }
 }
@@ -2172,6 +2183,7 @@ void app_main(void)
     // existence.
     s_job_lock = xSemaphoreCreateBinary();
     xSemaphoreGive(s_job_lock);             // created empty; start it free
+    s_offers_mx = xSemaphoreCreateMutex();
 #if CONFIG_AIRWRITER_PIC_CLK_PIN >= 0 && CONFIG_AIRWRITER_PIC_DAT_PIN >= 0
     s_lt_mx = xSemaphoreCreateMutex();
 #endif

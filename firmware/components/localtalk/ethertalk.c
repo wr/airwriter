@@ -53,6 +53,7 @@ typedef struct {
     uint32_t    seen_replies;      // what the panel was last told (W-1049)
     uint8_t     seen_heard[32];
     lt_name_t  *names;             // its Macs' names, in PSRAM (internal RAM is short)
+    lt_reg_t   *regs;              // W-1088: its node's registrations, in PSRAM
     lt_offers_t *offers;           // W-1088: what its Macs are offered, in PSRAM
 } et_side_t;
 
@@ -291,8 +292,9 @@ static void side_init(et_side_t *s, const uint8_t mac[ETH_ALEN])
         nvs_close(h);
     }
     if (!s->names) s->names = heap_caps_calloc(LT_SEEN_SLOTS, sizeof *s->names, MALLOC_CAP_SPIRAM);
+    if (!s->regs) s->regs = heap_caps_calloc(LT_REG_MAX, sizeof *s->regs, MALLOC_CAP_SPIRAM);
     et_cfg_t c = { s_obj, s_type, s->status, {0}, hnet, hnode, esp_random() | 1, LT_IDLE_HOLD_MS,
-                   s->names };
+                   s->names, s->regs };
     memcpy(c.mac, mac, ETH_ALEN);
     et_ops_t o = { s, s == &s_tun ? tun_send : s == &s_zone ? zone_send : radio_send, op_log,
                    op_begin, op_data, op_room, op_end, op_claimed, op_found, op_pap_open,
