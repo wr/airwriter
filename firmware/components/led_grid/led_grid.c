@@ -11,6 +11,7 @@
 #include "freertos/semphr.h"
 #include "led_strip.h"
 #include "printer_state.h"
+#include <string.h>
 
 #define LG_RMT_SYMBOLS 1024    // the DMA buffer: one frame of 37 LEDs is 888
 
@@ -29,6 +30,12 @@ static slot_t   s_task[LG_FAMS];
 static uint8_t  s_blip;
 static uint64_t s_blip_t0;
 static volatile uint8_t s_src;     // lg_src_t, whose job Printing is
+
+// The frame being driven, for the settings page's picture of the panel
+// (led_grid_frame). Copied every frame: 222 bytes, well under a microsecond.
+static portMUX_TYPE s_frame_mux = portMUX_INITIALIZER_UNLOCKED;
+static uint16_t s_frame[LG_NUM_LEDS][3];
+static volatile uint8_t s_running;
 
 static uint64_t now_ms(void) { return (uint64_t)(esp_timer_get_time() / 1000); }
 
@@ -50,6 +57,7 @@ static void lg_task(void *arg)
     s_start_err = strip_start();
     xSemaphoreGive(s_started);
     if (s_start_err != ESP_OK) vTaskDelete(NULL);
+    s_running = 1;
     // Rendered at 8.8 fixed point and temporally dithered down to 8 bits, at
     // a steady 100 fps: at a few counts of drive an 8-bit breathe has only a
     // handful of levels and visibly stutters; the dither carries each
@@ -76,6 +84,9 @@ static void lg_task(void *arg)
         o.blip_ms = lg_elapsed(now, s_blip_t0);
         portEXIT_CRITICAL(&s_act_mux);
         lg_render16(&v, &o, (uint32_t)now, hi);    // animation phase: wraps harmlessly
+        portENTER_CRITICAL(&s_frame_mux);
+        memcpy(s_frame, hi, sizeof s_frame);
+        portEXIT_CRITICAL(&s_frame_mux);
         lg_dither(&dith, hi, frame);
         for (int i = 0; i < s_count && i < LG_NUM_LEDS; i++)
             led_strip_set_pixel(s_strip, (uint32_t)i,
@@ -118,6 +129,15 @@ esp_err_t led_grid_start(void)
         return ESP_ERR_NO_MEM;
     xSemaphoreTake(s_started, portMAX_DELAY);
     return s_start_err;
+}
+
+int led_grid_frame(uint16_t out[LG_NUM_LEDS][3])
+{
+    if (!s_running) return 0;
+    portENTER_CRITICAL(&s_frame_mux);
+    memcpy(out, s_frame, sizeof s_frame);
+    portEXIT_CRITICAL(&s_frame_mux);
+    return 1;
 }
 
 void led_grid_set_gamer(int on)

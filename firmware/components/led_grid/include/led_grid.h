@@ -13,6 +13,12 @@
 // push entry point here.
 esp_err_t led_grid_start(void);
 
+// The frame the panel is being driven with now, at 8.8 fixed point (value x
+// 256, before the dither), in chain order: what the settings page draws
+// (W-1092). 0, and `out` untouched, on a board with no strip. Safe from any
+// task.
+int led_grid_frame(uint16_t out[LG_NUM_LEDS][3]);
+
 // Gamer mode (DIP7): Ready and Asleep drift through RGB instead of white.
 // Safe from any task; the render task picks it up on its next frame.
 void led_grid_set_gamer(int on);
