@@ -171,7 +171,7 @@ void et_link_init(et_link_t *l, const et_cfg_t *cfg, const et_ops_t *ops, uint64
     l->rng = cfg->seed ? cfg->seed : 0x2434u;
     l->now = now;
     lt_cfg_t nc = { cfg->object, cfg->type, cfg->status, 0, cfg->seed, cfg->names };
-    lt_ops_t no = { l, t_send, NULL, t_log, t_begin, t_data, t_room, t_end, t_found };
+    lt_ops_t no = { l, t_send, NULL, t_log, t_begin, t_data, t_room, t_end, t_found, NULL, NULL };
     lt_node_init_elap(&l->node, &nc, &no, cfg->idle_hold_ms, now);
     if (cfg->hint_net >= 0xFF00 && cfg->hint_net <= 0xFFFE && cfg->hint_node >= 1 &&
         cfg->hint_node <= 253) {

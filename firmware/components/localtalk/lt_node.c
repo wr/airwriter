@@ -109,6 +109,7 @@ static void respond(lt_node_t *n, const lt_route_t *to, uint8_t src_sock, const 
 // ------------------------------------------------------------- NBP
 
 static void name_reply(lt_node_t *n, const ddp_t *d, const nbp_t *q, uint64_t now);
+static void aw_note(lt_node_t *n, uint16_t net, uint8_t node, uint64_t now);
 static void name_registering(lt_node_t *n, const ddp_t *d, const nbp_t *q, uint64_t now);
 
 static void on_nbp(lt_node_t *n, const ddp_t *d, uint64_t now)
@@ -116,8 +117,11 @@ static void on_nbp(lt_node_t *n, const ddp_t *d, uint64_t now)
     nbp_t q;
     if (d->dst.sock != SOCK_NIS || nbp_parse(d->data, d->len, &q)) return;
     if (q.fn == NBP_LKUP_REPLY) {
-        uint8_t ws[NBP_NAME_MAX + 1];
+        uint8_t ws[NBP_NAME_MAX + 1], aw[NBP_NAME_MAX + 1];
         nbp_name(ws, LT_NAME_TYPE);
+        nbp_name(aw, LT_AIRWRITER_TYPE);
+        if (nbp_match(aw, q.t.type) && q.count) aw_note(n, q.t.addr.net ? q.t.addr.net : d->src.net,
+                                                        q.t.addr.node, now);
         if (nbp_match(ws, q.t.type)) {
             name_reply(n, d, &q, now);
         } else if (n->ops.found && q.count && q.t.obj[0]) {
@@ -136,7 +140,13 @@ static void on_nbp(lt_node_t *n, const ddp_t *d, uint64_t now)
     if (q.fn != NBP_LKUP) return;
     n->st.lookups++;
     name_registering(n, d, &q, now);
-    int hit = n->serve && nbp_match(q.t.obj, n->obj) && nbp_match(q.t.type, n->type);
+    // The node's own name while it serves, and each registration (W-1088).
+    int hits[LT_REG_MAX] = { 0 }, hit = 0;
+    hits[0] = n->serve && nbp_match(q.t.obj, n->obj) && nbp_match(q.t.type, n->type);
+    for (int r = 1; r < LT_REG_MAX; r++)
+        hits[r] = n->reg[r].sls && nbp_match(q.t.obj, n->reg[r].obj) &&
+                  nbp_match(q.t.type, n->reg[r].type);
+    for (int r = 0; r < LT_REG_MAX; r++) hit |= hits[r];
 
     // Log a lookup once, not every second the Chooser repeats it.
     uint8_t key[sizeof n->last_lkup];
@@ -162,16 +172,20 @@ static void on_nbp(lt_node_t *n, const ddp_t *d, uint64_t now)
         to.via = d->llap_src;
         to.is_long = 1;
     }
-    nbp_tuple_t me = { .addr = { n->net, n->node, LT_SOCK_SLS }, .enumerator = 0 };
-    memcpy(me.obj, n->obj, sizeof me.obj);
-    memcpy(me.type, n->type, sizeof me.type);
-    me.zone[0] = 1;
-    me.zone[1] = '*';
-    uint8_t pkt[2 + 5 + 3 * (NBP_NAME_MAX + 1)];
-    size_t pl = nbp_build(pkt, sizeof pkt, NBP_LKUP_REPLY, q.id, &me);
-    if (pl) {
-        send_ddp(n, &to, SOCK_NIS, DDP_NBP, pkt, pl);
-        n->st.replies++;
+    for (int r = 0; r < LT_REG_MAX; r++) {
+        if (!hits[r]) continue;
+        nbp_tuple_t me = { .addr = { n->net, n->node, r ? n->reg[r].sls : LT_SOCK_SLS },
+                           .enumerator = (uint8_t)r };
+        memcpy(me.obj, r ? n->reg[r].obj : n->obj, sizeof me.obj);
+        memcpy(me.type, r ? n->reg[r].type : n->type, sizeof me.type);
+        me.zone[0] = 1;
+        me.zone[1] = '*';
+        uint8_t pkt[2 + 5 + 3 * (NBP_NAME_MAX + 1)];
+        size_t pl = nbp_build(pkt, sizeof pkt, NBP_LKUP_REPLY, q.id, &me);
+        if (pl) {
+            send_ddp(n, &to, SOCK_NIS, DDP_NBP, pkt, pl);
+            n->st.replies++;
+        }
     }
 }
 
@@ -291,7 +305,7 @@ static void pap_read_done(lt_node_t *n, uint64_t now)
 }
 
 static void pap_open(lt_node_t *n, const ddp_t *d, const atp_t *a, const lt_route_t *from,
-                     uint64_t now)
+                     uint64_t now, int reg, uint8_t sls)
 {
     lt_pap_t *p = &n->pap;
     if (a->len < 4) return;
@@ -306,9 +320,14 @@ static void pap_open(lt_node_t *n, const ddp_t *d, const atp_t *a, const lt_rout
     // The printer may be someone else's: an IPP job, a test page, or the
     // last LocalTalk job still draining.
     int printer_busy = 0;
-    if (result == PAP_RESULT_OK && !same_conn && n->ops.job_begin && n->ops.job_begin(n->ops.ctx)) {
-        result = PAP_RESULT_BUSY;
-        printer_busy = 1;
+    if (result == PAP_RESULT_OK && !same_conn) {
+        // W-1088: a registration's printer is its owner's to give.
+        int busy = reg ? (!n->ops.pap_open || n->ops.pap_open(n->ops.ctx, reg, now))
+                       : (n->ops.job_begin && n->ops.job_begin(n->ops.ctx));
+        if (busy) {
+            result = PAP_RESULT_BUSY;
+            printer_busy = 1;
+        }
     }
 
     uint8_t data[4 + 3];
@@ -318,7 +337,7 @@ static void pap_open(lt_node_t *n, const ddp_t *d, const atp_t *a, const lt_rout
     data[3] = (uint8_t)result;
     status_bytes(n, data + 4);
     uint8_t user[4] = { a->user[0], PAP_OPEN_CONN_REPLY, 0, 0 };
-    respond(n, from, LT_SOCK_SLS, a, user, data, sizeof data, now);
+    respond(n, from, sls, a, user, data, sizeof data, now);
 
     if (result == PAP_RESULT_BUSY) {
         if (n->st.busy++ == 0 || !(n->st.busy % 10)) {
@@ -334,6 +353,7 @@ static void pap_open(lt_node_t *n, const ddp_t *d, const atp_t *a, const lt_rout
     if (same_conn) return;
     memset(p, 0, sizeof *p);
     p->open = 1;
+    p->reg = (uint8_t)reg;
     p->connid = a->user[0];
     p->ws = ws;
     p->heard = p->tickled = p->wrote = p->idle_since = now;
@@ -374,16 +394,26 @@ static void on_atp(lt_node_t *n, const ddp_t *d, uint64_t now)
         }
     }
 
-    if (d->dst.sock == LT_SOCK_SLS && fn == ATP_TREQ) {
-        if (!n->serve) return;                     // W-1082: no ImageWriter on this link
+    int reg = -1;
+    if (d->dst.sock == LT_SOCK_SLS) reg = n->serve ? 0 : -1;   // W-1082: no ImageWriter here
+    else for (int r = 1; r < LT_REG_MAX; r++) if (n->reg[r].sls && n->reg[r].sls == d->dst.sock) reg = r;
+    if (reg >= 0 && fn == ATP_TREQ) {
+        uint8_t aw[NBP_NAME_MAX + 1];
+        nbp_name(aw, LT_AIRWRITER_TYPE);
+        if (reg && nbp_match(aw, n->reg[reg].type)) return;   // the marker never opens
+        uint8_t sls = reg ? n->reg[reg].sls : LT_SOCK_SLS;
         if (a.user[1] == PAP_SEND_STATUS) {
-            uint8_t data[4 + 3] = {0};
-            status_bytes(n, data + 4);
+            uint8_t data[4 + 256] = {0};
+            size_t sl = reg && n->ops.reg_status ? n->ops.reg_status(n->ops.ctx, reg, data + 4, 256) : 0;
+            if (!sl) {
+                status_bytes(n, data + 4);
+                sl = 3;
+            }
             uint8_t user[4] = { 0, PAP_STATUS, 0, 0 };
-            respond(n, &from, LT_SOCK_SLS, &a, user, data, sizeof data, now);
+            respond(n, &from, sls, &a, user, data, 4 + sl, now);
             if (n->st.statuses++ == 0) say(n, "PAP SendStatus from %u", d->src.node);
         } else if (a.user[1] == PAP_OPEN_CONN) {
-            pap_open(n, d, &a, &from, now);
+            pap_open(n, d, &a, &from, now, reg, sls);
         }
         return;
     }
@@ -476,6 +506,47 @@ static void pap_tick(lt_node_t *n, uint64_t now)
 }
 
 // ------------------------------------------------------------- W-1082
+
+int lt_node_register(lt_node_t *n, int reg, const uint8_t *obj, const uint8_t *type, uint8_t sls)
+{
+    if (reg < 1 || reg >= LT_REG_MAX) return -1;
+    if (!obj || !type || !sls) {
+        memset(&n->reg[reg], 0, sizeof n->reg[reg]);
+        return 0;
+    }
+    size_t ol = obj[0] > NBP_NAME_MAX ? NBP_NAME_MAX : obj[0];
+    size_t tl = type[0] > NBP_NAME_MAX ? NBP_NAME_MAX : type[0];
+    memcpy(n->reg[reg].obj + 1, obj + 1, ol);
+    n->reg[reg].obj[0] = (uint8_t)ol;
+    memcpy(n->reg[reg].type + 1, type + 1, tl);
+    n->reg[reg].type[0] = (uint8_t)tl;
+    n->reg[reg].sls = sls;
+    return 0;
+}
+
+int lt_node_pap_reg(const lt_node_t *n) { return n->pap.open ? n->pap.reg : 0; }
+
+static void aw_note(lt_node_t *n, uint16_t net, uint8_t node, uint64_t now)
+{
+    int slot = 0;
+    for (int i = 0; i < (int)(sizeof n->aw / sizeof n->aw[0]); i++) {
+        if (n->aw[i].node == node && n->aw[i].net == net) { slot = i; break; }
+        if (n->aw[i].at < n->aw[slot].at) slot = i;
+    }
+    n->aw[slot].net = net;
+    n->aw[slot].node = node;
+    n->aw[slot].at = now ? now : 1;
+}
+
+int lt_node_is_airwriter(const lt_node_t *n, uint16_t net, uint8_t node)
+{
+    if (node == n->node && (!net || net == n->net)) return 1;
+    for (size_t i = 0; i < sizeof n->aw / sizeof n->aw[0]; i++)
+        if (n->aw[i].at && n->aw[i].node == node && (!net || !n->aw[i].net || n->aw[i].net == net) &&
+            n->last_now - n->aw[i].at < LT_AIRWRITER_MS)
+            return 1;
+    return 0;
+}
 
 void lt_node_set_serve(lt_node_t *n, int serve)
 {
@@ -762,6 +833,7 @@ static void name_reply(lt_node_t *n, const ddp_t *d, const nbp_t *q, uint64_t no
 
 void lt_node_rx(lt_node_t *n, const uint8_t *f, size_t len, uint64_t now)
 {
+    n->last_now = now;
     if (len < LLAP_HDR) return;
     n->st.frames++;
     uint8_t dst = f[0], src = f[1], type = f[2];
@@ -806,6 +878,7 @@ void lt_node_rx(lt_node_t *n, const uint8_t *f, size_t len, uint64_t now)
 
 void lt_node_tick(lt_node_t *n, uint64_t now)
 {
+    n->last_now = now;
     if (n->phase == LT_ONLINE) {
         pap_tick(n, now);
         names_tick(n, now);

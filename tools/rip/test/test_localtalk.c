@@ -49,7 +49,8 @@ static void f_data(void *ctx, const uint8_t *d, size_t n)
 static size_t f_room(void *ctx) { (void)ctx; return fake_room; }
 static void f_end(void *ctx, int normal) { (void)ctx; job_eof++; job_normal = normal; }
 
-static const lt_ops_t OPS = { NULL, f_send, f_claim, f_log, f_begin, f_data, f_room, f_end, NULL };
+static const lt_ops_t OPS = { NULL, f_send, f_claim, f_log, f_begin, f_data, f_room, f_end, NULL,
+                              NULL, NULL };
 
 static void reset_fake(void) { nsent = 0; nlogs = 0; lastlog[0] = 0; }
 
@@ -1190,6 +1191,166 @@ static void test_seen(void)
 }
 
 // NBP names are MacRoman; the settings page wants UTF-8.
+// ------------------------------------------------------------- W-1088: several names
+
+static int po_calls, po_reg = -1, po_busy;
+static int f_pap_open(void *ctx, int reg, uint64_t now) { (void)ctx; (void)now; po_calls++; po_reg = reg; return po_busy; }
+static size_t f_reg_status(void *ctx, int reg, uint8_t *pstr, size_t cap)
+{
+    (void)ctx;
+    int n = snprintf((char *)pstr + 1, cap - 1, "status: idle (reg %d)", reg);
+    pstr[0] = (uint8_t)n;
+    return (size_t)n + 1;
+}
+static const lt_ops_t OPS_REG = { NULL, f_send, f_claim, f_log, f_begin, f_data, f_room, f_end, NULL,
+                                  f_pap_open, f_reg_status };
+
+static uint64_t online_reg(lt_node_t *n, uint8_t id)
+{
+    lt_cfg_t cfg = { "ImageWriter II", "ImageWriter", 0x0000, id, 1, NULL };
+    lt_node_init(n, &cfg, &OPS_REG, 0);
+    uint64_t t = 0;
+    for (int i = 0; i <= LT_ENQ_TRIES; i++, t += LT_ENQ_GAP_MS) lt_node_tick(n, t);
+    reset_fake();
+    return t;
+}
+
+static const uint8_t *PS(const char *s)
+{
+    static uint8_t b[4][34];
+    static int k;
+    uint8_t *o = b[k++ % 4];
+    o[0] = (uint8_t)strlen(s);
+    memcpy(o + 1, s, o[0]);
+    return o;
+}
+
+// A Mac's LkUp for obj:type@*, broadcast.
+static void lkup(lt_node_t *n, const uint8_t *obj, const uint8_t *type, uint64_t t)
+{
+    uint8_t nbp[128], f[LLAP_MAX];
+    size_t k = 0;
+    nbp[k++] = 0x21; nbp[k++] = 0x2A;
+    nbp[k++] = 0; nbp[k++] = 0; nbp[k++] = 83; nbp[k++] = 0xFB; nbp[k++] = 0;
+    memcpy(nbp + k, obj, 1 + (size_t)obj[0]); k += 1 + obj[0];
+    memcpy(nbp + k, type, 1 + (size_t)type[0]); k += 1 + type[0];
+    nbp[k++] = 1; nbp[k++] = '*';
+    lt_node_rx(n, f, mac_ddp(f, 0xFF, SOCK_NIS, DDP_NBP, nbp, k), t);
+}
+
+// The NBP tuple of reply i: its socket and object.
+static uint8_t reply_sock(int i) { return sent[i][3 + 5 + 2 + 3]; }
+static const uint8_t *reply_obj(int i) { return sent[i] + 3 + 5 + 2 + 5; }
+
+static void test_register_two(void)
+{
+    lt_node_t n;
+    uint64_t t = online_reg(&n, 200);
+    CHECK_EQ_INT(lt_node_register(&n, 1, PS("Office"), PS("LaserWriter"), 0x85), 0);
+    lkup(&n, PS("="), PS("LaserWriter"), t);
+    CHECK_EQ_INT(nsent, 1);
+    CHECK_EQ_INT(reply_sock(0), 0x85);
+    CHECK_EQ_MEM(reply_obj(0), PS("Office"), 7);
+    reset_fake();
+    lkup(&n, PS("="), PS("="), t + 1000);
+    CHECK_EQ_INT(nsent, 2);                               // the ImageWriter, and Office
+    reset_fake();
+    lkup(&n, PS("="), PS("ImageWriter"), t + 2000);
+    CHECK_EQ_INT(nsent, 1);
+    CHECK_EQ_INT(reply_sock(0), LT_SOCK_SLS);
+    // Cleared: not answered any more.
+    CHECK_EQ_INT(lt_node_register(&n, 1, NULL, NULL, 0), 0);
+    reset_fake();
+    lkup(&n, PS("="), PS("LaserWriter"), t + 3000);
+    CHECK_EQ_INT(nsent, 0);
+    CHECK_EQ_INT(lt_node_register(&n, 0, PS("x"), PS("y"), 0x85), -1);   // 0 is the node's own
+    CHECK_EQ_INT(lt_node_register(&n, LT_REG_MAX, PS("x"), PS("y"), 0x85), -1);
+}
+
+static void test_open_on_reg(void)
+{
+    lt_node_t n;
+    uint64_t t = online_reg(&n, 200);
+    lt_node_register(&n, 1, PS("Office"), PS("LaserWriter"), 0x85);
+    po_calls = 0; po_busy = 0; job_begins = 0;
+    uint8_t f[LLAP_MAX];
+    // SendStatus at its socket: the registration's own status.
+    size_t fl = mac_atp(f, 200, 0x85, ATP_TREQ, 0x01, 0x0301, 0, PAP_SEND_STATUS, 0, 0, NULL, 0);
+    lt_node_rx(&n, f, fl, t);
+    CHECK_EQ_INT(nsent, 1);
+    CHECK_EQ_INT(sent[0][3 + 3], 0x85);                   // from its socket
+    CHECK(memmem(sent[0], sent_len[0], "status: idle (reg 1)", 20) != NULL);
+    // OpenConn there asks pap_open, not the ImageWriter's job_begin.
+    reset_fake();
+    const uint8_t oc[] = { 0xFC, 8, 0, 0 };
+    fl = mac_atp(f, 200, 0x85, ATP_TREQ | ATP_XO, 0x01, 0x0302, 0x51, PAP_OPEN_CONN, 0, 0, oc, sizeof oc);
+    lt_node_rx(&n, f, fl, t + 10);
+    CHECK_EQ_INT(po_calls, 1);
+    CHECK_EQ_INT(po_reg, 1);
+    CHECK_EQ_INT(job_begins, 0);
+    CHECK(n.pap.open);
+    CHECK_EQ_INT(n.pap.reg, 1);
+    CHECK_EQ_INT(atp_of(0)[10], 0x00);                    // result OK
+    CHECK_EQ_INT(atp_of(0)[11], 0x00);
+    // Busy behind it.
+    lt_node_t m;
+    t = online_reg(&m, 201);
+    lt_node_register(&m, 1, PS("Office"), PS("LaserWriter"), 0x85);
+    po_busy = 1;
+    fl = mac_atp(f, 201, 0x85, ATP_TREQ | ATP_XO, 0x01, 0x0303, 0x52, PAP_OPEN_CONN, 0, 0, oc, sizeof oc);
+    lt_node_rx(&m, f, fl, t);
+    CHECK(!m.pap.open);
+    CHECK_EQ_INT(atp_of(0)[10], 0xFF);                    // PAP_RESULT_BUSY
+    CHECK_EQ_INT(atp_of(0)[11], 0xFF);
+    po_busy = 0;
+}
+
+static void test_marker(void)
+{
+    lt_node_t n;
+    uint64_t t = online_reg(&n, 200);
+    lt_node_register(&n, 4, PS("airwriter-2434"), PS("AirWriter"), 0x89);
+    lkup(&n, PS("="), PS("AirWriter"), t);
+    CHECK_EQ_INT(nsent, 1);
+    CHECK_EQ_INT(reply_sock(0), 0x89);
+    // It never opens.
+    reset_fake();
+    po_calls = 0;
+    uint8_t f[LLAP_MAX];
+    const uint8_t oc[] = { 0xFC, 8, 0, 0 };
+    size_t fl = mac_atp(f, 200, 0x89, ATP_TREQ | ATP_XO, 0x01, 0x0401, 0x53, PAP_OPEN_CONN, 0, 0, oc, sizeof oc);
+    lt_node_rx(&n, f, fl, t + 5);
+    CHECK_EQ_INT(po_calls, 0);
+    CHECK(!n.pap.open);
+    // Another AirWriter answers our lookup: its node is remembered.
+    nbp_tuple_t other = { .addr = { 0, 77, 0x89 } };
+    memcpy(other.obj, PS("airwriter-9999"), 15);
+    memcpy(other.type, PS("AirWriter"), 10);
+    other.zone[0] = 1; other.zone[1] = '*';
+    uint8_t pkt[128];
+    size_t pl = nbp_build(pkt, sizeof pkt, NBP_LKUP_REPLY, 9, &other);
+    lt_addr_t to = { 0, 200, SOCK_NIS }, from = { 0, 77, SOCK_NIS };
+    fl = ddp_build(f, sizeof f, 200, 77, 0, &to, &from, DDP_NBP, pkt, pl);
+    lt_node_rx(&n, f, fl, t + 10);
+    CHECK_EQ_INT(lt_node_is_airwriter(&n, 0, 77), 1);
+    CHECK_EQ_INT(lt_node_is_airwriter(&n, 0, 78), 0);
+    CHECK_EQ_INT(lt_node_is_airwriter(&n, 0, 200), 1);    // itself
+    lt_node_tick(&n, t + 10 + 11 * 60 * 1000);           // forgotten after ten minutes
+    CHECK_EQ_INT(lt_node_is_airwriter(&n, 0, 77), 0);
+}
+
+static void test_register_macroman(void)
+{
+    lt_node_t n;
+    uint64_t t = online_reg(&n, 200);
+    static const uint8_t cafe[] = { 4, 'C', 'a', 'f', 0x8E };
+    static const uint8_t cafe_lc[] = { 4, 'c', 'a', 'f', 0x8E };
+    lt_node_register(&n, 2, cafe, PS("LaserWriter"), 0x86);
+    lkup(&n, cafe_lc, PS("LaserWriter"), t);
+    CHECK_EQ_INT(nsent, 1);
+    CHECK_EQ_MEM(reply_obj(0), cafe, sizeof cafe);
+}
+
 static void test_nbp_utf8(void)
 {
     char out[3 * NBP_NAME_MAX + 1];
@@ -1659,6 +1820,10 @@ int main(void)
     test_idle_hold_waits_for_room();
     test_seen();
     test_nbp_utf8();
+    test_register_two();
+    test_open_on_reg();
+    test_marker();
+    test_register_macroman();
     test_name_asked();
     test_name_late_mac();
     test_name_after_registration();

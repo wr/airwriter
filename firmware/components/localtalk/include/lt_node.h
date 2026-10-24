@@ -32,6 +32,12 @@ struct pap_client;              // pap_client.h (W-1082)
 #define LT_SOCK_CONN  0x82      // the one connection's ATP responding socket
 #define LT_SOCK_PAPC    0x83    // W-1082: the PAP client's connection socket
 #define LT_SOCK_PAPC_ST 0x84    // and the one its SendStatus goes from
+// W-1088: registrations beside the node's own: printers offered to Macs here
+// (listening sockets 0x85..0x88) and the AirWriter marker, whose type is
+// LT_AIRWRITER_TYPE and which never opens.
+#define LT_REG_MAX        5
+#define LT_AIRWRITER_TYPE "AirWriter"
+#define LT_AIRWRITER_MS   600000
 #define LT_FLOW       8         // our flow quantum: 512-byte packets per SendData
 #define LT_READ_MAX   (LT_FLOW * PAP_QUANTUM)   // the most one SendData can bring
 
@@ -109,6 +115,14 @@ typedef struct {
     // name's answer is the name table's, not this), and the route to its
     // socket. May be NULL.
     void   (*found)(void *ctx, const nbp_tuple_t *t, const lt_route_t *r);
+    // W-1088: a registration other than the node's own (lt_node_register)
+    // is opened: 0 to accept, nonzero for busy. NULL: always busy. The
+    // connection then feeds job_data and job_end as the node's own does, and
+    // lt_node_pap_reg says which registration it is.
+    int    (*pap_open)(void *ctx, int reg, uint64_t now);
+    // Its SendStatus answer as a Pascal string into pstr; 0 for the node's
+    // own status word. May be NULL.
+    size_t (*reg_status)(void *ctx, int reg, uint8_t *pstr, size_t cap);
 } lt_ops_t;
 
 typedef uint8_t lt_name_t[NBP_NAME_MAX + 1];   // a Pascal NBP name, MacRoman
@@ -181,6 +195,7 @@ typedef struct {               // a sent XO response, kept for duplicate request
 
 typedef struct {
     uint8_t    open, connid;
+    uint8_t    reg;            // W-1088: the registration it was opened on (0 the node's own)
     lt_route_t ws;             // the workstation's ATP responding socket
     uint64_t   heard, tickled;
     uint16_t   tickle_tid;
@@ -249,6 +264,13 @@ typedef struct {
     uint8_t    serve;
     uint8_t    lkup_id;        // the last lt_node_lookup's NBP id
     struct pap_client *client; // the PAP client riding this node, or NULL
+    // W-1088: more names on this node, each with its own listening socket:
+    // printers offered to Macs here, and the AirWriter marker. reg[0] is
+    // unused (the node's own is obj:type above).
+    struct { uint8_t obj[NBP_NAME_MAX + 1], type[NBP_NAME_MAX + 1], sls; } reg[LT_REG_MAX];
+    // Nodes heard answering as an AirWriter (=:AirWriter@*), for ten minutes.
+    struct { uint16_t net; uint8_t node; uint64_t at; } aw[16];
+    uint64_t   last_now;
 } lt_node_t;
 
 void lt_node_init(lt_node_t *n, const lt_cfg_t *cfg, const lt_ops_t *ops, uint64_t now);
@@ -283,6 +305,13 @@ const uint8_t *lt_node_name(const lt_node_t *n, uint16_t net, uint8_t node);
 // ImageWriter is shared. On at init. Turning it off leaves an open
 // connection alone: abort it first (lt_node_pap_abort).
 void     lt_node_set_serve(lt_node_t *n, int serve);
+// W-1088: registration reg (1..LT_REG_MAX-1) as obj:type (Pascal) on listening
+// socket sls; obj NULL clears it. 0, or -1 for a bad reg.
+int      lt_node_register(lt_node_t *n, int reg, const uint8_t *obj, const uint8_t *type, uint8_t sls);
+// Which registration the open connection is on (0 the node's own).
+int      lt_node_pap_reg(const lt_node_t *n);
+// 1 for a node heard answering as an AirWriter in the last ten minutes, or this one.
+int      lt_node_is_airwriter(const lt_node_t *n, uint16_t net, uint8_t node);
 // NBP LkUp of =:type@* to every node on the link (the AppleTalk multicast on
 // EtherTalk); the answers reach ops.found. Nothing until the node is online.
 void     lt_node_lookup(lt_node_t *n, const char *type, uint64_t now);
