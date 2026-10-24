@@ -263,6 +263,64 @@ static void test_heard_list(void)
     CHECK_EQ_INT(n, 0);
 }
 
+static void name_check(lwc_t *c, const char *name, const char *type, uint8_t link, uint64_t now)
+{
+    nbp_tuple_t t = { .addr = { 0, 233, 2 } };
+    nbp_name(t.obj, name);
+    nbp_name(t.type, type);
+    t.zone[0] = 1; t.zone[1] = '*';
+    lwc_name_check(c, &t, link, now);
+}
+
+// When the next look is due from `from`, ticking every 100 ms up to `to`, or 0.
+static uint64_t next_look(lwc_t *c, uint64_t from, uint64_t to)
+{
+    for (uint64_t s = from; s <= to; s += 100)
+        if (lwc_tick(c, s).look) return s;
+    return 0;
+}
+
+// W-1098: a printer switched on checks no one has its name, looking it up by
+// name a few times about 2 s apart (the NTR on 2026-10-24: five). One look
+// follows a moment after the last check, then the 5-minute ones as before.
+static void test_name_check(void)
+{
+    static lwc_t c;
+    lwc_init(&c, 0);
+    for (uint64_t s = 0; s <= 310000; s += 1000) lwc_tick(&c, s);   // past the start's run
+    uint64_t look = 0;
+    for (uint64_t s = 320000; s < 340000; s += 100) {
+        if (s <= 328000 && !((s - 320000) % 2000))
+            name_check(&c, "Personal LaserWriter NTR", "LaserWriter", LW_LINK_CABLE, s);
+        if (lwc_tick(&c, s).look) { CHECK_EQ_INT((long)look, 0); look = s; }
+    }
+    CHECK_EQ_INT((long)look, 328000 + LW_CHECK_SETTLE_MS);
+    CHECK_EQ_INT((long)next_look(&c, 340000, 1000000), (long)(look + LW_LOOK_SLOW_MS));
+
+    // An ImageWriter's check too, on any link.
+    uint64_t t = look + LW_LOOK_SLOW_MS + 1000;
+    name_check(&c, "Den ImageWriter", "ImageWriter", LW_LINK_ZONE, t);
+    CHECK_EQ_INT((long)next_look(&c, t, t + 10000), (long)(t + LW_CHECK_SETTLE_MS));
+
+    // Not one: a Chooser's =:LaserWriter@*, a Mac's own name, or a printer
+    // heard lately on that link (a Mac about to print to it looks it up).
+    t += 20000;
+    name_check(&c, "=", "LaserWriter", LW_LINK_CABLE, t);
+    name_check(&c, "SE30", "Workstation", LW_LINK_CABLE, t);
+    found(&c, "LaserWriter II NT", LW_LINK_CABLE, 12, t);
+    name_check(&c, "LaserWriter II NT", "LaserWriter", LW_LINK_CABLE, t + 500);
+    CHECK_EQ_INT((long)next_look(&c, t, t + 10000), 0);
+
+    // Quiet since, or heard on another link: it is coming up.
+    t += LW_GONE_MS + 1000;
+    name_check(&c, "LaserWriter II NT", "LaserWriter", LW_LINK_CABLE, t);
+    CHECK_EQ_INT((long)next_look(&c, t, t + 10000), (long)(t + LW_CHECK_SETTLE_MS));
+    t += 20000;
+    found(&c, "Office", LW_LINK_RADIO, 30, t);
+    name_check(&c, "Office", "LaserWriter", LW_LINK_TUNNEL, t);
+    CHECK_EQ_INT((long)next_look(&c, t, t + 10000), (long)(t + LW_CHECK_SETTLE_MS));
+}
+
 int main(void)
 {
     test_cadence();
@@ -271,5 +329,6 @@ int main(void)
     test_query_retry();
     test_two_lw_status();
     test_heard_list();
+    test_name_check();
     TEST_END;
 }

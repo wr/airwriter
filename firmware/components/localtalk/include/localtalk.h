@@ -85,6 +85,8 @@ void localtalk_set_offers(const lt_offers_t *o);
 // callback (localtalk_set_found).
 void localtalk_lookup(const char *type);
 void localtalk_set_found(void (*found)(int link, const nbp_tuple_t *t, const lt_route_t *r));
+// W-1098: a node on the cable looked up one name (lt_ops_t's name_check).
+void localtalk_set_name_check(void (*check)(int link, const nbp_tuple_t *t));
 // The PAP client rides the cable's node (NULL detaches). Its callbacks run
 // on the LocalTalk task with the node's lock held: they must not block.
 void localtalk_attach(pap_client_t *c);

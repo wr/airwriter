@@ -173,6 +173,20 @@ void lwc_found(lwc_t *c, const nbp_tuple_t *t, uint8_t link, const lt_route_t *r
         if (c->t[ti].used && heard_of(c, ti) == (int)(h - c->heard)) answered(c, ti, now);
 }
 
+void lwc_name_check(lwc_t *c, const nbp_tuple_t *t, uint8_t link, uint64_t now)
+{
+    uint8_t kind = type_is(t->type, "LaserWriter") ? LWC_KIND_LW
+                 : type_is(t->type, "ImageWriter") ? LWC_KIND_IW : 0;
+    if (!kind || !t->obj[0] || (t->obj[0] == 1 && t->obj[1] == '=')) return;
+    for (int i = 0; i < LW_HEARD_MAX; i++) {
+        const lw_heard_t *h = &c->heard[i];
+        if (h->used && h->link == link && h->kind == kind && same_name(h->name, t->obj) &&
+            since(now, h->heard) < LW_GONE_MS)
+            return;                                   // up: a Mac about to print to it
+    }
+    c->check_look_at = now + LW_CHECK_SETTLE_MS;      // the next check puts it off again
+}
+
 void lwc_status(lwc_t *c, int ti, const uint8_t *p, uint64_t now)
 {
     if (ti < 0 || ti >= LWC_TARGETS || !c->t[ti].used) return;
@@ -210,6 +224,10 @@ lwc_want_t lwc_tick(lwc_t *c, uint64_t now)
     for (int i = 0; i < LWC_AW_MAX; i++)
         if (c->aw[i].at && since(now, c->aw[i].at) >= LW_FORGET_MS) c->aw[i].at = 0;
 
+    if (c->check_look_at && now >= c->check_look_at) {
+        c->check_look_at = 0;
+        c->look_due = 1;
+    }
     uint64_t every = since(now, c->burst_from) <= LW_LOOK_BURST_MS ? LW_LOOK_MS : LW_LOOK_SLOW_MS;
     if (c->look_due || since(now, c->looked) >= every) {
         w.look = 1;

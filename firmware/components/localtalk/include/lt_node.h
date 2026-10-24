@@ -132,6 +132,9 @@ typedef struct {
     // Mac asked again with the same sequence number). NULL, or registration 0:
     // the ImageWriter's, nothing to say and EOF once the Mac's job has ended.
     size_t (*reg_output)(void *ctx, int reg, uint8_t *buf, size_t max, int *eof, int again);
+    // W-1098: another node looked up one name, no wildcard in it: what a
+    // printer switched on does before it takes its name. May be NULL.
+    void   (*name_check)(void *ctx, const nbp_tuple_t *t);
 } lt_ops_t;
 
 // W-1095: a relayed connection carries any number of jobs. A Mac's

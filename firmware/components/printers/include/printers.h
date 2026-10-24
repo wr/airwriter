@@ -46,9 +46,13 @@ esp_err_t   printers_start(const printers_cfg_t *cfg);
 // What the port said when asked: the self-ID's model (iw_model_t) with the
 // line ready, or not ready.
 void        printers_port_seen(int iw_model, int ready);
-// What laser.c heard (once per printer, its link as at_link_t) and its query.
+// What laser.c heard (once per printer, its link as at_link_t) and its query:
+// answered on at_link at net.node with its page count (-1 none), or not
+// (at_link -1). W-1098: a printer the list has under an old name keeps its
+// record (pr_at_answered).
 void        printers_at_seen(int at_link, const uint8_t *name, const uint8_t *type);
-void        printers_at_queried(int id, int ok, const lw_info_t *info);
+void        printers_at_queried(int id, int ok, const lw_info_t *info, int at_link, uint16_t net,
+                                uint8_t node, int32_t pages);
 
 // What old Macs are offered on a link (at_link_t): on a way in that is on,
 // every printer AirWriter can carry there (pr_offers): the port's ImageWriter

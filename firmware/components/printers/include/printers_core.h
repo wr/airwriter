@@ -52,6 +52,16 @@ typedef enum { PR_NOTE_FOUND, PR_NOTE_UNKNOWN_PORT, PR_NOTE_CHANGED, PR_NOTE_NO_
                PR_NOTE_TOO_MANY } pr_note_kind_t;
 typedef struct { uint8_t kind, id, model; } pr_note_t;
 
+// W-1098: where an AppleTalk printer last answered its query (its link and
+// its address there) and the page count it gave then (-1 none). Kept beside
+// the records, not in them (pr_seen_save), so that a firmware without it
+// reads the list as it is. id 0: unused.
+typedef struct {
+    uint8_t  id, where, node;
+    uint16_t net;
+    int32_t  pages;
+} pr_seen_t;
+
 typedef struct {
     pr_rec_t  r[PR_MAX];
     uint8_t   n, next_id;
@@ -59,6 +69,7 @@ typedef struct {
     uint8_t   n_notes;
     uint8_t   mac[6];
     uint16_t  epoch;
+    pr_seen_t seen[PR_MAX];
 } pr_list_t;
 
 // A printer's live state, by its index in r[]: the board fills it in.
@@ -73,6 +84,16 @@ int  pr_port_seen(pr_list_t *l, pr_port_seen_t what);
 int  pr_at_seen(pr_list_t *l, pr_where_t link, const uint8_t *nbp_name, const uint8_t *nbp_type,
                 int from_airwriter);
 void pr_at_queried(pr_list_t *l, int id, int ok, const lw_info_t *info);
+// W-1098: a LaserWriter's query answered on `where` at net.node, with its
+// page count (-1 none), before pr_at_queried. A printer new to the list may
+// be one it has under an old name: renamed, a LaserWriter comes back at the
+// address it had, gives the same product and a page count at or above its
+// last, and its old name is silent (live[].present 0). That record then
+// takes the new name (its own name follows, unless the person gave it one)
+// and the new one goes. The id the answers belong to, for pr_at_queried.
+int  pr_at_answered(pr_list_t *l, int id, pr_where_t where, uint16_t net, uint8_t node,
+                    int32_t pages, const lw_info_t *info, const pr_live_t live[PR_MAX]);
+const pr_seen_t *pr_seen_of(const pr_list_t *l, int id);   // NULL: never answered
 
 // What the person said. 0 done, -1 refused.
 int  pr_rename(pr_list_t *l, int id, const char *name);     // "" or NULL: the printer's own
@@ -125,6 +146,10 @@ int    pr_load(pr_list_t *l, const uint8_t *buf, size_t n);     // -1: refused, 
 // pr_load refuses but nothing here may write over, so that an OTA rollback or
 // the known-good reset leaves the newer firmware its printers.
 int    pr_blob_newer(const uint8_t *buf, size_t n);
+// W-1098: the seen[] entries, in a blob of their own. pr_seen_load after
+// pr_load keeps only the list's printers'; -1: refused, l untouched.
+size_t pr_seen_save(const pr_list_t *l, uint8_t *buf, size_t cap);    // 0: too small
+int    pr_seen_load(pr_list_t *l, const uint8_t *buf, size_t n);
 
 size_t pr_json(const pr_list_t *l, const pr_live_t live[PR_MAX], char *buf, size_t cap);
 

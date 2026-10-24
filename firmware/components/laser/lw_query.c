@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "lw_query.h"
+#include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -26,6 +27,7 @@ static const char k_head[] =
     "(area) { gsave initclip clippath pathbbox grestore 4 -1 roll awp ( ) print\n"
     "  3 -1 roll awp ( ) print exch awp ( ) print awp } awq\n"
     "(size) { currentpagedevice /PageSize get aload pop exch awp ( ) print awp } awq\n"
+    "(pages) { statusdict /pagecount get exec awp } awq\n"
     "(probe) { /awb 256 string def currentfile awb readstring pop length awp ( ) print\n"
     "  true 0 1 255 { dup awb exch get ne { pop false } if } for { (1) } { (0) } ifelse print } awq\n";
 static const char k_tail[] =
@@ -66,6 +68,7 @@ void lw_parse_init(lw_parse_t *p)
 {
     memset(p, 0, sizeof *p);
     lw_info_default(&p->info);
+    p->pages = -1;
 }
 
 // Up to n numbers from s; returns how many there were.
@@ -132,6 +135,10 @@ static void answer(lw_parse_t *p, const char *key, const char *val)
             p->sized = 1;
             i->page = h > 900 ? LW_LEGAL : (w < 604 && h > 800) ? LW_A4 : LW_LETTER;
         }
+    } else if (!strcmp(key, "pages")) {
+        char *end;
+        long v = strtol(val, &end, 10);
+        if (end != val && !*end && v >= 0 && v <= INT32_MAX) p->pages = (int32_t)v;
     } else if (!strcmp(key, "probe")) {
         int k = numbers(val, v, 2);
         i->binary = k == 2 && v[0] == 256 && v[1] == 1;

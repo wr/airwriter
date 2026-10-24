@@ -802,9 +802,10 @@ static void laser_found(int link, const uint8_t *name, const uint8_t *type)
     printers_at_seen(link, name, type);
 }
 
-static void laser_queried(int id, int ok, const lw_info_t *info)
+static void laser_queried(int id, int ok, const lw_info_t *info, const laser_at_t *at)
 {
-    printers_at_queried(id, ok, info);
+    printers_at_queried(id, ok, info, at ? at->link : -1, at ? at->net : 0, at ? at->node : 0,
+                        at ? at->pages : -1);
 }
 
 // W-1088: a Mac's job relayed to a printer on another AppleTalk link holds the

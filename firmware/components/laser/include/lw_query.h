@@ -9,7 +9,8 @@
 // Each answer is one line, aw:<key>=<value>: product, version, revision,
 // level, res (the device's dots per inch across and down), area (the
 // imageable area, llx lly urx ury in points), size (Level 2's PageSize),
-// probe, end. The probe is 256 bytes 0x00-0xFF read with readstring: its
+// pages (statusdict's pagecount: every page it has printed, W-1098), probe,
+// end. The probe is 256 bytes 0x00-0xFF read with readstring: its
 // count and whether each byte arrived as itself. Binary goes to this printer
 // only if they did; otherwise every page goes as hex. That is how a Level 1
 // LaserWriter answers the binary question no document does. TailTalk's
@@ -47,6 +48,9 @@ typedef struct {
     char      line[160];
     size_t    n;
     uint8_t   sized;            // aw:size gave the page
+    // W-1098: aw:pages, or -1. Not in lw_info_t, which the printer list
+    // stores as it is: a LaserWriter renamed is told by it (printers_core.h).
+    int32_t   pages;
 } lw_parse_t;
 
 void lw_parse_init(lw_parse_t *p);
