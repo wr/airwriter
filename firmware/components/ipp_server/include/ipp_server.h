@@ -16,6 +16,13 @@
 #include "printer_caps.h"
 
 typedef struct {
+    // Takes the printer for a job about to start, without waiting: 0 when
+    // something else has it (a Mac's job on AppleTalk, the test page, an
+    // update). The client is then told server-error-busy and asks again. A
+    // document left unread while its job waited held ~20 KB of internal RAM in
+    // received frames, and the job then could not start (W-1076 bench). Every
+    // claim that returned 1 is followed by begin. May be NULL.
+    int       (*claim)(void *ctx);
     // Called once per job when the document starts. Return ESP_OK to accept.
     // `format` is the client's document-format, already checked against the
     // formats we advertise.

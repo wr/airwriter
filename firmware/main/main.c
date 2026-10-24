@@ -267,10 +267,10 @@ static void printer_fail(void)
 // doc_end's verdict on the transfer, for job_finished on the pipeline task.
 static volatile int s_doc_ok;
 
-// An IPP job holds s_job_lock: from doc_begin's take to job_finished's give.
-// A Cancel-Job for a job still waiting in doc_begin must not reach the printer
-// another job owns -- a LocalTalk job holds it for minutes (W-1053 review).
-// ipp_server passes the cancel on again once begin returns.
+// An IPP job holds s_job_lock: from doc_claim's take to job_finished's give.
+// A Cancel-Job before doc_begin must not reach the printer another job owns
+// -- a LocalTalk job holds it for minutes (W-1053 review). ipp_server passes
+// the cancel on again once begin returns.
 static volatile int s_ipp_owns;
 
 // The printer stream: checksummed so the device can be compared with tools/rip
@@ -515,19 +515,24 @@ static void line_source(void)
     if (ready >= 0) printer_state_post(ready ? PS_EV_LINE_READY : PS_EV_LINE_NOT_READY);
 }
 
+// Both AirPrint sinks' claim: a job never waits out a Mac's job, the test page
+// or an update with its document unread (ipp_server.h). Its client is told
+// busy and asks again, as a Mac on AppleTalk is.
+static int doc_claim(void *ctx)
+{
+    (void)ctx;
+    if (xSemaphoreTake(s_job_lock, 0) == pdTRUE) return 1;
+    s_job_waiting = 1;                  // an update in progress gives way (W-1048)
+    return 0;
+}
+
 static esp_err_t doc_begin(void *ctx, const char *format, const char *name)
 {
     (void)ctx;
-    // A real job waits out a test page rather than interleaving with it,
-    // mirroring how ipp_server's own s_print_lock makes a second phone job
-    // wait for the first. ipp_server always pairs this call with exactly one
-    // doc_end -- including when job_pipe_begin below fails -- and every
-    // doc_end leads to exactly one job_finished, whose give balances every
-    // take here, refusals included.
-    if (xSemaphoreTake(s_job_lock, 0) != pdTRUE) {
-        s_job_waiting = 1;
-        xSemaphoreTake(s_job_lock, portMAX_DELAY);
-    }
+    // doc_claim took s_job_lock. ipp_server always pairs this call with
+    // exactly one doc_end -- including when job_pipe_begin below fails -- and
+    // every doc_end leads to exactly one job_finished, whose give balances
+    // the claim, refusals included.
     s_ipp_owns = 1;
     // The link's strength with each job: a weak one is what a slow upload
     // usually is (W-1042 bench).
@@ -712,11 +717,7 @@ static int s_laser_slot = 1;
 static esp_err_t laser_doc_begin(void *ctx, const char *format, const char *name)
 {
     int id = (int)((intptr_t)ctx & 0xFF);
-    if (xSemaphoreTake(s_job_lock, 0) != pdTRUE) {
-        s_job_waiting = 1;
-        xSemaphoreTake(s_job_lock, portMAX_DELAY);
-    }
-    s_laser_owns = 1;
+    s_laser_owns = 1;                   // doc_claim took s_job_lock
     s_laser_slot = (int)((intptr_t)ctx >> 8);
     ESP_LOGI(TAG, "LaserWriter job \"%s\" for printer %d format %s", name, id,
              format[0] ? format : "(unspecified)");
@@ -2241,10 +2242,10 @@ void app_main(void)
         .legacy = { .model = s_set.model, .name = s_set.name, .airprint = s_set.airprint,
                     .dither = s_set.dither, .gain = s_set.gain, .top_margin = s_set.top_margin,
                     .ribbon = s_set.ribbon },
-        .port_sink = { .begin = doc_begin, .data = doc_data, .end = doc_end,
+        .port_sink = { .claim = doc_claim, .begin = doc_begin, .data = doc_data, .end = doc_end,
                        .cancel = doc_cancel, .ctx = NULL },
-        .at_sink   = { .begin = laser_doc_begin, .data = doc_data, .end = laser_doc_end,
-                       .cancel = laser_doc_cancel },
+        .at_sink   = { .claim = doc_claim, .begin = laser_doc_begin, .data = doc_data,
+                       .end = laser_doc_end, .cancel = laser_doc_cancel },
         .port_live = port_live, .port_screen = port_screen, .look = printers_look,
         .changed = printers_changed,
     };
