@@ -21,6 +21,7 @@ firmware/dependencies.lock
 
 # host tools
 tools/rip/build/
+tools/ipp/build/
 *.o
 *.d
 __pycache__/

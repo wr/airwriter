@@ -407,8 +407,7 @@ Linear is the queue; these are the live items.
 ## Verification
 - **Host tests:** `make -C tools/rip test` (raster path, halftone screens and colour, serial writer, printer_state, led_grid,
   dip_config, pic_prog, localtalk, PAP client, LaserWriter query and policy, PostScript writer,
-  cable, fw_update, known_good, testpage) and `make -B -C tools/ipp test`
-  (`-B`: `tools/ipp/build/` is committed).
+  cable, fw_update, known_good, testpage) and `make -C tools/ipp test`.
 - **Test page preview:** `tools/rip/build/rip --testpage colour --out-stream tp.bin` (or `black`,
   `unknown`), then `python3.14 tools/iwview/iwview.py tp.bin tp.png` draws it as ink on paper.
   Its text needs the printer's font dot patterns, extracted from the Technical Reference's
