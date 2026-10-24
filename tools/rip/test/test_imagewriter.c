@@ -433,6 +433,26 @@ int main(void)
         }
     }
 
+    /* -- W-1088: the same reply names the model, for the Printers list; an
+     *    answer AirWriter cannot read is no model, not a guess -- */
+    {
+        static const struct { const char *s; size_t n; iw_model_t model; iw_ribbon_t ribbon; } ids[] = {
+            { "IW10C",            5, IW_MODEL_II, IW_RIBBON_COLOUR },
+            { "LQ1CF1\r",         7, IW_MODEL_LQ, IW_RIBBON_COLOUR },
+            { "LQ1F1",            5, IW_MODEL_LQ, IW_RIBBON_BLACK },
+            { "",                 0, IW_MODEL_NONE, IW_RIBBON_UNKNOWN },
+            { "\x00\x00IW10",     6, IW_MODEL_II, IW_RIBBON_BLACK },
+            { "LQ",               2, IW_MODEL_NONE, IW_RIBBON_UNKNOWN },
+        };
+        for (size_t k = 0; k < sizeof ids / sizeof ids[0]; k++) {
+            iw_self_id_t got = iw_self_id((const uint8_t *)ids[k].s, ids[k].n);
+            if (got.model != ids[k].model || got.ribbon != ids[k].ribbon)
+                fprintf(stderr, "  model case %zu\n", k);
+            CHECK_EQ_INT(got.model, ids[k].model);
+            CHECK_EQ_INT(got.ribbon, ids[k].ribbon);
+        }
+    }
+
     /* -- a resync sent between jobs (W-1064: before asking the ribbon) settles
      *    the link, so the next job does not send another; a cut still counts -- */
     {
