@@ -91,6 +91,21 @@ static esp_err_t status_get(httpd_req_t *req)
     return httpd_resp_sendstr(req, json);
 }
 
+// The panel's lights as the board drives them now, for the sidebar's picture
+// of the panel (W-1092): 37 dots in chain order (led_map.h), red, green and
+// blue each as a little-endian 8.8 fixed-point drive, 222 bytes. The page asks
+// a few times a second while it is open. 404 on a board with no panel.
+static esp_err_t panel_get(httpd_req_t *req)
+{
+    uint16_t f[LG_NUM_LEDS][3];
+    if (!led_grid_frame(f)) return httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "no panel");
+    uint8_t b[sizeof f], *p = b;
+    for (int i = 0; i < LG_NUM_LEDS; i++)
+        for (int c = 0; c < 3; c++) { *p++ = f[i][c] & 0xff; *p++ = f[i][c] >> 8; }
+    httpd_resp_set_type(req, "application/octet-stream");
+    return httpd_resp_send(req, (const char *)b, sizeof b);
+}
+
 static esp_err_t lt_get(httpd_req_t *req)
 {
     if (!s_cfg.lt_json) return httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "no localtalk log");
@@ -577,6 +592,7 @@ esp_err_t webui_start(const webui_cfg_t *cfg)
     static const httpd_uri_t routes[] = {
         { .uri = "/",             .method = HTTP_GET,  .handler = page_get },
         { .uri = "/api/status",   .method = HTTP_GET,  .handler = status_get },
+        { .uri = "/api/panel",    .method = HTTP_GET,  .handler = panel_get },
         { .uri = "/api/scan",     .method = HTTP_GET,  .handler = scan_get },
         { .uri = "/api/lt",       .method = HTTP_GET,  .handler = lt_get },
         { .uri = "/api/lt/job",   .method = HTTP_GET,  .handler = lt_job_get },

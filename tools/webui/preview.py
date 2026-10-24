@@ -17,15 +17,59 @@ answer late, and "_first": n to apply only to the first n asks. A state's
 "_down_after": s stops answering s seconds after the page loads, as a board
 unplugged mid-poll. A POST's "_then" is the state the board comes back in
 after "_down" seconds of restarting.
+
+/api/panel plays the panel's own frames (tools/lights' scenes, the firmware's
+renderer built for this computer) for the status's "ps": ready, printing,
+offline... ("asleep" plays the sleep). Without a C compiler it answers 404 and
+the sidebar's dots show unlit.
 """
-import argparse, copy, http.server, json, pathlib, sys, time, urllib.parse
+import argparse, copy, http.server, json, pathlib, struct, subprocess, sys, time, urllib.parse
 
 HERE = pathlib.Path(__file__).parent
 sys.path.insert(0, str(HERE))
 import mkheader  # noqa: E402
 
 STATES = HERE / "states.json"
+LIGHTS = HERE / "../lights"
 clock = {"loaded": 0.0, "down_until": 0.0, "override": None, "seen": {}}
+SCENE = {"booting": "spin", "setup": "setup", "joining": "joining", "ready": "ready", "offline": "offline",
+         "printing": "printing", "attention": "attention", "failed": "failed"}
+STEP = 0.04                                 # scenes.c's STEP_MS
+
+
+def load_scenes():
+    """{scene: [frame, ...]}, each frame 111 drives at 8.8, looped as the
+    wiki's GIFs are: the last frames fade into the first."""
+    try:
+        subprocess.run(["make", "-s", "-C", str(LIGHTS), "build/frames.txt"], check=True,
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        lines = (LIGHTS / "build/frames.txt").read_text().splitlines()
+    except (OSError, subprocess.CalledProcessError):
+        print("no C compiler for tools/lights: the panel shows unlit")
+        return {}
+    scenes, cur = {}, None
+    for ln in lines:
+        if ln.startswith("M "):
+            continue
+        if ln.startswith("P "):
+            name, loop = ln[2:].split()
+            cur = scenes[name] = {"xfade": 0 if loop == "cut" else int(loop), "frames": []}
+        else:
+            cur["frames"].append([int(v) for v in ln.split()])
+    out = {}
+    for name, sc in scenes.items():
+        f, n = sc["frames"], int(sc["xfade"] / 1000 / STEP)
+        if n:
+            keep = len(f) - n
+            f = f[:keep]
+            for i in range(n):
+                k = (i + 0.5) / n
+                f[i] = [round(a * (1 - k) + b * k) for a, b in zip(sc["frames"][keep + i], f[i])]
+        out[name] = f
+    return out
+
+
+SCENES = {}
 
 
 def merge(base, patch):
@@ -103,6 +147,14 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if meta.get("_down_after") is not None and now - clock["loaded"] > meta["_down_after"]:
             return self.drop()
 
+        if method == "GET" and url.path == "/api/panel":
+            st = resp.get("GET /api/status")
+            st = st if isinstance(st, dict) else {}
+            frames = SCENES.get("asleep" if st.get("asleep") else SCENE.get(st.get("ps"), "ready"))
+            if not frames:
+                return self.send(404, "no panel", "text/plain")
+            f = frames[int((now - clock["loaded"]) / STEP) % len(frames)]
+            return self.send(200, struct.pack("<%dH" % len(f), *f), "application/octet-stream")
         if method == "POST":
             n = int(self.headers.get("Content-Length") or 0)
             body = self.rfile.read(n).decode("utf-8", "replace")
@@ -144,6 +196,7 @@ def main():
     ap.add_argument("--host", default="127.0.0.1",
                     help="0.0.0.0 to try the page on a phone on this network")
     a = ap.parse_args()
+    SCENES.update(load_scenes())
     srv = http.server.ThreadingHTTPServer((a.host, a.port), Handler)
     print("http://%s:%d/_states" % ("localhost" if a.host == "127.0.0.1" else a.host, a.port))
     srv.serve_forever()

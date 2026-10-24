@@ -240,7 +240,10 @@ body.setupmode .app{grid-template-columns:minmax(0,1fr)}
 /* W-1088: AirWriter's own mark, its render, in place of the ImageWriter's icon
    (that one is the ImageWriter's: the printer's, on AirPrint) */
 .awm{display:block;flex:none;background:url({{airwriter}}) center/contain no-repeat;width:49px;height:84px}
-.brand .awm{width:20px;height:34px}
+/* W-1092: beside the name, the status panel itself, its dots as they are on
+   the box now (app.js draws them): the top of the panel, 62 x 70 mm */
+.brand .dots{flex:none;width:32px;height:36px;border-radius:3px;box-shadow:0 0 0 .5px rgba(0,0,0,.3)}
+@media (prefers-color-scheme:dark){.brand .dots{box-shadow:0 0 0 .5px rgba(255,250,235,.14)}}
 /* a key's icon, before its words (after, for the next step) */
 .btn .bi{width:13px;height:13px;vertical-align:-2px;margin-right:6px}
 .btn .bi.end{margin:0 0 0 6px}

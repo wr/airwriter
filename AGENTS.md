@@ -114,16 +114,22 @@ What works on `main`:
 - Setup AP `AirWriter-xxxx` (open, 192.168.4.1) on a board with no credentials; web UI on port
   80: `/api/status`, Wi-Fi, settings, `/update` (OTA), `/api/update` (GitHub releases),
   `/api/localtalk/flash`, `/api/cable`, `/api/restart`, `/api/erase`, `/api/test`,
-  `/api/printers`.
+  `/api/printers`, `/api/panel` (the LED frame being driven: 37 × RGB, little-endian 8.8,
+  222 bytes; 404 with no strip).
 - The settings page (`W-1079 Settings page: organise by port, like macOS System Settings`,
   design `docs/superpowers/specs/2026-10-20-settings-redesign-design.md`): a settings app, a
   sidebar of Printers (W-1088: notices, a row per printer, a printer's detail in the pane,
   `#printers/<id>`), AirPrint (the switch and each shared printer's address), AppleTalk, Wi-Fi
   and About, each row showing its state; one home per setting. Setup mode is three steps,
   sized for a phone (printers, Wi-Fi, "You're All Set": print from a phone, the test button for
-  a test page) and the first visit after it opens on "AirWriter is ready". AirWriter's mark is
-  its own render (`tools/webui/airwriter.webp`, from the shop); the ImageWriter icon is the
-  ImageWriter's (IPP, the tab). Printer rows draw an ImageWriter or a LaserWriter. Upright system type, Apple Garamond Light titles, platinum, icon tiles in the
+  a test page) and the first visit after it opens on "AirWriter is ready". Beside the name in
+  the sidebar is the status panel itself (W-1092): its 7 × 8 dots from `panel_layout.json`, lit
+  live from `/api/panel` in the colours board 1's panel was measured showing (the wiki GIFs'
+  model, `tools/lights/render.py`), the gold muted so a lit dot never reads as gold. The page
+  asks about 6 times a second while the mark is on screen, once a second during a job (6 a
+  second cost board 1 7% of a core and no heap), and draws at 30 fps. The setup and About
+  heroes keep AirWriter's render (`tools/webui/airwriter.webp`, from the shop); the ImageWriter
+  icon is the ImageWriter's (IPP, the tab). Printer rows draw an ImageWriter or a LaserWriter. Upright system type, Apple Garamond Light titles, platinum, icon tiles in the
   ribbon's inks, status as lit bar lamps, low platinum keys; in a window on a big screen, the
   sidebar first on a phone. AppleTalk is one card per way in (AppleTalk Port, Networked Macs,
   Basilisk II, Infinite Mac) with its switch and the Macs heard in the last 10 minutes, each by
@@ -432,6 +438,8 @@ Linear is the queue; these are the live items.
 - **Firmware:** `idf.py build` clean.
 - **Web page:** `python3 tools/webui/preview.py`, then http://localhost:8079/_states: every state
   at desktop and phone width, light and dark, before a change to the page goes to the board.
+  Its `/api/panel` plays `tools/lights`' scene frames for each state's `ps` (it builds them with
+  `make`; without a C compiler the dots show unlit).
 - **On board 1:** with Top margin at 0 (`POST /api/general {"top_margin":0}`), an `ipptool`
   Print-Job of `fixtures/checker.urf` prints crc32 `8ee84844`. At the default (-1 in) the
   checker, which sits in the page's top inch, prints blank (crc32 `0e5fc630`, 9 bytes).

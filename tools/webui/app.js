@@ -435,6 +435,117 @@ function poll(){
 poll(); setInterval(()=>{ if(!document.hidden) poll(); },4000);
 setTimeout(()=>document.body.classList.add('ready'),1500);
 
+/* ── the panel ─────────────────────────────────────────────────────── */
+/* W-1092: the sidebar's mark is the status panel, its dots as they are on the
+   box now. GET /api/panel is the frame the board drives the LEDs with; each
+   dot is drawn as board 1's panel was photographed showing it, as the wiki's
+   GIFs are (tools/lights/render.py): the drive goes back through the gamma to
+   a hue, saturation and level, the hue picks between the 24 measured hues and
+   the saturation mixes in the measured white. FR4 dots are crisp with a little
+   glow, the mask dots a haze. The page asks a few times a second and blends
+   from one answer to the next, so a breath stays smooth; with no answer the
+   dots go dark, as they would. */
+(()=>{
+  const cv=$('dots'), P=PANEL, N=P.chain.length*3, CAP={P:48,B:192,L:192};
+  const lin=v=>(v/=255)<=.04045?v/12.92:((v+.055)/1.055)**2.4;
+  const srgb=x=>Math.round(Math.min(1,Math.max(0,x))**(1/2.2)*255);
+  const RING={}, WHITE={};
+  for(const m of 'PBL'){ RING[m]=P.ring[m].map(c=>c.map(lin)); WHITE[m]=P.white[m].map(lin); }
+  // with the lights off: ENIG gold, the FR4 windows, the two depths of mask
+  const BG='#161618', UNLIT={G:[146,122,66],T:[146,122,66],P:[80,77,68],B:[35,38,36],L:[29,31,30]};
+  const MAT=P.chain.map(i=>P.dots[i]);
+  function look(d,m){                      // a dot's drive -> linear RGB, or null when off
+    if(Math.max(...d)<.5) return null;
+    const p=d.map(x=>(Math.max(x,0)/CAP[m])**(1/2.2)), v=Math.max(...p);
+    const [r,g,b]=p.map(x=>x/v), s=1-Math.min(r,g,b);
+    let h=0;
+    if(s>0){
+      const rc=(1-r)/s, gc=(1-g)/s, bc=(1-b)/s;
+      h=(r===1?bc-gc:g===1?2+rc-bc:4+gc-rc)/6; h-=Math.floor(h);
+    }
+    const x=h*24%24, i=Math.floor(x), f=x-i, a=RING[m][i], c=RING[m][(i+1)%24], w=(1-s)**2.2, k=v**2.2;
+    return [0,1,2].map(j=>((a[j]*(1-f)+c[j]*f)*(1-w)+WHITE[m][j]*w)*k);
+  }
+
+  let ctx=null, W=0, H=0, sc=1, ox=0, oy=0;
+  function size(){
+    const dpr=devicePixelRatio||1, gh=2*P.origin+(P.rows-1)*P.pitch;
+    W=cv.width=Math.round(cv.clientWidth*dpr); H=cv.height=Math.round(cv.clientHeight*dpr);
+    ctx=cv.getContext('2d'); sc=Math.min(W/P.w,H/gh); ox=(W-P.w*sc)/2; oy=(H-gh*sc)/2;
+  }
+  const at=i=>[ox+(P.origin+i%P.cols*P.pitch)*sc, oy+(P.origin+Math.floor(i/P.cols)*P.pitch)*sc];
+  function disc(x,y,r,fill){ ctx.fillStyle=fill; ctx.beginPath(); ctx.arc(x,y,r,0,2*Math.PI); ctx.fill(); }
+  function soft(x,y,r,blur,rgb,a){        // a disc blurred by `blur`, added to what is under it
+    const R=r+1.5*blur, g=ctx.createRadialGradient(x,y,0,x,y,R), c='rgba('+rgb.join()+',';
+    g.addColorStop(0,c+a+')'); g.addColorStop(Math.max(0,r-1.5*blur)/R,c+a+')');
+    g.addColorStop(r/R,c+a/2+')'); g.addColorStop(1,c+'0)');
+    ctx.fillStyle=g; ctx.fillRect(x-R,y-R,2*R,2*R);
+  }
+  function paint(f){                       // f: the drives in chain order
+    if(!W||!H) return;
+    const rad=P.dia*sc/2, lit=[];
+    MAT.forEach((m,k)=>{ lit[P.chain[k]]=look([f[3*k],f[3*k+1],f[3*k+2]],m); });
+    ctx.globalCompositeOperation='source-over';
+    ctx.fillStyle=BG; ctx.fillRect(0,0,W,H);
+    for(let i=0;i<P.dots.length;i++){
+      const m=P.dots[i], [x,y]=at(i), u=UNLIT[m], c=lit[i];
+      disc(x,y,rad,'rgb('+(m==='P'&&c?u.map((v,j)=>Math.max(v,srgb(c[j]))):u).join()+')');
+      if(m==='T') disc(x,y,P.hole*sc/2,'#0b0b0c');
+    }
+    ctx.globalCompositeOperation='lighter';
+    for(let i=0;i<P.dots.length;i++){
+      const c=lit[i]; if(!c) continue;
+      const m=P.dots[i], [x,y]=at(i), rgb=c.map(srgb);
+      if(m==='P') soft(x,y,rad,.8*sc,rgb,.35);
+      else soft(x,y,rad*(m==='B'?1.25:1.05),.7*sc,rgb,.9);
+    }
+  }
+
+  // Each answer is blended in over the time since the one before, so the
+  // picture runs a fraction of a second behind the box, without steps. Each
+  // ask costs board 1 about 12 ms of CPU (6 a second took 7% of a core), and
+  // a photo print leaves it a few KB of internal RAM: while a job prints the
+  // board is asked once a second.
+  const DARK=new Float32Array(N), CALM=matchMedia('(prefers-reduced-motion:reduce)').matches;
+  const every=()=>CALM||S.printing?1000:160;
+  // Drawn 30 times a second, not at the screen's rate: the dots are a few
+  // pixels across, and at 120 Hz the drawing alone took 2% of a Mac's core.
+  let from=DARK, to=DARK, t0=0, dur=1, last=0, tick=0;
+  function now(){
+    const k=Math.min(1,(performance.now()-t0)/dur);
+    return k>=1?to:to.map((v,i)=>from[i]+(v-from[i])*k);
+  }
+  function frame(){ tick=0; paint(now()); if(performance.now()-t0<dur) tick=setTimeout(frame,33); }
+  function show(f){
+    const t=performance.now();
+    from=now(); to=f; dur=Math.min(1000,Math.max(every(),t-last)); last=t0=t;
+    if(!tick) frame();
+  }
+
+  // Asks only while the mark is on screen: not in a hidden tab, in setup
+  // (no sidebar), or behind a pane on a phone. A board with no panel says
+  // 404 once and is not asked again.
+  let timer=0, busy=false, none=false, misses=0;
+  async function ask(){
+    timer=0;
+    if(none||busy||document.hidden) return;
+    if(!cv.offsetParent){ timer=setTimeout(ask,1000); return; }
+    busy=true; const t=performance.now();
+    try{
+      const r=await fetchIn('/api/panel',2000), b=await r.arrayBuffer();
+      if(r.status===404||(r.ok&&b.byteLength!==2*N)){ none=true; show(DARK); return; }
+      if(!r.ok) throw 0;
+      const v=new DataView(b); misses=0;
+      show(Float32Array.from({length:N},(_,i)=>v.getUint16(2*i,true)/256));
+    }catch(e){ if(++misses===3) show(DARK); }
+    finally{ busy=false; }
+    if(!none) timer=setTimeout(ask,Math.max(0,every()-(performance.now()-t)));
+  }
+  document.addEventListener('visibilitychange',()=>{ if(!document.hidden&&!timer) ask(); });
+  new ResizeObserver(()=>{ size(); paint(now()); }).observe(cv);
+  ask();
+})();
+
 /* ── printers ──────────────────────────────────────────────────────── */
 /* W-1088: every printer AirWriter has (/api/printers): notices first, one row
    each, and a printer's detail in the pane when it is opened. */
