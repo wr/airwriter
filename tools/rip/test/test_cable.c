@@ -182,7 +182,7 @@ static void test_verdict(void)
             CHECK_EQ_INT(ct_verdict(tt[k], legs & 1, legs >> 1), want[k]);
         CHECK(!ct_verdict_tested(want[k]));
         CHECK(!strcmp(ct_verdict_name(want[k]), name[k]));
-        CHECK(strncmp(ct_verdict_text(want[k]), "Not tested:", 11) == 0);
+        CHECK(strstr(ct_verdict_text(want[k]), "Couldn’t test the cable") != NULL);
         CHECK(!strchr(ct_verdict_text(want[k]), '"'));       // it goes into JSON as is
     }
     CHECK(ct_verdict_tested(CT_PASS) && ct_verdict_tested(CT_NO_LOOP) && ct_verdict_tested(CT_ONE_WAY));

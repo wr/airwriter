@@ -180,7 +180,7 @@ static void test_at_imagewriter(void)
     char body[64];
     snprintf(body, sizeof body, "{\"id\":%d,\"shared\":true}", id);
     CHECK_EQ_INT(pr_post(&L, body, &r), -1);
-    CHECK(strstr(r.err, "can't share") != NULL);
+    CHECK(strstr(r.err, "can’t be shared with phones") != NULL);
     int ids[PR_MAX];
     CHECK_EQ_INT(pr_offers(&L, PR_WHERE_TUNNEL, ids, PR_MAX), 1);   // old Macs elsewhere see it
     // Other types are not printers AirWriter drives.
@@ -532,7 +532,7 @@ static void test_post(void)
 
     snprintf(body, sizeof body, "{\"id\":%d,\"shared\":true}", lw);   // unidentified yet
     CHECK_EQ_INT(pr_post(&L, body, &r), -1);
-    CHECK(strstr(r.err, "can't be shared") != NULL);
+    CHECK(strstr(r.err, "until it responds") != NULL);
     snprintf(body, sizeof body, "{\"id\":%d,\"use_anyway\":true}", lw);
     CHECK_EQ_INT(pr_post(&L, body, &r), -1);                 // only after it didn't answer
     pr_at_queried(&L, lw, 0, NULL); pr_at_queried(&L, lw, 0, NULL); pr_at_queried(&L, lw, 0, NULL);

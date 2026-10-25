@@ -1655,9 +1655,9 @@ static const char *state_text(ps_state_t st)
     case PS_SETUP:     return "Waiting for setup";
     case PS_JOINING:   return "Joining Wi-Fi";
     case PS_ATTENTION: return "Needs attention";
-    case PS_FAILED:    return "Last job failed";
+    case PS_FAILED:    return "The last job failed";
     case PS_PRINTING:  return "Printing";
-    case PS_OFFLINE:   return "Printer offline";
+    case PS_OFFLINE:   return "Offline";
     case PS_READY:     return "Ready";
     }
     return "?";
@@ -2048,14 +2048,13 @@ static void localtalk_flash(void *ctx, char *buf, size_t cap)
     // The node holds the PIC's UART pins; flashing would fight it. "err", as
     // pic_result_json has it, is what the page shows.
     if (localtalk_running()) {
-        snprintf(buf, cap, "{\"ok\":false,\"err\":\"LocalTalk is running: switch the "
-                 "AppleTalk Port off and restart, then flash\"}");
+        snprintf(buf, cap, "{\"ok\":false,\"err\":\"TashTalk is already installed\"}");
         return;
     }
     // A cable test borrows the same pins, under the job lock.
     if (xSemaphoreTake(s_job_lock, 0) != pdTRUE) {
-        snprintf(buf, cap, "{\"ok\":false,\"err\":\"The printer port is busy; try again "
-                 "when the job is done\"}");
+        snprintf(buf, cap, "{\"ok\":false,\"err\":\"The printer is busy. Try again when "
+                 "it’s done\"}");
         return;
     }
     pic_result_t r;
@@ -2084,8 +2083,8 @@ static void cable_web(void *ctx, int both, char *buf, size_t cap)
     (void)both;
 #if CONFIG_AIRWRITER_PIC_CLK_PIN >= 0
     if (xSemaphoreTake(s_job_lock, 0) != pdTRUE) {
-        snprintf(buf, cap, "{\"ok\":false,\"error\":\"The printer port is busy; try again "
-                 "when the job is done\"}");
+        snprintf(buf, cap, "{\"ok\":false,\"error\":\"The printer is busy. Try again when "
+                 "it’s done\"}");
         return;
     }
     on_activity();
@@ -2126,7 +2125,7 @@ static void port_push(ps_state_t box)
     if (st == PS_ATTENTION)
         ipp_server_set_stopped("media-empty-error", "Needs attention: check paper and SELECT");
     else if (st == PS_OFFLINE)
-        ipp_server_set_stopped("other", "Printer offline");
+        ipp_server_set_stopped("other", "Offline: check power, cable and SELECT");
     else
         ipp_server_set_stopped(NULL, NULL);
     localtalk_set_status(lt_status(st, AT_LINK_CABLE));

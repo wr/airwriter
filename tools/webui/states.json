@@ -195,7 +195,7 @@
     "verdict": "pass",
     "back": true,
     "fwd": true,
-    "text": "Crossover: this cable works with the ImageWriter II. (Its handshake wires, pins 1 and 2, can't be tested.)"
+    "text": "Crossover cable. It works with the ImageWriter II."
    }
   },
   "POST /api/et/settings": {
@@ -380,7 +380,7 @@
    "patch": {
     "GET /api/status": {
      "ps": "offline",
-     "state": "Printer offline",
+     "state": "Offline",
      "printer": false,
      "stopped": true,
      "ribbon": "unknown"
@@ -403,7 +403,7 @@
    "patch": {
     "GET /api/status": {
      "ps": "failed",
-     "state": "Last job failed",
+     "state": "The last job failed",
      "fault": true,
      "job": "Holiday card.pdf (2 pages)"
     }
@@ -1094,11 +1094,11 @@
    }
   },
   "update-error": {
-   "about": "A check that could not reach GitHub",
+   "about": "A check that can’t reach GitHub",
    "patch": {
     "GET /api/update": {
      "state": "failed",
-     "error": "could not reach GitHub",
+     "error": "can’t reach GitHub",
      "checked": 30
     }
    }

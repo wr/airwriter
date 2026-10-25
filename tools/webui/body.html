@@ -61,14 +61,14 @@
          The board looks before it has Wi-Fi, so step 1 shows what is plugged in. -->
     <section class=pane id=p-setup>
       <div id=su-1>
-        <div class=hero><i class=awm></i><h2>Let’s find your printer</h2><p id=su-looking></p></div>
+        <div class=hero><i class=awm></i><h2>Printers</h2><p id=su-looking></p></div>
         <div class="box prlist" id=su-list></div>
-        <p class=foot>Printer missing? Make sure it’s switched on and connected, then press Look Again. Printers on your home network appear after setup.</p>
+        <p class=foot>Don’t see your printer? Make sure it’s connected and switched on, then choose Look Again. Printers on your Wi-Fi network show up after setup.</p>
         <p class=say id=su-say></p>
         <div class=btnrow><button class=btn type=button id=su-look><svg class=bi><use href="#g-look"/></svg>Look Again</button><button class=btn type=button data-dlg=d-add><svg class=bi><use href="#g-add"/></svg>Add a Printer…</button><button class="btn primary" type=button id=su-next><span id=su-next-t>Continue</span><svg class="bi end"><use href="#g-on"/></svg></button></div>
       </div>
       <div id=su-2 class=hide>
-        <div class=hero><span class="ic c"><svg><use href="#g-wifi"/></svg></span><h2>Wi-Fi</h2><p>AirWriter joins your Wi-Fi so your phones and computers can print.</p></div>
+        <div class=hero><span class="ic c"><svg><use href="#g-wifi"/></svg></span><h2>Wi-Fi</h2><p>Choose the network your phones and computers use.</p></div>
         <div class="btnrow one"><button class=btn type=button id=su-back><svg class=bi><use href="#g-off"/></svg>Back</button><button class="btn primary" type=button id=su-nets><svg class=bi><use href="#g-wifi"/></svg>Choose a Network…</button></div>
       </div>
       <!-- Wells: the test button, not an address to copy and open -->
@@ -86,7 +86,7 @@
     <section class=pane id=p-printers>
       <div id=pr-home>
         <div class=hero><span class="ic k"><svg><use href="#g-printer"/></svg></span>
-          <h2>Printers</h2><p>Your printers, for your phones, computers and vintage Macs. <a href="https://github.com/wr/airwriter/wiki/Printers" target=_blank rel=noopener>Learn&nbsp;More…</a></p></div>
+          <h2>Printers</h2><p>Printers for your phones, computers and vintage Macs. <a href="https://github.com/wr/airwriter/wiki/Printers" target=_blank rel=noopener>Learn&nbsp;More…</a></p></div>
         <div id=pr-notes></div>
         <div class="box prlist" id=pr-list></div>
         <p class=say id=prs-say></p>
@@ -108,7 +108,7 @@
           <div class=row id=share-row><span class=txt>Share over AirPrint</span><label class=sw><input type=checkbox role=switch id=pshare aria-label="Share over AirPrint"><span></span></label></div>
           <div class="row hide" id=sp-row><span class=txt>Start page<small>Printed each time it’s switched on</small></span><label class=sw><input type=checkbox role=switch id=pstart aria-label="Start page"><span></span></label></div>
         </div>
-        <p class=say id=pd-cant>AirWriter can’t print to this printer yet.</p>
+        <p class=say id=pd-cant></p>
         <div class=box id=ht-box>
           <div class=row><span class=txt>Halftone</span><select class=pop id=screen aria-label=Halftone></select></div>
           <div class=paper id=ht-paper><div class=sheet><canvas id=prev aria-label="A sample printed with this halftone"></canvas></div></div>
@@ -121,7 +121,7 @@
     <!-- ── AirPrint ──────────────────────────────────────────── -->
     <section class=pane id=p-airprint>
       <div class=hero><span class="ic g"><svg><use href="#g-airprint"/></svg></span>
-        <h2>AirPrint</h2><p>Your printers appear on your phones and computers, with nothing to install. <a href="https://github.com/wr/airwriter/wiki/Setup" target=_blank rel=noopener>Learn&nbsp;More…</a></p></div>
+        <h2>AirPrint</h2><p>Print from your phones and computers, with nothing to install. <a href="https://github.com/wr/airwriter/wiki/Setup" target=_blank rel=noopener>Learn&nbsp;More…</a></p></div>
       <div class=box>
         <div class=row><span class=txt>AirPrint</span><label class=sw><input type=checkbox role=switch id=ap aria-label=AirPrint><span></span></label></div>
       </div>
@@ -134,7 +134,7 @@
     <!-- ── AppleTalk ─────────────────────────────────────────── -->
     <section class=pane id=p-appletalk>
       <div class=hero><span class="ic b"><svg><use href="#g-talk"/></svg></span>
-        <h2>AppleTalk</h2><p>Let vintage Macs print to your printers over AppleTalk. <a href="https://github.com/wr/airwriter/wiki/Vintage-Macs-(LocalTalk)" target=_blank rel=noopener>Learn&nbsp;More…</a></p></div>
+        <h2>AppleTalk</h2><p>Print from vintage Macs over AppleTalk. <a href="https://github.com/wr/airwriter/wiki/Vintage-Macs-(LocalTalk)" target=_blank rel=noopener>Learn&nbsp;More…</a></p></div>
 
       <!-- Wells's layout, from macOS's Wi-Fi network row: the interface and its
            switch, then below a rule how many Macs it can see and which. -->
@@ -152,7 +152,7 @@
       </div>
       <div class="box card" id=c-tun>
         <div class=top><img class=ic src="{{basilisk}}" alt="">
-          <div><b>Basilisk II</b><p>Emulated Macs on computers on your network.</p></div>
+          <div><b>Basilisk II</b><p>Emulated Macs on your network.</p></div>
           <div class=ctls><button class=btn type=button data-dlg=d-bas>Set Up…</button><label class=sw><input type=checkbox role=switch data-way=tun aria-label="Basilisk II"><span></span></label></div></div>
         <div class=body></div>
       </div>
@@ -163,7 +163,6 @@
         <div class=body></div>
       </div>
       <p class=foot id=oldmacs></p>
-      <p class=foot>SheepShaver and Mini vMac are not supported. <a href="https://github.com/wr/airwriter/wiki/Vintage-Macs-(LocalTalk)" target=_blank rel=noopener>Learn&nbsp;More…</a></p>
       <p class=foot id=tt-credit>The AppleTalk Port runs on <a href="https://github.com/lampmerchant/tashtalk" target=_blank rel=noopener>TashTalk</a>, made by <a href="https://ko-fi.com/tashtari" target=_blank rel=noopener>Tashtari</a>. Thank you!</p>
       <p class=say id=at-say></p>
       <a class=help href="https://github.com/wr/airwriter/wiki/Troubleshooting" target=_blank rel=noopener aria-label="Help with AppleTalk">?</a>
@@ -172,7 +171,7 @@
     <!-- ── Wi-Fi ─────────────────────────────────────────────── -->
     <section class=pane id=p-wifi>
       <div class=hero><span class="ic c"><svg><use href="#g-wifi"/></svg></span>
-        <h2>Wi-Fi</h2><p>The network AirWriter prints over. <a href="https://github.com/wr/airwriter/wiki/Setup" target=_blank rel=noopener>Learn&nbsp;More…</a></p></div>
+        <h2>Wi-Fi</h2><p>Put AirWriter on the same network as your phones and computers. <a href="https://github.com/wr/airwriter/wiki/Setup" target=_blank rel=noopener>Learn&nbsp;More…</a></p></div>
       <div class=box>
         <div class=row id=ssid-row><span class=txt>Wi-Fi network</span><span class=val><i class=lamp id=wifi-lamp></i><span id=ssid></span></span>
           <span class=glyphs id=wifi-glyphs></span><button class=btn type=button id=change>Change…</button></div>
@@ -228,20 +227,20 @@
     <path class=cable d="M68 92C68 160 180 160 180 92"/>
     <path class=flow id=flow d="M180 92C180 160 68 160 68 92C68 160 180 160 180 92"/>
   </svg>
-  <p>Plug one cable into both ports, then click Test.</p>
+  <p>Plug one cable into both ports, then choose Test.</p>
   <p class=say id=cable-say></p>
   <div class=btnrow><button class="btn hide" type=button id=ltflash>Flash TashTalk</button><button class=btn type=button data-close>Cancel</button><button class="btn primary" type=button id=cabletest>Test</button></div>
 </div></dialog>
 
 <dialog id=d-remove><div class=dlg>
   <b>Remove <span id=rm-name></span>?</b>
-  <p>It disappears from your phones and computers, and comes back if you connect it again.</p>
+  <p>It disappears from your phones and computers. If it’s still connected, it comes back.</p>
   <div class=btnrow><button class=btn type=button data-close>Cancel</button><button class="btn danger primary" type=button id=rm-go>Remove</button></div>
 </div></dialog>
 
 <dialog id=d-add><div class=dlg>
   <b>Add a printer on the printer port</b>
-  <p>For an ImageWriter that’s switched off, or an original ImageWriter. AppleTalk printers appear on their own.</p>
+  <p>Add an ImageWriter that’s switched off, or an original ImageWriter. Printers on AppleTalk show up by themselves.</p>
   <div class=box><div class=row><span class=txt>Model</span><select class=pop id=add-model aria-label=Model><option>ImageWriter II</option><option>ImageWriter LQ</option><option>ImageWriter</option></select></div></div>
   <p class=say id=add-say></p>
   <div class=btnrow><button class=btn type=button data-close>Cancel</button><button class="btn primary" type=button id=add-go>Add</button></div>
@@ -259,18 +258,18 @@
 <dialog id=d-bas><div class=dlg>
   <b>Set up Basilisk II</b>
   <ol>
-    <li>In Basilisk II's settings, open Ports and turn on <span class=q>Tunnel Mac OS networking over UDP</span> and <span class=q>Tunnel AppleTalk only</span>.</li>
+    <li>In Basilisk II’s settings, open Ports and turn on <span class=q>Tunnel Mac OS networking over UDP</span> and <span class=q>Tunnel AppleTalk only</span>.</li>
     <li>Start the Mac and choose EtherTalk in its Network control panel.</li>
   </ol>
-  <p>The second keeps that Mac on the internet. Older versions of Basilisk II don't have it, and there the tunnel cuts the Mac off the internet. <a href="https://github.com/wr/airwriter/wiki/Vintage-Macs-(LocalTalk)" target=_blank rel=noopener>Learn&nbsp;More…</a></p>
+  <p>The second keeps the Mac on the internet. Older versions of Basilisk II don’t have it, and the Mac loses the internet while the tunnel is on. <a href="https://github.com/wr/airwriter/wiki/Vintage-Macs-(LocalTalk)" target=_blank rel=noopener>Learn&nbsp;More…</a></p>
   <div class=btnrow><button class="btn primary" type=button data-close>Done</button></div>
 </div></dialog>
 
 <dialog id=d-inf><div class=dlg>
   <b>Set up Infinite Mac</b>
-  <p>Infinite Mac's Macs share AppleTalk in a zone you name. AirWriter joins this one:</p>
+  <p>Macs in Infinite Mac share AppleTalk in a zone you name.</p>
   <div class=box><div class=row><input class="fld mono" id=zone autocomplete=off autocapitalize=off spellcheck=false maxlength=32 aria-label="Zone name"><button class=btn type=button id=copyzone>Copy</button></div></div>
-  <p>Anyone who opens Infinite Mac with this zone name can print here. To join a zone you already use, type its name.</p>
+  <p>Anyone who opens Infinite Mac with this zone name can print here. To use a zone you already have, type its name.</p>
   <p class=say id=zone-say></p>
   <div class=btnrow><button class=btn type=button id=newzone>New Name</button><a class=btn id=imopen target=_blank rel=noopener>Open Infinite Mac</a><button class="btn primary" type=button id=zonedone>Done</button></div>
 </div></dialog>
@@ -285,13 +284,13 @@
 
 <dialog id=d-erase><div class=dlg>
   <b>Erase all settings?</b>
-  <p>Erases the Wi-Fi network, your printers and every other setting, then restarts. Join the <span id=apname>AirWriter</span> network to set it up again.</p>
+  <p>Your Wi-Fi network, printers and every other setting are erased, and AirWriter restarts. Join the <span id=apname>AirWriter</span> network to set it up again.</p>
   <div class=btnrow><button class=btn type=button data-close>Cancel</button><button class="btn danger primary" type=button id=erase>Erase</button></div>
 </div></dialog>
 
 <dialog id=d-restart><div class=dlg>
   <b>Restart AirWriter?</b>
-  <p>A page that is printing finishes first.</p>
+  <p>Anything printing finishes first.</p>
   <div class=btnrow><button class=btn type=button data-close>Cancel</button><button class="btn primary" type=button id=restart>Restart</button></div>
 </div></dialog>
 
