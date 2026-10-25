@@ -21,6 +21,7 @@ static const char k_ntx[] =
     "aw:res=300 300\r"
     "aw:area=14.16 8.4 597.84 783.6\r"
     "aw:size=?\r"
+    "aw:startpage=true\r"
     "aw:probe=256 1\r"
     "aw:end\r";
 
@@ -32,9 +33,12 @@ static int parse_stdin(void)
     size_t n;
     while ((n = fread(buf, 1, sizeof buf, stdin)) > 0) lw_parse_feed(&p, buf, n);
     const lw_info_t *i = &p.info;
-    printf("complete=%d product=%s level=%d binary=%d dpi=%d page=%s area=%d %d %d %d\n",
+    printf("complete=%d product=%s level=%d binary=%d dpi=%d page=%s area=%d %d %d %d "
+           "start_page=%s refused=%d\n",
            i->complete, i->product, i->level, i->binary, i->dpi, lw_page_name(i->page),
-           (int)i->area[0], (int)i->area[1], (int)i->area[2], (int)i->area[3]);
+           (int)i->area[0], (int)i->area[1], (int)i->area[2], (int)i->area[3],
+           i->start_page == LW_START_ON ? "on" : i->start_page == LW_START_OFF ? "off" : "unknown",
+           p.refused);
     return 0;
 }
 
@@ -69,6 +73,8 @@ int main(int argc, char **argv)
     CHECK_EQ_INT(i->area[3], 78360);
     CHECK_EQ_INT(i->page, LW_LETTER);
     CHECK_EQ_INT(i->binary, 1);
+    CHECK_EQ_INT(i->start_page, LW_START_ON);
+    CHECK_EQ_INT(p.refused, 0);
     CHECK_EQ_INT(i->complete, 1);
 
     // LF line ends, split mid-line; a failed probe; Level 2 with a page size.
@@ -118,6 +124,50 @@ int main(int argc, char **argv)
     CHECK_EQ_INT(d.page, LW_LETTER);
     CHECK_EQ_INT(d.area[0], 1800);
     CHECK_EQ_INT(d.area[3], 77400);
+    CHECK_EQ_INT(d.start_page, LW_START_UNKNOWN);
+
+    // W-1099: the start page, as the query and the start page job read it
+    // back. A printer that can't say keeps it unknown, and the page shows no
+    // switch for it.
+    lw_parse_init(&p);
+    const char *off = "aw:startpage=false\r";
+    lw_parse_feed(&p, (const uint8_t *)off, strlen(off));
+    CHECK_EQ_INT(i->start_page, LW_START_OFF);
+    lw_parse_init(&p);
+    const char *unsaid = "aw:startpage=?\raw:startpage=maybe\raw:end\r";
+    lw_parse_feed(&p, (const uint8_t *)unsaid, strlen(unsaid));
+    CHECK_EQ_INT(i->start_page, LW_START_UNKNOWN);
+    // A password other than 0: exitserver refuses, and the rest is flushed.
+    lw_parse_init(&p);
+    const char *pw = "%%[ exitserver: permanent state may be changed ]%%\r";
+    lw_parse_feed(&p, (const uint8_t *)pw, strlen(pw));
+    CHECK_EQ_INT(p.refused, 0);
+    pw = "%%[ Error: invalidaccess; OffendingCommand: exitserver ]%%\r"
+         "%%[ Flushing: rest of job (to end-of-file) will be ignored ]%%\r";
+    lw_parse_feed(&p, (const uint8_t *)pw, strlen(pw));
+    CHECK_EQ_INT(p.refused, 1);
+    CHECK_EQ_INT(i->start_page, LW_START_UNKNOWN);
+
+    // The start page job: LaserWriter Utility's recipe, then the answer. It
+    // runs outside the server loop's save, so it defines nothing: whatever it
+    // defined would sit in the printer's memory until it is switched off.
+    static uint8_t sp[1024];
+    for (int on = 0; on < 2; on++) {
+        size_t sn = lw_start_page_job(sp, sizeof sp, on);
+        CHECK(sn > 0 && sn < sizeof sp);
+        sp[sn < sizeof sp ? sn : sizeof sp - 1] = '\0';
+        const char *s = (const char *)sp;
+        CHECK(memcmp(s, "%!PS-Adobe-3.0\n", 15) == 0);
+        const char *ex = strstr(s, "serverdict begin 0 exitserver");
+        const char *set = strstr(s, on ? "true setdostartpage" : "false setdostartpage");
+        const char *ask = strstr(s, "(aw:startpage=)");
+        const char *end = strstr(s, "(aw:end");
+        CHECK(ex && set && ask && end && ex < set && set < ask && ask < end);
+        CHECK(strstr(s, on ? "false setdostartpage" : "true setdostartpage") == NULL);
+        CHECK(strstr(s, " def") == NULL && strstr(s, "def\n") == NULL);
+        CHECK(strstr(s, "%%EOF") != NULL);
+    }
+    CHECK_EQ_INT(lw_start_page_job(sp, 40, 1), 0);
 
     // The query job: Level 1 text around the 256-byte probe, which follows
     // one LF after the procedure that reads it.
@@ -135,6 +185,9 @@ int main(int argc, char **argv)
     if (probe_at > 0) CHECK_EQ_INT(q[probe_at - 1], '\n');
     CHECK(probe_at > 1 && q[probe_at - 2] != '\r');
     CHECK_EQ_INT(lw_query_job(q, 100), 0);
+    // It asks for the start page (W-1099), before the probe like every question.
+    q[probe_at] = '\0';
+    CHECK(strstr((const char *)q, "(startpage)") != NULL);
 
     // Status strings as IPP reasons (spec, "Status and errors").
     check_map("status: idle", "none", 0, 0);

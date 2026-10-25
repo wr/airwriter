@@ -488,6 +488,13 @@ static void test_json(void)
     snprintf(want, sizeof want, "\"rp\":\"ipp/p%d\"", lw);
     n = pr_json(&L, live, buf, sizeof buf);
     CHECK(strstr(buf, want) != NULL);
+    CHECK(strstr(buf, "\"start_page\":true") == NULL);  // W-1099: it didn't say
+    CHECK(strstr(buf, "\"start_page\":false") == NULL);
+    CHECK(strstr(buf, "\"start_page\":null") != NULL);
+    info.start_page = LW_START_OFF;
+    pr_at_queried(&L, lw, 1, &info);
+    n = pr_json(&L, live, buf, sizeof buf);
+    CHECK(strstr(buf, "\"start_page\":false") != NULL);
     pr_get(&L, lw)->ipp_laser = 1;                    // W-1082's keeps its path
     n = pr_json(&L, live, buf, sizeof buf);
     CHECK(strstr(buf, "\"rp\":\"ipp/laser\"") != NULL);
@@ -553,6 +560,28 @@ static void test_post(void)
     CHECK_EQ_INT(pr_post(&L, body, &r), -1);
     snprintf(body, sizeof body, "{\"id\":%d,\"gain\":46}", lw);
     CHECK_EQ_INT(pr_post(&L, body, &r), -1);
+
+    // W-1099: the start page is the printer's own: asked for here, set by a
+    // job to it. Only for a LaserWriter that said whether it prints one.
+    snprintf(body, sizeof body, "{\"id\":%d,\"start_page\":false}", lw);
+    CHECK_EQ_INT(pr_post(&L, body, &r), -1);
+    CHECK(strstr(r.err, "start page") != NULL);
+    snprintf(body, sizeof body, "{\"id\":%d,\"start_page\":false}", port);
+    CHECK_EQ_INT(pr_post(&L, body, &r), -1);
+    info.start_page = LW_START_ON;
+    pr_at_queried(&L, lw, 1, &info);
+    snprintf(body, sizeof body, "{\"id\":%d,\"start_page\":false}", lw);
+    CHECK_EQ_INT(pr_post(&L, body, &r), 0);
+    CHECK_EQ_INT(r.start_page, 0);
+    CHECK_EQ_INT(r.start_page_id, lw);
+    CHECK_EQ_INT(r.changed, 0);
+    CHECK_EQ_INT(pr_get(&L, lw)->lw.start_page, LW_START_ON);   // until the printer says
+    snprintf(body, sizeof body, "{\"id\":%d,\"start_page\":true}", lw);
+    CHECK_EQ_INT(pr_post(&L, body, &r), 0);
+    CHECK_EQ_INT(r.start_page, 1);
+    snprintf(body, sizeof body, "{\"id\":%d,\"name\":\"Office\"}", lw);
+    CHECK_EQ_INT(pr_post(&L, body, &r), 0);
+    CHECK_EQ_INT(r.start_page, -1);
 
     CHECK_EQ_INT(pr_post(&L, "{\"look\":true}", &r), 0);
     CHECK_EQ_INT(r.look, 1);

@@ -150,6 +150,17 @@ async def main():
         code, lines, _ = await scenario(["query", NAME], {"hex_only": True})
         q = has(lines, "query ") or ""
         check(code == 0 and "binary=0" in q and "complete=1" in q, f"query, hex only: {q}")
+        check("start_page=on" in q, "query: it prints a start page")
+
+        # W-1099: the start page job, read back; a password refuses it.
+        code, lines, fake = await scenario(["start-page", NAME, "off"])
+        q = has(lines, "query ") or ""
+        check(code == 0 and "start_page=off" in q and "refused=0" in q and not fake.start_page,
+              f"start page off: {q}")
+        code, lines, fake = await scenario(["start-page", NAME, "off"], {"password": True})
+        q = has(lines, "query ") or ""
+        check("start_page=unknown" in q and "refused=1" in q and fake.start_page,
+              f"start page, password: {q}")
 
         out = tmp / "jobs"
         code, lines, fake = await scenario(["print", NAME, str(page)], {"out": out})

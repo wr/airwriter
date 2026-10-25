@@ -135,9 +135,12 @@ size_t pr_json(const pr_list_t *l, const pr_live_t live[PR_MAX], char *buf, size
 // "ImageWriter II"|"ImageWriter LQ"|"ImageWriter"}, {"note":N,
 // "accept"|"dismiss":true}, or {"id":N, then any of "name":"...",
 // "shared":bool, "model":"ImageWriter II"|"ImageWriter LQ"|"ImageWriter"|
-// "none", "remove":true, "use_anyway":true, "dither":"...", "gain":0-45}.
-// 0 done; -1 with a sentence for the page in err.
-typedef struct { int changed, look, screen_id; char err[64]; } pr_post_t;
+// "none", "remove":true, "use_anyway":true, "dither":"...", "gain":0-45,
+// "start_page":bool}. 0 done; -1 with a sentence for the page in err.
+// start_page (W-1099) changes nothing here: it is the printer's own, set by a
+// job to it (start_page_id's, 0 off or 1 on; -1 not asked), and the record
+// follows the printer's answer.
+typedef struct { int changed, look, screen_id, start_page_id, start_page; char err[64]; } pr_post_t;
 int pr_post(pr_list_t *l, const char *body, pr_post_t *out);
 
 // A board's first boot on W-1088 (no host name stored yet): one set up before

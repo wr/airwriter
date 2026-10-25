@@ -11,10 +11,12 @@
 //   status <text>
 //   output <line>                     (the printer's output, read back)
 //   query product=<p> level=<n> binary=<0|1> page=<p> complete=<0|1>
+//         start_page=on|off|unknown refused=<0|1>
 //   ended ok|canceled|busy|dead|refused|dropped
 //
 //   lwhost lookup
 //   lwhost query NAME
+//   lwhost start-page NAME on|off       (W-1099: the start page job, read back as a query)
 //   lwhost print NAME FILE [--cancel-after BYTES]
 //   lwhost status NAME
 //   ... [--dead-ms MS]                (the client's silence limit, for tests)
@@ -127,8 +129,10 @@ static void ended(void *ctx, papc_end_t how)
     s_line_n = 0;
     if (s_query) {
         const lw_info_t *i = &s_parse.info;
-        fprintf(stderr, "query product=%s level=%u binary=%u page=%s complete=%u\n",
-                i->product, i->level, i->binary, lw_page_name(i->page), i->complete);
+        fprintf(stderr, "query product=%s level=%u binary=%u page=%s complete=%u start_page=%s "
+                "refused=%u\n", i->product, i->level, i->binary, lw_page_name(i->page), i->complete,
+                i->start_page == LW_START_ON ? "on" : i->start_page == LW_START_OFF ? "off" : "unknown",
+                s_parse.refused);
     }
     fprintf(stderr, "ended %s\n", names[how]);
     s_ended = (int)how;
@@ -183,8 +187,8 @@ static int find(void)
 
 static void usage(void)
 {
-    fputs("usage: lwhost lookup | query NAME | print NAME FILE [--cancel-after N] | status NAME"
-          " [--dead-ms MS]\n", stderr);
+    fputs("usage: lwhost lookup | query NAME | start-page NAME on|off | print NAME FILE"
+          " [--cancel-after N] | status NAME [--dead-ms MS]\n", stderr);
     exit(2);
 }
 
@@ -198,7 +202,7 @@ int main(int argc, char **argv)
         if (argc < 3) usage();
         s_want = argv[k++];
     }
-    if (!strcmp(cmd, "print")) {
+    if (!strcmp(cmd, "print") || !strcmp(cmd, "start-page")) {
         if (argc < 4) usage();
         file = argv[k++];
     }
@@ -235,6 +239,12 @@ int main(int argc, char **argv)
     if (!strcmp(cmd, "query")) {
         static uint8_t q[4096];
         s_job_len = lw_query_job(q, sizeof q);
+        s_job = q;
+        s_query = 1;
+        lw_parse_init(&s_parse);
+    } else if (!strcmp(cmd, "start-page")) {
+        static uint8_t q[1024];
+        s_job_len = lw_start_page_job(q, sizeof q, !strcmp(file, "on"));
         s_job = q;
         s_query = 1;
         lw_parse_init(&s_parse);

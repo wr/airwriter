@@ -41,8 +41,10 @@ to job-N.png at 300 dpi when Ghostscript is installed). Like a real one it
 takes any number of jobs on a connection: after its EOF it pulls the next.
 Lines on stdin fault it: `busy SECONDS`, `paper` (out of paper), `jam`, `ok`,
 `error` (the next job gets a PostScript error), `drop` (it answers nothing
-more). --hex-only answers the binary probe as a Level 1 machine that cannot
-take binary would.
+more), `password` (a password other than 0: the start page can't be set,
+W-1099). --hex-only answers the binary probe as a Level 1 machine that cannot
+take binary would. It prints a start page at power-on until the board's
+start page job turns it off.
 A tunnel fake starts itself again when this Mac's address changes.
 `--also NAME` adds another fake LaserWriter, at its own AppleTalk address, on
 the same tunnel (one Mac can bind the tunnel's port once); its jobs go in
@@ -609,10 +611,12 @@ class Conn:
 class LaserWriter(Mac):
     """A fake PostScript LaserWriter on AppleTalk (W-1082): see the module doc."""
 
-    def __init__(self, t, name, hex_only=False, out=None, busy=0, error=False, paper=False):
+    def __init__(self, t, name, hex_only=False, out=None, busy=0, error=False, paper=False,
+                 password=False):
         super().__init__(t)
         self.lw_name = name.encode("mac_roman")[:32]
         self.hex_only, self.out_dir = hex_only, pathlib.Path(out) if out else None
+        self.start_page, self.password = True, password
         self.busy_until = time.monotonic() + busy
         self.error_next, self.paused, self.dropped = error, False, False
         self.fault = None
@@ -647,6 +651,8 @@ class LaserWriter(Mac):
             self.error_next = True
         elif w[0] == "drop":
             self.dropped = True
+        elif w[0] == "password":
+            self.password = True
         else:
             print(f"unknown command {line!r}: busy N, paper, jam, ok, error, drop")
             return
@@ -784,8 +790,22 @@ class LaserWriter(Mac):
         if job.startswith(b"%!PS-Adobe-3.0\n%%Title: AirWriter query"):
             intact = bytes(range(256)) in job
             probe = b"256 1" if intact and not self.hex_only else b"256 0"
-            c.out += QUERY_ANSWER + b"aw:probe=" + probe + b"\raw:end\r"
+            c.out += (QUERY_ANSWER + b"aw:startpage=" + (b"true" if self.start_page else b"false")
+                      + b"\raw:probe=" + probe + b"\raw:end\r")
             print(f"fake LaserWriter: query answered (binary {'ok' if probe.endswith(b'1') else 'refused'})")
+        elif job.startswith(b"%!PS-Adobe-3.0\n%%Title: AirWriter start page"):
+            # W-1099: exitserver with password 0, then setdostartpage, read back.
+            if self.password:
+                c.out += (b"%%[ Error: invalidaccess; OffendingCommand: exitserver ]%%\r"
+                          b"%%[ Flushing: rest of job (to end-of-file) will be ignored ]%%\r")
+                print("fake LaserWriter: start page refused (password)")
+            else:
+                if b"true setdostartpage" in job or b"false setdostartpage" in job:
+                    self.start_page = b"true setdostartpage" in job
+                c.out += (b"%%[ exitserver: permanent state may be changed ]%%\r"
+                          b"aw:startpage=" + (b"true" if self.start_page else b"false")
+                          + b"\raw:end\r")
+                print(f"fake LaserWriter: start page {'on' if self.start_page else 'off'}")
         elif not c.error:
             self.save(job)
         c.done = True

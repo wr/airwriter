@@ -631,6 +631,7 @@ function prOpen(id){
   say('prn-say','');
   if(id!==null){ document.querySelector('.detail').scrollTop=0; pdDraw(); requestAnimationFrame(render); lwtPoll(); }
 }
+let spSaving=false;                 // W-1099: the start page on its way to the printer
 function pdDraw(){
   const p=prById(sel);
   if(!p){ prOpen(null); return; }
@@ -651,6 +652,9 @@ function pdDraw(){
   const atiw=p.kind==='appletalk-imagewriter';     // W-1088: old Macs' only, for now
   $('share-row').classList.toggle('hide',unk||atiw);
   $('pshare').checked=!!p.shared; $('pshare').disabled=!p.identified;
+  // W-1099: a LaserWriter's own start page, where it said whether it prints one
+  $('sp-row').classList.toggle('hide',p.kind!=='laserwriter'||typeof p.start_page!=='boolean');
+  if(!spSaving){ $('pstart').checked=!!p.start_page; $('pstart').disabled=p.state==='offline'; }
   $('pd-cant').classList.toggle('hide',!unk&&!atiw);
   $('pd-cant').textContent=ask?'Unrecognized printer. If it’s an ImageWriter, choose its model.'
     :atiw?'Old Macs on your other AppleTalk ways in can print to it. AirWriter can’t share it with iPhones and Macs yet.'
@@ -710,6 +714,16 @@ $('model').onchange=()=>prPost({id:sel,model:$('model').value},'Saved.');
 $('pshare').onchange=async()=>{
   const on=$('pshare').checked;
   if(!await prPost({id:sel,shared:on},on?'Shared. iPhones and Macs see it in a moment.':'Not shared.')) $('pshare').checked=!on;
+};
+/* The start page is stored in the printer: the board sends it a job and
+   answers once the printer says, a few seconds. */
+$('pstart').onchange=async()=>{
+  const b=$('pstart'), on=b.checked;
+  spSaving=true; b.disabled=true; say('prn-say','Saving…');
+  const ok=await prPost({id:sel,start_page:on},'Saved.');
+  spSaving=false;
+  if(!ok) b.checked=!on;
+  pdDraw();
 };
 $('screen').onchange=()=>{
   const p=prById(sel); if(p&&p.kind==='imagewriter'){ dither=$('screen').value; render(); }

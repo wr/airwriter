@@ -26,6 +26,8 @@ static const char k_head[] =
     "(area) { gsave initclip clippath pathbbox grestore 4 -1 roll awp ( ) print\n"
     "  3 -1 roll awp ( ) print exch awp ( ) print awp } awq\n"
     "(size) { currentpagedevice /PageSize get aload pop exch awp ( ) print awp } awq\n"
+    // An operator on a LaserWriter, a boolean in Ghostscript.
+    "(startpage) { statusdict /dostartpage get dup type /booleantype ne { exec } if awp } awq\n"
     "(probe) { /awb 256 string def currentfile awb readstring pop length awp ( ) print\n"
     "  true 0 1 255 { dup awb exch get ne { pop false } if } for { (1) } { (0) } ifelse print } awq\n";
 static const char k_tail[] =
@@ -34,6 +36,34 @@ static const char k_tail[] =
 // After the probe, a line of spaces as long as it: a channel that drops
 // probe bytes leaves readstring eating spaces, not the end of the job.
 #define PAD 256
+
+// After exitserver nothing is undone at the job's end, so no defs: only the
+// setting, then its answer read back.
+static const char k_sp_head[] =
+    "%!PS-Adobe-3.0\n"
+    "%%Title: AirWriter start page\n"
+    "%%Creator: AirWriter\n"
+    "%%EndComments\n"
+    "serverdict begin 0 exitserver\n"
+    "statusdict begin ";
+static const char k_sp_tail[] =
+    " setdostartpage end\n"
+    "(aw:startpage=) print\n"
+    "statusdict /dostartpage get dup type /booleantype ne { exec } if\n"
+    "{ (true) } { (false) } ifelse print (\\n) print\n"
+    "(aw:end\\n) print flush\n"
+    "%%EOF\n";
+
+size_t lw_start_page_job(uint8_t *out, size_t cap, int on)
+{
+    const char *v = on ? "true" : "false";
+    size_t h = sizeof k_sp_head - 1, n = strlen(v), t = sizeof k_sp_tail - 1;
+    if (cap < h + n + t) return 0;
+    memcpy(out, k_sp_head, h);
+    memcpy(out + h, v, n);
+    memcpy(out + h + n, k_sp_tail, t);
+    return h + n + t;
+}
 
 size_t lw_query_job(uint8_t *out, size_t cap)
 {
@@ -132,6 +162,9 @@ static void answer(lw_parse_t *p, const char *key, const char *val)
             p->sized = 1;
             i->page = h > 900 ? LW_LEGAL : (w < 604 && h > 800) ? LW_A4 : LW_LETTER;
         }
+    } else if (!strcmp(key, "startpage")) {
+        if (!strcmp(val, "true")) i->start_page = LW_START_ON;
+        else if (!strcmp(val, "false")) i->start_page = LW_START_OFF;
     } else if (!strcmp(key, "probe")) {
         int k = numbers(val, v, 2);
         i->binary = k == 2 && v[0] == 256 && v[1] == 1;
@@ -145,6 +178,8 @@ static void line_done(lw_parse_t *p)
 {
     p->line[p->n] = '\0';
     p->n = 0;
+    // W-1099: exitserver's answer to a password other than 0.
+    if (!strncmp(p->line, "%%[", 3) && strstr(p->line, "invalidaccess")) p->refused = 1;
     if (strncmp(p->line, "aw:", 3)) return;             // %%[ status ]%% and the like
     char *eq = strchr(p->line + 3, '=');
     if (!eq) {

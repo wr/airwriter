@@ -36,6 +36,8 @@ static const char *TAG = "laser";
 #define STALL_MS   (CONFIG_AIRWRITER_STALL_ABORT * 1000u)
 #define SPOOL      (16 * 1024)       // between the rip and the client: 4 SendData answers
 #define QUERY_BUSY_MS 60000          // a query waits out a busy printer this long
+#define SP_BUSY_MS 8000              // W-1099: the start page job, while the page waits
+#define SP_WAIT_MS 25000             // the page's request, for the printer's answer
 #define INFO_VER   1
 // The first look waits (laser_cfg_t's first_look_ms) for Wi-Fi and Infinite
 // Mac's TLS handshake to settle: lookups and their answers take Wi-Fi buffers
@@ -112,9 +114,21 @@ static volatile int s_relay_id = -1, s_relay_mac_link = -1;
 static const lt_node_t *volatile s_relay_node;
 static int       s_relay_locked;
 
+// W-1099: the start page, asked for from the web server's task (under
+// s_sp_mx, one at a time) and taken by the laser task (under s_mu). Each
+// request has its number, so an answer that comes after its request gave up
+// is not the next one's.
+static SemaphoreHandle_t s_sp_mx, s_sp_sem;
+static int       s_sp_id = -1, s_sp_on;
+static uint32_t  s_sp_seq;
+static volatile uint32_t s_sp_done;                 // the request answered last
+static volatile int s_sp_rc;
+
 // The laser task's.
 static int       s_pc_link = -1;
 static int       s_query_id = -1;                   // whom the query in flight asked (review M12)
+static int       s_ask_sp = -1;                     // the aw: job in flight sets the start page (0, 1)
+static uint32_t  s_ask_seq;                         // and answers this request
 // A job's OpenConn, run on the laser task (its stack is sized for the send
 // path; an IPP worker's is not: review I5).
 static volatile int s_open_req, s_open_rc;
@@ -359,18 +373,20 @@ void laser_look_now(void)
 
 // ------------------------------------------------------------- the query
 
-static void query_start(int id, int link, const lt_route_t *r)
+// Sends s_big->query's n bytes, a job that prints nothing and answers in aw:
+// lines (the query, or W-1099's start page), its answers into s_parse; the
+// laser task's query_done reads them once the connection ends. 0, 1 with the
+// client taken (nothing sent), or -1 when the open failed.
+static int ask(int id, int link, const lt_route_t *r, size_t n, uint32_t busy_ms)
 {
-    uint8_t *q = s_big->query;
-    size_t n = lw_query_job(q, sizeof s_big->query);
     xSemaphoreTake(s_client_mx, portMAX_DELAY);
     if (s_use != USE_NONE) {
         xSemaphoreGive(s_client_mx);
-        return;
+        return 1;
     }
     ride(link);
     spool_reset();
-    xStreamBufferSend(s_spool, q, n, 0);
+    xStreamBufferSend(s_spool, s_big->query, n, 0);
     s_spool_eof = 1;
     lw_parse_init(&s_parse);
     s_ended = -1;
@@ -380,10 +396,17 @@ static void query_start(int id, int link, const lt_route_t *r)
     lock();
     s_status_id = s_open_id = id;
     unlock();
-    int rc = call(OP_OPEN, r, QUERY_BUSY_MS);
+    int rc = call(OP_OPEN, r, busy_ms);
     xSemaphoreGive(s_client_mx);
+    if (rc) s_use = USE_NONE;
+    return rc ? -1 : 0;
+}
+
+static void query_start(int id, int link, const lt_route_t *r)
+{
+    int rc = ask(id, link, r, lw_query_job(s_big->query, sizeof s_big->query), QUERY_BUSY_MS);
+    if (rc > 0) return;
     if (rc) {
-        s_use = USE_NONE;
         lock();
         lwc_queried(&s_core, ti_of(id), 0, now_ms());
         unlock();
@@ -393,8 +416,106 @@ static void query_start(int id, int link, const lt_route_t *r)
     ESP_LOGI(TAG, "asking printer %d what it is", id);
 }
 
+// ------------------------------------------------------------- the start page
+// W-1099. On the laser task.
+
+static void sp_answer(uint32_t seq, int rc)
+{
+    s_sp_rc = rc;
+    s_sp_done = seq;
+    xSemaphoreGive(s_sp_sem);
+}
+
+// The request the page made, if any, once the client is free of queries.
+static void start_page_start(void)
+{
+    lock();
+    int id = s_sp_id, on = s_sp_on;
+    uint32_t seq = s_sp_seq;
+    s_sp_id = -1;
+    int ti = id >= 0 ? ti_of(id) : -1;
+    lwc_view_t v = lwc_view(&s_core, ti, now_ms());
+    lt_route_t r = v.idx >= 0 ? s_core.heard[v.idx].route : (lt_route_t){ 0 };
+    int link = v.idx >= 0 ? s_core.heard[v.idx].link : -1;
+    int ok = ti >= 0 && s_tg[ti].kind == LASER_KIND_LW && s_tg[ti].have_info && link >= 0;
+    unlock();
+    if (id < 0) return;
+    if (!ok) {
+        sp_answer(seq, LASER_SP_NOT_HEARD);
+        return;
+    }
+    int rc = ask(id, link, &r, lw_start_page_job(s_big->query, sizeof s_big->query, on), SP_BUSY_MS);
+    if (rc) {
+        sp_answer(seq, rc > 0 ? LASER_SP_BUSY : LASER_SP_NO_ANSWER);
+        return;
+    }
+    // Only once it is this job's: a query's end is told apart by it, on this
+    // task, which reads the end later.
+    s_ask_sp = on;
+    s_ask_seq = seq;
+    ESP_LOGI(TAG, "turning printer %d's start page %s", id, on ? "on" : "off");
+}
+
+static void start_page_done(void)
+{
+    int id = s_query_id, got = s_parse.info.start_page;
+    int want = s_ask_sp ? LW_START_ON : LW_START_OFF;
+    int rc = s_ended == PAPC_END_BUSY ? LASER_SP_BUSY
+           : got == want ? LASER_SP_OK
+           : s_parse.refused ? LASER_SP_REFUSED : LASER_SP_NO_ANSWER;
+    lw_info_t info;
+    int tell = 0;
+    lock();
+    int ti = ti_of(id);
+    if (ti >= 0 && got && s_tg[ti].have_info) {
+        s_tg[ti].info.start_page = (uint8_t)got;
+        info = s_tg[ti].info;
+        tell = 1;
+    }
+    unlock();
+    static const char *const why[] = { "done", "printer busy", "password refused", "no answer", "" };
+    ESP_LOGI(TAG, "start page for printer %d: %s, %s", id,
+             got == LW_START_ON ? "on" : got == LW_START_OFF ? "off" : "unknown", why[rc]);
+    s_ask_sp = -1;
+    s_use = USE_NONE;
+    if (tell && s_cfg.queried) s_cfg.queried(id, 1, &info);
+    sp_answer(s_ask_seq, rc);
+}
+
+int laser_set_start_page(int id, int on)
+{
+    if (!s_started) return LASER_SP_NOT_HEARD;
+    xSemaphoreTake(s_sp_mx, portMAX_DELAY);
+    lock();
+    uint32_t me = ++s_sp_seq;
+    s_sp_id = id;
+    s_sp_on = on ? 1 : 0;
+    unlock();
+    xTaskNotifyGive(s_task);
+    int rc = LASER_SP_NO_ANSWER;
+    uint64_t until = now_ms() + SP_WAIT_MS;
+    for (uint64_t t; (t = now_ms()) < until;) {
+        if (xSemaphoreTake(s_sp_sem, pdMS_TO_TICKS(until - t)) != pdTRUE) break;
+        if (s_sp_done == me) {
+            rc = s_sp_rc;
+            break;
+        }
+    }
+    lock();
+    s_sp_id = -1;                                   // not taken yet: never sent
+    unlock();
+    xSemaphoreGive(s_sp_mx);
+    return rc;
+}
+
+// ------------------------------------------------------------- the query's end
+
 static void query_done(void)
 {
+    if (s_ask_sp >= 0) {
+        start_page_done();
+        return;
+    }
     int ok = s_ended == PAPC_END_OK && s_parse.info.complete;
     int id = s_query_id;
     lock();
@@ -659,6 +780,8 @@ static void laser_task(void *arg)
             xSemaphoreGive(s_client_mx);
         }
         if (s_use == USE_QUERY && s_ended >= 0) query_done();
+        // W-1099: after a query in flight, which is short; a job or a relay is busy.
+        if (s_sp_id >= 0 && s_use != USE_QUERY) start_page_start();
 
         lock();
         lwc_want_t w = lwc_tick(&s_core, now);
@@ -734,6 +857,8 @@ esp_err_t laser_start(const laser_cfg_t *cfg)
     s_ended_sem = xSemaphoreCreateBinary();
     s_open_sem = xSemaphoreCreateBinary();
     s_relay_mx = xSemaphoreCreateMutex();
+    s_sp_mx = xSemaphoreCreateMutex();
+    s_sp_sem = xSemaphoreCreateBinary();
     s_pc = heap_caps_calloc(1, sizeof *s_pc, MALLOC_CAP_SPIRAM);
     if (!s_pc) s_pc = calloc(1, sizeof *s_pc);
     s_big = heap_caps_calloc(1, sizeof *s_big, MALLOC_CAP_SPIRAM);
@@ -741,8 +866,8 @@ esp_err_t laser_start(const laser_cfg_t *cfg)
     uint8_t *spool = heap_caps_malloc(SPOOL + 1, MALLOC_CAP_SPIRAM);
     uint8_t *m2p = heap_caps_malloc(RELAY_BUF, MALLOC_CAP_SPIRAM);
     uint8_t *p2m = heap_caps_malloc(RELAY_BUF, MALLOC_CAP_SPIRAM);
-    if (!s_mu || !s_client_mx || !s_ended_sem || !s_open_sem || !s_relay_mx || !s_pc || !s_big ||
-        !spool || !m2p || !p2m)
+    if (!s_mu || !s_client_mx || !s_ended_sem || !s_open_sem || !s_relay_mx || !s_sp_mx || !s_sp_sem ||
+        !s_pc || !s_big || !spool || !m2p || !p2m)
         return ESP_ERR_NO_MEM;
     pap_relay_init(&s_big->relay, m2p, p2m, RELAY_BUF);
     s_big->relay.lock = relay_lock;
