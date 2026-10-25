@@ -638,7 +638,12 @@ ImageWriter on the port keeps its identity, UUID and bytes (`tools/ipp/test/gold
   LaserWriter NTR: five, after 8 s of LLAP ENQs reusing its node ID). Every link's node passes a
   LkUp of one name, no wildcard, to `lwc_name_check`; for a LaserWriter or ImageWriter not heard
   in the last 30 s on that link it puts off one look until 3 s after the last check. A printer
-  switched on is found in seconds, new or renamed; nothing is sent while it is off.
+  switched on is found in seconds, new or renamed; nothing is sent while it is off (the NTR on
+  board 1: ready 3 s after its last check). A check of a new name from the address another name
+  was heard at ends that name there at once: a renamed printer answers the old name's SendStatus,
+  which names nothing. An old Mac's driver looks up its printer by name before printing, and a
+  look follows that too unless the name answered lately on that link. `/api/laser` counts looks
+  and checks.
 - **Roles.** A link runs when its way in is switched on or a printer in the list lives there;
   it answers old Macs only where its way in is on (3.15's offers).
 - **The query job** (`laser/lw_query.c`): a Level 1 PAP job that prints nothing and asks

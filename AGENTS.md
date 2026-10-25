@@ -249,8 +249,12 @@ What works on `main`:
   no sleep mode: off between uses is the power saving). The query also asks the page count; a
   printer new to the list at the address a silent one of the same product had, with as many
   pages or more, is that one renamed and keeps its record (uuid, AirPrint printer, settings).
-  Addresses and counts are NVS `printers`/`seen`, beside the list. Host-tested and built;
-  not yet benched on board 1. A LaserWriter is queried (Level 1 PostScript, a binary probe) and,
+  A check of a new name from the address another name was heard at ends that name there at
+  once: a renamed printer answers the old name's SendStatus, which names nothing. Addresses and
+  counts are NVS `printers`/`seen`, beside the list. Benched on board 1 2026-10-24: the NTR,
+  off 14 minutes and back on, was ready 3 s after its last name check (19 s after its first
+  frame); the fake, booted, was ready 5 s after, and renamed at its address kept its record and
+  uuid (two runs). Once, before the stale-name fix, a renamed fake was never found; not since. A LaserWriter is queried (Level 1 PostScript, a binary probe) and,
   once it answers, shared on AirPrint printer 1-3 at `ipp/p<id>` (W-1082's at `ipp/laser`), its
   own Bonjour name and UUID. Jobs rip at 300 dpi into Level 1 `imagemask` bands (`ps_page`) and
   go out through one PAP client beside the server (`localtalk/pap_client.c`); `components/laser`
