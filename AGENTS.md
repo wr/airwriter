@@ -13,6 +13,7 @@ being true, change or delete it in the same commit that made it false.
 |---|---|
 | `docs/SPEC.md` | The build spec, amended in place. Read before touching hardware or firmware. |
 | `docs/traps.md` | Gotchas still true, by topic. Read the section for what you are about to touch. |
+| `docs/voice-and-tone.md` | How AirWriter writes: settings page, wiki, README, posts. Read before writing any of them. |
 | `docs/cad-routine.md` | How to design, check and iterate printed parts. Follow it for any `enclosure/` change. |
 | `docs/hardware-rev-a.md` | Rev A as built: geometry, deviations from the spec and why, rev B list. |
 | `docs/library.md` | The custom KiCad library and 3D models. |
