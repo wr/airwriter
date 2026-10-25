@@ -261,7 +261,11 @@ What works on `main`:
   own Bonjour name and UUID. Jobs rip at 300 dpi into Level 1 `imagemask` bands (`ps_page`) and
   go out through one PAP client beside the server (`localtalk/pap_client.c`); `components/laser`
   holds the query, the status words, the caps and UUID, the policy (`lw_core.c`: lookups,
-  status in turn, queries) and the board's side (`laser.c`). `GET /api/laser` is diagnostics
+  status in turn, queries) and the board's side (`laser.c`). A LaserWriter's detail has a
+  Start page switch (`W-1099 LaserWriter detail: a switch for the printer's start page`) where
+  the printer says whether it prints one; flipping it sends `exitserver` with password 0 and
+  `setdostartpage`, and the page waits for the printer's answer. Board 1's NTR took it through
+  the relay (2026-10-24, DoStartPage read back false). `GET /api/laser` is diagnostics
   (heard, targets, the last job's figures); the page reads `/api/printers`. A link answers as
   the ImageWriter only where its card's switch is on, and runs for a printer in the list
   whatever it says. `etpeer.py laserwriter` is the fake (`--also NAME` for a second; it checks
@@ -298,11 +302,11 @@ its name in the Chooser. U7's PIC calibration words: `16E0 1DA8`. Its LocalTalk 
 2026-10-24, with its settings put back over the API. Its port printer's uuid is now
 `…4c57-0001-0001-10bda36e2434`, which orphans Mac queues added before that date. Printer: an ImageWriter II on J2 via
 Apple's crossover cable, fanfold paper loaded as the Owner's Guide says (top edge under the paper
-bail). It runs v0.2.0-163-gb07bc44-dirty, the same firmware as main (the branch that cut
-the "found" printer notice, before its commit), ahead of any release, with auto-update on; it shares the fake "LaserWriter II NT" on the Basilisk II tunnel when
+bail). It runs v0.2.0-175-g4bab2d5, main with the W-1099 branch (the start page switch) merged
+in, ahead of any release, with auto-update on; it shares the fake "LaserWriter II NT" on the Basilisk II tunnel when
 `etpeer.py tunnel laserwriter` runs on the Mac. On its AppleTalk cable since 2026-10-24: a
 Personal LaserWriter NTR (PostScript 2010.129, Level 2, 3 MB, 300 dpi, takes binary; 10,277
-pages that morning), AirPrint printer 3 at `ipp/p3`. Its toner is spent (more ordered), so
+pages that morning), AirPrint printer 3 at `ipp/p3`. Its start page is off (set from the board, 2026-10-24). Its toner is spent (more ordered), so
 its pages cannot be judged by eye yet; `statusdict /pagecount` through the relay
 (`etpeer.py tunnel print-ps`) shows each page came out. Its Top margin is calibrated to -7/8 in
 (`top_margin` -126): a page's line 1 in down and one 0.5 in from the bottom landed exactly there.

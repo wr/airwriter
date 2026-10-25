@@ -764,7 +764,7 @@ static int post_err(pr_post_t *o, const char *msg)
 int pr_post(pr_list_t *l, const char *body, pr_post_t *o)
 {
     memset(o, 0, sizeof *o);
-    o->screen_id = -1;
+    o->screen_id = o->start_page_id = o->start_page = -1;
     const char *b = body ? body : "";
     while (*b == ' ' || *b == '\n' || *b == '\r' || *b == '\t') b++;
     if (*b != '{') return post_err(o, "That isn't something AirWriter understands.");
@@ -838,6 +838,14 @@ int pr_post(pr_list_t *l, const char *body, pr_post_t *o)
         o->changed = 1;
         o->screen_id = id;
     }
+    if (json_has_bool(b, "start_page", &v)) {
+        const pr_rec_t *r = pr_get(l, id);
+        if (r->kind != PR_KIND_LASERWRITER ||
+            (r->lw.start_page != LW_START_ON && r->lw.start_page != LW_START_OFF))
+            return post_err(o, "This printer has no start page setting.");
+        o->start_page_id = id;
+        o->start_page = v ? 1 : 0;
+    }
     return 0;
 }
 
@@ -875,13 +883,17 @@ size_t pr_json(const pr_list_t *l, const pr_live_t live[PR_MAX], char *buf, size
             snprintf(rp, sizeof rp, "ipp/print");
         else if (r->shared && r->identified && r->kind == PR_KIND_LASERWRITER)
             snprintf(rp, sizeof rp, r->ipp_laser ? "ipp/laser" : "ipp/p%u", r->id);
+        // W-1099: a LaserWriter's start page, null where it never said.
+        int lw = r->kind == PR_KIND_LASERWRITER;
+        const char *sp = lw && r->lw.start_page == LW_START_ON ? "true"
+                       : lw && r->lw.start_page == LW_START_OFF ? "false" : "null";
         PUT("%s{\"id\":%u,\"name\":\"%s\",\"where\":\"%s\",\"kind\":\"%s\",\"model\":\"%s\","
             "\"shared\":%s,\"identified\":%s,\"found\":\"%s\",\"state\":\"%s\",\"uuid\":\"%s\","
-            "\"product\":\"%s\",\"dither\":\"%s\",\"gain\":%u,\"rp\":\"%s\"}",
+            "\"product\":\"%s\",\"dither\":\"%s\",\"gain\":%u,\"rp\":\"%s\",\"start_page\":%s}",
             i ? "," : "", r->id, e_name, pr_where_name(r->where), pr_kind_name(r->kind),
             pr_model_name(r->model), r->shared ? "true" : "false",
             r->identified ? "true" : "false", r->found_auto ? "auto" : "person",
-            states[one_state(&live[i])], r->uuid, e_prod, r->dither, r->gain, rp);
+            states[one_state(&live[i])], r->uuid, e_prod, r->dither, r->gain, rp, sp);
     }
     PUT("],\"notes\":[");
     for (int i = 0; i < l->n_notes; i++)

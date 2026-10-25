@@ -647,8 +647,9 @@ ImageWriter on the port keeps its identity, UUID and bytes (`tools/ipp/test/gold
 - **Roles.** A link runs when its way in is switched on or a printer in the list lives there;
   it answers old Macs only where its way in is on (3.15's offers).
 - **The query job** (`laser/lw_query.c`): a Level 1 PAP job that prints nothing and asks
-  product, version, language level, resolution, imageable area, page size and page count, each inside
-  `stopped`, plus a 256-byte binary probe. Binary goes to the printer only if the probe came
+  product, version, language level, resolution, imageable area, page size, page count and
+  whether it prints a start page (W-1099), each inside `stopped`, plus a 256-byte binary
+  probe. Binary goes to the printer only if the probe came
   back intact; otherwise hex. Answers in its record; run again at the first answer after boot
   and when the printer comes back, tried again after 60 s twice, then every 5 minutes. Three
   unanswered make the "didn't answer" notice (Share Anyway takes its defaults).
@@ -676,6 +677,14 @@ ImageWriter on the port keeps its identity, UUID and bytes (`tools/ipp/test/gold
   the printer's own Times and Helvetica: the mark, its name and product, the board, a type
   sample, its gray ramp, AirWriter's five screens as 300 dpi swatches, a ruler and four
   one-inch squares; sent as it is (`laser_test_page`).
+- **Start page** (W-1099). The printer's detail has a Start page switch where the query read
+  `statusdict /dostartpage`. Flipping it sends LaserWriter Utility's recipe on the laser task as
+  a query goes (`lw_start_page_job`: `serverdict begin 0 exitserver statusdict begin <bool>
+  setdostartpage end`, then the setting read back), which the printer keeps in non-volatile
+  memory; `POST /api/printers {"id":N,"start_page":bool}` waits for the answer (up to 25 s, 8 s
+  of it a busy printer): saved, busy (409), a password other than 0 (`invalidaccess`), or no
+  answer (502). The record follows what the printer says (`lw_info_t.start_page`, in what was
+  its tail padding: its stored size is pinned).
 - **Panel.** A LaserWriter job is an AirPrint job (3.15's box state).
 - **Web.** `GET /api/laser` is diagnostics (heard, targets, the last job's figures); the page
   reads `/api/printers`. `/api/status` `laser`: `{"targets":N,"online":M,"job":bool}`.

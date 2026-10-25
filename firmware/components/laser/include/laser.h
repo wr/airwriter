@@ -92,6 +92,15 @@ int       laser_job_active(void);
 // job lock: 1 if it printed. laser_job_cancel stops it.
 int       laser_test_page(int id, const ps_tp_info_t *info);
 
+// W-1099: turns LaserWriter id's start page on (1) or off (0) with a job
+// that prints nothing (lw_start_page_job), on the laser task as a query is,
+// and waits for the printer's answer, up to about 25 s: one waits out a busy
+// printer for 8 s. The target's info, and its record (laser_cfg_t's
+// queried), follows what the printer then says it does. Writes the printer's
+// non-volatile memory, which wears: only on a change.
+enum { LASER_SP_OK = 0, LASER_SP_BUSY, LASER_SP_REFUSED, LASER_SP_NO_ANSWER, LASER_SP_NOT_HEARD };
+int       laser_set_start_page(int id, int on);
+
 // GET /api/laser: what is heard, the targets and the last job's figures.
 void      laser_json(char *buf, size_t cap);
 // The "laser" member of /api/status: {"targets":N,"online":M,"job":bool}.

@@ -629,6 +629,25 @@ void printers_json(char *buf, size_t cap)
     unlock();
 }
 
+// W-1099: a LaserWriter's start page is set by a job to it, and its record
+// follows the printer's answer (printers_at_queried) before this returns.
+static int start_page(int id, int on, char *err, size_t cap)
+{
+    switch (laser_set_start_page(id, on)) {
+    case LASER_SP_OK:
+        return 0;
+    case LASER_SP_BUSY:
+        snprintf(err, cap, "The printer is busy. Try again when it’s done.");
+        return 409;
+    case LASER_SP_REFUSED:
+        snprintf(err, cap, "The printer has a password, so AirWriter can’t change this.");
+        return 403;
+    default:
+        snprintf(err, cap, "Can’t reach the printer. Check that it’s switched on.");
+        return 502;
+    }
+}
+
 int printers_post(const char *body, char *err, size_t cap)
 {
     if (cap) err[0] = '\0';
@@ -656,6 +675,7 @@ int printers_post(const char *body, char *err, size_t cap)
     after_change(o.changed);
     if (port_screen && s_cfg.port_screen) s_cfg.port_screen(dither, gain);
     if (o.look && s_cfg.look) s_cfg.look();
+    if (o.start_page >= 0) return start_page(o.start_page_id, o.start_page, err, cap);
     return 0;
 }
 

@@ -171,13 +171,34 @@ def query_check(tmp):
         r = subprocess.run(cmd + [job], capture_output=True, timeout=TIMEOUT)
         got = subprocess.run([parse, "--parse"], input=r.stdout,
                              capture_output=True).stdout.decode().strip()
-        want = [f"complete=1", f"level={level}", "binary=1", "page=letter"]
+        want = [f"complete=1", f"level={level}", "binary=1", "page=letter", "start_page=on"]
         what = f"query{' level 1' if level1 else ''}"
         if r.returncode or not all(w in got.split() for w in want):
             print(f"FAIL pscheck {what}: {got or r.stderr.decode(errors='replace')[:200]}")
             fails += 1
         else:
             print(f"ok  pscheck {what}: {got}")
+    return fails
+
+
+def start_page_check(tmp):
+    """W-1099: the start page job through Ghostscript's job server, which
+    takes exitserver as a LaserWriter does: each setting read back after it."""
+    parse = RIP.parent / "test_lw"
+    fails = 0
+    for v in ("off", "on"):
+        job = tmp / f"start-page-{v}.ps"
+        subprocess.run([RIP, "--start-page-job", v, job], check=True)
+        r = subprocess.run([GS, "-q", "-dSAFER", "-dJOBSERVER", "-dBATCH", "-dNOPAUSE",
+                            "-sDEVICE=nullpage", "-"], stdin=job.open("rb"),
+                           capture_output=True, timeout=TIMEOUT)
+        got = subprocess.run([parse, "--parse"], input=r.stdout,
+                             capture_output=True).stdout.decode().strip()
+        if r.returncode or not all(w in got.split() for w in ("complete=1", f"start_page={v}")):
+            print(f"FAIL pscheck start page {v}: {got or r.stderr.decode(errors='replace')[:200]}")
+            fails += 1
+        else:
+            print(f"ok  pscheck start page {v}: {got}")
     return fails
 
 
@@ -227,6 +248,7 @@ def main():
     with tempfile.TemporaryDirectory() as t:
         tmp = pathlib.Path(t)
         failed += query_check(tmp)
+        failed += start_page_check(tmp)
         failed += testpage_check(tmp)
         for urf in pages(tmp):
             for mode in ("binary", "hex"):

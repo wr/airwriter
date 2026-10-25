@@ -362,8 +362,9 @@ static int json_bool(const char *body, const char *key)
     return !strncmp(p, "true", 4) ? 1 : !strncmp(p, "false", 5) ? 0 : -1;
 }
 
-// W-1088: the printer list. In PSRAM, as laser_get's.
-enum { PRINTERS_JSON = 4096 };
+// W-1088: the printer list. In PSRAM, as laser_get's: eight records with
+// the longest names and products run to about 4 KB.
+enum { PRINTERS_JSON = 6144 };
 
 static esp_err_t printers_get(httpd_req_t *req)
 {
@@ -384,7 +385,8 @@ static esp_err_t printers_post(httpd_req_t *req)
         return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "short body");
     int rc = s_cfg.printers_post(s_cfg.ctx, body, err, sizeof err);
     if (rc) {
-        httpd_resp_set_status(req, rc == 503 ? "503 Service Unavailable" : "400 Bad Request");
+        httpd_resp_set_status(req, rc == 503 ? "503 Service Unavailable" : rc == 409 ? "409 Conflict"
+                              : rc == 502 ? "502 Bad Gateway" : "400 Bad Request");
         httpd_resp_set_type(req, "text/plain; charset=utf-8");
         return httpd_resp_sendstr(req, err);
     }

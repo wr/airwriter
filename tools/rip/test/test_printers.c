@@ -488,6 +488,13 @@ static void test_json(void)
     snprintf(want, sizeof want, "\"rp\":\"ipp/p%d\"", lw);
     n = pr_json(&L, live, buf, sizeof buf);
     CHECK(strstr(buf, want) != NULL);
+    CHECK(strstr(buf, "\"start_page\":true") == NULL);  // W-1099: it didn't say
+    CHECK(strstr(buf, "\"start_page\":false") == NULL);
+    CHECK(strstr(buf, "\"start_page\":null") != NULL);
+    info.start_page = LW_START_OFF;
+    pr_at_queried(&L, lw, 1, &info);
+    n = pr_json(&L, live, buf, sizeof buf);
+    CHECK(strstr(buf, "\"start_page\":false") != NULL);
     pr_get(&L, lw)->ipp_laser = 1;                    // W-1082's keeps its path
     n = pr_json(&L, live, buf, sizeof buf);
     CHECK(strstr(buf, "\"rp\":\"ipp/laser\"") != NULL);
@@ -554,6 +561,28 @@ static void test_post(void)
     snprintf(body, sizeof body, "{\"id\":%d,\"gain\":46}", lw);
     CHECK_EQ_INT(pr_post(&L, body, &r), -1);
 
+    // W-1099: the start page is the printer's own: asked for here, set by a
+    // job to it. Only for a LaserWriter that said whether it prints one.
+    snprintf(body, sizeof body, "{\"id\":%d,\"start_page\":false}", lw);
+    CHECK_EQ_INT(pr_post(&L, body, &r), -1);
+    CHECK(strstr(r.err, "start page") != NULL);
+    snprintf(body, sizeof body, "{\"id\":%d,\"start_page\":false}", port);
+    CHECK_EQ_INT(pr_post(&L, body, &r), -1);
+    info.start_page = LW_START_ON;
+    pr_at_queried(&L, lw, 1, &info);
+    snprintf(body, sizeof body, "{\"id\":%d,\"start_page\":false}", lw);
+    CHECK_EQ_INT(pr_post(&L, body, &r), 0);
+    CHECK_EQ_INT(r.start_page, 0);
+    CHECK_EQ_INT(r.start_page_id, lw);
+    CHECK_EQ_INT(r.changed, 0);
+    CHECK_EQ_INT(pr_get(&L, lw)->lw.start_page, LW_START_ON);   // until the printer says
+    snprintf(body, sizeof body, "{\"id\":%d,\"start_page\":true}", lw);
+    CHECK_EQ_INT(pr_post(&L, body, &r), 0);
+    CHECK_EQ_INT(r.start_page, 1);
+    snprintf(body, sizeof body, "{\"id\":%d,\"name\":\"Office\"}", lw);
+    CHECK_EQ_INT(pr_post(&L, body, &r), 0);
+    CHECK_EQ_INT(r.start_page, -1);
+
     CHECK_EQ_INT(pr_post(&L, "{\"look\":true}", &r), 0);
     CHECK_EQ_INT(r.look, 1);
     CHECK_EQ_INT(r.changed, 0);
@@ -600,6 +629,34 @@ static void test_add_port(void)
     // It then answers ESC ? as an LQ: no churn.
     pr_port_seen(&L, PR_PORT_IWLQ);
     CHECK_EQ_INT(L.n_notes, 0);
+}
+
+// W-1099: the start page rides in the record's lw_info_t. Every answered
+// query asks the printer again and brings it, so the record follows the
+// printer; a query that fails changes nothing; the stored list keeps it.
+static void test_start_page_kept(void)
+{
+    fresh();
+    int lw = pr_at_seen(&L, PR_WHERE_CABLE, P("NTR"), P("LaserWriter"), 0);
+    lw_parse_t q;
+    lw_parse_init(&q);
+    const char *a = "aw:product=LaserWriter Personal NTR\raw:startpage=false\raw:probe=256 1\raw:end\r";
+    lw_parse_feed(&q, (const uint8_t *)a, strlen(a));
+    pr_at_queried(&L, lw, 1, &q.info);
+    CHECK_EQ_INT(pr_get(&L, lw)->lw.start_page, LW_START_OFF);
+    lw_parse_init(&q);                                      // switched on again: asked again
+    a = "aw:product=LaserWriter Personal NTR\raw:startpage=true\raw:probe=256 1\raw:end\r";
+    lw_parse_feed(&q, (const uint8_t *)a, strlen(a));
+    pr_at_queried(&L, lw, 1, &q.info);
+    CHECK_EQ_INT(pr_get(&L, lw)->lw.start_page, LW_START_ON);
+    pr_at_queried(&L, lw, 0, NULL);                         // no answer: as it was
+    CHECK_EQ_INT(pr_get(&L, lw)->lw.start_page, LW_START_ON);
+    static uint8_t buf[4096];
+    size_t n = pr_save(&L, buf, sizeof buf);
+    pr_list_t M;
+    pr_init(&M, MAC, 1);
+    CHECK_EQ_INT(pr_load(&M, buf, n), 0);
+    CHECK_EQ_INT(pr_get(&M, lw)->lw.start_page, LW_START_ON);
 }
 
 // W-1098: a LaserWriter's query answered on `where` at node, with its page
@@ -790,5 +847,6 @@ int main(void)
     test_load_garbage();
     test_load_newer();
     test_json();
+    test_start_page_kept();
     TEST_END;
 }

@@ -179,6 +179,7 @@ static void usage(void)
           "             tools/iwview/iwview.py draws the stream\n"
           "  --out-pbm  page 1's dots as a raw PBM, 1 = ink\n"
           "       rip --query-job FILE   the LaserWriter query job, probe and all\n"
+          "       rip --start-page-job on|off FILE  the job that sets its start page (W-1099)\n"
           "       rip --ps-testpage FILE  the PostScript printers' test page (W-1088)\n"
           "  --printer laser  rip at 300 dpi for a LaserWriter (W-1082); --ps writes its\n"
           "             PostScript, in binary, or with --hex as a Level 1 machine that\n"
@@ -191,7 +192,8 @@ int main(int argc, char **argv)
     const char *in = NULL, *out_stream = NULL, *out_preview = NULL;
     const char *dither = "atkinson", *testpage = NULL;
     const char *printer = "imagewriter", *paper = "letter", *out_ps = NULL, *out_pbm = NULL;
-    const char *query = NULL, *ps_tp = NULL;
+    const char *query = NULL, *ps_tp = NULL, *sp_job = NULL;
+    int sp_on = 0;
     int colour = 0, gain = 0, top = 0, hex = 0;
 
     for (int i = 1; i < argc; i++) {
@@ -209,6 +211,10 @@ int main(int argc, char **argv)
         else if (!strcmp(argv[i], "--hex"))                          hex = 1;
         else if (!strcmp(argv[i], "--out-pbm") && i + 1 < argc)     out_pbm = argv[++i];
         else if (!strcmp(argv[i], "--query-job") && i + 1 < argc)   query = argv[++i];
+        else if (!strcmp(argv[i], "--start-page-job") && i + 2 < argc) {
+            sp_on = !strcmp(argv[++i], "on");
+            sp_job = argv[++i];
+        }
         else if (!strcmp(argv[i], "--ps-testpage") && i + 1 < argc) ps_tp = argv[++i];
         else { usage(); return 2; }
     }
@@ -222,9 +228,10 @@ int main(int argc, char **argv)
         fclose(tf);
         return rc ? 1 : 0;
     }
-    if (query) {
+    if (query || sp_job) {
         static uint8_t q[4096];
-        size_t n = lw_query_job(q, sizeof q);
+        size_t n = query ? lw_query_job(q, sizeof q) : lw_start_page_job(q, sizeof q, sp_on);
+        if (!query) query = sp_job;
         FILE *qf = fopen(query, "wb");
         if (!qf || fwrite(q, 1, n, qf) != n) { perror(query); return 1; }
         fclose(qf);
