@@ -208,25 +208,20 @@ const char *ct_verdict_text(ct_verdict_t v)
 {
     switch (v) {
     case CT_PASS:
-        return "Crossover: this cable works with the ImageWriter II. "
-               "(Its handshake wires, pins 1 and 2, can't be tested.)";
+        return "Crossover. This cable works with the ImageWriter.";
     case CT_NO_LOOP:
-        return "No crossover between the printer and LocalTalk ports. The cable is "
-               "straight-through or broken, or isn't plugged into both ports. "
-               "Only a crossover works with the ImageWriter II.";
+        return "Not a crossover. The cable is straight-through, broken, or not plugged into both "
+               "ports. Only a crossover works with the ImageWriter.";
     case CT_ONE_WAY:
-        return "The cable is crossed but one wire pair is broken: the one that carries "
-               "print data to the printer.";
+        return "A crossover, but the pair of wires that carries print data to the printer is "
+               "broken.";
     case CT_NO_CHIP:
-        return "No cable was tested: AirWriter can't find a LocalTalk chip, and the test "
-               "runs through it. See LocalTalk Chip (TashTalk) in the AirWriter wiki.";
+        return "Not tested: the LocalTalk chip is missing. See LocalTalk Chip (TashTalk) on the "
+               "AirWriter wiki.";
     case CT_NO_TASHTALK:
-        return "No cable was tested: the LocalTalk chip isn't running TashTalk, and the "
-               "test runs through it. It needs flashing first.";
+        return "Not tested: the LocalTalk chip needs TashTalk. Flash TashTalk, then test again.";
     case CT_CHIP_SILENT:
-        return "No cable was tested: the LocalTalk chip isn't answering, and the test runs "
-               "through it. It may be missing or need TashTalk: turn LocalTalk off (DIP "
-               "switch 2), restart, and test again to find out.";
+        return "Not tested: the LocalTalk chip isn't responding. Restart AirWriter and test again.";
     }
     return "";
 }

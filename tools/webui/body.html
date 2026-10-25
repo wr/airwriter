@@ -63,12 +63,12 @@
       <div id=su-1>
         <div class=hero><i class=awm></i><h2>Let’s find your printer</h2><p id=su-looking></p></div>
         <div class="box prlist" id=su-list></div>
-        <p class=foot>Don’t see your printer? Make sure it’s switched on and connected, then Look Again. A printer on your home network shows up once AirWriter has joined it.</p>
+        <p class=foot>Printer missing? Make sure it’s switched on and connected, then press Look Again. Printers on your home network appear after setup.</p>
         <p class=say id=su-say></p>
         <div class=btnrow><button class=btn type=button id=su-look><svg class=bi><use href="#g-look"/></svg>Look Again</button><button class=btn type=button data-dlg=d-add><svg class=bi><use href="#g-add"/></svg>Add a Printer…</button><button class="btn primary" type=button id=su-next><span id=su-next-t>Continue</span><svg class="bi end"><use href="#g-on"/></svg></button></div>
       </div>
       <div id=su-2 class=hide>
-        <div class=hero><span class="ic c"><svg><use href="#g-wifi"/></svg></span><h2>Wi-Fi</h2><p>AirWriter joins your Wi-Fi so your iPhone, iPad and Mac can print to it.</p></div>
+        <div class=hero><span class="ic c"><svg><use href="#g-wifi"/></svg></span><h2>Wi-Fi</h2><p>AirWriter joins your Wi-Fi so your phones and computers can print.</p></div>
         <div class="btnrow one"><button class=btn type=button id=su-back><svg class=bi><use href="#g-off"/></svg>Back</button><button class="btn primary" type=button id=su-nets><svg class=bi><use href="#g-wifi"/></svg>Choose a Network…</button></div>
       </div>
       <!-- Wells: the test button, not an address to copy and open -->
@@ -86,7 +86,7 @@
     <section class=pane id=p-printers>
       <div id=pr-home>
         <div class=hero><span class="ic k"><svg><use href="#g-printer"/></svg></span>
-          <h2>Printers</h2><p>The printers AirWriter shares with your iPhone, iPad, Mac and old Macs. <a href="https://github.com/wr/airwriter/wiki/Printers" target=_blank rel=noopener>Learn&nbsp;More…</a></p></div>
+          <h2>Printers</h2><p>Your printers, for your phones, computers and vintage Macs. <a href="https://github.com/wr/airwriter/wiki/Printers" target=_blank rel=noopener>Learn&nbsp;More…</a></p></div>
         <div id=pr-notes></div>
         <div class="box prlist" id=pr-list></div>
         <p class=say id=prs-say></p>
@@ -105,7 +105,7 @@
         <div class=box>
           <div class=row><span class=txt>Name</span><input class="fld short" id=pname autocomplete=off spellcheck=false maxlength=32 aria-label=Name></div>
           <div class="row hide" id=model-row><span class=txt>Model</span><select class=pop id=model aria-label=Model></select></div>
-          <div class=row id=share-row><span class=txt>Share with iPhone, iPad and Mac</span><label class=sw><input type=checkbox role=switch id=pshare aria-label="Share with iPhone, iPad and Mac"><span></span></label></div>
+          <div class=row id=share-row><span class=txt>Share over AirPrint</span><label class=sw><input type=checkbox role=switch id=pshare aria-label="Share over AirPrint"><span></span></label></div>
         </div>
         <p class=say id=pd-cant>AirWriter can’t print to this printer yet.</p>
         <div class=box id=ht-box>
@@ -120,7 +120,7 @@
     <!-- ── AirPrint ──────────────────────────────────────────── -->
     <section class=pane id=p-airprint>
       <div class=hero><span class="ic g"><svg><use href="#g-airprint"/></svg></span>
-        <h2>AirPrint</h2><p>iPhones, iPads and Macs find your printers by themselves. <a href="https://github.com/wr/airwriter/wiki/Setup" target=_blank rel=noopener>Learn&nbsp;More…</a></p></div>
+        <h2>AirPrint</h2><p>Your printers appear on your phones and computers, with nothing to install. <a href="https://github.com/wr/airwriter/wiki/Setup" target=_blank rel=noopener>Learn&nbsp;More…</a></p></div>
       <div class=box>
         <div class=row><span class=txt>AirPrint</span><label class=sw><input type=checkbox role=switch id=ap aria-label=AirPrint><span></span></label></div>
       </div>
@@ -133,7 +133,7 @@
     <!-- ── AppleTalk ─────────────────────────────────────────── -->
     <section class=pane id=p-appletalk>
       <div class=hero><span class="ic b"><svg><use href="#g-talk"/></svg></span>
-        <h2>AppleTalk</h2><p>Let old Macs print to your printers over AppleTalk. <a href="https://github.com/wr/airwriter/wiki/Vintage-Macs-(LocalTalk)" target=_blank rel=noopener>Learn&nbsp;More…</a></p></div>
+        <h2>AppleTalk</h2><p>Let vintage Macs print to your printers over AppleTalk. <a href="https://github.com/wr/airwriter/wiki/Vintage-Macs-(LocalTalk)" target=_blank rel=noopener>Learn&nbsp;More…</a></p></div>
 
       <!-- Wells's layout, from macOS's Wi-Fi network row: the interface and its
            switch, then below a rule how many Macs it can see and which. -->
@@ -234,13 +234,13 @@
 
 <dialog id=d-remove><div class=dlg>
   <b>Remove <span id=rm-name></span>?</b>
-  <p>It stops appearing on your iPhone, iPad and Mac. If AirWriter finds it again, it comes back.</p>
+  <p>It disappears from your phones and computers, and comes back if you connect it again.</p>
   <div class=btnrow><button class=btn type=button data-close>Cancel</button><button class="btn danger primary" type=button id=rm-go>Remove</button></div>
 </div></dialog>
 
 <dialog id=d-add><div class=dlg>
   <b>Add a printer on the printer port</b>
-  <p>For an ImageWriter that is switched off, or an original ImageWriter, which doesn’t say what it is. Printers on AppleTalk are found by themselves.</p>
+  <p>For an ImageWriter that’s switched off, or an original ImageWriter. AppleTalk printers appear on their own.</p>
   <div class=box><div class=row><span class=txt>Model</span><select class=pop id=add-model aria-label=Model><option>ImageWriter II</option><option>ImageWriter LQ</option><option>ImageWriter</option></select></div></div>
   <p class=say id=add-say></p>
   <div class=btnrow><button class=btn type=button data-close>Cancel</button><button class="btn primary" type=button id=add-go>Add</button></div>
@@ -284,7 +284,7 @@
 
 <dialog id=d-erase><div class=dlg>
   <b>Erase all settings?</b>
-  <p>AirWriter forgets its Wi-Fi network and every setting, then restarts. Join the <span id=apname>AirWriter</span> network to set it up again.</p>
+  <p>Erases the Wi-Fi network, your printers and every other setting, then restarts. Join the <span id=apname>AirWriter</span> network to set it up again.</p>
   <div class=btnrow><button class=btn type=button data-close>Cancel</button><button class="btn danger primary" type=button id=erase>Erase</button></div>
 </div></dialog>
 
@@ -301,4 +301,4 @@
 </div></dialog>
 
 <!-- when the board stops answering: what the page shows is what it last heard -->
-<div class="lost hide" id=lost role=status><i class="lamp a"></i>AirWriter isn’t answering. Trying again…</div>
+<div class="lost hide" id=lost role=status><i class="lamp a"></i>Can’t reach AirWriter. Trying again…</div>
