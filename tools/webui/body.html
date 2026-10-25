@@ -63,7 +63,7 @@
       <div id=su-1>
         <div class=hero><i class=awm></i><h2>Printers</h2><p id=su-looking></p></div>
         <div class="box prlist" id=su-list></div>
-        <p class=foot>Don’t see your printer? Make sure it’s connected and switched on, then Look Again. Printers on your Wi-Fi network show up after setup.</p>
+        <p class=foot>Don’t see your printer? Make sure it’s connected and switched on, then choose Look Again. Printers on your Wi-Fi network show up after setup.</p>
         <p class=say id=su-say></p>
         <div class=btnrow><button class=btn type=button id=su-look><svg class=bi><use href="#g-look"/></svg>Look Again</button><button class=btn type=button data-dlg=d-add><svg class=bi><use href="#g-add"/></svg>Add a Printer…</button><button class="btn primary" type=button id=su-next><span id=su-next-t>Continue</span><svg class="bi end"><use href="#g-on"/></svg></button></div>
       </div>
@@ -105,7 +105,7 @@
         <div class=box>
           <div class=row><span class=txt>Name</span><input class="fld short" id=pname autocomplete=off spellcheck=false maxlength=32 aria-label=Name></div>
           <div class="row hide" id=model-row><span class=txt>Model</span><select class=pop id=model aria-label=Model></select></div>
-          <div class=row id=share-row><span class=txt>Share with phones and computers</span><label class=sw><input type=checkbox role=switch id=pshare aria-label="Share with phones and computers"><span></span></label></div>
+          <div class=row id=share-row><span class=txt>Share over AirPrint</span><label class=sw><input type=checkbox role=switch id=pshare aria-label="Share over AirPrint"><span></span></label></div>
           <div class="row hide" id=sp-row><span class=txt>Start page<small>Printed each time it’s switched on</small></span><label class=sw><input type=checkbox role=switch id=pstart aria-label="Start page"><span></span></label></div>
         </div>
         <p class=say id=pd-cant></p>
@@ -284,7 +284,7 @@
 
 <dialog id=d-erase><div class=dlg>
   <b>Erase all settings?</b>
-  <p>Wi-Fi and every other setting are erased, and AirWriter restarts. Join the <span id=apname>AirWriter</span> network to set it up again.</p>
+  <p>Your Wi-Fi network, printers and every other setting are erased, and AirWriter restarts. Join the <span id=apname>AirWriter</span> network to set it up again.</p>
   <div class=btnrow><button class=btn type=button data-close>Cancel</button><button class="btn danger primary" type=button id=erase>Erase</button></div>
 </div></dialog>
 

@@ -208,18 +208,18 @@ const char *ct_verdict_text(ct_verdict_t v)
 {
     switch (v) {
     case CT_PASS:
-        return "Crossover cable. It works with the ImageWriter II.";
+        return "Crossover cable. It works with the ImageWriter.";
     case CT_NO_LOOP:
         return "Not a crossover cable, or it isn’t plugged into both ports. "
-               "The ImageWriter II needs a crossover cable.";
+               "The ImageWriter needs a crossover cable.";
     case CT_ONE_WAY:
         return "This crossover cable has a broken wire, so pages can’t reach the printer.";
     case CT_NO_CHIP:
-        return "Couldn’t test the cable. The test needs the LocalTalk chip, which is "
-               "missing. See LocalTalk Chip (TashTalk) in the wiki.";
+        return "Couldn’t test the cable. The LocalTalk chip is missing. See LocalTalk Chip "
+               "(TashTalk) in the wiki.";
     case CT_NO_TASHTALK:
-        return "Couldn’t test the cable. The LocalTalk chip needs TashTalk, so flash it "
-               "first.";
+        return "Couldn’t test the cable. The LocalTalk chip needs TashTalk. Flash TashTalk, "
+               "then test again.";
     case CT_CHIP_SILENT:
         return "Couldn’t test the cable. The LocalTalk chip isn’t responding. Restart "
                "AirWriter and test again.";

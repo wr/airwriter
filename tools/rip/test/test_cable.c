@@ -186,7 +186,7 @@ static void test_verdict(void)
         CHECK(!strchr(ct_verdict_text(want[k]), '"'));       // it goes into JSON as is
     }
     CHECK(ct_verdict_tested(CT_PASS) && ct_verdict_tested(CT_NO_LOOP) && ct_verdict_tested(CT_ONE_WAY));
-    CHECK(strstr(ct_verdict_text(CT_NO_TASHTALK), "flash") != NULL);
+    CHECK(strstr(ct_verdict_text(CT_NO_TASHTALK), "Flash TashTalk") != NULL);
 }
 
 int main(void)

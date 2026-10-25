@@ -150,11 +150,10 @@ function art(W,H,mode,colour){
   }
   return c;
 }
-const PAGE_NOTE='The ImageWriter II puts down 144 dots an inch across and 72 down, nine pins '
- +'at a time, and every dot is either there or not. Every tone, from a photograph to the sky '
- +'above, is made of dots left out, and the screen you pick here sets which ones. Color comes '
- +'from a four-band ribbon, with yellow, magenta and cyan laid one pass after another and black '
- +'on its own.';
+const PAGE_NOTE='The ImageWriter II prints 144 dots an inch across and 72 down, nine pins at a '
+ +'time, and every dot is either there or not. Every tone in a photo is a pattern of dots, and '
+ +'the halftone you pick here sets the pattern. Color comes from a four-band ribbon, with yellow, '
+ +'magenta and cyan one pass after another, then black.';
 function sourceAt(W,H,mode,colour){
   const d=art(W,H,mode,colour).getContext('2d').getImageData(0,0,W,H).data, n=colour?4:1,
         out=Array.from({length:n},()=>new Float32Array(W*H));
@@ -832,7 +831,7 @@ const CHIP_HELP=' <a href="https://github.com/wr/airwriter/wiki/LocalTalk-Chip-(
 const CHIP={
   no_chip:['r','No LocalTalk chip.'+CHIP_HELP],
   no_tashtalk:['a','The LocalTalk chip needs TashTalk.'],
-  silent:['r','The LocalTalk chip isn’t answering.'+CHIP_HELP]};
+  silent:['r','The LocalTalk chip isn’t responding.'+CHIP_HELP]};
 let flashing=false;
 /* A flash that failed: the board's own words when it refused to start, else
    the chip's failure (pic_err_str) in the reader's words. The wiki's LocalTalk
@@ -984,7 +983,8 @@ function suLook(){
 function suDraw(){
   if(!setup) return;
   const ps=PR?PR.printers:[], looking=!!suLooking;
-  $('su-looking').textContent=looking?'Looking for printers…':ps.length?'Rename '+(ps.length===1?'it':'them')+' if you like.':'';
+  $('su-looking').textContent=looking?'Looking for printers…'
+    :ps.length?(ps.length===1?'Here’s your printer. Rename it if you like.':'Here are your printers. Rename them if you like.'):'';
   const h=ps.length?ps.map(p=>'<div class="row prow">'+icHTML(p)+'<span class=txt><input class=fld data-rename='+p.id
       +' value="'+esc(p.name)+'" maxlength=32 autocomplete=off spellcheck=false aria-label="Name"><small>'
       +esc(WHERE[p.where]||p.where)+'</small></span></div>').join('')
@@ -1116,7 +1116,7 @@ $('join').onclick=async()=>{
     const row=(ic,g,t,s)=>'<div class="row prow"><span class="ic '+ic+'"><svg><use href="#'+g+'"/></svg></span><span class=txt>'+t+'<small>'+s+'</small></span></div>';
     $('su-joining').innerHTML='AirWriter is joining '+b+'. Your phone reconnects to it by itself.';
     $('su-then').innerHTML=ps.length
-      ?row('g','g-airprint','Print from a phone or computer','Choose Print (File &gt; Print on a Mac), then '+one+'.')
+      ?row('g','g-airprint','Print from your phone or computer','Choose Print (File &gt; Print on a Mac), then '+one+'.')
         +row('k','g-dots','Print a test page','When AirWriter’s lights turn white, press the test button in the middle.')
       :row('k','g-add','Add a printer','Connect it and switch it on. It shows up at <b>'+host+'</b>.');
     $('su-later').innerHTML=ps.length?'AirWriter’s settings page is at <b>'+host+'</b>.':'';
@@ -1125,7 +1125,7 @@ $('join').onclick=async()=>{
   }
   // From its own network the page cannot follow it: say where it will be.
   const q='“'+esc(ssid)+'”', host=esc(S.host||'airwriter.local'), link='<a href="http://'+host+'/">'+host+'</a>';
-  waitFor('Joining “'+ssid+'”','AirWriter restarts on the new network. This page reloads when it’s back.',true,
+  waitFor('Joining “'+ssid+'”','AirWriter restarts on the new network. This page reloads when AirWriter is back.',true,
     'Not back yet. On '+q+', open '+link+'. If AirWriter couldn’t join, join the '
       +esc($('apname').textContent)+' network to try again.');
 };
