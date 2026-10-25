@@ -116,10 +116,10 @@ static esp_err_t claim(const char **why)
     UNLOCK();
     if (was) { *why = "an update is already running"; return ESP_ERR_INVALID_STATE; }
     if (ota_health_on_trial()) {
-        *why = "the last update is still being checked; try again in two minutes";
+        *why = "the last update is still finishing. Try again in a couple of minutes";
         goto busy;
     }
-    if (!s_cfg.try_lock()) { *why = "printing; try again when the job is done"; goto busy; }
+    if (!s_cfg.try_lock()) { *why = "a job is printing. Try again when it’s done"; goto busy; }
     s_cfg.job_waiting_clear();
     return ESP_OK;
 busy:
@@ -133,8 +133,8 @@ static void release(void)
     LOCK(); s_updating = 0; UNLOCK();
 }
 
-static const char *const WHY_JOB = "a print job arrived; try again after it";
-static const char *const WHY_REFUSED = "not signed with this board's key, or damaged";
+static const char *const WHY_JOB = "a job started printing. Try again when it’s done";
+static const char *const WHY_REFUSED = "not a signed AirWriter update, or damaged";
 
 // ------------------------------------------------------------- the upload
 
@@ -147,8 +147,8 @@ esp_err_t fw_update_stream_begin(size_t len, const char **why)
     err = part ? esp_ota_begin(part, len, &s_ota) : ESP_ERR_NOT_FOUND;
     if (err != ESP_OK) {
         *why = err == ESP_ERR_OTA_ROLLBACK_INVALID_STATE
-            ? "the last update is still being checked; try again in two minutes"
-            : "could not start the update";
+            ? "the last update is still finishing. Try again in a couple of minutes"
+            : "couldn’t start the update";
         release();
         return err == ESP_ERR_OTA_ROLLBACK_INVALID_STATE ? ESP_ERR_INVALID_STATE : err;
     }
@@ -182,7 +182,7 @@ esp_err_t fw_update_stream_write(const void *buf, size_t n, const char **why)
         // a firmware image at all ends here.
         ESP_LOGE(TAG, "upload: write failed (%s)", esp_err_to_name(err));
         led_grid_action(LG_ACT_FW_REFUSED, 0);
-        *why = err == ESP_ERR_OTA_VALIDATE_FAILED ? WHY_REFUSED : "could not write the image";
+        *why = err == ESP_ERR_OTA_VALIDATE_FAILED ? WHY_REFUSED : "couldn’t install the update";
         stream_fail(ST_FAILED, *why);
         return err == ESP_ERR_OTA_VALIDATE_FAILED ? err : ESP_FAIL;
     }
@@ -233,7 +233,7 @@ esp_err_t fw_update_stream_end(const char **why)
     err = esp_ota_set_boot_partition(part);
     if (err != ESP_OK) {
         led_grid_action(LG_ACT_FW_REFUSED, 0);
-        *why = "could not make the new image bootable";
+        *why = "couldn’t install the update";
         set_state(ST_FAILED, *why);
         release();
         return err;
@@ -312,12 +312,12 @@ static void do_check(void)
     char ver[32] = "", file[65] = "";
     fwu_manifest_t m = FWU_M_BAD;
     const char *why = NULL;
-    if (err != ESP_OK)       why = "could not reach GitHub";
-    else if (status == 404)  why = "no release published yet";
-    else if (status != 200)  why = "GitHub gave an unexpected answer";
+    if (err != ESP_OK)       why = "can’t reach GitHub";
+    else if (status == 404)  why = "no updates yet";
+    else if (status != 200)  why = "couldn’t check for updates";
     else {
         m = fwu_parse_manifest(s_body, CONFIG_IDF_TARGET, ver, sizeof ver, file, sizeof file);
-        if (m == FWU_M_BAD) why = "the release's manifest is not readable";
+        if (m == FWU_M_BAD) why = "couldn’t check for updates";
     }
     if (why) ESP_LOGW(TAG, "check: %s (%s, HTTP %d)", why, esp_err_to_name(err), status);
 
@@ -359,7 +359,7 @@ static void do_install(const char *tag, int automatic)
     }
     UNLOCK();
     if (!fwu_asset_url(url, sizeof url, CONFIG_AIRWRITER_UPDATE_REPO, want, file)) {
-        set_state(ST_FAILED, "no release to install");
+        set_state(ST_FAILED, "no update to install");
         return;
     }
     const char *why = NULL;
@@ -383,9 +383,9 @@ static void do_install(const char *tag, int automatic)
                                   .partition.staging = ota_health_update_target() };
     esp_https_ota_handle_t h = NULL;
     esp_err_t err = ESP_ERR_NOT_FOUND;
-    if (!oc.partition.staging) { why = "no slot to install into"; goto fail; }
+    if (!oc.partition.staging) { why = "no room for the update"; goto fail; }
     err = esp_https_ota_begin(&oc, &h);
-    if (err != ESP_OK) { why = "could not download the release"; goto fail; }
+    if (err != ESP_OK) { why = "couldn’t download the update"; goto fail; }
 
     // The image's own description, before the rest of it comes down. It is
     // covered by the signature checked at the end, so what passes here is
@@ -393,11 +393,11 @@ static void do_install(const char *tag, int automatic)
     esp_app_desc_t d;
     err = esp_https_ota_get_img_desc(h, &d);
     if (err != ESP_OK || strncmp(d.project_name, "airwriter", sizeof d.project_name)) {
-        why = "that release's image is not AirWriter firmware";
+        why = "the download isn’t AirWriter firmware";
         goto refuse;
     }
     if (!tag[0] && strncmp(d.version, want, sizeof d.version)) {
-        why = "the release's image is not the version it says";
+        why = "the download is the wrong version";
         goto refuse;
     }
 
@@ -436,7 +436,7 @@ static void do_install(const char *tag, int automatic)
     h = NULL;
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "%s refused (%s)", want, esp_err_to_name(err));
-        why = err == ESP_ERR_OTA_VALIDATE_FAILED ? WHY_REFUSED : "could not install the image";
+        why = err == ESP_ERR_OTA_VALIDATE_FAILED ? WHY_REFUSED : "couldn’t install the update";
         led_grid_action(LG_ACT_FW_REFUSED, 0);
         set_state(ST_FAILED, why);
         release();
@@ -517,13 +517,13 @@ static void task(void *arg)
 
 static const char *ready_for_github(void)
 {
-    if (s_cfg.setup_mode) return "the board is in setup mode, off the internet";
+    if (s_cfg.setup_mode) return "join a network to look for updates";
     if (s_key == KEY_OTHER)
-        return "this firmware is signed with a different key, so it can't install AirWriter releases";
+        return "this version is signed with another key, so AirWriter updates can’t install";
     // IDF trusts the key that signed the running image; with none, it
     // refuses every image (only an image flashed unsigned by hand gets here).
     if (s_key == KEY_UNSIGNED)
-        return "this firmware isn't signed, so it can't take updates; flash a release over USB";
+        return "this version isn’t signed. Install a release over USB to get updates";
     return NULL;
 }
 
@@ -534,7 +534,7 @@ esp_err_t fw_update_check(const char **why)
     int running = s_updating || s_state == ST_CHECKING;
     if (!running) s_req_check = 1;
     UNLOCK();
-    if (running) { *why = "already busy with an update"; return ESP_ERR_INVALID_STATE; }
+    if (running) { *why = "an update is already running"; return ESP_ERR_INVALID_STATE; }
     xTaskNotifyGive(s_task);
     return ESP_OK;
 }
@@ -547,18 +547,18 @@ esp_err_t fw_update_install(const char *tag, const char **why)
         return ESP_ERR_INVALID_ARG;
     }
     if (ota_health_on_trial()) {
-        *why = "the last update is still being checked; try again in two minutes";
+        *why = "the last update is still finishing. Try again in a couple of minutes";
         return ESP_ERR_INVALID_STATE;
     }
     // A look at the job lock, for an answer now; the install takes it for real.
     if (!s_cfg.try_lock()) {
-        *why = "printing; try again when the job is done";
+        *why = "a job is printing. Try again when it’s done";
         return ESP_ERR_INVALID_STATE;
     }
     s_cfg.unlock();
     LOCK();
-    const char *no = s_updating || s_req_install ? "already busy with an update"
-                   : (!tag || !tag[0]) && !s_newer ? "no newer release known; check first"
+    const char *no = s_updating || s_req_install ? "an update is already running"
+                   : (!tag || !tag[0]) && !s_newer ? "no newer version. Check for updates first"
                    : NULL;
     if (!no) {
         s_req_install = 1;

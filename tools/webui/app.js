@@ -20,7 +20,7 @@ async function postJSON(url,body){
     const t=await r.text();
     if(!r.ok) return {error:cap(t.trim()||('error '+r.status))};
     try{ return JSON.parse(t); }catch(e){ return {ok:true}; }
-  }catch(e){ return {error:'No answer from AirWriter.'}; }
+  }catch(e){ return {error:'Can’t reach AirWriter.'}; }
 }
 /* What a pane has to say, for a moment, or until the next thing it says. */
 const sayTimers={};
@@ -73,18 +73,18 @@ const MODES={
         'readable. Best for most pages.']},
  floyd:{name:'floyd',title:'Floyd–Steinberg',
   body:['Published in 1976 and still the smoothest','gradient one ink can make. It pushes every',
-        'scrap of error into its neighbours, so','photographs look their best and small type',
+        'scrap of error into its neighbors, so','photographs look their best and small type',
         'starts to thicken. Best for photographs.']},
  bayer:{name:'ordered',title:'Ordered',
   body:['A fixed 8 by 8 screen, the same one every','page. Nothing smears into anything else, so',
         'type stays exactly where it was drawn.','You can see the weave in flat areas.',
         'Best for small text.']},
  bluenoise:{name:'blue noise',title:'Blue noise',
-  body:['A tile of noise with no pattern in it, grown','for this printer\'s tall dots. Nothing smears',
+  body:['A tile of noise with no pattern in it, grown','for this printer’s tall dots. Nothing smears',
         'and nothing weaves, so tints come out even','and type stays where it was drawn. Try it',
         'against Atkinson on a photograph.']},
  threshold:{name:'threshold',title:'Threshold',
-  body:['No halftone at all. Every dot is simply on','or off, so line art and logos come out',
+  body:['No halftone at all. Every dot is on or','off, so line art and logos come out',
         'exactly as drawn and anything with tone in','it collapses to black and white.',
         'Line art and logos only.']}};
 const ORDER=['atkinson','floyd','bluenoise','bayer','threshold'];
@@ -151,10 +151,10 @@ function art(W,H,mode,colour){
   return c;
 }
 const PAGE_NOTE='The ImageWriter II puts down 144 dots an inch across and 72 down, nine pins '
- +'at a time, and every one of them is either there or not. Everything with a tone in it, a '
- +'photograph, a shadow, the sky above, is made of dots the printer was told to leave out, and '
- +'the screen you pick here decides which ones. Colour comes from a four-band ribbon: yellow, '
- +'magenta and cyan laid one pass after another, and black on its own.';
+ +'at a time, and every dot is either there or not. Every tone, from a photograph to the sky '
+ +'above, is made of dots left out, and the screen you pick here sets which ones. Color comes '
+ +'from a four-band ribbon, with yellow, magenta and cyan laid one pass after another and black '
+ +'on its own.';
 function sourceAt(W,H,mode,colour){
   const d=art(W,H,mode,colour).getContext('2d').getImageData(0,0,W,H).data, n=colour?4:1,
         out=Array.from({length:n},()=>new Float32Array(W*H));
@@ -344,7 +344,7 @@ function waitFor(title,html,reload,late){
     fetchIn('/api/status',4000).then(r=>{ if(r.ok) location.reload(); else throw 0; })
       .catch(()=>{
         if(Date.now()-t0>90000&&$('wait-keys').classList.contains('hide')){
-          $('wait-s').innerHTML=late||'AirWriter hasn’t come back. Check its lights, then reload this page.';
+          $('wait-s').innerHTML=late||'AirWriter isn’t back yet. Check its lights, then reload this page.';
           $('wait-keys').classList.remove('hide');
         }
         setTimeout(again,3000);
@@ -365,7 +365,7 @@ function draw(s){
   // the port's ImageWriter: its ribbon and gain draw the halftone sample
   const colour=s.ribbon==='colour';
   $('rib-colour').classList.toggle('hide',!colour);
-  $('rib').textContent=colour?'Colour':s.ribbon==='black'?'Black':'Not known yet';
+  $('rib').textContent=colour?'Color':s.ribbon==='black'?'Black':'Unknown';
   if(s.ribbon!==ribbon){ ribbon=s.ribbon; render(); }
   const g=+s.gain; if(g>=0&&g<50&&g!==GAIN){ setGain(g); render(); }
   // AirPrint
@@ -386,7 +386,7 @@ function draw(s){
   $('v-wifi').textContent=missed?'Couldn’t join':setup?'Not set up':(s.ssid||'');
   // what waits for a restart
   const hostPending=s.phost&&s.phost+'.local'!==s.host;
-  if(hostPending) say('wifi-say','Saved. The new host name works after a restart.');
+  if(hostPending) say('wifi-say','Saved. Restart AirWriter to use the new host name.');
   // About
   $('uptime').textContent=upFor(s.uptime);
   $('reset').textContent=RESET[s.reset]||cap(s.reset||'');
@@ -568,26 +568,26 @@ function sideWord(){
   for(const [st,w] of [['failed','Failed'],['attention','Needs attention'],['printing','Printing']])
     if(sh.some(p=>p.state===st)) return w;
   if(!ps.length) return 'None';
-  if(ps.length===1) return ps[0].kind==='unknown'?'Not known':ST[ps[0].state]?ST[ps[0].state][1]:'';
+  if(ps.length===1) return ps[0].kind==='unknown'?'Unrecognized':ST[ps[0].state]?ST[ps[0].state][1]:'';
   return plural(ps.length,'printer','printers');
 }
 /* A printer's state in words: the port's as its line says, an AppleTalk
    printer's in its own words when it has any. */
 function stWords(p){
-  if(p.kind==='unknown') return ['','Not known'];
+  if(p.kind==='unknown') return ['','Unrecognized'];
   const t=LWT&&p.where!=='port'?LWT.find(t=>t.id===p.id):null;
   const low=w=>w?w[0].toLowerCase()+w.slice(1):w;
   if(p.state==='attention') return ['a','Needs attention: '+(p.where==='port'?'check paper and SELECT':low(t&&lwStatus(t.message))||'check the printer')];
-  if(p.state==='offline') return ['',p.where==='port'?'Offline: check power, cable and SELECT':'Offline: not answering'];
-  if(p.state==='printing'&&t&&/busy/i.test(t.message||'')&&!S.printing) return ['g','Busy with another Mac’s job'];
+  if(p.state==='offline') return ['',p.where==='port'?'Offline: check power, cable and SELECT':'Offline: check that it’s switched on'];
+  if(p.state==='printing'&&t&&/busy/i.test(t.message||'')&&!S.printing) return ['g','Busy with another job'];
   return ST[p.state]||['',''];
 }
 /* A notice: what is wrong, in bold, then what to do. */
 const NOTE={
   unknown_port:(p)=>['Unrecognized printer on the printer port','If it’s an ImageWriter, choose its model.',[['Choose Model…','open'],['Dismiss','dismiss']]],
   changed:(p,n)=>['A different printer is on the printer port','It’s an '+esc(n.model)+'.',[['Use '+esc(n.model),'accept'],['Dismiss','dismiss']]],
-  no_answer:(p)=>[q(p)+' isn’t responding','Make sure it’s on and connected. It isn’t shared until it responds.',[['Share Anyway','use_anyway'],['Dismiss','dismiss']]],
-  too_many:(p)=>[q(p)+' isn’t shared','AirWriter shares up to '+(PR.max_shared||4)+' printers. To share this one, stop sharing another.',[['OK','dismiss']]]};
+  no_answer:(p)=>[q(p)+' isn’t responding','Make sure it’s connected and switched on.',[['Share Anyway','use_anyway'],['Dismiss','dismiss']]],
+  too_many:(p)=>[q(p)+' isn’t shared','You can share up to '+(PR.max_shared||4)+' printers. To share this one, stop sharing another.',[['OK','dismiss']]]};
 const q=p=>esc(p?p.name:'A printer');
 function prDraw(){
   $('v-printers').textContent=sideWord();
@@ -607,7 +607,7 @@ function prDraw(){
   h=PR.printers.length?PR.printers.map(p=>{ const [cls]=stWords(p);
     return '<button class="row link prow" type=button data-pr='+p.id+'>'+icHTML(p)+'<span class=txt>'+esc(p.name)
       +'<small>'+esc(WHERE[p.where]||p.where)+(p.shared?'':' · Not shared')+'</small></span><i class="lamp '+cls+'"></i><span class=chev aria-hidden=true>›</span></button>'; }).join('')
-    :'<p class=empty>No printers yet. Switch your printer on and make sure it’s connected, then Look for Printers.</p>';
+    :'<p class=empty>No printers yet. Connect your printer and switch it on, then Look for Printers.</p>';
   if($('pr-list')._h!==h){ $('pr-list')._h=h; $('pr-list').innerHTML=h; }
   // AirPrint: each shared printer's address
   const sh=PR.printers.filter(p=>p.rp), host=(S.host||'airwriter.local');
@@ -617,7 +617,7 @@ function prDraw(){
   if($('ap-list')._h!==h){ $('ap-list')._h=h; $('ap-list').innerHTML=h; }
   // AppleTalk: what old Macs see
   const old=PR.printers.filter(p=>p.identified&&p.kind!=='unknown').map(p=>p.name);
-  $('oldmacs').textContent=old.length?'Old Macs see: '+old.join(', ')+'.':'Old Macs see no printers yet.';
+  $('oldmacs').textContent=old.length?'In the Chooser on vintage Macs: '+old.join(', '):'No printers in the Chooser yet.';
   if(sel!==null) pdDraw();
   suDraw();
 }
@@ -657,8 +657,8 @@ function pdDraw(){
   if(!spSaving){ $('pstart').checked=!!p.start_page; $('pstart').disabled=p.state==='offline'; }
   $('pd-cant').classList.toggle('hide',!unk&&!atiw);
   $('pd-cant').textContent=ask?'Unrecognized printer. If it’s an ImageWriter, choose its model.'
-    :atiw?'Old Macs on your other AppleTalk ways in can print to it. AirWriter can’t share it with iPhones and Macs yet.'
-    :'AirWriter can’t print to this printer yet.';
+    :atiw?'Vintage Macs on every AppleTalk connection can use it. Phones and computers can’t.'
+    :'AirWriter prints on ImageWriters and LaserWriters.';
   $('ht-box').classList.toggle('hide',unk||atiw);
   $('ht-paper').classList.toggle('hide',!iw);       // the sample is the ImageWriter's dots
   if(document.activeElement!==$('screen')&&p.dither&&p.dither!==$('screen').value){
@@ -700,7 +700,7 @@ $('pr-notes').addEventListener('click',e=>{
 });
 $('pr-look').onclick=async()=>{
   const b=$('pr-look'); b.disabled=true;
-  say('prs-say','Looking on the printer port and AppleTalk…');
+  say('prs-say','Looking for printers…');
   await prPost({look:true});
   setTimeout(()=>{ b.disabled=false; say('prs-say',''); prPoll(); },6000);
 };
@@ -713,7 +713,7 @@ byteCap($('pname'),32);
 $('model').onchange=()=>prPost({id:sel,model:$('model').value},'Saved.');
 $('pshare').onchange=async()=>{
   const on=$('pshare').checked;
-  if(!await prPost({id:sel,shared:on},on?'Shared. iPhones and Macs see it in a moment.':'Not shared.')) $('pshare').checked=!on;
+  if(!await prPost({id:sel,shared:on},on?'Shared. It shows up on phones and computers in a moment.':'Not shared.')) $('pshare').checked=!on;
 };
 /* The start page is stored in the printer: the board sends it a job and
    answers once the printer says, a few seconds. */
@@ -727,13 +727,13 @@ $('pstart').onchange=async()=>{
 };
 $('screen').onchange=()=>{
   const p=prById(sel); if(p&&p.kind==='imagewriter'){ dither=$('screen').value; render(); }
-  prPost({id:sel,dither:$('screen').value},'Saved. The next page prints with it.');
+  prPost({id:sel,dither:$('screen').value},'Saved.');
 };
 $('pd-remove').onclick=()=>{ const p=prById(sel); if(!p) return; $('rm-name').textContent=p.name; $('d-remove').showModal(); };
 $('rm-go').onclick=async()=>{ const id=sel; $('d-remove').close(); if(await prPost({id:id,remove:true},null,'prs-say')) prOpen(null); };
 $('testpage').onclick=async()=>{
   const p=prById(sel); if(!p) return;
-  if(p.state==='offline'){ say('prn-say',p.where==='port'?'The printer is offline. Check power, cable and SELECT.':'The printer isn’t answering.',1,4000); return; }
+  if(p.state==='offline'){ say('prn-say',p.where==='port'?'The printer is offline. Check power, cable and SELECT.':'The printer is offline. Check that it’s switched on.',1,4000); return; }
   const r=await postJSON('/api/test',{id:p.id});
   say('prn-say',r.error?r.error+'.':'Printing a test page.',!!r.error,4000);
 };
@@ -760,12 +760,12 @@ $('cabletest').onclick=async()=>{
 document.querySelector('[data-dlg=d-cable]').onclick=()=>{ ports(''); say('cable-say',''); $('d-cable').showModal(); };
 $('ltflash').onclick=async()=>{
   const b=$('ltflash'); if(b.disabled) return; b.disabled=true;
-  say('cable-say','Flashing… about two seconds.');
+  say('cable-say','Flashing TashTalk…');
   const r=await postJSON('/api/localtalk/flash');
   b.disabled=false;
   if(r.error){ say('cable-say',r.error,1); return; }
-  if(r.ok){ say('cable-say','TashTalk is on the chip. Plug the cable back into both ports and test again.'); b.classList.add('hide'); }
-  else say('cable-say',cap(r.err)+(r.addr?' at '+r.addr:'')+'.',1);
+  if(r.ok){ say('cable-say','TashTalk is installed. Test again.'); b.classList.add('hide'); }
+  else say('cable-say',flashErr(r),1);
 };
 
 /* ── AirPrint ──────────────────────────────────────────────────────── */
@@ -834,6 +834,17 @@ const CHIP={
   no_tashtalk:['a','The LocalTalk chip needs TashTalk.'],
   silent:['r','The LocalTalk chip isn’t answering.'+CHIP_HELP]};
 let flashing=false;
+/* A flash that failed: the board's own words when it refused to start, else
+   the chip's failure (pic_err_str) in the reader's words. The wiki's LocalTalk
+   Chip page tells these apart by their wording. */
+const FLASH_ERR={'no PIC answered':'Can’t reach the LocalTalk chip.','not a PIC12F1840':'The chip isn’t a PIC12F1840.',
+  'verify failed':'TashTalk didn’t install correctly. Try again.'};
+function flashErr(r){
+  const e=String(r.err||'');
+  if(/^[A-Z]/.test(e)) return e+'.';
+  for(const k in FLASH_ERR) if(e.startsWith(k)) return FLASH_ERR[k];
+  return 'Couldn’t flash TashTalk.';
+}
 function atDraw(){
   let macs=0, on=0;
   // the cable
@@ -920,7 +931,7 @@ $('lt-flash').onclick=async()=>{
   flashing=true; say('at-say',''); atDraw();
   const r=await postJSON('/api/localtalk/flash');
   flashing=false; b.disabled=false;
-  if(r.error||!r.ok) say('at-say',r.error||cap(r.err)+(r.addr?' at '+r.addr:'')+'.',1);
+  if(r.error||!r.ok) say('at-say',r.error||flashErr(r),1);
   else {
     S.lt_chip='ok';
     if(S.lt_port===1) LT={on:true,phase:'acquiring',macs:[]};
@@ -952,7 +963,7 @@ $('zonedone').onclick=async()=>{
   const z=$('zone').value.trim();
   if(!z||(ETS&&z===ETS.zone)){ $('d-inf').close(); return; }
   const r=await postJSON('/api/et/settings',{zone:z});
-  if(r.error){ say('zone-say','Zone names are 1 to 32 letters, digits, dashes, underscores and dots.',1); return; }
+  if(r.error){ say('zone-say','Use up to 32 letters, digits, dashes, underscores or dots.',1); return; }
   ETS=r; atDraw(); setTimeout(atPoll,1500); $('d-inf').close();
 };
 
@@ -973,12 +984,11 @@ function suLook(){
 function suDraw(){
   if(!setup) return;
   const ps=PR?PR.printers:[], looking=!!suLooking;
-  $('su-looking').textContent=looking?'Looking on the printer port and the AppleTalk port…'
-    :ps.length?'AirWriter found '+(ps.length===1?'this printer. You can rename it.':'these printers. You can rename them.'):'';
+  $('su-looking').textContent=looking?'Looking for printers…':ps.length?'Rename '+(ps.length===1?'it':'them')+' if you like.':'';
   const h=ps.length?ps.map(p=>'<div class="row prow">'+icHTML(p)+'<span class=txt><input class=fld data-rename='+p.id
       +' value="'+esc(p.name)+'" maxlength=32 autocomplete=off spellcheck=false aria-label="Name"><small>'
       +esc(WHERE[p.where]||p.where)+'</small></span></div>').join('')
-    :'<p class=empty>'+(looking?'Looking…':'No printers found yet.')+'</p>';
+    :'<p class=empty>'+(looking?'Looking…':'No printers yet.')+'</p>';
   // a name being typed is kept
   if(!$('su-list').contains(document.activeElement)&&$('su-list')._h!==h){ $('su-list')._h=h; $('su-list').innerHTML=h; }
   $('su-next-t').textContent=ps.length?'Continue':'Continue Without a Printer';
@@ -1071,7 +1081,7 @@ function scanning(on){
 let netErr=false;
 async function scan(){
   if(netErr) say('net-say',''); $('rescan').disabled=true; scanning(true);
-  let raw=null, err='No answer from AirWriter.';
+  let raw=null, err='Can’t reach AirWriter.';
   try{ const r=await fetchIn('/api/scan',20000); if(r.ok) raw=await r.json(); else err='Couldn’t look for networks. Try again.'; }catch(e){}
   $('rescan').disabled=false; scanning(false);
   netErr=!raw;
@@ -1104,21 +1114,20 @@ $('join').onclick=async()=>{
     const b='<b>'+esc(ssid)+'</b>', host=esc(S.host||'airwriter.local');
     const ps=PR?PR.printers:[], one=ps.length===1?esc(ps[0].name):'your printer';
     const row=(ic,g,t,s)=>'<div class="row prow"><span class="ic '+ic+'"><svg><use href="#'+g+'"/></svg></span><span class=txt>'+t+'<small>'+s+'</small></span></div>';
-    $('su-joining').innerHTML='AirWriter is joining '+b+', and your phone goes back to '+b+' by itself.';
+    $('su-joining').innerHTML='AirWriter is joining '+b+'. Your phone reconnects to it by itself.';
     $('su-then').innerHTML=ps.length
-      ?row('g','g-airprint','Print from your iPhone, iPad or Mac','Choose Print (File &gt; Print on a Mac), then '+one+'.')
-        +row('k','g-dots','Print a test page','When AirWriter’s lights turn white, press the button in the middle.')
-      :row('k','g-look','Your printers','Once it has joined, AirWriter looks for them on '+b+'. See what it found at <b>'+host+'</b>.');
-    $('su-later').innerHTML=ps.length?'AirWriter’s settings are at <b>'+host+'</b>.':'';
+      ?row('g','g-airprint','Print from a phone or computer','Choose Print (File &gt; Print on a Mac), then '+one+'.')
+        +row('k','g-dots','Print a test page','When AirWriter’s lights turn white, press the test button in the middle.')
+      :row('k','g-add','Add a printer','Connect it and switch it on. It shows up at <b>'+host+'</b>.');
+    $('su-later').innerHTML=ps.length?'AirWriter’s settings page is at <b>'+host+'</b>.':'';
     suStep(3);
     return;
   }
   // From its own network the page cannot follow it: say where it will be.
   const q='“'+esc(ssid)+'”', host=esc(S.host||'airwriter.local'), link='<a href="http://'+host+'/">'+host+'</a>';
-  waitFor('Joining “'+ssid+'”',setup?'AirWriter restarts on it. Join '+q+' here too, then open '+link+'.'
-      :'AirWriter restarts on the new network. This page reloads when it answers there.',true,
-    'No answer here yet. On '+q+', open '+link+'. If AirWriter couldn’t join, it makes its own network, '
-      +esc($('apname').textContent)+', to try again.');
+  waitFor('Joining “'+ssid+'”','AirWriter restarts on the new network. This page reloads when it’s back.',true,
+    'Not back yet. On '+q+', open '+link+'. If AirWriter couldn’t join, join the '
+      +esc($('apname').textContent)+' network to try again.');
 };
 $('pw').onkeydown=e=>{ if(e.key==='Enter') $('join').click(); };
 /* A host name is letters, digits and dashes. */
@@ -1142,9 +1151,9 @@ function fwDraw(u){
   let cls='g', text='Up to date';
   if(u.setup){ cls=''; text='Join a network to look for updates'; }
   else if(u.key!=='airwriter'){ cls='a'; text=u.key==='other'?'Signed with another key':'Not signed'; }
-  else if(u.state==='checking'){ cls='a'; text='Looking…'; }
+  else if(u.state==='checking'){ cls='a'; text='Checking…'; }
   else if(u.state==='downloading'){ cls='a'; text='Downloading'+(u.progress>=0?' '+u.progress+'%':'…'); }
-  else if(u.state==='installing'){ cls='a'; text='Checking the signature…'; }
+  else if(u.state==='installing'){ cls='a'; text='Installing…'; }
   else if(u.state==='restarting'){ cls='a'; text='Restarting…'; }
   else if(u.state==='failed'&&u.error){ cls='r'; text=cap(u.error); }
   else if(u.newer){ cls='a'; text=u.latest+' is available'; }
@@ -1157,7 +1166,7 @@ function fwDraw(u){
   $('fwauto').checked=!!u.auto&&(u.setup||u.key==='airwriter'); $('fwauto').disabled=!net;
   $('v-about').textContent=u.newer?'Update':'';
   if(u.state==='restarting'&&!$('d-wait').open)
-    waitFor('Installing','Restarting into '+esc(u.latest||'the new version')+'. This page reloads when AirWriter is back.',true);
+    waitFor('Installing','Restarting with '+esc(u.latest||'the new version')+'. This page reloads when AirWriter is back.',true);
   clearTimeout(fwFast); if(busy) fwFast=setTimeout(fwPoll,1500);
 }
 async function fwPoll(){
@@ -1181,7 +1190,7 @@ $('fw').onchange=async()=>{
   try{
     const r=await fetch('/update',{method:'POST',body:f});
     if(!r.ok){ $('d-wait').close(); say('about-say',cap((await r.text()).trim())+'.',1); }
-    else waitFor('Installing','Restarting into the new version. This page reloads when AirWriter is back.',true);
+    else waitFor('Installing','Restarting with the new version. This page reloads when AirWriter is back.',true);
   }catch(e){ $('d-wait').close(); say('about-say','The upload failed.',1); }
   $('fw').value='';
 };
@@ -1189,7 +1198,7 @@ fwPoll(); setInterval(()=>{ if(!document.hidden&&!FW_BUSY.includes(U.state)) fwP
 $('restart').onclick=async()=>{
   const r=await postJSON('/api/restart');
   if(r.error){ $('d-restart').close(); say('about-say',r.error,1); return; }
-  waitFor('Restarting',S.printing?'After this page. This page reloads when AirWriter is back.':'This page reloads when AirWriter is back.',true);
+  waitFor('Restarting',S.printing?'AirWriter restarts after the current print. This page reloads when it’s back.':'This page reloads when AirWriter is back.',true);
 };
 $('erase').onclick=async()=>{
   const r=await postJSON('/api/erase');
@@ -1210,8 +1219,8 @@ function drawDips(bits,ltPort){
   const rows=[
     ['AppleTalk port','1, 2', ltPort>=0?'<a href="#appletalk" data-goto=appletalk>Set in AppleTalk</a>':yn(mode===2)],
     ['Developer mode','3', yn(on(2))],
-    ['Test page at power-on','4', yn(on(3))],
-    ['Halftone','5, 6', 'Not used yet'],
+    ['Test page when switched on','4', yn(on(3))],
+    ['Halftone','5, 6', 'Not used'],
     ['Rainbow status lights','7', yn(on(6))],
     ['Spare','8', 'Not used']];
   $('dip-rows').innerHTML=rows.map(r=>'<div class=row><span class=txt>'+r[0]+'<span class=num>'+r[1]+'</span></span><span class=val>'+r[2]+'</span></div>').join('');

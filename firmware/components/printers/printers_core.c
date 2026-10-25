@@ -767,7 +767,7 @@ int pr_post(pr_list_t *l, const char *body, pr_post_t *o)
     o->screen_id = o->start_page_id = o->start_page = -1;
     const char *b = body ? body : "";
     while (*b == ' ' || *b == '\n' || *b == '\r' || *b == '\t') b++;
-    if (*b != '{') return post_err(o, "That isn't something AirWriter understands.");
+    if (*b != '{') return post_err(o, "Unknown request.");
     int v;
     long n;
     if (json_has_bool(b, "look", &v) && v) {
@@ -800,7 +800,7 @@ int pr_post(pr_list_t *l, const char *body, pr_post_t *o)
         return 0;
     }
     if (json_has_bool(b, "use_anyway", &v) && v) {
-        if (pr_use_anyway(l, id)) return post_err(o, "Only a LaserWriter that didn't answer.");
+        if (pr_use_anyway(l, id)) return post_err(o, "Only for a LaserWriter that isn’t responding.");
         o->changed = 1;
     }
     if (json_has_str(b, "model", s, sizeof s)) {
@@ -817,10 +817,12 @@ int pr_post(pr_list_t *l, const char *body, pr_post_t *o)
     if (json_has_bool(b, "shared", &v)) {
         pr_rec_t *r = pr_get(l, id);
         if (v && r->kind == PR_KIND_AT_IMAGEWRITER)
-            return post_err(o, "AirWriter can't share this printer with iPhones and Macs yet.");
-        if (v && (r->kind == PR_KIND_UNKNOWN || !r->identified))
-            return post_err(o, "That printer can't be shared until AirWriter knows what it is.");
-        if (pr_set_shared(l, id, v)) return post_err(o, "AirWriter shares up to four printers.");
+            return post_err(o, "This printer can’t be shared with phones and computers.");
+        if (v && r->kind == PR_KIND_UNKNOWN)
+            return post_err(o, "Choose this printer’s model to share it.");
+        if (v && !r->identified)
+            return post_err(o, "This printer can’t be shared until it responds.");
+        if (pr_set_shared(l, id, v)) return post_err(o, "You can share up to 4 printers.");
         o->changed = 1;
     }
     if (json_has_str(b, "dither", s, sizeof s)) {
