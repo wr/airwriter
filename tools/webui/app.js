@@ -548,7 +548,8 @@ setTimeout(()=>document.body.classList.add('ready'),1500);
 
 /* ── printers ──────────────────────────────────────────────────────── */
 /* W-1088: every printer AirWriter has (/api/printers): notices first, one row
-   each, and a printer's detail in the pane when it is opened. */
+   each, and a printer's detail in the pane when it is opened. A notice is only
+   for what asks the person something; a new printer just appears in the list. */
 let PR=null, sel=null, LWT=null;
 const WHERE={port:'Printer port',cable:'AppleTalk port',network:'Your network',tunnel:'Basilisk II',zone:'Infinite Mac'};
 const KIND_IC={imagewriter:['k','g-iw'],laserwriter:['k','g-laser'],'appletalk-imagewriter':['b','g-iw'],unknown:['unk','g-printer']};
@@ -581,22 +582,24 @@ function stWords(p){
   if(p.state==='printing'&&t&&/busy/i.test(t.message||'')&&!S.printing) return ['g','Busy with another Mac’s job'];
   return ST[p.state]||['',''];
 }
+/* A notice: what is wrong, in bold, then what to do. */
 const NOTE={
-  found:(p)=>['Found '+q(p)+'. It’s shared with your iPhone, iPad and Mac.',[['OK','dismiss']]],
-  unknown_port:(p)=>['Something on the printer port didn’t say what it is. If it’s an ImageWriter, choose its model.',[['Choose Model…','open'],['Dismiss','dismiss']]],
-  changed:(p,n)=>['The printer on the port now says it’s an '+esc(n.model)+'.',[['Use '+esc(n.model),'accept'],['Dismiss','dismiss']]],
-  no_answer:(p)=>[q(p)+' hasn’t answered AirWriter’s questions, so it isn’t shared.',[['Share Anyway','use_anyway'],['Dismiss','dismiss']]],
-  too_many:(p)=>['AirWriter shares up to '+(PR.max_shared||4)+' printers. '+q(p)+' isn’t shared.',[['OK','dismiss']]]};
-const q=p=>'<b>'+esc(p?p.name:'A printer')+'</b>';
+  unknown_port:(p)=>['Unrecognized printer on the printer port','If it’s an ImageWriter, choose its model.',[['Choose Model…','open'],['Dismiss','dismiss']]],
+  changed:(p,n)=>['A different printer is on the printer port','It’s an '+esc(n.model)+'.',[['Use '+esc(n.model),'accept'],['Dismiss','dismiss']]],
+  no_answer:(p)=>[q(p)+' isn’t responding','Make sure it’s on and connected. It isn’t shared until it responds.',[['Share Anyway','use_anyway'],['Dismiss','dismiss']]],
+  too_many:(p)=>[q(p)+' isn’t shared','AirWriter shares up to '+(PR.max_shared||4)+' printers. To share this one, stop sharing another.',[['OK','dismiss']]]};
+const q=p=>esc(p?p.name:'A printer');
 function prDraw(){
   $('v-printers').textContent=sideWord();
   if(!PR) return;
+  // a notice waiting: the caution mark beside the word, seen from any pane
+  if(PR.notes.some(n=>NOTE[n.kind])) $('v-printers').insertAdjacentHTML('afterbegin','<svg class=warn><use href="#g-caution"/></svg>');
   // the notices, each with its keys
   let h='';
   PR.notes.forEach((n,i)=>{
     const p=prById(n.id), f=NOTE[n.kind]; if(!f) return;
-    const [text,keys]=f(p,n);
-    h+='<div class="box note"><p>'+text+'</p><div class=btnrow>'+keys.map(([l,a])=>
+    const [title,text,keys]=f(p,n);
+    h+='<div class="box note"><svg class=warn><use href="#g-caution"/></svg><p><b>'+title+'</b>'+text+'</p><div class=btnrow>'+keys.map(([l,a])=>
       '<button class=btn type=button data-note='+i+' data-act='+a+' data-id='+n.id+'>'+l+'</button>').join('')+'</div></div>';
   });
   if($('pr-notes')._h!==h){ $('pr-notes')._h=h; $('pr-notes').innerHTML=h; }
@@ -649,7 +652,7 @@ function pdDraw(){
   $('share-row').classList.toggle('hide',unk||atiw);
   $('pshare').checked=!!p.shared; $('pshare').disabled=!p.identified;
   $('pd-cant').classList.toggle('hide',!unk&&!atiw);
-  $('pd-cant').textContent=ask?'It didn’t say what it is. If it’s an ImageWriter, choose its model.'
+  $('pd-cant').textContent=ask?'Unrecognized printer. If it’s an ImageWriter, choose its model.'
     :atiw?'Old Macs on your other AppleTalk ways in can print to it. AirWriter can’t share it with iPhones and Macs yet.'
     :'AirWriter can’t print to this printer yet.';
   $('ht-box').classList.toggle('hide',unk||atiw);

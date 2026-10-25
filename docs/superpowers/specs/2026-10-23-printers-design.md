@@ -134,13 +134,14 @@ updated board.
   (its NBP name matches the box's own, or it answers a status that says AirWriter) is skipped.
 - **An AppleTalk printer that won't say what it is.** A `LaserWriter`-type printer whose query
   job gets no answer is asked again twice over two minutes. Still nothing: it is listed with a
-  notice, "*Name* didn't answer AirWriter's questions.", and the keys Try Again, Use Anyway (as a
-  PostScript printer: Letter, 300 dpi, hex) and Remove. Add a Printer… covers the printer port
+  notice, "*Name* isn't responding. Make sure it's on and connected. It isn't shared until it
+  responds.", and the keys Try Again, Use Anyway (as a PostScript printer: Letter, 300 dpi,
+  hex) and Remove. Add a Printer… covers the printer port
   only: an AppleTalk printer must answer a lookup to be found (printers in other zones are out).
 - **Identified means shared.** A new identified printer gets a record, `shared` on, and appears
-  on phones under its own name, with a notice in the Printers section ("Found Office
-  LaserWriter on your network. It's ready to print from your iPhone, iPad and Mac."). A new
-  unidentified one gets a record, `shared` off, and a notice asking what it is.
+  on phones under its own name, and appears in the Printers list; no notice (a "found" notice
+  that stayed until dismissed was cut: it told nothing the list didn't). A new unidentified one
+  gets a record, `shared` off, and a notice asking what it is.
 - **Gone is not removed.** A record whose printer stops answering stays, shown offline on the
   page and to phones (`stopped`, `offline-report`), until the person removes it. AirWriter
   cannot tell "unplugged for good" from "off for the evening", and a printer that comes and
@@ -186,7 +187,8 @@ AppleTalk pane's LaserWriters card are replaced by Printers; nothing else moves.
 
 **Printers** (sidebar row: "Ready", "2 printers", or the most urgent state). The hero: a printer
 icon, "Printers", "The printers AirWriter shares with your iPhone, iPad, Mac and old Macs."
-Notices first (found, unidentified, changed, more than four), each with its keys. Then one row
+Notices first, only what asks something (unidentified, changed, didn't answer, more than four),
+each with a caution mark and its keys. Then one row
 per printer, in the W-1079 row shape: icon by kind, name, where it is, a state lamp, and a
 chevron to its detail. Keys at the foot: Look for Printers, Add a Printer….
 
@@ -215,8 +217,7 @@ printers, and a node cannot stop once started), Networked Macs on, Basilisk II o
 off, as today.
 
 `tools/webui/states.json` gains the states this needs (no printer, one port printer, a port
-printer and two AppleTalk printers, an unidentified port device, a found notice, a changed
-notice, more than four, a printer offline, the finish sheet, each setup step), and every one is
+printer and two AppleTalk printers, an unidentified port device, a changed notice, more than four, a printer offline, the finish sheet, each setup step), and every one is
 looked at in `preview.py` at desktop and phone width, light and dark, before the page goes to
 the board.
 

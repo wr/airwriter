@@ -694,8 +694,10 @@ read back is a list made again). At most 8 records.
   at 1-3 (`ipp/p<id>`), Bonjour by name. A change reaches Bonjour at once, after the job holding
   its slot. The W-1079 AirPrint switch is the whole box's. AirPrint to an AppleTalk ImageWriter
   is not built: it is old Macs' only.
-- **Notices.** found, unknown port, changed (accept or dismiss), no answer (Share Anyway), too
-  many; at most 8.
+- **Notices.** Only what asks the person something: unknown port, changed (accept or dismiss),
+  no answer (Share Anyway), too many; at most 8, each with a caution mark, and one beside the
+  sidebar's Printers while any waits. A newly found printer just appears in the list (a "found"
+  notice stored by an older build is dropped on load).
 - **Old Macs.** On each way in that is on, the node's own name is the port's ImageWriter (if
   any), registrations 1-3 the AppleTalk printers from other links under their own NBP names and
   types (relayed), and `<host name>:AirWriter` at registration 4 on every running link

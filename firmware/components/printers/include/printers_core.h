@@ -35,7 +35,7 @@ typedef struct {
     uint8_t   found_auto;     // found and identified by AirWriter, not told by the person
     uint8_t   identified;     // AirWriter knows what it is (a LaserWriter: its query answered)
     uint8_t   query_fails;    // a LaserWriter's unanswered queries in a row
-    uint8_t   announced;      // its "found" notice was given (once in its life)
+    uint8_t   announced;      // shared on being found (once in its life)
     uint8_t   ipp_laser;      // the LaserWriter W-1082 shared: also answers on ipp/laser
     char      name[PR_NAME_MAX];      // UTF-8: Bonjour, IPP, the page
     uint8_t   nbp[33];        // an AppleTalk printer's NBP name, Pascal, MacRoman
@@ -48,6 +48,9 @@ typedef struct {
     lw_info_t lw;             // LaserWriters: the query's answers
 } pr_rec_t;
 
+// Notices are for what asks the person something. PR_NOTE_FOUND is never made
+// now (a new printer just appears in the list); one stored before is dropped
+// on load. Its number stays so stored kinds keep theirs.
 typedef enum { PR_NOTE_FOUND, PR_NOTE_UNKNOWN_PORT, PR_NOTE_CHANGED, PR_NOTE_NO_ANSWER,
                PR_NOTE_TOO_MANY } pr_note_kind_t;
 typedef struct { uint8_t kind, id, model; } pr_note_t;
