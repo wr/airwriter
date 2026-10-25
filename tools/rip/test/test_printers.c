@@ -631,6 +631,34 @@ static void test_add_port(void)
     CHECK_EQ_INT(L.n_notes, 0);
 }
 
+// W-1099: the start page rides in the record's lw_info_t. Every answered
+// query asks the printer again and brings it, so the record follows the
+// printer; a query that fails changes nothing; the stored list keeps it.
+static void test_start_page_kept(void)
+{
+    fresh();
+    int lw = pr_at_seen(&L, PR_WHERE_CABLE, P("NTR"), P("LaserWriter"), 0);
+    lw_parse_t q;
+    lw_parse_init(&q);
+    const char *a = "aw:product=LaserWriter Personal NTR\raw:startpage=false\raw:probe=256 1\raw:end\r";
+    lw_parse_feed(&q, (const uint8_t *)a, strlen(a));
+    pr_at_queried(&L, lw, 1, &q.info);
+    CHECK_EQ_INT(pr_get(&L, lw)->lw.start_page, LW_START_OFF);
+    lw_parse_init(&q);                                      // switched on again: asked again
+    a = "aw:product=LaserWriter Personal NTR\raw:startpage=true\raw:probe=256 1\raw:end\r";
+    lw_parse_feed(&q, (const uint8_t *)a, strlen(a));
+    pr_at_queried(&L, lw, 1, &q.info);
+    CHECK_EQ_INT(pr_get(&L, lw)->lw.start_page, LW_START_ON);
+    pr_at_queried(&L, lw, 0, NULL);                         // no answer: as it was
+    CHECK_EQ_INT(pr_get(&L, lw)->lw.start_page, LW_START_ON);
+    static uint8_t buf[4096];
+    size_t n = pr_save(&L, buf, sizeof buf);
+    pr_list_t M;
+    pr_init(&M, MAC, 1);
+    CHECK_EQ_INT(pr_load(&M, buf, n), 0);
+    CHECK_EQ_INT(pr_get(&M, lw)->lw.start_page, LW_START_ON);
+}
+
 int main(void)
 {
     test_add_port();
@@ -657,5 +685,6 @@ int main(void)
     test_load_garbage();
     test_load_newer();
     test_json();
+    test_start_page_kept();
     TEST_END;
 }
