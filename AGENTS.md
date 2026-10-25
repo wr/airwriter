@@ -248,7 +248,11 @@ What works on `main`:
   own Bonjour name and UUID. Jobs rip at 300 dpi into Level 1 `imagemask` bands (`ps_page`) and
   go out through one PAP client beside the server (`localtalk/pap_client.c`); `components/laser`
   holds the query, the status words, the caps and UUID, the policy (`lw_core.c`: lookups,
-  status in turn, queries) and the board's side (`laser.c`). `GET /api/laser` is diagnostics
+  status in turn, queries) and the board's side (`laser.c`). A LaserWriter's detail has a
+  Start page switch (`W-1099 LaserWriter detail: a switch for the printer's start page`) where
+  the printer says whether it prints one; flipping it sends `exitserver` with password 0 and
+  `setdostartpage`, and the page waits for the printer's answer. Board 1's NTR took it through
+  the relay (2026-10-24, DoStartPage read back false). `GET /api/laser` is diagnostics
   (heard, targets, the last job's figures); the page reads `/api/printers`. A link answers as
   the ImageWriter only where its card's switch is on, and runs for a printer in the list
   whatever it says. `etpeer.py laserwriter` is the fake (`--also NAME` for a second).
