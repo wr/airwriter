@@ -54,6 +54,8 @@ typedef struct {
     int    (*pap_open)(void *ctx, int reg, uint64_t now);
     size_t (*reg_status)(void *ctx, int reg, uint8_t *pstr, size_t cap);
     size_t (*reg_output)(void *ctx, int reg, uint8_t *buf, size_t max, int *eof, int again);
+    // W-1098: lt_ops_t's name_check. May be NULL.
+    void   (*name_check)(void *ctx, const nbp_tuple_t *t);
 } et_ops_t;
 
 typedef struct { uint16_t net; uint8_t node; uint8_t hw[ETH_ALEN]; uint64_t at; } et_map_t;

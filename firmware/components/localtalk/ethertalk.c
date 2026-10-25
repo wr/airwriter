@@ -105,6 +105,7 @@ static volatile int s_radio_on = 1;
 // running whatever its switch; the switch alone answers as the ImageWriter.
 static volatile int s_laser_tun, s_laser_radio;
 static void     (*s_found)(int link, const nbp_tuple_t *t, const lt_route_t *r);
+static void     (*s_name_check)(int link, const nbp_tuple_t *t);
 
 static int tun_wanted(void)   { return s_tunnel_on || s_laser_tun; }
 static int radio_wanted(void) { return s_radio_on || s_laser_radio; }
@@ -225,6 +226,11 @@ static void op_found(void *ctx, const nbp_tuple_t *t, const lt_route_t *r)
     if (s_found) s_found((int)((et_side_t *)ctx)->owner.link, t, r);
 }
 
+static void op_name_check(void *ctx, const nbp_tuple_t *t)
+{
+    if (s_name_check) s_name_check((int)((et_side_t *)ctx)->owner.link, t);
+}
+
 static void side_abort(void *ctx)
 {
     et_side_t *s = ctx;
@@ -332,7 +338,7 @@ static void side_init(et_side_t *s, const uint8_t mac[ETH_ALEN])
     memcpy(c.mac, mac, ETH_ALEN);
     et_ops_t o = { s, s == &s_tun ? tun_send : s == &s_zone ? zone_send : radio_send, op_log,
                    op_begin, op_data, op_room, op_end, op_claimed, op_found, op_pap_open,
-                   op_reg_status, op_reg_output };
+                   op_reg_status, op_reg_output, op_name_check };
     et_link_init(&s->link, &c, &o, now_ms());
     if (s->offers)
         lt_node_offer(&s->link.node, s->offers->own, s->offers->rel, s->offers->n_rel, s->offers->marker);
@@ -839,6 +845,11 @@ void ethertalk_lookup(const char *type)
 void ethertalk_set_found(void (*found)(int link, const nbp_tuple_t *t, const lt_route_t *r))
 {
     s_found = found;
+}
+
+void ethertalk_set_name_check(void (*check)(int link, const nbp_tuple_t *t))
+{
+    s_name_check = check;
 }
 
 void ethertalk_attach(int link, pap_client_t *c)

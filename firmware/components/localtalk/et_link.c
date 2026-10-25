@@ -180,6 +180,11 @@ static size_t t_reg_output(void *ctx, int reg, uint8_t *buf, size_t max, int *eo
     }
     return l->ops.reg_output(l->ops.ctx, reg, buf, max, eof, again);
 }
+static void t_name_check(void *ctx, const nbp_tuple_t *t)
+{
+    et_link_t *l = ctx;
+    if (l->ops.name_check) l->ops.name_check(l->ops.ctx, t);
+}
 
 // ------------------------------------------------------------- the link
 
@@ -192,7 +197,7 @@ void et_link_init(et_link_t *l, const et_cfg_t *cfg, const et_ops_t *ops, uint64
     l->now = now;
     lt_cfg_t nc = { cfg->object, cfg->type, cfg->status, 0, cfg->seed, cfg->names, cfg->regs };
     lt_ops_t no = { l, t_send, NULL, t_log, t_begin, t_data, t_room, t_end, t_found, t_pap_open,
-                    t_reg_status, t_reg_output };
+                    t_reg_status, t_reg_output, t_name_check };
     lt_node_init_elap(&l->node, &nc, &no, cfg->idle_hold_ms, now);
     if (cfg->hint_net >= 0xFF00 && cfg->hint_net <= 0xFFFE && cfg->hint_node >= 1 &&
         cfg->hint_node <= 253) {

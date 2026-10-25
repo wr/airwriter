@@ -70,6 +70,7 @@ static void     (*s_tap)(void *ctx, const uint8_t *f, size_t n);
 static int        s_serve = 1;
 static pap_client_t *s_client;
 static void     (*s_found)(int link, const nbp_tuple_t *t, const lt_route_t *r);
+static void     (*s_name_check)(int link, const nbp_tuple_t *t);
 static void      *s_tap_ctx;
 
 // W-1049: the node's counters as last seen, to tell the panel what changed.
@@ -150,6 +151,12 @@ static void op_found(void *ctx, const nbp_tuple_t *t, const lt_route_t *r)
 {
     (void)ctx;
     if (s_found) s_found(AT_LINK_CABLE, t, r);
+}
+
+static void op_name_check(void *ctx, const nbp_tuple_t *t)
+{
+    (void)ctx;
+    if (s_name_check) s_name_check(AT_LINK_CABLE, t);
 }
 
 // The node's own connection prints on the ImageWriter; one on another
@@ -345,6 +352,7 @@ esp_err_t localtalk_start(const localtalk_cfg_t *cfg)
     s_ops = (lt_ops_t){ .send = op_send, .claim = op_claim, .log = op_log,
                         .job_begin = op_job_begin, .job_data = op_job_data,
                         .job_room = op_job_room, .job_end = op_job_end, .found = op_found,
+                        .name_check = op_name_check,
                         .pap_open = op_pap_open, .reg_status = op_reg_status,
                         .reg_output = op_reg_output };
     xSemaphoreTake(s_lock, portMAX_DELAY);
@@ -446,6 +454,11 @@ void localtalk_lookup(const char *type)
 void localtalk_set_found(void (*found)(int link, const nbp_tuple_t *t, const lt_route_t *r))
 {
     s_found = found;
+}
+
+void localtalk_set_name_check(void (*check)(int link, const nbp_tuple_t *t))
+{
+    s_name_check = check;
 }
 
 void localtalk_attach(pap_client_t *c)

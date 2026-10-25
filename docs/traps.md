@@ -320,6 +320,15 @@ Traps already explained in a code comment are listed only when the comment is ea
 - **`laser.c`'s lock order is `s_client_mx`, a link's lock, `s_mu`.** The client's callbacks
   run under a link's lock and take only `s_mu`; Cancel-Job reaches the client as a flag, since
   `ipp_server` calls cancel under its own lock.
+- **The printer list's NVS blob is `pr_rec_t`s as they are in RAM.** A field added to
+  `pr_rec_t` (or to `lw_info_t`, inside it) changes the blob's size, and an older firmware (an
+  OTA rollback, the known-good reset) then reads none of it, keeps it untouched and shares no
+  printer. Keep new facts about a printer beside it under a key of their own, as W-1098's
+  `seen` does (addresses and page counts).
+- **A printer switched on is not ready at its first frame.** The NTR spends 8 s on LLAP ENQs
+  (TashTalk passes other nodes' ENQs; `/api/lt` counts them in `frames`, not `heard`), then
+  looks up its own name five times 2 s apart, and answers lookups only after that. Look after
+  the last check (W-1098), not at the first sign of it.
 - **The preview server's port 8079 may be another session's.** `preview.py --port` runs one of
   your own.
 

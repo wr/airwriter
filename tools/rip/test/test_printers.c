@@ -602,8 +602,170 @@ static void test_add_port(void)
     CHECK_EQ_INT(L.n_notes, 0);
 }
 
+// W-1098: a LaserWriter's query answered on `where` at node, with its page
+// count; the id the answers went to.
+static int lw_answers(int id, pr_where_t where, uint8_t node, int32_t pages, const char *product,
+                      const pr_live_t *live)
+{
+    lw_info_t info;
+    lw_info_default(&info);
+    strcpy(info.product, product);
+    static const pr_live_t none[PR_MAX];
+    int got = pr_at_answered(&L, id, where, 0, node, pages, &info, live ? live : none);
+    pr_at_queried(&L, got, 1, &info);
+    return got;
+}
+
+static const char NTR[] = "LaserWriter Personal NTR";
+
+// A LaserWriter renamed (LaserWriter Utility, or a new owner) comes back at
+// the address it had under its new name. Its record goes on -- its uuid, its
+// AirPrint printer, its settings -- under the new name, and no printer is
+// found.
+static void test_at_renamed(void)
+{
+    fresh();
+    int a = pr_at_seen(&L, PR_WHERE_CABLE, P("Personal LaserWriter NTR"), P("LaserWriter"), 0);
+    CHECK_EQ_INT(lw_answers(a, PR_WHERE_CABLE, 233, 10287, NTR, NULL), a);
+    pr_get(&L, a)->gain = 20;
+    char uuid[46];
+    strcpy(uuid, pr_get(&L, a)->uuid);
+    int notes = L.n_notes;
+
+    int b = pr_at_seen(&L, PR_WHERE_CABLE, P("Wells's LaserWriter"), P("LaserWriter"), 0);
+    CHECK(b >= 0 && b != a);
+    CHECK_EQ_INT(L.n, 2);
+    CHECK_EQ_INT(lw_answers(b, PR_WHERE_CABLE, 233, 10290, NTR, NULL), a);
+    CHECK_EQ_INT(L.n, 1);
+    CHECK(pr_get(&L, b) == NULL);
+    const pr_rec_t *r = pr_get(&L, a);
+    CHECK(r->nbp[0] == 19 && !memcmp(r->nbp + 1, "Wells's LaserWriter", 19));
+    CHECK(strcmp(r->name, "Wells's LaserWriter") == 0);   // its own name follows
+    CHECK(strcmp(r->uuid, uuid) == 0);
+    CHECK_EQ_INT(r->shared, 1);
+    CHECK_EQ_INT(r->gain, 20);
+    CHECK_EQ_INT(L.n_notes, notes);                        // nothing found
+    const pr_seen_t *s = pr_seen_of(&L, a);
+    CHECK(s && s->pages == 10290 && s->node == 233 && s->where == PR_WHERE_CABLE);
+    CHECK(pr_seen_of(&L, b) == NULL);
+
+    // Renamed again, and its count not given this time: the last one stands.
+    int c = pr_at_seen(&L, PR_WHERE_CABLE, P("Den"), P("LaserWriter"), 0);
+    CHECK_EQ_INT(lw_answers(c, PR_WHERE_CABLE, 233, 10301, NTR, NULL), a);
+    CHECK_EQ_INT(lw_answers(a, PR_WHERE_CABLE, 233, -1, NTR, NULL), a);
+    CHECK_EQ_INT(pr_seen_of(&L, a)->pages, 10301);
+    CHECK(strcmp(pr_get(&L, a)->name, "Den") == 0);
+}
+
+// A name the person gave it stays.
+static void test_at_renamed_named(void)
+{
+    fresh();
+    int a = pr_at_seen(&L, PR_WHERE_CABLE, P("Personal LaserWriter NTR"), P("LaserWriter"), 0);
+    lw_answers(a, PR_WHERE_CABLE, 233, 10287, NTR, NULL);
+    CHECK_EQ_INT(pr_rename(&L, a, "Front Office"), 0);
+    int b = pr_at_seen(&L, PR_WHERE_CABLE, P("Wells's LaserWriter"), P("LaserWriter"), 0);
+    CHECK_EQ_INT(lw_answers(b, PR_WHERE_CABLE, 233, 10290, NTR, NULL), a);
+    CHECK(strcmp(pr_get(&L, a)->name, "Front Office") == 0);
+    CHECK(pr_get(&L, a)->nbp[0] == 19);
+}
+
+// Not a rename: fewer pages, another product, link or address, the old name
+// still answering, a count not given now or then, or a printer the list
+// already had.
+static void test_at_not_renamed(void)
+{
+    static const struct {
+        pr_where_t where;
+        uint8_t node;
+        int32_t pages, old_pages;
+        const char *product;
+        int live;
+    } cases[] = {
+        { PR_WHERE_CABLE, 233, 10000, 10287, NTR, 0 },
+        { PR_WHERE_CABLE, 233, 10290, 10287, "LaserWriter II NT", 0 },
+        { PR_WHERE_NETWORK, 233, 10290, 10287, NTR, 0 },
+        { PR_WHERE_CABLE, 234, 10290, 10287, NTR, 0 },
+        { PR_WHERE_CABLE, 233, 10290, 10287, NTR, 1 },
+        { PR_WHERE_CABLE, 233, -1, 10287, NTR, 0 },
+        { PR_WHERE_CABLE, 233, 10290, -1, NTR, 0 },
+    };
+    for (size_t k = 0; k < sizeof cases / sizeof cases[0]; k++) {
+        fresh();
+        int a = pr_at_seen(&L, PR_WHERE_CABLE, P("Personal LaserWriter NTR"), P("LaserWriter"), 0);
+        lw_answers(a, PR_WHERE_CABLE, 233, cases[k].old_pages, NTR, NULL);
+        int b = pr_at_seen(&L, cases[k].where, P("Wells's LaserWriter"), P("LaserWriter"), 0);
+        pr_live_t live[PR_MAX] = { 0 };
+        if (cases[k].live) live[pr_index(&L, a)].present = 1;
+        if (lw_answers(b, cases[k].where, cases[k].node, cases[k].pages, cases[k].product, live) != b)
+            fprintf(stderr, "  case %zu taken for a rename\n", k);
+        CHECK_EQ_INT(L.n, 2);
+        CHECK(pr_get(&L, a)->nbp[0] == 24);
+        CHECK_EQ_INT(pr_get(&L, b)->identified, 1);
+    }
+
+    fresh();
+    int a = pr_at_seen(&L, PR_WHERE_CABLE, P("Personal LaserWriter NTR"), P("LaserWriter"), 0);
+    lw_answers(a, PR_WHERE_CABLE, 233, 10287, NTR, NULL);
+    int b = pr_at_seen(&L, PR_WHERE_CABLE, P("Office"), P("LaserWriter"), 0);
+    lw_answers(b, PR_WHERE_CABLE, 40, 500, NTR, NULL);
+    CHECK_EQ_INT(lw_answers(b, PR_WHERE_CABLE, 233, 20000, NTR, NULL), b);   // it moved
+    CHECK_EQ_INT(L.n, 2);
+}
+
+// The addresses and counts are stored apart from the list (its blob is as
+// it was, so a firmware without them reads it); a printer removed takes its
+// own with it, and one for a printer not in the list is not read back.
+static void test_seen_save_load(void)
+{
+    fresh();
+    int a = pr_at_seen(&L, PR_WHERE_CABLE, P("Personal LaserWriter NTR"), P("LaserWriter"), 0);
+    lw_answers(a, PR_WHERE_CABLE, 233, 10287, NTR, NULL);
+    int b = pr_at_seen(&L, PR_WHERE_NETWORK, P("Office"), P("LaserWriter"), 0);
+    lw_info_t info;
+    lw_info_default(&info);
+    static const pr_live_t none[PR_MAX];
+    pr_at_answered(&L, b, PR_WHERE_NETWORK, 0xFF2A, 12, 500, &info, none);
+    pr_at_queried(&L, b, 1, &info);
+
+    static uint8_t list[4096], seen[256], bare[4096];
+    size_t ln = pr_save(&L, list, sizeof list);
+    size_t sn = pr_seen_save(&L, seen, sizeof seen);
+    CHECK(ln > 0 && sn > 0);
+    pr_list_t M = L;
+    memset(M.seen, 0, sizeof M.seen);
+    CHECK_EQ_INT(pr_save(&M, bare, sizeof bare), ln);     // the list's blob is the same
+    CHECK(!memcmp(list, bare, ln));
+
+    pr_init(&M, MAC, 1);
+    CHECK_EQ_INT(pr_load(&M, list, ln), 0);
+    CHECK_EQ_INT(pr_seen_load(&M, seen, sn), 0);
+    const pr_seen_t *s = pr_seen_of(&M, b);
+    CHECK(s && s->where == PR_WHERE_NETWORK && s->net == 0xFF2A && s->node == 12 && s->pages == 500);
+    CHECK(pr_seen_of(&M, a) && pr_seen_of(&M, a)->pages == 10287);
+
+    CHECK_EQ_INT(pr_remove(&M, a), 0);
+    CHECK(pr_seen_of(&M, a) == NULL);
+    pr_list_t N;
+    pr_init(&N, MAC, 1);
+    CHECK_EQ_INT(pr_load(&N, list, ln), 0);
+    CHECK_EQ_INT(pr_remove(&N, b), 0);
+    CHECK_EQ_INT(pr_seen_load(&N, seen, sn), 0);
+    CHECK(pr_seen_of(&N, b) == NULL);                      // not in the list
+    CHECK(pr_seen_of(&N, a) != NULL);
+
+    CHECK_EQ_INT(pr_seen_load(&N, (const uint8_t *)"PS", 2), -1);
+    seen[2] = 99;                                          // a newer form
+    CHECK_EQ_INT(pr_seen_load(&N, seen, sn), -1);
+    CHECK_EQ_INT(pr_seen_save(&L, seen, 4), 0);            // too small: nothing
+}
+
 int main(void)
 {
+    test_at_renamed();
+    test_at_renamed_named();
+    test_at_not_renamed();
+    test_seen_save_load();
     test_add_port();
     test_defaults();
     test_post();
