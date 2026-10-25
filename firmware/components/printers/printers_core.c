@@ -201,12 +201,8 @@ static void announce(pr_list_t *l, pr_rec_t *r)
 {
     if (r->announced) return;
     r->announced = 1;
-    if (can_share(l, r)) {
-        r->shared = 1;
-        note_add(l, PR_NOTE_FOUND, r->id, 0);
-    } else {
-        note_add(l, PR_NOTE_TOO_MANY, r->id, 0);
-    }
+    if (can_share(l, r)) r->shared = 1;
+    else note_add(l, PR_NOTE_TOO_MANY, r->id, 0);
 }
 
 static void become_imagewriter(pr_list_t *l, pr_rec_t *r, int model)
@@ -553,11 +549,15 @@ int pr_load(pr_list_t *l, const uint8_t *buf, size_t n)
     }
     pr_note_t nt[PR_NOTES_MAX];
     memcpy(nt, buf + HDR + (size_t)cnt * sizeof(pr_rec_t), (size_t)notes * sizeof(pr_note_t));
-    for (int i = 0; i < notes; i++) if (nt[i].kind > PR_NOTE_TOO_MANY) return -1;
+    uint8_t kept = 0;
+    for (int i = 0; i < notes; i++) {
+        if (nt[i].kind > PR_NOTE_TOO_MANY) return -1;
+        if (nt[i].kind != PR_NOTE_FOUND) nt[kept++] = nt[i];   // a "found" from before
+    }
     memcpy(l->r, buf + HDR, (size_t)cnt * sizeof(pr_rec_t));
-    memcpy(l->notes, nt, (size_t)notes * sizeof(pr_note_t));
+    memcpy(l->notes, nt, (size_t)kept * sizeof(pr_note_t));
     l->n = cnt;
-    l->n_notes = notes;
+    l->n_notes = kept;
     l->next_id = buf[4] ? buf[4] : 1;
     return 0;
 }

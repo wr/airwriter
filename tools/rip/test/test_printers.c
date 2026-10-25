@@ -44,9 +44,9 @@ static void test_port_identified(void)
     CHECK(strcmp(r->name, "ImageWriter II") == 0);
     CHECK_EQ_INT(r->shared, 1);
     CHECK_EQ_INT(r->found_auto, 1);
-    CHECK_EQ_INT(notes_of(PR_NOTE_FOUND), 1);
+    CHECK_EQ_INT(L.n_notes, 0);                             // it just appears in the list
     CHECK_EQ_INT(pr_port_seen(&L, PR_PORT_IW2), id);
-    CHECK_EQ_INT(notes_of(PR_NOTE_FOUND), 1);
+    CHECK_EQ_INT(L.n_notes, 0);
     CHECK_EQ_INT(L.n, 1);
 }
 
@@ -98,7 +98,7 @@ static void test_port_changed(void)
     fresh();
     id = pr_port_seen(&L, PR_PORT_IW2);
     pr_port_seen(&L, PR_PORT_IWLQ);
-    pr_accept_change(&L, 1);                                // notes: FOUND, CHANGED
+    pr_accept_change(&L, 0);                                // notes: CHANGED
     CHECK(strcmp(pr_get(&L, id)->name, "ImageWriter LQ") == 0);
 }
 
@@ -125,7 +125,6 @@ static void test_at_laserwriter(void)
     CHECK_EQ_INT(pr_get(&L, id)->kind, PR_KIND_LASERWRITER);
     CHECK_EQ_INT(pr_get(&L, id)->identified, 0);
     CHECK_EQ_INT(pr_get(&L, id)->shared, 0);
-    CHECK_EQ_INT(notes_of(PR_NOTE_FOUND), 0);
     lw_info_t info;
     lw_info_default(&info);
     strcpy(info.product, "LaserWriter II NT");
@@ -135,15 +134,15 @@ static void test_at_laserwriter(void)
     CHECK_EQ_INT(r->shared, 1);
     CHECK(strcmp(r->lw.product, "LaserWriter II NT") == 0);
     CHECK(strcmp(r->name, "Office") == 0);
-    CHECK_EQ_INT(notes_of(PR_NOTE_FOUND), 1);
+    CHECK_EQ_INT(L.n_notes, 0);
     char want[46];
     lw_uuid(want, MAC, 1, P("Office"));
     CHECK(strcmp(r->uuid, want) == 0);
-    // Asked again later: no second note, no re-share after the person unshared.
+    // Asked again later: no re-share after the person unshared.
     pr_set_shared(&L, id, 0);
     pr_at_queried(&L, id, 1, &info);
     CHECK_EQ_INT(pr_get(&L, id)->shared, 0);
-    CHECK_EQ_INT(notes_of(PR_NOTE_FOUND), 1);
+    CHECK_EQ_INT(L.n_notes, 0);
 }
 
 static void test_at_no_answer(void)
@@ -175,7 +174,7 @@ static void test_at_imagewriter(void)
     // W-1088's AirPrint to an AppleTalk ImageWriter was cut: it is old Macs'
     // (relayed), never shared over AirPrint, and nothing says it is.
     CHECK_EQ_INT(pr_get(&L, id)->shared, 0);
-    CHECK_EQ_INT(notes_of(PR_NOTE_FOUND), 0);
+    CHECK_EQ_INT(L.n_notes, 0);
     CHECK_EQ_INT(pr_set_shared(&L, id, 1), -1);
     pr_post_t r;
     char body[64];
@@ -255,16 +254,16 @@ static void test_remove(void)
     lw_info_t info;
     lw_info_default(&info);
     int id = pr_at_seen(&L, PR_WHERE_CABLE, P("Kitchen"), P("LaserWriter"), 0);
-    pr_at_queried(&L, id, 1, &info);
-    CHECK_EQ_INT(notes_of(PR_NOTE_FOUND), 1);
+    for (int i = 0; i < 3; i++) pr_at_queried(&L, id, 0, NULL);
+    CHECK_EQ_INT(notes_of(PR_NOTE_NO_ANSWER), 1);
     CHECK_EQ_INT(pr_remove(&L, id), 0);
     CHECK(pr_get(&L, id) == NULL);
     CHECK_EQ_INT(L.n, 0);
-    CHECK_EQ_INT(notes_of(PR_NOTE_FOUND), 0);               // its notes go with it
+    CHECK_EQ_INT(L.n_notes, 0);                             // its notes go with it
     int again = pr_at_seen(&L, PR_WHERE_CABLE, P("Kitchen"), P("LaserWriter"), 0);
     CHECK(again != id);
     pr_at_queried(&L, again, 1, &info);
-    CHECK_EQ_INT(notes_of(PR_NOTE_FOUND), 1);
+    CHECK_EQ_INT(pr_get(&L, again)->shared, 1);             // found again: shared again
 }
 
 static void test_offers(void)
@@ -397,6 +396,17 @@ static void test_save_load(void)
     CHECK_EQ_INT(M.n_notes, L.n_notes);
     CHECK(memcmp(M.r, L.r, sizeof L.r[0] * L.n) == 0);
     CHECK_EQ_INT(pr_save(&L, buf, 10), 0);                  // too small: nothing
+
+    // A board from before keeps "found" notices; they go on load, the rest stay.
+    L.notes[0] = (pr_note_t){ PR_NOTE_FOUND, (uint8_t)lw, 0 };
+    L.notes[1] = (pr_note_t){ PR_NOTE_TOO_MANY, (uint8_t)lw, 0 };
+    L.notes[2] = (pr_note_t){ PR_NOTE_FOUND, 1, 0 };
+    L.n_notes = 3;
+    n = pr_save(&L, buf, sizeof buf);
+    CHECK_EQ_INT(pr_load(&M, buf, n), 0);
+    CHECK_EQ_INT(M.n_notes, 1);
+    CHECK_EQ_INT(M.notes[0].kind, PR_NOTE_TOO_MANY);
+    CHECK_EQ_INT(M.notes[0].id, lw);
 }
 
 static void test_load_garbage(void)
@@ -548,12 +558,13 @@ static void test_post(void)
     CHECK_EQ_INT(r.look, 1);
     CHECK_EQ_INT(r.changed, 0);
 
-    pr_port_seen(&L, PR_PORT_NOTHING);
-    int found = L.n_notes;                                    // a FOUND note for Office
-    CHECK(found > 0);
-    snprintf(body, sizeof body, "{\"note\":%d,\"dismiss\":true}", found - 1);
+    int back = pr_at_seen(&L, PR_WHERE_CABLE, P("Back"), P("LaserWriter"), 0);
+    for (int i = 0; i < 3; i++) pr_at_queried(&L, back, 0, NULL);    // a NO_ANSWER note
+    int notes = L.n_notes;
+    CHECK(notes > 0);
+    snprintf(body, sizeof body, "{\"note\":%d,\"dismiss\":true}", notes - 1);
     CHECK_EQ_INT(pr_post(&L, body, &r), 0);
-    CHECK_EQ_INT(L.n_notes, found - 1);
+    CHECK_EQ_INT(L.n_notes, notes - 1);
 
     snprintf(body, sizeof body, "{\"id\":%d,\"remove\":true}", lw);
     CHECK_EQ_INT(pr_post(&L, body, &r), 0);

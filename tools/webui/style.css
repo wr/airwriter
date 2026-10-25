@@ -224,8 +224,13 @@ body:not(.ready) .sw span,body:not(.ready) .sw span:after{transition:none}
 .row small.mono{font-family:var(--mono);font-weight:400;color:var(--fg2)}
 .prow .chev{color:var(--fg3);font-size:20px;line-height:1;margin-left:-4px}
 .empty{margin:0;padding:14px;color:var(--fg2);font-size:var(--t-small)}
-.note{padding:12px 14px;display:flex;flex-direction:column;gap:10px}
-.note p{margin:0}
+/* a notice asks something: the caution mark, its words, its keys under them */
+.note{padding:12px 14px;display:grid;grid-template-columns:auto minmax(0,1fr);gap:10px 12px;align-items:start}
+.note .warn{width:22px;height:22px;color:var(--lamp-a)}
+.note p{margin:0;align-self:center}
+.note p b{display:block;margin-bottom:2px}
+.note .btnrow{grid-column:2}
+.nav .v .warn{width:13px;height:13px;color:var(--lamp-a);vertical-align:-2px;margin-right:5px}
 .note+.note{margin-top:10px}
 #pr-notes:empty{display:none}
 .back2{align-self:flex-start;border:0;background:none;box-shadow:none;color:var(--accent);padding:2px 0;cursor:pointer}

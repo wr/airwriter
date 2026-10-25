@@ -132,8 +132,9 @@ What works on `main`:
   222 bytes; 404 with no strip).
 - The settings page (`W-1079 Settings page: organise by port, like macOS System Settings`,
   design `docs/superpowers/specs/2026-10-20-settings-redesign-design.md`): a settings app, a
-  sidebar of Printers (W-1088: notices, a row per printer, a printer's detail in the pane,
-  `#printers/<id>`), AirPrint (the switch and each shared printer's address), AppleTalk, Wi-Fi
+  sidebar of Printers (W-1088: notices only for what needs a decision, with a caution mark
+  there and on the sidebar row; a found printer just joins the list; a row per printer, a
+  printer's detail in the pane, `#printers/<id>`), AirPrint (the switch and each shared printer's address), AppleTalk, Wi-Fi
   and About, each row showing its state; one home per setting. Setup mode is three steps,
   sized for a phone (printers, Wi-Fi, "You're All Set": print from a phone, the test button for
   a test page) and the first visit after it opens on "AirWriter is ready". Beside the name in
@@ -283,8 +284,8 @@ its name in the Chooser. U7's PIC calibration words: `16E0 1DA8`. Its LocalTalk 
 2026-10-24, with its settings put back over the API. Its port printer's uuid is now
 `…4c57-0001-0001-10bda36e2434`, which orphans Mac queues added before that date. Printer: an ImageWriter II on J2 via
 Apple's crossover cable, fanfold paper loaded as the Owner's Guide says (top edge under the paper
-bail). It runs v0.2.0-162-gf193b0d, the same firmware as main (the branch that took the
-LaserWriter detail's untested note off the page, before its merge), ahead of any release, with auto-update on; it shares the fake "LaserWriter II NT" on the Basilisk II tunnel when
+bail). It runs v0.2.0-163-gb07bc44-dirty, the same firmware as main (the branch that cut
+the "found" printer notice, before its commit), ahead of any release, with auto-update on; it shares the fake "LaserWriter II NT" on the Basilisk II tunnel when
 `etpeer.py tunnel laserwriter` runs on the Mac. On its AppleTalk cable since 2026-10-24: a
 Personal LaserWriter NTR (PostScript 2010.129, Level 2, 3 MB, 300 dpi, takes binary; 10,277
 pages that morning), AirPrint printer 3 at `ipp/p3`. Its toner is spent (more ordered), so

@@ -1296,131 +1296,6 @@
     }
    }
   },
-  "found-notice": {
-   "about": "Printers: a LaserWriter just found and shared",
-   "patch": {
-    "GET /api/printers": {
-     "printers": [
-      {
-       "id": 1,
-       "name": "ImageWriter II",
-       "where": "port",
-       "kind": "imagewriter",
-       "model": "ImageWriter II",
-       "shared": true,
-       "identified": true,
-       "found": "person",
-       "state": "ready",
-       "uuid": "urn:uuid:41575254-4552-0001-10bd-a36e2434",
-       "product": "",
-       "dither": "atkinson",
-       "gain": 0,
-       "rp": "ipp/print"
-      },
-      {
-       "id": 2,
-       "name": "LaserWriter II NT",
-       "where": "tunnel",
-       "kind": "laserwriter",
-       "model": "",
-       "shared": true,
-       "identified": true,
-       "found": "person",
-       "state": "ready",
-       "uuid": "urn:uuid:41575254-4c57-0001-99d7-10bda36e2434",
-       "product": "LaserWriter II NT",
-       "dither": "atkinson",
-       "gain": 0,
-       "rp": "ipp/laser"
-      },
-      {
-       "id": 3,
-       "name": "Office LaserWriter",
-       "where": "cable",
-       "kind": "laserwriter",
-       "model": "",
-       "shared": true,
-       "identified": true,
-       "found": "auto",
-       "state": "ready",
-       "uuid": "urn:uuid:41575254-4c57-0001-78fa-10bda36e2434",
-       "product": "LaserWriter Pro 630",
-       "dither": "bluenoise",
-       "gain": 0,
-       "rp": "ipp/p3"
-      }
-     ],
-     "notes": [
-      {
-       "kind": "found",
-       "id": 3,
-       "model": ""
-      }
-     ],
-     "max_shared": 4
-    },
-    "POST /api/printers": {
-     "printers": [
-      {
-       "id": 1,
-       "name": "ImageWriter II",
-       "where": "port",
-       "kind": "imagewriter",
-       "model": "ImageWriter II",
-       "shared": true,
-       "identified": true,
-       "found": "person",
-       "state": "ready",
-       "uuid": "urn:uuid:41575254-4552-0001-10bd-a36e2434",
-       "product": "",
-       "dither": "atkinson",
-       "gain": 0,
-       "rp": "ipp/print"
-      },
-      {
-       "id": 2,
-       "name": "LaserWriter II NT",
-       "where": "tunnel",
-       "kind": "laserwriter",
-       "model": "",
-       "shared": true,
-       "identified": true,
-       "found": "person",
-       "state": "ready",
-       "uuid": "urn:uuid:41575254-4c57-0001-99d7-10bda36e2434",
-       "product": "LaserWriter II NT",
-       "dither": "atkinson",
-       "gain": 0,
-       "rp": "ipp/laser"
-      },
-      {
-       "id": 3,
-       "name": "Office LaserWriter",
-       "where": "cable",
-       "kind": "laserwriter",
-       "model": "",
-       "shared": true,
-       "identified": true,
-       "found": "auto",
-       "state": "ready",
-       "uuid": "urn:uuid:41575254-4c57-0001-78fa-10bda36e2434",
-       "product": "LaserWriter Pro 630",
-       "dither": "bluenoise",
-       "gain": 0,
-       "rp": "ipp/p3"
-      }
-     ],
-     "notes": [
-      {
-       "kind": "found",
-       "id": 3,
-       "model": ""
-      }
-     ],
-     "max_shared": 4
-    }
-   }
-  },
   "changed-notice": {
    "about": "Printers: the port printer now says it is an LQ",
    "patch": {
@@ -2580,13 +2455,7 @@
        "rp": "ipp/p3"
       }
      ],
-     "notes": [
-      {
-       "kind": "found",
-       "id": 3,
-       "model": ""
-      }
-     ],
+     "notes": [],
      "max_shared": 4
     },
     "POST /api/printers": {
@@ -2624,13 +2493,7 @@
        "rp": "ipp/p3"
       }
      ],
-     "notes": [
-      {
-       "kind": "found",
-       "id": 3,
-       "model": ""
-      }
-     ],
+     "notes": [],
      "max_shared": 4
     }
    }
