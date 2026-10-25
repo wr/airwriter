@@ -15,6 +15,16 @@
 // every 5 s (2 s while printing), and, a LaserWriter, gets the query job at
 // its first answer after boot or after it went quiet, tried again after 60 s
 // twice, then every 5 minutes. No answer for 30 s is offline.
+//
+// W-1098: a printer switched on checks that no one has its name before it
+// takes it, looking that name up a few times about 2 s apart (NBP's
+// registration, Inside AppleTalk 7-9). Each such check of a LaserWriter or
+// ImageWriter name not heard lately on its link puts off one look until
+// LW_CHECK_SETTLE_MS after it, when the name answers: a printer comes back,
+// new or renamed, in seconds, and nothing is sent while it is off. A check
+// from the address another name was heard at is that printer renamed: the
+// old name is gone there at once, since its status (which names nothing)
+// would come from the printer under its new name.
 #pragma once
 #include <stdint.h>
 #include "lt_node.h"
@@ -33,6 +43,7 @@
 #define LW_FORGET_MS       600000     // a printer unheard this long leaves the heard list
 #define LW_QUERY_RETRY_MS  60000
 #define LW_QUERY_TRIES     3          // then every LW_LOOK_SLOW_MS
+#define LW_CHECK_SETTLE_MS 3000       // a name check's look, this long after the last check
 
 // The same numbers as at_printer.h's at_link_t.
 enum { LW_LINK_CABLE = 0, LW_LINK_TUNNEL, LW_LINK_ZONE, LW_LINK_RADIO };
@@ -70,6 +81,12 @@ typedef struct {
     lwc_target_t was[LWC_TARGETS];                // lwc_targets' scratch, off the caller's stack
     struct { uint8_t link, node; uint16_t net; uint64_t at; } aw[LWC_AW_MAX];
     uint64_t     looked, burst_from;
+    uint64_t     check_look_at;                   // a name check's look, or 0
+    struct {                                      // for /api/laser
+        uint32_t n, looks, dropped;               // checks, the looks they made, names ended
+        uint8_t  last[NBP_NAME_MAX + 1], link;
+    } checks;
+    uint32_t     looks;                           // every look, at start and since
     uint8_t      look_due;
     uint8_t      next;                            // whose status is asked next, in turn
 } lwc_t;
@@ -98,6 +115,8 @@ void       lwc_look_now(lwc_t *c, uint64_t now);
 void       lwc_targets(lwc_t *c, const lwc_target_in_t *in, int n, uint64_t now);
 int        lwc_target(const lwc_t *c, int id);   // t[] index, or -1
 void       lwc_found(lwc_t *c, const nbp_tuple_t *t, uint8_t link, const lt_route_t *r, uint64_t now);
+// A node on `link` looked up one name (lt_ops_t's name_check).
+void       lwc_name_check(lwc_t *c, const nbp_tuple_t *t, uint8_t link, uint64_t now);
 void       lwc_status(lwc_t *c, int ti, const uint8_t *pstr, uint64_t now);
 // The query job ended: answered (1) or not (0).
 void       lwc_queried(lwc_t *c, int ti, int ok, uint64_t now);

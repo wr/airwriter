@@ -633,11 +633,23 @@ ImageWriter on the port keeps its identity, UUID and bytes (`tools/ipp/test/gold
   policy is `laser/lw_core.c`. Heard on two links, the cable's wins, then the network, the
   tunnel, the zone. A printer answering from another AirWriter's node is skipped. No answer for
   30 s is `stopped` + `offline-report`.
+- **Switched on** (W-1098). A printer coming up checks no one has its name before it takes it,
+  an NBP LkUp of that one name a few times about 2 s apart (Inside AppleTalk 7-9; a Personal
+  LaserWriter NTR: five, after 8 s of LLAP ENQs reusing its node ID). Every link's node passes a
+  LkUp of one name, no wildcard, to `lwc_name_check`; for a LaserWriter or ImageWriter not heard
+  in the last 30 s on that link it puts off one look until 3 s after the last check. A printer
+  switched on is found in seconds, new or renamed; nothing is sent while it is off (the NTR on
+  board 1: ready 3 s after its last check). A check of a new name from the address another name
+  was heard at ends that name there at once: a renamed printer answers the old name's SendStatus,
+  which names nothing. An old Mac's driver looks up its printer by name before printing, and a
+  look follows that too unless the name answered lately on that link. `/api/laser` counts looks
+  and checks.
 - **Roles.** A link runs when its way in is switched on or a printer in the list lives there;
   it answers old Macs only where its way in is on (3.15's offers).
 - **The query job** (`laser/lw_query.c`): a Level 1 PAP job that prints nothing and asks
-  product, version, language level, resolution, imageable area, page size and whether it prints
-  a start page (W-1099), each inside `stopped`, plus a 256-byte binary probe. Binary goes to the printer only if the probe came
+  product, version, language level, resolution, imageable area, page size, page count and
+  whether it prints a start page (W-1099), each inside `stopped`, plus a 256-byte binary
+  probe. Binary goes to the printer only if the probe came
   back intact; otherwise hex. Answers in its record; run again at the first answer after boot
   and when the printer comes back, tried again after 60 s twice, then every 5 minutes. Three
   unanswered make the "didn't answer" notice (Share Anyway takes its defaults).
@@ -690,6 +702,13 @@ read back is a list made again). At most 8 records.
   MacRoman for NBP), uuid (made once: a new port printer `41575254-4c57-<epoch>-0001-<MAC>`, an
   AppleTalk printer W-1082's form), shared, found (auto or person), halftone and gain, and a
   LaserWriter's query answers.
+- **Renamed** (W-1098). A LaserWriter's record also keeps where it last answered its query (the
+  link and its address there) and its page count, in NVS `printers`/`seen` beside the list
+  (`pr_seen_save`; the list's blob is unchanged, so an older firmware reads it). A printer new to
+  the list whose query is answered at the address a silent LaserWriter of the same product had,
+  with as many pages or more, is that one renamed: the old record takes the new NBP name, its
+  own name following unless the person gave it one, and keeps its id, uuid, AirPrint printer and
+  settings; the new record goes, with no notice. Otherwise a new name is a new printer.
 - **The port.** At line-up after 1 s or more down (and at the first report) the board sends
   `ESC ?` and `CR`: `IW10`… is an ImageWriter II, `LQ`… an LQ, no answer with the line ready an
   unknown device, named "Unknown printer", never shared. ImageWriter commands (the CTRL-X kick,

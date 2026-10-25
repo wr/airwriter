@@ -263,6 +263,98 @@ static void test_heard_list(void)
     CHECK_EQ_INT(n, 0);
 }
 
+static void name_check_at(lwc_t *c, const char *name, const char *type, uint8_t link,
+                          uint8_t node, uint64_t now)
+{
+    nbp_tuple_t t = { .addr = { 0, node, 2 } };
+    nbp_name(t.obj, name);
+    nbp_name(t.type, type);
+    t.zone[0] = 1; t.zone[1] = '*';
+    lwc_name_check(c, &t, link, now);
+}
+
+static void name_check(lwc_t *c, const char *name, const char *type, uint8_t link, uint64_t now)
+{
+    name_check_at(c, name, type, link, 233, now);
+}
+
+// When the next look is due from `from`, ticking every 100 ms up to `to`, or 0.
+static uint64_t next_look(lwc_t *c, uint64_t from, uint64_t to)
+{
+    for (uint64_t s = from; s <= to; s += 100)
+        if (lwc_tick(c, s).look) return s;
+    return 0;
+}
+
+// W-1098: a printer switched on checks no one has its name, looking it up by
+// name a few times about 2 s apart (the NTR on 2026-10-24: five). One look
+// follows a moment after the last check, then the 5-minute ones as before.
+static void test_name_check(void)
+{
+    static lwc_t c;
+    lwc_init(&c, 0);
+    for (uint64_t s = 0; s <= 310000; s += 1000) lwc_tick(&c, s);   // past the start's run
+    uint64_t look = 0;
+    for (uint64_t s = 320000; s < 340000; s += 100) {
+        if (s <= 328000 && !((s - 320000) % 2000))
+            name_check(&c, "Personal LaserWriter NTR", "LaserWriter", LW_LINK_CABLE, s);
+        if (lwc_tick(&c, s).look) { CHECK_EQ_INT((long)look, 0); look = s; }
+    }
+    CHECK_EQ_INT((long)look, 328000 + LW_CHECK_SETTLE_MS);
+    CHECK_EQ_INT((long)next_look(&c, 340000, 1000000), (long)(look + LW_LOOK_SLOW_MS));
+
+    // An ImageWriter's check too, on any link.
+    uint64_t t = look + LW_LOOK_SLOW_MS + 1000;
+    name_check(&c, "Den ImageWriter", "ImageWriter", LW_LINK_ZONE, t);
+    CHECK_EQ_INT((long)next_look(&c, t, t + 10000), (long)(t + LW_CHECK_SETTLE_MS));
+
+    // Not one: a Chooser's =:LaserWriter@*, a Mac's own name, or a printer
+    // heard lately on that link (a Mac about to print to it looks it up).
+    t += 20000;
+    name_check(&c, "=", "LaserWriter", LW_LINK_CABLE, t);
+    name_check(&c, "SE30", "Workstation", LW_LINK_CABLE, t);
+    found(&c, "LaserWriter II NT", LW_LINK_CABLE, 12, t);
+    name_check(&c, "LaserWriter II NT", "LaserWriter", LW_LINK_CABLE, t + 500);
+    CHECK_EQ_INT((long)next_look(&c, t, t + 10000), 0);
+
+    // Quiet since, or heard on another link: it is coming up.
+    t += LW_GONE_MS + 1000;
+    name_check(&c, "LaserWriter II NT", "LaserWriter", LW_LINK_CABLE, t);
+    CHECK_EQ_INT((long)next_look(&c, t, t + 10000), (long)(t + LW_CHECK_SETTLE_MS));
+    t += 20000;
+    found(&c, "Office", LW_LINK_RADIO, 30, t);
+    name_check(&c, "Office", "LaserWriter", LW_LINK_TUNNEL, t);
+    CHECK_EQ_INT((long)next_look(&c, t, t + 10000), (long)(t + LW_CHECK_SETTLE_MS));
+}
+
+// A printer renamed answers status at its address under the old name's
+// target, and status carries no name. Its check of the new name, from the
+// address the old name was heard at, ends the old one there: no more status
+// for it, offline at once (so the list can tell the printer renamed). A
+// check from another node, or of the same name, leaves it.
+static void test_name_check_renamed(void)
+{
+    static lwc_t c;
+    lwc_init(&c, 0);
+    lwc_target_in_t in[1] = { target(4, "Personal LaserWriter NTR", LWC_KIND_LW) };
+    lwc_targets(&c, in, 1, 0);
+    found(&c, "Personal LaserWriter NTR", LW_LINK_CABLE, 233, 1000);
+    CHECK(lwc_view(&c, 0, 1000).online);
+    name_check_at(&c, "Personal LaserWriter NTR", "LaserWriter", LW_LINK_CABLE, 233, 1500);
+    name_check_at(&c, "Wells's LaserWriter", "LaserWriter", LW_LINK_CABLE, 83, 1600);
+    name_check_at(&c, "Wells's LaserWriter", "LaserWriter", LW_LINK_TUNNEL, 233, 1700);
+    CHECK(lwc_view(&c, 0, 1800).online);
+    CHECK(lwc_view(&c, 0, 1800).idx >= 0);
+
+    name_check_at(&c, "Wells's LaserWriter", "LaserWriter", LW_LINK_CABLE, 233, 2000);
+    lwc_view_t v = lwc_view(&c, 0, 2000);
+    CHECK(!v.online);
+    CHECK_EQ_INT(v.idx, -1);
+    for (uint64_t s = 2000; s < 2000 + 2 * LW_STATUS_MS; s += 100)
+        CHECK_EQ_INT(lwc_tick(&c, s).status_ti, LWC_NONE);
+    CHECK_EQ_INT(c.checks.dropped, 1);
+}
+
 int main(void)
 {
     test_cadence();
@@ -271,5 +363,7 @@ int main(void)
     test_query_retry();
     test_two_lw_status();
     test_heard_list();
+    test_name_check();
+    test_name_check_renamed();
     TEST_END;
 }

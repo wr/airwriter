@@ -140,6 +140,10 @@ static void on_nbp(lt_node_t *n, const ddp_t *d, uint64_t now)
     if (q.fn != NBP_LKUP) return;
     n->st.lookups++;
     name_registering(n, d, &q, now);
+    if (n->ops.name_check && q.t.obj[0] && !(q.t.obj[0] == 1 && q.t.obj[1] == NBP_WILD_ALL) &&
+        !memchr(q.t.obj + 1, NBP_WILD_PART, q.t.obj[0]) &&
+        !(d->src.node == n->node && d->src.net == n->net))
+        n->ops.name_check(n->ops.ctx, &q.t);
     // The node's own name while it serves, and each registration (W-1088).
     int hits[LT_REG_MAX] = { 0 }, hit = 0;
     hits[0] = n->serve && n->obj[0] && nbp_match(q.t.obj, n->obj) && nbp_match(q.t.type, n->type);

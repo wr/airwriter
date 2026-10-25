@@ -21,6 +21,15 @@
 #include "lw_query.h"
 #include "ps_testpage.h"
 
+// W-1098: where a printer answered its query (at_link_t, its net and node)
+// and the page count it gave (-1 none): how a renamed one is told.
+typedef struct laser_at {
+    int      link;
+    uint16_t net;
+    uint8_t  node;
+    int32_t  pages;
+} laser_at_t;
+
 typedef struct {
     const char *version;          // %%Creator: AirWriter <version>
     // The first look this long after start (10 s with Wi-Fi up, for its TLS
@@ -31,8 +40,9 @@ typedef struct {
     void (*links)(int cable, int tunnel, int radio);
     // A printer heard (once): its link (at_link_t), NBP name and type, Pascal.
     void (*found)(int link, const uint8_t *name, const uint8_t *type);
-    // The query job for target `id` ended: answered (info) or not.
-    void (*queried)(int id, int ok, const lw_info_t *info);
+    // The query job for target `id` ended: answered (info, and where: at)
+    // or not (both NULL).
+    void (*queried)(int id, int ok, const lw_info_t *info, const laser_at_t *at);
     // A shared printer's readiness changed (laser_ready): the panel may follow.
     void (*changed)(void);
     // W-1088: a Mac's job relayed to a printer on another link takes the job

@@ -70,5 +70,7 @@ void      ethertalk_set_laser(int link, int on);
 void      ethertalk_set_offers(int link, const lt_offers_t *o);
 void      ethertalk_lookup(const char *type);
 void      ethertalk_set_found(void (*found)(int link, const nbp_tuple_t *t, const lt_route_t *r));
+// W-1098: a node on a link looked up one name (lt_ops_t's name_check).
+void      ethertalk_set_name_check(void (*check)(int link, const nbp_tuple_t *t));
 void      ethertalk_attach(int link, pap_client_t *c);
 int       ethertalk_locked(void (*fn)(void *arg), void *arg);

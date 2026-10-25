@@ -21,6 +21,7 @@ static const char k_ntx[] =
     "aw:res=300 300\r"
     "aw:area=14.16 8.4 597.84 783.6\r"
     "aw:size=?\r"
+    "aw:pages=10287\r"
     "aw:startpage=true\r"
     "aw:probe=256 1\r"
     "aw:end\r";
@@ -33,9 +34,9 @@ static int parse_stdin(void)
     size_t n;
     while ((n = fread(buf, 1, sizeof buf, stdin)) > 0) lw_parse_feed(&p, buf, n);
     const lw_info_t *i = &p.info;
-    printf("complete=%d product=%s level=%d binary=%d dpi=%d page=%s area=%d %d %d %d "
+    printf("complete=%d product=%s level=%d binary=%d dpi=%d page=%s pages=%d area=%d %d %d %d "
            "start_page=%s refused=%d\n",
-           i->complete, i->product, i->level, i->binary, i->dpi, lw_page_name(i->page),
+           i->complete, i->product, i->level, i->binary, i->dpi, lw_page_name(i->page), (int)p.pages,
            (int)i->area[0], (int)i->area[1], (int)i->area[2], (int)i->area[3],
            i->start_page == LW_START_ON ? "on" : i->start_page == LW_START_OFF ? "off" : "unknown",
            p.refused);
@@ -76,6 +77,7 @@ int main(int argc, char **argv)
     CHECK_EQ_INT(i->start_page, LW_START_ON);
     CHECK_EQ_INT(p.refused, 0);
     CHECK_EQ_INT(i->complete, 1);
+    CHECK_EQ_INT(p.pages, 10287);            // W-1098: its page count, kept beside the answers
 
     // LF line ends, split mid-line; a failed probe; Level 2 with a page size.
     lw_parse_init(&p);
@@ -88,6 +90,13 @@ int main(int argc, char **argv)
     CHECK_EQ_INT(i->page, LW_A4);
     CHECK_EQ_INT(i->binary, 0);
     CHECK_EQ_INT(i->complete, 1);           // the probe is the last question
+    CHECK_EQ_INT(p.pages, -1);              // not asked: unknown
+
+    // A page count it would not give, or nonsense, is unknown.
+    lw_parse_init(&p);
+    const char *pc = "aw:pages=?\naw:pages=lots\n";
+    lw_parse_feed(&p, (const uint8_t *)pc, strlen(pc));
+    CHECK_EQ_INT(p.pages, -1);
 
     // Cut off before the probe: not complete, the defaults stand.
     lw_parse_init(&p);
@@ -184,6 +193,9 @@ int main(int argc, char **argv)
     CHECK(probe_at > 0);
     if (probe_at > 0) CHECK_EQ_INT(q[probe_at - 1], '\n');
     CHECK(probe_at > 1 && q[probe_at - 2] != '\r');
+    q[qn < sizeof q ? qn : sizeof q - 1] = 0;
+    const char *pages = strstr((const char *)q, "(pages)");
+    CHECK(pages && pages < (const char *)q + probe_at);   // asked before the probe
     CHECK_EQ_INT(lw_query_job(q, 100), 0);
     // It asks for the start page (W-1099), before the probe like every question.
     q[probe_at] = '\0';

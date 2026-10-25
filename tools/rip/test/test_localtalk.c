@@ -50,7 +50,7 @@ static size_t f_room(void *ctx) { (void)ctx; return fake_room; }
 static void f_end(void *ctx, int normal) { (void)ctx; job_eof++; job_normal = normal; }
 
 static const lt_ops_t OPS = { NULL, f_send, f_claim, f_log, f_begin, f_data, f_room, f_end, NULL,
-                              NULL, NULL, NULL };
+                              NULL, NULL, NULL, NULL };
 
 static void reset_fake(void) { nsent = 0; nlogs = 0; lastlog[0] = 0; }
 
@@ -1207,7 +1207,7 @@ static size_t f_reg_status(void *ctx, int reg, uint8_t *pstr, size_t cap)
     return (size_t)n + 1;
 }
 static const lt_ops_t OPS_REG = { NULL, f_send, f_claim, f_log, f_begin, f_data, f_room, f_end, NULL,
-                                  f_pap_open, f_reg_status, NULL };
+                                  f_pap_open, f_reg_status, NULL, NULL };
 
 // A node's registrations are its link's (cfg.regs, in PSRAM on the board).
 static lt_reg_t reg_room[4][LT_REG_MAX];
@@ -1360,7 +1360,8 @@ static size_t f_reg_output(void *ctx, int reg, uint8_t *buf, size_t max, int *eo
     return ro_last_n;
 }
 static const lt_ops_t OPS_RELAYED = { NULL, f_send, f_claim, f_log, f_begin, f_data, f_room,
-                                      f_end_jobs, NULL, f_pap_open, f_reg_status, f_reg_output };
+                                      f_end_jobs, NULL, f_pap_open, f_reg_status, f_reg_output,
+                                      NULL };
 
 static uint64_t online_relayed(lt_node_t *n, uint8_t id)
 {
@@ -1488,12 +1489,12 @@ static void test_pap_relayed_jobs(void)
     CHECK(n.pap.open);
 }
 
-// W-1088 review I5: the nodes live in internal RAM (four on the board), so
-// their registrations are the link's room, not each node's. A node given none
-// answers only as itself.
+// W-1088 review I5: there are four nodes on the board (in PSRAM since
+// W-1094), so their registrations are the link's room, not each node's. A
+// node given none answers only as itself.
 static void test_register_needs_room(void)
 {
-    CHECK(sizeof(lt_node_t) <= 6144);                     // 6072 before W-1088 (host)
+    CHECK(sizeof(lt_node_t) <= 6160);                     // 6072 before W-1088, 6152 with W-1098 (host)
     lt_node_t n;
     lt_cfg_t cfg = { "ImageWriter II", "ImageWriter", 0x0000, 200, 1, NULL, NULL };
     lt_node_init(&n, &cfg, &OPS_REG, 0);
@@ -2049,6 +2050,63 @@ static void test_lookup_out(void)
     CHECK_EQ_INT(d.type, DDP_ATP);
 }
 
+static nbp_tuple_t checked[4];
+static int         nchecked;
+static void f_check(void *ctx, const nbp_tuple_t *t)
+{
+    (void)ctx;
+    if (nchecked < 4) checked[nchecked] = *t;
+    nchecked++;
+}
+
+// A LkUp from the Mac at node 83 for obj:type@*, broadcast.
+static size_t lkup_from_83(uint8_t *f, const uint8_t *obj, const char *type)
+{
+    nbp_tuple_t q = { .addr = { 0, 83, SOCK_NIS }, .enumerator = 0 };
+    memcpy(q.obj, obj, 1 + (size_t)obj[0]);
+    nbp_name(q.type, type);
+    q.zone[0] = 1; q.zone[1] = '*';
+    uint8_t nbp[2 + 5 + 3 * (NBP_NAME_MAX + 1)];
+    size_t k = nbp_build(nbp, sizeof nbp, NBP_LKUP, 3, &q);
+    return mac_ddp(f, 0xFF, SOCK_NIS, DDP_NBP, nbp, k);
+}
+
+// W-1098: a node looking up one name, no wildcard in it, reaches name_check:
+// that is how a printer switched on checks no one has its name. A Chooser's
+// =:LaserWriter@* does not, nor a name with a wildcard in it.
+static void test_name_check(void)
+{
+    lt_ops_t ops = OPS;
+    ops.name_check = f_check;
+    lt_node_t n;
+    lt_cfg_t cfg = { "ImageWriter II", "ImageWriter", 0x0000, 184, 1, NULL, NULL };
+    lt_node_init(&n, &cfg, &ops, 0);
+    uint64_t t = 0;
+    for (int i = 0; i <= LT_ENQ_TRIES; i++, t += LT_ENQ_GAP_MS) lt_node_tick(&n, t);
+    nchecked = 0;
+
+    uint8_t f[LLAP_MAX], obj[NBP_NAME_MAX + 1];
+    nbp_name(obj, "Personal LaserWriter NTR");
+    lt_node_rx(&n, f, lkup_from_83(f, obj, "LaserWriter"), t);
+    CHECK_EQ_INT(nchecked, 1);
+    CHECK(!memcmp(checked[0].obj, obj, 1 + (size_t)obj[0]));
+    CHECK(checked[0].type[0] == 11 && !memcmp(checked[0].type + 1, "LaserWriter", 11));
+    CHECK_EQ_INT(checked[0].addr.node, 83);
+
+    nbp_name(obj, "=");
+    lt_node_rx(&n, f, lkup_from_83(f, obj, "LaserWriter"), t + 10);
+    const uint8_t part[] = { 6, 'L', 'a', 's', 'e', 'r', NBP_WILD_PART };
+    lt_node_rx(&n, f, lkup_from_83(f, part, "LaserWriter"), t + 20);
+    CHECK_EQ_INT(nchecked, 1);
+
+    // Without the callback, nothing to tell.
+    lt_node_init(&n, &cfg, &OPS, 0);
+    for (int i = 0; i <= LT_ENQ_TRIES; i++, t += LT_ENQ_GAP_MS) lt_node_tick(&n, t);
+    nbp_name(obj, "Personal LaserWriter NTR");
+    lt_node_rx(&n, f, lkup_from_83(f, obj, "LaserWriter"), t);
+    CHECK_EQ_INT(nchecked, 1);
+}
+
 int main(void)
 {
     test_fcs();
@@ -2091,5 +2149,6 @@ int main(void)
     test_printer_not_a_mac();
     test_serve_off();
     test_lookup_out();
+    test_name_check();
     TEST_END;
 }

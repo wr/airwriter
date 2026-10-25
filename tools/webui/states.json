@@ -2635,7 +2635,7 @@
     "POST /api/printers": {
      "_delay": 2,
      "_status": 400,
-     "_body": "The printer has a password, so AirWriter can't change this."
+     "_body": "The printer has a password, so AirWriter can’t change this."
     }
    }
   },
@@ -2645,7 +2645,7 @@
     "POST /api/printers": {
      "_delay": 8,
      "_status": 409,
-     "_body": "The printer is busy. Try again when it's done."
+     "_body": "The printer is busy. Try again when it’s done."
     }
    }
   }

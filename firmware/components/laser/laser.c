@@ -127,6 +127,7 @@ static volatile int s_sp_rc;
 // The laser task's.
 static int       s_pc_link = -1;
 static int       s_query_id = -1;                   // whom the query in flight asked (review M12)
+static laser_at_t s_query_at;                       // and where (W-1098)
 static int       s_ask_sp = -1;                     // the aw: job in flight sets the start page (0, 1)
 static uint32_t  s_ask_seq;                         // and answers this request
 // A job's OpenConn, run on the laser task (its stack is sized for the send
@@ -318,6 +319,23 @@ static void found(int link, const nbp_tuple_t *t, const lt_route_t *r)
     unlock();
 }
 
+// W-1098: a printer switched on checks its name is free: look a moment after.
+// On the link's task.
+static void name_check(int link, const nbp_tuple_t *t)
+{
+    lock();
+    uint64_t was = s_core.check_look_at;
+    lwc_name_check(&s_core, t, (uint8_t)link, now_ms());
+    int armed = s_core.check_look_at != was;
+    unlock();
+    if (!armed) return;
+    char n[3 * NBP_NAME_MAX + 1], ty[3 * NBP_NAME_MAX + 1];
+    nbp_utf8(n, sizeof n, t->obj);
+    nbp_utf8(ty, sizeof ty, t->type);
+    ESP_LOGI(TAG, "\"%s\" (%s) checks its name on the %s: looking in %d s", n, ty, link_name(link),
+             LW_CHECK_SETTLE_MS / 1000);
+}
+
 // ------------------------------------------------------------- targets
 
 void laser_set_targets(const laser_target_t *in, int n)
@@ -393,6 +411,7 @@ static int ask(int id, int link, const lt_route_t *r, size_t n, uint32_t busy_ms
     xSemaphoreTake(s_ended_sem, 0);
     s_use = USE_QUERY;
     s_query_id = id;
+    s_query_at = (laser_at_t){ .link = link, .net = r->addr.net, .node = r->addr.node, .pages = -1 };
     lock();
     s_status_id = s_open_id = id;
     unlock();
@@ -410,7 +429,7 @@ static void query_start(int id, int link, const lt_route_t *r)
         lock();
         lwc_queried(&s_core, ti_of(id), 0, now_ms());
         unlock();
-        if (s_cfg.queried) s_cfg.queried(id, 0, NULL);
+        if (s_cfg.queried) s_cfg.queried(id, 0, NULL, NULL);
         return;
     }
     ESP_LOGI(TAG, "asking printer %d what it is", id);
@@ -478,7 +497,7 @@ static void start_page_done(void)
              got == LW_START_ON ? "on" : got == LW_START_OFF ? "off" : "unknown", why[rc]);
     s_ask_sp = -1;
     s_use = USE_NONE;
-    if (tell && s_cfg.queried) s_cfg.queried(id, 1, &info);
+    if (tell && s_cfg.queried) s_cfg.queried(id, 1, &info, NULL);   // no new address: no rename
     sp_answer(s_ask_seq, rc);
 }
 
@@ -536,15 +555,16 @@ static void query_done(void)
     lwc_queried(&s_core, ti, ok, now_ms());
     unlock();
     if (ok) {
-        ESP_LOGI(TAG, "query: %s, PostScript %s level %u, %s, %u dpi, %s", s_parse.info.product,
+        ESP_LOGI(TAG, "query: %s, PostScript %s level %u, %s, %u dpi, %s, %ld pages", s_parse.info.product,
                  s_parse.info.version, s_parse.info.level, s_parse.info.binary ? "binary" : "hex",
-                 s_parse.info.dpi, lw_page_name(s_parse.info.page));
+                 s_parse.info.dpi, lw_page_name(s_parse.info.page), (long)s_parse.pages);
     } else {
         ESP_LOGW(TAG, "query: no answer (%d)", s_ended);
     }
     ESP_LOGI(TAG, "laser task: %u bytes of stack to spare", (unsigned)uxTaskGetStackHighWaterMark(NULL));
     s_use = USE_NONE;
-    if (s_cfg.queried) s_cfg.queried(id, ok, ok ? &s_parse.info : NULL);
+    s_query_at.pages = s_parse.pages;
+    if (s_cfg.queried) s_cfg.queried(id, ok, ok ? &s_parse.info : NULL, ok ? &s_query_at : NULL);
 }
 
 // ------------------------------------------------------------- the relay
@@ -882,6 +902,8 @@ esp_err_t laser_start(const laser_cfg_t *cfg)
     lwc_init(&s_core, now_ms());
     localtalk_set_found(found);
     ethertalk_set_found(found);
+    localtalk_set_name_check(name_check);
+    ethertalk_set_name_check(name_check);
     at_relay_set(&RELAY);
 
     // 6 KB: the PAP send path (frames built on the stack, full printf in the
@@ -1179,11 +1201,23 @@ void laser_json(char *buf, size_t cap)
             link_name(v.idx >= 0 ? s_core.heard[v.idx].link : g->where), state_name(&v),
             v.reason, e_msg, e_product, s_core.t[i].queried ? "true" : "false");
     }
+    if (k < cap) {                               // W-1098: printers checking their names
+        char name[3 * NBP_NAME_MAX + 1], e_name[200];
+        nbp_utf8(name, sizeof name, s_core.checks.last);
+        esc(e_name, sizeof e_name, name);
+        uint64_t at = s_core.check_look_at;
+        k += (size_t)snprintf(buf + k, cap - k,
+            "],\"looks\":%lu,\"checks\":{\"n\":%lu,\"looks\":%lu,\"dropped\":%lu,\"last\":\"%s\","
+            "\"link\":\"%s\",\"look_in_ms\":%ld",
+            (unsigned long)s_core.looks, (unsigned long)s_core.checks.n,
+            (unsigned long)s_core.checks.looks, (unsigned long)s_core.checks.dropped, e_name,
+            link_name(s_core.checks.link), at ? (long)(at > now ? at - now : 0) : -1L);
+    }
     if (k < cap) {
         char e_last[100];
         esc(e_last, sizeof e_last, s_last);
         k += (size_t)snprintf(buf + k, cap - k,
-            "],\"job\":{\"active\":%s,\"sent\":%lu,\"last\":\"%s\",\"ms\":%lu,"
+            "},\"job\":{\"active\":%s,\"sent\":%lu,\"last\":\"%s\",\"ms\":%lu,"
             "\"rip_wait_ms\":%lu,\"printer_wait_ms\":%lu,\"reads\":%lu,\"resends\":%lu,"
             "\"ram_low\":%lu}}",
             s_use == USE_JOB ? "true" : "false", (unsigned long)s_sent, e_last,

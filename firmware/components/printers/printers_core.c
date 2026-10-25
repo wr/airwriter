@@ -313,6 +313,82 @@ void pr_at_queried(pr_list_t *l, int id, int ok, const lw_info_t *info)
     if (!r->identified && r->query_fails == 3) note_add(l, PR_NOTE_NO_ANSWER, id, 0);
 }
 
+// ------------------------------------------------------------- W-1098: renamed
+
+static pr_seen_t *seen_find(pr_list_t *l, int id)
+{
+    for (int i = 0; i < PR_MAX; i++) if (id > 0 && l->seen[i].id == id) return &l->seen[i];
+    return NULL;
+}
+
+const pr_seen_t *pr_seen_of(const pr_list_t *l, int id)
+{
+    return seen_find((pr_list_t *)l, id);
+}
+
+static void seen_drop(pr_list_t *l, int id)
+{
+    pr_seen_t *s = seen_find(l, id);
+    if (s) memset(s, 0, sizeof *s);
+}
+
+// The new record b's printer, as one the list has under an old name: the
+// one that answered last at b's address with the same product and fewest
+// pages since, its old name silent. Its index, or -1.
+static int renamed_from(const pr_list_t *l, const pr_rec_t *b, pr_where_t where, uint16_t net,
+                        uint8_t node, int32_t pages, const lw_info_t *info,
+                        const pr_live_t live[PR_MAX])
+{
+    if (b->kind != PR_KIND_LASERWRITER || b->announced || !b->found_auto || pages < 0 || !info)
+        return -1;
+    int best = -1;
+    int32_t best_pages = -1;
+    for (int i = 0; i < l->n; i++) {
+        const pr_rec_t *c = &l->r[i];
+        const pr_seen_t *s = pr_seen_of(l, c->id);
+        if (c->id == b->id || c->kind != PR_KIND_LASERWRITER || !c->identified || !s ||
+            s->where != where || s->net != net || s->node != node || s->pages < 0 ||
+            pages < s->pages || strcmp(c->lw.product, info->product) || live[i].present ||
+            pstr_eq(c->nbp, b->nbp))
+            continue;
+        if (s->pages > best_pages) {
+            best = i;
+            best_pages = s->pages;
+        }
+    }
+    return best;
+}
+
+int pr_at_answered(pr_list_t *l, int id, pr_where_t where, uint16_t net, uint8_t node,
+                   int32_t pages, const lw_info_t *info, const pr_live_t live[PR_MAX])
+{
+    pr_rec_t *b = pr_get(l, id);
+    if (!b) return -1;
+    int ci = renamed_from(l, b, where, net, node, pages, info, live);
+    if (ci >= 0) {
+        pr_rec_t *c = &l->r[ci];
+        int own = name_is_own(c), cid = c->id;
+        memcpy(c->nbp, b->nbp, sizeof c->nbp);
+        memcpy(c->nbp_type, b->nbp_type, sizeof c->nbp_type);
+        if (b->where < c->where) c->where = b->where;
+        pr_remove(l, id);                            // c moves down if it was after b
+        c = pr_get(l, cid);
+        if (own) {
+            char n[PR_NAME_MAX];
+            own_name(c, n, sizeof n);
+            set_name(l, c, n);
+        }
+        id = cid;
+    }
+    pr_seen_t *s = seen_find(l, id);
+    int32_t was = s ? s->pages : -1;
+    for (int i = 0; i < PR_MAX && !s; i++) if (!l->seen[i].id) s = &l->seen[i];
+    if (!s) return id;                               // full: PR_MAX of each, never
+    *s = (pr_seen_t){ .id = (uint8_t)id, .where = (uint8_t)where, .node = node, .net = net,
+                      .pages = pages >= 0 ? pages : was };
+    return id;
+}
+
 // ------------------------------------------------------------- the person
 
 int pr_rename(pr_list_t *l, int id, const char *name)
@@ -388,6 +464,7 @@ int pr_remove(pr_list_t *l, int id)
     int i = pr_index(l, id);
     if (i < 0) return -1;
     notes_clear(l, id, -1);
+    seen_drop(l, id);
     memmove(&l->r[i], &l->r[i + 1], (size_t)(l->n - i - 1) * sizeof l->r[0]);
     l->n--;
     return 0;
@@ -567,6 +644,54 @@ int pr_blob_newer(const uint8_t *buf, size_t n)
     return buf && n >= 3 && buf[0] == 'P' && buf[1] == 'R' && buf[2] > PR_BLOB_VER;
 }
 
+// W-1098: 'P' 'S' 1, a count, then each entry: id, where, node, net and
+// pages, little-endian (pages as uint32, -1 as FFFFFFFF).
+enum { SEEN_HDR = 4, SEEN_ONE = 9 };
+
+size_t pr_seen_save(const pr_list_t *l, uint8_t *buf, size_t cap)
+{
+    int n = 0;
+    for (int i = 0; i < PR_MAX; i++) n += l->seen[i].id != 0;
+    size_t need = SEEN_HDR + (size_t)n * SEEN_ONE;
+    if (cap < need) return 0;
+    buf[0] = 'P'; buf[1] = 'S'; buf[2] = 1; buf[3] = (uint8_t)n;
+    uint8_t *p = buf + SEEN_HDR;
+    for (int i = 0; i < PR_MAX; i++) {
+        const pr_seen_t *s = &l->seen[i];
+        if (!s->id) continue;
+        uint32_t pg = (uint32_t)s->pages;
+        p[0] = s->id; p[1] = s->where; p[2] = s->node;
+        p[3] = (uint8_t)s->net; p[4] = (uint8_t)(s->net >> 8);
+        for (int k = 0; k < 4; k++) p[5 + k] = (uint8_t)(pg >> (8 * k));
+        p += SEEN_ONE;
+    }
+    return need;
+}
+
+int pr_seen_load(pr_list_t *l, const uint8_t *buf, size_t n)
+{
+    if (!buf || n < SEEN_HDR || buf[0] != 'P' || buf[1] != 'S' || buf[2] != 1 ||
+        buf[3] > PR_MAX || n != SEEN_HDR + (size_t)buf[3] * SEEN_ONE)
+        return -1;
+    pr_seen_t got[PR_MAX];
+    int k = 0;
+    for (int i = 0; i < buf[3]; i++) {
+        const uint8_t *p = buf + SEEN_HDR + (size_t)i * SEEN_ONE;
+        if (!p[0] || p[1] > PR_WHERE_ZONE) return -1;
+        if (pr_index(l, p[0]) < 0) continue;          // not one of the list's
+        int dup = 0;
+        for (int j = 0; j < k; j++) dup |= got[j].id == p[0];
+        if (dup) continue;
+        uint32_t pg = 0;
+        for (int b = 0; b < 4; b++) pg |= (uint32_t)p[5 + b] << (8 * b);
+        got[k++] = (pr_seen_t){ .id = p[0], .where = p[1], .node = p[2],
+                                .net = (uint16_t)(p[3] | p[4] << 8), .pages = (int32_t)pg };
+    }
+    memset(l->seen, 0, sizeof l->seen);
+    memcpy(l->seen, got, (size_t)k * sizeof got[0]);
+    return 0;
+}
+
 // ------------------------------------------------------------- the Printers section
 
 // Where "key": starts its value, or NULL.
@@ -717,7 +842,7 @@ int pr_post(pr_list_t *l, const char *body, pr_post_t *o)
         const pr_rec_t *r = pr_get(l, id);
         if (r->kind != PR_KIND_LASERWRITER ||
             (r->lw.start_page != LW_START_ON && r->lw.start_page != LW_START_OFF))
-            return post_err(o, "This printer didn't say whether it prints a start page.");
+            return post_err(o, "This printer has no start page setting.");
         o->start_page_id = id;
         o->start_page = v ? 1 : 0;
     }

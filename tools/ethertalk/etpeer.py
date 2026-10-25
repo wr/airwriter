@@ -17,7 +17,8 @@ driver does (OpenConn, the board's SendData answered with Data, CloseConn).
     python3 tools/ethertalk/etpeer.py zone ZONE lookup
     python3 tools/ethertalk/etpeer.py zone ZONE print FILE
     python3 tools/ethertalk/etpeer.py tunnel laserwriter "LaserWriter II NT" [--hex-only] [--out DIR]
-                                         [--also "Office LaserWriter"] ...
+                                         [--also "Office LaserWriter"] [--addr NET.NODE]
+                                         [--pages N] [--no-check] ...
 
 `named` registers a Macintosh name, as System 7's Sharing Setup does
 (<name>:Workstation), looks the printer up so the board hears it, and answers
@@ -43,8 +44,13 @@ Lines on stdin fault it: `busy SECONDS`, `paper` (out of paper), `jam`, `ok`,
 `error` (the next job gets a PostScript error), `drop` (it answers nothing
 more), `password` (a password other than 0: the start page can't be set,
 W-1099). --hex-only answers the binary probe as a Level 1 machine that cannot
-take binary would. It prints a start page at power-on until the board's
-start page job turns it off.
+take binary would. Coming up it checks no one has its name, as a LaserWriter
+switched on does (W-1098: five lookups of NAME:LaserWriter@*, 2 s apart;
+--no-check skips them). --addr tries the address it had first, as a printer
+does; --pages is the page count it gives the query (4242), one more a job.
+Started again under another name with the same --addr and as many pages or
+more, it is the board's printer renamed. It prints a start page at power-on
+until the board's start page job turns it off.
 A tunnel fake starts itself again when this Mac's address changes.
 `--also NAME` adds another fake LaserWriter, at its own AppleTalk address, on
 the same tunnel (one Mac can bind the tunnel's port once); its jobs go in
@@ -612,8 +618,11 @@ class LaserWriter(Mac):
     """A fake PostScript LaserWriter on AppleTalk (W-1082): see the module doc."""
 
     def __init__(self, t, name, hex_only=False, out=None, busy=0, error=False, paper=False,
-                 password=False):
+                 pages=4242, addr=None, password=False):
         super().__init__(t)
+        if addr:                                       # the address it had: tried first
+            self.net, self.node = addr
+        self.pages = pages                             # its page count, one more each job
         self.lw_name = name.encode("mac_roman")[:32]
         self.hex_only, self.out_dir = hex_only, pathlib.Path(out) if out else None
         self.start_page, self.password = True, password
@@ -659,6 +668,15 @@ class LaserWriter(Mac):
         print(f"fake LaserWriter: {line.strip()} -> {self.status()}")
         if self.conn and w[0] in ("paper", "jam", "ok"):
             self.conn.out += f"%%[ {self.status()} ]%%\r".encode()
+
+    async def check_name(self, times=5, gap=2.0):
+        """As a LaserWriter switched on does (the NTR, W-1098): its own name
+        looked up a few times, 2 s apart, before it takes it."""
+        nbp = bytes([0x21, 0x2E]) + struct.pack(">HBBB", self.net, self.node, MY_NIS, 0) + \
+              pstr(self.lw_name) + pstr(b"LaserWriter") + pstr(b"*")
+        for _ in range(times):
+            await self.send_ddp(0, 0xFF, NIS, MY_NIS, DDP_NBP, nbp)
+            await asyncio.sleep(gap)
 
     # -- frames
     async def serve(self):
@@ -790,7 +808,8 @@ class LaserWriter(Mac):
         if job.startswith(b"%!PS-Adobe-3.0\n%%Title: AirWriter query"):
             intact = bytes(range(256)) in job
             probe = b"256 1" if intact and not self.hex_only else b"256 0"
-            c.out += (QUERY_ANSWER + b"aw:startpage=" + (b"true" if self.start_page else b"false")
+            c.out += (QUERY_ANSWER + b"aw:pages=%d\r" % self.pages + b"aw:startpage="
+                      + (b"true" if self.start_page else b"false")
                       + b"\raw:probe=" + probe + b"\raw:end\r")
             print(f"fake LaserWriter: query answered (binary {'ok' if probe.endswith(b'1') else 'refused'})")
         elif job.startswith(b"%!PS-Adobe-3.0\n%%Title: AirWriter start page"):
@@ -812,6 +831,7 @@ class LaserWriter(Mac):
 
     def save(self, job, complete=True):
         self.jobs += 1
+        self.pages += 1
         print(f"fake LaserWriter: job {self.jobs}, {len(job)} bytes{'' if complete else ', cut short'}")
         if not self.out_dir:
             return
@@ -915,18 +935,25 @@ async def main(argv):
         also = [opts[i + 1] for i, o in enumerate(opts) if o == "--also" and i + 1 < len(opts)]
         hub = Hub(t) if also else None
         names = [rest[1]] + also
+        pages = int(opts[opts.index("--pages") + 1]) if "--pages" in opts else 4242
+        addr = None
+        if "--addr" in opts:
+            n, _, d = opts[opts.index("--addr") + 1].partition(".")
+            addr = (int(n), int(d))
         fakes = []
         for k, name in enumerate(names):
             d = out if not k or not out else os.path.join(out, name)
             fakes.append(LaserWriter(hub.tap() if hub else t, name, hex_only="--hex-only" in opts,
-                                     out=d))
+                                     out=d, pages=pages, addr=addr if not k else None))
         try:
             tasks = [hub.pump()] if hub else []
             pump = asyncio.ensure_future(asyncio.gather(*tasks)) if tasks else None
             for name, fake in zip(names, fakes):
                 await fake.acquire()
-                print(f"fake LaserWriter \"{name}\" at {fake.net}.{fake.node}, socket {LW_SLS}",
-                      file=sys.stderr if argv[0] == "pipe" else sys.stdout)
+                if argv[0] != "pipe" and "--no-check" not in opts:
+                    await fake.check_name()
+                print(f"fake LaserWriter \"{name}\" at {fake.net}.{fake.node}, socket {LW_SLS}, "
+                      f"{fake.pages} pages", file=sys.stderr if argv[0] == "pipe" else sys.stdout)
             tasks = [fake.serve() for fake in fakes]
             if argv[0] != "pipe":
                 tasks.append(stdin_commands(fakes[0]))

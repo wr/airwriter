@@ -42,7 +42,7 @@ static void f_log(void *ctx, const char *line)
     strncpy(lastlog, line, sizeof lastlog - 1);
 }
 static const lt_ops_t NODE_OPS = { NULL, f_send, f_claim, f_log, NULL, NULL, NULL, NULL, NULL,
-                                   NULL, NULL, NULL };
+                                   NULL, NULL, NULL, NULL };
 
 // Frame i as DDP and ATP; 0 when it is one.
 static int frame(int i, ddp_t *d, atp_t *a)

@@ -27,7 +27,7 @@
 static const char *TAG = "printers";
 static const char *NS = "printers";
 
-enum { BLOB_MAX = 8 + sizeof(pr_list_t) };
+enum { BLOB_MAX = 8 + sizeof(pr_list_t), SEEN_MAX = 4 + PR_MAX * 9 };
 
 // An AppleTalk printer's AirPrint slot (1-3) as it is wanted, and as it was
 // last put there.
@@ -44,6 +44,8 @@ typedef struct {
     pr_list_t list, scratch;        // scratch: a post works on a copy, all or nothing
     uint8_t   blob[BLOB_MAX], saved[BLOB_MAX];
     size_t    saved_n;
+    uint8_t   seen[SEEN_MAX], seen_saved[SEEN_MAX];   // W-1098: key "seen", beside "list"
+    size_t    seen_saved_n;
     slotat_t  at_want[IPP_PRINTERS], at_now[IPP_PRINTERS];
     laser_target_t targets[PR_MAX];
     lw_caps_t caps;
@@ -108,13 +110,40 @@ static int load(pr_list_t *l)
         return -2;
     }
     s_big->saved_n = n;
+    // W-1098: where each printer last answered, and its page count. Without
+    // them (a list from before, or one that won't read) none is told renamed.
+    if (nvs_open(NS, NVS_READONLY, &h) != ESP_OK) return 0;
+    n = sizeof s_big->seen_saved;
+    err = nvs_get_blob(h, "seen", s_big->seen_saved, &n);
+    nvs_close(h);
+    if (err == ESP_OK && !pr_seen_load(l, s_big->seen_saved, n)) s_big->seen_saved_n = n;
+    else if (err == ESP_OK) ESP_LOGW(TAG, "the stored addresses (%u bytes) do not read back", (unsigned)n);
     return 0;
+}
+
+// W-1098's addresses, if they differ from what NVS holds. Under s_mu.
+static void save_seen(void)
+{
+    size_t n = pr_seen_save(s_l, s_big->seen, sizeof s_big->seen);
+    if (!n || (n == s_big->seen_saved_n && !memcmp(s_big->seen, s_big->seen_saved, n))) return;
+    nvs_handle_t h;
+    if (nvs_open(NS, NVS_READWRITE, &h) != ESP_OK) return;
+    esp_err_t err = nvs_set_blob(h, "seen", s_big->seen, n);
+    if (err == ESP_OK) err = nvs_commit(h);
+    nvs_close(h);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "could not store the addresses: %s", esp_err_to_name(err));
+        return;
+    }
+    memcpy(s_big->seen_saved, s_big->seen, n);
+    s_big->seen_saved_n = n;
 }
 
 // Stores the list if it differs from what NVS holds. Under s_mu.
 static void save(void)
 {
     if (s_keep) return;
+    save_seen();
     size_t n = pr_save(s_l, s_big->blob, sizeof s_big->blob);
     if (!n || (n == s_big->saved_n && !memcmp(s_big->blob, s_big->saved, n))) return;
     nvs_handle_t h;
@@ -431,15 +460,27 @@ void printers_at_seen(int at_link, const uint8_t *name, const uint8_t *type)
     after_change(added);
 }
 
-void printers_at_queried(int id, int ok, const lw_info_t *info)
+void printers_at_queried(int id, int ok, const lw_info_t *info, int at_link, uint16_t net,
+                         uint8_t node, int32_t pages)
 {
     if (!s_started) return;
     lock();
+    int renamed = 0;
+    if (ok && at_link >= 0) {
+        live_fill();
+        int to = pr_at_answered(s_l, id, where_of(at_link), net, node, pages, info, s_live);
+        if (to >= 0 && to != id) {
+            ESP_LOGI(TAG, "printer %d is printer %d renamed: \"%s\", at %u.%u, %ld pages", id, to,
+                     pr_get(s_l, to)->name, (unsigned)net, (unsigned)node, (long)pages);
+            id = to;
+            renamed = 1;
+        }
+    }
     pr_rec_t *r = pr_get(s_l, id);
     int was = r && r->identified;
     pr_at_queried(s_l, id, ok, info);
     int now = r && pr_get(s_l, id) && pr_get(s_l, id)->identified;
-    after_change(now != was);
+    after_change(renamed || now != was);
 }
 
 void printers_offers(int at_link, int on, const char *host, lt_offers_t *o)
@@ -596,13 +637,13 @@ static int start_page(int id, int on, char *err, size_t cap)
     case LASER_SP_OK:
         return 0;
     case LASER_SP_BUSY:
-        snprintf(err, cap, "The printer is busy. Try again when it's done.");
+        snprintf(err, cap, "The printer is busy. Try again when it’s done.");
         return 409;
     case LASER_SP_REFUSED:
-        snprintf(err, cap, "The printer has a password, so AirWriter can't change this.");
+        snprintf(err, cap, "The printer has a password, so AirWriter can’t change this.");
         return 403;
     default:
-        snprintf(err, cap, "The printer didn't answer.");
+        snprintf(err, cap, "Can’t reach the printer. Check that it’s switched on.");
         return 502;
     }
 }
