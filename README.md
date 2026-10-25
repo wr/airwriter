@@ -45,7 +45,6 @@ Firmware updates are on the [Releases page](../../releases), and AirWriter can i
 | `tools/` | Host builds of the raster and IPP code, tests, fixtures and the settings page |
 | `hardware/` | KiCad board and front panel |
 | `enclosure/` | Case and light-guide lattice in build123d, with printable STLs in `out/` |
-| `docs/` | Spec, design notes, traps and the [voice and tone guide](docs/voice-and-tone.md) |
 
 Firmware builds with ESP-IDF 5.5 (`idf.py -C firmware build`). Host tests run anywhere with a C
 compiler: `make -C tools/rip test regress` and `make -C tools/ipp test`. `AGENTS.md` has the full
