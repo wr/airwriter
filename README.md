@@ -54,5 +54,4 @@ toolchain notes.
 ## License
 
 Firmware and tools are GPL-3.0-or-later, hardware and enclosure CERN-OHL-S-2.0, docs CC-BY-SA-4.0.
-See [`LICENSE.md`](LICENSE.md), which also covers third-party material. The AirWriter name and
-logo are not licensed: if you build and sell your own, please call it something else.
+See [`LICENSE.md`](LICENSE.md), which also covers third-party material.
