@@ -1076,11 +1076,23 @@ void laser_json(char *buf, size_t cap)
             link_name(v.idx >= 0 ? s_core.heard[v.idx].link : g->where), state_name(&v),
             v.reason, e_msg, e_product, s_core.t[i].queried ? "true" : "false");
     }
+    if (k < cap) {                               // W-1098: printers checking their names
+        char name[3 * NBP_NAME_MAX + 1], e_name[200];
+        nbp_utf8(name, sizeof name, s_core.checks.last);
+        esc(e_name, sizeof e_name, name);
+        uint64_t at = s_core.check_look_at;
+        k += (size_t)snprintf(buf + k, cap - k,
+            "],\"looks\":%lu,\"checks\":{\"n\":%lu,\"looks\":%lu,\"dropped\":%lu,\"last\":\"%s\","
+            "\"link\":\"%s\",\"look_in_ms\":%ld",
+            (unsigned long)s_core.looks, (unsigned long)s_core.checks.n,
+            (unsigned long)s_core.checks.looks, (unsigned long)s_core.checks.dropped, e_name,
+            link_name(s_core.checks.link), at ? (long)(at > now ? at - now : 0) : -1L);
+    }
     if (k < cap) {
         char e_last[100];
         esc(e_last, sizeof e_last, s_last);
         k += (size_t)snprintf(buf + k, cap - k,
-            "],\"job\":{\"active\":%s,\"sent\":%lu,\"last\":\"%s\",\"ms\":%lu,"
+            "},\"job\":{\"active\":%s,\"sent\":%lu,\"last\":\"%s\",\"ms\":%lu,"
             "\"rip_wait_ms\":%lu,\"printer_wait_ms\":%lu,\"reads\":%lu,\"resends\":%lu,"
             "\"ram_low\":%lu}}",
             s_use == USE_JOB ? "true" : "false", (unsigned long)s_sent, e_last,

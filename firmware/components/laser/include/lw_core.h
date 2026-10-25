@@ -21,7 +21,10 @@
 // registration, Inside AppleTalk 7-9). Each such check of a LaserWriter or
 // ImageWriter name not heard lately on its link puts off one look until
 // LW_CHECK_SETTLE_MS after it, when the name answers: a printer comes back,
-// new or renamed, in seconds, and nothing is sent while it is off.
+// new or renamed, in seconds, and nothing is sent while it is off. A check
+// from the address another name was heard at is that printer renamed: the
+// old name is gone there at once, since its status (which names nothing)
+// would come from the printer under its new name.
 #pragma once
 #include <stdint.h>
 #include "lt_node.h"
@@ -79,6 +82,11 @@ typedef struct {
     struct { uint8_t link, node; uint16_t net; uint64_t at; } aw[LWC_AW_MAX];
     uint64_t     looked, burst_from;
     uint64_t     check_look_at;                   // a name check's look, or 0
+    struct {                                      // for /api/laser
+        uint32_t n, looks, dropped;               // checks, the looks they made, names ended
+        uint8_t  last[NBP_NAME_MAX + 1], link;
+    } checks;
+    uint32_t     looks;                           // every look, at start and since
     uint8_t      look_due;
     uint8_t      next;                            // whose status is asked next, in turn
 } lwc_t;

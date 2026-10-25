@@ -178,12 +178,33 @@ void lwc_name_check(lwc_t *c, const nbp_tuple_t *t, uint8_t link, uint64_t now)
     uint8_t kind = type_is(t->type, "LaserWriter") ? LWC_KIND_LW
                  : type_is(t->type, "ImageWriter") ? LWC_KIND_IW : 0;
     if (!kind || !t->obj[0] || (t->obj[0] == 1 && t->obj[1] == '=')) return;
+    c->checks.n++;
+    c->checks.link = link;
+    memcpy(c->checks.last, t->obj, 1 + (size_t)(t->obj[0] <= NBP_NAME_MAX ? t->obj[0] : NBP_NAME_MAX));
+    if (c->checks.last[0] > NBP_NAME_MAX) c->checks.last[0] = NBP_NAME_MAX;
+    for (int i = 0; i < LW_HEARD_MAX; i++) {
+        lw_heard_t *h = &c->heard[i];
+        if (!h->used || h->link != link || same_name(h->name, t->obj) ||
+            h->route.addr.node != t->addr.node ||
+            (h->route.addr.net && t->addr.net && h->route.addr.net != t->addr.net))
+            continue;
+        for (int ti = 0; ti < LWC_TARGETS; ti++)      // renamed: gone, as lwc_tick's gone
+            if (c->t[ti].used && heard_of(c, ti) == i) {
+                c->t[ti].online = 0;
+                c->t[ti].queried = 0;
+                c->t[ti].fails = 0;
+                c->t[ti].query_at = 0;
+            }
+        h->used = 0;
+        c->checks.dropped++;
+    }
     for (int i = 0; i < LW_HEARD_MAX; i++) {
         const lw_heard_t *h = &c->heard[i];
         if (h->used && h->link == link && h->kind == kind && same_name(h->name, t->obj) &&
             since(now, h->heard) < LW_GONE_MS)
             return;                                   // up: a Mac about to print to it
     }
+    if (!c->check_look_at) c->checks.looks++;
     c->check_look_at = now + LW_CHECK_SETTLE_MS;      // the next check puts it off again
 }
 
@@ -231,6 +252,7 @@ lwc_want_t lwc_tick(lwc_t *c, uint64_t now)
     uint64_t every = since(now, c->burst_from) <= LW_LOOK_BURST_MS ? LW_LOOK_MS : LW_LOOK_SLOW_MS;
     if (c->look_due || since(now, c->looked) >= every) {
         w.look = 1;
+        c->looks++;
         c->look_due = 0;
         c->looked = now;
     }
