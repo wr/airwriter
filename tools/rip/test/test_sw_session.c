@@ -49,6 +49,7 @@ typedef struct {
     uint8_t s1, s2;
     uint32_t busy_until, clean_ms;
     int silent;
+    uint32_t silent_at;                    // goes silent at this time (0: never)
     uint32_t deaf_until, settle_ms;
     int b_ov;                              // B reads this, within [b_ov_from, b_ov_to), when >= 0
     uint32_t b_ov_from, b_ov_to;
@@ -215,7 +216,7 @@ static void g_done(void)
 static void fake_byte(uint8_t b)
 {
     uint32_t t = now_ms();
-    if (F.silent) return;
+    if (F.silent || (F.silent_at && t >= F.silent_at)) return;
     if (t < F.deaf_until) {                // settling: only the reset gets through
         if (b == 0xFF) F.nff++;
         else { if (F.nff >= 3 && b == 'I') do_reset(); F.nff = 0; }
@@ -857,6 +858,32 @@ static void test_silent(void)
         if (F.ev[i].kind == 'q' && F.ev[i].arg == '2' && F.ev[i].t <= now_ms()) last_heard = F.ev[i].t;   // the last it answered
     CHECK(now_ms() - last_heard >= 30000 && now_ms() - last_heard <= 37000);
     CHECK_EQ_INT(F.st[F.nst - 1], SWS_OFFLINE);
+    sw_session_free(s);
+
+    // Silence during a fault wait is still silence: out of paper for good, and the printer
+    // stops answering 20 s into it. The wait is 600 s, but the job ends 30 s after the last
+    // answer, as SW_E_SILENT with the printer offline. (cancel_at_ms is only a backstop, so
+    // a session that kept waiting would end the test with SW_E_CANCEL and not hang it.)
+    fake_init(SW_C2200, 0);
+    F.arm_after_g = 1;
+    F.arm_dur = 0xFFFFFFFFu;
+    F.arm_s2 = 0x04;
+    s = session(SW_C2200, 4, 0, 0);
+    n = fr_page(g_job, 0);
+    n += fr_rect(g_job + n, 'R', 0, 0, 99, 99);
+    n += fr_block(g_job + n, 5000);
+    n += fr_rect(g_job + n, 'R', 0, 100, 199, 199);
+    n += fr_block(g_job + n, 5000);
+    CHECK_EQ_INT(sw_session_begin(s), SW_OK);
+    uint32_t t_wait = now_ms();
+    F.silent_at = t_wait + 21000;                       // the fault begins about 1 s in
+    F.cancel_at_ms = F.silent_at + 120000;
+    CHECK_EQ_INT(sw_session_feed(s, g_job, n), SW_E_SILENT);
+    CHECK(now_ms() >= F.silent_at + 29000 && now_ms() <= F.silent_at + 40000);
+    CHECK(now_ms() - t_wait < 100000);              // far short of the 600 s a fault may be waited out
+    CHECK_EQ_INT(F.st[F.nst - 1], SWS_OFFLINE);
+    CHECK_EQ_INT(F.st[F.nst - 2], SWS_NO_PAPER);
+    CHECK_EQ_INT(F.g_n, 1);                         // the second block never went
     sw_session_free(s);
 
     // Silent from the start: begin ends at 30 s.
