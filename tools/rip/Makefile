@@ -29,6 +29,7 @@ SRCS    := $(wildcard $(COMP)/ripjob/*.c) \
            $(wildcard $(COMP)/imagewriter/*.c) \
            $(wildcard $(COMP)/testpage/*.c) \
            $(COMP)/stylewriter/sw_model.c $(COMP)/stylewriter/sw_code.c $(COMP)/stylewriter/sw_page.c \
+           $(COMP)/stylewriter/sw_session.c \
            $(COMP)/serial_out/serial_writer.c
 TESTSRC := $(wildcard test/test_*.c)
 TESTBIN := $(patsubst test/%.c,build/%,$(TESTSRC))
@@ -113,10 +114,10 @@ build/test_sw_page_mem: test/test_sw_page_mem.c $(SRCS) | build
 build/printers_core.o: $(COMP)/printers/printers_core.c | build
 	$(CC) $(CFLAGS) $(INCS) -I$(COMP)/printers/include -I$(LT)/include -c -o $@ $<
 
-# The StyleWriter's model table, run coder and page stage are held to the same rule as
-# the printer list's core (W-1103): no writable statics; the page stage's band and block
-# come from the board's PSRAM allocator (bigmem.h).
-SW_OBJS := build/sw_model.o build/sw_code.o build/sw_page.o
+# The StyleWriter's model table, run coder, page stage and session are held to the same rule
+# as the printer list's core (W-1103): no writable statics; the page stage's block and the
+# session's frame buffer come from the board's PSRAM allocator (bigmem.h).
+SW_OBJS := build/sw_model.o build/sw_code.o build/sw_page.o build/sw_session.o
 build/sw_%.o: $(COMP)/stylewriter/sw_%.c | build
 	$(CC) $(CFLAGS) $(INCS) -c -o $@ $<
 
