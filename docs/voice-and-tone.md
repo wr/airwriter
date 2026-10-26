@@ -54,7 +54,9 @@ These apply to the product, docs and Wells voices.
    negatives the reader didn't ask about ("StyleWriters aren't supported" under a table of
    supported printers).
 4. **Confident.** No "untested", "should work", "never tried" or "this part is new". Test
-   status belongs in Linear and the engineering docs.
+   status belongs in Linear and the engineering docs. One exception: the wiki's Supported
+   Printers table marks a printer not yet confirmed on paper **Yes\***, with a footnote asking
+   owners to report it. Drop the star once one prints.
 5. **Labels where a label will do.** Headings, table headers and list leads: "Port", not "Where
    it is".
 6. **Plain and short.** One idea per sentence, with no lists packed into a sentence behind a
