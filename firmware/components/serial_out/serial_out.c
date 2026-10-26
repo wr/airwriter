@@ -27,6 +27,14 @@ static volatile int s_abort;     // see serial_out_set_abort()
 static volatile size_t   s_lb_bytes;
 static volatile uint32_t s_lb_crc;
 
+// The port's link right now (serial_out_set_link): the ImageWriter's, 9600 with CTS, until a
+// StyleWriter's is asked for. Read and written under the job lock, like the calls that use it.
+static int s_link_baud;
+static int s_link_cts;
+// Longest serial_out_set_link waits for the transmitter before it discards what is left:
+// 128 bytes of FIFO are 133 ms at 9600.
+#define LINK_DRAIN_MS 300
+
 static uint32_t crc32_up(uint32_t crc, const uint8_t *buf, size_t n)
 {
     crc = ~crc;
@@ -140,6 +148,9 @@ esp_err_t serial_out_init(const serial_out_cfg_t *cfg)
     if (s_cfg.loopback && s_cfg.on_line)         s_cfg.on_line(s_cfg.on_line_ctx, 1);
     else if (s_cfg.cts_pin < 0 && s_cfg.on_line) s_cfg.on_line(s_cfg.on_line_ctx, 0);
 
+    s_link_baud = s_cfg.baud;
+    s_link_cts  = s_cfg.cts_pin >= 0 && !s_cfg.loopback;
+
     ESP_LOGI(TAG, "uart%d at %d baud, tx %d rx %d cts %d",
              s_cfg.uart_num, s_cfg.baud, s_cfg.tx_pin, s_cfg.rx_pin, s_cfg.cts_pin);
     return ESP_OK;
@@ -202,6 +213,20 @@ esp_err_t serial_out_flush(uint32_t timeout_ms)
     }
 }
 
+// The link's flow control: CTS on the ImageWriter's, none on a StyleWriter's (it may never
+// raise HSKo). Whatever else turned it off or on for a moment puts this back.
+static void apply_link_flow(void)
+{
+    uart_set_hw_flow_ctrl(s_cfg.uart_num,
+                          s_link_cts ? UART_HW_FLOWCTRL_CTS : UART_HW_FLOWCTRL_DISABLE, 0);
+}
+
+// Round up: a gap of a few milliseconds must not become a poll of none.
+static TickType_t ms_to_ticks_up(uint32_t ms)
+{
+    return ms ? (TickType_t)((ms + portTICK_PERIOD_MS - 1) / portTICK_PERIOD_MS) : 0;
+}
+
 void serial_out_lend(int lend)
 {
     if (lend) {
@@ -214,6 +239,7 @@ void serial_out_lend(int lend)
     // Line inversion lives in the UART, so it survived the loan.
     uart_set_pin(s_cfg.uart_num, s_cfg.tx_pin, s_cfg.rx_pin, UART_PIN_NO_CHANGE,
                  (s_cfg.cts_pin >= 0 && !s_cfg.loopback) ? s_cfg.cts_pin : UART_PIN_NO_CHANGE);
+    if (s_cfg.cts_pin >= 0 && !s_cfg.loopback) apply_link_flow();
     uart_flush_input(s_cfg.uart_num);
 }
 
@@ -249,11 +275,12 @@ void serial_out_loopback_reset(void)
 
 esp_err_t serial_out_send_unflowed(const uint8_t *buf, size_t n)
 {
-    if (s_cfg.cts_pin < 0 || s_cfg.loopback) return ESP_ERR_INVALID_STATE;
+    // Not on a StyleWriter's link: this is the ImageWriter's CTRL-X, and only at its 9600.
+    if (s_cfg.cts_pin < 0 || s_cfg.loopback || !s_link_cts) return ESP_ERR_INVALID_STATE;
     uart_set_hw_flow_ctrl(s_cfg.uart_num, UART_HW_FLOWCTRL_DISABLE, 0);
     int w = uart_tx_chars(s_cfg.uart_num, (const char *)buf, n);
     uart_wait_tx_done(s_cfg.uart_num, pdMS_TO_TICKS(100));
-    uart_set_hw_flow_ctrl(s_cfg.uart_num, UART_HW_FLOWCTRL_CTS, 0);
+    apply_link_flow();
     return w == (int)n ? ESP_OK : ESP_FAIL;
 }
 
@@ -265,7 +292,9 @@ void serial_out_rx_drop(void)
 int serial_out_query(const uint8_t *cmd, size_t n, uint8_t *reply, size_t cap,
                      uint32_t wait_ms)
 {
-    if (s_cfg.cts_pin < 0 || s_cfg.loopback) return -1;
+    // -1 too on a StyleWriter's link (serial_out_set_link): flow controlled, a byte queued
+    // with HSKo low would go out later at whatever baud the port has then.
+    if (s_cfg.cts_pin < 0 || s_cfg.loopback || !s_link_cts) return -1;
     if (uart_tx_chars(s_cfg.uart_num, (const char *)cmd, n) != (int)n) return -1;
     int got = uart_read_bytes(s_cfg.uart_num, reply, 1, pdMS_TO_TICKS(wait_ms));
     if (got <= 0) return 0;
@@ -276,4 +305,68 @@ int serial_out_query(const uint8_t *cmd, size_t n, uint8_t *reply, size_t cap,
         got += more;
     }
     return got;
+}
+
+void serial_out_set_link(int baud, int cts)
+{
+    if (s_cfg.loopback) return;
+    cts = cts && s_cfg.cts_pin >= 0;
+    if (baud == s_link_baud && cts == s_link_cts) {
+        uart_flush_input(s_cfg.uart_num);
+        return;
+    }
+    // Bytes still in the FIFO were framed for the old link. Waiting a CTS-held byte out can
+    // take forever, so past the wait it is thrown away: it must not go out later at the
+    // wrong baud, or to a printer that never asked for it.
+    if (uart_wait_tx_done(s_cfg.uart_num, pdMS_TO_TICKS(LINK_DRAIN_MS)) != ESP_OK) {
+        serial_out_purge();
+        ESP_LOGW(TAG, "link change: dropped what the transmitter still held");
+    }
+    uart_set_baudrate(s_cfg.uart_num, (uint32_t)baud);
+    s_link_baud = baud;
+    s_link_cts  = cts;
+    apply_link_flow();
+    uart_flush_input(s_cfg.uart_num);
+    ESP_LOGI(TAG, "link: %d baud, %s", baud, cts ? "CTS" : "no flow control");
+}
+
+int serial_out_read(uint8_t *b, size_t cap, uint32_t first_ms, uint32_t gap_ms)
+{
+    if (s_cfg.loopback) return -1;
+    if (!b || !cap) return 0;
+    int got = uart_read_bytes(s_cfg.uart_num, b, 1, ms_to_ticks_up(first_ms));
+    if (got <= 0) return 0;
+    // One byte at a time while waiting, so the gap runs from the last byte (a read of the
+    // whole remainder would wait out its full timeout after it); whatever is already
+    // buffered comes in a piece.
+    const TickType_t gap = ms_to_ticks_up(gap_ms);
+    while ((size_t)got < cap) {
+        int n = uart_read_bytes(s_cfg.uart_num, b + got, 1, gap);
+        if (n <= 0) break;
+        got += n;
+        if ((size_t)got < cap) {
+            int more = uart_read_bytes(s_cfg.uart_num, b + got, cap - (size_t)got, 0);
+            if (more > 0) got += more;
+        }
+    }
+    return got;
+}
+
+int serial_out_write_raw(const uint8_t *b, size_t n, uint32_t timeout_ms)
+{
+    if (s_cfg.loopback) return -1;
+    const TickType_t limit = ms_to_ticks_up(timeout_ms);
+    const TickType_t start = xTaskGetTickCount();
+    while (n) {
+        int w = uart_tx_chars(s_cfg.uart_num, (const char *)b, n);
+        if (w < 0) return -1;
+        b += w;
+        n -= (size_t)w;
+        if (!n) break;
+        if ((TickType_t)(xTaskGetTickCount() - start) >= limit) return -1;
+        // One tick, not serial_out_write's 100 ms: at 57600 the 128-byte FIFO empties in
+        // 22 ms, and a longer sleep would starve the line.
+        vTaskDelay(1);
+    }
+    return 0;
 }

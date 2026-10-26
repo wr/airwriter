@@ -75,8 +75,9 @@ void serial_out_set_abort(int on);
 // that holds HSKo false while idle (W-1039: CTRL-X clears an unprinted line
 // that serial-line noise left in its buffer). The ImageWriter keeps ~27
 // characters of slack after dropping DTR. Never while a job is writing --
-// callers hold the job lock. ESP_ERR_INVALID_STATE with no CTS line or in
-// loopback.
+// callers hold the job lock. ESP_ERR_INVALID_STATE with no CTS line, in
+// loopback, or on a StyleWriter's link (below). Flow control goes back to what
+// the link says, not to on.
 esp_err_t serial_out_send_unflowed(const uint8_t *buf, size_t n);
 
 // Asking the printer something (W-1064: ESC ?, self-ID). The printer answers
@@ -87,14 +88,15 @@ esp_err_t serial_out_send_unflowed(const uint8_t *buf, size_t n);
 // paused printer gets it when it is ready), waits up to wait_ms for a first
 // byte, then reads until 50 ms pass with nothing new or `cap` is full.
 // Returns the bytes read, 0 for no answer, -1 with no CTS line or in
-// loopback. Callers hold the job lock.
+// loopback or on a StyleWriter's link (below). Callers hold the job lock.
 void serial_out_rx_drop(void);
 int  serial_out_query(const uint8_t *cmd, size_t n, uint8_t *reply, size_t cap,
                       uint32_t wait_ms);
 // The cable tester (W-1055) borrows TX and RX for RMT. serial_out_lend(1)
 // waits for the transmitter to drain and leaves both pins to the caller;
-// serial_out_lend(0) routes them back to the UART and drops whatever RX
-// picked up meanwhile. Callers hold the job lock.
+// serial_out_lend(0) routes them back to the UART, puts the link's flow
+// control back and drops whatever RX picked up meanwhile. Callers hold the job
+// lock.
 void serial_out_lend(int lend);
 
 // The printer's HSKo line right now. A printer that is attached and online
@@ -111,3 +113,31 @@ void serial_out_loopback_reset(void);
 // before the receiving task has been scheduled to collect it -- without this
 // the tail of every stream looks lost. Returns 1 if the count was reached.
 int serial_out_loopback_wait(size_t expect, uint32_t timeout_ms);
+
+// The port's link (W-1103). An ImageWriter is 9600 baud with CTS, as serial_out_init
+// set it up; a StyleWriter is 57600 with no flow control, because it may never
+// raise HSKo. serial_out_set_link waits for the transmitter to empty (a byte held
+// by a low HSKo is thrown away after 300 ms, so it cannot go out later at the
+// wrong baud), sets the baud and the flow control, and drops whatever RX holds.
+// Asked for the link it already has, it reconfigures nothing and only drops RX.
+// `cts` is ignored on a board with no CTS line. Back to 9600 with CTS whenever
+// the port's record is not a StyleWriter. A no-op in loopback. Callers hold the
+// job lock.
+void serial_out_set_link(int baud, int cts);
+
+// Raw reading, for the link's own replies: waits up to first_ms for a first byte,
+// then reads until gap_ms pass with nothing new (0: what is already there) or
+// `cap` is full. Returns the bytes read, 0 for none, -1 in loopback. Rounded up
+// to whole ticks. Callers hold the job lock.
+int serial_out_read(uint8_t *b, size_t cap, uint32_t first_ms, uint32_t gap_ms);
+
+// Raw writing for a StyleWriter's link: fills the FIFO and sleeps one tick between
+// fills, so 57600 baud (5.76 KB/s) keeps up where serial_out_write's 100 ms sleeps
+// (about 1.3 KB/s) would not. 0 once every byte is queued in the FIFO (serial_out_flush
+// waits for the last to leave), -1 if timeout_ms passes first (what was queued stays;
+// serial_out_purge drops it), or in loopback. It never waits on HSKo (a StyleWriter's
+// link has no flow control) and does not look at serial_out_set_abort: a caller that
+// wants to be cancellable writes in chunks and checks its own flag between them. On a
+// link that has CTS a low HSKo holds the FIFO and the call times out. Callers hold the
+// job lock.
+int serial_out_write_raw(const uint8_t *b, size_t n, uint32_t timeout_ms);

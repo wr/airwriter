@@ -15,6 +15,7 @@ INCS    := -I$(COMP)/ripjob/include \
            -I$(COMP)/serial_out/include \
            -I$(COMP)/testpage/include \
            -I$(COMP)/stylewriter/include \
+           -I$(COMP)/printers/include \
            -I.
 # serial_out is IDF-bound except for serial_writer.c, which is pure by design
 # so the deadline loop can be tested here. Name it, don't wildcard the dir.
@@ -30,6 +31,7 @@ SRCS    := $(wildcard $(COMP)/ripjob/*.c) \
            $(wildcard $(COMP)/testpage/*.c) \
            $(COMP)/stylewriter/sw_model.c $(COMP)/stylewriter/sw_code.c $(COMP)/stylewriter/sw_page.c \
            $(COMP)/stylewriter/sw_session.c \
+           $(COMP)/printers/port_policy.c \
            $(COMP)/serial_out/serial_writer.c
 TESTSRC := $(wildcard test/test_*.c)
 TESTBIN := $(patsubst test/%.c,build/%,$(TESTSRC))
@@ -115,6 +117,10 @@ build/test_sw_page_mem: test/test_sw_page_mem.c $(SRCS) | build
 build/printers_core.o: $(COMP)/printers/printers_core.c | build
 	$(CC) $(CFLAGS) $(INCS) -I$(COMP)/printers/include -I$(LT)/include -c -o $@ $<
 
+# The port policy (W-1103) is the same: pure, no state of its own, the caller passes the clock.
+build/port_policy.o: $(COMP)/printers/port_policy.c | build
+	$(CC) $(CFLAGS) $(INCS) -c -o $@ $<
+
 # The StyleWriter's model table, run coder, page stage and session are held to the same rule
 # as the printer list's core (W-1103): no writable statics; the page stage's block and the
 # session's frame buffer come from the board's PSRAM allocator (bigmem.h).
@@ -122,9 +128,9 @@ SW_OBJS := build/sw_model.o build/sw_code.o build/sw_page.o build/sw_session.o
 build/sw_%.o: $(COMP)/stylewriter/sw_%.c | build
 	$(CC) $(CFLAGS) $(INCS) -c -o $@ $<
 
-test: $(TESTBIN) build/printers_core.o $(SW_OBJS)
+test: $(TESTBIN) build/printers_core.o build/port_policy.o $(SW_OBJS)
 	@fail=0; for t in $(TESTBIN); do ./$$t || fail=1; done; \
-	for o in printers_core $(basename $(notdir $(SW_OBJS))); do \
+	for o in printers_core port_policy $(basename $(notdir $(SW_OBJS))); do \
 	  if nm build/$$o.o | grep -E ' [bBdD] ' | grep -v ' ltmp'; then \
 	    echo "FAIL $$o: writable statics (above)"; fail=1; \
 	  else echo "ok  $$o: no writable statics"; fi; \
