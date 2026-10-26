@@ -20,14 +20,42 @@ const char *pr_where_name(int w)
 const char *pr_kind_name(int k)
 {
     static const char *const n[] = { "unknown", "imagewriter", "laserwriter",
-                                     "appletalk-imagewriter" };
-    return k >= 0 && k <= PR_KIND_AT_IMAGEWRITER ? n[k] : "?";
+                                     "appletalk-imagewriter", "stylewriter" };
+    return k >= 0 && k <= PR_KIND_STYLEWRITER ? n[k] : "?";
+}
+
+// pr_model_t's StyleWriters, in order, as sw_model_t has them.
+static const sw_model_t SW_OF[] = { SW_ORIGINAL, SW_II, SW_1200, SW_C1500, SW_C2200, SW_C2400,
+                                    SW_C2500 };
+
+sw_model_t pr_model_to_sw(pr_model_t m)
+{
+    return m >= PR_MODEL_SW1 && m <= PR_MODEL_SWC2500 ? SW_OF[m - PR_MODEL_SW1] : SW_NONE;
+}
+
+pr_model_t pr_model_from_sw(sw_model_t m)
+{
+    for (size_t i = 0; i < sizeof SW_OF / sizeof SW_OF[0]; i++)
+        if (SW_OF[i] == m) return (pr_model_t)(PR_MODEL_SW1 + (int)i);
+    return PR_MODEL_NONE;
 }
 
 const char *pr_model_name(int m)
 {
     static const char *const n[] = { "", "ImageWriter II", "ImageWriter LQ", "ImageWriter" };
-    return m >= 0 && m <= PR_MODEL_IW1 ? n[m] : "";
+    if (m >= 0 && m <= PR_MODEL_IW1) return n[m];
+    const sw_spec_t *sp = sw_spec(pr_model_to_sw((pr_model_t)m));
+    return sp ? sp->name : "";
+}
+
+static int model_is_sw(int m) { return m >= PR_MODEL_SW1 && m <= PR_MODEL_SWC2500; }
+
+// A model by the name the page sends (pr_model_name's); -1 for none.
+static int model_by_name(const char *s)
+{
+    for (int m = PR_MODEL_IW2; m <= PR_MODEL_SWC2500; m++)
+        if (!strcmp(s, pr_model_name(m))) return m;
+    return -1;
 }
 
 const char *pr_default_host_fmt(int has_wifi) { return has_wifi ? "imagewriter-%s" : "airwriter-%s"; }
@@ -65,6 +93,12 @@ int pr_port_is_imagewriter(const pr_list_t *l)
 {
     const pr_rec_t *p = pr_port(l);
     return p && p->kind == PR_KIND_IMAGEWRITER;
+}
+
+int pr_port_is_stylewriter(const pr_list_t *l)
+{
+    const pr_rec_t *p = pr_port(l);
+    return p && p->kind == PR_KIND_STYLEWRITER;
 }
 
 static int at_shared(const pr_list_t *l)
@@ -166,7 +200,7 @@ static int name_is_own(const pr_rec_t *r)
     char own[PR_NAME_MAX];
     own_name(r, own, sizeof own);
     size_t n = strlen(own);
-    // "ImageWriter II" or "ImageWriter II 2": still the printer's own.
+    // "ImageWriter II" or "ImageWriter II 2" (a StyleWriter's the same): still the printer's own.
     return !strncasecmp(r->name, own, n) &&
            (r->name[n] == '\0' || (r->name[n] == ' ' && isdigit((unsigned char)r->name[n + 1])));
 }
@@ -189,12 +223,22 @@ static pr_rec_t *rec_new(pr_list_t *l)
 }
 
 // A new port printer's identity: W-1082's form, the port's own tag in place
-// of a name's hash.
-static void port_uuid(const pr_list_t *l, char out[46])
+// of a name's hash. An ImageWriter's is "0001", a StyleWriter's "0002" (W-1103):
+// phones keep a queue's capabilities by uuid, and a StyleWriter is not the
+// ImageWriter that was there.
+static void port_uuid(const pr_list_t *l, char out[46], int stylewriter)
 {
     static const uint8_t tag[] = { 1, 1 };
     lw_uuid(out, l->mac, l->epoch, tag);
-    memcpy(out + strlen("urn:uuid:41575254-4c57-0000-"), "0001", 4);
+    memcpy(out + strlen("urn:uuid:41575254-4c57-0000-"), stylewriter ? "0002" : "0001", 4);
+}
+
+// By its form, not by the board's MAC and epoch it was made with.
+static int uuid_is_stylewriter(const char *uuid)
+{
+    static const char head[] = "urn:uuid:41575254-4c57-";
+    return strlen(uuid) == 45 && !strncmp(uuid, head, sizeof head - 1) &&
+           !strncmp(uuid + strlen("urn:uuid:41575254-4c57-0000-"), "0002", 4);
 }
 
 static void announce(pr_list_t *l, pr_rec_t *r)
@@ -205,12 +249,22 @@ static void announce(pr_list_t *l, pr_rec_t *r)
     else note_add(l, PR_NOTE_TOO_MANY, r->id, 0);
 }
 
-static void become_imagewriter(pr_list_t *l, pr_rec_t *r, int model)
+// The port's record takes a printer of `kind` and `model`: its own name follows
+// (a name the person gave stays), and a printer of the other family is a new
+// printer to phones, with the uuid of its own. Else the record, its uuid and
+// its settings go on. The Apple screen is a StyleWriter's alone.
+static void become_port_printer(pr_list_t *l, pr_rec_t *r, int kind, int model)
 {
     int own = name_is_own(r);
-    r->kind = PR_KIND_IMAGEWRITER;
+    r->kind = (uint8_t)kind;
     r->model = (uint8_t)model;
     r->identified = 1;
+    if (kind == PR_KIND_STYLEWRITER) {
+        if (!uuid_is_stylewriter(r->uuid)) port_uuid(l, r->uuid, 1);
+    } else {
+        if (uuid_is_stylewriter(r->uuid)) port_uuid(l, r->uuid, 0);
+        if (!strcmp(r->dither, "apple")) snprintf(r->dither, sizeof r->dither, "atkinson");
+    }
     if (own) {
         char n[PR_NAME_MAX];
         own_name(r, n, sizeof n);
@@ -218,6 +272,40 @@ static void become_imagewriter(pr_list_t *l, pr_rec_t *r, int model)
     }
     notes_clear(l, r->id, PR_NOTE_UNKNOWN_PORT);
     notes_clear(l, r->id, PR_NOTE_CHANGED);
+}
+
+static void become_imagewriter(pr_list_t *l, pr_rec_t *r, int model)
+{
+    become_port_printer(l, r, PR_KIND_IMAGEWRITER, model);
+}
+
+static void become_stylewriter(pr_list_t *l, pr_rec_t *r, int model)
+{
+    become_port_printer(l, r, PR_KIND_STYLEWRITER, model);
+}
+
+// A model the port's printer has come to be, whichever family.
+static void become_model(pr_list_t *l, pr_rec_t *r, int model)
+{
+    if (model_is_sw(model)) become_stylewriter(l, r, model);
+    else become_imagewriter(l, r, model);
+}
+
+// The port's record for a printer that named itself on an empty port: found,
+// named by its model, shared.
+static pr_rec_t *port_new(pr_list_t *l, int model)
+{
+    pr_rec_t *p = rec_new(l);
+    if (!p) return NULL;
+    p->where = PR_WHERE_PORT;
+    p->found_auto = 1;
+    port_uuid(l, p->uuid, model_is_sw(model));
+    become_model(l, p, model);
+    char n[PR_NAME_MAX];
+    own_name(p, n, sizeof n);
+    set_name(l, p, n);
+    announce(l, p);
+    return p;
 }
 
 int pr_port_seen(pr_list_t *l, pr_port_seen_t what)
@@ -231,24 +319,15 @@ int pr_port_seen(pr_list_t *l, pr_port_seen_t what)
         p->where = PR_WHERE_PORT;
         p->kind = PR_KIND_UNKNOWN;
         p->found_auto = 1;
-        port_uuid(l, p->uuid);
+        port_uuid(l, p->uuid, 0);
         set_name(l, p, UNKNOWN_NAME);
         note_add(l, PR_NOTE_UNKNOWN_PORT, p->id, 0);
         return p->id;
     }
     int model = what == PR_PORT_IWLQ ? PR_MODEL_IWLQ : PR_MODEL_IW2;
     if (!p) {
-        p = rec_new(l);
-        if (!p) return -1;
-        p->where = PR_WHERE_PORT;
-        p->found_auto = 1;
-        port_uuid(l, p->uuid);
-        become_imagewriter(l, p, model);
-        char n[PR_NAME_MAX];
-        own_name(p, n, sizeof n);
-        set_name(l, p, n);
-        announce(l, p);
-        return p->id;
+        p = port_new(l, model);
+        return p ? p->id : -1;
     }
     if (p->kind == PR_KIND_UNKNOWN) {
         if (!p->found_auto) return p->id;     // the person said "Something else"
@@ -256,9 +335,37 @@ int pr_port_seen(pr_list_t *l, pr_port_seen_t what)
         announce(l, p);
         return p->id;
     }
-    if (p->kind == PR_KIND_IMAGEWRITER && p->model != model)
+    // A different printer than the record's, an ImageWriter of another model or
+    // a StyleWriter, is offered, never swapped in.
+    if ((p->kind == PR_KIND_IMAGEWRITER && p->model != model) || p->kind == PR_KIND_STYLEWRITER)
         note_add(l, PR_NOTE_CHANGED, p->id, model);
     return p->id;
+}
+
+void pr_port_seen_sw(pr_list_t *l, pr_model_t m)
+{
+    if (!model_is_sw(m)) return;
+    pr_rec_t *p = (pr_rec_t *)pr_port(l);
+    if (!p) {
+        port_new(l, m);
+        return;
+    }
+    if (p->kind == PR_KIND_UNKNOWN) {
+        if (!p->found_auto) return;           // the person said "Something else"
+        become_stylewriter(l, p, m);
+        announce(l, p);
+        return;
+    }
+    if (p->kind == PR_KIND_IMAGEWRITER || (p->kind == PR_KIND_STYLEWRITER && p->model != m))
+        note_add(l, PR_NOTE_CHANGED, p->id, m);
+}
+
+int pr_port_sw_found(pr_list_t *l, pr_model_t m)
+{
+    pr_rec_t *p = (pr_rec_t *)pr_port(l);
+    if (!model_is_sw(m) || !p || p->kind != PR_KIND_STYLEWRITER || p->model == m) return 0;
+    become_stylewriter(l, p, m);
+    return 1;
 }
 
 int pr_at_seen(pr_list_t *l, pr_where_t link, const uint8_t *nbp_name, const uint8_t *nbp_type,
@@ -425,7 +532,7 @@ int pr_set_shared(pr_list_t *l, int id, int on)
 int pr_set_model(pr_list_t *l, int id, pr_model_t m)
 {
     pr_rec_t *r = pr_get(l, id);
-    if (!r || r->where != PR_WHERE_PORT || m > PR_MODEL_IW1) return -1;
+    if (!r || r->where != PR_WHERE_PORT || m > PR_MODEL_SWC2500) return -1;
     r->found_auto = 0;
     if (m == PR_MODEL_NONE) {
         int own = name_is_own(r);
@@ -433,12 +540,13 @@ int pr_set_model(pr_list_t *l, int id, pr_model_t m)
         r->model = PR_MODEL_NONE;
         r->identified = 0;
         r->shared = 0;
+        if (!strcmp(r->dither, "apple")) snprintf(r->dither, sizeof r->dither, "atkinson");
         if (own) set_name(l, r, UNKNOWN_NAME);
         notes_clear(l, id, PR_NOTE_UNKNOWN_PORT);
         notes_clear(l, id, PR_NOTE_CHANGED);
         return 0;
     }
-    become_imagewriter(l, r, m);
+    become_model(l, r, m);
     r->shared = 1;                        // the port always fits under the cap
     r->announced = 1;
     return 0;
@@ -446,13 +554,13 @@ int pr_set_model(pr_list_t *l, int id, pr_model_t m)
 
 int pr_add_port(pr_list_t *l, pr_model_t m)
 {
-    if (m < PR_MODEL_IW2 || m > PR_MODEL_IW1) return -1;
+    if (m < PR_MODEL_IW2 || m > PR_MODEL_SWC2500) return -1;
     pr_rec_t *p = (pr_rec_t *)pr_port(l);
     if (!p) {
         p = rec_new(l);
         if (!p) return -1;
         p->where = PR_WHERE_PORT;
-        port_uuid(l, p->uuid);
+        port_uuid(l, p->uuid, model_is_sw(m));
         set_name(l, p, UNKNOWN_NAME);             // its own name follows the model, below
         p->kind = PR_KIND_UNKNOWN;
     }
@@ -490,8 +598,8 @@ int pr_accept_change(pr_list_t *l, int note)
     pr_note_t n = l->notes[note];
     pr_rec_t *r = pr_get(l, n.id);
     note_drop(l, note);
-    if (!r) return -1;
-    become_imagewriter(l, r, n.model);
+    if (!r || n.model < PR_MODEL_IW2 || n.model > PR_MODEL_SWC2500) return -1;
+    become_model(l, r, n.model);
     return 0;
 }
 
@@ -508,6 +616,7 @@ int pr_offers(const pr_list_t *l, pr_where_t link, int ids[], int max)
     for (int i = 0; i < l->n && n < max; i++) {
         const pr_rec_t *r = &l->r[i];
         if (!r->identified || r->kind == PR_KIND_UNKNOWN) continue;
+        if (r->kind == PR_KIND_STYLEWRITER) continue;                  // phase 2
         if (r->where != PR_WHERE_PORT && r->where == link) continue;   // it speaks for itself
         ids[n++] = r->id;
     }
@@ -540,7 +649,7 @@ int pr_test_target(const pr_list_t *l, const pr_live_t live[PR_MAX])
 {
     (void)live;
     const pr_rec_t *p = pr_port(l);
-    if (p && p->kind == PR_KIND_IMAGEWRITER) return p->id;
+    if (p && (p->kind == PR_KIND_IMAGEWRITER || p->kind == PR_KIND_STYLEWRITER)) return p->id;
     for (int i = 0; i < l->n; i++) if (l->r[i].shared) return l->r[i].id;
     return -1;
 }
@@ -559,7 +668,7 @@ void pr_migrate(pr_list_t *l, const pr_legacy_t *o)
     p->identified = p->announced = 1;
     p->shared = o->airprint ? 1 : 0;
     snprintf(p->uuid, sizeof p->uuid, "%s", o->uuid ? o->uuid : "");
-    if (!p->uuid[0]) port_uuid(l, p->uuid);
+    if (!p->uuid[0]) port_uuid(l, p->uuid, 0);
     snprintf(p->dither, sizeof p->dither, "%s", o->dither && o->dither[0] ? o->dither : "atkinson");
     p->gain = o->gain;
     p->top_margin = o->top_margin;
@@ -608,7 +717,12 @@ size_t pr_save(const pr_list_t *l, uint8_t *buf, size_t cap)
 
 int pr_load(pr_list_t *l, const uint8_t *buf, size_t n)
 {
-    if (!buf || n < HDR || buf[0] != 'P' || buf[1] != 'R' || buf[2] != PR_BLOB_VER) return -1;
+    if (!buf || n < HDR || buf[0] != 'P' || buf[1] != 'R' || buf[2] < 1 || buf[2] > PR_BLOB_VER)
+        return -1;
+    // W-1103: a version 1 list has the ImageWriter kinds and models only. The
+    // layout is the same, so what it may hold is all that differs.
+    int max_kind = buf[2] == 1 ? PR_KIND_AT_IMAGEWRITER : PR_KIND_STYLEWRITER;
+    int max_model = buf[2] == 1 ? PR_MODEL_IW1 : PR_MODEL_SWC2500;
     uint8_t cnt = buf[3], notes = buf[5];
     if (cnt > PR_MAX || notes > PR_NOTES_MAX) return -1;
     if (n != HDR + (size_t)cnt * sizeof(pr_rec_t) + (size_t)notes * sizeof(pr_note_t)) return -1;
@@ -617,8 +731,9 @@ int pr_load(pr_list_t *l, const uint8_t *buf, size_t n)
     for (int i = 0; i < cnt; i++) {
         pr_rec_t r;
         memcpy(&r, buf + HDR + (size_t)i * sizeof r, sizeof r);
-        if (!r.id || r.kind > PR_KIND_AT_IMAGEWRITER || r.where > PR_WHERE_ZONE ||
-            r.model > PR_MODEL_IW1 || !memchr(r.name, 0, sizeof r.name) ||
+        if (!r.id || r.kind > max_kind || r.where > PR_WHERE_ZONE || r.model > max_model ||
+            (r.kind == PR_KIND_STYLEWRITER) != model_is_sw(r.model) ||
+            !memchr(r.name, 0, sizeof r.name) ||
             !memchr(r.uuid, 0, sizeof r.uuid) || !memchr(r.dither, 0, sizeof r.dither))
             return -1;
         for (int j = 0; j < i; j++) if (ids[j] == r.id) return -1;
@@ -628,7 +743,7 @@ int pr_load(pr_list_t *l, const uint8_t *buf, size_t n)
     memcpy(nt, buf + HDR + (size_t)cnt * sizeof(pr_rec_t), (size_t)notes * sizeof(pr_note_t));
     uint8_t kept = 0;
     for (int i = 0; i < notes; i++) {
-        if (nt[i].kind > PR_NOTE_TOO_MANY) return -1;
+        if (nt[i].kind > PR_NOTE_TOO_MANY || nt[i].model > max_model) return -1;
         if (nt[i].kind != PR_NOTE_FOUND) nt[kept++] = nt[i];   // a "found" from before
     }
     memcpy(l->r, buf + HDR, (size_t)cnt * sizeof(pr_rec_t));
@@ -764,7 +879,7 @@ static int post_err(pr_post_t *o, const char *msg)
 int pr_post(pr_list_t *l, const char *body, pr_post_t *o)
 {
     memset(o, 0, sizeof *o);
-    o->screen_id = o->start_page_id = o->start_page = -1;
+    o->screen_id = o->start_page_id = o->start_page = o->clean_id = o->confirm_sw_id = -1;
     const char *b = body ? body : "";
     while (*b == ' ' || *b == '\n' || *b == '\r' || *b == '\t') b++;
     if (*b != '{') return post_err(o, "Unknown request.");
@@ -786,10 +901,11 @@ int pr_post(pr_list_t *l, const char *body, pr_post_t *o)
     }
     char s[PR_NAME_MAX * 2];
     if (json_has_str(b, "add_port", s, sizeof s)) {
-        int m = !strcmp(s, "ImageWriter II") ? PR_MODEL_IW2 : !strcmp(s, "ImageWriter LQ") ? PR_MODEL_IWLQ
-              : !strcmp(s, "ImageWriter") ? PR_MODEL_IW1 : -1;
-        if (m < 0 || pr_add_port(l, (pr_model_t)m) < 0) return post_err(o, "Unknown model.");
+        int m = model_by_name(s);
+        int port = m < 0 ? -1 : pr_add_port(l, (pr_model_t)m);
+        if (port < 0) return post_err(o, "Unknown model.");
         o->changed = 1;
+        if (model_is_sw(m)) o->confirm_sw_id = port;     // the person's word, to be checked
         return 0;
     }
     if (!json_has_int(b, "id", &n) || !pr_get(l, (int)n)) return post_err(o, "No such printer.");
@@ -804,11 +920,10 @@ int pr_post(pr_list_t *l, const char *body, pr_post_t *o)
         o->changed = 1;
     }
     if (json_has_str(b, "model", s, sizeof s)) {
-        int m = !strcmp(s, "none") ? PR_MODEL_NONE : !strcmp(s, "ImageWriter II") ? PR_MODEL_IW2
-              : !strcmp(s, "ImageWriter LQ") ? PR_MODEL_IWLQ : !strcmp(s, "ImageWriter") ? PR_MODEL_IW1
-              : -1;
+        int m = !strcmp(s, "none") ? PR_MODEL_NONE : model_by_name(s);
         if (m < 0 || pr_set_model(l, id, (pr_model_t)m)) return post_err(o, "Unknown model.");
         o->changed = 1;
+        if (model_is_sw(m)) o->confirm_sw_id = id;
     }
     if (json_has_str(b, "name", s, sizeof s)) {
         pr_rename(l, id, s);
@@ -826,9 +941,12 @@ int pr_post(pr_list_t *l, const char *body, pr_post_t *o)
         o->changed = 1;
     }
     if (json_has_str(b, "dither", s, sizeof s)) {
-        static const char *const ok[] = { "atkinson", "floyd", "bluenoise", "bayer", "threshold" };
+        static const char *const ok[] = { "atkinson", "floyd", "bluenoise", "bayer", "threshold",
+                                          "apple" };
         const char *good = NULL;
         for (size_t i = 0; i < sizeof ok / sizeof ok[0]; i++) if (!strcmp(s, ok[i])) good = ok[i];
+        // Apple's screen is the StyleWriter drivers': only a StyleWriter is offered it.
+        if (good && !strcmp(good, "apple") && pr_get(l, id)->kind != PR_KIND_STYLEWRITER) good = NULL;
         if (!good) return post_err(o, "Unknown halftone.");
         snprintf(pr_get(l, id)->dither, sizeof pr_get(l, id)->dither, "%s", good);
         o->changed = 1;
@@ -847,6 +965,12 @@ int pr_post(pr_list_t *l, const char *body, pr_post_t *o)
             return post_err(o, "This printer has no start page setting.");
         o->start_page_id = id;
         o->start_page = v ? 1 : 0;
+    }
+    if (json_has_bool(b, "clean", &v) && v) {
+        const pr_rec_t *r = pr_get(l, id);
+        const sw_spec_t *sp = r->kind == PR_KIND_STYLEWRITER ? sw_spec(pr_model_to_sw(r->model)) : NULL;
+        if (!sp || !sp->cleans) return post_err(o, "This printer can’t clean its print head.");
+        o->clean_id = id;
     }
     return 0;
 }
@@ -881,7 +1005,8 @@ size_t pr_json(const pr_list_t *l, const pr_live_t live[PR_MAX], char *buf, size
         esc(e_prod, sizeof e_prod, r->kind == PR_KIND_LASERWRITER ? r->lw.product : "");
         // Its AirPrint path while it is shared: the port's, W-1082's, or its own.
         char rp[16] = "";
-        if (r->shared && r->identified && r->where == PR_WHERE_PORT && r->kind == PR_KIND_IMAGEWRITER)
+        if (r->shared && r->identified && r->where == PR_WHERE_PORT &&
+            (r->kind == PR_KIND_IMAGEWRITER || r->kind == PR_KIND_STYLEWRITER))
             snprintf(rp, sizeof rp, "ipp/print");
         else if (r->shared && r->identified && r->kind == PR_KIND_LASERWRITER)
             snprintf(rp, sizeof rp, r->ipp_laser ? "ipp/laser" : "ipp/p%u", r->id);
@@ -889,13 +1014,17 @@ size_t pr_json(const pr_list_t *l, const pr_live_t live[PR_MAX], char *buf, size
         int lw = r->kind == PR_KIND_LASERWRITER;
         const char *sp = lw && r->lw.start_page == LW_START_ON ? "true"
                        : lw && r->lw.start_page == LW_START_OFF ? "false" : "null";
+        // W-1103: a StyleWriter's cartridge as the board last read it, said only once it has.
+        char cart[28] = "";
+        if (r->kind == PR_KIND_STYLEWRITER && (live[i].cart == 1 || live[i].cart == 2))
+            snprintf(cart, sizeof cart, ",\"cartridge\":\"%s\"", live[i].cart == 2 ? "colour" : "black");
         PUT("%s{\"id\":%u,\"name\":\"%s\",\"where\":\"%s\",\"kind\":\"%s\",\"model\":\"%s\","
             "\"shared\":%s,\"identified\":%s,\"found\":\"%s\",\"state\":\"%s\",\"uuid\":\"%s\","
-            "\"product\":\"%s\",\"dither\":\"%s\",\"gain\":%u,\"rp\":\"%s\",\"start_page\":%s}",
+            "\"product\":\"%s\",\"dither\":\"%s\",\"gain\":%u,\"rp\":\"%s\",\"start_page\":%s%s}",
             i ? "," : "", r->id, e_name, pr_where_name(r->where), pr_kind_name(r->kind),
             pr_model_name(r->model), r->shared ? "true" : "false",
             r->identified ? "true" : "false", r->found_auto ? "auto" : "person",
-            states[one_state(&live[i])], r->uuid, e_prod, r->dither, r->gain, rp, sp);
+            states[one_state(&live[i])], r->uuid, e_prod, r->dither, r->gain, rp, sp, cart);
     }
     PUT("],\"notes\":[");
     for (int i = 0; i < l->n_notes; i++)

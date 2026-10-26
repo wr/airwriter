@@ -17,6 +17,7 @@ typedef enum {
     PORT_IMAGEWRITER,       // ImageWriter commands may go to J2
     PORT_UNKNOWN_FOUND,     // something that never answered ESC ?: asked again at line-up
     PORT_UNKNOWN_SAID,      // the person said "Something else": nothing is sent to it
+    PORT_STYLEWRITER,       // W-1103: a StyleWriter's own bytes (57600, no flow control) go to J2
 } port_mode_t;
 
 typedef struct {
@@ -35,6 +36,14 @@ typedef struct {
     void (*port_screen)(const char *dither, int gain);  // its halftone was changed
     void (*look)(void);              // "Look for printers": ask the port again
     void (*changed)(void);           // names, sharing or the port's kind changed
+    // W-1103, both optional, both after the post is stored and applied and with
+    // no list lock held. clean: one cleaning of printer `id`'s print head
+    // (0, or an HTTP status: 409 when a job holds the printer); the status is
+    // printers_post's. confirm_sw: the person named the port's printer a
+    // StyleWriter; ask it with the full sequence and record the model it gives
+    // (printers_port_set_sw_model), or keep the pick, offline, if it is silent.
+    int  (*clean)(int id);
+    void (*confirm_sw)(int id);
 } printers_cfg_t;
 
 // Whether a list is stored and reads back: before printers_start, to tell a
@@ -46,6 +55,10 @@ esp_err_t   printers_start(const printers_cfg_t *cfg);
 // What the port said when asked: the self-ID's model (iw_model_t) with the
 // line ready, or not ready.
 void        printers_port_seen(int iw_model, int ready);
+// W-1103: a StyleWriter answered on the port as `m` (SW_NONE: nothing did, no
+// change). Makes the port's record, or raises the "changed" notice
+// (pr_port_seen_sw).
+void        printers_port_seen_sw(sw_model_t m);
 // What laser.c heard (once per printer, its link as at_link_t) and its query:
 // answered on at_link at net.node with its page count (-1 none), or not
 // (at_link -1). W-1098: a printer the list has under an old name keeps its
@@ -60,11 +73,12 @@ void        printers_at_queried(int id, int ok, const lw_info_t *info, int at_li
 // on one that is off, nothing. The AirWriter marker (host) either way.
 void        printers_offers(int at_link, int on, const char *host, lt_offers_t *o);
 
-// Who gets the test page (the button, DIP4, the page): the port's ImageWriter,
-// else the first shared printer. Its id, *port 1 for the port's; -1 for none.
+// Who gets the test page (the button, DIP4, the page): the port's ImageWriter
+// or StyleWriter, else the first shared printer. Its id, *port 1 for the port's; -1 for none.
 int         printers_test_target(int *port);
 // What printer id's test page is: 1 the port's ImageWriter's, 2 a
-// LaserWriter's, 0 none (no such printer, or one with no page).
+// LaserWriter's, 3 the port's StyleWriter's (W-1103), 0 none (no such
+// printer, or one with no page).
 int         printers_test_kind(int id);
 // A printer's name, and a LaserWriter's product and PostScript version ("" for
 // none): -1 with no such printer.
@@ -73,9 +87,18 @@ int         printers_describe(int id, char *name, size_t ncap, char *product, si
 
 port_mode_t printers_port_mode(void);
 int         printers_port_is_imagewriter(void);
-// An ImageWriter on the port, shared over AirPrint: the panel follows its line.
+int         printers_port_is_stylewriter(void);
+// An ImageWriter or a StyleWriter on the port, shared over AirPrint: the panel
+// follows its state.
 int         printers_port_shared(void);
+// The port ImageWriter's model; PR_MODEL_NONE for anything else.
 pr_model_t  printers_port_model(void);
+// The port StyleWriter's model; SW_NONE for anything else.
+sw_model_t  printers_port_sw_model(void);
+// The full sequence found the port's StyleWriter to be `m`: its record takes it
+// (no notice: the person had named it a StyleWriter already; sharing stays as it
+// was). No-op for a port that is not a StyleWriter, or for the model it has.
+void        printers_port_set_sw_model(sw_model_t m);
 // The port printer's name, "" with none: the Chooser's name and the test page's.
 void        printers_port_name(char *out, size_t cap);
 // The port printer's halftone and gain, from its record: -1 with no port printer.
@@ -84,7 +107,7 @@ int         printers_port_screen(char *dither, size_t cap, int *gain);
 void        printers_port_set_screen(const char *dither, int gain);
 
 // The port printer's AirPrint slot as its record says, for ipp_server_start;
-// NULL when it is not shared or not an ImageWriter. Counts as applied.
+// NULL when it is not shared or not an ImageWriter or a StyleWriter. Counts as applied.
 const ipp_printer_cfg_t *printers_port_ipp(void);
 // Puts each shared printer on AirPrint as its record now says, where that
 // changed since it was last put there, and gives laser.c the AppleTalk

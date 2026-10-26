@@ -324,7 +324,12 @@ Traps already explained in a code comment are listed only when the comment is ea
   `pr_rec_t` (or to `lw_info_t`, inside it) changes the blob's size, and an older firmware (an
   OTA rollback, the known-good reset) then reads none of it, keeps it untouched and shares no
   printer. Keep new facts about a printer beside it under a key of their own, as W-1098's
-  `seen` does (addresses and page counts).
+  `seen` does (addresses and page counts). A new kind or model (`pr_kind_t`, `pr_model_t`) is
+  not a new key either: an older `pr_load` refuses the number. Bump `PR_BLOB_VER` (W-1103's
+  StyleWriters made it 2), keep a reader for each older version in `pr_load`, and append,
+  never insert. The bump is also what tells an older firmware the list is a newer one's, to
+  keep; a list it merely cannot read is replaced. A StyleWriter's cartridge is no field of the
+  record: it is `pr_live_t.cart`, read by the board.
 - **A printer switched on is not ready at its first frame.** The NTR spends 8 s on LLAP ENQs
   (TashTalk passes other nodes' ENQs; `/api/lt` counts them in `frames`, not `heard`), then
   looks up its own name five times 2 s apart, and answers lookups only after that. Look after

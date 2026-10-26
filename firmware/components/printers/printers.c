@@ -60,6 +60,7 @@ static int               s_started;
 // What printer 0 shows, as last put there.
 typedef struct {
     int     on;
+    uint8_t kind;                   // pr_kind_t: an ImageWriter or a StyleWriter
     uint8_t model;
     char    name[PR_NAME_MAX];
     char    uuid[46];
@@ -188,8 +189,14 @@ static void slot0_want(slot0_t *w)
 {
     memset(w, 0, sizeof *w);
     const pr_rec_t *p = pr_port(s_l);
-    if (!p || p->kind != PR_KIND_IMAGEWRITER || !p->shared) return;
+    if (!p || !p->shared) return;
+    if (p->kind == PR_KIND_STYLEWRITER) {
+        if (!sw_caps(pr_model_to_sw((pr_model_t)p->model))) return;   // no such model: off
+    } else if (p->kind != PR_KIND_IMAGEWRITER) {
+        return;
+    }
     w->on = 1;
+    w->kind = p->kind;
     w->model = p->model;
     snprintf(w->name, sizeof w->name, "%s", p->name);
     snprintf(w->uuid, sizeof w->uuid, "%s", p->uuid);
@@ -197,10 +204,12 @@ static void slot0_want(slot0_t *w)
 
 static void slot0_cfg(const slot0_t *w, ipp_printer_cfg_t *c)
 {
-    const printer_caps_t *caps = printer_caps_imagewriter_model(w->model);
+    int sw = w->kind == PR_KIND_STYLEWRITER;
+    const printer_caps_t *caps = sw ? sw_caps(pr_model_to_sw((pr_model_t)w->model))
+                                    : printer_caps_imagewriter_model(w->model);
     *c = (ipp_printer_cfg_t){ .resource = "ipp/print", .name = w->name,
                               .info = caps->make_model, .uuid = w->uuid, .caps = caps,
-                              .icon = "icon", .sink = s_cfg.port_sink };
+                              .icon = sw ? "stylewriter" : "icon", .sink = s_cfg.port_sink };
 }
 
 const ipp_printer_cfg_t *printers_port_ipp(void)
@@ -420,6 +429,7 @@ static port_mode_t mode_of(void)
     const pr_rec_t *p = pr_port(s_l);
     if (!p) return PORT_NONE;
     if (p->kind == PR_KIND_IMAGEWRITER) return PORT_IMAGEWRITER;
+    if (p->kind == PR_KIND_STYLEWRITER) return PORT_STYLEWRITER;
     return p->found_auto ? PORT_UNKNOWN_FOUND : PORT_UNKNOWN_SAID;
 }
 
@@ -440,6 +450,21 @@ void printers_port_seen(int iw_model, int ready)
     lock();
     port_mode_t before = mode_of();
     pr_port_seen(s_l, what);
+    int moved = mode_of() != before;
+    if (moved) {
+        const pr_rec_t *p = pr_port(s_l);
+        ESP_LOGI(TAG, "the port: %s \"%s\"", pr_kind_name(p->kind), p->name);
+    }
+    after_change(moved);
+}
+
+void printers_port_seen_sw(sw_model_t m)
+{
+    pr_model_t pm = pr_model_from_sw(m);
+    if (!s_started || pm == PR_MODEL_NONE) return;
+    lock();
+    port_mode_t before = mode_of();
+    pr_port_seen_sw(s_l, pm);
     int moved = mode_of() != before;
     if (moved) {
         const pr_rec_t *p = pr_port(s_l);
@@ -525,6 +550,7 @@ int printers_test_kind(int id)
     lock();
     const pr_rec_t *r = pr_get(s_l, id);
     int k = !r ? 0 : r->where == PR_WHERE_PORT && r->kind == PR_KIND_IMAGEWRITER ? 1
+          : r->where == PR_WHERE_PORT && r->kind == PR_KIND_STYLEWRITER ? 3
           : r->kind == PR_KIND_LASERWRITER && r->identified ? 2 : 0;
     unlock();
     return k;
@@ -560,17 +586,22 @@ int printers_port_is_imagewriter(void)
     return printers_port_mode() == PORT_IMAGEWRITER;
 }
 
+int printers_port_is_stylewriter(void)
+{
+    return printers_port_mode() == PORT_STYLEWRITER;
+}
+
 int printers_port_shared(void)
 {
     if (!s_started) return 0;
     lock();
     const pr_rec_t *p = pr_port(s_l);
-    int on = p && p->kind == PR_KIND_IMAGEWRITER && p->shared;
+    int on = p && (p->kind == PR_KIND_IMAGEWRITER || p->kind == PR_KIND_STYLEWRITER) && p->shared;
     unlock();
     return on;
 }
 
-pr_model_t printers_port_model(void)
+pr_model_t printers_port_model(void)      // the port ImageWriter's, else PR_MODEL_NONE
 {
     if (!s_started) return PR_MODEL_NONE;
     lock();
@@ -578,6 +609,30 @@ pr_model_t printers_port_model(void)
     pr_model_t m = p && p->kind == PR_KIND_IMAGEWRITER ? (pr_model_t)p->model : PR_MODEL_NONE;
     unlock();
     return m;
+}
+
+sw_model_t printers_port_sw_model(void)
+{
+    if (!s_started) return SW_NONE;
+    lock();
+    const pr_rec_t *p = pr_port(s_l);
+    sw_model_t m = p && p->kind == PR_KIND_STYLEWRITER ? pr_model_to_sw((pr_model_t)p->model) : SW_NONE;
+    unlock();
+    return m;
+}
+
+void printers_port_set_sw_model(sw_model_t m)
+{
+    pr_model_t pm = pr_model_from_sw(m);
+    if (!s_started || pm == PR_MODEL_NONE) return;
+    lock();
+    if (!pr_port_sw_found(s_l, pm)) {
+        unlock();
+        return;
+    }
+    const pr_rec_t *p = pr_port(s_l);
+    ESP_LOGI(TAG, "the port: %s \"%s\"", pr_kind_name(p->kind), p->name);
+    after_change(1);
 }
 
 void printers_port_name(char *out, size_t cap)
@@ -648,6 +703,20 @@ static int start_page(int id, int on, char *err, size_t cap)
     }
 }
 
+// W-1103: one cleaning of a StyleWriter's print head, run by the board. Its
+// answer is the status: 0, or 409 while a job holds the printer.
+static int clean_head(int id, char *err, size_t cap)
+{
+    if (!s_cfg.clean) {
+        snprintf(err, cap, "This board can’t clean a print head.");
+        return 501;
+    }
+    int rc = s_cfg.clean(id);
+    if (rc == 409) snprintf(err, cap, "The printer is busy. Try again when it’s done.");
+    else if (rc) snprintf(err, cap, "Couldn’t clean the print head. Check that the printer is switched on.");
+    return rc;
+}
+
 int printers_post(const char *body, char *err, size_t cap)
 {
     if (cap) err[0] = '\0';
@@ -675,7 +744,9 @@ int printers_post(const char *body, char *err, size_t cap)
     after_change(o.changed);
     if (port_screen && s_cfg.port_screen) s_cfg.port_screen(dither, gain);
     if (o.look && s_cfg.look) s_cfg.look();
+    if (o.confirm_sw_id >= 0 && s_cfg.confirm_sw) s_cfg.confirm_sw(o.confirm_sw_id);
     if (o.start_page >= 0) return start_page(o.start_page_id, o.start_page, err, cap);
+    if (o.clean_id >= 0) return clean_head(o.clean_id, err, cap);
     return 0;
 }
 
@@ -685,7 +756,8 @@ void printers_status_json(char *buf, size_t cap)
         snprintf(buf, cap, "{\"count\":0,\"shared\":0,\"port\":\"none\"}");
         return;
     }
-    static const char *const modes[] = { "none", "imagewriter", "unknown", "something_else" };
+    static const char *const modes[] = { "none", "imagewriter", "unknown", "something_else",
+                                         "stylewriter" };
     lock();
     int shared = 0;
     for (int i = 0; i < s_l->n; i++) shared += s_l->r[i].shared;
