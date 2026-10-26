@@ -31,7 +31,8 @@ Write for them. The rest goes in the engineering docs.
 
 **Docs.** What the reader does and what they see. Numbered steps for procedures, tables for
 lookups, problem then fix in troubleshooting. Anything on screen goes in bold, spelled exactly as
-it appears. Addresses, file names and commands go in code.
+it appears. Addresses, file names and commands go in code. A page starts with its first paragraph:
+GitHub shows the page's name as its title, so a `#` heading repeating it shows twice.
 
 **Wells.** First person and casual, like the shop and the TinkerDifferent thread. Mixed sentence
 lengths, the odd "(me!)" or ":)", and a request for testers. Few headings and no bold lead-ins.
