@@ -110,7 +110,18 @@ int ipp_req_parse(ipp_req_t *r, const uint8_t *buf, size_t len)
         in_requested = 0;
 
         // Job attributes may legally repeat operation-attribute names with
-        // different meaning, so only read from the operation group.
+        // different meaning, so each group has its own list: the job group's
+        // is print-quality, the operation group's follows. A collection's
+        // members have empty names and never get this far.
+        if (group == IPP_TAG_JOB) {
+            if (name_is(name, nlen, "print-quality") && tag == IPP_TAG_ENUM && vlen == 4 &&
+                !r->opts.quality) {
+                uint32_t q = ((uint32_t)val[0] << 24) | ((uint32_t)val[1] << 16) |
+                             ((uint32_t)val[2] << 8) | (uint32_t)val[3];
+                if (q >= 3 && q <= 5) r->opts.quality = (int)q;
+            }
+            continue;
+        }
         if (group != IPP_TAG_OPERATION) continue;
 
         if (name_is(name, nlen, "requested-attributes") && !r->requested.n) {

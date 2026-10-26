@@ -535,9 +535,11 @@ static int doc_claim(void *ctx)
     return 0;
 }
 
-static esp_err_t doc_begin(void *ctx, const char *format, const char *name)
+static esp_err_t doc_begin(void *ctx, const char *format, const char *name,
+                           const ipp_job_opts_t *opts)
 {
     (void)ctx;
+    (void)opts;
     // doc_claim took s_job_lock. ipp_server always pairs this call with
     // exactly one doc_end -- including when job_pipe_begin below fails -- and
     // every doc_end leads to exactly one job_finished, whose give balances
@@ -725,8 +727,10 @@ static void doc_end(void *ctx, int ok)
 static int s_laser_pipe_ok;
 static int s_laser_slot = 1;
 
-static esp_err_t laser_doc_begin(void *ctx, const char *format, const char *name)
+static esp_err_t laser_doc_begin(void *ctx, const char *format, const char *name,
+                                 const ipp_job_opts_t *opts)
 {
+    (void)opts;
     int id = (int)((intptr_t)ctx & 0xFF);
     s_laser_owns = 1;                   // doc_claim took s_job_lock
     memdiag_mark("job start");          // W-1094
@@ -741,7 +745,7 @@ static esp_err_t laser_doc_begin(void *ctx, const char *format, const char *name
     led_grid_set_source(LG_SRC_AIRPRINT);
     line_source();
     printer_state_post(PS_EV_JOB_START);
-    job_pipe_target_t t;
+    job_pipe_target_t t = { 0 };
     s_laser_pipe_ok = 0;
     if (laser_job_begin(id, name, &t)) return ESP_FAIL;
     esp_err_t err = job_pipe_begin_to(name, &t);

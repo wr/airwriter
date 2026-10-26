@@ -60,6 +60,7 @@ static int64_t s_t0;              // job_pipe_begin's time, which the stats coun
 static char s_name[64];
 static job_pipe_target_t s_target;    // this job's printer, when not the ImageWriter
 static int s_has_target;
+static job_pipe_prn_t    s_prn_to;    // who gets this job's printer bytes
 
 // urf_decode's source. Returns 1 only when all n bytes were delivered, which
 // is what makes a truncated document a decode error rather than a short page.
@@ -82,16 +83,15 @@ static void pipe_log(void *ctx, const char *msg)
     ESP_LOGI(TAG, "%s", msg);
 }
 
-// The rip's printer stream: into s_out for the printer task, or straight to
-// cfg.out with no PSRAM. A full s_out is a printer 512 KB behind, which the
-// rip waits out as it once waited on the serial port; the printer task gives
-// up on a stalled printer and aborts the job, which ends the wait.
-static void count_out(void *ctx, const uint8_t *buf, size_t n)
+// A job's printer stream: into s_out for the printer task, or straight to the
+// job's consumer with no ring. A full s_out is a printer 512 KB behind, which
+// the writer waits out as the rip once waited on the serial port; the printer
+// task gives up on a stalled printer and aborts the job, which ends the wait.
+void job_pipe_out(const uint8_t *buf, size_t n)
 {
-    (void)ctx;
     s_st.printer_bytes += n;
     if (!s_buffered) {
-        if (s_cfg.out) s_cfg.out(s_cfg.out_ctx, buf, n);
+        if (s_prn_to.fn) s_prn_to.fn(s_prn_to.ctx, buf, n);
         return;
     }
     size_t sent = 0;
@@ -99,9 +99,17 @@ static void count_out(void *ctx, const uint8_t *buf, size_t n)
         sent += xStreamBufferSend(s_out, buf + sent, n - sent, pdMS_TO_TICKS(250));
 }
 
-// The printer's side of an ImageWriter job: s_out to cfg.out at the printer's
-// pace, while the rip runs ahead at the upload's (W-1066). One task for the
-// board's life, idle between jobs.
+// The ImageWriter's: the rip's `out`.
+static void count_out(void *ctx, const uint8_t *buf, size_t n)
+{
+    (void)ctx;
+    job_pipe_out(buf, n);
+}
+
+// The printer's side of a buffered job: s_out to the job's consumer at the
+// printer's pace, while the rip runs ahead at the upload's (W-1066). The
+// ImageWriter's is cfg.out; a target's is its own prn (W-1103). One task for
+// the board's life, idle between jobs.
 static void prn_task(void *arg)
 {
     (void)arg;
@@ -110,7 +118,7 @@ static void prn_task(void *arg)
         size_t r = xStreamBufferReceive(s_out, buf, sizeof buf, pdMS_TO_TICKS(100));
         // An abandoned job's bytes go nowhere: its tail has been purged, and
         // the rip unwinds sooner with room to write.
-        if (r && !s_aborted && s_cfg.out) s_cfg.out(s_cfg.out_ctx, buf, r);
+        if (r && !s_aborted && s_prn_to.fn) s_prn_to.fn(s_prn_to.ctx, buf, r);
         // Only the rip fills s_out, and it is done: empty now is empty for good.
         if (s_out_eof && xStreamBufferIsEmpty(s_out)) {
             s_out_eof = 0;
@@ -202,7 +210,7 @@ esp_err_t job_pipe_init(const job_pipe_cfg_t *cfg)
         if (xTaskCreateWithCaps(prn_task, "prn", PRN_STACK, NULL, 5, &s_prn,
                                 MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT) == pdPASS) {
             ESP_LOGI(TAG, "job buffer %u KB in PSRAM: %u KB of URF and %u KB to print "
-                     "for the ImageWriter", POOL_BYTES / 1024,
+                     "for a job that writes printer bytes", POOL_BYTES / 1024,
                      (POOL_BYTES - OUT_BYTES) / 1024, OUT_BYTES / 1024);
             return ESP_OK;
         }
@@ -238,9 +246,12 @@ esp_err_t job_pipe_begin_to(const char *job_name, const job_pipe_target_t *t)
     if (s_task) return ESP_ERR_INVALID_STATE;
     s_has_target = t != NULL;
     if (t) s_target = *t;
-    // Another printer's rows go to its own stage, never to cfg.out, so its
-    // job keeps the whole pool for URF, as every job did before W-1066.
-    s_buffered = !t && s_out;
+    // A LaserWriter's rows go to its own stage, not to the printer-bytes ring,
+    // so its job keeps the whole pool for URF, as every job did before W-1066.
+    // A target that writes printer bytes (a StyleWriter's, W-1103) asks for
+    // the split, as the ImageWriter's job gets it.
+    s_buffered = job_pipe_buffered(t, s_out != NULL);
+    s_prn_to = job_pipe_prn_for(t, s_cfg.out, s_cfg.out_ctx);
     s_ring = s_buffered ? s_urf : s_whole;
 
     // The last job's task drained the ring before it finished, so this is

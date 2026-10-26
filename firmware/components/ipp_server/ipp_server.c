@@ -327,7 +327,7 @@ static int run_document(work_t *w, int fd, const ipp_req_t *r, hbody_t *body,
     xSemaphoreGive(s_job_lock);
 
     int ok = 1;
-    if (sink->begin && sink->begin(sink->ctx, r->document_format, kept.name) != ESP_OK)
+    if (sink->begin && sink->begin(sink->ctx, r->document_format, kept.name, &r->opts) != ESP_OK)
         ok = 0;
 
     // A sink without claim waits in begin(), and a Cancel-Job in that time

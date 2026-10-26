@@ -38,6 +38,23 @@ static void attr_i(bld_t *m, uint8_t tag, const char *name, int32_t val)
     u16(m, 4); u32(m, (uint32_t)val);
 }
 
+/* A value with raw bytes, for the empty-named parts of a collection. */
+static void attr_raw(bld_t *m, uint8_t tag, const char *name, const void *val, size_t n)
+{
+    u8(m, tag);
+    u16(m, (uint16_t)strlen(name)); bytes(m, name);
+    u16(m, (uint16_t)n);
+    for (size_t i = 0; i < n; i++) u8(m, ((const uint8_t *)val)[i]);
+}
+
+/* A collection member: its name, then its integer value under an empty name
+ * (RFC 8010 3.1.6). */
+static void member_i(bld_t *m, const char *member, int32_t val)
+{
+    attr(m, IPP_TAG_MEMBERNAME, "", member);
+    attr_i(m, IPP_TAG_INTEGER, "", val);
+}
+
 int main(void)
 {
     bld_t m;
@@ -171,6 +188,138 @@ int main(void)
     u16(&m, 8); bytes(&m, "job-name");
     u16(&m, 300); bytes(&m, "short");
     CHECK_EQ_INT(ipp_req_parse(&r, m.b, m.n), IPP_REQ_SHORT);
+
+
+    /* W-1103: print-quality comes from the Job group, enum 3 draft, 4 normal,
+     * 5 high; 0 when the client sent none. */
+    for (int q = 3; q <= 5; q++) {
+        hdr(&m, IPP_OP_PRINT_JOB, 20);
+        u8(&m, IPP_TAG_OPERATION);
+        attr(&m, IPP_TAG_CHARSET,  "attributes-charset", "utf-8");
+        attr(&m, IPP_TAG_URI,      "printer-uri", "ipp://aw.local/ipp/print");
+        attr(&m, IPP_TAG_NAME,     "job-name", "Photo");
+        attr(&m, IPP_TAG_MIMETYPE, "document-format", "image/urf");
+        u8(&m, IPP_TAG_JOB);
+        attr_i(&m, IPP_TAG_ENUM, "print-quality", q);
+        u8(&m, IPP_TAG_END);
+        CHECK_EQ_INT(ipp_req_parse(&r, m.b, m.n), IPP_REQ_OK);
+        CHECK_EQ_INT(r.opts.quality, q);
+        CHECK(strcmp(r.job_name, "Photo") == 0);
+        CHECK(strcmp(r.document_format, "image/urf") == 0);
+    }
+
+    /* None sent: 0, as for every request before it. */
+    hdr(&m, IPP_OP_PRINT_JOB, 21);
+    u8(&m, IPP_TAG_OPERATION);
+    attr(&m, IPP_TAG_NAME, "job-name", "Plain");
+    u8(&m, IPP_TAG_JOB);
+    attr_i(&m, IPP_TAG_INTEGER, "copies", 1);
+    u8(&m, IPP_TAG_END);
+    CHECK_EQ_INT(ipp_req_parse(&r, m.b, m.n), IPP_REQ_OK);
+    CHECK_EQ_INT(r.opts.quality, 0);
+    hdr(&m, IPP_OP_GET_PRINTER_ATTRIBUTES, 22);
+    u8(&m, IPP_TAG_OPERATION);
+    attr(&m, IPP_TAG_KEYWORD, "requested-attributes", "all");
+    u8(&m, IPP_TAG_END);
+    CHECK_EQ_INT(ipp_req_parse(&r, m.b, m.n), IPP_REQ_OK);
+    CHECK_EQ_INT(r.opts.quality, 0);
+
+    /* What iOS sends: a Job group of unknown attributes and media-col, a
+     * collection with a collection inside it, and print-quality after them.
+     * The members carry empty names and must be walked, not read as
+     * attributes of their own; one of them is called print-quality and is not
+     * the job's. The Operation group's values still land where they did. */
+    {
+        static const uint8_t four[4] = { 0, 0, 0, 4 };
+        hdr(&m, IPP_OP_PRINT_JOB, 23);
+        u8(&m, IPP_TAG_OPERATION);
+        attr(&m, IPP_TAG_CHARSET,  "attributes-charset", "utf-8");
+        attr(&m, IPP_TAG_URI,      "printer-uri", "ipp://aw.local/ipp/print");
+        attr(&m, IPP_TAG_NAME,     "job-name", "Safari");
+        attr(&m, IPP_TAG_NAME,     "requesting-user-name", "wells");
+        attr(&m, IPP_TAG_MIMETYPE, "document-format", "image/urf");
+        u8(&m, IPP_TAG_JOB);
+        attr(&m, IPP_TAG_KEYWORD,  "sides", "one-sided");
+        attr_raw(&m, IPP_TAG_BEGIN_COLLECTION, "media-col", NULL, 0);
+        attr(&m, IPP_TAG_MEMBERNAME, "", "media-size");
+        attr_raw(&m, IPP_TAG_BEGIN_COLLECTION, "", NULL, 0);
+        member_i(&m, "x-dimension", 21590);
+        member_i(&m, "y-dimension", 27940);
+        attr_raw(&m, IPP_TAG_END_COLLECTION, "", NULL, 0);
+        member_i(&m, "media-top-margin", 100);
+        attr(&m, IPP_TAG_MEMBERNAME, "", "print-quality");
+        attr_raw(&m, IPP_TAG_ENUM, "", four, 4);
+        attr(&m, IPP_TAG_MEMBERNAME, "", "media-type");
+        attr(&m, IPP_TAG_KEYWORD, "", "stationery");
+        attr_raw(&m, IPP_TAG_END_COLLECTION, "", NULL, 0);
+        attr(&m, IPP_TAG_KEYWORD,  "media", "na_letter_8.5x11in");
+        attr(&m, IPP_TAG_KEYWORD,  "x-made-up", "one");
+        attr(&m, IPP_TAG_KEYWORD,  "", "two");
+        attr_i(&m, IPP_TAG_ENUM, "print-quality", 5);
+        attr_i(&m, IPP_TAG_INTEGER, "copies", 1);
+        u8(&m, IPP_TAG_END);
+        size_t doc_at = m.n;
+        bytes(&m, "UNIRAST");
+        CHECK_EQ_INT(ipp_req_parse(&r, m.b, m.n), IPP_REQ_OK);
+        CHECK_EQ_INT(r.opts.quality, 5);
+        CHECK(strcmp(r.job_name, "Safari") == 0);
+        CHECK(strcmp(r.requesting_user, "wells") == 0);
+        CHECK(strcmp(r.document_format, "image/urf") == 0);
+        CHECK(strcmp(r.printer_uri, "ipp://aw.local/ipp/print") == 0);
+        CHECK_EQ_INT(r.header_len, doc_at);
+        for (size_t cut = 0; cut < doc_at; cut++)
+            CHECK_EQ_INT(ipp_req_parse(&r, m.b, cut), IPP_REQ_SHORT);
+
+        /* The same request without the job's own print-quality: the member
+         * that shares its name does not stand in for it. */
+        hdr(&m, IPP_OP_PRINT_JOB, 24);
+        u8(&m, IPP_TAG_OPERATION);
+        attr(&m, IPP_TAG_NAME, "job-name", "Safari");
+        u8(&m, IPP_TAG_JOB);
+        attr_raw(&m, IPP_TAG_BEGIN_COLLECTION, "media-col", NULL, 0);
+        attr(&m, IPP_TAG_MEMBERNAME, "", "print-quality");
+        attr_raw(&m, IPP_TAG_ENUM, "", four, 4);
+        attr_raw(&m, IPP_TAG_END_COLLECTION, "", NULL, 0);
+        u8(&m, IPP_TAG_END);
+        CHECK_EQ_INT(ipp_req_parse(&r, m.b, m.n), IPP_REQ_OK);
+        CHECK_EQ_INT(r.opts.quality, 0);
+        CHECK(strcmp(r.job_name, "Safari") == 0);
+    }
+
+    /* Only the Job group's: print-quality among the operation attributes, or
+     * after a Printer group, is not the job's. */
+    hdr(&m, IPP_OP_PRINT_JOB, 25);
+    u8(&m, IPP_TAG_OPERATION);
+    attr_i(&m, IPP_TAG_ENUM, "print-quality", 3);
+    attr(&m, IPP_TAG_NAME, "job-name", "Op");
+    u8(&m, IPP_TAG_PRINTER);
+    attr_i(&m, IPP_TAG_ENUM, "print-quality", 5);
+    u8(&m, IPP_TAG_END);
+    CHECK_EQ_INT(ipp_req_parse(&r, m.b, m.n), IPP_REQ_OK);
+    CHECK_EQ_INT(r.opts.quality, 0);
+    CHECK(strcmp(r.job_name, "Op") == 0);
+
+    /* A value the printer has no meaning for, or the wrong size or type, is
+     * as good as none; the first value of a list is the one read. */
+    hdr(&m, IPP_OP_PRINT_JOB, 26);
+    u8(&m, IPP_TAG_JOB);
+    attr_i(&m, IPP_TAG_ENUM, "print-quality", 7);
+    u8(&m, IPP_TAG_END);
+    CHECK_EQ_INT(ipp_req_parse(&r, m.b, m.n), IPP_REQ_OK);
+    CHECK_EQ_INT(r.opts.quality, 0);
+    hdr(&m, IPP_OP_PRINT_JOB, 27);
+    u8(&m, IPP_TAG_JOB);
+    attr(&m, IPP_TAG_KEYWORD, "print-quality", "high");
+    u8(&m, IPP_TAG_END);
+    CHECK_EQ_INT(ipp_req_parse(&r, m.b, m.n), IPP_REQ_OK);
+    CHECK_EQ_INT(r.opts.quality, 0);
+    hdr(&m, IPP_OP_PRINT_JOB, 28);
+    u8(&m, IPP_TAG_JOB);
+    attr_i(&m, IPP_TAG_ENUM, "print-quality", 3);
+    attr_i(&m, IPP_TAG_ENUM, "", 5);
+    u8(&m, IPP_TAG_END);
+    CHECK_EQ_INT(ipp_req_parse(&r, m.b, m.n), IPP_REQ_OK);
+    CHECK_EQ_INT(r.opts.quality, 3);
 
     /* An empty message is SHORT rather than a parse of uninitialised memory. */
     CHECK_EQ_INT(ipp_req_parse(&r, m.b, 0), IPP_REQ_SHORT);

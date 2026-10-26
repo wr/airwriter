@@ -18,7 +18,10 @@
 // behind a zero window until paper comes back (W-1042).
 //
 // Another printer's job (job_pipe_begin_to) has rows, not bytes, and keeps
-// the whole 1MB for URF: an iPhone Letter page is ~140KB of it.
+// the whole 1MB for URF: an iPhone Letter page is ~140KB of it. A target that
+// does write printer bytes (a StyleWriter's, W-1103) asks for the split with
+// `buffered`: its stage writes them with job_pipe_out and its own `prn` is
+// what the printer task feeds.
 //
 // A job whose printer bytes outrun their 512KB (two colour photo pages, or
 // five worst-case gray ones), a LaserWriter document bigger than 1MB, or any
@@ -80,6 +83,14 @@ esp_err_t job_pipe_begin(const char *job_name);
 // W-1082: a document for another printer than the ImageWriter
 // (job_pipe_target_t, in job_pipe_rip.h).
 esp_err_t job_pipe_begin_to(const char *job_name, const job_pipe_target_t *t);
+
+// A stage's write of the job's printer bytes (a buffered target's, or the
+// ImageWriter's through the rip): into the printer-bytes ring for the printer
+// task, so the rip is not held to the printer's speed. Blocks while the ring is
+// full, and stops waiting, dropping what is left, once the job is aborted. With
+// no ring (no PSRAM) it hands them straight to the job's consumer. From the
+// rip task, while a job is in the pipeline.
+void job_pipe_out(const uint8_t *buf, size_t n);
 
 // Returns as soon as the bytes are in the buffer. Blocks only when the buffer
 // is full -- a job bigger than it -- and that backpressure is the point.

@@ -25,8 +25,11 @@ typedef struct {
     int       (*claim)(void *ctx);
     // Called once per job when the document starts. Return ESP_OK to accept.
     // `format` is the client's document-format, already checked against the
-    // formats we advertise.
-    esp_err_t (*begin)(void *ctx, const char *format, const char *job_name);
+    // formats we advertise. `opts` is what the job asked for in its Job group
+    // (W-1103), valid for the call; a printer with no use for an option ignores
+    // it.
+    esp_err_t (*begin)(void *ctx, const char *format, const char *job_name,
+                       const ipp_job_opts_t *opts);
     // Called repeatedly with document bytes in arrival order.
     esp_err_t (*data)(void *ctx, const uint8_t *buf, size_t n);
     // Called once when the body ends, after begin -- even a begin that failed.

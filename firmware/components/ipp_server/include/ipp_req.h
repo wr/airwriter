@@ -4,9 +4,11 @@
 // the host tests in tools/ipp link it directly. The transport half of
 // ipp_server (esp_http_server glue) is the part that cannot run on the host.
 //
-// It only lifts the operation attributes the firmware acts on. Everything else
-// is skipped, not stored -- a printer that ignores an attribute it does not
-// implement is correct IPP, and iOS sends plenty we have no use for.
+// It only lifts the attributes the firmware acts on: the operation group's, and
+// from the job group the job's options (ipp_job_opts_t). Everything else is
+// skipped, not stored -- a printer that ignores an attribute it does not
+// implement is correct IPP, and iOS sends plenty we have no use for. Collections
+// (media-col) are walked through, their members never read as attributes.
 #pragma once
 #include <stdint.h>
 #include <stddef.h>
@@ -23,6 +25,14 @@
 #define IPP_NAME_MAX 64
 #define IPP_FMT_MAX  40
 
+// What a job asks for, from its Job group (W-1103). A printer that has no use
+// for an option ignores it.
+typedef struct {
+    // print-quality: 3 draft, 4 normal, 5 high. 0 when the client sent none,
+    // or sent a value that is not one of these.
+    int quality;
+} ipp_job_opts_t;
+
 typedef struct {
     uint16_t version;
     uint16_t op;
@@ -34,6 +44,8 @@ typedef struct {
     char document_format[IPP_FMT_MAX];
 
     int32_t job_id;          // -1 when absent; also read from job-uri
+
+    ipp_job_opts_t opts;
 
     // requested-attributes, pointing into the parsed buffer: valid as long
     // as that buffer is. n == 0 when absent.
