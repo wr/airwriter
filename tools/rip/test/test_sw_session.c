@@ -1027,12 +1027,11 @@ static void test_ask_cart(void)
 
 static void test_plain(void)
 {
-    // The plain question is the byte `?` and nothing else.
+    // The plain question is the byte `?` and nothing else, unless the reply is CS (below).
     static const struct { const char *ident; int awake; sw_model_t want; } t[] = {
         { "SW\r",   1, SW_II },
         { "SW3\r",  1, SW_1200 },
         { "IJ10\r", 1, SW_ORIGINAL },          // an original that happens to answer
-        { "CS\r",   1, SW_C2200 },             // the family: only `p` says which member
         { "IJ10\r", 0, SW_NONE },              // asleep until reset
         { "XYZ\r",  1, SW_NONE },
         { "\r",     1, SW_NONE },
@@ -1048,11 +1047,37 @@ static void test_plain(void)
         CHECK_EQ_INT(F.nwrites, 1);
         CHECK_EQ_INT(F.nsleeps, 0);
     }
-    // a CS is not asked its model
+    // A CS proves a colour StyleWriter, so `p` follows as a write of its own, `?` first: its
+    // byte names the model (01 2400, 02 2200, 04 1500, 05 2500).
+    static const struct { sw_model_t m; sw_model_t want; } cs[] = {
+        { SW_C2400, SW_C2400 }, { SW_C2200, SW_C2200 }, { SW_C1500, SW_C1500 }, { SW_C2500, SW_C2500 },
+    };
+    for (size_t i = 0; i < sizeof cs / sizeof cs[0]; i++) {
+        fake_init(cs[i].m, 1);
+        sw_ops_t oc = ops();
+        CHECK_EQ_INT(sw_ask_plain(&oc), cs[i].want);
+        static const uint8_t q[5] = { 0x3F, 0xFF, 0xFF, 0xFF, 0x70 };
+        CHECK_EQ_INT((long)F.rn, 5);
+        CHECK_EQ_MEM(F.raw, q, 5);
+        CHECK_EQ_INT(F.nwrites, 2);                          // `?` alone, then `p` alone
+        CHECK_STR(F.trace, "? [p]");
+        CHECK_EQ_INT(F.bad, 0);
+        CHECK_EQ_INT(F.nsleeps, 0);
+    }
+    // a byte from p that the drivers do not know is the 2200, as in the full sequence
     fake_init(SW_C2500, 1);
+    F.p = 0x09;
     sw_ops_t o = ops();
     CHECK_EQ_INT(sw_ask_plain(&o), SW_C2200);
-    CHECK_EQ_INT((long)F.rn, 1);
+    // a CS whose p goes unanswered is the family's stand-in, after 250 ms
+    fake_init(SW_C2500, 1);
+    F.no_p = 1;
+    uint32_t t0 = now_ms();
+    CHECK_EQ_INT(sw_ask_plain(&o), SW_C2200);
+    CHECK_EQ_INT((long)F.rn, 5);
+    CHECK_EQ_INT(F.nwrites, 2);
+    CHECK(now_ms() - t0 >= 250 && now_ms() - t0 <= 260);
+    // and no p goes to anything that is not a CS: SW, SW3, IJ10 and silence were one byte above
     // nobody home
     fake_init(SW_II, 0);
     F.silent = 1;

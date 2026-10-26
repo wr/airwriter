@@ -86,14 +86,15 @@ typedef struct {
 
 // ---- Recognition and idle (no job; the caller holds the port and the baud rate)
 
-// The plain question: writes the one byte `?` and nothing else, and reads the reply to
-// its CR at 250 ms a byte (a reply that stops without a CR counts). Returns the model the
-// reply names: SW_II, SW_1200, and SW_ORIGINAL if an original happens to answer it (it
-// usually does not, until reset, so it is found by the full sequence or by being named).
-// "CS" names the colour family but not a member, which only `p` can say, and the plain
-// question sends nothing else: it returns SW_C2200, the family's stand-in, so a caller
-// that records the model confirms it with sw_ask_full before a job. SW_NONE for no reply
-// or one that is not a StyleWriter's.
+// The plain question: writes the one byte `?` and reads the reply to its CR at 250 ms a
+// byte (a reply that stops without a CR counts). Returns the model the reply names: SW_II,
+// SW_1200, and SW_ORIGINAL if an original happens to answer it (it usually does not, until
+// reset, so it is found by the full sequence or by being named). Nothing else is written
+// for those, or for no reply or a reply that is not a StyleWriter's (SW_NONE): a port whose
+// printer is unknown is asked one byte and no more. "CS" names the colour family but not a
+// member; it proves a colour StyleWriter, which is what `p` is for, so `FF FF FF 70` follows
+// as a write of its own and its byte (250 ms) names the model (sw_model_from_p). A CS that
+// does not answer `p` is returned as SW_C2200, the family's stand-in.
 sw_model_t sw_ask_plain(const sw_ops_t *o);
 
 // The full sequence, for a printer the record or the person has named: `00 FF FF FF 49`
