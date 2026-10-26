@@ -25,10 +25,14 @@
 //    when ESC ? went unanswered"), and calls again.
 //  - sets `answering` when the port printer answered its last question, and clears it when
 //    it did not. An ImageWriter record's `answering` must also clear when its line goes down
-//    for good: only a port that is not answering is asked the plain question, and the kick
-//    follows only a plain question that got nothing, so a stuck ImageWriter that still
+//    and stays down: only a port that is not answering is asked the plain question, and the
+//    kick follows only a plain question that got nothing, so a stuck ImageWriter that still
 //    "answers" would never be kicked.
-//  - passes `plain_unanswered` for the last plain question it asked: it got nothing.
+//  - passes `plain_unanswered` for the last plain question it asked: it got nothing. It
+//    clears it when the line goes down, so each new busy spell gets one fresh plain question
+//    before its first kick (a wanted kick with `plain_unanswered` clear asks one at once,
+//    PA_PLAIN, not at the 60 s cadence; the kick follows on the next call, so a busy
+//    ImageWriter is kicked about as soon as `want_kick` says, ~5 s).
 #pragma once
 #include <stdint.h>
 
@@ -69,8 +73,10 @@ static inline uint32_t port_plain_due(uint32_t now_ms)
 //                   record, and a StyleWriter record that has stopped answering (so an
 //                   ImageWriter swapped in is noticed), and no record.
 //   4. PA_PLAIN     while the port's printer is not answering (any record that does not
-//                   answer, and no record): when the last one is 60 s old, or on a look.
-//                   An ImageWriter that answers is never asked it.
+//                   answer, and no record): when the last one is 60 s old, or on a look,
+//                   or at once when a kick is wanted and no plain question has been asked
+//                   since the line went down (`want_kick`, `plain_unanswered` clear; not
+//                   for a StyleWriter record). An ImageWriter that answers is never asked it.
 //   5. PA_KICK      last: only with want_kick and a plain question that got nothing, and
 //                   never for a StyleWriter record.
 //

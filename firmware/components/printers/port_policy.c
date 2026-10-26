@@ -22,7 +22,11 @@ port_act_t port_policy(const port_in_t *in)
 
     if (in->line_up_edge || (in->look && in->line_ready)) return PA_ESCQ;
 
-    if (!answers && (in->look || due(in->now_ms, in->last_plain_ms, PORT_PLAIN_EVERY_MS)))
+    // R22: a busy ImageWriter is kicked about as soon as it always was, so a wanted kick
+    // with no plain question since the line went down asks one at once; the kick follows.
+    int kick_asks = in->want_kick && !in->plain_unanswered && !sw;
+    if (!answers && (in->look || kick_asks ||
+                     due(in->now_ms, in->last_plain_ms, PORT_PLAIN_EVERY_MS)))
         return PA_PLAIN;
 
     if (in->want_kick && in->plain_unanswered && !sw) return PA_KICK;

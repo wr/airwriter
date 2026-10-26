@@ -79,6 +79,10 @@ static void test_invariants(void)
         if (in.said_other) CHECK_EQ_INT(a, PA_NONE);
         if (a == PA_KICK) CHECK(in.want_kick && in.plain_unanswered && !sw);
         if (a == PA_PLAIN) CHECK(!answers);
+        // ...and only for a reason: a look, the 60 s cadence, or a wanted kick (R22) with no
+        // plain question since the line went down, never for a StyleWriter record's kick.
+        if (a == PA_PLAIN)
+            CHECK(in.look || due == 2 || (in.want_kick && !in.plain_unanswered && !sw));
         if (a == PA_STATUS) CHECK(sw && answers);
         if (a == PA_ESCQ) CHECK(!(sw && answers) && (in.line_up_edge || (in.look && in.line_ready)));
         if (sw && answers) CHECK(a == PA_NONE || a == PA_STATUS);
@@ -259,9 +263,12 @@ static void test_kick(void)
         CHECK_EQ_INT(port_policy(&in), sw ? PA_NONE : PA_KICK);
         in.want_kick = 0;
         CHECK_EQ_INT(port_policy(&in), PA_NONE);
+        // R22: no plain question since the line went down, so one is asked at once, however
+        // recently the last one was; a StyleWriter record never gets that or the kick.
         in.want_kick = 1;
         in.plain_unanswered = 0;
-        CHECK_EQ_INT(port_policy(&in), PA_NONE);
+        in = at(in, 1 * SEC, 0);
+        CHECK_EQ_INT(port_policy(&in), sw ? PA_NONE : PA_PLAIN);
     }
     // An ImageWriter stuck busy at power-up, as the board runs it: its line is down, the
     // plain question comes due at 60 s and gets nothing, and the kick follows on the next
@@ -280,6 +287,91 @@ static void test_kick(void)
     in.line_up_edge = 0;
     in.last_plain_ms = in.now_ms - 60 * SEC;
     CHECK_EQ_INT(port_policy(&in), PA_PLAIN);
+}
+
+// R22: an ImageWriter left busy is kicked about as soon as it is wanted, not a plain-question
+// cadence later. The caller clears plain_unanswered when the line goes down, and the busy
+// spell gets one fresh plain question, then the kick.
+static void test_kick_prompt(void)
+{
+    port_in_t in = base(PR_KIND_IMAGEWRITER);
+    in.line_ready = 0;
+    in.want_kick = 1;
+    in.plain_unanswered = 0;
+    in = at(in, 1 * SEC, 0);                       // asked a second ago, for another spell
+    CHECK_EQ_INT(port_policy(&in), PA_PLAIN);
+    in.last_plain_ms = in.now_ms;                  // the caller stamps it; it got nothing
+    in.plain_unanswered = 1;
+    CHECK_EQ_INT(port_policy(&in), PA_KICK);
+
+    // The same with no record (a port nothing has been found on, left busy at power-up).
+    in = base(-1);
+    in.line_ready = 0;
+    in.want_kick = 1;
+    in = at(in, 1 * SEC, 0);
+    CHECK_EQ_INT(port_policy(&in), PA_PLAIN);
+    in.plain_unanswered = 1;
+    CHECK_EQ_INT(port_policy(&in), PA_KICK);
+
+    // A StyleWriter record never gets either on this path, answering or not.
+    in = base(PR_KIND_STYLEWRITER);
+    in.line_ready = 0;
+    in.want_kick = 1;
+    in = at(in, 1 * SEC, 0);
+    CHECK_EQ_INT(port_policy(&in), PA_NONE);
+    in.plain_unanswered = 1;
+    CHECK_EQ_INT(port_policy(&in), PA_NONE);
+    in.answering = 1;
+    in = at(in, 1 * SEC, 1 * SEC);
+    CHECK_EQ_INT(port_policy(&in), PA_NONE);
+    in.plain_unanswered = 0;
+    CHECK_EQ_INT(port_policy(&in), PA_NONE);
+
+    // An ImageWriter that answers is not asked the plain question by a wanted kick.
+    in = base(PR_KIND_IMAGEWRITER);
+    in.answering = 1;
+    in.want_kick = 1;
+    in.plain_unanswered = 0;
+    in = at(in, 1 * SEC, 0);
+    CHECK_EQ_INT(port_policy(&in), PA_NONE);
+    // (If its flag is stale and the plain question had got nothing, it is kicked.)
+    in.plain_unanswered = 1;
+    CHECK_EQ_INT(port_policy(&in), PA_KICK);
+
+    // The person said "Something else": nothing, wanted or not.
+    in = base(PR_KIND_IMAGEWRITER);
+    in.said_other = 1;
+    in.want_kick = 1;
+    CHECK_EQ_INT(port_policy(&in), PA_NONE);
+    in.plain_unanswered = 1;
+    CHECK_EQ_INT(port_policy(&in), PA_NONE);
+
+    // As the board runs it: the line drops at 100 s with the printer busy (its last plain
+    // question was 5 s before, for an earlier spell, so the 60 s cadence is nowhere near
+    // due), and want_kick comes true at 105 s. Calls every 500 ms: one plain question the
+    // moment it is wanted, the kick on the very next call, then kicks for printer_state to
+    // pace.
+    in = base(PR_KIND_IMAGEWRITER);
+    in.line_ready = 0;
+    in.plain_unanswered = 0;                       // cleared when the line went down
+    in.last_plain_ms = 95 * SEC;
+    int plains = 0, kicks = 0;
+    uint32_t first_plain = 0, first_kick = 0;
+    for (uint32_t ms = 100 * SEC; ms < 130 * SEC; ms += 500) {
+        in.now_ms = ms;
+        in.want_kick = ms >= 105 * SEC;
+        port_act_t a = port_policy(&in);
+        if (a == PA_PLAIN) {
+            if (!plains++) first_plain = ms;
+            in.last_plain_ms = ms;
+            in.plain_unanswered = 1;               // a busy ImageWriter says nothing
+        }
+        if (a == PA_KICK && !kicks++) first_kick = ms;
+    }
+    CHECK_EQ_INT(plains, 1);
+    CHECK_EQ_INT(first_plain, 105 * SEC);
+    CHECK_EQ_INT(first_kick, 105 * SEC + 500);
+    CHECK(kicks >= 1);
 }
 
 // Times past the 32-bit millisecond clock's wrap are not a reason to ask or not to ask.
@@ -327,6 +419,7 @@ int main(void)
     test_imagewriter_silent();
     test_no_record();
     test_kick();
+    test_kick_prompt();
     test_wrap();
     TEST_END;
 }
