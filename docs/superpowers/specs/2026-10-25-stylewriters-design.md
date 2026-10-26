@@ -50,9 +50,6 @@ StyleWriter and have an owner confirm on paper. Plan B: buy one.
   models offer. Rev A leaves GPi unconnected and the ESP32's UART takes no outside clock. Every
   page goes at 57600 baud, as lpstyl and InkTalk send it.
 - 720 dpi on the 2500, paper types other than plain, transparencies, envelopes.
-- Apple's own halftone tables and tone curves, which TailTalk copied out of the drivers'
-  `GAMA` and `HTSC` resources (my call: they are Apple's data, and AirWriter is sold). AirWriter
-  screens with its own five screens and dot-gain curve.
 
 ## Anti-goals
 
@@ -247,11 +244,21 @@ says how. Rev B fits R9 (`W-1091`; my call, Wells to confirm), harmless to an Im
 The rip already ends in a stage (`rip_stage_t`); add a StyleWriter stage, pure C and
 host-built (`components/sw_page`, name the builder's), fed 360 dpi rows:
 
-- **Screening.** AirWriter's five screens at 360 dpi, the record's choice, through the existing
-  dot-gain curve. Gray pages and black cartridges screen one plane (K). Colour pages go through
-  `ink_split`/`ink_screens` into C, M, Y, K (full gray-component replacement, black first, the
-  colours kept off its dots); inkjet ink spreads more than ribbon, so the default gain per
-  family is found on an owner's prints. `rip_stage_t` takes 1bpp rows today and turns RGB to
+- **Apple's tables** (Wells, 2026-10-26: use them). The drivers carry Apple's own calibration
+  of StyleWriter ink on paper: tone curves (`GAMA` 1 and 2; the Color SW 2200 driver's for the
+  2200, 2400 and 2500, the Color SW 1500 driver's for the other four) and a 16 × 16 threshold
+  screen (`HTSC` 1, the same in both). A script of ours (`tools/stylewriter/mktables.py`,
+  builder's name) reads them out of Apple's driver files and writes a header that is committed,
+  with where each table came from; nothing is copied from TailTalk's source. The tone curve is
+  the StyleWriter's default tone correction, in place of the dot-gain curve's 0, so the first
+  print is already close to a Mac's with no printer here to calibrate on; the gain setting
+  still adjusts on top. Apple's screen is a sixth screen beside AirWriter's five, offered on
+  StyleWriters ("Apple" in the Screen list).
+- **Screening.** The record's screen at 360 dpi, after the tone curve. Gray pages and black
+  cartridges screen one plane (K). Colour pages go through `ink_split`/`ink_screens` into C,
+  M, Y, K (full gray-component replacement, black first, the colours kept off its dots), with
+  Apple's screen placed per ink as TailTalk does (an ink prints where the threshold is under
+  its amount, black on the screen turned over). `rip_stage_t` takes 1bpp rows today and turns RGB to
   gray; it grows a four-plane row for this stage (and `colour` stops being the ImageWriter's
   alone).
 - **Bands and blocks.** Rows collect into the model's band height; each band's rows are
@@ -314,7 +321,8 @@ host-built (`components/sw_page`, name the builder's), fed 360 dpi rows:
   first (on hand in `~/Projects/macemu`; it redirects the Mac's serial driver to a host device,
   so a pty to `swfake`), Snow if a driver bypasses the serial driver. `swfake` must decode every
   capture; each model's command order is checked against them, and AirWriter's page and
-  Apple's for the same image are compared as decoded dots (not bytes: the screens differ).
+  Apple's for the same image are compared as decoded dots: with Apple's screen and curve the
+  pattern pages should agree closely, which also checks the extracted tables.
   Captures hold Apple's driver output, so they stay local like the printer fonts
   (`~/.config/airwriter/sw-captures/`, never committed) and the tests that use them skip
   without them. This is also `W-1102`'s calibration step, so the two share the rig. The rig is
@@ -397,7 +405,9 @@ host-built (`components/sw_page`, name the builder's), fed 360 dpi rows:
   code is ever ported, ask for an "or later" grant first (AirWriter's firmware is
   GPL-3.0-or-later).
 - **InkTalk firmware** (`GPL-3.0-or-later` in its `Cargo.toml`): may be ported with credit.
-- **Apple's driver data** (tone curves, threshold matrix, scatter constants): not copied.
+- **Apple's driver data** (the tone curves and the threshold screen, about 1.3 KB): used, read
+  out of Apple's driver files by our own script, its source named in the generated header and
+  in `LICENSE.md`'s table. The drivers themselves are never committed.
 - Credit for the StyleWriter work goes to Monroe Williams, FeralFirmware and Bolacore, in the
   README's credits, the StyleWriter wiki page and `docs/prior-art.md`.
 
@@ -411,6 +421,7 @@ host-built (`components/sw_page`, name the builder's), fed 360 dpi rows:
    cartridge; vintage Macs through AirWriter as Apple's adapter. (Proposed by Claude as a list,
    confirmed "sounds right".)
 5. Public copy never names one forum as the audience.
+6. Use Apple's halftone tables from the drivers (2026-10-26).
 
 ## Calls made in this design (check while reading)
 
@@ -423,7 +434,9 @@ host-built (`components/sw_page`, name the builder's), fed 360 dpi rows:
 - Idle status by asking `1`/`2` every 10 s; a 60 s look while the port is empty.
 - R9 fitted on rev A boards that run a StyleWriter until shown unnecessary; rev B fits it.
 - Letter, A4 and Legal; plain paper only; draft, normal, best from the phone's quality.
-- AirWriter's own screens and gain, not Apple's tables.
+- Apple's tone curve as the StyleWriter default and Apple's screen as a sixth choice (Wells
+  asked to use the tables; how they fit is mine): the default screen stays the board's usual
+  one, and the tables come from our own script, not TailTalk's file.
 - One Clean Print Head key, one cleaning a press, no deep clean and nothing automatic.
 - A StyleWriter test page drawn as a raster on the board.
 - StyleWriters on the network behind an adapter are out.
@@ -433,7 +446,7 @@ host-built (`components/sw_page`, name the builder's), fed 360 dpi rows:
 
 Component and file names, the stage's API change for four-plane rows, the NVS fields for
 model and cartridge, how the `prn` task frames bands in the job buffer, band heights and block
-splits within the caps, the default gain per family (from an owner's prints), the bitmap face
+splits within the caps, where Apple's screen sits per ink, the bitmap face
 and layout of the StyleWriter test page, the StyleWriter drawing, the exact IPP reason
 mapping, `swfake`'s command interface, and ADSP's timers and window.
 
