@@ -8,6 +8,10 @@ and is not covered by this repository's licences (LICENSE.md).
 laserwriter.txt is a LaserWriter II for a shared LaserWriter (W-1082), drawn
 for AirWriter in the same style and palette (the palette must not grow: the
 ImageWriter's PNGs would change), under this repository's licence.
+stylewriter.txt is the Color StyleWriter's Chooser icon, written by
+tools/stylewriter/mktables.py from Apple's driver and mapped to the nearest of this
+palette's colours, so, like the ImageWriter's, it is Apple's and is not covered by
+this repository's licences (LICENSE.md).
 
 IPP Everywhere wants 48, 128 and 512 pixel icons. The grid is centred on a
 32 x 32 canvas; 128 and 512 are exact 4x and 16x enlargements of it, and 48 is
@@ -75,7 +79,8 @@ def png(grid, size):
 
 def main():
     OUT.mkdir(parents=True, exist_ok=True)
-    for grid_file, prefix in (("imagewriter.txt", "icon"), ("laserwriter.txt", "laser")):
+    for grid_file, prefix in (("imagewriter.txt", "icon"), ("laserwriter.txt", "laser"),
+                              ("stylewriter.txt", "stylewriter")):
         grid = canvas(grid_file)
         for size in SIZES:
             data = png(grid, size)

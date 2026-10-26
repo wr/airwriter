@@ -5,6 +5,7 @@
 #include <string.h>
 #include <math.h>
 #include "bluenoise64.h"
+#include "apple_tables.h"
 
 // Bill Atkinson's kernel, written for the Macintosh in the same years the
 // ImageWriter shipped. It spreads only 6/8 of the error on purpose, which is
@@ -41,6 +42,7 @@ int ht_algo_from_name(const char *name, ht_algo_t *out)
     if (!strcmp(name, "floyd"))     { *out = HT_FLOYD;     return 0; }
     if (!strcmp(name, "bayer"))     { *out = HT_BAYER;     return 0; }
     if (!strcmp(name, "bluenoise")) { *out = HT_BLUENOISE; return 0; }
+    if (!strcmp(name, "apple"))     { *out = HT_APPLE;     return 0; }
     return -1;
 }
 
@@ -49,19 +51,39 @@ int ht_algo_from_name(const char *name, ht_algo_t *out)
 // for at a half tint fixes k, and the curve is that law run backwards, so
 // the dots asked for are the ones that will read right once they have
 // spread. Gray is paper-fraction, so the curve lifts the midtones.
-void ht_set_gain(ht_t *h, int gain_pct)
+static void gain_curve(int gain_pct, uint8_t curve[256])
 {
     if (gain_pct <= 0 || gain_pct >= 50) {
-        for (int v = 0; v < 256; v++) h->tone[v] = (uint8_t)v;
+        for (int v = 0; v < 256; v++) curve[v] = (uint8_t)v;
         return;
     }
     double k = log(1.0 / (0.5 - gain_pct / 100.0)) / log(2.0);
     for (int v = 0; v < 256; v++) {
         double t = 255.0 * pow(v / 255.0, 1.0 / k) + 0.5;
-        h->tone[v] = (uint8_t)(t > 255 ? 255 : t);
+        curve[v] = (uint8_t)(t > 255 ? 255 : t);
     }
-    h->tone[0] = 0;
-    h->tone[255] = 255;
+    curve[0] = 0;
+    curve[255] = 255;
+}
+
+// tone[] is the gain curve, if any, put on top of the tone curve, if any.
+static void retone(ht_t *h)
+{
+    uint8_t gain[256];
+    gain_curve(h->gain_pct, gain);
+    for (int v = 0; v < 256; v++) h->tone[v] = gain[h->tone_base ? h->tone_base[v] : v];
+}
+
+void ht_set_gain(ht_t *h, int gain_pct)
+{
+    h->gain_pct = gain_pct;
+    retone(h);
+}
+
+void ht_set_tone(ht_t *h, const uint8_t curve[256])
+{
+    h->tone_base = curve;
+    retone(h);
 }
 
 void ht_set_phase(ht_t *h, uint32_t dx, uint32_t dy, int invert)
@@ -152,6 +174,16 @@ void ht_row_avoid(ht_t *h, const uint8_t *gray, const uint8_t *avoid, uint8_t *b
             int t = ht_bluenoise_at(x + h->phase_x, ty);
             if (h->invert) t = 255 - t;
             ink = v < 255 && v <= t;
+            break;
+        }
+        case HT_APPLE: {
+            // The Color StyleWriter drivers' pattern: an ink prints where its
+            // amount (255 less v) is over the tile's threshold. Cyan, magenta
+            // and yellow read the tile as it is, black reads it mirrored about
+            // 254, so black dots fall where colour dots are least likely.
+            int t = apple_screen16[((ty & 15) << 4) | ((x + h->phase_x) & 15)];
+            if (h->invert) t = 254 - t;
+            ink = 255 - v > t;
             break;
         }
         default: {                              // HT_ATKINSON, HT_FLOYD

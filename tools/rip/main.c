@@ -167,7 +167,7 @@ static void write_file(void *ctx, const uint8_t *b, size_t n)
 static void usage(void)
 {
     fputs("usage: rip --in FILE [--out-stream FILE] [--out-preview FILE]\n"
-          "           [--dither threshold|atkinson|floyd|bayer|bluenoise] [--colour]\n"
+          "           [--dither threshold|atkinson|floyd|bayer|bluenoise|apple] [--colour]\n"
           "           [--gain PERCENT] [--top-margin N] [--out-pbm FILE]\n"
           "       rip --in FILE --printer laser [--paper letter|a4|legal] [--ps FILE] [--hex]\n"
           "       rip --testpage colour|black|unknown --out-stream FILE [--dither ...] [--gain ...]\n"
