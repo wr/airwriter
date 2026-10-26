@@ -102,6 +102,11 @@ build/test_cable: test/test_cable.c $(CT)/cable_core.c $(LT)/lt_proto.c | build
 build/%: test/%.c $(SRCS) | build
 	$(CC) $(CFLAGS) $(INCS) -Itest -o $@ $^ -lm
 
+# The page stage's memory, counted through bigmem.h (BIGMEM_COUNT, R15).
+build/test_sw_page_mem: CFLAGS += -DBIGMEM_COUNT
+build/test_sw_page_mem: test/test_sw_page_mem.c $(SRCS) | build
+	$(CC) $(CFLAGS) $(INCS) -Itest -o $@ $^ -lm
+
 # W-1088 review: the printer list's core takes none of the board's internal
 # RAM of its own (docs/traps.md): no writable statics, its buffers are the
 # caller's (the board's are in PSRAM).

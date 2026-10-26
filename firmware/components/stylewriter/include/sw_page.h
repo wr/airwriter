@@ -3,9 +3,9 @@
 // The StyleWriter's page stage (W-1103, design "The page"): the rip's last step
 // for a StyleWriter, in the place the LaserWriter's PostScript stage has. It takes
 // the page's 360 dpi rows (one K plane, or four planes when the job is in colour),
-// drops the engine's margins, collects the rows into bands of the model's height,
-// run-codes each non-blank band (sw_code.h) and writes it out as frames. The
-// session (sw_session.h) turns the frames into the conversation with the printer:
+// drops the engine's margins, and run-codes (sw_code.h) the rows as they arrive,
+// writing them out as frames in bands of the model's height. It holds no page and no
+// band: the block being filled and the row before, a plane each. The session (sw_session.h) turns the frames into the conversation with the printer:
 // the page commands, then each rect and block as the printer's buffer has room,
 // then the page's end. Pure C; tools/rip builds it on the host.
 //
@@ -19,11 +19,15 @@
 //                 bottom count from the printable area's first row.
 //   SWF_BLOCK     the coded data of one `G` block: whole rows (every plane of a row,
 //                 C, M, Y, K), never more than sw_block_cap bytes. The session adds
-//                 the `G`, the length and the 00. The rows after a block's first
+//                 the `G`, the length and the 00. The rows after a band's first
 //                 are XORed with the row before, as it was in the band, so the
 //                 delta carries over from one block to the next in a rect.
 //   SWF_PAGE_END  empty. The session sends 0C.
-// A band with no ink in it has no rect or block: the next rect's top moves on.
+// A band starts at the first row with ink after the last band ended, and its rect
+// runs the model's band height from there (less, at the printable area's last row),
+// so the rect goes out before the band's first block. Blank rows between bands
+// send nothing, and the next rect's top moves on; blank rows inside a band are
+// coded, those that end a band too.
 #pragma once
 #include <stdint.h>
 #include <stddef.h>
@@ -41,8 +45,10 @@ typedef struct {
 
 typedef struct sw_page sw_page_t;
 
-// Allocates the band (band_rows x planes x row bytes: PSRAM on the board, through
-// bigmem.h) and the block. NULL for SW_NONE, a missing `out`, or no memory.
+// Allocates what the stage holds, once, in one piece (PSRAM on the board, through
+// bigmem.h): the stage itself, the block being filled (the model's block cap and its
+// 3 bytes of head) and the row before, a plane each, with one to code from: about 33 KB
+// for the Color 1500, the most. NULL for SW_NONE, a missing `out`, or no memory.
 // colour_cart is ignored for a model that takes no colour cartridge.
 sw_page_t *sw_page_new(const sw_page_cfg_t *cfg);
 

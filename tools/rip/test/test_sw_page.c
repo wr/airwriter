@@ -4,7 +4,9 @@
 // would, then the frames it wrote are decoded by a reader written here from the
 // design's wire rules (sw_decode_row for the rows themselves) and held to the
 // rows that went in. Expected rects and margins are written out from the design's
-// table, not read back from the model table.
+// table, not read back from the model table. A band starts at the first row with
+// ink after the last band ended and runs the band height from there, clamped to
+// the printable area's last row (the stage holds no page: R15).
 #include "test_util.h"
 #include "sw_page.h"
 #include "sw_code.h"
@@ -234,8 +236,8 @@ static void test_letter_ii(void)
     static const dot_t dots[] = {
         { 71, 100, IW_BLACK },        // the margin above: dropped
         { 72, 100, IW_BLACK },        // printable row 0
-        { 900, 2879, IW_BLACK },      // row 828: second band, last column
-        { 1700, 0, IW_BLACK },        // row 1628: third band
+        { 900, 2879, IW_BLACK },      // row 828: first ink after the first band, last column
+        { 1700, 0, IW_BLACK },        // row 1628: first ink after the second band
         { 3845, 5, IW_BLACK },        // row 3773: the last printable row
         { 3846, 5, IW_BLACK },        // the margin below: dropped
     };
@@ -251,9 +253,10 @@ static void test_letter_ii(void)
     CHECK_EQ_INT(d.pages, 1);
     CHECK_EQ_INT(d.page_ends, 1);
     CHECK_EQ_INT(d.page_flag[0], 0);
-    // Bands are 800 rows from the printable area's top; the fourth is blank and has no rect.
+    // A band starts at its first row with ink and is 800 rows from there, or as far as the
+    // printable area goes: the rows between bands send nothing, and the last band is one row.
     CHECK_EQ_INT(d.rects, 4);
-    static const struct { uint16_t t, b; } want[4] = { { 0, 799 }, { 800, 1599 }, { 1600, 2399 }, { 3200, 3773 } };
+    static const struct { uint16_t t, b; } want[4] = { { 0, 799 }, { 828, 1627 }, { 1628, 2427 }, { 3773, 3773 } };
     for (int i = 0; i < d.rects && i < 4; i++) {
         CHECK_EQ_INT(d.rect[i].kind, 'R');
         CHECK_EQ_INT(d.rect[i].l, 16);                 // the II's rects start 16 in
@@ -290,7 +293,7 @@ static void test_blank_and_one_dot(void)
     CHECK_EQ_INT(g_n, 4 + 3);
 
     // One black dot: one rect and one block.
-    static const dot_t dot[] = { { 600, 1234, IW_BLACK } };
+    static const dot_t dot[] = { { 600, 1234, IW_BLACK } };       // printable row 528
     g_dots = dot; g_ndots = 1;
     sink_reset();
     feed(&st, 1, 2880, 3960, 0, fill_dots);
@@ -299,8 +302,8 @@ static void test_blank_and_one_dot(void)
     CHECK_EQ_INT(d.bad, 0);
     CHECK_EQ_INT(d.rects, 1);
     CHECK_EQ_INT(d.blocks, 1);
-    CHECK_EQ_INT(d.rect[0].t, 0);
-    CHECK_EQ_INT(d.rect[0].b, 799);
+    CHECK_EQ_INT(d.rect[0].t, 528);                    // the rect starts at the dot's row
+    CHECK_EQ_INT(d.rect[0].b, 528 + 799);
     CHECK_EQ_INT(d.img[0][3][(600 - 72) * 360 + 1234 / 8], 0x80 >> (1234 % 8));
     // The frames, byte for byte: page, rect, block, end.
     CHECK_EQ_INT(g_frames, 4);
@@ -308,9 +311,29 @@ static void test_blank_and_one_dot(void)
     CHECK_EQ_INT(g_buf[1], 1);
     CHECK_EQ_INT(g_buf[2], 0);
     CHECK_EQ_INT(g_buf[3], 0);
-    // R, left 16, top 0, right 16 + 2879 = 0x0B4F, bottom 799 = 0x031F, little-endian.
-    static const uint8_t rect[] = { SWF_RECT, 9, 0, 'R', 0x10, 0x00, 0x00, 0x00, 0x4F, 0x0B, 0x1F, 0x03 };
+    // R, left 16, top 528 = 0x0210, right 16 + 2879 = 0x0B4F, bottom 1327 = 0x052F, little-endian.
+    static const uint8_t rect[] = { SWF_RECT, 9, 0, 'R', 0x10, 0x00, 0x10, 0x02, 0x4F, 0x0B, 0x2F, 0x05 };
     CHECK_EQ_MEM(g_buf + 4, rect, sizeof rect);
+    // The band's 800 rows are all coded, the blank ones that end it too: the dot's row raw, the
+    // row after it back to white as a delta, and then a lone 80 for each of the 798 left.
+    {
+        const uint8_t *blk = g_buf + d.block_off[0];
+        size_t used = 0;
+        int rows = 0;
+        uint8_t tmp[360];
+        while (used < d.block_len[0]) {
+            size_t u = sw_decode_row(blk + used, d.block_len[0] - used, NULL, 360, tmp);
+            if (!u) break;
+            used += u;
+            rows++;
+        }
+        CHECK_EQ_INT(rows, 800);
+        CHECK_EQ_INT(used, d.block_len[0]);
+        int ends_white = 1;
+        for (size_t i = d.block_len[0] - 798; i < d.block_len[0]; i++) ends_white &= blk[i] == 0x80;
+        CHECK(ends_white);
+        CHECK(blk[d.block_len[0] - 799] != 0x80);       // the row before them is the delta that clears the dot
+    }
     dec_free(&d);
     sw_page_free(p);
 }
@@ -386,7 +409,7 @@ static void test_colour_c2500(void)
     if (!p) return;
     static const dot_t dots[] = {
         { 55, 10, IW_CYAN }, { 55, 20, IW_MAGENTA }, { 55, 30, IW_YELLOW }, { 55, 40, IW_BLACK },
-        { 450, 2915, IW_YELLOW },            // printable row 405: the second band, only yellow
+        { 550, 2915, IW_YELLOW },            // printable row 505: after the first band, only yellow
         { 3860, 7, IW_BLACK },               // printable row 3815: the last
         { 3861, 8, IW_BLACK },               // the 99 rows below: dropped
     };
@@ -400,7 +423,7 @@ static void test_colour_c2500(void)
     CHECK_EQ_INT(d.mid_row_ends, 0);
     CHECK_EQ_INT(d.page_flag[0], 1);
     CHECK_EQ_INT(d.rects, 3);
-    static const struct { uint16_t t, b; } want[3] = { { 0, 399 }, { 400, 799 }, { 3600, 3815 } };
+    static const struct { uint16_t t, b; } want[3] = { { 10, 409 }, { 505, 904 }, { 3815, 3815 } };
     for (int i = 0; i < d.rects && i < 3; i++) {
         CHECK_EQ_INT(d.rect[i].kind, 'c');
         CHECK_EQ_INT(d.rect[i].l, 0);                  // the 2500 has no offset
@@ -408,18 +431,14 @@ static void test_colour_c2500(void)
         CHECK_EQ_INT(d.rect[i].t, want[i].t);
         CHECK_EQ_INT(d.rect[i].b, want[i].b);
     }
-    // C, M, Y, K on the wire: the first row of the first band has all four planes, in that order.
+    // C, M, Y, K on the wire: the band starts at row 10 (source 55), whose four planes come
+    // first and raw, in that order: C has a dot at 10, M at 20, Y at 30, K at 40.
     const uint8_t *blk = g_buf + d.block_off[0];
     uint8_t tmp[365];
     size_t used = 0, u;
-    // Rows 0..9 are blank: each is four lone 80s.
-    for (int r = 0; r < 10; r++)
-        for (int k = 0; k < 4; k++) { CHECK_EQ_INT(blk[used], 0x80); used++; }
-    // Row 10 (source 55): C has a dot at 10, M at 20, Y at 30, K at 40.
     static const int col[4] = { 10, 20, 30, 40 };
     for (int k = 0; k < 4; k++) {
-        const uint8_t *pr = NULL;                      // row 9 was white in every plane
-        u = sw_decode_row(blk + used, d.block_len[0] - used, pr, 365, tmp);
+        u = sw_decode_row(blk + used, d.block_len[0] - used, NULL, 365, tmp);
         CHECK(u > 1);
         for (int x = 0; x < 365 * 8; x++)
             CHECK_EQ_INT(!!(tmp[x >> 3] & (0x80 >> (x & 7))), x == col[k] ? 1 : 0);
@@ -443,11 +462,12 @@ static void test_colour_c2500(void)
     decode(&d, SW_C2500, 3816, 365);
     CHECK_EQ_INT(d.bad, 0);
     CHECK_EQ_INT(d.page_flag[0], 0);
-    CHECK_EQ_INT(d.rects, 2);                          // the yellow-only band has no K ink
+    CHECK_EQ_INT(d.rects, 2);                          // the yellow-only row has no K ink to start a band
     CHECK_EQ_INT(d.rect[0].kind, 'R');
-    CHECK_EQ_INT(d.rect[0].t, 0);
-    CHECK_EQ_INT(d.rect[0].b, 399);
-    CHECK_EQ_INT(d.rect[1].t, 3600);
+    CHECK_EQ_INT(d.rect[0].t, 10);
+    CHECK_EQ_INT(d.rect[0].b, 409);
+    CHECK_EQ_INT(d.rect[1].t, 3815);
+    CHECK_EQ_INT(d.rect[1].b, 3815);
     uint8_t *wk = expect(2916, 3960, 45, 99, 2916, fill_dots, 3, 365);
     CHECK_EQ_MEM(d.img[0][3], wk, 3816 * 365);
     free(wk);
@@ -532,6 +552,69 @@ static void test_original_raw(void)
     total = 0;
     for (int i = 0; i < d.blocks; i++) total += d.block_len[i];
     CHECK(total < 5u * 800 + 5u * 400);                // a row each plus an 80 per further row
+    dec_free(&d);
+    sw_page_free(p);
+}
+
+// A dense colour page on the 1500: every plane noise, so the band splits into many blocks
+// within the four-plane cap, and every row comes back.
+static void test_dense_1500_colour(void)
+{
+    sw_page_t *p;
+    rip_stage_t st;
+    stage_for(&p, &st, SW_C1500, 1);
+    if (!p) return;
+    sink_reset();
+    feed(&st, 0, 2880, 1000, 1, fill_noise);           // 1000 rows: 814 printable
+    CHECK_EQ_INT(g_malformed, 0);
+    dec_t d;
+    decode(&d, SW_C1500, 814, 360);
+    CHECK_EQ_INT(d.bad, 0);
+    CHECK_EQ_INT(d.mid_row_ends, 0);
+    CHECK_EQ_INT(d.page_flag[0], 1);
+    CHECK_EQ_INT(d.rects, 2);                          // 800 rows, then 14
+    CHECK_EQ_INT(d.rect[0].kind, 'c');
+    CHECK(d.rect[0].blocks > 20);                      // ~1.4 KB a row, a 29 KB block
+    uint32_t cap = sw_block_cap(SW_C1500, 4);
+    for (int i = 0; i < d.blocks; i++) CHECK(d.block_len[i] <= cap);
+    for (int k = 0; k < 4; k++) {
+        uint8_t *w = expect(2880, 1000, 72, 114, 2880, fill_noise, k, 360);
+        CHECK_EQ_MEM(d.img[0][k], w, 814 * 360);
+        free(w);
+    }
+    dec_free(&d);
+    sw_page_free(p);
+}
+
+// A page that ends with its band unfinished (the stage was fed short) is finished with white
+// rows: the rect has said how many there are.
+static void test_short_feed(void)
+{
+    sw_page_t *p;
+    rip_stage_t st;
+    stage_for(&p, &st, SW_II, 0);
+    if (!p) return;
+    static const dot_t dot[] = { { 72 + 3, 9, IW_BLACK } };
+    g_dots = dot; g_ndots = 1;
+    sink_reset();
+    uint8_t row[360];
+    CHECK_EQ_INT(st.page_begin(st.ctx, 0, 2880, 3960), 0);
+    for (uint32_t y = 0; y < 72 + 10; y++) {           // the margin and ten printable rows
+        fill_dots(y, IW_BLACK, row, 360);
+        st.row(st.ctx, row);
+    }
+    CHECK_EQ_INT(st.page_end(st.ctx), 0);
+    dec_t d;
+    decode(&d, SW_II, 3774, 360);
+    CHECK_EQ_INT(d.bad, 0);
+    CHECK_EQ_INT(d.rects, 1);
+    CHECK_EQ_INT(d.rect[0].t, 3);
+    CHECK_EQ_INT(d.rect[0].b, 3 + 799);
+    CHECK_EQ_INT(d.page_ends, 1);
+    CHECK_EQ_INT(d.img[0][3][3 * 360 + 1], 0x40);
+    int ink = 0;
+    for (size_t i = 0; i < 3774u * 360; i++) ink += d.img[0][3][i] != 0;
+    CHECK_EQ_INT(ink, 1);
     dec_free(&d);
     sw_page_free(p);
 }
@@ -737,6 +820,8 @@ int main(void)
     test_splits_blocks();
     test_colour_c2500();
     test_original_raw();
+    test_dense_1500_colour();
+    test_short_feed();
     test_pages_and_misc();
     test_odd_sizes();
     free(g_buf);
