@@ -703,11 +703,24 @@ void pr_migrate(pr_list_t *l, const pr_legacy_t *o)
 
 enum { HDR = 6 };
 
+// R21 (W-1103): the list is stored with the lowest version that can hold it, 1 until
+// a record or a notice holds a StyleWriter, so that an OTA rollback to a firmware from
+// before StyleWriters (the W-1059 trial) still reads an ImageWriter or LaserWriter
+// owner's list and their printers keep their identity on their phones.
+static uint8_t blob_version(const pr_list_t *l)
+{
+    for (int i = 0; i < l->n; i++)
+        if (l->r[i].kind > PR_KIND_AT_IMAGEWRITER || l->r[i].model > PR_MODEL_IW1) return 2;
+    for (int i = 0; i < l->n_notes; i++)
+        if (l->notes[i].model > PR_MODEL_IW1) return 2;
+    return 1;
+}
+
 size_t pr_save(const pr_list_t *l, uint8_t *buf, size_t cap)
 {
     size_t need = HDR + (size_t)l->n * sizeof(pr_rec_t) + (size_t)l->n_notes * sizeof(pr_note_t);
     if (cap < need) return 0;
-    buf[0] = 'P'; buf[1] = 'R'; buf[2] = PR_BLOB_VER;
+    buf[0] = 'P'; buf[1] = 'R'; buf[2] = blob_version(l);
     buf[3] = l->n; buf[4] = l->next_id; buf[5] = l->n_notes;
     memcpy(buf + HDR, l->r, (size_t)l->n * sizeof(pr_rec_t));
     memcpy(buf + HDR + (size_t)l->n * sizeof(pr_rec_t), l->notes,

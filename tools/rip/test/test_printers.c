@@ -1279,7 +1279,7 @@ static void test_sw_box_state(void)
 static void test_sw_blob(void)
 {
     enum { HDR = 6 };
-    static uint8_t buf[4096], v1[4096], bad[4096];
+    static uint8_t buf[4096], v1[4096], v2[4096], bad[4096];
     CHECK_EQ_INT(PR_BLOB_VER, 2);
 
     // A list with a StyleWriter in it round-trips as version 2.
@@ -1304,14 +1304,16 @@ static void test_sw_blob(void)
     CHECK_EQ_INT(pr_port(&M)->kind, PR_KIND_STYLEWRITER);
     CHECK_EQ_INT(pr_port(&M)->model, PR_MODEL_SWC2400);
     CHECK_EQ_INT(pr_blob_newer(buf, n), 0);                  // ours
+    memcpy(v2, buf, n);
+    size_t n2 = n;
 
-    // A version 1 list (what every board has now) loads, nothing lost, and is saved as 2.
+    // A version 1 list (what every board has now) loads, nothing lost, and is saved again as 1.
     fresh();
     int a = pr_port_seen(&L, PR_PORT_IWLQ);
     pr_rename(&L, a, "Desk");
     pr_at_queried(&L, pr_at_seen(&L, PR_WHERE_TUNNEL, P("Back"), P("LaserWriter"), 0), 1, &info);
     n = pr_save(&L, v1, sizeof v1);
-    v1[2] = 1;                                               // the layout is the same, the stamp is 1
+    CHECK_EQ_INT(v1[2], 1);                                  // nothing here needs 2 (R21)
     pr_init(&M, MAC, 1);
     CHECK_EQ_INT(pr_load(&M, v1, n), 0);
     CHECK_EQ_INT(M.n, L.n);
@@ -1319,8 +1321,7 @@ static void test_sw_blob(void)
     CHECK_EQ_INT(pr_blob_newer(v1, n), 0);
     size_t m = pr_save(&M, buf, sizeof buf);
     CHECK_EQ_INT(m, n);
-    CHECK_EQ_INT(buf[2], 2);
-    CHECK(memcmp(buf + 3, v1 + 3, n - 3) == 0);
+    CHECK(memcmp(buf, v1, n) == 0);
 
     // Version 1 means the old kinds and models: nothing newer is believed.
     const size_t kind_at = HDR + offsetof(pr_rec_t, kind), model_at = HDR + offsetof(pr_rec_t, model);
@@ -1365,7 +1366,9 @@ static void test_sw_blob(void)
     CHECK_EQ_INT(pr_load(&M, bad, n), -1);
     CHECK_EQ_INT(pr_blob_newer(bad, n), 0);
     // An old firmware (PR_BLOB_VER 1) sees our version 2 as newer: that is `stamp > its version`.
-    CHECK(buf[2] > 1);
+    CHECK_EQ_INT(v2[2], 2);
+    CHECK(v2[2] > 1);
+    (void)n2;
 
     // A note whose model nobody has is refused with the rest.
     fresh();
@@ -1379,6 +1382,123 @@ static void test_sw_blob(void)
     bad[2] = 1;
     bad[n - 1] = PR_MODEL_SW2;                               // a StyleWriter in a version 1 note
     CHECK_EQ_INT(pr_load(&M, bad, n), -1);
+}
+
+// What a version 1 reader (a firmware before W-1103, as an OTA rollback brings back) accepts,
+// by the limits it had: its version, the old kinds and models, notes that name an ImageWriter.
+static int old_reader_accepts(const uint8_t *b, size_t n)
+{
+    enum { HDR = 6 };
+    if (n < HDR || b[0] != 'P' || b[1] != 'R' || b[2] != 1) return 0;
+    uint8_t cnt = b[3], notes = b[5];
+    if (cnt > PR_MAX || notes > PR_NOTES_MAX) return 0;
+    if (n != HDR + (size_t)cnt * sizeof(pr_rec_t) + (size_t)notes * sizeof(pr_note_t)) return 0;
+    for (int i = 0; i < cnt; i++) {
+        pr_rec_t r;
+        memcpy(&r, b + HDR + (size_t)i * sizeof r, sizeof r);
+        if (r.kind > PR_KIND_AT_IMAGEWRITER || r.model > PR_MODEL_IW1) return 0;
+    }
+    for (int i = 0; i < notes; i++) {
+        pr_note_t nt;
+        memcpy(&nt, b + HDR + (size_t)cnt * sizeof(pr_rec_t) + (size_t)i * sizeof nt, sizeof nt);
+        if (nt.kind > PR_NOTE_TOO_MANY || nt.model > PR_MODEL_IW1) return 0;
+    }
+    return 1;
+}
+
+// R21: the list is stored as version 1 while nothing in it needs 2, so a rollback to a firmware
+// from before StyleWriters (the W-1059 trial) reads it and a person's printers keep their
+// identity on their phones. A StyleWriter in a record, or a notice that names one, makes it 2.
+static void test_sw_blob_stamp(void)
+{
+    static uint8_t buf[4096], again[4096];
+    lw_info_t info;
+    lw_info_default(&info);
+
+    // Nothing at all, an ImageWriter, a LaserWriter, both: version 1, read by the old limits,
+    // and read back here identical.
+    fresh();
+    size_t n = pr_save(&L, buf, sizeof buf);
+    CHECK_EQ_INT(buf[2], 1);
+    CHECK(old_reader_accepts(buf, n));
+    int iw = pr_port_seen(&L, PR_PORT_IWLQ);
+    pr_rename(&L, iw, "Desk");
+    pr_dismiss(&L, 0);
+    int lw = pr_at_seen(&L, PR_WHERE_CABLE, P("Office"), P("LaserWriter"), 0);
+    pr_at_queried(&L, lw, 1, &info);
+    int ak = pr_at_seen(&L, PR_WHERE_TUNNEL, P("Kitchen"), P("ImageWriter"), 0);
+    (void)ak;
+    pr_port_seen(&L, PR_PORT_IW2);                           // a notice, naming an ImageWriter
+    CHECK_EQ_INT(notes_of(PR_NOTE_CHANGED), 1);
+    n = pr_save(&L, buf, sizeof buf);
+    CHECK_EQ_INT(buf[2], 1);
+    CHECK(old_reader_accepts(buf, n));
+    pr_list_t M;
+    pr_init(&M, MAC, 1);
+    CHECK_EQ_INT(pr_load(&M, buf, n), 0);
+    CHECK_EQ_INT(M.n, L.n);
+    CHECK(memcmp(M.r, L.r, sizeof L.r[0] * L.n) == 0);
+    CHECK_EQ_INT(M.n_notes, L.n_notes);
+    CHECK(memcmp(M.notes, L.notes, sizeof L.notes[0] * L.n_notes) == 0);
+    CHECK_EQ_INT(M.next_id, L.next_id);
+    CHECK_EQ_INT(pr_save(&M, again, sizeof again), n);       // and saved again the same, byte for byte
+    CHECK(memcmp(buf, again, n) == 0);
+
+    // A StyleWriter record makes it 2: the old limits refuse it (the old firmware would keep it).
+    CHECK_EQ_INT(pr_set_model(&L, iw, PR_MODEL_SW2), 0);
+    n = pr_save(&L, buf, sizeof buf);
+    CHECK_EQ_INT(buf[2], 2);
+    CHECK(!old_reader_accepts(buf, n));
+    pr_init(&M, MAC, 1);
+    CHECK_EQ_INT(pr_load(&M, buf, n), 0);
+    CHECK(memcmp(M.r, L.r, sizeof L.r[0] * L.n) == 0);
+    // Taking it away makes it 1 again, by removing the record or by the person's model.
+    pr_list_t keep = L;
+    CHECK_EQ_INT(pr_remove(&L, iw), 0);
+    n = pr_save(&L, buf, sizeof buf);
+    CHECK_EQ_INT(buf[2], 1);
+    CHECK(old_reader_accepts(buf, n));
+    L = keep;
+    CHECK_EQ_INT(pr_set_model(&L, iw, PR_MODEL_IW2), 0);
+    n = pr_save(&L, buf, sizeof buf);
+    CHECK_EQ_INT(buf[2], 1);
+    CHECK(old_reader_accepts(buf, n));
+
+    // The same through the front door: a StyleWriter that answers, then the person deletes it.
+    fresh();
+    pr_port_seen_sw(&L, PR_MODEL_SWC2200);
+    n = pr_save(&L, buf, sizeof buf);
+    CHECK_EQ_INT(buf[2], 2);
+    CHECK_EQ_INT(pr_remove(&L, pr_port(&L)->id), 0);
+    n = pr_save(&L, buf, sizeof buf);
+    CHECK_EQ_INT(buf[2], 1);
+    CHECK(old_reader_accepts(buf, n));
+
+    // A notice that names a StyleWriter is enough on its own (the old firmware would take its
+    // model for an ImageWriter's); once it is dismissed or accepted away, 1 again.
+    fresh();
+    pr_port_seen(&L, PR_PORT_IW2);
+    pr_port_seen_sw(&L, PR_MODEL_SW1200);
+    CHECK_EQ_INT(L.n_notes, 1);
+    n = pr_save(&L, buf, sizeof buf);
+    CHECK_EQ_INT(buf[2], 2);
+    CHECK(!old_reader_accepts(buf, n));
+    pr_dismiss(&L, 0);
+    n = pr_save(&L, buf, sizeof buf);
+    CHECK_EQ_INT(buf[2], 1);
+    CHECK(old_reader_accepts(buf, n));
+    pr_port_seen_sw(&L, PR_MODEL_SW1200);
+    CHECK_EQ_INT(pr_accept_change(&L, 0), 0);                // the record is a StyleWriter now
+    n = pr_save(&L, buf, sizeof buf);
+    CHECK_EQ_INT(buf[2], 2);
+
+    // Everything in version 1's range still loads whichever way it is stamped by hand.
+    fresh();
+    pr_port_seen(&L, PR_PORT_IW2);
+    n = pr_save(&L, buf, sizeof buf);
+    buf[2] = 2;
+    pr_init(&M, MAC, 1);
+    CHECK_EQ_INT(pr_load(&M, buf, n), 0);
 }
 
 int main(void)
@@ -1425,5 +1545,6 @@ int main(void)
     test_sw_offers();
     test_sw_box_state();
     test_sw_blob();
+    test_sw_blob_stamp();
     TEST_END;
 }

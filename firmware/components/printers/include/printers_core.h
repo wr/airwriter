@@ -15,9 +15,12 @@
 enum { PR_MAX = 8, PR_SHARE_MAX = 4, PR_AT_SHARE_MAX = 3, PR_NAME_MAX = 33, PR_NOTES_MAX = 8 };
 // The stored form's version. 2 (W-1103) adds the StyleWriter kind and its
 // seven models to the numbers a record may hold; the record's layout is the
-// same, so pr_load reads a 1 with the old bounds. A firmware that stops at 1
-// takes a 2 for a newer firmware's and keeps it (pr_blob_newer). A new kind or
-// model needs a new version; a new fact beside the list does not (pr_seen_save).
+// same, so pr_load reads a 1 with the old bounds. pr_save writes the lowest
+// version that holds the list: 1 until a record or a notice names a StyleWriter,
+// so an ImageWriter or LaserWriter owner's list is still one an older firmware
+// reads (an OTA rollback). A firmware that stops at 1 takes a 2 for a newer
+// firmware's and keeps it (pr_blob_newer). A new kind or model needs a new
+// version; a new fact beside the list does not (pr_seen_save).
 #define PR_BLOB_VER 2
 
 // Where a printer is: the printer port, or an AppleTalk link. The links'

@@ -328,8 +328,10 @@ Traps already explained in a code comment are listed only when the comment is ea
   not a new key either: an older `pr_load` refuses the number. Bump `PR_BLOB_VER` (W-1103's
   StyleWriters made it 2), keep a reader for each older version in `pr_load`, and append,
   never insert. The bump is also what tells an older firmware the list is a newer one's, to
-  keep; a list it merely cannot read is replaced. A StyleWriter's cartridge is no field of the
-  record: it is `pr_live_t.cart`, read by the board.
+  keep; a list it merely cannot read is replaced. `pr_save` writes the lowest version that
+  holds the list (1 until a record or notice names a StyleWriter), so an OTA rollback does not
+  touch the printers of anyone with no StyleWriter. A StyleWriter's cartridge is no field of
+  the record: it is `pr_live_t.cart`, read by the board.
 - **A printer switched on is not ready at its first frame.** The NTR spends 8 s on LLAP ENQs
   (TashTalk passes other nodes' ENQs; `/api/lt` counts them in `frames`, not `heard`), then
   looks up its own name five times 2 s apart, and answers lookups only after that. Look after
