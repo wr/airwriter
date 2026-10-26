@@ -46,9 +46,12 @@ StyleWriter and have an owner confirm on paper. Plan B: buy one.
 - StyleWriters already on the network behind Apple's adapter or an InkTalk, found over
   AppleTalk and shared on AirPrint (my call; the same reasoning that cut `W-1090`). Owners can
   plug the printer into AirWriter's port instead.
-- The printer-clocked fast mode (about 1 Mbit/s, the clock on the port's GPi pin) that later
-  models offer. Rev A leaves GPi unconnected and the ESP32's UART takes no outside clock. Every
-  page goes at 57600 baud, as lpstyl and InkTalk send it.
+- The printer-clocked fast mode (about 1 Mbit/s) that later models offer. The printer drives
+  its clock on HSKi (InkTalk `stack_task.rs`); rev A's U3 is too slow to pass it, rev B's
+  SP3232EU should (`W-1091`), and the ESP32's UART takes no outside clock, so how the board
+  follows it is `W-1102`'s to work out for the QuickDraw LaserWriters. StyleWriter fast mode
+  can follow from that later. Here every page goes at 57600 baud, as lpstyl and InkTalk send
+  it.
 - 720 dpi on the 2500, paper types other than plain, transparencies, envelopes.
 
 ## Anti-goals
