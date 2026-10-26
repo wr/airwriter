@@ -36,6 +36,44 @@ PAPER = (252, 250, 245)
 FONTS = ('draft', 'corr', 'corr_prop', 'nlq', 'nlq_prop', 'draft_mt', 'corr_mt', 'nlq_mt')
 
 
+# The press model, shared with tools/stylewriter/swfake.py (360 dots an inch): a
+# sheet of grainy paper, ink laid on it dot by dot, each ink taking away what it
+# absorbs, so overprints mix.
+def blank_paper(W, H, rng):
+    px = np.empty((H, W, 3), np.float32)
+    px[:] = PAPER
+    px += (rng.random((H, W, 1), np.float32) - .5) * 5
+    return px
+
+
+def dot_radius(ppi, dot_dpi=72):
+    """A dot's radius in pixels: the printer's dot pitch is 1 / dot_dpi in."""
+    return ppi / dot_dpi / 2
+
+
+def pad_for(r):
+    """The border `spread` needs round the hit counts for dots of radius r."""
+    return int(np.ceil(r + 1))
+
+
+def spread(cnt, r):
+    """Ink cover of dots of radius r px. cnt is the hits (weight 0.82 to 1) per
+    pixel, padded by pad_for(r) before and two more after; the cover is H x W."""
+    R = pad_for(r)
+    H, W = cnt.shape[0] - 2 * R - 2, cnt.shape[1] - 2 * R - 2
+    cov = np.zeros((H, W), np.float32)
+    for dy in range(-R, R + 1):
+        for dx in range(-R, R + 1):
+            k = min(1.0, max(0.0, r + .5 - np.hypot(dx, dy)))
+            if k > 0:
+                cov += k * cnt[R - dy:R - dy + H, R - dx:R - dx + W]
+    return cov
+
+
+def lay_ink(px, cov, ink):
+    px *= 1 - np.minimum(cov, 1.0)[..., None] * (1 - np.array(INKS[ink], np.float32) / 255)
+
+
 def load_fonts(d):
     fonts = {}
     for name in FONTS:
@@ -160,14 +198,12 @@ class Printer:
             elif 0x20 <= b < 0x7F: self.text(b)
         return self
 
-    def paper(self, path, ppi=288, left=0.25):
+    def paper(self, path, ppi=288, left=0.25, dot_dpi=72):
         W, H = int(8.5 * ppi), int(11 * ppi)
         rng = np.random.default_rng(7)
-        px = np.empty((H, W, 3), np.float32)
-        px[:] = PAPER
-        px += (rng.random((H, W, 1), np.float32) - .5) * 5
-        r = ppi / 72 / 2                    # a dot is as wide as a row is tall
-        R = int(np.ceil(r + 1))
+        px = blank_paper(W, H, rng)
+        r = dot_radius(ppi, dot_dpi)        # a dot is as wide as a row is tall
+        R = pad_for(r)
         arr = np.array(self.dots, dtype=np.float64).reshape(-1, 3)
         for ink in (Y, M, C, K):
             sel = arr[arr[:, 2] == ink]
@@ -177,13 +213,7 @@ class Printer:
             ok = (ix >= 0) & (ix < W) & (iy >= 0) & (iy < H)
             cnt = np.zeros((H + 2 * R + 2, W + 2 * R + 2), np.float32)
             np.add.at(cnt, (iy[ok] + R, ix[ok] + R), 0.82 + 0.18 * rng.random(ok.sum()))
-            cov = np.zeros((H, W), np.float32)
-            for dy in range(-R, R + 1):
-                for dx in range(-R, R + 1):
-                    k = min(1.0, max(0.0, r + .5 - np.hypot(dx, dy)))
-                    if k > 0:
-                        cov += k * cnt[R - dy:R - dy + H, R - dx:R - dx + W]
-            px *= 1 - np.minimum(cov, 1.0)[..., None] * (1 - np.array(INKS[ink], np.float32) / 255)
+            lay_ink(px, spread(cnt, r), ink)
         Image.fromarray(px.clip(0, 255).astype(np.uint8)).save(path)
 
     def grid(self, path):
