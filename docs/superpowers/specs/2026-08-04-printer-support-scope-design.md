@@ -46,6 +46,10 @@ pages print gray. The test page uses the II's fonts and styles and may print odd
 printing over AppleTalk sends the II's stream through the board untouched, which the original
 may not fully understand.
 
+*Reversed by `2026-10-25-stylewriters-design.md` (`W-1103`): owners restore and use them, the
+later colour models take separate heads with cheap tanks, and TailTalk/InkTalk have done the
+driver work. The paragraph below is the August reasoning.*
+
 **StyleWriter family — out, and this one is a genuine loss.** Monroe Williams reverse
 engineered the wire format in 1996 and `lpstyl` documents it: the identity query, the buffer
 accounting, the RLE-with-differencing compression, the CMYK planes. Rev A drives it with no
