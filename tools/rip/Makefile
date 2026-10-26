@@ -14,6 +14,7 @@ INCS    := -I$(COMP)/ripjob/include \
            -I$(COMP)/imagewriter/include \
            -I$(COMP)/serial_out/include \
            -I$(COMP)/testpage/include \
+           -I$(COMP)/stylewriter/include \
            -I.
 # serial_out is IDF-bound except for serial_writer.c, which is pure by design
 # so the deadline loop can be tested here. Name it, don't wildcard the dir.
@@ -27,6 +28,7 @@ SRCS    := $(wildcard $(COMP)/ripjob/*.c) \
            $(wildcard $(COMP)/halftone/*.c) \
            $(wildcard $(COMP)/imagewriter/*.c) \
            $(wildcard $(COMP)/testpage/*.c) \
+           $(COMP)/stylewriter/sw_model.c $(COMP)/stylewriter/sw_code.c \
            $(COMP)/serial_out/serial_writer.c
 TESTSRC := $(wildcard test/test_*.c)
 TESTBIN := $(patsubst test/%.c,build/%,$(TESTSRC))
