@@ -30,6 +30,8 @@ port and says which). `--media letter|a4|legal` sets the sheet, `--drain BYTES_P
 how fast the printer eats its buffer (32768), `--log FILE` writes every byte both
 ways with milliseconds, `--no-png` skips the pictures.
 
+It ends on Ctrl-C, or when its TCP or serial peer goes away (`--listen` keeps waiting for the next one).
+
 Type on its stdin to break it: `paper`, `jam`, `ink`, `door`, `waste`, `cart`
 (missing; `cart black` or `cart colour` puts one in), `busy 20`, `silent` (as if
 unplugged), `overflow`, and `ok` to put everything right. A fault it does not mean

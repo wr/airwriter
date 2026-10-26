@@ -14,6 +14,7 @@ import io
 import math
 import os
 import pathlib
+import signal
 import socket
 import struct
 import subprocess
@@ -606,10 +607,17 @@ class Log(unittest.TestCase):
 
 
 class Transports(unittest.TestCase):
-    def start(self, *args):
+    def start(self, *args, stdin=subprocess.PIPE):
         p = subprocess.Popen([sys.executable, "-u", str(SWFAKE), "serve", *args],
-                             stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
-        self.addCleanup(lambda: (p.kill(), p.wait(), p.stdin.close(), p.stdout.close()))
+                             stdin=stdin, stdout=subprocess.PIPE, text=True)
+
+        def reap():
+            p.kill()
+            p.wait()
+            for f in (p.stdin, p.stdout):
+                if f:
+                    f.close()
+        self.addCleanup(reap)
         return p
 
     @staticmethod
@@ -672,6 +680,55 @@ class Transports(unittest.TestCase):
         self.addCleanup(c.close)
         c.sendall(b"?")
         self.assertEqual(c.recv(4), b"SW3\r")
+
+    # A swfake that outlives its job is a hung test run for whatever scripts it (the
+    # first version waited on a thread blocked reading stdin: 6 s and more after Ctrl-C).
+    def test_ctrl_c_ends_it_whatever_stdin_is(self):
+        tty_master, tty_slave = os.openpty()
+        self.addCleanup(os.close, tty_master)
+        self.addCleanup(os.close, tty_slave)
+        for what, stdin in (("an open pipe", subprocess.PIPE), ("a tty", tty_slave),
+                            ("/dev/null", subprocess.DEVNULL)):
+            with self.subTest(stdin=what):
+                p = self.start("ii", "--pty", stdin=stdin)
+                p.stdout.readline()
+                p.stdout.readline()                        # path, then banner: it is serving
+                t = time.monotonic()
+                p.send_signal(signal.SIGINT)
+                p.wait(timeout=2)
+                self.assertLess(time.monotonic() - t, 2)
+
+    def test_it_ends_when_its_tcp_peer_closes(self):
+        srv = socket.socket()
+        srv.bind(("127.0.0.1", 0))
+        srv.listen(1)
+        self.addCleanup(srv.close)
+        p = self.start("ii", "--tcp", f"127.0.0.1:{srv.getsockname()[1]}")
+        srv.settimeout(10)
+        conn, _ = srv.accept()
+        conn.settimeout(10)
+        conn.sendall(b"?")
+        self.assertEqual(conn.recv(3), b"SW\r")
+        conn.close()
+        p.wait(timeout=2)
+
+    def test_it_ends_when_the_serial_peer_goes_away(self):
+        master, slave = os.openpty()
+        self.addCleanup(os.close, slave)
+        p = self.start("ii", "--serial", os.ttyname(slave))
+        p.stdout.readline()
+        os.close(master)                                   # the adapter is unplugged
+        p.wait(timeout=2)                                  # not 97% of a core until killed
+
+    def test_a_listener_outlasts_its_peers(self):
+        p = self.start("ii", "--listen", "0")
+        port = int(p.stdout.readline().split()[-1])
+        for _ in range(2):
+            c = socket.create_connection(("127.0.0.1", port), timeout=10)
+            c.sendall(b"?")
+            self.assertEqual(c.recv(3), b"SW\r")
+            c.close()
+        self.assertIsNone(p.poll())
 
     def test_decode_a_stream_and_refuse_a_bad_one(self):
         planes = pattern_planes("k", 9, 300, 6)

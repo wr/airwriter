@@ -620,6 +620,7 @@ def open_serial(path):
 
 
 async def pump_fd(sw, fd):
+    """Serves a pty master or a serial device until it errors or reaches EOF."""
     loop = asyncio.get_running_loop()
     done = asyncio.Event()
 
@@ -630,10 +631,12 @@ async def pump_fd(sw, fd):
             return
         except OSError as e:
             print(f"fake StyleWriter: {e}", file=sys.stderr)
+            data = b""
+        if not data:                               # the other end went away: stop, don't spin
             loop.remove_reader(fd)
             done.set()
             return
-        reply = sw.feed(data) if data else b""
+        reply = sw.feed(data)
         if reply:
             os.write(fd, reply)
 
@@ -642,48 +645,75 @@ async def pump_fd(sw, fd):
 
 
 async def pump_stream(sw, reader, writer):
-    while True:
-        data = await reader.read(65536)
-        if not data:
-            break
-        reply = sw.feed(data)
-        if reply:
-            writer.write(reply)
-            await writer.drain()
-    writer.close()
+    try:
+        while True:
+            data = await reader.read(65536)
+            if not data:
+                break
+            reply = sw.feed(data)
+            if reply:
+                writer.write(reply)
+                await writer.drain()
+    except ConnectionError as e:
+        print(f"fake StyleWriter: {e}", file=sys.stderr)
+    finally:
+        writer.close()
 
 
-async def stdin_commands(sw):
+def stdin_commands(sw):
+    """Lines on stdin fault the printer. They are read from the event loop, not by a
+    thread blocked in readline: that thread would keep the process alive for as long as
+    stdin stayed open after Ctrl-C or a peer that closed."""
     loop = asyncio.get_running_loop()
-    while True:
-        line = await loop.run_in_executor(None, sys.stdin.readline)
-        if not line:
+    buf = bytearray()
+    try:
+        fd = sys.stdin.fileno()
+    except (AttributeError, ValueError, OSError):
+        return                                       # no stdin at all
+
+    def readable():
+        try:
+            data = os.read(fd, 4096)
+        except OSError:
+            data = b""
+        if not data:
+            loop.remove_reader(fd)
+            if buf:
+                sw.command(bytes(buf).decode(errors="replace"))
             return
-        sw.command(line)
+        buf.extend(data)
+        while (n := buf.find(b"\n")) >= 0:
+            sw.command(bytes(buf[:n]).decode(errors="replace"))
+            del buf[:n + 1]
+
+    try:
+        loop.add_reader(fd, readable)
+    except (OSError, ValueError, NotImplementedError):
+        pass                                         # stdin is not something the loop can watch
 
 
 async def serve(a):
     log = open(a.log, "a") if a.log else None
     sw = StyleWriter(a.model, cart=a.cart, media=a.media, drain=a.drain, out=a.out, log=log,
                      png=not a.no_png)
-    tasks = [asyncio.create_task(stdin_commands(sw))]
+    stdin_commands(sw)
     if a.pty:
         master, slave, path = open_pty()
         print(path, flush=True)
-        tasks.append(asyncio.create_task(pump_fd(sw, master)))
+        task = asyncio.create_task(pump_fd(sw, master))
     elif a.serial:
-        tasks.append(asyncio.create_task(pump_fd(sw, open_serial(a.serial))))
+        task = asyncio.create_task(pump_fd(sw, open_serial(a.serial)))
     elif a.tcp:
         host, _, port = a.tcp.rpartition(":")
         reader, writer = await asyncio.open_connection(host, int(port))
-        tasks.append(asyncio.create_task(pump_stream(sw, reader, writer)))
+        task = asyncio.create_task(pump_stream(sw, reader, writer))
     else:
         server = await asyncio.start_server(lambda r, w: pump_stream(sw, r, w), "127.0.0.1",
                                             int(a.listen))
         print(f"listening on {server.sockets[0].getsockname()[1]}", flush=True)
-        tasks.append(asyncio.create_task(server.serve_forever()))
+        task = asyncio.create_task(server.serve_forever())
     print(f"fake StyleWriter: {a.model}, {sw.cart} cartridge, buffer {sw.cap} bytes", flush=True)
-    await asyncio.wait(tasks[1:], return_when=asyncio.FIRST_COMPLETED)
+    await task
 
 
 def decode(a):
