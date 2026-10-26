@@ -21,7 +21,7 @@ being true, change or delete it in the same commit that made it false.
 | `docs/prior-art.md` | TashTalk, TailTalk, AirTalk, ImageScribbler. |
 | `docs/ORDER-NOTES.md` | PCBWay order notes for rev A. |
 | `docs/KICAD-TOOLING.md` | General KiCad 10 / konnect / pcbnew playbook. |
-| `docs/superpowers/specs/` | Printer scope, dot-panel cover (read its amendment block first), enclosure, status language, signed updates, laser printers. |
+| `docs/superpowers/specs/` | Printer scope, dot-panel cover (read its amendment block first), enclosure, status language, signed updates, laser printers, StyleWriters. |
 | `docs/review-*.md`, `docs/firmware-audit-*.md` | Dated reviews. Historical; their findings are applied. |
 
 ## Source of truth
@@ -286,13 +286,16 @@ colour ribbon in an LQ prints in colour; the reply's shape is taken from GSport'
 untested on a real LQ. The original ImageWriter sends no self-ID, so the board never sees a
 colour ribbon in it. The port printer's model (found, or picked in its detail) names it in IPP
 `printer-make-and-model` and Bonjour `ty` (W-1088); `/api/status` `model` still says Apple
-ImageWriter II. StyleWriters stay out. PostScript LaserWriters on AppleTalk are shared as
+ImageWriter II. StyleWriters are designed, not built (below). PostScript LaserWriters on AppleTalk are shared as
 printers of their own (above), benched on a Personal LaserWriter NTR only.
 
 Not built: Mini vMac (LToUDP, `W-1077`), consumers of the dither override, PWG raster, HP
 LaserJets over serial (`W-1083`, designed), AirPrint to an AppleTalk ImageWriter (cut from
 W-1088: `W-1090 AirPrint to ImageWriters with the LocalTalk Option Card`), colour on a colour
-LaserWriter (`W-1089 Colour LaserWriters: print in colour over AirPrint`; it prints in gray).
+LaserWriter (`W-1089 Colour LaserWriters: print in colour over AirPrint`; it prints in gray),
+StyleWriters (`W-1103 StyleWriters on the printer port`, designed: AirPrint to the seven lpstyl
+documents on J2, then vintage Macs through AirWriter as Apple's adapter; no StyleWriter on the
+bench, an owner confirms on paper; a StyleWriter likely needs R9 fitted on rev A).
 
 **Board 1:** ESP32-S3-WROOM-1-N8R2 (8 MB flash, 2 MB PSRAM). On the home Wi-Fi at
 10.0.1.115, mDNS `imagewriter-2434.local`. Console on USB-C as `/dev/cu.usbmodem*` (the number
