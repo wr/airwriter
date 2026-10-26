@@ -25,9 +25,10 @@ What it takes, and from where:
   icl8 and ICN# -8193 of the 2500 driver, the printer's Chooser icon, as a pixel grid
   (tools/icon/stylewriter.txt, which tools/icon/mkicons.py turns into the PNGs).
   The drivers hold no clut: the icon's colours are the Macintosh system palette (clut 8),
-  which this script writes out from its definition, and then maps to the nearest of the
-  icon palette's colours, since that palette must not grow (the ImageWriter's PNGs would
-  change). It lists every colour that had no exact match.
+  which this script writes out from its definition. Each colour becomes its character in
+  mkicons.py's STYLEWRITER_PALETTE, which has every colour the icon uses, so it keeps
+  Apple's colours; a colour that palette lacked would be mapped to the nearest of its
+  colours, and the run lists it.
 
 Before it writes anything: every GAMA is 256 bytes and never falls; every HTSC has the 16 x 16
 header and 256 values; the two HTSC 1 agree (and the 2500's, which it only reports).
@@ -163,7 +164,7 @@ def icon_grid(driver):
     spec = importlib.util.spec_from_file_location("mkicons", MKICONS)
     mkicons = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mkicons)
-    palette = mkicons.PALETTE
+    palette = mkicons.STYLEWRITER_PALETTE
     system = mac_system_palette()
     rows, mapped = [], {}
     for y in range(32):

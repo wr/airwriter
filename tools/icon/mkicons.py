@@ -9,9 +9,12 @@ laserwriter.txt is a LaserWriter II for a shared LaserWriter (W-1082), drawn
 for AirWriter in the same style and palette (the palette must not grow: the
 ImageWriter's PNGs would change), under this repository's licence.
 stylewriter.txt is the Color StyleWriter's Chooser icon, written by
-tools/stylewriter/mktables.py from Apple's driver and mapped to the nearest of this
-palette's colours, so, like the ImageWriter's, it is Apple's and is not covered by
-this repository's licences (LICENSE.md).
+tools/stylewriter/mktables.py from Apple's driver in Apple's own colours (the
+Macintosh system palette's), so, like the ImageWriter's, it is Apple's and is not
+covered by this repository's licences (LICENSE.md). Each icon has its own palette
+(the PNG's PLTE): the StyleWriter's is PALETTE and the colours it adds, and the
+shared PALETTE does not grow, which would change the ImageWriter's and the
+LaserWriter's PNGs.
 
 IPP Everywhere wants 48, 128 and 512 pixel icons. The grid is centred on a
 32 x 32 canvas; 128 and 512 are exact 4x and 16x enlargements of it, and 48 is
@@ -34,8 +37,19 @@ PALETTE = {
     "G": (0, 178, 0), "R": (217, 0, 0),
 }
 
+# The Color StyleWriter's icon: PALETTE, and the colours its icl8 takes from the Macintosh
+# system palette that PALETTE has no match for. The grays are the system palette's ramp,
+# named by their hex pair (W is white, e EE, x DD, c CC, b BB, a AA, h 88, g 77, f 55, F 44, E 22).
+STYLEWRITER_PALETTE = dict(PALETTE, **{
+    "W": (255, 255, 255), "e": (238, 238, 238), "x": (221, 221, 221), "c": (204, 204, 204),
+    "b": (187, 187, 187), "a": (170, 170, 170), "h": (136, 136, 136), "g": (119, 119, 119),
+    "f": (85, 85, 85), "F": (68, 68, 68), "E": (34, 34, 34),
+    "B": (0, 0, 221), "N": (0, 187, 0), "Q": (221, 0, 0), "Y": (255, 255, 0), "O": (255, 102, 0),
+})
+PALETTES = {"stylewriter.txt": STYLEWRITER_PALETTE}
 
-def canvas(name):
+
+def canvas(name, palette=PALETTE):
     rows = (HERE / name).read_text().split()
     h, w = len(rows), max(len(r) for r in rows)
     assert w <= CANVAS and h <= CANVAS
@@ -43,14 +57,14 @@ def canvas(name):
     grid = [["."] * CANVAS for _ in range(CANVAS)]
     for j, r in enumerate(rows):
         for i, c in enumerate(r):
-            assert c == "." or c in PALETTE, f"unknown pixel {c!r}"
+            assert c == "." or c in palette, f"unknown pixel {c!r}"
             grid[oy + j][ox + i] = c
     return grid
 
 
-def png(grid, size):
+def png(grid, size, palette=PALETTE):
     """Indexed PNG, index 0 transparent."""
-    keys = ["."] + sorted(PALETTE)
+    keys = ["."] + sorted(palette)
     index = {k: i for i, k in enumerate(keys)}
     scale = size // CANVAS if size % CANVAS == 0 else 1
     pad = (size - CANVAS * scale) // 2
@@ -67,7 +81,7 @@ def png(grid, size):
         c = tag + data
         return struct.pack(">I", len(data)) + c + struct.pack(">I", zlib.crc32(c))
 
-    plte = b"".join(bytes(PALETTE[k]) if k in PALETTE else b"\0\0\0" for k in keys)
+    plte = b"".join(bytes(palette[k]) if k in palette else b"\0\0\0" for k in keys)
     trns = b"\0" + b"\xff" * (len(keys) - 1)
     return (b"\x89PNG\r\n\x1a\n"
             + chunk(b"IHDR", struct.pack(">IIBBBBB", size, size, 8, 3, 0, 0, 0))
@@ -81,9 +95,10 @@ def main():
     OUT.mkdir(parents=True, exist_ok=True)
     for grid_file, prefix in (("imagewriter.txt", "icon"), ("laserwriter.txt", "laser"),
                               ("stylewriter.txt", "stylewriter")):
-        grid = canvas(grid_file)
+        palette = PALETTES.get(grid_file, PALETTE)
+        grid = canvas(grid_file, palette)
         for size in SIZES:
-            data = png(grid, size)
+            data = png(grid, size, palette)
             (OUT / f"{prefix}-{size}.png").write_bytes(data)
             print(f"{prefix}-{size}.png  {len(data)} bytes")
 

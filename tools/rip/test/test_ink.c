@@ -188,9 +188,10 @@ int main(void)
         }
     }
 
-    /* ink_screens_set_tone: a curve on R, G and B ahead of the split, not on
-     * the planes after it. The threshold screen prints a plane below 128, and
-     * the curve darkens 200 to 100 and 100 to 50 and nothing else. */
+    /* ink_screens_set_tone: a curve on R, G and B ahead of the split. The threshold
+     * screen prints a plane below 128, and the curve darkens 200 to 100 and 100 to 50
+     * and nothing else. (These cases print the same either side of the split; the
+     * block after them is the one that tells the two orders apart.) */
     {
         enum { W = 16 };
         uint8_t tone[256];
@@ -202,8 +203,7 @@ int main(void)
             { { 200, 200, 200 }, { [IW_BLACK] = 1 } },
             /* (255, 100, 255): magenta alone, its plane 100 */
             { { 255, 200, 255 }, { [IW_MAGENTA] = 1 } },
-            /* (100, 100, 50): black at 100 and yellow at 255 - (100 - 50) = 205, so
-             * black alone. Toned after the split, yellow's 155 would print too. */
+            /* (100, 100, 50): black at 100 and yellow at 255 - (100 - 50) = 205, so black alone */
             { { 200, 200, 100 }, { [IW_BLACK] = 1 } },
         };
         for (unsigned c = 0; c < sizeof cases / sizeof cases[0]; c++) {
@@ -230,6 +230,56 @@ int main(void)
             for (int i = 0; i < IW_INKS; i++) CHECK_EQ_INT(b[i][0] | b[i][1], 0);
             ink_screens_free(&s);
         }
+    }
+
+
+    /* Before the split, not after it. A curve that scales tells the two apart where the
+     * one above cannot: v / 2 on (100, 200, 200) makes (50, 100, 100) before the split,
+     * whose planes are K 100, C 205, M 255, Y 255, so only black is under 128. Split
+     * first, the planes are K 200, C 155, M 255, Y 255 and halving them gives K 100,
+     * C 77, M 127, Y 127: all four print. Each pixel is checked against ink_split run on
+     * the toned row, and the other order is worked out too to show it would have printed
+     * something else. */
+    {
+        enum { W = 16, N = 5 };
+        uint8_t tone[256];
+        for (int v = 0; v < 256; v++) tone[v] = (uint8_t)(v / 2);
+        static const uint8_t px[N][3] = {
+            { 100, 200, 200 }, { 255, 200, 100 }, { 240, 100, 255 }, { 200, 200, 200 }, { 90, 250, 60 },
+        };
+        int other_order = 0;
+        for (int n = 0; n < N; n++) {
+            uint8_t rgb[W * 3], toned[W * 3], untoned_planes[IW_INKS][W], toned_planes[IW_INKS][W];
+            for (int x = 0; x < W; x++)
+                for (int c = 0; c < 3; c++) {
+                    rgb[x * 3 + c] = px[n][c];
+                    toned[x * 3 + c] = tone[px[n][c]];
+                }
+            uint8_t *const up[IW_INKS] = { untoned_planes[0], untoned_planes[1], untoned_planes[2], untoned_planes[3] };
+            uint8_t *const tp[IW_INKS] = { toned_planes[0], toned_planes[1], toned_planes[2], toned_planes[3] };
+            ink_split(rgb, W, up);
+            ink_split(toned, W, tp);
+
+            uint8_t b[IW_INKS][W / 8];
+            uint8_t *const bits[IW_INKS] = { b[0], b[1], b[2], b[3] };
+            ink_screens_t s;
+            CHECK_EQ_INT(ink_screens_init(&s, HT_THRESHOLD, 0, W), 0);
+            ink_screens_set_tone(&s, tone);
+            ink_screens_row(&s, rgb, bits);
+            int differs = 0;
+            for (int i = 0; i < IW_INKS; i++) {
+                int before = tp[i][0] < 128 ? 0xFF : 0x00;
+                int after = tone[up[i][0]] < 128 ? 0xFF : 0x00;     /* the planes toned after the split */
+                CHECK_EQ_INT(b[i][0], before);
+                CHECK_EQ_INT(b[i][1], before);
+                differs |= before != after;
+            }
+            other_order += differs;
+            if (n == 0)                                  /* only black prints */
+                for (int i = 0; i < IW_INKS; i++) CHECK_EQ_INT(b[i][0], i == IW_BLACK ? 0xFF : 0x00);
+            ink_screens_free(&s);
+        }
+        CHECK_EQ_INT(other_order, N);                    /* every pixel here would have gone differently */
     }
 
     TEST_END;
