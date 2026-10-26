@@ -179,3 +179,17 @@ swcheck: build/rip build/lpstyl_stream
 .PHONY: interop
 interop: build/lwhost build/rip
 	@python3 ../ethertalk/test_interop.py
+
+# The firmware's StyleWriter session, page stage and rip on the host (W-1103): swhost prints a
+# page to a serial device, which is swfake.py's pty here and a real printer's adapter for an
+# owner (swprint, tools/stylewriter/README.md). Reads PNG pages through zlib.
+build/swhost: swhost.c png_read.c $(SRCS) | build
+	$(CC) $(CFLAGS) $(INCS) -o $@ $^ -lm -lz
+
+# The owner's name for it (tools/stylewriter/README.md); the program names itself by it.
+build/swprint: build/swhost
+	ln -sf swhost $@
+
+.PHONY: swinterop
+swinterop: build/swhost build/rip
+	@python3.14 ../stylewriter/test_swinterop.py

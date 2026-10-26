@@ -15,6 +15,7 @@
 #include "ps_testpage.h"
 #include "lw_query.h"
 #include "sw_page.h"
+#include "sw_rip.h"
 
 typedef struct {
     FILE    *stream;
@@ -66,17 +67,6 @@ static void sw_out(void *ctx, const uint8_t *f, size_t n)
         break;
     }
     if (bad) h->write_failed = 1;
-}
-
-static int sw_model_from_arg(const char *name, sw_model_t *m)
-{
-    static const struct { const char *name; sw_model_t m; } k[] = {
-        { "original", SW_ORIGINAL }, { "ii", SW_II }, { "1200", SW_1200 }, { "1500", SW_C1500 },
-        { "2200", SW_C2200 }, { "2400", SW_C2400 }, { "2500", SW_C2500 },
-    };
-    for (size_t i = 0; i < sizeof k / sizeof k[0]; i++)
-        if (!strcmp(name, k[i].name)) { *m = k[i].m; return 0; }
-    return -1;
 }
 
 /* A LaserWriter's page at 300 dpi on the paper named (W-1082): as the board's
@@ -372,7 +362,6 @@ int main(int argc, char **argv)
     ps_t *ps = NULL;
     sw_page_t *swp = NULL;
     sw_model_t swm = SW_NONE;
-    const uint8_t *tone = NULL;
     rip_stage_t stage;
     memset(&stage, 0, sizeof stage);
     if (laser) {
@@ -386,7 +375,7 @@ int main(int argc, char **argv)
         ps_job_begin(ps);
     }
     if (stylewriter) {
-        if (!model_arg || sw_model_from_arg(model_arg, &swm) ||
+        if (!model_arg || sw_rip_model(model_arg, &swm) ||
             (strcmp(cart_arg, "black") && strcmp(cart_arg, "colour")) ||
             (strcmp(tone_arg, "apple") && strcmp(tone_arg, "none"))) {
             usage();
@@ -405,9 +394,7 @@ int main(int argc, char **argv)
         if (out_sw && !h.sw) { perror(out_sw); fclose(f); return 1; }
         sw_page_cfg_t pc = { .model = swm, .colour_cart = colour_cart, .out = sw_out, .ctx = &h };
         if (!(swp = sw_page_new(&pc))) { fclose(f); return 1; }
-        sw_page_stage(swp, &stage);
         colour = colour_cart;
-        if (!strcmp(tone_arg, "apple")) tone = sw_tone(swm, algo);
     }
 
     ripjob_cfg_t cfg = {
@@ -417,9 +404,8 @@ int main(int argc, char **argv)
         .gain     = gain,
         .colour   = colour,
         .top_margin = top,
-        .caps     = laser ? &caps : stylewriter ? sw_caps(swm) : NULL,
-        .stage    = laser || stylewriter ? &stage : NULL,
-        .tone     = tone,
+        .caps     = laser ? &caps : NULL,
+        .stage    = laser ? &stage : NULL,
         .page     = out_preview || out_pbm ? on_page : NULL,
         .page_ctx = &h,
         .row      = out_preview || out_pbm ? on_row : NULL,
@@ -427,6 +413,7 @@ int main(int argc, char **argv)
         .ink_row  = out_preview || (stylewriter && out_pbm) ? on_ink_row : NULL,
         .log      = say,
     };
+    if (stylewriter) sw_rip_cfg(&cfg, &stage, swp, swm, algo, colour, !strcmp(tone_arg, "apple"));
 
     ripjob_stats_t st;
     memset(&st, 0, sizeof st);
