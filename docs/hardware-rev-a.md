@@ -108,7 +108,7 @@ pad, the BOOT pads and the back-face artwork. The rest:
 ## Rev B candidates
 
 Tracked as `W-1091 Rev B: the main board's next revision` in Linear, which is the copy kept
-current; this is the list as filed on 2026-10-24. Most come from review #4
+current; this list started as the one filed on 2026-10-24. Most come from review #4
 (`docs/review-2026-09-01-pre-order-4.md`, "Rev-B list"), which has the reasoning.
 
 - 10 k pulldown on `LT_DE` (across U6 pins 3–5; it floats with the PIC absent or in reset).
@@ -136,3 +136,12 @@ current; this is the list as filed on 2026-10-24. Most come from review #4
   RS-232 printer (a LaserJet, the original ImageWriter) is wired both ways.
 - Through-hole dome power LED: `W-1043 Rev B: through-hole dome LED for the power indicator`.
 - Scope HSKo first: if its swing is modest, a divider and clamp into a GPIO could delete U3.
+  Whatever replaces U3 has to pass the 1 MHz clock below.
+- U3 to an SP3232EU (SP3232EUCN-L, LCSC C2997661): same SOIC-16 and pinout, so HSKi can carry
+  the ~1 MHz clock a QuickDraw LaserWriter drives in its fast mode (`W-1102 QuickDraw
+  LaserWriters on the printer port (Personal LaserWriter LS/300, Select 300)`). The fitted
+  SP3232EEN's receiver skew is 200 ns typical and 1 µs maximum against a 500 ns half-cycle;
+  the EU's is 50 ns. About $0.60 a board more at prototype quantities ($1.01 against $0.36 at
+  LCSC, 2026-10-26, 11,029 in stock); LCSC carries only the 0–70 °C grade in SOIC-16, and one
+  of its listings for the part says not recommended for new designs, so check MaxLinear's
+  status before ordering. Board 1 can take the swap by hand to test it first.
