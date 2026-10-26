@@ -43,7 +43,7 @@ int main(void)
     // A LaserWriter's job: the ImageWriter is never asked; the target's
     // geometry, stage and screen; no colour, no top margin.
     static const printer_caps_t caps = { .res_x = 300, .res_y = 300, .max_dots = 2550 };
-    static const rip_stage_t stage = { stage_begin, stage_row, stage_end, NULL };
+    static const rip_stage_t stage = { stage_begin, stage_row, stage_end, NULL, NULL };
     job_pipe_target_t t = { .caps = &caps, .stage = &stage, .dither = HT_BLUENOISE, .gain = 0 };
     g_asked = 0;
     ripjob_cfg_t lw = job_pipe_rip_cfg(base, ask_colour, NULL, &t);

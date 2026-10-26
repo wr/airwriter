@@ -1,24 +1,41 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""Write a Letter page at 300 dpi as 8-bit gray URF, for the LaserWriter's
-rip (W-1082). The only iOS capture is at 144 dpi; these stand in for an
-iPhone page at RS300 until one is captured.
+"""Write a page at 300 dpi as 8-bit gray URF, for the LaserWriter's rip
+(W-1082). The only iOS capture is at 144 dpi; these stand in for an iPhone
+page at RS300 until one is captured. With --dpi 360 they stand in for a
+StyleWriter's (W-1103; swcheck.py), and `colour` is the same in 24-bit sRGB.
 
     make_300dpi_fixture.py text OUT.urf    rows of glyph-like strokes, 1 in margins
     make_300dpi_fixture.py photo OUT.urf   full-bleed continuous tone
+    make_300dpi_fixture.py colour OUT.urf  sRGB: bars, ramps and a gradient, full bleed
+        [--dpi N]                          the page's resolution (default 300)
+        [--paper letter|a4|legal]          the sheet (default letter)
+        [--rows N]                         only the first N rows of it, for a quick page
 
-Deterministic: the same bytes every run. Not committed; pscheck.py makes them.
+Deterministic: the same bytes every run. Not committed; pscheck.py and swcheck.py
+make them. The defaults are the 300 dpi Letter pages pscheck.py has always used.
 """
-import math, random, struct, sys
+import argparse, math, random, struct, sys
 
+# The sheet in inches; W and H are its pixels at --dpi (A4 is 2976 x 4209 at 360 dpi,
+# the size swfake.py gives it).
+PAPERS = {"letter": (8.5, 11.0), "a4": (210 / 25.4, 297 / 25.4), "legal": (8.5, 14.0)}
 W, H, RES = 2550, 3300, 300          # 8.5 x 11 in
 
 
-def header():
+def setup(dpi, paper, rows):
+    global W, H, RES
+    w_in, h_in = PAPERS[paper]
+    W, H, RES = round(w_in * dpi), round(h_in * dpi), dpi
+    if rows:
+        H = min(H, rows)
+
+
+def header(bits=8, space=0):
     out = bytearray(b"UNIRAST\0" + struct.pack(">I", 1))
     hdr = bytearray(32)
-    hdr[0] = 8                       # bits per pixel
-    hdr[1] = 0                       # sGray
+    hdr[0] = bits                    # bits per pixel
+    hdr[1] = space                   # colorspace: 0 sGray, 1 sRGB
     struct.pack_into(">I", hdr, 12, W)
     struct.pack_into(">I", hdr, 16, H)
     struct.pack_into(">I", hdr, 20, RES)
@@ -115,12 +132,108 @@ def photo_page():
     return rows
 
 
+BARS = [(255, 255, 255), (255, 255, 0), (255, 0, 255), (0, 255, 255),
+        (255, 0, 0), (0, 255, 0), (0, 0, 255), (0, 0, 0)]
+
+
+def colour_page():
+    """24-bit sRGB, full bleed. A third of the page is the eight bars of white, the
+    three inks, red, green, blue and black; a third a gray ramp over a red-to-blue
+    one, each across the width; the last a smooth gradient in all three channels,
+    stepped every 8 pixels across so a row is runs, not noise. Returns H arrays of
+    (W, 3) uint8. The only page that needs numpy (the gray ones run on any python3)."""
+    import numpy as np
+    xs = np.arange(W)
+    rows = []
+    third = H // 3
+    bar = np.array([BARS[x * len(BARS) // W] for x in range(W)], np.uint8)
+    ramp = np.clip(255 - xs * 255 // (W - 1), 0, 255).astype(np.uint8)
+    gray = np.stack([ramp, ramp, ramp], axis=1)
+    redblue = np.stack([ramp, np.zeros(W, np.uint8), 255 - ramp], axis=1)
+    step = (xs // 8) * 8
+    for y in range(H):
+        if y < third:
+            rows.append(bar)
+        elif y < 2 * third:
+            rows.append(gray if y < third + third // 2 else redblue)
+        else:
+            t = (y - 2 * third) / max(1, H - 2 * third)
+            r = (step * 255 // (W - 1)).astype(np.int64)
+            g = np.full(W, int(255 * t), np.int64)
+            b = 255 - r // 2 - int(80 * t)
+            rows.append(np.stack([r, g, np.clip(b, 0, 255)], axis=1).astype(np.uint8))
+    return rows
+
+
+def encode_rgb(px):
+    """One RGB row's runs: repeats for runs of a pixel, literals for the rest."""
+    import numpy as np
+    n = len(px)
+    same = np.all(px[1:] == px[:-1], axis=1) if n > 1 else np.zeros(0, bool)
+    bounds = np.flatnonzero(~same) + 1                  # where a new pixel value starts
+    starts = [0, *bounds.tolist()]
+    ends = [*bounds.tolist(), n]
+    out = bytearray()
+    lit = []                                            # pixel indices of a literal in progress
+
+    def flush_lit():
+        i = 0
+        while i < len(lit):
+            k = min(128, len(lit) - i)
+            if k == 1:
+                out.append(0)
+            else:
+                out.append(257 - k)
+            for x in lit[i:i + k]:
+                out.extend(px[x].tobytes())
+            i += k
+        lit.clear()
+
+    for a, b in zip(starts, ends):
+        if b - a >= 3:
+            flush_lit()
+            while a < b:
+                k = min(128, b - a)
+                out.append(k - 1)
+                out.extend(px[a].tobytes())
+                a += k
+        else:
+            lit.extend(range(a, b))
+    flush_lit()
+    return out
+
+
+def write_rgb(rows, path):
+    out = header(24, 1)
+    y = 0
+    while y < H:
+        n = 1
+        key = rows[y].tobytes()
+        while y + n < H and n < 256 and rows[y + n].tobytes() == key:
+            n += 1
+        out.append(n - 1)
+        out += encode_rgb(rows[y])
+        y += n
+    open(path, "wb").write(bytes(out))
+    return len(out)
+
+
 def main():
-    if len(sys.argv) != 3 or sys.argv[1] not in ("text", "photo"):
-        sys.exit("usage: make_300dpi_fixture.py text|photo OUT.urf")
-    rows = text_page() if sys.argv[1] == "text" else photo_page()
-    n = write(rows, sys.argv[2])
-    print(f"wrote {sys.argv[2]}: {sys.argv[1]}, {W}x{H} @ {RES}dpi, {n} bytes")
+    ap = argparse.ArgumentParser(description="a synthetic URF page for the rip's tests")
+    ap.add_argument("kind", choices=("text", "photo", "colour"))
+    ap.add_argument("out")
+    ap.add_argument("--dpi", type=int, default=300)
+    ap.add_argument("--paper", choices=sorted(PAPERS), default="letter")
+    ap.add_argument("--rows", type=int, default=0)
+    a = ap.parse_args()
+    setup(a.dpi, a.paper, a.rows)
+    if a.kind == "colour":
+        n = write_rgb(colour_page(), a.out)
+        fmt = "sRGB"
+    else:
+        n = write(text_page() if a.kind == "text" else photo_page(), a.out)
+        fmt = "gray"
+    print(f"wrote {a.out}: {a.kind}, {W}x{H} {fmt} @ {RES}dpi, {n} bytes")
 
 
 if __name__ == "__main__":

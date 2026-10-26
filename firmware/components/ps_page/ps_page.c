@@ -177,4 +177,5 @@ void ps_stage(ps_t *ps, rip_stage_t *st)
     st->row        = st_row;
     st->page_end   = st_end;
     st->ctx        = ps;
+    st->ink_row    = NULL;
 }

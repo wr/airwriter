@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "sw_model.h"
+#include "apple_tables.h"
 #include <string.h>
 
 // Per model, from the design's table. The original takes the 1200 family's
@@ -124,4 +125,66 @@ uint32_t sw_printable_w(sw_model_t m, uint32_t paper_w)
     uint32_t sides = (uint32_t)s->margin_l + s->margin_r;
     uint32_t room = paper_w > sides ? paper_w - sides : 0;
     return room < s->dots_across ? room : s->dots_across;
+}
+
+// The sheets, at 360 dpi: the page's width the phone sends (Letter and Legal are the
+// same), where the engine's printable area begins and how wide it is on that paper
+// (sw_printable_w), and the margins in 1/100 mm rounded outward. The right margin is
+// whatever the paper leaves past the printable width. Per family: the original, II,
+// 1200 and 1500 print 2880 dots across with 72/108, 72, 114 dots of margin on Letter;
+// the 2200, 2400 and 2500 print 2916 on Letter (their 2919 is wider than the paper
+// less both side margins) with 72, 45 and 99. test_sw_model.c holds these to sw_spec.
+#define LETTER "na_letter_8.5x11in", 21590, 27940
+#define A4     "iso_a4_210x297mm",   21000, 29700
+#define LEGAL  "na_legal_8.5x14in",  21590, 35560
+static const printer_media_t k_media_1200[] = {
+    { LETTER, 508, 762, 508, 805, 3060, 72, 2880 },
+    { A4,     508, 508, 508, 805, 2976, 72, 2832 },
+    { LEGAL,  508, 762, 508, 805, 3060, 72, 2880 },
+};
+static const printer_media_t k_media_cs[] = {
+    { LETTER, 508, 508, 318, 699, 3060, 72, 2916 },
+    { A4,     508, 508, 318, 699, 2976, 72, 2832 },
+    { LEGAL,  508, 508, 318, 699, 3060, 72, 2916 },
+};
+#undef LETTER
+#undef A4
+#undef LEGAL
+
+// The scalar media fields repeat the first sheet (Letter), for what reads them.
+// `ppm` is a nominal figure: it is only advertised.
+#define SW_CAPS(MODEL, DOTS, MEDIA, LM, LR, LT, LB) { \
+    .make_model  = "Apple " MODEL, \
+    .device_id   = "MFG:Apple;MDL:" MODEL ";CMD:URF;", \
+    .urf_rs      = "RS360", \
+    .res_x = 360, .res_y = 360, \
+    .media       = "na_letter_8.5x11in", .media_x = 21590, .media_y = 27940, \
+    .margin_l = LM, .margin_r = LR, .margin_t = LT, .margin_b = LB, \
+    .ppm         = 2, \
+    .rip_dpi_x = 360, .rip_dpi_y = 360, \
+    .max_dots    = DOTS, .crop_margin = 0, \
+    .media_list  = MEDIA, .n_media = 3, }
+
+static const printer_caps_t s_caps[SW_MODELS] = {
+    [SW_ORIGINAL] = SW_CAPS("StyleWriter",            2880, k_media_1200, 508, 762, 508, 805),
+    [SW_II]       = SW_CAPS("StyleWriter II",         2880, k_media_1200, 508, 762, 508, 805),
+    [SW_1200]     = SW_CAPS("StyleWriter 1200",       2880, k_media_1200, 508, 762, 508, 805),
+    [SW_C1500]    = SW_CAPS("Color StyleWriter 1500", 2880, k_media_1200, 508, 762, 508, 805),
+    [SW_C2200]    = SW_CAPS("Color StyleWriter 2200", 2919, k_media_cs,   508, 508, 318, 699),
+    [SW_C2400]    = SW_CAPS("Color StyleWriter 2400", 2919, k_media_cs,   508, 508, 318, 699),
+    [SW_C2500]    = SW_CAPS("Color StyleWriter 2500", 2919, k_media_cs,   508, 508, 318, 699),
+};
+
+const printer_caps_t *sw_caps(sw_model_t m)
+{
+    if ((int)m <= SW_NONE || (int)m >= SW_MODELS) return NULL;
+    return &s_caps[m];
+}
+
+const uint8_t *sw_tone(sw_model_t m, ht_algo_t algo)
+{
+    if ((int)m <= SW_NONE || (int)m >= SW_MODELS) return NULL;
+    int cs = m == SW_C2200 || m == SW_C2400 || m == SW_C2500;
+    int diffusing = algo == HT_ATKINSON || algo == HT_FLOYD;
+    return cs ? apple_tone_cs[diffusing] : apple_tone_sw[diffusing];
 }

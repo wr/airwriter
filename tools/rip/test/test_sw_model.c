@@ -6,6 +6,7 @@
 // Constraints, not read back from the table.
 #include "test_util.h"
 #include "sw_model.h"
+#include "apple_tables.h"
 
 static sw_model_t id(const char *s, size_t n, int *cs)
 {
@@ -180,8 +181,114 @@ static void test_specs(void)
     CHECK(sw_spec((sw_model_t)99) == NULL);
 }
 
+// R11: the family by model, the curve by screen (apple_tables.h says why).
+static void test_tone(void)
+{
+    static const ht_algo_t ordered[] = { HT_APPLE, HT_BAYER, HT_BLUENOISE, HT_THRESHOLD };
+    static const ht_algo_t diffused[] = { HT_ATKINSON, HT_FLOYD };
+    for (int m = SW_ORIGINAL; m < SW_MODELS; m++) {
+        int cs = m == SW_C2200 || m == SW_C2400 || m == SW_C2500;
+        const uint8_t (*t)[256] = cs ? apple_tone_cs : apple_tone_sw;
+        for (size_t i = 0; i < sizeof ordered / sizeof ordered[0]; i++)
+            CHECK(sw_tone((sw_model_t)m, ordered[i]) == t[0]);
+        for (size_t i = 0; i < sizeof diffused / sizeof diffused[0]; i++)
+            CHECK(sw_tone((sw_model_t)m, diffused[i]) == t[1]);
+    }
+    CHECK(sw_tone(SW_NONE, HT_APPLE) == NULL);
+    CHECK(sw_tone(SW_MODELS, HT_ATKINSON) == NULL);
+    CHECK(sw_tone((sw_model_t)99, HT_APPLE) == NULL);
+    // The two families' curves are not one table.
+    CHECK(sw_tone(SW_II, HT_APPLE) != sw_tone(SW_C2200, HT_APPLE));
+    CHECK(sw_tone(SW_II, HT_APPLE) != sw_tone(SW_II, HT_ATKINSON));
+}
+
+// 1/100 mm from dots at 360 dpi, rounded outward (up), written out here.
+static int32_t outward(int dots) { return (int32_t)(((int64_t)dots * 2540 + 359) / 360); }
+
+static void test_caps(void)
+{
+    CHECK(sw_caps(SW_NONE) == NULL);
+    CHECK(sw_caps(SW_MODELS) == NULL);
+    CHECK(sw_caps((sw_model_t)99) == NULL);
+
+    // The numbers the design and the plan give, written out.
+    const printer_caps_t *ii = sw_caps(SW_II);
+    CHECK_EQ_INT(ii->n_media, 3);
+    CHECK(strcmp(ii->media_list[0].media, "na_letter_8.5x11in") == 0);
+    CHECK_EQ_INT(ii->media_list[0].margin_l, 508);
+    CHECK_EQ_INT(ii->media_list[0].margin_r, 762);
+    CHECK_EQ_INT(ii->media_list[0].margin_t, 508);
+    CHECK_EQ_INT(ii->media_list[0].margin_b, 805);
+    CHECK_EQ_INT(ii->media_list[0].rip_left, 72);
+    CHECK_EQ_INT(ii->media_list[0].rip_w, 2880);
+    const printer_caps_t *c25 = sw_caps(SW_C2500);
+    CHECK_EQ_INT(c25->media_list[0].margin_r, 508);
+    CHECK_EQ_INT(c25->media_list[0].margin_t, 318);
+    CHECK_EQ_INT(c25->media_list[0].margin_b, 699);
+    CHECK_EQ_INT(c25->media_list[0].rip_w, 2916);
+    CHECK_EQ_INT(ii->media_list[1].rip_w, 2832);
+    CHECK_EQ_INT(c25->media_list[1].rip_w, 2832);
+
+    for (int m = SW_ORIGINAL; m < SW_MODELS; m++) {
+        const printer_caps_t *c = sw_caps((sw_model_t)m);
+        const sw_spec_t *s = sw_spec((sw_model_t)m);
+        CHECK(c != NULL && s != NULL);
+        if (!c || !s) continue;
+        CHECK(sw_caps((sw_model_t)m) == c);                 // one static table
+        CHECK(strcmp(c->make_model, s->make_model) == 0);
+        char dev[96];
+        snprintf(dev, sizeof dev, "MFG:Apple;MDL:%s;CMD:URF;", s->make_model + strlen("Apple "));
+        CHECK(strcmp(c->device_id, dev) == 0);
+        CHECK(strcmp(c->urf_rs, "RS360") == 0);
+        CHECK_EQ_INT(c->res_x, 360);
+        CHECK_EQ_INT(c->res_y, 360);
+        CHECK_EQ_INT(c->rip_dpi_x, 360);
+        CHECK_EQ_INT(c->rip_dpi_y, 360);
+        CHECK_EQ_INT(c->max_dots, s->dots_across);
+        CHECK_EQ_INT(c->crop_margin, 0);
+        CHECK(c->ppm > 0);
+        CHECK_EQ_INT(c->n_media, 3);
+        CHECK(c->media_list != NULL);
+        if (!c->media_list) continue;
+
+        static const struct { const char *kw; int32_t x, y; uint16_t w; } k[3] = {
+            { "na_letter_8.5x11in", 21590, 27940, 3060 },
+            { "iso_a4_210x297mm",   21000, 29700, 2976 },
+            { "na_legal_8.5x14in",  21590, 35560, 3060 },
+        };
+        for (int i = 0; i < 3; i++) {
+            const printer_media_t *md = &c->media_list[i];
+            CHECK(strcmp(md->media, k[i].kw) == 0);
+            CHECK_EQ_INT(md->x, k[i].x);
+            CHECK_EQ_INT(md->y, k[i].y);
+            CHECK_EQ_INT(md->page_w, k[i].w);
+            // The engine's printable width on that paper, kept from its left margin.
+            CHECK_EQ_INT(md->rip_left, s->margin_l);
+            CHECK_EQ_INT(md->rip_w, sw_printable_w((sw_model_t)m, k[i].w));
+            CHECK_EQ_INT(md->margin_l, outward(s->margin_l));
+            CHECK_EQ_INT(md->margin_r, outward(k[i].w - s->margin_l - md->rip_w));
+            CHECK_EQ_INT(md->margin_t, outward(s->margin_t));
+            CHECK_EQ_INT(md->margin_b, outward(s->margin_b));
+            // Rounded outward: never less than the dots.
+            CHECK(md->margin_l * 360 >= s->margin_l * 2540);
+            CHECK(md->margin_t * 360 >= s->margin_t * 2540);
+            CHECK(md->margin_b * 360 >= s->margin_b * 2540);
+        }
+        // The scalar fields are the first (default) sheet's, for what reads them.
+        CHECK(strcmp(c->media, c->media_list[0].media) == 0);
+        CHECK_EQ_INT(c->media_x, c->media_list[0].x);
+        CHECK_EQ_INT(c->media_y, c->media_list[0].y);
+        CHECK_EQ_INT(c->margin_l, c->media_list[0].margin_l);
+        CHECK_EQ_INT(c->margin_r, c->media_list[0].margin_r);
+        CHECK_EQ_INT(c->margin_t, c->media_list[0].margin_t);
+        CHECK_EQ_INT(c->margin_b, c->media_list[0].margin_b);
+    }
+}
+
 int main(void)
 {
+    test_tone();
+    test_caps();
     test_id();
     test_p();
     test_cart();

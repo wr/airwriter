@@ -28,7 +28,7 @@ SRCS    := $(wildcard $(COMP)/ripjob/*.c) \
            $(wildcard $(COMP)/halftone/*.c) \
            $(wildcard $(COMP)/imagewriter/*.c) \
            $(wildcard $(COMP)/testpage/*.c) \
-           $(COMP)/stylewriter/sw_model.c $(COMP)/stylewriter/sw_code.c \
+           $(COMP)/stylewriter/sw_model.c $(COMP)/stylewriter/sw_code.c $(COMP)/stylewriter/sw_page.c \
            $(COMP)/serial_out/serial_writer.c
 TESTSRC := $(wildcard test/test_*.c)
 TESTBIN := $(patsubst test/%.c,build/%,$(TESTSRC))
@@ -108,11 +108,20 @@ build/%: test/%.c $(SRCS) | build
 build/printers_core.o: $(COMP)/printers/printers_core.c | build
 	$(CC) $(CFLAGS) $(INCS) -I$(COMP)/printers/include -I$(LT)/include -c -o $@ $<
 
-test: $(TESTBIN) build/printers_core.o
+# The StyleWriter's model table, run coder and page stage are held to the same rule as
+# the printer list's core (W-1103): no writable statics; the page stage's band and block
+# come from the board's PSRAM allocator (bigmem.h).
+SW_OBJS := build/sw_model.o build/sw_code.o build/sw_page.o
+build/sw_%.o: $(COMP)/stylewriter/sw_%.c | build
+	$(CC) $(CFLAGS) $(INCS) -c -o $@ $<
+
+test: $(TESTBIN) build/printers_core.o $(SW_OBJS)
 	@fail=0; for t in $(TESTBIN); do ./$$t || fail=1; done; \
-	if nm build/printers_core.o | grep -E ' [bBdD] ' | grep -v ' ltmp'; then \
-	  echo "FAIL printers_core.c: writable statics (above)"; fail=1; \
-	else echo "ok  printers_core.c: no writable statics"; fi; exit $$fail
+	for o in printers_core $(basename $(notdir $(SW_OBJS))); do \
+	  if nm build/$$o.o | grep -E ' [bBdD] ' | grep -v ' ltmp'; then \
+	    echo "FAIL $$o: writable statics (above)"; fail=1; \
+	  else echo "ok  $$o: no writable statics"; fi; \
+	done; exit $$fail
 
 clean:
 	rm -rf build
@@ -146,6 +155,17 @@ regress: build/rip
 .PHONY: pscheck
 pscheck: build/rip build/test_lw
 	@python3 test/pscheck.py
+
+# The StyleWriter's page stage held to swfake.py's reading of its stream and to a
+# second coder, lpstyl's (W-1103). Needs python3.14 with numpy (tools/stylewriter).
+LPSTYL := test/lpstyl_encode.c test/lpstyl_stream.c
+
+build/lpstyl_stream: $(LPSTYL) $(COMP)/stylewriter/sw_model.c $(COMP)/halftone/apple_tables.c | build
+	$(CC) $(CFLAGS) $(INCS) -Itest -o $@ $^
+
+.PHONY: swcheck
+swcheck: build/rip build/lpstyl_stream
+	@python3.14 test/swcheck.py
 
 # The PAP client, built for the host, printing to etpeer.py's fake
 # LaserWriter over a pipe (W-1082). Ghostscript renders what it gets when

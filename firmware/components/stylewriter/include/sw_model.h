@@ -11,6 +11,8 @@
 #pragma once
 #include <stdint.h>
 #include <stddef.h>
+#include "printer_caps.h"
+#include "halftone.h"
 
 typedef enum { SW_NONE, SW_ORIGINAL, SW_II, SW_1200, SW_C1500, SW_C2200, SW_C2400, SW_C2500, SW_MODELS } sw_model_t;
 
@@ -56,3 +58,16 @@ uint32_t sw_block_cap(sw_model_t m, int planes);
 // The widest row to print on paper `paper_w` dots wide: min(dots_across,
 // paper_w less both side margins); 0 for SW_NONE or a paper too narrow.
 uint32_t sw_printable_w(sw_model_t m, uint32_t paper_w);
+
+// What AirPrint is told about the model, and how the rip lays a page out for it
+// (printer_caps.h): 360 x 360 dpi, URF RS360, Letter, A4 and Legal with the
+// engine's margins, each sheet's kept width from the printable area's left edge.
+// One static table per model; NULL for SW_NONE and anything out of range.
+const printer_caps_t *sw_caps(sw_model_t m);
+
+// Apple's tone curve for a job (apple_tables.h): the Color StyleWriter 2200, 2400
+// and 2500 take the 2200 driver's, the other four the 1500 driver's; GAMA 1 goes
+// with the ordered and mask screens (Apple's, Bayer, blue noise, threshold) and
+// GAMA 2 with error diffusion (Atkinson, Floyd-Steinberg). NULL for SW_NONE. The
+// table is static; ripjob_cfg_t.tone keeps it by pointer.
+const uint8_t *sw_tone(sw_model_t m, ht_algo_t algo);

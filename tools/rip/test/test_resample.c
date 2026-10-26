@@ -53,8 +53,49 @@ static void check_three_vs_singles(const uint8_t *src, uint32_t w, uint32_t h,
     }
 }
 
+/* Equal widths take a copy in place of the per-pixel box average; the rows that
+ * come out are the same ones, down, up and 1:1, for one channel and three. The
+ * hashes were taken from the box-average path before the copy was added. */
+static uint32_t g_ch = 1;
+static void collect_ch(void *ctx, const uint8_t *row, uint32_t w)
+{
+    (void)ctx;
+    if (gotn_n < MAXROWS) memcpy(gotn[gotn_n], row, (size_t)w * g_ch);
+    gotn_n++;
+}
+
+static uint32_t fnv_rows(uint32_t w, uint32_t h, uint32_t dh, uint32_t ch, uint32_t seed)
+{
+    static uint8_t src[40 * 3];
+    uint32_t hash = 2166136261u;
+    rs_t r;
+    gotn_n = 0;
+    g_ch = ch;
+    if (rs_init_n(&r, w, h, w, dh, ch, collect_ch, NULL)) return 0;
+    uint32_t v = seed;
+    for (uint32_t y = 0; y < h; y++) {
+        for (uint32_t i = 0; i < w * ch; i++) { v = v * 1103515245u + 12345u; src[i] = (uint8_t)(v >> 16); }
+        rs_push(&r, src);
+    }
+    rs_free(&r);
+    for (uint32_t y = 0; y < gotn_n && y < MAXROWS; y++)
+        for (uint32_t i = 0; i < w * ch; i++) hash = (hash ^ gotn[y][i]) * 16777619u;
+    return hash ^ gotn_n;
+}
+
 int main(void)
 {
+    /* -- equal widths: the copy path gives the box average's rows -- */
+    {
+        static const struct { uint32_t w, h, dh, ch, seed, want; } k[] = {
+            { 16, 12, 12, 1, 1, 0xe6a8526d }, { 16, 12, 6, 1, 2, 0x696988d7 }, { 16, 12, 12, 3, 3, 0x74598e8e },
+            { 13, 12, 6, 3, 4, 0x0895e7b5 },  { 13, 6, 12, 3, 5, 0x9a88cc41 }, { 1, 5, 3, 1, 6, 0xb2c1c033 },
+            { 16, 7, 5, 1, 7, 0x25cc6084 },   { 5, 1, 1, 3, 8, 0xb6bdeac2 },   { 16, 8, 3, 3, 9, 0xaba9738a },
+        };
+        for (size_t i = 0; i < sizeof k / sizeof k[0]; i++)
+            CHECK_EQ_INT(fnv_rows(k[i].w, k[i].h, k[i].dh, k[i].ch, k[i].seed), k[i].want);
+    }
+
     /* -- 2:1 downscale in both axes, box averaged -- */
     {
         rs_t r;

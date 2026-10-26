@@ -28,7 +28,7 @@ static const char *TAG = "ipp";
 
 // One job at a time, in ipp_job's slot: enough to answer Get-Job-Attributes
 // while a job is in flight.
-#define RESP_MAX      5120   // printer attributes measure ~3.2KB with media-col
+#define RESP_MAX      5120   // printer attributes measure ~3.2KB with media-col, ~3.8KB with a StyleWriter's three sheets
 #define HDRBUF_MAX    2048   // the IPP attribute section, before the document
 #define CHUNK         1024
 

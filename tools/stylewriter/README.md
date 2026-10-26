@@ -75,7 +75,10 @@ python3.14 tools/stylewriter/swfake.py decode 2200 stream.bin --out /tmp/sw [--m
 Reads the bytes a printer would be sent (a ripped page, or the `>` side of a
 capture), with no waiting and no buffer limit, and writes the same files. Exit 1 and
 the reason if the stream is bad. It is how the firmware's pages are compared with an
-independent reading of the format.
+independent reading of the format: `rip --printer stylewriter --model 2200 --out-sw
+stream.bin` writes a page as the printer would be sent it, and `make -C tools/rip
+swcheck` decodes it here, and the same dots coded with lpstyl's coder, and holds both
+to the dots the rip made.
 
 ## Tests
 

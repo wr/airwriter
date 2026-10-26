@@ -26,8 +26,9 @@
 #define RIPJOB_DPI_Y  72
 
 // An output stage other than the ImageWriter's strips (W-1082): a LaserWriter's
-// PostScript bands (ps_page.h). It takes the page's 1bpp rows in order, MSB
-// the leftmost pixel and a set bit ink, as the halftoner makes them.
+// PostScript bands (ps_page.h), a StyleWriter's bands (sw_page.h, W-1103). It
+// takes the page's 1bpp rows in order, MSB the leftmost pixel and a set bit ink,
+// as the halftoner makes them.
 typedef struct {
     // A page starts; w x h rows follow. Non-zero aborts the job.
     int  (*page_begin)(void *ctx, int index, uint32_t w, uint32_t h);
@@ -35,6 +36,11 @@ typedef struct {
     // The page's last row has been given. Non-zero aborts the job.
     int  (*page_end)(void *ctx);
     void  *ctx;
+    // Set: an RGB page, when the job is in colour, comes as four rows a pixel
+    // row, one per ink indexed by iw_ink_t, screened as the colour ribbon's are
+    // (ink.h), and `row` is not called for it. NULL: RGB pages are gray, as for a
+    // LaserWriter. Gets ctx.
+    void (*ink_row)(void *ctx, const uint8_t *const bits[IW_INKS]);
 } rip_stage_t;
 
 typedef struct {
@@ -46,11 +52,17 @@ typedef struct {
     // quarter-inch crop. NULL is printer_caps_imagewriter.
     const printer_caps_t *caps;
     // Where rows go instead of the ImageWriter's strips. With a stage, RGB
-    // pages print as gray (colour is ignored) and top_margin is ignored: both
-    // are the ImageWriter's. A page wider than caps->max_dots is clipped on
-    // the right when caps->crop_margin is 0.
+    // pages print as gray (colour is ignored) unless the stage takes ink rows,
+    // and top_margin is ignored: both are the ImageWriter's. A page wider than
+    // caps->max_dots is clipped on the right when caps->crop_margin is 0. With
+    // caps->n_media, each page is cropped by the sheet its width names instead:
+    // rip_w dots from rip_left, or as far as the page goes (printer_caps.h).
     const rip_stage_t *stage;
 
+    // The screen. Apple's (HT_APPLE) is placed as the Color StyleWriter drivers place
+    // it: a gray page on the black ink's placement, and every page, gray or colour,
+    // starting on the tile's second row (halftone.h, ink.h). The others start
+    // where they always have.
     ht_algo_t   dither;
     // Dot gain at a 50% tint, percent (halftone.h ht_set_gain). 0 prints
     // the bits as they are.
@@ -58,8 +70,13 @@ typedef struct {
 
     // The colour ribbon is in (W-1064): RGB pages print in four inks. With
     // 0 they print as gray, as a black ribbon would anyway. Gray pages print
-    // the same either way.
+    // the same either way. With a stage, only a stage with ink_row has it.
     int         colour;
+
+    // The stage printer's tone curve (apple_tables.h, sw_tone), put on every gray
+    // before its screen, and on R, G and B before a colour pixel is split into
+    // inks. NULL is none. Kept by pointer, so it has to outlive the job.
+    const uint8_t *tone;
 
     // The top margin setting, in 1/144 in: positive adds that much blank
     // paper ahead of each page, negative drops the page's first rows, which

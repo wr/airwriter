@@ -40,31 +40,47 @@ static const int32_t k_finishings[] = { 3 };   // 'none'
 
 #define NELEM(a) (sizeof (a) / sizeof (a)[0])
 
+// The sheet sizes a printer lists (W-1103): its media list, or for a printer
+// with none (the ImageWriter, a LaserWriter) the one sheet the scalar fields name.
+static size_t n_sheets(const printer_caps_t *c) { return c->n_media ? c->n_media : 1; }
+
+static printer_media_t sheet(const printer_caps_t *c, size_t i)
+{
+    if (c->n_media) return c->media_list[i];
+    printer_media_t m = {
+        .media = c->media, .x = c->media_x, .y = c->media_y,
+        .margin_l = c->margin_l, .margin_r = c->margin_r,
+        .margin_t = c->margin_t, .margin_b = c->margin_b,
+    };
+    return m;
+}
+
 // media-col is how IPP Everywhere carries a sheet size together with the
 // margins that apply to it. iOS lays out against these, so they have to agree
 // with the flat media-*-margin-supported values below. Margins and sizes are
 // the printer's caps (printer_caps.h; the ImageWriter's say why its are what
-// they are).
-static void write_media_col(ipp_enc_t *e, const char *name, const printer_caps_t *c)
+// they are). The first value of an attribute carries its name; with `first`
+// clear this is a later value of the same attribute.
+static void write_media_col(ipp_enc_t *e, const char *name, const printer_media_t *m, int first)
 {
-    ipp_col_begin(e, name);
+    ipp_col_begin(e, first ? name : NULL);
 
     ipp_col_member(e, "media-size");
     ipp_col_begin(e, NULL);                  // nested collection, no name
     ipp_col_member(e, "x-dimension");
-    ipp_addl_int(e, IPP_TAG_INTEGER, c->media_x);
+    ipp_addl_int(e, IPP_TAG_INTEGER, m->x);
     ipp_col_member(e, "y-dimension");
-    ipp_addl_int(e, IPP_TAG_INTEGER, c->media_y);
+    ipp_addl_int(e, IPP_TAG_INTEGER, m->y);
     ipp_col_end(e);
 
     ipp_col_member(e, "media-bottom-margin");
-    ipp_addl_int(e, IPP_TAG_INTEGER, c->margin_b);
+    ipp_addl_int(e, IPP_TAG_INTEGER, m->margin_b);
     ipp_col_member(e, "media-top-margin");
-    ipp_addl_int(e, IPP_TAG_INTEGER, c->margin_t);
+    ipp_addl_int(e, IPP_TAG_INTEGER, m->margin_t);
     ipp_col_member(e, "media-left-margin");
-    ipp_addl_int(e, IPP_TAG_INTEGER, c->margin_l);
+    ipp_addl_int(e, IPP_TAG_INTEGER, m->margin_l);
     ipp_col_member(e, "media-right-margin");
-    ipp_addl_int(e, IPP_TAG_INTEGER, c->margin_r);
+    ipp_addl_int(e, IPP_TAG_INTEGER, m->margin_r);
 
     ipp_col_member(e, "media-source");
     ipp_addl_str(e, IPP_TAG_KEYWORD, "main");
@@ -72,6 +88,43 @@ static void write_media_col(ipp_enc_t *e, const char *name, const printer_caps_t
     ipp_addl_str(e, IPP_TAG_KEYWORD, "stationery");
 
     ipp_col_end(e);
+}
+
+// Every sheet as a media-col value of `name`, the default's alone when `all` is clear.
+static void write_media_cols(ipp_enc_t *e, const char *name, const printer_caps_t *c, int all)
+{
+    size_t n = all ? n_sheets(c) : 1;
+    for (size_t i = 0; i < n; i++) {
+        printer_media_t m = sheet(c, i);
+        write_media_col(e, name, &m, i == 0);
+    }
+}
+
+// The sheets' media keywords as the values of `name`.
+static void write_media_names(ipp_enc_t *e, const char *name, const printer_caps_t *c)
+{
+    for (size_t i = 0; i < n_sheets(c); i++) {
+        printer_media_t m = sheet(c, i);
+        if (i == 0) ipp_attr_str(e, IPP_TAG_KEYWORD, name, m.media);
+        else        ipp_addl_str(e, IPP_TAG_KEYWORD, m.media);
+    }
+}
+
+// The distinct values of one margin over the sheets, in the order first met.
+// `which` picks the margin: 'l', 'r', 't' or 'b'.
+static void write_margins(ipp_enc_t *e, const char *name, const printer_caps_t *c, char which)
+{
+    int32_t seen[8];
+    size_t n = 0;
+    for (size_t i = 0; i < n_sheets(c) && n < sizeof seen / sizeof seen[0]; i++) {
+        printer_media_t m = sheet(c, i);
+        int32_t v = which == 'l' ? m.margin_l : which == 'r' ? m.margin_r
+                  : which == 't' ? m.margin_t : m.margin_b;
+        size_t k = 0;
+        while (k < n && seen[k] != v) k++;
+        if (k == n) seen[n++] = v;
+    }
+    ipp_attr_ints(e, IPP_TAG_INTEGER, name, seen, n);
 }
 
 void ipp_write_op_attrs(ipp_enc_t *e)
@@ -215,12 +268,12 @@ void ipp_write_printer_attrs(ipp_enc_t *e, const ipp_printer_t *p,
         ipp_attr_strs(e, IPP_TAG_KEYWORD, "urf-supported", kw, n);
     }
 
-    if (W("media-default", JT))
-        ipp_attr_str(e, IPP_TAG_KEYWORD, "media-default", c->media);
-    if (W("media-supported", JT))
-        ipp_attr_strs(e, IPP_TAG_KEYWORD, "media-supported", &c->media, 1);
-    if (W("media-ready", JT))
-        ipp_attr_strs(e, IPP_TAG_KEYWORD, "media-ready", &c->media, 1);
+    if (W("media-default", JT)) {
+        printer_media_t m = sheet(c, 0);
+        ipp_attr_str(e, IPP_TAG_KEYWORD, "media-default", m.media);
+    }
+    if (W("media-supported", JT)) write_media_names(e, "media-supported", c);
+    if (W("media-ready", JT))     write_media_names(e, "media-ready", c);
     if (W("media-source-supported", JT))
         ipp_attr_strs(e, IPP_TAG_KEYWORD, "media-source-supported",
                       k_media_source, NELEM(k_media_source));
@@ -228,27 +281,26 @@ void ipp_write_printer_attrs(ipp_enc_t *e, const ipp_printer_t *p,
         ipp_attr_strs(e, IPP_TAG_KEYWORD, "media-type-supported",
                       k_media_type, NELEM(k_media_type));
 
-    if (W("media-col-default", JT))  write_media_col(e, "media-col-default", c);
-    if (W("media-col-ready", JT))    write_media_col(e, "media-col-ready", c);
-    if (W("media-col-database", EXPLICIT)) write_media_col(e, "media-col-database", c);
+    if (W("media-col-default", JT))  write_media_cols(e, "media-col-default", c, 0);
+    if (W("media-col-ready", JT))    write_media_cols(e, "media-col-ready", c, 1);
+    if (W("media-col-database", EXPLICIT)) write_media_cols(e, "media-col-database", c, 1);
 
     if (W("media-size-supported", JT)) {
-        ipp_col_begin(e, "media-size-supported");
-        ipp_col_member(e, "x-dimension");
-        ipp_addl_int(e, IPP_TAG_INTEGER, c->media_x);
-        ipp_col_member(e, "y-dimension");
-        ipp_addl_int(e, IPP_TAG_INTEGER, c->media_y);
-        ipp_col_end(e);
+        for (size_t i = 0; i < n_sheets(c); i++) {
+            printer_media_t m = sheet(c, i);
+            ipp_col_begin(e, i == 0 ? "media-size-supported" : NULL);
+            ipp_col_member(e, "x-dimension");
+            ipp_addl_int(e, IPP_TAG_INTEGER, m.x);
+            ipp_col_member(e, "y-dimension");
+            ipp_addl_int(e, IPP_TAG_INTEGER, m.y);
+            ipp_col_end(e);
+        }
     }
 
-    if (W("media-left-margin-supported", JT))
-        ipp_attr_int(e, IPP_TAG_INTEGER, "media-left-margin-supported",   c->margin_l);
-    if (W("media-right-margin-supported", JT))
-        ipp_attr_int(e, IPP_TAG_INTEGER, "media-right-margin-supported",  c->margin_r);
-    if (W("media-top-margin-supported", JT))
-        ipp_attr_int(e, IPP_TAG_INTEGER, "media-top-margin-supported",    c->margin_t);
-    if (W("media-bottom-margin-supported", JT))
-        ipp_attr_int(e, IPP_TAG_INTEGER, "media-bottom-margin-supported", c->margin_b);
+    if (W("media-left-margin-supported", JT))   write_margins(e, "media-left-margin-supported", c, 'l');
+    if (W("media-right-margin-supported", JT))  write_margins(e, "media-right-margin-supported", c, 'r');
+    if (W("media-top-margin-supported", JT))    write_margins(e, "media-top-margin-supported", c, 't');
+    if (W("media-bottom-margin-supported", JT)) write_margins(e, "media-bottom-margin-supported", c, 'b');
 
     // The ImageWriter's 144 dpi across, 72 down: one pass, bit 0 of a
     // graphics byte is the top pin of eight. SPEC.md 3.8.

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "ink.h"
+#include "bigmem.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -60,12 +61,12 @@ int ink_screens_init(ink_screens_t *s, ht_algo_t algo, int gain, uint32_t w)
     s->w = w;
     int ready = 0;
     for (; ready < IW_INKS; ready++) {
-        s->plane[ready] = malloc(w);
+        s->plane[ready] = big_malloc(w);
         if (!s->plane[ready] || ht_init(&s->ht[ready], algo, w)) break;
         ht_set_gain(&s->ht[ready], gain);
         ink_screen_phase(&s->ht[ready], (iw_ink_t)ready);
     }
-    s->avoid = ready == IW_INKS ? calloc((w + 7) / 8, 1) : NULL;
+    s->avoid = ready == IW_INKS ? big_calloc((w + 7) / 8, 1) : NULL;
     if (s->avoid) return 0;
     // A half-built set: ht_free and free both take what was never made.
     for (int i = 0; i < IW_INKS; i++) {

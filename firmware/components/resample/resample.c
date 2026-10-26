@@ -28,6 +28,13 @@ int rs_init(rs_t *r, uint32_t src_w, uint32_t src_h,
 // Fold one source row into the accumulator, box averaging horizontally.
 static void fold(rs_t *r, const uint8_t *src)
 {
+    if (r->src_w == r->dst_w) {
+        // One pixel to a box: the row as it is. A 360 dpi page crops to the
+        // printer's width and goes through here, 12 million pixels a page.
+        for (size_t i = 0; i < (size_t)r->dst_w * r->ch; i++) r->acc[i] += src[i];
+        r->acc_rows++;
+        return;
+    }
     for (uint32_t x = 0; x < r->dst_w; x++) {
         uint32_t x0 = (uint32_t)((uint64_t)x       * r->src_w / r->dst_w);
         uint32_t x1 = (uint32_t)((uint64_t)(x + 1) * r->src_w / r->dst_w);
