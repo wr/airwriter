@@ -7,7 +7,7 @@
 // bands and run coder as any page does.
 //
 // Top to bottom: the letterhead (the Chooser icon, "AirWriter" and "Test page" in Apple
-// Garamond Light, sw_art.h), the board's details in a small face of our own (sw_font.h), the
+// Garamond Light, sw_art.h), the board's details in a small 5 x 7 face (sw_font.h), the
 // inks (four solid swatches, the still life and a ramp of each ink with a color cartridge; the
 // still life in gray, a gray scale and a black ramp without), the six screens side by side
 // with the one in use ticked, a ruler 8 in long with a tick every 0.1 in, four squares an
