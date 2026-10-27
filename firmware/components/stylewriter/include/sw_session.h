@@ -31,10 +31,13 @@
 // goes silent, SWS_READY at a job's end. Idle, sw_ask_status gives it.
 //   SWS_NO_PAPER      `2` 04       SWS_JAM          `2` 08
 //   SWS_CART_JAM      `2` 01       SWS_CART_MISSING `2` 20
-//   SWS_INK_OUT       `2` 02 (the colour models; the others' 02 is the printer holding)
-//   SWS_DOOR          `1` 40       SWS_WASTE        `1` 80 (colour models; on the others only the 1500's)
-//   SWS_FAULT         a fault bit the design does not name: `1` 02 and 04, `2` 10, 40 and
-//                     80 (80 not on the 2400 and 2500); a job that sees one ends in SW_E_FAULT
+//   SWS_INK_OUT       `2` 02 (the 2200, 2400 and 2500; on the others, the 1500 included,
+//                     02 is the printer holding)
+//   SWS_DOOR          `1` 40 (the 2200, 2400 and 2500)
+//   SWS_WASTE         `1` 80 (the four colour models)
+//   SWS_FAULT         a fault bit the design does not name: `1` 04 (and 02 on the 2200, 2400
+//                     and 2500), `2` 10, 40 and 80 (80 not on the 2400 and 2500); a job that
+//                     sees one ends in SW_E_FAULT
 // Busy (`1` 01) and page done (`1` 08) are progress, not faults: SWS_PRINTING and SWS_READY.
 typedef enum { SWS_READY, SWS_PRINTING, SWS_NO_PAPER, SWS_JAM, SWS_CART_MISSING, SWS_CART_JAM,
                SWS_INK_OUT, SWS_DOOR, SWS_WASTE, SWS_OFFLINE, SWS_FAULT } sw_state_t;
@@ -97,7 +100,7 @@ typedef struct {
 // printer is unknown is asked one byte and no more. "CS" names the colour family but not a
 // member; it proves a colour StyleWriter, which is what `p` is for, so `FF FF FF 70` follows
 // as a write of its own and its byte (250 ms) names the model (sw_model_from_p). A CS that
-// does not answer `p` is returned as SW_C2200, the family's stand-in.
+// does not answer `p` names no model (SW_NONE), as in the full sequence.
 sw_model_t sw_ask_plain(const sw_ops_t *o);
 
 // The full sequence, for a printer the record or the person has named: `00 FF FF FF 49`

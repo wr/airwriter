@@ -175,9 +175,10 @@ sw_model_t sw_ask_plain(const sw_ops_t *o)
     sw_model_t m = sw_model_from_id(id, (size_t)n, &cs);
     if (!cs) return m;                         // nothing more is sent to a printer that is not a CS
     // "CS" proves a colour StyleWriter, which is what `p` is for, so it follows as a write of
-    // its own and its one byte names the model. No answer leaves the family's stand-in.
+    // its own and its one byte names the model. No answer names none, as the full sequence's
+    // does: a lost byte is not a model, and the next look asks again.
     uint8_t p;
-    return ask_once(o, 'p', &p, ID_BYTE_MS) == 1 ? sw_model_from_p(p) : SW_C2200;
+    return ask_once(o, 'p', &p, ID_BYTE_MS) == 1 ? sw_model_from_p(p) : SW_NONE;
 }
 
 sw_model_t sw_ask_full(const sw_ops_t *o)

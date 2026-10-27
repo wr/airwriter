@@ -1102,11 +1102,13 @@ static void test_plain(void)
     F.p = 0x09;
     sw_ops_t o = ops();
     CHECK_EQ_INT(sw_ask_plain(&o), SW_C2200);
-    // a CS whose p goes unanswered is the family's stand-in, after 250 ms
+    // a CS whose p goes unanswered is not named, after 250 ms: a lost byte must not make a
+    // 1500 a 2200 record, fail a 2500's jobs as the wrong model or offer a 2500's owner a
+    // change to a 2200. The next look asks again.
     fake_init(SW_C2500, 1);
     F.no_p = 1;
     uint32_t t0 = now_ms();
-    CHECK_EQ_INT(sw_ask_plain(&o), SW_C2200);
+    CHECK_EQ_INT(sw_ask_plain(&o), SW_NONE);
     CHECK_EQ_INT((long)F.rn, 5);
     CHECK_EQ_INT(F.nwrites, 2);
     CHECK(now_ms() - t0 >= 250 && now_ms() - t0 <= 260);
