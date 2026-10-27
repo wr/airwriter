@@ -56,6 +56,8 @@ typedef struct {
     int noise_on_reset;
     int fail_write;
     int no_p;                              // a CS that does not answer `p`
+    int count_letters;                     // the letters after the first `B` take buffer bytes too
+    int drain_from_b, nb;                  // drains at once from the drain_from_b-th `B` on (0: never)
     // a fault, or the end of its hearing, armed on the n-th block's end
     int arm_after_g;
     uint32_t arm_dur;                      // ms (0xFFFFFFFF: for good)
@@ -194,7 +196,10 @@ static void query(uint8_t q)
     switch (q) {
     case '1': push(status1()); break;
     case '2': push(status2()); break;
-    case 'B': push(b_now()); break;
+    case 'B':
+        if (F.drain_from_b && ++F.nb == F.drain_from_b) F.drain = -1;
+        push(b_now());
+        break;
     case 'H': push(F.h); break;
     case 'p': if (!is_cs()) F.bad++; else if (!F.no_p) push(F.p); break;
     case 'R': push(0x50); break;
@@ -229,12 +234,13 @@ static void fake_byte(uint8_t b)
         else if (b == '?') { tok("?"); if (F.awake) for (const char *c = F.ident; *c; c++) push((uint8_t)*c); }
         else if (b == 'G') { count(1); F.ps = P_GLEN; F.nlen = 0; F.glen = 0; }
         else if (b == 'R' || b == 'c') { tok(b == 'R' ? "R" : "c"); ev('r', b); count(9); F.ps = P_SKIP; F.skip = 8; }
-        else if (b == 'm') F.ps = P_M;
+        else if (b == 'm') { if (F.count_letters && F.nb) count(1); F.ps = P_M; }
         else if (b == 0x0C) { tok("0C"); count(1); F.page_pending = 1; }
         else {
             char s[2] = { (char)b, 0 };
             tok(s);
             ev('k', b);
+            if (F.count_letters && F.nb) count(1);
             if (b == 'P') { F.cleanings++; F.busy_until = t + F.clean_ms; }
             if (b == 'E') F.page_pending = 0;
         }
@@ -243,7 +249,7 @@ static void fake_byte(uint8_t b)
         if (b == 0xFF) F.nff++;
         else { if (F.nff >= 3) query(b); else F.bad++; if (F.ps == P_FF) F.ps = P_CMD; F.nff = 0; }
         break;
-    case P_M: { char s[3] = { 'm', (char)b, 0 }; tok(s); F.ps = P_CMD; break; }
+    case P_M: { char s[3] = { 'm', (char)b, 0 }; tok(s); if (F.count_letters && F.nb) count(1); F.ps = P_CMD; break; }
     case P_SKIP: if (--F.skip == 0) F.ps = P_CMD; break;
     case P_GLEN:
         count(1);
@@ -1228,6 +1234,64 @@ static void test_wrong_model(void)
     sw_session_free(s);
 }
 
+// A printer whose `B` reads one step short of empty (256 bytes, 64 on the original) still
+// begins the job and takes the largest block the model sends, at once: the quantisation
+// varies (the 2200 reads A2 or A3 at empty), and an exact fit would fail every job while it
+// read short, as the wrong model, or wait out the stall on a block.
+static void test_b_one_short(void)
+{
+    for (int m = SW_ORIGINAL; m < SW_MODELS; m++)
+        for (int cart = 0; cart <= 1; cart++) {
+            const sw_spec_t *sp = sw_spec((sw_model_t)m);
+            if (cart && !sp->colour) continue;
+            int empty = -1;
+            for (int b = 0; b < 256 && empty < 0; b++)
+                if (sw_b_empty((sw_model_t)m, (uint8_t)b, cart)) empty = b;
+            fake_init((sw_model_t)m, cart);
+            F.b_ov = empty - 1;
+            F.b_ov_from = 0;
+            F.b_ov_to = 0xFFFFFFFFu;
+            if (m == SW_C2400 || m == SW_C2500) F.s2 = 0;
+            sw_session_t *s = session((sw_model_t)m, 4, cart, 600000);
+            uint32_t cap = sw_block_cap((sw_model_t)m, cart ? 4 : 1);
+            size_t n = page(g_job, cart, 1, cap);
+            uint32_t t0 = now_ms();
+            CHECK_EQ_INT(run(s, g_job, n), SW_OK);
+            CHECK_EQ_INT(F.g_n, 1);
+            CHECK_EQ_INT(F.g_len[0], cap);
+            CHECK(now_ms() - t0 < 30000);
+            sw_session_free(s);
+        }
+}
+
+// The setup, page-mode and `L` letters are bytes in the printer's buffer as a rect is: the
+// session counts them against what `B` last said. A printer that has not drained since `B`
+// was read is never sent a block that only fits if they were not there.
+static void test_letters_counted(void)
+{
+    fake_init(SW_C2500, 0);
+    F.s2 = 0;
+    F.drain = 0;                               // nothing prints until `B` is read again
+    F.count_letters = 1;
+    F.drain_from_b = 2;
+    sw_session_t *s = session(SW_C2500, 4, 0, 600000);
+    CHECK_EQ_INT(sw_session_begin(s), SW_OK);
+    // What the session would believe free after a rect and a block if the letters took
+    // nothing; the second block is sized to that exactly.
+    int32_t empty = sw_free_bytes(SW_C2500, 0x80);
+    uint32_t x1 = 20000, x2 = (uint32_t)(empty - 9 - (int32_t)(x1 + 4) - 4);
+    size_t n = fr_page(g_job, 0);
+    n += fr_rect(g_job + n, 'R', 0, 0, 99, 99);
+    n += fr_block(g_job + n, x1);
+    n += fr_block(g_job + n, x2);
+    n += fr_end(g_job + n);
+    CHECK_EQ_INT(sw_session_feed(s, g_job, n), SW_OK);
+    CHECK_EQ_INT(F.g_n, 2);
+    CHECK_EQ_INT(F.overflow, 0);
+    CHECK_EQ_INT(F.nb, 2);                     // `B` was asked again before the second block
+    sw_session_free(s);
+}
+
 // ---- cancel and abort
 
 static void test_cancel(void)
@@ -1540,6 +1604,8 @@ int main(void)
     test_plain();
     test_ask_full();
     test_wrong_model();
+    test_b_one_short();
+    test_letters_counted();
     test_cancel();
     test_clean();
     test_frames();

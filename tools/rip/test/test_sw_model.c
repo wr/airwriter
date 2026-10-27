@@ -99,11 +99,13 @@ static void test_free_and_empty(void)
 }
 
 // sw_block_cap: the model's cap, or what an empty buffer can take less the
-// block's four bytes of framing (G, the length, the 00), whichever is less.
+// block's four bytes of framing (G, the length, the 00) and one step of `B`
+// (256 bytes, 64 on the original), whichever is less: a printer whose `B` reads
+// one step short of empty still takes a whole block.
 static void test_block_cap(void)
 {
-    CHECK_EQ_INT(sw_block_cap(SW_C2500, 4), 30720 - 4);        // below 0x79FA
-    CHECK_EQ_INT(sw_block_cap(SW_C2500, 1), 30720 - 4);        // below 0x7E77
+    CHECK_EQ_INT(sw_block_cap(SW_C2500, 4), 30720 - 4 - 256);  // 30460, below 0x79FA
+    CHECK_EQ_INT(sw_block_cap(SW_C2500, 1), 30720 - 4 - 256);  // below 0x7E77
     CHECK_EQ_INT(sw_block_cap(SW_C2200, 1), 0x7E77);
     CHECK_EQ_INT(sw_block_cap(SW_C2200, 4), 0x79FA);
     CHECK_EQ_INT(sw_block_cap(SW_C2400, 1), 0x7E77);
@@ -112,12 +114,24 @@ static void test_block_cap(void)
     CHECK_EQ_INT(sw_block_cap(SW_1200, 1), 0x76ED - 360);
     CHECK_EQ_INT(sw_block_cap(SW_C1500, 4), 0x76ED - 4 * 360); // 0x87 reads 32512 free
     CHECK_EQ_INT(sw_block_cap(SW_C1500, 1), 0x76ED - 360);
-    CHECK_EQ_INT(sw_block_cap(SW_ORIGINAL, 1), 8192 - 4);      // 0x2000 is a whole buffer
+    CHECK_EQ_INT(sw_block_cap(SW_ORIGINAL, 1), 8192 - 4 - 64); // 8124: 0x2000 is a whole buffer
     CHECK_EQ_INT(sw_block_cap(SW_NONE, 1), 0);
     // A block of 0x8000 stalls a CS printer: no cap reaches it.
     for (int m = SW_ORIGINAL; m < SW_MODELS; m++)
         for (int p = 1; p <= 4; p += 3)
             CHECK(sw_block_cap((sw_model_t)m, p) < 0x8000);
+    // Every model's largest block, framed, fits what its `B` says one step short of its
+    // emptiest reading.
+    for (int m = SW_ORIGINAL; m < SW_MODELS; m++)
+        for (int p = 1; p <= 4; p += 3) {
+            int empty = -1;
+            for (int b = 0; b < 256 && empty < 0; b++)
+                if (sw_b_empty((sw_model_t)m, (uint8_t)b, 0) || sw_b_empty((sw_model_t)m, (uint8_t)b, 1))
+                    empty = b;
+            CHECK(empty > 0);
+            CHECK((int32_t)sw_block_cap((sw_model_t)m, p) + 4 <=
+                  sw_free_bytes((sw_model_t)m, (uint8_t)(empty - 1)));
+        }
 }
 
 static void test_printable(void)

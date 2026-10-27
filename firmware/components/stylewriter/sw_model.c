@@ -113,8 +113,10 @@ uint32_t sw_block_cap(sw_model_t m, int planes)
         cap = 0x76ED - (uint32_t)planes * (s->dots_across / 8);
         break;
     }
-    int32_t room = empty_free_min(m);
-    uint32_t fits = room > BLOCK_FRAME ? (uint32_t)room - BLOCK_FRAME : 0;
+    // An empty buffer, read one step of `B` short (the reading is quantised, and the 2200's
+    // already varies at empty), still takes the block with its framing.
+    int32_t room = empty_free_min(m) - (m == SW_ORIGINAL ? 64 : 256) - BLOCK_FRAME;
+    uint32_t fits = room > 0 ? (uint32_t)room : 0;
     return cap < fits ? cap : fits;
 }
 

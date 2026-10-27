@@ -52,7 +52,9 @@ int     sw_b_empty(sw_model_t m, uint8_t b, int colour_cart);
 
 // The data bytes one `G` block may carry for a page of `planes` inks (1, or 4
 // for colour): the model's cap, or the least an empty buffer can take less the
-// block's 4 bytes of framing, whichever is less, so a block always fits.
+// block's 4 bytes of framing and one step of `B` (256 bytes, 64 on the original),
+// whichever is less, so a block always fits a buffer that reads one step short of
+// empty (30460 on the 2500, 8124 on the original; the model's cap on the others).
 uint32_t sw_block_cap(sw_model_t m, int planes);
 
 // The widest row to print on paper `paper_w` dots wide: min(dots_across,

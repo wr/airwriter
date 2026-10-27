@@ -426,20 +426,26 @@ static int frame(sw_session_t *s, uint8_t type, const uint8_t *p, size_t n)
         // A colour page needs a job made for colour and a colour cartridge in.
         int may = s->cfg.colour_job && s->cart && s->spec->colour;
         if (p[0] && !may) return SW_E_CART;
+        // Each letter here is a byte in the printer's buffer, counted as a rect's are.
         if (s->let->mode) {
             int want = may ? 'H' : 'B';
             if (s->mode != want) {
                 if ((rc = put1(s, (char)want))) return rc;
+                s->free_b -= 1;
                 s->mode = want;
                 if (want == 'B' && !s->cart && s->q == 2) {
                     // A black cartridge at Best asks `R`, then `s` (session.rs:709-718). Ours
                     // are screened pages, never plain 1 bit, so it is `s` whatever `R` says.
                     uint8_t r;
                     if ((rc = query(s, 'R', &r)) || (rc = put1(s, 's'))) return rc;
+                    s->free_b -= 1;
                 }
             }
         }
-        return s->let->page_l ? put1(s, s->let->page_l) : SW_OK;
+        if (!s->let->page_l) return SW_OK;
+        if ((rc = put1(s, s->let->page_l))) return rc;
+        s->free_b -= 1;
+        return SW_OK;
     }
     case SWF_RECT:
         if (n != RECT_LEN || (p[0] != 'R' && p[0] != 'c')) return SW_E_FAULT;
@@ -575,6 +581,7 @@ int sw_session_begin(sw_session_t *s)
         else if (s->clean) setup[k++] = 'P';
     }
     if ((rc = put(s, setup, k))) return rc;
+    s->free_b -= (int32_t)k;                   // in the buffer `B` was read for, as a rect is
     s->begun = 1;
     return SW_OK;
 }
