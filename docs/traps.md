@@ -299,6 +299,11 @@ Traps already explained in a code comment are listed only when the comment is ea
   the lock held. And a StyleWriter-first port (`port_policy.h`) gets `ESC ?` only after the plain
   question got nothing: `swfake.py` takes `ESC ?` for a letter it does not know and stops
   listening until a reset.
+- **A StyleWriter's bytes at 57600 print nothing on an ImageWriter II at 9600** (board 1,
+  2026-10-27): 300 plain questions a second apart, then the full sequence (`00 FF FF FF 49`, 2 s,
+  `?`) once, each followed by a CR LF at 9600, left the paper blank but for the line feeds. So a
+  look or a swapped port's question costs an ImageWriter nothing; the bytes that can mark paper
+  go the other way, an ImageWriter's stream to a StyleWriter.
 
 ## LaserWriters (W-1082)
 
