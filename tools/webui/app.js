@@ -559,6 +559,10 @@ const MODELS=['ImageWriter II','ImageWriter LQ','ImageWriter','StyleWriter','Sty
   'Color StyleWriter 1500','Color StyleWriter 2200','Color StyleWriter 2400','Color StyleWriter 2500'];
 for(const m of MODELS){ $('model').append(new Option(m,m)); $('add-model').append(new Option(m,m)); }
 const aOrAn=m=>(/^[aeiou]/i.test(m)?'an ':'a ')+m;
+/* A name in a notice title or key keeps its words together (R27): no
+   line ends after "StyleWriter" and leaves "II" on a line of its own. A
+   name is 32 bytes at most; anything longer is not one and may wrap. */
+const nb=s=>s.length>32?s:s.replace(/ /g,'\u00a0');
 $('model').append(new Option('Something else','none'));
 { const o=new Option('Choose…',''); o.id='model-ask'; o.disabled=true; $('model').prepend(o); }
 /* The five screens, and a sixth on a StyleWriter: Apple's own (W-1103). */
@@ -582,6 +586,11 @@ function sideWord(){
   if(ps.length===1) return ps[0].kind==='unknown'?'Unrecognized':ST[ps[0].state]?ST[ps[0].state][1]:'';
   return plural(ps.length,'printer','printers');
 }
+/* A StyleWriter's fault, in the words the phone shows for it (sw_status.c), as
+   the board names it in /api/printers (R25). */
+const SW_FAULT={paper:'check paper',jam:'clear the paper jam',cartridge:'check the ink cartridge',
+  'cartridge-jam':'check the ink cartridge',ink:'replace the ink cartridge',cover:'close the cover',
+  waste:'the waste ink pad is full',other:'check the printer'};
 /* A printer's state in words: the port's as its line says, an AppleTalk
    printer's in its own words when it has any. */
 function stWords(p){
@@ -590,7 +599,7 @@ function stWords(p){
   const low=w=>w?w[0].toLowerCase()+w.slice(1):w;
   // W-1103: a StyleWriter has no SELECT key
   const sw=p.kind==='stylewriter';
-  if(p.state==='attention') return ['a','Needs attention: '+(p.where==='port'?(sw?'check paper':'check paper and SELECT'):low(t&&lwStatus(t.message))||'check the printer')];
+  if(p.state==='attention') return ['a','Needs attention: '+(p.where==='port'?(sw?SW_FAULT[p.fault]||SW_FAULT.other:'check paper and SELECT'):low(t&&lwStatus(t.message))||'check the printer')];
   if(p.state==='offline') return ['',p.where==='port'?(sw?'Offline: check power and cable':'Offline: check power, cable and SELECT'):'Offline: check that it’s switched on'];
   if(p.state==='printing'&&t&&/busy/i.test(t.message||'')&&!S.printing) return ['g','Busy with another job'];
   return ST[p.state]||['',''];
@@ -598,10 +607,10 @@ function stWords(p){
 /* A notice: what is wrong, in bold, then what to do. */
 const NOTE={
   unknown_port:(p)=>['Unrecognized printer on the printer port','If it’s an ImageWriter or StyleWriter, choose its model.',[['Choose Model…','open'],['Dismiss','dismiss']]],
-  changed:(p,n)=>['The printer port now has '+esc(aOrAn(n.model)),'Use it instead of '+esc(p&&p.model||'the current printer')+'?',[['Use '+esc(n.model),'accept'],['Dismiss','dismiss']]],
+  changed:(p,n)=>['The printer port now has '+nb(esc(aOrAn(n.model))),'Use it instead of '+nb(esc(p&&p.model||'the current printer'))+'?',[['Use '+nb(esc(n.model)),'accept'],['Dismiss','dismiss']]],
   no_answer:(p)=>[q(p)+' isn’t responding','Make sure it’s connected and switched on.',[['Share Anyway','use_anyway'],['Dismiss','dismiss']]],
   too_many:(p)=>[q(p)+' isn’t shared','You can share up to '+(PR.max_shared||4)+' printers. To share this one, stop sharing another.',[['OK','dismiss']]]};
-const q=p=>esc(p?p.name:'A printer');
+const q=p=>nb(esc(p?p.name:'A printer'));
 function prDraw(){
   $('v-printers').textContent=sideWord();
   if(!PR) return;
@@ -685,9 +694,9 @@ function pdDraw(){
     if(iw&&p.dither!==dither){ dither=p.dither; render(); }
   }
   $('pd-cable').classList.toggle('hide',!port||S.pic===false);
-  // W-1103: one cleaning of the print head; the original StyleWriter has none
+  // W-1103: one cleaning of the print head, a card of its own; the original StyleWriter has none
   const clean=sw&&p.model!=='StyleWriter';
-  $('pd-clean').classList.toggle('hide',!clean);
+  $('clean-box').classList.toggle('hide',!clean);
   $('pd-cleannote').classList.toggle('hide',!clean);
   $('testpage').classList.toggle('hide',unk||p.kind==='appletalk-imagewriter');
 }
@@ -765,7 +774,7 @@ $('testpage').onclick=async()=>{
 $('pd-clean').onclick=async()=>{
   const b=$('pd-clean'); if(b.disabled) return;
   b.disabled=true;
-  await prPost({id:sel,clean:true},'Cleaning the print head.',null,4000);
+  await prPost({id:sel,clean:true},'Cleaning the print head.','pd-clean-say',4000);
   b.disabled=false;
 };
 /* The cable test borrows both ports. TashTalk, the AppleTalk chip's firmware,

@@ -97,11 +97,19 @@ typedef struct {
     pr_seen_t seen[PR_MAX];
 } pr_list_t;
 
+// A StyleWriter's fault as the board last read it, said to the settings page so it can
+// name it (R25). PR_FAULT_OTHER is one the design does not name.
+typedef enum { PR_FAULT_NONE, PR_FAULT_PAPER, PR_FAULT_JAM, PR_FAULT_CARTRIDGE,
+               PR_FAULT_CART_JAM, PR_FAULT_INK, PR_FAULT_COVER, PR_FAULT_WASTE,
+               PR_FAULT_OTHER } pr_fault_t;
+// The fault for a sw_state_t (sw_session.h): PR_FAULT_NONE for ready, printing and offline.
+int pr_fault_from_sw(int sw_state);
+
 // A printer's live state, by its index in r[]: the board fills it in. cart
 // (W-1103) is a StyleWriter's cartridge as last read: 0 not known, 1 black,
-// 2 colour. It lives here and not in the record, where an ImageWriter's ribbon
-// is the board's too.
-typedef struct { uint8_t present, ready, attention, printing, failed, cart; } pr_live_t;
+// 2 colour. fault is its pr_fault_t while it holds one. Both live here and not in
+// the record, where an ImageWriter's ribbon is the board's too.
+typedef struct { uint8_t present, ready, attention, printing, failed, cart, fault; } pr_live_t;
 typedef enum { PR_BOX_OFFLINE, PR_BOX_READY, PR_BOX_PRINTING, PR_BOX_ATTENTION,
                PR_BOX_FAILED } pr_box_t;
 

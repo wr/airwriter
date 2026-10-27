@@ -2591,7 +2591,8 @@
        "gain": 0,
        "rp": "ipp/print",
        "start_page": null,
-       "cartridge": "colour"
+       "cartridge": "colour",
+       "fault": "paper"
       }
      ],
      "notes": [],
@@ -2615,7 +2616,8 @@
        "gain": 0,
        "rp": "ipp/print",
        "start_page": null,
-       "cartridge": "colour"
+       "cartridge": "colour",
+       "fault": "paper"
       }
      ],
      "notes": [],
@@ -2639,6 +2641,160 @@
      },
      "model": "Apple Color StyleWriter 2200",
      "ribbon": "colour",
+     "ps": "attention",
+     "state": "Needs attention",
+     "fault": true,
+     "stopped": true
+    }
+   }
+  },
+  "stylewriter-cartridge": {
+   "about": "Printers: a Color StyleWriter 2400 with no ink cartridge fitted",
+   "patch": {
+    "GET /api/printers": {
+     "printers": [
+      {
+       "id": 1,
+       "name": "Color StyleWriter 2400",
+       "where": "port",
+       "kind": "stylewriter",
+       "model": "Color StyleWriter 2400",
+       "shared": true,
+       "identified": true,
+       "found": "auto",
+       "state": "attention",
+       "uuid": "urn:uuid:41575254-4c57-0001-0002-10bda36e2434",
+       "product": "",
+       "dither": "atkinson",
+       "gain": 0,
+       "rp": "ipp/print",
+       "start_page": null,
+       "fault": "cartridge"
+      }
+     ],
+     "notes": [],
+     "max_shared": 4
+    },
+    "POST /api/printers": {
+     "printers": [
+      {
+       "id": 1,
+       "name": "Color StyleWriter 2400",
+       "where": "port",
+       "kind": "stylewriter",
+       "model": "Color StyleWriter 2400",
+       "shared": true,
+       "identified": true,
+       "found": "auto",
+       "state": "attention",
+       "uuid": "urn:uuid:41575254-4c57-0001-0002-10bda36e2434",
+       "product": "",
+       "dither": "atkinson",
+       "gain": 0,
+       "rp": "ipp/print",
+       "start_page": null,
+       "fault": "cartridge"
+      }
+     ],
+     "notes": [],
+     "max_shared": 4
+    },
+    "GET /api/laser": {
+     "heard": [],
+     "targets": [],
+     "job": {
+      "active": false,
+      "sent": 0,
+      "last": ""
+     }
+    },
+    "GET /api/status": {
+     "printers": {
+      "count": 1,
+      "shared": 1,
+      "notes": 0,
+      "port": "stylewriter"
+     },
+     "model": "Apple Color StyleWriter 2400",
+     "ribbon": "unknown",
+     "ps": "attention",
+     "state": "Needs attention",
+     "fault": true,
+     "stopped": true
+    }
+   }
+  },
+  "stylewriter-cover": {
+   "about": "Printers: a StyleWriter 1200 with its cover open",
+   "patch": {
+    "GET /api/printers": {
+     "printers": [
+      {
+       "id": 1,
+       "name": "StyleWriter 1200",
+       "where": "port",
+       "kind": "stylewriter",
+       "model": "StyleWriter 1200",
+       "shared": true,
+       "identified": true,
+       "found": "auto",
+       "state": "attention",
+       "uuid": "urn:uuid:41575254-4c57-0001-0002-10bda36e2434",
+       "product": "",
+       "dither": "atkinson",
+       "gain": 0,
+       "rp": "ipp/print",
+       "start_page": null,
+       "cartridge": "black",
+       "fault": "cover"
+      }
+     ],
+     "notes": [],
+     "max_shared": 4
+    },
+    "POST /api/printers": {
+     "printers": [
+      {
+       "id": 1,
+       "name": "StyleWriter 1200",
+       "where": "port",
+       "kind": "stylewriter",
+       "model": "StyleWriter 1200",
+       "shared": true,
+       "identified": true,
+       "found": "auto",
+       "state": "attention",
+       "uuid": "urn:uuid:41575254-4c57-0001-0002-10bda36e2434",
+       "product": "",
+       "dither": "atkinson",
+       "gain": 0,
+       "rp": "ipp/print",
+       "start_page": null,
+       "cartridge": "black",
+       "fault": "cover"
+      }
+     ],
+     "notes": [],
+     "max_shared": 4
+    },
+    "GET /api/laser": {
+     "heard": [],
+     "targets": [],
+     "job": {
+      "active": false,
+      "sent": 0,
+      "last": ""
+     }
+    },
+    "GET /api/status": {
+     "printers": {
+      "count": 1,
+      "shared": 1,
+      "notes": 0,
+      "port": "stylewriter"
+     },
+     "model": "Apple StyleWriter 1200",
+     "ribbon": "black",
      "ps": "attention",
      "state": "Needs attention",
      "fault": true,

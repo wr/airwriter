@@ -125,7 +125,7 @@ img.ic{background:none;box-shadow:none}
 .row .lamp,.row .btn,.row .glyphs,.row .sw,.row select{flex-shrink:0}
 /* a 32-character network name is cut short in its row; the list has it whole */
 #ssid{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-#hostrow .txt,#iprow .txt,#ssid-row .txt{flex-shrink:0}
+#hostrow .txt,#iprow .txt,#ssid-row .txt,#prn-row .txt{flex-shrink:0}
 .row.link{width:100%;border:0;background:none;text-align:left;cursor:pointer;color:inherit;text-decoration:none}
 .row.link:hover{background:var(--hover)}
 .out{color:var(--fg3)}
@@ -168,8 +168,6 @@ img.ic{background:none;box-shadow:none}
 .btn.danger{color:var(--lamp-r)}
 .btn.danger.primary{background:var(--lamp-r);color:#fff;box-shadow:0 0 0 1px var(--lamp-r),var(--key-lift)}
 .btnrow{display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap}
-/* a line that belongs to the keys under it (W-1103: Cleaning uses ink.) */
-.btnrow>.say{flex:1 0 calc(100% - 24px)}
 select.pop{border:0;border-radius:var(--r-ctl);padding:4px 26px 4px 10px;background-color:var(--key);
   box-shadow:inset 0 1px 0 var(--key-hi),0 0 0 1px var(--key-edge),var(--key-lift);appearance:none;cursor:pointer;
   background-image:linear-gradient(45deg,transparent 50%,var(--fg2) 50%),linear-gradient(135deg,var(--fg2) 50%,transparent 50%);
@@ -229,7 +227,7 @@ body:not(.ready) .sw span,body:not(.ready) .sw span:after{transition:none}
 /* a notice asks something: the caution mark, its words, its keys under them */
 .note{padding:12px 14px;display:grid;grid-template-columns:auto minmax(0,1fr);gap:10px 12px;align-items:start}
 .note .warn{width:22px;height:22px;color:var(--lamp-a)}
-.note p{margin:0;align-self:center}
+.note p{margin:0;align-self:center;overflow-wrap:anywhere}
 .note p b{display:block;margin-bottom:2px}
 .note .btnrow{grid-column:2}
 .nav .v .warn{width:13px;height:13px;color:var(--lamp-a);vertical-align:-2px;margin-right:5px}

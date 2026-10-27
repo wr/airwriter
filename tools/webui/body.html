@@ -101,7 +101,7 @@
         <div class=hero><span class="ic k" id=pd-ic><svg><use href="#g-printer"/></svg></span>
           <h2 id=pd-name></h2><p id=pd-where></p></div>
         <div class=box>
-          <div class=row><span class=txt>Status</span><span class=val><i class=lamp id=prn-lamp></i><span id=prn-state></span></span></div>
+          <div class=row id=prn-row><span class=txt>Status</span><span class=val><i class=lamp id=prn-lamp></i><span id=prn-state></span></span></div>
           <div class="row hide" id=prn-jobrow><span class=txt>Printing</span><span class=val id=prn-job></span></div>
           <div class="row hide" id=rib-row><span class=txt>Ribbon</span><span class=val><span class="ribbon hide" id=rib-colour><i class=y></i><i class=m></i><i class=c></i><i class=k></i></span><span id=rib></span></span></div>
           <div class="row hide" id=cart-row><span class=txt>Cartridge</span><span class=val><span class="ribbon hide" id=cart-colour><i class=y></i><i class=m></i><i class=c></i><i class=k></i></span><span id=cart></span></span></div>
@@ -117,8 +117,13 @@
           <div class=row><span class=txt>Halftone</span><select class=pop id=screen aria-label=Halftone></select></div>
           <div class=paper id=ht-paper><div class=sheet><canvas id=prev aria-label="A sample printed with this halftone"></canvas></div></div>
         </div>
+        <div class="box hide" id=clean-box>
+          <div class=row><span class=txt>Print Head</span><button class=btn type=button id=pd-clean aria-describedby=pd-cleannote>Clean</button></div>
+        </div>
+        <p class="foot hide" id=pd-cleannote>Cleaning uses ink.</p>
+        <p class=say id=pd-clean-say></p>
         <p class=say id=prn-say></p>
-        <div class=btnrow><p class="say hide" id=pd-cleannote>Cleaning uses ink.</p><button class="btn danger" type=button id=pd-remove>Remove Printer…</button><button class=btn type=button data-dlg=d-cable id=pd-cable>Test Cable…</button><button class="btn hide" type=button id=pd-clean aria-describedby=pd-cleannote>Clean Print Head</button><button class=btn type=button id=testpage>Print Test Page</button></div>
+        <div class=btnrow><button class="btn danger" type=button id=pd-remove>Remove Printer…</button><button class=btn type=button data-dlg=d-cable id=pd-cable>Test Cable…</button><button class=btn type=button id=testpage>Print Test Page</button></div>
       </div>
     </section>
 

@@ -8,6 +8,7 @@
 #include "printers_core.h"
 #include "lw_caps.h"
 #include "sw_model.h"
+#include "sw_session.h"
 #include <stddef.h>
 #include <stdlib.h>
 
@@ -1223,6 +1224,69 @@ static void test_sw_json(void)
     CHECK_EQ_INT(sizeof(pr_rec_t), 284);
 }
 
+// R25: the fault a StyleWriter holds, named for the page.
+static void test_sw_fault(void)
+{
+    // Each state the session reports, as the page's word for it.
+    CHECK_EQ_INT(pr_fault_from_sw(SWS_READY), PR_FAULT_NONE);
+    CHECK_EQ_INT(pr_fault_from_sw(SWS_PRINTING), PR_FAULT_NONE);
+    CHECK_EQ_INT(pr_fault_from_sw(SWS_OFFLINE), PR_FAULT_NONE);   // offline is not a fault
+    CHECK_EQ_INT(pr_fault_from_sw(SWS_NO_PAPER), PR_FAULT_PAPER);
+    CHECK_EQ_INT(pr_fault_from_sw(SWS_JAM), PR_FAULT_JAM);
+    CHECK_EQ_INT(pr_fault_from_sw(SWS_CART_MISSING), PR_FAULT_CARTRIDGE);
+    CHECK_EQ_INT(pr_fault_from_sw(SWS_CART_JAM), PR_FAULT_CART_JAM);
+    CHECK_EQ_INT(pr_fault_from_sw(SWS_INK_OUT), PR_FAULT_INK);
+    CHECK_EQ_INT(pr_fault_from_sw(SWS_DOOR), PR_FAULT_COVER);
+    CHECK_EQ_INT(pr_fault_from_sw(SWS_WASTE), PR_FAULT_WASTE);
+    CHECK_EQ_INT(pr_fault_from_sw(SWS_FAULT), PR_FAULT_OTHER);
+    // Every fault state is a fault, and no other state is one (the board sets fault with attention).
+    for (int st = SWS_READY; st <= SWS_FAULT; st++)
+        CHECK_EQ_INT(pr_fault_from_sw(st) != PR_FAULT_NONE,
+                     st != SWS_READY && st != SWS_PRINTING && st != SWS_OFFLINE);
+
+    static const struct { int fault; const char *word; } K[] = {
+        { PR_FAULT_PAPER, "paper" }, { PR_FAULT_JAM, "jam" }, { PR_FAULT_CARTRIDGE, "cartridge" },
+        { PR_FAULT_CART_JAM, "cartridge-jam" }, { PR_FAULT_INK, "ink" }, { PR_FAULT_COVER, "cover" },
+        { PR_FAULT_WASTE, "waste" }, { PR_FAULT_OTHER, "other" } };
+    fresh();
+    pr_port_seen_sw(&L, PR_MODEL_SWC2400);
+    pr_live_t live[PR_MAX];
+    memset(live, 0, sizeof live);
+    static char buf[4096];
+    live[0].present = 1;
+    live[0].attention = 1;
+    pr_json(&L, live, buf, sizeof buf);
+    CHECK(strstr(buf, "\"fault\"") == NULL);                 // none held: not said
+    for (size_t k = 0; k < sizeof K / sizeof K[0]; k++) {
+        char want[40];
+        snprintf(want, sizeof want, "\"fault\":\"%s\"", K[k].word);
+        live[0].fault = (uint8_t)K[k].fault;
+        pr_json(&L, live, buf, sizeof buf);
+        CHECK(strstr(buf, want) != NULL);
+        CHECK(strstr(buf, "\"state\":\"attention\"") != NULL);
+        live[0].cart = 2;                                      // beside the cartridge, both valid
+        pr_json(&L, live, buf, sizeof buf);
+        CHECK(strstr(buf, want) != NULL);
+        CHECK(strstr(buf, "\"cartridge\":\"colour\"") != NULL);
+        live[0].cart = 0;
+        // said once
+        CHECK(strstr(strstr(buf, want) + 1, "\"fault\"") == NULL);
+    }
+    live[0].fault = 99;                                        // out of range: not said
+    pr_json(&L, live, buf, sizeof buf);
+    CHECK(strstr(buf, "\"fault\"") == NULL);
+
+    // Only a StyleWriter record carries it: not an ImageWriter, not a LaserWriter.
+    fresh();
+    pr_port_seen(&L, PR_PORT_IW2);
+    pr_at_seen(&L, PR_WHERE_CABLE, P("Office"), P("LaserWriter"), 0);
+    memset(live, 0, sizeof live);
+    live[0].fault = live[1].fault = PR_FAULT_PAPER;
+    pr_json(&L, live, buf, sizeof buf);
+    CHECK(strstr(buf, "fault") == NULL);
+    CHECK_EQ_INT(sizeof(pr_rec_t), 284);                       // and it is not stored
+}
+
 static void test_sw_test_target(void)
 {
     fresh();
@@ -1541,6 +1605,7 @@ int main(void)
     test_sw_clean();
     test_sw_apple_screen();
     test_sw_json();
+    test_sw_fault();
     test_sw_test_target();
     test_sw_offers();
     test_sw_box_state();

@@ -986,6 +986,7 @@ static void port_live(pr_live_t *o)
         o->present = s_port_answering;
         o->ready = s_port_answering && sw_state_ready(st);
         o->attention = s_port_answering && sw_state_fault(st);
+        o->fault = o->attention ? (uint8_t)pr_fault_from_sw(st) : 0;   // R25: the page names it
         o->cart = (uint8_t)s_sw_cart;
     }
 }

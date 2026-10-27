@@ -2,6 +2,7 @@
 #include "printers_core.h"
 #include "lw_caps.h"
 #include "lt_proto.h"
+#include "sw_session.h"
 #include <stdio.h>
 #include <string.h>
 #include <strings.h>
@@ -22,6 +23,21 @@ const char *pr_kind_name(int k)
     static const char *const n[] = { "unknown", "imagewriter", "laserwriter",
                                      "appletalk-imagewriter", "stylewriter" };
     return k >= 0 && k <= PR_KIND_STYLEWRITER ? n[k] : "?";
+}
+
+int pr_fault_from_sw(int st)
+{
+    switch (st) {
+    case SWS_NO_PAPER:     return PR_FAULT_PAPER;
+    case SWS_JAM:          return PR_FAULT_JAM;
+    case SWS_CART_MISSING: return PR_FAULT_CARTRIDGE;
+    case SWS_CART_JAM:     return PR_FAULT_CART_JAM;
+    case SWS_INK_OUT:      return PR_FAULT_INK;
+    case SWS_DOOR:         return PR_FAULT_COVER;
+    case SWS_WASTE:        return PR_FAULT_WASTE;
+    case SWS_FAULT:        return PR_FAULT_OTHER;
+    default:               return PR_FAULT_NONE;       // ready, printing, offline
+    }
 }
 
 // pr_model_t's StyleWriters, in order, as sw_model_t has them.
@@ -1028,16 +1044,24 @@ size_t pr_json(const pr_list_t *l, const pr_live_t live[PR_MAX], char *buf, size
         const char *sp = lw && r->lw.start_page == LW_START_ON ? "true"
                        : lw && r->lw.start_page == LW_START_OFF ? "false" : "null";
         // W-1103: a StyleWriter's cartridge as the board last read it, said only once it has.
-        char cart[28] = "";
+        char swx[28 + 24] = "";   // the cartridge and the fault, as JSON fields
         if (r->kind == PR_KIND_STYLEWRITER && (live[i].cart == 1 || live[i].cart == 2))
-            snprintf(cart, sizeof cart, ",\"cartridge\":\"%s\"", live[i].cart == 2 ? "colour" : "black");
+            snprintf(swx, sizeof swx, ",\"cartridge\":\"%s\"", live[i].cart == 2 ? "colour" : "black");
+        // and the fault it holds, for the page to name (R25), said only while it has one
+        static const char *const faults[] = { "", "paper", "jam", "cartridge", "cartridge-jam",
+                                              "ink", "cover", "waste", "other" };
+        if (r->kind == PR_KIND_STYLEWRITER && live[i].fault > PR_FAULT_NONE &&
+            live[i].fault <= PR_FAULT_OTHER) {
+            size_t n = strlen(swx);
+            snprintf(swx + n, sizeof swx - n, ",\"fault\":\"%s\"", faults[live[i].fault]);
+        }
         PUT("%s{\"id\":%u,\"name\":\"%s\",\"where\":\"%s\",\"kind\":\"%s\",\"model\":\"%s\","
             "\"shared\":%s,\"identified\":%s,\"found\":\"%s\",\"state\":\"%s\",\"uuid\":\"%s\","
             "\"product\":\"%s\",\"dither\":\"%s\",\"gain\":%u,\"rp\":\"%s\",\"start_page\":%s%s}",
             i ? "," : "", r->id, e_name, pr_where_name(r->where), pr_kind_name(r->kind),
             pr_model_name(r->model), r->shared ? "true" : "false",
             r->identified ? "true" : "false", r->found_auto ? "auto" : "person",
-            states[one_state(&live[i])], r->uuid, e_prod, r->dither, r->gain, rp, sp, cart);
+            states[one_state(&live[i])], r->uuid, e_prod, r->dither, r->gain, rp, sp, swx);
     }
     PUT("],\"notes\":[");
     for (int i = 0; i < l->n_notes; i++)
