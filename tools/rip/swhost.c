@@ -33,13 +33,14 @@
 #define _DARWIN_C_SOURCE
 #include <errno.h>
 #include <fcntl.h>
-#include <poll.h>
 #include <signal.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/ioctl.h>
+#include <sys/select.h>
+#include <sys/time.h>
 #include <sys/utsname.h>
 #include <termios.h>
 #include <time.h>
@@ -145,22 +146,34 @@ static const char *why(int rc)
 
 // ---- The line (sw_ops_t over the device)
 
-static int wait_fd(int fd, short events, uint32_t ms)
+// select(), not poll(): macOS documents poll() as not working on devices, and an owner's USB
+// serial adapter is a /dev/cu.* device (the interop's pty works with either). A line that is
+// gone reads as ready and then gives 0 bytes or an error, which the callers take as gone.
+enum { WANT_READ, WANT_WRITE };
+
+static int wait_fd(int fd, int want, uint32_t ms)
 {
+    if (fd < 0 || fd >= FD_SETSIZE) return -1;
     uint32_t t0 = clock_ms();
     for (;;) {
         uint32_t used = clock_ms() - t0;
-        int left = used >= ms ? 0 : (int)(ms - used);
-        struct pollfd p = { fd, events, 0 };
-        int r = poll(&p, 1, left);
+        uint32_t left = used >= ms ? 0 : ms - used;
+        fd_set rd, wr, ex;
+        FD_ZERO(&rd);
+        FD_ZERO(&wr);
+        FD_ZERO(&ex);
+        FD_SET(fd, want == WANT_READ ? &rd : &wr);
+        FD_SET(fd, &ex);
+        struct timeval tv = { (time_t)(left / 1000), (suseconds_t)(left % 1000) * 1000 };
+        int r = select(fd + 1, &rd, &wr, &ex, &tv);
         if (r < 0 && errno == EINTR) {
             if (!left) return 0;
             continue;
         }
         if (r < 0) return -1;
         if (!r) return 0;
-        if (p.revents & events) return 1;
-        return -1;                       // hung up, or an error, with nothing to read
+        if (FD_ISSET(fd, want == WANT_READ ? &rd : &wr)) return 1;
+        return -1;                       // an error on the line, with nothing to read
     }
 }
 
@@ -176,7 +189,7 @@ static int op_write(void *ctx, const uint8_t *b, size_t n)
         if (w < 0 && errno == EINTR) continue;
         if (w < 0 && errno == EAGAIN) {
             if (clock_ms() - last > WRITE_STUCK_MS) return -1;
-            if (wait_fd(h->fd, POLLOUT, 500) < 0) return -1;
+            if (wait_fd(h->fd, WANT_WRITE, 500) < 0) return -1;
             continue;
         }
         return -1;
@@ -191,7 +204,7 @@ static int op_read(void *ctx, uint8_t *b, size_t cap, uint32_t first_ms, uint32_
     uint32_t wait = first_ms;
     while (n < cap) {
         uint32_t t0 = clock_ms();
-        int r = wait_fd(h->fd, POLLIN, wait);
+        int r = wait_fd(h->fd, WANT_READ, wait);
         if (r < 0) {                     // a line that is gone: no byte, and no hurry to say so
             struct timespec ts = { wait / 1000, (long)(wait % 1000) * 1000000L };
             nanosleep(&ts, NULL);
@@ -204,7 +217,15 @@ static int op_read(void *ctx, uint8_t *b, size_t cap, uint32_t first_ms, uint32_
             wait = used < wait ? wait - used : 0;
             continue;
         }
-        if (got <= 0) break;
+        if (got <= 0) {                  // ready, and nothing: the line is gone, as above
+            uint32_t used = clock_ms() - t0;
+            if (used < wait) {
+                uint32_t rest = wait - used;
+                struct timespec ts = { rest / 1000, (long)(rest % 1000) * 1000000L };
+                nanosleep(&ts, NULL);
+            }
+            break;
+        }
         n += (size_t)got;
         wait = gap_ms;
     }
