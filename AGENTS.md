@@ -18,7 +18,7 @@ being true, change or delete it in the same commit that made it false.
 | `docs/hardware-rev-a.md` | Rev A as built: geometry, deviations from the spec and why, rev B list. |
 | `docs/library.md` | The custom KiCad library and 3D models. |
 | `docs/sourcing.md` | Fab, parts, mini-DIN and PIC decisions. |
-| `docs/prior-art.md` | TashTalk, TailTalk, AirTalk, ImageScribbler. |
+| `docs/prior-art.md` | TashTalk, TailTalk, lpstyl, InkTalk, Apple's StyleWriter drivers, AirTalk, ImageScribbler. |
 | `docs/ORDER-NOTES.md` | PCBWay order notes for rev A. |
 | `docs/KICAD-TOOLING.md` | General KiCad 10 / konnect / pcbnew playbook. |
 | `docs/superpowers/specs/` | Printer scope, dot-panel cover (read its amendment block first), enclosure, status language, signed updates, laser printers, StyleWriters. |

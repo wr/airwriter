@@ -787,15 +787,18 @@ Apple's StyleWriter adapter (ADSP, not PAP), is not built.
   cable-test branch is skipped for it). The link follows the port's record. Every question puts
   it back, and ImageWriter-only traffic (`ESC ?`, the CTRL-X kick, the resync, the job's
   self-ID, the ImageWriter test page) goes after `stylewriter_link(0)` and never to a
-  StyleWriter record.
+  StyleWriter record. The cable is expected to be the ImageWriter II's (Apple's
+  System/Peripheral-8 crossover), as a StyleWriter plugs into a Mac's printer port the same
+  way: not yet confirmed on a StyleWriter.
 - **Recognition.** Two questions. The *plain question* is the one byte `?` at 57600. At 9600 its
   frame is a 17 µs low pulse, high past the receiver's mid-bit check, then a 35 µs low that
   ends in the stop bit before the next check: an ImageWriter's UART takes both for false start
   bits and hears nothing (`tools/stylewriter/test_plain_question.py` runs a 16× receiver model
   at 64 phases). The II, 1200 and colour models answer it, to CR at 250 ms a byte: `SW` the II,
   `SW3` the 1200, `CS` a colour model, whose member is the byte after `FF FF FF 70` (`p`): 01
-  the 2400, 02 the 2200, 04 the 1500, 05 the 2500, anything else the 2200. `p` sent to any
-  other model ejects and resets it, so only a `CS` is sent it. The *full sequence* is the reset
+  the 2400, 02 the 2200, 04 the 1500, 05 the 2500, anything else the 2200; a `CS` that does
+  not answer `p` names no model, and the next look asks again. `p` sent to any other model
+  ejects and resets it, so only a `CS` is sent it. The *full sequence* is the reset
   `00 FF FF FF 49` (eject and reset), a 2 s settle (8 s on a second try), a drain, then `?`
   again; it also finds the original (`IJ10`), which ignores `?` until reset. Its `00` and `49`
   can read as stray characters at 9600, so it goes only to a printer a record or the person has
@@ -803,18 +806,38 @@ Apple's StyleWriter adapter (ADSP, not PAP), is not built.
   (Add a Printer…, the unknown printer's notice, the detail's Model), to confirm it and read
   its model. So the original is found only when named.
 - **What the idle port is asked** (`port_policy`, pure: one act a call, every 500 ms, under the
-  job lock and never while a job runs on the port; the caller's events are `look` and
-  `line_up_edge`, cleared once acted on). In this order: the person said Something else, nothing
-  ever; a StyleWriter record that answers, `1` and `2` every 10 s and on a look, and nothing
-  else (no `ESC ?`, no plain question, no kick); `ESC ?` on a line-up edge or on a look with the
-  line ready, for every other record, for a StyleWriter record that has stopped answering (an
-  ImageWriter swapped in is noticed), and for none; the plain question while the port's printer
-  does not answer, every 60 s, on a look, at boot after the quiet power-on, when `ESC ?` went
-  unanswered, and at once when a kick is wanted and none has been asked since the line went
-  down; the CTRL-X kick last, only after a plain question that got nothing and never for a
-  StyleWriter record. A StyleWriter that answers makes the port's record (or the "changed"
-  notice, 3.15), shared at once, named by its model; one that stops answering stays in the list,
-  offline.
+  job lock and never while a job runs on the port; `port_tick`, `port_after` and
+  `port_line_down` keep its books between calls, so the host tests run the whole loop against
+  scripted printers for ten minutes, every record against every printer). In this order: the
+  person said Something else, nothing ever; a StyleWriter record that answers, `1` and `2`
+  every 10 s and on a look, and nothing else (no `ESC ?`, no plain question, no kick); on a
+  line-up edge or a look with the line ready, the plain question first where the port is
+  StyleWriter-first (a StyleWriter record, a port that last answered as a StyleWriter, or an
+  original ImageWriter record, which gives no self-ID), then `ESC ?` once that got nothing, and
+  `ESC ?` alone everywhere else (an empty port, an ImageWriter II or LQ record), so an
+  ImageWriter swapped in is noticed and a StyleWriter that would answer never hears `ESC ?`
+  (`swfake.py` takes it for a letter it does not know and stops listening until a reset); the
+  plain question on a look with the line down; nothing more of its own accord for an
+  ImageWriter record whose port a StyleWriter answered (so its "changed" notice can be
+  dismissed); the plain question while the port's printer does not answer, every 60 s, at boot
+  after the quiet power-on, when `ESC ?` went unanswered, and once per busy spell when a kick is
+  wanted and none has been asked since the line went down; the CTRL-X kick last, only after a
+  plain question since the line went down that got nothing, and never for a StyleWriter record.
+  An original ImageWriter record's `ESC ?` that gets nothing with the line up is its answer. A
+  StyleWriter that answers makes the port's record (or the "changed" notice, 3.15), shared at
+  once, named by its model; one that stops answering stays in the list, offline (but the
+  original, below).
+- **The other family on the port.** The printer list keeps the family that last answered on the
+  port (`pr_port_heard`: `ESC ?` naming an ImageWriter, an original ImageWriter record's line up
+  with nothing said, the plain question, `1` and `2`, the full sequence). While it is not the
+  record's (`pr_port_conflict`), nothing in the record's language goes to the port: its AirPrint
+  jobs are refused (the job aborts; IPP stopped, `other`, "Needs attention: confirm the printer
+  under Printers on the settings page"), its test page too (the button blips Busy and runs no
+  cable test, the page's Print Test Page answers 409), a cleaning answers 409, a Mac's job hears
+  busy, and the page shows the record as needing attention (`/api/printers` `swapped`). It ends
+  when the record's own family answers again, or when the person makes the record the other's
+  (accepting the notice, or choosing its model); dismissing the notice does not end it. It is not
+  stored, but a pending "changed" notice naming the other family says it again at a start.
 - **AirPrint.** 360 × 360 dpi, URF `RS360`; Letter, A4 and Legal, the first the default
   (`printer_media_t` in `printer_caps`: the page's width at 360 dpi names the entry, and the
   rip keeps the engine's printable area from `rip_left` for `rip_w` dots). Margins in whole
@@ -846,7 +869,10 @@ Apple's StyleWriter adapter (ADSP, not PAP), is not built.
   | Color 2500 | 2919 | 72/72, 45, 99 | 400 | 0 | as the 2200 | 80 |
 
   Free bytes are `B` × 256 − 2048 (the original `B` × 64). A block never exceeds the least an
-  empty buffer can take less its 4 bytes of framing, and a block of 0x8000 stalls a CS printer.
+  empty buffer can take less its 4 bytes of framing and one step of `B` (256 bytes, 64 on the
+  original), so a printer whose `B` reads one step short of empty still takes a whole block: 30460
+  data bytes on the 2500 and 8124 on the original, the table's cap on the rest. A block of
+  0x8000 stalls a CS printer.
 - **The page** (`sw_page`, the rip's last stage in the place the LaserWriter's PostScript stage
   has). `ripjob` gives it 360 dpi rows, one K plane or, for an sRGB page on a colour
   cartridge, four (C, M, Y, K); the stage drops the engine's top and bottom margins and codes
@@ -860,7 +886,8 @@ Apple's StyleWriter adapter (ADSP, not PAP), is not built.
   1–62 and the top bits 00 literal (that many bytes follow), 01 repeat the next byte, 10 white
   bytes, 11 black bytes; `80` alone is a white plane row. Each plane is XORed with the same
   plane of the row before within a band, the band's first row raw, the delta carrying across
-  blocks within a band, and no delta at all on the original. Colour rows go C, M, Y, K. The stage
+  blocks within a band (TailTalk's reading; lpstyl gives each block its own rect, so this is not
+  yet confirmed on a printer), and no delta at all on the original. Colour rows go C, M, Y, K. The stage
   writes frames, `[type][u16 LE length][payload]` (page start, rect, block, page end), into the
   printer-bytes half of the job buffer (the same 512 KB / 512 KB split as the ImageWriter's,
   3.8); the `prn` task hands them to `stylewriter_prn`, which reassembles frames across the
@@ -871,7 +898,8 @@ Apple's StyleWriter adapter (ADSP, not PAP), is not built.
   page or a black cartridge screens one plane; a colour page goes through `ink_split` and
   `ink_screens` into C, M, Y, K as 3.7 says for the ribbon. Apple's drivers carry the
   calibration of StyleWriter ink on paper: two tone curves (`GAMA` 1 with the ordered and mask
-  screens, `GAMA` 2 with error diffusion; the 2200 driver's for the 2200, 2400 and 2500, the
+  screens, `GAMA` 2 with error diffusion, a pairing not yet confirmed by a print; the 2200
+  driver's for the 2200, 2400 and 2500, the
   1500 driver's for the other four) and a 16 × 16 threshold screen (`HTSC` 1). The curve is the
   StyleWriter's default tone correction, in place of the dot-gain curve's 0, and `gain` still
   adjusts on top; the screen is a sixth beside the five, offered on StyleWriters only (`apple`,
@@ -890,7 +918,8 @@ Apple's StyleWriter adapter (ADSP, not PAP), is not built.
   take their mode letter, `H` for a colour page on a colour cartridge and `B` otherwise, when
   it changes, and `L`; the 1200 and 1500 take `L`. Each rect goes out after `1` and `2` show no
   fault, each block when the tracked free space fits it (re-read every 100 ms while it does
-  not), a page's end after the last block; after the last page, wait for `1` to say the page is
+  not; the setup and page letters, rects and `0C` are counted against it), a page's end after
+  the last block; after the last page, wait for `1` to say the page is
   printed (not the original), then `E` (the 1200 adds `Y`) and `l`. Cancel stops at the next
   step (a block in flight goes out whole; a cut `G` block wedges the printer), then `E` (the
   black-only models) and the reset, and the next job starts with the reset anyway. A cartridge
@@ -911,8 +940,14 @@ Apple's StyleWriter adapter (ADSP, not PAP), is not built.
   fails, the state is offline ("check power and cable"), and the next job resets the printer. A
   printer switched off mid-page has lost the page.
 - **Idle and status.** Idle, `1` and `2` every 10 s feed the page, the panel and IPP as the
-  ImageWriter's line does: an answer is ready (or the fault it holds), none is offline. A
-  StyleWriter that starts answering again is asked `D` and `H` for its cartridge. The panel
+  ImageWriter's line does: an answer is ready (or the fault it holds), none is offline. The
+  original StyleWriter ignores the plain question until a reset and is switched off between
+  uses, so its silence while idle says nothing (`sw_idle_silent`): it reads as ready, takes
+  jobs, and is asked no `1` and `2` while it is not answering; a session that gets nothing from
+  it (a job's full sequence, a job it goes silent during, the person's pick) shows it offline
+  until it answers or the next session. A StyleWriter that starts answering again is asked `D`
+  and `H` for its cartridge, as a record that changes family is asked for its ribbon or
+  cartridge. The panel
   shows the box's state, and the port's own while it prints.
 - **Test page.** The button, DIP4 and the page's Print Test Page reach a port StyleWriter as
   they reach an ImageWriter; a second tap cancels. A StyleWriter has no fonts, so the page is a
@@ -927,7 +962,8 @@ Apple's StyleWriter adapter (ADSP, not PAP), is not built.
 - **Clean Print Head.** One press is one cleaning: the job's reset and setup with a single `P`
   in it, wait for the printer to stop being busy (up to 600 s), then `E` (`Y` on the 1200) and
   `l`. The original has none. `POST /api/printers {"id":N,"clean":true}` answers 409 when a
-  job holds the lock, 502 when the model has no cleaning or the printer is off or holds a
+  job holds the lock or another printer answered on the port, 502 when the model has no
+  cleaning or the printer is off or holds a
   fault (it is asked `1` and `2` first, as a cleaning would wait on a fault with the lock held),
   and otherwise starts it on a task of its own under the job lock. Nothing cleans on its own.
 - **Web.** The settings page draws a StyleWriter's row and detail (Cartridge, Black or Color;

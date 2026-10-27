@@ -5,6 +5,16 @@
 `W-1102 QuickDraw LaserWriters on the printer port (Personal LaserWriter LS/300, Select 300)`.
 Reverses the StyleWriter cut in `2026-08-04-printer-support-scope-design.md`.
 
+**Amended 2026-10-27, before the bench** (SPEC §3.16 has each in full). A port
+whose record is, or that last answered as, a StyleWriter is asked the plain question first at a
+line-up or a look, and `ESC ?` only when that gets nothing: a StyleWriter may stop listening
+once it has heard `ESC ?`. While the family that last answered on the port is not the record's,
+the record's jobs, test page and cleaning are refused until its own family answers again or the
+person accepts the change; an ImageWriter record whose port a StyleWriter answered asks nothing
+more on its own, so its notice can be dismissed. The original StyleWriter's silence while idle
+reads as ready, not offline, since it ignores the plain question until a reset. A block leaves
+one step of `B` below the empty buffer.
+
 ## Why
 
 In August the StyleWriter was cut for one reason: the print head is the cartridge on the early

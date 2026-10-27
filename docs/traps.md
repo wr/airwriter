@@ -290,6 +290,15 @@ Traps already explained in a code comment are listed only when the comment is ea
 - **U8's ~RE rides `LT_DE`, so U8 shuts down while the PIC transmits.** Deliberate: wake is
   ≤ 1.8 µs against LocalTalk's ~200 µs inter-dialogue gap. It mirrors the U6 bug fixed on 08-22
   but is not that bug; don't "fix" it.
+- **The port's record and the printer on the port can be of different families** (W-1103). A
+  StyleWriter answering on an ImageWriter record's port, or the reverse, only raises the
+  "changed" notice; until the person accepts it (or the record's own family answers again)
+  `pr_port_conflict` holds, and nothing in the record's language may go out. A new path that
+  sends a port job, page or command checks it; `stylewriter_cfg_t.swapped` holds the
+  StyleWriter's own. `s_port_sw` flips only under the job lock (`port_sw_sync`), so read it with
+  the lock held. And a StyleWriter-first port (`port_policy.h`) gets `ESC ?` only after the plain
+  question got nothing: `swfake.py` takes `ESC ?` for a letter it does not know and stops
+  listening until a reset.
 
 ## LaserWriters (W-1082)
 

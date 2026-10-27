@@ -64,7 +64,7 @@ If the printer needs attention, such as paper or a closed door, the screen shows
 | `--dither NAME` | The screen: `atkinson` (the default), `floyd`, `bayer`, `bluenoise`, `threshold` or `apple`. |
 | `--dpi N` | The resolution of a PNG that has none (360). |
 
-A colour page prints in colour on a colour model with a colour cartridge, and as gray on
+A color page prints in color on a color model with a color cartridge, and as gray on
 any other.
 
 ### If it does not print
@@ -81,7 +81,7 @@ any other.
 ### Send back the log
 
 Open an issue at github.com/wr/airwriter and attach `sw.log`. Say which model it is, whether
-the cartridge is black or colour, what the adapter and cable are, and what came out on
+the cartridge is black or color, what the adapter and cable are, and what came out on
 paper (a photo of the page helps). The log has the bytes sent and received, with long page
 data cut after 32 bytes. Its first line is the command you ran, with the folder names in it,
 and its second is your computer's operating system and version. Look them over before you
@@ -141,7 +141,7 @@ tools/rip/build/swhost --dev /dev/ttysNNN --ask fixtures/checker.urf
 ```
 
 `make -C tools/rip swinterop` (`test_swinterop.py`) does this for all seven models, a gray
-page and a colour one each, and then breaks the printer: paper out and back, silence, and a
+page and a color one each, and then breaks the printer: paper out and back, silence, and a
 cancel in the middle of a band. It checks that the pages swfake drew are the dots
 `rip --printer stylewriter` made of the same pages, with PNG pages and bad ones as well.
 The silence case waits out the real 30 seconds, so the run takes about 35 seconds. swfake is
