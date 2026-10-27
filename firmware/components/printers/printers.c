@@ -621,6 +621,32 @@ sw_model_t printers_port_sw_model(void)
     return m;
 }
 
+int printers_port_heard(void)
+{
+    if (!s_started) return PR_HEARD_NONE;
+    lock();
+    int h = pr_port_heard(s_l);
+    unlock();
+    return h;
+}
+
+void printers_port_answered(int heard)
+{
+    if (!s_started) return;
+    lock();
+    pr_port_answered(s_l, heard);            // not stored: nothing to save
+    unlock();
+}
+
+int printers_port_conflict(void)
+{
+    if (!s_started) return 0;
+    lock();
+    int c = pr_port_conflict(s_l);
+    unlock();
+    return c;
+}
+
 void printers_port_set_sw_model(sw_model_t m)
 {
     pr_model_t pm = pr_model_from_sw(m);
@@ -704,14 +730,19 @@ static int start_page(int id, int on, char *err, size_t cap)
 }
 
 // W-1103: one cleaning of a StyleWriter's print head, run by the board. Its
-// answer is the status: 0, or 409 while a job holds the printer, or 502 for a
-// printer that is off or has something to see to (no paper, a jam, the cover):
-// the one sentence is true of both.
+// answer is the status: 0, or 409 while a job holds the printer or another
+// printer answered on the port, or 502 for a printer that is off or has
+// something to see to (no paper, a jam, the cover): the one sentence is true of both.
 static int clean_head(int id, char *err, size_t cap)
 {
     if (!s_cfg.clean) {
-        snprintf(err, cap, "This board can’t clean a print head.");
+        snprintf(err, cap, "AirWriter can’t clean a print head.");
         return 501;
+    }
+    // Another printer answered on the printer port: the cleaning is the record's printer's.
+    if (printers_port_conflict()) {
+        snprintf(err, cap, "Another printer is on the printer port.");
+        return 409;
     }
     int rc = s_cfg.clean(id);
     if (rc == 409) snprintf(err, cap, "The printer is busy. Try again when it’s done.");

@@ -329,6 +329,9 @@ int pr_port_seen(pr_list_t *l, pr_port_seen_t what)
     pr_rec_t *p = (pr_rec_t *)pr_port(l);
     if (what == PR_PORT_NOTHING) return p ? p->id : -1;
     if (what == PR_PORT_SILENT) {
+        // The original ImageWriter has no self-ID: its line up and nothing said is its answer.
+        if (p && p->kind == PR_KIND_IMAGEWRITER && p->model == PR_MODEL_IW1)
+            l->heard = PR_HEARD_IMAGEWRITER;
         if (p) return p->id;              // an original ImageWriter, a lost answer: no churn
         p = rec_new(l);
         if (!p) return -1;
@@ -341,6 +344,7 @@ int pr_port_seen(pr_list_t *l, pr_port_seen_t what)
         return p->id;
     }
     int model = what == PR_PORT_IWLQ ? PR_MODEL_IWLQ : PR_MODEL_IW2;
+    l->heard = PR_HEARD_IMAGEWRITER;
     if (!p) {
         p = port_new(l, model);
         return p ? p->id : -1;
@@ -361,6 +365,7 @@ int pr_port_seen(pr_list_t *l, pr_port_seen_t what)
 void pr_port_seen_sw(pr_list_t *l, pr_model_t m)
 {
     if (!model_is_sw(m)) return;
+    l->heard = PR_HEARD_STYLEWRITER;
     pr_rec_t *p = (pr_rec_t *)pr_port(l);
     if (!p) {
         port_new(l, m);
@@ -624,6 +629,32 @@ void pr_dismiss(pr_list_t *l, int note)
     if (note >= 0 && note < l->n_notes) note_drop(l, note);
 }
 
+// ------------------------------------------------------------- who answered
+
+int pr_port_heard(const pr_list_t *l)
+{
+    return l->heard;
+}
+
+void pr_port_answered(pr_list_t *l, int heard)
+{
+    if (heard == PR_HEARD_IMAGEWRITER || heard == PR_HEARD_STYLEWRITER) l->heard = (uint8_t)heard;
+}
+
+// The family a port record's kind speaks, PR_HEARD_NONE for one that is neither.
+static int family_of_kind(int kind)
+{
+    return kind == PR_KIND_IMAGEWRITER ? PR_HEARD_IMAGEWRITER
+         : kind == PR_KIND_STYLEWRITER ? PR_HEARD_STYLEWRITER : PR_HEARD_NONE;
+}
+
+int pr_port_conflict(const pr_list_t *l)
+{
+    const pr_rec_t *p = pr_port(l);
+    int fam = p ? family_of_kind(p->kind) : PR_HEARD_NONE;
+    return fam != PR_HEARD_NONE && l->heard != PR_HEARD_NONE && l->heard != fam;
+}
+
 // ------------------------------------------------------------- old Macs, the box
 
 int pr_offers(const pr_list_t *l, pr_where_t link, int ids[], int max)
@@ -780,6 +811,16 @@ int pr_load(pr_list_t *l, const uint8_t *buf, size_t n)
     l->n = cnt;
     l->n_notes = kept;
     l->next_id = buf[4] ? buf[4] : 1;
+    // Who answered on the port is not stored, but a "changed" notice still waiting for the
+    // person says the other family did: so it holds from the start, as it did before.
+    l->heard = PR_HEARD_NONE;
+    const pr_rec_t *p = pr_port(l);
+    for (int i = 0; p && i < l->n_notes; i++) {
+        int fam = model_is_sw(l->notes[i].model) ? PR_HEARD_STYLEWRITER : PR_HEARD_IMAGEWRITER;
+        if (l->notes[i].kind == PR_NOTE_CHANGED && l->notes[i].id == p->id &&
+            fam != family_of_kind(p->kind))
+            l->heard = (uint8_t)fam;
+    }
     return 0;
 }
 
@@ -1055,13 +1096,16 @@ size_t pr_json(const pr_list_t *l, const pr_live_t live[PR_MAX], char *buf, size
             size_t n = strlen(swx);
             snprintf(swx + n, sizeof swx - n, ",\"fault\":\"%s\"", faults[live[i].fault]);
         }
+        // W-1103: the other family answered on the port: its record needs the person.
+        int swapped = r->where == PR_WHERE_PORT && pr_port_conflict(l);
         PUT("%s{\"id\":%u,\"name\":\"%s\",\"where\":\"%s\",\"kind\":\"%s\",\"model\":\"%s\","
             "\"shared\":%s,\"identified\":%s,\"found\":\"%s\",\"state\":\"%s\",\"uuid\":\"%s\","
-            "\"product\":\"%s\",\"dither\":\"%s\",\"gain\":%u,\"rp\":\"%s\",\"start_page\":%s%s}",
+            "\"product\":\"%s\",\"dither\":\"%s\",\"gain\":%u,\"rp\":\"%s\",\"start_page\":%s%s%s}",
             i ? "," : "", r->id, e_name, pr_where_name(r->where), pr_kind_name(r->kind),
             pr_model_name(r->model), r->shared ? "true" : "false",
             r->identified ? "true" : "false", r->found_auto ? "auto" : "person",
-            states[one_state(&live[i])], r->uuid, e_prod, r->dither, r->gain, rp, sp, swx);
+            states[swapped ? PR_BOX_ATTENTION : one_state(&live[i])], r->uuid, e_prod, r->dither,
+            r->gain, rp, sp, swx, swapped ? ",\"swapped\":true" : "");
     }
     PUT("],\"notes\":[");
     for (int i = 0; i < l->n_notes; i++)

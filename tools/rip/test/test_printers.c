@@ -1565,6 +1565,129 @@ static void test_sw_blob_stamp(void)
     CHECK_EQ_INT(pr_load(&M, buf, n), 0);
 }
 
+// W-1103: a printer of the other family answered on the port. The port's record must not
+// hear the other's language, so the list says so (pr_port_conflict) until the record's own
+// family answers again or the person accepts the change; the board refuses the record's
+// AirPrint jobs, test page and cleaning while it holds.
+static void test_port_conflict(void)
+{
+    static char buf[4096];
+    pr_live_t live[PR_MAX];
+    memset(live, 0, sizeof live);
+
+    // An ImageWriter record, and a StyleWriter answers the plain question.
+    fresh();
+    CHECK_EQ_INT(pr_port_heard(&L), PR_HEARD_NONE);
+    int id = pr_port_seen(&L, PR_PORT_IW2);
+    CHECK_EQ_INT(pr_port_heard(&L), PR_HEARD_IMAGEWRITER);
+    CHECK_EQ_INT(pr_port_conflict(&L), 0);
+    live[0].present = live[0].ready = 1;
+    pr_json(&L, live, buf, sizeof buf);
+    CHECK(strstr(buf, "swapped") == NULL);
+    pr_port_seen_sw(&L, PR_MODEL_SW2);
+    CHECK_EQ_INT(pr_port_heard(&L), PR_HEARD_STYLEWRITER);
+    CHECK_EQ_INT(pr_port_conflict(&L), 1);
+    // The page shows the port's printer as needing attention, and why.
+    pr_json(&L, live, buf, sizeof buf);
+    CHECK(strstr(buf, "\"state\":\"attention\"") != NULL);
+    CHECK(strstr(buf, "\"swapped\":true") != NULL);
+    // Dismissing the notice does not end it: the StyleWriter is still there.
+    pr_dismiss(&L, 0);
+    CHECK_EQ_INT(L.n_notes, 0);
+    CHECK_EQ_INT(pr_port_conflict(&L), 1);
+    // The ImageWriter answers ESC ? again: over.
+    pr_port_seen(&L, PR_PORT_IW2);
+    CHECK_EQ_INT(pr_port_conflict(&L), 0);
+    pr_json(&L, live, buf, sizeof buf);
+    CHECK(strstr(buf, "swapped") == NULL);
+    CHECK(strstr(buf, "\"state\":\"ready\"") != NULL);
+    // The line up and nothing said is no answer from an ImageWriter II.
+    pr_port_seen_sw(&L, PR_MODEL_SW2);
+    pr_port_seen(&L, PR_PORT_SILENT);
+    pr_port_seen(&L, PR_PORT_NOTHING);
+    CHECK_EQ_INT(pr_port_conflict(&L), 1);
+    // The person accepts: over, the record is the StyleWriter's.
+    CHECK_EQ_INT(pr_accept_change(&L, 0), 0);
+    CHECK_EQ_INT(pr_get(&L, id)->kind, PR_KIND_STYLEWRITER);
+    CHECK_EQ_INT(pr_port_conflict(&L), 0);
+
+    // The reverse: a StyleWriter record, and an ImageWriter answers ESC ?.
+    pr_port_seen(&L, PR_PORT_IWLQ);
+    CHECK_EQ_INT(pr_port_conflict(&L), 1);
+    // Its own StyleWriter answers (its status, the full sequence): over.
+    pr_port_answered(&L, PR_HEARD_STYLEWRITER);
+    CHECK_EQ_INT(pr_port_heard(&L), PR_HEARD_STYLEWRITER);
+    CHECK_EQ_INT(pr_port_conflict(&L), 0);
+    pr_port_answered(&L, PR_HEARD_IMAGEWRITER);
+    CHECK_EQ_INT(pr_port_conflict(&L), 1);
+    pr_port_answered(&L, PR_HEARD_NONE);           // nothing is not an answer
+    CHECK_EQ_INT(pr_port_conflict(&L), 1);
+    pr_port_seen_sw(&L, PR_MODEL_SW2);
+    CHECK_EQ_INT(pr_port_conflict(&L), 0);
+
+    // Another StyleWriter model is no conflict: a job's `?` holds it to the record's model.
+    fresh();
+    pr_port_seen_sw(&L, PR_MODEL_SW2);
+    pr_port_seen_sw(&L, PR_MODEL_SWC2500);
+    CHECK_EQ_INT(notes_of(PR_NOTE_CHANGED), 1);
+    CHECK_EQ_INT(pr_port_conflict(&L), 0);
+
+    // The original ImageWriter gives no self-ID: its line up with nothing said is its answer.
+    fresh();
+    id = pr_add_port(&L, PR_MODEL_IW1);
+    pr_port_seen_sw(&L, PR_MODEL_SW1200);
+    CHECK_EQ_INT(pr_port_conflict(&L), 1);
+    pr_port_seen(&L, PR_PORT_NOTHING);             // its line down: no answer
+    CHECK_EQ_INT(pr_port_conflict(&L), 1);
+    pr_port_seen(&L, PR_PORT_SILENT);
+    CHECK_EQ_INT(pr_port_heard(&L), PR_HEARD_IMAGEWRITER);
+    CHECK_EQ_INT(pr_port_conflict(&L), 0);
+
+    // A model the person picks counts as the record's: the family that answered ends it,
+    // the other starts it again.
+    fresh();
+    id = pr_port_seen(&L, PR_PORT_IW2);
+    pr_port_seen_sw(&L, PR_MODEL_SW2);
+    CHECK_EQ_INT(pr_port_conflict(&L), 1);
+    CHECK_EQ_INT(pr_set_model(&L, id, PR_MODEL_SW2), 0);
+    CHECK_EQ_INT(pr_port_conflict(&L), 0);
+    CHECK_EQ_INT(pr_set_model(&L, id, PR_MODEL_IWLQ), 0);
+    CHECK_EQ_INT(pr_port_conflict(&L), 1);
+    // "Something else", or no record at all: nothing is sent to it anyway.
+    CHECK_EQ_INT(pr_set_model(&L, id, PR_MODEL_NONE), 0);
+    CHECK_EQ_INT(pr_port_conflict(&L), 0);
+    CHECK_EQ_INT(pr_remove(&L, id), 0);
+    CHECK_EQ_INT(pr_port_conflict(&L), 0);
+
+    // Nothing of it is stored, but a pending "changed" notice says it again at a start: the
+    // board restarted with the StyleWriter still on the ImageWriter record's port.
+    fresh();
+    id = pr_port_seen(&L, PR_PORT_IW2);
+    static uint8_t blob[8192], blob2[8192];
+    size_t n1 = pr_save(&L, blob, sizeof blob);
+    pr_port_seen_sw(&L, PR_MODEL_SWC2200);
+    pr_dismiss(&L, 0);
+    size_t n2 = pr_save(&L, blob2, sizeof blob2);
+    CHECK_EQ_INT((long)n2, (long)n1);
+    CHECK(!memcmp(blob, blob2, n1));                // heard is not in the blob
+    pr_port_seen_sw(&L, PR_MODEL_SWC2200);
+    size_t n = pr_save(&L, blob, sizeof blob);
+    static pr_list_t M;
+    pr_init(&M, MAC, 1);
+    CHECK_EQ_INT(pr_load(&M, blob, n), 0);
+    CHECK_EQ_INT(pr_port_heard(&M), PR_HEARD_STYLEWRITER);
+    CHECK_EQ_INT(pr_port_conflict(&M), 1);
+    // A notice naming the record's own family says nothing about the port's language.
+    fresh();
+    pr_port_seen_sw(&L, PR_MODEL_SW2);
+    pr_port_seen_sw(&L, PR_MODEL_SWC2400);
+    n = pr_save(&L, blob, sizeof blob);
+    pr_init(&M, MAC, 1);
+    CHECK_EQ_INT(pr_load(&M, blob, n), 0);
+    CHECK_EQ_INT(pr_port_heard(&M), PR_HEARD_NONE);
+    CHECK_EQ_INT(pr_port_conflict(&M), 0);
+}
+
 int main(void)
 {
     test_at_renamed();
@@ -1611,5 +1734,6 @@ int main(void)
     test_sw_box_state();
     test_sw_blob();
     test_sw_blob_stamp();
+    test_port_conflict();
     TEST_END;
 }

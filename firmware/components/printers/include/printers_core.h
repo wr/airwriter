@@ -40,6 +40,12 @@ typedef enum { PR_MODEL_NONE, PR_MODEL_IW2, PR_MODEL_IWLQ, PR_MODEL_IW1,
 // pr_port_seen_sw's: it names its own model.)
 typedef enum { PR_PORT_NOTHING, PR_PORT_SILENT, PR_PORT_IW2, PR_PORT_IWLQ } pr_port_seen_t;
 
+// W-1103: the family of the printer that last answered on the port: an ImageWriter (ESC ?
+// named one; for an original ImageWriter record, its line was up and ESC ? got nothing) or a
+// StyleWriter (the plain question, the full sequence, `1` and `2`). Not stored; a pending
+// "changed" notice says it again at a start (pr_load).
+typedef enum { PR_HEARD_NONE, PR_HEARD_IMAGEWRITER, PR_HEARD_STYLEWRITER } pr_heard_t;
+
 // A StyleWriter model as stylewriter's; SW_NONE for anything else.
 sw_model_t pr_model_to_sw(pr_model_t m);
 // And back; PR_MODEL_NONE for SW_NONE.
@@ -95,6 +101,7 @@ typedef struct {
     uint8_t   mac[6];
     uint16_t  epoch;
     pr_seen_t seen[PR_MAX];
+    uint8_t   heard;          // W-1103: pr_heard_t, the port's last answer; not stored
 } pr_list_t;
 
 // A StyleWriter's fault as the board last read it, said to the settings page so it can
@@ -160,6 +167,18 @@ const pr_rec_t *pr_port(const pr_list_t *l);
 int  pr_index(const pr_list_t *l, int id);                  // its place in r[], or -1
 int  pr_port_is_imagewriter(const pr_list_t *l);            // ImageWriter commands may go to J2
 int  pr_port_is_stylewriter(const pr_list_t *l);            // the port's printer is a StyleWriter
+
+// W-1103: who answered on the port last (pr_heard_t). pr_port_seen and pr_port_seen_sw keep
+// it; pr_port_answered is for an answer that says nothing else (a StyleWriter's `1` and `2`,
+// the full sequence). PR_HEARD_NONE changes nothing: silence is not an answer.
+int  pr_port_heard(const pr_list_t *l);
+void pr_port_answered(pr_list_t *l, int heard);
+// The port's record is an ImageWriter and a StyleWriter answered last, or the reverse: the
+// record's language must not go to the port (its AirPrint jobs, test page and cleaning are
+// refused, and the page shows it as needing attention, "swapped") until the record's own
+// family answers again or the person makes the record the other's (accepting the "changed"
+// notice, or choosing its model). Dismissing the notice does not end it.
+int  pr_port_conflict(const pr_list_t *l);
 
 // The records old Macs are offered on `link` (ids, in list order): every
 // identified printer AirWriter can carry, shared over AirPrint or not; an
