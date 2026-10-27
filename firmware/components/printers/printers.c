@@ -704,7 +704,9 @@ static int start_page(int id, int on, char *err, size_t cap)
 }
 
 // W-1103: one cleaning of a StyleWriter's print head, run by the board. Its
-// answer is the status: 0, or 409 while a job holds the printer.
+// answer is the status: 0, or 409 while a job holds the printer, or 502 for a
+// printer that is off or has something to see to (no paper, a jam, the cover):
+// the one sentence is true of both.
 static int clean_head(int id, char *err, size_t cap)
 {
     if (!s_cfg.clean) {
@@ -713,7 +715,7 @@ static int clean_head(int id, char *err, size_t cap)
     }
     int rc = s_cfg.clean(id);
     if (rc == 409) snprintf(err, cap, "The printer is busy. Try again when it’s done.");
-    else if (rc) snprintf(err, cap, "Couldn’t clean the print head. Check that the printer is switched on.");
+    else if (rc) snprintf(err, cap, "Couldn’t clean the print head. Check that the printer is on and ready.");
     return rc;
 }
 

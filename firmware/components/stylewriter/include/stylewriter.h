@@ -19,6 +19,7 @@
 #include <stddef.h>
 #include "sw_session.h"
 #include "sw_model.h"
+#include "sw_testpage.h"
 #include "job_pipe_rip.h"
 #include "halftone.h"
 
@@ -64,13 +65,35 @@ int        stylewriter_cart(sw_model_t m);
 // One cleaning (sw_clean): 0, or the session's error. Takes as long as the printer does,
 // up to ten minutes; the state callback follows it.
 int        stylewriter_clean(sw_model_t m);
+// The answer to a Clean Print Head press before anything is started, which printers_post
+// reports as its status: 0 when a cleaning may begin, 409 when `busy` (the caller could not
+// take the job lock: nothing is asked of the printer), 502 when the model has no cleaning (the
+// original: nothing is asked) or the printer is off or holds a fault (it is asked `1` and `2`,
+// as the idle check does: a cleaning would wait on a fault with the lock held). Under the
+// caller's job lock when it is not `busy`.
+int        stylewriter_clean_check(sw_model_t m, int busy);
+
+// The test page (sw_testpage.h), under the caller's job lock and with no job in the pipeline:
+// one session at normal quality for `m`, the printer reset and its cartridge read (the board is
+// told through the cfg's cart callback, which may write flash, so call this from a task whose
+// stack is internal), the page drawn for that cartridge (info->colour_cart and ->model are the
+// session's, not the caller's), its frames fed straight to the session as they are made, the
+// last page waited out and `E` and `l` sent (sw_session_end). The cfg's cancelled callback and
+// stylewriter_cancel() stop it between steps (a block in flight finishes: the page is drawn
+// to a stop hook and fed through the session, which never cuts a `G` block), after which
+// the printer is told (`E`, the reset) and SW_E_CANCEL comes back. Any other error aborts the
+// session the same way. 0 if the page printed, else the session's error or SW_E_NOMEM.
+// The cancel flag is cleared as it starts and as it ends.
+int        stylewriter_test_page(sw_model_t m, const sw_tp_info_t *info);
 
 // The session's line, for whoever else sends a StyleWriter bytes under the lock (the test
 // page). Its cancelled op is the callback's and stylewriter_cancel's.
 const sw_ops_t *stylewriter_ops(void);
 
 // Stops what the session is doing at its next step (a cancel, a cut upload). Cleared by
-// each stylewriter_job_begin and stylewriter_clean. Any task.
+// each stylewriter_job_begin, stylewriter_clean and stylewriter_test_page as they start, and
+// as a job or a test page ends, so a cancel that lands late leaves nothing for the next
+// session to find. Any task.
 void stylewriter_cancel(void);
 
 // ---- A job

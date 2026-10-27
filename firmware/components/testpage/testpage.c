@@ -242,6 +242,7 @@ static const char *screen_name(ht_algo_t a)
     case HT_FLOYD:     return "Floyd-Steinberg";
     case HT_BLUENOISE: return "Blue noise";
     case HT_BAYER:     return "Ordered";
+    case HT_APPLE:     return "Apple";
     default:           return "Threshold";
     }
 }

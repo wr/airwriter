@@ -311,6 +311,26 @@ static void test_page_tick(void)
     }
 }
 
+/* Apple's screen is a StyleWriter's, but a name for it is the screen's own: the details line
+ * never reads "Threshold" for it (a default case once did). */
+static void test_page_names_every_screen(void)
+{
+    static const struct { ht_algo_t a; const char *name; } sc[] = {
+        { HT_ATKINSON, "Atkinson" }, { HT_FLOYD, "Floyd-Steinberg" }, { HT_BLUENOISE, "Blue noise" },
+        { HT_BAYER, "Ordered" }, { HT_THRESHOLD, "Threshold" }, { HT_APPLE, "Apple" },
+    };
+    for (size_t k = 0; k < sizeof sc / sizeof sc[0]; k++) {
+        tp_info_t info = info_for(IW_RIBBON_BLACK);
+        info.screen = sc[k].a;
+        tp_result_t rc;
+        buf_t s = print_page(&info, &rc);
+        char want[64];
+        snprintf(want, sizeof want, "Halftone   %s", sc[k].name);
+        CHECK(has(&s, want));
+        free(s.b);
+    }
+}
+
 static void test_page_long_names(void)
 {
     tp_info_t info = info_for(IW_RIBBON_COLOUR);
@@ -418,6 +438,7 @@ int main(void)
     test_page_inks();
     test_page_identity();
     test_page_tick();
+    test_page_names_every_screen();
     test_page_long_names();
     test_page_names_outside_ascii();
     test_page_no_head_placement();

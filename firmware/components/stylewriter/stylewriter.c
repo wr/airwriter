@@ -8,6 +8,7 @@
 // (stylewriter_prn), then the finisher's stylewriter_job_end.
 #include "stylewriter.h"
 #include "sw_page.h"
+#include "sw_status.h"
 #include "serial_out.h"
 #include "job_pipe.h"
 
@@ -150,6 +151,84 @@ int stylewriter_clean(sw_model_t m)
     return rc;
 }
 
+int stylewriter_clean_check(sw_model_t m, int busy)
+{
+    if (busy) return 409;
+    const sw_spec_t *sp = sw_spec(m);
+    if (!sp || !sp->cleans) return 502;
+    sw_state_t st;
+    if (stylewriter_status(m, &st) != SW_OK || sw_state_fault(st)) return 502;
+    return 0;
+}
+
+// ---------------------------------------------------------------- the test page
+
+typedef struct {
+    sw_session_t *s;
+    int           err;           // the first session error
+} tp_ctx_t;
+
+// The stage's frames go straight to the session, which waits while the printer's buffer is full.
+static void tp_frame(void *ctx, const uint8_t *frame, size_t n)
+{
+    tp_ctx_t *c = ctx;
+    if (c->err) return;
+    int rc = sw_session_feed(c->s, frame, n);
+    if (rc) c->err = rc;
+}
+
+// The page is not made any further once the session has failed or been asked to stop.
+static int tp_stop(void *ctx)
+{
+    tp_ctx_t *c = ctx;
+    return c->err || op_cancelled(NULL);
+}
+
+int stylewriter_test_page(sw_model_t m, const sw_tp_info_t *info)
+{
+    const sw_spec_t *sp = sw_spec(m);
+    if (!sp || !info) return SW_E_FAULT;
+    s_cancel = 0;                // a cancel a job left behind is not this page's
+    stylewriter_link(1);
+    const sw_job_cfg_t jc = { .model = m, .quality = 4, .colour_job = sp->colour,
+                              .stall_ms = CONFIG_AIRWRITER_STALL_ABORT * 1000u };
+    sw_session_t *s = sw_session_new(&k_ops, &jc);
+    sw_page_t *pg = NULL;
+    int rc = s ? sw_session_begin(s) : SW_E_NOMEM;
+    tp_ctx_t c = { .s = s };
+    if (!rc) {
+        int cart = sw_session_cart(s);
+        ESP_LOGI(TAG, "test page begins: %s cartridge", cart ? "colour" : "black");
+        if (s_cfg.cart) s_cfg.cart(cart);
+        sw_page_cfg_t pc = { .model = m, .colour_cart = cart, .out = tp_frame, .ctx = &c };
+        pg = sw_page_new(&pc);
+        if (!pg) {
+            rc = SW_E_NOMEM;
+        } else {
+            rip_stage_t st;
+            sw_page_stage(pg, &st);
+            sw_tp_info_t ti = *info;
+            ti.model = m;
+            ti.colour_cart = cart;
+            ti.stop = tp_stop;
+            ti.stop_ctx = &c;
+            int drawn = sw_testpage(&ti, &st);
+            rc = c.err ? c.err
+               : drawn == SW_TP_NOMEM ? SW_E_NOMEM
+               : drawn == SW_TP_STAGE ? SW_E_FAULT
+               : drawn == SW_TP_STOPPED ? SW_E_CANCEL
+               : sw_session_end(s);
+        }
+    }
+    if (rc && s) sw_session_abort(s);      // `E` and the reset, once; a no-op if it sent nothing
+    ESP_LOGI(TAG, "test page: %s (%d)", rc ? "not printed" : "printed", rc);
+    sw_page_free(pg);                      // both take NULL
+    sw_session_free(s);
+    s_cancel = 0;
+    stylewriter_link_record();
+    return rc;
+}
+
 // ---------------------------------------------------------------- a job
 
 typedef struct {
@@ -168,6 +247,7 @@ static void job_free(void)
     sw_page_free(s_job.page);        // both take NULL
     sw_session_free(s_job.s);
     memset(&s_job, 0, sizeof s_job);
+    s_cancel = 0;                    // a cancel is the job's: it ends with it, for the next session
 }
 
 // The job cannot go on: the first error is kept, the printer is told (`E`, the reset: once,

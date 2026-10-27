@@ -16,6 +16,7 @@
 #include "lw_query.h"
 #include "sw_page.h"
 #include "sw_rip.h"
+#include "sw_testpage.h"
 
 typedef struct {
     FILE    *stream;
@@ -232,6 +233,43 @@ static int print_testpage(const char *ribbon, const char *path, ht_algo_t algo, 
     return 0;
 }
 
+/* A StyleWriter's test page, drawn as the board draws it for `model` with a black or colour
+ * cartridge, written as the wire stream swfake.py decode reads (--out-sw). */
+static int print_sw_testpage(const char *cart, sw_model_t model, const char *path, ht_algo_t algo,
+                             int gain)
+{
+    int colour = !strcmp(cart, "colour");
+    if (colour && !sw_spec(model)->colour) {
+        fprintf(stderr, "rip: the %s takes no colour cartridge\n", sw_spec(model)->name);
+        return 2;
+    }
+    host_t h;
+    memset(&h, 0, sizeof h);
+    if (!(h.sw = fopen(path, "wb"))) { perror(path); return 1; }
+    sw_page_cfg_t pc = { .model = model, .colour_cart = colour, .out = sw_out, .ctx = &h };
+    sw_page_t *p = sw_page_new(&pc);
+    rip_stage_t st;
+    int rc = -1;
+    if (p) {
+        sw_page_stage(p, &st);
+        sw_tp_info_t info = {
+            .printer = sw_spec(model)->name, .board = "AirWriter v0.3.0 at 10.0.1.115",
+            .host = "airwriter-2434.local", .model = model, .colour_cart = colour, .gain = gain,
+            .screen = algo,
+        };
+        rc = sw_testpage(&info, &st);
+        sw_page_free(p);
+    }
+    long n = ftell(h.sw);
+    fclose(h.sw);
+    if (rc != SW_TP_DONE || h.write_failed) {
+        fprintf(stderr, "rip: test page failed (%d)\n", rc);
+        return 1;
+    }
+    fprintf(stderr, "rip: %s test page, %ld bytes\n", sw_spec(model)->name, n);
+    return 0;
+}
+
 static void write_file(void *ctx, const uint8_t *b, size_t n)
 {
     fwrite(b, 1, n, (FILE *)ctx);
@@ -246,6 +284,7 @@ static void usage(void)
           "       rip --in FILE --printer stylewriter --model original|ii|1200|1500|2200|2400|2500\n"
           "           [--cart black|colour] [--tone none] [--out-sw FILE] [--out-pbm FILE]\n"
           "       rip --testpage colour|black|unknown --out-stream FILE [--dither ...] [--gain ...]\n"
+          "       rip --sw-testpage black|colour --model M --out-sw FILE [--dither ...] [--gain ...]\n"
           "  --colour   print RGB pages in four inks, as with the colour ribbon in\n"
           "  --gain     dot gain at a 50%% tint the tone curve makes up for (default 0, off)\n"
           "  --top-margin  the board's top margin setting, 1/144 in: + adds paper ahead of\n"
@@ -256,6 +295,8 @@ static void usage(void)
           "       rip --query-job FILE   the LaserWriter query job, probe and all\n"
           "       rip --start-page-job on|off FILE  the job that sets its start page (W-1099)\n"
           "       rip --ps-testpage FILE  the PostScript printers' test page (W-1088)\n"
+          "       --sw-testpage  a StyleWriter's test page for that cartridge, as the board draws it\n"
+          "             (W-1103); --out-sw writes it as the printer gets it, for swfake.py decode\n"
           "  --printer stylewriter  rip at 360 dpi for a StyleWriter (W-1103), the sheet named by\n"
           "             the page's width. --out-sw writes the page as the printer gets it (rects,\n"
           "             G blocks, 0C; no setup or queries) for tools/stylewriter/swfake.py decode;\n"
@@ -275,6 +316,7 @@ int main(int argc, char **argv)
     const char *printer = "imagewriter", *paper = "letter", *out_ps = NULL, *out_pbm = NULL;
     const char *query = NULL, *ps_tp = NULL, *sp_job = NULL;
     const char *model_arg = NULL, *cart_arg = "black", *tone_arg = "apple", *out_sw = NULL;
+    const char *sw_tp = NULL;
     int sp_on = 0;
     int colour = 0, gain = 0, top = 0, hex = 0;
 
@@ -302,6 +344,7 @@ int main(int argc, char **argv)
             sp_job = argv[++i];
         }
         else if (!strcmp(argv[i], "--ps-testpage") && i + 1 < argc) ps_tp = argv[++i];
+        else if (!strcmp(argv[i], "--sw-testpage") && i + 1 < argc) sw_tp = argv[++i];
         else { usage(); return 2; }
     }
     if (ps_tp) {
@@ -323,12 +366,20 @@ int main(int argc, char **argv)
         fclose(qf);
         return 0;
     }
-    if (!in && !(testpage && out_stream)) { usage(); return 2; }
+    if (!in && !(testpage && out_stream) && !(sw_tp && out_sw)) { usage(); return 2; }
 
     ht_algo_t algo;
     if (ht_algo_from_name(dither, &algo)) {
         fprintf(stderr, "rip: unknown dither '%s'\n", dither);
         return 2;
+    }
+    if (sw_tp) {
+        sw_model_t m;
+        if (!model_arg || sw_rip_model(model_arg, &m) || (strcmp(sw_tp, "black") && strcmp(sw_tp, "colour"))) {
+            usage();
+            return 2;
+        }
+        return print_sw_testpage(sw_tp, m, out_sw, algo, gain);
     }
     if (testpage) return print_testpage(testpage, out_stream, algo, gain, top);
 

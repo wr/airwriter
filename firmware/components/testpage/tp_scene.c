@@ -108,12 +108,16 @@ static uint8_t srgb(float lin)
 
 void tp_scene_row(uint32_t w, uint32_t h, uint32_t y, uint8_t *rgb)
 {
+    tp_scene_row_aspect(w, h, y, rgb, ((float)h / 72) / ((float)w / 144));
+}
+
+void tp_scene_row_aspect(uint32_t w, uint32_t h, uint32_t y, uint8_t *rgb, float aspect)
+{
     const v3 eye = { 0.15f, 1.05f, -3.6f }, look = { 0.15f, 0.40f, 0.0f };
     v3 fwd = norm(sub(look, eye));
     v3 right = norm(cross((v3){ 0, 1, 0 }, fwd));
     v3 up = cross(fwd, right);
     const float fov = 0.62f;                // half the image plane's width at distance 1
-    float aspect = ((float)h / 72) / ((float)w / 144);
 
     for (uint32_t x = 0; x < w; x++) {
         v3 acc = { 0, 0, 0 };

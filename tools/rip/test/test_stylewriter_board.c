@@ -11,7 +11,12 @@
 //     ripped before the cartridge is known, and the rip's colour is the cartridge's;
 //   - the abort contract: any session error aborts the session and the job pipeline, once, and
 //     the bytes that follow go nowhere;
-//   - a job that ends short sends nothing it had not begun to send.
+//   - a job that ends short sends nothing it had not begun to send;
+//   - the test page (Task 11) is one session at normal quality, made for the cartridge the printer
+//     reports, cancelled through the session, and never cancelled by a flag a job left behind;
+//   - the answer to the Clean Print Head key: 0 when a cleaning may begin, 409 while a job holds
+//     the printer, 502 for a printer that is off or holds a fault, and nothing at all for the
+//     original, which has none; one press is one `P`.
 #include "test_util.h"
 #include "stylewriter.h"
 #include "sw_page.h"
@@ -47,9 +52,11 @@ typedef struct {
     // what it was sent
     int resets, blocks, pages, rects, aborts, draws;
     int cancel_on_block;           // stylewriter_cancel() is called as this block begins (0: never)
+    int tap_on_block;              // the board's own cancel (the test button's second tap) is raised then
 } fake_t;
 
 static fake_t F;
+static int g_tap;                  // what the board's cancelled callback answers
 
 int64_t esp_timer_get_time(void) { return (int64_t)F.us; }
 void vTaskDelay(TickType_t ticks) { F.us += (uint64_t)ticks * 10000u; }
@@ -133,6 +140,7 @@ static void parse(uint8_t b)
         F.glen |= (uint32_t)b << 8;
         F.blocks++;
         if (F.cancel_on_block && F.blocks == F.cancel_on_block) stylewriter_cancel();
+        if (F.tap_on_block && F.blocks == F.tap_on_block) g_tap = 1;
         if (F.silent_after_g && F.blocks >= F.silent_after_g) F.silent = 1;
         F.ps = F.glen ? P_GDATA : P_SKIP;
         F.skip = F.glen ? 0 : 1;
@@ -195,6 +203,7 @@ static int rec_is_sw(void) { return g_record_sw; }
 static void on_state(sw_state_t st) { if (g_nstates < 64) g_states[g_nstates++] = (int)st; }
 static void on_cart(int colour) { g_cart_calls++; g_cart_val = colour; }
 static int no_cancel(void) { return 0; }
+static int tapped(void) { return g_tap; }
 
 static void reset_all(sw_model_t model)
 {
@@ -204,6 +213,7 @@ static void reset_all(sw_model_t model)
     F.model = model;
     F.us = 100u * 1000000u;
     g_aborts = g_cart_calls = g_cart_val = g_nstates = 0;
+    g_tap = 0;
     g_target = NULL;
 }
 
@@ -259,6 +269,14 @@ static void start(int record_sw)
                               .cancelled = no_cancel };
     stylewriter_start(&cfg);
     g_record_sw = record_sw;
+}
+
+static sw_tp_info_t tp_info(sw_model_t m)
+{
+    sw_tp_info_t i = { .printer = "Den StyleWriter", .board = "AirWriter v0.3.0 at 10.0.1.115",
+                       .host = "airwriter-2434.local", .model = m, .colour_cart = 1,
+                       .screen = HT_ATKINSON };
+    return i;
 }
 
 int main(void)
@@ -538,6 +556,158 @@ int main(void)
     reset_all(SW_II);
     F.silent = 1;
     CHECK_EQ_INT(stylewriter_clean(SW_II), SW_E_SILENT);
+
+    // ---------------------------------------------------------- a cancel left over from a job
+    // A job that was cancelled leaves nothing behind: its end clears the flag (the test page's
+    // session reads the same flag), so a page after it is not cancelled at once.
+    reset_all(SW_C2500);
+    F.cart_colour = 1;
+    F.cancel_on_block = 1;
+    CHECK_EQ_INT(stylewriter_job_begin(SW_C2500, 4, HT_APPLE, 0, &t), 0);
+    g_target = &t;
+    CHECK_EQ_INT(t.colour_ok(t.colour_ctx), 1);
+    feed_page(t.stage, 1, 1);
+    CHECK_EQ_INT(stylewriter_job_end(1), SW_E_CANCEL);
+    CHECK_EQ_INT(stylewriter_ops()->cancelled(NULL), 0);
+    // And a flag set while nothing runs (a cancel that lands as a job ends) does not stop the
+    // next test page either: it clears the flag as it starts.
+    reset_all(SW_C2500);
+    F.cart_colour = 1;
+    stylewriter_cancel();
+    CHECK_EQ_INT(stylewriter_ops()->cancelled(NULL), 1);
+    sw_tp_info_t ti = tp_info(SW_C2500);
+    g_cart_calls = 0;
+    CHECK_EQ_INT(stylewriter_test_page(SW_C2500, &ti), 0);
+    CHECK_EQ_INT(F.pages, 1);
+    CHECK_EQ_INT(stylewriter_ops()->cancelled(NULL), 0);
+
+    // ---------------------------------------------------------- the test page
+    // One session: the reset and setup at normal quality (m2 then n: no `d` draft, no `s` best),
+    // the cartridge read and told to the board, the page's rects and blocks, its end.
+    reset_all(SW_C2500);
+    F.cart_colour = 1;
+    start(1);
+    stylewriter_link(0);                                      // (J2 was at the ImageWriter's link)
+    ti = tp_info(SW_C2500);
+    CHECK_EQ_INT(stylewriter_test_page(SW_C2500, &ti), 0);
+    CHECK_EQ_INT(F.resets, 1);
+    CHECK_EQ_MEM(F.wire, "\x00\xFF\xFF\xFF" "I", 5);
+    CHECK(wire_has("m2nZA"));                                 // m2, normal on a colour cartridge, A
+    CHECK(!wire_has("m2dA") && !wire_has("m2sA"));
+    CHECK_EQ_INT(g_cart_calls, 1);
+    CHECK_EQ_INT(g_cart_val, 1);
+    CHECK_EQ_INT(F.pages, 1);
+    CHECK(F.rects > 8 && F.blocks > 8);                       // a colour page is bands of blocks
+    CHECK_EQ_INT(wire_count("El"), 1);                        // the page was waited out: E and l
+    CHECK_EQ_INT(g_states[g_nstates - 1], SWS_READY);
+    CHECK_EQ_INT(g_aborts, 0);                                // no job pipeline was involved
+    CHECK_EQ_INT(F.nlinks, 2);                                // 9600, then 57600 for the page
+    CHECK_EQ_INT(F.links[1].baud, 57600);                     // and the record's link stays after it
+
+    // A black cartridge in a colour model: the page is the gray one (black rects only), whatever
+    // the caller said, and the board is told black.
+    reset_all(SW_C2500);
+    F.cart_colour = 0;
+    ti = tp_info(SW_C2500);
+    ti.colour_cart = 1;
+    CHECK_EQ_INT(stylewriter_test_page(SW_C2500, &ti), 0);
+    CHECK_EQ_INT(g_cart_val, 0);
+    CHECK_EQ_INT(F.pages, 1);
+    CHECK(wire_has("m2bA"));                                  // normal on a black cartridge
+    int gray_blocks = F.blocks;
+    reset_all(SW_C2500);
+    F.cart_colour = 1;
+    CHECK_EQ_INT(stylewriter_test_page(SW_C2500, &ti), 0);
+    CHECK(F.blocks > gray_blocks);                            // four planes a row against one
+
+    // The models with no cartridge to read, and the original (no delta, no D, no H).
+    reset_all(SW_II);
+    ti = tp_info(SW_II);
+    CHECK_EQ_INT(stylewriter_test_page(SW_II, &ti), 0);
+    CHECK_EQ_INT(F.pages, 1);
+    CHECK_EQ_INT(g_cart_val, 0);
+    reset_all(SW_ORIGINAL);
+    ti = tp_info(SW_ORIGINAL);
+    CHECK_EQ_INT(stylewriter_test_page(SW_ORIGINAL, &ti), 0);
+    CHECK_EQ_INT(F.pages, 1);
+
+    // The second tap cancels it through the session: the block in flight finishes, then `E`
+    // and the reset, nothing more, and the next page is not cancelled.
+    reset_all(SW_C2500);
+    F.cart_colour = 1;
+    F.cancel_on_block = 3;
+    ti = tp_info(SW_C2500);
+    CHECK_EQ_INT(stylewriter_test_page(SW_C2500, &ti), SW_E_CANCEL);
+    CHECK_EQ_INT(F.pages, 0);
+    CHECK(F.blocks >= 3 && F.blocks <= 4);
+    CHECK_EQ_INT(F.resets, 2);                                // the begin's and the abort's
+    F.cancel_on_block = 0;
+    CHECK_EQ_INT(stylewriter_ops()->cancelled(NULL), 0);
+    F.blocks = F.pages = 0;
+    CHECK_EQ_INT(stylewriter_test_page(SW_C2500, &ti), 0);
+    CHECK_EQ_INT(F.pages, 1);
+
+    // The test button's second tap is the board's own cancel, the cfg's callback: the same stop.
+    {
+        stylewriter_cfg_t cfg = { .record_is_sw = rec_is_sw, .state = on_state, .cart = on_cart,
+                                  .cancelled = tapped };
+        stylewriter_start(&cfg);
+        reset_all(SW_C2500);
+        F.cart_colour = 1;
+        F.tap_on_block = 2;
+        CHECK_EQ_INT(stylewriter_test_page(SW_C2500, &ti), SW_E_CANCEL);
+        CHECK_EQ_INT(F.pages, 0);
+        CHECK(F.blocks >= 2 && F.blocks <= 3);
+        CHECK_EQ_INT(F.resets, 2);
+        g_tap = 0;                                           // the board clears its own, as the page ends
+        CHECK_EQ_INT(stylewriter_test_page(SW_C2500, &ti), 0);
+        CHECK_EQ_INT(F.pages, 1);
+        start(1);
+    }
+
+    // A printer that does not answer: nothing but the reset and its questions are sent, and
+    // the page is never drawn.
+    reset_all(SW_C2500);
+    F.silent = 1;
+    ti = tp_info(SW_C2500);
+    CHECK_EQ_INT(stylewriter_test_page(SW_C2500, &ti), SW_E_SILENT);
+    CHECK_EQ_INT(F.blocks, 0);
+    CHECK_EQ_INT(F.pages, 0);
+    // One that goes deaf partway: the page stops being drawn and sent, the session is aborted
+    // once, and the error is the printer's.
+    reset_all(SW_C2500);
+    F.cart_colour = 1;
+    F.silent_after_g = 2;
+    CHECK_EQ_INT(stylewriter_test_page(SW_C2500, &ti), SW_E_SILENT);
+    CHECK_EQ_INT(F.blocks, 2);
+    CHECK_EQ_INT(F.resets, 2);
+    // A model there is none of.
+    reset_all(SW_NONE);
+    CHECK(stylewriter_test_page(SW_NONE, &ti) != 0);
+    CHECK_EQ_INT(F.wn, 0);
+
+    // ---------------------------------------------------------- Clean Print Head, the answers
+    // POST /api/printers {"id":N,"clean":true}: main.c takes the job lock without waiting and asks
+    // whether a cleaning may begin; 0 starts it on its own task, which calls stylewriter_clean.
+    reset_all(SW_II);
+    start(1);
+    CHECK_EQ_INT(stylewriter_clean_check(SW_II, 1), 409);     // a job holds the printer
+    CHECK_EQ_INT(F.wn, 0);                                    // and the printer is not asked anything
+    CHECK_EQ_INT(stylewriter_clean_check(SW_ORIGINAL, 0), 502);   // the original has no cleaning
+    CHECK_EQ_INT(F.wn, 0);                                    // and is sent nothing
+    CHECK_EQ_INT(stylewriter_clean_check(SW_NONE, 0), 502);
+    CHECK_EQ_INT(F.wn, 0);
+    F.silent = 1;
+    CHECK_EQ_INT(stylewriter_clean_check(SW_II, 0), 502);     // switched off
+    F.silent = 0;
+    F.no_paper = 1;
+    CHECK_EQ_INT(stylewriter_clean_check(SW_II, 0), 502);     // holding a fault: a cleaning would wait on it
+    CHECK_EQ_INT(wire_count("P"), 0);                         // none was started by asking
+    F.no_paper = 0;
+    CHECK_EQ_INT(stylewriter_clean_check(SW_II, 0), 0);       // ready: it may begin
+    CHECK_EQ_INT(wire_count("P"), 0);
+    CHECK_EQ_INT(stylewriter_clean(SW_II), 0);                // and the one press is one cleaning
+    CHECK_EQ_INT(wire_count("P"), 1);
 
     free(F.wire);
     TEST_END;

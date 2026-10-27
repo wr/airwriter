@@ -15,6 +15,7 @@ INCS    := -I$(COMP)/ripjob/include \
            -I$(COMP)/serial_out/include \
            -I$(COMP)/testpage/include \
            -I$(COMP)/stylewriter/include \
+           -I$(COMP)/stylewriter \
            -I$(COMP)/printers/include \
            -I.
 # serial_out is IDF-bound except for serial_writer.c, which is pure by design
@@ -31,6 +32,7 @@ SRCS    := $(wildcard $(COMP)/ripjob/*.c) \
            $(wildcard $(COMP)/testpage/*.c) \
            $(COMP)/stylewriter/sw_model.c $(COMP)/stylewriter/sw_code.c $(COMP)/stylewriter/sw_page.c \
            $(COMP)/stylewriter/sw_session.c $(COMP)/stylewriter/sw_status.c \
+           $(COMP)/stylewriter/sw_testpage.c \
            $(COMP)/printers/port_policy.c \
            $(COMP)/serial_out/serial_writer.c
 TESTSRC := $(wildcard test/test_*.c)
@@ -117,6 +119,11 @@ build/test_sw_page_mem: CFLAGS += -DBIGMEM_COUNT
 build/test_sw_page_mem: test/test_sw_page_mem.c $(SRCS) | build
 	$(CC) $(CFLAGS) $(INCS) -Itest -o $@ $^ -lm
 
+# So is the test page's (test_sw_testpage.c): what it holds, once, is in PSRAM.
+build/test_sw_testpage: CFLAGS += -DBIGMEM_COUNT
+build/test_sw_testpage: test/test_sw_testpage.c $(SRCS) | build
+	$(CC) $(CFLAGS) $(INCS) -Itest -o $@ $^ -lm
+
 # W-1088 review: the printer list's core takes none of the board's internal
 # RAM of its own (docs/traps.md): no writable statics, its buffers are the
 # caller's (the board's are in PSRAM).
@@ -127,10 +134,11 @@ build/printers_core.o: $(COMP)/printers/printers_core.c | build
 build/port_policy.o: $(COMP)/printers/port_policy.c | build
 	$(CC) $(CFLAGS) $(INCS) -c -o $@ $<
 
-# The StyleWriter's model table, run coder, page stage and session are held to the same rule
+# The StyleWriter's model table, run coder, page stage, session and test page are held to the same rule
 # as the printer list's core (W-1103): no writable statics; the page stage's block and the
 # session's frame buffer come from the board's PSRAM allocator (bigmem.h).
-SW_OBJS := build/sw_model.o build/sw_code.o build/sw_page.o build/sw_session.o build/sw_status.o
+SW_OBJS := build/sw_model.o build/sw_code.o build/sw_page.o build/sw_session.o build/sw_status.o \
+           build/sw_testpage.o
 build/sw_%.o: $(COMP)/stylewriter/sw_%.c | build
 	$(CC) $(CFLAGS) $(INCS) -c -o $@ $<
 
@@ -140,7 +148,11 @@ test: $(TESTBIN) build/printers_core.o build/port_policy.o $(SW_OBJS)
 	  if nm build/$$o.o | grep -E ' [bBdD] ' | grep -v ' ltmp'; then \
 	    echo "FAIL $$o: writable statics (above)"; fail=1; \
 	  else echo "ok  $$o: no writable statics"; fi; \
-	done; exit $$fail
+	done; \
+	if grep -nE '(^|[^_a-z])(malloc|calloc|realloc)\(' $(COMP)/stylewriter/sw_testpage.c; then \
+	  echo "FAIL sw_testpage: a buffer not through bigmem.h (above)"; fail=1; \
+	else echo "ok  sw_testpage: every buffer through bigmem.h"; fi; \
+	exit $$fail
 
 clean:
 	rm -rf build

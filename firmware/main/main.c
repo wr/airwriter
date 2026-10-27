@@ -157,6 +157,7 @@ static SemaphoreHandle_t s_job_lock;
 // finishes can never set its cancel on the next job instead.
 static portMUX_TYPE s_tap_mux = portMUX_INITIALIZER_UNLOCKED;
 static int s_test_running;      // the test page holds the lock
+static int s_sw_test_running;   // ... and it is a StyleWriter's: a session, not ImageWriter writes
 static volatile int s_test_cancel;  // a second tap asked to stop it
 
 static volatile int s_job_waiting;
@@ -1086,6 +1087,7 @@ static void sw_online(sw_model_t m)
     if (c >= 0) sw_cart_seen(c);
     sw_state_t st;
     sw_idle_state(stylewriter_status(m, &st) == SW_OK ? st : SWS_OFFLINE);
+    s_last_status_ms = uptime_ms();     // `1` and `2` were just asked: not again in 10 s
 }
 
 // The person named the port's printer a StyleWriter (Add a Printer…, the unknown printer's
@@ -1114,7 +1116,7 @@ static void sw_confirm(void)
 static int sw_cancelled(void)
 {
     if (s_sw_owns) return s_job_cancelled;
-    return s_test_running && s_test_cancel;      // the test page's second tap (Task 11)
+    return s_test_running && s_test_cancel;      // the test page's second tap
 }
 
 // The settings page's Print Head cleaning (printers_cfg_t.clean): one cleaning, on a task
@@ -1128,21 +1130,23 @@ static void sw_clean_task(void *arg)
     s_printing = 0;
     job_touch();
     line_source();
+    ESP_LOGI(TAG, "cleaning task: %u bytes of stack to spare", (unsigned)uxTaskGetStackHighWaterMark(NULL));
     xSemaphoreGive(s_job_lock);
     vTaskDelete(NULL);
 }
 
-// 0 once it has begun, 409 when a job holds the printer, 502 when the printer does not
-// answer or holds a fault (a cleaning would wait on it holding the lock).
+// 0 once it has begun, 409 when a job holds the printer, 502 when it is not the port's
+// StyleWriter, has no cleaning (the original), does not answer or holds a fault (a cleaning
+// would wait on it with the lock held): stylewriter_clean_check decides, with the lock.
 static int sw_clean_web(int id)
 {
     if (printers_test_kind(id) != 3) return 502;
-    if (xSemaphoreTake(s_job_lock, 0) != pdTRUE) return 409;
+    int busy = xSemaphoreTake(s_job_lock, 0) != pdTRUE;
     sw_model_t m = printers_port_sw_model();
-    sw_state_t st;
-    if (stylewriter_status(m, &st) != SW_OK || sw_state_fault(st)) {
-        xSemaphoreGive(s_job_lock);
-        return 502;
+    int rc = stylewriter_clean_check(m, busy);
+    if (rc) {
+        if (!busy) xSemaphoreGive(s_job_lock);
+        return rc;
     }
     printer_state_post(PS_EV_ACTIVITY);          // a person asked: wake the panel
     s_printing = 1;
@@ -1435,6 +1439,10 @@ static void kick_task(void *arg)
                 port_sw_sync(printers_port_is_stylewriter());
                 if (s_port_sw && printers_port_sw_model() == m) {
                     sw_online(m);
+                    // The deepest the port task goes: the plain question, the record, the cartridge
+                    // (which saves the ribbon) and the status.
+                    ESP_LOGI(TAG, "port task: %u bytes of stack to spare",
+                             (unsigned)uxTaskGetStackHighWaterMark(NULL));
                     break;
                 }
             }
@@ -1454,7 +1462,9 @@ static void kick_task(void *arg)
             break;
         }
         case PA_KICK: {
+            stylewriter_link(0);             // CTRL-X is the ImageWriter's: at its link, as ESC ? is
             esp_err_t err = serial_out_send_unflowed(&ctrl_x, 1);
+            stylewriter_link_record();
             printer_state_kicked();
             ESP_LOGI(TAG, "printer busy while idle; sent CTRL-X (%s)", esp_err_to_name(err));
             break;
@@ -1652,14 +1662,79 @@ static void ps_test_locked(int id)
     }
 }
 
-// W-1103: a StyleWriter's test page is a raster drawn on the board (a later step of the
-// StyleWriter work). Until it is built the page is asked for and nothing is sent, which is
-// all that is safe: the ImageWriter's page is ImageWriter commands, and a StyleWriter must
-// never hear those. s_job_lock is held; this gives it back.
+// W-1103: a StyleWriter's test page is a raster drawn on the board (sw_testpage.h) and fed to
+// a session as it is made (stylewriter_test_page). It never hears the ImageWriter's page, which
+// is ImageWriter commands. Its own task, as the ImageWriter's page has, so that the button's
+// poll task and the settings page are answered at once; the task's stack is internal, as the
+// cartridge it reads may be saved to flash. The second tap of the button is the cancel
+// (sw_cancelled), which the session reads between steps: a block in flight finishes.
+static void sw_test_task(void *arg)
+{
+    sw_model_t m = (sw_model_t)(intptr_t)arg;
+    char screen[sizeof s_set.dither], name[PR_NAME_MAX], board[112], host[64];
+    int gain = 0;
+    ht_algo_t algo = HT_ATKINSON;
+    if (!printers_port_screen(screen, sizeof screen, &gain) && ht_algo_from_name(screen, &algo))
+        algo = HT_ATKINSON;
+    printers_port_name(name, sizeof name);
+    int has_ip = s_ip[0] && strcmp(s_ip, "0.0.0.0");
+    if (has_ip) snprintf(board, sizeof board, "AirWriter %s at %s", esp_app_get_description()->version, s_ip);
+    else        snprintf(board, sizeof board, "AirWriter %s, no IP yet", esp_app_get_description()->version);
+    // The settings page's address: its host name, or in setup mode the board's own.
+    if (s_ap_mode) snprintf(host, sizeof host, "%s", s_ip);
+    else           snprintf(host, sizeof host, "%s.local", s_set.hostname);
+    sw_tp_info_t info = { .printer = name, .board = board, .host = host, .model = m,
+                          .colour_cart = s_sw_cart == 2, .gain = gain, .screen = algo };
+    int rc = stylewriter_test_page(m, &info);
+    ESP_LOGI(TAG, "StyleWriter test page: %s (%d); %u bytes of stack to spare",
+             rc == SW_OK ? "printed" : rc == SW_E_CANCEL ? "cancelled" : "not printed", rc,
+             (unsigned)uxTaskGetStackHighWaterMark(NULL));
+
+    // As the ImageWriter's page ends: the cancel is cleared with the page under the tap's own
+    // lock, so a tap that lands as it finishes cannot cancel the next job.
+    portENTER_CRITICAL(&s_tap_mux);
+    s_test_running = 0;
+    s_sw_test_running = 0;
+    int cancelled = s_test_cancel;
+    s_test_cancel = 0;
+    portEXIT_CRITICAL(&s_tap_mux);
+    printer_state_post(rc == SW_OK ? PS_EV_JOB_DONE : cancelled ? PS_EV_JOB_CANCELLED : PS_EV_JOB_FAILED);
+    // The session spoke to the printer and may have reset it: `1` and `2` are due in 10 s, not now.
+    s_last_status_ms = uptime_ms();
+    s_printing = 0;
+    job_touch();
+    line_source();
+    xSemaphoreGive(s_job_lock);
+    vTaskDelete(NULL);
+}
+
+// s_job_lock is held; the page's task gives it back.
 static void sw_test_locked(void)
 {
-    ESP_LOGW(TAG, "test page: a StyleWriter's test page is not built yet; nothing sent");
-    xSemaphoreGive(s_job_lock);
+    strncpy(s_last_job, "Test page", sizeof s_last_job - 1);
+    s_printing = 1;
+    job_touch();
+    led_grid_set_source(LG_SRC_AIRPRINT);
+    line_source();
+    printer_state_post(PS_EV_JOB_START);
+    portENTER_CRITICAL(&s_tap_mux);
+    s_test_running = 1;
+    s_sw_test_running = 1;
+    s_test_cancel = 0;
+    portEXIT_CRITICAL(&s_tap_mux);
+    if (xTaskCreate(sw_test_task, "sw_test", 6144, (void *)(intptr_t)printers_port_sw_model(), 3,
+                    NULL) != pdPASS) {
+        ESP_LOGE(TAG, "test page: could not create task");
+        portENTER_CRITICAL(&s_tap_mux);
+        s_test_running = 0;
+        s_sw_test_running = 0;
+        portEXIT_CRITICAL(&s_tap_mux);
+        printer_state_post(PS_EV_JOB_FAILED);
+        s_printing = 0;
+        job_touch();
+        line_source();
+        xSemaphoreGive(s_job_lock);
+    }
 }
 
 // The test page for whichever printer gets it (printers_test_target): the
@@ -1729,10 +1804,11 @@ static void test_button(void)
         }
         portENTER_CRITICAL(&s_tap_mux);
         if (s_test_running) {
-            // The write in progress is aborted; W-1041's resync runs before
-            // the next job.
+            // An ImageWriter's write in progress is aborted; W-1041's resync runs before
+            // the next job. A StyleWriter's session stops at its next step instead (its
+            // writes are in whole blocks and never cut), and leaves the abort flag alone.
             s_test_cancel = 1;
-            serial_out_set_abort(1);
+            if (!s_sw_test_running) serial_out_set_abort(1);
             cancel = 1;
         }
         portEXIT_CRITICAL(&s_tap_mux);
