@@ -154,7 +154,9 @@ const pr_seen_t *pr_seen_of(const pr_list_t *l, int id);   // NULL: never answer
 // What the person said. 0 done, -1 refused.
 int  pr_rename(pr_list_t *l, int id, const char *name);     // "" or NULL: the printer's own
 int  pr_set_shared(pr_list_t *l, int id, int on);           // -1 at the cap, or unidentified
-int  pr_set_model(pr_list_t *l, int id, pr_model_t m);      // the port printer only
+// The port printer only. A StyleWriter named forgets an answer that would hold it as
+// swapped (pr_port_conflict, pr_port_swapped): the person's word is the newest.
+int  pr_set_model(pr_list_t *l, int id, pr_model_t m);
 // "Add a Printer…" for the port: its model (an original ImageWriter, or one
 // that is off, never answers; a StyleWriter, W-1103, the original's included).
 // Makes the port's record, the person's, shared, or sets the model of the one
@@ -183,7 +185,8 @@ void pr_port_answered(pr_list_t *l, int heard);
 // record's language must not go to the port (its AirPrint jobs, test page and cleaning are
 // refused, and the page shows it as needing attention, "swapped") until the record's own
 // family answers again or the person makes the record the other's (accepting the "changed"
-// notice, or choosing its model). Dismissing the notice does not end it.
+// notice, or choosing its model), or names the port's printer a StyleWriter (pr_set_model).
+// Dismissing the notice does not end it.
 int  pr_port_conflict(const pr_list_t *l);
 // What the phone and the page show as a swap: pr_port_conflict, or a StyleWriter record whose
 // port another StyleWriter model answered last (its jobs fail at their own `?`, so they are left

@@ -585,6 +585,18 @@ int pr_set_model(pr_list_t *l, int id, pr_model_t m)
     become_model(l, r, m);
     r->shared = 1;                        // the port always fits under the cap
     r->announced = 1;
+    // A StyleWriter the person names is the newest word on what the port holds: an answer
+    // before it that would hold it as swapped (an ImageWriter's, another StyleWriter model's)
+    // is forgotten, the printer that gave it likely unplugged, and so is the notice they
+    // dismissed. Its bytes mark no ImageWriter's paper and its jobs ask the printer first,
+    // and the board asks the port at once (the full sequence, then a look), so what answers
+    // decides again. An ImageWriter named over a StyleWriter's answer stays held until the
+    // ImageWriter answers: its stream would print on a StyleWriter.
+    if (model_is_sw(m)) {
+        if (l->heard == PR_HEARD_IMAGEWRITER) l->heard = PR_HEARD_NONE;
+        l->heard_model = 0;
+        l->dismissed = 0;
+    }
     return 0;
 }
 

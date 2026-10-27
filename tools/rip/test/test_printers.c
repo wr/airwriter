@@ -1660,6 +1660,45 @@ static void test_port_conflict(void)
     CHECK_EQ_INT(pr_remove(&L, id), 0);
     CHECK_EQ_INT(pr_port_conflict(&L), 0);
 
+    // Naming the port's printer a StyleWriter forgets an ImageWriter that answered before it:
+    // board 1's ImageWriter, unplugged, and the port named an original StyleWriter with nothing
+    // on it (2026-10-27) read as "another printer is on the printer port".
+    fresh();
+    id = pr_port_seen(&L, PR_PORT_IW2);
+    CHECK_EQ_INT(pr_set_model(&L, id, PR_MODEL_SW1), 0);
+    CHECK_EQ_INT(pr_port_heard(&L), PR_HEARD_NONE);
+    CHECK_EQ_INT(pr_port_conflict(&L), 0);
+    CHECK_EQ_INT(pr_port_swapped(&L), 0);
+    pr_json(&L, live, buf, sizeof buf);
+    CHECK(strstr(buf, "swapped") == NULL);
+    // An ImageWriter still there says so at its next answer, with its notice, though the person
+    // dismissed that notice before naming the printer.
+    fresh();
+    id = pr_port_seen(&L, PR_PORT_IW2);
+    CHECK_EQ_INT(pr_set_model(&L, id, PR_MODEL_SW2), 0);
+    pr_port_seen(&L, PR_PORT_IW2);
+    CHECK_EQ_INT(pr_port_conflict(&L), 1);
+    pr_dismiss(&L, 0);
+    CHECK_EQ_INT(pr_set_model(&L, id, PR_MODEL_SW2), 0);
+    CHECK_EQ_INT(pr_port_conflict(&L), 0);
+    pr_port_seen(&L, PR_PORT_IW2);
+    CHECK_EQ_INT(pr_port_conflict(&L), 1);
+    CHECK_EQ_INT(notes_of(PR_NOTE_CHANGED), 1);
+    // Another StyleWriter model that answered before is forgotten the same way; a StyleWriter's
+    // answer still holds an ImageWriter the person names over it, whose stream would print on
+    // a StyleWriter, until the ImageWriter answers.
+    fresh();
+    pr_port_seen_sw(&L, PR_MODEL_SW2);
+    id = pr_port(&L)->id;
+    pr_port_seen_sw(&L, PR_MODEL_SWC2500);
+    CHECK_EQ_INT(pr_port_swapped(&L), 1);
+    CHECK_EQ_INT(pr_set_model(&L, id, PR_MODEL_SWC1500), 0);
+    CHECK_EQ_INT(pr_port_swapped(&L), 0);
+    CHECK_EQ_INT(pr_set_model(&L, id, PR_MODEL_IW2), 0);
+    CHECK_EQ_INT(pr_port_conflict(&L), 1);
+    pr_port_seen(&L, PR_PORT_IW2);
+    CHECK_EQ_INT(pr_port_conflict(&L), 0);
+
     // Nothing of it is stored, but a pending "changed" notice says it again at a start: the
     // board restarted with the StyleWriter still on the ImageWriter record's port.
     fresh();
