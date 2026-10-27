@@ -1224,7 +1224,7 @@ static void test_sw_json(void)
     CHECK_EQ_INT(sizeof(pr_rec_t), 284);
 }
 
-// R25: the fault a StyleWriter holds, named for the page.
+// The fault a StyleWriter holds, named for the page in its own words.
 static void test_sw_fault(void)
 {
     // Each state the session reports, as the page's word for it.
@@ -1377,7 +1377,7 @@ static void test_sw_blob(void)
     pr_rename(&L, a, "Desk");
     pr_at_queried(&L, pr_at_seen(&L, PR_WHERE_TUNNEL, P("Back"), P("LaserWriter"), 0), 1, &info);
     n = pr_save(&L, v1, sizeof v1);
-    CHECK_EQ_INT(v1[2], 1);                                  // nothing here needs 2 (R21)
+    CHECK_EQ_INT(v1[2], 1);                                  // nothing here needs 2
     pr_init(&M, MAC, 1);
     CHECK_EQ_INT(pr_load(&M, v1, n), 0);
     CHECK_EQ_INT(M.n, L.n);
@@ -1470,7 +1470,7 @@ static int old_reader_accepts(const uint8_t *b, size_t n)
     return 1;
 }
 
-// R21: the list is stored as version 1 while nothing in it needs 2, so a rollback to a firmware
+// The list is stored as version 1 while nothing in it needs 2, so a rollback to a firmware
 // from before StyleWriters (the W-1059 trial) reads it and a person's printers keep their
 // identity on their phones. A StyleWriter in a record, or a notice that names one, makes it 2.
 static void test_sw_blob_stamp(void)

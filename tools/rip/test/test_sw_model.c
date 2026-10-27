@@ -195,7 +195,7 @@ static void test_specs(void)
     CHECK(sw_spec((sw_model_t)99) == NULL);
 }
 
-// R11: the family by model, the curve by screen (apple_tables.h says why).
+// The tone curve: its family by model, GAMA 1 or 2 by screen (apple_tables.h says why).
 static void test_tone(void)
 {
     static const ht_algo_t ordered[] = { HT_APPLE, HT_BAYER, HT_BLUENOISE, HT_THRESHOLD };

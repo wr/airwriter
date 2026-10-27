@@ -105,7 +105,8 @@ typedef struct {
 } pr_list_t;
 
 // A StyleWriter's fault as the board last read it, said to the settings page so it can
-// name it (R25). PR_FAULT_OTHER is one the design does not name.
+// name it ("check paper" for a missing cartridge would send its owner to the wrong part of
+// the printer). PR_FAULT_OTHER is one the design does not name.
 typedef enum { PR_FAULT_NONE, PR_FAULT_PAPER, PR_FAULT_JAM, PR_FAULT_CARTRIDGE,
                PR_FAULT_CART_JAM, PR_FAULT_INK, PR_FAULT_COVER, PR_FAULT_WASTE,
                PR_FAULT_OTHER } pr_fault_t;

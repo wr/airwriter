@@ -750,7 +750,7 @@ void pr_migrate(pr_list_t *l, const pr_legacy_t *o)
 
 enum { HDR = 6 };
 
-// R21 (W-1103): the list is stored with the lowest version that can hold it, 1 until
+// W-1103: the list is stored with the lowest version that can hold it, 1 until
 // a record or a notice holds a StyleWriter, so that an OTA rollback to a firmware from
 // before StyleWriters (the W-1059 trial) still reads an ImageWriter or LaserWriter
 // owner's list and their printers keep their identity on their phones.
@@ -1088,7 +1088,7 @@ size_t pr_json(const pr_list_t *l, const pr_live_t live[PR_MAX], char *buf, size
         char swx[28 + 24] = "";   // the cartridge and the fault, as JSON fields
         if (r->kind == PR_KIND_STYLEWRITER && (live[i].cart == 1 || live[i].cart == 2))
             snprintf(swx, sizeof swx, ",\"cartridge\":\"%s\"", live[i].cart == 2 ? "colour" : "black");
-        // and the fault it holds, for the page to name (R25), said only while it has one
+        // and the fault it holds, for the page to name in its own words, said only while it has one
         static const char *const faults[] = { "", "paper", "jam", "cartridge", "cartridge-jam",
                                               "ink", "cover", "waste", "other" };
         if (r->kind == PR_KIND_STYLEWRITER && live[i].fault > PR_FAULT_NONE &&

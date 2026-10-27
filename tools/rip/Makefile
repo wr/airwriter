@@ -114,7 +114,7 @@ build/test_stylewriter_board: test/test_stylewriter_board.c $(COMP)/stylewriter/
                               $(SRCS) | build
 	$(CC) $(CFLAGS) $(INCS) -Itest/shim -Itest -o $@ $^ -lm
 
-# The page stage's memory, counted through bigmem.h (BIGMEM_COUNT, R15).
+# The page stage's memory, counted through bigmem.h (BIGMEM_COUNT): it holds no page or band.
 build/test_sw_page_mem: CFLAGS += -DBIGMEM_COUNT
 build/test_sw_page_mem: test/test_sw_page_mem.c $(SRCS) | build
 	$(CC) $(CFLAGS) $(INCS) -Itest -o $@ $^ -lm

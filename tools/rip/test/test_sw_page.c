@@ -6,7 +6,8 @@
 // rows that went in. Expected rects and margins are written out from the design's
 // table, not read back from the model table. A band starts at the first row with
 // ink after the last band ended and runs the band height from there, clamped to
-// the printable area's last row (the stage holds no page: R15).
+// the printable area's last row. The stage holds no page and no band: it codes rows as they
+// come, so a 360 dpi colour page fits beside the 1 MB job buffer.
 #include "test_util.h"
 #include "sw_page.h"
 #include "sw_code.h"

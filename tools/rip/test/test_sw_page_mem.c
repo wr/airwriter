@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// What the StyleWriter page stage holds (W-1103, R15). It codes rows as they arrive and
+// What the StyleWriter page stage holds (W-1103). It codes rows as they arrive and
 // keeps no band: the block being filled and the row before, a plane each. For the most it
 // can be asked, the 1500 in colour (a band of 800 rows x 4 planes x 360 bytes would be 1.15 MB,
 // beside the 1 MB job buffer in the board's 2 MB of PSRAM), that is about the largest block cap
