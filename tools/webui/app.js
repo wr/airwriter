@@ -559,9 +559,9 @@ const MODELS=['ImageWriter II','ImageWriter LQ','ImageWriter','StyleWriter','Sty
   'Color StyleWriter 1500','Color StyleWriter 2200','Color StyleWriter 2400','Color StyleWriter 2500'];
 for(const m of MODELS){ $('model').append(new Option(m,m)); $('add-model').append(new Option(m,m)); }
 const aOrAn=m=>(/^[aeiou]/i.test(m)?'an ':'a ')+m;
-/* A name in a notice title or key keeps its words together (R27): no
-   line ends after "StyleWriter" and leaves "II" on a line of its own. A
-   name is 32 bytes at most; anything longer is not one and may wrap. */
+/* A name in a notice title or key keeps its words together: no line ends
+   after "StyleWriter" and leaves "II" on a line of its own. A name is 32
+   bytes at most; anything longer is not one and may wrap. */
 const nb=s=>s.length>32?s:s.replace(/ /g,'\u00a0');
 $('model').append(new Option('Something else','none'));
 { const o=new Option('Choose…',''); o.id='model-ask'; o.disabled=true; $('model').prepend(o); }
@@ -587,7 +587,8 @@ function sideWord(){
   return plural(ps.length,'printer','printers');
 }
 /* A StyleWriter's fault, in the words the phone shows for it (sw_status.c), as
-   the board names it in /api/printers (R25). */
+   the board names it in /api/printers: "check paper" for a missing cartridge
+   would send its owner to the wrong part of the printer. */
 const SW_FAULT={paper:'check paper',jam:'clear the paper jam',cartridge:'check the ink cartridge',
   'cartridge-jam':'check the ink cartridge',ink:'replace the ink cartridge',cover:'close the cover',
   waste:'the waste ink pad is full',other:'check the printer'};
@@ -595,6 +596,8 @@ const SW_FAULT={paper:'check paper',jam:'clear the paper jam',cartridge:'check t
    printer's in its own words when it has any. */
 function stWords(p){
   if(p.kind==='unknown') return ['','Unrecognized'];
+  // W-1103: the other family answered on the port: nothing prints on it until it's sorted out
+  if(p.swapped) return ['a','Needs attention: another printer is on the printer port'];
   const t=LWT&&p.where!=='port'?LWT.find(t=>t.id===p.id):null;
   const low=w=>w?w[0].toLowerCase()+w.slice(1):w;
   // W-1103: a StyleWriter has no SELECT key
@@ -650,7 +653,7 @@ function prOpen(id){
   $('pr-home').classList.toggle('hide',id!==null);
   $('pr-detail').classList.toggle('hide',id===null);
   document.querySelector('.back').textContent=id!==null?'‹ Printers':'‹ Settings';
-  say('prn-say','');
+  say('prn-say',''); say('pd-clean-say','');
   if(id!==null){ document.querySelector('.detail').scrollTop=0; pdDraw(); requestAnimationFrame(render); lwtPoll(); }
 }
 let spSaving=false;                 // W-1099: the start page on its way to the printer
@@ -665,8 +668,10 @@ function pdDraw(){
   const [cls,text]=stWords(p);
   lamp($('prn-lamp'),cls); $('prn-state').textContent=text;
   $('rib-row').classList.toggle('hide',!(port&&iw));
-  // W-1103: a StyleWriter's cartridge, read from the printer; the black-only models always hold black
-  const cart=sw?p.cartridge||(/^Color /.test(p.model)?'':'black'):'';
+  // W-1103: a StyleWriter's cartridge, read from the printer; the black-only models always hold
+  // black, but not while the printer says the cartridge is missing or jammed
+  const cartFault=p.fault==='cartridge'||p.fault==='cartridge-jam';
+  const cart=sw&&!cartFault?p.cartridge||(/^Color /.test(p.model)?'':'black'):'';
   $('cart-row').classList.toggle('hide',!cart);
   $('cart-colour').classList.toggle('hide',cart!=='colour');
   $('cart').textContent=cart==='colour'?'Color':'Black';
@@ -774,7 +779,8 @@ $('testpage').onclick=async()=>{
 $('pd-clean').onclick=async()=>{
   const b=$('pd-clean'); if(b.disabled) return;
   b.disabled=true;
-  await prPost({id:sel,clean:true},'Cleaning the print head.','pd-clean-say',4000);
+  const ok=await prPost({id:sel,clean:true},'Cleaning the print head.','pd-clean-say',4000);
+  if(!ok) say('pd-clean-say',$('pd-clean-say').textContent,1,6000);   // a refusal goes, as the test page's does
   b.disabled=false;
 };
 /* The cable test borrows both ports. TashTalk, the AppleTalk chip's firmware,

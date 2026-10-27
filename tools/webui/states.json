@@ -2724,6 +2724,82 @@
     }
    }
   },
+  "stylewriter-ii-cartridge": {
+   "about": "Printers: a StyleWriter II with its ink cartridge missing",
+   "patch": {
+    "GET /api/printers": {
+     "printers": [
+      {
+       "id": 1,
+       "name": "StyleWriter II",
+       "where": "port",
+       "kind": "stylewriter",
+       "model": "StyleWriter II",
+       "shared": true,
+       "identified": true,
+       "found": "auto",
+       "state": "attention",
+       "uuid": "urn:uuid:41575254-4c57-0001-0002-10bda36e2434",
+       "product": "",
+       "dither": "atkinson",
+       "gain": 0,
+       "rp": "ipp/print",
+       "start_page": null,
+       "fault": "cartridge"
+      }
+     ],
+     "notes": [],
+     "max_shared": 4
+    },
+    "POST /api/printers": {
+     "printers": [
+      {
+       "id": 1,
+       "name": "StyleWriter II",
+       "where": "port",
+       "kind": "stylewriter",
+       "model": "StyleWriter II",
+       "shared": true,
+       "identified": true,
+       "found": "auto",
+       "state": "attention",
+       "uuid": "urn:uuid:41575254-4c57-0001-0002-10bda36e2434",
+       "product": "",
+       "dither": "atkinson",
+       "gain": 0,
+       "rp": "ipp/print",
+       "start_page": null,
+       "fault": "cartridge"
+      }
+     ],
+     "notes": [],
+     "max_shared": 4
+    },
+    "GET /api/laser": {
+     "heard": [],
+     "targets": [],
+     "job": {
+      "active": false,
+      "sent": 0,
+      "last": ""
+     }
+    },
+    "GET /api/status": {
+     "printers": {
+      "count": 1,
+      "shared": 1,
+      "notes": 0,
+      "port": "stylewriter"
+     },
+     "model": "Apple StyleWriter II",
+     "ribbon": "unknown",
+     "ps": "attention",
+     "state": "Needs attention",
+     "fault": true,
+     "stopped": true
+    }
+   }
+  },
   "stylewriter-cover": {
    "about": "Printers: a StyleWriter 1200 with its cover open",
    "patch": {
@@ -2929,7 +3005,7 @@
    }
   },
   "stylewriter-changed": {
-   "about": "Printers: the port printer now answers as a StyleWriter II",
+   "about": "Printers: the ImageWriter record’s port now answers as a StyleWriter II (its jobs refused until the person says)",
    "patch": {
     "GET /api/printers": {
      "printers": [
@@ -2942,13 +3018,14 @@
        "shared": true,
        "identified": true,
        "found": "person",
-       "state": "ready",
+       "state": "attention",
        "uuid": "urn:uuid:41575254-4552-0001-10bd-a36e2434",
        "product": "",
        "dither": "atkinson",
        "gain": 0,
        "rp": "ipp/print",
-       "start_page": null
+       "start_page": null,
+       "swapped": true
       }
      ],
      "notes": [
@@ -2971,13 +3048,14 @@
        "shared": true,
        "identified": true,
        "found": "person",
-       "state": "ready",
+       "state": "attention",
        "uuid": "urn:uuid:41575254-4552-0001-10bd-a36e2434",
        "product": "",
        "dither": "atkinson",
        "gain": 0,
        "rp": "ipp/print",
-       "start_page": null
+       "start_page": null,
+       "swapped": true
       }
      ],
      "notes": [
@@ -3003,6 +3081,76 @@
       "count": 1,
       "shared": 1,
       "notes": 1,
+      "port": "imagewriter"
+     }
+    }
+   }
+  },
+  "stylewriter-swapped": {
+   "about": "Printers: a StyleWriter answered on the ImageWriter record’s port and the notice was dismissed",
+   "patch": {
+    "GET /api/printers": {
+     "printers": [
+      {
+       "id": 1,
+       "name": "ImageWriter II",
+       "where": "port",
+       "kind": "imagewriter",
+       "model": "ImageWriter II",
+       "shared": true,
+       "identified": true,
+       "found": "person",
+       "state": "attention",
+       "uuid": "urn:uuid:41575254-4552-0001-10bd-a36e2434",
+       "product": "",
+       "dither": "atkinson",
+       "gain": 0,
+       "rp": "ipp/print",
+       "start_page": null,
+       "swapped": true
+      }
+     ],
+     "notes": [],
+     "max_shared": 4
+    },
+    "POST /api/printers": {
+     "printers": [
+      {
+       "id": 1,
+       "name": "ImageWriter II",
+       "where": "port",
+       "kind": "imagewriter",
+       "model": "ImageWriter II",
+       "shared": true,
+       "identified": true,
+       "found": "person",
+       "state": "attention",
+       "uuid": "urn:uuid:41575254-4552-0001-10bd-a36e2434",
+       "product": "",
+       "dither": "atkinson",
+       "gain": 0,
+       "rp": "ipp/print",
+       "start_page": null,
+       "swapped": true
+      }
+     ],
+     "notes": [],
+     "max_shared": 4
+    },
+    "GET /api/laser": {
+     "heard": [],
+     "targets": [],
+     "job": {
+      "active": false,
+      "sent": 0,
+      "last": ""
+     }
+    },
+    "GET /api/status": {
+     "printers": {
+      "count": 1,
+      "shared": 1,
+      "notes": 0,
       "port": "imagewriter"
      }
     }
