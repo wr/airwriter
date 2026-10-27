@@ -338,7 +338,7 @@ its name in the Chooser. U7's PIC calibration words: `16E0 1DA8`. Its LocalTalk 
 2026-10-27 the ImageWriter is unplugged and Wells has named the port's printer an original
 StyleWriter (uuid `…0001-0002-…`); naming it ImageWriter II again brings back the `…0001-0001-…`
 uuid. Printer: an ImageWriter II on J2 via Apple's crossover cable, fanfold paper loaded as the Owner's Guide says (top edge under the paper
-bail). It runs v0.2.0-240-ge2f04be, the W-1103 StyleWriter branch (known-good: v0.2.0-235-g0499beb),
+bail). It runs v0.2.0-242-g41cf8cc, the W-1103 StyleWriter branch (known-good: v0.2.0-235-g0499beb),
 ahead of any release, with auto-update on; it shares the fake "LaserWriter II NT" on the Basilisk II tunnel when
 `etpeer.py tunnel laserwriter` runs on the Mac. On its AppleTalk cable since 2026-10-24: a
 Personal LaserWriter NTR (PostScript 2010.129, Level 2, 3 MB, 300 dpi, takes binary; 10,277
