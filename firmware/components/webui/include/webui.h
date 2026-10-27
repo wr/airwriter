@@ -67,7 +67,8 @@ typedef struct {
     void  (*restart)(void *ctx);
     void  (*erase)(void *ctx);
     // W-1088: id is the printer's in the list, or -1 for the one the test
-    // button prints on; 2 for none, or one with no test page.
+    // button prints on; 2 for none, or one with no test page; 3 (W-1103) for
+    // the port's printer while another printer answered on the port.
     int   (*test_page)(void *ctx, int id);
 
     // Serves the setup page for every unknown host, so joining the device's

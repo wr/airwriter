@@ -581,6 +581,10 @@ static esp_err_t test_post(httpd_req_t *req)
         return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "short body");
     int rc = s_cfg.test_page(s_cfg.ctx, json_int(body, "id", -1));
     if (rc == 2) return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "no printer with a test page");
+    if (rc == 3) {                            // W-1103: the port's record is not what answered there
+        httpd_resp_set_status(req, "409 Conflict");
+        return httpd_resp_sendstr(req, "another printer is on the printer port");
+    }
     if (rc) {
         httpd_resp_set_status(req, "409 Conflict");
         return httpd_resp_sendstr(req, "the printer is busy");
