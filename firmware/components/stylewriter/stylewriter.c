@@ -91,6 +91,12 @@ void stylewriter_cancel(void)
     s_cancel = 1;
 }
 
+// Another printer than the record's answered on the port: its language must not reach it.
+static int swapped(void)
+{
+    return s_cfg.swapped && s_cfg.swapped();
+}
+
 // ---------------------------------------------------------------- the link
 
 void stylewriter_link(int sw)
@@ -143,6 +149,7 @@ int stylewriter_cart(sw_model_t m)
 
 int stylewriter_clean(sw_model_t m)
 {
+    if (swapped()) return SW_E_SWAPPED;
     s_cancel = 0;
     stylewriter_link(1);
     int rc = sw_clean(&k_ops, m);
@@ -153,7 +160,7 @@ int stylewriter_clean(sw_model_t m)
 
 int stylewriter_clean_check(sw_model_t m, int busy)
 {
-    if (busy) return 409;
+    if (busy || swapped()) return 409;
     const sw_spec_t *sp = sw_spec(m);
     if (!sp || !sp->cleans) return 502;
     sw_state_t st;
@@ -188,6 +195,7 @@ int stylewriter_test_page(sw_model_t m, const sw_tp_info_t *info)
 {
     const sw_spec_t *sp = sw_spec(m);
     if (!sp || !info) return SW_E_FAULT;
+    if (swapped()) return SW_E_SWAPPED;
     s_cancel = 0;                // a cancel a job left behind is not this page's
     stylewriter_link(1);
     const sw_job_cfg_t jc = { .model = m, .quality = 4, .colour_job = sp->colour,
@@ -282,6 +290,7 @@ static int job_rip_begin(void *ctx)
 {
     (void)ctx;
     if (!s_job.s) { job_failed(SW_E_FAULT); return 0; }
+    if (swapped()) { job_failed(SW_E_SWAPPED); return 0; }
     stylewriter_link(1);
     int rc = sw_session_begin(s_job.s);
     if (rc) {
@@ -311,6 +320,7 @@ int stylewriter_job_begin(sw_model_t m, int quality, ht_algo_t dither, int gain,
     const printer_caps_t *caps = sw_caps(m);
     if (!sp || !caps || !t) return -1;
     job_free();                              // nothing should be held; belt and braces
+    if (swapped()) return -1;
     s_cancel = 0;
     const sw_job_cfg_t jc = { .model = m, .quality = quality, .colour_job = sp->colour,
                               .stall_ms = CONFIG_AIRWRITER_STALL_ABORT * 1000u };

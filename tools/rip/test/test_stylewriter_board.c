@@ -12,11 +12,13 @@
 //   - the abort contract: any session error aborts the session and the job pipeline, once, and
 //     the bytes that follow go nowhere;
 //   - a job that ends short sends nothing it had not begun to send;
-//   - the test page (Task 11) is one session at normal quality, made for the cartridge the printer
+//   - the test page is one session at normal quality, made for the cartridge the printer
 //     reports, cancelled through the session, and never cancelled by a flag a job left behind;
 //   - the answer to the Clean Print Head key: 0 when a cleaning may begin, 409 while a job holds
 //     the printer, 502 for a printer that is off or holds a fault, and nothing at all for the
-//     original, which has none; one press is one `P`.
+//     original, which has none; one press is one `P`;
+//   - with another printer than the record's on the port (the list's pr_port_conflict), no job,
+//     test page or cleaning sends it anything.
 #include "test_util.h"
 #include "stylewriter.h"
 #include "sw_page.h"
@@ -204,6 +206,8 @@ static void on_state(sw_state_t st) { if (g_nstates < 64) g_states[g_nstates++] 
 static void on_cart(int colour) { g_cart_calls++; g_cart_val = colour; }
 static int no_cancel(void) { return 0; }
 static int tapped(void) { return g_tap; }
+static int g_swapped;
+static int swapped(void) { return g_swapped; }
 
 static void reset_all(sw_model_t model)
 {
@@ -708,6 +712,50 @@ int main(void)
     CHECK_EQ_INT(wire_count("P"), 0);
     CHECK_EQ_INT(stylewriter_clean(SW_II), 0);                // and the one press is one cleaning
     CHECK_EQ_INT(wire_count("P"), 1);
+
+    // ---------------------------------------------------------- another printer on the port
+    // The printer list says the other family answered on the port last (pr_port_conflict): the
+    // record's language must not reach it, so no job, test page or cleaning starts a session,
+    // and nothing at all is sent, not even the link switched. The port's own questions are the
+    // policy's: the plain question is how the record's StyleWriter is found again.
+    {
+        stylewriter_cfg_t cfg = { .record_is_sw = rec_is_sw, .state = on_state, .cart = on_cart,
+                                  .cancelled = no_cancel, .swapped = swapped };
+        stylewriter_start(&cfg);
+        g_swapped = 1;
+        reset_all(SW_II);
+        CHECK_EQ_INT(stylewriter_job_begin(SW_II, 4, HT_ATKINSON, 0, &t), -1);
+        CHECK_EQ_INT(stylewriter_job_end(1), SW_E_CANCEL);        // nothing held, nothing sent
+        ti = tp_info(SW_II);
+        CHECK_EQ_INT(stylewriter_test_page(SW_II, &ti), SW_E_SWAPPED);
+        CHECK_EQ_INT(stylewriter_clean_check(SW_II, 0), 409);
+        CHECK_EQ_INT(stylewriter_clean(SW_II), SW_E_SWAPPED);
+        CHECK_EQ_INT(F.wn, 0);
+        CHECK_EQ_INT(F.nlinks, 0);
+        CHECK_EQ_INT(g_nstates, 0);
+        // It starts while a job's begin was taken: the rip's start refuses it too, before the reset.
+        g_swapped = 0;
+        CHECK_EQ_INT(stylewriter_job_begin(SW_II, 4, HT_ATKINSON, 0, &t), 0);
+        g_target = &t;
+        g_swapped = 1;
+        CHECK_EQ_INT(t.colour_ok(t.colour_ctx), 0);
+        CHECK_EQ_INT(g_aborts, 1);
+        CHECK_EQ_INT(stylewriter_job_error(), SW_E_SWAPPED);
+        CHECK_EQ_INT(stylewriter_job_end(0), SW_E_SWAPPED);
+        CHECK_EQ_INT(F.wn, 0);
+        // The plain question still goes, and once the record's own printer answers (the list
+        // says so), a job runs as before.
+        CHECK_EQ_INT(stylewriter_ask_plain(), SW_II);
+        g_swapped = 0;
+        reset_all(SW_II);
+        CHECK_EQ_INT(stylewriter_job_begin(SW_II, 4, HT_ATKINSON, 0, &t), 0);
+        g_target = &t;
+        CHECK_EQ_INT(t.colour_ok(t.colour_ctx), 0);
+        feed_page(t.stage, 0, 1);
+        CHECK_EQ_INT(stylewriter_job_end(0), 0);
+        CHECK_EQ_INT(F.pages, 1);
+        start(1);
+    }
 
     free(F.wire);
     TEST_END;

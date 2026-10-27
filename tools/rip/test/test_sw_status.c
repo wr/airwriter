@@ -56,5 +56,20 @@ int main(void)
     // The reasons are literals the server compares by address: the same state gives the same one.
     CHECK(sw_state_ipp(SWS_JAM).reason == sw_state_ipp(SWS_JAM).reason);
 
+    // Silence while idle. A StyleWriter that stops answering is offline, but the original
+    // ignores the plain question until it is reset: switched off between uses, as these are,
+    // it would read as offline after every power-on until a job, so its silence while idle
+    // says nothing and it reads as ready. Only a job's full sequence that gets nothing, or a
+    // job it went silent during, shows it offline, until it answers or the next job.
+    CHECK_EQ_INT(sw_idle_silent(SW_ORIGINAL, 0), SWS_READY);
+    CHECK_EQ_INT(sw_idle_silent(SW_ORIGINAL, 1), SWS_OFFLINE);
+    for (int m = SW_II; m < SW_MODELS; m++) {
+        CHECK_EQ_INT(sw_idle_silent((sw_model_t)m, 0), SWS_OFFLINE);
+        CHECK_EQ_INT(sw_idle_silent((sw_model_t)m, 1), SWS_OFFLINE);
+    }
+    CHECK_EQ_INT(sw_idle_silent(SW_NONE, 0), SWS_OFFLINE);
+    // Ready claims nothing to the phone, so a job is taken and its full sequence finds out.
+    CHECK(sw_state_ipp(sw_idle_silent(SW_ORIGINAL, 0)).reason == NULL);
+
     TEST_END;
 }

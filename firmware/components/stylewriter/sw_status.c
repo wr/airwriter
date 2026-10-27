@@ -30,3 +30,8 @@ int sw_state_fault(sw_state_t st)
 {
     return st != SWS_READY && st != SWS_PRINTING && st != SWS_OFFLINE;
 }
+
+sw_state_t sw_idle_silent(sw_model_t m, int job_silent)
+{
+    return m == SW_ORIGINAL && !job_silent ? SWS_READY : SWS_OFFLINE;
+}

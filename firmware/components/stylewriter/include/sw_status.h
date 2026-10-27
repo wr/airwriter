@@ -24,3 +24,11 @@ int sw_state_ready(sw_state_t st);
 // ink, or one the design does not name). Not SWS_OFFLINE, which is a printer that does not
 // answer, and not progress.
 int sw_state_fault(sw_state_t st);
+
+// What a StyleWriter record shows when its printer, idle, did not answer (the plain question
+// or `1` and `2` got nothing): SWS_OFFLINE. But the original StyleWriter ignores the plain
+// question until it is reset, so its silence while idle says nothing: it reads as ready (shared
+// and taking jobs, and asked no `1` and `2` while it is not answering, so an ImageWriter
+// swapped in hears none), unless a job's full sequence got nothing, or a job lost it, since it
+// last answered (`job_silent`): then offline, until it answers or the next job begins.
+sw_state_t sw_idle_silent(sw_model_t m, int job_silent);

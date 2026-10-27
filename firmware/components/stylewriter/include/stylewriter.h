@@ -35,12 +35,16 @@ typedef struct {
     void (*cart)(int colour);
     // The job (a cleaning, a test page) is to stop; asked between steps. NULL: never.
     int  (*cancelled)(void);
+    // The port's last answer came from the other family than the record's (printers_core.h,
+    // pr_port_conflict): no job, test page or cleaning may start, and nothing is sent. NULL: never.
+    int  (*swapped)(void);
 } stylewriter_cfg_t;
 
 void stylewriter_start(const stylewriter_cfg_t *cfg);
 
-// A job error of the board's own, beside sw_session.h's: no memory for the page stage.
-enum { SW_E_NOMEM = -7 };
+// Job errors of the board's own, beside sw_session.h's: no memory for the page stage; another
+// printer than the record's answered on the port (the cfg's swapped), so nothing was sent.
+enum { SW_E_NOMEM = -7, SW_E_SWAPPED = -8 };
 
 // ---- J2, under the caller's job lock and with no job in the pipeline
 
@@ -63,14 +67,16 @@ int        stylewriter_status(sw_model_t m, sw_state_t *st);
 // The cartridge: 1 colour, 0 black, or SW_E_SILENT / SW_E_CART (sw_ask_cart).
 int        stylewriter_cart(sw_model_t m);
 // One cleaning (sw_clean): 0, or the session's error. Takes as long as the printer does,
-// up to ten minutes; the state callback follows it.
+// up to ten minutes; the state callback follows it. SW_E_SWAPPED, nothing sent, while another
+// printer has the port (the cfg's swapped).
 int        stylewriter_clean(sw_model_t m);
 // The answer to a Clean Print Head press before anything is started, which printers_post
 // reports as its status: 0 when a cleaning may begin, 409 when `busy` (the caller could not
 // take the job lock: nothing is asked of the printer), 502 when the model has no cleaning (the
 // original: nothing is asked) or the printer is off or holds a fault (it is asked `1` and `2`,
-// as the idle check does: a cleaning would wait on a fault with the lock held). Under the
-// caller's job lock when it is not `busy`.
+// as the idle check does: a cleaning would wait on a fault with the lock held). 409 too, with
+// nothing asked, while another printer has the port. Under the caller's job lock when it is
+// not `busy`.
 int        stylewriter_clean_check(sw_model_t m, int busy);
 
 // The test page (sw_testpage.h), under the caller's job lock and with no job in the pipeline:
@@ -82,8 +88,9 @@ int        stylewriter_clean_check(sw_model_t m, int busy);
 // stylewriter_cancel() stop it between steps (a block in flight finishes: the page is drawn
 // to a stop hook and fed through the session, which never cuts a `G` block), after which
 // the printer is told (`E`, the reset) and SW_E_CANCEL comes back. Any other error aborts the
-// session the same way. 0 if the page printed, else the session's error or SW_E_NOMEM.
-// The cancel flag is cleared as it starts and as it ends.
+// session the same way. 0 if the page printed, else the session's error or SW_E_NOMEM, or
+// SW_E_SWAPPED with nothing sent while another printer has the port. The cancel flag is
+// cleared as it starts and as it ends.
 int        stylewriter_test_page(sw_model_t m, const sw_tp_info_t *info);
 
 // The session's line, for whoever else sends a StyleWriter bytes under the lock (the test
@@ -104,8 +111,9 @@ void stylewriter_cancel(void);
 // printer-bytes ring (`buffered`), stylewriter_prn as its consumer, and the stage the page
 // is made into. The page itself is made, and the printer reset, on the pipeline task as the
 // rip begins (job_pipe_target_t.colour_ok): the cartridge decides what the page stage is, so
-// nothing is ripped before it is known. 0, or -1 for no memory or a bad model (nothing is
-// held then).
+// nothing is ripped before it is known. 0, or -1 for no memory, a bad model, or another
+// printer on the port (nothing is held then; the rip's start refuses the job the same way,
+// SW_E_SWAPPED, if one answers before it).
 int  stylewriter_job_begin(sw_model_t m, int quality, ht_algo_t dither, int gain,
                            job_pipe_target_t *t);
 
