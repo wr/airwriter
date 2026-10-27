@@ -148,6 +148,12 @@ python3.14 tools/stylewriter/swfake.py serve 2500 --serial /dev/cu.usbserial-XXX
 Set the board's port to a StyleWriter and print from a phone. This has not been
 tried yet.
 
+### Against Apple's drivers
+
+`capture.md` is the plan for running Apple's own StyleWriter drivers in an emulated Mac whose
+printer port is this fake's pseudo-terminal, and `make -C tools/rip swcaptures` holds what
+they send to what the firmware sends. Not run yet: the rig needs a 68k Mac ROM.
+
 ### Decode a stream
 
 ```sh

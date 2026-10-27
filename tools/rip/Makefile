@@ -218,3 +218,15 @@ build/swprint: build/swhost
 .PHONY: swinterop
 swinterop: build/swhost build/rip
 	@python3.14 ../stylewriter/test_swinterop.py
+
+# Apple's StyleWriter drivers' captures held to the firmware's session and rip (W-1103).
+# The captures are logs from the emulated-Mac rig (tools/stylewriter/capture.md), kept in
+# ~/.config/airwriter/sw-captures/ and never committed; without them this prints a skip line
+# and passes. `make swcaptures-selftest` runs the same checks on the firmware's own
+# conversations, to show they work.
+.PHONY: swcaptures swcaptures-selftest
+swcaptures: build/swhost build/rip
+	@python3.14 test/swcaptures.py
+
+swcaptures-selftest: build/swhost build/rip
+	@python3.14 test/swcaptures.py --selftest --no-png
