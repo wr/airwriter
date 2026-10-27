@@ -300,8 +300,8 @@ Personal LaserWriter NTR only.
 **StyleWriters** (`W-1103 StyleWriters on the printer port`, design
 `docs/superpowers/specs/2026-10-25-stylewriters-design.md`, plan
 `docs/superpowers/plans/2026-10-26-stylewriters.md`, SPEC §3.16): **phase 1 is built on branch
-`ww/stylewriters-plan`, host-tested end to end against the software StyleWriter, and has not run on
-board 1 or on any StyleWriter.** It is AirPrint to the seven lpstyl models on J2 (StyleWriter, II,
+`ww/stylewriters-plan`, host-tested end to end against the software StyleWriter, and runs on board
+1 beside its ImageWriter; it has not run on any StyleWriter.** It is AirPrint to the seven lpstyl models on J2 (StyleWriter, II,
 1200, Color 1500, 2200, 2400, 2500): found by the plain question or named by the person, shared
 under the model's name at 360 dpi, in colour when the cartridge read from the printer is, with
 Apple's tone curves and screen from its drivers (`tools/stylewriter/mktables.py`), status and faults
@@ -310,10 +310,13 @@ StyleWriter), lpstyl's coder as a second oracle and `swinterop` over all seven m
 lets an owner print a page to a real printer and send the log back. The wiki's draft (the seven as
 `Yes*` until an owner confirms each on paper, and a StyleWriters page) is unpublished: it waits for
 Wells's yes. A rev A board needs R9 (0 Ω, not fitted) fitted for a StyleWriter until one is shown to
-answer without it; rev B fits it (`docs/hardware-rev-a.md`). Owed: plan Task 15, the bench on board
-1 (its ImageWriter unchanged, the plain question sent to it at 57600 a few hundred times, the empty
-port's 60 s looks, `/api/mem` across a colour page, and with a USB serial adapter `swfake` on J2),
-then Wells's merge. Not built: vintage Macs printing through AirWriter as Apple's StyleWriter
+answer without it; rev B fits it (`docs/hardware-rev-a.md`). Benched on board 1 2026-10-27 (plan
+Task 15): the ImageWriter's IPP answer unchanged but for its state, the checker's 2672 bytes printed
+(crc unread: no USB console), a paper-out mid-page shown as Needs attention and aborted after 600 s,
+300 plain questions and one full sequence that printed nothing on the ImageWriter, and 12 minutes of
+empty port with no notices and internal RAM steady (one dip of `/api/status` `lowest` to 52.9 KB at
+10 minutes' uptime, cause not found, no failed allocations). Not benched: `swfake` on J2 (no USB serial
+adapter), `/api/mem` across a StyleWriter colour page. Owed: Wells's merge. Not built: vintage Macs printing through AirWriter as Apple's StyleWriter
 adapter (phase 2, ADSP), the printers' fast mode, and the captures of Apple's own drivers (no 68k
 Mac ROM on hand, `tools/stylewriter/capture.md`).
 
@@ -331,8 +334,8 @@ its name in the Chooser. U7's PIC calibration words: `16E0 1DA8`. Its LocalTalk 
 2026-10-24, with its settings put back over the API. Its port printer's uuid is now
 `…4c57-0001-0001-10bda36e2434`, which orphans Mac queues added before that date. Printer: an ImageWriter II on J2 via
 Apple's crossover cable, fanfold paper loaded as the Owner's Guide says (top edge under the paper
-bail). It runs v0.2.0-180-g79b562c, the W-1100 copy pass as merged to main, ahead of any
-release, with auto-update on; it shares the fake "LaserWriter II NT" on the Basilisk II tunnel when
+bail). It runs v0.2.0-235-g0499beb, the W-1103 StyleWriter branch (also its known-good image),
+ahead of any release, with auto-update on; it shares the fake "LaserWriter II NT" on the Basilisk II tunnel when
 `etpeer.py tunnel laserwriter` runs on the Mac. On its AppleTalk cable since 2026-10-24: a
 Personal LaserWriter NTR (PostScript 2010.129, Level 2, 3 MB, 300 dpi, takes binary; 10,277
 pages that morning), AirPrint printer 3 at `ipp/p3`. Its start page is off (set from the board, 2026-10-24). Its toner is spent (more ordered), so
@@ -454,7 +457,7 @@ Linear is the queue; these are the live items.
   worker stacks to PSRAM (20 KB), Wi-Fi's IRAM options off (18 KB), the rip stack to PSRAM with
   its flash writes on another task (7 KB), mDNS and the NVS cache to PSRAM.
 - `W-1103 StyleWriters on the printer port`: phase 1 built on `ww/stylewriters-plan` (above,
-  SPEC §3.16). Open: the bench on board 1 (plan Task 15), an owner's print on each model before
+  SPEC §3.16), benched on board 1 2026-10-27. Open: Wells's merge, an owner's print on each model before
   its wiki star goes, whether a StyleWriter answers with R9 left out, the cable (expected to be
   the ImageWriter II's), and the credit link for Bolacore. Phase 2 (ADSP, vintage Macs) gets its
   own plan after an owner has printed.
