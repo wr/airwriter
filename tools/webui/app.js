@@ -551,13 +551,25 @@ setTimeout(()=>document.body.classList.add('ready'),1500);
    for what asks the person something; a new printer just appears in the list. */
 let PR=null, sel=null, LWT=null;
 const WHERE={port:'Printer port',cable:'AppleTalk port',network:'Your network',tunnel:'Basilisk II',zone:'Infinite Mac'};
-const KIND_IC={imagewriter:['k','g-iw'],laserwriter:['k','g-laser'],'appletalk-imagewriter':['b','g-iw'],unknown:['unk','g-printer']};
+const KIND_IC={imagewriter:['k','g-iw'],stylewriter:['k','g-style'],laserwriter:['k','g-laser'],'appletalk-imagewriter':['b','g-iw'],unknown:['unk','g-printer']};
 const ST={ready:['g','Ready'],printing:['g','Printing'],attention:['a','Needs attention'],failed:['r','The last job failed'],offline:['','Offline']};
-const MODELS=['ImageWriter II','ImageWriter LQ','ImageWriter'];
-for(const m of MODELS) $('model').append(new Option(m,m));
+/* W-1103: the port's models, the board's own names for them (sw_model.c). The
+   original StyleWriter has no cleaning, and only the Color ones take a color cartridge. */
+const MODELS=['ImageWriter II','ImageWriter LQ','ImageWriter','StyleWriter','StyleWriter II','StyleWriter 1200',
+  'Color StyleWriter 1500','Color StyleWriter 2200','Color StyleWriter 2400','Color StyleWriter 2500'];
+for(const m of MODELS){ $('model').append(new Option(m,m)); $('add-model').append(new Option(m,m)); }
+const aOrAn=m=>(/^[aeiou]/i.test(m)?'an ':'a ')+m;
 $('model').append(new Option('Something else','none'));
 { const o=new Option('Choose…',''); o.id='model-ask'; o.disabled=true; $('model').prepend(o); }
-for(const k of ['atkinson','floyd','bluenoise','bayer','threshold']) $('screen').append(new Option(MODES[k].title,k));
+/* The five screens, and a sixth on a StyleWriter: Apple's own (W-1103). */
+function screenList(sw){
+  const s=$('screen'); if(s._sw===sw) return;
+  const v=s.value; s._sw=sw; s.textContent='';
+  for(const k of ORDER) s.append(new Option(MODES[k].title,k));
+  if(sw) s.append(new Option('Apple','apple'));
+  if(v) s.value=v;
+}
+screenList(false);
 const prById=id=>PR&&PR.printers.find(p=>p.id===id);
 function icHTML(p){ const k=KIND_IC[p.kind]||KIND_IC.unknown; return '<span class="ic '+k[0]+'"><svg><use href="#'+k[1]+'"/></svg></span>'; }
 /* What the box is: the most urgent of its shared printers, else how many. */
@@ -576,15 +588,17 @@ function stWords(p){
   if(p.kind==='unknown') return ['','Unrecognized'];
   const t=LWT&&p.where!=='port'?LWT.find(t=>t.id===p.id):null;
   const low=w=>w?w[0].toLowerCase()+w.slice(1):w;
-  if(p.state==='attention') return ['a','Needs attention: '+(p.where==='port'?'check paper and SELECT':low(t&&lwStatus(t.message))||'check the printer')];
-  if(p.state==='offline') return ['',p.where==='port'?'Offline: check power, cable and SELECT':'Offline: check that it’s switched on'];
+  // W-1103: a StyleWriter has no SELECT key
+  const sw=p.kind==='stylewriter';
+  if(p.state==='attention') return ['a','Needs attention: '+(p.where==='port'?(sw?'check paper':'check paper and SELECT'):low(t&&lwStatus(t.message))||'check the printer')];
+  if(p.state==='offline') return ['',p.where==='port'?(sw?'Offline: check power and cable':'Offline: check power, cable and SELECT'):'Offline: check that it’s switched on'];
   if(p.state==='printing'&&t&&/busy/i.test(t.message||'')&&!S.printing) return ['g','Busy with another job'];
   return ST[p.state]||['',''];
 }
 /* A notice: what is wrong, in bold, then what to do. */
 const NOTE={
-  unknown_port:(p)=>['Unrecognized printer on the printer port','If it’s an ImageWriter, choose its model.',[['Choose Model…','open'],['Dismiss','dismiss']]],
-  changed:(p,n)=>['A different printer is on the printer port','It’s an '+esc(n.model)+'.',[['Use '+esc(n.model),'accept'],['Dismiss','dismiss']]],
+  unknown_port:(p)=>['Unrecognized printer on the printer port','If it’s an ImageWriter or StyleWriter, choose its model.',[['Choose Model…','open'],['Dismiss','dismiss']]],
+  changed:(p,n)=>['The printer port now has '+esc(aOrAn(n.model)),'Use it instead of '+esc(p&&p.model||'the current printer')+'?',[['Use '+esc(n.model),'accept'],['Dismiss','dismiss']]],
   no_answer:(p)=>[q(p)+' isn’t responding','Make sure it’s connected and switched on.',[['Share Anyway','use_anyway'],['Dismiss','dismiss']]],
   too_many:(p)=>[q(p)+' isn’t shared','You can share up to '+(PR.max_shared||4)+' printers. To share this one, stop sharing another.',[['OK','dismiss']]]};
 const q=p=>esc(p?p.name:'A printer');
@@ -634,7 +648,7 @@ let spSaving=false;                 // W-1099: the start page on its way to the 
 function pdDraw(){
   const p=prById(sel);
   if(!p){ prOpen(null); return; }
-  const port=p.where==='port', iw=p.kind==='imagewriter', unk=p.kind==='unknown';
+  const port=p.where==='port', iw=p.kind==='imagewriter', sw=p.kind==='stylewriter', unk=p.kind==='unknown';
   const k=KIND_IC[p.kind]||KIND_IC.unknown;
   $('pd-ic').className='ic '+k[0]; $('pd-ic').firstChild.firstChild.setAttribute('href','#'+k[1]);
   $('pd-name').textContent=p.name;
@@ -642,6 +656,11 @@ function pdDraw(){
   const [cls,text]=stWords(p);
   lamp($('prn-lamp'),cls); $('prn-state').textContent=text;
   $('rib-row').classList.toggle('hide',!(port&&iw));
+  // W-1103: a StyleWriter's cartridge, read from the printer; the black-only models always hold black
+  const cart=sw?p.cartridge||(/^Color /.test(p.model)?'':'black'):'';
+  $('cart-row').classList.toggle('hide',!cart);
+  $('cart-colour').classList.toggle('hide',cart!=='colour');
+  $('cart').textContent=cart==='colour'?'Color':'Black';
   if(document.activeElement!==$('pname')){ $('pname').value=p.name; }
   $('model-row').classList.toggle('hide',!port);
   // found, never said what it is: ask; told it is something else: say so
@@ -655,16 +674,21 @@ function pdDraw(){
   $('sp-row').classList.toggle('hide',p.kind!=='laserwriter'||typeof p.start_page!=='boolean');
   if(!spSaving){ $('pstart').checked=!!p.start_page; $('pstart').disabled=p.state==='offline'; }
   $('pd-cant').classList.toggle('hide',!unk&&!atiw);
-  $('pd-cant').textContent=ask?'Unrecognized printer. If it’s an ImageWriter, choose its model.'
+  $('pd-cant').textContent=ask?'Unrecognized printer. If it’s an ImageWriter or StyleWriter, choose its model.'
     :atiw?'Vintage Macs on every AppleTalk connection can use it. Phones and computers can’t.'
-    :'AirWriter prints on ImageWriters and LaserWriters.';
+    :'AirWriter prints on ImageWriters, StyleWriters and LaserWriters.';
   $('ht-box').classList.toggle('hide',unk||atiw);
   $('ht-paper').classList.toggle('hide',!iw);       // the sample is the ImageWriter's dots
+  screenList(sw);                                   // W-1103: Apple's screen is a StyleWriter's
   if(document.activeElement!==$('screen')&&p.dither&&p.dither!==$('screen').value){
     $('screen').value=p.dither;
     if(iw&&p.dither!==dither){ dither=p.dither; render(); }
   }
   $('pd-cable').classList.toggle('hide',!port||S.pic===false);
+  // W-1103: one cleaning of the print head; the original StyleWriter has none
+  const clean=sw&&p.model!=='StyleWriter';
+  $('pd-clean').classList.toggle('hide',!clean);
+  $('pd-cleannote').classList.toggle('hide',!clean);
   $('testpage').classList.toggle('hide',unk||p.kind==='appletalk-imagewriter');
 }
 async function prPoll(){
@@ -680,11 +704,11 @@ async function lwtPoll(){
   const r=await getJSON('/api/laser'); if(r&&r.targets){ LWT=r.targets; pdDraw(); }
 }
 prPoll(); setInterval(()=>{ if(!document.hidden){ prPoll(); if(sel!==null) lwtPoll(); } },4000);
-async function prPost(body,okText,sayId){
+async function prPost(body,okText,sayId,ms){
   const r=await postJSON('/api/printers',body);
   if(r.error){ say(sayId||'prn-say',r.error,1); return false; }
   if(r.printers){ PR=r; prDraw(); }
-  if(okText) say(sayId||'prn-say',okText,0,2400);
+  if(okText) say(sayId||'prn-say',okText,0,ms||2400);
   setTimeout(poll,300);
   return true;
 }
@@ -732,9 +756,17 @@ $('pd-remove').onclick=()=>{ const p=prById(sel); if(!p) return; $('rm-name').te
 $('rm-go').onclick=async()=>{ const id=sel; $('d-remove').close(); if(await prPost({id:id,remove:true},null,'prs-say')) prOpen(null); };
 $('testpage').onclick=async()=>{
   const p=prById(sel); if(!p) return;
-  if(p.state==='offline'){ say('prn-say',p.where==='port'?'The printer is offline. Check power, cable and SELECT.':'The printer is offline. Check that it’s switched on.',1,4000); return; }
+  if(p.state==='offline'){ say('prn-say',p.where==='port'?(p.kind==='stylewriter'?'The printer is offline. Check power and cable.':'The printer is offline. Check power, cable and SELECT.'):'The printer is offline. Check that it’s switched on.',1,4000); return; }
   const r=await postJSON('/api/test',{id:p.id});
   say('prn-say',r.error?r.error+'.':'Printing a test page.',!!r.error,4000);
+};
+/* W-1103: one press is one cleaning. The board says no in a sentence when the
+   printer is busy, off or holding a fault. */
+$('pd-clean').onclick=async()=>{
+  const b=$('pd-clean'); if(b.disabled) return;
+  b.disabled=true;
+  await prPost({id:sel,clean:true},'Cleaning the print head.',null,4000);
+  b.disabled=false;
 };
 /* The cable test borrows both ports. TashTalk, the AppleTalk chip's firmware,
    comes on an assembled AirWriter, so its flash key shows only once a test
@@ -1013,7 +1045,7 @@ function finDraw(){
   const ps=PR.printers, sh=ps.filter(p=>p.shared);
   const name=sh.length===1?'<b>'+esc(sh[0].name)+'</b>':'your printer';
   $('fin-list').innerHTML=ps.length?ps.map(p=>{ const [cls,t]=stWords(p);
-      const can=p.where==='port'?p.kind==='imagewriter':p.kind==='laserwriter'&&p.identified;
+      const can=p.where==='port'?p.kind==='imagewriter'||p.kind==='stylewriter':p.kind==='laserwriter'&&p.identified;
       return '<div class="row prow">'+icHTML(p)+'<span class=txt>'+esc(p.name)+'<small>'+esc(t)
         +'</small></span><i class="lamp '+cls+'"></i>'+(can?'<button class=btn type=button data-fintest='+p.id+'>Print Test Page</button>':'')+'</div>'; }).join('')
     :'<p class=empty>No printers yet. Add one in Printers.</p>';

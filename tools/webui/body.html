@@ -28,6 +28,9 @@
        out of the top and its paper cassette, narrower, at the foot -->
   <symbol id=g-iw viewBox="0 0 16 16"><path fill=currentColor fill-rule=evenodd d="M3 1h10v8.75H3zM3.7 2.75a.55 .55 0 1 0 1.1 0 .55 .55 0 1 0-1.1 0zM3.7 4.75a.55 .55 0 1 0 1.1 0 .55 .55 0 1 0-1.1 0zM3.7 6.75a.55 .55 0 1 0 1.1 0 .55 .55 0 1 0-1.1 0zM11.2 2.75a.55 .55 0 1 0 1.1 0 .55 .55 0 1 0-1.1 0zM11.2 4.75a.55 .55 0 1 0 1.1 0 .55 .55 0 1 0-1.1 0zM11.2 6.75a.55 .55 0 1 0 1.1 0 .55 .55 0 1 0-1.1 0zM2.25 9.75h11.5A1.25 1.25 0 0 1 15 11v2.75A1.25 1.25 0 0 1 13.75 15H2.25A1.25 1.25 0 0 1 1 13.75V11a1.25 1.25 0 0 1 1.25-1.25zm.25 1.5v1h11v-1z"/></symbol>
   <symbol id=g-laser viewBox="0 0 16 16"><path fill=currentColor fill-rule=evenodd d="M4.5 4.25V1.5a.5.5 0 0 1 .5-.5h6a.5.5 0 0 1 .5.5v2.75zM3.25 4.25h9.5A1.25 1.25 0 0 1 14 5.5V12H2V5.5a1.25 1.25 0 0 1 1.25-1.25zM3.5 6.25v1h9v-1zm6.75 2.75v1H12V9zM3.5 13h9v1a1 1 0 0 1-1 1h-7a1 1 0 0 1-1-1z"/></symbol>
+  <!-- W-1103: a StyleWriter, the family's one drawing: a low inkjet with its
+       sheet feeder rising behind it, an output slot and a light -->
+  <symbol id=g-style viewBox="0 0 16 16"><path fill=currentColor fill-rule=evenodd d="M4 1h8a.75 .75 0 0 1 .75 .75V8.5h-9.5V1.75A.75 .75 0 0 1 4 1zM5.25 2.25v6.25h5.5V2.25zM2.25 9h11.5A1.25 1.25 0 0 1 15 10.25v3.5A1.25 1.25 0 0 1 13.75 15H2.25A1.25 1.25 0 0 1 1 13.75v-3.5A1.25 1.25 0 0 1 2.25 9zM3 11v1.5h6.5V11zM11.2 11.75a.8 .8 0 1 0 1.6 0 .8 .8 0 1 0-1.6 0z"/></symbol>
   <!-- AirWriter's dots with the test button in the middle -->
   <symbol id=g-dots viewBox="0 0 16 16"><path fill=currentColor d="M2 3.25a1.25 1.25 0 1 0 2.5 0 1.25 1.25 0 1 0-2.5 0zM6.75 3.25a1.25 1.25 0 1 0 2.5 0 1.25 1.25 0 1 0-2.5 0zM11.5 3.25a1.25 1.25 0 1 0 2.5 0 1.25 1.25 0 1 0-2.5 0zM2 8a1.25 1.25 0 1 0 2.5 0 1.25 1.25 0 1 0-2.5 0zM11.5 8a1.25 1.25 0 1 0 2.5 0 1.25 1.25 0 1 0-2.5 0zM2 12.75a1.25 1.25 0 1 0 2.5 0 1.25 1.25 0 1 0-2.5 0zM6.75 12.75a1.25 1.25 0 1 0 2.5 0 1.25 1.25 0 1 0-2.5 0zM11.5 12.75a1.25 1.25 0 1 0 2.5 0 1.25 1.25 0 1 0-2.5 0z"/><circle cx=8 cy=8 r=1.75 fill=none stroke=currentColor stroke-width=1.5 /></symbol>
   <!-- the keys' own: look, add, on, back -->
@@ -101,6 +104,7 @@
           <div class=row><span class=txt>Status</span><span class=val><i class=lamp id=prn-lamp></i><span id=prn-state></span></span></div>
           <div class="row hide" id=prn-jobrow><span class=txt>Printing</span><span class=val id=prn-job></span></div>
           <div class="row hide" id=rib-row><span class=txt>Ribbon</span><span class=val><span class="ribbon hide" id=rib-colour><i class=y></i><i class=m></i><i class=c></i><i class=k></i></span><span id=rib></span></span></div>
+          <div class="row hide" id=cart-row><span class=txt>Cartridge</span><span class=val><span class="ribbon hide" id=cart-colour><i class=y></i><i class=m></i><i class=c></i><i class=k></i></span><span id=cart></span></span></div>
         </div>
         <div class=box>
           <div class=row><span class=txt>Name</span><input class="fld short" id=pname autocomplete=off spellcheck=false maxlength=32 aria-label=Name></div>
@@ -114,7 +118,7 @@
           <div class=paper id=ht-paper><div class=sheet><canvas id=prev aria-label="A sample printed with this halftone"></canvas></div></div>
         </div>
         <p class=say id=prn-say></p>
-        <div class=btnrow><button class="btn danger" type=button id=pd-remove>Remove Printer…</button><button class=btn type=button data-dlg=d-cable id=pd-cable>Test Cable…</button><button class=btn type=button id=testpage>Print Test Page</button></div>
+        <div class=btnrow><p class="say hide" id=pd-cleannote>Cleaning uses ink.</p><button class="btn danger" type=button id=pd-remove>Remove Printer…</button><button class=btn type=button data-dlg=d-cable id=pd-cable>Test Cable…</button><button class="btn hide" type=button id=pd-clean aria-describedby=pd-cleannote>Clean Print Head</button><button class=btn type=button id=testpage>Print Test Page</button></div>
       </div>
     </section>
 
@@ -240,8 +244,8 @@
 
 <dialog id=d-add><div class=dlg>
   <b>Add a printer on the printer port</b>
-  <p>Add an ImageWriter that’s switched off, or an original ImageWriter. Printers on AppleTalk show up by themselves.</p>
-  <div class=box><div class=row><span class=txt>Model</span><select class=pop id=add-model aria-label=Model><option>ImageWriter II</option><option>ImageWriter LQ</option><option>ImageWriter</option></select></div></div>
+  <p>Add a printer that’s switched off, or an original ImageWriter or StyleWriter. Printers on AppleTalk show up by themselves.</p>
+  <div class=box><div class=row><span class=txt>Model</span><select class=pop id=add-model aria-label=Model></select></div></div>
   <p class=say id=add-say></p>
   <div class=btnrow><button class=btn type=button data-close>Cancel</button><button class="btn primary" type=button id=add-go>Add</button></div>
 </div></dialog>

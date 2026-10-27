@@ -2297,6 +2297,624 @@
     }
    }
   },
+  "stylewriter-colour": {
+   "about": "Printers: a Color StyleWriter 2500 with its color cartridge, two LaserWriters",
+   "patch": {
+    "GET /api/printers": {
+     "printers": [
+      {
+       "id": 1,
+       "name": "Color StyleWriter 2500",
+       "where": "port",
+       "kind": "stylewriter",
+       "model": "Color StyleWriter 2500",
+       "shared": true,
+       "identified": true,
+       "found": "auto",
+       "state": "ready",
+       "uuid": "urn:uuid:41575254-4c57-0001-0002-10bda36e2434",
+       "product": "",
+       "dither": "atkinson",
+       "gain": 0,
+       "rp": "ipp/print",
+       "start_page": null,
+       "cartridge": "colour"
+      },
+      {
+       "id": 2,
+       "name": "LaserWriter II NT",
+       "where": "tunnel",
+       "kind": "laserwriter",
+       "model": "",
+       "shared": true,
+       "identified": true,
+       "found": "person",
+       "state": "ready",
+       "uuid": "urn:uuid:41575254-4c57-0001-99d7-10bda36e2434",
+       "product": "LaserWriter II NT",
+       "dither": "atkinson",
+       "gain": 0,
+       "rp": "ipp/laser",
+       "start_page": true
+      },
+      {
+       "id": 3,
+       "name": "Office LaserWriter",
+       "where": "cable",
+       "kind": "laserwriter",
+       "model": "",
+       "shared": true,
+       "identified": true,
+       "found": "auto",
+       "state": "ready",
+       "uuid": "urn:uuid:41575254-4c57-0001-78fa-10bda36e2434",
+       "product": "LaserWriter Pro 630",
+       "dither": "bluenoise",
+       "gain": 0,
+       "rp": "ipp/p3",
+       "start_page": null
+      }
+     ],
+     "notes": [],
+     "max_shared": 4
+    },
+    "POST /api/printers": {
+     "printers": [
+      {
+       "id": 1,
+       "name": "Color StyleWriter 2500",
+       "where": "port",
+       "kind": "stylewriter",
+       "model": "Color StyleWriter 2500",
+       "shared": true,
+       "identified": true,
+       "found": "auto",
+       "state": "ready",
+       "uuid": "urn:uuid:41575254-4c57-0001-0002-10bda36e2434",
+       "product": "",
+       "dither": "atkinson",
+       "gain": 0,
+       "rp": "ipp/print",
+       "start_page": null,
+       "cartridge": "colour"
+      },
+      {
+       "id": 2,
+       "name": "LaserWriter II NT",
+       "where": "tunnel",
+       "kind": "laserwriter",
+       "model": "",
+       "shared": true,
+       "identified": true,
+       "found": "person",
+       "state": "ready",
+       "uuid": "urn:uuid:41575254-4c57-0001-99d7-10bda36e2434",
+       "product": "LaserWriter II NT",
+       "dither": "atkinson",
+       "gain": 0,
+       "rp": "ipp/laser",
+       "start_page": true
+      },
+      {
+       "id": 3,
+       "name": "Office LaserWriter",
+       "where": "cable",
+       "kind": "laserwriter",
+       "model": "",
+       "shared": true,
+       "identified": true,
+       "found": "auto",
+       "state": "ready",
+       "uuid": "urn:uuid:41575254-4c57-0001-78fa-10bda36e2434",
+       "product": "LaserWriter Pro 630",
+       "dither": "bluenoise",
+       "gain": 0,
+       "rp": "ipp/p3",
+       "start_page": null
+      }
+     ],
+     "notes": [],
+     "max_shared": 4
+    },
+    "GET /api/status": {
+     "printers": {
+      "count": 3,
+      "shared": 3,
+      "notes": 0,
+      "port": "stylewriter"
+     },
+     "model": "Apple Color StyleWriter 2500",
+     "ribbon": "colour"
+    }
+   }
+  },
+  "stylewriter-black": {
+   "about": "Printers: a StyleWriter II with its black cartridge",
+   "patch": {
+    "GET /api/printers": {
+     "printers": [
+      {
+       "id": 1,
+       "name": "StyleWriter II",
+       "where": "port",
+       "kind": "stylewriter",
+       "model": "StyleWriter II",
+       "shared": true,
+       "identified": true,
+       "found": "auto",
+       "state": "ready",
+       "uuid": "urn:uuid:41575254-4c57-0001-0002-10bda36e2434",
+       "product": "",
+       "dither": "atkinson",
+       "gain": 0,
+       "rp": "ipp/print",
+       "start_page": null,
+       "cartridge": "black"
+      }
+     ],
+     "notes": [],
+     "max_shared": 4
+    },
+    "POST /api/printers": {
+     "printers": [
+      {
+       "id": 1,
+       "name": "StyleWriter II",
+       "where": "port",
+       "kind": "stylewriter",
+       "model": "StyleWriter II",
+       "shared": true,
+       "identified": true,
+       "found": "auto",
+       "state": "ready",
+       "uuid": "urn:uuid:41575254-4c57-0001-0002-10bda36e2434",
+       "product": "",
+       "dither": "atkinson",
+       "gain": 0,
+       "rp": "ipp/print",
+       "start_page": null,
+       "cartridge": "black"
+      }
+     ],
+     "notes": [],
+     "max_shared": 4
+    },
+    "GET /api/laser": {
+     "heard": [],
+     "targets": [],
+     "job": {
+      "active": false,
+      "sent": 0,
+      "last": ""
+     }
+    },
+    "GET /api/status": {
+     "printers": {
+      "count": 1,
+      "shared": 1,
+      "notes": 0,
+      "port": "stylewriter"
+     },
+     "model": "Apple StyleWriter II",
+     "ribbon": "black"
+    }
+   }
+  },
+  "stylewriter-original": {
+   "about": "Printers: the original StyleWriter, with no Clean Print Head and a cartridge that is always Black",
+   "patch": {
+    "GET /api/printers": {
+     "printers": [
+      {
+       "id": 1,
+       "name": "StyleWriter",
+       "where": "port",
+       "kind": "stylewriter",
+       "model": "StyleWriter",
+       "shared": true,
+       "identified": true,
+       "found": "auto",
+       "state": "ready",
+       "uuid": "urn:uuid:41575254-4c57-0001-0002-10bda36e2434",
+       "product": "",
+       "dither": "atkinson",
+       "gain": 0,
+       "rp": "ipp/print",
+       "start_page": null
+      }
+     ],
+     "notes": [],
+     "max_shared": 4
+    },
+    "POST /api/printers": {
+     "printers": [
+      {
+       "id": 1,
+       "name": "StyleWriter",
+       "where": "port",
+       "kind": "stylewriter",
+       "model": "StyleWriter",
+       "shared": true,
+       "identified": true,
+       "found": "auto",
+       "state": "ready",
+       "uuid": "urn:uuid:41575254-4c57-0001-0002-10bda36e2434",
+       "product": "",
+       "dither": "atkinson",
+       "gain": 0,
+       "rp": "ipp/print",
+       "start_page": null
+      }
+     ],
+     "notes": [],
+     "max_shared": 4
+    },
+    "GET /api/laser": {
+     "heard": [],
+     "targets": [],
+     "job": {
+      "active": false,
+      "sent": 0,
+      "last": ""
+     }
+    },
+    "GET /api/status": {
+     "printers": {
+      "count": 1,
+      "shared": 1,
+      "notes": 0,
+      "port": "stylewriter"
+     },
+     "model": "Apple StyleWriter",
+     "ribbon": "black"
+    }
+   }
+  },
+  "stylewriter-paper": {
+   "about": "Printers: a Color StyleWriter 2200 out of paper",
+   "patch": {
+    "GET /api/printers": {
+     "printers": [
+      {
+       "id": 1,
+       "name": "Color StyleWriter 2200",
+       "where": "port",
+       "kind": "stylewriter",
+       "model": "Color StyleWriter 2200",
+       "shared": true,
+       "identified": true,
+       "found": "auto",
+       "state": "attention",
+       "uuid": "urn:uuid:41575254-4c57-0001-0002-10bda36e2434",
+       "product": "",
+       "dither": "atkinson",
+       "gain": 0,
+       "rp": "ipp/print",
+       "start_page": null,
+       "cartridge": "colour"
+      }
+     ],
+     "notes": [],
+     "max_shared": 4
+    },
+    "POST /api/printers": {
+     "printers": [
+      {
+       "id": 1,
+       "name": "Color StyleWriter 2200",
+       "where": "port",
+       "kind": "stylewriter",
+       "model": "Color StyleWriter 2200",
+       "shared": true,
+       "identified": true,
+       "found": "auto",
+       "state": "attention",
+       "uuid": "urn:uuid:41575254-4c57-0001-0002-10bda36e2434",
+       "product": "",
+       "dither": "atkinson",
+       "gain": 0,
+       "rp": "ipp/print",
+       "start_page": null,
+       "cartridge": "colour"
+      }
+     ],
+     "notes": [],
+     "max_shared": 4
+    },
+    "GET /api/laser": {
+     "heard": [],
+     "targets": [],
+     "job": {
+      "active": false,
+      "sent": 0,
+      "last": ""
+     }
+    },
+    "GET /api/status": {
+     "printers": {
+      "count": 1,
+      "shared": 1,
+      "notes": 0,
+      "port": "stylewriter"
+     },
+     "model": "Apple Color StyleWriter 2200",
+     "ribbon": "colour",
+     "ps": "attention",
+     "state": "Needs attention",
+     "fault": true,
+     "stopped": true
+    }
+   }
+  },
+  "stylewriter-offline": {
+   "about": "Printers: a Color StyleWriter 1500 switched off, cartridge not read yet",
+   "patch": {
+    "GET /api/printers": {
+     "printers": [
+      {
+       "id": 1,
+       "name": "Color StyleWriter 1500",
+       "where": "port",
+       "kind": "stylewriter",
+       "model": "Color StyleWriter 1500",
+       "shared": true,
+       "identified": true,
+       "found": "auto",
+       "state": "offline",
+       "uuid": "urn:uuid:41575254-4c57-0001-0002-10bda36e2434",
+       "product": "",
+       "dither": "atkinson",
+       "gain": 0,
+       "rp": "ipp/print",
+       "start_page": null
+      }
+     ],
+     "notes": [],
+     "max_shared": 4
+    },
+    "POST /api/printers": {
+     "printers": [
+      {
+       "id": 1,
+       "name": "Color StyleWriter 1500",
+       "where": "port",
+       "kind": "stylewriter",
+       "model": "Color StyleWriter 1500",
+       "shared": true,
+       "identified": true,
+       "found": "auto",
+       "state": "offline",
+       "uuid": "urn:uuid:41575254-4c57-0001-0002-10bda36e2434",
+       "product": "",
+       "dither": "atkinson",
+       "gain": 0,
+       "rp": "ipp/print",
+       "start_page": null
+      }
+     ],
+     "notes": [],
+     "max_shared": 4
+    },
+    "GET /api/laser": {
+     "heard": [],
+     "targets": [],
+     "job": {
+      "active": false,
+      "sent": 0,
+      "last": ""
+     }
+    },
+    "GET /api/status": {
+     "printers": {
+      "count": 1,
+      "shared": 1,
+      "notes": 0,
+      "port": "stylewriter"
+     },
+     "model": "Apple Color StyleWriter 1500",
+     "ribbon": "unknown",
+     "ps": "offline",
+     "state": "Offline",
+     "printer": false,
+     "stopped": true
+    }
+   }
+  },
+  "stylewriter-clean-busy": {
+   "about": "Printers: a StyleWriter II busy with a job when Clean Print Head is pressed",
+   "patch": {
+    "GET /api/printers": {
+     "printers": [
+      {
+       "id": 1,
+       "name": "StyleWriter II",
+       "where": "port",
+       "kind": "stylewriter",
+       "model": "StyleWriter II",
+       "shared": true,
+       "identified": true,
+       "found": "auto",
+       "state": "ready",
+       "uuid": "urn:uuid:41575254-4c57-0001-0002-10bda36e2434",
+       "product": "",
+       "dither": "atkinson",
+       "gain": 0,
+       "rp": "ipp/print",
+       "start_page": null,
+       "cartridge": "black"
+      }
+     ],
+     "notes": [],
+     "max_shared": 4
+    },
+    "POST /api/printers": {
+     "_status": 409,
+     "_body": "The printer is busy. Try again when it’s done."
+    },
+    "GET /api/laser": {
+     "heard": [],
+     "targets": [],
+     "job": {
+      "active": false,
+      "sent": 0,
+      "last": ""
+     }
+    },
+    "GET /api/status": {
+     "printers": {
+      "count": 1,
+      "shared": 1,
+      "notes": 0,
+      "port": "stylewriter"
+     },
+     "model": "Apple StyleWriter II",
+     "ribbon": "black"
+    }
+   }
+  },
+  "stylewriter-changed": {
+   "about": "Printers: the port printer now answers as a StyleWriter II",
+   "patch": {
+    "GET /api/printers": {
+     "printers": [
+      {
+       "id": 1,
+       "name": "ImageWriter II",
+       "where": "port",
+       "kind": "imagewriter",
+       "model": "ImageWriter II",
+       "shared": true,
+       "identified": true,
+       "found": "person",
+       "state": "ready",
+       "uuid": "urn:uuid:41575254-4552-0001-10bd-a36e2434",
+       "product": "",
+       "dither": "atkinson",
+       "gain": 0,
+       "rp": "ipp/print",
+       "start_page": null
+      }
+     ],
+     "notes": [
+      {
+       "kind": "changed",
+       "id": 1,
+       "model": "StyleWriter II"
+      }
+     ],
+     "max_shared": 4
+    },
+    "POST /api/printers": {
+     "printers": [
+      {
+       "id": 1,
+       "name": "ImageWriter II",
+       "where": "port",
+       "kind": "imagewriter",
+       "model": "ImageWriter II",
+       "shared": true,
+       "identified": true,
+       "found": "person",
+       "state": "ready",
+       "uuid": "urn:uuid:41575254-4552-0001-10bd-a36e2434",
+       "product": "",
+       "dither": "atkinson",
+       "gain": 0,
+       "rp": "ipp/print",
+       "start_page": null
+      }
+     ],
+     "notes": [
+      {
+       "kind": "changed",
+       "id": 1,
+       "model": "StyleWriter II"
+      }
+     ],
+     "max_shared": 4
+    },
+    "GET /api/laser": {
+     "heard": [],
+     "targets": [],
+     "job": {
+      "active": false,
+      "sent": 0,
+      "last": ""
+     }
+    },
+    "GET /api/status": {
+     "printers": {
+      "count": 1,
+      "shared": 1,
+      "notes": 1,
+      "port": "imagewriter"
+     }
+    }
+   }
+  },
+  "unknown-port-stylewriter": {
+   "about": "Printers: something on the port that never answered, the Model picker lists the StyleWriters",
+   "patch": {
+    "GET /api/printers": {
+     "printers": [
+      {
+       "id": 1,
+       "name": "Unknown printer",
+       "where": "port",
+       "kind": "unknown",
+       "model": "",
+       "shared": false,
+       "identified": false,
+       "found": "auto",
+       "state": "ready",
+       "uuid": "urn:uuid:41575254-4552-0001-10bd-a36e2434",
+       "product": "",
+       "dither": "atkinson",
+       "gain": 0,
+       "rp": "",
+       "start_page": null
+      }
+     ],
+     "notes": [
+      {
+       "kind": "unknown_port",
+       "id": 1,
+       "model": ""
+      }
+     ],
+     "max_shared": 4
+    },
+    "POST /api/printers": {
+     "printers": [
+      {
+       "id": 1,
+       "name": "Unknown printer",
+       "where": "port",
+       "kind": "unknown",
+       "model": "",
+       "shared": false,
+       "identified": false,
+       "found": "auto",
+       "state": "ready",
+       "uuid": "urn:uuid:41575254-4552-0001-10bd-a36e2434",
+       "product": "",
+       "dither": "atkinson",
+       "gain": 0,
+       "rp": "",
+       "start_page": null
+      }
+     ],
+     "notes": [
+      {
+       "kind": "unknown_port",
+       "id": 1,
+       "model": ""
+      }
+     ],
+     "max_shared": 4
+    }
+   }
+  },
   "setup-found": {
    "about": "Setup step 1: an ImageWriter on the port and a LaserWriter on the cable",
    "patch": {
