@@ -102,6 +102,8 @@ typedef struct {
     uint16_t  epoch;
     pr_seen_t seen[PR_MAX];
     uint8_t   heard;          // W-1103: pr_heard_t, the port's last answer; not stored
+    uint8_t   heard_model;    // ...the pr_model_t it named (0: none), not stored
+    uint8_t   dismissed;      // the model of a "changed" notice the person dismissed; not stored
 } pr_list_t;
 
 // A StyleWriter's fault as the board last read it, said to the settings page so it can
@@ -169,9 +171,12 @@ int  pr_index(const pr_list_t *l, int id);                  // its place in r[],
 int  pr_port_is_imagewriter(const pr_list_t *l);            // ImageWriter commands may go to J2
 int  pr_port_is_stylewriter(const pr_list_t *l);            // the port's printer is a StyleWriter
 
-// W-1103: who answered on the port last (pr_heard_t). pr_port_seen and pr_port_seen_sw keep
-// it; pr_port_answered is for an answer that says nothing else (a StyleWriter's `1` and `2`,
-// the full sequence). PR_HEARD_NONE changes nothing: silence is not an answer.
+// W-1103: who answered on the port last (pr_heard_t), and the model it named. pr_port_seen and
+// pr_port_seen_sw keep them; pr_port_answered is for an answer of the record's own printer that
+// names no model (a StyleWriter's `1` and `2`, a job that printed, the full sequence once the
+// record has the model it found). PR_HEARD_NONE changes nothing: silence is not an answer.
+// A "changed" notice the person dismissed is not offered again for the same answer: only an
+// answer that names another model ends that (pr_dismiss).
 int  pr_port_heard(const pr_list_t *l);
 void pr_port_answered(pr_list_t *l, int heard);
 // The port's record is an ImageWriter and a StyleWriter answered last, or the reverse: the
@@ -180,6 +185,10 @@ void pr_port_answered(pr_list_t *l, int heard);
 // family answers again or the person makes the record the other's (accepting the "changed"
 // notice, or choosing its model). Dismissing the notice does not end it.
 int  pr_port_conflict(const pr_list_t *l);
+// What the phone and the page show as a swap: pr_port_conflict, or a StyleWriter record whose
+// port another StyleWriter model answered last (its jobs fail at their own `?`, so they are left
+// to it). An ImageWriter of another model is not one: it takes the record's stream.
+int  pr_port_swapped(const pr_list_t *l);
 
 // The records old Macs are offered on `link` (ids, in list order): every
 // identified printer AirWriter can carry, shared over AirPrint or not; an

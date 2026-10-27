@@ -647,6 +647,15 @@ int printers_port_conflict(void)
     return c;
 }
 
+int printers_port_swapped(void)
+{
+    if (!s_started) return 0;
+    lock();
+    int c = pr_port_swapped(s_l);
+    unlock();
+    return c;
+}
+
 void printers_port_set_sw_model(sw_model_t m)
 {
     pr_model_t pm = pr_model_from_sw(m);

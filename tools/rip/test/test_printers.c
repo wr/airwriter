@@ -1551,6 +1551,7 @@ static void test_sw_blob_stamp(void)
     n = pr_save(&L, buf, sizeof buf);
     CHECK_EQ_INT(buf[2], 1);
     CHECK(old_reader_accepts(buf, n));
+    pr_port_seen(&L, PR_PORT_IW2);                           // its own printer, then the other again
     pr_port_seen_sw(&L, PR_MODEL_SW1200);
     CHECK_EQ_INT(pr_accept_change(&L, 0), 0);                // the record is a StyleWriter now
     n = pr_save(&L, buf, sizeof buf);
@@ -1670,6 +1671,7 @@ static void test_port_conflict(void)
     size_t n2 = pr_save(&L, blob2, sizeof blob2);
     CHECK_EQ_INT((long)n2, (long)n1);
     CHECK(!memcmp(blob, blob2, n1));                // heard is not in the blob
+    pr_port_seen(&L, PR_PORT_IW2);                  // its own, then the StyleWriter's notice again
     pr_port_seen_sw(&L, PR_MODEL_SWC2200);
     size_t n = pr_save(&L, blob, sizeof blob);
     static pr_list_t M;
@@ -1677,14 +1679,108 @@ static void test_port_conflict(void)
     CHECK_EQ_INT(pr_load(&M, blob, n), 0);
     CHECK_EQ_INT(pr_port_heard(&M), PR_HEARD_STYLEWRITER);
     CHECK_EQ_INT(pr_port_conflict(&M), 1);
-    // A notice naming the record's own family says nothing about the port's language.
+    // A notice naming another model of the record's own family is no conflict (the job's own
+    // `?` holds it), though it reads as a swap (test_port_swapped).
     fresh();
     pr_port_seen_sw(&L, PR_MODEL_SW2);
     pr_port_seen_sw(&L, PR_MODEL_SWC2400);
     n = pr_save(&L, blob, sizeof blob);
     pr_init(&M, MAC, 1);
     CHECK_EQ_INT(pr_load(&M, blob, n), 0);
+    CHECK_EQ_INT(pr_port_conflict(&M), 0);
+    CHECK_EQ_INT(pr_port_swapped(&M), 1);
+    // An ImageWriter record's notice for another ImageWriter says nothing at all.
+    fresh();
+    pr_port_seen(&L, PR_PORT_IW2);
+    pr_port_seen(&L, PR_PORT_IWLQ);
+    n = pr_save(&L, blob, sizeof blob);
+    pr_init(&M, MAC, 1);
+    CHECK_EQ_INT(pr_load(&M, blob, n), 0);
     CHECK_EQ_INT(pr_port_heard(&M), PR_HEARD_NONE);
+    CHECK_EQ_INT(pr_port_swapped(&M), 0);
+}
+
+// A different StyleWriter model answering on a StyleWriter record's port reads as a swap on the
+// phone and the page (pr_port_swapped), though its jobs are left to the job's own model check
+// (pr_port_conflict is the family's). A dismissed "changed" notice stays dismissed until an
+// answer other than the one dismissed, and the same answer again rewrites nothing.
+static void test_port_swapped(void)
+{
+    static char buf[4096];
+    static uint8_t b1[8192], b2[8192];
+    pr_live_t live[PR_MAX];
+    memset(live, 0, sizeof live);
+
+    fresh();
+    pr_port_seen_sw(&L, PR_MODEL_SW2);
+    CHECK_EQ_INT(pr_port_swapped(&L), 0);
+    pr_port_seen_sw(&L, PR_MODEL_SWC2500);
+    CHECK_EQ_INT(notes_of(PR_NOTE_CHANGED), 1);
+    CHECK_EQ_INT(pr_port_conflict(&L), 0);          // the same family: the job's `?` holds it
+    CHECK_EQ_INT(pr_port_swapped(&L), 1);
+    pr_json(&L, live, buf, sizeof buf);
+    CHECK(strstr(buf, "\"swapped\":true") != NULL);
+    CHECK(strstr(buf, "\"state\":\"attention\"") != NULL);
+    // Dismissed: the same answer every minute adds nothing back and stores nothing new.
+    pr_dismiss(&L, 0);
+    CHECK_EQ_INT(L.n_notes, 0);
+    size_t n1 = pr_save(&L, b1, sizeof b1);
+    for (int i = 0; i < 5; i++) pr_port_seen_sw(&L, PR_MODEL_SWC2500);
+    CHECK_EQ_INT(L.n_notes, 0);
+    size_t n2 = pr_save(&L, b2, sizeof b2);
+    CHECK_EQ_INT((long)n2, (long)n1);
+    CHECK(!memcmp(b1, b2, n1));
+    CHECK_EQ_INT(pr_port_swapped(&L), 1);           // still the other model: still a swap
+    // Another answer than the dismissed one brings a notice of its own.
+    pr_port_seen_sw(&L, PR_MODEL_SWC2400);
+    CHECK_EQ_INT(notes_of(PR_NOTE_CHANGED), 1);
+    CHECK_EQ_INT(L.notes[0].model, PR_MODEL_SWC2400);
+    pr_dismiss(&L, 0);
+    // The record's own printer answers: over, and the dismissed one may be offered again.
+    pr_port_seen_sw(&L, PR_MODEL_SW2);
+    CHECK_EQ_INT(pr_port_swapped(&L), 0);
+    pr_json(&L, live, buf, sizeof buf);
+    CHECK(strstr(buf, "swapped") == NULL);
+    pr_port_seen_sw(&L, PR_MODEL_SWC2400);
+    CHECK_EQ_INT(notes_of(PR_NOTE_CHANGED), 1);
+    // An answer that names no model but is the record's own (its `1` and `2`, a job that
+    // printed): over too.
+    CHECK_EQ_INT(pr_port_swapped(&L), 1);
+    pr_port_answered(&L, PR_HEARD_STYLEWRITER);
+    CHECK_EQ_INT(pr_port_swapped(&L), 0);
+    // Accepting the notice: the record is the printer that answered.
+    pr_port_seen_sw(&L, PR_MODEL_SWC2400);
+    int k = -1;
+    for (int i = 0; i < L.n_notes; i++) if (L.notes[i].kind == PR_NOTE_CHANGED) k = i;
+    CHECK_EQ_INT(pr_accept_change(&L, k), 0);
+    CHECK_EQ_INT(pr_port_swapped(&L), 0);
+
+    // The family's swap is a swap too; an ImageWriter of another model is not (it prints on).
+    fresh();
+    pr_port_seen(&L, PR_PORT_IW2);
+    pr_port_seen(&L, PR_PORT_IWLQ);
+    CHECK_EQ_INT(notes_of(PR_NOTE_CHANGED), 1);
+    CHECK_EQ_INT(pr_port_swapped(&L), 0);
+    pr_json(&L, live, buf, sizeof buf);
+    CHECK(strstr(buf, "swapped") == NULL);
+    pr_port_seen_sw(&L, PR_MODEL_SW2);
+    CHECK_EQ_INT(pr_port_swapped(&L), 1);
+    // Dismissed, the StyleWriter's answer at each look adds nothing back either.
+    for (int i = L.n_notes - 1; i >= 0; i--)
+        if (L.notes[i].model == PR_MODEL_SW2) pr_dismiss(&L, i);
+    pr_port_seen_sw(&L, PR_MODEL_SW2);
+    CHECK_EQ_INT(notes_of(PR_NOTE_CHANGED), 1);              // the LQ's, still waiting
+    CHECK_EQ_INT(pr_port_conflict(&L), 1);
+
+    // A start with the other model's notice pending says it again.
+    fresh();
+    pr_port_seen_sw(&L, PR_MODEL_SW1200);
+    pr_port_seen_sw(&L, PR_MODEL_SW2);
+    size_t n = pr_save(&L, b1, sizeof b1);
+    static pr_list_t M;
+    pr_init(&M, MAC, 1);
+    CHECK_EQ_INT(pr_load(&M, b1, n), 0);
+    CHECK_EQ_INT(pr_port_swapped(&M), 1);
     CHECK_EQ_INT(pr_port_conflict(&M), 0);
 }
 
@@ -1735,5 +1831,6 @@ int main(void)
     test_sw_blob();
     test_sw_blob_stamp();
     test_port_conflict();
+    test_port_swapped();
     TEST_END;
 }

@@ -168,6 +168,21 @@ static void notes_clear(pr_list_t *l, int id, int kind)     // kind -1: every ki
         if (l->notes[i].id == id && (kind < 0 || l->notes[i].kind == kind)) note_drop(l, i);
 }
 
+// W-1103: the port's printer answered as `model` (a pr_model_t) of family `heard`. An answer
+// other than the one whose notice the person dismissed lets that notice be offered again.
+static void port_heard(pr_list_t *l, int heard, int model)
+{
+    l->heard = (uint8_t)heard;
+    l->heard_model = (uint8_t)model;
+    if (model != l->dismissed) l->dismissed = 0;
+}
+
+// The "changed" notice for the port's record `p`, unless the person dismissed it for this model.
+static void port_changed(pr_list_t *l, const pr_rec_t *p, int model)
+{
+    if (model != l->dismissed) note_add(l, PR_NOTE_CHANGED, p->id, model);
+}
+
 // ------------------------------------------------------------- names
 
 // The name a printer gives itself: a port printer's model, an AppleTalk
@@ -331,7 +346,7 @@ int pr_port_seen(pr_list_t *l, pr_port_seen_t what)
     if (what == PR_PORT_SILENT) {
         // The original ImageWriter has no self-ID: its line up and nothing said is its answer.
         if (p && p->kind == PR_KIND_IMAGEWRITER && p->model == PR_MODEL_IW1)
-            l->heard = PR_HEARD_IMAGEWRITER;
+            port_heard(l, PR_HEARD_IMAGEWRITER, PR_MODEL_IW1);
         if (p) return p->id;              // an original ImageWriter, a lost answer: no churn
         p = rec_new(l);
         if (!p) return -1;
@@ -344,7 +359,7 @@ int pr_port_seen(pr_list_t *l, pr_port_seen_t what)
         return p->id;
     }
     int model = what == PR_PORT_IWLQ ? PR_MODEL_IWLQ : PR_MODEL_IW2;
-    l->heard = PR_HEARD_IMAGEWRITER;
+    port_heard(l, PR_HEARD_IMAGEWRITER, model);
     if (!p) {
         p = port_new(l, model);
         return p ? p->id : -1;
@@ -358,14 +373,14 @@ int pr_port_seen(pr_list_t *l, pr_port_seen_t what)
     // A different printer than the record's, an ImageWriter of another model or
     // a StyleWriter, is offered, never swapped in.
     if ((p->kind == PR_KIND_IMAGEWRITER && p->model != model) || p->kind == PR_KIND_STYLEWRITER)
-        note_add(l, PR_NOTE_CHANGED, p->id, model);
+        port_changed(l, p, model);
     return p->id;
 }
 
 void pr_port_seen_sw(pr_list_t *l, pr_model_t m)
 {
     if (!model_is_sw(m)) return;
-    l->heard = PR_HEARD_STYLEWRITER;
+    port_heard(l, PR_HEARD_STYLEWRITER, m);
     pr_rec_t *p = (pr_rec_t *)pr_port(l);
     if (!p) {
         port_new(l, m);
@@ -378,7 +393,7 @@ void pr_port_seen_sw(pr_list_t *l, pr_model_t m)
         return;
     }
     if (p->kind == PR_KIND_IMAGEWRITER || (p->kind == PR_KIND_STYLEWRITER && p->model != m))
-        note_add(l, PR_NOTE_CHANGED, p->id, m);
+        port_changed(l, p, m);
 }
 
 int pr_port_sw_found(pr_list_t *l, pr_model_t m)
@@ -626,7 +641,11 @@ int pr_accept_change(pr_list_t *l, int note)
 
 void pr_dismiss(pr_list_t *l, int note)
 {
-    if (note >= 0 && note < l->n_notes) note_drop(l, note);
+    if (note < 0 || note >= l->n_notes) return;
+    const pr_rec_t *p = pr_port(l);
+    if (p && l->notes[note].kind == PR_NOTE_CHANGED && l->notes[note].id == p->id)
+        l->dismissed = l->notes[note].model;
+    note_drop(l, note);
 }
 
 // ------------------------------------------------------------- who answered
@@ -636,11 +655,6 @@ int pr_port_heard(const pr_list_t *l)
     return l->heard;
 }
 
-void pr_port_answered(pr_list_t *l, int heard)
-{
-    if (heard == PR_HEARD_IMAGEWRITER || heard == PR_HEARD_STYLEWRITER) l->heard = (uint8_t)heard;
-}
-
 // The family a port record's kind speaks, PR_HEARD_NONE for one that is neither.
 static int family_of_kind(int kind)
 {
@@ -648,11 +662,28 @@ static int family_of_kind(int kind)
          : kind == PR_KIND_STYLEWRITER ? PR_HEARD_STYLEWRITER : PR_HEARD_NONE;
 }
 
+void pr_port_answered(pr_list_t *l, int heard)
+{
+    if (heard != PR_HEARD_IMAGEWRITER && heard != PR_HEARD_STYLEWRITER) return;
+    // The record's own printer: its model, when the family is the record's.
+    const pr_rec_t *p = pr_port(l);
+    int own = p && family_of_kind(p->kind) == heard;
+    port_heard(l, heard, own ? p->model : 0);
+}
+
 int pr_port_conflict(const pr_list_t *l)
 {
     const pr_rec_t *p = pr_port(l);
     int fam = p ? family_of_kind(p->kind) : PR_HEARD_NONE;
     return fam != PR_HEARD_NONE && l->heard != PR_HEARD_NONE && l->heard != fam;
+}
+
+int pr_port_swapped(const pr_list_t *l)
+{
+    if (pr_port_conflict(l)) return 1;
+    const pr_rec_t *p = pr_port(l);
+    return p && p->kind == PR_KIND_STYLEWRITER && l->heard == PR_HEARD_STYLEWRITER &&
+           l->heard_model && l->heard_model != p->model;
 }
 
 // ------------------------------------------------------------- old Macs, the box
@@ -813,13 +844,16 @@ int pr_load(pr_list_t *l, const uint8_t *buf, size_t n)
     l->next_id = buf[4] ? buf[4] : 1;
     // Who answered on the port is not stored, but a "changed" notice still waiting for the
     // person says the other family did: so it holds from the start, as it did before.
-    l->heard = PR_HEARD_NONE;
+    // So is another StyleWriter model's, on a StyleWriter record.
+    l->heard = l->heard_model = l->dismissed = 0;
     const pr_rec_t *p = pr_port(l);
     for (int i = 0; p && i < l->n_notes; i++) {
         int fam = model_is_sw(l->notes[i].model) ? PR_HEARD_STYLEWRITER : PR_HEARD_IMAGEWRITER;
-        if (l->notes[i].kind == PR_NOTE_CHANGED && l->notes[i].id == p->id &&
-            fam != family_of_kind(p->kind))
+        if (l->notes[i].kind != PR_NOTE_CHANGED || l->notes[i].id != p->id) continue;
+        if (fam != family_of_kind(p->kind) || p->kind == PR_KIND_STYLEWRITER) {
             l->heard = (uint8_t)fam;
+            l->heard_model = l->notes[i].model;
+        }
     }
     return 0;
 }
@@ -1097,7 +1131,7 @@ size_t pr_json(const pr_list_t *l, const pr_live_t live[PR_MAX], char *buf, size
             snprintf(swx + n, sizeof swx - n, ",\"fault\":\"%s\"", faults[live[i].fault]);
         }
         // W-1103: the other family answered on the port: its record needs the person.
-        int swapped = r->where == PR_WHERE_PORT && pr_port_conflict(l);
+        int swapped = r->where == PR_WHERE_PORT && pr_port_swapped(l);
         PUT("%s{\"id\":%u,\"name\":\"%s\",\"where\":\"%s\",\"kind\":\"%s\",\"model\":\"%s\","
             "\"shared\":%s,\"identified\":%s,\"found\":\"%s\",\"state\":\"%s\",\"uuid\":\"%s\","
             "\"product\":\"%s\",\"dither\":\"%s\",\"gain\":%u,\"rp\":\"%s\",\"start_page\":%s%s%s}",

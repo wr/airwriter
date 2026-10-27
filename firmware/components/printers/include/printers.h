@@ -95,14 +95,18 @@ int         printers_port_shared(void);
 pr_model_t  printers_port_model(void);
 // The port StyleWriter's model; SW_NONE for anything else.
 sw_model_t  printers_port_sw_model(void);
-// W-1103: who answered on the port last (pr_heard_t), an answer that says nothing more than
-// its family (a StyleWriter's `1` and `2`, the full sequence; PR_HEARD_NONE changes nothing),
+// W-1103: who answered on the port last (pr_heard_t), an answer of the record's own printer
+// that names no model (a StyleWriter's `1` and `2`, a job that printed, the full sequence once
+// the record has its model; PR_HEARD_NONE changes nothing),
 // and whether that was the other family than the record's (pr_port_conflict): then the
 // record's AirPrint jobs, test page and cleaning are refused. Not stored. Any task, the
 // printer task included: nothing here writes flash.
 int         printers_port_heard(void);
 void        printers_port_answered(int heard);
 int         printers_port_conflict(void);
+// What the phone and the page show as a swap (pr_port_swapped): the conflict, or another
+// StyleWriter model on a StyleWriter record's port.
+int         printers_port_swapped(void);
 // The full sequence found the port's StyleWriter to be `m`: its record takes it
 // (no notice: the person had named it a StyleWriter already; sharing stays as it
 // was). No-op for a port that is not a StyleWriter, or for the model it has.
