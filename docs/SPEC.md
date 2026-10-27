@@ -817,27 +817,43 @@ Apple's StyleWriter adapter (ADSP, not PAP), is not built.
   `ESC ?` alone everywhere else (an empty port, an ImageWriter II or LQ record), so an
   ImageWriter swapped in is noticed and a StyleWriter that would answer never hears `ESC ?`
   (`swfake.py` takes it for a letter it does not know and stops listening until a reset); the
-  plain question on a look with the line down; nothing more of its own accord for an
+  plain question on a look with the line down; the full sequence once, when the person's Look for
+  Printers on an original StyleWriter record whose port an ImageWriter answered got nothing from
+  either (the original ignores the plain question until a reset, so nothing else finds it
+  again; never on a cadence, never for another model); nothing more of its own accord for an
   ImageWriter record whose port a StyleWriter answered (so its "changed" notice can be
-  dismissed); the plain question while the port's printer does not answer, every 60 s, at boot
+  dismissed), and CTRL-X there at most once after a look that got nothing, never on a cadence;
+  the plain question while the port's printer does not answer, every 60 s, at boot
   after the quiet power-on, when `ESC ?` went unanswered, and once per busy spell when a kick is
   wanted and none has been asked since the line went down; the CTRL-X kick last, only after a
   plain question since the line went down that got nothing, and never for a StyleWriter record.
-  An original ImageWriter record's `ESC ?` that gets nothing with the line up is its answer. A
-  StyleWriter that answers makes the port's record (or the "changed" notice, 3.15), shared at
-  once, named by its model; one that stops answering stays in the list, offline (but the
-  original, below).
+  An original ImageWriter record's `ESC ?` that gets nothing with the line up is its answer. The
+  plain question asked for a line-up or a look goes with it: once the event ends any other way,
+  the next line-up asks the plain question first again. A StyleWriter that answers makes the
+  port's record (or the "changed" notice, 3.15), shared at once, named by its model; one that
+  stops answering stays in the list, offline (but the original, below). A StyleWriter record
+  that was answering and stops (its `1` and `2`, or a job's question, get nothing) is looked at
+  once, once per stop: the plain question, then `ESC ?` if that got nothing, so an ImageWriter
+  put in its place with its line already up (behind an A/B switch) is found within one status
+  interval and the refusal below begins.
 - **The other family on the port.** The printer list keeps the family that last answered on the
-  port (`pr_port_heard`: `ESC ?` naming an ImageWriter, an original ImageWriter record's line up
-  with nothing said, the plain question, `1` and `2`, the full sequence). While it is not the
+  port, and the model it named (`pr_port_heard`: `ESC ?` naming an ImageWriter, an original
+  ImageWriter record's line up with nothing said, the plain question, the full sequence, and the
+  record's own `1` and `2` or a job that printed). While the family is not the
   record's (`pr_port_conflict`), nothing in the record's language goes to the port: its AirPrint
   jobs are refused (the job aborts; IPP stopped, `other`, "Needs attention: confirm the printer
   under Printers on the settings page"), its test page too (the button blips Busy and runs no
   cable test, the page's Print Test Page answers 409), a cleaning answers 409, a Mac's job hears
   busy, and the page shows the record as needing attention (`/api/printers` `swapped`). It ends
   when the record's own family answers again, or when the person makes the record the other's
-  (accepting the notice, or choosing its model); dismissing the notice does not end it. It is not
-  stored, but a pending "changed" notice naming the other family says it again at a start.
+  (accepting the notice, or choosing its model); dismissing the notice does not end it. Another
+  StyleWriter model on a StyleWriter record's port reads the same on the phone and the page
+  (`pr_port_swapped`), while its jobs, test page and cleaning fail at their own `?` as the wrong
+  model. A dismissed "changed" notice is not offered again until an answer other than the one it
+  named, so the list is not rewritten each minute. None of this is stored, but a pending
+  "changed" notice naming the other family, or another StyleWriter model, says it again at a
+  start. The notice on an original StyleWriter record whose port an ImageWriter answered adds
+  "Or connect the StyleWriter again and choose Look for Printers."
 - **AirPrint.** 360 × 360 dpi, URF `RS360`; Letter, A4 and Legal, the first the default
   (`printer_media_t` in `printer_caps`: the page's width at 360 dpi names the entry, and the
   rip keeps the engine's printable area from `rip_left` for `rip_w` dots). Margins in whole
