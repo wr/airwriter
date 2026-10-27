@@ -967,8 +967,9 @@ Apple's StyleWriter adapter (ADSP, not PAP), is not built.
   reads as ready while quiet, takes jobs, and is asked no `1` and `2` while it is not
   answering; a session that gets nothing from it (the start-up reset, the person's look or
   pick, a job's full sequence, a job it goes silent during) shows it offline until it answers
-  or the next session. The page then says "Offline: check power and cable, then Look for
-  Printers": switched on, it answers only that look's reset or a job's. A StyleWriter that starts answering again is asked `D`
+  or the next session. Switched on, it answers only Look for Printers' reset or a job's, so the
+  wiki's Offline row ends with pressing Look for Printers; the page and phone keep the one
+  line "Offline: check power and cable", as for every StyleWriter. A StyleWriter that starts answering again is asked `D`
   and `H` for its cartridge, as a record that changes family is asked for its ribbon or
   cartridge. The panel
   shows the box's state, and the port's own while it prints.
