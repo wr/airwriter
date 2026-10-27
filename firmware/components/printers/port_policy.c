@@ -34,11 +34,18 @@ port_act_t port_policy(const port_in_t *in)
         return sw_first && !in->event_plain ? PA_PLAIN : PA_ESCQ;
     if (in->look && !answers) return PA_PLAIN;
 
+    // The person's look found nothing where an ImageWriter answered on an original StyleWriter
+    // record's port: the full sequence, which the original answers once it is reset.
+    if (in->full_due && sw && in->sw_original && in->heard == PR_HEARD_IMAGEWRITER) return PA_FULL;
+
+    // A StyleWriter answered on an ImageWriter record's port: nothing more is asked on its own,
+    // and CTRL-X goes at most once after a look that got nothing, never on a cadence.
+    if (iw && in->heard == PR_HEARD_STYLEWRITER)
+        return in->want_kick && in->look_kick ? PA_KICK : PA_NONE;
+
     // CTRL-X follows only a plain question since the line went down that got nothing, and
     // never goes to a StyleWriter record.
     int kick = in->want_kick && in->plain_asked && in->plain_unanswered && !sw;
-    // A StyleWriter answered on an ImageWriter record's port: nothing more is asked on its own.
-    if (iw && in->heard == PR_HEARD_STYLEWRITER) return kick ? PA_KICK : PA_NONE;
 
     // A wanted kick with no plain question since the line went down asks one at once, so a
     // busy ImageWriter is kicked about as soon as it always was; the kick follows.
@@ -48,17 +55,35 @@ port_act_t port_policy(const port_in_t *in)
     return kick ? PA_KICK : PA_NONE;
 }
 
+// A look is over and nothing answered it: one kick may follow where a StyleWriter answered last,
+// and the person's look on an original StyleWriter record whose port an ImageWriter answered
+// sends the full sequence.
+static void look_found_nothing(port_in_t *in)
+{
+    in->look_kick = 1;
+    in->full_due = in->look_person && in->kind == PR_KIND_STYLEWRITER && in->sw_original &&
+                   in->heard == PR_HEARD_IMAGEWRITER;
+}
+
+static void events_over(port_in_t *in)
+{
+    in->look = in->look_person = in->line_up_edge = in->event_plain = 0;
+}
+
 void port_after(port_in_t *in, port_act_t act, int heard, int mine)
 {
     int iw = in->kind == PR_KIND_IMAGEWRITER;
+    // Any answer: the port has a printer that speaks, so neither the look's kick nor its full
+    // sequence is wanted.
+    if (heard != PR_HEARD_NONE) in->look_kick = in->full_due = 0;
     switch (act) {
     case PA_ESCQ: {
-        int asked_plain = in->event_plain;
-        in->look = in->line_up_edge = in->event_plain = 0;
+        int asked_plain = in->event_plain, was_look = in->look;
         // The original ImageWriter has no self-ID: its line up and its silence are its answer.
         if (heard == PR_HEARD_NONE && iw && in->no_self_id && in->line_ready) {
             heard = PR_HEARD_IMAGEWRITER;
             mine = 1;
+            in->look_kick = in->full_due = 0;
         }
         if (heard != PR_HEARD_NONE) {
             in->heard = heard;
@@ -68,7 +93,9 @@ void port_after(port_in_t *in, port_act_t act, int heard, int mine)
             // Nothing said: the plain question follows at once, if this line-up or look
             // has not had it already.
             if (!asked_plain) in->last_plain_ms = port_plain_due(in->now_ms);
+            else if (was_look) look_found_nothing(in);
         }
+        events_over(in);
         break;
     }
     case PA_PLAIN:
@@ -78,20 +105,35 @@ void port_after(port_in_t *in, port_act_t act, int heard, int mine)
         if (heard != PR_HEARD_NONE) {
             in->heard = heard;
             in->answering = mine ? 1 : 0;
-            in->look = in->line_up_edge = in->event_plain = 0;   // answered: no ESC ?
+            events_over(in);                                      // answered: no ESC ?
         } else if (in->line_up_edge || (in->look && in->line_ready)) {
             in->event_plain = 1;                                  // ESC ? next
         } else {
-            in->look = 0;
+            if (in->look) look_found_nothing(in);                 // a look with the line down
+            events_over(in);
         }
         break;
-    case PA_STATUS:
+    case PA_STATUS: {
+        // A StyleWriter record that was answering and now says nothing: one look, at once.
+        int stopped = heard == PR_HEARD_NONE && in->answering;
         in->last_status_ms = in->now_ms;
-        in->look = in->line_up_edge = 0;
+        events_over(in);
+        in->look = stopped;
         in->answering = heard != PR_HEARD_NONE;
         if (heard != PR_HEARD_NONE) in->heard = heard;
         break;
+    }
     case PA_KICK:
+        in->look_kick = 0;
+        break;
+    case PA_FULL:
+        in->full_due = 0;
+        events_over(in);
+        if (heard != PR_HEARD_NONE) {
+            in->heard = heard;
+            in->answering = mine ? 1 : 0;
+        }
+        break;
     case PA_NONE:
         break;
     }

@@ -14,6 +14,9 @@
 //   PA_PLAIN   the StyleWriter's plain question: the single byte ? at 57600, no flow control.
 //   PA_STATUS  the StyleWriter's 1 and 2 queries at 57600, for a StyleWriter that answers.
 //   PA_KICK    CTRL-X to an ImageWriter left busy while idle.
+//   PA_FULL    the StyleWriter's full sequence (reset, settle, ?), only after the person's look
+//              on an original StyleWriter record whose port an ImageWriter answered: the original
+//              ignores the plain question until a reset, so nothing else finds it again.
 //
 // A StyleWriter that has just been sent ESC ? may hear it as a command it does not know and
 // stop listening until it is reset (swfake.py models it so), so a port whose printer is, or
@@ -26,9 +29,13 @@
 // The caller:
 //  - calls only when it holds the job lock, and not while a job runs on the port. The policy
 //    has no job input; it never has to say "wait".
-//  - sets `look` and `line_up_edge` as events; port_after clears them once a question answers
-//    them (for a StyleWriter-first port, a line-up or a look with the line up takes the plain
-//    question and then, if that got nothing, ESC ?).
+//  - sets `look` and `line_up_edge` as events, and `look_person` with `look` when the person
+//    asked (Look for Printers); port_after clears them once a question answers them (for a
+//    StyleWriter-first port, a line-up or a look with the line up takes the plain question and
+//    then, if that got nothing, ESC ?), and sets `look` itself when a StyleWriter record that
+//    was answering stops (its status got nothing): one look, the plain question and then
+//    ESC ?, so an ImageWriter put in its place is found within one status interval. The caller
+//    does the same when a job's question gets nothing from a record that was answering.
 //  - does one thing per call, then calls again (every 500 ms, or at once after PA_ESCQ).
 //  - fills `heard` from the printer list before each call (pr_port_heard), and passes each
 //    answer to port_after: the family that answered (PR_HEARD_NONE for nothing) and whether it
@@ -38,7 +45,7 @@
 #pragma once
 #include <stdint.h>
 
-typedef enum { PA_NONE, PA_ESCQ, PA_PLAIN, PA_STATUS, PA_KICK } port_act_t;
+typedef enum { PA_NONE, PA_ESCQ, PA_PLAIN, PA_STATUS, PA_KICK, PA_FULL } port_act_t;
 
 // How often the port's printer is asked, while it answers (the StyleWriter's status) and
 // while it does not (the plain question).
@@ -48,6 +55,7 @@ typedef struct {
     // What is true now, each call.
     int      kind;            // pr_kind_t of the port record, -1 none
     int      no_self_id;      // the record is the original ImageWriter, which never answers ESC ?
+    int      sw_original;     // the record is the original StyleWriter, which ignores ? until reset
     int      said_other;      // "Something else": the person said what is there is not a printer we ask
     int      line_ready;      // HSKo
     int      want_kick;       // printer_state_want_kick()
@@ -55,7 +63,8 @@ typedef struct {
     uint32_t now_ms;          // any 32-bit millisecond clock; the policy only subtracts
     // Events: the caller sets them, port_after clears them.
     int      line_up_edge;    // HSKo came up after a second or more down
-    int      look;            // boot, setup or the Printers section asked
+    int      look;            // boot, setup, the Printers section, a family flip, a stop
+    int      look_person;     // ...and it is the person's Look for Printers
     // Kept between calls by port_tick, port_after and port_line_down.
     int      answering;       // the record's own printer answered its last question
     uint32_t last_plain_ms;   // when the plain question was last asked
@@ -63,6 +72,8 @@ typedef struct {
     int      plain_asked;     // a plain question has been asked since the line went down
     int      plain_unanswered;  // the last plain question got nothing
     int      event_plain;     // the plain question asked for the pending line-up or look got nothing
+    int      look_kick;       // a look got nothing: one CTRL-X may follow where a StyleWriter answered last
+    int      full_due;        // the person's look found nothing on an original StyleWriter record's port
 } port_in_t;
 
 // A last_plain_ms that makes the plain question due at now_ms (and not a moment before the
@@ -89,13 +100,16 @@ void port_tick(port_in_t *in);
 //                   (`event_plain`); PA_ESCQ alone everywhere else (an empty port, an
 //                   ImageWriter record), so an ImageWriter swapped in is noticed.
 //   4. PA_PLAIN     on a look with the line down, while the port's printer is not answering.
-//   5. PA_NONE      an ImageWriter record whose port a StyleWriter answered asks nothing on
-//                   its own, but the kick below after a plain question that got nothing.
-//   6. PA_PLAIN     while the port's printer is not answering (any record that does not
+//   5. PA_FULL      `full_due`: the person's look on an original StyleWriter record whose port an
+//                   ImageWriter answered got nothing from the plain question or ESC ?. Once.
+//   6. PA_NONE      an ImageWriter record whose port a StyleWriter answered asks nothing on
+//                   its own, and is kicked at most once a look that got nothing
+//                   (`look_kick`), never on a cadence.
+//   7. PA_PLAIN     while the port's printer is not answering (any record that does not
 //                   answer, and no record): when the last one is 60 s old, or at once when
 //                   a kick is wanted and none has been asked since the line went down
 //                   (`want_kick`, `plain_asked` clear; not for a StyleWriter record).
-//   7. PA_KICK      last: only with want_kick and a plain question since the line went down
+//   8. PA_KICK      last: only with want_kick and a plain question since the line went down
 //                   that got nothing, and never for a StyleWriter record.
 //
 // So a busy ImageWriter is kicked about as soon as want_kick says (~5 s): one plain question
@@ -105,10 +119,13 @@ port_act_t port_policy(const port_in_t *in);
 
 // What the question `act` got, at in->now_ms: `heard` the family that answered
 // (PR_HEARD_NONE for nothing), `mine` 1 when that was the record's own printer. Keeps
-// the bookkeeping: the events it answered are cleared, the stamps set, `answering` follows,
-// `heard` takes the answer. An original ImageWriter record's ESC ? that got nothing with the
-// line up is its answer (it gives no self-ID). An ESC ? that got nothing makes the plain
-// question due at once, unless it was asked for this line-up or look already.
+// the bookkeeping: the events it answered are cleared (and with them `event_plain`), the
+// stamps set, `answering` follows, `heard` takes the answer. An original ImageWriter record's
+// ESC ? that got nothing with the line up is its answer (it gives no self-ID). An ESC ? that
+// got nothing makes the plain question due at once, unless it was asked for this line-up or
+// look already. A look that got nothing arms one kick (`look_kick`) and, for the person's look
+// on an original StyleWriter record whose port an ImageWriter answered, the full sequence; an
+// answer of any kind disarms both, as does the kick or the full sequence itself.
 void port_after(port_in_t *in, port_act_t act, int heard, int mine);
 
 // HSKo went down: a new busy spell gets a fresh plain question before its first kick.
