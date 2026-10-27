@@ -88,7 +88,7 @@ the Apple drivers talk through the Serial Driver (which Basilisk emulates) at al
    1500) and `StyleWriter 1200`. No Installer is needed. Each driver runs only here, never on
    this computer.
    **Versions.** The drivers are 1997 (the 2.2.1 packages are dated January 15, 1997) and the
-   brief assumed System 7.5; the disk is Mac OS 8.1. For Color SW 1500, Color SW 2500 and
+   plan assumed System 7.5; the disk is Mac OS 8.1. For Color SW 1500, Color SW 2500 and
    StyleWriter 1200 the disk answers that: they are installed in its Extensions folder. Their
    resource forks are 13 bytes shorter than the 2.2.1 downloads' (the data forks are identical),
    so what runs is not byte for byte what the tables were read from; why is not known.
@@ -166,15 +166,15 @@ For every capture: the log reads, swfake never ejected a page, and the bytes dec
 The command order, page data taken out, against what `sw_session` sends for the same model,
 cartridge, quality and kind of page (swhost on a swfake): every difference is a **DIFF** line
 and does not fail. Those lines, with the geometry ones (rect offset, band height, block length
-against the cap), are what the controller reads to decide whether `sw_session.c` should
-change; the check changes nothing.
+against the cap), are what to read when deciding whether `sw_session.c` should change, citing
+the capture; the check changes nothing.
 
 The checker with `--dither apple`: AirWriter's page and Apple's, both cropped to their ink,
 must have the same size to 2% and differ in at most 5% of the ink dots. **Those two figures
 are guesses.** The first real capture replaces them in `swcaptures.py` (`TOLERANCE`) and in
 this file, with the figures it measured.
 
-Three questions from the reviews are answered from the captures, or say "not captured":
+Three open questions are answered from the captures, or say "not captured":
 
 1. What the 2400 and 2500 drivers do when `2` answers with bit 80 (swfake always sets it on
    those two, as the design says the printers do): the job goes on, or it does not.

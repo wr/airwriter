@@ -1,6 +1,6 @@
 #!/usr/bin/env python3.14
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""What Apple's StyleWriter drivers send, held to what the firmware sends (W-1103, Task 13).
+"""What Apple's StyleWriter drivers send, held to what the firmware sends (W-1103).
 
 Apple's drivers run in an emulated Mac whose printer port is swfake.py's pseudo-terminal
 (tools/stylewriter/capture.md). The captures are swfake's own logs, kept on this computer
@@ -22,14 +22,15 @@ For every capture:
     token, a G block none, the polling queries 1, 2 and B none) against the same for what
     `sw_session` sends for the same model, cartridge and quality, by running swhost against
     a swfake. Every difference is listed as `DIFF`. Differences do not fail: they are the
-    evidence for the controller (docs: where Apple's driver and TailTalk's reading part).
+    evidence for deciding whether sw_session should change, where Apple's driver and TailTalk's
+    reading part, and the capture is what to cite.
   * the geometry: the rect offsets, band height and block length against the model's
     (swfake.SPECS and the block caps the design gives). DIFF lines again.
   * the checker, with --dither apple: AirWriter's page (`rip --dither apple`) and Apple's
     decode, both cropped to their ink, agree to within TOLERANCE below. FAIL if not. The
     figures it measured are printed whether they pass or not.
 
-Always (when there are captures) the three questions the reviews left open are answered
+Always (when there are captures) the three open questions are answered
 from them, or "not captured":
 
   1. what the 2400 and 2500 drivers do when `2` answers with bit 80 set (swfake answers it

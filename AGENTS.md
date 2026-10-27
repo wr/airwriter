@@ -25,10 +25,11 @@ being true, change or delete it in the same commit that made it false.
 | `docs/review-*.md`, `docs/firmware-audit-*.md` | Dated reviews. Historical; their findings are applied. |
 
 ## Source of truth
-- GitHub: github.com/wr/airwriter (public), remote `origin`. Push `main` there directly. History
-  was purged on 2026-10-15 (`tools/release/purge-history.sh`, W-1054): never commit the Apple
-  manuals, third-party 3D models without a licence, or the private strings listed in
-  `~/.config/airwriter/purge-scrub.txt`. Run `gitleaks git` before pushing anything unusual.
+- GitHub: github.com/wr/airwriter (public), remote `origin`. Push `main` there directly. History was
+  purged on 2026-10-15 (`tools/release/purge-history.sh`, W-1054): never commit the Apple manuals,
+  Apple's StyleWriter drivers or captures of them, third-party 3D models without a licence, or the
+  private strings listed in `~/.config/airwriter/purge-scrub.txt`. Run `gitleaks git` before pushing
+  anything unusual.
 - Linear project: AirWriter (id: 9c428072-e8eb-4c3d-88e6-b3eadf604eed), team Personal
 - Branch prefix: wells/
 - PR mode: none
@@ -46,21 +47,24 @@ What works on `main`:
   three pages and printed).
 - `printer-icons`: Apple's colour ImageWriter icon at 48, 128 and 512 px, served on port 631
   (SPEC §3.5). A Mac takes it only when the printer is added.
-- The client is answered when its upload ends
-  (`W-1042 Buffer the whole job in PSRAM and reply when the upload is done`), from a 1 MB
-  PSRAM job buffer. An ImageWriter job splits it (`W-1066 Full-page colour photos overflow the
-  1 MB job buffer`): 512 KB of URF ahead of the rip, 512 KB of printer bytes behind it, which
-  the `prn` task feeds to the port, so the rip keeps pace with the upload and the printer
-  prints from memory. Any one page fits, a full-page colour photo included (~5.7 MB of URF,
-  250–350 KB to print; the worst page, colour noise, 460 KB). The upload waits on the printer
-  past 512 KB of printer bytes (a second colour photo page, or about five gray pages), and
-  when the ImageWriter is not ready as the job starts, past 512 KB of URF (the rip asks the
-  ribbon first). A LaserWriter job keeps the whole 1 MB for URF. `/api/status` `pipe` shows
-  the job in the pipeline, or the last one: bytes in and out, `queued` (still to print), and
-  when its upload, rip and last byte ended (`upload_ms`, `rip_ms`, `ms`, 0 until then).
+- The client is answered when its upload ends (`W-1042 Buffer the whole job in PSRAM and reply when
+  the upload is done`), from a 1 MB PSRAM job buffer. An ImageWriter or StyleWriter job splits it
+  (`W-1066 Full-page colour photos overflow the 1 MB job buffer`): 512 KB of URF ahead of the rip,
+  512 KB of printer bytes behind it, which the `prn` task feeds to the port, so the rip keeps pace
+  with the upload and the printer prints from memory. A StyleWriter's printer bytes are framed bands
+  (SPEC §3.16), fed through its session. For an ImageWriter any one page fits, a full-page colour
+  photo included (~5.7 MB of URF, 250–350 KB to print; the worst page, colour noise, 460 KB). The
+  upload waits on the printer past 512 KB of printer bytes (an ImageWriter's second colour photo
+  page, or about five gray pages; a StyleWriter's full-page photo, several MB of bands at 57600
+  baud, is past it on its own), and when the printer is not ready as the job starts, past 512 KB of
+  URF (the rip asks the ribbon, or reads the cartridge, first). A LaserWriter job keeps the
+  whole 1 MB for URF. `/api/status` `pipe` shows the job in the pipeline, or the last one: bytes in
+  and out, `queued` (still to print), and when its upload, rip and last byte ended (`upload_ms`,
+  `rip_ms`, `ms`, 0 until then).
 - Out of paper or SELECT off pauses the job; clients show "Needs attention: check paper and
   SELECT" (processing-stopped, `media-empty-error`); the job aborts after
-  `CONFIG_AIRWRITER_STALL_ABORT` (600 s).
+  `CONFIG_AIRWRITER_STALL_ABORT` (600 s). A StyleWriter has no SELECT: it says "check paper",
+  and its jam, cartridge, ink, cover and waste-ink faults each show in words of their own.
 - After an aborted job the next one resyncs the printer first (1280 NULs + CTRL-X); a printer
   left busy by line noise at power-up gets a CTRL-X.
 - Five screens (SPEC §3.7, W-1068): Atkinson, Floyd–Steinberg (both serpentine), blue noise
@@ -189,13 +193,16 @@ What works on `main`:
   2026-10-24): records in NVS `printers`/`list` (`components/printers`), each
   with its own printer-uuid, made once. The port's printer is AirPrint printer 0 as its record
   says; `ESC ?` at line-up finds it, and ImageWriter commands (CTRL-X kick, resync, the job's
-  self-ID, the test page) go to J2 only when it is an ImageWriter. Identified printers are
-  shared at once, up to four; AppleTalk ones at AirPrint printers 1-3. The test button, DIP4 and
-  the page go to the port's ImageWriter, else the first shared printer (a LaserWriter gets
-  `ps_testpage`). The panel shows the box: ready while any shared printer is; the idle CTRL-X
-  follows the port printer's own line (`printer_state_port_line`). Setup mode looks
-  at once. AirPrint to an AppleTalk ImageWriter was cut: old Macs' only. `GET`/`POST
-  /api/printers`.
+  self-ID, the test page) go to J2 only when it is an ImageWriter. A StyleWriter is found by the
+  plain question instead (one `?` at 57600, which an ImageWriter at 9600 does not hear), and J2
+  runs at 57600 with no flow control while the port's record is one (SPEC §3.16). Identified
+  printers are shared at once, up to four; AppleTalk ones at AirPrint printers 1-3. The test
+  button, DIP4 and the page go to the port's ImageWriter or StyleWriter, else the first shared
+  printer (a LaserWriter gets `ps_testpage`). The panel shows the box: ready while any shared
+  printer is; the idle CTRL-X follows the port printer's own line (`printer_state_port_line`).
+  Setup mode looks at once. AirPrint to an AppleTalk ImageWriter was cut: old Macs' only.
+  `GET`/`POST /api/printers`; a StyleWriter's record also shows `cartridge` and, while it holds
+  one, `fault`, and `{"id":N,"clean":true}` runs one cleaning.
   A board's first boot on it makes its records from what it had (the port's old uuid, a
   W-1082 LaserWriter, the AirPrint switch as the port's Share) and stores its host name, so
   `imagewriter-xxxx` stays; a new board is `airwriter-xxxx` with the AppleTalk port on.
@@ -285,17 +292,36 @@ amendment); docs say so rather than excluding them. The board reads an LQ's self
 colour ribbon in an LQ prints in colour; the reply's shape is taken from GSport's emulator and
 untested on a real LQ. The original ImageWriter sends no self-ID, so the board never sees a
 colour ribbon in it. The port printer's model (found, or picked in its detail) names it in IPP
-`printer-make-and-model` and Bonjour `ty` (W-1088); `/api/status` `model` still says Apple
-ImageWriter II. StyleWriters are designed, not built (below). PostScript LaserWriters on AppleTalk are shared as
-printers of their own (above), benched on a Personal LaserWriter NTR only.
+`printer-make-and-model` and Bonjour `ty` (W-1088); `/api/status` `model` says Apple
+ImageWriter II, or the make and model of the port's StyleWriter. StyleWriters are below.
+PostScript LaserWriters on AppleTalk are shared as printers of their own (above), benched on a
+Personal LaserWriter NTR only.
+
+**StyleWriters** (`W-1103 StyleWriters on the printer port`, design
+`docs/superpowers/specs/2026-10-25-stylewriters-design.md`, plan
+`docs/superpowers/plans/2026-10-26-stylewriters.md`, SPEC §3.16): **phase 1 is built on branch
+`ww/stylewriters-plan`, host-tested end to end against the software StyleWriter, and has not run on
+board 1 or on any StyleWriter.** It is AirPrint to the seven lpstyl models on J2 (StyleWriter, II,
+1200, Color 1500, 2200, 2400, 2500): found by the plain question or named by the person, shared
+under the model's name at 360 dpi, in colour when the cartridge read from the printer is, with
+Apple's tone curves and screen from its drivers (`tools/stylewriter/mktables.py`), status and faults
+on the phone and panel, a raster test page, and Clean Print Head. Checked by `swfake.py` (a software
+StyleWriter), lpstyl's coder as a second oracle and `swinterop` over all seven models; `swprint`
+lets an owner print a page to a real printer and send the log back. The wiki's draft (the seven as
+`Yes*` until an owner confirms each on paper, and a StyleWriters page) is unpublished: it waits for
+Wells's yes. A rev A board needs R9 (0 Ω, not fitted) fitted for a StyleWriter until one is shown to
+answer without it; rev B fits it (`docs/hardware-rev-a.md`). Owed: plan Task 15, the bench on board
+1 (its ImageWriter unchanged, the plain question sent to it at 57600 a few hundred times, the empty
+port's 60 s looks, `/api/mem` across a colour page, and with a USB serial adapter `swfake` on J2),
+then Wells's merge. Not built: vintage Macs printing through AirWriter as Apple's StyleWriter
+adapter (phase 2, ADSP), the printers' fast mode, and the captures of Apple's own drivers (no 68k
+Mac ROM on hand, `tools/stylewriter/capture.md`).
 
 Not built: Mini vMac (LToUDP, `W-1077`), consumers of the dither override, PWG raster, HP
 LaserJets over serial (`W-1083`, designed), AirPrint to an AppleTalk ImageWriter (cut from
 W-1088: `W-1090 AirPrint to ImageWriters with the LocalTalk Option Card`), colour on a colour
 LaserWriter (`W-1089 Colour LaserWriters: print in colour over AirPrint`; it prints in gray),
-StyleWriters (`W-1103 StyleWriters on the printer port`, designed: AirPrint to the seven lpstyl
-documents on J2, then vintage Macs through AirWriter as Apple's adapter; no StyleWriter on the
-bench, an owner confirms on paper; a StyleWriter likely needs R9 fitted on rev A).
+and the StyleWriter parts listed above.
 
 **Board 1:** ESP32-S3-WROOM-1-N8R2 (8 MB flash, 2 MB PSRAM). On the home Wi-Fi at
 10.0.1.115, mDNS `imagewriter-2434.local`. Console on USB-C as `/dev/cu.usbmodem*` (the number
@@ -427,6 +453,11 @@ Linear is the queue; these are the live items.
   allocations, and the relay stayed connected. Ranked next steps, if RAM is short again: IPP
   worker stacks to PSRAM (20 KB), Wi-Fi's IRAM options off (18 KB), the rip stack to PSRAM with
   its flash writes on another task (7 KB), mDNS and the NVS cache to PSRAM.
+- `W-1103 StyleWriters on the printer port`: phase 1 built on `ww/stylewriters-plan` (above,
+  SPEC §3.16). Open: the bench on board 1 (plan Task 15), an owner's print on each model before
+  its wiki star goes, whether a StyleWriter answers with R9 left out, the cable (expected to be
+  the ImageWriter II's), and the credit link for Bolacore. Phase 2 (ADSP, vintage Macs) gets its
+  own plan after an owner has printed.
 - Not in Linear: scope HSKo during a long job (SPEC §3.9 timing).
 - Laser printers (design `docs/superpowers/specs/2026-10-21-laser-printers-design.md`; a
   Personal LaserWriter NTR on the bench since 2026-10-24): `W-1082 AirPrint to LaserWriters on
@@ -493,7 +524,9 @@ Linear is the queue; these are the live items.
 ## Verification
 - **Host tests:** `make -C tools/rip test` (raster path, halftone screens and colour, serial writer, printer_state, led_grid,
   dip_config, pic_prog, localtalk, PAP client, LaserWriter query and policy, PostScript writer,
-  cable, fw_update, known_good, testpage) and `make -C tools/ipp test`.
+  cable, fw_update, known_good, testpage, the port policy, and W-1103's StyleWriter model, run
+  coder, page stage, session, status, test page and board code) and `make -C tools/ipp test`
+  (its StyleWriter media list among them).
 - **Test page preview:** `tools/rip/build/rip --testpage colour --out-stream tp.bin` (or `black`,
   `unknown`), then `python3.14 tools/iwview/iwview.py tp.bin tp.png` draws it as ink on paper.
   Its text needs the printer's font dot patterns, extracted from the Technical Reference's
@@ -513,6 +546,19 @@ Linear is the queue; these are the live items.
   (`build/lwhost`) to `etpeer.py`'s fake LaserWriter over a pipe (lookup, query, print, busy,
   paper out, PostScript error, cancel, a silent printer). `tools/ipp/test/golden/` pins the
   ImageWriter's IPP answers byte for byte.
+- **StyleWriters:** needs python3.14 with numpy. `make -C tools/rip swcheck` decodes the
+  stage's pages with `swfake.py` and the same dots coded with lpstyl's coder, and holds both to
+  the dots the rip made; `make -C tools/rip swinterop` prints from `build/swhost` (the firmware's
+  session on the host) to `swfake.py` over a pty, all seven models, with each fault and a cancel
+  (about 35 s, the silence case waits out 30 s); `make -C tools/rip swcaptures` holds Apple's
+  drivers' captures to the session and skips without them (`swcaptures-selftest` runs the
+  checks on the firmware's own conversations); `python3.14 -m unittest
+  tools/stylewriter/test_swfake.py tools/stylewriter/test_plain_question.py
+  tools/stylewriter/test_untome.py` (the software printer, the plain question against a 9600 baud
+  receiver, and the reader of Apple's Installer files). `rip --printer stylewriter --model M
+  --out-sw F` writes a page as the printer would be sent it and `rip --sw-testpage` the test
+  page; `swfake.py decode M F` draws either. Apple's drivers and captures live in
+  `~/.config/airwriter/sw-drivers/` and `sw-captures/` and are never committed.
 - **Firmware:** `idf.py build` clean.
 - **Web page:** `python3 tools/webui/preview.py`, then http://localhost:8079/_states: every state
   at desktop and phone width, light and dark, before a change to the page goes to the board.
@@ -558,13 +604,17 @@ hardware/airwriter/   KiCad 10 main board (sch, pcb, lib/, route.py, stitch.py, 
 hardware/panel/       art panel generator (Figma SVG → panel.kicad_pcb)
 hardware/combined/    the snap-apart order panel and make_fab.sh; combined-fab.zip is the order
 firmware/             ESP-IDF 5.5 app; components/ per SPEC §3.1 plus job_pipe, led_grid, pic_prog,
-                      ota_health, printer_caps, ps_page, laser …; bootloader_components/ holds the bootloader's pin clamps
-                      and power-up reset
-tools/rip/            host build of the raster path + host tests for the pure-C cores
+                      ota_health, printer_caps, ps_page, laser, stylewriter …; bootloader_components/
+                      holds the bootloader's pin clamps and power-up reset
+tools/rip/            host build of the raster path + host tests for the pure-C cores; swhost
+                      (swprint for owners) is the StyleWriter session on the host
 tools/ipp/            IPP host tests and gpa_server (the real encoder on localhost for ipptool)
 tools/ippcap/         stub IPP server that captures a Print-Job body (how fixtures were made)
 tools/ethertalk/      etpeer.py, a software EtherTalk Mac for the tunnel and the relay, and
                       a fake LaserWriter; test_interop.py
+tools/stylewriter/    swfake.py (a software StyleWriter and page decoder), mktables.py and untome.py
+                      (Apple's tables and icon out of its drivers), the owner's README, capture.md
+                      (the Apple-driver rig), and their tests
 tools/webui/          web UI sources and its two emulator icons; mkheader.py generates
                       firmware's webui_page.h (never hand-edit); preview.py serves the page
                       in any of states.json's states (no printer, setup mode, a failing

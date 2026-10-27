@@ -18,17 +18,24 @@ your model works with AirWriter's StyleWriter support.
 - A USB serial adapter with RS-422, and the cable that connects the printer to a Mac's printer
   port. The line is 57600 baud, 8N1, no flow control.
 - A Mac or Linux computer with a C compiler (on a Mac, the Xcode command line tools) and zlib.
+  On Linux, your account also needs to be in the `dialout` group to open the adapter
+  (`sudo usermod -aG dialout $USER`, then log out and in).
+- The AirWriter source: `git clone https://github.com/wr/airwriter.git`, or **Code > Download
+  ZIP** on github.com/wr/airwriter. Run the commands below from that folder.
 - A page, as a PNG or a URF file. Make it the size of the sheet at 360 dots an inch: 3060 x 3960
   pixels for Letter, 2976 x 4209 for A4, 3060 x 5040 for Legal. The printer cannot print to
   the edges, so keep anything that matters clear of the outer 0.3 inch. A PDF turns into a
-  page with `pdftoppm -r 360 -png -singlefile page.pdf page`. A PNG with no resolution in it
-  prints one pixel to a dot, and `--dpi` sets another.
+  page with `pdftoppm -r 360 -png -singlefile page.pdf page`. A PNG that records its resolution
+  (most image editors do) prints at its real size: a PNG saved at 300 dots an inch and
+  2550 x 3300 pixels fills a Letter sheet. One with no resolution in it prints one pixel to a dot, and
+  `--dpi` sets another.
 
 ### Print
 
 ```sh
 make -C tools/rip build/swprint
-ls /dev/cu.usbserial-*                       # Linux: /dev/ttyUSB0
+ls /dev/cu.*                                 # on a Mac, the adapter is one of these
+ls /dev/ttyUSB*                              # on Linux
 tools/rip/build/swprint --dev /dev/cu.usbserial-XXXX --log sw.log page.png
 ```
 
@@ -67,6 +74,8 @@ any other.
 | `no answer to the plain question` | Check the power, the cable and the adapter. The original StyleWriter does not answer the question: use `--model original`. A printer reset in the last 2 seconds needs a moment: run it again. |
 | `printer stopped answering` | Nothing came back for 30 seconds. Check the power and the cable. |
 | `the printer answers as another model than the one named` | Run again with `--ask`, or name the right model. |
+| `the printer reported a fault that did not clear` | The printer's status showed a fault for 10 seconds. Look for a blinking light, and fix what it points to. Naming a wrong model with `--model` can cause it too, within the Color family (2200, 2400 and 2500 report their status differently): run again with `--ask`, or name the right model. |
+| `the printer held the job for 10 minutes (paper, ink, a jam or the door), so it was given up` | The printer stopped on paper, ink, a jam or the cover and stayed stopped. Fix it, then run again. |
 | `... is neither a PNG nor a URF page` | The file is not a page `swprint` reads. A PNG must not be interlaced. |
 
 ### Send back the log
@@ -74,7 +83,9 @@ any other.
 Open an issue at github.com/wr/airwriter and attach `sw.log`. Say which model it is, whether
 the cartridge is black or colour, what the adapter and cable are, and what came out on
 paper (a photo of the page helps). The log has the bytes sent and received, with long page
-data cut after 32 bytes, and the name of your computer's operating system.
+data cut after 32 bytes. Its first line is the command you ran, with the folder names in it,
+and its second is your computer's operating system and version. Look them over before you
+attach the log.
 
 ## swfake
 
@@ -173,13 +184,17 @@ to the dots the rip made.
 ```sh
 python3.14 -m unittest tools/stylewriter/test_swfake.py
 python3.14 -m unittest tools/stylewriter/test_plain_question.py
+python3.14 -m unittest tools/stylewriter/test_untome.py
 ```
 
 The first runs on a clock of its own, so the 2 s settle costs nothing. The second is
 a model of a 9600 baud receiver (16 samples a bit, start bit checked again at its
 middle) hearing the single `?` a StyleWriter is asked at 57600: it hears no byte at
 any of 64 phases. It also prints what the same receiver makes of the full sequence
-`00 FF FF FF 49`, which the design sends only to a printer someone named.
+`00 FF FF FF 49`, which the design sends only to a printer someone named. The third reads
+the packed files in Apple's old Installer packages (`untome.py`, which `mktables.py` uses to
+get Apple's tables out of Apple's drivers) from streams written by hand, so it shows that
+the reader does what its notes say. Apple's files are never committed, so no test reads them.
 
 ### What it guesses
 

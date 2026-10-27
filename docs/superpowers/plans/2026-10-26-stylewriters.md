@@ -43,7 +43,7 @@
 - **The session's frames ride the existing printer-bytes ring.** `sw_page` writes `[type][u16 LE len][payload]` frames into `job_pipe`'s 512 KB `s_out`; the `prn` task hands the bytes to the StyleWriter's consumer, which reassembles frames and runs the conversation. No second buffer.
 - **Silence mid-job aborts after 30 s;** a fault the printer reports (paper, jam, door, ink) waits up to `CONFIG_AIRWRITER_STALL_ABORT` (600 s), as the ImageWriter's paper-out does.
 - **The quality reaches the rip through a new options argument** on `ipp_doc_sink_t.begin`; today no Job-group attribute is read at all.
-- **The test page's text is a 5 × 7 face drawn for this repo** (GPL, `sw_font.h`), scaled at 360 dpi. There is no bitmap face in the repo, and the ImageWriter's fonts are Apple's and never committed.
+- **The test page's text is a 5 × 7 face (the HD44780 shapes, `sw_font.h`)**, scaled at 360 dpi. There is no bitmap face in the repo, and the ImageWriter's fonts are Apple's and never committed.
 - **The IPP icon is Apple's StyleWriter icon** out of the Color SW 2500 driver's `icl8` resource, by the same script as the tables, as the ImageWriter's icon is Apple's (`LICENSE.md` row). The settings page's row symbol is drawn for the page, in its 16-unit style.
 - **The idle CTRL-X kick goes to an unrecognised port only after the plain question went unanswered**, so a StyleWriter never hears it.
 - **The test button's cable-test branch** (`test_button`, handshake line low) is skipped for a StyleWriter record, whose line means nothing.
@@ -411,12 +411,12 @@
   } sw_tp_info_t;
   int sw_testpage(const sw_tp_info_t *i, const rip_stage_t *st);   // one Letter page of rows to the stage; 0, or -1 short of memory
   ```
-  `sw_font.h`: a 5 × 7 face for 0x20–0x7E drawn for this repo, drawn at 4 × 4 dots a pixel.
+  `sw_font.h`: a 5 × 7 face (the HD44780 shapes) for 0x20–0x7E, drawn at 4 × 4 dots a pixel.
 
 - [ ] **Step 1: Failing test** `test_sw_testpage.c`: decoded through `sw_page` and `sw_decode_row`, the page has the letterhead in its top inch, the ruler's ticks every 36 dots (0.1 in), four squares of exactly 360 × 360 dots, six screen swatches (the Apple screen among them), four ink swatches with a colour cartridge and a gray ramp with black, nothing outside the printable area.
 - [ ] **Step 2:** Run → fails. **Step 3:** Implement the page (sections as the ImageWriter's: letterhead, details, inks or ramp, the still life via `tp_scene_row` at square pixels, screens, ruler and squares; no printer fonts section). Wire the button, DIP4 and `POST /api/test` to it for a port StyleWriter (the cable-test branch skipped), a second tap cancelling it, and `POST /api/printers {"id":N,"clean":true}` to `stylewriter_clean` under the job lock (409 when held).
 - [ ] **Step 4:** `make -C tools/rip test`; preview with `tools/rip/build/rip --sw-testpage colour --model 2500 --out-sw tp.bin` and `swfake.py decode 2500 tp.bin --out <scratch>`, and look at the PNG; `idf.py build` clean.
-- [ ] **Step 5:** Commit `stylewriter: a raster test page in a face of our own; Clean Print Head (W-1103)`.
+- [ ] **Step 5:** Commit `stylewriter: a raster test page in a 5 × 7 face; Clean Print Head (W-1103)`.
 
 ### Task 12: The settings page
 

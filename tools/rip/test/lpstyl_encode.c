@@ -4,9 +4,10 @@
 // appendEncode and encodescanline), a printer driver for Apple StyleWriters. Used by
 // the host tests only (tools/rip/test/swcheck.py), never in the firmware: its output
 // is decoded by swfake.py and must give the same dots as ours. Changed from the
-// original: types (fixed width in place of unsigned char and long), const
-// arguments, the padding width as a parameter in place of the PRINT_ROWBYTES
-// constant, and the constants' names. The logic is lpstyl's.
+// original: types (uint8_t in place of unsigned char and size_t for the lengths; the
+// loop indexes stay long, as lpstyl has them), const arguments, the padding width as a
+// parameter in place of the PRINT_ROWBYTES constant, and the constants' names. The logic
+// is lpstyl's.
 //
 // lpstyl.c:
 //

@@ -10,6 +10,27 @@
   answers SendStatus with the card's status word (low byte first; a ready II with a colour
   ribbon reads 0x0080, deselected 0x0088, out of paper 0x00AA), holds one PAP connection, and
   passes the job through as raw ImageWriter command bytes. `components/localtalk` follows it.
+  TailTalk 0.13.0 (2026-10-24) also prints to every StyleWriter from a computer, from a reading
+  of Apple's Color StyleWriter 1500 and 2500 drivers (`tailtalk/src/stylewriter/*`, at
+  `bf38658`): the command letters and their order per model, the margins, band heights and
+  block caps. It is GPL-3.0 with no "or later" grant, so AirWriter reads it as a reference and
+  uses its facts; `components/stylewriter` is written fresh.
+- **lpstyl** (Monroe Williams, 1996-2000, BSD-2-Clause; github.com/Godzil/lpstyl): the public
+  account of the StyleWriters' serial protocol, for seven models (`README.protocol`), and of
+  Apple's StyleWriter network adapter (`README.atalk`). The identity query, the buffer
+  accounting, the run coding with differencing and the CMYK planes are its. Its scanline coder
+  is ported for the host tests only (`tools/rip/test/lpstyl_encode.c`, LICENSE.md), as a second
+  coder that `swfake.py`'s decoder and ours are held to; the firmware has its own.
+- **InkTalk** (FeralFirmware, in the TailTalk repository; firmware `GPL-3.0-or-later`): a board
+  that stands in for Apple's StyleWriter network adapter, so a Mac's own driver prints through
+  it. It is the reference for the adapter's ADSP exchange (phase 2 of W-1103, not built), for
+  holding the printer's HSKi high so the printer answers (R9 on rev A), and for the printer's
+  fast mode, whose clock is on HSKi. Nothing is ported.
+- **Bolacore**: credited with FeralFirmware for the StyleWriter work. The link is added when the
+  handle is confirmed.
+- **Apple's StyleWriter drivers** (Color StyleWriter 1500, 2200 and 2500): the source of the
+  tone curves, the 16 × 16 screen and the printer's icon, read out by
+  `tools/stylewriter/mktables.py` (LICENSE.md). The drivers are never committed.
 - **tashrouter** (lampmerchant): the reference TashTalk host. Its start-up (1024 NULs, an empty
   node bitmap, features off) and node acquisition are what `localtalk.c` copies.
 - **AirTalk**: ESP32 LocalTalk-over-Wi-Fi dongles. Relevant if mode 2 or a Wi-Fi tunnel is ever

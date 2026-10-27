@@ -32,10 +32,9 @@ Pages: the checker (fixtures/checker.urf, 144 dpi, so scaled up to 360), a Lette
 page and a photo-like page of gray at 360 dpi and a Letter sRGB colour page
 (make_300dpi_fixture.py --dpi 360), and A4 and Legal text pages, on the seven models,
 with a black cartridge and, for the four colour models, a colour one. Screens: Atkinson
-(the default), and Apple's, blue noise and Floyd-Steinberg on some. Not done: the
-brief's optional second oracle, TailTalk's encoder (R13): lpstyl's coder and swfake
-are two decoders and two coders already, and Apple's own captures are the stronger
-check (a later task).
+(the default), and Apple's, blue noise and Floyd-Steinberg on some. Not done: a
+second oracle in TailTalk's encoder: lpstyl's coder and swfake are two decoders and
+two coders already, and Apple's own captures are the stronger check.
 
     make -C tools/rip swcheck          (builds build/rip and build/lpstyl_stream first)
     python3.14 tools/rip/test/swcheck.py [-j N] [--quick]
