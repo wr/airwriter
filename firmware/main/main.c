@@ -1472,10 +1472,12 @@ static void kick_task(void *arg)
         int line_ready = s_hsko == 1;
         // Boot: after the quiet power-on, a port with no line up is asked the plain question
         // (a StyleWriter may never raise it). A StyleWriter the board already knows is asked
-        // at once.
+        // at once, the original with the full sequence: it answers nothing else until reset,
+        // and only an answer tells it from an empty port.
         if (!boot_looked && (mode == PORT_STYLEWRITER || printer_state_view().state != PS_BOOTING)) {
             boot_looked = 1;
-            if (mode == PORT_STYLEWRITER) s_last_plain_ms = port_plain_due(now);
+            if (mode == PORT_STYLEWRITER && printers_port_sw_model() == SW_ORIGINAL) s_full_due = 1;
+            else if (mode == PORT_STYLEWRITER) s_last_plain_ms = port_plain_due(now);
             else if (!line_ready) s_look = 1;
         }
         // The line came up after a second or more down (or was first seen), 2 s ago (W-1064).
@@ -1594,8 +1596,8 @@ static void kick_task(void *arg)
             if (plain != SW_NONE) sw_idle_state(SWS_OFFLINE, 0);
             else sw_idle_quiet();
         } else if (act == PA_FULL && s_port_sw) {
-            // The person's look, and not even the full sequence got the record's printer: it is
-            // offline (another StyleWriter there shows as a swap).
+            // Start-up or the person's look, and not even the full sequence got the record's
+            // printer: it is offline (another StyleWriter there shows as a swap).
             if (plain == SW_NONE) s_sw_job_silent = 1;
             sw_idle_state(SWS_OFFLINE, 0);
         } else if (act == PA_STATUS && m != SW_NONE) {

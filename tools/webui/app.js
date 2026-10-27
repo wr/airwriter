@@ -603,7 +603,8 @@ function stWords(p){
   // W-1103: a StyleWriter has no SELECT key
   const sw=p.kind==='stylewriter';
   if(p.state==='attention') return ['a','Needs attention: '+(p.where==='port'?(sw?SW_FAULT[p.fault]||SW_FAULT.other:'check paper and SELECT'):low(t&&lwStatus(t.message))||'check the printer')];
-  if(p.state==='offline') return ['',p.where==='port'?(sw?'Offline: check power and cable':'Offline: check power, cable and SELECT'):'Offline: check that it’s switched on'];
+  // W-1103: the original StyleWriter answers only once reset, and only a look sends it that
+  if(p.state==='offline') return ['',p.where==='port'?(sw?(p.model==='StyleWriter'?'Offline: check power and cable, then Look for Printers':'Offline: check power and cable'):'Offline: check power, cable and SELECT'):'Offline: check that it’s switched on'];
   if(p.state==='printing'&&t&&/busy/i.test(t.message||'')&&!S.printing) return ['g','Busy with another job'];
   return ST[p.state]||['',''];
 }

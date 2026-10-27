@@ -14,9 +14,10 @@
 //   PA_PLAIN   the StyleWriter's plain question: the single byte ? at 57600, no flow control.
 //   PA_STATUS  the StyleWriter's 1 and 2 queries at 57600, for a StyleWriter that answers.
 //   PA_KICK    CTRL-X to an ImageWriter left busy while idle.
-//   PA_FULL    the StyleWriter's full sequence (reset, settle, ?), only after the person's look
-//              on an original StyleWriter record whose port an ImageWriter answered: the original
-//              ignores the plain question until a reset, so nothing else finds it again.
+//   PA_FULL    the StyleWriter's full sequence (reset, settle, ?), only to an original StyleWriter
+//              record: once at start-up, and after the person's look that got nothing. The
+//              original ignores the plain question until a reset (InkTalk's notes), so nothing
+//              else finds it.
 //
 // A StyleWriter that has just been sent ESC ? may hear it as a command it does not know and
 // stop listening until it is reset (swfake.py models it so), so a port whose printer is, or
@@ -73,7 +74,7 @@ typedef struct {
     int      plain_unanswered;  // the last plain question got nothing
     int      event_plain;     // the plain question asked for the pending line-up or look got nothing
     int      look_kick;       // a look got nothing: one CTRL-X may follow where a StyleWriter answered last
-    int      full_due;        // the person's look found nothing on an original StyleWriter record's port
+    int      full_due;        // owed an original StyleWriter record: start-up, or the person's look got nothing
 } port_in_t;
 
 // A last_plain_ms that makes the plain question due at now_ms (and not a moment before the
@@ -100,8 +101,9 @@ void port_tick(port_in_t *in);
 //                   (`event_plain`); PA_ESCQ alone everywhere else (an empty port, an
 //                   ImageWriter record), so an ImageWriter swapped in is noticed.
 //   4. PA_PLAIN     on a look with the line down, while the port's printer is not answering.
-//   5. PA_FULL      `full_due`: the person's look on an original StyleWriter record whose port an
-//                   ImageWriter answered got nothing from the plain question or ESC ?. Once.
+//   5. PA_FULL      `full_due` on an original StyleWriter record: set by the board at start-up,
+//                   or by the person's look that got nothing from the plain question or ESC ?.
+//                   Once.
 //   6. PA_NONE      an ImageWriter record whose port a StyleWriter answered asks nothing on
 //                   its own, and is kicked at most once a look that got nothing
 //                   (`look_kick`), never on a cadence.
@@ -124,8 +126,9 @@ port_act_t port_policy(const port_in_t *in);
 // ESC ? that got nothing with the line up is its answer (it gives no self-ID). An ESC ? that
 // got nothing makes the plain question due at once, unless it was asked for this line-up or
 // look already. A look that got nothing arms one kick (`look_kick`) and, for the person's look
-// on an original StyleWriter record whose port an ImageWriter answered, the full sequence; an
-// answer of any kind disarms both, as does the kick or the full sequence itself.
+// on an original StyleWriter record, the full sequence; an answer of any kind disarms both, as
+// does the kick or the full sequence itself. A status that got nothing on the person's look
+// keeps the look theirs.
 void port_after(port_in_t *in, port_act_t act, int heard, int mine);
 
 // HSKo went down: a new busy spell gets a fresh plain question before its first kick.

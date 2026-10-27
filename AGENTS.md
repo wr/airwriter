@@ -303,7 +303,9 @@ Personal LaserWriter NTR only.
 `ww/stylewriters-plan`, host-tested end to end against the software StyleWriter, and runs on board
 1 beside its ImageWriter; it has not run on any StyleWriter.** It is AirPrint to the seven lpstyl models on J2 (StyleWriter, II,
 1200, Color 1500, 2200, 2400, 2500): found by the plain question or named by the person, shared
-under the model's name at 360 dpi, in colour when the cartridge read from the printer is, with
+under the model's name at 360 dpi (an original StyleWriter record is sent the reset once at
+start-up and on Look for Printers, so an empty port reads offline), in colour when the
+cartridge read from the printer is, with
 Apple's tone curves and screen from its drivers (`tools/stylewriter/mktables.py`), status and faults
 on the phone and panel, a raster test page, and Clean Print Head. Checked by `swfake.py` (a software
 StyleWriter), lpstyl's coder as a second oracle and `swinterop` over all seven models; `swprint`

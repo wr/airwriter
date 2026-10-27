@@ -800,11 +800,13 @@ Apple's StyleWriter adapter (ADSP, not PAP), is not built.
   not answer `p` names no model, and the next look asks again. `p` sent to any other model
   ejects and resets it, so only a `CS` is sent it. The *full sequence* is the reset
   `00 FF FF FF 49` (eject and reset), a 2 s settle (8 s on a second try), a drain, then `?`
-  again; it also finds the original (`IJ10`), which ignores `?` until reset. Its `00` and `49`
-  can read as stray characters at 9600, so it goes only to a printer a record or the person has
-  named: before every job to a StyleWriter record, and once when the person picks a StyleWriter
-  (Add a Printer…, the unknown printer's notice, the detail's Model), to confirm it and read
-  its model. So the original is found only when named.
+  again; it also finds the original (`IJ10`), which ignores `?` until reset (InkTalk's notes,
+  from its author's own original; not yet seen here). Its `00` and `49` can read as stray
+  characters at 9600, so it goes only to a printer a record or the person has named: before
+  every job to a StyleWriter record, once when the person picks a StyleWriter (Add a Printer…,
+  the unknown printer's notice, the detail's Model), to confirm it and read its model, and to
+  an original StyleWriter record once at start-up and on the person's Look for Printers when
+  nothing else answered (Wells, 2026-10-27). So the original is found only when named.
 - **What the idle port is asked** (`port_policy`, pure: one act a call, every 500 ms, under the
   job lock and never while a job runs on the port; `port_tick`, `port_after` and
   `port_line_down` keep its books between calls, so the host tests run the whole loop against
@@ -817,10 +819,13 @@ Apple's StyleWriter adapter (ADSP, not PAP), is not built.
   `ESC ?` alone everywhere else (an empty port, an ImageWriter II or LQ record), so an
   ImageWriter swapped in is noticed and a StyleWriter that would answer never hears `ESC ?`
   (`swfake.py` takes it for a letter it does not know and stops listening until a reset); the
-  plain question on a look with the line down; the full sequence once, when the person's Look for
-  Printers on an original StyleWriter record whose port an ImageWriter answered got nothing from
-  either (the original ignores the plain question until a reset, so nothing else finds it
-  again; never on a cadence, never for another model); nothing more of its own accord for an
+  plain question on a look with the line down; the full sequence once to an original
+  StyleWriter record, at start-up (the board sets `full_due`; a look of the board's own goes
+  first and leaves it owed) and when the person's Look for Printers got nothing from the plain
+  question or `ESC ?` (or from the status, for one that was answering), since the original
+  ignores the plain question until a reset and nothing else finds it; never on a cadence, never
+  for another model, and not once anything answers (an ImageWriter's `ESC ?` there makes the
+  record swapped instead); nothing more of its own accord for an
   ImageWriter record whose port a StyleWriter answered (so its "changed" notice can be
   dismissed), and CTRL-X there at most once after a look that got nothing, never on a cadence;
   the plain question while the port's printer does not answer, every 60 s, at boot
@@ -958,10 +963,12 @@ Apple's StyleWriter adapter (ADSP, not PAP), is not built.
 - **Idle and status.** Idle, `1` and `2` every 10 s feed the page, the panel and IPP as the
   ImageWriter's line does: an answer is ready (or the fault it holds), none is offline. The
   original StyleWriter ignores the plain question until a reset and is switched off between
-  uses, so its silence while idle says nothing (`sw_idle_silent`): it reads as ready, takes
-  jobs, and is asked no `1` and `2` while it is not answering; a session that gets nothing from
-  it (a job's full sequence, a job it goes silent during, the person's pick) shows it offline
-  until it answers or the next session. A StyleWriter that starts answering again is asked `D`
+  uses, so its silence while idle says nothing (`sw_idle_silent`): once it has answered it
+  reads as ready while quiet, takes jobs, and is asked no `1` and `2` while it is not
+  answering; a session that gets nothing from it (the start-up reset, the person's look or
+  pick, a job's full sequence, a job it goes silent during) shows it offline until it answers
+  or the next session. The page then says "Offline: check power and cable, then Look for
+  Printers": switched on, it answers only that look's reset or a job's. A StyleWriter that starts answering again is asked `D`
   and `H` for its cartridge, as a record that changes family is asked for its ribbon or
   cartridge. The panel
   shows the box's state, and the port's own while it prints.

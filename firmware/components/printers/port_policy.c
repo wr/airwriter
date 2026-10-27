@@ -34,9 +34,9 @@ port_act_t port_policy(const port_in_t *in)
         return sw_first && !in->event_plain ? PA_PLAIN : PA_ESCQ;
     if (in->look && !answers) return PA_PLAIN;
 
-    // The person's look found nothing where an ImageWriter answered on an original StyleWriter
-    // record's port: the full sequence, which the original answers once it is reset.
-    if (in->full_due && sw && in->sw_original && in->heard == PR_HEARD_IMAGEWRITER) return PA_FULL;
+    // An original StyleWriter record at start-up, or the person's look that found nothing on its
+    // port: the full sequence, which the original answers once it is reset.
+    if (in->full_due && sw && in->sw_original) return PA_FULL;
 
     // A StyleWriter answered on an ImageWriter record's port: nothing more is asked on its own,
     // and CTRL-X goes at most once after a look that got nothing, never on a cadence.
@@ -56,13 +56,12 @@ port_act_t port_policy(const port_in_t *in)
 }
 
 // A look is over and nothing answered it: one kick may follow where a StyleWriter answered last,
-// and the person's look on an original StyleWriter record whose port an ImageWriter answered
-// sends the full sequence.
+// and the person's look on an original StyleWriter record sends the full sequence (one owed
+// since start-up stays owed).
 static void look_found_nothing(port_in_t *in)
 {
     in->look_kick = 1;
-    in->full_due = in->look_person && in->kind == PR_KIND_STYLEWRITER && in->sw_original &&
-                   in->heard == PR_HEARD_IMAGEWRITER;
+    if (in->look_person && in->kind == PR_KIND_STYLEWRITER && in->sw_original) in->full_due = 1;
 }
 
 static void events_over(port_in_t *in)
@@ -114,11 +113,14 @@ void port_after(port_in_t *in, port_act_t act, int heard, int mine)
         }
         break;
     case PA_STATUS: {
-        // A StyleWriter record that was answering and now says nothing: one look, at once.
+        // A StyleWriter record that was answering and now says nothing: one look, at once, still
+        // the person's if theirs asked the status.
         int stopped = heard == PR_HEARD_NONE && in->answering;
+        int person = in->look && in->look_person;
         in->last_status_ms = in->now_ms;
         events_over(in);
         in->look = stopped;
+        in->look_person = stopped && person;
         in->answering = heard != PR_HEARD_NONE;
         if (heard != PR_HEARD_NONE) in->heard = heard;
         break;

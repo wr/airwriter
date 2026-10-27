@@ -2952,6 +2952,80 @@
     }
    }
   },
+  "stylewriter-original-offline": {
+   "about": "Printers: an original StyleWriter that sent nothing back to the reset at start-up or Look for Printers",
+   "patch": {
+    "GET /api/printers": {
+     "printers": [
+      {
+       "id": 1,
+       "name": "StyleWriter",
+       "where": "port",
+       "kind": "stylewriter",
+       "model": "StyleWriter",
+       "shared": true,
+       "identified": true,
+       "found": "person",
+       "state": "offline",
+       "uuid": "urn:uuid:41575254-4c57-0001-0002-10bda36e2434",
+       "product": "",
+       "dither": "atkinson",
+       "gain": 0,
+       "rp": "ipp/print",
+       "start_page": null
+      }
+     ],
+     "notes": [],
+     "max_shared": 4
+    },
+    "POST /api/printers": {
+     "printers": [
+      {
+       "id": 1,
+       "name": "StyleWriter",
+       "where": "port",
+       "kind": "stylewriter",
+       "model": "StyleWriter",
+       "shared": true,
+       "identified": true,
+       "found": "person",
+       "state": "offline",
+       "uuid": "urn:uuid:41575254-4c57-0001-0002-10bda36e2434",
+       "product": "",
+       "dither": "atkinson",
+       "gain": 0,
+       "rp": "ipp/print",
+       "start_page": null
+      }
+     ],
+     "notes": [],
+     "max_shared": 4
+    },
+    "GET /api/laser": {
+     "heard": [],
+     "targets": [],
+     "job": {
+      "active": false,
+      "sent": 0,
+      "last": ""
+     }
+    },
+    "GET /api/status": {
+     "printers": {
+      "count": 1,
+      "shared": 1,
+      "notes": 0,
+      "port": "stylewriter"
+     },
+     "model": "Apple StyleWriter",
+     "ribbon": "black",
+     "ps": "offline",
+     "state": "Offline",
+     "printer": false,
+     "stopped": true
+    }
+   }
+  },
   "stylewriter-clean-busy": {
    "about": "Printers: a StyleWriter II busy with a job when Clean Print Head is pressed",
    "patch": {

@@ -204,7 +204,9 @@ which ignores `?` until reset, but its `00` and `49` bytes can read as a stray c
   byte, then back to 9600.
 - **The full sequence goes only to a StyleWriter the person or the record names:** before
   every job to a StyleWriter record, and once when the person picks a StyleWriter in Add a
-  Printer… or in the unknown printer's notice, to confirm it and read its model.
+  Printer… or in the unknown printer's notice, to confirm it and read its model. Amended
+  2026-10-27 (Wells): an original StyleWriter record also gets it once at start-up and on Look
+  for Printers when nothing else answered, so an empty port reads offline rather than ready.
 - **A port whose record is an ImageWriter** is asked `ESC ?` at line-up as today; while its
   printer does not answer (off or gone), the automatic looks add the plain question, so a
   StyleWriter swapped in is noticed.
