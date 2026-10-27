@@ -612,7 +612,7 @@ const NOTE={
   unknown_port:(p)=>['Unrecognized printer on the printer port','If it’s an ImageWriter or StyleWriter, choose its model.',[['Choose Model…','open'],['Dismiss','dismiss']]],
   changed:(p,n)=>['The printer port now has '+nb(esc(aOrAn(n.model))),'Use it instead of '+nb(esc(p&&p.model||'the current printer'))+'?'
     // W-1103: the original StyleWriter doesn't answer until it's reset, so only a look finds it again
-    +(p&&p.kind==='stylewriter'&&p.model==='StyleWriter'&&/^ImageWriter/.test(n.model)?' Or connect the StyleWriter again and choose Look for Printers.':''),
+    +(p&&p.kind==='stylewriter'&&p.model==='StyleWriter'&&/^ImageWriter/.test(n.model)?' Or connect the StyleWriter again and press Look for Printers.':''),
     [['Use '+nb(esc(n.model)),'accept'],['Dismiss','dismiss']]],
   no_answer:(p)=>[q(p)+' isn’t responding','Make sure it’s connected and switched on.',[['Share Anyway','use_anyway'],['Dismiss','dismiss']]],
   too_many:(p)=>[q(p)+' isn’t shared','You can share up to '+(PR.max_shared||4)+' printers. To share this one, stop sharing another.',[['OK','dismiss']]]};

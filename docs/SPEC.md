@@ -853,7 +853,7 @@ Apple's StyleWriter adapter (ADSP, not PAP), is not built.
   named, so the list is not rewritten each minute. None of this is stored, but a pending
   "changed" notice naming the other family, or another StyleWriter model, says it again at a
   start. The notice on an original StyleWriter record whose port an ImageWriter answered adds
-  "Or connect the StyleWriter again and choose Look for Printers."
+  "Or connect the StyleWriter again and press Look for Printers."
 - **AirPrint.** 360 × 360 dpi, URF `RS360`; Letter, A4 and Legal, the first the default
   (`printer_media_t` in `printer_caps`: the page's width at 360 dpi names the entry, and the
   rip keeps the engine's printable area from `rip_left` for `rip_w` dots). Margins in whole
