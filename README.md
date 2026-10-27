@@ -59,7 +59,7 @@ toolchain notes.
 The StyleWriter support rests on other people's work. Monroe Williams worked out the printers'
 serial protocol in the 1990s and wrote [lpstyl](https://github.com/Godzil/lpstyl). FeralFirmware
 took Apple's drivers apart for [TailTalk](https://github.com/FeralFirmware/TailTalk) and InkTalk.
-Thanks to Monroe Williams, FeralFirmware and Bolacore.
+Thanks to Monroe Williams and FeralFirmware.
 
 ## License
 

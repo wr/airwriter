@@ -47,7 +47,7 @@ StyleWriter and have an owner confirm on paper. Plan B: buy one.
 - Built and checked with no StyleWriter here: a software StyleWriter for the host tests and the
   bench, Apple's own drivers captured against it, and an owner's prints before it is called
   working.
-- lpstyl, TailTalk/InkTalk (FeralFirmware) and Bolacore credited in the docs and `LICENSE.md`.
+- lpstyl and TailTalk/InkTalk (FeralFirmware) credited in the docs and `LICENSE.md`.
 
 ## Non-goals
 
@@ -421,13 +421,14 @@ host-built (`components/sw_page`, name the builder's), fed 360 dpi rows:
 - **Apple's driver data** (the tone curves and the threshold screen, about 1.3 KB): used, read
   out of Apple's driver files by our own script, its source named in the generated header and
   in `LICENSE.md`'s table. The drivers themselves are never committed.
-- Credit for the StyleWriter work goes to Monroe Williams, FeralFirmware and Bolacore, in the
+- Credit for the StyleWriter work goes to Monroe Williams and FeralFirmware, in the
   README's credits, the StyleWriter wiki page and `docs/prior-art.md`.
 
 ## Decided by Wells (2026-10-25)
 
 1. The StyleWriter comes back into scope because owners restore and use them.
-2. TailTalk/InkTalk and Bolacore's work are the starting point, credited.
+2. TailTalk/InkTalk, FeralFirmware's work, is the starting point, credited under the
+   repository's name, FeralFirmware (Wells, 2026-10-27).
 3. No StyleWriter on the bench: build against a software one and an owner confirms (plan A);
    buying one is plan B.
 4. The seven lpstyl models; recognised and shared under its own name; colour with a colour

@@ -458,8 +458,8 @@ Linear is the queue; these are the live items.
   its flash writes on another task (7 KB), mDNS and the NVS cache to PSRAM.
 - `W-1103 StyleWriters on the printer port`: phase 1 built on `ww/stylewriters-plan` (above,
   SPEC §3.16), benched on board 1 2026-10-27. Open: Wells's merge, an owner's print on each model before
-  its wiki star goes, whether a StyleWriter answers with R9 left out, the cable (expected to be
-  the ImageWriter II's), and the credit link for Bolacore. Phase 2 (ADSP, vintage Macs) gets its
+  its wiki star goes, whether a StyleWriter answers with R9 left out, and the cable (expected to
+  be the ImageWriter II's). Phase 2 (ADSP, vintage Macs) gets its
   own plan after an owner has printed.
 - Not in Linear: scope HSKo during a long job (SPEC §3.9 timing).
 - Laser printers (design `docs/superpowers/specs/2026-10-21-laser-printers-design.md`; a

@@ -26,8 +26,6 @@
   it. It is the reference for the adapter's ADSP exchange (phase 2 of W-1103, not built), for
   holding the printer's HSKi high so the printer answers (R9 on rev A), and for the printer's
   fast mode, whose clock is on HSKi. Nothing is ported.
-- **Bolacore**: credited with FeralFirmware for the StyleWriter work. The link is added when the
-  handle is confirmed.
 - **Apple's StyleWriter drivers** (Color StyleWriter 1500, 2200 and 2500): the source of the
   tone curves, the 16 × 16 screen and the printer's icon, read out by
   `tools/stylewriter/mktables.py` (LICENSE.md). The drivers are never committed.
