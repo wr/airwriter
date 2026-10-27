@@ -17,6 +17,22 @@ static int ask_colour(void *ctx)
     return 1;
 }
 
+// A target's colour_ok: fills in the stage it is given (the board makes it here) and says
+// whether RGB pages print in colour.
+static int g_target_asked, g_target_says;
+static int  stage_begin(void *ctx, int i, uint32_t w, uint32_t h);
+static void stage_row(void *ctx, const uint8_t *bits);
+static int  stage_end(void *ctx);
+static int target_colour(void *ctx)
+{
+    g_target_asked++;
+    rip_stage_t *st = ctx;
+    st->page_begin = stage_begin;
+    st->row = stage_row;
+    st->page_end = stage_end;
+    return g_target_says;
+}
+
 static int ink_rows, gray_rows, begins;
 static int  cnt_begin(void *ctx, int i, uint32_t w, uint32_t h) { (void)ctx; (void)i; (void)w; (void)h; begins++; return 0; }
 static void cnt_row(void *ctx, const uint8_t *bits) { (void)ctx; (void)bits; gray_rows++; }
@@ -117,6 +133,30 @@ int main(void)
     sw.colour = 0;
     CHECK_EQ_INT(job_pipe_rip_cfg(base, ask_colour, NULL, &sw).colour, 0);
     CHECK(job_pipe_rip_cfg(base, ask_colour, NULL, NULL).tone == NULL);   // the ImageWriter has none
+
+    // A target's own colour_ok (a StyleWriter is reset and its cartridge read first) is asked
+    // once, on the way to the rip, and its answer is the job's colour in place of `colour`;
+    // what it fills in reaches the rip too, because the stage is the target's by pointer.
+    // The ImageWriter's is still not asked.
+    static rip_stage_t late_stage;
+    job_pipe_target_t lt = { .caps = &caps, .stage = &late_stage, .dither = HT_APPLE, .colour = 1,
+                             .buffered = 1, .colour_ok = target_colour, .colour_ctx = &late_stage };
+    g_asked = g_target_asked = 0;
+    g_target_says = 0;
+    ripjob_cfg_t lc = job_pipe_rip_cfg(base, ask_colour, NULL, &lt);
+    CHECK_EQ_INT(g_target_asked, 1);
+    CHECK_EQ_INT(g_asked, 0);
+    CHECK_EQ_INT(lc.colour, 0);                       // not `colour` 1: the target's answer
+    CHECK(lc.stage == &late_stage && late_stage.page_begin == stage_begin);
+    g_target_says = 1;
+    CHECK_EQ_INT(job_pipe_rip_cfg(base, ask_colour, NULL, &lt).colour, 1);
+    CHECK_EQ_INT(g_target_asked, 2);
+    lt.colour = 0;
+    CHECK_EQ_INT(job_pipe_rip_cfg(base, ask_colour, NULL, &lt).colour, 1);
+    lt.colour_ok = NULL;                              // without one `colour` rules, as before
+    g_target_asked = 0;
+    CHECK_EQ_INT(job_pipe_rip_cfg(base, ask_colour, NULL, &lt).colour, 0);
+    CHECK_EQ_INT(g_target_asked, 0);
 
     // And the rip runs it that way: an RGB page, to a stage with ink_row, in colour is
     // four planes a row and no gray rows; with colour 0 it is gray rows, as for a

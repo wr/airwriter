@@ -28,16 +28,31 @@ typedef struct {
     // ring's printer task reads (up to 512 bytes) or, with no ring, the stage
     // wrote: a consumer that needs whole frames puts them together. NULL takes
     // cfg.out, the ImageWriter's.
+    //
+    // A consumer that cannot go on (the printer silent, a fault held for STALL_ABORT,
+    // a frame that is not one the stage makes) must call job_pipe_abort(). job_pipe_out()
+    // has no timeout of its own: with the ring full it waits for the printer, so the rip
+    // task stays blocked in the stage's write until the job is aborted, and the job never
+    // ends. After the abort the ring's printer task hands the consumer nothing more.
     void                (*prn)(void *ctx, const uint8_t *buf, size_t n);
     void                 *prn_ctx;
     const uint8_t        *tone;
+    // Asked on the pipeline task as the job's rip begins, under the job lock and before
+    // any row, where the ImageWriter's colour_ok is asked: the place for a printer that
+    // has to be settled before its first row (a StyleWriter is reset and its cartridge read,
+    // which decide the page stage it makes). Its result is `colour`'s meaning, 1 for RGB
+    // pages in four inks, and replaces it. It may fill what `stage` points at. A printer that
+    // cannot go on calls job_pipe_abort(), and the rip ends at its first read.
+    int                 (*colour_ok)(void *ctx);
+    void                 *colour_ctx;
 } job_pipe_target_t;
 
 // `base` with this job's printer in it. An ImageWriter job (t NULL) asks
 // colour_ok (the ImageWriter's ribbon, W-1064); another printer's job asks
 // the ImageWriter nothing, since it may be off (W-1082 bench: a LaserWriter
 // job waited 10 minutes on a switched-off ImageWriter), and takes its colour
-// and tone from its target.
+// and tone from its target: `colour`, or what the target's own colour_ok says
+// (asked here, once).
 ripjob_cfg_t job_pipe_rip_cfg(ripjob_cfg_t base, int (*colour_ok)(void *ctx), void *colour_ctx,
                               const job_pipe_target_t *t);
 

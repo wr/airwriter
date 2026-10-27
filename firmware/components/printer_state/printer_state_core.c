@@ -67,14 +67,16 @@ void ps_post(ps_t *ps, ps_event_t ev, uint64_t now)
     case PS_EV_LINE_NOT_READY:
         if (ps->line_ready) { ps->line_ready = 0; ps->line_since = now; }
         break;
+    case PS_EV_FAULT_ON:   ps->fault = 1; break;
+    case PS_EV_FAULT_OFF:  ps->fault = 0; break;
     case PS_EV_JOB_START:
-        ps->job = 1; ps->failed = 0; ps->cancelled = 0; ps->activity_at = now;
+        ps->job = 1; ps->failed = 0; ps->cancelled = 0; ps->fault = 0; ps->activity_at = now;
         ps->job_at = now;
         ps->job_started_low = !ps->line_ready;
         break;
-    case PS_EV_JOB_DONE:   ps->job = 0; break;
-    case PS_EV_JOB_CANCELLED: ps->job = 0; ps->cancelled = 1; break;
-    case PS_EV_JOB_FAILED: ps->job = 0; ps->failed = 1; ps->failed_at = now; break;
+    case PS_EV_JOB_DONE:   ps->job = 0; ps->fault = 0; break;
+    case PS_EV_JOB_CANCELLED: ps->job = 0; ps->fault = 0; ps->cancelled = 1; break;
+    case PS_EV_JOB_FAILED: ps->job = 0; ps->fault = 0; ps->failed = 1; ps->failed_at = now; break;
     case PS_EV_ACTIVITY:   ps->activity_at = now; break;
     }
 }
@@ -104,6 +106,7 @@ static ps_state_t derive(const ps_t *ps, uint64_t now)
                                                    : ps->tm.stall_attention_ms;
     if (ps->job && !ps->line_ready && low_for >= attention_after)
         return PS_ATTENTION;
+    if (ps->job && ps->fault) return PS_ATTENTION;       // a StyleWriter says so itself (W-1103)
     if (ps->failed && now - ps->failed_at < ps->tm.failed_hold_ms) return PS_FAILED;
     if (ps->job) return PS_PRINTING;
     // The ImageWriter reports busy for ~3.5 s after the AirWriter powers up

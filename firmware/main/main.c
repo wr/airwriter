@@ -40,6 +40,9 @@
 #include "lt_node.h"
 #include "laser.h"
 #include "printers.h"
+#include "port_policy.h"
+#include "stylewriter.h"
+#include "sw_status.h"
 #include "ota_health.h"
 #include "fw_update.h"
 #include "cable_test.h"
@@ -334,6 +337,23 @@ static volatile int        s_line_src = LINE_IW;
 static volatile int        s_iw_ready = -1;    // HSKo as last reported, -1 before
 static volatile int        s_laser_owns;       // the job in the pipeline is the LaserWriter's
 
+// W-1103: a StyleWriter on the port. Its HSKo says nothing, so its own answers are its state:
+// `s_iw_ready` above is then what they say (-1 before the first), not the line.
+static volatile int        s_port_sw;          // the port's record is a StyleWriter (printers_changed)
+static volatile int        s_port_answering;   // the port's printer answered its last question
+static volatile sw_state_t s_sw_state = SWS_OFFLINE;   // and what it said (a job's session also reports it)
+static volatile int        s_sw_cart;          // pr_live_t.cart: 0 not read yet, 1 black, 2 colour
+static volatile int        s_sw_owns;          // the job in the pipeline is the StyleWriter's
+static volatile int        s_hsko = -1;        // HSKo as last reported, whichever printer is there
+static volatile uint32_t   s_line_drops;       // and how often it has gone down
+// Events for the port task (kick_task), set by whoever knows and cleared by what acts on them.
+static volatile int        s_look;             // boot, setup or the Printers section asked
+static volatile int        s_confirm_sw;       // the person named the port's printer a StyleWriter
+static volatile int        s_link_check;       // the record's kind changed: J2's link may be the wrong one
+static uint32_t            s_last_plain_ms, s_last_status_ms;   // the port task's own
+static int                 s_plain_unanswered;
+static uint32_t uptime_ms(void);
+
 static char s_suffix[8];            // the MAC's last two bytes, the default hostname's
 
 // W-1079: what the page last saved, beside s_set's names in use since boot:
@@ -413,24 +433,24 @@ static const char *ribbon_name(uint8_t r)
 // mid-graphics, is left alone. For a job it must not be: a colour page on a
 // ribbon swapped while the printer was off would print four passes in black.
 // So a job waits for the line as its first write would, and sends the resync
-// its first write would have sent.
-static void ribbon_check(int for_job)
+// its first write would have sent. 1 when the printer answered as an ImageWriter.
+static int ribbon_ask(int for_job)
 {
-    if (AW_LOOPBACK) return;
+    if (AW_LOOPBACK) return 0;
     // W-1088: ESC ? also finds what is on the port, so it goes to anything
     // but a printer the person said is something else; a job's goes only to
     // an ImageWriter.
     port_mode_t mode = printers_port_mode();
-    if (mode == PORT_UNKNOWN_SAID || (for_job && mode != PORT_IMAGEWRITER)) return;
+    if (mode == PORT_UNKNOWN_SAID || (for_job && mode != PORT_IMAGEWRITER)) return 0;
     for (uint32_t ms = 0; for_job && !serial_out_clear() && !s_job_cancelled && !s_test_cancel &&
                           ms < CONFIG_AIRWRITER_STALL_ABORT * 1000u; ms += 100)
         vTaskDelay(pdMS_TO_TICKS(100));
-    if (!serial_out_clear()) return;
+    if (!serial_out_clear()) return 0;
     if (s_link.dirty) {
-        if (!for_job) return;
+        if (!for_job) return 0;
         esp_err_t err = ESP_OK;
         iw_resync(resync_out, &err);
-        if (err != ESP_OK) return;
+        if (err != ESP_OK) return 0;
         iw_link_resynced(&s_link);
         ESP_LOGW(TAG, "last job was cut short; resynced the printer before asking its ribbon");
     }
@@ -442,7 +462,7 @@ static void ribbon_check(int for_job)
     // note under Table 6-7), so if it said nothing, end the line. Idle, the
     // head is at the left margin and a CR moves nothing.
     if (n == 0) n = serial_out_query(cr, sizeof cr, reply, sizeof reply, 1000);
-    if (n < 0) return;
+    if (n < 0) return 0;
     char hex[3 * sizeof reply + 1] = "";
     for (int i = 0; i < n; i++) snprintf(hex + 3 * i, 4, " %02x", reply[i]);
     iw_self_id_t id = iw_self_id(reply, (size_t)n);
@@ -451,11 +471,24 @@ static void ribbon_check(int for_job)
              id.model == IW_MODEL_LQ ? "LQ" : id.model == IW_MODEL_II ? "II" : "no model",
              ribbon_name(r));
     printers_port_seen(id.model, 1);
-    if (!printers_port_is_imagewriter() || r == IW_RIBBON_UNKNOWN || r == s_ribbon) return;
+    int answered = id.model != IW_MODEL_NONE;
+    if (!printers_port_is_imagewriter() || r == IW_RIBBON_UNKNOWN || r == s_ribbon) return answered;
     ESP_LOGI(TAG, "ribbon now %s (was %s)", ribbon_name(r), ribbon_name(s_ribbon));
     s_ribbon = (uint8_t)r;
     settings_save_ribbon((uint8_t)r);
     ipp_server_set_colour(r == IW_RIBBON_COLOUR);
+    return answered;
+}
+
+// ESC ? is the ImageWriter's, at 9600 with CTS (W-1103): a StyleWriter's link is given
+// up for it and taken back, so a port whose record is a StyleWriter that has stopped
+// answering can still be asked whether an ImageWriter has taken its place.
+static int ribbon_check(int for_job)
+{
+    stylewriter_link(0);
+    int answered = ribbon_ask(for_job);
+    stylewriter_link_record();
+    return answered;
 }
 
 // job_pipe asks as each job's rip starts, on the pipeline task, while the
@@ -487,6 +520,11 @@ static void printer_line_changed(void *ctx, int ready)
         s_ribbon_want = 1;
     }
     s_line_seen = 1;
+    s_hsko = ready;                     // the port task's, for any record
+    if (!ready) s_line_drops++;
+    // W-1103: a StyleWriter's line says nothing; its answers are its state, and the
+    // line only tells the port task when an ImageWriter may have taken its place.
+    if (s_port_sw) return;
     s_iw_ready = ready;
     printer_state_port_line(ready);     // the kick's, whatever line the panel follows
     // Mid-job the line toggles every printed line: this stays cheap.
@@ -535,16 +573,20 @@ static int doc_claim(void *ctx)
     return 0;
 }
 
+static esp_err_t sw_doc_begin(const char *format, const char *name, const ipp_job_opts_t *opts);
+
 static esp_err_t doc_begin(void *ctx, const char *format, const char *name,
                            const ipp_job_opts_t *opts)
 {
     (void)ctx;
-    (void)opts;
     // doc_claim took s_job_lock. ipp_server always pairs this call with
     // exactly one doc_end -- including when job_pipe_begin below fails -- and
     // every doc_end leads to exactly one job_finished, whose give balances
     // the claim, refusals included.
     s_ipp_owns = 1;
+    // W-1103: the port's printer is a StyleWriter: the same sink, its own job.
+    if (s_port_sw) return sw_doc_begin(format, name, opts);
+    stylewriter_link(0);                // the ImageWriter's link, whatever the last job's was
     // The link's strength with each job: a weak one is what a slow upload
     // usually is (W-1042 bench).
     wifi_ap_record_t ap;
@@ -581,7 +623,8 @@ static void doc_cancel(void *ctx)
     (void)ctx;
     if (!s_ipp_owns) return;
     s_job_cancelled = 1;
-    serial_out_set_abort(1);    // a paused printer must not hold the job hostage
+    if (s_sw_owns) stylewriter_cancel();     // its session stops at its next step
+    else serial_out_set_abort(1);    // a paused printer must not hold the job hostage
     job_pipe_abort();
 }
 
@@ -676,12 +719,15 @@ static void job_finished(const job_pipe_stats_t *st, int ok)
 }
 
 static void laser_finished(const job_pipe_stats_t *st, int ok);
+static void sw_finished(const job_pipe_stats_t *st, int ok);
 
 // job_pipe's done callback: the pipeline has printed the document or let it go.
 static void pipe_done(void *ctx, const job_pipe_stats_t *st)
 {
     (void)ctx;
-    if (s_laser_owns) {
+    if (s_sw_owns) {
+        sw_finished(st, s_doc_ok);
+    } else if (s_laser_owns) {
         laser_finished(st, s_doc_ok);
     } else {
         job_finished(st, s_doc_ok);
@@ -700,10 +746,18 @@ static void doc_end(void *ctx, int ok)
     // A cut transfer (a client that cancels by dropping the upload rather
     // than with Cancel-Job) means nothing more will arrive: stop a write
     // that is waiting out a paused printer, so the pipeline unwinds now
-    // instead of after the stall limit.
-    if (!ok) serial_out_set_abort(1);
+    // instead of after the stall limit. A StyleWriter's session stops at its next step.
+    if (!ok) {
+        if (s_sw_owns) stylewriter_cancel();
+        else serial_out_set_abort(1);
+    }
     if (s_job_pipe_ok) {
         job_pipe_end(ok);
+        return;
+    }
+    if (s_sw_owns) {                    // the pipeline never started: finish here
+        job_pipe_stats_t none = {0};
+        sw_finished(&none, 0);
         return;
     }
     // A failed job_pipe_begin never created the pipeline task, so nothing
@@ -840,6 +894,78 @@ static int laser_relay(int take)
     return 0;
 }
 
+// ------------------------------------------------------------ StyleWriter jobs
+// W-1103: the port's printer is a StyleWriter. Its job takes the same sink, job lock and
+// pipeline as the ImageWriter's, rips at 360 dpi into sw_page's frames and goes out through
+// a session (stylewriter.c) on the printer task: the printer is reset and its cartridge
+// read as the rip begins, then each frame is sent as the printer's buffer has room.
+
+static esp_err_t sw_doc_begin(const char *format, const char *name, const ipp_job_opts_t *opts)
+{
+    s_sw_owns = 1;                      // doc_claim took s_job_lock; sw_finished gives it
+    sw_model_t m = printers_port_sw_model();
+    ESP_LOGI(TAG, "StyleWriter job \"%s\" format %s, quality %d", name,
+             format[0] ? format : "(unspecified)", opts ? opts->quality : 0);
+    memdiag_mark("job start");          // W-1094
+    strncpy(s_last_job, name && name[0] ? name : "Untitled", sizeof s_last_job - 1);
+    s_last_job[sizeof s_last_job - 1] = '\0';
+    s_printer_failed = 0;
+    s_job_cancelled = 0;
+    s_printing = 1;
+    job_touch();
+    led_grid_set_source(LG_SRC_AIRPRINT);
+    line_source();
+    printer_state_post(PS_EV_JOB_START);
+    // The record's screen, with Apple's tone curve under it (stylewriter.c).
+    char screen[sizeof s_set.dither];
+    int gain = 0;
+    ht_algo_t algo = HT_ATKINSON;
+    if (!printers_port_screen(screen, sizeof screen, &gain) && ht_algo_from_name(screen, &algo))
+        algo = HT_ATKINSON;
+    job_pipe_target_t t = { 0 };
+    s_job_pipe_ok = 0;
+    if (stylewriter_job_begin(m, opts ? opts->quality : 0, algo, gain, &t)) return ESP_FAIL;
+    esp_err_t err = job_pipe_begin_to(name, &t);
+    s_job_pipe_ok = err == ESP_OK;
+    return err;
+}
+
+// The rip is over and the printer task has sent its last frame, or the job was abandoned. On
+// the pipeline task (or the IPP worker, when the pipeline never started): the last page is
+// waited out and the printer told it is the end, or told to stop.
+static void sw_finished(const job_pipe_stats_t *st, int ok)
+{
+    int cancelled = s_job_cancelled;
+    int rc = stylewriter_job_end(!(st->rc == 0 && ok && !cancelled));
+    int printed = rc == 0;
+    s_printing = 0;
+    job_touch();
+    memdiag_mark("job done");           // W-1094
+    s_last_pages = (size_t)st->pages;
+    s_last_bytes = st->printer_bytes;
+    if (printed) {
+        ESP_LOGI(TAG, "StyleWriter job: %d page%s, %u bytes in -> %u printer bytes in %ums, "
+                 "all out in %ums", st->pages, st->pages == 1 ? "" : "s", (unsigned)st->doc_bytes,
+                 (unsigned)st->printer_bytes, (unsigned)st->rip_ms, (unsigned)st->ms);
+        ota_health_printed();           // W-1059: this firmware prints; under the job lock
+    } else {
+        ESP_LOGE(TAG, "StyleWriter job %s: %u bytes in, rc %d, printer %d%s",
+                 cancelled ? "canceled" : "failed", (unsigned)st->doc_bytes, st->rc, rc,
+                 ok ? "" : ", transfer truncated");
+    }
+    printer_state_post(printed ? PS_EV_JOB_DONE : cancelled ? PS_EV_JOB_CANCELLED
+                                                            : PS_EV_JOB_FAILED);
+    // A job that stopped short reset the printer, which takes 2 s to settle: the port task's
+    // next `1` and `2` are due in 10 s, not now, or a printer still starting reads as gone.
+    s_last_status_ms = uptime_ms();
+    s_sw_owns = 0;
+    s_ipp_owns = 0;
+    line_source();
+    xSemaphoreGive(s_job_lock);
+    ipp_server_job_done(printed);
+    printers_apply();                   // W-1088: a change to the port's printer waited for it
+}
+
 // ------------------------------------------------------------- printers
 // W-1088: the printer list (components/printers) keeps what is where; these
 // are its board's side of the port printer.
@@ -852,6 +978,15 @@ static void port_live(pr_live_t *o)
     o->printing = s_printing && !s_laser_owns;
     o->attention = mine && v.state == PS_ATTENTION;
     o->failed = mine && v.state == PS_FAILED;
+    if (s_port_sw) {
+        // W-1103: its own answers. A fault it reports is attention whether or not a job is
+        // printing; present means it answered, ready that it could print now.
+        sw_state_t st = s_sw_state;
+        o->present = s_port_answering;
+        o->ready = s_port_answering && sw_state_ready(st);
+        o->attention = s_port_answering && sw_state_fault(st);
+        o->cart = (uint8_t)s_sw_cart;
+    }
 }
 
 // The page changed the port printer's halftone: the next job prints with it.
@@ -866,12 +1001,180 @@ static void port_screen(const char *dither, int gain)
     ESP_LOGI(TAG, "the port printer's screen now %s, gain %u%%", s_set.dither, s_set.gain);
 }
 
-// "Look for printers": ask the port again once the line is ready, and look
-// on AppleTalk every 30 s again for a while.
+// ------------------------------------------------------- a StyleWriter on the port
+// W-1103: the port task (kick_task) asks it, a job reports through its session, and these
+// turn what it says into the box's state, the panel's line and what the phone is told.
+
+// The port's record became a StyleWriter, or stopped being one: whose answers are the
+// port's state changes hands.
+static void port_sw_sync(int sw)
+{
+    if (sw == s_port_sw) return;
+    s_port_sw = sw;
+    s_port_answering = 0;
+    s_sw_cart = 0;
+    s_link_check = 1;                   // J2's link follows the record, under the job lock
+    if (sw) {
+        s_iw_ready = -1;                // its answers will say; HSKo says nothing
+        s_sw_state = SWS_OFFLINE;
+        // It is asked the plain question at once. Not "look": that is ESC ? when the line is
+        // up, the ImageWriter's, and a printer already known as a StyleWriter is not sent it.
+        s_last_plain_ms = port_plain_due(uptime_ms());
+    } else {
+        s_iw_ready = s_hsko;            // the line speaks again
+        if (s_hsko >= 0) printer_state_port_line(s_hsko);
+    }
+}
+
+// A cartridge was read: AirPrint offers colour or not under the same UUID, as the ribbon
+// does, and it is kept so a restart offers what the printer last said. A black-only model
+// never offers colour. Not for the printer task to call: this writes flash.
+static void sw_cart_seen(int colour)
+{
+    const sw_spec_t *sp = sw_spec(printers_port_sw_model());
+    colour = colour > 0 && sp && sp->colour;
+    s_sw_cart = colour ? 2 : 1;
+    iw_ribbon_t r = colour ? IW_RIBBON_COLOUR : IW_RIBBON_BLACK;
+    if (r != s_ribbon) {
+        ESP_LOGI(TAG, "cartridge now %s (was %s)", ribbon_name(r), ribbon_name(s_ribbon));
+        s_ribbon = (uint8_t)r;
+        settings_save_ribbon((uint8_t)r);
+    }
+    ipp_server_set_colour(colour);
+}
+
+// What a saved ribbon may offer a phone at start: a black-only StyleWriter never offers colour,
+// whatever the ImageWriter that was there before had in.
+static int ribbon_offered(void)
+{
+    if (!s_port_sw) return 1;
+    const sw_spec_t *sp = sw_spec(printers_port_sw_model());
+    return sp && sp->colour;
+}
+
+// The session reports its state (sw_session.h) while it runs a job or a cleaning, on
+// whichever task that is, the printer task included, so nothing here may write flash. The
+// fault goes to the panel at once and to IPP in its own words, not only as a change of the
+// display state.
+static void sw_state_cb(sw_state_t st)
+{
+    s_sw_state = st;
+    s_port_answering = st != SWS_OFFLINE;
+    s_iw_ready = sw_state_ready(st);
+    if (s_printing) {
+        printer_state_post(sw_state_fault(st) ? PS_EV_FAULT_ON : PS_EV_FAULT_OFF);
+        printer_state_post(st == SWS_OFFLINE ? PS_EV_LINE_NOT_READY : PS_EV_LINE_READY);
+    }
+    port_push(printer_state_view().state);
+}
+
+// The port task asked `1` and `2` (or the question got no answer: SWS_OFFLINE), idle.
+static void sw_idle_state(sw_state_t st)
+{
+    s_sw_state = st;
+    s_port_answering = st != SWS_OFFLINE;
+    s_iw_ready = sw_state_ready(st);
+    line_source();
+    port_push(printer_state_view().state);
+}
+
+// A StyleWriter that has just answered: its cartridge (what AirPrint offers follows it), and
+// its state.
+static void sw_online(sw_model_t m)
+{
+    int c = stylewriter_cart(m);
+    if (c >= 0) sw_cart_seen(c);
+    sw_state_t st;
+    sw_idle_state(stylewriter_status(m, &st) == SW_OK ? st : SWS_OFFLINE);
+}
+
+// The person named the port's printer a StyleWriter (Add a Printer…, the unknown printer's
+// notice, the detail's Model): the full sequence, which finds the original too, confirms it
+// and reads its model. A printer that stays silent keeps the pick, offline.
+static void sw_confirm(void)
+{
+    if (!printers_port_is_stylewriter()) return;
+    sw_model_t picked = printers_port_sw_model();
+    ESP_LOGI(TAG, "asking the port's StyleWriter what it is");
+    sw_model_t m = stylewriter_ask_full();
+    s_last_status_ms = uptime_ms();
+    if (m == SW_NONE) {
+        ESP_LOGW(TAG, "the port's StyleWriter did not answer; keeping the pick, offline");
+        sw_idle_state(SWS_OFFLINE);
+        return;
+    }
+    if (m != picked) {
+        ESP_LOGI(TAG, "it is a %s, not a %s", sw_spec(m)->name, sw_spec(picked)->name);
+        printers_port_set_sw_model(m);
+    }
+    sw_online(m);
+    ESP_LOGI(TAG, "port task: %u bytes of stack to spare", (unsigned)uxTaskGetStackHighWaterMark(NULL));
+}
+
+static int sw_cancelled(void)
+{
+    if (s_sw_owns) return s_job_cancelled;
+    return s_test_running && s_test_cancel;      // the test page's second tap (Task 11)
+}
+
+// The settings page's Print Head cleaning (printers_cfg_t.clean): one cleaning, on a task
+// of its own so the page is answered. The job lock is held to its end.
+static void sw_clean_task(void *arg)
+{
+    sw_model_t m = (sw_model_t)(intptr_t)arg;
+    int rc = stylewriter_clean(m);
+    printer_state_post(rc == SW_OK ? PS_EV_JOB_DONE : PS_EV_JOB_FAILED);
+    s_last_status_ms = uptime_ms();
+    s_printing = 0;
+    job_touch();
+    line_source();
+    xSemaphoreGive(s_job_lock);
+    vTaskDelete(NULL);
+}
+
+// 0 once it has begun, 409 when a job holds the printer, 502 when the printer does not
+// answer or holds a fault (a cleaning would wait on it holding the lock).
+static int sw_clean_web(int id)
+{
+    if (printers_test_kind(id) != 3) return 502;
+    if (xSemaphoreTake(s_job_lock, 0) != pdTRUE) return 409;
+    sw_model_t m = printers_port_sw_model();
+    sw_state_t st;
+    if (stylewriter_status(m, &st) != SW_OK || sw_state_fault(st)) {
+        xSemaphoreGive(s_job_lock);
+        return 502;
+    }
+    printer_state_post(PS_EV_ACTIVITY);          // a person asked: wake the panel
+    s_printing = 1;
+    job_touch();
+    led_grid_set_source(LG_SRC_AIRPRINT);
+    line_source();
+    printer_state_post(PS_EV_JOB_START);
+    if (xTaskCreate(sw_clean_task, "sw_clean", 4096, (void *)(intptr_t)m, 3, NULL) != pdPASS) {
+        ESP_LOGE(TAG, "cleaning: could not create task");
+        printer_state_post(PS_EV_JOB_FAILED);
+        s_printing = 0;
+        job_touch();
+        line_source();
+        xSemaphoreGive(s_job_lock);
+        return 502;
+    }
+    return 0;
+}
+
+// On the HTTP task: the full sequence takes 2 to 12 s, so it is the port task's to run.
+static void sw_confirm_queue(int id)
+{
+    (void)id;
+    s_confirm_sw = 1;
+}
+
+// "Look for printers": the port is asked again (the ImageWriter's self-ID once the line is
+// ready, the StyleWriter's plain question while nothing answers), and AppleTalk is looked on
+// every 30 s again for a while.
 static void printers_look(void)
 {
-    s_ribbon_due = xTaskGetTickCount();
-    s_ribbon_want = 1;
+    s_look = 1;
     laser_look_now();
 }
 
@@ -879,6 +1182,12 @@ static void offers_apply(void);
 
 static void printers_changed(void)
 {
+    port_sw_sync(printers_port_is_stylewriter());
+    // A black-only StyleWriter (the record was changed to one) offers no colour.
+    if (s_port_sw) {
+        const sw_spec_t *sp = sw_spec(printers_port_sw_model());
+        if (!sp || !sp->colour) ipp_server_set_colour(0);
+    }
     line_source();
     offers_apply();
 }
@@ -927,6 +1236,13 @@ static int lt_print_begin(void *ctx, at_link_t link)
         s_job_waiting = 1;
         return 1;
     }
+    // A Mac's stream is the ImageWriter driver's: it never goes to a StyleWriter (W-1103).
+    // The offers keep Macs from asking; this keeps a stray one from being heard.
+    if (s_port_sw) {
+        xSemaphoreGive(s_job_lock);
+        return 1;
+    }
+    stylewriter_link(0);
     strncpy(s_last_job, lt_job_name(link), sizeof s_last_job - 1);
     s_stream_crc = 0;
     s_printer_failed = 0;
@@ -1016,35 +1332,137 @@ static int lt_print_end(void *ctx, int normal)
 // later milestones -- for this rev dev_mode is a log note only (each
 // printer's uuid is its record's since W-1088).
 
-// W-1039: unstick a printer that serial-line noise (a cable replug, power-up)
-// left busy with SELECT lit -- CTRL-X cancels the unprinted line in its
-// buffer. printer_state decides when (idle, busy 5 s, then every 60 s at
-// most); the job lock, taken without waiting, keeps it clear of any job's
-// writes or a test page.
+// The port task. It runs every 500 ms and asks the printer on J2 whatever the policy
+// (port_policy.h, W-1103) says the port is due, under the job lock, taken without waiting,
+// which keeps it clear of any job's writes or a test page. The policy is pure and
+// host-tested; what it picks is done here:
+//   PA_ESCQ    the ImageWriter's self-ID (W-1064): the ribbon, and what is on the port
+//   PA_PLAIN   the StyleWriter's plain question, one `?` at 57600
+//   PA_STATUS  a StyleWriter that answers: `1` and `2` every 10 s
+//   PA_KICK    W-1039: unstick an ImageWriter that serial-line noise (a cable replug,
+//              power-up) left busy with SELECT lit -- CTRL-X cancels the unprinted line in
+//              its buffer. printer_state decides when (idle, busy 5 s, then every 60 s at
+//              most), and only an ImageWriter, or a port nothing has been found on yet (one
+//              left busy at power-up never answers ESC ?), is ever kicked (W-1088).
 static void kick_task(void *arg)
 {
     (void)arg;
     static const uint8_t ctrl_x = 0x18;     // ImageWriter II: cancel current line
+    int boot_looked = 0, again = 0;
+    uint32_t drops = s_line_drops;
+    s_last_plain_ms = uptime_ms();           // the first cadence question is 60 s from now
     for (;;) {
-        vTaskDelay(pdMS_TO_TICKS(500));
-        // W-1064: the ribbon, once the line has been ready 2 s with no job.
-        if (s_ribbon_want && (int32_t)(xTaskGetTickCount() - s_ribbon_due) >= 0 &&
-            xSemaphoreTake(s_job_lock, 0) == pdTRUE) {
-            s_ribbon_want = 0;
-            ribbon_check(0);
-            xSemaphoreGive(s_job_lock);
-        }
-        // W-1088: CTRL-X only to an ImageWriter, or a port nothing has been
-        // found on yet (one left busy at power-up never answers ESC ?), on its
-        // own line whatever the panel follows; a LaserWriter's job holds the lock.
+        if (!again) vTaskDelay(pdMS_TO_TICKS(500));
+        again = 0;
         port_mode_t mode = printers_port_mode();
-        if ((mode != PORT_IMAGEWRITER && mode != PORT_NONE) || !printer_state_want_kick())
+        port_sw_sync(mode == PORT_STYLEWRITER);
+
+        // J2's link follows the port's record (the kind may have changed), and a StyleWriter the
+        // person named is asked what it is. Both need the printer to themselves.
+        if ((s_link_check || s_confirm_sw) && xSemaphoreTake(s_job_lock, 0) == pdTRUE) {
+            if (s_link_check) {
+                s_link_check = 0;
+                stylewriter_link_record();
+            }
+            if (s_confirm_sw) {
+                s_confirm_sw = 0;
+                sw_confirm();
+            }
+            xSemaphoreGive(s_job_lock);
             continue;
-        if (xSemaphoreTake(s_job_lock, 0) != pdTRUE) continue;
-        esp_err_t err = serial_out_send_unflowed(&ctrl_x, 1);
-        printer_state_kicked();
+        }
+
+        uint32_t now = uptime_ms();
+        int line_ready = s_hsko == 1;
+        // Boot: after the quiet power-on, a port with no line up is asked the plain question
+        // (a StyleWriter may never raise it). A StyleWriter the board already knows is asked
+        // at once, and not by a look, which is ESC ? when the line is up.
+        if (!boot_looked && (mode == PORT_STYLEWRITER || printer_state_view().state != PS_BOOTING)) {
+            boot_looked = 1;
+            if (mode == PORT_STYLEWRITER) s_last_plain_ms = port_plain_due(now);
+            else if (!line_ready) s_look = 1;
+        }
+        if (s_line_drops != drops) {         // a new busy spell gets a fresh plain question
+            drops = s_line_drops;
+            s_plain_unanswered = 0;
+        }
+        // The line came up after a second or more down (or was first seen), 2 s ago: ESC ?
+        // (W-1064). A StyleWriter that answers needs none, and a stale one would be sent to it.
+        int line_up = s_ribbon_want && (int32_t)(xTaskGetTickCount() - s_ribbon_due) >= 0;
+        if (mode == PORT_STYLEWRITER && s_port_answering) {
+            s_ribbon_want = 0;
+            line_up = 0;
+        }
+        if (mode == PORT_UNKNOWN_SAID) s_look = 0;
+        // CTRL-X goes only where it always went; an ImageWriter that has been stuck busy for
+        // the kick delay is not answering any more, whatever it said before.
+        int want_kick = (mode == PORT_IMAGEWRITER || mode == PORT_NONE) && printer_state_want_kick();
+        if (want_kick && mode == PORT_IMAGEWRITER) s_port_answering = 0;
+
+        port_in_t in = {
+            .kind = mode == PORT_NONE ? -1 : mode == PORT_IMAGEWRITER ? PR_KIND_IMAGEWRITER
+                  : mode == PORT_STYLEWRITER ? PR_KIND_STYLEWRITER : PR_KIND_UNKNOWN,
+            .said_other = mode == PORT_UNKNOWN_SAID, .answering = s_port_answering,
+            .line_ready = line_ready, .line_up_edge = line_up, .look = s_look,
+            .want_kick = want_kick, .now_ms = now, .last_plain_ms = s_last_plain_ms,
+            .last_status_ms = s_last_status_ms, .plain_unanswered = s_plain_unanswered,
+        };
+        port_act_t act = port_policy(&in);
+        if (act == PA_NONE || xSemaphoreTake(s_job_lock, 0) != pdTRUE) continue;
+
+        switch (act) {
+        case PA_ESCQ: {
+            s_look = 0;
+            s_ribbon_want = 0;
+            int answered = ribbon_check(0);
+            if (answered && printers_port_is_imagewriter()) {
+                s_port_answering = 1;
+            } else if (!answered) {
+                // Nothing said: the StyleWriter's plain question follows at once.
+                if (mode == PORT_IMAGEWRITER) s_port_answering = 0;
+                s_last_plain_ms = port_plain_due(now);
+                again = 1;
+            }
+            break;
+        }
+        case PA_PLAIN: {
+            s_look = 0;
+            sw_model_t m = stylewriter_ask_plain();
+            s_last_plain_ms = uptime_ms();
+            s_plain_unanswered = m == SW_NONE;
+            if (m != SW_NONE) {
+                printers_port_seen_sw(m);    // makes the record, or raises the "changed" notice
+                port_sw_sync(printers_port_is_stylewriter());
+                if (s_port_sw && printers_port_sw_model() == m) {
+                    sw_online(m);
+                    break;
+                }
+            }
+            // A StyleWriter record whose printer did not answer as it (or at all) is offline.
+            if (s_port_sw) sw_idle_state(SWS_OFFLINE);
+            break;
+        }
+        case PA_STATUS: {
+            s_look = 0;
+            s_ribbon_want = 0;
+            sw_model_t m = printers_port_sw_model();
+            if (m == SW_NONE) break;         // the record changed under us: not a StyleWriter's to ask
+            sw_state_t st;
+            int rc = stylewriter_status(m, &st);
+            s_last_status_ms = uptime_ms();
+            sw_idle_state(rc == SW_OK ? st : SWS_OFFLINE);
+            break;
+        }
+        case PA_KICK: {
+            esp_err_t err = serial_out_send_unflowed(&ctrl_x, 1);
+            printer_state_kicked();
+            ESP_LOGI(TAG, "printer busy while idle; sent CTRL-X (%s)", esp_err_to_name(err));
+            break;
+        }
+        case PA_NONE:
+            break;
+        }
         xSemaphoreGive(s_job_lock);
-        ESP_LOGI(TAG, "printer busy while idle; sent CTRL-X (%s)", esp_err_to_name(err));
     }
 }
 
@@ -1234,11 +1652,22 @@ static void ps_test_locked(int id)
     }
 }
 
+// W-1103: a StyleWriter's test page is a raster drawn on the board (a later step of the
+// StyleWriter work). Until it is built the page is asked for and nothing is sent, which is
+// all that is safe: the ImageWriter's page is ImageWriter commands, and a StyleWriter must
+// never hear those. s_job_lock is held; this gives it back.
+static void sw_test_locked(void)
+{
+    ESP_LOGW(TAG, "test page: a StyleWriter's test page is not built yet; nothing sent");
+    xSemaphoreGive(s_job_lock);
+}
+
 // The test page for whichever printer gets it (printers_test_target): the
-// port's ImageWriter's, or a LaserWriter's. s_job_lock is held.
+// port's ImageWriter's, a LaserWriter's, or the port's StyleWriter's. s_job_lock is held.
 static void test_page_to(int id, int port)
 {
-    if (port) test_page_locked();
+    if (printers_test_kind(id) == 3) sw_test_locked();
+    else if (port) test_page_locked();
     else ps_test_locked(id);
 }
 
@@ -1319,7 +1748,8 @@ static void test_button(void)
     // W-1088: the port's ImageWriter, else the first shared printer.
     int port, id = printers_test_target(&port);
 #if CONFIG_AIRWRITER_PIC_CLK_PIN >= 0
-    if ((port || id < 0) && !serial_out_clear()) {
+    // A StyleWriter's HSKo says nothing, so a low line is no sign of a cable (W-1103).
+    if (((port && !s_port_sw) || id < 0) && !serial_out_clear()) {
         ESP_LOGI(TAG, "test button with the printer not ready: testing the cable");
         if (xTaskCreate(cable_button_task, "cable", 4096, NULL, 3, NULL) != pdPASS)
             xSemaphoreGive(s_job_lock);
@@ -1445,15 +1875,11 @@ static int web_test_page(void *ctx, int which)
         int k = printers_test_kind(which);
         if (!k) return 2;
         id = which;
-        port = k == 1;
+        port = k != 2;                             // the port's ImageWriter or StyleWriter
     }
     if (id < 0) return 2;
     if (xSemaphoreTake(s_job_lock, 0) != pdTRUE) return 1;
-    if (!port) {
-        ps_test_locked(id);
-        return 0;
-    }
-    test_page_locked();
+    test_page_to(id, port);
     return 0;
 }
 
@@ -1726,6 +2152,10 @@ static void status_json(void *ctx, char *buf, size_t cap)
         dip[8] = '\0';
     }
     char e_ssid[80], e_queue[80], e_job[200], e_model[80], e_name[80], e_host[96], e_phost[96], e_uri[200];
+    // W-1103: the port's printer, as AirPrint names it. The ImageWriter keeps the one name
+    // it has always been reported under.
+    const sw_spec_t *swp = s_port_sw ? sw_spec(printers_port_sw_model()) : NULL;
+    const char *model = swp ? swp->make_model : "Apple ImageWriter II";
 
     char laser[300], printers[128];
     laser_status_json(laser, sizeof laser);
@@ -1752,7 +2182,7 @@ static void status_json(void *ctx, char *buf, size_t cap)
         "\"uptime\":\"%uh %02um\",\"reset\":\"%s\",\"version\":\"%s\",\"heap\":\"%u KB\","
         "\"slot\":\"%s\",\"trial\":%s,\"rolled_back\":\"%s\","
         "\"known_good\":\"%s\",\"known_good_version\":\"%s\","
-        "\"model\":\"Apple ImageWriter II\",\"pic\":%s,"
+        "\"model\":\"%s\",\"pic\":%s,"
         "\"pmodel\":\"%s\",\"pname\":\"%s\",\"phost\":\"%s\",\"airprint\":%s,"
         "\"lt_port\":%d,\"lt\":%s,\"lt_chip\":\"%s\",\"dip\":\"%s\",\"ap\":\"AirWriter-%s\","
         "\"laser\":%s,\"printers\":%s,\"fresh\":%s,\"internal\":{\"free\":%u,\"lowest\":%u},"
@@ -1764,7 +2194,7 @@ static void status_json(void *ctx, char *buf, size_t cap)
         s_ap_mode ? "true" : "false",
         json_esc(e_job, sizeof e_job, job),
         attention || failed ? "true" : "false",
-        serial_out_clear() ? "true" : "false",
+        (s_port_sw ? s_iw_ready == 1 : serial_out_clear()) ? "true" : "false",
         s_printing ? "true" : "false", ribbon_name(s_ribbon),
         json_esc(e_queue, sizeof e_queue, s_set.queue), json_esc(e_host, sizeof e_host, s_set.hostname), s_ip,
         // in setup mode, the network it could not join ("" if none was set)
@@ -1778,7 +2208,7 @@ static void status_json(void *ctx, char *buf, size_t cap)
         (unsigned)(up / 3600), (unsigned)((up / 60) % 60),
         reset_name(esp_reset_reason()), app->version, (unsigned)(esp_get_free_heap_size() / 1024),
         ota_health_slot(), ota_health_on_trial() ? "true" : "false", ota_health_rolled_back(),
-        ota_health_known_good(), ota_health_known_good_version(),
+        ota_health_known_good(), ota_health_known_good_version(), model,
         pic_prog_available() ? "true" : "false",
         json_esc(e_model, sizeof e_model, s_saved_model), json_esc(e_name, sizeof e_name, s_saved_name),
         json_esc(e_phost, sizeof e_phost, s_saved_host), s_set.airprint ? "true" : "false", s_set.lt_port,
@@ -2126,7 +2556,14 @@ static void port_push(ps_state_t box)
     // Idle and not ready: printer off, unplugged or deselected. offline-report
     // is CUPS-only (not in the IANA registry), so it reports the registered
     // "other", which on a stopped printer reads as an error all the same.
-    if (st == PS_ATTENTION)
+    if (s_port_sw) {
+        // W-1103: a StyleWriter says what is wrong itself (no paper, a jam, the cartridge,
+        // the cover...), in the words of sw_status.c, and it has no SELECT. Nothing before
+        // it has answered: nothing is claimed.
+        sw_ipp_t w = sw_state_ipp(s_sw_state);
+        if (s_iw_ready < 0 || !w.reason) ipp_server_set_state_for(0, NULL, NULL, 0, 0);
+        else ipp_server_set_state_for(0, w.reason, w.message, 1, 0);
+    } else if (st == PS_ATTENTION)
         ipp_server_set_stopped("media-empty-error", "Needs attention: check paper and SELECT");
     else if (st == PS_OFFLINE)
         ipp_server_set_stopped("other", "Offline: check power, cable and SELECT");
@@ -2266,9 +2703,11 @@ void app_main(void)
                        .end = laser_doc_end, .cancel = laser_doc_cancel },
         .port_live = port_live, .port_screen = port_screen, .look = printers_look,
         .changed = printers_changed,
+        .clean = sw_clean_web, .confirm_sw = sw_confirm_queue,      // W-1103
     };
     memcpy(pc.mac, mac, sizeof pc.mac);
     ESP_ERROR_CHECK(printers_start(&pc));
+    s_port_sw = printers_port_is_stylewriter();         // W-1103: whose answers are the port's state
     if (updated && !s_set.airprint) {
         // W-1079's switch was the ImageWriter's alone: its record took it as
         // Share, and the switch is now the whole box's.
@@ -2335,7 +2774,12 @@ void app_main(void)
     };
     cable_test_init(&ct);
 #endif
-    // 4 KB: a ribbon change saves to NVS and re-announces mDNS from here.
+    // W-1103: the StyleWriter's line, over the port serial_out just brought up.
+    stylewriter_cfg_t swc = { .record_is_sw = printers_port_is_stylewriter, .state = sw_state_cb,
+                              .cart = sw_cart_seen, .cancelled = sw_cancelled };
+    stylewriter_start(&swc);
+    // 4 KB: a ribbon change saves to NVS and re-announces mDNS from here; the StyleWriter's
+    // questions and its model and cartridge saves run here too.
     xTaskCreate(kick_task, "kick", 4096, NULL, 3, NULL);
 
     job_pipe_cfg_t pipe = { .out = printer_out, .dither = algo, .gain = s_set.gain,
@@ -2398,12 +2842,12 @@ void app_main(void)
         .port         = 631,
         .port_printer = printers_port_ipp(),        // W-1088: as its record says
         .on_job_op    = on_activity,
-        .colour       = s_ribbon == IW_RIBBON_COLOUR,
+        .colour       = s_ribbon == IW_RIBBON_COLOUR && ribbon_offered(),
     };
     ipp_server_set_airprint(s_set.airprint);          // W-1079
     ESP_ERROR_CHECK(ipp_server_start(&cfg));
     // The ribbon may have been read while the server started; push what it is.
-    ipp_server_set_colour(s_ribbon == IW_RIBBON_COLOUR);
+    ipp_server_set_colour(s_ribbon == IW_RIBBON_COLOUR && ribbon_offered());
     ota_health_set(OH_IPP_UP, 1);
     // wifi_start returned joined, before this could hear the join.
     fwu_start(0);

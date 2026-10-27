@@ -12,7 +12,7 @@ ripjob_cfg_t job_pipe_rip_cfg(ripjob_cfg_t base, int (*colour_ok)(void *ctx), vo
     base.stage      = t->stage;
     base.dither     = t->dither;
     base.gain       = t->gain;
-    base.colour     = t->colour;
+    base.colour     = t->colour_ok ? t->colour_ok(t->colour_ctx) : t->colour;
     base.tone       = t->tone;
     base.top_margin = 0;
     return base;

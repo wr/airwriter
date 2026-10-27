@@ -30,7 +30,7 @@ SRCS    := $(wildcard $(COMP)/ripjob/*.c) \
            $(wildcard $(COMP)/imagewriter/*.c) \
            $(wildcard $(COMP)/testpage/*.c) \
            $(COMP)/stylewriter/sw_model.c $(COMP)/stylewriter/sw_code.c $(COMP)/stylewriter/sw_page.c \
-           $(COMP)/stylewriter/sw_session.c \
+           $(COMP)/stylewriter/sw_session.c $(COMP)/stylewriter/sw_status.c \
            $(COMP)/printers/port_policy.c \
            $(COMP)/serial_out/serial_writer.c
 TESTSRC := $(wildcard test/test_*.c)
@@ -106,6 +106,12 @@ build/test_cable: test/test_cable.c $(CT)/cable_core.c $(LT)/lt_proto.c | build
 build/%: test/%.c $(SRCS) | build
 	$(CC) $(CFLAGS) $(INCS) -Itest -o $@ $^ -lm
 
+# The board's StyleWriter glue, the real stylewriter.c, against stand-ins for the ESP-IDF headers
+# (test/shim) and a printer scripted in the test (W-1103).
+build/test_stylewriter_board: test/test_stylewriter_board.c $(COMP)/stylewriter/stylewriter.c \
+                              $(SRCS) | build
+	$(CC) $(CFLAGS) $(INCS) -Itest/shim -Itest -o $@ $^ -lm
+
 # The page stage's memory, counted through bigmem.h (BIGMEM_COUNT, R15).
 build/test_sw_page_mem: CFLAGS += -DBIGMEM_COUNT
 build/test_sw_page_mem: test/test_sw_page_mem.c $(SRCS) | build
@@ -124,7 +130,7 @@ build/port_policy.o: $(COMP)/printers/port_policy.c | build
 # The StyleWriter's model table, run coder, page stage and session are held to the same rule
 # as the printer list's core (W-1103): no writable statics; the page stage's block and the
 # session's frame buffer come from the board's PSRAM allocator (bigmem.h).
-SW_OBJS := build/sw_model.o build/sw_code.o build/sw_page.o build/sw_session.o
+SW_OBJS := build/sw_model.o build/sw_code.o build/sw_page.o build/sw_session.o build/sw_status.o
 build/sw_%.o: $(COMP)/stylewriter/sw_%.c | build
 	$(CC) $(CFLAGS) $(INCS) -c -o $@ $<
 

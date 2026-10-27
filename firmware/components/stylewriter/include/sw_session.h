@@ -46,7 +46,7 @@ typedef enum { SWS_READY, SWS_PRINTING, SWS_NO_PAPER, SWS_JAM, SWS_CART_MISSING,
 //                but the next job resets the printer anyway.
 //   SW_E_MODEL   the printer answers `?` as another model than the job was made for (nothing
 //                is sent after it), or its empty buffer is smaller than the model's blocks.
-//                Fail the job; the port's record has the wrong model.
+//                Fail the job and call sw_session_abort(); the port's record has the wrong model.
 //   SW_E_STALL   a fault, a full buffer or an unprinted page held the job for stall_ms.
 //                Fail the job and call sw_session_abort(): it ejects the page and resets.
 //   SW_E_FAULT   a fault bit the design does not name held for 10 s, a frame that is not
@@ -57,9 +57,12 @@ typedef enum { SWS_READY, SWS_PRINTING, SWS_NO_PAPER, SWS_JAM, SWS_CART_MISSING,
 //                harmless. Fail the job.
 //   SW_E_CART    the cartridge cannot be read (a colour model that answers `H` with neither
 //                81 nor 01, as with none fitted), or a colour page was sent to a black
-//                cartridge or to a job not made for colour. Fail the job.
+//                cartridge or to a job not made for colour. Fail the job and call
+//                sw_session_abort().
 // After any error but SW_E_CANCEL the session is not used again but for sw_session_abort and
-// sw_session_free.
+// sw_session_free. So every error ends the same way for a caller: sw_session_abort() (it
+// sends `E` and the reset once, and only if the session ever wrote), then job_pipe_abort() so
+// the rip task, which may be blocked in job_pipe_out(), is released.
 enum { SW_OK = 0, SW_E_SILENT = -1, SW_E_MODEL = -2, SW_E_STALL = -3, SW_E_FAULT = -4,
        SW_E_CANCEL = -5, SW_E_CART = -6 };
 

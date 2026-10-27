@@ -327,7 +327,7 @@ void serial_out_set_link(int baud, int cts)
     s_link_cts  = cts;
     apply_link_flow();
     uart_flush_input(s_cfg.uart_num);
-    ESP_LOGI(TAG, "link: %d baud, %s", baud, cts ? "CTS" : "no flow control");
+    ESP_LOGD(TAG, "link: %d baud, %s", baud, cts ? "CTS" : "no flow control");   // flips every 60 s for an off ImageWriter
 }
 
 int serial_out_read(uint8_t *b, size_t cap, uint32_t first_ms, uint32_t gap_ms)

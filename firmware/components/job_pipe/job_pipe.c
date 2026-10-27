@@ -28,9 +28,12 @@ static const char *TAG = "job";
 // The rip, then job_finished's flush and logging on top of it since W-1042:
 // a canceled iOS page left 944 bytes spare at 6144 on the bench.
 #define PIPE_STACK   7168
-// The printer task's: printer_out's resync and logging over one chunk. In
-// PSRAM, as the task writes no flash, so it costs internal RAM nothing.
-#define PRN_STACK    4096
+// The printer task's: printer_out's resync and logging over one chunk, or a
+// StyleWriter's session (W-1103), whose queries between blocks and whose state
+// callbacks (IPP, the panel) sit on top of the chunk's own 512 bytes. In PSRAM, as
+// the task writes no flash (a callback that did would crash it), so it costs
+// internal RAM nothing.
+#define PRN_STACK    6144
 #define PRN_CHUNK    512
 // A paused job (paper out, SELECT) bigger than the ring backs the upload up
 // behind the printer, so the push waits as long as the serial writer will,

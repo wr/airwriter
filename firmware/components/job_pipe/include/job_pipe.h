@@ -90,6 +90,12 @@ esp_err_t job_pipe_begin_to(const char *job_name, const job_pipe_target_t *t);
 // full, and stops waiting, dropping what is left, once the job is aborted. With
 // no ring (no PSRAM) it hands them straight to the job's consumer. From the
 // rip task, while a job is in the pipeline.
+//
+// The wait has no overall timeout. It ends when the printer takes the bytes or when
+// the job is aborted, so the consumer (cfg.out, a target's prn) that gives up on the
+// printer must call job_pipe_abort(): serial_out's writer does so through printer_fail()
+// after STALL_ABORT with no progress, a StyleWriter's session when the printer goes
+// silent or a fault holds past it.
 void job_pipe_out(const uint8_t *buf, size_t n);
 
 // Returns as soon as the bytes are in the buffer. Blocks only when the buffer
