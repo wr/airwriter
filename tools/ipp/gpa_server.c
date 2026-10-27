@@ -128,7 +128,7 @@ int main(int argc, char **argv)
         if (at < 0 || ipp_req_parse(&r, req + at, blen) != IPP_REQ_OK) { close(fd); continue; }
         char path[96] = "/";
         sscanf((char *)req, "%*s %95s", path);
-        int idx = ipp_route(path, res);
+        int idx = ipp_route(path, res, NULL);
 
         ipp_enc_t e;
         ipp_enc_init(&e, resp, sizeof resp);
