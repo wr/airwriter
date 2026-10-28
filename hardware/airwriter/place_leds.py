@@ -37,7 +37,7 @@ from pathlib import Path
 
 import pcbnew
 
-REPO = Path("/Users/wells/Projects/airwriter")
+REPO = Path(__file__).resolve().parents[2]
 BOARD = REPO / "hardware/airwriter/airwriter.kicad_pcb"
 SCH = REPO / "hardware/airwriter/airwriter.kicad_sch"
 PANEL_LAYOUT = REPO / "hardware/panel/panel_layout.json"

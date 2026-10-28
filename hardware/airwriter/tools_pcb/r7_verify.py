@@ -5,12 +5,14 @@ genuine L and its bbox throws false overlaps against everything near the notch.
 Run it after any placement change; it writes nothing.
 """
 import json
+import os
 import sys
-sys.path.insert(0, "/Users/wells/Projects/airwriter/hardware/airwriter/tools_pcb")
+HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, HERE)
 import pcbnew
 import r6_lib as L
 
-LAYOUT = "/Users/wells/Projects/airwriter/hardware/panel/panel_layout.json"
+LAYOUT = os.path.join(HERE, "..", "..", "panel", "panel_layout.json")
 ORIGIN = (100.0, 60.0)
 DOT_R = 5.6364 / 2
 BOARD = (100.0, 60.0, 162.0, 164.27)
