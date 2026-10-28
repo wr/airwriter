@@ -52,33 +52,33 @@ Display states, highest priority first:
 
 | # | State | Entered when | Left when | IPP |
 |---|---|---|---|---|
-| 1 | **Booting** | power-on | the Spin ends: once the board has settled (below, W-1049's quiet power-on), at the earliest 3.0 s and at the latest 30 s after power-on | idle |
+| 1 | **Booting** | power-on | the boot wave ends: once the board has settled (below, W-1049's quiet power-on), at the earliest 3.0 s and at the latest 30 s after power-on | idle |
 | 2 | **Setup** | no credentials, or the boot-time join failed; sub-state *phone joined* while ≥1 station is on the AP | credentials saved (the board reboots) | — |
-| 3 | **Joining Wi-Fi** | the Spin ended without Wi-Fi (the 30 s cap), and after any disconnect once joined | got an IP | — |
+| 3 | **Joining Wi-Fi** | the boot wave ended without Wi-Fi (the 30 s cap), and after any disconnect once joined | got an IP | — |
 | 4 | **Needs attention** | a job is active and HSKo has been false for `STALL_ATTENTION` (30 s) -- or for `OFFLINE_DEBOUNCE` (3 s) if it was already false when the job started: no printer to wait for | HSKo true (the job resumes), or `STALL_ABORT` (600 s) passes → job fails | stopped, `media-empty` |
 | 5 | **Job failed** | a job ends in failure (transfer cut, rip error, stall abort) | `FAILED_HOLD` (60 s) passes, or the next job starts | idle; the job is aborted |
 | 6 | **Printing** | a job starts | the job ends | processing |
-| 7 | **Printer offline** | no job, HSKo false for `OFFLINE_DEBOUNCE` (3 s), counted from the end of the Spin (the ImageWriter reports busy for ~3.5 s after the AirWriter powers up, W-1039) | HSKo true | stopped, `other`¹ |
+| 7 | **Printer offline** | no job, HSKo false for `OFFLINE_DEBOUNCE` (3 s), counted from the end of the boot wave (the ImageWriter reports busy for ~3.5 s after the AirWriter powers up, W-1039) | HSKo true | stopped, `other`¹ |
 | 8 | **Ready** | Wi-Fi up, HSKo true, nothing above applies | — | idle |
 
 **Quiet power-on** (W-1049; Wells, 2026-10-16: a normal power-on showed the Spin, Joining, the
-green, the printer gone and back, then Ready). The Spin is all a normal power-on shows. It runs
+green, the printer gone and back, then Ready). The boot wave is all a normal power-on shows. It runs
 until the board has **settled**, then goes out (1.3 s) straight into the state:
 
 - settled means Wi-Fi is up and the printer line has held still: ready for `BOOT_SETTLE_READY`
   (1 s), or not ready for `BOOT_SETTLE_OFFLINE` (10 s, counted from power-on: a printer switched on
   with the board keeps its line down for a few seconds while it starts). Setup mode or a job
   starting settles it at once;
-- the Spin runs at least `BOOT_MS` (3.0 s, its own show) and at most `BOOT_CAP` (30 s), so it
+- the boot wave runs at least `BOOT_MS` (3.0 s, its own show) and at most `BOOT_CAP` (30 s), so it
   never looks hung;
 - after it: Ready with nothing else, or Printer offline's embers directly (no "gone"), or Setup
   (no credentials), or Setup opened by the two red pulses (the saved network was tried and
   failed), or Joining (still no Wi-Fi at the cap);
-- the green Wi-Fi moment opens the Ready after the Spin only on the first power-on after Wi-Fi
+- the green Wi-Fi moment opens the Ready after the boot wave only on the first power-on after Wi-Fi
   was saved from the web page (the restart that follows; a flag that survives the restart, not a
   power cut), as confirmation. Otherwise it opens a Ready entered from Joining: a real rejoin.
 
-After the Spin, every moment plays for real changes as before.
+After the boot wave, every moment plays for real changes as before.
 
 **Asleep** is a modifier, not a state: after `SLEEP_AFTER` (300 s) with no activity while in
 *Ready* or *Printer offline*, the panel fades to one breathing dot. States 1–6 never sleep.
@@ -125,7 +125,7 @@ Colours are drive targets before the cap: `LG_BRIGHTNESS_CAP` 48/255 on FR4 dots
 attention, which gets `LG_ALERT_CAP` 96/255 (tuned on board 1: at 48 it was too dim to notice).
 Every pattern peaks at 100% of its cap: peaks of 60–90% read too dim on board 1, so each was
 scaled up to full with its lower levels in proportion (the same animation, brighter). The
-Spin's 60% hold is the exception.
+boot wave's 60% hold is the exception.
 "FR4 only" means mask dots stay dark.
 
 Every pattern uses the array: position drives sweeps, ripples and the print head, and each dot
@@ -139,7 +139,7 @@ only, since under the mask it turns mint.
 
 | State | Dots | Pattern |
 |---|---|---|
-| Booting | all; mask at 4× | **Spin**: a full-saturation hue wheel around the test button, spinning up from dark (dots fade in by distance), then collapsing inward to the test button: the far dots go first and the centre last, over 1.3 s from when the board settles (so a board settled by 1.7 s ends dark at 3.0 s, as before). While it waits longer, the wheel keeps turning at its 2.5 s pace (100°/s) and eases to 60% between 3 and 4 s, which also keeps the draw down while Wi-Fi joins. |
+| Booting | all; mask at 4× | **boot wave**: a rainbow in diagonal bands from the top-left corner to the bottom-right, hue `30·t − 14·(row + col)` degrees at saturation 90%, so each dot goes round the wheel every 12 s and neighbours are always close in hue; steady, no pulse. It comes in from the top-left corner (each dot fades in over 0.6 s, the bottom-right 0.4 s after the top-left), and once the board settles it rolls off the panel the way it flows, over 1.3 s, the bottom-right corner last (so a board settled by 1.7 s ends dark at 3.0 s). While it waits longer it eases to 60% between 3 and 4 s, which keeps the draw down while Wi-Fi joins. (Wells, 2026-10-28, picked on the shop's 3D model of the board. It replaced the Spin, a hue wheel turning round the test button: through the mask a dot's brightness swings hard with hue, a double-mask dot nearly black at red and bright at green, so the turning wheel blinked mask dots on and off out of step.) |
 | Setup | FR4 only | sky blue (hue 240° ±6° per dot, drifting ±3°) **pairing blink**: a 25% glow, and every 2.4 s every dot flashes to 100% twice together (90 ms and 390 ms in, ±70 ms), like a gadget waiting to pair. (A radar sweep, an arm turning round the test button, never read on the scattered FR4 dots.) |
 | Setup, phone joined | FR4 only | the same blues, steady at 88% with a per-dot shimmer of ±12% on its own 3–5.5 s period |
 | Joining Wi-Fi | FR4 only | sky blue (hue 240° ±6°) **rings pulsing outward** from the test button every 0.9 s, 10% floor, 100% at the ring |
@@ -164,9 +164,11 @@ before the cap, on FR4 and mask dots alike, and the numbers get a final tune on 
 No per-hue colour correction for the mask: calibration was tried and dropped (the cast is
 hue-dependent and not worth a lookup table).
 
-**Power.** Worst case is the boot spin: mask dots at 4× (192/255) with about 1.1 channels lit
-on average. Steady states drive FR4 dots only, so the steady draw falls well below today's
-37-dot breathe.
+**Power.** Worst case is the boot wave: mask dots at 4× (192/255) with about 1.1 channels lit
+on average. Its heaviest frame is the budget every other pattern is held to, and it is held to
+the Spin's it replaced (6990 counts; board 1 drew 0.46 A at about that, the whole board, on
+2026-10-16), both by host test. Steady states drive FR4 dots only, so the steady draw falls
+well below today's 37-dot breathe.
 
 ### Actions, moments and acknowledgements (W-1049)
 
@@ -186,10 +188,10 @@ renderer itself (the W-1049 panel-patterns page), with four held back (below).
 | white | ready, done, taken | (off in normal running) |
 | the four stripes | LocalTalk | — |
 
-The boot stays AirWriter's RGB Spin (FeatherFrame breathes white). The stripes are the classic
-Apple logo's without its red and purple (red is for failures, and purple reads as the update's
-pink), top to bottom over the eight rows, two rows each: hue 104°, 55°, 28°, 240° (stripe
-`⌊(row + 0.5)·4/8⌋`), saturation 85%, ±4° per dot.
+The boot stays AirWriter's rainbow, the boot wave (FeatherFrame breathes white). The stripes are
+the classic Apple logo's without its red and purple (red is for failures, and purple reads as the
+update's pink), top to bottom over the eight rows, two rows each: hue 104°, 55°, 28°, 240°
+(stripe `⌊(row + 0.5)·4/8⌋`), saturation 85%, ±4° per dot.
 
 **The sockets are on the bottom edge**: the printer (J2) under column 0.9, LocalTalk (J4) under
 column 3.2, USB-C under 5.5. A pattern about a cable starts at its socket, drawn from row 8.6,
@@ -207,12 +209,12 @@ just below the grid (the sockets themselves are 4.6 rows lower), so the wave ent
 3. **Acknowledgements**: at most 1.6 s, drawn over the state (screen blend), on any dots they
    need. Never during a task, and not in Needs attention or Job failed, so an alert is never
    hidden. Not over an all-dot moment (Page out, Cancelled, Could not join, Printer back into
-   Printing) or a cable test's answer either: together they would draw more than the Spin. One raised during Booting waits for the Spin to end, then plays from its start (the
+   Printing) or a cable test's answer either: together they would draw more than the boot wave. One raised during Booting waits for the boot wave to end, then plays from its start (the
    LocalTalk node comes online about 2 s into a mode-2 boot). A newer one replaces the one
    showing. They show over sleep without waking the panel; the ones a person causes also post
    `ACTIVITY` from their call site.
 
-No frame of any of these draws more than the boot spin's heaviest (host test). FR4 dots use the
+No frame of any of these draws more than the boot wave's heaviest (host test). FR4 dots use the
 normal cap except in red phases (alert cap); mask dots use the mask cap.
 
 **Moments.**
@@ -223,7 +225,7 @@ normal cap except in red phases (alert cap); mask dots use the mask cap.
 | Printer back | Printer offline → Ready, or Needs attention → Printing | a green wave (hue 130° ±14°, 100%) rolls out of the printer socket, crossing the panel in 1.1 s; ahead of it the old state, behind it green cross-fading to the new state over 150–900 ms after it passes. FR4 only from offline; all dots from attention (Printing's dots). | 2 s |
 | Page out | Printing → Ready, the job finished | the inked sheet rises off the top: its bottom edge climbs from row 8.5 to −1.5 in 0.9 s, the ink in bands (33–100%, period 3 rows) scrolling up with it; the job's ink (warm, or the stripes for LocalTalk); Ready below the edge; mask dots carry the ink and go dark below it. | 1 s |
 | Cancelled | Printing → Ready, the job cancelled | the print freezes where it stood (Printing's frame at the moment of the cancel) and fades out over 0.6 s; Ready fades in 0.3–0.9 s. No page out. | 0.9 s |
-| Could not join | Setup after the saved network was tried and failed (from Joining, or straight from the Spin; `ps_view_t.join_failed`) | two red pulses (hue 2° ±8°, 500 ms each, peak 100%) on all dots, FR4 at the alert cap, then Setup fades in 1.0–1.6 s. FeatherFrame's failed-join signal. | 1.6 s |
+| Could not join | Setup after the saved network was tried and failed (from Joining, or straight from the boot wave; `ps_view_t.join_failed`) | two red pulses (hue 2° ±8°, 500 ms each, peak 100%) on all dots, FR4 at the alert cap, then Setup fades in 1.0–1.6 s. FeatherFrame's failed-join signal. | 1.6 s |
 
 Any other change of state opens with no moment: the new state shows as it is (a job cancelled
 while it waits for paper goes from Needs attention straight to Printer offline's embers).
@@ -286,8 +288,8 @@ cap for white.
 |---|---|---|
 | Reset countdown | test button held past a tap (1 s) | a hand sweeps clockwise from 12 o'clock round the test button over 7 s, lighting each dot it passes (soft edge, the newest dots glowing, a 5% floor on the rest of the track); orange (hue 38°) through the first half, running to red by the end (`38·(1 − p^1.5)`, ±3° per dot); the lit dots beat 1 Hz rising to 3 Hz |
 | Reset cancelled | let go during the countdown | the sweep winds back to 12 o'clock and fades in 0.4 s; the state returns |
-| Point of no return, then done | 8 s held: settings erased | FR4 dots flash white and mask dots red (180 ms); the red drains inward into the test button (1 s); two full white beats on the FR4 dots (180 ms each); dark until the button is let go and the board restarts (Spin, then Setup) |
-| Reset confirmed at boot | after the bootloader's factory reset (button held through power-up) | the same flash, drain and beats once the Spin ends (2 s), then the state |
+| Point of no return, then done | 8 s held: settings erased | FR4 dots flash white and mask dots red (180 ms); the red drains inward into the test button (1 s); two full white beats on the FR4 dots (180 ms each); dark until the button is let go and the board restarts (the boot wave, then Setup) |
+| Reset confirmed at boot | after the bootloader's factory reset (button held through power-up) | the same flash, drain and beats once the boot wave ends (2 s), then the state |
 | Reset failed | the erase failed | Job failed's red glitch and pulse for 3 s, then the board restarts |
 
 ## Architecture
@@ -305,12 +307,12 @@ Units and their interfaces. Pure cores stay host-testable in `tools/rip`, as now
   phone_joined; greeted; asleep; since_ms; asleep_ms }`, the one view the LEDs, IPP and the web
   status all read. `greeted` marks a stretch of Ready entered from Joining, or from Booting after
   `PS_EV_WIFI_FRESH`, which the panel opens with the green Wi-Fi-connected moment. `spin_out` and
-  `spin_out_ms` say the Spin is going out and for how long; `join_failed` that Setup follows a
+  `spin_out_ms` say the boot wave is going out and for how long; `join_failed` that Setup follows a
   failed join of the saved network. `prev` is the display state before this one (Booting at first),
   which the panel's moments key off (W-1049).
 - `PS_EV_JOB_CANCELLED` ends a job as `JOB_DONE` does and sets `cancelled`; `JOB_START` clears
   it. Only the panel reads it (Cancelled instead of Page out).
-- Booting ends on the core's own clock (W-1049's quiet power-on): the Spin starts going out at
+- Booting ends on the core's own clock (W-1049's quiet power-on): the boot wave starts going out at
   the latest of `boot_ms − boot_out_ms` and the moment the board settled, or at
   `boot_cap_ms − boot_out_ms`, whichever is earlier, and Booting ends `boot_out_ms` later.
   `ps_timing_t` gains `boot_cap_ms` (30 000), `boot_out_ms` (1 300), `settle_ready_ms` (1 000) and
@@ -342,7 +344,7 @@ Units and their interfaces. Pure cores stay host-testable in `tools/rip`, as now
 
 **`led_grid_core`**
 - `lg_render(const ps_view_t *, const lg_opts_t *, t_ms, frame)`: one renderer per state,
-  materials as above, the Spin as a one-shot keyed off `since_ms`. `lg_opts_t { gamer }`.
+  materials as above, the boot wave as a one-shot keyed off `since_ms`. `lg_opts_t { gamer }`.
 - Gamer mode is DIP7 (`dip_config_t.gamer`; DIP8 stays spare), read live like the other
   switches and handed to the LED task with `led_grid_set_gamer()`.
 - **Test patterns do not ship.** The W-1034 rainbow and the boot-animation spike stay on their
@@ -386,10 +388,10 @@ Host (`tools/rip`, `make test`):
 - `test_printer_state`: every transition in the table, each timer edge (2.9 s vs 3.1 s offline
   debounce, 29 s vs 31 s attention, the 60 s failed hold, the 300 s sleep), priority between
   overlapping states, activity resetting sleep, and a job surviving a stall and resuming.
-- `test_led_grid`: per state — the cap holds; FR4-only states leave mask dots dark; the Spin
+- `test_led_grid`: per state — the cap holds; FR4-only states leave mask dots dark; the boot wave
   ends dark at 3.0 s; asleep lights exactly one dot.
 - `test_led_grid`, W-1049: for every moment, task and acknowledgement — caps hold (alert cap
-  only in red phases), no frame draws more than the Spin's heaviest, FR4-only patterns leave
+  only in red phases), no frame draws more than the boot wave's heaviest, FR4-only patterns leave
   mask dots dark, and each one ends on time with the state's own frame after it. Task priority
   (a reset hold covers an update, which shows again after the cancel; firmware covers
   TashTalk). Acknowledgements are dropped during a task and in Booting, Needs attention and
@@ -401,14 +403,14 @@ Host (`tools/rip`, `make test`):
   no credentials goes to Setup at 3.0 s; a failed join goes to Setup with `join_failed`; no Wi-Fi
   by the cap goes to Joining at 30 s; the green opens the first Ready only after
   `PS_EV_WIFI_FRESH`; a fast boot still ends at 3.0 s exactly.
-- `test_led_grid`, W-1049: the Spin waiting past 3 s stays lit at no more than its heaviest
+- `test_led_grid`, W-1049: the boot wave waiting past 3 s stays lit at no more than its heaviest
   frame, and goes dark `boot_out_ms` after it starts going out.
 - `test_serial_writer`: a write rides out a stall and succeeds when the line returns; fails only
   past the stall limit.
 - `make regress`: both `stream.bin` regressions unchanged (the raster path is untouched).
 
 On board 1:
-- Power-on shows the Spin, then Joining, then Ready (swell). Pull the printer cable → Printer
+- Power-on shows the boot wave, then Joining, then Ready (swell). Pull the printer cable → Printer
   offline within ~3 s; reconnect → Ready.
 - Deselect the printer mid-job → Needs attention after 30 s; reselect → the job resumes and the
   page prints complete. Note what iOS shows during the pause, and whether its upload survives.
