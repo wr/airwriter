@@ -42,8 +42,9 @@ swaps them, so J4's lines leave U3 on the side facing J4:
 
 Each port's HSKo has its own GPIO, on pins the DIP switches freed. The cable test drives
 each, and through a crossover IO8 reads J2.2 (from J4.1) and IO21 reads J4.2 (from J2.1).
-IO35–IO37 are left free, so the board also takes an octal-PSRAM module (R8), which uses
-them.
+U1 is the ESP32-S3-WROOM-1-N16R8 (16 MB flash, 8 MB octal PSRAM; rev A's is the N8R2): its
+PSRAM takes IO35–IO37, so those stay off every net. It needs its own firmware build, and it
+is rated to 65 °C.
 
 ## GPIOs that changed
 
@@ -54,10 +55,10 @@ them.
 | IO13 | `J4_HSKO_DRV` | J4's HSKo, through U3's driver 1; no pull-down (below) |
 | IO21 | `J4_HSKI_RX` | J4.2 through U3's receiver 1 |
 | IO47 | `HSKI_DRV` | J2's HSKo, through U3's driver 2; R24 holds it low until firmware |
-| IO35, IO37 | none | rev A's `HSKI_DRV` and `J4_HSKI_RX`; an octal-PSRAM module's own |
+| IO35–IO37 | the N16R8's PSRAM | rev A's `HSKI_DRV` (IO35) and `J4_HSKI_RX` (IO37) |
 | IO38–IO42 | none | rev A's DIP switches |
 
-Free: IO1, IO3, IO7, IO9–IO12, IO35–IO42, IO45, IO46.
+Free: IO1, IO3, IO7, IO9–IO12, IO38–IO42, IO45, IO46.
 
 ## Parts that moved from rev A
 
@@ -127,7 +128,8 @@ IO16 and IO15.
 
 - ERC: 0 errors, 44 known warnings.
 - DRC with `--severity-all --schematic-parity --refill-zones`: 0 errors, 0 unconnected, 5
-  `lib_footprint_mismatch` warnings, 15 field-parity warnings.
+  `lib_footprint_mismatch` warnings, no field-parity warnings (`r13_sync.py` now copies the
+  Description, Manufacturer and Datasheet fields too).
 - `r12_gnd.py`: one GND component, no stranded pads.
 - `r7_verify.py`: rev A's known FAIL lines, plus TP9 under U1.
 - `r13_check.py`: every pad of a part inside the board 0.30 mm or more from the edge, no

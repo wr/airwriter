@@ -14,7 +14,8 @@ This does what Update PCB from Schematic would, matched by reference:
     no symbol by design -- holes, test pads -- are left alone);
   - new symbols get a footprint from KiCad's library, parked off the board's
     east edge for r13_place.py; a changed footprint (D3) is swapped in place;
-  - values and the LCSC/MPN/Note fields follow the schematic;
+  - values and the LCSC, MPN, Note, Manufacturer, Description and Datasheet fields
+    follow the schematic;
   - every pad takes its net from the netlist, and copper on a net that was
     only renamed (the LocalTalk pairs) follows the rename.
 
@@ -36,7 +37,7 @@ RENAMED = {                                   # rev A net -> rev 2026.11 net
     '/LT_PORT_A': '/LT_PORT_RXD_N', '/LT_PORT_B': '/LT_PORT_RXD_P',
     '/LT_PORT_Y': '/LT_PORT_TXD_N', '/LT_PORT_Z': '/LT_PORT_TXD_P',
 }
-FIELDS = ('LCSC', 'MPN', 'Note')
+FIELDS = ('LCSC', 'MPN', 'Note', 'Manufacturer', 'Description', 'Datasheet')
 PARK_X, PARK_Y0 = 170.0, 70.0                 # east of the 162.05 edge
 
 

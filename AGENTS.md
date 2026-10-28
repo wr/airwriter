@@ -369,9 +369,10 @@ Linear is the queue; these are the live items.
   routed on branch `ww/rev-2026-11-board-updates-4f0c6a` (`docs/hardware-rev-2026-11.md`), not
   merged. Next: Wells reviews the routing in KiCad, then the PCBWay order (November or
   December). No DIP switches; each port's HSKo has its own GPIO (J2's IO47, J4's IO13, J4's
-  HSKi IO21), and IO35–IO37 are free, so the board takes an N16R8 (octal PSRAM) module as
-  well as a quad-PSRAM one. SW1 is the Macintosh Mini's BZCN TSB001A3518A. Firmware for it:
-  `W-1109 Firmware for rev 2026.11 boards: straps, own handshake pins, no DIPs, Lite`.
+  HSKi IO21), and U1 is the ESP32-S3-WROOM-1-N16R8 (16 MB flash, 8 MB octal PSRAM on
+  IO35–IO37), which needs its own firmware build. SW1 is the Macintosh Mini's BZCN
+  TSB001A3518A. Firmware for it:
+  `W-1109 Firmware for rev 2026.11 boards: N16R8 build, straps, own handshake pins, no DIPs, Lite`.
 - `W-1046 Factory reset must always work, even with broken firmware` and
   `W-1045 Long-press factory reset with live feedback on the LED panel`: merged 2026-10-15, benched
   on board 1 (all pass). Board 1 has the W-1059 bootloader and partition table, so an image
@@ -540,7 +541,7 @@ Linear is the queue; these are the live items.
   2 `isolated_pin_label`).
 - **Board:** `kicad-cli pcb drc --severity-all --schematic-parity --refill-zones` on
   `hardware/airwriter/airwriter.kicad_pcb` → 0 errors, 0 unconnected, 5 `lib_footprint_mismatch`
-  warnings, 15 field-parity warnings (rev 2026.11, 2026-10-28). Treat any unconnected item as real;
+  warnings, no field-parity warnings (rev 2026.11, 2026-10-28). Treat any unconnected item as real;
   `tools_pcb/r12_gnd.py` checks that every GND pad is on the main plane. The combined panel
   under its default rules shows only known
   items (~221 false clearance, 6 copper_edge and 4 silk_edge where J1, J2, J4 and U1 meet

@@ -59,8 +59,9 @@ AirWriter leaves R33 off. Both are single-sided (the top side of the file).
    align by the chamfer, not by "pad 1". A 180° placement breaks the whole chain.
 8. Substitutions allowed: any 10 k 1 % 0603 for C25804, any 15 k 1 % 0603 for C22809 and any
    1 k 1 % 0603 for C21190.
-   **No substitution** for U1–U9, J1, J2, SW1–SW3 or D3, and U1 must be the quad-PSRAM
-   **ESP32-S3-WROOM-1-N8R2**, never an octal-PSRAM (R8) variant.
+   **No substitution** for U1–U9, J1, J2, SW1–SW3 or D3, and U1 must be the
+   **ESP32-S3-WROOM-1-N16R8** (16 MB flash, 8 MB octal PSRAM, LCSC C2913202), never a
+   quad-PSRAM (R2) variant: the firmware is built for the octal PSRAM.
 9. Please confirm polarity of U2, U3, U6, U8 (SOIC pin-1 dot), U5 and U9, the U7 socket
    notch, D3 and J1 against `airwriter-top.png` (the main board alone, at about 40 px/mm)
    before placement.

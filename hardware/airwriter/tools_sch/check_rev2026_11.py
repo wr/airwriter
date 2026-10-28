@@ -48,6 +48,7 @@ GONE_REFS = {'C7', 'R5', 'R6', 'R7', 'R26', 'R28', 'R31', 'S1'}  # R26: IO3 boxe
 FREE = {'U1.28', 'U1.29', 'U1.30'}     # IO35-37: an octal-PSRAM module's own
 GONE_NETS = {*(f'/DIP{n}' for n in range(1, 9)), '/DIP3_GPIO', '/LT_A', '/LT_B', '/LT_Y', '/LT_Z', '/LT_PORT_A', '/LT_PORT_B', '/LT_PORT_Y', '/LT_PORT_Z'}
 PARTS = {  # ref: (value, LCSC)
+    'U1': ('ESP32-S3-WROOM-1-N16R8', 'C2913202'),       # its octal PSRAM takes IO35-IO37 (FREE)
     'U3': ('SP3232EBEN-L/TR', 'C6852'), 'U9': ('SN74LV1T125DCKR', 'C75925'),
     'R17': ('150R', 'C22808'), 'SW3': ('TS-1002-BR15026', 'C920209'), 'D3': (None, 'C20613324'),
     'R9': ('0R', 'C21189'), 'R27': ('1k', 'C21190'), 'SW1': ('TSB001A3518A', 'C2888448'),

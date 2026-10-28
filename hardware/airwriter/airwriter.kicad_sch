@@ -11389,7 +11389,7 @@
 				)
 			)
 		)
-		(property "LCSC" "C2913204"
+		(property "LCSC" "C2913202"
 			(at 204.47 135.89 0)
 			(hide yes)
 			(effects
@@ -11398,7 +11398,7 @@
 				)
 			)
 		)
-		(property "Value" "ESP32-S3-WROOM-1-N8R2"
+		(property "Value" "ESP32-S3-WROOM-1-N16R8"
 			(at 204.47 143.51 0)
 			(effects
 				(font
@@ -11424,7 +11424,7 @@
 				)
 			)
 		)
-		(property "MPN" "ESP32-S3-WROOM-1-N8R2"
+		(property "MPN" "ESP32-S3-WROOM-1-N16R8"
 			(at 204.47 135.89 0)
 			(hide yes)
 			(effects
@@ -11442,7 +11442,7 @@
 				)
 			)
 		)
-		(property "Description" "WiFi/BLE module, ESP32-S3, 8MB flash, 2MB PSRAM, PCB antenna"
+		(property "Description" "WiFi/BLE module, ESP32-S3, 16MB flash, 8MB octal PSRAM (uses IO35-IO37), PCB antenna"
 			(at 204.47 135.89 0)
 			(hide yes)
 			(effects
