@@ -9,8 +9,10 @@
 #
 # Steps: rev A's board, then r13_sync.py (follow the schematic), r13_place.py
 # (place parts, D3, TP9, silk, refill), r13_clean.py (remove copper the
-# changes made wrong; refuses to cut any net the design didn't change), and
-# r13_place.py again so the pours are refilled round the cleaned copper.
+# changes made wrong; refuses to cut any net the design didn't change),
+# r13_place.py again so the pours are refilled round the cleaned copper, and
+# r13_reroute.py (the rev A copper and parts moved to make room, U3's channel
+# swap). Then r13_route.py draws the new traces.
 set -e
 HERE=$(cd "$(dirname "$0")" && pwd)
 BOARD_DIR=$(cd "$HERE/.." && pwd)
@@ -27,4 +29,5 @@ python3 "$BOARD_DIR/tools_sch/check_rev2026_11.py" "$NET"
 "$KP" "$HERE/r13_place.py" 2>&1 | quiet
 "$KP" "$HERE/r13_clean.py" 2>&1 | quiet
 "$KP" "$HERE/r13_place.py" 2>&1 | quiet
+"$KP" "$HERE/r13_reroute.py" 2>&1 | quiet
 rm -f "$NET"

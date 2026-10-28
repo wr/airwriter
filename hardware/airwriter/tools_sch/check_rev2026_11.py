@@ -11,9 +11,8 @@ WANT = {
     '/BOOT_CFG': {'U1.27', 'SW2.1', 'R21.2'},
     '/LT_DE': {'U6.3', 'U7.3', 'U8.2', 'R22.1'},
     '/LED_DATA': {'U1.25', 'U9.2', 'R23.1'},
-    '/HSKI_DRV': {'U1.28', 'U3.11', 'R24.1'},
+    '/HSKI_DRV': {'U1.28', 'U3.10', 'U3.11', 'R24.1'},   # IO35 drives both of U3's drivers
     '/UART_TX': {'U1.10', 'U2.3', 'R25.2'},
-    '/IO3': {'U1.15', 'R26.2'},
     '/LT_RESET': {'U1.38', 'R27.1'},
     '/LT_MCLR': {'R27.2', 'U7.4'},
     '/DIP3': {'S1.3', 'R28.1'},
@@ -22,13 +21,15 @@ WANT = {
     '/PR_TXD_P_IN': {'R29.2', 'U2.8'},
     '/PR_TXD_N': {'J2.5', 'R30.1'},
     '/PR_TXD_N_IN': {'R30.2', 'U2.7'},
-    '/J4_HSKO_DRV': {'U1.18', 'U3.10', 'R31.1'},
-    '/J4_HSKO': {'U3.7', 'J4.1'},
-    '/J4_HSKI': {'U3.8', 'J4.2'},
-    '/J4_HSKI_RX': {'U3.9', 'U1.19'},
-    '/BOARD_REV': {'U1.20', 'R32.1'},
-    '/BOARD_LITE': {'U1.17', 'R33.1'},
-    '/HSKI_RS232': {'U3.14', 'R9.1'},
+    # U3's channels: J2 on driver 2 / receiver 2 (pins 7-10), J4 on driver 1 / receiver 1 (11-14)
+    '/J4_HSKO': {'U3.14', 'J4.1'},
+    '/J4_HSKI': {'U3.13', 'J4.2'},
+    '/J4_HSKI_RX': {'U3.12', 'U1.30'},
+    '/BOARD_REV': {'U1.9', 'R32.1'},
+    '/BOARD_LITE': {'U1.8', 'R33.1'},
+    '/HSKI_RS232': {'U3.7', 'R9.1'},
+    '/PR_HSKO': {'U3.8', 'J2.2'},
+    '/UART_CTS': {'U3.9', 'U1.12'},
     '/PR_HSKI': {'J2.1', 'R9.2'},
     '/LT_RXD_N': {'R10.1', 'U8.7'},
     '/LT_RXD_P': {'R11.1', 'U8.6'},
@@ -39,16 +40,16 @@ WANT = {
     '/LT_PORT_TXD_N': {'R12.2', 'J4.3'},
     '/LT_PORT_TXD_P': {'R13.2', 'J4.6'},
 }
-ON_RAIL = {'/+3V3': {'R21.1', 'R25.1', 'R26.1'},
-           '/GND': {'R22.2', 'R23.2', 'R24.2', 'R31.2', 'R32.2', 'R33.2'}}
+ON_RAIL = {'/+3V3': {'R21.1', 'R25.1'},
+           '/GND': {'R22.2', 'R23.2', 'R24.2', 'R32.2', 'R33.2'}}
 OFF_RAIL = {'/GND': {'U3.8', 'U3.10'}}
-GONE_REFS = {'C7', 'R5', 'R6', 'R7'}
-GONE_NETS = {'/LT_A', '/LT_B', '/LT_Y', '/LT_Z', '/LT_PORT_A', '/LT_PORT_B', '/LT_PORT_Y', '/LT_PORT_Z'}
+GONE_REFS = {'C7', 'R5', 'R6', 'R7', 'R26', 'R31'}  # R26: IO3 is boxed in; R31: no own GPIO (see the design)
+GONE_NETS = {'/J4_HSKO_DRV', '/LT_A', '/LT_B', '/LT_Y', '/LT_Z', '/LT_PORT_A', '/LT_PORT_B', '/LT_PORT_Y', '/LT_PORT_Z'}
 PARTS = {  # ref: (value, LCSC)
     'U3': ('SP3232EBEN-L/TR', 'C6852'), 'U9': ('SN74LV1T125DCKR', 'C75925'),
     'R17': ('150R', 'C22808'), 'SW3': ('TS-1002-BR15026', 'C920209'), 'D3': (None, 'C20613324'),
     'R9': ('0R', 'C21189'), 'R27': ('1k', 'C21190'), 'R28': ('1k', 'C21190'),
-    **{f'R{n}': ('10k', 'C25804') for n in (21, 22, 23, 24, 25, 26, 29, 30, 31, 32, 33)},
+    **{f'R{n}': ('10k', 'C25804') for n in (21, 22, 23, 24, 25, 29, 30, 32, 33)},
 }
 
 root = ET.parse(sys.argv[1]).getroot()

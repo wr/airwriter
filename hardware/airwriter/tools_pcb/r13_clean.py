@@ -23,8 +23,12 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 BOARD = os.path.join(HERE, '..', 'airwriter.kicad_pcb')
 COPPER = (pcbnew.F_Cu, pcbnew.B_Cu)
 # Nets whose pads rev 2026.11 changed: their stubs may be cut on a re-run too.
+# Rev A routes kept although cut short: r13_reroute.py joins them back up.
+KEEP = {'/LT_RESET',     # U1.38 to U7.4 along the back; R27 now sits in it
+        '/UART_CTS', '/PR_HSKO', '/HSKI_RS232'}   # U3's channel swap moves their pins
 NEW_NETS = {'/LT_RESET', '/LT_MCLR', '/DIP3', '/DIP3_GPIO', '/PR_TXD_P', '/PR_TXD_N',
-            '/PR_TXD_P_IN', '/PR_TXD_N_IN', '/J4_HSKO_DRV', '/J4_HSKI', 'Net-(D3-K)', '/+3V3'}
+            '/PR_TXD_P_IN', '/PR_TXD_N_IN', '/J4_HSKI', 'Net-(D3-K)', '/+3V3',
+            '/UART_CTS', '/PR_HSKO', '/HSKI_RS232'}
 
 
 def mm(v):
@@ -102,6 +106,8 @@ def dangling(board, nets):
                        and any(v.HitTest(e) for e in ends_of(o)) for o in tracks))
 
     for t in tracks:
+        if t.GetNetname() in KEEP:
+            continue
         if isinstance(t, pcbnew.PCB_VIA):
             # a via earns its keep only by joining two layers
             if sum(via_joined(t, layer) for layer in COPPER) < 2:

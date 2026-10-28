@@ -8,7 +8,9 @@ sets positions and attributes outright and adds TP9 and the texts only once.
 
 Every resistor sits beside the pin it serves, on a spot found clear of other
 courtyards, F.Cu copper (0.25 mm), U7's TASHTALK label, the antenna keepout
-and the lit dots' light paths. Wells draws the traces.
+and the lit dots' light paths. Rev A parts that move to make room move in
+r13_reroute.py, after r13_clean.py has seen the board as rev A left it;
+r13_route.py draws the new traces.
 
 D3 stands under the top case's slash: centred at (159.35, 160.38), its leads
 along the slash's -77.5 degrees, the cathode (pad 1) to the north toward R17.
@@ -29,16 +31,14 @@ PLACE = {  # ref: (x, y, orientation); pad 1 is west at 0, south at 90
     'R21': (141.30, 151.20, 90),    # IO0 pull-up, on C7's old spot: pad 2 meets BOOT_CFG
     'R22': (126.55, 129.05, 0),     # LT_DE pull-down, north of U7.3
     'R23': (147.70, 127.16, 0),     # IO48 pull-down, beside U9.2
-    'R24': (139.00, 152.00, 0),     # IO35 pull-down, south of U1.28
-    'R25': (118.42, 152.56, 90),    # IO17 pull-up, beside U2's 3V3 pin
-    'R26': (135.75, 129.30, 0),     # IO3 pull-up, north of U1.15
-    'R27': (122.59, 130.59, 0),     # 1 k into U7.4 (MCLR)
-    'R28': (140.12, 153.80, 0),     # 1 k in DIP3, south of U1, west of SW2's label
+    'R24': (119.725, 143.25, 180),  # IO35 pull-down, just below U3 where IO35 drops to the back
+    'R25': (136.00, 151.00, 90),    # IO17 pull-up, east of U6, off UART_TX's back run by a via
+    'R27': (134.12, 136.00, -90),   # 1 k in LT_RESET's back run, east of U7
+    'R28': (145.62, 151.10, 90),    # 1 k in DIP3, right under IO40 (pin 33)
     'R29': (112.75, 152.50, 90),    # 10 k, J2.8 to U2.8
     'R30': (109.75, 153.25, 0),     # 10 k, J2.5 to U2.7
-    'R31': (134.25, 135.90, 90),    # IO10/T2IN pull-down, west of U1.18
-    'R32': (134.25, 139.16, 90),    # revision strap, west of U1.20
-    'R33': (134.25, 132.81, 90),    # Lite strap, west of U1.15-17
+    'R32': (141.45, 129.05, 180),   # revision strap, north of U1, beside IO16 (pin 9)
+    'R33': (144.50, 129.05, 180),   # Lite strap, north of U1, above IO15 (pin 8)
     'R17': (160.50, 155.60, 0),     # D3's resistor, north of it: clear of the keepout and the lattice's D3 tube
 }
 
