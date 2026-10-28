@@ -63,9 +63,16 @@ class TestEnvelopes(unittest.TestCase):
         self.assertAlmostEqual(top[4], 15.0, delta=0.1)
 
     def test_no_model_parts_and_overrides(self):
-        self.assertAlmostEqual(max(b[4] for b in self.env["S1"]), 9.41)
         self.assertAlmostEqual(max(b[4] for b in self.env["U7"]), 9.00)
         self.assertAlmostEqual(max(b[4] for b in self.env["D13"]), 1.60)
+
+    def test_sw1_is_read_from_its_model_button_and_all(self):
+        # Rev 2026.11's BZCN TSB001A3518A has a model (lib/make_sw1_model.py):
+        # its button reaches KiCad x 159.91, past the courtyard box a
+        # NO_MODEL entry would give (160.05 would be the courtyard's edge).
+        bands = self.env["SW1"]
+        self.assertAlmostEqual(max(b[1] for b in bands), 159.91 - 100.0, delta=0.05)
+        self.assertAlmostEqual(max(b[4] for b in bands), 3.52, delta=0.05)
 
     def test_d3_stands_on_its_spacer_where_the_board_puts_it(self):
         # Rev 2026.11: a 3 mm LED on a 4 x 8 mm spacer, two models on one

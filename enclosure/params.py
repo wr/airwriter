@@ -263,32 +263,13 @@ as the side-surface glitch. Raised to 0.80 so there is real margin (0.15mm)
 outside each key's own edge once DIP_KEY_HALF_WIDTH is subtracted first --
 see case.dip_slot()."""
 
-RESET_ACTUATOR_Z = 3.5 / 2
-"""Height of SW1's (Panasonic EVQP44B3M side-press) actuator axis above the
-board's top face. SW1 has no 3D model placed on the board, so this can't be
-booleaned from a STEP; its footprint's own descr instead records the body as
-6.2 x 2.55 x 3.5mm. A side-press switch's SMD body sits flush on the board
-like any other SMD part (Z=0 at its base), and the side button is centred on
-the body's own height, so the axis lands at half of 3.5mm -- a derivation
-from the footprint descr, unverified against a Panasonic mechanical drawing
-(not in this repo). This is consistent with (NOT confirmed by)
-EVQP44B3M_SidePress.wrl (hand-authored, not wired to the footprint -- OCCT
-can't import .wrl anyway): its actuator Transform's Z translation is 0.689
-(the file's own header: values are mm/2.54) = 1.7499mm, matching to within
-the file's own rounding. That agreement is NOT independent evidence -- the
-WRL was hand-written from measured dimensions with the actuator's Z set
-equal to the body's centre Z, the same "centred on the body" assumption used
-above, so the two were guaranteed to agree to four decimal places regardless
-of whether the assumption is right. The number (1.75mm) stands; task 6 report
-has the full derivation and the ruling that struck the "independently
-confirmed" framing.
-
-RULING 1 (task-6-report.md) drops carveouts() and its CARVEOUT_R/
-CARVEOUT_CLEAR params: the tray's interior is one open prism, and U4/R3/U9
-all sit well inboard of every wall, so subtracting cylinders there would
-subtract air from air. test_case.TestSideFeaturesAndTray covers the
-requirement's real intent instead -- see its
-test_internal_parts_keep_at_least_1mm_of_air_to_the_tray."""
+RESET_ACTUATOR_Z = 1.90
+"""Height of SW1's button axis above the board's top face. Rev 2026.11's SW1 is
+the BZCN TSB001A3518A (LCSC C2888448): its 3.0 x 1.5 mm button spans z
+1.15-2.65 in LCSC's model, which hardware/airwriter/lib/make_sw1_model.py
+redraws. Rev A's Panasonic EVQP44B3M put it at 1.75 (half its 3.5 mm body,
+derived, never measured); a rev A tray is in git history at the hw-rev-a tag.
+Unmeasured on a real TSB001A3518A."""
 
 # --- derived ---------------------------------------------------------------
 

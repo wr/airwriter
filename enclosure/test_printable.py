@@ -64,10 +64,12 @@ def wall_lintels():
     depth = p.WALL - p.POCKET_CLEAR
     mid = -(p.WALL + p.POCKET_CLEAR) / 2
     out = []
-    bb = case.dip_slot().bounding_box()
-    wall = Pos(mid, (bb.min.Y + bb.max.Y) / 2, (bb.min.Z + bb.max.Z) / 2) * Box(
-        depth, bb.size.Y, bb.size.Z)
-    out.append(("S1", wall.bounding_box(), bb.size.Y))
+    slot = case.dip_slot()                  # none on a board without S1
+    if slot is not None:
+        bb = slot.bounding_box()
+        wall = Pos(mid, (bb.min.Y + bb.max.Y) / 2, (bb.min.Z + bb.max.Z) / 2) * Box(
+            depth, bb.size.Y, bb.size.Z)
+        out.append(("S1", wall.bounding_box(), bb.size.Y))
     for ref in ("J2", "J4", "J1"):
         bb = case._grown(ref, p.PORT_CLEAR).bounding_box()
         wall = Pos((bb.min.X + bb.max.X) / 2, mid, (bb.min.Z + bb.max.Z) / 2) * Box(
