@@ -105,6 +105,13 @@ Traps already explained in a code comment are listed only when the comment is ea
   status-language spec's material table), not from a screen.
 - **A raw pyserial open on macOS drops the S3 into download mode** (the driver asserts DTR at
   open). Read the console only with `idf.py monitor` under `script` (AGENTS.md, bench rules).
+- **Rev A can power up into download mode: D3 lit, panel dark, no Wi-Fi, console silent.** IO0
+  has C7 (100 nF) to GND and only the S3's ~45 k internal pull-up, so it races EN's 10 k / 1 µF
+  and sometimes is still low when the straps latch (board 1, 2026-10-28: `GPIO_STRAP` 0x23,
+  bit 3 clear, after a power-on reset; IO0 read high once it had charged). No firmware runs, so
+  none can help. An `idf.py monitor` reset and esptool's RTS reset leave it there (USB resets
+  don't re-latch the straps); `esptool.py -p /dev/cu.usbmodem* --before no_reset --after
+  watchdog_reset read_mac` does re-latch them, and so do SW1 or unplugging. Rev B fixes it.
 - **An image built without W-1046 is rolled back at its next reboot** when a W-1046 image
   installs it over the air: the installer marks it on trial, and nothing in it ever keeps
   itself. It runs fine until then. Rebase a branch on W-1046 before OTAing it to a W-1046 board,
