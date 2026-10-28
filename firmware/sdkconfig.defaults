@@ -41,3 +41,9 @@ CONFIG_SECURE_BOOT_BUILD_SIGNED_BINARIES=y
 # (SPEC.md 3.12); a build with a key of your own makes a board that takes
 # only your builds. The build says how to make one if it is missing.
 CONFIG_SECURE_BOOT_SIGNING_KEY="firmware_signing_key.pem"
+
+# W-1108: app_main never returns, and at boot it reaches mDNS and the
+# partition and OTA calls; by GCC's count that is at least 2.7 KB before
+# logging's formatting, which tools/stackcheck needs 1 KB spare for. IDF's
+# 3,584 left too little.
+CONFIG_ESP_MAIN_TASK_STACK_SIZE=4608

@@ -517,7 +517,10 @@ Linear is the queue; these are the live items.
   (`build/lwhost`) to `etpeer.py`'s fake LaserWriter over a pipe (lookup, query, print, busy,
   paper out, PostScript error, cancel, a silent printer). `tools/ipp/test/golden/` pins the
   ImageWriter's IPP answers byte for byte.
-- **Firmware:** `idf.py build` clean.
+- **Firmware:** `idf.py build` clean, then `python3 tools/stackcheck/stackcheck.py` (needs the
+  toolchain `export.sh` puts on PATH): every task that makes ESP-IDF's deep calls keeps 1 KB
+  of its stack spare by GCC's count (W-1108). A local sdkconfig older than W-1108 fails it on
+  `app_main` until its `CONFIG_ESP_MAIN_TASK_STACK_SIZE` is 4608, as in `sdkconfig.defaults`.
 - **Web page:** `python3 tools/webui/preview.py`, then http://localhost:8079/_states: every state
   at desktop and phone width, light and dark, before a change to the page goes to the board.
   Its `/api/panel` plays `tools/lights`' scene frames for each state's `ps` (it builds them with
@@ -578,6 +581,7 @@ tools/iwview/         iwview.py draws any ImageWriter stream (test page, a Local
 tools/lights/         the wiki's GIF of every panel light effect, played through led_grid_core;
                       after changing an effect, `make -C tools/lights OUT=<wiki>/images/lights`
 tools/release/        release.sh (build, check, sign, publish), tamper.py (refusal-test images)
+tools/stackcheck/     stackcheck.py: worst-case stack of the tasks that make ESP-IDF's deep calls
 fixtures/             captured URF samples and expected streams
 enclosure/            3D printed case (build123d): tray, Lite lid, Pro lattice; out/*.stl committed
 ```

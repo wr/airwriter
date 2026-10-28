@@ -623,13 +623,33 @@ static key_t_ running_key(void)
     return KEY_AIRWRITER;
 }
 
+// running_key() on a task of its own: it reads the image and hashes the keys
+// in its signature block, at least 2.6 KB of stack by GCC's count, and on the
+// main task, under app_main's own frames, it came within 200 bytes of the
+// 3,584 there (W-1108, tools/stackcheck). The main task waits for it.
+#define KEY_STACK 4096
+
+static void key_task(void *arg)
+{
+    s_key = running_key();
+    xSemaphoreGive((SemaphoreHandle_t)arg);
+    vTaskDelete(NULL);
+}
+
 esp_err_t fw_update_start(const fw_update_cfg_t *cfg)
 {
     s_cfg = *cfg;
     s_auto = cfg->auto_on ? 1 : 0;
     s_mx = xSemaphoreCreateMutex();
     if (!s_mx) return ESP_ERR_NO_MEM;
-    s_key = running_key();
+    SemaphoreHandle_t known = xSemaphoreCreateBinary();
+    if (!known) return ESP_ERR_NO_MEM;
+    if (xTaskCreate(key_task, "fw_key", KEY_STACK, known, 2, NULL) != pdPASS) {
+        vSemaphoreDelete(known);
+        return ESP_ERR_NO_MEM;
+    }
+    xSemaphoreTake(known, portMAX_DELAY);
+    vSemaphoreDelete(known);
     ESP_LOGI(TAG, "running %s, signed with %s key; auto-update %s",
              esp_app_get_description()->version,
              s_key == KEY_AIRWRITER ? "the AirWriter release" : s_key == KEY_OTHER ? "another"
