@@ -15,10 +15,10 @@ void ps_init(ps_t *ps, const ps_timing_t *tm, uint64_t now)
 static uint64_t max64(uint64_t a, uint64_t b) { return a > b ? a : b; }
 static uint64_t min64(uint64_t a, uint64_t b) { return a < b ? a : b; }
 
-// W-1049's quiet power-on: when the Spin starts going out, or 0 while it is
+// W-1049's quiet power-on: when the boot wave starts going out, or 0 while it is
 // still waiting at `now`. The board has settled once Wi-Fi is up and the
 // printer line has held still (ready a moment, or down long enough to be no
-// printer), or at once on setup mode or a job. The Spin shows at least
+// printer), or at once on setup mode or a job. The boot wave shows at least
 // boot_ms and at most boot_cap_ms, going out for the last boot_out_ms.
 static uint64_t out_start(const ps_t *ps, uint64_t now)
 {
@@ -36,7 +36,7 @@ static uint64_t out_start(const ps_t *ps, uint64_t now)
     return at <= now ? at : 0;
 }
 
-// Latches the Spin's going-out once the board has settled. Run before each
+// Latches the boot wave's going-out once the board has settled. Run before each
 // event, so the moment is judged on what held until then, and on each update.
 static void latch_out(ps_t *ps, uint64_t now)
 {
@@ -107,7 +107,7 @@ static ps_state_t derive(const ps_t *ps, uint64_t now)
     if (ps->failed && now - ps->failed_at < ps->tm.failed_hold_ms) return PS_FAILED;
     if (ps->job) return PS_PRINTING;
     // The ImageWriter reports busy for ~3.5 s after the AirWriter powers up
-    // and then clears by itself (W-1039). The Spin waits for the line to
+    // and then clears by itself (W-1039). The boot wave waits for the line to
     // settle (out_start), so after it a down line is a real one: the embers
     // come straight up for a printer that never came, with no Ready first.
     if (!ps->line_ready && now - ps->line_since >= ps->tm.offline_debounce_ms)
@@ -123,7 +123,7 @@ ps_view_t ps_update(ps_t *ps, uint64_t now)
     ps_state_t st = derive(ps, now);
     if (st != ps->last) {
         // The green Wi-Fi moment is for a real join, or the first one after
-        // Wi-Fi was set up; a normal power-on is the Spin alone (W-1049).
+        // Wi-Fi was set up; a normal power-on is the boot wave alone (W-1049).
         if (st == PS_READY)
             ps->greeted = ps->last == PS_JOINING || (ps->last == PS_BOOTING && ps->fresh);
         ps->prev = ps->last;

@@ -501,7 +501,7 @@ static void printer_line_changed(void *ctx, int ready)
 
 // W-1088: the box's line while idle. Ready while any shared printer is; with
 // nothing shared, the port's line, as before. Unknown (-1) until the port's
-// ImageWriter, when shared, has reported, so the quiet power-on's Spin waits.
+// ImageWriter, when shared, has reported, so the quiet power-on's boot wave waits.
 static int box_ready(void)
 {
     int iw = printers_port_shared(), lw = laser_ready();   // lw < 0: none shared
@@ -514,7 +514,7 @@ static int box_ready(void)
 // W-1082: the line the panel follows, chosen again whenever a job starts or
 // ends, the printer list changes, or a LaserWriter's readiness changes. Its
 // state is posted at once (the panel takes a repeat as nothing new); before a
-// LaserWriter has answered there is none, so the quiet power-on's Spin waits
+// LaserWriter has answered there is none, so the quiet power-on's boot wave waits
 // for it, to its 30 s cap.
 static void line_source(void)
 {
@@ -1487,7 +1487,7 @@ static void on_hold(btn_ev_t ev)
 }
 
 // The bootloader erased the settings at power-up (test button held through
-// it): show the reset's confirmation once the boot spin is over.
+// it): show the reset's confirmation once the boot wave is over.
 static volatile int s_boot_reset;
 
 // ----------------------------------------------------------------- wifi

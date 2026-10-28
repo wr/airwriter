@@ -18,7 +18,7 @@ typedef struct {
     uint32_t len;               // ms
     ps_state_t st, prev;
     uint32_t since0;            // since_ms at the segment's start
-    uint32_t settle;            // BOOTING: the Spin starts going out this far in (0: never)
+    uint32_t settle;            // BOOTING: the boot wave starts going out this far in (0: never)
     uint8_t  act; uint16_t arg; uint8_t ramp;   // ramp: arg runs 0..1000 over the segment
     uint8_t  blip;
     uint8_t  src, gamer, greeted, phone, cancelled, join_failed, cable;
@@ -90,7 +90,7 @@ int main(void)
     printf("\n");
 
     // ---------------------------------------------------------- the states
-    scene("spin", "cut", 0);    // a board that settles early: the original 3 s Spin
+    scene("boot-wave", "cut", 0);   // a board that settles early: the shortest boot, 3 s
     SEG(.len = 3000, .st = PS_BOOTING, .settle = 1700);
     SEG(.len = 600, .st = PS_BOOTING, .since0 = 3000, .settle = 1700);
 

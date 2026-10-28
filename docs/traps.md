@@ -98,7 +98,8 @@ Traps already explained in a code comment are listed only when the comment is ea
   interrupt is on core 1 too. An unpinned task is not "free to use the idle core".
 - **Rev A has no hardware LED current limit.** `LG_BRIGHTNESS_CAP` and friends in
   `led_grid_core.h` are the only limit on 37 SK6812s; raise them knowingly. All 37 lit at
-  about the boot Spin's heaviest draw measured 5.2 V, 0.461 A for the whole board.
+  about the boot animation's heaviest draw (the Spin's then; the boot wave is held under it)
+  measured 5.2 V, 0.461 A for the whole board.
 - **The panel is not true RGB.** Through the FR4, blue reads cyan except at hue 240 (sky blue),
   270 is pale lavender, 285 onward pink, and there is no purple; under the mask white turns
   mint. Pick colours from the measured map (`tools/lights/panel_colours.json`, the

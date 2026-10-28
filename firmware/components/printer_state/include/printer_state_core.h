@@ -37,9 +37,9 @@ typedef struct {
     uint32_t sleep_after_ms;       // ready or offline with no activity -> asleep
     uint32_t kick_after_ms;        // idle and not ready this long -> send CTRL-X (W-1039)
     uint32_t kick_every_ms;        // and again at most this often while it stays stuck
-    // W-1049's quiet power-on: the Spin runs until the board has settled.
+    // W-1049's quiet power-on: the boot wave runs until the board has settled.
     uint32_t boot_cap_ms;          // ... but never longer than this from power-on
-    uint32_t boot_out_ms;          // the Spin's going-out, from settled to the state
+    uint32_t boot_out_ms;          // the boot wave's going-out, from settled to the state
     uint32_t settle_ready_ms;      // the printer line ready this long: settled
     uint32_t settle_offline_ms;    // or not ready this long (a printer starting up holds it down)
 } ps_timing_t;
@@ -58,7 +58,7 @@ typedef struct {
     ps_timing_t tm;
     uint64_t    boot_at, line_since, failed_at, activity_at, state_since, kicked_at, cable_at;
     uint64_t    wifi_at, setup_at, job_at, out_at;  // W-1049: when each happened; out_at is
-                                                     // when the Spin started going out
+                                                     // when the boot wave started going out
     uint8_t     out;               // out_at is set
     uint8_t     tried;             // the saved network was tried (PS_EV_WIFI_JOINING)
     uint8_t     join_failed;       // setup mode after a failed try
@@ -78,7 +78,7 @@ typedef struct {
                               // moments are drawn from it (W-1049)
     uint8_t    cancelled;     // the last job was cancelled, not finished
     uint8_t    join_failed;   // SETUP only: the saved network was tried and failed
-    uint8_t    spin_out;      // BOOTING only: the Spin is going out (the board has settled)
+    uint8_t    spin_out;      // BOOTING only: the boot wave is going out (the board has settled)
     uint32_t   spin_out_ms;   // ... for this long
     uint8_t    phone_joined;  // SETUP only: a station is on the access point
     uint8_t    greeted;       // READY only: entered straight from JOINING or BOOTING,
