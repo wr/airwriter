@@ -8,6 +8,7 @@
 
 #define LG_BRIGHTNESS_CAP 48    // of 255, FR4 dots -- no hardware current limit on rev A
 #define LG_MASK_CAP       192   // mask dots in the all-dot states: 4x, they pass ~10% / ~5%
+#define LG_BOOT_MASK_CAP  190   // the boot wave's: 1% under, so no frame draws more than the Spin did
 #define LG_ALERT_CAP      96    // FR4 dots in Needs attention: it has to read across the room
 #define LG_BOOT_MS        3000  // the shortest boot wave; main sets printer_state's boot_ms to this
 #define LG_SPIN_OUT_MS    1300  // the boot wave going out once the board settles (boot_out_ms)

@@ -142,21 +142,23 @@ int lg_pilot_index(void)
 
 // The boot wave, as the shop's 3D model of the board draws it: a rainbow in
 // diagonal bands from the top-left corner to the bottom-right, 14 degrees a
-// step along the diagonal, each dot going round the wheel every 12 s, so
-// neighbours are always close in hue. (It replaced the Spin, a hue wheel round
-// the test button, whose mask dots blinked on and off out of step: through the
-// mask a dot's brightness swings hard with hue.) It comes in from the top-left
+// step along the diagonal, each dot going round the wheel every 4 s, so
+// neighbours are always close in hue and the bands cross the panel in about
+// 2 s. (It replaced the Spin, a hue wheel round the test button, whose mask
+// dots blinked on and off out of step: through the mask a dot's brightness
+// swings hard with hue. At first it turned at 30 degrees a second, which on
+// board 1 read as too slow; Wells picked 90.) It comes in from the top-left
 // corner. W-1049's quiet power-on keeps it running until the board has
 // settled, eased to 60% after 3 s (less draw while Wi-Fi joins); then it rolls
 // off the panel the way it flows, over LG_SPIN_OUT_MS (`out`, `e` seconds in),
 // the bottom-right corner last. A board settled early starts going out at
-// 1.7 s and is dark at 3.0 s.
+// 1.7 s and is dark at 3.0 s. Its mask dots take LG_BOOT_MASK_CAP.
 static lg_c3 boot_wave(int r, int c, float t, int out, float e)
 {
     float d = (float)(r + c) / (float)(LG_ROWS + LG_COLS - 2);     // 0 top-left, 1 bottom-right
     float v = ss(0, 0.6f, t - d * 0.4f) * (1 - 0.4f * ss(3.0f, 4.0f, t));
     if (out) v *= 1 - ss(0.6f, 1.3f, e + (1 - d) * 0.6f);
-    return hsv(30 * t - 14 * (float)(r + c), 0.9f, v);
+    return hsv(90 * t - 14 * (float)(r + c), 0.9f, v);
 }
 
 // LocalTalk's colours: the stripes of the classic Apple logo without its red
@@ -702,7 +704,7 @@ void lg_render16(const ps_view_t *v, const lg_opts_t *o, uint32_t t_ms,
         if (!fr4 && !all && !blip) continue;   // FR4-only state: mask dot stays dark
         lg_c3 c = fr4 || all ? sc(view_dot(v, o, i, t_ms), 1 - sleep_k) : DARK;
         if (blip) c = screen(c, blip_dot(o->blip, o->blip_ms, i, t_ms));
-        float cap = !fr4 ? LG_MASK_CAP
+        float cap = !fr4 ? (v->state == PS_BOOTING ? LG_BOOT_MASK_CAP : LG_MASK_CAP)
                   : v->state == PS_ATTENTION || join_failed(v) ? LG_ALERT_CAP : LG_BRIGHTNESS_CAP;
         put_dot(out[i], level16(c.r, cap), level16(c.g, cap), level16(c.b, cap));
     }

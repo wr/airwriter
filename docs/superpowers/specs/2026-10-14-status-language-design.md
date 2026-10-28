@@ -139,7 +139,7 @@ only, since under the mask it turns mint.
 
 | State | Dots | Pattern |
 |---|---|---|
-| Booting | all; mask at 4× | **boot wave**: a rainbow in diagonal bands from the top-left corner to the bottom-right, hue `30·t − 14·(row + col)` degrees at saturation 90%, so each dot goes round the wheel every 12 s and neighbours are always close in hue; steady, no pulse. It comes in from the top-left corner (each dot fades in over 0.6 s, the bottom-right 0.4 s after the top-left), and once the board settles it rolls off the panel the way it flows, over 1.3 s, the bottom-right corner last (so a board settled by 1.7 s ends dark at 3.0 s). While it waits longer it eases to 60% between 3 and 4 s, which keeps the draw down while Wi-Fi joins. (Wells, 2026-10-28, picked on the shop's 3D model of the board. It replaced the Spin, a hue wheel turning round the test button: through the mask a dot's brightness swings hard with hue, a double-mask dot nearly black at red and bright at green, so the turning wheel blinked mask dots on and off out of step.) |
+| Booting | all; mask at 190/255, 1% under 4× | **boot wave**: a rainbow in diagonal bands from the top-left corner to the bottom-right, hue `90·t − 14·(row + col)` degrees at saturation 90%, so each dot goes round the wheel every 4 s, the bands cross the panel in about 2 s, and neighbours are always close in hue; steady, no pulse. It comes in from the top-left corner (each dot fades in over 0.6 s, the bottom-right 0.4 s after the top-left), and once the board settles it rolls off the panel the way it flows, over 1.3 s, the bottom-right corner last (so a board settled by 1.7 s ends dark at 3.0 s). While it waits longer it eases to 60% between 3 and 4 s, which keeps the draw down while Wi-Fi joins. (Wells, 2026-10-28, picked on the shop's 3D model of the board. It replaced the Spin, a hue wheel turning round the test button: through the mask a dot's brightness swings hard with hue, a double-mask dot nearly black at red and bright at green, so the turning wheel blinked mask dots on and off out of step. At first it turned at 30° a second, which on board 1 read as too slow; Wells picked 90 from previews. Its mask cap, `LG_BOOT_MASK_CAP`, keeps its heaviest frame under the Spin's.) |
 | Setup | FR4 only | sky blue (hue 240° ±6° per dot, drifting ±3°) **pairing blink**: a 25% glow, and every 2.4 s every dot flashes to 100% twice together (90 ms and 390 ms in, ±70 ms), like a gadget waiting to pair. (A radar sweep, an arm turning round the test button, never read on the scattered FR4 dots.) |
 | Setup, phone joined | FR4 only | the same blues, steady at 88% with a per-dot shimmer of ±12% on its own 3–5.5 s period |
 | Joining Wi-Fi | FR4 only | sky blue (hue 240° ±6°) **rings pulsing outward** from the test button every 0.9 s, 10% floor, 100% at the ring |
@@ -164,8 +164,8 @@ before the cap, on FR4 and mask dots alike, and the numbers get a final tune on 
 No per-hue colour correction for the mask: calibration was tried and dropped (the cast is
 hue-dependent and not worth a lookup table).
 
-**Power.** Worst case is the boot wave: mask dots at 4× (192/255) with about 1.1 channels lit
-on average. Its heaviest frame is the budget every other pattern is held to, and it is held to
+**Power.** Worst case is the boot wave: mask dots at about 4× (190/255) with about 1.1 channels
+lit on average. Its heaviest frame is the budget every other pattern is held to, and it is held to
 the Spin's it replaced (6990 counts; board 1 drew 0.46 A at about that, the whole board, on
 2026-10-16), both by host test. Steady states drive FR4 dots only, so the steady draw falls
 well below today's 37-dot breathe.
