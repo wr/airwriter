@@ -8,7 +8,7 @@
 	(property "Reference" "REF**"
 		(at 1.27 -2.96 0)
 		(layer "F.SilkS")
-		(uuid "0eca516e-fc94-430e-b478-b6af9c5705f9")
+		(uuid "021b8d63-5585-4a19-b6ce-a6f67e63b874")
 		(effects
 			(font
 				(size 1 1)
@@ -19,7 +19,7 @@
 	(property "Value" "LED_D3.0mm"
 		(at 1.27 2.96 0)
 		(layer "F.Fab")
-		(uuid "c5804ed9-3a17-413c-acc6-14c60d8a4a79")
+		(uuid "120dd432-807e-4724-81f1-375cb6a979fc")
 		(effects
 			(font
 				(size 1 1)
@@ -31,7 +31,7 @@
 		(at 0 0 0)
 		(layer "F.Fab")
 		(hide yes)
-		(uuid "c1940db4-a8f8-44e3-b86c-634c5e4e0947")
+		(uuid "6b63e873-9430-4e07-a36e-5fcc36fc7740")
 		(effects
 			(font
 				(size 1.27 1.27)
@@ -42,7 +42,7 @@
 		(at 0 0 0)
 		(layer "F.Fab")
 		(hide yes)
-		(uuid "d56ac0c7-9d79-477e-8631-62a4e7ee753f")
+		(uuid "f4c6881f-eee0-46ef-adce-b85821635a86")
 		(effects
 			(font
 				(size 1.27 1.27)
@@ -53,7 +53,7 @@
 		(at 0 0 0)
 		(layer "F.SilkS")
 		(hide yes)
-		(uuid "cebbaeaf-6e00-44d7-844c-92703689130e")
+		(uuid "7619b8d0-bd1a-43bf-bfa6-ecda9de6d86c")
 		(effects
 			(font
 				(size 1 1)
@@ -71,7 +71,7 @@
 			(type solid)
 		)
 		(layer "F.SilkS")
-		(uuid "c8814b63-6591-4d2d-a72f-ae07b2120262")
+		(uuid "b151a887-9718-4166-b284-345de6a97e14")
 	)
 	(fp_line
 		(start -0.29 1.08)
@@ -81,7 +81,7 @@
 			(type solid)
 		)
 		(layer "F.SilkS")
-		(uuid "76e07f4f-6ff5-4db0-b99c-0b3994719562")
+		(uuid "4adc6fde-90e7-42b5-af14-b46b9b652c25")
 	)
 	(fp_arc
 		(start -0.29 -1.235516)
@@ -92,7 +92,7 @@
 			(type solid)
 		)
 		(layer "F.SilkS")
-		(uuid "d8d261b0-019e-4753-87ae-37d10fcec751")
+		(uuid "1fd5d122-423e-4487-ae9f-a55853f1cec2")
 	)
 	(fp_arc
 		(start 0.229039 -1.08)
@@ -103,7 +103,7 @@
 			(type solid)
 		)
 		(layer "F.SilkS")
-		(uuid "e6fcf0c5-83e7-464c-acfb-088862ec5f33")
+		(uuid "abacead6-b63c-4ec6-99ee-a54942bd904a")
 	)
 	(fp_arc
 		(start 2.310961 1.08)
@@ -114,7 +114,7 @@
 			(type solid)
 		)
 		(layer "F.SilkS")
-		(uuid "3deaae5a-29ee-419f-ac5c-7e18cf4a3716")
+		(uuid "62f6387c-3772-4acb-831c-fafa80023fa7")
 	)
 	(fp_arc
 		(start 2.941437 1.08)
@@ -125,7 +125,7 @@
 			(type solid)
 		)
 		(layer "F.SilkS")
-		(uuid "dac274a6-9c3b-4431-9970-6f13bea3570c")
+		(uuid "e8afd8d5-559d-4600-b520-4152e78aa60a")
 	)
 	(fp_circle
 		(center 1.27 0)
@@ -136,7 +136,7 @@
 		)
 		(fill no)
 		(layer "F.CrtYd")
-		(uuid "9af8c787-e794-46b8-b35d-d639bd3b30be")
+		(uuid "514f172c-b116-434d-b04c-a6f551b10ae3")
 	)
 	(fp_line
 		(start -0.23 -1.16619)
@@ -146,7 +146,7 @@
 			(type solid)
 		)
 		(layer "F.Fab")
-		(uuid "36c4cc89-7529-4704-a9c7-b0cab52595f5")
+		(uuid "5b2ea8cd-3e95-4b2f-8b7c-b90a1e57a048")
 	)
 	(fp_arc
 		(start -0.23 -1.16619)
@@ -157,7 +157,7 @@
 			(type solid)
 		)
 		(layer "F.Fab")
-		(uuid "419e24c3-1c45-4f01-8ddb-5be1461e802e")
+		(uuid "5e064778-aaa6-4fa8-be6a-720b7e92a59e")
 	)
 	(fp_circle
 		(center 1.27 0)
@@ -168,7 +168,7 @@
 		)
 		(fill no)
 		(layer "F.Fab")
-		(uuid "4385a706-e03a-49a7-b4a9-4779ec6634f8")
+		(uuid "41192dd1-d032-420d-b7a3-10a03f52473b")
 	)
 	(fp_circle
 		(center 1.27 0)
@@ -179,12 +179,12 @@
 		)
 		(fill no)
 		(layer "F.Fab")
-		(uuid "581c0271-3563-4018-af12-de7825a88930")
+		(uuid "bffea182-eb58-4bb7-9d88-4f6cab40ed60")
 	)
 	(fp_text user "${REFERENCE}"
 		(at 1.27 0 0)
 		(layer "F.Fab")
-		(uuid "2aa53b18-c970-4459-a7b9-33e508f9d8f5")
+		(uuid "8cfece50-8569-4af8-9506-b13546e630c5")
 		(effects
 			(font
 				(size 0.8 0.8)
@@ -196,7 +196,7 @@
 		(at 1.27 0)
 		(size 2)
 		(layer "F.Fab")
-		(uuid "cd5b1abe-e01a-4331-a677-e38959d1c4fd")
+		(uuid "64a4b234-2e45-4692-bc38-636ce2cb8b8a")
 	)
 	(pad "1" thru_hole rect
 		(at 0 0)
@@ -204,7 +204,7 @@
 		(drill 0.9)
 		(layers "*.Cu" "*.Mask")
 		(remove_unused_layers no)
-		(uuid "b86cab4c-5b4b-4fa9-ba3f-a9abc5b6449a")
+		(uuid "df5b9536-91dd-4bd0-bd13-1e964958db67")
 	)
 	(pad "2" thru_hole circle
 		(at 2.54 0)
@@ -212,12 +212,12 @@
 		(drill 0.9)
 		(layers "*.Cu" "*.Mask")
 		(remove_unused_layers no)
-		(uuid "b435b3a6-71eb-4bb0-b7ba-a7c7abf976bd")
+		(uuid "0eb92ea2-ce61-438c-9208-fcf31bbcfead")
 	)
 	(embedded_fonts no)
-	(model "${KICAD10_3DMODEL_DIR}/LED_THT.3dshapes/LED_D3.0mm.step"
+	(model "${KIPRJMOD}/lib/airwriter.3dshapes/LED_D3.0mm_FlatTop.step"
 		(offset
-			(xyz 0 0 8)
+			(xyz 1.27 0 8)
 		)
 		(scale
 			(xyz 1 1 1)

@@ -6,9 +6,10 @@
 Starts from KiCad's LED_D3.0mm (pads, silk, fab) and changes what the spacer
 changes. The courtyard is a circle round the spacer (4.0 mm + 0.15 mm) rather
 than the stock rectangle, because D3 stands 0.9 mm from J1's shell and the
-stock outline meets J1's generous courtyard. The 3D models put the LED 8 mm up
-on a spacer model (lib/make_led_spacer_model.py), so the lattice and case
-read its real envelope. Saved through KiCad's own footprint writer.
+stock outline meets J1's generous courtyard. The 3D models are the flat-top
+LED 8 mm up on its spacer (both from lib/make_led_spacer_model.py; KiCad's own
+3 mm LED is a dome on long legs that would reach 16.3 mm), so the lattice and
+case read the real envelope. Saved through KiCad's own footprint writer.
 """
 import os
 
@@ -21,7 +22,7 @@ NAME = 'LED_D3.0mm_Spacer_H8mm'
 AXIS_X = 1.27              # the LED's axis, between its pads
 SPACER_R, COURTYARD_R = 2.0, 2.15
 SPACER_H = 8.0
-MODELS = ('${KICAD10_3DMODEL_DIR}/LED_THT.3dshapes/LED_D3.0mm.step',
+MODELS = ('${KIPRJMOD}/lib/airwriter.3dshapes/LED_D3.0mm_FlatTop.step',
           '${KIPRJMOD}/lib/airwriter.3dshapes/LED_Spacer_D4.0mm_H8mm.step')
 
 
@@ -43,9 +44,10 @@ def main():
     fp.SetLibDescription('3 mm round THT LED on a 4 x 8 mm nylon spacer '
                          '(HIWA LED4*8, LCSC C92326): lens about 11.85 mm above the board')
     fp.SetKeywords('LED THT 3mm spacer standoff')
-    models = fp.Models()           # the stock LED model, lifted onto the spacer
+    models = fp.Models()           # the flat-top LED (lib/make_led_spacer_model.py), on the spacer
     led = models[0]
     led.m_Filename = MODELS[0]
+    led.m_Offset.x = AXIS_X
     led.m_Offset.z = SPACER_H
     spacer = pcbnew.FP_3DMODEL()
     spacer.m_Filename = MODELS[1]

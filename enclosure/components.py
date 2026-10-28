@@ -136,20 +136,24 @@ def envelopes() -> dict[str, list[Band]]:
     if _ENV is not None:
         return _ENV
     fps = bg._all()
-    stem = {r: _norm(pathlib.Path(f.model).stem) if f.model else None
-            for r, f in fps.items()}
+    # A footprint may carry more than one model (D3: LED and spacer); each STEP
+    # body is matched to a footprint by its model's name, and a footprint's
+    # bodies all add to its envelope.
+    stems = {r: [_norm(pathlib.Path(m).stem) for m in (f.model, *f.extra_models) if m]
+             for r, f in fps.items()}
     env: dict[str, list[Band]] = {}
-    used: set[str] = set()
+    used: set[tuple[str, str]] = set()
     for child in import_step(str(export())).children:
         bb = child.bounding_box()
         cx, cy = (bb.min.X + bb.max.X) / 2, -(bb.min.Y + bb.max.Y) / 2
+        label = _norm(child.label)
         cands = sorted((math.hypot(f.x - cx, f.y - cy), r) for r, f in fps.items()
-                       if stem[r] == _norm(child.label) and r not in used)
+                       if label in stems[r] and (r, label) not in used)
         if not cands:
             raise RuntimeError(f"STEP body {child.label!r} matches no footprint")
         ref = cands[0][1]
-        used.add(ref)
-        env[ref] = _bands(child)
+        used.add((ref, label))
+        env[ref] = sorted(env.get(ref, []) + _bands(child), key=lambda b: b[4])
     for ref, f in fps.items():
         if ref in env or FLAT.fullmatch(ref) or f.layer != "F.Cu":
             continue

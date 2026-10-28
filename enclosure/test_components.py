@@ -67,12 +67,19 @@ class TestEnvelopes(unittest.TestCase):
         self.assertAlmostEqual(max(b[4] for b in self.env["U7"]), 9.00)
         self.assertAlmostEqual(max(b[4] for b in self.env["D13"]), 1.60)
 
-    def test_d3_is_where_the_board_puts_it(self):
-        (x0, x1, y0, y1, top), = self.env["D3"]
+    def test_d3_stands_on_its_spacer_where_the_board_puts_it(self):
+        # Rev 2026.11: a 3 mm LED on a 4 x 8 mm spacer, two models on one
+        # footprint. Both count: the spacer at the bottom, the lens near 11.85.
+        bands = self.env["D3"]
         f = bg.footprint("D3")
         x, y = bg.to_case(f.x, f.y)
+        low = [b for b in bands if b[4] <= 1.0 + 1e-6]   # the bottom slice: spacer and leads
+        x0, x1 = min(b[0] for b in low), max(b[1] for b in low)
+        y0, y1 = min(b[2] for b in low), max(b[3] for b in low)
         self.assertTrue(x0 < x < x1 and y0 < y < y1)
-        self.assertLess(top, 1.2)
+        self.assertGreater(x1 - x0, 3.9)                 # the 4.0 mm spacer
+        self.assertGreater(y1 - y0, 3.9)
+        self.assertAlmostEqual(max(b[4] for b in bands), 11.85, delta=0.3)
 
 
 if __name__ == "__main__":

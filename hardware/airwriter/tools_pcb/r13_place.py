@@ -39,7 +39,7 @@ PLACE = {  # ref: (x, y, orientation); pad 1 is west at 0, south at 90
     'R31': (134.25, 135.90, 90),    # IO10/T2IN pull-down, west of U1.18
     'R32': (134.25, 139.16, 90),    # revision strap, west of U1.20
     'R33': (134.25, 132.81, 90),    # Lite strap, west of U1.15-17
-    'R17': (160.50, 156.30, 90),    # D3's resistor, north of it, out of the antenna keepout
+    'R17': (160.50, 155.60, 0),     # D3's resistor, north of it: clear of the keepout and the lattice's D3 tube
 }
 
 SLASH = (159.35, 160.38, -77.5)     # centre and angle of the top case's slash
