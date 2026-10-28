@@ -1,6 +1,7 @@
 # PCBWay order notes: rev 2026.11 combined panel
 
-Paste-ready. Upload **only** `hardware/combined-fab.zip` and `hardware/combined/combined-top.png`.
+Paste-ready. Upload **only** `hardware/combined-fab.zip`, `hardware/combined/combined-top.png` and
+`hardware/combined/airwriter-top.png`.
 Standing rule: quote to Wells before the order is placed. Rev A's order (W654223ASS53,
 T-S54W654223A) and its notes are in git history.
 
@@ -35,12 +36,14 @@ AirWriter leaves R33 off. Both are single-sided (the top side of the file).
 
 1. **J2 (Kycon KMDGX-8S-BS mini-DIN-8): ASSEMBLE.** Not at LCSC; source from Mouser.
    Through-hole, 11 joints.
-2. **J4: DO NOT ASSEMBLE.** It is fitted by hand with the TashTalk add-on, and is absent
-   from both position files.
+2. **J4: DO NOT ASSEMBLE, and keep its 11 holes free of solder.** It is fitted by hand with
+   the TashTalk add-on, and is absent from both position files. If J2 is wave or selectively
+   soldered, mask J4's holes.
 3. **U7: fit ONLY the DIP-8 socket, LCSC C72124.** Do not buy or fit the PIC.
 4. **D3: through-hole 3 mm flat-top green LED (LCSC C20613324) standing on a HIWA LED4*8
    nylon spacer (LCSC C92326):** leads through the spacer's bore, the LED's flange seated
-   on the spacer, lens up. Cathode (pad 1) toward R17.
+   on the spacer, lens up. Cathode (pad 1) toward R17, where the silk reads K;
+   the spacer hides the square pad.
 5. **Through-hole parts (J2, S1, SW3, U7's socket, D3): solder every joint fully.** Rev A's
    first boards came back with S1, U7 and SW3 only tacked.
 6. **MT1–MT4: Wurth 9774030151R** M2.5 SMT standoff, not at LCSC; source from Digi-Key or
@@ -51,11 +54,13 @@ AirWriter leaves R33 off. Both are single-sided (the top side of the file).
    on the footprint's chamfer/notch corner, the top-left corner of every LED in the top-view
    image. The footprint's pad numbering is rotated 180° from the datasheet's pin numbers:
    align by the chamfer, not by "pad 1". A 180° placement breaks the whole chain.
-8. Substitutions allowed: any 10 k 1 % 0603 for C25804 and any 1 k 1 % 0603 for C21190.
+8. Substitutions allowed: any 10 k 1 % 0603 for C25804, any 15 k 1 % 0603 for C22809 and any
+   1 k 1 % 0603 for C21190.
    **No substitution** for U1–U9, J1, J2, S1, SW1–SW3 or D3, and U1 must be the quad-PSRAM
    **ESP32-S3-WROOM-1-N8R2**, never an octal-PSRAM (R8) variant.
 9. Please confirm polarity of U2, U3, U6, U8 (SOIC pin-1 dot), U5 and U9, the U7 socket
-   notch, D3 and J1 against `combined-top.png` before placement.
+   notch, D3 and J1 against `airwriter-top.png` (the main board alone, at about 40 px/mm)
+   before placement.
 
 ## Known engineering-query answers
 
@@ -83,11 +88,13 @@ AirWriter leaves R33 off. Both are single-sided (the top side of the file).
 | Upload | Never upload |
 |---|---|
 | `hardware/combined-fab.zip` | anything else |
-| `hardware/combined/combined-top.png` (assembly and polarity reference) | |
+| `hardware/combined/combined-top.png` (the panel) | |
+| `hardware/combined/airwriter-top.png` (the main board, assembly and polarity reference) | |
 
 Regenerate the package only with `python3 hardware/combine_boards.py` then
 `sh hardware/combined/make_fab.sh`, and check it with the battery in `AGENTS.md`
 (Verification): ERC, both DRCs with `--severity-all`, the drill floor, 138 and 61 position
-rows. `combined-top.png` is rendered from `hardware/combined/combined.kicad_pcb` with
-`kicad-cli pcb render --side top --quality high --use-board-stackup-colors -w 2328 -h 1264`
-on a white background.
+rows. Both pictures are `kicad-cli pcb render --side top --quality high
+--use-board-stackup-colors`, flattened onto white: `combined-top.png` from
+`hardware/combined/combined.kicad_pcb` at `-w 2328 -h 1264`, `airwriter-top.png` from
+`hardware/airwriter/airwriter.kicad_pcb` at `-w 2600 -h 4200`.

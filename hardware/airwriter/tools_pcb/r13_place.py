@@ -39,12 +39,14 @@ PLACE = {  # ref: (x, y, orientation); pad 1 is west at 0, south at 90
     'R30': (109.75, 153.25, 0),     # 10 k, J2.5 to U2.7
     'R32': (141.45, 129.05, 180),   # revision strap, north of U1, beside IO16 (pin 9)
     'R33': (144.50, 129.05, 180),   # Lite strap, north of U1, above IO15 (pin 8)
-    'R17': (160.50, 155.60, 0),     # D3's resistor, north of it: clear of the keepout and the lattice's D3 tube
+    'R17': (160.20, 155.60, 0),     # D3's resistor, north of it: clear of the keepout and the lattice's D3 tube,
+                                    # pad 2 0.58 mm in from the edge (PCBWay's minimum is 0.30), pad 1 on D3-K's run
 }
 
 SLASH = (159.35, 160.38, -77.5)     # centre and angle of the top case's slash
 D3_EAST = 0.27                      # LED axis east of the slash centre, clear of J1
 D3_ORIENT = 257.5                   # pad 1 north, pad 2 south, along the slash
+D3_K = 1.8                          # the cathode's K, this far past pad 1 along the leads: outside the spacer
 
 FRONT_LEGENDS = ('SERIAL', 'LOCALTALK', 'USB-C', 'PWR')
 BACK_TEXT = [  # text, x, y, height
@@ -77,6 +79,24 @@ def d3(board):
     ux, uy = math.cos(math.radians(ang)), math.sin(math.radians(ang))
     # pad 1 (the footprint's origin) half a pitch north-east of the centre
     fp = place(board, 'D3', cx + 1.27 * ux, cy + 1.27 * uy, D3_ORIENT)
+    # an LED's designator lives on F.Fab, as rev A's do; on the silk it ran off the edge
+    fp.Reference().SetLayer(pcbnew.F_Fab)
+    fp.Reference().SetTextSize(pcbnew.VECTOR2I(pcbnew.FromMM(1.0), pcbnew.FromMM(1.0)))
+    fp.Reference().SetTextThickness(pcbnew.FromMM(0.15))
+    fp.Reference().SetTextAngleDegrees(0)
+    fp.Reference().SetPosition(at(cx, cy))
+    # The spacer hides the square pad once it is on, and PCBWay fits D3 by hand:
+    # a K beside the cathode, past pad 1 on the side away from pad 2.
+    k = [d for d in board.GetDrawings() if d.GetClass() == 'PCB_TEXT'
+         and d.GetLayer() == pcbnew.F_SilkS and d.GetText() == 'K']
+    if not k:
+        k = [pcbnew.PCB_TEXT(board)]
+        k[0].SetText('K')
+        k[0].SetLayer(pcbnew.F_SilkS)
+        k[0].SetTextSize(pcbnew.VECTOR2I(pcbnew.FromMM(0.8), pcbnew.FromMM(0.8)))
+        k[0].SetTextThickness(pcbnew.FromMM(0.15))
+        board.Add(k[0])
+    k[0].SetPosition(at(cx + (1.27 + D3_K) * ux, cy + (1.27 + D3_K) * uy))
     for pad in fp.Pads():
         c = pad.GetCenter()
         print(f'  D3.{pad.GetNumber()} {pad.GetNetname()} at '

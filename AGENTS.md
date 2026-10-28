@@ -20,7 +20,7 @@ being true, change or delete it in the same commit that made it false.
 | `docs/library.md` | The custom KiCad library and 3D models. |
 | `docs/sourcing.md` | Fab, parts, mini-DIN and PIC decisions. |
 | `docs/prior-art.md` | TashTalk, TailTalk, AirTalk, ImageScribbler. |
-| `docs/ORDER-NOTES.md` | PCBWay order notes for rev A. |
+| `docs/ORDER-NOTES.md` | PCBWay order notes for rev 2026.11. |
 | `docs/KICAD-TOOLING.md` | General KiCad 10 / konnect / pcbnew playbook. |
 | `docs/superpowers/specs/` | Printer scope, dot-panel cover (read its amendment block first), enclosure, status language, signed updates, laser printers, StyleWriters. |
 | `docs/review-*.md`, `docs/firmware-audit-*.md` | Dated reviews. Historical; their findings are applied. |
@@ -539,9 +539,12 @@ Linear is the queue; these are the live items.
   warnings, 16 field-parity warnings (rev 2026.11, 2026-10-28). Treat any unconnected item as real;
   `tools_pcb/r12_gnd.py` checks that every GND pad is on the main plane. The combined panel
   under its default rules shows only known
-  items (~239 false clearance, 15 copper_edge, 12 hole_clearance, 6 seam invalid_outline, 1
-  benign starved_thermal on U7.8). Rev 2026.11's netlist gate:
-  `python3 hardware/airwriter/tools_sch/check_rev2026_11.py <kicadxml netlist>`.
+  items (~249 false clearance, 14 copper_edge and 5 silk_edge where S1, J1, J2, J4 and U1
+  meet the edge, 12 hole_clearance, 6 seam invalid_outline, 1 benign starved_thermal on
+  U7.8). Rev 2026.11's netlist gate:
+  `python3 hardware/airwriter/tools_sch/check_rev2026_11.py <kicadxml netlist>`; its board
+  gate, on KiCad's python: `hardware/airwriter/tools_pcb/r13_check.py` (pads 0.30 mm from
+  the edge, silk on the board, D3's K).
 - **Fab package:** `python3 hardware/combine_boards.py` then `sh hardware/combined/make_fab.sh`;
   drill floor 0.30 (`grep -E '^T[0-9]+C'`); `combined-pos.csv` 138 rows (J2 placed, J4 not),
   `combined-lite-pos.csv` 61.

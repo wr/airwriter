@@ -81,8 +81,9 @@ R32 and R33 above IO16 and IO15.
 - `LED_DATA`'s run north of the module is 0.37 mm higher, which makes room for R32 and R33's
   ground vias.
 - The LocalTalk receive pair from R10/R11 to J4: `LT_PORT_RXD_P` on the back.
-- The VBUS via at the H4 crossing is 0.5 mm drill (rev A 0.4); a partner via has no room
-  between C22's ground pad and H4's screw head.
+- The VBUS via at the H4 crossing is 0.5 mm drill (rev A 0.4), not doubled: its plated wall
+  now holds more copper than the 0.5 mm track that feeds it, so that track, unchanged from
+  rev A, is the limit.
 - D− reaches the ESP32 through U5's pad 3, as D+ goes through U5; U5.2 has a ground via
   under U5.
 
@@ -99,8 +100,13 @@ R32 and R33 above IO16 and IO15.
 - J4's HSKo shares IO35 with J2's (above).
 - TP9 and the old test pads sit on the back under U1's courtyard.
 - Vias under U5's and U8's bodies are tented.
-- In the combined panel's DRC (default rules), R17 and D3 add a copper-edge and a silk-edge
-  item; the main board's own 0.25 mm edge rule passes them.
+- R29 and R30, in series with J2's receive pair, are 15 k (the design said 10 k). U2's input
+  resistance is 12 k minimum and 15 k typical, so with 10 k a −15 V RS-232 line reached
+  about −9 V, past the SP3490's −7 V common-mode limit. With 15 k, −12 V lands at −5.3 to
+  −6.0 V and an RS-422 printer's 2 V still arrives as at least 0.89 V.
+- D3's cathode is marked K on the silk beside pad 1: the spacer hides the square pad.
+- R17's pads sit 0.58 mm in from the east edge: PCBWay's minimum is 0.30, with ±0.2 mm on a
+  routed edge.
 
 ## Checks, 2026-10-28
 
@@ -109,5 +115,7 @@ R32 and R33 above IO16 and IO15.
   `lib_footprint_mismatch` warnings, 16 field-parity warnings.
 - `r12_gnd.py`: one GND component, no stranded pads.
 - `r7_verify.py`: rev A's known FAIL lines, plus TP9 under U1.
+- `r13_check.py`: every pad of a part inside the board 0.30 mm or more from the edge, no
+  front silk off the board, D3's K in place.
 - `enclosure/build.sh`: 129 tests pass.
 - `make_fab.sh`: 138 placements on AirWriter, 61 on Lite, drill floor 0.30 mm.
