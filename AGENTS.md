@@ -16,6 +16,7 @@ being true, change or delete it in the same commit that made it false.
 | `docs/voice-and-tone.md` | How AirWriter writes: settings page, wiki, README, posts. Read before writing any of them. |
 | `docs/cad-routine.md` | How to design, check and iterate printed parts. Follow it for any `enclosure/` change. |
 | `docs/hardware-rev-a.md` | Rev A as built: geometry, deviations from the spec and why, rev B list. |
+| `docs/hardware-rev-2026-11.md` | Rev 2026.11 as drawn: U3's channels, the GPIOs, what moved from rev A, the scripts that build the board. |
 | `docs/library.md` | The custom KiCad library and 3D models. |
 | `docs/sourcing.md` | Fab, parts, mini-DIN and PIC decisions. |
 | `docs/prior-art.md` | TashTalk, TailTalk, AirTalk, ImageScribbler. |
@@ -362,8 +363,11 @@ Known issues, open:
 ## Open work
 
 Linear is the queue; these are the live items.
-- `W-1091 Rev B: the main board's next revision`: the rev B list (`docs/hardware-rev-a.md`),
-  with `W-1043 Rev B: through-hole dome LED for the power indicator` under it.
+- `W-1091 Rev B: the main board's next revision` (rev 2026.11, with
+  `W-1043 Rev B: through-hole dome LED for the power indicator` under it): designed, placed and
+  routed on branch `ww/rev-2026-11-board-updates-4f0c6a` (`docs/hardware-rev-2026-11.md`), not
+  merged. Next: Wells reviews the routing in KiCad, then the PCBWay order (November or
+  December). J4's HSKo shares IO35 with J2's: no free GPIO reaches U3.
 - `W-1046 Factory reset must always work, even with broken firmware` and
   `W-1045 Long-press factory reset with live feedback on the LED panel`: merged 2026-10-15, benched
   on board 1 (all pass). Board 1 has the W-1059 bootloader and partition table, so an image
@@ -457,6 +461,8 @@ Linear is the queue; these are the live items.
 - **pcbnew scripts** run on KiCad's bundled interpreter:
   `/Applications/KiCad/KiCad.app/Contents/Frameworks/Python.framework/Versions/3.9/bin/python3`.
   `hardware/airwriter/route.py` does export DSN → round → Freerouting → import → DRC headless.
+  Rev 2026.11's board is built from rev A by `tools_pcb/r13_build.sh` then `r13_route.py`
+  (`docs/hardware-rev-2026-11.md`); never re-run them over hand edits.
 - **Freerouting 2.2.4** at `~/.local/share/freerouting/freerouting.jar`, Java 25.
 - **konnect** resolves `lib_id` only against KiCad's install directory, so the project libraries
   must be symlinked into the app bundle. **The symlinks are gone since the 10.0.6 upgrade**;
@@ -530,13 +536,15 @@ Linear is the queue; these are the live items.
   2 `isolated_pin_label`).
 - **Board:** `kicad-cli pcb drc --severity-all --schematic-parity --refill-zones` on
   `hardware/airwriter/airwriter.kicad_pcb` → 0 errors, 0 unconnected, 5 `lib_footprint_mismatch`
-  warnings, 80 field-parity notes (both re-run 2026-10-15). Treat any unconnected item as real;
+  warnings, 16 field-parity warnings (rev 2026.11, 2026-10-28). Treat any unconnected item as real;
   `tools_pcb/r12_gnd.py` checks that every GND pad is on the main plane. The combined panel
   under its default rules shows only known
-  items (~274 false clearance, 14 copper_edge, 12 hole_clearance, 6 seam invalid_outline, 1
-  benign starved_thermal on U7.8).
+  items (~239 false clearance, 15 copper_edge, 12 hole_clearance, 6 seam invalid_outline, 1
+  benign starved_thermal on U7.8). Rev 2026.11's netlist gate:
+  `python3 hardware/airwriter/tools_sch/check_rev2026_11.py <kicadxml netlist>`.
 - **Fab package:** `python3 hardware/combine_boards.py` then `sh hardware/combined/make_fab.sh`;
-  drill floor 0.30 (`grep -E '^T[0-9]+C'`), pos file 127 rows with no J2/J4.
+  drill floor 0.30 (`grep -E '^T[0-9]+C'`); `combined-pos.csv` 138 rows (J2 placed, J4 not),
+  `combined-lite-pos.csv` 61.
 
 ## Bench rules (board 1)
 - **Never OTA while a job prints.** Tell Wells to hold prints, read `/api/status`, confirm
