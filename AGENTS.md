@@ -109,9 +109,10 @@ What works on `main`:
 - Recovery (SPEC §3.11): three equal app slots and a `known_good` record naming the last image
   that was kept and finished a real print; updates never write the running or known-good slot.
   A new OTA image runs on trial and rolls back unless healthy (`/api/status` `slot`, `trial`,
-  `rolled_back`, `known_good`). Holding `test` 8 s erases the settings with a countdown on the
-  panel; holding it through power-up for 5 s makes the bootloader hook erase them and boot the
-  known-good slot.
+  `rolled_back`, `known_good`); with the console on board 1 (2026-10-28, W-1108), a restart 2 s
+  into a trial was back on the previous image 6 s later. Holding `test` 8 s erases the settings
+  with a countdown on the panel; holding it through power-up for 5 s makes the bootloader hook
+  erase them and boot the known-good slot.
 - Signed updates (SPEC §3.12): only images signed with the release key install, from GitHub
   releases or `/update`; the web page's firmware section checks, installs and switches
   auto-update (off by default). An update holds the job lock to its restart and gives way to a
@@ -306,9 +307,12 @@ its name in the Chooser. U7's PIC calibration words: `16E0 1DA8`. Its LocalTalk 
 2026-10-24, with its settings put back over the API. Its port printer's uuid is now
 `…4c57-0001-0001-10bda36e2434`, which orphans Mac queues added before that date. Printer: an ImageWriter II on J2 via
 Apple's crossover cable, fanfold paper loaded as the Owner's Guide says (top edge under the paper
-bail). It runs v0.2.0-180-g79b562c, the W-1100 copy pass as merged to main, ahead of any
-release, with auto-update on; it shares the fake "LaserWriter II NT" on the Basilisk II tunnel when
-`etpeer.py tunnel laserwriter` runs on the Mac. On its AppleTalk cable since 2026-10-24: a
+bail). It runs v0.2.0-246-g5ce940d, a bench build on no pushed branch (local branch
+`bench/board1-5ce940d`): the StyleWriter branch at a38820f (W-1103) with W-1108 and the boot
+wave. Its known-good slot, ota_0, holds the same without the wave (v0.2.0-245-g56cc466,
+USB-installed 2026-10-28, record blank). Auto-update is on; it shares the fake "LaserWriter II
+NT" on the Basilisk II tunnel when `etpeer.py tunnel laserwriter` runs on the Mac. On its
+AppleTalk cable since 2026-10-24: a
 Personal LaserWriter NTR (PostScript 2010.129, Level 2, 3 MB, 300 dpi, takes binary; 10,277
 pages that morning), AirPrint printer 3 at `ipp/p3`. Its start page is off (set from the board, 2026-10-24). Its toner is spent (more ordered), so
 its pages cannot be judged by eye yet; `statusdict /pagecount` through the relay
