@@ -77,7 +77,7 @@ for ref, (val, lcsc) in PARTS.items():
         bad.append(f'{ref} LCSC {fields.get("LCSC")} != {lcsc}')
     if any(p.get('name') == 'dnp' for p in c.iter('property')):
         bad.append(f'{ref} is DNP')
-if comps['D3'].findtext('footprint') != 'LED_THT:LED_D3.0mm':
+if comps['D3'].findtext('footprint') != 'airwriter:LED_D3.0mm_Spacer_H8mm':
     bad.append(f"D3 footprint {comps['D3'].findtext('footprint')}")
 print('\n'.join(bad) if bad else f'ok: {len(WANT)} nets, {len(PARTS)} parts, {len(GONE_REFS)} removed')
 sys.exit(1 if bad else 0)

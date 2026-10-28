@@ -13844,7 +13844,7 @@
 				(hide yes)
 			)
 		)
-		(property "Footprint" "LED_THT:LED_D3.0mm"
+		(property "Footprint" "airwriter:LED_D3.0mm_Spacer_H8mm"
 			(at 149.86 248.92 0)
 			(hide yes)
 			(effects
