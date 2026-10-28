@@ -322,6 +322,10 @@ Known issues, open:
   RAM was short (`W-1094 Internal RAM nearly runs out during AirPrint jobs`). Not seen since
   the W-1094 build, which has not yet sat idle long on board 1; if it recurs, `/api/et`
   `relay` `why` has the client's own reason.
+- Board 1 sometimes powers up in the S3's download mode (power LED only, panel dark, no
+  Wi-Fi): C7, 100 nF on IO0 with no pull-up but the chip's own, holds IO0 low past EN
+  (`docs/traps.md` has how to tell and how to get out without touching it). Lifting C7 cures
+  it; rev B adds a 10 k pull-up and drops C7.
 - Twice on 2026-10-24, after board 1 lost power (its USB moved) with the ImageWriter on, the
   printer sat busy with SELECT lit: the idle CTRL-X did not free it, switching the printer off
   and on did. A soft restart (`/api/restart`, an OTA) leaves the line ready. A job sent while it

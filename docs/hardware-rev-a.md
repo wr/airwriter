@@ -116,6 +116,8 @@ current; this list started as the one filed on 2026-10-24. Most come from review
 - Tie U3.11 T1IN to GND, or pull `HSKI_DRV` (IO35) low; firmware clamps it today.
 - 1 k in series in `LT_RESET`, to protect IO2 from a mistaken high-voltage ICSP.
 - 10 k pulldown on IO3.
+- 10 k pull-up on IO0 (`/BOOT_CFG`) and C7 left off: with only the S3's internal pull-up to
+  charge it, C7 sometimes holds IO0 low past EN and the board powers up in download mode.
 - 1 k in series in every switch and DIP leg: in USB-OTG download boot the ROM drives GPIO40
   (DIP3) high.
 - Pull-up on IO17 so UART TX idles at mark through reset and download mode.
