@@ -132,25 +132,28 @@ check(plunger and abs(plunger[0] - 131) < 1e-4 and abs(plunger[1] - 91) < 1e-4,
       f"plunger at {plunger}, wants (131, 91)")
 
 print("the west control edge")
-s1 = L.cy_bbox(fps["S1"])
-# S1's F.Fab carries the body outline AND the eight key tabs, and the tabs
-# deliberately hang 2.25mm past the board edge, so the leftmost F.Fab ink is not
-# the body face. The body's own west wall is the one long vertical run.
-walls = [L.mm(i.GetStart().x) for i in fps["S1"].GraphicalItems()
-         if i.GetClass() == "PCB_SHAPE" and i.GetLayer() == pcbnew.F_Fab
-         and abs(L.mm(i.GetStart().x) - L.mm(i.GetEnd().x)) < 1e-6
-         and abs(L.mm(i.GetStart().y) - L.mm(i.GetEnd().y)) > 15.0]
-bx0 = min(walls)
-keys = min(min(L.mm(i.GetStart().x), L.mm(i.GetEnd().x)) for i in fps["S1"].GraphicalItems()
-           if i.GetClass() == "PCB_SHAPE" and i.GetLayer() == pcbnew.F_Fab)
-check(abs(bx0 - 100.0) <= 0.3, f"S1 body face at x={bx0:.3f} (wants x<=100.3); "
-                               f"key tips reach x={keys:.3f}, outboard by design")
-sw1 = L.cy_bbox(fps["SW1"])
-check(abs(sw1[0] + 0.195 - 100.0) < 0.02, f"SW1 courtyard west edge {sw1[0]:.3f} "
-      f"(actuator tip at {sw1[0] + 0.195:.3f}, wants 100.000)")
-print(f"       S1 reaches {max(0.0, 127.6 - s1[1]):.3f}mm into the grid zone (top at "
-      f"y={s1[1]:.3f}) -- legal because Frame 9b's (7,0) is gold, but the light "
-      f"lattice has to be carved around a 9.41mm part there")
+if "S1" not in fps:
+    print("       no DIP switches (rev 2026.11): nothing on the west edge")
+else:
+    s1 = L.cy_bbox(fps["S1"])
+    # S1's F.Fab carries the body outline AND the eight key tabs, and the tabs
+    # deliberately hang 2.25mm past the board edge, so the leftmost F.Fab ink is not
+    # the body face. The body's own west wall is the one long vertical run.
+    walls = [L.mm(i.GetStart().x) for i in fps["S1"].GraphicalItems()
+             if i.GetClass() == "PCB_SHAPE" and i.GetLayer() == pcbnew.F_Fab
+             and abs(L.mm(i.GetStart().x) - L.mm(i.GetEnd().x)) < 1e-6
+             and abs(L.mm(i.GetStart().y) - L.mm(i.GetEnd().y)) > 15.0]
+    bx0 = min(walls)
+    keys = min(min(L.mm(i.GetStart().x), L.mm(i.GetEnd().x)) for i in fps["S1"].GraphicalItems()
+               if i.GetClass() == "PCB_SHAPE" and i.GetLayer() == pcbnew.F_Fab)
+    check(abs(bx0 - 100.0) <= 0.3, f"S1 body face at x={bx0:.3f} (wants x<=100.3); "
+                                   f"key tips reach x={keys:.3f}, outboard by design")
+    sw1 = L.cy_bbox(fps["SW1"])
+    check(abs(sw1[0] + 0.195 - 100.0) < 0.02, f"SW1 courtyard west edge {sw1[0]:.3f} "
+          f"(actuator tip at {sw1[0] + 0.195:.3f}, wants 100.000)")
+    print(f"       S1 reaches {max(0.0, 127.6 - s1[1]):.3f}mm into the grid zone (top at "
+          f"y={s1[1]:.3f}) -- legal because Frame 9b's (7,0) is gold, but the light "
+          f"lattice has to be carved around a 9.41mm part there")
 
 print("the ESD clamp")
 # pair the pads per net -- a /USB_DP pad next to a /USB_DM pad is not a short

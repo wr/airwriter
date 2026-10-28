@@ -25,10 +25,14 @@ COPPER = (pcbnew.F_Cu, pcbnew.B_Cu)
 # Nets whose pads rev 2026.11 changed: their stubs may be cut on a re-run too.
 # Rev A routes kept although cut short: r13_reroute.py joins them back up.
 KEEP = {'/LT_RESET',     # U1.38 to U7.4 along the back; R27 now sits in it
-        '/UART_CTS', '/PR_HSKO', '/HSKI_RS232'}   # U3's channel swap moves their pins
-NEW_NETS = {'/LT_RESET', '/LT_MCLR', '/DIP3', '/DIP3_GPIO', '/PR_TXD_P', '/PR_TXD_N',
+        '/UART_CTS', '/PR_HSKO', '/HSKI_RS232',   # U3's channel swap moves their pins
+        '/EN'}           # SW1's bracket pad cuts its last leg; r13_reroute.py redraws it
+# The DIP switches are gone, so all their copper goes; IO35 (HSKI_DRV) moves to
+# IO47, so rev A's run from it goes too and r13_route.py draws the new one.
+DIPS = {f'/DIP{n}' for n in range(1, 9)}
+NEW_NETS = {'/LT_RESET', '/LT_MCLR', '/PR_TXD_P', '/PR_TXD_N',
             '/PR_TXD_P_IN', '/PR_TXD_N_IN', '/J4_HSKI', 'Net-(D3-K)', '/+3V3',
-            '/UART_CTS', '/PR_HSKO', '/HSKI_RS232'}
+            '/UART_CTS', '/PR_HSKO', '/HSKI_RS232', '/HSKI_DRV', '/EN'} | DIPS
 
 
 def mm(v):

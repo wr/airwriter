@@ -41,8 +41,10 @@ F, B = pcbnew.F_Cu, pcbnew.B_Cu
 Pt = namedtuple('Pt', 'x y')
 
 # Drawn by hand: the long runs, where the path is the design (U3's J4 lines
-# down beside U3 and under U8; J4_HSKI_RX along the slot between UART_CTS and
-# DIP5 on the back), and the ground vias the new parts' pads need.
+# down beside U3 and under U8; the drivers' inputs and receiver 1's output on
+# the back to the module's west pins the DIP switches freed, IO47, IO21 and
+# IO13, which leaves IO35 and IO37 to an octal-PSRAM module), and the ground
+# vias the new parts' pads need.
 # (net, layer or 'via', points, width)
 HAND = [
     ('/J4_HSKO', F, [(120.05, 135.16), (122.95, 135.16), (122.95, 142.2), (124.6, 143.85), (124.6, 151.25)], 0.2),
@@ -54,9 +56,23 @@ HAND = [
                      (131.2, 158.52)], 0.2),
     ('/J4_HSKI_RX', F, [(120.05, 137.7), (119.0, 137.7), (118.0, 138.7)], 0.2),
     ('/J4_HSKI_RX', 'via', [(118.0, 138.7)], None),
-    ('/J4_HSKI_RX', B, [(118.0, 138.7), (122.75, 143.45), (143.75, 143.45)], 0.2),
-    ('/J4_HSKI_RX', 'via', [(143.75, 143.45)], None),
-    ('/J4_HSKI_RX', F, [(143.75, 143.45), (143.75, 144.65), (142.15, 146.25), (142.15, 148.0)], 0.2),
+    ('/J4_HSKI_RX', B, [(118.0, 138.7), (122.75, 143.45), (135.0, 143.45)], 0.2),
+    ('/J4_HSKI_RX', 'via', [(135.0, 143.45)], None),
+    ('/J4_HSKI_RX', F, [(135.0, 143.45), (135.48, 142.97), (136.75, 142.97)], 0.2),          # IO21
+    # U3.10 from IO47 along rev A's back run below J4_HSKI_RX's; R24 below U3
+    ('/HSKI_DRV', F, [(120.05, 140.24), (118.6, 140.24), (118.6, 142.0), (118.94, 142.34), (119.75, 142.34)], 0.2),
+    ('/HSKI_DRV', 'via', [(119.75, 142.34)], None),
+    ('/HSKI_DRV', F, [(119.75, 142.34), (120.2, 142.79)], 0.2),
+    ('/HSKI_DRV', B, [(119.75, 142.34), (122.12, 144.71), (135.0, 144.71)], 0.2),
+    ('/HSKI_DRV', 'via', [(135.0, 144.71)], None),
+    ('/HSKI_DRV', F, [(135.0, 144.71), (135.47, 144.24), (136.75, 144.24)], 0.2),          # IO47
+    # U3.11 from IO13: one straight run on the back between U7's two rows of pins,
+    # up just west of the module's pin (BTN_TEST passes on the front)
+    ('/J4_HSKO_DRV', F, [(120.05, 138.97), (121.4, 138.97)], 0.2),
+    ('/J4_HSKO_DRV', 'via', [(121.4, 138.97)], None),
+    ('/J4_HSKO_DRV', B, [(121.4, 138.97), (134.65, 138.97), (135.65, 139.97)], 0.2),
+    ('/J4_HSKO_DRV', 'via', [(135.65, 139.97)], None),
+    ('/J4_HSKO_DRV', F, [(135.65, 139.97), (136.11, 140.43), (136.75, 140.43)], 0.2),
     ('/UART_TX', B, [(136.4, 147.537), (136.4, 147.75)], 0.2),          # R25 off UART_TX's back run
     ('/UART_TX', 'via', [(136.4, 147.75)], None),
     ('/UART_TX', F, [(136.4, 147.75), (136.0, 148.15), (136.0, 150.175)], 0.2),

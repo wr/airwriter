@@ -7764,6 +7764,34 @@
 		(at 189.23 139.7)
 		(uuid "99a05b94-dd08-495b-95e1-982ebed2794c")
 	)
+	(no_connect
+		(at 219.71 134.62)
+		(uuid "9a52268e-4d40-42ed-85db-065ac8a6b197")
+	)
+	(no_connect
+		(at 219.71 139.7)
+		(uuid "842216fe-9910-4a93-9121-4eddcace5f0a")
+	)
+	(no_connect
+		(at 219.71 142.24)
+		(uuid "77487303-9f9f-4c88-84ee-d1ae2cc17fc2")
+	)
+	(no_connect
+		(at 219.71 144.78)
+		(uuid "320a850a-7cc6-4984-8890-79f7fd56cca1")
+	)
+	(no_connect
+		(at 219.71 147.32)
+		(uuid "f64f0809-e550-48f2-af37-e0abdff27e01")
+	)
+	(no_connect
+		(at 219.71 149.86)
+		(uuid "7bf6cbb5-d108-442d-b08a-29590c85ae6e")
+	)
+	(no_connect
+		(at 219.71 152.4)
+		(uuid "1385fbc3-b539-4de0-a6f3-c5e109ad9895")
+	)
 	(wire
 		(pts
 			(xy 149.86 245.11)
@@ -8435,26 +8463,6 @@
 		)
 		(uuid "2ec3c776-dee3-46da-b876-ade01c3d6805")
 	)
-	(label "HSKI_DRV"
-		(at 219.71 134.62 0)
-		(effects
-			(font
-				(size 1.27 1.27)
-			)
-			(justify left bottom)
-		)
-		(uuid "f3d6a605-9431-450b-ad47-d2a2d63a048a")
-	)
-	(label "HSKI_DRV"
-		(at 320.04 152.4 0)
-		(effects
-			(font
-				(size 1.27 1.27)
-			)
-			(justify left bottom)
-		)
-		(uuid "057474be-25af-4643-be3b-5c3156cbf040")
-	)
 	(label "LED_DATA"
 		(at 219.71 162.56 0)
 		(effects
@@ -9097,70 +9105,6 @@
 		(at 476.25 48.26 0)
 		(uuid "55fb8c00-034c-4dbd-93a3-c04366aad069")
 	)
-	(label "DIP1"
-		(at 449.58 59.69 0)
-		(uuid "10823fe7-d3d7-42c7-83cb-b4657f34341c")
-	)
-	(label "GND"
-		(at 464.82 59.69 0)
-		(uuid "8ed8fd8d-7e6c-49cf-93a7-cea81df89b50")
-	)
-	(label "DIP2"
-		(at 449.58 62.23 0)
-		(uuid "8707d8e4-81b9-4f1a-bf35-3edb91a822ed")
-	)
-	(label "GND"
-		(at 464.82 62.23 0)
-		(uuid "ef4d5183-acf5-47af-bf8d-dc23bf522bf9")
-	)
-	(label "DIP3"
-		(at 449.58 64.77 0)
-		(uuid "56e4dc57-eee6-4c5b-9d26-7afb881a051f")
-	)
-	(label "GND"
-		(at 464.82 64.77 0)
-		(uuid "4b9b6853-1770-4657-90fe-e0431ac051f2")
-	)
-	(label "DIP4"
-		(at 449.58 67.31 0)
-		(uuid "855ed8c0-817e-47a2-816e-1d9d982b126f")
-	)
-	(label "GND"
-		(at 464.82 67.31 0)
-		(uuid "98b46108-4e84-40a6-b24a-f2396861de57")
-	)
-	(label "DIP5"
-		(at 449.58 69.85 0)
-		(uuid "8e66c3ec-99d5-4226-b27d-ad2f7dce7eb3")
-	)
-	(label "GND"
-		(at 464.82 69.85 0)
-		(uuid "77a0579b-d4a0-48db-ab91-0774a34fad7d")
-	)
-	(label "DIP6"
-		(at 449.58 72.39 0)
-		(uuid "36e2fd7b-a621-4bc0-82f7-5afe2e9759e2")
-	)
-	(label "GND"
-		(at 464.82 72.39 0)
-		(uuid "09d576fc-05e3-466a-a6f6-3f78c198414e")
-	)
-	(label "DIP7"
-		(at 449.58 74.93 0)
-		(uuid "c19d5fb6-2a7c-4ea1-b0db-1de091fd5d79")
-	)
-	(label "GND"
-		(at 464.82 74.93 0)
-		(uuid "cb34a341-5b5c-4d92-96be-d37e70596914")
-	)
-	(label "DIP8"
-		(at 449.58 77.47 0)
-		(uuid "c769ed29-d5c9-4645-a196-0fde0f8cddc2")
-	)
-	(label "GND"
-		(at 464.82 77.47 0)
-		(uuid "c57bde92-96a3-4f85-8bdb-018b3dff145a")
-	)
 	(label "BTN_TEST"
 		(at 452.12 95.25 0)
 		(uuid "69cea9bf-0307-4b01-ad76-906af15a65c2")
@@ -9168,34 +9112,6 @@
 	(label "GND"
 		(at 462.28 95.25 0)
 		(uuid "8ac5c62d-66fd-4333-98dc-6b3e12766323")
-	)
-	(label "DIP1"
-		(at 219.71 142.24 0)
-		(uuid "86d2850a-2a2e-4838-91a4-39cbb7de9c21")
-	)
-	(label "DIP2"
-		(at 219.71 144.78 0)
-		(uuid "25682216-555e-48d4-b45a-2e5223919b5d")
-	)
-	(label "DIP4"
-		(at 219.71 149.86 0)
-		(uuid "7247a1d0-ed26-4bdb-9e5d-9531af38fe01")
-	)
-	(label "DIP5"
-		(at 219.71 152.4 0)
-		(uuid "229edbcf-c83a-457c-8fac-ebce39af852d")
-	)
-	(label "DIP6"
-		(at 219.71 160.02 0)
-		(uuid "4812619c-96f2-47c7-b991-4bbdc9f15973")
-	)
-	(label "DIP7"
-		(at 219.71 132.08 0)
-		(uuid "8cb744dd-847d-46d2-ba1c-5e592bf1bc97")
-	)
-	(label "DIP8"
-		(at 189.23 154.94 0)
-		(uuid "4f94f7c3-3be2-475d-819f-6fff335f8fb5")
 	)
 	(label "LED_DATA5"
 		(at 449.58 114.3 0)
@@ -10371,36 +10287,6 @@
 		)
 		(uuid "941ab808-aac5-4a62-9edb-e3cb6f796c8b")
 	)
-	(label "DIP3"
-		(at 81.28 237.49 0)
-		(effects
-			(font
-				(size 1.27 1.27)
-			)
-			(justify left bottom)
-		)
-		(uuid "fa4a66fc-1a3b-469d-b0fe-5c9a10b23ee8")
-	)
-	(label "DIP3_GPIO"
-		(at 81.28 245.11 0)
-		(effects
-			(font
-				(size 1.27 1.27)
-			)
-			(justify left bottom)
-		)
-		(uuid "8bdca722-07d3-449b-ab1f-08cb6d4f3e98")
-	)
-	(label "DIP3_GPIO"
-		(at 219.71 147.32 0)
-		(effects
-			(font
-				(size 1.27 1.27)
-			)
-			(justify left bottom)
-		)
-		(uuid "3b49e322-650a-4c17-9a3c-7ae0bdab56e2")
-	)
 	(label "PR_TXD_P"
 		(at 101.6 237.49 0)
 		(effects
@@ -10681,16 +10567,6 @@
 		)
 		(uuid "f9cab7cb-9373-4bb8-9bc6-b0d4599f5fc6")
 	)
-	(label "J4_HSKI_RX"
-		(at 219.71 139.7 0)
-		(effects
-			(font
-				(size 1.27 1.27)
-			)
-			(justify left bottom)
-		)
-		(uuid "37571d37-e3d7-402a-9394-022d3a4b0f61")
-	)
 	(label "HSKI_DRV"
 		(at 320.04 157.48 180)
 		(effects
@@ -10760,6 +10636,46 @@
 			(justify left bottom)
 		)
 		(uuid "cdf86051-166c-46db-a621-88ca7d97eae1")
+	)
+	(label "J4_HSKO_DRV"
+		(at 320.04 152.4 180)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right bottom)
+		)
+		(uuid "3eebe197-d4f4-4f01-8be0-4daa4a44b0b9")
+	)
+	(label "J4_HSKO_DRV"
+		(at 189.23 154.94 180)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right bottom)
+		)
+		(uuid "47c90360-88c1-49c0-ac69-1c1c41e32818")
+	)
+	(label "J4_HSKI_RX"
+		(at 219.71 132.08 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left bottom)
+		)
+		(uuid "b5dc338c-a5b0-453d-a6bf-992fee6d377b")
+	)
+	(label "HSKI_DRV"
+		(at 219.71 160.02 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left bottom)
+		)
+		(uuid "ec277380-d7e1-4474-9fa9-03a45c34e570")
 	)
 	(symbol
 		(lib_id "Connector:USB_C_Receptacle_USB2.0_16P")
@@ -11908,7 +11824,7 @@
 				)
 			)
 		)
-		(property "LCSC" "C79164"
+		(property "LCSC" "C2888448"
 			(at 149.86 171.45 0)
 			(hide yes)
 			(effects
@@ -11917,7 +11833,7 @@
 				)
 			)
 		)
-		(property "Value" "EVQP44B3M"
+		(property "Value" "TSB001A3518A"
 			(at 149.86 179.07 0)
 			(effects
 				(font
@@ -11925,7 +11841,7 @@
 				)
 			)
 		)
-		(property "Footprint" "airwriter:EVQP44B3M_SidePress"
+		(property "Footprint" "airwriter:SW_BZCN_TSB001A3518A"
 			(at 149.86 175.26 0)
 			(hide yes)
 			(effects
@@ -11934,7 +11850,7 @@
 				)
 			)
 		)
-		(property "Datasheet" ""
+		(property "Datasheet" "https://www.lcsc.com/datasheet/C2888448.pdf"
 			(at 149.86 175.26 0)
 			(hide yes)
 			(effects
@@ -11943,7 +11859,7 @@
 				)
 			)
 		)
-		(property "MPN" ""
+		(property "MPN" "TSB001A3518A"
 			(at 149.86 171.45 0)
 			(hide yes)
 			(effects
@@ -11952,7 +11868,7 @@
 				)
 			)
 		)
-		(property "Manufacturer" "Panasonic"
+		(property "Manufacturer" "BZCN"
 			(at 149.86 171.45 0)
 			(hide yes)
 			(effects
@@ -11961,7 +11877,7 @@
 				)
 			)
 		)
-		(property "Description" "RESET momentary side-press switch (Panasonic EVQP44B3M), east edge, actuator flush at case pinhole, grounds EN through R3/C6 POR"
+		(property "Description" "RESET momentary side-press switch (BZCN TSB001A3518A, two locating pegs and bracket pads), east edge, actuator at the case pinhole, grounds EN through R3/C6 POR"
 			(at 149.86 171.45 0)
 			(hide yes)
 			(effects
@@ -14405,75 +14321,6 @@
 			(project "airwriter"
 				(path "/b907fa76-c5fe-4a7a-8e4e-adfdab62cb9c"
 					(reference "C22")
-					(unit 1)
-				)
-			)
-		)
-	)
-	(symbol
-		(lib_id "Switch:SW_DIP_x08")
-		(at 457.2 69.85 0)
-		(unit 1)
-		(in_bom yes)
-		(on_board yes)
-		(dnp no)
-		(uuid "83a06fe2-425e-4064-a6a3-6cbe42b93917")
-		(property "Reference" "S1"
-			(at 457.2 57.14999999999999 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "LCSC" "C458097"
-			(at 457.2 57.14999999999999 0)
-			(hide yes)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Value" "DIP switch, 8-position"
-			(at 457.2 82.55 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Footprint" "airwriter:SW_DIP_8_RightAngle_DP-08RP"
-			(at 457.2 69.85 0)
-			(hide yes)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Datasheet" ""
-			(at 457.2 69.85 0)
-			(hide yes)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Description" "DIP bank for the 8 DIP config bits, internal ESP32 pull-ups, other side to GND"
-			(at 457.2 69.85 0)
-			(hide yes)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(instances
-			(project "airwriter"
-				(path "/b907fa76-c5fe-4a7a-8e4e-adfdab62cb9c"
-					(reference "S1")
 					(unit 1)
 				)
 			)
@@ -20735,75 +20582,6 @@
 			(project "airwriter"
 				(path "b907fa76-c5fe-4a7a-8e4e-adfdab62cb9c"
 					(reference "R27")
-					(unit 1)
-				)
-			)
-		)
-	)
-	(symbol
-		(lib_id "Device:R")
-		(at 81.28 241.3 0)
-		(unit 1)
-		(in_bom yes)
-		(on_board yes)
-		(dnp no)
-		(uuid "81a8b9d2-1f95-49bf-933b-c9e0144625ca")
-		(property "Reference" "R28"
-			(at 83.312 241.3 90)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Value" "1k"
-			(at 81.28 241.3 90)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Footprint" "Resistor_SMD:R_0603_1608Metric"
-			(at 81.28 241.3 0)
-			(hide yes)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Datasheet" ""
-			(at 81.28 241.3 0)
-			(hide yes)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Description" "Resistor"
-			(at 81.28 241.3 0)
-			(hide yes)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "LCSC" "C21190"
-			(at 81.28 241.3 0)
-			(hide yes)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(instances
-			(project "airwriter"
-				(path "b907fa76-c5fe-4a7a-8e4e-adfdab62cb9c"
-					(reference "R28")
 					(unit 1)
 				)
 			)

@@ -9,9 +9,9 @@ once per build (it refuses a board it has already changed).
 U3 swaps channels: the printer port takes driver 2 and receiver 2 (pins 7-10)
 and the LocalTalk port driver 1 and receiver 1 (11-14), so J4's two RS-232
 lines leave U3 on the side facing J4 and run straight down beside it, under
-U8, to J4. IO35 drives both drivers' inputs (pins 10 and 11): the cable test
-still sees each handshake wire, and no GPIO is left that reaches U3. The
-printer port's lines come back to rev A's routes by short steps.
+U8, to J4. The printer port's lines come back to rev A's routes by short
+steps; the drivers' inputs (pins 10 and 11) and receiver 1's output are
+r13_route.py's, on GPIOs the DIP switches freed.
 
 To clear that path:
 - U3's 3.3 V feed runs under U3's body from pin 16, not down its right side.
@@ -19,8 +19,8 @@ To clear that path:
   between U7 and U6. The LocalTalk receive lines follow them.
 - R27 joins LT_RESET where it already passes east of U7; U7.4 is fed back
   along rev A's run.
-- SW2 and R21 move west so R28 sits right under IO40; DIP1 meets its pin from
-  below instead of looping round under the module.
+- SW2 and R21 move west, below IO0, so BOOT_CFG runs straight down.
+- SW1's bracket pad sits on EN's last leg: EN steps round it into pad 1.
 - LED_DATA's run north of the module lifts 0.37 mm so R32 and R33 get ground
   vias.
 
@@ -63,19 +63,14 @@ def printer_handshakes(e):
     e.move_end(e.track('/UART_CTS', (122.83, 142.744), (118.58, 138.494)), (118.58, 138.494), (121.6, 141.514))
     e.add_via('/UART_CTS', (121.6, 141.514))
     e.draw('/UART_CTS', [(120.05, 141.51), (121.6, 141.514)])
-    # pins 10 and 11 from IO35: joined under U3, a via below it onto rev A's back run,
-    # and R24 (the pull-down) below U3
-    e.drop(e.track('/HSKI_DRV', (120.05, 138.97), (119.752, 138.97)),
-           e.track('/HSKI_DRV', (119.752, 138.97), (118.822, 139.899)),
-           e.track('/HSKI_DRV', (118.822, 139.899), (118.822, 141.899)),
-           e.track('/HSKI_DRV', (118.822, 141.899), (120.463, 143.539)),
-           e.track('/HSKI_DRV', (120.463, 143.539), (120.946, 143.539)),
-           e.via('/HSKI_DRV', (120.946, 143.539)))
-    e.move_end(e.track('/HSKI_DRV', (120.946, 143.539), (122.116, 144.708)), (120.946, 143.539), (119.75, 142.34))
-    e.draw('/HSKI_DRV', [(120.05, 138.97), (118.6, 138.97), (118.6, 142.0), (118.94, 142.34), (119.75, 142.34)])
-    e.draw('/HSKI_DRV', [(120.05, 140.24), (118.6, 140.24)])
-    e.add_via('/HSKI_DRV', (119.75, 142.34))
-    e.draw('/HSKI_DRV', [(119.75, 142.34), (120.2, 142.79)])
+    # what r13_clean.py leaves of rev A's IO35 run: each end is a stub lying inside
+    # its own via, which reads as joined. r13_route.py draws the IO47 run.
+    e.drop(e.track('/HSKI_DRV', (120.463, 143.539), (120.946, 143.539)),
+           e.via('/HSKI_DRV', (120.946, 143.539)),
+           e.track('/HSKI_DRV', (120.946, 143.539), (122.116, 144.708)),
+           e.track('/HSKI_DRV', (122.116, 144.708), (139.458, 144.708)),
+           e.via('/HSKI_DRV', (139.458, 144.708)),
+           e.track('/HSKI_DRV', (139.27, 144.897), (139.458, 144.708)))
 
 
 def under_u8(e):
@@ -124,28 +119,8 @@ def reset_line(e):
     e.draw('/LT_MCLR', [(134.12, 137.9), (130.39, 134.17), (125.171, 134.171), (124.09, 133.09)], B)
 
 
-def boot_and_dips(e):
-    """SW2 and R21 west, R28 under IO40, DIP1 up from below, DIP3 down to R28."""
-    e.drop(e.track('/DIP1', (143.08, 146.911), (143.08, 148.544)),
-           e.track('/DIP1', (142.784, 146.614), (143.08, 146.911)),
-           e.via('/DIP1', (142.784, 146.614)),
-           e.track('/DIP1', (145.938, 148.436), (143.974, 150.4)),
-           e.track('/DIP1', (142.923, 146.475), (145.602, 146.475)),
-           e.track('/DIP1', (145.938, 146.811), (145.938, 148.436)),
-           e.track('/DIP1', (142.784, 146.614), (142.923, 146.475)),
-           e.track('/DIP1', (145.602, 146.475), (145.938, 146.811)))
-    e.move_end(e.track('/DIP1', (143.974, 150.4), (113.405, 150.4)), (143.974, 150.4), (143.08, 150.4))
-    e.draw('/DIP1', [(143.08, 150.4), (143.08, 150.95)], B)
-    e.add_via('/DIP1', (143.08, 150.95))
-    e.draw('/DIP1', [(143.08, 150.95), (143.08, 148.6)])
-    e.drop(e.track('/DIP3', (145.352, 147.275), (145.352, 147.041)),
-           e.via('/DIP3', (145.352, 147.041)),
-           e.track('/DIP3', (145.227, 147.166), (145.352, 147.041)))
-    e.move_end(e.track('/DIP3', (141.113, 147.166), (145.227, 147.166)), (145.227, 147.166), (144.6, 147.166))
-    e.draw('/DIP3', [(144.6, 147.166), (144.6, 151.925)], B)
-    e.add_via('/DIP3', (144.6, 151.925))
-    e.draw('/DIP3', [(144.6, 151.925), (145.62, 151.925)])
-    e.draw('/DIP3_GPIO', [(145.62, 150.275), (145.62, 148.6)])
+def boot(e):
+    """SW2 and R21 west, below IO0: BOOT_CFG straight down to both."""
     e.drop(e.track('/BOOT_CFG', (140.421, 149.546), (141.3, 150.425)),
            e.track('/BOOT_CFG', (142.8, 151.2), (142.075, 151.2)),
            e.track('/BOOT_CFG', (142.075, 151.2), (141.3, 150.425)),
@@ -158,6 +133,11 @@ def boot_and_dips(e):
     e.place('R21', 140.0, 150.2, 180)
     e.draw('/BOOT_CFG', [(138.0, 149.546), (138.65, 150.2), (139.175, 150.2)])
     e.draw('/BOOT_CFG', [(138.0, 149.546), (138.0, 151.5), (138.3, 151.8)])
+
+
+def reset_switch(e):
+    """EN into SW1's pad 1, round the bracket pad that now sits on its last leg."""
+    e.draw('/EN', [(159.19, 104.94), (158.3, 104.05), (157.45, 104.05), (157.0, 103.6), (157.0, 102.0)])
 
 
 def led_data(e):
@@ -191,7 +171,8 @@ def main():
     printer_handshakes(e)
     under_u8(e)
     reset_line(e)
-    boot_and_dips(e)
+    boot(e)
+    reset_switch(e)
     led_data(e)
     usb(e)
     e.save()

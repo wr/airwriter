@@ -6,10 +6,11 @@
 - Every pad of a part that sits inside the board is at least 0.30 mm from the
   outline. The board's DRC rule is 0.25, but PCBWay's routed edge wanders
   ±0.2 mm, and its stated minimum is 0.30. Parts made to meet the edge (the
-  ports, S1, SW1) are left out.
+  ports) are left out.
 - No front silk text runs off the board.
 - D3 has a cathode mark outside its spacer: the square pad is hidden once the
   spacer is on, and PCBWay fits D3 by hand.
+- SW1 has its RESET label beside it.
 Writes nothing.
 """
 import math
@@ -22,7 +23,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 BOARD = os.path.join(HERE, '..', 'airwriter.kicad_pcb')
 OUTLINE = (100.0, 60.0, 162.0, 164.27)
 PAD_EDGE = 0.30
-AT_EDGE = ('J1', 'J2', 'J4', 'S1', 'SW1')
+AT_EDGE = ('J1', 'J2', 'J4')
 SPACER_R = 2.0
 
 
@@ -64,7 +65,12 @@ def main():
                            (mm(k['1'].x), mm(k['1'].y))) < 2.5]
     if not marks:
         bad.append('D3 has no K mark beside pad 1, outside its spacer')
-    print('\n'.join(bad) if bad else 'ok: pads clear of the edge, silk on the board, D3 marked')
+    sw1 = b.FindFootprintByReference('SW1').GetPosition()
+    if not any(t.GetLayer() == pcbnew.F_SilkS and t.GetShownText(False) == 'RESET'
+               and math.dist((mm(t.GetPosition().x), mm(t.GetPosition().y)), (mm(sw1.x), mm(sw1.y))) < 4.0
+               for t in texts):
+        bad.append('no RESET label beside SW1')
+    print('\n'.join(bad) if bad else 'ok: pads clear of the edge, silk on the board, D3 and SW1 marked')
     sys.exit(1 if bad else 0)
 
 

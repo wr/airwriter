@@ -21,13 +21,15 @@ KP=/Applications/KiCad/KiCad.app/Contents/Frameworks/Python.framework/Versions/3
 K=/Applications/KiCad/KiCad.app/Contents/MacOS/kicad-cli
 NET=$(mktemp -t r13net).xml
 quiet() { grep -v -i -E 'fontconfig|wxapp|image handler|memory leak' || true; }
+# run a step through quiet, and stop if the step itself failed (sh has no pipefail)
+step() { LOG=$(mktemp -t r13step); "$@" > "$LOG" 2>&1 && rc=0 || rc=$?; quiet < "$LOG"; rm -f "$LOG"; [ $rc -eq 0 ] || exit $rc; }
 
 git -C "$ROOT" show hw-rev-a:hardware/airwriter/airwriter.kicad_pcb > "$BOARD_DIR/airwriter.kicad_pcb"
 "$K" sch export netlist --format kicadxml -o "$NET" "$BOARD_DIR/airwriter.kicad_sch" >/dev/null 2>&1
 python3 "$BOARD_DIR/tools_sch/check_rev2026_11.py" "$NET"
-"$KP" "$HERE/r13_sync.py" "$NET" 2>&1 | quiet
-"$KP" "$HERE/r13_place.py" 2>&1 | quiet
-"$KP" "$HERE/r13_clean.py" 2>&1 | quiet
-"$KP" "$HERE/r13_place.py" 2>&1 | quiet
-"$KP" "$HERE/r13_reroute.py" 2>&1 | quiet
+step "$KP" "$HERE/r13_sync.py" "$NET"
+step "$KP" "$HERE/r13_place.py"
+step "$KP" "$HERE/r13_clean.py"
+step "$KP" "$HERE/r13_place.py"
+step "$KP" "$HERE/r13_reroute.py"
 rm -f "$NET"

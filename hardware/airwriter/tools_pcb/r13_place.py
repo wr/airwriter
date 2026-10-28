@@ -31,14 +31,15 @@ PLACE = {  # ref: (x, y, orientation); pad 1 is west at 0, south at 90
     'R21': (141.30, 151.20, 90),    # IO0 pull-up, on C7's old spot: pad 2 meets BOOT_CFG
     'R22': (126.55, 129.05, 0),     # LT_DE pull-down, north of U7.3
     'R23': (147.70, 127.16, 0),     # IO48 pull-down, beside U9.2
-    'R24': (119.725, 143.25, 180),  # IO35 pull-down, just below U3 where IO35 drops to the back
+    'R24': (119.725, 143.25, 180),  # IO47 pull-down, just below U3 where HSKI_DRV drops to the back
     'R25': (136.00, 151.00, 90),    # IO17 pull-up, east of U6, off UART_TX's back run by a via
     'R27': (134.12, 136.00, -90),   # 1 k in LT_RESET's back run, east of U7
-    'R28': (145.62, 151.10, 90),    # 1 k in DIP3, right under IO40 (pin 33)
     'R29': (112.75, 152.50, 90),    # 10 k, J2.8 to U2.8
     'R30': (109.75, 153.25, 0),     # 10 k, J2.5 to U2.7
     'R32': (141.45, 129.05, 180),   # revision strap, north of U1, beside IO16 (pin 9)
     'R33': (144.50, 129.05, 180),   # Lite strap, north of U1, above IO15 (pin 8)
+    'SW1': (157.60, 99.45, -90),    # reset, button east at x 159.9 on rev A's pinhole axis;
+                                    # pads 1 and 2 over rev A's EN and GND pads
     'R17': (160.20, 155.60, 0),     # D3's resistor, north of it: clear of the keepout and the lattice's D3 tube,
                                     # pad 2 0.58 mm in from the edge (PCBWay's minimum is 0.30), pad 1 on D3-K's run
 }
@@ -58,6 +59,7 @@ BACK_TEXT = [  # text, x, y, height
     ('CERN-OHL-S-2.0', 131.0, 111.0, 1.0),
 ]
 TP9 = (150.0, 142.1)                # GND, west of TP4 (EN) and its label, near TP7/TP8
+RESET_LABEL = (154.75, 99.45)       # beside SW1's back, on its axis
 
 
 def at(x, y):
@@ -136,6 +138,18 @@ def texts(board):
         t.SetTextSize(pcbnew.VECTOR2I(pcbnew.FromMM(h), pcbnew.FromMM(h)))
         t.SetTextThickness(pcbnew.FromMM(0.15 if h <= 1.0 else 0.22))
         t.SetPosition(at(x, y))
+        board.Add(t)
+    # Rev A's RESET was a field of the EVQP44B3M's footprint and went with it:
+    # the same knockout label, on the board, west of the new switch
+    if not any(d.GetClass() == 'PCB_TEXT' and d.GetText() == 'RESET' for d in board.GetDrawings()):
+        t = pcbnew.PCB_TEXT(board)
+        t.SetText('RESET')
+        t.SetLayer(pcbnew.F_SilkS)
+        t.SetIsKnockout(True)
+        t.SetTextSize(pcbnew.VECTOR2I(pcbnew.FromMM(1.0), pcbnew.FromMM(1.0)))
+        t.SetTextThickness(pcbnew.FromMM(0.15))
+        t.SetTextAngleDegrees(90)
+        t.SetPosition(at(*RESET_LABEL))
         board.Add(t)
 
 

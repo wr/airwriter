@@ -275,7 +275,8 @@ What works on `main`:
 **Enclosure** (`enclosure/`, in use on board 1): tray (print in PETG with Arachne walls;
 every wall 1.70 below the rim, one thickness all round so no lines show up the outside; the
 board goes in by the sequence in `enclosure/README.md`, thumbing the west wall out past the
-DIP keys), Lite lid, and the Pro build's light-guide lattice. Cavity 13.04 (measured mini-DIN
+DIP keys; on this branch the tray is cut to rev 2026.11, which has no DIP switches and no
+DIP window, and board 1's tray is the one at `hw-rev-a`), Lite lid, and the Pro build's light-guide lattice. Cavity 13.04 (measured mini-DIN
 height); Pro screws M2.5 × 18. Four 10 mm rubber feet sit in 0.40 pockets in the floor's
 underside, each hiding a screw counterbore. The shop's cased GLBs still show the pre-W-1036
 tray.
@@ -367,7 +368,10 @@ Linear is the queue; these are the live items.
   `W-1043 Rev B: through-hole dome LED for the power indicator` under it): designed, placed and
   routed on branch `ww/rev-2026-11-board-updates-4f0c6a` (`docs/hardware-rev-2026-11.md`), not
   merged. Next: Wells reviews the routing in KiCad, then the PCBWay order (November or
-  December). J4's HSKo shares IO35 with J2's: no free GPIO reaches U3.
+  December). No DIP switches; each port's HSKo has its own GPIO (J2's IO47, J4's IO13, J4's
+  HSKi IO21), and IO35–IO37 are free, so the board takes an N16R8 (octal PSRAM) module as
+  well as a quad-PSRAM one. SW1 is the Macintosh Mini's BZCN TSB001A3518A. Firmware for it:
+  `W-1109 Firmware for rev 2026.11 boards: straps, own handshake pins, no DIPs, Lite`.
 - `W-1046 Factory reset must always work, even with broken firmware` and
   `W-1045 Long-press factory reset with live feedback on the LED panel`: merged 2026-10-15, benched
   on board 1 (all pass). Board 1 has the W-1059 bootloader and partition table, so an image
@@ -536,18 +540,18 @@ Linear is the queue; these are the live items.
   2 `isolated_pin_label`).
 - **Board:** `kicad-cli pcb drc --severity-all --schematic-parity --refill-zones` on
   `hardware/airwriter/airwriter.kicad_pcb` → 0 errors, 0 unconnected, 5 `lib_footprint_mismatch`
-  warnings, 16 field-parity warnings (rev 2026.11, 2026-10-28). Treat any unconnected item as real;
+  warnings, 15 field-parity warnings (rev 2026.11, 2026-10-28). Treat any unconnected item as real;
   `tools_pcb/r12_gnd.py` checks that every GND pad is on the main plane. The combined panel
   under its default rules shows only known
-  items (~249 false clearance, 14 copper_edge and 5 silk_edge where S1, J1, J2, J4 and U1
-  meet the edge, 12 hole_clearance, 6 seam invalid_outline, 1 benign starved_thermal on
-  U7.8). Rev 2026.11's netlist gate:
+  items (~221 false clearance, 6 copper_edge and 4 silk_edge where J1, J2, J4 and U1 meet
+  the edge, 16 hole_clearance where NPTH holes meet the pours, 6 seam invalid_outline, 1
+  benign starved_thermal on U7.8). Rev 2026.11's netlist gate:
   `python3 hardware/airwriter/tools_sch/check_rev2026_11.py <kicadxml netlist>`; its board
   gate, on KiCad's python: `hardware/airwriter/tools_pcb/r13_check.py` (pads 0.30 mm from
-  the edge, silk on the board, D3's K).
+  the edge, silk on the board, D3's K, SW1's RESET).
 - **Fab package:** `python3 hardware/combine_boards.py` then `sh hardware/combined/make_fab.sh`;
-  drill floor 0.30 (`grep -E '^T[0-9]+C'`); `combined-pos.csv` 138 rows (J2 placed, J4 not),
-  `combined-lite-pos.csv` 61.
+  drill floor 0.30 (`grep -E '^T[0-9]+C'`); `combined-pos.csv` 136 rows (J2 placed, J4 not),
+  `combined-lite-pos.csv` 59.
 
 ## Bench rules (board 1)
 - **Never OTA while a job prints.** Tell Wells to hold prints, read `/api/status`, confirm
