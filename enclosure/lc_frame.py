@@ -1,13 +1,13 @@
 # SPDX-License-Identifier: CERN-OHL-S-2.0
-"""The Lite frame: the printed part the Lite's clear acrylic top is glued to.
+"""The LC frame: the printed part the LC's clear acrylic top is glued to.
 
-docs/superpowers/specs/2026-10-28-lite-acrylic-top-design.md. The Lite lid's
-four legs (case.lite_legs: the same inserts, the same M2.5 x 10 from below),
+docs/superpowers/specs/2026-10-28-lite-acrylic-top-design.md. The LC lid's
+four legs (case.lc_legs: the same inserts, the same M2.5 x 10 from below),
 stopped GLUE_LINE under the acrylic, joined by a rim round the top edge like the
 lattice's lip and an arm from each leg out to the side rim, and a light tube
 round the power LED D3, closed at the top but for a slit the shape of the
 slash frosted over it, so D3 lights the slash and nothing else under the clear
-top. The acrylic (hardware/panel/airwriter-lite-top.svg) is glued to the four
+top. The acrylic (hardware/panel/airwriter-lc-top.svg) is glued to the four
 leg tops, its face ACRYLIC_FACE_UNDER under the tray's rim.
 Printed rim-down, legs up."""
 from build123d import Face, Part, Pos, Solid, Wire, extrude
@@ -45,8 +45,8 @@ def _arms() -> Part:
 
 
 def slash_box() -> tuple[float, float, float, float]:
-    """The Lite's frosted slash as a case-frame box (x0, x1, y0, y1)."""
-    xs, ys = zip(*bg.lite_slash())
+    """The LC's frosted slash as a case-frame box (x0, x1, y0, y1)."""
+    xs, ys = zip(*bg.lc_slash())
     return min(xs), max(xs), min(ys), max(ys)
 
 
@@ -88,22 +88,22 @@ def tube_hollow(grow: float = 0.0) -> Part:
 
 
 def d3_tube() -> tuple[Part, Part]:
-    """(tube, its void). Walls from the board to TOP round the Lite's slash
+    """(tube, its void). Walls from the board to TOP round the LC's slash
     and D3, and a FRAME_CAP cap; the void is the tube's inside and a slit
     through the cap the slash's own shape. Seen through the clear top, the cap
     hides D3 and the slit lights the frost from right under it."""
     tube = lattice._box(*tube_rects()[1], 0, TOP) & _rim_outline(0.0, 0, TOP)
-    face = Face(Wire.make_polygon([(x, y, 0) for x, y in bg.lite_slash()], close=True))
+    face = Face(Wire.make_polygon([(x, y, 0) for x, y in bg.lc_slash()], close=True))
     slit = Pos(0, 0, TOP - p.FRAME_CAP - 0.5) * extrude(face, p.FRAME_CAP + 1.5, dir=(0, 0, 1))
     return tube, tube_hollow() + slit
 
 
-def lite_frame() -> Solid:
+def lc_frame() -> Solid:
     tube, tube_void = d3_tube()
     # D3 stands inside its tube, which clears it; its grown shadow would cut
     # the tube's east wall, one line from the board edge, clean away.
     top = (_rim() + _arms() + tube) - lattice._part_voids(skip=("D3",)) - tube_void
-    body = top + case.lite_legs(TOP)
+    body = top + case.lc_legs(TOP)
     # J2 and J4's hulls cut the rim along the front, and the piece between
     # them is left hanging from nothing; the acrylic spans it, over the shells.
     return max(body.solids(), key=lambda s: s.volume)

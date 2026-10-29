@@ -199,8 +199,8 @@ class TestCornerRadius(unittest.TestCase):
 class TestPanelSharesTheBoardOutline(unittest.TestCase):
     """params.CORNER_R's docstring claims the art panel (hardware/panel/
     panel.kicad_pcb) shares the main board's exact outline -- same
-    62.00 x 104.27 footprint, same R2.0 corners -- and case.lite_lid()'s
-    fix for Finding 1 (the Lite lid's zero-clearance pocket fit) depends on
+    62.00 x 104.27 footprint, same R2.0 corners -- and case.lc_lid()'s
+    fix for Finding 1 (the LC lid's zero-clearance pocket fit) depends on
     that being literally true: the lid is now sized at BOARD_W x BOARD_L /
     CORNER_R specifically because the panel is assumed to match. Read the
     panel file directly, with the same parser used on the main board,

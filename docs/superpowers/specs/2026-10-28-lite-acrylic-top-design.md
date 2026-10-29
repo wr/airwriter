@@ -1,5 +1,10 @@
 # Lite acrylic top and frame design
 
+> **Amended 2026-10-29:** the build is AirWriter LC, not Lite, and its files say so:
+> `enclosure/lc_frame.py` (`lc_frame()`), `case.lc_legs()` and `case.lc_lid()`,
+> `out/airwriter-lc-frame.stl` and `airwriter-lc-lid.stl`, `hardware/panel/lc_top.py`,
+> `svg/lc.svg`, `airwriter-lc-top.svg` and `lc_slash.polys.json`. Below, read LC for Lite.
+
 2026-10-28. Wells chose a clean top over screws through the acrylic, then UV-cure glue
 over tape, the rev 2026.11 board (this branch has it merged) over rev A, and on 2026-10-29
 1 mm acrylic, the sheet his library had (it has 1 and 3 mm). The shop sells AirWriter Lite as "the same black bottom case under a clear

@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: CERN-OHL-S-2.0
-"""The Lite frame (lite_frame.py): what the Lite's acrylic top is glued to."""
+"""The LC frame (lc_frame.py): what the LC's acrylic top is glued to."""
 import unittest
 
 from build123d import Box, Cylinder, Pos
@@ -7,7 +7,7 @@ from build123d import Box, Cylinder, Pos
 import board_geom as bg
 import case
 import components
-import lite_frame
+import lc_frame
 import params as p
 
 TOP = p.ACRYLIC_UNDERSIDE - p.GLUE_LINE
@@ -21,10 +21,10 @@ def _vol(part):
     return part.volume if part else 0.0
 
 
-class TestLiteFrame(unittest.TestCase):
+class TestLCFrame(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.frame = lite_frame.lite_frame()
+        cls.frame = lc_frame.lc_frame()
 
     def test_is_one_valid_solid(self):
         self.assertTrue(self.frame.is_valid)
@@ -50,14 +50,14 @@ class TestLiteFrame(unittest.TestCase):
             pad = Pos(x, y, TOP - 0.05) * Cylinder(p.LEG_D / 2 - 0.05, 0.1)
             self.assertGreaterEqual(_vol(self.frame & pad), 0.9 * pad.volume, msg=h)
 
-    def test_legs_are_the_lite_lids(self):
+    def test_legs_are_the_lc_lids(self):
         # Same legs, inserts, screws, connector trims and foot relief as the
-        # printed Lite lid: below the rim the two parts are the same solid.
+        # printed LC lid: below the rim the two parts are the same solid.
         # Away from D3's light tube, which stands on the board too.
-        _, (ox0, ox1, oy0, oy1) = lite_frame.tube_rects()
+        _, (ox0, ox1, oy0, oy1) = lc_frame.tube_rects()
         below = (_box(-5, p.BOARD_W + 5, -5, p.BOARD_L + 5, -1, TOP - p.FRAME_RIM_H - 0.1)
                  - _box(ox0 - 0.01, ox1 + 0.01, oy0 - 0.01, oy1 + 0.01, -2, TOP + 1))
-        mine, lids = self.frame & below, case.lite_lid() & below
+        mine, lids = self.frame & below, case.lc_lid() & below
         self.assertAlmostEqual(_vol(mine), _vol(lids), places=2)
         self.assertAlmostEqual(_vol(mine - lids), 0.0, places=2)
 
@@ -87,16 +87,16 @@ class TestLiteFrame(unittest.TestCase):
         from build123d import Face, Wire, extrude
         z1 = TOP - p.FRAME_CAP
         board_up = _box(-5, p.BOARD_W + 5, -5, p.BOARD_L + 5, 0, z1)
-        shell = (lite_frame.tube_hollow(0.40) - lite_frame.tube_hollow()) & board_up
+        shell = (lc_frame.tube_hollow(0.40) - lc_frame.tube_hollow()) & board_up
         self.assertAlmostEqual(_vol(self.frame & shell), shell.volume, places=2,
                                msg="a wall of D3's tube is under 0.40 somewhere")
-        inside = lite_frame.tube_hollow() & _box(-5, p.BOARD_W + 5, -5, p.BOARD_L + 5, 0.01, z1 - 0.01)
+        inside = lc_frame.tube_hollow() & _box(-5, p.BOARD_W + 5, -5, p.BOARD_L + 5, 0.01, z1 - 0.01)
         self.assertAlmostEqual(_vol(self.frame & inside), 0.0, places=3,
                                msg="something inside D3's tube")
-        ix0, ix1, iy0, iy1 = lite_frame.tube_rects()[0]
-        lid = _box(ix0, ix1, iy0, iy1, z1, TOP) & lite_frame._rim_outline(
+        ix0, ix1, iy0, iy1 = lc_frame.tube_rects()[0]
+        lid = _box(ix0, ix1, iy0, iy1, z1, TOP) & lc_frame._rim_outline(
             p.FRAME_TUBE_MIN_WALL, z1, TOP)
-        face = Face(Wire.make_polygon([(x, y, 0) for x, y in bg.lite_slash()], close=True))
+        face = Face(Wire.make_polygon([(x, y, 0) for x, y in bg.lc_slash()], close=True))
         slit = Pos(0, 0, z1) * extrude(face, p.FRAME_CAP, dir=(0, 0, 1))
         self.assertAlmostEqual(_vol(self.frame & lid), lid.volume - slit.volume, places=2,
                                msg="the cap is open somewhere but the slit")

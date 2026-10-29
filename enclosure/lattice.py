@@ -123,7 +123,7 @@ def d3_window() -> tuple[float, float, float, float]:
 def _d3_tube_rects(window=None) -> tuple[tuple[float, float, float, float],
                                          tuple[float, float, float, float]]:
     """(interior, outer) of the D3 tube as (x0, x1, y0, y1). The interior
-    holds `window` (the panel's FR4 window by default; the Lite frame passes
+    holds `window` (the panel's FR4 window by default; the LC frame passes
     its frosted slash) and D3's envelope (since rev 2026.11 a 3 mm LED on an
     8 mm spacer, standing near the window), D3_TUBE_CLEAR round both. The
     outer runs on to the board edge on any side within 1 mm of it, so the edge

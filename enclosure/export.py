@@ -7,14 +7,14 @@ from build123d import export_step, export_stl
 
 import case
 import lattice
-import lite_frame
+import lc_frame
 
 OUT = pathlib.Path(__file__).resolve().parent / "out"
 
 PARTS = {
     "airwriter-tray": case.tray,
-    "airwriter-lite-lid": case.lite_lid,
-    "airwriter-lite-frame": lite_frame.lite_frame,
+    "airwriter-lc-lid": case.lc_lid,
+    "airwriter-lc-frame": lc_frame.lc_frame,
     "airwriter-lattice": lattice.lattice,
 }
 

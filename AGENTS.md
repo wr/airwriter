@@ -278,16 +278,16 @@ What works on `main`:
 every wall 1.70 below the rim, one thickness all round so no lines show up the outside; the
 board goes in by the sequence in `enclosure/README.md`, thumbing the west wall out past the
 DIP keys; on this branch the tray is cut to rev 2026.11, which has no DIP switches and no
-DIP window, and board 1's tray is the one at `hw-rev-a`), Lite frame, Lite lid, and the Pro build's light-guide lattice. Cavity 13.04 (measured mini-DIN
+DIP window, and board 1's tray is the one at `hw-rev-a`), LC frame, LC lid, and the Pro build's light-guide lattice. Cavity 13.04 (measured mini-DIN
 height); Pro screws M2.5 × 18. Four 10 mm rubber feet sit in 0.40 pockets in the floor's
 underside, each hiding a screw counterbore. The shop's cased GLBs still show the pre-W-1036
-tray. The Lite's clear top is 1 mm cast acrylic (the frame's height follows `ACRYLIC`), laser file
-`hardware/panel/airwriter-lite-top.svg` (`lite_top.py`, from the Lite's own art
-`hardware/panel/svg/lite.svg`, Figma Frame 17: "AirWriter LC", rev 2026.11, the Pro's gold
+tray. The LC's clear top is 1 mm cast acrylic (the frame's height follows `ACRYLIC`), laser file
+`hardware/panel/airwriter-lc-top.svg` (`lc_top.py`, from the LC's own art
+`hardware/panel/svg/lc.svg`, Figma Frame 17: "AirWriter LC", rev 2026.11, the Pro's gold
 dots, serial and power only, all frosted; the panel's outline and Ø3.8 test hole cut), glued with
-UV-cure glue to the four leg tops of the printed Lite frame (`lite_frame.py`: the lid's legs, a
+UV-cure glue to the four leg tops of the printed LC frame (`lc_frame.py`: the lid's legs, a
 rim and arms, and a sealed tube that lets D3 out only through a slit under the slash; spec `docs/superpowers/specs/2026-10-28-lite-acrylic-top-design.md`). Neither
-is cut or printed yet. The all-printed Lite lid stays, its plunger bore now the panel's 3.8.
+is cut or printed yet. The all-printed LC lid stays, its plunger bore now the panel's 3.8.
 
 **Printers:** built and tested on the ImageWriter II only. The original ImageWriter and the
 ImageWriter LQ take the same stream and are expected to work, untested (the scope spec's
@@ -597,8 +597,8 @@ Linear is the queue; these are the live items.
 ## Layout
 ```
 hardware/airwriter/   KiCad 10 main board (sch, pcb, lib/, route.py, stitch.py, tools_pcb/)
-hardware/panel/       art panel generator (Figma SVG → panel.kicad_pcb), and the Lite's
-                      acrylic top laser file (svg/lite.svg → lite_top.py → airwriter-lite-top.svg)
+hardware/panel/       art panel generator (Figma SVG → panel.kicad_pcb), and the LC's
+                      acrylic top laser file (svg/lc.svg → lc_top.py → airwriter-lc-top.svg)
 hardware/combined/    the snap-apart order panel and make_fab.sh; combined-fab.zip is the order
 firmware/             ESP-IDF 5.5 app; components/ per SPEC §3.1 plus job_pipe, led_grid, pic_prog,
                       ota_health, printer_caps, ps_page, laser …; bootloader_components/ holds the bootloader's pin clamps
@@ -619,7 +619,7 @@ tools/lights/         the wiki's GIF of every panel light effect, played through
 tools/release/        release.sh (build, check, sign, publish), tamper.py (refusal-test images)
 tools/stackcheck/     stackcheck.py: worst-case stack of the tasks that make ESP-IDF's deep calls
 fixtures/             captured URF samples and expected streams
-enclosure/            3D printed case (build123d): tray, Lite lid, Pro lattice; out/*.stl committed
+enclosure/            3D printed case (build123d): tray, LC frame and lid, Pro lattice; out/*.stl committed
 ```
 
 ## Licence

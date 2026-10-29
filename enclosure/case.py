@@ -1,4 +1,4 @@
-"""The AirWriter enclosure: a tray shared by both builds, and a Lite lid.
+"""The AirWriter enclosure: a tray shared by both builds, and an LC lid.
 
 Everything is modelled in the case frame (see board_geom): X=0 is the west
 wall's inner face, Y=0 is the front (port) wall's inner face, Z=0 is the
@@ -29,7 +29,7 @@ def _rounded_box(w: float, l: float, h: float, cx: float, cy: float,
     """A Box(w, l, h) centred at (cx, cy, cz), with its four VERTICAL edges
     filleted to `radius` -- a rounded rectangle extruded through h. Only the
     vertical edges are touched (top and bottom rims stay sharp): both the
-    tray's exterior/pocket and the lite lid's plate print with this shape
+    tray's exterior/pocket and the LC lid's plate print with this shape
     flat-side-down, and a rounded bottom rim would be an overhang. (The
     tray's bottom rim gets a 45-degree chamfer instead -- see shell().)"""
     box = Pos(cx, cy, cz) * Box(w, l, h)
@@ -472,7 +472,7 @@ def reset_pinhole() -> Part:
 
 
 def _sw3_plunger_centre() -> tuple[float, float]:
-    """SW3's body centre, in KiCad mm -- where the Lite lid's test-plunger
+    """SW3's body centre, in KiCad mm -- where the LC lid's test-plunger
     bore lands (HANDOFF: under the art panel's test dot).
 
     SW3's four through-hole pads sit at footprint-local (0,0), (6.5,0),
@@ -488,10 +488,10 @@ def _sw3_plunger_centre() -> tuple[float, float]:
     return bg.local_to_board(fp, lx, ly)
 
 
-def lite_legs(top: float) -> Part:
-    """The Lite's four legs at H1-H4, from the board's face (Z=0) up to `top`,
-    each with an M2.5 heat-set insert's bore in its foot. The Lite lid and the
-    Lite frame (lite_frame.py) stand on them.
+def lc_legs(top: float) -> Part:
+    """The LC's four legs at H1-H4, from the board's face (Z=0) up to `top`,
+    each with an M2.5 heat-set insert's bore in its foot. The LC lid and the
+    LC frame (lc_frame.py) stand on them.
 
     Each is a constant-diameter cylinder, so whatever plate or rim sits on
     top joins it in a clean coincident union with no exposed shoulder: both
@@ -546,7 +546,7 @@ def lite_legs(top: float) -> Part:
     return legs
 
 
-def lite_lid() -> Part:
+def lc_lid() -> Part:
     """The panel stand-in for boards built without the dot-grid art panel.
 
     A plate at the panel's OWN size (BOARD_W x BOARD_L, the board's outline,
@@ -556,7 +556,7 @@ def lite_lid() -> Part:
     lands the same POCKET_CLEAR per side the pocket gives every other seated part --
     at the pocket's own size, the plate would need zero clearance to drop
     in, which does not print (see test_it_fits_the_tray_with_no_interference).
-    Thickness on four legs (lite_legs) that reproduce in plastic the CAVITY
+    Thickness on four legs (lc_legs) that reproduce in plastic the CAVITY
     (13.04mm) the Pro's mini-DIN lattice spans, so the plate's own top lands
     flush with Z_WALL_TOP -- the same face the Pro's panel top registers
     against (see params.CAVITY for the nut-stack correction and its open
@@ -575,7 +575,7 @@ def lite_lid() -> Part:
         p.BOARD_W, p.BOARD_L, p.PANEL,
         p.BOARD_W / 2, p.BOARD_L / 2, p.Z_WALL_TOP - p.PANEL / 2,
         p.CORNER_R)
-    body = plate + lite_legs(p.CAVITY)
+    body = plate + lc_legs(p.CAVITY)
     px, py = bg.to_case(*_sw3_plunger_centre())
     plunger = Pos(px, py, p.Z_WALL_TOP - p.PANEL / 2) * Cylinder(
         p.PLUNGER_BORE_D / 2, p.PANEL + 0.02)
@@ -583,7 +583,7 @@ def lite_lid() -> Part:
 
 
 def tray() -> Part:
-    """The finished tray, shared by Pro and Lite.
+    """The finished tray, shared by Pro and LC.
 
     No carveouts() term: RULING 1 (task-6-report.md) found the brief's
     version vacuous -- the cavity is one open prism and U4/R3/U9 all sit well

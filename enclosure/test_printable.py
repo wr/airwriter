@@ -11,8 +11,8 @@ The two parts print in OPPOSITE orientations relative to their own model:
 
   - The tray prints floor-down, in the SAME orientation it's modelled --
     model -Z is down on the bed. `downward_flats()` is its check.
-  - The Lite lid prints plate-down: its own Z_WALL_TOP face sits on the
-    bed, legs pointing up into the air (see case.lite_lid()'s docstring),
+  - The LC lid prints plate-down: its own Z_WALL_TOP face sits on the
+    bed, legs pointing up into the air (see case.lc_lid()'s docstring),
     which INVERTS the model -- print-down is model +Z. `upward_flats()` is
     its check. Calling `downward_flats()` on the lid would look at model -Z
     faces, which print-side-up are always supported -- it can never see a
@@ -24,7 +24,7 @@ import unittest
 from build123d import GeomType
 
 import case
-import lite_frame
+import lc_frame
 import params as p
 
 MIN_WALL = p.WALL - p.POCKET_CLEAR
@@ -159,8 +159,8 @@ def downward_flats(part, floor_z, min_area=MIN_BAND_AREA):
 
 def upward_flats(part, ceiling_z, min_area=MIN_BAND_AREA):
     """Overhangs for a part printed INVERTED relative to its own model --
-    model +Z is print-down. Use for the Lite lid, which prints plate-down
-    (case.lite_lid()'s docstring). `ceiling_z` is the model Z of the plate's
+    model +Z is print-down. Use for the LC lid, which prints plate-down
+    (case.lc_lid()'s docstring). `ceiling_z` is the model Z of the plate's
     own top face (the real build-plate contact)."""
     return _overhangs(part, 1.0, ceiling_z, min_area)
 
@@ -223,7 +223,7 @@ class TestTray(unittest.TestCase):
 class TestLid(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.lid = case.lite_lid()
+        cls.lid = case.lc_lid()
 
     def test_single_watertight_solid(self):
         self.assertTrue(self.lid.is_valid)
@@ -239,15 +239,15 @@ class TestLid(unittest.TestCase):
               round(f.center().Z, 1), round(f.area, 1)) for f in flats], [])
 
 
-class TestLiteFrame(unittest.TestCase):
+class TestLCFrame(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.frame = lite_frame.lite_frame()
+        cls.frame = lc_frame.lc_frame()
 
     def test_no_unsupported_downward_flats_printed_rim_down(self):
         # Printed rim-down like the lid, so print-down is model +Z; the rim's
-        # and leg tops' own face at lite_frame.TOP is the bed.
-        flats = upward_flats(self.frame, ceiling_z=lite_frame.TOP)
+        # and leg tops' own face at lc_frame.TOP is the bed.
+        flats = upward_flats(self.frame, ceiling_z=lc_frame.TOP)
         self.assertEqual(
             [(round(f.center().X, 1), round(f.center().Y, 1),
               round(f.center().Z, 1), round(f.area, 1)) for f in flats], [])

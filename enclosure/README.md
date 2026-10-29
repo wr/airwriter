@@ -1,15 +1,15 @@
 # Enclosure (enclosure/out/*.stl)
 
-Four printed parts. The **tray** is shared by both builds. The **Lite frame**
-carries the Lite's clear acrylic top, which stands in for the dot-grid art panel
-on boards built without it; the **Lite lid** is the all-printed alternative to
+Four printed parts. The **tray** is shared by both builds. The **LC frame**
+carries the LC's clear acrylic top, which stands in for the dot-grid art panel
+on boards built without it; the **LC lid** is the all-printed alternative to
 the two. The **lattice** is the Pro build's light guide, between the board and
 the panel.
 
     ./build.sh          # runs the tests, then writes out/*.{step,stl}
 
-`out/airwriter-tray.stl`, `out/airwriter-lite-frame.stl`,
-`out/airwriter-lite-lid.stl` and `out/airwriter-lattice.stl` are committed, so the case can be printed without a
+`out/airwriter-tray.stl`, `out/airwriter-lc-frame.stl`,
+`out/airwriter-lc-lid.stl` and `out/airwriter-lattice.stl` are committed, so the case can be printed without a
 build123d install; re-run `./build.sh` and commit
 them again after any change here or to the board. The STEPs are not (6 MB, and
 the same command rebuilds them).
@@ -63,9 +63,9 @@ real unsupported ceilings once the part is reoriented in the slicer.
 | Build | Screws | Into |
 |---|---|---|
 | Pro | 4 × M2.5 × 18 | the art panel's Würth 9774030151R blind standoffs |
-| Lite | 4 × M2.5 × 10 | M2.5 brass heat-set inserts in the frame's (or lid's) legs |
+| LC | 4 × M2.5 × 10 | M2.5 brass heat-set inserts in the frame's (or lid's) legs |
 
-Lite is **M2.5 × 10, not × 8**: with `STANDOFF` at 3.00 the counterbore seat
+LC is **M2.5 × 10, not × 8**: with `STANDOFF` at 3.00 the counterbore seat
 sits at Z = -5.70, so an 8mm screw only reaches 2.30mm into the lid's 4.50mm
 insert bore. 10mm reaches 4.30mm — most of the insert's own length.
 
@@ -79,15 +79,15 @@ Press the four inserts into the **bottom** of the frame's or lid's legs before
 assembly.
 Rubber feet go on the floor's underside, over the screw counterbores.
 
-## Acrylic top and frame (Lite)
+## Acrylic top and frame (LC)
 
 Spec: `docs/superpowers/specs/2026-10-28-lite-acrylic-top-design.md`.
 
 The top is 1 mm clear **cast** acrylic (extruded barely frosts), cut and
-engraved from `hardware/panel/airwriter-lite-top.svg`: red hairline is cut,
+engraved from `hardware/panel/airwriter-lc-top.svg`: red hairline is cut,
 black fill is engraved. Engrave first, on the top face.
 
-`out/airwriter-lite-frame.stl` is the Lite lid's four legs joined by a rim
+`out/airwriter-lc-frame.stl` is the LC lid's four legs joined by a rim
 round the top edge (1.7 mm wide, 2.5 mm deep), with an arm from each leg out to
 the side rim, and a light-tight tube round the power LED, closed but for a slit
 right under the frosted slash, so the LED lights the slash and nothing else. It stops
@@ -202,7 +202,7 @@ before it costs you the ones further down the list.
    set equal to the body's centre Z — the same assumption `RESET_ACTUATOR_Z`
    makes — so the two were always going to agree (see `params.py` and
    task-6-report.md for the full derivation).
-6. (Lite only) The lid, or the acrylic, into the tray's pocket, by hand, before any screws go
+6. (LC only) The lid, or the acrylic, into the tray's pocket, by hand, before any screws go
    in. It should drop in with a light push and lift back out — expect about
    0.30 mm of clearance per side (`POCKET_CLEAR`), not a press fit and not a
    rattle. Too tight almost always means the pocket printed a little
@@ -226,13 +226,13 @@ glTF-transform install they depend on; after `./build.sh` here:
     E=~/Projects/airwriter/enclosure/out
     H="105.636,65.636;156.364,65.636;105.636,151.93;153.364,151.93"   # H1-H4, KiCad mm
     node case-shell.mjs ../../../public/models/airwriter-pro-cased.glb  ../../../public/models/airwriter-pro-cased.glb  --tray $E/airwriter-tray.stl
-    node case-shell.mjs ../../../public/models/airwriter-lite-cased.glb ../../../public/models/airwriter-lite-cased.glb --tray $E/airwriter-tray.stl --lid $E/airwriter-lite-lid.stl
+    node case-shell.mjs ../../../public/models/airwriter-lite-cased.glb ../../../public/models/airwriter-lite-cased.glb --tray $E/airwriter-tray.stl --lid $E/airwriter-lc-lid.stl
     node case-hardware.mjs ../../../public/models/airwriter-pro-cased.glb  ../../../public/models/airwriter-pro-cased.glb  --holes "$H" --floor -5.4 --feet black
     node case-hardware.mjs ../../../public/models/airwriter-lite-cased.glb ../../../public/models/airwriter-lite-cased.glb --holes "$H" --floor -5.4 --feet clear --screws 10 --clear
 
 `case-shell.mjs` swaps the `case` (and `lid`) mesh for these STLs in the KiCad
 GLB frame (a -90 degree turn about X, then +100 / +1.6 / +164.27 mm) and keeps
-each node's material; `case-hardware.mjs` re-seats the rubber feet, the Lite's
+each node's material; `case-hardware.mjs` re-seats the rubber feet, the LC's
 screws and the clear materials. `--floor` is glTF Y of the tray's underside:
 `Z_FLOOR_BOTTOM` (-7.00) + the 1.60 frame offset. The full write-up is "The
 cased AirWriter" in the shop's `scripts/board-model/README.md`; then
@@ -247,7 +247,7 @@ cased AirWriter" in the shop's `scripts/board-model/README.md`; then
   every review finding and ruling). The `task-N-report.md` files the
   docstrings and tests here cite are those.
 - After that branch: three measured fit fixes (wall/panel flush, DIP slot,
-  boss relief), the DIP slot resized to the switch's key recess, the Lite
+  boss relief), the DIP slot resized to the switch's key recess, the LC
   lid's legs pulled clear of the board, flat port lintels in place of the
   45-degree ridge roofs (shop W-806), the bottom chamfer, the top
   chamfer, and (2026-10-14, after rev A would not go in) 0.30 pocket

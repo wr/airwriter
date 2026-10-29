@@ -446,7 +446,7 @@ class TestPorts(unittest.TestCase):
                     f"there (full tray), need >= {min_thickness}mm")
 
     def test_no_cut_breaks_the_top_rim(self):
-        # The rim is what the panel / Lite lid sits against and the first
+        # The rim is what the panel / LC lid sits against and the first
         # thing anyone sees. The old 45-degree print roofs over J2/J4 peaked
         # at Z 14.55, above Z_WALL_TOP (14.34), and notched triangles out of
         # it; the averaged band probes above let that through. Nothing the
@@ -858,10 +858,10 @@ class TestFeet(unittest.TestCase):
         self.assertAlmostEqual(p.SCREW_HEAD_DEPTH - p.FOOT_POCKET_DEPTH, 0.90, places=6)
 
 
-class TestLiteLid(unittest.TestCase):
+class TestLCLid(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.lid = case.lite_lid()
+        cls.lid = case.lc_lid()
 
     def test_is_one_valid_solid(self):
         self.assertTrue(self.lid.is_valid)
@@ -887,7 +887,7 @@ class TestLiteLid(unittest.TestCase):
         # built plate geometry directly (not just each against p.Z_WALL_TOP
         # separately, which both derive from the same constant and so can't
         # catch one of the two code paths drifting from the other). The
-        # spec's promise is that Pro and Lite look identical from outside --
+        # spec's promise is that Pro and LC look identical from outside --
         # this is that promise, checked on the actual solids.
         wall_top = case.shell().bounding_box().max.Z
         lid_top = self.lid.bounding_box().max.Z
@@ -992,7 +992,7 @@ class TestCornerRounding(unittest.TestCase):
     """Task 10: the board (hardware/airwriter/airwriter.kicad_pcb) and the
     art panel it shares an outline with both have R2.0 corners, not square
     ones (board_geom.corner_radius()). shell()'s exterior is rounded at
-    EXT_R, its pocket at POCKET_R, and lite_lid()'s plate at CORNER_R --
+    EXT_R, its pocket at POCKET_R, and lc_lid()'s plate at CORNER_R --
     the panel's own outline, not the pocket's (Finding 1: cutting the plate
     at POCKET_R/POCKET_W/POCKET_L, the pocket's own size, leaves it zero
     clearance to seat in) (params.py derives all three from CORNER_R). Only
@@ -1012,14 +1012,14 @@ class TestCornerRounding(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.shell = case.shell()
-        cls.lid = case.lite_lid()
+        cls.lid = case.lc_lid()
 
     def _assert_solid_corner_rounded(self, part, x0, y0, x1, y1, radius, z,
                                       label):
         """For a SOLID part whose outer footprint is x0..x1, y0..y1: the
         square-corner wedge a fillet cuts away must be empty, and the
         fillet's own rounded body must be solid. Used for the tray's
-        exterior and the lite lid's plate -- both solids with a rounded
+        exterior and the LC lid's plate -- both solids with a rounded
         outer edge."""
         from build123d import Box, Pos
         for cx, cy, sx, sy in _corners(x0, y0, x1, y1):
@@ -1093,7 +1093,7 @@ class TestCornerRounding(unittest.TestCase):
                 msg=f"pocket corner ({cx:.2f},{cy:.2f}): {vol:.4f}mm^3 of "
                     "material inside the pocket's own rounded region")
 
-    def test_lite_lid_plate_corners_are_rounded_at_corner_r(self):
+    def test_lc_lid_plate_corners_are_rounded_at_corner_r(self):
         # The plate is cut at the panel's OWN outline (BOARD_W x BOARD_L,
         # CORNER_R), not the pocket's (Finding 1) -- so this checks the
         # plate's real footprint and radius, not the pocket's.
@@ -1103,7 +1103,7 @@ class TestCornerRounding(unittest.TestCase):
         y1 = p.BOARD_L
         z = p.Z_WALL_TOP - p.PANEL / 2
         self._assert_solid_corner_rounded(
-            self.lid, x0, y0, x1, y1, p.CORNER_R, z, label="lite lid plate")
+            self.lid, x0, y0, x1, y1, p.CORNER_R, z, label="LC lid plate")
 
     def test_lid_outline_matches_the_panel_it_stands_in_for(self):
         # The lid's plate is cut to the art panel's OWN outline -- BOARD_W x
@@ -1125,7 +1125,7 @@ class TestCornerRounding(unittest.TestCase):
             p.BOARD_W, p.BOARD_L, p.PANEL)
         panel_shape = panel_shape.fillet(
             p.CORNER_R, panel_shape.edges().filter_by(Axis.Z))
-        # lite_lid() also cuts SW3's plunger bore through the plate -- a
+        # lc_lid() also cuts SW3's plunger bore through the plate -- a
         # real, intentional hole, not a corner defect. Cut the same bore
         # out of the reference shape so it isn't mistaken for one. Derived
         # from SW3's own pad centroid (Finding 2), not a hardcoded KiCad
