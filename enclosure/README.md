@@ -188,9 +188,9 @@ before it costs you the ones further down the list.
 
 1. The board in, per "Fitting the board". The west wall should bow and spring
    back without whitening at the DIP window's corners.
-2. A real USB-C cable into the chamfered opening. The receptacle sits 1.5 mm
-   behind the wall; this is the one clearance the board file could not settle
-   — `USBC_CHAMFER` was tuned by eye, not measured.
+2. A real USB-C cable into its opening, the shell's outline with 0.40 round it.
+   The receptacle sits 1.5 mm behind the wall, so the plug's overmould has to
+   clear the wall's face: this is the one fit the board file could not settle.
 3. Both mini-DIN plugs.
 4. A pen tip on S1's keys (they sit 0.80 mm recessed by design).
 5. A paperclip on the east-wall reset pinhole. Its Z (1.75mm, half of SW1's

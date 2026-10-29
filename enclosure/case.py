@@ -363,16 +363,19 @@ def _usbc_opening() -> Part:
     No flare: it used to widen by 1.20 to the outer face for a plug's
     overmould, but a typical USB-C plug clears the case without one, and the
     chamfer read as an indent round the port (Wells, 2026-10-17). Sized from
-    the connector's real X and Z extents, so the cut stays off the floor
-    slab."""
-    j1 = connector_solid("J1").bounding_box()
+    the shell's own X and Z extents in front of the board edge, with ends as
+    round as the shell's, so the opening is the metal's outline with an even
+    PORT_CLEAR round it. The whole part's extents reach down its legs, 1.0
+    through the board, which made it 1.0 too tall below the shell and showed
+    the board's edge in it (Wells, 2026-10-29)."""
+    j1 = (connector_solid("J1") & (Pos(0, -10, 0) * Box(200, 20, 100))).bounding_box()
     xc = (j1.min.X + j1.max.X) / 2
     zc = (j1.min.Z + j1.max.Z) / 2
     w = j1.size.X + 2 * p.PORT_CLEAR
     h = j1.size.Z + 2 * p.PORT_CLEAR
 
     def section(y):
-        return Pos(xc, y, zc) * Rot(90, 0, 0) * RectangleRounded(w, h, min(w, h) / 2 * 0.9)
+        return Pos(xc, y, zc) * Rot(90, 0, 0) * RectangleRounded(w, h, min(w, h) / 2 * 0.98)
 
     # From outside the wall to the board edge: past the wall's inner face it
     # cuts only air.
@@ -406,10 +409,12 @@ def port_cutouts() -> Part:
     the vendor geometry rather than from a datasheet reading. The mini-DIN
     windows get flat bottoms (`_minidin_window`); the USB-C receptacle sits
     ~1.5mm behind the wall's outer face, so its opening is carried straight
-    out to it (`_usbc_opening`).
+    out to it (`_usbc_opening`). Every envelope is the connector's front
+    only: behind the board edge are its pins and legs, which the wall never
+    meets.
     """
     return (_minidin_window("J2") + _minidin_window("J4")
-            + _grown("J1", p.PORT_CLEAR) + _usbc_opening())
+            + _grown("J1", p.PORT_CLEAR, front_only=True) + _usbc_opening())
 
 
 def dip_slot() -> Part | None:

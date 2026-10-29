@@ -465,10 +465,13 @@ class TestPorts(unittest.TestCase):
         # port). The opening is the same size at the wall's outer face as
         # just behind it, and that size is J1's own outline grown by
         # PORT_CLEAR. Measured on the real cut by slicing port_cutouts()
-        # with a thin Y slab at J1's centre.
+        # with a thin Y slab at J1's centre. J1's outline is its shell, in
+        # front of the board edge: the whole part reaches 1.0 down its legs
+        # through the board, and an opening cut to that showed the board's
+        # edge under the shell (Wells, 2026-10-29).
         from build123d import Box, Pos
 
-        j1 = case.connector_solid("J1").bounding_box()
+        j1 = (case.connector_solid("J1") & (Pos(0, -10, 0) * Box(200, 20, 100))).bounding_box()
         xc = (j1.min.X + j1.max.X) / 2
         zc = (j1.min.Z + j1.max.Z) / 2
 
@@ -485,6 +488,11 @@ class TestPorts(unittest.TestCase):
         self.assertAlmostEqual(outer.Z, inner.Z, delta=0.02, msg="taller outside: a flare")
         self.assertAlmostEqual(outer.X, j1.size.X + 2 * p.PORT_CLEAR, delta=0.02)
         self.assertAlmostEqual(outer.Z, j1.size.Z + 2 * p.PORT_CLEAR, delta=0.02)
+        self.assertAlmostEqual(j1.min.Z, 0.0, delta=0.05, msg="the shell sits on the board")
+        for y in (-2.99, -1.81, -0.5):
+            hit = case.port_cutouts() & (Pos(xc, y, zc) * Box(15, 0.02, 10))
+            self.assertAlmostEqual(hit.bounding_box().min.Z, j1.min.Z - p.PORT_CLEAR, delta=0.02,
+                                   msg=f"opening's bottom at Y={y}")
 
     def test_minidin_window_bottoms_are_flat(self):
         # One level face across each window and through the wall (Wells,
