@@ -7,8 +7,8 @@ C15,1n,Capacitor_SMD:C_0603_1608Metric,C1588,1,
 C67,1u,Capacitor_SMD:C_0805_2012Metric,C28323,1,
 D3,green PWR,airwriter:LED_D3.0mm_Spacer_H8mm,C20613324,1,"THT: 3 mm flat-top green on a HIWA LED4*8 nylon spacer (LCSC C92326) under the body, lens up"
 J1,USB-C 5V in,Connector_USB:USB_C_Receptacle_HRO_TYPE-C-31-M-12,C165948,1,
-J2,Mini-DIN-8 to printer,airwriter:MiniDIN-8_Kycon_KMDGX-8S-BS_RightAngle,C5780060,1,"ASSEMBLE - Kycon KMDGX-8S-BS, source from Mouser (none at LCSC); through-hole, 11 joints"
-J4,Mini-DIN-8 LocalTalk,airwriter:MiniDIN-8_Kycon_KMDGX-8S-BS_RightAngle,C5780060,1,DO NOT ASSEMBLE - keep its 11 holes free of solder (Kycon KMDGX-8S-BS)
+J2,Mini-DIN-8 to printer,airwriter:MiniDIN-8_Kycon_KMDGX-8S-BS_RightAngle,C5780060,1,DO NOT ASSEMBLE - keep its 11 holes free of solder; fitted after delivery (Kycon KMDGX-8S-BS)
+J4,Mini-DIN-8 LocalTalk,airwriter:MiniDIN-8_Kycon_KMDGX-8S-BS_RightAngle,C5780060,1,DO NOT ASSEMBLE - keep its 11 holes free of solder; fitted after delivery (Kycon KMDGX-8S-BS)
 "R1,R2",5.1k,Resistor_SMD:R_0603_1608Metric,C23186,2,
 "R3,R14,R21-R25,R32,R33",10k,Resistor_SMD:R_0603_1608Metric,C25804,9,
 "R8,R9",0R,Resistor_SMD:R_0603_1608Metric,C21189,2,

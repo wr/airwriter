@@ -8,8 +8,8 @@ C67,1u,Capacitor_SMD:C_0805_2012Metric,C28323,1,
 D3,green PWR,airwriter:LED_D3.0mm_Spacer_H8mm,C20613324,1,"THT: 3 mm flat-top green on a HIWA LED4*8 nylon spacer (LCSC C92326) under the body, lens up"
 D10-D46,SK6812MINI-C,LED_SMD:LED_SK6812MINI_PLCC4_3.5x3.5mm_P1.75mm,C7423117,37,
 J1,USB-C 5V in,Connector_USB:USB_C_Receptacle_HRO_TYPE-C-31-M-12,C165948,1,
-J2,Mini-DIN-8 to printer,airwriter:MiniDIN-8_Kycon_KMDGX-8S-BS_RightAngle,C5780060,1,"ASSEMBLE - Kycon KMDGX-8S-BS, source from Mouser (none at LCSC); through-hole, 11 joints"
-J4,Mini-DIN-8 LocalTalk,airwriter:MiniDIN-8_Kycon_KMDGX-8S-BS_RightAngle,C5780060,1,"ASSEMBLE - Kycon KMDGX-8S-BS, source from Mouser (none at LCSC); through-hole, 11 joints"
+J2,Mini-DIN-8 to printer,airwriter:MiniDIN-8_Kycon_KMDGX-8S-BS_RightAngle,C5780060,1,DO NOT ASSEMBLE - keep its 11 holes free of solder; fitted after delivery (Kycon KMDGX-8S-BS)
+J4,Mini-DIN-8 LocalTalk,airwriter:MiniDIN-8_Kycon_KMDGX-8S-BS_RightAngle,C5780060,1,DO NOT ASSEMBLE - keep its 11 holes free of solder; fitted after delivery (Kycon KMDGX-8S-BS)
 "R1,R2",5.1k,Resistor_SMD:R_0603_1608Metric,C23186,2,
 "R3,R14,R21,R22,R23,R24,R25,R32",10k,Resistor_SMD:R_0603_1608Metric,C25804,8,
 "R8,R9",0R,Resistor_SMD:R_0603_1608Metric,C21189,2,
@@ -28,8 +28,7 @@ U3,SP3232EBEN-L/TR,Package_SO:SOIC-16_3.9x9.9mm_P1.27mm,C6852,1,
 U4,AP7361C-33E,Package_TO_SOT_SMD:SOT-223-3_TabPin2,C500795,1,
 U5,USBLC6-2SC6,Package_TO_SOT_SMD:SOT-23-6,C7519,1,
 "U6,U8",SP3485EN-L,Package_SO:SOIC-8_3.9x4.9mm_P1.27mm,C8963,2,
-U7,PIC12F1840-I/P,Package_DIP:DIP-8_W7.62mm_Socket,C72124,1,"Fit the DIP-8 socket (LCSC C72124), then press the PIC12F1840-I/P (line ""U7 (PIC)"") into it"
+U7,PIC12F1840-I/P,Package_DIP:DIP-8_W7.62mm_Socket,C72124,1,Fit the DIP-8 SOCKET only (LCSC C72124) and leave it empty: no PIC
 U9,SN74LV1T125DCKR,Package_TO_SOT_SMD:SOT-353_SC-70-5,C75925,1,
-U7 (PIC),"PIC12F1840-I/P (Microchip, PDIP-8)",Package_DIP:DIP-8_W7.62mm,,1,"Source from Digi-Key or Mouser (LCSC stocks only the SOIC); no substitute. Press into U7's socket, its notch to the socket's notch. Fit it BLANK: do not program it, the board loads its firmware"
 "MT1,MT2,MT3,MT4",9774030151R (Wurth WA-SMSI M2.5x3 SMT spacer),panel:SMT_Standoff_M2.5_D6.0mm,,4,"Source from Digi-Key (48k stock, ~$0.60); panel is art-face-down in this production panel so these reflow on the SAME side as all other parts; ring paste aperture in stencil data"
 D3 (spacer),"LED4*8 nylon LED spacer, 4 mm x 8 mm",-,C92326,1,"Under D3: LED leads through the spacer bore, LED flange seated on it, lens up"

@@ -252,8 +252,8 @@ def main():
         fp.Reference().SetPosition(fp.GetPosition())
     d3(board)
     board.FindFootprintByReference('R9').SetDNP(False)
-    for ref in ('J2', 'J4'):   # PCBWay fits both mini-DINs (the LC's list leaves J4 off)
-        board.FindFootprintByReference(ref).SetExcludedFromPosFiles(False)
+    for ref in ('J2', 'J4'):   # Wells fits both mini-DINs after delivery, not PCBWay
+        board.FindFootprintByReference(ref).SetExcludedFromPosFiles(True)
     tp9(board)
     spare_pads(board)
     logos(board)

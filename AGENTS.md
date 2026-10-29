@@ -368,10 +368,12 @@ Linear is the queue; these are the live items.
   `W-1043 Rev B: through-hole dome LED for the power indicator` under it): designed, placed and
   routed on branch `ww/rev-2026-11-board-updates-4f0c6a` (`docs/hardware-rev-2026-11.md`), not
   merged. Next: Wells reviews the routing in KiCad, then the PCBWay orders (November or
-  December): AirWriter on the combined panel, with both ports and a blank PIC in U7's socket,
-  and AirWriter LC on the main board alone, with neither (`docs/ORDER-NOTES.md`). TashTalk is
-  no longer an add-on: each AirWriter gets TashTalk flashed at its bench test (the AppleTalk
-  Port card's Flash TashTalk key, or `POST /api/localtalk/flash`). No DIP switches; each port's HSKo has its own GPIO (J2's IO47, J4's IO13, J4's
+  December): AirWriter on the combined panel, AirWriter LC on the main board alone
+  (`docs/ORDER-NOTES.md`). PCBWay fits neither mini-DIN nor the PIC, and U7's socket goes on
+  empty. TashTalk is no longer an add-on: at each board's bench test Wells solders J2 (and J4
+  on AirWriter), presses a blank PIC12F1840-I/P into AirWriter's socket and flashes TashTalk
+  (the AppleTalk Port card's Flash TashTalk key, or `POST /api/localtalk/flash`). One new
+  blank PIC goes through board 1 before the order. No DIP switches; each port's HSKo has its own GPIO (J2's IO47, J4's IO13, J4's
   HSKi IO21), and U1 is the ESP32-S3-WROOM-1-N16R8 (16 MB flash, 8 MB octal PSRAM on
   IO35–IO37), which needs its own firmware build. SW1 is the Macintosh Mini's BZCN
   TSB001A3518A. IO38–IO40 end on bare pads on the back (TP10–TP12) for bodging. Firmware
@@ -555,9 +557,9 @@ Linear is the queue; these are the live items.
   gate, on KiCad's python: `hardware/airwriter/tools_pcb/r13_check.py` (pads 0.30 mm from
   the edge, silk on the board, D3's K, SW1's RESET).
 - **Fab packages:** `python3 hardware/combine_boards.py` then `sh hardware/combined/make_fab.sh`
-  writes both orders: AirWriter's panel (`hardware/combined-fab.zip`, `combined-pos.csv` 137
-  rows, J2 and J4 placed) and the LC's main board alone (`hardware/airwriter-lc-fab.zip`,
-  `airwriter-lc-pos.csv` 55 rows). The script asserts both counts and the 0.30 drill floor
+  writes both orders: AirWriter's panel (`hardware/combined-fab.zip`, `combined-pos.csv` 135
+  rows) and the LC's main board alone (`hardware/airwriter-lc-fab.zip`, `airwriter-lc-pos.csv`
+  54 rows), neither placing J2 or J4. The script asserts both counts and the 0.30 drill floor
   (`grep -E '^T[0-9]+C'`).
 
 ## Bench rules (board 1)

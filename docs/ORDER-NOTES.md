@@ -2,15 +2,15 @@
 
 Two orders, one main board. **AirWriter** is ordered on the combined panel (main board and
 art cover, snapped apart). **AirWriter LC** is ordered on the main board alone: on the panel it
-would pay for a cover it never uses and the cover's four standoffs. AirWriter ships with both
-ports and TashTalk's PIC fitted; the LC ships with neither.
+would pay for a cover it never uses and the cover's four standoffs. Neither order fits the
+mini-DINs (J2, J4) or TashTalk's PIC: Wells fits them after delivery (below).
 Standing rule: quote to Wells before either order is placed. Rev A's order (W654223ASS53,
 T-S54W654223A) and its notes are in git history.
 
 | Order | Upload only | Placements |
 |---|---|---|
-| AirWriter | `hardware/combined-fab.zip`, `hardware/combined/combined-top.png`, `hardware/combined/airwriter-top.png` | 137 |
-| AirWriter LC | `hardware/airwriter-lc-fab.zip`, `hardware/combined/airwriter-top.png` | 55 |
+| AirWriter | `hardware/combined-fab.zip`, `hardware/combined/combined-top.png`, `hardware/combined/airwriter-top.png` | 135 |
+| AirWriter LC | `hardware/airwriter-lc-fab.zip`, `hardware/combined/airwriter-top.png` | 54 |
 
 Each order's section below is paste-ready on its own.
 
@@ -37,41 +37,38 @@ Each order's section below is paste-ready on its own.
 
 ### Assembly
 
-Position file `combined-pos.csv`, BOM `combined-assembly-bom.csv`, 137 placements, all on the
+Position file `combined-pos.csv`, BOM `combined-assembly-bom.csv`, 135 placements, all on the
 top side of the file. R33 is left off; its pads stay bare.
 
-1. **J2 and J4 (Kycon KMDGX-8S-BS mini-DIN-8): ASSEMBLE both.** Not at LCSC; source from
-   Mouser (two per board). Through-hole, 11 joints each.
-2. **U7: fit the DIP-8 socket (LCSC C72124), then press a PIC12F1840-I/P into it** (PDIP-8,
-   the BOM's "U7 (PIC)" line). LCSC stocks only the SOIC; source the PDIP from Digi-Key or
-   Mouser. No substitute. The PIC's notch goes to the socket's notch.
-3. **Fit the PIC BLANK, straight from the reel or tube. Do not program it, and please don't
-   quote programming:** the board loads the PIC's firmware itself, through its own pins,
-   after delivery.
-4. **D3: through-hole 3 mm flat-top green LED (LCSC C20613324) standing on a HIWA LED4*8
+1. **J2 and J4 (mini-DIN-8): DO NOT ASSEMBLE, and keep all 22 of their holes free of
+   solder.** They are fitted after delivery and are absent from the position file. If the
+   through-hole parts are wave or selectively soldered, mask J2's and J4's holes.
+2. **U7: fit ONLY the DIP-8 socket, LCSC C72124, and leave it empty.** Do not buy or fit the
+   PIC.
+3. **D3: through-hole 3 mm flat-top green LED (LCSC C20613324) standing on a HIWA LED4*8
    nylon spacer (LCSC C92326):** leads through the spacer's bore, the LED's flange seated
    on the spacer, lens up. Cathode (pad 1) toward R17, where the silk reads K;
    the spacer hides the square pad.
    **SW1 (BZCN TSB001A3518A, LCSC C2888448):** its two plastic pegs go into the two 0.9 mm
    holes; the two bracket pads are soldered, on no net. The button faces the board's east
    edge.
-5. **Through-hole parts (J2, J4, SW3, U7's socket, D3): solder every joint fully.** Rev A's
+4. **Through-hole parts (SW3, U7's socket, D3): solder every joint fully.** Rev A's
    first boards came back with U7 and SW3 only tacked.
-6. **MT1–MT4: Wurth 9774030151R** M2.5 SMT standoff, not at LCSC; source from Digi-Key or
+5. **MT1–MT4: Wurth 9774030151R** M2.5 SMT standoff, not at LCSC; source from Digi-Key or
    consign (labelled "MT1-MT4, Wurth 9774030151R, qty 4 + 2 spares"). Reflow on the top
    side; paste is the ring aperture in the paste layer; the seat centre is bare ENIG with
    no paste.
-7. **D10–D46 (37 × SK6812MINI-C, C7423117): align by the CHAMFERED corner**, which must sit
+6. **D10–D46 (37 × SK6812MINI-C, C7423117): align by the CHAMFERED corner**, which must sit
    on the footprint's chamfer/notch corner, the top-left corner of every LED in the top-view
    image. The footprint's pad numbering is rotated 180° from the datasheet's pin numbers:
    align by the chamfer, not by "pad 1". A 180° placement breaks the whole chain.
-8. Substitutions allowed: any 10 k 1 % 0603 for C25804, any 15 k 1 % 0603 for C22809 and any
+7. Substitutions allowed: any 10 k 1 % 0603 for C25804, any 15 k 1 % 0603 for C22809 and any
    1 k 1 % 0603 for C21190.
-   **No substitution** for U1–U9 (the PIC included), J1, J2, J4, SW1–SW3 or D3, and U1 must be the
+   **No substitution** for U1–U9, J1, SW1–SW3 or D3, and U1 must be the
    **ESP32-S3-WROOM-1-N16R8** (16 MB flash, 8 MB octal PSRAM, LCSC C2913202), never a
    quad-PSRAM (R2) variant: the firmware is built for the octal PSRAM.
-9. Please confirm polarity of U2, U3, U6, U8 (SOIC pin-1 dot), U5 and U9, the U7 socket
-   notch and the PIC's notch in it, D3 and J1 against `airwriter-top.png` (the main board alone, at about 40 px/mm)
+8. Please confirm polarity of U2, U3, U6, U8 (SOIC pin-1 dot), U5 and U9, the U7 socket
+   notch, D3 and J1 against `airwriter-top.png` (the main board alone, at about 40 px/mm)
    before placement.
 
 ## Order 2: AirWriter LC (main board alone)
@@ -90,33 +87,31 @@ top side of the file. R33 is left off; its pads stay bare.
 
 ### Assembly
 
-Position file `airwriter-lc-pos.csv`, BOM `airwriter-lc-assembly-bom.csv`, 55 placements, all
+Position file `airwriter-lc-pos.csv`, BOM `airwriter-lc-assembly-bom.csv`, 54 placements, all
 on the top side. **Leave off the LED array and its parts: D10–D46, C30–C66, C29, C21, R20
 and U9.** They are absent from the position file and the BOM; their pads stay bare. R33 is
 fitted.
 
-1. **J2 (Kycon KMDGX-8S-BS mini-DIN-8): ASSEMBLE.** Not at LCSC; source from Mouser.
-   Through-hole, 11 joints.
-2. **J4: DO NOT ASSEMBLE, and keep its 11 holes free of solder,** so it can be fitted later.
-   It is absent from the position file. If J2 is wave or selectively soldered, mask J4's
-   holes.
-3. **U7: fit ONLY the DIP-8 socket, LCSC C72124, and leave it empty.** Do not buy or fit the
+1. **J2 and J4 (mini-DIN-8): DO NOT ASSEMBLE, and keep all 22 of their holes free of
+   solder.** They are fitted after delivery and are absent from the position file. If the
+   through-hole parts are wave or selectively soldered, mask J2's and J4's holes.
+2. **U7: fit ONLY the DIP-8 socket, LCSC C72124, and leave it empty.** Do not buy or fit the
    PIC.
-4. **D3: through-hole 3 mm flat-top green LED (LCSC C20613324) standing on a HIWA LED4*8
+3. **D3: through-hole 3 mm flat-top green LED (LCSC C20613324) standing on a HIWA LED4*8
    nylon spacer (LCSC C92326):** leads through the spacer's bore, the LED's flange seated
    on the spacer, lens up. Cathode (pad 1) toward R17, where the silk reads K;
    the spacer hides the square pad.
    **SW1 (BZCN TSB001A3518A, LCSC C2888448):** its two plastic pegs go into the two 0.9 mm
    holes; the two bracket pads are soldered, on no net. The button faces the board's east
    edge.
-5. **Through-hole parts (J2, SW3, U7's socket, D3): solder every joint fully.** Rev A's
+4. **Through-hole parts (SW3, U7's socket, D3): solder every joint fully.** Rev A's
    first boards came back with U7 and SW3 only tacked.
-6. Substitutions allowed: any 10 k 1 % 0603 for C25804, any 15 k 1 % 0603 for C22809 and any
+5. Substitutions allowed: any 10 k 1 % 0603 for C25804, any 15 k 1 % 0603 for C22809 and any
    1 k 1 % 0603 for C21190.
-   **No substitution** for U1–U8, J1, J2, SW1–SW3 or D3, and U1 must be the
+   **No substitution** for U1–U8, J1, SW1–SW3 or D3, and U1 must be the
    **ESP32-S3-WROOM-1-N16R8** (16 MB flash, 8 MB octal PSRAM, LCSC C2913202), never a
    quad-PSRAM (R2) variant: the firmware is built for the octal PSRAM.
-7. Please confirm polarity of U2, U3, U6, U8 (SOIC pin-1 dot) and U5, the U7 socket notch,
+6. Please confirm polarity of U2, U3, U6, U8 (SOIC pin-1 dot) and U5, the U7 socket notch,
    D3 and J1 against `airwriter-top.png` (the main board, at about 40 px/mm; it also shows
    the LED array this order leaves off) before placement.
 
@@ -131,6 +126,16 @@ fitted.
   process. Thirteen board vias meet SMD pads, all on GND: the five in U4's tab, and stitch
   vias on C9.2, C12.2, C17.2, D29.2, D37.2, R1.2, U1.1 and U8.5 (U1's centre paddle has its
   own thermal holes in the footprint). Minor paste wicking into those barrels is acceptable.
+
+## Wells's part: before the order and after delivery
+
+- **Before ordering:** flash one new, blank PIC12F1840-I/P in board 1's U7 socket, to prove
+  the board takes TashTalk onto a part straight from the factory (an erased 12F1840 has LVP
+  on, so it should).
+- **Per board, after delivery:** solder J2 (Kycon KMDGX-8S-BS, Mouser), and on AirWriter J4
+  too. On AirWriter, press a blank PIC12F1840-I/P (PDIP-8, Digi-Key) into U7's socket, notch
+  to notch, then flash TashTalk (the AppleTalk Port card's Flash TashTalk key, or
+  `POST /api/localtalk/flash`). The LC's U7 socket and J4 stay empty.
 
 ## Not part of either order, but buy alongside them
 
@@ -148,7 +153,7 @@ Upload only the files in the table at the top. Never upload anything else, and n
 
 Regenerate both packages only with `python3 hardware/combine_boards.py` then
 `sh hardware/combined/make_fab.sh`, and check them with the battery in `AGENTS.md`
-(Verification): ERC, both DRCs with `--severity-all`, the drill floor, 137 and 55 position
+(Verification): ERC, both DRCs with `--severity-all`, the drill floor, 135 and 54 position
 rows (the script asserts both). Both pictures are `kicad-cli pcb render --side top
 --quality high --use-board-stackup-colors`, flattened onto white: `combined-top.png` from
 `hardware/combined/combined.kicad_pcb` at `-w 2328 -h 1264`, `airwriter-top.png` from

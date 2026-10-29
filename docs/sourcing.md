@@ -21,10 +21,12 @@ current BOMs are `hardware/combined/fab/combined-assembly-bom.csv` (AirWriter) a
 
 ## Not at LCSC
 
-- **J2, J4: Kycon KMDGX-8S-BS, from Mouser** (Digi-Key is the backordered channel). PCBWay
-  fits J2 on every rev 2026.11 board and J4 on the full AirWriter; the LC leaves J4's holes
-  empty. PCBWay keeps no parts library, so the connector is a manually quoted line with a
-  5–10 day sourcing delay. Alternatives checked and rejected:
+- **J2, J4: Kycon KMDGX-8S-BS, from Mouser** (Digi-Key is the backordered channel). **Wells
+  buys and solders them after delivery** (Wells, 2026-10-29): J2 on every board, J4 on the
+  full AirWriter only. Buy a few spares; it's a through-hole part you can damage. PCBWay
+  could fit them, but its instant quote (50 boards) put fitting J2, J4 and the PIC at $0.73 a
+  board on AirWriter and J2 at $0.26 on the LC, and the ~25% import duty on those parts'
+  value at about $1.63 and $0.63 more. Alternatives checked and rejected:
   - Kycon KMDGX-8S-AS: "Board Guide, Board Lock" push-pull variant, different mounting; Digi-Key
     doesn't list it as a substitute.
   - Adam Tech MDJ-008-FS: a genuine drop-in (all eight signals and the ±6.75 posts match), out
@@ -34,9 +36,9 @@ current BOMs are `hardware/combined/fab/combined-assembly-bom.csv` (AirWriter) a
   - HOOYA / Legion DIN-802 (LCSC C20611694 / C41409494): pads 0.15–0.20 mm out and an oval
     centre slot; unusable without a new footprint.
 - **U7: PIC12F1840-I/P (PDIP-8) from Digi-Key or Mouser.** LCSC stocks only the SOIC. PCBWay fits
-  the socket (CONNFLY DS1009-08AT1NX-0A2, LCSC C72124) on every board and, on the full
-  AirWriter, presses a blank PIC into it; the LC's socket ships empty. TashTalk is no longer
-  an add-on.
+  the socket only (CONNFLY DS1009-08AT1NX-0A2, LCSC C72124), empty, on both builds. **Wells
+  buys the PIC and presses a blank one into each full AirWriter** at its bench test; the LC's
+  socket ships empty. TashTalk is no longer an add-on.
 - **Standoffs: Würth 9774030151R (WA-SMSI M2.5 × 3)**, four per panel (AirWriter only). Not on LCSC; PCBWay
   sourced them for rev A ($0.48 each). Consign from Digi-Key only as the fallback.
 
@@ -44,8 +46,9 @@ current BOMs are `hardware/combined/fab/combined-assembly-bom.csv` (AirWriter) a
 
 The ESP32 flashes TashTalk into U7 in its socket over LVP (`pic_prog`,
 `W-1028 Firmware: flash TashTalk into the PIC from the ESP32 over LVP`), so no external
-programmer is needed. An erased PIC12F1840 has LVP on, so a blank part straight from the fab
-takes TashTalk in its socket; PCBWay never programs it. Upstream TashTalk's config clears LVP, so a stock-programmed part needs
+programmer is needed. An erased PIC12F1840 has LVP on, so a blank part straight from the
+distributor takes TashTalk in its socket: buy them blank, never pre-programmed. One new part
+goes through board 1 before the rev 2026.11 order, to prove it. Upstream TashTalk's config clears LVP, so a stock-programmed part needs
 high-voltage programming, off the board (never in the socket, `docs/traps.md`). For that: a
 PICkit 3 clone driven by PICkitminus (kair.us, macOS CLI, lists the 12F1840), PICkit 5 as
 fallback. The MPLAB Snap is LVP-only, and the TL866II does not support the 12F1840 at all.
