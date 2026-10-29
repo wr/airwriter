@@ -1,23 +1,23 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: CERN-OHL-S-2.0
-"""svg/panel.svg + panel_layout.json -> airwriter-lite-top.svg, the laser file
+"""svg/lite.svg + panel_layout.json -> airwriter-lite-top.svg, the laser file
 for the Lite's clear acrylic top.
 
 One sheet of 1.5 mm clear cast acrylic at the art panel's own outline, so it
 seats in the tray's pocket exactly where the Pro's top case does. Two layers,
 by colour, which LightBurn, xTool and Glowforge all read as separate jobs:
 
-  black fill   engrave (frost): the gold dots, the test dot, the wordmark and
-               subtitle, the port labels and their rules, the power slash
+  black fill   engrave (frost): everything the art paints
   red hairline cut: the outline and the test button's hole
 
-Only the gold dots are engraved. They are the dots that never light on the Pro,
-so they are its face with the power off, and the Lite has no LEDs under the
-other 37. The slash is frosted so the power LED under it lights it, as it
-lights the Pro's bare-FR4 slash.
+svg/lite.svg is Wells's Lite art (Figma "Frame 13", AirWriter LC): the Pro's
+gold dots and test dot, the wordmark and subtitle, the serial and power labels,
+and the power slash, which the LED under it lights. The other 37 dots are drawn
+in the background's #111111, so they stay clear; black inside the test dot is
+knocked out of it.
 
-Everything is copied out of Wells's Figma export as vector paths, scaled to mm,
-so a re-export of the art flows through on the next run (generate.sh runs this).
+Everything is copied out of the export as vector paths, scaled to mm, so a
+re-export of the art flows through on the next run (generate.sh runs this).
 """
 import json, math, pathlib, re
 
@@ -26,8 +26,13 @@ OUT = HERE / "airwriter-lite-top.svg"
 MARGIN = 1.0  # mm of empty sheet round the part, so viewers don't clip the cut line
 CUT = "#FF0000"
 ENGRAVE = "#000000"
-ENGRAVED_MATS = "G"  # panel_layout's material codes; "GPBL" would frost every dot
-GOLD, WHITE, FR4, INK = "#dda857", "white", "#e7ba9b", "#111111"
+ART = HERE / "svg" / "lite.svg"
+GOLD, BG, KNOCKOUT = "#dda857", "#111111", ("black", "#000000")
+BOTTOM_BAND = 10.0
+"""mm. Art this close to the artboard's bottom (the port labels, the slash) is
+set that far from the sheet's bottom edge, the rest from its top. Frame 13's
+artboard is 1801 px (101.51 mm), the top case 104.27: top-aligned, its slash
+stood 3 mm behind the power LED. At full height this moves nothing."""
 
 _NUM = r"[-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?"
 # Absolute commands only; Figma writes nothing else. One letter per argument:
@@ -158,8 +163,7 @@ def weld(shapes):
     """Join shapes whose outlines cross into one outline.
 
     Laser software fills a layer even-odd, so where two marks overlap it leaves
-    the overlap clear. In Frame 9b only the wordmark's A and i touch, at their
-    feet. The joined outline goes out as straight segments 0.02 mm long."""
+    the overlap clear. In the art the wordmark's A and i touch, at their feet. The joined outline goes out as straight segments 0.02 mm long."""
     shapes = list(shapes)
     while True:
         # Dots are drawn with arcs and sit alone on the grid; only art can touch.
@@ -209,8 +213,14 @@ def read_art(svg):
 
     circles, paths = [], []
     for tag in re.findall(r"<circle[^>]*>", svg):
-        circles.append(dict(cx=float(_attr(tag, "cx")), cy=float(_attr(tag, "cy")),
-                            r=float(_attr(tag, "r")), fill=_attr(tag, "fill").lower()))
+        cx, cy = float(_attr(tag, "cx")), float(_attr(tag, "cy"))
+        tf = _attr(tag, "transform")
+        if tf:
+            # Figma mirrors a circle now and then; a mirror moves only its centre.
+            a, b, c, d, e, f = (float(v) for v in re.findall(_NUM, tf))
+            assert tf.startswith("matrix(") and b == c == 0 and abs(a) == abs(d) == 1, tf
+            cx, cy = a * cx + e, d * cy + f
+        circles.append(dict(cx=cx, cy=cy, r=float(_attr(tag, "r")), fill=_attr(tag, "fill").lower()))
     for tag in re.findall(r"<path[^>]*>", svg):
         cmds = parse_path(_attr(tag, "d"))
         mask = _attr(tag, "mask")
@@ -237,7 +247,7 @@ def test_dot(dot, circles, paths):
     tabs = [p for p in paths if p["fill"] == GOLD and inside(bbox(p["cmds"]))]
     assert len(tabs) == 1, f"expected one tab on the test dot, found {len(tabs)}"
     tab = tabs[0]["cmds"]
-    # Frame 9b's tab is the dot's south-east quadrant with its outer corner
+    # The tab is the dot's south-east quadrant with its outer corner
     # rounded: M c,c H c+r <outer edge, ending H c> V c Z. Its outer edge plus
     # the disc's other three quadrants is the union's outline.
     assert bbox(tab) == (cx, cy, cx + r, cy + r), "test tab is no longer the SE quadrant"
@@ -246,43 +256,60 @@ def test_dot(dot, circles, paths):
     assert [c for c, _ in tab[end + 1:]] in (["V", "Z"], ["Z"]), "test tab drawn differently"
     outline = [("M", [cx, cy + r]), ("A", [r, r, 0, 1, 1, cx + r, cy])] + tab[2:end + 1] + [("Z", [])]
 
+    dark = KNOCKOUT + (BG,)
     holes = [circle_path(c["cx"], c["cy"], c["r"]) for c in circles
-             if c["fill"] in ("black", INK) and inside((c["cx"] - c["r"], c["cy"] - c["r"],
-                                                        c["cx"] + c["r"], c["cy"] + c["r"]))]
-    holes += [p["cmds"] for p in paths if p["fill"] in ("black", INK) and inside(bbox(p["cmds"]))]
+             if c["fill"] in dark and inside((c["cx"] - c["r"], c["cy"] - c["r"],
+                                              c["cx"] + c["r"], c["cy"] + c["r"]))]
+    holes += [p["cmds"] for p in paths if p["fill"] in dark and inside(bbox(p["cmds"]))]
     assert holes, "test dot has no hole marker"
     return [outline] + holes
 
 
+def _shift(cmds, dy):
+    return [(c, [a + dy if k == "y" else a for a, k in zip(args, _ARGS[c])]) for c, args in cmds]
+
+
 def build():
     lay = json.loads((HERE / "panel_layout.json").read_text())
-    svg = (HERE / "svg" / "panel.svg").read_text()
-    vw = float(re.search(r'viewBox="0 0 ([\d.]+) ', svg).group(1))
-    s = lay["panel"]["w"] / vw  # mm per Figma px
+    svg = ART.read_text()
+    vw, vh = (float(v) for v in re.search(r'viewBox="0 0 ([\d.]+) ([\d.]+)"', svg).groups())
+    w, h, cr = lay["panel"]["w"], lay["panel"]["h"], lay["panel"]["corner_r"]
+    s = w / vw  # mm per Figma px
     circles, paths = read_art(svg)
 
-    # Dots come from panel_layout.json (their material); the SVG circle at the
-    # same place gives the exact radius. Figma puts every dot on whole pixels.
-    at = {(round(c["cx"]), round(c["cy"])): c for c in circles
-          if c["fill"] not in ("black", INK)}
-    dot = lambda d: at[(round(d["x"] / s), round(d["y"] / s))]
-    tdot = next(d for d in lay["dots"] if d["mat"] == "T")
-    t = dot(tdot)
+    drop = h / s - vh
+    assert drop > -1, f"the art is {-drop * s:.2f} mm taller than the top case"
+    band = vh - BOTTOM_BAND / s
+    for c in circles:
+        if c["cy"] - c["r"] >= band:
+            c["cy"] += drop
+    for p in paths:
+        if bbox(p["cmds"])[1] >= band:
+            p["cmds"] = _shift(p["cmds"], drop)
 
-    engrave = [[circle_path(c["cx"], c["cy"], c["r"])] for c in
-               (dot(d) for d in lay["dots"] if d["mat"] in ENGRAVED_MATS)]
+    # The test dot is the gold dot round the hole's black marker, and it has to
+    # be where the Pro's is: over SW3's plunger.
+    tdot = next(d for d in lay["dots"] if d["mat"] == "T")
+    inks = [c for c in circles if c["fill"] not in KNOCKOUT + (BG,)]
+    (t,) = [c for c in inks if any(k["fill"] in KNOCKOUT and (k["cx"], k["cy"]) == (c["cx"], c["cy"])
+                                   for k in circles)]
+    assert math.dist((t["cx"] * s, t["cy"] * s), (tdot["x"], tdot["y"])) < 0.01, \
+        "the art's test dot is not over the test button"
+
+    engrave = [[circle_path(c["cx"], c["cy"], c["r"])] for c in inks if c is not t]
     engrave.append(test_dot(t, circles, paths))
     tab_box = (t["cx"] - t["r"], t["cy"] - t["r"], t["cx"] + t["r"], t["cy"] + t["r"])
     for p in paths:
         b = bbox(p["cmds"])
         if b[0] >= tab_box[0] and b[2] <= tab_box[2] and b[1] >= tab_box[1] and b[3] <= tab_box[3]:
             continue  # part of the test dot, already composed
-        assert p["fill"] in (GOLD, WHITE, "#ffffff", FR4), f"art in {p['fill']} has no layer"
+        if p["fill"] == BG:
+            continue  # drawn in the background: nothing to frost
+        assert p["fill"] not in KNOCKOUT, "black art outside the test dot"
         engrave.append([p["cmds"]])
 
     engrave = weld(engrave)
 
-    w, h, cr = lay["panel"]["w"], lay["panel"]["h"], lay["panel"]["corner_r"]
     hole_r = lay["grid"]["hole_dia"] / 2
     num = lambda v: f"{v:.4f}".rstrip("0").rstrip(".")
     shapes = "\n".join(
@@ -290,7 +317,7 @@ def build():
         + (' fill-rule="evenodd"' if len(subs) > 1 else "") + "/>"
         for subs in engrave)
     return f"""<?xml version="1.0" encoding="UTF-8"?>
-<!-- Generated by hardware/panel/lite_top.py from svg/panel.svg; do not edit.
+<!-- Generated by hardware/panel/lite_top.py from svg/lite.svg; do not edit.
      AirWriter Lite top: 1.5 mm clear CAST acrylic, {num(w)} x {num(h)} mm.
      Black fill: engrave the top face. Red hairline: cut. Engrave first. -->
 <svg xmlns="http://www.w3.org/2000/svg" width="{num(w + 2 * MARGIN)}mm" height="{num(h + 2 * MARGIN)}mm" viewBox="{num(-MARGIN)} {num(-MARGIN)} {num(w + 2 * MARGIN)} {num(h + 2 * MARGIN)}">

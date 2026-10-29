@@ -22,10 +22,17 @@ back of the sheet settle before it cured.
 ## The acrylic
 
 `hardware/panel/airwriter-lite-top.svg`, from `lite_top.py`: the panel's own outline cut
-(62.00 × 104.27, R2.0), the test hole cut at the panel's 3.8 mm, and the panel's art
-frosted: the 18 gold dots, the test dot, the wordmark and subtitle, the port labels and
-rules, the power slash. The other 37 dots are left clear: they are the Pro's lit dots and
-the Lite has no LEDs. The frosted slash sits over D3, so the power light shows in it.
+(62.00 × 104.27, R2.0), the test hole cut at the panel's 3.8 mm, and Wells's Lite art
+(`hardware/panel/svg/lite.svg`, Figma "Frame 13": AirWriter LC, rev 2026.11) frosted: the
+Pro's 18 gold dots and test dot, the wordmark and subtitle, the serial and power labels, and
+the power slash. The other 37 dots are drawn in the background colour and left clear: they
+are the Pro's lit dots and the Lite has no LEDs. The frosted slash sits over D3, so the
+power light shows in it.
+
+Frame 13's artboard is 101.51 mm tall, the top 104.27. The dots, wordmark and subtitle stay
+where the art puts them, from the top, so the test hole is over the plunger; the art's bottom
+10 mm (labels and slash) goes to the sheet's bottom edge, which puts the slash over D3 and
+the labels where the Pro's are. Top-aligned, the slash stood 3 mm behind D3.
 
 On rev 2026.11 (15 mm SW3) the test plunger stands 0.46 above the acrylic; on rev A
 (16 mm) 1.46.

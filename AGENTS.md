@@ -280,8 +280,10 @@ DIP keys), Lite frame, Lite lid, and the Pro build's light-guide lattice. Cavity
 height); Pro screws M2.5 × 18. Four 10 mm rubber feet sit in 0.40 pockets in the floor's
 underside, each hiding a screw counterbore. The shop's cased GLBs still show the pre-W-1036
 tray. The Lite's clear top is 1.5 mm cast acrylic, laser file
-`hardware/panel/airwriter-lite-top.svg` (`lite_top.py`, from the panel's art: gold dots, test
-dot, wordmark, labels and power slash frosted; outline and Ø3.8 test hole cut), glued with
+`hardware/panel/airwriter-lite-top.svg` (`lite_top.py`, from Wells's Lite art `svg/lite.svg`,
+"AirWriter LC": gold dots, test dot, wordmark, serial and power labels and power slash
+frosted; outline and Ø3.8 test hole cut; the art is 2.76 mm short, so its bottom 10 mm is
+set on the sheet's bottom edge), glued with
 UV-cure glue to the four leg tops of the printed Lite frame (`lite_frame.py`: the lid's legs, a
 rim and arms; spec `docs/superpowers/specs/2026-10-28-lite-acrylic-top-design.md`). Neither
 is cut or printed yet. The all-printed Lite lid stays, its plunger bore now the panel's 3.8.
@@ -573,7 +575,8 @@ Linear is the queue; these are the live items.
 ```
 hardware/airwriter/   KiCad 10 main board (sch, pcb, lib/, route.py, stitch.py, tools_pcb/)
 hardware/panel/       art panel generator (Figma SVG → panel.kicad_pcb), and the Lite's
-                      acrylic top laser file (lite_top.py → airwriter-lite-top.svg)
+                      acrylic top laser file (svg/lite.svg → lite_top.py →
+                      airwriter-lite-top.svg)
 hardware/combined/    the snap-apart order panel and make_fab.sh; combined-fab.zip is the order
 firmware/             ESP-IDF 5.5 app; components/ per SPEC §3.1 plus job_pipe, led_grid, pic_prog,
                       ota_health, printer_caps, ps_page, laser …; bootloader_components/ holds the bootloader's pin clamps

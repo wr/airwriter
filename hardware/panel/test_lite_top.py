@@ -40,6 +40,20 @@ class TestLiteTop(unittest.TestCase):
             frosted = (round(d["x"], 2), round(d["y"], 2)) in starts
             self.assertEqual(frosted, d["mat"] == "G", f"dot r{d['r']}c{d['c']} ({d['mat']})")
 
+    def test_slash_and_labels_sit_where_the_pros_do(self):
+        # The power LED is under the Pro's slash (fr4.polys.json), so the
+        # Lite's frosted slash must cover its middle; the labels must sit as
+        # close to the front edge as the Pro's, whatever the artboard's height.
+        (fr4,) = json.loads((HERE / "fr4.polys.json").read_text())
+        xs, ys = zip(*fr4["outline"])
+        led = ((min(xs) + max(xs)) / 2, (min(ys) + max(ys)) / 2)
+        boxes = [lite_top.bbox(lite_top.parse_path(d))
+                 for d in re.findall(r'<path d="([^"]+)"', self.engrave)]
+        (slash,) = [b for b in boxes if b[0] <= led[0] <= b[2] and b[1] <= led[1] <= b[3]]
+        self.assertGreater(slash[3] - slash[1], 4.0, "the shape over the LED is the slash")
+        lowest = max(b[3] for b in boxes if b[2] < 55)
+        self.assertGreater(lowest, self.lay["panel"]["h"] - 2.0)
+
     def test_weld_joins_crossing_shapes_and_leaves_the_rest(self):
         sq = lambda x, y, w: [[("M", [x, y]), ("H", [x + w]), ("V", [y + w]), ("H", [x]), ("Z", [])]]
         out = lite_top.weld([sq(0, 0, 10), sq(5, 5, 10), sq(30, 0, 10)])
