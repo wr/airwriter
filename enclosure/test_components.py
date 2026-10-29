@@ -49,10 +49,10 @@ class TestEnvelopes(unittest.TestCase):
     def setUpClass(cls):
         cls.env = components.envelopes()
 
-    def test_every_part_has_one_except_holes_and_test_points(self):
+    def test_every_part_has_one_except_holes_test_points_and_logos(self):
         missing = [r for r, f in bg._all().items()
                    if f.layer == "F.Cu" and r not in self.env
-                   and not re.fullmatch(r"(H|TP)\d+", r)]
+                   and not re.fullmatch(r"(H|TP|LOGO)\d+", r)]
         self.assertEqual(missing, [])
 
     def test_sw3_is_stepped_body_then_plunger(self):

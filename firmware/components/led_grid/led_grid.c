@@ -77,7 +77,7 @@ static void lg_task(void *arg)
         portENTER_CRITICAL(&s_act_mux);
         for (int f = 0; f < LG_FAMS; f++)
             o.task[f] = (lg_slot_t){ s_task[f].act, s_task[f].arg, lg_elapsed(now, s_task[f].t0) };
-        // An acknowledgement raised during the Spin waits it out: its clock
+        // An acknowledgement raised during the boot wave waits it out: its clock
         // starts again every frame until the panel has booted.
         if (v.state == PS_BOOTING) s_blip_t0 = now;
         o.blip = s_blip;

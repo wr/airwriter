@@ -85,16 +85,17 @@ What works on `main`:
   and sRGB pages print one pass per ink per strip, yellow, magenta, cyan, black (SPEC §3.8). On a
   black ribbon an sRGB page prints as gray. Gray pages keep their bytes.
 - The 37-dot status panel per the status-language spec, in the palette picked from the panel's
-  measured colour map (red only for failures, sky blue for Wi-Fi, pink for updates): Spin at boot,
-  discrete printer and Wi-Fi states, per-dot white Ready, DIP7 gamer RGB, and after 5 min idle one
-  dot breathing like an old Mac laptop's sleep light, a new dot each breath. W-1049 puts the
-  board's actions on it in FeatherFrame's colours: tasks (firmware update, TashTalk flash) beside
-  the reset, moments opening states (printer gone and back, page out, cancelled, could not join),
-  short acknowledgements (LocalTalk on, a Mac heard, Busy, Saved), and LocalTalk jobs inked in the
-  Apple stripes without red and purple. `led_grid_action()` per family, `led_grid_blip()`,
-  `led_grid_set_source()`. A quiet power-on: the Spin alone until Wi-Fi is up and the printer line
-  has settled (3–30 s), then straight into the state; the Wi-Fi green only after a fresh setup or
-  a real rejoin.
+  measured colour map (red only for failures, sky blue for Wi-Fi, pink for updates): the boot
+  wave (a rainbow in diagonal bands on all 37 dots, as the shop's 3D model draws it; it replaced
+  the Spin on 2026-10-28), discrete printer and Wi-Fi states, per-dot white Ready, DIP7 gamer
+  RGB, and after 5 min idle one dot breathing like an old Mac laptop's sleep light, a new dot
+  each breath. W-1049 puts the board's actions on it in FeatherFrame's colours: tasks (firmware
+  update, TashTalk flash) beside the reset, moments opening states (printer gone and back, page
+  out, cancelled, could not join), short acknowledgements (LocalTalk on, a Mac heard, Busy,
+  Saved), and LocalTalk jobs inked in the Apple stripes without red and purple.
+  `led_grid_action()` per family, `led_grid_blip()`, `led_grid_set_source()`. A quiet power-on:
+  the boot wave alone until Wi-Fi is up and the printer line has settled (3–30 s), then straight
+  into the state; the Wi-Fi green only after a fresh setup or a real rejoin.
 - DIP switches read by their printed numbers; a tap of the `test` button prints a test page, or
   with the printer not ready runs the cable test; a second tap cancels the test page; a tap during
   another job shows Busy.
@@ -109,9 +110,10 @@ What works on `main`:
 - Recovery (SPEC §3.11): three equal app slots and a `known_good` record naming the last image
   that was kept and finished a real print; updates never write the running or known-good slot.
   A new OTA image runs on trial and rolls back unless healthy (`/api/status` `slot`, `trial`,
-  `rolled_back`, `known_good`). Holding `test` 8 s erases the settings with a countdown on the
-  panel; holding it through power-up for 5 s makes the bootloader hook erase them and boot the
-  known-good slot.
+  `rolled_back`, `known_good`); with the console on board 1 (2026-10-28, W-1108), a restart 2 s
+  into a trial was back on the previous image 6 s later. Holding `test` 8 s erases the settings
+  with a countdown on the panel; holding it through power-up for 5 s makes the bootloader hook
+  erase them and boot the known-good slot.
 - Signed updates (SPEC §3.12): only images signed with the release key install, from GitHub
   releases or `/update`; the web page's firmware section checks, installs and switches
   auto-update (off by default). An update holds the job lock to its restart and gives way to a
@@ -276,10 +278,16 @@ What works on `main`:
 every wall 1.70 below the rim, one thickness all round so no lines show up the outside; the
 board goes in by the sequence in `enclosure/README.md`, thumbing the west wall out past the
 DIP keys; on this branch the tray is cut to rev 2026.11, which has no DIP switches and no
-DIP window, and board 1's tray is the one at `hw-rev-a`), Lite lid, and the Pro build's light-guide lattice. Cavity 13.04 (measured mini-DIN
+DIP window, and board 1's tray is the one at `hw-rev-a`), Lite frame, Lite lid, and the Pro build's light-guide lattice. Cavity 13.04 (measured mini-DIN
 height); Pro screws M2.5 × 18. Four 10 mm rubber feet sit in 0.40 pockets in the floor's
 underside, each hiding a screw counterbore. The shop's cased GLBs still show the pre-W-1036
-tray.
+tray. The Lite's clear top is 1 mm cast acrylic (the frame's height follows `ACRYLIC`), laser file
+`hardware/panel/airwriter-lite-top.svg` (`lite_top.py`, from the Lite's own art
+`hardware/panel/svg/lite.svg`, Figma Frame 17: "AirWriter LC", rev 2026.11, the Pro's gold
+dots, serial and power only, all frosted; the panel's outline and Ø3.8 test hole cut), glued with
+UV-cure glue to the four leg tops of the printed Lite frame (`lite_frame.py`: the lid's legs, a
+rim and arms, and a sealed tube that lets D3 out only through a slit under the slash; spec `docs/superpowers/specs/2026-10-28-lite-acrylic-top-design.md`). Neither
+is cut or printed yet. The all-printed Lite lid stays, its plunger bore now the panel's 3.8.
 
 **Printers:** built and tested on the ImageWriter II only. The original ImageWriter and the
 ImageWriter LQ take the same stream and are expected to work, untested (the scope spec's
@@ -307,9 +315,12 @@ its name in the Chooser. U7's PIC calibration words: `16E0 1DA8`. Its LocalTalk 
 2026-10-24, with its settings put back over the API. Its port printer's uuid is now
 `…4c57-0001-0001-10bda36e2434`, which orphans Mac queues added before that date. Printer: an ImageWriter II on J2 via
 Apple's crossover cable, fanfold paper loaded as the Owner's Guide says (top edge under the paper
-bail). It runs v0.2.0-180-g79b562c, the W-1100 copy pass as merged to main, ahead of any
-release, with auto-update on; it shares the fake "LaserWriter II NT" on the Basilisk II tunnel when
-`etpeer.py tunnel laserwriter` runs on the Mac. On its AppleTalk cable since 2026-10-24: a
+bail). It runs v0.2.0-246-g5ce940d, a bench build on no pushed branch (local branch
+`bench/board1-5ce940d`): the StyleWriter branch at a38820f (W-1103) with W-1108 and the boot
+wave. Its known-good slot, ota_0, holds the same without the wave (v0.2.0-245-g56cc466,
+USB-installed 2026-10-28, record blank). Auto-update is on; it shares the fake "LaserWriter II
+NT" on the Basilisk II tunnel when `etpeer.py tunnel laserwriter` runs on the Mac. On its
+AppleTalk cable since 2026-10-24: a
 Personal LaserWriter NTR (PostScript 2010.129, Level 2, 3 MB, 300 dpi, takes binary; 10,277
 pages that morning), AirPrint printer 3 at `ipp/p3`. Its start page is off (set from the board, 2026-10-24). Its toner is spent (more ordered), so
 its pages cannot be judged by eye yet; `statusdict /pagecount` through the relay
@@ -534,7 +545,10 @@ Linear is the queue; these are the live items.
   (`build/lwhost`) to `etpeer.py`'s fake LaserWriter over a pipe (lookup, query, print, busy,
   paper out, PostScript error, cancel, a silent printer). `tools/ipp/test/golden/` pins the
   ImageWriter's IPP answers byte for byte.
-- **Firmware:** `idf.py build` clean.
+- **Firmware:** `idf.py build` clean, then `python3 tools/stackcheck/stackcheck.py` (needs the
+  toolchain `export.sh` puts on PATH): every task that makes ESP-IDF's deep calls keeps 1 KB
+  of its stack spare by GCC's count (W-1108). A local sdkconfig older than W-1108 fails it on
+  `app_main` until its `CONFIG_ESP_MAIN_TASK_STACK_SIZE` is 4608, as in `sdkconfig.defaults`.
 - **Web page:** `python3 tools/webui/preview.py`, then http://localhost:8079/_states: every state
   at desktop and phone width, light and dark, before a change to the page goes to the board.
   Its `/api/panel` plays `tools/lights`' scene frames for each state's `ps` (it builds them with
@@ -583,7 +597,8 @@ Linear is the queue; these are the live items.
 ## Layout
 ```
 hardware/airwriter/   KiCad 10 main board (sch, pcb, lib/, route.py, stitch.py, tools_pcb/)
-hardware/panel/       art panel generator (Figma SVG → panel.kicad_pcb)
+hardware/panel/       art panel generator (Figma SVG → panel.kicad_pcb), and the Lite's
+                      acrylic top laser file (svg/lite.svg → lite_top.py → airwriter-lite-top.svg)
 hardware/combined/    the snap-apart order panel and make_fab.sh; combined-fab.zip is the order
 firmware/             ESP-IDF 5.5 app; components/ per SPEC §3.1 plus job_pipe, led_grid, pic_prog,
                       ota_health, printer_caps, ps_page, laser …; bootloader_components/ holds the bootloader's pin clamps
@@ -602,6 +617,7 @@ tools/iwview/         iwview.py draws any ImageWriter stream (test page, a Local
 tools/lights/         the wiki's GIF of every panel light effect, played through led_grid_core;
                       after changing an effect, `make -C tools/lights OUT=<wiki>/images/lights`
 tools/release/        release.sh (build, check, sign, publish), tamper.py (refusal-test images)
+tools/stackcheck/     stackcheck.py: worst-case stack of the tasks that make ESP-IDF's deep calls
 fixtures/             captured URF samples and expected streams
 enclosure/            3D printed case (build123d): tray, Lite lid, Pro lattice; out/*.stl committed
 ```

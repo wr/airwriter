@@ -6,7 +6,7 @@
 //
 // Material physics measured on board 1: FR4 dots are the crisp pixels; mask
 // dots pass ~10% (B) / ~5% (L), red well, blue as teal. So information lives
-// on the FR4 dots, and mask dots join in only for the boot spin and the
+// on the FR4 dots, and mask dots join in only for the boot wave and the
 // printing / attention / failed states, at LG_MASK_CAP.
 //
 // It is an array, not one LED: every pattern uses position (sweeps, ripples,
@@ -140,19 +140,25 @@ int lg_pilot_index(void)
     return 0;
 }
 
-// The boot spin: a hue wheel around the test button (row 3, col 3) that fades
-// in by distance and spins. W-1049's quiet power-on keeps it turning until the
-// board has settled, at the pace it had reached by 2.5 s and eased to 60%
-// after 3 s (less draw while Wi-Fi joins); then it collapses inward over
-// LG_SPIN_OUT_MS (`out`, `e` seconds in), the far dots first and the test
-// button last. A board settled early starts going out at 1.7 s, which is the
-// original 3.0 s Spin exactly.
-static lg_c3 spin(float dist, float ang, float t, int out, float e)
+// The boot wave, as the shop's 3D model of the board draws it: a rainbow in
+// diagonal bands from the top-left corner to the bottom-right, 14 degrees a
+// step along the diagonal, each dot going round the wheel every 4 s, so
+// neighbours are always close in hue and the bands cross the panel in about
+// 2 s. (It replaced the Spin, a hue wheel round the test button, whose mask
+// dots blinked on and off out of step: through the mask a dot's brightness
+// swings hard with hue. At first it turned at 30 degrees a second, which on
+// board 1 read as too slow; Wells picked 90.) It comes in from the top-left
+// corner. W-1049's quiet power-on keeps it running until the board has
+// settled, eased to 60% after 3 s (less draw while Wi-Fi joins); then it rolls
+// off the panel the way it flows, over LG_SPIN_OUT_MS (`out`, `e` seconds in),
+// the bottom-right corner last. A board settled early starts going out at
+// 1.7 s and is dark at 3.0 s. Its mask dots take LG_BOOT_MASK_CAP.
+static lg_c3 boot_wave(int r, int c, float t, int out, float e)
 {
-    float v = ss(0, 0.6f, t - dist * 0.08f) * (1 - 0.4f * ss(3.0f, 4.0f, t));
-    if (out) v *= 1 - ss(0.6f, 1.3f, e + dist * 0.12f);
-    float turn = t <= 2.5f ? t * 300 - t * t * 40 : 500 + (t - 2.5f) * 100;
-    return hsv(ang + turn, 0.9f, v);
+    float d = (float)(r + c) / (float)(LG_ROWS + LG_COLS - 2);     // 0 top-left, 1 bottom-right
+    float v = ss(0, 0.6f, t - d * 0.4f) * (1 - 0.4f * ss(3.0f, 4.0f, t));
+    if (out) v *= 1 - ss(0.6f, 1.3f, e + (1 - d) * 0.6f);
+    return hsv(90 * t - 14 * (float)(r + c), 0.9f, v);
 }
 
 // LocalTalk's colours: the stripes of the classic Apple logo without its red
@@ -184,7 +190,7 @@ static lg_c3 state_dot(const ps_view_t *v, const lg_opts_t *o, int i, uint32_t t
 {
     int r = LG_MAP[i].r, c = LG_MAP[i].c;
     float dr = (float)r - 3, dc = (float)c - 3;
-    float dist = hypotf(dr, dc), ang = atan2f(dr, dc) * 57.29578f;
+    float dist = hypotf(dr, dc);
     float h1 = dot_hash(r, c, 1), h2 = dot_hash(r, c, 2);
     uint32_t s = v->since_ms;
 
@@ -227,7 +233,7 @@ static lg_c3 state_dot(const ps_view_t *v, const lg_opts_t *o, int i, uint32_t t
 
     switch (v->state) {
     case PS_BOOTING:
-        return spin(dist, ang, (float)s / 1000.0f, v->spin_out, (float)v->spin_out_ms / 1000.0f);
+        return boot_wave(r, c, (float)s / 1000.0f, v->spin_out, (float)v->spin_out_ms / 1000.0f);
 
     case PS_SETUP: {
         float hue = jitter(r, c, 240, 6, t, 3);     // blue is one hue wide on the panel
@@ -361,7 +367,7 @@ static int moment_all(const ps_view_t *v)       // the moment lights mask dots t
 }
 
 // An acknowledgement over an all-dot moment or a cable test's answer would
-// draw more than the boot spin (review of W-1049): it is not drawn then.
+// draw more than the boot wave (review of W-1049): it is not drawn then.
 static int busy_panel(const ps_view_t *v)
 {
     return moment_all(v) || v->cable
@@ -410,7 +416,7 @@ static lg_c3 view_dot(const ps_view_t *v, const lg_opts_t *o, int i, uint32_t t)
         return mix(sc(ink, band), fr4 ? sc(now, ss(0, 1, k)) : DARK, k);
     }
     // Could not join: two red pulses (FeatherFrame's), then Setup. After the
-    // saved network was tried, from Joining or straight from the Spin.
+    // saved network was tried, from Joining or straight from the boot wave.
     if (v->state == PS_SETUP && v->join_failed && s < LG_JOINFAIL_MS) {
         if (s < 1000) {
             float x = sinf(3.1415927f * fmodf(s, 500) / 500.0f);
@@ -426,7 +432,7 @@ static lg_c3 view_dot(const ps_view_t *v, const lg_opts_t *o, int i, uint32_t t)
 // drawn instead of the state. The reset is orange turning red because it is a
 // warning a person is choosing to walk into; mask dots join in, since red and
 // amber survive the mask. FR4 dots take the alert cap in red phases and the
-// normal cap otherwise, which keeps every frame's draw under the boot spin's
+// normal cap otherwise, which keeps every frame's draw under the boot wave's
 // (no current limit on rev A).
 
 lg_fam_t lg_family(uint8_t act)
@@ -698,7 +704,7 @@ void lg_render16(const ps_view_t *v, const lg_opts_t *o, uint32_t t_ms,
         if (!fr4 && !all && !blip) continue;   // FR4-only state: mask dot stays dark
         lg_c3 c = fr4 || all ? sc(view_dot(v, o, i, t_ms), 1 - sleep_k) : DARK;
         if (blip) c = screen(c, blip_dot(o->blip, o->blip_ms, i, t_ms));
-        float cap = !fr4 ? LG_MASK_CAP
+        float cap = !fr4 ? (v->state == PS_BOOTING ? LG_BOOT_MASK_CAP : LG_MASK_CAP)
                   : v->state == PS_ATTENTION || join_failed(v) ? LG_ALERT_CAP : LG_BRIGHTNESS_CAP;
         put_dot(out[i], level16(c.r, cap), level16(c.g, cap), level16(c.b, cap));
     }

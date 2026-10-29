@@ -493,7 +493,7 @@ slot the power-up reset boots) and `known_good_version`.
   choice then boots it. The bootloader never writes the record: a fallback image becomes
   known-good after its first real print. The panel stays dark while the button is held (the
   bootloader has no LED driver; the hook first clamps IO48, IO35 and IO4 so the hold does not
-  leave them floating), then spins, then shows the reset's confirmation.
+  leave them floating), then shows the boot wave, then the reset's confirmation.
 
 IO14 is not a strapping pin (the S3's are IO0, IO3, IO45, IO46), and SW3 shorts it straight to
 GND with no external pull-up or capacitor; the bootloader enables the internal pull-up before

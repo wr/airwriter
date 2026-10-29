@@ -32,7 +32,7 @@ import mkheader  # noqa: E402
 STATES = HERE / "states.json"
 LIGHTS = HERE / "../lights"
 clock = {"loaded": 0.0, "down_until": 0.0, "override": None, "seen": {}}
-SCENE = {"booting": "spin", "setup": "setup", "joining": "joining", "ready": "ready", "offline": "offline",
+SCENE = {"booting": "boot-wave", "setup": "setup", "joining": "joining", "ready": "ready", "offline": "offline",
          "printing": "printing", "attention": "attention", "failed": "failed"}
 STEP = 0.04                                 # scenes.c's STEP_MS
 

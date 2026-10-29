@@ -98,7 +98,8 @@ Traps already explained in a code comment are listed only when the comment is ea
   interrupt is on core 1 too. An unpinned task is not "free to use the idle core".
 - **Rev A has no hardware LED current limit.** `LG_BRIGHTNESS_CAP` and friends in
   `led_grid_core.h` are the only limit on 37 SK6812s; raise them knowingly. All 37 lit at
-  about the boot Spin's heaviest draw measured 5.2 V, 0.461 A for the whole board.
+  about the boot animation's heaviest draw (the Spin's then; the boot wave is held under it)
+  measured 5.2 V, 0.461 A for the whole board.
 - **The panel is not true RGB.** Through the FR4, blue reads cyan except at hue 240 (sky blue),
   270 is pale lavender, 285 onward pink, and there is no purple; under the mask white turns
   mint. Pick colours from the measured map (`tools/lights/panel_colours.json`, the
@@ -124,10 +125,14 @@ Traps already explained in a code comment are listed only when the comment is ea
   air.** A bug there needs a USB flash on every board. Bench every reset path after changing it
   (`docs/superpowers/specs/2026-10-16-known-good-slot-design.md`), and keep it inside the
   bootloader's 9 s watchdog: the 5 s hold, the image checks and the app's start all count.
-- **`esp_image_verify` in the app checks the RSA signature too** (signed updates), and that
-  overflows `app_main`'s stack: the board crash-loops at boot. Board 1 did, once, from a status
-  check on the known-good slot (W-1059). The bootloader's check has no such cost; leave whole-
-  image checks to it, or run them on a task with a large stack.
+- **`esp_image_verify` in the app checks the RSA signature too** (signed updates), at least
+  3.4 KB of stack, and that overflows `app_main`'s stack: the board crash-loops at boot. Board 1
+  did twice, from a status check on the known-good slot (W-1059) and, after a failed update, from
+  `esp_ota_get_last_invalid_partition()` (W-1108), which calls it out of sight; so do
+  `esp_ota_check_rollback_is_possible()` and with it `esp_ota_mark_app_invalid_rollback*()`. The
+  overflow lands on the other core's IPC task, so the panic names `ipc_task`, not the culprit.
+  The bootloader's check has no such cost; leave whole-image checks to it, or run them on a task
+  with a large stack, and run `tools/stackcheck` after adding one.
 - **`idf.py app-flash` writes ota_0 and nothing else.** otadata may boot another slot, so the
   board can keep running the old image, and ota_0 may be the known-good slot. Use `idf.py flash`,
   which also blanks otadata and the record.

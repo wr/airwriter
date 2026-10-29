@@ -40,7 +40,9 @@ NO_MODEL_LIB = {"LED_SK6812MINI_PLCC4_3.5x3.5mm_P1.75mm": 1.60}
 TOP_OVERRIDE = {"U7": 9.00}
 """U7's model is the empty DIP socket; the PIC seated in it stands ~9 mm."""
 
-FLAT = re.compile(r"(H|TP)\d+")
+FLAT = re.compile(r"(H|TP|LOGO)\d+")
+"""Footprints with nothing standing on the board: mounting holes, test pads,
+and silkscreen art (rev 2026.11's OSHW mark, LOGO1)."""
 BAND = 1.0
 STEPPED_ABOVE = 2.5
 """Parts taller than this get one band per BAND mm; shorter ones one box."""

@@ -24,6 +24,7 @@ import unittest
 from build123d import GeomType
 
 import case
+import lite_frame
 import params as p
 
 MIN_WALL = p.WALL - p.POCKET_CLEAR
@@ -233,6 +234,20 @@ class TestLid(unittest.TestCase):
         # the check is for UPWARD model flats, excluding the plate's own top
         # face at Z_WALL_TOP -- that's the bed, not an overhang.
         flats = upward_flats(self.lid, ceiling_z=p.Z_WALL_TOP)
+        self.assertEqual(
+            [(round(f.center().X, 1), round(f.center().Y, 1),
+              round(f.center().Z, 1), round(f.area, 1)) for f in flats], [])
+
+
+class TestLiteFrame(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.frame = lite_frame.lite_frame()
+
+    def test_no_unsupported_downward_flats_printed_rim_down(self):
+        # Printed rim-down like the lid, so print-down is model +Z; the rim's
+        # and leg tops' own face at lite_frame.TOP is the bed.
+        flats = upward_flats(self.frame, ceiling_z=lite_frame.TOP)
         self.assertEqual(
             [(round(f.center().X, 1), round(f.center().Y, 1),
               round(f.center().Z, 1), round(f.area, 1)) for f in flats], [])
