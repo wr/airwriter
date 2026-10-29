@@ -72,10 +72,6 @@ SPARE_PADS = [('TP10', '/SPARE_IO38', (143.08, 151.20)), ('TP11', '/SPARE_IO39',
 # Mini board's two chevrons, symmetric, so they read the same on either side.
 # Both clear the GND via at (102.5, 141.0) and H3's screw.
 KICAD_FP = '/Applications/KiCad/KiCad.app/Contents/SharedSupport/footprints'
-# The back's upper half: Snow White grooves, as on Apple's Data Modem 2400's
-# lid, eleven round-ended stripes centred on the board, between the top screw
-# holes and above SW3's pads (the only bare copper up there).
-STRIPES = dict(n=11, x0=110.0, pitch=4.2, y0=64.75, y1=84.25, width=1.5)
 OSHW = ('LOGO1', 'Symbol', 'OSHW-Logo_7.5x8mm_SilkScreen', (105.3, 145.4))
 WW_AT, WW_WIDTH, WW_DRAWN = (105.3, 134.5), 7.0, 2.5968
 WW = [  # two chevrons, 2.6 mm wide as drawn; centred on the origin
@@ -213,21 +209,6 @@ def logos(board):
         board.Add(poly)
 
 
-def back_stripes(board):
-    w = pcbnew.FromMM(STRIPES['width'])
-    if any(d.GetClass() == 'PCB_SHAPE' and d.GetLayer() == pcbnew.B_SilkS and d.GetWidth() == w
-           for d in board.GetDrawings()):
-        return
-    for i in range(STRIPES['n']):
-        x = STRIPES['x0'] + i * STRIPES['pitch']
-        line = pcbnew.PCB_SHAPE(board, pcbnew.SHAPE_T_SEGMENT)
-        line.SetStart(at(x, STRIPES['y0']))
-        line.SetEnd(at(x, STRIPES['y1']))
-        line.SetWidth(w)                           # a silk line's ends are round
-        line.SetLayer(pcbnew.B_SilkS)
-        board.Add(line)
-
-
 def texts(board):
     for d in list(board.GetDrawings()):
         if d.GetClass() == 'PCB_TEXT' and d.GetLayer() == pcbnew.F_SilkS \
@@ -275,7 +256,6 @@ def main():
     tp9(board)
     spare_pads(board)
     logos(board)
-    back_stripes(board)
     texts(board)
     for ref in ('R21', 'R24', 'R29', 'R30'):
         fp = board.FindFootprintByReference(ref)
