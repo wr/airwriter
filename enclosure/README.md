@@ -218,25 +218,14 @@ why this is build123d and not OpenSCAD.
 ## Shop model
 
 The shop's product viewer shows both builds inside this case
-(`~/Projects/shop/public/models/airwriter-{pro,lc}-cased.glb`). The scripts
-that put it there live in the shop repo, beside the viewer and the
-glTF-transform install they depend on; after `./build.sh` here:
-
-    cd ~/Projects/shop/scripts/board-model/tools
-    E=~/Projects/airwriter/enclosure/out
-    H="105.636,65.636;156.364,65.636;105.636,151.93;153.364,151.93"   # H1-H4, KiCad mm
-    node case-shell.mjs ../../../public/models/airwriter-pro-cased.glb  ../../../public/models/airwriter-pro-cased.glb  --tray $E/airwriter-tray.stl
-    node case-shell.mjs ../../../public/models/airwriter-lc-cased.glb ../../../public/models/airwriter-lc-cased.glb --tray $E/airwriter-tray.stl --lid $E/airwriter-lc-lid.stl
-    node case-hardware.mjs ../../../public/models/airwriter-pro-cased.glb  ../../../public/models/airwriter-pro-cased.glb  --holes "$H" --floor -5.4 --feet black
-    node case-hardware.mjs ../../../public/models/airwriter-lc-cased.glb ../../../public/models/airwriter-lc-cased.glb --holes "$H" --floor -5.4 --feet clear --screws 10 --clear
-
-`case-shell.mjs` swaps the `case` (and `lid`) mesh for these STLs in the KiCad
-GLB frame (a -90 degree turn about X, then +100 / +1.6 / +164.27 mm) and keeps
-each node's material; `case-hardware.mjs` re-seats the rubber feet, the LC's
-screws and the clear materials. `--floor` is glTF Y of the tray's underside:
-`Z_FLOOR_BOTTOM` (-7.00) + the 1.60 frame offset. The full write-up is "The
-cased AirWriter" in the shop's `scripts/board-model/README.md`; then
-`npm run renders` there re-shoots the home-page stills.
+(`~/Projects/shop/public/models/airwriter-{pro,lc}-cased.glb`), built whole from
+this checkout: the board, `out/`'s tray, lattice and LC frame, the LC's acrylic
+top and art, and the screws' and feet's places, read from `case.py` and
+`params.py`. The scripts live in the shop repo, beside the viewer and the
+glTF-transform install they depend on; after `./build.sh` here, run the
+commands in "The cased AirWriter" in the shop's `scripts/board-model/README.md`
+(`AIRWRITER_DIR` picks a worktree), then `npm run renders` there re-shoots the
+stills.
 
 ## History
 
