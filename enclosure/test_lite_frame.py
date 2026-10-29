@@ -1,0 +1,102 @@
+# SPDX-License-Identifier: CERN-OHL-S-2.0
+"""The Lite frame (lite_frame.py): what the Lite's acrylic top is taped to."""
+import unittest
+
+from build123d import Box, Cylinder, Pos
+
+import board_geom as bg
+import case
+import components
+import lattice
+import lite_frame
+import params as p
+
+TOP = p.CAVITY - p.TAPE
+
+
+def _box(x0, x1, y0, y1, z0, z1):
+    return Pos((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2) * Box(x1 - x0, y1 - y0, z1 - z0)
+
+
+def _vol(part):
+    return part.volume if part else 0.0
+
+
+class TestLiteFrame(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.frame = lite_frame.lite_frame()
+
+    def test_is_one_valid_solid(self):
+        self.assertTrue(self.frame.is_valid)
+        self.assertEqual(len(self.frame.solids()), 1)
+
+    def test_taped_acrylic_lands_on_the_shells_just_under_the_rim(self):
+        # The frame stops TAPE short of CAVITY, so the acrylic on the tape
+        # lands where the panel does, on J2/J4's shells. Its face must never
+        # stand proud of the tray's rim, and should sit close enough under it
+        # to read flush.
+        bb = self.frame.bounding_box()
+        self.assertAlmostEqual(bb.min.Z, 0.0, places=3)
+        self.assertAlmostEqual(bb.max.Z + p.TAPE, p.CAVITY, places=3)
+        face = p.CAVITY + p.ACRYLIC
+        rim = case.shell().bounding_box().max.Z
+        self.assertLessEqual(face, rim)
+        self.assertGreaterEqual(face, rim - 0.20)
+
+    def test_every_leg_top_is_a_tape_pad(self):
+        # H3's leg loses a sliver to J2's grown hull, its whole height (93%
+        # of the disc is left); the others are whole.
+        for h, (x, y) in bg.mount_holes().items():
+            pad = Pos(x, y, TOP - 0.05) * Cylinder(p.LEG_D / 2 - 0.05, 0.1)
+            self.assertGreaterEqual(_vol(self.frame & pad), 0.9 * pad.volume, msg=h)
+
+    def test_legs_are_the_lite_lids(self):
+        # Same legs, inserts, screws, connector trims and foot relief as the
+        # printed Lite lid: below the rim the two parts are the same solid.
+        below = _box(-5, p.BOARD_W + 5, -5, p.BOARD_L + 5, -1, TOP - p.FRAME_RIM_H - 0.1)
+        mine, lids = self.frame & below, case.lite_lid() & below
+        self.assertAlmostEqual(_vol(mine), _vol(lids), places=2)
+        self.assertAlmostEqual(_vol(mine - lids), 0.0, places=2)
+
+    def test_it_fits_the_tray(self):
+        margin = case.tray().distance_to(self.frame)
+        self.assertGreaterEqual(margin, 0.05, f"frame clears the tray by only {margin:.4f}mm")
+
+    def test_rim_and_arms_clear_every_part(self):
+        z0 = TOP - p.FRAME_RIM_H - 0.01
+        band = self.frame & _box(-5, p.BOARD_W + 5, -5, p.BOARD_L + 5, z0, TOP + 1)
+        for ref, bands in components.envelopes().items():
+            if ref in ("J1", "J2", "J4"):
+                continue
+            for x0, x1, y0, y1, top in bands:
+                if top <= z0:
+                    continue
+                hit = _vol(band & _box(x0, x1, y0, y1, -1, top))
+                self.assertAlmostEqual(hit, 0.0, places=3, msg=f"rim runs into {ref}")
+        for ref in ("J1", "J2", "J4"):
+            hit = _vol(band & case.connector_solid(ref))
+            self.assertAlmostEqual(hit, 0.0, places=3, msg=f"rim runs into {ref}")
+
+    def test_power_slash_window_stays_open(self):
+        # Nothing between D3 and the frosted slash over it.
+        x0, x1, y0, y1 = lattice.d3_window()
+        hit = _vol(self.frame & _box(x0, x1, y0, y1, 0, TOP + 1))
+        self.assertAlmostEqual(hit, 0.0, places=3)
+
+    def test_rim_runs_round_the_back_and_both_sides(self):
+        # Probes mid-way along the three edges the ports don't cut.
+        o = p.POCKET_CLEAR - p.RIDGE_CLEAR
+        w = o + p.FRAME_RIM_IN
+        z = TOP - p.FRAME_RIM_H / 2
+        probes = {
+            "west": _box(-o + 0.05, -o + w - 0.05, 50, 51, z - 0.1, z + 0.1),
+            "east": _box(p.BOARD_W + o - w + 0.05, p.BOARD_W + o - 0.05, 50, 51, z - 0.1, z + 0.1),
+            "back": _box(30, 31, p.BOARD_L + o - w + 0.05, p.BOARD_L + o - 0.05, z - 0.1, z + 0.1),
+        }
+        for name, probe in probes.items():
+            self.assertAlmostEqual(_vol(self.frame & probe), probe.volume, places=4, msg=name)
+
+
+if __name__ == "__main__":
+    unittest.main()

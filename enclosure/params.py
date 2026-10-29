@@ -187,6 +187,29 @@ an open item in the spec; re-cut this if the chosen insert differs."""
 
 INSERT_DEPTH = 4.50
 
+ACRYLIC = 1.50
+"""The Lite's clear cast-acrylic top (hardware/panel/airwriter-lite-top.svg).
+Its underside lands at CAVITY on J2/J4's shells, as the panel's does, so its
+face sits PANEL - ACRYLIC (0.10) under the rim."""
+
+TAPE = 0.50
+"""3M VHB 4905, clear, 0.50mm: the tape between the Lite frame's leg tops and
+the acrylic. The frame stops TAPE under CAVITY, so the taped acrylic lands at
+CAVITY; thicker tape lifts the acrylic proud of the rim by the difference."""
+
+FRAME_RIM_IN = 1.50
+"""How far inside the board edge the Lite frame's rim reaches. Outward it runs
+to RIDGE_CLEAR short of the pocket wall, as the lattice's lip does."""
+
+FRAME_RIM_H = 2.50
+"""The Lite frame's rim and arms, deep: a rim RIDGE_H (1.50) deep was a wire
+loop 104mm long until the acrylic was taped on; 2.50 is (2.5/1.5)^3, 4.6x,
+as stiff. It stops 0.13 above S1's body plus PART_TOP_CLEAR on rev A, the
+tallest part under it but the mini-DINs, which cut it."""
+
+FRAME_ARM_W = 2.40
+"""Each Lite frame leg's arm out to the side rim: six 0.4mm lines."""
+
 # --- openings --------------------------------------------------------------
 
 PORT_CLEAR = 0.40
@@ -198,9 +221,12 @@ RESET_PINHOLE_D = 0.80
 to make it perfectly round, but i just need a small dot to serve as a pilot
 hole" (Wells, 2026-10-17). Was 1.20, printed as a hole for the paperclip."""
 
-PLUNGER_BORE_D = 2.25
-"""SW3's test plunger. Matches the art panel's own 2.25mm NPTH so the Lite lid
-behaves identically -- the plunger is <= 2.0mm."""
+PLUNGER_BORE_D = 3.80
+"""SW3's test plunger, through the Lite lid. Matches the art panel's 3.8mm
+NPTH (hardware/panel/panel_layout.py TEST_HOLE_DIA) and the acrylic top's hole,
+so the three tops behave alike: the plunger measures 3.1-3.2 tapering to 3.5,
+and stands 0.2 E / 0.2 S of the model's axis (TEST_PLUNGER_OFFSET). It was
+2.25, from the panel's first switch, and stopped this plunger."""
 
 DIP_SLOT_Z0 = 4.60
 DIP_SLOT_Z1 = 9.90

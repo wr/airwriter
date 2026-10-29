@@ -1,13 +1,15 @@
 # Enclosure (enclosure/out/*.stl)
 
-Three printed parts. The **tray** is shared by both builds. The **Lite lid**
-replaces the dot-grid art panel on boards built without it. The **lattice**
-is the Pro build's light guide, between the board and the panel.
+Four printed parts. The **tray** is shared by both builds. The **Lite frame**
+carries the Lite's clear acrylic top, which stands in for the dot-grid art panel
+on boards built without it; the **Lite lid** is the all-printed alternative to
+the two. The **lattice** is the Pro build's light guide, between the board and
+the panel.
 
     ./build.sh          # runs the tests, then writes out/*.{step,stl}
 
-`out/airwriter-tray.stl`, `out/airwriter-lite-lid.stl` and
-`out/airwriter-lattice.stl` are committed, so the case can be printed without a
+`out/airwriter-tray.stl`, `out/airwriter-lite-frame.stl`,
+`out/airwriter-lite-lid.stl` and `out/airwriter-lattice.stl` are committed, so the case can be printed without a
 build123d install; re-run `./build.sh` and commit
 them again after any change here or to the board. The STEPs are not (6 MB, and
 the same command rebuilds them).
@@ -61,7 +63,7 @@ real unsupported ceilings once the part is reoriented in the slicer.
 | Build | Screws | Into |
 |---|---|---|
 | Pro | 4 × M2.5 × 18 | the art panel's Würth 9774030151R blind standoffs |
-| Lite | 4 × M2.5 × 10 | M2.5 brass heat-set inserts in the lid legs |
+| Lite | 4 × M2.5 × 10 | M2.5 brass heat-set inserts in the frame's (or lid's) legs |
 
 Lite is **M2.5 × 10, not × 8**: with `STANDOFF` at 3.00 the counterbore seat
 sits at Z = -5.70, so an 8mm screw only reaches 2.30mm into the lid's 4.50mm
@@ -73,8 +75,35 @@ the seat. From the same Z = -5.70 head seat, an 18 mm screw ends at Z 12.30,
 0.74 short of the panel's underside at 13.04 and 2.26 mm into the standoff. A
 20 mm screw would end at 14.30, past the panel's underside, and bottom out.
 
-Press the four inserts into the **bottom** of the lid's legs before assembly.
+Press the four inserts into the **bottom** of the frame's or lid's legs before
+assembly.
 Rubber feet go on the floor's underside, over the screw counterbores.
+
+## Acrylic top and frame (Lite)
+
+Spec: `docs/superpowers/specs/2026-10-28-lite-acrylic-top-design.md`.
+
+The top is 1.5 mm clear **cast** acrylic (extruded barely frosts), cut and
+engraved from `hardware/panel/airwriter-lite-top.svg`: red hairline is cut,
+black fill is engraved. Engrave first, on the top face.
+
+`out/airwriter-lite-frame.stl` is the Lite lid's four legs joined by a rim
+round the top edge (1.7 mm wide, 2.5 mm deep), with an arm from each leg out to
+the side rim. It stops
+0.50 mm under the panel's height, the thickness of the tape, so the acrylic
+lands on the mini-DIN shells exactly where the Pro's panel does, 0.10 under
+the tray's rim. Print it in matte black, **rim down** (its top on the bed,
+legs up), no supports.
+
+1. Board into the tray, inserts into the frame's legs.
+2. Frame onto the board, four M2.5 × 10 from below.
+3. A 6 mm square of 3M VHB 4905 (clear, 0.50 mm) on each leg top. Thicker tape
+   lifts the acrylic proud of the rim.
+4. Peel the acrylic's film off both faces, drop it into the pocket frosted face
+   up, and press over each leg. The pocket lines it up.
+
+To open it, take the four screws out from below: frame and acrylic come out
+together.
 
 ## Light-guide lattice (Pro)
 
@@ -163,7 +192,7 @@ before it costs you the ones further down the list.
    set equal to the body's centre Z — the same assumption `RESET_ACTUATOR_Z`
    makes — so the two were always going to agree (see `params.py` and
    task-6-report.md for the full derivation).
-6. (Lite only) The lid into the tray's pocket, by hand, before any screws go
+6. (Lite only) The lid, or the acrylic, into the tray's pocket, by hand, before any screws go
    in. It should drop in with a light push and lift back out — expect about
    0.30 mm of clearance per side (`POCKET_CLEAR`), not a press fit and not a
    rattle. Too tight almost always means the pocket printed a little
