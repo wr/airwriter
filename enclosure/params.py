@@ -192,10 +192,11 @@ ACRYLIC = 1.50
 Its underside lands at CAVITY on J2/J4's shells, as the panel's does, so its
 face sits PANEL - ACRYLIC (0.10) under the rim."""
 
-TAPE = 0.50
-"""3M VHB 4905, clear, 0.50mm: the tape between the Lite frame's leg tops and
-the acrylic. The frame stops TAPE under CAVITY, so the taped acrylic lands at
-CAVITY; thicker tape lifts the acrylic proud of the rim by the difference."""
+GLUE_LINE = 0.10
+"""The UV-cure glue between the Lite frame's leg tops and the acrylic (Wells,
+2026-10-28, over 0.50mm VHB tape). The frame stops GLUE_LINE under CAVITY, so
+the glued acrylic lands at CAVITY on J2/J4's shells. A print up to 0.10 tall
+still lands it there; one short leaves the glue more to fill."""
 
 FRAME_RIM_IN = 1.50
 """How far inside the board edge the Lite frame's rim reaches. Outward it runs
@@ -203,7 +204,7 @@ to RIDGE_CLEAR short of the pocket wall, as the lattice's lip does."""
 
 FRAME_RIM_H = 2.50
 """The Lite frame's rim and arms, deep: a rim RIDGE_H (1.50) deep was a wire
-loop 104mm long until the acrylic was taped on; 2.50 is (2.5/1.5)^3, 4.6x,
+loop 104mm long until the acrylic was glued on; 2.50 is (2.5/1.5)^3, 4.6x,
 as stiff. It stops 0.13 above S1's body plus PART_TOP_CLEAR on rev A, the
 tallest part under it but the mini-DINs, which cut it."""
 

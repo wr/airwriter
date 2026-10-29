@@ -281,8 +281,8 @@ height); Pro screws M2.5 × 18. Four 10 mm rubber feet sit in 0.40 pockets in th
 underside, each hiding a screw counterbore. The shop's cased GLBs still show the pre-W-1036
 tray. The Lite's clear top is 1.5 mm cast acrylic, laser file
 `hardware/panel/airwriter-lite-top.svg` (`lite_top.py`, from the panel's art: gold dots, test
-dot, wordmark, labels and power slash frosted; outline and Ø3.8 test hole cut), taped with 3M
-VHB 4905 to the four leg tops of the printed Lite frame (`lite_frame.py`: the lid's legs, a
+dot, wordmark, labels and power slash frosted; outline and Ø3.8 test hole cut), glued with
+UV-cure glue to the four leg tops of the printed Lite frame (`lite_frame.py`: the lid's legs, a
 rim and arms; spec `docs/superpowers/specs/2026-10-28-lite-acrylic-top-design.md`). Neither
 is cut or printed yet. The all-printed Lite lid stays, its plunger bore now the panel's 3.8.
 

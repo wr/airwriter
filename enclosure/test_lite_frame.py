@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: CERN-OHL-S-2.0
-"""The Lite frame (lite_frame.py): what the Lite's acrylic top is taped to."""
+"""The Lite frame (lite_frame.py): what the Lite's acrylic top is glued to."""
 import unittest
 
 from build123d import Box, Cylinder, Pos
@@ -11,7 +11,7 @@ import lattice
 import lite_frame
 import params as p
 
-TOP = p.CAVITY - p.TAPE
+TOP = p.CAVITY - p.GLUE_LINE
 
 
 def _box(x0, x1, y0, y1, z0, z1):
@@ -31,20 +31,20 @@ class TestLiteFrame(unittest.TestCase):
         self.assertTrue(self.frame.is_valid)
         self.assertEqual(len(self.frame.solids()), 1)
 
-    def test_taped_acrylic_lands_on_the_shells_just_under_the_rim(self):
-        # The frame stops TAPE short of CAVITY, so the acrylic on the tape
+    def test_glued_acrylic_lands_on_the_shells_just_under_the_rim(self):
+        # The frame stops GLUE_LINE short of CAVITY, so the acrylic on the glue
         # lands where the panel does, on J2/J4's shells. Its face must never
         # stand proud of the tray's rim, and should sit close enough under it
         # to read flush.
         bb = self.frame.bounding_box()
         self.assertAlmostEqual(bb.min.Z, 0.0, places=3)
-        self.assertAlmostEqual(bb.max.Z + p.TAPE, p.CAVITY, places=3)
+        self.assertAlmostEqual(bb.max.Z + p.GLUE_LINE, p.CAVITY, places=3)
         face = p.CAVITY + p.ACRYLIC
         rim = case.shell().bounding_box().max.Z
         self.assertLessEqual(face, rim)
         self.assertGreaterEqual(face, rim - 0.20)
 
-    def test_every_leg_top_is_a_tape_pad(self):
+    def test_every_leg_top_is_a_glue_pad(self):
         # H3's leg loses a sliver to J2's grown hull, its whole height (93%
         # of the disc is left); the others are whole.
         for h, (x, y) in bg.mount_holes().items():

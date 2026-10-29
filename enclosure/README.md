@@ -90,17 +90,21 @@ black fill is engraved. Engrave first, on the top face.
 `out/airwriter-lite-frame.stl` is the Lite lid's four legs joined by a rim
 round the top edge (1.7 mm wide, 2.5 mm deep), with an arm from each leg out to
 the side rim. It stops
-0.50 mm under the panel's height, the thickness of the tape, so the acrylic
-lands on the mini-DIN shells exactly where the Pro's panel does, 0.10 under
-the tray's rim. Print it in matte black, **rim down** (its top on the bed,
+0.10 mm under the panel's height, a glue line, so the acrylic lands on the
+mini-DIN shells exactly where the Pro's panel does, 0.10 under the tray's
+rim. Print it in matte black, **rim down** (its top on the bed,
 legs up), no supports.
 
 1. Board into the tray, inserts into the frame's legs.
 2. Frame onto the board, four M2.5 × 10 from below.
-3. A 6 mm square of 3M VHB 4905 (clear, 0.50 mm) on each leg top. Thicker tape
-   lifts the acrylic proud of the rim.
+3. Scuff the four leg tops with sandpaper and put a small dab of UV-cure glue
+   (395–405 nm) on each. Squeeze-out shows through the top at the front legs.
+   Not superglue: its fumes haze clear acrylic.
 4. Peel the acrylic's film off both faces, drop it into the pocket frosted face
-   up, and press over each leg. The pocket lines it up.
+   up, and press it down. The pocket lines it up.
+5. Cure through the acrylic, longer than the glue's label says (many clear
+   acrylics block some UV), and longer again over the back legs, which sit
+   under frosted dots. Try it on an offcut of the same sheet first.
 
 To open it, take the four screws out from below: frame and acrylic come out
 together.

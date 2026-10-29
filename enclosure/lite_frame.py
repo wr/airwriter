@@ -1,11 +1,11 @@
 # SPDX-License-Identifier: CERN-OHL-S-2.0
-"""The Lite frame: the printed part the Lite's clear acrylic top is taped to.
+"""The Lite frame: the printed part the Lite's clear acrylic top is glued to.
 
 docs/superpowers/specs/2026-10-28-lite-acrylic-top-design.md. The Lite lid's
 four legs (case.lite_legs: the same inserts, the same M2.5 x 10 from below),
-stopped TAPE under CAVITY, joined by a rim round the top edge like the
+stopped GLUE_LINE under CAVITY, joined by a rim round the top edge like the
 lattice's lip and an arm from each leg out to the side rim. The acrylic
-(hardware/panel/airwriter-lite-top.svg) is taped to the four leg tops and
+(hardware/panel/airwriter-lite-top.svg) is glued to the four leg tops and
 lands on J2/J4's shells at CAVITY, as the Pro's panel does. Printed rim-down,
 legs up."""
 from build123d import Part, Solid
@@ -14,8 +14,8 @@ import case
 import lattice
 import params as p
 
-TOP = p.CAVITY - p.TAPE
-"""The frame's top face: the tape's, and the bed's when printed."""
+TOP = p.CAVITY - p.GLUE_LINE
+"""The frame's top face: the glue's, and the bed's when printed."""
 
 
 def _rim() -> Part:
