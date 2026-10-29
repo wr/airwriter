@@ -4,8 +4,7 @@ Two orders, one main board. **AirWriter** is ordered on the combined panel (main
 art cover, snapped apart). **AirWriter LC** is ordered on the main board alone: on the panel it
 would pay for a cover it never uses and the cover's four standoffs. Neither order fits the
 mini-DINs (J2, J4) or TashTalk's PIC: Wells fits them after delivery (below).
-Standing rule: quote to Wells before either order is placed. Rev A's order (W654223ASS53,
-T-S54W654223A) and its notes are in git history.
+Standing rule: quote to Wells before either order is placed. Rev A's order and its notes are in git history.
 
 | Order | Upload only | Placements |
 |---|---|---|
