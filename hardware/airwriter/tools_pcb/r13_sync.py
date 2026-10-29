@@ -31,7 +31,7 @@ import pcbnew
 HERE = os.path.dirname(os.path.abspath(__file__))
 BOARD = os.path.join(HERE, '..', 'airwriter.kicad_pcb')
 FP_ROOT = '/Applications/KiCad/KiCad.app/Contents/SharedSupport/footprints'
-BOARD_ONLY = ('H', 'TP')                      # refs with no symbol, by design
+BOARD_ONLY = ('H', 'TP', 'LOGO')              # refs with no symbol, by design
 RENAMED = {                                   # rev A net -> rev 2026.11 net
     '/LT_A': '/LT_RXD_N', '/LT_B': '/LT_RXD_P', '/LT_Y': '/LT_TXD_N', '/LT_Z': '/LT_TXD_P',
     '/LT_PORT_A': '/LT_PORT_RXD_N', '/LT_PORT_B': '/LT_PORT_RXD_P',

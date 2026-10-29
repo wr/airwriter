@@ -35,11 +35,13 @@ cp "$MAIN.kicad_pro" "$TMP/airwriter-lc.kicad_pro"
   --group-by "Value,Footprint,LCSC,DNP" --exclude-dnp \
   -o "$TMP/bom.csv" "$SCH"
 # Assembly notes and the two variants: AirWriter (LED array and the cover's
-# standoffs, no LC strap) and AirWriter LC (no LED array, U9 or LED caps; the LC
-# strap R33 fitted). The schematic carries every part; the lists here say which
-# each variant leaves off. The cover has no schematic, so its standoff line is
-# added here, on AirWriter only. Neither places J2, J4 or a PIC: Wells fits them
-# after delivery (the board keeps J2 and J4 out of its position files).
+# standoffs, no LC strap) and AirWriter LC (of the LED array only D26, the light
+# under the test button, with its cap, U9 and its cap, and R20; the LC strap R33
+# fitted). The schematic carries every part; the lists here say which each variant
+# leaves off. The cover has no schematic, so its standoff line is added here, on
+# AirWriter only. Neither places J2, J4 or a PIC: Wells fits them after delivery
+# (the board keeps J2 and J4 out of its position files), and on the LC bridges JP1,
+# a solder jumper, which no BOM lists.
 python3 - "$TMP/bom.csv" "$OUT" "$LC_OUT" <<'PY'
 import csv, os, re, sys
 bom_path, out, lc_out = sys.argv[1:]
@@ -60,15 +62,16 @@ def expand(spec):
             out.append(part)
     return out
 AIRWRITER_OFF = ['R33']                                   # the LC strap
-LC_OFF = expand('D10-D46,C30-C66') + ['C29', 'U9', 'R20', 'C21']   # LEDs, their caps, U9 and its cap, the LED bulk cap
+LC_OFF = expand('D10-D25,D27-D46,C30-C45,C47-C66') + ['C21']   # every LED but D26, their caps, the LED bulk cap
 STANDOFFS = ['MT1,MT2,MT3,MT4', '9774030151R (Wurth WA-SMSI M2.5x3 SMT spacer)',
              'panel:SMT_Standoff_M2.5_D6.0mm', '', '4',
              'Source from Digi-Key (48k stock, ~$0.60); panel is art-face-down in this production panel so these reflow on the SAME side as all other parts; ring paste aperture in stencil data']
 SPACER = ['D3 (spacer)', 'LED4*8 nylon LED spacer, 4 mm x 8 mm', '-', 'C92326', '1',
           'Under D3: LED leads through the spacer bore, LED flange seated on it, lens up']
-PLACEMENTS = {'AirWriter': 135, 'AirWriter LC': 54}
+PLACEMENTS = {'AirWriter': 135, 'AirWriter LC': 59}
 
 bom = list(csv.reader(open(bom_path)))
+bom = [bom[0]] + [r for r in bom[1:] if not r[2].startswith('Jumper:SolderJumper')]   # copper, not parts
 for r in bom[1:]:
     if r[0] in NOTES: r[5] = NOTES[r[0]]
     if r[5].startswith('LC only'): r[5] = ''   # R33's schematic note: the lists here say it

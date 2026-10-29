@@ -9,7 +9,7 @@ Standing rule: quote to Wells before either order is placed. Rev A's order and i
 | Order | Upload only | Placements |
 |---|---|---|
 | AirWriter | `hardware/combined-fab.zip`, `hardware/combined/combined-top.png`, `hardware/combined/airwriter-top.png` | 135 |
-| AirWriter LC | `hardware/airwriter-lc-fab.zip`, `hardware/combined/airwriter-top.png` | 54 |
+| AirWriter LC | `hardware/airwriter-lc-fab.zip`, `hardware/combined/airwriter-top.png` | 59 |
 
 Each order's section below is paste-ready on its own.
 
@@ -86,10 +86,10 @@ top side of the file. R33 is left off; its pads stay bare.
 
 ### Assembly
 
-Position file `airwriter-lc-pos.csv`, BOM `airwriter-lc-assembly-bom.csv`, 54 placements, all
-on the top side. **Leave off the LED array and its parts: D10–D46, C30–C66, C29, C21, R20
-and U9.** They are absent from the position file and the BOM; their pads stay bare. R33 is
-fitted.
+Position file `airwriter-lc-pos.csv`, BOM `airwriter-lc-assembly-bom.csv`, 59 placements, all
+on the top side. **Of the LED array fit only D26 (the LED under the test button), C46, U9,
+R20 and C29. Leave off D10–D25, D27–D46, C30–C45, C47–C66 and C21.** They are absent from
+the position file and the BOM; their pads stay bare. R33 is fitted.
 
 1. **J2 and J4 (mini-DIN-8): DO NOT ASSEMBLE, and keep all 22 of their holes free of
    solder.** They are fitted after delivery and are absent from the position file. If the
@@ -105,14 +105,18 @@ fitted.
    edge.
 4. **Through-hole parts (SW3, U7's socket, D3): solder every joint fully.** Rev A's
    first boards came back with U7 and SW3 only tacked.
-5. Substitutions allowed: any 10 k 1 % 0603 for C25804, any 15 k 1 % 0603 for C22809 and any
+5. **D26 (SK6812MINI-C, C7423117): align by the CHAMFERED corner**, which must sit on the
+   footprint's chamfer/notch corner, the top-left corner of the LED in the top-view image.
+   The footprint's pad numbering is rotated 180° from the datasheet's pin numbers: align by
+   the chamfer, not by "pad 1".
+6. Substitutions allowed: any 10 k 1 % 0603 for C25804, any 15 k 1 % 0603 for C22809 and any
    1 k 1 % 0603 for C21190.
-   **No substitution** for U1–U8, J1, SW1–SW3 or D3, and U1 must be the
+   **No substitution** for U1–U9, J1, SW1–SW3 or D3, and U1 must be the
    **ESP32-S3-WROOM-1-N16R8** (16 MB flash, 8 MB octal PSRAM, LCSC C2913202), never a
    quad-PSRAM (R2) variant: the firmware is built for the octal PSRAM.
-6. Please confirm polarity of U2, U3, U6, U8 (SOIC pin-1 dot) and U5, the U7 socket notch,
-   D3 and J1 against `airwriter-top.png` (the main board, at about 40 px/mm; it also shows
-   the LED array this order leaves off) before placement.
+7. Please confirm polarity of U2, U3, U6, U8 (SOIC pin-1 dot), U5 and U9, the U7 socket
+   notch, D3, D26 and J1 against `airwriter-top.png` (the main board, at about 40 px/mm; it
+   also shows the 36 LEDs this order leaves off) before placement.
 
 ## Known engineering-query answers (both orders)
 
@@ -121,6 +125,8 @@ fitted.
   and shrinking apertures onto 0.3 mm pads is worse than no dams. Every other IC's dams clear
   0.22 mm; keep the mask as designed. On the AirWriter panel, the art-panel half's fine mask
   features are decorative: produce as-is.
+- **JP1** (two gold pads marked LC, south-east of D26): a solder jumper, not a part. No
+  paste, nothing fitted, left open; Wells bridges it on the LC after delivery.
 - **Via fill:** none. All vias standard plated, unfilled; do not add the via-fill or cap
   process. Thirteen board vias meet SMD pads, all on GND: the five in U4's tab, and stitch
   vias on C9.2, C12.2, C17.2, D29.2, D37.2, R1.2, U1.1 and U8.5 (U1's centre paddle has its
@@ -133,7 +139,9 @@ fitted.
 - **Per board, after delivery:** solder J2 (Kycon KMDGX-8S-BS, Mouser), and on AirWriter J4
   too. On AirWriter, press a blank PIC12F1840-I/P (PDIP-8, Digi-Key) into U7's socket, notch
   to notch, then flash TashTalk (the AppleTalk Port card's Flash TashTalk key, or
-  `POST /api/localtalk/flash`). The LC's U7 socket and J4 stay empty.
+  `POST /api/localtalk/flash`). The LC's U7 socket and J4 stay empty. On the LC, bridge JP1
+  (the pads marked LC beside D26) with solder: it feeds D26, the LC's one LED, straight from
+  U9, since the LEDs ahead of it in the chain are left off.
 
 ## Not part of either order, but buy alongside them
 
@@ -151,7 +159,7 @@ Upload only the files in the table at the top. Never upload anything else, and n
 
 Regenerate both packages only with `python3 hardware/combine_boards.py` then
 `sh hardware/combined/make_fab.sh`, and check them with the battery in `AGENTS.md`
-(Verification): ERC, both DRCs with `--severity-all`, the drill floor, 135 and 54 position
+(Verification): ERC, both DRCs with `--severity-all`, the drill floor, 135 and 59 position
 rows (the script asserts both). Both pictures are `kicad-cli pcb render --side top
 --quality high --use-board-stackup-colors`, flattened onto white: `combined-top.png` from
 `hardware/combined/combined.kicad_pcb` at `-w 2328 -h 1264`, `airwriter-top.png` from

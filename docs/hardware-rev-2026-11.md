@@ -17,6 +17,8 @@ scripts, so every change can be read and re-run:
    at the first step that fails.
 2. `tools_pcb/r13_route.py`: the new traces. The long runs are drawn point by point; the
    short stubs round a part's own pins are found by a small grid search in a corridor.
+3. `tools_pcb/r14_lc_light.py`, after `r13_sync.py` has brought JP1 in from the
+   schematic: JP1 placed, its two runs drawn by the same grid search, two ground vias (below).
 
 D3's and SW1's footprints are `r13_mkfp_d3.py` and `r13_mkfp_sw1.py`, their 3D models
 `lib/make_led_spacer_model.py` and `lib/make_sw1_model.py`.
@@ -60,6 +62,22 @@ is rated to 65 °C.
 | IO41, IO42 | none | rev A's DIP switches |
 
 Free: IO1, IO3, IO7, IO9–IO12, IO41, IO42, IO45, IO46, and IO38–IO40 on their pads.
+
+## The LC's one light: D26 and JP1
+
+The LC fits one LED of the 37: D26, the one under the test button, with its cap C46, and U9,
+R20 and C29 to drive it. C21, the array's bulk cap, stays off. The chain starts at D10, so
+JP1, a solder jumper marked LC on the silk south-east of D26, joins `LED_DATA5` (U9's output
+after R20) to `LED_CH16` (D26's input). It is open on AirWriter, where it leaves stubs of
+25 mm on `LED_DATA5` and 9 mm on `LED_CH16`; Wells bridges it on the LC. On the LC, D26 is
+the first LED U9 drives, so it shows a frame's first pixel. The firmware tells the two
+apart by `BOARD_LC`.
+
+`LED_DATA5` runs east from JP1 on the front and down the back to TP5; `LED_CH16` passes under
+D26's VBUS and `BTN_TEST` runs on the back. The front run closed off two patches of the front
+pour, the ones D26.2, C46.2 and C21.2 reach ground through, so each has a via to the back
+plane at (132.75, 97.6) and (139.45, 101.5). JP1 is in the schematic's BOM (konnect can't
+clear the flag); `make_fab.sh` leaves solder jumpers off both orders' BOMs.
 
 ## Parts that moved from rev A
 
