@@ -240,8 +240,7 @@ cased AirWriter" in the shop's `scripts/board-model/README.md`; then
 
 ## History
 
-- Design: `docs/superpowers/specs/2026-09-08-airwriter-enclosure-design.md`;
-  plan: `docs/superpowers/plans/2026-09-08-airwriter-enclosure.md`.
+- Design: `docs/superpowers/specs/2026-09-08-airwriter-enclosure-design.md`.
 - `docs/enclosure-build-log/` is the build's own record: a brief and a report
   per task, the two fix-wave reports, and `progress.md` (the running ledger,
   every review finding and ruling). The `task-N-report.md` files the

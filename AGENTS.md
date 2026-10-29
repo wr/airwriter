@@ -4,7 +4,7 @@ AirPrint bridge for Apple serial printers. ESP32-S3 dongle on the ImageWriter II
 mini-DIN-8 serial port, presenting as a native IPP Everywhere printer.
 
 **This file is current state only. Edit it in place; never append dated entries.** History is
-`git log` and Linear; designs are `docs/superpowers/specs/` and `plans/`. When a fact here stops
+`git log` and Linear; designs are `docs/superpowers/specs/`. Implementation plans and dated reviews are kept outside this repo. When a fact here stops
 being true, change or delete it in the same commit that made it false.
 
 ## Docs
@@ -23,7 +23,6 @@ being true, change or delete it in the same commit that made it false.
 | `docs/ORDER-NOTES.md` | PCBWay order notes for rev 2026.11. |
 | `docs/KICAD-TOOLING.md` | General KiCad 10 / konnect / pcbnew playbook. |
 | `docs/superpowers/specs/` | Printer scope, dot-panel cover (read its amendment block first), enclosure, status language, signed updates, laser printers, StyleWriters. |
-| `docs/review-*.md`, `docs/firmware-audit-*.md` | Dated reviews. Historical; their findings are applied. |
 
 ## Source of truth
 - GitHub: github.com/wr/airwriter (public), remote `origin`. Push `main` there directly. History
@@ -459,7 +458,7 @@ Linear is the queue; these are the live items.
 - Not in Linear: scope HSKo during a long job (SPEC §3.9 timing).
 - Laser printers (design `docs/superpowers/specs/2026-10-21-laser-printers-design.md`; a
   Personal LaserWriter NTR on the bench since 2026-10-24): `W-1082 AirPrint to LaserWriters on
-  AppleTalk` merged 2026-10-22 (plan `docs/superpowers/plans/2026-10-22-laserwriters-appletalk.md`),
+  AppleTalk` merged 2026-10-22,
   benched on board 1 against the fake, then on the NTR (the design's "What only a printer
   settles" has the figures): the cable, long frames through TashTalk, ~12 KB/s on LocalTalk,
   binary, full pages in its memory, busy both ways, out of paper read mid-job, and the SE/30
