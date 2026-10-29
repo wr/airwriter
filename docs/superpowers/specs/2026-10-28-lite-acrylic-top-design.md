@@ -1,7 +1,7 @@
 # Lite acrylic top and frame design
 
 2026-10-28. Wells chose a clean top over screws through the acrylic, then UV-cure glue
-over tape. The shop sells AirWriter Lite as "the same black bottom case under a clear
+over tape, and the rev 2026.11 board (this branch has it merged) over rev A. The shop sells AirWriter Lite as "the same black bottom case under a clear
 acrylic top with the AirWriter mark lasered into it".
 
 ## The stack
@@ -46,14 +46,17 @@ One printed part, in `enclosure/lite_frame.py`:
   between them would be loose, so it's left off.
 - **Arms:** one `FRAME_ARM_W` (2.40) wide from each leg out to the side rim, at rim depth.
 - **Light tube:** under a clear top D3 would light the whole corner, so the frame carries
-  the lattice's D3 tube round the Lite's slash (`hardware/panel/lite_slash.polys.json`,
-  written by `lite_top.py` from the art): 0.80 walls from the board to the top, closed by
-  a 0.80 cap but for a slit the slash's own shape, right under the frost. D3 and R17
-  stand inside it. Its corner is cut to the board's rounded one. On rev 2026.11 the dome
-  LED (a 4.5 mm bore) is wider than this tube; its envelope will cut a wall and the
-  test that the tube is sealed will fail until the tube is widened round it, as the
-  lattice's was on that branch.
-- **Clearances:** the rim, arms and tube clear every part's STEP envelope grown by
+  a tube round the Lite's slash (`hardware/panel/lite_slash.polys.json`, written by
+  `lite_top.py` from the art) and D3's envelope: on rev 2026.11 a 3 mm LED on a 4 mm
+  spacer standing to 11.85, with R17 nearby outside. Walls run from the board to the
+  top, `LATTICE_WALL` thick where there is room; on the east the spacer stands 0.38 from
+  the board edge, so that wall runs out to the rim's outer line and is one printed line
+  (`FRAME_TUBE_MIN_WALL`, 0.45), as the lattice's was let be on that board. Its inside
+  corner follows the rim's rounded one, so the corner keeps that thickness too. A
+  `FRAME_CAP` (0.60) cap closes it but for a slit the slash's own shape, right under the
+  frost, 0.49 over the LED. D3's grown shadow is left out of the frame's part voids: the
+  tube clears D3 itself, and the shadow would cut the east wall away.
+- **Clearances:** the rim, arms and tube clear every other part's STEP envelope grown by
   `PART_CLEAR`/`PART_TOP_CLEAR` (`components.py`, as the lattice does).
 
 Printed rim-down (the glue face on the bed, the flattest face), legs up, no supports: the

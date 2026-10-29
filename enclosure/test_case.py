@@ -521,11 +521,30 @@ class TestPorts(unittest.TestCase):
             msg=f"port_cutouts() removes {vol:.4f}mm^3 from the floor slab")
 
 
+def _has_s1():
+    import board_geom as bg
+    try:
+        bg.footprint("S1")
+        return True
+    except KeyError:
+        return False
+
+
 class TestSideFeaturesAndTray(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.t = case.tray()
 
+    @unittest.skipIf(_has_s1(), "a board with DIP switches")
+    def test_no_dip_slot_without_dip_switches(self):
+        # Rev 2026.11 has no S1: the west wall stays whole where rev A's keys
+        # came through (rev A's slot: z 4.60-9.90 round KiCad y 134.32).
+        from build123d import Box, Pos
+        self.assertIsNone(case.dip_slot())
+        probe = Pos(-p.WALL / 2, p.BOARD_L - (134.32 - 60.0), 7.25) * Box(0.4, 10.0, 4.0)
+        self.assertAlmostEqual((self.t & probe).volume, probe.volume, places=3)
+
+    @unittest.skipUnless(_has_s1(), "no DIP switches on this board")
     def test_dip_slot_is_in_the_west_wall_at_the_key_band(self):
         import board_geom as bg
         bb = case.dip_slot().bounding_box()
@@ -548,6 +567,7 @@ class TestSideFeaturesAndTray(unittest.TestCase):
         self.assertAlmostEqual(bb.min.Y, lo - edge, places=2)
         self.assertAlmostEqual(bb.max.Y, hi + edge, places=2)
 
+    @unittest.skipUnless(_has_s1(), "no DIP switches on this board")
     def test_dip_slot_stays_close_to_the_switch_body_top(self):
         # S1's moulded body tops out 9.41 above the board (dp08rp.mjs / the
         # footprint descr's 9.41mm height). A slot reaching past that opens the
@@ -559,6 +579,7 @@ class TestSideFeaturesAndTray(unittest.TestCase):
         self.assertLessEqual(bb.max.Z, S1_BODY_TOP + 0.5,
                              f"slot top {bb.max.Z:.2f} is more than 0.5 above S1's body top")
 
+    @unittest.skipUnless(_has_s1(), "no DIP switches on this board")
     def test_dip_keys_have_room_to_rock(self):
         # The keys and their levers span z 5.6-9.01. On the first print a slot
         # 0.4 below and 0.3 above them pinned them. Ask for 0.85 each way.
@@ -567,6 +588,7 @@ class TestSideFeaturesAndTray(unittest.TestCase):
         self.assertGreaterEqual(KEYS_BOTTOM - bb.min.Z, 0.85)
         self.assertGreaterEqual(bb.max.Z - KEYS_TOP, 0.85)
 
+    @unittest.skipUnless(_has_s1(), "no DIP switches on this board")
     def test_dip_slot_clears_the_whole_key_lever(self):
         # The levers run from z 5.8 (the lip) to 9.01 (the key top), inside the
         # switch's own 5.6-9.0 recess. A slot that starts above the lip cuts the
@@ -576,6 +598,7 @@ class TestSideFeaturesAndTray(unittest.TestCase):
         self.assertLessEqual(bb.min.Z, LEVER_BOTTOM, "slot starts above the lever lip")
         self.assertGreaterEqual(bb.max.Z, KEY_TOP, "slot ends below the key top")
 
+    @unittest.skipUnless(_has_s1(), "no DIP switches on this board")
     def test_dip_slot_fully_contains_the_key_band_with_real_margin(self):
         # Would have caught the outer keys sitting inside the wall
         # material: build the KEY BAND itself (pad column centres +-
@@ -624,6 +647,7 @@ class TestSideFeaturesAndTray(unittest.TestCase):
             "old margin=0.60 was expected to fail to clear the key band, "
             "but didn't reproduce the bug")
 
+    @unittest.skipUnless(_has_s1(), "no DIP switches on this board")
     def test_dip_slot_spans_the_wall_with_a_1mm_inward_overshoot(self):
         # RULING 2 (task-6-report.md): the brief's expression had a stray
         # "- 0.5" that cancelled the +0.5, leaving the slot centred on the
@@ -651,18 +675,13 @@ class TestSideFeaturesAndTray(unittest.TestCase):
         self.assertLessEqual(p.RESET_PINHOLE_D, 0.80)
         self.assertGreaterEqual(p.RESET_PINHOLE_D, 0.60)
 
-    def test_reset_pinhole_z_matches_sw1s_derived_actuator_height(self):
-        # SW1 (Panasonic EVQP44B3M side-press, see task-6-report.md) has no
-        # 3D model on the board, so its actuator axis can't be booleaned
-        # from a placed STEP. Its footprint's own descr records the body as
-        # 6.2 x 2.55 x 3.5mm; a side-press body sits flush on the board like
-        # any SMD part (Z=0 at its base), so its actuator is centred at half
-        # the body height above the board's top face. The brief's guess
-        # ((DIP_SLOT_Z0+DIP_SLOT_Z1)/2 - 5.0 = 3.55) is a different number
-        # from that derivation and must not silently come back.
+    def test_reset_pinhole_z_is_on_sw1s_button(self):
+        # Rev 2026.11's SW1, the BZCN TSB001A3518A, has a 3.0 x 1.5 mm button
+        # 1.15-2.65 above the board (LCSC's model, lib/make_sw1_model.py):
+        # the pinhole aims at its middle.
         bb = case.reset_pinhole().bounding_box()
         z_centre = (bb.min.Z + bb.max.Z) / 2
-        self.assertAlmostEqual(z_centre, 3.5 / 2, places=2)
+        self.assertAlmostEqual(z_centre, 1.90, places=2)
 
     def test_tray_is_one_valid_watertight_solid(self):
         self.assertTrue(self.t.is_valid)
@@ -730,6 +749,8 @@ class TestThinWalls(unittest.TestCase):
     def setUpClass(cls):
         import board_geom as bg
         cls.t = case.tray()
+        if not _has_s1():
+            return
         fp = bg.footprint("S1")
         pad_xs = [lx for lx, _ in bg.pad_positions("S1")]
         ys = [bg.to_case(*bg.local_to_board(fp, lx, 0.0))[1]
@@ -768,6 +789,7 @@ class TestThinWalls(unittest.TestCase):
             self.assertAlmostEqual(self._wall(side, s, p.Z_LID_UNDER - run - 0.3, h=0.2),
                                    p.THIN_WALL, places=2, msg=side)
 
+    @unittest.skipUnless(_has_s1(), "no DIP switches on this board")
     def test_keys_clear_the_wall_at_rest(self):
         # The keys' tips stand into the thin wall, inside the DIP
         # window: nothing may touch them once the wall springs back.

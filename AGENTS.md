@@ -16,10 +16,11 @@ being true, change or delete it in the same commit that made it false.
 | `docs/voice-and-tone.md` | How AirWriter writes: settings page, wiki, README, posts. Read before writing any of them. |
 | `docs/cad-routine.md` | How to design, check and iterate printed parts. Follow it for any `enclosure/` change. |
 | `docs/hardware-rev-a.md` | Rev A as built: geometry, deviations from the spec and why, rev B list. |
+| `docs/hardware-rev-2026-11.md` | Rev 2026.11 as drawn: U3's channels, the GPIOs, what moved from rev A, the scripts that build the board. |
 | `docs/library.md` | The custom KiCad library and 3D models. |
 | `docs/sourcing.md` | Fab, parts, mini-DIN and PIC decisions. |
 | `docs/prior-art.md` | TashTalk, TailTalk, AirTalk, ImageScribbler. |
-| `docs/ORDER-NOTES.md` | PCBWay order notes for rev A. |
+| `docs/ORDER-NOTES.md` | PCBWay order notes for rev 2026.11. |
 | `docs/KICAD-TOOLING.md` | General KiCad 10 / konnect / pcbnew playbook. |
 | `docs/superpowers/specs/` | Printer scope, dot-panel cover (read its amendment block first), enclosure, status language, signed updates, laser printers, StyleWriters. |
 | `docs/review-*.md`, `docs/firmware-audit-*.md` | Dated reviews. Historical; their findings are applied. |
@@ -276,7 +277,8 @@ What works on `main`:
 **Enclosure** (`enclosure/`, in use on board 1): tray (print in PETG with Arachne walls;
 every wall 1.70 below the rim, one thickness all round so no lines show up the outside; the
 board goes in by the sequence in `enclosure/README.md`, thumbing the west wall out past the
-DIP keys), Lite frame, Lite lid, and the Pro build's light-guide lattice. Cavity 13.04 (measured mini-DIN
+DIP keys; on this branch the tray is cut to rev 2026.11, which has no DIP switches and no
+DIP window, and board 1's tray is the one at `hw-rev-a`), Lite frame, Lite lid, and the Pro build's light-guide lattice. Cavity 13.04 (measured mini-DIN
 height); Pro screws M2.5 × 18. Four 10 mm rubber feet sit in 0.40 pockets in the floor's
 underside, each hiding a screw counterbore. The shop's cased GLBs still show the pre-W-1036
 tray. The Lite's clear top is 1.5 mm cast acrylic, laser file
@@ -373,8 +375,16 @@ Known issues, open:
 ## Open work
 
 Linear is the queue; these are the live items.
-- `W-1091 Rev B: the main board's next revision`: the rev B list (`docs/hardware-rev-a.md`),
-  with `W-1043 Rev B: through-hole dome LED for the power indicator` under it.
+- `W-1091 Rev B: the main board's next revision` (rev 2026.11, with
+  `W-1043 Rev B: through-hole dome LED for the power indicator` under it): designed, placed and
+  routed on branch `ww/rev-2026-11-board-updates-4f0c6a` (`docs/hardware-rev-2026-11.md`), not
+  merged. Next: Wells reviews the routing in KiCad, then the PCBWay order (November or
+  December). No DIP switches; each port's HSKo has its own GPIO (J2's IO47, J4's IO13, J4's
+  HSKi IO21), and U1 is the ESP32-S3-WROOM-1-N16R8 (16 MB flash, 8 MB octal PSRAM on
+  IO35–IO37), which needs its own firmware build. SW1 is the Macintosh Mini's BZCN
+  TSB001A3518A. IO38–IO40 end on bare pads on the back (TP10–TP12) for bodging. Firmware
+  for it:
+  `W-1109 Firmware for rev 2026.11 boards: N16R8 build, straps, own handshake pins, no DIPs, Lite`.
 - `W-1046 Factory reset must always work, even with broken firmware` and
   `W-1045 Long-press factory reset with live feedback on the LED panel`: merged 2026-10-15, benched
   on board 1 (all pass). Board 1 has the W-1059 bootloader and partition table, so an image
@@ -454,9 +464,9 @@ Linear is the queue; these are the live items.
   its toner is in, and the cover-open, jam and toner texts mid-job (idle, it says "idle"
   whatever is wrong). Owed on a Level 1 machine (Plus, II NT): hex and a 68000's imaging
   time. Next
-  `W-1083 AirPrint to HP LaserJets over serial (PCL)`. Network printers over TCP are out. Open
-  hardware question for any RS-232 printer, the original ImageWriter included: J2's receiver
-  (MAX3490, common-mode −7 to +12 V) against RS-232's −12 V.
+  `W-1083 AirPrint to HP LaserJets over serial (PCL)`. Network printers over TCP are out. For
+  any RS-232 printer, the original ImageWriter included: rev A's J2 receiver (SP3490,
+  common mode −7 to +12 V) can't take RS-232's −12 V; rev 2026.11's THVD1451 takes ±15 V.
 - The full test page has printed on board 1 from the page's Print Test Page, on the colour
   ribbon. Still owed: a print from the button and from DIP4, one on the black ribbon, and a
   second tap mid-page.
@@ -468,6 +478,8 @@ Linear is the queue; these are the live items.
 - **pcbnew scripts** run on KiCad's bundled interpreter:
   `/Applications/KiCad/KiCad.app/Contents/Frameworks/Python.framework/Versions/3.9/bin/python3`.
   `hardware/airwriter/route.py` does export DSN → round → Freerouting → import → DRC headless.
+  Rev 2026.11's board is built from rev A by `tools_pcb/r13_build.sh` then `r13_route.py`
+  (`docs/hardware-rev-2026-11.md`); never re-run them over hand edits.
 - **Freerouting 2.2.4** at `~/.local/share/freerouting/freerouting.jar`, Java 25.
 - **konnect** resolves `lib_id` only against KiCad's install directory, so the project libraries
   must be symlinked into the app bundle. **The symlinks are gone since the 10.0.6 upgrade**;
@@ -540,17 +552,22 @@ Linear is the queue; these are the live items.
   Print-Job of `fixtures/checker.urf` prints crc32 `8ee84844`. At the default (-1 in) the
   checker, which sits in the page's top inch, prints blank (crc32 `0e5fc630`, 9 bytes).
   After an OTA, `/api/status` reaches `"trial":false` with the new `version`.
-- **Schematic:** `kicad-cli sch erc` → 0 errors; 44 known warnings (42 `lib_symbol_mismatch`,
-  2 `isolated_pin_label`).
+- **Schematic:** `kicad-cli sch erc` → 0 errors; 47 known warnings (42 `lib_symbol_mismatch`,
+  5 `isolated_pin_label`: TXD0, RXD0 and rev 2026.11's three spare pins).
 - **Board:** `kicad-cli pcb drc --severity-all --schematic-parity --refill-zones` on
   `hardware/airwriter/airwriter.kicad_pcb` → 0 errors, 0 unconnected, 5 `lib_footprint_mismatch`
-  warnings, 80 field-parity notes (both re-run 2026-10-15). Treat any unconnected item as real;
+  warnings, no field-parity warnings (rev 2026.11, 2026-10-28). Treat any unconnected item as real;
   `tools_pcb/r12_gnd.py` checks that every GND pad is on the main plane. The combined panel
   under its default rules shows only known
-  items (~274 false clearance, 14 copper_edge, 12 hole_clearance, 6 seam invalid_outline, 1
-  benign starved_thermal on U7.8).
+  items (~221 false clearance, 6 copper_edge and 4 silk_edge where J1, J2, J4 and U1 meet
+  the edge, 16 hole_clearance where NPTH holes meet the pours, 6 seam invalid_outline, 1
+  benign starved_thermal on U7.8). Rev 2026.11's netlist gate:
+  `python3 hardware/airwriter/tools_sch/check_rev2026_11.py <kicadxml netlist>`; its board
+  gate, on KiCad's python: `hardware/airwriter/tools_pcb/r13_check.py` (pads 0.30 mm from
+  the edge, silk on the board, D3's K, SW1's RESET).
 - **Fab package:** `python3 hardware/combine_boards.py` then `sh hardware/combined/make_fab.sh`;
-  drill floor 0.30 (`grep -E '^T[0-9]+C'`), pos file 127 rows with no J2/J4.
+  drill floor 0.30 (`grep -E '^T[0-9]+C'`); `combined-pos.csv` 136 rows (J2 placed, J4 not),
+  `combined-lite-pos.csv` 59.
 
 ## Bench rules (board 1)
 - **Never OTA while a job prints.** Tell Wells to hold prints, read `/api/status`, confirm

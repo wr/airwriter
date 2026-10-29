@@ -7,7 +7,6 @@ from build123d import Box, Cylinder, Pos
 import board_geom as bg
 import case
 import components
-import lattice
 import lite_frame
 import params as p
 
@@ -55,7 +54,7 @@ class TestLiteFrame(unittest.TestCase):
         # Same legs, inserts, screws, connector trims and foot relief as the
         # printed Lite lid: below the rim the two parts are the same solid.
         # Away from D3's light tube, which stands on the board too.
-        _, (ox0, ox1, oy0, oy1) = lattice._d3_tube_rects(lite_frame.slash_box())
+        _, (ox0, ox1, oy0, oy1) = lite_frame.tube_rects()
         below = (_box(-5, p.BOARD_W + 5, -5, p.BOARD_L + 5, -1, TOP - p.FRAME_RIM_H - 0.1)
                  - _box(ox0 - 0.01, ox1 + 0.01, oy0 - 0.01, oy1 + 0.01, -2, TOP + 1))
         mine, lids = self.frame & below, case.lite_lid() & below
@@ -82,23 +81,23 @@ class TestLiteFrame(unittest.TestCase):
             self.assertAlmostEqual(hit, 0.0, places=3, msg=f"rim runs into {ref}")
 
     def test_power_light_leaves_only_through_the_slash(self):
-        # D3's tube: walls whole from the board to the top, a cap over the
-        # tube solid but for the slit, and the slit open the slash's shape.
+        # D3's tube: a wall at least 0.40 thick all round from the board to
+        # the cap, nothing inside, the cap solid but for the slit, and the
+        # slit open the slash's own shape.
         from build123d import Face, Wire, extrude
-        (ix0, ix1, iy0, iy1), (ox0, ox1, oy0, oy1) = lattice._d3_tube_rects(
-            lite_frame.slash_box())
-        cap = p.LATTICE_WALL
-        board = case._rounded_box(p.BOARD_W, p.BOARD_L, TOP, p.BOARD_W / 2, p.BOARD_L / 2,
-                                  TOP / 2, p.CORNER_R)
-        ring = (_box(ox0, ox1, oy0, oy1, 0, TOP - cap)
-                - _box(ix0, ix1, iy0, iy1, -1, TOP)) & board
-        self.assertAlmostEqual(_vol(self.frame & ring), ring.volume, places=2,
-                               msg="a wall of D3's tube is cut through")
-        self.assertAlmostEqual(_vol(self.frame & _box(ix0, ix1, iy0, iy1, 0.01, TOP - cap - 0.01)),
-                               0.0, places=3, msg="something inside D3's tube")
+        z1 = TOP - p.FRAME_CAP
+        board_up = _box(-5, p.BOARD_W + 5, -5, p.BOARD_L + 5, 0, z1)
+        shell = (lite_frame.tube_hollow(0.40) - lite_frame.tube_hollow()) & board_up
+        self.assertAlmostEqual(_vol(self.frame & shell), shell.volume, places=2,
+                               msg="a wall of D3's tube is under 0.40 somewhere")
+        inside = lite_frame.tube_hollow() & _box(-5, p.BOARD_W + 5, -5, p.BOARD_L + 5, 0.01, z1 - 0.01)
+        self.assertAlmostEqual(_vol(self.frame & inside), 0.0, places=3,
+                               msg="something inside D3's tube")
+        ix0, ix1, iy0, iy1 = lite_frame.tube_rects()[0]
+        lid = _box(ix0, ix1, iy0, iy1, z1, TOP) & lite_frame._rim_outline(
+            p.FRAME_TUBE_MIN_WALL, z1, TOP)
         face = Face(Wire.make_polygon([(x, y, 0) for x, y in bg.lite_slash()], close=True))
-        slit = Pos(0, 0, TOP - cap) * extrude(face, cap, dir=(0, 0, 1))
-        lid = _box(ix0, ix1, iy0, iy1, TOP - cap, TOP)
+        slit = Pos(0, 0, z1) * extrude(face, p.FRAME_CAP, dir=(0, 0, 1))
         self.assertAlmostEqual(_vol(self.frame & lid), lid.volume - slit.volume, places=2,
                                msg="the cap is open somewhere but the slit")
         self.assertAlmostEqual(_vol(self.frame & slit), 0.0, places=3, msg="the slit is closed")

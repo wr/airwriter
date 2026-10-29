@@ -107,9 +107,11 @@ pad, the BOOT pads and the back-face artwork. The rest:
 
 ## Rev B candidates
 
-Tracked as `W-1091 Rev B: the main board's next revision` in Linear, which is the copy kept
-current; this list started as the one filed on 2026-10-24. Most come from review #4
-(`docs/review-2026-09-01-pre-order-4.md`, "Rev-B list"), which has the reasoning.
+Rev B became rev 2026.11 (`W-1091 Rev B: the main board's next revision`): its design,
+`docs/superpowers/specs/2026-10-28-rev-2026-11-board-design.md`, says which of these it took,
+changed or dropped, and `docs/hardware-rev-2026-11.md` is the board as drawn. The list below
+is the one filed on 2026-10-24, kept for its reasons. Most come from review #4
+(`docs/review-2026-09-01-pre-order-4.md`, "Rev-B list").
 
 - 10 k pulldown on `LT_DE` (across U6 pins 3–5; it floats with the PIC absent or in reset).
 - 100 k from U9.2 to GND (IO48 floats until firmware claims it; brownout loop risk on 500 mA ports).

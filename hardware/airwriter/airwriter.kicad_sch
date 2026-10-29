@@ -7713,30 +7713,6 @@
 		(uuid "79d6885d-28a6-4757-bbdd-5ce5065db533")
 	)
 	(no_connect
-		(at 189.23 129.54)
-		(uuid "a502f18b-b0b8-4184-adbe-11efb93261e9")
-	)
-	(no_connect
-		(at 189.23 139.7)
-		(uuid "1eb826b6-bd93-43c8-851c-e2a0a4a89948")
-	)
-	(no_connect
-		(at 189.23 144.78)
-		(uuid "d4a91729-1e1a-40e7-bacd-8a4b89afa6fa")
-	)
-	(no_connect
-		(at 189.23 147.32)
-		(uuid "958e566f-023c-4e01-86b5-993eea2046a9")
-	)
-	(no_connect
-		(at 189.23 149.86)
-		(uuid "095e2a6c-22a6-43f5-abb4-a8241ab39c27")
-	)
-	(no_connect
-		(at 189.23 152.4)
-		(uuid "3426c45b-6830-45b6-8799-1d68f400a993")
-	)
-	(no_connect
 		(at 219.71 154.94)
 		(uuid "f51e1a66-ee80-416a-8c1e-32c552cdb066")
 	)
@@ -7745,24 +7721,8 @@
 		(uuid "36dbcc5f-61fd-4941-8b10-39ea5f4472be")
 	)
 	(no_connect
-		(at 320.04 167.64)
-		(uuid "c2e42cbf-37be-48fe-b6d8-0f1f7436ea68")
-	)
-	(no_connect
-		(at 360.68 157.48)
-		(uuid "7b68b6b9-00b7-46dc-bb71-b05b9f0f72a9")
-	)
-	(no_connect
 		(at 426.72 115.57)
 		(uuid "20e3efd6-b054-4178-8c97-166ec600c903")
-	)
-	(no_connect
-		(at 426.72 219.71)
-		(uuid "8ec075c7-d49a-4982-bead-9151bf200fba")
-	)
-	(no_connect
-		(at 426.72 222.25)
-		(uuid "43ccf2c5-9d9b-42ba-9e43-2060b693b90e")
 	)
 	(no_connect
 		(at 426.72 234.95)
@@ -7773,14 +7733,6 @@
 		(uuid "8b1a355d-f9e8-4b68-b5d9-b5a4fe56d5e1")
 	)
 	(no_connect
-		(at 189.23 160.02)
-		(uuid "c17a0fc5-cb2e-41c8-92e7-f922530ee11f")
-	)
-	(no_connect
-		(at 189.23 162.56)
-		(uuid "44ec9fdf-d2f4-402b-a2ed-d4ef97b2a430")
-	)
-	(no_connect
 		(at 535.94 185.42)
 		(uuid "62595897-3912-4465-8ce8-d9009e755cb6")
 	)
@@ -7789,8 +7741,44 @@
 		(uuid "96a33347-3b4d-439a-bafe-e8b1e97b4ee2")
 	)
 	(no_connect
+		(at 189.23 129.54)
+		(uuid "67754455-6c6e-4909-a6f9-9fe8c275bf37")
+	)
+	(no_connect
+		(at 189.23 144.78)
+		(uuid "76a8273c-fd21-440b-88dd-34629937438c")
+	)
+	(no_connect
+		(at 189.23 147.32)
+		(uuid "60addb33-662c-42b7-a0fe-54c8c5a9cea3")
+	)
+	(no_connect
+		(at 189.23 149.86)
+		(uuid "71c46b40-9ad3-4ca2-b54c-2e3d5b8016d0")
+	)
+	(no_connect
+		(at 189.23 152.4)
+		(uuid "702db697-67a1-4a5d-9172-b2864de35e71")
+	)
+	(no_connect
+		(at 189.23 139.7)
+		(uuid "99a05b94-dd08-495b-95e1-982ebed2794c")
+	)
+	(no_connect
+		(at 219.71 134.62)
+		(uuid "9a52268e-4d40-42ed-85db-065ac8a6b197")
+	)
+	(no_connect
 		(at 219.71 139.7)
-		(uuid "296ae452-5afc-4aee-b5ba-c082d98071fd")
+		(uuid "842216fe-9910-4a93-9121-4eddcace5f0a")
+	)
+	(no_connect
+		(at 219.71 152.4)
+		(uuid "1385fbc3-b539-4de0-a6f3-c5e109ad9895")
+	)
+	(no_connect
+		(at 219.71 149.86)
+		(uuid "f704f44d-f732-47e6-a81a-55ad34d74fd0")
 	)
 	(wire
 		(pts
@@ -8093,16 +8081,6 @@
 		)
 		(uuid "11d55a17-2ac5-479d-b208-2d6ac9a410c3")
 	)
-	(label "+3V3"
-		(at 410.21 45.72 0)
-		(effects
-			(font
-				(size 1.27 1.27)
-			)
-			(justify left bottom)
-		)
-		(uuid "e57bd50d-2683-48ef-8b67-bec92f1e739c")
-	)
 	(label "GND"
 		(at 35.56 82.55 0)
 		(effects
@@ -8204,16 +8182,6 @@
 		(uuid "c392b854-00a0-43a6-b35a-c0e08c2401ae")
 	)
 	(label "GND"
-		(at 162.56 179.07 0)
-		(effects
-			(font
-				(size 1.27 1.27)
-			)
-			(justify left bottom)
-		)
-		(uuid "55fdf6f2-3111-4e80-ac30-36a251e1fec3")
-	)
-	(label "GND"
 		(at 309.88 43.18 0)
 		(effects
 			(font
@@ -8294,26 +8262,6 @@
 		(uuid "7bf0b93f-06f1-4bef-a32d-03249584e9ae")
 	)
 	(label "GND"
-		(at 320.04 157.48 0)
-		(effects
-			(font
-				(size 1.27 1.27)
-			)
-			(justify left bottom)
-		)
-		(uuid "71d2436d-f75e-453e-bea6-bf9a88c2d384")
-	)
-	(label "GND"
-		(at 360.68 167.64 0)
-		(effects
-			(font
-				(size 1.27 1.27)
-			)
-			(justify left bottom)
-		)
-		(uuid "c3dc4270-0c7a-4e03-9b85-d5d542a71050")
-	)
-	(label "GND"
 		(at 154.94 175.26 0)
 		(effects
 			(font
@@ -8342,16 +8290,6 @@
 			(justify left bottom)
 		)
 		(uuid "576bf18a-f44f-474d-95ac-25e870a4f059")
-	)
-	(label "GND"
-		(at 410.21 78.74 0)
-		(effects
-			(font
-				(size 1.27 1.27)
-			)
-			(justify left bottom)
-		)
-		(uuid "8f4aa6d6-d80b-460f-9d2a-164f90a8fe79")
 	)
 	(label "GND"
 		(at 420.37 163.83 0)
@@ -8463,16 +8401,6 @@
 		)
 		(uuid "fe629f8e-c6ea-4167-8057-ff88d887fa38")
 	)
-	(label "BOOT_CFG"
-		(at 162.56 171.45 0)
-		(effects
-			(font
-				(size 1.27 1.27)
-			)
-			(justify left bottom)
-		)
-		(uuid "25e368ca-532f-4457-9e14-0db33e879c11")
-	)
 	(label "UART_TX"
 		(at 219.71 121.92 0)
 		(effects
@@ -8523,36 +8451,6 @@
 		)
 		(uuid "2ec3c776-dee3-46da-b876-ade01c3d6805")
 	)
-	(label "UART_CTS"
-		(at 320.04 162.56 0)
-		(effects
-			(font
-				(size 1.27 1.27)
-			)
-			(justify left bottom)
-		)
-		(uuid "7148d8c1-25f8-4f5c-bd9b-87d7412a4fba")
-	)
-	(label "HSKI_DRV"
-		(at 219.71 134.62 0)
-		(effects
-			(font
-				(size 1.27 1.27)
-			)
-			(justify left bottom)
-		)
-		(uuid "f3d6a605-9431-450b-ad47-d2a2d63a048a")
-	)
-	(label "HSKI_DRV"
-		(at 320.04 152.4 0)
-		(effects
-			(font
-				(size 1.27 1.27)
-			)
-			(justify left bottom)
-		)
-		(uuid "057474be-25af-4643-be3b-5c3156cbf040")
-	)
 	(label "LED_DATA"
 		(at 219.71 162.56 0)
 		(effects
@@ -8583,16 +8481,6 @@
 		)
 		(uuid "1943fc2c-a2c8-4d36-bd77-e7e99249a825")
 	)
-	(label "PR_HSKO"
-		(at 360.68 162.56 0)
-		(effects
-			(font
-				(size 1.27 1.27)
-			)
-			(justify left bottom)
-		)
-		(uuid "1928818d-023a-459d-b221-f7a55e609e7d")
-	)
 	(label "PR_HSKI"
 		(at 400.05 143.51 0)
 		(effects
@@ -8612,16 +8500,6 @@
 			(justify left bottom)
 		)
 		(uuid "682e7dd8-7f0c-43ec-afea-e12bbc5715fe")
-	)
-	(label "HSKI_RS232"
-		(at 360.68 152.4 0)
-		(effects
-			(font
-				(size 1.27 1.27)
-			)
-			(justify left bottom)
-		)
-		(uuid "c823f1a4-3705-47ae-868c-05ec37aaec13")
 	)
 	(label "SHELL"
 		(at 426.72 123.19 0)
@@ -8813,66 +8691,6 @@
 		)
 		(uuid "d787e0d0-8f78-4110-beb2-097001945089")
 	)
-	(label "PR_TXD_P"
-		(at 350.52 52.07 0)
-		(effects
-			(font
-				(size 1.27 1.27)
-			)
-			(justify left bottom)
-		)
-		(uuid "5050779d-c9a0-45c4-b9de-41717323152b")
-	)
-	(label "PR_TXD_P"
-		(at 400.05 58.42 0)
-		(effects
-			(font
-				(size 1.27 1.27)
-			)
-			(justify left bottom)
-		)
-		(uuid "93b63eb8-ea5c-48b8-956b-e0b13eb36415")
-	)
-	(label "PR_TXD_P"
-		(at 410.21 53.34 0)
-		(effects
-			(font
-				(size 1.27 1.27)
-			)
-			(justify left bottom)
-		)
-		(uuid "b7b287ba-fa4b-437d-8e9d-bde63cad52cb")
-	)
-	(label "PR_TXD_N"
-		(at 350.52 57.15 0)
-		(effects
-			(font
-				(size 1.27 1.27)
-			)
-			(justify left bottom)
-		)
-		(uuid "cfde01e6-dc7c-44af-9e35-7bb4f6e21551")
-	)
-	(label "PR_TXD_N"
-		(at 400.05 66.04 0)
-		(effects
-			(font
-				(size 1.27 1.27)
-			)
-			(justify left bottom)
-		)
-		(uuid "91ea75fb-7501-477b-948f-813bc39c1305")
-	)
-	(label "PR_TXD_N"
-		(at 410.21 71.12 0)
-		(effects
-			(font
-				(size 1.27 1.27)
-			)
-			(justify left bottom)
-		)
-		(uuid "e5ebe92f-0f51-4e99-9a15-bb8d125c9c8d")
-	)
 	(label "LT_DATA"
 		(at 285.75 232.41 0)
 		(effects
@@ -9003,136 +8821,6 @@
 		)
 		(uuid "5628a37c-6117-4730-8869-df47807b3e62")
 	)
-	(label "LT_RESET"
-		(at 285.75 227.33 0)
-		(effects
-			(font
-				(size 1.27 1.27)
-			)
-			(justify left bottom)
-		)
-		(uuid "cca5ffee-039e-4c3e-89fb-bad65f924ad7")
-	)
-	(label "LT_A"
-		(at 384.81 210.82 0)
-		(effects
-			(font
-				(size 1.27 1.27)
-			)
-			(justify left bottom)
-		)
-		(uuid "1d88978e-6362-4b64-981a-59514fc4a3c7")
-	)
-	(label "LT_B"
-		(at 394.97 210.82 0)
-		(effects
-			(font
-				(size 1.27 1.27)
-			)
-			(justify left bottom)
-		)
-		(uuid "2e1237a3-942e-4502-ae50-061c066a4082")
-	)
-	(label "LT_Y"
-		(at 405.13 210.82 0)
-		(effects
-			(font
-				(size 1.27 1.27)
-			)
-			(justify left bottom)
-		)
-		(uuid "faaff177-7400-4195-a315-b320175373df")
-	)
-	(label "LT_Z"
-		(at 415.29 210.82 0)
-		(effects
-			(font
-				(size 1.27 1.27)
-			)
-			(justify left bottom)
-		)
-		(uuid "e303db99-bf34-43f6-830a-61fca07b0f93")
-	)
-	(label "LT_PORT_A"
-		(at 384.81 218.44 0)
-		(effects
-			(font
-				(size 1.27 1.27)
-			)
-			(justify left bottom)
-		)
-		(uuid "2931476e-ae26-448c-b6c5-4f6c9cd63daa")
-	)
-	(label "LT_PORT_A"
-		(at 426.72 229.87 0)
-		(effects
-			(font
-				(size 1.27 1.27)
-			)
-			(justify left bottom)
-		)
-		(uuid "ded9dc4c-1c48-4598-b79a-bb146051fffd")
-	)
-	(label "LT_PORT_B"
-		(at 394.97 218.44 0)
-		(effects
-			(font
-				(size 1.27 1.27)
-			)
-			(justify left bottom)
-		)
-		(uuid "5717d842-c994-4f77-92fd-66b5da298c88")
-	)
-	(label "LT_PORT_B"
-		(at 426.72 237.49 0)
-		(effects
-			(font
-				(size 1.27 1.27)
-			)
-			(justify left bottom)
-		)
-		(uuid "9f6e618d-a58b-4020-a715-77388cbed93f")
-	)
-	(label "LT_PORT_Y"
-		(at 405.13 218.44 0)
-		(effects
-			(font
-				(size 1.27 1.27)
-			)
-			(justify left bottom)
-		)
-		(uuid "96996f66-5d5b-496c-9ad6-2ffd9dec0cc4")
-	)
-	(label "LT_PORT_Y"
-		(at 426.72 224.79 0)
-		(effects
-			(font
-				(size 1.27 1.27)
-			)
-			(justify left bottom)
-		)
-		(uuid "ff83ba62-e600-4dd6-a8c2-0a387af1626e")
-	)
-	(label "LT_PORT_Z"
-		(at 415.29 218.44 0)
-		(effects
-			(font
-				(size 1.27 1.27)
-			)
-			(justify left bottom)
-		)
-		(uuid "3b013e6c-4581-403b-9637-6f8c193a8058")
-	)
-	(label "LT_PORT_Z"
-		(at 426.72 232.41 0)
-		(effects
-			(font
-				(size 1.27 1.27)
-			)
-			(justify left bottom)
-		)
-		(uuid "9c3e8e8c-6c2c-43e7-bdc5-eff8a5fefbc2")
-	)
 	(label "+3V3"
 		(at 270.51 214.63 0)
 		(effects
@@ -9262,46 +8950,6 @@
 			(justify left bottom)
 		)
 		(uuid "dd8cf57c-5a52-47ca-bc05-c8c5dc9c733f")
-	)
-	(label "LT_Z"
-		(at 345.44 217.17 0)
-		(effects
-			(font
-				(size 1.27 1.27)
-			)
-			(justify left bottom)
-		)
-		(uuid "34f9bd59-2918-4a38-ad11-13c0d86bb50d")
-	)
-	(label "LT_Y"
-		(at 345.44 222.25 0)
-		(effects
-			(font
-				(size 1.27 1.27)
-			)
-			(justify left bottom)
-		)
-		(uuid "00b513bf-9098-492a-8562-1cad6bbe740a")
-	)
-	(label "LT_B"
-		(at 345.44 257.81 0)
-		(effects
-			(font
-				(size 1.27 1.27)
-			)
-			(justify left bottom)
-		)
-		(uuid "7343240d-fd21-4797-b765-0397b230557c")
-	)
-	(label "LT_A"
-		(at 345.44 262.89 0)
-		(effects
-			(font
-				(size 1.27 1.27)
-			)
-			(justify left bottom)
-		)
-		(uuid "c7ae0ead-8889-4da5-a95c-1ca263c1b8ae")
 	)
 	(label "+3V3"
 		(at 335.28 209.55 0)
@@ -9445,70 +9093,6 @@
 		(at 476.25 48.26 0)
 		(uuid "55fb8c00-034c-4dbd-93a3-c04366aad069")
 	)
-	(label "DIP1"
-		(at 449.58 59.69 0)
-		(uuid "10823fe7-d3d7-42c7-83cb-b4657f34341c")
-	)
-	(label "GND"
-		(at 464.82 59.69 0)
-		(uuid "8ed8fd8d-7e6c-49cf-93a7-cea81df89b50")
-	)
-	(label "DIP2"
-		(at 449.58 62.23 0)
-		(uuid "8707d8e4-81b9-4f1a-bf35-3edb91a822ed")
-	)
-	(label "GND"
-		(at 464.82 62.23 0)
-		(uuid "ef4d5183-acf5-47af-bf8d-dc23bf522bf9")
-	)
-	(label "DIP3"
-		(at 449.58 64.77 0)
-		(uuid "56e4dc57-eee6-4c5b-9d26-7afb881a051f")
-	)
-	(label "GND"
-		(at 464.82 64.77 0)
-		(uuid "4b9b6853-1770-4657-90fe-e0431ac051f2")
-	)
-	(label "DIP4"
-		(at 449.58 67.31 0)
-		(uuid "855ed8c0-817e-47a2-816e-1d9d982b126f")
-	)
-	(label "GND"
-		(at 464.82 67.31 0)
-		(uuid "98b46108-4e84-40a6-b24a-f2396861de57")
-	)
-	(label "DIP5"
-		(at 449.58 69.85 0)
-		(uuid "8e66c3ec-99d5-4226-b27d-ad2f7dce7eb3")
-	)
-	(label "GND"
-		(at 464.82 69.85 0)
-		(uuid "77a0579b-d4a0-48db-ab91-0774a34fad7d")
-	)
-	(label "DIP6"
-		(at 449.58 72.39 0)
-		(uuid "36e2fd7b-a621-4bc0-82f7-5afe2e9759e2")
-	)
-	(label "GND"
-		(at 464.82 72.39 0)
-		(uuid "09d576fc-05e3-466a-a6f6-3f78c198414e")
-	)
-	(label "DIP7"
-		(at 449.58 74.93 0)
-		(uuid "c19d5fb6-2a7c-4ea1-b0db-1de091fd5d79")
-	)
-	(label "GND"
-		(at 464.82 74.93 0)
-		(uuid "cb34a341-5b5c-4d92-96be-d37e70596914")
-	)
-	(label "DIP8"
-		(at 449.58 77.47 0)
-		(uuid "c769ed29-d5c9-4645-a196-0fde0f8cddc2")
-	)
-	(label "GND"
-		(at 464.82 77.47 0)
-		(uuid "c57bde92-96a3-4f85-8bdb-018b3dff145a")
-	)
 	(label "BTN_TEST"
 		(at 452.12 95.25 0)
 		(uuid "69cea9bf-0307-4b01-ad76-906af15a65c2")
@@ -9516,38 +9100,6 @@
 	(label "GND"
 		(at 462.28 95.25 0)
 		(uuid "8ac5c62d-66fd-4333-98dc-6b3e12766323")
-	)
-	(label "DIP1"
-		(at 219.71 142.24 0)
-		(uuid "86d2850a-2a2e-4838-91a4-39cbb7de9c21")
-	)
-	(label "DIP2"
-		(at 219.71 144.78 0)
-		(uuid "25682216-555e-48d4-b45a-2e5223919b5d")
-	)
-	(label "DIP3"
-		(at 219.71 147.32 0)
-		(uuid "d098acb7-4e53-4387-8ded-7076dce33a2c")
-	)
-	(label "DIP4"
-		(at 219.71 149.86 0)
-		(uuid "7247a1d0-ed26-4bdb-9e5d-9531af38fe01")
-	)
-	(label "DIP5"
-		(at 219.71 152.4 0)
-		(uuid "229edbcf-c83a-457c-8fac-ebce39af852d")
-	)
-	(label "DIP6"
-		(at 219.71 160.02 0)
-		(uuid "4812619c-96f2-47c7-b991-4bbdc9f15973")
-	)
-	(label "DIP7"
-		(at 219.71 132.08 0)
-		(uuid "8cb744dd-847d-46d2-ba1c-5e592bf1bc97")
-	)
-	(label "DIP8"
-		(at 189.23 154.94 0)
-		(uuid "4f94f7c3-3be2-475d-819f-6fff335f8fb5")
 	)
 	(label "LED_DATA5"
 		(at 449.58 114.3 0)
@@ -10573,6 +10125,572 @@
 		)
 		(uuid "e0499a60-7eca-46c1-af5b-9c050f494dd0")
 	)
+	(label "BOOT_CFG"
+		(at 40.64 219.71 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left bottom)
+		)
+		(uuid "8516c313-0aa6-4b1b-acd7-6d23fc696d87")
+	)
+	(label "+3V3"
+		(at 40.64 212.09 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left bottom)
+		)
+		(uuid "b075dd84-8230-4f15-9cd2-1e954eca657e")
+	)
+	(label "+3V3"
+		(at 121.92 212.09 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left bottom)
+		)
+		(uuid "cc10ffce-906a-4d72-bbd7-bd040bc6d741")
+	)
+	(label "GND"
+		(at 60.96 219.71 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left bottom)
+		)
+		(uuid "adf2202a-ce7e-4536-abbd-a60712ab787d")
+	)
+	(label "GND"
+		(at 81.28 219.71 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left bottom)
+		)
+		(uuid "ae553857-aa1e-47d7-8906-3f0548fb7962")
+	)
+	(label "GND"
+		(at 101.6 219.71 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left bottom)
+		)
+		(uuid "cc09473e-2e23-44ac-b0d8-177152de8e2a")
+	)
+	(label "GND"
+		(at 60.96 270.51 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left bottom)
+		)
+		(uuid "aebcf961-932e-4a34-b980-10b0e34618a5")
+	)
+	(label "GND"
+		(at 81.28 270.51 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left bottom)
+		)
+		(uuid "9ffe1907-d15b-47be-ad63-a9ab462c451f")
+	)
+	(label "LT_DE"
+		(at 60.96 212.09 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left bottom)
+		)
+		(uuid "01c5d768-9dd6-4a8c-8767-b8b7b9330a15")
+	)
+	(label "LED_DATA"
+		(at 81.28 212.09 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left bottom)
+		)
+		(uuid "54f20c80-6d20-4b68-8597-930499a400cf")
+	)
+	(label "HSKI_DRV"
+		(at 101.6 212.09 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left bottom)
+		)
+		(uuid "61bd93af-5d4e-43ac-b694-b95e111d37cd")
+	)
+	(label "UART_TX"
+		(at 121.92 219.71 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left bottom)
+		)
+		(uuid "2aca1241-f414-4cae-8965-a12bda7c57f0")
+	)
+	(label "LT_RESET"
+		(at 60.96 237.49 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left bottom)
+		)
+		(uuid "7c8846f0-79cb-45e4-86ca-dbdecf606811")
+	)
+	(label "LT_MCLR"
+		(at 60.96 245.11 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left bottom)
+		)
+		(uuid "a6244c44-99a6-4656-90fd-9aed91f8eda8")
+	)
+	(label "LT_MCLR"
+		(at 285.75 227.33 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left bottom)
+		)
+		(uuid "941ab808-aac5-4a62-9edb-e3cb6f796c8b")
+	)
+	(label "PR_TXD_P"
+		(at 101.6 237.49 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left bottom)
+		)
+		(uuid "73c65f29-8f12-4b91-a560-d1fb5fe9d3de")
+	)
+	(label "PR_TXD_P_IN"
+		(at 101.6 245.11 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left bottom)
+		)
+		(uuid "60b5006b-e2de-4839-816d-23779809e648")
+	)
+	(label "PR_TXD_P_IN"
+		(at 350.52 52.07 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left bottom)
+		)
+		(uuid "0db30fdd-f049-441f-8f06-ede06ca3683e")
+	)
+	(label "PR_TXD_N"
+		(at 121.92 237.49 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left bottom)
+		)
+		(uuid "aa54985d-5fb4-40c3-9f2e-995579ef18f8")
+	)
+	(label "PR_TXD_N_IN"
+		(at 121.92 245.11 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left bottom)
+		)
+		(uuid "1848d44a-21c7-41b7-942c-6cb934d57bc0")
+	)
+	(label "PR_TXD_N_IN"
+		(at 350.52 57.15 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left bottom)
+		)
+		(uuid "7a2f3ed5-7605-4782-844a-7843f2cd992f")
+	)
+	(label "BOARD_REV"
+		(at 60.96 262.89 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left bottom)
+		)
+		(uuid "46c2b887-7518-4eef-8f60-6f3609a7cf89")
+	)
+	(label "BOARD_LITE"
+		(at 81.28 262.89 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left bottom)
+		)
+		(uuid "e3c46dd7-5b03-4896-bc66-50fc3506ed88")
+	)
+	(label "J4_HSKO"
+		(at 426.72 219.71 180)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right bottom)
+		)
+		(uuid "f91573be-f8b7-4a05-8c12-7a1be6ae8e41")
+	)
+	(label "J4_HSKI"
+		(at 426.72 222.25 180)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right bottom)
+		)
+		(uuid "01065d27-8db0-471c-a73c-1d0b87c0a5dc")
+	)
+	(label "LT_RXD_N"
+		(at 384.81 210.82 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left bottom)
+		)
+		(uuid "34e4b442-1a12-45c4-8973-6dbdb6574a6b")
+	)
+	(label "LT_RXD_N"
+		(at 345.44 262.89 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left bottom)
+		)
+		(uuid "438cafdc-b224-45cb-91a9-7ad8511e1963")
+	)
+	(label "LT_PORT_RXD_N"
+		(at 384.81 218.44 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left bottom)
+		)
+		(uuid "594f04ba-5bb5-446a-89f4-646748cde79b")
+	)
+	(label "LT_PORT_RXD_N"
+		(at 426.72 229.87 180)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right bottom)
+		)
+		(uuid "b9a479a3-0c44-470d-ba0c-ffcb664670d0")
+	)
+	(label "LT_RXD_P"
+		(at 394.97 210.82 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left bottom)
+		)
+		(uuid "653cffc5-4322-4fcd-93d4-3af68e166d03")
+	)
+	(label "LT_RXD_P"
+		(at 345.44 257.81 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left bottom)
+		)
+		(uuid "71c7f998-1567-45b0-8e84-8a0677ef138f")
+	)
+	(label "LT_PORT_RXD_P"
+		(at 394.97 218.44 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left bottom)
+		)
+		(uuid "bfd0d342-3157-4112-85e7-7cbc97572c1c")
+	)
+	(label "LT_PORT_RXD_P"
+		(at 426.72 237.49 180)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right bottom)
+		)
+		(uuid "ad85fd6a-4559-4ae6-9bf5-296ef2d1a918")
+	)
+	(label "LT_TXD_N"
+		(at 405.13 210.82 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left bottom)
+		)
+		(uuid "d2493c79-82f3-4b50-afc4-94f23c63a113")
+	)
+	(label "LT_TXD_N"
+		(at 345.44 222.25 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left bottom)
+		)
+		(uuid "8a55ad77-d712-4018-9359-bfbf165a6230")
+	)
+	(label "LT_PORT_TXD_N"
+		(at 405.13 218.44 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left bottom)
+		)
+		(uuid "b56c5086-370a-4e43-8729-9c4a65da4023")
+	)
+	(label "LT_PORT_TXD_N"
+		(at 426.72 224.79 180)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right bottom)
+		)
+		(uuid "eb1ce7c6-df15-450e-985c-c49e9c49ef89")
+	)
+	(label "LT_TXD_P"
+		(at 415.29 210.82 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left bottom)
+		)
+		(uuid "d50e5187-a198-4dbb-ade4-0bb0df65a52f")
+	)
+	(label "LT_TXD_P"
+		(at 345.44 217.17 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left bottom)
+		)
+		(uuid "cce02ca9-5a91-4c87-8de9-da2888d5a637")
+	)
+	(label "LT_PORT_TXD_P"
+		(at 415.29 218.44 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left bottom)
+		)
+		(uuid "46eef85a-8c0a-4ef0-aa66-1ce5e60c4908")
+	)
+	(label "LT_PORT_TXD_P"
+		(at 426.72 232.41 180)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right bottom)
+		)
+		(uuid "e35c9605-570a-4f18-915b-387141e73954")
+	)
+	(label "BOARD_REV"
+		(at 189.23 162.56 180)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right bottom)
+		)
+		(uuid "7b971c32-0b43-4513-bc56-e00a67739fb7")
+	)
+	(label "BOARD_LITE"
+		(at 189.23 160.02 180)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right bottom)
+		)
+		(uuid "f9cab7cb-9373-4bb8-9bc6-b0d4599f5fc6")
+	)
+	(label "HSKI_DRV"
+		(at 320.04 157.48 180)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right bottom)
+		)
+		(uuid "ffc4e42b-dc03-4dd1-94b8-6aaa7d9d0186")
+	)
+	(label "J4_HSKI_RX"
+		(at 320.04 162.56 180)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right bottom)
+		)
+		(uuid "b145850c-c17c-4d26-b638-e20af2acc3c6")
+	)
+	(label "UART_CTS"
+		(at 320.04 167.64 180)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right bottom)
+		)
+		(uuid "9971516e-0b01-48b8-bcab-1a33387c9ff2")
+	)
+	(label "J4_HSKO"
+		(at 360.68 152.4 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left bottom)
+		)
+		(uuid "c9bdb8d6-e1bb-48bf-9d38-d81363627ab7")
+	)
+	(label "HSKI_RS232"
+		(at 360.68 157.48 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left bottom)
+		)
+		(uuid "acfc1345-7eda-4cbc-965f-5307eb5217ce")
+	)
+	(label "J4_HSKI"
+		(at 360.68 162.56 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left bottom)
+		)
+		(uuid "1be5b7dd-72c0-4811-b09e-03f78c3438c8")
+	)
+	(label "PR_HSKO"
+		(at 360.68 167.64 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left bottom)
+		)
+		(uuid "cdf86051-166c-46db-a621-88ca7d97eae1")
+	)
+	(label "J4_HSKO_DRV"
+		(at 320.04 152.4 180)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right bottom)
+		)
+		(uuid "3eebe197-d4f4-4f01-8be0-4daa4a44b0b9")
+	)
+	(label "J4_HSKO_DRV"
+		(at 189.23 154.94 180)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right bottom)
+		)
+		(uuid "47c90360-88c1-49c0-ac69-1c1c41e32818")
+	)
+	(label "J4_HSKI_RX"
+		(at 219.71 132.08 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left bottom)
+		)
+		(uuid "b5dc338c-a5b0-453d-a6bf-992fee6d377b")
+	)
+	(label "HSKI_DRV"
+		(at 219.71 160.02 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left bottom)
+		)
+		(uuid "ec277380-d7e1-4474-9fa9-03a45c34e570")
+	)
+	(label "SPARE_IO39"
+		(at 219.71 144.78 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left bottom)
+		)
+		(uuid "0e0cf11c-62fa-49ce-8f4e-5e8891519efa")
+	)
+	(label "SPARE_IO40"
+		(at 219.71 147.32 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left bottom)
+		)
+		(uuid "dc8c9dda-57c6-4800-9970-5654983f2578")
+	)
+  (label "SPARE_IO38"
+    (at 219.71 142.23999999999998 0)
+    (fields_autoplaced yes)
+    (effects (font (size 1.27 1.27)) (justify left bottom))
+    (uuid "391646ad-95b6-43b8-90cb-0cef30ff2299")
+  )
 	(symbol
 		(lib_id "Connector:USB_C_Receptacle_USB2.0_16P")
 		(at 35.56 59.69 0)
@@ -11285,7 +11403,7 @@
 				)
 			)
 		)
-		(property "LCSC" "C2913204"
+		(property "LCSC" "C2913202"
 			(at 204.47 135.89 0)
 			(hide yes)
 			(effects
@@ -11294,7 +11412,7 @@
 				)
 			)
 		)
-		(property "Value" "ESP32-S3-WROOM-1-N8R2"
+		(property "Value" "ESP32-S3-WROOM-1-N16R8"
 			(at 204.47 143.51 0)
 			(effects
 				(font
@@ -11320,7 +11438,7 @@
 				)
 			)
 		)
-		(property "MPN" "ESP32-S3-WROOM-1-N8R2"
+		(property "MPN" "ESP32-S3-WROOM-1-N16R8"
 			(at 204.47 135.89 0)
 			(hide yes)
 			(effects
@@ -11338,7 +11456,7 @@
 				)
 			)
 		)
-		(property "Description" "WiFi/BLE module, ESP32-S3, 8MB flash, 2MB PSRAM, PCB antenna"
+		(property "Description" "WiFi/BLE module, ESP32-S3, 16MB flash, 8MB octal PSRAM (uses IO35-IO37), PCB antenna"
 			(at 204.47 135.89 0)
 			(hide yes)
 			(effects
@@ -11720,7 +11838,7 @@
 				)
 			)
 		)
-		(property "LCSC" "C79164"
+		(property "LCSC" "C2888448"
 			(at 149.86 171.45 0)
 			(hide yes)
 			(effects
@@ -11729,7 +11847,7 @@
 				)
 			)
 		)
-		(property "Value" "EVQP44B3M"
+		(property "Value" "TSB001A3518A"
 			(at 149.86 179.07 0)
 			(effects
 				(font
@@ -11737,7 +11855,7 @@
 				)
 			)
 		)
-		(property "Footprint" "airwriter:EVQP44B3M_SidePress"
+		(property "Footprint" "airwriter:SW_BZCN_TSB001A3518A"
 			(at 149.86 175.26 0)
 			(hide yes)
 			(effects
@@ -11746,7 +11864,7 @@
 				)
 			)
 		)
-		(property "Datasheet" ""
+		(property "Datasheet" "https://www.lcsc.com/datasheet/C2888448.pdf"
 			(at 149.86 175.26 0)
 			(hide yes)
 			(effects
@@ -11755,7 +11873,7 @@
 				)
 			)
 		)
-		(property "MPN" ""
+		(property "MPN" "TSB001A3518A"
 			(at 149.86 171.45 0)
 			(hide yes)
 			(effects
@@ -11764,7 +11882,7 @@
 				)
 			)
 		)
-		(property "Manufacturer" "Panasonic"
+		(property "Manufacturer" "BZCN"
 			(at 149.86 171.45 0)
 			(hide yes)
 			(effects
@@ -11773,7 +11891,7 @@
 				)
 			)
 		)
-		(property "Description" "RESET momentary side-press switch (Panasonic EVQP44B3M), east edge, actuator flush at case pinhole, grounds EN through R3/C6 POR"
+		(property "Description" "RESET momentary side-press switch (BZCN TSB001A3518A, two locating pegs and bracket pads), east edge, actuator at the case pinhole, grounds EN through R3/C6 POR"
 			(at 149.86 171.45 0)
 			(hide yes)
 			(effects
@@ -11786,93 +11904,6 @@
 			(project "airwriter"
 				(path "/b907fa76-c5fe-4a7a-8e4e-adfdab62cb9c"
 					(reference "SW1")
-					(unit 1)
-				)
-			)
-		)
-	)
-	(symbol
-		(lib_id "Device:C")
-		(at 162.56 175.26 0)
-		(unit 1)
-		(in_bom yes)
-		(on_board yes)
-		(dnp no)
-		(uuid "502d1202-1f37-4022-b168-695f111c9ee2")
-		(property "Reference" "C7"
-			(at 162.56 171.45 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Value" "100n"
-			(at 162.56 179.07 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "LCSC" "C14663"
-			(at 162.56 179.07 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(hide yes)
-			)
-		)
-		(property "Footprint" "Capacitor_SMD:C_0603_1608Metric"
-			(at 162.56 175.26 0)
-			(hide yes)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Datasheet" ""
-			(at 162.56 175.26 0)
-			(hide yes)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "MPN" ""
-			(at 162.56 171.45 0)
-			(hide yes)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Manufacturer" "Any"
-			(at 162.56 171.45 0)
-			(hide yes)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Description" "CAP 100nF >=25V X7R 0603, or equivalent"
-			(at 162.56 171.45 0)
-			(hide yes)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(instances
-			(project "airwriter"
-				(path "/b907fa76-c5fe-4a7a-8e4e-adfdab62cb9c"
-					(reference "C7")
 					(unit 1)
 				)
 			)
@@ -11894,7 +11925,7 @@
 				)
 			)
 		)
-		(property "LCSC" "C26735"
+		(property "LCSC" "C2671319"
 			(at 340.36 55.88 0)
 			(hide yes)
 			(effects
@@ -11903,7 +11934,7 @@
 				)
 			)
 		)
-		(property "Value" "SP3490EN-L"
+		(property "Value" "THVD1451DR"
 			(at 340.36 63.5 0)
 			(effects
 				(font
@@ -11920,7 +11951,7 @@
 				)
 			)
 		)
-		(property "Datasheet" ""
+		(property "Datasheet" "https://www.ti.com/lit/ds/symlink/thvd1451.pdf"
 			(at 340.36 59.69 0)
 			(hide yes)
 			(effects
@@ -11929,7 +11960,7 @@
 				)
 			)
 		)
-		(property "MPN" "SP3490EN-L/TR"
+		(property "MPN" "THVD1451DR"
 			(at 340.36 55.88 0)
 			(hide yes)
 			(effects
@@ -11938,7 +11969,7 @@
 				)
 			)
 		)
-		(property "Manufacturer" "MaxLinear"
+		(property "Manufacturer" "Texas Instruments"
 			(at 340.36 55.88 0)
 			(hide yes)
 			(effects
@@ -11947,7 +11978,7 @@
 				)
 			)
 		)
-		(property "Description" "RS-422/485 full-duplex transceiver, 3.3V, SOIC-8"
+		(property "Description" "RS-422/485 full-duplex transceiver, 3.3 V, inputs to +-15 V common mode, +-30 kV HBM on the bus pins, SOIC-8"
 			(at 340.36 55.88 0)
 			(hide yes)
 			(effects
@@ -12053,267 +12084,6 @@
 		)
 	)
 	(symbol
-		(lib_id "Device:R")
-		(at 400.05 62.23 0)
-		(unit 1)
-		(in_bom yes)
-		(on_board yes)
-		(dnp yes)
-		(uuid "d99b47a4-ae54-45b6-af89-8f2ba64cacac")
-		(property "Reference" "R5"
-			(at 400.05 58.42 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Value" "120R"
-			(at 400.05 66.04 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "LCSC" "C22787"
-			(at 400.05 66.04 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(hide yes)
-			)
-		)
-		(property "Footprint" "Resistor_SMD:R_0603_1608Metric"
-			(at 400.05 62.23 0)
-			(hide yes)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Datasheet" ""
-			(at 400.05 62.23 0)
-			(hide yes)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "MPN" ""
-			(at 400.05 58.42 0)
-			(hide yes)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Manufacturer" "Any"
-			(at 400.05 58.42 0)
-			(hide yes)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Description" "RES 120R 1% 1/10W 0603, or equivalent. DNP"
-			(at 400.05 58.42 0)
-			(hide yes)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(instances
-			(project "airwriter"
-				(path "/b907fa76-c5fe-4a7a-8e4e-adfdab62cb9c"
-					(reference "R5")
-					(unit 1)
-				)
-			)
-		)
-	)
-	(symbol
-		(lib_id "Device:R")
-		(at 410.21 49.53 0)
-		(unit 1)
-		(in_bom yes)
-		(on_board yes)
-		(dnp yes)
-		(uuid "745d8738-3080-4f01-9964-fee33ef4ab2d")
-		(property "Reference" "R6"
-			(at 410.21 45.72 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Value" "4.7k"
-			(at 410.21 53.34 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "LCSC" "C23162"
-			(at 410.21 53.34 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(hide yes)
-			)
-		)
-		(property "Footprint" "Resistor_SMD:R_0603_1608Metric"
-			(at 410.21 49.53 0)
-			(hide yes)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Datasheet" ""
-			(at 410.21 49.53 0)
-			(hide yes)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "MPN" ""
-			(at 410.21 45.72 0)
-			(hide yes)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Manufacturer" "Any"
-			(at 410.21 45.72 0)
-			(hide yes)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Description" "RES 4.7k 1% 1/10W 0603, or equivalent. DNP"
-			(at 410.21 45.72 0)
-			(hide yes)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(instances
-			(project "airwriter"
-				(path "/b907fa76-c5fe-4a7a-8e4e-adfdab62cb9c"
-					(reference "R6")
-					(unit 1)
-				)
-			)
-		)
-	)
-	(symbol
-		(lib_id "Device:R")
-		(at 410.21 74.93 0)
-		(unit 1)
-		(in_bom yes)
-		(on_board yes)
-		(dnp yes)
-		(uuid "ddc22750-7eb3-4a76-b710-f370e237a734")
-		(property "Reference" "R7"
-			(at 410.21 71.12 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Value" "4.7k"
-			(at 410.21 78.74 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "LCSC" "C23162"
-			(at 410.21 78.74 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(hide yes)
-			)
-		)
-		(property "Footprint" "Resistor_SMD:R_0603_1608Metric"
-			(at 410.21 74.93 0)
-			(hide yes)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Datasheet" ""
-			(at 410.21 74.93 0)
-			(hide yes)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "MPN" ""
-			(at 410.21 71.12 0)
-			(hide yes)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Manufacturer" "Any"
-			(at 410.21 71.12 0)
-			(hide yes)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Description" "RES 4.7k 1% 1/10W 0603, or equivalent. DNP"
-			(at 410.21 71.12 0)
-			(hide yes)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(instances
-			(project "airwriter"
-				(path "/b907fa76-c5fe-4a7a-8e4e-adfdab62cb9c"
-					(reference "R7")
-					(unit 1)
-				)
-			)
-		)
-	)
-	(symbol
 		(lib_id "Interface_UART:MAX3232")
 		(at 340.36 149.86 0)
 		(unit 1)
@@ -12329,7 +12099,7 @@
 				)
 			)
 		)
-		(property "LCSC" "C9378"
+		(property "LCSC" "C6852"
 			(at 340.36 146.05 0)
 			(hide yes)
 			(effects
@@ -12338,7 +12108,7 @@
 				)
 			)
 		)
-		(property "Value" "SP3232EEN"
+		(property "Value" "SP3232EBEN-L/TR"
 			(at 340.36 153.67 0)
 			(effects
 				(font
@@ -12364,7 +12134,7 @@
 				)
 			)
 		)
-		(property "MPN" "SP3232EEN-L/TR"
+		(property "MPN" "SP3232EBEN-L/TR"
 			(at 340.36 146.05 0)
 			(hide yes)
 			(effects
@@ -13091,93 +12861,6 @@
 			(project "airwriter"
 				(path "/b907fa76-c5fe-4a7a-8e4e-adfdab62cb9c"
 					(reference "J2")
-					(unit 1)
-				)
-			)
-		)
-	)
-	(symbol
-		(lib_id "Device:R")
-		(at 400.05 139.7 0)
-		(unit 1)
-		(in_bom yes)
-		(on_board yes)
-		(dnp yes)
-		(uuid "fd535424-79eb-46e4-b0d9-7211bc95e6bb")
-		(property "Reference" "R9"
-			(at 400.05 135.89 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Value" "0R"
-			(at 400.05 143.51 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "LCSC" "C21189"
-			(at 400.05 143.51 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(hide yes)
-			)
-		)
-		(property "Footprint" "Resistor_SMD:R_0603_1608Metric"
-			(at 400.05 139.7 0)
-			(hide yes)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Datasheet" ""
-			(at 400.05 139.7 0)
-			(hide yes)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "MPN" ""
-			(at 400.05 135.89 0)
-			(hide yes)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Manufacturer" "Any"
-			(at 400.05 135.89 0)
-			(hide yes)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Description" "RES 0R jumper 0603, or equivalent. DNP"
-			(at 400.05 135.89 0)
-			(hide yes)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(instances
-			(project "airwriter"
-				(path "/b907fa76-c5fe-4a7a-8e4e-adfdab62cb9c"
-					(reference "R9")
 					(unit 1)
 				)
 			)
@@ -14258,7 +13941,7 @@
 				)
 			)
 		)
-		(property "LCSC" "C12624"
+		(property "LCSC" "C20613324"
 			(at 149.86 252.73 0)
 			(effects
 				(font
@@ -14267,7 +13950,7 @@
 				(hide yes)
 			)
 		)
-		(property "Footprint" "LED_SMD:LED_0603_1608Metric"
+		(property "Footprint" "airwriter:LED_D3.0mm_Spacer_H8mm"
 			(at 149.86 248.92 0)
 			(hide yes)
 			(effects
@@ -14276,7 +13959,7 @@
 				)
 			)
 		)
-		(property "MPN" "KT-0603G"
+		(property "MPN" "TJ-L3FPTHBGMCGSFLC2G-A5"
 			(at 149.86 248.92 0)
 			(hide yes)
 			(effects
@@ -14312,6 +13995,15 @@
 				)
 			)
 		)
+		(property "Note" "THT: 3 mm flat-top green on a HIWA LED4*8 nylon spacer (LCSC C92326) under the body, lens up"
+			(at 149.86 248.92 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
 		(instances
 			(project "airwriter"
 				(path "/b907fa76-c5fe-4a7a-8e4e-adfdab62cb9c"
@@ -14337,7 +14029,7 @@
 				)
 			)
 		)
-		(property "Value" "1k"
+		(property "Value" "150R"
 			(at 149.86 262.89 0)
 			(effects
 				(font
@@ -14345,7 +14037,7 @@
 				)
 			)
 		)
-		(property "LCSC" "C21190"
+		(property "LCSC" "C22808"
 			(at 149.86 262.89 0)
 			(effects
 				(font
@@ -14397,7 +14089,7 @@
 				)
 			)
 		)
-		(property "LCSC" "C151417"
+		(property "LCSC" "C75925"
 			(at 457.2 19.049999999999997 0)
 			(hide yes)
 			(effects
@@ -14406,7 +14098,7 @@
 				)
 			)
 		)
-		(property "Value" "74AHCT1G125SE-7"
+		(property "Value" "SN74LV1T125DCKR"
 			(at 457.2 38.099999999999994 0)
 			(effects
 				(font
@@ -14432,7 +14124,7 @@
 				)
 			)
 		)
-		(property "MPN" "74AHCT1G125SE-7"
+		(property "MPN" "SN74LV1T125DCKR"
 			(at 457.2 25.4 0)
 			(hide yes)
 			(effects
@@ -14649,75 +14341,6 @@
 		)
 	)
 	(symbol
-		(lib_id "Switch:SW_DIP_x08")
-		(at 457.2 69.85 0)
-		(unit 1)
-		(in_bom yes)
-		(on_board yes)
-		(dnp no)
-		(uuid "83a06fe2-425e-4064-a6a3-6cbe42b93917")
-		(property "Reference" "S1"
-			(at 457.2 57.14999999999999 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "LCSC" "C458097"
-			(at 457.2 57.14999999999999 0)
-			(hide yes)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Value" "DIP switch, 8-position"
-			(at 457.2 82.55 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Footprint" "airwriter:SW_DIP_8_RightAngle_DP-08RP"
-			(at 457.2 69.85 0)
-			(hide yes)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Datasheet" ""
-			(at 457.2 69.85 0)
-			(hide yes)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Description" "DIP bank for the 8 DIP config bits, internal ESP32 pull-ups, other side to GND"
-			(at 457.2 69.85 0)
-			(hide yes)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(instances
-			(project "airwriter"
-				(path "/b907fa76-c5fe-4a7a-8e4e-adfdab62cb9c"
-					(reference "S1")
-					(unit 1)
-				)
-			)
-		)
-	)
-	(symbol
 		(lib_id "Switch:SW_Push")
 		(at 457.2 95.25 0)
 		(unit 1)
@@ -14733,7 +14356,7 @@
 				)
 			)
 		)
-		(property "LCSC" "C920211"
+		(property "LCSC" "C920209"
 			(at 457.2 91.44 0)
 			(hide yes)
 			(effects
@@ -14742,7 +14365,7 @@
 				)
 			)
 		)
-		(property "Value" "TS-1002-BR16026"
+		(property "Value" "TS-1002-BR15026"
 			(at 457.2 99.06 0)
 			(effects
 				(font
@@ -14769,6 +14392,15 @@
 			)
 		)
 		(property "Description" "6x6mm THT tact switch, test button"
+			(at 457.2 95.25 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "MPN" "TS-1002-BR15026"
 			(at 457.2 95.25 0)
 			(hide yes)
 			(effects
@@ -20481,6 +20113,774 @@
 			(project "airwriter"
 				(path "/b907fa76-c5fe-4a7a-8e4e-adfdab62cb9c"
 					(reference "SW2")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "Device:R")
+		(at 400.05 139.7 0)
+		(unit 1)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "f1f29978-5f7e-4f13-91f5-b60b627b3d80")
+		(property "Reference" "R9"
+			(at 402.082 139.7 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "0R"
+			(at 400.05 139.7 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" "Resistor_SMD:R_0603_1608Metric"
+			(at 400.05 139.7 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 400.05 139.7 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" "Resistor"
+			(at 400.05 139.7 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "LCSC" "C21189"
+			(at 400.05 139.7 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(instances
+			(project "airwriter"
+				(path "b907fa76-c5fe-4a7a-8e4e-adfdab62cb9c"
+					(reference "R9")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "Device:R")
+		(at 40.64 215.9 0)
+		(unit 1)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "45794640-9ea6-4d82-9455-da68246c7d58")
+		(property "Reference" "R21"
+			(at 42.672 215.9 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "10k"
+			(at 40.64 215.9 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" "Resistor_SMD:R_0603_1608Metric"
+			(at 40.64 215.9 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 40.64 215.9 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" "Resistor"
+			(at 40.64 215.9 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "LCSC" "C25804"
+			(at 40.64 215.9 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(instances
+			(project "airwriter"
+				(path "b907fa76-c5fe-4a7a-8e4e-adfdab62cb9c"
+					(reference "R21")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "Device:R")
+		(at 60.96 215.9 0)
+		(unit 1)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "e05e1ca6-dbe4-4412-ae9e-c404557b1fb7")
+		(property "Reference" "R22"
+			(at 62.992 215.9 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "10k"
+			(at 60.96 215.9 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" "Resistor_SMD:R_0603_1608Metric"
+			(at 60.96 215.9 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 60.96 215.9 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" "Resistor"
+			(at 60.96 215.9 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "LCSC" "C25804"
+			(at 60.96 215.9 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(instances
+			(project "airwriter"
+				(path "b907fa76-c5fe-4a7a-8e4e-adfdab62cb9c"
+					(reference "R22")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "Device:R")
+		(at 81.28 215.9 0)
+		(unit 1)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "8bac46db-3079-43bc-85c7-74a210018f64")
+		(property "Reference" "R23"
+			(at 83.312 215.9 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "10k"
+			(at 81.28 215.9 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" "Resistor_SMD:R_0603_1608Metric"
+			(at 81.28 215.9 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 81.28 215.9 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" "Resistor"
+			(at 81.28 215.9 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "LCSC" "C25804"
+			(at 81.28 215.9 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(instances
+			(project "airwriter"
+				(path "b907fa76-c5fe-4a7a-8e4e-adfdab62cb9c"
+					(reference "R23")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "Device:R")
+		(at 101.6 215.9 0)
+		(unit 1)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "99b56182-8abe-4122-aed6-f2bc63aca877")
+		(property "Reference" "R24"
+			(at 103.632 215.9 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "10k"
+			(at 101.6 215.9 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" "Resistor_SMD:R_0603_1608Metric"
+			(at 101.6 215.9 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 101.6 215.9 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" "Resistor"
+			(at 101.6 215.9 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "LCSC" "C25804"
+			(at 101.6 215.9 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(instances
+			(project "airwriter"
+				(path "b907fa76-c5fe-4a7a-8e4e-adfdab62cb9c"
+					(reference "R24")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "Device:R")
+		(at 121.92 215.9 0)
+		(unit 1)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "46d259da-8581-4c7f-b5e5-4c38f71e9e87")
+		(property "Reference" "R25"
+			(at 123.952 215.9 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "10k"
+			(at 121.92 215.9 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" "Resistor_SMD:R_0603_1608Metric"
+			(at 121.92 215.9 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 121.92 215.9 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" "Resistor"
+			(at 121.92 215.9 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "LCSC" "C25804"
+			(at 121.92 215.9 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(instances
+			(project "airwriter"
+				(path "b907fa76-c5fe-4a7a-8e4e-adfdab62cb9c"
+					(reference "R25")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "Device:R")
+		(at 60.96 241.3 0)
+		(unit 1)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "b5aeee16-27c4-448a-9a8e-0edab6192c3d")
+		(property "Reference" "R27"
+			(at 62.992 241.3 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "1k"
+			(at 60.96 241.3 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" "Resistor_SMD:R_0603_1608Metric"
+			(at 60.96 241.3 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 60.96 241.3 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" "Resistor"
+			(at 60.96 241.3 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "LCSC" "C21190"
+			(at 60.96 241.3 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(instances
+			(project "airwriter"
+				(path "b907fa76-c5fe-4a7a-8e4e-adfdab62cb9c"
+					(reference "R27")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "Device:R")
+		(at 101.6 241.3 0)
+		(unit 1)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "9fefecec-b497-43e6-b22d-749bc61aef77")
+		(property "Reference" "R29"
+			(at 103.632 241.3 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "15k"
+			(at 101.6 241.3 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" "Resistor_SMD:R_0603_1608Metric"
+			(at 101.6 241.3 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 101.6 241.3 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" "Resistor"
+			(at 101.6 241.3 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "LCSC" "C22809"
+			(at 101.6 241.3 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(instances
+			(project "airwriter"
+				(path "b907fa76-c5fe-4a7a-8e4e-adfdab62cb9c"
+					(reference "R29")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "Device:R")
+		(at 121.92 241.3 0)
+		(unit 1)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "f8c63af4-cfe3-4102-a7c8-0181a9982108")
+		(property "Reference" "R30"
+			(at 123.952 241.3 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "15k"
+			(at 121.92 241.3 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" "Resistor_SMD:R_0603_1608Metric"
+			(at 121.92 241.3 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 121.92 241.3 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" "Resistor"
+			(at 121.92 241.3 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "LCSC" "C22809"
+			(at 121.92 241.3 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(instances
+			(project "airwriter"
+				(path "b907fa76-c5fe-4a7a-8e4e-adfdab62cb9c"
+					(reference "R30")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "Device:R")
+		(at 60.96 266.7 0)
+		(unit 1)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "56a9edbb-4f00-463f-ad5f-158ce33790bf")
+		(property "Reference" "R32"
+			(at 62.992 266.7 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "10k"
+			(at 60.96 266.7 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" "Resistor_SMD:R_0603_1608Metric"
+			(at 60.96 266.7 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 60.96 266.7 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" "Resistor"
+			(at 60.96 266.7 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "LCSC" "C25804"
+			(at 60.96 266.7 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(instances
+			(project "airwriter"
+				(path "b907fa76-c5fe-4a7a-8e4e-adfdab62cb9c"
+					(reference "R32")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "Device:R")
+		(at 81.28 266.7 0)
+		(unit 1)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "9be2601e-4551-4f37-b925-e3994ad82a8e")
+		(property "Reference" "R33"
+			(at 83.312 266.7 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "10k"
+			(at 81.28 266.7 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" "Resistor_SMD:R_0603_1608Metric"
+			(at 81.28 266.7 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 81.28 266.7 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" "Resistor"
+			(at 81.28 266.7 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "LCSC" "C25804"
+			(at 81.28 266.7 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Note" "Lite only: fitted on AirWriter Lite, left off AirWriter (variant strap)"
+			(at 81.28 266.7 0)
+			(hide yes)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(instances
+			(project "airwriter"
+				(path "b907fa76-c5fe-4a7a-8e4e-adfdab62cb9c"
+					(reference "R33")
 					(unit 1)
 				)
 			)

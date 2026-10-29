@@ -154,6 +154,11 @@ neighbours and the power window glows only from D3.
 
 ## Fitting the board
 
+The tray is cut to the board in `hardware/airwriter/`. Rev 2026.11 has no DIP switches, so
+its tray has no DIP window and steps 1–2 alone fit it: ports in under their lintels, then
+rock the back down. The rest of this section is rev A's (board 1), whose tray is the one at
+the `hw-rev-a` tag.
+
 The board does not drop in. The mini-DINs and USB-C stand into closed windows
 in the front wall, and S1's keys stand 2.2 mm into the west wall, at right
 angles to them. So the ports go in first, and the west wall bows out of the

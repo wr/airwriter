@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """panel_layout.json + *.polys.json -> panel.kicad_pcb. KiCad python only."""
 import json, math, pathlib, re, uuid, pcbnew
+from front_flood import FLOOD_INSET, front_windows
 
 HERE = pathlib.Path(__file__).parent
 mm = pcbnew.FromMM
@@ -22,11 +23,12 @@ def rounded_outline(board, w, h, r):
         a.SetLayer(pcbnew.Edge_Cuts); a.SetWidth(mm(0.1))
         board.Add(a)
 
-def filled_circle(board, layer, x, y, dia):
+def filled_circle(board, layer, x, y, dia, net=None):
     c = pcbnew.PCB_SHAPE(board, pcbnew.SHAPE_T_CIRCLE)
     c.SetCenter(pcbnew.VECTOR2I(mm(x), mm(y)))
     c.SetEnd(pcbnew.VECTOR2I(mm(x + dia / 2), mm(y)))
     c.SetFilled(True); c.SetWidth(0); c.SetLayer(layer)
+    if net is not None: c.SetNetCode(net.GetNetCode())
     board.Add(c)
 
 def _circle_pts(cx, cy, r, segs=64):
@@ -228,6 +230,38 @@ def back_copper_flood(board, p, dots, g, fr4):
     board.Add(s)
     return hole_count
 
+def front_copper_flood(board, p, dots, g, fr4, net):
+    # Rev 2026.11: copper under the front mask too, so the dots' edges are
+    # crisp (front_flood.py has why and the window sizes). Everything copper on
+    # the front shares PANEL_AU, so the flood merging with the gold art and the
+    # test dot reads as one node.
+    flood = panel_interior(p["w"], p["h"], p["corner_r"], FLOOD_INSET)
+    cut = pcbnew.SHAPE_POLY_SET()
+    for w in front_windows(dots, g, fr4):
+        if w["kind"] == "circle":
+            ch = pcbnew.SHAPE_LINE_CHAIN()
+            for px, py in _circle_pts(w["x"], w["y"], w["dia"] / 2, 256):
+                ch.Append(mm(px), mm(py))
+            ch.SetClosed(True)
+            cut.AddOutline(ch)
+        else:
+            sl = pcbnew.SHAPE_POLY_SET()
+            ch = pcbnew.SHAPE_LINE_CHAIN()
+            for x, y in w["outline"]:
+                ch.Append(mm(x), mm(y))
+            ch.SetClosed(True)
+            sl.AddOutline(ch)
+            sl.Inflate(mm(w["grow"]), pcbnew.CORNER_STRATEGY_ROUND_ALL_CORNERS, mm(0.002))
+            cut.Append(sl)
+    windows = cut.OutlineCount()
+    flood.BooleanSubtract(cut)
+    flood.Fracture()
+    s = pcbnew.PCB_SHAPE(board, pcbnew.SHAPE_T_POLY)
+    s.SetPolyShape(flood); s.SetFilled(True); s.SetWidth(0); s.SetLayer(pcbnew.F_Cu)
+    s.SetNetCode(net.GetNetCode())
+    board.Add(s)
+    return windows
+
 # Reflow standoff seats: blind SMT nuts (PEM SMTSO-M25-3ET or equivalent,
 # verify stock at order) solder to the back-copper flood so M2.5 screws come
 # up from the case floor through the main board's mounting holes. Coordinates
@@ -424,7 +458,7 @@ def main():
                 filled_ring(board, pcbnew.F_Cu, d["x"], d["y"], dia,
                             g["hole_dia"] + 0.6, net=au)
             else:
-                filled_circle(board, pcbnew.F_Cu, d["x"], d["y"], dia)
+                filled_circle(board, pcbnew.F_Cu, d["x"], d["y"], dia, net=au)
         if mf:
             if i in mask_knockouts:
                 # keep_dia is gone: no black surround at the test hole any
@@ -454,7 +488,7 @@ def main():
               if any(_m.hypot(x - tdot["x"], y - tdot["y"]) < g["dot_dia"]
                      for x, y in q["outline"])]
     rest_gold = [q for q in gold if q not in t_gold]
-    poly_shape(board, pcbnew.F_Cu, rest_gold, clip=gold_cu_clip)  # gold = copper...
+    poly_shape(board, pcbnew.F_Cu, rest_gold, clip=gold_cu_clip, net=au)  # gold = copper...
     poly_shape(board, pcbnew.F_Cu, t_gold, clip=gold_cu_clip, net=au)  # tab touches the pad
     # The gold-art mask opening must keep mask OVER the knockout glyph
     # strokes (they may sit on the tab, outside the disc that mask_knockout
@@ -474,6 +508,7 @@ def main():
     poly_shape(board, pcbnew.F_Mask, fr4)    # bare FR4 = open both faces
     poly_shape(board, pcbnew.B_Mask, fr4)
     flood_holes = back_copper_flood(board, p, lay["dots"], g, fr4)
+    front_holes = front_copper_flood(board, p, lay["dots"], g, fr4, au)
     standoff_pads(board)
 
     out = HERE / "panel.kicad_pcb"
@@ -481,7 +516,7 @@ def main():
     derandomize_uuids(out)
     inject_stackup(out)
     print("wrote panel.kicad_pcb:", len(lay["dots"]), "dots,",
-          flood_holes, "back-copper flood holes")
+          flood_holes, "back-copper flood holes,", front_holes, "front-copper windows")
 
 if __name__ == "__main__":
     main()

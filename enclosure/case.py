@@ -412,8 +412,9 @@ def port_cutouts() -> Part:
             + _grown("J1", p.PORT_CLEAR) + _usbc_opening())
 
 
-def dip_slot() -> Part:
-    """S1's eight piano keys, out through the west wall.
+def dip_slot() -> Part | None:
+    """S1's eight piano keys, out through the west wall; None on a board with
+    no S1 (rev 2026.11), whose west wall stays whole.
 
     S1's footprint origin is the centre of its pin field; the pad columns run
     footprint-local x = -8.89 .. +8.89 and the keys align with them. The tips
@@ -431,7 +432,10 @@ def dip_slot() -> Part:
     allowance for the key's own width, and the two outer keys ended up
     0.05mm inside the wall material -- see params.DIP_SLOT_MARGIN.)
     """
-    fp = bg.footprint("S1")
+    try:
+        fp = bg.footprint("S1")
+    except KeyError:
+        return None
     pad_xs = [lx for lx, _ in bg.pad_positions("S1")]
     ys = [bg.to_case(*bg.local_to_board(fp, lx, 0.0))[1]
           for lx in (min(pad_xs), max(pad_xs))]
@@ -456,9 +460,8 @@ def reset_pinhole() -> Part:
     HANDOFF has a superseded line putting this on the west wall at x=100; the
     live ruling is the east edge, with SW1's plate face at KiCad x ~ 159.4.
 
-    SW1 has no 3D model placed on the board, so its Z can't be booleaned from
-    a STEP -- p.RESET_ACTUATOR_Z is derived from its footprint's own descr
-    (body 6.2 x 2.55 x 3.5mm) instead; see params.py and task-6-report.md.
+    The pinhole aims at the middle of SW1's button, p.RESET_ACTUATOR_Z above
+    the board (see params.py).
     """
     fp = bg.footprint("SW1")
     _, y = bg.to_case(fp.x, fp.y)
@@ -596,5 +599,6 @@ def tray() -> Part:
     anyway.
     """
     body = shell() + standoffs()
-    return (body - screw_holes() - foot_pockets() - port_cutouts() - dip_slot()
-            - reset_pinhole())
+    tray = body - screw_holes() - foot_pockets() - port_cutouts() - reset_pinhole()
+    slot = dip_slot()
+    return tray - slot if slot is not None else tray
