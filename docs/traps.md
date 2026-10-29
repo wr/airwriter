@@ -410,8 +410,9 @@ Traps already explained in a code comment are listed only when the comment is ea
 - **`kicad-cli pcb render` tints bare FR4 by the mask colour**, so glowing FR4 dots look black
   in renders.
 - **The BOM must group by the DNP flag** or a DNP row swallows fitted parts (R8 was once left off).
-- **`hardware/airwriter/fab/` is a stale single-board package.** The order source is
-  `hardware/combined-fab.zip` + `hardware/combined/combined-top.png` (`docs/ORDER-NOTES.md`).
+- **`hardware/airwriter/fab/` is a stale rev A single-board package.** The order sources are
+  `hardware/combined-fab.zip` (AirWriter) and `hardware/airwriter-lc-fab.zip` (AirWriter LC,
+  the main board alone), both from `make_fab.sh` (`docs/ORDER-NOTES.md`).
 - **`combine_boards.py` strips every net except `PANEL_AU`**, the decorative net that lets the
   test pad, annulus and tab art touch without a DRC short. Don't "fix" either end.
 

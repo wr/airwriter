@@ -1,11 +1,21 @@
-# PCBWay order notes: rev 2026.11 combined panel
+# PCBWay order notes: rev 2026.11
 
-Paste-ready. Upload **only** `hardware/combined-fab.zip`, `hardware/combined/combined-top.png` and
-`hardware/combined/airwriter-top.png`.
-Standing rule: quote to Wells before the order is placed. Rev A's order (W654223ASS53,
+Two orders, one main board. **AirWriter** is ordered on the combined panel (main board and
+art cover, snapped apart). **AirWriter LC** is ordered on the main board alone: on the panel it
+would pay for a cover it never uses and the cover's four standoffs.
+Standing rule: quote to Wells before either order is placed. Rev A's order (W654223ASS53,
 T-S54W654223A) and its notes are in git history.
 
-## Board spec (order form)
+| Order | Upload only | Placements |
+|---|---|---|
+| AirWriter | `hardware/combined-fab.zip`, `hardware/combined/combined-top.png`, `hardware/combined/airwriter-top.png` | 136 |
+| AirWriter LC | `hardware/airwriter-lc-fab.zip`, `hardware/combined/airwriter-top.png` | 55 |
+
+Each order's section below is paste-ready on its own.
+
+## Order 1: AirWriter (combined panel)
+
+### Board spec (order form)
 
 - One customer panel, profile **62.0 × 208.54 mm**, containing **TWO different designs**:
   main board 62 × 104.27 mm (bottom half of the file), art cover panel 62 × 104.27 mm
@@ -20,24 +30,19 @@ T-S54W654223A) and its notes are in git history.
   main-board half (the project's `GND_STITCH_012` rule area). Everywhere else is ≥ 0.15 mm.
 - Vias: 0.6 mm pad / 0.3 mm drill, plus five 0.8/0.4, one 0.6/0.4 and one 0.9/0.5 (the
   VBUS via). Drill floor 0.30 mm.
-- **NPTH:** 2 × 0.65 mm (J1 pegs) and 4 × 2.75 mm (mounting) only. The **3.8 mm hole is
-  PLATED on purpose** (netless gold bore on the art panel; it is in the PTH drill file, do
-  not convert it to NPTH).
+- **NPTH:** 2 × 0.65 mm (J1 pegs), 2 × 0.9 mm (SW1 pegs) and 4 × 2.75 mm (mounting) only.
+  The **3.8 mm hole is PLATED on purpose** (netless gold bore on the art panel; it is in the
+  PTH drill file, do not convert it to NPTH).
 
-## Assembly: two variants from the same panel
+### Assembly
 
-| Variant | Position file | BOM | Placements |
-|---|---|---|---|
-| AirWriter | `combined-pos.csv` | `combined-assembly-bom.csv` | 136 |
-| AirWriter Lite | `combined-lite-pos.csv` | `combined-lite-assembly-bom.csv` | 59 |
-
-Lite leaves off the LED array (D10–D46 and C30–C66), U9, R20, C21 and C29, and fits R33;
-AirWriter leaves R33 off. Both are single-sided (the top side of the file).
+Position file `combined-pos.csv`, BOM `combined-assembly-bom.csv`, 136 placements, all on the
+top side of the file. R33 is left off; its pads stay bare.
 
 1. **J2 (Kycon KMDGX-8S-BS mini-DIN-8): ASSEMBLE.** Not at LCSC; source from Mouser.
    Through-hole, 11 joints.
 2. **J4: DO NOT ASSEMBLE, and keep its 11 holes free of solder.** It is fitted by hand with
-   the TashTalk add-on, and is absent from both position files. If J2 is wave or selectively
+   the TashTalk add-on, and is absent from the position file. If J2 is wave or selectively
    soldered, mask J4's holes.
 3. **U7: fit ONLY the DIP-8 socket, LCSC C72124.** Do not buy or fit the PIC.
 4. **D3: through-hole 3 mm flat-top green LED (LCSC C20613324) standing on a HIWA LED4*8
@@ -66,19 +71,64 @@ AirWriter leaves R33 off. Both are single-sided (the top side of the file).
    notch, D3 and J1 against `airwriter-top.png` (the main board alone, at about 40 px/mm)
    before placement.
 
-## Known engineering-query answers
+## Order 2: AirWriter LC (main board alone)
+
+### Board spec (order form)
+
+- One design, **62.0 × 104.27 mm**, routed outline with 2 mm corner radii. No panel, no
+  V-score. Copper sits 0.5 mm back from the top (north) edge, by design.
+- **2 layer, 1.6 mm FR4, 1 oz, matte BLACK soldermask both sides, white silkscreen, ENIG.**
+- Min trace/space **0.15 mm (6 mil)** generally. **Exception: four spots need 0.12 mm
+  (4.7 mil) space**, all around U4's SOT-223 tab at approx. x 115–120 / y 113–120 mm (the
+  project's `GND_STITCH_012` rule area). Everywhere else is ≥ 0.15 mm.
+- Vias: 0.6 mm pad / 0.3 mm drill, plus five 0.8/0.4, one 0.6/0.4 and one 0.9/0.5 (the
+  VBUS via). Drill floor 0.30 mm.
+- **NPTH:** 2 × 0.65 mm (J1 pegs), 2 × 0.9 mm (SW1 pegs) and 4 × 2.75 mm (mounting) only.
+
+### Assembly
+
+Position file `airwriter-lc-pos.csv`, BOM `airwriter-lc-assembly-bom.csv`, 55 placements, all
+on the top side. **Leave off the LED array and its parts: D10–D46, C30–C66, C29, C21, R20
+and U9.** They are absent from the position file and the BOM; their pads stay bare. R33 is
+fitted.
+
+1. **J2 (Kycon KMDGX-8S-BS mini-DIN-8): ASSEMBLE.** Not at LCSC; source from Mouser.
+   Through-hole, 11 joints.
+2. **J4: DO NOT ASSEMBLE, and keep its 11 holes free of solder.** It is fitted by hand with
+   the TashTalk add-on, and is absent from the position file. If J2 is wave or selectively
+   soldered, mask J4's holes.
+3. **U7: fit ONLY the DIP-8 socket, LCSC C72124.** Do not buy or fit the PIC.
+4. **D3: through-hole 3 mm flat-top green LED (LCSC C20613324) standing on a HIWA LED4*8
+   nylon spacer (LCSC C92326):** leads through the spacer's bore, the LED's flange seated
+   on the spacer, lens up. Cathode (pad 1) toward R17, where the silk reads K;
+   the spacer hides the square pad.
+   **SW1 (BZCN TSB001A3518A, LCSC C2888448):** its two plastic pegs go into the two 0.9 mm
+   holes; the two bracket pads are soldered, on no net. The button faces the board's east
+   edge.
+5. **Through-hole parts (J2, SW3, U7's socket, D3): solder every joint fully.** Rev A's
+   first boards came back with U7 and SW3 only tacked.
+6. Substitutions allowed: any 10 k 1 % 0603 for C25804, any 15 k 1 % 0603 for C22809 and any
+   1 k 1 % 0603 for C21190.
+   **No substitution** for U1–U8, J1, J2, SW1–SW3 or D3, and U1 must be the
+   **ESP32-S3-WROOM-1-N16R8** (16 MB flash, 8 MB octal PSRAM, LCSC C2913202), never a
+   quad-PSRAM (R2) variant: the firmware is built for the octal PSRAM.
+7. Please confirm polarity of U2, U3, U6, U8 (SOIC pin-1 dot) and U5, the U7 socket notch,
+   D3 and J1 against `airwriter-top.png` (the main board, at about 40 px/mm; it also shows
+   the LED array this order leaves off) before placement.
+
+## Known engineering-query answers (both orders)
 
 - **Soldermask bridges:** no bridges needed on the fine-pitch USB-C (J1) pin rows; gang-open
   them. The file's 0.20 mm dams there are under PCBWay's 0.22 mm matte-black-ink minimum,
   and shrinking apertures onto 0.3 mm pads is worse than no dams. Every other IC's dams clear
-  0.22 mm; keep the mask as designed. The art-panel half's fine mask features are
-  decorative: produce as-is.
+  0.22 mm; keep the mask as designed. On the AirWriter panel, the art-panel half's fine mask
+  features are decorative: produce as-is.
 - **Via fill:** none. All vias standard plated, unfilled; do not add the via-fill or cap
   process. Thirteen board vias meet SMD pads, all on GND: the five in U4's tab, and stitch
   vias on C9.2, C12.2, C17.2, D29.2, D37.2, R1.2, U1.1 and U8.5 (U1's centre paddle has its
   own thermal holes in the footprint). Minor paste wicking into those barrels is acceptable.
 
-## Not part of the order, but buy alongside it
+## Not part of either order, but buy alongside them
 
 - **Printer cable (J2):** use Apple's own Mac-to-printer cable (590-0552-A / M0197,
   null-modem: 1↔2, 3↔5, 6↔8) or any cable that works between a real Mac and the printer.
@@ -89,16 +139,13 @@ AirWriter leaves R33 off. Both are single-sided (the top side of the file).
 
 ## Files
 
-| Upload | Never upload |
-|---|---|
-| `hardware/combined-fab.zip` | anything else |
-| `hardware/combined/combined-top.png` (the panel) | |
-| `hardware/combined/airwriter-top.png` (the main board, assembly and polarity reference) | |
+Upload only the files in the table at the top. Never upload anything else, and never
+`hardware/airwriter/fab/`, a stale rev A package.
 
-Regenerate the package only with `python3 hardware/combine_boards.py` then
-`sh hardware/combined/make_fab.sh`, and check it with the battery in `AGENTS.md`
-(Verification): ERC, both DRCs with `--severity-all`, the drill floor, 136 and 59 position
-rows. Both pictures are `kicad-cli pcb render --side top --quality high
---use-board-stackup-colors`, flattened onto white: `combined-top.png` from
+Regenerate both packages only with `python3 hardware/combine_boards.py` then
+`sh hardware/combined/make_fab.sh`, and check them with the battery in `AGENTS.md`
+(Verification): ERC, both DRCs with `--severity-all`, the drill floor, 136 and 55 position
+rows (the script asserts both). Both pictures are `kicad-cli pcb render --side top
+--quality high --use-board-stackup-colors`, flattened onto white: `combined-top.png` from
 `hardware/combined/combined.kicad_pcb` at `-w 2328 -h 1264`, `airwriter-top.png` from
 `hardware/airwriter/airwriter.kicad_pcb` at `-w 2600 -h 4200`.

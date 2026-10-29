@@ -367,8 +367,9 @@ Linear is the queue; these are the live items.
 - `W-1091 Rev B: the main board's next revision` (rev 2026.11, with
   `W-1043 Rev B: through-hole dome LED for the power indicator` under it): designed, placed and
   routed on branch `ww/rev-2026-11-board-updates-4f0c6a` (`docs/hardware-rev-2026-11.md`), not
-  merged. Next: Wells reviews the routing in KiCad, then the PCBWay order (November or
-  December). No DIP switches; each port's HSKo has its own GPIO (J2's IO47, J4's IO13, J4's
+  merged. Next: Wells reviews the routing in KiCad, then the PCBWay orders (November or
+  December): AirWriter on the combined panel, AirWriter LC on the main board alone
+  (`docs/ORDER-NOTES.md`). No DIP switches; each port's HSKo has its own GPIO (J2's IO47, J4's IO13, J4's
   HSKi IO21), and U1 is the ESP32-S3-WROOM-1-N16R8 (16 MB flash, 8 MB octal PSRAM on
   IO35–IO37), which needs its own firmware build. SW1 is the Macintosh Mini's BZCN
   TSB001A3518A. IO38–IO40 end on bare pads on the back (TP10–TP12) for bodging. Firmware
@@ -551,9 +552,11 @@ Linear is the queue; these are the live items.
   `python3 hardware/airwriter/tools_sch/check_rev2026_11.py <kicadxml netlist>`; its board
   gate, on KiCad's python: `hardware/airwriter/tools_pcb/r13_check.py` (pads 0.30 mm from
   the edge, silk on the board, D3's K, SW1's RESET).
-- **Fab package:** `python3 hardware/combine_boards.py` then `sh hardware/combined/make_fab.sh`;
-  drill floor 0.30 (`grep -E '^T[0-9]+C'`); `combined-pos.csv` 136 rows (J2 placed, J4 not),
-  `combined-lite-pos.csv` 59.
+- **Fab packages:** `python3 hardware/combine_boards.py` then `sh hardware/combined/make_fab.sh`
+  writes both orders: AirWriter's panel (`hardware/combined-fab.zip`, `combined-pos.csv` 136
+  rows, J2 placed, J4 not) and the LC's main board alone (`hardware/airwriter-lc-fab.zip`,
+  `airwriter-lc-pos.csv` 55 rows). The script asserts both counts and the 0.30 drill floor
+  (`grep -E '^T[0-9]+C'`).
 
 ## Bench rules (board 1)
 - **Never OTA while a job prints.** Tell Wells to hold prints, read `/api/status`, confirm
