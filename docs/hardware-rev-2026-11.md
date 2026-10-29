@@ -73,7 +73,9 @@ Free: IO1, IO3, IO7, IO9–IO12, IO41, IO42, IO45, IO46, and IO38–IO40 on thei
 
 The maker's marks are on the top silk where S1 was, where the Lite's clear lid shows them:
 the WW mark (the Macintosh Mini board's two chevrons, 7 mm wide) above KiCad's OSHW logo
-(7.5 × 8 mm, LOGO1, a board-only footprint).
+(7.5 × 8 mm, LOGO1, a board-only footprint). The back's upper half carries Snow White
+grooves, like the lid of Apple's Data Modem 2400: eleven round-ended silk stripes, 1.5 mm
+wide at a 4.2 mm pitch, from below the top screw holes to just above SW3's pads.
 
 Gone: S1, the eight DIP switches, and with them rev A's eight runs from the west edge to the
 module. SW1 is now the BZCN TSB001A3518A side-press switch (the Macintosh Mini's), at
