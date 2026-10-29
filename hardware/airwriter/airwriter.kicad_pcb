@@ -5985,7 +5985,7 @@
 				(pins "1" "2" "3" "4" "5" "6" "7" "8" "9")
 			)
 		)
-		(attr through_hole exclude_from_pos_files)
+		(attr through_hole)
 		(duplicate_pad_numbers_are_jumpers no)
 		(fp_rect
 			(start -8.45 3)

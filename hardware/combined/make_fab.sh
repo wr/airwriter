@@ -34,19 +34,28 @@ cp "$MAIN.kicad_pro" "$TMP/airwriter-lc.kicad_pro"
   --labels "Designator,Comment,Footprint,LCSC,Qty,Note" \
   --group-by "Value,Footprint,LCSC,DNP" --exclude-dnp \
   -o "$TMP/bom.csv" "$SCH"
-# Assembly notes and the two variants: AirWriter (LED array and the cover's
-# standoffs, no LC strap) and AirWriter LC (no LED array, U9 or LED caps; the LC
+# Assembly notes and the two variants: AirWriter (LED array, the cover's
+# standoffs, both ports and a blank PIC in U7's socket; no LC strap) and
+# AirWriter LC (no LED array, U9 or LED caps, no J4, U7's socket empty; the LC
 # strap R33 fitted). The schematic carries every part; the lists here say which
-# each variant leaves off. The cover has no schematic, so its standoff line is
-# added here, on AirWriter only.
+# each variant leaves off. The cover has no schematic and the PIC sits in a
+# socket the schematic names, so their lines are added here, on AirWriter only.
 python3 - "$TMP/bom.csv" "$OUT" "$LC_OUT" <<'PY'
 import csv, os, re, sys
 bom_path, out, lc_out = sys.argv[1:]
 POS, LC_POS = os.path.join(out, 'combined-pos.csv'), os.path.join(lc_out, 'airwriter-lc-pos.csv')
-NOTES = {
-  'J2': 'ASSEMBLE - Kycon KMDGX-8S-BS, source from Mouser (none at LCSC); through-hole, 11 joints',
-  'J4': 'DO NOT ASSEMBLE - fitted by hand with the TashTalk add-on (Kycon KMDGX-8S-BS)',
-  'U7': 'Fit DIP-8 SOCKET only (LCSC C72124); PIC12F1840 is user-programmed and inserted later',
+MINIDIN = 'ASSEMBLE - Kycon KMDGX-8S-BS, source from Mouser (none at LCSC); through-hole, 11 joints'
+NOTES = {   # AirWriter fits both ports and TashTalk's PIC; the LC fits neither
+  'AirWriter': {
+    'J2': MINIDIN,
+    'J4': MINIDIN,
+    'U7': 'Fit the DIP-8 socket (LCSC C72124), then press the PIC12F1840-I/P (line "U7 (PIC)") into it',
+  },
+  'AirWriter LC': {
+    'J2': MINIDIN,
+    'J4': 'DO NOT ASSEMBLE - keep its 11 holes free of solder (Kycon KMDGX-8S-BS)',
+    'U7': 'Fit the DIP-8 SOCKET only (LCSC C72124) and leave it empty: no PIC',
+  },
 }
 def expand(spec):
     out = []
@@ -64,11 +73,13 @@ STANDOFFS = ['MT1,MT2,MT3,MT4', '9774030151R (Wurth WA-SMSI M2.5x3 SMT spacer)',
              'Source from Digi-Key (48k stock, ~$0.60); panel is art-face-down in this production panel so these reflow on the SAME side as all other parts; ring paste aperture in stencil data']
 SPACER = ['D3 (spacer)', 'LED4*8 nylon LED spacer, 4 mm x 8 mm', '-', 'C92326', '1',
           'Under D3: LED leads through the spacer bore, LED flange seated on it, lens up']
-PLACEMENTS = {'AirWriter': 136, 'AirWriter LC': 55}
+PIC = ['U7 (PIC)', 'PIC12F1840-I/P (Microchip, PDIP-8)', 'Package_DIP:DIP-8_W7.62mm', '', '1',
+       'Source from Digi-Key or Mouser (LCSC stocks only the SOIC); no substitute. Press into U7\'s '
+       'socket, its notch to the socket\'s notch. Fit it BLANK: do not program it, the board loads its firmware']
+PLACEMENTS = {'AirWriter': 137, 'AirWriter LC': 55}
 
 bom = list(csv.reader(open(bom_path)))
 for r in bom[1:]:
-    if r[0] in NOTES: r[5] = NOTES[r[0]]
     if r[5].startswith('Lite only'): r[5] = ''   # R33's schematic note: the lists here say it
 pos = list(csv.reader(open(POS)))
 lc_pos = list(csv.reader(open(LC_POS)))
@@ -77,9 +88,12 @@ missing = [r for r in AIRWRITER_OFF + LC_OFF if r not in on_board]
 assert not missing, f'variant lists name parts the board does not place: {missing}'
 assert not on_board & set(expand('MT1-MT4')), 'the main board alone places the cover standoffs'
 
-def variant(name, off, extra, pos, bom_out, pos_out):
+def variant(name, off, extra, pos, bom_out, pos_out, pos_off=()):
+    # off: parts not fitted. pos_off: parts the BOM keeps (for their DO NOT ASSEMBLE note)
+    # but the position file leaves out.
     rows = [bom[0]]
     for r in bom[1:]:
+        r = r[:5] + [NOTES[name].get(r[0], r[5])]
         refs = expand(r[0]) if re.fullmatch(r'[A-Z0-9,-]+', r[0]) else [r[0]]
         keep = [x for x in refs if x not in off]
         if not keep:
@@ -90,7 +104,7 @@ def variant(name, off, extra, pos, bom_out, pos_out):
     rows += extra
     with open(bom_out, 'w', newline='') as f:
         csv.writer(f, lineterminator='\r\n').writerows(rows)
-    prows = [pos[0]] + [r for r in pos[1:] if r[0] not in off]
+    prows = [pos[0]] + [r for r in pos[1:] if r[0] not in off and r[0] not in pos_off]
     with open(pos_out, 'w', newline='') as f:
         csv.writer(f, lineterminator='\n').writerows(prows)
     n = len(prows) - 1
@@ -98,10 +112,10 @@ def variant(name, off, extra, pos, bom_out, pos_out):
           f'{os.path.basename(bom_out)} {len(rows) - 1} lines')
     assert n == PLACEMENTS[name], f'{name} places {n} parts, not {PLACEMENTS[name]}'
 
-variant('AirWriter', AIRWRITER_OFF, [STANDOFFS, SPACER], pos,
+variant('AirWriter', AIRWRITER_OFF, [PIC, STANDOFFS, SPACER], pos,
         os.path.join(out, 'combined-assembly-bom.csv'), POS)
 variant('AirWriter LC', LC_OFF, [SPACER], lc_pos,
-        os.path.join(lc_out, 'airwriter-lc-assembly-bom.csv'), LC_POS)
+        os.path.join(lc_out, 'airwriter-lc-assembly-bom.csv'), LC_POS, pos_off=['J4'])
 PY
 # The drill floor: nothing under 0.30 mm, PCBWay's standard tier.
 python3 - "$OUT" "$LC_OUT" <<'PY'

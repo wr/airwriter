@@ -8,7 +8,7 @@ C67,1u,Capacitor_SMD:C_0805_2012Metric,C28323,1,
 D3,green PWR,airwriter:LED_D3.0mm_Spacer_H8mm,C20613324,1,"THT: 3 mm flat-top green on a HIWA LED4*8 nylon spacer (LCSC C92326) under the body, lens up"
 J1,USB-C 5V in,Connector_USB:USB_C_Receptacle_HRO_TYPE-C-31-M-12,C165948,1,
 J2,Mini-DIN-8 to printer,airwriter:MiniDIN-8_Kycon_KMDGX-8S-BS_RightAngle,C5780060,1,"ASSEMBLE - Kycon KMDGX-8S-BS, source from Mouser (none at LCSC); through-hole, 11 joints"
-J4,Mini-DIN-8 LocalTalk,airwriter:MiniDIN-8_Kycon_KMDGX-8S-BS_RightAngle,C5780060,1,DO NOT ASSEMBLE - fitted by hand with the TashTalk add-on (Kycon KMDGX-8S-BS)
+J4,Mini-DIN-8 LocalTalk,airwriter:MiniDIN-8_Kycon_KMDGX-8S-BS_RightAngle,C5780060,1,DO NOT ASSEMBLE - keep its 11 holes free of solder (Kycon KMDGX-8S-BS)
 "R1,R2",5.1k,Resistor_SMD:R_0603_1608Metric,C23186,2,
 "R3,R14,R21-R25,R32,R33",10k,Resistor_SMD:R_0603_1608Metric,C25804,9,
 "R8,R9",0R,Resistor_SMD:R_0603_1608Metric,C21189,2,
@@ -26,5 +26,5 @@ U3,SP3232EBEN-L/TR,Package_SO:SOIC-16_3.9x9.9mm_P1.27mm,C6852,1,
 U4,AP7361C-33E,Package_TO_SOT_SMD:SOT-223-3_TabPin2,C500795,1,
 U5,USBLC6-2SC6,Package_TO_SOT_SMD:SOT-23-6,C7519,1,
 "U6,U8",SP3485EN-L,Package_SO:SOIC-8_3.9x4.9mm_P1.27mm,C8963,2,
-U7,PIC12F1840-I/P,Package_DIP:DIP-8_W7.62mm_Socket,C72124,1,Fit DIP-8 SOCKET only (LCSC C72124); PIC12F1840 is user-programmed and inserted later
+U7,PIC12F1840-I/P,Package_DIP:DIP-8_W7.62mm_Socket,C72124,1,Fit the DIP-8 SOCKET only (LCSC C72124) and leave it empty: no PIC
 D3 (spacer),"LED4*8 nylon LED spacer, 4 mm x 8 mm",-,C92326,1,"Under D3: LED leads through the spacer bore, LED flange seated on it, lens up"
