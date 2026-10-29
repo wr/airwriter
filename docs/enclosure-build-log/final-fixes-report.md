@@ -4,20 +4,20 @@ Branch `wells/airwriter-enclosure`, single commit `3dff90f`. Ran from
 `enclosure/` with `.venv/bin/python`. Baseline before this wave: 65 tests,
 ~65s, all passing. After: **68 tests, ~63-65s, all passing.**
 
-## Finding 1 (Important) -- Lite lid zero clearance in the pocket
+## Finding 1 (Important) -- LC lid zero clearance in the pocket
 
-`case.lite_lid()`'s plate was built at `POCKET_W x POCKET_L` / `POCKET_R` --
+`case.lc_lid()`'s plate was built at `POCKET_W x POCKET_L` / `POCKET_R` --
 the pocket's own size -- instead of the panel's real outline. Fixed to build
 it at `BOARD_W x BOARD_L` / `CORNER_R` (`case.py` lines ~453-456).
 
-**Measured clearance:** `tray().distance_to(lite_lid())` went from
+**Measured clearance:** `tray().distance_to(lc_lid())` went from
 **0.000000mm** (before) to **0.199999...mm** (after) -- matches
 `POCKET_CLEAR = 0.20` per side exactly.
 
 Fixed three tests that had pinned the old (wrong) geometry:
-- `test_case.TestLiteLid.test_plate_matches_the_art_panel_and_seats_flush`
+- `test_case.TestLCLid.test_plate_matches_the_art_panel_and_seats_flush`
   -- now asserts `BOARD_W`/`BOARD_L`, not `POCKET_W`/`POCKET_L`.
-- `test_case.TestLiteLid.test_it_fits_the_tray_with_no_interference` --
+- `test_case.TestLCLid.test_it_fits_the_tray_with_no_interference` --
   replaced the zero-margin `(tray & lid).volume == 0` assertion (satisfied
   identically by "clears by 2mm" and "touches exactly") with
   `tray().distance_to(lid) >= 0.15`.
@@ -25,7 +25,7 @@ Fixed three tests that had pinned the old (wrong) geometry:
   renamed to `test_lid_outline_matches_the_panel_it_stands_in_for` and
   rewritten against `BOARD_W`/`BOARD_L`/`CORNER_R`; also caught and fixed a
   second, previously-undetected instance of the same stale assumption in
-  `test_lite_lid_plate_corners_are_rounded_at_pocket_r` (renamed
+  `test_lc_lid_plate_corners_are_rounded_at_pocket_r` (renamed
   `..._at_corner_r`), which the review didn't call out by name but which
   encoded the same wrong pocket-sized reference geometry.
 
@@ -37,14 +37,14 @@ Fixed three tests that had pinned the old (wrong) geometry:
 - `test_lid_outline_matches_the_panel_it_stands_in_for`: red at
   `105.515mm^3 of the lid plate sticks out past the panel's own rounded
   footprint`; green after restore.
-- `test_lite_lid_plate_corners_are_rounded_at_corner_r` did NOT go red
+- `test_lc_lid_plate_corners_are_rounded_at_corner_r` did NOT go red
   under the old geometry (both probes still landed inside the ~0.6mm-wide
   fillet wedge at a 0.2mm size difference) -- noted here rather than hidden;
   it's a coarse "rounded vs square" check, not this defect's primary
   detector, and the other two tests above catch Finding 1 directly.
 - README's lid dims corrected: `62.40 x 104.67` -> `62.00 x 104.27` (line
   17), and `build.sh`'s real export now prints
-  `airwriter-lite-lid: 62.00 x 104.27 x 15.94 mm` confirming it end to end.
+  `airwriter-lc-lid: 62.00 x 104.27 x 15.94 mm` confirming it end to end.
 
 ## Finding 2 (Important) -- two retyped board-coordinate literals
 
@@ -86,7 +86,7 @@ widen the key pitch to +/-10.00mm; script at
   there's no separate rebate/shelf, the pocket is one constant
   cross-section prism and the panel/lid just occupies its top 1.6mm, held
   by screws.
-- Plan line 21: `Lite M2.5 x 8` -> `Lite M2.5 x 10`.
+- Plan line 21: `LC M2.5 x 8` -> `LC M2.5 x 10`.
 - Plan: added a staleness note at the top pointing at the Global
   Constraints block as the live summary; left the per-task bodies
   untouched (their historical pre-amendment numbers are intentional, per
@@ -105,7 +105,7 @@ but fails the new 4.0 one (confirmed red: `3.1512... not greater than
 
 ## Minor 5 -- unguarded screw-length arithmetic
 
-Added `test_params.TestLiteScrewLength.test_screw_reaches_the_insert_with_engagement_to_spare`:
+Added `test_params.TestLCScrewLength.test_screw_reaches_the_insert_with_engagement_to_spare`:
 computes the 10mm screw's tip Z from `Z_FLOOR_BOTTOM + SCREW_HEAD_DEPTH +
 10.0` and asserts it lands inside `INSERT_DEPTH` with >=3mm of engagement.
 At today's params: seat Z=-5.60, tip Z=4.40, engagement 4.40mm (matches
@@ -155,7 +155,7 @@ not just spec:106.
   passing, both standalone and via `./build.sh` end to end (which also ran
   `export.py`, confirming `out/*.step`/`*.stl` still generate --
   `airwriter-tray: 68.00 x 110.27 x 22.94mm`,
-  `airwriter-lite-lid: 62.00 x 104.27 x 15.94mm`).
+  `airwriter-lc-lid: 62.00 x 104.27 x 15.94mm`).
 - `out/` not committed (gitignored, confirmed).
 - Nothing under `hardware/` modified by this work (the two pre-existing
   `.kicad_pro` modifications in `git status` predate this session and were

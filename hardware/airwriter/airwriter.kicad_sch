@@ -10345,16 +10345,6 @@
 		)
 		(uuid "46c2b887-7518-4eef-8f60-6f3609a7cf89")
 	)
-	(label "BOARD_LITE"
-		(at 81.28 262.89 0)
-		(effects
-			(font
-				(size 1.27 1.27)
-			)
-			(justify left bottom)
-		)
-		(uuid "e3c46dd7-5b03-4896-bc66-50fc3506ed88")
-	)
 	(label "J4_HSKO"
 		(at 426.72 219.71 180)
 		(effects
@@ -10545,16 +10535,6 @@
 		)
 		(uuid "7b971c32-0b43-4513-bc56-e00a67739fb7")
 	)
-	(label "BOARD_LITE"
-		(at 189.23 160.02 180)
-		(effects
-			(font
-				(size 1.27 1.27)
-			)
-			(justify right bottom)
-		)
-		(uuid "f9cab7cb-9373-4bb8-9bc6-b0d4599f5fc6")
-	)
 	(label "HSKI_DRV"
 		(at 320.04 157.48 180)
 		(effects
@@ -10685,12 +10665,36 @@
 		)
 		(uuid "dc8c9dda-57c6-4800-9970-5654983f2578")
 	)
-  (label "SPARE_IO38"
-    (at 219.71 142.23999999999998 0)
-    (fields_autoplaced yes)
-    (effects (font (size 1.27 1.27)) (justify left bottom))
-    (uuid "391646ad-95b6-43b8-90cb-0cef30ff2299")
-  )
+	(label "SPARE_IO38"
+		(at 219.71 142.24 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left bottom)
+		)
+		(uuid "391646ad-95b6-43b8-90cb-0cef30ff2299")
+	)
+	(label "BOARD_LC"
+		(at 81.28 262.89 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left bottom)
+		)
+		(uuid "d70b1e71-83de-40cb-b993-7e9365f1740b")
+	)
+	(label "BOARD_LC"
+		(at 189.23 160.02 180)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right bottom)
+		)
+		(uuid "2cee0609-d1e3-493d-849b-1bf41d1b5aa5")
+	)
 	(symbol
 		(lib_id "Connector:USB_C_Receptacle_USB2.0_16P")
 		(at 35.56 59.69 0)
@@ -20868,7 +20872,7 @@
 				)
 			)
 		)
-		(property "Note" "Lite only: fitted on AirWriter Lite, left off AirWriter (variant strap)"
+		(property "Note" "LC only: fitted on AirWriter LC, left off AirWriter (variant strap)"
 			(at 81.28 266.7 0)
 			(hide yes)
 			(effects

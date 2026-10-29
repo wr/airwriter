@@ -22110,7 +22110,7 @@
 				)
 			)
 		)
-		(property "Note" "Lite only: fitted on AirWriter Lite, left off AirWriter (variant strap)"
+		(property "Note" "LC only: fitted on AirWriter LC, left off AirWriter (variant strap)"
 			(at 0 0 180)
 			(layer "F.Fab")
 			(hide yes)
@@ -22183,7 +22183,7 @@
 			(size 0.8 0.95)
 			(layers "F.Cu" "F.Mask" "F.Paste")
 			(roundrect_rratio 0.25)
-			(net "/BOARD_LITE")
+			(net "/BOARD_LC")
 			(uuid "baec7b70-fa52-4925-90c7-f030c8d189f3")
 		)
 		(pad "2" smd roundrect
@@ -23154,7 +23154,7 @@
 			(at -8.75 3.63 270)
 			(size 1.5 0.9)
 			(layers "F.Cu" "F.Mask" "F.Paste")
-			(net "/BOARD_LITE")
+			(net "/BOARD_LC")
 			(pinfunction "IO15_8")
 			(pintype "bidirectional+no_connect")
 			(uuid "b3678dd4-4e81-4388-956c-4b2790359fe2")
@@ -42001,7 +42001,7 @@
 		(end 145.225 130.35)
 		(width 0.2)
 		(layer "F.Cu")
-		(net "/BOARD_LITE")
+		(net "/BOARD_LC")
 		(uuid "022d541b-d132-43a8-a90e-fad1fd900f3a")
 	)
 	(segment
@@ -42009,7 +42009,7 @@
 		(end 145.225 129.45)
 		(width 0.2)
 		(layer "F.Cu")
-		(net "/BOARD_LITE")
+		(net "/BOARD_LC")
 		(uuid "687c79da-b5cd-48d9-a7c4-281bde0f901a")
 	)
 	(segment
@@ -42017,7 +42017,7 @@
 		(end 145.62 131.044)
 		(width 0.2)
 		(layer "F.Cu")
-		(net "/BOARD_LITE")
+		(net "/BOARD_LC")
 		(uuid "e962f4a5-856f-4cb2-a124-b50367132d5c")
 	)
 	(segment

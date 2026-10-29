@@ -37,7 +37,7 @@ PLACE = {  # ref: (x, y, orientation); pad 1 is west at 0, south at 90
     'R29': (112.75, 152.50, 90),    # 10 k, J2.8 to U2.8
     'R30': (109.75, 153.25, 0),     # 10 k, J2.5 to U2.7
     'R32': (141.45, 129.05, 180),   # revision strap, north of U1, beside IO16 (pin 9)
-    'R33': (144.50, 129.05, 180),   # Lite strap, north of U1, above IO15 (pin 8)
+    'R33': (144.50, 129.05, 180),   # LC strap, north of U1, above IO15 (pin 8)
     'SW1': (157.60, 99.45, -90),    # reset, button east at x 159.9 on rev A's pinhole axis;
                                     # pads 1 and 2 over rev A's EN and GND pads
     'R17': (160.20, 155.60, 0),     # D3's resistor, north of it: clear of the keepout and the lattice's D3 tube,
@@ -68,7 +68,7 @@ RESET_LABEL = (154.75, 99.45)       # beside SW1's back, on its axis
 SPARE_PADS = [('TP10', '/SPARE_IO38', (143.08, 151.20)), ('TP11', '/SPARE_IO39', (144.35, 151.20)),
               ('TP12', '/SPARE_IO40', (145.62, 151.20))]
 # The maker's marks, on top where the DIP switch was: they show through the
-# Lite's clear lid. The OSHW logo is KiCad's own; the WW mark is the Macintosh
+# LC's clear lid. The OSHW logo is KiCad's own; the WW mark is the Macintosh
 # Mini board's two chevrons, symmetric, so they read the same on either side.
 # Both clear the GND via at (102.5, 141.0) and H3's screw.
 KICAD_FP = '/Applications/KiCad/KiCad.app/Contents/SharedSupport/footprints'

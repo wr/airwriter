@@ -286,7 +286,7 @@ tray. The LC's clear top is 1 mm cast acrylic (the frame's height follows `ACRYL
 `hardware/panel/svg/lc.svg`, Figma Frame 17: "AirWriter LC", rev 2026.11, the Pro's gold
 dots, serial and power only, all frosted; the panel's outline and Ø3.8 test hole cut), glued with
 UV-cure glue to the four leg tops of the printed LC frame (`lc_frame.py`: the lid's legs, a
-rim and arms, and a sealed tube that lets D3 out only through a slit under the slash; spec `docs/superpowers/specs/2026-10-28-lite-acrylic-top-design.md`). Neither
+rim and arms, and a sealed tube that lets D3 out only through a slit under the slash; spec `docs/superpowers/specs/2026-10-28-lc-acrylic-top-design.md`). Neither
 is cut or printed yet. The all-printed LC lid stays, its plunger bore now the panel's 3.8.
 
 **Printers:** built and tested on the ImageWriter II only. The original ImageWriter and the
@@ -389,7 +389,7 @@ Linear is the queue; these are the live items.
   IO35–IO37), which needs its own firmware build. SW1 is the Macintosh Mini's BZCN
   TSB001A3518A. IO38–IO40 end on bare pads on the back (TP10–TP12) for bodging. Firmware
   for it:
-  `W-1109 Firmware for rev 2026.11 boards: N16R8 build, straps, own handshake pins, no DIPs, Lite`.
+  `W-1109 Firmware for rev 2026.11 boards: N16R8 build, straps, own handshake pins, no DIPs, LC`.
 - `W-1046 Factory reset must always work, even with broken firmware` and
   `W-1045 Long-press factory reset with live feedback on the LED panel`: merged 2026-10-15, benched
   on board 1 (all pass). Board 1 has the W-1059 bootloader and partition table, so an image

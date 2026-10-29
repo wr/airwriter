@@ -28,7 +28,7 @@ WANT = {
     '/J4_HSKI_RX': {'U3.12', 'U1.23'},                   # IO21
     **{f'/SPARE_IO{n}': {f'U1.{n - 7}'} for n in (38, 39, 40)},   # to bare pads on the board
     '/BOARD_REV': {'U1.9', 'R32.1'},
-    '/BOARD_LITE': {'U1.8', 'R33.1'},
+    '/BOARD_LC': {'U1.8', 'R33.1'},
     '/HSKI_RS232': {'U3.7', 'R9.1'},
     '/PR_HSKO': {'U3.8', 'J2.2'},
     '/UART_CTS': {'U3.9', 'U1.12'},

@@ -50,7 +50,7 @@ is rated to 65 °C.
 
 | GPIO | Net | Notes |
 |---|---|---|
-| IO15 | `BOARD_LITE` | R33 to GND, fitted on AirWriter LC only |
+| IO15 | `BOARD_LC` | R33 to GND, fitted on AirWriter LC only |
 | IO16 | `BOARD_REV` | R32 to GND, fitted on every 2026.11 board; rev A floats high |
 | IO13 | `J4_HSKO_DRV` | J4's HSKo, through U3's driver 1; no pull-down (below) |
 | IO21 | `J4_HSKI_RX` | J4.2 through U3's receiver 1 |

@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: CERN-OHL-S-2.0
 """The LC frame: the printed part the LC's clear acrylic top is glued to.
 
-docs/superpowers/specs/2026-10-28-lite-acrylic-top-design.md. The LC lid's
+docs/superpowers/specs/2026-10-28-lc-acrylic-top-design.md. The LC lid's
 four legs (case.lc_legs: the same inserts, the same M2.5 x 10 from below),
 stopped GLUE_LINE under the acrylic, joined by a rim round the top edge like the
 lattice's lip and an arm from each leg out to the side rim, and a light tube

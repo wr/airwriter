@@ -1,21 +1,16 @@
-# Lite acrylic top and frame design
-
-> **Amended 2026-10-29:** the build is AirWriter LC, not Lite, and its files say so:
-> `enclosure/lc_frame.py` (`lc_frame()`), `case.lc_legs()` and `case.lc_lid()`,
-> `out/airwriter-lc-frame.stl` and `airwriter-lc-lid.stl`, `hardware/panel/lc_top.py`,
-> `svg/lc.svg`, `airwriter-lc-top.svg` and `lc_slash.polys.json`. Below, read LC for Lite.
+# LC acrylic top and frame design
 
 2026-10-28. Wells chose a clean top over screws through the acrylic, then UV-cure glue
 over tape, the rev 2026.11 board (this branch has it merged) over rev A, and on 2026-10-29
-1 mm acrylic, the sheet his library had (it has 1 and 3 mm). The shop sells AirWriter Lite as "the same black bottom case under a clear
+1 mm acrylic, the sheet his library had (it has 1 and 3 mm). The shop sells AirWriter LC as "the same black bottom case under a clear
 acrylic top with the AirWriter mark lasered into it".
 
 ## The stack
 
 | Part | Where | Set by |
 |---|---|---|
-| Tray, board, M2.5 × 10 from below | unchanged | the Lite lid's hardware |
-| Lite frame (printed) | board face to `ACRYLIC_UNDERSIDE - GLUE_LINE` | this design |
+| Tray, board, M2.5 × 10 from below | unchanged | the LC lid's hardware |
+| LC frame (printed) | board face to `ACRYLIC_UNDERSIDE - GLUE_LINE` | this design |
 | UV-cure glue, about 0.10 | on the four leg tops | `GLUE_LINE` |
 | Acrylic top, 1.00 mm clear cast | `ACRYLIC_UNDERSIDE` to 14.54 | `ACRYLIC` |
 
@@ -30,12 +25,12 @@ settle before it cured.
 
 ## The acrylic
 
-`hardware/panel/airwriter-lite-top.svg`, from `lite_top.py`: the panel's own outline cut
-(62.00 × 104.27, R2.0), the test hole cut at the panel's 3.8 mm, and the Lite's own art,
-`hardware/panel/svg/lite.svg` (Wells's Figma Frame 17), frosted: "AirWriter LC", "airprint
+`hardware/panel/airwriter-lc-top.svg`, from `lc_top.py`: the panel's own outline cut
+(62.00 × 104.27, R2.0), the test hole cut at the panel's 3.8 mm, and the LC's own art,
+`hardware/panel/svg/lc.svg` (Wells's Figma Frame 17), frosted: "AirWriter LC", "airprint
 to serial bridge", rev 2026.11, the 18 gold dots and the test dot, the serial and power
 labels and the three rules, the power slash. The art draws the Pro's 37 lit dots in the
-background's colour, and they stay clear: the Lite has no LEDs. The frosted slash sits
+background's colour, and they stay clear: the LC has no LEDs. The frosted slash sits
 over D3, so the power light shows in it.
 
 On rev 2026.11 (15 mm SW3) the test plunger stands 0.46 above the acrylic; on rev A
@@ -43,9 +38,9 @@ On rev 2026.11 (15 mm SW3) the test plunger stands 0.46 above the acrylic; on re
 
 ## The frame
 
-One printed part, in `enclosure/lite_frame.py`:
+One printed part, in `enclosure/lc_frame.py`:
 
-- **Legs:** the Lite lid's four, factored out as `case.lite_legs()`: Ø6 at H1–H4, an
+- **Legs:** the LC lid's four, factored out as `case.lc_legs()`: Ø6 at H1–H4, an
   M2.5 heat-set insert in each foot, trimmed round J1, J2 and J4's hulls, feet relieved
   for C22. They stop `GLUE_LINE` under the acrylic, and their tops are the glue pads.
 - **Rim:** `FRAME_RIM_H` (2.50) deep at the top, from `RIDGE_CLEAR` short of the pocket wall
@@ -55,8 +50,8 @@ One printed part, in `enclosure/lite_frame.py`:
   between them would be loose, so it's left off.
 - **Arms:** one `FRAME_ARM_W` (2.40) wide from each leg out to the side rim, at rim depth.
 - **Light tube:** under a clear top D3 would light the whole corner, so the frame carries
-  a tube round the Lite's slash (`hardware/panel/lite_slash.polys.json`, written by
-  `lite_top.py` from the art) and D3's envelope: on rev 2026.11 a 3 mm LED on a 4 mm
+  a tube round the LC's slash (`hardware/panel/lc_slash.polys.json`, written by
+  `lc_top.py` from the art) and D3's envelope: on rev 2026.11 a 3 mm LED on a 4 mm
   spacer standing to 11.85, with R17 nearby outside. Walls run from the board to the
   top, `LATTICE_WALL` thick where there is room; on the east the spacer stands 0.38 from
   the board edge, so that wall runs out to the rim's outer line and is one printed line
@@ -69,7 +64,7 @@ One printed part, in `enclosure/lite_frame.py`:
   `PART_CLEAR`/`PART_TOP_CLEAR` (`components.py`, as the lattice does).
 
 Printed rim-down (the glue face on the bed, the flattest face), legs up, no supports: the
-same orientation as the Lite lid, and the same printability gate.
+same orientation as the LC lid, and the same printability gate.
 
 ## Assembly
 
@@ -94,7 +89,7 @@ To open, unscrew from below: the frame and acrylic come out together.
   cement, which doesn't take to the printed frame.
 - The legs' tops at H1 and H2 sit under the frosted corner dots, so two of the four glue
   pads don't show. H3 and H4's do, as Ø6 discs below the subtitle.
-- The printed Lite lid stays, for anyone without a laser. Its plunger bore goes from
+- The printed LC lid stays, for anyone without a laser. Its plunger bore goes from
   2.25 to 3.80, the panel's hole: 2.25 dated from the old switch and stopped the
   measured 3.1–3.2 plunger.
 

@@ -95,7 +95,7 @@ HAND = [
 # net, start pad, width, layers, corridor margin (mm)
 CONNECTIONS = [
     ('/BOARD_REV', ('R32', '1'), 0.2, (F, B), 3.0),
-    ('/BOARD_LITE', ('R33', '1'), 0.2, (F, B), 3.0),
+    ('/BOARD_LC', ('R33', '1'), 0.2, (F, B), 3.0),
     ('/LT_DE', ('R22', '1'), 0.2, (F, B), 2.5),
     ('/LED_DATA', ('R23', '1'), 0.2, (F, B), 2.0),
     ('/PR_TXD_N', ('R30', '1'), 0.2, (F, B), 3.0),

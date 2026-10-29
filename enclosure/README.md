@@ -81,7 +81,7 @@ Rubber feet go on the floor's underside, over the screw counterbores.
 
 ## Acrylic top and frame (LC)
 
-Spec: `docs/superpowers/specs/2026-10-28-lite-acrylic-top-design.md`.
+Spec: `docs/superpowers/specs/2026-10-28-lc-acrylic-top-design.md`.
 
 The top is 1 mm clear **cast** acrylic (extruded barely frosts), cut and
 engraved from `hardware/panel/airwriter-lc-top.svg`: red hairline is cut,
@@ -218,7 +218,7 @@ why this is build123d and not OpenSCAD.
 ## Shop model
 
 The shop's product viewer shows both builds inside this case
-(`~/Projects/shop/public/models/airwriter-{pro,lite}-cased.glb`). The scripts
+(`~/Projects/shop/public/models/airwriter-{pro,lc}-cased.glb`). The scripts
 that put it there live in the shop repo, beside the viewer and the
 glTF-transform install they depend on; after `./build.sh` here:
 
@@ -226,9 +226,9 @@ glTF-transform install they depend on; after `./build.sh` here:
     E=~/Projects/airwriter/enclosure/out
     H="105.636,65.636;156.364,65.636;105.636,151.93;153.364,151.93"   # H1-H4, KiCad mm
     node case-shell.mjs ../../../public/models/airwriter-pro-cased.glb  ../../../public/models/airwriter-pro-cased.glb  --tray $E/airwriter-tray.stl
-    node case-shell.mjs ../../../public/models/airwriter-lite-cased.glb ../../../public/models/airwriter-lite-cased.glb --tray $E/airwriter-tray.stl --lid $E/airwriter-lc-lid.stl
+    node case-shell.mjs ../../../public/models/airwriter-lc-cased.glb ../../../public/models/airwriter-lc-cased.glb --tray $E/airwriter-tray.stl --lid $E/airwriter-lc-lid.stl
     node case-hardware.mjs ../../../public/models/airwriter-pro-cased.glb  ../../../public/models/airwriter-pro-cased.glb  --holes "$H" --floor -5.4 --feet black
-    node case-hardware.mjs ../../../public/models/airwriter-lite-cased.glb ../../../public/models/airwriter-lite-cased.glb --holes "$H" --floor -5.4 --feet clear --screws 10 --clear
+    node case-hardware.mjs ../../../public/models/airwriter-lc-cased.glb ../../../public/models/airwriter-lc-cased.glb --holes "$H" --floor -5.4 --feet clear --screws 10 --clear
 
 `case-shell.mjs` swaps the `case` (and `lid`) mesh for these STLs in the KiCad
 GLB frame (a -90 degree turn about X, then +100 / +1.6 / +164.27 mm) and keeps

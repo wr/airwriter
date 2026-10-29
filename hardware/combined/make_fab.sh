@@ -71,7 +71,7 @@ PLACEMENTS = {'AirWriter': 135, 'AirWriter LC': 54}
 bom = list(csv.reader(open(bom_path)))
 for r in bom[1:]:
     if r[0] in NOTES: r[5] = NOTES[r[0]]
-    if r[5].startswith('Lite only'): r[5] = ''   # R33's schematic note: the lists here say it
+    if r[5].startswith('LC only'): r[5] = ''   # R33's schematic note: the lists here say it
 pos = list(csv.reader(open(POS)))
 lc_pos = list(csv.reader(open(LC_POS)))
 on_board = {r[0] for r in lc_pos[1:]}
