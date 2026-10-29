@@ -7,32 +7,31 @@ One sheet of 1.5 mm clear cast acrylic at the art panel's own outline, so it
 seats in the tray's pocket exactly where the Pro's top case does. Two layers,
 by colour, which LightBurn, xTool and Glowforge all read as separate jobs:
 
-  black fill   engrave (frost): everything the art paints
+  black fill   engrave (frost): everything gold, white or tan in the art: the
+               dots, the test dot, the wordmark and subtitle, the port labels
+               and their rules, the power slash
   red hairline cut: the outline and the test button's hole
 
-svg/lite.svg is Wells's Lite art (Figma "Frame 13", AirWriter LC): the Pro's
-gold dots and test dot, the wordmark and subtitle, the serial and power labels,
-and the power slash, which the LED under it lights. The other 37 dots are drawn
-in the background's #111111, so they stay clear; black inside the test dot is
-knocked out of it.
+svg/lite.svg is the Lite's own art (Wells's Figma Frame 17: "AirWriter LC",
+rev 2026.11, serial and power only). Its gold dots are the Pro's, the ones
+that never light; it draws the other 37 in the background's #111111, and they
+stay clear, since the Lite has no LEDs under them. The slash is frosted so the
+power LED under it lights it, as it lights the Pro's bare-FR4 slash. The
+outline and the test hole are the panel's (panel_layout.json): the board under
+them is the same.
 
-Everything is copied out of the export as vector paths, scaled to mm, so a
-re-export of the art flows through on the next run (generate.sh runs this).
+Everything is copied out of the Figma export as vector paths, scaled to mm, so
+a re-export of the art flows through on the next run (generate.sh runs this).
 """
 import json, math, pathlib, re
 
 HERE = pathlib.Path(__file__).parent
+ART = HERE / "svg" / "lite.svg"
 OUT = HERE / "airwriter-lite-top.svg"
 MARGIN = 1.0  # mm of empty sheet round the part, so viewers don't clip the cut line
 CUT = "#FF0000"
 ENGRAVE = "#000000"
-ART = HERE / "svg" / "lite.svg"
-GOLD, BG, KNOCKOUT = "#dda857", "#111111", ("black", "#000000")
-BOTTOM_BAND = 10.0
-"""mm. Art this close to the artboard's bottom (the port labels, the slash) is
-set that far from the sheet's bottom edge, the rest from its top. Frame 13's
-artboard is 1801 px (101.51 mm), the top case 104.27: top-aligned, its slash
-stood 3 mm behind the power LED. At full height this moves nothing."""
+GOLD, WHITE, FR4, INK = "#dda857", "white", "#e7ba9b", "#111111"
 
 _NUM = r"[-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?"
 # Absolute commands only; Figma writes nothing else. One letter per argument:
@@ -163,7 +162,8 @@ def weld(shapes):
     """Join shapes whose outlines cross into one outline.
 
     Laser software fills a layer even-odd, so where two marks overlap it leaves
-    the overlap clear. In the art the wordmark's A and i touch, at their feet. The joined outline goes out as straight segments 0.02 mm long."""
+    the overlap clear. In the art the wordmark's A and i touch, at their feet.
+    The joined outline goes out as straight segments 0.02 mm long."""
     shapes = list(shapes)
     while True:
         # Dots are drawn with arcs and sit alone on the grid; only art can touch.
@@ -205,7 +205,7 @@ def weld(shapes):
 
 
 def read_art(svg):
-    """The panel SVG's shapes, sorted into what this file needs."""
+    """The art's shapes, sorted into what this file needs."""
     masks = {}
     for mid, body in re.findall(r'<mask\b[^>]*\bid="([^"]+)"[^>]*>(.*?)</mask>', svg, re.S):
         masks[mid] = bbox(parse_path(_attr(re.search(r"<path[^>]*>", body).group(0), "d")))
@@ -213,15 +213,17 @@ def read_art(svg):
 
     circles, paths = [], []
     for tag in re.findall(r"<circle[^>]*>", svg):
-        cx, cy = float(_attr(tag, "cx")), float(_attr(tag, "cy"))
-        tf = _attr(tag, "transform")
-        if tf:
-            # Figma mirrors a circle now and then; a mirror moves only its centre.
-            a, b, c, d, e, f = (float(v) for v in re.findall(_NUM, tf))
-            assert tf.startswith("matrix(") and b == c == 0 and abs(a) == abs(d) == 1, tf
-            cx, cy = a * cx + e, d * cy + f
-        circles.append(dict(cx=cx, cy=cy, r=float(_attr(tag, "r")), fill=_attr(tag, "fill").lower()))
+        cx, cy, r = (float(_attr(tag, k)) for k in ("cx", "cy", "r"))
+        m = _attr(tag, "transform")
+        if m:
+            # Figma places a flipped circle by matrix(a b c d e f).
+            a, b, c, d, e, f = (float(v) for v in re.search(
+                r"matrix\(([^)]*)\)", m).group(1).replace(",", " ").split())
+            cx, cy = a * cx + c * cy + e, b * cx + d * cy + f
+            r *= math.sqrt(abs(a * d - b * c))
+        circles.append(dict(cx=cx, cy=cy, r=r, fill=_attr(tag, "fill").lower()))
     for tag in re.findall(r"<path[^>]*>", svg):
+        assert not _attr(tag, "transform"), "a path with a transform; flatten it in Figma"
         cmds = parse_path(_attr(tag, "d"))
         mask = _attr(tag, "mask")
         if mask:
@@ -256,60 +258,46 @@ def test_dot(dot, circles, paths):
     assert [c for c, _ in tab[end + 1:]] in (["V", "Z"], ["Z"]), "test tab drawn differently"
     outline = [("M", [cx, cy + r]), ("A", [r, r, 0, 1, 1, cx + r, cy])] + tab[2:end + 1] + [("Z", [])]
 
-    dark = KNOCKOUT + (BG,)
     holes = [circle_path(c["cx"], c["cy"], c["r"]) for c in circles
-             if c["fill"] in dark and inside((c["cx"] - c["r"], c["cy"] - c["r"],
-                                              c["cx"] + c["r"], c["cy"] + c["r"]))]
-    holes += [p["cmds"] for p in paths if p["fill"] in dark and inside(bbox(p["cmds"]))]
+             if c["fill"] in ("black", INK) and inside((c["cx"] - c["r"], c["cy"] - c["r"],
+                                                        c["cx"] + c["r"], c["cy"] + c["r"]))]
+    holes += [p["cmds"] for p in paths if p["fill"] in ("black", INK) and inside(bbox(p["cmds"]))]
     assert holes, "test dot has no hole marker"
     return [outline] + holes
-
-
-def _shift(cmds, dy):
-    return [(c, [a + dy if k == "y" else a for a, k in zip(args, _ARGS[c])]) for c, args in cmds]
 
 
 def build():
     lay = json.loads((HERE / "panel_layout.json").read_text())
     svg = ART.read_text()
     vw, vh = (float(v) for v in re.search(r'viewBox="0 0 ([\d.]+) ([\d.]+)"', svg).groups())
-    w, h, cr = lay["panel"]["w"], lay["panel"]["h"], lay["panel"]["corner_r"]
-    s = w / vw  # mm per Figma px
+    s = lay["panel"]["w"] / vw  # mm per Figma px
+    # Frame 13 was 1801 px, 3 mm short: its slash stood behind the power LED.
+    assert abs(vh * s - lay["panel"]["h"]) < 0.05, \
+        f"the art is {vh * s:.2f} mm tall, the top case {lay['panel']['h']}: re-export at 1100 x 1850"
     circles, paths = read_art(svg)
-
-    drop = h / s - vh
-    assert drop > -1, f"the art is {-drop * s:.2f} mm taller than the top case"
-    band = vh - BOTTOM_BAND / s
     for c in circles:
-        if c["cy"] - c["r"] >= band:
-            c["cy"] += drop
-    for p in paths:
-        if bbox(p["cmds"])[1] >= band:
-            p["cmds"] = _shift(p["cmds"], drop)
+        assert c["fill"] in (GOLD, INK, "black"), f"a circle in {c['fill']} has no layer"
 
-    # The test dot is the gold dot round the hole's black marker, and it has to
-    # be where the Pro's is: over SW3's plunger.
+    # The test dot is where the panel's is, whatever the art does round it:
+    # SW3's plunger comes up through it. Figma puts every dot on whole pixels.
     tdot = next(d for d in lay["dots"] if d["mat"] == "T")
-    inks = [c for c in circles if c["fill"] not in KNOCKOUT + (BG,)]
-    (t,) = [c for c in inks if any(k["fill"] in KNOCKOUT and (k["cx"], k["cy"]) == (c["cx"], c["cy"])
-                                   for k in circles)]
-    assert math.dist((t["cx"] * s, t["cy"] * s), (tdot["x"], tdot["y"])) < 0.01, \
-        "the art's test dot is not over the test button"
+    at = (round(tdot["x"] / s), round(tdot["y"] / s))
+    (t,) = [c for c in circles if c["fill"] == GOLD and (round(c["cx"]), round(c["cy"])) == at]
 
-    engrave = [[circle_path(c["cx"], c["cy"], c["r"])] for c in inks if c is not t]
+    engrave = [[circle_path(c["cx"], c["cy"], c["r"])] for c in circles
+               if c["fill"] == GOLD and c is not t]
     engrave.append(test_dot(t, circles, paths))
     tab_box = (t["cx"] - t["r"], t["cy"] - t["r"], t["cx"] + t["r"], t["cy"] + t["r"])
     for p in paths:
         b = bbox(p["cmds"])
         if b[0] >= tab_box[0] and b[2] <= tab_box[2] and b[1] >= tab_box[1] and b[3] <= tab_box[3]:
             continue  # part of the test dot, already composed
-        if p["fill"] == BG:
-            continue  # drawn in the background: nothing to frost
-        assert p["fill"] not in KNOCKOUT, "black art outside the test dot"
+        assert p["fill"] in (GOLD, WHITE, "#ffffff", FR4), f"art in {p['fill']} has no layer"
         engrave.append([p["cmds"]])
 
     engrave = weld(engrave)
 
+    w, h, cr = lay["panel"]["w"], lay["panel"]["h"], lay["panel"]["corner_r"]
     hole_r = lay["grid"]["hole_dia"] / 2
     num = lambda v: f"{v:.4f}".rstrip("0").rstrip(".")
     shapes = "\n".join(
