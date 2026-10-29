@@ -379,15 +379,17 @@ Linear is the queue; these are the live items.
   routed (`docs/hardware-rev-2026-11.md`), on main since 2026-10-29; Wells approved the routing in KiCad the same day. Next: the PCBWay orders (November or
   December): AirWriter on the combined panel, AirWriter LC on the main board alone
   (`docs/ORDER-NOTES.md`). PCBWay fits neither mini-DIN nor the PIC, and U7's socket goes on
-  empty. TashTalk is no longer an add-on: at each board's bench test Wells solders J2 (and J4
-  on AirWriter), presses a blank PIC12F1840-I/P into AirWriter's socket and flashes TashTalk
+  empty. The LC fits one LED of the array, D26 under the test button, fed through JP1, a
+  solder jumper (`docs/hardware-rev-2026-11.md`). TashTalk is no longer an add-on: at each
+  board's bench test Wells solders J2 (and J4 on AirWriter, or bridges JP1 on the LC), presses a blank PIC12F1840-I/P into AirWriter's socket and flashes TashTalk
   (the AppleTalk Port card's Flash TashTalk key, or `POST /api/localtalk/flash`). A new blank
   PIC took TashTalk in board 1's socket (2026-10-29). No DIP switches; each port's HSKo has its own GPIO (J2's IO47, J4's IO13, J4's
   HSKi IO21), and U1 is the ESP32-S3-WROOM-1-N16R8 (16 MB flash, 8 MB octal PSRAM on
   IO35–IO37), which needs its own firmware build. SW1 is the Macintosh Mini's BZCN
   TSB001A3518A. IO38–IO40 end on bare pads on the back (TP10–TP12) for bodging. Firmware
   for it:
-  `W-1109 Firmware for rev 2026.11 boards: N16R8 build, straps, own handshake pins, no DIPs, LC`.
+  `W-1109 Firmware for rev 2026.11 boards: N16R8 build, straps, own handshake pins, no DIPs, LC`;
+  on the LC (`BOARD_LC` low) the status panel is D26 alone, which shows a frame's first pixel.
 - `W-1046 Factory reset must always work, even with broken firmware` and
   `W-1045 Long-press factory reset with live feedback on the LED panel`: merged 2026-10-15, benched
   on board 1 (all pass). Board 1 has the W-1059 bootloader and partition table, so an image
@@ -481,8 +483,8 @@ Linear is the queue; these are the live items.
 - **pcbnew scripts** run on KiCad's bundled interpreter:
   `/Applications/KiCad/KiCad.app/Contents/Frameworks/Python.framework/Versions/3.9/bin/python3`.
   `hardware/airwriter/route.py` does export DSN → round → Freerouting → import → DRC headless.
-  Rev 2026.11's board is built from rev A by `tools_pcb/r13_build.sh` then `r13_route.py`
-  (`docs/hardware-rev-2026-11.md`); never re-run them over hand edits.
+  Rev 2026.11's board is built from rev A by `tools_pcb/r13_build.sh` then `r13_route.py` and
+  `r14_lc_light.py` (`docs/hardware-rev-2026-11.md`); never re-run them over hand edits.
 - **Freerouting 2.2.4** at `~/.local/share/freerouting/freerouting.jar`, Java 25.
 - **konnect** resolves `lib_id` only against KiCad's install directory, so the project libraries
   must be symlinked into the app bundle. **The symlinks are gone since the 10.0.6 upgrade**;
@@ -571,7 +573,7 @@ Linear is the queue; these are the live items.
 - **Fab packages:** `python3 hardware/combine_boards.py` then `sh hardware/combined/make_fab.sh`
   writes both orders: AirWriter's panel (`hardware/combined-fab.zip`, `combined-pos.csv` 135
   rows) and the LC's main board alone (`hardware/airwriter-lc-fab.zip`, `airwriter-lc-pos.csv`
-  54 rows), neither placing J2 or J4. The script asserts both counts and the 0.30 drill floor
+  59 rows), neither placing J2 or J4. The script asserts both counts and the 0.30 drill floor
   (`grep -E '^T[0-9]+C'`).
 
 ## Bench rules (board 1)
