@@ -122,10 +122,14 @@ IO16 and IO15.
   J2's (IO47) keeps R24: a StyleWriter on J2 watches its HSKo.
 - TP9 and the old test pads sit on the back under U1's courtyard.
 - Vias under U5's and U8's bodies are tented.
-- R29 and R30, in series with J2's receive pair, are 15 k (the design said 10 k). U2's input
-  resistance is 12 k minimum and 15 k typical, so with 10 k a −15 V RS-232 line reached
-  about −9 V, past the SP3490's −7 V common-mode limit. With 15 k, −12 V lands at −5.3 to
-  −6.0 V and an RS-422 printer's 2 V still arrives as at least 0.89 V.
+- U2 is TI's THVD1451 (the design had the SP3490): the same pinout, rated ±30 kV HBM on its
+  bus pins against the SP3490's ±2 kV, and its receiver works with ±15 V on its inputs
+  (absolute maximum ±18 V), so an RS-232 printer's line is in range on its own. R29 and
+  R30 stay in series with the receive pair at 15 k, as protection: against the receiver's
+  load (at least 75 k at −15 V) a −15 V line arrives at about −12.5 V, and an RS-422
+  printer's 2 V as about 1.7 V. Its fail-safe threshold (−20 to −200 mV) reads an idle,
+  open or unplugged line as mark, so a printer switched off with the cable in sends no
+  garbage.
 - D3's cathode is marked K on the silk beside pad 1: the spacer hides the square pad.
 - R17's pads sit 0.58 mm in from the east edge: PCBWay's minimum is 0.30, with ±0.2 mm on a
   routed edge.

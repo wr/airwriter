@@ -11925,7 +11925,7 @@
 				)
 			)
 		)
-		(property "LCSC" "C26735"
+		(property "LCSC" "C2671319"
 			(at 340.36 55.88 0)
 			(hide yes)
 			(effects
@@ -11934,7 +11934,7 @@
 				)
 			)
 		)
-		(property "Value" "SP3490EN-L"
+		(property "Value" "THVD1451DR"
 			(at 340.36 63.5 0)
 			(effects
 				(font
@@ -11951,7 +11951,7 @@
 				)
 			)
 		)
-		(property "Datasheet" ""
+		(property "Datasheet" "https://www.ti.com/lit/ds/symlink/thvd1451.pdf"
 			(at 340.36 59.69 0)
 			(hide yes)
 			(effects
@@ -11960,7 +11960,7 @@
 				)
 			)
 		)
-		(property "MPN" "SP3490EN-L/TR"
+		(property "MPN" "THVD1451DR"
 			(at 340.36 55.88 0)
 			(hide yes)
 			(effects
@@ -11969,7 +11969,7 @@
 				)
 			)
 		)
-		(property "Manufacturer" "MaxLinear"
+		(property "Manufacturer" "Texas Instruments"
 			(at 340.36 55.88 0)
 			(hide yes)
 			(effects
@@ -11978,7 +11978,7 @@
 				)
 			)
 		)
-		(property "Description" "RS-422/485 full-duplex transceiver, 3.3V, SOIC-8"
+		(property "Description" "RS-422/485 full-duplex transceiver, 3.3 V, inputs to +-15 V common mode, +-30 kV HBM on the bus pins, SOIC-8"
 			(at 340.36 55.88 0)
 			(hide yes)
 			(effects

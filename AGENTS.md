@@ -453,9 +453,9 @@ Linear is the queue; these are the live items.
   its toner is in, and the cover-open, jam and toner texts mid-job (idle, it says "idle"
   whatever is wrong). Owed on a Level 1 machine (Plus, II NT): hex and a 68000's imaging
   time. Next
-  `W-1083 AirPrint to HP LaserJets over serial (PCL)`. Network printers over TCP are out. Open
-  hardware question for any RS-232 printer, the original ImageWriter included: J2's receiver
-  (MAX3490, common-mode −7 to +12 V) against RS-232's −12 V.
+  `W-1083 AirPrint to HP LaserJets over serial (PCL)`. Network printers over TCP are out. For
+  any RS-232 printer, the original ImageWriter included: rev A's J2 receiver (SP3490,
+  common mode −7 to +12 V) can't take RS-232's −12 V; rev 2026.11's THVD1451 takes ±15 V.
 - The full test page has printed on board 1 from the page's Print Test Page, on the colour
   ribbon. Still owed: a print from the button and from DIP4, one on the black ribbon, and a
   second tap mid-page.
