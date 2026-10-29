@@ -279,7 +279,10 @@ board goes in by the sequence in `enclosure/README.md`, thumbing the west wall o
 DIP keys), Lite lid, and the Pro build's light-guide lattice. Cavity 13.04 (measured mini-DIN
 height); Pro screws M2.5 × 18. Four 10 mm rubber feet sit in 0.40 pockets in the floor's
 underside, each hiding a screw counterbore. The shop's cased GLBs still show the pre-W-1036
-tray.
+tray. The Lite's clear top is 1.5 mm cast acrylic, laser file
+`hardware/panel/airwriter-lite-top.svg` (`lite_top.py`, from the panel's art: gold dots, test
+dot, wordmark, labels and power slash frosted; outline and Ø3.8 test hole cut); not yet cut,
+and nothing holds it down yet (the printed Lite lid is a solid plate on legs).
 
 **Printers:** built and tested on the ImageWriter II only. The original ImageWriter and the
 ImageWriter LQ take the same stream and are expected to work, untested (the scope spec's
@@ -567,7 +570,8 @@ Linear is the queue; these are the live items.
 ## Layout
 ```
 hardware/airwriter/   KiCad 10 main board (sch, pcb, lib/, route.py, stitch.py, tools_pcb/)
-hardware/panel/       art panel generator (Figma SVG → panel.kicad_pcb)
+hardware/panel/       art panel generator (Figma SVG → panel.kicad_pcb), and the Lite's
+                      acrylic top laser file (lite_top.py → airwriter-lite-top.svg)
 hardware/combined/    the snap-apart order panel and make_fab.sh; combined-fab.zip is the order
 firmware/             ESP-IDF 5.5 app; components/ per SPEC §3.1 plus job_pipe, led_grid, pic_prog,
                       ota_health, printer_caps, ps_page, laser …; bootloader_components/ holds the bootloader's pin clamps
