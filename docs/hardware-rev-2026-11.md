@@ -71,6 +71,10 @@ Free: IO1, IO3, IO7, IO9–IO12, IO41, IO42, IO45, IO46, and IO38–IO40 on thei
 | R14 | (125.70, 152.40) | (131.30, 144.60) | on `LT_DATA` between U7 and U6, below U7's TASHTALK label |
 | SW2 | (144.50, 151.20) | (140.00, 152.70) | below IO0, so `BOOT_CFG` runs straight down; BOOT label to its right |
 
+The maker's marks are on the top silk where S1 was, where the Lite's clear lid shows them:
+the WW mark (the Macintosh Mini board's two chevrons, 7 mm wide) above KiCad's OSHW logo
+(7.5 × 8 mm, LOGO1, a board-only footprint).
+
 Gone: S1, the eight DIP switches, and with them rev A's eight runs from the west edge to the
 module. SW1 is now the BZCN TSB001A3518A side-press switch (the Macintosh Mini's), at
 (157.60, 99.45) turned −90°: its button faces the case's reset pinhole, on rev A's axis, and

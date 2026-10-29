@@ -67,6 +67,19 @@ RESET_LABEL = (154.75, 99.45)       # beside SW1's back, on its axis
 # and C22. IO41 has no way down past USB D- on the back; IO42 has C1 over it.
 SPARE_PADS = [('TP10', '/SPARE_IO38', (143.08, 151.20)), ('TP11', '/SPARE_IO39', (144.35, 151.20)),
               ('TP12', '/SPARE_IO40', (145.62, 151.20))]
+# The maker's marks, on top where the DIP switch was: they show through the
+# Lite's clear lid. The OSHW logo is KiCad's own; the WW mark is the Macintosh
+# Mini board's two chevrons, symmetric, so they read the same on either side.
+# Both clear the GND via at (102.5, 141.0) and H3's screw.
+KICAD_FP = '/Applications/KiCad/KiCad.app/Contents/SharedSupport/footprints'
+OSHW = ('LOGO1', 'Symbol', 'OSHW-Logo_7.5x8mm_SilkScreen', (105.3, 145.4))
+WW_AT, WW_WIDTH, WW_DRAWN = (105.3, 134.5), 7.0, 2.5968
+WW = [  # two chevrons, 2.6 mm wide as drawn; centred on the origin
+    [(1.1514, -0.7349), (0.4328, -0.0164), (0.0000, -0.4492), (-0.4328, -0.0164), (-1.1514, -0.7349),
+     (-0.8656, -1.0207), (-0.4328, -0.5879), (0.0000, -1.0207), (0.4328, -0.5879), (0.8656, -1.0207)],
+    [(1.2984, 0.1552), (0.4328, 1.0208), (0.0000, 0.5880), (-0.4328, 1.0208), (-1.2984, 0.1552),
+     (-1.0126, -0.1307), (-0.4328, 0.4492), (0.0000, 0.0164), (0.4328, 0.4492), (1.0126, -0.1307)],
+]
 
 
 def at(x, y):
@@ -168,6 +181,34 @@ def spare_pads(board):
         pad.SetNet(board.FindNet(net))
 
 
+def logos(board):
+    ref, lib, name, xy = OSHW
+    if not board.FindFootprintByReference(ref):
+        fp = pcbnew.FootprintLoad(os.path.join(KICAD_FP, lib + '.pretty'), name)
+        fp.SetFPIDAsString(f'{lib}:{name}')
+        fp.SetReference(ref)
+        fp.SetAttributes(fp.GetAttributes() | pcbnew.FP_BOARD_ONLY)   # art, not a part
+        fp.SetPosition(at(*xy))
+        board.Add(fp)
+    if any(d.GetClass() == 'PCB_SHAPE' and d.GetLayer() == pcbnew.F_SilkS
+           and d.GetShape() == pcbnew.SHAPE_T_POLY for d in board.GetDrawings()):
+        return
+    k = WW_WIDTH / WW_DRAWN
+    for ring in WW:
+        chain = pcbnew.SHAPE_LINE_CHAIN()
+        for x, y in ring:
+            chain.Append(pcbnew.FromMM(WW_AT[0] + k * x), pcbnew.FromMM(WW_AT[1] + k * y))
+        chain.SetClosed(True)
+        shape = pcbnew.SHAPE_POLY_SET()
+        shape.AddOutline(chain)
+        poly = pcbnew.PCB_SHAPE(board, pcbnew.SHAPE_T_POLY)
+        poly.SetPolyShape(shape)
+        poly.SetFilled(True)
+        poly.SetWidth(0)
+        poly.SetLayer(pcbnew.F_SilkS)
+        board.Add(poly)
+
+
 def texts(board):
     for d in list(board.GetDrawings()):
         if d.GetClass() == 'PCB_TEXT' and d.GetLayer() == pcbnew.F_SilkS \
@@ -214,6 +255,7 @@ def main():
     board.FindFootprintByReference('J2').SetExcludedFromPosFiles(False)
     tp9(board)
     spare_pads(board)
+    logos(board)
     texts(board)
     for ref in ('R21', 'R24', 'R29', 'R30'):
         fp = board.FindFootprintByReference(ref)

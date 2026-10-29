@@ -10,7 +10,7 @@
 - No front silk text runs off the board.
 - D3 has a cathode mark outside its spacer: the square pad is hidden once the
   spacer is on, and PCBWay fits D3 by hand.
-- SW1 has its RESET label beside it.
+- SW1 has its RESET label beside it, and the top carries the OSHW logo and the WW mark.
 Writes nothing.
 """
 import math
@@ -70,7 +70,10 @@ def main():
                and math.dist((mm(t.GetPosition().x), mm(t.GetPosition().y)), (mm(sw1.x), mm(sw1.y))) < 4.0
                for t in texts):
         bad.append('no RESET label beside SW1')
-    print('\n'.join(bad) if bad else 'ok: pads clear of the edge, silk on the board, D3 and SW1 marked')
+    if not b.FindFootprintByReference('LOGO1') or not any(
+            d.GetClass() == 'PCB_SHAPE' and d.GetLayer() == pcbnew.F_SilkS for d in b.GetDrawings()):
+        bad.append('the OSHW logo or the WW mark is missing from the top')
+    print('\n'.join(bad) if bad else 'ok: pads clear of the edge, silk on the board, D3 and SW1 marked, logos on top')
     sys.exit(1 if bad else 0)
 
 
