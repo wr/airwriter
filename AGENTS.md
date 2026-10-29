@@ -377,13 +377,13 @@ Known issues, open:
 Linear is the queue; these are the live items.
 - `W-1091 Rev B: the main board's next revision` (rev 2026.11, with
   `W-1043 Rev B: through-hole dome LED for the power indicator` under it): designed, placed and
-  routed (`docs/hardware-rev-2026-11.md`), on main since 2026-10-29. Next: Wells reviews the routing in KiCad, then the PCBWay orders (November or
+  routed (`docs/hardware-rev-2026-11.md`), on main since 2026-10-29; Wells approved the routing in KiCad the same day. Next: the PCBWay orders (November or
   December): AirWriter on the combined panel, AirWriter LC on the main board alone
   (`docs/ORDER-NOTES.md`). PCBWay fits neither mini-DIN nor the PIC, and U7's socket goes on
   empty. TashTalk is no longer an add-on: at each board's bench test Wells solders J2 (and J4
   on AirWriter), presses a blank PIC12F1840-I/P into AirWriter's socket and flashes TashTalk
-  (the AppleTalk Port card's Flash TashTalk key, or `POST /api/localtalk/flash`). One new
-  blank PIC goes through board 1 before the order. No DIP switches; each port's HSKo has its own GPIO (J2's IO47, J4's IO13, J4's
+  (the AppleTalk Port card's Flash TashTalk key, or `POST /api/localtalk/flash`). A new blank
+  PIC took TashTalk in board 1's socket (2026-10-29). No DIP switches; each port's HSKo has its own GPIO (J2's IO47, J4's IO13, J4's
   HSKi IO21), and U1 is the ESP32-S3-WROOM-1-N16R8 (16 MB flash, 8 MB octal PSRAM on
   IO35–IO37), which needs its own firmware build. SW1 is the Macintosh Mini's BZCN
   TSB001A3518A. IO38–IO40 end on bare pads on the back (TP10–TP12) for bodging. Firmware

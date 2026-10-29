@@ -1,7 +1,7 @@
 # Rev 2026.11 hardware, as drawn
 
-The main board after rev A, named for what prints on the top case. Designed and routed;
-not yet ordered or built. Why each change exists is in the design,
+The main board after rev A, named for what prints on the top case. Designed and routed, the
+routing approved by Wells (2026-10-29); not yet ordered or built. Why each change exists is in the design,
 `docs/superpowers/specs/2026-10-28-rev-2026-11-board-design.md`. This file is the board as
 drawn: what moved from rev A, where things are, and what to leave alone. Edit it in place.
 

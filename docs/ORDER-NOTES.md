@@ -127,11 +127,10 @@ fitted.
   vias on C9.2, C12.2, C17.2, D29.2, D37.2, R1.2, U1.1 and U8.5 (U1's centre paddle has its
   own thermal holes in the footprint). Minor paste wicking into those barrels is acceptable.
 
-## Wells's part: before the order and after delivery
+## Wells's part, after delivery
 
-- **Before ordering:** flash one new, blank PIC12F1840-I/P in board 1's U7 socket, to prove
-  the board takes TashTalk onto a part straight from the factory (an erased 12F1840 has LVP
-  on, so it should).
+- **Proved before ordering:** a new, blank PIC12F1840-I/P took TashTalk in board 1's U7
+  socket (2026-10-29), so a part straight from the factory flashes on the board.
 - **Per board, after delivery:** solder J2 (Kycon KMDGX-8S-BS, Mouser), and on AirWriter J4
   too. On AirWriter, press a blank PIC12F1840-I/P (PDIP-8, Digi-Key) into U7's socket, notch
   to notch, then flash TashTalk (the AppleTalk Port card's Flash TashTalk key, or

@@ -47,8 +47,8 @@ current BOMs are `hardware/combined/fab/combined-assembly-bom.csv` (AirWriter) a
 The ESP32 flashes TashTalk into U7 in its socket over LVP (`pic_prog`,
 `W-1028 Firmware: flash TashTalk into the PIC from the ESP32 over LVP`), so no external
 programmer is needed. An erased PIC12F1840 has LVP on, so a blank part straight from the
-distributor takes TashTalk in its socket: buy them blank, never pre-programmed. One new part
-goes through board 1 before the rev 2026.11 order, to prove it. Upstream TashTalk's config clears LVP, so a stock-programmed part needs
+distributor takes TashTalk in its socket: buy them blank, never pre-programmed. Proved on board 1
+(2026-10-29): a new blank part took TashTalk in its socket. Upstream TashTalk's config clears LVP, so a stock-programmed part needs
 high-voltage programming, off the board (never in the socket, `docs/traps.md`). For that: a
 PICkit 3 clone driven by PICkitminus (kair.us, macOS CLI, lists the 12F1840), PICkit 5 as
 fallback. The MPLAB Snap is LVP-only, and the TL866II does not support the 12F1840 at all.
