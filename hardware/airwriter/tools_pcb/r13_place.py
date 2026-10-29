@@ -44,7 +44,8 @@ PLACE = {  # ref: (x, y, orientation); pad 1 is west at 0, south at 90
                                     # pad 2 0.58 mm in from the edge (PCBWay's minimum is 0.30), pad 1 on D3-K's run
 }
 
-SLASH = (159.35, 160.38, -77.5)     # centre and angle of the top case's slash
+SLASH = (159.35, 160.38, -77.5)     # centre and angle of the top case's first slash; Frame 16's
+                                    # (1.0 x 5.75 mm) centres 0.3 mm up it, and D3 stays here
 D3_EAST = 0.27                      # LED axis east of the slash centre, clear of J1
 D3_ORIENT = 257.5                   # pad 1 north, pad 2 south, along the slash
 D3_K = 1.8                          # the cathode's K, this far past pad 1 along the leads: outside the spacer

@@ -131,6 +131,9 @@ IO16 and IO15.
   open or unplugged line as mark, so a printer switched off with the cable in sends no
   garbage.
 - D3's cathode is marked K on the silk beside pad 1: the spacer hides the square pad.
+- D3's axis sits about 0.5 mm east of the top case's slash centre line: the slash grew to
+  about 1.0 × 5.75 mm in the Frame 16 art, and D3 can't move west without meeting J1. Its
+  3 mm face still covers the slash's full width.
 - R17's pads sit 0.58 mm in from the east edge: PCBWay's minimum is 0.30, with ±0.2 mm on a
   routed edge.
 
