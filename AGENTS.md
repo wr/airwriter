@@ -277,7 +277,7 @@ What works on `main`:
 **Enclosure** (`enclosure/`, in use on board 1): tray (print in PETG with Arachne walls;
 every wall 1.70 below the rim, one thickness all round so no lines show up the outside; the
 board goes in by the sequence in `enclosure/README.md`, thumbing the west wall out past the
-DIP keys; on this branch the tray is cut to rev 2026.11, which has no DIP switches and no
+DIP keys; the tray is now cut to rev 2026.11, which has no DIP switches and no
 DIP window, and board 1's tray is the one at `hw-rev-a`), LC frame, LC lid, and the Pro build's light-guide lattice. Cavity 13.04 (measured mini-DIN
 height); Pro screws M2.5 × 18. Four 10 mm rubber feet sit in 0.40 pockets in the floor's
 underside, each hiding a screw counterbore. The shop's cased GLBs still show the pre-W-1036
@@ -377,8 +377,7 @@ Known issues, open:
 Linear is the queue; these are the live items.
 - `W-1091 Rev B: the main board's next revision` (rev 2026.11, with
   `W-1043 Rev B: through-hole dome LED for the power indicator` under it): designed, placed and
-  routed on branch `ww/rev-2026-11-board-updates-4f0c6a` (`docs/hardware-rev-2026-11.md`), not
-  merged. Next: Wells reviews the routing in KiCad, then the PCBWay orders (November or
+  routed (`docs/hardware-rev-2026-11.md`), on main since 2026-10-29. Next: Wells reviews the routing in KiCad, then the PCBWay orders (November or
   December): AirWriter on the combined panel, AirWriter LC on the main board alone
   (`docs/ORDER-NOTES.md`). PCBWay fits neither mini-DIN nor the PIC, and U7's socket goes on
   empty. TashTalk is no longer an add-on: at each board's bench test Wells solders J2 (and J4
@@ -599,7 +598,7 @@ Linear is the queue; these are the live items.
 hardware/airwriter/   KiCad 10 main board (sch, pcb, lib/, route.py, stitch.py, tools_pcb/)
 hardware/panel/       art panel generator (Figma SVG → panel.kicad_pcb), and the LC's
                       acrylic top laser file (svg/lc.svg → lc_top.py → airwriter-lc-top.svg)
-hardware/combined/    the snap-apart order panel and make_fab.sh; combined-fab.zip is the order
+hardware/combined/    the snap-apart order panel and make_fab.sh; combined-fab.zip and airwriter-lc-fab.zip are the orders
 firmware/             ESP-IDF 5.5 app; components/ per SPEC §3.1 plus job_pipe, led_grid, pic_prog,
                       ota_health, printer_caps, ps_page, laser …; bootloader_components/ holds the bootloader's pin clamps
                       and power-up reset

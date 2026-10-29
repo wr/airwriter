@@ -1,7 +1,7 @@
 # LC acrylic top and frame design
 
 2026-10-28. Wells chose a clean top over screws through the acrylic, then UV-cure glue
-over tape, the rev 2026.11 board (this branch has it merged) over rev A, and on 2026-10-29
+over tape, the rev 2026.11 board over rev A, and on 2026-10-29
 1 mm acrylic, the sheet his library had (it has 1 and 3 mm). The shop sells AirWriter LC as "the same black bottom case under a clear
 acrylic top with the AirWriter mark lasered into it".
 
