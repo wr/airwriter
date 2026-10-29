@@ -284,7 +284,7 @@ tray. The Lite's clear top is 1.5 mm cast acrylic, laser file
 `hardware/panel/svg/lite.svg`, Figma Frame 17: "AirWriter LC", rev 2026.11, the Pro's gold
 dots, serial and power only, all frosted; the panel's outline and Ø3.8 test hole cut), glued with
 UV-cure glue to the four leg tops of the printed Lite frame (`lite_frame.py`: the lid's legs, a
-rim and arms; spec `docs/superpowers/specs/2026-10-28-lite-acrylic-top-design.md`). Neither
+rim and arms, and a sealed tube that lets D3 out only through a slit under the slash; spec `docs/superpowers/specs/2026-10-28-lite-acrylic-top-design.md`). Neither
 is cut or printed yet. The all-printed Lite lid stays, its plunger bore now the panel's 3.8.
 
 **Printers:** built and tested on the ImageWriter II only. The original ImageWriter and the

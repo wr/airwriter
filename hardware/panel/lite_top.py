@@ -28,6 +28,9 @@ import json, math, pathlib, re
 HERE = pathlib.Path(__file__).parent
 ART = HERE / "svg" / "lite.svg"
 OUT = HERE / "airwriter-lite-top.svg"
+SLASH = HERE / "lite_slash.polys.json"
+"""The frosted power slash's outline, in mm, for the Lite frame's light tube
+(enclosure/lite_frame.py), whose slit has to be exactly under it."""
 MARGIN = 1.0  # mm of empty sheet round the part, so viewers don't clip the cut line
 CUT = "#FF0000"
 ENGRAVE = "#000000"
@@ -321,6 +324,18 @@ def build():
 """
 
 
+def slash():
+    """The art's power slash (its one tan shape) as polys.json: [{outline,
+    holes}] in mm, y down, flattened to 0.02 mm."""
+    svg = ART.read_text()
+    s = json.loads((HERE / "panel_layout.json").read_text())["panel"]["w"] / \
+        float(re.search(r'viewBox="0 0 ([\d.]+) ', svg).group(1))
+    (p,) = [p for p in read_art(svg)[1] if p["fill"] == FR4]
+    ring = flatten(p["cmds"])
+    return [dict(outline=[[round(x * s, 4), round(y * s, 4)] for x, y in ring], holes=[])]
+
+
 if __name__ == "__main__":
     OUT.write_text(build())
-    print(f"wrote {OUT.relative_to(HERE)}")
+    SLASH.write_text(json.dumps(slash()) + "\n")
+    print(f"wrote {OUT.relative_to(HERE)}, {SLASH.relative_to(HERE)}")

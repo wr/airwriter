@@ -18,6 +18,8 @@ class TestLiteTop(unittest.TestCase):
         # anything; a re-export of the art must regenerate it.
         self.assertEqual((HERE / "airwriter-lite-top.svg").read_text(), self.svg,
                          "run: python3 hardware/panel/lite_top.py")
+        self.assertEqual(json.loads(lite_top.SLASH.read_text()), lite_top.slash(),
+                         "run: python3 hardware/panel/lite_top.py")
 
     def test_cut_is_the_panel_outline_and_the_test_hole(self):
         p, g = self.lay["panel"], self.lay["grid"]

@@ -54,7 +54,10 @@ class TestLiteFrame(unittest.TestCase):
     def test_legs_are_the_lite_lids(self):
         # Same legs, inserts, screws, connector trims and foot relief as the
         # printed Lite lid: below the rim the two parts are the same solid.
-        below = _box(-5, p.BOARD_W + 5, -5, p.BOARD_L + 5, -1, TOP - p.FRAME_RIM_H - 0.1)
+        # Away from D3's light tube, which stands on the board too.
+        _, (ox0, ox1, oy0, oy1) = lattice._d3_tube_rects(lite_frame.slash_box())
+        below = (_box(-5, p.BOARD_W + 5, -5, p.BOARD_L + 5, -1, TOP - p.FRAME_RIM_H - 0.1)
+                 - _box(ox0 - 0.01, ox1 + 0.01, oy0 - 0.01, oy1 + 0.01, -2, TOP + 1))
         mine, lids = self.frame & below, case.lite_lid() & below
         self.assertAlmostEqual(_vol(mine), _vol(lids), places=2)
         self.assertAlmostEqual(_vol(mine - lids), 0.0, places=2)
@@ -78,11 +81,27 @@ class TestLiteFrame(unittest.TestCase):
             hit = _vol(band & case.connector_solid(ref))
             self.assertAlmostEqual(hit, 0.0, places=3, msg=f"rim runs into {ref}")
 
-    def test_power_slash_window_stays_open(self):
-        # Nothing between D3 and the frosted slash over it.
-        x0, x1, y0, y1 = lattice.d3_window()
-        hit = _vol(self.frame & _box(x0, x1, y0, y1, 0, TOP + 1))
-        self.assertAlmostEqual(hit, 0.0, places=3)
+    def test_power_light_leaves_only_through_the_slash(self):
+        # D3's tube: walls whole from the board to the top, a cap over the
+        # tube solid but for the slit, and the slit open the slash's shape.
+        from build123d import Face, Wire, extrude
+        (ix0, ix1, iy0, iy1), (ox0, ox1, oy0, oy1) = lattice._d3_tube_rects(
+            lite_frame.slash_box())
+        cap = p.LATTICE_WALL
+        board = case._rounded_box(p.BOARD_W, p.BOARD_L, TOP, p.BOARD_W / 2, p.BOARD_L / 2,
+                                  TOP / 2, p.CORNER_R)
+        ring = (_box(ox0, ox1, oy0, oy1, 0, TOP - cap)
+                - _box(ix0, ix1, iy0, iy1, -1, TOP)) & board
+        self.assertAlmostEqual(_vol(self.frame & ring), ring.volume, places=2,
+                               msg="a wall of D3's tube is cut through")
+        self.assertAlmostEqual(_vol(self.frame & _box(ix0, ix1, iy0, iy1, 0.01, TOP - cap - 0.01)),
+                               0.0, places=3, msg="something inside D3's tube")
+        face = Face(Wire.make_polygon([(x, y, 0) for x, y in bg.lite_slash()], close=True))
+        slit = Pos(0, 0, TOP - cap) * extrude(face, cap, dir=(0, 0, 1))
+        lid = _box(ix0, ix1, iy0, iy1, TOP - cap, TOP)
+        self.assertAlmostEqual(_vol(self.frame & lid), lid.volume - slit.volume, places=2,
+                               msg="the cap is open somewhere but the slit")
+        self.assertAlmostEqual(_vol(self.frame & slit), 0.0, places=3, msg="the slit is closed")
 
     def test_rim_runs_round_the_back_and_both_sides(self):
         # Probes mid-way along the three edges the ports don't cut.

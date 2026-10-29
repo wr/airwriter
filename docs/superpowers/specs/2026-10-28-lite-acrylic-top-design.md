@@ -45,10 +45,16 @@ One printed part, in `enclosure/lite_frame.py`:
   just inside the tray's rim. J2 and J4's hulls cut it at the front. The short piece
   between them would be loose, so it's left off.
 - **Arms:** one `FRAME_ARM_W` (2.40) wide from each leg out to the side rim, at rim depth.
-- **Clearances:** the rim and arms clear every part's STEP envelope grown by
-  `PART_CLEAR`/`PART_TOP_CLEAR` (`components.py`, as the lattice does), and stay out of
-  the power slash's window, grown by `D3_TUBE_CLEAR`, so D3's light reaches the slash.
-  On rev 2026.11 the dome LED's envelope cuts the rim where it needs to.
+- **Light tube:** under a clear top D3 would light the whole corner, so the frame carries
+  the lattice's D3 tube round the Lite's slash (`hardware/panel/lite_slash.polys.json`,
+  written by `lite_top.py` from the art): 0.80 walls from the board to the top, closed by
+  a 0.80 cap but for a slit the slash's own shape, right under the frost. D3 and R17
+  stand inside it. Its corner is cut to the board's rounded one. On rev 2026.11 the dome
+  LED (a 4.5 mm bore) is wider than this tube; its envelope will cut a wall and the
+  test that the tube is sealed will fail until the tube is widened round it, as the
+  lattice's was on that branch.
+- **Clearances:** the rim, arms and tube clear every part's STEP envelope grown by
+  `PART_CLEAR`/`PART_TOP_CLEAR` (`components.py`, as the lattice does).
 
 Printed rim-down (the glue face on the bed, the flattest face), legs up, no supports: the
 same orientation as the Lite lid, and the same printability gate.
@@ -84,4 +90,5 @@ To open, unscrew from below: the frame and acrylic come out together.
 
 - Whether the glue cures through this acrylic, and whether the acrylic then sits flush.
 - How the black rim and the two front leg pads read through the acrylic.
-- Whether the frosted slash lights well enough from D3 with no tube.
+- How brightly the slash glows through the slit, and whether the frost scatters light
+  along the sheet into the other frosted marks.

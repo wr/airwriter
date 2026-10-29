@@ -301,6 +301,14 @@ def panel_dots() -> list[dict]:
     return out
 
 
+def lite_slash() -> list[tuple[float, float]]:
+    """The power slash frosted into the Lite's acrylic top
+    (hardware/panel/lite_slash.polys.json, written by lite_top.py from the
+    Lite's own art), as a case-frame outline."""
+    (poly,) = json.loads((PANEL_DIR / "lite_slash.polys.json").read_text())
+    return [panel_to_case(px, py) for px, py in poly["outline"]]
+
+
 def fr4_windows() -> list[tuple[float, float, float, float]]:
     """The panel's bare-FR4 windows (hardware/panel/fr4.polys.json) as case-frame
     boxes (x0, x1, y0, y1). Rev A has one, over the power LED D3."""

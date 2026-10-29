@@ -120,12 +120,13 @@ def d3_window() -> tuple[float, float, float, float]:
     return hits[0]
 
 
-def _d3_tube_rects() -> tuple[tuple[float, float, float, float],
-                              tuple[float, float, float, float]]:
-    """(interior, outer) of the D3 tube as (x0, x1, y0, y1). The outer runs on
-    to the board edge on any side within 1 mm of it, so the edge ridge has a
-    wall to hang from at the corner."""
-    x0, x1, y0, y1 = d3_window()
+def _d3_tube_rects(window=None) -> tuple[tuple[float, float, float, float],
+                                         tuple[float, float, float, float]]:
+    """(interior, outer) of the D3 tube as (x0, x1, y0, y1), round `window`
+    (the panel's FR4 window by default). The outer runs on to the board edge on
+    any side within 1 mm of it, so the edge ridge has a wall to hang from at
+    the corner."""
+    x0, x1, y0, y1 = window or d3_window()
     c, w = p.D3_TUBE_CLEAR, p.LATTICE_WALL
     inner = (x0 - c, x1 + c, y0 - c, y1 + c)
     ox0, ox1, oy0, oy1 = inner[0] - w, inner[1] + w, inner[2] - w, inner[3] + w
