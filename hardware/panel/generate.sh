@@ -14,5 +14,7 @@ python3 svg2poly.py svg/panel.svg "$S" "#dda857" gold.polys.json
 # background is #111111 too, and svg2poly drops it by its viewbox-sized bbox.
 python3 svg2poly.py svg/panel.svg "$S" "white,#ffffff,#111111" silk.polys.json
 python3 svg2poly.py svg/panel.svg "$S" "#e7ba9b" fr4.polys.json
+# The LC's acrylic top, from its own art (svg/lc.svg).
+python3 lc_top.py
 python3 floors.py
 "$KIPY" emit_board.py

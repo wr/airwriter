@@ -1,4 +1,4 @@
-"""Write the two parts to out/ as STEP (for the KiCad interference check) and
+"""Write the parts to out/ as STEP (for the KiCad interference check) and
 STL (to slice)."""
 import pathlib
 import sys
@@ -7,12 +7,14 @@ from build123d import export_step, export_stl
 
 import case
 import lattice
+import lc_frame
 
 OUT = pathlib.Path(__file__).resolve().parent / "out"
 
 PARTS = {
     "airwriter-tray": case.tray,
-    "airwriter-lite-lid": case.lite_lid,
+    "airwriter-lc-lid": case.lc_lid,
+    "airwriter-lc-frame": lc_frame.lc_frame,
     "airwriter-lattice": lattice.lattice,
 }
 

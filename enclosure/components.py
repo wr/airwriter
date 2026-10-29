@@ -28,10 +28,10 @@ MODEL_DIR = os.environ.get(
     "/Applications/KiCad/KiCad.app/Contents/SharedSupport/3dmodels")
 STEP = pathlib.Path(__file__).resolve().parent / "out" / "components.step"
 
-NO_MODEL = {"S1": 9.41, "SW1": 3.50}
+NO_MODEL = {"S1": 9.41}
 """Top above the board for parts with no 3D model, boxed from their courtyard.
-S1: the DP-08RP body top (test_case / the shop's dp08rp.mjs). SW1: its
-footprint descr, 6.2 x 2.55 x 3.5."""
+S1 (rev A's DIP switches): the DP-08RP body top (test_case / the shop's
+dp08rp.mjs)."""
 
 NO_MODEL_LIB = {"LED_SK6812MINI_PLCC4_3.5x3.5mm_P1.75mm": 1.60}
 """KiCad 10 ships no SK6812MINI model; 1.60 is conservative over the
@@ -40,7 +40,9 @@ NO_MODEL_LIB = {"LED_SK6812MINI_PLCC4_3.5x3.5mm_P1.75mm": 1.60}
 TOP_OVERRIDE = {"U7": 9.00}
 """U7's model is the empty DIP socket; the PIC seated in it stands ~9 mm."""
 
-FLAT = re.compile(r"(H|TP)\d+")
+FLAT = re.compile(r"(H|TP|LOGO)\d+")
+"""Footprints with nothing standing on the board: mounting holes, test pads,
+and silkscreen art (rev 2026.11's OSHW mark, LOGO1)."""
 BAND = 1.0
 STEPPED_ABOVE = 2.5
 """Parts taller than this get one band per BAND mm; shorter ones one box."""
@@ -136,20 +138,24 @@ def envelopes() -> dict[str, list[Band]]:
     if _ENV is not None:
         return _ENV
     fps = bg._all()
-    stem = {r: _norm(pathlib.Path(f.model).stem) if f.model else None
-            for r, f in fps.items()}
+    # A footprint may carry more than one model (D3: LED and spacer); each STEP
+    # body is matched to a footprint by its model's name, and a footprint's
+    # bodies all add to its envelope.
+    stems = {r: [_norm(pathlib.Path(m).stem) for m in (f.model, *f.extra_models) if m]
+             for r, f in fps.items()}
     env: dict[str, list[Band]] = {}
-    used: set[str] = set()
+    used: set[tuple[str, str]] = set()
     for child in import_step(str(export())).children:
         bb = child.bounding_box()
         cx, cy = (bb.min.X + bb.max.X) / 2, -(bb.min.Y + bb.max.Y) / 2
+        label = _norm(child.label)
         cands = sorted((math.hypot(f.x - cx, f.y - cy), r) for r, f in fps.items()
-                       if stem[r] == _norm(child.label) and r not in used)
+                       if label in stems[r] and (r, label) not in used)
         if not cands:
             raise RuntimeError(f"STEP body {child.label!r} matches no footprint")
         ref = cands[0][1]
-        used.add(ref)
-        env[ref] = _bands(child)
+        used.add((ref, label))
+        env[ref] = sorted(env.get(ref, []) + _bands(child), key=lambda b: b[4])
     for ref, f in fps.items():
         if ref in env or FLAT.fullmatch(ref) or f.layer != "F.Cu":
             continue

@@ -8,9 +8,9 @@
 > rulings. The **Global Constraints** block just below is the live summary; trust it, not
 > the task bodies, for current numbers.
 
-**Goal:** A parametric build123d model in `enclosure/` that exports a printable tray shared by both AirWriter builds and a Lite lid that replaces the dot-grid art panel, with every board-derived dimension read out of `airwriter.kicad_pcb` at build time.
+**Goal:** A parametric build123d model in `enclosure/` that exports a printable tray shared by both AirWriter builds and an LC lid that replaces the dot-grid art panel, with every board-derived dimension read out of `airwriter.kicad_pcb` at build time.
 
-**Architecture:** Three Python modules and a shell driver. `board_geom.py` parses the KiCad board and hands back positions in a case-local right-handed frame. `params.py` holds the numbers this project *chooses* (wall, floor, clearances), each commented with where it came from. `case.py` builds two solids — `tray()` and `lite_lid()` — using `board_geom` for anything the board decides and importing the real connector STEP files to cut the port openings, so no connector diameter is ever guessed. `build.sh` exports STEP and STL and runs the printability assertions.
+**Architecture:** Three Python modules and a shell driver. `board_geom.py` parses the KiCad board and hands back positions in a case-local right-handed frame. `params.py` holds the numbers this project *chooses* (wall, floor, clearances), each commented with where it came from. `case.py` builds two solids — `tray()` and `lc_lid()` — using `board_geom` for anything the board decides and importing the real connector STEP files to cut the port openings, so no connector diameter is ever guessed. `build.sh` exports STEP and STL and runs the printability assertions.
 
 **Tech Stack:** Python 3.14, build123d 0.11.1 (OCCT via cadquery-ocp), `unittest` (matching `hardware/panel/test_*.py` — the repo has no pytest), plain `sh` for the driver.
 
@@ -24,7 +24,7 @@
 - **Floor 2.40 mm. Board standoffs 3.00 mm. PCB 1.60 mm. Panel/lid 1.60 mm.** (standoff raised from 2.00 during Task 5: J2/J4's pins measure 2.150 mm below the board)
 - **Board pocket clearance: 0.20 mm per side.**
 - **Print process assumed: FDM, 0.4 mm nozzle, 0.2 mm layers, tray printed floor-down, no supports.**
-- **Screws: M2.5. Pro M2.5 × 20 into the panel's SMTSO nuts; Lite M2.5 × 10 into heat-set inserts at the bottom of each lid leg.**
+- **Screws: M2.5. Pro M2.5 × 20 into the panel's SMTSO nuts; LC M2.5 × 10 into heat-set inserts at the bottom of each lid leg.**
 - **Never modify anything under `hardware/`.** This project reads the board; it does not write it.
 - Board file is at `hardware/airwriter/airwriter.kicad_pcb`; connector STEPs at `hardware/airwriter/lib/airwriter.3dshapes/`.
 
@@ -450,7 +450,7 @@ J2/J4/S1/SW3/U7."""
 
 PCB = 1.60
 PANEL = 1.60
-"""The art panel, and the Lite lid that stands in for it."""
+"""The art panel, and the LC lid that stands in for it."""
 
 CAVITY = 14.34
 """Board top face to lid underside. NOT a free variable: the mini-DIN shells
@@ -471,7 +471,7 @@ SCREW_HEAD_D = 5.00
 SCREW_HEAD_DEPTH = 1.40
 
 INSERT_D = 3.60
-"""Bore for an M2.5 brass heat-set insert in the Lite lid's legs. Final MPN is
+"""Bore for an M2.5 brass heat-set insert in the LC lid's legs. Final MPN is
 an open item in the spec; re-cut this if the chosen insert differs."""
 
 INSERT_DEPTH = 4.50
@@ -491,7 +491,7 @@ RESET_PINHOLE_D = 1.20
 """East wall, on SW1's actuator axis."""
 
 PLUNGER_BORE_D = 2.25
-"""SW3's test plunger. Matches the art panel's own 2.25mm NPTH so the Lite lid
+"""SW3's test plunger. Matches the art panel's own 2.25mm NPTH so the LC lid
 behaves identically -- the plunger is <= 2.0mm."""
 
 DIP_SLOT_Z0 = 7.60
@@ -617,7 +617,7 @@ Expected: FAIL — `ModuleNotFoundError: No module named 'case'`
 Create `enclosure/case.py`:
 
 ```python
-"""The AirWriter enclosure: a tray shared by both builds, and a Lite lid.
+"""The AirWriter enclosure: a tray shared by both builds, and an LC lid.
 
 Everything is modelled in the case frame (see board_geom): X=0 is the west
 wall's inner face, Y=0 is the front (port) wall's inner face, Z=0 is the
@@ -1043,7 +1043,7 @@ def carveouts() -> Part:
 
 
 def tray() -> Part:
-    """The finished tray, shared by Pro and Lite."""
+    """The finished tray, shared by Pro and LC."""
     body = shell() + standoffs()
     return body - screw_holes() - port_cutouts() - dip_slot() \
         - reset_pinhole() - carveouts()
@@ -1066,7 +1066,7 @@ git commit -m "Enclosure: DIP slot, reset pinhole, carve-outs, finished tray"
 
 ---
 
-### Task 7: The Lite lid
+### Task 7: The LC lid
 
 **Files:**
 - Modify: `enclosure/case.py`
@@ -1074,17 +1074,17 @@ git commit -m "Enclosure: DIP slot, reset pinhole, carve-outs, finished tray"
 
 **Interfaces:**
 - Consumes: `params`, `board_geom.mount_holes()`, `board_geom.footprint("SW3")`
-- Produces: `lite_lid() -> Part`
+- Produces: `lc_lid() -> Part`
 
 - [ ] **Step 1: Write the failing test**
 
 Append to `enclosure/test_case.py`, above the `if __name__` block:
 
 ```python
-class TestLiteLid(unittest.TestCase):
+class TestLCLid(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.lid = case.lite_lid()
+        cls.lid = case.lc_lid()
 
     def test_is_one_valid_solid(self):
         self.assertTrue(self.lid.is_valid)
@@ -1125,7 +1125,7 @@ class TestLiteLid(unittest.TestCase):
 - [ ] **Step 2: Run the test and watch it fail**
 
 Run: `cd ~/Projects/airwriter/enclosure && .venv/bin/python -m unittest -v test_case`
-Expected: FAIL — `AttributeError: module 'case' has no attribute 'lite_lid'`
+Expected: FAIL — `AttributeError: module 'case' has no attribute 'lc_lid'`
 
 - [ ] **Step 3: Implement**
 
@@ -1133,10 +1133,10 @@ Add to `enclosure/case.py`:
 
 ```python
 LEG_D = 6.00
-"""Lite lid leg diameter -- enough plastic round a 3.60 insert bore."""
+"""LC lid leg diameter -- enough plastic round a 3.60 insert bore."""
 
 
-def lite_lid() -> Part:
+def lc_lid() -> Part:
     """The panel stand-in for boards built without the dot-grid art panel.
 
     A plate the panel's size and thickness, seating in the same place, on four
@@ -1177,7 +1177,7 @@ Expected: PASS, 24 tests.
 ```bash
 cd ~/Projects/airwriter
 git add enclosure/case.py enclosure/test_case.py
-git commit -m "Enclosure: Lite lid"
+git commit -m "Enclosure: LC lid"
 ```
 
 ---
@@ -1191,8 +1191,8 @@ git commit -m "Enclosure: Lite lid"
 - Create: `enclosure/README.md`
 
 **Interfaces:**
-- Consumes: `case.tray()`, `case.lite_lid()`
-- Produces: `out/airwriter-tray.step`, `out/airwriter-tray.stl`, `out/airwriter-lite-lid.step`, `out/airwriter-lite-lid.stl`
+- Consumes: `case.tray()`, `case.lc_lid()`
+- Produces: `out/airwriter-tray.step`, `out/airwriter-tray.stl`, `out/airwriter-lc-lid.step`, `out/airwriter-lc-lid.stl`
 
 - [ ] **Step 1: Write the failing printability test**
 
@@ -1259,7 +1259,7 @@ class TestTray(unittest.TestCase):
 class TestLid(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.lid = case.lite_lid()
+        cls.lid = case.lc_lid()
 
     def test_single_watertight_solid(self):
         self.assertTrue(self.lid.is_valid)
@@ -1284,7 +1284,7 @@ if __name__ == "__main__":
 
 Run: `cd ~/Projects/airwriter/enclosure && .venv/bin/python -m unittest -v test_printable`
 
-Expected: FAIL. Do not guess at the fix — the failure prints the X/Y/Z and area of every offending face. For each one, go back to the function in `case.py` that made it and either cone the transition (as `screw_holes()` already does) or accept it by proving it is on the build plate. The two likely offenders are the top of each Lite-lid leg where it meets the plate (legitimate — it is a fillet candidate, not a bridge, because the leg is *under* the plate and prints plate-down) and any flat left by the USB-C chamfer cone.
+Expected: FAIL. Do not guess at the fix — the failure prints the X/Y/Z and area of every offending face. For each one, go back to the function in `case.py` that made it and either cone the transition (as `screw_holes()` already does) or accept it by proving it is on the build plate. The two likely offenders are the top of each LC-lid leg where it meets the plate (legitimate — it is a fillet candidate, not a bridge, because the leg is *under* the plate and prints plate-down) and any flat left by the USB-C chamfer cone.
 
 - [ ] **Step 3: Fix `case.py` until the gate passes**
 
@@ -1309,7 +1309,7 @@ OUT = pathlib.Path(__file__).resolve().parent / "out"
 
 PARTS = {
     "airwriter-tray": case.tray,
-    "airwriter-lite-lid": case.lite_lid,
+    "airwriter-lc-lid": case.lc_lid,
 }
 
 
@@ -1359,7 +1359,7 @@ Create `enclosure/README.md`:
 ```markdown
 # Enclosure (enclosure/out/*.stl)
 
-Two printed parts. The **tray** is shared by both builds. The **Lite lid**
+Two printed parts. The **tray** is shared by both builds. The **LC lid**
 replaces the dot-grid art panel on boards built without it.
 
     ./build.sh          # runs the tests, then writes out/*.{step,stl}
@@ -1381,7 +1381,7 @@ downward-facing flat, so if it passes, it slices.
 | Build | Screws | Into |
 |---|---|---|
 | Pro | 4 × M2.5 × 20 | the art panel's PEM SMTSO-M25-3ET blind nuts |
-| Lite | 4 × M2.5 × 8 | M2.5 brass heat-set inserts in the lid legs |
+| LC | 4 × M2.5 × 8 | M2.5 brass heat-set inserts in the lid legs |
 
 Press the four inserts into the **bottom** of the lid's legs before assembly.
 Rubber feet go on the floor's underside, over the screw counterbores.
@@ -1472,6 +1472,6 @@ cd ~/Projects/shop && git add public/models/airwriter-case.glb && \
 
 ## Self-review notes
 
-- **Spec coverage.** §1 parts → Tasks 3–7. §2 stack → Task 2 (`test_z_landmarks`). §3 uniform wall → Task 2 + `test_walls_are_at_least_2_80_thick`. §4 front wall → Task 5; west/east/carve-outs → Task 6; top seat → Task 3 + Task 7. §5 fastening → Task 4 (Pro) and Task 7 (Lite inserts). §6 source layout → Tasks 1, 2, 8. §7 verification → Task 8's gate plus the README's first-print order; the KiCad interference check is manual and the README says so. §8 shop GLB → Task 9. §9 out-of-scope is honoured: no task touches `hardware/`.
+- **Spec coverage.** §1 parts → Tasks 3–7. §2 stack → Task 2 (`test_z_landmarks`). §3 uniform wall → Task 2 + `test_walls_are_at_least_2_80_thick`. §4 front wall → Task 5; west/east/carve-outs → Task 6; top seat → Task 3 + Task 7. §5 fastening → Task 4 (Pro) and Task 7 (LC inserts). §6 source layout → Tasks 1, 2, 8. §7 verification → Task 8's gate plus the README's first-print order; the KiCad interference check is manual and the README says so. §8 shop GLB → Task 9. §9 out-of-scope is honoured: no task touches `hardware/`.
 - **Open items carried, not resolved.** Insert MPN (`INSERT_D`/`INSERT_DEPTH` are re-cuttable constants), rubber foot, USB-C chamfer (`USBC_CHAMFER`, tuned on the first print). Each is a named constant rather than a buried literal.
 - **The two soft numbers**, both flagged at their use site: `DIP_SLOT_Z0/Z1` (from HANDOFF's 8.11–9.01 tip travel, no STEP to boolean against) and `reset_pinhole()`'s Z (SW1 has only a `.wrl`). Everything else is either read from the board or booleaned from vendor geometry.

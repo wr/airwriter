@@ -31,7 +31,7 @@ that. Under a third of FLOOR and of WALL, so neither gets thin."""
 TOP_CHAMFER = 0.40
 """45-degree chamfer around the tray's top outside edge, 2 layers. Added
 2026-10-13 (Wells: "a small top chamfer"). Outside edge only: the pocket edge
-the panel / Lite lid sits against stays sharp, so no groove opens round the
+the panel / LC lid sits against stays sharp, so no groove opens round the
 panel. Sized by the J2/J4 lintels, whose openings top out 1.19mm under
 Z_WALL_TOP: a 45-degree chamfer takes its own depth off a lintel at the
 wall's outer face, so 0.40 leaves 0.79mm there, where matching
@@ -59,7 +59,7 @@ case.standoffs()."""
 
 PCB = 1.60
 PANEL = 1.60
-"""The art panel, and the Lite lid that stands in for it."""
+"""The art panel, and the LC lid that stands in for it."""
 
 MINIDIN_TOP = 13.04
 """Top of J2/J4's shells above the board's top face, MEASURED on rev A
@@ -179,13 +179,58 @@ STANDOFF_D = 6.00
 the board and to leave a printable wall around the 2.80 clearance bore."""
 
 LEG_D = 6.00
-"""Lite lid leg diameter -- enough plastic round a 3.60 insert bore."""
+"""LC lid leg diameter -- enough plastic round a 3.60 insert bore."""
 
 INSERT_D = 3.60
-"""Bore for an M2.5 brass heat-set insert in the Lite lid's legs. Final MPN is
+"""Bore for an M2.5 brass heat-set insert in the LC lid's legs. Final MPN is
 an open item in the spec; re-cut this if the chosen insert differs."""
 
 INSERT_DEPTH = 4.50
+
+ACRYLIC = 1.00
+"""The LC's clear cast-acrylic top (hardware/panel/airwriter-lc-top.svg):
+1 mm, the sheet Wells's library had (2026-10-29; it has 1 and 3, and 3 would
+stand 1.5 proud of the rim with no room to sink it past the mini-DINs). The
+frame stands it so its face is ACRYLIC_FACE_UNDER under the rim, whatever its
+thickness; only a 1.50 sheet would also rest on J2/J4's shells."""
+
+ACRYLIC_FACE_UNDER = 0.10
+"""How far the acrylic's face sits under the tray's rim: close enough to read
+flush, never proud."""
+
+ACRYLIC_UNDERSIDE = CAVITY + PANEL - ACRYLIC_FACE_UNDER - ACRYLIC
+"""The acrylic's underside above the board: 13.54 for 1 mm, 0.50 over the
+shells."""
+
+GLUE_LINE = 0.10
+"""The UV-cure glue between the LC frame's leg tops and the acrylic (Wells,
+2026-10-28, over 0.50mm VHB tape). The frame stops GLUE_LINE under
+ACRYLIC_UNDERSIDE. A print up to 0.10 tall still leaves the face no prouder
+than the rim; one short leaves the glue more to fill."""
+
+FRAME_RIM_IN = 1.50
+"""How far inside the board edge the LC frame's rim reaches. Outward it runs
+to RIDGE_CLEAR short of the pocket wall, as the lattice's lip does."""
+
+FRAME_RIM_H = 2.50
+"""The LC frame's rim and arms, deep: a rim RIDGE_H (1.50) deep was a wire
+loop 104mm long until the acrylic was glued on; 2.50 is (2.5/1.5)^3, 4.6x,
+as stiff. On rev A it stops 0.63 above S1's body plus PART_TOP_CLEAR (1 mm
+acrylic), the tallest part under it but the mini-DINs, which cut it."""
+
+FRAME_ARM_W = 2.40
+"""Each LC frame leg's arm out to the side rim: six 0.4mm lines."""
+
+FRAME_CAP = 0.60
+"""The cap over the LC frame's D3 tube, three 0.2mm layers. Rev 2026.11's
+LED stands to 11.85; under 1 mm acrylic the cap's underside is 0.99 over
+it (0.49 under 1.5)."""
+
+FRAME_TUBE_MIN_WALL = 0.45
+"""The thinnest wall of the LC frame's D3 tube, one printed line: on rev
+2026.11 the LED's 4 mm spacer stands 0.38 from the board's east edge, and the
+tube runs out to the rim's outer line there, as the lattice's tube was let do
+on that branch."""
 
 # --- openings --------------------------------------------------------------
 
@@ -198,9 +243,12 @@ RESET_PINHOLE_D = 0.80
 to make it perfectly round, but i just need a small dot to serve as a pilot
 hole" (Wells, 2026-10-17). Was 1.20, printed as a hole for the paperclip."""
 
-PLUNGER_BORE_D = 2.25
-"""SW3's test plunger. Matches the art panel's own 2.25mm NPTH so the Lite lid
-behaves identically -- the plunger is <= 2.0mm."""
+PLUNGER_BORE_D = 3.80
+"""SW3's test plunger, through the LC lid. Matches the art panel's 3.8mm
+NPTH (hardware/panel/panel_layout.py TEST_HOLE_DIA) and the acrylic top's hole,
+so the three tops behave alike: the plunger measures 3.1-3.2 tapering to 3.5,
+and stands 0.2 E / 0.2 S of the model's axis (TEST_PLUNGER_OFFSET). It was
+2.25, from the panel's first switch, and stopped this plunger."""
 
 DIP_SLOT_Z0 = 4.60
 DIP_SLOT_Z1 = 9.90
@@ -230,7 +278,7 @@ before that, 7.60-9.50, was only 1.90mm and could not be worked with a tool.
 
 FOOT_RELIEF = 0.60
 FOOT_RELIEF_H = 1.60
-"""The Lite lid's legs are trimmed by FOOT_RELIEF for their first
+"""The LC lid's legs are trimmed by FOOT_RELIEF for their first
 FOOT_RELIEF_H, so a leg does not stand on a small SMD part crowding a
 mounting hole. C22 (a 0603, 1.24mm tall) reaches within 2.844mm of H4's
 centre against the 3.00mm leg radius; 0.60 of relief clears it by 0.44.
@@ -263,32 +311,13 @@ as the side-surface glitch. Raised to 0.80 so there is real margin (0.15mm)
 outside each key's own edge once DIP_KEY_HALF_WIDTH is subtracted first --
 see case.dip_slot()."""
 
-RESET_ACTUATOR_Z = 3.5 / 2
-"""Height of SW1's (Panasonic EVQP44B3M side-press) actuator axis above the
-board's top face. SW1 has no 3D model placed on the board, so this can't be
-booleaned from a STEP; its footprint's own descr instead records the body as
-6.2 x 2.55 x 3.5mm. A side-press switch's SMD body sits flush on the board
-like any other SMD part (Z=0 at its base), and the side button is centred on
-the body's own height, so the axis lands at half of 3.5mm -- a derivation
-from the footprint descr, unverified against a Panasonic mechanical drawing
-(not in this repo). This is consistent with (NOT confirmed by)
-EVQP44B3M_SidePress.wrl (hand-authored, not wired to the footprint -- OCCT
-can't import .wrl anyway): its actuator Transform's Z translation is 0.689
-(the file's own header: values are mm/2.54) = 1.7499mm, matching to within
-the file's own rounding. That agreement is NOT independent evidence -- the
-WRL was hand-written from measured dimensions with the actuator's Z set
-equal to the body's centre Z, the same "centred on the body" assumption used
-above, so the two were guaranteed to agree to four decimal places regardless
-of whether the assumption is right. The number (1.75mm) stands; task 6 report
-has the full derivation and the ruling that struck the "independently
-confirmed" framing.
-
-RULING 1 (task-6-report.md) drops carveouts() and its CARVEOUT_R/
-CARVEOUT_CLEAR params: the tray's interior is one open prism, and U4/R3/U9
-all sit well inboard of every wall, so subtracting cylinders there would
-subtract air from air. test_case.TestSideFeaturesAndTray covers the
-requirement's real intent instead -- see its
-test_internal_parts_keep_at_least_1mm_of_air_to_the_tray."""
+RESET_ACTUATOR_Z = 1.90
+"""Height of SW1's button axis above the board's top face. Rev 2026.11's SW1 is
+the BZCN TSB001A3518A (LCSC C2888448): its 3.0 x 1.5 mm button spans z
+1.15-2.65 in LCSC's model, which hardware/airwriter/lib/make_sw1_model.py
+redraws. Rev A's Panasonic EVQP44B3M put it at 1.75 (half its 3.5 mm body,
+derived, never measured); a rev A tray is in git history at the hw-rev-a tag.
+Unmeasured on a real TSB001A3518A."""
 
 # --- derived ---------------------------------------------------------------
 

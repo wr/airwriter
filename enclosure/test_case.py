@@ -446,7 +446,7 @@ class TestPorts(unittest.TestCase):
                     f"there (full tray), need >= {min_thickness}mm")
 
     def test_no_cut_breaks_the_top_rim(self):
-        # The rim is what the panel / Lite lid sits against and the first
+        # The rim is what the panel / LC lid sits against and the first
         # thing anyone sees. The old 45-degree print roofs over J2/J4 peaked
         # at Z 14.55, above Z_WALL_TOP (14.34), and notched triangles out of
         # it; the averaged band probes above let that through. Nothing the
@@ -521,11 +521,30 @@ class TestPorts(unittest.TestCase):
             msg=f"port_cutouts() removes {vol:.4f}mm^3 from the floor slab")
 
 
+def _has_s1():
+    import board_geom as bg
+    try:
+        bg.footprint("S1")
+        return True
+    except KeyError:
+        return False
+
+
 class TestSideFeaturesAndTray(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.t = case.tray()
 
+    @unittest.skipIf(_has_s1(), "a board with DIP switches")
+    def test_no_dip_slot_without_dip_switches(self):
+        # Rev 2026.11 has no S1: the west wall stays whole where rev A's keys
+        # came through (rev A's slot: z 4.60-9.90 round KiCad y 134.32).
+        from build123d import Box, Pos
+        self.assertIsNone(case.dip_slot())
+        probe = Pos(-p.WALL / 2, p.BOARD_L - (134.32 - 60.0), 7.25) * Box(0.4, 10.0, 4.0)
+        self.assertAlmostEqual((self.t & probe).volume, probe.volume, places=3)
+
+    @unittest.skipUnless(_has_s1(), "no DIP switches on this board")
     def test_dip_slot_is_in_the_west_wall_at_the_key_band(self):
         import board_geom as bg
         bb = case.dip_slot().bounding_box()
@@ -548,6 +567,7 @@ class TestSideFeaturesAndTray(unittest.TestCase):
         self.assertAlmostEqual(bb.min.Y, lo - edge, places=2)
         self.assertAlmostEqual(bb.max.Y, hi + edge, places=2)
 
+    @unittest.skipUnless(_has_s1(), "no DIP switches on this board")
     def test_dip_slot_stays_close_to_the_switch_body_top(self):
         # S1's moulded body tops out 9.41 above the board (dp08rp.mjs / the
         # footprint descr's 9.41mm height). A slot reaching past that opens the
@@ -559,6 +579,7 @@ class TestSideFeaturesAndTray(unittest.TestCase):
         self.assertLessEqual(bb.max.Z, S1_BODY_TOP + 0.5,
                              f"slot top {bb.max.Z:.2f} is more than 0.5 above S1's body top")
 
+    @unittest.skipUnless(_has_s1(), "no DIP switches on this board")
     def test_dip_keys_have_room_to_rock(self):
         # The keys and their levers span z 5.6-9.01. On the first print a slot
         # 0.4 below and 0.3 above them pinned them. Ask for 0.85 each way.
@@ -567,6 +588,7 @@ class TestSideFeaturesAndTray(unittest.TestCase):
         self.assertGreaterEqual(KEYS_BOTTOM - bb.min.Z, 0.85)
         self.assertGreaterEqual(bb.max.Z - KEYS_TOP, 0.85)
 
+    @unittest.skipUnless(_has_s1(), "no DIP switches on this board")
     def test_dip_slot_clears_the_whole_key_lever(self):
         # The levers run from z 5.8 (the lip) to 9.01 (the key top), inside the
         # switch's own 5.6-9.0 recess. A slot that starts above the lip cuts the
@@ -576,6 +598,7 @@ class TestSideFeaturesAndTray(unittest.TestCase):
         self.assertLessEqual(bb.min.Z, LEVER_BOTTOM, "slot starts above the lever lip")
         self.assertGreaterEqual(bb.max.Z, KEY_TOP, "slot ends below the key top")
 
+    @unittest.skipUnless(_has_s1(), "no DIP switches on this board")
     def test_dip_slot_fully_contains_the_key_band_with_real_margin(self):
         # Would have caught the outer keys sitting inside the wall
         # material: build the KEY BAND itself (pad column centres +-
@@ -624,6 +647,7 @@ class TestSideFeaturesAndTray(unittest.TestCase):
             "old margin=0.60 was expected to fail to clear the key band, "
             "but didn't reproduce the bug")
 
+    @unittest.skipUnless(_has_s1(), "no DIP switches on this board")
     def test_dip_slot_spans_the_wall_with_a_1mm_inward_overshoot(self):
         # RULING 2 (task-6-report.md): the brief's expression had a stray
         # "- 0.5" that cancelled the +0.5, leaving the slot centred on the
@@ -651,18 +675,13 @@ class TestSideFeaturesAndTray(unittest.TestCase):
         self.assertLessEqual(p.RESET_PINHOLE_D, 0.80)
         self.assertGreaterEqual(p.RESET_PINHOLE_D, 0.60)
 
-    def test_reset_pinhole_z_matches_sw1s_derived_actuator_height(self):
-        # SW1 (Panasonic EVQP44B3M side-press, see task-6-report.md) has no
-        # 3D model on the board, so its actuator axis can't be booleaned
-        # from a placed STEP. Its footprint's own descr records the body as
-        # 6.2 x 2.55 x 3.5mm; a side-press body sits flush on the board like
-        # any SMD part (Z=0 at its base), so its actuator is centred at half
-        # the body height above the board's top face. The brief's guess
-        # ((DIP_SLOT_Z0+DIP_SLOT_Z1)/2 - 5.0 = 3.55) is a different number
-        # from that derivation and must not silently come back.
+    def test_reset_pinhole_z_is_on_sw1s_button(self):
+        # Rev 2026.11's SW1, the BZCN TSB001A3518A, has a 3.0 x 1.5 mm button
+        # 1.15-2.65 above the board (LCSC's model, lib/make_sw1_model.py):
+        # the pinhole aims at its middle.
         bb = case.reset_pinhole().bounding_box()
         z_centre = (bb.min.Z + bb.max.Z) / 2
-        self.assertAlmostEqual(z_centre, 3.5 / 2, places=2)
+        self.assertAlmostEqual(z_centre, 1.90, places=2)
 
     def test_tray_is_one_valid_watertight_solid(self):
         self.assertTrue(self.t.is_valid)
@@ -730,6 +749,8 @@ class TestThinWalls(unittest.TestCase):
     def setUpClass(cls):
         import board_geom as bg
         cls.t = case.tray()
+        if not _has_s1():
+            return
         fp = bg.footprint("S1")
         pad_xs = [lx for lx, _ in bg.pad_positions("S1")]
         ys = [bg.to_case(*bg.local_to_board(fp, lx, 0.0))[1]
@@ -768,6 +789,7 @@ class TestThinWalls(unittest.TestCase):
             self.assertAlmostEqual(self._wall(side, s, p.Z_LID_UNDER - run - 0.3, h=0.2),
                                    p.THIN_WALL, places=2, msg=side)
 
+    @unittest.skipUnless(_has_s1(), "no DIP switches on this board")
     def test_keys_clear_the_wall_at_rest(self):
         # The keys' tips stand into the thin wall, inside the DIP
         # window: nothing may touch them once the wall springs back.
@@ -836,10 +858,10 @@ class TestFeet(unittest.TestCase):
         self.assertAlmostEqual(p.SCREW_HEAD_DEPTH - p.FOOT_POCKET_DEPTH, 0.90, places=6)
 
 
-class TestLiteLid(unittest.TestCase):
+class TestLCLid(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.lid = case.lite_lid()
+        cls.lid = case.lc_lid()
 
     def test_is_one_valid_solid(self):
         self.assertTrue(self.lid.is_valid)
@@ -865,7 +887,7 @@ class TestLiteLid(unittest.TestCase):
         # built plate geometry directly (not just each against p.Z_WALL_TOP
         # separately, which both derive from the same constant and so can't
         # catch one of the two code paths drifting from the other). The
-        # spec's promise is that Pro and Lite look identical from outside --
+        # spec's promise is that Pro and LC look identical from outside --
         # this is that promise, checked on the actual solids.
         wall_top = case.shell().bounding_box().max.Z
         lid_top = self.lid.bounding_box().max.Z
@@ -970,7 +992,7 @@ class TestCornerRounding(unittest.TestCase):
     """Task 10: the board (hardware/airwriter/airwriter.kicad_pcb) and the
     art panel it shares an outline with both have R2.0 corners, not square
     ones (board_geom.corner_radius()). shell()'s exterior is rounded at
-    EXT_R, its pocket at POCKET_R, and lite_lid()'s plate at CORNER_R --
+    EXT_R, its pocket at POCKET_R, and lc_lid()'s plate at CORNER_R --
     the panel's own outline, not the pocket's (Finding 1: cutting the plate
     at POCKET_R/POCKET_W/POCKET_L, the pocket's own size, leaves it zero
     clearance to seat in) (params.py derives all three from CORNER_R). Only
@@ -990,14 +1012,14 @@ class TestCornerRounding(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.shell = case.shell()
-        cls.lid = case.lite_lid()
+        cls.lid = case.lc_lid()
 
     def _assert_solid_corner_rounded(self, part, x0, y0, x1, y1, radius, z,
                                       label):
         """For a SOLID part whose outer footprint is x0..x1, y0..y1: the
         square-corner wedge a fillet cuts away must be empty, and the
         fillet's own rounded body must be solid. Used for the tray's
-        exterior and the lite lid's plate -- both solids with a rounded
+        exterior and the LC lid's plate -- both solids with a rounded
         outer edge."""
         from build123d import Box, Pos
         for cx, cy, sx, sy in _corners(x0, y0, x1, y1):
@@ -1071,7 +1093,7 @@ class TestCornerRounding(unittest.TestCase):
                 msg=f"pocket corner ({cx:.2f},{cy:.2f}): {vol:.4f}mm^3 of "
                     "material inside the pocket's own rounded region")
 
-    def test_lite_lid_plate_corners_are_rounded_at_corner_r(self):
+    def test_lc_lid_plate_corners_are_rounded_at_corner_r(self):
         # The plate is cut at the panel's OWN outline (BOARD_W x BOARD_L,
         # CORNER_R), not the pocket's (Finding 1) -- so this checks the
         # plate's real footprint and radius, not the pocket's.
@@ -1081,7 +1103,7 @@ class TestCornerRounding(unittest.TestCase):
         y1 = p.BOARD_L
         z = p.Z_WALL_TOP - p.PANEL / 2
         self._assert_solid_corner_rounded(
-            self.lid, x0, y0, x1, y1, p.CORNER_R, z, label="lite lid plate")
+            self.lid, x0, y0, x1, y1, p.CORNER_R, z, label="LC lid plate")
 
     def test_lid_outline_matches_the_panel_it_stands_in_for(self):
         # The lid's plate is cut to the art panel's OWN outline -- BOARD_W x
@@ -1103,7 +1125,7 @@ class TestCornerRounding(unittest.TestCase):
             p.BOARD_W, p.BOARD_L, p.PANEL)
         panel_shape = panel_shape.fillet(
             p.CORNER_R, panel_shape.edges().filter_by(Axis.Z))
-        # lite_lid() also cuts SW3's plunger bore through the plate -- a
+        # lc_lid() also cuts SW3's plunger bore through the plate -- a
         # real, intentional hole, not a corner defect. Cut the same bore
         # out of the reference shape so it isn't mistaken for one. Derived
         # from SW3's own pad centroid (Finding 2), not a hardcoded KiCad

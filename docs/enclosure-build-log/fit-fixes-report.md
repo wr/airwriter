@@ -13,10 +13,10 @@ hardcoded twice.
 - `CAVITY`: 14.34 → **12.74** (`enclosure/params.py`)
 - Derived automatically: `Z_LID_UNDER` 14.34 → **12.74**, `Z_WALL_TOP` 15.94 → **14.34**,
   `EXT_H` 22.94 → **21.34**
-- Verified `lite_lid()`'s plate still lands at Z 12.74..14.34 (leg from Z=0 to `p.CAVITY`,
-  plate top at `p.Z_WALL_TOP`) — confirmed by `test_case.TestLiteLid.test_legs_span_the_cavity_to_the_board_face`
+- Verified `lc_lid()`'s plate still lands at Z 12.74..14.34 (leg from Z=0 to `p.CAVITY`,
+  plate top at `p.Z_WALL_TOP`) — confirmed by `test_case.TestLCLid.test_legs_span_the_cavity_to_the_board_face`
   and the new `test_lid_top_matches_the_walls_own_top_nothing_stands_proud`, which compares
-  `case.shell()`'s own built wall-top geometry against `case.lite_lid()`'s own built
+  `case.shell()`'s own built wall-top geometry against `case.lc_lid()`'s own built
   plate-top geometry directly (not just each independently against the shared param).
 - Rewrote `CAVITY`'s provenance comment in `params.py` and the spec
   (`docs/superpowers/specs/2026-09-08-airwriter-enclosure-design.md` §2 + stack table) to
@@ -30,7 +30,7 @@ hardcoded twice.
 `test_external_size`, and `test_z_landmarks` all go red (EXT_H 22.94 vs new 21.34,
 Z_LID_UNDER 14.34 vs new 12.74, etc.), then restored. Note:
 `test_lid_top_matches_the_walls_own_top_nothing_stands_proud` does **not** independently
-catch this bug — both `shell()` and `lite_lid()` derived Z_WALL_TOP from the same (buggy)
+catch this bug — both `shell()` and `lc_lid()` derived Z_WALL_TOP from the same (buggy)
 constant, so they were self-consistent throughout. That test instead guards the two code
 paths from diverging from *each other* going forward; the actual ground truth for this bug
 is external (the real GLB), which isn't something the test suite can check without
@@ -76,7 +76,7 @@ is being applied at all, independent of the param's value.
 - `CAVITY` = 12.74, `Z_LID_UNDER` = 12.74, `Z_WALL_TOP` = 14.34
 - `EXT_H` = **21.34** (external footprint stays 68.00 × 110.27 × 21.34mm — confirmed by
   `export.py`: `airwriter-tray: 68.00 x 110.27 x 21.34 mm, 34.3 cm3`)
-- Lite lid: `airwriter-lite-lid: 62.00 x 104.27 x 14.34 mm, 11.6 cm3`
+- LC lid: `airwriter-lc-lid: 62.00 x 104.27 x 14.34 mm, 11.6 cm3`
 - DIP slot Z span: **6.60 .. 10.60** (4.00mm open, was 7.60..9.50 / 1.90mm)
 - DIP slot Y span: **19.61 .. 40.29**, measured directly off `case.dip_slot().bounding_box()`.
   The key band's own real edges (pad-column extreme ± `DIP_KEY_HALF_WIDTH`) are at
@@ -101,7 +101,7 @@ Updated `docs/superpowers/specs/2026-09-08-airwriter-enclosure-design.md`:
 - §2 body text: replaced the nut-stack derivation with the GLB measurement, kept the
   original derivation as "superseded, kept for the record", and added the same open flag
   as `params.py` about unverified real-hardware nut stand-off.
-- §5 (Fastening): the Lite leg's spacer length reference, 14.34mm → 12.74mm.
+- §5 (Fastening): the LC leg's spacer length reference, 14.34mm → 12.74mm.
 
 ## Constraints honored
 

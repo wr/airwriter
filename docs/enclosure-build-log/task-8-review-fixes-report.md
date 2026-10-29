@@ -24,7 +24,7 @@ Z=7.00):
 - The original blind check (`downward_flats(lid, 0.0)`, brief's Step-1
   sketch, filtered against `Z_WALL_TOP - PANEL`): **0 offenders** -- silently
   blind, reproduced.
-- Restored (real `lite_lid()`): `upward_flats()` returns `[]` -- confirmed
+- Restored (real `lc_lid()`): `upward_flats()` returns `[]` -- confirmed
   clean on the shipped geometry, unchanged.
 
 ## Finding 2 (Important) -- only exact-horizontal faces were caught

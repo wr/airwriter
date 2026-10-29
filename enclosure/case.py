@@ -1,4 +1,4 @@
-"""The AirWriter enclosure: a tray shared by both builds, and a Lite lid.
+"""The AirWriter enclosure: a tray shared by both builds, and an LC lid.
 
 Everything is modelled in the case frame (see board_geom): X=0 is the west
 wall's inner face, Y=0 is the front (port) wall's inner face, Z=0 is the
@@ -29,7 +29,7 @@ def _rounded_box(w: float, l: float, h: float, cx: float, cy: float,
     """A Box(w, l, h) centred at (cx, cy, cz), with its four VERTICAL edges
     filleted to `radius` -- a rounded rectangle extruded through h. Only the
     vertical edges are touched (top and bottom rims stay sharp): both the
-    tray's exterior/pocket and the lite lid's plate print with this shape
+    tray's exterior/pocket and the LC lid's plate print with this shape
     flat-side-down, and a rounded bottom rim would be an overhang. (The
     tray's bottom rim gets a 45-degree chamfer instead -- see shell().)"""
     box = Pos(cx, cy, cz) * Box(w, l, h)
@@ -412,8 +412,9 @@ def port_cutouts() -> Part:
             + _grown("J1", p.PORT_CLEAR) + _usbc_opening())
 
 
-def dip_slot() -> Part:
-    """S1's eight piano keys, out through the west wall.
+def dip_slot() -> Part | None:
+    """S1's eight piano keys, out through the west wall; None on a board with
+    no S1 (rev 2026.11), whose west wall stays whole.
 
     S1's footprint origin is the centre of its pin field; the pad columns run
     footprint-local x = -8.89 .. +8.89 and the keys align with them. The tips
@@ -431,7 +432,10 @@ def dip_slot() -> Part:
     allowance for the key's own width, and the two outer keys ended up
     0.05mm inside the wall material -- see params.DIP_SLOT_MARGIN.)
     """
-    fp = bg.footprint("S1")
+    try:
+        fp = bg.footprint("S1")
+    except KeyError:
+        return None
     pad_xs = [lx for lx, _ in bg.pad_positions("S1")]
     ys = [bg.to_case(*bg.local_to_board(fp, lx, 0.0))[1]
           for lx in (min(pad_xs), max(pad_xs))]
@@ -456,9 +460,8 @@ def reset_pinhole() -> Part:
     HANDOFF has a superseded line putting this on the west wall at x=100; the
     live ruling is the east edge, with SW1's plate face at KiCad x ~ 159.4.
 
-    SW1 has no 3D model placed on the board, so its Z can't be booleaned from
-    a STEP -- p.RESET_ACTUATOR_Z is derived from its footprint's own descr
-    (body 6.2 x 2.55 x 3.5mm) instead; see params.py and task-6-report.md.
+    The pinhole aims at the middle of SW1's button, p.RESET_ACTUATOR_Z above
+    the board (see params.py).
     """
     fp = bg.footprint("SW1")
     _, y = bg.to_case(fp.x, fp.y)
@@ -469,7 +472,7 @@ def reset_pinhole() -> Part:
 
 
 def _sw3_plunger_centre() -> tuple[float, float]:
-    """SW3's body centre, in KiCad mm -- where the Lite lid's test-plunger
+    """SW3's body centre, in KiCad mm -- where the LC lid's test-plunger
     bore lands (HANDOFF: under the art panel's test dot).
 
     SW3's four through-hole pads sit at footprint-local (0,0), (6.5,0),
@@ -485,44 +488,20 @@ def _sw3_plunger_centre() -> tuple[float, float]:
     return bg.local_to_board(fp, lx, ly)
 
 
-def lite_lid() -> Part:
-    """The panel stand-in for boards built without the dot-grid art panel.
+def lc_legs(top: float) -> Part:
+    """The LC's four legs at H1-H4, from the board's face (Z=0) up to `top`,
+    each with an M2.5 heat-set insert's bore in its foot. The LC lid and the
+    LC frame (lc_frame.py) stand on them.
 
-    A plate at the panel's OWN size (BOARD_W x BOARD_L, the board's outline,
-    which the art panel shares -- see params.CORNER_R) and corner radius
-    (CORNER_R), seating in the pocket that was cut POCKET_CLEAR oversize for
-    it. Sized at the panel's own outline rather than at the pocket's, this
-    lands the same POCKET_CLEAR per side the pocket gives every other seated part --
-    at the pocket's own size, the plate would need zero clearance to drop
-    in, which does not print (see test_it_fits_the_tray_with_no_interference).
-    Thickness on four legs that reproduce in plastic the CAVITY (13.04mm) the
-    Pro's mini-DIN lattice spans, so the plate's own top lands flush with
-    Z_WALL_TOP -- the same face the Pro's panel top registers against (see
-    params.CAVITY for the nut-stack correction and its open flag). Each leg
-    takes an M2.5 heat-set insert at its BOTTOM, level with the board's top
-    face, so the screw from below engages brass after a few millimetres
-    instead of threading through the full leg.
-
-    Prints plate-down (the plate's own Z_WALL_TOP face on the bed, legs
-    pointing up into the air), so any OTHER model surface facing +Z becomes,
-    once flipped for the print, an unsupported overhang -- a downward flat
-    that isn't the bed-contact plate face. There isn't one here: each leg is
-    a constant-diameter cylinder from the board face (Z=0) up to exactly the
-    plate's underside (Z=CAVITY), so the leg-to-plate junction is a clean
-    coincident union with no exposed shoulder, and the insert bore is cut
-    from the leg's free (Z=0) end, opening the same direction the leg does.
+    Each is a constant-diameter cylinder, so whatever plate or rim sits on
+    top joins it in a clean coincident union with no exposed shoulder: both
+    parts print top-down, where a shoulder facing +Z would be an overhang.
+    The insert bore is cut from the leg's free (Z=0) end, opening the same
+    direction the leg does.
     """
-    plate = _rounded_box(
-        p.BOARD_W, p.BOARD_L, p.PANEL,
-        p.BOARD_W / 2, p.BOARD_L / 2, p.Z_WALL_TOP - p.PANEL / 2,
-        p.CORNER_R)
-
-    # Build the legs on their own so the connector trim below cannot bite
-    # into the plate: J2's grown envelope reaches 0.40 above the shell's
-    # MINIDIN_TOP, which is inside the plate's own CAVITY..Z_WALL_TOP band.
     legs = None
     for x, y in bg.mount_holes().values():
-        leg = Pos(x, y, p.CAVITY / 2) * Cylinder(p.LEG_D / 2, p.CAVITY)
+        leg = Pos(x, y, top / 2) * Cylinder(p.LEG_D / 2, top)
         # The foot is relieved where small SMD parts crowd a mounting hole.
         # C22, a 0603, comes within 2.844mm of H4's centre against a 3.00mm
         # leg radius -- a 0.156mm bite, and a leg standing on a capacitor
@@ -535,15 +514,14 @@ def lite_lid() -> Part:
 
     # Anything tall near a mounting hole is in a leg's way. J2's shell reaches
     # within 2.220mm of H3's centre against a 3.00mm radius, for the leg's
-    # whole CAVITY height. Trim to the connectors we hold real vendor
-    # geometry for rather than guessing a diameter that clears -- this
-    # self-corrects if a connector moves. Parts with no STEP (see the
-    # ${KICAD10_3DMODEL_DIR} note in board_geom) are not covered; FOOT_RELIEF
-    # handles the short ones.
+    # whole height. Trim to the connectors we hold real vendor geometry for
+    # rather than guessing a diameter that clears -- this self-corrects if a
+    # connector moves. Parts with no STEP (see the ${KICAD10_3DMODEL_DIR} note
+    # in board_geom) are not covered; FOOT_RELIEF handles the short ones.
+    # Legs only: J2's grown envelope reaches 0.40 above the shell's
+    # MINIDIN_TOP, which is inside a plate's CAVITY..Z_WALL_TOP band.
     for ref in ("J2", "J4", "J1"):
         legs = legs - _grown(ref, p.PORT_CLEAR)
-
-    body = plate + legs
 
     for x, y in bg.mount_holes().values():
         # Overshoots 0.02 below Z=0 so the bore opens all the way through the
@@ -553,20 +531,51 @@ def lite_lid() -> Part:
             p.INSERT_D / 2, p.INSERT_DEPTH + 0.02)
         # The insert doesn't reach past INSERT_DEPTH, so a flat-bottomed
         # blind bore leaves a flat cap INSIDE the leg at that depth, model
-        # normal -Z (solid above, toward Z=CAVITY; void below). That is NOT
-        # a bridge: the lid prints plate-down, which makes print-down model
-        # +Z (see this function's own docstring and test_printable.py), so
-        # a model -Z face is print-UP -- this cap sits on solid material in
-        # the print's own down direction and comes out as an ordinary
-        # supported floor. Coned to a point anyway, the same idea as
-        # screw_holes()'s counterbore cone (radius and height both
-        # INSERT_D/2, so it closes over exactly as fast as it rises), so
-        # the insert has a lead-in and nothing to hang up on going in --
-        # not required by the printability gate.
+        # normal -Z (solid above, toward the top; void below). That is NOT
+        # a bridge: the legs print top-down, which makes print-down model
+        # +Z (see test_printable.py), so a model -Z face is print-UP -- this
+        # cap sits on solid material in the print's own down direction and
+        # comes out as an ordinary supported floor. Coned to a point anyway,
+        # the same idea as screw_holes()'s counterbore cone (radius and
+        # height both INSERT_D/2, so it closes over exactly as fast as it
+        # rises), so the insert has a lead-in and nothing to hang up on
+        # going in -- not required by the printability gate.
         tip_r = p.INSERT_D / 2
         tip = Pos(x, y, p.INSERT_DEPTH + tip_r / 2) * Cone(tip_r, 0, tip_r)
-        body = body - bore - tip
+        legs = legs - bore - tip
+    return legs
 
+
+def lc_lid() -> Part:
+    """The panel stand-in for boards built without the dot-grid art panel.
+
+    A plate at the panel's OWN size (BOARD_W x BOARD_L, the board's outline,
+    which the art panel shares -- see params.CORNER_R) and corner radius
+    (CORNER_R), seating in the pocket that was cut POCKET_CLEAR oversize for
+    it. Sized at the panel's own outline rather than at the pocket's, this
+    lands the same POCKET_CLEAR per side the pocket gives every other seated part --
+    at the pocket's own size, the plate would need zero clearance to drop
+    in, which does not print (see test_it_fits_the_tray_with_no_interference).
+    Thickness on four legs (lc_legs) that reproduce in plastic the CAVITY
+    (13.04mm) the Pro's mini-DIN lattice spans, so the plate's own top lands
+    flush with Z_WALL_TOP -- the same face the Pro's panel top registers
+    against (see params.CAVITY for the nut-stack correction and its open
+    flag). Each leg takes an M2.5 heat-set insert at its BOTTOM, level with
+    the board's top face, so the screw from below engages brass after a few
+    millimetres instead of threading through the full leg.
+
+    Prints plate-down (the plate's own Z_WALL_TOP face on the bed, legs
+    pointing up into the air), so any OTHER model surface facing +Z becomes,
+    once flipped for the print, an unsupported overhang -- a downward flat
+    that isn't the bed-contact plate face. There isn't one here: the legs
+    run from the board face (Z=0) up to exactly the plate's underside
+    (Z=CAVITY).
+    """
+    plate = _rounded_box(
+        p.BOARD_W, p.BOARD_L, p.PANEL,
+        p.BOARD_W / 2, p.BOARD_L / 2, p.Z_WALL_TOP - p.PANEL / 2,
+        p.CORNER_R)
+    body = plate + lc_legs(p.CAVITY)
     px, py = bg.to_case(*_sw3_plunger_centre())
     plunger = Pos(px, py, p.Z_WALL_TOP - p.PANEL / 2) * Cylinder(
         p.PLUNGER_BORE_D / 2, p.PANEL + 0.02)
@@ -574,7 +583,7 @@ def lite_lid() -> Part:
 
 
 def tray() -> Part:
-    """The finished tray, shared by Pro and Lite.
+    """The finished tray, shared by Pro and LC.
 
     No carveouts() term: RULING 1 (task-6-report.md) found the brief's
     version vacuous -- the cavity is one open prism and U4/R3/U9 all sit well
@@ -590,5 +599,6 @@ def tray() -> Part:
     anyway.
     """
     body = shell() + standoffs()
-    return (body - screw_holes() - foot_pockets() - port_cutouts() - dip_slot()
-            - reset_pinhole())
+    tray = body - screw_holes() - foot_pockets() - port_cutouts() - reset_pinhole()
+    slot = dip_slot()
+    return tray - slot if slot is not None else tray

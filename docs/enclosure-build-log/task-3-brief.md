@@ -72,7 +72,7 @@ Expected: FAIL — `ModuleNotFoundError: No module named 'case'`
 Create `enclosure/case.py`:
 
 ```python
-"""The AirWriter enclosure: a tray shared by both builds, and a Lite lid.
+"""The AirWriter enclosure: a tray shared by both builds, and an LC lid.
 
 Everything is modelled in the case frame (see board_geom): X=0 is the west
 wall's inner face, Y=0 is the front (port) wall's inner face, Z=0 is the

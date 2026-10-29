@@ -99,7 +99,7 @@ J2/J4/S1/SW3/U7."""
 
 PCB = 1.60
 PANEL = 1.60
-"""The art panel, and the Lite lid that stands in for it."""
+"""The art panel, and the LC lid that stands in for it."""
 
 CAVITY = 14.34
 """Board top face to lid underside. NOT a free variable: the mini-DIN shells
@@ -120,7 +120,7 @@ SCREW_HEAD_D = 5.00
 SCREW_HEAD_DEPTH = 1.40
 
 INSERT_D = 3.60
-"""Bore for an M2.5 brass heat-set insert in the Lite lid's legs. Final MPN is
+"""Bore for an M2.5 brass heat-set insert in the LC lid's legs. Final MPN is
 an open item in the spec; re-cut this if the chosen insert differs."""
 
 INSERT_DEPTH = 4.50
@@ -140,7 +140,7 @@ RESET_PINHOLE_D = 1.20
 """East wall, on SW1's actuator axis."""
 
 PLUNGER_BORE_D = 2.25
-"""SW3's test plunger. Matches the art panel's own 2.25mm NPTH so the Lite lid
+"""SW3's test plunger. Matches the art panel's own 2.25mm NPTH so the LC lid
 behaves identically -- the plunger is <= 2.0mm."""
 
 DIP_SLOT_Z0 = 7.60

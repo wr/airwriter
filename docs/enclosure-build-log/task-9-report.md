@@ -73,7 +73,7 @@ cd /Users/wells/Projects/airwriter && ./enclosure/build.sh
 ```
 ```
 airwriter-tray: 68.00 x 110.27 x 22.94 mm, 36.0 cm3
-airwriter-lite-lid: 62.40 x 104.67 x 15.94 mm, 11.9 cm3
+airwriter-lc-lid: 62.40 x 104.67 x 15.94 mm, 11.9 cm3
 ```
 
 ### Converter command
