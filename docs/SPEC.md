@@ -1005,7 +1005,8 @@ Apple's StyleWriter adapter (ADSP, not PAP), is not built.
   ignores that pin, 2.4).
 - **Not built.** Vintage Macs through AirWriter (phase 2: ADSP in `components/localtalk`, the
   adapter as `<name>:StyleWriter1200AT@*` or `<name>:ColorStyleWriter2400AT@*` on socket 129,
-  busy as `0001`, `GET /api/sw/job`); the printer-clocked fast mode (about 1 Mbit/s on HSKi,
+  busy as `0001`, `GET /api/sw/job`, the fast clock refused or the Mac switches the printer
+  over and the adapter drops off); the printer-clocked fast mode (850 kHz on HSKi on the 2200,
   which rev A's U3 cannot pass, 2.4, and the ESP32's UART cannot follow: `W-1102`'s to work out,
   so every page goes at 57600); 720 dpi on the 2500, other media and transparencies;
   StyleWriters behind Apple's network adapter found over AppleTalk.

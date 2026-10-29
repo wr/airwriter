@@ -142,7 +142,9 @@ current; this list started as the one filed on 2026-10-24. Most come from review
   Fit it by hand for a StyleWriter until one is shown to answer without it.
 - Through-hole dome power LED: `W-1043 Rev B: through-hole dome LED for the power indicator`.
 - Scope HSKo first: if its swing is modest, a divider and clamp into a GPIO could delete U3.
-  Whatever replaces U3 has to pass the 1 MHz clock below.
+  Whatever replaces U3 has to pass the 1 MHz clock below. FeralFirmware follows a StyleWriter
+  2200's 850 kHz fast clock with a simple circuit (2026-10-28); look at it in InkTalk before
+  drawing ours.
 - U3 to an SP3232EU (SP3232EUCN-L, LCSC C2997661): same SOIC-16 and pinout, so HSKi can carry
   the ~1 MHz clock a QuickDraw LaserWriter drives in its fast mode (`W-1102 QuickDraw
   LaserWriters on the printer port (Personal LaserWriter LS/300, Select 300)`). The fitted

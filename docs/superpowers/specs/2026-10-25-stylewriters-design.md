@@ -56,8 +56,9 @@ StyleWriter and have an owner confirm on paper. Plan B: buy one.
 - StyleWriters already on the network behind Apple's adapter or an InkTalk, found over
   AppleTalk and shared on AirPrint (my call; the same reasoning that cut `W-1090`). Owners can
   plug the printer into AirWriter's port instead.
-- The printer-clocked fast mode (about 1 Mbit/s) that later models offer. The printer drives
-  its clock on HSKi (InkTalk `stack_task.rs`); rev A's U3 is too slow to pass it, rev B's
+- The printer-clocked fast mode that later models offer: 850 kHz on the 2200, where
+  FeralFirmware has it working with a simple circuit to follow the clock (2026-10-28; InkTalk's
+  code for it is to come). The printer drives its clock on HSKi (InkTalk `stack_task.rs`); rev A's U3 is too slow to pass it, rev B's
   SP3232EU should (`W-1091`), and the ESP32's UART takes no outside clock, so how the board
   follows it is `W-1102`'s to work out for the QuickDraw LaserWriters. StyleWriter fast mode
   can follow from that later. Here every page goes at 57600 baud, as lpstyl and InkTalk send
@@ -388,7 +389,9 @@ host-built (`components/sw_page`, name the builder's), fed 360 dpi rows:
 - **The adapter.** On every AppleTalk connection that is on, the port's StyleWriter registers
   as `<name>:StyleWriter1200AT@*` or `<name>:ColorStyleWriter2400AT@*` by model, on socket 129
   (0x81; the port ImageWriter's socket today, and the port holds one printer). The open
-  handshake, attentions and data path as InkTalk does them; the fast clock refused. A request
+  handshake, attentions and data path as InkTalk does them; the fast clock refused, since a Mac
+  told the adapter takes it switches the printer over to it and the adapter drops off the
+  network (FeralFirmware, 2026-10-28). A request
   while any job holds the box's lock (AirPrint, the test page, another Mac) answers busy
   (`0001`); the Mac's driver waits and asks again. The Mac's bytes go to J2 as they are under
   the job lock, the printer's come back; a Mac that vanishes mid-job leaves the printer reset.
