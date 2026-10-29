@@ -371,7 +371,8 @@ Linear is the queue; these are the live items.
   December). No DIP switches; each port's HSKo has its own GPIO (J2's IO47, J4's IO13, J4's
   HSKi IO21), and U1 is the ESP32-S3-WROOM-1-N16R8 (16 MB flash, 8 MB octal PSRAM on
   IO35–IO37), which needs its own firmware build. SW1 is the Macintosh Mini's BZCN
-  TSB001A3518A. Firmware for it:
+  TSB001A3518A. IO38–IO40 end on bare pads on the back (TP10–TP12) for bodging. Firmware
+  for it:
   `W-1109 Firmware for rev 2026.11 boards: N16R8 build, straps, own handshake pins, no DIPs, Lite`.
 - `W-1046 Factory reset must always work, even with broken firmware` and
   `W-1045 Long-press factory reset with live feedback on the LED panel`: merged 2026-10-15, benched
@@ -537,8 +538,8 @@ Linear is the queue; these are the live items.
   Print-Job of `fixtures/checker.urf` prints crc32 `8ee84844`. At the default (-1 in) the
   checker, which sits in the page's top inch, prints blank (crc32 `0e5fc630`, 9 bytes).
   After an OTA, `/api/status` reaches `"trial":false` with the new `version`.
-- **Schematic:** `kicad-cli sch erc` → 0 errors; 44 known warnings (42 `lib_symbol_mismatch`,
-  2 `isolated_pin_label`).
+- **Schematic:** `kicad-cli sch erc` → 0 errors; 47 known warnings (42 `lib_symbol_mismatch`,
+  5 `isolated_pin_label`: TXD0, RXD0 and rev 2026.11's three spare pins).
 - **Board:** `kicad-cli pcb drc --severity-all --schematic-parity --refill-zones` on
   `hardware/airwriter/airwriter.kicad_pcb` → 0 errors, 0 unconnected, 5 `lib_footprint_mismatch`
   warnings, no field-parity warnings (rev 2026.11, 2026-10-28). Treat any unconnected item as real;

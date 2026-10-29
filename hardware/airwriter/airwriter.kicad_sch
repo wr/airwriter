@@ -7773,24 +7773,12 @@
 		(uuid "842216fe-9910-4a93-9121-4eddcace5f0a")
 	)
 	(no_connect
-		(at 219.71 142.24)
-		(uuid "77487303-9f9f-4c88-84ee-d1ae2cc17fc2")
-	)
-	(no_connect
-		(at 219.71 144.78)
-		(uuid "320a850a-7cc6-4984-8890-79f7fd56cca1")
-	)
-	(no_connect
-		(at 219.71 147.32)
-		(uuid "f64f0809-e550-48f2-af37-e0abdff27e01")
+		(at 219.71 152.4)
+		(uuid "1385fbc3-b539-4de0-a6f3-c5e109ad9895")
 	)
 	(no_connect
 		(at 219.71 149.86)
-		(uuid "7bf6cbb5-d108-442d-b08a-29590c85ae6e")
-	)
-	(no_connect
-		(at 219.71 152.4)
-		(uuid "1385fbc3-b539-4de0-a6f3-c5e109ad9895")
+		(uuid "f704f44d-f732-47e6-a81a-55ad34d74fd0")
 	)
 	(wire
 		(pts
@@ -10677,6 +10665,32 @@
 		)
 		(uuid "ec277380-d7e1-4474-9fa9-03a45c34e570")
 	)
+	(label "SPARE_IO39"
+		(at 219.71 144.78 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left bottom)
+		)
+		(uuid "0e0cf11c-62fa-49ce-8f4e-5e8891519efa")
+	)
+	(label "SPARE_IO40"
+		(at 219.71 147.32 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left bottom)
+		)
+		(uuid "dc8c9dda-57c6-4800-9970-5654983f2578")
+	)
+  (label "SPARE_IO38"
+    (at 219.71 142.23999999999998 0)
+    (fields_autoplaced yes)
+    (effects (font (size 1.27 1.27)) (justify left bottom))
+    (uuid "391646ad-95b6-43b8-90cb-0cef30ff2299")
+  )
 	(symbol
 		(lib_id "Connector:USB_C_Receptacle_USB2.0_16P")
 		(at 35.56 59.69 0)

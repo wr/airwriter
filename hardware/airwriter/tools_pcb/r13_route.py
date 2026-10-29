@@ -84,6 +84,11 @@ HAND = [
     ('/GND', F, [(143.68, 128.25), (143.68, 129.05)], 0.2),
     ('/GND', 'via', [(150.0, 140.6)], None),                            # TP9's patch of the back pour
     ('/GND', B, [(150.0, 140.6), (150.0, 142.1)], 0.2),
+    # the spare GPIOs, straight down from their pins to a via and their pads on the back
+    *[run for x in (143.08, 144.35, 145.62) for run in (
+        (f'/SPARE_IO{38 + round((x - 143.08) / 1.27)}', F, [(x, 148.54), (x, 149.9)], 0.2),
+        (f'/SPARE_IO{38 + round((x - 143.08) / 1.27)}', 'via', [(x, 149.9)], None),
+        (f'/SPARE_IO{38 + round((x - 143.08) / 1.27)}', B, [(x, 149.9), (x, 151.2)], 0.2))],
 ]
 
 # Found by the grid search: the short stubs round their own pins.

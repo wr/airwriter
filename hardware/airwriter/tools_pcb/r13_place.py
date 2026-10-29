@@ -60,6 +60,12 @@ BACK_TEXT = [  # text, x, y, height
 ]
 TP9 = (150.0, 142.1)                # GND, west of TP4 (EN) and its label, near TP7/TP8
 RESET_LABEL = (154.75, 99.45)       # beside SW1's back, on its axis
+# Spare GPIOs on bare pads on the back, below the module's south pins, for
+# trying a new idea on a built board with a few wires. On the back, the front
+# keeps only a short stub and a via per pin, so the front pour still reaches C1
+# and C22. IO41 has no way down past USB D- on the back; IO42 has C1 over it.
+SPARE_PADS = [('TP10', '/SPARE_IO38', (143.08, 151.20)), ('TP11', '/SPARE_IO39', (144.35, 151.20)),
+              ('TP12', '/SPARE_IO40', (145.62, 151.20))]
 
 
 def at(x, y):
@@ -121,6 +127,46 @@ def tp9(board):
     board.Add(tp)
 
 
+def spare_pads(board):
+    """Bare 1 mm round pads on the back, each with its pin number beside it,
+    built here rather than copied from TP7: copying a footprint and removing its
+    label leaves SWIG's lists opaque for the next."""
+    for ref, net, xy in SPARE_PADS:
+        if board.FindFootprintByReference(ref):
+            continue
+        tp = pcbnew.FOOTPRINT(board)
+        tp.SetFPIDAsString('SparePad_D1.0mm')     # drawn here; no library to match
+        tp.SetAttributes(pcbnew.FP_SMD | pcbnew.FP_BOARD_ONLY
+                         | pcbnew.FP_EXCLUDE_FROM_POS_FILES | pcbnew.FP_EXCLUDE_FROM_BOM)
+        tp.Reference().SetText(ref)
+        tp.Reference().SetLayer(pcbnew.F_Fab)
+        tp.Value().SetText(net.lstrip('/'))
+        tp.Value().SetLayer(pcbnew.F_Fab)
+        tp.Value().SetVisible(False)
+        pad = pcbnew.PAD(tp)
+        pad.SetNumber('1')
+        pad.SetAttribute(pcbnew.PAD_ATTRIB_SMD)
+        pad.SetShape(pcbnew.PAD_SHAPE_CIRCLE)
+        pad.SetSize(pcbnew.VECTOR2I(pcbnew.FromMM(1.0), pcbnew.FromMM(1.0)))
+        layers = pcbnew.LSET()
+        layers.AddLayer(pcbnew.F_Cu)
+        layers.AddLayer(pcbnew.F_Mask)
+        pad.SetLayerSet(layers)                    # bare copper, no paste
+        tp.Add(pad)
+        label = pcbnew.PCB_TEXT(tp)
+        label.SetText(net[-2:])                    # 38, 39, 40
+        label.SetLayer(pcbnew.F_SilkS)
+        label.SetTextSize(pcbnew.VECTOR2I(pcbnew.FromMM(0.8), pcbnew.FromMM(0.8)))
+        label.SetTextThickness(pcbnew.FromMM(0.15))
+        label.SetPosition(at(0, 2.3 if net.endswith('39') else 1.3))   # staggered: 1.27 apart
+        tp.Add(label)
+        tp.SetPosition(at(*xy))
+        tp.Reference().SetPosition(at(*xy))
+        tp.Flip(tp.GetPosition(), False)           # to the back: pad, label and all
+        board.Add(tp)
+        pad.SetNet(board.FindNet(net))
+
+
 def texts(board):
     for d in list(board.GetDrawings()):
         if d.GetClass() == 'PCB_TEXT' and d.GetLayer() == pcbnew.F_SilkS \
@@ -166,6 +212,7 @@ def main():
     board.FindFootprintByReference('R9').SetDNP(False)
     board.FindFootprintByReference('J2').SetExcludedFromPosFiles(False)
     tp9(board)
+    spare_pads(board)
     texts(board)
     for ref in ('R21', 'R24', 'R29', 'R30'):
         fp = board.FindFootprintByReference(ref)

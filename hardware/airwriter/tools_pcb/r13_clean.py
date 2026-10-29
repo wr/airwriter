@@ -103,11 +103,30 @@ def dangling(board, nets):
                        and z.HitTestFilledArea(layer, pos) for z in zones))
 
     def via_joined(v, layer):
-        # a track joins a via when one of its ends lands anywhere in the via
-        return (joined(v, v.GetPosition(), layer)
-                or any(o is not v and o.GetNetCode() == v.GetNetCode()
-                       and not isinstance(o, pcbnew.PCB_VIA) and o.GetLayer() == layer
-                       and any(v.HitTest(e) for e in ends_of(o)) for o in tracks))
+        # a track joins a via when one of its ends lands anywhere in the via, but a
+        # stub lying wholly inside the via joins nothing: rev A's DIP and IO35 runs
+        # end so, and the stub and via would otherwise hold each other up
+        pos = v.GetPosition()
+        if any(p.GetNetCode() == v.GetNetCode() for p in pads_at(board, pos, layer)):
+            return True
+        if any(z.GetNetCode() == v.GetNetCode() and z.IsOnLayer(layer)
+               and z.HitTestFilledArea(layer, pos) for z in zones):
+            return True
+        for o in tracks:
+            if o is v or o.GetNetCode() != v.GetNetCode():
+                continue
+            if isinstance(o, pcbnew.PCB_VIA):
+                if o.HitTest(pos):
+                    return True
+                continue
+            if o.GetLayer() != layer:
+                continue
+            s, e = o.GetStart(), o.GetEnd()
+            if abs(s.x - e.x) + abs(s.y - e.y) > 10000 and all(v.HitTest(p) for p in (s, e)):
+                continue        # (rev A's near-zero pieces, 0.1 um, mark a via's landing: they count)
+            if on_line(o, pos) or any(v.HitTest(e) for e in ends_of(o)):
+                return True
+        return False
 
     for t in tracks:
         if t.GetNetname() in KEEP:

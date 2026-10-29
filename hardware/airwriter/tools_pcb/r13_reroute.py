@@ -63,14 +63,6 @@ def printer_handshakes(e):
     e.move_end(e.track('/UART_CTS', (122.83, 142.744), (118.58, 138.494)), (118.58, 138.494), (121.6, 141.514))
     e.add_via('/UART_CTS', (121.6, 141.514))
     e.draw('/UART_CTS', [(120.05, 141.51), (121.6, 141.514)])
-    # what r13_clean.py leaves of rev A's IO35 run: each end is a stub lying inside
-    # its own via, which reads as joined. r13_route.py draws the IO47 run.
-    e.drop(e.track('/HSKI_DRV', (120.463, 143.539), (120.946, 143.539)),
-           e.via('/HSKI_DRV', (120.946, 143.539)),
-           e.track('/HSKI_DRV', (120.946, 143.539), (122.116, 144.708)),
-           e.track('/HSKI_DRV', (122.116, 144.708), (139.458, 144.708)),
-           e.via('/HSKI_DRV', (139.458, 144.708)),
-           e.track('/HSKI_DRV', (139.27, 144.897), (139.458, 144.708)))
 
 
 def under_u8(e):

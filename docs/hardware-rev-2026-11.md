@@ -56,9 +56,10 @@ is rated to 65 °C.
 | IO21 | `J4_HSKI_RX` | J4.2 through U3's receiver 1 |
 | IO47 | `HSKI_DRV` | J2's HSKo, through U3's driver 2; R24 holds it low until firmware |
 | IO35–IO37 | the N16R8's PSRAM | rev A's `HSKI_DRV` (IO35) and `J4_HSKI_RX` (IO37) |
-| IO38–IO42 | none | rev A's DIP switches |
+| IO38–IO40 | `SPARE_IO38`–`40` | rev A's DIP switches; now bare pads on the back (below) |
+| IO41, IO42 | none | rev A's DIP switches |
 
-Free: IO1, IO3, IO7, IO9–IO12, IO38–IO42, IO45, IO46.
+Free: IO1, IO3, IO7, IO9–IO12, IO41, IO42, IO45, IO46, and IO38–IO40 on their pads.
 
 ## Parts that moved from rev A
 
@@ -108,6 +109,11 @@ IO16 and IO15.
 - IO13 (`J4_HSKO_DRV`): a via beside U3.11, one straight run on the back between U7's two
   rows of pins, and a via just west of pin 21 (BTN_TEST passes on the front).
 - Ground vias for R24, R32, R33, TP9's patch of the back pour and U5.2.
+- Spare pins: IO38, IO39 and IO40 each run straight down from the module's pin to a via
+  and a bare 1 mm pad on the back (TP10–TP12, labelled 38, 39, 40), for trying an idea on
+  a built board with a few wires; 3V3 is at TP2 and GND at TP9 nearby. On the back, so the
+  front keeps only a short stub per pin and the ground pour still reaches C1 and C22. IO41
+  has no way down past USB D− on the back, and IO42 has C1 over it.
 
 ## Deliberate, don't "fix"
 
@@ -126,7 +132,8 @@ IO16 and IO15.
 
 ## Checks, 2026-10-28
 
-- ERC: 0 errors, 44 known warnings.
+- ERC: 0 errors, 47 known warnings (42 `lib_symbol_mismatch`; 5 `isolated_pin_label`: TXD0,
+  RXD0 and the three spare pins, each a label on one pin by design).
 - DRC with `--severity-all --schematic-parity --refill-zones`: 0 errors, 0 unconnected, 5
   `lib_footprint_mismatch` warnings, no field-parity warnings (`r13_sync.py` now copies the
   Description, Manufacturer and Datasheet fields too).
