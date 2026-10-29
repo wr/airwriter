@@ -187,20 +187,21 @@ an open item in the spec; re-cut this if the chosen insert differs."""
 
 INSERT_DEPTH = 4.50
 
-ACRYLIC = 1.00
+ACRYLIC = 1.50
 """The LC's clear cast-acrylic top (hardware/panel/airwriter-lc-top.svg):
-1 mm, the sheet Wells's library had (2026-10-29; it has 1 and 3, and 3 would
-stand 1.5 proud of the rim with no room to sink it past the mini-DINs). The
-frame stands it so its face is ACRYLIC_FACE_UNDER under the rim, whatever its
-thickness; only a 1.50 sheet would also rest on J2/J4's shells."""
+1/16 in, sold as 1.5 mm (Wells, 2026-10-29, after a day on 1 mm: his library
+had only 1 and 3, and 3 would stand 1.5 proud of the rim with no room to sink
+it past the mini-DINs). The frame stands it so its face is ACRYLIC_FACE_UNDER
+under the rim, whatever its thickness; at 1.50 it also rests on J2/J4's
+shells, as the Pro's panel does, and a sheet up to 1.60 still sits no prouder
+than the rim."""
 
 ACRYLIC_FACE_UNDER = 0.10
 """How far the acrylic's face sits under the tray's rim: close enough to read
 flush, never proud."""
 
 ACRYLIC_UNDERSIDE = CAVITY + PANEL - ACRYLIC_FACE_UNDER - ACRYLIC
-"""The acrylic's underside above the board: 13.54 for 1 mm, 0.50 over the
-shells."""
+"""The acrylic's underside above the board: 13.04 for 1.5 mm, on the shells."""
 
 GLUE_LINE = 0.10
 """The UV-cure glue between the LC frame's leg tops and the acrylic (Wells,
@@ -215,16 +216,16 @@ to RIDGE_CLEAR short of the pocket wall, as the lattice's lip does."""
 FRAME_RIM_H = 2.50
 """The LC frame's rim and arms, deep: a rim RIDGE_H (1.50) deep was a wire
 loop 104mm long until the acrylic was glued on; 2.50 is (2.5/1.5)^3, 4.6x,
-as stiff. On rev A it stops 0.63 above S1's body plus PART_TOP_CLEAR (1 mm
-acrylic), the tallest part under it but the mini-DINs, which cut it."""
+as stiff. On rev A it stops 0.13 above S1's body plus PART_TOP_CLEAR, the
+tallest part under it but the mini-DINs, which cut it."""
 
 FRAME_ARM_W = 2.40
 """Each LC frame leg's arm out to the side rim: six 0.4mm lines."""
 
 FRAME_CAP = 0.60
 """The cap over the LC frame's D3 tube, three 0.2mm layers. Rev 2026.11's
-LED stands to 11.85; under 1 mm acrylic the cap's underside is 0.99 over
-it (0.49 under 1.5)."""
+LED stands to 11.85; the cap's underside is 0.49 over it, about
+PART_TOP_CLEAR."""
 
 FRAME_TUBE_MIN_WALL = 0.45
 """The thinnest wall of the LC frame's D3 tube, one printed line: on rev
