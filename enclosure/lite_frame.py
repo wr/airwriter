@@ -3,12 +3,12 @@
 
 docs/superpowers/specs/2026-10-28-lite-acrylic-top-design.md. The Lite lid's
 four legs (case.lite_legs: the same inserts, the same M2.5 x 10 from below),
-stopped GLUE_LINE under CAVITY, joined by a rim round the top edge like the
+stopped GLUE_LINE under the acrylic, joined by a rim round the top edge like the
 lattice's lip and an arm from each leg out to the side rim, and a light tube
 round the power LED D3, closed at the top but for a slit the shape of the
 slash frosted over it, so D3 lights the slash and nothing else under the clear
 top. The acrylic (hardware/panel/airwriter-lite-top.svg) is glued to the four
-leg tops and lands on J2/J4's shells at CAVITY, as the Pro's panel does.
+leg tops, its face ACRYLIC_FACE_UNDER under the tray's rim.
 Printed rim-down, legs up."""
 from build123d import Face, Part, Pos, Solid, Wire, extrude
 
@@ -18,7 +18,7 @@ import components
 import lattice
 import params as p
 
-TOP = p.CAVITY - p.GLUE_LINE
+TOP = p.ACRYLIC_UNDERSIDE - p.GLUE_LINE
 """The frame's top face: the glue's, and the bed's when printed."""
 
 
@@ -105,5 +105,5 @@ def lite_frame() -> Solid:
     top = (_rim() + _arms() + tube) - lattice._part_voids(skip=("D3",)) - tube_void
     body = top + case.lite_legs(TOP)
     # J2 and J4's hulls cut the rim along the front, and the piece between
-    # them is left hanging from nothing; the acrylic rests on the shells there.
+    # them is left hanging from nothing; the acrylic spans it, over the shells.
     return max(body.solids(), key=lambda s: s.volume)

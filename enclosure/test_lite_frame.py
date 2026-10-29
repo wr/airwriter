@@ -10,7 +10,7 @@ import components
 import lite_frame
 import params as p
 
-TOP = p.CAVITY - p.GLUE_LINE
+TOP = p.ACRYLIC_UNDERSIDE - p.GLUE_LINE
 
 
 def _box(x0, x1, y0, y1, z0, z1):
@@ -30,15 +30,15 @@ class TestLiteFrame(unittest.TestCase):
         self.assertTrue(self.frame.is_valid)
         self.assertEqual(len(self.frame.solids()), 1)
 
-    def test_glued_acrylic_lands_on_the_shells_just_under_the_rim(self):
-        # The frame stops GLUE_LINE short of CAVITY, so the acrylic on the glue
-        # lands where the panel does, on J2/J4's shells. Its face must never
-        # stand proud of the tray's rim, and should sit close enough under it
-        # to read flush.
+    def test_glued_acrylic_sits_just_under_the_rim_clear_of_the_shells(self):
+        # The frame stops GLUE_LINE short of the acrylic's underside. Its face
+        # must never stand proud of the tray's rim, and should sit close enough
+        # under it to read flush; its underside never below J2/J4's shells.
         bb = self.frame.bounding_box()
         self.assertAlmostEqual(bb.min.Z, 0.0, places=3)
-        self.assertAlmostEqual(bb.max.Z + p.GLUE_LINE, p.CAVITY, places=3)
-        face = p.CAVITY + p.ACRYLIC
+        self.assertAlmostEqual(bb.max.Z + p.GLUE_LINE, p.ACRYLIC_UNDERSIDE, places=3)
+        self.assertGreaterEqual(p.ACRYLIC_UNDERSIDE, p.MINIDIN_TOP - 1e-6)
+        face = p.ACRYLIC_UNDERSIDE + p.ACRYLIC
         rim = case.shell().bounding_box().max.Z
         self.assertLessEqual(face, rim)
         self.assertGreaterEqual(face, rim - 0.20)

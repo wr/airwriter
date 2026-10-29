@@ -83,7 +83,7 @@ Rubber feet go on the floor's underside, over the screw counterbores.
 
 Spec: `docs/superpowers/specs/2026-10-28-lite-acrylic-top-design.md`.
 
-The top is 1.5 mm clear **cast** acrylic (extruded barely frosts), cut and
+The top is 1 mm clear **cast** acrylic (extruded barely frosts), cut and
 engraved from `hardware/panel/airwriter-lite-top.svg`: red hairline is cut,
 black fill is engraved. Engrave first, on the top face.
 
@@ -91,9 +91,9 @@ black fill is engraved. Engrave first, on the top face.
 round the top edge (1.7 mm wide, 2.5 mm deep), with an arm from each leg out to
 the side rim, and a light-tight tube round the power LED, closed but for a slit
 right under the frosted slash, so the LED lights the slash and nothing else. It stops
-0.10 mm under the panel's height, a glue line, so the acrylic lands on the
-mini-DIN shells exactly where the Pro's panel does, 0.10 under the tray's
-rim. Print it in matte black, **rim down** (its top on the bed,
+a glue line under the acrylic, which it holds 0.10 mm under the tray's rim.
+It is cut for 1 mm acrylic: for another thickness change `ACRYLIC` in
+`params.py` and rebuild. Print it in matte black, **rim down** (its top on the bed,
 legs up), no supports.
 
 1. Board into the tray, inserts into the frame's legs.

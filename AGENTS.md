@@ -281,7 +281,7 @@ DIP keys; on this branch the tray is cut to rev 2026.11, which has no DIP switch
 DIP window, and board 1's tray is the one at `hw-rev-a`), Lite frame, Lite lid, and the Pro build's light-guide lattice. Cavity 13.04 (measured mini-DIN
 height); Pro screws M2.5 × 18. Four 10 mm rubber feet sit in 0.40 pockets in the floor's
 underside, each hiding a screw counterbore. The shop's cased GLBs still show the pre-W-1036
-tray. The Lite's clear top is 1.5 mm cast acrylic, laser file
+tray. The Lite's clear top is 1 mm cast acrylic (the frame's height follows `ACRYLIC`), laser file
 `hardware/panel/airwriter-lite-top.svg` (`lite_top.py`, from the Lite's own art
 `hardware/panel/svg/lite.svg`, Figma Frame 17: "AirWriter LC", rev 2026.11, the Pro's gold
 dots, serial and power only, all frosted; the panel's outline and Ø3.8 test hole cut), glued with

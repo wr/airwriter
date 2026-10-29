@@ -187,16 +187,26 @@ an open item in the spec; re-cut this if the chosen insert differs."""
 
 INSERT_DEPTH = 4.50
 
-ACRYLIC = 1.50
-"""The Lite's clear cast-acrylic top (hardware/panel/airwriter-lite-top.svg).
-Its underside lands at CAVITY on J2/J4's shells, as the panel's does, so its
-face sits PANEL - ACRYLIC (0.10) under the rim."""
+ACRYLIC = 1.00
+"""The Lite's clear cast-acrylic top (hardware/panel/airwriter-lite-top.svg):
+1 mm, the sheet Wells's library had (2026-10-29; it has 1 and 3, and 3 would
+stand 1.5 proud of the rim with no room to sink it past the mini-DINs). The
+frame stands it so its face is ACRYLIC_FACE_UNDER under the rim, whatever its
+thickness; only a 1.50 sheet would also rest on J2/J4's shells."""
+
+ACRYLIC_FACE_UNDER = 0.10
+"""How far the acrylic's face sits under the tray's rim: close enough to read
+flush, never proud."""
+
+ACRYLIC_UNDERSIDE = CAVITY + PANEL - ACRYLIC_FACE_UNDER - ACRYLIC
+"""The acrylic's underside above the board: 13.54 for 1 mm, 0.50 over the
+shells."""
 
 GLUE_LINE = 0.10
 """The UV-cure glue between the Lite frame's leg tops and the acrylic (Wells,
-2026-10-28, over 0.50mm VHB tape). The frame stops GLUE_LINE under CAVITY, so
-the glued acrylic lands at CAVITY on J2/J4's shells. A print up to 0.10 tall
-still lands it there; one short leaves the glue more to fill."""
+2026-10-28, over 0.50mm VHB tape). The frame stops GLUE_LINE under
+ACRYLIC_UNDERSIDE. A print up to 0.10 tall still leaves the face no prouder
+than the rim; one short leaves the glue more to fill."""
 
 FRAME_RIM_IN = 1.50
 """How far inside the board edge the Lite frame's rim reaches. Outward it runs
@@ -205,16 +215,16 @@ to RIDGE_CLEAR short of the pocket wall, as the lattice's lip does."""
 FRAME_RIM_H = 2.50
 """The Lite frame's rim and arms, deep: a rim RIDGE_H (1.50) deep was a wire
 loop 104mm long until the acrylic was glued on; 2.50 is (2.5/1.5)^3, 4.6x,
-as stiff. It stops 0.13 above S1's body plus PART_TOP_CLEAR on rev A, the
-tallest part under it but the mini-DINs, which cut it."""
+as stiff. On rev A it stops 0.63 above S1's body plus PART_TOP_CLEAR (1 mm
+acrylic), the tallest part under it but the mini-DINs, which cut it."""
 
 FRAME_ARM_W = 2.40
 """Each Lite frame leg's arm out to the side rim: six 0.4mm lines."""
 
 FRAME_CAP = 0.60
 """The cap over the Lite frame's D3 tube, three 0.2mm layers. Rev 2026.11's
-LED stands to 11.85, so a LATTICE_WALL cap under the frame's top would sit
-0.29 over it; 0.60 leaves 0.49, about PART_TOP_CLEAR."""
+LED stands to 11.85; under 1 mm acrylic the cap's underside is 0.99 over
+it (0.49 under 1.5)."""
 
 FRAME_TUBE_MIN_WALL = 0.45
 """The thinnest wall of the Lite frame's D3 tube, one printed line: on rev
