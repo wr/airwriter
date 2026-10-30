@@ -56,12 +56,18 @@ StyleWriter and have an owner confirm on paper. Plan B: buy one.
 - StyleWriters already on the network behind Apple's adapter or an InkTalk, found over
   AppleTalk and shared on AirPrint (my call; the same reasoning that cut `W-1090`). Owners can
   plug the printer into AirWriter's port instead.
-- The printer-clocked fast mode that later models offer: 850 kHz on the 2200, where
-  FeralFirmware has it working with a simple circuit to follow the clock (2026-10-28; InkTalk's
-  code for it is to come). The printer drives its clock on HSKi (InkTalk `stack_task.rs`); rev A's U3 is too slow to pass it, rev B's
-  SP3232EU should (`W-1091`), and the ESP32's UART takes no outside clock, so how the board
-  follows it is `W-1102`'s to work out for the QuickDraw LaserWriters. StyleWriter fast mode
-  can follow from that later. Here every page goes at 57600 baud, as lpstyl and InkTalk send
+- The printers' fast modes, which InkTalk follows since TailTalk PR 93 (2026-10-30;
+  `InkTalk/firmware/src/fast_clock.rs` and `printer.rs`). A StyleWriter II or 1200 is sent `h`
+  and then runs at 230,400 baud on the port's own clock; J2's data lines go through U2, an
+  RS-422 part, so rev A should carry it (untested). A Colour StyleWriter (1500, 2200, 2400,
+  2500) is sent `x` and then drives a bit clock on HSKi, one clock per bit with 8N1 framing on
+  it, about 885 kHz on a 2200: send each bit just after a falling edge, sample on the rising
+  one. Either way the port switches about 33 ms after the command is out, as a Mac allows, and
+  a printer that stops clocking has been reset or switched off and is back at 57600. Rev A's U3
+  is too slow to pass the HSKi clock, rev B's SP3232EU should (`W-1091`), and the ESP32's UART
+  takes no outside clock (InkTalk uses the RP2040's PIO), so how the board follows it is
+  `W-1102`'s to work out for the QuickDraw LaserWriters. How a job brings the printer back out
+  of either mode cleanly is not yet known. Here every page goes at 57600 baud, as lpstyl sends
   it.
 - 720 dpi on the 2500, paper types other than plain, transparencies, envelopes.
 
@@ -389,9 +395,11 @@ host-built (`components/sw_page`, name the builder's), fed 360 dpi rows:
 - **The adapter.** On every AppleTalk connection that is on, the port's StyleWriter registers
   as `<name>:StyleWriter1200AT@*` or `<name>:ColorStyleWriter2400AT@*` by model, on socket 129
   (0x81; the port ImageWriter's socket today, and the port holds one printer). The open
-  handshake, attentions and data path as InkTalk does them; the fast clock refused, since a Mac
-  told the adapter takes it switches the printer over to it and the adapter drops off the
-  network (FeralFirmware, 2026-10-28). A request
+  handshake, attentions and data path as InkTalk does them; each fast mode refused unless the
+  port can follow it, since a Mac told the adapter takes one switches the printer over and an
+  adapter that cannot follow drops off the network (FeralFirmware, 2026-10-28). The II and
+  1200's 230,400 baud is likely within rev A's reach; the attentions that ask for either mode
+  are in TailTalk's `tailtalk-core/src/stylewriter.rs`. A request
   while any job holds the box's lock (AirPrint, the test page, another Mac) answers busy
   (`0001`); the Mac's driver waits and asks again. The Mac's bytes go to J2 as they are under
   the job lock, the printer's come back; a Mac that vanishes mid-job leaves the printer reset.
