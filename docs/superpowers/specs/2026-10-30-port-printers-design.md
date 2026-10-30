@@ -344,6 +344,8 @@ iPhone:
 4. Plugging in, unplugging and switching on or off show by themselves, with no button; an exact
    match isn't needed, the experience is.
 5. The original StyleWriter may stay the exception.
+6. Vintage Macs keep one ImageWriter for the printer port, named from the oldest ImageWriter
+   record and fixed across swaps, rather than one per ImageWriter as phones get.
 
 ## Calls I made (Claude), for Wells to check
 
@@ -366,11 +368,9 @@ iPhone:
     (about 1 s today), so the page never shows the wrong ImageWriter.
 12. **The plain question goes first at a line-up whenever any StyleWriter record is in the
     list**, so a StyleWriter never hears `ESC ?` first.
-13. **Vintage Macs see one ImageWriter for the port**, named from the oldest ImageWriter record
-    and fixed across swaps.
-14. **A waiting ImageWriter job ends when a different printer answers**, ImageWriter or
+13. **A waiting ImageWriter job ends when a different printer answers**, ImageWriter or
     StyleWriter: "Another printer was connected. Print again."
-15. **An Unknown printer record goes when an identified printer answers on the port.**
+14. **An Unknown printer record goes when an identified printer answers on the port.**
 
 ## Left to the builder
 
