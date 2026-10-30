@@ -508,10 +508,13 @@ static void live_fill(void)
     }
 }
 
-// Under s_mu.
+// Under s_mu. W-1116: the printer on the port is the current record (pr_port_current, whose
+// model answered last), not the oldest; a Something else record in the list silences the port
+// whatever else is there (PORT_UNKNOWN_SAID), as the design's rule 1 says.
 static port_mode_t mode_of(void)
 {
-    const pr_rec_t *p = pr_port(s_l);
+    if (pr_port_said_other(s_l)) return PORT_UNKNOWN_SAID;
+    const pr_rec_t *p = pr_port_current(s_l);
     if (!p) return PORT_NONE;
     if (p->kind == PR_KIND_IMAGEWRITER) return PORT_IMAGEWRITER;
     if (p->kind == PR_KIND_STYLEWRITER) return PORT_STYLEWRITER;
@@ -526,36 +529,38 @@ static void after_change(int notify)
     if (notify && s_cfg.changed) s_cfg.changed();
 }
 
-void printers_port_seen(int iw_model, int ready)
+int printers_port_seen(int iw_model, int ready)
 {
-    if (!s_started) return;
+    if (!s_started) return -1;
     pr_port_seen_t what = !ready ? PR_PORT_NOTHING
                         : iw_model == IW_MODEL_LQ ? PR_PORT_IWLQ
                         : iw_model == IW_MODEL_II ? PR_PORT_IW2 : PR_PORT_SILENT;
     lock();
     port_mode_t before = mode_of();
-    pr_port_seen(s_l, what);
+    int r = pr_port_seen(s_l, what);
     int moved = mode_of() != before;
     if (moved) {
-        const pr_rec_t *p = pr_port(s_l);
-        ESP_LOGI(TAG, "the port: %s \"%s\"", pr_kind_name(p->kind), p->name);
+        const pr_rec_t *p = pr_port_current(s_l);
+        if (p) ESP_LOGI(TAG, "the port: %s \"%s\"", pr_kind_name(p->kind), p->name);
     }
     after_change(moved);
+    return r;
 }
 
-void printers_port_seen_sw(sw_model_t m)
+int printers_port_seen_sw(sw_model_t m)
 {
     pr_model_t pm = pr_model_from_sw(m);
-    if (!s_started || pm == PR_MODEL_NONE) return;
+    if (!s_started || pm == PR_MODEL_NONE) return -1;
     lock();
     port_mode_t before = mode_of();
-    pr_port_seen_sw(s_l, pm);
+    int r = pr_port_seen_sw(s_l, pm);
     int moved = mode_of() != before;
     if (moved) {
-        const pr_rec_t *p = pr_port(s_l);
-        ESP_LOGI(TAG, "the port: %s \"%s\"", pr_kind_name(p->kind), p->name);
+        const pr_rec_t *p = pr_port_current(s_l);
+        if (p) ESP_LOGI(TAG, "the port: %s \"%s\"", pr_kind_name(p->kind), p->name);
     }
     after_change(moved);
+    return r;
 }
 
 void printers_at_seen(int at_link, const uint8_t *name, const uint8_t *type)
@@ -683,7 +688,7 @@ int printers_port_shared(void)
 {
     if (!s_started) return 0;
     lock();
-    const pr_rec_t *p = pr_port(s_l);
+    const pr_rec_t *p = pr_port_current(s_l);
     int on = p && (p->kind == PR_KIND_IMAGEWRITER || p->kind == PR_KIND_STYLEWRITER) && p->shared;
     unlock();
     return on;
@@ -693,7 +698,7 @@ pr_model_t printers_port_model(void)      // the port ImageWriter's, else PR_MOD
 {
     if (!s_started) return PR_MODEL_NONE;
     lock();
-    const pr_rec_t *p = pr_port(s_l);
+    const pr_rec_t *p = pr_port_current(s_l);
     pr_model_t m = p && p->kind == PR_KIND_IMAGEWRITER ? (pr_model_t)p->model : PR_MODEL_NONE;
     unlock();
     return m;
@@ -703,7 +708,7 @@ sw_model_t printers_port_sw_model(void)
 {
     if (!s_started) return SW_NONE;
     lock();
-    const pr_rec_t *p = pr_port(s_l);
+    const pr_rec_t *p = pr_port_current(s_l);
     sw_model_t m = p && p->kind == PR_KIND_STYLEWRITER ? pr_model_to_sw((pr_model_t)p->model) : SW_NONE;
     unlock();
     return m;
@@ -771,17 +776,17 @@ int printers_port_other_family(int family)
     return c;
 }
 
-void printers_port_set_sw_model(sw_model_t m)
+void printers_port_set_sw_model(int id, sw_model_t m)
 {
     pr_model_t pm = pr_model_from_sw(m);
     if (!s_started || pm == PR_MODEL_NONE) return;
     lock();
-    if (!pr_port_sw_found(s_l, pm)) {
-        unlock();
-        return;
-    }
-    const pr_rec_t *p = pr_port(s_l);
-    ESP_LOGI(TAG, "the port: %s \"%s\"", pr_kind_name(p->kind), p->name);
+    // The full sequence named `m` on the port for the record the person picked (W-1116, `id`):
+    // that record takes it, and either way `m` is the printer on the port now (heard set). The
+    // person asked, so the page and AirPrint are refreshed whether or not the model changed.
+    pr_port_sw_found(s_l, id, pm);
+    const pr_rec_t *p = pr_port_current(s_l);
+    if (p) ESP_LOGI(TAG, "the port: %s \"%s\"", pr_kind_name(p->kind), p->name);
     after_change(1);
 }
 
@@ -844,7 +849,7 @@ int printers_port_screen(char *dither, size_t cap, int *gain)
 {
     if (!s_started) return -1;
     lock();
-    const pr_rec_t *p = pr_port(s_l);
+    const pr_rec_t *p = pr_port_current(s_l);
     if (p) {
         snprintf(dither, cap, "%s", p->dither);
         *gain = p->gain;
@@ -857,7 +862,7 @@ void printers_port_set_screen(const char *dither, int gain)
 {
     if (!s_started) return;
     lock();
-    pr_rec_t *p = (pr_rec_t *)pr_port(s_l);
+    pr_rec_t *p = (pr_rec_t *)pr_port_current(s_l);
     if (p) {
         if (dither && dither[0]) snprintf(p->dither, sizeof p->dither, "%s", dither);
         if (gain >= 0 && gain <= 45) p->gain = (uint8_t)gain;
@@ -937,7 +942,7 @@ int printers_post(const char *body, char *err, size_t cap)
     *s_l = s_big->scratch;
     char dither[sizeof s_l->r[0].dither] = "";
     int gain = -1;
-    const pr_rec_t *p = pr_port(s_l);
+    const pr_rec_t *p = pr_port_current(s_l);
     int port_screen = o.screen_id >= 0 && p && p->id == o.screen_id;
     if (port_screen) {
         snprintf(dither, sizeof dither, "%s", p->dither);

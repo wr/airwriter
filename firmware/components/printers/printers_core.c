@@ -443,18 +443,35 @@ int pr_port_seen_sw(pr_list_t *l, pr_model_t m)
     return port_named(l, PR_HEARD_STYLEWRITER, m);
 }
 
-int pr_port_sw_found(pr_list_t *l, pr_model_t m)
+int pr_port_sw_found(pr_list_t *l, int id, pr_model_t m)
 {
-    if (!model_is_sw(m) || pr_port_of(l, m)) return 0;
-    pr_rec_t *p = (pr_rec_t *)pr_port_current(l);
-    if (!p || p->kind != PR_KIND_STYLEWRITER) {
-        p = NULL;
-        for (int i = 0; i < l->n; i++)
-            if (l->r[i].where == PR_WHERE_PORT && l->r[i].kind == PR_KIND_STYLEWRITER) p = &l->r[i];
+    if (!model_is_sw(m)) return 0;
+    // The record the person named, when `id` names one (W-1116: the full sequence confirms
+    // exactly the StyleWriter record the person picked, not the newest). id <= 0 keeps the old
+    // reach: the one on the port if that is a StyleWriter, else the newest StyleWriter record.
+    pr_rec_t *p = id > 0 ? pr_get(l, id) : NULL;
+    if (p && (p->where != PR_WHERE_PORT || p->kind != PR_KIND_STYLEWRITER)) p = NULL;
+    if (!p && id <= 0) {
+        p = (pr_rec_t *)pr_port_current(l);
+        if (!p || p->kind != PR_KIND_STYLEWRITER) {
+            p = NULL;
+            for (int i = 0; i < l->n; i++)
+                if (l->r[i].where == PR_WHERE_PORT && l->r[i].kind == PR_KIND_STYLEWRITER) p = &l->r[i];
+        }
     }
     if (!p) return 0;
-    become_stylewriter(l, p, m);
-    return 1;
+    // The full sequence named `m` on the port: that model is the printer on the port now.
+    // When `m` already has its own record, that one is the printer; leave the picked record as
+    // the person set it. Else the picked record becomes `m`.
+    pr_rec_t *other = (pr_rec_t *)pr_port_of(l, m);
+    if (other && other != p) {
+        port_heard(l, PR_HEARD_STYLEWRITER, m);
+        return 0;
+    }
+    int changed = p->model != m;
+    if (changed) become_stylewriter(l, p, m);
+    port_heard(l, PR_HEARD_STYLEWRITER, m);
+    return changed;
 }
 
 int pr_at_seen(pr_list_t *l, pr_where_t link, const uint8_t *nbp_name, const uint8_t *nbp_type,

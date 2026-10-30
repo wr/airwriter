@@ -156,6 +156,11 @@ last", and three changes (in bold). In order:
 2. A StyleWriter answering: `1` and `2` every 10 s, as built. **Each check also asks `?` (and `p`
    after `CS`, as a look does), so a different StyleWriter put in its place shows within one
    check.**
+   **Amendment (R11, 2026-10-30): a line-up edge or a look while a StyleWriter answers asks its
+   status at once, not at the next 10 s check, so an ImageWriter put in its place (its line
+   coming up) is found in about 1.5 s. The status bytes at 57600 are harmless to an ImageWriter
+   (bench 2026-10-27). The board no longer drops the line-up edge for an answering StyleWriter
+   (W-1116 task 5).**
 3. A line-up edge after a second or more down, or a look with the line ready: the plain question
    first where any StyleWriter record is in the list, the port last answered as a StyleWriter, or
    an original ImageWriter record is in the list; `ESC ?` first everywhere else; then the other

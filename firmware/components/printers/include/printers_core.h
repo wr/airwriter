@@ -153,13 +153,15 @@ void pr_init(pr_list_t *l, const uint8_t mac[6], uint16_t epoch);
 #define PR_SEEN_AGAIN (-2)
 int  pr_port_seen(pr_list_t *l, pr_port_seen_t what);
 int  pr_port_seen_sw(pr_list_t *l, pr_model_t m);
-// W-1103: the printer, asked with the full sequence, says the port's StyleWriter is `m`,
-// not the model the person picked: the record takes it, quietly. Its name follows if it
-// was the printer's own; sharing and who found it stay. 1 if it changed, else 0 (no
-// StyleWriter record, or `m` has a record of its own already). W-1116: the record is the
-// one on the port when that is a StyleWriter, else the newest StyleWriter record (the one
-// Add a Printer… just made).
-int  pr_port_sw_found(pr_list_t *l, pr_model_t m);
+// W-1103/W-1116: the printer, asked with the full sequence, says the port's StyleWriter is
+// `m`. The person named port record `id` a StyleWriter (Add a Printer…, the Model detail); its
+// record takes `m`, quietly, when `m` has no record of its own, and either way `m` is the
+// printer on the port now (heard). Its name follows if it was the printer's own; sharing and
+// who found it stay. id <= 0 keeps the old reach (the one on the port when that is a
+// StyleWriter, else the newest StyleWriter record). 1 if record `id` took `m`, else 0 (not a
+// StyleWriter record, or `m` has a record of its own already, which is then the one on the
+// port).
+int  pr_port_sw_found(pr_list_t *l, int id, pr_model_t m);
 int  pr_at_seen(pr_list_t *l, pr_where_t link, const uint8_t *nbp_name, const uint8_t *nbp_type,
                 int from_airwriter);
 void pr_at_queried(pr_list_t *l, int id, int ok, const lw_info_t *info);

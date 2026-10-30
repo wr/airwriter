@@ -62,12 +62,13 @@ int         printers_stored(void);
 esp_err_t   printers_start(const printers_cfg_t *cfg);
 
 // What the port said when asked: the self-ID's model (iw_model_t) with the
-// line ready, or not ready.
-void        printers_port_seen(int iw_model, int ready);
+// line ready, or not ready. Returns the core's result (pr_port_seen): the record id the
+// answer belongs to, PR_SEEN_AGAIN for a first sighting of a model with no record, or -1.
+int         printers_port_seen(int iw_model, int ready);
 // W-1103: a StyleWriter answered on the port as `m` (SW_NONE: nothing did, no
 // change). Its record's, or a record of its own once it has answered twice
-// (pr_port_seen_sw, W-1116).
-void        printers_port_seen_sw(sw_model_t m);
+// (pr_port_seen_sw, W-1116). Returns the core's result (the record id, PR_SEEN_AGAIN, or -1).
+int         printers_port_seen_sw(sw_model_t m);
 // What laser.c heard (once per printer, its link as at_link_t) and its query:
 // answered on at_link at net.node with its page count (-1 none), or not
 // (at_link -1). W-1098: a printer the list has under an old name keeps its
@@ -121,10 +122,11 @@ int         printers_port_heard(void);
 void        printers_port_answered(int heard);
 int         printers_port_other_family(int family);
 int         printers_port_conflict(void);
-// The full sequence found the port's StyleWriter to be `m`: its record takes it
-// (no notice: the person had named it a StyleWriter already; sharing stays as it
-// was). No-op for a port that is not a StyleWriter, or for the model it has.
-void        printers_port_set_sw_model(sw_model_t m);
+// The full sequence found the port's StyleWriter to be `m`: the record the person picked
+// (W-1116, `id`) takes it (no notice: the person had named it a StyleWriter already; sharing
+// stays as it was), and `m` is the printer on the port now. No-op for an `id` that is not a
+// StyleWriter port record.
+void        printers_port_set_sw_model(int id, sw_model_t m);
 // The printer on the port's name (pr_port_current), "" with none: the test page's.
 void        printers_port_name(char *out, size_t cap);
 // W-1116: the name vintage Macs see for the printer port and the queue name at boot

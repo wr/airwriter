@@ -1409,8 +1409,8 @@ static void test_sw_found(void)
     char uuid[46];
     strcpy(uuid, pr_port(&L)->uuid);
     pr_set_shared(&L, id, 0);
-    CHECK_EQ_INT(pr_port_sw_found(&L, PR_MODEL_SWC2200), 0);          // as picked: nothing
-    CHECK_EQ_INT(pr_port_sw_found(&L, PR_MODEL_SWC2500), 1);
+    CHECK_EQ_INT(pr_port_sw_found(&L, 0, PR_MODEL_SWC2200), 0);       // as picked: no change
+    CHECK_EQ_INT(pr_port_sw_found(&L, 0, PR_MODEL_SWC2500), 1);
     const pr_rec_t *p = pr_port(&L);
     CHECK_EQ_INT(p->model, PR_MODEL_SWC2500);
     CHECK(strcmp(p->name, "Color StyleWriter 2500") == 0);
@@ -1418,28 +1418,52 @@ static void test_sw_found(void)
     CHECK_EQ_INT(p->found_auto, 0);
     CHECK(strcmp(p->uuid, uuid) == 0);
     CHECK_EQ_INT(L.n_notes, 0);
+    // The full sequence's answer is the port's last answer: the record is on the port now.
+    CHECK_EQ_INT(pr_port_heard(&L), PR_HEARD_STYLEWRITER);
+    CHECK(pr_port_current(&L) == p);
     pr_rename(&L, id, "Desk");
-    CHECK_EQ_INT(pr_port_sw_found(&L, PR_MODEL_SW2), 1);
+    CHECK_EQ_INT(pr_port_sw_found(&L, 0, PR_MODEL_SW2), 1);
     CHECK(strcmp(pr_port(&L)->name, "Desk") == 0);
     // Not a StyleWriter model, not a StyleWriter record, no port.
-    CHECK_EQ_INT(pr_port_sw_found(&L, PR_MODEL_IW2), 0);
-    CHECK_EQ_INT(pr_port_sw_found(&L, PR_MODEL_NONE), 0);
+    CHECK_EQ_INT(pr_port_sw_found(&L, 0, PR_MODEL_IW2), 0);
+    CHECK_EQ_INT(pr_port_sw_found(&L, 0, PR_MODEL_NONE), 0);
     pr_set_model(&L, id, PR_MODEL_IW2);
-    CHECK_EQ_INT(pr_port_sw_found(&L, PR_MODEL_SW2), 0);
+    CHECK_EQ_INT(pr_port_sw_found(&L, 0, PR_MODEL_SW2), 0);
     CHECK_EQ_INT(pr_get(&L, id)->kind, PR_KIND_IMAGEWRITER);
     fresh();
-    CHECK_EQ_INT(pr_port_sw_found(&L, PR_MODEL_SW2), 0);
-    // W-1116: a model that has its own record already is not taken by another; the
-    // StyleWriter record it corrects is the one on the port when that is a StyleWriter.
+    CHECK_EQ_INT(pr_port_sw_found(&L, 0, PR_MODEL_SW2), 0);
+    // W-1116: a model that has its own record already is not taken by another; the id <= 0
+    // reach corrects the one on the port when that is a StyleWriter.
     int a = pr_add_port(&L, PR_MODEL_SWC2200);
     int b = pr_add_port(&L, PR_MODEL_SW2);
-    CHECK_EQ_INT(pr_port_sw_found(&L, PR_MODEL_SW2), 0);
+    CHECK_EQ_INT(pr_port_sw_found(&L, 0, PR_MODEL_SW2), 0);
     CHECK_EQ_INT(pr_get(&L, a)->model, PR_MODEL_SWC2200);
     CHECK_EQ_INT(pr_get(&L, b)->model, PR_MODEL_SW2);
     seen_sw(PR_MODEL_SW2);
-    CHECK_EQ_INT(pr_port_sw_found(&L, PR_MODEL_SW1200), 1);
+    CHECK_EQ_INT(pr_port_sw_found(&L, 0, PR_MODEL_SW1200), 1);
     CHECK_EQ_INT(pr_get(&L, b)->model, PR_MODEL_SW1200);
     CHECK_EQ_INT(pr_get(&L, a)->model, PR_MODEL_SWC2200);
+
+    // W-1116: by id, the full sequence corrects exactly the record the person picked, not the
+    // newest StyleWriter, and that record is the one on the port after.
+    fresh();
+    int c = pr_add_port(&L, PR_MODEL_SW2);
+    int d = pr_add_port(&L, PR_MODEL_SWC2500);
+    CHECK_EQ_INT(pr_port_sw_found(&L, c, PR_MODEL_SW1200), 1);        // the older record, by id
+    CHECK_EQ_INT(pr_get(&L, c)->model, PR_MODEL_SW1200);
+    CHECK_EQ_INT(pr_get(&L, d)->model, PR_MODEL_SWC2500);             // the newer one untouched
+    CHECK(pr_port_current(&L) == pr_get(&L, c));
+    // The picked record's model already matches the answer: no change, still on the port.
+    CHECK_EQ_INT(pr_port_sw_found(&L, c, PR_MODEL_SW1200), 0);
+    CHECK(pr_port_current(&L) == pr_get(&L, c));
+    // The answer names a model another record has: that record is the one on the port; the
+    // picked record is left as the person set it.
+    CHECK_EQ_INT(pr_port_sw_found(&L, c, PR_MODEL_SWC2500), 0);
+    CHECK_EQ_INT(pr_get(&L, c)->model, PR_MODEL_SW1200);
+    CHECK(pr_port_current(&L) == pr_get(&L, d));
+    // id names a record that is no longer a StyleWriter: nothing.
+    pr_set_model(&L, c, PR_MODEL_IW2);
+    CHECK_EQ_INT(pr_port_sw_found(&L, c, PR_MODEL_SW2), 0);
 }
 
 // A model the person picks reaches the same places; the uuid is the record's for its life

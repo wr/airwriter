@@ -736,7 +736,20 @@ read back is a list made again). At most 8 records.
   not in the list (original ImageWriter, one that is off, a StyleWriter by model), beside the
   records there, or converts an "Unknown printer" or "Something else" record; a model already
   listed is refused, and so is a record's Model set to one another record has, or to
-  Something else while another port record is one (one per port).
+  Something else while another port record is one (one per port). The one on the port (the
+  record that answered last) shows its state; every other port record is Offline. An
+  ImageWriter record reads Ready only once `ESC ?` has named its model since the line came up
+  (never from the line alone), so the page never shows the wrong ImageWriter for a moment, and
+  how long a change takes to show:
+
+  | Printer | Plugged in or switched on, to Ready | Unplugged or switched off, to Offline |
+  |---|---|---|
+  | ImageWriter II or LQ | 2-3 s (line up, the 2 s settle, `ESC ?`) | 3 s |
+  | Original ImageWriter | About 3 s (line up, the settle, `ESC ?` and the plain question unanswered) | 3 s |
+  | StyleWriter II, 1200, Color 1500-2500 | Within 5 s | Within 10 s |
+  | Original StyleWriter | On Look for Printers or at start-up | Reads Ready while quiet once found |
+  | LaserWriter on AppleTalk | In seconds | 30 s |
+
 - **Sharing.** Identified printers are shared at once, up to six (`PR_SHARE_MAX`, W-1116; any
   mix of the port's records and AppleTalk printers, where before it was the port's and three
   on AppleTalk), each its own AirPrint printer in one of `IPP_PRINTERS` (7) slots: printer 0
@@ -929,11 +942,13 @@ Apple's StyleWriter adapter (ADSP, not PAP), is not built.
   `1` and `2`, or a job's question, get nothing) is looked at once, once per stop: the plain
   question, then `ESC ?` if that got nothing, so an ImageWriter put in its place with its line
   already up (behind an A/B switch) is found within one status interval, and one whose line
-  comes up while the StyleWriter record still answers is found by the status its line-up asks
-  at once and the stop's look, in about 1.5 s. So the design's timings hold: a StyleWriter
-  within 5 s, an ImageWriter at its line-up's `ESC ?` after the 2 s settle, whatever answered
-  before; only a StyleWriter that raises no line, put in place of one that answers, waits for
-  the next status check, within 10 s, whose `?` names it.
+  comes up while the StyleWriter record still answers is found by the status its line-up edge
+  asks at once (R11) and the stop's look, in about 1.5 s from the edge. The board raises that
+  edge 2 s after the line itself comes up (the settle), so about 3 to 3.5 s from the line
+  coming up. So the design's timings hold: a StyleWriter within 5 s, an ImageWriter 2 to 3 s
+  after its line comes up (the settle, then `ESC ?`), whatever answered before; only a
+  StyleWriter that raises no line, put in place of one that answers, waits for the next status
+  check, within 10 s, whose `?` names it.
 - **Several printers on the port** (`W-1116 Printer port: several printers, the one plugged in
   shows online`; design `docs/superpowers/specs/2026-10-30-port-printers-design.md`, which
   replaces the StyleWriter branch's swapped-port refusal and W-1088's "changed" notice). The
@@ -961,18 +976,26 @@ Apple's StyleWriter adapter (ADSP, not PAP), is not built.
   the Chooser name and the queue name are the oldest ImageWriter record's; a port job's end
   goes to the slot it came in on; the StyleWriter glue's `swapped` is
   `pr_port_other_family(PR_HEARD_STYLEWRITER)` (the port last answered as an ImageWriter),
-  whichever record. The board fills the list-level inputs (`printers_port_listed`) and so
-  asks every 5 s and in the list's order, but still gives the policy the oldest port record's
-  kind, never sets `confirm`, keeps the oldest port record's kind as the port's mode
-  (`printers_port_mode`, `s_port_sw`: the words and live state of the printer on the port are
-  read as that family's until the mode follows it), and refuses the oldest record's AirPrint
-  jobs (the job aborts), its test page (the button blips Busy and runs no cable test, the
-  page's Print Test Page answers 409), a cleaning (409) and a Mac's job (busy) while the other
-  family answered last (`printers_port_conflict`, on `pr_port_other_family`), as the
-  StyleWriter branch did; that ends when the record's own family answers again, or when the
-  person names the record a StyleWriter (an ImageWriter's answer before it is forgotten). The
-  busy answer for a port printer that is not the one answering, the current record as the
-  port's mode and the page follow in W-1116's later commits.
+  whichever record. The current record is the port's mode and state: `printers_port_mode`,
+  `s_port_sw` and the live state, model, screen, sharing and `/api/status` `model` follow
+  `pr_port_current`, so the page and the test page name and read the printer that answered
+  last, and a Something else record in the list silences the port whatever else is there. An
+  ImageWriter record reads Ready only once `ESC ?` has named its model since the line came up
+  (`s_iw_named`), never from the line alone, so the page never shows the wrong ImageWriter for
+  a moment, and Ready appears with the answer, about 2 to 3 s after the line comes up. The
+  board sets `confirm` to repeat a first sighting, asks every 5 s and in the list's order, and
+  gives the policy the current record's kind; a person's model change on the port forgets the
+  port's last answer (R10) and the port is asked again at once; the person's pick of a
+  StyleWriter is confirmed on the record they named (`pr_port_sw_found` by id). Still on the
+  oldest record until W-1116's job commit: the board refuses the oldest record's AirPrint jobs
+  (the job aborts), its test page (the button blips Busy and runs no cable test, the page's
+  Print Test Page answers 409), a cleaning (409) and a Mac's job (busy) while the other family
+  answered last (`printers_port_conflict`, on `pr_port_other_family`), as the StyleWriter
+  branch did; that ends when the record's own family answers again, or when the person names
+  the record a StyleWriter (an ImageWriter's answer before it is forgotten). The busy answer
+  for a port printer that is not the one answering, and that job, test page, cleaning and
+  Mac's-job gate moving to the record the job is for (`pr_port_absent`), follow in W-1116's
+  job commit.
 - **AirPrint.** 360 × 360 dpi, URF `RS360`; Letter, A4 and Legal, the first the default
   (`printer_media_t` in `printer_caps`: the page's width at 360 dpi names the entry, and the
   rip keeps the engine's printable area from `rip_left` for `rip_w` dots). Margins in whole
@@ -1075,7 +1098,11 @@ Apple's StyleWriter adapter (ADSP, not PAP), is not built.
   fails, the state is offline ("check power and cable"), and the next job resets the printer. A
   printer switched off mid-page has lost the page.
 - **Idle and status.** Idle, `1` and `2` every 10 s feed the page, the panel and IPP as the
-  ImageWriter's line does: an answer is ready (or the fault it holds), none is offline. The
+  ImageWriter's line does: an answer is ready (or the fault it holds), none is offline. Each
+  check also asks the plain question (`?`, and `p` after `CS`), so a different StyleWriter put
+  in its place shows within one check; a StyleWriter plugged in on a quiet port is found within
+  5 s by the plain question's cadence, and reads Offline within 10 s of being switched off (the
+  timings table in 3.15). The
   original StyleWriter ignores the plain question until a reset and is switched off between
   uses, so its silence while idle says nothing (`sw_idle_silent`): once it has answered it
   reads as ready while quiet, takes jobs, and is asked no `1` and `2` while it is not
