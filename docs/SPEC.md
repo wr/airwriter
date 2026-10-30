@@ -654,7 +654,7 @@ ImageWriter on the port keeps its identity, UUID and bytes (`tools/ipp/test/gold
   back intact; otherwise hex. Answers in its record; run again at the first answer after boot
   and when the printer comes back, tried again after 60 s twice, then every 5 minutes. Three
   unanswered make the "didn't answer" notice (Share Anyway takes its defaults).
-- **The AirPrint printer** (`ipp_server` printer 1-5, `laser/lw_caps.c`): `ipp/p<id>` (a board's
+- **The AirPrint printer** (`ipp_server` printer 1-6, `laser/lw_caps.c`): `ipp/p<id>` (a board's
   W-1082 LaserWriter advertises `ipp/laser` and answers at both), its own Bonjour instance (its name in the list),
   `printer-uuid` `41575254-4c57-<CONFIG_AIRWRITER_LASER_UUID_EPOCH>-
   <hash of the NBP name>-<MAC>`, URF `RS300`, `W8`, only the paper it reported, margins from its
@@ -739,9 +739,12 @@ read back is a list made again). At most 8 records.
   Something else while another port record is one (one per port).
 - **Sharing.** Identified printers are shared at once, up to six (`PR_SHARE_MAX`, W-1116; any
   mix of the port's records and AppleTalk printers, where before it was the port's and three
-  on AppleTalk), each its own AirPrint printer in one of `IPP_PRINTERS` (6) slots, Bonjour by
-  name (`CONFIG_MDNS_MAX_SERVICES` 10 in `sdkconfig.defaults`: six `_ipp`, the `_printer` stub
-  and `_http`). Every record answers at `ipp/p<id>` for as long as it exists, port records
+  on AppleTalk), each its own AirPrint printer in one of `IPP_PRINTERS` (7) slots: printer 0
+  is the oldest port record's alone and stays empty while that record is not shared or there
+  is none, printers 1-6 take every other shared record, so six fit either way (R14). Bonjour
+  by name (`CONFIG_MDNS_MAX_SERVICES` 10 in `sdkconfig.defaults`: only a slot with a record
+  registers, so at most six `_ipp`, printer 0's `_printer` stub and `_http`, 8 of the 10).
+  Every record answers at `ipp/p<id>` for as long as it exists, port records
   included; the oldest port record is also advertised at `ipp/print`, at printer 0, with the
   legacy routing of any other path, and W-1082's LaserWriter also answers at `ipp/laser`.
   Removing the oldest port record moves `ipp/print` to the next one, whose `ipp/p<id>` keeps
@@ -753,15 +756,19 @@ read back is a list made again). At most 8 records.
   Bonjour at once, after the job holding its slot. The W-1079 AirPrint switch is the whole
   box's. AirPrint to an AppleTalk ImageWriter is not built: it is old Macs' only. The slots
   (`printers.c`): printer 0 is the oldest port record; every other shared record, port or
-  AppleTalk, takes the lowest free slot of 1-5 and keeps it for its life there; a record that
-  becomes the oldest moves to printer 0 under the same Bonjour name, so printer 0 is cleared
-  first and the record leaves its old slot before it takes it, and while a job holds either
-  slot nothing moves until the job ends. A port record's slot carries the record's own sink, with
+  AppleTalk, takes the lowest free slot of 1-6 and keeps it for its life there; a record that
+  becomes the oldest moves to printer 0 under the same Bonjour name: printer 0 is cleared
+  first (while a job holds printer 0 nothing moves until it ends), then the record leaves its
+  old slot and takes printer 0; while a job holds its old slot it stays there and `ipp/print`
+  answers nobody until that job ends. After any such move, and after one that waited for a
+  job, every port slot is told its state again (`printers_cfg_t.placed`: a slot starts with
+  none). A port record's slot carries the record's own sink, with
   its slot and id in the ctx as a LaserWriter's does, so a job's end goes back to the slot it
   came in on. What a port record's slot says (`pr_port_say`, `main.c`'s `port_push`, on every
   change of the port's state or the list): the printer on the port its own state, in its
   family's words (3.9's for an ImageWriter, 3.16's for a StyleWriter), and the colour the
-  ribbon or cartridge last read offers (a black-only StyleWriter none); every other port
+  ribbon or cartridge last read offers (a black-only StyleWriter none; a record that is not
+  on the port keeps the colour it last offered, unless its model has none); every other port
   record `stopped`, `offline-report`, "Offline: *name* is connected instead." while that
   printer is present, "Offline: the printer port is set to Something else." while a Something
   else record is listed, else its family's offline words with nothing answering; so phones see

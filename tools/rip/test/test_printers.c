@@ -2430,9 +2430,20 @@ static void test_path_moves_on_removal(void)
     CHECK(strstr(buf, "\"rp\":\"ipp/print\"") != NULL);
 }
 
-// W-1116: what each port record's AirPrint printer says of itself (pr_port_say), beside the
-// board's own words for the printer on the port, and which record carries the port's live
-// state (pr_port_live_id): the one on the port, every other port record offline.
+// The sentence the board pushes for port record `id` as it stands: pr_port_say's answer put
+// into words with the name of the printer on the port (pr_port_on), as main's port_push does.
+static const char *say_words(const pr_live_t live[PR_MAX], int id)
+{
+    static char msg[PR_SAY_MAX];
+    int on = pr_port_on(&L, live);
+    pr_port_say_words(pr_port_say(&L, live, id), on ? pr_get(&L, on)->name : NULL, msg, sizeof msg);
+    return msg;
+}
+
+// W-1116: what each port record's AirPrint printer says of itself (pr_port_say, its words
+// pr_port_say_words), beside the board's own words for the printer on the port, and which
+// record carries the port's live state (pr_port_live_id): the one on the port, every other
+// port record offline.
 static void test_port_say(void)
 {
     fresh();
@@ -2444,34 +2455,35 @@ static void test_port_say(void)
     pr_at_queried(&L, lw, 1, &info);
     pr_live_t live[PR_MAX];
     memset(live, 0, sizeof live);
-    char msg[80];
     // Nothing on the port: the one that answered last says its own state (offline, as the
     // board reads it), the other is offline in its own family's words.
     CHECK_EQ_INT(pr_port_live_id(&L), lq);
-    CHECK_EQ_INT(pr_port_say(&L, live, lq, msg, sizeof msg), PR_PORT_SAY_OWN);
-    CHECK(msg[0] == '\0');
-    CHECK_EQ_INT(pr_port_say(&L, live, iw, msg, sizeof msg), PR_PORT_SAY_OFFLINE);
-    CHECK(msg[0] == '\0');
-    CHECK_EQ_INT(pr_port_say(&L, live, lw, msg, sizeof msg), PR_PORT_SAY_OWN);    // not the port's
-    CHECK_EQ_INT(pr_port_say(&L, live, 99, msg, sizeof msg), PR_PORT_SAY_OWN);
+    CHECK_EQ_INT(pr_port_on(&L, live), 0);
+    CHECK_EQ_INT(pr_port_say(&L, live, lq), PR_PORT_SAY_OWN);
+    CHECK(say_words(live, lq)[0] == '\0');
+    CHECK_EQ_INT(pr_port_say(&L, live, iw), PR_PORT_SAY_OFFLINE);
+    CHECK(say_words(live, iw)[0] == '\0');
+    CHECK_EQ_INT(pr_port_say(&L, live, lw), PR_PORT_SAY_OWN);    // not the port's
+    CHECK_EQ_INT(pr_port_say(&L, live, 99), PR_PORT_SAY_OWN);
     // The LQ is there: the II is offline because the LQ is connected, by the LQ's name on
     // the page.
     live[pr_index(&L, lq)].present = 1;
-    CHECK_EQ_INT(pr_port_say(&L, live, iw, msg, sizeof msg), PR_PORT_SAY_ABSENT);
-    CHECK(strcmp(msg, "Offline: ImageWriter LQ is connected instead.") == 0);
-    CHECK_EQ_INT(pr_port_say(&L, live, lq, msg, sizeof msg), PR_PORT_SAY_OWN);
+    CHECK_EQ_INT(pr_port_on(&L, live), lq);
+    CHECK_EQ_INT(pr_port_say(&L, live, iw), PR_PORT_SAY_ABSENT);
+    CHECK(strcmp(say_words(live, iw), "Offline: ImageWriter LQ is connected instead.") == 0);
+    CHECK_EQ_INT(pr_port_say(&L, live, lq), PR_PORT_SAY_OWN);
     pr_rename(&L, lq, "Desk");
-    CHECK_EQ_INT(pr_port_say(&L, live, iw, msg, sizeof msg), PR_PORT_SAY_ABSENT);
-    CHECK(strcmp(msg, "Offline: Desk is connected instead.") == 0);
+    CHECK(strcmp(say_words(live, iw), "Offline: Desk is connected instead.") == 0);
     // The II answers: the other way round.
     memset(live, 0, sizeof live);
     pr_port_seen(&L, PR_PORT_IW2);
     CHECK_EQ_INT(pr_port_live_id(&L), iw);
-    CHECK_EQ_INT(pr_port_say(&L, live, lq, msg, sizeof msg), PR_PORT_SAY_OFFLINE);
+    CHECK_EQ_INT(pr_port_say(&L, live, lq), PR_PORT_SAY_OFFLINE);
     live[pr_index(&L, iw)].present = 1;
-    CHECK_EQ_INT(pr_port_say(&L, live, iw, msg, sizeof msg), PR_PORT_SAY_OWN);
-    CHECK_EQ_INT(pr_port_say(&L, live, lq, msg, sizeof msg), PR_PORT_SAY_ABSENT);
-    CHECK(strcmp(msg, "Offline: ImageWriter II is connected instead.") == 0);
+    CHECK_EQ_INT(pr_port_on(&L, live), iw);
+    CHECK_EQ_INT(pr_port_say(&L, live, iw), PR_PORT_SAY_OWN);
+    CHECK_EQ_INT(pr_port_say(&L, live, lq), PR_PORT_SAY_ABSENT);
+    CHECK(strcmp(say_words(live, lq), "Offline: ImageWriter II is connected instead.") == 0);
     // A Something else record in the list: the port is its (asked nothing), and every other
     // port record is offline for that reason, whatever answered and whatever is there.
     int se = pr_add_port(&L, PR_MODEL_SW2);
@@ -2479,31 +2491,41 @@ static void test_port_say(void)
     CHECK_EQ_INT(pr_set_model(&L, se, PR_MODEL_NONE), 0);
     CHECK(pr_port_said_other(&L) == pr_get(&L, se));
     CHECK_EQ_INT(pr_port_live_id(&L), se);
-    CHECK_EQ_INT(pr_port_say(&L, live, iw, msg, sizeof msg), PR_PORT_SAY_SAID_OTHER);
-    CHECK(strcmp(msg, "Offline: the printer port is set to Something else.") == 0);
-    CHECK_EQ_INT(pr_port_say(&L, live, lq, msg, sizeof msg), PR_PORT_SAY_SAID_OTHER);
-    CHECK_EQ_INT(pr_port_say(&L, live, se, msg, sizeof msg), PR_PORT_SAY_OWN);
+    CHECK_EQ_INT(pr_port_say(&L, live, iw), PR_PORT_SAY_SAID_OTHER);
+    CHECK(strcmp(say_words(live, iw), "Offline: the printer port is set to Something else.") == 0);
+    CHECK_EQ_INT(pr_port_say(&L, live, lq), PR_PORT_SAY_SAID_OTHER);
+    CHECK_EQ_INT(pr_port_say(&L, live, se), PR_PORT_SAY_OWN);
     CHECK_EQ_INT(pr_remove(&L, se), 0);
     CHECK_EQ_INT(pr_port_live_id(&L), iw);
-    CHECK_EQ_INT(pr_port_say(&L, live, lq, msg, sizeof msg), PR_PORT_SAY_ABSENT);
+    CHECK_EQ_INT(pr_port_say(&L, live, lq), PR_PORT_SAY_ABSENT);
+    // The words alone: the longest name fits PR_SAY_MAX, and no name is no name.
+    char msg[PR_SAY_MAX];
+    pr_port_say_words(PR_PORT_SAY_ABSENT, "A name of thirty-two characters!", msg, sizeof msg);
+    CHECK(strcmp(msg, "Offline: A name of thirty-two characters! is connected instead.") == 0);
+    pr_port_say_words(PR_PORT_SAY_ABSENT, NULL, msg, sizeof msg);
+    CHECK(strcmp(msg, "Offline:  is connected instead.") == 0);
+    pr_port_say_words(PR_PORT_SAY_OWN, "Desk", msg, sizeof msg);
+    CHECK(msg[0] == '\0');
+    pr_port_say_words(PR_PORT_SAY_OFFLINE, "Desk", msg, sizeof msg);
+    CHECK(msg[0] == '\0');
     // Alone on the port: its own state, there or not.
     fresh();
     iw = seen_iw(PR_PORT_IW2);
     memset(live, 0, sizeof live);
     CHECK_EQ_INT(pr_port_live_id(&L), iw);
-    CHECK_EQ_INT(pr_port_say(&L, live, iw, msg, sizeof msg), PR_PORT_SAY_OWN);
+    CHECK_EQ_INT(pr_port_say(&L, live, iw), PR_PORT_SAY_OWN);
     live[pr_index(&L, iw)].present = 1;
-    CHECK_EQ_INT(pr_port_say(&L, live, iw, msg, sizeof msg), PR_PORT_SAY_OWN);
+    CHECK_EQ_INT(pr_port_say(&L, live, iw), PR_PORT_SAY_OWN);
     // Nothing heard, two records added by hand: the oldest carries the port's state.
     fresh();
     iw = pr_add_port(&L, PR_MODEL_IW2);
     lq = pr_add_port(&L, PR_MODEL_IWLQ);
     memset(live, 0, sizeof live);
     CHECK_EQ_INT(pr_port_live_id(&L), iw);
-    CHECK_EQ_INT(pr_port_say(&L, live, iw, msg, sizeof msg), PR_PORT_SAY_OWN);
-    CHECK_EQ_INT(pr_port_say(&L, live, lq, msg, sizeof msg), PR_PORT_SAY_OFFLINE);
+    CHECK_EQ_INT(pr_port_say(&L, live, iw), PR_PORT_SAY_OWN);
+    CHECK_EQ_INT(pr_port_say(&L, live, lq), PR_PORT_SAY_OFFLINE);
     live[pr_index(&L, iw)].present = 1;
-    CHECK_EQ_INT(pr_port_say(&L, live, lq, msg, sizeof msg), PR_PORT_SAY_ABSENT);
+    CHECK_EQ_INT(pr_port_say(&L, live, lq), PR_PORT_SAY_ABSENT);
     // A StyleWriter record while an ImageWriter answers, and the reverse.
     fresh();
     int sw = seen_sw(PR_MODEL_SW2);
@@ -2511,19 +2533,20 @@ static void test_port_say(void)
     memset(live, 0, sizeof live);
     live[pr_index(&L, iw)].present = 1;
     CHECK_EQ_INT(pr_port_live_id(&L), iw);
-    CHECK_EQ_INT(pr_port_say(&L, live, sw, msg, sizeof msg), PR_PORT_SAY_ABSENT);
-    CHECK(strcmp(msg, "Offline: ImageWriter II is connected instead.") == 0);
+    CHECK_EQ_INT(pr_port_say(&L, live, sw), PR_PORT_SAY_ABSENT);
+    CHECK(strcmp(say_words(live, sw), "Offline: ImageWriter II is connected instead.") == 0);
     memset(live, 0, sizeof live);
     pr_port_seen_sw(&L, PR_MODEL_SW2);
     live[pr_index(&L, sw)].present = 1;
     CHECK_EQ_INT(pr_port_live_id(&L), sw);
-    CHECK_EQ_INT(pr_port_say(&L, live, iw, msg, sizeof msg), PR_PORT_SAY_ABSENT);
-    CHECK(strcmp(msg, "Offline: StyleWriter II is connected instead.") == 0);
+    CHECK_EQ_INT(pr_port_say(&L, live, iw), PR_PORT_SAY_ABSENT);
+    CHECK(strcmp(say_words(live, iw), "Offline: StyleWriter II is connected instead.") == 0);
     // No port record: nothing carries the port.
     fresh();
     CHECK_EQ_INT(pr_port_live_id(&L), -1);
     lw = pr_at_seen(&L, PR_WHERE_CABLE, P("Office"), P("LaserWriter"), 0);
     CHECK_EQ_INT(pr_port_live_id(&L), -1);
+    CHECK_EQ_INT(pr_port_on(&L, live), 0);
 }
 
 // W-1116: the name vintage Macs see for the printer port, and the queue name at boot: the

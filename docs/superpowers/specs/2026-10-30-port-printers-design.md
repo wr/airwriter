@@ -232,7 +232,10 @@ port first."
 
 ## Six shared printers
 
-`PR_SHARE_MAX` 6, any mix; the separate AppleTalk cap goes. `IPP_PRINTERS` 6. Bonjour 8 of 10
+`PR_SHARE_MAX` 6, any mix; the separate AppleTalk cap goes. `IPP_PRINTERS` 7 (ruling R14,
+2026-10-30: slot 0 is the oldest port record's alone and stays empty while that record is not
+shared or there is none, so the six others need slots of their own; at most six are on at
+once). Bonjour 8 of 10
 services, with `CONFIG_MDNS_MAX_SERVICES` pinned in `sdkconfig.defaults` (releases build from it
 alone). The list stays at 8 records. A seventh identified printer is listed, not shared, with
 the "more than six" notice (today's "more than four", renumbered).

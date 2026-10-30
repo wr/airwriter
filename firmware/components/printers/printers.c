@@ -30,8 +30,11 @@ static const char *NS = "printers";
 
 enum { BLOB_MAX = 8 + sizeof(pr_list_t), SEEN_MAX = 4 + PR_MAX * 9 };
 
-// Every shared record has an AirPrint slot (W-1116).
-_Static_assert(IPP_PRINTERS >= PR_SHARE_MAX, "a slot for every shared printer");
+// Every shared record has an AirPrint slot (W-1116, R14): slot 0 is the oldest port record's
+// alone and stays empty while that record is not shared (or there is none), so the other
+// PR_SHARE_MAX records need slots of their own.
+_Static_assert(IPP_PRINTERS >= PR_SHARE_MAX + 1,
+               "slot 0 is the oldest port record's alone: a slot for every other shared printer");
 
 // A shared record's AirPrint slot (1 to IPP_PRINTERS-1) as it is wanted, and as it was last
 // put there: a LaserWriter's, or (W-1116) a port record's other than the oldest.
@@ -320,9 +323,10 @@ static int targets_fill(void)
     return n;
 }
 
-// Slots 1 to IPP_PRINTERS-1 as wanted. Under s_apply_mx.
-static void others_apply(void)
+// Slots 1 to IPP_PRINTERS-1 as wanted. How many changed. Under s_apply_mx.
+static int others_apply(void)
 {
+    int changed = 0;
     for (int k = 1; k < IPP_PRINTERS; k++) {
         lock();
         slot_t w = s_big->want[k];
@@ -361,10 +365,12 @@ static void others_apply(void)
             lock();
             s_big->now[k] = w;
             unlock();
+            changed++;
         } else {
             ESP_LOGI(TAG, "printer %d changes after its job (%s)", k, esp_err_to_name(err));
         }
     }
+    return changed;
 }
 
 void printers_apply(void)
@@ -372,13 +378,15 @@ void printers_apply(void)
     if (!s_started) return;
     xSemaphoreTake(s_apply_mx, portMAX_DELAY);
     slot0_t w;
+    int changed = 0;
     lock();
     slot0_want(&w);
     others_want();
     // W-1116: a port record that became the oldest (the one before it was removed) is still
     // in its old slot. It leaves that slot before it takes slot 0, under the same Bonjour
     // name; slot 0 is cleared first, and while a job holds slot 0 nothing moves (the job's
-    // end applies again), so the record stays reachable where it is meanwhile.
+    // end applies again), so the record stays reachable where it is meanwhile. While a job
+    // holds its old slot instead, slot 0 is cleared and waits empty for it.
     int moving = s_slot0_known && w.on && slot_of(w.id) > 0;
     unlock();
     if (moving && ipp_server_set_printer(0, NULL) != ESP_OK) {
@@ -388,8 +396,9 @@ void printers_apply(void)
             lock();
             memset(&s_slot0, 0, sizeof s_slot0);
             unlock();
+            changed++;
         }
-        if (s_slot0_known) others_apply();         // ipp_server is up (printers_port_ipp)
+        if (s_slot0_known) changed += others_apply();   // ipp_server is up (printers_port_ipp)
         lock();
         int held = w.on && slot_of(w.id) > 0;      // its old slot's job keeps it there
         unlock();
@@ -404,6 +413,7 @@ void printers_apply(void)
                 s_slot0 = w;
                 unlock();
                 s_slot0_known = 1;
+                changed++;
             } else {
                 ESP_LOGI(TAG, "the port's printer changes after its job (%s)", esp_err_to_name(err));
             }
@@ -414,6 +424,9 @@ void printers_apply(void)
     unlock();
     laser_set_targets(s_big->targets, n);         // s_apply_mx keeps targets[] ours
     xSemaphoreGive(s_apply_mx);
+    // A slot put, moved or taken off starts with no state: what each port slot says is
+    // pushed again (the slot's change may have waited for a job, with nothing else to push).
+    if (changed && s_cfg.placed) s_cfg.placed();
 }
 
 // ------------------------------------------------------------- start
@@ -802,12 +815,15 @@ int printers_slot_of(int id)
     return k;
 }
 
-int printers_port_slots(printers_port_slot_t out[], int max)
+int printers_port_slots(printers_port_slot_t out[], int max, char on_name[PR_NAME_MAX])
 {
     int n = 0;
+    on_name[0] = '\0';
     if (!s_started) return 0;
     lock();
     live_fill();
+    int on = pr_port_on(s_l, s_live);
+    if (on) snprintf(on_name, PR_NAME_MAX, "%s", pr_get(s_l, on)->name);
     for (int i = 0; i < s_l->n && n < max; i++) {
         const pr_rec_t *r = &s_l->r[i];
         if (r->where != PR_WHERE_PORT) continue;
@@ -818,7 +834,7 @@ int printers_port_slots(printers_port_slot_t out[], int max)
         s->id = r->id;
         s->kind = r->kind;
         s->model = r->model;
-        s->say = (uint8_t)pr_port_say(s_l, s_live, r->id, s->msg, sizeof s->msg);
+        s->say = (uint8_t)pr_port_say(s_l, s_live, r->id);
     }
     unlock();
     return n;

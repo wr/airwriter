@@ -41,6 +41,10 @@ typedef struct {
     void (*port_screen)(const char *dither, int gain);  // its halftone was changed
     void (*look)(void);              // "Look for printers": ask the port again
     void (*changed)(void);           // names, sharing or the port's kind changed
+    // W-1116: a record was put on AirPrint, moved or taken off (printers_apply), after the
+    // job that held its slot if there was one: a slot starts with no state, so what each
+    // port slot says is pushed again (main's port_push). Optional. No list lock held.
+    void (*placed)(void);
     // W-1103, both optional, both after the post is stored and applied and with
     // no list lock held. clean: one cleaning of printer `id`'s print head
     // (0, or an HTTP status: 409 when a job holds the printer); the status is
@@ -130,14 +134,11 @@ void        printers_chooser_name(char *out, size_t cap);
 // W-1116: a record's AirPrint slot as last put there (0 the oldest port record's), -1 none.
 int         printers_slot_of(int id);
 // W-1116: the port records on AirPrint, in list order, for what each one's printer is told
-// (main's port_push): its slot, kind and model, what it says of itself (pr_port_say_t) and
-// the sentence that goes with PR_PORT_SAY_ABSENT or PR_PORT_SAY_SAID_OTHER. The live state
-// is read as printers_json reads it. How many; a record without a slot is left out.
-typedef struct {
-    uint8_t slot, id, kind, model, say;
-    char    msg[80];
-} printers_port_slot_t;
-int         printers_port_slots(printers_port_slot_t out[], int max);
+// (main's port_push): its slot, kind and model and what it says of itself (pr_port_say_t);
+// on_name is the name of the printer on the port ("" none), for pr_port_say_words. The live
+// state is read as printers_json reads it. How many; a record without a slot is left out.
+typedef struct { uint8_t slot, id, kind, model, say; } printers_port_slot_t;
+int         printers_port_slots(printers_port_slot_t out[], int max, char on_name[PR_NAME_MAX]);
 // The port printer's halftone and gain, from its record: -1 with no port printer.
 int         printers_port_screen(char *dither, size_t cap, int *gain);
 // The page's old Printer pane changed the screen: the port record follows.

@@ -28,18 +28,27 @@ static void test_route_slots(void)
     CHECK_EQ_INT(ipp_route("/ipp/p3", no_port, NONE), 1);
 }
 
-// W-1116: six slots, any mix of the port's records and AppleTalk printers; the last answers
-// at its own path like the rest.
-static void test_route_six(void)
+// W-1116: seven slots for six shared printers, any mix of the port's records and AppleTalk
+// printers (R14: slot 0 is the oldest port record's alone, so six others fit beside an empty
+// slot 0); the last answers at its own path like the rest.
+static void test_route_seven(void)
 {
-    CHECK_EQ_INT(IPP_PRINTERS, 6);
+    CHECK_EQ_INT(IPP_PRINTERS, 7);
     const char *res[IPP_PRINTERS] = { "ipp/print", "ipp/p3", "ipp/p4", "ipp/p5", "ipp/p6",
-                                      "ipp/p7" };
+                                      "ipp/p7", "ipp/p8" };
+    CHECK_EQ_INT(ipp_route("/ipp/p8", res, NONE), 6);
+    CHECK_EQ_INT(ipp_route("/ipp/p8/1", res, NONE), 6);
     CHECK_EQ_INT(ipp_route("/ipp/p7", res, NONE), 5);
-    CHECK_EQ_INT(ipp_route("/ipp/p7/1", res, NONE), 5);
     CHECK_EQ_INT(ipp_route("/ipp/p6", res, NONE), 4);
-    CHECK_EQ_INT(ipp_route("/ipp/p8", res, NONE), -1);
+    CHECK_EQ_INT(ipp_route("/ipp/p9", res, NONE), -1);
     CHECK_EQ_INT(ipp_route("/ipp/print", res, NONE), 0);
+    // Six shared with no port record: slot 0 empty, slots 1-6 full.
+    const char *six[IPP_PRINTERS] = { NULL, "ipp/p3", "ipp/p4", "ipp/p5", "ipp/p6", "ipp/p7",
+                                      "ipp/p8" };
+    CHECK_EQ_INT(ipp_route("/ipp/p8", six, NONE), 6);
+    CHECK_EQ_INT(ipp_route("/ipp/p3", six, NONE), 1);
+    CHECK_EQ_INT(ipp_route("/ipp/print", six, NONE), -1);
+    CHECK_EQ_INT(ipp_route("/", six, NONE), -1);
 }
 
 // W-1116 (R9): the oldest port record's slot answers at ipp/print and at its own ipp/p<id>,
@@ -69,7 +78,7 @@ int main(void)
     const char *iw_only[IPP_PRINTERS] = { "ipp/print", NULL };
 
     test_route_slots();
-    test_route_six();
+    test_route_seven();
     test_route_port_legacy();
 
     CHECK_EQ_INT(ipp_route("/ipp/print", both, NONE), 0);

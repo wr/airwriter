@@ -822,26 +822,35 @@ int pr_port_live_id(const pr_list_t *l)
     return p ? p->id : -1;
 }
 
-pr_port_say_t pr_port_say(const pr_list_t *l, const pr_live_t live[PR_MAX], int id, char *msg,
-                          size_t cap)
+int pr_port_on(const pr_list_t *l, const pr_live_t live[PR_MAX])
 {
-    if (cap) msg[0] = '\0';
+    int on = port_on(l, live);
+    return on < 0 ? 0 : l->r[on].id;
+}
+
+pr_port_say_t pr_port_say(const pr_list_t *l, const pr_live_t live[PR_MAX], int id)
+{
     int i = pr_index(l, id);
     const pr_rec_t *r = i < 0 ? NULL : &l->r[i], *other = pr_port_said_other(l);
     if (!r || r->where != PR_WHERE_PORT) return PR_PORT_SAY_OWN;
     // The port is the Something else record's while one is listed (pr_port_live_id).
-    if (other) {
-        if (r == other) return PR_PORT_SAY_OWN;
-        snprintf(msg, cap, "Offline: the printer port is set to Something else.");
-        return PR_PORT_SAY_SAID_OTHER;
-    }
+    if (other) return r == other ? PR_PORT_SAY_OWN : PR_PORT_SAY_SAID_OTHER;
     if (r == pr_port_current(l)) return PR_PORT_SAY_OWN;
-    int on = port_on(l, live);
-    if (on >= 0) {
-        snprintf(msg, cap, "Offline: %s is connected instead.", l->r[on].name);
-        return PR_PORT_SAY_ABSENT;
+    return port_on(l, live) >= 0 ? PR_PORT_SAY_ABSENT : PR_PORT_SAY_OFFLINE;
+}
+
+void pr_port_say_words(pr_port_say_t say, const char *on, char *out, size_t cap)
+{
+    switch (say) {
+    case PR_PORT_SAY_SAID_OTHER:
+        snprintf(out, cap, "Offline: the printer port is set to Something else.");
+        break;
+    case PR_PORT_SAY_ABSENT:
+        snprintf(out, cap, "Offline: %s is connected instead.", on ? on : "");
+        break;
+    default:
+        if (cap) out[0] = '\0';
     }
-    return PR_PORT_SAY_OFFLINE;
 }
 
 void pr_chooser_name(const pr_list_t *l, char *out, size_t cap)
@@ -1282,8 +1291,7 @@ size_t pr_json(const pr_list_t *l, const pr_live_t live[PR_MAX], char *buf, size
     // W-1116: the port's printer, the port set to Something else, and what the Chooser on
     // vintage Macs shows: the port ImageWriter's name as on the page (the node's own), an
     // AppleTalk printer's own NBP name (relayed as it is, whatever the page calls it).
-    int on = port_on(l, live);
-    PUT("],\"port_on\":%u,\"said_other\":%s,\"chooser\":[", on < 0 ? 0 : l->r[on].id,
+    PUT("],\"port_on\":%u,\"said_other\":%s,\"chooser\":[", pr_port_on(l, live),
         pr_port_said_other(l) ? "true" : "false");
     for (int i = 0, n = 0; i < l->n; i++) {
         const pr_rec_t *r = &l->r[i];

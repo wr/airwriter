@@ -954,7 +954,7 @@ void ipp_server_job_done_for(int idx, int ok)
         ESP_LOGE(TAG, "printer %d: job done reported with no job printing", idx);
         return;
     }
-    ESP_LOGI(TAG, "%sjob %d: %s", idx ? "printer " : "", (int)id, reason);
+    ESP_LOGI(TAG, "printer %d job %d: %s", idx, (int)id, reason);
     xSemaphoreGive(s_print_lock);
 }
 

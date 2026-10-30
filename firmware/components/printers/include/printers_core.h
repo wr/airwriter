@@ -249,6 +249,9 @@ int  pr_port_absent(const pr_list_t *l, const pr_live_t live[PR_MAX], int id);
 // its, and asked nothing). Every other port record's live state is all zero: offline. -1
 // with no port record.
 int  pr_port_live_id(const pr_list_t *l);
+// W-1116: the port record whose printer is on the port right now: pr_port_current while it
+// is present (pr_json's port_on). Its id; 0 for none.
+int  pr_port_on(const pr_list_t *l, const pr_live_t live[PR_MAX]);
 // W-1116: what port record `id`'s AirPrint printer says of itself, beside its own state:
 //   OWN: it is the printer on the port (pr_port_current): its own state, in the board's
 //        words for its family. Also for a record that is not the port's, or none.
@@ -257,11 +260,13 @@ int  pr_port_live_id(const pr_list_t *l);
 //   ABSENT: another port record's printer is on the port (pr_port_absent): stopped,
 //        "Offline: <that printer's name> is connected instead."
 //   OFFLINE: nothing answering: stopped, in the board's offline words for its family.
-// `msg` gets the sentence for SAID_OTHER and ABSENT, "" otherwise.
+// pr_port_say_words is the sentence for SAID_OTHER and ABSENT (`on`: the name of the
+// printer on the port, pr_port_on's record), "" for the others; PR_SAY_MAX holds any.
 typedef enum { PR_PORT_SAY_OWN, PR_PORT_SAY_SAID_OTHER, PR_PORT_SAY_ABSENT,
                PR_PORT_SAY_OFFLINE } pr_port_say_t;
-pr_port_say_t pr_port_say(const pr_list_t *l, const pr_live_t live[PR_MAX], int id, char *msg,
-                          size_t cap);
+enum { PR_SAY_MAX = PR_NAME_MAX + 32 };
+pr_port_say_t pr_port_say(const pr_list_t *l, const pr_live_t live[PR_MAX], int id);
+void pr_port_say_words(pr_port_say_t say, const char *on, char *out, size_t cap);
 // W-1116: the name vintage Macs see for the printer port (the node's own NBP name) and the
 // queue name at boot: the oldest ImageWriter record's (pr_offers' one port offer, fixed across
 // swaps so a Chooser selection keeps working), else the oldest port record's, else

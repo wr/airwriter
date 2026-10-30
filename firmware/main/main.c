@@ -2798,6 +2798,9 @@ static ps_state_t port_state(ps_state_t box)
     return box == PS_OFFLINE || box == PS_ATTENTION ? PS_READY : box;
 }
 
+// An ImageWriter whose line is down, idle: off, unplugged or deselected.
+static const char IW_OFFLINE_WORDS[] = "Offline: check power, cable and SELECT";
+
 // What the port's own state is, in the words of a port record's family, for its slot: an
 // ImageWriter's line, or what a StyleWriter said itself (no paper, a jam, the cartridge, the
 // cover..., sw_status.c's words; it has no SELECT; nothing before it has answered, so
@@ -2814,24 +2817,31 @@ static void port_push_own(int slot, int kind, ps_state_t st)
     // Mid-job stall: media-empty, the real "out of paper" alert. The -error
     // suffix (RFC 8011 5.4.12) says it outright: a stopped printer MUST carry
     // an error reason, and a bare one is only "assumed" to be one.
-    // Idle and not ready: printer off, unplugged or deselected. offline-report
-    // is CUPS-only (not in the IANA registry), so it reports the registered
+    // Idle and not ready: printer off, unplugged or deselected: the registered
     // "other", which on a stopped printer reads as an error all the same.
+    // (offline-report is CUPS's keyword, not the IANA registry's: it is kept
+    // for a record that is offline because another printer is connected, or
+    // the port is set to Something else, as the W-1116 design says, so the two
+    // read apart on a phone.)
     if (st == PS_ATTENTION)
         ipp_server_set_stopped_for(slot, "media-empty-error", "Needs attention: check paper and SELECT");
     else if (st == PS_OFFLINE)
-        ipp_server_set_stopped_for(slot, "other", "Offline: check power, cable and SELECT");
+        ipp_server_set_stopped_for(slot, "other", IW_OFFLINE_WORDS);
     else
         ipp_server_set_stopped_for(slot, NULL, NULL);
 }
 
 // What a port record's printer says while it is not the one on the port (W-1116): offline,
 // in its family's own words with nothing answering (as the printer on the port would), or
-// because another printer is connected or the port is set to Something else, with the
-// sentence printers_core gave (pr_port_say).
-static void port_push_offline(int slot, int kind, int say, const char *msg)
+// because another printer is connected (`on`: its name) or the port is set to Something
+// else, in printers_core's words (pr_port_say_words). It offers no colour unless its model
+// could: the ribbon or cartridge read was another printer's.
+static void port_push_offline(int slot, int kind, int model, int say, const char *on)
 {
+    if (!colour_offered(kind, model)) ipp_server_set_colour_for(slot, 0);
     if (say != PR_PORT_SAY_OFFLINE) {
+        char msg[PR_SAY_MAX];
+        pr_port_say_words((pr_port_say_t)say, on, msg, sizeof msg);
         ipp_server_set_stopped_for(slot, "offline-report", msg);
         return;
     }
@@ -2839,19 +2849,21 @@ static void port_push_offline(int slot, int kind, int say, const char *msg)
         sw_ipp_t w = sw_state_ipp(SWS_OFFLINE);
         ipp_server_set_stopped_for(slot, w.reason, w.message);
     } else {
-        ipp_server_set_stopped_for(slot, "other", "Offline: check power, cable and SELECT");
+        ipp_server_set_stopped_for(slot, "other", IW_OFFLINE_WORDS);
     }
 }
 
 // What phones and Macs are told about the printer port: every port record on AirPrint, by
 // its slot (W-1116): the printer on the port its own state and the colour it offers (the
 // ribbon or cartridge last read), every other port record offline; and the status word the
-// AppleTalk nodes answer.
+// AppleTalk nodes answer. Small on the stack: the 4 KB tasks call it (the port task, a
+// StyleWriter session's).
 static void port_push(ps_state_t box)
 {
     ps_state_t st = port_state(box);
     printers_port_slot_t ps[PR_MAX];
-    int n = printers_port_slots(ps, PR_MAX);
+    char on[PR_NAME_MAX];
+    int n = printers_port_slots(ps, PR_MAX, on);
     for (int i = 0; i < n; i++) {
         const printers_port_slot_t *s = &ps[i];
         if (s->say == PR_PORT_SAY_OWN) {
@@ -2859,12 +2871,19 @@ static void port_push(ps_state_t box)
             ipp_server_set_colour_for(s->slot, s_ribbon == IW_RIBBON_COLOUR &&
                                                colour_offered(s->kind, s->model));
         } else {
-            port_push_offline(s->slot, s->kind, s->say, s->msg);
+            port_push_offline(s->slot, s->kind, s->model, s->say, on);
         }
     }
     localtalk_set_status(lt_status(st, AT_LINK_CABLE));
     ethertalk_set_status(lt_status(st, AT_LINK_TUNNEL), lt_status(st, AT_LINK_ZONE),
                          lt_status(st, AT_LINK_RADIO));
+}
+
+// printers_cfg_t.placed: a record was put on AirPrint, moved or taken off, perhaps after the
+// job that held its slot: its slot starts with no state, so every port slot is told again.
+static void port_placed(void)
+{
+    port_push(printer_state_view().state);
 }
 
 static void on_ps_change(const ps_view_t *v)
@@ -2995,7 +3014,7 @@ void app_main(void)
         .at_sink   = { .claim = doc_claim, .begin = laser_doc_begin, .data = doc_data,
                        .end = laser_doc_end, .cancel = laser_doc_cancel },
         .port_live = port_live, .port_screen = port_screen, .look = printers_look,
-        .changed = printers_changed,
+        .changed = printers_changed, .placed = port_placed,          // W-1116: placed
         .clean = sw_clean_web, .confirm_sw = sw_confirm_queue,      // W-1103
     };
     memcpy(pc.mac, mac, sizeof pc.mac);
@@ -3167,8 +3186,7 @@ void app_main(void)
                        .changed = laser_changed, .relay = laser_relay };
     err = laser_start(&lc);
     if (err != ESP_OK) ESP_LOGE(TAG, "AppleTalk printers did not start: %s", esp_err_to_name(err));
-    printers_apply();
-    port_push(printer_state_view().state);      // W-1116: the port's other records have slots now
+    printers_apply();                           // W-1116: the other slots are placed, and pushed (placed)
 
     if (s_test_on_boot) {
         s_test_on_boot = 0;
