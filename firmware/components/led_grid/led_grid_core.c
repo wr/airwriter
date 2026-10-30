@@ -675,16 +675,34 @@ static int sleep_round(uint32_t round, int order[LG_NUM_LEDS])
     return n;
 }
 
+// Is dot d one of the last m of a round?
+static int in_tail(int d, const int order[LG_NUM_LEDS], int n, int m)
+{
+    for (int i = n - m; i < n; i++)
+        if (order[i] == d) return 1;
+    return 0;
+}
+
 int lg_sleep_dot(uint32_t breath)
 {
     int order[LG_NUM_LEDS], prev[LG_NUM_LEDS];
     int n = sleep_round(0, order);
     uint32_t round = breath / (uint32_t)n;
     sleep_round(round, order);
-    // A round never opens on the dot the last one closed on.
+    // Breaths overlap, so a round never opens on a dot the last one is still
+    // breathing at: its first m trade places with dots from its middle. Its
+    // last m stay put, since the next round reads them from the raw shuffle.
     if (round > 0) {
+        const int m = LG_BREATH_MS / LG_FIREFLY_MS - 1;
         sleep_round(round - 1, prev);
-        if (order[0] == prev[n - 1]) { int x = order[0]; order[0] = order[1]; order[1] = x; }
+        for (int j = 0; j < m; j++) {
+            if (!in_tail(order[j], prev, n, m)) continue;
+            for (int p = m; p < n - m; p++)
+                if (!in_tail(order[p], prev, n, m)) {
+                    int x = order[j]; order[j] = order[p]; order[p] = x;
+                    break;
+                }
+        }
     }
     return order[breath % (uint32_t)n];
 }
@@ -728,14 +746,20 @@ void lg_render16(const ps_view_t *v, const lg_opts_t *o, uint32_t t_ms,
 
     if (!v->asleep) return;
 
-    // One breath per LG_BREATH_MS (12 a minute), in the curve of the old Mac
-    // laptops' sleep light, (e^sin - 1/e) / (e - 1/e): off at the start of
-    // each breath, full at its middle. Each breath is at a new FR4 dot.
-    float ph = (float)(t_ms % LG_BREATH_MS) / (float)LG_BREATH_MS;
-    float breath = (expf(sinf(TAU * ph - TAU / 4)) - 0.36787944f) / (2.71828183f - 0.36787944f);
-    int d = lg_sleep_dot(t_ms / LG_BREATH_MS);
-    lg_c3 col = gamer ? hsv((float)t_ms / 60.0f, 0.75f, 1) : white_of(LG_MAP[d].r, LG_MAP[d].c);
-    put_linear(out[d], col, breath * sleep_k);
+    // Fireflies: a breath starts every LG_FIREFLY_MS at a new FR4 dot and
+    // lasts LG_BREATH_MS, so three overlap, each in the curve of the old Mac
+    // laptops' sleep light, (e^sin - 1/e) / (e - 1/e): off at its start, full
+    // at its middle. In gamer mode each firefly is its own hue.
+    uint32_t n = t_ms / LG_FIREFLY_MS;
+    for (uint32_t k = 0; k < LG_BREATH_MS / LG_FIREFLY_MS && k <= n; k++) {
+        uint32_t b = n - k;
+        float ph = (float)(t_ms - b * LG_FIREFLY_MS) / (float)LG_BREATH_MS;
+        float breath = (expf(sinf(TAU * ph - TAU / 4)) - 0.36787944f) / (2.71828183f - 0.36787944f);
+        int d = lg_sleep_dot(b);
+        lg_c3 col = gamer ? hsv((float)t_ms / 60.0f + (float)b * 40, 0.75f, 1)
+                          : white_of(LG_MAP[d].r, LG_MAP[d].c);
+        put_linear(out[d], col, breath * sleep_k);
+    }
 }
 
 void lg_render(const ps_view_t *v, const lg_opts_t *o, uint32_t t_ms,

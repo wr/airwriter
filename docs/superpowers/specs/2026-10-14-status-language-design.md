@@ -81,7 +81,8 @@ until the board has **settled**, then goes out (1.3 s) straight into the state:
 After the boot wave, every moment plays for real changes as before.
 
 **Asleep** is a modifier, not a state: after `SLEEP_AFTER` (300 s) with no activity while in
-*Ready* or *Printer offline*, the panel fades to one breathing dot. States 1–6 never sleep.
+*Ready* or *Printer offline*, the panel fades to fireflies: a few dots breathing in turn. States
+1–6 never sleep.
 
 **Cable result** (W-1055) is a modifier too: after a cable test, its result shows over Setup,
 Joining, Ready or Printer offline for 2.4 s (1 s when no cable was tested); a job hides it. The
@@ -151,7 +152,7 @@ only, since under the mask it turns mint.
 | Needs attention | all; FR4 at the alert cap (96/255), mask at 4× | deep amber (hue 18–30°: at 36° the bright green die washed it toward white) **double ripple** from the test button: two wide rings 350 ms apart every 2 s over a 12% amber floor (resting on the glow), so the panel is never dark while it needs a person |
 | Job failed | all; mask at 4× | red (hue 352–12°): three 200 ms **glitch flashes**, each on a different random ~65% of dots, then a pulse 33%→100% whose period varies ±15% per dot, until the hold ends |
 | Cable test | the strip between the sockets; mask at 4× | everything stays in the bottom three rows, columns 0–4 (from the printer socket to just past LocalTalk's: 10 dots), the rest dark (Wells, 2026-10-16: it was the whole panel). A band **sweeps** from the LocalTalk socket to the printer's and back (600 ms each way), the order the test runs in, over an 8% floor (resting on the glow). Green (hue 130° ±14°), a crossover: then the strip **glows** 100% and fades by 2.4 s. Red (hue 352–12°), a straight, broken or missing cable: then the strip **blinks twice** (200 ms on, 200 off, 200 on). **No cable tested** (TashTalk didn't answer, W-1063): no sweep; after 200 ms dark the five dots within 2.8 rows of the LocalTalk socket blink red twice (200 on, 200 off, 200 on), the rest dark, 1 s in all. Red says no; where it blinks says LocalTalk |
-| Asleep | one FR4 dot at a time | one **breath** every 5 s (12 a minute) in the curve of the old Mac laptops' sleep light, `(e^sin − 1/e)/(e − 1/e)` driven linearly: from off up to 100% of the cap and back to off. Each breath is at a new FR4 dot: every FR4 dot takes a turn, in a shuffled order, before any repeats, never the same dot twice running. Neutral white, or a slowly cycling hue in gamer mode. Fade into sleep over 10 s; wake instantly. (Was a fixed pilot dot at 3–12% with a rare twinkle; too dim on board 1.) |
+| Asleep | two or three FR4 dots at a time | **fireflies** (W-1117): a breath starts every 2 s at a new FR4 dot and lasts 6 s, so three overlap and two or three dots are always lit. Each breath is in the curve of the old Mac laptops' sleep light, `(e^sin − 1/e)/(e − 1/e)` driven linearly: from off up to 100% of the cap and back to off. Every FR4 dot takes a turn, in a shuffled order, before any repeats, and no dot breathes twice at once (a round never opens on either of the last round's last two dots). Neutral white, or in gamer mode a slowly cycling hue, each firefly 40° on from the one before. Fade into sleep over 10 s; wake instantly. (Was a fixed pilot dot at 3–12% with a rare twinkle, too dim on board 1; then one breath every 5 s at a new dot, too subtle: one dot of 14, somewhere new each time and dark most of the time. Wells picked fireflies on 2026-10-30 from previews, over a fixed dot by the test button at twice the cap and the whole panel breathing out from the test button, and approved it on board 1.) |
 
 **The glow** (W-1115). At one or two counts of drive a dot can show only a few colours, and
 temporal dithering between them reads as flicker: on a rev A board the embers' floor (red 1, green
@@ -165,7 +166,7 @@ eighth of its light, so it is temporally dithered (an 8-bit Ready breathe had ~6
 stuttered), and a channel within 1/8 count of a whole count holds it, so nothing steps back and
 forth slower than 50 times a second.
 
-Levels in this table are perceptual: every pattern except the asleep breath goes through **gamma 2.2**
+Levels in this table are perceptual: every pattern except the asleep fireflies goes through **gamma 2.2**
 before the cap, on FR4 and mask dots alike, and the numbers get a final tune on the board.
 No per-hue colour correction for the mask: calibration was tried and dropped (the cast is
 hue-dependent and not worth a lookup table).
@@ -395,7 +396,7 @@ Host (`tools/rip`, `make test`):
   debounce, 29 s vs 31 s attention, the 60 s failed hold, the 300 s sleep), priority between
   overlapping states, activity resetting sleep, and a job surviving a stall and resuming.
 - `test_led_grid`: per state — the cap holds; FR4-only states leave mask dots dark; the boot wave
-  ends dark at 3.0 s; asleep lights exactly one dot.
+  ends dark at 3.0 s; asleep lights at most three FR4 dots, three mid-breath, never one twice at once.
 - `test_led_grid`, W-1049: for every moment, task and acknowledgement — caps hold (alert cap
   only in red phases), no frame draws more than the boot wave's heaviest, FR4-only patterns leave
   mask dots dark, and each one ends on time with the state's own frame after it. Task priority
@@ -421,7 +422,7 @@ On board 1:
 - Deselect the printer mid-job → Needs attention after 30 s; reselect → the job resumes and the
   page prints complete. Note what iOS shows during the pause, and whether its upload survives.
 - Router Wi-Fi off for 1 minute → Joining; back on → Ready, with no setup AP.
-- Leave idle 5 minutes → one dot breathing, a new dot each breath; a print or the test button wakes it.
+- Leave idle 5 minutes → two or three dots breathing, a new dot every 2 s; a print or the test button wakes it.
 - W-1049, each by eye: printer cable out and in (gone, back); a job to the end (page out); the
   test button tapped twice (cancelled) and during a phone job (Busy); a LocalTalk job (stripes);
   DIP mode 2 on (LocalTalk on) and the Chooser open on the Mac (A Mac heard); a TashTalk flash;

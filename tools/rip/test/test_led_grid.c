@@ -4,7 +4,7 @@
 // dots each state may light, that the array varies dot to dot, the boot wave,
 // the Wi-Fi-connected green moment, gamer mode, joining's outward rings,
 // setup's two cues, attention, failure, the bidirectional print head, and
-// the asleep breath.
+// the asleep fireflies.
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -790,30 +790,35 @@ int main(void)
         assert(max3(f[b]) > max3(f[a]));
     }
 
-    // Asleep: after the fade, one FR4 dot breathes, near-white, from off up
-    // to the cap and out again; each breath at a new dot, every FR4 dot taking
-    // a turn before any repeats.
+    // Asleep: fireflies. After the fade, a breath starts at a new FR4 dot
+    // every LG_FIREFLY_MS and lasts LG_BREATH_MS, near-white, from off up to
+    // the cap and out again, so at most three dots are lit, never the same one
+    // twice at once; every FR4 dot takes a turn before any repeats.
     {
         ps_view_t v = view(PS_READY, 400000);
         v.asleep = 1;
         v.asleep_ms = 20000;
-        int peak = 0, d = lg_sleep_dot(0);
-        for (uint32_t t = 0; t < LG_BREATH_MS; t += 50) {
+        const uint32_t b = 10, t0 = b * LG_FIREFLY_MS;
+        int peak = 0, d = lg_sleep_dot(b);
+        for (uint32_t t = t0; t < t0 + LG_BREATH_MS; t += 50) {
             lg_render(&v, &WHITE_MODE, t, f);
             for (int i = 0; i < LG_NUM_LEDS; i++)
-                if (i != d) assert(max3(f[i]) == 0);
-            assert(neutral(f[d]));
+                if (max3(f[i])) assert(LG_MAP[i].mat == 'P' && neutral(f[i]));
+            assert(lit_count(f) <= 3);
             if (max3(f[d]) > peak) peak = max3(f[d]);
         }
         assert(peak * 10 >= LG_BRIGHTNESS_CAP * 9 && peak <= LG_BRIGHTNESS_CAP);
-        lg_render(&v, &WHITE_MODE, 3 * LG_BREATH_MS, f);
-        assert(lit_count(f) == 0);                          // off between breaths
+        lg_render(&v, &WHITE_MODE, t0, f);
+        assert(max3(f[d]) == 0);                            // each breath from off
+        lg_render(&v, &WHITE_MODE, t0 + LG_BREATH_MS / 2, f);
+        assert(lit_count(f) == 3);                          // three at once
 
         int n = 0;
         for (int i = 0; i < LG_NUM_LEDS; i++) n += LG_MAP[i].mat == 'P';
         for (uint32_t k = 0; k < 2000; k++) {
             assert(LG_MAP[lg_sleep_dot(k)].mat == 'P');
-            if (k) assert(lg_sleep_dot(k) != lg_sleep_dot(k - 1));
+            for (uint32_t j = 1; j < LG_BREATH_MS / LG_FIREFLY_MS && j <= k; j++)
+                assert(lg_sleep_dot(k) != lg_sleep_dot(k - j));
             if (k % (uint32_t)n == 0) {
                 int seen[LG_NUM_LEDS] = {0};
                 for (uint32_t j = k; j < k + (uint32_t)n; j++) seen[lg_sleep_dot(j)]++;
@@ -823,10 +828,10 @@ int main(void)
         }
 
         v.state = PS_OFFLINE;
-        lg_render(&v, &WHITE_MODE, 3 * LG_BREATH_MS + LG_BREATH_MS / 2, f);
-        assert(lit_count(f) == 1 && max3(f[lg_sleep_dot(3)]) > 0);
+        lg_render(&v, &WHITE_MODE, t0 + LG_BREATH_MS / 2, f);
+        assert(lit_count(f) == 3 && max3(f[d]) > 0);
         v.state = PS_READY;                                 // gamer: a colour, not white
-        lg_render(&v, &GAMER_MODE, LG_BREATH_MS / 2, f);
+        lg_render(&v, &GAMER_MODE, t0 + LG_BREATH_MS / 2, f);
         assert(max3(f[d]) - min3(f[d]) >= 3);
     }
 
@@ -945,7 +950,7 @@ int main(void)
         for (uint32_t ms = 5000; ms <= 10000; ms += 25) {
             v.asleep_ms = ms;
             lg_render16(&v, &WHITE_MODE, 777, hi);  // frozen time: only the fade moves
-            if (dot == lg_sleep_dot(777 / LG_BREATH_MS)) continue;
+            if (dot == lg_sleep_dot(777 / LG_FIREFLY_MS)) continue;
             int m = hi[dot][0] > hi[dot][1] ? (hi[dot][0] > hi[dot][2] ? hi[dot][0] : hi[dot][2])
                                             : (hi[dot][1] > hi[dot][2] ? hi[dot][1] : hi[dot][2]);
             assert(m <= prev);
@@ -959,7 +964,7 @@ int main(void)
         v.asleep_ms = 60000;
         under = 0;
         int d = lg_sleep_dot(3);
-        for (uint32_t t = 3 * LG_BREATH_MS; t < 3 * LG_BREATH_MS + 1000; t += 10) {
+        for (uint32_t t = 3 * LG_FIREFLY_MS; t < 3 * LG_FIREFLY_MS + 1000; t += 10) {
             lg_render16(&v, &WHITE_MODE, t, hi);
             int m = hi[d][0] > hi[d][1] ? (hi[d][0] > hi[d][2] ? hi[d][0] : hi[d][2])
                                         : (hi[d][1] > hi[d][2] ? hi[d][1] : hi[d][2]);
