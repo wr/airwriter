@@ -100,6 +100,10 @@ Traps already explained in a code comment are listed only when the comment is ea
   `led_grid_core.h` are the only limit on 37 SK6812s; raise them knowingly. All 37 lit at
   about the boot animation's heaviest draw (the Spin's then; the boot wave is held under it)
   measured 5.2 V, 0.461 A for the whole board.
+- **Dithering one or two counts flickers.** There a dot can show only a few colours, and temporal
+  dithering between them reads as flicker even at 400 fps: a rev A board's embers hopped red, yellow,
+  white (W-1115). No dot rests below `LG_GLOW`, and only dots over `LG_BLEND` are dithered. A new
+  dim floor goes through `glow_at` or `rest()`; a fade to or from dark may pass through.
 - **The panel is not true RGB.** Through the FR4, blue reads cyan except at hue 240 (sky blue),
   270 is pale lavender, 285 onward pink, and there is no purple; under the mask white turns
   mint. Pick colours from the measured map (`tools/lights/panel_colours.json`, the

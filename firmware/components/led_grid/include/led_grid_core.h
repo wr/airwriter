@@ -125,9 +125,31 @@ int  lg_sleep_dot(uint32_t breath);
 void lg_render16(const ps_view_t *v, const lg_opts_t *o, uint32_t t_ms,
                  uint16_t out[LG_NUM_LEDS][3]);
 
-// Sigma-delta down to the LEDs' 8 bits: each channel carries its rounding
-// error into the next frame, so over time the output averages to the 16-bit
-// level. Zero-initialise once; call once per frame.
+// The dim end (W-1115). At one or two counts a dot can show only a few
+// colours, and a dot resting there either sits on a rough colour or, dithered,
+// flickers: an ember's floor (R 1, G 0.63, B 0.16 counts) went red, yellow,
+// white, and on a rev A board it flickered at 100 and at 400 fps. So no dot rests
+// below LG_GLOW: every level a state or a task holds (the embers' floor,
+// Joining's, Setup's and Needs attention's, Printing's ink, the cable test's
+// strip, the reset countdown and the firmware fill) is at least the glow,
+// lifted with its hue. Fades to and from dark pass straight through: a fade
+// that settled on the glow and then stepped off looked odd. 4 counts was
+// picked by eye on the board over 3, 5 and 6 (2026-10-30).
+#define LG_GLOW  (4 * 256)
+
+// Sigma-delta down to the LEDs' 8 bits, where it can't be seen: each channel
+// carries its rounding error into the next frame, so over time the output
+// averages to the 16-bit level. A dot whose brightest channel is under
+// LG_BLEND is rounded and holds still; over it one step is under an eighth of
+// the dot's light. A channel at n + f counts lights n + 1 about once every 1/f
+// frames, so frames go out at 400 fps and a channel within LG_DITHER_HOLD of a
+// whole count holds it: nothing steps back and forth slower than
+// 400 * 32 / 256 = 50 times a second. Zero-initialise once; call once per sent
+// frame, LG_DITHER_SUBFRAMES times per rendered one.
+#define LG_BLEND            (8 * 256)
+#define LG_FRAME_MS         10      // one rendered frame
+#define LG_DITHER_SUBFRAMES 4       // sent frames per rendered one: 400 fps
+#define LG_DITHER_HOLD      32      // 1/8 count, of 256
 typedef struct { uint8_t err[LG_NUM_LEDS][3]; } lg_dither_t;
 void lg_dither(lg_dither_t *d, const uint16_t in[LG_NUM_LEDS][3],
                uint8_t out[LG_NUM_LEDS][3]);

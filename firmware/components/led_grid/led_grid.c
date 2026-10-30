@@ -6,6 +6,7 @@
 #include "led_grid.h"
 #include "led_grid_core.h"
 #include "esp_timer.h"
+#include "driver/gptimer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/semphr.h"
@@ -58,42 +59,55 @@ static void lg_task(void *arg)
     xSemaphoreGive(s_started);
     if (s_start_err != ESP_OK) vTaskDelete(NULL);
     s_running = 1;
-    // Rendered at 8.8 fixed point and temporally dithered down to 8 bits, at
-    // a steady 100 fps: at a few counts of drive an 8-bit breathe has only a
-    // handful of levels and visibly stutters; the dither carries each
-    // channel's fraction into the next frame, and at 100 fps it blends.
+    // Rendered at 8.8 fixed point, 100 times a second, and sent 400 times a
+    // second: a dot over LG_BLEND is temporally dithered down to 8 bits, so a
+    // slow fade there is smooth rather than a handful of steps, and at 400 fps
+    // the dither blends; a dimmer one is rounded and holds still (lg_dither,
+    // W-1115). The timer wakes the task for each sent frame.
     static uint16_t hi[LG_NUM_LEDS][3];
     static lg_dither_t dith;
     uint8_t frame[LG_NUM_LEDS][3];
-    TickType_t last = xTaskGetTickCount();
-    for (;;) {
-        // Reads printer_state directly each frame rather than being pushed a
-        // state, so two racing posters can never deliver an update to this
-        // task out of order -- the next frame just re-reads whatever is
-        // current.
-        ps_view_t v = printer_state_view();
-        uint64_t now = now_ms();
-        lg_opts_t o = { .gamer = s_gamer, .src = s_src };
-        portENTER_CRITICAL(&s_act_mux);
-        for (int f = 0; f < LG_FAMS; f++)
-            o.task[f] = (lg_slot_t){ s_task[f].act, s_task[f].arg, lg_elapsed(now, s_task[f].t0) };
-        // An acknowledgement raised during the boot wave waits it out: its clock
-        // starts again every frame until the panel has booted.
-        if (v.state == PS_BOOTING) s_blip_t0 = now;
-        o.blip = s_blip;
-        o.blip_ms = lg_elapsed(now, s_blip_t0);
-        portEXIT_CRITICAL(&s_act_mux);
-        lg_render16(&v, &o, (uint32_t)now, hi);    // animation phase: wraps harmlessly
-        portENTER_CRITICAL(&s_frame_mux);
-        memcpy(s_frame, hi, sizeof s_frame);
-        portEXIT_CRITICAL(&s_frame_mux);
+    for (int sub = 0;; sub = (sub + 1) % LG_DITHER_SUBFRAMES) {
+        ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+        if (sub == 0) {
+            // Reads printer_state directly each frame rather than being pushed
+            // a state, so two racing posters can never deliver an update to
+            // this task out of order -- the next frame just re-reads whatever
+            // is current.
+            ps_view_t v = printer_state_view();
+            uint64_t now = now_ms();
+            lg_opts_t o = { .gamer = s_gamer, .src = s_src };
+            portENTER_CRITICAL(&s_act_mux);
+            for (int f = 0; f < LG_FAMS; f++)
+                o.task[f] = (lg_slot_t){ s_task[f].act, s_task[f].arg, lg_elapsed(now, s_task[f].t0) };
+            // An acknowledgement raised during the boot wave waits it out: its
+            // clock starts again every frame until the panel has booted.
+            if (v.state == PS_BOOTING) s_blip_t0 = now;
+            o.blip = s_blip;
+            o.blip_ms = lg_elapsed(now, s_blip_t0);
+            portEXIT_CRITICAL(&s_act_mux);
+            lg_render16(&v, &o, (uint32_t)now, hi);    // animation phase: wraps harmlessly
+            portENTER_CRITICAL(&s_frame_mux);
+            memcpy(s_frame, hi, sizeof s_frame);
+            portEXIT_CRITICAL(&s_frame_mux);
+        }
         lg_dither(&dith, hi, frame);
         for (int i = 0; i < s_count && i < LG_NUM_LEDS; i++)
             led_strip_set_pixel(s_strip, (uint32_t)i,
                                  frame[i][0], frame[i][1], frame[i][2]);
-        led_strip_refresh(s_strip);
-        xTaskDelayUntil(&last, pdMS_TO_TICKS(10));
+        led_strip_refresh(s_strip);     // ~1.4 ms on the wire, of the 2.5
     }
+}
+
+// The sent-frame clock. Its interrupt is allocated on the core that registers
+// it, and that is this task's, core 1: paced from core 0, Wi-Fi could hold
+// frames back as it did the task itself (W-1060).
+static bool on_tick(gptimer_handle_t t, const gptimer_alarm_event_data_t *e, void *arg)
+{
+    (void)t; (void)e;
+    BaseType_t woke = pdFALSE;
+    vTaskNotifyGiveFromISR((TaskHandle_t)arg, &woke);
+    return woke == pdTRUE;
 }
 
 static esp_err_t strip_start(void)
@@ -115,7 +129,20 @@ static esp_err_t strip_start(void)
                                   .mem_block_symbols = LG_RMT_SYMBOLS, .flags.with_dma = true };
     esp_err_t err = led_strip_new_rmt_device(&sc, &rc, &s_strip);
     if (err != ESP_OK) return err;
-    return led_strip_clear(s_strip);
+    if ((err = led_strip_clear(s_strip)) != ESP_OK) return err;
+
+    gptimer_handle_t tick;
+    gptimer_config_t tc = { .clk_src = GPTIMER_CLK_SRC_DEFAULT, .direction = GPTIMER_COUNT_UP,
+                            .resolution_hz = 1000 * 1000 };
+    if ((err = gptimer_new_timer(&tc, &tick)) != ESP_OK) return err;
+    gptimer_event_callbacks_t cb = { .on_alarm = on_tick };
+    gptimer_alarm_config_t ac = { .alarm_count = LG_FRAME_MS * 1000 / LG_DITHER_SUBFRAMES,
+                                  .flags.auto_reload_on_alarm = true };
+    if ((err = gptimer_register_event_callbacks(tick, &cb, xTaskGetCurrentTaskHandle())) != ESP_OK ||
+        (err = gptimer_set_alarm_action(tick, &ac)) != ESP_OK ||
+        (err = gptimer_enable(tick)) != ESP_OK)
+        return err;
+    return gptimer_start(tick);
 }
 
 esp_err_t led_grid_start(void)
