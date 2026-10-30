@@ -289,7 +289,8 @@ and Ø3.8 test hole cut), glued with
 UV-cure glue to the four leg tops of the printed LC frame (`lc_frame.py`: the lid's legs, a
 rim and arms, and a sealed tube that lets D3 out only through a slit under the slash; spec `docs/superpowers/specs/2026-10-28-lc-acrylic-top-design.md`).
 D26 gets a loose printed tube of its own (`lc_light.py`), trapped between board and acrylic,
-with a 3 mm hole under its 5.64 dot. None of these is cut or printed yet. The all-printed LC lid stays, its plunger bore now the panel's 3.8.
+with a 3 mm hole under its 5.64 dot; it takes in SW3 in a 0.2 sleeve with the lattice's
+plunger collar, so the switch holds it and it braces the switch. None of these is cut or printed yet. The all-printed LC lid stays, its plunger bore now the panel's 3.8.
 
 **Printers:** built and tested on the ImageWriter II only. The original ImageWriter and the
 ImageWriter LQ take the same stream and are expected to work, untested (the scope spec's

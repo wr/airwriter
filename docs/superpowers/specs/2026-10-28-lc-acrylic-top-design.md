@@ -73,16 +73,24 @@ same orientation as the LC lid, and the same printability gate.
 A second printed part, `enclosure/lc_light.py`. Under the clear top D26 would light
 the board round it, so it gets a tube as D3 does. D26 sits mid-board, though, about
 27 mm from the frame, and joining the two would take an arm across the clear top, so
-the tube is a part of its own (Wells, 2026-10-29):
+the tube is a part of its own (Wells, 2026-10-29). It reaches north over the test
+switch SW3 too, 8.45 mm away, so the switch holds it in place and it braces the
+switch (Wells: "this will also help stabilize the switch and center the part"). One
+block, 8.0 × 15.9, from the board to `LC_LIGHT_PLAY` (0.20) under the acrylic, with
+two chambers:
 
-- **Walls:** `LATTICE_WALL` (0.80), from the board to `LC_LIGHT_PLAY` (0.20) under the
-  acrylic, round D26's and C46's courtyards with `LC_LIGHT_CLEAR` (0.25) inside. They hug
-  the two parts, which is what keeps the loose tube on its dot: about 0.5 of wander at
-  most. JP1's solder blob is 0.75 outside the south wall and SW3 0.93 outside the north.
-- **Cap:** `FRAME_CAP` (0.60), with a round `LC_LIGHT_APERTURE_D` (3.00) opening centred
-  on the dot. The dot is 5.64 across; the smaller opening is a diffuser, since the LEDs
-  are bright (Wells).
-- **Held by:** the board below and the acrylic above. Nothing glues or screws it.
+- **D26's:** round D26's and C46's courtyards with `LC_LIGHT_CLEAR` (0.25) inside,
+  `LATTICE_WALL` (0.80) walls or more, 1.53 between it and the switch. A `FRAME_CAP`
+  (0.60) cap with a round `LC_LIGHT_APERTURE_D` (3.00) opening centred on the dot. The
+  dot is 5.64 across; the smaller opening is a diffuser, since the LEDs are bright
+  (Wells). JP1's solder blob is 0.75 outside the south wall.
+- **SW3's:** a sleeve `LC_SWITCH_CLEAR` (0.20) round the switch's body and legs, the
+  guiding fit, and the lattice's collar at the top: `COLLAR_BORE_D` (3.60) through the
+  top `COLLAR_H` (2.00), 0.25 a side on the plunger's measured 3.1. The collar centres
+  on the switch's body, so it follows the switch wherever it sits, and is 0.10 off the
+  acrylic's test hole, whose 3.8 leaves the plunger 0.35 a side.
+- **Held by:** the switch, sideways; the board below and the acrylic above. Nothing
+  glues or screws it.
 
 Printed cap-down, walls up, no supports.
 
@@ -90,7 +98,8 @@ Printed cap-down, walls up, no supports.
 
 1. Board into the tray. Heat-set inserts into the frame's legs.
 2. Frame onto the board, four M2.5 × 10 from below. Bridge JP1 with solder if it
-   isn't yet, and set the light tube over D26 (the LED under the test button), cap up.
+   isn't yet, and set the light tube over the test button and the LED below it, cap
+   up, the plunger through its collar.
 3. Scuff the four leg tops with sandpaper and put a small dab of UV-cure glue (395–405 nm)
    on each. Squeeze-out shows through the clear top at the front legs.
 4. Peel the acrylic's film off both faces, drop it into the pocket frosted face up, and
@@ -112,6 +121,7 @@ To open, unscrew from below: the frame and acrylic come out together.
   pads don't show. H3 and H4's do, as Ø6 discs below the subtitle.
 - D26's tube is loose, not part of the frame: an arm out to it would show across the
   board through the clear top. Its opening is smaller than its dot, to soften the LED.
+  It takes in the test switch, which holds it and which it braces.
 - The printed LC lid stays, for anyone without a laser. Its plunger bore goes from
   2.25 to 3.80, the panel's hole: 2.25 dated from the old switch and stopped the
   measured 3.1–3.2 plunger.
@@ -123,5 +133,5 @@ To open, unscrew from below: the frame and acrylic come out together.
 - How brightly the slash glows through the slit, and whether the frost scatters light
   along the sheet into the other frosted marks.
 - How D26's dot reads through its 3 mm opening: bright enough, and soft enough at the
-  edge of the dot; and whether the loose tube stays square on the board while the top
-  goes on.
+  edge of the dot; whether the switch holds the loose part square while the top goes
+  on; and whether the plunger runs free in its collar.

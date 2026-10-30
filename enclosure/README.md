@@ -99,14 +99,15 @@ legs up), no supports.
 
 `out/airwriter-lc-light.stl` is a light-tight tube round D26, the LC's status LED
 under the test button, with a 3 mm hole in its cap under the frosted dot: smaller than
-the dot, to soften the LED. It stands loose on the board, its walls round D26 and its
-cap C46 keep it on the dot, and the acrylic traps it 0.2 mm over its top. Print it in
-matte black, **cap down**, no supports.
+the dot, to soften the LED. It reaches over the test button too, a sleeve 0.2 mm round
+the switch's body and a collar round its plunger, so the switch holds it on its dots
+and it steadies the switch. It stands loose on the board, and the acrylic traps it
+0.2 mm over its top. Print it in matte black, **cap down**, no supports.
 
 1. Board into the tray, inserts into the frame's legs.
 2. Frame onto the board, four M2.5 × 10 from below. Bridge JP1 (marked LC, beside
    the LED under the test button) with solder if it isn't yet, and set the light tube
-   over that LED, cap up.
+   over the test button and that LED, cap up, the plunger through its collar.
 3. Scuff the four leg tops with sandpaper and put a small dab of UV-cure glue
    (395–405 nm) on each. Squeeze-out shows through the top at the front legs.
    Not superglue: its fumes haze clear acrylic.

@@ -237,6 +237,12 @@ LC_LIGHT_APERTURE_D = 3.00
 half its width, a quarter of its light. Smaller than the dot on purpose, a
 diffuser: the LEDs are bright (Wells, 2026-10-29)."""
 
+LC_SWITCH_CLEAR = 0.20
+"""The LC light tube's sleeve round SW3's body, a side: the guiding fit
+(docs/cad-routine.md), so the switch holds the loose part on its dots and the
+part braces the tall switch (Wells, 2026-10-29). Its collar is the lattice's,
+COLLAR_BORE_D in the top COLLAR_H."""
+
 LC_LIGHT_PLAY = 0.20
 """Between the LC light tube's top and the acrylic, which traps it: room for a
 print that comes out a little tall, so the tube never presses on the top."""
