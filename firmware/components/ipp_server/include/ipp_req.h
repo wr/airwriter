@@ -59,11 +59,12 @@ typedef struct {
 
 int ipp_req_parse(ipp_req_t *r, const uint8_t *buf, size_t len);
 
-// The printers one server answers for (W-1082, W-1088): slot 0 is the
-// printer port's, at every path it has always answered at; 1-3 printers on
-// AppleTalk, each at its own (ipp/p<id>), and W-1082's LaserWriter also at
+// The printers one server answers for (W-1082, W-1088, W-1116): six slots, any
+// mix of the printer port's records and printers on AppleTalk (PR_SHARE_MAX).
+// Slot 0 is the oldest port record's, at every path it has always answered at;
+// the others each at its own (ipp/p<id>), and W-1082's LaserWriter also at
 // ipp/laser.
-#define IPP_PRINTERS       4
+#define IPP_PRINTERS       6
 #define IPP_RESOURCE_LASER "ipp/laser"
 
 // Which printer a request's HTTP path (or absolute URI) names: a slot at its

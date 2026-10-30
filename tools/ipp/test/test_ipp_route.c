@@ -28,12 +28,27 @@ static void test_route_slots(void)
     CHECK_EQ_INT(ipp_route("/ipp/p3", no_port, NONE), 1);
 }
 
+// W-1116: six slots, any mix of the port's records and AppleTalk printers; the last answers
+// at its own path like the rest.
+static void test_route_six(void)
+{
+    CHECK_EQ_INT(IPP_PRINTERS, 6);
+    const char *res[IPP_PRINTERS] = { "ipp/print", "ipp/p3", "ipp/p4", "ipp/p5", "ipp/p6",
+                                      "ipp/p7" };
+    CHECK_EQ_INT(ipp_route("/ipp/p7", res, NONE), 5);
+    CHECK_EQ_INT(ipp_route("/ipp/p7/1", res, NONE), 5);
+    CHECK_EQ_INT(ipp_route("/ipp/p6", res, NONE), 4);
+    CHECK_EQ_INT(ipp_route("/ipp/p8", res, NONE), -1);
+    CHECK_EQ_INT(ipp_route("/ipp/print", res, NONE), 0);
+}
+
 int main(void)
 {
     const char *both[IPP_PRINTERS] = { "ipp/print", "ipp/laser" };
     const char *iw_only[IPP_PRINTERS] = { "ipp/print", NULL };
 
     test_route_slots();
+    test_route_six();
 
     CHECK_EQ_INT(ipp_route("/ipp/print", both, NONE), 0);
     CHECK_EQ_INT(ipp_route("/", both, NONE), 0);

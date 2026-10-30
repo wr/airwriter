@@ -736,28 +736,44 @@ read back is a list made again). At most 8 records.
   records there, or converts an "Unknown printer" or "Something else" record; a model already
   listed is refused, and so is a record's Model set to one another record has, or to
   Something else while another port record is one (one per port).
-- **Sharing.** Identified printers are shared at once, up to four (the port's, three on
-  AppleTalk), each its own AirPrint printer: the port's at printer 0 (`ipp/print`), AppleTalk's
-  at 1-3 (`ipp/p<id>`), Bonjour by name. A change reaches Bonjour at once, after the job holding
-  its slot. The W-1079 AirPrint switch is the whole box's. AirPrint to an AppleTalk ImageWriter
-  is not built: it is old Macs' only.
+- **Sharing.** Identified printers are shared at once, up to six (`PR_SHARE_MAX`, W-1116; any
+  mix of the port's records and AppleTalk printers, where before it was the port's and three
+  on AppleTalk), each its own AirPrint printer in one of `IPP_PRINTERS` (6) slots, Bonjour by
+  name (`CONFIG_MDNS_MAX_SERVICES` 10 in `sdkconfig.defaults`: six `_ipp`, the `_printer` stub
+  and `_http`). A record's path never changes while it exists: the oldest port record's is
+  `ipp/print` at printer 0, with the legacy routing of any other path; every other record's,
+  port records included, is `ipp/p<id>`; W-1082's LaserWriter also answers at `ipp/laser`. The
+  seventh identified printer is listed, not shared, with the "too many" notice, and shares once
+  another stops; a shared record keeps its place through a model change. A change reaches
+  Bonjour at once, after the job holding its slot. The W-1079 AirPrint switch is the whole
+  box's. AirPrint to an AppleTalk ImageWriter is not built: it is old Macs' only. (The board's
+  slot mapping still places AppleTalk printers only, at 1 on; a second port record's slot
+  follows in W-1116's later commits.)
 - **Notices.** Only what asks the person something: unknown port, no answer (Share Anyway),
   too many; at most 8, each with a caution mark, and one beside the sidebar's Printers while
   any waits; each is dismissed. A newly found printer just appears in the list, and so does a
   different printer answering on the port (W-1116): a "found" notice stored by an older build,
   or a "changed" one (accept or dismiss) from before W-1116, is dropped on load.
-- **Old Macs.** On each way in that is on, the node's own name is the port's ImageWriter (if
-  any), registrations 1-3 the AppleTalk printers from other links under their own NBP names and
-  types (relayed), and `<host name>:AirWriter` at registration 4 on every running link
-  (`lt_node_offer`, sockets 0x85-0x88). A Mac's connection on a relayed name goes through
-  `localtalk/pap_relay.c`, run by `laser.c` with the one PAP client under the job lock: busy, in
-  the printer's own status words, until the printer's connection is open; then both ways as
-  they are, the printer's output 256 bytes a read.
+- **Old Macs.** On each way in that is on, the node's own name is the port's one ImageWriter
+  (if any): the oldest ImageWriter record's name, fixed across swaps so a Chooser selection
+  keeps working (W-1116; `pr_offers` lists that record alone for the port, so the board's
+  `printers_offers` names it once, where before the last port ImageWriter overwrote the name).
+  A Mac's ImageWriter job goes to whichever ImageWriter answers on the port (the II, LQ and
+  original take the same stream). Registrations 1-3 are the AppleTalk printers from other
+  links under their own NBP names and types (relayed), and `<host name>:AirWriter` is at
+  registration 4 on every running link (`lt_node_offer`, sockets 0x85-0x88). A Mac's
+  connection on a relayed name goes through `localtalk/pap_relay.c`, run by `laser.c` with the
+  one PAP client under the job lock: busy, in the printer's own status words, until the
+  printer's connection is open; then both ways as they are, the printer's output 256 bytes a
+  read.
 - **Panel.** Idle, the box: ready while any shared printer is; while the port prints, its own
   line (a StyleWriter has none: its answers to `1` and `2`); during a LaserWriter job, the
   LaserWriter's.
-- **Test page.** The button, DIP4 and the page's Print Test Page (without an id) go to the port's
-  ImageWriter or StyleWriter, else the first shared printer; `POST /api/test {"id":N}` names one.
+- **Test page.** The button, DIP4 and the page's Print Test Page (without an id) go to the
+  printer on the port (`pr_port_current`, an ImageWriter or StyleWriter record) while it is
+  present, else the first shared printer that is ready, else that port record (the button then
+  runs the cable test, as before), else the first shared printer (`pr_test_target`, W-1116);
+  `POST /api/test {"id":N}` names one.
 - **Setup.** In setup mode the port is asked and the cable looked on at once, and the page is
   three steps, sized for a phone: the printers found, Wi-Fi, then "You're All Set" (how to print
   from a phone, and the test button for a test page; the settings' address for later, nothing
@@ -767,13 +783,18 @@ read back is a list made again). At most 8 records.
   made from what it had: the port's ImageWriter with its old uuid and the AirPrint switch as its
   Share (the switch then on), a W-1082 LaserWriter at `ipp/laser`. Its host name is stored, so
   `imagewriter-xxxx` stays; a new board is `airwriter-xxxx` with the AppleTalk port on.
-- **Web.** `GET /api/printers` (records with live state and `rp`, notices, `max_shared`);
-  `POST /api/printers` with `{"look":true}`, `{"add_port":"<model>"}`, `{"note":N,
-  "dismiss":true}` or `{"id":N, "name", "shared", "model" ("none" for Something else),
-  "remove", "use_anyway", "dither", "gain", "clean"}`; 400 with a sentence for the page
+- **Web.** `GET /api/printers`: the records with live state and `rp` (above), the notices,
+  then (W-1116) `port_on` (the id of the port record whose printer is on the port: the one
+  that answered last, while it is present; 0 for none), `said_other` (a Something else record
+  is in the list), `chooser` (the names vintage Macs see: the port ImageWriter's as on the
+  page, an AppleTalk printer's own NBP name whatever the page calls it) and `max_shared` (6);
+  `swapped` is gone. `POST /api/printers` with `{"look":true}`, `{"add_port":"<model>"}`,
+  `{"note":N, "dismiss":true}` or `{"id":N, "name", "shared", "model" ("none" for Something
+  else), "remove", "use_anyway", "dither", "gain", "clean"}`; 400 with a sentence for the page
   ("<model> is already in Printers." for `add_port` or `model` naming a model another port
   record has, "Something else is already in Printers." for `model` `none` while another port
-  record is one, W-1116). A StyleWriter's record also carries `cartridge` and `fault` (3.16).
+  record is one, "You can share up to 6 printers." at the cap, W-1116). A StyleWriter's record
+  also carries `cartridge` and `fault` (3.16).
 
 ### 3.16 StyleWriters (W-1103)
 

@@ -3,7 +3,7 @@
 // The printer list on the board (W-1088). printers_core holds the rules; this
 // keeps the list in PSRAM under a mutex, stores it in NVS when it changes,
 // puts each shared printer on AirPrint as its record says (the port's at
-// printer 0, AppleTalk's at 1-3), and gives laser.c the AppleTalk printers.
+// printer 0, AppleTalk's at 1 to IPP_PRINTERS-1), and gives laser.c the AppleTalk printers.
 //
 // Locks: s_apply_mx, then s_mu, then laser.c's and ipp_server's own. Nothing
 // here is called back with s_mu held.
@@ -29,7 +29,7 @@ static const char *NS = "printers";
 
 enum { BLOB_MAX = 8 + sizeof(pr_list_t), SEEN_MAX = 4 + PR_MAX * 9 };
 
-// An AppleTalk printer's AirPrint slot (1-3) as it is wanted, and as it was
+// An AppleTalk printer's AirPrint slot (1 to IPP_PRINTERS-1) as it is wanted, and as it was
 // last put there.
 typedef struct {
     uint8_t   id, kind, legacy;     // id 0: empty; legacy: answers at ipp/laser (W-1082's)
@@ -227,7 +227,7 @@ const ipp_printer_cfg_t *printers_port_ipp(void)
     return on ? &c : NULL;
 }
 
-// What slots 1-3 should hold: a shared, identified LaserWriter keeps the slot
+// What slots 1 to IPP_PRINTERS-1 should hold: a shared, identified LaserWriter keeps the slot
 // it has; others take the lowest free one. Under s_mu.
 static void at_want(void)
 {

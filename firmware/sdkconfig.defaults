@@ -27,6 +27,11 @@ CONFIG_LWIP_MAX_SOCKETS=16
 # accept mailbox full is reset rather than queued.
 CONFIG_LWIP_TCP_ACCEPTMBOX_SIZE=8
 
+# W-1116: Bonjour carries six shared printers (PR_SHARE_MAX), one _ipp service
+# each, plus the port printer's _printer stub and the settings page's _http:
+# 8 of these 10. Pinned here because releases build from this file alone.
+CONFIG_MDNS_MAX_SERVICES=10
+
 # W-1048: only signed images install over the air, from GitHub or /update.
 # IDF's signed apps without secure boot: esp_ota_end checks the RSA-3072
 # signature block on the new image, and trusts the key that signed the

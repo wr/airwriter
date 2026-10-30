@@ -12,7 +12,10 @@
 #include "lw_query.h"
 #include "sw_model.h"
 
-enum { PR_MAX = 8, PR_SHARE_MAX = 4, PR_AT_SHARE_MAX = 3, PR_NAME_MAX = 33, PR_NOTES_MAX = 8 };
+// PR_SHARE_MAX (W-1116): six shared over AirPrint, any mix of the port's records and
+// AppleTalk printers (before, the port's and three on AppleTalk); ipp_server has a slot
+// for each (IPP_PRINTERS), and Bonjour room for their services.
+enum { PR_MAX = 8, PR_SHARE_MAX = 6, PR_NAME_MAX = 33, PR_NOTES_MAX = 8 };
 // The stored form's version. 2 (W-1103) adds the StyleWriter kind and its
 // seven models to the numbers a record may hold; 3 (W-1116) is a second port
 // record in the list. The record's layout is the same throughout, so pr_load
@@ -177,8 +180,9 @@ int  pr_set_shared(pr_list_t *l, int id, int on);           // -1 at the cap, or
 // A port record only; -2 when another port record has the model, or is "Something else"
 // already for PR_MODEL_NONE (W-1116: one record per model, one Something else per port).
 // The record is shared if there is room, else the "too many" notice. A StyleWriter named
-// forgets an ImageWriter's answer before it: the person's word is the newest, and the board
-// asks the port again at once.
+// on the record that is on the port (pr_port_current) forgets an ImageWriter's answer before
+// it: the person's word is the newest, and the board asks the port again at once. Named on
+// another record, it leaves the one on the port as it is.
 int  pr_set_model(pr_list_t *l, int id, pr_model_t m);
 // "Add a Printer…" for the port: its model (an original ImageWriter, or one
 // that is off, never answers; a StyleWriter, W-1103, the original's included).
@@ -224,14 +228,22 @@ int  pr_port_other_family(const pr_list_t *l, int family);
 typedef enum { PR_GATE_GO, PR_GATE_WAIT, PR_GATE_OTHER } pr_gate_t;
 pr_gate_t pr_job_gate(const pr_list_t *l, int id, int heard, pr_model_t heard_model, int line_up);
 
-// The records old Macs are offered on `link` (ids, in list order): every
-// identified printer AirWriter can carry, shared over AirPrint or not; an
-// AppleTalk printer never on its own link. A port StyleWriter is carried to
-// none until StyleWriters phase 2.
+// The records old Macs are offered on `link` (ids, in list order): one ImageWriter for the
+// printer port, the oldest ImageWriter record's (W-1116: fixed across swaps, so a Chooser
+// selection keeps working; a Mac's job goes to whichever ImageWriter answers), and every
+// identified AppleTalk printer, shared over AirPrint or not, never on its own link. A port
+// StyleWriter is carried to none until StyleWriters phase 2.
 int  pr_offers(const pr_list_t *l, pr_where_t link, int ids[], int max);
 
 pr_box_t pr_box_state(const pr_list_t *l, const pr_live_t live[PR_MAX]);
-int  pr_test_target(const pr_list_t *l, const pr_live_t live[PR_MAX]);   // the port's ImageWriter or StyleWriter, else the first shared
+// Where the test page goes (W-1116): the printer on the port (pr_port_current, an ImageWriter
+// or StyleWriter record) while it is present; else the first shared printer that is ready;
+// else that port record (the board then runs the cable test); else the first shared. -1: none.
+int  pr_test_target(const pr_list_t *l, const pr_live_t live[PR_MAX]);
+// W-1116: 1 when `id` is a port record and another port record's printer is the one on the
+// port (pr_port_current, present): a job to `id` is answered busy, nothing held. 0 for the
+// one on the port, with nothing present, or for an AppleTalk printer.
+int  pr_port_absent(const pr_list_t *l, const pr_live_t live[PR_MAX], int id);
 
 // A board from before W-1088: its one ImageWriter and its one shared
 // LaserWriter, as NVS kept them. Nothing changes on its phones.
@@ -263,6 +275,13 @@ int    pr_blob_newer(const uint8_t *buf, size_t n);
 size_t pr_seen_save(const pr_list_t *l, uint8_t *buf, size_t cap);    // 0: too small
 int    pr_seen_load(pr_list_t *l, const uint8_t *buf, size_t n);
 
+// The Printers section's JSON: the records with their live state and, while shared, each one's
+// AirPrint path `rp` (W-1116: the oldest port record's ipp/print, every other record's
+// ipp/p<id>, W-1082's LaserWriter ipp/laser), the notices, then `port_on` (the id of the port
+// record whose printer is on the port, pr_port_current while present; 0 for none),
+// `said_other` (a Something else record is in the list), `chooser` (the names vintage Macs
+// see: the port ImageWriter's as on the page, an AppleTalk printer's own NBP name) and
+// `max_shared` (PR_SHARE_MAX).
 size_t pr_json(const pr_list_t *l, const pr_live_t live[PR_MAX], char *buf, size_t cap);
 
 // What the Printers section sends: flat JSON, {"look":true}, {"add_port":

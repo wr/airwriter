@@ -155,16 +155,19 @@ int pr_port_is_stylewriter(const pr_list_t *l)
     return p && p->kind == PR_KIND_STYLEWRITER;
 }
 
-static int at_shared(const pr_list_t *l)
+// How many records besides `r` are shared: `r` may be one of them already (a model change
+// keeps its place).
+static int shared_besides(const pr_list_t *l, const pr_rec_t *r)
 {
     int c = 0;
-    for (int i = 0; i < l->n; i++) if (l->r[i].where != PR_WHERE_PORT && l->r[i].shared) c++;
+    for (int i = 0; i < l->n; i++) c += &l->r[i] != r && l->r[i].shared;
     return c;
 }
 
+// W-1116: six shared, any mix of the port's records and AppleTalk printers.
 static int can_share(const pr_list_t *l, const pr_rec_t *r)
 {
-    return r->where == PR_WHERE_PORT || at_shared(l) < PR_AT_SHARE_MAX;
+    return shared_besides(l, r) < PR_SHARE_MAX;
 }
 
 // NBP compares names without regard to ASCII case.
@@ -634,17 +637,19 @@ int pr_set_model(pr_list_t *l, int id, pr_model_t m)
         notes_clear(l, id, PR_NOTE_UNKNOWN_PORT);
         return 0;
     }
+    int on_port = pr_port_current(l) == r;        // before its model moves
     become_model(l, r, m);
     r->announced = 1;
     if (can_share(l, r)) r->shared = 1;
     else note_add(l, PR_NOTE_TOO_MANY, id, 0);
-    // A StyleWriter the person names is the newest word on what the port holds: an
-    // ImageWriter's answer before it is forgotten, the printer that gave it likely
-    // unplugged, so the StyleWriter's own questions (the full sequence, then a look) are
-    // not held back by it, and what answers decides again. An ImageWriter named over a
-    // StyleWriter's answer stays held until an ImageWriter answers: its stream would print
-    // on a StyleWriter.
-    if (model_is_sw(m)) {
+    // A StyleWriter the person names on the record that is on the port is the newest word
+    // on what the port holds: an ImageWriter's answer before it is forgotten, the printer
+    // that gave it likely unplugged, so the StyleWriter's own questions (the full sequence,
+    // then a look) are not held back by it, and what answers decides again. An ImageWriter
+    // named over a StyleWriter's answer stays held until an ImageWriter answers: its stream
+    // would print on a StyleWriter. Named on another record (W-1116), nothing is forgotten:
+    // the printer on the port is still there.
+    if (on_port && model_is_sw(m)) {
         if (l->heard == PR_HEARD_IMAGEWRITER) l->heard = PR_HEARD_NONE;
         l->heard_model = 0;
     }
@@ -743,16 +748,33 @@ pr_gate_t pr_job_gate(const pr_list_t *l, int id, int heard, pr_model_t heard_mo
 
 // ------------------------------------------------------------- old Macs, the box
 
+// The port's one offer to vintage Macs: the oldest ImageWriter record (W-1116), fixed
+// across swaps. A StyleWriter is offered to none (phase 2); "Unknown printer" and
+// "Something else" are no printer to offer. NULL: none.
+static const pr_rec_t *port_offer(const pr_list_t *l)
+{
+    for (int i = 0; i < l->n; i++) {
+        const pr_rec_t *r = &l->r[i];
+        if (r->where == PR_WHERE_PORT && r->kind == PR_KIND_IMAGEWRITER && r->identified) return r;
+    }
+    return NULL;
+}
+
+// Whether vintage Macs on `link` (any link: -1) are offered `r`: the port's one ImageWriter
+// (`own`, port_offer's), or an identified AppleTalk printer not on its own link, where it
+// speaks for itself.
+static int offered(const pr_rec_t *r, const pr_rec_t *own, int link)
+{
+    if (r->where == PR_WHERE_PORT) return r == own;
+    return r->identified && r->where != link;
+}
+
 int pr_offers(const pr_list_t *l, pr_where_t link, int ids[], int max)
 {
+    const pr_rec_t *own = port_offer(l);
     int n = 0;
-    for (int i = 0; i < l->n && n < max; i++) {
-        const pr_rec_t *r = &l->r[i];
-        if (!r->identified || r->kind == PR_KIND_UNKNOWN) continue;
-        if (r->kind == PR_KIND_STYLEWRITER) continue;                  // phase 2
-        if (r->where != PR_WHERE_PORT && r->where == link) continue;   // it speaks for itself
-        ids[n++] = r->id;
-    }
+    for (int i = 0; i < l->n && n < max; i++)
+        if (offered(&l->r[i], own, link)) ids[n++] = l->r[i].id;
     return n;
 }
 
@@ -778,11 +800,30 @@ pr_box_t pr_box_state(const pr_list_t *l, const pr_live_t live[PR_MAX])
     return s;
 }
 
+// The port record whose printer is the one on the port right now: the one that answered
+// last (pr_port_current), while it is present. Its index in r[], or -1.
+static int port_on(const pr_list_t *l, const pr_live_t live[PR_MAX])
+{
+    const pr_rec_t *p = pr_port_current(l);
+    if (!p) return -1;
+    int i = (int)(p - l->r);
+    return live[i].present ? i : -1;
+}
+
+int pr_port_absent(const pr_list_t *l, const pr_live_t live[PR_MAX], int id)
+{
+    int i = pr_index(l, id), on = port_on(l, live);
+    return i >= 0 && on >= 0 && i != on && l->r[i].where == PR_WHERE_PORT;
+}
+
 int pr_test_target(const pr_list_t *l, const pr_live_t live[PR_MAX])
 {
-    (void)live;
     const pr_rec_t *p = pr_port_current(l);
-    if (p && (p->kind == PR_KIND_IMAGEWRITER || p->kind == PR_KIND_STYLEWRITER)) return p->id;
+    if (p && p->kind != PR_KIND_IMAGEWRITER && p->kind != PR_KIND_STYLEWRITER) p = NULL;
+    if (p && live[p - l->r].present) return p->id;
+    for (int i = 0; i < l->n; i++)
+        if (l->r[i].shared && one_state(&live[i]) == PR_BOX_READY) return l->r[i].id;
+    if (p) return p->id;
     for (int i = 0; i < l->n; i++) if (l->r[i].shared) return l->r[i].id;
     return -1;
 }
@@ -1049,13 +1090,13 @@ int pr_post(pr_list_t *l, const char *body, pr_post_t *o)
         return 0;
     }
     char s[PR_NAME_MAX * 2];
-    char taken[PR_NAME_MAX + 32];
+    char msg[PR_NAME_MAX + 32];
     if (json_has_str(b, "add_port", s, sizeof s)) {
         int m = model_by_name(s);
         int port = m < 0 ? -1 : pr_add_port(l, (pr_model_t)m);
         if (port == -2) {
-            snprintf(taken, sizeof taken, "%s is already in Printers.", pr_model_name(m));
-            return post_err(o, taken);
+            snprintf(msg, sizeof msg, "%s is already in Printers.", pr_model_name(m));
+            return post_err(o, msg);
         }
         if (port < 0) return post_err(o, "Unknown model.");
         o->changed = 1;
@@ -1077,9 +1118,9 @@ int pr_post(pr_list_t *l, const char *body, pr_post_t *o)
         int m = !strcmp(s, "none") ? PR_MODEL_NONE : model_by_name(s);
         int rc = m < 0 ? -1 : pr_set_model(l, id, (pr_model_t)m);
         if (rc == -2) {
-            snprintf(taken, sizeof taken, "%s is already in Printers.",
+            snprintf(msg, sizeof msg, "%s is already in Printers.",
                      m == PR_MODEL_NONE ? "Something else" : pr_model_name(m));
-            return post_err(o, taken);
+            return post_err(o, msg);
         }
         if (rc) return post_err(o, "Unknown model.");
         o->changed = 1;
@@ -1097,7 +1138,10 @@ int pr_post(pr_list_t *l, const char *body, pr_post_t *o)
             return post_err(o, "Choose this printer’s model to share it.");
         if (v && !r->identified)
             return post_err(o, "This printer can’t be shared until it responds.");
-        if (pr_set_shared(l, id, v)) return post_err(o, "You can share up to 4 printers.");
+        if (pr_set_shared(l, id, v)) {
+            snprintf(msg, sizeof msg, "You can share up to %d printers.", PR_SHARE_MAX);
+            return post_err(o, msg);
+        }
         o->changed = 1;
     }
     if (json_has_str(b, "dither", s, sizeof s)) {
@@ -1157,17 +1201,19 @@ size_t pr_json(const pr_list_t *l, const pr_live_t live[PR_MAX], char *buf, size
                                          "too_many" };
     size_t k = 0;
     char e_name[PR_NAME_MAX * 2], e_prod[sizeof l->r[0].lw.product * 2];
+    const pr_rec_t *oldest = pr_port(l), *own = port_offer(l);
 #define PUT(...) do { if (k < cap) k += (size_t)snprintf(buf + k, cap - k, __VA_ARGS__); } while (0)
     PUT("{\"printers\":[");
     for (int i = 0; i < l->n; i++) {
         const pr_rec_t *r = &l->r[i];
         esc(e_name, sizeof e_name, r->name);
         esc(e_prod, sizeof e_prod, r->kind == PR_KIND_LASERWRITER ? r->lw.product : "");
-        // Its AirPrint path while it is shared: the port's, W-1082's, or its own.
+        // Its AirPrint path while it is shared: the oldest port record's (the one a board
+        // had before W-1116) ipp/print, W-1082's LaserWriter's ipp/laser, every other's own.
         char rp[16] = "";
         if (r->shared && r->identified && r->where == PR_WHERE_PORT &&
             (r->kind == PR_KIND_IMAGEWRITER || r->kind == PR_KIND_STYLEWRITER))
-            snprintf(rp, sizeof rp, "ipp/print");
+            snprintf(rp, sizeof rp, r == oldest ? "ipp/print" : "ipp/p%u", r->id);
         else if (r->shared && r->identified && r->kind == PR_KIND_LASERWRITER)
             snprintf(rp, sizeof rp, r->ipp_laser ? "ipp/laser" : "ipp/p%u", r->id);
         // W-1099: a LaserWriter's start page, null where it never said.
@@ -1198,6 +1244,21 @@ size_t pr_json(const pr_list_t *l, const pr_live_t live[PR_MAX], char *buf, size
     for (int i = 0; i < l->n_notes; i++)
         PUT("%s{\"kind\":\"%s\",\"id\":%u,\"model\":\"%s\"}", i ? "," : "",
             notes[l->notes[i].kind], l->notes[i].id, pr_model_name(l->notes[i].model));
+    // W-1116: the port's printer, the port set to Something else, and what the Chooser on
+    // vintage Macs shows: the port ImageWriter's name as on the page (the node's own), an
+    // AppleTalk printer's own NBP name (relayed as it is, whatever the page calls it).
+    int on = port_on(l, live);
+    PUT("],\"port_on\":%u,\"said_other\":%s,\"chooser\":[", on < 0 ? 0 : l->r[on].id,
+        pr_port_said_other(l) ? "true" : "false");
+    for (int i = 0, n = 0; i < l->n; i++) {
+        const pr_rec_t *r = &l->r[i];
+        if (!offered(r, own, -1)) continue;
+        char seen_as[PR_NAME_MAX];
+        if (r->where == PR_WHERE_PORT) snprintf(seen_as, sizeof seen_as, "%s", r->name);
+        else own_name(r, seen_as, sizeof seen_as);
+        esc(e_name, sizeof e_name, seen_as);
+        PUT("%s\"%s\"", n++ ? "," : "", e_name);
+    }
     PUT("],\"max_shared\":%d}", PR_SHARE_MAX);
 #undef PUT
     if (k >= cap) {
