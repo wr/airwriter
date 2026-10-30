@@ -106,8 +106,11 @@ void port_tick(port_in_t *in);
 //                   unanswered ESC ? elsewhere, not the cadence, not the full sequence (one
 //                   owed waits until the Something else record goes).
 //   3. PA_STATUS    a StyleWriter record that answers (and only then), when its status
-//                   is 10 s old or on a look. Nothing else is ever sent to it: no ESC ?,
-//                   no plain question, no kick, whatever the line does.
+//                   is 10 s old, on a look, or on a line-up edge: the line may be another
+//                   printer's, so a StyleWriter that is gone turns into the stop's look at
+//                   once (an ImageWriter in its place is found in about 1.5 s; the status
+//                   bytes at 57600 are harmless to it, bench 2026-10-27). Nothing else is
+//                   ever sent to it: no ESC ?, no plain question, no kick.
 //   4. On a line-up edge, or a look with the line ready, for every other port: PA_PLAIN
 //                   first where the port is StyleWriter-first (a StyleWriter record listed, a
 //                   port that last answered as a StyleWriter, or an original ImageWriter

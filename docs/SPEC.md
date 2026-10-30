@@ -865,8 +865,11 @@ Apple's StyleWriter adapter (ADSP, not PAP), is not built.
   AirWriter's own, and the person's own Look for Printers asks once, as any look does, with
   nothing following it (not the plain question that follows an unanswered `ESC ?` elsewhere,
   not the cadence, and a full sequence owed waits until the Something else record goes); a
-  StyleWriter record that answers, `1` and `2` every 10 s and on a look, and nothing else (no
-  `ESC ?`, no plain question, no kick); on a line-up edge or a look with the line ready, the
+  StyleWriter record that answers, `1` and `2` every 10 s, on a look and on a line-up edge
+  (the line may be another printer's: a StyleWriter that is gone turns into the stop's look at
+  once, and the check's bytes at 57600 are harmless to an ImageWriter, `docs/traps.md`
+  2026-10-27), and nothing else (no `ESC ?`, no plain question, no kick); on a line-up edge or
+  a look with the line ready, for every other port, the
   plain question first where the port is StyleWriter-first (any StyleWriter record listed, a
   port that last answered as a StyleWriter, or an original ImageWriter record listed, which
   gives no self-ID), then `ESC ?` once that got nothing, and `ESC ?` alone everywhere else (an
@@ -897,11 +900,12 @@ Apple's StyleWriter adapter (ADSP, not PAP), is not built.
   offline (but the original, below). A StyleWriter record that was answering and stops (its
   `1` and `2`, or a job's question, get nothing) is looked at once, once per stop: the plain
   question, then `ESC ?` if that got nothing, so an ImageWriter put in its place with its line
-  already up (behind an A/B switch) is found within one status interval; a printer plugged in
-  while a StyleWriter record still answers is found that way too, within one status check and
-  the look that follows it (the design's timings: a StyleWriter within 5 s, an ImageWriter at
-  its line-up's `ESC ?` after the 2 s settle, a swap for a StyleWriter that was answering
-  within 10 s and the look).
+  already up (behind an A/B switch) is found within one status interval, and one whose line
+  comes up while the StyleWriter record still answers is found by the status its line-up asks
+  at once and the stop's look, in about 1.5 s. So the design's timings hold: a StyleWriter
+  within 5 s, an ImageWriter at its line-up's `ESC ?` after the 2 s settle, whatever answered
+  before; only a StyleWriter that raises no line, put in place of one that answers, waits for
+  the next status check, within 10 s, whose `?` names it.
 - **Several printers on the port** (`W-1116 Printer port: several printers, the one plugged in
   shows online`; design `docs/superpowers/specs/2026-10-30-port-printers-design.md`, which
   replaces the StyleWriter branch's swapped-port refusal and W-1088's "changed" notice). The

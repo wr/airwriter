@@ -28,8 +28,11 @@ port_act_t port_policy(const port_in_t *in)
     // does, below, and nothing follows it.
     if (in->said_other && !person_look) return PA_NONE;
 
+    // A line-up edge while a StyleWriter answers may be another printer's line: the status at
+    // once, so one that is gone turns into the stop's look now, not a status interval later.
     if (sw && answers)
-        return in->look || due(in->now_ms, in->last_status_ms, PORT_STATUS_EVERY_MS)
+        return in->look || in->line_up_edge ||
+               due(in->now_ms, in->last_status_ms, PORT_STATUS_EVERY_MS)
                ? PA_STATUS : PA_NONE;
 
     // A StyleWriter may stop listening once it has heard ESC ?, so a port with a StyleWriter

@@ -9,17 +9,26 @@ Reverses the StyleWriter cut in `2026-08-04-printer-support-scope-design.md`.
 online` (`2026-10-30-port-printers-design.md`): the swapped-port refusal and the "changed"
 notice of the 2026-10-27 amendment are replaced; the port keeps a record per model, the one
 answering online and the rest offline, and the family check alone stays (`pr_port_other_family`)
-so one family's bytes never reach the other.
+so one family's bytes never reach the other. The automatic look is every 5 s, not 60, while
+the port's printer is not answering, whatever the list holds; the order of the questions is
+the list's, not the record's: the plain question first wherever a StyleWriter record is
+listed, the port last answered as a StyleWriter, or an original ImageWriter record is listed;
+the full sequence wherever an original StyleWriter record is listed. A StyleWriter record
+that answers is asked its status on a line-up edge as well, so an ImageWriter put in its
+place is found by the failed check and the stop's look in about 1.5 s. An ImageWriter record
+whose port a StyleWriter answered is asked as any port that is not answering (the quiet rule
+below went with the notice).
 
-**Amended 2026-10-27, before the bench** (SPEC §3.16 has each in full). A port
-whose record is, or that last answered as, a StyleWriter is asked the plain question first at a
-line-up or a look, and `ESC ?` only when that gets nothing: a StyleWriter may stop listening
-once it has heard `ESC ?`. While the family that last answered on the port is not the record's,
-the record's jobs, test page and cleaning are refused until its own family answers again or the
-person accepts the change; an ImageWriter record whose port a StyleWriter answered asks nothing
-more on its own, so its notice can be dismissed. The original StyleWriter's silence while idle
-reads as ready, not offline, since it ignores the plain question until a reset. A block leaves
-one step of `B` below the empty buffer.
+**Amended 2026-10-27, before the bench** (SPEC §3.16 has each in full; the 2026-10-30
+amendment above changes the first two). A port whose record is, or that last answered as, a
+StyleWriter is asked the plain question first at a line-up or a look, and `ESC ?` only when
+that gets nothing: a StyleWriter may stop listening once it has heard `ESC ?`. While the
+family that last answered on the port is not the record's, the record's jobs, test page and
+cleaning are refused until its own family answers again or the person accepts the change; an
+ImageWriter record whose port a StyleWriter answered asks nothing more on its own, so its
+notice can be dismissed. The original StyleWriter's silence while idle reads as ready, not
+offline, since it ignores the plain question until a reset. A block leaves one step of `B`
+below the empty buffer.
 
 ## Why
 
@@ -212,8 +221,9 @@ which ignores `?` until reset, but its `00` and `49` bytes can read as a stray c
 9600. So:
 
 - **Automatic looks send only the plain question.** At boot after the quiet power-on, when
-  setup or the Printers section looks, at line-up when `ESC ?` went unanswered, and every 60 s
-  while the port's printer is not answering (InkTalk's retry), never while the port prints. One
+  setup or the Printers section looks, at line-up when `ESC ?` went unanswered, and every 5 s
+  while the port's printer is not answering (60 s at first, InkTalk's retry; 5 s since
+  W-1116, so a StyleWriter plugged in is found in seconds), never while the port prints. One
   byte, then back to 9600.
 - **The full sequence goes only to a StyleWriter the person or the record names:** before
   every job to a StyleWriter record, and once when the person picks a StyleWriter in Add a
@@ -384,8 +394,8 @@ host-built (`components/sw_page`, name the builder's), fed 360 dpi rows:
 - Board 1 (bench rules: no OTA mid-print, ask before printing on the ImageWriter): its
   ImageWriter recognised and printing as before (the checker's crc at top margin 0); the plain
   question sent at 57600 to its ImageWriter, several hundred times, prints nothing, and what
-  the full sequence prints is written down; with no printer answering, the 60 s look costs
-  nothing visible.
+  the full sequence prints is written down; with no printer answering, the automatic look
+  (60 s then, 5 s since W-1116) costs nothing visible.
 - If a USB serial adapter is to hand: `swfake` on the Mac on board 1's J2, recognised as each
   model, an AirPrint page from a phone decoded by `swfake` as the dots the rip made, out of
   paper and cancel.
@@ -464,7 +474,8 @@ host-built (`components/sw_page`, name the builder's), fed 360 dpi rows:
 - Automatic looks send only the one-byte plain question, harmless to an ImageWriter by its bit
   timing (bench-checked); the full sequence only to a named StyleWriter. So the original
   StyleWriter is found once the person says what it is.
-- Idle status by asking `1`/`2` every 10 s; a 60 s look while the port is empty.
+- Idle status by asking `1`/`2` every 10 s; a look every 5 s while the port is empty (60 s
+  until W-1116).
 - R9 fitted on rev A boards that run a StyleWriter until shown unnecessary; rev B fits it.
 - Letter, A4 and Legal; plain paper only; draft, normal, best from the phone's quality.
 - Apple's tone curve as the StyleWriter default and Apple's screen as a sixth choice (Wells

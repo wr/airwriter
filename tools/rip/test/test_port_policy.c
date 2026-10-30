@@ -133,6 +133,10 @@ static void test_invariants(void)
         if (a == PA_ESCQ) CHECK(!(sw && answers) && event && (!sw_first_of(&in) || in.event_plain));
         if (a == PA_STATUS) CHECK(sw && answers);
         if (sw && answers) CHECK(a == PA_NONE || a == PA_STATUS);
+        // ...and its status at once on a look or a line-up edge, as when it is due (but for
+        // Something else, which only the person's look gets past).
+        if (sw && answers && (in.look || in.line_up_edge || due == 1) && !(in.said_other && !person_look))
+            CHECK_EQ_INT(a, PA_STATUS);
         // An ImageWriter that answers is never asked the plain question on its own.
         if (iw && in.answering && !event) CHECK(a != PA_PLAIN && a != PA_STATUS);
         // A port that is not answering is asked the plain question on the cadence whatever
@@ -310,7 +314,6 @@ static void test_stylewriter_answering(void)
 
     // Not due: nothing, however much else would ask.
     in = at(in, 600 * SEC, 9 * SEC + 999);
-    in.line_up_edge = 1;
     in.want_kick = 1;
     in.plain_unanswered = 1;
     in.plain_asked = 1;
@@ -318,9 +321,12 @@ static void test_stylewriter_answering(void)
     // Due at 10 s, not a millisecond before.
     in = at(in, 600 * SEC, 10 * SEC);
     CHECK_EQ_INT(port_policy(&in), PA_STATUS);
-    // A look asks at once.
+    // A look asks at once; so does a line-up edge (the line may be another printer's).
     in = at(in, 600 * SEC, 1);
     in.look = 1;
+    CHECK_EQ_INT(port_policy(&in), PA_STATUS);
+    in.look = 0;
+    in.line_up_edge = 1;
     CHECK_EQ_INT(port_policy(&in), PA_STATUS);
 
     // Five minutes at the board's pace, 500 ms a call: a status every 10 s, nothing else,
@@ -860,11 +866,55 @@ static void test_swap_sw_raises_line(void)
     CHECK_EQ_INT(port_policy(&in), PA_ESCQ);
 }
 
+// An ImageWriter put in place of a StyleWriter that answers, its line coming up (R11): the
+// line-up edge asks the status at once, not at the next 10 s check; that gets nothing, so the
+// stop's look follows (the plain question first, since a StyleWriter answered last, then
+// ESC ?), and the ImageWriter is found in about 1.5 s. The status bytes at 57600 are harmless
+// to it (bench 2026-10-27). When the StyleWriter is still there (its own line came up again,
+// for one that raises it), the status answers and the edge is over: no ESC ?, no plain question.
+static void test_swap_iw_while_sw_answers(void)
+{
+    port_in_t in = base(PR_KIND_STYLEWRITER);
+    in.answering = 1;
+    in.heard = PR_HEARD_STYLEWRITER;
+    in = at(in, 0, 1 * SEC);                        // its status a second old: not due
+    in.line_up_edge = 1;
+    CHECK_EQ_INT(port_policy(&in), PA_STATUS);
+    port_after(&in, PA_STATUS, PR_HEARD_NONE, 0);   // an ImageWriter hears nothing at 57600
+    CHECK_EQ_INT(in.line_up_edge, 0);
+    CHECK_EQ_INT(in.answering, 0);
+    CHECK_EQ_INT(in.look, 1);
+    CHECK_EQ_INT(in.look_person, 0);
+    in.now_ms += 500;
+    CHECK_EQ_INT(port_policy(&in), PA_PLAIN);
+    port_after(&in, PA_PLAIN, PR_HEARD_NONE, 0);
+    in.now_ms += 500;
+    CHECK_EQ_INT(port_policy(&in), PA_ESCQ);
+    port_after(&in, PA_ESCQ, PR_HEARD_IMAGEWRITER, 1);
+    CHECK_EQ_INT(in.heard, PR_HEARD_IMAGEWRITER);
+    CHECK_EQ_INT(in.answering, 1);
+    CHECK_EQ_INT(in.look, 0);
+    // The StyleWriter itself, its line up again: the status answers, and that is all.
+    in = base(PR_KIND_STYLEWRITER);
+    in.answering = 1;
+    in.heard = PR_HEARD_STYLEWRITER;
+    in = at(in, 0, 1 * SEC);
+    in.line_up_edge = 1;
+    CHECK_EQ_INT(port_policy(&in), PA_STATUS);
+    port_after(&in, PA_STATUS, PR_HEARD_STYLEWRITER, 1);
+    CHECK_EQ_INT(in.line_up_edge + in.look, 0);
+    CHECK_EQ_INT(in.answering, 1);
+    CHECK_EQ_INT(port_policy(&in), PA_NONE);
+    tally_t t = run(in, in.now_ms, in.now_ms + 60 * SEC);
+    CHECK_EQ_INT(t.counts[PA_ESCQ] + t.counts[PA_PLAIN] + t.counts[PA_KICK], 0);
+}
+
 // Review Focus 4: a line that blips. The board raises a line-up edge only after the line was
 // down a second or more (W-1064), so a drop under 1 s (power-on, a quick deselect, the
 // printer's own busy blips) is no event here: no ESC ?, no plain question, and the ImageWriter
 // stays answering, though the board calls port_line_down for every drop. A drop of a second or
-// more is an edge, and one ESC ?.
+// more is an edge, and one ESC ?. This tests the policy's side only: the edge rule itself is
+// the board's (main.c, printer_line_changed), and the loop below plays it.
 static void test_line_blips(void)
 {
     port_in_t in = base(PR_KIND_IMAGEWRITER);
@@ -1453,11 +1503,13 @@ static void swaps_run(swaps_t *s, const swap_t *script, int n, uint32_t len_s)
     for (uint32_t ms = t0; ms < t0 + len_s * SEC; ms += again ? 0 : 500) {
         if (!again && next < n && ms == t0 + script[next].at_s * SEC) {
             int on = script[next].on;
-            // A printer plugged in while a StyleWriter record answers is found once a status
-            // check fails (within 10 s) and the look that follows asks; else within the 5 s
-            // cadence, plus the repeat that makes a record.
+            // Within 6 s: the 5 s cadence plus the repeat that makes a record, or a line-up's
+            // questions (the status at once while a StyleWriter record answers, then the
+            // stop's look). Only a StyleWriter that raises no line, put in place of one that
+            // answers, gives nothing to see: the next status check's `?` names it, within 10 s.
             int sw_answers = kind_of(s->current) == PR_KIND_STYLEWRITER && in.answering;
-            s->due_ms[next] = ms + (sw_answers ? 11 : 6) * SEC;
+            int unseen = sw_answers && on != NOTHING && !raises_line(s, on);
+            s->due_ms[next] = ms + (unseen ? 11 : 6) * SEC;
             s->w.on = on;
             s->w.deaf = 0;
             int line_now = raises_line(s, on);
@@ -1505,23 +1557,24 @@ static void check_swaps(const swaps_t *s, const swap_t *script, int n, const cha
     CHECK_EQ_INT(s->w.kicks_sw, 0);
 }
 
-// Printers plugged in and out, one after another and in each other's place: each is answering
-// as the current record within seconds (the design's timings: a StyleWriter within the 5 s
-// cadence; an ImageWriter at its line-up's ESC ?, the board's 2 s settle aside; a printer
-// plugged in while a StyleWriter record answers, within one status check and the look that
-// follows it); no StyleWriter that would answer hears ESC ?; none hears CTRL-X.
+// Printers plugged in and out, one after another and in each other's place, at times off the
+// 10 s status grid: each is answering as the current record within 6 s (the design's timings:
+// a StyleWriter within the 5 s cadence; an ImageWriter at its line-up's ESC ?, the board's 2 s
+// settle aside, even in place of a StyleWriter that answers, R11); no StyleWriter that would
+// answer hears ESC ?; none hears CTRL-X.
 static void test_swaps(void)
 {
     // An empty list, the StyleWriters never raising the line: each printer makes its record
-    // when it has answered twice.
+    // when it has answered twice; the ImageWriter twice takes a StyleWriter's place while its
+    // record answers.
     static const swap_t a[] = {
-        { 5, IMAGEWRITER }, { 30, NOTHING }, { 40, SW_MINE }, { 70, SW_OTHER }, { 100, IMAGEWRITER },
-        { 130, NOTHING }, { 150, SW_MINE }, { 180, NOTHING }, { 200, IMAGEWRITER }, { 230, NOTHING },
+        { 5, IMAGEWRITER }, { 31, NOTHING }, { 43, SW_MINE }, { 67, IMAGEWRITER }, { 93, NOTHING },
+        { 107, SW_OTHER }, { 131, NOTHING }, { 144, SW_MINE }, { 173, IMAGEWRITER }, { 201, NOTHING },
     };
     swaps_t s;
     memset(&s, 0, sizeof s);
     s.current = s.pending = NOTHING;
-    swaps_run(&s, a, 10, 260);
+    swaps_run(&s, a, 10, 230);
     check_swaps(&s, a, 10, "an empty list");
     CHECK(s.listed[IMAGEWRITER] && s.listed[SW_MINE] && s.listed[SW_OTHER] && !s.listed[ORIGINAL_IW]);
     CHECK_EQ_INT(s.current, IMAGEWRITER);
@@ -1529,31 +1582,43 @@ static void test_swaps(void)
     // An original ImageWriter record, the person's, listed first, and StyleWriters that raise
     // the line (Review Focus 1 in the loop): the port is StyleWriter-first throughout.
     static const swap_t b[] = {
-        { 5, ORIGINAL_IW }, { 30, NOTHING }, { 40, SW_MINE }, { 70, IMAGEWRITER },
-        { 110, ORIGINAL_IW }, { 140, SW_OTHER }, { 170, NOTHING },
+        { 5, ORIGINAL_IW }, { 31, NOTHING }, { 43, SW_MINE }, { 67, IMAGEWRITER },
+        { 101, ORIGINAL_IW }, { 133, SW_OTHER }, { 161, NOTHING },
     };
     memset(&s, 0, sizeof s);
     s.listed[ORIGINAL_IW] = 1;
     s.current = ORIGINAL_IW;
     s.pending = NOTHING;
     s.sw_line = 1;
-    swaps_run(&s, b, 7, 200);
+    swaps_run(&s, b, 7, 190);
     check_swaps(&s, b, 7, "an original ImageWriter record first");
     CHECK(s.listed[IMAGEWRITER] && s.listed[SW_MINE] && s.listed[SW_OTHER]);
 
     // An ImageWriter II and a StyleWriter record, the ImageWriter's the oldest, StyleWriters
-    // that raise the line: the two swapped for each other without a gap.
+    // that raise the line: swapped for each other without a gap, and a StyleWriter for a
+    // StyleWriter (its line-up asks the status at once, whose `?` names it).
     static const swap_t c[] = {
-        { 5, IMAGEWRITER }, { 30, SW_MINE }, { 60, IMAGEWRITER }, { 90, SW_OTHER }, { 120, NOTHING },
+        { 5, IMAGEWRITER }, { 31, SW_MINE }, { 57, IMAGEWRITER }, { 83, SW_OTHER }, { 109, SW_MINE },
+        { 131, NOTHING },
     };
     memset(&s, 0, sizeof s);
     s.listed[IMAGEWRITER] = s.listed[SW_MINE] = 1;
     s.current = IMAGEWRITER;
     s.pending = NOTHING;
     s.sw_line = 1;
-    swaps_run(&s, c, 5, 150);
-    check_swaps(&s, c, 5, "an ImageWriter II and a StyleWriter record");
+    swaps_run(&s, c, 6, 160);
+    check_swaps(&s, c, 6, "an ImageWriter II and a StyleWriter record");
     CHECK(s.listed[SW_OTHER]);
+
+    // A StyleWriter that raises no line, put in place of one that answers: nothing to see
+    // until the next status check, whose `?` names it (the design: within one check).
+    static const swap_t d[] = { { 5, SW_MINE }, { 23, SW_OTHER }, { 51, NOTHING } };
+    memset(&s, 0, sizeof s);
+    s.current = s.pending = NOTHING;
+    swaps_run(&s, d, 3, 70);
+    check_swaps(&s, d, 3, "a StyleWriter for a StyleWriter, no line");
+    CHECK(s.found_ms[1] - (7000u * SEC + 23 * SEC) > 6 * SEC);     // the bound above is the one that bites
+    CHECK(s.listed[SW_MINE] && s.listed[SW_OTHER]);
 }
 
 int main(void)
@@ -1574,6 +1639,7 @@ int main(void)
     test_wrap();
     test_stale_event();
     test_swap_sw_raises_line();
+    test_swap_iw_while_sw_answers();
     test_line_blips();
     test_stylewriter_heard();
     test_original_look();
