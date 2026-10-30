@@ -145,8 +145,8 @@ int main(void)
     SEG(.len = PS_CABLE_NO_CHIP_MS, .st = PS_OFFLINE, .prev = PS_READY, .since0 = 61200, .cable = PS_CABLE_NO_CHIP);
     SEG(.len = 1200, .st = PS_OFFLINE, .prev = PS_READY, .since0 = 61200 + PS_CABLE_NO_CHIP_MS);
 
-    scene("asleep", "cut", 115000);             // three breaths, each at a new dot
-    SEG(.len = 3 * LG_BREATH_MS, .st = PS_READY, .prev = PS_JOINING, .since0 = 400000, .asleep = 1, .asleep0 = 60000);
+    scene("asleep", "1000", 116000);            // fireflies: nine breaths, a new dot every 2 s
+    SEG(.len = 9 * LG_FIREFLY_MS, .st = PS_READY, .prev = PS_JOINING, .since0 = 400000, .asleep = 1, .asleep0 = 60000);
 
     scene("falling-asleep", "cut", 100000);
     READY(1500);
