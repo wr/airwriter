@@ -268,7 +268,7 @@ What works on `main`:
   off 14 minutes and back on, was ready 3 s after its last name check (19 s after its first
   frame); the fake, booted, was ready 5 s after, and renamed at its address kept its record and
   uuid (two runs). Once, before the stale-name fix, a renamed fake was never found; not since. A LaserWriter is queried (Level 1 PostScript, a binary probe) and,
-  once it answers, shared on AirPrint printer 1-3 at `ipp/p<id>` (W-1082's at `ipp/laser`), its
+  once it answers, shared on AirPrint printer 1-5 at `ipp/p<id>` (W-1082's at `ipp/laser`), its
   own Bonjour name and UUID. Jobs rip at 300 dpi into Level 1 `imagemask` bands (`ps_page`) and
   go out through one PAP client beside the server (`localtalk/pap_client.c`); `components/laser`
   holds the query, the status words, the caps and UUID, the policy (`lw_core.c`: lookups,

@@ -244,6 +244,29 @@ int  pr_test_target(const pr_list_t *l, const pr_live_t live[PR_MAX]);
 // port (pr_port_current, present): a job to `id` is answered busy, nothing held. 0 for the
 // one on the port, with nothing present, or for an AppleTalk printer.
 int  pr_port_absent(const pr_list_t *l, const pr_live_t live[PR_MAX], int id);
+// W-1116: the port record the board's own port state belongs to, for live[]: the one on the
+// port (pr_port_current), or the "Something else" record while one is listed (the port is
+// its, and asked nothing). Every other port record's live state is all zero: offline. -1
+// with no port record.
+int  pr_port_live_id(const pr_list_t *l);
+// W-1116: what port record `id`'s AirPrint printer says of itself, beside its own state:
+//   OWN: it is the printer on the port (pr_port_current): its own state, in the board's
+//        words for its family. Also for a record that is not the port's, or none.
+//   SAID_OTHER: a Something else record is in the list (and `id` is not it): stopped,
+//        "Offline: the printer port is set to Something else."
+//   ABSENT: another port record's printer is on the port (pr_port_absent): stopped,
+//        "Offline: <that printer's name> is connected instead."
+//   OFFLINE: nothing answering: stopped, in the board's offline words for its family.
+// `msg` gets the sentence for SAID_OTHER and ABSENT, "" otherwise.
+typedef enum { PR_PORT_SAY_OWN, PR_PORT_SAY_SAID_OTHER, PR_PORT_SAY_ABSENT,
+               PR_PORT_SAY_OFFLINE } pr_port_say_t;
+pr_port_say_t pr_port_say(const pr_list_t *l, const pr_live_t live[PR_MAX], int id, char *msg,
+                          size_t cap);
+// W-1116: the name vintage Macs see for the printer port (the node's own NBP name) and the
+// queue name at boot: the oldest ImageWriter record's (pr_offers' one port offer, fixed across
+// swaps so a Chooser selection keeps working), else the oldest port record's, else
+// "AirWriter".
+void pr_chooser_name(const pr_list_t *l, char *out, size_t cap);
 
 // A board from before W-1088: its one ImageWriter and its one shared
 // LaserWriter, as NVS kept them. Nothing changes on its phones.

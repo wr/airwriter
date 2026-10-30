@@ -294,12 +294,14 @@ Traps already explained in a code comment are listed only when the comment is ea
   A StyleWriter answering on a port whose records are ImageWriters, or the reverse, is a record
   of its own once it has answered twice (`pr_port_seen_sw`, `pr_port_seen`: one answer is
   `PR_SEEN_AGAIN`), never a notice; meanwhile, and whenever the family that answered last is
-  not a record's (`pr_port_other_family`), nothing in that record's language may go out. Until
-  the board follows the printer on the port (W-1116's later commits), `printers_port_conflict()`
-  is the interim check: the oldest port record's family against `pr_port_other_family`, and
-  main.c refuses that record's jobs, test page and cleaning on it, as the StyleWriter branch
-  did. A new path that sends a port job, page or command checks it; `stylewriter_cfg_t.swapped`
-  holds the StyleWriter's own. `s_port_sw` flips only under the job lock (`port_sw_sync`), so
+  not a record's (`pr_port_other_family`), nothing in that record's language may go out. What
+  phones are told follows the printer on the port already (`pr_port_say`, `port_push`); until
+  the board's jobs, test page and cleaning do too (W-1116's later commits),
+  `printers_port_conflict()` is their interim check: the oldest port record's family against
+  `pr_port_other_family`, and main.c refuses that record's jobs, test page and cleaning on it,
+  as the StyleWriter branch did. A new path that sends a port job, page or command checks it;
+  `stylewriter_cfg_t.swapped` is `pr_port_other_family(PR_HEARD_STYLEWRITER)`, whichever
+  record. `s_port_sw` flips only under the job lock (`port_sw_sync`), so
   read it with the lock held. And a StyleWriter-first port (`port_policy.h`) gets `ESC ?` only
   after the plain question got nothing: `swfake.py` takes `ESC ?` for a letter it does not know
   and stops listening until a reset.

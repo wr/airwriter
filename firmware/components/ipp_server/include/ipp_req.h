@@ -61,15 +61,16 @@ int ipp_req_parse(ipp_req_t *r, const uint8_t *buf, size_t len);
 
 // The printers one server answers for (W-1082, W-1088, W-1116): six slots, any
 // mix of the printer port's records and printers on AppleTalk (PR_SHARE_MAX).
-// Slot 0 is the oldest port record's, at every path it has always answered at;
-// the others each at its own (ipp/p<id>), and W-1082's LaserWriter also at
-// ipp/laser.
+// Slot 0 is the oldest port record's, at every path it has always answered at
+// and at its own ipp/p<id> (its legacy path, R9: the path it had before it was
+// the oldest); the others each at its own (ipp/p<id>), and W-1082's LaserWriter
+// also at ipp/laser.
 #define IPP_PRINTERS       6
 #define IPP_RESOURCE_LASER "ipp/laser"
 
 // Which printer a request's HTTP path (or absolute URI) names: a slot at its
-// resource or its legacy one (without the leading '/'), slot 0 for any other
-// path while it is set, and -1 for none: a path of the ipp/p<n> or ipp/laser
-// shape no slot holds is never slot 0's.
+// resource or its legacy one (without the leading '/'), slot 0 included, then
+// slot 0 for any other path while it is set, and -1 for none: a path of the
+// ipp/p<n> or ipp/laser shape no slot holds is never slot 0's.
 int ipp_route(const char *path, const char *const resources[IPP_PRINTERS],
               const char *const legacy[IPP_PRINTERS]);

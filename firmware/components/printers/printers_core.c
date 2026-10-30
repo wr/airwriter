@@ -815,6 +815,42 @@ int pr_port_absent(const pr_list_t *l, const pr_live_t live[PR_MAX], int id)
     return i >= 0 && on >= 0 && i != on && l->r[i].where == PR_WHERE_PORT;
 }
 
+int pr_port_live_id(const pr_list_t *l)
+{
+    const pr_rec_t *p = pr_port_said_other(l);
+    if (!p) p = pr_port_current(l);
+    return p ? p->id : -1;
+}
+
+pr_port_say_t pr_port_say(const pr_list_t *l, const pr_live_t live[PR_MAX], int id, char *msg,
+                          size_t cap)
+{
+    if (cap) msg[0] = '\0';
+    int i = pr_index(l, id);
+    const pr_rec_t *r = i < 0 ? NULL : &l->r[i], *other = pr_port_said_other(l);
+    if (!r || r->where != PR_WHERE_PORT) return PR_PORT_SAY_OWN;
+    // The port is the Something else record's while one is listed (pr_port_live_id).
+    if (other) {
+        if (r == other) return PR_PORT_SAY_OWN;
+        snprintf(msg, cap, "Offline: the printer port is set to Something else.");
+        return PR_PORT_SAY_SAID_OTHER;
+    }
+    if (r == pr_port_current(l)) return PR_PORT_SAY_OWN;
+    int on = port_on(l, live);
+    if (on >= 0) {
+        snprintf(msg, cap, "Offline: %s is connected instead.", l->r[on].name);
+        return PR_PORT_SAY_ABSENT;
+    }
+    return PR_PORT_SAY_OFFLINE;
+}
+
+void pr_chooser_name(const pr_list_t *l, char *out, size_t cap)
+{
+    const pr_rec_t *p = port_offer(l);
+    if (!p) p = pr_port(l);
+    snprintf(out, cap, "%s", p ? p->name : "AirWriter");
+}
+
 int pr_test_target(const pr_list_t *l, const pr_live_t live[PR_MAX])
 {
     const pr_rec_t *p = pr_port_current(l);

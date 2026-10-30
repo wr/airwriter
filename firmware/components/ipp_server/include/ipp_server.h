@@ -85,7 +85,10 @@ void ipp_server_set_stopped(const char *reason_or_null, const char *message);
 
 // The colour ribbon came or went (W-1064). The printer attributes change at
 // once and the TXT record's Color and URF keys are re-announced, all under
-// the same printer-uuid. Any task.
+// the same printer-uuid. Any task. W-1116: by slot, for the printer on the
+// port, whichever slot its record has; ipp_server_set_colour is slot 0's.
+// Before ipp_server_start only slot 0's is kept (ipp_server_cfg_t.colour).
+void ipp_server_set_colour_for(int idx, int on);
 void ipp_server_set_colour(int on);
 
 // AirPrint on or off (W-1079). Off, the printer leaves Bonjour (_ipp and
@@ -96,14 +99,14 @@ void ipp_server_set_colour(int on);
 void ipp_server_set_airprint(int on);
 
 // ------------------------------------------------------------- W-1082
-// A second printer: a shared LaserWriter, beside the ImageWriter. The
-// functions above act on the ImageWriter (printer 0); these take the printer.
-// Printer 1 answers at its own resource, under its own Bonjour instance and
-// printer-uuid; one job at a time across both (the job buffer is single), so
-// a job for either waits behind the other as a second ImageWriter job does.
+// More printers beside slot 0's: shared LaserWriters (W-1082, W-1088) and,
+// since W-1116, the printer port's other records. The functions above act on
+// slot 0; these take the slot. Each answers at its own resource, under its own
+// Bonjour instance and printer-uuid; one job at a time across all of them
+// (the job buffer is single), so a job for any waits behind the one printing.
 struct ipp_printer_cfg {
-    const char *resource;        // "ipp/print" for the port's, "ipp/p<id>": its path, TXT rp
-    const char *legacy_resource; // another path it answers at ("ipp/laser"), or NULL
+    const char *resource;        // "ipp/print" for the oldest port record's, "ipp/p<id>": its path, TXT rp
+    const char *legacy_resource; // another path it answers at ("ipp/laser"; slot 0's own "ipp/p<id>"), or NULL
     const char *name;            // Bonjour instance and printer-name
     const char *info;            // printer-info: the printer's NBP name
     const char *uuid;            // urn:uuid:...
@@ -116,9 +119,12 @@ struct ipp_printer_cfg {
 // board's first boot on the printer list. Any time.
 void      ipp_server_legacy_uuid(char out[46]);
 
-// Puts printer idx (0 the port's, 1-3 AppleTalk's; W-1088) on the network, or
-// replaces it, or with NULL takes it off. Strings and caps are copied. ESP_ERR_INVALID_STATE while its job
-// holds the printer. Any task, after ipp_server_start.
+// Puts printer idx (0 the oldest port record's, 1 to IPP_PRINTERS-1 any other
+// shared record's; W-1088, W-1116) on the network, or replaces it, or with NULL
+// takes it off. Strings and caps are copied. The same printer put again (its
+// uuid: a rename, a model change) keeps its state and colour; another one
+// starts with none, until its owner pushes them. ESP_ERR_INVALID_STATE while
+// its job holds the printer. Any task, after ipp_server_start.
 esp_err_t ipp_server_set_printer(int idx, const ipp_printer_cfg_t *cfg);
 void      ipp_server_job_done_for(int idx, int ok);
 void      ipp_server_set_stopped_for(int idx, const char *reason_or_null, const char *message);

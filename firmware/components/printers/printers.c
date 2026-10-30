@@ -2,8 +2,9 @@
 //
 // The printer list on the board (W-1088). printers_core holds the rules; this
 // keeps the list in PSRAM under a mutex, stores it in NVS when it changes,
-// puts each shared printer on AirPrint as its record says (the port's at
-// printer 0, AppleTalk's at 1 to IPP_PRINTERS-1), and gives laser.c the AppleTalk printers.
+// puts each shared printer on AirPrint as its record says (the oldest port
+// record at printer 0, every other shared record, port or AppleTalk, at 1 to
+// IPP_PRINTERS-1; W-1116), and gives laser.c the AppleTalk printers.
 //
 // Locks: s_apply_mx, then s_mu, then laser.c's and ipp_server's own. Nothing
 // here is called back with s_mu held.
@@ -29,15 +30,19 @@ static const char *NS = "printers";
 
 enum { BLOB_MAX = 8 + sizeof(pr_list_t), SEEN_MAX = 4 + PR_MAX * 9 };
 
-// An AppleTalk printer's AirPrint slot (1 to IPP_PRINTERS-1) as it is wanted, and as it was
-// last put there.
+// Every shared record has an AirPrint slot (W-1116).
+_Static_assert(IPP_PRINTERS >= PR_SHARE_MAX, "a slot for every shared printer");
+
+// A shared record's AirPrint slot (1 to IPP_PRINTERS-1) as it is wanted, and as it was last
+// put there: a LaserWriter's, or (W-1116) a port record's other than the oldest.
 typedef struct {
     uint8_t   id, kind, legacy;     // id 0: empty; legacy: answers at ipp/laser (W-1082's)
+    uint8_t   model;                // a port record's pr_model_t
     char      name[PR_NAME_MAX];
-    char      info[3 * 32 + 1];     // its NBP name, UTF-8
+    char      info[3 * 32 + 1];     // a LaserWriter's NBP name, UTF-8
     char      uuid[46];
     lw_info_t lw;
-} slotat_t;
+} slot_t;
 
 // In PSRAM: internal RAM is Wi-Fi's (docs/traps.md).
 typedef struct {
@@ -46,7 +51,7 @@ typedef struct {
     size_t    saved_n;
     uint8_t   seen[SEEN_MAX], seen_saved[SEEN_MAX];   // W-1098: key "seen", beside "list"
     size_t    seen_saved_n;
-    slotat_t  at_want[IPP_PRINTERS], at_now[IPP_PRINTERS];
+    slot_t    want[IPP_PRINTERS], now[IPP_PRINTERS];  // [0] unused: slot 0 is s_slot0's
     laser_target_t targets[PR_MAX];
     lw_caps_t caps;
 } big_t;
@@ -57,13 +62,17 @@ static SemaphoreHandle_t s_mu, s_apply_mx;
 static printers_cfg_t    s_cfg;
 static int               s_started;
 
-// What printer 0 shows, as last put there.
+// What printer 0 shows, as last put there: the oldest port record (pr_port), at ipp/print
+// and (W-1116, R9) at its own ipp/p<id>, so the path a phone cached before the record was
+// the oldest keeps routing. Written under s_mu.
 typedef struct {
     int     on;
+    uint8_t id;
     uint8_t kind;                   // pr_kind_t: an ImageWriter or a StyleWriter
     uint8_t model;
     char    name[PR_NAME_MAX];
     char    uuid[46];
+    char    path[16];               // "ipp/p<id>"
 } slot0_t;
 static slot0_t s_slot0;
 static int     s_slot0_known;
@@ -184,32 +193,43 @@ static pr_where_t where_of(int at_link)
     }
 }
 
+// The record id and slot a job's sink carries in its ctx (laser_job_begin, main's
+// doc_begin, ipp_server_job_done_for).
+static void *slot_ctx(int slot, int id) { return (void *)(intptr_t)(slot << 8 | id); }
+
+// A port record's AirPrint capabilities: an ImageWriter's or a StyleWriter's by model; NULL
+// for a record that is neither, or a StyleWriter model with none (not shared).
+static const printer_caps_t *port_caps(int kind, int model)
+{
+    if (kind == PR_KIND_STYLEWRITER) return sw_caps(pr_model_to_sw((pr_model_t)model));
+    if (kind == PR_KIND_IMAGEWRITER) return printer_caps_imagewriter_model(model);
+    return NULL;
+}
+
 // Printer 0 as the record says. Under s_mu.
 static void slot0_want(slot0_t *w)
 {
     memset(w, 0, sizeof *w);
     const pr_rec_t *p = pr_port(s_l);
-    if (!p || !p->shared) return;
-    if (p->kind == PR_KIND_STYLEWRITER) {
-        if (!sw_caps(pr_model_to_sw((pr_model_t)p->model))) return;   // no such model: off
-    } else if (p->kind != PR_KIND_IMAGEWRITER) {
-        return;
-    }
+    if (!p || !p->shared || !port_caps(p->kind, p->model)) return;
     w->on = 1;
+    w->id = p->id;
     w->kind = p->kind;
     w->model = p->model;
     snprintf(w->name, sizeof w->name, "%s", p->name);
     snprintf(w->uuid, sizeof w->uuid, "%s", p->uuid);
+    snprintf(w->path, sizeof w->path, "ipp/p%u", p->id);
 }
 
 static void slot0_cfg(const slot0_t *w, ipp_printer_cfg_t *c)
 {
-    int sw = w->kind == PR_KIND_STYLEWRITER;
-    const printer_caps_t *caps = sw ? sw_caps(pr_model_to_sw((pr_model_t)w->model))
-                                    : printer_caps_imagewriter_model(w->model);
-    *c = (ipp_printer_cfg_t){ .resource = "ipp/print", .name = w->name,
-                              .info = caps->make_model, .uuid = w->uuid, .caps = caps,
-                              .icon = sw ? "stylewriter" : "icon", .sink = s_cfg.port_sink };
+    const printer_caps_t *caps = port_caps(w->kind, w->model);
+    *c = (ipp_printer_cfg_t){ .resource = "ipp/print", .legacy_resource = w->path,
+                              .name = w->name, .info = caps->make_model, .uuid = w->uuid,
+                              .caps = caps,
+                              .icon = w->kind == PR_KIND_STYLEWRITER ? "stylewriter" : "icon",
+                              .sink = s_cfg.port_sink };
+    c->sink.ctx = slot_ctx(0, w->id);
 }
 
 const ipp_printer_cfg_t *printers_port_ipp(void)
@@ -221,40 +241,59 @@ const ipp_printer_cfg_t *printers_port_ipp(void)
     slot0_want(&s_slot0);
     unlock();
     s_slot0_known = 1;
-    slot0_cfg(&s_slot0, &c);
+    if (s_slot0.on) slot0_cfg(&s_slot0, &c);
     int on = s_slot0.on;
     xSemaphoreGive(s_apply_mx);
     return on ? &c : NULL;
 }
 
-// What slots 1 to IPP_PRINTERS-1 should hold: a shared, identified LaserWriter keeps the slot
-// it has; others take the lowest free one. Under s_mu.
-static void at_want(void)
+// Whether a record takes one of slots 1 to IPP_PRINTERS-1: a shared, identified LaserWriter,
+// or (W-1116) a shared port record other than the oldest (slot 0's) that has capabilities.
+static int wants_slot(const pr_rec_t *r)
 {
-    slotat_t *want = s_big->at_want, *now = s_big->at_now;
-    memset(want, 0, sizeof s_big->at_want);
+    if (!r->shared) return 0;
+    if (r->where == PR_WHERE_PORT) return r != pr_port(s_l) && port_caps(r->kind, r->model) != NULL;
+    return r->kind == PR_KIND_LASERWRITER && r->identified;
+}
+
+// What slots 1 to IPP_PRINTERS-1 should hold: a record keeps the slot it has; others take
+// the lowest free one. Under s_mu.
+static void others_want(void)
+{
+    slot_t *want = s_big->want, *now = s_big->now;
+    memset(want, 0, sizeof s_big->want);
     for (int pass = 0; pass < 2; pass++) {
         for (int i = 0; i < s_l->n; i++) {
             const pr_rec_t *r = &s_l->r[i];
-            if (r->where == PR_WHERE_PORT || r->kind != PR_KIND_LASERWRITER || !r->shared ||
-                !r->identified)
-                continue;
+            if (!wants_slot(r)) continue;
             int k = 0, placed = 0;
             for (int j = 1; j < IPP_PRINTERS; j++) placed |= want[j].id == r->id;
             if (placed) continue;
             for (int j = 1; j < IPP_PRINTERS && !k; j++)
                 if (pass == 0 ? now[j].id == r->id : !want[j].id) k = j;
             if (!k) continue;
-            slotat_t *w = &want[k];
+            slot_t *w = &want[k];
             w->id = r->id;
             w->kind = r->kind;
-            w->legacy = r->ipp_laser;
+            w->model = r->model;
             snprintf(w->name, sizeof w->name, "%s", r->name);
-            nbp_utf8(w->info, sizeof w->info, r->nbp);
             snprintf(w->uuid, sizeof w->uuid, "%s", r->uuid);
-            w->lw = r->lw;
+            if (r->kind == PR_KIND_LASERWRITER) {
+                w->legacy = r->ipp_laser;
+                nbp_utf8(w->info, sizeof w->info, r->nbp);
+                w->lw = r->lw;
+            }
         }
     }
+}
+
+// A record's slot as last put on AirPrint: 0 the oldest port record's, 1.. the others',
+// -1 none (not shared, or its change still waits for a job). Under s_mu.
+static int slot_of(int id)
+{
+    if (s_slot0.on && s_slot0.id == id) return 0;
+    for (int k = 1; k < IPP_PRINTERS; k++) if (s_big->now[k].id == id) return k;
+    return -1;
 }
 
 // The targets laser.c serves: every AppleTalk printer, with the slot it has.
@@ -271,8 +310,7 @@ static int targets_fill(void)
         t->id = r->id;
         t->kind = r->kind == PR_KIND_LASERWRITER ? LASER_KIND_LW : LASER_KIND_IW;
         t->where = (int8_t)at_link_of(r->where);
-        t->slot = -1;
-        for (int k = 1; k < IPP_PRINTERS; k++) if (s_big->at_now[k].id == r->id) t->slot = (int8_t)k;
+        t->slot = (int8_t)slot_of(r->id);
         memcpy(t->name, r->nbp, sizeof t->name);
         snprintf(t->dither, sizeof t->dither, "%s", r->dither);
         t->gain = r->gain;
@@ -282,27 +320,38 @@ static int targets_fill(void)
     return n;
 }
 
-// The record id and slot a LaserWriter job's sink carries in its ctx.
-static void *slot_ctx(int slot, int id) { return (void *)(intptr_t)(slot << 8 | id); }
-
-static void at_apply(void)
+// Slots 1 to IPP_PRINTERS-1 as wanted. Under s_apply_mx.
+static void others_apply(void)
 {
     for (int k = 1; k < IPP_PRINTERS; k++) {
         lock();
-        slotat_t w = s_big->at_want[k];
-        int same = !memcmp(&w, &s_big->at_now[k], sizeof w);
+        slot_t w = s_big->want[k];
+        int same = !memcmp(&w, &s_big->now[k], sizeof w);
         unlock();
         if (same) continue;
         esp_err_t err;
         if (w.id) {
-            // W-1082's LaserWriter keeps its path, so a Mac's queue for it still prints.
-            char resource[16];
-            if (w.legacy) snprintf(resource, sizeof resource, "%s", IPP_RESOURCE_LASER);
-            else snprintf(resource, sizeof resource, "ipp/p%u", w.id);
-            lw_caps_fill(&s_big->caps, &w.lw);    // s_apply_mx held: the scratch is ours
-            ipp_printer_cfg_t c = { .resource = resource, .name = w.name, .info = w.info,
-                                    .uuid = w.uuid, .caps = &s_big->caps.caps, .icon = "laser",
-                                    .sink = s_cfg.at_sink };
+            char own[16];
+            snprintf(own, sizeof own, "ipp/p%u", w.id);
+            ipp_printer_cfg_t c = { .resource = own, .name = w.name, .uuid = w.uuid };
+            if (w.kind == PR_KIND_LASERWRITER) {
+                // W-1082's LaserWriter keeps its path, so a Mac's queue for it still prints.
+                if (w.legacy) {
+                    c.resource = IPP_RESOURCE_LASER;
+                    c.legacy_resource = own;
+                }
+                lw_caps_fill(&s_big->caps, &w.lw);    // s_apply_mx held: the scratch is ours
+                c.caps = &s_big->caps.caps;
+                c.info = w.info;
+                c.icon = "laser";
+                c.sink = s_cfg.at_sink;
+            } else {
+                // W-1116: a port record, as slot 0's but at its own path.
+                c.caps = port_caps(w.kind, w.model);
+                c.info = c.caps->make_model;
+                c.icon = w.kind == PR_KIND_STYLEWRITER ? "stylewriter" : "icon";
+                c.sink = s_cfg.port_sink;
+            }
             c.sink.ctx = slot_ctx(k, w.id);
             err = ipp_server_set_printer(k, &c);
         } else {
@@ -310,7 +359,7 @@ static void at_apply(void)
         }
         if (err == ESP_OK) {
             lock();
-            s_big->at_now[k] = w;
+            s_big->now[k] = w;
             unlock();
         } else {
             ESP_LOGI(TAG, "printer %d changes after its job (%s)", k, esp_err_to_name(err));
@@ -325,20 +374,41 @@ void printers_apply(void)
     slot0_t w;
     lock();
     slot0_want(&w);
-    at_want();
+    others_want();
+    // W-1116: a port record that became the oldest (the one before it was removed) is still
+    // in its old slot. It leaves that slot before it takes slot 0, under the same Bonjour
+    // name; slot 0 is cleared first, and while a job holds slot 0 nothing moves (the job's
+    // end applies again), so the record stays reachable where it is meanwhile.
+    int moving = s_slot0_known && w.on && slot_of(w.id) > 0;
     unlock();
-    if (!s_slot0_known || memcmp(&w, &s_slot0, sizeof w)) {
-        ipp_printer_cfg_t c;
-        slot0_cfg(&w, &c);
-        esp_err_t err = ipp_server_set_printer(0, w.on ? &c : NULL);
-        if (err == ESP_OK) {
-            s_slot0 = w;
-            s_slot0_known = 1;
-        } else {
-            ESP_LOGI(TAG, "the port's printer changes after its job (%s)", esp_err_to_name(err));
+    if (moving && ipp_server_set_printer(0, NULL) != ESP_OK) {
+        ESP_LOGI(TAG, "the port's printer moves to printer 0 after printer 0's job");
+    } else {
+        if (moving) {
+            lock();
+            memset(&s_slot0, 0, sizeof s_slot0);
+            unlock();
+        }
+        if (s_slot0_known) others_apply();         // ipp_server is up (printers_port_ipp)
+        lock();
+        int held = w.on && slot_of(w.id) > 0;      // its old slot's job keeps it there
+        unlock();
+        if (held) {
+            ESP_LOGI(TAG, "the port's printer moves to printer 0 after its job");
+        } else if (!s_slot0_known || memcmp(&w, &s_slot0, sizeof w)) {
+            ipp_printer_cfg_t c;
+            if (w.on) slot0_cfg(&w, &c);
+            esp_err_t err = ipp_server_set_printer(0, w.on ? &c : NULL);
+            if (err == ESP_OK) {
+                lock();
+                s_slot0 = w;
+                unlock();
+                s_slot0_known = 1;
+            } else {
+                ESP_LOGI(TAG, "the port's printer changes after its job (%s)", esp_err_to_name(err));
+            }
         }
     }
-    if (s_slot0_known) at_apply();                 // ipp_server is up (printers_port_ipp)
     lock();
     int n = targets_fill();
     unlock();
@@ -406,14 +476,16 @@ esp_err_t printers_start(const printers_cfg_t *cfg)
 
 static pr_live_t s_live[PR_MAX];
 
-// Every record's live state; the port's from main. Under s_mu.
+// Every record's live state; the port's from main, to the one record it belongs to
+// (pr_port_live_id, W-1116): every other port record is offline. Under s_mu.
 static void live_fill(void)
 {
     memset(s_live, 0, sizeof s_live);
+    int port_id = pr_port_live_id(s_l);
     for (int i = 0; i < s_l->n; i++) {
         const pr_rec_t *r = &s_l->r[i];
         if (r->where == PR_WHERE_PORT) {
-            if (s_cfg.port_live) s_cfg.port_live(&s_live[i]);
+            if (r->id == port_id && s_cfg.port_live) s_cfg.port_live(&s_live[i]);
             continue;
         }
         laser_state_t st;
@@ -514,12 +586,15 @@ void printers_offers(int at_link, int on, const char *host, lt_offers_t *o)
     nbp_name(o->marker, host ? host : "");
     if (!s_started || !on) return;
     int ids[PR_MAX];
+    char own[PR_NAME_MAX];
     lock();
     int n = pr_offers(s_l, where_of(at_link), ids, PR_MAX);
     for (int k = 0; k < n; k++) {
         const pr_rec_t *r = pr_get(s_l, ids[k]);
         if (r->where == PR_WHERE_PORT) {
-            if (r->kind == PR_KIND_IMAGEWRITER) nbp_name(o->own, r->name);
+            // The port's one offer, under the name the Chooser and the queue have (W-1116).
+            pr_chooser_name(s_l, own, sizeof own);
+            nbp_name(o->own, own);
         } else if (o->n_rel < (int)(sizeof o->rel / sizeof o->rel[0])) {
             lt_offer_t *x = &o->rel[o->n_rel++];
             memcpy(x->obj, r->nbp, sizeof x->obj);
@@ -657,10 +732,10 @@ void printers_port_answered(int heard)
     unlock();
 }
 
-// W-1116, until the board follows the printer on the port (the record whose model answered)
-// rather than the oldest record: the family of the oldest port record, as the rest of this
-// file reads it, against the family that answered last (pr_port_other_family). With one port
-// record this is what the StyleWriter branch did.
+// W-1116, until the board's jobs, test page and cleaning follow the printer on the port (the
+// record whose model answered) rather than the oldest record: the family of the oldest port
+// record, as mode_of reads it, against the family that answered last
+// (pr_port_other_family). With one port record this is what the StyleWriter branch did.
 int printers_port_conflict(void)
 {
     if (!s_started) return 0;
@@ -674,9 +749,13 @@ int printers_port_conflict(void)
     return c;
 }
 
-int printers_port_swapped(void)
+int printers_port_other_family(int family)
 {
-    return printers_port_conflict();
+    if (!s_started) return 0;
+    lock();
+    int c = pr_port_other_family(s_l, family);
+    unlock();
+    return c;
 }
 
 void printers_port_set_sw_model(sw_model_t m)
@@ -698,9 +777,51 @@ void printers_port_name(char *out, size_t cap)
     if (cap) out[0] = '\0';
     if (!s_started) return;
     lock();
-    const pr_rec_t *p = pr_port(s_l);
+    const pr_rec_t *p = pr_port_current(s_l);
     if (p) snprintf(out, cap, "%s", p->name);
     unlock();
+}
+
+void printers_chooser_name(char *out, size_t cap)
+{
+    if (!s_started) {
+        snprintf(out, cap, "AirWriter");
+        return;
+    }
+    lock();
+    pr_chooser_name(s_l, out, cap);
+    unlock();
+}
+
+int printers_slot_of(int id)
+{
+    if (!s_started) return -1;
+    lock();
+    int k = slot_of(id);
+    unlock();
+    return k;
+}
+
+int printers_port_slots(printers_port_slot_t out[], int max)
+{
+    int n = 0;
+    if (!s_started) return 0;
+    lock();
+    live_fill();
+    for (int i = 0; i < s_l->n && n < max; i++) {
+        const pr_rec_t *r = &s_l->r[i];
+        if (r->where != PR_WHERE_PORT) continue;
+        int k = slot_of(r->id);
+        if (k < 0) continue;
+        printers_port_slot_t *s = &out[n++];
+        s->slot = (uint8_t)k;
+        s->id = r->id;
+        s->kind = r->kind;
+        s->model = r->model;
+        s->say = (uint8_t)pr_port_say(s_l, s_live, r->id, s->msg, sizeof s->msg);
+    }
+    unlock();
+    return n;
 }
 
 int printers_port_screen(char *dither, size_t cap, int *gain)

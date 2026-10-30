@@ -654,8 +654,8 @@ ImageWriter on the port keeps its identity, UUID and bytes (`tools/ipp/test/gold
   back intact; otherwise hex. Answers in its record; run again at the first answer after boot
   and when the printer comes back, tried again after 60 s twice, then every 5 minutes. Three
   unanswered make the "didn't answer" notice (Share Anyway takes its defaults).
-- **The AirPrint printer** (`ipp_server` printer 1-3, `laser/lw_caps.c`): `ipp/p<id>` (a board's
-  W-1082 LaserWriter keeps `ipp/laser`), its own Bonjour instance (its name in the list),
+- **The AirPrint printer** (`ipp_server` printer 1-5, `laser/lw_caps.c`): `ipp/p<id>` (a board's
+  W-1082 LaserWriter advertises `ipp/laser` and answers at both), its own Bonjour instance (its name in the list),
   `printer-uuid` `41575254-4c57-<CONFIG_AIRWRITER_LASER_UUID_EPOCH>-
   <hash of the NBP name>-<MAC>`, URF `RS300`, `W8`, only the paper it reported, margins from its
   imageable area rounded outward, `laser-*.png` icons. One job at a time across every printer.
@@ -745,14 +745,29 @@ read back is a list made again). At most 8 records.
   included; the oldest port record is also advertised at `ipp/print`, at printer 0, with the
   legacy routing of any other path, and W-1082's LaserWriter also answers at `ipp/laser`.
   Removing the oldest port record moves `ipp/print` to the next one, whose `ipp/p<id>` keeps
-  working (`/api/printers` `rp` names the advertised path; the board's routing of both is
-  W-1116's later commits). The seventh identified printer is listed, not shared, with the
+  working (`/api/printers` `rp` names the advertised path; the slot's `legacy_resource` is the
+  other, and `ipp_route` tries every slot's two paths, slot 0's included, before any other
+  path falls to slot 0). The seventh identified printer is listed, not shared, with the
   "too many" notice, and can be shared once another stops; a shared record keeps its place
   through a model change. A change reaches
   Bonjour at once, after the job holding its slot. The W-1079 AirPrint switch is the whole
-  box's. AirPrint to an AppleTalk ImageWriter is not built: it is old Macs' only. (The board's
-  slot mapping still places AppleTalk printers only, at 1 on; a second port record's slot
-  follows in W-1116's later commits.)
+  box's. AirPrint to an AppleTalk ImageWriter is not built: it is old Macs' only. The slots
+  (`printers.c`): printer 0 is the oldest port record; every other shared record, port or
+  AppleTalk, takes the lowest free slot of 1-5 and keeps it for its life there; a record that
+  becomes the oldest moves to printer 0 under the same Bonjour name, so printer 0 is cleared
+  first and the record leaves its old slot before it takes it, and while a job holds either
+  slot nothing moves until the job ends. A port record's slot carries the record's own sink, with
+  its slot and id in the ctx as a LaserWriter's does, so a job's end goes back to the slot it
+  came in on. What a port record's slot says (`pr_port_say`, `main.c`'s `port_push`, on every
+  change of the port's state or the list): the printer on the port its own state, in its
+  family's words (3.9's for an ImageWriter, 3.16's for a StyleWriter), and the colour the
+  ribbon or cartridge last read offers (a black-only StyleWriter none); every other port
+  record `stopped`, `offline-report`, "Offline: *name* is connected instead." while that
+  printer is present, "Offline: the printer port is set to Something else." while a Something
+  else record is listed, else its family's offline words with nothing answering; so phones see
+  every shared port printer all the time, each offline while it isn't the one answering. The
+  same printer put in its slot again (a rename, a model change: its uuid) keeps its state and
+  colour; another one starts with none until its owner pushes them.
 - **Notices.** Only what asks the person something: unknown port, no answer (Share Anyway),
   too many; at most 8, each with a caution mark, and one beside the sidebar's Printers while
   any waits; each is dismissed. A newly found printer just appears in the list, and so does a
@@ -760,8 +775,12 @@ read back is a list made again). At most 8 records.
   or a "changed" one (accept or dismiss) from before W-1116, is dropped on load.
 - **Old Macs.** On each way in that is on, the node's own name is the port's one ImageWriter
   (if any): the oldest ImageWriter record's name, fixed across swaps so a Chooser selection
-  keeps working (W-1116; `pr_offers` lists that record alone for the port, so the board's
-  `printers_offers` names it once, where before the last port ImageWriter overwrote the name).
+  keeps working (W-1116; `pr_offers` lists that record alone for the port, and
+  `printers_offers` names it from `pr_chooser_name`, where before the last port ImageWriter
+  overwrote the name). `pr_chooser_name` is also the queue name at boot (mDNS's default
+  instance, the node's NBP object): the oldest ImageWriter record's name, else the oldest port
+  record's, else "AirWriter" (before W-1116, the one port record's). The test page names the
+  printer on the port (`printers_port_name`, `pr_port_current`).
   A Mac's ImageWriter job goes to whichever ImageWriter answers on the port (the II, LQ and
   original take the same stream). Registrations 1-3 are the AppleTalk printers from other
   links under their own NBP names and types (relayed), and `<host name>:AirWriter` is at
@@ -772,7 +791,9 @@ read back is a list made again). At most 8 records.
   read.
 - **Panel.** Idle, the box: ready while any shared printer is; while the port prints, its own
   line (a StyleWriter has none: its answers to `1` and `2`); during a LaserWriter job, the
-  LaserWriter's.
+  LaserWriter's. The port's own state belongs to one record (`pr_port_live_id`, W-1116): the
+  printer on the port, or the Something else record while one is listed; every other port
+  record's live state is offline, on the page, to phones and in the box's state alike.
 - **Test page.** The button, DIP4 and the page's Print Test Page (without an id) go to the
   printer on the port (`pr_port_current`, an ImageWriter or StyleWriter record) while it is
   present, else the first shared printer that is ready, else that port record (the button then
@@ -922,21 +943,29 @@ Apple's StyleWriter adapter (ADSP, not PAP), is not built.
   line up with nothing said), wait while nothing answers, stop when another model or a
   StyleWriter did. None of it is stored; a "changed" notice stored before is dropped on load.
   Built so far and host-tested: in `printers_core` the records, the twice-seen rule, the
-  per-model uuid, the version 3 blob, `/api/printers` without `swapped`; in `port_policy` the
-  list-level inputs, the 5 s plain question, the person's look on a Something else port and
-  the repeat of a first sighting (above). The board fills the list-level inputs
-  (`printers_port_listed`) and so asks every 5 s and in the list's order, but still gives the
-  policy the oldest port record's kind, never sets `confirm`, and takes the oldest port
-  record as the port's printer and refuses its AirPrint jobs (the job aborts;
-  IPP stopped, `other`, "Needs attention: confirm the printer under Printers on the settings
-  page"), its test page (the button blips Busy and runs no cable test, the page's Print Test
-  Page answers 409), a cleaning (409) and a Mac's job (busy) while the other family answered
-  last (`printers_port_conflict`, on `pr_port_other_family`), as the StyleWriter branch did;
-  that ends when the record's own family answers again, or when the person names the record
-  a StyleWriter (an ImageWriter's answer before it is forgotten). The live state per record,
-  the busy answer for a port printer that is not the one answering, the current record as
-  the port's printer, six shared printers on AirPrint and the page follow in W-1116's later
-  commits.
+  per-model uuid, the version 3 blob, `/api/printers` without `swapped`, what each port
+  record's AirPrint printer says of itself (`pr_port_say`), the record the port's state
+  belongs to (`pr_port_live_id`) and the Chooser name (`pr_chooser_name`); in `port_policy`
+  the list-level inputs, the 5 s plain question, the person's look on a Something else port
+  and the repeat of a first sighting (above); in `ipp_server` a slot per shared record, any
+  mix, slot 0's legacy path. On the board: every shared port record is its own AirPrint
+  printer in its slot (3.15 Sharing), the one on the port with the port's state and colour,
+  the others offline with why; only that record carries the port's live state on the page;
+  the Chooser name and the queue name are the oldest ImageWriter record's; a port job's end
+  goes to the slot it came in on; the StyleWriter glue's `swapped` is
+  `pr_port_other_family(PR_HEARD_STYLEWRITER)` (the port last answered as an ImageWriter),
+  whichever record. The board fills the list-level inputs (`printers_port_listed`) and so
+  asks every 5 s and in the list's order, but still gives the policy the oldest port record's
+  kind, never sets `confirm`, keeps the oldest port record's kind as the port's mode
+  (`printers_port_mode`, `s_port_sw`: the words and live state of the printer on the port are
+  read as that family's until the mode follows it), and refuses the oldest record's AirPrint
+  jobs (the job aborts), its test page (the button blips Busy and runs no cable test, the
+  page's Print Test Page answers 409), a cleaning (409) and a Mac's job (busy) while the other
+  family answered last (`printers_port_conflict`, on `pr_port_other_family`), as the
+  StyleWriter branch did; that ends when the record's own family answers again, or when the
+  person names the record a StyleWriter (an ImageWriter's answer before it is forgotten). The
+  busy answer for a port printer that is not the one answering, the current record as the
+  port's mode and the page follow in W-1116's later commits.
 - **AirPrint.** 360 × 360 dpi, URF `RS360`; Letter, A4 and Legal, the first the default
   (`printer_media_t` in `printer_caps`: the page's width at 360 dpi names the entry, and the
   rip keeps the engine's printable area from `rip_left` for `rip_w` dots). Margins in whole

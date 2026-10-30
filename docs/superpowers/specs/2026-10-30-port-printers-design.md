@@ -363,7 +363,9 @@ iPhone:
 5. **Each StyleWriter status check confirms the model**, so a quick swap between StyleWriters
    can't print to the wrong one.
 6. **A new record takes the same answer twice.**
-7. **The board's existing port record keeps `ipp/print`**; others are `ipp/p<id>`.
+7. **Every port record answers at `ipp/p<id>`**, and the oldest one, the record a board had
+   before, also at `ipp/print`, which moves to the next port record when it is removed (Paths,
+   ruling R9).
 8. **A Something else record still silences the port**, but Look for Printers asks once and a
    printer that answers replaces it. It's rare, and the person chose it.
 9. **A swap plays one printer-back wave.**

@@ -363,7 +363,9 @@ static volatile int        s_sw_was_answering;
 // (sw_idle_silent), until it answers or the next session begins.
 static volatile int        s_sw_job_silent;
 static int                 s_port_refused;     // the port's job was refused at its begin: another printer is there
-static volatile int        s_conflict_pushed;  // what port_push last told the phone: a swap
+// W-1116: the AirPrint printer (slot) the port's job came in on, from the sink's ctx: its
+// record's, which may be any slot. The job's end goes back to it.
+static int                 s_port_job_slot;
 static uint32_t uptime_ms(void);
 static void port_push(ps_state_t box);
 
@@ -489,7 +491,7 @@ static int ribbon_ask(int for_job)
     ESP_LOGI(TAG, "ribbon now %s (was %s)", ribbon_name(r), ribbon_name(s_ribbon));
     s_ribbon = (uint8_t)r;
     settings_save_ribbon((uint8_t)r);
-    ipp_server_set_colour(r == IW_RIBBON_COLOUR);
+    port_push(printer_state_view().state);      // the colour it offers (W-1116: its own slot)
     return answered;
 }
 
@@ -593,7 +595,9 @@ static void port_sw_sync(int sw, int locked);
 static esp_err_t doc_begin(void *ctx, const char *format, const char *name,
                            const ipp_job_opts_t *opts)
 {
-    (void)ctx;
+    // W-1116: whose job, by its slot (printers.c's slot_ctx); the record id is the low byte,
+    // for the job's own gate (a later commit).
+    s_port_job_slot = (int)((intptr_t)ctx >> 8);
     // doc_claim took s_job_lock. ipp_server always pairs this call with
     // exactly one doc_end -- including when job_pipe_begin below fails -- and
     // every doc_end leads to exactly one job_finished, whose give balances
@@ -686,7 +690,7 @@ static void job_finished(const job_pipe_stats_t *st, int ok)
         }
         s_ipp_owns = 0;
         xSemaphoreGive(s_job_lock);
-        ipp_server_job_done(0);
+        ipp_server_job_done_for(s_port_job_slot, 0);
         return;
     }
 
@@ -716,7 +720,7 @@ static void job_finished(const job_pipe_stats_t *st, int ok)
         }
         s_ipp_owns = 0;
         xSemaphoreGive(s_job_lock);
-        ipp_server_job_done(0);
+        ipp_server_job_done_for(s_port_job_slot, 0);
         return;
     }
     printer_state_post(PS_EV_JOB_DONE);
@@ -741,7 +745,7 @@ static void job_finished(const job_pipe_stats_t *st, int ok)
     ota_health_printed();       // W-1059: this firmware prints; under the job lock
     s_ipp_owns = 0;
     xSemaphoreGive(s_job_lock);
-    ipp_server_job_done(1);
+    ipp_server_job_done_for(s_port_job_slot, 1);
 }
 
 static void laser_finished(const job_pipe_stats_t *st, int ok);
@@ -771,7 +775,7 @@ static void doc_end(void *ctx, int ok)
     if (s_port_refused) {               // nothing began: the claim's lock goes back, the job aborts
         s_port_refused = 0;
         xSemaphoreGive(s_job_lock);
-        ipp_server_job_done(0);
+        ipp_server_job_done_for(s_port_job_slot, 0);
         return;
     }
     s_doc_ok = ok;
@@ -998,7 +1002,7 @@ static void sw_finished(const job_pipe_stats_t *st, int ok)
     s_ipp_owns = 0;
     line_source();
     xSemaphoreGive(s_job_lock);
-    ipp_server_job_done(printed);
+    ipp_server_job_done_for(s_port_job_slot, printed);
     printers_apply();                   // W-1088: a change to the port's printer waited for it
 }
 
@@ -1094,16 +1098,24 @@ static void sw_cart_seen(int colour)
         s_ribbon = (uint8_t)r;
         settings_save_ribbon((uint8_t)r);
     }
-    ipp_server_set_colour(colour);
+    port_push(printer_state_view().state);      // the colour it offers (W-1116: its own slot)
 }
 
-// What a saved ribbon may offer a phone at start: a black-only StyleWriter never offers colour,
-// whatever the ImageWriter that was there before had in.
+// Whether a port record of `kind` and `model` may offer colour at all: a black-only
+// StyleWriter never does, whatever the ImageWriter that was there before had in.
+static int colour_offered(int kind, int model)
+{
+    if (kind != PR_KIND_STYLEWRITER) return 1;
+    const sw_spec_t *sp = sw_spec(pr_model_to_sw((pr_model_t)model));
+    return sp && sp->colour;
+}
+
+// What a saved ribbon may offer a phone at start, for printer 0 (the oldest port record,
+// which is the port's printer until anything answers).
 static int ribbon_offered(void)
 {
-    if (!s_port_sw) return 1;
-    const sw_spec_t *sp = sw_spec(printers_port_sw_model());
-    return sp && sp->colour;
+    return colour_offered(s_port_sw ? PR_KIND_STYLEWRITER : PR_KIND_IMAGEWRITER,
+                          pr_model_from_sw(printers_port_sw_model()));
 }
 
 // The session reports its state (sw_session.h) while it runs a job or a cleaning, on
@@ -1197,6 +1209,13 @@ static int sw_cancelled(void)
     return s_test_running && s_test_cancel;      // the test page's second tap
 }
 
+// W-1116: the port last answered as an ImageWriter, so the StyleWriter's language must not
+// go out (stylewriter_cfg_t.swapped), whichever record a job, page or cleaning is for.
+static int sw_swapped(void)
+{
+    return printers_port_other_family(PR_HEARD_STYLEWRITER);
+}
+
 // The settings page's Print Head cleaning (printers_cfg_t.clean): one cleaning, on a task
 // of its own so the page is answered. The job lock is held to its end.
 static void sw_clean_task(void *arg)
@@ -1272,16 +1291,12 @@ static void offers_apply(void);
 static void printers_changed(void)
 {
     port_sw_sync(printers_port_is_stylewriter(), 0);
-    // A black-only StyleWriter (the record was changed to one) offers no colour.
-    if (printers_port_is_stylewriter()) {
-        const sw_spec_t *sp = sw_spec(printers_port_sw_model());
-        if (!sp || !sp->colour) ipp_server_set_colour(0);
-    }
     line_source();
     offers_apply();
-    // The person made the port's record the family that answered there (or the other): what
-    // the phone is told about it follows.
-    if (!s_printing && printers_port_swapped() != s_conflict_pushed) port_push(printer_state_view().state);
+    // What the phone is told about each port record follows the list (W-1116): its slot,
+    // which record is the printer on the port, and the colour it may offer (a black-only
+    // StyleWriter, the record changed to one, offers none).
+    port_push(printer_state_view().state);
 }
 
 static void printers_web_json(void *ctx, char *buf, size_t cap)
@@ -2783,18 +2798,16 @@ static ps_state_t port_state(ps_state_t box)
     return box == PS_OFFLINE || box == PS_ATTENTION ? PS_READY : box;
 }
 
-static void port_push(ps_state_t box)
+// What the port's own state is, in the words of a port record's family, for its slot: an
+// ImageWriter's line, or what a StyleWriter said itself (no paper, a jam, the cartridge, the
+// cover..., sw_status.c's words; it has no SELECT; nothing before it has answered, so
+// nothing is claimed). `st` is the port's state for the panel (port_state).
+static void port_push_own(int slot, int kind, ps_state_t st)
 {
-    ps_state_t st = port_state(box);
-    // W-1103: another printer than the record's answered on the port (the other family, whose
-    // jobs are refused until the person says, or another StyleWriter model, whose jobs fail at
-    // their own `?`): the phone is told where to sort it out (pr_port_swapped).
-    s_conflict_pushed = printers_port_swapped();
-    if (s_conflict_pushed) {
-        ipp_server_set_stopped("other", "Needs attention: confirm the printer under Printers on the settings page");
-        localtalk_set_status(lt_status(st, AT_LINK_CABLE));
-        ethertalk_set_status(lt_status(st, AT_LINK_TUNNEL), lt_status(st, AT_LINK_ZONE),
-                             lt_status(st, AT_LINK_RADIO));
+    if (kind == PR_KIND_STYLEWRITER) {
+        sw_ipp_t w = sw_state_ipp(s_sw_state);
+        if (s_iw_ready < 0 || !w.reason) ipp_server_set_state_for(slot, NULL, NULL, 0, 0);
+        else ipp_server_set_state_for(slot, w.reason, w.message, 1, 0);
         return;
     }
     // SPEC.md 3.9: a stall mid-job becomes a real alert on the phone.
@@ -2804,19 +2817,51 @@ static void port_push(ps_state_t box)
     // Idle and not ready: printer off, unplugged or deselected. offline-report
     // is CUPS-only (not in the IANA registry), so it reports the registered
     // "other", which on a stopped printer reads as an error all the same.
-    if (s_port_sw) {
-        // W-1103: a StyleWriter says what is wrong itself (no paper, a jam, the cartridge,
-        // the cover...), in the words of sw_status.c, and it has no SELECT. Nothing before
-        // it has answered: nothing is claimed.
-        sw_ipp_t w = sw_state_ipp(s_sw_state);
-        if (s_iw_ready < 0 || !w.reason) ipp_server_set_state_for(0, NULL, NULL, 0, 0);
-        else ipp_server_set_state_for(0, w.reason, w.message, 1, 0);
-    } else if (st == PS_ATTENTION)
-        ipp_server_set_stopped("media-empty-error", "Needs attention: check paper and SELECT");
+    if (st == PS_ATTENTION)
+        ipp_server_set_stopped_for(slot, "media-empty-error", "Needs attention: check paper and SELECT");
     else if (st == PS_OFFLINE)
-        ipp_server_set_stopped("other", "Offline: check power, cable and SELECT");
+        ipp_server_set_stopped_for(slot, "other", "Offline: check power, cable and SELECT");
     else
-        ipp_server_set_stopped(NULL, NULL);
+        ipp_server_set_stopped_for(slot, NULL, NULL);
+}
+
+// What a port record's printer says while it is not the one on the port (W-1116): offline,
+// in its family's own words with nothing answering (as the printer on the port would), or
+// because another printer is connected or the port is set to Something else, with the
+// sentence printers_core gave (pr_port_say).
+static void port_push_offline(int slot, int kind, int say, const char *msg)
+{
+    if (say != PR_PORT_SAY_OFFLINE) {
+        ipp_server_set_stopped_for(slot, "offline-report", msg);
+        return;
+    }
+    if (kind == PR_KIND_STYLEWRITER) {
+        sw_ipp_t w = sw_state_ipp(SWS_OFFLINE);
+        ipp_server_set_stopped_for(slot, w.reason, w.message);
+    } else {
+        ipp_server_set_stopped_for(slot, "other", "Offline: check power, cable and SELECT");
+    }
+}
+
+// What phones and Macs are told about the printer port: every port record on AirPrint, by
+// its slot (W-1116): the printer on the port its own state and the colour it offers (the
+// ribbon or cartridge last read), every other port record offline; and the status word the
+// AppleTalk nodes answer.
+static void port_push(ps_state_t box)
+{
+    ps_state_t st = port_state(box);
+    printers_port_slot_t ps[PR_MAX];
+    int n = printers_port_slots(ps, PR_MAX);
+    for (int i = 0; i < n; i++) {
+        const printers_port_slot_t *s = &ps[i];
+        if (s->say == PR_PORT_SAY_OWN) {
+            port_push_own(s->slot, s->kind, st);
+            ipp_server_set_colour_for(s->slot, s_ribbon == IW_RIBBON_COLOUR &&
+                                               colour_offered(s->kind, s->model));
+        } else {
+            port_push_offline(s->slot, s->kind, s->say, s->msg);
+        }
+    }
     localtalk_set_status(lt_status(st, AT_LINK_CABLE));
     ethertalk_set_status(lt_status(st, AT_LINK_TUNNEL), lt_status(st, AT_LINK_ZONE),
                          lt_status(st, AT_LINK_RADIO));
@@ -2969,9 +3014,10 @@ void app_main(void)
             snprintf(s_set.dither, sizeof s_set.dither, "%s", dither);
             s_set.gain = (uint8_t)gain;
         }
-        // The Chooser's name and mDNS's default instance: the port printer's.
-        printers_port_name(s_set.queue, sizeof s_set.queue);
-        if (!s_set.queue[0]) snprintf(s_set.queue, sizeof s_set.queue, "AirWriter");
+        // The Chooser's name and mDNS's default instance: the port's one ImageWriter for
+        // vintage Macs (W-1116: the oldest ImageWriter record's, fixed across swaps), else
+        // the oldest port record's, else AirWriter.
+        printers_chooser_name(s_set.queue, sizeof s_set.queue);
     }
     offers_apply();                 // the cable's, kept for its node's start
     s_ribbon = s_set.ribbon;
@@ -3025,7 +3071,7 @@ void app_main(void)
     // W-1103: the StyleWriter's line, over the port serial_out just brought up.
     stylewriter_cfg_t swc = { .record_is_sw = printers_port_is_stylewriter, .state = sw_state_cb,
                               .cart = sw_cart_seen, .cancelled = sw_cancelled,
-                              .swapped = printers_port_conflict };
+                              .swapped = sw_swapped };
     stylewriter_start(&swc);
     // 4 KB: a ribbon change saves to NVS and re-announces mDNS from here; the StyleWriter's
     // questions and its model and cartridge saves run here too.
@@ -3095,8 +3141,8 @@ void app_main(void)
     };
     ipp_server_set_airprint(s_set.airprint);          // W-1079
     ESP_ERROR_CHECK(ipp_server_start(&cfg));
-    // The ribbon may have been read while the server started; push what it is.
-    ipp_server_set_colour(s_ribbon == IW_RIBBON_COLOUR && ribbon_offered());
+    // The ribbon or the line may have been read while the server started; push what they are.
+    port_push(printer_state_view().state);
     ota_health_set(OH_IPP_UP, 1);
     // wifi_start returned joined, before this could hear the join.
     fwu_start(0);
@@ -3122,6 +3168,7 @@ void app_main(void)
     err = laser_start(&lc);
     if (err != ESP_OK) ESP_LOGE(TAG, "AppleTalk printers did not start: %s", esp_err_to_name(err));
     printers_apply();
+    port_push(printer_state_view().state);      // W-1116: the port's other records have slots now
 
     if (s_test_on_boot) {
         s_test_on_boot = 0;
