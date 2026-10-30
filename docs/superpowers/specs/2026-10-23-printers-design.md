@@ -4,6 +4,12 @@
 Wells in chat on 2026-10-23. Builds on `W-1082 AirPrint to LaserWriters on AppleTalk` (merged),
 `W-1087` (the ImageWriter LQ's self-ID, merged) and the settings redesign (`W-1079`).
 
+**Amended 2026-10-30** by `W-1116 Printer port: several printers, the one plugged in shows
+online` (`2026-10-30-port-printers-design.md`): the printer port keeps a record per model, the
+one answering online and the rest offline, so "the printer port holds one printer" and the
+"changed" notice (accept or dismiss) below no longer hold; a different printer answering is a
+record of its own, once it has answered twice.
+
 ## Why
 
 AirWriter assumes an ImageWriter. Its host name is `imagewriter-xxxx`, its default printer is

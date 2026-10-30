@@ -5,6 +5,12 @@
 `W-1102 QuickDraw LaserWriters on the printer port (Personal LaserWriter LS/300, Select 300)`.
 Reverses the StyleWriter cut in `2026-08-04-printer-support-scope-design.md`.
 
+**Amended 2026-10-30** by `W-1116 Printer port: several printers, the one plugged in shows
+online` (`2026-10-30-port-printers-design.md`): the swapped-port refusal and the "changed"
+notice of the 2026-10-27 amendment are replaced; the port keeps a record per model, the one
+answering online and the rest offline, and the family check alone stays (`pr_port_other_family`)
+so one family's bytes never reach the other.
+
 **Amended 2026-10-27, before the bench** (SPEC §3.16 has each in full). A port
 whose record is, or that last answered as, a StyleWriter is asked the plain question first at a
 line-up or a look, and `ESC ?` only when that gets nothing: a StyleWriter may stop listening

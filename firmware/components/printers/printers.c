@@ -638,22 +638,26 @@ void printers_port_answered(int heard)
     unlock();
 }
 
+// W-1116, until the board follows the printer on the port (the record whose model answered)
+// rather than the oldest record: the family of the oldest port record, as the rest of this
+// file reads it, against the family that answered last (pr_port_other_family). With one port
+// record this is what the StyleWriter branch did.
 int printers_port_conflict(void)
 {
     if (!s_started) return 0;
     lock();
-    int c = pr_port_conflict(s_l);
+    const pr_rec_t *p = pr_port(s_l);
+    int fam = !p ? PR_HEARD_NONE
+            : p->kind == PR_KIND_IMAGEWRITER ? PR_HEARD_IMAGEWRITER
+            : p->kind == PR_KIND_STYLEWRITER ? PR_HEARD_STYLEWRITER : PR_HEARD_NONE;
+    int c = fam != PR_HEARD_NONE && pr_port_other_family(s_l, fam);
     unlock();
     return c;
 }
 
 int printers_port_swapped(void)
 {
-    if (!s_started) return 0;
-    lock();
-    int c = pr_port_swapped(s_l);
-    unlock();
-    return c;
+    return printers_port_conflict();
 }
 
 void printers_port_set_sw_model(sw_model_t m)

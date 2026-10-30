@@ -105,15 +105,53 @@ const pr_rec_t *pr_port(const pr_list_t *l)
     return NULL;
 }
 
+const pr_rec_t *pr_port_of(const pr_list_t *l, pr_model_t m)
+{
+    if (m == PR_MODEL_NONE) return NULL;
+    for (int i = 0; i < l->n; i++)
+        if (l->r[i].where == PR_WHERE_PORT && l->r[i].model == m) return &l->r[i];
+    return NULL;
+}
+
+const pr_rec_t *pr_port_current(const pr_list_t *l)
+{
+    const pr_rec_t *p = pr_port_of(l, (pr_model_t)l->heard_model);
+    return p ? p : pr_port(l);
+}
+
+// The port's record of `kind` that the person made so, or the board found: at most one of
+// each (an "Unknown printer" is made only on an empty port, "Something else" is one per port).
+static pr_rec_t *port_unknown(const pr_list_t *l, int found_auto)
+{
+    for (int i = 0; i < l->n; i++) {
+        const pr_rec_t *r = &l->r[i];
+        if (r->where == PR_WHERE_PORT && r->kind == PR_KIND_UNKNOWN && !r->found_auto == !found_auto)
+            return (pr_rec_t *)r;
+    }
+    return NULL;
+}
+
+const pr_rec_t *pr_port_said_other(const pr_list_t *l)
+{
+    return port_unknown(l, 0);
+}
+
+int pr_port_count(const pr_list_t *l)
+{
+    int c = 0;
+    for (int i = 0; i < l->n; i++) c += l->r[i].where == PR_WHERE_PORT;
+    return c;
+}
+
 int pr_port_is_imagewriter(const pr_list_t *l)
 {
-    const pr_rec_t *p = pr_port(l);
+    const pr_rec_t *p = pr_port_current(l);
     return p && p->kind == PR_KIND_IMAGEWRITER;
 }
 
 int pr_port_is_stylewriter(const pr_list_t *l)
 {
-    const pr_rec_t *p = pr_port(l);
+    const pr_rec_t *p = pr_port_current(l);
     return p && p->kind == PR_KIND_STYLEWRITER;
 }
 
@@ -168,19 +206,11 @@ static void notes_clear(pr_list_t *l, int id, int kind)     // kind -1: every ki
         if (l->notes[i].id == id && (kind < 0 || l->notes[i].kind == kind)) note_drop(l, i);
 }
 
-// W-1103: the port's printer answered as `model` (a pr_model_t) of family `heard`. An answer
-// other than the one whose notice the person dismissed lets that notice be offered again.
+// W-1103: the port's printer answered as `model` (a pr_model_t) of family `heard`.
 static void port_heard(pr_list_t *l, int heard, int model)
 {
     l->heard = (uint8_t)heard;
     l->heard_model = (uint8_t)model;
-    if (model != l->dismissed) l->dismissed = 0;
-}
-
-// The "changed" notice for the port's record `p`, unless the person dismissed it for this model.
-static void port_changed(pr_list_t *l, const pr_rec_t *p, int model)
-{
-    if (model != l->dismissed) note_add(l, PR_NOTE_CHANGED, p->id, model);
 }
 
 // ------------------------------------------------------------- names
@@ -253,23 +283,29 @@ static pr_rec_t *rec_new(pr_list_t *l)
     return r;
 }
 
-// A new port printer's identity: W-1082's form, the port's own tag in place
-// of a name's hash. An ImageWriter's is "0001", a StyleWriter's "0002" (W-1103):
-// phones keep a queue's capabilities by uuid, and a StyleWriter is not the
-// ImageWriter that was there.
-static void port_uuid(const pr_list_t *l, char out[46], int stylewriter)
+// A new port record's identity, made once and never changed: W-1082's form, the port's
+// own tag in place of a name's hash, at offset 28. Before W-1116 the tag was the family
+// alone ("0001" an ImageWriter, "0002" a StyleWriter), the same for every record; now it
+// is the model and the family, "%02x%02x", so each model's record is its own printer to
+// phones. A form already taken (by a record since corrected to another model) sets the
+// model byte's top bit, then the next bit down, so no two records share one. Records
+// from before keep theirs.
+static void port_uuid(const pr_list_t *l, char out[46], int model)
 {
     static const uint8_t tag[] = { 1, 1 };
-    lw_uuid(out, l->mac, l->epoch, tag);
-    memcpy(out + strlen("urn:uuid:41575254-4c57-0000-"), stylewriter ? "0002" : "0001", 4);
-}
-
-// By its form, not by the board's MAC and epoch it was made with.
-static int uuid_is_stylewriter(const char *uuid)
-{
-    static const char head[] = "urn:uuid:41575254-4c57-";
-    return strlen(uuid) == 45 && !strncmp(uuid, head, sizeof head - 1) &&
-           !strncmp(uuid + strlen("urn:uuid:41575254-4c57-0000-"), "0002", 4);
+    int family = model_is_sw(model) ? 2 : 1;
+    char cand[46];
+    lw_uuid(cand, l->mac, l->epoch, tag);
+    for (int k = 0; k < 16; k++) {
+        // k's four bits reversed: 0, then 0x80, 0x40, 0xC0, 0x20 ...
+        int hi = ((k & 1) << 7) | ((k & 2) << 5) | ((k & 4) << 3) | ((k & 8) << 1);
+        snprintf(cand + 28, 5, "%02x%02x", (model & 0x0F) | hi, family);
+        cand[32] = '-';
+        int taken = 0;
+        for (int i = 0; i < l->n; i++) taken |= !strcmp(l->r[i].uuid, cand);
+        if (!taken) break;
+    }
+    memcpy(out, cand, 46);
 }
 
 static void announce(pr_list_t *l, pr_rec_t *r)
@@ -280,29 +316,23 @@ static void announce(pr_list_t *l, pr_rec_t *r)
     else note_add(l, PR_NOTE_TOO_MANY, r->id, 0);
 }
 
-// The port's record takes a printer of `kind` and `model`: its own name follows
-// (a name the person gave stays), and a printer of the other family is a new
-// printer to phones, with the uuid of its own. Else the record, its uuid and
-// its settings go on. The Apple screen is a StyleWriter's alone.
+// The port record takes a printer of `kind` and `model`: its own name follows
+// (a name the person gave stays); its uuid and its settings go on. The Apple
+// screen is a StyleWriter's alone.
 static void become_port_printer(pr_list_t *l, pr_rec_t *r, int kind, int model)
 {
     int own = name_is_own(r);
     r->kind = (uint8_t)kind;
     r->model = (uint8_t)model;
     r->identified = 1;
-    if (kind == PR_KIND_STYLEWRITER) {
-        if (!uuid_is_stylewriter(r->uuid)) port_uuid(l, r->uuid, 1);
-    } else {
-        if (uuid_is_stylewriter(r->uuid)) port_uuid(l, r->uuid, 0);
-        if (!strcmp(r->dither, "apple")) snprintf(r->dither, sizeof r->dither, "atkinson");
-    }
+    if (kind != PR_KIND_STYLEWRITER && !strcmp(r->dither, "apple"))
+        snprintf(r->dither, sizeof r->dither, "atkinson");
     if (own) {
         char n[PR_NAME_MAX];
         own_name(r, n, sizeof n);
         set_name(l, r, n);
     }
     notes_clear(l, r->id, PR_NOTE_UNKNOWN_PORT);
-    notes_clear(l, r->id, PR_NOTE_CHANGED);
 }
 
 static void become_imagewriter(pr_list_t *l, pr_rec_t *r, int model)
@@ -322,15 +352,14 @@ static void become_model(pr_list_t *l, pr_rec_t *r, int model)
     else become_imagewriter(l, r, model);
 }
 
-// The port's record for a printer that named itself on an empty port: found,
-// named by its model, shared.
+// A port record for a printer that named itself: found, named by its model, shared.
 static pr_rec_t *port_new(pr_list_t *l, int model)
 {
     pr_rec_t *p = rec_new(l);
     if (!p) return NULL;
     p->where = PR_WHERE_PORT;
     p->found_auto = 1;
-    port_uuid(l, p->uuid, model_is_sw(model));
+    port_uuid(l, p->uuid, model);
     become_model(l, p, model);
     char n[PR_NAME_MAX];
     own_name(p, n, sizeof n);
@@ -339,67 +368,88 @@ static pr_rec_t *port_new(pr_list_t *l, int model)
     return p;
 }
 
-int pr_port_seen(pr_list_t *l, pr_port_seen_t what)
+// W-1116: the port's printer named its `model`, of family `heard`. Its record's id, at once,
+// when it has one and nothing else would change. Anything that changes the list (a record
+// made, an "Unknown printer" converted or dropped, a "Something else" replaced) takes the
+// same answer twice in a row: the first is PR_SEEN_AGAIN, or the record's id when it has
+// one; any other model's answer in between starts over.
+static int port_named(pr_list_t *l, int heard, int model)
 {
-    pr_rec_t *p = (pr_rec_t *)pr_port(l);
-    if (what == PR_PORT_NOTHING) return p ? p->id : -1;
-    if (what == PR_PORT_SILENT) {
-        // The original ImageWriter has no self-ID: its line up and nothing said is its answer.
-        if (p && p->kind == PR_KIND_IMAGEWRITER && p->model == PR_MODEL_IW1)
-            port_heard(l, PR_HEARD_IMAGEWRITER, PR_MODEL_IW1);
-        if (p) return p->id;              // an original ImageWriter, a lost answer: no churn
-        p = rec_new(l);
-        if (!p) return -1;
-        p->where = PR_WHERE_PORT;
-        p->kind = PR_KIND_UNKNOWN;
-        p->found_auto = 1;
-        port_uuid(l, p->uuid, 0);
-        set_name(l, p, UNKNOWN_NAME);
-        note_add(l, PR_NOTE_UNKNOWN_PORT, p->id, 0);
-        return p->id;
+    port_heard(l, heard, model);
+    pr_rec_t *rec = (pr_rec_t *)pr_port_of(l, (pr_model_t)model);
+    pr_rec_t *unknown = port_unknown(l, 1), *other = port_unknown(l, 0);
+    if (rec && !unknown && !other) {
+        l->pending_model = 0;
+        return rec->id;
     }
-    int model = what == PR_PORT_IWLQ ? PR_MODEL_IWLQ : PR_MODEL_IW2;
-    port_heard(l, PR_HEARD_IMAGEWRITER, model);
-    if (!p) {
-        p = port_new(l, model);
-        return p ? p->id : -1;
+    if (l->pending_model != model) {
+        l->pending_model = (uint8_t)model;
+        return rec ? rec->id : PR_SEEN_AGAIN;
     }
-    if (p->kind == PR_KIND_UNKNOWN) {
-        if (!p->found_auto) return p->id;     // the person said "Something else"
-        become_imagewriter(l, p, model);
-        announce(l, p);
-        return p->id;
+    l->pending_model = 0;
+    // The printer that said nothing before was this one: its record becomes it, unless the
+    // model has a record already, when it goes. The person's "Something else" is replaced.
+    // By id: a removal moves the records after it.
+    int other_id = other ? other->id : 0;
+    if (unknown && !rec) {
+        become_model(l, unknown, model);
+        announce(l, unknown);
+    } else if (unknown) {
+        pr_remove(l, unknown->id);
     }
-    // A different printer than the record's, an ImageWriter of another model or
-    // a StyleWriter, is offered, never swapped in.
-    if ((p->kind == PR_KIND_IMAGEWRITER && p->model != model) || p->kind == PR_KIND_STYLEWRITER)
-        port_changed(l, p, model);
-    return p->id;
+    if (other_id) pr_remove(l, other_id);
+    rec = (pr_rec_t *)pr_port_of(l, (pr_model_t)model);
+    if (!rec) rec = port_new(l, model);
+    return rec ? rec->id : -1;
 }
 
-void pr_port_seen_sw(pr_list_t *l, pr_model_t m)
+int pr_port_seen(pr_list_t *l, pr_port_seen_t what)
 {
-    if (!model_is_sw(m)) return;
-    port_heard(l, PR_HEARD_STYLEWRITER, m);
-    pr_rec_t *p = (pr_rec_t *)pr_port(l);
-    if (!p) {
-        port_new(l, m);
-        return;
+    if (what == PR_PORT_NOTHING) {
+        const pr_rec_t *p = pr_port_current(l);
+        return p ? p->id : -1;
     }
-    if (p->kind == PR_KIND_UNKNOWN) {
-        if (!p->found_auto) return;           // the person said "Something else"
-        become_stylewriter(l, p, m);
-        announce(l, p);
-        return;
+    if (what == PR_PORT_SILENT) {
+        // The original ImageWriter has no self-ID: its line up and nothing said is its answer.
+        const pr_rec_t *iw1 = pr_port_of(l, PR_MODEL_IW1);
+        if (iw1 && iw1->kind == PR_KIND_IMAGEWRITER) {
+            port_heard(l, PR_HEARD_IMAGEWRITER, PR_MODEL_IW1);
+            l->pending_model = 0;
+            return iw1->id;
+        }
+        l->pending_model = 0;             // nothing said is another answer
+        const pr_rec_t *p = pr_port_current(l);
+        if (p) return p->id;              // a lost answer: no churn
+        pr_rec_t *u = rec_new(l);
+        if (!u) return -1;
+        u->where = PR_WHERE_PORT;
+        u->kind = PR_KIND_UNKNOWN;
+        u->found_auto = 1;
+        port_uuid(l, u->uuid, PR_MODEL_NONE);
+        set_name(l, u, UNKNOWN_NAME);
+        note_add(l, PR_NOTE_UNKNOWN_PORT, u->id, 0);
+        return u->id;
     }
-    if (p->kind == PR_KIND_IMAGEWRITER || (p->kind == PR_KIND_STYLEWRITER && p->model != m))
-        port_changed(l, p, m);
+    int model = what == PR_PORT_IWLQ ? PR_MODEL_IWLQ : PR_MODEL_IW2;
+    return port_named(l, PR_HEARD_IMAGEWRITER, model);
+}
+
+int pr_port_seen_sw(pr_list_t *l, pr_model_t m)
+{
+    if (!model_is_sw(m)) return -1;
+    return port_named(l, PR_HEARD_STYLEWRITER, m);
 }
 
 int pr_port_sw_found(pr_list_t *l, pr_model_t m)
 {
-    pr_rec_t *p = (pr_rec_t *)pr_port(l);
-    if (!model_is_sw(m) || !p || p->kind != PR_KIND_STYLEWRITER || p->model == m) return 0;
+    if (!model_is_sw(m) || pr_port_of(l, m)) return 0;
+    pr_rec_t *p = (pr_rec_t *)pr_port_current(l);
+    if (!p || p->kind != PR_KIND_STYLEWRITER) {
+        p = NULL;
+        for (int i = 0; i < l->n; i++)
+            if (l->r[i].where == PR_WHERE_PORT && l->r[i].kind == PR_KIND_STYLEWRITER) p = &l->r[i];
+    }
+    if (!p) return 0;
     become_stylewriter(l, p, m);
     return 1;
 }
@@ -569,6 +619,8 @@ int pr_set_model(pr_list_t *l, int id, pr_model_t m)
 {
     pr_rec_t *r = pr_get(l, id);
     if (!r || r->where != PR_WHERE_PORT || m > PR_MODEL_SWC2500) return -1;
+    const pr_rec_t *has = pr_port_of(l, m);
+    if (has && has != r) return -2;       // W-1116: one record per model
     r->found_auto = 0;
     if (m == PR_MODEL_NONE) {
         int own = name_is_own(r);
@@ -579,23 +631,21 @@ int pr_set_model(pr_list_t *l, int id, pr_model_t m)
         if (!strcmp(r->dither, "apple")) snprintf(r->dither, sizeof r->dither, "atkinson");
         if (own) set_name(l, r, UNKNOWN_NAME);
         notes_clear(l, id, PR_NOTE_UNKNOWN_PORT);
-        notes_clear(l, id, PR_NOTE_CHANGED);
         return 0;
     }
     become_model(l, r, m);
-    r->shared = 1;                        // the port always fits under the cap
     r->announced = 1;
-    // A StyleWriter the person names is the newest word on what the port holds: an answer
-    // before it that would hold it as swapped (an ImageWriter's, another StyleWriter model's)
-    // is forgotten, the printer that gave it likely unplugged, and so is the notice they
-    // dismissed. Its bytes mark no ImageWriter's paper and its jobs ask the printer first,
-    // and the board asks the port at once (the full sequence, then a look), so what answers
-    // decides again. An ImageWriter named over a StyleWriter's answer stays held until the
-    // ImageWriter answers: its stream would print on a StyleWriter.
+    if (can_share(l, r)) r->shared = 1;
+    else note_add(l, PR_NOTE_TOO_MANY, id, 0);
+    // A StyleWriter the person names is the newest word on what the port holds: an
+    // ImageWriter's answer before it is forgotten, the printer that gave it likely
+    // unplugged, so the StyleWriter's own questions (the full sequence, then a look) are
+    // not held back by it, and what answers decides again. An ImageWriter named over a
+    // StyleWriter's answer stays held until an ImageWriter answers: its stream would print
+    // on a StyleWriter.
     if (model_is_sw(m)) {
         if (l->heard == PR_HEARD_IMAGEWRITER) l->heard = PR_HEARD_NONE;
         l->heard_model = 0;
-        l->dismissed = 0;
     }
     return 0;
 }
@@ -603,12 +653,16 @@ int pr_set_model(pr_list_t *l, int id, pr_model_t m)
 int pr_add_port(pr_list_t *l, pr_model_t m)
 {
     if (m < PR_MODEL_IW2 || m > PR_MODEL_SWC2500) return -1;
-    pr_rec_t *p = (pr_rec_t *)pr_port(l);
+    if (pr_port_of(l, m)) return -2;
+    // The printer that said nothing, or the person's "Something else", is the one the
+    // model names; else a record beside the ones there (W-1116).
+    pr_rec_t *p = port_unknown(l, 1);
+    if (!p) p = port_unknown(l, 0);
     if (!p) {
         p = rec_new(l);
         if (!p) return -1;
         p->where = PR_WHERE_PORT;
-        port_uuid(l, p->uuid, model_is_sw(m));
+        port_uuid(l, p->uuid, m);
         set_name(l, p, UNKNOWN_NAME);             // its own name follows the model, below
         p->kind = PR_KIND_UNKNOWN;
     }
@@ -640,23 +694,9 @@ int pr_use_anyway(pr_list_t *l, int id)
     return 0;
 }
 
-int pr_accept_change(pr_list_t *l, int note)
-{
-    if (note < 0 || note >= l->n_notes || l->notes[note].kind != PR_NOTE_CHANGED) return -1;
-    pr_note_t n = l->notes[note];
-    pr_rec_t *r = pr_get(l, n.id);
-    note_drop(l, note);
-    if (!r || n.model < PR_MODEL_IW2 || n.model > PR_MODEL_SWC2500) return -1;
-    become_model(l, r, n.model);
-    return 0;
-}
-
 void pr_dismiss(pr_list_t *l, int note)
 {
     if (note < 0 || note >= l->n_notes) return;
-    const pr_rec_t *p = pr_port(l);
-    if (p && l->notes[note].kind == PR_NOTE_CHANGED && l->notes[note].id == p->id)
-        l->dismissed = l->notes[note].model;
     note_drop(l, note);
 }
 
@@ -677,25 +717,27 @@ static int family_of_kind(int kind)
 void pr_port_answered(pr_list_t *l, int heard)
 {
     if (heard != PR_HEARD_IMAGEWRITER && heard != PR_HEARD_STYLEWRITER) return;
-    // The record's own printer: its model, when the family is the record's.
-    const pr_rec_t *p = pr_port(l);
+    // The printer on the port: its model, when the family is its record's.
+    const pr_rec_t *p = pr_port_current(l);
     int own = p && family_of_kind(p->kind) == heard;
     port_heard(l, heard, own ? p->model : 0);
 }
 
-int pr_port_conflict(const pr_list_t *l)
+int pr_port_other_family(const pr_list_t *l, int family)
 {
-    const pr_rec_t *p = pr_port(l);
-    int fam = p ? family_of_kind(p->kind) : PR_HEARD_NONE;
-    return fam != PR_HEARD_NONE && l->heard != PR_HEARD_NONE && l->heard != fam;
+    return l->heard != PR_HEARD_NONE && l->heard != family;
 }
 
-int pr_port_swapped(const pr_list_t *l)
+pr_gate_t pr_job_gate(const pr_list_t *l, int id, int heard, pr_model_t heard_model, int line_up)
 {
-    if (pr_port_conflict(l)) return 1;
-    const pr_rec_t *p = pr_port(l);
-    return p && p->kind == PR_KIND_STYLEWRITER && l->heard == PR_HEARD_STYLEWRITER &&
-           l->heard_model && l->heard_model != p->model;
+    int i = pr_index(l, id);
+    const pr_rec_t *r = i < 0 ? NULL : &l->r[i];
+    if (!r || r->where != PR_WHERE_PORT || r->kind != PR_KIND_IMAGEWRITER) return PR_GATE_OTHER;
+    if (heard == PR_HEARD_STYLEWRITER) return PR_GATE_OTHER;
+    if (heard == PR_HEARD_IMAGEWRITER && heard_model != PR_MODEL_NONE)
+        return heard_model == r->model ? PR_GATE_GO : PR_GATE_OTHER;
+    // Nothing named. The original ImageWriter has no self-ID: its line up is its answer.
+    return r->model == PR_MODEL_IW1 && line_up ? PR_GATE_GO : PR_GATE_WAIT;
 }
 
 // ------------------------------------------------------------- old Macs, the box
@@ -738,7 +780,7 @@ pr_box_t pr_box_state(const pr_list_t *l, const pr_live_t live[PR_MAX])
 int pr_test_target(const pr_list_t *l, const pr_live_t live[PR_MAX])
 {
     (void)live;
-    const pr_rec_t *p = pr_port(l);
+    const pr_rec_t *p = pr_port_current(l);
     if (p && (p->kind == PR_KIND_IMAGEWRITER || p->kind == PR_KIND_STYLEWRITER)) return p->id;
     for (int i = 0; i < l->n; i++) if (l->r[i].shared) return l->r[i].id;
     return -1;
@@ -758,7 +800,7 @@ void pr_migrate(pr_list_t *l, const pr_legacy_t *o)
     p->identified = p->announced = 1;
     p->shared = o->airprint ? 1 : 0;
     snprintf(p->uuid, sizeof p->uuid, "%s", o->uuid ? o->uuid : "");
-    if (!p->uuid[0]) port_uuid(l, p->uuid, 0);
+    if (!p->uuid[0]) port_uuid(l, p->uuid, model);
     snprintf(p->dither, sizeof p->dither, "%s", o->dither && o->dither[0] ? o->dither : "atkinson");
     p->gain = o->gain;
     p->top_margin = o->top_margin;
@@ -793,12 +835,14 @@ void pr_migrate(pr_list_t *l, const pr_legacy_t *o)
 
 enum { HDR = 6 };
 
-// W-1103: the list is stored with the lowest version that can hold it, 1 until
-// a record or a notice holds a StyleWriter, so that an OTA rollback to a firmware from
-// before StyleWriters (the W-1059 trial) still reads an ImageWriter or LaserWriter
-// owner's list and their printers keep their identity on their phones.
+// The list is stored with the lowest version that can hold it: 1 until a record or a
+// notice holds a StyleWriter (W-1103), 2 until a second port record (W-1116), so that an
+// OTA rollback to a firmware from before still reads a one-printer list and the person's
+// printers keep their identity on their phones. A rolled-back firmware keeps a 3 unread
+// (pr_blob_newer) for the next update.
 static uint8_t blob_version(const pr_list_t *l)
 {
+    if (pr_port_count(l) >= 2) return 3;
     for (int i = 0; i < l->n; i++)
         if (l->r[i].kind > PR_KIND_AT_IMAGEWRITER || l->r[i].model > PR_MODEL_IW1) return 2;
     for (int i = 0; i < l->n_notes; i++)
@@ -823,7 +867,8 @@ int pr_load(pr_list_t *l, const uint8_t *buf, size_t n)
     if (!buf || n < HDR || buf[0] != 'P' || buf[1] != 'R' || buf[2] < 1 || buf[2] > PR_BLOB_VER)
         return -1;
     // W-1103: a version 1 list has the ImageWriter kinds and models only. The
-    // layout is the same, so what it may hold is all that differs.
+    // layout is the same, so what it may hold is all that differs; a 3 (W-1116,
+    // a second port record) holds what a 2 does.
     int max_kind = buf[2] == 1 ? PR_KIND_AT_IMAGEWRITER : PR_KIND_STYLEWRITER;
     int max_model = buf[2] == 1 ? PR_MODEL_IW1 : PR_MODEL_SWC2500;
     uint8_t cnt = buf[3], notes = buf[5];
@@ -847,26 +892,17 @@ int pr_load(pr_list_t *l, const uint8_t *buf, size_t n)
     uint8_t kept = 0;
     for (int i = 0; i < notes; i++) {
         if (nt[i].kind > PR_NOTE_TOO_MANY || nt[i].model > max_model) return -1;
-        if (nt[i].kind != PR_NOTE_FOUND) nt[kept++] = nt[i];   // a "found" from before
+        // A "found" from before W-1088, a "changed" from before W-1116: its printer becomes a
+        // record at the next look if it answers.
+        if (nt[i].kind != PR_NOTE_FOUND && nt[i].kind != PR_NOTE_CHANGED) nt[kept++] = nt[i];
     }
     memcpy(l->r, buf + HDR, (size_t)cnt * sizeof(pr_rec_t));
     memcpy(l->notes, nt, (size_t)kept * sizeof(pr_note_t));
     l->n = cnt;
     l->n_notes = kept;
     l->next_id = buf[4] ? buf[4] : 1;
-    // Who answered on the port is not stored, but a "changed" notice still waiting for the
-    // person says the other family did: so it holds from the start, as it did before.
-    // So is another StyleWriter model's, on a StyleWriter record.
-    l->heard = l->heard_model = l->dismissed = 0;
-    const pr_rec_t *p = pr_port(l);
-    for (int i = 0; p && i < l->n_notes; i++) {
-        int fam = model_is_sw(l->notes[i].model) ? PR_HEARD_STYLEWRITER : PR_HEARD_IMAGEWRITER;
-        if (l->notes[i].kind != PR_NOTE_CHANGED || l->notes[i].id != p->id) continue;
-        if (fam != family_of_kind(p->kind) || p->kind == PR_KIND_STYLEWRITER) {
-            l->heard = (uint8_t)fam;
-            l->heard_model = l->notes[i].model;
-        }
-    }
+    // Who answered on the port, and a model answered once, are not stored.
+    l->heard = l->heard_model = l->pending_model = 0;
     return 0;
 }
 
@@ -1007,18 +1043,19 @@ int pr_post(pr_list_t *l, const char *body, pr_post_t *o)
     }
     if (json_has_int(b, "note", &n)) {
         if (n < 0 || n >= l->n_notes) return post_err(o, "No such notice.");
-        if (json_has_bool(b, "accept", &v) && v) {
-            if (pr_accept_change(l, (int)n)) return post_err(o, "No such notice.");
-        } else {
-            pr_dismiss(l, (int)n);
-        }
+        pr_dismiss(l, (int)n);                // every notice left is one to dismiss (W-1116)
         o->changed = 1;
         return 0;
     }
     char s[PR_NAME_MAX * 2];
+    char taken[PR_NAME_MAX + 32];
     if (json_has_str(b, "add_port", s, sizeof s)) {
         int m = model_by_name(s);
         int port = m < 0 ? -1 : pr_add_port(l, (pr_model_t)m);
+        if (port == -2) {
+            snprintf(taken, sizeof taken, "%s is already in Printers.", pr_model_name(m));
+            return post_err(o, taken);
+        }
         if (port < 0) return post_err(o, "Unknown model.");
         o->changed = 1;
         if (model_is_sw(m)) o->confirm_sw_id = port;     // the person's word, to be checked
@@ -1037,7 +1074,12 @@ int pr_post(pr_list_t *l, const char *body, pr_post_t *o)
     }
     if (json_has_str(b, "model", s, sizeof s)) {
         int m = !strcmp(s, "none") ? PR_MODEL_NONE : model_by_name(s);
-        if (m < 0 || pr_set_model(l, id, (pr_model_t)m)) return post_err(o, "Unknown model.");
+        int rc = m < 0 ? -1 : pr_set_model(l, id, (pr_model_t)m);
+        if (rc == -2) {
+            snprintf(taken, sizeof taken, "%s is already in Printers.", pr_model_name(m));
+            return post_err(o, taken);
+        }
+        if (rc) return post_err(o, "Unknown model.");
         o->changed = 1;
         if (model_is_sw(m)) o->confirm_sw_id = id;
     }
@@ -1142,16 +1184,13 @@ size_t pr_json(const pr_list_t *l, const pr_live_t live[PR_MAX], char *buf, size
             size_t n = strlen(swx);
             snprintf(swx + n, sizeof swx - n, ",\"fault\":\"%s\"", faults[live[i].fault]);
         }
-        // W-1103: the other family answered on the port: its record needs the person.
-        int swapped = r->where == PR_WHERE_PORT && pr_port_swapped(l);
         PUT("%s{\"id\":%u,\"name\":\"%s\",\"where\":\"%s\",\"kind\":\"%s\",\"model\":\"%s\","
             "\"shared\":%s,\"identified\":%s,\"found\":\"%s\",\"state\":\"%s\",\"uuid\":\"%s\","
-            "\"product\":\"%s\",\"dither\":\"%s\",\"gain\":%u,\"rp\":\"%s\",\"start_page\":%s%s%s}",
+            "\"product\":\"%s\",\"dither\":\"%s\",\"gain\":%u,\"rp\":\"%s\",\"start_page\":%s%s}",
             i ? "," : "", r->id, e_name, pr_where_name(r->where), pr_kind_name(r->kind),
             pr_model_name(r->model), r->shared ? "true" : "false",
             r->identified ? "true" : "false", r->found_auto ? "auto" : "person",
-            states[swapped ? PR_BOX_ATTENTION : one_state(&live[i])], r->uuid, e_prod, r->dither,
-            r->gain, rp, sp, swx, swapped ? ",\"swapped\":true" : "");
+            states[one_state(&live[i])], r->uuid, e_prod, r->dither, r->gain, rp, sp, swx);
     }
     PUT("],\"notes\":[");
     for (int i = 0; i < l->n_notes; i++)
