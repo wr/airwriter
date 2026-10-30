@@ -2357,8 +2357,8 @@ static void test_json_ports(void)
     CHECK(strstr(buf, "\"port_on\":0,\"said_other\":false,\"chooser\":[\"Office\"]") != NULL);
 }
 
-// W-1116 (R8): the person naming a StyleWriter forgets an ImageWriter's answer only when the
-// record changed is the one on the port; editing another record leaves the port's as it is.
+// W-1116 (R8, R10): the person naming a model on the record that is on the port forgets the
+// port's last answer, whatever the model; editing another record leaves the port's as it is.
 static void test_set_model_keeps_current(void)
 {
     fresh();
@@ -2382,6 +2382,52 @@ static void test_set_model_keeps_current(void)
     CHECK_EQ_INT(pr_port_heard(&L), PR_HEARD_STYLEWRITER);
     CHECK_EQ_INT(L.heard_model, PR_MODEL_SW2);
     CHECK(pr_port_current(&L) == pr_get(&L, sw));
+    // R10: a change within a family forgets the answer too, so a record added later with
+    // the old model is never the one on the port without its printer answering.
+    fresh();
+    int lq2 = pr_add_port(&L, PR_MODEL_IWLQ);              // the oldest, so the fallback
+    iw = seen_iw(PR_PORT_IW2);
+    CHECK(pr_port_current(&L) == pr_get(&L, iw));
+    CHECK_EQ_INT(pr_set_model(&L, iw, PR_MODEL_IW1), 0);    // "it's an original"
+    CHECK_EQ_INT(pr_port_heard(&L), PR_HEARD_NONE);
+    CHECK_EQ_INT(L.heard_model, 0);
+    CHECK(pr_port_current(&L) == pr_get(&L, lq2));
+    int again = pr_add_port(&L, PR_MODEL_IW2);
+    CHECK(again >= 0);
+    CHECK(pr_port_current(&L) == pr_get(&L, lq2));         // not the new II: it never answered
+    CHECK(pr_port_current(&L) != pr_get(&L, again));
+    CHECK_EQ_INT(pr_port_seen(&L, PR_PORT_IW2), again);     // once it does, it is
+    CHECK(pr_port_current(&L) == pr_get(&L, again));
+    // And a StyleWriter's answer, corrected to another StyleWriter model, the same.
+    fresh();
+    sw = seen_sw(PR_MODEL_SW2);
+    CHECK_EQ_INT(pr_set_model(&L, sw, PR_MODEL_SW1200), 0);
+    CHECK_EQ_INT(pr_port_heard(&L), PR_HEARD_NONE);
+    CHECK_EQ_INT(L.heard_model, 0);
+}
+
+// W-1116 (R9): every port record answers at ipp/p<id>; the oldest is also ipp/print. Removing
+// the oldest moves ipp/print to the next one, whose own path keeps working (the board's
+// routing, in a later commit).
+static void test_path_moves_on_removal(void)
+{
+    fresh();
+    int iw = seen_iw(PR_PORT_IW2);
+    int sw = seen_sw(PR_MODEL_SW2);
+    pr_live_t live[PR_MAX];
+    memset(live, 0, sizeof live);
+    static char buf[4096];
+    char want[32];
+    CHECK(pr_json(&L, live, buf, sizeof buf) > 0);
+    snprintf(want, sizeof want, "\"id\":%d,", iw);
+    CHECK(strstr(strstr(buf, want), "\"rp\":\"ipp/print\"") != NULL);
+    snprintf(want, sizeof want, "\"rp\":\"ipp/p%d\"", sw);
+    CHECK(strstr(buf, want) != NULL);
+    CHECK_EQ_INT(pr_remove(&L, iw), 0);
+    CHECK(pr_port(&L) == pr_get(&L, sw));
+    CHECK(pr_json(&L, live, buf, sizeof buf) > 0);
+    CHECK(strstr(buf, want) == NULL);
+    CHECK(strstr(buf, "\"rp\":\"ipp/print\"") != NULL);
 }
 
 int main(void)
@@ -2443,5 +2489,6 @@ int main(void)
     test_test_target_current();
     test_json_ports();
     test_set_model_keeps_current();
+    test_path_moves_on_removal();
     TEST_END;
 }

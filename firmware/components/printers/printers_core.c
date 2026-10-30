@@ -642,15 +642,14 @@ int pr_set_model(pr_list_t *l, int id, pr_model_t m)
     r->announced = 1;
     if (can_share(l, r)) r->shared = 1;
     else note_add(l, PR_NOTE_TOO_MANY, id, 0);
-    // A StyleWriter the person names on the record that is on the port is the newest word
-    // on what the port holds: an ImageWriter's answer before it is forgotten, the printer
-    // that gave it likely unplugged, so the StyleWriter's own questions (the full sequence,
-    // then a look) are not held back by it, and what answers decides again. An ImageWriter
-    // named over a StyleWriter's answer stays held until an ImageWriter answers: its stream
-    // would print on a StyleWriter. Named on another record (W-1116), nothing is forgotten:
-    // the printer on the port is still there.
-    if (on_port && model_is_sw(m)) {
-        if (l->heard == PR_HEARD_IMAGEWRITER) l->heard = PR_HEARD_NONE;
+    // A model the person names on the record that is on the port is the newest word on what
+    // the port holds: the answer before it is forgotten, whichever family gave it, and the
+    // board asks the port again at once, so what answers decides again (R10: an answer kept
+    // under a model this record no longer has would make a record added later with that
+    // model the one on the port without its printer ever answering). Named on another record
+    // (W-1116), nothing is forgotten: the printer on the port is still there.
+    if (on_port) {
+        l->heard = PR_HEARD_NONE;
         l->heard_model = 0;
     }
     return 0;

@@ -237,9 +237,13 @@ services, with `CONFIG_MDNS_MAX_SERVICES` pinned in `sdkconfig.defaults` (releas
 alone). The list stays at 8 records. A seventh identified printer is listed, not shared, with
 the "more than six" notice (today's "more than four", renumbered).
 
-**Paths.** A record's IPP path and `printer-uuid` never change while it exists. The port record
-a board had before keeps `ipp/print` and the legacy routing of any other path; every other
-record answers at `ipp/p<id>`, port records included. Each port record needs its own uuid:
+**Paths.** A record's `printer-uuid` never changes while it exists, and nor does its own path:
+every record answers at `ipp/p<id>`, port records included. The oldest port record is also
+advertised at `ipp/print`, with the legacy routing of any other path, so the port record a
+board had before keeps the path its phones know. Removing the oldest port record moves
+`ipp/print` to the next one, whose `ipp/p<id>` keeps working (ruling R9, 2026-10-30: the
+`rp` in `/api/printers` names the advertised path; the board routes both). Each port record
+needs its own uuid:
 today's port form is the list's epoch and MAC with a family tag (`0001` ImageWriter, `0002`
 StyleWriter), the same for an ImageWriter II and an LQ, so a new port record's uuid also carries
 its model. Existing records keep theirs.

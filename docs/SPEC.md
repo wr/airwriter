@@ -238,8 +238,9 @@ Minimum viable set for iOS:
 - `Get-Printer-Attributes` (0x000B) — must respond in under two seconds or the print sheet
   gives up
 - `Validate-Job` (0x0004)
-- Each printer answers at its own resource (3.15): `ipp/print` for the port's, `ipp/p<id>`
-  for one on AppleTalk; any other path goes to the port's while it is shared.
+- Each printer answers at its own resource (3.15), `ipp/p<id>`, port records included; the
+  oldest port record also at `ipp/print`, and any other path goes to it while it is shared
+  (W-1116; before, `ipp/print` was the port's one record and `ipp/p<id>` AppleTalk's).
 - `Print-Job` (0x0002) — body arrives chunked, into a 1 MB PSRAM buffer as fast as Wi-Fi
   delivers it. An ImageWriter job holds 512 KB of URF in it, and the rip runs as the URF
   arrives into the other 512 KB, which holds the printer's bytes and drains to the port at
@@ -740,11 +741,14 @@ read back is a list made again). At most 8 records.
   mix of the port's records and AppleTalk printers, where before it was the port's and three
   on AppleTalk), each its own AirPrint printer in one of `IPP_PRINTERS` (6) slots, Bonjour by
   name (`CONFIG_MDNS_MAX_SERVICES` 10 in `sdkconfig.defaults`: six `_ipp`, the `_printer` stub
-  and `_http`). A record's path never changes while it exists: the oldest port record's is
-  `ipp/print` at printer 0, with the legacy routing of any other path; every other record's,
-  port records included, is `ipp/p<id>`; W-1082's LaserWriter also answers at `ipp/laser`. The
-  seventh identified printer is listed, not shared, with the "too many" notice, and shares once
-  another stops; a shared record keeps its place through a model change. A change reaches
+  and `_http`). Every record answers at `ipp/p<id>` for as long as it exists, port records
+  included; the oldest port record is also advertised at `ipp/print`, at printer 0, with the
+  legacy routing of any other path, and W-1082's LaserWriter also answers at `ipp/laser`.
+  Removing the oldest port record moves `ipp/print` to the next one, whose `ipp/p<id>` keeps
+  working (`/api/printers` `rp` names the advertised path; the board's routing of both is
+  W-1116's later commits). The seventh identified printer is listed, not shared, with the
+  "too many" notice, and can be shared once another stops; a shared record keeps its place
+  through a model change. A change reaches
   Bonjour at once, after the job holding its slot. The W-1079 AirPrint switch is the whole
   box's. AirPrint to an AppleTalk ImageWriter is not built: it is old Macs' only. (The board's
   slot mapping still places AppleTalk printers only, at 1 on; a second port record's slot

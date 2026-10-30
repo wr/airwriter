@@ -179,10 +179,10 @@ int  pr_rename(pr_list_t *l, int id, const char *name);     // "" or NULL: the p
 int  pr_set_shared(pr_list_t *l, int id, int on);           // -1 at the cap, or unidentified
 // A port record only; -2 when another port record has the model, or is "Something else"
 // already for PR_MODEL_NONE (W-1116: one record per model, one Something else per port).
-// The record is shared if there is room, else the "too many" notice. A StyleWriter named
-// on the record that is on the port (pr_port_current) forgets an ImageWriter's answer before
-// it: the person's word is the newest, and the board asks the port again at once. Named on
-// another record, it leaves the one on the port as it is.
+// The record is shared if there is room, else the "too many" notice. A model named on the
+// record that is on the port (pr_port_current) forgets the port's last answer (heard and
+// heard_model): the person's word is the newest, and the board asks the port again at once.
+// Named on another record, it leaves the one on the port as it is.
 int  pr_set_model(pr_list_t *l, int id, pr_model_t m);
 // "Add a Printer…" for the port: its model (an original ImageWriter, or one
 // that is off, never answers; a StyleWriter, W-1103, the original's included).
