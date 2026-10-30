@@ -353,7 +353,7 @@ static volatile int        s_confirm_sw;       // the person named the port's pr
 static volatile int        s_link_check;       // the record's kind changed: J2's link may be the wrong one
 // The port task's books between its calls of port_policy (port_policy.h's port_in_t).
 static uint32_t            s_last_plain_ms, s_last_status_ms;
-static int                 s_plain_asked, s_plain_unanswered, s_event_plain, s_look_kick, s_full_due;
+static int                 s_plain_asked, s_plain_unanswered, s_event_plain, s_full_due;
 static volatile int        s_look_person;      // the pending look is the person's Look for Printers
 // The port's StyleWriter answered before the session began (a job, the test page, a cleaning):
 // if the session then gets nothing, the port is looked at once when it is over.
@@ -1445,7 +1445,7 @@ static void kick_task(void *arg)
     static const uint8_t ctrl_x = 0x18;     // ImageWriter II: cancel current line
     int boot_looked = 0, again = 0;
     uint32_t drops = s_line_drops;
-    s_last_plain_ms = uptime_ms();           // the first cadence question is 60 s from now
+    s_last_plain_ms = uptime_ms();           // the first cadence question is 5 s from now
     for (;;) {
         if (!again) vTaskDelay(pdMS_TO_TICKS(500));
         again = 0;
@@ -1492,20 +1492,23 @@ static void kick_task(void *arg)
         int look = s_look, look_person = s_look_person;
 
         // CTRL-X goes only where it always went: an ImageWriter, or a port nothing has been found
-        // on yet (one left busy at power-up never answers ESC ?).
+        // on yet (one left busy at power-up never answers ESC ?). What the list holds (W-1116)
+        // sets the order of the questions; the kind is still the oldest port record's, and the
+        // repeat of a first sighting (`confirm`) is not wired yet: W-1116's port task commit.
+        int sw_listed, iw1_listed, sw1_listed;
+        printers_port_listed(&sw_listed, &iw1_listed, &sw1_listed);
         port_in_t in = {
             .kind = mode == PORT_NONE ? -1 : mode == PORT_IMAGEWRITER ? PR_KIND_IMAGEWRITER
                   : mode == PORT_STYLEWRITER ? PR_KIND_STYLEWRITER : PR_KIND_UNKNOWN,
-            .no_self_id = printers_port_model() == PR_MODEL_IW1,
+            .iw1_listed = iw1_listed, .sw_listed = sw_listed, .sw1_listed = sw1_listed,
             .said_other = mode == PORT_UNKNOWN_SAID, .line_ready = line_ready,
             .want_kick = (mode == PORT_IMAGEWRITER || mode == PORT_NONE) && printer_state_want_kick(),
-            .sw_original = printers_port_sw_model() == SW_ORIGINAL,
             .heard = printers_port_heard(), .now_ms = now,
             .line_up_edge = line_up, .look = look, .look_person = look && look_person,
             .answering = s_port_answering, .last_plain_ms = s_last_plain_ms,
             .last_status_ms = s_last_status_ms, .plain_asked = s_plain_asked,
             .plain_unanswered = s_plain_unanswered, .event_plain = s_event_plain,
-            .look_kick = s_look_kick, .full_due = s_full_due,
+            .full_due = s_full_due, .confirm = PA_NONE,
         };
         if (s_line_drops != drops) {         // a new busy spell gets a fresh plain question
             drops = s_line_drops;
@@ -1579,7 +1582,6 @@ static void kick_task(void *arg)
         s_plain_asked = in.plain_asked;
         s_plain_unanswered = in.plain_unanswered;
         s_event_plain = in.event_plain;
-        s_look_kick = in.look_kick;
         s_full_due = in.full_due;
 
         if ((act == PA_PLAIN || act == PA_FULL) && mine) {

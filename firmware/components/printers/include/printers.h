@@ -95,6 +95,10 @@ int         printers_port_shared(void);
 pr_model_t  printers_port_model(void);
 // The port StyleWriter's model; SW_NONE for anything else.
 sw_model_t  printers_port_sw_model(void);
+// W-1116: what the port's records hold, for port_policy's order of questions, read in one
+// pass: any StyleWriter record (sw), an original ImageWriter record (iw1), an original
+// StyleWriter record (sw1). Each out may be NULL.
+void        printers_port_listed(int *sw, int *iw1, int *sw1);
 // W-1103: who answered on the port last (pr_heard_t), an answer of the record's own printer
 // that names no model (a StyleWriter's `1` and `2`, a job that printed, the full sequence once
 // the record has its model; PR_HEARD_NONE changes nothing),

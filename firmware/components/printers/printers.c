@@ -621,6 +621,25 @@ sw_model_t printers_port_sw_model(void)
     return m;
 }
 
+void printers_port_listed(int *sw, int *iw1, int *sw1)
+{
+    int any_sw = 0, any_iw1 = 0, any_sw1 = 0;
+    if (s_started) {
+        lock();
+        for (int i = 0; i < s_l->n; i++) {
+            const pr_rec_t *r = &s_l->r[i];
+            if (r->where != PR_WHERE_PORT) continue;
+            any_sw  |= r->kind == PR_KIND_STYLEWRITER;
+            any_iw1 |= r->model == PR_MODEL_IW1;
+            any_sw1 |= r->model == PR_MODEL_SW1;
+        }
+        unlock();
+    }
+    if (sw) *sw = any_sw;
+    if (iw1) *iw1 = any_iw1;
+    if (sw1) *sw1 = any_sw1;
+}
+
 int printers_port_heard(void)
 {
     if (!s_started) return PR_HEARD_NONE;

@@ -854,37 +854,54 @@ Apple's StyleWriter adapter (ADSP, not PAP), is not built.
 - **What the idle port is asked** (`port_policy`, pure: one act a call, every 500 ms, under the
   job lock and never while a job runs on the port; `port_tick`, `port_after` and
   `port_line_down` keep its books between calls, so the host tests run the whole loop against
-  scripted printers for ten minutes, every record against every printer). In this order: the
-  person said Something else, nothing ever; a StyleWriter record that answers, `1` and `2`
-  every 10 s and on a look, and nothing else (no `ESC ?`, no plain question, no kick); on a
-  line-up edge or a look with the line ready, the plain question first where the port is
-  StyleWriter-first (a StyleWriter record, a port that last answered as a StyleWriter, or an
-  original ImageWriter record, which gives no self-ID), then `ESC ?` once that got nothing, and
-  `ESC ?` alone everywhere else (an empty port, an ImageWriter II or LQ record), so an
-  ImageWriter swapped in is noticed and a StyleWriter that would answer never hears `ESC ?`
-  (`swfake.py` takes it for a letter it does not know and stops listening until a reset); the
-  plain question on a look with the line down; the full sequence once to an original
-  StyleWriter record, at start-up (the board sets `full_due`; a look of the board's own goes
+  scripted printers for ten minutes, every record against every printer, and through scripts
+  of swaps with the list kept as the board keeps it). Its inputs are the current port record's
+  kind (`pr_port_current`, W-1116), what the list holds (any StyleWriter record, an original
+  ImageWriter record, an original StyleWriter record: the order of the questions is the
+  list's, not the current record's alone), the family that answered last, the line, and the
+  events. In this order: an act the board wants repeated (`confirm`: a seen call answered
+  `PR_SEEN_AGAIN`, one sighting of a model with no record, and the same answer twice makes the
+  record), at once, before anything else; the person said Something else, nothing of
+  AirWriter's own, and the person's own Look for Printers asks once, as any look does, with
+  nothing following it (not the plain question that follows an unanswered `ESC ?` elsewhere,
+  not the cadence, and a full sequence owed waits until the Something else record goes); a
+  StyleWriter record that answers, `1` and `2` every 10 s and on a look, and nothing else (no
+  `ESC ?`, no plain question, no kick); on a line-up edge or a look with the line ready, the
+  plain question first where the port is StyleWriter-first (any StyleWriter record listed, a
+  port that last answered as a StyleWriter, or an original ImageWriter record listed, which
+  gives no self-ID), then `ESC ?` once that got nothing, and `ESC ?` alone everywhere else (an
+  empty port, ImageWriter II or LQ records only), so an ImageWriter swapped in is noticed and
+  a StyleWriter that would answer never hears `ESC ?` (`swfake.py` takes it for a letter it
+  does not know and stops listening until a reset; one that raises its line on a port with no
+  StyleWriter record hears it first, the design's cost); the plain question on a look with the
+  line down; the full sequence once while an original StyleWriter record is listed and
+  nothing answers, at start-up (the board sets `full_due`; a look of the board's own goes
   first and leaves it owed) and when the person's Look for Printers got nothing from the plain
   question or `ESC ?` (or from the status, for one that was answering), since the original
-  ignores the plain question until a reset and nothing else finds it; never on a cadence, never
-  for another model, and not once anything answers (an ImageWriter's `ESC ?` there is the
-  ImageWriter's answer, 3.15); nothing more of its own accord for an
-  ImageWriter record whose port a StyleWriter answered, and CTRL-X there at most once after a
-  look that got nothing, never on a cadence;
-  the plain question while the port's printer does not answer, every 60 s, at boot
-  after the quiet power-on, when `ESC ?` went unanswered, and once per busy spell when a kick is
-  wanted and none has been asked since the line went down; the CTRL-X kick last, only after a
-  plain question since the line went down that got nothing, and never for a StyleWriter record.
-  An original ImageWriter record's `ESC ?` that gets nothing with the line up is its answer. The
-  plain question asked for a line-up or a look goes with it: once the event ends any other way,
-  the next line-up asks the plain question first again. A StyleWriter that answers is its
-  record's, or makes one once it has answered twice (3.15), shared at once, named by its
-  model; one that stops answering stays in the list, offline (but the original, below). A
-  StyleWriter record that was answering and stops (its `1` and `2`, or a job's question, get
-  nothing) is looked at once, once per stop: the plain question, then `ESC ?` if that got
-  nothing, so an ImageWriter put in its place with its line already up (behind an A/B switch)
-  is found within one status interval and the refusal below begins.
+  ignores the plain question until a reset and nothing else finds it; never on a cadence, and
+  not once anything answers (an ImageWriter's `ESC ?` there is the ImageWriter's answer, 3.15);
+  the plain question while the port's printer does not answer, every 5 s (W-1116; 60 s on the
+  StyleWriter branch), whatever the list holds and whatever answered last, so a StyleWriter
+  plugged in is found in seconds by someone who never added it, at boot after the quiet
+  power-on, when `ESC ?` went unanswered, and once per busy spell when a kick is wanted and
+  none has been asked since the line went down; the CTRL-X kick last, only after a plain
+  question since the line went down that got nothing, and never while the current record is a
+  StyleWriter, so a StyleWriter that answers the plain question is never kicked (the
+  StyleWriter branch's quiet ImageWriter record, nothing of its own and one kick a look while a
+  StyleWriter answered on its port, went with the "changed" notice it waited for). An
+  ESC ? that gets nothing with the line up is an original ImageWriter record's answer while
+  one is listed, whatever record is current. The plain question asked for a line-up or a look
+  goes with it: once the event ends any other way, the next line-up asks the plain question
+  first again. A StyleWriter that answers is its record's, or makes one once it has answered
+  twice (3.15), shared at once, named by its model; one that stops answering stays in the list,
+  offline (but the original, below). A StyleWriter record that was answering and stops (its
+  `1` and `2`, or a job's question, get nothing) is looked at once, once per stop: the plain
+  question, then `ESC ?` if that got nothing, so an ImageWriter put in its place with its line
+  already up (behind an A/B switch) is found within one status interval; a printer plugged in
+  while a StyleWriter record still answers is found that way too, within one status check and
+  the look that follows it (the design's timings: a StyleWriter within 5 s, an ImageWriter at
+  its line-up's `ESC ?` after the 2 s settle, a swap for a StyleWriter that was answering
+  within 10 s and the look).
 - **Several printers on the port** (`W-1116 Printer port: several printers, the one plugged in
   shows online`; design `docs/superpowers/specs/2026-10-30-port-printers-design.md`, which
   replaces the StyleWriter branch's swapped-port refusal and W-1088's "changed" notice). The
@@ -900,17 +917,22 @@ Apple's StyleWriter adapter (ADSP, not PAP), is not built.
   `ESC ?` and plain question: go when its own model answered (an original ImageWriter: its
   line up with nothing said), wait while nothing answers, stop when another model or a
   StyleWriter did. None of it is stored; a "changed" notice stored before is dropped on load.
-  Built so far, in `printers_core` and host-tested: the records, the twice-seen rule, the
-  per-model uuid, the version 3 blob, `/api/printers` without `swapped`. The board still takes
-  the oldest port record as the port's printer and refuses its AirPrint jobs (the job aborts;
+  Built so far and host-tested: in `printers_core` the records, the twice-seen rule, the
+  per-model uuid, the version 3 blob, `/api/printers` without `swapped`; in `port_policy` the
+  list-level inputs, the 5 s plain question, the person's look on a Something else port and
+  the repeat of a first sighting (above). The board fills the list-level inputs
+  (`printers_port_listed`) and so asks every 5 s and in the list's order, but still gives the
+  policy the oldest port record's kind, never sets `confirm`, and takes the oldest port
+  record as the port's printer and refuses its AirPrint jobs (the job aborts;
   IPP stopped, `other`, "Needs attention: confirm the printer under Printers on the settings
   page"), its test page (the button blips Busy and runs no cable test, the page's Print Test
   Page answers 409), a cleaning (409) and a Mac's job (busy) while the other family answered
   last (`printers_port_conflict`, on `pr_port_other_family`), as the StyleWriter branch did;
   that ends when the record's own family answers again, or when the person names the record
   a StyleWriter (an ImageWriter's answer before it is forgotten). The live state per record,
-  the busy answer for a port printer that is not the one answering, the 5 s plain question,
-  six shared printers and the page follow in W-1116's later commits.
+  the busy answer for a port printer that is not the one answering, the current record as
+  the port's printer, six shared printers on AirPrint and the page follow in W-1116's later
+  commits.
 - **AirPrint.** 360 × 360 dpi, URF `RS360`; Letter, A4 and Legal, the first the default
   (`printer_media_t` in `printer_caps`: the page's width at 360 dpi names the entry, and the
   rip keeps the engine's printable area from `rip_left` for `rip_w` dots). Margins in whole
