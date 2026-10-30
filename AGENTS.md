@@ -527,6 +527,9 @@ Linear is the queue; these are the live items.
   `tools/requirements.txt`. Work by `docs/cad-routine.md`.
 
 ## Verification
+- **Done means the docs match:** once Wells has approved a change, it isn't done until the wiki,
+  the settings page text and the shop's AirWriter description (`../shop`) match it. Not before:
+  the docs follow his approval, not the first build.
 - **Host tests:** `make -C tools/rip test` (raster path, halftone screens and colour, serial writer, printer_state, led_grid,
   dip_config, pic_prog, localtalk, PAP client, LaserWriter query and policy, PostScript writer,
   cable, fw_update, known_good, testpage) and `make -C tools/ipp test`.
