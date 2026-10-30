@@ -105,7 +105,7 @@ Traps already explained in a code comment are listed only when the comment is ea
   mint. Pick colours from the measured map (`tools/lights/panel_colours.json`, the
   status-language spec's material table), not from a screen.
 - **A raw pyserial open on macOS drops the S3 into download mode** (the driver asserts DTR at
-  open). Read the console only with `idf.py monitor` under `script` (AGENTS.md, bench rules).
+  open). Read the console only with `idf.py monitor` under `script` (AGENTS.md, On a real board).
 - **Rev A can power up into download mode: D3 lit, panel dark, no Wi-Fi, console silent.** IO0
   has C7 (100 nF) to GND and only the S3's ~45 k internal pull-up, so it races EN's 10 k / 1 µF
   and sometimes is still low when the straps latch (board 1, 2026-10-28: `GPIO_STRAP` 0x23,
@@ -216,7 +216,7 @@ Traps already explained in a code comment are listed only when the comment is ea
   same file went in on the next try. Verify the image, then retry once.
 - **Never OTA while a job prints.** It cut two jobs on 2026-10-15. Since W-1048 `/update` refuses
   (409) while a job holds the job lock and gives way to one that arrives mid-upload, but an
-  image from before W-1048 still on a board does not. Bench rule in AGENTS.md.
+  image from before W-1048 still on a board does not. AGENTS.md, On a real board.
 
 ## Serial, printer, LocalTalk
 
