@@ -965,6 +965,26 @@ static void test_something_else_replaced(void)
     CHECK_EQ_INT(L.n, 2);
     CHECK(pr_get(&L, x) == NULL);
     CHECK(pr_port_said_other(&L) == NULL);
+    // One Something else per port: a second record can't be made one while the first is,
+    // by the page's sentence; the record that is one may be set so again.
+    CHECK_EQ_INT(pr_set_model(&L, cs, PR_MODEL_NONE), 0);
+    CHECK(pr_port_said_other(&L) == pr_get(&L, cs));
+    CHECK_EQ_INT(pr_set_model(&L, iw, PR_MODEL_NONE), -2);
+    CHECK_EQ_INT(pr_get(&L, iw)->kind, PR_KIND_IMAGEWRITER);
+    CHECK_EQ_INT(pr_set_model(&L, cs, PR_MODEL_NONE), 0);
+    pr_post_t o;
+    char body[80];
+    snprintf(body, sizeof body, "{\"id\":%d,\"model\":\"none\"}", iw);
+    CHECK_EQ_INT(pr_post(&L, body, &o), -1);
+    CHECK(strcmp(o.err, "Something else is already in Printers.") == 0);
+    CHECK_EQ_INT(o.changed, 0);
+    CHECK_EQ_INT(pr_get(&L, iw)->model, PR_MODEL_IW2);
+    CHECK(pr_port_said_other(&L) == pr_get(&L, cs));
+    // Once it is a model again, the other may be Something else.
+    CHECK_EQ_INT(pr_set_model(&L, cs, PR_MODEL_SWC2400), 0);
+    CHECK_EQ_INT(pr_post(&L, body, &o), 0);
+    CHECK(pr_port_said_other(&L) == pr_get(&L, iw));
+    CHECK_EQ_INT(L.n, 2);
 }
 
 // Each port record has a uuid of its own: the list's epoch and MAC with the model and the

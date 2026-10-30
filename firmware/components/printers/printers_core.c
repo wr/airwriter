@@ -619,8 +619,9 @@ int pr_set_model(pr_list_t *l, int id, pr_model_t m)
 {
     pr_rec_t *r = pr_get(l, id);
     if (!r || r->where != PR_WHERE_PORT || m > PR_MODEL_SWC2500) return -1;
-    const pr_rec_t *has = pr_port_of(l, m);
-    if (has && has != r) return -2;       // W-1116: one record per model
+    // W-1116: one record per model, and one "Something else" per port.
+    const pr_rec_t *has = m == PR_MODEL_NONE ? pr_port_said_other(l) : pr_port_of(l, m);
+    if (has && has != r) return -2;
     r->found_auto = 0;
     if (m == PR_MODEL_NONE) {
         int own = name_is_own(r);
@@ -1076,7 +1077,8 @@ int pr_post(pr_list_t *l, const char *body, pr_post_t *o)
         int m = !strcmp(s, "none") ? PR_MODEL_NONE : model_by_name(s);
         int rc = m < 0 ? -1 : pr_set_model(l, id, (pr_model_t)m);
         if (rc == -2) {
-            snprintf(taken, sizeof taken, "%s is already in Printers.", pr_model_name(m));
+            snprintf(taken, sizeof taken, "%s is already in Printers.",
+                     m == PR_MODEL_NONE ? "Something else" : pr_model_name(m));
             return post_err(o, taken);
         }
         if (rc) return post_err(o, "Unknown model.");

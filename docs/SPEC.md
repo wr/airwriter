@@ -734,7 +734,8 @@ read back is a list made again). At most 8 records.
   already; a "Something else" record is replaced. "Add a Printer…" adds a record for a model
   not in the list (original ImageWriter, one that is off, a StyleWriter by model), beside the
   records there, or converts an "Unknown printer" or "Something else" record; a model already
-  listed is refused, and so is a record's Model set to one another record has.
+  listed is refused, and so is a record's Model set to one another record has, or to
+  Something else while another port record is one (one per port).
 - **Sharing.** Identified printers are shared at once, up to four (the port's, three on
   AppleTalk), each its own AirPrint printer: the port's at printer 0 (`ipp/print`), AppleTalk's
   at 1-3 (`ipp/p<id>`), Bonjour by name. A change reaches Bonjour at once, after the job holding
@@ -771,7 +772,8 @@ read back is a list made again). At most 8 records.
   "dismiss":true}` or `{"id":N, "name", "shared", "model" ("none" for Something else),
   "remove", "use_anyway", "dither", "gain", "clean"}`; 400 with a sentence for the page
   ("<model> is already in Printers." for `add_port` or `model` naming a model another port
-  record has, W-1116). A StyleWriter's record also carries `cartridge` and `fault` (3.16).
+  record has, "Something else is already in Printers." for `model` `none` while another port
+  record is one, W-1116). A StyleWriter's record also carries `cartridge` and `fault` (3.16).
 
 ### 3.16 StyleWriters (W-1103)
 

@@ -174,10 +174,11 @@ const pr_seen_t *pr_seen_of(const pr_list_t *l, int id);   // NULL: never answer
 // What the person said. 0 done, -1 refused.
 int  pr_rename(pr_list_t *l, int id, const char *name);     // "" or NULL: the printer's own
 int  pr_set_shared(pr_list_t *l, int id, int on);           // -1 at the cap, or unidentified
-// A port record only; -2 when another port record has the model (W-1116: one record per
-// model). The record is shared if there is room, else the "too many" notice. A StyleWriter
-// named forgets an ImageWriter's answer before it: the person's word is the newest, and the
-// board asks the port again at once.
+// A port record only; -2 when another port record has the model, or is "Something else"
+// already for PR_MODEL_NONE (W-1116: one record per model, one Something else per port).
+// The record is shared if there is room, else the "too many" notice. A StyleWriter named
+// forgets an ImageWriter's answer before it: the person's word is the newest, and the board
+// asks the port again at once.
 int  pr_set_model(pr_list_t *l, int id, pr_model_t m);
 // "Add a Printer…" for the port: its model (an original ImageWriter, or one
 // that is off, never answers; a StyleWriter, W-1103, the original's included).
@@ -271,7 +272,8 @@ size_t pr_json(const pr_list_t *l, const pr_live_t live[PR_MAX], char *buf, size
 // "remove":true, "use_anyway":true, "dither":"...", "gain":0-45,
 // "start_page":bool, "clean":true}. 0 done; -1 with a sentence for the page in err
 // ("<model> is already in Printers." for add_port or model naming a model another port
-// record has, W-1116).
+// record has, "Something else is already in Printers." for model "none" while another port
+// record is one, W-1116).
 // start_page (W-1099) changes nothing here: it is the printer's own, set by a
 // job to it (start_page_id's, 0 off or 1 on; -1 not asked), and the record
 // follows the printer's answer. So is clean (W-1103): clean_id is the

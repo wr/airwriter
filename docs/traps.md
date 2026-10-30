@@ -290,15 +290,19 @@ Traps already explained in a code comment are listed only when the comment is ea
 - **U8's ~RE rides `LT_DE`, so U8 shuts down while the PIC transmits.** Deliberate: wake is
   ≤ 1.8 µs against LocalTalk's ~200 µs inter-dialogue gap. It mirrors the U6 bug fixed on 08-22
   but is not that bug; don't "fix" it.
-- **The port's record and the printer on the port can be of different families** (W-1103). A
-  StyleWriter answering on an ImageWriter record's port, or the reverse, only raises the
-  "changed" notice; until the person accepts it (or the record's own family answers again)
-  `pr_port_conflict` holds, and nothing in the record's language may go out. A new path that
-  sends a port job, page or command checks it; `stylewriter_cfg_t.swapped` holds the
-  StyleWriter's own. `s_port_sw` flips only under the job lock (`port_sw_sync`), so read it with
-  the lock held. And a StyleWriter-first port (`port_policy.h`) gets `ESC ?` only after the plain
-  question got nothing: `swfake.py` takes `ESC ?` for a letter it does not know and stops
-  listening until a reset.
+- **A port record and the printer on the port can be of different families** (W-1103, W-1116).
+  A StyleWriter answering on a port whose records are ImageWriters, or the reverse, is a record
+  of its own once it has answered twice (`pr_port_seen_sw`, `pr_port_seen`: one answer is
+  `PR_SEEN_AGAIN`), never a notice; meanwhile, and whenever the family that answered last is
+  not a record's (`pr_port_other_family`), nothing in that record's language may go out. Until
+  the board follows the printer on the port (W-1116's later commits), `printers_port_conflict()`
+  is the interim check: the oldest port record's family against `pr_port_other_family`, and
+  main.c refuses that record's jobs, test page and cleaning on it, as the StyleWriter branch
+  did. A new path that sends a port job, page or command checks it; `stylewriter_cfg_t.swapped`
+  holds the StyleWriter's own. `s_port_sw` flips only under the job lock (`port_sw_sync`), so
+  read it with the lock held. And a StyleWriter-first port (`port_policy.h`) gets `ESC ?` only
+  after the plain question got nothing: `swfake.py` takes `ESC ?` for a letter it does not know
+  and stops listening until a reset.
 - **A StyleWriter's bytes at 57600 print nothing on an ImageWriter II at 9600** (board 1,
   2026-10-27): 300 plain questions a second apart, then the full sequence (`00 FF FF FF 49`, 2 s,
   `?`) once, each followed by a CR LF at 9600, left the paper blank but for the line feeds. So a
