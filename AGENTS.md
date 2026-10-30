@@ -280,8 +280,8 @@ DIP keys; the tray is now cut to rev 2026.11, which has no DIP switches and no
 DIP window, and board 1's tray is the one at `hw-rev-a`), LC frame, LC light, LC lid, and the Pro build's light-guide lattice. Cavity 13.04 (measured mini-DIN
 height); Pro screws M2.5 × 18. Four 10 mm rubber feet sit in 0.40 pockets in the floor's
 underside, each hiding a screw counterbore. The shop's 3D models are built from this tray and
-rev 2026.11 (enclosure/README.md, "Shop model"): the LC's is live, the full build's waits on
-wr/shop#171. The LC's clear top is 1.5 mm cast acrylic (the frame's height follows `ACRYLIC`), laser file
+rev 2026.11 (enclosure/README.md, "Shop model"), both live; the LC's shows its two lights lit
+(the slash green, D26's dot running the panel's colour wave). The LC's clear top is 1.5 mm cast acrylic (the frame's height follows `ACRYLIC`), laser file
 `hardware/panel/airwriter-lc-top.svg` (`lc_top.py`, from the LC's own art
 `hardware/panel/svg/lc.svg`, Figma Frame 17: "AirWriter LC", rev 2026.11, the Pro's gold
 dots and D26's (the LC's one light), serial and power only, all frosted; the panel's outline
