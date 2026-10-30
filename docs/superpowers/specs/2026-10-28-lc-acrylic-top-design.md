@@ -28,10 +28,12 @@ settle before it cured.
 `hardware/panel/airwriter-lc-top.svg`, from `lc_top.py`: the panel's own outline cut
 (62.00 × 104.27, R2.0), the test hole cut at the panel's 3.8 mm, and the LC's own art,
 `hardware/panel/svg/lc.svg` (Wells's Figma Frame 17), frosted: "AirWriter LC", "airprint
-to serial bridge", rev 2026.11, the 18 gold dots and the test dot, the serial and power
-labels and the three rules, the power slash. The art draws the Pro's 37 lit dots in the
-background's colour, and they stay clear: the LC has no LEDs. The frosted slash sits
-over D3, so the power light shows in it.
+to serial bridge", rev 2026.11, the 18 gold dots, the test dot and the dot under it, the
+serial and power labels and the three rules, the power slash. The art draws the Pro's 37
+lit dots in the background's colour, and they stay clear but for one: the LC fits one of
+the 37 LEDs, D26, the one under the test dot, as its status light
+(`docs/hardware-rev-2026-11.md`, "The LC's one light"), and the art draws its dot gold, so
+it is frosted and lights. The frosted slash sits over D3, so the power light shows in it.
 
 On rev 2026.11 (15 mm SW3) the test plunger stands 0.46 above the acrylic; on rev A
 (16 mm) 1.46.
@@ -66,10 +68,29 @@ One printed part, in `enclosure/lc_frame.py`:
 Printed rim-down (the glue face on the bed, the flattest face), legs up, no supports: the
 same orientation as the LC lid, and the same printability gate.
 
+## The light tube
+
+A second printed part, `enclosure/lc_light.py`. Under the clear top D26 would light
+the board round it, so it gets a tube as D3 does. D26 sits mid-board, though, about
+27 mm from the frame, and joining the two would take an arm across the clear top, so
+the tube is a part of its own (Wells, 2026-10-29):
+
+- **Walls:** `LATTICE_WALL` (0.80), from the board to `LC_LIGHT_PLAY` (0.20) under the
+  acrylic, round D26's and C46's courtyards with `LC_LIGHT_CLEAR` (0.25) inside. They hug
+  the two parts, which is what keeps the loose tube on its dot: about 0.5 of wander at
+  most. JP1's solder blob is 0.75 outside the south wall and SW3 0.93 outside the north.
+- **Cap:** `FRAME_CAP` (0.60), with a round `LC_LIGHT_APERTURE_D` (3.00) opening centred
+  on the dot. The dot is 5.64 across; the smaller opening is a diffuser, since the LEDs
+  are bright (Wells).
+- **Held by:** the board below and the acrylic above. Nothing glues or screws it.
+
+Printed cap-down, walls up, no supports.
+
 ## Assembly
 
 1. Board into the tray. Heat-set inserts into the frame's legs.
-2. Frame onto the board, four M2.5 × 10 from below.
+2. Frame onto the board, four M2.5 × 10 from below. Bridge JP1 with solder if it
+   isn't yet, and set the light tube over D26 (the LED under the test button), cap up.
 3. Scuff the four leg tops with sandpaper and put a small dab of UV-cure glue (395–405 nm)
    on each. Squeeze-out shows through the clear top at the front legs.
 4. Peel the acrylic's film off both faces, drop it into the pocket frosted face up, and
@@ -89,6 +110,8 @@ To open, unscrew from below: the frame and acrylic come out together.
   cement, which doesn't take to the printed frame.
 - The legs' tops at H1 and H2 sit under the frosted corner dots, so two of the four glue
   pads don't show. H3 and H4's do, as Ø6 discs below the subtitle.
+- D26's tube is loose, not part of the frame: an arm out to it would show across the
+  board through the clear top. Its opening is smaller than its dot, to soften the LED.
 - The printed LC lid stays, for anyone without a laser. Its plunger bore goes from
   2.25 to 3.80, the panel's hole: 2.25 dated from the old switch and stopped the
   measured 3.1–3.2 plunger.
@@ -99,3 +122,6 @@ To open, unscrew from below: the frame and acrylic come out together.
 - How the black rim and the two front leg pads read through the acrylic.
 - How brightly the slash glows through the slit, and whether the frost scatters light
   along the sheet into the other frosted marks.
+- How D26's dot reads through its 3 mm opening: bright enough, and soft enough at the
+  edge of the dot; and whether the loose tube stays square on the board while the top
+  goes on.

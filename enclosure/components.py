@@ -28,10 +28,11 @@ MODEL_DIR = os.environ.get(
     "/Applications/KiCad/KiCad.app/Contents/SharedSupport/3dmodels")
 STEP = pathlib.Path(__file__).resolve().parent / "out" / "components.step"
 
-NO_MODEL = {"S1": 9.41}
+NO_MODEL = {"S1": 9.41, "JP1": 0.50}
 """Top above the board for parts with no 3D model, boxed from their courtyard.
 S1 (rev A's DIP switches): the DP-08RP body top (test_case / the shop's
-dp08rp.mjs)."""
+dp08rp.mjs). JP1 (rev 2026.11's LC jumper): the solder blob Wells bridges it
+with on every LC, up to about 0.5."""
 
 NO_MODEL_LIB = {"LED_SK6812MINI_PLCC4_3.5x3.5mm_P1.75mm": 1.60}
 """KiCad 10 ships no SK6812MINI model; 1.60 is conservative over the

@@ -1,14 +1,15 @@
 # Enclosure (enclosure/out/*.stl)
 
-Four printed parts. The **tray** is shared by both builds. The **LC frame**
+Five printed parts. The **tray** is shared by both builds. The **LC frame**
 carries the LC's clear acrylic top, which stands in for the dot-grid art panel
-on boards built without it; the **LC lid** is the all-printed alternative to
-the two. The **lattice** is the Pro build's light guide, between the board and
-the panel.
+on boards built without it, and the **LC light** is a loose tube round its one
+status LED; the **LC lid** is the all-printed alternative to the frame and top.
+The **lattice** is the Pro build's light guide, between the board and the
+panel.
 
     ./build.sh          # runs the tests, then writes out/*.{step,stl}
 
-`out/airwriter-tray.stl`, `out/airwriter-lc-frame.stl`,
+`out/airwriter-tray.stl`, `out/airwriter-lc-frame.stl`, `out/airwriter-lc-light.stl`,
 `out/airwriter-lc-lid.stl` and `out/airwriter-lattice.stl` are committed, so the case can be printed without a
 build123d install; re-run `./build.sh` and commit
 them again after any change here or to the board. The STEPs are not (6 MB, and
@@ -96,8 +97,16 @@ It is cut for 1.5 mm acrylic: for another thickness change `ACRYLIC` in
 `params.py` and rebuild. Print it in matte black, **rim down** (its top on the bed,
 legs up), no supports.
 
+`out/airwriter-lc-light.stl` is a light-tight tube round D26, the LC's status LED
+under the test button, with a 3 mm hole in its cap under the frosted dot: smaller than
+the dot, to soften the LED. It stands loose on the board, its walls round D26 and its
+cap C46 keep it on the dot, and the acrylic traps it 0.2 mm over its top. Print it in
+matte black, **cap down**, no supports.
+
 1. Board into the tray, inserts into the frame's legs.
-2. Frame onto the board, four M2.5 × 10 from below.
+2. Frame onto the board, four M2.5 × 10 from below. Bridge JP1 (marked LC, beside
+   the LED under the test button) with solder if it isn't yet, and set the light tube
+   over that LED, cap up.
 3. Scuff the four leg tops with sandpaper and put a small dab of UV-cure glue
    (395–405 nm) on each. Squeeze-out shows through the top at the front legs.
    Not superglue: its fumes haze clear acrylic.

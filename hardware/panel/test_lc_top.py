@@ -35,8 +35,9 @@ class TestLCTop(unittest.TestCase):
         self.assertEqual(self.cut.count("<"), 2, "the cut layer is the outline and one hole")
 
     def test_only_the_arts_gold_dots_are_frosted(self):
-        # The LC's art draws its 18 gold dots in gold and the Pro's 37 lit
-        # ones in the background's #111111: those stay clear.
+        # The LC's art draws its 18 gold dots in gold, and the Pro's 37 lit
+        # ones in the background's #111111, which stay clear, but for D26's:
+        # the LC's one light (the dot under the test dot) is gold, frosted.
         r = self.lay["grid"]["dot_dia"] / 2
         starts = {(round(float(x) + r, 2), round(float(y), 2)) for x, y in
                   re.findall(r'<path d="M([\d.]+) ([\d.]+)A', self.engrave)}
@@ -50,7 +51,9 @@ class TestLCTop(unittest.TestCase):
             self.assertEqual(at in starts, c["fill"] == lc_top.GOLD and not is_test,
                              f"dot at {at} ({c['fill']})")
         gold = sum(c["fill"] == lc_top.GOLD for c in dots)
-        self.assertEqual(gold, 19, "18 gold dots and the test dot")
+        self.assertEqual(gold, 20, "18 gold dots, the test dot and D26's")
+        lit = [d for d in self.lay["dots"] if d["led"] and (round(d["x"], 2), round(d["y"], 2)) in starts]
+        self.assertEqual([(d["r"], d["c"]) for d in lit], [(4, 3)], "D26's dot, and no other lit one")
 
     def test_slash_and_labels_sit_where_the_pros_do(self):
         # The power LED is under the Pro's slash (fr4.polys.json), so the

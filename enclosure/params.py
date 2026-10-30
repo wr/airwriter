@@ -227,6 +227,20 @@ FRAME_CAP = 0.60
 LED stands to 11.85; the cap's underside is 0.49 over it, about
 PART_TOP_CLEAR."""
 
+LC_LIGHT_CLEAR = 0.25
+"""The LC light tube's inside, this clear of D26's and C46's courtyards. It is
+also what keeps the loose tube on its dot: it can wander only this far, plus
+the courtyards' own margin round the parts (lc_light.py)."""
+
+LC_LIGHT_APERTURE_D = 3.00
+"""The round opening in the LC light tube's cap, under D26's 5.64 dot: about
+half its width, a quarter of its light. Smaller than the dot on purpose, a
+diffuser: the LEDs are bright (Wells, 2026-10-29)."""
+
+LC_LIGHT_PLAY = 0.20
+"""Between the LC light tube's top and the acrylic, which traps it: room for a
+print that comes out a little tall, so the tube never presses on the top."""
+
 FRAME_TUBE_MIN_WALL = 0.45
 """The thinnest wall of the LC frame's D3 tube, one printed line: on rev
 2026.11 the LED's 4 mm spacer stands 0.38 from the board's east edge, and the

@@ -277,17 +277,19 @@ What works on `main`:
 every wall 1.70 below the rim, one thickness all round so no lines show up the outside; the
 board goes in by the sequence in `enclosure/README.md`, thumbing the west wall out past the
 DIP keys; the tray is now cut to rev 2026.11, which has no DIP switches and no
-DIP window, and board 1's tray is the one at `hw-rev-a`), LC frame, LC lid, and the Pro build's light-guide lattice. Cavity 13.04 (measured mini-DIN
+DIP window, and board 1's tray is the one at `hw-rev-a`), LC frame, LC light, LC lid, and the Pro build's light-guide lattice. Cavity 13.04 (measured mini-DIN
 height); Pro screws M2.5 × 18. Four 10 mm rubber feet sit in 0.40 pockets in the floor's
 underside, each hiding a screw counterbore. The shop's 3D models are built from this tray and
 rev 2026.11 (enclosure/README.md, "Shop model"): the LC's is live, the full build's waits on
 wr/shop#171. The LC's clear top is 1.5 mm cast acrylic (the frame's height follows `ACRYLIC`), laser file
 `hardware/panel/airwriter-lc-top.svg` (`lc_top.py`, from the LC's own art
 `hardware/panel/svg/lc.svg`, Figma Frame 17: "AirWriter LC", rev 2026.11, the Pro's gold
-dots, serial and power only, all frosted; the panel's outline and Ø3.8 test hole cut), glued with
+dots and D26's (the LC's one light), serial and power only, all frosted; the panel's outline
+and Ø3.8 test hole cut), glued with
 UV-cure glue to the four leg tops of the printed LC frame (`lc_frame.py`: the lid's legs, a
-rim and arms, and a sealed tube that lets D3 out only through a slit under the slash; spec `docs/superpowers/specs/2026-10-28-lc-acrylic-top-design.md`). Neither
-is cut or printed yet. The all-printed LC lid stays, its plunger bore now the panel's 3.8.
+rim and arms, and a sealed tube that lets D3 out only through a slit under the slash; spec `docs/superpowers/specs/2026-10-28-lc-acrylic-top-design.md`).
+D26 gets a loose printed tube of its own (`lc_light.py`), trapped between board and acrylic,
+with a 3 mm hole under its 5.64 dot. None of these is cut or printed yet. The all-printed LC lid stays, its plunger bore now the panel's 3.8.
 
 **Printers:** built and tested on the ImageWriter II only. The original ImageWriter and the
 ImageWriter LQ take the same stream and are expected to work, untested (the scope spec's

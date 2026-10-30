@@ -14,8 +14,9 @@ by colour, which LightBurn, xTool and Glowforge all read as separate jobs:
 
 svg/lc.svg is the LC's own art (Wells's Figma Frame 17: "AirWriter LC",
 rev 2026.11, serial and power only). Its gold dots are the Pro's, the ones
-that never light; it draws the other 37 in the background's #111111, and they
-stay clear, since the LC has no LEDs under them. The slash is frosted so the
+that never light, and D26's, the LC's one light, under the test dot; it draws
+the other 36 in the background's #111111, and they stay clear, since the LC
+has no LEDs under them. The slash is frosted so the
 power LED under it lights it, as it lights the Pro's bare-FR4 slash. The
 outline and the test hole are the panel's (panel_layout.json): the board under
 them is the same.
