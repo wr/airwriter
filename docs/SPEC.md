@@ -82,7 +82,7 @@ USB-C (5V) ─┬─ ESD ─ LDO 3.3V ─┬─ ESP32-S3-WROOM-1
 | U4 | AP7361C-33E | SOT-223 | 1A LDO. Do not use a 600mA part — S3 WiFi TX peaks near 500mA and margin matters |
 | U5 | USBLC6-2SC6 | SOT-23-6 | USB ESD |
 | J1 | USB-C receptacle, 16-pin | SMD | 5.1k CC1/CC2 pulldowns |
-| J2, J4 | **Kycon KMDGX-8S-BS** | THT | Mini-DIN-8 female, right-angle, fully shielded. Buy from Mouser, not Digi-Key, which is backordered. Footprint is custom — KiCad ships none — and was drawn from Kycon's drawing and verified against their STEP model. **Do not substitute Same Sky MD-80S/MD-80SM**, listed here in the original draft: their mounting is a rectangular-slot and earth-blade arrangement that does not fit this footprint. Wells solders them after delivery (J2 on every rev 2026.11 board, J4 on the full AirWriter); PCBWay does not. See `docs/sourcing.md` |
+| J2, J4 | **Kycon KMDGX-8S-BS** | THT | Mini-DIN-8 female, right-angle, fully shielded. Buy from Mouser, not Digi-Key, which is backordered. Footprint is custom — KiCad ships none — and was drawn from Kycon's drawing and verified against their STEP model. **Do not substitute Same Sky MD-80S/MD-80SM**, listed here in the original draft: their mounting is a rectangular-slot and earth-blade arrangement that does not fit this footprint. The maintainer solders them after delivery (J2 on every rev 2026.11 board, J4 on the full AirWriter); PCBWay does not. See `docs/sourcing.md` |
 | D1, D2 | WS2812B-2020 | 2020 | Status. D2 chains off D1's DOUT, so the second costs no GPIO. D1 = network, D2 = printer/job |
 | D3 | green LED + 1k | 0603 | Power. Straight across the 3V3 rail, no GPIO. Separates "board is dead" from "firmware is dead" during bring-up |
 | SW2 | Omron B3U-1000P | SMD | BOOT, on IO0: a strapping pin, so holding it at reset means USB download mode. Component side, not reachable through the case |
@@ -292,8 +292,8 @@ the ImageWriter II Owner's Guide says, its leading edge under the paper bail, pr
 an inch below its edge, and Apple left software to allow for it. A page arrives as the whole
 sheet, so the board drops that inch of every page (the Top margin setting, default -1in, §3.8)
 and iOS, told the inch is margin, draws nothing there: every row prints where iOS put it. The
-printable area is 8 x 9.5in. On board 1 the calibration page's lines landed exactly 1in from
-the top and 0.5in from the bottom at -7/8in, which is where its Top margin is set.*
+printable area is 8 x 9.5in. On a rev A board the calibration page's lines landed exactly 1in
+from the top and 0.5in from the bottom at -7/8in.*
 
 **Media.** `na_letter_8.5x11in` plus the continuous fanfold sizes. Not borderless.
 
@@ -391,8 +391,8 @@ Guide says, its leading edge under the paper bail, prints from about 1 in below 
 default is -1 in: a page, which arrives as the whole sheet, then lands where iOS laid it out.*
 
 *Amended (2026-10-20): a strip with no dots sends no `ESC G`, only the line feed it owes, held
-like any other until a strip below it prints. Board 1 fed a white page at a line a second when
-each blank strip was 1152 zeros at 9600 baud.*
+like any other until a strip below it prints. A rev A board fed a white page at a line a
+second when each blank strip was 1152 zeros at 9600 baud.*
 
 *Amended (W-1064): an sRGB page with the colour ribbon in prints in four inks. Each pixel splits
 into yellow, magenta, cyan and black (grey components go to black), each ink is dithered on
@@ -499,7 +499,7 @@ IO14 is not a strapping pin (the S3's are IO0, IO3, IO45, IO46), and SW3 shorts 
 GND with no external pull-up or capacitor; the bootloader enables the internal pull-up before
 it reads. A press already down when the app starts is the tail of the bootloader's hold, and
 the app ignores it until it is let go. A build with Wi-Fi credentials in its `sdkconfig` rejoins
-them after either reset; one without (board 1's, and every release) comes back in setup mode.
+them after either reset; one without (every release) comes back in setup mode.
 The bootloader cannot be updated over the air, so the hook is the one piece a mistake in which
 needs a USB flash on every board.
 
@@ -530,8 +530,8 @@ refuses to build without them). `esp_ota_end` checks the new image's signature b
 key that signed the *running* image, so `/update` and the GitHub path share one check. No eFuse
 is burned and the bootloader is unchanged. A board running an unsigned image accepts any valid
 image once; after that only images signed with the same key. Changing the key takes a USB
-flash. The release key is `~/.config/airwriter/firmware-signing-key.pem` on Wells's Mac (backed
-up in 1Password), never in the repo; its public half is `firmware/keys/airwriter-release.pub.pem`,
+flash. The release signing key is kept outside the repo, by the maintainer, with a backup;
+its public half is `firmware/keys/airwriter-release.pub.pem`,
 digest `6f11af9cd8eec9923985957400aa753ba034e7e057e18ebf61033cb4d327ad89`
 (`CONFIG_AIRWRITER_UPDATE_KEY_DIGEST`). A build from someone else's key makes a board that takes
 only their builds, and its web page says it can't install AirWriter releases.
@@ -639,7 +639,7 @@ ImageWriter on the port keeps its identity, UUID and bytes (`tools/ipp/test/gold
   LkUp of one name, no wildcard, to `lwc_name_check`; for a LaserWriter or ImageWriter not heard
   in the last 30 s on that link it puts off one look until 3 s after the last check. A printer
   switched on is found in seconds, new or renamed; nothing is sent while it is off (the NTR on
-  board 1: ready 3 s after its last check). A check of a new name from the address another name
+  the bench: ready 3 s after its last check). A check of a new name from the address another name
   was heard at ends that name there at once: a renamed printer answers the old name's SendStatus,
   which names nothing. An old Mac's driver looks up its printer by name before printing, and a
   look follows that too unless the name answered lately on that link. `/api/laser` counts looks
@@ -834,7 +834,7 @@ never been scoped; see 4.
    proper polarity to serve as the single ... data line for an RS423 or an RS232
    interface". Under the RS-232/RS-423 mark-negative convention that fixes TxD+ as the
    non-inverting line — exactly the corrected mapping above. Status: resolved from the
-   printer's own manual; the bench check on board 1 is confirmation, not discovery.
+   printer's own manual; a bench check on a built board is confirmation, not discovery.
 
    Impact is limited: the ImageWriter talks back over HSKo hardware handshaking rather than
    the serial receive path, so a wrong receiver polarity does not block M1 or M5. Bias
@@ -850,7 +850,7 @@ never been scoped; see 4.
    ~1.2-1.5 V threshold, and Appendix E's "Data Terminal Ready" text ("true (logic 0)
    when the printer is on and able to receive data") matches the design's
    true = logic 0 = ready sense exactly. The SP3232 receiver choice is sound; scoping
-   HSKo on board 1 is a confirmation step. (`CONFIG_AIRWRITER_INVERT_CTS` stays as the
+   HSKo on a built board is a confirmation step. (`CONFIG_AIRWRITER_INVERT_CTS` stays as the
    insurance either way.)
 
    **The handshake timing is a hard firmware constraint.** DTR goes false when the buffer
