@@ -16,7 +16,7 @@ Two boards ordered snap-apart in one PCBWay panel (`hardware/combined/`):
   (C7423117) under the panel's lit dots, an 8-way right-angle DIP bank (S1) through the west
   wall, the `test` button (SW3) under the panel's test dot.
 - **Art panel** (`hardware/panel/`), same outline, passive: no components except four SMT
-  standoffs. `hardware/panel/generate.sh` turns Wells's Figma export
+  standoffs. `hardware/panel/generate.sh` turns the Figma export
   (`hardware/panel/svg/panel.svg`, the single source of truth; fill colour is the material) into a
   byte-deterministic `panel.kicad_pcb`. Frame 9b: 56 dots, 37 lit (14 bare FR4 full-RGB pixels,
   9 single-mask and 14 double-mask teal), 19 gold, one of which is the `test` dot (3.8 mm plated
@@ -45,7 +45,7 @@ router; AirPrint is IP and runs alongside either. Only mode 1 exists in firmware
   EVQP44B3M side-press, EN reset) is on the east edge, plate face x ≈ 159.4. SW2 (B3U-1000P) is
   BOOT on IO0, on the component side. SW3's plunger is centred under the test dot.
 - The WROOM antenna is flush at x = 162 (no case bump); its keepout is the module width + 5 mm a
-  side. Wells kept the panel's back copper over the antenna; board-1 range is unquantified.
+  side. The panel's back copper stays over the antenna; the range that leaves is unquantified.
 - R/C and LED designators live on F.Fab; chips, connectors and switches keep silk designators.
 - Before believing a placement change, run the alignment proof: `tools_pcb/r7_verify.py`
   (writes nothing) and the `r7_align.py` overlay. 37/37 LEDs, plunger and holes must sit coaxial
@@ -148,4 +148,4 @@ pre-order review (2026-09-01).
   the EU's is 50 ns. About $0.60 a board more at prototype quantities ($1.01 against $0.36 at
   LCSC, 2026-10-26, 11,029 in stock); LCSC carries only the 0–70 °C grade in SOIC-16, and one
   of its listings for the part says not recommended for new designs, so check MaxLinear's
-  status before ordering. Board 1 can take the swap by hand to test it first.
+  status before ordering. A rev A board can take the swap by hand to test it first.
