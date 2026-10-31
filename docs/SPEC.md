@@ -1007,21 +1007,32 @@ Apple's StyleWriter adapter (ADSP, not PAP), is not built.
   gives the policy the current record's kind; a person's model change on the port forgets the
   port's last answer (R10) and the port is asked again at once; the person's pick of a
   StyleWriter is confirmed on the record they named (`pr_port_sw_found` by id). Jobs, the test
-  page and cleaning follow the record they are for, not the oldest (W-1116's job commit): a job
-  for a port record while another port record's printer is on the port is answered busy
-  (`port_claim` on `pr_port_absent`, 3.4), and the page's Print Test Page and Clean Print Head
-  for it answer 409 "Connect <name> to the printer port first."; the button runs the cable test
-  on a quiet port as before, and blips Busy for an absent record. A job takes its family from
-  its own record (`doc_begin` on `printers_record_is_sw`), not the port's. An ImageWriter job
-  that starts on a quiet port sends no page byte until its own model has answered `ESC ?`
-  (`colour_ok` on `pr_job_gate`): an original ImageWriter record's line coming up with the plain
-  question unanswered is its answer; while it waits it asks the plain question every 5 s, and
-  another ImageWriter model or a StyleWriter answering ends the job aborted ("Another printer
-  was connected. Print again.") before any byte, since its page was ripped for the model it was
-  sent to. A Mac's ImageWriter stream goes to whichever ImageWriter answers, and hears busy
-  while the printer on the port is a StyleWriter or a StyleWriter answered last
-  (`pr_port_other_family`), so the driver's bytes never reach a StyleWriter. The StyleWriter
-  glue's `swapped` stays `pr_port_other_family(PR_HEARD_STYLEWRITER)`, whichever record.
+  page and cleaning follow the record they are for, not the oldest and not the printer on the
+  port (W-1116's job commit): a job for a port record while another port record's printer is
+  on the port is answered busy (`port_claim` on `pr_port_absent`, 3.4), and the page's Print
+  Test Page and Clean Print Head for it answer 409 "Connect <name> to the printer port first."
+  (only the page can name such a record: the button's and DIP4's target, `pr_test_target`, is
+  the printer on the port, a ready shared printer, or the port's record for the cable test, as
+  before). A job or test page takes its family, model and screen from its own record
+  (`printers_record_is_sw`, `printers_record_model`, `printers_record_screen`), not the port's.
+  An ImageWriter job that starts on a quiet port sends no page byte until its own model has
+  answered `ESC ?` (`colour_ok` on `pr_job_gate`), and the gate reads only what this job's own
+  `ESC ?` and plain questions got (`s_job_heard`, reset as its wait begins), never the list's
+  last answer: a StyleWriter that answered before the job and was unplugged, or an LQ that
+  answered before a II job, neither ends the job nor passes it. The wait is for the job's
+  record's line whatever record is on the port now, to one stall limit in all
+  (`CONFIG_AIRWRITER_STALL_ABORT`, the questions' time counted), asking the plain question every
+  5 s with the line down, and `ESC ?` again (after the plain question, once) while the line is
+  up and the model is not named yet; a cancel or an upload cut short ends it as that, never as
+  "another printer". An original ImageWriter record's answer is its line up and the plain
+  question, asked once more then, unanswered. Another ImageWriter model or a StyleWriter
+  answering the job's own questions ends it aborted ("Another printer was connected. Print
+  again.") before any byte, since its page was ripped for the model it was sent to; the test
+  page stops the same way, before its first byte. A Mac's ImageWriter stream goes to whichever
+  ImageWriter answers, and hears busy while the printer on the port is a StyleWriter now
+  (`s_port_sw`) or a flip is pending, not on the list's last answer, so the driver's bytes
+  never reach a StyleWriter. The StyleWriter glue's `swapped` stays
+  `pr_port_other_family(PR_HEARD_STYLEWRITER)`, whichever record.
 - **AirPrint.** 360 × 360 dpi, URF `RS360`; Letter, A4 and Legal, the first the default
   (`printer_media_t` in `printer_caps`: the page's width at 360 dpi names the entry, and the
   rip keeps the engine's printable area from `rip_left` for `rip_w` dots). Margins in whole

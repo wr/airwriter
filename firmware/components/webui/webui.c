@@ -584,7 +584,7 @@ static esp_err_t test_post(httpd_req_t *req)
     if (rc == 2) return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "no printer with a test page");
     if (rc == 3) {                            // W-1116: this record is not the printer on the port
         httpd_resp_set_status(req, "409 Conflict");
-        return httpd_resp_sendstr(req, msg[0] ? msg : "another printer is on the printer port");
+        return httpd_resp_sendstr(req, msg[0] ? msg : "connect the printer to the printer port first");
     }
     if (rc) {
         httpd_resp_set_status(req, "409 Conflict");

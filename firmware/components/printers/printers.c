@@ -793,14 +793,38 @@ int printers_record_is_sw(int id)
     return sw;
 }
 
-// W-1116: an ImageWriter job's gate after its own ESC ? and the plain question (pr_job_gate):
-// the port's last answer (pr_port_heard, heard_model) and whether the line is up now decide
-// whether it may send its page, must abort, or should keep waiting.
-pr_gate_t printers_job_gate(int id, int line_up)
+pr_model_t printers_record_model(int id)
+{
+    if (!s_started) return PR_MODEL_NONE;
+    lock();
+    const pr_rec_t *r = pr_get(s_l, id);
+    pr_model_t m = r && r->where == PR_WHERE_PORT ? (pr_model_t)r->model : PR_MODEL_NONE;
+    unlock();
+    return m;
+}
+
+int printers_record_screen(int id, char *dither, size_t cap, int *gain)
+{
+    if (!s_started) return -1;
+    lock();
+    const pr_rec_t *r = pr_get(s_l, id);
+    if (r && r->where != PR_WHERE_PORT) r = NULL;
+    if (r) {
+        snprintf(dither, cap, "%s", r->dither);
+        *gain = r->gain;
+    }
+    unlock();
+    return r ? 0 : -1;
+}
+
+// W-1116: an ImageWriter job's gate (pr_job_gate) on what its own ESC ? and plain questions
+// got, never the list's last answer: a printer that answered before the job and was unplugged
+// must not end the job as "another printer", nor pass it. The list is read for the record alone.
+pr_gate_t printers_job_gate(int id, int heard, pr_model_t heard_model, int line_up)
 {
     if (!s_started) return PR_GATE_OTHER;
     lock();
-    pr_gate_t g = pr_job_gate(s_l, id, pr_port_heard(s_l), (pr_model_t)s_l->heard_model, line_up);
+    pr_gate_t g = pr_job_gate(s_l, id, heard, heard_model, line_up);
     unlock();
     return g;
 }
@@ -933,9 +957,10 @@ static int start_page(int id, int on, char *err, size_t cap)
 }
 
 // W-1103: one cleaning of a StyleWriter's print head, run by the board. Its
-// answer is the status: 0, or 409 while a job holds the printer or another
-// printer answered on the port, or 502 for a printer that is off or has
-// something to see to (no paper, a jam, the cover): the one sentence is true of both.
+// answer is the status: 0; 409 when this StyleWriter is not the printer on the
+// port (another port record's printer is, W-1116) or while a job holds the
+// printer; or 502 for a printer that is off or has something to see to (no
+// paper, a jam, the cover): the one sentence is true of both.
 static int clean_head(int id, char *err, size_t cap)
 {
     if (!s_cfg.clean) {

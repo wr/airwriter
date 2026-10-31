@@ -301,16 +301,20 @@ Traps already explained in a code comment are listed only when the comment is ea
   of its own once it has answered twice (`pr_port_seen_sw`, `pr_port_seen`: one answer is
   `PR_SEEN_AGAIN`), never a notice; meanwhile, and whenever the family that answered last is
   not a record's (`pr_port_other_family`), nothing in that record's language may go out. What
-  phones are told, and jobs, the test page and cleaning, all follow the printer on the port by
-  record (W-1116's job commit): a job, test page or cleaning for a port record that is not the
-  one on the port -- another port record's printer is -- is answered busy or 409 "Connect
-  <name> to the printer port first." (`pr_port_absent`, the port sink's `port_claim`,
-  `port_page_refused`, `clean_head`); a job takes its family from its own record
-  (`printers_record_is_sw`), not the port's; an ImageWriter job on a quiet port sends no page
-  byte until its own model answers `ESC ?` (`colour_ok` on `pr_job_gate`), aborting with
-  "Another printer was connected. Print again." if another model or a StyleWriter answers; a
-  Mac's ImageWriter stream hears busy while a StyleWriter is on the port or answered last
-  (`lt_print_begin`). `stylewriter_cfg_t.swapped` is
+  phones are told follows the printer on the port (`pr_port_say`, `port_push`); jobs, the test
+  page and cleaning follow the record they are for (W-1116's job commit): a job, test page or
+  cleaning for a port record that is not the one on the port -- another port record's printer
+  is -- is answered busy or 409 "Connect <name> to the printer port first." (`pr_port_absent`,
+  the port sink's `port_claim`, `port_page_refused`, `clean_head`); a job or test page takes
+  its family, model and screen from its own record (`printers_record_*`), not the port's; an
+  ImageWriter job on a quiet port sends no page byte until its own model answers `ESC ?`
+  (`colour_ok` on `pr_job_gate`). **The gate is fed only what the job's own questions got
+  (`s_job_heard`), never the list's `heard`**: the list's last answer is history (a StyleWriter
+  that answered and was unplugged stays `pr_port_current`), and a gate read from it ended a
+  quiet-port ImageWriter job at once with "Another printer was connected" (task 6 review, I1).
+  For the same reason the job's wait in `ribbon_ask` is not guarded on the current record's
+  mode, and `lt_print_begin` reads `s_port_sw` (a StyleWriter now), not `pr_port_other_family`.
+  `stylewriter_cfg_t.swapped` is
   `pr_port_other_family(PR_HEARD_STYLEWRITER)`, whichever record. `s_port_sw` flips only under
   the job lock (`port_sw_sync`), so
   read it with the lock held. And a StyleWriter-first port (`port_policy.h`) gets `ESC ?` only

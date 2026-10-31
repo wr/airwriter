@@ -2302,6 +2302,29 @@ static void test_job_gate(void)
     CHECK_EQ_INT(pr_port_heard(&L), PR_HEARD_STYLEWRITER);
     CHECK_EQ_INT(pr_job_gate(&L, iw, PR_HEARD_IMAGEWRITER, PR_MODEL_IW2, 1), PR_GATE_GO);
     CHECK_EQ_INT(pr_job_gate(&L, iw, PR_HEARD_NONE, PR_MODEL_NONE, 0), PR_GATE_WAIT);
+    // Task 6 review I1: a StyleWriter that answered before the job and was unplugged is the
+    // list's last answer and the printer on the port, yet an ImageWriter job on a quiet port
+    // waits for its own printer -- it is neither "another printer" nor passed -- until its own
+    // questions answer. The board feeds the gate only what the job's ESC ? and plain
+    // questions got (job-local, reset as the job's wait begins), never the list's heard.
+    CHECK(pr_port_current(&L) == pr_get(&L, sw));
+    CHECK_EQ_INT(pr_job_gate(&L, iw, PR_HEARD_NONE, PR_MODEL_NONE, 0), PR_GATE_WAIT);  // line down
+    CHECK_EQ_INT(pr_job_gate(&L, iw, PR_HEARD_NONE, PR_MODEL_NONE, 1), PR_GATE_WAIT);  // up, not named yet
+    CHECK_EQ_INT(pr_job_gate(&L, iw, PR_HEARD_IMAGEWRITER, PR_MODEL_IW2, 1), PR_GATE_GO);   // its own answer
+    CHECK_EQ_INT(pr_job_gate(&L, iw, PR_HEARD_STYLEWRITER, PR_MODEL_SW2, 0), PR_GATE_OTHER); // the job's own plain question answered
+    // An original ImageWriter's answer is its line up with the job's own plain question
+    // unanswered (nothing heard), whatever the list last heard (M2).
+    CHECK_EQ_INT(pr_job_gate(&L, iw1, PR_HEARD_NONE, PR_MODEL_NONE, 1), PR_GATE_GO);
+    CHECK_EQ_INT(pr_job_gate(&L, iw1, PR_HEARD_NONE, PR_MODEL_NONE, 0), PR_GATE_WAIT);
+    CHECK_EQ_INT(pr_job_gate(&L, iw1, PR_HEARD_STYLEWRITER, PR_MODEL_SW2, 1), PR_GATE_OTHER);
+    // An LQ answered earlier (the list's last); a II job whose own ESC ? was lost waits, and
+    // is not ended as "another printer" on the list's say-so.
+    seen_iw(PR_PORT_IWLQ);
+    CHECK_EQ_INT(pr_port_heard(&L), PR_HEARD_IMAGEWRITER);
+    CHECK(pr_port_current(&L) == pr_get(&L, lq));
+    CHECK_EQ_INT(pr_job_gate(&L, iw, PR_HEARD_NONE, PR_MODEL_NONE, 1), PR_GATE_WAIT);
+    CHECK_EQ_INT(pr_job_gate(&L, iw, PR_HEARD_IMAGEWRITER, PR_MODEL_IWLQ, 1), PR_GATE_OTHER); // its own ESC ? named the LQ
+    CHECK_EQ_INT(pr_job_gate(&L, iw, PR_HEARD_IMAGEWRITER, PR_MODEL_IW2, 1), PR_GATE_GO);
 }
 
 // W-1116: a port record is absent while another port record's printer is the one on the port

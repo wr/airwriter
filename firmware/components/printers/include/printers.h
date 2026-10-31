@@ -134,11 +134,17 @@ int         printers_port_absent(int id);
 // W-1116: whether port record `id` is a StyleWriter (doc_begin reads the job's own family from
 // its record, not the port's). 0 for an ImageWriter, an AppleTalk printer, or no such record.
 int         printers_record_is_sw(int id);
-// W-1116: what an ImageWriter job on port record `id` does after its own ESC ? and the plain
-// question (pr_job_gate), given the port's last answer and whether the line is up now:
-// PR_GATE_GO to send its page, PR_GATE_OTHER to abort (another model or a StyleWriter answered),
-// PR_GATE_WAIT to keep waiting with nothing sent.
-pr_gate_t   printers_job_gate(int id, int line_up);
+// W-1116: port record `id`'s model (pr_model_t), PR_MODEL_NONE for no such port record, and its
+// halftone and gain (-1 for no such port record). A job or test page reads its own record's,
+// not the printer on the port's.
+pr_model_t  printers_record_model(int id);
+int         printers_record_screen(int id, char *dither, size_t cap, int *gain);
+// W-1116: what an ImageWriter job (or test page) on port record `id` does after its own ESC ?
+// and plain questions (pr_job_gate), given only what they got -- `heard` (pr_heard_t) and the
+// model it named, never the list's history -- and whether the line is up now: PR_GATE_GO to
+// send its page, PR_GATE_OTHER to abort (another model or a StyleWriter answered), PR_GATE_WAIT
+// to keep waiting with nothing sent.
+pr_gate_t   printers_job_gate(int id, int heard, pr_model_t heard_model, int line_up);
 // The full sequence found the port's StyleWriter to be `m`: the record the person picked
 // (W-1116, `id`) takes it (no notice: the person had named it a StyleWriter already; sharing
 // stays as it was), and `m` is the printer on the port now. No-op for an `id` that is not a
