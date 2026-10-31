@@ -521,24 +521,44 @@ static int ribbon_ask(int for_job)
     // for its ImageWriter. It waits for the line to its deadline (s_job_deadline_ms: one stall
     // limit in all, the plain questions' time counted), and every 5 s with the line down asks
     // whether a StyleWriter took the quiet port; one answering ends the wait.
+    //
+    // Then its ESC ? waits the idle one's settle (W-1064) after a line-up: a II switched on
+    // mid-wait does not answer its first ESC ? yet, and with an original ImageWriter record
+    // listed its silence would be taken for the original's. The settle is the job's own: 2 s
+    // from when this wait first saw the line up, since serial_out's line task and this loop poll
+    // the same pin every 100 ms and either may see the edge first; and a line-up the line task
+    // saw just before the job (s_ribbon_due still ahead) is waited out too. Never more than
+    // 2.5 s, however stale s_ribbon_due is; a cancel or a cut upload ends it, and a line that
+    // goes down again inside it is waited for anew.
     uint32_t plain_at = uptime_ms();
-    while (for_job && !serial_out_clear() && !job_stopping() &&
-           (int32_t)(s_job_deadline_ms - uptime_ms()) > 0) {
-        vTaskDelay(pdMS_TO_TICKS(100));
-        if (uptime_ms() - plain_at >= 5000) {
-            if (job_ask_plain() != SW_NONE) return 0;     // a StyleWriter: not one ImageWriter byte
-            plain_at = uptime_ms();
+    int saw_down = 0;                   // this ask found the line down
+    for (;;) {
+        while (for_job && !serial_out_clear() && !job_stopping() &&
+               (int32_t)(s_job_deadline_ms - uptime_ms()) > 0) {
+            saw_down = 1;
+            vTaskDelay(pdMS_TO_TICKS(100));
+            if (uptime_ms() - plain_at >= 5000) {
+                if (job_ask_plain() != SW_NONE) return 0;     // a StyleWriter: not one ImageWriter byte
+                plain_at = uptime_ms();
+            }
         }
+        if (!serial_out_clear()) return 0;
+        if (!for_job) break;
+        if (job_stopping()) return 0;
+        TickType_t t0 = xTaskGetTickCount();
+        TickType_t hold = saw_down ? pdMS_TO_TICKS(2000) : 0;
+        if (s_ribbon_want) {
+            TickType_t left = s_ribbon_due - t0;
+            if ((int32_t)left > 0 && left > hold) hold = left;
+        }
+        if (hold > pdMS_TO_TICKS(2500)) hold = pdMS_TO_TICKS(2500);
+        while (!job_stopping() && xTaskGetTickCount() - t0 < hold)
+            vTaskDelay(pdMS_TO_TICKS(100));
+        if (job_stopping()) return 0;
+        if (serial_out_clear()) break;
+        if ((int32_t)(s_job_deadline_ms - uptime_ms()) <= 0) return 0;
+        saw_down = 1;                   // down again inside the settle
     }
-    if (!serial_out_clear()) return 0;
-    // W-1116: a line that came up after a second or more down (printer_line_changed set
-    // s_ribbon_due 2 s on) gets the same settle a job's or test page's question as the idle
-    // one does (W-1064): a II switched on mid-wait does not answer its first ESC ? yet, and
-    // with an original ImageWriter record listed its silence would be taken for the original's.
-    while (for_job && s_ribbon_want && (int32_t)(xTaskGetTickCount() - s_ribbon_due) < 0 &&
-           !job_stopping())
-        vTaskDelay(pdMS_TO_TICKS(100));
-    if (job_stopping()) return 0;
     // W-1116: a job's or test page's plain question goes before any ImageWriter byte -- the
     // resync, ESC ?, the CR -- whenever the line is up: a StyleWriter that raised its line and
     // heard ESC ? first would stop listening until a reset, and an original ImageWriter record

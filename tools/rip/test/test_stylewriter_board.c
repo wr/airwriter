@@ -17,8 +17,8 @@
 //   - the answer to the Clean Print Head key: 0 when a cleaning may begin, 409 while a job holds
 //     the printer, 502 for a printer that is off or holds a fault, and nothing at all for the
 //     original, which has none; one press is one `P`;
-//   - with the port's last answer from an ImageWriter (the list's pr_port_other_family, the
-//     cfg's swapped), no job, test page or cleaning sends it anything.
+//   - with an ImageWriter the printer on the port now (the cfg's swapped; on the board,
+//     printers_port_on_is_imagewriter), no job, test page or cleaning sends it anything.
 #include "test_util.h"
 #include "stylewriter.h"
 #include "sw_page.h"
@@ -714,10 +714,10 @@ int main(void)
     CHECK_EQ_INT(wire_count("P"), 1);
 
     // ---------------------------------------------------------- another printer on the port
-    // The printer list says an ImageWriter answered on the port last (pr_port_other_family,
-    // the cfg's swapped): the StyleWriter's language must not reach it, so no job, test page
-    // or cleaning starts a session,
-    // and nothing at all is sent, not even the link switched. The port's own questions are the
+    // An ImageWriter is the printer on the port now (the cfg's swapped; on the board,
+    // printers_port_on_is_imagewriter): the StyleWriter's language must not reach it, so no
+    // job, test page or cleaning starts a session, and nothing at all is sent, not even the
+    // link switched. The port's own questions are the
     // policy's: the plain question is how the record's StyleWriter is found again.
     {
         stylewriter_cfg_t cfg = { .record_is_sw = rec_is_sw, .state = on_state, .cart = on_cart,

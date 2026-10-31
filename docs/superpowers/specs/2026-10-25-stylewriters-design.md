@@ -8,16 +8,18 @@ Reverses the StyleWriter cut in `2026-08-04-printer-support-scope-design.md`.
 **Amended 2026-10-30** by `W-1116 Printer port: several printers, the one plugged in shows
 online` (`2026-10-30-port-printers-design.md`): the swapped-port refusal and the "changed"
 notice of the 2026-10-27 amendment are replaced; the port keeps a record per model, the one
-answering online and the rest offline, and the family check alone stays (`pr_port_other_family`)
-so one family's bytes never reach the other. The automatic look is every 5 s, not 60, while
-the port's printer is not answering, whatever the list holds; the order of the questions is
-the list's, not the record's: the plain question first wherever a StyleWriter record is
-listed, the port last answered as a StyleWriter, or an original ImageWriter record is listed;
-the full sequence wherever an original StyleWriter record is listed. A StyleWriter record
-that answers is asked its status on a line-up edge as well, so an ImageWriter put in its
-place is found by the failed check and the stop's look in about 1.5 s. An ImageWriter record
-whose port a StyleWriter answered is asked as any port that is not answering (the quiet rule
-below went with the notice).
+answering online and the rest offline, and a family check alone stays so one family's bytes
+never reach the other: on what is on the port now and what the work's own questions got, never
+the family that answered last (SPEC §3.16: `pr_port_absent` at a job's claim, the ImageWriter
+job's own gate, and `printers_port_on_is_imagewriter` for a StyleWriter's job, page or
+cleaning). The automatic look is every 5 s, not 60, while the port's printer is not answering,
+whatever the list holds; the order of the questions is the list's, not the record's: the plain
+question first wherever a StyleWriter record is listed, the port last answered as a
+StyleWriter, or an original ImageWriter record is listed; the full sequence wherever an
+original StyleWriter record is listed. A StyleWriter record that answers is asked its status on
+a line-up edge as well, so an ImageWriter put in its place is found by the failed check and the
+stop's look in about 1.5 s. An ImageWriter record whose port a StyleWriter answered is asked as
+any port that is not answering (the quiet rule below went with the notice).
 
 **Amended 2026-10-27, before the bench** (SPEC §3.16 has each in full; the 2026-10-30
 amendment above changes the first two). A port whose record is, or that last answered as, a

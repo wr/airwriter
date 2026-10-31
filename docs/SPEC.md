@@ -755,7 +755,8 @@ read back is a list made again). At most 8 records.
   the port's last answer,
   and the port is asked again at once (R19). `/api/status` `model` is the record
   on the port's make and model, an ImageWriter's by its model. How long a change takes to
-  show:
+  show (a job or test page waiting for its ImageWriter takes the same 2 s settle after the
+  line comes up, then the plain question and `ESC ?`, 3.16):
 
   | Printer | Plugged in or switched on, to Ready | Unplugged or switched off, to Offline |
   |---|---|---|
@@ -1027,7 +1028,13 @@ Apple's StyleWriter adapter (ADSP, not PAP), is not built.
   answered before a II job, neither ends the job nor passes it. The wait is for the job's
   record's line whatever record is on the port now, to one stall limit in all
   (`CONFIG_AIRWRITER_STALL_ABORT`, the questions' time counted), asking the plain question every
-  5 s with the line down; whenever the line is up the plain question goes first, and a
+  5 s with the line down. A line that comes up while the job waits gets the idle line-up's
+  2 s settle (W-1064) before any question, so a II switched on mid-wait answers its first
+  `ESC ?` and is not taken for an original ImageWriter's silence: 2 s from when the job's own
+  wait saw the line up (the wait and serial_out's line task each poll the pin, and either may
+  see the edge first), or to the idle settle's end if that is later (a line-up just before
+  the job), never more than 2.5 s; a cancel or a cut upload ends it, and a line that drops
+  inside it is waited for again. Whenever the line is up the plain question goes first, and a
   StyleWriter answering it is the job's answer with no ImageWriter byte sent (not the resync,
   not `ESC ?`: one that raised its line and heard `ESC ?` first would stop listening until a
   reset); only after it got nothing do the resync and `ESC ?` go, again after a 500 ms rest
