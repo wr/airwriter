@@ -110,7 +110,8 @@ static void test_invariants(void)
         int person_look = in.look && in.look_person;
         // R20: an ImageWriter II or LQ record on the port whose ESC ? answer was lost, its line
         // up, not answering: asked for it again.
-        int reask = in.line_ready && in.kind == PR_KIND_IMAGEWRITER && in.iw_unnamed && !answers;
+        int reask = in.line_ready && in.kind == PR_KIND_IMAGEWRITER && in.iw_unnamed && !answers &&
+                    in.heard != PR_HEARD_STYLEWRITER;
 
         // An act the board wants repeated goes first, whatever else is true.
         if (in.confirm != PA_NONE) { CHECK_EQ_INT(a, in.confirm); continue; }
@@ -219,6 +220,41 @@ static void test_lost_answer_reask(void)
     in.said_other = 1;
     t = run(in, in.now_ms, in.now_ms + 60 * SEC + 1);
     CHECK_EQ_INT(t.counts[PA_PLAIN] + t.counts[PA_ESCQ], 0);
+    // A StyleWriter answered last (its first sighting, no record yet, so an ImageWriter record
+    // is current by fallback; its confirm got nothing): no ESC ? to it, which could leave it
+    // deaf; the plain question alone, as rule 7 has it. A II in its place raises its line, and
+    // that line-up asks it.
+    in = base(PR_KIND_IMAGEWRITER);
+    in.iw_unnamed = 1;
+    in.heard = PR_HEARD_STYLEWRITER;
+    t = run(in, in.now_ms, in.now_ms + 61 * SEC);
+    CHECK_EQ_INT(t.counts[PA_PLAIN], 12);
+    CHECK_EQ_INT(t.counts[PA_ESCQ], 0);
+    // The board holds iw_unnamed off through a line-up's 2 s settle (s_ribbon_want), so a
+    // cadence plain question inside the settle is rule 7's, owing no ESC ?, and the first
+    // question after the settle is the line-up's own, in its order (the plain question first
+    // on a StyleWriter-first port); the re-ask begins only once that got nothing.
+    in = base(PR_KIND_IMAGEWRITER);
+    in.sw_listed = 1;
+    in = at(in, 5 * SEC, 0);                                  // the cadence due inside the settle
+    CHECK_EQ_INT(port_policy(&in), PA_PLAIN);
+    port_after(&in, PA_PLAIN, PR_HEARD_NONE, 0);
+    CHECK_EQ_INT(in.event_plain, 0);                          // not a re-ask's: no ESC ? owed
+    in.now_ms += 500;
+    CHECK_EQ_INT(port_policy(&in), PA_NONE);
+    in.now_ms += 1500;
+    in.line_up_edge = 1;                                      // the settle is over
+    CHECK_EQ_INT(port_policy(&in), PA_PLAIN);                 // the line-up's own, first
+    port_after(&in, PA_PLAIN, PR_HEARD_NONE, 0);
+    in.now_ms += 500;
+    CHECK_EQ_INT(port_policy(&in), PA_ESCQ);
+    port_after(&in, PA_ESCQ, PR_HEARD_NONE, 0);               // lost: the board turns iw_unnamed on
+    in.iw_unnamed = 1;
+    in = at(in, 5 * SEC, 0);
+    CHECK_EQ_INT(port_policy(&in), PA_PLAIN);                 // the re-ask: the cadence's question
+    port_after(&in, PA_PLAIN, PR_HEARD_NONE, 0);
+    in.now_ms += 500;
+    CHECK_EQ_INT(port_policy(&in), PA_ESCQ);                  // then ESC ? 500 ms later
 }
 
 static void test_said_other(void)
@@ -322,8 +358,8 @@ static void test_said_other_person_look(void)
 }
 
 // W-1116: an act the board wants repeated at once (`confirm`: a seen call answered
-// PR_SEEN_AGAIN, one sighting of a model with no record; the same answer twice makes the
-// record) goes first, whatever else is due or pending, and once: port_after clears it before
+// PR_SEEN_AGAIN, one sighting of an answer that would change the list, R16; the same answer
+// twice makes the change) goes first, whatever else is due or pending, and once: port_after clears it before
 // anything else, and the board sets it again only on another first sighting.
 static void test_confirm_repeats(void)
 {

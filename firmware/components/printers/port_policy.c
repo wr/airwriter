@@ -11,9 +11,14 @@ static int due(uint32_t now_ms, uint32_t last_ms, uint32_t every_ms)
 
 // R20: an ImageWriter II or LQ record on the port whose ESC ? answer was lost (its line up,
 // not named since it came up, not answering) is asked for it again every 5 s.
+// Not while a StyleWriter answered last: one that raised its line and was sighted once (no
+// record yet, so an ImageWriter record is current by fallback) must not hear ESC ?, which
+// could leave it deaf; an ImageWriter put in its place raises its line, and that line-up
+// asks it.
 static int reask(const port_in_t *in)
 {
-    return in->line_ready && in->kind == PR_KIND_IMAGEWRITER && in->iw_unnamed && !in->answering;
+    return in->line_ready && in->kind == PR_KIND_IMAGEWRITER && in->iw_unnamed && !in->answering &&
+           in->heard != PR_HEARD_STYLEWRITER;
 }
 
 void port_tick(port_in_t *in)
@@ -27,8 +32,8 @@ void port_tick(port_in_t *in)
 
 port_act_t port_policy(const port_in_t *in)
 {
-    // An answer the caller wants confirmed (one sighting of a model with no record): the
-    // same question again, before anything else.
+    // An answer the caller wants confirmed (one sighting of an answer that would change the
+    // list, R16): the same question again, before anything else.
     if (in->confirm != PA_NONE) return in->confirm;
 
     int sw = in->kind == PR_KIND_STYLEWRITER;

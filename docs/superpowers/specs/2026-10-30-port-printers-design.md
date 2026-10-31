@@ -409,7 +409,8 @@ Rulings made during the build that change what the sections above say:
   so does a line-up mid-job (a paper reload).
 - **R19** (Adding by hand): removing the record on the port forgets the port's last answer, as
   a model change does, and the port is asked again at once.
-- **R20** (What the port is asked, rule 3): an ImageWriter II or LQ record on the port whose
-  `ESC ?` answer was lost is asked again every 5 s while its line is up, as at a line-up (the
-  plain question first where the port is StyleWriter-first, then `ESC ?`); not while a
-  Something else or Unknown printer record is listed, and not on a dirty link.
+- **R20** (What the port is asked, rule 4): an ImageWriter II or LQ record on the port whose
+  `ESC ?` answer was lost gets the 5 s plain question and then `ESC ?` when it got nothing,
+  while its line is up; not while a Something else or Unknown printer record is listed, not
+  on a dirty link, not before the line-up's own question has run (the 2 s settle), and not
+  while a StyleWriter answered last.

@@ -746,8 +746,9 @@ read back is a list made again). At most 8 records.
   line-up mid-job (a paper reload drops the line) keeps the name, and so does one while the
   link is dirty after a job cut short, when the idle `ESC ?` waits for a job's resync (3.8)
   (R17; the plain question still runs while the printer isn't answering). A II or LQ record
-  on the port whose `ESC ?` answer was lost is asked again every 5 s while its line is up, as
-  at a line-up (R20, 3.16). Removing the record on the port forgets the port's last answer,
+  on the port whose `ESC ?` answer was lost gets the 5 s plain question and then `ESC ?` when
+  it got nothing, while its line is up (R20, 3.16). Removing the record on the port forgets
+  the port's last answer,
   and the port is asked again at once (R19). `/api/status` `model` is the record
   on the port's make and model, an ImageWriter's by its model. How long a change takes to
   show:
@@ -940,10 +941,10 @@ Apple's StyleWriter adapter (ADSP, not PAP), is not built.
   plugged in is found in seconds by someone who never added it, at boot after the quiet
   power-on, when `ESC ?` went unanswered, and once per busy spell when a kick is wanted and
   none has been asked since the line went down; an ImageWriter II or LQ record on the port
-  that `ESC ?` has not named since its line came up (a lost answer, `iw_unnamed`; not on a
-  dirty link) is asked as at a line-up every 5 s while its line is up and it does not answer,
-  the plain question first where the port is StyleWriter-first and then `ESC ?` (R20); the
-  CTRL-X kick last, only after a plain
+  that `ESC ?` has not named since its line came up (a lost answer, `iw_unnamed`: not on a
+  dirty link, not before the line-up's own question has run, and not while a StyleWriter
+  answered last) gets the 5 s plain question and then `ESC ?` when it got nothing, while its
+  line is up and it does not answer (R20); the CTRL-X kick last, only after a plain
   question since the line went down that got nothing, and never while the current record is a
   StyleWriter, so a StyleWriter that answers the plain question is never kicked (the
   StyleWriter branch's quiet ImageWriter record, nothing of its own and one kick a look while a

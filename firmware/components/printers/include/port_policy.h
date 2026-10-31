@@ -71,7 +71,8 @@ typedef struct {
     int      sw1_listed;      // an original StyleWriter record is listed: it ignores ? until reset
     int      said_other;      // "Something else": the person said what is there is not a printer we ask
     int      iw_unnamed;      // R20: the current record is an ImageWriter II or LQ whose ESC ? answer
-                              // is not in since its line came up (a lost answer), the link clean
+                              // is not in since its line came up (a lost answer), the link clean and
+                              // the line-up's own question run (the board holds it off in the settle)
     int      line_ready;      // HSKo
     int      want_kick;       // printer_state_want_kick()
     int      heard;           // pr_heard_t: the family that last answered on the port

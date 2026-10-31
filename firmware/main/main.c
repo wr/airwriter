@@ -1353,6 +1353,13 @@ static void offers_apply(void);
 static void port_model_changed(int id)
 {
     (void)id;
+    // The port's answer went with the record that changed or was removed (R10, R19): the name
+    // ESC ? gave was that record's, so no other reads Ready on it until the port answers again.
+    if (printers_port_heard() == PR_HEARD_NONE && s_iw_named) {
+        s_iw_named = 0;
+        line_source();
+        port_push(printer_state_view().state);
+    }
     s_look = 1;
 }
 
@@ -1604,9 +1611,11 @@ static void kick_task(void *arg)
             .said_other = mode == PORT_UNKNOWN_SAID, .line_ready = line_ready,
             // R20: an ImageWriter II or LQ record on the port that ESC ? has not named since its
             // line came up (a lost answer) is asked again every 5 s; not on a dirty link, where
-            // the idle ESC ? waits for a job's resync (R17).
+            // the idle ESC ? waits for a job's resync (R17), and not before the line-up's own
+            // question has run (s_ribbon_want holds through the 2 s settle), so the re-ask never
+            // sends ESC ? inside the settle, nor ahead of a StyleWriter-first port's plain question.
             .iw_unnamed = mode == PORT_IMAGEWRITER && !s_iw_named && !s_link.dirty &&
-                          printers_port_model() != PR_MODEL_IW1,
+                          !s_ribbon_want && printers_port_model() != PR_MODEL_IW1,
             .want_kick = (mode == PORT_IMAGEWRITER || mode == PORT_NONE) && printer_state_want_kick(),
             .heard = printers_port_heard(), .now_ms = now,
             .line_up_edge = line_up, .look = look, .look_person = look && look_person,

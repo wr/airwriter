@@ -72,8 +72,10 @@ esp_err_t   printers_start(const printers_cfg_t *cfg);
 // (R16: a new model, or one that replaces Something else or drops an Unknown record), or -1.
 int         printers_port_seen(int iw_model, int ready);
 // W-1103: a StyleWriter answered on the port as `m` (SW_NONE: nothing did, no
-// change). Its record's, or a record of its own once it has answered twice
-// (pr_port_seen_sw, W-1116). Returns the core's result (the record id, PR_SEEN_AGAIN, or -1).
+// change). Its record's at once where nothing else would change; else (a record
+// of its own to make, a Something else record to replace, an Unknown record to
+// drop: R16) once it has answered twice (pr_port_seen_sw, W-1116). Returns the
+// core's result (the record id, PR_SEEN_AGAIN for the first of those two, or -1).
 int         printers_port_seen_sw(sw_model_t m);
 // What laser.c heard (once per printer, its link as at_link_t) and its query:
 // answered on at_link at net.node with its page count (-1 none), or not

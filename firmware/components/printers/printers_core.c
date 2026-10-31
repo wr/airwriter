@@ -216,6 +216,15 @@ static void port_heard(pr_list_t *l, int heard, int model)
     l->heard_model = (uint8_t)model;
 }
 
+// The port's last answer is forgotten (R10, R19): the person's word is the newest, and a
+// sighting pending from before it is not the first of the two answers that make a change.
+static void port_forget(pr_list_t *l)
+{
+    l->heard = PR_HEARD_NONE;
+    l->heard_model = 0;
+    l->pending_model = 0;
+}
+
 // ------------------------------------------------------------- names
 
 // The name a printer gives itself: a port printer's model, an AppleTalk
@@ -645,6 +654,7 @@ int pr_set_model(pr_list_t *l, int id, pr_model_t m)
     const pr_rec_t *has = m == PR_MODEL_NONE ? pr_port_said_other(l) : pr_port_of(l, m);
     if (has && has != r) return -2;
     r->found_auto = 0;
+    int on_port = pr_port_current(l) == r;        // before its model moves
     if (m == PR_MODEL_NONE) {
         int own = name_is_own(r);
         r->kind = PR_KIND_UNKNOWN;
@@ -654,23 +664,21 @@ int pr_set_model(pr_list_t *l, int id, pr_model_t m)
         if (!strcmp(r->dither, "apple")) snprintf(r->dither, sizeof r->dither, "atkinson");
         if (own) set_name(l, r, UNKNOWN_NAME);
         notes_clear(l, id, PR_NOTE_UNKNOWN_PORT);
+        if (on_port) port_forget(l);              // their word; a sighting before it is dropped
         return 0;
     }
-    int on_port = pr_port_current(l) == r;        // before its model moves
     become_model(l, r, m);
     r->announced = 1;
     if (can_share(l, r)) r->shared = 1;
     else note_add(l, PR_NOTE_TOO_MANY, id, 0);
     // A model the person names on the record that is on the port is the newest word on what
-    // the port holds: the answer before it is forgotten, whichever family gave it, and the
-    // board asks the port again at once, so what answers decides again (R10: an answer kept
+    // the port holds: the answer before it is forgotten, whichever family gave it, with any
+    // sighting pending from before it, and the board asks the port again at once, so what
+    // answers decides again (R10: an answer kept
     // under a model this record no longer has would make a record added later with that
     // model the one on the port without its printer ever answering). Named on another record
     // (W-1116), nothing is forgotten: the printer on the port is still there.
-    if (on_port) {
-        l->heard = PR_HEARD_NONE;
-        l->heard_model = 0;
-    }
+    if (on_port) port_forget(l);
     return 0;
 }
 
@@ -699,10 +707,7 @@ int pr_remove(pr_list_t *l, int id)
     if (i < 0) return -1;
     // The record on the port goes: the port's last answer was its and is forgotten (R19), so
     // the oldest record is the port's only until something answers; the board asks at once.
-    if (&l->r[i] == pr_port_current(l)) {
-        l->heard = PR_HEARD_NONE;
-        l->heard_model = 0;
-    }
+    if (&l->r[i] == pr_port_current(l)) port_forget(l);
     notes_clear(l, id, -1);
     seen_drop(l, id);
     memmove(&l->r[i], &l->r[i + 1], (size_t)(l->n - i - 1) * sizeof l->r[0]);

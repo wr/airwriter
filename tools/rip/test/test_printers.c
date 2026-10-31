@@ -1438,6 +1438,32 @@ static void test_sw_port_found(void)
     CHECK(strcmp(pr_get(&L, u)->dither, "atkinson") == 0);
 }
 
+// A first sighting stranded when the person then picks Something else, or removes the record
+// on the port, must not count as the first of the two answers that make a change: what
+// forgets the port's answer (R10, R19) forgets the pending sighting too.
+static void test_pending_forgotten(void)
+{
+    fresh();
+    int u = pr_port_seen(&L, PR_PORT_SILENT);                        // the Unknown printer
+    CHECK_EQ_INT(pr_port_seen(&L, PR_PORT_IW2), PR_SEEN_AGAIN);      // sighted once
+    CHECK_EQ_INT(pr_set_model(&L, u, PR_MODEL_NONE), 0);             // the person: Something else
+    CHECK_EQ_INT(pr_port_heard(&L), PR_HEARD_NONE);
+    CHECK_EQ_INT(pr_port_seen(&L, PR_PORT_IW2), PR_SEEN_AGAIN);      // the first again, not the second
+    CHECK(pr_port_said_other(&L) == pr_get(&L, u));                  // their choice stands
+    CHECK(pr_port_seen(&L, PR_PORT_IW2) > 0);                        // the second in a row replaces it
+    CHECK(pr_port_said_other(&L) == NULL);
+    // Removing the record on the port the same.
+    fresh();
+    int iw = seen_iw(PR_PORT_IW2);
+    CHECK_EQ_INT(pr_port_seen(&L, PR_PORT_IWLQ), PR_SEEN_AGAIN);
+    CHECK_EQ_INT(pr_remove(&L, iw), 0);                              // the one on the port (by fallback)
+    CHECK_EQ_INT(pr_port_heard(&L), PR_HEARD_NONE);
+    CHECK_EQ_INT(pr_port_seen(&L, PR_PORT_IWLQ), PR_SEEN_AGAIN);
+    CHECK_EQ_INT(L.n, 0);
+    CHECK(pr_port_seen(&L, PR_PORT_IWLQ) > 0);
+    CHECK_EQ_INT(L.n, 1);
+}
+
 // The full sequence says the person's pick was another StyleWriter: the record takes the
 // printer's word, quietly, and keeps what the person decided about it.
 static void test_sw_found(void)
@@ -2706,6 +2732,7 @@ int main(void)
     test_sw_models();
     test_sw_port_found();
     test_sw_found();
+    test_pending_forgotten();
     test_sw_set_model();
     test_sw_add_port();
     test_sw_clean();
