@@ -51,7 +51,8 @@
 //    one; the first of the two in a row that make the change, R16) is not a record's yet:
 //    the caller then sets `confirm` to the act, after port_after, and the next call repeats
 //    it at once. It fills `iw_unnamed` (R20) when the current record is an ImageWriter II or
-//    LQ that ESC ? has not named since its line came up, on a clean link.
+//    LQ that ESC ? has not named since its line came up, on a clean link; the policy then
+//    re-asks only while nothing answers and a StyleWriter did not answer last.
 //  - may set `answering` itself from other answers (a job's, a status read elsewhere), and
 //    `last_status_ms` when something else asked `1` and `2`.
 #pragma once
@@ -125,7 +126,8 @@ void port_tick(port_in_t *in);
 //                   ImageWriter II or LQ records only), so an ImageWriter swapped in is noticed.
 //                   R20: the same question, every 5 s on rule 7's clock, for an ImageWriter II
 //                   or LQ record on the port that ESC ? has not named since its line came up
-//                   (`iw_unnamed`, a lost answer) while its line is up and it does not answer;
+//                   (`iw_unnamed`, a lost answer) while its line is up and it does not answer,
+//                   unless a StyleWriter answered last (a once-sighted one must not hear ESC ?);
 //                   PA_ESCQ follows that re-ask's plain question when it got nothing.
 //   5. PA_PLAIN     on a look with the line down, while the port's printer is not answering.
 //   6. PA_FULL      `full_due` with an original StyleWriter record listed, while nothing

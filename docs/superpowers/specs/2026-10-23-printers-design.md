@@ -103,7 +103,8 @@ ImageWriter settings and `laser`'s single shared LaserWriter. Each record:
 
 Up to four records are shared over AirPrint at once (one on the port, three on AppleTalk). More
 are listed but not offered, with a line saying AirWriter shares up to four. Wells's "one or two,
-with a long tail" fits; four keeps the mDNS service count and memory bounded.
+with a long tail" fits; four keeps the mDNS service count and memory bounded. (W-1116: now up to
+six, any mix, with several port printers.)
 
 **Names.** From the printer, never from Wells: an AppleTalk printer's own NBP name ("Office
 LaserWriter"); a port printer's model ("ImageWriter II", "ImageWriter LQ", "ImageWriter"). Two
@@ -338,6 +339,7 @@ lookups' timing within the limits above; how setup mode fits the LocalTalk node 
 ## Calls I made (Claude), for Wells to check
 
 1. **Up to four printers shared** (one port, three AppleTalk); more are listed but not offered.
+   (W-1116: now up to six, any mix of port and AppleTalk printers.)
 2. **AppleTalk ImageWriters** (LocalTalk Option Card) are supported, through the PAP client and
    the ImageWriter rip, since the pieces exist.
 3. **A changed port printer is offered, not swapped**, so a misread self-ID never renames

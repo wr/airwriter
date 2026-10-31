@@ -796,8 +796,10 @@ read back is a list made again). At most 8 records.
   came in on. What a port record's slot says (`pr_port_say`, `main.c`'s `port_push`, on every
   change of the port's state or the list): the printer on the port its own state, in its
   family's words (3.9's for an ImageWriter, 3.16's for a StyleWriter), and the colour the
-  ribbon or cartridge last read offers (a black-only StyleWriter none; a record that is not
-  on the port keeps the colour it last offered, unless its model has none); every other port
+  ribbon or cartridge last read offers (a black-only StyleWriter and an original ImageWriter
+  none; a record that is not on the port keeps the colour it last offered, unless its model
+  has none, until its slot is put again for another printer, which starts with none until it
+  answers); every other port
   record `stopped` with the message "Offline", the one word the page shows too for every
   offline printer of any kind, whether nothing answers, another port record's printer is
   present or a Something else record is listed (Wells 2026-10-31: Offline is a status name
@@ -817,8 +819,8 @@ read back is a list made again). At most 8 records.
   `printers_offers` names it from `pr_chooser_name`, where before the last port ImageWriter
   overwrote the name). `pr_chooser_name` is also the queue name at boot (mDNS's default
   instance, the node's NBP object): the oldest ImageWriter record's name, else the oldest port
-  record's, else "AirWriter" (before W-1116, the one port record's). The test page names the
-  printer on the port (`printers_port_name`, `pr_port_current`).
+  record's, else "AirWriter" (before W-1116, the one port record's). The test page names its
+  own record (`printers_describe`), the one it was sent to.
   A Mac's ImageWriter job goes to whichever ImageWriter answers on the port (the II, LQ and
   original take the same stream). Registrations 1-3 are the AppleTalk printers from other
   links under their own NBP names and types (relayed), and `<host name>:AirWriter` is at
@@ -827,7 +829,9 @@ read back is a list made again). At most 8 records.
   one PAP client under the job lock: busy, in the printer's own status words, until the
   printer's connection is open; then both ways as they are, the printer's output 256 bytes a
   read.
-- **Panel.** Idle, the box: ready while any shared printer is; while the port prints, its own
+- **Panel.** Idle, the box: ready while the printer on the port is, if its record is shared
+  (`box_ready`: an ImageWriter once `ESC ?` named it), or any shared LaserWriter is; while the
+  port prints, its own
   line (a StyleWriter has none: its answers to `1` and `2`); during a LaserWriter job, the
   LaserWriter's. The port's own state belongs to one record (`pr_port_live_id`, W-1116): the
   printer on the port, or the Something else record while one is listed; every other port
@@ -1000,14 +1004,15 @@ Apple's StyleWriter adapter (ADSP, not PAP), is not built.
   and the repeat of a first sighting (above); in `ipp_server` a slot per shared record, any
   mix, slot 0's legacy path. On the board: every shared port record is its own AirPrint
   printer in its slot (3.15 Sharing), the one on the port with the port's state and colour,
-  the others offline with why; only that record carries the port's live state on the page;
+  the others "Offline", never why; only that record carries the port's live state on the page;
   the Chooser name and the queue name are the oldest ImageWriter record's; a port job's end
   goes to the slot it came in on; the StyleWriter glue's `swapped` is an ImageWriter being the
   printer on the port now (`printers_port_on_is_imagewriter`: its record current and present),
   whichever record. The current record is the port's mode and state: `printers_port_mode`,
   `s_port_sw` and the live state, model, screen, sharing and `/api/status` `model` follow
-  `pr_port_current`, so the page and the test page name and read the printer that answered
-  last, and a Something else record in the list silences the port whatever else is there. An
+  `pr_port_current`, so the page reads the printer that answered last (a job or test page
+  takes its family, model and screen from its own record), and a Something else record in the
+  list silences the port whatever else is there. An
   ImageWriter record reads Ready only once `ESC ?` has named its model since the line came up
   (`s_iw_named`), never from the line alone, so the page never shows the wrong ImageWriter for
   a moment, and Ready appears with the answer, about 2 to 3 s after the line comes up. The

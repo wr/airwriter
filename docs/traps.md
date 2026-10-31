@@ -329,7 +329,9 @@ Traps already explained in a code comment are listed only when the comment is ea
   line-up, too soon to answer, and with an original ImageWriter record listed its silence would
   read as the original's. The wait holds 2 s from its own first sighting of the line up (or to
   `s_ribbon_due`, whichever is later), never more than 2.5 s. `s_port_sw` flips only under the
-  job lock (`port_sw_sync`), so read it with the lock held. And a StyleWriter-first port
+  job lock (`port_sw_sync`): read it with the lock held wherever a decision sends bytes; the
+  unlocked reads (`port_live`, `box_ready`, `status_json`, `printer_line_changed`) only show
+  state and may be one flip behind. And a StyleWriter-first port
   (`port_policy.h`) gets `ESC ?` only after the plain question got nothing: `swfake.py` takes
   `ESC ?` for a letter it does not know and stops listening until a reset.
 - **A StyleWriter's bytes at 57600 print nothing on an ImageWriter II at 9600** (board 1,

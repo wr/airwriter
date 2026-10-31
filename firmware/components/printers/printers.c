@@ -6,8 +6,9 @@
 // record at printer 0, every other shared record, port or AppleTalk, at 1 to
 // IPP_PRINTERS-1; W-1116), and gives laser.c the AppleTalk printers.
 //
-// Locks: s_apply_mx, then s_mu, then laser.c's and ipp_server's own. Nothing
-// here is called back with s_mu held.
+// Locks: s_apply_mx, then s_mu, then laser.c's and ipp_server's own. With s_mu
+// held only port_live is called back (live_fill), which takes nothing but
+// printer_state's leaf mutex.
 #include "printers.h"
 
 #include <string.h>
