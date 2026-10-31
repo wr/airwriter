@@ -558,13 +558,25 @@ const ST={ready:['g','Ready'],printing:['g','Printing'],attention:['a','Needs at
 const MODELS=['ImageWriter II','ImageWriter LQ','ImageWriter','StyleWriter','StyleWriter II','StyleWriter 1200',
   'Color StyleWriter 1500','Color StyleWriter 2200','Color StyleWriter 2400','Color StyleWriter 2500'];
 for(const m of MODELS){ $('model').append(new Option(m,m)); $('add-model').append(new Option(m,m)); }
-const aOrAn=m=>(/^[aeiou]/i.test(m)?'an ':'a ')+m;
 /* A name in a notice title or key keeps its words together: no line ends
    after "StyleWriter" and leaves "II" on a line of its own. A name is 32
    bytes at most; anything longer is not one and may wrap. */
 const nb=s=>s.length>32?s:s.replace(/ /g,'\u00a0');
 $('model').append(new Option('Something else','none'));
 { const o=new Option('Choose…',''); o.id='model-ask'; o.disabled=true; $('model').prepend(o); }
+/* W-1116: the printer port keeps one record per model, so a model already in
+   Printers can't be added again: both pickers mark it (the Something else
+   record is one per port too). A record's own model stays as it is. */
+function markAdded(sel,own){
+  const have=new Set(PR.printers.filter(p=>p.where==='port'&&p.model).map(p=>p.model));
+  if(PR.said_other) have.add('none');
+  for(const o of sel.options){
+    if(!o.value) continue;                          // Choose…
+    const on=o.value!==own&&have.has(o.value), name=o.value==='none'?'Something else':o.value;
+    const label=on?name+' — Added':name;
+    if(o.disabled!==on||o.textContent!==label){ o.disabled=on; o.textContent=label; }
+  }
+}
 /* The five screens, and a sixth on a StyleWriter: Apple's own (W-1103). */
 function screenList(sw){
   const s=$('screen'); if(s._sw===sw) return;
@@ -596,26 +608,29 @@ const SW_FAULT={paper:'check paper',jam:'clear the paper jam',cartridge:'check t
    printer's in its own words when it has any. */
 function stWords(p){
   if(p.kind==='unknown') return ['','Unrecognized'];
-  // W-1103: the other family answered on the port: nothing prints on it until it's sorted out
-  if(p.swapped) return ['a','Needs attention: another printer is on the printer port'];
   const t=LWT&&p.where!=='port'?LWT.find(t=>t.id===p.id):null;
   const low=w=>w?w[0].toLowerCase()+w.slice(1):w;
   // W-1103: a StyleWriter has no SELECT key
   const sw=p.kind==='stylewriter';
   if(p.state==='attention') return ['a','Needs attention: '+(p.where==='port'?(sw?SW_FAULT[p.fault]||SW_FAULT.other:'check paper and SELECT'):low(t&&lwStatus(t.message))||'check the printer')];
-  if(p.state==='offline') return ['',p.where==='port'?(sw?'Offline: check power and cable':'Offline: check power, cable and SELECT'):'Offline: check that it’s switched on'];
+  if(p.state==='offline') return ['',portTaken(p)||(p.where==='port'?(sw?'Offline: check power and cable':'Offline: check power, cable and SELECT'):'Offline: check that it’s switched on')];
   if(p.state==='printing'&&t&&/busy/i.test(t.message||'')&&!S.printing) return ['g','Busy with another job'];
   return ST[p.state]||['',''];
+}
+/* W-1116: several printers can be on the printer port, one at a time. A port
+   printer is offline while another one is connected, or while the port is set
+   to Something else: the line says which. '' when the port is simply quiet. */
+function portTaken(p){
+  if(!PR||p.where!=='port'||p.kind==='unknown') return '';
+  if(PR.said_other) return 'Offline: the printer port is set to Something else.';
+  const on=PR.port_on&&PR.port_on!==p.id?prById(PR.port_on):null;
+  return on?'Offline: '+on.name+' is connected instead.':'';
 }
 /* A notice: what is wrong, in bold, then what to do. */
 const NOTE={
   unknown_port:(p)=>['Unrecognized printer on the printer port','If it’s an ImageWriter or StyleWriter, choose its model.',[['Choose Model…','open'],['Dismiss','dismiss']]],
-  changed:(p,n)=>['The printer port now has '+nb(esc(aOrAn(n.model))),'Use it instead of '+nb(esc(p&&p.model||'the current printer'))+'?'
-    // W-1103: the original StyleWriter doesn't answer until it's reset, so only a look finds it again
-    +(p&&p.kind==='stylewriter'&&p.model==='StyleWriter'&&/^ImageWriter/.test(n.model)?' Or connect the StyleWriter again and press Look for Printers.':''),
-    [['Use '+nb(esc(n.model)),'accept'],['Dismiss','dismiss']]],
   no_answer:(p)=>[q(p)+' isn’t responding','Make sure it’s connected and switched on.',[['Share Anyway','use_anyway'],['Dismiss','dismiss']]],
-  too_many:(p)=>[q(p)+' isn’t shared','You can share up to '+(PR.max_shared||4)+' printers. To share this one, stop sharing another.',[['OK','dismiss']]]};
+  too_many:(p)=>[q(p)+' isn’t shared','You can share up to '+(PR.max_shared||6)+' printers. To share this one, stop sharing another.',[['OK','dismiss']]]};
 const q=p=>nb(esc(p?p.name:'A printer'));
 function prDraw(){
   $('v-printers').textContent=sideWord();
@@ -643,9 +658,10 @@ function prDraw(){
     +'</small></span><button class=btn type=button data-copyuri>Copy</button></div>').join('');
   $('ap-list').classList.toggle('hide',!sh.length);
   if($('ap-list')._h!==h){ $('ap-list')._h=h; $('ap-list').innerHTML=h; }
-  // AppleTalk: what old Macs see
-  const old=PR.printers.filter(p=>p.identified&&p.kind!=='unknown').map(p=>p.name);
+  // AppleTalk: what vintage Macs see, in the names their Chooser shows (W-1116: the board's list)
+  const old=PR.chooser||[];
   $('oldmacs').textContent=old.length?'In the Chooser on vintage Macs: '+old.join(', '):'No printers in the Chooser yet.';
+  markAdded($('add-model'),'');
   if(sel!==null) pdDraw();
   suDraw();
 }
@@ -683,6 +699,7 @@ function pdDraw(){
   // found, never said what it is: ask; told it is something else: say so
   const ask=unk&&p.found==='auto';
   $('model-ask').hidden=!ask;
+  markAdded($('model'),unk?'none':p.model);
   if(document.activeElement!==$('model')) $('model').value=ask?'':unk?'none':p.model;
   const atiw=p.kind==='appletalk-imagewriter';     // W-1088: old Macs' only, for now
   $('share-row').classList.toggle('hide',unk||atiw);
@@ -744,6 +761,12 @@ $('pr-look').onclick=async()=>{
   await prPost({look:true});
   setTimeout(()=>{ b.disabled=false; say('prs-say',''); prPoll(); },6000);
 };
+/* W-1116: the Add dialog opens on a model that can still be added. */
+document.querySelector('[data-dlg=d-add]').onclick=()=>{
+  const s=$('add-model'), o=s.selectedOptions[0];
+  if(!o||o.disabled){ const f=[...s.options].find(o=>!o.disabled); if(f) s.value=f.value; }
+  say('add-say',''); $('d-add').showModal();
+};
 $('add-go').onclick=async()=>{
   if(await prPost({add_port:$('add-model').value},null,'add-say')) $('d-add').close();
 };
@@ -773,9 +796,15 @@ $('pd-remove').onclick=()=>{ const p=prById(sel); if(!p) return; $('rm-name').te
 $('rm-go').onclick=async()=>{ const id=sel; $('d-remove').close(); if(await prPost({id:id,remove:true},null,'prs-say')) prOpen(null); };
 $('testpage').onclick=async()=>{
   const p=prById(sel); if(!p) return;
-  if(p.state==='offline'){ say('prn-say',p.where==='port'?(p.kind==='stylewriter'?'The printer is offline. Check power and cable.':'The printer is offline. Check power, cable and SELECT.'):'The printer is offline. Check that it’s switched on.',1,4000); return; }
+  // W-1116: a port printer while another one is connected: the board says which to connect
+  // (409, its sentence); while the port is set to Something else, or simply quiet, the page does
+  const port=p.where==='port'&&p.kind!=='unknown', said=port&&PR.said_other, other=port&&!said&&PR.port_on&&PR.port_on!==p.id;
+  if(p.state==='offline'&&!other){
+    say('prn-say',said?'The printer port is set to Something else.':port?(p.kind==='stylewriter'?'The printer is offline. Check power and cable.':'The printer is offline. Check power, cable and SELECT.'):'The printer is offline. Check that it’s switched on.',1,4000);
+    return;
+  }
   const r=await postJSON('/api/test',{id:p.id});
-  say('prn-say',r.error?r.error+'.':'Printing a test page.',!!r.error,4000);
+  say('prn-say',r.error?r.error.replace(/\.?$/,'.'):'Printing a test page.',!!r.error,4000);
 };
 /* W-1103: one press is one cleaning. The board says no in a sentence when the
    printer is busy, off or holding a fault. */
