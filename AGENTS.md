@@ -200,9 +200,10 @@ What works on `main`:
   records and AppleTalk printers, each at `ipp/p<id>` and the oldest port record also at
   `ipp/print`. The test button, DIP4 and the page go to the printer on the port while it is
   present, else the first shared printer that is ready, else that port record, else the first
-  shared printer (`pr_test_target`; a LaserWriter gets `ps_testpage`). The panel shows the
-  box: ready while any shared printer is; the idle CTRL-X follows the port printer's own line
-  (`printer_state_port_line`).
+  shared printer (`pr_test_target`; never a port record while a Something else record is
+  listed; a LaserWriter gets `ps_testpage`). The panel shows the box: ready while the
+  printer on the port is, if its record is shared, or any shared LaserWriter is; the idle
+  CTRL-X follows the port printer's own line (`printer_state_port_line`).
   Setup mode looks at once. AirPrint to an AppleTalk ImageWriter was cut: old Macs' only.
   `GET`/`POST /api/printers`; a StyleWriter's record also shows `cartridge` and, while it holds
   one, `fault`, and `{"id":N,"clean":true}` runs one cleaning.

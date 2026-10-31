@@ -281,7 +281,8 @@ The bench check below covers it on a rev A board (N8R2, 2 MB PSRAM), the smaller
 - **Notices** left: the unknown port printer, a LaserWriter that won't answer, more than six.
 - **Phones** see every shared port printer all the time, each `stopped` + `offline-report` while
   it isn't the one answering.
-- **Panel.** As built: idle, the box is ready while any shared printer is. A swap plays the
+- **Panel.** As built: idle, the box is ready while the printer on the port is, if its record
+  is shared, or any shared LaserWriter is. A swap plays the
   printer-back wave at J2 once, not printer-gone then printer-back.
 - **API.** `GET /api/printers`: each port record's live state says whether it is the one
   answering; `swapped` goes. `POST /api/printers {"add_port":"<model>"}` adds a record, 400 with

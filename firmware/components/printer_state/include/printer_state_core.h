@@ -117,7 +117,7 @@ const char *ps_name(ps_state_t st);   // "ready", "offline", ...
 // kick_every_ms. Never mid-job, where a low line is paper or a jam. Call
 // ps_kicked() after sending. W-1088: the port's line is its own, given by
 // ps_port_line (not ready from init): idle, the line the events carry is the
-// box's, ready while any shared printer is.
+// box's (main.c's box_ready: the port printer's record if shared, or a shared LaserWriter).
 void        ps_port_line(ps_t *ps, int ready, uint64_t now_ms);
 int         ps_want_kick(const ps_t *ps, uint64_t now_ms);
 void        ps_kicked(ps_t *ps, uint64_t now_ms);

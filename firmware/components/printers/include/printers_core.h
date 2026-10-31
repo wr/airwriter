@@ -247,7 +247,8 @@ int  pr_offers(const pr_list_t *l, pr_where_t link, int ids[], int max);
 pr_box_t pr_box_state(const pr_list_t *l, const pr_live_t live[PR_MAX]);
 // Where the test page goes (W-1116): the printer on the port (pr_port_current, an ImageWriter
 // or StyleWriter record) while it is present; else the first shared printer that is ready;
-// else that port record (the board then runs the cable test); else the first shared. -1: none.
+// else that port record (the board then runs the cable test); else the first shared. While a
+// Something else record is listed no port record is a target. -1: none.
 int  pr_test_target(const pr_list_t *l, const pr_live_t live[PR_MAX]);
 // W-1116: 1 when `id` is a port record and another port record's printer is the one on the
 // port (pr_port_current, present): a job to `id` is answered busy, nothing held. 0 for the

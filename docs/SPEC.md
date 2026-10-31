@@ -840,7 +840,9 @@ read back is a list made again). At most 8 records.
   printer on the port (`pr_port_current`, an ImageWriter or StyleWriter record) while it is
   present, else the first shared printer that is ready, else that port record (the button then
   runs the cable test, as before), else the first shared printer (`pr_test_target`, W-1116);
-  `POST /api/test {"id":N}` names one.
+  while a Something else record is listed no port record gets it. `POST /api/test {"id":N}`
+  names one; for a port record that isn't on the port, or any port record while a Something
+  else record is listed, it answers 409 "Connect <name> to the printer port first."
 - **Setup.** In setup mode the port is asked and the cable looked on at once, and the page is
   three steps, sized for a phone: the printers found, Wi-Fi, then "You're All Set" (how to print
   from a phone, and the test button for a test page; the settings' address for later, nothing

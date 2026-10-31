@@ -333,7 +333,8 @@ static volatile int        s_line_seen;     // serial_out has reported the line
 // W-1082: which printer the panel's printer line follows. While a LaserWriter
 // job prints, or with no ImageWriter shared and a LaserWriter shared, the
 // LaserWriter's readiness (laser_ready); while the port prints, its HSKo; idle,
-// the box's (W-1088): ready while any shared printer is (box_ready).
+// the box's (W-1088): ready while the port printer is, if its record is shared, or any
+// shared LaserWriter is (box_ready).
 enum { LINE_IW, LINE_LASER };
 static volatile int        s_line_src = LINE_IW;
 static volatile int        s_iw_ready = -1;    // HSKo as last reported, -1 before
@@ -376,6 +377,7 @@ static volatile int        s_look_person;      // the pending look is the person
 // its exchange ran (up to ~1.7 s): a model change or a Look then is still owed.
 static volatile uint32_t   s_look_gen, s_ribbon_gen;
 static void look_ask(void) { s_look = 1; s_look_gen++; }
+static TaskHandle_t        s_kick_handle;      // the port task (kick_task)
 // The port's StyleWriter answered before the session began (a job, the test page, a cleaning):
 // if the session then gets nothing, the port is looked at once when it is over.
 static volatile int        s_sw_was_answering;
@@ -734,8 +736,9 @@ static void printer_line_changed(void *ctx, int ready)
     if (!s_printing) port_push(printer_state_view().state);
 }
 
-// W-1088: the box's line while idle. Ready while any shared printer is; with
-// nothing shared, the port's line, as before. Unknown (-1) until the port's
+// W-1088: the box's line while idle. Ready while the printer on the port is, if its record
+// is shared (an ImageWriter once ESC ? named it), or any shared LaserWriter is; with nothing
+// shared, the port's line, as before. Unknown (-1) until the port's
 // ImageWriter, when shared, has reported, so the quiet power-on's Spin waits.
 static int box_ready(void)
 {
@@ -1283,8 +1286,10 @@ static void port_sw_sync(int sw, int locked)
     s_link_check = 1;                   // J2's link follows the record, under the job lock
     // The printer now on the record is asked what it has in, its ribbon or its cartridge, so
     // AirPrint offers colour for it and not for the last one (a look: ESC ? with the line up
-    // for an ImageWriter, the plain question first for a StyleWriter).
-    look_ask();
+    // for an ImageWriter, the plain question first for a StyleWriter). The port task's own
+    // flip is answered by the act that made it, so it is not a look asked during that act.
+    if (xTaskGetCurrentTaskHandle() == s_kick_handle) s_look = 1;
+    else look_ask();
     if (sw) {
         s_iw_ready = -1;                // its answers will say; HSKo says nothing
         s_iw_named = 0;                 // an ImageWriter's name is not this record's
@@ -1924,7 +1929,7 @@ static void kick_task(void *arg)
 
         if ((act == PA_PLAIN || act == PA_FULL) && mine) {
             sw_online(plain);
-            s_look = 0;                       // its cartridge and state were just read
+            if (s_look_gen == look_gen) s_look = 0;   // its cartridge and state were just read
             // The deepest the port task goes: the plain question, the record, the cartridge
             // (which saves the ribbon) and the status.
             ESP_LOGI(TAG, "port task: %u bytes of stack to spare",
@@ -1950,8 +1955,8 @@ static void kick_task(void *arg)
             }
         } else if (act == PA_ESCQ && mine) {
             // The ImageWriter on the port is its record's: the flip's own look is answered, and
-            // the screen follows the record while the lock is held.
-            s_look = 0;
+            // the screen follows the record while the lock is held (a look asked meanwhile stays).
+            if (s_look_gen == look_gen) s_look = 0;
             port_screen_follow();
             port_push(printer_state_view().state);
         } else if (act == PA_ESCQ || act == PA_PLAIN) {
@@ -2259,15 +2264,22 @@ static void test_page_to(int id, int port)
 }
 
 // W-1116: a test page for a port record that is not the one on the port -- another port
-// record's printer is (printers_port_absent) -- would go to that printer: it is refused, and
-// the page's Print Test Page answers 409 "Connect <name> to the printer port first."
-// (web_test_page builds the sentence). Only the page can name such a record: the button's and
-// DIP4's target (pr_test_target) is the printer on the port, a ready shared printer, or the
-// port's record for the cable test. 0 for the one on the port, a quiet port, or an AppleTalk
+// record's printer is (printers_port_absent), or a Something else record is listed, where
+// nothing asks the port and the page would hold the job lock to the stall limit -- is
+// refused, and the page's Print Test Page answers 409 "Connect <name> to the printer port
+// first." (web_test_page builds the sentence). Only the page can name such a record: the
+// button's and DIP4's target (pr_test_target) is the printer on the port, a ready shared
+// printer, or the port's record for the cable test, and never a port record while a
+// Something else record is listed. 0 for the one on the port, a quiet port, or an AppleTalk
 // printer.
 static int port_page_refused(int id, int port)
 {
-    if (!port || !printers_port_absent(id)) return 0;
+    if (!port) return 0;
+    if (printers_port_mode() == PORT_UNKNOWN_SAID) {
+        ESP_LOGW(TAG, "test page for printer %d refused: the printer port is set to Something else", id);
+        return 1;
+    }
+    if (!printers_port_absent(id)) return 0;
     ESP_LOGW(TAG, "test page for printer %d refused: another printer is on the printer port", id);
     return 1;
 }
@@ -3149,7 +3161,7 @@ static void cable_web(void *ctx, int both, char *buf, size_t cap)
 
 // Runs on printer_state's poll task, once per change of display state.
 // W-1088: the port printer's own state, for AirPrint and old Macs. The panel's
-// machine follows the box while idle (ready while any shared printer is) and
+// machine follows the box while idle (box_ready) and
 // a LaserWriter during its job; the port's printer is offline when its own line
 // is down, whatever else is ready.
 static ps_state_t port_state(ps_state_t box)
@@ -3455,7 +3467,7 @@ void app_main(void)
     stylewriter_start(&swc);
     // 4 KB: a ribbon change saves to NVS and re-announces mDNS from here; the StyleWriter's
     // questions and its model and cartridge saves run here too.
-    xTaskCreate(kick_task, "kick", 4096, NULL, 3, NULL);
+    xTaskCreate(kick_task, "kick", 4096, NULL, 3, &s_kick_handle);
 
     job_pipe_cfg_t pipe = { .out = printer_out, .dither = algo, .gain = s_set.gain,
                             .top_margin = s_set.top_margin,
