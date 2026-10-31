@@ -260,6 +260,10 @@ Minimum viable set for iOS:
   and the client asks again (RFC 8011). It never waits with its document unread: received
   frames left unread hold internal RAM, and on the W-1076 bench a job that waited behind a
   Mac's page could not start its rip.
+  A job to a port printer that is not the one on the port -- another port record's printer is
+  (`pr_port_absent`, the port sink's `port_claim`, W-1116) -- is answered `server-error-busy`
+  the same way, nothing held, so the printer that is there keeps printing and the phone keeps
+  the job and asks again; it prints once the person swaps the cable (3.16).
 - `Get-Job-Attributes` (0x0009) — iOS polls this for progress
 - `Get-Jobs` (0x000A)
 - `Cancel-Job` (0x0008)
@@ -1002,16 +1006,22 @@ Apple's StyleWriter adapter (ADSP, not PAP), is not built.
   board sets `confirm` to repeat a first sighting, asks every 5 s and in the list's order, and
   gives the policy the current record's kind; a person's model change on the port forgets the
   port's last answer (R10) and the port is asked again at once; the person's pick of a
-  StyleWriter is confirmed on the record they named (`pr_port_sw_found` by id). Still on the
-  oldest record until W-1116's job commit: the board refuses the oldest record's AirPrint jobs
-  (the job aborts), its test page (the button blips Busy and runs no cable test, the page's
-  Print Test Page answers 409), a cleaning (409) and a Mac's job (busy) while the other family
-  answered last (`printers_port_conflict`, on `pr_port_other_family`), as the StyleWriter
-  branch did; that ends when the record's own family answers again, or when the person names
-  the record a StyleWriter (an ImageWriter's answer before it is forgotten). The busy answer
-  for a port printer that is not the one answering, and that job, test page, cleaning and
-  Mac's-job gate moving to the record the job is for (`pr_port_absent`), follow in W-1116's
-  job commit.
+  StyleWriter is confirmed on the record they named (`pr_port_sw_found` by id). Jobs, the test
+  page and cleaning follow the record they are for, not the oldest (W-1116's job commit): a job
+  for a port record while another port record's printer is on the port is answered busy
+  (`port_claim` on `pr_port_absent`, 3.4), and the page's Print Test Page and Clean Print Head
+  for it answer 409 "Connect <name> to the printer port first."; the button runs the cable test
+  on a quiet port as before, and blips Busy for an absent record. A job takes its family from
+  its own record (`doc_begin` on `printers_record_is_sw`), not the port's. An ImageWriter job
+  that starts on a quiet port sends no page byte until its own model has answered `ESC ?`
+  (`colour_ok` on `pr_job_gate`): an original ImageWriter record's line coming up with the plain
+  question unanswered is its answer; while it waits it asks the plain question every 5 s, and
+  another ImageWriter model or a StyleWriter answering ends the job aborted ("Another printer
+  was connected. Print again.") before any byte, since its page was ripped for the model it was
+  sent to. A Mac's ImageWriter stream goes to whichever ImageWriter answers, and hears busy
+  while the printer on the port is a StyleWriter or a StyleWriter answered last
+  (`pr_port_other_family`), so the driver's bytes never reach a StyleWriter. The StyleWriter
+  glue's `swapped` stays `pr_port_other_family(PR_HEARD_STYLEWRITER)`, whichever record.
 - **AirPrint.** 360 × 360 dpi, URF `RS360`; Letter, A4 and Legal, the first the default
   (`printer_media_t` in `printer_caps`: the page's width at 360 dpi names the entry, and the
   rip keeps the engine's printable area from `rip_left` for `rip_w` dots). Margins in whole
@@ -1144,8 +1154,10 @@ Apple's StyleWriter adapter (ADSP, not PAP), is not built.
   F` makes it on the host; `swfake.py decode` draws it.
 - **Clean Print Head.** One press is one cleaning: the job's reset and setup with a single `P`
   in it, wait for the printer to stop being busy (up to 600 s), then `E` (`Y` on the 1200) and
-  `l`. The original has none. `POST /api/printers {"id":N,"clean":true}` answers 409 when a
-  job holds the lock or another printer answered on the port, 502 when the model has no
+  `l`. The original has none. `POST /api/printers {"id":N,"clean":true}` answers 409 "Connect
+  <name> to the printer port first." when this StyleWriter is not the printer on the port --
+  another port record's printer is (`pr_port_absent`, W-1116) -- 409 when a job holds the lock,
+  502 when the model has no
   cleaning or the printer is off or holds a
   fault (it is asked `1` and `2` first, as a cleaning would wait on a fault with the lock held),
   and otherwise starts it on a task of its own under the job lock. Nothing cleans on its own.

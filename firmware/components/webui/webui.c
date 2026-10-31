@@ -579,11 +579,12 @@ static esp_err_t test_post(httpd_req_t *req)
     char body[BODY_MAX] = "";
     if (req->content_len && read_body(req, body, sizeof body) < 0)
         return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "short body");
-    int rc = s_cfg.test_page(s_cfg.ctx, json_int(body, "id", -1));
+    char msg[96] = "";
+    int rc = s_cfg.test_page(s_cfg.ctx, json_int(body, "id", -1), msg, sizeof msg);
     if (rc == 2) return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "no printer with a test page");
-    if (rc == 3) {                            // W-1103: the port's record is not what answered there
+    if (rc == 3) {                            // W-1116: this record is not the printer on the port
         httpd_resp_set_status(req, "409 Conflict");
-        return httpd_resp_sendstr(req, "another printer is on the printer port");
+        return httpd_resp_sendstr(req, msg[0] ? msg : "another printer is on the printer port");
     }
     if (rc) {
         httpd_resp_set_status(req, "409 Conflict");

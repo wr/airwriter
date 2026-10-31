@@ -761,23 +761,6 @@ void printers_port_answered(int heard)
     unlock();
 }
 
-// W-1116, until the board's jobs, test page and cleaning follow the printer on the port (the
-// record whose model answered) rather than the oldest record: the family of the oldest port
-// record, as mode_of reads it, against the family that answered last
-// (pr_port_other_family). With one port record this is what the StyleWriter branch did.
-int printers_port_conflict(void)
-{
-    if (!s_started) return 0;
-    lock();
-    const pr_rec_t *p = pr_port(s_l);
-    int fam = !p ? PR_HEARD_NONE
-            : p->kind == PR_KIND_IMAGEWRITER ? PR_HEARD_IMAGEWRITER
-            : p->kind == PR_KIND_STYLEWRITER ? PR_HEARD_STYLEWRITER : PR_HEARD_NONE;
-    int c = fam != PR_HEARD_NONE && pr_port_other_family(s_l, fam);
-    unlock();
-    return c;
-}
-
 int printers_port_other_family(int family)
 {
     if (!s_started) return 0;
@@ -785,6 +768,41 @@ int printers_port_other_family(int family)
     int c = pr_port_other_family(s_l, family);
     unlock();
     return c;
+}
+
+// W-1116: a job, test page or cleaning for port record `id` goes to another's printer when
+// another port record's printer is the one on the port (pr_port_absent): the one that answered
+// last and is present. Reads the live state as printers_json does.
+int printers_port_absent(int id)
+{
+    if (!s_started) return 0;
+    lock();
+    live_fill();
+    int a = pr_port_absent(s_l, s_live, id);
+    unlock();
+    return a;
+}
+
+int printers_record_is_sw(int id)
+{
+    if (!s_started) return 0;
+    lock();
+    const pr_rec_t *r = pr_get(s_l, id);
+    int sw = r && r->where == PR_WHERE_PORT && r->kind == PR_KIND_STYLEWRITER;
+    unlock();
+    return sw;
+}
+
+// W-1116: an ImageWriter job's gate after its own ESC ? and the plain question (pr_job_gate):
+// the port's last answer (pr_port_heard, heard_model) and whether the line is up now decide
+// whether it may send its page, must abort, or should keep waiting.
+pr_gate_t printers_job_gate(int id, int line_up)
+{
+    if (!s_started) return PR_GATE_OTHER;
+    lock();
+    pr_gate_t g = pr_job_gate(s_l, id, pr_port_heard(s_l), (pr_model_t)s_l->heard_model, line_up);
+    unlock();
+    return g;
 }
 
 void printers_port_set_sw_model(int id, sw_model_t m)
@@ -924,9 +942,15 @@ static int clean_head(int id, char *err, size_t cap)
         snprintf(err, cap, "AirWriter can’t clean a print head.");
         return 501;
     }
-    // Another printer answered on the printer port: the cleaning is the record's printer's.
-    if (printers_port_conflict()) {
-        snprintf(err, cap, "Another printer is on the printer port.");
+    // W-1116: this StyleWriter is not the printer on the port -- another port record's printer
+    // is. Its cleaning would go to that printer, so it waits until it is plugged in again.
+    if (printers_port_absent(id)) {
+        char name[PR_NAME_MAX] = "";
+        lock();
+        const pr_rec_t *r = pr_get(s_l, id);
+        if (r) snprintf(name, sizeof name, "%s", r->name);
+        unlock();
+        snprintf(err, cap, "Connect %s to the printer port first.", name);
         return 409;
     }
     int rc = s_cfg.clean(id);

@@ -119,17 +119,26 @@ sw_model_t  printers_port_sw_model(void);
 void        printers_port_listed(int *sw, int *iw1, int *sw1);
 // W-1103: who answered on the port last (pr_heard_t), an answer of the record's own printer
 // that names no model (a StyleWriter's `1` and `2`, a job that printed, the full sequence once
-// the record has its model; PR_HEARD_NONE changes nothing), whether the port last answered
+// the record has its model; PR_HEARD_NONE changes nothing), and whether the port last answered
 // as a family other than `family` (pr_port_other_family: that family's bytes must not go
-// out; the StyleWriter glue's swapped), and whether that was the other family than the
-// oldest port record's (printers_port_conflict): then that record's AirPrint jobs, test
-// page and cleaning are refused, as on the StyleWriter branch, until they follow the
-// printer on the port (W-1116's later commits). Not stored. Any task, the printer task
-// included: nothing here writes flash.
+// out; the StyleWriter glue's swapped, whichever record). Not stored. Any task, the printer
+// task included: nothing here writes flash.
 int         printers_port_heard(void);
 void        printers_port_answered(int heard);
 int         printers_port_other_family(int family);
-int         printers_port_conflict(void);
+// W-1116: a job, test page or cleaning is for port record `id`, but another port record's
+// printer is the one on the port (pr_port_absent): the job is answered busy and the test page
+// and cleaning 409, so one record's work never goes to another's printer. 0 for the one on the
+// port, a quiet port, or an AppleTalk printer. Reads the live state as printers_json does.
+int         printers_port_absent(int id);
+// W-1116: whether port record `id` is a StyleWriter (doc_begin reads the job's own family from
+// its record, not the port's). 0 for an ImageWriter, an AppleTalk printer, or no such record.
+int         printers_record_is_sw(int id);
+// W-1116: what an ImageWriter job on port record `id` does after its own ESC ? and the plain
+// question (pr_job_gate), given the port's last answer and whether the line is up now:
+// PR_GATE_GO to send its page, PR_GATE_OTHER to abort (another model or a StyleWriter answered),
+// PR_GATE_WAIT to keep waiting with nothing sent.
+pr_gate_t   printers_job_gate(int id, int line_up);
 // The full sequence found the port's StyleWriter to be `m`: the record the person picked
 // (W-1116, `id`) takes it (no notice: the person had named it a StyleWriter already; sharing
 // stays as it was), and `m` is the printer on the port now. No-op for an `id` that is not a

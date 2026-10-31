@@ -67,9 +67,11 @@ typedef struct {
     void  (*restart)(void *ctx);
     void  (*erase)(void *ctx);
     // W-1088: id is the printer's in the list, or -1 for the one the test
-    // button prints on; 2 for none, or one with no test page; 3 (W-1103) for
-    // the port's printer while another printer answered on the port.
-    int   (*test_page)(void *ctx, int id);
+    // button prints on. Returns 0, 1 while the printer is busy, 2 for none or
+    // one with no test page, or 3 (W-1116) when the record is not the printer
+    // on the port -- another is -- in which case it writes the sentence for the
+    // page into msg ("Connect <name> to the printer port first.").
+    int   (*test_page)(void *ctx, int id, char *msg, size_t cap);
 
     // Serves the setup page for every unknown host, so joining the device's
     // access point opens the page by itself.

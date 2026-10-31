@@ -301,13 +301,18 @@ Traps already explained in a code comment are listed only when the comment is ea
   of its own once it has answered twice (`pr_port_seen_sw`, `pr_port_seen`: one answer is
   `PR_SEEN_AGAIN`), never a notice; meanwhile, and whenever the family that answered last is
   not a record's (`pr_port_other_family`), nothing in that record's language may go out. What
-  phones are told follows the printer on the port already (`pr_port_say`, `port_push`); until
-  the board's jobs, test page and cleaning do too (W-1116's later commits),
-  `printers_port_conflict()` is their interim check: the oldest port record's family against
-  `pr_port_other_family`, and main.c refuses that record's jobs, test page and cleaning on it,
-  as the StyleWriter branch did. A new path that sends a port job, page or command checks it;
-  `stylewriter_cfg_t.swapped` is `pr_port_other_family(PR_HEARD_STYLEWRITER)`, whichever
-  record. `s_port_sw` flips only under the job lock (`port_sw_sync`), so
+  phones are told, and jobs, the test page and cleaning, all follow the printer on the port by
+  record (W-1116's job commit): a job, test page or cleaning for a port record that is not the
+  one on the port -- another port record's printer is -- is answered busy or 409 "Connect
+  <name> to the printer port first." (`pr_port_absent`, the port sink's `port_claim`,
+  `port_page_refused`, `clean_head`); a job takes its family from its own record
+  (`printers_record_is_sw`), not the port's; an ImageWriter job on a quiet port sends no page
+  byte until its own model answers `ESC ?` (`colour_ok` on `pr_job_gate`), aborting with
+  "Another printer was connected. Print again." if another model or a StyleWriter answers; a
+  Mac's ImageWriter stream hears busy while a StyleWriter is on the port or answered last
+  (`lt_print_begin`). `stylewriter_cfg_t.swapped` is
+  `pr_port_other_family(PR_HEARD_STYLEWRITER)`, whichever record. `s_port_sw` flips only under
+  the job lock (`port_sw_sync`), so
   read it with the lock held. And a StyleWriter-first port (`port_policy.h`) gets `ESC ?` only
   after the plain question got nothing: `swfake.py` takes `ESC ?` for a letter it does not know
   and stops listening until a reset.
