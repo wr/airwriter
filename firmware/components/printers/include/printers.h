@@ -117,15 +117,14 @@ sw_model_t  printers_port_sw_model(void);
 // pass: any StyleWriter record (sw), an original ImageWriter record (iw1), an original
 // StyleWriter record (sw1). Each out may be NULL.
 void        printers_port_listed(int *sw, int *iw1, int *sw1);
-// W-1103: who answered on the port last (pr_heard_t), an answer of the record's own printer
+// W-1103: who answered on the port last (pr_heard_t: the list's history, which the port task
+// and a pending sighting read; a job's gate and the StyleWriter glue read what is on the port
+// now and the job's own answers instead, W-1116), and an answer of the record's own printer
 // that names no model (a StyleWriter's `1` and `2`, a job that printed, the full sequence once
-// the record has its model; PR_HEARD_NONE changes nothing), and whether the port last answered
-// as a family other than `family` (pr_port_other_family: that family's bytes must not go
-// out; the StyleWriter glue's swapped, whichever record). Not stored. Any task, the printer
+// the record has its model; PR_HEARD_NONE changes nothing). Not stored. Any task, the printer
 // task included: nothing here writes flash.
 int         printers_port_heard(void);
 void        printers_port_answered(int heard);
-int         printers_port_other_family(int family);
 // W-1116: a job, test page or cleaning is for port record `id`, but another port record's
 // printer is the one on the port (pr_port_absent): the job is answered busy and the test page
 // and cleaning 409, so one record's work never goes to another's printer. 0 for the one on the

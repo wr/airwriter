@@ -761,15 +761,6 @@ void printers_port_answered(int heard)
     unlock();
 }
 
-int printers_port_other_family(int family)
-{
-    if (!s_started) return 0;
-    lock();
-    int c = pr_port_other_family(s_l, family);
-    unlock();
-    return c;
-}
-
 // W-1116: a job, test page or cleaning for port record `id` goes to another's printer when
 // another port record's printer is the one on the port (pr_port_absent): the one that answered
 // last and is present. Reads the live state as printers_json does.

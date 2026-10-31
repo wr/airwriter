@@ -979,11 +979,16 @@ Apple's StyleWriter adapter (ADSP, not PAP), is not built.
   printer on the port when it is of that family), and from them the printer on the port
   (`pr_port_current`: the record whose model answered last, else the oldest; `pr_port` is
   always the oldest, the record a board had before, which keeps `ipp/print`).
-  `pr_port_other_family` says the port last answered as the other family, so one family's
-  bytes never reach the other; `pr_job_gate` is what an ImageWriter job does after its own
-  `ESC ?` and plain question: go when its own model answered (an original ImageWriter: its
-  line up with nothing said), wait while nothing answers, stop when another model or a
-  StyleWriter did. None of it is stored; a "changed" notice stored before is dropped on load.
+  One family's bytes never reach the other by what is on the port now and what a job's own
+  questions got, never the list's last answer: a job, test page or cleaning for a record that
+  is not the one on the port is refused (`pr_port_absent`), an ImageWriter job's own `ESC ?`
+  and plain question gate its page (`pr_job_gate`: go when its own model answered -- an
+  original ImageWriter: its line up with nothing said -- wait while nothing answers, stop when
+  another model or a StyleWriter did), and the StyleWriter glue sends nothing while an
+  ImageWriter is the printer on the port (`printers_port_on_is_imagewriter`).
+  `pr_port_other_family` (the port last answered as the other family) stays in the core with
+  its host tests, but nothing on the board reads it. None of it is stored; a "changed" notice
+  stored before is dropped on load.
   Built so far and host-tested: in `printers_core` the records, the twice-seen rule, the
   per-model uuid, the version 3 blob, `/api/printers` without `swapped`, what each port
   record's AirPrint printer says of itself (`pr_port_say`), the record the port's state
@@ -994,8 +999,8 @@ Apple's StyleWriter adapter (ADSP, not PAP), is not built.
   printer in its slot (3.15 Sharing), the one on the port with the port's state and colour,
   the others offline with why; only that record carries the port's live state on the page;
   the Chooser name and the queue name are the oldest ImageWriter record's; a port job's end
-  goes to the slot it came in on; the StyleWriter glue's `swapped` is
-  `pr_port_other_family(PR_HEARD_STYLEWRITER)` (the port last answered as an ImageWriter),
+  goes to the slot it came in on; the StyleWriter glue's `swapped` is an ImageWriter being the
+  printer on the port now (`printers_port_on_is_imagewriter`: its record current and present),
   whichever record. The current record is the port's mode and state: `printers_port_mode`,
   `s_port_sw` and the live state, model, screen, sharing and `/api/status` `model` follow
   `pr_port_current`, so the page and the test page name and read the printer that answered

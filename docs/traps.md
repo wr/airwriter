@@ -299,8 +299,10 @@ Traps already explained in a code comment are listed only when the comment is ea
 - **A port record and the printer on the port can be of different families** (W-1103, W-1116).
   A StyleWriter answering on a port whose records are ImageWriters, or the reverse, is a record
   of its own once it has answered twice (`pr_port_seen_sw`, `pr_port_seen`: one answer is
-  `PR_SEEN_AGAIN`), never a notice; meanwhile, and whenever the family that answered last is
-  not a record's (`pr_port_other_family`), nothing in that record's language may go out. What
+  `PR_SEEN_AGAIN`), never a notice; meanwhile nothing in a record's language goes out to the
+  other family's printer, by what is on the port now and what the work's own questions got,
+  never the list's last answer (`pr_port_other_family` is in the core and host-tested; nothing
+  on the board reads it). What
   phones are told follows the printer on the port (`pr_port_say`, `port_push`); jobs, the test
   page and cleaning follow the record they are for (W-1116's job commit): a job, test page or
   cleaning for a port record that is not the one on the port -- another port record's printer

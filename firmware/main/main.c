@@ -531,6 +531,14 @@ static int ribbon_ask(int for_job)
         }
     }
     if (!serial_out_clear()) return 0;
+    // W-1116: a line that came up after a second or more down (printer_line_changed set
+    // s_ribbon_due 2 s on) gets the same settle a job's or test page's question as the idle
+    // one does (W-1064): a II switched on mid-wait does not answer its first ESC ? yet, and
+    // with an original ImageWriter record listed its silence would be taken for the original's.
+    while (for_job && s_ribbon_want && (int32_t)(xTaskGetTickCount() - s_ribbon_due) < 0 &&
+           !job_stopping())
+        vTaskDelay(pdMS_TO_TICKS(100));
+    if (job_stopping()) return 0;
     // W-1116: a job's or test page's plain question goes before any ImageWriter byte -- the
     // resync, ESC ?, the CR -- whenever the line is up: a StyleWriter that raised its line and
     // heard ESC ? first would stop listening until a reset, and an original ImageWriter record
@@ -1426,8 +1434,13 @@ static int sw_clean_web(int id)
 {
     if (printers_test_kind(id) != 3) return 502;
     int busy = xSemaphoreTake(s_job_lock, 0) != pdTRUE;
-    if (!busy) {                                 // a new session: what it finds is the state
-        s_sw_job_silent = 0;
+    if (!busy) {
+        // W-1116: the cleaning's family is its record's, a StyleWriter, under the lock, as a
+        // job's (doc_begin) and a test page's (test_page_to) are: whose answers are the port's
+        // state while it runs, and whose family the answer at its end names. The flip zeroes
+        // answering, so what the StyleWriter was doing before is read after it.
+        port_sw_sync(1, 1);
+        s_sw_job_silent = 0;                     // a new session: what it finds is the state
         s_sw_was_answering = s_port_answering;
     }
     sw_model_t m = pr_model_to_sw(printers_record_model(id));   // the record's own (W-1116)
@@ -1769,7 +1782,12 @@ static void kick_task(void *arg)
         port_act_t act = port_policy(&in);
         if (act == PA_NONE) continue;
         if (xSemaphoreTake(s_job_lock, 0) != pdTRUE) {
-            s_port_confirm = PA_NONE;        // a job has the port: the sighting is stale by its end
+            // A job has the port: the sighting is stale by its end. Only when one really does
+            // (a job, test page or cleaning is printing): a quick take and give -- a Mac's
+            // stream answered busy for the sighting itself (lt_print_begin), the list's screen
+            // follow -- must not make the port task forget it, or the Mac's next try slips
+            // through before the repeat (task 6 round 3).
+            if (s_printing || s_ipp_owns || s_sw_owns) s_port_confirm = PA_NONE;
             continue;
         }
 
