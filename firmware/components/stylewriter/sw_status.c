@@ -14,7 +14,9 @@ sw_ipp_t sw_state_ipp(sw_state_t st)
     // as the offline state uses, reads as an error on a stopped printer all the same.
     case SWS_CART_JAM:     return (sw_ipp_t){ "other",                       "Needs attention: check the ink cartridge" };
     case SWS_FAULT:        return (sw_ipp_t){ "other",                       "Needs attention: check the printer" };
-    case SWS_OFFLINE:      return (sw_ipp_t){ "other",                       "Offline: check power and cable" };
+    // Offline is a status name alone, page and phone (Wells, 2026-10-31): what to check is
+    // the wiki's Offline troubleshooting row's.
+    case SWS_OFFLINE:      return (sw_ipp_t){ "other",                       "Offline" };
     case SWS_READY:
     case SWS_PRINTING:     break;
     }

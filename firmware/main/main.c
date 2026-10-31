@@ -3163,8 +3163,9 @@ static ps_state_t port_state(ps_state_t box)
     return box == PS_OFFLINE || box == PS_ATTENTION ? PS_READY : box;
 }
 
-// An ImageWriter whose line is down, idle: off, unplugged or deselected.
-static const char IW_OFFLINE_WORDS[] = "Offline: check power, cable and SELECT";
+// An ImageWriter whose line is down, idle: off, unplugged or deselected. Offline is a status
+// name alone, page and phone (Wells, 2026-10-31); what to check is the wiki's.
+static const char IW_OFFLINE_WORDS[] = "Offline";
 
 // What the port's own state is, in the words of a port record's family, for its slot: an
 // ImageWriter's line, or what a StyleWriter said itself (no paper, a jam, the cartridge, the

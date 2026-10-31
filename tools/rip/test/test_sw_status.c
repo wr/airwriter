@@ -17,7 +17,7 @@ int main(void)
     // The design's two sentences.
     CHECK(!strcmp(sw_state_ipp(SWS_NO_PAPER).message, "Needs attention: check paper"));
     CHECK(!strcmp(sw_state_ipp(SWS_NO_PAPER).reason, "media-empty-error"));
-    CHECK(!strcmp(sw_state_ipp(SWS_OFFLINE).message, "Offline: check power and cable"));
+    CHECK(!strcmp(sw_state_ipp(SWS_OFFLINE).message, "Offline"));
     CHECK(!strcmp(sw_state_ipp(SWS_OFFLINE).reason, "other"));
 
     // Each fault the session names has its own IPP reason.
@@ -45,7 +45,7 @@ int main(void)
         CHECK_EQ_INT(p.reason == NULL, ready);
         if (p.reason) {
             CHECK(ends_with(p.reason, "-error") || !strcmp(p.reason, "other"));
-            CHECK(!strncmp(p.message, "Needs attention: ", 17) || !strncmp(p.message, "Offline: ", 9));
+            CHECK(!strncmp(p.message, "Needs attention: ", 17) || !strcmp(p.message, "Offline"));
             CHECK(fault == !strncmp(p.message, "Needs attention: ", 17));
         }
     }

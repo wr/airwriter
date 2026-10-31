@@ -199,8 +199,8 @@ per printer, in the W-1079 row shape: icon by kind, name, where it is, a state l
 chevron to its detail. Keys at the foot: Look for Printers, Add a Printer….
 
 **A printer's detail** (a sheet on a phone, the pane's content on a big screen): status lamp and
-words (Ready, Printing, Needs attention: *the printer's own words*, Offline: "Check power, cable
-and SELECT" for the port, "Not answering" for AppleTalk); for an ImageWriter its ribbon;
+words (Ready, Printing, Needs attention: *the printer's own words*, Offline; W-1116,
+2026-10-31: Offline alone for every printer, what to check in the wiki's Offline row); for an ImageWriter its ribbon;
 Name; Model (port printers: ImageWriter II, ImageWriter LQ, ImageWriter, Something else);
 Share with iPhone, iPad and Mac (switch); Halftone with its printed sample; Print Test Page;
 Test Cable… (port only); Remove Printer… ("Remove *name*? It stops appearing on your iPhone,

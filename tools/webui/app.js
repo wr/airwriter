@@ -613,9 +613,9 @@ function stWords(p){
   // W-1103: a StyleWriter has no SELECT key
   const sw=p.kind==='stylewriter';
   if(p.state==='attention') return ['a','Needs attention: '+(p.where==='port'?(sw?SW_FAULT[p.fault]||SW_FAULT.other:'check paper and SELECT'):low(t&&lwStatus(t.message))||'check the printer')];
-  // W-1116: one kind of Offline: a port printer whose port is another's (another printer
-  // connected, or a Something else record listed) reads as one with nothing answering
-  if(p.state==='offline') return ['',p.where==='port'?(sw?'Offline: check power and cable':'Offline: check power, cable and SELECT'):'Offline: check that it’s switched on'];
+  // Offline is a status name alone, as on the phone, for every printer (Wells, 2026-10-31):
+  // what to check is the wiki's Offline troubleshooting row's
+  if(p.state==='offline') return ['','Offline'];
   if(p.state==='printing'&&t&&/busy/i.test(t.message||'')&&!S.printing) return ['g','Busy with another job'];
   return ST[p.state]||['',''];
 }

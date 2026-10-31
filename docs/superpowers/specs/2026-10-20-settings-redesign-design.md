@@ -127,8 +127,9 @@ mode 2 starts the port as before.
 
 Each was looked at in `tools/webui/preview.py` at desktop and phone width, light and dark:
 
-- Printer offline reads "Check power, cable and SELECT" (off, unplugged and deselected look the
-  same to the board); Print Test Page then says so instead of sending a page. In setup mode the
+- Printer offline reads "Offline" (W-1116, 2026-10-31: a status name alone, for every printer;
+  what to check is the wiki's Offline row; off, unplugged and deselected look the same to the
+  board); Print Test Page then says so instead of sending a page. In setup mode the
   printer's line comes from the printer, not the setup.
 - The page notices when the board stops answering (two polls, 8 s): a note, "AirWriter isn't
   answering. Trying again…", over what it last heard, at the top on a big screen and the foot

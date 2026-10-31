@@ -192,8 +192,8 @@ Never while a job runs on the port, as built.
 answered `server-error-busy`, its body read to the end, as when another job holds the printer
 (SPEC 3.4): the phone or Mac keeps the job and asks again, and it prints once the person swaps
 the cable. Nothing is held on the board, so the printer that is there, and every other printer,
-keep printing. The absent printer reads `stopped`, `offline-report`, with its family's one
-Offline line ("Offline: check power and cable" for a StyleWriter), never why (R27).
+keep printing. The absent printer reads `stopped`, `offline-report`, "Offline", never why
+(R27).
 
 This rests on how iPhones and Macs retry, which nobody has watched for minutes on end. Gate: on
 the bench, an iPhone and a Mac print to the absent printer and the bench records how long each
@@ -265,11 +265,10 @@ The bench check below covers it on a rev A board (N8R2, 2 MB PSRAM), the smaller
 - **Printers list.** Every port printer has its row: icon, name, "Printer port", its lamp. The
   one answering shows its state; the others show Offline. No notice for a swap.
 - **A port printer's detail**, offline for any reason (another printer answers, nothing does,
-  a Something else record is listed): its family's one Offline line, as today ("Offline:
-  check power, cable and SELECT" for an ImageWriter, "Offline: check power and cable" for a
-  StyleWriter), the phone's words exactly; never why (R27). Print Test Page and Clean Print
-  Head on a printer whose port another is on still answer "Connect *name* to the printer port
-  first." (an action's refusal, not a status line).
+  a Something else record is listed): "Offline", the phone's word exactly, as for every
+  offline printer (R28); never why (R27). Print Test Page and Clean Print Head on a printer
+  whose port another is on still answer "Connect *name* to the printer port first." (an
+  action's refusal, not a status line).
 - **Add a Printer…** adds. Its model list marks models already in Printers as added.
 - **Notices** left: the unknown port printer, a LaserWriter that won't answer, more than six.
 - **Phones** see every shared port printer all the time, each `stopped` + `offline-report` while
@@ -334,8 +333,8 @@ Host tests (`make -C tools/rip test`, `make -C tools/ipp test`):
 On the bench board, with its ImageWriter II, the fake LaserWriter (`etpeer.py`), the Mac and the
 iPhone:
 
-1. A StyleWriter II record added by hand: both rows show, the StyleWriter Offline ("Offline:
-   check power and cable", on the page and the iPhone), the ImageWriter Ready.
+1. A StyleWriter II record added by hand: both rows show, the StyleWriter Offline (on the
+   page and the iPhone), the ImageWriter Ready.
 2. The ImageWriter switched off: Offline within 3 s on the page and the iPhone; on: Ready
    within 3 s, and never the wrong ImageWriter on the way.
 3. The busy gate above: the iPhone and the Mac print to the StyleWriter record; how long each
@@ -429,3 +428,8 @@ Rulings made during the build that change what the sections above say:
   The phone's reason keyword stays `offline-report` for a taken port. The 409 "Connect *name*
   to the printer port first." on Print Test Page and Clean Print Head stays: it refuses an
   action, it is not a status line. The reasons go in the wiki's Offline troubleshooting row.
+- **R28** (Wells, 2026-10-31, from the bench): Offline is a status name alone, "Offline", on
+  the page and the phone, for every printer of every kind (ImageWriter, StyleWriter,
+  LaserWriter), not only port printers: "check power and cable" pointed a printer that isn't
+  plugged in, because another is, at the wrong fix. What to check goes in the wiki's Offline
+  row. Print Test Page's own refusal on an offline printer keeps its line of help.

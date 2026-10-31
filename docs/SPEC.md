@@ -798,11 +798,10 @@ read back is a list made again). At most 8 records.
   family's words (3.9's for an ImageWriter, 3.16's for a StyleWriter), and the colour the
   ribbon or cartridge last read offers (a black-only StyleWriter none; a record that is not
   on the port keeps the colour it last offered, unless its model has none); every other port
-  record `stopped` in its family's offline words, the one line the page shows too ("Offline:
-  check power, cable and SELECT", "Offline: check power and cable"), whether nothing answers,
-  another port record's printer is present or a Something else record is listed (one kind of
-  Offline, Wells 2026-10-31: a status line never says why; the reasons are the wiki's Offline
-  troubleshooting row's); only the reason keyword differs, `offline-report` while the port is
+  record `stopped` with the message "Offline", the one word the page shows too for every
+  offline printer of any kind, whether nothing answers, another port record's printer is
+  present or a Something else record is listed (Wells 2026-10-31: Offline is a status name
+  alone; what to check, and why, are the wiki's Offline troubleshooting row's); only the reason keyword differs, `offline-report` while the port is
   another's (`PR_PORT_SAY_TAKEN`), the family's own with nothing answering; so phones see
   every shared port printer all the time, each offline while it isn't the one answering. The
   same printer put in its slot again (a rename, a model change: its uuid) keeps its state and
@@ -1159,7 +1158,7 @@ Apple's StyleWriter adapter (ADSP, not PAP), is not built.
   original, II, 1200 and 1500 is the printer holding the job and clears itself; bit 80 of `2` is
   spurious on the 2400 and 2500. Silence is 30 s with nothing the printer says heard (counted
   from its last answer, or from when the caller last gave the session something to do): the job
-  fails, the state is offline ("check power and cable"), and the next job resets the printer. A
+  fails, the state is offline, and the next job resets the printer. A
   printer switched off mid-page has lost the page.
 - **Idle and status.** Idle, `1` and `2` every 10 s feed the page, the panel and IPP as the
   ImageWriter's line does: an answer is ready (or the fault it holds), none is offline. Each
@@ -1173,8 +1172,8 @@ Apple's StyleWriter adapter (ADSP, not PAP), is not built.
   answering; a session that gets nothing from it (the start-up reset, the person's look or
   pick, a job's full sequence, a job it goes silent during) shows it offline until it answers
   or the next session. Switched on, it answers only Look for Printers' reset or a job's, so the
-  wiki's Offline row ends with pressing Look for Printers; the page and phone keep the one
-  line "Offline: check power and cable", as for every StyleWriter. A StyleWriter that starts answering again is asked `D`
+  wiki's Offline row ends with pressing Look for Printers; the page and phone read "Offline",
+  as for every printer. A StyleWriter that starts answering again is asked `D`
   and `H` for its cartridge, as a record that changes family is asked for its ribbon or
   cartridge. The panel
   shows the box's state, and the port's own while it prints.
