@@ -196,19 +196,24 @@ What works on `main`:
   self-ID, the test page) go to J2 only when it is an ImageWriter. A StyleWriter is found by the
   plain question instead (one `?` at 57600, which an ImageWriter at 9600 does not hear), and J2
   runs at 57600 with no flow control while the port's record is one (SPEC §3.16). Identified
-  printers are shared at once, up to four; AppleTalk ones at AirPrint printers 1-3. The test
-  button, DIP4 and the page go to the port's ImageWriter or StyleWriter, else the first shared
-  printer (a LaserWriter gets `ps_testpage`). The panel shows the box: ready while any shared
-  printer is; the idle CTRL-X follows the port printer's own line (`printer_state_port_line`).
+  printers are shared at once, up to six (`PR_SHARE_MAX`, W-1116), any mix of the port's
+  records and AppleTalk printers, each at `ipp/p<id>` and the oldest port record also at
+  `ipp/print`. The test button, DIP4 and the page go to the printer on the port while it is
+  present, else the first shared printer that is ready, else that port record, else the first
+  shared printer (`pr_test_target`; never a port record while a Something else record is
+  listed; a LaserWriter gets `ps_testpage`). The panel shows the box: ready while the
+  printer on the port is, if its record is shared, or any shared LaserWriter is; the idle
+  CTRL-X follows the port printer's own line (`printer_state_port_line`).
   Setup mode looks at once. AirPrint to an AppleTalk ImageWriter was cut: old Macs' only.
   `GET`/`POST /api/printers`; a StyleWriter's record also shows `cartridge` and, while it holds
   one, `fault`, and `{"id":N,"clean":true}` runs one cleaning.
   A board's first boot on it makes its records from what it had (the port's old uuid, a
   W-1082 LaserWriter, the AirPrint switch as the port's Share) and stores its host name, so
   `imagewriter-xxxx` stays; a new board is `airwriter-xxxx` with the AppleTalk port on.
-  Old Macs on each AppleTalk way in that is on are offered every identified printer AirWriter
-  can carry (`printers_offers`, `lt_node_offer`): the port's ImageWriter under its name on
-  socket 0x81, printers from other links under their own NBP names on 0x85-0x87, and
+  Old Macs on each AppleTalk way in that is on are offered one ImageWriter for the printer
+  port and every identified AppleTalk printer AirWriter can carry (`printers_offers`,
+  `lt_node_offer`): the oldest ImageWriter record under its name on socket 0x81, fixed across
+  swaps (W-1116), printers from other links under their own NBP names on 0x85-0x87, and
   `<host name>:AirWriter` on 0x88 on every running link, which another AirWriter's lookups use
   to skip this one's printers. NBP names are the record's in MacRoman (`nbp_name`). A Mac's
   connection to a printer from another link goes through the relay (`localtalk/pap_relay.c`,
@@ -264,7 +269,7 @@ What works on `main`:
   off 14 minutes and back on, was ready 3 s after its last name check (19 s after its first
   frame); the fake, booted, was ready 5 s after, and renamed at its address kept its record and
   uuid (two runs). Once, before the stale-name fix, a renamed fake was never found; not since. A LaserWriter is queried (Level 1 PostScript, a binary probe) and,
-  once it answers, shared on AirPrint printer 1-3 at `ipp/p<id>` (W-1082's at `ipp/laser`), its
+  once it answers, shared on AirPrint printer 1-6 at `ipp/p<id>` (W-1082's at `ipp/laser`), its
   own Bonjour name and UUID. Jobs rip at 300 dpi into Level 1 `imagemask` bands (`ps_page`) and
   go out through one PAP client beside the server (`localtalk/pap_client.c`); `components/laser`
   holds the query, the status words, the caps and UUID, the policy (`lw_core.c`: lookups,

@@ -35,8 +35,9 @@ typedef struct {
     void (*cart)(int colour);
     // The job (a cleaning, a test page) is to stop; asked between steps. NULL: never.
     int  (*cancelled)(void);
-    // The port's last answer came from the other family than the record's (printers_core.h,
-    // pr_port_conflict): no job, test page or cleaning may start, and nothing is sent. NULL: never.
+    // An ImageWriter is the printer on the port now (W-1116: its record is current and
+    // present, printers_port_on_is_imagewriter; not the list's last answer): no job, test
+    // page or cleaning may start, and nothing is sent. NULL: never.
     int  (*swapped)(void);
 } stylewriter_cfg_t;
 

@@ -59,16 +59,21 @@ typedef struct {
 
 int ipp_req_parse(ipp_req_t *r, const uint8_t *buf, size_t len);
 
-// The printers one server answers for (W-1082, W-1088): slot 0 is the
-// printer port's, at every path it has always answered at; 1-3 printers on
-// AppleTalk, each at its own (ipp/p<id>), and W-1082's LaserWriter also at
-// ipp/laser.
-#define IPP_PRINTERS       4
+// The printers one server answers for (W-1082, W-1088, W-1116): seven slots
+// for six shared printers (PR_SHARE_MAX), any mix of the printer port's
+// records and printers on AppleTalk. Slot 0 is the oldest port record's alone,
+// at every path it has always answered at and at its own ipp/p<id> (its
+// legacy path, R9: the path it had before it was the oldest), and stays empty
+// while that record is not shared; slots 1-6 take every other shared record,
+// each at its own path (ipp/p<id>), W-1082's LaserWriter also at ipp/laser. So
+// six fit with slot 0 empty (R14). At most six are on at once: Bonjour carries
+// six _ipp, slot 0's _printer and the page's _http, 8 of CONFIG_MDNS_MAX_SERVICES.
+#define IPP_PRINTERS       7
 #define IPP_RESOURCE_LASER "ipp/laser"
 
 // Which printer a request's HTTP path (or absolute URI) names: a slot at its
-// resource or its legacy one (without the leading '/'), slot 0 for any other
-// path while it is set, and -1 for none: a path of the ipp/p<n> or ipp/laser
-// shape no slot holds is never slot 0's.
+// resource or its legacy one (without the leading '/'), slot 0 included, then
+// slot 0 for any other path while it is set, and -1 for none: a path of the
+// ipp/p<n> or ipp/laser shape no slot holds is never slot 0's.
 int ipp_route(const char *path, const char *const resources[IPP_PRINTERS],
               const char *const legacy[IPP_PRINTERS]);

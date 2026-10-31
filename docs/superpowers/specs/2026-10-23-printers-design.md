@@ -4,6 +4,12 @@
 Wells in chat on 2026-10-23. Builds on `W-1082 AirPrint to LaserWriters on AppleTalk` (merged),
 `W-1087` (the ImageWriter LQ's self-ID, merged) and the settings redesign (`W-1079`).
 
+**Amended 2026-10-30** by `W-1116 Printer port: several printers, the one plugged in shows
+online` (`2026-10-30-port-printers-design.md`): the printer port keeps a record per model, the
+one answering online and the rest offline, so "the printer port holds one printer" and the
+"changed" notice (accept or dismiss) below no longer hold; a different printer answering is a
+record of its own, once it has answered twice.
+
 ## Why
 
 AirWriter assumes an ImageWriter. Its host name is `imagewriter-xxxx`, its default printer is
@@ -97,7 +103,8 @@ ImageWriter settings and `laser`'s single shared LaserWriter. Each record:
 
 Up to four records are shared over AirPrint at once (one on the port, three on AppleTalk). More
 are listed but not offered, with a line saying AirWriter shares up to four. Wells's "one or two,
-with a long tail" fits; four keeps the mDNS service count and memory bounded.
+with a long tail" fits; four keeps the mDNS service count and memory bounded. (W-1116: now up to
+six, any mix, with several port printers.)
 
 **Names.** From the printer, never from Wells: an AppleTalk printer's own NBP name ("Office
 LaserWriter"); a port printer's model ("ImageWriter II", "ImageWriter LQ", "ImageWriter"). Two
@@ -193,8 +200,8 @@ per printer, in the W-1079 row shape: icon by kind, name, where it is, a state l
 chevron to its detail. Keys at the foot: Look for Printers, Add a Printer….
 
 **A printer's detail** (a sheet on a phone, the pane's content on a big screen): status lamp and
-words (Ready, Printing, Needs attention: *the printer's own words*, Offline: "Check power, cable
-and SELECT" for the port, "Not answering" for AppleTalk); for an ImageWriter its ribbon;
+words (Ready, Printing, Needs attention: *the printer's own words*, Offline; W-1116,
+2026-10-31: Offline alone for every printer, what to check in the wiki's Offline row); for an ImageWriter its ribbon;
 Name; Model (port printers: ImageWriter II, ImageWriter LQ, ImageWriter, Something else);
 Share with iPhone, iPad and Mac (switch); Halftone with its printed sample; Print Test Page;
 Test Cable… (port only); Remove Printer… ("Remove *name*? It stops appearing on your iPhone,
@@ -332,6 +339,7 @@ lookups' timing within the limits above; how setup mode fits the LocalTalk node 
 ## Calls I made (Claude), for Wells to check
 
 1. **Up to four printers shared** (one port, three AppleTalk); more are listed but not offered.
+   (W-1116: now up to six, any mix of port and AppleTalk printers.)
 2. **AppleTalk ImageWriters** (LocalTalk Option Card) are supported, through the PAP client and
    the ImageWriter rip, since the pieces exist.
 3. **A changed port printer is offered, not swapped**, so a misread self-ID never renames

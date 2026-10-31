@@ -170,8 +170,11 @@ int ipp_route(const char *path, const char *const resources[IPP_PRINTERS],
         if (!path) return resources[0] ? 0 : -1;
     }
     while (*path == '/') path++;
-    for (int i = 1; i < IPP_PRINTERS; i++) {
-        if (resources[i] && under(path, resources[i])) return i;
+    // Slot 0 too (W-1116): the oldest port record's own ipp/p<id> is its legacy path, and a
+    // path of that shape would otherwise be nobody's below. A legacy path is a set slot's.
+    for (int i = 0; i < IPP_PRINTERS; i++) {
+        if (!resources[i]) continue;
+        if (under(path, resources[i])) return i;
         if (legacy && legacy[i] && under(path, legacy[i])) return i;
     }
     if (slot_shaped(path) || under(path, IPP_RESOURCE_LASER)) return -1;

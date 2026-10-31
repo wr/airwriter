@@ -17,6 +17,11 @@ static const uint8_t MAC[6] = { 0x10, 0xBD, 0xA3, 0x6E, 0x24, 0x34 };
 static pr_list_t L;
 static void fresh(void) { pr_init(&L, MAC, 1); }
 
+// W-1116: an answer naming a model with no record makes one only when it comes twice in a
+// row. The set-up for tests that want the record there: the second answer's return.
+static int seen_iw(pr_port_seen_t what) { pr_port_seen(&L, what); return pr_port_seen(&L, what); }
+static int seen_sw(pr_model_t m) { pr_port_seen_sw(&L, m); return pr_port_seen_sw(&L, m); }
+
 static int notes_of(int kind)
 {
     int c = 0;
@@ -38,6 +43,10 @@ static const uint8_t *P(const char *s)      // a Pascal string from C, for tests
 static void test_port_identified(void)
 {
     fresh();
+    // W-1116: the same answer twice makes the record; one reply may be garbled.
+    CHECK_EQ_INT(pr_port_seen(&L, PR_PORT_IW2), PR_SEEN_AGAIN);
+    CHECK_EQ_INT(L.n, 0);
+    CHECK_EQ_INT(pr_port_heard(&L), PR_HEARD_IMAGEWRITER);     // who answered follows at once
     int id = pr_port_seen(&L, PR_PORT_IW2);
     CHECK(id >= 0);
     const pr_rec_t *r = pr_get(&L, id);
@@ -75,40 +84,172 @@ static void test_port_silent(void)
     CHECK_EQ_INT(pr_port_is_imagewriter(&L), 0);
 }
 
-static void test_port_changed(void)
+// W-1116: the printer port keeps a record for every model that answers on it, one per model,
+// and the one that answered last is the one on the port. A different printer answering is
+// that printer's record, never a notice, and the record it replaced is as it was.
+static void test_port_two_records(void)
 {
     fresh();
-    int id = pr_port_seen(&L, PR_PORT_IW2);
-    char uuid[46];
-    strcpy(uuid, pr_get(&L, id)->uuid);
-    pr_rename(&L, id, "Desk");
-    CHECK_EQ_INT(pr_port_seen(&L, PR_PORT_IWLQ), id);
-    CHECK_EQ_INT(pr_get(&L, id)->model, PR_MODEL_IW2);      // offered, never swapped
-    CHECK(strcmp(pr_get(&L, id)->name, "Desk") == 0);
-    CHECK_EQ_INT(notes_of(PR_NOTE_CHANGED), 1);
-    pr_port_seen(&L, PR_PORT_IWLQ);                         // seen again: one note
-    CHECK_EQ_INT(notes_of(PR_NOTE_CHANGED), 1);
-    int note = -1;
-    for (int i = 0; i < L.n_notes; i++) if (L.notes[i].kind == PR_NOTE_CHANGED) note = i;
-    CHECK_EQ_INT(L.notes[note].model, PR_MODEL_IWLQ);
-    CHECK_EQ_INT(pr_accept_change(&L, note), 0);
-    CHECK_EQ_INT(pr_get(&L, id)->model, PR_MODEL_IWLQ);
-    CHECK(strcmp(pr_get(&L, id)->name, "Desk") == 0);       // the person's name stays
-    CHECK(strcmp(pr_get(&L, id)->uuid, uuid) == 0);
+    int iw = seen_iw(PR_PORT_IW2);
+    CHECK(iw >= 0);
+    CHECK_EQ_INT(L.n, 1);
+    CHECK_EQ_INT(pr_port_count(&L), 1);
+    CHECK(pr_port_current(&L) == pr_get(&L, iw));
+    pr_rename(&L, iw, "Desk");
+    CHECK_EQ_INT(pr_port_seen_sw(&L, PR_MODEL_SW2), PR_SEEN_AGAIN);
+    CHECK_EQ_INT(L.n, 1);
+    CHECK(pr_port_current(&L) == pr_get(&L, iw));          // no record answers: the oldest
+    int sw = pr_port_seen_sw(&L, PR_MODEL_SW2);
+    CHECK(sw >= 0 && sw != iw);
+    CHECK_EQ_INT(L.n, 2);
+    CHECK_EQ_INT(pr_port_count(&L), 2);
+    const pr_rec_t *r = pr_get(&L, sw);
+    CHECK_EQ_INT(r->where, PR_WHERE_PORT);
+    CHECK_EQ_INT(r->kind, PR_KIND_STYLEWRITER);
+    CHECK_EQ_INT(r->model, PR_MODEL_SW2);
+    CHECK(strcmp(r->name, "StyleWriter II") == 0);
+    CHECK_EQ_INT(r->shared, 1);
+    CHECK_EQ_INT(r->found_auto, 1);
+    CHECK_EQ_INT(r->identified, 1);
+    r = pr_get(&L, iw);                                     // the ImageWriter's, as it was
+    CHECK_EQ_INT(r->kind, PR_KIND_IMAGEWRITER);
+    CHECK_EQ_INT(r->model, PR_MODEL_IW2);
+    CHECK_EQ_INT(r->shared, 1);
+    CHECK(strcmp(r->name, "Desk") == 0);
+    CHECK_EQ_INT(L.n_notes, 0);
     CHECK_EQ_INT(notes_of(PR_NOTE_CHANGED), 0);
-
-    // A default name follows the model.
+    // The one on the port follows each answer; the oldest record stays pr_port's.
+    CHECK(pr_port_current(&L) == pr_get(&L, sw));
+    CHECK(pr_port(&L) == pr_get(&L, iw));
+    CHECK_EQ_INT(pr_port_heard(&L), PR_HEARD_STYLEWRITER);
+    CHECK_EQ_INT(pr_port_is_stylewriter(&L), 1);
+    CHECK_EQ_INT(pr_port_is_imagewriter(&L), 0);
+    CHECK_EQ_INT(pr_port_seen(&L, PR_PORT_IW2), iw);        // a recorded model: at once
+    CHECK(pr_port_current(&L) == pr_get(&L, iw));
+    CHECK_EQ_INT(pr_port_heard(&L), PR_HEARD_IMAGEWRITER);
+    CHECK_EQ_INT(pr_port_is_imagewriter(&L), 1);
+    CHECK_EQ_INT(pr_port_is_stylewriter(&L), 0);
+    CHECK_EQ_INT(pr_port_seen_sw(&L, PR_MODEL_SW2), sw);
+    CHECK(pr_port_current(&L) == pr_get(&L, sw));
+    CHECK_EQ_INT(L.n, 2);
+    CHECK_EQ_INT(L.n_notes, 0);
+    CHECK(pr_port_of(&L, PR_MODEL_IW2) == pr_get(&L, iw));
+    CHECK(pr_port_of(&L, PR_MODEL_SW2) == pr_get(&L, sw));
+    CHECK(pr_port_of(&L, PR_MODEL_IWLQ) == NULL);
+    CHECK(pr_port_of(&L, PR_MODEL_NONE) == NULL);
+    CHECK(pr_port_said_other(&L) == NULL);
+    // Which family answered last, for the record that must not hear the other's language.
+    CHECK_EQ_INT(pr_port_other_family(&L, PR_HEARD_IMAGEWRITER), 1);
+    CHECK_EQ_INT(pr_port_other_family(&L, PR_HEARD_STYLEWRITER), 0);
+    pr_port_seen(&L, PR_PORT_IW2);
+    CHECK_EQ_INT(pr_port_other_family(&L, PR_HEARD_IMAGEWRITER), 0);
+    CHECK_EQ_INT(pr_port_other_family(&L, PR_HEARD_STYLEWRITER), 1);
+    // An ImageWriter LQ makes a third; an AppleTalk printer is not a port record.
+    int lq = seen_iw(PR_PORT_IWLQ);
+    CHECK(lq >= 0);
+    CHECK_EQ_INT(pr_port_count(&L), 3);
+    CHECK(pr_port_current(&L) == pr_get(&L, lq));
+    pr_at_seen(&L, PR_WHERE_CABLE, P("Office"), P("LaserWriter"), 0);
+    CHECK_EQ_INT(pr_port_count(&L), 3);
+    CHECK_EQ_INT(L.n, 4);
+    // An answer of its own that names no model (a job that printed) keeps the one on the port;
+    // one of the other family with no model named leaves the oldest as the port's.
+    pr_port_answered(&L, PR_HEARD_IMAGEWRITER);
+    CHECK(pr_port_current(&L) == pr_get(&L, lq));
+    pr_port_answered(&L, PR_HEARD_STYLEWRITER);
+    CHECK_EQ_INT(pr_port_heard(&L), PR_HEARD_STYLEWRITER);
+    CHECK(pr_port_current(&L) == pr_port(&L));
+    pr_port_answered(&L, PR_HEARD_NONE);                    // silence is not an answer
+    CHECK_EQ_INT(pr_port_heard(&L), PR_HEARD_STYLEWRITER);
+    // The line down or nothing said changes no record.
+    CHECK_EQ_INT(pr_port_seen(&L, PR_PORT_NOTHING), pr_port_current(&L)->id);
+    CHECK_EQ_INT(pr_port_seen(&L, PR_PORT_SILENT), pr_port_current(&L)->id);
+    CHECK_EQ_INT(L.n, 4);
+    CHECK_EQ_INT(L.n_notes, 0);
+    // The page: every port record with its own state, and no swap to confirm.
+    pr_live_t live[PR_MAX];
+    memset(live, 0, sizeof live);
+    live[pr_index(&L, sw)].present = live[pr_index(&L, sw)].ready = 1;
+    static char buf[4096];
+    CHECK(pr_json(&L, live, buf, sizeof buf) > 0);
+    CHECK(strstr(buf, "swapped") == NULL);
+    CHECK(strstr(buf, "\"state\":\"ready\"") != NULL);
+    CHECK(strstr(buf, "\"state\":\"attention\"") == NULL);
+    CHECK(strstr(buf, "\"changed\"") == NULL);
+    // Removing the record of the printer on the port: it comes back at the next two answers.
+    CHECK_EQ_INT(pr_remove(&L, iw), 0);
+    CHECK(pr_port(&L) == pr_get(&L, sw));                   // the oldest left
+    CHECK_EQ_INT(pr_port_seen(&L, PR_PORT_IW2), PR_SEEN_AGAIN);
+    int again = pr_port_seen(&L, PR_PORT_IW2);
+    CHECK(again >= 0 && again != iw);
+    CHECK_EQ_INT(pr_port_count(&L), 3);
+    // Nothing answered yet: no family is the other.
     fresh();
-    id = pr_port_seen(&L, PR_PORT_IW2);
-    pr_port_seen(&L, PR_PORT_IWLQ);
-    pr_accept_change(&L, 0);                                // notes: CHANGED
-    CHECK(strcmp(pr_get(&L, id)->name, "ImageWriter LQ") == 0);
+    CHECK_EQ_INT(pr_port_other_family(&L, PR_HEARD_IMAGEWRITER), 0);
+    CHECK_EQ_INT(pr_port_other_family(&L, PR_HEARD_STYLEWRITER), 0);
+    CHECK(pr_port_current(&L) == NULL);
+    CHECK_EQ_INT(pr_port_count(&L), 0);
+}
+
+// A model with no record is believed only when it answers twice in a row, so a garbled reply
+// never adds a printer. Any other answer in between starts it over; the line going down
+// between the two (the cable moved) does not. Nothing of it is stored.
+static void test_twice_seen(void)
+{
+    fresh();
+    CHECK_EQ_INT(pr_port_seen(&L, PR_PORT_IWLQ), PR_SEEN_AGAIN);
+    CHECK_EQ_INT(L.n, 0);
+    CHECK_EQ_INT(L.n_notes, 0);
+    CHECK_EQ_INT(pr_port_seen(&L, PR_PORT_IW2), PR_SEEN_AGAIN);     // another model: over again
+    CHECK_EQ_INT(pr_port_seen(&L, PR_PORT_IWLQ), PR_SEEN_AGAIN);
+    CHECK_EQ_INT(L.n, 0);
+    int lq = pr_port_seen(&L, PR_PORT_IWLQ);
+    CHECK(lq >= 0);
+    CHECK_EQ_INT(pr_get(&L, lq)->model, PR_MODEL_IWLQ);
+    CHECK_EQ_INT(L.n, 1);
+    // A StyleWriter's answer resets an ImageWriter's, and the other way round.
+    CHECK_EQ_INT(pr_port_seen(&L, PR_PORT_IW2), PR_SEEN_AGAIN);
+    CHECK_EQ_INT(pr_port_seen_sw(&L, PR_MODEL_SWC2500), PR_SEEN_AGAIN);
+    CHECK_EQ_INT(pr_port_seen(&L, PR_PORT_IW2), PR_SEEN_AGAIN);
+    CHECK_EQ_INT(pr_port_seen_sw(&L, PR_MODEL_SWC2500), PR_SEEN_AGAIN);
+    CHECK_EQ_INT(L.n, 1);
+    // Nothing said with the line up is another answer; the line down is not one.
+    CHECK_EQ_INT(pr_port_seen(&L, PR_PORT_IW2), PR_SEEN_AGAIN);
+    CHECK_EQ_INT(pr_port_seen(&L, PR_PORT_SILENT), lq);
+    CHECK_EQ_INT(pr_port_seen(&L, PR_PORT_IW2), PR_SEEN_AGAIN);
+    CHECK_EQ_INT(pr_port_seen(&L, PR_PORT_NOTHING), lq);
+    int iw = pr_port_seen(&L, PR_PORT_IW2);
+    CHECK(iw >= 0 && iw != lq);
+    CHECK_EQ_INT(L.n, 2);
+    // A recorded model needs no second answer.
+    CHECK_EQ_INT(pr_port_seen(&L, PR_PORT_IWLQ), lq);
+    CHECK_EQ_INT(pr_port_seen(&L, PR_PORT_IW2), iw);
+    CHECK_EQ_INT(pr_port_seen_sw(&L, PR_MODEL_SWC2500), PR_SEEN_AGAIN);
+    int sw = pr_port_seen_sw(&L, PR_MODEL_SWC2500);
+    CHECK(sw >= 0);
+    CHECK_EQ_INT(pr_port_seen_sw(&L, PR_MODEL_SWC2500), sw);
+    CHECK_EQ_INT(L.n, 3);
+    CHECK_EQ_INT(L.n_notes, 0);
+    // Not a StyleWriter model: ignored.
+    CHECK_EQ_INT(pr_port_seen_sw(&L, PR_MODEL_NONE), -1);
+    CHECK_EQ_INT(pr_port_seen_sw(&L, PR_MODEL_IW2), -1);
+    CHECK_EQ_INT(L.n, 3);
+    // The first answer is not stored: a restart between the two starts over.
+    fresh();
+    CHECK_EQ_INT(pr_port_seen(&L, PR_PORT_IWLQ), PR_SEEN_AGAIN);
+    static uint8_t buf[4096];
+    size_t n = pr_save(&L, buf, sizeof buf);
+    pr_list_t M;
+    pr_init(&M, MAC, 1);
+    CHECK_EQ_INT(pr_load(&M, buf, n), 0);
+    CHECK_EQ_INT(pr_port_seen(&M, PR_PORT_IWLQ), PR_SEEN_AGAIN);
+    CHECK_EQ_INT(M.n, 0);
 }
 
 static void test_port_nothing(void)
 {
     fresh();
-    int id = pr_port_seen(&L, PR_PORT_IW2);
+    int id = seen_iw(PR_PORT_IW2);
     int notes = L.n_notes;
     CHECK_EQ_INT(pr_port_seen(&L, PR_PORT_NOTHING), id);
     CHECK_EQ_INT(L.n, 1);
@@ -208,30 +349,73 @@ static void test_skip_airwriter(void)
     CHECK_EQ_INT(L.n, 0);
 }
 
+static int shared_count(void)
+{
+    int c = 0;
+    for (int i = 0; i < L.n; i++) c += L.r[i].shared;
+    return c;
+}
+
+// W-1116: six shared, any mix of the port's records and AppleTalk printers. The seventh
+// identified printer is listed with the "too many" notice and shares once another stops.
 static void test_cap(void)
 {
     fresh();
     lw_info_t info;
     lw_info_default(&info);
-    pr_port_seen(&L, PR_PORT_IW2);
-    int id[4];
-    const char *names[4] = { "A", "B", "C", "D" };
-    for (int i = 0; i < 4; i++) {
+    int port = seen_iw(PR_PORT_IW2);
+    int id[6];
+    const char *names[6] = { "A", "B", "C", "D", "E", "F" };
+    for (int i = 0; i < 6; i++) {
         id[i] = pr_at_seen(&L, PR_WHERE_NETWORK, P(names[i]), P("LaserWriter"), 0);
         pr_at_queried(&L, id[i], 1, &info);
     }
-    CHECK_EQ_INT(pr_get(&L, id[0])->shared + pr_get(&L, id[1])->shared + pr_get(&L, id[2])->shared, 3);
-    CHECK_EQ_INT(pr_get(&L, id[3])->shared, 0);
+    CHECK_EQ_INT(PR_SHARE_MAX, 6);
+    CHECK_EQ_INT(shared_count(), 6);
+    CHECK_EQ_INT(pr_get(&L, port)->shared, 1);
+    for (int i = 0; i < 5; i++) CHECK_EQ_INT(pr_get(&L, id[i])->shared, 1);
+    CHECK_EQ_INT(pr_get(&L, id[5])->shared, 0);
     CHECK_EQ_INT(notes_of(PR_NOTE_TOO_MANY), 1);
-    CHECK_EQ_INT(pr_set_shared(&L, id[3], 1), -1);
+    CHECK_EQ_INT(pr_set_shared(&L, id[5], 1), -1);
+    char body[64];
+    pr_post_t o;
+    snprintf(body, sizeof body, "{\"id\":%d,\"shared\":true}", id[5]);
+    CHECK_EQ_INT(pr_post(&L, body, &o), -1);
+    CHECK(strcmp(o.err, "You can share up to 6 printers.") == 0);
+    // A shared record at the cap keeps its place through a model change: it is not a seventh.
+    CHECK_EQ_INT(pr_set_model(&L, port, PR_MODEL_IWLQ), 0);
+    CHECK_EQ_INT(pr_get(&L, port)->shared, 1);
+    CHECK_EQ_INT(notes_of(PR_NOTE_TOO_MANY), 1);
+    // A second port record is one of the six like any other: listed, not shared, its notice.
+    int second = pr_add_port(&L, PR_MODEL_IW2);
+    CHECK(second >= 0);
+    CHECK_EQ_INT(pr_get(&L, second)->shared, 0);
+    CHECK_EQ_INT(notes_of(PR_NOTE_TOO_MANY), 2);
     CHECK_EQ_INT(pr_set_shared(&L, id[1], 0), 0);
-    CHECK_EQ_INT(pr_set_shared(&L, id[3], 1), 0);
+    CHECK_EQ_INT(pr_set_shared(&L, id[5], 1), 0);
+    CHECK_EQ_INT(notes_of(PR_NOTE_TOO_MANY), 1);
+    CHECK_EQ_INT(pr_set_shared(&L, second, 1), -1);
+    CHECK_EQ_INT(shared_count(), 6);
+
+    // Two port records and five LaserWriters: both ports and four of them.
+    fresh();
+    int iw = seen_iw(PR_PORT_IW2), lq = seen_iw(PR_PORT_IWLQ);
+    for (int i = 0; i < 5; i++) {
+        id[i] = pr_at_seen(&L, PR_WHERE_NETWORK, P(names[i]), P("LaserWriter"), 0);
+        pr_at_queried(&L, id[i], 1, &info);
+    }
+    CHECK_EQ_INT(shared_count(), 6);
+    CHECK_EQ_INT(pr_get(&L, iw)->shared, 1);
+    CHECK_EQ_INT(pr_get(&L, lq)->shared, 1);
+    for (int i = 0; i < 4; i++) CHECK_EQ_INT(pr_get(&L, id[i])->shared, 1);
+    CHECK_EQ_INT(pr_get(&L, id[4])->shared, 0);
+    CHECK_EQ_INT(notes_of(PR_NOTE_TOO_MANY), 1);
 }
 
 static void test_names_unique(void)
 {
     fresh();
-    int a = pr_port_seen(&L, PR_PORT_IW2);
+    int a = seen_iw(PR_PORT_IW2);
     int b = pr_at_seen(&L, PR_WHERE_CABLE, P("ImageWriter II"), P("ImageWriter"), 0);
     CHECK(strcmp(pr_get(&L, a)->name, "ImageWriter II") == 0);
     CHECK(strcmp(pr_get(&L, b)->name, "ImageWriter II 2") == 0);
@@ -267,6 +451,24 @@ static void test_remove(void)
     CHECK(again != id);
     pr_at_queried(&L, again, 1, &info);
     CHECK_EQ_INT(pr_get(&L, again)->shared, 1);             // found again: shared again
+
+    // W-1116, R19: removing the record on the port forgets the port's last answer, so the
+    // oldest record is the port's only until something answers; removing another port record
+    // leaves the port's answer as it was.
+    fresh();
+    int iw2 = seen_iw(PR_PORT_IW2);
+    int lq = seen_iw(PR_PORT_IWLQ);
+    CHECK(pr_port_current(&L) == pr_get(&L, lq));
+    CHECK_EQ_INT(pr_remove(&L, iw2), 0);                    // not the one on the port
+    CHECK_EQ_INT(pr_port_heard(&L), PR_HEARD_IMAGEWRITER);
+    CHECK(pr_port_current(&L) == pr_get(&L, lq));
+    int sw = seen_sw(PR_MODEL_SW2);
+    CHECK(pr_port_current(&L) == pr_get(&L, sw));
+    CHECK_EQ_INT(pr_remove(&L, sw), 0);                     // the one on the port
+    CHECK_EQ_INT(pr_port_heard(&L), PR_HEARD_NONE);
+    CHECK_EQ_INT(L.heard_model, 0);
+    CHECK(pr_port_current(&L) == pr_get(&L, lq));           // the oldest, until something answers
+    CHECK_EQ_INT(pr_port_other_family(&L, PR_HEARD_IMAGEWRITER), 0);
 }
 
 static void test_offers(void)
@@ -274,7 +476,7 @@ static void test_offers(void)
     fresh();
     lw_info_t info;
     lw_info_default(&info);
-    int port = pr_port_seen(&L, PR_PORT_IW2);
+    int port = seen_iw(PR_PORT_IW2);
     int lw = pr_at_seen(&L, PR_WHERE_CABLE, P("Office"), P("LaserWriter"), 0);
     pr_at_queried(&L, lw, 1, &info);
     int iw = pr_at_seen(&L, PR_WHERE_TUNNEL, P("Kitchen"), P("ImageWriter"), 0);
@@ -289,12 +491,56 @@ static void test_offers(void)
     pr_set_shared(&L, lw, 0);                               // AirPrint only
     CHECK_EQ_INT(pr_offers(&L, PR_WHERE_NETWORK, ids, 8), 3);
     for (int i = 0; i < 3; i++) CHECK(ids[i] != raw);
+    // W-1116: a second port ImageWriter is not a second offer (test_offers_one_iw).
+    int lq = seen_iw(PR_PORT_IWLQ);
+    CHECK_EQ_INT(pr_offers(&L, PR_WHERE_NETWORK, ids, 8), 3);
+    for (int i = 0; i < 3; i++) CHECK(ids[i] != lq);
+}
+
+// W-1116: vintage Macs see one ImageWriter for the printer port, the oldest ImageWriter
+// record's, whatever answers on the port, so a Chooser selection keeps working. A
+// StyleWriter record is still offered to none.
+static void test_offers_one_iw(void)
+{
+    fresh();
+    lw_info_t info;
+    lw_info_default(&info);
+    int iw = seen_iw(PR_PORT_IW2);
+    int lq = seen_iw(PR_PORT_IWLQ);
+    int lw = pr_at_seen(&L, PR_WHERE_CABLE, P("Office"), P("LaserWriter"), 0);
+    pr_at_queried(&L, lw, 1, &info);
+    int ids[8], n;
+    n = pr_offers(&L, PR_WHERE_TUNNEL, ids, 8);
+    CHECK_EQ_INT(n, 2); CHECK_EQ_INT(ids[0], iw); CHECK_EQ_INT(ids[1], lw);
+    n = pr_offers(&L, PR_WHERE_CABLE, ids, 8);
+    CHECK_EQ_INT(n, 1); CHECK_EQ_INT(ids[0], iw);
+    CHECK(pr_port_current(&L) == pr_get(&L, lq));          // the LQ answering changes nothing
+    int sw = pr_add_port(&L, PR_MODEL_SW2);
+    CHECK(sw >= 0);
+    n = pr_offers(&L, PR_WHERE_TUNNEL, ids, 8);
+    CHECK_EQ_INT(n, 2); CHECK_EQ_INT(ids[0], iw); CHECK_EQ_INT(ids[1], lw);
+    // The oldest ImageWriter record gone, the next oldest is the one.
+    pr_remove(&L, iw);
+    n = pr_offers(&L, PR_WHERE_TUNNEL, ids, 8);
+    CHECK_EQ_INT(n, 2); CHECK_EQ_INT(ids[0], lq); CHECK_EQ_INT(ids[1], lw);
+    // The oldest port record a StyleWriter: the ImageWriter record after it is offered.
+    fresh();
+    seen_sw(PR_MODEL_SW2);
+    iw = seen_iw(PR_PORT_IW2);
+    n = pr_offers(&L, PR_WHERE_TUNNEL, ids, 8);
+    CHECK_EQ_INT(n, 1); CHECK_EQ_INT(ids[0], iw);
+    // An "Unknown printer" or "Something else" record is no ImageWriter.
+    fresh();
+    int u = pr_port_seen(&L, PR_PORT_SILENT);
+    CHECK_EQ_INT(pr_offers(&L, PR_WHERE_TUNNEL, ids, 8), 0);
+    pr_set_model(&L, u, PR_MODEL_NONE);
+    CHECK_EQ_INT(pr_offers(&L, PR_WHERE_TUNNEL, ids, 8), 0);
 }
 
 static void test_box_state(void)
 {
     fresh();
-    int a = pr_port_seen(&L, PR_PORT_IW2);
+    int a = seen_iw(PR_PORT_IW2);
     int b = pr_at_seen(&L, PR_WHERE_CABLE, P("Kitchen"), P("LaserWriter"), 0);
     lw_info_t info;
     lw_info_default(&info);
@@ -384,7 +630,7 @@ static void test_save_load(void)
     fresh();
     lw_info_t info;
     lw_info_default(&info);
-    pr_port_seen(&L, PR_PORT_IW2);
+    seen_iw(PR_PORT_IW2);
     int lw = pr_at_seen(&L, PR_WHERE_CABLE, P("Office"), P("LaserWriter"), 0);
     pr_at_queried(&L, lw, 1, &info);
     pr_rename(&L, lw, "Front");
@@ -415,12 +661,13 @@ static void test_save_load(void)
 static void test_load_garbage(void)
 {
     fresh();
-    pr_port_seen(&L, PR_PORT_IW2);
+    seen_iw(PR_PORT_IW2);
     static uint8_t buf[4096];
     size_t n = pr_save(&L, buf, sizeof buf);
     pr_list_t M;
     pr_init(&M, MAC, 1);
     pr_port_seen(&M, PR_PORT_IWLQ);                         // what must survive a refusal
+    pr_port_seen(&M, PR_PORT_IWLQ);
     pr_list_t keep = M;
     CHECK_EQ_INT(pr_load(&M, buf, 0), -1);
     CHECK_EQ_INT(pr_load(&M, buf, 5), -1);
@@ -441,7 +688,7 @@ static void test_load_garbage(void)
 static void test_load_newer(void)
 {
     fresh();
-    pr_port_seen(&L, PR_PORT_IW2);
+    seen_iw(PR_PORT_IW2);
     static uint8_t buf[4096];
     size_t n = pr_save(&L, buf, sizeof buf);
     CHECK_EQ_INT(pr_blob_newer(buf, n), 0);                 // ours
@@ -463,7 +710,7 @@ static void test_load_newer(void)
 static void test_json(void)
 {
     fresh();
-    int a = pr_port_seen(&L, PR_PORT_IW2);
+    int a = seen_iw(PR_PORT_IW2);
     pr_rename(&L, a, "Wells' \"Desk\"");
     pr_at_seen(&L, PR_WHERE_CABLE, P("Kitchen"), P("ImageWriter"), 0);
     pr_live_t live[PR_MAX];
@@ -479,7 +726,7 @@ static void test_json(void)
     CHECK(strstr(buf, "\"state\":\"ready\"") != NULL);
     CHECK(strstr(buf, "\"state\":\"offline\"") != NULL);
     CHECK(strstr(buf, "\"notes\":[") != NULL);
-    CHECK(strstr(buf, "\"max_shared\":4") != NULL);
+    CHECK(strstr(buf, "\"max_shared\":6") != NULL);
 
     // W-1088: each shared printer's AirPrint path, for the AirPrint pane.
     CHECK(strstr(buf, "\"rp\":\"ipp/print\"") != NULL);
@@ -523,7 +770,7 @@ static void test_post(void)
     fresh();
     lw_info_t info;
     lw_info_default(&info);
-    int port = pr_port_seen(&L, PR_PORT_IW2);
+    int port = seen_iw(PR_PORT_IW2);
     int lw = pr_at_seen(&L, PR_WHERE_CABLE, P("Office"), P("LaserWriter"), 0);
     char body[160];
     pr_post_t r;
@@ -548,9 +795,11 @@ static void test_post(void)
     snprintf(body, sizeof body, "{\"id\":%d,\"model\":\"ImageWriter LQ\"}", port);
     CHECK_EQ_INT(pr_post(&L, body, &r), 0);
     CHECK_EQ_INT(pr_get(&L, port)->model, PR_MODEL_IWLQ);
+    CHECK_EQ_INT(r.model_id, port);                            // W-1116: the board asks the port again
     snprintf(body, sizeof body, "{\"id\":%d,\"model\":\"none\"}", port);
     CHECK_EQ_INT(pr_post(&L, body, &r), 0);
     CHECK_EQ_INT(pr_get(&L, port)->kind, PR_KIND_UNKNOWN);
+    CHECK_EQ_INT(r.model_id, port);
     snprintf(body, sizeof body, "{\"id\":%d,\"model\":\"Daisywheel\"}", port);
     CHECK_EQ_INT(pr_post(&L, body, &r), -1);
     snprintf(body, sizeof body, "{\"id\":%d,\"model\":\"StyleWriter\"}", port);   // W-1103
@@ -558,9 +807,11 @@ static void test_post(void)
     CHECK_EQ_INT(pr_get(&L, port)->kind, PR_KIND_STYLEWRITER);
     CHECK_EQ_INT(pr_get(&L, port)->model, PR_MODEL_SW1);
     CHECK_EQ_INT(r.confirm_sw_id, port);
+    CHECK_EQ_INT(r.model_id, port);
 
     snprintf(body, sizeof body, "{\"id\":%d,\"dither\":\"floyd\",\"gain\":20}", lw);
     CHECK_EQ_INT(pr_post(&L, body, &r), 0);
+    CHECK_EQ_INT(r.model_id, -1);                              // no model named: no re-ask
     CHECK(strcmp(pr_get(&L, lw)->dither, "floyd") == 0);
     CHECK_EQ_INT(pr_get(&L, lw)->gain, 20);
     CHECK_EQ_INT(r.screen_id, lw);
@@ -606,14 +857,24 @@ static void test_post(void)
     snprintf(body, sizeof body, "{\"id\":%d,\"remove\":true}", lw);
     CHECK_EQ_INT(pr_post(&L, body, &r), 0);
     CHECK(pr_get(&L, lw) == NULL);
+    CHECK_EQ_INT(r.model_id, -1);                              // a LaserWriter's removal: the port is not asked
     CHECK_EQ_INT(pr_post(&L, "{\"id\":99,\"remove\":true}", &r), -1);
     CHECK(strstr(r.err, "No such printer") != NULL);
     CHECK_EQ_INT(pr_post(&L, "not json", &r), -1);
+
+    // W-1116, R19: removing a port record asks the port again (model_id names the record,
+    // gone by then), and the port's last answer is forgotten when it was the one on the port.
+    fresh();
+    int p2 = seen_iw(PR_PORT_IW2);
+    snprintf(body, sizeof body, "{\"id\":%d,\"remove\":true}", p2);
+    CHECK_EQ_INT(pr_post(&L, body, &r), 0);
+    CHECK_EQ_INT(r.model_id, p2);
+    CHECK_EQ_INT(pr_port_heard(&L), PR_HEARD_NONE);
 }
 
 // "Add a Printer…" for the port (W-1088 setup): an original ImageWriter, or
-// one that is off, never answers by itself. With nothing there it makes the
-// port's record, the person's, shared; with something there it sets its model.
+// one that is off, never answers by itself. It makes a port record, the
+// person's, shared; W-1116: one for each model, beside the records there.
 static void test_add_port(void)
 {
     fresh();
@@ -629,14 +890,290 @@ static void test_add_port(void)
     CHECK(strcmp(p->name, "ImageWriter") == 0);
     CHECK(strlen(p->uuid) == 45);
     CHECK_EQ_INT(L.n, 1);
-    // Again, with the port's record there: its model, not a second record.
+    int iw1 = p->id;
+    // Again, with that record there: a second record, the first as it was.
     CHECK_EQ_INT(pr_post(&L, "{\"add_port\":\"ImageWriter LQ\"}", &r), 0);
-    CHECK_EQ_INT(L.n, 1);
-    CHECK_EQ_INT(pr_port(&L)->model, PR_MODEL_IWLQ);
+    CHECK_EQ_INT(L.n, 2);
+    CHECK_EQ_INT(pr_port_count(&L), 2);
+    CHECK_EQ_INT(pr_get(&L, iw1)->model, PR_MODEL_IW1);
+    CHECK(pr_port_of(&L, PR_MODEL_IWLQ) != NULL);
+    CHECK_EQ_INT(pr_port_of(&L, PR_MODEL_IWLQ)->shared, 1);
     CHECK_EQ_INT(pr_post(&L, "{\"add_port\":\"Daisywheel\"}", &r), -1);
-    // It then answers ESC ? as an LQ: no churn.
-    pr_port_seen(&L, PR_PORT_IWLQ);
+    CHECK(strcmp(r.err, "Unknown model.") == 0);
+    // The LQ then answers ESC ?: its record, no churn.
+    CHECK_EQ_INT(pr_port_seen(&L, PR_PORT_IWLQ), pr_port_of(&L, PR_MODEL_IWLQ)->id);
+    CHECK_EQ_INT(L.n, 2);
     CHECK_EQ_INT(L.n_notes, 0);
+}
+
+// W-1116: Add a Printer… adds a record for a model not in the list; a model that is in it
+// is refused, by the page's sentence, and so is a record's Model set to one another record
+// has. An "Unknown printer" or "Something else" record is the one record it converts, as
+// before.
+static void test_add_port_adds(void)
+{
+    fresh();
+    int iw = seen_iw(PR_PORT_IW2);
+    int sw = pr_add_port(&L, PR_MODEL_SW2);
+    CHECK(sw >= 0 && sw != iw);
+    CHECK_EQ_INT(L.n, 2);
+    const pr_rec_t *r = pr_get(&L, sw);
+    CHECK_EQ_INT(r->where, PR_WHERE_PORT);
+    CHECK_EQ_INT(r->kind, PR_KIND_STYLEWRITER);
+    CHECK_EQ_INT(r->model, PR_MODEL_SW2);
+    CHECK_EQ_INT(r->shared, 1);
+    CHECK_EQ_INT(r->found_auto, 0);
+    CHECK_EQ_INT(r->identified, 1);
+    CHECK(strcmp(r->name, "StyleWriter II") == 0);
+    CHECK_EQ_INT(pr_get(&L, iw)->model, PR_MODEL_IW2);         // the ImageWriter's, as it was
+    CHECK(pr_port(&L) == pr_get(&L, iw));
+    // One record per model.
+    CHECK_EQ_INT(pr_add_port(&L, PR_MODEL_IW2), -2);
+    CHECK_EQ_INT(pr_add_port(&L, PR_MODEL_SW2), -2);
+    CHECK_EQ_INT(L.n, 2);
+    CHECK_EQ_INT(pr_set_model(&L, sw, PR_MODEL_IW2), -2);
+    CHECK_EQ_INT(pr_get(&L, sw)->model, PR_MODEL_SW2);
+    CHECK_EQ_INT(pr_set_model(&L, sw, PR_MODEL_SW2), 0);        // its own model again
+    CHECK_EQ_INT(pr_set_model(&L, sw, PR_MODEL_SW1200), 0);     // a model nobody has
+    CHECK_EQ_INT(pr_get(&L, sw)->model, PR_MODEL_SW1200);
+    int sw2 = pr_add_port(&L, PR_MODEL_SW2);                   // free again
+    CHECK(sw2 >= 0 && sw2 != sw);
+    CHECK_EQ_INT(L.n, 3);
+    CHECK_EQ_INT(pr_add_port(&L, PR_MODEL_NONE), -1);
+    CHECK_EQ_INT(pr_add_port(&L, (pr_model_t)(PR_MODEL_SWC2500 + 1)), -1);
+    // The page's sentence, for Add a Printer… and for a record's Model.
+    pr_post_t o;
+    char body[80];
+    CHECK_EQ_INT(pr_post(&L, "{\"add_port\":\"ImageWriter II\"}", &o), -1);
+    CHECK(strcmp(o.err, "ImageWriter II is already in Printers.") == 0);
+    CHECK_EQ_INT(o.changed, 0);
+    snprintf(body, sizeof body, "{\"id\":%d,\"model\":\"StyleWriter II\"}", sw);
+    CHECK_EQ_INT(pr_post(&L, body, &o), -1);
+    CHECK(strcmp(o.err, "StyleWriter II is already in Printers.") == 0);
+    CHECK_EQ_INT(o.confirm_sw_id, -1);
+    CHECK_EQ_INT(pr_post(&L, "{\"add_port\":\"ImageWriter LQ\"}", &o), 0);
+    CHECK_EQ_INT(L.n, 4);
+    CHECK_EQ_INT(pr_post(&L, "{\"add_port\":\"Daisywheel\"}", &o), -1);
+    CHECK(strcmp(o.err, "Unknown model.") == 0);
+    // A full list says so, not that the model is unknown.
+    pr_add_port(&L, PR_MODEL_IW1);
+    pr_add_port(&L, PR_MODEL_SW1);
+    pr_add_port(&L, PR_MODEL_SWC2400);
+    pr_add_port(&L, PR_MODEL_SWC1500);
+    CHECK_EQ_INT(L.n, PR_MAX);
+    CHECK_EQ_INT(pr_post(&L, "{\"add_port\":\"Color StyleWriter 2200\"}", &o), -1);
+    CHECK(strcmp(o.err, "Printers is full. Remove a printer first.") == 0);
+    // An Unknown printer the board found, or a Something else, converts, as before.
+    fresh();
+    int u = pr_port_seen(&L, PR_PORT_SILENT);
+    CHECK_EQ_INT(pr_add_port(&L, PR_MODEL_IW1), u);
+    CHECK_EQ_INT(L.n, 1);
+    CHECK_EQ_INT(pr_get(&L, u)->model, PR_MODEL_IW1);
+    CHECK_EQ_INT(pr_get(&L, u)->found_auto, 0);
+    CHECK_EQ_INT(notes_of(PR_NOTE_UNKNOWN_PORT), 0);
+    CHECK_EQ_INT(pr_set_model(&L, u, PR_MODEL_NONE), 0);
+    CHECK(pr_port_said_other(&L) == pr_get(&L, u));
+    CHECK_EQ_INT(pr_add_port(&L, PR_MODEL_SW2), u);
+    CHECK_EQ_INT(L.n, 1);
+    CHECK_EQ_INT(pr_get(&L, u)->kind, PR_KIND_STYLEWRITER);
+    CHECK(pr_port_said_other(&L) == NULL);
+    // Beside another record too.
+    int iw2 = pr_add_port(&L, PR_MODEL_IW2);
+    CHECK(iw2 > 0);
+    CHECK_EQ_INT(pr_set_model(&L, u, PR_MODEL_NONE), 0);
+    CHECK(pr_port_said_other(&L) == pr_get(&L, u));
+    CHECK_EQ_INT(pr_add_port(&L, PR_MODEL_SWC2500), u);
+    CHECK(pr_port_said_other(&L) == NULL);
+    CHECK_EQ_INT(L.n, 2);
+    CHECK_EQ_INT(pr_add_port(&L, PR_MODEL_IW2), -2);
+}
+
+// An "Unknown printer" record is the port's printer before it was identified: an identified
+// answer (twice) converts it, its uuid kept, as before; where that model has a record
+// already, the Unknown record and its notice go instead.
+static void test_unknown_goes(void)
+{
+    fresh();
+    int u = pr_port_seen(&L, PR_PORT_SILENT);
+    char uuid[46];
+    strcpy(uuid, pr_get(&L, u)->uuid);
+    CHECK_EQ_INT(notes_of(PR_NOTE_UNKNOWN_PORT), 1);
+    CHECK_EQ_INT(pr_port_seen(&L, PR_PORT_IWLQ), PR_SEEN_AGAIN);
+    CHECK_EQ_INT(pr_get(&L, u)->kind, PR_KIND_UNKNOWN);
+    CHECK_EQ_INT(notes_of(PR_NOTE_UNKNOWN_PORT), 1);
+    CHECK_EQ_INT(pr_port_seen(&L, PR_PORT_IWLQ), u);
+    const pr_rec_t *r = pr_get(&L, u);
+    CHECK_EQ_INT(r->kind, PR_KIND_IMAGEWRITER);
+    CHECK_EQ_INT(r->model, PR_MODEL_IWLQ);
+    CHECK(strcmp(r->name, "ImageWriter LQ") == 0);
+    CHECK(strcmp(r->uuid, uuid) == 0);
+    CHECK_EQ_INT(r->shared, 1);
+    CHECK_EQ_INT(r->found_auto, 1);
+    CHECK_EQ_INT(notes_of(PR_NOTE_UNKNOWN_PORT), 0);
+    CHECK_EQ_INT(L.n, 1);
+    // A StyleWriter the same.
+    fresh();
+    u = pr_port_seen(&L, PR_PORT_SILENT);
+    strcpy(uuid, pr_get(&L, u)->uuid);
+    CHECK_EQ_INT(seen_sw(PR_MODEL_SWC2500), u);
+    r = pr_get(&L, u);
+    CHECK_EQ_INT(r->kind, PR_KIND_STYLEWRITER);
+    CHECK(strcmp(r->name, "Color StyleWriter 2500") == 0);
+    CHECK(strcmp(r->uuid, uuid) == 0);
+    CHECK_EQ_INT(r->shared, 1);
+    CHECK_EQ_INT(notes_of(PR_NOTE_UNKNOWN_PORT), 0);
+    CHECK_EQ_INT(L.n, 1);
+    // With the LQ listed already, the Unknown printer was the LQ: it goes, with its notice.
+    // Nothing said where a record is set up makes no record (as before), so the list is
+    // made by hand.
+    fresh();
+    int lq = seen_iw(PR_PORT_IWLQ);
+    L.r[1] = L.r[0];
+    L.r[1].id = 7;
+    L.r[1].kind = PR_KIND_UNKNOWN;
+    L.r[1].model = PR_MODEL_NONE;
+    L.r[1].shared = L.r[1].identified = 0;
+    snprintf(L.r[1].name, sizeof L.r[1].name, "Unknown printer");
+    L.n = 2;
+    L.notes[0] = (pr_note_t){ PR_NOTE_UNKNOWN_PORT, 7, 0 };
+    L.n_notes = 1;
+    // R16: the answer would drop the Unknown record, so even with a record of its own it is
+    // asked again first (one garbled reply changes nothing); the second drops the Unknown.
+    CHECK_EQ_INT(pr_port_seen(&L, PR_PORT_IWLQ), PR_SEEN_AGAIN);
+    CHECK_EQ_INT(L.n, 2);
+    CHECK_EQ_INT(pr_port_heard(&L), PR_HEARD_IMAGEWRITER);     // who answered follows at once
+    CHECK_EQ_INT(pr_port_seen(&L, PR_PORT_IWLQ), lq);
+    CHECK_EQ_INT(L.n, 1);
+    CHECK(pr_get(&L, 7) == NULL);
+    CHECK_EQ_INT(L.n_notes, 0);
+    CHECK_EQ_INT(pr_get(&L, lq)->model, PR_MODEL_IWLQ);
+    CHECK_EQ_INT(pr_port_seen(&L, PR_PORT_IWLQ), lq);
+    CHECK_EQ_INT(L.n, 1);
+}
+
+// "Something else" is the person's word that the port is theirs to leave alone. A printer
+// that answers the person's own Look for Printers replaces that record (W-1116; before, the
+// answer was ignored).
+static void test_something_else_replaced(void)
+{
+    fresh();
+    int u = pr_port_seen(&L, PR_PORT_SILENT);
+    CHECK_EQ_INT(pr_set_model(&L, u, PR_MODEL_NONE), 0);
+    CHECK(pr_port_said_other(&L) == pr_get(&L, u));
+    CHECK_EQ_INT(pr_port_seen(&L, PR_PORT_IW2), PR_SEEN_AGAIN);       // once: nothing
+    CHECK_EQ_INT(pr_get(&L, u)->kind, PR_KIND_UNKNOWN);
+    CHECK_EQ_INT(L.n, 1);
+    int iw = pr_port_seen(&L, PR_PORT_IW2);
+    CHECK(iw >= 0 && iw != u);
+    CHECK(pr_get(&L, u) == NULL);
+    CHECK(pr_port_said_other(&L) == NULL);
+    CHECK_EQ_INT(L.n, 1);
+    const pr_rec_t *r = pr_get(&L, iw);
+    CHECK_EQ_INT(r->kind, PR_KIND_IMAGEWRITER);
+    CHECK_EQ_INT(r->model, PR_MODEL_IW2);
+    CHECK_EQ_INT(r->shared, 1);
+    CHECK_EQ_INT(r->found_auto, 1);
+    CHECK(strcmp(r->name, "ImageWriter II") == 0);
+    CHECK_EQ_INT(L.n_notes, 0);
+    // A StyleWriter the same, beside a record of another model.
+    int sw = pr_add_port(&L, PR_MODEL_SW2);
+    CHECK_EQ_INT(pr_set_model(&L, sw, PR_MODEL_NONE), 0);
+    CHECK(pr_port_said_other(&L) == pr_get(&L, sw));
+    int cs = seen_sw(PR_MODEL_SWC2400);
+    CHECK(cs >= 0 && cs != sw);
+    CHECK(pr_get(&L, sw) == NULL);
+    CHECK_EQ_INT(L.n, 2);
+    CHECK_EQ_INT(pr_get(&L, cs)->model, PR_MODEL_SWC2400);
+    CHECK_EQ_INT(pr_get(&L, iw)->model, PR_MODEL_IW2);
+    // Replaced by a model that has its record already: it just goes. R16: the first answer is
+    // asked again even so (it would change the list), and another model in between starts
+    // over; the second in a row removes the Something else record.
+    int x = pr_add_port(&L, PR_MODEL_SW1200);
+    CHECK_EQ_INT(pr_set_model(&L, x, PR_MODEL_NONE), 0);
+    CHECK_EQ_INT(L.n, 3);
+    CHECK_EQ_INT(pr_port_seen(&L, PR_PORT_IW2), PR_SEEN_AGAIN);
+    CHECK_EQ_INT(L.n, 3);
+    CHECK_EQ_INT(pr_port_seen(&L, PR_PORT_IWLQ), PR_SEEN_AGAIN);      // another model: starts over
+    CHECK_EQ_INT(pr_port_seen(&L, PR_PORT_IW2), PR_SEEN_AGAIN);
+    CHECK_EQ_INT(L.n, 3);
+    CHECK_EQ_INT(pr_port_seen(&L, PR_PORT_IW2), iw);
+    CHECK_EQ_INT(L.n, 2);
+    CHECK(pr_get(&L, x) == NULL);
+    CHECK(pr_port_said_other(&L) == NULL);
+    // One Something else per port: a second record can't be made one while the first is,
+    // by the page's sentence; the record that is one may be set so again.
+    CHECK_EQ_INT(pr_set_model(&L, cs, PR_MODEL_NONE), 0);
+    CHECK(pr_port_said_other(&L) == pr_get(&L, cs));
+    CHECK_EQ_INT(pr_set_model(&L, iw, PR_MODEL_NONE), -2);
+    CHECK_EQ_INT(pr_get(&L, iw)->kind, PR_KIND_IMAGEWRITER);
+    CHECK_EQ_INT(pr_set_model(&L, cs, PR_MODEL_NONE), 0);
+    pr_post_t o;
+    char body[80];
+    snprintf(body, sizeof body, "{\"id\":%d,\"model\":\"none\"}", iw);
+    CHECK_EQ_INT(pr_post(&L, body, &o), -1);
+    CHECK(strcmp(o.err, "Something else is already in Printers.") == 0);
+    CHECK_EQ_INT(o.changed, 0);
+    CHECK_EQ_INT(pr_get(&L, iw)->model, PR_MODEL_IW2);
+    CHECK(pr_port_said_other(&L) == pr_get(&L, cs));
+    // Once it is a model again, the other may be Something else.
+    CHECK_EQ_INT(pr_set_model(&L, cs, PR_MODEL_SWC2400), 0);
+    CHECK_EQ_INT(pr_post(&L, body, &o), 0);
+    CHECK(pr_port_said_other(&L) == pr_get(&L, iw));
+    CHECK_EQ_INT(L.n, 2);
+}
+
+// Each port record has a uuid of its own: the list's epoch and MAC with the model and the
+// family at offset 28, made once and never changed. A new record whose model form is taken
+// (by a record since corrected to another model) sets the model byte's top bit.
+static void test_port_uuid_per_model(void)
+{
+    fresh();
+    int iw = seen_iw(PR_PORT_IW2);
+    int lq = seen_iw(PR_PORT_IWLQ);
+    int sw = seen_sw(PR_MODEL_SW2);
+    const char *a = pr_get(&L, iw)->uuid, *b = pr_get(&L, lq)->uuid, *c = pr_get(&L, sw)->uuid;
+    CHECK_EQ_INT(strlen(a), 45);
+    CHECK(strncmp(a, "urn:uuid:41575254-4c57-0001-", 28) == 0);     // the epoch, 1
+    CHECK(strncmp(a + 28, "0101", 4) == 0);
+    CHECK(strncmp(b + 28, "0201", 4) == 0);
+    CHECK(strncmp(c + 28, "0502", 4) == 0);
+    CHECK(strcmp(a + 32, b + 32) == 0 && strcmp(a + 32, c + 32) == 0);   // the MAC
+    CHECK(strcmp(a, b) != 0 && strcmp(a, c) != 0 && strcmp(b, c) != 0);
+    // Corrected to another model, a record keeps its uuid; a new record of the model it had
+    // takes the form with the top bit, and a third the next.
+    CHECK_EQ_INT(pr_remove(&L, lq), 0);
+    CHECK_EQ_INT(pr_set_model(&L, iw, PR_MODEL_IWLQ), 0);
+    CHECK(strcmp(pr_get(&L, iw)->uuid, a) == 0);
+    int iw2 = seen_iw(PR_PORT_IW2);
+    CHECK(strncmp(pr_get(&L, iw2)->uuid + 28, "8101", 4) == 0);
+    CHECK(strcmp(pr_get(&L, iw2)->uuid + 32, a + 32) == 0);
+    CHECK_EQ_INT(pr_set_model(&L, iw2, PR_MODEL_IW1), 0);
+    CHECK(strncmp(pr_get(&L, iw2)->uuid + 28, "8101", 4) == 0);
+    int iw3 = seen_iw(PR_PORT_IW2);
+    CHECK(strncmp(pr_get(&L, iw3)->uuid + 28, "4101", 4) == 0);
+    // A family the person changes keeps it too: the record is the printer it was to phones.
+    fresh();
+    iw = seen_iw(PR_PORT_IW2);
+    char u[46];
+    strcpy(u, pr_get(&L, iw)->uuid);
+    CHECK_EQ_INT(pr_set_model(&L, iw, PR_MODEL_SW2), 0);
+    CHECK(strcmp(pr_get(&L, iw)->uuid, u) == 0);
+    CHECK_EQ_INT(pr_set_model(&L, iw, PR_MODEL_NONE), 0);
+    CHECK(strcmp(pr_get(&L, iw)->uuid, u) == 0);
+    CHECK_EQ_INT(pr_set_model(&L, iw, PR_MODEL_IWLQ), 0);
+    CHECK(strcmp(pr_get(&L, iw)->uuid, u) == 0);
+    // Add a Printer… and the Unknown printer get theirs the same way.
+    fresh();
+    int cs = pr_add_port(&L, PR_MODEL_SWC2500);
+    CHECK(strncmp(pr_get(&L, cs)->uuid + 28, "0a02", 4) == 0);
+    int o = pr_add_port(&L, PR_MODEL_IW1);
+    CHECK(strncmp(pr_get(&L, o)->uuid + 28, "0301", 4) == 0);
+    fresh();
+    int un = pr_port_seen(&L, PR_PORT_SILENT);
+    CHECK(strncmp(pr_get(&L, un)->uuid + 28, "0001", 4) == 0);
+    strcpy(u, pr_get(&L, un)->uuid);
+    CHECK_EQ_INT(seen_iw(PR_PORT_IW2), un);
+    CHECK(strcmp(pr_get(&L, un)->uuid, u) == 0);
 }
 
 // W-1099: the start page rides in the record's lw_info_t. Every answered
@@ -858,13 +1395,16 @@ static void test_sw_models(void)
     CHECK(strcmp(pr_model_name(PR_MODEL_SWC2500 + 1), "") == 0);
 }
 
-// A StyleWriter that answers on an empty port: a shared record named by its model.
+// A StyleWriter that answers on an empty port (twice, W-1116): a shared record named by its
+// model.
 static void test_sw_port_found(void)
 {
     fresh();
-    pr_port_seen_sw(&L, PR_MODEL_SW2);
+    CHECK_EQ_INT(pr_port_seen_sw(&L, PR_MODEL_SW2), PR_SEEN_AGAIN);
+    CHECK_EQ_INT(L.n, 0);
+    int found = pr_port_seen_sw(&L, PR_MODEL_SW2);
     const pr_rec_t *r = pr_port(&L);
-    CHECK(r != NULL);
+    CHECK(r != NULL && r->id == found);
     CHECK_EQ_INT(L.n, 1);
     CHECK_EQ_INT(r->where, PR_WHERE_PORT);
     CHECK_EQ_INT(r->kind, PR_KIND_STYLEWRITER);
@@ -878,113 +1418,58 @@ static void test_sw_port_found(void)
     CHECK_EQ_INT(pr_port_is_stylewriter(&L), 1);
     CHECK_EQ_INT(pr_port_is_imagewriter(&L), 0);
     int id = r->id;
-    pr_port_seen_sw(&L, PR_MODEL_SW2);                      // again: no churn
+    CHECK_EQ_INT(pr_port_seen_sw(&L, PR_MODEL_SW2), id);    // again: no churn
     CHECK_EQ_INT(L.n, 1);
     CHECK_EQ_INT(L.n_notes, 0);
     CHECK_EQ_INT(pr_port_seen(&L, PR_PORT_NOTHING), id);
     CHECK_EQ_INT(pr_port_seen(&L, PR_PORT_SILENT), id);     // a lost answer changes nothing
     CHECK_EQ_INT(pr_get(&L, id)->kind, PR_KIND_STYLEWRITER);
     CHECK_EQ_INT(L.n_notes, 0);
-    pr_port_seen_sw(&L, PR_MODEL_NONE);                     // not a StyleWriter model: ignored
-    pr_port_seen_sw(&L, PR_MODEL_IW2);
+    CHECK_EQ_INT(pr_port_seen_sw(&L, PR_MODEL_NONE), -1);   // not a StyleWriter model: ignored
+    CHECK_EQ_INT(pr_port_seen_sw(&L, PR_MODEL_IW2), -1);
     CHECK_EQ_INT(L.n_notes, 0);
     CHECK_EQ_INT(pr_get(&L, id)->model, PR_MODEL_SW2);
 
-    // The unknown printer that answers: found, shared, named by its model.
+    // The unknown printer that answers: found, shared, named by its model (test_unknown_goes
+    // has the rest; the person's "Something else" is test_something_else_replaced's).
     fresh();
     int u = pr_port_seen(&L, PR_PORT_SILENT);
     CHECK_EQ_INT(notes_of(PR_NOTE_UNKNOWN_PORT), 1);
-    pr_port_seen_sw(&L, PR_MODEL_SWC2500);
+    CHECK_EQ_INT(seen_sw(PR_MODEL_SWC2500), u);
     CHECK_EQ_INT(pr_get(&L, u)->kind, PR_KIND_STYLEWRITER);
     CHECK(strcmp(pr_get(&L, u)->name, "Color StyleWriter 2500") == 0);
     CHECK_EQ_INT(pr_get(&L, u)->shared, 1);
     CHECK_EQ_INT(notes_of(PR_NOTE_UNKNOWN_PORT), 0);
-    // ... unless the person said "Something else".
-    fresh();
-    u = pr_port_seen(&L, PR_PORT_SILENT);
-    CHECK_EQ_INT(pr_set_model(&L, u, PR_MODEL_NONE), 0);
-    pr_port_seen_sw(&L, PR_MODEL_SW2);
-    CHECK_EQ_INT(pr_get(&L, u)->kind, PR_KIND_UNKNOWN);
-    CHECK_EQ_INT(pr_get(&L, u)->shared, 0);
+    // The Apple screen is a StyleWriter's: a record the person makes an ImageWriter loses it.
+    strcpy(pr_get(&L, u)->dither, "apple");
+    CHECK_EQ_INT(pr_set_model(&L, u, PR_MODEL_IWLQ), 0);
+    CHECK(strcmp(pr_get(&L, u)->dither, "atkinson") == 0);
 }
 
-// A different printer on the port is a notice, never a swap, both ways; accepting it
-// is a new printer to phones (a new uuid), and an ImageWriter's again is its own.
-static void test_sw_changed(void)
+// A first sighting stranded when the person then picks Something else, or removes the record
+// on the port, must not count as the first of the two answers that make a change: what
+// forgets the port's answer (R10, R19) forgets the pending sighting too.
+static void test_pending_forgotten(void)
 {
     fresh();
-    int id = pr_port_seen(&L, PR_PORT_IW2);
-    char iw_uuid[46];
-    strcpy(iw_uuid, pr_get(&L, id)->uuid);
-    pr_port_seen_sw(&L, PR_MODEL_SW2);
-    CHECK_EQ_INT(pr_get(&L, id)->kind, PR_KIND_IMAGEWRITER);   // offered, never swapped
-    CHECK_EQ_INT(notes_of(PR_NOTE_CHANGED), 1);
-    pr_port_seen_sw(&L, PR_MODEL_SW2);                         // seen again: one note
-    CHECK_EQ_INT(notes_of(PR_NOTE_CHANGED), 1);
-    CHECK_EQ_INT(L.notes[0].kind, PR_NOTE_CHANGED);
-    CHECK_EQ_INT(L.notes[0].model, PR_MODEL_SW2);
-    static char buf[4096];
-    pr_live_t live[PR_MAX];
-    memset(live, 0, sizeof live);
-    pr_json(&L, live, buf, sizeof buf);
-    CHECK(strstr(buf, "{\"kind\":\"changed\",\"id\":1,\"model\":\"StyleWriter II\"}") != NULL);
-    CHECK_EQ_INT(pr_accept_change(&L, 0), 0);
-    const pr_rec_t *r = pr_get(&L, id);
-    CHECK_EQ_INT(r->kind, PR_KIND_STYLEWRITER);
-    CHECK_EQ_INT(r->model, PR_MODEL_SW2);
-    CHECK(strcmp(r->name, "StyleWriter II") == 0);             // its own name follows
-    CHECK(strcmp(r->uuid, iw_uuid) != 0);
-    CHECK_EQ_INT(strlen(r->uuid), 45);
-    CHECK_EQ_INT(r->shared, 1);
+    int u = pr_port_seen(&L, PR_PORT_SILENT);                        // the Unknown printer
+    CHECK_EQ_INT(pr_port_seen(&L, PR_PORT_IW2), PR_SEEN_AGAIN);      // sighted once
+    CHECK_EQ_INT(pr_set_model(&L, u, PR_MODEL_NONE), 0);             // the person: Something else
+    CHECK_EQ_INT(pr_port_heard(&L), PR_HEARD_NONE);
+    CHECK_EQ_INT(pr_port_seen(&L, PR_PORT_IW2), PR_SEEN_AGAIN);      // the first again, not the second
+    CHECK(pr_port_said_other(&L) == pr_get(&L, u));                  // their choice stands
+    CHECK(pr_port_seen(&L, PR_PORT_IW2) > 0);                        // the second in a row replaces it
+    CHECK(pr_port_said_other(&L) == NULL);
+    // Removing the record on the port the same.
+    fresh();
+    int iw = seen_iw(PR_PORT_IW2);
+    CHECK_EQ_INT(pr_port_seen(&L, PR_PORT_IWLQ), PR_SEEN_AGAIN);
+    CHECK_EQ_INT(pr_remove(&L, iw), 0);                              // the one on the port (by fallback)
+    CHECK_EQ_INT(pr_port_heard(&L), PR_HEARD_NONE);
+    CHECK_EQ_INT(pr_port_seen(&L, PR_PORT_IWLQ), PR_SEEN_AGAIN);
+    CHECK_EQ_INT(L.n, 0);
+    CHECK(pr_port_seen(&L, PR_PORT_IWLQ) > 0);
     CHECK_EQ_INT(L.n, 1);
-    CHECK_EQ_INT(L.n_notes, 0);
-    char sw_uuid[46];
-    strcpy(sw_uuid, r->uuid);
-
-    // The same model seen again later raises nothing; another StyleWriter does, and keeps the uuid.
-    pr_port_seen_sw(&L, PR_MODEL_SW2);
-    CHECK_EQ_INT(L.n_notes, 0);
-    pr_port_seen_sw(&L, PR_MODEL_SWC2200);
-    CHECK_EQ_INT(notes_of(PR_NOTE_CHANGED), 1);
-    CHECK_EQ_INT(pr_accept_change(&L, 0), 0);
-    CHECK_EQ_INT(pr_get(&L, id)->model, PR_MODEL_SWC2200);
-    CHECK(strcmp(pr_get(&L, id)->name, "Color StyleWriter 2200") == 0);
-    CHECK(strcmp(pr_get(&L, id)->uuid, sw_uuid) == 0);         // a StyleWriter is a StyleWriter
-
-    // The reverse: an ImageWriter answering on a StyleWriter record.
-    pr_port_seen(&L, PR_PORT_IWLQ);
-    CHECK_EQ_INT(pr_get(&L, id)->kind, PR_KIND_STYLEWRITER);
-    CHECK_EQ_INT(notes_of(PR_NOTE_CHANGED), 1);
-    CHECK_EQ_INT(L.notes[0].model, PR_MODEL_IWLQ);
-    pr_port_seen(&L, PR_PORT_IWLQ);
-    CHECK_EQ_INT(notes_of(PR_NOTE_CHANGED), 1);
-    strcpy(pr_get(&L, id)->dither, "apple");                  // the Apple screen is a StyleWriter's
-    CHECK_EQ_INT(pr_accept_change(&L, 0), 0);
-    r = pr_get(&L, id);
-    CHECK_EQ_INT(r->kind, PR_KIND_IMAGEWRITER);
-    CHECK_EQ_INT(r->model, PR_MODEL_IWLQ);
-    CHECK(strcmp(r->name, "ImageWriter LQ") == 0);
-    CHECK(strcmp(r->uuid, sw_uuid) != 0);
-    CHECK(strcmp(r->uuid, iw_uuid) == 0);                      // the ImageWriter's, as it was made
-    CHECK(strcmp(r->dither, "atkinson") == 0);                 // no Apple screen on an ImageWriter
-    CHECK_EQ_INT(L.n_notes, 0);
-
-    // A name the person gave stays through both.
-    fresh();
-    id = pr_port_seen(&L, PR_PORT_IW2);
-    pr_rename(&L, id, "Desk");
-    pr_port_seen_sw(&L, PR_MODEL_SW1200);
-    CHECK_EQ_INT(pr_accept_change(&L, 0), 0);
-    CHECK(strcmp(pr_get(&L, id)->name, "Desk") == 0);
-    CHECK_EQ_INT(pr_get(&L, id)->model, PR_MODEL_SW1200);
-
-    // A note from a list that cannot be read back is refused, not applied.
-    fresh();
-    id = pr_port_seen(&L, PR_PORT_IW2);
-    L.notes[0] = (pr_note_t){ PR_NOTE_CHANGED, (uint8_t)id, PR_MODEL_SWC2500 + 1 };
-    L.n_notes = 1;
-    CHECK_EQ_INT(pr_accept_change(&L, 0), -1);
-    CHECK_EQ_INT(pr_get(&L, id)->kind, PR_KIND_IMAGEWRITER);
 }
 
 // The full sequence says the person's pick was another StyleWriter: the record takes the
@@ -998,8 +1483,8 @@ static void test_sw_found(void)
     char uuid[46];
     strcpy(uuid, pr_port(&L)->uuid);
     pr_set_shared(&L, id, 0);
-    CHECK_EQ_INT(pr_port_sw_found(&L, PR_MODEL_SWC2200), 0);          // as picked: nothing
-    CHECK_EQ_INT(pr_port_sw_found(&L, PR_MODEL_SWC2500), 1);
+    CHECK_EQ_INT(pr_port_sw_found(&L, 0, PR_MODEL_SWC2200), 0);       // as picked: no change
+    CHECK_EQ_INT(pr_port_sw_found(&L, 0, PR_MODEL_SWC2500), 1);
     const pr_rec_t *p = pr_port(&L);
     CHECK_EQ_INT(p->model, PR_MODEL_SWC2500);
     CHECK(strcmp(p->name, "Color StyleWriter 2500") == 0);
@@ -1007,31 +1492,67 @@ static void test_sw_found(void)
     CHECK_EQ_INT(p->found_auto, 0);
     CHECK(strcmp(p->uuid, uuid) == 0);
     CHECK_EQ_INT(L.n_notes, 0);
+    // The full sequence's answer is the port's last answer: the record is on the port now.
+    CHECK_EQ_INT(pr_port_heard(&L), PR_HEARD_STYLEWRITER);
+    CHECK(pr_port_current(&L) == p);
     pr_rename(&L, id, "Desk");
-    CHECK_EQ_INT(pr_port_sw_found(&L, PR_MODEL_SW2), 1);
+    CHECK_EQ_INT(pr_port_sw_found(&L, 0, PR_MODEL_SW2), 1);
     CHECK(strcmp(pr_port(&L)->name, "Desk") == 0);
     // Not a StyleWriter model, not a StyleWriter record, no port.
-    CHECK_EQ_INT(pr_port_sw_found(&L, PR_MODEL_IW2), 0);
-    CHECK_EQ_INT(pr_port_sw_found(&L, PR_MODEL_NONE), 0);
+    CHECK_EQ_INT(pr_port_sw_found(&L, 0, PR_MODEL_IW2), 0);
+    CHECK_EQ_INT(pr_port_sw_found(&L, 0, PR_MODEL_NONE), 0);
     pr_set_model(&L, id, PR_MODEL_IW2);
-    CHECK_EQ_INT(pr_port_sw_found(&L, PR_MODEL_SW2), 0);
+    CHECK_EQ_INT(pr_port_sw_found(&L, 0, PR_MODEL_SW2), 0);
     CHECK_EQ_INT(pr_get(&L, id)->kind, PR_KIND_IMAGEWRITER);
     fresh();
-    CHECK_EQ_INT(pr_port_sw_found(&L, PR_MODEL_SW2), 0);
+    CHECK_EQ_INT(pr_port_sw_found(&L, 0, PR_MODEL_SW2), 0);
+    // W-1116: a model that has its own record already is not taken by another; the id <= 0
+    // reach corrects the one on the port when that is a StyleWriter.
+    int a = pr_add_port(&L, PR_MODEL_SWC2200);
+    int b = pr_add_port(&L, PR_MODEL_SW2);
+    CHECK_EQ_INT(pr_port_sw_found(&L, 0, PR_MODEL_SW2), 0);
+    CHECK_EQ_INT(pr_get(&L, a)->model, PR_MODEL_SWC2200);
+    CHECK_EQ_INT(pr_get(&L, b)->model, PR_MODEL_SW2);
+    seen_sw(PR_MODEL_SW2);
+    CHECK_EQ_INT(pr_port_sw_found(&L, 0, PR_MODEL_SW1200), 1);
+    CHECK_EQ_INT(pr_get(&L, b)->model, PR_MODEL_SW1200);
+    CHECK_EQ_INT(pr_get(&L, a)->model, PR_MODEL_SWC2200);
+
+    // W-1116: by id, the full sequence corrects exactly the record the person picked, not the
+    // newest StyleWriter, and that record is the one on the port after.
+    fresh();
+    int c = pr_add_port(&L, PR_MODEL_SW2);
+    int d = pr_add_port(&L, PR_MODEL_SWC2500);
+    CHECK_EQ_INT(pr_port_sw_found(&L, c, PR_MODEL_SW1200), 1);        // the older record, by id
+    CHECK_EQ_INT(pr_get(&L, c)->model, PR_MODEL_SW1200);
+    CHECK_EQ_INT(pr_get(&L, d)->model, PR_MODEL_SWC2500);             // the newer one untouched
+    CHECK(pr_port_current(&L) == pr_get(&L, c));
+    // The picked record's model already matches the answer: no change, still on the port.
+    CHECK_EQ_INT(pr_port_sw_found(&L, c, PR_MODEL_SW1200), 0);
+    CHECK(pr_port_current(&L) == pr_get(&L, c));
+    // The answer names a model another record has: that record is the one on the port; the
+    // picked record is left as the person set it.
+    CHECK_EQ_INT(pr_port_sw_found(&L, c, PR_MODEL_SWC2500), 0);
+    CHECK_EQ_INT(pr_get(&L, c)->model, PR_MODEL_SW1200);
+    CHECK(pr_port_current(&L) == pr_get(&L, d));
+    // id names a record that is no longer a StyleWriter: nothing.
+    pr_set_model(&L, c, PR_MODEL_IW2);
+    CHECK_EQ_INT(pr_port_sw_found(&L, c, PR_MODEL_SW2), 0);
 }
 
-// A model the person picks reaches the same places, and the uuid follows the family.
+// A model the person picks reaches the same places; the uuid is the record's for its life
+// (W-1116: the family no longer makes a new one).
 static void test_sw_set_model(void)
 {
     fresh();
-    int id = pr_port_seen(&L, PR_PORT_IW2);
+    int id = seen_iw(PR_PORT_IW2);
     char iw_uuid[46];
     strcpy(iw_uuid, pr_get(&L, id)->uuid);
     CHECK_EQ_INT(pr_set_model(&L, id, PR_MODEL_SWC1500), 0);
     const pr_rec_t *r = pr_get(&L, id);
     CHECK_EQ_INT(r->kind, PR_KIND_STYLEWRITER);
     CHECK(strcmp(r->name, "Color StyleWriter 1500") == 0);
-    CHECK(strcmp(r->uuid, iw_uuid) != 0);
+    CHECK(strcmp(r->uuid, iw_uuid) == 0);
     CHECK_EQ_INT(r->shared, 1);
     CHECK_EQ_INT(r->found_auto, 0);
     CHECK_EQ_INT(pr_set_model(&L, id, (pr_model_t)(PR_MODEL_SWC2500 + 1)), -1);
@@ -1070,28 +1591,43 @@ static void test_sw_add_port(void)
     CHECK(strcmp(p->name, "Color StyleWriter 2500") == 0);
     CHECK_EQ_INT(strlen(p->uuid), 45);
     CHECK_EQ_INT(r.confirm_sw_id, p->id);                    // the full sequence confirms the pick
+    CHECK_EQ_INT(r.model_id, p->id);                         // and the port is asked again
     CHECK_EQ_INT(r.clean_id, -1);
     CHECK_EQ_INT(L.n, 1);
     int id = p->id;
-    // Again, with the port's record there: its model, not a second record.
+    // Again, with that record there (W-1116): a second record, and its own id to confirm.
     CHECK_EQ_INT(pr_post(&L, "{\"add_port\":\"StyleWriter 1200\"}", &r), 0);
-    CHECK_EQ_INT(L.n, 1);
-    CHECK_EQ_INT(pr_port(&L)->model, PR_MODEL_SW1200);
-    CHECK_EQ_INT(r.confirm_sw_id, id);
+    CHECK_EQ_INT(L.n, 2);
+    CHECK_EQ_INT(pr_get(&L, id)->model, PR_MODEL_SWC2500);
+    const pr_rec_t *q = pr_port_of(&L, PR_MODEL_SW1200);
+    CHECK(q != NULL && q->id != id);
+    CHECK_EQ_INT(r.confirm_sw_id, q->id);
     // An ImageWriter's pick confirms nothing (ESC ? is its own, at line-up).
     CHECK_EQ_INT(pr_post(&L, "{\"add_port\":\"ImageWriter LQ\"}", &r), 0);
     CHECK_EQ_INT(r.confirm_sw_id, -1);
-    CHECK_EQ_INT(pr_port(&L)->kind, PR_KIND_IMAGEWRITER);
+    CHECK_EQ_INT(r.model_id, pr_port_of(&L, PR_MODEL_IWLQ)->id);   // but the port is asked again
+    CHECK_EQ_INT(L.n, 3);
+    CHECK_EQ_INT(pr_port(&L)->kind, PR_KIND_STYLEWRITER);     // the oldest stays the port's
     CHECK_EQ_INT(pr_post(&L, "{\"add_port\":\"Color StyleWriter 9000\"}", &r), -1);
     CHECK_EQ_INT(pr_post(&L, "{\"add_port\":\"none\"}", &r), -1);
-    // Every one of the seven by the name the page sends.
+    // Every one of the seven by the name the page sends: the two there already are refused
+    // with the page's sentence, the rest add, up to the list's 8.
     for (size_t i = 0; i < sizeof SW_ALL / sizeof SW_ALL[0]; i++) {
         char body[80];
         snprintf(body, sizeof body, "{\"add_port\":\"%s\"}", SW_NAMES[i]);
-        CHECK_EQ_INT(pr_post(&L, body, &r), 0);
-        CHECK_EQ_INT(pr_port(&L)->model, SW_ALL[i]);
-        CHECK_EQ_INT(r.confirm_sw_id, id);
+        int there = SW_ALL[i] == PR_MODEL_SWC2500 || SW_ALL[i] == PR_MODEL_SW1200;
+        CHECK_EQ_INT(pr_post(&L, body, &r), there ? -1 : 0);
+        CHECK(pr_port_of(&L, SW_ALL[i]) != NULL);
+        if (there) {
+            char want[80];
+            snprintf(want, sizeof want, "%s is already in Printers.", SW_NAMES[i]);
+            CHECK(strcmp(r.err, want) == 0);
+        } else {
+            CHECK_EQ_INT(r.confirm_sw_id, pr_port_of(&L, SW_ALL[i])->id);
+        }
     }
+    CHECK_EQ_INT(L.n, PR_MAX);
+    CHECK_EQ_INT(pr_port_count(&L), PR_MAX);
 
     // The unknown printer's notice: the model picked in its detail.
     fresh();
@@ -1107,6 +1643,7 @@ static void test_sw_add_port(void)
     snprintf(body, sizeof body, "{\"id\":%d,\"name\":\"Desk\"}", id);
     CHECK_EQ_INT(pr_post(&L, body, &r), 0);
     CHECK_EQ_INT(r.confirm_sw_id, -1);                       // only a model picked confirms
+    CHECK_EQ_INT(r.model_id, -1);                            // a rename asks the port nothing
 }
 
 // "Clean Print Head": one cleaning, for a StyleWriter that has one.
@@ -1115,7 +1652,7 @@ static void test_sw_clean(void)
     fresh();
     pr_post_t r;
     char body[80];
-    int id = pr_port_seen(&L, PR_PORT_IW2);
+    int id = seen_iw(PR_PORT_IW2);
     snprintf(body, sizeof body, "{\"id\":%d,\"clean\":true}", id);
     CHECK_EQ_INT(pr_post(&L, body, &r), -1);                 // an ImageWriter has none
     CHECK(strstr(r.err, "clean") != NULL);
@@ -1159,7 +1696,7 @@ static void test_sw_apple_screen(void)
     fresh();
     pr_post_t r;
     char body[96];
-    int iw = pr_port_seen(&L, PR_PORT_IW2);
+    int iw = seen_iw(PR_PORT_IW2);
     int lw = pr_at_seen(&L, PR_WHERE_CABLE, P("Office"), P("LaserWriter"), 0);
     snprintf(body, sizeof body, "{\"id\":%d,\"dither\":\"apple\"}", iw);
     CHECK_EQ_INT(pr_post(&L, body, &r), -1);
@@ -1190,7 +1727,7 @@ static void test_sw_apple_screen(void)
 static void test_sw_json(void)
 {
     fresh();
-    pr_port_seen_sw(&L, PR_MODEL_SWC2200);
+    seen_sw(PR_MODEL_SWC2200);
     pr_live_t live[PR_MAX];
     memset(live, 0, sizeof live);
     static char buf[4096];
@@ -1214,7 +1751,7 @@ static void test_sw_json(void)
 
     // Only a StyleWriter has one: an ImageWriter's ribbon is not this, and a LaserWriter has none.
     fresh();
-    pr_port_seen(&L, PR_PORT_IW2);
+    seen_iw(PR_PORT_IW2);
     pr_at_seen(&L, PR_WHERE_CABLE, P("Office"), P("LaserWriter"), 0);
     memset(live, 0, sizeof live);
     live[0].cart = live[1].cart = 2;
@@ -1249,7 +1786,7 @@ static void test_sw_fault(void)
         { PR_FAULT_CART_JAM, "cartridge-jam" }, { PR_FAULT_INK, "ink" }, { PR_FAULT_COVER, "cover" },
         { PR_FAULT_WASTE, "waste" }, { PR_FAULT_OTHER, "other" } };
     fresh();
-    pr_port_seen_sw(&L, PR_MODEL_SWC2400);
+    seen_sw(PR_MODEL_SWC2400);
     pr_live_t live[PR_MAX];
     memset(live, 0, sizeof live);
     static char buf[4096];
@@ -1278,7 +1815,7 @@ static void test_sw_fault(void)
 
     // Only a StyleWriter record carries it: not an ImageWriter, not a LaserWriter.
     fresh();
-    pr_port_seen(&L, PR_PORT_IW2);
+    seen_iw(PR_PORT_IW2);
     pr_at_seen(&L, PR_WHERE_CABLE, P("Office"), P("LaserWriter"), 0);
     memset(live, 0, sizeof live);
     live[0].fault = live[1].fault = PR_FAULT_PAPER;
@@ -1297,7 +1834,7 @@ static void test_sw_test_target(void)
     int lw = pr_at_seen(&L, PR_WHERE_CABLE, P("Office"), P("LaserWriter"), 0);
     pr_at_queried(&L, lw, 1, &info);
     CHECK_EQ_INT(pr_test_target(&L, live), lw);              // the first shared printer
-    pr_port_seen_sw(&L, PR_MODEL_SW1200);
+    seen_sw(PR_MODEL_SW1200);
     CHECK_EQ_INT(pr_test_target(&L, live), pr_port(&L)->id); // the port's StyleWriter, as its ImageWriter
     pr_set_shared(&L, pr_port(&L)->id, 0);
     CHECK_EQ_INT(pr_test_target(&L, live), pr_port(&L)->id); // shared or not
@@ -1312,7 +1849,7 @@ static void test_sw_offers(void)
     fresh();
     lw_info_t info;
     lw_info_default(&info);
-    int id = pr_port_seen(&L, PR_PORT_IW2);
+    int id = seen_iw(PR_PORT_IW2);
     int lw = pr_at_seen(&L, PR_WHERE_CABLE, P("Office"), P("LaserWriter"), 0);
     pr_at_queried(&L, lw, 1, &info);
     int ids[8];
@@ -1328,7 +1865,7 @@ static void test_sw_offers(void)
 static void test_sw_box_state(void)
 {
     fresh();
-    pr_port_seen_sw(&L, PR_MODEL_SW2);
+    seen_sw(PR_MODEL_SW2);
     pr_live_t live[PR_MAX];
     memset(live, 0, sizeof live);
     CHECK_EQ_INT(pr_box_state(&L, live), PR_BOX_OFFLINE);
@@ -1340,21 +1877,23 @@ static void test_sw_box_state(void)
 
 // The stored form (W-1103): version 2 adds the StyleWriter kind and models and keeps
 // the record's layout, so a version 1 list reads as it always did and a newer one is kept.
+// W-1116: version 3 is a second port record (test_blob_v3); the layout is still the same.
 static void test_sw_blob(void)
 {
     enum { HDR = 6 };
     static uint8_t buf[4096], v1[4096], v2[4096], bad[4096];
-    CHECK_EQ_INT(PR_BLOB_VER, 2);
+    CHECK_EQ_INT(PR_BLOB_VER, 3);
 
-    // A list with a StyleWriter in it round-trips as version 2.
+    // A list with a StyleWriter in it round-trips as version 2, its notices with it.
     fresh();
-    pr_port_seen_sw(&L, PR_MODEL_SWC2400);
+    seen_sw(PR_MODEL_SWC2400);
     int lw = pr_at_seen(&L, PR_WHERE_CABLE, P("Office"), P("LaserWriter"), 0);
     lw_info_t info;
     lw_info_default(&info);
     pr_at_queried(&L, lw, 1, &info);
-    pr_port_seen(&L, PR_PORT_IW2);                           // two changed notices, one naming a
-    pr_port_seen_sw(&L, PR_MODEL_SW2);                       // StyleWriter model
+    int back = pr_at_seen(&L, PR_WHERE_TUNNEL, P("Back"), P("LaserWriter"), 0);
+    for (int i = 0; i < 3; i++) pr_at_queried(&L, back, 0, NULL);   // a "no answer" notice
+    CHECK_EQ_INT(L.n_notes, 1);
     size_t n = pr_save(&L, buf, sizeof buf);
     CHECK(n > 0);
     CHECK_EQ_INT(buf[2], 2);
@@ -1373,7 +1912,7 @@ static void test_sw_blob(void)
 
     // A version 1 list (what every board has now) loads, nothing lost, and is saved again as 1.
     fresh();
-    int a = pr_port_seen(&L, PR_PORT_IWLQ);
+    int a = seen_iw(PR_PORT_IWLQ);
     pr_rename(&L, a, "Desk");
     pr_at_queried(&L, pr_at_seen(&L, PR_WHERE_TUNNEL, P("Back"), P("LaserWriter"), 0), 1, &info);
     n = pr_save(&L, v1, sizeof v1);
@@ -1416,9 +1955,9 @@ static void test_sw_blob(void)
     bad[2] = 2;
     CHECK_EQ_INT(pr_load(&M, bad, n), -1);
 
-    // Version 3 is a newer firmware's: not read here, and kept.
+    // Version 4 is a newer firmware's: not read here, and kept.
     memcpy(bad, buf, n);
-    bad[2] = 3;
+    bad[2] = 4;
     pr_init(&M, MAC, 1);
     pr_list_t keep = M;
     CHECK_EQ_INT(pr_load(&M, bad, n), -1);
@@ -1434,12 +1973,14 @@ static void test_sw_blob(void)
     CHECK(v2[2] > 1);
     (void)n2;
 
-    // A note whose model nobody has is refused with the rest.
+    // A note whose model nobody has is refused with the rest (no notice made now names a
+    // model, 3.15; one stored by an older build still has the byte).
     fresh();
-    pr_port_seen(&L, PR_PORT_IW2);
-    pr_port_seen_sw(&L, PR_MODEL_SW2);
+    int iw = seen_iw(PR_PORT_IW2);
+    L.notes[0] = (pr_note_t){ PR_NOTE_TOO_MANY, (uint8_t)iw, PR_MODEL_SW2 };
+    L.n_notes = 1;
     n = pr_save(&L, buf, sizeof buf);
-    CHECK_EQ_INT(L.n_notes, 1);
+    CHECK_EQ_INT(buf[2], 2);
     memcpy(bad, buf, n);
     bad[n - 1] = PR_MODEL_SWC2500 + 1;                       // the note's model, its last byte
     CHECK_EQ_INT(pr_load(&M, bad, n), -1);
@@ -1485,15 +2026,16 @@ static void test_sw_blob_stamp(void)
     size_t n = pr_save(&L, buf, sizeof buf);
     CHECK_EQ_INT(buf[2], 1);
     CHECK(old_reader_accepts(buf, n));
-    int iw = pr_port_seen(&L, PR_PORT_IWLQ);
+    int iw = seen_iw(PR_PORT_IWLQ);
     pr_rename(&L, iw, "Desk");
-    pr_dismiss(&L, 0);
+    pr_dismiss(&L, 0);                                       // no notice: nothing
     int lw = pr_at_seen(&L, PR_WHERE_CABLE, P("Office"), P("LaserWriter"), 0);
     pr_at_queried(&L, lw, 1, &info);
     int ak = pr_at_seen(&L, PR_WHERE_TUNNEL, P("Kitchen"), P("ImageWriter"), 0);
     (void)ak;
-    pr_port_seen(&L, PR_PORT_IW2);                           // a notice, naming an ImageWriter
-    CHECK_EQ_INT(notes_of(PR_NOTE_CHANGED), 1);
+    pr_port_seen(&L, PR_PORT_IW2);                           // another ImageWriter once: nothing
+    CHECK_EQ_INT(L.n_notes, 0);
+    CHECK_EQ_INT(L.n, 3);
     n = pr_save(&L, buf, sizeof buf);
     CHECK_EQ_INT(buf[2], 1);
     CHECK(old_reader_accepts(buf, n));
@@ -1530,7 +2072,7 @@ static void test_sw_blob_stamp(void)
 
     // The same through the front door: a StyleWriter that answers, then the person deletes it.
     fresh();
-    pr_port_seen_sw(&L, PR_MODEL_SWC2200);
+    seen_sw(PR_MODEL_SWC2200);
     n = pr_save(&L, buf, sizeof buf);
     CHECK_EQ_INT(buf[2], 2);
     CHECK_EQ_INT(pr_remove(&L, pr_port(&L)->id), 0);
@@ -1539,288 +2081,641 @@ static void test_sw_blob_stamp(void)
     CHECK(old_reader_accepts(buf, n));
 
     // A notice that names a StyleWriter is enough on its own (the old firmware would take its
-    // model for an ImageWriter's); once it is dismissed or accepted away, 1 again.
+    // model for an ImageWriter's); none made now carries a model (W-1116), but one from an
+    // older build may. Dismissed, 1 again.
     fresh();
-    pr_port_seen(&L, PR_PORT_IW2);
-    pr_port_seen_sw(&L, PR_MODEL_SW1200);
-    CHECK_EQ_INT(L.n_notes, 1);
+    iw = seen_iw(PR_PORT_IW2);
+    L.notes[0] = (pr_note_t){ PR_NOTE_TOO_MANY, (uint8_t)iw, PR_MODEL_SW1200 };
+    L.n_notes = 1;
     n = pr_save(&L, buf, sizeof buf);
     CHECK_EQ_INT(buf[2], 2);
     CHECK(!old_reader_accepts(buf, n));
     pr_dismiss(&L, 0);
+    CHECK_EQ_INT(L.n_notes, 0);
     n = pr_save(&L, buf, sizeof buf);
     CHECK_EQ_INT(buf[2], 1);
     CHECK(old_reader_accepts(buf, n));
-    pr_port_seen(&L, PR_PORT_IW2);                           // its own printer, then the other again
-    pr_port_seen_sw(&L, PR_MODEL_SW1200);
-    CHECK_EQ_INT(pr_accept_change(&L, 0), 0);                // the record is a StyleWriter now
-    n = pr_save(&L, buf, sizeof buf);
-    CHECK_EQ_INT(buf[2], 2);
 
     // Everything in version 1's range still loads whichever way it is stamped by hand.
     fresh();
-    pr_port_seen(&L, PR_PORT_IW2);
+    seen_iw(PR_PORT_IW2);
     n = pr_save(&L, buf, sizeof buf);
     buf[2] = 2;
     pr_init(&M, MAC, 1);
     CHECK_EQ_INT(pr_load(&M, buf, n), 0);
+    buf[2] = 3;
+    CHECK_EQ_INT(pr_load(&M, buf, n), 0);
 }
 
-// W-1103: a printer of the other family answered on the port. The port's record must not
-// hear the other's language, so the list says so (pr_port_conflict) until the record's own
-// family answers again or the person accepts the change; the board refuses the record's
-// AirPrint jobs, test page and cleaning while it holds.
-static void test_port_conflict(void)
+// W-1116 (review focus 3): a board's one-printer list from before is stored as it was. A
+// version 1 list (an ImageWriter) and a version 2 one (a StyleWriter) each load, keep their
+// uuid and name, and save again byte for byte at their own version.
+static void test_one_port_unchanged(void)
 {
-    static char buf[4096];
-    pr_live_t live[PR_MAX];
-    memset(live, 0, sizeof live);
-
-    // An ImageWriter record, and a StyleWriter answers the plain question.
+    enum { HDR = 6 };
+    static uint8_t v1[4096], v2[4096], again[4096];
+    lw_info_t info;
+    lw_info_default(&info);
     fresh();
-    CHECK_EQ_INT(pr_port_heard(&L), PR_HEARD_NONE);
-    int id = pr_port_seen(&L, PR_PORT_IW2);
-    CHECK_EQ_INT(pr_port_heard(&L), PR_HEARD_IMAGEWRITER);
-    CHECK_EQ_INT(pr_port_conflict(&L), 0);
-    live[0].present = live[0].ready = 1;
-    pr_json(&L, live, buf, sizeof buf);
-    CHECK(strstr(buf, "swapped") == NULL);
-    pr_port_seen_sw(&L, PR_MODEL_SW2);
-    CHECK_EQ_INT(pr_port_heard(&L), PR_HEARD_STYLEWRITER);
-    CHECK_EQ_INT(pr_port_conflict(&L), 1);
-    // The page shows the port's printer as needing attention, and why.
-    pr_json(&L, live, buf, sizeof buf);
-    CHECK(strstr(buf, "\"state\":\"attention\"") != NULL);
-    CHECK(strstr(buf, "\"swapped\":true") != NULL);
-    // Dismissing the notice does not end it: the StyleWriter is still there.
-    pr_dismiss(&L, 0);
-    CHECK_EQ_INT(L.n_notes, 0);
-    CHECK_EQ_INT(pr_port_conflict(&L), 1);
-    // The ImageWriter answers ESC ? again: over.
-    pr_port_seen(&L, PR_PORT_IW2);
-    CHECK_EQ_INT(pr_port_conflict(&L), 0);
-    pr_json(&L, live, buf, sizeof buf);
-    CHECK(strstr(buf, "swapped") == NULL);
-    CHECK(strstr(buf, "\"state\":\"ready\"") != NULL);
-    // The line up and nothing said is no answer from an ImageWriter II.
-    pr_port_seen_sw(&L, PR_MODEL_SW2);
-    pr_port_seen(&L, PR_PORT_SILENT);
-    pr_port_seen(&L, PR_PORT_NOTHING);
-    CHECK_EQ_INT(pr_port_conflict(&L), 1);
-    // The person accepts: over, the record is the StyleWriter's.
-    CHECK_EQ_INT(pr_accept_change(&L, 0), 0);
-    CHECK_EQ_INT(pr_get(&L, id)->kind, PR_KIND_STYLEWRITER);
-    CHECK_EQ_INT(pr_port_conflict(&L), 0);
-
-    // The reverse: a StyleWriter record, and an ImageWriter answers ESC ?.
-    pr_port_seen(&L, PR_PORT_IWLQ);
-    CHECK_EQ_INT(pr_port_conflict(&L), 1);
-    // Its own StyleWriter answers (its status, the full sequence): over.
-    pr_port_answered(&L, PR_HEARD_STYLEWRITER);
-    CHECK_EQ_INT(pr_port_heard(&L), PR_HEARD_STYLEWRITER);
-    CHECK_EQ_INT(pr_port_conflict(&L), 0);
-    pr_port_answered(&L, PR_HEARD_IMAGEWRITER);
-    CHECK_EQ_INT(pr_port_conflict(&L), 1);
-    pr_port_answered(&L, PR_HEARD_NONE);           // nothing is not an answer
-    CHECK_EQ_INT(pr_port_conflict(&L), 1);
-    pr_port_seen_sw(&L, PR_MODEL_SW2);
-    CHECK_EQ_INT(pr_port_conflict(&L), 0);
-
-    // Another StyleWriter model is no conflict: a job's `?` holds it to the record's model.
-    fresh();
-    pr_port_seen_sw(&L, PR_MODEL_SW2);
-    pr_port_seen_sw(&L, PR_MODEL_SWC2500);
-    CHECK_EQ_INT(notes_of(PR_NOTE_CHANGED), 1);
-    CHECK_EQ_INT(pr_port_conflict(&L), 0);
-
-    // The original ImageWriter gives no self-ID: its line up with nothing said is its answer.
-    fresh();
-    id = pr_add_port(&L, PR_MODEL_IW1);
-    pr_port_seen_sw(&L, PR_MODEL_SW1200);
-    CHECK_EQ_INT(pr_port_conflict(&L), 1);
-    pr_port_seen(&L, PR_PORT_NOTHING);             // its line down: no answer
-    CHECK_EQ_INT(pr_port_conflict(&L), 1);
-    pr_port_seen(&L, PR_PORT_SILENT);
-    CHECK_EQ_INT(pr_port_heard(&L), PR_HEARD_IMAGEWRITER);
-    CHECK_EQ_INT(pr_port_conflict(&L), 0);
-
-    // A model the person picks counts as the record's: the family that answered ends it,
-    // the other starts it again.
-    fresh();
-    id = pr_port_seen(&L, PR_PORT_IW2);
-    pr_port_seen_sw(&L, PR_MODEL_SW2);
-    CHECK_EQ_INT(pr_port_conflict(&L), 1);
-    CHECK_EQ_INT(pr_set_model(&L, id, PR_MODEL_SW2), 0);
-    CHECK_EQ_INT(pr_port_conflict(&L), 0);
-    CHECK_EQ_INT(pr_set_model(&L, id, PR_MODEL_IWLQ), 0);
-    CHECK_EQ_INT(pr_port_conflict(&L), 1);
-    // "Something else", or no record at all: nothing is sent to it anyway.
-    CHECK_EQ_INT(pr_set_model(&L, id, PR_MODEL_NONE), 0);
-    CHECK_EQ_INT(pr_port_conflict(&L), 0);
-    CHECK_EQ_INT(pr_remove(&L, id), 0);
-    CHECK_EQ_INT(pr_port_conflict(&L), 0);
-
-    // Naming the port's printer a StyleWriter forgets an ImageWriter that answered before it:
-    // board 1's ImageWriter, unplugged, and the port named an original StyleWriter with nothing
-    // on it (2026-10-27) read as "another printer is on the printer port".
-    fresh();
-    id = pr_port_seen(&L, PR_PORT_IW2);
-    CHECK_EQ_INT(pr_set_model(&L, id, PR_MODEL_SW1), 0);
-    CHECK_EQ_INT(pr_port_heard(&L), PR_HEARD_NONE);
-    CHECK_EQ_INT(pr_port_conflict(&L), 0);
-    CHECK_EQ_INT(pr_port_swapped(&L), 0);
-    pr_json(&L, live, buf, sizeof buf);
-    CHECK(strstr(buf, "swapped") == NULL);
-    // An ImageWriter still there says so at its next answer, with its notice, though the person
-    // dismissed that notice before naming the printer.
-    fresh();
-    id = pr_port_seen(&L, PR_PORT_IW2);
-    CHECK_EQ_INT(pr_set_model(&L, id, PR_MODEL_SW2), 0);
-    pr_port_seen(&L, PR_PORT_IW2);
-    CHECK_EQ_INT(pr_port_conflict(&L), 1);
-    pr_dismiss(&L, 0);
-    CHECK_EQ_INT(pr_set_model(&L, id, PR_MODEL_SW2), 0);
-    CHECK_EQ_INT(pr_port_conflict(&L), 0);
-    pr_port_seen(&L, PR_PORT_IW2);
-    CHECK_EQ_INT(pr_port_conflict(&L), 1);
-    CHECK_EQ_INT(notes_of(PR_NOTE_CHANGED), 1);
-    // Another StyleWriter model that answered before is forgotten the same way; a StyleWriter's
-    // answer still holds an ImageWriter the person names over it, whose stream would print on
-    // a StyleWriter, until the ImageWriter answers.
-    fresh();
-    pr_port_seen_sw(&L, PR_MODEL_SW2);
-    id = pr_port(&L)->id;
-    pr_port_seen_sw(&L, PR_MODEL_SWC2500);
-    CHECK_EQ_INT(pr_port_swapped(&L), 1);
-    CHECK_EQ_INT(pr_set_model(&L, id, PR_MODEL_SWC1500), 0);
-    CHECK_EQ_INT(pr_port_swapped(&L), 0);
-    CHECK_EQ_INT(pr_set_model(&L, id, PR_MODEL_IW2), 0);
-    CHECK_EQ_INT(pr_port_conflict(&L), 1);
-    pr_port_seen(&L, PR_PORT_IW2);
-    CHECK_EQ_INT(pr_port_conflict(&L), 0);
-
-    // Nothing of it is stored, but a pending "changed" notice says it again at a start: the
-    // board restarted with the StyleWriter still on the ImageWriter record's port.
-    fresh();
-    id = pr_port_seen(&L, PR_PORT_IW2);
-    static uint8_t blob[8192], blob2[8192];
-    size_t n1 = pr_save(&L, blob, sizeof blob);
-    pr_port_seen_sw(&L, PR_MODEL_SWC2200);
-    pr_dismiss(&L, 0);
-    size_t n2 = pr_save(&L, blob2, sizeof blob2);
-    CHECK_EQ_INT((long)n2, (long)n1);
-    CHECK(!memcmp(blob, blob2, n1));                // heard is not in the blob
-    pr_port_seen(&L, PR_PORT_IW2);                  // its own, then the StyleWriter's notice again
-    pr_port_seen_sw(&L, PR_MODEL_SWC2200);
-    size_t n = pr_save(&L, blob, sizeof blob);
-    static pr_list_t M;
+    int iw = seen_iw(PR_PORT_IW2);
+    pr_rename(&L, iw, "Desk");
+    int lw = pr_at_seen(&L, PR_WHERE_CABLE, P("Office"), P("LaserWriter"), 0);
+    pr_at_queried(&L, lw, 1, &info);
+    size_t n1 = pr_save(&L, v1, sizeof v1);
+    CHECK_EQ_INT(v1[2], 1);
+    CHECK(old_reader_accepts(v1, n1));
+    pr_list_t M;
     pr_init(&M, MAC, 1);
-    CHECK_EQ_INT(pr_load(&M, blob, n), 0);
-    CHECK_EQ_INT(pr_port_heard(&M), PR_HEARD_STYLEWRITER);
-    CHECK_EQ_INT(pr_port_conflict(&M), 1);
-    // A notice naming another model of the record's own family is no conflict (the job's own
-    // `?` holds it), though it reads as a swap (test_port_swapped).
+    CHECK_EQ_INT(pr_load(&M, v1, n1), 0);
+    CHECK_EQ_INT(pr_port_count(&M), 1);
+    CHECK(strcmp(pr_get(&M, iw)->uuid, pr_get(&L, iw)->uuid) == 0);
+    CHECK(strcmp(pr_get(&M, iw)->name, "Desk") == 0);
+    CHECK_EQ_INT(pr_save(&M, again, sizeof again), n1);
+    CHECK(memcmp(again, v1, n1) == 0);
+
+    // The StyleWriter branch's version 2, with the uuid form it made (the family tag alone).
     fresh();
-    pr_port_seen_sw(&L, PR_MODEL_SW2);
-    pr_port_seen_sw(&L, PR_MODEL_SWC2400);
-    n = pr_save(&L, blob, sizeof blob);
+    int sw = seen_sw(PR_MODEL_SW2);
+    pr_rename(&L, sw, "Den");
+    size_t n2 = pr_save(&L, v2, sizeof v2);
+    CHECK_EQ_INT(v2[2], 2);
+    memcpy(v2 + HDR + offsetof(pr_rec_t, uuid) + 28, "0002", 4);
     pr_init(&M, MAC, 1);
-    CHECK_EQ_INT(pr_load(&M, blob, n), 0);
-    CHECK_EQ_INT(pr_port_conflict(&M), 0);
-    CHECK_EQ_INT(pr_port_swapped(&M), 1);
-    // An ImageWriter record's notice for another ImageWriter says nothing at all.
+    CHECK_EQ_INT(pr_load(&M, v2, n2), 0);
+    CHECK_EQ_INT(pr_port_count(&M), 1);
+    CHECK(strncmp(pr_get(&M, sw)->uuid + 28, "0002", 4) == 0);
+    CHECK(strcmp(pr_get(&M, sw)->name, "Den") == 0);
+    CHECK_EQ_INT(pr_get(&M, sw)->model, PR_MODEL_SW2);
+    CHECK_EQ_INT(pr_save(&M, again, sizeof again), n2);
+    CHECK(memcmp(again, v2, n2) == 0);
+    // Its printer answering, a job printing, a look: still as it was.
+    CHECK_EQ_INT(pr_port_seen_sw(&M, PR_MODEL_SW2), sw);
+    pr_port_answered(&M, PR_HEARD_STYLEWRITER);
+    CHECK_EQ_INT(pr_port_seen(&M, PR_PORT_NOTHING), sw);
+    CHECK_EQ_INT(pr_save(&M, again, sizeof again), n2);
+    CHECK(memcmp(again, v2, n2) == 0);
+}
+
+// W-1116 (review focus 5): two port records are version 3. A firmware before W-1116 refuses
+// it (a PR_BLOB_VER 1 reader by its limits, a PR_BLOB_VER 2 reader by the stamp alone) and
+// keeps it unwritten (pr_blob_newer) for the next update; here it reads back whole.
+static void test_blob_v3(void)
+{
+    static uint8_t buf[4096], again[4096], bad[4096];
+    CHECK_EQ_INT(PR_BLOB_VER, 3);
     fresh();
-    pr_port_seen(&L, PR_PORT_IW2);
-    pr_port_seen(&L, PR_PORT_IWLQ);
-    n = pr_save(&L, blob, sizeof blob);
+    int iw = seen_iw(PR_PORT_IW2);
+    size_t n = pr_save(&L, buf, sizeof buf);
+    CHECK_EQ_INT(buf[2], 1);
+    int lq = seen_iw(PR_PORT_IWLQ);
+    n = pr_save(&L, buf, sizeof buf);
+    CHECK_EQ_INT(buf[2], 3);                                 // two ImageWriters: 3, never 2
+    CHECK(!old_reader_accepts(buf, n));
+    CHECK(buf[2] > 2);                                       // a PR_BLOB_VER 2 reader: newer
+    CHECK_EQ_INT(pr_blob_newer(buf, n), 0);                  // ours
+    pr_list_t M;
     pr_init(&M, MAC, 1);
-    CHECK_EQ_INT(pr_load(&M, blob, n), 0);
+    CHECK_EQ_INT(pr_load(&M, buf, n), 0);
+    CHECK_EQ_INT(M.n, 2);
+    CHECK_EQ_INT(pr_port_count(&M), 2);
+    CHECK(memcmp(M.r, L.r, sizeof L.r[0] * L.n) == 0);
+    CHECK_EQ_INT(M.next_id, L.next_id);
+    CHECK_EQ_INT(pr_save(&M, again, sizeof again), n);
+    CHECK(memcmp(again, buf, n) == 0);
+    CHECK(pr_port(&M) == pr_get(&M, iw));                    // the oldest first, as stored
+    // Back to one port record: 1 again; a StyleWriter beside an ImageWriter: 3; alone: 2.
+    CHECK_EQ_INT(pr_remove(&L, lq), 0);
+    n = pr_save(&L, buf, sizeof buf);
+    CHECK_EQ_INT(buf[2], 1);
+    seen_sw(PR_MODEL_SW2);
+    n = pr_save(&L, buf, sizeof buf);
+    CHECK_EQ_INT(buf[2], 3);
+    CHECK_EQ_INT(pr_remove(&L, iw), 0);
+    n = pr_save(&L, buf, sizeof buf);
+    CHECK_EQ_INT(buf[2], 2);
+    // An Unknown printer or a Something else beside a record is a second port record too.
+    int sw = pr_port(&L)->id;
+    int x = pr_add_port(&L, PR_MODEL_IW1);
+    CHECK_EQ_INT(pr_set_model(&L, x, PR_MODEL_NONE), 0);
+    n = pr_save(&L, buf, sizeof buf);
+    CHECK_EQ_INT(buf[2], 3);
+    CHECK_EQ_INT(pr_remove(&L, sw), 0);
+    n = pr_save(&L, buf, sizeof buf);
+    CHECK_EQ_INT(buf[2], 1);
+    // AppleTalk printers never count.
+    lw_info_t info;
+    lw_info_default(&info);
+    pr_at_queried(&L, pr_at_seen(&L, PR_WHERE_CABLE, P("Office"), P("LaserWriter"), 0), 1, &info);
+    pr_at_queried(&L, pr_at_seen(&L, PR_WHERE_TUNNEL, P("Back"), P("LaserWriter"), 0), 1, &info);
+    n = pr_save(&L, buf, sizeof buf);
+    CHECK_EQ_INT(buf[2], 1);
+    // A version 3 stamp is read by version 2's limits: a kind or model nobody has is refused.
+    fresh();
+    seen_iw(PR_PORT_IW2);
+    seen_iw(PR_PORT_IWLQ);
+    n = pr_save(&L, buf, sizeof buf);
+    memcpy(bad, buf, n);
+    bad[6 + offsetof(pr_rec_t, kind)] = PR_KIND_STYLEWRITER + 1;
+    CHECK_EQ_INT(pr_load(&M, bad, n), -1);
+    memcpy(bad, buf, n);
+    bad[6 + offsetof(pr_rec_t, model)] = PR_MODEL_SWC2500 + 1;
+    CHECK_EQ_INT(pr_load(&M, bad, n), -1);
+}
+
+// A "changed" notice stored by a firmware before W-1116 is dropped on load, as a "found" one
+// is, and nothing of who answered on the port is rebuilt from it. The page shows none, and
+// a note is only ever dismissed.
+static void test_load_drops_changed(void)
+{
+    static uint8_t buf[4096];
+    static char js[4096];
+    fresh();
+    int iw = seen_iw(PR_PORT_IW2);
+    L.notes[0] = (pr_note_t){ PR_NOTE_CHANGED, (uint8_t)iw, PR_MODEL_SW2 };
+    L.notes[1] = (pr_note_t){ PR_NOTE_TOO_MANY, (uint8_t)iw, 0 };
+    L.notes[2] = (pr_note_t){ PR_NOTE_CHANGED, (uint8_t)iw, PR_MODEL_IWLQ };
+    L.n_notes = 3;
+    size_t n = pr_save(&L, buf, sizeof buf);
+    CHECK_EQ_INT(buf[2], 2);                                 // as the StyleWriter branch stored it
+    pr_list_t M;
+    pr_init(&M, MAC, 1);
+    CHECK_EQ_INT(pr_port_seen_sw(&M, PR_MODEL_SW2), PR_SEEN_AGAIN);   // something pending, to go too
+    CHECK_EQ_INT(pr_load(&M, buf, n), 0);
+    CHECK_EQ_INT(M.n_notes, 1);
+    CHECK_EQ_INT(M.notes[0].kind, PR_NOTE_TOO_MANY);
     CHECK_EQ_INT(pr_port_heard(&M), PR_HEARD_NONE);
-    CHECK_EQ_INT(pr_port_swapped(&M), 0);
-}
-
-// A different StyleWriter model answering on a StyleWriter record's port reads as a swap on the
-// phone and the page (pr_port_swapped), though its jobs are left to the job's own model check
-// (pr_port_conflict is the family's). A dismissed "changed" notice stays dismissed until an
-// answer other than the one dismissed, and the same answer again rewrites nothing.
-static void test_port_swapped(void)
-{
-    static char buf[4096];
-    static uint8_t b1[8192], b2[8192];
+    CHECK_EQ_INT(M.heard_model, 0);
+    CHECK(pr_port_current(&M) == pr_port(&M));
+    CHECK_EQ_INT(pr_port_other_family(&M, PR_HEARD_IMAGEWRITER), 0);
+    CHECK_EQ_INT(pr_port_other_family(&M, PR_HEARD_STYLEWRITER), 0);
+    CHECK_EQ_INT(pr_port_seen_sw(&M, PR_MODEL_SW2), PR_SEEN_AGAIN);
+    CHECK_EQ_INT(M.n, 1);
     pr_live_t live[PR_MAX];
     memset(live, 0, sizeof live);
-
+    pr_json(&M, live, js, sizeof js);
+    CHECK(strstr(js, "\"changed\"") == NULL);
+    CHECK(strstr(js, "{\"kind\":\"too_many\"") != NULL);
+    pr_post_t o;
+    CHECK_EQ_INT(pr_post(&M, "{\"note\":0,\"dismiss\":true}", &o), 0);
+    CHECK_EQ_INT(M.n_notes, 0);
+    CHECK_EQ_INT(o.changed, 1);
+    CHECK_EQ_INT(pr_post(&M, "{\"note\":0,\"dismiss\":true}", &o), -1);
+    CHECK(strcmp(o.err, "No such notice.") == 0);
+    // A version 1 list with such a note (before StyleWriters, an ImageWriter LQ's) the same.
     fresh();
-    pr_port_seen_sw(&L, PR_MODEL_SW2);
-    CHECK_EQ_INT(pr_port_swapped(&L), 0);
-    pr_port_seen_sw(&L, PR_MODEL_SWC2500);
-    CHECK_EQ_INT(notes_of(PR_NOTE_CHANGED), 1);
-    CHECK_EQ_INT(pr_port_conflict(&L), 0);          // the same family: the job's `?` holds it
-    CHECK_EQ_INT(pr_port_swapped(&L), 1);
-    pr_json(&L, live, buf, sizeof buf);
-    CHECK(strstr(buf, "\"swapped\":true") != NULL);
-    CHECK(strstr(buf, "\"state\":\"attention\"") != NULL);
-    // Dismissed: the same answer every minute adds nothing back and stores nothing new.
-    pr_dismiss(&L, 0);
-    CHECK_EQ_INT(L.n_notes, 0);
-    size_t n1 = pr_save(&L, b1, sizeof b1);
-    for (int i = 0; i < 5; i++) pr_port_seen_sw(&L, PR_MODEL_SWC2500);
-    CHECK_EQ_INT(L.n_notes, 0);
-    size_t n2 = pr_save(&L, b2, sizeof b2);
-    CHECK_EQ_INT((long)n2, (long)n1);
-    CHECK(!memcmp(b1, b2, n1));
-    CHECK_EQ_INT(pr_port_swapped(&L), 1);           // still the other model: still a swap
-    // Another answer than the dismissed one brings a notice of its own.
-    pr_port_seen_sw(&L, PR_MODEL_SWC2400);
-    CHECK_EQ_INT(notes_of(PR_NOTE_CHANGED), 1);
-    CHECK_EQ_INT(L.notes[0].model, PR_MODEL_SWC2400);
-    pr_dismiss(&L, 0);
-    // The record's own printer answers: over, and the dismissed one may be offered again.
-    pr_port_seen_sw(&L, PR_MODEL_SW2);
-    CHECK_EQ_INT(pr_port_swapped(&L), 0);
-    pr_json(&L, live, buf, sizeof buf);
-    CHECK(strstr(buf, "swapped") == NULL);
-    pr_port_seen_sw(&L, PR_MODEL_SWC2400);
-    CHECK_EQ_INT(notes_of(PR_NOTE_CHANGED), 1);
-    // An answer that names no model but is the record's own (its `1` and `2`, a job that
-    // printed): over too.
-    CHECK_EQ_INT(pr_port_swapped(&L), 1);
-    pr_port_answered(&L, PR_HEARD_STYLEWRITER);
-    CHECK_EQ_INT(pr_port_swapped(&L), 0);
-    // Accepting the notice: the record is the printer that answered.
-    pr_port_seen_sw(&L, PR_MODEL_SWC2400);
-    int k = -1;
-    for (int i = 0; i < L.n_notes; i++) if (L.notes[i].kind == PR_NOTE_CHANGED) k = i;
-    CHECK_EQ_INT(pr_accept_change(&L, k), 0);
-    CHECK_EQ_INT(pr_port_swapped(&L), 0);
-
-    // The family's swap is a swap too; an ImageWriter of another model is not (it prints on).
-    fresh();
-    pr_port_seen(&L, PR_PORT_IW2);
-    pr_port_seen(&L, PR_PORT_IWLQ);
-    CHECK_EQ_INT(notes_of(PR_NOTE_CHANGED), 1);
-    CHECK_EQ_INT(pr_port_swapped(&L), 0);
-    pr_json(&L, live, buf, sizeof buf);
-    CHECK(strstr(buf, "swapped") == NULL);
-    pr_port_seen_sw(&L, PR_MODEL_SW2);
-    CHECK_EQ_INT(pr_port_swapped(&L), 1);
-    // Dismissed, the StyleWriter's answer at each look adds nothing back either.
-    for (int i = L.n_notes - 1; i >= 0; i--)
-        if (L.notes[i].model == PR_MODEL_SW2) pr_dismiss(&L, i);
-    pr_port_seen_sw(&L, PR_MODEL_SW2);
-    CHECK_EQ_INT(notes_of(PR_NOTE_CHANGED), 1);              // the LQ's, still waiting
-    CHECK_EQ_INT(pr_port_conflict(&L), 1);
-
-    // A start with the other model's notice pending says it again.
-    fresh();
-    pr_port_seen_sw(&L, PR_MODEL_SW1200);
-    pr_port_seen_sw(&L, PR_MODEL_SW2);
-    size_t n = pr_save(&L, b1, sizeof b1);
-    static pr_list_t M;
+    iw = seen_iw(PR_PORT_IW2);
+    L.notes[0] = (pr_note_t){ PR_NOTE_CHANGED, (uint8_t)iw, PR_MODEL_IWLQ };
+    L.n_notes = 1;
+    n = pr_save(&L, buf, sizeof buf);
+    CHECK_EQ_INT(buf[2], 1);
     pr_init(&M, MAC, 1);
-    CHECK_EQ_INT(pr_load(&M, b1, n), 0);
-    CHECK_EQ_INT(pr_port_swapped(&M), 1);
-    CHECK_EQ_INT(pr_port_conflict(&M), 0);
+    CHECK_EQ_INT(pr_load(&M, buf, n), 0);
+    CHECK_EQ_INT(M.n_notes, 0);
+}
+
+// W-1116 (review focus 2): what an ImageWriter job on record `id` does after its own ESC ?
+// (and the plain question): go when its own model answered, wait while nothing answers,
+// and stop when another printer is there. The original ImageWriter's answer is its line up
+// and nothing said.
+static void test_job_gate(void)
+{
+    fresh();
+    int iw = seen_iw(PR_PORT_IW2);
+    int lq = seen_iw(PR_PORT_IWLQ);
+    int iw1 = pr_add_port(&L, PR_MODEL_IW1);
+    int sw = pr_add_port(&L, PR_MODEL_SW2);
+    CHECK_EQ_INT(pr_job_gate(&L, iw, PR_HEARD_IMAGEWRITER, PR_MODEL_IW2, 1), PR_GATE_GO);
+    CHECK_EQ_INT(pr_job_gate(&L, iw, PR_HEARD_IMAGEWRITER, PR_MODEL_IWLQ, 1), PR_GATE_OTHER);
+    CHECK_EQ_INT(pr_job_gate(&L, lq, PR_HEARD_IMAGEWRITER, PR_MODEL_IW2, 1), PR_GATE_OTHER);
+    CHECK_EQ_INT(pr_job_gate(&L, lq, PR_HEARD_IMAGEWRITER, PR_MODEL_IWLQ, 1), PR_GATE_GO);
+    CHECK_EQ_INT(pr_job_gate(&L, iw, PR_HEARD_STYLEWRITER, PR_MODEL_SW2, 1), PR_GATE_OTHER);
+    CHECK_EQ_INT(pr_job_gate(&L, iw, PR_HEARD_STYLEWRITER, PR_MODEL_SW2, 0), PR_GATE_OTHER);
+    CHECK_EQ_INT(pr_job_gate(&L, iw, PR_HEARD_STYLEWRITER, PR_MODEL_NONE, 1), PR_GATE_OTHER);
+    CHECK_EQ_INT(pr_job_gate(&L, iw, PR_HEARD_NONE, PR_MODEL_NONE, 0), PR_GATE_WAIT);
+    CHECK_EQ_INT(pr_job_gate(&L, iw, PR_HEARD_NONE, PR_MODEL_NONE, 1), PR_GATE_WAIT);   // up, nothing said: not a II
+    CHECK_EQ_INT(pr_job_gate(&L, lq, PR_HEARD_NONE, PR_MODEL_NONE, 1), PR_GATE_WAIT);
+    // The original ImageWriter has no self-ID: the line up and nothing said is its answer.
+    CHECK_EQ_INT(pr_job_gate(&L, iw1, PR_HEARD_NONE, PR_MODEL_NONE, 1), PR_GATE_GO);
+    CHECK_EQ_INT(pr_job_gate(&L, iw1, PR_HEARD_NONE, PR_MODEL_NONE, 0), PR_GATE_WAIT);
+    CHECK_EQ_INT(pr_job_gate(&L, iw1, PR_HEARD_IMAGEWRITER, PR_MODEL_IW1, 1), PR_GATE_GO);
+    CHECK_EQ_INT(pr_job_gate(&L, iw1, PR_HEARD_IMAGEWRITER, PR_MODEL_IW2, 1), PR_GATE_OTHER);
+    CHECK_EQ_INT(pr_job_gate(&L, iw1, PR_HEARD_STYLEWRITER, PR_MODEL_SW2, 1), PR_GATE_OTHER);
+    // Not an ImageWriter job: a StyleWriter's record, no such record, an AppleTalk printer's.
+    CHECK_EQ_INT(pr_job_gate(&L, sw, PR_HEARD_STYLEWRITER, PR_MODEL_SW2, 1), PR_GATE_OTHER);
+    CHECK_EQ_INT(pr_job_gate(&L, 99, PR_HEARD_IMAGEWRITER, PR_MODEL_IW2, 1), PR_GATE_OTHER);
+    int lw = pr_at_seen(&L, PR_WHERE_CABLE, P("Office"), P("LaserWriter"), 0);
+    CHECK_EQ_INT(pr_job_gate(&L, lw, PR_HEARD_IMAGEWRITER, PR_MODEL_IW2, 1), PR_GATE_OTHER);
+    // The answer the job just got decides, not the list's last.
+    seen_sw(PR_MODEL_SW2);
+    CHECK_EQ_INT(pr_port_heard(&L), PR_HEARD_STYLEWRITER);
+    CHECK_EQ_INT(pr_job_gate(&L, iw, PR_HEARD_IMAGEWRITER, PR_MODEL_IW2, 1), PR_GATE_GO);
+    CHECK_EQ_INT(pr_job_gate(&L, iw, PR_HEARD_NONE, PR_MODEL_NONE, 0), PR_GATE_WAIT);
+    // Task 6 review I1: a StyleWriter that answered before the job and was unplugged is the
+    // list's last answer and the printer on the port, yet an ImageWriter job on a quiet port
+    // waits for its own printer -- it is neither "another printer" nor passed -- until its own
+    // questions answer. The board feeds the gate only what the job's ESC ? and plain
+    // questions got (job-local, reset as the job's wait begins), never the list's heard.
+    CHECK(pr_port_current(&L) == pr_get(&L, sw));
+    CHECK_EQ_INT(pr_job_gate(&L, iw, PR_HEARD_NONE, PR_MODEL_NONE, 0), PR_GATE_WAIT);  // line down
+    CHECK_EQ_INT(pr_job_gate(&L, iw, PR_HEARD_NONE, PR_MODEL_NONE, 1), PR_GATE_WAIT);  // up, not named yet
+    CHECK_EQ_INT(pr_job_gate(&L, iw, PR_HEARD_IMAGEWRITER, PR_MODEL_IW2, 1), PR_GATE_GO);   // its own answer
+    CHECK_EQ_INT(pr_job_gate(&L, iw, PR_HEARD_STYLEWRITER, PR_MODEL_SW2, 0), PR_GATE_OTHER); // the job's own plain question answered
+    // An original ImageWriter's answer is its line up with the job's own plain question
+    // unanswered (nothing heard), whatever the list last heard (M2).
+    CHECK_EQ_INT(pr_job_gate(&L, iw1, PR_HEARD_NONE, PR_MODEL_NONE, 1), PR_GATE_GO);
+    CHECK_EQ_INT(pr_job_gate(&L, iw1, PR_HEARD_NONE, PR_MODEL_NONE, 0), PR_GATE_WAIT);
+    CHECK_EQ_INT(pr_job_gate(&L, iw1, PR_HEARD_STYLEWRITER, PR_MODEL_SW2, 1), PR_GATE_OTHER);
+    // An LQ answered earlier (the list's last); a II job whose own ESC ? was lost waits, and
+    // is not ended as "another printer" on the list's say-so.
+    seen_iw(PR_PORT_IWLQ);
+    CHECK_EQ_INT(pr_port_heard(&L), PR_HEARD_IMAGEWRITER);
+    CHECK(pr_port_current(&L) == pr_get(&L, lq));
+    CHECK_EQ_INT(pr_job_gate(&L, iw, PR_HEARD_NONE, PR_MODEL_NONE, 1), PR_GATE_WAIT);
+    CHECK_EQ_INT(pr_job_gate(&L, iw, PR_HEARD_IMAGEWRITER, PR_MODEL_IWLQ, 1), PR_GATE_OTHER); // its own ESC ? named the LQ
+    CHECK_EQ_INT(pr_job_gate(&L, iw, PR_HEARD_IMAGEWRITER, PR_MODEL_IW2, 1), PR_GATE_GO);
+}
+
+// W-1116: a port record is absent while another port record's printer is the one on the port
+// (that one answered last and is present): a job to it is busy, never held. Nothing present,
+// the one on the port itself, or an AppleTalk printer: not absent.
+static void test_port_absent(void)
+{
+    fresh();
+    lw_info_t info;
+    lw_info_default(&info);
+    int iw = seen_iw(PR_PORT_IW2);
+    int lq = seen_iw(PR_PORT_IWLQ);
+    int lw = pr_at_seen(&L, PR_WHERE_CABLE, P("Office"), P("LaserWriter"), 0);
+    pr_at_queried(&L, lw, 1, &info);
+    pr_live_t live[PR_MAX];
+    memset(live, 0, sizeof live);
+    CHECK(pr_port_current(&L) == pr_get(&L, lq));
+    CHECK_EQ_INT(pr_port_absent(&L, live, iw), 0);          // nothing present
+    CHECK_EQ_INT(pr_port_absent(&L, live, lq), 0);
+    live[pr_index(&L, lq)].present = 1;
+    CHECK_EQ_INT(pr_port_absent(&L, live, iw), 1);
+    CHECK_EQ_INT(pr_port_absent(&L, live, lq), 0);          // the one on the port
+    CHECK_EQ_INT(pr_port_absent(&L, live, lw), 0);          // not a port record
+    CHECK_EQ_INT(pr_port_absent(&L, live, 99), 0);
+    live[pr_index(&L, lw)].present = 1;                     // a LaserWriter's presence is its own
+    CHECK_EQ_INT(pr_port_absent(&L, live, iw), 1);
+    // The other way round once the ImageWriter II answers.
+    memset(live, 0, sizeof live);
+    pr_port_seen(&L, PR_PORT_IW2);
+    live[pr_index(&L, iw)].present = 1;
+    CHECK_EQ_INT(pr_port_absent(&L, live, lq), 1);
+    CHECK_EQ_INT(pr_port_absent(&L, live, iw), 0);
+    // Nothing answered yet: the oldest is the one on the port while it is present.
+    fresh();
+    iw = pr_add_port(&L, PR_MODEL_IW2);
+    lq = pr_add_port(&L, PR_MODEL_IWLQ);
+    memset(live, 0, sizeof live);
+    CHECK_EQ_INT(pr_port_absent(&L, live, lq), 0);
+    live[pr_index(&L, iw)].present = 1;
+    CHECK_EQ_INT(pr_port_absent(&L, live, lq), 1);
+    CHECK_EQ_INT(pr_port_absent(&L, live, iw), 0);
+}
+
+// W-1116: the test page goes to the printer on the port while it is there, else to the first
+// shared printer that is ready, else to the port's record (the button then runs the cable
+// test, as today), else to the first shared printer.
+static void test_test_target_current(void)
+{
+    fresh();
+    lw_info_t info;
+    lw_info_default(&info);
+    int iw = seen_iw(PR_PORT_IW2);
+    int lq = seen_iw(PR_PORT_IWLQ);
+    int lw = pr_at_seen(&L, PR_WHERE_CABLE, P("Office"), P("LaserWriter"), 0);
+    pr_at_queried(&L, lw, 1, &info);
+    pr_live_t live[PR_MAX];
+    memset(live, 0, sizeof live);
+    CHECK_EQ_INT(pr_test_target(&L, live), lq);             // nothing there: the port's record
+    live[pr_index(&L, lq)].present = live[pr_index(&L, lq)].ready = 1;
+    CHECK_EQ_INT(pr_test_target(&L, live), lq);
+    live[pr_index(&L, lq)].ready = 0;                       // present is enough: its own page says
+    CHECK_EQ_INT(pr_test_target(&L, live), lq);
+    live[pr_index(&L, lq)].present = 0;
+    live[pr_index(&L, lw)].present = live[pr_index(&L, lw)].ready = 1;
+    CHECK_EQ_INT(pr_test_target(&L, live), lw);             // the port's printer away: a ready one
+    live[pr_index(&L, lw)].printing = 1;                    // busy is not ready
+    CHECK_EQ_INT(pr_test_target(&L, live), lq);
+    live[pr_index(&L, lw)].printing = 0;
+    pr_set_shared(&L, lw, 0);                               // not shared: not a target
+    CHECK_EQ_INT(pr_test_target(&L, live), lq);
+    pr_port_seen(&L, PR_PORT_IW2);                          // the II answers: it is the port's
+    live[pr_index(&L, iw)].present = 1;
+    CHECK_EQ_INT(pr_test_target(&L, live), iw);
+    // A port record that is no printer (Something else) is not the page's; the first shared is.
+    fresh();
+    int u = pr_port_seen(&L, PR_PORT_SILENT);
+    pr_set_model(&L, u, PR_MODEL_NONE);
+    lw = pr_at_seen(&L, PR_WHERE_CABLE, P("Office"), P("LaserWriter"), 0);
+    pr_at_queried(&L, lw, 1, &info);
+    memset(live, 0, sizeof live);
+    CHECK_EQ_INT(pr_test_target(&L, live), lw);
+    live[pr_index(&L, u)].present = 1;
+    CHECK_EQ_INT(pr_test_target(&L, live), lw);
+}
+
+// W-1116: the page's JSON says which port record is the one on the port (0 for none), whether
+// a Something else record listed, the names vintage Macs see in the Chooser, each port
+// record's own AirPrint path (the oldest keeps ipp/print, the others ipp/p<id>), and six shared.
+static void test_json_ports(void)
+{
+    fresh();
+    lw_info_t info;
+    lw_info_default(&info);
+    int iw = seen_iw(PR_PORT_IW2);
+    int lq = seen_iw(PR_PORT_IWLQ);
+    int lw = pr_at_seen(&L, PR_WHERE_CABLE, P("Office"), P("LaserWriter"), 0);
+    pr_at_queried(&L, lw, 1, &info);
+    pr_live_t live[PR_MAX];
+    memset(live, 0, sizeof live);
+    static char buf[4096];
+    char want[64];
+    CHECK(pr_json(&L, live, buf, sizeof buf) > 0);
+    CHECK(strstr(buf, "\"port_on\":0,") != NULL);          // the LQ answered, but is not there
+    CHECK(strstr(buf, "\"said_other\":false") != NULL);
+    CHECK(strstr(buf, "\"chooser\":[\"ImageWriter II\",\"Office\"]") != NULL);
+    CHECK(strstr(buf, "\"max_shared\":6") != NULL);
+    CHECK(strstr(buf, "swapped") == NULL);
+    snprintf(want, sizeof want, "\"id\":%d,\"name\":\"ImageWriter II\"", iw);
+    const char *at = strstr(buf, want);
+    CHECK(at != NULL && strstr(at, "\"rp\":\"ipp/print\"") != NULL);
+    snprintf(want, sizeof want, "\"rp\":\"ipp/p%d\"", lq);
+    CHECK(strstr(buf, want) != NULL);
+    snprintf(want, sizeof want, "\"rp\":\"ipp/p%d\"", lw);
+    CHECK(strstr(buf, want) != NULL);
+    live[pr_index(&L, lq)].present = 1;
+    CHECK(pr_json(&L, live, buf, sizeof buf) > 0);
+    snprintf(want, sizeof want, "\"port_on\":%d,", lq);
+    CHECK(strstr(buf, want) != NULL);
+    // The Chooser's names are the ones Macs see: the port ImageWriter's as named on the page,
+    // an AppleTalk printer's own NBP name whatever the page calls it.
+    pr_rename(&L, iw, "Desk");
+    pr_rename(&L, lw, "Kitchen");
+    CHECK(pr_json(&L, live, buf, sizeof buf) > 0);
+    CHECK(strstr(buf, "\"chooser\":[\"Desk\",\"Office\"]") != NULL);
+    // A second port record shared is at its own path; not shared, at none.
+    int sw = pr_add_port(&L, PR_MODEL_SW2);
+    CHECK(pr_json(&L, live, buf, sizeof buf) > 0);
+    snprintf(want, sizeof want, "\"rp\":\"ipp/p%d\"", sw);
+    CHECK(strstr(buf, want) != NULL);
+    pr_set_shared(&L, sw, 0);
+    CHECK(pr_json(&L, live, buf, sizeof buf) > 0);
+    CHECK(strstr(buf, want) == NULL);
+    CHECK(strstr(buf, "\"chooser\":[\"Desk\",\"Office\"]") != NULL);   // a StyleWriter: not offered
+    // Set to Something else: said, and no longer an ImageWriter for the Chooser.
+    CHECK_EQ_INT(pr_set_model(&L, iw, PR_MODEL_NONE), 0);
+    CHECK(pr_json(&L, live, buf, sizeof buf) > 0);
+    CHECK(strstr(buf, "\"said_other\":true") != NULL);
+    CHECK(strstr(buf, "\"chooser\":[\"ImageWriter LQ\",\"Office\"]") != NULL);
+    CHECK(strstr(buf, "\"rp\":\"ipp/print\"") == NULL);     // the oldest record shares nothing
+    // No port record at all: 0, nothing said, and the Chooser line is the AppleTalk printers'.
+    fresh();
+    lw = pr_at_seen(&L, PR_WHERE_CABLE, P("Office"), P("LaserWriter"), 0);
+    pr_at_queried(&L, lw, 1, &info);
+    memset(live, 0, sizeof live);
+    CHECK(pr_json(&L, live, buf, sizeof buf) > 0);
+    CHECK(strstr(buf, "\"port_on\":0,\"said_other\":false,\"chooser\":[\"Office\"]") != NULL);
+}
+
+// W-1116: while a Something else record is listed no port record gets the test page (the
+// button's, or DIP4's at boot): an ImageWriter record's would hold the job lock to the stall
+// limit. An AppleTalk printer still gets it; with none, nothing does.
+static void test_test_target_said_other(void)
+{
+    fresh();
+    pr_live_t live[PR_MAX];
+    memset(live, 0, sizeof live);
+    int iw = seen_iw(PR_PORT_IW2);
+    pr_add_port(&L, PR_MODEL_IWLQ);
+    CHECK_EQ_INT(pr_test_target(&L, live), iw);
+    CHECK_EQ_INT(pr_set_model(&L, iw, PR_MODEL_NONE), 0);
+    CHECK(pr_port_said_other(&L) != NULL);
+    CHECK_EQ_INT(pr_test_target(&L, live), -1);
+    lw_info_t info;
+    lw_info_default(&info);
+    int lw = pr_at_seen(&L, PR_WHERE_CABLE, P("Office"), P("LaserWriter"), 0);
+    pr_at_queried(&L, lw, 1, &info);
+    CHECK_EQ_INT(pr_test_target(&L, live), lw);
+}
+
+// W-1116 (R8, R10): the person naming a model on the record that is on the port forgets the
+// port's last answer, whatever the model; editing another record leaves the port's as it is.
+static void test_set_model_keeps_current(void)
+{
+    fresh();
+    int iw = seen_iw(PR_PORT_IW2);
+    int lq = pr_add_port(&L, PR_MODEL_IWLQ);
+    CHECK(pr_port_current(&L) == pr_get(&L, iw));
+    CHECK_EQ_INT(pr_set_model(&L, lq, PR_MODEL_SW2), 0);
+    CHECK_EQ_INT(pr_port_heard(&L), PR_HEARD_IMAGEWRITER);
+    CHECK_EQ_INT(L.heard_model, PR_MODEL_IW2);
+    CHECK(pr_port_current(&L) == pr_get(&L, iw));
+    CHECK_EQ_INT(pr_port_is_imagewriter(&L), 1);
+    CHECK_EQ_INT(pr_set_model(&L, iw, PR_MODEL_SW1200), 0); // the one on the port: forgotten
+    CHECK_EQ_INT(pr_port_heard(&L), PR_HEARD_NONE);
+    CHECK_EQ_INT(L.heard_model, 0);
+    CHECK(pr_port_current(&L) == pr_get(&L, iw));          // the oldest, with nothing heard
+    // A StyleWriter answering stays the one on the port while another record is named one.
+    fresh();
+    int sw = seen_sw(PR_MODEL_SW2);
+    int iw1 = pr_add_port(&L, PR_MODEL_IW1);
+    CHECK_EQ_INT(pr_set_model(&L, iw1, PR_MODEL_SWC1500), 0);
+    CHECK_EQ_INT(pr_port_heard(&L), PR_HEARD_STYLEWRITER);
+    CHECK_EQ_INT(L.heard_model, PR_MODEL_SW2);
+    CHECK(pr_port_current(&L) == pr_get(&L, sw));
+    // R10: a change within a family forgets the answer too, so a record added later with
+    // the old model is never the one on the port without its printer answering.
+    fresh();
+    int lq2 = pr_add_port(&L, PR_MODEL_IWLQ);              // the oldest, so the fallback
+    iw = seen_iw(PR_PORT_IW2);
+    CHECK(pr_port_current(&L) == pr_get(&L, iw));
+    CHECK_EQ_INT(pr_set_model(&L, iw, PR_MODEL_IW1), 0);    // "it's an original"
+    CHECK_EQ_INT(pr_port_heard(&L), PR_HEARD_NONE);
+    CHECK_EQ_INT(L.heard_model, 0);
+    CHECK(pr_port_current(&L) == pr_get(&L, lq2));
+    int again = pr_add_port(&L, PR_MODEL_IW2);
+    CHECK(again >= 0);
+    CHECK(pr_port_current(&L) == pr_get(&L, lq2));         // not the new II: it never answered
+    CHECK(pr_port_current(&L) != pr_get(&L, again));
+    CHECK_EQ_INT(pr_port_seen(&L, PR_PORT_IW2), again);     // once it does, it is
+    CHECK(pr_port_current(&L) == pr_get(&L, again));
+    // And a StyleWriter's answer, corrected to another StyleWriter model, the same.
+    fresh();
+    sw = seen_sw(PR_MODEL_SW2);
+    CHECK_EQ_INT(pr_set_model(&L, sw, PR_MODEL_SW1200), 0);
+    CHECK_EQ_INT(pr_port_heard(&L), PR_HEARD_NONE);
+    CHECK_EQ_INT(L.heard_model, 0);
+}
+
+// W-1116 (R9): every port record answers at ipp/p<id>; the oldest is also ipp/print. Removing
+// the oldest moves ipp/print to the next one, whose own path keeps working (the board's
+// routing, in a later commit).
+static void test_path_moves_on_removal(void)
+{
+    fresh();
+    int iw = seen_iw(PR_PORT_IW2);
+    int sw = seen_sw(PR_MODEL_SW2);
+    pr_live_t live[PR_MAX];
+    memset(live, 0, sizeof live);
+    static char buf[4096];
+    char want[32];
+    CHECK(pr_json(&L, live, buf, sizeof buf) > 0);
+    snprintf(want, sizeof want, "\"id\":%d,", iw);
+    CHECK(strstr(strstr(buf, want), "\"rp\":\"ipp/print\"") != NULL);
+    snprintf(want, sizeof want, "\"rp\":\"ipp/p%d\"", sw);
+    CHECK(strstr(buf, want) != NULL);
+    CHECK_EQ_INT(pr_remove(&L, iw), 0);
+    CHECK(pr_port(&L) == pr_get(&L, sw));
+    CHECK(pr_json(&L, live, buf, sizeof buf) > 0);
+    CHECK(strstr(buf, want) == NULL);
+    CHECK(strstr(buf, "\"rp\":\"ipp/print\"") != NULL);
+}
+
+// W-1116: what each port record's AirPrint printer says of itself (pr_port_say), beside the
+// board's own words for the printer on the port, and which record carries the port's live
+// state (pr_port_live_id): the one on the port its own state, every other port record
+// offline, in its family's offline words whatever the reason (one kind of Offline, Wells
+// 2026-10-31); only the reason keyword (main's port_push) tells a taken port from a quiet one.
+static void test_port_say(void)
+{
+    fresh();
+    lw_info_t info;
+    lw_info_default(&info);
+    int iw = seen_iw(PR_PORT_IW2);
+    int lq = seen_iw(PR_PORT_IWLQ);
+    int lw = pr_at_seen(&L, PR_WHERE_CABLE, P("Office"), P("LaserWriter"), 0);
+    pr_at_queried(&L, lw, 1, &info);
+    pr_live_t live[PR_MAX];
+    memset(live, 0, sizeof live);
+    // Nothing on the port: the one that answered last says its own state (offline, as the
+    // board reads it), the other is offline with nothing answering.
+    CHECK_EQ_INT(pr_port_live_id(&L), lq);
+    CHECK_EQ_INT(pr_port_on(&L, live), 0);
+    CHECK_EQ_INT(pr_port_say(&L, live, lq), PR_PORT_SAY_OWN);
+    CHECK_EQ_INT(pr_port_say(&L, live, iw), PR_PORT_SAY_OFFLINE);
+    CHECK_EQ_INT(pr_port_say(&L, live, lw), PR_PORT_SAY_OWN);    // not the port's
+    CHECK_EQ_INT(pr_port_say(&L, live, 99), PR_PORT_SAY_OWN);
+    // The LQ is there: the port is taken for the II, whatever the LQ is called.
+    live[pr_index(&L, lq)].present = 1;
+    CHECK_EQ_INT(pr_port_on(&L, live), lq);
+    CHECK_EQ_INT(pr_port_say(&L, live, iw), PR_PORT_SAY_TAKEN);
+    CHECK_EQ_INT(pr_port_say(&L, live, lq), PR_PORT_SAY_OWN);
+    pr_rename(&L, lq, "Desk");
+    CHECK_EQ_INT(pr_port_say(&L, live, iw), PR_PORT_SAY_TAKEN);
+    // The II answers: the other way round.
+    memset(live, 0, sizeof live);
+    pr_port_seen(&L, PR_PORT_IW2);
+    CHECK_EQ_INT(pr_port_live_id(&L), iw);
+    CHECK_EQ_INT(pr_port_say(&L, live, lq), PR_PORT_SAY_OFFLINE);
+    live[pr_index(&L, iw)].present = 1;
+    CHECK_EQ_INT(pr_port_on(&L, live), iw);
+    CHECK_EQ_INT(pr_port_say(&L, live, iw), PR_PORT_SAY_OWN);
+    CHECK_EQ_INT(pr_port_say(&L, live, lq), PR_PORT_SAY_TAKEN);
+    // A Something else record in the list: the port is its (asked nothing), and every other
+    // port record's port is taken, whatever answered and whatever is there.
+    int se = pr_add_port(&L, PR_MODEL_SW2);
+    CHECK(se >= 0);
+    CHECK_EQ_INT(pr_set_model(&L, se, PR_MODEL_NONE), 0);
+    CHECK(pr_port_said_other(&L) == pr_get(&L, se));
+    CHECK_EQ_INT(pr_port_live_id(&L), se);
+    CHECK_EQ_INT(pr_port_say(&L, live, iw), PR_PORT_SAY_TAKEN);
+    CHECK_EQ_INT(pr_port_say(&L, live, lq), PR_PORT_SAY_TAKEN);
+    CHECK_EQ_INT(pr_port_say(&L, live, se), PR_PORT_SAY_OWN);
+    CHECK_EQ_INT(pr_remove(&L, se), 0);
+    CHECK_EQ_INT(pr_port_live_id(&L), iw);
+    CHECK_EQ_INT(pr_port_say(&L, live, lq), PR_PORT_SAY_TAKEN);
+    // Alone on the port: its own state, there or not.
+    fresh();
+    iw = seen_iw(PR_PORT_IW2);
+    memset(live, 0, sizeof live);
+    CHECK_EQ_INT(pr_port_live_id(&L), iw);
+    CHECK_EQ_INT(pr_port_say(&L, live, iw), PR_PORT_SAY_OWN);
+    live[pr_index(&L, iw)].present = 1;
+    CHECK_EQ_INT(pr_port_say(&L, live, iw), PR_PORT_SAY_OWN);
+    // Nothing heard, two records added by hand: the oldest carries the port's state.
+    fresh();
+    iw = pr_add_port(&L, PR_MODEL_IW2);
+    lq = pr_add_port(&L, PR_MODEL_IWLQ);
+    memset(live, 0, sizeof live);
+    CHECK_EQ_INT(pr_port_live_id(&L), iw);
+    CHECK_EQ_INT(pr_port_say(&L, live, iw), PR_PORT_SAY_OWN);
+    CHECK_EQ_INT(pr_port_say(&L, live, lq), PR_PORT_SAY_OFFLINE);
+    live[pr_index(&L, iw)].present = 1;
+    CHECK_EQ_INT(pr_port_say(&L, live, lq), PR_PORT_SAY_TAKEN);
+    // A StyleWriter record while an ImageWriter answers, and the reverse.
+    fresh();
+    int sw = seen_sw(PR_MODEL_SW2);
+    iw = seen_iw(PR_PORT_IW2);
+    memset(live, 0, sizeof live);
+    live[pr_index(&L, iw)].present = 1;
+    CHECK_EQ_INT(pr_port_live_id(&L), iw);
+    CHECK_EQ_INT(pr_port_say(&L, live, sw), PR_PORT_SAY_TAKEN);
+    memset(live, 0, sizeof live);
+    pr_port_seen_sw(&L, PR_MODEL_SW2);
+    live[pr_index(&L, sw)].present = 1;
+    CHECK_EQ_INT(pr_port_live_id(&L), sw);
+    CHECK_EQ_INT(pr_port_say(&L, live, iw), PR_PORT_SAY_TAKEN);
+    // No port record: nothing carries the port.
+    fresh();
+    CHECK_EQ_INT(pr_port_live_id(&L), -1);
+    lw = pr_at_seen(&L, PR_WHERE_CABLE, P("Office"), P("LaserWriter"), 0);
+    CHECK_EQ_INT(pr_port_live_id(&L), -1);
+    CHECK_EQ_INT(pr_port_on(&L, live), 0);
+}
+
+// W-1116: the name vintage Macs see for the printer port, and the queue name at boot: the
+// oldest ImageWriter record's, fixed across swaps; with no ImageWriter the oldest port
+// record's; with no port record "AirWriter".
+static void test_chooser_name(void)
+{
+    char name[PR_NAME_MAX];
+    lw_info_t info;
+    lw_info_default(&info);
+    fresh();
+    pr_chooser_name(&L, name, sizeof name);
+    CHECK(strcmp(name, "AirWriter") == 0);
+    int lw = pr_at_seen(&L, PR_WHERE_CABLE, P("Office"), P("LaserWriter"), 0);
+    pr_at_queried(&L, lw, 1, &info);
+    pr_chooser_name(&L, name, sizeof name);                 // an AppleTalk printer is no name for the port
+    CHECK(strcmp(name, "AirWriter") == 0);
+    int sw = seen_sw(PR_MODEL_SW2);
+    pr_chooser_name(&L, name, sizeof name);
+    CHECK(strcmp(name, "StyleWriter II") == 0);             // the oldest port record, no ImageWriter
+    int iw = seen_iw(PR_PORT_IW2);
+    pr_chooser_name(&L, name, sizeof name);
+    CHECK(strcmp(name, "ImageWriter II") == 0);             // the ImageWriter, though newer
+    int lq = seen_iw(PR_PORT_IWLQ);
+    pr_chooser_name(&L, name, sizeof name);
+    CHECK(strcmp(name, "ImageWriter II") == 0);             // the oldest ImageWriter: not the LQ
+    pr_rename(&L, iw, "Desk");
+    pr_chooser_name(&L, name, sizeof name);
+    CHECK(strcmp(name, "Desk") == 0);                       // as named on the page
+    pr_port_seen(&L, PR_PORT_IWLQ);                         // the LQ answers: fixed across swaps
+    CHECK(pr_port_current(&L) == pr_get(&L, lq));
+    pr_chooser_name(&L, name, sizeof name);
+    CHECK(strcmp(name, "Desk") == 0);
+    // The name follows pr_offers' one port offer (in list order: the LaserWriter came first).
+    int ids[8];
+    CHECK_EQ_INT(pr_offers(&L, PR_WHERE_TUNNEL, ids, 8), 2);
+    CHECK_EQ_INT(ids[0], lw);
+    CHECK_EQ_INT(ids[1], iw);
+    CHECK_EQ_INT(pr_remove(&L, iw), 0);
+    pr_chooser_name(&L, name, sizeof name);
+    CHECK(strcmp(name, "ImageWriter LQ") == 0);
+    CHECK_EQ_INT(pr_remove(&L, lq), 0);
+    pr_chooser_name(&L, name, sizeof name);
+    CHECK(strcmp(name, "StyleWriter II") == 0);
+    CHECK_EQ_INT(pr_remove(&L, sw), 0);
+    pr_chooser_name(&L, name, sizeof name);
+    CHECK(strcmp(name, "AirWriter") == 0);
+    // Cut to the buffer.
+    seen_iw(PR_PORT_IW2);
+    pr_chooser_name(&L, name, 6);
+    CHECK(strcmp(name, "Image") == 0);
 }
 
 int main(void)
@@ -1834,7 +2729,12 @@ int main(void)
     test_post();
     test_port_identified();
     test_port_silent();
-    test_port_changed();
+    test_port_two_records();
+    test_twice_seen();
+    test_add_port_adds();
+    test_unknown_goes();
+    test_something_else_replaced();
+    test_port_uuid_per_model();
     test_port_nothing();
     test_at_laserwriter();
     test_at_no_answer();
@@ -1856,8 +2756,8 @@ int main(void)
     test_start_page_kept();
     test_sw_models();
     test_sw_port_found();
-    test_sw_changed();
     test_sw_found();
+    test_pending_forgotten();
     test_sw_set_model();
     test_sw_add_port();
     test_sw_clean();
@@ -1869,7 +2769,18 @@ int main(void)
     test_sw_box_state();
     test_sw_blob();
     test_sw_blob_stamp();
-    test_port_conflict();
-    test_port_swapped();
+    test_one_port_unchanged();
+    test_blob_v3();
+    test_load_drops_changed();
+    test_job_gate();
+    test_offers_one_iw();
+    test_port_absent();
+    test_test_target_current();
+    test_json_ports();
+    test_test_target_said_other();
+    test_set_model_keeps_current();
+    test_path_moves_on_removal();
+    test_port_say();
+    test_chooser_name();
     TEST_END;
 }

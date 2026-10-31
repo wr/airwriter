@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
 // The board's printer list (W-1088): printers_core's records kept in NVS
-// (namespace "printers", key "list"), fed what the port says, and the port's
-// printer put on AirPrint (ipp_server printer 0). A board set up before W-1088
-// gets its records from what it had, once; the old keys stay where they were.
+// (namespace "printers", key "list"), fed what the port says, and each shared
+// record put on AirPrint (the oldest port record at ipp_server printer 0, the
+// rest at 1..; W-1116). A board set up before W-1088 gets its records from what
+// it had, once; the old keys stay where they were.
 #pragma once
 #include <stddef.h>
 #include <stdint.h>
@@ -28,14 +29,22 @@ typedef struct {
     // LaserWriter's and the port's old uuid are read here.
     int         updated_board;
     pr_legacy_t legacy;
-    ipp_doc_sink_t port_sink;        // the port printer's jobs
+    // A port record's jobs. W-1116: its ctx is set per record to (slot << 8 | record id),
+    // as at_sink's, so the job's end goes to the record's slot (ipp_server_job_done_for).
+    ipp_doc_sink_t port_sink;
     // An AppleTalk LaserWriter's jobs: its ctx is set per printer to
     // (slot << 8 | record id), for laser_job_begin and ipp_server_job_done_for.
     ipp_doc_sink_t at_sink;
-    void (*port_live)(pr_live_t *out);                  // the port printer's state now
+    // The port's own state now: the printer on the port's (pr_port_live_id; every other
+    // port record is offline, W-1116).
+    void (*port_live)(pr_live_t *out);
     void (*port_screen)(const char *dither, int gain);  // its halftone was changed
     void (*look)(void);              // "Look for printers": ask the port again
     void (*changed)(void);           // names, sharing or the port's kind changed
+    // W-1116: a record was put on AirPrint, moved or taken off (printers_apply), after the
+    // job that held its slot if there was one: a slot starts with no state, so what each
+    // port slot says is pushed again (main's port_push). Optional. No list lock held.
+    void (*placed)(void);
     // W-1103, both optional, both after the post is stored and applied and with
     // no list lock held. clean: one cleaning of printer `id`'s print head
     // (0, or an HTTP status: 409 when a job holds the printer); the status is
@@ -44,6 +53,11 @@ typedef struct {
     // (printers_port_set_sw_model), or keep the pick, offline, if it is silent.
     int  (*clean)(int id);
     void (*confirm_sw)(int id);
+    // W-1116, optional, after the post is stored and applied, no list lock held: the person
+    // set port record `id`'s model (pr_post_t.model_id, any family) or removed it (R19; `id`
+    // is gone by then); the port's last answer is forgotten for the record on the port, so
+    // the board asks the port again at once.
+    void (*port_model)(int id);
 } printers_cfg_t;
 
 // Whether a list is stored and reads back: before printers_start, to tell a
@@ -53,12 +67,16 @@ int         printers_stored(void);
 esp_err_t   printers_start(const printers_cfg_t *cfg);
 
 // What the port said when asked: the self-ID's model (iw_model_t) with the
-// line ready, or not ready.
-void        printers_port_seen(int iw_model, int ready);
+// line ready, or not ready. Returns the core's result (pr_port_seen): the record id the
+// answer belongs to, PR_SEEN_AGAIN for the first of the two answers that change the list
+// (R16: a new model, or one that replaces Something else or drops an Unknown record), or -1.
+int         printers_port_seen(int iw_model, int ready);
 // W-1103: a StyleWriter answered on the port as `m` (SW_NONE: nothing did, no
-// change). Makes the port's record, or raises the "changed" notice
-// (pr_port_seen_sw).
-void        printers_port_seen_sw(sw_model_t m);
+// change). Its record's at once where nothing else would change; else (a record
+// of its own to make, a Something else record to replace, an Unknown record to
+// drop: R16) once it has answered twice (pr_port_seen_sw, W-1116). Returns the
+// core's result (the record id, PR_SEEN_AGAIN for the first of those two, or -1).
+int         printers_port_seen_sw(sw_model_t m);
 // What laser.c heard (once per printer, its link as at_link_t) and its query:
 // answered on at_link at net.node with its page count (-1 none), or not
 // (at_link -1). W-1098: a printer the list has under an old name keeps its
@@ -95,36 +113,74 @@ int         printers_port_shared(void);
 pr_model_t  printers_port_model(void);
 // The port StyleWriter's model; SW_NONE for anything else.
 sw_model_t  printers_port_sw_model(void);
-// W-1103: who answered on the port last (pr_heard_t), an answer of the record's own printer
+// W-1116: what the port's records hold, for port_policy's order of questions, read in one
+// pass: any StyleWriter record (sw), an original ImageWriter record (iw1), an original
+// StyleWriter record (sw1). Each out may be NULL.
+void        printers_port_listed(int *sw, int *iw1, int *sw1);
+// W-1103: who answered on the port last (pr_heard_t: the list's history, which the port task
+// and a pending sighting read; a job's gate and the StyleWriter glue read what is on the port
+// now and the job's own answers instead, W-1116), and an answer of the record's own printer
 // that names no model (a StyleWriter's `1` and `2`, a job that printed, the full sequence once
-// the record has its model; PR_HEARD_NONE changes nothing),
-// and whether that was the other family than the record's (pr_port_conflict): then the
-// record's AirPrint jobs, test page and cleaning are refused. Not stored. Any task, the
-// printer task included: nothing here writes flash.
+// the record has its model; PR_HEARD_NONE changes nothing). Not stored. Any task, the printer
+// task included: nothing here writes flash.
 int         printers_port_heard(void);
 void        printers_port_answered(int heard);
-int         printers_port_conflict(void);
-// What the phone and the page show as a swap (pr_port_swapped): the conflict, or another
-// StyleWriter model on a StyleWriter record's port.
-int         printers_port_swapped(void);
-// The full sequence found the port's StyleWriter to be `m`: its record takes it
-// (no notice: the person had named it a StyleWriter already; sharing stays as it
-// was). No-op for a port that is not a StyleWriter, or for the model it has.
-void        printers_port_set_sw_model(sw_model_t m);
-// The port printer's name, "" with none: the Chooser's name and the test page's.
+// W-1116: a job, test page or cleaning is for port record `id`, but another port record's
+// printer is the one on the port (pr_port_absent): the job is answered busy and the test page
+// and cleaning 409, so one record's work never goes to another's printer. 0 for the one on the
+// port, a quiet port, or an AppleTalk printer. Reads the live state as printers_json does.
+int         printers_port_absent(int id);
+// W-1116: an ImageWriter is the printer on the port now: the current record is one and it is
+// present (pr_port_on), not the list's last answer. The StyleWriter glue's `swapped`. Reads the
+// live state as printers_json does.
+int         printers_port_on_is_imagewriter(void);
+// W-1116: whether port record `id` is a StyleWriter (doc_begin reads the job's own family from
+// its record, not the port's). 0 for an ImageWriter, an AppleTalk printer, or no such record.
+int         printers_record_is_sw(int id);
+// W-1116: port record `id`'s model (pr_model_t), PR_MODEL_NONE for no such port record, and its
+// halftone and gain (-1 for no such port record). A job or test page reads its own record's,
+// not the printer on the port's.
+pr_model_t  printers_record_model(int id);
+int         printers_record_screen(int id, char *dither, size_t cap, int *gain);
+// W-1116: what an ImageWriter job (or test page) on port record `id` does after its own ESC ?
+// and plain questions (pr_job_gate), given only what they got -- `heard` (pr_heard_t) and the
+// model it named, never the list's history -- and whether the line is up now: PR_GATE_GO to
+// send its page, PR_GATE_OTHER to abort (another model or a StyleWriter answered), PR_GATE_WAIT
+// to keep waiting with nothing sent.
+pr_gate_t   printers_job_gate(int id, int heard, pr_model_t heard_model, int line_up);
+// The full sequence found the port's StyleWriter to be `m`: the record the person picked
+// (W-1116, `id`) takes it (no notice: the person had named it a StyleWriter already; sharing
+// stays as it was), and `m` is the printer on the port now. No-op for an `id` that is not a
+// StyleWriter port record.
+void        printers_port_set_sw_model(int id, sw_model_t m);
+// The printer on the port's name (pr_port_current), "" with none: the test page's.
 void        printers_port_name(char *out, size_t cap);
+// W-1116: the name vintage Macs see for the printer port and the queue name at boot
+// (pr_chooser_name): the oldest ImageWriter record's, fixed across swaps, else the oldest
+// port record's, else "AirWriter".
+void        printers_chooser_name(char *out, size_t cap);
+// W-1116: a record's AirPrint slot as last put there (0 the oldest port record's), -1 none.
+int         printers_slot_of(int id);
+// W-1116: the port records on AirPrint, in list order, for what each one's printer is told
+// (main's port_push): its slot, kind and model and what it says of itself (pr_port_say_t).
+// The live state is read as printers_json reads it. How many; a record without a slot is
+// left out.
+typedef struct { uint8_t slot, id, kind, model, say; } printers_port_slot_t;
+int         printers_port_slots(printers_port_slot_t out[], int max);
 // The port printer's halftone and gain, from its record: -1 with no port printer.
 int         printers_port_screen(char *dither, size_t cap, int *gain);
 // The page's old Printer pane changed the screen: the port record follows.
 void        printers_port_set_screen(const char *dither, int gain);
 
-// The port printer's AirPrint slot as its record says, for ipp_server_start;
-// NULL when it is not shared or not an ImageWriter or a StyleWriter. Counts as applied.
+// Printer 0 as its record says (the oldest port record, at ipp/print and its own ipp/p<id>),
+// for ipp_server_start; NULL when it is not shared or not an ImageWriter or a StyleWriter.
+// Counts as applied.
 const ipp_printer_cfg_t *printers_port_ipp(void);
 // Puts each shared printer on AirPrint as its record now says, where that
-// changed since it was last put there, and gives laser.c the AppleTalk
-// printers. A change that met a job in its slot waits: the job's end calls
-// this again. After laser_start.
+// changed since it was last put there (every other shared record, port or
+// AppleTalk, in the lowest free slot of 1.., kept for its life there), and
+// gives laser.c the AppleTalk printers. A change that met a job in its slot
+// waits: the job's end calls this again. After laser_start.
 void        printers_apply(void);
 
 // GET /api/printers and POST /api/printers (pr_post's actions): 0, or an

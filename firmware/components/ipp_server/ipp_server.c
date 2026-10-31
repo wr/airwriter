@@ -75,16 +75,16 @@ static char s_adminurl[96];
 static char s_hostname[40];
 static volatile int s_mdns_up;
 
-// W-1082: each printer the server answers for. Printer 0 is the ImageWriter
-// (ipp_server_cfg_t), set up at start and there for good; printer 1 a shared
-// LaserWriter (ipp_server_set_printer), there while it is shared. Strings
-// are copies. The job slot, ids and stop reason are each printer's; the
-// print lock, below, is one: one job at a time across both, since the job
-// buffer and the rip are single.
+// W-1082: each printer the server answers for. Printer 0 is the oldest port
+// record's (ipp_server_cfg_t at start, ipp_server_set_printer after); the
+// others any shared record's, a LaserWriter's or (W-1116) another port
+// record's, there while it is shared. Strings are copies. The job slot, ids
+// and stop reason are each printer's; the print lock, below, is one: one job
+// at a time across all, since the job buffer and the rip are single.
 typedef struct {
     int             on;                  // a printer is in this slot (W-1088: shared)
     char            resource[24];        // "ipp/print": its path, TXT rp
-    char            legacy[24];          // another path it answers at ("ipp/laser"), or 
+    char            legacy[24];          // another path it answers at ("ipp/laser", slot 0's "ipp/p<id>"), or ""
     char            uri[128];
     char            uuid[64];
     char            name[64];            // printer-name; printer 1's Bonjour instance too
@@ -101,7 +101,7 @@ typedef struct {
     int             busy;                // working on something not ours: processing
     char            stop_message[256];   // printer-state-message with either reason or busy
     char            job_message[128];    // job-state-message for the job in the slot
-    volatile int    colour;              // W-1064: the colour ribbon is in (printer 0)
+    volatile int    colour;              // W-1064: the colour ribbon is in (the port's printer)
     int             txt_colour;          // what the TXT record says
     volatile int    airprint;            // advertised and taking jobs: on, and AirPrint on (W-1079)
     int             print_svcs;          // its Bonjour services are registered
@@ -909,21 +909,22 @@ void ipp_server_stop(void)
     mdns_free();
 }
 
-void ipp_server_set_colour(int on)
+void ipp_server_set_colour_for(int idx, int on)
 {
     on = on ? 1 : 0;
+    if (idx < 0 || idx >= IPP_PRINTERS) return;
     if (!s_p) {
-        s_pre_colour = on;
+        if (idx == 0) s_pre_colour = on;
         return;
     }
-    printer_t *p = &s_p[0];
-    if (on != p->colour) ESP_LOGI(TAG, "colour %s", on ? "on: the colour ribbon is in" : "off");
+    printer_t *p = &s_p[idx];
+    if (on != p->colour) ESP_LOGI(TAG, "printer %d colour %s", idx, on ? "on: the colour ribbon is in" : "off");
     p->colour = on;
     // The TXT record is tracked on its own: a change during start_mdns lands
     // in the attributes but not the record, and the call after start fixes it.
     if (!s_mdns_up || !p->print_svcs || on == p->txt_colour) return;
     p->txt_colour = on;
-    // By name, as in ipp_server_set_airprint: not a shared LaserWriter's record.
+    // By name, as in ipp_server_set_airprint: this slot's record, not another's.
     char urf[64];
     printer_caps_urf(p->caps ? p->caps : &printer_caps_imagewriter, on, urf, sizeof urf);
     esp_err_t a = mdns_service_txt_item_set_for_host(p->svc_name, "_ipp", "_tcp", NULL, "Color",
@@ -932,6 +933,8 @@ void ipp_server_set_colour(int on)
     if (a != ESP_OK || b != ESP_OK)
         ESP_LOGW(TAG, "TXT update failed: %s / %s", esp_err_to_name(a), esp_err_to_name(b));
 }
+
+void ipp_server_set_colour(int on) { ipp_server_set_colour_for(0, on); }
 
 const char *ipp_server_uri(void) { return s_p ? s_p[0].uri : ""; }
 
@@ -948,10 +951,10 @@ void ipp_server_job_done_for(int idx, int ok)
     xSemaphoreGive(s_job_lock);
 
     if (!ended) {
-        ESP_LOGE(TAG, "job done reported with no job printing");
+        ESP_LOGE(TAG, "printer %d: job done reported with no job printing", idx);
         return;
     }
-    ESP_LOGI(TAG, "%sjob %d: %s", idx ? "LaserWriter " : "", (int)id, reason);
+    ESP_LOGI(TAG, "printer %d job %d: %s", idx, (int)id, reason);
     xSemaphoreGive(s_print_lock);
 }
 
@@ -974,7 +977,7 @@ void ipp_server_set_stopped_for(int idx, const char *reason_or_null, const char 
     snprintf(p->stop_message, sizeof p->stop_message, "%s", message ? message : "");
     if (s_job_lock) xSemaphoreGive(s_job_lock);
     if (changed)
-        ESP_LOGW(TAG, "%sprinter-state-reasons now %s", idx ? "LaserWriter " : "",
+        ESP_LOGW(TAG, "printer %d printer-state-reasons now %s", idx,
                  reason_or_null ? reason_or_null : "none");
 }
 
@@ -1036,16 +1039,18 @@ esp_err_t ipp_server_set_printer(int idx, const ipp_printer_cfg_t *cfg)
         return ESP_ERR_INVALID_STATE;
     }
     if (s_mdns_up) remove_services(p);
+    // The same printer put again (a rename, a model change: its uuid) keeps its
+    // state and its ribbon's colour, since neither changed with the slot; another
+    // printer starts with none, and its owner pushes them (main's port_push, laser.c).
+    // W-1116: by uuid, since a port record may hold any slot.
+    int same = cfg && p->on && strcmp(p->uuid, cfg->uuid) == 0;
     p->on = 0;
-    // The port's printer keeps its line's state (W-1088: a rename re-puts the
-    // slot, and the line has not changed); an AppleTalk printer's is pushed
-    // again by laser.c.
-    if (idx) p->stop_reason = p->note_reason = NULL;
-    p->busy = 0;
-    if (cfg) {
-        fill(p, cfg);
-        if (idx) p->colour = 0;               // the port's printer keeps its ribbon's
+    if (!same) {
+        p->stop_reason = p->note_reason = NULL;
+        p->busy = 0;
+        p->colour = 0;
     }
+    if (cfg) fill(p, cfg);
     refresh(p);
     xSemaphoreGive(s_job_lock);
     if (cfg) ESP_LOGI(TAG, "printer %d \"%s\" at %s, uuid %s", idx, p->name, p->uri, p->uuid);

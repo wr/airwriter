@@ -150,6 +150,12 @@ Traps already explained in a code comment are listed only when the comment is ea
   `ribbon_check` was not needed. It needs the printer selected and between commands.
 - **The colour ribbon is reported as C straight after the width.** `iw_self_id_ribbon` takes C
   only there, so noise read out after a black reply cannot flip the board to colour.
+- **A cut-short job leaves the link dirty, and the idle `ESC ?` is then skipped** until a job
+  resyncs the printer (`ribbon_ask`, `s_link.dirty`). Since W-1116 an ImageWriter record reads
+  Ready only once `ESC ?` has named it since its line came up (`s_iw_named`), so a line-up
+  while the link is dirty must keep the record it named, or the printer reads Offline until
+  the next job (ruling R17, 2026-10-30). The plain question still runs every 5 s while the
+  printer isn't answering.
 
 ## IPP, iOS, macOS, mDNS
 
@@ -290,15 +296,44 @@ Traps already explained in a code comment are listed only when the comment is ea
 - **U8's ~RE rides `LT_DE`, so U8 shuts down while the PIC transmits.** Deliberate: wake is
   ≤ 1.8 µs against LocalTalk's ~200 µs inter-dialogue gap. It mirrors the U6 bug fixed on 08-22
   but is not that bug; don't "fix" it.
-- **The port's record and the printer on the port can be of different families** (W-1103). A
-  StyleWriter answering on an ImageWriter record's port, or the reverse, only raises the
-  "changed" notice; until the person accepts it (or the record's own family answers again)
-  `pr_port_conflict` holds, and nothing in the record's language may go out. A new path that
-  sends a port job, page or command checks it; `stylewriter_cfg_t.swapped` holds the
-  StyleWriter's own. `s_port_sw` flips only under the job lock (`port_sw_sync`), so read it with
-  the lock held. And a StyleWriter-first port (`port_policy.h`) gets `ESC ?` only after the plain
-  question got nothing: `swfake.py` takes `ESC ?` for a letter it does not know and stops
-  listening until a reset.
+- **A port record and the printer on the port can be of different families** (W-1103, W-1116). A
+  StyleWriter answering on a port whose records are ImageWriters, or the reverse, is a record of
+  its own once it has answered twice (`pr_port_seen_sw`, `pr_port_seen`: one answer is
+  `PR_SEEN_AGAIN`), never a notice; meanwhile nothing in a record's language goes out to the
+  other family's printer, by what is on the port now and what the work's own questions got,
+  never the list's last answer (`pr_port_other_family` is in the core and host-tested; nothing
+  on the board reads it). What phones are told follows the printer on the port (`pr_port_say`,
+  `port_push`); jobs, the test page and cleaning follow the record they are for (W-1116's job
+  commit): a job, test page or cleaning for a port record that is not the one on the port --
+  another port record's printer is -- is answered busy or 409 "Connect <name> to the printer
+  port first." (`pr_port_absent`, the port sink's `port_claim`, `port_page_refused`,
+  `clean_head`); a job or test page takes its family, model and screen from its own record
+  (`printers_record_*`), not the port's; an ImageWriter job on a quiet port sends no page byte
+  until its own model answers `ESC ?` (`colour_ok` on `pr_job_gate`). **The gate is fed only
+  what the job's own questions got (`s_job_heard`), never the list's `heard`**: the list's last
+  answer is history (a StyleWriter that answered and was unplugged stays `pr_port_current`), and
+  a gate read from it ended a quiet-port ImageWriter job at once with "Another printer was
+  connected" (task 6 review, I1). For the same reason the job's wait in `ribbon_ask` is not
+  guarded on the current record's mode; `lt_print_begin` reads `s_port_sw` (a StyleWriter now)
+  or a StyleWriter sighting whose repeat is pending (`s_port_confirm`, the 500 ms the port task
+  lets the lock go between the two answers, R16), not `pr_port_other_family`; and `sw_swapped`
+  is an ImageWriter on the port now (`printers_port_on_is_imagewriter`), not the list's last
+  answer. **A job's or test page's plain question goes before any ImageWriter byte whenever the
+  line is up** (the wait's 5 s question too), and a StyleWriter answering ends the call with
+  nothing else sent: a StyleWriter that raises its line and hears `ESC ?` first goes deaf until
+  a reset, and an original ImageWriter record would then take its silence for its own line (task
+  6 re-review, N2/N3). **A job's or test page's settle is its own**: `ribbon_ask`'s wait and
+  serial_out's line task poll the same pin every 100 ms, so `s_ribbon_want`/`s_ribbon_due`
+  (`printer_line_changed`, on the line task) may not be set yet when the wait sees the line up;
+  keyed off them alone, a II switched on mid-wait would get its first `ESC ?` ~0.3 s after the
+  line-up, too soon to answer, and with an original ImageWriter record listed its silence would
+  read as the original's. The wait holds 2 s from its own first sighting of the line up (or to
+  `s_ribbon_due`, whichever is later), never more than 2.5 s. `s_port_sw` flips only under the
+  job lock (`port_sw_sync`): read it with the lock held wherever a decision sends bytes; the
+  unlocked reads (`port_live`, `box_ready`, `status_json`, `printer_line_changed`) only show
+  state and may be one flip behind. And a StyleWriter-first port
+  (`port_policy.h`) gets `ESC ?` only after the plain question got nothing: `swfake.py` takes
+  `ESC ?` for a letter it does not know and stops listening until a reset.
 - **A StyleWriter's bytes at 57600 print nothing on an ImageWriter II at 9600** (board 1,
   2026-10-27): 300 plain questions a second apart, then the full sequence (`00 FF FF FF 49`, 2 s,
   `?`) once, each followed by a CR LF at 9600, left the paper blank but for the line feeds. So a
