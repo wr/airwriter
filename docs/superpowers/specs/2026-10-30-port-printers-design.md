@@ -202,6 +202,14 @@ minutes or more (today's wait for a switched-off ImageWriter) and show something
 as "offline" or "waiting". Otherwise the fallback: the job is taken and ends aborted at once,
 with the same message, as the StyleWriter branch's refusal does today.
 
+Bench, 2026-10-31 (board 1, an ImageWriter II on the port, a StyleWriter II record): passed,
+no fallback (Wells). The Mac's queue kept the job 11.5 minutes until cancelled, sending it again
+about every 30 s and reading "Offline" and "The printer is in use" in turn. The iPhone asks
+every ~10 s at first and shows "This printer is offline" with **Cancel Print Job** and
+**Continue**; Continue sends it again and the choice comes back, as long as the person keeps
+choosing; left unanswered, the phone gives up within about 11 minutes. Nothing printed on the
+ImageWriter either way.
+
 **Nothing answers on the port.** AirWriter can't tell a switched-off ImageWriter from one that
 is out of paper or deselected, so this stays as today: the job is taken, the phone shows it
 paused, and an ImageWriter job waits up to 10 minutes (`CONFIG_AIRWRITER_STALL_ABORT`); a
