@@ -727,10 +727,13 @@ read back is a list made again). At most 8 records.
   for an ImageWriter (the kick also with nothing found yet), and never to a StyleWriter.
   "Something else" stops even the self-ID. W-1116 (3.16): the port keeps a record for every
   model that answers on it, one per model, and the one that answered last is the printer on
-  the port. An answer naming a recorded model is that record's, at once. One naming a model
-  with no record changes the list only when it comes twice in a row (any other model's answer,
-  or nothing said, in between starts it over; the line down does not), so a garbled reply never
-  adds a printer: it makes the model's record, shared if there is room; a found "Unknown
+  the port. An answer naming a recorded model, where nothing else would change, is that
+  record's, at once. One that would change the list (a model with no record, or one that
+  would replace a "Something else" record or drop a found "Unknown printer" record, whether
+  or not the model has a record, ruling R16) changes it only when it comes twice in a row
+  (any other model's answer, or nothing said, in between starts it over; the line down does
+  not), so a garbled reply never changes the list: it makes the model's record, shared if
+  there is room; a found "Unknown
   printer" record becomes it (uuid kept), or goes with its notice when the model has a record
   already; a "Something else" record is replaced. "Add a Printer…" adds a record for a model
   not in the list (original ImageWriter, one that is off, a StyleWriter by model), beside the
@@ -739,10 +742,13 @@ read back is a list made again). At most 8 records.
   Something else while another port record is one (one per port). The one on the port (the
   record that answered last) shows its state; every other port record is Offline. An
   ImageWriter record reads Ready only once `ESC ?` has named its model since the line came up
-  (never from the line alone), so the page never shows the wrong ImageWriter for a moment;
-  not mid-job (a paper reload drops the line), and not while the link is dirty after a job
-  cut short, when the idle `ESC ?` waits for a job's resync (3.8) and a line-up keeps the
-  record it named (R17; the plain question still runs). `/api/status` `model` is the record
+  (never from the line alone), so the page never shows the wrong ImageWriter for a moment. A
+  line-up mid-job (a paper reload drops the line) keeps the name, and so does one while the
+  link is dirty after a job cut short, when the idle `ESC ?` waits for a job's resync (3.8)
+  (R17; the plain question still runs while the printer isn't answering). A II or LQ record
+  on the port whose `ESC ?` answer was lost is asked again every 5 s while its line is up, as
+  at a line-up (R20, 3.16). Removing the record on the port forgets the port's last answer,
+  and the port is asked again at once (R19). `/api/status` `model` is the record
   on the port's make and model, an ImageWriter's by its model. How long a change takes to
   show:
 
@@ -905,8 +911,9 @@ Apple's StyleWriter adapter (ADSP, not PAP), is not built.
   ImageWriter record, an original StyleWriter record: the order of the questions is the
   list's, not the current record's alone), the family that answered last, the line, and the
   events. In this order: an act the board wants repeated (`confirm`: a seen call answered
-  `PR_SEEN_AGAIN`, one sighting of a model with no record, and the same answer twice makes the
-  record), at once, before anything else; the person said Something else, nothing of
+  `PR_SEEN_AGAIN`, one sighting of an answer that would change the list, and the same answer
+  twice makes the change, R16), at once, before anything else; the person said Something
+  else, nothing of
   AirWriter's own, and the person's own Look for Printers asks once, as any look does, with
   nothing following it (not the plain question that follows an unanswered `ESC ?` elsewhere,
   not the cadence, and a full sequence owed waits until the Something else record goes); a
@@ -932,7 +939,11 @@ Apple's StyleWriter adapter (ADSP, not PAP), is not built.
   StyleWriter branch), whatever the list holds and whatever answered last, so a StyleWriter
   plugged in is found in seconds by someone who never added it, at boot after the quiet
   power-on, when `ESC ?` went unanswered, and once per busy spell when a kick is wanted and
-  none has been asked since the line went down; the CTRL-X kick last, only after a plain
+  none has been asked since the line went down; an ImageWriter II or LQ record on the port
+  that `ESC ?` has not named since its line came up (a lost answer, `iw_unnamed`; not on a
+  dirty link) is asked as at a line-up every 5 s while its line is up and it does not answer,
+  the plain question first where the port is StyleWriter-first and then `ESC ?` (R20); the
+  CTRL-X kick last, only after a plain
   question since the line went down that got nothing, and never while the current record is a
   StyleWriter, so a StyleWriter that answers the plain question is never kicked (the
   StyleWriter branch's quiet ImageWriter record, nothing of its own and one kick a look while a

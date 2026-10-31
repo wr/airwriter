@@ -139,10 +139,12 @@ void pr_init(pr_list_t *l, const uint8_t mac[6], uint16_t epoch);
 //
 // W-1116: the printer port keeps a record for every model that answers on it, one per
 // model (pr_port_of), and the one that answered last is the one on the port
-// (pr_port_current). An answer naming a recorded model is that record's, at once. One
-// naming a model with no record changes the list only when it comes twice in a row
-// (PR_SEEN_AGAIN for the first; any other answer in between, SILENT included, starts over;
-// the line down does not), so a garbled reply never adds a printer: a found "Unknown
+// (pr_port_current). An answer naming a recorded model, where nothing else would change, is
+// that record's, at once. One that would change the list (a model with no record, or one
+// that would replace a "Something else" record or drop a found "Unknown printer" record,
+// whether or not the model has a record: ruling R16) changes it only when it comes twice in
+// a row (PR_SEEN_AGAIN for the first; any other answer in between, SILENT included, starts
+// over; the line down does not), so a garbled reply never changes the list: a found "Unknown
 // printer" record becomes it (its uuid kept) or, when the model has a record already, goes
 // with its notice; a "Something else" record is replaced; else a record of its own is made,
 // named by its model, shared if there is room. SILENT with an original ImageWriter record is
@@ -192,6 +194,9 @@ int  pr_set_model(pr_list_t *l, int id, pr_model_t m);
 // or sets the model of an "Unknown printer" or "Something else" record. Its
 // id; -1 for no such model or no room; -2 when the model has a record already.
 int  pr_add_port(pr_list_t *l, pr_model_t m);
+// Removing the port record that is on the port (pr_port_current) forgets the port's last
+// answer (heard and heard_model, as a model change does, ruling R19): the oldest record is
+// the port's until something answers, and the board asks the port again at once.
 int  pr_remove(pr_list_t *l, int id);
 int  pr_use_anyway(pr_list_t *l, int id);                   // a LaserWriter that won't answer
 void pr_dismiss(pr_list_t *l, int note);
@@ -330,9 +335,10 @@ size_t pr_json(const pr_list_t *l, const pr_live_t live[PR_MAX], char *buf, size
 // confirm_sw_id is the port's record when the post made it a StyleWriter by a
 // model the person picked (add_port, model): the board then asks the printer
 // with the full sequence (-1 otherwise). model_id (W-1116) is the port record
-// whose model the person set this post, any family (add_port makes one, model
-// changes one; -1 otherwise): the port's last answer is forgotten for the record
-// on the port (pr_set_model, R10), so the board asks the port again at once.
+// the person set the model of this post, any family (add_port makes one, model
+// changes one), or removed (R19; the id is gone from the list by then); -1
+// otherwise. The port's last answer is forgotten for the record on the port
+// (pr_set_model, pr_remove), so the board asks the port again at once.
 typedef struct {
     int changed, look, screen_id, start_page_id, start_page, clean_id, confirm_sw_id, model_id;
     char err[64];

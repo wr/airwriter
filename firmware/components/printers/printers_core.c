@@ -404,6 +404,7 @@ static int port_named(pr_list_t *l, int heard, int model)
     if (other_id) pr_remove(l, other_id);
     rec = (pr_rec_t *)pr_port_of(l, (pr_model_t)model);
     if (!rec) rec = port_new(l, model);
+    port_heard(l, heard, model);        // a removal above may have forgotten it (pr_remove, R19)
     return rec ? rec->id : -1;
 }
 
@@ -696,6 +697,12 @@ int pr_remove(pr_list_t *l, int id)
 {
     int i = pr_index(l, id);
     if (i < 0) return -1;
+    // The record on the port goes: the port's last answer was its and is forgotten (R19), so
+    // the oldest record is the port's only until something answers; the board asks at once.
+    if (&l->r[i] == pr_port_current(l)) {
+        l->heard = PR_HEARD_NONE;
+        l->heard_model = 0;
+    }
     notes_clear(l, id, -1);
     seen_drop(l, id);
     memmove(&l->r[i], &l->r[i + 1], (size_t)(l->n - i - 1) * sizeof l->r[0]);
@@ -1170,8 +1177,10 @@ int pr_post(pr_list_t *l, const char *body, pr_post_t *o)
     if (!json_has_int(b, "id", &n) || !pr_get(l, (int)n)) return post_err(o, "No such printer.");
     int id = (int)n;
     if (json_has_bool(b, "remove", &v) && v) {
+        int port = pr_get(l, id)->where == PR_WHERE_PORT;      // (pr_get checked above)
         pr_remove(l, id);
         o->changed = 1;
+        if (port) o->model_id = id;                            // R19: the board asks the port again
         return 0;
     }
     if (json_has_bool(b, "use_anyway", &v) && v) {

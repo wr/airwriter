@@ -392,3 +392,24 @@ How port records and the answering one are held in `printers_core` and `port_pol
 the IPP slot each shared record takes; where the twice-seen rule lives; the shortest line-down
 that still re-asks `ESC ?` while idle (an A/B switch box flipped quickly should be re-asked, and
 flow control mid-job must not); the exact words, in the copy pass, within the voice guide.
+
+## Amendments (2026-10-30, while building)
+
+Rulings made during the build that change what the sections above say:
+
+- **R11** (What the port is asked, rule 2): a line-up edge or a look while a StyleWriter
+  answers asks its status at once, not at the next 10 s check; an ImageWriter put in its
+  place is found in about 1.5 s from the edge.
+- **R16** (Port records, a printer AirWriter has no record for): the first answer that would
+  change the list is asked again even when the model has a record of its own, so one answer
+  never replaces a Something else record or drops an Unknown printer record; the second in a
+  row does.
+- **R17** (Which one is on the port): a line-up while the link is dirty after a job cut short
+  keeps the ImageWriter record `ESC ?` named, since the idle `ESC ?` waits for a job's resync;
+  so does a line-up mid-job (a paper reload).
+- **R19** (Adding by hand): removing the record on the port forgets the port's last answer, as
+  a model change does, and the port is asked again at once.
+- **R20** (What the port is asked, rule 3): an ImageWriter II or LQ record on the port whose
+  `ESC ?` answer was lost is asked again every 5 s while its line is up, as at a line-up (the
+  plain question first where the port is StyleWriter-first, then `ESC ?`); not while a
+  Something else or Unknown printer record is listed, and not on a dirty link.

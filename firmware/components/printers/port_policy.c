@@ -9,9 +9,20 @@ static int due(uint32_t now_ms, uint32_t last_ms, uint32_t every_ms)
     return (uint32_t)(now_ms - last_ms) >= every_ms;
 }
 
+// R20: an ImageWriter II or LQ record on the port whose ESC ? answer was lost (its line up,
+// not named since it came up, not answering) is asked for it again every 5 s.
+static int reask(const port_in_t *in)
+{
+    return in->line_ready && in->kind == PR_KIND_IMAGEWRITER && in->iw_unnamed && !in->answering;
+}
+
 void port_tick(port_in_t *in)
 {
     if (in->want_kick && in->kind == PR_KIND_IMAGEWRITER) in->answering = 0;
+    // A re-ask's plain question got nothing, and the record was named another way since (a
+    // job's ESC ?): its ESC ? is no longer owed. With no look or edge pending, event_plain can
+    // only be a re-ask's.
+    if (in->event_plain && !in->look && !in->line_up_edge && !reask(in)) in->event_plain = 0;
 }
 
 port_act_t port_policy(const port_in_t *in)
@@ -40,7 +51,9 @@ port_act_t port_policy(const port_in_t *in)
     // one with an original ImageWriter record, which gives no self-ID and is found by its
     // line alone.
     int sw_first = in->sw_listed || in->heard == PR_HEARD_STYLEWRITER || in->iw1_listed;
-    if (in->line_up_edge || (in->look && in->line_ready))
+    // R20: a re-ask's plain question (rule 7's, every 5 s) got nothing: ESC ? follows at once,
+    // so a lost self-ID is asked for again while the line stays up.
+    if (in->line_up_edge || (in->look && in->line_ready) || (reask(in) && in->event_plain))
         return sw_first && !in->event_plain ? PA_PLAIN : PA_ESCQ;
     if (in->look && !answers) return PA_PLAIN;
     if (in->said_other) return PA_NONE;
@@ -110,8 +123,8 @@ void port_after(port_in_t *in, port_act_t act, int heard, int mine)
             in->heard = heard;
             in->answering = mine ? 1 : 0;
             events_over(in);                                      // answered: no ESC ?
-        } else if (in->line_up_edge || (in->look && in->line_ready)) {
-            in->event_plain = 1;                                  // ESC ? next
+        } else if (in->line_up_edge || (in->look && in->line_ready) || reask(in)) {
+            in->event_plain = 1;                                  // ESC ? next (a re-ask's too, R20)
         } else {
             if (in->look) look_found_nothing(in);                 // a look with the line down
             events_over(in);

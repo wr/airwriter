@@ -451,6 +451,24 @@ static void test_remove(void)
     CHECK(again != id);
     pr_at_queried(&L, again, 1, &info);
     CHECK_EQ_INT(pr_get(&L, again)->shared, 1);             // found again: shared again
+
+    // W-1116, R19: removing the record on the port forgets the port's last answer, so the
+    // oldest record is the port's only until something answers; removing another port record
+    // leaves the port's answer as it was.
+    fresh();
+    int iw2 = seen_iw(PR_PORT_IW2);
+    int lq = seen_iw(PR_PORT_IWLQ);
+    CHECK(pr_port_current(&L) == pr_get(&L, lq));
+    CHECK_EQ_INT(pr_remove(&L, iw2), 0);                    // not the one on the port
+    CHECK_EQ_INT(pr_port_heard(&L), PR_HEARD_IMAGEWRITER);
+    CHECK(pr_port_current(&L) == pr_get(&L, lq));
+    int sw = seen_sw(PR_MODEL_SW2);
+    CHECK(pr_port_current(&L) == pr_get(&L, sw));
+    CHECK_EQ_INT(pr_remove(&L, sw), 0);                     // the one on the port
+    CHECK_EQ_INT(pr_port_heard(&L), PR_HEARD_NONE);
+    CHECK_EQ_INT(L.heard_model, 0);
+    CHECK(pr_port_current(&L) == pr_get(&L, lq));           // the oldest, until something answers
+    CHECK_EQ_INT(pr_port_other_family(&L, PR_HEARD_IMAGEWRITER), 0);
 }
 
 static void test_offers(void)
@@ -839,9 +857,19 @@ static void test_post(void)
     snprintf(body, sizeof body, "{\"id\":%d,\"remove\":true}", lw);
     CHECK_EQ_INT(pr_post(&L, body, &r), 0);
     CHECK(pr_get(&L, lw) == NULL);
+    CHECK_EQ_INT(r.model_id, -1);                              // a LaserWriter's removal: the port is not asked
     CHECK_EQ_INT(pr_post(&L, "{\"id\":99,\"remove\":true}", &r), -1);
     CHECK(strstr(r.err, "No such printer") != NULL);
     CHECK_EQ_INT(pr_post(&L, "not json", &r), -1);
+
+    // W-1116, R19: removing a port record asks the port again (model_id names the record,
+    // gone by then), and the port's last answer is forgotten when it was the one on the port.
+    fresh();
+    int p2 = seen_iw(PR_PORT_IW2);
+    snprintf(body, sizeof body, "{\"id\":%d,\"remove\":true}", p2);
+    CHECK_EQ_INT(pr_post(&L, body, &r), 0);
+    CHECK_EQ_INT(r.model_id, p2);
+    CHECK_EQ_INT(pr_port_heard(&L), PR_HEARD_NONE);
 }
 
 // "Add a Printer…" for the port (W-1088 setup): an original ImageWriter, or

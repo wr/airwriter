@@ -54,8 +54,9 @@ typedef struct {
     int  (*clean)(int id);
     void (*confirm_sw)(int id);
     // W-1116, optional, after the post is stored and applied, no list lock held: the person
-    // set port record `id`'s model (pr_post_t.model_id, any family); the port's last answer
-    // is forgotten for the record on the port (R10), so the board asks the port again at once.
+    // set port record `id`'s model (pr_post_t.model_id, any family) or removed it (R19; `id`
+    // is gone by then); the port's last answer is forgotten for the record on the port, so
+    // the board asks the port again at once.
     void (*port_model)(int id);
 } printers_cfg_t;
 
@@ -67,7 +68,8 @@ esp_err_t   printers_start(const printers_cfg_t *cfg);
 
 // What the port said when asked: the self-ID's model (iw_model_t) with the
 // line ready, or not ready. Returns the core's result (pr_port_seen): the record id the
-// answer belongs to, PR_SEEN_AGAIN for a first sighting of a model with no record, or -1.
+// answer belongs to, PR_SEEN_AGAIN for the first of the two answers that change the list
+// (R16: a new model, or one that replaces Something else or drops an Unknown record), or -1.
 int         printers_port_seen(int iw_model, int ready);
 // W-1103: a StyleWriter answered on the port as `m` (SW_NONE: nothing did, no
 // change). Its record's, or a record of its own once it has answered twice

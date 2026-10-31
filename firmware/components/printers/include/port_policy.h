@@ -46,9 +46,12 @@
 //  - fills `kind` from the current record and the `_listed` flags from the list before each
 //    call, `heard` from pr_port_heard, and passes each answer to port_after: the family that
 //    answered (PR_HEARD_NONE for nothing) and whether it names a record (`mine`: the seen
-//    call gave a record id). An answer naming a model with no record (PR_SEEN_AGAIN, the
-//    first of the two in a row that make one) is not a record's: the caller then sets
-//    `confirm` to the act, after port_after, and the next call repeats it at once.
+//    call gave a record id). An answer that would change the list (PR_SEEN_AGAIN: a model
+//    with no record, or one that would replace a Something else record or drop an Unknown
+//    one; the first of the two in a row that make the change, R16) is not a record's yet:
+//    the caller then sets `confirm` to the act, after port_after, and the next call repeats
+//    it at once. It fills `iw_unnamed` (R20) when the current record is an ImageWriter II or
+//    LQ that ESC ? has not named since its line came up, on a clean link.
 //  - may set `answering` itself from other answers (a job's, a status read elsewhere), and
 //    `last_status_ms` when something else asked `1` and `2`.
 #pragma once
@@ -67,6 +70,8 @@ typedef struct {
     int      sw_listed;       // a StyleWriter record is listed
     int      sw1_listed;      // an original StyleWriter record is listed: it ignores ? until reset
     int      said_other;      // "Something else": the person said what is there is not a printer we ask
+    int      iw_unnamed;      // R20: the current record is an ImageWriter II or LQ whose ESC ? answer
+                              // is not in since its line came up (a lost answer), the link clean
     int      line_ready;      // HSKo
     int      want_kick;       // printer_state_want_kick()
     int      heard;           // pr_heard_t: the family that last answered on the port
@@ -117,6 +122,10 @@ void port_tick(port_in_t *in);
 //                   record listed, which gives no self-ID), then PA_ESCQ once that got
 //                   nothing (`event_plain`); PA_ESCQ alone everywhere else (an empty port,
 //                   ImageWriter II or LQ records only), so an ImageWriter swapped in is noticed.
+//                   R20: the same question, every 5 s on rule 7's clock, for an ImageWriter II
+//                   or LQ record on the port that ESC ? has not named since its line came up
+//                   (`iw_unnamed`, a lost answer) while its line is up and it does not answer;
+//                   PA_ESCQ follows that re-ask's plain question when it got nothing.
 //   5. PA_PLAIN     on a look with the line down, while the port's printer is not answering.
 //   6. PA_FULL      `full_due` with an original StyleWriter record listed, while nothing
 //                   answers: set by the board at start-up, or by the person's look that got

@@ -363,10 +363,12 @@ static volatile int        s_screen_check;     // the record on the port changed
 static uint32_t            s_last_plain_ms, s_last_status_ms;
 static int                 s_plain_asked, s_plain_unanswered, s_event_plain, s_full_due;
 // W-1116: an act to repeat at once (port_in_t.confirm), set after a seen call that returned
-// PR_SEEN_AGAIN (one sighting of a model with no record; the same answer twice makes it).
+// PR_SEEN_AGAIN (one sighting of an answer that would change the list: a model with no
+// record, or one that would replace a Something else record or drop an Unknown one; the same
+// answer twice makes the change, R16).
 static port_act_t          s_port_confirm;
 // W-1116: the last printers_port_seen result ribbon_ask kept, for the port task: the record id
-// the ESC ? answer belongs to, PR_SEEN_AGAIN, or -1.
+// the ESC ? answer belongs to, PR_SEEN_AGAIN (asked again first), or -1.
 static int                 s_seen_again = -1;
 static volatile int        s_look_person;      // the pending look is the person's Look for Printers
 // The port's StyleWriter answered before the session began (a job, the test page, a cleaning):
@@ -473,7 +475,10 @@ static int ribbon_ask(int for_job)
     port_mode_t mode = printers_port_mode();
     // W-1116: on a Something else port only the person's own Look for Printers asks (the policy
     // sends PA_ESCQ for that alone); a job's goes only to an ImageWriter.
-    if (mode == PORT_UNKNOWN_SAID && (for_job || !s_look_person)) return 0;
+    // ...and the repeat of what that look sighted once (the look is over by then, port_after
+    // ends it; the same answer twice replaces the Something else record, R16).
+    if (mode == PORT_UNKNOWN_SAID && (for_job || (!s_look_person && s_port_confirm != PA_ESCQ)))
+        return 0;
     if (for_job && mode != PORT_IMAGEWRITER) return 0;
     for (uint32_t ms = 0; for_job && !serial_out_clear() && !s_job_cancelled && !s_test_cancel &&
                           ms < CONFIG_AIRWRITER_STALL_ABORT * 1000u; ms += 100)
@@ -1420,9 +1425,11 @@ static int lt_print_begin(void *ctx, at_link_t link)
     // A Mac's stream is the ImageWriter driver's: it never goes to a StyleWriter (W-1103), nor
     // to an ImageWriter record's port where a StyleWriter answered last (the Mac hears busy
     // until the person says). The offers keep Macs from asking; this keeps a stray one from
-    // being heard.
-    port_sw_sync(printers_port_is_stylewriter(), 1);
-    if (s_port_sw || printers_port_conflict()) {
+    // being heard. A family flip still pending is the port task's to make, within a tick, not
+    // this task's: port_sw_sync pushes the AppleTalk status, whose stack lock this task holds
+    // (W-1116 review, NB1); the Mac hears busy until then.
+    int sw = printers_port_is_stylewriter();
+    if (sw != s_port_sw || s_port_sw || printers_port_conflict()) {
         xSemaphoreGive(s_job_lock);
         return 1;
     }
@@ -1551,7 +1558,7 @@ static void kick_task(void *arg)
             }
             if (s_screen_check) {
                 s_screen_check = 0;
-                port_screen_follow();
+                if (!s_port_sw) port_screen_follow();   // an ImageWriter's; a StyleWriter job reads its own
             }
             if (s_confirm_sw) {
                 s_confirm_sw = 0;
@@ -1595,6 +1602,11 @@ static void kick_task(void *arg)
                   : mode == PORT_STYLEWRITER ? PR_KIND_STYLEWRITER : PR_KIND_UNKNOWN,
             .iw1_listed = iw1_listed, .sw_listed = sw_listed, .sw1_listed = sw1_listed,
             .said_other = mode == PORT_UNKNOWN_SAID, .line_ready = line_ready,
+            // R20: an ImageWriter II or LQ record on the port that ESC ? has not named since its
+            // line came up (a lost answer) is asked again every 5 s; not on a dirty link, where
+            // the idle ESC ? waits for a job's resync (R17).
+            .iw_unnamed = mode == PORT_IMAGEWRITER && !s_iw_named && !s_link.dirty &&
+                          printers_port_model() != PR_MODEL_IW1,
             .want_kick = (mode == PORT_IMAGEWRITER || mode == PORT_NONE) && printer_state_want_kick(),
             .heard = printers_port_heard(), .now_ms = now,
             .line_up_edge = line_up, .look = look, .look_person = look && look_person,
@@ -1624,8 +1636,9 @@ static void kick_task(void *arg)
         // answer, which sets answering from what it then finds.
         int heard = PR_HEARD_NONE, mine = 0;
         // The seen call's result (printers_port_seen / _sw): the record id the answer belongs
-        // to, PR_SEEN_AGAIN for a first sighting of a model with no record, or -1 for no seen
-        // call. `mine` is whether it named a record; a first sighting is repeated (`confirm`).
+        // to, PR_SEEN_AGAIN for the first of the two answers that change the list (a new
+        // model, or one that replaces Something else or drops an Unknown record, R16), or -1
+        // for no seen call. `mine` is whether it named a record; a first sighting is repeated.
         int seen = -1;
         sw_model_t plain = SW_NONE;             // the model the plain question or the full sequence named
         switch (act) {
@@ -1706,8 +1719,8 @@ static void kick_task(void *arg)
         s_plain_unanswered = in.plain_unanswered;
         s_event_plain = in.event_plain;
         s_full_due = in.full_due;
-        // A first sighting of a model with no record (PR_SEEN_AGAIN): the same question again
-        // at once, and the same answer twice makes the record (port_policy.h's `confirm`).
+        // A first sighting (PR_SEEN_AGAIN: the answer would change the list, R16): the same
+        // question again at once, and the same answer twice makes the change (`confirm`).
         // A status check's sighting is confirmed by the plain question, which names the model
         // whatever record is current (the status needs a StyleWriter record's model).
         s_port_confirm = seen != PR_SEEN_AGAIN ? PA_NONE : act == PA_STATUS ? PA_PLAIN : act;

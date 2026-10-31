@@ -79,10 +79,11 @@ static int sw_first_of(const port_in_t *in)
 static void test_invariants(void)
 {
     for (int k = 0; k < N_KINDS; k++)
-    for (unsigned f = 0; f < 32768; f++)
+    for (unsigned f = 0; f < 65536; f++)
     for (int heard = PR_HEARD_NONE; heard <= PR_HEARD_STYLEWRITER; heard++)
     for (int due = 0; due < 3; due++) {
         port_in_t in = base(KINDS[k]);
+        in.iw_unnamed = (f >> 15) & 1;
         in.said_other = f & 1;
         in.answering = (f >> 1) & 1;
         in.line_ready = (f >> 2) & 1;
@@ -107,6 +108,9 @@ static void test_invariants(void)
         int answers = KINDS[k] >= 0 && in.answering;
         int event = in.line_up_edge || (in.look && in.line_ready);
         int person_look = in.look && in.look_person;
+        // R20: an ImageWriter II or LQ record on the port whose ESC ? answer was lost, its line
+        // up, not answering: asked for it again.
+        int reask = in.line_ready && in.kind == PR_KIND_IMAGEWRITER && in.iw_unnamed && !answers;
 
         // An act the board wants repeated goes first, whatever else is true.
         if (in.confirm != PA_NONE) { CHECK_EQ_INT(a, in.confirm); continue; }
@@ -130,7 +134,9 @@ static void test_invariants(void)
         if (a == PA_PLAIN && answers) CHECK(event && sw_first_of(&in) && !sw);
         // ESC ? only on a line-up or a look with the line up; first only where the port is not
         // StyleWriter-first, else once the plain question for it got nothing.
-        if (a == PA_ESCQ) CHECK(!(sw && answers) && event && (!sw_first_of(&in) || in.event_plain));
+        if (a == PA_ESCQ) CHECK(!(sw && answers) &&
+                                ((event && (!sw_first_of(&in) || in.event_plain)) ||
+                                 (reask && in.event_plain)));
         if (a == PA_STATUS) CHECK(sw && answers);
         if (sw && answers) CHECK(a == PA_NONE || a == PA_STATUS);
         // ...and its status at once on a look or a line-up edge, as when it is due (but for
@@ -143,9 +149,76 @@ static void test_invariants(void)
         // answered last: an ImageWriter record whose port a StyleWriter answered is no longer
         // quiet (W-1116; the "changed" notice it waited for is gone).
         if (!in.said_other && !answers && due == 2 && !event && !in.look &&
-            !(in.full_due && in.sw1_listed))
+            !(in.full_due && in.sw1_listed) && !(reask && in.event_plain))
             CHECK_EQ_INT(a, PA_PLAIN);
+        // R20: ESC ? follows the re-ask's plain question that got nothing, at once, so a lost
+        // self-ID is asked for again every 5 s while the line stays up.
+        if (!in.said_other && !event && !in.look && reask && in.event_plain) CHECK_EQ_INT(a, PA_ESCQ);
     }
+}
+
+// R20: an ImageWriter II or LQ record on the port whose ESC ? answer was lost (its line up, not
+// named, not answering; `iw_unnamed`) is asked for it again every 5 s: the cadence's plain
+// question, then ESC ? at once when that got nothing. Nothing once it is named and answering,
+// no ESC ? while its line is down, nothing on a Something else port; a stale re-ask ends when
+// the record answers another way.
+static void test_lost_answer_reask(void)
+{
+    port_in_t in = base(PR_KIND_IMAGEWRITER);
+    in.heard = PR_HEARD_IMAGEWRITER;
+    in.iw_unnamed = 1;
+    tally_t t = run(in, in.now_ms, in.now_ms + 61 * SEC);     // the 12th ESC ? is at 60.5 s
+    CHECK_EQ_INT(t.counts[PA_PLAIN], 12);                     // 5, 10 ... 60 s
+    CHECK_EQ_INT(t.counts[PA_ESCQ], 12);                      // 500 ms after each
+    for (int i = 0; i < 12; i++) CHECK_EQ_INT(t.at[PA_ESCQ][i] - t.at[PA_PLAIN][i], 500);
+    CHECK_EQ_INT(t.at[PA_PLAIN][0], in.now_ms + 5 * SEC);
+    CHECK_EQ_INT(t.counts[PA_KICK] + t.counts[PA_STATUS] + t.counts[PA_FULL], 0);
+    // The same with a StyleWriter record listed: the plain question is first there anyway.
+    in.sw_listed = 1;
+    t = run(in, in.now_ms, in.now_ms + 61 * SEC);
+    CHECK_EQ_INT(t.counts[PA_PLAIN], 12);
+    CHECK_EQ_INT(t.counts[PA_ESCQ], 12);
+    in.sw_listed = 0;
+    // Step by step: the plain question gets nothing, ESC ? follows and names it; the board
+    // then clears iw_unnamed, and nothing more is asked.
+    in = at(in, 5 * SEC, 0);
+    CHECK_EQ_INT(port_policy(&in), PA_PLAIN);
+    port_after(&in, PA_PLAIN, PR_HEARD_NONE, 0);
+    CHECK_EQ_INT(in.event_plain, 1);
+    in.now_ms += 500;
+    CHECK_EQ_INT(port_policy(&in), PA_ESCQ);
+    port_after(&in, PA_ESCQ, PR_HEARD_IMAGEWRITER, 1);
+    CHECK_EQ_INT(in.answering, 1);
+    CHECK_EQ_INT(in.event_plain, 0);
+    in.iw_unnamed = 0;
+    t = run(in, in.now_ms + 500, in.now_ms + 60 * SEC);
+    CHECK_EQ_INT(t.counts[PA_PLAIN] + t.counts[PA_ESCQ], 0);
+    // Named another way (a job's ESC ?) between the plain question and its ESC ?: the stale
+    // re-ask ends at the next tick, with no ESC ?.
+    in = base(PR_KIND_IMAGEWRITER);
+    in.iw_unnamed = 1;
+    in = at(in, 5 * SEC, 0);
+    CHECK_EQ_INT(port_policy(&in), PA_PLAIN);
+    port_after(&in, PA_PLAIN, PR_HEARD_NONE, 0);
+    in.iw_unnamed = 0;
+    in.answering = 1;
+    in.now_ms += 500;
+    port_tick(&in);
+    CHECK_EQ_INT(in.event_plain, 0);
+    CHECK_EQ_INT(port_policy(&in), PA_NONE);
+    // The line down: the cadence's plain question alone, as for any port.
+    in = base(PR_KIND_IMAGEWRITER);
+    in.iw_unnamed = 1;
+    in.line_ready = 0;
+    t = run(in, in.now_ms, in.now_ms + 60 * SEC + 1);
+    CHECK_EQ_INT(t.counts[PA_PLAIN], 12);
+    CHECK_EQ_INT(t.counts[PA_ESCQ], 0);
+    // Something else listed: nothing.
+    in = base(PR_KIND_IMAGEWRITER);
+    in.iw_unnamed = 1;
+    in.said_other = 1;
+    t = run(in, in.now_ms, in.now_ms + 60 * SEC + 1);
+    CHECK_EQ_INT(t.counts[PA_PLAIN] + t.counts[PA_ESCQ], 0);
 }
 
 static void test_said_other(void)
@@ -1632,6 +1705,7 @@ int main(void)
     test_imagewriter_answering();
     test_imagewriter_silent();
     test_quiet_cadence();
+    test_lost_answer_reask();
     test_original_imagewriter();
     test_no_record();
     test_kick();
