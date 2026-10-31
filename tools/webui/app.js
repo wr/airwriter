@@ -573,7 +573,7 @@ function markAdded(sel,own){
   for(const o of sel.options){
     if(!o.value) continue;                          // Choose…
     const on=o.value!==own&&have.has(o.value), name=o.value==='none'?'Something else':o.value;
-    const label=on?name+' — Added':name;
+    const label=on?name+' · Added':name;
     if(o.disabled!==on||o.textContent!==label){ o.disabled=on; o.textContent=label; }
   }
 }
@@ -622,9 +622,9 @@ function stWords(p){
    to Something else: the line says which. '' when the port is simply quiet. */
 function portTaken(p){
   if(!PR||p.where!=='port'||p.kind==='unknown') return '';
-  if(PR.said_other) return 'Offline: the printer port is set to Something else.';
+  if(PR.said_other) return 'Offline: the printer port is set to Something else';
   const on=PR.port_on&&PR.port_on!==p.id?prById(PR.port_on):null;
-  return on?'Offline: '+on.name+' is connected instead.':'';
+  return on?'Offline: '+on.name+' is connected instead':'';
 }
 /* A notice: what is wrong, in bold, then what to do. */
 const NOTE={
@@ -753,7 +753,7 @@ $('pr-notes').addEventListener('click',e=>{
   const a=b.dataset.act, n=+b.dataset.note, id=+b.dataset.id;
   if(a==='open'){ prOpen(id); return; }
   if(a==='use_anyway') prPost({id:id,use_anyway:true},'Shared.','prs-say');
-  else prPost(a==='accept'?{note:n,accept:true}:{note:n,dismiss:true},null,'prs-say');
+  else prPost({note:n,dismiss:true},null,'prs-say');
 });
 $('pr-look').onclick=async()=>{
   const b=$('pr-look'); b.disabled=true;
@@ -1103,7 +1103,7 @@ function finDraw(){
 $('fin-list').addEventListener('click',async e=>{
   const b=e.target.closest('[data-fintest]'); if(!b) return;
   const r=await postJSON('/api/test',{id:+b.dataset.fintest});
-  say('fin-say',r.error?r.error+'.':'Printing a test page.',!!r.error,4000);
+  say('fin-say',r.error?r.error.replace(/\.?$/,'.'):'Printing a test page.',!!r.error,4000);
 });
 $('fin-done').onclick=async()=>{ $('d-finish').close(); S.fresh=false; await postJSON('/api/general',{finish:true}); };
 
