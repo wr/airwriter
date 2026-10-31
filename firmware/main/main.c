@@ -371,6 +371,11 @@ static volatile port_act_t s_port_confirm;   // read on the LocalTalk task too (
 // the ESC ? answer belongs to, PR_SEEN_AGAIN (asked again first), or -1.
 static int                 s_seen_again = -1;
 static volatile int        s_look_person;      // the pending look is the person's Look for Printers
+// Bumped by every ask for a look (look_ask) and every line-up edge, so the port task's
+// write-back after an act clears only what it saw before the act, never one asked for while
+// its exchange ran (up to ~1.7 s): a model change or a Look then is still owed.
+static volatile uint32_t   s_look_gen, s_ribbon_gen;
+static void look_ask(void) { s_look = 1; s_look_gen++; }
 // The port's StyleWriter answered before the session began (a job, the test page, a cleaning):
 // if the session then gets nothing, the port is looked at once when it is over.
 static volatile int        s_sw_was_answering;
@@ -504,7 +509,7 @@ static sw_model_t job_ask_plain(void)
 
 static int ribbon_ask(int for_job)
 {
-    if (AW_LOOPBACK) return 0;
+    if (AW_LOOPBACK) { s_iw_named = 1; return 0; }  // no printer to ask: the record reads Ready
     s_seen_again = -1;                  // no answer unless printers_port_seen is reached below
     // W-1088: ESC ? also finds what is on the port, so it goes to anything
     // but a printer the person said is something else.
@@ -648,6 +653,7 @@ static int ribbon_check(int for_job)
 // a flap), or a II or LQ record's model not named while its line is up (a lost ESC ?).
 static pr_gate_t job_gate_wait(int id)
 {
+    if (AW_LOOPBACK) return PR_GATE_GO;     // the UART loopback build takes every job
     s_job_heard = PR_HEARD_NONE;
     s_job_heard_model = PR_MODEL_NONE;
     s_job_deadline_ms = uptime_ms() + CONFIG_AIRWRITER_STALL_ABORT * 1000u;
@@ -667,11 +673,15 @@ static pr_gate_t job_gate_wait(int id)
 // the job holds s_job_lock. W-1116: the ImageWriter job's gate (job_gate_wait): on GO the rip
 // runs, in the ribbon's colour; on OTHER the job aborts with the message the phone shows; on
 // WAIT it aborts as a cancel, a cut upload, or a printer that never answered.
+static int colour_offered(int kind, int model);
+
 static int colour_ok(void *ctx)
 {
     (void)ctx;
     pr_gate_t g = job_gate_wait(s_port_job_record);
-    if (g == PR_GATE_GO) return s_ribbon == IW_RIBBON_COLOUR;
+    if (g == PR_GATE_GO)
+        return s_ribbon == IW_RIBBON_COLOUR &&
+               colour_offered(PR_KIND_IMAGEWRITER, printers_record_model(s_port_job_record));
     if (g == PR_GATE_OTHER) {
         ESP_LOGW(TAG, "job \"%s\" aborted: another printer was connected on the printer port",
                  s_last_job);
@@ -699,6 +709,7 @@ static void printer_line_changed(void *ctx, int ready)
     } else if (!s_line_seen || now - s_line_low_at >= pdMS_TO_TICKS(1000)) {
         s_ribbon_due  = now + pdMS_TO_TICKS(2000);
         s_ribbon_want = 1;
+        s_ribbon_gen++;
         // A fresh line is not Ready until ESC ? names the model (W-1116). Not mid-job (a paper
         // reload drops the line), and not while the link is dirty after a job cut short (the
         // idle ESC ? waits for a job's resync, so the record it named is kept, ruling R17; the
@@ -1273,7 +1284,7 @@ static void port_sw_sync(int sw, int locked)
     // The printer now on the record is asked what it has in, its ribbon or its cartridge, so
     // AirPrint offers colour for it and not for the last one (a look: ESC ? with the line up
     // for an ImageWriter, the plain question first for a StyleWriter).
-    s_look = 1;
+    look_ask();
     if (sw) {
         s_iw_ready = -1;                // its answers will say; HSKo says nothing
         s_iw_named = 0;                 // an ImageWriter's name is not this record's
@@ -1311,10 +1322,12 @@ static void sw_cart_seen(int colour)
 }
 
 // Whether a port record of `kind` and `model` may offer colour at all: a black-only
-// StyleWriter never does, whatever the ImageWriter that was there before had in.
+// StyleWriter never does, whatever the ImageWriter that was there before had in, and nor
+// does an original ImageWriter, which never says its ribbon (s_ribbon is the last answer's,
+// a colour cartridge's or a II's ribbon).
 static int colour_offered(int kind, int model)
 {
-    if (kind != PR_KIND_STYLEWRITER) return 1;
+    if (kind != PR_KIND_STYLEWRITER) return model != PR_MODEL_IW1;
     const sw_spec_t *sp = sw_spec(pr_model_to_sw((pr_model_t)model));
     return sp && sp->colour;
 }
@@ -1323,8 +1336,8 @@ static int colour_offered(int kind, int model)
 // which is the port's printer until anything answers).
 static int ribbon_offered(void)
 {
-    return colour_offered(s_port_sw ? PR_KIND_STYLEWRITER : PR_KIND_IMAGEWRITER,
-                          pr_model_from_sw(printers_port_sw_model()));
+    return s_port_sw ? colour_offered(PR_KIND_STYLEWRITER, pr_model_from_sw(printers_port_sw_model()))
+                     : colour_offered(PR_KIND_IMAGEWRITER, printers_port_model());
 }
 
 // The session reports its state (sw_session.h) while it runs a job or a cleaning, on
@@ -1341,7 +1354,7 @@ static void sw_state_cb(sw_state_t st)
         // (the plain question, then ESC ?), so an ImageWriter put in its place is found.
         if (s_sw_was_answering) {
             s_sw_was_answering = 0;
-            s_look = 1;
+            look_ask();
         }
     }
     s_iw_ready = sw_state_ready(st);
@@ -1501,7 +1514,7 @@ static void sw_confirm_queue(int id)
 static void printers_look(void)
 {
     s_look_person = 1;
-    s_look = 1;
+    look_ask();
     laser_look_now();
 }
 
@@ -1521,7 +1534,7 @@ static void port_model_changed(int id)
         line_source();
         port_push(printer_state_view().state);
     }
-    s_look = 1;
+    look_ask();
 }
 
 static void printers_changed(void)
@@ -1764,6 +1777,7 @@ static void kick_task(void *arg)
         // The line came up after a second or more down (or was first seen), 2 s ago (W-1064).
         // A line-up edge reaches the policy even while a StyleWriter answers (R11): the status
         // its edge asks at once finds an ImageWriter put in its place in about 1.5 s.
+        uint32_t look_gen = s_look_gen, ribbon_gen = s_ribbon_gen;
         int line_up = s_ribbon_want && (int32_t)(xTaskGetTickCount() - s_ribbon_due) >= 0;
         // Something else: the board's own look asks nothing of AirWriter's own (the policy gates
         // it), but the person's Look for Printers asks once.
@@ -1888,10 +1902,13 @@ static void kick_task(void *arg)
         }
         in.now_ms = uptime_ms();
         port_after(&in, act, heard, mine);
-        if (in.look != look) s_look = in.look;        // answered, or a StyleWriter's stop to look at
+        // Answered, or a StyleWriter's stop to look at; a look asked for during the act stays.
+        if (in.look != look && (in.look || s_look_gen == look_gen)) s_look = in.look;
         if (look_person && !in.look_person) s_look_person = 0;
-        // ESC ? and the status end a line-up not yet due as well, as they always did.
-        if ((line_up && !in.line_up_edge) || act == PA_ESCQ || act == PA_STATUS) s_ribbon_want = 0;
+        // ESC ? and the status end a line-up not yet due as well, as they always did; a line-up
+        // edge during the act (the line down a second or more inside it) is still owed.
+        if (((line_up && !in.line_up_edge) || act == PA_ESCQ || act == PA_STATUS) &&
+            s_ribbon_gen == ribbon_gen) s_ribbon_want = 0;
         s_port_answering = in.answering;
         s_last_plain_ms = in.last_plain_ms;
         s_last_status_ms = in.last_status_ms;
@@ -2037,7 +2054,9 @@ static void test_page_task(void *arg)
         .version = app->version, .built = built, .model = pr_model_name(printers_record_model(id)),
         .name = name,
         .host = s_set.hostname, .ip = s_ip, .setup_ssid = s_ap_mode ? ap : NULL,
-        .appletalk = at, .ribbon = (iw_ribbon_t)s_ribbon, .screen = algo, .gain = gain,
+        .appletalk = at, .screen = algo, .gain = gain,
+        // an original ImageWriter never says its ribbon: its page is the unknown ribbon's
+        .ribbon = printers_record_model(id) == PR_MODEL_IW1 ? IW_RIBBON_UNKNOWN : (iw_ribbon_t)s_ribbon,
         .top_margin = s_set.top_margin,
     };
     tp_io_t io = { .out = test_page_out, .stop = test_page_stop };

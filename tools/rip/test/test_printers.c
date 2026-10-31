@@ -955,6 +955,14 @@ static void test_add_port_adds(void)
     CHECK_EQ_INT(L.n, 4);
     CHECK_EQ_INT(pr_post(&L, "{\"add_port\":\"Daisywheel\"}", &o), -1);
     CHECK(strcmp(o.err, "Unknown model.") == 0);
+    // A full list says so, not that the model is unknown.
+    pr_add_port(&L, PR_MODEL_IW1);
+    pr_add_port(&L, PR_MODEL_SW1);
+    pr_add_port(&L, PR_MODEL_SWC2400);
+    pr_add_port(&L, PR_MODEL_SWC1500);
+    CHECK_EQ_INT(L.n, PR_MAX);
+    CHECK_EQ_INT(pr_post(&L, "{\"add_port\":\"Color StyleWriter 2200\"}", &o), -1);
+    CHECK(strcmp(o.err, "Printers is full. Remove a printer first.") == 0);
     // An Unknown printer the board found, or a Something else, converts, as before.
     fresh();
     int u = pr_port_seen(&L, PR_PORT_SILENT);
@@ -2473,6 +2481,27 @@ static void test_json_ports(void)
     CHECK(strstr(buf, "\"port_on\":0,\"said_other\":false,\"chooser\":[\"Office\"]") != NULL);
 }
 
+// W-1116: while a Something else record is listed no port record gets the test page (the
+// button's, or DIP4's at boot): an ImageWriter record's would hold the job lock to the stall
+// limit. An AppleTalk printer still gets it; with none, nothing does.
+static void test_test_target_said_other(void)
+{
+    fresh();
+    pr_live_t live[PR_MAX];
+    memset(live, 0, sizeof live);
+    int iw = seen_iw(PR_PORT_IW2);
+    pr_add_port(&L, PR_MODEL_IWLQ);
+    CHECK_EQ_INT(pr_test_target(&L, live), iw);
+    CHECK_EQ_INT(pr_set_model(&L, iw, PR_MODEL_NONE), 0);
+    CHECK(pr_port_said_other(&L) != NULL);
+    CHECK_EQ_INT(pr_test_target(&L, live), -1);
+    lw_info_t info;
+    lw_info_default(&info);
+    int lw = pr_at_seen(&L, PR_WHERE_CABLE, P("Office"), P("LaserWriter"), 0);
+    pr_at_queried(&L, lw, 1, &info);
+    CHECK_EQ_INT(pr_test_target(&L, live), lw);
+}
+
 // W-1116 (R8, R10): the person naming a model on the record that is on the port forgets the
 // port's last answer, whatever the model; editing another record leaves the port's as it is.
 static void test_set_model_keeps_current(void)
@@ -2748,6 +2777,7 @@ int main(void)
     test_port_absent();
     test_test_target_current();
     test_json_ports();
+    test_test_target_said_other();
     test_set_model_keeps_current();
     test_path_moves_on_removal();
     test_port_say();

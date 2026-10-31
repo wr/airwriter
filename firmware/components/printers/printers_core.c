@@ -878,13 +878,18 @@ void pr_chooser_name(const pr_list_t *l, char *out, size_t cap)
 
 int pr_test_target(const pr_list_t *l, const pr_live_t live[PR_MAX])
 {
-    const pr_rec_t *p = pr_port_current(l);
+    // W-1116: while a Something else record is listed the port's printer is none of ours, so
+    // no port record gets the page (its ImageWriter page would wait out the stall limit).
+    int other = pr_port_said_other(l) != NULL;
+    const pr_rec_t *p = other ? NULL : pr_port_current(l);
     if (p && p->kind != PR_KIND_IMAGEWRITER && p->kind != PR_KIND_STYLEWRITER) p = NULL;
     if (p && live[p - l->r].present) return p->id;
     for (int i = 0; i < l->n; i++)
-        if (l->r[i].shared && one_state(&live[i]) == PR_BOX_READY) return l->r[i].id;
+        if (l->r[i].shared && !(other && l->r[i].where == PR_WHERE_PORT) &&
+            one_state(&live[i]) == PR_BOX_READY) return l->r[i].id;
     if (p) return p->id;
-    for (int i = 0; i < l->n; i++) if (l->r[i].shared) return l->r[i].id;
+    for (int i = 0; i < l->n; i++)
+        if (l->r[i].shared && !(other && l->r[i].where == PR_WHERE_PORT)) return l->r[i].id;
     return -1;
 }
 
@@ -1159,7 +1164,7 @@ int pr_post(pr_list_t *l, const char *body, pr_post_t *o)
             snprintf(msg, sizeof msg, "%s is already in Printers.", pr_model_name(m));
             return post_err(o, msg);
         }
-        if (port < 0) return post_err(o, "Unknown model.");
+        if (port < 0) return post_err(o, m < 0 ? "Unknown model." : "Printers is full. Remove a printer first.");
         o->changed = 1;
         o->model_id = port;                                // the board asks the port again
         if (model_is_sw(m)) o->confirm_sw_id = port;     // the person's word, to be checked
