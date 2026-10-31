@@ -150,6 +150,11 @@ Traps already explained in a code comment are listed only when the comment is ea
   `ribbon_check` was not needed. It needs the printer selected and between commands.
 - **The colour ribbon is reported as C straight after the width.** `iw_self_id_ribbon` takes C
   only there, so noise read out after a black reply cannot flip the board to colour.
+- **A cut-short job leaves the link dirty, and the idle `ESC ?` is then skipped** until a job
+  resyncs the printer (`ribbon_ask`, `s_link.dirty`). Since W-1116 an ImageWriter record reads
+  Ready only once `ESC ?` has named it since its line came up (`s_iw_named`), so a line-up
+  while the link is dirty must keep the record it named, or the printer reads Offline until
+  the next job (ruling R17, 2026-10-30). The plain question still runs every 5 s.
 
 ## IPP, iOS, macOS, mDNS
 

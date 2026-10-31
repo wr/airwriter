@@ -374,8 +374,9 @@ static pr_rec_t *port_new(pr_list_t *l, int model)
 // W-1116: the port's printer named its `model`, of family `heard`. Its record's id, at once,
 // when it has one and nothing else would change. Anything that changes the list (a record
 // made, an "Unknown printer" converted or dropped, a "Something else" replaced) takes the
-// same answer twice in a row: the first is PR_SEEN_AGAIN, or the record's id when it has
-// one; any other model's answer in between starts over.
+// same answer twice in a row: the first is PR_SEEN_AGAIN, even when the model has a record
+// of its own (ruling R16: one garbled reply never changes the list, and the board repeats
+// the question at once); any other model's answer in between starts over.
 static int port_named(pr_list_t *l, int heard, int model)
 {
     port_heard(l, heard, model);
@@ -387,7 +388,7 @@ static int port_named(pr_list_t *l, int heard, int model)
     }
     if (l->pending_model != model) {
         l->pending_model = (uint8_t)model;
-        return rec ? rec->id : PR_SEEN_AGAIN;
+        return PR_SEEN_AGAIN;
     }
     l->pending_model = 0;
     // The printer that said nothing before was this one: its record becomes it, unless the
@@ -1135,6 +1136,7 @@ int pr_post(pr_list_t *l, const char *body, pr_post_t *o)
 {
     memset(o, 0, sizeof *o);
     o->screen_id = o->start_page_id = o->start_page = o->clean_id = o->confirm_sw_id = -1;
+    o->model_id = -1;
     const char *b = body ? body : "";
     while (*b == ' ' || *b == '\n' || *b == '\r' || *b == '\t') b++;
     if (*b != '{') return post_err(o, "Unknown request.");
@@ -1161,6 +1163,7 @@ int pr_post(pr_list_t *l, const char *body, pr_post_t *o)
         }
         if (port < 0) return post_err(o, "Unknown model.");
         o->changed = 1;
+        o->model_id = port;                                // the board asks the port again
         if (model_is_sw(m)) o->confirm_sw_id = port;     // the person's word, to be checked
         return 0;
     }
@@ -1185,6 +1188,7 @@ int pr_post(pr_list_t *l, const char *body, pr_post_t *o)
         }
         if (rc) return post_err(o, "Unknown model.");
         o->changed = 1;
+        o->model_id = id;                                  // the board asks the port again
         if (model_is_sw(m)) o->confirm_sw_id = id;
     }
     if (json_has_str(b, "name", s, sizeof s)) {

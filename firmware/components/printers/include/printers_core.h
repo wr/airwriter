@@ -329,9 +329,12 @@ size_t pr_json(const pr_list_t *l, const pr_live_t live[PR_MAX], char *buf, size
 // StyleWriter to clean once (-1 not asked), none that has no cleaning.
 // confirm_sw_id is the port's record when the post made it a StyleWriter by a
 // model the person picked (add_port, model): the board then asks the printer
-// with the full sequence (-1 otherwise).
+// with the full sequence (-1 otherwise). model_id (W-1116) is the port record
+// whose model the person set this post, any family (add_port makes one, model
+// changes one; -1 otherwise): the port's last answer is forgotten for the record
+// on the port (pr_set_model, R10), so the board asks the port again at once.
 typedef struct {
-    int changed, look, screen_id, start_page_id, start_page, clean_id, confirm_sw_id;
+    int changed, look, screen_id, start_page_id, start_page, clean_id, confirm_sw_id, model_id;
     char err[64];
 } pr_post_t;
 int pr_post(pr_list_t *l, const char *body, pr_post_t *out);

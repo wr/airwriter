@@ -521,6 +521,15 @@ static port_mode_t mode_of(void)
     return p->found_auto ? PORT_UNKNOWN_FOUND : PORT_UNKNOWN_SAID;
 }
 
+// Under s_mu. The record on the port's id (pr_port_current), 0 for none: a change of it, even
+// within a family (the LQ for the II), is a change the board follows (its screen and gain, its
+// name, what Macs are offered), so it is told (W-1116).
+static int cur_id(void)
+{
+    const pr_rec_t *p = pr_port_current(s_l);
+    return p ? p->id : 0;
+}
+
 static void after_change(int notify)
 {
     save();
@@ -537,8 +546,9 @@ int printers_port_seen(int iw_model, int ready)
                         : iw_model == IW_MODEL_II ? PR_PORT_IW2 : PR_PORT_SILENT;
     lock();
     port_mode_t before = mode_of();
+    int before_id = cur_id();
     int r = pr_port_seen(s_l, what);
-    int moved = mode_of() != before;
+    int moved = mode_of() != before || cur_id() != before_id;
     if (moved) {
         const pr_rec_t *p = pr_port_current(s_l);
         if (p) ESP_LOGI(TAG, "the port: %s \"%s\"", pr_kind_name(p->kind), p->name);
@@ -553,8 +563,9 @@ int printers_port_seen_sw(sw_model_t m)
     if (!s_started || pm == PR_MODEL_NONE) return -1;
     lock();
     port_mode_t before = mode_of();
+    int before_id = cur_id();
     int r = pr_port_seen_sw(s_l, pm);
-    int moved = mode_of() != before;
+    int moved = mode_of() != before || cur_id() != before_id;
     if (moved) {
         const pr_rec_t *p = pr_port_current(s_l);
         if (p) ESP_LOGI(TAG, "the port: %s \"%s\"", pr_kind_name(p->kind), p->name);
@@ -951,6 +962,7 @@ int printers_post(const char *body, char *err, size_t cap)
     after_change(o.changed);
     if (port_screen && s_cfg.port_screen) s_cfg.port_screen(dither, gain);
     if (o.look && s_cfg.look) s_cfg.look();
+    if (o.model_id >= 0 && s_cfg.port_model) s_cfg.port_model(o.model_id);
     if (o.confirm_sw_id >= 0 && s_cfg.confirm_sw) s_cfg.confirm_sw(o.confirm_sw_id);
     if (o.start_page >= 0) return start_page(o.start_page_id, o.start_page, err, cap);
     if (o.clean_id >= 0) return clean_head(o.clean_id, err, cap);

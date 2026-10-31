@@ -53,6 +53,10 @@ typedef struct {
     // (printers_port_set_sw_model), or keep the pick, offline, if it is silent.
     int  (*clean)(int id);
     void (*confirm_sw)(int id);
+    // W-1116, optional, after the post is stored and applied, no list lock held: the person
+    // set port record `id`'s model (pr_post_t.model_id, any family); the port's last answer
+    // is forgotten for the record on the port (R10), so the board asks the port again at once.
+    void (*port_model)(int id);
 } printers_cfg_t;
 
 // Whether a list is stored and reads back: before printers_start, to tell a

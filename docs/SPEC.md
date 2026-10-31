@@ -739,8 +739,12 @@ read back is a list made again). At most 8 records.
   Something else while another port record is one (one per port). The one on the port (the
   record that answered last) shows its state; every other port record is Offline. An
   ImageWriter record reads Ready only once `ESC ?` has named its model since the line came up
-  (never from the line alone), so the page never shows the wrong ImageWriter for a moment, and
-  how long a change takes to show:
+  (never from the line alone), so the page never shows the wrong ImageWriter for a moment;
+  not mid-job (a paper reload drops the line), and not while the link is dirty after a job
+  cut short, when the idle `ESC ?` waits for a job's resync (3.8) and a line-up keeps the
+  record it named (R17; the plain question still runs). `/api/status` `model` is the record
+  on the port's make and model, an ImageWriter's by its model. How long a change takes to
+  show:
 
   | Printer | Plugged in or switched on, to Ready | Unplugged or switched off, to Offline |
   |---|---|---|
@@ -1002,8 +1006,10 @@ Apple's StyleWriter adapter (ADSP, not PAP), is not built.
   1/100 mm rounded outward, on Letter 5.08 left, 7.62 right, 5.08 top and 8.05 bottom mm for
   the original, II, 1200 and 1500, and 5.08, 5.08, 3.18 and 6.99 for the 2200, 2400 and 2500.
   `printer-make-and-model` and the Bonjour `ty` are "Apple StyleWriter II" and so on, and
-  `/api/status` `model` is that while the port's printer is a StyleWriter (else "Apple
-  ImageWriter II"). `print-quality` 3, 4 and 5 are draft, normal and best, read from the Job
+  `/api/status` `model` is that while the port's printer is a StyleWriter (else the
+  ImageWriter record's own, "Apple ImageWriter II", "Apple ImageWriter LQ" or "Apple
+  ImageWriter", W-1116; the II with no ImageWriter record). `print-quality` 3, 4 and 5 are
+  draft, normal and best, read from the Job
   group into the sink's options (`ipp_job_opts_t`). The icon is Apple's StyleWriter Chooser
   icon (LICENSE.md). Colour is advertised only while a colour cartridge was read in a colour
   model, under the same UUID, as the colour ribbon is (3.8): the cartridge lives where the

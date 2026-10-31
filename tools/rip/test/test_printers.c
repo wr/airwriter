@@ -777,9 +777,11 @@ static void test_post(void)
     snprintf(body, sizeof body, "{\"id\":%d,\"model\":\"ImageWriter LQ\"}", port);
     CHECK_EQ_INT(pr_post(&L, body, &r), 0);
     CHECK_EQ_INT(pr_get(&L, port)->model, PR_MODEL_IWLQ);
+    CHECK_EQ_INT(r.model_id, port);                            // W-1116: the board asks the port again
     snprintf(body, sizeof body, "{\"id\":%d,\"model\":\"none\"}", port);
     CHECK_EQ_INT(pr_post(&L, body, &r), 0);
     CHECK_EQ_INT(pr_get(&L, port)->kind, PR_KIND_UNKNOWN);
+    CHECK_EQ_INT(r.model_id, port);
     snprintf(body, sizeof body, "{\"id\":%d,\"model\":\"Daisywheel\"}", port);
     CHECK_EQ_INT(pr_post(&L, body, &r), -1);
     snprintf(body, sizeof body, "{\"id\":%d,\"model\":\"StyleWriter\"}", port);   // W-1103
@@ -787,9 +789,11 @@ static void test_post(void)
     CHECK_EQ_INT(pr_get(&L, port)->kind, PR_KIND_STYLEWRITER);
     CHECK_EQ_INT(pr_get(&L, port)->model, PR_MODEL_SW1);
     CHECK_EQ_INT(r.confirm_sw_id, port);
+    CHECK_EQ_INT(r.model_id, port);
 
     snprintf(body, sizeof body, "{\"id\":%d,\"dither\":\"floyd\",\"gain\":20}", lw);
     CHECK_EQ_INT(pr_post(&L, body, &r), 0);
+    CHECK_EQ_INT(r.model_id, -1);                              // no model named: no re-ask
     CHECK(strcmp(pr_get(&L, lw)->dither, "floyd") == 0);
     CHECK_EQ_INT(pr_get(&L, lw)->gain, 20);
     CHECK_EQ_INT(r.screen_id, lw);
@@ -997,8 +1001,11 @@ static void test_unknown_goes(void)
     L.n = 2;
     L.notes[0] = (pr_note_t){ PR_NOTE_UNKNOWN_PORT, 7, 0 };
     L.n_notes = 1;
-    CHECK_EQ_INT(pr_port_seen(&L, PR_PORT_IWLQ), lq);         // its own record: at once
-    CHECK_EQ_INT(L.n, 2);                                     // but the Unknown waits for the second
+    // R16: the answer would drop the Unknown record, so even with a record of its own it is
+    // asked again first (one garbled reply changes nothing); the second drops the Unknown.
+    CHECK_EQ_INT(pr_port_seen(&L, PR_PORT_IWLQ), PR_SEEN_AGAIN);
+    CHECK_EQ_INT(L.n, 2);
+    CHECK_EQ_INT(pr_port_heard(&L), PR_HEARD_IMAGEWRITER);     // who answered follows at once
     CHECK_EQ_INT(pr_port_seen(&L, PR_PORT_IWLQ), lq);
     CHECK_EQ_INT(L.n, 1);
     CHECK(pr_get(&L, 7) == NULL);
@@ -1042,11 +1049,16 @@ static void test_something_else_replaced(void)
     CHECK_EQ_INT(L.n, 2);
     CHECK_EQ_INT(pr_get(&L, cs)->model, PR_MODEL_SWC2400);
     CHECK_EQ_INT(pr_get(&L, iw)->model, PR_MODEL_IW2);
-    // Replaced by a model that has its record already: it just goes.
+    // Replaced by a model that has its record already: it just goes. R16: the first answer is
+    // asked again even so (it would change the list), and another model in between starts
+    // over; the second in a row removes the Something else record.
     int x = pr_add_port(&L, PR_MODEL_SW1200);
     CHECK_EQ_INT(pr_set_model(&L, x, PR_MODEL_NONE), 0);
     CHECK_EQ_INT(L.n, 3);
-    CHECK_EQ_INT(pr_port_seen(&L, PR_PORT_IW2), iw);
+    CHECK_EQ_INT(pr_port_seen(&L, PR_PORT_IW2), PR_SEEN_AGAIN);
+    CHECK_EQ_INT(L.n, 3);
+    CHECK_EQ_INT(pr_port_seen(&L, PR_PORT_IWLQ), PR_SEEN_AGAIN);      // another model: starts over
+    CHECK_EQ_INT(pr_port_seen(&L, PR_PORT_IW2), PR_SEEN_AGAIN);
     CHECK_EQ_INT(L.n, 3);
     CHECK_EQ_INT(pr_port_seen(&L, PR_PORT_IW2), iw);
     CHECK_EQ_INT(L.n, 2);
@@ -1517,6 +1529,7 @@ static void test_sw_add_port(void)
     CHECK(strcmp(p->name, "Color StyleWriter 2500") == 0);
     CHECK_EQ_INT(strlen(p->uuid), 45);
     CHECK_EQ_INT(r.confirm_sw_id, p->id);                    // the full sequence confirms the pick
+    CHECK_EQ_INT(r.model_id, p->id);                         // and the port is asked again
     CHECK_EQ_INT(r.clean_id, -1);
     CHECK_EQ_INT(L.n, 1);
     int id = p->id;
@@ -1530,6 +1543,7 @@ static void test_sw_add_port(void)
     // An ImageWriter's pick confirms nothing (ESC ? is its own, at line-up).
     CHECK_EQ_INT(pr_post(&L, "{\"add_port\":\"ImageWriter LQ\"}", &r), 0);
     CHECK_EQ_INT(r.confirm_sw_id, -1);
+    CHECK_EQ_INT(r.model_id, pr_port_of(&L, PR_MODEL_IWLQ)->id);   // but the port is asked again
     CHECK_EQ_INT(L.n, 3);
     CHECK_EQ_INT(pr_port(&L)->kind, PR_KIND_STYLEWRITER);     // the oldest stays the port's
     CHECK_EQ_INT(pr_post(&L, "{\"add_port\":\"Color StyleWriter 9000\"}", &r), -1);
@@ -1567,6 +1581,7 @@ static void test_sw_add_port(void)
     snprintf(body, sizeof body, "{\"id\":%d,\"name\":\"Desk\"}", id);
     CHECK_EQ_INT(pr_post(&L, body, &r), 0);
     CHECK_EQ_INT(r.confirm_sw_id, -1);                       // only a model picked confirms
+    CHECK_EQ_INT(r.model_id, -1);                            // a rename asks the port nothing
 }
 
 // "Clean Print Head": one cleaning, for a StyleWriter that has one.
