@@ -761,10 +761,12 @@ $('pr-look').onclick=async()=>{
   await prPost({look:true});
   setTimeout(()=>{ b.disabled=false; say('prs-say',''); prPoll(); },6000);
 };
-/* W-1116: the Add dialog opens on a model that can still be added. */
-document.querySelector('[data-dlg=d-add]').onclick=()=>{
+/* W-1116: the Add dialog (opened from Printers and from setup) opens on a model
+   that can still be added; with every model added, Add is off. */
+for(const b of $$('[data-dlg=d-add]')) b.onclick=()=>{
   const s=$('add-model'), o=s.selectedOptions[0];
   if(!o||o.disabled){ const f=[...s.options].find(o=>!o.disabled); if(f) s.value=f.value; }
+  $('add-go').disabled=![...s.options].some(o=>!o.disabled);
   say('add-say',''); $('d-add').showModal();
 };
 $('add-go').onclick=async()=>{
