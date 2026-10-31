@@ -162,11 +162,11 @@ void        printers_chooser_name(char *out, size_t cap);
 // W-1116: a record's AirPrint slot as last put there (0 the oldest port record's), -1 none.
 int         printers_slot_of(int id);
 // W-1116: the port records on AirPrint, in list order, for what each one's printer is told
-// (main's port_push): its slot, kind and model and what it says of itself (pr_port_say_t);
-// on_name is the name of the printer on the port ("" none), for pr_port_say_words. The live
-// state is read as printers_json reads it. How many; a record without a slot is left out.
+// (main's port_push): its slot, kind and model and what it says of itself (pr_port_say_t).
+// The live state is read as printers_json reads it. How many; a record without a slot is
+// left out.
 typedef struct { uint8_t slot, id, kind, model, say; } printers_port_slot_t;
-int         printers_port_slots(printers_port_slot_t out[], int max, char on_name[PR_NAME_MAX]);
+int         printers_port_slots(printers_port_slot_t out[], int max);
 // The port printer's halftone and gain, from its record: -1 with no port printer.
 int         printers_port_screen(char *dither, size_t cap, int *gain);
 // The page's old Printer pane changed the screen: the port record follows.

@@ -798,9 +798,12 @@ read back is a list made again). At most 8 records.
   family's words (3.9's for an ImageWriter, 3.16's for a StyleWriter), and the colour the
   ribbon or cartridge last read offers (a black-only StyleWriter none; a record that is not
   on the port keeps the colour it last offered, unless its model has none); every other port
-  record `stopped`, `offline-report`, "Offline: *name* is connected instead." while that
-  printer is present, "Offline: the printer port is set to Something else." while a Something
-  else record is listed, else its family's offline words with nothing answering; so phones see
+  record `stopped` in its family's offline words, the one line the page shows too ("Offline:
+  check power, cable and SELECT", "Offline: check power and cable"), whether nothing answers,
+  another port record's printer is present or a Something else record is listed (one kind of
+  Offline, Wells 2026-10-31: a status line never says why; the reasons are the wiki's Offline
+  troubleshooting row's); only the reason keyword differs, `offline-report` while the port is
+  another's (`PR_PORT_SAY_TAKEN`), the family's own with nothing answering; so phones see
   every shared port printer all the time, each offline while it isn't the one answering. The
   same printer put in its slot again (a rename, a model change: its uuid) keeps its state and
   colour; another one starts with none until its owner pushes them.

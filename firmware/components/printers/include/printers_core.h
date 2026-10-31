@@ -264,18 +264,15 @@ int  pr_port_on(const pr_list_t *l, const pr_live_t live[PR_MAX]);
 // W-1116: what port record `id`'s AirPrint printer says of itself, beside its own state:
 //   OWN: it is the printer on the port (pr_port_current): its own state, in the board's
 //        words for its family. Also for a record that is not the port's, or none.
-//   SAID_OTHER: a Something else record is in the list (and `id` is not it): stopped,
-//        "Offline: the printer port is set to Something else."
-//   ABSENT: another port record's printer is on the port (pr_port_absent): stopped,
-//        "Offline: <that printer's name> is connected instead."
-//   OFFLINE: nothing answering: stopped, in the board's offline words for its family.
-// pr_port_say_words is the sentence for SAID_OTHER and ABSENT (`on`: the name of the
-// printer on the port, pr_port_on's record), "" for the others; PR_SAY_MAX holds any.
-typedef enum { PR_PORT_SAY_OWN, PR_PORT_SAY_SAID_OTHER, PR_PORT_SAY_ABSENT,
-               PR_PORT_SAY_OFFLINE } pr_port_say_t;
-enum { PR_SAY_MAX = PR_NAME_MAX + 32 };
+//   TAKEN: the port is another's: another port record's printer is on it (pr_port_absent),
+//        or a Something else record is in the list (and `id` is not it): stopped,
+//        `offline-report`, in its family's offline words.
+//   OFFLINE: nothing answering: stopped, in its family's offline reason and words.
+// One kind of Offline (Wells, 2026-10-31): the words never say why, on the page or the
+// phone; only the reason keyword tells a taken port from a quiet one. Why a printer is
+// offline is the wiki's Offline troubleshooting row's.
+typedef enum { PR_PORT_SAY_OWN, PR_PORT_SAY_TAKEN, PR_PORT_SAY_OFFLINE } pr_port_say_t;
 pr_port_say_t pr_port_say(const pr_list_t *l, const pr_live_t live[PR_MAX], int id);
-void pr_port_say_words(pr_port_say_t say, const char *on, char *out, size_t cap);
 // W-1116: the name vintage Macs see for the printer port (the node's own NBP name) and the
 // queue name at boot: the oldest ImageWriter record's (pr_offers' one port offer, fixed across
 // swaps so a Chooser selection keeps working), else the oldest port record's, else

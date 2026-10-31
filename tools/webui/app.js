@@ -613,18 +613,11 @@ function stWords(p){
   // W-1103: a StyleWriter has no SELECT key
   const sw=p.kind==='stylewriter';
   if(p.state==='attention') return ['a','Needs attention: '+(p.where==='port'?(sw?SW_FAULT[p.fault]||SW_FAULT.other:'check paper and SELECT'):low(t&&lwStatus(t.message))||'check the printer')];
-  if(p.state==='offline') return ['',portTaken(p)||(p.where==='port'?(sw?'Offline: check power and cable':'Offline: check power, cable and SELECT'):'Offline: check that it’s switched on')];
+  // W-1116: one kind of Offline: a port printer whose port is another's (another printer
+  // connected, or a Something else record listed) reads as one with nothing answering
+  if(p.state==='offline') return ['',p.where==='port'?(sw?'Offline: check power and cable':'Offline: check power, cable and SELECT'):'Offline: check that it’s switched on'];
   if(p.state==='printing'&&t&&/busy/i.test(t.message||'')&&!S.printing) return ['g','Busy with another job'];
   return ST[p.state]||['',''];
-}
-/* W-1116: several printers can be on the printer port, one at a time. A port
-   printer is offline while another one is connected, or while the port is set
-   to Something else: the line says which. '' when the port is simply quiet. */
-function portTaken(p){
-  if(!PR||p.where!=='port'||p.kind==='unknown') return '';
-  if(PR.said_other) return 'Offline: the printer port is set to Something else';
-  const on=PR.port_on&&PR.port_on!==p.id?prById(PR.port_on):null;
-  return on?'Offline: '+on.name+' is connected instead':'';
 }
 /* A notice: what is wrong, in bold, then what to do. */
 const NOTE={
@@ -798,11 +791,11 @@ $('pd-remove').onclick=()=>{ const p=prById(sel); if(!p) return; $('rm-name').te
 $('rm-go').onclick=async()=>{ const id=sel; $('d-remove').close(); if(await prPost({id:id,remove:true},null,'prs-say')) prOpen(null); };
 $('testpage').onclick=async()=>{
   const p=prById(sel); if(!p) return;
-  // W-1116: a port printer while another one is connected: the board says which to connect
-  // (409, its sentence); while the port is set to Something else, or simply quiet, the page does
-  const port=p.where==='port'&&p.kind!=='unknown', said=port&&PR.said_other, other=port&&!said&&PR.port_on&&PR.port_on!==p.id;
+  // W-1116: a port printer while another one is connected: the board answers 409 with which
+  // to connect (an action's refusal); any other offline printer gets the page's one line
+  const other=p.where==='port'&&p.kind!=='unknown'&&!PR.said_other&&PR.port_on&&PR.port_on!==p.id;
   if(p.state==='offline'&&!other){
-    say('prn-say',said?'The printer port is set to Something else.':port?(p.kind==='stylewriter'?'The printer is offline. Check power and cable.':'The printer is offline. Check power, cable and SELECT.'):'The printer is offline. Check that it’s switched on.',1,4000);
+    say('prn-say',p.where==='port'?(p.kind==='stylewriter'?'The printer is offline. Check power and cable.':'The printer is offline. Check power, cable and SELECT.'):'The printer is offline. Check that it’s switched on.',1,4000);
     return;
   }
   const r=await postJSON('/api/test',{id:p.id});

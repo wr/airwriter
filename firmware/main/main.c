@@ -3166,9 +3166,8 @@ static void port_push_own(int slot, int kind, ps_state_t st)
     // Idle and not ready: printer off, unplugged or deselected: the registered
     // "other", which on a stopped printer reads as an error all the same.
     // (offline-report is CUPS's keyword, not the IANA registry's: it is kept
-    // for a record that is offline because another printer is connected, or
-    // the port is set to Something else, as the W-1116 design says, so the two
-    // read apart on a phone.)
+    // for a record whose port is another's, W-1116's port_push_offline, so a
+    // phone that reads reasons can tell the two apart; the words are the same.)
     if (st == PS_ATTENTION)
         ipp_server_set_stopped_for(slot, "media-empty-error", "Needs attention: check paper and SELECT");
     else if (st == PS_OFFLINE)
@@ -3178,24 +3177,20 @@ static void port_push_own(int slot, int kind, ps_state_t st)
 }
 
 // What a port record's printer says while it is not the one on the port (W-1116): offline,
-// in its family's own words with nothing answering (as the printer on the port would), or
-// because another printer is connected (`on`: its name) or the port is set to Something
-// else, in printers_core's words (pr_port_say_words). It offers no colour unless its model
-// could: the ribbon or cartridge read was another printer's.
-static void port_push_offline(int slot, int kind, int model, int say, const char *on)
+// in its family's own offline words whether nothing answers, another printer is connected
+// or a Something else record is listed (one kind of Offline, Wells 2026-10-31: the words
+// never say why); the reason is `offline-report` while the port is another's
+// (PR_PORT_SAY_TAKEN), the family's own with nothing answering. It offers no colour unless
+// its model could: the ribbon or cartridge read was another printer's.
+static void port_push_offline(int slot, int kind, int model, int say)
 {
     if (!colour_offered(kind, model)) ipp_server_set_colour_for(slot, 0);
-    if (say != PR_PORT_SAY_OFFLINE) {
-        char msg[PR_SAY_MAX];
-        pr_port_say_words((pr_port_say_t)say, on, msg, sizeof msg);
-        ipp_server_set_stopped_for(slot, "offline-report", msg);
-        return;
-    }
+    int taken = say == PR_PORT_SAY_TAKEN;
     if (kind == PR_KIND_STYLEWRITER) {
         sw_ipp_t w = sw_state_ipp(SWS_OFFLINE);
-        ipp_server_set_stopped_for(slot, w.reason, w.message);
+        ipp_server_set_stopped_for(slot, taken ? "offline-report" : w.reason, w.message);
     } else {
-        ipp_server_set_stopped_for(slot, "other", IW_OFFLINE_WORDS);
+        ipp_server_set_stopped_for(slot, taken ? "offline-report" : "other", IW_OFFLINE_WORDS);
     }
 }
 
@@ -3208,8 +3203,7 @@ static void port_push(ps_state_t box)
 {
     ps_state_t st = port_state(box);
     printers_port_slot_t ps[PR_MAX];
-    char on[PR_NAME_MAX];
-    int n = printers_port_slots(ps, PR_MAX, on);
+    int n = printers_port_slots(ps, PR_MAX);
     for (int i = 0; i < n; i++) {
         const printers_port_slot_t *s = &ps[i];
         if (s->say == PR_PORT_SAY_OWN) {
@@ -3217,7 +3211,7 @@ static void port_push(ps_state_t box)
             ipp_server_set_colour_for(s->slot, s_ribbon == IW_RIBBON_COLOUR &&
                                                colour_offered(s->kind, s->model));
         } else {
-            port_push_offline(s->slot, s->kind, s->model, s->say, on);
+            port_push_offline(s->slot, s->kind, s->model, s->say);
         }
     }
     localtalk_set_status(lt_status(st, AT_LINK_CABLE));

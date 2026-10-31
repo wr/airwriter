@@ -876,15 +876,12 @@ int printers_slot_of(int id)
     return k;
 }
 
-int printers_port_slots(printers_port_slot_t out[], int max, char on_name[PR_NAME_MAX])
+int printers_port_slots(printers_port_slot_t out[], int max)
 {
     int n = 0;
-    on_name[0] = '\0';
     if (!s_started) return 0;
     lock();
     live_fill();
-    int on = pr_port_on(s_l, s_live);
-    if (on) snprintf(on_name, PR_NAME_MAX, "%s", pr_get(s_l, on)->name);
     for (int i = 0; i < s_l->n && n < max; i++) {
         const pr_rec_t *r = &s_l->r[i];
         if (r->where != PR_WHERE_PORT) continue;

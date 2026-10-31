@@ -864,23 +864,9 @@ pr_port_say_t pr_port_say(const pr_list_t *l, const pr_live_t live[PR_MAX], int 
     const pr_rec_t *r = i < 0 ? NULL : &l->r[i], *other = pr_port_said_other(l);
     if (!r || r->where != PR_WHERE_PORT) return PR_PORT_SAY_OWN;
     // The port is the Something else record's while one is listed (pr_port_live_id).
-    if (other) return r == other ? PR_PORT_SAY_OWN : PR_PORT_SAY_SAID_OTHER;
+    if (other) return r == other ? PR_PORT_SAY_OWN : PR_PORT_SAY_TAKEN;
     if (r == pr_port_current(l)) return PR_PORT_SAY_OWN;
-    return port_on(l, live) >= 0 ? PR_PORT_SAY_ABSENT : PR_PORT_SAY_OFFLINE;
-}
-
-void pr_port_say_words(pr_port_say_t say, const char *on, char *out, size_t cap)
-{
-    switch (say) {
-    case PR_PORT_SAY_SAID_OTHER:
-        snprintf(out, cap, "Offline: the printer port is set to Something else.");
-        break;
-    case PR_PORT_SAY_ABSENT:
-        snprintf(out, cap, "Offline: %s is connected instead.", on ? on : "");
-        break;
-    default:
-        if (cap) out[0] = '\0';
-    }
+    return port_on(l, live) >= 0 ? PR_PORT_SAY_TAKEN : PR_PORT_SAY_OFFLINE;
 }
 
 void pr_chooser_name(const pr_list_t *l, char *out, size_t cap)
@@ -1323,7 +1309,7 @@ size_t pr_json(const pr_list_t *l, const pr_live_t live[PR_MAX], char *buf, size
     for (int i = 0; i < l->n_notes; i++)
         PUT("%s{\"kind\":\"%s\",\"id\":%u,\"model\":\"%s\"}", i ? "," : "",
             notes[l->notes[i].kind], l->notes[i].id, pr_model_name(l->notes[i].model));
-    // W-1116: the port's printer, the port set to Something else, and what the Chooser on
+    // W-1116: the port's printer, a Something else record listed, and what the Chooser on
     // vintage Macs shows: the port ImageWriter's name as on the page (the node's own), an
     // AppleTalk printer's own NBP name (relayed as it is, whatever the page calls it).
     PUT("],\"port_on\":%u,\"said_other\":%s,\"chooser\":[", pr_port_on(l, live),
