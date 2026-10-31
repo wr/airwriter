@@ -1022,17 +1022,27 @@ Apple's StyleWriter adapter (ADSP, not PAP), is not built.
   answered before a II job, neither ends the job nor passes it. The wait is for the job's
   record's line whatever record is on the port now, to one stall limit in all
   (`CONFIG_AIRWRITER_STALL_ABORT`, the questions' time counted), asking the plain question every
-  5 s with the line down, and `ESC ?` again (after the plain question, once) while the line is
-  up and the model is not named yet; a cancel or an upload cut short ends it as that, never as
-  "another printer". An original ImageWriter record's answer is its line up and the plain
-  question, asked once more then, unanswered. Another ImageWriter model or a StyleWriter
-  answering the job's own questions ends it aborted ("Another printer was connected. Print
-  again.") before any byte, since its page was ripped for the model it was sent to; the test
-  page stops the same way, before its first byte. A Mac's ImageWriter stream goes to whichever
-  ImageWriter answers, and hears busy while the printer on the port is a StyleWriter now
-  (`s_port_sw`) or a flip is pending, not on the list's last answer, so the driver's bytes
-  never reach a StyleWriter. The StyleWriter glue's `swapped` stays
-  `pr_port_other_family(PR_HEARD_STYLEWRITER)`, whichever record.
+  5 s with the line down; whenever the line is up the plain question goes first, and a
+  StyleWriter answering it is the job's answer with no ImageWriter byte sent (not the resync,
+  not `ESC ?`: one that raised its line and heard `ESC ?` first would stop listening until a
+  reset); only after it got nothing do the resync and `ESC ?` go, again after a 500 ms rest
+  while the model is not named yet. A cancel or an upload cut short ends it as that, never as
+  "another printer". An original ImageWriter record's answer is its line up with `ESC ?` and
+  the plain question unanswered: the core names that record, and the job takes it as its own
+  answer, so an original's job goes and a II's or LQ's on such a port ends as another
+  printer's. Another ImageWriter model or a StyleWriter answering the job's own questions ends
+  it aborted ("Another printer was connected. Print again.") before any byte, since its page
+  was ripped for the model it was sent to. The test page (`test_page_task`) waits and re-asks
+  the same way (`job_gate_wait`) and prints only on GO; at the deadline or a second tap it
+  stops without a byte. A Mac's ImageWriter stream goes to whichever ImageWriter answers, and
+  hears busy while the printer on the port is a StyleWriter now (`s_port_sw`), a flip is
+  pending, or a StyleWriter's first answer awaits its repeat (`s_port_confirm` with the list's
+  last answer a StyleWriter's: the port task asks again within 500 ms and has let the lock go
+  meanwhile), not on the list's last answer alone, so the driver's bytes never reach a
+  StyleWriter. The StyleWriter glue's `swapped` is an ImageWriter being the printer on the
+  port now (`printers_port_on_is_imagewriter`: its record current and present), not the list's
+  last answer, so a StyleWriter's job, test page or cleaning on a quiet port runs after an
+  ImageWriter was unplugged; the session's own `?` still refuses the wrong printer.
 - **AirPrint.** 360 × 360 dpi, URF `RS360`; Letter, A4 and Legal, the first the default
   (`printer_media_t` in `printer_caps`: the page's width at 360 dpi names the entry, and the
   rip keeps the engine's printable area from `rip_left` for `rip_w` dots). Margins in whole

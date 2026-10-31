@@ -783,6 +783,18 @@ int printers_port_absent(int id)
     return a;
 }
 
+int printers_port_on_is_imagewriter(void)
+{
+    if (!s_started) return 0;
+    lock();
+    live_fill();
+    int on = pr_port_on(s_l, s_live);
+    const pr_rec_t *r = on ? pr_get(s_l, on) : NULL;
+    int iw = r && r->kind == PR_KIND_IMAGEWRITER;
+    unlock();
+    return iw;
+}
+
 int printers_record_is_sw(int id)
 {
     if (!s_started) return 0;

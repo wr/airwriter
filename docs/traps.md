@@ -313,10 +313,15 @@ Traps already explained in a code comment are listed only when the comment is ea
   that answered and was unplugged stays `pr_port_current`), and a gate read from it ended a
   quiet-port ImageWriter job at once with "Another printer was connected" (task 6 review, I1).
   For the same reason the job's wait in `ribbon_ask` is not guarded on the current record's
-  mode, and `lt_print_begin` reads `s_port_sw` (a StyleWriter now), not `pr_port_other_family`.
-  `stylewriter_cfg_t.swapped` is
-  `pr_port_other_family(PR_HEARD_STYLEWRITER)`, whichever record. `s_port_sw` flips only under
-  the job lock (`port_sw_sync`), so
+  mode; `lt_print_begin` reads `s_port_sw` (a StyleWriter now) or a StyleWriter sighting whose
+  repeat is pending (`s_port_confirm`, the 500 ms the port task lets the lock go between the
+  two answers, R16), not `pr_port_other_family`; and `sw_swapped` is an ImageWriter on the port
+  now (`printers_port_on_is_imagewriter`), not the list's last answer. **A job's or test
+  page's plain question goes before any ImageWriter byte whenever the line is up** (the wait's
+  5 s question too), and a StyleWriter answering ends the call with nothing else sent: a
+  StyleWriter that raises its line and hears `ESC ?` first goes deaf until a reset, and an
+  original ImageWriter record would then take its silence for its own line (task 6 re-review,
+  N2/N3). `s_port_sw` flips only under the job lock (`port_sw_sync`), so
   read it with the lock held. And a StyleWriter-first port (`port_policy.h`) gets `ESC ?` only
   after the plain question got nothing: `swfake.py` takes `ESC ?` for a letter it does not know
   and stops listening until a reset.

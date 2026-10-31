@@ -131,6 +131,10 @@ int         printers_port_other_family(int family);
 // and cleaning 409, so one record's work never goes to another's printer. 0 for the one on the
 // port, a quiet port, or an AppleTalk printer. Reads the live state as printers_json does.
 int         printers_port_absent(int id);
+// W-1116: an ImageWriter is the printer on the port now: the current record is one and it is
+// present (pr_port_on), not the list's last answer. The StyleWriter glue's `swapped`. Reads the
+// live state as printers_json does.
+int         printers_port_on_is_imagewriter(void);
 // W-1116: whether port record `id` is a StyleWriter (doc_begin reads the job's own family from
 // its record, not the port's). 0 for an ImageWriter, an AppleTalk printer, or no such record.
 int         printers_record_is_sw(int id);
