@@ -873,8 +873,9 @@ printer port: `components/stylewriter` (`sw_model`, `sw_code`, `sw_page`, `sw_se
 `sw_status` and `sw_testpage` are pure and host-tested in `tools/rip`; `stylewriter.c` is the
 board's), `components/printers/port_policy.c`, and `tools/stylewriter` (the software printer
 and the owner's tool). **Built and host-tested against a software StyleWriter
-(`tools/stylewriter/swfake.py`) and a second coder (lpstyl's); no StyleWriter has printed from
-AirWriter, and Apple's drivers have not been captured** (the rig stops at a 68k Mac ROM,
+(`tools/stylewriter/swfake.py`) and a second coder (lpstyl's); a Color StyleWriter 2500 ran the
+test page to its end on board 1 (2026-11-02, its dry cartridge left the sheet blank), no other
+model has printed from AirWriter, and Apple's drivers have not been captured** (the rig stops at a 68k Mac ROM,
 `tools/stylewriter/capture.md`). The command letters, orders, geometry and block caps are
 TailTalk's reading of Apple's drivers (`tailtalk/src/stylewriter/*`, FeralFirmware; read for
 facts, never copied) and lpstyl's `README.protocol`; only the Color StyleWriter 2200 has
@@ -1082,7 +1083,12 @@ Apple's StyleWriter adapter (ADSP, not PAP), is not built.
   read, and `pr_live_t.cart` holds it, not the record.
 - **Geometry.** Dots at 360 dpi; margins are from the sheet's edges. Rect x values are relative
   to the printable area's top-left corner, inclusive, little-endian u16, and on the II, 1200 and
-  1500 both are 16 more for the same page. The printable width is the lesser of dots across and
+  1500 both are 16 more for the same page. A rect's right edge is the last dot of its rows'
+  whole bytes, into the printable width's last byte where the width is not whole bytes (Letter
+  and Legal on the 2200, 2400 and 2500: 2920 dots over 2916, the extra dots white): the 2500
+  counts a row's bytes from the rect's width rounded down, and a 2916-dot rect over 365-byte
+  rows stopped it on the first row with `2` 80 (board 1, 2026-11-02; `docs/traps.md`). The
+  printable width is the lesser of dots across and
   the paper's width less both side margins (Letter 3060: 2880 on the first family, 2916 on the
   second; A4 2976: 2832 on both).
 
@@ -1163,7 +1169,9 @@ Apple's StyleWriter adapter (ADSP, not PAP), is not built.
   holds, and the job waits `CONFIG_AIRWRITER_STALL_ABORT` (600 s) as the ImageWriter's
   paper-out does. A fault the design does not name ends the job after 10 s. Bit 02 on the
   original, II, 1200 and 1500 is the printer holding the job and clears itself; bit 80 of `2` is
-  spurious on the 2400 and 2500. Silence is 30 s with nothing the printer says heard (counted
+  spurious on the 2400 and 2500 (lpstyl's testers), but it is also how a 2500 stops on a page it
+  cannot read (`1` 00, the buffer never draining), which the session waits out to the stall
+  limit (`docs/traps.md`). Silence is 30 s with nothing the printer says heard (counted
   from its last answer, or from when the caller last gave the session something to do): the job
   fails, the state is offline, and the next job resets the printer. A
   printer switched off mid-page has lost the page.
@@ -1212,9 +1220,10 @@ Apple's StyleWriter adapter (ADSP, not PAP), is not built.
 - **The handshake pin.** Rev A's R9 (0 Ω, not fitted) joins U3's T1OUT to J2 pin 1 (HSKo); with
   it fitted the `HSKI_DRV` clamp (IO35 low) holds the line asserted at RS-232 levels, as a Mac's
   port does, and InkTalk holds its StyleWriter's input high for the same reason ("a StyleWriter
-  won't send anything back otherwise"). Whether a StyleWriter answers with the pin floating is
-  unknown; a rev A board that is to run one gets R9 fitted until an owner shows it is not
-  needed (the wiki's StyleWriters page says how), and rev B fits it (`W-1091`; an ImageWriter
+  won't send anything back otherwise"). A Color StyleWriter 2500 answered every question with
+  the pin floating (board 1, 2026-11-02), but its first page printed after R9 was fitted, so
+  whether one prints without it is not known; a rev A board that is to run one gets R9 fitted
+  until an owner shows it is not needed (the wiki's StyleWriters page says how), and rev B fits it (`W-1091`; an ImageWriter
   ignores that pin, 2.4).
 - **Not built.** Vintage Macs through AirWriter (phase 2: ADSP in `components/localtalk`, the
   adapter as `<name>:StyleWriter1200AT@*` or `<name>:ColorStyleWriter2400AT@*` on socket 129,

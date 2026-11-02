@@ -117,7 +117,8 @@ def band_stream(model, planes, x, y, inks, split=None, delta=True):
     bytes a block may carry (blocks end between plane rows)."""
     h, w = planes[inks[0]].shape
     dx = DX[model]
-    rect = (b"c" if len(inks) == 4 else b"R") + struct.pack("<HHHH", x + dx, y, x + dx + w - 1, y + h - 1)
+    # whole bytes wide, as the page stage sends it: a rect that is not, the printer misreads
+    rect = (b"c" if len(inks) == 4 else b"R") + struct.pack("<HHHH", x + dx, y, x + dx + (w + 7) // 8 * 8 - 1, y + h - 1)
     packed = {i: np.packbits(planes[i], axis=1) for i in inks}
     rows = []
     for r in range(h):
@@ -485,11 +486,25 @@ class Bad(unittest.TestCase):
             sw.feed(b"R" + struct.pack("<HHHH", *rect))
             self.assertTrue(sw.bad, what)
         sw, _ = mk("2200", media=(1144, 1200))
-        sw.feed(b"R" + struct.pack("<HHHH", 0, 0, 99, 400))         # 401 rows: past a 400-row band
+        sw.feed(b"R" + struct.pack("<HHHH", 0, 0, 103, 400))        # 401 rows: past a 400-row band
         self.assertTrue(sw.bad)
         sw, _ = mk("2200", media=(1144, 1200))
-        sw.feed(b"R" + struct.pack("<HHHH", 0, 0, 99, 399))
+        sw.feed(b"R" + struct.pack("<HHHH", 0, 0, 103, 399))
         self.assertEqual(sw.bad, [])
+
+    def test_a_rect_must_be_whole_bytes_wide(self):
+        # Board 1's 2500, 2026-11-02: Letter's printable 2916 dots over 365-byte rows lost
+        # the printer its place on the first row; 2920 printed.
+        sw, clock = mk("2500", media=(3060, 3960))
+        sw.feed(b"R" + struct.pack("<HHHH", 0, 0, 2915, 1))
+        self.assertTrue(any("whole bytes" in b for b in sw.bad), sw.bad)
+        self.wedged(sw, clock, "2500")
+        sw, _ = mk("2500", media=(3060, 3960))
+        sw.feed(b"R" + struct.pack("<HHHH", 0, 0, 2919, 1))
+        self.assertEqual(sw.bad, [], "the last byte of the printable width is fine")
+        sw, _ = mk("2500", media=(3060, 3960))
+        sw.feed(b"R" + struct.pack("<HHHH", 0, 0, 2927, 1))
+        self.assertTrue(any("last byte" in b for b in sw.bad), sw.bad)
 
     def test_colour_rect_on_a_black_only_model(self):
         sw, _ = mk("ii")

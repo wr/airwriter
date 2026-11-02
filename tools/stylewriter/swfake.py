@@ -54,14 +54,17 @@ What it models, from the design:
   blocks (`G`, u16 length, data, 00) of run-coded rows, then 0C. Rows are checked the
   way the design says: counts 1-62, `80` alone for a white row, each plane XORed with
   the row above inside a band (the original not), colour rows C, M, Y, K. A rect is
-  inside the printable area (minus the +16 of the 1200 family), no taller than a band,
-  and gets all its rows before the next rect or 0C.
+  inside the printable area (minus the +16 of the 1200 family) or its last byte, whole
+  bytes wide (a real 2500 counts a row's bytes from the rect's width rounded down, so a
+  rect 2916 dots wide over 365-byte rows lost it its place: board 1, 2026-11-02), no
+  taller than a band, and gets all its rows before the next rect or 0C.
 * Setup letters (m + one byte, d n Z b s A u D N L H B F, E ends a page early, Y l,
   P once a cleaning on every model but the original) are taken and recorded in
   `setup`. Anything else is a fault.
 * A fault (logged as bad, in `bad`): the page is ejected and the printer is deaf until
   the next reset. Faults are an unknown letter, a bad run code, a block longer than
-  its length, a rect past the printable width or the page, a colour rect on a model
+  its length, a rect past the printable width's last byte or the page or not whole
+  bytes wide, a colour rect on a model
   without colour, `p` to a model that is not a colour one, an overflow, and the
   0x8000-byte block that stalls a colour printer.
 
@@ -482,8 +485,11 @@ class StyleWriter:
             raise Fault(f"rect left {l} is before the printable area (it starts at {spec.dx})")
         if l > r or t > b:
             raise Fault(f"rect {l},{t},{r},{b} runs backwards")
-        if x1 >= w:
-            raise Fault(f"rect right {r} is past the printable width ({w} dots, +{spec.dx})")
+        if x1 >= (w + 7) // 8 * 8:
+            raise Fault(f"rect right {r} is past the printable width's last byte ({w} dots, +{spec.dx})")
+        if (x1 - x0 + 1) % 8:
+            raise Fault(f"rect {l}..{r} is {x1 - x0 + 1} dots, not whole bytes: the printer "
+                        f"reads {(x1 - x0 + 1) // 8} bytes a row and loses its place")
         if b >= h:
             raise Fault(f"rect bottom {b} is past the page ({h} printable rows)")
         if b - t + 1 > spec.band:

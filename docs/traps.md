@@ -339,6 +339,14 @@ Traps already explained in a code comment are listed only when the comment is ea
   `?`) once, each followed by a CR LF at 9600, left the paper blank but for the line feeds. So a
   look or a swapped port's question costs an ImageWriter nothing; the bytes that can mark paper
   go the other way, an ImageWriter's stream to a StyleWriter.
+- **A StyleWriter's rect is as wide as its rows' whole bytes** (board 1's Color StyleWriter 2500,
+  2026-11-02). Letter's printable width on the 2200, 2400 and 2500 is 2916 dots, and a rect that
+  wide over 365-byte rows stopped the 2500 before its first row: `1` read busy for about 6 s after `L`,
+  then `1` 00 and `2` 80, with `B` never rising. It counts a row's bytes from the rect's width
+  rounded down. A 2920-dot rect printed the page. The session reads `2` 80 as spurious on the
+  2400 and 2500, so a page the printer cannot read sits in `wait_room` to the 600 s stall limit
+  and the phone shows Printing all the while. TailTalk's rects are the printable width (fine on
+  A4's 2832); lpstyl's are always 2920.
 
 ## LaserWriters (W-1082)
 

@@ -428,7 +428,7 @@ static void test_colour_c2500(void)
     for (int i = 0; i < d.rects && i < 3; i++) {
         CHECK_EQ_INT(d.rect[i].kind, 'c');
         CHECK_EQ_INT(d.rect[i].l, 0);                  // the 2500 has no offset
-        CHECK_EQ_INT(d.rect[i].r, 2915);
+        CHECK_EQ_INT(d.rect[i].r, 2919);               // 365 bytes: the rows' whole bytes, not Letter's 2916
         CHECK_EQ_INT(d.rect[i].t, want[i].t);
         CHECK_EQ_INT(d.rect[i].b, want[i].b);
     }
@@ -654,21 +654,23 @@ static void test_pages_and_misc(void)
     sw_page_free(p);
 
     // A row wider than any sheet's printable width is cut to it, never sent past it.
-    static const dot_t wide[] = { { 100, 2879, IW_BLACK }, { 100, 2880, IW_BLACK }, { 101, 3000, IW_BLACK } };
+    static const dot_t wide[] = { { 100, 2879, IW_BLACK }, { 100, 2880, IW_BLACK }, { 101, 2917, IW_BLACK },
+                                  { 101, 3000, IW_BLACK } };
     for (int m = 0; m < 2; m++) {
         sw_model_t model = m ? SW_C2500 : SW_II;
         uint32_t cols = m ? 2916 : 2880, dx = m ? 0 : 16;
         stage_for(&p, &st, model, 0);
         if (!p) return;
-        g_dots = wide; g_ndots = 3;
+        g_dots = wide; g_ndots = 4;
         sink_reset();
         feed(&st, 0, 3060, 400, 0, fill_dots);
         decode(&d, model, 400 - (m ? 144 : 186), 365);
         CHECK_EQ_INT(d.bad, 0);
         CHECK_EQ_INT(d.rects, 1);
         CHECK_EQ_INT(d.rect[0].l, dx);
-        CHECK_EQ_INT(d.rect[0].r, dx + cols - 1);
+        CHECK_EQ_INT(d.rect[0].r, dx + (cols + 7) / 8 * 8 - 1);      // the rows' whole bytes
         if (m) CHECK_EQ_INT(d.img[0][3][(100 - 45) * 365 + 360], 0x80);   // 2880 is inside the 2500's 2916
+        if (m) CHECK_EQ_INT(d.img[0][3][(101 - 45) * 365 + 364], 0);      // 2917 is past it: white in the rect
         else   CHECK_EQ_INT(d.img[0][3][(100 - 72) * 365 + 359], 0x01);   // 2879 is the II's last
         dec_free(&d);
         sw_page_free(p);
@@ -776,7 +778,7 @@ static int odd(sw_model_t m, int colour_cart, uint32_t w, uint32_t h, uint32_t l
     CHECK_EQ_INT(d.page_ends, 1);
     for (int i = 0; i < d.rects; i++) {
         CHECK_EQ_INT(d.rect[i].l, dx);
-        CHECK_EQ_INT(d.rect[i].r, dx + cols - 1);         // never a coordinate past the printable width
+        CHECK_EQ_INT(d.rect[i].r, dx + rb * 8 - 1);       // the rows' whole bytes, never past them
         CHECK(d.rect[i].b < nrows);                       // nor a rect past the page
         CHECK(d.rect[i].t <= d.rect[i].b);
     }
