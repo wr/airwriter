@@ -343,10 +343,18 @@ Traps already explained in a code comment are listed only when the comment is ea
   2026-11-02). Letter's printable width on the 2200, 2400 and 2500 is 2916 dots, and a rect that
   wide over 365-byte rows stopped the 2500 before its first row: `1` read busy for about 6 s after `L`,
   then `1` 00 and `2` 80, with `B` never rising. It counts a row's bytes from the rect's width
-  rounded down. A 2920-dot rect printed the page. The session reads `2` 80 as spurious on the
-  2400 and 2500, so a page the printer cannot read sits in `wait_room` to the 600 s stall limit
-  and the phone shows Printing all the while. TailTalk's rects are the printable width (fine on
-  A4's 2832); lpstyl's are always 2920.
+  rounded down. A 2920-dot rect printed the page. The session once read that `2` 80 as spurious
+  (lpstyl's testers saw 80 with nothing wrong), so the page sat in `wait_room` to the 600 s
+  stall limit with the phone showing Printing; now 80 with `1` not busy and nothing draining
+  ends it after 10 s. TailTalk's rects are the printable width (fine on A4's 2832); lpstyl's
+  are always 2920.
+- **A Color StyleWriter 2500 goes dark on its own** (board 1, 2026-11-02): about 5 minutes after
+  a page its light goes out and it answers nothing, `?` and `1` alike, until `00 FF FF FF 49`
+  wakes it (the start-up reset and Look for Printers' did, 2 s later). It also went dark at
+  once after the reset that ends a failed page, and once two resets 77 s after a page left it
+  dark. A page cut short (the board restarting mid-page) leaves it answering nothing but a
+  reset as well. Not known: whether `l` at a job's end starts the timer, and whether a job's
+  own reset wakes it every time.
 
 ## LaserWriters (W-1082)
 

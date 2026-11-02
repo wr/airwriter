@@ -915,8 +915,10 @@ Apple's StyleWriter adapter (ADSP, not PAP), is not built.
   characters at 9600, so it goes only to a printer a record or the person has named: before
   every job to a StyleWriter record, once when the person picks a StyleWriter (Add a Printer…,
   the unknown printer's notice, the detail's Model), to confirm it and read its model, and to
-  an original StyleWriter record once at start-up and on the person's Look for Printers when
-  nothing else answered (Wells, 2026-10-27). So the original is found only when named.
+  any StyleWriter record once at start-up and on the person's Look for Printers when
+  nothing else answered (Wells, 2026-10-27, for the original; every model since 2026-11-02, when
+  board 1's 2500 answered nothing but a reset after a page cut short and while asleep). So the
+  original is found only when named.
 - **What the idle port is asked** (`port_policy`, pure: one act a call, every 500 ms, under the
   job lock and never while a job runs on the port; `port_tick`, `port_after` and
   `port_line_down` keep its books between calls, so the host tests run the whole loop against
@@ -944,11 +946,14 @@ Apple's StyleWriter adapter (ADSP, not PAP), is not built.
   a StyleWriter that would answer never hears `ESC ?` (`swfake.py` takes it for a letter it
   does not know and stops listening until a reset; one that raises its line on a port with no
   StyleWriter record hears it first, the design's cost); the plain question on a look with the
-  line down; the full sequence once while an original StyleWriter record is listed and
-  nothing answers, at start-up (the board sets `full_due`; a look of the board's own goes
-  first and leaves it owed) and when the person's Look for Printers got nothing from the plain
-  question or `ESC ?` (or from the status, for one that was answering), since the original
-  ignores the plain question until a reset and nothing else finds it; never on a cadence, and
+  line down; the full sequence once while a StyleWriter record is listed and nothing
+  answers, at start-up (the board sets `full_due`; a look of the board's own goes first and
+  leaves it owed) and when the person's Look for Printers got nothing from the plain question
+  or `ESC ?` (or from the status, for one that was answering), since the original ignores the
+  plain question until a reset and nothing else finds it, and a 2500 asleep or left with a page
+  cut short answers nothing else either; to an original's record at once, to any other only
+  once a plain question got nothing, so a StyleWriter that answers is never reset idle; never
+  on a cadence, and
   not once anything answers (an ImageWriter's `ESC ?` there is the ImageWriter's answer, 3.15);
   the plain question while the port's printer does not answer, every 5 s (W-1116; 60 s on the
   StyleWriter branch), whatever the list holds and whatever answered last, so a StyleWriter
@@ -1170,8 +1175,9 @@ Apple's StyleWriter adapter (ADSP, not PAP), is not built.
   paper-out does. A fault the design does not name ends the job after 10 s. Bit 02 on the
   original, II, 1200 and 1500 is the printer holding the job and clears itself; bit 80 of `2` is
   spurious on the 2400 and 2500 (lpstyl's testers), but it is also how a 2500 stops on a page it
-  cannot read (`1` 00, the buffer never draining), which the session waits out to the stall
-  limit (`docs/traps.md`). Silence is 30 s with nothing the printer says heard (counted
+  cannot read: with `1` not busy and the page not draining (waiting for room, or for the page
+  to finish with the buffer still holding it), 80 on the 2400 and 2500 ends the page after the
+  same 10 s, and the abort resets the printer (`docs/traps.md`). Silence is 30 s with nothing the printer says heard (counted
   from its last answer, or from when the caller last gave the session something to do): the job
   fails, the state is offline, and the next job resets the printer. A
   printer switched off mid-page has lost the page.
@@ -1188,7 +1194,11 @@ Apple's StyleWriter adapter (ADSP, not PAP), is not built.
   pick, a job's full sequence, a job it goes silent during) shows it offline until it answers
   or the next session. Switched on, it answers only Look for Printers' reset or a job's, so the
   wiki's Offline row ends with pressing Look for Printers; the page and phone read "Offline",
-  as for every printer. A StyleWriter that starts answering again is asked `D`
+  as for every printer. Board 1's Color StyleWriter 2500 goes dark on its own about 5 minutes
+  after a page (twice, 305 s and about 315 s after its `E l`) and then answers nothing, not `?`
+  nor `1`, until a reset: the start-up and Look for Printers resets woke it, and it reads
+  Offline meanwhile. After the reset that ends a failed page it has gone dark at once, and once
+  two resets 77 s after a page did not wake it (`docs/traps.md`). A StyleWriter that starts answering again is asked `D`
   and `H` for its cartridge, as a record that changes family is asked for its ribbon or
   cartridge. The panel
   shows the box's state, and the port's own while it prints.

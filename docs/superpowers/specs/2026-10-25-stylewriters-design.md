@@ -13,6 +13,12 @@ Geometry). lpstyl's rects are always whole bytes; TailTalk's are the printable w
 Letter is not. With 2920-dot rects the test page ran to its end at 57600 baud, with blank rows
 skipped, several bands in the buffer, `m2bA` and `B`, and pauses of 13 to 20 s between a rect
 and its blocks while the board drew them. The cartridge was dry, so the sheet came out blank.
+The same bench changed two rules. The 2400 and 2500's `2` 80, read as spurious, also marks a
+page the printer has stopped on (`1` not busy, nothing draining), which now fails after 10 s
+rather than the 600 s stall limit. And the full sequence at start-up and on the person's Look
+for Printers goes to any StyleWriter record that a plain question got nothing from, not only
+the original's: the 2500 goes dark on its own about 5 minutes after a page, and is left silent
+by a page cut short, and only a reset wakes it.
 
 **Amended 2026-10-30** by `W-1116 Printer port: several printers, the one plugged in shows
 online` (`2026-10-30-port-printers-design.md`): the swapped-port refusal and the "changed"

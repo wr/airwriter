@@ -469,7 +469,9 @@ Linear is the queue; these are the live items.
   SPEC §3.16), benched on board 1 2026-10-27; a Color StyleWriter 2500 ran the test page to its
   end there on 2026-11-02 once rects were whole bytes wide (its dry cartridge left the sheet
   blank). Open: Wells's merge, an owner's print on each model before its wiki star goes, whether
-  a StyleWriter prints with R9 left out, and the cable (expected to be the ImageWriter II's). Phase 2 (ADSP, vintage Macs) gets its
+  a StyleWriter prints with R9 left out, the cable (expected to be the ImageWriter II's), and
+  the 2500 going dark on its own about 5 minutes after a page (a reset wakes it; the board sends
+  one at start-up and on Look for Printers, not yet for a job to a dark printer). Phase 2 (ADSP, vintage Macs) gets its
   own plan after an owner has printed.
 - Not in Linear: scope HSKo during a long job (SPEC §3.9 timing).
 - Laser printers (design `docs/superpowers/specs/2026-10-21-laser-printers-design.md`; a
