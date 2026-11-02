@@ -30,5 +30,8 @@ int sw_state_fault(sw_state_t st);
 // question until it is reset, so its silence while idle says nothing: it reads as ready (shared
 // and taking jobs, and asked no `1` and `2` while it is not answering, so an ImageWriter
 // swapped in hears none), unless a job's full sequence got nothing, or a job lost it, since it
-// last answered (`job_silent`): then offline, until it answers or the next job begins.
-sw_state_t sw_idle_silent(sw_model_t m, int job_silent);
+// last answered (`job_silent`): then offline, until it answers or the next job begins. So does
+// a Color StyleWriter 2200, 2400 or 2500 `asleep`: one that was sent a job's end (`E l`) and
+// has not been reset since goes dark about 5 minutes later and answers nothing, and a job's
+// reset wakes it (board 1's 2500, 2026-11-02; the 2200 and 2400 by family).
+sw_state_t sw_idle_silent(sw_model_t m, int job_silent, int asleep);

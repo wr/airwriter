@@ -61,15 +61,27 @@ int main(void)
     // it would read as offline after every power-on until a job, so its silence while idle
     // says nothing and it reads as ready. Only a job's full sequence that gets nothing, or a
     // job it went silent during, shows it offline, until it answers or the next job.
-    CHECK_EQ_INT(sw_idle_silent(SW_ORIGINAL, 0), SWS_READY);
-    CHECK_EQ_INT(sw_idle_silent(SW_ORIGINAL, 1), SWS_OFFLINE);
-    for (int m = SW_II; m < SW_MODELS; m++) {
-        CHECK_EQ_INT(sw_idle_silent((sw_model_t)m, 0), SWS_OFFLINE);
-        CHECK_EQ_INT(sw_idle_silent((sw_model_t)m, 1), SWS_OFFLINE);
+    for (int asleep = 0; asleep < 2; asleep++) {
+        CHECK_EQ_INT(sw_idle_silent(SW_ORIGINAL, 0, asleep), SWS_READY);
+        CHECK_EQ_INT(sw_idle_silent(SW_ORIGINAL, 1, asleep), SWS_OFFLINE);
     }
-    CHECK_EQ_INT(sw_idle_silent(SW_NONE, 0), SWS_OFFLINE);
+    for (int m = SW_II; m < SW_MODELS; m++) {
+        CHECK_EQ_INT(sw_idle_silent((sw_model_t)m, 0, 0), SWS_OFFLINE);
+        CHECK_EQ_INT(sw_idle_silent((sw_model_t)m, 1, 0), SWS_OFFLINE);
+        CHECK_EQ_INT(sw_idle_silent((sw_model_t)m, 1, 1), SWS_OFFLINE);
+    }
+    // A 2200, 2400 or 2500 goes dark about 5 minutes after a job's end (`E l`) and a job's
+    // reset wakes it (board 1's 2500, 2026-11-02): asleep, it reads as ready. Not the II, 1200
+    // or 1500, whose sleep has not been seen.
+    CHECK_EQ_INT(sw_idle_silent(SW_C2200, 0, 1), SWS_READY);
+    CHECK_EQ_INT(sw_idle_silent(SW_C2400, 0, 1), SWS_READY);
+    CHECK_EQ_INT(sw_idle_silent(SW_C2500, 0, 1), SWS_READY);
+    CHECK_EQ_INT(sw_idle_silent(SW_II, 0, 1), SWS_OFFLINE);
+    CHECK_EQ_INT(sw_idle_silent(SW_1200, 0, 1), SWS_OFFLINE);
+    CHECK_EQ_INT(sw_idle_silent(SW_C1500, 0, 1), SWS_OFFLINE);
+    CHECK_EQ_INT(sw_idle_silent(SW_NONE, 0, 1), SWS_OFFLINE);
     // Ready claims nothing to the phone, so a job is taken and its full sequence finds out.
-    CHECK(sw_state_ipp(sw_idle_silent(SW_ORIGINAL, 0)).reason == NULL);
+    CHECK(sw_state_ipp(sw_idle_silent(SW_ORIGINAL, 0, 0)).reason == NULL);
 
     TEST_END;
 }
