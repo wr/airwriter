@@ -932,12 +932,21 @@ static void test_silent(void)
     CHECK_EQ_INT(sw_session_begin(s), SW_E_SILENT);
     sw_session_free(s);
 
-    // A printer that answers late, after the first 5 s try, is asked again and answers.
+    // A printer that answers late, after the first 5 s try, is asked once more before a second
+    // reset, and answers to the one (a 2500 waking from its sleep stayed dark when a second
+    // reset followed, board 1 2026-11-02).
     fake_init(SW_II, 0);
     F.settle_ms = 6500;
     s = session(SW_II, 4, 0, 600000);
     CHECK_EQ_INT(sw_session_begin(s), SW_OK);
-    CHECK(F.resets == 2 && F.sleeps[1] == 8000);          // the reset again, with the long settle
+    CHECK_EQ_INT(F.resets, 1);
+    sw_session_free(s);
+    // Later still than both tries: the reset again, with the long settle.
+    fake_init(SW_II, 0);
+    F.settle_ms = 12500;
+    s = session(SW_II, 4, 0, 600000);
+    CHECK_EQ_INT(sw_session_begin(s), SW_OK);
+    CHECK(F.resets == 2 && F.sleeps[1] == 8000);
     sw_session_free(s);
 }
 
@@ -1164,23 +1173,26 @@ static void test_ask_full(void)
     fake_init(SW_C2200, 1);
     F.no_p = 1;
     CHECK_EQ_INT(sw_ask_full(&o), SW_NONE);
-    // 2 s got nothing, so 8 s: the printer takes 5 s to come back from a reset
+    // 2 s got nothing: asked again a second at a time before any second reset, so a printer
+    // that takes 5 s to come back answers to the one reset
     fake_init(SW_II, 0);
     F.settle_ms = 5000;
     CHECK_EQ_INT(sw_ask_full(&o), SW_II);
-    CHECK_EQ_INT(F.nsleeps, 2);
-    CHECK_EQ_INT(F.sleeps[0], 2000);
-    CHECK_EQ_INT(F.sleeps[1], 8000);
-    CHECK_EQ_INT(F.resets, 2);
+    CHECK_EQ_INT(F.nsleeps, 1);
+    CHECK_EQ_INT(F.resets, 1);
     // and the original, which would not have answered `?` before its reset
     fake_init(SW_ORIGINAL, 0);
     F.settle_ms = 5000;
     CHECK_EQ_INT(sw_ask_full(&o), SW_ORIGINAL);
-    // nothing at all: two tries, then none
+    // nothing at all: two tries, the second reset 10 s after the first, with 8 s, then none
     fake_init(SW_II, 0);
     F.silent = 1;
+    uint32_t t0 = now_ms();
     CHECK_EQ_INT(sw_ask_full(&o), SW_NONE);
     CHECK_EQ_INT(F.nsleeps, 2);
+    CHECK_EQ_INT(F.sleeps[0], 2000);
+    CHECK_EQ_INT(F.sleeps[1], 8000);
+    CHECK(now_ms() - t0 >= 18000 && now_ms() - t0 <= 20000);
     // a reply that is not a StyleWriter's is not tried again
     fake_init(SW_II, 0);
     F.ident = "LW\r";

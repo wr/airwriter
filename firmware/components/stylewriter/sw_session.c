@@ -18,6 +18,7 @@
 #define SETTLE_MS        2000   // after the reset (session.rs:37)
 #define SETTLE_LONG_MS   8000   // the original, and a printer that said nothing at 2 s (:41)
 #define ID_BYTE_MS        250   // `?` is read to its CR at 250 ms a byte (design, "Recognising it")
+#define WAKE_MS          8000   // `?` again, a second at a time, before a second reset (below)
 #define ANSWER_MS        5000   // one try at a one-byte answer in a job (:48); asked again
 #define IDLE_ANSWER_MS   1000   // one try at an idle check; asked twice
 #define SILENT_MS       30000   // nothing heard since the last answer (Wells's rule)
@@ -190,8 +191,13 @@ sw_model_t sw_ask_full(const sw_ops_t *o)
         o->sleep_ms(o->ctx, settle[i]);
         uint8_t id[32];
         int n = ask_ident(o, id, sizeof id, ID_BYTE_MS);
+        // A 2500 woken from its sleep by this reset has answered at 2 s, but when a second reset
+        // followed 2 s after the first it stayed dark (board 1, 2026-11-02): it is asked again,
+        // a second at a time, for WAKE_MS before the reset goes again.
+        for (uint32_t w = 0; n == 0 && i == 0 && w < WAKE_MS; w += 1000)
+            n = ask_ident(o, id, sizeof id, 1000);
         if (n < 0) return SW_NONE;
-        if (n == 0) continue;                  // nothing at 2 s: the reset again, and 8 s
+        if (n == 0) continue;                  // nothing at 10 s: the reset again, and 8 s
         int cs = 0;
         sw_model_t m = sw_model_from_id(id, (size_t)n, &cs);
         if (!cs) return m;
@@ -543,6 +549,9 @@ static int reset_and_status(sw_session_t *s, uint8_t *s1)
         if (rc) return rc;
         s->o.sleep_ms(s->o.ctx, i == 0 && s->cfg.model != SW_ORIGINAL ? SETTLE_MS : SETTLE_LONG_MS);
         int r = ask_once(&s->o, '1', s1, ANSWER_MS);
+        // Once more before a second reset, which a 2500 waking from its sleep has been seen to
+        // take as sleep again (sw_ask_full).
+        if (r == 0 && i == 0) r = ask_once(&s->o, '1', s1, ANSWER_MS);
         if (r < 0) { show(s, SWS_OFFLINE); return SW_E_SILENT; }
         if (r) { s->last_heard = ms(s); return SW_OK; }
     }
