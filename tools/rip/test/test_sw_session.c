@@ -63,6 +63,8 @@ typedef struct {
     uint32_t arm_dur;                      // ms (0xFFFFFFFF: for good)
     uint8_t arm_s1, arm_s2;
     int arm_silent;
+    int stop_after_g;                      // the engine stops on the n-th block's end: not busy, not draining
+    int stopped;
     int cancel_on_g;                       // `cancelled` turns true as the n-th block begins
     uint32_t cancel_at_ms;                 // or at this time (0: never)
     int cancel;
@@ -149,6 +151,7 @@ static uint8_t status1(void)
     tick();
     uint8_t a = F.s1, b = 0;
     in_window(&a, &b);
+    if (F.stopped) return a;               // neither busy nor done: it has given the page up
     if (now_ms() < F.busy_until) a |= 0x01;
     if (F.page_pending) a |= F.fill > 0 ? 0x01 : 0x08;
     return a;
@@ -211,6 +214,12 @@ static void query(uint8_t q)
 static void g_done(void)
 {
     F.g_complete++;
+    if (F.stop_after_g && F.g_complete == F.stop_after_g) {
+        tick();
+        if (F.fill < F.glen) F.fill = F.glen;   // it holds the block it stopped on
+        F.drain = 0;
+        F.stopped = 1;
+    }
     if (F.arm_after_g && F.g_complete == F.arm_after_g) {
         uint32_t t = now_ms();
         if (F.arm_silent) F.silent = 1;
@@ -1533,6 +1542,65 @@ static void test_frames(void)
     CHECK(sw_session_new(&o, &c) == NULL);
 }
 
+// Board 1's 2500 on a rect it misread (2026-11-02): it took the blocks, then read `1` 00 and
+// `2` 80 with its buffer full until it was reset. The page fails after GRACE_MS, not the stall
+// limit, and the abort resets it. A 2400 and 2500 read 80 always in this fake (lpstyl's
+// testers), so it is `1` not busy with nothing draining that tells the stop.
+static void test_stopped(void)
+{
+    // Mid-page: the third block waits for room that never comes.
+    fake_init(SW_C2500, 0);
+    F.stop_after_g = 1;
+    sw_session_t *s = session(SW_C2500, 4, 0, 600000);
+    size_t n = fr_page(g_job, 0);
+    for (unsigned i = 0; i < 3; i++) {
+        n += fr_rect(g_job + n, 'R', 0, 400 * i, 2919, 400 * i + 399);
+        n += fr_block(g_job + n, 12000);
+    }
+    n += fr_end(g_job + n);
+    CHECK_EQ_INT(sw_session_begin(s), SW_OK);
+    uint32_t t0 = now_ms();
+    CHECK_EQ_INT(sw_session_feed(s, g_job, n), SW_E_FAULT);
+    CHECK_EQ_INT(F.g_complete, 2);
+    CHECK(now_ms() - t0 >= 10000 && now_ms() - t0 <= 16000);
+    CHECK_EQ_INT(F.st[F.nst - 1], SWS_FAULT);
+    int resets = F.resets;
+    sw_session_abort(s);
+    CHECK_EQ_INT(F.resets, resets + 1);
+    sw_session_free(s);
+
+    // After the last block: the wait for page done ends the same way.
+    fake_init(SW_C2500, 0);
+    F.stop_after_g = 1;
+    s = session(SW_C2500, 4, 0, 600000);
+    n = page(g_job, 0, 1, 6000);
+    CHECK_EQ_INT(sw_session_begin(s), SW_OK);
+    CHECK_EQ_INT(sw_session_feed(s, g_job, n), SW_OK);
+    t0 = now_ms();
+    CHECK_EQ_INT(sw_session_end(s), SW_E_FAULT);
+    CHECK(now_ms() - t0 >= 10000 && now_ms() - t0 <= 16000);
+    sw_session_free(s);
+
+    // The same 80 while it prints, busy and draining, stops nothing (the pacing tests run
+    // every model so); and a 2400's stop is the 2500's.
+    fake_init(SW_C2400, 0);
+    F.stop_after_g = 1;
+    s = session(SW_C2400, 4, 0, 600000);
+    n = page(g_job, 0, 1, 6000);
+    CHECK_EQ_INT(run(s, g_job, n), SW_E_FAULT);
+    sw_session_free(s);
+
+    // A 2200 that stops reads no 80 here: it waits out the stall limit as before.
+    fake_init(SW_C2200, 0);
+    F.stop_after_g = 1;
+    s = session(SW_C2200, 4, 0, 60000);
+    n = page(g_job, 0, 1, 6000);
+    t0 = now_ms();
+    CHECK_EQ_INT(run(s, g_job, n), SW_E_STALL);
+    CHECK(now_ms() - t0 >= 60000);
+    sw_session_free(s);
+}
+
 static void test_end(void)
 {
     // The end waits for 08: the page takes 20 s to print.
@@ -1612,5 +1680,6 @@ int main(void)
     test_clean();
     test_frames();
     test_end();
+    test_stopped();
     TEST_END;
 }

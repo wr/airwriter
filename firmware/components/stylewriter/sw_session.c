@@ -242,6 +242,7 @@ struct sw_session {
     int                 clean;          // sw_clean: one P in the setup
     int                 cart;           // what `H` said
     int32_t             free_b;         // the printer's free buffer: `B`, less what went since
+    int32_t             free_empty;     // what `B` read as the job began, the buffer empty
     int                 mode;           // the page mode letter last sent
     int                 pages_done;
     int                 begun, aborted, cancelled_out, touched;
@@ -375,14 +376,31 @@ static int clear_loop(sw_session_t *s, int have, uint8_t s1, uint8_t s2)
 
 static int wait_clear(sw_session_t *s) { return clear_loop(s, 0, 0, 0); }
 
+// The 2400 and 2500 may read `2` 80 with nothing wrong (lpstyl's testers), but `2` 80 with `1`
+// not busy, while the page it holds is not draining, is a printer that has stopped on what it
+// was sent: board 1's 2500 on a rect it misread (2026-11-02) read so until it was reset. Held
+// GRACE_MS, the page fails, as a fault the design does not name does; its caller's abort resets
+// the printer. `on` and `since` are the caller's, cleared whenever the buffer drains.
+static int stopped(sw_session_t *s, uint8_t s1, uint8_t s2, int *on, uint32_t *since)
+{
+    sw_model_t m = s->cfg.model;
+    if (!((m == SW_C2400 || m == SW_C2500) && (s2 & 0x80) && !(s1 & 0x01))) { *on = 0; return 0; }
+    uint32_t t = ms(s);
+    if (!*on) { *on = 1; *since = t; return 0; }
+    if ((uint32_t)(t - *since) < GRACE_MS) return 0;
+    show(s, SWS_FAULT);
+    return 1;
+}
+
 // Waits until `need` bytes fit the printer's buffer (session.rs:779-801, make_room): reads
 // `B` now and every ROOM_MS after, looks at `1` and `2` every ROOM_LOOK_MS (a fault stops
 // the buffer draining), and gives up when the free count has not risen for stall_ms.
 static int wait_room(sw_session_t *s, int32_t need)
 {
     if (s->free_b >= need) return SW_OK;
-    uint32_t t_prog = ms(s), t_look = t_prog;
+    uint32_t t_prog = ms(s), t_look = t_prog, t_stop = 0;
     int32_t best = s->free_b;
+    int stop_on = 0;
     for (;;) {
         if (cancelled(s)) return cancel_out(s);
         uint8_t b;
@@ -391,12 +409,14 @@ static int wait_room(sw_session_t *s, int32_t need)
         s->free_b = sw_free_bytes(s->cfg.model, b);
         uint32_t t = ms(s);
         if (s->free_b >= need) return SW_OK;
-        if (s->free_b > best) { best = s->free_b; t_prog = t; }
+        if (s->free_b > best) { best = s->free_b; t_prog = t; stop_on = 0; }
         if ((uint32_t)(t - t_look) >= ROOM_LOOK_MS) {
             unsigned f0 = s->faults;
-            if ((rc = wait_clear(s))) return rc;
+            uint8_t s1, s2;
+            if ((rc = status12(s, &s1, &s2)) || (rc = clear_loop(s, 1, s1, s2))) return rc;
             t = t_look = ms(s);
-            if (s->faults != f0) t_prog = t;               // a fault that cleared is progress
+            if (s->faults != f0) { t_prog = t; stop_on = 0; }   // a fault that cleared is progress
+            else if (stopped(s, s1, s2, &stop_on, &t_stop)) return SW_E_FAULT;
         }
         if ((uint32_t)(t - t_prog) >= s->cfg.stall_ms) return SW_E_STALL;
         s->o.sleep_ms(s->o.ctx, ROOM_MS);
@@ -561,7 +581,7 @@ int sw_session_begin(sw_session_t *s)
     // D or N, the free buffer with the printer empty, the cartridge (session.rs:599-619).
     if (s->let->pre && (rc = put1(s, s->let->pre))) return rc;
     if ((rc = query(s, 'B', &b))) return rc;
-    s->free_b = sw_free_bytes(m, b);
+    s->free_b = s->free_empty = sw_free_bytes(m, b);
     if (s->let->reads_h) {
         if ((rc = query(s, 'H', &h))) return rc;
         s->cart = sw_cart_colour(m, h);
@@ -630,8 +650,9 @@ int sw_session_feed(sw_session_t *s, const uint8_t *buf, size_t n)
 // cleared, for stall_ms.
 static int wait_printed(sw_session_t *s)
 {
-    uint32_t t_prog = ms(s);
+    uint32_t t_prog = ms(s), t_stop = 0;
     int32_t best = -1;
+    int stop_on = 0;
     for (;;) {
         if (cancelled(s)) return cancel_out(s);
         uint8_t s1, s2, b;
@@ -644,11 +665,14 @@ static int wait_printed(sw_session_t *s)
         if (kind != K_NONE) {
             if ((rc = clear_loop(s, 1, s1, s2))) return rc;
             t_prog = ms(s);
+            stop_on = 0;
             continue;
         }
         if ((rc = query(s, 'B', &b))) return rc;
         int32_t free_b = sw_free_bytes(s->cfg.model, b);
-        if (free_b > best) { best = free_b; t_prog = ms(s); }
+        if (free_b > best) { best = free_b; t_prog = ms(s); stop_on = 0; }
+        else if (free_b < s->free_empty - 256 && stopped(s, s1, s2, &stop_on, &t_stop))
+            return SW_E_FAULT;                         // a page still held, not one printed
         if ((uint32_t)(ms(s) - t_prog) >= s->cfg.stall_ms) return SW_E_STALL;
         s->o.sleep_ms(s->o.ctx, PRINTED_MS);
     }

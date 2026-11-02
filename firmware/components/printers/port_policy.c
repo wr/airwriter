@@ -63,10 +63,14 @@ port_act_t port_policy(const port_in_t *in)
     if (in->look && !answers) return PA_PLAIN;
     if (in->said_other) return PA_NONE;
 
-    // An original StyleWriter record at start-up, or the person's look that found nothing on
-    // the port: the full sequence, which the original answers once it is reset. Not while
-    // another printer answers.
-    if (in->full_due && in->sw1_listed && !answers) return PA_FULL;
+    // A StyleWriter record at start-up, or the person's look that found nothing on the port:
+    // the full sequence, once. The original answers nothing until it is reset, so it gets it
+    // at once; another model only once a plain question got nothing, as a 2500 left with a
+    // page cut short answers nothing until it is reset either (board 1, 2026-11-02), while
+    // one that answers is never reset idle. Not while another printer answers.
+    if (in->full_due && !answers &&
+        (in->sw1_listed || (in->sw_listed && in->plain_asked && in->plain_unanswered)))
+        return PA_FULL;
 
     // CTRL-X follows only a plain question since the line went down that got nothing, and
     // never while the current record is a StyleWriter.
@@ -80,11 +84,11 @@ port_act_t port_policy(const port_in_t *in)
     return kick ? PA_KICK : PA_NONE;
 }
 
-// A look is over and nothing answered it: the person's look owes the full sequence where an
-// original StyleWriter record is listed (one owed since start-up stays owed).
+// A look is over and nothing answered it: the person's look owes the full sequence where a
+// StyleWriter record is listed (one owed since start-up stays owed).
 static void look_found_nothing(port_in_t *in)
 {
-    if (in->look_person && in->sw1_listed) in->full_due = 1;
+    if (in->look_person && (in->sw_listed || in->sw1_listed)) in->full_due = 1;
 }
 
 static void events_over(port_in_t *in)

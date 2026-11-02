@@ -1768,14 +1768,16 @@ static void kick_task(void *arg)
         // Boot: after the quiet power-on, a port with no line up is asked the plain question
         // (a StyleWriter may never raise it). A StyleWriter the board already knows is asked
         // at once, the original with the full sequence: it answers nothing else until reset,
-        // and only an answer tells it from an empty port.
+        // and only an answer tells it from an empty port. Any other StyleWriter record gets the
+        // full sequence once its plain question gets nothing (port_policy.h, rule 6): a 2500
+        // left with a page cut short by a restart answers nothing until it is reset.
         if (!boot_looked && (mode == PORT_STYLEWRITER || printer_state_view().state != PS_BOOTING)) {
             boot_looked = 1;
-            // An original StyleWriter record anywhere in the list is owed the full sequence at
-            // start-up (W-1116: keyed on the list, not the oldest record); a StyleWriter on the
-            // port is primed for the plain question; an empty or ImageWriter port with the line
-            // down is looked at.
-            if (sw1_listed) s_full_due = 1;
+            // A StyleWriter record anywhere in the list is owed the full sequence at start-up
+            // (W-1116: keyed on the list, not the oldest record); a StyleWriter on the port is
+            // primed for the plain question; an empty or ImageWriter port with the line down is
+            // looked at.
+            if (sw_listed || sw1_listed) s_full_due = 1;
             if (mode == PORT_STYLEWRITER) s_last_plain_ms = port_plain_due(now);
             else if (!line_ready) s_look = 1;
         }
@@ -1856,8 +1858,9 @@ static void kick_task(void *arg)
         }
         case PA_PLAIN:
         case PA_FULL:
-            // The full sequence only after the person's look found nothing on an original
-            // StyleWriter record's port (port_policy.h): the original answers once reset.
+            // The full sequence only at start-up or after the person's look found nothing on a
+            // StyleWriter record's port (port_policy.h): the original, or a printer left silent
+            // by a page cut short, answers once reset.
             plain = act == PA_FULL ? stylewriter_ask_full() : stylewriter_ask_plain();
             if (plain != SW_NONE) {
                 seen = printers_port_seen_sw(plain);   // makes/finds the record, or PR_SEEN_AGAIN
