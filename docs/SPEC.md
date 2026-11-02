@@ -909,8 +909,9 @@ Apple's StyleWriter adapter (ADSP, not PAP), is not built.
   the 2400, 02 the 2200, 04 the 1500, 05 the 2500, anything else the 2200; a `CS` that does
   not answer `p` names no model, and the next look asks again. `p` sent to any other model
   ejects and resets it, so only a `CS` is sent it. The *full sequence* is the reset
-  `00 FF FF FF 49` (eject and reset), a 2 s settle (8 s on a second try), a drain, then `?`
-  again; it also finds the original (`IJ10`), which ignores `?` until reset (InkTalk's notes,
+  `00 FF FF FF 49` (eject and reset), a 2 s settle, a drain, then `?` again, and again a
+  second at a time for 8 s before a second try with an 8 s settle (a 2500 waking from its
+  sleep stayed dark when the second reset came 2 s after the first); it also finds the original (`IJ10`), which ignores `?` until reset (InkTalk's notes,
   from its author's own original; not yet seen here). Its `00` and `49` can read as stray
   characters at 9600, so it goes only to a printer a record or the person has named: before
   every job to a StyleWriter record, once when the person picks a StyleWriter (Add a Printer…,
@@ -1147,7 +1148,9 @@ Apple's StyleWriter adapter (ADSP, not PAP), is not built.
   packages) into `halftone/apple_tables.{h,c}`, whose header says where each table came from.
   The drivers are never committed, and nothing is copied from TailTalk's source.
 - **The session** (`sw_session`, pure behind an ops table so the host tests run it against a
-  scripted printer on a fake clock). A job: the reset, the settle, `1` and `2` clear, `?`
+  scripted printer on a fake clock). A job: the reset, the settle, `1` and `2` clear (up to
+  three resets, each given `1` twice, 5 s each, the second and third with the long settle, so a
+  printer that answers none fails the job after about 53 s), `?`
   (which must name the record's model, else the job fails with nothing further sent), then `D`
   (the colour models), or `N` (the 1200), `B`, `H` (all but the original: CS 0x81 colour and
   0x01 black, the 1500 bit 0x80), and the model's setup string for the quality and the
@@ -1195,10 +1198,19 @@ Apple's StyleWriter adapter (ADSP, not PAP), is not built.
   or the next session. Switched on, it answers only Look for Printers' reset or a job's, so the
   wiki's Offline row ends with pressing Look for Printers; the page and phone read "Offline",
   as for every printer. Board 1's Color StyleWriter 2500 goes dark on its own about 5 minutes
-  after a page (twice, 305 s and about 315 s after its `E l`) and then answers nothing, not `?`
-  nor `1`, until a reset: the start-up and Look for Printers resets woke it, and it reads
-  Offline meanwhile. After the reset that ends a failed page it has gone dark at once, and once
-  two resets 77 s after a page did not wake it (`docs/traps.md`). A StyleWriter that starts answering again is asked `D`
+  after a job's end (305, 317 and about 315 s after its `E l`) and then answers nothing, not
+  `?` nor `1`, until a reset wakes it; left alone after a reset with no job it stayed awake past
+  11 minutes, and a job's reset woke it dark and printed. So a 2200, 2400 or 2500 that was sent
+  a job's end (the session showing ready, `s_sw_asleep`) and has not been reset since reads as
+  ready while it is silent (`sw_idle_silent`), as the original does, and the next job wakes it;
+  a start-up or Look for Printers reset that gets an answer ends the sleep (it stays awake
+  after), and one that gets nothing, or a job that gets nothing, shows it offline (Wells,
+  2026-11-02: ready and woken, as Apple's driver leaves it, over dropping `l` to keep it
+  awake). One switched off at its button reads ready too, until a job finds it off. The 2200
+  and 2400 are taken to sleep as the 2500 does, by family. After the reset that ends a failed
+  page it has gone dark at once, two resets 2 s or 7 s apart have left it dark where a single
+  one woke it, and once a job's reset darkened it while it was awake and a later reset brought
+  it straight back (`docs/traps.md`). A StyleWriter that starts answering again is asked `D`
   and `H` for its cartridge, as a record that changes family is asked for its ribbon or
   cartridge. The panel
   shows the box's state, and the port's own while it prints.

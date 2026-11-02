@@ -18,7 +18,11 @@ page the printer has stopped on (`1` not busy, nothing draining), which now fail
 rather than the 600 s stall limit. And the full sequence at start-up and on the person's Look
 for Printers goes to any StyleWriter record that a plain question got nothing from, not only
 the original's: the 2500 goes dark on its own about 5 minutes after a page, and is left silent
-by a page cut short, and only a reset wakes it.
+by a page cut short, and only a reset wakes it. Wells's call the same day: a 2200, 2400 or
+2500 asleep after a job reads as Ready (as the original's quiet idle does) and the next job's
+reset wakes it, as Apple's driver leaves it, rather than dropping `l` to keep it awake; one
+switched off at its button reads Ready too until a job finds it off. And a waking printer gets
+10 s before a second reset, which has left it dark.
 
 **Amended 2026-10-30** by `W-1116 Printer port: several printers, the one plugged in shows
 online` (`2026-10-30-port-printers-design.md`): the swapped-port refusal and the "changed"

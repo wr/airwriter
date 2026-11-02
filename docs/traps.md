@@ -349,12 +349,18 @@ Traps already explained in a code comment are listed only when the comment is ea
   ends it after 10 s. TailTalk's rects are the printable width (fine on A4's 2832); lpstyl's
   are always 2920.
 - **A Color StyleWriter 2500 goes dark on its own** (board 1, 2026-11-02): about 5 minutes after
-  a page its light goes out and it answers nothing, `?` and `1` alike, until `00 FF FF FF 49`
-  wakes it (the start-up reset and Look for Printers' did, 2 s later). It also went dark at
-  once after the reset that ends a failed page, and once two resets 77 s after a page left it
-  dark. A page cut short (the board restarting mid-page) leaves it answering nothing but a
-  reset as well. Not known: whether `l` at a job's end starts the timer, and whether a job's
-  own reset wakes it every time.
+  a job's end (`E l`) its light goes out and it answers nothing, `?` and `1` alike, until
+  `00 FF FF FF 49` wakes it, answering 2 s later (a job's reset, the start-up reset, Look for
+  Printers'). Left alone after a reset with no job it stayed awake past 11 minutes. A second
+  reset close behind the first has left it dark, twice: the start-up full sequence's at 2 s and
+  a session's at 7 s, where a single reset woke it two minutes later. So a waking printer gets
+  10 s before a second reset, and a job's start up to three resets. It also went dark at once
+  after the reset that ends a failed page, after one Look for Printers wake it went dark again
+  10 s later, and once a job's first reset darkened it while it was awake and answering; two
+  more got nothing for 30 s, and the job's closing reset brought it back 70 ms later. Forum
+  threads on aging StyleWriters blame power-supply capacitors that brown out when the motors
+  start, which a reset does: this one may be that. A page cut short
+  (the board restarting mid-page) leaves it answering nothing but a reset as well.
 
 ## LaserWriters (W-1082)
 

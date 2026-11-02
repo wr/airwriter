@@ -543,17 +543,20 @@ int sw_session_cart(const sw_session_t *s)
 // without the fast-clock steps), and then asked until it has been silent for SILENT_MS.
 static int reset_and_status(sw_session_t *s, uint8_t *s1)
 {
-    for (int i = 0; i < 2; i++) {
+    // Up to three resets, each given `1` twice (10 s) to be answered. Board 1's 2500
+    // (2026-11-02) has gone dark at one reset and answered the next at once, and stayed dark
+    // when a second reset came close behind the first.
+    for (int i = 0; i < 3; i++) {
         if (cancelled(s)) return cancel_out(s);
         int rc = put(s, k_reset, sizeof k_reset);
         if (rc) return rc;
         s->o.sleep_ms(s->o.ctx, i == 0 && s->cfg.model != SW_ORIGINAL ? SETTLE_MS : SETTLE_LONG_MS);
-        int r = ask_once(&s->o, '1', s1, ANSWER_MS);
-        // Once more before a second reset, which a 2500 waking from its sleep has been seen to
-        // take as sleep again (sw_ask_full).
-        if (r == 0 && i == 0) r = ask_once(&s->o, '1', s1, ANSWER_MS);
-        if (r < 0) { show(s, SWS_OFFLINE); return SW_E_SILENT; }
-        if (r) { s->last_heard = ms(s); return SW_OK; }
+        for (int k = 0; k < 2; k++) {
+            int r = ask_once(&s->o, '1', s1, ANSWER_MS);
+            if (r < 0) { show(s, SWS_OFFLINE); return SW_E_SILENT; }
+            if (r) { s->last_heard = ms(s); return SW_OK; }
+            if (cancelled(s)) return cancel_out(s);
+        }
     }
     return query(s, '1', s1);
 }

@@ -901,13 +901,15 @@ static void test_silent(void)
     CHECK_EQ_INT(F.g_n, 1);                         // the second block never went
     sw_session_free(s);
 
-    // Silent from the start: begin ends at 30 s.
+    // Silent from the start: three resets, each given 10 s, then begin ends (about 53 s; a
+    // 2500 that went dark at one reset answered the next, board 1 2026-11-02).
     fake_init(SW_II, 0);
     F.silent = 1;
     s = session(SW_II, 4, 0, 600000);
     uint32_t t0 = now_ms();
     CHECK_EQ_INT(sw_session_begin(s), SW_E_SILENT);
-    CHECK(now_ms() - t0 >= 30000 && now_ms() - t0 <= 36000);
+    CHECK_EQ_INT(F.resets, 0);                      // silent: the fake counts none it never heard
+    CHECK(now_ms() - t0 >= 50000 && now_ms() - t0 <= 56000);
     CHECK_EQ_INT(F.st[F.nst - 1], SWS_OFFLINE);
     sw_session_free(s);
 
