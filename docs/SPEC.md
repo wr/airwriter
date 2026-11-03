@@ -1242,10 +1242,12 @@ Apple's StyleWriter adapter (ADSP, not PAP), is not built.
 - **The handshake pin.** Rev A's R9 (0 Ω, not fitted) joins U3's T1OUT to J2 pin 1 (HSKo); with
   it fitted the `HSKI_DRV` clamp (IO35 low) holds the line asserted at RS-232 levels, as a Mac's
   port does, and InkTalk holds its StyleWriter's input high for the same reason ("a StyleWriter
-  won't send anything back otherwise"). A Color StyleWriter 2500 answered every question with
-  the pin floating (board 1, 2026-11-02), but its first page printed after R9 was fitted, so
-  whether one prints without it is not known; a rev A board that is to run one gets R9 fitted
-  until an owner shows it is not needed (the wiki's StyleWriters page says how), and rev B fits it (`W-1091`; an ImageWriter
+  won't send anything back otherwise"). A Color StyleWriter 2500 answers and prints with the
+  pin floating: on board 1 with R9 taken off again (2026-11-03) it woke at the start-up reset
+  and ran the test page to its end, as fast as with R9 fitted. Whether the other models need it
+  is not known (InkTalk's remark is about some StyleWriter, not named), so a rev A board that is
+  to run one other than a 2500 gets R9 fitted until an owner shows it is not needed (the wiki's
+  StyleWriters page says how), and rev B fits it (`W-1091`; an ImageWriter
   ignores that pin, 2.4).
 - **Not built.** Vintage Macs through AirWriter (phase 2: ADSP in `components/localtalk`, the
   adapter as `<name>:StyleWriter1200AT@*` or `<name>:ColorStyleWriter2400AT@*` on socket 129,

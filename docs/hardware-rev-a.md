@@ -139,8 +139,9 @@ current; this list started as the one filed on 2026-10-24. Most come from review
   back otherwise. An ImageWriter ignores the pin (SPEC §2.4). On rev A it is a pair of 0603 pads
   on the top side with no silkscreen label (R designators are on F.Fab), 12.3 mm from the west
   edge and 25 mm up from the bottom edge: straight above J2, just left of U3 (silkscreened).
-  A Color StyleWriter 2500 answers with it open but first printed with it fitted (board 1,
-  2026-11-02): fit it by hand for a StyleWriter until one prints without it.
+  A Color StyleWriter 2500 answers and prints with it open (board 1, 2026-11-03, R9 taken off
+  again after it first printed with R9 fitted): fit it by hand for the other StyleWriters until
+  each is shown to print without it.
 - Through-hole dome power LED: `W-1043 Rev B: through-hole dome LED for the power indicator`.
 - Scope HSKo first: if its swing is modest, a divider and clamp into a GPIO could delete U3.
   Whatever replaces U3 has to pass the 1 MHz clock below. A Colour StyleWriter's fast clock is

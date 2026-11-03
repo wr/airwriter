@@ -6,7 +6,8 @@
 Reverses the StyleWriter cut in `2026-08-04-printer-support-scope-design.md`.
 
 **Amended 2026-11-02** after the first StyleWriter on the bench, a Color StyleWriter 2500 on
-board 1 (rev A; it answered every question with R9 open, and printed with R9 fitted): a rect is as wide as its rows' whole bytes, not the printable width.
+board 1 (rev A; it answered every question with R9 open, first printed with R9 fitted, and on
+2026-11-03 printed the test page with R9 taken off again, so the 2500 does not need R9): a rect is as wide as its rows' whole bytes, not the printable width.
 The 2500 counts a row's bytes from the rect's width rounded down, so Letter's 2916-dot rect over
 365-byte rows lost it the first row, and it stopped with `2` 80 and its buffer full (SPEC §3.16,
 Geometry). lpstyl's rects are always whole bytes; TailTalk's are the printable width, which on
