@@ -339,6 +339,28 @@ Traps already explained in a code comment are listed only when the comment is ea
   `?`) once, each followed by a CR LF at 9600, left the paper blank but for the line feeds. So a
   look or a swapped port's question costs an ImageWriter nothing; the bytes that can mark paper
   go the other way, an ImageWriter's stream to a StyleWriter.
+- **A StyleWriter's rect is as wide as its rows' whole bytes** (board 1's Color StyleWriter 2500,
+  2026-11-02). Letter's printable width on the 2200, 2400 and 2500 is 2916 dots, and a rect that
+  wide over 365-byte rows stopped the 2500 before its first row: `1` read busy for about 6 s after `L`,
+  then `1` 00 and `2` 80, with `B` never rising. It counts a row's bytes from the rect's width
+  rounded down. A 2920-dot rect printed the page. The session once read that `2` 80 as spurious
+  (lpstyl's testers saw 80 with nothing wrong), so the page sat in `wait_room` to the 600 s
+  stall limit with the phone showing Printing; now 80 with `1` not busy and nothing draining
+  ends it after 10 s. TailTalk's rects are the printable width (fine on A4's 2832); lpstyl's
+  are always 2920.
+- **A Color StyleWriter 2500 goes dark on its own** (board 1, 2026-11-02): about 5 minutes after
+  a job's end (`E l`) its light goes out and it answers nothing, `?` and `1` alike, until
+  `00 FF FF FF 49` wakes it, answering 2 s later (a job's reset, the start-up reset, Look for
+  Printers'). Left alone after a reset with no job it stayed awake past 11 minutes. A second
+  reset close behind the first has left it dark, twice: the start-up full sequence's at 2 s and
+  a session's at 7 s, where a single reset woke it two minutes later. So a waking printer gets
+  10 s before a second reset, and a job's start up to three resets. It also went dark at once
+  after the reset that ends a failed page, after one Look for Printers wake it went dark again
+  10 s later, and once a job's first reset darkened it while it was awake and answering; two
+  more got nothing for 30 s, and the job's closing reset brought it back 70 ms later. Forum
+  threads on aging StyleWriters blame power-supply capacitors that brown out when the motors
+  start, which a reset does: this one may be that. A page cut short
+  (the board restarting mid-page) leaves it answering nothing but a reset as well.
 
 ## LaserWriters (W-1082)
 

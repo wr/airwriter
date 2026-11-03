@@ -89,7 +89,7 @@ typedef struct {
     int      plain_asked;     // a plain question has been asked since the line went down
     int      plain_unanswered;  // the last plain question got nothing
     int      event_plain;     // the plain question asked for the pending line-up or look got nothing
-    int      full_due;        // owed an original StyleWriter record: start-up, or the person's look got nothing
+    int      full_due;        // owed a StyleWriter record: start-up, or the person's look got nothing
     port_act_t confirm;       // an act to repeat at once: the caller sets it after port_after, which clears it
 } port_in_t;
 
@@ -130,9 +130,13 @@ void port_tick(port_in_t *in);
 //                   unless a StyleWriter answered last (a once-sighted one must not hear ESC ?);
 //                   PA_ESCQ follows that re-ask's plain question when it got nothing.
 //   5. PA_PLAIN     on a look with the line down, while the port's printer is not answering.
-//   6. PA_FULL      `full_due` with an original StyleWriter record listed, while nothing
-//                   answers: set by the board at start-up, or by the person's look that got
-//                   nothing from the plain question or ESC ?. Once.
+//   6. PA_FULL      `full_due` with a StyleWriter record listed, while nothing answers: set
+//                   by the board at start-up, or by the person's look that got nothing from
+//                   the plain question or ESC ?. Once. An original StyleWriter record gets it
+//                   at once (it ignores the plain question until reset); any other only once
+//                   a plain question got nothing (`plain_asked`, `plain_unanswered`), so a
+//                   StyleWriter that answers is never reset idle, and one left silent by a
+//                   page cut short (a 2500, board 1 2026-11-02) is.
 //   7. PA_PLAIN     while the port's printer is not answering (any record that does not
 //                   answer, and no record): when the last one is 5 s old, or at once when
 //                   a kick is wanted and none has been asked since the line went down
@@ -155,8 +159,8 @@ port_act_t port_policy(const port_in_t *in);
 // ImageWriter record listed, an ESC ? that got nothing with the line up is that record's
 // answer (it gives no self-ID; the board makes it current). An ESC ? that got nothing makes
 // the plain question due at once, unless it was asked for this line-up or look already. The
-// person's look that got nothing owes the full sequence where an original StyleWriter record
-// is listed; an answer of any kind, or the sequence itself, clears that. A status that got
+// person's look that got nothing owes the full sequence where a StyleWriter record is listed;
+// an answer of any kind, or the sequence itself, clears that. A status that got
 // nothing on the person's look keeps the look theirs.
 void port_after(port_in_t *in, port_act_t act, int heard, int mine);
 

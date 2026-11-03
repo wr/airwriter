@@ -873,8 +873,9 @@ printer port: `components/stylewriter` (`sw_model`, `sw_code`, `sw_page`, `sw_se
 `sw_status` and `sw_testpage` are pure and host-tested in `tools/rip`; `stylewriter.c` is the
 board's), `components/printers/port_policy.c`, and `tools/stylewriter` (the software printer
 and the owner's tool). **Built and host-tested against a software StyleWriter
-(`tools/stylewriter/swfake.py`) and a second coder (lpstyl's); no StyleWriter has printed from
-AirWriter, and Apple's drivers have not been captured** (the rig stops at a 68k Mac ROM,
+(`tools/stylewriter/swfake.py`) and a second coder (lpstyl's); a Color StyleWriter 2500 ran the
+test page to its end on board 1 (2026-11-02, its dry cartridge left the sheet blank), no other
+model has printed from AirWriter, and Apple's drivers have not been captured** (the rig stops at a 68k Mac ROM,
 `tools/stylewriter/capture.md`). The command letters, orders, geometry and block caps are
 TailTalk's reading of Apple's drivers (`tailtalk/src/stylewriter/*`, FeralFirmware; read for
 facts, never copied) and lpstyl's `README.protocol`; only the Color StyleWriter 2200 has
@@ -908,14 +909,17 @@ Apple's StyleWriter adapter (ADSP, not PAP), is not built.
   the 2400, 02 the 2200, 04 the 1500, 05 the 2500, anything else the 2200; a `CS` that does
   not answer `p` names no model, and the next look asks again. `p` sent to any other model
   ejects and resets it, so only a `CS` is sent it. The *full sequence* is the reset
-  `00 FF FF FF 49` (eject and reset), a 2 s settle (8 s on a second try), a drain, then `?`
-  again; it also finds the original (`IJ10`), which ignores `?` until reset (InkTalk's notes,
+  `00 FF FF FF 49` (eject and reset), a 2 s settle, a drain, then `?` again, and again a
+  second at a time for 8 s before a second try with an 8 s settle (a 2500 waking from its
+  sleep stayed dark when the second reset came 2 s after the first); it also finds the original (`IJ10`), which ignores `?` until reset (InkTalk's notes,
   from its author's own original; not yet seen here). Its `00` and `49` can read as stray
   characters at 9600, so it goes only to a printer a record or the person has named: before
   every job to a StyleWriter record, once when the person picks a StyleWriter (Add a Printer…,
   the unknown printer's notice, the detail's Model), to confirm it and read its model, and to
-  an original StyleWriter record once at start-up and on the person's Look for Printers when
-  nothing else answered (Wells, 2026-10-27). So the original is found only when named.
+  any StyleWriter record once at start-up and on the person's Look for Printers when
+  nothing else answered (Wells, 2026-10-27, for the original; every model since 2026-11-02, when
+  board 1's 2500 answered nothing but a reset after a page cut short and while asleep). So the
+  original is found only when named.
 - **What the idle port is asked** (`port_policy`, pure: one act a call, every 500 ms, under the
   job lock and never while a job runs on the port; `port_tick`, `port_after` and
   `port_line_down` keep its books between calls, so the host tests run the whole loop against
@@ -943,11 +947,14 @@ Apple's StyleWriter adapter (ADSP, not PAP), is not built.
   a StyleWriter that would answer never hears `ESC ?` (`swfake.py` takes it for a letter it
   does not know and stops listening until a reset; one that raises its line on a port with no
   StyleWriter record hears it first, the design's cost); the plain question on a look with the
-  line down; the full sequence once while an original StyleWriter record is listed and
-  nothing answers, at start-up (the board sets `full_due`; a look of the board's own goes
-  first and leaves it owed) and when the person's Look for Printers got nothing from the plain
-  question or `ESC ?` (or from the status, for one that was answering), since the original
-  ignores the plain question until a reset and nothing else finds it; never on a cadence, and
+  line down; the full sequence once while a StyleWriter record is listed and nothing
+  answers, at start-up (the board sets `full_due`; a look of the board's own goes first and
+  leaves it owed) and when the person's Look for Printers got nothing from the plain question
+  or `ESC ?` (or from the status, for one that was answering), since the original ignores the
+  plain question until a reset and nothing else finds it, and a 2500 asleep or left with a page
+  cut short answers nothing else either; to an original's record at once, to any other only
+  once a plain question got nothing, so a StyleWriter that answers is never reset idle; never
+  on a cadence, and
   not once anything answers (an ImageWriter's `ESC ?` there is the ImageWriter's answer, 3.15);
   the plain question while the port's printer does not answer, every 5 s (W-1116; 60 s on the
   StyleWriter branch), whatever the list holds and whatever answered last, so a StyleWriter
@@ -1082,7 +1089,12 @@ Apple's StyleWriter adapter (ADSP, not PAP), is not built.
   read, and `pr_live_t.cart` holds it, not the record.
 - **Geometry.** Dots at 360 dpi; margins are from the sheet's edges. Rect x values are relative
   to the printable area's top-left corner, inclusive, little-endian u16, and on the II, 1200 and
-  1500 both are 16 more for the same page. The printable width is the lesser of dots across and
+  1500 both are 16 more for the same page. A rect's right edge is the last dot of its rows'
+  whole bytes, into the printable width's last byte where the width is not whole bytes (Letter
+  and Legal on the 2200, 2400 and 2500: 2920 dots over 2916, the extra dots white): the 2500
+  counts a row's bytes from the rect's width rounded down, and a 2916-dot rect over 365-byte
+  rows stopped it on the first row with `2` 80 (board 1, 2026-11-02; `docs/traps.md`). The
+  printable width is the lesser of dots across and
   the paper's width less both side margins (Letter 3060: 2880 on the first family, 2916 on the
   second; A4 2976: 2832 on both).
 
@@ -1136,7 +1148,9 @@ Apple's StyleWriter adapter (ADSP, not PAP), is not built.
   packages) into `halftone/apple_tables.{h,c}`, whose header says where each table came from.
   The drivers are never committed, and nothing is copied from TailTalk's source.
 - **The session** (`sw_session`, pure behind an ops table so the host tests run it against a
-  scripted printer on a fake clock). A job: the reset, the settle, `1` and `2` clear, `?`
+  scripted printer on a fake clock). A job: the reset, the settle, `1` and `2` clear (up to
+  three resets, each given `1` twice, 5 s each, the second and third with the long settle, so a
+  printer that answers none fails the job after about 53 s), `?`
   (which must name the record's model, else the job fails with nothing further sent), then `D`
   (the colour models), or `N` (the 1200), `B`, `H` (all but the original: CS 0x81 colour and
   0x01 black, the 1500 bit 0x80), and the model's setup string for the quality and the
@@ -1163,7 +1177,10 @@ Apple's StyleWriter adapter (ADSP, not PAP), is not built.
   holds, and the job waits `CONFIG_AIRWRITER_STALL_ABORT` (600 s) as the ImageWriter's
   paper-out does. A fault the design does not name ends the job after 10 s. Bit 02 on the
   original, II, 1200 and 1500 is the printer holding the job and clears itself; bit 80 of `2` is
-  spurious on the 2400 and 2500. Silence is 30 s with nothing the printer says heard (counted
+  spurious on the 2400 and 2500 (lpstyl's testers), but it is also how a 2500 stops on a page it
+  cannot read: with `1` not busy and the page not draining (waiting for room, or for the page
+  to finish with the buffer still holding it), 80 on the 2400 and 2500 ends the page after the
+  same 10 s, and the abort resets the printer (`docs/traps.md`). Silence is 30 s with nothing the printer says heard (counted
   from its last answer, or from when the caller last gave the session something to do): the job
   fails, the state is offline, and the next job resets the printer. A
   printer switched off mid-page has lost the page.
@@ -1180,7 +1197,20 @@ Apple's StyleWriter adapter (ADSP, not PAP), is not built.
   pick, a job's full sequence, a job it goes silent during) shows it offline until it answers
   or the next session. Switched on, it answers only Look for Printers' reset or a job's, so the
   wiki's Offline row ends with pressing Look for Printers; the page and phone read "Offline",
-  as for every printer. A StyleWriter that starts answering again is asked `D`
+  as for every printer. Board 1's Color StyleWriter 2500 goes dark on its own about 5 minutes
+  after a job's end (305, 317 and about 315 s after its `E l`) and then answers nothing, not
+  `?` nor `1`, until a reset wakes it; left alone after a reset with no job it stayed awake past
+  11 minutes, and a job's reset woke it dark and printed. So a 2200, 2400 or 2500 that was sent
+  a job's end (the session showing ready, `s_sw_asleep`) and has not been reset since reads as
+  ready while it is silent (`sw_idle_silent`), as the original does, and the next job wakes it;
+  a start-up or Look for Printers reset that gets an answer ends the sleep (it stays awake
+  after), and one that gets nothing, or a job that gets nothing, shows it offline (Wells,
+  2026-11-02: ready and woken, as Apple's driver leaves it, over dropping `l` to keep it
+  awake). One switched off at its button reads ready too, until a job finds it off. The 2200
+  and 2400 are taken to sleep as the 2500 does, by family. After the reset that ends a failed
+  page it has gone dark at once, two resets 2 s or 7 s apart have left it dark where a single
+  one woke it, and once a job's reset darkened it while it was awake and a later reset brought
+  it straight back (`docs/traps.md`). A StyleWriter that starts answering again is asked `D`
   and `H` for its cartridge, as a record that changes family is asked for its ribbon or
   cartridge. The panel
   shows the box's state, and the port's own while it prints.
@@ -1212,9 +1242,10 @@ Apple's StyleWriter adapter (ADSP, not PAP), is not built.
 - **The handshake pin.** Rev A's R9 (0 Ω, not fitted) joins U3's T1OUT to J2 pin 1 (HSKo); with
   it fitted the `HSKI_DRV` clamp (IO35 low) holds the line asserted at RS-232 levels, as a Mac's
   port does, and InkTalk holds its StyleWriter's input high for the same reason ("a StyleWriter
-  won't send anything back otherwise"). Whether a StyleWriter answers with the pin floating is
-  unknown; a rev A board that is to run one gets R9 fitted until an owner shows it is not
-  needed (the wiki's StyleWriters page says how), and rev B fits it (`W-1091`; an ImageWriter
+  won't send anything back otherwise"). A Color StyleWriter 2500 answered every question with
+  the pin floating (board 1, 2026-11-02), but its first page printed after R9 was fitted, so
+  whether one prints without it is not known; a rev A board that is to run one gets R9 fitted
+  until an owner shows it is not needed (the wiki's StyleWriters page says how), and rev B fits it (`W-1091`; an ImageWriter
   ignores that pin, 2.4).
 - **Not built.** Vintage Macs through AirWriter (phase 2: ADSP in `components/localtalk`, the
   adapter as `<name>:StyleWriter1200AT@*` or `<name>:ColorStyleWriter2400AT@*` on socket 129,

@@ -69,6 +69,12 @@ static tally_t run(port_in_t in, uint32_t from_ms, uint32_t to_ms)
 }
 
 // W-1116: what the list holds decides the order, not the current record alone.
+// The full sequence's list rule (port_policy.h, rule 6).
+static int full_ok(const port_in_t *in)
+{
+    return in->sw1_listed || (in->sw_listed && in->plain_asked && in->plain_unanswered);
+}
+
 static int sw_first_of(const port_in_t *in)
 {
     return in->sw_listed || in->heard == PR_HEARD_STYLEWRITER || in->iw1_listed;
@@ -121,10 +127,10 @@ static void test_invariants(void)
         // The kick: wanted, after a plain question since the line went down that got
         // nothing, never while the current record is a StyleWriter.
         if (a == PA_KICK) CHECK(in.want_kick && !sw && in.plain_asked && in.plain_unanswered);
-        // The full sequence: only with an original StyleWriter record listed, at start-up or
-        // after the person's look, only once that look's questions got nothing, and never
-        // while the port's printer answers.
-        if (a == PA_FULL) CHECK(in.full_due && in.sw1_listed && !answers && !event && !in.look);
+        // The full sequence: only with a StyleWriter record listed, at start-up or after the
+        // person's look, only once that look's questions got nothing, and never while the
+        // port's printer answers; to any but an original only after a plain question got nothing.
+        if (a == PA_FULL) CHECK(in.full_due && full_ok(&in) && !answers && !event && !in.look);
         // The plain question only for a reason: a line-up or a look that takes it first, a
         // look with the line down, the 5 s cadence, or a wanted kick with none since the
         // line went down; never to a port that answers, but an event's on a port that is
@@ -150,7 +156,7 @@ static void test_invariants(void)
         // answered last: an ImageWriter record whose port a StyleWriter answered is no longer
         // quiet (W-1116; the "changed" notice it waited for is gone).
         if (!in.said_other && !answers && due == 2 && !event && !in.look &&
-            !(in.full_due && in.sw1_listed) && !(reask && in.event_plain))
+            !(in.full_due && full_ok(&in)) && !(reask && in.event_plain))
             CHECK_EQ_INT(a, PA_PLAIN);
         // R20: ESC ? follows the re-ask's plain question that got nothing, at once, so a lost
         // self-ID is asked for again every 5 s while the line stays up.
@@ -1109,6 +1115,56 @@ static void test_stylewriter_heard(void)
     CHECK_EQ_INT(port_policy(&in), PA_NONE);
 }
 
+// Board 1's 2500, 2026-11-02: restarted with a page cut short, it answered no plain question
+// until a job's reset. A StyleWriter record that is not an original is owed the full sequence
+// at start-up as the original's is, but asked the plain question first: one that answers is
+// never reset idle; one that does not gets the sequence once.
+static void test_silent_start(void)
+{
+    // At start-up the plain question goes first; nothing: the full sequence, once, then the
+    // plain question's cadence.
+    port_in_t in = base(PR_KIND_STYLEWRITER);
+    in.full_due = 1;
+    in.last_plain_ms = port_plain_due(in.now_ms);
+    CHECK_EQ_INT(port_policy(&in), PA_PLAIN);
+    port_after(&in, PA_PLAIN, PR_HEARD_NONE, 0);
+    CHECK_EQ_INT(port_policy(&in), PA_FULL);
+    port_after(&in, PA_FULL, PR_HEARD_STYLEWRITER, 1);
+    CHECK_EQ_INT(in.full_due, 0);
+    CHECK_EQ_INT(in.answering, 1);
+    // One that answers its first plain question is never reset.
+    in = base(PR_KIND_STYLEWRITER);
+    in.full_due = 1;
+    in.last_plain_ms = port_plain_due(in.now_ms);
+    CHECK_EQ_INT(port_policy(&in), PA_PLAIN);
+    port_after(&in, PA_PLAIN, PR_HEARD_STYLEWRITER, 1);
+    CHECK_EQ_INT(in.full_due, 0);
+    port_in_t q = in;
+    tally_t t = run(q, in.now_ms, in.now_ms + 600 * SEC);
+    CHECK_EQ_INT(t.counts[PA_FULL], 0);
+    // Switched off at start-up: the sequence once, then only the plain question's cadence.
+    in = base(PR_KIND_STYLEWRITER);
+    in.full_due = 1;
+    in.last_plain_ms = port_plain_due(in.now_ms);
+    port_after(&in, port_policy(&in), PR_HEARD_NONE, 0);
+    CHECK_EQ_INT(port_policy(&in), PA_FULL);
+    port_after(&in, PA_FULL, PR_HEARD_NONE, 0);
+    q = in;
+    t = run(q, in.now_ms, in.now_ms + 600 * SEC);
+    CHECK_EQ_INT(t.counts[PA_FULL], 0);
+    CHECK(t.counts[PA_PLAIN] >= 100);
+    // An ImageWriter record current, a StyleWriter record beside it, nothing answering at
+    // start-up (board 1's list): the look's plain question, then the sequence.
+    in = base(PR_KIND_IMAGEWRITER);
+    in.sw_listed = 1;
+    in.full_due = 1;
+    in.line_ready = 0;
+    in.look = 1;
+    CHECK_EQ_INT(port_policy(&in), PA_PLAIN);
+    port_after(&in, PA_PLAIN, PR_HEARD_NONE, 0);
+    CHECK_EQ_INT(port_policy(&in), PA_FULL);
+}
+
 // An original StyleWriter record listed: its printer ignores the plain question until a reset
 // (InkTalk's notes), so only the person's Look for Printers can find it again. The look asks the
 // plain question and ESC ? first, and only when nothing answers sends the full sequence, once,
@@ -1160,7 +1216,8 @@ static void test_original_look(void)
     CHECK_EQ_INT(in.full_due, 0);
     CHECK_EQ_INT(port_policy(&in), PA_NONE);
     // An original record listed beside whatever record is current, whatever answered last:
-    // the same. Never without one.
+    // the same. Any other StyleWriter record too, once the look's plain question got nothing
+    // (here the current record is one where the kind is a StyleWriter). Never without one.
     static const struct { int kind, sw1_listed, heard; } any[] = {
         { PR_KIND_STYLEWRITER, 1, PR_HEARD_STYLEWRITER }, { PR_KIND_STYLEWRITER, 1, PR_HEARD_NONE },
         { PR_KIND_IMAGEWRITER, 1, PR_HEARD_IMAGEWRITER }, { -1, 1, PR_HEARD_NONE },
@@ -1176,8 +1233,9 @@ static void test_original_look(void)
         in.line_ready = 0;
         in.look = in.look_person = 1;
         port_after(&in, port_policy(&in), PR_HEARD_NONE, 0);
-        CHECK_EQ_INT(in.full_due, any[i].sw1_listed);
-        CHECK_EQ_INT(port_policy(&in), (any[i].sw1_listed ? PA_FULL : PA_NONE));
+        int owed = any[i].sw1_listed || any[i].kind == PR_KIND_STYLEWRITER;
+        CHECK_EQ_INT(in.full_due, owed);
+        CHECK_EQ_INT(port_policy(&in), (owed ? PA_FULL : PA_NONE));
     }
     // An original that answers its status when the person looks needs nothing more; one that
     // has stopped answering gets the look's questions and then the full sequence.
@@ -1753,6 +1811,7 @@ int main(void)
     test_line_blips();
     test_stylewriter_heard();
     test_original_look();
+    test_silent_start();
     test_original_boot();
     test_stop_looks();
     test_ten_minutes();

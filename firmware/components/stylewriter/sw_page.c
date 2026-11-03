@@ -139,7 +139,10 @@ static int has_ink(const sw_page_t *p, const uint8_t *const src[4])
 }
 
 // A band begins at printable row `ry`: its rect, as tall as a band is or as far as the
-// page goes, goes out before any of its rows.
+// page goes, goes out before any of its rows. It is as wide as the rows' whole bytes, not
+// the printable width: a Color StyleWriter 2500 counts a row's bytes from the rect's width
+// rounded down, so Letter's 2916 dots with 365-byte rows lost it the first row and it
+// stopped with `2` 80 (board 1, 2026-11-02). The bits past the width are white.
 static void begin_band(sw_page_t *p, uint32_t ry)
 {
     uint32_t last = p->nrows - 1, b = ry + p->spec->band_rows - 1;
@@ -147,7 +150,7 @@ static void begin_band(sw_page_t *p, uint32_t ry)
     uint8_t f[FRAME_HEAD + 9] = { SWF_RECT, 9, 0, (uint8_t)(p->colour ? 'c' : 'R') };
     put16(f + 4, p->spec->rect_dx);
     put16(f + 6, ry);
-    put16(f + 8, p->spec->rect_dx + p->pw - 1);
+    put16(f + 8, p->spec->rect_dx + p->rowbytes * 8 - 1);
     put16(f + 10, b);
     emit(p, f, sizeof f);
     p->band_left = b - ry + 1;

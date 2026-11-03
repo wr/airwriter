@@ -316,8 +316,8 @@ on the phone and panel, a raster test page, and Clean Print Head. Checked by `sw
 StyleWriter), lpstyl's coder as a second oracle and `swinterop` over all seven models; `swprint`
 lets an owner print a page to a real printer and send the log back. The wiki's draft (the seven as
 `Yes*` until an owner confirms each on paper, and a StyleWriters page) is unpublished: it waits for
-Wells's yes. A rev A board needs R9 (0 Ω, not fitted) fitted for a StyleWriter until one is shown to
-answer without it; rev B fits it (`docs/hardware-rev-a.md`). Benched on board 1 2026-10-27 (plan
+Wells's yes. A rev A board needs R9 (0 Ω, not fitted) fitted for a StyleWriter until one prints
+without it (a Color StyleWriter 2500 answers without it); rev B fits it (`docs/hardware-rev-a.md`). Benched on board 1 2026-10-27 (plan
 Task 15): the ImageWriter's IPP answer unchanged but for its state, the checker's 2672 bytes printed
 (crc unread: no USB console), a paper-out mid-page shown as Needs attention and aborted after 600 s,
 300 plain questions and one full sequence that printed nothing on the ImageWriter, and 12 minutes of
@@ -466,9 +466,12 @@ Linear is the queue; these are the live items.
   worker stacks to PSRAM (20 KB), Wi-Fi's IRAM options off (18 KB), the rip stack to PSRAM with
   its flash writes on another task (7 KB), mDNS and the NVS cache to PSRAM.
 - `W-1103 StyleWriters on the printer port`: phase 1 built on `ww/stylewriters-plan` (above,
-  SPEC §3.16), benched on board 1 2026-10-27. Open: Wells's merge, an owner's print on each model before
-  its wiki star goes, whether a StyleWriter answers with R9 left out, and the cable (expected to
-  be the ImageWriter II's). Phase 2 (ADSP, vintage Macs) gets its
+  SPEC §3.16), benched on board 1 2026-10-27; a Color StyleWriter 2500 ran the test page to its
+  end there on 2026-11-02 once rects were whole bytes wide (its dry cartridge left the sheet
+  blank). Open: Wells's merge, an owner's print on each model before its wiki star goes, whether
+  a StyleWriter prints with R9 left out, the cable (expected to be the ImageWriter II's), and
+  the 2500 going dark on its own about 5 minutes after a job (it reads Ready asleep and a job's
+  reset wakes it; whether the 2200 and 2400 sleep alike is not known). Phase 2 (ADSP, vintage Macs) gets its
   own plan after an owner has printed.
 - Not in Linear: scope HSKo during a long job (SPEC §3.9 timing).
 - Laser printers (design `docs/superpowers/specs/2026-10-21-laser-printers-design.md`; a

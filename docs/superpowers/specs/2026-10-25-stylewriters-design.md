@@ -5,6 +5,25 @@
 `W-1102 QuickDraw LaserWriters on the printer port (Personal LaserWriter LS/300, Select 300)`.
 Reverses the StyleWriter cut in `2026-08-04-printer-support-scope-design.md`.
 
+**Amended 2026-11-02** after the first StyleWriter on the bench, a Color StyleWriter 2500 on
+board 1 (rev A; it answered every question with R9 open, and printed with R9 fitted): a rect is as wide as its rows' whole bytes, not the printable width.
+The 2500 counts a row's bytes from the rect's width rounded down, so Letter's 2916-dot rect over
+365-byte rows lost it the first row, and it stopped with `2` 80 and its buffer full (SPEC §3.16,
+Geometry). lpstyl's rects are always whole bytes; TailTalk's are the printable width, which on
+Letter is not. With 2920-dot rects the test page ran to its end at 57600 baud, with blank rows
+skipped, several bands in the buffer, `m2bA` and `B`, and pauses of 13 to 20 s between a rect
+and its blocks while the board drew them. The cartridge was dry, so the sheet came out blank.
+The same bench changed two rules. The 2400 and 2500's `2` 80, read as spurious, also marks a
+page the printer has stopped on (`1` not busy, nothing draining), which now fails after 10 s
+rather than the 600 s stall limit. And the full sequence at start-up and on the person's Look
+for Printers goes to any StyleWriter record that a plain question got nothing from, not only
+the original's: the 2500 goes dark on its own about 5 minutes after a page, and is left silent
+by a page cut short, and only a reset wakes it. Wells's call the same day: a 2200, 2400 or
+2500 asleep after a job reads as Ready (as the original's quiet idle does) and the next job's
+reset wakes it, as Apple's driver leaves it, rather than dropping `l` to keep it awake; one
+switched off at its button reads Ready too until a job finds it off. And a waking printer gets
+10 s before a second reset, which has left it dark.
+
 **Amended 2026-10-30** by `W-1116 Printer port: several printers, the one plugged in shows
 online` (`2026-10-30-port-printers-design.md`): the swapped-port refusal and the "changed"
 notice of the 2026-10-27 amendment are replaced; the port keeps a record per model, the one

@@ -63,7 +63,7 @@ int main(int argc, char **argv)
         if (read_pbm(argv[3], inks[i], &pl[i])) return 1;
     for (int i = 1; i < 4; i++)
         if (pl[i].w != pl[0].w || pl[i].h != pl[0].h) { fputs("lpstyl_stream: planes differ in size\n", stderr); return 1; }
-    unsigned w = pl[0].w, h = pl[0].h;
+    unsigned h = pl[0].h;
     size_t rb = pl[0].rb;
 
     // lpstyl prints in colour when the file is and the printer can.
@@ -102,7 +102,7 @@ int main(int argc, char **argv)
             fputc(colour ? 'c' : 'R', out);
             put_u16(out, spec->rect_dx);
             put_u16(out, first);
-            put_u16(out, spec->rect_dx + w - 1);
+            put_u16(out, spec->rect_dx + (unsigned)rb * 8 - 1);    // whole bytes, as lpstyl's PRINT_WIDTH
             put_u16(out, r - 1);
             fputc('G', out);
             put_u16(out, (unsigned)n);

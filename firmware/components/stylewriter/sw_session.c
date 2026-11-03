@@ -18,6 +18,7 @@
 #define SETTLE_MS        2000   // after the reset (session.rs:37)
 #define SETTLE_LONG_MS   8000   // the original, and a printer that said nothing at 2 s (:41)
 #define ID_BYTE_MS        250   // `?` is read to its CR at 250 ms a byte (design, "Recognising it")
+#define WAKE_MS          8000   // `?` again, a second at a time, before a second reset (below)
 #define ANSWER_MS        5000   // one try at a one-byte answer in a job (:48); asked again
 #define IDLE_ANSWER_MS   1000   // one try at an idle check; asked twice
 #define SILENT_MS       30000   // nothing heard since the last answer (Wells's rule)
@@ -190,8 +191,13 @@ sw_model_t sw_ask_full(const sw_ops_t *o)
         o->sleep_ms(o->ctx, settle[i]);
         uint8_t id[32];
         int n = ask_ident(o, id, sizeof id, ID_BYTE_MS);
+        // A 2500 woken from its sleep by this reset has answered at 2 s, but when a second reset
+        // followed 2 s after the first it stayed dark (board 1, 2026-11-02): it is asked again,
+        // a second at a time, for WAKE_MS before the reset goes again.
+        for (uint32_t w = 0; n == 0 && i == 0 && w < WAKE_MS; w += 1000)
+            n = ask_ident(o, id, sizeof id, 1000);
         if (n < 0) return SW_NONE;
-        if (n == 0) continue;                  // nothing at 2 s: the reset again, and 8 s
+        if (n == 0) continue;                  // nothing at 10 s: the reset again, and 8 s
         int cs = 0;
         sw_model_t m = sw_model_from_id(id, (size_t)n, &cs);
         if (!cs) return m;
@@ -242,6 +248,7 @@ struct sw_session {
     int                 clean;          // sw_clean: one P in the setup
     int                 cart;           // what `H` said
     int32_t             free_b;         // the printer's free buffer: `B`, less what went since
+    int32_t             free_empty;     // what `B` read as the job began, the buffer empty
     int                 mode;           // the page mode letter last sent
     int                 pages_done;
     int                 begun, aborted, cancelled_out, touched;
@@ -375,14 +382,31 @@ static int clear_loop(sw_session_t *s, int have, uint8_t s1, uint8_t s2)
 
 static int wait_clear(sw_session_t *s) { return clear_loop(s, 0, 0, 0); }
 
+// The 2400 and 2500 may read `2` 80 with nothing wrong (lpstyl's testers), but `2` 80 with `1`
+// not busy, while the page it holds is not draining, is a printer that has stopped on what it
+// was sent: board 1's 2500 on a rect it misread (2026-11-02) read so until it was reset. Held
+// GRACE_MS, the page fails, as a fault the design does not name does; its caller's abort resets
+// the printer. `on` and `since` are the caller's, cleared whenever the buffer drains.
+static int stopped(sw_session_t *s, uint8_t s1, uint8_t s2, int *on, uint32_t *since)
+{
+    sw_model_t m = s->cfg.model;
+    if (!((m == SW_C2400 || m == SW_C2500) && (s2 & 0x80) && !(s1 & 0x01))) { *on = 0; return 0; }
+    uint32_t t = ms(s);
+    if (!*on) { *on = 1; *since = t; return 0; }
+    if ((uint32_t)(t - *since) < GRACE_MS) return 0;
+    show(s, SWS_FAULT);
+    return 1;
+}
+
 // Waits until `need` bytes fit the printer's buffer (session.rs:779-801, make_room): reads
 // `B` now and every ROOM_MS after, looks at `1` and `2` every ROOM_LOOK_MS (a fault stops
 // the buffer draining), and gives up when the free count has not risen for stall_ms.
 static int wait_room(sw_session_t *s, int32_t need)
 {
     if (s->free_b >= need) return SW_OK;
-    uint32_t t_prog = ms(s), t_look = t_prog;
+    uint32_t t_prog = ms(s), t_look = t_prog, t_stop = 0;
     int32_t best = s->free_b;
+    int stop_on = 0;
     for (;;) {
         if (cancelled(s)) return cancel_out(s);
         uint8_t b;
@@ -391,12 +415,14 @@ static int wait_room(sw_session_t *s, int32_t need)
         s->free_b = sw_free_bytes(s->cfg.model, b);
         uint32_t t = ms(s);
         if (s->free_b >= need) return SW_OK;
-        if (s->free_b > best) { best = s->free_b; t_prog = t; }
+        if (s->free_b > best) { best = s->free_b; t_prog = t; stop_on = 0; }
         if ((uint32_t)(t - t_look) >= ROOM_LOOK_MS) {
             unsigned f0 = s->faults;
-            if ((rc = wait_clear(s))) return rc;
+            uint8_t s1, s2;
+            if ((rc = status12(s, &s1, &s2)) || (rc = clear_loop(s, 1, s1, s2))) return rc;
             t = t_look = ms(s);
-            if (s->faults != f0) t_prog = t;               // a fault that cleared is progress
+            if (s->faults != f0) { t_prog = t; stop_on = 0; }   // a fault that cleared is progress
+            else if (stopped(s, s1, s2, &stop_on, &t_stop)) return SW_E_FAULT;
         }
         if ((uint32_t)(t - t_prog) >= s->cfg.stall_ms) return SW_E_STALL;
         s->o.sleep_ms(s->o.ctx, ROOM_MS);
@@ -517,14 +543,20 @@ int sw_session_cart(const sw_session_t *s)
 // without the fast-clock steps), and then asked until it has been silent for SILENT_MS.
 static int reset_and_status(sw_session_t *s, uint8_t *s1)
 {
-    for (int i = 0; i < 2; i++) {
+    // Up to three resets, each given `1` twice (10 s) to be answered. Board 1's 2500
+    // (2026-11-02) has gone dark at one reset and answered the next at once, and stayed dark
+    // when a second reset came close behind the first.
+    for (int i = 0; i < 3; i++) {
         if (cancelled(s)) return cancel_out(s);
         int rc = put(s, k_reset, sizeof k_reset);
         if (rc) return rc;
         s->o.sleep_ms(s->o.ctx, i == 0 && s->cfg.model != SW_ORIGINAL ? SETTLE_MS : SETTLE_LONG_MS);
-        int r = ask_once(&s->o, '1', s1, ANSWER_MS);
-        if (r < 0) { show(s, SWS_OFFLINE); return SW_E_SILENT; }
-        if (r) { s->last_heard = ms(s); return SW_OK; }
+        for (int k = 0; k < 2; k++) {
+            int r = ask_once(&s->o, '1', s1, ANSWER_MS);
+            if (r < 0) { show(s, SWS_OFFLINE); return SW_E_SILENT; }
+            if (r) { s->last_heard = ms(s); return SW_OK; }
+            if (cancelled(s)) return cancel_out(s);
+        }
     }
     return query(s, '1', s1);
 }
@@ -561,7 +593,7 @@ int sw_session_begin(sw_session_t *s)
     // D or N, the free buffer with the printer empty, the cartridge (session.rs:599-619).
     if (s->let->pre && (rc = put1(s, s->let->pre))) return rc;
     if ((rc = query(s, 'B', &b))) return rc;
-    s->free_b = sw_free_bytes(m, b);
+    s->free_b = s->free_empty = sw_free_bytes(m, b);
     if (s->let->reads_h) {
         if ((rc = query(s, 'H', &h))) return rc;
         s->cart = sw_cart_colour(m, h);
@@ -630,8 +662,9 @@ int sw_session_feed(sw_session_t *s, const uint8_t *buf, size_t n)
 // cleared, for stall_ms.
 static int wait_printed(sw_session_t *s)
 {
-    uint32_t t_prog = ms(s);
+    uint32_t t_prog = ms(s), t_stop = 0;
     int32_t best = -1;
+    int stop_on = 0;
     for (;;) {
         if (cancelled(s)) return cancel_out(s);
         uint8_t s1, s2, b;
@@ -644,11 +677,14 @@ static int wait_printed(sw_session_t *s)
         if (kind != K_NONE) {
             if ((rc = clear_loop(s, 1, s1, s2))) return rc;
             t_prog = ms(s);
+            stop_on = 0;
             continue;
         }
         if ((rc = query(s, 'B', &b))) return rc;
         int32_t free_b = sw_free_bytes(s->cfg.model, b);
-        if (free_b > best) { best = free_b; t_prog = ms(s); }
+        if (free_b > best) { best = free_b; t_prog = ms(s); stop_on = 0; }
+        else if (free_b < s->free_empty - 2048 && stopped(s, s1, s2, &stop_on, &t_stop))
+            return SW_E_FAULT;      // 2 KB still held, not a printed page's empty reading a step or two short
         if ((uint32_t)(ms(s) - t_prog) >= s->cfg.stall_ms) return SW_E_STALL;
         s->o.sleep_ms(s->o.ctx, PRINTED_MS);
     }
