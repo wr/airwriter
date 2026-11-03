@@ -8,6 +8,10 @@
 #include <stdio.h>
 #include <stdarg.h>
 
+// The page's width at rip dpi names a sheet of the caps' list when it is within
+// this many dots of its page_w: a phone rounds an A4 page by a dot or two.
+#define MEDIA_SLACK 2
+
 typedef struct {
     const ripjob_cfg_t *cfg;
     ht_t      ht;
@@ -51,16 +55,33 @@ static void on_row(void *ctx, const uint8_t *row, uint32_t w)
 }
 
 // One resampled RGB row of a colour page: split it into inks, halftone each,
-// and hand the four rows to the colour strip writer.
+// and hand the four rows to the colour strip writer, or to a stage that takes them.
 static void on_rgb_row(void *ctx, const uint8_t *row, uint32_t w)
 {
     pipe_t *p = (pipe_t *)ctx;
     ink_screens_row(&p->inks, row, p->ibits);
     const uint8_t *const *bits = (const uint8_t *const *)p->ibits;
     if (p->cfg->ink_row) p->cfg->ink_row(p->cfg->row_ctx, bits, w, p->y);
-    if (p->skip) p->skip--;
+    if (p->cfg->stage) p->cfg->stage->ink_row(p->cfg->stage->ctx, bits);
+    else if (p->skip) p->skip--;
     else iwc_row(p->iwc, bits);
     p->y++;
+}
+
+// Apple's drivers start a page on the screen's second row (apple_tables.h).
+static void apple_page_start(ht_t *h)
+{
+    ht_set_phase(h, h->phase_x, h->phase_y + 1, h->invert);
+}
+
+// The sheet of the caps' list this page's width names, or the first.
+static const printer_media_t *pick_media(const printer_caps_t *caps, uint32_t page_w)
+{
+    for (size_t i = 0; i < caps->n_media; i++) {
+        int32_t d = (int32_t)page_w - (int32_t)caps->media_list[i].page_w;
+        if (d >= -MEDIA_SLACK && d <= MEDIA_SLACK) return &caps->media_list[i];
+    }
+    return &caps->media_list[0];
 }
 
 // URF colour spaces that are plain RGB: 1 sRGB, 3 AdobeRGB, 5 device RGB.
@@ -94,7 +115,8 @@ int ripjob_run(urf_t *u, const ripjob_cfg_t *cfg, ripjob_stats_t *st)
             rc = -1;
             break;
         }
-        int colour = rgb && cfg->colour && !stage;
+        // With a stage, colour is the stage's to take: four rows a pixel row, or none.
+        int colour = rgb && cfg->colour && (!stage || stage->ink_row);
 
         uint32_t res    = u->page.res_x ? u->page.res_x : dpi_x;
         uint32_t full_w = (uint32_t)((uint64_t)u->page.width * dpi_x / res);
@@ -108,7 +130,23 @@ int ripjob_run(urf_t *u, const ripjob_cfg_t *cfg, ripjob_stats_t *st)
         // what lies past its widest row: the paper is the page, top-left.
         uint32_t src_w = u->page.width, crop_left = 0, crop_per_side = 0;
         int clipped = 0;
-        if (max && full_w > max) {
+        // A printer with sheets (W-1103) keeps its engine's printable area of the
+        // sheet the page's width names: rip_w dots from rip_left, or the page's own
+        // width when that is less, so a short page is never padded and a page the
+        // engine cannot print wide never reaches it.
+        uint32_t limit = max;
+        int sheeted = caps->n_media != 0;
+        if (sheeted) {
+            const printer_media_t *md = pick_media(caps, full_w);
+            uint32_t left = md->rip_left < full_w ? md->rip_left : 0;
+            uint32_t keep = md->rip_w < full_w - left ? md->rip_w : full_w - left;
+            crop_left = (uint32_t)((uint64_t)left * res / dpi_x);
+            src_w = (uint32_t)((uint64_t)keep * res / dpi_x);
+            if (src_w > u->page.width - crop_left) src_w = u->page.width - crop_left;
+            if (!src_w) src_w = 1;
+            crop_per_side = crop_left;
+            limit = md->rip_w;
+        } else if (max && full_w > max) {
             if (caps->crop_margin) {
                 uint32_t shortfall_dst  = full_w - max;
                 uint32_t shortfall_src  = (uint32_t)((uint64_t)shortfall_dst * res / dpi_x);
@@ -127,14 +165,15 @@ int ripjob_run(urf_t *u, const ripjob_cfg_t *cfg, ripjob_stats_t *st)
         uint32_t dst_h = (uint32_t)((uint64_t)u->page.height * dpi_y / res);
 
         int still_wide = 0;
-        if (max && dst_w > max) {
-            dst_w = max;
+        if (limit && dst_w > limit) {
+            dst_w = limit;
             still_wide = 1;
         }
-        if (clipped) {
+        // A sheeted printer's crop is how its pages are meant to go: nothing to say.
+        if (!sheeted && clipped) {
             say(cfg, "page %d width %u dots exceeds %u; clipped on the right",
                 pages + 1, (unsigned)full_w, (unsigned)max);
-        } else if (crop_per_side || still_wide) {
+        } else if (!sheeted && (crop_per_side || still_wide)) {
             say(cfg, "page %d width %u dots exceeds %u; cropped %u source px per side "
                      "(0.25in margin)%s",
                 pages + 1, (unsigned)full_w, (unsigned)max,
@@ -166,30 +205,43 @@ int ripjob_run(urf_t *u, const ripjob_cfg_t *cfg, ripjob_stats_t *st)
         rs_t rs;
 
         if (colour) {
-            p->iwc = calloc(1, sizeof *p->iwc);
-            if (!p->iwc) { rc = -1; goto page_cleanup; }
+            if (!stage) {
+                p->iwc = big_calloc(1, sizeof *p->iwc);
+                if (!p->iwc) { rc = -1; goto page_cleanup; }
+            }
             for (int i = 0; i < IW_INKS; i++)
-                if (!(p->ibits[i] = calloc((dst_w + 7) / 8, 1))) { rc = -1; goto page_cleanup; }
+                if (!(p->ibits[i] = big_calloc((dst_w + 7) / 8, 1))) { rc = -1; goto page_cleanup; }
             if (ink_screens_init(&p->inks, cfg->dither, cfg->gain, dst_w)) {
                 rc = -1; goto page_cleanup;
             }
             inks_ready = 1;
-            iwc_init(p->iwc, dst_w, cfg->out, cfg->out_ctx);
-            iwc_begin_page(p->iwc);
-            // The margin's blank rows: ibits are still all zeros here.
-            for (int r = 0; r < cfg->top_margin / 2; r++)
-                iwc_row(p->iwc, (const uint8_t *const *)p->ibits);
+            if (cfg->tone) ink_screens_set_tone(&p->inks, cfg->tone);
+            if (cfg->dither == HT_APPLE)
+                for (int i = 0; i < IW_INKS; i++) apple_page_start(&p->inks.ht[i]);
+            if (!stage) {
+                iwc_init(p->iwc, dst_w, cfg->out, cfg->out_ctx);
+                iwc_begin_page(p->iwc);
+                // The margin's blank rows: ibits are still all zeros here.
+                for (int r = 0; r < cfg->top_margin / 2; r++)
+                    iwc_row(p->iwc, (const uint8_t *const *)p->ibits);
+            }
             if (rs_init_n(&rs, src_w, u->page.height, dst_w, dst_h, 3, on_rgb_row, p)) {
                 rc = -1; goto page_cleanup;
             }
         } else {
-            p->bits = calloc((dst_w + 7) / 8, 1);
+            p->bits = big_calloc((dst_w + 7) / 8, 1);
             if (!p->bits) { rc = -1; goto page_cleanup; }
             if (rgb && !(p->gray = big_malloc(src_w))) { rc = -1; goto page_cleanup; }
 
             if (ht_init(&p->ht, cfg->dither, dst_w)) { rc = -1; goto page_cleanup; }
             ht_ready = 1;
             ht_set_gain(&p->ht, cfg->gain);
+            if (cfg->tone) ht_set_tone(&p->ht, cfg->tone);
+            if (cfg->dither == HT_APPLE) {
+                // One plane of gray is the black ink's: its placement, not the colour inks'.
+                ink_screen_phase(&p->ht, IW_BLACK);
+                apple_page_start(&p->ht);
+            }
             if (!stage) {
                 iw_init(&p->iw, dst_w, cfg->out, cfg->out_ctx);
                 iw_begin_page(&p->iw);
@@ -220,13 +272,15 @@ int ripjob_run(urf_t *u, const ripjob_cfg_t *cfg, ripjob_stats_t *st)
             if (r < 0) {
                 say(cfg, "page %d incomplete, stream is truncated", pages + 1);
                 rc = r;
+            } else if (stage) {
+                if (stage->page_end(stage->ctx)) {
+                    say(cfg, "page %d: the output stage failed", pages + 1);
+                    rc = -1;
+                }
             } else if (colour) {
                 iwc_end_page(p->iwc);
-            } else if (!stage) {
+            } else {
                 iw_end_page(&p->iw);
-            } else if (stage->page_end(stage->ctx)) {
-                say(cfg, "page %d: the output stage failed", pages + 1);
-                rc = -1;
             }
         }
 

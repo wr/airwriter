@@ -168,6 +168,12 @@ Traps already explained in a code comment are listed only when the comment is ea
   `ribbon_check` was not needed. It needs the printer selected and between commands.
 - **The colour ribbon is reported as C straight after the width.** `iw_self_id_ribbon` takes C
   only there, so noise read out after a black reply cannot flip the board to colour.
+- **A cut-short job leaves the link dirty, and the idle `ESC ?` is then skipped** until a job
+  resyncs the printer (`ribbon_ask`, `s_link.dirty`). Since W-1116 an ImageWriter record reads
+  Ready only once `ESC ?` has named it since its line came up (`s_iw_named`), so a line-up
+  while the link is dirty must keep the record it named, or the printer reads Offline until
+  the next job (ruling R17, 2026-10-30). The plain question still runs every 5 s while the
+  printer isn't answering.
 
 ## IPP, iOS, macOS, mDNS
 
@@ -308,6 +314,71 @@ Traps already explained in a code comment are listed only when the comment is ea
 - **U8's ~RE rides `LT_DE`, so U8 shuts down while the PIC transmits.** Deliberate: wake is
   ≤ 1.8 µs against LocalTalk's ~200 µs inter-dialogue gap. It mirrors the U6 bug fixed on 08-22
   but is not that bug; don't "fix" it.
+- **A port record and the printer on the port can be of different families** (W-1103, W-1116). A
+  StyleWriter answering on a port whose records are ImageWriters, or the reverse, is a record of
+  its own once it has answered twice (`pr_port_seen_sw`, `pr_port_seen`: one answer is
+  `PR_SEEN_AGAIN`), never a notice; meanwhile nothing in a record's language goes out to the
+  other family's printer, by what is on the port now and what the work's own questions got,
+  never the list's last answer (`pr_port_other_family` is in the core and host-tested; nothing
+  on the board reads it). What phones are told follows the printer on the port (`pr_port_say`,
+  `port_push`); jobs, the test page and cleaning follow the record they are for (W-1116's job
+  commit): a job, test page or cleaning for a port record that is not the one on the port --
+  another port record's printer is -- is answered busy or 409 "Connect <name> to the printer
+  port first." (`pr_port_absent`, the port sink's `port_claim`, `port_page_refused`,
+  `clean_head`); a job or test page takes its family, model and screen from its own record
+  (`printers_record_*`), not the port's; an ImageWriter job on a quiet port sends no page byte
+  until its own model answers `ESC ?` (`colour_ok` on `pr_job_gate`). **The gate is fed only
+  what the job's own questions got (`s_job_heard`), never the list's `heard`**: the list's last
+  answer is history (a StyleWriter that answered and was unplugged stays `pr_port_current`), and
+  a gate read from it ended a quiet-port ImageWriter job at once with "Another printer was
+  connected" (task 6 review, I1). For the same reason the job's wait in `ribbon_ask` is not
+  guarded on the current record's mode; `lt_print_begin` reads `s_port_sw` (a StyleWriter now)
+  or a StyleWriter sighting whose repeat is pending (`s_port_confirm`, the 500 ms the port task
+  lets the lock go between the two answers, R16), not `pr_port_other_family`; and `sw_swapped`
+  is an ImageWriter on the port now (`printers_port_on_is_imagewriter`), not the list's last
+  answer. **A job's or test page's plain question goes before any ImageWriter byte whenever the
+  line is up** (the wait's 5 s question too), and a StyleWriter answering ends the call with
+  nothing else sent: a StyleWriter that raises its line and hears `ESC ?` first goes deaf until
+  a reset, and an original ImageWriter record would then take its silence for its own line (task
+  6 re-review, N2/N3). **A job's or test page's settle is its own**: `ribbon_ask`'s wait and
+  serial_out's line task poll the same pin every 100 ms, so `s_ribbon_want`/`s_ribbon_due`
+  (`printer_line_changed`, on the line task) may not be set yet when the wait sees the line up;
+  keyed off them alone, a II switched on mid-wait would get its first `ESC ?` ~0.3 s after the
+  line-up, too soon to answer, and with an original ImageWriter record listed its silence would
+  read as the original's. The wait holds 2 s from its own first sighting of the line up (or to
+  `s_ribbon_due`, whichever is later), never more than 2.5 s. `s_port_sw` flips only under the
+  job lock (`port_sw_sync`): read it with the lock held wherever a decision sends bytes; the
+  unlocked reads (`port_live`, `box_ready`, `status_json`, `printer_line_changed`) only show
+  state and may be one flip behind. And a StyleWriter-first port
+  (`port_policy.h`) gets `ESC ?` only after the plain question got nothing: `swfake.py` takes
+  `ESC ?` for a letter it does not know and stops listening until a reset.
+- **A StyleWriter's bytes at 57600 print nothing on an ImageWriter II at 9600** (board 1,
+  2026-10-27): 300 plain questions a second apart, then the full sequence (`00 FF FF FF 49`, 2 s,
+  `?`) once, each followed by a CR LF at 9600, left the paper blank but for the line feeds. So a
+  look or a swapped port's question costs an ImageWriter nothing; the bytes that can mark paper
+  go the other way, an ImageWriter's stream to a StyleWriter.
+- **A StyleWriter's rect is as wide as its rows' whole bytes** (board 1's Color StyleWriter 2500,
+  2026-11-02). Letter's printable width on the 2200, 2400 and 2500 is 2916 dots, and a rect that
+  wide over 365-byte rows stopped the 2500 before its first row: `1` read busy for about 6 s after `L`,
+  then `1` 00 and `2` 80, with `B` never rising. It counts a row's bytes from the rect's width
+  rounded down. A 2920-dot rect printed the page. The session once read that `2` 80 as spurious
+  (lpstyl's testers saw 80 with nothing wrong), so the page sat in `wait_room` to the 600 s
+  stall limit with the phone showing Printing; now 80 with `1` not busy and nothing draining
+  ends it after 10 s. TailTalk's rects are the printable width (fine on A4's 2832); lpstyl's
+  are always 2920.
+- **A Color StyleWriter 2500 goes dark on its own** (board 1, 2026-11-02): about 5 minutes after
+  a job's end (`E l`) its light goes out and it answers nothing, `?` and `1` alike, until
+  `00 FF FF FF 49` wakes it, answering 2 s later (a job's reset, the start-up reset, Look for
+  Printers'). Left alone after a reset with no job it stayed awake past 11 minutes. A second
+  reset close behind the first has left it dark, twice: the start-up full sequence's at 2 s and
+  a session's at 7 s, where a single reset woke it two minutes later. So a waking printer gets
+  10 s before a second reset, and a job's start up to three resets. It also went dark at once
+  after the reset that ends a failed page, after one Look for Printers wake it went dark again
+  10 s later, and once a job's first reset darkened it while it was awake and answering; two
+  more got nothing for 30 s, and the job's closing reset brought it back 70 ms later. Forum
+  threads on aging StyleWriters blame power-supply capacitors that brown out when the motors
+  start, which a reset does: this one may be that. A page cut short
+  (the board restarting mid-page) leaves it answering nothing but a reset as well.
 
 ## LaserWriters (W-1082)
 
@@ -342,7 +413,14 @@ Traps already explained in a code comment are listed only when the comment is ea
   `pr_rec_t` (or to `lw_info_t`, inside it) changes the blob's size, and an older firmware (an
   OTA rollback, the known-good reset) then reads none of it, keeps it untouched and shares no
   printer. Keep new facts about a printer beside it under a key of their own, as W-1098's
-  `seen` does (addresses and page counts).
+  `seen` does (addresses and page counts). A new kind or model (`pr_kind_t`, `pr_model_t`) is
+  not a new key either: an older `pr_load` refuses the number. Bump `PR_BLOB_VER` (W-1103's
+  StyleWriters made it 2), keep a reader for each older version in `pr_load`, and append,
+  never insert. The bump is also what tells an older firmware the list is a newer one's, to
+  keep; a list it merely cannot read is replaced. `pr_save` writes the lowest version that
+  holds the list (1 until a record or notice names a StyleWriter), so an OTA rollback does not
+  touch the printers of anyone with no StyleWriter. A StyleWriter's cartridge is no field of
+  the record: it is `pr_live_t.cart`, read by the board.
 - **A printer switched on is not ready at its first frame.** The NTR spends 8 s on LLAP ENQs
   (TashTalk passes other nodes' ENQs; `/api/lt` counts them in `frames`, not `heard`), then
   looks up its own name five times 2 s apart, and answers lookups only after that. Look after

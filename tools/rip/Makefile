@@ -14,6 +14,9 @@ INCS    := -I$(COMP)/ripjob/include \
            -I$(COMP)/imagewriter/include \
            -I$(COMP)/serial_out/include \
            -I$(COMP)/testpage/include \
+           -I$(COMP)/stylewriter/include \
+           -I$(COMP)/stylewriter \
+           -I$(COMP)/printers/include \
            -I.
 # serial_out is IDF-bound except for serial_writer.c, which is pure by design
 # so the deadline loop can be tested here. Name it, don't wildcard the dir.
@@ -27,6 +30,10 @@ SRCS    := $(wildcard $(COMP)/ripjob/*.c) \
            $(wildcard $(COMP)/halftone/*.c) \
            $(wildcard $(COMP)/imagewriter/*.c) \
            $(wildcard $(COMP)/testpage/*.c) \
+           $(COMP)/stylewriter/sw_model.c $(COMP)/stylewriter/sw_code.c $(COMP)/stylewriter/sw_page.c \
+           $(COMP)/stylewriter/sw_session.c $(COMP)/stylewriter/sw_status.c \
+           $(COMP)/stylewriter/sw_testpage.c \
+           $(COMP)/printers/port_policy.c \
            $(COMP)/serial_out/serial_writer.c
 TESTSRC := $(wildcard test/test_*.c)
 TESTBIN := $(patsubst test/%.c,build/%,$(TESTSRC))
@@ -81,7 +88,8 @@ build/test_pap_relay: test/test_pap_relay.c $(LT)/lt_proto.c $(LT)/lt_node.c $(L
 
 # W-1088: the printer list, beside the LaserWriter pieces it names records with.
 build/test_printers: test/test_printers.c $(COMP)/printers/printers_core.c $(COMP)/laser/lw_caps.c \
-                     $(COMP)/laser/lw_query.c $(COMP)/printer_caps/printer_caps.c $(LT)/lt_proto.c | build
+                     $(COMP)/laser/lw_query.c $(COMP)/printer_caps/printer_caps.c $(LT)/lt_proto.c \
+                     $(COMP)/stylewriter/sw_model.c $(COMP)/halftone/apple_tables.c | build
 	$(CC) $(CFLAGS) $(INCS) -I$(COMP)/printers/include -I$(LT)/include -Itest -o $@ $^
 
 build/test_lw_core: test/test_lw_core.c $(COMP)/laser/lw_core.c $(COMP)/laser/lw_status.c \
@@ -100,17 +108,51 @@ build/test_cable: test/test_cable.c $(CT)/cable_core.c $(LT)/lt_proto.c | build
 build/%: test/%.c $(SRCS) | build
 	$(CC) $(CFLAGS) $(INCS) -Itest -o $@ $^ -lm
 
+# The board's StyleWriter glue, the real stylewriter.c, against stand-ins for the ESP-IDF headers
+# (test/shim) and a printer scripted in the test (W-1103).
+build/test_stylewriter_board: test/test_stylewriter_board.c $(COMP)/stylewriter/stylewriter.c \
+                              $(SRCS) | build
+	$(CC) $(CFLAGS) $(INCS) -Itest/shim -Itest -o $@ $^ -lm
+
+# The page stage's memory, counted through bigmem.h (BIGMEM_COUNT): it holds no page or band.
+build/test_sw_page_mem: CFLAGS += -DBIGMEM_COUNT
+build/test_sw_page_mem: test/test_sw_page_mem.c $(SRCS) | build
+	$(CC) $(CFLAGS) $(INCS) -Itest -o $@ $^ -lm
+
+# So is the test page's (test_sw_testpage.c): what it holds, once, is in PSRAM.
+build/test_sw_testpage: CFLAGS += -DBIGMEM_COUNT
+build/test_sw_testpage: test/test_sw_testpage.c $(SRCS) | build
+	$(CC) $(CFLAGS) $(INCS) -Itest -o $@ $^ -lm
+
 # W-1088 review: the printer list's core takes none of the board's internal
 # RAM of its own (docs/traps.md): no writable statics, its buffers are the
 # caller's (the board's are in PSRAM).
 build/printers_core.o: $(COMP)/printers/printers_core.c | build
 	$(CC) $(CFLAGS) $(INCS) -I$(COMP)/printers/include -I$(LT)/include -c -o $@ $<
 
-test: $(TESTBIN) build/printers_core.o
+# The port policy (W-1103) is the same: pure, no state of its own, the caller passes the clock.
+build/port_policy.o: $(COMP)/printers/port_policy.c | build
+	$(CC) $(CFLAGS) $(INCS) -c -o $@ $<
+
+# The StyleWriter's model table, run coder, page stage, session and test page are held to the same rule
+# as the printer list's core (W-1103): no writable statics; the page stage's block and the
+# session's frame buffer come from the board's PSRAM allocator (bigmem.h).
+SW_OBJS := build/sw_model.o build/sw_code.o build/sw_page.o build/sw_session.o build/sw_status.o \
+           build/sw_testpage.o
+build/sw_%.o: $(COMP)/stylewriter/sw_%.c | build
+	$(CC) $(CFLAGS) $(INCS) -c -o $@ $<
+
+test: $(TESTBIN) build/printers_core.o build/port_policy.o $(SW_OBJS)
 	@fail=0; for t in $(TESTBIN); do ./$$t || fail=1; done; \
-	if nm build/printers_core.o | grep -E ' [bBdD] ' | grep -v ' ltmp'; then \
-	  echo "FAIL printers_core.c: writable statics (above)"; fail=1; \
-	else echo "ok  printers_core.c: no writable statics"; fi; exit $$fail
+	for o in printers_core port_policy $(basename $(notdir $(SW_OBJS))); do \
+	  if nm build/$$o.o | grep -E ' [bBdD] ' | grep -v ' ltmp'; then \
+	    echo "FAIL $$o: writable statics (above)"; fail=1; \
+	  else echo "ok  $$o: no writable statics"; fi; \
+	done; \
+	if grep -nE '(^|[^_a-z])(malloc|calloc|realloc)\(' $(COMP)/stylewriter/sw_testpage.c; then \
+	  echo "FAIL sw_testpage: a buffer not through bigmem.h (above)"; fail=1; \
+	else echo "ok  sw_testpage: every buffer through bigmem.h"; fi; \
+	exit $$fail
 
 clean:
 	rm -rf build
@@ -145,9 +187,46 @@ regress: build/rip
 pscheck: build/rip build/test_lw
 	@python3 test/pscheck.py
 
+# The StyleWriter's page stage held to swfake.py's reading of its stream and to a
+# second coder, lpstyl's (W-1103). Needs python3.14 with numpy (tools/stylewriter).
+LPSTYL := test/lpstyl_encode.c test/lpstyl_stream.c
+
+build/lpstyl_stream: $(LPSTYL) $(COMP)/stylewriter/sw_model.c $(COMP)/halftone/apple_tables.c | build
+	$(CC) $(CFLAGS) $(INCS) -Itest -o $@ $^
+
+.PHONY: swcheck
+swcheck: build/rip build/lpstyl_stream
+	@python3.14 test/swcheck.py
+
 # The PAP client, built for the host, printing to etpeer.py's fake
 # LaserWriter over a pipe (W-1082). Ghostscript renders what it gets when
 # installed; the test does not need it.
 .PHONY: interop
 interop: build/lwhost build/rip
 	@python3 ../ethertalk/test_interop.py
+
+# The firmware's StyleWriter session, page stage and rip on the host (W-1103): swhost prints a
+# page to a serial device, which is swfake.py's pty here and a real printer's adapter for an
+# owner (swprint, tools/stylewriter/README.md). Reads PNG pages through zlib.
+build/swhost: swhost.c png_read.c $(SRCS) | build
+	$(CC) $(CFLAGS) $(INCS) -o $@ $^ -lm -lz
+
+# The owner's name for it (tools/stylewriter/README.md); the program names itself by it.
+build/swprint: build/swhost
+	ln -sf swhost $@
+
+.PHONY: swinterop
+swinterop: build/swhost build/rip
+	@python3.14 ../stylewriter/test_swinterop.py
+
+# Apple's StyleWriter drivers' captures held to the firmware's session and rip (W-1103).
+# The captures are logs from the emulated-Mac rig (tools/stylewriter/capture.md), kept in
+# ~/.config/airwriter/sw-captures/ and never committed; without them this prints a skip line
+# and passes. `make swcaptures-selftest` runs the same checks on the firmware's own
+# conversations, to show they work.
+.PHONY: swcaptures swcaptures-selftest
+swcaptures: build/swhost build/rip
+	@python3.14 test/swcaptures.py
+
+swcaptures-selftest: build/swhost build/rip
+	@python3.14 test/swcaptures.py --selftest --no-png

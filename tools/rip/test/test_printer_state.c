@@ -178,6 +178,38 @@ int main(void)
     assert(st(&ps, 84999) == PS_PRINTING);
     assert(st(&ps, 85000) == PS_ATTENTION);
 
+    // W-1103: a StyleWriter that reports a fault mid-job (no paper, a jam) needs attention at
+    // once, with the 30 s a chattering HSKo is given not waited; its fault clearing resumes
+    // the job. The line plays no part: a StyleWriter's HSKo is ignored.
+    up_and_ready(&ps, 0);
+    ps_post(&ps, PS_EV_JOB_START, 5000);
+    assert(st(&ps, 5000) == PS_PRINTING);
+    ps_post(&ps, PS_EV_FAULT_ON, 6000);
+    assert(st(&ps, 6000) == PS_ATTENTION);
+    assert(st(&ps, 7000) == PS_ATTENTION);
+    ps_post(&ps, PS_EV_FAULT_OFF, 8000);
+    assert(st(&ps, 8000) == PS_PRINTING);
+    // The fault outlasts nothing: a job that ends under one is over, and the next starts clear.
+    ps_post(&ps, PS_EV_FAULT_ON, 9000);
+    assert(st(&ps, 9000) == PS_ATTENTION);
+    ps_post(&ps, PS_EV_JOB_FAILED, 10000);
+    assert(st(&ps, 10000) == PS_FAILED);
+    ps_post(&ps, PS_EV_JOB_START, 11000);
+    assert(st(&ps, 11000) == PS_PRINTING);
+    ps_post(&ps, PS_EV_JOB_DONE, 12000);
+    ps_post(&ps, PS_EV_FAULT_ON, 13000);            // no job: a fault says nothing to the panel
+    assert(st(&ps, 13000) == PS_READY);
+    ps_post(&ps, PS_EV_JOB_START, 14000);
+    assert(st(&ps, 14000) == PS_PRINTING);          // and a job does not start under it
+    ps_post(&ps, PS_EV_FAULT_ON, 15000);
+    ps_post(&ps, PS_EV_JOB_CANCELLED, 16000);
+    ps_post(&ps, PS_EV_JOB_START, 17000);
+    assert(st(&ps, 17000) == PS_PRINTING);
+    // A fault is not the line: the ImageWriter's 30 s still holds beside it.
+    ps_post(&ps, PS_EV_LINE_NOT_READY, 18000);
+    assert(st(&ps, 47999) == PS_PRINTING);
+    assert(st(&ps, 48000) == PS_ATTENTION);
+
     // A failed job holds for failed_hold_ms; the next job clears it at once.
     up_and_ready(&ps, 0);
     ps_post(&ps, PS_EV_JOB_START, 5000);

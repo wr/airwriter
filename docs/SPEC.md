@@ -238,8 +238,9 @@ Minimum viable set for iOS:
 - `Get-Printer-Attributes` (0x000B) — must respond in under two seconds or the print sheet
   gives up
 - `Validate-Job` (0x0004)
-- Each printer answers at its own resource (3.15): `ipp/print` for the port's, `ipp/p<id>`
-  for one on AppleTalk; any other path goes to the port's while it is shared.
+- Each printer answers at its own resource (3.15), `ipp/p<id>`, port records included; the
+  oldest port record also at `ipp/print`, and any other path goes to it while it is shared
+  (W-1116; before, `ipp/print` was the port's one record and `ipp/p<id>` AppleTalk's).
 - `Print-Job` (0x0002) — body arrives chunked, into a 1 MB PSRAM buffer as fast as Wi-Fi
   delivers it. An ImageWriter job holds 512 KB of URF in it, and the rip runs as the URF
   arrives into the other 512 KB, which holds the printer's bytes and drains to the port at
@@ -259,6 +260,10 @@ Minimum viable set for iOS:
   and the client asks again (RFC 8011). It never waits with its document unread: received
   frames left unread hold internal RAM, and on the W-1076 bench a job that waited behind a
   Mac's page could not start its rip.
+  A job to a port printer that is not the one on the port -- another port record's printer is
+  (`pr_port_absent`, the port sink's `port_claim`, W-1116) -- is answered `server-error-busy`
+  the same way, nothing held, so the printer that is there keeps printing and the phone keeps
+  the job and asks again; it prints once the person swaps the cable (3.16).
 - `Get-Job-Attributes` (0x0009) — iOS polls this for progress
 - `Get-Jobs` (0x000A)
 - `Cancel-Job` (0x0008)
@@ -653,8 +658,8 @@ ImageWriter on the port keeps its identity, UUID and bytes (`tools/ipp/test/gold
   back intact; otherwise hex. Answers in its record; run again at the first answer after boot
   and when the printer comes back, tried again after 60 s twice, then every 5 minutes. Three
   unanswered make the "didn't answer" notice (Share Anyway takes its defaults).
-- **The AirPrint printer** (`ipp_server` printer 1-3, `laser/lw_caps.c`): `ipp/p<id>` (a board's
-  W-1082 LaserWriter keeps `ipp/laser`), its own Bonjour instance (its name in the list),
+- **The AirPrint printer** (`ipp_server` printer 1-6, `laser/lw_caps.c`): `ipp/p<id>` (a board's
+  W-1082 LaserWriter advertises `ipp/laser` and answers at both), its own Bonjour instance (its name in the list),
   `printer-uuid` `41575254-4c57-<CONFIG_AIRWRITER_LASER_UUID_EPOCH>-
   <hash of the NBP name>-<MAC>`, URF `RS300`, `W8`, only the paper it reported, margins from its
   imageable area rounded outward, `laser-*.png` icons. One job at a time across every printer.
@@ -697,11 +702,16 @@ printers it has, found or told (`components/printers`: `printers_core.c` pure an
 read back is a list made again). At most 8 records.
 
 - **Records.** id (stable), where (port, or an AppleTalk link), kind (ImageWriter with model II,
-  LQ or original; LaserWriter; AppleTalk ImageWriter; unknown), name (from the printer: the
+  LQ or original; StyleWriter with one of its seven models, 3.16; LaserWriter; AppleTalk
+  ImageWriter; unknown), name (from the printer: the
   port's model, an AppleTalk printer's NBP name; two the same get " 2"; renamed freely, UTF-8,
-  MacRoman for NBP), uuid (made once: a new port printer `41575254-4c57-<epoch>-0001-<MAC>`, an
-  AppleTalk printer W-1082's form), shared, found (auto or person), halftone and gain, and a
-  LaserWriter's query answers.
+  MacRoman for NBP), uuid (made once and never changed, whatever the record's model becomes:
+  a port record `41575254-4c57-<epoch>-<model><family>-<MAC>`, the model's number and `01`
+  for an ImageWriter or `02` for a StyleWriter, since W-1116, each model's record its own
+  printer to phones; before W-1116 the family tag alone, `0001` or `0002`, which records from
+  then keep; a form a record since corrected to another model still holds sets the model
+  byte's top bit; an AppleTalk printer W-1082's form), shared, found (auto or person),
+  halftone and gain, and a LaserWriter's query answers.
 - **Renamed** (W-1098). A LaserWriter's record also keeps where it last answered its query (the
   link and its address there) and its page count, in NVS `printers`/`seen` beside the list
   (`pr_seen_save`; the list's blob is unchanged, so an older firmware reads it). A printer new to
@@ -711,31 +721,128 @@ read back is a list made again). At most 8 records.
   settings; the new record goes, with no notice. Otherwise a new name is a new printer.
 - **The port.** At line-up after 1 s or more down (and at the first report) the board sends
   `ESC ?` and `CR`: `IW10`… is an ImageWriter II, `LQ`… an LQ, no answer with the line ready an
-  unknown device, named "Unknown printer", never shared. ImageWriter commands (the CTRL-X kick,
-  resync, the job's self-ID, the test page) go to J2 only for an ImageWriter (the kick also with
-  nothing found yet). "Something else" stops even the self-ID. A different model answering is a
-  notice, not a change. "Add a Printer…" makes the port's record by hand (original ImageWriter,
-  one that is off).
-- **Sharing.** Identified printers are shared at once, up to four (the port's, three on
-  AppleTalk), each its own AirPrint printer: the port's at printer 0 (`ipp/print`), AppleTalk's
-  at 1-3 (`ipp/p<id>`), Bonjour by name. A change reaches Bonjour at once, after the job holding
-  its slot. The W-1079 AirPrint switch is the whole box's. AirPrint to an AppleTalk ImageWriter
-  is not built: it is old Macs' only.
-- **Notices.** Only what asks the person something: unknown port, changed (accept or dismiss),
-  no answer (Share Anyway), too many; at most 8, each with a caution mark, and one beside the
-  sidebar's Printers while any waits. A newly found printer just appears in the list (a "found"
-  notice stored by an older build is dropped on load).
-- **Old Macs.** On each way in that is on, the node's own name is the port's ImageWriter (if
-  any), registrations 1-3 the AppleTalk printers from other links under their own NBP names and
-  types (relayed), and `<host name>:AirWriter` at registration 4 on every running link
-  (`lt_node_offer`, sockets 0x85-0x88). A Mac's connection on a relayed name goes through
-  `localtalk/pap_relay.c`, run by `laser.c` with the one PAP client under the job lock: busy, in
-  the printer's own status words, until the printer's connection is open; then both ways as
-  they are, the printer's output 256 bytes a read.
-- **Panel.** Idle, the box: ready while any shared printer is; while the port prints, its own
-  line; during a LaserWriter job, the LaserWriter's.
-- **Test page.** The button, DIP4 and the page's Print Test Page (without an id) go to the port's
-  ImageWriter, else the first shared printer; `POST /api/test {"id":N}` names one.
+  unknown device, named "Unknown printer", never shared (made only with no port record; with
+  an original ImageWriter record it is that record's answer, with any other port record a lost
+  answer, nothing). A StyleWriter may never raise the line
+  and speaks at 57600, so a port whose printer does not answer is also asked the StyleWriter's
+  plain question, one `?` byte that an ImageWriter at 9600 does not hear; a StyleWriter that
+  answers it is a port record of its own (3.16 has the rules and what each question costs).
+  ImageWriter commands (the CTRL-X kick, resync, the job's self-ID, the test page) go to J2 only
+  for an ImageWriter (the kick also with nothing found yet), and never to a StyleWriter.
+  "Something else" stops even the self-ID. W-1116 (3.16): the port keeps a record for every
+  model that answers on it, one per model, and the one that answered last is the printer on
+  the port. An answer naming a recorded model, where nothing else would change, is that
+  record's, at once. One that would change the list (a model with no record, or one that
+  would replace a "Something else" record or drop a found "Unknown printer" record, whether
+  or not the model has a record, ruling R16) changes it only when it comes twice in a row
+  (any other model's answer, or nothing said, in between starts it over; the line down does
+  not), so a garbled reply never changes the list: it makes the model's record, shared if
+  there is room; a found "Unknown
+  printer" record becomes it (uuid kept), or goes with its notice when the model has a record
+  already; a "Something else" record is replaced. "Add a Printer…" adds a record for a model
+  not in the list (original ImageWriter, one that is off, a StyleWriter by model), beside the
+  records there, or converts an "Unknown printer" or "Something else" record; a model already
+  listed is refused, and so is a record's Model set to one another record has, or to
+  Something else while another port record is one (one per port). The one on the port (the
+  record that answered last) shows its state; every other port record is Offline. An
+  ImageWriter record reads Ready only once `ESC ?` has named its model since the line came up
+  (never from the line alone), so the page never shows the wrong ImageWriter for a moment. A
+  line-up mid-job (a paper reload drops the line) keeps the name, and so does one while the
+  link is dirty after a job cut short, when the idle `ESC ?` waits for a job's resync (3.8)
+  (R17; the plain question still runs while the printer isn't answering). A II or LQ record
+  on the port whose `ESC ?` answer was lost gets the 5 s plain question and then `ESC ?` when
+  it got nothing, while its line is up (R20, 3.16). Removing the record on the port forgets
+  the port's last answer,
+  and the port is asked again at once (R19). `/api/status` `model` is the record
+  on the port's make and model, an ImageWriter's by its model. How long a change takes to
+  show (a job or test page waiting for its ImageWriter takes the same 2 s settle after the
+  line comes up, then the plain question and `ESC ?`, 3.16):
+
+  | Printer | Plugged in or switched on, to Ready | Unplugged or switched off, to Offline |
+  |---|---|---|
+  | ImageWriter II or LQ | 2-3 s (line up, the 2 s settle, `ESC ?`) | 3 s |
+  | Original ImageWriter | About 3 s (line up, the settle, `ESC ?` and the plain question unanswered) | 3 s |
+  | StyleWriter II, 1200, Color 1500-2500 | Within 5 s | Within 10 s |
+  | Original StyleWriter | On Look for Printers or at start-up | Reads Ready while quiet once found |
+  | LaserWriter on AppleTalk | In seconds | 30 s |
+
+- **Sharing.** Identified printers are shared at once, up to six (`PR_SHARE_MAX`, W-1116; any
+  mix of the port's records and AppleTalk printers, where before it was the port's and three
+  on AppleTalk), each its own AirPrint printer in one of `IPP_PRINTERS` (7) slots: printer 0
+  is the oldest port record's alone and stays empty while that record is not shared or there
+  is none, printers 1-6 take every other shared record, so six fit either way (R14). Bonjour
+  by name (`CONFIG_MDNS_MAX_SERVICES` 10 in `sdkconfig.defaults`: only a slot with a record
+  registers, so at most six `_ipp`, printer 0's `_printer` stub and `_http`, 8 of the 10).
+  Every record answers at `ipp/p<id>` for as long as it exists, port records
+  included; the oldest port record is also advertised at `ipp/print`, at printer 0, with the
+  legacy routing of any other path, and W-1082's LaserWriter also answers at `ipp/laser`.
+  Removing the oldest port record moves `ipp/print` to the next one, whose `ipp/p<id>` keeps
+  working (`/api/printers` `rp` names the advertised path; the slot's `legacy_resource` is the
+  other, and `ipp_route` tries every slot's two paths, slot 0's included, before any other
+  path falls to slot 0). The seventh identified printer is listed, not shared, with the
+  "too many" notice, and can be shared once another stops; a shared record keeps its place
+  through a model change. A change reaches
+  Bonjour at once, after the job holding its slot. The W-1079 AirPrint switch is the whole
+  box's. AirPrint to an AppleTalk ImageWriter is not built: it is old Macs' only. The slots
+  (`printers.c`): printer 0 is the oldest port record; every other shared record, port or
+  AppleTalk, takes the lowest free slot of 1-6 and keeps it for its life there; a record that
+  becomes the oldest moves to printer 0 under the same Bonjour name: printer 0 is cleared
+  first (while a job holds printer 0 nothing moves until it ends), then the record leaves its
+  old slot and takes printer 0; while a job holds its old slot it stays there and `ipp/print`
+  answers nobody until that job ends. After any such move, and after one that waited for a
+  job, every port slot is told its state again (`printers_cfg_t.placed`: a slot starts with
+  none). A port record's slot carries the record's own sink, with
+  its slot and id in the ctx as a LaserWriter's does, so a job's end goes back to the slot it
+  came in on. What a port record's slot says (`pr_port_say`, `main.c`'s `port_push`, on every
+  change of the port's state or the list): the printer on the port its own state, in its
+  family's words (3.9's for an ImageWriter, 3.16's for a StyleWriter), and the colour the
+  ribbon or cartridge last read offers (a black-only StyleWriter and an original ImageWriter
+  none; a record that is not on the port keeps the colour it last offered, unless its model
+  has none, until its slot is put again for another printer, which starts with none until it
+  answers); every other port
+  record `stopped` with the message "Offline", the one word the page shows too for every
+  offline printer of any kind, whether nothing answers, another port record's printer is
+  present or a Something else record is listed (2026-10-31: Offline is a status name
+  alone; what to check, and why, are the wiki's Offline troubleshooting row's); only the reason keyword differs, `offline-report` while the port is
+  another's (`PR_PORT_SAY_TAKEN`), the family's own with nothing answering; so phones see
+  every shared port printer all the time, each offline while it isn't the one answering. The
+  same printer put in its slot again (a rename, a model change: its uuid) keeps its state and
+  colour; another one starts with none until its owner pushes them.
+- **Notices.** Only what asks the person something: unknown port, no answer (Share Anyway),
+  too many; at most 8, each with a caution mark, and one beside the sidebar's Printers while
+  any waits; each is dismissed. A newly found printer just appears in the list, and so does a
+  different printer answering on the port (W-1116): a "found" notice stored by an older build,
+  or a "changed" one (accept or dismiss) from before W-1116, is dropped on load.
+- **Old Macs.** On each way in that is on, the node's own name is the port's one ImageWriter
+  (if any): the oldest ImageWriter record's name, fixed across swaps so a Chooser selection
+  keeps working (W-1116; `pr_offers` lists that record alone for the port, and
+  `printers_offers` names it from `pr_chooser_name`, where before the last port ImageWriter
+  overwrote the name). `pr_chooser_name` is also the queue name at boot (mDNS's default
+  instance, the node's NBP object): the oldest ImageWriter record's name, else the oldest port
+  record's, else "AirWriter" (before W-1116, the one port record's). The test page names its
+  own record (`printers_describe`), the one it was sent to.
+  A Mac's ImageWriter job goes to whichever ImageWriter answers on the port (the II, LQ and
+  original take the same stream). Registrations 1-3 are the AppleTalk printers from other
+  links under their own NBP names and types (relayed), and `<host name>:AirWriter` is at
+  registration 4 on every running link (`lt_node_offer`, sockets 0x85-0x88). A Mac's
+  connection on a relayed name goes through `localtalk/pap_relay.c`, run by `laser.c` with the
+  one PAP client under the job lock: busy, in the printer's own status words, until the
+  printer's connection is open; then both ways as they are, the printer's output 256 bytes a
+  read.
+- **Panel.** Idle, the box: ready while the printer on the port is, if its record is shared
+  (`box_ready`: an ImageWriter once `ESC ?` named it), or any shared LaserWriter is; while the
+  port prints, its own
+  line (a StyleWriter has none: its answers to `1` and `2`); during a LaserWriter job, the
+  LaserWriter's. The port's own state belongs to one record (`pr_port_live_id`, W-1116): the
+  printer on the port, or the Something else record while one is listed; every other port
+  record's live state is offline, on the page, to phones and in the box's state alike.
+- **Test page.** The button, DIP4 and the page's Print Test Page (without an id) go to the
+  printer on the port (`pr_port_current`, an ImageWriter or StyleWriter record) while it is
+  present, else the first shared printer that is ready, else that port record (the button then
+  runs the cable test, as before), else the first shared printer (`pr_test_target`, W-1116);
+  while a Something else record is listed no port record gets it. `POST /api/test {"id":N}`
+  names one; for a port record that isn't on the port, or any port record while a Something
+  else record is listed, it answers 409 "Connect <name> to the printer port first."
 - **Setup.** In setup mode the port is asked and the cable looked on at once, and the page is
   three steps, sized for a phone: the printers found, Wi-Fi, then "You're All Set" (how to print
   from a phone, and the test button for a test page; the settings' address for later, nothing
@@ -745,10 +852,420 @@ read back is a list made again). At most 8 records.
   made from what it had: the port's ImageWriter with its old uuid and the AirPrint switch as its
   Share (the switch then on), a W-1082 LaserWriter at `ipp/laser`. Its host name is stored, so
   `imagewriter-xxxx` stays; a new board is `airwriter-xxxx` with the AppleTalk port on.
-- **Web.** `GET /api/printers` (records with live state and `rp`, notices, `max_shared`);
-  `POST /api/printers` with `{"look":true}`, `{"add_port":"<model>"}`, `{"note":N,"accept"|
-  "dismiss":true}` or `{"id":N, "name", "shared", "model" ("none" for Something else),
-  "remove", "use_anyway", "dither", "gain"}`; 400 with a sentence for the page.
+- **Web.** `GET /api/printers`: the records with live state and `rp` (above), the notices,
+  then (W-1116) `port_on` (the id of the port record whose printer is on the port: the one
+  that answered last, while it is present; 0 for none), `said_other` (a Something else record
+  is in the list), `chooser` (the names vintage Macs see: the port ImageWriter's as on the
+  page, an AppleTalk printer's own NBP name whatever the page calls it) and `max_shared` (6);
+  `swapped` is gone. `POST /api/printers` with `{"look":true}`, `{"add_port":"<model>"}`,
+  `{"note":N, "dismiss":true}` or `{"id":N, "name", "shared", "model" ("none" for Something
+  else), "remove", "use_anyway", "dither", "gain", "clean"}`; 400 with a sentence for the page
+  ("<model> is already in Printers." for `add_port` or `model` naming a model another port
+  record has, "Something else is already in Printers." for `model` `none` while another port
+  record is one, "You can share up to 6 printers." at the cap, W-1116). A StyleWriter's record
+  also carries `cartridge` and `fault` (3.16).
+
+### 3.16 StyleWriters (W-1103)
+
+Design: `docs/superpowers/specs/2026-10-25-stylewriters-design.md`. Phase 1 is AirPrint to a
+StyleWriter on the printer port: `components/stylewriter` (`sw_model`, `sw_code`, `sw_page`, `sw_session`,
+`sw_status` and `sw_testpage` are pure and host-tested in `tools/rip`; `stylewriter.c` is the
+board's), `components/printers/port_policy.c`, and `tools/stylewriter` (the software printer
+and the owner's tool). **Built and host-tested against a software StyleWriter
+(`tools/stylewriter/swfake.py`) and a second coder (lpstyl's); a Color StyleWriter 2500 ran the
+test page to its end on a rev A board (2026-11-02, its dry cartridge left the sheet blank), no other
+model has printed from AirWriter, and Apple's drivers have not been captured** (the rig stops at a 68k Mac ROM,
+`tools/stylewriter/capture.md`). The command letters, orders, geometry and block caps are
+TailTalk's reading of Apple's drivers (`tailtalk/src/stylewriter/*`, FeralFirmware; read for
+facts, never copied) and lpstyl's `README.protocol`; only the Color StyleWriter 2200 has
+printed from TailTalk on a real printer. Phase 2, vintage Macs printing through AirWriter as
+Apple's StyleWriter adapter (ADSP, not PAP), is not built.
+
+- **Models.** `sw_model_t`: the original StyleWriter, StyleWriter II, StyleWriter 1200, Color
+  StyleWriter 1500, 2200, 2400 and 2500 (the names the page and Bonjour use). The Portable
+  StyleWriter and the Color StyleWriter 4100, 4500 and 6500 are not supported. A port record
+  of kind StyleWriter keeps its model (`pr_model_t`, appended after the ImageWriters' so stored
+  numbers keep theirs). The list blob is version 2 for it, with a reader for version 1, and 3
+  for a second port record (W-1116; the layout is the same throughout); `pr_save` writes the
+  lowest version that holds the list, 1 until a record or notice names a StyleWriter and 2
+  until a second port record, so an OTA rollback does not touch a one-printer list, and a
+  rolled-back firmware keeps a newer stamp unread for the next update (`docs/traps.md`).
+- **Two languages on J2.** An ImageWriter is 9600 baud with CTS on HSKi (3.9); a StyleWriter is
+  57600 baud, 8N1, RS-422, no flow control (`serial_out_set_link`; its handshake line is not a
+  pacing signal and says nothing, so a low line is no sign of a cable and the test button's
+  cable-test branch is skipped for it). The link follows the port's record. Every question puts
+  it back, and ImageWriter-only traffic (`ESC ?`, the CTRL-X kick, the resync, the job's
+  self-ID, the ImageWriter test page) goes after `stylewriter_link(0)` and never to a
+  StyleWriter record. The cable is expected to be the ImageWriter II's (Apple's
+  System/Peripheral-8 crossover), as a StyleWriter plugs into a Mac's printer port the same
+  way: not yet confirmed on a StyleWriter.
+- **Recognition.** Two questions. The *plain question* is the one byte `?` at 57600. At 9600 its
+  frame is a 17 µs low pulse, high past the receiver's mid-bit check, then a 35 µs low that
+  ends in the stop bit before the next check: an ImageWriter's UART takes both for false start
+  bits and hears nothing (`tools/stylewriter/test_plain_question.py` runs a 16× receiver model
+  at 64 phases). The II, 1200 and colour models answer it, to CR at 250 ms a byte: `SW` the II,
+  `SW3` the 1200, `CS` a colour model, whose member is the byte after `FF FF FF 70` (`p`): 01
+  the 2400, 02 the 2200, 04 the 1500, 05 the 2500, anything else the 2200; a `CS` that does
+  not answer `p` names no model, and the next look asks again. `p` sent to any other model
+  ejects and resets it, so only a `CS` is sent it. The *full sequence* is the reset
+  `00 FF FF FF 49` (eject and reset), a 2 s settle, a drain, then `?` again, and again a
+  second at a time for 8 s before a second try with an 8 s settle (a 2500 waking from its
+  sleep stayed dark when the second reset came 2 s after the first); it also finds the original (`IJ10`), which ignores `?` until reset (InkTalk's notes,
+  from its author's own original; not yet seen here). Its `00` and `49` can read as stray
+  characters at 9600, so it goes only to a printer a record or the person has named: before
+  every job to a StyleWriter record, once when the person picks a StyleWriter (Add a Printer…,
+  the unknown printer's notice, the detail's Model), to confirm it and read its model, and to
+  any StyleWriter record once at start-up and on the person's Look for Printers when
+  nothing else answered (2026-10-27, for the original; every model since 2026-11-02, when
+  a Color StyleWriter 2500 answered nothing but a reset after a page cut short and while asleep). So the
+  original is found only when named.
+- **What the idle port is asked** (`port_policy`, pure: one act a call, every 500 ms, under the
+  job lock and never while a job runs on the port; `port_tick`, `port_after` and
+  `port_line_down` keep its books between calls, so the host tests run the whole loop against
+  scripted printers for ten minutes, every record against every printer, and through scripts
+  of swaps with the list kept as the board keeps it). Its inputs are the current port record's
+  kind (`pr_port_current`, W-1116), what the list holds (any StyleWriter record, an original
+  ImageWriter record, an original StyleWriter record: the order of the questions is the
+  list's, not the current record's alone), the family that answered last, the line, and the
+  events. In this order: an act the board wants repeated (`confirm`: a seen call answered
+  `PR_SEEN_AGAIN`, one sighting of an answer that would change the list, and the same answer
+  twice makes the change, R16), at once, before anything else; the person said Something
+  else, nothing of
+  AirWriter's own, and the person's own Look for Printers asks once, as any look does, with
+  nothing following it (not the plain question that follows an unanswered `ESC ?` elsewhere,
+  not the cadence, and a full sequence owed waits until the Something else record goes); a
+  StyleWriter record that answers, `1` and `2` every 10 s, on a look and on a line-up edge
+  (the line may be another printer's: a StyleWriter that is gone turns into the stop's look at
+  once, and the check's bytes at 57600 are harmless to an ImageWriter, `docs/traps.md`
+  2026-10-27), and nothing else (no `ESC ?`, no plain question, no kick); on a line-up edge or
+  a look with the line ready, for every other port, the
+  plain question first where the port is StyleWriter-first (any StyleWriter record listed, a
+  port that last answered as a StyleWriter, or an original ImageWriter record listed, which
+  gives no self-ID), then `ESC ?` once that got nothing, and `ESC ?` alone everywhere else (an
+  empty port, ImageWriter II or LQ records only), so an ImageWriter swapped in is noticed and
+  a StyleWriter that would answer never hears `ESC ?` (`swfake.py` takes it for a letter it
+  does not know and stops listening until a reset; one that raises its line on a port with no
+  StyleWriter record hears it first, the design's cost); the plain question on a look with the
+  line down; the full sequence once while a StyleWriter record is listed and nothing
+  answers, at start-up (the board sets `full_due`; a look of the board's own goes first and
+  leaves it owed) and when the person's Look for Printers got nothing from the plain question
+  or `ESC ?` (or from the status, for one that was answering), since the original ignores the
+  plain question until a reset and nothing else finds it, and a 2500 asleep or left with a page
+  cut short answers nothing else either; to an original's record at once, to any other only
+  once a plain question got nothing, so a StyleWriter that answers is never reset idle; never
+  on a cadence, and
+  not once anything answers (an ImageWriter's `ESC ?` there is the ImageWriter's answer, 3.15);
+  the plain question while the port's printer does not answer, every 5 s (W-1116; 60 s on the
+  StyleWriter branch), whatever the list holds and whatever answered last, so a StyleWriter
+  plugged in is found in seconds by someone who never added it, at boot after the quiet
+  power-on, when `ESC ?` went unanswered, and once per busy spell when a kick is wanted and
+  none has been asked since the line went down; an ImageWriter II or LQ record on the port
+  that `ESC ?` has not named since its line came up (a lost answer, `iw_unnamed`: not on a
+  dirty link, not before the line-up's own question has run, and not while a StyleWriter
+  answered last) gets the 5 s plain question and then `ESC ?` when it got nothing, while its
+  line is up and it does not answer (R20); the CTRL-X kick last, only after a plain
+  question since the line went down that got nothing, and never while the current record is a
+  StyleWriter, so a StyleWriter that answers the plain question is never kicked (the
+  StyleWriter branch's quiet ImageWriter record, nothing of its own and one kick a look while a
+  StyleWriter answered on its port, went with the "changed" notice it waited for). An
+  ESC ? that gets nothing with the line up is an original ImageWriter record's answer while
+  one is listed, whatever record is current. The plain question asked for a line-up or a look
+  goes with it: once the event ends any other way, the next line-up asks the plain question
+  first again. A StyleWriter that answers is its record's, or makes one once it has answered
+  twice (3.15), shared at once, named by its model; one that stops answering stays in the list,
+  offline (but the original, below). A StyleWriter record that was answering and stops (its
+  `1` and `2`, or a job's question, get nothing) is looked at once, once per stop: the plain
+  question, then `ESC ?` if that got nothing, so an ImageWriter put in its place with its line
+  already up (behind an A/B switch) is found within one status interval, and one whose line
+  comes up while the StyleWriter record still answers is found by the status its line-up edge
+  asks at once (R11) and the stop's look, in about 1.5 s from the edge. The board raises that
+  edge 2 s after the line itself comes up (the settle), so about 3 to 3.5 s from the line
+  coming up. So the design's timings hold: a StyleWriter within 5 s, an ImageWriter 2 to 3 s
+  after its line comes up (the settle, then `ESC ?`), whatever answered before; only a
+  StyleWriter that raises no line, put in place of one that answers, waits for the next status
+  check, within 10 s, whose `?` names it.
+- **Several printers on the port** (`W-1116 Printer port: several printers, the one plugged in
+  shows online`; design `docs/superpowers/specs/2026-10-30-port-printers-design.md`, which
+  replaces the StyleWriter branch's swapped-port refusal and W-1088's "changed" notice). The
+  printer list keeps a port record per model (3.15), the family that last answered on the port
+  and the model it named (`pr_port_heard`, `heard_model`: `ESC ?` naming an ImageWriter, an
+  original ImageWriter record's line up with nothing said, the plain question, the full
+  sequence, and a record's own `1` and `2` or a job that printed, which keep the model of the
+  printer on the port when it is of that family), and from them the printer on the port
+  (`pr_port_current`: the record whose model answered last, else the oldest; `pr_port` is
+  always the oldest, the record a board had before, which keeps `ipp/print`).
+  One family's bytes never reach the other by what is on the port now and what a job's own
+  questions got, never the list's last answer: a job, test page or cleaning for a record that
+  is not the one on the port is refused (`pr_port_absent`), an ImageWriter job's own `ESC ?`
+  and plain question gate its page (`pr_job_gate`: go when its own model answered -- an
+  original ImageWriter: its line up with nothing said -- wait while nothing answers, stop when
+  another model or a StyleWriter did), and the StyleWriter glue sends nothing while an
+  ImageWriter is the printer on the port (`printers_port_on_is_imagewriter`).
+  `pr_port_other_family` (the port last answered as the other family) stays in the core with
+  its host tests, but nothing on the board reads it. None of it is stored; a "changed" notice
+  stored before is dropped on load.
+  Built so far and host-tested: in `printers_core` the records, the twice-seen rule, the
+  per-model uuid, the version 3 blob, `/api/printers` without `swapped`, what each port
+  record's AirPrint printer says of itself (`pr_port_say`), the record the port's state
+  belongs to (`pr_port_live_id`) and the Chooser name (`pr_chooser_name`); in `port_policy`
+  the list-level inputs, the 5 s plain question, the person's look on a Something else port
+  and the repeat of a first sighting (above); in `ipp_server` a slot per shared record, any
+  mix, slot 0's legacy path. On the board: every shared port record is its own AirPrint
+  printer in its slot (3.15 Sharing), the one on the port with the port's state and colour,
+  the others "Offline", never why; only that record carries the port's live state on the page;
+  the Chooser name and the queue name are the oldest ImageWriter record's; a port job's end
+  goes to the slot it came in on; the StyleWriter glue's `swapped` is an ImageWriter being the
+  printer on the port now (`printers_port_on_is_imagewriter`: its record current and present),
+  whichever record. The current record is the port's mode and state: `printers_port_mode`,
+  `s_port_sw` and the live state, model, screen, sharing and `/api/status` `model` follow
+  `pr_port_current`, so the page reads the printer that answered last (a job or test page
+  takes its family, model and screen from its own record), and a Something else record in the
+  list silences the port whatever else is there. An
+  ImageWriter record reads Ready only once `ESC ?` has named its model since the line came up
+  (`s_iw_named`), never from the line alone, so the page never shows the wrong ImageWriter for
+  a moment, and Ready appears with the answer, about 2 to 3 s after the line comes up. The
+  board sets `confirm` to repeat a first sighting, asks every 5 s and in the list's order, and
+  gives the policy the current record's kind; a person's model change on the port forgets the
+  port's last answer (R10) and the port is asked again at once; the person's pick of a
+  StyleWriter is confirmed on the record they named (`pr_port_sw_found` by id). Jobs, the test
+  page and cleaning follow the record they are for, not the oldest and not the printer on the
+  port (W-1116's job commit): a job for a port record while another port record's printer is
+  on the port is answered busy (`port_claim` on `pr_port_absent`, 3.4), and the page's Print
+  Test Page and Clean Print Head for it answer 409 "Connect <name> to the printer port first."
+  (only the page can name such a record: the button's and DIP4's target, `pr_test_target`, is
+  the printer on the port, a ready shared printer, or the port's record for the cable test, as
+  before). A job or test page takes its family, model and screen from its own record
+  (`printers_record_is_sw`, `printers_record_model`, `printers_record_screen`), not the port's.
+  An ImageWriter job that starts on a quiet port sends no page byte until its own model has
+  answered `ESC ?` (`colour_ok` on `pr_job_gate`), and the gate reads only what this job's own
+  `ESC ?` and plain questions got (`s_job_heard`, reset as its wait begins), never the list's
+  last answer: a StyleWriter that answered before the job and was unplugged, or an LQ that
+  answered before a II job, neither ends the job nor passes it. The wait is for the job's
+  record's line whatever record is on the port now, to one stall limit in all
+  (`CONFIG_AIRWRITER_STALL_ABORT`, the questions' time counted), asking the plain question every
+  5 s with the line down. A line that comes up while the job waits gets the idle line-up's
+  2 s settle (W-1064) before any question, so a II switched on mid-wait answers its first
+  `ESC ?` and is not taken for an original ImageWriter's silence: 2 s from when the job's own
+  wait saw the line up (the wait and serial_out's line task each poll the pin, and either may
+  see the edge first), or to the idle settle's end if that is later (a line-up just before
+  the job), never more than 2.5 s; a cancel or a cut upload ends it, and a line that drops
+  inside it is waited for again. Whenever the line is up the plain question goes first, and a
+  StyleWriter answering it is the job's answer with no ImageWriter byte sent (not the resync,
+  not `ESC ?`: one that raised its line and heard `ESC ?` first would stop listening until a
+  reset); only after it got nothing do the resync and `ESC ?` go, again after a 500 ms rest
+  while the model is not named yet. A cancel or an upload cut short ends it as that, never as
+  "another printer". An original ImageWriter record's answer is its line up with `ESC ?` and
+  the plain question unanswered: the core names that record, and the job takes it as its own
+  answer, so an original's job goes and a II's or LQ's on such a port ends as another
+  printer's. Another ImageWriter model or a StyleWriter answering the job's own questions ends
+  it aborted ("Another printer was connected. Print again.") before any byte, since its page
+  was ripped for the model it was sent to. The test page (`test_page_task`) waits and re-asks
+  the same way (`job_gate_wait`) and prints only on GO; at the deadline or a second tap it
+  stops without a byte. A Mac's ImageWriter stream goes to whichever ImageWriter answers, and
+  hears busy while the printer on the port is a StyleWriter now (`s_port_sw`), a flip is
+  pending, or a StyleWriter's first answer awaits its repeat (`s_port_confirm` with the list's
+  last answer a StyleWriter's: the port task asks again within 500 ms and has let the lock go
+  meanwhile), not on the list's last answer alone, so the driver's bytes never reach a
+  StyleWriter. The StyleWriter glue's `swapped` is an ImageWriter being the printer on the
+  port now (`printers_port_on_is_imagewriter`: its record current and present), not the list's
+  last answer, so a StyleWriter's job, test page or cleaning on a quiet port runs after an
+  ImageWriter was unplugged; the session's own `?` still refuses the wrong printer.
+- **AirPrint.** 360 × 360 dpi, URF `RS360`; Letter, A4 and Legal, the first the default
+  (`printer_media_t` in `printer_caps`: the page's width at 360 dpi names the entry, and the
+  rip keeps the engine's printable area from `rip_left` for `rip_w` dots). Margins in whole
+  1/100 mm rounded outward, on Letter 5.08 left, 7.62 right, 5.08 top and 8.05 bottom mm for
+  the original, II, 1200 and 1500, and 5.08, 5.08, 3.18 and 6.99 for the 2200, 2400 and 2500.
+  `printer-make-and-model` and the Bonjour `ty` are "Apple StyleWriter II" and so on, and
+  `/api/status` `model` is that while the port's printer is a StyleWriter (else the
+  ImageWriter record's own, "Apple ImageWriter II", "Apple ImageWriter LQ" or "Apple
+  ImageWriter", W-1116; the II with no ImageWriter record). `print-quality` 3, 4 and 5 are
+  draft, normal and best, read from the Job
+  group into the sink's options (`ipp_job_opts_t`). The icon is Apple's StyleWriter Chooser
+  icon (LICENSE.md). Colour is advertised only while a colour cartridge was read in a colour
+  model, under the same UUID, as the colour ribbon is (3.8): the cartridge lives where the
+  ribbon does (`s_ribbon`, `ipp_server_set_colour`, `/api/status` `ribbon`), and a black-only
+  model never offers colour. `/api/printers` shows it as `cartridge` (`black`, `colour`) once
+  read, and `pr_live_t.cart` holds it, not the record.
+- **Geometry.** Dots at 360 dpi; margins are from the sheet's edges. Rect x values are relative
+  to the printable area's top-left corner, inclusive, little-endian u16, and on the II, 1200 and
+  1500 both are 16 more for the same page. A rect's right edge is the last dot of its rows'
+  whole bytes, into the printable width's last byte where the width is not whole bytes (Letter
+  and Legal on the 2200, 2400 and 2500: 2920 dots over 2916, the extra dots white): the 2500
+  counts a row's bytes from the rect's width rounded down, and a 2916-dot rect over 365-byte
+  rows stopped it on the first row with `2` 80 (a Color StyleWriter 2500, 2026-11-02; `docs/traps.md`). The
+  printable width is the lesser of dots across and
+  the paper's width less both side margins (Letter 3060: 2880 on the first family, 2916 on the
+  second; A4 2976: 2832 on both).
+
+  | | Dots across | Margins L/R, top, bottom | Band | Rect x offset | Block cap (data bytes) | `B` reads empty |
+  |---|---|---|---|---|---|---|
+  | Original | 2880 | 72/72, 72, 114 | 800 rows | 0 | 0x2000 | A0 |
+  | II | 2880 | 72/72, 72, 114 | 800 | +16 | 0x76ED − planes × row bytes | F8 |
+  | 1200 | 2880 | 72/72, 72, 114 | 800 | +16 | as the II | F8 |
+  | Color 1500 | 2880 | 72/72, 72, 114 | 800 | +16 | as the II | 87 with a colour cartridge, 9F black |
+  | Color 2200 | 2919 | 72/72, 45, 99 | 400 | 0 | 0x7E77 black, 0x79FA colour | `B & A0` = A0 |
+  | Color 2400 | 2919 | 72/72, 45, 99 | 400 | 0 | as the 2200 | F8 |
+  | Color 2500 | 2919 | 72/72, 45, 99 | 400 | 0 | as the 2200 | 80 |
+
+  Free bytes are `B` × 256 − 2048 (the original `B` × 64). A block never exceeds the least an
+  empty buffer can take less its 4 bytes of framing and one step of `B` (256 bytes, 64 on the
+  original), so a printer whose `B` reads one step short of empty still takes a whole block: 30460
+  data bytes on the 2500 and 8124 on the original, the table's cap on the rest. A block of
+  0x8000 stalls a CS printer.
+- **The page** (`sw_page`, the rip's last stage in the place the LaserWriter's PostScript stage
+  has). `ripjob` gives it 360 dpi rows, one K plane or, for an sRGB page on a colour
+  cartridge, four (C, M, Y, K); the stage drops the engine's top and bottom margins and codes
+  rows as they arrive, holding no page and no band: the block being filled and the row before,
+  a plane each (about 33 KB at most, the Color 1500's, through `bigmem.h`). A band starts at
+  the first row with ink after the last band ended and runs the model's band height (less at
+  the printable area's last row); blank rows between bands send nothing and the next rect's
+  top moves on, while blank rows inside a band are coded. A rect is `R` (black) or `c` (four
+  inks) and left, top, right, bottom; blocks are `G`, a little-endian u16 length, the data and
+  `00`; `0C` ends the page. A row is run-coded per plane: the low 6 bits of a code are a count
+  1–62 and the top bits 00 literal (that many bytes follow), 01 repeat the next byte, 10 white
+  bytes, 11 black bytes; `80` alone is a white plane row. Each plane is XORed with the same
+  plane of the row before within a band, the band's first row raw, the delta carrying across
+  blocks within a band (TailTalk's reading; lpstyl gives each block its own rect, so this is not
+  yet confirmed on a printer), and no delta at all on the original. Colour rows go C, M, Y, K. The stage
+  writes frames, `[type][u16 LE length][payload]` (page start, rect, block, page end), into the
+  printer-bytes half of the job buffer (the same 512 KB / 512 KB split as the ImageWriter's,
+  3.8); the `prn` task hands them to `stylewriter_prn`, which reassembles frames across the
+  ring's reads and runs the session, so the upload waits on the printer once the 512 KB fills.
+  Nothing is ripped before the cartridge is known: the printer is reset and `H` read as the
+  rip begins.
+- **Screens and Apple's tables.** The record's screen at 360 dpi after the tone curve. A gray
+  page or a black cartridge screens one plane; a colour page goes through `ink_split` and
+  `ink_screens` into C, M, Y, K as 3.7 says for the ribbon. Apple's drivers carry the
+  calibration of StyleWriter ink on paper: two tone curves (`GAMA` 1 with the ordered and mask
+  screens, `GAMA` 2 with error diffusion, a pairing not yet confirmed by a print; the 2200
+  driver's for the 2200, 2400 and 2500, the
+  1500 driver's for the other four) and a 16 × 16 threshold screen (`HTSC` 1). The curve is the
+  StyleWriter's default tone correction, in place of the dot-gain curve's 0, and `gain` still
+  adjusts on top; the screen is a sixth beside the five, offered on StyleWriters only (`apple`,
+  "Apple" in the Screen list). They are read out of Apple's driver files by our own script
+  (`tools/stylewriter/mktables.py`; `untome.py` takes the files out of Apple's Installer
+  packages) into `halftone/apple_tables.{h,c}`, whose header says where each table came from.
+  The drivers are never committed, and nothing is copied from TailTalk's source.
+- **The session** (`sw_session`, pure behind an ops table so the host tests run it against a
+  scripted printer on a fake clock). A job: the reset, the settle, `1` and `2` clear (up to
+  three resets, each given `1` twice, 5 s each, the second and third with the long settle, so a
+  printer that answers none fails the job after about 53 s), `?`
+  (which must name the record's model, else the job fails with nothing further sent), then `D`
+  (the colour models), or `N` (the 1200), `B`, `H` (all but the original: CS 0x81 colour and
+  0x01 black, the 1500 bit 0x80), and the model's setup string for the quality and the
+  cartridge. The Color 2200, 2400 and 2500 take `m2`, the quality (`d`; `b`, or `nZ` with a
+  colour cartridge; `s`) and `A`, the 1500 `m2`, `d`/`Z`/`s`, `A`; the II and 1200 `u`,
+  `d`/`n`/`b`, `D`, `A`; the original `nuA`. Plain paper only. Per page, the 2200, 2400 and 2500
+  take their mode letter, `H` for a colour page on a colour cartridge and `B` otherwise, when
+  it changes, and `L`; the 1200 and 1500 take `L`. Each rect goes out after `1` and `2` show no
+  fault, each block when the tracked free space fits it (re-read every 100 ms while it does
+  not; the setup and page letters, rects and `0C` are counted against it), a page's end after
+  the last block; after the last page, wait for `1` to say the page is
+  printed (not the original), then `E` (the 1200 adds `Y`) and `l`. Cancel stops at the next
+  step (a block in flight goes out whole; a cut `G` block wedges the printer), then `E` (the
+  black-only models) and the reset, and the next job starts with the reset anyway. A cartridge
+  read as black for a job made for colour prints the page in gray (the stage is built from
+  what `H` said) and the board turns IPP colour off before the next job.
+- **Faults and silence.** `1` and `2` are read as `sw_state_t`. Named faults hold the job and
+  are shown: no paper (`2` 04; "Needs attention: check paper", `media-empty-error`), paper jam
+  (`2` 08, `media-jam-error`), cartridge missing (`2` 20, `marker-supply-missing-error`),
+  cartridge jammed (`2` 01), ink out (`2` 02 on the 2200, 2400 and 2500,
+  `marker-supply-empty-error`), door (`1` 40 on the same three, `door-open-error`) and waste ink
+  (`1` 80 on them and the 1500, `marker-waste-full-error`); a jammed cartridge and a fault the
+  design does not name report `other`. `S` goes every 5 s while one
+  holds, and the job waits `CONFIG_AIRWRITER_STALL_ABORT` (600 s) as the ImageWriter's
+  paper-out does. A fault the design does not name ends the job after 10 s. Bit 02 on the
+  original, II, 1200 and 1500 is the printer holding the job and clears itself; bit 80 of `2` is
+  spurious on the 2400 and 2500 (lpstyl's testers), but it is also how a 2500 stops on a page it
+  cannot read: with `1` not busy and the page not draining (waiting for room, or for the page
+  to finish with the buffer still holding it), 80 on the 2400 and 2500 ends the page after the
+  same 10 s, and the abort resets the printer (`docs/traps.md`). Silence is 30 s with nothing the printer says heard (counted
+  from its last answer, or from when the caller last gave the session something to do): the job
+  fails, the state is offline, and the next job resets the printer. A
+  printer switched off mid-page has lost the page.
+- **Idle and status.** Idle, `1` and `2` every 10 s feed the page, the panel and IPP as the
+  ImageWriter's line does: an answer is ready (or the fault it holds), none is offline. Each
+  check also asks the plain question (`?`, and `p` after `CS`), so a different StyleWriter put
+  in its place shows within one check; a StyleWriter plugged in on a quiet port is found within
+  5 s by the plain question's cadence, and reads Offline within 10 s of being switched off (the
+  timings table in 3.15). The
+  original StyleWriter ignores the plain question until a reset and is switched off between
+  uses, so its silence while idle says nothing (`sw_idle_silent`): once it has answered it
+  reads as ready while quiet, takes jobs, and is asked no `1` and `2` while it is not
+  answering; a session that gets nothing from it (the start-up reset, the person's look or
+  pick, a job's full sequence, a job it goes silent during) shows it offline until it answers
+  or the next session. Switched on, it answers only Look for Printers' reset or a job's, so the
+  wiki's Offline row ends with pressing Look for Printers; the page and phone read "Offline",
+  as for every printer. The one Color StyleWriter 2500 benched goes dark on its own about 5 minutes
+  after a job's end (305, 317 and about 315 s after its `E l`) and then answers nothing, not
+  `?` nor `1`, until a reset wakes it; left alone after a reset with no job it stayed awake past
+  11 minutes, and a job's reset woke it dark and printed. So a 2200, 2400 or 2500 that was sent
+  a job's end (the session showing ready, `s_sw_asleep`) and has not been reset since reads as
+  ready while it is silent (`sw_idle_silent`), as the original does, and the next job wakes it;
+  a start-up or Look for Printers reset that gets an answer ends the sleep (it stays awake
+  after), and one that gets nothing, or a job that gets nothing, shows it offline
+  (2026-11-02: ready and woken, as Apple's driver leaves it, over dropping `l` to keep it
+  awake). One switched off at its button reads ready too, until a job finds it off. The 2200
+  and 2400 are taken to sleep as the 2500 does, by family. After the reset that ends a failed
+  page it has gone dark at once, two resets 2 s or 7 s apart have left it dark where a single
+  one woke it, and once a job's reset darkened it while it was awake and a later reset brought
+  it straight back (`docs/traps.md`). A StyleWriter that starts answering again is asked `D`
+  and `H` for its cartridge, as a record that changes family is asked for its ribbon or
+  cartridge. The panel
+  shows the box's state, and the port's own while it prints.
+- **Test page.** The button, DIP4 and the page's Print Test Page reach a port StyleWriter as
+  they reach an ImageWriter; a second tap cancels. A StyleWriter has no fonts, so the page is a
+  raster drawn on the board at 360 dpi, one Letter page, rows made as they are sent through the
+  same stage: the letterhead (the icon and Apple Garamond as dots, `sw_art.h`), the board's
+  details in a 5 × 7 face (the HD44780 shapes, `sw_font.h`, LICENSE.md), the inks (four solid
+  swatches, the still life and a ramp of each ink with a colour cartridge; the still life in
+  gray, a gray scale and a black ramp without), the six screens side by side with the one in use
+  ticked, a ruler with a tick every 0.1 in and four one-inch squares. 88 KB of working memory
+  in gray and 141 KB in colour, in PSRAM. `rip --sw-testpage colour|black --model M --out-sw
+  F` makes it on the host; `swfake.py decode` draws it.
+- **Clean Print Head.** One press is one cleaning: the job's reset and setup with a single `P`
+  in it, wait for the printer to stop being busy (up to 600 s), then `E` (`Y` on the 1200) and
+  `l`. The original has none. `POST /api/printers {"id":N,"clean":true}` answers 409 "Connect
+  <name> to the printer port first." when this StyleWriter is not the printer on the port --
+  another port record's printer is (`pr_port_absent`, W-1116) -- 409 when a job holds the lock,
+  502 when the model has no
+  cleaning or the printer is off or holds a
+  fault (it is asked `1` and `2` first, as a cleaning would wait on a fault with the lock held),
+  and otherwise starts it on a task of its own under the job lock. Nothing cleans on its own.
+- **Web.** The settings page draws a StyleWriter's row and detail (Cartridge, Black or Color;
+  Print Head with Clean and the line "Cleaning uses ink."; the Halftone list with Apple, without
+  the ImageWriter's 144 × 72 sample; "check paper" without SELECT). `/api/printers` adds
+  `cartridge` and, while the printer holds one, `fault`: `paper`, `jam`, `cartridge`,
+  `cartridge-jam`, `ink`, `cover`, `waste` or `other`. The model names in `add_port` and `model`
+  are the seven.
+- **The handshake pin.** Rev A's R9 (0 Ω, not fitted) joins U3's T1OUT to J2 pin 1 (HSKo); with
+  it fitted the `HSKI_DRV` clamp (IO35 low) holds the line asserted at RS-232 levels, as a Mac's
+  port does, and InkTalk holds its StyleWriter's input high for the same reason ("a StyleWriter
+  won't send anything back otherwise"). A Color StyleWriter 2500 answers and prints with the
+  pin floating: on a rev A board with R9 taken off again (2026-11-03) it woke at the start-up reset
+  and ran the test page to its end, as fast as with R9 fitted. Whether the other models need it
+  is not known (InkTalk's remark is about some StyleWriter, not named), so a rev A board that is
+  to run one other than a 2500 gets R9 fitted until an owner shows it is not needed (the wiki's
+  StyleWriters page says how), and rev B fits it (`W-1091`; an ImageWriter
+  ignores that pin, 2.4).
+- **Not built.** Vintage Macs through AirWriter (phase 2: ADSP in `components/localtalk`, the
+  adapter as `<name>:StyleWriter1200AT@*` or `<name>:ColorStyleWriter2400AT@*` on socket 129,
+  busy as `0001`, `GET /api/sw/job`, a fast mode the port cannot follow refused or the Mac
+  switches the printer over and the adapter drops off); the printers' fast modes (a II or 1200
+  at 230,400 baud after `h`, likely within rev A's reach; a Colour StyleWriter's clock on HSKi
+  after `x`, about 885 kHz on a 2200, which rev A's U3 cannot pass, 2.4, and the ESP32's UART
+  cannot follow: `W-1102`'s to work out), so every page goes at 57600; 720 dpi on the 2500, other media and transparencies;
+  StyleWriters behind Apple's network adapter found over AppleTalk.
+- **Checks.** `make -C tools/rip test` (model table, run coder, page stage, session, status,
+  test page, the board code with fakes, the port policy) and `make -C tools/ipp test`
+  (the media list); `make -C tools/rip swcheck` (the stage's pages decoded by `swfake.py`, an
+  independent decoder, and the same dots coded with lpstyl's coder, held to the dots the rip
+  made); `make -C tools/rip swinterop` (the firmware's session built for the host,
+  `build/swhost`, printing to `swfake.py` over a pty: all seven models, gray and colour, with
+  each fault and a cancel); `make -C tools/rip swcaptures` (Apple's drivers' captures held to
+  the session, skipped without them) with `swcaptures-selftest`. `build/swprint` is `swhost`
+  for an owner to print a page to a real StyleWriter through a USB serial adapter and send
+  the log back (`tools/stylewriter/README.md`).
 
 ---
 

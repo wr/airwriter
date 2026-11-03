@@ -52,8 +52,8 @@ These apply to the product, docs and Wells voices.
 2. **Objects don't think or talk.** AirWriter, the page and the printer don't speak, ask, tell,
    say, report, hold, decide, know, find or search.
 3. **Cut what the reader can't use.** Mechanics, timings, internal names, edge cases, and scope
-   negatives the reader didn't ask about ("StyleWriters aren't supported" under a table of
-   supported printers).
+   negatives the reader didn't ask about ("Portable StyleWriters aren't supported" under a
+   table of supported printers).
 4. **Confident.** No "untested", "should work", "never tried" or "this part is new". Test
    status belongs in Linear and the engineering docs. One exception: the wiki's Supported
    Printers table marks a printer not yet confirmed on paper **Yes\***, with a footnote asking

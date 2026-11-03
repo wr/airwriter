@@ -59,7 +59,7 @@ enum { LASER_KIND_LW = 1, LASER_KIND_IW = 2 };
 typedef struct {
     uint8_t   id, kind;
     int8_t    where;              // at_link_t it is reached on, the list's
-    int8_t    slot;               // its AirPrint printer (1-3), or -1 not shared
+    int8_t    slot;               // its AirPrint printer (1 to IPP_PRINTERS-1), or -1 not shared
     uint8_t   name[33];           // NBP, Pascal, MacRoman
     char      dither[12];
     uint8_t   gain;

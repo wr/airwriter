@@ -304,7 +304,7 @@ lwc_view_t lwc_view(const lwc_t *c, int ti, uint64_t now)
 {
     (void)now;
     lwc_view_t v = { .online = 0, .idx = -1, .ipp_state = LWC_STOPPED,
-                     .reason = "offline-report", .message = "The printer isn't responding" };
+                     .reason = "offline-report", .message = "Offline" };
     if (ti < 0 || ti >= LWC_TARGETS || !c->t[ti].used) return v;
     const lwc_target_t *t = &c->t[ti];
     v.idx = heard_of(c, ti);

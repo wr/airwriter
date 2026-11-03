@@ -1,6 +1,22 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "test_util.h"
 #include "halftone.h"
+#include "apple_tables.h"
+
+/* Row y of what Apple's tile should print at an amount of ink, as bits: a cell inks
+ * where the amount is over its threshold, the threshold read mirrored about 254
+ * when `turned`, the tile started px across and py down. Compared a row at a time:
+ * the same check summed cell by cell in one loop counted 30 wrong at -O2 under Apple
+ * clang 21 (-O0, -O1 and the sanitizers, 0), though no cell it looked at differed. */
+static void apple_row(uint8_t *out, int w, int y, int px, int py, int turned, int amount)
+{
+    memset(out, 0, (size_t)(w + 7) / 8);
+    for (int x = 0; x < w; x++) {
+        int t = apple_screen16[((y + py) & 15) * 16 + ((x + px) & 15)];
+        if (turned) t = 254 - t;
+        if (amount > t) out[x >> 3] |= (uint8_t)(0x80 >> (x & 7));
+    }
+}
 
 int main(void)
 {
@@ -227,6 +243,153 @@ int main(void)
         CHECK(dots_avoid > dots_blind * 9 / 10 && dots_avoid < dots_blind * 11 / 10);
         printf("  dot-off-dot: %d shared blind, %d avoiding; %d dots blind, %d avoiding\n",
                shared_blind, shared_avoid, dots_blind, dots_avoid);
+    }
+
+
+    /* -- Apple's screen: the name, the tables, the tile, which way round -- */
+    {
+        ht_algo_t a;
+        CHECK_EQ_INT(ht_algo_from_name("apple", &a), 0);
+        CHECK_EQ_INT(a, HT_APPLE);
+        CHECK_EQ_INT(HT_APPLE, HT_BLUENOISE + 1);        /* stored by name, but last all the same */
+    }
+
+    /* The tables are Apple's, read out of the drivers by
+     * tools/stylewriter/mktables.py (checked against TailTalk's copy with its
+     * --compare). Pin the ends and a few values so a bad regeneration shows. */
+    {
+        CHECK_EQ_INT(apple_screen16[0], 0x23);
+        CHECK_EQ_INT(apple_screen16[1], 0x6B);
+        CHECK_EQ_INT(apple_screen16[15], 0x5B);
+        CHECK_EQ_INT(apple_screen16[255], 0x1B);
+        int lo = 255, hi = 0;
+        for (int i = 0; i < 256; i++) {
+            if (apple_screen16[i] < lo) lo = apple_screen16[i];
+            if (apple_screen16[i] > hi) hi = apple_screen16[i];
+        }
+        CHECK_EQ_INT(lo, 1);
+        CHECK_EQ_INT(hi, 254);                           /* the threshold the black ink mirrors about */
+
+        const uint8_t *curves[4] = { apple_tone_cs[0], apple_tone_cs[1],
+                                     apple_tone_sw[0], apple_tone_sw[1] };
+        for (int c = 0; c < 4; c++) {
+            CHECK_EQ_INT(curves[c][0], 0);
+            CHECK_EQ_INT(curves[c][255], 255);
+            for (int v = 1; v < 256; v++) CHECK(curves[c][v] >= curves[c][v - 1]);
+        }
+        CHECK_EQ_INT(apple_tone_cs[0][1], 0x03);         /* the 2200's pattern curve starts steep */
+        CHECK_EQ_INT(apple_tone_sw[0][1], 0x04);         /* the 1500's a little steeper still */
+
+        /* a half tint prints about half the cells: no cell value is favoured */
+        int under = 0;
+        for (int i = 0; i < 256; i++) under += apple_screen16[i] < 128;
+        CHECK(under > 120 && under < 136);
+    }
+
+    /* The tile, every 16 pixels and 16 rows. A flat amount of 128 (gray 127)
+     * inks the cells whose threshold is under 128, and bare paper inks none,
+     * full black all, whatever the tile. */
+    {
+        enum { W = 40, R = 40, NB = W / 8 };
+        ht_t h;
+        CHECK_EQ_INT(ht_init(&h, HT_APPLE, W), 0);
+        uint8_t gray[W], bits[NB];
+        memset(gray, 127, sizeof gray);
+        int wrong = 0, inked = 0;
+        for (int y = 0; y < R; y++) {
+            uint8_t want[NB];
+            ht_row(&h, gray, bits);
+            apple_row(want, W, y, 0, 0, 0, 128);
+            wrong += memcmp(bits, want, NB) != 0;
+            for (int i = 0; i < NB; i++) inked += __builtin_popcount(bits[i]);
+        }
+        CHECK_EQ_INT(wrong, 0);
+        CHECK(inked > R * W * 45 / 100 && inked < R * W * 55 / 100);
+
+        memset(gray, 255, sizeof gray);
+        ht_row(&h, gray, bits);
+        for (int i = 0; i < NB; i++) CHECK_EQ_INT(bits[i], 0x00);
+        memset(gray, 0, sizeof gray);
+        ht_row(&h, gray, bits);
+        for (int i = 0; i < NB; i++) CHECK_EQ_INT(bits[i], 0xFF);
+        ht_free(&h);
+    }
+
+    /* Turned over (what the black ink gets): a cell inks where its threshold
+     * mirrored about 254 is under the amount. The phase starts the tile in. */
+    {
+        enum { W = 32, R = 20, NB = W / 8 };
+        ht_t h;
+        CHECK_EQ_INT(ht_init(&h, HT_APPLE, W), 0);
+        ht_set_phase(&h, 3, 5, 1);
+        uint8_t gray[W], bits[NB];
+        memset(gray, 127, sizeof gray);
+        int wrong = 0;
+        for (int y = 0; y < R; y++) {
+            uint8_t want[NB];
+            ht_row(&h, gray, bits);
+            apple_row(want, W, y, 3, 5, 1, 128);
+            wrong += memcmp(bits, want, NB) != 0;
+        }
+        CHECK_EQ_INT(wrong, 0);
+        ht_free(&h);
+    }
+
+    /* Mask screens carry nothing and ignore where an earlier ink printed: the
+     * Apple tile keeps inks apart by turning the black one over. */
+    {
+        enum { W = 32, NB = W / 8 };
+        ht_t a, b;
+        CHECK_EQ_INT(ht_init(&a, HT_APPLE, W), 0);
+        CHECK_EQ_INT(ht_init(&b, HT_APPLE, W), 0);
+        uint8_t gray[W], avoid[NB], x[NB], y[NB];
+        memset(gray, 100, sizeof gray);
+        memset(avoid, 0xFF, sizeof avoid);
+        ht_row(&a, gray, x);
+        ht_row_avoid(&b, gray, avoid, y);
+        CHECK_EQ_MEM(x, y, NB);
+        ht_free(&a); ht_free(&b);
+    }
+
+    /* ht_set_tone: a curve ahead of the screen, NULL for none, and the dot
+     * gain curve composed on top of it whichever is set first. */
+    {
+        enum { W = 16, NB = W / 8 };
+        ht_t h;
+        CHECK_EQ_INT(ht_init(&h, HT_APPLE, W), 0);
+        uint8_t zero[256], half[256], gray[W], bits[NB];
+        memset(zero, 0, sizeof zero);
+        for (int v = 0; v < 256; v++) half[v] = (uint8_t)(v / 2 + 64);
+
+        ht_set_tone(&h, zero);                          /* everything reads as black */
+        memset(gray, 255, sizeof gray);
+        ht_row(&h, gray, bits);
+        for (int i = 0; i < NB; i++) CHECK_EQ_INT(bits[i], 0xFF);
+
+        ht_set_tone(&h, NULL);                          /* identity again */
+        for (int v = 0; v < 256; v++) CHECK_EQ_INT(h.tone[v], v);
+        ht_row(&h, gray, bits);
+        for (int i = 0; i < NB; i++) CHECK_EQ_INT(bits[i], 0x00);
+
+        ht_t g;                                         /* the gain curve on its own */
+        CHECK_EQ_INT(ht_init(&g, HT_APPLE, W), 0);
+        ht_set_gain(&g, 20);
+
+        ht_set_tone(&h, half);
+        ht_set_gain(&h, 20);                            /* gain after the tone ... */
+        for (int v = 0; v < 256; v++) CHECK_EQ_INT(h.tone[v], g.tone[half[v]]);
+        ht_t k;                                         /* ... and before it */
+        CHECK_EQ_INT(ht_init(&k, HT_APPLE, W), 0);
+        ht_set_gain(&k, 20);
+        ht_set_tone(&k, half);
+        CHECK_EQ_MEM(k.tone, h.tone, 256);
+
+        ht_set_gain(&h, 0);                             /* gain off leaves the tone curve */
+        for (int v = 0; v < 256; v++) CHECK_EQ_INT(h.tone[v], half[v]);
+        ht_set_tone(&h, NULL);
+        ht_set_gain(&h, 20);                            /* and with no tone curve it is the gain alone */
+        CHECK_EQ_MEM(h.tone, g.tone, 256);
+        ht_free(&h); ht_free(&g); ht_free(&k);
     }
 
     TEST_END;

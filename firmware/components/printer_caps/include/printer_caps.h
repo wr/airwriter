@@ -9,6 +9,20 @@
 #include <stdint.h>
 #include <stddef.h>
 
+// One sheet size a printer offers beside others (W-1103: a StyleWriter feeds cut
+// sheets, so it lists Letter, A4 and Legal and the phone picks). The margins are
+// the engine's, in whole 1/100 mm rounded outward so a client never lays out into
+// them. The rip keeps `rip_w` dots of the page from `rip_left`: the page width the
+// phone sends at the rip dpi names the entry (`page_w`), and what is kept is the
+// engine's printable area, so the page's own left margin never reaches the stage.
+typedef struct {
+    const char *media;                      // "na_letter_8.5x11in", "iso_a4_210x297mm", "na_legal_8.5x14in"
+    int32_t     x, y;                       // 1/100 mm
+    int32_t     margin_l, margin_r, margin_t, margin_b;   // 1/100 mm, rounded outward
+    uint16_t    page_w;                     // the page's width at rip dpi: 3060, 2976, 3060
+    uint16_t    rip_left, rip_w;            // dots kept across
+} printer_media_t;
+
 typedef struct {
     // What clients are told.
     const char *make_model;      // printer-make-and-model, TXT ty
@@ -23,6 +37,12 @@ typedef struct {
     uint16_t    rip_dpi_x, rip_dpi_y;
     uint32_t    max_dots;        // the widest row the output stage takes; 0 = any
     uint8_t     crop_margin;     // crop up to 1/4 in a side to reach max_dots
+    // Sheet sizes (W-1103). With none (n_media 0) the one sheet is the scalar
+    // media fields above and the rip crops by crop_margin and max_dots, as the
+    // ImageWriter's always has. With a list, the first entry is the default,
+    // IPP lists them all, and the rip crops each page by its own entry.
+    const printer_media_t *media_list;
+    uint8_t     n_media;
 } printer_caps_t;
 
 // The ImageWriter II as it has always been advertised: one pass at 144 x 72,

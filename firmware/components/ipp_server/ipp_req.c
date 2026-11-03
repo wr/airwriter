@@ -110,7 +110,18 @@ int ipp_req_parse(ipp_req_t *r, const uint8_t *buf, size_t len)
         in_requested = 0;
 
         // Job attributes may legally repeat operation-attribute names with
-        // different meaning, so only read from the operation group.
+        // different meaning, so each group has its own list: the job group's
+        // is print-quality, the operation group's follows. A collection's
+        // members have empty names and never get this far.
+        if (group == IPP_TAG_JOB) {
+            if (name_is(name, nlen, "print-quality") && tag == IPP_TAG_ENUM && vlen == 4 &&
+                !r->opts.quality) {
+                uint32_t q = ((uint32_t)val[0] << 24) | ((uint32_t)val[1] << 16) |
+                             ((uint32_t)val[2] << 8) | (uint32_t)val[3];
+                if (q >= 3 && q <= 5) r->opts.quality = (int)q;
+            }
+            continue;
+        }
         if (group != IPP_TAG_OPERATION) continue;
 
         if (name_is(name, nlen, "requested-attributes") && !r->requested.n) {
@@ -159,8 +170,11 @@ int ipp_route(const char *path, const char *const resources[IPP_PRINTERS],
         if (!path) return resources[0] ? 0 : -1;
     }
     while (*path == '/') path++;
-    for (int i = 1; i < IPP_PRINTERS; i++) {
-        if (resources[i] && under(path, resources[i])) return i;
+    // Slot 0 too (W-1116): the oldest port record's own ipp/p<id> is its legacy path, and a
+    // path of that shape would otherwise be nobody's below. A legacy path is a set slot's.
+    for (int i = 0; i < IPP_PRINTERS; i++) {
+        if (!resources[i]) continue;
+        if (under(path, resources[i])) return i;
         if (legacy && legacy[i] && under(path, legacy[i])) return i;
     }
     if (slot_shaped(path) || under(path, IPP_RESOURCE_LASER)) return -1;

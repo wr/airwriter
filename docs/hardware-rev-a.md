@@ -85,7 +85,7 @@ pad, the BOOT pads and the back-face artwork. The rest:
   |---|---|---|---|
   | R5 | 120 R | Termination across the printer's TxD pair at U2's receiver | The cable rings. At 9600 baud on a printer cable it only loads the line |
   | R6, R7 | 4.7 k | Failsafe bias, 3V3 to TxD+ and TxD− to GND; fit both or neither | The receiver reads garbage with the printer off or unplugged |
-  | R9 | 0 R | T1OUT → J2's HSKo pin | The board should drive the printer's DSR rather than only listen on HSKi |
+  | R9 | 0 R | T1OUT → J2's HSKo pin | A StyleWriter is on the printer port (its input wants the line held asserted, W-1103), or the board should drive the printer's DSR rather than only listen on HSKi |
 
 - **Shells and holes.** J2's shell reaches GND through R8 (0 R, net `/SHELL`) so the tie can be
   lifted; the ImageWriter II is mains-powered with a metal chassis and a second, unbreakable ground
@@ -138,9 +138,20 @@ pre-order review (2026-09-01).
 - J2's receive pair is a MAX3490 (RS-422, common-mode −7 to +12 V) against RS-232's −12 V:
   check its absolute maximum, or route J2 pin 5 through U3's spare RS-232 receiver, before an
   RS-232 printer (a LaserJet, the original ImageWriter) is wired both ways.
+- Fit R9 (0 Ω) so J2 pin 1 holds HSKo asserted for StyleWriters (`W-1103 StyleWriters on the
+  printer port`): InkTalk holds the printer's HSKi high because a StyleWriter won't send anything
+  back otherwise. An ImageWriter ignores the pin (SPEC §2.4). On rev A it is a pair of 0603 pads
+  on the top side with no silkscreen label (R designators are on F.Fab), 12.3 mm from the west
+  edge and 25 mm up from the bottom edge: straight above J2, just left of U3 (silkscreened).
+  A Color StyleWriter 2500 answers and prints with it open (2026-11-03, R9 taken off
+  again after it first printed with R9 fitted): fit it by hand for the other StyleWriters until
+  each is shown to print without it.
 - Through-hole dome power LED: `W-1043 Rev B: through-hole dome LED for the power indicator`.
 - Scope HSKo first: if its swing is modest, a divider and clamp into a GPIO could delete U3.
-  Whatever replaces U3 has to pass the 1 MHz clock below.
+  Whatever replaces U3 has to pass the 1 MHz clock below. A Colour StyleWriter's fast clock is
+  about 885 kHz on a 2200. InkTalk follows it with the RP2040's PIO (TailTalk PR 93) behind the
+  simple circuit FeralFirmware mentioned; the S3 has no PIO, so look at both before drawing
+  ours.
 - U3 to an SP3232EU (SP3232EUCN-L, LCSC C2997661): same SOIC-16 and pinout, so HSKi can carry
   the ~1 MHz clock a QuickDraw LaserWriter drives in its fast mode (`W-1102 QuickDraw
   LaserWriters on the printer port (Personal LaserWriter LS/300, Select 300)`). The fitted

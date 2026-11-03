@@ -22,7 +22,7 @@ false.
 | `docs/hardware-rev-2026-11.md` | Rev 2026.11 as drawn: U3's channels, the GPIOs, what moved from rev A, the scripts that build the board. |
 | `docs/library.md` | The custom KiCad library and 3D models. |
 | `docs/sourcing.md` | Fab, parts, mini-DIN and PIC decisions. |
-| `docs/prior-art.md` | TashTalk, TailTalk, AirTalk, ImageScribbler. |
+| `docs/prior-art.md` | TashTalk, TailTalk, lpstyl, InkTalk, Apple's StyleWriter drivers, AirTalk, ImageScribbler. |
 | `docs/ORDER-NOTES.md` | PCBWay order notes for rev 2026.11. |
 | `docs/KICAD-TOOLING.md` | General KiCad 10 / konnect / pcbnew playbook. |
 | `docs/superpowers/specs/` | One design per feature, each amended in place. Read the dot-panel cover's amendment block first. |
@@ -30,9 +30,10 @@ false.
 
 ## Source of truth
 - GitHub: github.com/wr/airwriter (public), remote `origin`. Everything committed is public.
-  Never commit the Apple manuals, third-party files without a licence (3D models above all),
-  Wi-Fi credentials or other private details; history was rewritten once to take such things
-  out (`tools/release/purge-history.sh`). Run `gitleaks git` before pushing anything unusual.
+  Never commit the Apple manuals, Apple's StyleWriter drivers or captures of them, third-party
+  files without a licence (3D models above all), Wi-Fi credentials or other private details;
+  history was rewritten once to take such things out (`tools/release/purge-history.sh`). Run
+  `gitleaks git` before pushing anything unusual.
   Plans and dated reviews are kept outside this repo.
 - Linear project: AirWriter (id: 9c428072-e8eb-4c3d-88e6-b3eadf604eed), team Personal
 - Branch prefix: wells/
@@ -48,13 +49,21 @@ in Linear and older docs) is drawn and routed, not yet made, and needs firmware 
   take the same stream and are expected to work, untested; docs say so rather than excluding
   them. The LQ's self-ID reply is taken from GSport's emulator; the original ImageWriter sends
   none, so it never prints in colour. PostScript LaserWriters on AppleTalk are shared as
-  printers of their own, tested on a Personal LaserWriter NTR only.
+  printers of their own, tested on a Personal LaserWriter NTR only. StyleWriters on the printer
+  port, the seven models lpstyl covers (StyleWriter, II, 1200, Color 1500, 2200, 2400, 2500),
+  are found by the plain question or named by the person, and print over AirPrint in colour
+  with a colour cartridge. All seven are host-tested against a software StyleWriter; a Color
+  StyleWriter 2500 runs a page to its end, its dry cartridge leaving the sheet blank. On rev A
+  the others may need R9 fitted (`docs/hardware-rev-a.md`). Up to six printers are shared at
+  once, any mix of the port's records and AppleTalk printers.
 - **Ways in.** AirPrint (`image/urf`, Print-Job only) for phones and Macs. For vintage Macs, the
   LocalTalk port (TashTalk 2.1.3 in U7, which the ESP32 flashes over LVP) and three EtherTalk
   links: the board's own Wi-Fi, Basilisk II's UDP tunnel (port 6066) and Infinite Mac's zone
   relay (off until switched on). One job at a time across all of them, under one job lock.
 - **Not built:** Mini vMac (LToUDP), PWG raster, HP LaserJets over serial (designed), AirPrint to
-  an AppleTalk ImageWriter, colour on a colour LaserWriter (it prints gray), StyleWriters.
+  an AppleTalk ImageWriter, colour on a colour LaserWriter (it prints gray), vintage Macs
+  printing to a StyleWriter (AirWriter as Apple's StyleWriter network adapter), a StyleWriter's
+  fast mode.
 
 Where things are (`firmware/components/` unless a path is given):
 
@@ -68,7 +77,8 @@ Where things are (`firmware/components/` unless a path is given):
 | Signed updates | `fw_update` | SPEC §3.12 |
 | LocalTalk, EtherTalk, PAP server, client and relay | `localtalk` | SPEC §3.13 |
 | LaserWriters | `laser`, `ps_page` | SPEC §3.14 |
-| The printer list | `printers` | SPEC §3.15 |
+| The printer list, what the port asks | `printers` (`port_policy.c`) | SPEC §3.15, port-printers design |
+| StyleWriters | `stylewriter` | SPEC §3.16, StyleWriters design |
 | Status panel | `led_grid`; `tools/lights` renders every effect | status-language design |
 | Test page | `testpage` | test-page design |
 | Cable test, TashTalk flashing | `cable_test`, `pic_prog` | |
@@ -155,6 +165,16 @@ page: Top margin (`{"top_margin":N}`, 1/144 in, -216 to 144, default -144) and d
   non-Level-1 operator trapped; `make -C tools/rip interop` prints with the firmware's PAP client
   to `etpeer.py`'s fake LaserWriter (lookup, query, print, busy, paper out, PostScript error,
   cancel, a silent printer). `tools/ipp/test/golden/` pins the IPP answers byte for byte.
+- **StyleWriters** (Python 3 with numpy): `make -C tools/rip swcheck` decodes the rip's pages
+  with `swfake.py` (a software StyleWriter) and the same dots coded with lpstyl's coder, and
+  holds both to the dots the rip made; `make -C tools/rip swinterop` prints from `build/swhost`
+  (the firmware's session on the host) to `swfake.py` over a pty, all seven models, each fault
+  and a cancel (about 35 s); `make -C tools/rip swcaptures` holds Apple's drivers' captures to
+  the session and skips without them; `python3 -m unittest tools/stylewriter/test_swfake.py
+  tools/stylewriter/test_plain_question.py tools/stylewriter/test_untome.py`. `rip --printer
+  stylewriter --model M --out-sw F` writes a page as the printer would be sent it, `rip
+  --sw-testpage` the test page, and `swfake.py decode M F` draws either. Apple's drivers and
+  captures live in `~/.config/airwriter/sw-drivers/` and `sw-captures/`, never committed.
 - **Firmware:** `idf.py build` clean, then `python3 tools/stackcheck/stackcheck.py` (needs the
   toolchain `export.sh` puts on PATH): every task that makes ESP-IDF's deep calls keeps 1 KB of
   its stack spare by GCC's count. A local sdkconfig that fails it on `app_main` needs
@@ -212,7 +232,11 @@ hardware/panel/       art panel generator (Figma SVG → panel.kicad_pcb), and t
 hardware/combined/    the snap-apart order panel and make_fab.sh
 firmware/             ESP-IDF 5.5 app (components/, above); bootloader_components/ holds the
                       bootloader's pin clamps and power-up reset
-tools/rip/            host build of the raster path + host tests for the pure-C cores
+tools/rip/            host build of the raster path + host tests for the pure-C cores; swhost
+                      (swprint for owners) is the StyleWriter session on the host
+tools/stylewriter/    swfake.py (a software StyleWriter and page decoder), mktables.py and
+                      untome.py (Apple's tables and icon out of its drivers), the owners'
+                      README, capture.md (the Apple-driver capture rig), and their tests
 tools/ipp/            IPP host tests and gpa_server (the real encoder on localhost for ipptool)
 tools/ippcap/         stub IPP server that captures a Print-Job body (how fixtures were made)
 tools/ethertalk/      etpeer.py, a software EtherTalk Mac for the tunnel and the relay, and

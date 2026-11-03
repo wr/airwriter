@@ -5,8 +5,10 @@
 // Two kinds of screen. The error-diffusion ones (Atkinson, Floyd-Steinberg)
 // carry what a pixel could not print to its neighbours and scan serpentine,
 // each row the other way, so no diagonal worm can form. The mask screens
-// (Bayer, blue noise) compare each pixel with a fixed tile and carry nothing,
-// so type stays exactly where it was drawn; the blue-noise tile has no weave.
+// (Bayer, blue noise, Apple's) compare each pixel with a fixed tile and carry
+// nothing, so type stays exactly where it was drawn; the blue-noise tile has no
+// weave. Apple's is the 16 x 16 pattern the Color StyleWriter drivers print flat
+// colour and text with (apple_tables.h).
 //
 // A dot on this printer is as wide as its row, so neighbours overlap and a
 // tint prints darker than its bits: ht_set_gain puts a tone curve ahead of
@@ -15,16 +17,20 @@
 #include <stdint.h>
 #include <stddef.h>
 
-typedef enum { HT_THRESHOLD, HT_ATKINSON, HT_FLOYD, HT_BAYER, HT_BLUENOISE } ht_algo_t;
+// Screens are stored by name ("apple" and the rest, ht_algo_from_name), so the order
+// is only a convention: new ones go last.
+typedef enum { HT_THRESHOLD, HT_ATKINSON, HT_FLOYD, HT_BAYER, HT_BLUENOISE, HT_APPLE } ht_algo_t;
 
 typedef struct {
     ht_algo_t algo;
     uint32_t  width;
     int16_t  *err;      // 3 rows of width, used as a ring by row index % 3
     uint32_t  y;
-    uint8_t   tone[256];    // the curve every gray goes through; identity until ht_set_gain
+    uint8_t   tone[256];    // the curve every gray goes through; identity until ht_set_tone or ht_set_gain
+    const uint8_t *tone_base;   // ht_set_tone's curve, which tone[] is the gain curve put on top of
+    int       gain_pct;         // ht_set_gain's
     uint32_t  phase_x, phase_y; // where in its tile a mask screen starts
-    int       invert;       // mask screen read upside down (255 - t)
+    int       invert;       // mask screen read upside down (255 - t; Apple's, 254 - t)
 } ht_t;
 
 int  ht_init(ht_t *h, ht_algo_t algo, uint32_t width);
@@ -37,9 +43,18 @@ int  ht_algo_from_name(const char *name, ht_algo_t *out);
 // once they have spread; 0 and 255 stay themselves. 0 removes the curve.
 void ht_set_gain(ht_t *h, int gain_pct);
 
+// A tone curve ahead of every screen: each gray, 0 black to 255 white, goes through
+// curve[] first (Apple's GAMA curves, apple_tables.h). NULL is none. The curve is
+// kept, not copied, so it has to outlive the halftoner. ht_set_gain puts the dot
+// gain curve on top of it, whichever of the two is set first: tone[v] is the gain
+// curve at curve[v].
+void ht_set_tone(ht_t *h, const uint8_t curve[256]);
+
 // Mask screens only: start the tile dx, dy in, and read it upside down if
 // asked. Two inks on the same tile upside down to each other never share a
-// dot in a light tint; two on tiles far apart share them only by chance.
+// dot in a light tint; two on tiles far apart share them only by chance. Apple's
+// tile reads "upside down" as the Color StyleWriter drivers' black ink does: its
+// threshold mirrored about 254, the tile's largest (halftone.c).
 void ht_set_phase(ht_t *h, uint32_t dx, uint32_t dy, int invert);
 
 // As ht_row, but where `avoid` has a bit set (an earlier ink's dot) this

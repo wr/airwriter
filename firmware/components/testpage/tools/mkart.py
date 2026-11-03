@@ -1,23 +1,39 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""Builds tp_art.h, the test page's letterhead: the colour ImageWriter icon and
-"AirWriter" / "Test page" in Apple Garamond Light as dots.
+"""Builds the test pages' letterheads: the printer's icon and "AirWriter" / "Test page"
+in Apple Garamond Light as dots.
 
-The Garamond is the subset the settings page embeds (tools/webui/style.css), the
-icon the grid the printer icons are built from (tools/icon/imagewriter.txt).
-Neither is covered by this repository's licences (LICENSE.md). Text is drawn
-large, scaled to its cap height in rows at 72 dpi and twice that across (the
-printer's 144 dpi), and cut at a fixed level, so the output is the same each run.
+The ImageWriter's (tp_art.h, the default) is the colour ImageWriter icon, the words
+scaled to a cap height in rows at 72 dpi and twice that across (the printer's 144
+dpi). The StyleWriter's (--grid 360x360, sw_art.h) is the Color StyleWriter's
+Chooser icon and the words on its square 360 dpi grid. The Garamond is the subset
+the settings page embeds (tools/webui/style.css), the icons the grids the printer
+icons are built from (tools/icon/imagewriter.txt, stylewriter.txt). None of these
+is covered by this repository's licences (LICENSE.md). Text is cut at a fixed
+level, so the output is the same each run.
 
-Needs Pillow (python3.14 here):  python3.14 firmware/components/testpage/tools/mkart.py
+Needs Pillow (python3.14 here):
+
+    python3.14 firmware/components/testpage/tools/mkart.py
+    python3.14 firmware/components/testpage/tools/mkart.py --grid 360x360 \\
+        --out firmware/components/stylewriter/sw_art.h
+
+The names in the header start with the output file's: tp_ for tp_art.h, sw_ for sw_art.h.
 """
-import base64, io, pathlib, re
+import argparse, base64, io, pathlib, re, sys
 
 from PIL import Image, ImageDraw, ImageFont
 
 HERE = pathlib.Path(__file__).resolve().parent
 ROOT = HERE / "../../../.."
 OUT = HERE / "../tp_art.h"
+
+# The grids the letterhead is made for: the printer's dots per inch across and down; the cap
+# heights of "AirWriter" and "Test page" in rows; the icon grid.
+GRIDS = {
+    (144, 72): (34, 20, "imagewriter.txt"),
+    (360, 360): (120, 70, "stylewriter.txt"),
+}
 
 # tools/icon/mkicons.py's palette; '.' is paper.
 PALETTE = {
@@ -35,15 +51,16 @@ def garamond():
     return ImageFont.truetype(io.BytesIO(base64.b64decode(data)), 400)
 
 
-def text_bits(font, text, cap_rows):
-    """Rows of 0/1, the cap height cap_rows rows, descenders below it."""
+def text_bits(font, text, cap_rows, xscale):
+    """Rows of 0/1, the cap height cap_rows rows, descenders below it, xscale dots across
+    for each row's height (2 on the ImageWriter's 144 x 72, 1 on a square grid)."""
     im = Image.new("L", (4000, 700), 0)
     ImageDraw.Draw(im).text((20, 20), text, font=font, fill=255)
     cap = font.getbbox("A")
     sc = cap_rows / (cap[3] - cap[1])
     bb = im.getbbox()
     im = im.crop((bb[0], 20 + cap[1], bb[2], bb[3]))
-    small = im.resize((int(im.width * sc * 2), int(round(im.height * sc))), Image.LANCZOS)
+    small = im.resize((int(im.width * sc * xscale), int(round(im.height * sc))), Image.LANCZOS)
     w, h = small.size
     px = small.load()
     return [[1 if px[x, y] > 100 else 0 for x in range(w)] for y in range(h)]
@@ -62,13 +79,21 @@ def c_bits(name, rows):
     return "\n".join(out)
 
 
-def c_icon():
-    rows = (ROOT / "tools/icon/imagewriter.txt").read_text().split()
-    keys = list(PALETTE)
-    out = [f"#define TP_ICON_W {len(rows[0])}", f"#define TP_ICON_H {len(rows)}",
-           "static const uint8_t tp_icon_rgb[][3] = {"]
-    out += [f"    {{ {r}, {g}, {b} }},   // {k}" for k, (r, g, b) in PALETTE.items()]
-    out += ["};", "static const uint8_t tp_icon[TP_ICON_H][TP_ICON_W] = {"]
+def stylewriter_palette():
+    """tools/icon/mkicons.py's palette for the Color StyleWriter's icon; '.' is paper."""
+    sys.path.insert(0, str(ROOT / "tools/icon"))
+    import mkicons
+    return dict({".": (255, 255, 255)}, **mkicons.STYLEWRITER_PALETTE)
+
+
+def c_icon(prefix, icon, palette):
+    rows = (ROOT / "tools/icon" / icon).read_text().split()
+    keys = list(palette)
+    up = prefix.upper()
+    out = [f"#define {up}_ICON_W {len(rows[0])}", f"#define {up}_ICON_H {len(rows)}",
+           f"static const uint8_t {prefix}_icon_rgb[][3] = {{"]
+    out += [f"    {{ {r}, {g}, {b} }},   // {k}" for k, (r, g, b) in palette.items()]
+    out += ["};", f"static const uint8_t {prefix}_icon[{up}_ICON_H][{up}_ICON_W] = {{"]
     for r in rows:
         out.append("    { " + ", ".join(str(keys.index(c)) for c in r) + " },")
     out.append("};")
@@ -76,25 +101,47 @@ def c_icon():
 
 
 def main():
+    ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
+    ap.add_argument("--grid", default="144x72", help="dots per inch across x down: 144x72 or 360x360")
+    ap.add_argument("--out", type=pathlib.Path, default=OUT, help="the header to write")
+    a = ap.parse_args()
+    try:
+        gx, gy = (int(v) for v in a.grid.split("x"))
+        title_cap, sub_cap, icon = GRIDS[(gx, gy)]
+    except (ValueError, KeyError):
+        sys.exit(f"mkart: no letterhead for the grid {a.grid}; it makes {', '.join('x'.join(map(str, g)) for g in GRIDS)}")
+    prefix = a.out.stem.split("_")[0]
+    palette = PALETTE if (gx, gy) == (144, 72) else stylewriter_palette()
+    printer = "ImageWriter" if (gx, gy) == (144, 72) else "StyleWriter"
+
     font = garamond()
+    if (gx, gy) == (144, 72):
+        about = ["// Generated by tools/mkart.py: do not edit. The test page's letterhead. The",
+                 "// icon is Apple's and the face Apple Garamond Light; neither is covered by",
+                 "// this repository's licences (LICENSE.md). Bit rows are MSB first."]
+    else:
+        rel = a.out.resolve().relative_to(ROOT.resolve())
+        about = ["// Generated by firmware/components/testpage/tools/mkart.py --grid " + a.grid,
+                 f"// --out {rel}: do not edit. The {printer}'s test page's",
+                 "// letterhead. The icon is Apple's (the Color StyleWriter's Chooser icon) and the",
+                 "// face Apple Garamond Light; neither is covered by this repository's licences",
+                 f"// (LICENSE.md). Bit rows are MSB first, one dot a bit at the grid's {gx} x {gy} dpi."]
     parts = [
         "// SPDX-License-Identifier: GPL-3.0-or-later",
         "//",
-        "// Generated by tools/mkart.py: do not edit. The test page's letterhead. The",
-        "// icon is Apple's and the face Apple Garamond Light; neither is covered by",
-        "// this repository's licences (LICENSE.md). Bit rows are MSB first.",
+        *about,
         "#pragma once",
         "#include <stdint.h>",
         "",
-        c_bits("tp_title", text_bits(font, "AirWriter", 34)),
+        c_bits(f"{prefix}_title", text_bits(font, "AirWriter", title_cap, gx / gy)),
         "",
-        c_bits("tp_sub", text_bits(font, "Test page", 20)),
+        c_bits(f"{prefix}_sub", text_bits(font, "Test page", sub_cap, gx / gy)),
         "",
-        c_icon(),
+        c_icon(prefix, icon, palette),
         "",
     ]
-    OUT.write_text("\n".join(parts))
-    print(f"wrote {OUT.resolve().relative_to(ROOT.resolve())}")
+    a.out.write_text("\n".join(parts))
+    print(f"wrote {a.out.resolve().relative_to(ROOT.resolve())}")
 
 
 if __name__ == "__main__":

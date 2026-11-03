@@ -4,9 +4,11 @@
 // the host tests in tools/ipp link it directly. The transport half of
 // ipp_server (esp_http_server glue) is the part that cannot run on the host.
 //
-// It only lifts the operation attributes the firmware acts on. Everything else
-// is skipped, not stored -- a printer that ignores an attribute it does not
-// implement is correct IPP, and iOS sends plenty we have no use for.
+// It only lifts the attributes the firmware acts on: the operation group's, and
+// from the job group the job's options (ipp_job_opts_t). Everything else is
+// skipped, not stored -- a printer that ignores an attribute it does not
+// implement is correct IPP, and iOS sends plenty we have no use for. Collections
+// (media-col) are walked through, their members never read as attributes.
 #pragma once
 #include <stdint.h>
 #include <stddef.h>
@@ -23,6 +25,14 @@
 #define IPP_NAME_MAX 64
 #define IPP_FMT_MAX  40
 
+// What a job asks for, from its Job group (W-1103). A printer that has no use
+// for an option ignores it.
+typedef struct {
+    // print-quality: 3 draft, 4 normal, 5 high. 0 when the client sent none,
+    // or sent a value that is not one of these.
+    int quality;
+} ipp_job_opts_t;
+
 typedef struct {
     uint16_t version;
     uint16_t op;
@@ -34,6 +44,8 @@ typedef struct {
     char document_format[IPP_FMT_MAX];
 
     int32_t job_id;          // -1 when absent; also read from job-uri
+
+    ipp_job_opts_t opts;
 
     // requested-attributes, pointing into the parsed buffer: valid as long
     // as that buffer is. n == 0 when absent.
@@ -47,16 +59,21 @@ typedef struct {
 
 int ipp_req_parse(ipp_req_t *r, const uint8_t *buf, size_t len);
 
-// The printers one server answers for (W-1082, W-1088): slot 0 is the
-// printer port's, at every path it has always answered at; 1-3 printers on
-// AppleTalk, each at its own (ipp/p<id>), and W-1082's LaserWriter also at
-// ipp/laser.
-#define IPP_PRINTERS       4
+// The printers one server answers for (W-1082, W-1088, W-1116): seven slots
+// for six shared printers (PR_SHARE_MAX), any mix of the printer port's
+// records and printers on AppleTalk. Slot 0 is the oldest port record's alone,
+// at every path it has always answered at and at its own ipp/p<id> (its
+// legacy path, R9: the path it had before it was the oldest), and stays empty
+// while that record is not shared; slots 1-6 take every other shared record,
+// each at its own path (ipp/p<id>), W-1082's LaserWriter also at ipp/laser. So
+// six fit with slot 0 empty (R14). At most six are on at once: Bonjour carries
+// six _ipp, slot 0's _printer and the page's _http, 8 of CONFIG_MDNS_MAX_SERVICES.
+#define IPP_PRINTERS       7
 #define IPP_RESOURCE_LASER "ipp/laser"
 
 // Which printer a request's HTTP path (or absolute URI) names: a slot at its
-// resource or its legacy one (without the leading '/'), slot 0 for any other
-// path while it is set, and -1 for none: a path of the ipp/p<n> or ipp/laser
-// shape no slot holds is never slot 0's.
+// resource or its legacy one (without the leading '/'), slot 0 included, then
+// slot 0 for any other path while it is set, and -1 for none: a path of the
+// ipp/p<n> or ipp/laser shape no slot holds is never slot 0's.
 int ipp_route(const char *path, const char *const resources[IPP_PRINTERS],
               const char *const legacy[IPP_PRINTERS]);

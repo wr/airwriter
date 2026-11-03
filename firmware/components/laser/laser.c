@@ -1073,10 +1073,8 @@ static int begin(int id, const char *name, job_pipe_target_t *t, int raw)
     ESP_LOGI(TAG, "job \"%s\" to %s, %s", name, s_job_name, raw ? "as it is" : pc.binary ? "binary" : "hex");
     if (raw) return 0;
     // Its own copy, made above: the list may give the targets again while the rip runs.
-    t->caps = &s_big->job_caps.caps;
-    t->stage = &s_stage;
-    t->dither = algo;
-    t->gain = gain;
+    *t = (job_pipe_target_t){ .caps = &s_big->job_caps.caps, .stage = &s_stage,
+                              .dither = algo, .gain = gain };
     return 0;
 }
 

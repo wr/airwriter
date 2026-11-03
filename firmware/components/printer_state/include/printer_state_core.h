@@ -27,6 +27,13 @@ typedef enum {
     PS_EV_ACTIVITY,         // a person did something: wake the panel
     PS_EV_JOB_CANCELLED,    // the job was cancelled: ends it as JOB_DONE does (W-1049)
     PS_EV_WIFI_FRESH,       // Wi-Fi was saved before this restart: green opens the first Ready
+    // W-1103: a StyleWriter's own report. Its HSKo says nothing, so a fault it names (no
+    // paper, a jam, the cartridge) is what needs attention, at once and not after the
+    // 30 s an ImageWriter's chattering line is given. Mid-job only: with no job it says
+    // nothing to the panel (the board posts the line instead, as it does for an
+    // ImageWriter that is not ready), and a job starting or ending clears it.
+    PS_EV_FAULT_ON,         // the printer holds the job with a fault
+    PS_EV_FAULT_OFF,        // and it cleared
 } ps_event_t;
 
 typedef struct {
@@ -64,6 +71,7 @@ typedef struct {
     uint8_t     join_failed;       // setup mode after a failed try
     uint8_t     fresh;             // PS_EV_WIFI_FRESH: Wi-Fi was just saved
     uint8_t     setup, wifi_up, line_ready, job, failed, ap_stations, greeted, kicked;
+    uint8_t     fault;             // PS_EV_FAULT_ON, until FAULT_OFF or the job's start or end
     uint8_t     job_started_low;   // the line was down when this job began: no printer to wait for
     uint8_t     cable;             // PS_CABLE_*, the last test's result, or 0
     uint8_t     cancelled;         // the last job was cancelled, not finished
@@ -109,7 +117,7 @@ const char *ps_name(ps_state_t st);   // "ready", "offline", ...
 // kick_every_ms. Never mid-job, where a low line is paper or a jam. Call
 // ps_kicked() after sending. W-1088: the port's line is its own, given by
 // ps_port_line (not ready from init): idle, the line the events carry is the
-// box's, ready while any shared printer is.
+// box's (main.c's box_ready: the port printer's record if shared, or a shared LaserWriter).
 void        ps_port_line(ps_t *ps, int ready, uint64_t now_ms);
 int         ps_want_kick(const ps_t *ps, uint64_t now_ms);
 void        ps_kicked(ps_t *ps, uint64_t now_ms);

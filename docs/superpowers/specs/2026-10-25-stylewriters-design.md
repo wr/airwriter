@@ -5,6 +5,53 @@
 `W-1102 QuickDraw LaserWriters on the printer port (Personal LaserWriter LS/300, Select 300)`.
 Reverses the StyleWriter cut in `2026-08-04-printer-support-scope-design.md`.
 
+**Amended 2026-11-02** after the first StyleWriter on the bench, a Color StyleWriter 2500 on
+board 1 (rev A; it answered every question with R9 open, first printed with R9 fitted, and on
+2026-11-03 printed the test page with R9 taken off again, so the 2500 does not need R9): a rect is as wide as its rows' whole bytes, not the printable width.
+The 2500 counts a row's bytes from the rect's width rounded down, so Letter's 2916-dot rect over
+365-byte rows lost it the first row, and it stopped with `2` 80 and its buffer full (SPEC §3.16,
+Geometry). lpstyl's rects are always whole bytes; TailTalk's are the printable width, which on
+Letter is not. With 2920-dot rects the test page ran to its end at 57600 baud, with blank rows
+skipped, several bands in the buffer, `m2bA` and `B`, and pauses of 13 to 20 s between a rect
+and its blocks while the board drew them. The cartridge was dry, so the sheet came out blank.
+The same bench changed two rules. The 2400 and 2500's `2` 80, read as spurious, also marks a
+page the printer has stopped on (`1` not busy, nothing draining), which now fails after 10 s
+rather than the 600 s stall limit. And the full sequence at start-up and on the person's Look
+for Printers goes to any StyleWriter record that a plain question got nothing from, not only
+the original's: the 2500 goes dark on its own about 5 minutes after a page, and is left silent
+by a page cut short, and only a reset wakes it. Wells's call the same day: a 2200, 2400 or
+2500 asleep after a job reads as Ready (as the original's quiet idle does) and the next job's
+reset wakes it, as Apple's driver leaves it, rather than dropping `l` to keep it awake; one
+switched off at its button reads Ready too until a job finds it off. And a waking printer gets
+10 s before a second reset, which has left it dark.
+
+**Amended 2026-10-30** by `W-1116 Printer port: several printers, the one plugged in shows
+online` (`2026-10-30-port-printers-design.md`): the swapped-port refusal and the "changed"
+notice of the 2026-10-27 amendment are replaced; the port keeps a record per model, the one
+answering online and the rest offline, and a family check alone stays so one family's bytes
+never reach the other: on what is on the port now and what the work's own questions got, never
+the family that answered last (SPEC §3.16: `pr_port_absent` at a job's claim, the ImageWriter
+job's own gate, and `printers_port_on_is_imagewriter` for a StyleWriter's job, page or
+cleaning). The automatic look is every 5 s, not 60, while the port's printer is not answering,
+whatever the list holds; the order of the questions is the list's, not the record's: the plain
+question first wherever a StyleWriter record is listed, the port last answered as a
+StyleWriter, or an original ImageWriter record is listed; the full sequence wherever an
+original StyleWriter record is listed. A StyleWriter record that answers is asked its status on
+a line-up edge as well, so an ImageWriter put in its place is found by the failed check and the
+stop's look in about 1.5 s. An ImageWriter record whose port a StyleWriter answered is asked as
+any port that is not answering (the quiet rule below went with the notice).
+
+**Amended 2026-10-27, before the bench** (SPEC §3.16 has each in full; the 2026-10-30
+amendment above changes the first two). A port whose record is, or that last answered as, a
+StyleWriter is asked the plain question first at a line-up or a look, and `ESC ?` only when
+that gets nothing: a StyleWriter may stop listening once it has heard `ESC ?`. While the
+family that last answered on the port is not the record's, the record's jobs, test page and
+cleaning are refused until its own family answers again or the person accepts the change; an
+ImageWriter record whose port a StyleWriter answered asks nothing more on its own, so its
+notice can be dismissed. The original StyleWriter's silence while idle reads as ready, not
+offline, since it ignores the plain question until a reset. A block leaves one step of `B`
+below the empty buffer.
+
 ## Why
 
 In August the StyleWriter was cut for one reason: the print head is the cartridge on the early
@@ -37,7 +84,7 @@ StyleWriter and have an owner confirm on paper. Plan B: buy one.
 - Built and checked with no StyleWriter here: a software StyleWriter for the host tests and the
   bench, Apple's own drivers captured against it, and an owner's prints before it is called
   working.
-- lpstyl, TailTalk/InkTalk (FeralFirmware) and Bolacore credited in the docs and `LICENSE.md`.
+- lpstyl and TailTalk/InkTalk (FeralFirmware) credited in the docs and `LICENSE.md`.
 
 ## Non-goals
 
@@ -46,11 +93,18 @@ StyleWriter and have an owner confirm on paper. Plan B: buy one.
 - StyleWriters already on the network behind Apple's adapter or an InkTalk, found over
   AppleTalk and shared on AirPrint (my call; the same reasoning that cut `W-1090`). Owners can
   plug the printer into AirWriter's port instead.
-- The printer-clocked fast mode (about 1 Mbit/s) that later models offer. The printer drives
-  its clock on HSKi (InkTalk `stack_task.rs`); rev A's U3 is too slow to pass it, rev B's
-  SP3232EU should (`W-1091`), and the ESP32's UART takes no outside clock, so how the board
-  follows it is `W-1102`'s to work out for the QuickDraw LaserWriters. StyleWriter fast mode
-  can follow from that later. Here every page goes at 57600 baud, as lpstyl and InkTalk send
+- The printers' fast modes, which InkTalk follows since TailTalk PR 93 (2026-10-30;
+  `InkTalk/firmware/src/fast_clock.rs` and `printer.rs`). A StyleWriter II or 1200 is sent `h`
+  and then runs at 230,400 baud on the port's own clock; J2's data lines go through U2, an
+  RS-422 part, so rev A should carry it (untested). A Colour StyleWriter (1500, 2200, 2400,
+  2500) is sent `x` and then drives a bit clock on HSKi, one clock per bit with 8N1 framing on
+  it, about 885 kHz on a 2200: send each bit just after a falling edge, sample on the rising
+  one. Either way the port switches about 33 ms after the command is out, as a Mac allows, and
+  a printer that stops clocking has been reset or switched off and is back at 57600. Rev A's U3
+  is too slow to pass the HSKi clock, rev B's SP3232EU should (`W-1091`), and the ESP32's UART
+  takes no outside clock (InkTalk uses the RP2040's PIO), so how the board follows it is
+  `W-1102`'s to work out for the QuickDraw LaserWriters. How a job brings the printer back out
+  of either mode cleanly is not yet known. Here every page goes at 57600 baud, as lpstyl sends
   it.
 - 720 dpi on the 2500, paper types other than plain, transparencies, envelopes.
 
@@ -189,12 +243,15 @@ which ignores `?` until reset, but its `00` and `49` bytes can read as a stray c
 9600. So:
 
 - **Automatic looks send only the plain question.** At boot after the quiet power-on, when
-  setup or the Printers section looks, at line-up when `ESC ?` went unanswered, and every 60 s
-  while the port's printer is not answering (InkTalk's retry), never while the port prints. One
+  setup or the Printers section looks, at line-up when `ESC ?` went unanswered, and every 5 s
+  while the port's printer is not answering (60 s at first, InkTalk's retry; 5 s since
+  W-1116, so a StyleWriter plugged in is found in seconds), never while the port prints. One
   byte, then back to 9600.
 - **The full sequence goes only to a StyleWriter the person or the record names:** before
   every job to a StyleWriter record, and once when the person picks a StyleWriter in Add a
-  Printer… or in the unknown printer's notice, to confirm it and read its model.
+  Printer… or in the unknown printer's notice, to confirm it and read its model. Amended
+  2026-10-27 (Wells): an original StyleWriter record also gets it once at start-up and on Look
+  for Printers when nothing else answered, so an empty port reads offline rather than ready.
 - **A port whose record is an ImageWriter** is asked `ESC ?` at line-up as today; while its
   printer does not answer (off or gone), the automatic looks add the plain question, so a
   StyleWriter swapped in is noticed.
@@ -359,8 +416,8 @@ host-built (`components/sw_page`, name the builder's), fed 360 dpi rows:
 - Board 1 (bench rules: no OTA mid-print, ask before printing on the ImageWriter): its
   ImageWriter recognised and printing as before (the checker's crc at top margin 0); the plain
   question sent at 57600 to its ImageWriter, several hundred times, prints nothing, and what
-  the full sequence prints is written down; with no printer answering, the 60 s look costs
-  nothing visible.
+  the full sequence prints is written down; with no printer answering, the automatic look
+  (60 s then, 5 s since W-1116) costs nothing visible.
 - If a USB serial adapter is to hand: `swfake` on the Mac on board 1's J2, recognised as each
   model, an AirPrint page from a phone decoded by `swfake` as the dots the rip made, out of
   paper and cancel.
@@ -376,7 +433,11 @@ host-built (`components/sw_page`, name the builder's), fed 360 dpi rows:
 - **The adapter.** On every AppleTalk connection that is on, the port's StyleWriter registers
   as `<name>:StyleWriter1200AT@*` or `<name>:ColorStyleWriter2400AT@*` by model, on socket 129
   (0x81; the port ImageWriter's socket today, and the port holds one printer). The open
-  handshake, attentions and data path as InkTalk does them; the fast clock refused. A request
+  handshake, attentions and data path as InkTalk does them; each fast mode refused unless the
+  port can follow it, since a Mac told the adapter takes one switches the printer over and an
+  adapter that cannot follow drops off the network (FeralFirmware, 2026-10-28). The II and
+  1200's 230,400 baud is likely within rev A's reach; the attentions that ask for either mode
+  are in TailTalk's `tailtalk-core/src/stylewriter.rs`. A request
   while any job holds the box's lock (AirPrint, the test page, another Mac) answers busy
   (`0001`); the Mac's driver waits and asks again. The Mac's bytes go to J2 as they are under
   the job lock, the printer's come back; a Mac that vanishes mid-job leaves the printer reset.
@@ -411,13 +472,14 @@ host-built (`components/sw_page`, name the builder's), fed 360 dpi rows:
 - **Apple's driver data** (the tone curves and the threshold screen, about 1.3 KB): used, read
   out of Apple's driver files by our own script, its source named in the generated header and
   in `LICENSE.md`'s table. The drivers themselves are never committed.
-- Credit for the StyleWriter work goes to Monroe Williams, FeralFirmware and Bolacore, in the
+- Credit for the StyleWriter work goes to Monroe Williams and FeralFirmware, in the
   README's credits, the StyleWriter wiki page and `docs/prior-art.md`.
 
 ## Decided by Wells (2026-10-25)
 
 1. The StyleWriter comes back into scope because owners restore and use them.
-2. TailTalk/InkTalk and Bolacore's work are the starting point, credited.
+2. TailTalk/InkTalk, FeralFirmware's work, is the starting point, credited under the
+   repository's name, FeralFirmware (Wells, 2026-10-27).
 3. No StyleWriter on the bench: build against a software one and an owner confirms (plan A);
    buying one is plan B.
 4. The seven lpstyl models; recognised and shared under its own name; colour with a colour
@@ -434,7 +496,8 @@ host-built (`components/sw_page`, name the builder's), fed 360 dpi rows:
 - Automatic looks send only the one-byte plain question, harmless to an ImageWriter by its bit
   timing (bench-checked); the full sequence only to a named StyleWriter. So the original
   StyleWriter is found once the person says what it is.
-- Idle status by asking `1`/`2` every 10 s; a 60 s look while the port is empty.
+- Idle status by asking `1`/`2` every 10 s; a look every 5 s while the port is empty (60 s
+  until W-1116).
 - R9 fitted on rev A boards that run a StyleWriter until shown unnecessary; rev B fits it.
 - Letter, A4 and Legal; plain paper only; draft, normal, best from the phone's quality.
 - Apple's tone curve as the StyleWriter default and Apple's screen as a sixth choice (Wells
