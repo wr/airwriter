@@ -683,8 +683,8 @@ static int wait_printed(sw_session_t *s)
         if ((rc = query(s, 'B', &b))) return rc;
         int32_t free_b = sw_free_bytes(s->cfg.model, b);
         if (free_b > best) { best = free_b; t_prog = ms(s); stop_on = 0; }
-        else if (free_b < s->free_empty - 256 && stopped(s, s1, s2, &stop_on, &t_stop))
-            return SW_E_FAULT;                         // a page still held, not one printed
+        else if (free_b < s->free_empty - 2048 && stopped(s, s1, s2, &stop_on, &t_stop))
+            return SW_E_FAULT;      // 2 KB still held, not a printed page's empty reading a step or two short
         if ((uint32_t)(ms(s) - t_prog) >= s->cfg.stall_ms) return SW_E_STALL;
         s->o.sleep_ms(s->o.ctx, PRINTED_MS);
     }

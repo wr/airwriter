@@ -390,6 +390,7 @@ static volatile int        s_sw_job_silent;
 // and answers nothing until a job's reset wakes it, so its silence reads as ready
 // (sw_idle_silent). Answering meanwhile leaves it set: the dark comes after.
 static volatile int        s_sw_asleep;
+static volatile sw_model_t s_sw_asleep_model;  // whose: another StyleWriter on the port is not asleep
 // W-1116: the AirPrint printer (slot) the port's job came in on, and its record id, from the
 // sink's ctx (printers.c's slot_ctx). The job's end goes back to the slot; the record is the
 // job's own family (doc_begin) and the ImageWriter gate's (colour_ok), not the port's.
@@ -1360,6 +1361,7 @@ static void sw_state_cb(sw_state_t st)
     s_sw_state = st;
     s_port_answering = st != SWS_OFFLINE;
     s_sw_asleep = st == SWS_READY;      // only the session's end shows ready: `E l` went out
+    if (s_sw_asleep) s_sw_asleep_model = printers_port_sw_model();
     if (st == SWS_OFFLINE) {
         s_sw_job_silent = 1;            // the session got nothing: offline until it answers
         // It was answering before the session: the port is looked at once the session is over
@@ -1396,7 +1398,8 @@ static void sw_idle_state(sw_state_t st, int answered)
 // The record's StyleWriter did not answer, idle.
 static void sw_idle_quiet(void)
 {
-    sw_idle_state(sw_idle_silent(printers_port_sw_model(), s_sw_job_silent, s_sw_asleep), 0);
+    sw_model_t m = printers_port_sw_model();
+    sw_idle_state(sw_idle_silent(m, s_sw_job_silent, s_sw_asleep && m == s_sw_asleep_model), 0);
 }
 
 // A StyleWriter that has just answered: its cartridge (what AirPrint offers follows it), and
@@ -1431,6 +1434,7 @@ static void sw_confirm(void)
         else port_push(printer_state_view().state);
         return;
     }
+    s_sw_asleep = 0;                    // the reset woke it: it stays awake now
     // The picked record takes the model it named (when free), and that model is on the port now.
     printers_port_set_sw_model(id, m);
     port_sw_sync(printers_port_is_stylewriter(), 1);
@@ -1934,8 +1938,11 @@ static void kick_task(void *arg)
         // A first sighting (PR_SEEN_AGAIN: the answer would change the list, R16): the same
         // question again at once, and the same answer twice makes the change (`confirm`).
         // A status check's sighting is confirmed by the plain question, which names the model
-        // whatever record is current (the status needs a StyleWriter record's model).
-        s_port_confirm = seen != PR_SEEN_AGAIN ? PA_NONE : act == PA_STATUS ? PA_PLAIN : act;
+        // whatever record is current (the status needs a StyleWriter record's model); so is the
+        // full sequence's, as the printer it just reset answers the plain question, and a
+        // second reset a second after the first has left a 2500 dark (board 1, 2026-11-02).
+        s_port_confirm = seen != PR_SEEN_AGAIN ? PA_NONE
+                       : act == PA_STATUS || act == PA_FULL ? PA_PLAIN : act;
 
         if ((act == PA_PLAIN || act == PA_FULL) && mine) {
             if (act == PA_FULL) s_sw_asleep = 0;      // the reset woke it: it stays awake now
