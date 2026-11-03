@@ -9,8 +9,8 @@ exists and is out of scope here.
 A 3D-printed enclosure for both AirWriter builds, authored once as parametric build123d
 source in `enclosure/` and exported to STEP (for interference checks against the real
 board in KiCad) and STL (to print). Two printed parts: a **tray** — floor and four walls —
-shared by both builds, and a **Lite lid** that stands in for the dot-grid art panel on
-boards built without it. Pro closes with the panel; Lite closes with the printed lid.
+shared by both builds, and a **LC lid** that stands in for the dot-grid art panel on
+boards built without it. Pro closes with the panel; LC closes with the printed lid.
 Every board-derived number is read out of `hardware/airwriter/airwriter.kicad_pcb` at
 build time rather than retyped, so the case cannot drift from the board.
 
@@ -19,14 +19,14 @@ build time rather than retyped, so the case cannot drift from the board.
 | Build | Stack |
 |---|---|
 | **Pro** | tray + main board + printed lattice + dot-grid art panel (the panel is the lid) |
-| **Lite** | tray + main board + printed lid on four legs |
+| **LC** | tray + main board + printed lid on four legs |
 
-The Lite board is the same main board with the 37 SK6812MINI and their 100 nF caps
+The LC board is the same main board with the 37 SK6812MINI and their 100 nF caps
 unpopulated. It has no panel, so the lid reproduces the panel's outline, its 1.6 mm
 thickness and its position at the top of the tray's pocket: from the outside the two
 builds are identical except the top face.
 
-One tray, not two. The Lite's legs — not the tray — span the cavity, because the Pro's
+One tray, not two. The LC's legs — not the tray — span the cavity, because the Pro's
 lattice already occupies the four mounting-hole positions with its own indexing posts.
 Putting the spanning pillars on the lid keeps that space free in the shared part.
 
@@ -154,14 +154,14 @@ can only go in one way. Four 3.00 mm bosses at the same positions carry the boar
 
 **Internal carve-outs**, from the ledger: S1's top corner, U4 (119.3, 116.1), R3
 (151.8, 128.8), U9 (146.7, 124.818). SW3's plunger passes up through the lattice and the
-panel's 2.25 mm bore at (131, 91); the Lite lid carries the same bore at the same place.
+panel's 2.25 mm bore at (131, 91); the LC lid carries the same bore at the same place.
 
 ## 5. Fastening
 
 - **Pro:** M2.5 × 18 from below *(amended 2026-10-14: × 20 bottoms out in the blind Würth standoffs once the cavity is the measured 13.04)* — rubber foot, floor, standoff, board, lattice, into the
   panel's SMTSO blind nuts. Unchanged from the panel design; hole/seat coaxiality between
   the two boards is load-bearing and is not this document's to move.
-- **Lite:** M2.5 × 10 from below into an M2.5 heat-set insert pressed into the **bottom** of
+- **LC:** M2.5 × 10 from below into an M2.5 heat-set insert pressed into the **bottom** of
   each lid leg, level with the board's top face. Short engagement into brass; the 12.74 mm
   of leg above the insert is a plain spacer that also guides the screw. Threading M2.5
   straight into printed plastic on a lid meant to be opened is what this avoids.
@@ -172,9 +172,9 @@ panel's 2.25 mm bore at (131, 91); the Lite lid carries the same bore at the sam
 enclosure/
   board_geom.py     reads hardware/airwriter/airwriter.kicad_pcb -> outline, H1-H4,
                     connector footprint extents, carve-out positions
-  case.py           build123d model: tray() and lite_lid()
+  case.py           build123d model: tray() and lc_lid()
   params.py         the numbers this document fixes, one place, commented with provenance
-  build.sh          -> out/airwriter-tray.{step,stl}, out/airwriter-lite-lid.{step,stl}
+  build.sh          -> out/airwriter-tray.{step,stl}, out/airwriter-lc-lid.{step,stl}
   README.md         how to print it, which screws, which inserts
 ```
 
@@ -205,7 +205,7 @@ tray printed floor-down. No part of either model needs support.
 
 ## 8. Shop model
 
-The tray and Lite lid STLs convert to GLB through the shop's existing
+The tray and LC lid STLs convert to GLB through the shop's existing
 `scripts/addon-models/stl2glb.mjs`. Whether the case then becomes a purchasable add-on on
 the AirWriter product page is a separate product decision and is not part of this design.
 
@@ -217,7 +217,7 @@ the AirWriter product page is a separate product decision and is not part of thi
 
 ## Open items
 
-1. Heat-set insert MPN for the Lite lid legs (M2.5 × 4 mm brass, short-flange; picked at
+1. Heat-set insert MPN for the LC lid legs (M2.5 × 4 mm brass, short-flange; picked at
    implementation from what is actually stocked).
 2. Rubber foot MPN and whether the floor gets a recess for it — decided against a real
    foot in hand, not from a datasheet.

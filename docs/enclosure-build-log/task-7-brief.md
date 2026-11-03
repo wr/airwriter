@@ -1,4 +1,4 @@
-### Task 7: The Lite lid
+### Task 7: The LC lid
 
 **Files:**
 - Modify: `enclosure/case.py`
@@ -6,17 +6,17 @@
 
 **Interfaces:**
 - Consumes: `params`, `board_geom.mount_holes()`, `board_geom.footprint("SW3")`
-- Produces: `lite_lid() -> Part`
+- Produces: `lc_lid() -> Part`
 
 - [ ] **Step 1: Write the failing test**
 
 Append to `enclosure/test_case.py`, above the `if __name__` block:
 
 ```python
-class TestLiteLid(unittest.TestCase):
+class TestLCLid(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.lid = case.lite_lid()
+        cls.lid = case.lc_lid()
 
     def test_is_one_valid_solid(self):
         self.assertTrue(self.lid.is_valid)
@@ -57,7 +57,7 @@ class TestLiteLid(unittest.TestCase):
 - [ ] **Step 2: Run the test and watch it fail**
 
 Run: `cd ~/Projects/airwriter/enclosure && .venv/bin/python -m unittest -v test_case`
-Expected: FAIL — `AttributeError: module 'case' has no attribute 'lite_lid'`
+Expected: FAIL — `AttributeError: module 'case' has no attribute 'lc_lid'`
 
 - [ ] **Step 3: Implement**
 
@@ -65,10 +65,10 @@ Add to `enclosure/case.py`:
 
 ```python
 LEG_D = 6.00
-"""Lite lid leg diameter -- enough plastic round a 3.60 insert bore."""
+"""LC lid leg diameter -- enough plastic round a 3.60 insert bore."""
 
 
-def lite_lid() -> Part:
+def lc_lid() -> Part:
     """The panel stand-in for boards built without the dot-grid art panel.
 
     A plate the panel's size and thickness, seating in the same place, on four
@@ -109,7 +109,7 @@ Expected: PASS, 24 tests.
 ```bash
 cd ~/Projects/airwriter
 git add enclosure/case.py enclosure/test_case.py
-git commit -m "Enclosure: Lite lid"
+git commit -m "Enclosure: LC lid"
 ```
 
 ---

@@ -120,12 +120,17 @@ def d3_window() -> tuple[float, float, float, float]:
     return hits[0]
 
 
-def _d3_tube_rects() -> tuple[tuple[float, float, float, float],
-                              tuple[float, float, float, float]]:
-    """(interior, outer) of the D3 tube as (x0, x1, y0, y1). The outer runs on
-    to the board edge on any side within 1 mm of it, so the edge ridge has a
-    wall to hang from at the corner."""
-    x0, x1, y0, y1 = d3_window()
+def _d3_tube_rects(window=None) -> tuple[tuple[float, float, float, float],
+                                         tuple[float, float, float, float]]:
+    """(interior, outer) of the D3 tube as (x0, x1, y0, y1). The interior
+    holds `window` (the panel's FR4 window by default; the LC frame passes
+    its frosted slash) and D3's envelope (since rev 2026.11 a 3 mm LED on an
+    8 mm spacer, standing near the window), D3_TUBE_CLEAR round both. The
+    outer runs on to the board edge on any side within 1 mm of it, so the edge
+    ridge has a wall to hang from at the corner."""
+    x0, x1, y0, y1 = window or d3_window()
+    for bx0, bx1, by0, by1, _ in components.envelopes()["D3"]:
+        x0, x1, y0, y1 = min(x0, bx0), max(x1, bx1), min(y0, by0), max(y1, by1)
     c, w = p.D3_TUBE_CLEAR, p.LATTICE_WALL
     inner = (x0 - c, x1 + c, y0 - c, y1 + c)
     ox0, ox1, oy0, oy1 = inner[0] - w, inner[1] + w, inner[2] - w, inner[3] + w
@@ -188,14 +193,15 @@ def _ridge() -> Part:
     return outer - inner
 
 
-def _part_voids() -> Part:
+def _part_voids(skip=()) -> Part:
     """Every part's shadow (components.py), grown by PART_CLEAR and
-    PART_TOP_CLEAR, from below the board to its top. The connectors use their
-    vendor hulls grown by PORT_CLEAR instead, as the tray does."""
+    PART_TOP_CLEAR, from below the board to its top, but those in `skip`. The
+    connectors use their vendor hulls grown by PORT_CLEAR instead, as the tray
+    does."""
     c = p.PART_CLEAR
     out = []
     for ref, bands in components.envelopes().items():
-        if ref in ("J1", "J2", "J4"):
+        if ref in ("J1", "J2", "J4") or ref in skip:
             continue
         for x0, x1, y0, y1, top in bands:
             out.append(_box(x0 - c, x1 + c, y0 - c, y1 + c, -1, top + p.PART_TOP_CLEAR))

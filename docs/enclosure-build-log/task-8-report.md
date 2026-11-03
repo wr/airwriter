@@ -10,7 +10,7 @@ printability gate, README (W-8)".
   (see "The check that was wrong" below): a `f.geom_type != GeomType.PLANE`
   guard added before the normal check.
 - `enclosure/export.py` — writes `out/airwriter-tray.{step,stl}` and
-  `out/airwriter-lite-lid.{step,stl}`, printing each part's bounding box and
+  `out/airwriter-lc-lid.{step,stl}`, printing each part's bounding box and
   volume. Verbatim from the brief.
 - `enclosure/build.sh` (executable) — runs the full test suite, then
   `export.py`. Verbatim from the brief.
@@ -38,7 +38,7 @@ the check itself, not the geometry; the other eight were real.
    top stays flat too — an unsupported ceiling inside the front wall.
 3. **J1's (USB-C) port-opening top** (`(52.1, -0.9, 3.6)`, area 8.4mm²):
    same mechanism as #2, on the USB-C receptacle's shield.
-4. **Lite lid insert bores** (four, all at Z=4.5 — `(5.6,12.3)`,
+4. **LC lid insert bores** (four, all at Z=4.5 — `(5.6,12.3)`,
    `(53.4,12.3)`, `(5.6,98.6)`, `(56.4,98.6)`): each M2.5 heat-set insert
    bore is a blind cylindrical hole (`INSERT_DEPTH`=4.50 into a 14.34mm-tall
    leg) with a flat bottom — solid above, void below, inside the leg.
@@ -57,7 +57,7 @@ bounding boxes; changing their return values would have broken those tests
 for no functional reason. The relief is a printability-only add-on layered
 on in `tray()`.
 
-**Fix, offender 4:** the insert-bore loop in `lite_lid()` now also
+**Fix, offender 4:** the insert-bore loop in `lc_lid()` now also
 subtracts a 45° cone from the bore's blind end down to a point
 (`Cone(INSERT_D/2, 0, INSERT_D/2)`), the same idea `screw_holes()` already
 uses for its own counterbore-to-clearance-bore transition.
@@ -133,7 +133,7 @@ Per the verification bar, constructed a broken variant for every check
 
 ```
 airwriter-tray:      68.00 x 110.27 x 22.94 mm, 36.4 cm3
-airwriter-lite-lid:  62.40 x 104.67 x 15.94 mm, 11.9 cm3
+airwriter-lc-lid:  62.40 x 104.67 x 15.94 mm, 11.9 cm3
 ```
 
 Matches the brief's Step 6 expectation (68.00 x 110.27 x 22.94 for the tray
@@ -159,7 +159,7 @@ regressed.
 
 - `enclosure/case.py` (modified) — `_ridge_roof()`, `_dip_slot_roof()`,
   `_port_roof()`, `_print_reliefs()` added; `tray()` subtracts
-  `_print_reliefs()`; `lite_lid()`'s insert-bore loop cones the blind end.
+  `_print_reliefs()`; `lc_lid()`'s insert-bore loop cones the blind end.
 - `enclosure/test_printable.py` (new) — the gate.
 - `enclosure/export.py` (new) — the exporter.
 - `enclosure/build.sh` (new, executable) — the driver.
@@ -194,7 +194,7 @@ start, unrelated to this task, and left alone.
   (`git status` after `build.sh` shows nothing new under `enclosure/`).
 - Re-read `case.py`'s diff end to end before committing; no stray debug
   code, no changed signatures on existing public functions
-  (`dip_slot()`, `port_cutouts()`, `screw_holes()`, `tray()`, `lite_lid()`
+  (`dip_slot()`, `port_cutouts()`, `screw_holes()`, `tray()`, `lc_lid()`
   all still take no arguments and return `Part`).
 
 ## Concerns

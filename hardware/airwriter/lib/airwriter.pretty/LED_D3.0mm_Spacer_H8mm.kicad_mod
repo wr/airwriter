@@ -1,0 +1,240 @@
+(footprint "LED_D3.0mm_Spacer_H8mm"
+	(version 20260206)
+	(generator "pcbnew")
+	(generator_version "10.0")
+	(layer "F.Cu")
+	(descr "3 mm round THT LED on a 4 x 8 mm nylon spacer (HIWA LED4*8, LCSC C92326): lens about 11.85 mm above the board")
+	(tags "LED THT 3mm spacer standoff")
+	(property "Reference" "REF**"
+		(at 1.27 -2.96 0)
+		(layer "F.SilkS")
+		(uuid "021b8d63-5585-4a19-b6ce-a6f67e63b874")
+		(effects
+			(font
+				(size 1 1)
+				(thickness 0.15)
+			)
+		)
+	)
+	(property "Value" "LED_D3.0mm"
+		(at 1.27 2.96 0)
+		(layer "F.Fab")
+		(uuid "120dd432-807e-4724-81f1-375cb6a979fc")
+		(effects
+			(font
+				(size 1 1)
+				(thickness 0.15)
+			)
+		)
+	)
+	(property "Datasheet" ""
+		(at 0 0 0)
+		(layer "F.Fab")
+		(hide yes)
+		(uuid "6b63e873-9430-4e07-a36e-5fcc36fc7740")
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+		)
+	)
+	(property "Description" ""
+		(at 0 0 0)
+		(layer "F.Fab")
+		(hide yes)
+		(uuid "f4c6881f-eee0-46ef-adce-b85821635a86")
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+		)
+	)
+	(property "KiLib_Generator" "LED/THT"
+		(at 0 0 0)
+		(layer "F.SilkS")
+		(hide yes)
+		(uuid "7619b8d0-bd1a-43bf-bfa6-ecda9de6d86c")
+		(effects
+			(font
+				(size 1 1)
+				(thickness 0.15)
+			)
+		)
+	)
+	(attr through_hole)
+	(duplicate_pad_numbers_are_jumpers no)
+	(fp_line
+		(start -0.29 -1.236)
+		(end -0.29 -1.08)
+		(stroke
+			(width 0.12)
+			(type solid)
+		)
+		(layer "F.SilkS")
+		(uuid "b151a887-9718-4166-b284-345de6a97e14")
+	)
+	(fp_line
+		(start -0.29 1.08)
+		(end -0.29 1.236)
+		(stroke
+			(width 0.12)
+			(type solid)
+		)
+		(layer "F.SilkS")
+		(uuid "4adc6fde-90e7-42b5-af14-b46b9b652c25")
+	)
+	(fp_arc
+		(start -0.29 -1.235516)
+		(mid 1.36566 -1.987699)
+		(end 2.941437 -1.08)
+		(stroke
+			(width 0.12)
+			(type solid)
+		)
+		(layer "F.SilkS")
+		(uuid "1fd5d122-423e-4487-ae9f-a55853f1cec2")
+	)
+	(fp_arc
+		(start 0.229039 -1.08)
+		(mid 1.27 -1.5)
+		(end 2.310961 -1.08)
+		(stroke
+			(width 0.12)
+			(type solid)
+		)
+		(layer "F.SilkS")
+		(uuid "abacead6-b63c-4ec6-99ee-a54942bd904a")
+	)
+	(fp_arc
+		(start 2.310961 1.08)
+		(mid 1.27 1.5)
+		(end 0.229039 1.08)
+		(stroke
+			(width 0.12)
+			(type solid)
+		)
+		(layer "F.SilkS")
+		(uuid "62f6387c-3772-4acb-831c-fafa80023fa7")
+	)
+	(fp_arc
+		(start 2.941437 1.08)
+		(mid 1.36566 1.987699)
+		(end -0.29 1.235516)
+		(stroke
+			(width 0.12)
+			(type solid)
+		)
+		(layer "F.SilkS")
+		(uuid "e8afd8d5-559d-4600-b520-4152e78aa60a")
+	)
+	(fp_circle
+		(center 1.27 0)
+		(end 3.42 0)
+		(stroke
+			(width 0.05)
+			(type default)
+		)
+		(fill no)
+		(layer "F.CrtYd")
+		(uuid "514f172c-b116-434d-b04c-a6f551b10ae3")
+	)
+	(fp_line
+		(start -0.23 -1.16619)
+		(end -0.23 1.16619)
+		(stroke
+			(width 0.1)
+			(type solid)
+		)
+		(layer "F.Fab")
+		(uuid "5b2ea8cd-3e95-4b2f-8b7c-b90a1e57a048")
+	)
+	(fp_arc
+		(start -0.23 -1.16619)
+		(mid 3.17 0)
+		(end -0.23 1.16619)
+		(stroke
+			(width 0.1)
+			(type solid)
+		)
+		(layer "F.Fab")
+		(uuid "5e064778-aaa6-4fa8-be6a-720b7e92a59e")
+	)
+	(fp_circle
+		(center 1.27 0)
+		(end 2.77 0)
+		(stroke
+			(width 0.1)
+			(type solid)
+		)
+		(fill no)
+		(layer "F.Fab")
+		(uuid "41192dd1-d032-420d-b7a3-10a03f52473b")
+	)
+	(fp_circle
+		(center 1.27 0)
+		(end 3.27 0)
+		(stroke
+			(width 0.1)
+			(type default)
+		)
+		(fill no)
+		(layer "F.Fab")
+		(uuid "bffea182-eb58-4bb7-9d88-4f6cab40ed60")
+	)
+	(fp_text user "${REFERENCE}"
+		(at 1.27 0 0)
+		(layer "F.Fab")
+		(uuid "8cfece50-8569-4af8-9506-b13546e630c5")
+		(effects
+			(font
+				(size 0.8 0.8)
+				(thickness 0.12)
+			)
+		)
+	)
+	(point
+		(at 1.27 0)
+		(size 2)
+		(layer "F.Fab")
+		(uuid "64a4b234-2e45-4692-bc38-636ce2cb8b8a")
+	)
+	(pad "1" thru_hole rect
+		(at 0 0)
+		(size 1.8 1.8)
+		(drill 0.9)
+		(layers "*.Cu" "*.Mask")
+		(remove_unused_layers no)
+		(uuid "df5b9536-91dd-4bd0-bd13-1e964958db67")
+	)
+	(pad "2" thru_hole circle
+		(at 2.54 0)
+		(size 1.8 1.8)
+		(drill 0.9)
+		(layers "*.Cu" "*.Mask")
+		(remove_unused_layers no)
+		(uuid "0eb92ea2-ce61-438c-9208-fcf31bbcfead")
+	)
+	(embedded_fonts no)
+	(model "${KIPRJMOD}/lib/airwriter.3dshapes/LED_D3.0mm_FlatTop.step"
+		(offset
+			(xyz 1.27 0 8)
+		)
+		(scale
+			(xyz 1 1 1)
+		)
+		(rotate
+			(xyz 0 0 0)
+		)
+	)
+	(model "${KIPRJMOD}/lib/airwriter.3dshapes/LED_Spacer_D4.0mm_H8mm.step"
+		(offset
+			(xyz 1.27 0 0)
+		)
+		(scale
+			(xyz 1 1 1)
+		)
+		(rotate
+			(xyz 0 0 0)
+		)
+	)
+)

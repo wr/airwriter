@@ -7,8 +7,8 @@
 - Create: `enclosure/README.md`
 
 **Interfaces:**
-- Consumes: `case.tray()`, `case.lite_lid()`
-- Produces: `out/airwriter-tray.step`, `out/airwriter-tray.stl`, `out/airwriter-lite-lid.step`, `out/airwriter-lite-lid.stl`
+- Consumes: `case.tray()`, `case.lc_lid()`
+- Produces: `out/airwriter-tray.step`, `out/airwriter-tray.stl`, `out/airwriter-lc-lid.step`, `out/airwriter-lc-lid.stl`
 
 - [ ] **Step 1: Write the failing printability test**
 
@@ -75,7 +75,7 @@ class TestTray(unittest.TestCase):
 class TestLid(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.lid = case.lite_lid()
+        cls.lid = case.lc_lid()
 
     def test_single_watertight_solid(self):
         self.assertTrue(self.lid.is_valid)
@@ -100,7 +100,7 @@ if __name__ == "__main__":
 
 Run: `cd ~/Projects/airwriter/enclosure && .venv/bin/python -m unittest -v test_printable`
 
-Expected: FAIL. Do not guess at the fix — the failure prints the X/Y/Z and area of every offending face. For each one, go back to the function in `case.py` that made it and either cone the transition (as `screw_holes()` already does) or accept it by proving it is on the build plate. The two likely offenders are the top of each Lite-lid leg where it meets the plate (legitimate — it is a fillet candidate, not a bridge, because the leg is *under* the plate and prints plate-down) and any flat left by the USB-C chamfer cone.
+Expected: FAIL. Do not guess at the fix — the failure prints the X/Y/Z and area of every offending face. For each one, go back to the function in `case.py` that made it and either cone the transition (as `screw_holes()` already does) or accept it by proving it is on the build plate. The two likely offenders are the top of each LC-lid leg where it meets the plate (legitimate — it is a fillet candidate, not a bridge, because the leg is *under* the plate and prints plate-down) and any flat left by the USB-C chamfer cone.
 
 - [ ] **Step 3: Fix `case.py` until the gate passes**
 
@@ -125,7 +125,7 @@ OUT = pathlib.Path(__file__).resolve().parent / "out"
 
 PARTS = {
     "airwriter-tray": case.tray,
-    "airwriter-lite-lid": case.lite_lid,
+    "airwriter-lc-lid": case.lc_lid,
 }
 
 
@@ -175,7 +175,7 @@ Create `enclosure/README.md`:
 ```markdown
 # Enclosure (enclosure/out/*.stl)
 
-Two printed parts. The **tray** is shared by both builds. The **Lite lid**
+Two printed parts. The **tray** is shared by both builds. The **LC lid**
 replaces the dot-grid art panel on boards built without it.
 
     ./build.sh          # runs the tests, then writes out/*.{step,stl}
@@ -197,7 +197,7 @@ downward-facing flat, so if it passes, it slices.
 | Build | Screws | Into |
 |---|---|---|
 | Pro | 4 × M2.5 × 20 | the art panel's PEM SMTSO-M25-3ET blind nuts |
-| Lite | 4 × M2.5 × 8 | M2.5 brass heat-set inserts in the lid legs |
+| LC | 4 × M2.5 × 8 | M2.5 brass heat-set inserts in the lid legs |
 
 Press the four inserts into the **bottom** of the lid's legs before assembly.
 Rubber feet go on the floor's underside, over the screw counterbores.

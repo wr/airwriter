@@ -1,8 +1,8 @@
-# Task 7 report: the Lite lid
+# Task 7 report: the LC lid
 
 ## What was implemented
 
-`case.lite_lid() -> Part`: the panel stand-in for AirWriter Lite builds.
+`case.lc_lid() -> Part`: the panel stand-in for AirWriter LC builds.
 
 - A plate the art panel's footprint (`POCKET_W x POCKET_L x PANEL`), seated
   with its top face at `Z_WALL_TOP` (flush with the wall tops, same rebate
@@ -19,7 +19,7 @@
 
 `STANDOFF_D` and `LEG_D` now live in `params.py`, beside `SCREW_CLEAR_D` /
 `SCREW_HEAD_D`, which they derive from -- `case.py`'s `standoffs()` and
-`lite_lid()` both reference `p.STANDOFF_D` / `p.LEG_D`. No `case.py` module
+`lc_lid()` both reference `p.STANDOFF_D` / `p.LEG_D`. No `case.py` module
 attribute for either remains.
 
 ## Printability: the leg-to-plate junction
@@ -39,7 +39,7 @@ Traced through the actual geometry:
   floor at `Z=INSERT_DEPTH`) both face `-Z` in model space, which is the
   *upward* (sky-facing, unproblematic) direction once flipped for printing --
   confirmed by working through the 180-degree-flip normal transform by hand
-  (documented in the `lite_lid()` docstring).
+  (documented in the `lc_lid()` docstring).
 - The bore itself opens at the leg's free end and is never capped above by
   solid printed later, so it is a simple blind hole open at the print's top,
   not a bridged void.
@@ -51,22 +51,22 @@ face.
 
 Baseline before this task: 44/44 tests passing (`enclosure`, discover).
 
-1. Appended `TestLiteLid` (6 tests) to `test_case.py`, exactly as specified
+1. Appended `TestLCLid` (6 tests) to `test_case.py`, exactly as specified
    in the brief.
-2. Ran `test_case.TestLiteLid` before implementing `lite_lid()`:
+2. Ran `test_case.TestLCLid` before implementing `lc_lid()`:
    ```
-   AttributeError: module 'case' has no attribute 'lite_lid'
+   AttributeError: module 'case' has no attribute 'lc_lid'
    Ran 0 tests in 0.000s
    FAILED (errors=1)
    ```
-3. Implemented `lite_lid()` in `case.py`.
-4. Ran `test_case.TestLiteLid`: 6/6 pass in 12.25s.
+3. Implemented `lc_lid()` in `case.py`.
+4. Ran `test_case.TestLCLid`: 6/6 pass in 12.25s.
 5. Full suite: `Ran 50 tests in 39.184s -- OK` (44 old + 6 new, no
    regressions).
 
 ## Red/green evidence for every new test
 
-Each test was broken with a targeted, temporary edit to `lite_lid()`, run
+Each test was broken with a targeted, temporary edit to `lc_lid()`, run
 alone to confirm red, then restored and re-run to confirm green. All six:
 
 | Test | Break | Red result | Restored |
@@ -91,7 +91,7 @@ widened by 4mm each) rather than trusting an empty intersection blindly.
 1. **`STANDOFF_D` / `LEG_D` moved into `params.py`.** Both now live in the
    `# --- fasteners ---` section, directly after `SCREW_HEAD_DEPTH` and
    before `INSERT_D` (the params they sit beside/derive from). `case.py`'s
-   `standoffs()` uses `p.STANDOFF_D`; `lite_lid()` uses `p.LEG_D`. No
+   `standoffs()` uses `p.STANDOFF_D`; `lc_lid()` uses `p.LEG_D`. No
    `case.py`-level definition of either remains (checked with grep).
 
 2. **SW1 actuator-Z confidence language softened.** Rewrote
@@ -112,26 +112,26 @@ widened by 4mm each) rather than trusting an empty intersection blindly.
    `case.py`'s `dip_slot()` docstring already said 0.80mm and needed no
    change.
 
-4. **Lite screw length M2.5 x 10, not x 8.** No `enclosure/*.py` file
+4. **LC screw length M2.5 x 10, not x 8.** No `enclosure/*.py` file
    currently has a comment stating the screw length (grepped for
    "screw"/"M2.5" across `case.py`/`params.py`/`test_case.py` -- none
-   exists), so `lite_lid()`'s own docstring was written to already say the
+   exists), so `lc_lid()`'s own docstring was written to already say the
    correct thing ("brass after a few millimetres... not 14mm of printed
    plastic", with no numeric screw length asserted). The only place in the
    repo that actually stated a screw length was
    `docs/superpowers/specs/2026-09-08-airwriter-enclosure-design.md`
-   section 5 ("Lite: M2.5 x 8 ..."), which I corrected to "M2.5 x 10".
+   section 5 ("LC: M2.5 x 8 ..."), which I corrected to "M2.5 x 10".
 
 ## Files changed
 
-- `enclosure/case.py` -- added `lite_lid()`; removed the local
+- `enclosure/case.py` -- added `lc_lid()`; removed the local
   `STANDOFF_D` (now `p.STANDOFF_D`); `standoffs()` updated to match.
 - `enclosure/params.py` -- added `STANDOFF_D`, `LEG_D`; corrected the two
   stale 0.75mm recess figures to 0.80mm; rewrote the SW1 actuator-Z
   docstring's confidence language (value unchanged).
-- `enclosure/test_case.py` -- added `TestLiteLid` (6 tests), exactly as
+- `enclosure/test_case.py` -- added `TestLCLid` (6 tests), exactly as
   specified in the brief.
-- `docs/superpowers/specs/2026-09-08-airwriter-enclosure-design.md` -- Lite
+- `docs/superpowers/specs/2026-09-08-airwriter-enclosure-design.md` -- LC
   screw length corrected from M2.5 x 8 to M2.5 x 10 (section 5).
 
 Note: this file already carried one *other*, pre-existing uncommitted edit
@@ -159,7 +159,7 @@ and remain untouched and unstaged.
 - Confirmed `case.STANDOFF_D` / `case.LEG_D` no longer exist as module
   attributes (grep across `*.py`), and that no other test or module
   referenced the old `case.STANDOFF_D` location before the move.
-- Re-read the full `lite_lid()` diff once more for the coincident-union
+- Re-read the full `lc_lid()` diff once more for the coincident-union
   argument (leg top == plate bottom, no exposed shoulder) and the bore
   overshoot direction (`-0.01`/`+0.02`, opening below `Z=0`, matching the
   "insert bore at the BOTTOM of each leg" requirement) -- both check out

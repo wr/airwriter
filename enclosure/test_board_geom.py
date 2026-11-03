@@ -28,8 +28,7 @@ class TestFootprints(unittest.TestCase):
             ("J2", 113.000, 167.020, 180.0),
             ("J4", 132.500, 167.020, 180.0),
             ("J1", 152.000, 162.120, 0.0),
-            ("S1", 105.005, 134.320, 90.0),
-            ("SW1", 157.225, 99.454, 0.0),
+            ("SW1", 157.600, 99.450, -90.0),
             ("SW3", 133.250, 87.750, -90.0),
         ]:
             fp = bg.footprint(ref)
@@ -42,14 +41,10 @@ class TestFootprints(unittest.TestCase):
         self.assertIsNotNone(fp.model)
         self.assertTrue(fp.model.endswith(".step"), fp.model)
 
-    def test_s1_key_tips_reach_x_97_80(self):
-        # S1's footprint origin is the centre of the pin field (pads at +/-8.89,
-        # +/-3.81). Body 9.61 deep centred on the rows -> front face at local
-        # y = -4.805; keys protrude 2.40 past it -> local y = -7.205. At rot 90
-        # that maps to KiCad x = 105.005 - 7.205. HANDOFF records "x=97.8".
-        fp = bg.footprint("S1")
-        x, _ = bg.local_to_board(fp, 0.0, -7.205)
-        self.assertAlmostEqual(x, 97.800, places=3)
+    def test_rev_2026_11_has_no_dip_switches(self):
+        # Rev 2026.11 dropped S1: the settings page does what its switches did.
+        with self.assertRaises(KeyError):
+            bg.footprint("S1")
 
     def test_mount_holes_in_case_frame(self):
         holes = bg.mount_holes()
@@ -204,8 +199,8 @@ class TestCornerRadius(unittest.TestCase):
 class TestPanelSharesTheBoardOutline(unittest.TestCase):
     """params.CORNER_R's docstring claims the art panel (hardware/panel/
     panel.kicad_pcb) shares the main board's exact outline -- same
-    62.00 x 104.27 footprint, same R2.0 corners -- and case.lite_lid()'s
-    fix for Finding 1 (the Lite lid's zero-clearance pocket fit) depends on
+    62.00 x 104.27 footprint, same R2.0 corners -- and case.lc_lid()'s
+    fix for Finding 1 (the LC lid's zero-clearance pocket fit) depends on
     that being literally true: the lid is now sized at BOARD_W x BOARD_L /
     CORNER_R specifically because the panel is assumed to match. Read the
     panel file directly, with the same parser used on the main board,
@@ -251,8 +246,6 @@ class TestPanelAndFootprintReaders(unittest.TestCase):
         self.assertLess(x1 - x0, 9.0)
         self.assertGreater(x1 - x0, 6.0)
         self.assertIsNone(bg.courtyard("TP2"))
-        # S1's courtyard includes the keys, 2.2 past the board's west edge.
-        self.assertLess(bg.courtyard("S1")[0], -2.0)
 
     def test_u1_carries_the_antenna_keepout(self):
         (zone,) = bg.keepout_zones("U1")

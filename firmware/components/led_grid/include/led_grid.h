@@ -32,7 +32,7 @@ void led_grid_set_gamer(int on);
 void led_grid_action(lg_act_t act, uint16_t arg);
 
 // Shows an acknowledgement over the state from now, replacing the one showing.
-// One raised while the panel is booting waits for the Spin to end, then plays
+// One raised while the panel is booting waits for the boot wave to end, then plays
 // whole. Safe from any task.
 void led_grid_blip(lg_blip_t b);
 

@@ -39,7 +39,7 @@ lengths, the odd "(me!)" or ":)", and a request for testers. Few headings and no
 Only the technical details you'd tell a friend.
 
 **Engineering.** Precise and complete. Internals, timings, test status and known issues all
-belong here, and only here. Name Linear issues by ID and title. AGENTS.md is current state
+belong here, and only here. Name Linear issues by ID and title. AGENTS.md is instructions
 only. A commit message gives the reason for the change.
 
 ## Principles

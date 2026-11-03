@@ -42,6 +42,8 @@ class Footprint:
     model_offset: tuple[float, float, float] = _IDENTITY_OFFSET
     model_scale: tuple[float, float, float] = _IDENTITY_SCALE
     model_rotate: tuple[float, float, float] = _IDENTITY_ROTATE
+    extra_models: tuple[str, ...] = ()
+    """Any further 3D models after the first (D3's spacer under its LED)."""
 
 
 def _text(path: pathlib.Path | None = None) -> str:
@@ -204,6 +206,8 @@ def _all() -> dict[str, Footprint]:
             model_offset = _model_sub_block(model_blk, "offset") or _IDENTITY_OFFSET
             model_scale = _model_sub_block(model_blk, "scale") or _IDENTITY_SCALE
             model_rotate = _model_sub_block(model_blk, "rotate") or _IDENTITY_ROTATE
+        extra = tuple(m.group(1).replace("${KIPRJMOD}", str(BOARD_PCB.parent))
+                      for m in list(_MODEL.finditer(blk))[1:])
         layer_m = _FP_LAYER.search(blk)
         out[ref.group(1)] = Footprint(
             ref=ref.group(1),
@@ -216,6 +220,7 @@ def _all() -> dict[str, Footprint]:
             model_offset=model_offset,
             model_scale=model_scale,
             model_rotate=model_rotate,
+            extra_models=extra,
         )
     return out
 
@@ -299,6 +304,14 @@ def panel_dots() -> list[dict]:
         out.append({"r": d["r"], "c": d["c"], "mat": d["mat"], "led": d["led"],
                     "x": x, "y": y})
     return out
+
+
+def lc_slash() -> list[tuple[float, float]]:
+    """The power slash frosted into the LC's acrylic top
+    (hardware/panel/lc_slash.polys.json, written by lc_top.py from the
+    LC's own art), as a case-frame outline."""
+    (poly,) = json.loads((PANEL_DIR / "lc_slash.polys.json").read_text())
+    return [panel_to_case(px, py) for px, py in poly["outline"]]
 
 
 def fr4_windows() -> list[tuple[float, float, float, float]]:

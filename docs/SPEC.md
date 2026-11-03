@@ -82,7 +82,7 @@ USB-C (5V) ─┬─ ESD ─ LDO 3.3V ─┬─ ESP32-S3-WROOM-1
 | U4 | AP7361C-33E | SOT-223 | 1A LDO. Do not use a 600mA part — S3 WiFi TX peaks near 500mA and margin matters |
 | U5 | USBLC6-2SC6 | SOT-23-6 | USB ESD |
 | J1 | USB-C receptacle, 16-pin | SMD | 5.1k CC1/CC2 pulldowns |
-| J2, J4 | **Kycon KMDGX-8S-BS** | THT | Mini-DIN-8 female, right-angle, fully shielded. Buy from Mouser, not Digi-Key, which is backordered. Footprint is custom — KiCad ships none — and was drawn from Kycon's drawing and verified against their STEP model. **Do not substitute Same Sky MD-80S/MD-80SM**, listed here in the original draft: their mounting is a rectangular-slot and earth-blade arrangement that does not fit this footprint. Solder by hand; see `docs/sourcing.md` |
+| J2, J4 | **Kycon KMDGX-8S-BS** | THT | Mini-DIN-8 female, right-angle, fully shielded. Buy from Mouser, not Digi-Key, which is backordered. Footprint is custom — KiCad ships none — and was drawn from Kycon's drawing and verified against their STEP model. **Do not substitute Same Sky MD-80S/MD-80SM**, listed here in the original draft: their mounting is a rectangular-slot and earth-blade arrangement that does not fit this footprint. The maintainer solders them after delivery (J2 on every rev 2026.11 board, J4 on the full AirWriter); PCBWay does not. See `docs/sourcing.md` |
 | D1, D2 | WS2812B-2020 | 2020 | Status. D2 chains off D1's DOUT, so the second costs no GPIO. D1 = network, D2 = printer/job |
 | D3 | green LED + 1k | 0603 | Power. Straight across the 3V3 rail, no GPIO. Separates "board is dead" from "firmware is dead" during bring-up |
 | SW2 | Omron B3U-1000P | SMD | BOOT, on IO0: a strapping pin, so holding it at reset means USB download mode. Component side, not reachable through the case |
@@ -297,8 +297,8 @@ the ImageWriter II Owner's Guide says, its leading edge under the paper bail, pr
 an inch below its edge, and Apple left software to allow for it. A page arrives as the whole
 sheet, so the board drops that inch of every page (the Top margin setting, default -1in, §3.8)
 and iOS, told the inch is margin, draws nothing there: every row prints where iOS put it. The
-printable area is 8 x 9.5in. On board 1 the calibration page's lines landed exactly 1in from
-the top and 0.5in from the bottom at -7/8in, which is where its Top margin is set.*
+printable area is 8 x 9.5in. On a rev A board the calibration page's lines landed exactly 1in
+from the top and 0.5in from the bottom at -7/8in.*
 
 **Media.** `na_letter_8.5x11in` plus the continuous fanfold sizes. Not borderless.
 
@@ -396,8 +396,8 @@ Guide says, its leading edge under the paper bail, prints from about 1 in below 
 default is -1 in: a page, which arrives as the whole sheet, then lands where iOS laid it out.*
 
 *Amended (2026-10-20): a strip with no dots sends no `ESC G`, only the line feed it owes, held
-like any other until a strip below it prints. Board 1 fed a white page at a line a second when
-each blank strip was 1152 zeros at 9600 baud.*
+like any other until a strip below it prints. A rev A board fed a white page at a line a
+second when each blank strip was 1152 zeros at 9600 baud.*
 
 *Amended (W-1064): an sRGB page with the colour ribbon in prints in four inks. Each pixel splits
 into yellow, magenta, cyan and black (grey components go to black), each ink is dithered on
@@ -498,13 +498,13 @@ slot the power-up reset boots) and `known_good_version`.
   choice then boots it. The bootloader never writes the record: a fallback image becomes
   known-good after its first real print. The panel stays dark while the button is held (the
   bootloader has no LED driver; the hook first clamps IO48, IO35 and IO4 so the hold does not
-  leave them floating), then spins, then shows the reset's confirmation.
+  leave them floating), then shows the boot wave, then the reset's confirmation.
 
 IO14 is not a strapping pin (the S3's are IO0, IO3, IO45, IO46), and SW3 shorts it straight to
 GND with no external pull-up or capacitor; the bootloader enables the internal pull-up before
 it reads. A press already down when the app starts is the tail of the bootloader's hold, and
 the app ignores it until it is let go. A build with Wi-Fi credentials in its `sdkconfig` rejoins
-them after either reset; one without (board 1's, and every release) comes back in setup mode.
+them after either reset; one without (every release) comes back in setup mode.
 The bootloader cannot be updated over the air, so the hook is the one piece a mistake in which
 needs a USB flash on every board.
 
@@ -535,8 +535,8 @@ refuses to build without them). `esp_ota_end` checks the new image's signature b
 key that signed the *running* image, so `/update` and the GitHub path share one check. No eFuse
 is burned and the bootloader is unchanged. A board running an unsigned image accepts any valid
 image once; after that only images signed with the same key. Changing the key takes a USB
-flash. The release key is `~/.config/airwriter/firmware-signing-key.pem` on Wells's Mac (backed
-up in 1Password), never in the repo; its public half is `firmware/keys/airwriter-release.pub.pem`,
+flash. The release signing key is kept outside the repo, by the maintainer, with a backup;
+its public half is `firmware/keys/airwriter-release.pub.pem`,
 digest `6f11af9cd8eec9923985957400aa753ba034e7e057e18ebf61033cb4d327ad89`
 (`CONFIG_AIRWRITER_UPDATE_KEY_DIGEST`). A build from someone else's key makes a board that takes
 only their builds, and its web page says it can't install AirWriter releases.
@@ -644,7 +644,7 @@ ImageWriter on the port keeps its identity, UUID and bytes (`tools/ipp/test/gold
   LkUp of one name, no wildcard, to `lwc_name_check`; for a LaserWriter or ImageWriter not heard
   in the last 30 s on that link it puts off one look until 3 s after the last check. A printer
   switched on is found in seconds, new or renamed; nothing is sent while it is off (the NTR on
-  board 1: ready 3 s after its last check). A check of a new name from the address another name
+  the bench: ready 3 s after its last check). A check of a new name from the address another name
   was heard at ends that name there at once: a renamed printer answers the old name's SendStatus,
   which names nothing. An old Mac's driver looks up its printer by name before printing, and a
   look follows that too unless the name answered lately on that link. `/api/laser` counts looks
@@ -802,7 +802,7 @@ read back is a list made again). At most 8 records.
   answers); every other port
   record `stopped` with the message "Offline", the one word the page shows too for every
   offline printer of any kind, whether nothing answers, another port record's printer is
-  present or a Something else record is listed (Wells 2026-10-31: Offline is a status name
+  present or a Something else record is listed (2026-10-31: Offline is a status name
   alone; what to check, and why, are the wiki's Offline troubleshooting row's); only the reason keyword differs, `offline-report` while the port is
   another's (`PR_PORT_SAY_TAKEN`), the family's own with nothing answering; so phones see
   every shared port printer all the time, each offline while it isn't the one answering. The
@@ -867,14 +867,13 @@ read back is a list made again). At most 8 records.
 
 ### 3.16 StyleWriters (W-1103)
 
-Design: `docs/superpowers/specs/2026-10-25-stylewriters-design.md`; plan
-`docs/superpowers/plans/2026-10-26-stylewriters.md`. Phase 1 is AirPrint to a StyleWriter on the
-printer port: `components/stylewriter` (`sw_model`, `sw_code`, `sw_page`, `sw_session`,
+Design: `docs/superpowers/specs/2026-10-25-stylewriters-design.md`. Phase 1 is AirPrint to a
+StyleWriter on the printer port: `components/stylewriter` (`sw_model`, `sw_code`, `sw_page`, `sw_session`,
 `sw_status` and `sw_testpage` are pure and host-tested in `tools/rip`; `stylewriter.c` is the
 board's), `components/printers/port_policy.c`, and `tools/stylewriter` (the software printer
 and the owner's tool). **Built and host-tested against a software StyleWriter
 (`tools/stylewriter/swfake.py`) and a second coder (lpstyl's); a Color StyleWriter 2500 ran the
-test page to its end on board 1 (2026-11-02, its dry cartridge left the sheet blank), no other
+test page to its end on a rev A board (2026-11-02, its dry cartridge left the sheet blank), no other
 model has printed from AirWriter, and Apple's drivers have not been captured** (the rig stops at a 68k Mac ROM,
 `tools/stylewriter/capture.md`). The command letters, orders, geometry and block caps are
 TailTalk's reading of Apple's drivers (`tailtalk/src/stylewriter/*`, FeralFirmware; read for
@@ -917,8 +916,8 @@ Apple's StyleWriter adapter (ADSP, not PAP), is not built.
   every job to a StyleWriter record, once when the person picks a StyleWriter (Add a Printer…,
   the unknown printer's notice, the detail's Model), to confirm it and read its model, and to
   any StyleWriter record once at start-up and on the person's Look for Printers when
-  nothing else answered (Wells, 2026-10-27, for the original; every model since 2026-11-02, when
-  board 1's 2500 answered nothing but a reset after a page cut short and while asleep). So the
+  nothing else answered (2026-10-27, for the original; every model since 2026-11-02, when
+  a Color StyleWriter 2500 answered nothing but a reset after a page cut short and while asleep). So the
   original is found only when named.
 - **What the idle port is asked** (`port_policy`, pure: one act a call, every 500 ms, under the
   job lock and never while a job runs on the port; `port_tick`, `port_after` and
@@ -1093,7 +1092,7 @@ Apple's StyleWriter adapter (ADSP, not PAP), is not built.
   whole bytes, into the printable width's last byte where the width is not whole bytes (Letter
   and Legal on the 2200, 2400 and 2500: 2920 dots over 2916, the extra dots white): the 2500
   counts a row's bytes from the rect's width rounded down, and a 2916-dot rect over 365-byte
-  rows stopped it on the first row with `2` 80 (board 1, 2026-11-02; `docs/traps.md`). The
+  rows stopped it on the first row with `2` 80 (a Color StyleWriter 2500, 2026-11-02; `docs/traps.md`). The
   printable width is the lesser of dots across and
   the paper's width less both side margins (Letter 3060: 2880 on the first family, 2916 on the
   second; A4 2976: 2832 on both).
@@ -1197,15 +1196,15 @@ Apple's StyleWriter adapter (ADSP, not PAP), is not built.
   pick, a job's full sequence, a job it goes silent during) shows it offline until it answers
   or the next session. Switched on, it answers only Look for Printers' reset or a job's, so the
   wiki's Offline row ends with pressing Look for Printers; the page and phone read "Offline",
-  as for every printer. Board 1's Color StyleWriter 2500 goes dark on its own about 5 minutes
+  as for every printer. The one Color StyleWriter 2500 benched goes dark on its own about 5 minutes
   after a job's end (305, 317 and about 315 s after its `E l`) and then answers nothing, not
   `?` nor `1`, until a reset wakes it; left alone after a reset with no job it stayed awake past
   11 minutes, and a job's reset woke it dark and printed. So a 2200, 2400 or 2500 that was sent
   a job's end (the session showing ready, `s_sw_asleep`) and has not been reset since reads as
   ready while it is silent (`sw_idle_silent`), as the original does, and the next job wakes it;
   a start-up or Look for Printers reset that gets an answer ends the sleep (it stays awake
-  after), and one that gets nothing, or a job that gets nothing, shows it offline (Wells,
-  2026-11-02: ready and woken, as Apple's driver leaves it, over dropping `l` to keep it
+  after), and one that gets nothing, or a job that gets nothing, shows it offline
+  (2026-11-02: ready and woken, as Apple's driver leaves it, over dropping `l` to keep it
   awake). One switched off at its button reads ready too, until a job finds it off. The 2200
   and 2400 are taken to sleep as the 2500 does, by family. After the reset that ends a failed
   page it has gone dark at once, two resets 2 s or 7 s apart have left it dark where a single
@@ -1243,7 +1242,7 @@ Apple's StyleWriter adapter (ADSP, not PAP), is not built.
   it fitted the `HSKI_DRV` clamp (IO35 low) holds the line asserted at RS-232 levels, as a Mac's
   port does, and InkTalk holds its StyleWriter's input high for the same reason ("a StyleWriter
   won't send anything back otherwise"). A Color StyleWriter 2500 answers and prints with the
-  pin floating: on board 1 with R9 taken off again (2026-11-03) it woke at the start-up reset
+  pin floating: on a rev A board with R9 taken off again (2026-11-03) it woke at the start-up reset
   and ran the test page to its end, as fast as with R9 fitted. Whether the other models need it
   is not known (InkTalk's remark is about some StyleWriter, not named), so a rev A board that is
   to run one other than a 2500 gets R9 fitted until an owner shows it is not needed (the wiki's
@@ -1352,7 +1351,7 @@ never been scoped; see 4.
    proper polarity to serve as the single ... data line for an RS423 or an RS232
    interface". Under the RS-232/RS-423 mark-negative convention that fixes TxD+ as the
    non-inverting line — exactly the corrected mapping above. Status: resolved from the
-   printer's own manual; the bench check on board 1 is confirmation, not discovery.
+   printer's own manual; a bench check on a built board is confirmation, not discovery.
 
    Impact is limited: the ImageWriter talks back over HSKo hardware handshaking rather than
    the serial receive path, so a wrong receiver polarity does not block M1 or M5. Bias
@@ -1368,7 +1367,7 @@ never been scoped; see 4.
    ~1.2-1.5 V threshold, and Appendix E's "Data Terminal Ready" text ("true (logic 0)
    when the printer is on and able to receive data") matches the design's
    true = logic 0 = ready sense exactly. The SP3232 receiver choice is sound; scoping
-   HSKo on board 1 is a confirmation step. (`CONFIG_AIRWRITER_INVERT_CTS` stays as the
+   HSKo on a built board is a confirmation step. (`CONFIG_AIRWRITER_INVERT_CTS` stays as the
    insurance either way.)
 
    **The handshake timing is a hard firmware constraint.** DTR goes false when the buffer

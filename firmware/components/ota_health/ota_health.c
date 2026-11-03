@@ -146,6 +146,14 @@ static void kg_promote(void)
     xSemaphoreGive(s_kg);
 }
 
+// The gate's rollback cannot skip the signature check: ESP-IDF's
+// esp_ota_mark_app_invalid_rollback_and_reboot() checks the other slots' RSA
+// signatures before it gives up on this one, at least 3.4 KB of stack by GCC's
+// count. On the 3 KB this task had, an image that never got healthy would have
+// crashed instead of rolling back (W-1108). The task ends once it has decided,
+// so the stack is held only during a trial.
+#define GATE_STACK 6144
+
 static void gate_task(void *arg)
 {
     (void)arg;
@@ -178,12 +186,31 @@ static void gate_task(void *arg)
     }
 }
 
+// The slot otadata says was rolled back (an image that failed its trial or was
+// marked invalid), or NULL. Not esp_ota_get_last_invalid_partition(): that
+// checks the image's RSA-3072 signature, at least 3.7 KB of stack from
+// ota_health_start down, and on the main task's 3,584 bytes it overflowed into
+// the other core's IPC task, so after any failed update the board crashed at
+// every boot (W-1108). Only the version is wanted, for the status and
+// auto-update's skip, and the descriptor needs no signature check.
+static const esp_partition_t *rolled_back_slot(const esp_partition_t *run)
+{
+    for (int i = 0; i < esp_ota_get_app_partition_count(); i++) {
+        const esp_partition_t *p = slot_part(i);
+        esp_ota_img_states_t st;
+        if (p && p != run && esp_ota_get_state_partition(p, &st) == ESP_OK &&
+            (st == ESP_OTA_IMG_INVALID || st == ESP_OTA_IMG_ABORTED))
+            return p;
+    }
+    return NULL;
+}
+
 void ota_health_start(int has_creds)
 {
     const esp_partition_t *run = esp_ota_get_running_partition();
     s_slot = run ? run->label : "?";
 
-    const esp_partition_t *bad = esp_ota_get_last_invalid_partition();
+    const esp_partition_t *bad = rolled_back_slot(run);
     esp_app_desc_t desc;
     if (bad && esp_ota_get_partition_description(bad, &desc) == ESP_OK) {
         strncpy(s_rolled_back, desc.version, sizeof s_rolled_back - 1);
@@ -211,7 +238,7 @@ void ota_health_start(int has_creds)
     ESP_LOGW(TAG, "running %s on trial: kept once %s for %us, rolled back if not by %us",
              s_slot, has_creds ? "Wi-Fi, IPP and the web UI are up" : "the setup portal is up",
              (unsigned)(tm.settle_ms / 1000), (unsigned)(tm.deadline_ms / 1000));
-    if (xTaskCreate(gate_task, "ota_health", 3072, NULL, 2, NULL) != pdPASS) {
+    if (xTaskCreate(gate_task, "ota_health", GATE_STACK, NULL, 2, NULL) != pdPASS) {
         // No gate means no verdict, and the next reboot rolls this image
         // back. That is the safe side for an image that cannot start a task.
         ESP_LOGE(TAG, "could not start the gate");

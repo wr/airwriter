@@ -49,10 +49,10 @@ class TestEnvelopes(unittest.TestCase):
     def setUpClass(cls):
         cls.env = components.envelopes()
 
-    def test_every_part_has_one_except_holes_and_test_points(self):
+    def test_every_part_has_one_except_holes_test_points_and_logos(self):
         missing = [r for r, f in bg._all().items()
                    if f.layer == "F.Cu" and r not in self.env
-                   and not re.fullmatch(r"(H|TP)\d+", r)]
+                   and not re.fullmatch(r"(H|TP|LOGO)\d+", r)]
         self.assertEqual(missing, [])
 
     def test_sw3_is_stepped_body_then_plunger(self):
@@ -63,16 +63,30 @@ class TestEnvelopes(unittest.TestCase):
         self.assertAlmostEqual(top[4], 15.0, delta=0.1)
 
     def test_no_model_parts_and_overrides(self):
-        self.assertAlmostEqual(max(b[4] for b in self.env["S1"]), 9.41)
         self.assertAlmostEqual(max(b[4] for b in self.env["U7"]), 9.00)
         self.assertAlmostEqual(max(b[4] for b in self.env["D13"]), 1.60)
 
-    def test_d3_is_where_the_board_puts_it(self):
-        (x0, x1, y0, y1, top), = self.env["D3"]
+    def test_sw1_is_read_from_its_model_button_and_all(self):
+        # Rev 2026.11's BZCN TSB001A3518A has a model (lib/make_sw1_model.py):
+        # its button reaches KiCad x 159.91, past the courtyard box a
+        # NO_MODEL entry would give (160.05 would be the courtyard's edge).
+        bands = self.env["SW1"]
+        self.assertAlmostEqual(max(b[1] for b in bands), 159.91 - 100.0, delta=0.05)
+        self.assertAlmostEqual(max(b[4] for b in bands), 3.52, delta=0.05)
+
+    def test_d3_stands_on_its_spacer_where_the_board_puts_it(self):
+        # Rev 2026.11: a 3 mm LED on a 4 x 8 mm spacer, two models on one
+        # footprint. Both count: the spacer at the bottom, the lens near 11.85.
+        bands = self.env["D3"]
         f = bg.footprint("D3")
         x, y = bg.to_case(f.x, f.y)
+        low = [b for b in bands if b[4] <= 1.0 + 1e-6]   # the bottom slice: spacer and leads
+        x0, x1 = min(b[0] for b in low), max(b[1] for b in low)
+        y0, y1 = min(b[2] for b in low), max(b[3] for b in low)
         self.assertTrue(x0 < x < x1 and y0 < y < y1)
-        self.assertLess(top, 1.2)
+        self.assertGreater(x1 - x0, 3.9)                 # the 4.0 mm spacer
+        self.assertGreater(y1 - y0, 3.9)
+        self.assertAlmostEqual(max(b[4] for b in bands), 11.85, delta=0.3)
 
 
 if __name__ == "__main__":

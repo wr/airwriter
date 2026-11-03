@@ -6,7 +6,7 @@
 //
 // Material physics measured on board 1: FR4 dots are the crisp pixels; mask
 // dots pass ~10% (B) / ~5% (L), red well, blue as teal. So information lives
-// on the FR4 dots, and mask dots join in only for the boot spin and the
+// on the FR4 dots, and mask dots join in only for the boot wave and the
 // printing / attention / failed states, at LG_MASK_CAP.
 //
 // It is an array, not one LED: every pattern uses position (sweeps, ripples,
@@ -110,23 +110,27 @@ static float level16(float level, float cap)
     return level <= 0 ? 0 : powf(level, 2.2f) * cap * 256.0f;
 }
 
-// At a cap of 48 the bottom of a slow fade drops below one count and the dot
-// would blink off. Lift the dot's brightest channel to one count and scale the
-// others with it, so the dither keeps its hue -- lifting every channel to one
-// count turned dim embers and dim blue pulses white on board 1.
 static void put_dot(uint16_t px[3], float r, float g, float b)
 {
-    float m = r > g ? (r > b ? r : b) : (g > b ? g : b);
-    if (m < 1) {                    // under 1/256 of a count (a ripple's far tail,
-        r = g = b = 0;              // even a subnormal): dark, not lifted
-    } else if (m < 256) {
-        float k = 256.0f / m;
-        r *= k; g *= k; b *= k;
-    }
     float ch[3] = { r, g, b };
     for (int i = 0; i < 3; i++)
         px[i] = (uint16_t)(ch[i] > 65280 ? 65280 : ch[i] + 0.5f);
 }
+
+// The glow (LG_GLOW, W-1115): the level, before gamma and the cap, that drives
+// a dot's brightest channel at LG_GLOW counts. A level a dot rests at is never
+// under it; a fade to or from dark passes straight through.
+static float glow_at(float cap) { return powf((float)LG_GLOW / 256.0f / cap, 1 / 2.2f); }
+
+// A resting colour lifted to the glow, keeping its hue. Dark stays dark.
+static lg_c3 rest(lg_c3 col, float cap)
+{
+    float m = col.r > col.g ? (col.r > col.b ? col.r : col.b) : (col.g > col.b ? col.g : col.b);
+    float g = glow_at(cap);
+    return m > 0 && m < g ? sc(col, g / m) : col;
+}
+
+static float dot_cap(const ps_view_t *v, int i);
 
 static int all_dots(ps_state_t st)
 {
@@ -140,19 +144,25 @@ int lg_pilot_index(void)
     return 0;
 }
 
-// The boot spin: a hue wheel around the test button (row 3, col 3) that fades
-// in by distance and spins. W-1049's quiet power-on keeps it turning until the
-// board has settled, at the pace it had reached by 2.5 s and eased to 60%
-// after 3 s (less draw while Wi-Fi joins); then it collapses inward over
-// LG_SPIN_OUT_MS (`out`, `e` seconds in), the far dots first and the test
-// button last. A board settled early starts going out at 1.7 s, which is the
-// original 3.0 s Spin exactly.
-static lg_c3 spin(float dist, float ang, float t, int out, float e)
+// The boot wave, as the shop's 3D model of the board draws it: a rainbow in
+// diagonal bands from the top-left corner to the bottom-right, 14 degrees a
+// step along the diagonal, each dot going round the wheel every 4 s, so
+// neighbours are always close in hue and the bands cross the panel in about
+// 2 s. (It replaced the Spin, a hue wheel round the test button, whose mask
+// dots blinked on and off out of step: through the mask a dot's brightness
+// swings hard with hue. At first it turned at 30 degrees a second, which on
+// board 1 read as too slow; Wells picked 90.) It comes in from the top-left
+// corner. W-1049's quiet power-on keeps it running until the board has
+// settled, eased to 60% after 3 s (less draw while Wi-Fi joins); then it rolls
+// off the panel the way it flows, over LG_SPIN_OUT_MS (`out`, `e` seconds in),
+// the bottom-right corner last. A board settled early starts going out at
+// 1.7 s and is dark at 3.0 s. Its mask dots take LG_BOOT_MASK_CAP.
+static lg_c3 boot_wave(int r, int c, float t, int out, float e)
 {
-    float v = ss(0, 0.6f, t - dist * 0.08f) * (1 - 0.4f * ss(3.0f, 4.0f, t));
-    if (out) v *= 1 - ss(0.6f, 1.3f, e + dist * 0.12f);
-    float turn = t <= 2.5f ? t * 300 - t * t * 40 : 500 + (t - 2.5f) * 100;
-    return hsv(ang + turn, 0.9f, v);
+    float d = (float)(r + c) / (float)(LG_ROWS + LG_COLS - 2);     // 0 top-left, 1 bottom-right
+    float v = ss(0, 0.6f, t - d * 0.4f) * (1 - 0.4f * ss(3.0f, 4.0f, t));
+    if (out) v *= 1 - ss(0.6f, 1.3f, e + (1 - d) * 0.6f);
+    return hsv(90 * t - 14 * (float)(r + c), 0.9f, v);
 }
 
 // LocalTalk's colours: the stripes of the classic Apple logo without its red
@@ -180,12 +190,14 @@ static float dist_to(int r, int c, float pr, float pc)
     return hypotf((float)r - pr, (float)c - pc);
 }
 
-static lg_c3 state_dot(const ps_view_t *v, const lg_opts_t *o, int i, uint32_t t)
+// cap: the cap the dot is drawn under, for the glow its resting levels sit on.
+static lg_c3 state_dot(const ps_view_t *v, const lg_opts_t *o, int i, uint32_t t, float cap)
 {
     int r = LG_MAP[i].r, c = LG_MAP[i].c;
     float dr = (float)r - 3, dc = (float)c - 3;
-    float dist = hypotf(dr, dc), ang = atan2f(dr, dc) * 57.29578f;
+    float dist = hypotf(dr, dc);
     float h1 = dot_hash(r, c, 1), h2 = dot_hash(r, c, 2);
+    float glow = glow_at(cap);
     uint32_t s = v->since_ms;
 
     if (v->cable == PS_CABLE_NO_CHIP) {
@@ -214,7 +226,7 @@ static lg_c3 state_dot(const ps_view_t *v, const lg_opts_t *o, int i, uint32_t t
             const float a = LT_COL + 1.3f, b = PRINTER_COL - 1.3f;
             float x = cs < sweep ? a + (b - a) * (float)cs / (float)sweep
                                  : b + (a - b) * (float)(cs - sweep) / (float)sweep;
-            lv = 0.08f + 0.92f * gauss((float)c - x, 0.8f);
+            lv = fmaxf(0.08f + 0.92f * gauss((float)c - x, 0.8f), glow);
         } else if (pass) {
             float g = (float)(cs - 2 * sweep);
             lv = ss(0, 200, g) * (1 - ss(500, 1100, g));
@@ -227,7 +239,7 @@ static lg_c3 state_dot(const ps_view_t *v, const lg_opts_t *o, int i, uint32_t t
 
     switch (v->state) {
     case PS_BOOTING:
-        return spin(dist, ang, (float)s / 1000.0f, v->spin_out, (float)v->spin_out_ms / 1000.0f);
+        return boot_wave(r, c, (float)s / 1000.0f, v->spin_out, (float)v->spin_out_ms / 1000.0f);
 
     case PS_SETUP: {
         float hue = jitter(r, c, 240, 6, t, 3);     // blue is one hue wide on the panel
@@ -241,12 +253,13 @@ static lg_c3 state_dot(const ps_view_t *v, const lg_opts_t *o, int i, uint32_t t
         // replaced never read on the panel's scattered clear dots.)
         uint32_t ph = t % 2400;
         float flash = gauss(((float)ph - 90) / 70.0f, 1) + gauss(((float)ph - 390) / 70.0f, 1);
-        return hsv(hue, 0.85f, 0.25f + 0.75f * clampf(flash));
+        return hsv(hue, 0.85f, fmaxf(0.25f + 0.75f * clampf(flash), glow));
     }
 
     case PS_JOINING: {
         float ring = (float)(t % 900) / 900.0f * 4.8f;          // outward from the test button
-        return hsv(jitter(r, c, 240, 6, t, 0), 0.85f, 0.10f + 0.90f * gauss(dist - ring, 1.1f));
+        return hsv(jitter(r, c, 240, 6, t, 0), 0.85f,
+                   fmaxf(0.10f + 0.90f * gauss(dist - ring, 1.1f), glow));
     }
 
     case PS_READY: {
@@ -265,9 +278,11 @@ static lg_c3 state_dot(const ps_view_t *v, const lg_opts_t *o, int i, uint32_t t
         uint32_t period = 7000 + (uint32_t)(h1 * 6000);
         float ph = sinf(TAU * (float)(t % period) / (float)period + h2 * TAU);
         float ember = ph > 0 ? ph * ph * ph : 0;
-        // 15% swelling to 100%: the first tune (5-32%) and the second (9-60%)
-        // were lost in daylight like Ready's.
-        return hsv(jitter(r, c, 34, 9, t, 0), 0.5f + 0.12f * h1, 0.15f + 0.85f * ember);
+        // 15% swelling to 100%, resting on the glow: the first tune (5-32%)
+        // and the second (9-60%) were lost in daylight like Ready's, and at
+        // 15% (one count) the dots flickered (W-1115).
+        return hsv(jitter(r, c, 34, 9, t, 0), 0.5f + 0.12f * h1,
+                   fmaxf(0.15f + 0.85f * ember, glow));
     }
 
     case PS_PRINTING: {
@@ -279,17 +294,19 @@ static lg_c3 state_dot(const ps_view_t *v, const lg_opts_t *o, int i, uint32_t t
         float f = (float)(t % 1500) / 1500.0f;
         float x = ltr ? f * 7.6f - 0.3f : 6.3f - f * 7.6f;
         // AirPrint and the test page ink warm; a LocalTalk job inks each row
-        // in its stripe, and the stripes show across the whole panel.
+        // in its stripe, and the stripes show across the whole panel. The ink
+        // steps down from the head's row over the two behind it to the rest,
+        // all of it over the glow so the trail still reads (W-1115).
         int lt = o && o->src == LG_SRC_LOCALTALK;
         lg_c3 ink = lt ? stripe(r, c) : hsv(jitter(r, c, 38, 10, t, 0), 0.4f, 1);
-        if (r == row) {
+        if (r == row) {                 // ahead of the head the row is dark
             int inked = ltr ? ((float)c < x) : ((float)c > x);
-            return add(sc(FULL, gauss((float)c - x, 0.6f)), sc(ink, inked ? 0.35f : 0));
+            lg_c3 head = sc(FULL, gauss((float)c - x, 0.6f));
+            return inked ? add(head, sc(ink, glow + (1 - glow) * 0.35f)) : head;
         }
         int back = (row - r + LG_ROWS) % LG_ROWS;
-        if (back == 1) return sc(ink, lt ? 0.35f : 0.25f);
-        if (back == 2) return sc(ink, lt ? 0.22f : 0.12f);
-        return sc(ink, lt ? 0.12f : 0.03f);
+        float k = back == 1 ? (lt ? 0.35f : 0.25f) : back == 2 ? (lt ? 0.22f : 0.12f) : (lt ? 0.12f : 0.03f);
+        return sc(ink, glow + (1 - glow) * k);
     }
 
     case PS_ATTENTION: {
@@ -301,7 +318,7 @@ static lg_c3 state_dot(const ps_view_t *v, const lg_opts_t *o, int i, uint32_t t
         float lv = 0.12f;
         if (ph < 1200) lv += gauss(dist - (float)ph / 1000.0f * 6, 1.6f);
         if (ph >= 350 && ph < 1550) lv += gauss(dist - (float)(ph - 350) / 1000.0f * 6, 1.6f);
-        return hsv(jitter(r, c, 24, 6, t, 0), 1, clampf(lv));
+        return hsv(jitter(r, c, 24, 6, t, 0), 1, fmaxf(clampf(lv), glow));
     }
 
     case PS_FAILED: {
@@ -355,13 +372,20 @@ static int cancel_out(const ps_view_t *v)
         && v->since_ms < LG_CANCEL_MS;
 }
 
+// The cap a dot is drawn under in a state (not in a task).
+static float dot_cap(const ps_view_t *v, int i)
+{
+    if (LG_MAP[i].mat != 'P') return v->state == PS_BOOTING ? LG_BOOT_MASK_CAP : LG_MASK_CAP;
+    return v->state == PS_ATTENTION || join_failed(v) ? LG_ALERT_CAP : LG_BRIGHTNESS_CAP;
+}
+
 static int moment_all(const ps_view_t *v)       // the moment lights mask dots too
 {
     return page_out(v) || cancel_out(v) || join_failed(v);
 }
 
 // An acknowledgement over an all-dot moment or a cable test's answer would
-// draw more than the boot spin (review of W-1049): it is not drawn then.
+// draw more than the boot wave (review of W-1049): it is not drawn then.
 static int busy_panel(const ps_view_t *v)
 {
     return moment_all(v) || v->cable
@@ -372,7 +396,8 @@ static lg_c3 view_dot(const ps_view_t *v, const lg_opts_t *o, int i, uint32_t t)
 {
     int r = LG_MAP[i].r, c = LG_MAP[i].c, fr4 = LG_MAP[i].mat == 'P';
     float s = (float)v->since_ms;
-    lg_c3 now = state_dot(v, o, i, t);
+    float cap = dot_cap(v, i);          // the old state is drawn under the new one's cap
+    lg_c3 now = state_dot(v, o, i, t, cap);
     ps_view_t was = *v;
     was.state = v->prev;
     was.since_ms = 100000;      // its own opening moments long over
@@ -383,7 +408,7 @@ static lg_c3 view_dot(const ps_view_t *v, const lg_opts_t *o, int i, uint32_t t)
          (v->state == PS_PRINTING && v->prev == PS_ATTENTION)) && s < LG_BACK_MS) {
         float ds = s - dist_to(r, c, PORT_ROW, PRINTER_COL) / FAR * CROSS_MS;
         lg_c3 green = green_of(r, c, t);
-        if (ds < 0) return mix(state_dot(&was, o, i, t), green, gauss(ds / 160.0f, 1));
+        if (ds < 0) return mix(state_dot(&was, o, i, t, cap), green, gauss(ds / 160.0f, 1));
         return mix(green, now, ss(150, 900, ds));
     }
     // Printer gone: the white drains into the printer socket, a glint at the
@@ -391,12 +416,12 @@ static lg_c3 view_dot(const ps_view_t *v, const lg_opts_t *o, int i, uint32_t t)
     if (v->state == PS_OFFLINE && v->prev == PS_READY && s < LG_GONE_MS) {
         float ds = s - (FAR - dist_to(r, c, PORT_ROW, PRINTER_COL)) / FAR * CROSS_MS;
         lg_c3 glint = sc(white_of(r, c), gauss(ds / 130.0f, 1));
-        if (ds < 0) return screen(state_dot(&was, o, i, t), glint);
+        if (ds < 0) return screen(state_dot(&was, o, i, t, cap), glint);
         return screen(sc(now, ss(250, 900, ds)), glint);
     }
     // Cancelled: the print stops where it stood and fades; no page out.
     if (cancel_out(v)) {
-        lg_c3 stopped = sc(state_dot(&was, o, i, t - (uint32_t)s), 1 - ss(0, 600, s));
+        lg_c3 stopped = sc(state_dot(&was, o, i, t - (uint32_t)s, cap), 1 - ss(0, 600, s));
         return fr4 ? screen(stopped, sc(now, ss(300, LG_CANCEL_MS, s))) : stopped;
     }
     // Page out: the inked sheet feeds up off the top, Ready below its edge.
@@ -410,7 +435,7 @@ static lg_c3 view_dot(const ps_view_t *v, const lg_opts_t *o, int i, uint32_t t)
         return mix(sc(ink, band), fr4 ? sc(now, ss(0, 1, k)) : DARK, k);
     }
     // Could not join: two red pulses (FeatherFrame's), then Setup. After the
-    // saved network was tried, from Joining or straight from the Spin.
+    // saved network was tried, from Joining or straight from the boot wave.
     if (v->state == PS_SETUP && v->join_failed && s < LG_JOINFAIL_MS) {
         if (s < 1000) {
             float x = sinf(3.1415927f * fmodf(s, 500) / 500.0f);
@@ -426,7 +451,7 @@ static lg_c3 view_dot(const ps_view_t *v, const lg_opts_t *o, int i, uint32_t t)
 // drawn instead of the state. The reset is orange turning red because it is a
 // warning a person is choosing to walk into; mask dots join in, since red and
 // amber survive the mask. FR4 dots take the alert cap in red phases and the
-// normal cap otherwise, which keeps every frame's draw under the boot spin's
+// normal cap otherwise, which keeps every frame's draw under the boot wave's
 // (no current limit on rev A).
 
 lg_fam_t lg_family(uint8_t act)
@@ -458,7 +483,7 @@ int lg_act_over(uint8_t act, uint32_t act_ms)
 // The countdown at fill p (0..1): a hand sweeps clockwise from 12 o'clock
 // round the test button, lighting each dot it passes, so the panel reads as a
 // clock running out. The newest dots glow; the rest beat faster as it fills.
-static lg_c3 reset_fill(int r, int c, float p, uint32_t s, uint32_t t)
+static lg_c3 reset_fill(int r, int c, float p, uint32_t s, uint32_t t, float lo)
 {
     float dr = (float)r - 3, dc = (float)c - 3;
     float turn = atan2f(dc, -dr) / TAU;                 // 0 at 12 o'clock, clockwise
@@ -475,7 +500,7 @@ static lg_c3 reset_fill(int r, int c, float p, uint32_t s, uint32_t t)
     float sec = (float)s / 1000.0f, fill = LG_RESET_FILL_MS / 1000.0f;
     float beat = 0.88f + 0.12f * cosf(TAU * (sec + sec * sec / fill));
     float lvl = lit * (0.55f + 0.45f * glow) * beat;
-    return hsv(hue, 1, lvl > 0.05f ? lvl : 0.05f);
+    return hsv(hue, 1, fmaxf(lvl, lo));            // the dots still to come rest on the glow (lo)
 }
 
 // The firmware fill at p (0..1): pink rising from the bottom like a level,
@@ -488,7 +513,8 @@ static lg_c3 fw_fill(int r, int c, float p, uint32_t t)
     float span = 8.0f - line;
     float band = 8.0f - (float)(t % 800) / 800.0f * (span + 1.0f);
     float shimmer = span > 0.3f ? gauss((float)r - band, 0.6f) : 0;
-    return mix(sc(pink_of(r, c, t), 0.07f + in * 0.56f), lavender_of(r, c, t), in * shimmer);
+    return mix(rest(sc(pink_of(r, c, t), 0.07f + in * 0.56f), LG_BRIGHTNESS_CAP),
+               lavender_of(r, c, t), in * shimmer);
 }
 
 static void task_frame(const lg_slot_t *k, uint32_t t, uint16_t out[LG_NUM_LEDS][3])
@@ -501,12 +527,14 @@ static void task_frame(const lg_slot_t *k, uint32_t t, uint16_t out[LG_NUM_LEDS]
         int red = 0, white = 0;
         switch (k->act) {
         case LG_ACT_RESET_HOLD:
-            col = reset_fill(r, c, clampf((float)s / LG_RESET_FILL_MS), s, t);
+            col = reset_fill(r, c, clampf((float)s / LG_RESET_FILL_MS), s, t,
+                             glow_at(fr4 ? LG_ALERT_CAP : LG_MASK_CAP));
             red = 1;
             break;
         case LG_ACT_RESET_CANCEL: {
             float back = 1 - ss(0, LG_RESET_CANCEL_MS, (float)s);
-            col = sc(reset_fill(r, c, (float)k->arg / 1000.0f * back, 0, t), back);
+            col = sc(reset_fill(r, c, (float)k->arg / 1000.0f * back, 0, t,
+                                glow_at(fr4 ? LG_ALERT_CAP : LG_MASK_CAP)), back);
             red = 1;
             break;
         }
@@ -529,7 +557,7 @@ static void task_frame(const lg_slot_t *k, uint32_t t, uint16_t out[LG_NUM_LEDS]
         case LG_ACT_RESET_FAILED:
         case LG_ACT_PIC_FAILED: {
             ps_view_t f = { .state = PS_FAILED, .since_ms = s };
-            col = state_dot(&f, NULL, i, t);
+            col = state_dot(&f, NULL, i, t, fr4 ? LG_ALERT_CAP : LG_MASK_CAP);
             red = 1;
             break;
         }
@@ -538,7 +566,7 @@ static void task_frame(const lg_slot_t *k, uint32_t t, uint16_t out[LG_NUM_LEDS]
             if (!fr4) break;
             if (k->arg == LG_PROGRESS_NONE) {           // length unknown: a lavender band climbs
                 float band = 9.0f - (float)(t % 1200) / 1200.0f * 11.0f;
-                col = mix(sc(pink_of(r, c, t), 0.12f), lavender_of(r, c, t),
+                col = mix(rest(sc(pink_of(r, c, t), 0.12f), LG_BRIGHTNESS_CAP), lavender_of(r, c, t),
                           gauss((float)r - band, 1.0f));
             } else {
                 col = fw_fill(r, c, (float)(k->arg > 1000 ? 1000 : k->arg) / 1000.0f, t);
@@ -647,33 +675,47 @@ static int sleep_round(uint32_t round, int order[LG_NUM_LEDS])
     return n;
 }
 
+// Is dot d one of the last m of a round?
+static int in_tail(int d, const int order[LG_NUM_LEDS], int n, int m)
+{
+    for (int i = n - m; i < n; i++)
+        if (order[i] == d) return 1;
+    return 0;
+}
+
 int lg_sleep_dot(uint32_t breath)
 {
     int order[LG_NUM_LEDS], prev[LG_NUM_LEDS];
     int n = sleep_round(0, order);
     uint32_t round = breath / (uint32_t)n;
     sleep_round(round, order);
-    // A round never opens on the dot the last one closed on.
+    // Breaths overlap, so a round never opens on a dot the last one is still
+    // breathing at: its first m trade places with dots from its middle. Its
+    // last m stay put, since the next round reads them from the raw shuffle.
     if (round > 0) {
+        const int m = LG_BREATH_MS / LG_FIREFLY_MS - 1;
         sleep_round(round - 1, prev);
-        if (order[0] == prev[n - 1]) { int x = order[0]; order[0] = order[1]; order[1] = x; }
+        for (int j = 0; j < m; j++) {
+            if (!in_tail(order[j], prev, n, m)) continue;
+            for (int p = m; p < n - m; p++)
+                if (!in_tail(order[p], prev, n, m)) {
+                    int x = order[j]; order[j] = order[p]; order[p] = x;
+                    break;
+                }
+        }
     }
     return order[breath % (uint32_t)n];
 }
 
 // The asleep breath: neutral white, or a slowly cycling hue in gamer mode.
-// Linear drive, as a fraction of LG_BRIGHTNESS_CAP. A channel under one count
-// snaps to 0 or 1 rather than being dithered, which at these levels would
-// read as a flicker.
+// Linear drive, as a fraction of LG_BRIGHTNESS_CAP, from dark and back.
 static void put_linear(uint16_t px[3], lg_c3 col, float frac)
 {
     float lvl = frac * LG_BRIGHTNESS_CAP * 256.0f;
-    float ch3[3] = { col.r * lvl, col.g * lvl, col.b * lvl };
-    for (int ch = 0; ch < 3; ch++) {
-        float x = ch3[ch];
-        uint16_t v = x < 256 ? (x >= 128 ? 256 : 0) : (uint16_t)(x > 65280 ? 65280 : x);
-        if (v > px[ch]) px[ch] = v;
-    }
+    uint16_t dot[3];
+    put_dot(dot, col.r * lvl, col.g * lvl, col.b * lvl);
+    for (int ch = 0; ch < 3; ch++)
+        if (dot[ch] > px[ch]) px[ch] = dot[ch];
 }
 
 void lg_render16(const ps_view_t *v, const lg_opts_t *o, uint32_t t_ms,
@@ -698,21 +740,26 @@ void lg_render16(const ps_view_t *v, const lg_opts_t *o, uint32_t t_ms,
         if (!fr4 && !all && !blip) continue;   // FR4-only state: mask dot stays dark
         lg_c3 c = fr4 || all ? sc(view_dot(v, o, i, t_ms), 1 - sleep_k) : DARK;
         if (blip) c = screen(c, blip_dot(o->blip, o->blip_ms, i, t_ms));
-        float cap = !fr4 ? LG_MASK_CAP
-                  : v->state == PS_ATTENTION || join_failed(v) ? LG_ALERT_CAP : LG_BRIGHTNESS_CAP;
+        float cap = dot_cap(v, i);
         put_dot(out[i], level16(c.r, cap), level16(c.g, cap), level16(c.b, cap));
     }
 
     if (!v->asleep) return;
 
-    // One breath per LG_BREATH_MS (12 a minute), in the curve of the old Mac
-    // laptops' sleep light, (e^sin - 1/e) / (e - 1/e): off at the start of
-    // each breath, full at its middle. Each breath is at a new FR4 dot.
-    float ph = (float)(t_ms % LG_BREATH_MS) / (float)LG_BREATH_MS;
-    float breath = (expf(sinf(TAU * ph - TAU / 4)) - 0.36787944f) / (2.71828183f - 0.36787944f);
-    int d = lg_sleep_dot(t_ms / LG_BREATH_MS);
-    lg_c3 col = gamer ? hsv((float)t_ms / 60.0f, 0.75f, 1) : white_of(LG_MAP[d].r, LG_MAP[d].c);
-    put_linear(out[d], col, breath * sleep_k);
+    // Fireflies: a breath starts every LG_FIREFLY_MS at a new FR4 dot and
+    // lasts LG_BREATH_MS, so three overlap, each in the curve of the old Mac
+    // laptops' sleep light, (e^sin - 1/e) / (e - 1/e): off at its start, full
+    // at its middle. In gamer mode each firefly is its own hue.
+    uint32_t n = t_ms / LG_FIREFLY_MS;
+    for (uint32_t k = 0; k < LG_BREATH_MS / LG_FIREFLY_MS && k <= n; k++) {
+        uint32_t b = n - k;
+        float ph = (float)(t_ms - b * LG_FIREFLY_MS) / (float)LG_BREATH_MS;
+        float breath = (expf(sinf(TAU * ph - TAU / 4)) - 0.36787944f) / (2.71828183f - 0.36787944f);
+        int d = lg_sleep_dot(b);
+        lg_c3 col = gamer ? hsv((float)t_ms / 60.0f + (float)b * 40, 0.75f, 1)
+                          : white_of(LG_MAP[d].r, LG_MAP[d].c);
+        put_linear(out[d], col, breath * sleep_k);
+    }
 }
 
 void lg_render(const ps_view_t *v, const lg_opts_t *o, uint32_t t_ms,
@@ -730,11 +777,24 @@ void lg_render(const ps_view_t *v, const lg_opts_t *o, uint32_t t_ms,
 void lg_dither(lg_dither_t *d, const uint16_t in[LG_NUM_LEDS][3],
                uint8_t out[LG_NUM_LEDS][3])
 {
-    for (int i = 0; i < LG_NUM_LEDS; i++)
+    for (int i = 0; i < LG_NUM_LEDS; i++) {
+        uint16_t m = in[i][0] > in[i][1] ? (in[i][0] > in[i][2] ? in[i][0] : in[i][2])
+                                         : (in[i][1] > in[i][2] ? in[i][1] : in[i][2]);
         for (int ch = 0; ch < 3; ch++) {
+            uint32_t frac = in[i][ch] & 0xFF;
+            if (m < LG_BLEND || frac < LG_DITHER_HOLD || frac > 256 - LG_DITHER_HOLD) {
+                // A dim dot, or a channel near a whole count: rounded. The
+                // error is left at half a count, so a level moving into the
+                // dither carries on from its rounding with no jump.
+                uint32_t x = ((uint32_t)in[i][ch] + 128u) >> 8;
+                out[i][ch] = (uint8_t)(x > 255 ? 255 : x);
+                d->err[i][ch] = 128;
+                continue;
+            }
             uint32_t acc = (uint32_t)in[i][ch] + d->err[i][ch];
             uint32_t x = acc >> 8;
             out[i][ch] = (uint8_t)(x > 255 ? 255 : x);
             d->err[i][ch] = (uint8_t)(acc & 0xFF);
         }
+    }
 }

@@ -130,7 +130,7 @@ def carveouts() -> Part:
 
 
 def tray() -> Part:
-    """The finished tray, shared by Pro and Lite."""
+    """The finished tray, shared by Pro and LC."""
     body = shell() + standoffs()
     return body - screw_holes() - port_cutouts() - dip_slot() \
         - reset_pinhole() - carveouts()

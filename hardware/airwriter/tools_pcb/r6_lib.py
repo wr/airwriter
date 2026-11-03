@@ -1,7 +1,7 @@
-"""Shared geometry helpers for round 6. Absolute paths only."""
-import pcbnew, math, json, sys
+"""Shared geometry helpers for round 6. Paths resolve from this file, so any checkout works."""
+import pcbnew, math, json, sys, os
 
-BOARD = "/Users/wells/Projects/airwriter/hardware/airwriter/airwriter.kicad_pcb"
+BOARD = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "airwriter.kicad_pcb")
 
 # Satellites the solver fits around the hand-placed frame. Anything not listed
 # here is furniture: fixed by the case, by the panel, or by r6_blocks.py.

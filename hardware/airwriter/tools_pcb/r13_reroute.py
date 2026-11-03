@@ -1,0 +1,175 @@
+#!/usr/bin/env python3
+"""Rev 2026.11: the rev A copper and parts that move to make room.
+
+    <KiCad python> tools_pcb/r13_reroute.py
+
+Run by r13_build.sh after r13_clean.py and r13_place.py, with KiCad closed,
+once per build (it refuses a board it has already changed).
+
+U3 swaps channels: the printer port takes driver 2 and receiver 2 (pins 7-10)
+and the LocalTalk port driver 1 and receiver 1 (11-14), so J4's two RS-232
+lines leave U3 on the side facing J4 and run straight down beside it, under
+U8, to J4. The printer port's lines come back to rev A's routes by short
+steps; the drivers' inputs (pins 10 and 11) and receiver 1's output are
+r13_route.py's, on GPIOs the DIP switches freed.
+
+To clear that path:
+- U3's 3.3 V feed runs under U3's body from pin 16, not down its right side.
+- C18 moves next to U8's VCC pin and R10/R11 west of it; R14 moves to LT_DATA
+  between U7 and U6. The LocalTalk receive lines follow them.
+- R27 joins LT_RESET where it already passes east of U7; U7.4 is fed back
+  along rev A's run.
+- SW2 and R21 move west, below IO0, so BOOT_CFG runs straight down.
+- SW1's bracket pad sits on EN's last leg: EN steps round it into pad 1.
+- LED_DATA's run north of the module lifts 0.37 mm so R32 and R33 get ground
+  vias.
+
+And two rev A fixes from the rev B list: the VBUS via at the H4 crossing grows
+from a 0.4 mm to a 0.5 mm drill (a partner via has no room between C22 and
+H4's screw head), and D- reaches the ESP32 through U5's pad 3, as D+ goes through U5, so
+U5 no longer hangs off D- on an 8 mm stub; U5's ground pin, cut off from the
+pour by the new D- run, gets a via under U5.
+"""
+import os
+
+import pcbnew
+
+from r13_edit import Board, B, nm
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+BOARD = os.path.join(HERE, '..', 'airwriter.kicad_pcb')
+
+
+def trunk(e):
+    """U3's 3.3 V: pin 16 under the body to the branch at y 144.24."""
+    e.drop(e.track('/+3V3', (121.455, 143.055), (121.455, 133.516)),
+           e.track('/+3V3', (121.648, 143.248), (121.455, 143.055)),
+           e.track('/+3V3', (121.648, 143.829), (121.648, 143.248)),
+           e.track('/+3V3', (121.237, 144.24), (121.648, 143.829)),
+           e.track('/+3V3', (121.455, 133.516), (121.125, 133.186)))
+    e.draw('/+3V3', [(120.05, 132.62), (118.8, 132.62), (117.3, 134.12), (117.3, 144.24)], width=0.5)
+
+
+def printer_handshakes(e):
+    """J2's handshakes on U3's pins 7-10, back onto rev A's routes."""
+    # pin 7 (T2OUT) to R9: a step up beside the pin to rev A's run between pins 5 and 6
+    e.draw('/HSKI_RS232', [(115.1, 140.24), (116.508, 140.24), (116.508, 138.335)])
+    # pin 8 (R2IN) from J2.2: straight down to rev A's run
+    e.drop(e.track('/PR_HSKO', (117.641, 138.508), (117.641, 142.52)),
+           e.track('/PR_HSKO', (117.641, 142.52), (114.65, 145.512)))
+    e.draw('/PR_HSKO', [(115.1, 141.51), (115.1, 145.061), (114.65, 145.512)])
+    # pin 9 (R2OUT) to IO8: a via on rev A's diagonal, just past the pin
+    e.drop(e.via('/UART_CTS', (118.58, 138.494)))
+    e.move_end(e.track('/UART_CTS', (122.83, 142.744), (118.58, 138.494)), (118.58, 138.494), (121.6, 141.514))
+    e.add_via('/UART_CTS', (121.6, 141.514))
+    e.draw('/UART_CTS', [(120.05, 141.51), (121.6, 141.514)])
+
+
+def under_u8(e):
+    """The row under U8: C18 beside U8's VCC pin, R10/R11 west of it, R14 out."""
+    e.drop(e.track('/+3V3', (122.351, 150.105), (122.68, 150.105)),
+           e.track('/+3V3', (122.68, 150.105), (124.2, 151.625)),
+           e.track('/+3V3', (125.7, 153.12), (124.2, 151.625)),
+           e.track('/+3V3', (125.7, 153.225), (125.7, 153.12)),
+           e.track('/LT_DATA', (125.7, 151.57), (125.7, 150.28)),
+           e.track('/LT_DATA', (125.7, 150.28), (125.88, 150.1)),
+           e.track('/LT_RXD_N', (120.815, 151.575), (119.683, 150.443)),
+           e.track('/LT_RXD_N', (121.2, 151.575), (120.815, 151.575)),
+           e.track('/LT_RXD_P', (119.263, 150.753), (120.813, 152.303)),
+           e.track('/LT_RXD_P', (120.813, 152.303), (121.972, 152.303)),
+           e.track('/LT_RXD_P', (121.972, 152.303), (122.7, 151.575)),
+           e.track('/LT_PORT_RXD_N', (126.495, 158.52), (121.2, 153.225)),
+           e.track('/LT_PORT_RXD_P', (124.488, 154.412), (123.887, 154.412)),
+           e.track('/LT_PORT_RXD_P', (123.887, 154.412), (122.7, 153.225)),
+           e.via('/LT_PORT_RXD_P', (124.488, 154.412)),
+           e.track('/LT_PORT_RXD_P', (126.096, 156.02), (124.488, 154.412)),
+           e.track('/LT_PORT_RXD_P', (129.1, 156.02), (126.096, 156.02)))
+    e.move_end(e.track('/LT_PORT_RXD_N', (129.1, 158.52), (126.495, 158.52)), (126.495, 158.52), (125.295, 158.52))
+    e.place('R11', 118.45, 152.4, -90)
+    e.place('R10', 120.0, 152.4, -90)
+    e.place('C18', 121.55, 152.4, -90)
+    e.place('R14', 131.3, 144.6, 180)        # below U7's TASHTALK label
+    e.draw('/+3V3', [(120.925, 150.105), (121.55, 150.73), (121.55, 151.62)], width=0.5)
+    e.draw('/LT_RXD_N', [(119.683, 150.443), (119.683, 150.9), (120.0, 151.217)])
+    e.draw('/LT_RXD_P', [(119.263, 150.753), (118.45, 151.566)])
+    e.draw('/LT_PORT_RXD_N', [(120.0, 153.225), (125.295, 158.52)])
+    e.draw('/LT_PORT_RXD_P', [(118.45, 153.225), (118.9, 153.675), (118.9, 154.25)])
+    e.add_via('/LT_PORT_RXD_P', (118.9, 154.25))
+    e.draw('/LT_PORT_RXD_P', [(118.9, 154.25), (122.67, 154.25), (124.44, 156.02), (129.1, 156.02)], B)
+    # R14 pulls LT_DATA up from where it passes between U7 and U6
+    e.draw('/+3V3', [(132.125, 144.6), (132.927, 144.6)], width=0.3)
+    e.draw('/LT_DATA', [(130.23, 144.6), (130.475, 144.6)])
+
+
+def reset_line(e):
+    """R27 (r13_place puts it east of U7) in LT_RESET's back run; U7.4 fed back along it."""
+    e.move_end(e.track('/LT_RESET', (125.171, 134.171), (150.717, 134.171)), (125.171, 134.171), (134.12, 134.171))
+    e.add_via('/LT_RESET', (134.12, 134.171))
+    e.draw('/LT_RESET', [(134.12, 134.171), (134.12, 135.175)])
+    e.draw('/LT_MCLR', [(134.12, 136.825), (134.12, 137.9)])
+    e.add_via('/LT_MCLR', (134.12, 137.9))
+    e.draw('/LT_MCLR', [(134.12, 137.9), (130.39, 134.17), (125.171, 134.171), (124.09, 133.09)], B)
+
+
+def boot(e):
+    """SW2 and R21 west, below IO0: BOOT_CFG straight down to both."""
+    e.drop(e.track('/BOOT_CFG', (140.421, 149.546), (141.3, 150.425)),
+           e.track('/BOOT_CFG', (142.8, 151.2), (142.075, 151.2)),
+           e.track('/BOOT_CFG', (142.075, 151.2), (141.3, 150.425)),
+           e.track('/BOOT_CFG', (138.0, 149.546), (140.421, 149.546)))
+    e.place('SW2', 140.0, 152.7, 0)
+    boot = [t for t in e.b.FindFootprintByReference('SW2').GraphicalItems()
+            if isinstance(t, pcbnew.PCB_TEXT) and t.GetText() == 'BOOT'][0]
+    boot.SetPosition(pcbnew.VECTOR2I(nm(143.1), nm(152.7)))   # J4's outline is below
+    boot.SetTextAngleDegrees(90)
+    e.place('R21', 140.0, 150.2, 180)
+    e.draw('/BOOT_CFG', [(138.0, 149.546), (138.65, 150.2), (139.175, 150.2)])
+    e.draw('/BOOT_CFG', [(138.0, 149.546), (138.0, 151.5), (138.3, 151.8)])
+
+
+def reset_switch(e):
+    """EN into SW1's pad 1, round the bracket pad that now sits on its last leg."""
+    e.draw('/EN', [(159.19, 104.94), (158.3, 104.05), (157.45, 104.05), (157.0, 103.6), (157.0, 102.0)])
+
+
+def led_data(e):
+    """LED_DATA's run north of the module, up 0.37 mm."""
+    e.drop(e.track('/LED_DATA', (144.75, 127.967), (139.494, 127.967)),
+           e.track('/LED_DATA', (139.494, 127.967), (137.298, 130.163)))
+    e.move_end(e.track('/LED_DATA', (146.7, 126.017), (144.75, 127.967)), (144.75, 127.967), (145.117, 127.6))
+    e.draw('/LED_DATA', [(137.298, 130.163), (139.861, 127.6), (145.117, 127.6)])
+
+
+def usb(e):
+    """VBUS's one via, bigger; D- in line through U5."""
+    e.drop(e.via('/VBUS', (151.25, 150.171)))
+    e.move_end(e.track('/VBUS', (151.338, 150.386), (151.25, 150.171)), (151.25, 150.171), (151.3, 150.1))
+    e.move_end(e.track('/VBUS', (151.25, 150.171), (154.538, 146.883)), (151.25, 150.171), (151.3, 150.1))
+    e.add_via('/VBUS', (151.3, 150.1), size=0.9, drill=0.5)
+    e.drop(e.track('/USB_DM', (146.691, 157.346), (146.691, 155.674)),
+           e.track('/USB_DM', (146.691, 155.674), (148.323, 154.042)))
+    e.move_end(e.track('/USB_DM', (146.691, 159.673), (146.691, 157.346)), (146.691, 157.346), (146.691, 157.3))
+    e.draw('/USB_DM', [(146.691, 157.3), (143.15, 157.3)])
+    e.add_via('/GND', (144.1, 159.35))
+    e.draw('/GND', [(144.1, 159.35), (144.1, 158.26)])
+
+
+def main():
+    e = Board(BOARD)
+    if any(t.GetNetname() == '/LT_MCLR' and t.GetLayer() == B for t in e.b.GetTracks()):
+        print('reroute: already done')
+        return
+    trunk(e)
+    printer_handshakes(e)
+    under_u8(e)
+    reset_line(e)
+    boot(e)
+    reset_switch(e)
+    led_data(e)
+    usb(e)
+    e.save()
+    print(f'reroute: {len(e.dead)} rev A pieces replaced; R10, R11, C18, R14, SW2, R21 moved')
+
+
+if __name__ == '__main__':
+    main()

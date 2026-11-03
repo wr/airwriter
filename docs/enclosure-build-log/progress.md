@@ -14,7 +14,7 @@ Base at start: 018d18efb5338f4b7114c86a2de4a3bed112c0b4
 |---|---|---|---|
 | T1 `outline()` | T2 `BOARD_W/BOARD_L` | `(min_x,min_y,max_x,max_y)` KiCad mm | clean |
 | T1 `to_case()` | T3, T6, T7 | KiCad mm → case frame | clean |
-| T1 `mount_holes()` | T4 `standoffs`/`screw_holes`, T7 `lite_lid` | `{ref:(X,Y)}` case frame | clean |
+| T1 `mount_holes()` | T4 `standoffs`/`screw_holes`, T7 `lc_lid` | `{ref:(X,Y)}` case frame | clean |
 | T1 `footprint()` | T5 `connector_solid`, T6 `dip_slot`/`reset_pinhole` | dataclass | **DEFECT 1** — no model offset/scale/rotate fields |
 | T1 `local_to_board()` | T6 `dip_slot`, T1's own S1 test | footprint-local → KiCad | clean |
 | T2 constants | T3–T8 | module globals | clean |
@@ -22,7 +22,7 @@ Base at start: 018d18efb5338f4b7114c86a2de4a3bed112c0b4
 | T4 `standoffs()`/`screw_holes()` | T6 `tray()` | `Part` | clean |
 | T5 `port_cutouts()` | T6 `tray()` | `Part` | clean |
 | T6 `tray()` | T7 fit test, T8 export | `Part` | clean |
-| T7 `lite_lid()` | T8 export | `Part` | clean |
+| T7 `lc_lid()` | T8 export | `Part` | clean |
 | T8 `out/*.stl` | T9 GLB | file | clean |
 | T3–T7 all edit `case.py` + `test_case.py` | — | serial edits, one task at a time | clean |
 
@@ -281,10 +281,10 @@ README's first-print check list. Cost if wrong: a paperclip misses the switch by
 a millimetre or two and the pinhole gets redrilled once — but nobody will have
 been told it was verified when it wasn't.
 
-Ruling: Lite screw length. With STANDOFF at 3.00 the counterbore seat is at
+Ruling: LC screw length. With STANDOFF at 3.00 the counterbore seat is at
 Z=-5.60, so an M2.5x8 reaches Z=2.40 — only 2.40 mm of engagement in a 4.50 mm
 insert bore, down from 3.40 before my standoff change. Specifying M2.5x10 for
-the Lite instead (reaches 4.40, nearly full engagement). The Pro's M2.5x20 is
+the LC instead (reaches 4.40, nearly full engagement). The Pro's M2.5x20 is
 unaffected and actually improved: its tip now lands at 14.40 against the SMTSO
 nut's far end at 14.34, where before it over-travelled 1.06 mm into a blind nut.
 Cost if wrong: a screw 2 mm longer than needed.
@@ -352,8 +352,8 @@ panel.kicad_pcb has the identical four at 62.000 x 104.270. Board and art panel
 share one outline: 62 x 104.27, R2.0.
 Everything built so far uses `outline()`, which returns a BOUNDING BOX, so no
 part of the model knows the corners exist. Consequences, worst first:
-  1. The Lite lid is a square-cornered plate standing in for an R2.0 panel. The
-     spec's own promise is that Pro and Lite are "identical from the outside
+  1. The LC lid is a square-cornered plate standing in for an R2.0 panel. The
+     spec's own promise is that Pro and LC are "identical from the outside
      except the top face" — a square lid in the same seat as a rounded panel
      breaks exactly that. This is a real defect, not a polish item.
   2. The board pocket is a square-cornered box, so the board's rounded corners
@@ -364,7 +364,7 @@ part of the model knows the corners exist. Consequences, worst first:
      for a printed part than a sharp vertical arris.
 Ruling: implement it as one coherent follow-up task (Task 10) rather than
 reopening Tasks 1/3/7 separately — board_geom exposes the corner radius read
-from the arcs, params carries it, and shell()/lite_lid() use rounded rects.
+from the arcs, params carries it, and shell()/lc_lid() use rounded rects.
 Sequenced AFTER Task 8's gate is fixed and re-reviewed, because it changes
 geometry the gate has to check, and BEFORE Task 9 so the shop GLB is final.
 Cost if wrong: the geometry churn lands on two functions plus their tests.
@@ -411,12 +411,12 @@ extra commit until he runs it.
 
 ## Final whole-branch review (opus)
 Verdict: NOT READY. One real fit defect plus two truth-contract leaks.
-- Finding 1 (Important): the Lite lid was built at POCKET_W x POCKET_L into a
+- Finding 1 (Important): the LC lid was built at POCKET_W x POCKET_L into a
   pocket of exactly that size — 0.0000 mm clearance per side, distance_to = 0.
   An FDM plate at nominal pocket size does not drop into an FDM pocket, and this
   is the one part meant to be removed and reinstalled. It also violated spec S1:
   the panel's real outline is 62.00 x 104.27, so the lid was 0.4 mm oversize in
-  both axes and Pro/Lite were NOT "identical from the outside except the top
+  both axes and Pro/LC were NOT "identical from the outside except the top
   face". The guarding test asserted (tray & lid).volume == 0, which is satisfied
   identically at zero clearance and at 2 mm — the EIGHTH blind test on this branch.
 - Finding 2 (Important): two board coordinates still retyped (SW3's plunger

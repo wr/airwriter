@@ -30,7 +30,7 @@ egg-crate idea.
   lattice must reach the same height, or a gap opens under the panel and light runs from
   cell to cell across it.
 - **The tray follows** (landed with W-1036's second print fix). `params.CAVITY` goes from 12.74 to 13.04. That moves `Z_LID_UNDER`
-  to 13.04 and `Z_WALL_TOP` to 14.64, and `EXT_H` grows to 21.64. The Lite lid's legs
+  to 13.04 and `Z_WALL_TOP` to 14.64, and `EXT_H` grows to 21.64. The LC lid's legs
   follow automatically. A tray printed at 12.74 leaves the panel 0.3 mm proud of the rim.
 - **Pro screws: M2.5 × 18, not × 20.** The panel's standoffs are Würth 9774030151R:
   Ø5.1 × 3.0, steel, a blind M2.5 thread in the bottom 1.8 mm, and the screw tip must stop
@@ -106,8 +106,8 @@ front edge, Z up from its top face). Dot centres: case x = panel x, case y =
   post loses a sliver; the D3 tube sits south of the zone. *Amended during build:* the zone
   overlaps the grid by 1.85 mm, the module's antenna ends 1.7 mm short of the grid, and
   cutting there opened lit cell r7c6, so the cut stops at the grid's front wall.
-- **J2 at the H3 post.** J2's body (the same grown hull the tray and Lite lid use) trims the
-  post's front-east side, as it trims the Lite lid's leg there.
+- **J2 at the H3 post.** J2's body (the same grown hull the tray and LC lid use) trims the
+  post's front-east side, as it trims the LC lid's leg there.
 - **SW3 and the test cell.** SW3 sits in cell r3c3 under the panel's Ø3.8 hole. The cell
   stays open. *Amended during build:* envelopes are stepped (`components.py`: one box per
   1 mm slice for parts over 2.5 mm), because one box from the board to the plunger tip cut
@@ -124,7 +124,7 @@ the build.
 FDM, matte black PLA or PETG, 0.4 mm nozzle, 0.2 mm layers, **panel face down** on the bed,
 which makes the contact face the flattest one. No supports: printed that way, every pocket,
 notch and rail underside opens upward. The pocket cones keep the post pockets from becoming
-flat ceilings. The overhang check is the Lite lid's: print-down is model +Z, so
+flat ceilings. The overhang check is the LC lid's: print-down is model +Z, so
 `upward_flats` with the bed at Z = 13.04.
 
 ## 5. Source and build

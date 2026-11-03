@@ -98,13 +98,27 @@ Traps already explained in a code comment are listed only when the comment is ea
   interrupt is on core 1 too. An unpinned task is not "free to use the idle core".
 - **Rev A has no hardware LED current limit.** `LG_BRIGHTNESS_CAP` and friends in
   `led_grid_core.h` are the only limit on 37 SK6812s; raise them knowingly. All 37 lit at
-  about the boot Spin's heaviest draw measured 5.2 V, 0.461 A for the whole board.
+  about the boot animation's heaviest draw (the Spin's then; the boot wave is held under it)
+  measured 5.2 V, 0.461 A for the whole board.
+- **Dithering one or two counts flickers.** There a dot can show only a few colours, and temporal
+  dithering between them reads as flicker even at 400 fps: a rev A board's embers hopped red, yellow,
+  white (W-1115). No dot rests below `LG_GLOW`, and only dots over `LG_BLEND` are dithered. A new
+  dim floor goes through `glow_at` or `rest()`; a fade to or from dark may pass through.
 - **The panel is not true RGB.** Through the FR4, blue reads cyan except at hue 240 (sky blue),
   270 is pale lavender, 285 onward pink, and there is no purple; under the mask white turns
   mint. Pick colours from the measured map (`tools/lights/panel_colours.json`, the
   status-language spec's material table), not from a screen.
 - **A raw pyserial open on macOS drops the S3 into download mode** (the driver asserts DTR at
-  open). Read the console only with `idf.py monitor` under `script` (AGENTS.md, bench rules).
+  open). Read the console only with `idf.py monitor` under `script` (AGENTS.md, On a real board).
+- **Rev A can power up into download mode: D3 lit, panel dark, no Wi-Fi, console silent.** IO0
+  has C7 (100 nF) to GND and only the S3's ~45 k internal pull-up, so it races EN's 10 k / 1 µF
+  and sometimes is still low when the straps latch (board 1, 2026-10-28: `GPIO_STRAP` 0x23,
+  bit 3 clear, after a power-on reset; IO0 read high once it had charged). No firmware runs, so
+  none can help. An `idf.py monitor` reset and esptool's RTS reset leave it there (USB resets
+  don't re-latch the straps); `esptool.py -p /dev/cu.usbmodem* --before no_reset --after
+  watchdog_reset read_mac` does re-latch them, and so do SW1 or unplugging. Lifting C7 fixes
+  it, and the BOOT button works without it: board 1 started normally in 50 plug-ins after
+  (2026-10-29). Rev 2026.11 has a 10 k pull-up on IO0 and no C7.
 - **An image built without W-1046 is rolled back at its next reboot** when a W-1046 image
   installs it over the air: the installer marks it on trial, and nothing in it ever keeps
   itself. It runs fine until then. Rebase a branch on W-1046 before OTAing it to a W-1046 board,
@@ -117,10 +131,14 @@ Traps already explained in a code comment are listed only when the comment is ea
   air.** A bug there needs a USB flash on every board. Bench every reset path after changing it
   (`docs/superpowers/specs/2026-10-16-known-good-slot-design.md`), and keep it inside the
   bootloader's 9 s watchdog: the 5 s hold, the image checks and the app's start all count.
-- **`esp_image_verify` in the app checks the RSA signature too** (signed updates), and that
-  overflows `app_main`'s stack: the board crash-loops at boot. Board 1 did, once, from a status
-  check on the known-good slot (W-1059). The bootloader's check has no such cost; leave whole-
-  image checks to it, or run them on a task with a large stack.
+- **`esp_image_verify` in the app checks the RSA signature too** (signed updates), at least
+  3.4 KB of stack, and that overflows `app_main`'s stack: the board crash-loops at boot. Board 1
+  did twice, from a status check on the known-good slot (W-1059) and, after a failed update, from
+  `esp_ota_get_last_invalid_partition()` (W-1108), which calls it out of sight; so do
+  `esp_ota_check_rollback_is_possible()` and with it `esp_ota_mark_app_invalid_rollback*()`. The
+  overflow lands on the other core's IPC task, so the panic names `ipc_task`, not the culprit.
+  The bootloader's check has no such cost; leave whole-image checks to it, or run them on a task
+  with a large stack, and run `tools/stackcheck` after adding one.
 - **`idf.py app-flash` writes ota_0 and nothing else.** otadata may boot another slot, so the
   board can keep running the old image, and ota_0 may be the known-good slot. Use `idf.py flash`,
   which also blanks otadata and the record.
@@ -210,7 +228,7 @@ Traps already explained in a code comment are listed only when the comment is ea
   same file went in on the next try. Verify the image, then retry once.
 - **Never OTA while a job prints.** It cut two jobs on 2026-10-15. Since W-1048 `/update` refuses
   (409) while a job holds the job lock and gives way to one that arrives mid-upload, but an
-  image from before W-1048 still on a board does not. Bench rule in AGENTS.md.
+  image from before W-1048 still on a board does not. AGENTS.md, On a real board.
 
 ## Serial, printer, LocalTalk
 
@@ -481,8 +499,9 @@ Traps already explained in a code comment are listed only when the comment is ea
 - **`kicad-cli pcb render` tints bare FR4 by the mask colour**, so glowing FR4 dots look black
   in renders.
 - **The BOM must group by the DNP flag** or a DNP row swallows fitted parts (R8 was once left off).
-- **`hardware/airwriter/fab/` is a stale single-board package.** The order source is
-  `hardware/combined-fab.zip` + `hardware/combined/combined-top.png` (`docs/ORDER-NOTES.md`).
+- **`hardware/airwriter/fab/` is a stale rev A single-board package.** The order sources are
+  `hardware/combined-fab.zip` (AirWriter) and `hardware/airwriter-lc-fab.zip` (AirWriter LC,
+  the main board alone), both from `make_fab.sh` (`docs/ORDER-NOTES.md`).
 - **`combine_boards.py` strips every net except `PANEL_AU`**, the decorative net that lets the
   test pad, annulus and tab art touch without a DRC short. Don't "fix" either end.
 

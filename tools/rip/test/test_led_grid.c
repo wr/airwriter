@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Host test for the led_grid frame renderer, panel language v4
 // (docs/superpowers/specs/2026-10-14-status-language-design.md): caps, which
-// dots each state may light, that the array varies dot to dot, the boot spin,
+// dots each state may light, that the array varies dot to dot, the boot wave,
 // the Wi-Fi-connected green moment, gamer mode, joining's outward rings,
 // setup's two cues, attention, failure, the bidirectional print head, and
-// the asleep breath.
+// the asleep fireflies.
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -82,18 +82,18 @@ static lg_slot_t *slot(lg_opts_t *o, lg_act_t a) { return &o->task[lg_family(a)]
 
 // The factory-reset overlay (W-1045): it covers every state, sleep included;
 // the countdown fills clockwise and goes orange to red; the point of no return
-// and the confirmation; caps, and a draw no worse than the boot spin's.
+// and the confirmation; caps, and a draw no worse than the boot wave's.
 static void test_reset(uint8_t f[LG_NUM_LEDS][3], uint8_t g[LG_NUM_LEDS][3])
 {
     const lg_act_t acts[] = { LG_ACT_RESET_HOLD, LG_ACT_RESET_CANCEL, LG_ACT_RESET_DONE,
                               LG_ACT_RESET_CONFIRM, LG_ACT_RESET_FAILED };
 
-    // The boot spin's heaviest frame is the budget.
-    int spin_max = 0;
+    // The boot wave's heaviest frame is the budget.
+    int boot_max = 0;
     for (uint32_t s = 0; s < LG_BOOT_MS; s += 10) {
         ps_view_t v = view(PS_BOOTING, s);
         lg_render(&v, &WHITE_MODE, s, f);
-        if (frame_sum(f) > spin_max) spin_max = frame_sum(f);
+        if (frame_sum(f) > boot_max) boot_max = frame_sum(f);
     }
     for (int a = 0; a < 5; a++)
         for (uint32_t s = 0; s < 9000; s += 10) {
@@ -101,7 +101,7 @@ static void test_reset(uint8_t f[LG_NUM_LEDS][3], uint8_t g[LG_NUM_LEDS][3])
             lg_opts_t o = act(acts[a], s);
             slot(&o, acts[a])->arg = 1000;
             lg_render(&v, &o, s, f);
-            assert(frame_sum(f) <= spin_max);
+            assert(frame_sum(f) <= boot_max);
             for (int i = 0; i < LG_NUM_LEDS; i++)
                 for (int ch = 0; ch < 3; ch++)
                     assert(f[i][ch] <= (LG_MAP[i].mat != 'P' ? LG_MASK_CAP : LG_ALERT_CAP));
@@ -137,7 +137,7 @@ static void test_reset(uint8_t f[LG_NUM_LEDS][3], uint8_t g[LG_NUM_LEDS][3])
 
         lg_opts_t o = act(LG_ACT_RESET_HOLD, LG_RESET_FILL_MS / 2);
         lg_render(&v, &o, 0, f);
-        assert(max3(f[idx(3, 4)]) > 8 && max3(f[idx(3, 2)]) <= 2);   // 3 o'clock lit, 9 not
+        assert(max3(f[idx(3, 4)]) > 8 && max3(f[idx(3, 2)]) <= LG_GLOW / 256);   // 3 o'clock lit, 9 at most the glow
 
         int orange = idx(0, 4), red = orange;           // just right of 12 o'clock
         o = act(LG_ACT_RESET_HOLD, 900);
@@ -215,7 +215,7 @@ static lg_opts_t blip(lg_blip_t b, uint32_t ms)
     return o;
 }
 
-static int spin_heaviest(void)
+static int boot_heaviest(void)
 {
     uint8_t f[LG_NUM_LEDS][3];
     int m = 0;
@@ -227,11 +227,11 @@ static int spin_heaviest(void)
     return m;
 }
 
-// Caps (the alert cap only where red is allowed), the boot spin's draw as the
+// Caps (the alert cap only where red is allowed), the boot wave's draw as the
 // budget, and, for FR4-only patterns, dark mask dots.
-static void check_frame(uint8_t f[LG_NUM_LEDS][3], int spin_max, int alert_ok, int fr4_only)
+static void check_frame(uint8_t f[LG_NUM_LEDS][3], int boot_max, int alert_ok, int fr4_only)
 {
-    assert(frame_sum(f) <= spin_max);
+    assert(frame_sum(f) <= boot_max);
     for (int i = 0; i < LG_NUM_LEDS; i++) {
         int fr4 = LG_MAP[i].mat == 'P';
         if (fr4_only && !fr4) assert(max3(f[i]) == 0);
@@ -254,9 +254,9 @@ static int fr4_lit(uint8_t f[LG_NUM_LEDS][3], int over)
 
 static void test_w1049(uint8_t f[LG_NUM_LEDS][3], uint8_t g[LG_NUM_LEDS][3])
 {
-    const int spin_max = spin_heaviest();
+    const int boot_max = boot_heaviest();
 
-    // Moments: within the caps and the spin's draw, FR4-only where the state
+    // Moments: within the caps and the boot wave's draw, FR4-only where the state
     // they open is, drawn (not the plain state) mid-way, and the plain state
     // exactly once they end.
     struct { ps_state_t st, prev; uint8_t cancelled, src; uint32_t len; int alert, fr4_only; uint8_t jf; } M[] = {
@@ -267,7 +267,7 @@ static void test_w1049(uint8_t f[LG_NUM_LEDS][3], uint8_t g[LG_NUM_LEDS][3])
         { PS_READY,    PS_PRINTING,  0, LG_SRC_LOCALTALK, LG_PAGE_MS,     0, 0, 0 },
         { PS_READY,    PS_PRINTING,  1, LG_SRC_AIRPRINT,  LG_CANCEL_MS,   0, 0, 0 },   // cancelled
         { PS_SETUP,    PS_JOINING,   0, 0,                LG_JOINFAIL_MS, 1, 0, 1 },   // could not join
-        { PS_SETUP,    PS_BOOTING,   0, 0,                LG_JOINFAIL_MS, 1, 0, 1 },   // ... straight from the Spin
+        { PS_SETUP,    PS_BOOTING,   0, 0,                LG_JOINFAIL_MS, 1, 0, 1 },   // ... straight from the wave
     };
     for (unsigned m = 0; m < sizeof M / sizeof M[0]; m++) {
         lg_opts_t o;
@@ -278,7 +278,7 @@ static void test_w1049(uint8_t f[LG_NUM_LEDS][3], uint8_t g[LG_NUM_LEDS][3])
             v.cancelled = M[m].cancelled;
             v.join_failed = M[m].jf;
             lg_render(&v, &o, 50000 + s, f);
-            check_frame(f, spin_max, M[m].alert, M[m].fr4_only);
+            check_frame(f, boot_max, M[m].alert, M[m].fr4_only);
         }
         ps_view_t v = moment(M[m].st, M[m].prev, 500), plain = view(M[m].st, 500);
         v.cancelled = M[m].cancelled;
@@ -363,7 +363,7 @@ static void test_w1049(uint8_t f[LG_NUM_LEDS][3], uint8_t g[LG_NUM_LEDS][3])
             lg_opts_t o = act(T[k].a, s);
             slot(&o, T[k].a)->arg = T[k].arg;
             lg_render(&v, &o, 20000 + s, f);
-            check_frame(f, spin_max, T[k].alert, T[k].fr4_only);
+            check_frame(f, boot_max, T[k].alert, T[k].fr4_only);
         }
     assert(lg_act_over(LG_ACT_PIC_OK, LG_PIC_OK_MS) && !lg_act_over(LG_ACT_PIC_OK, LG_PIC_OK_MS - 1));
     assert(lg_act_over(LG_ACT_PIC_FAILED, LG_PIC_FAILED_MS));
@@ -437,10 +437,10 @@ static void test_w1049(uint8_t f[LG_NUM_LEDS][3], uint8_t g[LG_NUM_LEDS][3])
                 lg_opts_t o = blip(B[k], s);
                 ps_view_t v = view(PS_READY, 100000);
                 lg_render(&v, &o, 30000 + s, f);
-                check_frame(f, spin_max, 0, 0);
+                check_frame(f, boot_max, 0, 0);
                 v = view(PS_PRINTING, 100000);
                 lg_render(&v, &o, 30000 + s, f);
-                check_frame(f, spin_max, 0, 0);
+                check_frame(f, boot_max, 0, 0);
             }
             const ps_state_t quiet[] = { PS_BOOTING, PS_ATTENTION, PS_FAILED };
             for (int q = 0; q < 3; q++) {
@@ -486,7 +486,7 @@ static void test_w1049(uint8_t f[LG_NUM_LEDS][3], uint8_t g[LG_NUM_LEDS][3])
     }
 
     // Review fix: an acknowledgement is not drawn over an all-dot moment or a
-    // cable test's answer, whose frames would then draw more than the Spin.
+    // cable test's answer, whose frames would then draw more than the boot wave.
     {
         const lg_blip_t B[] = { LG_BLIP_MAC, LG_BLIP_LT_ON, LG_BLIP_BUSY, LG_BLIP_SAVED };
         const uint32_t L[] = { LG_BLIP_MAC_MS, LG_BLIP_LT_ON_MS, LG_BLIP_BUSY_MS, LG_BLIP_SAVED_MS };
@@ -501,7 +501,7 @@ static void test_w1049(uint8_t f[LG_NUM_LEDS][3], uint8_t g[LG_NUM_LEDS][3])
                     if (m == 3) { v.cable = 1 + s % 3; v.cable_ms = s; }
                     lg_opts_t o = blip(B[k], s % L[k]);
                     lg_render(&v, &o, 60000 + s, f);
-                    check_frame(f, spin_max, m == 2, 0);
+                    check_frame(f, boot_max, m == 2, 0);
                 }
         ps_view_t v = moment(PS_PRINTING, PS_ATTENTION, 500);
         lg_opts_t o = blip(LG_BLIP_LT_ON, 500);
@@ -581,9 +581,13 @@ int main(void)
         if (all[s] != PS_ATTENTION) assert(distinct >= 3);   // attention may be between rings
     }
 
-    // Boot spin: lit mid-way, mask dots included; dark by LG_BOOT_MS.
+    // Boot wave: in from the top-left corner, lit mid-way, mask dots included;
+    // diagonal bands that move; dark by LG_BOOT_MS.
     {
-        ps_view_t v = view(PS_BOOTING, 1000);
+        ps_view_t v = view(PS_BOOTING, 200);
+        lg_render(&v, &WHITE_MODE, 200, f);
+        assert(max3(f[idx(0, 2)]) > 0 && max3(f[idx(7, 4)]) == 0);
+        v = view(PS_BOOTING, 1000);
         lg_render(&v, &WHITE_MODE, 1000, f);
         int fr4 = 0, mask = 0;
         for (int i = 0; i < LG_NUM_LEDS; i++) {
@@ -591,6 +595,17 @@ int main(void)
             if (LG_MAP[i].mat == 'P') fr4 = 1; else mask = 1;
         }
         assert(fr4 && mask);
+        // The FR4 dots on one diagonal show one colour, the next diagonal's
+        // another, and a second later it has moved on.
+        v = view(PS_BOOTING, 1500);
+        lg_render(&v, &WHITE_MODE, 1500, f);
+        const uint8_t *d6 = f[idx(2, 4)];
+        assert(!memcmp(d6, f[idx(6, 0)], 3) && !memcmp(d6, f[idx(5, 1)], 3)
+               && !memcmp(d6, f[idx(4, 2)], 3));
+        assert(memcmp(d6, f[idx(3, 4)], 3));
+        v = view(PS_BOOTING, 2500);
+        lg_render(&v, &WHITE_MODE, 2500, g);
+        assert(memcmp(d6, g[idx(2, 4)], 3));
         // A board settled early starts going out at 1.7 s and is dark at 3.0 s.
         v = view(PS_BOOTING, LG_BOOT_MS);
         v.spin_out = 1;
@@ -599,9 +614,9 @@ int main(void)
         assert(lit_count(f) == 0);
     }
 
-    // W-1049's quiet power-on: a Spin still waiting keeps turning, lit but
-    // eased down after 3 s, never heavier than its opening; once the board
-    // settles it goes out over LG_SPIN_OUT_MS.
+    // W-1049's quiet power-on: a boot wave still waiting keeps flowing, lit
+    // but eased down after 3 s, never heavier than its opening; once the board
+    // settles it rolls off over LG_SPIN_OUT_MS, the bottom-right corner last.
     {
         int heaviest = 0;
         for (uint32_t s = 0; s < 3000; s += 10) {
@@ -609,6 +624,10 @@ int main(void)
             lg_render(&v, &WHITE_MODE, s, f);
             if (frame_sum(f) > heaviest) heaviest = frame_sum(f);
         }
+        // The whole panel's budget: no heavier than the Spin it replaced,
+        // whose heaviest frame (6990) board 1 drew 0.46 A at, all told
+        // (2026-10-16). Rev A has no current limit.
+        assert(heaviest <= 6990);
         int waiting = 0;
         for (uint32_t s = 3000; s < 30000; s += 97) {
             ps_view_t v = view(PS_BOOTING, s);
@@ -622,8 +641,8 @@ int main(void)
         v.spin_out = 1;
         v.spin_out_ms = 900;
         lg_render(&v, &WHITE_MODE, 20000, f);
-        assert(max3(f[idx(3, 4)]) > 0);              // the middle still lit ...
-        assert(max3(f[idx(7, 4)]) == 0);             // ... the far dots gone first
+        assert(max3(f[idx(7, 6)]) > 0);              // the bottom-right corner still lit ...
+        assert(max3(f[idx(0, 2)]) == 0 && max3(f[idx(1, 1)]) == 0);   // ... the top-left gone first
         v.spin_out_ms = LG_SPIN_OUT_MS;
         lg_render(&v, &WHITE_MODE, 20000, f);
         assert(lit_count(f) == 0);
@@ -771,30 +790,35 @@ int main(void)
         assert(max3(f[b]) > max3(f[a]));
     }
 
-    // Asleep: after the fade, one FR4 dot breathes, near-white, from off up
-    // to the cap and out again; each breath at a new dot, every FR4 dot taking
-    // a turn before any repeats.
+    // Asleep: fireflies. After the fade, a breath starts at a new FR4 dot
+    // every LG_FIREFLY_MS and lasts LG_BREATH_MS, near-white, from off up to
+    // the cap and out again, so at most three dots are lit, never the same one
+    // twice at once; every FR4 dot takes a turn before any repeats.
     {
         ps_view_t v = view(PS_READY, 400000);
         v.asleep = 1;
         v.asleep_ms = 20000;
-        int peak = 0, d = lg_sleep_dot(0);
-        for (uint32_t t = 0; t < LG_BREATH_MS; t += 50) {
+        const uint32_t b = 10, t0 = b * LG_FIREFLY_MS;
+        int peak = 0, d = lg_sleep_dot(b);
+        for (uint32_t t = t0; t < t0 + LG_BREATH_MS; t += 50) {
             lg_render(&v, &WHITE_MODE, t, f);
             for (int i = 0; i < LG_NUM_LEDS; i++)
-                if (i != d) assert(max3(f[i]) == 0);
-            assert(neutral(f[d]));
+                if (max3(f[i])) assert(LG_MAP[i].mat == 'P' && neutral(f[i]));
+            assert(lit_count(f) <= 3);
             if (max3(f[d]) > peak) peak = max3(f[d]);
         }
         assert(peak * 10 >= LG_BRIGHTNESS_CAP * 9 && peak <= LG_BRIGHTNESS_CAP);
-        lg_render(&v, &WHITE_MODE, 3 * LG_BREATH_MS, f);
-        assert(lit_count(f) == 0);                          // off between breaths
+        lg_render(&v, &WHITE_MODE, t0, f);
+        assert(max3(f[d]) == 0);                            // each breath from off
+        lg_render(&v, &WHITE_MODE, t0 + LG_BREATH_MS / 2, f);
+        assert(lit_count(f) == 3);                          // three at once
 
         int n = 0;
         for (int i = 0; i < LG_NUM_LEDS; i++) n += LG_MAP[i].mat == 'P';
         for (uint32_t k = 0; k < 2000; k++) {
             assert(LG_MAP[lg_sleep_dot(k)].mat == 'P');
-            if (k) assert(lg_sleep_dot(k) != lg_sleep_dot(k - 1));
+            for (uint32_t j = 1; j < LG_BREATH_MS / LG_FIREFLY_MS && j <= k; j++)
+                assert(lg_sleep_dot(k) != lg_sleep_dot(k - j));
             if (k % (uint32_t)n == 0) {
                 int seen[LG_NUM_LEDS] = {0};
                 for (uint32_t j = k; j < k + (uint32_t)n; j++) seen[lg_sleep_dot(j)]++;
@@ -804,10 +828,10 @@ int main(void)
         }
 
         v.state = PS_OFFLINE;
-        lg_render(&v, &WHITE_MODE, 3 * LG_BREATH_MS + LG_BREATH_MS / 2, f);
-        assert(lit_count(f) == 1 && max3(f[lg_sleep_dot(3)]) > 0);
+        lg_render(&v, &WHITE_MODE, t0 + LG_BREATH_MS / 2, f);
+        assert(lit_count(f) == 3 && max3(f[d]) > 0);
         v.state = PS_READY;                                 // gamer: a colour, not white
-        lg_render(&v, &GAMER_MODE, LG_BREATH_MS / 2, f);
+        lg_render(&v, &GAMER_MODE, t0 + LG_BREATH_MS / 2, f);
         assert(max3(f[d]) - min3(f[d]) >= 3);
     }
 
@@ -832,65 +856,219 @@ int main(void)
         assert(distinct >= 100);
     }
 
-    // Temporal dither: over time the 8-bit output averages to the 16-bit
-    // level; whole counts pass through untouched (no shimmer); zero stays dark.
+    // W-1115: nothing rests below the glow. Every level a state holds, long
+    // after it began (no moment), over 20 s: each dot it lights is at the
+    // glow or over (a count of float rounding allowed). FR4 dots in every
+    // state; mask dots too in the all-dot ones.
     {
         static uint16_t hi[LG_NUM_LEDS][3];
-        lg_dither_t d;
-        memset(&d, 0, sizeof d);
-        for (int i = 0; i < LG_NUM_LEDS; i++) {
-            hi[i][0] = 384;                 // 1.5 counts
-            hi[i][1] = 3 * 256;             // exactly 3
-            hi[i][2] = 0;
+        struct { ps_state_t st; int gamer, lt, joined; } S[] = {
+            { PS_SETUP, 0, 0, 0 }, { PS_SETUP, 0, 0, 1 }, { PS_JOINING, 0, 0, 0 },
+            { PS_READY, 0, 0, 0 }, { PS_READY, 1, 0, 0 }, { PS_OFFLINE, 0, 0, 0 },
+            { PS_PRINTING, 0, 0, 0 }, { PS_PRINTING, 0, 1, 0 }, { PS_ATTENTION, 0, 0, 0 },
+            { PS_FAILED, 0, 0, 0 } };
+        int at_glow = 0;
+        for (unsigned k = 0; k < sizeof S / sizeof *S; k++) {
+            ps_view_t v = view(S[k].st, 60000);
+            v.phone_joined = (uint8_t)S[k].joined;
+            lg_opts_t o = { .gamer = (uint8_t)S[k].gamer,
+                            .src = (uint8_t)(S[k].lt ? LG_SRC_LOCALTALK : LG_SRC_AIRPRINT) };
+            int all = S[k].st == PS_PRINTING || S[k].st == PS_ATTENTION || S[k].st == PS_FAILED;
+            for (uint32_t t = 0; t < 20000; t += 37) {
+                v.since_ms = 60000 + t;     // Failed's pulse runs on since_ms
+                lg_render16(&v, &o, t, hi);
+                for (int i = 0; i < LG_NUM_LEDS; i++) {
+                    if (LG_MAP[i].mat != 'P' && !all) continue;
+                    if (S[k].st == PS_PRINTING && LG_MAP[i].r == (int)((t / 1500) % LG_ROWS))
+                        continue;           // the head's row: dark ahead of the head
+                    int m = hi[i][0] > hi[i][1] ? (hi[i][0] > hi[i][2] ? hi[i][0] : hi[i][2])
+                                                : (hi[i][1] > hi[i][2] ? hi[i][1] : hi[i][2]);
+                    assert(m >= LG_GLOW - 1);
+                    at_glow += m <= LG_GLOW + 1;
+                }
+            }
         }
-        long sum0 = 0;
-        for (int k = 0; k < 200; k++) {
-            lg_dither(&d, hi, f);
-            sum0 += f[0][0];
-            assert(f[0][1] == 3 && f[0][2] == 0);
-            assert(f[0][0] == 1 || f[0][0] == 2);
+        assert(at_glow > 0);                // the embers and the rest do sit on it
+        // The cable test's strip while the band runs, the reset countdown's
+        // dots still to come, the firmware fill's empty rows.
+        ps_view_t v = view(PS_READY, 60000);
+        v.cable = PS_CABLE_PASS;
+        for (uint32_t ms = 0; ms < 1200; ms += 17) {
+            v.cable_ms = ms;
+            lg_render16(&v, &WHITE_MODE, 0, hi);
+            for (int i = 0; i < LG_NUM_LEDS; i++)
+                if (LG_MAP[i].r >= 5 && LG_MAP[i].c <= 4) assert(hi[i][0] + hi[i][1] + hi[i][2] > 0 &&
+                    (hi[i][0] >= LG_GLOW - 1 || hi[i][1] >= LG_GLOW - 1 || hi[i][2] >= LG_GLOW - 1));
         }
-        assert(sum0 == 300);                // 200 frames x 1.5
+        v = view(PS_READY, 60000);
+        for (uint32_t ms = 0; ms < LG_RESET_FILL_MS; ms += 53) {
+            lg_opts_t o = act(LG_ACT_RESET_HOLD, ms);
+            lg_render16(&v, &o, ms, hi);
+            for (int i = 0; i < LG_NUM_LEDS; i++)
+                assert(hi[i][0] >= LG_GLOW - 1 || hi[i][1] >= LG_GLOW - 1 || hi[i][2] >= LG_GLOW - 1);
+        }
+        for (uint32_t ms = 0; ms < 3000; ms += 23) {
+            lg_opts_t o = act(LG_ACT_FW_VERIFYING, ms);
+            lg_render16(&v, &o, ms, hi);
+            for (int i = 0; i < LG_NUM_LEDS; i++)
+                if (LG_MAP[i].mat == 'P')
+                    assert(hi[i][0] >= LG_GLOW - 1 || hi[i][1] >= LG_GLOW - 1 || hi[i][2] >= LG_GLOW - 1);
+            o = act(LG_ACT_PIC_FLASHING, ms);
+            lg_render16(&v, &o, ms, hi);
+            for (int i = 0; i < LG_NUM_LEDS; i++)
+                assert(hi[i][0] >= LG_GLOW - 1 || hi[i][1] >= LG_GLOW - 1 || hi[i][2] >= LG_GLOW - 1);
+        }
+        // Back from Needs attention to Printing: before the green wave reaches
+        // a dot it shows the amber it had, on the glow of the cap it is drawn
+        // under now (not Needs attention's alert cap).
+        {
+            ps_view_t m = view(PS_PRINTING, 30);
+            m.prev = PS_ATTENTION;
+            lg_render16(&m, &WHITE_MODE, 0, hi);
+            int far = idx(0, 4);            // the far corner from the printer socket
+            assert(hi[far][0] >= LG_GLOW - 1);
+        }
+        for (int arg = 0; arg <= 1001; arg += 77) {
+            lg_opts_t o = act(LG_ACT_FW_DOWNLOADING, 5000);
+            o.task[LG_FAM_FW].arg = (uint16_t)(arg > 1000 ? LG_PROGRESS_NONE : arg);
+            lg_render16(&v, &o, 5000, hi);
+            for (int i = 0; i < LG_NUM_LEDS; i++)
+                if (LG_MAP[i].mat == 'P')
+                    assert(hi[i][0] >= LG_GLOW - 1 || hi[i][1] >= LG_GLOW - 1 || hi[i][2] >= LG_GLOW - 1);
+        }
     }
 
-    // Dim dots keep their hue. At the bottom of a fade a dot is under one
-    // count; the floor must lift its brightest channel and scale the rest, not
-    // lift every channel to one count -- that turned dim warm embers and dim
-    // blue pulses white on board 1. Averaged through the dither: embers at
-    // their dim floor stay warm (red > green > blue), the joining pulse at its
-    // dim floor stays blue (blue at least twice red and twice green).
+    // W-1115: a fade to dark passes straight through. Falling asleep, a Ready
+    // dot dims without a pause on the glow and reaches dark; the asleep
+    // breath rises from dark through the levels under the glow.
+    {
+        static uint16_t hi[LG_NUM_LEDS][3];
+        ps_view_t v = view(PS_READY, 60000);
+        v.asleep = 1;
+        const int dot = idx(0, 2);
+        int prev = 1 << 30, under = 0, on_glow = 0, under_one = 0;
+        for (uint32_t ms = 5000; ms <= 10000; ms += 25) {
+            v.asleep_ms = ms;
+            lg_render16(&v, &WHITE_MODE, 777, hi);  // frozen time: only the fade moves
+            if (dot == lg_sleep_dot(777 / LG_FIREFLY_MS)) continue;
+            int m = hi[dot][0] > hi[dot][1] ? (hi[dot][0] > hi[dot][2] ? hi[dot][0] : hi[dot][2])
+                                            : (hi[dot][1] > hi[dot][2] ? hi[dot][1] : hi[dot][2]);
+            assert(m <= prev);
+            prev = m;
+            under += m > 0 && m < LG_GLOW;
+            on_glow += abs(m - LG_GLOW) <= 1;
+            under_one += m > 0 && m < 256;
+        }
+        assert(prev == 0 && under >= 10 && on_glow <= 2);     // through it, not resting on it
+        assert(under_one >= 3);             // and under one count: no floor at all
+        v.asleep_ms = 60000;
+        under = 0;
+        int d = lg_sleep_dot(3);
+        for (uint32_t t = 3 * LG_FIREFLY_MS; t < 3 * LG_FIREFLY_MS + 1000; t += 10) {
+            lg_render16(&v, &WHITE_MODE, t, hi);
+            int m = hi[d][0] > hi[d][1] ? (hi[d][0] > hi[d][2] ? hi[d][0] : hi[d][2])
+                                        : (hi[d][1] > hi[d][2] ? hi[d][1] : hi[d][2]);
+            under += m > 0 && m < LG_GLOW;
+        }
+        assert(under >= 5);
+    }
+
+    // W-1115: a dot under LG_BLEND is rounded and holds still, every level
+    // from dark to the blend line, from another level's leftover error.
+    {
+        static uint16_t hi[LG_NUM_LEDS][3];
+        for (int lvl = 0; lvl < LG_BLEND; lvl++) {
+            lg_dither_t d;
+            memset(&d, 0, sizeof d);
+            for (int i = 0; i < LG_NUM_LEDS; i++)
+                for (int ch = 0; ch < 3; ch++) hi[i][ch] = (uint16_t)(LG_BLEND + 101 + 37 * i + ch);
+            for (int k = 0; k < 13; k++) lg_dither(&d, hi, f);
+            const int want[3] = { lvl, lvl * 5 / 8, lvl / 6 };
+            for (int ch = 0; ch < 3; ch++) hi[0][ch] = (uint16_t)want[ch];
+            for (int k = 0; k < 300; k++) {
+                lg_dither(&d, hi, f);
+                for (int ch = 0; ch < 3; ch++) assert(f[0][ch] == (want[ch] + 128) >> 8);
+            }
+        }
+    }
+
+    // Over the blend line the dither averages to the 16-bit level, and no
+    // channel steps back and forth slower than 50 times a second: frames go
+    // out at 400 fps, so a dithered channel shows both of its values in every
+    // 8 frames running, and one within LG_DITHER_HOLD of a whole count holds
+    // it. Every steady level of channel 0 from 8 to 16 counts, the others at
+    // different ones (dim channels of a bright dot included), with the error
+    // left over from another level. 300 frames: long enough for a sigma-delta
+    // to step at even 1/256 of a count, so a hold that is too narrow shows.
+    {
+        static uint16_t hi[LG_NUM_LEDS][3];
+        const int span = 256 / LG_DITHER_HOLD;      // 8 frames
+        for (int lvl = LG_BLEND; lvl <= 2 * LG_BLEND; lvl++) {
+            lg_dither_t d;
+            memset(&d, 0, sizeof d);
+            const int want[3] = { lvl, 3 * LG_BLEND - lvl, (lvl * 7) % LG_BLEND };
+            for (int i = 0; i < LG_NUM_LEDS; i++)
+                for (int ch = 0; ch < 3; ch++) hi[i][ch] = (uint16_t)((want[ch] + 101 + 37 * i) % (2 * LG_BLEND));
+            for (int k = 0; k < 13; k++) lg_dither(&d, hi, f);
+            for (int ch = 0; ch < 3; ch++) hi[0][ch] = (uint16_t)want[ch];
+            enum { N = 300 };
+            static int seen[3][N];
+            for (int k = 0; k < N; k++) {
+                lg_dither(&d, hi, f);
+                for (int ch = 0; ch < 3; ch++) seen[ch][k] = f[0][ch];
+            }
+            for (int ch = 0; ch < 3; ch++) {
+                int whole = want[ch] >> 8, frac = want[ch] & 0xFF;
+                int hold = frac < LG_DITHER_HOLD || frac > 256 - LG_DITHER_HOLD;
+                long sum = 0;
+                for (int k = 0; k < N; k++) {
+                    if (hold) assert(seen[ch][k] == whole + (frac >= 128));
+                    else assert(seen[ch][k] == whole || seen[ch][k] == whole + 1);
+                    sum += seen[ch][k];
+                }
+                if (hold) continue;
+                assert(labs(sum * 256 - (long)want[ch] * N) <= 2 * 256);
+                for (int k = span; k + span <= N; k++) {
+                    int lo = 0, up = 0;
+                    for (int j = k; j < k + span; j++) {
+                        lo |= seen[ch][j] == whole;
+                        up |= seen[ch][j] == whole + 1;
+                    }
+                    assert(lo && up);
+                }
+            }
+        }
+    }
+
+    // Dim dots keep their hue at the glow: its brightest channel is lifted
+    // and the others scaled with it, not every channel lifted -- that turned
+    // dim warm embers and dim blue pulses white on board 1. Embers at their
+    // floor stay warm (red > green > blue), the joining pulse at its floor
+    // stays blue (blue over twice red and twice green), both holding still.
     {
         static uint16_t hi[LG_NUM_LEDS][3];
         lg_dither_t d;
-        double sum[3];
-
         memset(&d, 0, sizeof d);
-        memset(sum, 0, sizeof sum);
         ps_view_t v = view(PS_OFFLINE, 5000);
+        lg_render16(&v, &WHITE_MODE, 0, hi);        // frozen time: the floor
         int dim = -1;                       // an FR4 dot sitting at the ember floor
-        for (int i = 0; i < LG_NUM_LEDS && dim < 0; i++) {
-            if (LG_MAP[i].mat != 'P') continue;
-            lg_render16(&v, &WHITE_MODE, 0, hi);
-            if (hi[i][0] > 0 && hi[i][0] <= 256) dim = i;
-        }
+        for (int i = 0; i < LG_NUM_LEDS && dim < 0; i++)
+            if (LG_MAP[i].mat == 'P' && abs((int)hi[i][0] - LG_GLOW) <= 1) dim = i;
         assert(dim >= 0);
-        for (int k = 0; k < 400; k++) {
-            lg_render16(&v, &WHITE_MODE, 0, hi);   // frozen time: the floor
+        lg_dither(&d, hi, f);
+        uint8_t first[3] = { f[dim][0], f[dim][1], f[dim][2] };
+        assert(first[0] == LG_GLOW / 256 && first[0] > first[1] && first[1] > first[2]);
+        for (int k = 0; k < 100; k++) {
             lg_dither(&d, hi, f);
-            for (int ch = 0; ch < 3; ch++) sum[ch] += f[dim][ch];
+            assert(!memcmp(f[dim], first, 3));
         }
-        assert(sum[0] > sum[1] && sum[1] > sum[2]);
 
-        memset(&d, 0, sizeof d);
-        memset(sum, 0, sizeof sum);
         v = view(PS_JOINING, 0);
         int far = idx(7, 4);
-        for (int k = 0; k < 400; k++) {
-            lg_render16(&v, &WHITE_MODE, 0, hi);   // t=0: ring at the centre, far dot at the floor
-            lg_dither(&d, hi, f);
-            for (int ch = 0; ch < 3; ch++) sum[ch] += f[far][ch];
-        }
-        assert(sum[2] > 2 * sum[1] && sum[2] > 2 * sum[0]);
+        lg_render16(&v, &WHITE_MODE, 0, hi);        // t=0: ring at the centre, far dot at the floor
+        assert(abs((int)hi[far][2] - LG_GLOW) <= 1);
+        lg_dither(&d, hi, f);
+        assert(f[far][2] > 2 * f[far][1] && f[far][2] > 2 * f[far][0]);
     }
 
     // W-1055: a cable test's answer stays in the bottom three rows between
@@ -921,7 +1099,7 @@ int main(void)
             assert(max3(f[mask]) > 0);                       // mask dots join in
             if (!k) assert(f[pr_end][1] > f[pr_end][0] && f[pr_end][1] > f[pr_end][2]);
             else    assert(f[pr_end][0] > f[pr_end][1] && f[pr_end][0] > f[pr_end][2]);
-            v.cable_ms = 1030;                               // and back
+            v.cable_ms = 1100;                               // and back, over the glow
             lg_render(&v, &WHITE_MODE, 0, f);
             assert(max3(f[lt_end]) > 2 * max3(f[pr_end]));
         }

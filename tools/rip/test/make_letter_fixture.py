@@ -5,8 +5,7 @@ black 0.25in margin on each side and a distinct vertical bar, for exercising
 the horizontal margin-crop path in tools/rip/main.c. checker.urf (the
 committed regression fixture) is only 2in wide, so it never triggers that
 path -- this fixture is the one that does. Not itself a regression target;
-rip it and check the crop arithmetic by hand (see main.c's stderr notice
-and docs/superpowers/plans/2026-08-04-rip-host-pipeline.md's crop rule).
+rip it and check the crop arithmetic by hand (see main.c's stderr notice).
 """
 import struct, sys
 

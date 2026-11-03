@@ -16,7 +16,7 @@ Two boards ordered snap-apart in one PCBWay panel (`hardware/combined/`):
   (C7423117) under the panel's lit dots, an 8-way right-angle DIP bank (S1) through the west
   wall, the `test` button (SW3) under the panel's test dot.
 - **Art panel** (`hardware/panel/`), same outline, passive: no components except four SMT
-  standoffs. `hardware/panel/generate.sh` turns Wells's Figma export
+  standoffs. `hardware/panel/generate.sh` turns the Figma export
   (`hardware/panel/svg/panel.svg`, the single source of truth; fill colour is the material) into a
   byte-deterministic `panel.kicad_pcb`. Frame 9b: 56 dots, 37 lit (14 bare FR4 full-RGB pixels,
   9 single-mask and 14 double-mask teal), 19 gold, one of which is the `test` dot (3.8 mm plated
@@ -45,7 +45,7 @@ router; AirPrint is IP and runs alongside either. Only mode 1 exists in firmware
   EVQP44B3M side-press, EN reset) is on the east edge, plate face x ≈ 159.4. SW2 (B3U-1000P) is
   BOOT on IO0, on the component side. SW3's plunger is centred under the test dot.
 - The WROOM antenna is flush at x = 162 (no case bump); its keepout is the module width + 5 mm a
-  side. Wells kept the panel's back copper over the antenna; board-1 range is unquantified.
+  side. The panel's back copper stays over the antenna; the range that leaves is unquantified.
 - R/C and LED designators live on F.Fab; chips, connectors and switches keep silk designators.
 - Before believing a placement change, run the alignment proof: `tools_pcb/r7_verify.py`
   (writes nothing) and the `r7_align.py` overlay. 37/37 LEDs, plunger and holes must sit coaxial
@@ -107,15 +107,19 @@ pad, the BOOT pads and the back-face artwork. The rest:
 
 ## Rev B candidates
 
-Tracked as `W-1091 Rev B: the main board's next revision` in Linear, which is the copy kept
-current; this list started as the one filed on 2026-10-24. Most come from review #4
-(`docs/review-2026-09-01-pre-order-4.md`, "Rev-B list"), which has the reasoning.
+Rev B became rev 2026.11 (`W-1091 Rev B: the main board's next revision`): its design,
+`docs/superpowers/specs/2026-10-28-rev-2026-11-board-design.md`, says which of these it took,
+changed or dropped, and `docs/hardware-rev-2026-11.md` is the board as drawn. The list below
+is the one filed on 2026-10-24, kept for its reasons. Most come from the fourth
+pre-order review (2026-09-01).
 
 - 10 k pulldown on `LT_DE` (across U6 pins 3–5; it floats with the PIC absent or in reset).
 - 100 k from U9.2 to GND (IO48 floats until firmware claims it; brownout loop risk on 500 mA ports).
 - Tie U3.11 T1IN to GND, or pull `HSKI_DRV` (IO35) low; firmware clamps it today.
 - 1 k in series in `LT_RESET`, to protect IO2 from a mistaken high-voltage ICSP.
 - 10 k pulldown on IO3.
+- 10 k pull-up on IO0 (`/BOOT_CFG`) and C7 left off: with only the S3's internal pull-up to
+  charge it, C7 sometimes holds IO0 low past EN and the board powers up in download mode.
 - 1 k in series in every switch and DIP leg: in USB-OTG download boot the ROM drives GPIO40
   (DIP3) high.
 - Pull-up on IO17 so UART TX idles at mark through reset and download mode.
@@ -139,7 +143,7 @@ current; this list started as the one filed on 2026-10-24. Most come from review
   back otherwise. An ImageWriter ignores the pin (SPEC §2.4). On rev A it is a pair of 0603 pads
   on the top side with no silkscreen label (R designators are on F.Fab), 12.3 mm from the west
   edge and 25 mm up from the bottom edge: straight above J2, just left of U3 (silkscreened).
-  A Color StyleWriter 2500 answers and prints with it open (board 1, 2026-11-03, R9 taken off
+  A Color StyleWriter 2500 answers and prints with it open (2026-11-03, R9 taken off
   again after it first printed with R9 fitted): fit it by hand for the other StyleWriters until
   each is shown to print without it.
 - Through-hole dome power LED: `W-1043 Rev B: through-hole dome LED for the power indicator`.
@@ -155,4 +159,4 @@ current; this list started as the one filed on 2026-10-24. Most come from review
   the EU's is 50 ns. About $0.60 a board more at prototype quantities ($1.01 against $0.36 at
   LCSC, 2026-10-26, 11,029 in stock); LCSC carries only the 0–70 °C grade in SOIC-16, and one
   of its listings for the part says not recommended for new designs, so check MaxLinear's
-  status before ordering. Board 1 can take the swap by hand to test it first.
+  status before ordering. A rev A board can take the swap by hand to test it first.

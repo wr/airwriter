@@ -42,7 +42,7 @@ How to design, check and iterate a printed part. Follow it for any new part or c
 7. **Close out.**
    - `README.md`: how to print it and assemble it.
    - The spec's amendment block.
-   - AGENTS.md state.
+   - AGENTS.md, if a command or rule changed.
    - The Linear ticket.
    - Commit the STLs.
 

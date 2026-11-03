@@ -19,19 +19,21 @@ def _vol(a, b):
 
 
 def _d3_wall_gaps(part):
-    """Points 0.59 out from the D3 tube's interior (its thinnest allowed
-    wall is 0.6) that are not inside the part, at heights from just above the
-    board to just under the panel."""
-    x0, x1, y0, y1 = lattice.d3_window()
-    c = p.D3_TUBE_CLEAR
-    ix0, ix1, iy0, iy1 = x0 - c, x1 + c, y0 - c, y1 + c
-    t = 0.6 - 0.01
+    """Points 0.44 out from the D3 tube's interior (its thinnest allowed
+    wall is one printed line, 0.45, beside J1) that are not inside the part,
+    at heights from just above the board to just under the panel. A side the
+    board's edge closes (the tube runs on to it) is not probed past the
+    lattice's own outline, rounded corner included."""
+    (ix0, ix1, iy0, iy1), _ = lattice._d3_tube_rects()
+    t = 0.45 - 0.01
     d = t / 2 ** 0.5
     pts = [(ix0 - d, iy0 - d), (ix1 + d, iy0 - d), (ix0 - d, iy1 + d), (ix1 + d, iy1 + d)]
     for k in range(1, 10):
         fx = ix0 + k / 10 * (ix1 - ix0)
         fy = iy0 + k / 10 * (iy1 - iy0)
         pts += [(fx, iy0 - t), (fx, iy1 + t), (ix0 - t, fy), (ix1 + t, fy)]
+    outline = lattice._outline()
+    pts = [(px, py) for px, py in pts if outline.is_inside(Vector(px, py, H / 2))]
     return [(round(px, 2), round(py, 2), z) for z in (0.2, 0.6, 1.0, 1.5, H / 2, H - 0.5)
             for px, py in pts if not part.is_inside(Vector(px, py, z))]
 
@@ -176,21 +178,23 @@ class TestLattice(unittest.TestCase):
         self.assertEqual(_d3_wall_gaps(self.L), [])
 
     def test_d3_wall_check_catches_a_breach_near_the_board(self):
-        # The part voids that could breach the tube all sit low (<= 1.3), so
+        # The part voids that could breach the tube sit low (J1's shell), so
         # the check must look there, not only near the top.
-        x0, x1, y0, y1 = lattice.d3_window()
-        c = p.D3_TUBE_CLEAR
-        breach = Pos(x0 - c - p.LATTICE_WALL / 2, (y0 + y1) / 2, 0.5) * Box(2.0, 1.0, 1.0)
+        (ix0, ix1, iy0, iy1), _ = lattice._d3_tube_rects()
+        breach = Pos(ix0 - 0.3, (iy0 + iy1) / 2, 0.5) * Box(1.0, 1.0, 1.0)
         self.assertNotEqual(_d3_wall_gaps(self.L - breach), [])
 
-    def test_d3_and_its_resistor_sit_inside_the_tube(self):
+    def test_d3_tube_clears_the_led_on_its_spacer(self):
+        # Rev 2026.11: the tube is cut round the LED and its spacer as well as
+        # the window, D3_TUBE_CLEAR all round.
+        (ix0, ix1, iy0, iy1), _ = lattice._d3_tube_rects()
+        c = p.D3_TUBE_CLEAR - 1e-6
+        for bx0, bx1, by0, by1, _ in components.envelopes()["D3"]:
+            self.assertTrue(ix0 <= bx0 - c and bx1 + c <= ix1 and iy0 <= by0 - c and by1 + c <= iy1)
         x0, x1, y0, y1 = lattice.d3_window()
-        c = p.D3_TUBE_CLEAR
-        env = components.envelopes()
-        for ref in ("D3", "R17"):
-            (bx0, bx1, by0, by1, _), = env[ref]
-            self.assertTrue(x0 - c <= bx0 and bx1 <= x1 + c and y0 - c <= by0 and by1 <= y1 + c,
-                            ref)
+        self.assertTrue(ix0 <= x0 - c and x1 + c <= ix1 and iy0 <= y0 - c and y1 + c <= iy1)
+        self.assertLess(_vol(self.L, Pos((ix0 + ix1) / 2, (iy0 + iy1) / 2, H / 2)
+                             * Box(ix1 - ix0 - 0.02, iy1 - iy0 - 0.02, H + 2)), 1e-3)
 
     def test_grid_walls_are_lattice_wall_thick(self):
         xs, _ = lattice.wall_lines()
