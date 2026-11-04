@@ -1,47 +1,40 @@
 # AirWriter
 
-Add AirPrint to your Apple ImageWriter, StyleWriter or LaserWriter. AirWriter plugs into the
-printer, joins your Wi-Fi, and your printers show up on your phone and computer like any other
-printer. Nothing to install.
+AirPrint for your vintage Apple printer.
 
-Vintage Macs can print to the same printers over AppleTalk, from a LocalTalk cable, your network,
-Basilisk II or Infinite Mac. That part runs on Tashtari's
-[TashTalk](https://github.com/lampmerchant/tashtalk).
+<img src="docs/images/airwriter.jpg" alt="AirWriter on a stack of printer paper, its lights on" width="600">
 
-Rev A boards print from iPhones, Macs and vintage Macs to an ImageWriter II, in color with Apple's
-color ribbon, and to a Personal LaserWriter NTR. Assembled boards are at
-[Wells Workshop](https://shop.wells.ee/products/airwriter).
+Print from your phone or computer to an Apple ImageWriter, StyleWriter or LaserWriter. Connect
+AirWriter to the printer and your Wi-Fi, and the printer shows up like any other. Nothing to
+install.
 
-## Using it
+The top is a gold-plated circuit board with 37 lights glowing through it. A rainbow sweeps
+across when it starts up, and a few dots glow like fireflies while it's idle.
 
-The [wiki](../../wiki) has setup, printers, the status lights, settings and troubleshooting.
+- **Five-minute setup.** All from your phone.
+- **Color.** If your printer does color, so does AirWriter.
+- **Vintage Macs too.** Print from a vintage Mac over a LocalTalk cable or your network, or from
+  an emulator like Infinite Mac.
+- **Up to six printers.** One AirWriter shares them all.
+- **Open source.** Hardware and software, free to tinker with.
 
-You need:
+Buy one from [Wells Workshop](https://shop.wells.ee/products/airwriter).
 
-- **A printer.** An ImageWriter II, ImageWriter LQ or ImageWriter, a StyleWriter, or a PostScript
-  LaserWriter. The wiki's Supported Printers page has each model.
-- **For an ImageWriter or StyleWriter, a crossover cable.** An 8-pin mini-DIN cable wired like
-  Apple's 590-0552. Straight-through cables won't work. The original ImageWriter needs the 25-pin
-  Mac cable.
-- **For a LaserWriter, a connection.** LocalTalk cabling to AirWriter's AppleTalk port, or your
-  network.
-- **USB-C power and 2.4 GHz Wi-Fi.**
+## What you need
 
-Firmware updates are on the [Releases page](../../releases), and AirWriter can install them itself.
+- A vintage Apple printer ([check yours](../../wiki/Supported-Printers))
+- The cable your printer uses with a Mac ([which cable](../../wiki/Troubleshooting#crossover-cable))
+- A USB-C charger
+- 2.4 GHz Wi-Fi
+
+The [wiki](../../wiki) has setup help and troubleshooting. [Updates](../../releases) install over
+Wi-Fi.
 
 ## How it works
 
-- An ESP32-S3 runs an IPP Everywhere printer for each of your printers: Bonjour, IPP and Apple's
-  URF raster format.
-- ImageWriter pages are dithered and sent as the printer's own graphics commands at 9600 baud,
-  paced by the printer's handshake. Color pages print in four passes on the color ribbon.
-- StyleWriter pages are screened at 360 dpi, run-length coded and sent at 57600 baud, in color
-  with a color cartridge.
-- LaserWriter pages go out as 300 dpi PostScript over AppleTalk.
-- A PIC12F1840 running TashTalk handles LocalTalk, and EtherTalk runs over Wi-Fi.
-- A 37-dot light panel shows the state of things.
-
-## Repository
+Inside is an ESP32-S3. It shows each printer to your network as an AirPrint printer. Each page
+goes out in the printer's own language, down the printer cable or over AppleTalk. LocalTalk runs
+on Tashtari's TashTalk, on a small PIC chip.
 
 | Path | Contents |
 |---|---|
@@ -56,10 +49,10 @@ toolchain notes.
 
 ## Credits
 
-The StyleWriter support rests on other people's work. Monroe Williams worked out the printers'
-serial protocol in the 1990s and wrote [lpstyl](https://github.com/Godzil/lpstyl). FeralFirmware
-took Apple's drivers apart for [TailTalk](https://github.com/FeralFirmware/TailTalk) and InkTalk.
-Thanks to Monroe Williams and FeralFirmware.
+LocalTalk runs on Tashtari's [TashTalk](https://github.com/lampmerchant/tashtalk). Monroe
+Williams worked out the StyleWriter's serial protocol in the 1990s and wrote
+[lpstyl](https://github.com/Godzil/lpstyl). FeralFirmware took Apple's StyleWriter drivers apart
+for [TailTalk](https://github.com/FeralFirmware/TailTalk) and InkTalk. Thank you all.
 
 ## License
 
