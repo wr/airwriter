@@ -380,6 +380,14 @@ Traps already explained in a code comment are listed only when the comment is ea
   start, which a reset does: this one may be that. A page cut short
   (the board restarting mid-page) leaves it answering nothing but a reset as well.
 
+- **A Color StyleWriter 2500 reads busy whether it is or not** (board 1, 2026-11-07): `1`
+  reads 11 from a reset on and 19 once what it was sent is done, idle, cleaning and after `E`
+  alike, so its busy bit cannot say a cleaning has ended. Its 08 can: off from the reset, on
+  26 s after a setup with `P` and 3.5 s after one without. A cleaning that waited for busy to go
+  off, as TailTalk's does, showed Printing and held the job lock for the full 600 s, then reset
+  the printer and failed, though the head was done in 26 s. A cleaning now ends on whichever
+  comes first, busy off after on or 08 on after off (`wait_cleaned`).
+
 ## LaserWriters (W-1082)
 
 - **`gs` is aliased to `git status` in Wells's shell.** Call Ghostscript by path,
