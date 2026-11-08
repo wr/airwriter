@@ -173,7 +173,7 @@ test: $(TESTBIN) build/printers_core.o build/port_policy.o build/logbook_core.o 
 	if grep -nE '(^|[^_a-z])(malloc|calloc|realloc)\(' $(COMP)/stylewriter/sw_testpage.c; then \
 	  echo "FAIL sw_testpage: a buffer not through bigmem.h (above)"; fail=1; \
 	else echo "ok  sw_testpage: every buffer through bigmem.h"; fi; \
-	if grep -rnE 'ESP_LOG[EWID]\(.*(requesting_user|job \\"%s\\"|s_last_job[^_])' $(COMP) ../../firmware/main --include=*.c; then \
+	if grep -rnE 'ESP_LOG[EWID]\(.*(requesting_user|job \\"%s\\"|s_last_job[^_]|p->name)' $(COMP) ../../firmware/main --include=*.c; then \
 	  echo "FAIL a document or person's name in a log line (above)"; fail=1; \
 	else echo "ok  no document or person's name in a log line"; fi; \
 	exit $$fail

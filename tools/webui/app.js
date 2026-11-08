@@ -390,13 +390,22 @@ async function logFetch(query,ms){
     return r.ok?logParse(await r.text()):null;
   }catch(e){ return null; }
 }
+/* Erased, or a power cut took lines only RAM held. Numbering carries on from what flash kept, so
+   either the newest number is behind the page's, or a new start's first lines hide behind numbers
+   the page has already seen, and the first line it hears of that start isn't the start line. */
+function logLost(r){
+  if(!LG.last) return false;
+  if(r.head&&r.head.newest<LG.last) return true;
+  const l=r.lines.find(l=>l.seq>LG.last&&l.run!==LG.run);
+  return !!l&&l.lv!=='S';
+}
 async function logPoll(){
   clearTimeout(LG.timer);
   if(!LG.open) return;
   if(!document.hidden&&!LG.busy){
     LG.busy=true;
     let r=await logFetch(LG.last?'?after='+LG.last:'?n='+LOG_KEEP);
-    if(r&&r.head&&r.head.newest<LG.last){           // erased, or lines lost to a power cut
+    if(r&&logLost(r)){
       logWipe();
       r=await logFetch('?n='+LOG_KEEP);
     }

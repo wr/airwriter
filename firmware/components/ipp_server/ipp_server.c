@@ -765,7 +765,7 @@ static esp_err_t add_services(printer_t *p)
     esp_err_t err = mdns_service_add_for_host(p->name, "_ipp", "_tcp", NULL, s_cfg.port,
                                               txt, sizeof txt / sizeof txt[0]);
     if (err != ESP_OK) {
-        ESP_LOGE(TAG, "\"%s\": not advertised (%s)", p->name, esp_err_to_name(err));
+        ESP_LOGE(TAG, "printer %d: not advertised (%s)", (int)(p - s_p), esp_err_to_name(err));
         return err;
     }
     snprintf(p->svc_name, sizeof p->svc_name, "%s", p->name);
