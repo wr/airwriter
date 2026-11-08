@@ -144,6 +144,14 @@ build/printers_core.o: $(COMP)/printers/printers_core.c | build
 build/port_policy.o: $(COMP)/printers/port_policy.c | build
 	$(CC) $(CFLAGS) $(INCS) -c -o $@ $<
 
+# The log's core (W-1136): the same rule, because it runs on whichever task logged.
+LB := $(COMP)/logbook
+build/test_logbook: test/test_logbook.c $(LB)/logbook_core.c | build
+	$(CC) $(CFLAGS) -I$(LB)/include -Itest -o $@ $^
+
+build/logbook_core.o: $(LB)/logbook_core.c | build
+	$(CC) $(CFLAGS) -I$(LB)/include -c -o $@ $<
+
 # The StyleWriter's model table, run coder, page stage, session and test page are held to the same rule
 # as the printer list's core (W-1103): no writable statics; the page stage's block and the
 # session's frame buffer come from the board's PSRAM allocator (bigmem.h).
@@ -152,9 +160,9 @@ SW_OBJS := build/sw_model.o build/sw_code.o build/sw_page.o build/sw_session.o b
 build/sw_%.o: $(COMP)/stylewriter/sw_%.c | build
 	$(CC) $(CFLAGS) $(INCS) -c -o $@ $<
 
-test: $(TESTBIN) build/printers_core.o build/port_policy.o $(SW_OBJS)
+test: $(TESTBIN) build/printers_core.o build/port_policy.o build/logbook_core.o $(SW_OBJS)
 	@fail=0; for t in $(TESTBIN); do ./$$t || fail=1; done; \
-	for o in printers_core port_policy $(basename $(notdir $(SW_OBJS))); do \
+	for o in printers_core port_policy logbook_core $(basename $(notdir $(SW_OBJS))); do \
 	  if nm build/$$o.o | grep -E ' [bBdD] ' | grep -v ' ltmp'; then \
 	    echo "FAIL $$o: writable statics (above)"; fail=1; \
 	  else echo "ok  $$o: no writable statics"; fi; \
