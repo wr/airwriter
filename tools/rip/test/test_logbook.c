@@ -232,6 +232,466 @@ static void test_crash_text(void)
     CHECK(!strcmp(buf, "crashed in task main on core 0 (abort)"));
 }
 
+// The rings. A fake flash: writing can only clear bits, as on the real part.
+#define FF_BYTES (LB_SECTORS * LB_SECTOR_BYTES)
+typedef struct { uint8_t mem[FF_BYTES]; unsigned erases; int fail_writes; } fakeflash_t;
+static fakeflash_t g_ff;
+static uint32_t g_ring[LB_RING_BYTES / 4];
+
+static int ff_read(void *c, uint32_t off, void *buf, uint32_t n)
+{
+    memcpy(buf, ((fakeflash_t *)c)->mem + off, n);
+    return 0;
+}
+
+static int ff_write(void *c, uint32_t off, const void *buf, uint32_t n)
+{
+    const uint8_t *d = buf;
+    fakeflash_t *f = c;
+    if (f->fail_writes) return 1;
+    for (uint32_t i = 0; i < n; i++) f->mem[off + i] &= d[i];
+    return 0;
+}
+
+static int ff_erase(void *c, uint32_t sector)
+{
+    fakeflash_t *f = c;
+    memset(f->mem + sector * LB_SECTOR_BYTES, 0xFF, LB_SECTOR_BYTES);
+    f->erases++;
+    return 0;
+}
+
+static lb_flash_t ff_ops(void)
+{
+    memset(g_ff.mem, 0xFF, sizeof g_ff.mem);
+    g_ff.erases = 0;
+    g_ff.fail_writes = 0;
+    return (lb_flash_t){ &g_ff, ff_read, ff_write, ff_erase };
+}
+
+static lb_store_t g_s, g_s2;
+static lb_reader_t g_rd;
+
+static lb_ring_t *fresh_ring(void)
+{
+    int kept = 1;
+    memset(g_ring, 0, sizeof g_ring);
+    lb_ring_t *r = lb_ring_attach(g_ring, sizeof g_ring, &kept);
+    CHECK_EQ_INT(kept, 0);
+    return r;
+}
+
+// Lines of mixed lengths, so records fall across the end of the ring in every way.
+static void push_lines(lb_ring_t *r, unsigned n, char level, uint8_t ram_only)
+{
+    static unsigned salt;
+    for (unsigned i = 0; i < n; i++) {
+        lb_line_t l = mk(0, level, "tag", "");
+        int w = snprintf(l.text, sizeof l.text, "line %u ", i);
+        unsigned pad = (salt++ * 37u) % 120u;
+        memset(l.text + w, 'p', pad);
+        l.text[w + pad] = 0;
+        l.ram_only = ram_only;
+        lb_ring_push(r, &l);
+    }
+}
+
+// Reads everything after `after`: the count, with the first and last seq, every step ascending.
+static unsigned read_all(const lb_ring_t *r, const lb_store_t *s, uint32_t after,
+                         uint32_t *first, uint32_t *last)
+{
+    lb_line_t l;
+    unsigned n = 0;
+    uint32_t prev = after;
+    lb_read_begin(&g_rd, r, s, after);
+    while (lb_read_next(&g_rd, &l)) {
+        CHECK(l.seq > prev);
+        if (!n && first) *first = l.seq;
+        prev = l.seq;
+        n++;
+        if (n > 100000) { CHECK(0); break; }
+    }
+    if (last) *last = prev;
+    return n;
+}
+
+static void test_ring_keeps_newest(void)
+{
+    lb_ring_t *r = fresh_ring();
+    push_lines(r, 2000, 'I', 0);
+    CHECK_EQ_INT(lb_ring_newest(r), 2000);
+    uint32_t first = 0, last = 0;
+    unsigned n = read_all(r, NULL, 0, &first, &last);
+    CHECK_EQ_INT(last, 2000);
+    CHECK_EQ_INT(n, last - first + 1);               // consecutive
+    CHECK(n > 100 && n < 2000);                      // the ring holds some, not all
+}
+
+static void test_ring_attach(void)
+{
+    lb_ring_t *r = fresh_ring();
+    lb_ring_begin_run(r, 1, 0);
+    push_lines(r, 50, 'W', 0);
+    int kept = 0;
+    r = lb_ring_attach(g_ring, sizeof g_ring, &kept);
+    CHECK_EQ_INT(kept, 1);
+    CHECK_EQ_INT(lb_ring_newest(r), 50);
+    CHECK_EQ_INT(read_all(r, NULL, 0, NULL, NULL), 50);
+    push_lines(r, 1, 'I', 0);
+    CHECK_EQ_INT(lb_ring_newest(r), 51);
+
+    ((uint8_t *)g_ring)[0] ^= 0x40;                  // what power loss leaves
+    r = lb_ring_attach(g_ring, sizeof g_ring, &kept);
+    CHECK_EQ_INT(kept, 0);
+    CHECK_EQ_INT(read_all(r, NULL, 0, NULL, NULL), 0);
+}
+
+static void test_ring_torn_tail(void)
+{
+    lb_ring_t *r = fresh_ring();
+    for (int i = 0; i < 10; i++) { lb_line_t l = mk(0, 'I', "t", "same length"); lb_ring_push(r, &l); }
+    lb_line_t probe = mk(0, 'I', "t", "same length");
+    uint8_t rec[300];
+    size_t one = lb_encode(&probe, rec, sizeof rec);
+
+    // The ring's data ends one record after the last whole one: flip a byte of the last one.
+    uint8_t *mem = (uint8_t *)g_ring;
+    size_t i;
+    for (i = sizeof g_ring - 1; i > 0 && !mem[i]; i--) {}   // the last byte ever written
+    mem[i - one / 2] ^= 0x10;
+
+    int kept = 0;
+    r = lb_ring_attach(g_ring, sizeof g_ring, &kept);
+    CHECK_EQ_INT(kept, 1);
+    uint32_t last = 0;
+    CHECK_EQ_INT(read_all(r, NULL, 0, NULL, &last), 9);
+    CHECK_EQ_INT(last, 9);
+}
+
+static void test_store_blank(void)
+{
+    lb_flash_t f = ff_ops();
+    lb_store_open(&g_s, &f);
+    CHECK_EQ_INT(g_s.last_seq, 0);
+    CHECK_EQ_INT(read_all(fresh_ring(), &g_s, 0, NULL, NULL), 0);
+    lb_store_prepare(&g_s);
+    CHECK_EQ_INT(g_ff.erases, 0);                    // blank needs no erase
+    lb_line_t l = mk(1, 'I', "t", "x");
+    CHECK_EQ_INT(lb_store_append(&g_s, &l), 1);
+
+    uint32_t x = 0x12345678;                         // bytes of nothing in particular
+    for (size_t i = 0; i < sizeof g_ff.mem; i++) {
+        x ^= x << 13; x ^= x >> 17; x ^= x << 5;
+        g_ff.mem[i] = (uint8_t)x;
+    }
+    lb_store_open(&g_s, &f);
+    CHECK_EQ_INT(read_all(fresh_ring(), &g_s, 0, NULL, NULL), 0);
+    lb_store_prepare(&g_s);
+    CHECK_EQ_INT(lb_store_append(&g_s, &l), 1);
+    CHECK_EQ_INT(read_all(fresh_ring(), &g_s, 0, NULL, NULL), 1);
+}
+
+static void store_lines(lb_store_t *s, unsigned from, unsigned n, uint16_t run)
+{
+    for (unsigned i = 0; i < n; i++) {
+        lb_line_t l = mk(from + i, 'I', "tag", "a line of an ordinary length, saved");
+        l.run = run;
+        lb_store_prepare(s);
+        CHECK_EQ_INT(lb_store_append(s, &l), 1);
+    }
+}
+
+static void test_store_reopen(void)
+{
+    lb_flash_t f = ff_ops();
+    lb_store_open(&g_s, &f);
+    store_lines(&g_s, 1, 100, 4);
+    lb_store_open(&g_s2, &f);
+    CHECK_EQ_INT(g_s2.last_seq, 100);
+    CHECK_EQ_INT(g_s2.last_run, 4);
+    uint32_t last = 0;
+    CHECK_EQ_INT(read_all(fresh_ring(), &g_s2, 0, NULL, &last), 100);
+    CHECK_EQ_INT(last, 100);
+    store_lines(&g_s2, 101, 1, 5);                   // and it carries on where it was
+    CHECK_EQ_INT(read_all(fresh_ring(), &g_s2, 0, NULL, &last), 101);
+}
+
+static void test_store_wrap(void)
+{
+    lb_flash_t f = ff_ops();
+    lb_store_open(&g_s, &f);
+    lb_ring_t *r = fresh_ring();
+    unsigned total = 15000;
+    for (unsigned i = 0; i < total; i++) {
+        push_lines(r, 1, 'I', 0);
+        if (i % 10 == 9) { lb_store_prepare(&g_s); lb_save(&g_s, r); }
+    }
+    lb_store_prepare(&g_s);
+    lb_save(&g_s, r);
+    CHECK_EQ_INT(g_s.last_seq, total);
+
+    unsigned live = 0;
+    for (unsigned i = 0; i < LB_SECTORS; i++) live += g_s.sector_no[i] != 0;
+    CHECK(live <= LB_SECTORS);
+
+    uint32_t first = 0, last = 0;
+    unsigned n = read_all(fresh_ring(), &g_s, 0, &first, &last);
+    CHECK_EQ_INT(last, total);
+    CHECK(first > 1);                                // the oldest are gone
+    CHECK_EQ_INT(n, last - first + 1);               // nothing missing in between
+
+    lb_store_open(&g_s2, &f);                        // the same from a cold start
+    CHECK_EQ_INT(g_s2.last_seq, total);
+    CHECK_EQ_INT(read_all(fresh_ring(), &g_s2, 0, NULL, NULL), n);
+}
+
+static void test_store_no_erased_room(void)
+{
+    lb_flash_t f = ff_ops();
+    lb_store_open(&g_s, &f);
+    lb_store_prepare(&g_s);
+    unsigned stored = 0;
+    for (unsigned i = 1; i < 10000; i++) {
+        lb_line_t l = mk(i, 'I', "tag", "a line of an ordinary length, saved");
+        if (!lb_store_append(&g_s, &l)) break;
+        stored = i;
+    }
+    CHECK(stored > 100);
+    CHECK_EQ_INT(g_s.last_seq, stored);
+    uint32_t last = 0;
+    CHECK_EQ_INT(read_all(fresh_ring(), &g_s, 0, NULL, &last), stored);
+
+    // lb_save finds no room either, and doesn't pretend it saved.
+    lb_ring_t *r = fresh_ring();
+    lb_ring_begin_run(r, stored + 1, 1);
+    push_lines(r, 3, 'E', 0);
+    CHECK_EQ_INT(lb_has_urgent(&g_s, r), 1);
+    CHECK_EQ_INT(lb_save(&g_s, r), 0);
+    CHECK_EQ_INT(g_s.last_seq, stored);
+    CHECK_EQ_INT(lb_has_urgent(&g_s, r), 1);
+
+    lb_store_prepare(&g_s);                          // room again: those three go down
+    CHECK_EQ_INT(lb_save(&g_s, r), 3);
+    CHECK_EQ_INT(lb_has_urgent(&g_s, r), 0);
+}
+
+static void test_store_torn_record(void)
+{
+    lb_flash_t f = ff_ops();
+    lb_store_open(&g_s, &f);
+    store_lines(&g_s, 1, 5, 1);
+    unsigned sector = g_s.head;
+
+    lb_line_t l = mk(6, 'I', "tag", "this one loses power half way");
+    uint8_t rec[300];
+    size_t n = lb_encode(&l, rec, sizeof rec);
+    ff_write(&g_ff, sector * LB_SECTOR_BYTES + g_s.head_off, rec, (uint32_t)(n / 2));
+
+    lb_store_open(&g_s2, &f);
+    uint32_t last = 0;
+    CHECK_EQ_INT(read_all(fresh_ring(), &g_s2, 0, NULL, &last), 5);
+    CHECK_EQ_INT(g_s2.last_seq, 5);
+
+    store_lines(&g_s2, 6, 1, 1);                     // the next one goes in the next sector
+    CHECK_EQ_INT(g_s2.head, (sector + 1) % LB_SECTORS);
+    CHECK_EQ_INT(read_all(fresh_ring(), &g_s2, 0, NULL, &last), 6);
+    CHECK_EQ_INT(last, 6);
+}
+
+static void test_store_torn_header(void)
+{
+    lb_flash_t f = ff_ops();
+    lb_store_open(&g_s, &f);
+    store_lines(&g_s, 1, 5, 1);
+    unsigned next = (g_s.head + 1) % LB_SECTORS;
+
+    static const uint8_t half[] = { 'A', 'W', 'L' };  // power lost inside a sector's first write
+    ff_write(&g_ff, next * LB_SECTOR_BYTES, half, sizeof half);
+
+    lb_store_open(&g_s2, &f);
+    CHECK_EQ_INT(read_all(fresh_ring(), &g_s2, 0, NULL, NULL), 5);
+    lb_store_prepare(&g_s2);
+    CHECK_EQ_INT(g_ff.mem[next * LB_SECTOR_BYTES], 0xFF);   // made ready again
+    for (unsigned i = 0; i < 300; i++) store_lines(&g_s2, 6 + i, 1, 1);
+    uint32_t last = 0;
+    CHECK_EQ_INT(read_all(fresh_ring(), &g_s2, 0, NULL, &last), 305);
+    CHECK_EQ_INT(last, 305);
+}
+
+static void test_store_write_fails(void)
+{
+    lb_flash_t f = ff_ops();
+    lb_store_open(&g_s, &f);
+    lb_line_t probe = mk(1, 'I', "tag", "a line of an ordinary length, saved");
+    uint8_t rec[300];
+    size_t one = lb_encode(&probe, rec, sizeof rec);
+
+    unsigned seq = 1;
+    while (g_s.head < 3 || g_s.head_off + one <= LB_SECTOR_BYTES) store_lines(&g_s, seq++, 1, 1);
+
+    // The first write into a new sector fails. The number sequence has to survive it.
+    lb_store_prepare(&g_s);
+    g_ff.fail_writes = 1;
+    lb_line_t l = mk(seq, 'I', "tag", "a line of an ordinary length, saved");
+    CHECK_EQ_INT(lb_store_append(&g_s, &l), 0);
+    CHECK_EQ_INT(g_s.last_seq, seq - 1);
+    g_ff.fail_writes = 0;
+    store_lines(&g_s, seq, 1, 1);
+
+    uint32_t last = 0;
+    CHECK_EQ_INT(read_all(fresh_ring(), &g_s, 0, NULL, &last), seq);
+    CHECK_EQ_INT(last, seq);
+    lb_store_open(&g_s2, &f);
+    CHECK_EQ_INT(g_s2.last_seq, seq);
+    CHECK_EQ_INT(read_all(fresh_ring(), &g_s2, 0, NULL, &last), seq);
+}
+
+static void test_save_one_at_a_time(void)
+{
+    // The board holds the ring's lock only to take a line, never across a flash write.
+    lb_flash_t f = ff_ops();
+    lb_store_open(&g_s, &f);
+    lb_ring_t *r = fresh_ring();
+    push_lines(r, 2, 'I', 0);
+    push_lines(r, 2, 'I', 1);
+    push_lines(r, 1, 'I', 0);
+    lb_store_prepare(&g_s);
+
+    uint32_t seqs[8];
+    unsigned n = 0;
+    while (lb_save_next(&g_s, r) && n < 8) {
+        seqs[n++] = g_s.line.seq;
+        CHECK_EQ_INT(lb_store_append(&g_s, &g_s.line), 1);
+    }
+    CHECK_EQ_INT(n, 3);
+    CHECK_EQ_INT(seqs[0], 1);
+    CHECK_EQ_INT(seqs[1], 2);
+    CHECK_EQ_INT(seqs[2], 5);
+    CHECK_EQ_INT(g_s.last_seq, 5);
+}
+
+static void test_store_unknown_format(void)
+{
+    lb_flash_t f = ff_ops();
+    uint8_t future[8] = { 'A', 'W', 'L', 2, 9, 0, 0, 0 };
+    ff_write(&g_ff, 0, future, sizeof future);
+    lb_store_open(&g_s, &f);
+    CHECK_EQ_INT(g_s.sector_no[0], 0);
+    lb_store_prepare(&g_s);
+    CHECK_EQ_INT(g_ff.erases, 1);
+    CHECK_EQ_INT(g_ff.mem[3], 0xFF);
+}
+
+static void test_save_skips_chatter(void)
+{
+    lb_flash_t f = ff_ops();
+    lb_store_open(&g_s, &f);
+    lb_ring_t *r = fresh_ring();
+    push_lines(r, 2, 'I', 0);
+    push_lines(r, 3, 'I', 1);                        // a phone asking how things are
+    push_lines(r, 2, 'I', 0);
+    lb_store_prepare(&g_s);
+    CHECK_EQ_INT(lb_save(&g_s, r), 4);
+    CHECK_EQ_INT(g_s.last_seq, 7);
+    CHECK_EQ_INT(lb_save(&g_s, r), 0);               // nothing twice
+
+    uint32_t last = 0;
+    CHECK_EQ_INT(read_all(r, &g_s, 0, NULL, &last), 7);              // RAM beside it: all of them
+    CHECK_EQ_INT(read_all(fresh_ring(), &g_s, 0, NULL, &last), 4);   // flash alone: not the chatter
+    CHECK_EQ_INT(last, 7);
+}
+
+static void test_reader_merge(void)
+{
+    lb_flash_t f = ff_ops();
+    lb_store_open(&g_s, &f);
+    lb_ring_t *r = fresh_ring();
+    push_lines(r, 50, 'I', 0);
+    lb_store_prepare(&g_s);
+    lb_save(&g_s, r);
+    push_lines(r, 50, 'I', 0);
+
+    uint32_t first = 0, last = 0;
+    CHECK_EQ_INT(read_all(r, &g_s, 0, &first, &last), 100);
+    CHECK_EQ_INT(first, 1);
+    CHECK_EQ_INT(last, 100);
+    CHECK_EQ_INT(read_all(r, &g_s, 30, &first, &last), 70);
+    CHECK_EQ_INT(first, 31);
+    CHECK_EQ_INT(read_all(r, &g_s, 100, NULL, NULL), 0);
+    CHECK_EQ_INT(read_all(r, NULL, 0, NULL, NULL), 100);             // RAM only, as during a job
+}
+
+static void test_reader_overwrite(void)
+{
+    lb_ring_t *r = fresh_ring();
+    push_lines(r, 300, 'I', 0);
+    lb_line_t l;
+    lb_read_begin(&g_rd, r, NULL, 0);
+    CHECK_EQ_INT(lb_read_next(&g_rd, &l), 1);
+    uint32_t prev = l.seq;
+    push_lines(r, 3000, 'I', 0);                     // the ring laps the reader's place
+    unsigned n = 0;
+    while (lb_read_next(&g_rd, &l)) {
+        CHECK(l.seq > prev);
+        prev = l.seq;
+        if (++n > 5000) { CHECK(0); break; }
+    }
+    CHECK_EQ_INT(prev, 3300);
+    CHECK(n > 0);
+}
+
+static void test_ids_after_power_cut(void)
+{
+    lb_flash_t f = ff_ops();
+    lb_store_open(&g_s, &f);
+    store_lines(&g_s, 500, 1, 7);
+    lb_ring_t *r = fresh_ring();
+    lb_ring_begin_run(r, g_s.last_seq + 1, g_s.last_run);
+    CHECK_EQ_INT(lb_ring_run(r), 8);
+    lb_line_t l = mk(0, 'S', "sys", "reset=power-on");
+    lb_ring_push(r, &l);
+    CHECK_EQ_INT(l.seq, 501);
+    CHECK_EQ_INT(l.run, 8);
+}
+
+static void test_ring_carries_on_after_restart(void)
+{
+    // RAM survived: its numbers are ahead of flash's, and win.
+    lb_ring_t *r = fresh_ring();
+    lb_ring_begin_run(r, 1, 0);
+    push_lines(r, 40, 'I', 0);
+    int kept = 0;
+    r = lb_ring_attach(g_ring, sizeof g_ring, &kept);
+    lb_ring_begin_run(r, 11, 0);
+    CHECK_EQ_INT(lb_ring_run(r), 2);
+    lb_line_t l = mk(0, 'S', "sys", "reset=panic");
+    lb_ring_push(r, &l);
+    CHECK_EQ_INT(l.seq, 41);
+}
+
+static void test_clear(void)
+{
+    lb_flash_t f = ff_ops();
+    lb_store_open(&g_s, &f);
+    lb_ring_t *r = fresh_ring();
+    lb_ring_begin_run(r, 1, 0);
+    push_lines(r, 200, 'E', 0);
+    lb_store_prepare(&g_s);
+    lb_save(&g_s, r);
+    lb_ring_clear(r);
+    lb_store_clear(&g_s);
+    CHECK_EQ_INT(read_all(r, &g_s, 0, NULL, NULL), 0);
+    CHECK_EQ_INT(g_s.last_seq, 0);
+    CHECK_EQ_INT(lb_ring_newest(r), 0);
+
+    lb_line_t l = mk(0, 'W', "airwriter", "factory reset: settings erased");
+    lb_ring_push(r, &l);
+    CHECK_EQ_INT(l.seq, 1);                          // the page sees the number fall, and reloads
+
+    lb_store_open(&g_s2, &f);                        // and it stays gone
+    CHECK_EQ_INT(read_all(fresh_ring(), &g_s2, 0, NULL, NULL), 0);
+}
+
 int main(void)
 {
     test_parse();
@@ -241,5 +701,23 @@ int main(void)
     test_encode();
     test_wire();
     test_crash_text();
+    test_ring_keeps_newest();
+    test_ring_attach();
+    test_ring_torn_tail();
+    test_store_blank();
+    test_store_reopen();
+    test_store_wrap();
+    test_store_no_erased_room();
+    test_store_torn_record();
+    test_store_torn_header();
+    test_store_write_fails();
+    test_save_one_at_a_time();
+    test_store_unknown_format();
+    test_save_skips_chatter();
+    test_reader_merge();
+    test_reader_overwrite();
+    test_ids_after_power_cut();
+    test_ring_carries_on_after_restart();
+    test_clear();
     TEST_END;
 }
