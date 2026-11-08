@@ -4217,6 +4217,152 @@
     }
    }
   },
+  "stylewriter-cleaning": {
+   "about": "Printers: the Color StyleWriter 2500 cleaning its print head",
+   "patch": {
+    "GET /api/printers": {
+     "printers": [
+      {
+       "id": 1,
+       "name": "Color StyleWriter 2500",
+       "where": "port",
+       "kind": "stylewriter",
+       "model": "Color StyleWriter 2500",
+       "shared": true,
+       "identified": true,
+       "found": "auto",
+       "state": "cleaning",
+       "uuid": "urn:uuid:41575254-4c57-0001-0002-10bda36e2434",
+       "product": "",
+       "dither": "atkinson",
+       "gain": 0,
+       "rp": "ipp/print",
+       "start_page": null,
+       "cartridge": "colour"
+      },
+      {
+       "id": 2,
+       "name": "LaserWriter II NT",
+       "where": "tunnel",
+       "kind": "laserwriter",
+       "model": "",
+       "shared": true,
+       "identified": true,
+       "found": "person",
+       "state": "ready",
+       "uuid": "urn:uuid:41575254-4c57-0001-99d7-10bda36e2434",
+       "product": "LaserWriter II NT",
+       "dither": "atkinson",
+       "gain": 0,
+       "rp": "ipp/laser",
+       "start_page": true
+      },
+      {
+       "id": 3,
+       "name": "Office LaserWriter",
+       "where": "cable",
+       "kind": "laserwriter",
+       "model": "",
+       "shared": true,
+       "identified": true,
+       "found": "auto",
+       "state": "ready",
+       "uuid": "urn:uuid:41575254-4c57-0001-78fa-10bda36e2434",
+       "product": "LaserWriter Pro 630",
+       "dither": "bluenoise",
+       "gain": 0,
+       "rp": "ipp/p3",
+       "start_page": null
+      }
+     ],
+     "notes": [],
+     "port_on": 1,
+     "said_other": false,
+     "chooser": [
+      "LaserWriter II NT",
+      "Office LaserWriter"
+     ],
+     "max_shared": 6
+    },
+    "POST /api/printers": {
+     "printers": [
+      {
+       "id": 1,
+       "name": "Color StyleWriter 2500",
+       "where": "port",
+       "kind": "stylewriter",
+       "model": "Color StyleWriter 2500",
+       "shared": true,
+       "identified": true,
+       "found": "auto",
+       "state": "cleaning",
+       "uuid": "urn:uuid:41575254-4c57-0001-0002-10bda36e2434",
+       "product": "",
+       "dither": "atkinson",
+       "gain": 0,
+       "rp": "ipp/print",
+       "start_page": null,
+       "cartridge": "colour"
+      },
+      {
+       "id": 2,
+       "name": "LaserWriter II NT",
+       "where": "tunnel",
+       "kind": "laserwriter",
+       "model": "",
+       "shared": true,
+       "identified": true,
+       "found": "person",
+       "state": "ready",
+       "uuid": "urn:uuid:41575254-4c57-0001-99d7-10bda36e2434",
+       "product": "LaserWriter II NT",
+       "dither": "atkinson",
+       "gain": 0,
+       "rp": "ipp/laser",
+       "start_page": true
+      },
+      {
+       "id": 3,
+       "name": "Office LaserWriter",
+       "where": "cable",
+       "kind": "laserwriter",
+       "model": "",
+       "shared": true,
+       "identified": true,
+       "found": "auto",
+       "state": "ready",
+       "uuid": "urn:uuid:41575254-4c57-0001-78fa-10bda36e2434",
+       "product": "LaserWriter Pro 630",
+       "dither": "bluenoise",
+       "gain": 0,
+       "rp": "ipp/p3",
+       "start_page": null
+      }
+     ],
+     "notes": [],
+     "port_on": 1,
+     "said_other": false,
+     "chooser": [
+      "LaserWriter II NT",
+      "Office LaserWriter"
+     ],
+     "max_shared": 6
+    },
+    "GET /api/status": {
+     "printers": {
+      "count": 3,
+      "shared": 3,
+      "notes": 0,
+      "port": "stylewriter"
+     },
+     "model": "Apple Color StyleWriter 2500",
+     "ribbon": "colour",
+     "ps": "printing",
+     "state": "Printing",
+     "printing": true
+    }
+   }
+  },
   "unknown-port-stylewriter": {
    "about": "Printers: something on the port that never answered, the Model picker lists the StyleWriters",
    "patch": {

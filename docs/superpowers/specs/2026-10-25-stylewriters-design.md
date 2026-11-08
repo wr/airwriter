@@ -5,6 +5,12 @@
 `W-1102 QuickDraw LaserWriters on the printer port (Personal LaserWriter LS/300, Select 300)`.
 Reverses the StyleWriter cut in `2026-08-04-printer-support-scope-design.md`.
 
+**Amended 2026-11-07** (`W-1132 Show Cleaning while a StyleWriter cleans its print head`, Wells's
+word): while a cleaning runs, the settings page shows the StyleWriter as Cleaning, not Printing,
+in its row, its Status and the sidebar, with Printing's green lamp. The printer never says it is
+cleaning; the board started it and knows when it ends. The panel keeps the printing light and
+the phone is unchanged (SPEC §3.16, Web).
+
 **Amended 2026-11-07** after the first cleaning on board 1's Color StyleWriter 2500: it reads
 `1` busy from its reset on, cleaning or not, so a cleaning that waited for busy to go off
 (TailTalk's rule) showed Printing for the full 600 s and then failed, though the head was done
