@@ -899,7 +899,7 @@ esp_err_t ipp_server_start(const ipp_server_cfg_t *cfg)
     if (err != ESP_OK) return err;
 
     ESP_LOGI(TAG, "listening on port %u", (unsigned)s_cfg.port);
-    if (p->on) ESP_LOGI(TAG, "printer 0 at %s, uuid %s", p->uri, p->uuid);
+    if (p->on) ESP_LOGI(TAG, "printer 0 at %s", p->uri);
     return ESP_OK;
 }
 
@@ -1055,7 +1055,7 @@ esp_err_t ipp_server_set_printer(int idx, const ipp_printer_cfg_t *cfg)
     if (cfg) fill(p, cfg);
     refresh(p);
     xSemaphoreGive(s_job_lock);
-    if (cfg) ESP_LOGI(TAG, "printer %d at %s, uuid %s", idx, p->uri, p->uuid);
+    if (cfg) ESP_LOGI(TAG, "printer %d at %s", idx, p->uri);
     else ESP_LOGI(TAG, "printer %d no longer shared", idx);
     return ESP_OK;
 }
