@@ -149,6 +149,9 @@ LB := $(COMP)/logbook
 build/test_logbook: test/test_logbook.c $(LB)/logbook_core.c | build
 	$(CC) $(CFLAGS) -I$(LB)/include -Itest -o $@ $^
 
+build/test_webui_paths: test/test_webui_paths.c $(COMP)/webui/include/webui_paths.h | build
+	$(CC) $(CFLAGS) -I$(COMP)/webui/include -Itest -o $@ $<
+
 build/logbook_core.o: $(LB)/logbook_core.c | build
 	$(CC) $(CFLAGS) -I$(LB)/include -c -o $@ $<
 

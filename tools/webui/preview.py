@@ -23,13 +23,14 @@ renderer built for this computer) for the status's "ps": ready, printing,
 offline... ("asleep" plays the sleep). Without a C compiler it answers 404 and
 the sidebar's dots show unlit.
 """
-import argparse, copy, http.server, json, pathlib, struct, subprocess, sys, time, urllib.parse
+import argparse, copy, http.server, json, pathlib, re, struct, subprocess, sys, time, urllib.parse
 
 HERE = pathlib.Path(__file__).parent
 sys.path.insert(0, str(HERE))
 import mkheader  # noqa: E402
 
 STATES = HERE / "states.json"
+PAGES = re.compile(r"/|/printers(/\d+)?|/airprint|/appletalk|/wifi|/about(/log)?|/setup")  # as webui_paths.h
 LIGHTS = HERE / "../lights"
 clock = {"loaded": 0.0, "down_until": 0.0, "override": None, "seen": {}}
 SCENE = {"booting": "boot-wave", "setup": "setup", "joining": "joining", "ready": "ready", "offline": "offline",
@@ -122,7 +123,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                            for n, s in doc["states"].items())
             return self.send(200, "<!doctype html><meta charset=utf-8><title>States</title>"
                              "<ul style='font:14px/1.6 system-ui'>%s</ul>" % rows, "text/html; charset=utf-8")
-        if method == "GET" and url.path == "/":
+        if method == "GET" and PAGES.fullmatch(url.path):
             q = urllib.parse.parse_qs(url.query)
             name = q.get("state", [None])[0]
             if name is not None:            # a fresh start in that state, at /

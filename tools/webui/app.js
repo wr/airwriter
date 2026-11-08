@@ -297,14 +297,190 @@ function press(planes,W,H,inks,zoom,cv,dpr){
 }
 
 /* ── panes ─────────────────────────────────────────────────────────── */
+/* ── the log (W-1136) ──────────────────────────────────────────────── */
+/* Opens in place on About, as a printer's details do. Every line goes in as text, never as
+   markup: a Wi-Fi library's message or a Mac's reply can hold anything. */
+const LG={open:false,lines:[],divs:[],last:0,timer:0,busy:false,began:0,run:null,head:null};
+const LOG_KEEP=500, LOG_COPY=300, LV={I:'INFO',W:'WARN',E:'ERROR'};
+function logParse(t){
+  const out={head:null,lines:[]};
+  for(const l of t.split('\n')){
+    if(!l) continue;
+    const f=l.split('\t');
+    if(f[0]==='#'){ out.head={newest:+f[1],errors:+f[2],dropped:+f[3]}; continue; }
+    if(f.length>=6) out.lines.push({seq:+f[0],run:+f[1],ms:+f[2],lv:f[3],tag:f[4],text:f.slice(5).join('\t')});
+  }
+  return out;
+}
+/* Time since that start: +04:53, +26:14:32. A plus so that nobody reads it as a time of day. */
+const logHms=ms=>{ const s=Math.floor(ms/1000), h=s/3600|0, p=v=>String(v).padStart(2,'0'); return '+'+(h?h+':':'')+p((s%3600)/60|0)+':'+p(s%60); };
+const logWhy=l=>{ const m=/^reset=(.*) version=/.exec(l.text); return m?m[1]:''; };
+function logAgo(){
+  const m=/(\d+)h (\d+)m/.exec(S.uptime||''); if(!m) return '';
+  const h=+m[1], mi=+m[2];
+  return h?h+' h '+mi+' min ago':mi?mi+' min ago':'just now';
+}
+/* When this start began, by the clock of the phone or computer showing the page. Uptime comes
+   in whole minutes, so the sum wanders by up to a minute; only a bigger change moves it. */
+function logBegan(){
+  const m=/(\d+)h (\d+)m/.exec(S.uptime||''); if(!m) return '';
+  const est=Date.now()-(m[1]*3600+m[2]*60+30)*1000;
+  if(Math.abs(est-LG.began)>90000) LG.began=est;
+  const t=new Date(LG.began), now=new Date(), same=(a,b)=>a.toDateString()===b.toDateString();
+  const day=same(t,now)?'today':same(t,new Date(now-864e5))?'yesterday':t.toLocaleDateString([],{month:'short',day:'numeric'});
+  return day+' at '+t.toLocaleTimeString([],{hour:'numeric',minute:'2-digit'});
+}
+/* starts: the start lines, oldest first. The real time is for the screen only: a log gets
+   posted, and a time of day gives away a time zone. */
+function logLabel(starts,i,screen){
+  if(i===starts.length-1){
+    const r=logWhy(starts[i]);
+    return ['This start',(RESET[r]||r).toLowerCase().replace('usb','USB'),screen?logBegan():logAgo()].filter(Boolean).join(' · ');
+  }
+  return 'Earlier start'+(RESET[logWhy(starts[i+1])]==='After a crash'?' · ended in a crash':'');
+}
+function logDiv(l){
+  const d=document.createElement('div');
+  d.className='lg-div'; LG.divs.push({el:d,line:l});
+  return d;
+}
+function logRow(l){
+  const r=document.createElement('div');
+  r.className='ln '+l.lv;
+  for(const [c,t] of [['t',logHms(l.ms)],['v',LV[l.lv]||l.lv],['g',l.tag],['m',l.text]]){
+    const s=document.createElement('span'); s.className=c; s.textContent=t; r.appendChild(s);
+  }
+  return r;
+}
+function logLabels(){
+  const starts=LG.divs.map(d=>d.line);
+  LG.divs.forEach((d,i)=>{ d.el.textContent=logLabel(starts,i,true); });
+}
+function logWipe(){
+  LG.lines=[]; LG.divs=[]; LG.last=0; LG.run=LG.head=null;
+  while($('log-drop').nextSibling) $('log-drop').nextSibling.remove();
+}
+/* Newest first, each start under its own divider. LG.lines stays oldest first, for Copy and
+   Download. The list can begin partway through a start, with its first line long gone, so a
+   change of run makes the divider rather than the start line. */
+function logApply(r){
+  const box=$('log-box'), top=box.scrollTop, tall=box.scrollHeight;
+  for(const l of r.lines){
+    if(l.seq<=LG.last) continue;
+    LG.last=l.seq; LG.lines.push(l);
+    if(l.run!==LG.run){ LG.run=l.run; LG.head=logDiv(l); $('log-drop').after(LG.head); }
+    if(l.lv!=='S'){ l.el=logRow(l); LG.head.after(l.el); }
+  }
+  if(top>0) box.scrollTop=top+box.scrollHeight-tall;     // someone reading further down stays put
+  while(LG.lines.length>LOG_KEEP){
+    const l=LG.lines.shift();
+    if(l.el) l.el.remove();
+    if(LG.lines[0].run!==l.run) LG.divs.shift().el.remove();
+  }
+  logLabels();
+  $('log-empty').textContent='No lines yet.';
+  $('log-empty').classList.toggle('hide',LG.lines.length>0);
+  const lost=r.head?r.head.dropped:0;
+  $('log-drop').textContent=lost+' line'+(lost===1?'':'s')+' not recorded';
+  $('log-drop').classList.toggle('hide',!lost);
+}
+async function logFetch(query,ms){
+  try{
+    const r=await fetchIn('/api/log'+query,ms||20000);
+    return r.ok?logParse(await r.text()):null;
+  }catch(e){ return null; }
+}
+async function logPoll(){
+  clearTimeout(LG.timer);
+  if(!LG.open) return;
+  if(!document.hidden&&!LG.busy){
+    LG.busy=true;
+    let r=await logFetch(LG.last?'?after='+LG.last:'?n='+LOG_KEEP);
+    if(r&&r.head&&r.head.newest<LG.last){           // erased, or lines lost to a power cut
+      logWipe();
+      r=await logFetch('?n='+LOG_KEEP);
+    }
+    LG.busy=false;
+    if(!LG.open) return;
+    if(r) logApply(r);
+    else if(!LG.lines.length) $('log-empty').textContent='Can’t reach AirWriter.';
+  }
+  LG.timer=setTimeout(logPoll,S.printing?3000:1000);
+}
+function logOpen(){
+  if(pane!=='about') go('about');
+  LG.open=true;
+  $('ab-home').classList.add('hide');
+  $('ab-log').classList.remove('hide');
+  document.querySelector('.back').textContent='‹ About';
+  document.querySelector('.detail').scrollTop=0;
+  try{ history.replaceState(null,'','/about/log'); }catch(e){}
+  logWipe();
+  $('log-empty').textContent='Loading…';
+  $('log-empty').classList.remove('hide');
+  $('log-drop').classList.add('hide');
+  say('log-say','');
+  logPoll();
+}
+function logClose(){
+  if(!LG.open) return;
+  LG.open=false;
+  clearTimeout(LG.timer);
+  $('ab-log').classList.add('hide');
+  $('ab-home').classList.remove('hide');
+  document.querySelector('.back').textContent='‹ Settings';
+  try{ history.replaceState(null,'','/about'); }catch(e){}
+}
+function logHeader(){
+  const ps=(PR&&PR.printers||[]).map(p=>(p.model||p.product||p.kind)+' ('+(p.where==='port'?'printer port':'AppleTalk')+')');
+  return ['AirWriter log',
+    'Firmware: '+S.version+' (slot '+S.slot+')',
+    'Board: '+$('about-rev').textContent.split(' · ')[0],
+    'On for: '+S.uptime,
+    'Last started: '+(RESET[S.reset]||cap(S.reset||'')),
+    'Printers: '+(ps.join('; ')||'None'),
+    'Free memory: '+S.heap,
+    'Times count from each start.'].join('\n');
+}
+function logText(lines){
+  const starts=lines.filter(l=>l.lv==='S');
+  let n=0;
+  return lines.map(l=>l.lv==='S'?'--- '+logLabel(starts,n++)+' ---'
+    :logHms(l.ms).padEnd(9)+' '+(LV[l.lv]||l.lv).padEnd(5)+' '+l.tag+'  '+l.text).join('\n');
+}
+$('log-row').onclick=logOpen;
+$('ab-back').onclick=()=>{ logClose(); if(setup){ go('setup'); suStep(2); openNets(); } };
+$('su-log').onclick=()=>{ $('d-net').close(); logOpen(); };
+$('log-show').onchange=()=>{ $('log-box').dataset.show=$('log-show').value; $('log-box').scrollTop=0; };
+$('log-copy').onclick=()=>{
+  const f=$('log-show').value;
+  const shown=LG.lines.filter(l=>f==='all'||l.lv==='S'||l.lv==='E'||(f==='w'&&l.lv==='W'));
+  $('log-buf').value=logHeader()+'\n\n'+logText(shown.slice(-LOG_COPY));
+  copyFrom($('log-buf'),$('log-copy'));
+};
+$('log-dl').onclick=async()=>{
+  const btn=$('log-dl');
+  btn.disabled=true;
+  const r=await logFetch('',60000);
+  btn.disabled=false;
+  if(!r){ say('log-say','Can’t reach AirWriter.',1,4000); return; }
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([logHeader()+'\n\n'+logText(r.lines)+'\n'],{type:'text/plain'}));
+  a.download='airwriter-'+((S.ap||'').split('-')[1]||'board').toLowerCase()+'-log.txt';
+  a.click();
+  setTimeout(()=>URL.revokeObjectURL(a.href),10000);
+};
+
 /* One pane at a time; on a phone the sidebar is the first screen and a pane
    slides over it. The pane is in the address, so a reload stays put. */
 const PANES=['printers','airprint','appletalk','wifi','about','setup'];
 const phone=()=>matchMedia('(max-width:760px)').matches;
 let pane='', wantSel=null;
 function go(id){
-  // #printers/2 opens that printer's detail once the list is in
+  logClose();
+  // printers/2 opens that printer's detail once the list is in; about/log, the log
   const m=/^printers\/(\d+)$/.exec(id||''); if(m){ id='printers'; wantSel=+m[1]; }
+  const log=id==='about/log'; if(log) id='about';
   if(!PANES.includes(id)) id='printers';
   pane=id;
   for(const p of $$('.pane')) p.classList.toggle('on',p.id==='p-'+id);
@@ -312,18 +488,20 @@ function go(id){
     if(b.dataset.go===id) b.setAttribute('aria-current','page'); else b.removeAttribute('aria-current');
   document.body.classList.add('in');
   document.querySelector('.detail').scrollTop=0;
-  try{ history.replaceState(null,'','#'+id); }catch(e){}
+  try{ history.replaceState(null,'','/'+id); }catch(e){}
   document.querySelector('.back').textContent='‹ Settings';
   if(id==='printers'){ prOpen(null); prPoll(); }
   if(id==='printers'&&wantSel!==null&&PR) prOpen(wantSel);
   if(id==='appletalk') atPoll();
   if(id==='about') fwPoll();
+  if(log) logOpen();
 }
 for(const b of $$('[data-go]')) b.onclick=()=>go(b.dataset.go);
 document.querySelector('.back').onclick=()=>{
+  if(LG.open){ logClose(); return; }
   if(pane==='printers'&&sel!==null){ prOpen(null); return; }   // a phone's one back key
   document.body.classList.remove('in');
-  try{ history.replaceState(null,'',location.pathname); }catch(e){}
+  try{ history.replaceState(null,'','/'); }catch(e){}
 };
 
 /* dialogs: a key with data-dlg opens one, data-close shuts it, and so does a
@@ -389,6 +567,9 @@ function draw(s){
   // About
   $('uptime').textContent=upFor(s.uptime);
   $('reset').textContent=RESET[s.reset]||cap(s.reset||'');
+  const logN=+s.log_errors||0;
+  $('log-val').textContent=logN?logN+' error'+(logN===1?'':'s'):'';
+  $('log-val').classList.toggle('bad',logN>0);
   drawDips(s.dip,s.lt_port);
   $('apname').textContent=s.ap||'AirWriter';
   // in setup mode only the printer, Wi-Fi and About make sense
@@ -396,13 +577,15 @@ function draw(s){
     document.querySelector('.nav [data-go="'+id+'"]').classList.toggle('hide',setup);
   if(first){
     first=false;
-    const want=(location.hash||'').slice(1);
+    // the address, or what follows the # in a link saved before pages had addresses
+    const want=location.pathname.slice(1)||(location.hash||'').slice(1);
     if(setup){
       // W-1088: setup's three steps; back from a join that failed, straight to Wi-Fi
       document.body.classList.add('setupmode'); go('setup');
-      if(s.ssid){ suStep(2); openNets(); } else { suStep(1); suLook(); }
+      if(want==='about/log') logOpen();
+      else if(s.ssid){ suStep(2); openNets(); } else { suStep(1); suLook(); }
     }
-    else if(PANES.includes(want)||/^printers\/\d+$/.test(want)) go(want);
+    else if(PANES.includes(want)||/^printers\/\d+$/.test(want)||want==='about/log') go(want);
     else { go('printers'); if(phone()) document.body.classList.remove('in'); }
   }
   atDraw();
@@ -661,7 +844,7 @@ function prDraw(){
 /* A printer's detail, in the pane in place of the list. */
 function prOpen(id){
   sel=id;
-  if(pane==='printers') try{ history.replaceState(null,'','#printers'+(id!==null?'/'+id:'')); }catch(e){}
+  if(pane==='printers') try{ history.replaceState(null,'','/printers'+(id!==null?'/'+id:'')); }catch(e){}
   $('pr-home').classList.toggle('hide',id!==null);
   $('pr-detail').classList.toggle('hide',id===null);
   document.querySelector('.back').textContent=id!==null?'‹ Printers':'‹ Settings';
@@ -1170,6 +1353,7 @@ function openNets(){
   pick=null; $('join').disabled=true; $('joinform').classList.add('hide');
   const c=cacheLoad(); nets=c||[]; scanned=!!c;
   say('net-say',setup&&S.ssid?'Couldn’t join “'+S.ssid+'”. Check the password, or choose another network.':'',setup&&S.ssid);
+  $('su-log').classList.toggle('hide',!(setup&&S.ssid));
   netErr=false;
   drawNets(); $('d-net').showModal();
   if(!c) scan();
@@ -1291,7 +1475,7 @@ function drawDips(bits,ltPort){
      stops counting once the port's own switch has been used */
   const mode=(on(0)?1:0)|(on(1)?2:0), yn=x=>x?'On':'Off';
   const rows=[
-    ['AppleTalk port','1, 2', ltPort>=0?'<a href="#appletalk" data-goto=appletalk>Set in AppleTalk</a>':yn(mode===2)],
+    ['AppleTalk port','1, 2', ltPort>=0?'<a href="/appletalk" data-goto=appletalk>Set in AppleTalk</a>':yn(mode===2)],
     ['Developer mode','3', yn(on(2))],
     ['Test page when switched on','4', yn(on(3))],
     ['Halftone','5, 6', 'Not used'],

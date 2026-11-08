@@ -74,7 +74,7 @@ button,input,select{font:inherit;color:inherit}
 /* On a big screen the settings sit in a window on the desk, as an app would. */
 @media (min-width:1000px) and (min-height:640px){
   body{background:var(--desk);display:flex;align-items:center;justify-content:center;padding:28px}
-  .app{width:100%;max-width:1060px;max-height:800px;border-radius:12px;overflow:hidden;
+  .app{width:100%;max-width:860px;max-height:800px;border-radius:12px;overflow:hidden;
     box-shadow:0 0 0 .5px rgba(0,0,0,.14),0 2px 8px rgba(0,0,0,.06)}
 }
 
@@ -222,7 +222,7 @@ body:not(.ready) .sw span,body:not(.ready) .sw span:after{transition:none}
 .prow .ic svg{width:19px;height:19px}
 .row .txt small{display:block;color:var(--fg2);font-size:var(--t-small);overflow-wrap:anywhere}
 .row small.mono{font-family:var(--mono);font-weight:400;color:var(--fg2)}
-.prow .chev{color:var(--fg3);font-size:20px;line-height:1;margin-left:-4px}
+.prow .chev,#log-row .chev{color:var(--fg3);font-size:20px;line-height:1;margin-left:-4px}
 .empty{margin:0;padding:14px;color:var(--fg2);font-size:var(--t-small)}
 /* a notice asks something: the caution mark, its words, its keys under them */
 .note{padding:12px 14px;display:grid;grid-template-columns:auto minmax(0,1fr);gap:10px 12px;align-items:start}
@@ -237,6 +237,27 @@ body:not(.ready) .sw span,body:not(.ready) .sw span:after{transition:none}
 .back2:hover{text-decoration:underline;background:none}
 #pr-home,#pr-detail{display:flex;flex-direction:column;gap:inherit}
 #pr-home.hide,#pr-detail.hide{display:none}
+/* W-1136: the log, in place of About */
+#ab-home,#ab-log{display:flex;flex-direction:column;gap:inherit}
+#log-val.bad{color:var(--lamp-r)}
+.logbar{display:flex;align-items:center;gap:8px}
+.logbar .sp{flex:1}
+.logbox{height:min(64vh,720px);overflow:auto;overflow-anchor:none;padding:6px 0;font:var(--t-small)/1.45 var(--mono)}
+/* in the window on the desk, the box takes what the keys above and the links below leave */
+@media (min-width:1000px) and (min-height:640px){
+  .logbox{height:calc(min(100vh - 56px,800px) - 300px)}
+}
+.ln{display:grid;grid-template-columns:9ch 5ch 11ch minmax(0,1fr);gap:0 10px;padding:1px 12px}
+.ln .t,.ln .g{color:var(--fg2)}
+.ln .g{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ln .v{color:var(--fg3)}
+.ln.W .v{color:var(--lamp-a);font-weight:600}
+.ln.E .v{color:var(--lamp-r);font-weight:600}
+.ln .m{overflow-wrap:anywhere}
+.logbox[data-show=w] .ln.I,.logbox[data-show=e] .ln.I,.logbox[data-show=e] .ln.W{display:none}
+.lg-div{padding:8px 12px 3px;color:var(--fg2);font:600 var(--t-small)/1.4 var(--font)}
+.ln+.lg-div,.lg-div+.lg-div{margin-top:6px;border-top:.5px solid var(--line)}
+#log-buf{position:absolute;left:-9999px;width:1px;height:1px;opacity:0}
 /* W-1088: setup is three steps on their own, without the sidebar */
 body.setupmode .side,body.setupmode .bar{display:none}
 body.setupmode .app{grid-template-columns:minmax(0,1fr)}
@@ -337,6 +358,13 @@ dialog::backdrop{background:var(--scrim)}
 /* ── phones: the sidebar is the first screen ────────────────────── */
 @media (max-width:760px){
   #pr-back{display:none}
+  body:not(.setupmode) #ab-back{display:none}
+  .ln{grid-template-columns:auto auto minmax(0,1fr);padding:3px 12px}
+  .logbar{flex-wrap:wrap}
+  .logbar .sp{display:none}
+  .logbar select{flex:1 1 calc(100% - 60px);min-width:0}
+  .logbar .btn{flex:1 1 40%}
+  .ln .m{grid-column:1/-1}
   :root{--t-body:16px;--t-small:13px;--t-head:16px}
   .app{display:block}
   .side{border-right:0;min-height:100%;background:var(--bg);
@@ -368,7 +396,7 @@ dialog::backdrop{background:var(--scrim)}
    roomier rows, and full-width keys at the foot, the next step last, under
    the thumb. */
 @media (max-width:760px){
-  body.setupmode .pane{min-height:100svh;display:flex;flex-direction:column;
+  body.setupmode .pane.on{min-height:100svh;display:flex;flex-direction:column;
     padding-top:max(24px,env(safe-area-inset-top,0px));padding-bottom:max(24px,env(safe-area-inset-bottom,0px))}
   body.setupmode #su-1,body.setupmode #su-2,body.setupmode #su-3{flex:1 1 auto;gap:22px}
   body.setupmode .hero{padding:32px 22px 28px;gap:10px}

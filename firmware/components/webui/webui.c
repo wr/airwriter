@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "webui.h"
+#include "webui_paths.h"
 #include "esp_heap_caps.h"
 #include "webui_page.h"
 #include "settings.h"
@@ -646,11 +647,11 @@ static esp_err_t cable_post(httpd_req_t *req)
     return httpd_resp_sendstr(req, out);
 }
 
-// In captive mode every unknown path serves the page, so whatever the phone
-// probes for on joining the access point opens the setup screen.
+// The page's own addresses always serve it. In captive mode every unknown path does too, so
+// whatever the phone probes for on joining the access point opens the setup screen.
 static esp_err_t catch_all(httpd_req_t *req)
 {
-    if (!s_cfg.captive) {
+    if (!s_cfg.captive && !webui_is_page(req->uri)) {
         httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "no such page");
         return ESP_FAIL;
     }
