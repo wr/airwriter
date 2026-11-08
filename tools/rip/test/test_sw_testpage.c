@@ -5,7 +5,7 @@
 // wire rules (sw_decode_row for the rows themselves), and the page that comes out is held to
 // what the design says it has: a letterhead in the top inch, a ruler with a tick every 36
 // dots (0.1 in), four squares of exactly 360 x 360 dots, six screens (Apple's among them),
-// four ink swatches with a color cartridge and a gray ramp with black, and nothing where the
+// seven swatches with a color cartridge and a gray ramp with black, and nothing where the
 // model cannot print. The panels are held to a reference made here from the halftoner, the
 // stored scene and the model's tone curve, so a panel drawn through the wrong screen fails.
 // The stored pictures (sw_scene.h) are held to tp_scene.c, which traced them (W-1133).
@@ -435,7 +435,8 @@ static void test_layout(void)
         for (int i = 0; i < 4; i++) all[n++] = l.square[i];
         for (int i = 0; i < 6; i++) { all[n++] = l.panel[i]; all[n++] = l.panel_ramp[i]; }
         if (cart) {
-            for (int i = 0; i < 4; i++) { all[n++] = l.swatch[i]; all[n++] = l.ink_ramp[i]; }
+            for (int i = 0; i < SW_TP_SWATCHES; i++) all[n++] = l.swatch[i];
+            for (int i = 0; i < 4; i++) all[n++] = l.ink_ramp[i];
         } else {
             all[n++] = l.ink_ramp[3];
             for (int i = 0; i < 11; i++) all[n++] = l.gray_step[i];
@@ -539,12 +540,29 @@ static void test_colour_page(void)
     CHECK(has_text(&d, &l.details, "72 left, 45 top, 99 bottom dots"));
     CHECK(!has_text(&d, &l.details, "No such thing"));
 
-    // Four solid swatches, each in its ink alone.
-    for (int i = 0; i < 4; i++) {
-        uint32_t area = (uint32_t)l.swatch[i].w * l.swatch[i].h;
+    // Seven solid swatches in one row across the page: each ink alone, then red (magenta over
+    // yellow), green (cyan over yellow) and blue (cyan over magenta), each solid in its inks and
+    // clear of the others, with its name under it (W-1134).
+    static const int inks[SW_TP_SWATCHES] = {
+        1 << INK_C, 1 << INK_M, 1 << INK_Y, 1 << INK_K,
+        1 << INK_M | 1 << INK_Y, 1 << INK_C | 1 << INK_Y, 1 << INK_C | 1 << INK_M,
+    };
+    static const char *const names[SW_TP_SWATCHES] = { "Cyan", "Magenta", "Yellow", "Black",
+                                                       "Red", "Green", "Blue" };
+    for (int i = 0; i < SW_TP_SWATCHES; i++) {
+        sw_tp_box_t b = l.swatch[i];
+        uint32_t area = (uint32_t)b.w * b.h;
+        CHECK(area > 0);
         for (int k = 0; k < 4; k++)
-            CHECK_EQ_INT(ink_in(&d, k, &l.swatch[i]), k == i ? area : 0);
+            CHECK_EQ_INT(ink_in(&d, k, &b), inks[i] >> k & 1 ? area : 0);
+        CHECK_EQ_INT(b.y, l.swatch[0].y);
+        CHECK_EQ_INT(b.w, l.swatch[0].w);
+        if (i) CHECK(b.x > l.swatch[i - 1].x + l.swatch[i - 1].w);
+        sw_tp_box_t name = { b.x, (uint16_t)(b.y + b.h), b.w, 80 };
+        CHECK(has_text(&d, &name, names[i]));
     }
+    CHECK_EQ_INT(l.swatch[0].x, 0);
+    CHECK_EQ_INT(l.swatch[SW_TP_SWATCHES - 1].x + l.swatch[SW_TP_SWATCHES - 1].w, SW_TP_W);
     CHECK(l.swatch[0].y > l.details.y + l.details.h);
 
     // The still life in all four inks, and a ramp of each ink from nothing to all of it.

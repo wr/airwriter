@@ -8,10 +8,10 @@
 //
 // Top to bottom: the letterhead (the Chooser icon, "AirWriter" and "Test page" in Apple
 // Garamond Light, sw_art.h), the board's details in a small 5 x 7 face (sw_font.h), the
-// inks (four solid swatches, the still life and a ramp of each ink with a color cartridge; the
-// still life in gray, a gray scale and a black ramp without), the six screens side by side
-// with the one in use ticked, a ruler 8 in long with a tick every 0.1 in, four squares an
-// inch each way, and the footer.
+// inks (seven solid swatches, the four inks and the three they make in pairs, then the still
+// life and a ramp of each ink, with a color cartridge; the still life in gray, a gray scale
+// and a black ramp without), the six screens side by side with the one in use ticked, a ruler
+// 8 in long with a tick every 0.1 in, four squares an inch each way, and the footer.
 //
 // Built as it is sent, a row at a time: it holds a few halftoners, a picture's reader and the
 // row's four planes, each part's only while its rows are made (about 173 KB asked over a gray
@@ -60,10 +60,14 @@ int sw_testpage(const sw_tp_info_t *i, const rip_stage_t *st);
 // and the host preview to find them by. The same code that draws the page fills it.
 typedef struct { uint16_t x, y, w, h; } sw_tp_box_t;
 
+#define SW_TP_SWATCHES 7               // the colour row's swatches
+
 typedef struct {
     sw_tp_box_t letterhead;              // the icon, the title and "Test page"
     sw_tp_box_t details;                 // the board's details, in the face
-    sw_tp_box_t swatch[4];               // cyan, magenta, yellow and black, solid (color cartridge)
+    sw_tp_box_t swatch[SW_TP_SWATCHES];  // cyan, magenta, yellow, black, then red (magenta over
+                                         // yellow), green (cyan over yellow) and blue (cyan over
+                                         // magenta), solid (color cartridge)
     sw_tp_box_t photo;                   // the still life through the screen in use
     sw_tp_box_t ink_ramp[4];             // 0 to 100 % of cyan, magenta, yellow, black (black alone: [3])
     sw_tp_box_t gray_step[11];           // 0 to 100 % in tens (gray page)

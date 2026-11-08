@@ -1217,9 +1217,12 @@ Apple's StyleWriter adapter (ADSP, not PAP), is not built.
   they reach an ImageWriter; a second tap cancels. A StyleWriter has no fonts, so the page is a
   raster drawn on the board at 360 dpi, one Letter page, rows made as they are sent through the
   same stage: the letterhead (the icon and Apple Garamond as dots, `sw_art.h`), the board's
-  details in a 5 × 7 face (the HD44780 shapes, `sw_font.h`, LICENSE.md), the inks (four solid
-  swatches, the still life and a ramp of each ink with a colour cartridge; the still life in
-  gray, a gray scale and a black ramp without), the six screens side by side with the one in use
+  details in a 5 × 7 face (the HD44780 shapes, `sw_font.h`, LICENSE.md), the inks (with a colour
+  cartridge, seven solid swatches in a row across the page, 336 dots wide on 424-dot centres:
+  cyan, magenta, yellow, black, then red, green and blue, each two inks printed over each other,
+  as the ImageWriter's colour page shows its overprints (W-1134); then the still life and a ramp
+  of each ink; without, the still life in gray, a gray scale and a black ramp), the six screens
+  side by side with the one in use
   ticked, a ruler with a tick every 0.1 in and four one-inch squares. The still life and the
   scene the six screens show are not traced on the board: the page is drawn and sent from one
   task with nothing between them, so tracing them there kept the printer waiting partway down
