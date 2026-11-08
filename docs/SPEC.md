@@ -1220,9 +1220,16 @@ Apple's StyleWriter adapter (ADSP, not PAP), is not built.
   details in a 5 × 7 face (the HD44780 shapes, `sw_font.h`, LICENSE.md), the inks (four solid
   swatches, the still life and a ramp of each ink with a colour cartridge; the still life in
   gray, a gray scale and a black ramp without), the six screens side by side with the one in use
-  ticked, a ruler with a tick every 0.1 in and four one-inch squares. 88 KB of working memory
-  in gray and 141 KB in colour, in PSRAM. `rip --sw-testpage colour|black --model M --out-sw
-  F` makes it on the host; `swfake.py decode` draws it.
+  ticked, a ruler with a tick every 0.1 in and four one-inch squares. The still life and the
+  scene the six screens show are not traced on the board: the page is drawn and sent from one
+  task with nothing between them, so tracing them there kept the printer waiting partway down
+  the page (W-1133). `tools/rip/mkscene.c` traces them once with `tp_scene.c` (632 × 350 RGB,
+  and 400 × 300 gray through `ink_gray`) and `sw_scene.h` stores them as zlib streams, 53 KB of
+  flash; `sw_unpack.c` reads them a row at a time, with the ROM's tinfl on the board (its state
+  and 32 KB window, 44 KB, held only while a picture's rows are made) and zlib on the host. The
+  page is the same dots as when it was traced. Over a page it asks PSRAM for about 173 KB in
+  gray and 226 KB in colour, each part's freed after its last row. `rip --sw-testpage colour|black --model M --out-sw F` makes it on
+  the host; `swfake.py decode` draws it.
 - **Clean Print Head.** One press is one cleaning: the job's reset and setup with a single `P` in
   it, wait for `1` to say the cleaning is over (up to 600 s), then `E` (`Y` on the 1200) and `l`.
   Over is busy (01) gone off after reading on, or page done (08) come on after reading off,

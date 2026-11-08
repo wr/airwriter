@@ -1,8 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
 // The test page's still life: four glossy balls on a checkered floor under a
-// blue sky, ray traced rather than stored, so it costs no flash and has the
-// smooth tone, highlights and soft shadow a halftone screen shows itself on.
+// blue sky, with the smooth tone, highlights and soft shadow a halftone screen
+// shows itself on. The ImageWriter's page traces it on the board, where it is
+// small and costs no flash; the StyleWriter's stores it, traced once on the
+// host (tools/rip/mkscene.c, sw_scene.h), as tracing it there held the printer.
 // Laid out in inches and sampled on the printer's own grid, 1/144 in across
 // and 1/72 in down (tp_scene_row), or square (tp_scene_row_aspect), so a w x h
 // picture prints w/144 by h/72 inches, or at the aspect it is given.

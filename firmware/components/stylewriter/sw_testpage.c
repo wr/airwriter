@@ -14,7 +14,8 @@
 #include "sw_testpage.h"
 #include "sw_font.h"
 #include "sw_art.h"
-#include "tp_scene.h"
+#include "sw_scene.h"
+#include "sw_unpack.h"
 #include "ink.h"
 #include "bigmem.h"
 
@@ -33,7 +34,7 @@
 // Where the pictures are, all multiples of 8 across so a halftoned row is copied in by the byte.
 #define PHOTO_W  1264
 #define PHOTO_H  700
-#define SCENE_W  (PHOTO_W / 2)      // the still life is traced at 180 dpi and the screen does the rest
+#define SCENE_W  (PHOTO_W / 2)      // the still life is stored at 180 dpi and the screen does the rest
 #define SCENE_H  (PHOTO_H / 2)
 #define SIDE_X   1384               // the ramps and steps beside it
 #define SIDE_W   (W - SIDE_X)       // 1496
@@ -45,6 +46,10 @@
 #define STEP_DX  136
 #define ICON_S   6
 #define ICON_W   (SW_ICON_W * ICON_S)
+
+// The pictures are traced once on the host (tools/rip/mkscene.c, W-1133), at these sizes.
+_Static_assert(SW_SCENE_W == SCENE_W && SW_SCENE_H == SCENE_H, "sw_scene.h: make -C tools/rip scene");
+_Static_assert(SW_PANEL_W == PANEL_W && SW_PANEL_H == PANEL_H, "sw_scene.h: make -C tools/rip scene");
 
 enum { MAX_TEXT = 72, MAX_SECT = 40, POOL = 3072 };
 
@@ -266,6 +271,7 @@ static void fill_head(tp_t *t, sect_t *s, uint32_t y, uint8_t *const bits[IW_INK
 typedef struct {
     ink_screens_t inks;
     ht_t          gray;
+    sw_unpack_t  *z;                    // the stored still life, a row of the scene at a time
     uint8_t       scene[SCENE_W * 3], rgb[PHOTO_W * 3], g[PHOTO_W], b[PHOTO_NB], ib[IW_INKS][PHOTO_NB];
 } photo_t;
 
@@ -273,13 +279,16 @@ static int begin_photo(tp_t *t, sect_t *s)
 {
     photo_t *p = big_calloc(1, sizeof *p);
     if (!p) return -1;
+    p->z = sw_unpack_new(sw_scene_photo_z, sizeof sw_scene_photo_z);
+    if (!p->z) { free(p); return -1; }
     if (t->colour) {
-        if (ink_screens_init(&p->inks, t->screen, t->gain, PHOTO_W)) { free(p); return -1; }
+        if (ink_screens_init(&p->inks, t->screen, t->gain, PHOTO_W)) { sw_unpack_free(p->z); free(p); return -1; }
         ink_screens_set_tone(&p->inks, sw_tone(t->model, t->screen));
         if (t->screen == HT_APPLE)
             for (int i = 0; i < IW_INKS; i++)
                 ht_set_phase(&p->inks.ht[i], p->inks.ht[i].phase_x, p->inks.ht[i].phase_y + 1, p->inks.ht[i].invert);
     } else if (ht_make(t, &p->gray, t->screen, PHOTO_W, IW_BLACK)) {
+        sw_unpack_free(p->z);
         free(p);
         return -1;
     }
@@ -291,6 +300,7 @@ static void end_photo(tp_t *t, sect_t *s)
 {
     photo_t *p = s->st;
     if (t->colour) ink_screens_free(&p->inks); else ht_free(&p->gray);
+    sw_unpack_free(p->z);
     free(p);
 }
 
@@ -298,7 +308,8 @@ static void fill_photo(tp_t *t, sect_t *s, uint32_t y, uint8_t *const bits[IW_IN
 {
     photo_t *p = s->st;
     if (y % 2 == 0) {                                   // two rows of dots to a row of the scene
-        tp_scene_row_aspect(SCENE_W, SCENE_H, y / 2, p->scene, (float)SCENE_H / SCENE_W);
+        // The stream is ours and held to tp_scene.c by the tests: a row it cannot give is paper.
+        if (sw_unpack_read(p->z, p->scene, sizeof p->scene)) memset(p->scene, 255, sizeof p->scene);
         for (uint32_t x = 0; x < SCENE_W; x++) {
             memcpy(p->rgb + x * 6, p->scene + x * 3, 3);
             memcpy(p->rgb + x * 6 + 3, p->scene + x * 3, 3);
@@ -384,15 +395,21 @@ static void fill_steps(tp_t *t, sect_t *s, uint32_t y, uint8_t *const bits[IW_IN
 
 // ------------------------------------------------------------------ part: the six screens
 
-typedef struct { ht_t h[6]; uint8_t rgb[PANEL_W * 3], g[PANEL_W], b[PANEL_W / 8]; } panels_t;
+// idx 0 is the panels themselves, which read the stored scene in gray; idx 1 the ramps under them.
+typedef struct { ht_t h[6]; sw_unpack_t *z; uint8_t g[PANEL_W], b[PANEL_W / 8]; } panels_t;
 
 static int begin_panels(tp_t *t, sect_t *s)
 {
     panels_t *p = big_calloc(1, sizeof *p);
     if (!p) return -1;
+    if (s->idx == 0 && !(p->z = sw_unpack_new(sw_scene_panel_z, sizeof sw_scene_panel_z))) {
+        free(p);
+        return -1;
+    }
     for (int i = 0; i < 6; i++)
         if (ht_make(t, &p->h[i], k_screens[i], PANEL_W, IW_BLACK)) {
             while (i--) ht_free(&p->h[i]);
+            sw_unpack_free(p->z);
             free(p);
             return -1;
         }
@@ -405,6 +422,7 @@ static void end_panels(tp_t *t, sect_t *s)
     (void)t;
     panels_t *p = s->st;
     for (int i = 0; i < 6; i++) ht_free(&p->h[i]);
+    sw_unpack_free(p->z);
     free(p);
 }
 
@@ -412,10 +430,10 @@ static void end_panels(tp_t *t, sect_t *s)
 static void fill_panels(tp_t *t, sect_t *s, uint32_t y, uint8_t *const bits[IW_INKS])
 {
     (void)t;
+    (void)y;                                            // the stored rows come in order
     panels_t *p = s->st;
     if (s->idx == 0) {
-        tp_scene_row_aspect(PANEL_W, PANEL_H, y, p->rgb, (float)PANEL_H / PANEL_W);
-        ink_gray(p->rgb, PANEL_W, p->g);
+        if (sw_unpack_read(p->z, p->g, sizeof p->g)) memset(p->g, 255, sizeof p->g);
     } else {
         for (uint32_t x = 0; x < PANEL_W; x++) p->g[x] = (uint8_t)(255.0 - 255.0 * x / (PANEL_W - 1));
     }

@@ -387,6 +387,14 @@ Traps already explained in a code comment are listed only when the comment is ea
   off, as TailTalk's does, showed Printing and held the job lock for the full 600 s, then reset
   the printer and failed, though the head was done in 26 s. A cleaning now ends on whichever
   comes first, busy off after on or 08 on after off (`wait_cleaned`).
+- **A StyleWriter test page waits for whatever the board draws** (board 1's Color StyleWriter
+  2500, 2026-11-07, `W-1133`). The page is drawn and sent from one task, and `serial_out` has no
+  TX ring, so the link is idle while the board draws a row. Tracing the still life and the
+  panels there stopped the 2500 twice partway down the page, the second time with the noises it
+  makes at power-up; they are stored now (`sw_scene.h`). Anything new on the page that costs
+  the board time costs the printer the same. The link itself is 57600 baud, 5.76 KB a second:
+  the densest 400-row band (the still life beside its ramps) is 73 KB, about 13 s on the wire
+  however fast it is drawn.
 
 ## LaserWriters (W-1082)
 

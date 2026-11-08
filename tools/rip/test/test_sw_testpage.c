@@ -7,17 +7,67 @@
 // dots (0.1 in), four squares of exactly 360 x 360 dots, six screens (Apple's among them),
 // four ink swatches with a color cartridge and a gray ramp with black, and nothing where the
 // model cannot print. The panels are held to a reference made here from the halftoner, the
-// still life and the model's tone curve, so a panel drawn through the wrong screen fails.
+// stored scene and the model's tone curve, so a panel drawn through the wrong screen fails.
+// The stored pictures (sw_scene.h) are held to tp_scene.c, which traced them (W-1133).
 #include "test_util.h"
 #include "sw_testpage.h"
 #include "sw_page.h"
 #include "sw_code.h"
 #include "sw_font.h"
+#include "sw_scene.h"
+#include "sw_unpack.h"
 #include "tp_scene.h"
 #include "ink.h"
 #include <stdlib.h>
 
 size_t big_asked_bytes, big_asked_n;
+
+// ---- the stored pictures (W-1133)
+
+// sw_scene.h is what tp_scene.c traces at the page's sizes: a change to the scene, ink_gray or
+// the sizes without `make -C tools/rip scene` fails here. Held within two levels rather than
+// exactly, so a host whose maths rounds a little differently from the one that made it passes.
+static void scene_matches(const uint8_t *z, size_t zn, uint32_t w, uint32_t h, int gray)
+{
+    size_t rn = (size_t)w * (gray ? 1 : 3);
+    uint8_t *rgb = malloc((size_t)w * 3), *want = malloc(rn), *got = malloc(rn);
+    sw_unpack_t *u = sw_unpack_new(z, zn);
+    CHECK(u != NULL);
+    int worst = 0;
+    size_t off = 0;
+    for (uint32_t y = 0; y < h; y++) {
+        tp_scene_row_aspect(w, h, y, rgb, (float)h / (float)w);
+        if (gray) ink_gray(rgb, w, want);
+        else memcpy(want, rgb, rn);
+        CHECK_EQ_INT(sw_unpack_read(u, got, rn), 0);     // the last row too, which ends the stream
+        for (size_t i = 0; i < rn; i++) {
+            int dd = abs(want[i] - got[i]);
+            off += dd != 0;
+            if (dd > worst) worst = dd;
+        }
+    }
+    CHECK(worst <= 2);
+    CHECK(off <= rn * h / 1000);
+    CHECK_EQ_INT(sw_unpack_read(u, got, 1), -1);         // nothing past the end
+    sw_unpack_free(u);
+    // On the host (zlib), a stream cut short gives its rows up to the cut, then fails rather
+    // than making more up. The board's tinfl would read zeros on; its streams are whole.
+    u = sw_unpack_new(z, zn / 2);
+    CHECK(u != NULL);
+    uint32_t rows = 0;
+    while (rows < h && sw_unpack_read(u, got, rn) == 0) rows++;
+    CHECK(rows > 0 && rows < h);
+    sw_unpack_free(u);
+    free(rgb);
+    free(want);
+    free(got);
+}
+
+static void test_stored_scene(void)
+{
+    scene_matches(sw_scene_photo_z, sizeof sw_scene_photo_z, SW_SCENE_W, SW_SCENE_H, 0);
+    scene_matches(sw_scene_panel_z, sizeof sw_scene_panel_z, SW_PANEL_W, SW_PANEL_H, 1);
+}
 
 // ---- the face
 
@@ -537,17 +587,21 @@ static void test_colour_page(void)
     }
     CHECK(apple >= 0);
     {
-        uint8_t *rgb = malloc((size_t)pb.w * 3), *g = malloc(pb.w), *bits = calloc((pb.w + 7) / 8, 1);
+        uint8_t *g = malloc(pb.w), *bits = calloc((pb.w + 7) / 8, 1);
         uint32_t bad[6] = { 0 };
+        CHECK_EQ_INT(pb.w, SW_PANEL_W);
+        CHECK_EQ_INT(pb.h, SW_PANEL_H);
+        sw_unpack_t *z = sw_unpack_new(sw_scene_panel_z, sizeof sw_scene_panel_z);
+        CHECK(z != NULL);
         for (uint32_t y = 0; y < pb.h; y++) {
-            tp_scene_row_aspect(pb.w, pb.h, y, rgb, (float)pb.h / (float)pb.w);
-            ink_gray(rgb, pb.w, g);
+            CHECK_EQ_INT(sw_unpack_read(z, g, pb.w), 0);
             for (int p = 0; p < 6; p++) {
                 ht_row(&ph[p], g, bits);
                 for (uint32_t x = 0; x < pb.w; x++)
                     bad[p] += ((bits[x >> 3] >> (7 - (x & 7)) & 1) != bit(&d, INK_K, l.panel[p].x + x, l.panel[p].y + y));
             }
         }
+        sw_unpack_free(z);
         for (int p = 0; p < 6; p++) CHECK_EQ_INT(bad[p], 0);
         // Each ramp runs 255 to 0 across.
         for (uint32_t x = 0; x < rb.w; x++) g[x] = (uint8_t)(255.0 - 255.0 * x / (rb.w - 1));
@@ -559,7 +613,6 @@ static void test_colour_page(void)
                     rbad[p] += ((bits[x >> 3] >> (7 - (x & 7)) & 1) != bit(&d, INK_K, l.panel_ramp[p].x + x, l.panel_ramp[p].y + y));
             }
         for (int p = 0; p < 6; p++) CHECK_EQ_INT(rbad[p], 0);
-        free(rgb);
         free(g);
         free(bits);
         // And the screens differ from one another: the same still life, six sets of dots.
@@ -754,6 +807,7 @@ static void test_memory(void)
 
 int main(void)
 {
+    test_stored_scene();
     test_font();
     test_layout();
     test_margins();

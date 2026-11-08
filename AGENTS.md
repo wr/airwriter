@@ -100,6 +100,9 @@ page: Top margin (`{"top_margin":N}`, 1/144 in, -216 to 144, default -144) and d
   changes.
 - The settings page makes no request off the board. Never hand-edit `webui_page.h`;
   `tools/webui/mkheader.py` builds it.
+- Never hand-edit the StyleWriter test page's pictures, `sw_scene.h`: after a change to
+  `tp_scene.c` or `ink_gray`, `make -C tools/rip scene` traces them again (the host tests fail
+  until it does).
 - Never change `fixtures/checker.expected.bin` (see Verification).
 - Generate `.kicad_sch` and `.kicad_pcb` files with the tools, never by hand.
 - Releases are cut only by `tools/release/release.sh`, by a maintainer.
