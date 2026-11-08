@@ -13,11 +13,13 @@
 // with the one in use ticked, a ruler 8 in long with a tick every 0.1 in, four squares an
 // inch each way, and the footer.
 //
-// Built as it is sent, a row at a time: it holds a few halftoners and the row's four planes
-// (88 KB gray, 141 KB color at its largest, through bigmem.h: PSRAM on the board) and never a
-// page. The still life is ray traced as its rows are made, at half the page's resolution and
-// enlarged, so a page costs the board some seconds of its own between the printer's blocks;
-// the host draws one in under a fifth of a second.
+// Built as it is sent, a row at a time: it holds a few halftoners, a picture's reader and the
+// row's four planes, each part's only while its rows are made (about 173 KB asked over a gray
+// page and 226 KB over a color one on the board, through bigmem.h: PSRAM), and never a page.
+// The still life and the scene the panels show are not traced here: tools/rip/mkscene.c
+// traces them once (tp_scene.c) and sw_scene.h stores them deflated, read a row at a time
+// (sw_unpack.h, its window held only while a picture's rows are being made). Traced on the
+// board, they kept the printer waiting partway down the page (W-1133).
 //
 // The layout is in dots from the printable area's top-left (the engine's margins are dropped
 // by the stage), 2880 across and 3295 down at the most: the same on every model, which print

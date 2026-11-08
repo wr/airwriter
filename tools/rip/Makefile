@@ -32,20 +32,30 @@ SRCS    := $(wildcard $(COMP)/ripjob/*.c) \
            $(wildcard $(COMP)/testpage/*.c) \
            $(COMP)/stylewriter/sw_model.c $(COMP)/stylewriter/sw_code.c $(COMP)/stylewriter/sw_page.c \
            $(COMP)/stylewriter/sw_session.c $(COMP)/stylewriter/sw_status.c \
-           $(COMP)/stylewriter/sw_testpage.c \
+           $(COMP)/stylewriter/sw_testpage.c $(COMP)/stylewriter/sw_unpack.c \
            $(COMP)/printers/port_policy.c \
            $(COMP)/serial_out/serial_writer.c
 TESTSRC := $(wildcard test/test_*.c)
 TESTBIN := $(patsubst test/%.c,build/%,$(TESTSRC))
 
-.PHONY: all test clean
+.PHONY: all test clean scene
 all: build/rip
 
 build:
 	@mkdir -p build
 
+# The StyleWriter test page's pictures, traced here once and stored deflated (W-1133): run
+# `make scene` after changing tp_scene.c, ink_gray or the sizes in mkscene.c. It builds without
+# the header it writes, so a size change can always be made.
+build/mkscene: mkscene.c $(COMP)/testpage/tp_scene.c $(COMP)/ripjob/ink.c \
+               $(COMP)/halftone/halftone.c $(COMP)/halftone/apple_tables.c | build
+	$(CC) $(CFLAGS) $(INCS) -o $@ $^ -lm -lz
+
+scene: build/mkscene
+	./build/mkscene $(COMP)/stylewriter/sw_scene.h
+
 build/rip: main.c png_write.c $(SRCS) | build
-	$(CC) $(CFLAGS) $(INCS) -Itest -o $@ $^ -lm
+	$(CC) $(CFLAGS) $(INCS) -Itest -o $@ $^ -lm -lz
 
 build/test_printer_state: test/test_printer_state.c ../../firmware/components/printer_state/printer_state_core.c | build
 	$(CC) $(CFLAGS) $(INCS) -I../../firmware/components/printer_state/include -Itest -o $@ $^
@@ -106,23 +116,23 @@ build/test_cable: test/test_cable.c $(CT)/cable_core.c $(LT)/lt_proto.c | build
 	$(CC) $(CFLAGS) -I$(CT)/include -I$(LT)/include -Itest -o $@ $^
 
 build/%: test/%.c $(SRCS) | build
-	$(CC) $(CFLAGS) $(INCS) -Itest -o $@ $^ -lm
+	$(CC) $(CFLAGS) $(INCS) -Itest -o $@ $^ -lm -lz
 
 # The board's StyleWriter glue, the real stylewriter.c, against stand-ins for the ESP-IDF headers
 # (test/shim) and a printer scripted in the test (W-1103).
 build/test_stylewriter_board: test/test_stylewriter_board.c $(COMP)/stylewriter/stylewriter.c \
                               $(SRCS) | build
-	$(CC) $(CFLAGS) $(INCS) -Itest/shim -Itest -o $@ $^ -lm
+	$(CC) $(CFLAGS) $(INCS) -Itest/shim -Itest -o $@ $^ -lm -lz
 
 # The page stage's memory, counted through bigmem.h (BIGMEM_COUNT): it holds no page or band.
 build/test_sw_page_mem: CFLAGS += -DBIGMEM_COUNT
 build/test_sw_page_mem: test/test_sw_page_mem.c $(SRCS) | build
-	$(CC) $(CFLAGS) $(INCS) -Itest -o $@ $^ -lm
+	$(CC) $(CFLAGS) $(INCS) -Itest -o $@ $^ -lm -lz
 
 # So is the test page's (test_sw_testpage.c): what it holds, once, is in PSRAM.
 build/test_sw_testpage: CFLAGS += -DBIGMEM_COUNT
 build/test_sw_testpage: test/test_sw_testpage.c $(SRCS) | build
-	$(CC) $(CFLAGS) $(INCS) -Itest -o $@ $^ -lm
+	$(CC) $(CFLAGS) $(INCS) -Itest -o $@ $^ -lm -lz
 
 # W-1088 review: the printer list's core takes none of the board's internal
 # RAM of its own (docs/traps.md): no writable statics, its buffers are the
@@ -138,7 +148,7 @@ build/port_policy.o: $(COMP)/printers/port_policy.c | build
 # as the printer list's core (W-1103): no writable statics; the page stage's block and the
 # session's frame buffer come from the board's PSRAM allocator (bigmem.h).
 SW_OBJS := build/sw_model.o build/sw_code.o build/sw_page.o build/sw_session.o build/sw_status.o \
-           build/sw_testpage.o
+           build/sw_testpage.o build/sw_unpack.o
 build/sw_%.o: $(COMP)/stylewriter/sw_%.c | build
 	$(CC) $(CFLAGS) $(INCS) -c -o $@ $<
 

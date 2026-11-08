@@ -5,6 +5,13 @@
 `W-1102 QuickDraw LaserWriters on the printer port (Personal LaserWriter LS/300, Select 300)`.
 Reverses the StyleWriter cut in `2026-08-04-printer-support-scope-design.md`.
 
+**Amended 2026-11-07** (`W-1133 StyleWriter test page stops partway while the board draws its
+pictures`): the test page's still life and the scene its six screens show are traced once on
+the host and stored in the firmware, not traced on the board as the page prints. The page is
+drawn and sent from one task, so the board's seconds of tracing were seconds the printer had
+nothing, and the 2500 stopped twice partway down the page, the second time making the noises it
+makes at power-up before going on. The page is the same dots (SPEC §3.16, Test page).
+
 **Amended 2026-11-07** (`W-1132 Show Cleaning while a StyleWriter cleans its print head`, Wells's
 word): while a cleaning runs, the settings page shows the StyleWriter as Cleaning, not Printing,
 in its row, its Status and the sidebar, with Printing's green lamp. The printer never says it is
