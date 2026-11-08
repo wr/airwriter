@@ -136,6 +136,9 @@ static void reconnect_cb(void *arg)
 static char   s_last_job[64];
 static int    s_printing;
 static size_t s_last_pages, s_last_bytes;
+// W-1132: what s_printing is busy with is a print-head cleaning (sw_clean_web to the end of
+// sw_clean_task): the settings page says Cleaning for the StyleWriter, not Printing.
+static volatile int s_cleaning;
 
 // The real mutual exclusion between a real IPP job and a test page: taken
 // (blocking) at the top of doc_begin and (non-blocking) in test_page, given
@@ -1232,6 +1235,7 @@ static void port_live(pr_live_t *o)
     // self-ID has not come back yet (about 2-3 s).
     o->present = o->ready = s_iw_ready == 1 && s_iw_named;
     o->printing = s_printing && !s_laser_owns;
+    o->cleaning = o->printing && s_cleaning;
     o->attention = mine && v.state == PS_ATTENTION;
     o->failed = mine && v.state == PS_FAILED;
     if (s_port_sw) {
@@ -1468,7 +1472,8 @@ static void sw_clean_task(void *arg)
     if (rc == SW_OK) printers_port_answered(PR_HEARD_STYLEWRITER);
     printer_state_post(rc == SW_OK ? PS_EV_JOB_DONE : PS_EV_JOB_FAILED);
     s_last_status_ms = uptime_ms();
-    s_printing = 0;
+    s_printing = 0;                              // first: never Printing in between
+    s_cleaning = 0;
     job_touch();
     line_source();
     ESP_LOGI(TAG, "cleaning task: %u bytes of stack to spare", (unsigned)uxTaskGetStackHighWaterMark(NULL));
@@ -1499,6 +1504,7 @@ static int sw_clean_web(int id)
         return rc;
     }
     printer_state_post(PS_EV_ACTIVITY);          // a person asked: wake the panel
+    s_cleaning = 1;
     s_printing = 1;
     job_touch();
     led_grid_set_source(LG_SRC_AIRPRINT);
@@ -1508,6 +1514,7 @@ static int sw_clean_web(int id)
         ESP_LOGE(TAG, "cleaning: could not create task");
         printer_state_post(PS_EV_JOB_FAILED);
         s_printing = 0;
+        s_cleaning = 0;
         job_touch();
         line_source();
         xSemaphoreGive(s_job_lock);

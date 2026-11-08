@@ -1302,13 +1302,17 @@ size_t pr_json(const pr_list_t *l, const pr_live_t live[PR_MAX], char *buf, size
             size_t n = strlen(swx);
             snprintf(swx + n, sizeof swx - n, ",\"fault\":\"%s\"", faults[live[i].fault]);
         }
+        // W-1132: busy with a cleaning, not a job, it is Cleaning: the one state the list has that
+        // the box (pr_box_state) does not, where a cleaning is the printer at work as a job is.
+        pr_box_t o = one_state(&live[i]);
+        const char *st = o == PR_BOX_PRINTING && live[i].cleaning ? "cleaning" : states[o];
         PUT("%s{\"id\":%u,\"name\":\"%s\",\"where\":\"%s\",\"kind\":\"%s\",\"model\":\"%s\","
             "\"shared\":%s,\"identified\":%s,\"found\":\"%s\",\"state\":\"%s\",\"uuid\":\"%s\","
             "\"product\":\"%s\",\"dither\":\"%s\",\"gain\":%u,\"rp\":\"%s\",\"start_page\":%s%s}",
             i ? "," : "", r->id, e_name, pr_where_name(r->where), pr_kind_name(r->kind),
             pr_model_name(r->model), r->shared ? "true" : "false",
             r->identified ? "true" : "false", r->found_auto ? "auto" : "person",
-            states[one_state(&live[i])], r->uuid, e_prod, r->dither, r->gain, rp, sp, swx);
+            st, r->uuid, e_prod, r->dither, r->gain, rp, sp, swx);
     }
     PUT("],\"notes\":[");
     for (int i = 0; i < l->n_notes; i++)

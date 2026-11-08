@@ -27,7 +27,8 @@ Write for them. The rest goes in the engineering docs.
   on what to do, and buttons for the choice: "Unrecognized printer on the printer port" / "If
   it's an ImageWriter, choose its model." / **Choose Model…** **Dismiss**.
 - Status names stay the same on the page, the phone and the wiki: Ready, Printing, Needs
-  attention, Offline, The last job failed.
+  attention, Offline, The last job failed. Cleaning, a StyleWriter cleaning its print head, is
+  the page's and the wiki's only.
 
 **Docs.** What the reader does and what they see. Numbered steps for procedures, tables for
 lookups, problem then fix in troubleshooting. Anything on screen goes in bold, spelled exactly as

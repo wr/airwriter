@@ -125,8 +125,10 @@ int pr_fault_from_sw(int sw_state);
 // A printer's live state, by its index in r[]: the board fills it in. cart
 // (W-1103) is a StyleWriter's cartridge as last read: 0 not known, 1 black,
 // 2 colour. fault is its pr_fault_t while it holds one. Both live here and not in
-// the record, where an ImageWriter's ribbon is the board's too.
-typedef struct { uint8_t present, ready, attention, printing, failed, cart, fault; } pr_live_t;
+// the record, where an ImageWriter's ribbon is the board's too. cleaning (W-1132): what
+// it is busy with is a cleaning of its print head, not a job; the page says Cleaning
+// where it would say Printing.
+typedef struct { uint8_t present, ready, attention, printing, failed, cart, fault, cleaning; } pr_live_t;
 typedef enum { PR_BOX_OFFLINE, PR_BOX_READY, PR_BOX_PRINTING, PR_BOX_ATTENTION,
                PR_BOX_FAILED } pr_box_t;
 

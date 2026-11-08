@@ -552,7 +552,7 @@ setTimeout(()=>document.body.classList.add('ready'),1500);
 let PR=null, sel=null, LWT=null;
 const WHERE={port:'Printer port',cable:'AppleTalk port',network:'Your network',tunnel:'Basilisk II',zone:'Infinite Mac'};
 const KIND_IC={imagewriter:['k','g-iw'],stylewriter:['k','g-style'],laserwriter:['k','g-laser'],'appletalk-imagewriter':['b','g-iw'],unknown:['unk','g-printer']};
-const ST={ready:['g','Ready'],printing:['g','Printing'],attention:['a','Needs attention'],failed:['r','The last job failed'],offline:['','Offline']};
+const ST={ready:['g','Ready'],printing:['g','Printing'],cleaning:['g','Cleaning'],attention:['a','Needs attention'],failed:['r','The last job failed'],offline:['','Offline']};
 /* W-1103: the port's models, the board's own names for them (sw_model.c). The
    original StyleWriter has no cleaning, and only the Color ones take a color cartridge. */
 const MODELS=['ImageWriter II','ImageWriter LQ','ImageWriter','StyleWriter','StyleWriter II','StyleWriter 1200',
@@ -592,7 +592,7 @@ function icHTML(p){ const k=KIND_IC[p.kind]||KIND_IC.unknown; return '<span clas
 function sideWord(){
   if(!PR) return '';
   const ps=PR.printers, sh=ps.filter(p=>p.shared);
-  for(const [st,w] of [['failed','Failed'],['attention','Needs attention'],['printing','Printing']])
+  for(const [st,w] of [['failed','Failed'],['attention','Needs attention'],['printing','Printing'],['cleaning','Cleaning']])
     if(sh.some(p=>p.state===st)) return w;
   if(!ps.length) return 'None';
   if(ps.length===1) return ps[0].kind==='unknown'?'Unrecognized':ST[ps[0].state]?ST[ps[0].state][1]:'';

@@ -1238,8 +1238,10 @@ Apple's StyleWriter adapter (ADSP, not PAP), is not built.
   Print Head with Clean and the line "Cleaning uses ink."; the Halftone list with Apple, without
   the ImageWriter's 144 × 72 sample; "check paper" without SELECT). `/api/printers` adds
   `cartridge` and, while the printer holds one, `fault`: `paper`, `jam`, `cartridge`,
-  `cartridge-jam`, `ink`, `cover`, `waste` or `other`. The model names in `add_port` and `model`
-  are the seven.
+  `cartridge-jam`, `ink`, `cover`, `waste` or `other`. Its `state` is `cleaning` from the press
+  to the cleaning's end (W-1132), where it would be `printing`, and the page says Cleaning with
+  Printing's lamp; a fault meanwhile is still `attention`. The panel shows the printing light
+  and the phone sees no change. The model names in `add_port` and `model` are the seven.
 - **The handshake pin.** Rev A's R9 (0 Ω, not fitted) joins U3's T1OUT to J2 pin 1 (HSKo); with
   it fitted the `HSKI_DRV` clamp (IO35 low) holds the line asserted at RS-232 levels, as a Mac's
   port does, and InkTalk holds its StyleWriter's input high for the same reason ("a StyleWriter

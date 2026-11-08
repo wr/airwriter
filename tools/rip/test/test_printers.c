@@ -1824,6 +1824,37 @@ static void test_sw_fault(void)
     CHECK_EQ_INT(sizeof(pr_rec_t), 284);                       // and it is not stored
 }
 
+// W-1132: a StyleWriter busy with a cleaning of its print head is Cleaning on the page, where
+// it would be Printing; a fault while it cleans is still Needs attention, and the box counts a
+// cleaning as the printer at work.
+static void test_sw_cleaning(void)
+{
+    fresh();
+    seen_sw(PR_MODEL_SWC2500);
+    pr_live_t live[PR_MAX];
+    memset(live, 0, sizeof live);
+    static char buf[4096];
+    live[0].present = live[0].ready = 1;
+    live[0].cleaning = 1;                                    // not busy: the flag alone says nothing
+    pr_json(&L, live, buf, sizeof buf);
+    CHECK(strstr(buf, "\"state\":\"ready\"") != NULL);
+    live[0].printing = 1;
+    pr_json(&L, live, buf, sizeof buf);
+    CHECK(strstr(buf, "\"state\":\"cleaning\"") != NULL);
+    CHECK(strstr(buf, "\"state\":\"printing\"") == NULL);
+    CHECK_EQ_INT(pr_box_state(&L, live), PR_BOX_PRINTING);
+    live[0].cleaning = 0;                                    // a job
+    pr_json(&L, live, buf, sizeof buf);
+    CHECK(strstr(buf, "\"state\":\"printing\"") != NULL);
+    CHECK(strstr(buf, "\"state\":\"cleaning\"") == NULL);
+    live[0].cleaning = 1;
+    live[0].attention = 1;
+    live[0].fault = PR_FAULT_INK;
+    pr_json(&L, live, buf, sizeof buf);
+    CHECK(strstr(buf, "\"state\":\"attention\"") != NULL);
+    CHECK(strstr(buf, "\"state\":\"cleaning\"") == NULL);
+}
+
 static void test_sw_test_target(void)
 {
     fresh();
@@ -2764,6 +2795,7 @@ int main(void)
     test_sw_apple_screen();
     test_sw_json();
     test_sw_fault();
+    test_sw_cleaning();
     test_sw_test_target();
     test_sw_offers();
     test_sw_box_state();
