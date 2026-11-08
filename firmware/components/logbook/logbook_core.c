@@ -545,6 +545,10 @@ void lb_store_clear(lb_store_t *s)
 
 void lb_read_begin(lb_reader_t *rd, const lb_ring_t *r, const lb_store_t *s, uint32_t after)
 {
+    // The ring has every line from its oldest on, so a reader already there can leave flash alone.
+    uint32_t oldest = ring_norm(r, r->tail);
+    if (oldest != r->head && rec_seq(r->data + oldest) <= after + 1) s = NULL;
+
     rd->r = r;
     rd->s = s;
     rd->last = after;

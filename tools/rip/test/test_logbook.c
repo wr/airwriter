@@ -296,8 +296,11 @@ typedef struct { uint8_t mem[FF_BYTES]; unsigned erases; int fail_writes; } fake
 static fakeflash_t g_ff;
 static uint32_t g_ring[LB_RING_BYTES / 4];
 
+static unsigned g_ff_reads;
+
 static int ff_read(void *c, uint32_t off, void *buf, uint32_t n)
 {
+    g_ff_reads++;
     memcpy(buf, ((fakeflash_t *)c)->mem + off, n);
     return 0;
 }
@@ -679,6 +682,34 @@ static void test_reader_merge(void)
     CHECK_EQ_INT(read_all(r, NULL, 0, NULL, NULL), 100);             // RAM only, as during a job
 }
 
+// The screen asks every second for the lines after the last it has. RAM holds those.
+static void test_reader_leaves_flash_alone_when_ram_has_it_all(void)
+{
+    lb_flash_t f = ff_ops();
+    lb_store_open(&g_s, &f);
+    store_lines(&g_s, 1, 50, 7);
+    lb_ring_t *r = fresh_ring();
+    lb_ring_begin_run(r, g_s.last_seq + 1, g_s.last_run);
+    push_lines(r, 50, 'I', 0);
+
+    uint32_t first = 0, last = 0;
+    g_ff_reads = 0;
+    CHECK_EQ_INT(read_all(r, &g_s, 100, NULL, NULL), 0);
+    CHECK_EQ_INT(read_all(r, &g_s, 90, &first, &last), 10);
+    CHECK_EQ_INT(first, 91);
+    CHECK_EQ_INT(last, 100);
+    CHECK_EQ_INT(read_all(r, &g_s, 50, &first, NULL), 50);           // the line after is RAM's oldest
+    CHECK_EQ_INT(first, 51);
+    CHECK_EQ_INT(g_ff_reads, 0);
+
+    CHECK_EQ_INT(read_all(r, &g_s, 30, &first, &last), 70);          // further back needs flash
+    CHECK_EQ_INT(first, 31);
+    CHECK_EQ_INT(last, 100);
+    CHECK(g_ff_reads > 0);
+    CHECK_EQ_INT(read_all(fresh_ring(), &g_s, 0, NULL, &last), 50);  // and so does an empty ring
+    CHECK_EQ_INT(last, 50);
+}
+
 static void test_reader_overwrite(void)
 {
     lb_ring_t *r = fresh_ring();
@@ -774,6 +805,7 @@ int main(void)
     test_store_unknown_format();
     test_save_skips_chatter();
     test_reader_merge();
+    test_reader_leaves_flash_alone_when_ram_has_it_all();
     test_reader_overwrite();
     test_ids_after_power_cut();
     test_ring_carries_on_after_restart();

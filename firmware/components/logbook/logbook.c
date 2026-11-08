@@ -250,7 +250,6 @@ uint32_t logbook_newest(void)
 int logbook_read_next(lb_line_t *out)
 {
     if (!s_ps) return 0;
-    if (s_ps->reader.s && s_busy && s_busy()) s_ps->reader.s = NULL;    // a job has started
     xSemaphoreTake(s_store_lock, portMAX_DELAY);
     xSemaphoreTake(s_ring_lock, portMAX_DELAY);
     int got = lb_read_next(&s_ps->reader, out);
@@ -259,9 +258,8 @@ int logbook_read_next(lb_line_t *out)
     return got;
 }
 
-static void read_open(uint32_t after)
+static void read_open(uint32_t after, const lb_store_t *st)
 {
-    const lb_store_t *st = s_store_ok && !(s_busy && s_busy()) ? &s_ps->store : NULL;
     xSemaphoreTake(s_store_lock, portMAX_DELAY);
     xSemaphoreTake(s_ring_lock, portMAX_DELAY);
     lb_read_begin(&s_ps->reader, s_ring, st, after);
@@ -272,12 +270,16 @@ static void read_open(uint32_t after)
 void logbook_read_begin(uint32_t after, unsigned newest)
 {
     if (!s_ps) return;
-    read_open(after);
+
+    // Decided once for the whole request. The port task holds the job lock for a moment now and
+    // then with nothing printing, and the count below has to see the same lines as the read.
+    const lb_store_t *st = s_store_ok && !(s_busy && s_busy()) ? &s_ps->store : NULL;
+    read_open(after, st);
     if (!newest) return;
 
     // Numbers skip the lines flash never kept, so count rather than subtract.
     unsigned total = 0;
     while (logbook_read_next(&s_ps->skip)) total++;
-    read_open(after);
+    read_open(after, st);
     while (total > newest && logbook_read_next(&s_ps->skip)) total--;
 }
