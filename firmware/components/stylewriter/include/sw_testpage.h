@@ -15,7 +15,8 @@
 //
 // Built as it is sent, a row at a time: it holds a few halftoners, a picture's reader and the
 // row's four planes, each part's only while its rows are made (about 173 KB asked over a gray
-// page and 226 KB over a color one on the board, through bigmem.h: PSRAM), and never a page. The still life and the scene the panels show are not traced here: tools/rip/mkscene.c
+// page and 226 KB over a color one on the board, through bigmem.h: PSRAM), and never a page.
+// The still life and the scene the panels show are not traced here: tools/rip/mkscene.c
 // traces them once (tp_scene.c) and sw_scene.h stores them deflated, read a row at a time
 // (sw_unpack.h, its window held only while a picture's rows are being made). Traced on the
 // board, they kept the printer waiting partway down the page (W-1133).
