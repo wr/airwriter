@@ -2850,7 +2850,7 @@ static void status_json(void *ctx, char *buf, size_t cap)
         "\"queue\":\"%s\",\"host\":\"%s.local\",\"ip\":\"%s\","
         "\"ssid\":\"%s\",\"dither\":\"%s\",\"gain\":%u,\"top_margin\":%d,\"signal\":\"%s\","
         "\"channel\":\"%s\",\"security\":\"%s\",\"uri\":\"%s\","
-        "\"uptime\":\"%uh %02um\",\"reset\":\"%s\",\"version\":\"%s\",\"heap\":\"%u KB\","
+        "\"uptime\":\"%uh %02um\",\"reset\":\"%s\",\"version\":\"%s\",\"heap\":\"%u KB\",\"log_errors\":%u,"
         "\"slot\":\"%s\",\"trial\":%s,\"rolled_back\":\"%s\","
         "\"known_good\":\"%s\",\"known_good_version\":\"%s\","
         "\"model\":\"%s\",\"pic\":%s,"
@@ -2878,6 +2878,7 @@ static void status_json(void *ctx, char *buf, size_t cap)
         s_ap_mode ? "" : json_esc(e_uri, sizeof e_uri, ipp_server_uri()),
         (unsigned)(up / 3600), (unsigned)((up / 60) % 60),
         reset_name(esp_reset_reason()), app->version, (unsigned)(esp_get_free_heap_size() / 1024),
+        logbook_errors(),
         ota_health_slot(), ota_health_on_trial() ? "true" : "false", ota_health_rolled_back(),
         ota_health_known_good(), ota_health_known_good_version(), model,
         pic_prog_available() ? "true" : "false",

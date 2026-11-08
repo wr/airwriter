@@ -92,9 +92,6 @@
     "printed": 0,
     "aborted": 0
    },
-   "events": [
-    "node 198 is ours (20 enquiries, 1 candidate)"
-   ],
    "frames_recent": []
   },
   "GET /api/et": {

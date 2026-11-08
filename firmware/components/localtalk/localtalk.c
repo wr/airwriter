@@ -24,7 +24,6 @@ static const char *TAG = "lt";
 
 #define LT_BAUD   1000000
 #define LT_ALIVE_MS 100     // the sync's 11 ms, with room
-#define EV_LINES  20
 #define FR_LINES  10
 #define LINE_LEN  100
 #define JSON_MACS 8         // Macs in /api/lt: eight, named, keep it inside its 4.5 KB
@@ -36,7 +35,7 @@ static volatile int s_quiet;        // W-1079: switched off on the settings page
 static lt_cfg_t   s_nc;             // the node's set-up, for coming back on
 static lt_ops_t   s_ops;
 static char       s_obj[NBP_NAME_MAX + 1], s_type[NBP_NAME_MAX + 1];
-static unsigned   s_ev_head, s_ev_n, s_fr_head, s_fr_n;
+static unsigned   s_fr_head, s_fr_n;
 
 // W-1094: the node, the TashTalk decoder, the logs and the send buffer, ~10 KB,
 // in PSRAM rather than .bss, where they were internal RAM that Wi-Fi and lwIP
@@ -46,7 +45,6 @@ static unsigned   s_ev_head, s_ev_n, s_fr_head, s_fr_n;
 typedef struct {
     lt_node_t node;
     tt_rx_t   rx;
-    char      ev[EV_LINES][LINE_LEN];
     char      fr[FR_LINES][LINE_LEN];
     uint8_t   cmd[1 + LLAP_MAX + 2];        // op_send's, on the LocalTalk task
 } lt_mem_t;
@@ -54,7 +52,6 @@ typedef struct {
 static lt_mem_t *s_mem;
 #define s_node (s_mem->node)
 #define s_rx   (s_mem->rx)
-#define s_ev   (s_mem->ev)
 #define s_fr   (s_mem->fr)
 
 __attribute__((constructor)) static void lt_mem_make(void)
@@ -133,7 +130,6 @@ static void op_log(void *ctx, const char *line)
 {
     (void)ctx;
     ESP_LOGI(TAG, "%s", line);
-    push(s_ev, EV_LINES, &s_ev_head, &s_ev_n, line);
 }
 
 // The printer gave up mid-job (on the print task): tell the Mac.
@@ -617,9 +613,7 @@ void localtalk_json(char *buf, size_t cap)
         at_printer_json(p, end - p);
         p += strlen(p);
     }
-    if (p < end) p += snprintf(p, end - p, ",\"events\":[");
-    json_ring(&p, end, s_ev, EV_LINES, s_ev_head, s_ev_n);
-    if (p < end) p += snprintf(p, end - p, "],\"frames_recent\":[");
+    if (p < end) p += snprintf(p, end - p, ",\"frames_recent\":[");
     json_ring(&p, end, s_fr, FR_LINES, s_fr_head, s_fr_n);
     xSemaphoreGive(s_lock);
     if (p > end) p = end;                          // a cut-short part never runs past buf

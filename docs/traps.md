@@ -281,7 +281,7 @@ Traps already explained in a code comment are listed only when the comment is ea
 - **TashTalk never says whether a frame went out.** It does the RTS/CTS handshake itself and
   drops a frame silently after 32 failed attempts, and it relays every frame but its own. Prove
   the transmit path with `POST /api/lt/echo` (body: a Mac's node number) and look for the echo
-  reply in `GET /api/lt`.
+  reply in `GET /api/log`.
 - **TashTalk's CTS (RA2 → IO6) is low when it can take bytes**, the ESP32 UART's own CTS
   polarity: no inversion. Its queue is 128 bytes and a frame can be 605, so flow control is not
   optional.
