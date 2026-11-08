@@ -35,6 +35,17 @@ typedef struct {
 // break the /api/log format.
 int lb_parse(const char *s, lb_line_t *out);
 
+// Puts lines back together. The Wi-Fi library sends "I (9) wifi:" and its message as separate
+// calls, so one line can take several. Feed each call's text with who it came from: 1 when
+// *out holds a finished line, 0 when there's nothing yet or it wasn't a line at all.
+typedef struct {
+    lb_line_t   line;
+    const void *who;
+    uint8_t     open;
+} lb_asm_t;
+
+int lb_feed(lb_asm_t *a, const char *s, const void *who, lb_line_t *out);
+
 // Replaces the saved network and host name wherever they stand as whole words, and, in lines
 // tagged wifi, anything shaped like a MAC address. Grows in place, cut at LB_TEXT_MAX.
 void lb_scrub(lb_line_t *l, const lb_names_t *n);

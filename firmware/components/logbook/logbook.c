@@ -33,6 +33,7 @@
 typedef struct {
     char        fmt[LB_TEXT_MAX + LB_TAG_MAX + 64];
     lb_line_t   line, skip;
+    lb_asm_t    pieces;
     lb_store_t  store;
     lb_reader_t reader;
     char        network[NAME_CAP], host[NAME_CAP];
@@ -96,13 +97,13 @@ static void on_shutdown(void)
 static int log_hook(const char *fmt, va_list ap)
 {
     if (xPortCanYield() && xTaskGetSchedulerState() == taskSCHEDULER_RUNNING
-        && xSemaphoreTake(s_ring_lock, pdMS_TO_TICKS(2)) == pdTRUE) {
+        && xSemaphoreTake(s_ring_lock, 1) == pdTRUE) {      // one tick at most
         va_list copy;
         va_copy(copy, ap);
         vsnprintf(s_ps->fmt, sizeof s_ps->fmt, fmt, copy);
         va_end(copy);
         lb_line_t *l = &s_ps->line;
-        if (lb_parse(s_ps->fmt, l)) {
+        if (lb_feed(&s_ps->pieces, s_ps->fmt, xTaskGetCurrentTaskHandle(), l)) {
             lb_names_t names = { s_ps->network, s_ps->host };
             lb_scrub(l, &names);
             l->ram_only = (uint8_t)lb_is_chatter(l);

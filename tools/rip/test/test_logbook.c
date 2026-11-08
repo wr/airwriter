@@ -59,6 +59,64 @@ static void test_parse(void)
     CHECK(!strcmp(l.text, "m"));
 }
 
+static void test_feed_in_pieces(void)
+{
+    // The Wi-Fi library sends its "I (9) wifi:" and then its message, as two calls.
+    lb_asm_t a;
+    memset(&a, 0, sizeof a);
+    lb_line_t l;
+    int one = 1, two = 2;
+
+    CHECK_EQ_INT(lb_feed(&a, "I (9) wifi:", &one, &l), 0);
+    CHECK_EQ_INT(lb_feed(&a, "state: init -> auth (b0)\n", &one, &l), 1);
+    CHECK_EQ_INT(l.level, 'I');
+    CHECK_EQ_INT(l.ms, 9);
+    CHECK(!strcmp(l.tag, "wifi"));
+    CHECK(!strcmp(l.text, "state: init -> auth (b0)"));
+
+    CHECK_EQ_INT(lb_feed(&a, "E (5) job: whole\n", &one, &l), 1);      // a whole line, as ever
+    CHECK(!strcmp(l.text, "whole"));
+
+    CHECK_EQ_INT(lb_feed(&a, "no line is waiting\n", &one, &l), 0);    // a piece of nothing
+
+    // Another task's whole line in between doesn't disturb the waiting one.
+    CHECK_EQ_INT(lb_feed(&a, "W (20) wifi:", &one, &l), 0);
+    CHECK_EQ_INT(lb_feed(&a, "I (21) ipp: other\n", &two, &l), 1);
+    CHECK(!strcmp(l.tag, "ipp"));
+    CHECK_EQ_INT(lb_feed(&a, "the rest\n", &one, &l), 1);
+    CHECK_EQ_INT(l.level, 'W');
+    CHECK_EQ_INT(l.ms, 20);
+    CHECK(!strcmp(l.text, "the rest"));
+
+    // Another task's piece isn't taken for this one's.
+    CHECK_EQ_INT(lb_feed(&a, "I (30) wifi:", &one, &l), 0);
+    CHECK_EQ_INT(lb_feed(&a, "stray\n", &two, &l), 0);
+    CHECK_EQ_INT(lb_feed(&a, "mine\n", &one, &l), 1);
+    CHECK(!strcmp(l.text, "mine"));
+
+    // The message can come in more than one piece.
+    CHECK_EQ_INT(lb_feed(&a, "I (40) wifi:", &one, &l), 0);
+    CHECK_EQ_INT(lb_feed(&a, "a\tb", &one, &l), 0);
+    CHECK_EQ_INT(lb_feed(&a, " c\n", &one, &l), 1);
+    CHECK(!strcmp(l.text, "a b c"));
+
+    // An unfinished one gives way to the task's next line.
+    CHECK_EQ_INT(lb_feed(&a, "I (50) wifi:", &one, &l), 0);
+    CHECK_EQ_INT(lb_feed(&a, "W (51) wifi:", &one, &l), 0);
+    CHECK_EQ_INT(lb_feed(&a, "x\n", &one, &l), 1);
+    CHECK_EQ_INT(l.level, 'W');
+    CHECK_EQ_INT(l.ms, 51);
+
+    // A long message stays within the limit.
+    CHECK_EQ_INT(lb_feed(&a, "I (60) wifi:", &one, &l), 0);
+    char big[LB_TEXT_MAX + 60];
+    memset(big, 'z', sizeof big - 2);
+    big[sizeof big - 2] = '\n';
+    big[sizeof big - 1] = 0;
+    CHECK_EQ_INT(lb_feed(&a, big, &one, &l), 1);
+    CHECK_EQ_INT(strlen(l.text), LB_TEXT_MAX);
+}
+
 static void test_scrub_names(void)
 {
     lb_names_t n = { "Orchard", "imagewriter-2434" };
@@ -695,6 +753,7 @@ static void test_clear(void)
 int main(void)
 {
     test_parse();
+    test_feed_in_pieces();
     test_scrub_names();
     test_scrub_never_leaves_a_name_at_the_cut();
     test_chatter();

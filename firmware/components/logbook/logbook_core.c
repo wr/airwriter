@@ -51,6 +51,36 @@ int lb_parse(const char *s, lb_line_t *out)
     return 1;
 }
 
+static int starts_a_line(const char *s)
+{
+    return (s[0] == 'I' || s[0] == 'W' || s[0] == 'E') && s[1] == ' ' && s[2] == '('
+        && s[3] >= '0' && s[3] <= '9';
+}
+
+int lb_feed(lb_asm_t *a, const char *s, const void *who, lb_line_t *out)
+{
+    if (a->open && a->who == who && !starts_a_line(s)) {
+        size_t n = strlen(a->line.text), have = strlen(s);
+        int ended = have && s[have - 1] == '\n';
+        for (const char *p = s; *p && n < LB_TEXT_MAX; p++)
+            a->line.text[n++] = (unsigned char)*p < 0x20 ? ' ' : *p;
+        a->line.text[n] = 0;
+        if (!ended) return 0;
+        a->open = 0;
+        while (n && a->line.text[n - 1] == ' ') n--;
+        a->line.text[n] = 0;
+        if (!n) return 0;
+        *out = a->line;
+        return 1;
+    }
+    if (!lb_parse(s, out)) return 0;
+    if (out->text[0]) return 1;
+    a->line = *out;                         // only the front of a line so far
+    a->who = who;
+    a->open = 1;
+    return 0;
+}
+
 // Swaps text[at, at+len) for `with`, in place. What grows past the end falls off.
 static size_t splice(char *text, size_t at, size_t len, const char *with)
 {
