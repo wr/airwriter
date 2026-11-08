@@ -203,10 +203,13 @@ static void fill_rule(tp_t *t, sect_t *s, uint32_t y, uint8_t *const bits[IW_INK
     memset(bits[IW_BLACK] + s->x / 8, 0xFF, s->w / 8);
 }
 
+// A swatch is solid in each ink of its mask (`idx`, a bit per iw_ink_t): one ink, or two
+// printed over each other for red, green and blue.
 static void fill_swatch(tp_t *t, sect_t *s, uint32_t y, uint8_t *const bits[IW_INKS])
 {
     (void)t; (void)y;
-    memset(bits[s->ink] + s->x / 8, 0xFF, s->w / 8);
+    for (int k = 0; k < IW_INKS; k++)
+        if (s->idx >> k & 1) memset(bits[k] + s->x / 8, 0xFF, s->w / 8);
 }
 
 // ------------------------------------------------------------------ part: the letterhead
@@ -537,6 +540,21 @@ static void textf(tp_t *t, uint32_t x, uint32_t y, size_t cap, int bold, const c
 static const char *const k_ink_name[4] = { "Cyan", "Magenta", "Yellow", "Black" };
 static const iw_ink_t k_ink_of[4] = { IW_CYAN, IW_MAGENTA, IW_YELLOW, IW_BLACK };
 
+// The colour row: the four inks, then the three colours two of them make printed over each
+// other, as the ImageWriter's colour ribbon page shows its overprints (W-1134).
+#define INK(k) (1 << (k))
+static const char *const k_swatch_name[SW_TP_SWATCHES] = { "Cyan", "Magenta", "Yellow", "Black",
+                                                           "Red", "Green", "Blue" };
+static const int k_swatch_inks[SW_TP_SWATCHES] = {
+    INK(IW_CYAN), INK(IW_MAGENTA), INK(IW_YELLOW), INK(IW_BLACK),
+    INK(IW_MAGENTA) | INK(IW_YELLOW), INK(IW_CYAN) | INK(IW_YELLOW), INK(IW_CYAN) | INK(IW_MAGENTA),
+};
+#define SWATCH_W  336               // nearly an inch, whole bytes, the gaps near the panels' below
+#define SWATCH_DX 424
+#define SWATCH_H  150
+_Static_assert(SWATCH_W % 8 == 0 && SWATCH_DX % 8 == 0, "a swatch is filled by the byte");
+_Static_assert((SW_TP_SWATCHES - 1) * SWATCH_DX + SWATCH_W == W, "the row spans the page");
+
 static void plan(tp_t *t)
 {
     const sw_spec_t *sp = sw_spec(t->model);
@@ -582,17 +600,19 @@ static void plan(tp_t *t)
         y += LINE + GAP - 20;
     }
 
-    // Ink: four solid swatches, the still life and a ramp of each ink; or, without a color
-    // cartridge, the still life in gray beside eleven steps and a ramp of black.
+    // Ink: seven solid swatches (the four inks and the three they make in pairs), the still
+    // life and a ramp of each ink; or, without a color cartridge, the still life in gray beside
+    // eleven steps and a ramp of black.
     if (t->colour) {
         y = heading(t, y, "Color");
-        for (int i = 0; i < 4; i++) {
-            uint32_t x = (uint32_t)i * 760;
-            push(t, (sect_t){ .y0 = y, .rows = 150, .x = x, .w = 600, .ink = k_ink_of[i], .fill = fill_swatch });
-            L->swatch[i] = bx(x, y, 600, 150);
-            text(t, x, y + 150 + 16, k_ink_name[i], 20, 0);
+        for (int i = 0; i < SW_TP_SWATCHES; i++) {
+            uint32_t x = (uint32_t)i * SWATCH_DX;
+            push(t, (sect_t){ .y0 = y, .rows = SWATCH_H, .x = x, .w = SWATCH_W, .idx = k_swatch_inks[i],
+                              .fill = fill_swatch });
+            L->swatch[i] = bx(x, y, SWATCH_W, SWATCH_H);
+            text(t, x, y + SWATCH_H + 16, k_swatch_name[i], 20, 0);
         }
-        y += 150 + 16 + GH + 64;
+        y += SWATCH_H + 16 + GH + 64;
         push(t, (sect_t){ .y0 = y, .rows = PHOTO_H, .x = 0, .begin = begin_photo, .fill = fill_photo, .end = end_photo });
         L->photo = bx(0, y, PHOTO_W, PHOTO_H);
         for (int i = 0; i < 4; i++) {

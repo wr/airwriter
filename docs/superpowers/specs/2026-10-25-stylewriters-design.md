@@ -5,6 +5,14 @@
 `W-1102 QuickDraw LaserWriters on the printer port (Personal LaserWriter LS/300, Select 300)`.
 Reverses the StyleWriter cut in `2026-08-04-printer-support-scope-design.md`.
 
+**Amended 2026-11-08** (`W-1134 StyleWriter test page: show the three colour mixes, as the
+ImageWriter's does`, Wells's word on a mock): with a colour cartridge the test page's colour
+row is seven swatches across the page, the four inks and then red (magenta over yellow), green
+(cyan over yellow) and blue (cyan over magenta), in the space the four took, so the page grows
+no taller. The mixes show whether the inks lie cleanly over each other. A black made of the
+three colours was left out: it tunes AirWriter's colour, it does not tell an owner anything
+(SPEC §3.16, Test page).
+
 **Amended 2026-11-07** (`W-1133 StyleWriter test page stops partway while the board draws its
 pictures`): the test page's still life and the scene its six screens show are traced once on
 the host and stored in the firmware, not traced on the board as the page prints. The page is
