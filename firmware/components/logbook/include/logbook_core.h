@@ -26,6 +26,7 @@ typedef struct {
     char     reason[48];
     char     task[16];
     uint8_t  core, n;
+    uint32_t ms;
     uint32_t pc[8];
 } lb_crash_t;
 

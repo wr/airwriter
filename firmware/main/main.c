@@ -51,6 +51,7 @@
 #include "esp_heap_caps.h"
 #include "bigmem.h"
 #include "memdiag.h"
+#include "logbook.h"
 #include "esp_app_desc.h"
 #include "esp_partition.h"
 #if CONFIG_BOOTLOADER_RESERVE_RTC_MEM
@@ -102,6 +103,9 @@ static const char *TAG = "airwriter";
 #endif
 // W-1048: an image that is not signed would refuse every update after it
 // (IDF trusts the key that signed the running image), so every build is.
+#if !CONFIG_SPIRAM_ALLOW_NOINIT_SEG_EXTERNAL_MEMORY
+#error "sdkconfig predates W-1136: enable CONFIG_SPIRAM_ALLOW_NOINIT_SEG_EXTERNAL_MEMORY (sdkconfig.defaults.esp32s3)"
+#endif
 #if !CONFIG_SECURE_SIGNED_APPS_NO_SECURE_BOOT || !CONFIG_SECURE_SIGNED_APPS_RSA_SCHEME || \
     !CONFIG_SECURE_SIGNED_ON_UPDATE_NO_SECURE_BOOT || !CONFIG_SECURE_BOOT_BUILD_SIGNED_BINARIES
 #error "sdkconfig predates W-1048: copy the signing options from sdkconfig.defaults"
@@ -172,6 +176,16 @@ static volatile int32_t s_last_job_s = -1;
 static void job_touch(void)
 {
     s_last_job_s = (int32_t)(esp_timer_get_time() / 1000000);
+}
+
+// For the log, which leaves flash alone while a job is on or just ended. Reads the count,
+// never takes the lock: it's a binary semaphore, and a job arriving in that instant would be
+// told the board was busy.
+static int job_busy(void)
+{
+    if (!s_job_lock || uxSemaphoreGetCount(s_job_lock) == 0) return 1;
+    int32_t last = s_last_job_s;
+    return last >= 0 && esp_timer_get_time() / 1000000 - last < 5;
 }
 
 // ---------------------------------------------------------------- raster
@@ -2472,6 +2486,7 @@ static void reset_task(void *arg)
         vTaskDelay(pdMS_TO_TICKS(LG_RESET_FAILED_MS));
         restart_when_released();
     }
+    logbook_clear();
     ESP_LOGW(TAG, "factory reset: settings erased; restarting when the button is let go");
     led_grid_action(LG_ACT_RESET_DONE, 0);
     vTaskDelay(pdMS_TO_TICKS(LG_RESET_DONE_MS));
@@ -3328,6 +3343,8 @@ void app_main(void)
     gpio_set_level(CONFIG_AIRWRITER_LED_DATA_PIN, 0);
     gpio_config(&led_clamp);
 #endif
+    // As early as it can be: everything after this reaches the log (W-1136).
+    logbook_start(job_busy, reset_name(esp_reset_reason()));
     // IO4 runs through R15 to the PIC's RA1, TashTalk's UART receive. Left
     // floating, TashTalk can decode noise as host commands and put garbage
     // on a LocalTalk bus. High is the UART idle level; low would be a break.
@@ -3379,6 +3396,7 @@ void app_main(void)
              reset_name(esp_reset_reason()), (unsigned)esp_get_free_heap_size());
     memdiag_start();                        // W-1094: what holds internal RAM (/api/mem)
     if (bootloader_common_get_rtc_retain_mem_factory_reset_state()) {
+        logbook_clear();
         ESP_LOGW(TAG, "power-up reset by the bootloader: settings erased, known-good firmware");
         s_boot_reset = 1;
     }
@@ -3395,6 +3413,7 @@ void app_main(void)
     esp_read_mac(mac, ESP_MAC_WIFI_STA);
     snprintf(s_suffix, sizeof s_suffix, "%02x%02x", mac[4], mac[5]);
     settings_load(&s_set, s_suffix);
+    logbook_set_names(s_set.ssid, s_set.hostname);
     // W-1088: a board's first boot on the printer list. One set up before
     // (Wi-Fi saved, no list) keeps its host name and DIP rule, and its records
     // are made from what it had; a new one is airwriter-xxxx, port on.
@@ -3402,6 +3421,7 @@ void app_main(void)
     int updated = has_wifi && !printers_stored();
     settings_first_boot(pr_default_host_fmt(has_wifi), s_suffix, pr_default_lt_port(has_wifi));
     settings_load(&s_set, s_suffix);
+    logbook_set_names(s_set.ssid, s_set.hostname);
     printers_cfg_t pc = {
         .epoch = CONFIG_AIRWRITER_LASER_UUID_EPOCH, .updated_board = updated,
         .legacy = { .model = s_set.model, .name = s_set.name, .airprint = s_set.airprint,
@@ -3546,7 +3566,7 @@ void app_main(void)
                            .changed = laser_changed, .relay = laser_relay };
         if (laser_start(&lc) == ESP_OK) printers_apply();
 
-        for (;;) vTaskDelay(pdMS_TO_TICKS(30000));
+        for (;;) { vTaskDelay(pdMS_TO_TICKS(1000)); logbook_tick(); }
     }
 
     ipp_server_cfg_t cfg = {
@@ -3598,5 +3618,5 @@ void app_main(void)
     ESP_LOGI(TAG, "%u bytes free after startup", (unsigned)esp_get_free_heap_size());
     memdiag_mark("ready");
 
-    for (;;) vTaskDelay(pdMS_TO_TICKS(30000));
+    for (;;) { vTaskDelay(pdMS_TO_TICKS(1000)); logbook_tick(); }
 }
