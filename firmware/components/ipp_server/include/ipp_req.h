@@ -31,6 +31,9 @@ typedef struct {
     // print-quality: 3 draft, 4 normal, 5 high. 0 when the client sent none,
     // or sent a value that is not one of these.
     int quality;
+    // The job's number, for the log, which never holds the document's name (W-1136). Set
+    // by ipp_server before a sink's begin.
+    int32_t job_id;
 } ipp_job_opts_t;
 
 typedef struct {

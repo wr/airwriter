@@ -138,6 +138,7 @@ static void reconnect_cb(void *arg)
 
 // Last job, for the status page.
 static char   s_last_job[64];
+static int32_t s_last_job_id;          // what the log calls it: it never holds the name (W-1136)
 static int    s_printing;
 static size_t s_last_pages, s_last_bytes;
 // W-1132: what s_printing is busy with is a print-head cleaning (sw_clean_web to the end of
@@ -708,11 +709,11 @@ static int colour_ok(void *ctx)
         return s_ribbon == IW_RIBBON_COLOUR &&
                colour_offered(PR_KIND_IMAGEWRITER, printers_record_model(s_port_job_record));
     if (g == PR_GATE_OTHER) {
-        ESP_LOGW(TAG, "job \"%s\" aborted: another printer was connected on the printer port",
-                 s_last_job);
+        ESP_LOGW(TAG, "job %d aborted: another printer was connected on the printer port",
+                 (int)s_last_job_id);
         ipp_server_job_message_for(s_port_job_slot, "Another printer was connected. Print again.");
     } else if (!job_stopping()) {
-        ESP_LOGW(TAG, "job \"%s\" aborted: its printer never answered", s_last_job);
+        ESP_LOGW(TAG, "job %d aborted: its printer never answered", (int)s_last_job_id);
     }
     job_pipe_abort();                       // ends the job before any page byte
     return 0;
@@ -852,7 +853,8 @@ static esp_err_t doc_begin(void *ctx, const char *format, const char *name,
     // usually is (W-1042 bench).
     wifi_ap_record_t ap;
     int rssi = esp_wifi_sta_get_ap_info(&ap) == ESP_OK ? ap.rssi : 0;
-    ESP_LOGI(TAG, "job \"%s\" format %s, rssi %d", name,
+    s_last_job_id = opts ? opts->job_id : 0;
+    ESP_LOGI(TAG, "job %d format %s, rssi %d", (int)s_last_job_id,
              format[0] ? format : "(unspecified)", rssi);
     memdiag_mark("job start");          // W-1094
     strncpy(s_last_job, name && name[0] ? name : "Untitled", sizeof s_last_job - 1);
@@ -1051,7 +1053,8 @@ static esp_err_t laser_doc_begin(void *ctx, const char *format, const char *name
     s_laser_owns = 1;                   // doc_claim took s_job_lock
     memdiag_mark("job start");          // W-1094
     s_laser_slot = (int)((intptr_t)ctx >> 8);
-    ESP_LOGI(TAG, "LaserWriter job \"%s\" for printer %d format %s", name, id,
+    s_last_job_id = opts ? opts->job_id : 0;
+    ESP_LOGI(TAG, "LaserWriter job %d for printer %d format %s", (int)s_last_job_id, id,
              format[0] ? format : "(unspecified)");
     strncpy(s_last_job, name && name[0] ? name : "Untitled", sizeof s_last_job - 1);
     s_last_job[sizeof s_last_job - 1] = '\0';
@@ -1171,7 +1174,8 @@ static esp_err_t sw_doc_begin(const char *format, const char *name, const ipp_jo
     // printer on the port's: port_claim let it through, so that record is the one on the port
     // or the port is quiet, and the session's own `?` must name this model before any page byte.
     sw_model_t m = pr_model_to_sw(printers_record_model(s_port_job_record));
-    ESP_LOGI(TAG, "StyleWriter job \"%s\" format %s, quality %d", name,
+    s_last_job_id = opts ? opts->job_id : 0;
+    ESP_LOGI(TAG, "StyleWriter job %d format %s, quality %d", (int)s_last_job_id,
              format[0] ? format : "(unspecified)", opts ? opts->quality : 0);
     memdiag_mark("job start");          // W-1094
     strncpy(s_last_job, name && name[0] ? name : "Untitled", sizeof s_last_job - 1);
@@ -2179,7 +2183,7 @@ static void ps_test_task(void *arg)
     ps_tp_info_t ti = { .printer = name, .product = product, .version = version, .host = host,
                         .board = board };
     int printed = laser_test_page(id, &ti);
-    ESP_LOGI(TAG, "test page to \"%s\": %s", name, printed ? "printed" : "not printed");
+    ESP_LOGI(TAG, "test page to printer %d: %s", id, printed ? "printed" : "not printed");
     printer_state_post(printed ? PS_EV_JOB_DONE : PS_EV_JOB_FAILED);
     s_ps_test_running = 0;
     s_printing = 0;

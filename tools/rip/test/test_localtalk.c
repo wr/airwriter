@@ -336,7 +336,7 @@ static void test_lookup(void)
     };
     CHECK_EQ_INT(sent_len[0], sizeof want);
     CHECK_EQ_MEM(sent[0], want, sizeof want);
-    CHECK(strstr(lastlog, "=:ImageWriter@* from 83:251 -> answered") != NULL);
+    CHECK(strstr(lastlog, "LkUp ImageWriter from 83:251 -> answered") != NULL);
 
     // The same lookup a second later answers again but logs nothing new.
     int logs = nlogs;
@@ -1729,7 +1729,8 @@ static void test_name_answered(void)
     const uint8_t *name = seen_name(&n, 83, at + 20);
     CHECK(name != NULL);
     if (name) CHECK_EQ_MEM(name, SE30, sizeof SE30);
-    CHECK(strstr(lastlog, "node 83 is Wells\xE2\x80\x99s SE/30") != NULL);
+    CHECK(strstr(lastlog, "node 83 gave its name") != NULL);
+    CHECK(strstr(lastlog, "SE/30") == NULL);            // a Mac's name stays out of the log (W-1136)
     CHECK_EQ_INT(nsent, 1);                               // a reply is not answered
 
     // Answered: no retries, only the refresh.

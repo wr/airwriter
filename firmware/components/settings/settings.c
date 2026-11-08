@@ -112,7 +112,7 @@ esp_err_t settings_first_boot(const char *host_fmt, const char *mac_suffix, int 
     if (nvs_get_str(h, "hostname", host, &len) != ESP_OK || !host[0]) {
         snprintf(host, sizeof host, host_fmt, mac_suffix);
         nvs_set_str(h, "hostname", host);
-        ESP_LOGI(TAG, "host name %s", host);
+        ESP_LOGI(TAG, "host name saved");
     }
     uint8_t lt;
     if (lt_port >= 0 && nvs_get_u8(h, "lt_port", &lt) != ESP_OK)
@@ -133,7 +133,7 @@ esp_err_t settings_save_wifi(const char *ssid, const char *pass)
     err = nvs_commit(h);
     nvs_close(h);
     if (err == ESP_OK) s_fresh = FRESH_MAGIC;
-    ESP_LOGI(TAG, "wifi credentials saved for \"%s\"", ssid ? ssid : "");
+    ESP_LOGI(TAG, "wifi credentials saved");
     return err;
 }
 

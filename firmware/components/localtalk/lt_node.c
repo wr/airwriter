@@ -161,9 +161,9 @@ static void on_nbp(lt_node_t *n, const ddp_t *d, uint64_t now)
     memcpy(key + k, q.t.zone, 1 + (size_t)q.t.zone[0]); k += 1 + q.t.zone[0];
     memset(key + k, 0, sizeof key - k);
     if (memcmp(key, n->last_lkup, sizeof key) || now - n->last_lkup_at > 30000) {
-        char o[NBP_NAME_MAX + 1], t[NBP_NAME_MAX + 1], z[NBP_NAME_MAX + 1];
-        say(n, "LkUp %s:%s@%s from %u:%u -> %s", show(q.t.obj, o), show(q.t.type, t),
-            show(q.t.zone, z), d->src.node, q.t.addr.sock, hit ? "answered" : "not us");
+        char t[NBP_NAME_MAX + 1];
+        say(n, "LkUp %s from %u:%u -> %s", show(q.t.type, t), d->src.node, q.t.addr.sock,
+            hit ? "answered" : "not us");
         memcpy(n->last_lkup, key, sizeof key);
         n->last_lkup_at = now;
     }
@@ -911,10 +911,8 @@ static void name_reply(lt_node_t *n, const ddp_t *d, const nbp_t *q, uint64_t no
     n->seen[i].ask_at = now + LT_NAME_REFRESH_MS;
     if (!memcmp(n->names[i], q->t.obj, 1 + (size_t)q->t.obj[0])) return;
     memcpy(n->names[i], q->t.obj, 1 + (size_t)q->t.obj[0]);
-    char u[3 * NBP_NAME_MAX + 1];
-    nbp_utf8(u, sizeof u, q->t.obj);
-    if (n->link == LT_LINK_ELAP) say(n, "%u.%u is %s", net, node, u);
-    else say(n, "node %u is %s", node, u);
+    if (n->link == LT_LINK_ELAP) say(n, "%u.%u gave its name", net, node);
+    else say(n, "node %u gave its name", node);
 }
 
 void lt_node_rx(lt_node_t *n, const uint8_t *f, size_t len, uint64_t now)

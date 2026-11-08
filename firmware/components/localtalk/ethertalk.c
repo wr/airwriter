@@ -948,7 +948,7 @@ esp_err_t ethertalk_start(const ethertalk_cfg_t *cfg)
         s_running = 0;
         return ESP_ERR_NO_MEM;
     }
-    ESP_LOGI(TAG, "EtherTalk as %s:%s@* (radio %s, tunnel %s, zone %s)", cfg->object, cfg->type,
+    ESP_LOGI(TAG, "EtherTalk as a %s (radio %s, tunnel %s, zone %s)", cfg->type,
              s_radio_on ? "on" : "off", s_tunnel_on ? "on" : "off",
              s_zone_on && s_zone_name[0] ? "on" : "off");
     return ESP_OK;

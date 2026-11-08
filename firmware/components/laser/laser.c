@@ -105,7 +105,6 @@ static uint64_t    s_job_t0;
 static int       s_status_id = -1;                  // whose status was asked last
 static int       s_open_id = -1;                    // whom an OpenConn is for
 static int       s_job_id = -1, s_job_slot = -1;    // the job's target and slot
-static char      s_job_name[3 * NBP_NAME_MAX + 1];
 static int       s_look_now;
 
 // The relay (W-1088): whose printer, the Mac's link and node, the job lock.
@@ -329,10 +328,9 @@ static void name_check(int link, const nbp_tuple_t *t)
     int armed = s_core.check_look_at != was;
     unlock();
     if (!armed) return;
-    char n[3 * NBP_NAME_MAX + 1], ty[3 * NBP_NAME_MAX + 1];
-    nbp_utf8(n, sizeof n, t->obj);
+    char ty[3 * NBP_NAME_MAX + 1];
     nbp_utf8(ty, sizeof ty, t->type);
-    ESP_LOGI(TAG, "\"%s\" (%s) checks its name on the %s: looking in %d s", n, ty, link_name(link),
+    ESP_LOGI(TAG, "a %s checks its name on the %s: looking in %d s", ty, link_name(link),
              LW_CHECK_SETTLE_MS / 1000);
 }
 
@@ -844,9 +842,7 @@ static void laser_task(void *arg)
         }
         look_step(&step, &step_at, now);
         if (tell) {
-            char n[3 * NBP_NAME_MAX + 1];
-            nbp_utf8(n, sizeof n, tell_name);
-            ESP_LOGI(TAG, "heard \"%s\" (%s) on the %s", n,
+            ESP_LOGI(TAG, "heard a %s on the %s",
                      tell_type[1] == 'I' ? "ImageWriter" : "LaserWriter", link_name(tell_link));
             if (s_cfg.found) s_cfg.found(tell_link, tell_name, tell_type);
         }
@@ -1003,14 +999,13 @@ static int begin(int id, const char *name, job_pipe_target_t *t, int raw)
         gain = g->gain;
         s_job_id = id;
         s_job_slot = g->slot;
-        snprintf(s_job_name, sizeof s_job_name, "%s", g->name_utf8);
         s_status_id = s_open_id = id;
     }
     s_ps_error[0] = '\0';
     unlock();
     pc.title = name;
     if (!ok || s_use != USE_NONE) {
-        ESP_LOGW(TAG, "job \"%s\" for printer %d: %s", name, id,
+        ESP_LOGW(TAG, "job for printer %d: %s", id,
                  !g ? "not in the list" : link < 0 ? "not heard" : !ok ? "not shared" : "busy");
         if (ok) {
             lock();
@@ -1059,7 +1054,7 @@ static int begin(int id, const char *name, job_pipe_target_t *t, int raw)
     xTaskNotifyGive(s_task);
     int rc = xSemaphoreTake(s_open_sem, pdMS_TO_TICKS(10000)) == pdTRUE ? s_open_rc : -1;
     if (rc) {
-        ESP_LOGE(TAG, "job \"%s\": no connection", name);
+        ESP_LOGE(TAG, "job for printer %d: no connection", id);
         heap_caps_monitor_local_minimum_free_size_stop();
         ps_free(s_ps);
         s_ps = NULL;
@@ -1070,7 +1065,7 @@ static int begin(int id, const char *name, job_pipe_target_t *t, int raw)
         unlock();
         return -1;
     }
-    ESP_LOGI(TAG, "job \"%s\" to %s, %s", name, s_job_name, raw ? "as it is" : pc.binary ? "binary" : "hex");
+    ESP_LOGI(TAG, "job for printer %d, %s", id, raw ? "as it is" : pc.binary ? "binary" : "hex");
     if (raw) return 0;
     // Its own copy, made above: the list may give the targets again while the rip runs.
     *t = (job_pipe_target_t){ .caps = &s_big->job_caps.caps, .stage = &s_stage,

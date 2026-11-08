@@ -364,8 +364,8 @@ esp_err_t localtalk_start(const localtalk_cfg_t *cfg)
 
     if (xTaskCreate(lt_task, "localtalk", 6144, NULL, 4, NULL) != pdPASS) return ESP_ERR_NO_MEM;
     s_running = 1;
-    ESP_LOGI(TAG, "LocalTalk node starting as %s:%s@* (UART%d, tx IO%d rx IO%d cts IO%d, hint %u)",
-             cfg->object, cfg->type, s_uart, cfg->tx_pin, cfg->rx_pin, cfg->cts_pin, hint);
+    ESP_LOGI(TAG, "LocalTalk node starting as a %s (UART%d, tx IO%d rx IO%d cts IO%d, hint %u)",
+             cfg->type, s_uart, cfg->tx_pin, cfg->rx_pin, cfg->cts_pin, hint);
     return ESP_OK;
 }
 
