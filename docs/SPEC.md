@@ -450,7 +450,8 @@ An owner must always be able to get back to a working printer without a computer
 
 **Partitions** (`firmware/partitions.csv`, 8 MB): nvs 24K at 0x9000, otadata at 0xf000,
 phy_init, **known_good** 8K at 0x12000, ota_0 2M at 0x20000, ota_1 2M at 0x220000, ota_2 2M at
-0x420000, storage 1.9M. Three equal app slots, no factory slot.
+0x420000, storage 1.9M (its first 256 KB is the log, 3.17). Three equal app slots, no factory
+slot.
 
 **The known-good slot.** `known_good` holds a 32-byte record (magic, sequence number, slot, the
 first 16 bytes of the image's `app_elf_sha256`, CRC-32) twice, one per 4 KB sector; the valid
@@ -619,7 +620,7 @@ closing, Wi-Fi going, a new IP) ends its job abandoned at once.
 session in internal RAM left Wi-Fi and lwIP starving.
 
 **Web.** `GET /api/lt` (the cable node), `GET /api/et` (both EtherTalk links, the shared
-printer, internal RAM, the log), `GET`/`POST /api/et/settings`
+printer, internal RAM), `GET`/`POST /api/et/settings`
 (`{"radio":true,"tunnel":true,"infinite":true,"zone":"…"}`; 400 for a zone name outside the rule
 above).
 
@@ -1280,6 +1281,56 @@ Apple's StyleWriter adapter (ADSP, not PAP), is not built.
   the session, skipped without them) with `swcaptures-selftest`. `build/swprint` is `swhost`
   for an owner to print a page to a real StyleWriter through a USB serial adapter and send
   the log back (`tools/stylewriter/README.md`).
+
+### 3.17 The log (W-1136)
+
+`W-1136 Settings page: a technical log that survives crashes and being unplugged`. Design:
+`docs/superpowers/specs/2026-11-08-log-design.md`. `logbook_core.c` is the pure core, host-tested
+in `tools/rip/test/test_logbook.c`; `logbook.c` is the ESP-IDF side.
+
+**What goes in.** Every `ESP_LOG` line at info and above, through `esp_log_set_vprintf` and on to
+the console unchanged. The hook runs on whichever task logged. It formats into PSRAM under a lock
+it waits one tick for; if it can't take the lock or can't yield, it drops the line and counts it.
+The Wi-Fi library sends its prefix, message and newline as separate calls, so `lb_feed` joins them
+per task. Each start writes a first line at level `S`, `reset=<reason> version=<v>`, with a run
+number. A panic goes through a wrap of `esp_panic_handler` (`-Wl,--wrap`): the reason, task, core
+and backtrace addresses wait in RTC memory and become one `E sys` line on the next start.
+
+**What's left out.** A name somebody typed or chose, or anything that could locate them, so that a
+log can be posted. No log statement carries a document, person or custom printer name, and a check
+in `make -C tools/rip test` holds the firmware to that. `lb_scrub` replaces the saved network and
+host names in every line with `<network>` and `<host>`, and anything shaped like a MAC address in
+lines tagged `wifi` with `<mac>`, before the line is stored.
+
+**Two layers.** A 32 KB ring in PSRAM (about 400 lines), in the noinit segment with a magic number
+and a check on each boot, survives a panic and a software restart. The first 256 KB of `storage`
+(64 sectors of 4 KB, about 3,000 lines), raw `esp_partition`, survives a power cut. `logbook_tick`
+runs once a second on the main task. With no job it keeps two sectors erased ahead and saves
+what's new. During a job (`job_busy`: the job lock held, or a job within the last 5 s) it saves
+only when a warning or error is waiting, a page write with no erase. The per-request `op … asks`
+line for routine status polls stays in RAM. Flash calls come only from tasks with internal stacks.
+Erase All Settings and the power-up reset clear both layers.
+
+**Reading.** `GET /api/log`: `?n=N` for the newest N, `?after=S` for the lines after sequence
+number S, neither for everything. Plain text: a header `#\t<newest>\t<errors this start>\t<dropped>\n`,
+then `<seq>\t<run>\t<ms>\t<level>\t<tag>\t<text>\n`. A request decides once, when it begins, whether
+it may read flash: not during a job. The job lock is held for moments with nothing printing, so
+asking again partway changes the answer. Flash also stays out of it when the ring holds every line
+wanted, which is every poll of an open screen. `/api/status` carries `log_errors`, the count for
+this start.
+
+**The screen.** **Log** on About, at `/about/log`. Newest line first, each start under a divider,
+at most 500 lines, asking for new lines every second, or every 3 s during a print: a held-open
+response would tie up the web server, which answers one request at a time. Times are `+MM:SS` or
+`+H:MM:SS` since that start, because the board has no clock. The current start's divider shows when
+it began, from the viewer's clock, on screen only. **Copy** (the newest 300 under the filter) and
+**Download** (everything) are oldest first, with a header.
+
+**Bench (rev A, board 1).** A NULL dereference and an abort each left their line with earlier lines
+intact. RAM wiped and restarted lost no lines, and neither did unplugging an idle board. A
+StyleWriter page printed normally with the screen open and a forced flash save each second, with
+`ipp0` at 340 bytes of stack spare, about 80 of them the hook's. Not run: a LaserWriter or LocalTalk
+job with the screen open, or the ImageWriter checker on this build.
 
 ---
 

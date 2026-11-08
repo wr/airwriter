@@ -1,7 +1,8 @@
 # Log — design
 
 `W-1136 Settings page: a technical log that survives crashes and being unplugged`. Agreed with
-Wells in chat on 2026-11-08. Not built.
+Wells in chat on 2026-11-08 and built that day. Amended in place for what the bench and Wells's
+look at it on a board changed. `docs/SPEC.md` §3.17 says what it does.
 
 ## Why
 
@@ -28,7 +29,8 @@ one, and the people those owners ask for help.
 - A plain-language history of jobs.
 - Sending logs anywhere automatically, or any new connection off the board. No syslog, no network
   console.
-- Real clock times. The board has no clock (no SNTP, no time calls anywhere in the firmware).
+- Real clock times on the lines. The board has no clock (no SNTP, no time calls anywhere in the
+  firmware). The one real time is when the current start began, from the viewer's own clock.
 - A debug level, a log level setting or an on/off switch. `CONFIG_LOG_MAXIMUM_LEVEL` is info and
   only three `ESP_LOGD` lines exist, so there is nothing to turn up.
 - Changing what a person with a USB cable sees, other than the name removals below.
@@ -45,18 +47,25 @@ are none. It opens in place the way a printer's details do, with a `‹ About` b
 Chosen by Wells over a sidebar item and over download-only.
 
 **The screen.** At the top: `‹ About`, a **Show** popup (Everything, Warnings and Errors, Errors),
-**Copy** and **Download**. Below, one box of monospaced lines, oldest first, opened scrolled to the
-newest, and updating while it's open. Each line has the time since that start (`hh:mm:ss`), the
-level (`INFO`, `WARN`, `ERROR`), the source and the message. At phone width the time, level and
-source sit on one line with the message wrapping below. It shows the newest 500 lines.
+**Copy** and **Download**. Below, one box of monospaced lines, newest first, updating while it's
+open. There is no auto-scroll: new lines arrive at the top, and someone who has scrolled down
+stays where they are. Wells chose this over oldest first with following, on seeing that one on a
+board. Each line has the time since that start (`+04:53`, `+26:14:32`), the level (`INFO`, `WARN`,
+`ERROR`), the source and the message. At phone width the time, level and source sit on one line
+with the message wrapping below. It shows the newest 500 lines. Under the box, "Times count from
+each start." Wells first read the old `00:14:32` as a clock time.
 
-Each start begins with a divider saying how that start came about, and for the latest one how long
-ago: "This start · after a crash · 2 h 14 min ago", "Earlier start · ended in a crash". A **Get
-Help** link at the foot goes to the wiki's Troubleshooting page, which says where to send a log.
+Each start sits under a divider saying how that start came about, and for the latest one when it
+began: "This start · after a crash · today at 5:46 PM", "Earlier start · ended in a crash". The
+list can begin partway through a start whose first line is gone, which gets a plain "Earlier
+start". Below the box, in About's list style, **Wiki** opens the Troubleshooting page, which says
+where to send a log, and **Report an issue** opens a new GitHub issue.
 
 **Copy** takes what's shown under the current filter, at most the newest 300 lines, plus a header.
 It uses the page's existing copy helper, because a page on plain http gets no clipboard API.
-**Download** saves the whole log with the same header as `airwriter-xxxx-log.txt`.
+**Download** saves the whole log with the same header as `airwriter-xxxx-log.txt`. Both are oldest
+first, how a log file reads, and say "26 h 14 min ago" where the screen gives a time of day: a
+time of day in a posted log gives away a time zone.
 
 The header makes a pasted log stand alone: firmware version and slot, board revision, time on,
 last reset reason, each printer's model and connection, and free memory.
@@ -65,11 +74,16 @@ last reset reason, each printer's model and connection, and free memory.
 can't join Wi-Fi, which is a likely reason to want the log. In the "Couldn't join" state only, the
 Wi-Fi step gets a small **View Log** link to the same screen. Back returns to setup.
 
+**Addresses.** The screen is at `/about/log`, so a reload stays on it. Wells asked for real
+addresses over `#` ones, so every pane has one now (`/about`, `/printers/2`), and an old `#` link
+forwards.
+
 ## What's recorded
 
 Everything that goes through `ESP_LOG` at info and above, including ESP-IDF's own Wi-Fi, mDNS and
 HTTP messages, captured with `esp_log_set_vprintf` and passed on to the console unchanged.
-Messages keep their existing wording.
+Messages keep their existing wording. The Wi-Fi library sends a line in three calls, which the
+capture joins per task.
 
 - **Starts.** Every start writes a first record: firmware version, reset reason, a run number.
 - **Crashes.** One error line from the panic path, with the reason, the task, the core and the
@@ -93,6 +107,7 @@ somebody typed or chose, or anything that could locate them, never reaches the l
 | Wi-Fi network, board's host name | `<network>`, `<host>` |
 | MAC address of the router, or of a phone on the setup network | `<mac>` |
 | A vintage Mac's name, if the AppleTalk event lines carry one | Nothing |
+| A printer's uuid, which holds the board's MAC address | Nothing |
 
 About 30 log statements carry a quoted string or the requesting user; each needs reading. Call
 sites change for the names the firmware passes in. ESP-IDF's Wi-Fi library prints the network name
@@ -108,8 +123,8 @@ stay. No message contains a password today, and that must stay true.
 **RAM.** A 32 KB ring in PSRAM holds every line (about 400) and survives a panic or software
 restart. That needs a `.noinit` placement (`CONFIG_SPIRAM_ALLOW_NOINIT_SEG_EXTERNAL_MEMORY`, off
 today) with a magic number and check on each boot. `CONFIG_SPIRAM_MEMTEST` is on, and ESP-IDF's
-test skips that segment. Whether PSRAM keeps its contents through a panic restart on this module
-needs a bench test. If it doesn't, use a smaller tail in RTC memory.
+test skips that segment. On the bench, PSRAM kept its contents through a panic restart on rev A's
+module.
 
 **Flash.** The first 256 KB of the `storage` partition (1.9 MB, used by nothing: the icons are
 embedded in the app), about 3,000 lines. Raw `esp_partition` access, append-only records, a ring of
@@ -122,9 +137,10 @@ records that for the auto-updater's idle check). On boot, lines from the last st
 still in RAM are saved first. The page sees flash and RAM merged by sequence number.
 
 **What can be lost.** Lines not yet saved when the power is cut, which during a job means that job
-so far. A stuck job followed by someone unplugging the board is a likely real case, so test
-appending warnings and errors straight away to pre-erased flash (a page write, about a millisecond,
-no erase). If that doesn't disturb the printer port or LocalTalk, do it.
+so far. A stuck job followed by someone unplugging the board is a likely real case, so warnings
+and errors are appended straight away to pre-erased flash during a job (`LB_SAVE_DURING_JOB`, a
+page write, about a millisecond, no erase). On the bench a StyleWriter page printed normally with
+one forced every second.
 
 **Erasing.** **Erase All Settings** and the power-up reset clear both layers, and the new log
 starts by saying settings were erased.
@@ -136,9 +152,10 @@ starts by saying settings were erased.
   from `/api/status` and `/api/printers`.
 - `/api/status` gains the error count for this start.
 
-`webui.c` has `max_uri_handlers = 32` and registers 29 routes, so this one leaves two spare. Add it
-to AGENTS.md. While a job runs, `/api/log` answers from RAM only, because reading flash competes
-with the print.
+`webui.c` has `max_uri_handlers = 32` and registers 30 routes, this one among them. While a job
+runs, `/api/log` answers from RAM only, because reading flash competes with the print. A request
+decides that once, when it begins. The screen's once-a-second question never needs flash, because
+RAM holds every line after the last one it has.
 
 LocalTalk and EtherTalk each keep a small ring of event lines (20 and 24), served through `/api/lt`
 and `/api/et`. The page doesn't read them, and every one of those lines will now be in the log, so
@@ -169,19 +186,21 @@ to the log.
   `/_states` at desktop and phone width, light and dark.
 - `idf.py build` clean, then `tools/stackcheck/stackcheck.py`.
 - On a board: a bench-only forced panic shows its reason after the restart; power cut while idle
-  leaves the log whole; an OTA from the current release starts cleanly on the blank region; a
-  LaserWriter print with the screen open finishes normally. The on-board checker test still prints
-  crc32 `8ee84844`, which is an ImageWriter print and needs Wells's yes first.
+  leaves the log whole. Both done. A StyleWriter page took the place of the LaserWriter print with
+  the screen open, because the LaserWriter was offline. The ImageWriter checker wasn't run, because
+  no ImageWriter was connected; the raster path didn't change and `regress` is byte-identical.
 
 ## Who decided what
 
-**Wells:** technical, with the usual levels. A row on About that opens in place.
+**Wells:** technical, with the usual levels. A row on About that opens in place. Newest line on
+top, with no following. Times counted from each start, with the real start time on the current
+one. **Wiki** and **Report an issue** rows in About's style. Real page addresses. A window 860 wide.
 
 **Claude, for Wells to check:** always recording with no settings. Names and MAC addresses left
-out, and the rule behind that. Times since each start rather than real times. The **View Log** link
-on the setup screens. **Get Help** going to the wiki, so where people send logs can change without
-a firmware update. Erasing clears the log. The two AppleTalk event rings removed in favour of the
-log.
+out, and the rule behind that. The **View Log** link on the setup screens. **Wiki** going to the
+Troubleshooting page, so where people send logs can change without a firmware update. Erasing
+clears the log. The two AppleTalk event rings removed in favour of the log. Copy and Download
+staying oldest first. The screen asking every second rather than holding a connection open.
 
 **Left to the builder:** record format, ring sizes within reason, the API's exact shape, how panic
 details are captured, the polling rate, the wording of dividers.

@@ -160,6 +160,14 @@ Traps already explained in a code comment are listed only when the comment is ea
 - **`idf.py flash` over USB leaves the printer not-ready until SELECT is toggled.** The S3 sits
   ~10 s in download mode with IO17 (UART1 TX → U2 DI) floating. Power-cycling does not do it.
   Dev-only; rev B candidate pull-up on IO17.
+- **The Wi-Fi library logs one line in three calls** (prefix, message, newline), each through the
+  `esp_log_set_vprintf` hook. A hook that takes each call for a line records blanks. `lb_feed`
+  joins them per task.
+- **The job lock is held for moments with nothing printing** (the port task's checks on the
+  printer). Reading it twice in one operation can give two answers, so decide once. A request for
+  the newest log lines that asked twice came back nearly empty about one time in ten.
+- **PSRAM keeps its contents through a panic and a software restart** on rev A's N8R2, in the
+  noinit segment (`CONFIG_SPIRAM_ALLOW_NOINIT_SEG_EXTERNAL_MEMORY`). A power cut loses it.
 
 ## Printer self-ID (W-1064)
 
