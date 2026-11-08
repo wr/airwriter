@@ -722,20 +722,27 @@ void sw_session_abort(sw_session_t *s)
     if (s) abort_seq(s);
 }
 
-// A cleaning: busy has CLEAN_START_MS to come on (a printer that never reads busy is taken
-// to have cleaned), then CLEAN_MS to go off (session.rs:902-923).
+// A cleaning is done when `1` says so, either way a printer has been seen to: busy (01) has
+// gone off after reading on (session.rs:902-923, where 08 stays on throughout), or 08, all it
+// was sent is done, has come on after reading off. Board 1's Color StyleWriter 2500
+// (2026-11-07) reads busy from its reset on, cleaning or not, and its 08 comes on 26 s after a
+// setup with P, 3.5 s after one without. A printer that reads busy for none of the first
+// CLEAN_START_MS is taken to have cleaned; CLEAN_MS is the longest a cleaning may take.
 static int wait_cleaned(sw_session_t *s)
 {
     uint32_t t0 = ms(s);
-    int seen_busy = 0;
+    int seen_busy = 0, seen_undone = 0;
     for (;;) {
         if (cancelled(s)) return cancel_out(s);
         uint8_t s1;
         int rc = query(s, '1', &s1);
         if (rc) return rc;
         uint32_t el = (uint32_t)(ms(s) - t0);
-        if (s1 & 0x01) seen_busy = 1;
-        else if (seen_busy || el >= CLEAN_START_MS) return SW_OK;
+        int busy = s1 & 0x01, done = s1 & 0x08;
+        if ((seen_busy && !busy) || (seen_undone && done)) return SW_OK;
+        if (busy) seen_busy = 1;
+        if (!done) seen_undone = 1;
+        if (!seen_busy && el >= CLEAN_START_MS) return SW_OK;
         if (el >= CLEAN_MS) return SW_E_STALL;
         s->o.sleep_ms(s->o.ctx, CLEAN_POLL_MS);
     }

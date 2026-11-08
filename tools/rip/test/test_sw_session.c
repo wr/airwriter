@@ -48,6 +48,8 @@ typedef struct {
     int nwin;
     uint8_t s1, s2;
     uint32_t busy_until, clean_ms;
+    int shows_done;                        // `1` 08 means all it was sent is done, cleaning too (the 2500)
+    uint32_t done_at;                      // when 08 comes on, with shows_done
     int silent;
     uint32_t silent_at;                    // goes silent at this time (0: never)
     uint32_t deaf_until, settle_ms;
@@ -153,6 +155,7 @@ static uint8_t status1(void)
     in_window(&a, &b);
     if (F.stopped) return a;               // neither busy nor done: it has given the page up
     if (now_ms() < F.busy_until) a |= 0x01;
+    if (F.shows_done && now_ms() >= F.done_at) a |= 0x08;
     if (F.page_pending) a |= F.fill > 0 ? 0x01 : 0x08;
     return a;
 }
@@ -181,6 +184,7 @@ static void do_reset(void)
     F.fill = 0;
     F.fill_us = F.us;
     F.page_pending = 0;
+    F.done_at = 0xFFFFFFFFu;
     F.awake = 1;
     F.resets++;
     F.deaf_until = now_ms() + F.settle_ms;
@@ -251,6 +255,7 @@ static void fake_byte(uint8_t b)
             ev('k', b);
             if (F.count_letters && F.nb) count(1);
             if (b == 'P') { F.cleanings++; F.busy_until = t + F.clean_ms; }
+            if (b == 'A') F.done_at = (F.busy_until > t ? F.busy_until : t) + 3500;
             if (b == 'E') F.page_pending = 0;
         }
         break;
@@ -1435,11 +1440,33 @@ static void test_clean(void)
         CHECK_EQ_INT(F.bad, 0);
         CHECK_EQ_INT(F.st[F.nst - 1], SWS_READY);
     }
+    uint32_t t0;
+    // TailTalk's, whose 08 reads on throughout as busy comes and goes: done when busy goes.
+    fake_init(SW_C2200, 1);
+    F.s1 = 0x08;
+    F.clean_ms = 12000;
+    t0 = now_ms();
+    CHECK_EQ_INT(sw_clean(&o, SW_C2200), SW_OK);
+    CHECK(now_ms() - t0 >= 12000 && now_ms() - t0 <= 16000);
+    CHECK(ends_with(F.trace, "E l"));
     // A printer that never reads busy is done after 5 s.
     fake_init(SW_II, 0);
-    uint32_t t0 = now_ms();
+    t0 = now_ms();
     CHECK_EQ_INT(sw_clean(&o, SW_II), SW_OK);
     CHECK(now_ms() - t0 >= 5000 && now_ms() - t0 <= 12000);
+    // Board 1's Color StyleWriter 2500 (2026-11-07) reads `1` 11 from its reset on: busy
+    // whether it cleans or not. Its 08, all it was sent is done, comes on 26 s after a setup
+    // with P, 3.5 s after one without. The cleaning is done when 08 comes on.
+    fake_init(SW_C2500, 1);
+    F.s1 = 0x11;
+    F.shows_done = 1;
+    F.clean_ms = 25000;
+    t0 = now_ms();
+    CHECK_EQ_INT(sw_clean(&o, SW_C2500), SW_OK);
+    CHECK_EQ_INT(F.cleanings, 1);
+    CHECK(now_ms() - t0 >= 27000 && now_ms() - t0 <= 40000);
+    CHECK(ends_with(F.trace, "E l"));
+    CHECK_EQ_INT(F.st[F.nst - 1], SWS_READY);
     // One that stays busy is given 600 s, then reset.
     fake_init(SW_C2200, 1);
     F.clean_ms = 0x7FFFFFFF;

@@ -121,9 +121,10 @@ int sw_ask_status(const sw_ops_t *o, sw_model_t m, sw_state_t *st);
 int sw_ask_cart(const sw_ops_t *o, sw_model_t m);
 
 // One cleaning, as the Clean Print Head key asks: the job's reset and setup with a single
-// `P` in it, then waits for the printer to stop being busy (up to 600 s), then `E` (and `Y`
-// on the 1200) and `l`. SW_E_FAULT with nothing sent for the original, which has none.
-// Otherwise the results of a job's begin, and SW_E_STALL if it is still busy at 600 s.
+// `P` in it, then waits for `1` to say the cleaning is over (busy gone off, or page done come
+// on; up to 600 s), then `E` (and `Y` on the 1200) and `l`. SW_E_FAULT with nothing sent for
+// the original, which has none. Otherwise the results of a job's begin, and SW_E_STALL if it
+// is still cleaning at 600 s.
 int sw_clean(const sw_ops_t *o, sw_model_t m);
 
 // ---- A job

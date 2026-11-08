@@ -5,6 +5,13 @@
 `W-1102 QuickDraw LaserWriters on the printer port (Personal LaserWriter LS/300, Select 300)`.
 Reverses the StyleWriter cut in `2026-08-04-printer-support-scope-design.md`.
 
+**Amended 2026-11-07** after the first cleaning on board 1's Color StyleWriter 2500: it reads
+`1` busy from its reset on, cleaning or not, so a cleaning that waited for busy to go off
+(TailTalk's rule) showed Printing for the full 600 s and then failed, though the head was done
+in 26 s. A cleaning now ends when busy goes off after reading on, or when `1` 08 (all it was
+sent is done) comes on after reading off, whichever is first; the 2500's 08 is off from the
+reset until the cleaning ends (SPEC §3.16, Clean Print Head).
+
 **Amended 2026-11-02** after the first StyleWriter on the bench, a Color StyleWriter 2500 on
 board 1 (rev A; it answered every question with R9 open, first printed with R9 fitted, and on
 2026-11-03 printed the test page with R9 taken off again, so the 2500 does not need R9): a rect is as wide as its rows' whole bytes, not the printable width.

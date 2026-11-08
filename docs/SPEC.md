@@ -1223,15 +1223,17 @@ Apple's StyleWriter adapter (ADSP, not PAP), is not built.
   ticked, a ruler with a tick every 0.1 in and four one-inch squares. 88 KB of working memory
   in gray and 141 KB in colour, in PSRAM. `rip --sw-testpage colour|black --model M --out-sw
   F` makes it on the host; `swfake.py decode` draws it.
-- **Clean Print Head.** One press is one cleaning: the job's reset and setup with a single `P`
-  in it, wait for the printer to stop being busy (up to 600 s), then `E` (`Y` on the 1200) and
-  `l`. The original has none. `POST /api/printers {"id":N,"clean":true}` answers 409 "Connect
-  <name> to the printer port first." when this StyleWriter is not the printer on the port --
-  another port record's printer is (`pr_port_absent`, W-1116) -- 409 when a job holds the lock,
-  502 when the model has no
-  cleaning or the printer is off or holds a
-  fault (it is asked `1` and `2` first, as a cleaning would wait on a fault with the lock held),
-  and otherwise starts it on a task of its own under the job lock. Nothing cleans on its own.
+- **Clean Print Head.** One press is one cleaning: the job's reset and setup with a single `P` in
+  it, wait for `1` to say the cleaning is over (up to 600 s), then `E` (`Y` on the 1200) and `l`.
+  Over is busy (01) gone off after reading on, or page done (08) come on after reading off,
+  whichever comes first: the 2500 reads busy throughout and its 08 is off from the reset until the
+  cleaning ends; a printer that reads busy in none of the first 5 s has cleaned. The original has
+  none. `POST /api/printers {"id":N,"clean":true}` answers 409 "Connect <name> to the printer port
+  first." when this StyleWriter is not the printer on the port -- another port record's printer is
+  (`pr_port_absent`, W-1116) -- 409 when a job holds the lock, 502 when the model has no cleaning
+  or the printer is off or holds a fault (it is asked `1` and `2` first, as a cleaning would wait
+  on a fault with the lock held), and otherwise starts it on a task of its own under the job lock.
+  Nothing cleans on its own.
 - **Web.** The settings page draws a StyleWriter's row and detail (Cartridge, Black or Color;
   Print Head with Clean and the line "Cleaning uses ink."; the Halftone list with Apple, without
   the ImageWriter's 144 × 72 sample; "check paper" without SELECT). `/api/printers` adds
