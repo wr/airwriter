@@ -91,6 +91,12 @@ void ipp_server_set_stopped(const char *reason_or_null, const char *message);
 void ipp_server_set_colour_for(int idx, int on);
 void ipp_server_set_colour(int on);
 
+// What a Mac's Supply Levels panel shows for printer idx (W-1137): what is in it, and the
+// page count its printer gave (0 or less: none). Each starts at none when another printer
+// takes the slot. Any task, after ipp_server_start.
+void ipp_server_set_supply_for(int idx, ipp_supply_t supply);
+void ipp_server_set_pages_for(int idx, int32_t pages);
+
 // AirPrint on or off (W-1079). Off, the printer leaves Bonjour (_ipp and
 // _printer go; _http, the settings page, stays) and refuses Print-Job and
 // Validate-Job as not accepting jobs; on, it comes back under the same

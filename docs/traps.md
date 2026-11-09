@@ -216,6 +216,16 @@ Traps already explained in a code comment are listed only when the comment is ea
 - **Documents over 1 MB bypass the PSRAM buffer** and stream with TCP backpressure (an iPhone
   photo page is 6.4 MB of URF). For those a dropped upload during a pause still looks like a
   healthy pause until paper returns: the client's FIN waits behind its unsent data.
+- **macOS's Supply Levels panel has a fixed layout (W-1137).** A row is a name and, on the
+  right, a bar or macOS's own words: any negative level is "Level is unknown", except -3, "Level
+  is OK". Nothing leaves the right side blank (a bar in the panel's colour draws as an empty
+  outline), and level 0 always gets the warning triangle, whatever the low level. Names are forced
+  to title case and inner capitals lowered ("AirWriter" shows as "Airwriter", "3 of 6" as "3 Of
+  6"), and a newline ends the name. Colours run together stripe one bar. The type and high level
+  change nothing, and a level over 100 is a full bar.
+- **Testing that panel needs an AirPrint queue.** A queue added with `lpadmin -m everywhere` never
+  asks the printer and shows "Information Not Available"; one whose PPD has `*APAirPrint: True`
+  asks when the tab opens, and again only when the sheet is reopened.
 - **`fixtures/checker.urf` cannot show printer desync.** Its 0x00/0xFF bytes print nothing when
   read out of sync; test resync with a mid-gray band.
 

@@ -365,6 +365,11 @@ static int others_apply(void)
         if (err == ESP_OK) {
             lock();
             s_big->now[k] = w;
+            if (w.id && w.kind == PR_KIND_LASERWRITER) {    // W-1137: a Mac's Supply Levels
+                const pr_seen_t *seen = pr_seen_of(s_l, w.id);
+                ipp_server_set_supply_for(k, IPP_SUPPLY_TONER);
+                ipp_server_set_pages_for(k, seen ? seen->pages : 0);
+            }
             unlock();
             changed++;
         } else {
@@ -606,6 +611,9 @@ void printers_at_queried(int id, int ok, const lw_info_t *info, int at_link, uin
     int was = r && r->identified;
     pr_at_queried(s_l, id, ok, info);
     int now = r && pr_get(s_l, id) && pr_get(s_l, id)->identified;
+    if (ok && pages >= 0)           // W-1137: a Mac's Supply Levels
+        for (int k = 0; k < IPP_PRINTERS; k++)
+            if (s_big->now[k].id == id) ipp_server_set_pages_for(k, pages);
     after_change(renamed || now != was);
 }
 

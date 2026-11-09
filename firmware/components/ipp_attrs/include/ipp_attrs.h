@@ -13,6 +13,17 @@
 // With the colour ribbon in (W-1064): 24-bit sRGB pages too.
 #define IPP_URF_STRING_COLOUR IPP_URF_VERSION ",CP1,RS72-144,W8,SRGB24,DM1,IS1,MT1,FN3"
 
+// What is in a printer, as far as the printer has said (W-1137). None of these
+// printers measures its ribbon or ink, so a Mac is told what is installed, never how much.
+typedef enum {
+    IPP_SUPPLY_NONE,            // not known: no row
+    IPP_SUPPLY_BLACK_RIBBON,
+    IPP_SUPPLY_COLOUR_RIBBON,
+    IPP_SUPPLY_BLACK_INK,
+    IPP_SUPPLY_COLOUR_INK,      // a cartridge of black, cyan, magenta and yellow
+    IPP_SUPPLY_TONER,
+} ipp_supply_t;
+
 typedef struct {
     const char *uri;        // ipp://host.local:631/ipp/print
     const char *name;       // queue name shown in the print sheet
@@ -29,6 +40,9 @@ typedef struct {
     uint32_t    uptime_s;
     int         colour;             // the colour ribbon is in: offer colour (W-1064)
     const printer_caps_t *caps;     // NULL: printer_caps_imagewriter (W-1082)
+    // A Mac's Supply Levels panel (W-1137).
+    ipp_supply_t supply;
+    int32_t      pages;             // the printer's own count, named with its toner; 0 none
 } ipp_printer_t;
 
 typedef struct {
@@ -61,8 +75,9 @@ int ipp_names_has(const ipp_names_t *names, const char *name);
 // (RFC 8011 4.2.5.1): the groups 'all', 'printer-description' and
 // 'job-template', explicit names, or 'none'. NULL or an empty list means
 // 'all'. media-col-database is sent only when named: it is large, and
-// IPP Everywhere clients that want it ask. The group delimiter is written
-// only if at least one attribute is.
+// IPP Everywhere clients that want it ask; the marker-* lists likewise, since
+// macOS and CUPS name them and a full answer has no room. The group delimiter
+// is written only if at least one attribute is.
 void ipp_write_printer_attrs(ipp_enc_t *e, const ipp_printer_t *p,
                              const ipp_names_t *requested);
 

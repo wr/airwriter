@@ -102,6 +102,8 @@ typedef struct {
     char            stop_message[256];   // printer-state-message with either reason or busy
     char            job_message[128];    // job-state-message for the job in the slot
     volatile int    colour;              // W-1064: the colour ribbon is in (the port's printer)
+    volatile int    supply;              // W-1137: ipp_supply_t, what its owner last read
+    volatile int32_t pages;              // W-1137: the count its printer gave, 0 none
     int             txt_colour;          // what the TXT record says
     volatile int    airprint;            // advertised and taking jobs: on, and AirPrint on (W-1079)
     int             print_svcs;          // its Bonjour services are registered
@@ -213,6 +215,8 @@ static void fill_printer(const printer_t *p, ipp_printer_t *out)
     out->uptime_s       = uptime_s();
     out->colour         = p->colour;
     out->caps           = p->caps;
+    out->supply         = (ipp_supply_t)p->supply;
+    out->pages          = p->pages;
 }
 
 // `src` and `printer_stopped` are a snapshot taken under s_job_lock; the
@@ -911,6 +915,18 @@ void ipp_server_stop(void)
     mdns_free();
 }
 
+void ipp_server_set_supply_for(int idx, ipp_supply_t supply)
+{
+    if (idx < 0 || idx >= IPP_PRINTERS || !s_p) return;
+    s_p[idx].supply = supply;
+}
+
+void ipp_server_set_pages_for(int idx, int32_t pages)
+{
+    if (idx < 0 || idx >= IPP_PRINTERS || !s_p) return;
+    s_p[idx].pages = pages > 0 ? pages : 0;
+}
+
 void ipp_server_set_colour_for(int idx, int on)
 {
     on = on ? 1 : 0;
@@ -1051,6 +1067,8 @@ esp_err_t ipp_server_set_printer(int idx, const ipp_printer_cfg_t *cfg)
         p->stop_reason = p->note_reason = NULL;
         p->busy = 0;
         p->colour = 0;
+        p->supply = IPP_SUPPLY_NONE;
+        p->pages = 0;
     }
     if (cfg) fill(p, cfg);
     refresh(p);
