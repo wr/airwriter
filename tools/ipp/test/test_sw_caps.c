@@ -32,6 +32,7 @@ static ipp_printer_t printer(sw_model_t m, int colour)
         .uptime_s       = 1,
         .colour         = colour,
         .caps           = sw_caps(m),
+        .supply         = colour ? IPP_SUPPLY_COLOUR_INK : IPP_SUPPLY_BLACK_INK,
     };
     return p;
 }

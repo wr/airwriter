@@ -3263,6 +3263,7 @@ static void port_push_own(int slot, int kind, ps_state_t st)
 static void port_push_offline(int slot, int kind, int model, int say)
 {
     if (!colour_offered(kind, model)) ipp_server_set_colour_for(slot, 0);
+    ipp_server_set_supply_for(slot, IPP_SUPPLY_NONE);
     int taken = say == PR_PORT_SAY_TAKEN;
     if (kind == PR_KIND_STYLEWRITER) {
         sw_ipp_t w = sw_state_ipp(SWS_OFFLINE);
@@ -3270,6 +3271,21 @@ static void port_push_offline(int slot, int kind, int model, int say)
     } else {
         ipp_server_set_stopped_for(slot, taken ? "offline-report" : "other", IW_OFFLINE_WORDS);
     }
+}
+
+// What a Mac's Supply Levels panel says is in the port's printer (W-1137): the ribbon or
+// cartridge last read, while the printer is there. `st` is port_state's: a StyleWriter out of
+// paper or ink is offline by that, but still answers, and its ink row has to say so. An
+// original ImageWriter never says its ribbon, so s_ribbon is another printer's and nothing
+// is claimed.
+static ipp_supply_t port_supply(int kind, int model, ps_state_t st)
+{
+    int gone = kind == PR_KIND_STYLEWRITER ? s_sw_state == SWS_OFFLINE : st == PS_OFFLINE;
+    if (gone || s_ribbon == IW_RIBBON_UNKNOWN) return IPP_SUPPLY_NONE;
+    int colour = s_ribbon == IW_RIBBON_COLOUR && colour_offered(kind, model);
+    if (kind == PR_KIND_STYLEWRITER) return colour ? IPP_SUPPLY_COLOUR_INK : IPP_SUPPLY_BLACK_INK;
+    if (!colour_offered(kind, model)) return IPP_SUPPLY_NONE;
+    return colour ? IPP_SUPPLY_COLOUR_RIBBON : IPP_SUPPLY_BLACK_RIBBON;
 }
 
 // What phones and Macs are told about the printer port: every port record on AirPrint, by
@@ -3288,6 +3304,7 @@ static void port_push(ps_state_t box)
             port_push_own(s->slot, s->kind, st);
             ipp_server_set_colour_for(s->slot, s_ribbon == IW_RIBBON_COLOUR &&
                                                colour_offered(s->kind, s->model));
+            ipp_server_set_supply_for(s->slot, port_supply(s->kind, s->model, st));
         } else {
             port_push_offline(s->slot, s->kind, s->model, s->say);
         }

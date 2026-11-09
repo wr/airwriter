@@ -329,6 +329,30 @@ Otherwise exactly the black-only set. This changes advertised values under one U
 `docs/traps.md` warns against; it is a deliberate first try, and the fallback (a settings switch
 with a second UUID) is in `docs/superpowers/specs/2026-10-17-colour-printing-design.md`.
 
+**Supply Levels (W-1137).** What a Mac shows under Options & Supplies, Supply Levels. When
+the tab opens, macOS asks the printer by name for `marker-names`, `marker-colors`,
+`marker-types`, `marker-levels`, `marker-low-levels` and `marker-high-levels`, and draws one row
+per name. None of these printers measures its ribbon or ink, so a row says what is installed and
+shows full: Color Ribbon (four stripes in one bar, the `#RRGGBB` values run together) or Black
+Ribbon from the ImageWriter's self-ID; Black Ink, or Black, Cyan, Magenta and Yellow Ink, from a
+StyleWriter's cartridge; Toner on a LaserWriter, its name carrying the `pagecount` the printer
+last gave ("Toner, 10,291 Pages Printed"). A row at 10 (`toner-low-warning`) or 0
+(`toner-empty-error`, `marker-supply-empty-error`) is only ever the printer's own report, so the
+panel's warning triangle is true. Nothing known, no cartridge (`marker-supply-missing-error`) or
+a printer showing as Offline sends no rows, and macOS says "Information Not Available". An
+original ImageWriter never says its ribbon, so it has no row.
+
+The six lists go only when named, like `media-col-database`: in a full answer they would take a
+Color StyleWriter past `RESP_MAX`. (`all`, `media-col-database` and all six in one request still
+would, by a few bytes; no client asks for that.) `printer-supply-info-uri`, sent with at least one
+row, is the settings page. On the bench
+HP, macOS copied that attribute into the queue's PPD as `*APSupplies`, and a PPD with that line
+shows the panel's More Info link, so a queue added before this has no link. Not yet seen on an
+AirWriter queue added since.
+
+Wi-Fi, firmware and page-count rows of their own were tried on board 1 and dropped: any bar in
+that panel reads as how much is left, and a row can't leave its right side blank (`docs/traps.md`).
+
 ### 3.6 Raster decode
 
 iOS sends `image/urf`. Support `image/pwg-raster` too — same pixel data, different

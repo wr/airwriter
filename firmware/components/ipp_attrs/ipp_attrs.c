@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "ipp_attrs.h"
+#include <stdio.h>
 #include <string.h>
 
 static const char *const k_ipp_versions[]  = { "1.1", "2.0" };
@@ -174,6 +175,113 @@ static int want(sel_t *s, const char *name, int group)
     return yes;
 }
 
+// A Mac's Supply Levels panel (W-1137): one row for each marker-names value, in the colour
+// and to the level at the same place in the other lists. Colours run together make stripes.
+// Only what is in the printer goes here: any bar in that panel reads as how much is left.
+// macOS warns at or below a row's low level and always at 0, and forces names to title case.
+#define MARKERS_MAX  4              // a colour cartridge's inks
+#define SUPPLY_LOW   10
+#define INK_BLACK    "#1C1C1E"
+#define INK_CYAN     "#0A84C6"
+#define INK_MAGENTA  "#D6187F"
+#define INK_YELLOW   "#FFCC00"
+
+typedef struct {
+    const char *names[MARKERS_MAX], *colours[MARKERS_MAX], *types[MARKERS_MAX];
+    int32_t     levels[MARKERS_MAX], lows[MARKERS_MAX], highs[MARKERS_MAX];
+    size_t      n;
+} markers_t;
+
+static void add_row(markers_t *m, const char *name, const char *colour, const char *type,
+                    int32_t level, int32_t low)
+{
+    if (m->n == MARKERS_MAX) return;
+    m->names[m->n] = name;
+    m->colours[m->n] = colour;
+    m->types[m->n] = type;
+    m->levels[m->n] = level;
+    m->lows[m->n] = low;
+    m->highs[m->n] = 100;
+    m->n++;
+}
+
+// "Toner, 10,291 Pages Printed", or "Toner" with no count from its printer.
+#define TONER_NAME_MAX 36           // the longest count is 13 characters with its commas
+static void toner_name(char out[TONER_NAME_MAX], int32_t pages)
+{
+    if (pages <= 0) {
+        strcpy(out, "Toner");
+        return;
+    }
+    char digits[12];
+    int d = snprintf(digits, sizeof digits, "%ld", (long)pages);
+    size_t o = (size_t)snprintf(out, TONER_NAME_MAX, "Toner, ");
+    for (int i = 0; i < d; i++) {
+        out[o++] = digits[i];
+        if (i != d - 1 && (d - i - 1) % 3 == 0) out[o++] = ',';
+    }
+    strcpy(out + o, " Pages Printed");
+}
+
+// A supply shows as installed, full, until its printer says otherwise. A printer that
+// isn't answering, or has no cartridge, has nothing to show.
+static void add_supplies(markers_t *m, const ipp_printer_t *p, char toner[TONER_NAME_MAX])
+{
+    const char *why = p->state_reason ? p->state_reason : "none";
+    if (!strcmp(why, "offline-report") || !strcmp(why, "marker-supply-missing-error")) return;
+    int32_t level = !strcmp(why, "toner-low-warning") ? SUPPLY_LOW
+                  : !strcmp(why, "toner-empty-error") || !strcmp(why, "marker-supply-empty-error") ? 0
+                  : 100;
+    switch (p->supply) {
+    case IPP_SUPPLY_BLACK_RIBBON:
+        add_row(m, "Black Ribbon", INK_BLACK, "ink-ribbon", level, SUPPLY_LOW);
+        break;
+    case IPP_SUPPLY_COLOUR_RIBBON:
+        add_row(m, "Color Ribbon", INK_YELLOW INK_MAGENTA INK_CYAN INK_BLACK, "ink-ribbon",
+                level, SUPPLY_LOW);
+        break;
+    case IPP_SUPPLY_COLOUR_INK:
+        add_row(m, "Black Ink", INK_BLACK, "ink-cartridge", level, SUPPLY_LOW);
+        add_row(m, "Cyan Ink", INK_CYAN, "ink-cartridge", level, SUPPLY_LOW);
+        add_row(m, "Magenta Ink", INK_MAGENTA, "ink-cartridge", level, SUPPLY_LOW);
+        add_row(m, "Yellow Ink", INK_YELLOW, "ink-cartridge", level, SUPPLY_LOW);
+        break;
+    case IPP_SUPPLY_BLACK_INK:
+        add_row(m, "Black Ink", INK_BLACK, "ink-cartridge", level, SUPPLY_LOW);
+        break;
+    case IPP_SUPPLY_TONER:
+        toner_name(toner, p->pages);
+        add_row(m, toner, INK_BLACK, "toner", level, SUPPLY_LOW);
+        break;
+    case IPP_SUPPLY_NONE:
+        break;
+    }
+}
+
+static void write_markers(sel_t *s, const ipp_printer_t *p)
+{
+    markers_t m = { .n = 0 };
+    char toner[TONER_NAME_MAX];
+    add_supplies(&m, p, toner);
+    if (!m.n) return;
+
+    ipp_enc_t *e = s->e;
+    if (want(s, "marker-names", EXPLICIT))
+        ipp_attr_strs(e, IPP_TAG_NAME, "marker-names", m.names, m.n);
+    if (want(s, "marker-colors", EXPLICIT))
+        ipp_attr_strs(e, IPP_TAG_NAME, "marker-colors", m.colours, m.n);
+    if (want(s, "marker-types", EXPLICIT))
+        ipp_attr_strs(e, IPP_TAG_KEYWORD, "marker-types", m.types, m.n);
+    if (want(s, "marker-levels", EXPLICIT))
+        ipp_attr_ints(e, IPP_TAG_INTEGER, "marker-levels", m.levels, m.n);
+    if (want(s, "marker-low-levels", EXPLICIT))
+        ipp_attr_ints(e, IPP_TAG_INTEGER, "marker-low-levels", m.lows, m.n);
+    if (want(s, "marker-high-levels", EXPLICIT))
+        ipp_attr_ints(e, IPP_TAG_INTEGER, "marker-high-levels", m.highs, m.n);
+    if (want(s, "printer-supply-info-uri", PD))
+        ipp_attr_str(e, IPP_TAG_URI, "printer-supply-info-uri", p->adminurl);
+}
+
 void ipp_write_printer_attrs(ipp_enc_t *e, const ipp_printer_t *p,
                              const ipp_names_t *requested)
 {
@@ -225,6 +333,7 @@ void ipp_write_printer_attrs(ipp_enc_t *e, const ipp_printer_t *p,
         ipp_attr_str(e, IPP_TAG_KEYWORD, "printer-state-reasons", p->state_reason);
     if (p->state_message && p->state_message[0] && W("printer-state-message", PD))
         ipp_attr_str(e, IPP_TAG_TEXT, "printer-state-message", p->state_message);
+    write_markers(&s, p);
     if (W("printer-is-accepting-jobs", PD))
         ipp_attr_bool(e, "printer-is-accepting-jobs", p->accepting_jobs);
     if (W("queued-job-count", PD))
