@@ -339,7 +339,9 @@ static int run_document(work_t *w, int fd, const ipp_req_t *r, hbody_t *body,
     xSemaphoreGive(s_job_lock);
 
     int ok = 1;
-    if (sink->begin && sink->begin(sink->ctx, r->document_format, kept.name, &r->opts) != ESP_OK)
+    ipp_job_opts_t opts = r->opts;
+    opts.job_id = job_id;
+    if (sink->begin && sink->begin(sink->ctx, r->document_format, kept.name, &opts) != ESP_OK)
         ok = 0;
 
     // A sink without claim waits in begin(), and a Cancel-Job in that time
@@ -613,9 +615,9 @@ static int handle_post(work_t *w, int fd, const hreq_t *hr)
     // a job says why only here (W-1044, W-1082 bench).
     char asked[160];
     names_str(&r.requested, asked, sizeof asked);
-    ESP_LOGI(TAG, "op 0x%04x id %u v%u.%u from %s to %s (%d) asks %s", r.op,
+    ESP_LOGI(TAG, "op 0x%04x id %u v%u.%u to %s (%d) asks %s", r.op,
              (unsigned)r.request_id, (unsigned)(r.version >> 8), (unsigned)(r.version & 0xFF),
-             r.requesting_user[0] ? r.requesting_user : "-", hr->uri, idx, asked);
+             hr->uri, idx, asked);
     if (idx < 0) {
         hbody_drain(&body);
         return send_status(w, fd, &r, IPP_STATUS_ERR_NOT_FOUND, hr->keep_alive);
@@ -763,14 +765,14 @@ static esp_err_t add_services(printer_t *p)
     esp_err_t err = mdns_service_add_for_host(p->name, "_ipp", "_tcp", NULL, s_cfg.port,
                                               txt, sizeof txt / sizeof txt[0]);
     if (err != ESP_OK) {
-        ESP_LOGE(TAG, "\"%s\": not advertised (%s)", p->name, esp_err_to_name(err));
+        ESP_LOGE(TAG, "printer %d: not advertised (%s)", (int)(p - s_p), esp_err_to_name(err));
         return err;
     }
     snprintf(p->svc_name, sizeof p->svc_name, "%s", p->name);
     p->print_svcs = 1;
     err = mdns_service_subtype_add_for_host(p->name, "_ipp", "_tcp", NULL, "_universal");
-    if (err != ESP_OK) ESP_LOGE(TAG, "\"%s\": no _universal subtype, iOS will not list it (%s)",
-                                p->name, esp_err_to_name(err));
+    if (err != ESP_OK) ESP_LOGE(TAG, "printer %d: no _universal subtype, iOS will not list it (%s)",
+                                (int)(p - s_p), esp_err_to_name(err));
     if (slot0 && mdns_service_add_for_host(p->name, "_printer", "_tcp", NULL, 515, NULL, 0) != ESP_OK)
         ESP_LOGW(TAG, "no _printer._tcp advertisement");
     return ESP_OK;
@@ -897,7 +899,7 @@ esp_err_t ipp_server_start(const ipp_server_cfg_t *cfg)
     if (err != ESP_OK) return err;
 
     ESP_LOGI(TAG, "listening on port %u", (unsigned)s_cfg.port);
-    if (p->on) ESP_LOGI(TAG, "printer 0 \"%s\" at %s, uuid %s", p->name, p->uri, p->uuid);
+    if (p->on) ESP_LOGI(TAG, "printer 0 at %s", p->uri);
     return ESP_OK;
 }
 
@@ -1053,7 +1055,7 @@ esp_err_t ipp_server_set_printer(int idx, const ipp_printer_cfg_t *cfg)
     if (cfg) fill(p, cfg);
     refresh(p);
     xSemaphoreGive(s_job_lock);
-    if (cfg) ESP_LOGI(TAG, "printer %d \"%s\" at %s, uuid %s", idx, p->name, p->uri, p->uuid);
+    if (cfg) ESP_LOGI(TAG, "printer %d at %s", idx, p->uri);
     else ESP_LOGI(TAG, "printer %d no longer shared", idx);
     return ESP_OK;
 }

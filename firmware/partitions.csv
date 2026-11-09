@@ -16,7 +16,7 @@
 # settings. `known_good` fills part of the gap below the first app slot, and
 # ota_0 is where the factory slot was: `idf.py flash` puts the app there.
 #
-# `storage` holds the printer-icon PNGs the print sheet renders (SPEC.md 3.5).
+# The first 256 KB of `storage` holds the log (SPEC.md 3.17). The rest is unused.
 # Name,     Type, SubType,   Offset,   Size
 nvs,        data, nvs,       0x9000,   0x6000
 otadata,    data, ota,       0xf000,   0x2000

@@ -32,7 +32,6 @@
 
 static const char *TAG = "et";
 
-#define EV_LINES        24
 #define LINE_LEN        100
 #define ZQ_DEPTH        16
 #define WS_MSG_MAX      4096           // one relay message: a 621-byte frame is ~2.5 KB of JSON
@@ -66,7 +65,6 @@ typedef struct {
 // Made by a constructor, before app_main, so every use below finds it.
 typedef struct {
     et_side_t side[3];                        // s_tun, s_zone, s_radio
-    char      ev[EV_LINES][LINE_LEN];         // the log ring, under s_ring_lock
     zframe_t  zone_out;                       // zone_send's, s_lock held
     uint8_t   radio_raw[ELAP_MAX_FRAME + 64]; // ethertalk_radio_input's: lwIP's thread
     zframe_t  radio_in;
@@ -82,7 +80,6 @@ static et_mem_t *s_mem;
 #define s_tun   (s_mem->side[0])
 #define s_zone  (s_mem->side[1])
 #define s_radio (s_mem->side[2])
-#define s_ev    (s_mem->ev)
 
 __attribute__((constructor)) static void et_mem_make(void)
 {
@@ -92,11 +89,9 @@ __attribute__((constructor)) static void et_mem_make(void)
 }
 
 static SemaphoreHandle_t s_lock;           // the links, the settings, the pending flags
-static SemaphoreHandle_t s_ring_lock;      // the log ring alone; never held around a send
 static int        s_running;
 static char       s_obj[NBP_NAME_MAX + 1], s_type[NBP_NAME_MAX + 1];
 static void     (*s_on_event)(lt_event_t ev);
-static unsigned   s_ev_head, s_ev_n;
 
 // Settings, and what the task has yet to act on.
 static int        s_tunnel_on = 1;
@@ -147,13 +142,6 @@ static void note(const char *who, const char *line)
     char l[LINE_LEN];
     snprintf(l, sizeof l, "%s: %s", who, line);
     ESP_LOGI(TAG, "%s", l);
-    if (!s_ring_lock) return;
-    xSemaphoreTake(s_ring_lock, portMAX_DELAY);
-    strncpy(s_ev[s_ev_head], l, LINE_LEN - 1);
-    s_ev[s_ev_head][LINE_LEN - 1] = '\0';
-    s_ev_head = (s_ev_head + 1) % EV_LINES;
-    if (s_ev_n < EV_LINES) s_ev_n++;
-    xSemaphoreGive(s_ring_lock);
 }
 
 static void tun_note(const char *line)  { note("tunnel", line); }
@@ -897,11 +885,10 @@ esp_err_t ethertalk_start(const ethertalk_cfg_t *cfg)
     esp_err_t err = at_printer_init(&cfg->printer);
     if (err != ESP_OK) return err;
     s_lock = xSemaphoreCreateMutex();
-    s_ring_lock = xSemaphoreCreateMutex();
     s_zin = xQueueCreateWithCaps(ZQ_DEPTH, sizeof(zframe_t), MALLOC_CAP_SPIRAM);
     s_zout = xQueueCreateWithCaps(ZQ_DEPTH, sizeof(zframe_t), MALLOC_CAP_SPIRAM);
     s_rin = xQueueCreateWithCaps(ZQ_DEPTH, sizeof(zframe_t), MALLOC_CAP_SPIRAM);
-    if (!s_lock || !s_ring_lock || !s_zin || !s_zout || !s_rin) return ESP_ERR_NO_MEM;
+    if (!s_lock || !s_zin || !s_zout || !s_rin) return ESP_ERR_NO_MEM;
 
     strncpy(s_obj, cfg->object, sizeof s_obj - 1);
     strncpy(s_type, cfg->type, sizeof s_type - 1);
@@ -948,7 +935,7 @@ esp_err_t ethertalk_start(const ethertalk_cfg_t *cfg)
         s_running = 0;
         return ESP_ERR_NO_MEM;
     }
-    ESP_LOGI(TAG, "EtherTalk as %s:%s@* (radio %s, tunnel %s, zone %s)", cfg->object, cfg->type,
+    ESP_LOGI(TAG, "EtherTalk as a %s (radio %s, tunnel %s, zone %s)", cfg->type,
              s_radio_on ? "on" : "off", s_tunnel_on ? "on" : "off",
              s_zone_on && s_zone_name[0] ? "on" : "off");
     return ESP_OK;
@@ -1086,19 +1073,6 @@ void ethertalk_json(char *buf, size_t cap)
         at_printer_json(p, end - p);
         p += strlen(p);
     }
-    if (p < end) p += snprintf(p, end - p, ",\"events\":[");
-    xSemaphoreTake(s_ring_lock, portMAX_DELAY);
-    for (unsigned i = 0; i < s_ev_n && p < end; i++) {
-        unsigned k = (s_ev_head + EV_LINES - s_ev_n + i) % EV_LINES;
-        if (i && p < end) *p++ = ',';
-        if (p < end) *p++ = '"';
-        for (const char *c = s_ev[k]; *c && p < end - 2; c++) {
-            if (*c == '"' || *c == '\\') *p++ = '\\';
-            *p++ = *c;
-        }
-        if (p < end) *p++ = '"';
-    }
-    xSemaphoreGive(s_ring_lock);
     if (p > end) p = end;                          // a cut-short part never runs past buf
-    snprintf(p, buf + cap - p, "]}");
+    snprintf(p, buf + cap - p, "}");
 }

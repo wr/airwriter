@@ -192,26 +192,54 @@
 
     <!-- ── About ─────────────────────────────────────────────── -->
     <section class=pane id=p-about>
-      <div class=hero><i class=awm></i><h2>AirWriter</h2><p>Rev A · Wells Workshop</p></div>
-      <div class=box>
-        <div class=row><span class=txt>Version <span class="mono" id=fw-ver></span></span><span class=val><i class=lamp id=fw-lamp></i><span id=fw-state></span></span><button class=btn type=button id=fw-btn>Check Now</button></div>
-        <div class=row><span class=txt>Update automatically</span><label class=sw><input type=checkbox role=switch id=fwauto aria-label="Update automatically"><span></span></label></div>
-        <div class=row><span class=txt>Install from a file</span><button class=btn type=button id=fw-file>Choose File…</button></div>
+      <div id=ab-home>
+        <div class=hero><i class=awm></i><h2>AirWriter</h2><p id=about-rev>Rev A · Wells Workshop</p></div>
+        <div class=box>
+          <div class=row><span class=txt>Version <span class="mono" id=fw-ver></span></span><span class=val><i class=lamp id=fw-lamp></i><span id=fw-state></span></span><button class=btn type=button id=fw-btn>Check Now</button></div>
+          <div class=row><span class=txt>Update automatically</span><label class=sw><input type=checkbox role=switch id=fwauto aria-label="Update automatically"><span></span></label></div>
+          <div class=row><span class=txt>Install from a file</span><button class=btn type=button id=fw-file>Choose File…</button></div>
+        </div>
+        <div class=box>
+          <div class=row><span class=txt>On for</span><span class=val id=uptime></span></div>
+          <div class=row><span class=txt>Last started</span><span class=val id=reset></span></div>
+          <button class="row link" id=log-row type=button><span class=txt>Log</span><span class=val id=log-val></span><span class=chev aria-hidden=true>›</span></button>
+        </div>
+        <p class=say id=about-say></p>
+        <div class=btnrow><button class="btn danger" type=button data-dlg=d-erase>Erase All Settings…</button><button class=btn type=button data-dlg=d-restart>Restart…</button></div>
+        <div class=grp id=dipgrp><h3>DIP Switches</h3><div class=box><div class=dips id=dips></div><div id=dip-rows></div></div></div>
+        <div class=box>
+          <a class="row link" href="https://github.com/wr/airwriter/wiki/Status-Lights" target=_blank rel=noopener><span class=txt>Status lights</span><span class=out aria-hidden=true>↗</span></a>
+          <a class="row link" href="https://github.com/wr/airwriter/wiki/Troubleshooting" target=_blank rel=noopener><span class=txt>Troubleshooting</span><span class=out aria-hidden=true>↗</span></a>
+          <a class="row link" href="https://github.com/wr/airwriter/wiki" target=_blank rel=noopener><span class=txt>Wiki</span><span class=out aria-hidden=true>↗</span></a>
+          <a class="row link" href="https://github.com/wr/airwriter" target=_blank rel=noopener><span class=txt>Source code</span><span class=out aria-hidden=true>↗</span></a>
+        </div>
+        <div class=mark><a href="https://wells.ee" target=_blank rel=noopener aria-label="Made by Wells Workshop">{{ww-logo}}Wells Workshop</a></div>
       </div>
-      <div class=box>
-        <div class=row><span class=txt>On for</span><span class=val id=uptime></span></div>
-        <div class=row><span class=txt>Last started</span><span class=val id=reset></span></div>
+      <div id=ab-log class=hide>
+        <button class="btn back2" type=button id=ab-back>‹ About</button>
+        <div class=logbar>
+          <label for=log-show>Show</label>
+          <select class=pop id=log-show>
+            <option value=all>Everything</option>
+            <option value=w>Warnings and Errors</option>
+            <option value=e>Errors</option>
+          </select>
+          <span class=sp></span>
+          <button class=btn type=button id=log-copy>Copy</button>
+          <button class=btn type=button id=log-dl>Download</button>
+        </div>
+        <div class="box logbox" id=log-box data-show=all>
+          <p class=empty id=log-empty></p>
+          <p class="empty hide" id=log-drop></p>
+        </div>
+        <p class=say id=log-say></p>
+        <p class=foot>Times count from each start.</p>
+        <div class=box>
+          <a class="row link" href="https://github.com/wr/airwriter/wiki/Troubleshooting" target=_blank rel=noopener><span class=txt>Wiki</span><span class=out aria-hidden=true>↗</span></a>
+          <a class="row link" href="https://github.com/wr/airwriter/issues/new" target=_blank rel=noopener><span class=txt>Report an issue</span><span class=out aria-hidden=true>↗</span></a>
+        </div>
+        <textarea id=log-buf tabindex=-1 aria-hidden=true readonly></textarea>
       </div>
-      <p class=say id=about-say></p>
-      <div class=btnrow><button class="btn danger" type=button data-dlg=d-erase>Erase All Settings…</button><button class=btn type=button data-dlg=d-restart>Restart…</button></div>
-      <div class=grp id=dipgrp><h3>DIP Switches</h3><div class=box><div class=dips id=dips></div><div id=dip-rows></div></div></div>
-      <div class=box>
-        <a class="row link" href="https://github.com/wr/airwriter/wiki/Status-Lights" target=_blank rel=noopener><span class=txt>Status lights</span><span class=out aria-hidden=true>↗</span></a>
-        <a class="row link" href="https://github.com/wr/airwriter/wiki/Troubleshooting" target=_blank rel=noopener><span class=txt>Troubleshooting</span><span class=out aria-hidden=true>↗</span></a>
-        <a class="row link" href="https://github.com/wr/airwriter/wiki" target=_blank rel=noopener><span class=txt>Wiki</span><span class=out aria-hidden=true>↗</span></a>
-        <a class="row link" href="https://github.com/wr/airwriter" target=_blank rel=noopener><span class=txt>Source code</span><span class=out aria-hidden=true>↗</span></a>
-      </div>
-      <div class=mark><a href="https://wells.ee" target=_blank rel=noopener aria-label="Made by Wells Workshop">{{ww-logo}}Wells Workshop</a></div>
     </section>
   </main>
 </div>
@@ -288,6 +316,7 @@
   <div class="box nets" id=nets></div>
   <div class=hide id=joinform><input class="fld hide" id=nm placeholder="Network name" autocomplete=off autocapitalize=off spellcheck=false maxlength=32 aria-label="Network name"><input class=fld type=password id=pw placeholder=Password autocomplete=off maxlength=64 aria-label=Password></div>
   <p class=say id=net-say></p>
+  <button class="btn back2 hide" type=button id=su-log>View Log</button>
   <div class=btnrow><button class=btn type=button id=rescan>Scan Again</button><button class=btn type=button data-close>Cancel</button><button class="btn primary" type=button id=join disabled>Join</button></div>
 </div></dialog>
 

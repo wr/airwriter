@@ -51,6 +51,7 @@
 #include "esp_heap_caps.h"
 #include "bigmem.h"
 #include "memdiag.h"
+#include "logbook.h"
 #include "esp_app_desc.h"
 #include "esp_partition.h"
 #if CONFIG_BOOTLOADER_RESERVE_RTC_MEM
@@ -102,6 +103,9 @@ static const char *TAG = "airwriter";
 #endif
 // W-1048: an image that is not signed would refuse every update after it
 // (IDF trusts the key that signed the running image), so every build is.
+#if !CONFIG_SPIRAM_ALLOW_NOINIT_SEG_EXTERNAL_MEMORY
+#error "sdkconfig predates W-1136: enable CONFIG_SPIRAM_ALLOW_NOINIT_SEG_EXTERNAL_MEMORY (sdkconfig.defaults.esp32s3)"
+#endif
 #if !CONFIG_SECURE_SIGNED_APPS_NO_SECURE_BOOT || !CONFIG_SECURE_SIGNED_APPS_RSA_SCHEME || \
     !CONFIG_SECURE_SIGNED_ON_UPDATE_NO_SECURE_BOOT || !CONFIG_SECURE_BOOT_BUILD_SIGNED_BINARIES
 #error "sdkconfig predates W-1048: copy the signing options from sdkconfig.defaults"
@@ -134,6 +138,7 @@ static void reconnect_cb(void *arg)
 
 // Last job, for the status page.
 static char   s_last_job[64];
+static int32_t s_last_job_id;          // what the log calls it: it never holds the name (W-1136)
 static int    s_printing;
 static size_t s_last_pages, s_last_bytes;
 // W-1132: what s_printing is busy with is a print-head cleaning (sw_clean_web to the end of
@@ -172,6 +177,16 @@ static volatile int32_t s_last_job_s = -1;
 static void job_touch(void)
 {
     s_last_job_s = (int32_t)(esp_timer_get_time() / 1000000);
+}
+
+// For the log, which leaves flash alone while a job is on or just ended. Reads the count,
+// never takes the lock: it's a binary semaphore, and a job arriving in that instant would be
+// told the board was busy.
+static int job_busy(void)
+{
+    if (!s_job_lock || uxSemaphoreGetCount(s_job_lock) == 0) return 1;
+    int32_t last = s_last_job_s;
+    return last >= 0 && esp_timer_get_time() / 1000000 - last < 5;
 }
 
 // ---------------------------------------------------------------- raster
@@ -694,11 +709,11 @@ static int colour_ok(void *ctx)
         return s_ribbon == IW_RIBBON_COLOUR &&
                colour_offered(PR_KIND_IMAGEWRITER, printers_record_model(s_port_job_record));
     if (g == PR_GATE_OTHER) {
-        ESP_LOGW(TAG, "job \"%s\" aborted: another printer was connected on the printer port",
-                 s_last_job);
+        ESP_LOGW(TAG, "job %d aborted: another printer was connected on the printer port",
+                 (int)s_last_job_id);
         ipp_server_job_message_for(s_port_job_slot, "Another printer was connected. Print again.");
     } else if (!job_stopping()) {
-        ESP_LOGW(TAG, "job \"%s\" aborted: its printer never answered", s_last_job);
+        ESP_LOGW(TAG, "job %d aborted: its printer never answered", (int)s_last_job_id);
     }
     job_pipe_abort();                       // ends the job before any page byte
     return 0;
@@ -838,7 +853,8 @@ static esp_err_t doc_begin(void *ctx, const char *format, const char *name,
     // usually is (W-1042 bench).
     wifi_ap_record_t ap;
     int rssi = esp_wifi_sta_get_ap_info(&ap) == ESP_OK ? ap.rssi : 0;
-    ESP_LOGI(TAG, "job \"%s\" format %s, rssi %d", name,
+    s_last_job_id = opts ? opts->job_id : 0;
+    ESP_LOGI(TAG, "job %d format %s, rssi %d", (int)s_last_job_id,
              format[0] ? format : "(unspecified)", rssi);
     memdiag_mark("job start");          // W-1094
     strncpy(s_last_job, name && name[0] ? name : "Untitled", sizeof s_last_job - 1);
@@ -1037,7 +1053,8 @@ static esp_err_t laser_doc_begin(void *ctx, const char *format, const char *name
     s_laser_owns = 1;                   // doc_claim took s_job_lock
     memdiag_mark("job start");          // W-1094
     s_laser_slot = (int)((intptr_t)ctx >> 8);
-    ESP_LOGI(TAG, "LaserWriter job \"%s\" for printer %d format %s", name, id,
+    s_last_job_id = opts ? opts->job_id : 0;
+    ESP_LOGI(TAG, "LaserWriter job %d for printer %d format %s", (int)s_last_job_id, id,
              format[0] ? format : "(unspecified)");
     strncpy(s_last_job, name && name[0] ? name : "Untitled", sizeof s_last_job - 1);
     s_last_job[sizeof s_last_job - 1] = '\0';
@@ -1157,7 +1174,8 @@ static esp_err_t sw_doc_begin(const char *format, const char *name, const ipp_jo
     // printer on the port's: port_claim let it through, so that record is the one on the port
     // or the port is quiet, and the session's own `?` must name this model before any page byte.
     sw_model_t m = pr_model_to_sw(printers_record_model(s_port_job_record));
-    ESP_LOGI(TAG, "StyleWriter job \"%s\" format %s, quality %d", name,
+    s_last_job_id = opts ? opts->job_id : 0;
+    ESP_LOGI(TAG, "StyleWriter job %d format %s, quality %d", (int)s_last_job_id,
              format[0] ? format : "(unspecified)", opts ? opts->quality : 0);
     memdiag_mark("job start");          // W-1094
     strncpy(s_last_job, name && name[0] ? name : "Untitled", sizeof s_last_job - 1);
@@ -2165,7 +2183,7 @@ static void ps_test_task(void *arg)
     ps_tp_info_t ti = { .printer = name, .product = product, .version = version, .host = host,
                         .board = board };
     int printed = laser_test_page(id, &ti);
-    ESP_LOGI(TAG, "test page to \"%s\": %s", name, printed ? "printed" : "not printed");
+    ESP_LOGI(TAG, "test page to printer %d: %s", id, printed ? "printed" : "not printed");
     printer_state_post(printed ? PS_EV_JOB_DONE : PS_EV_JOB_FAILED);
     s_ps_test_running = 0;
     s_printing = 0;
@@ -2472,6 +2490,7 @@ static void reset_task(void *arg)
         vTaskDelay(pdMS_TO_TICKS(LG_RESET_FAILED_MS));
         restart_when_released();
     }
+    logbook_clear();
     ESP_LOGW(TAG, "factory reset: settings erased; restarting when the button is let go");
     led_grid_action(LG_ACT_RESET_DONE, 0);
     vTaskDelay(pdMS_TO_TICKS(LG_RESET_DONE_MS));
@@ -2831,7 +2850,7 @@ static void status_json(void *ctx, char *buf, size_t cap)
         "\"queue\":\"%s\",\"host\":\"%s.local\",\"ip\":\"%s\","
         "\"ssid\":\"%s\",\"dither\":\"%s\",\"gain\":%u,\"top_margin\":%d,\"signal\":\"%s\","
         "\"channel\":\"%s\",\"security\":\"%s\",\"uri\":\"%s\","
-        "\"uptime\":\"%uh %02um\",\"reset\":\"%s\",\"version\":\"%s\",\"heap\":\"%u KB\","
+        "\"uptime\":\"%uh %02um\",\"reset\":\"%s\",\"version\":\"%s\",\"heap\":\"%u KB\",\"log_errors\":%u,"
         "\"slot\":\"%s\",\"trial\":%s,\"rolled_back\":\"%s\","
         "\"known_good\":\"%s\",\"known_good_version\":\"%s\","
         "\"model\":\"%s\",\"pic\":%s,"
@@ -2859,6 +2878,7 @@ static void status_json(void *ctx, char *buf, size_t cap)
         s_ap_mode ? "" : json_esc(e_uri, sizeof e_uri, ipp_server_uri()),
         (unsigned)(up / 3600), (unsigned)((up / 60) % 60),
         reset_name(esp_reset_reason()), app->version, (unsigned)(esp_get_free_heap_size() / 1024),
+        logbook_errors(),
         ota_health_slot(), ota_health_on_trial() ? "true" : "false", ota_health_rolled_back(),
         ota_health_known_good(), ota_health_known_good_version(), model,
         pic_prog_available() ? "true" : "false",
@@ -3328,6 +3348,8 @@ void app_main(void)
     gpio_set_level(CONFIG_AIRWRITER_LED_DATA_PIN, 0);
     gpio_config(&led_clamp);
 #endif
+    // As early as it can be: everything after this reaches the log (W-1136).
+    logbook_start(job_busy, reset_name(esp_reset_reason()));
     // IO4 runs through R15 to the PIC's RA1, TashTalk's UART receive. Left
     // floating, TashTalk can decode noise as host commands and put garbage
     // on a LocalTalk bus. High is the UART idle level; low would be a break.
@@ -3379,6 +3401,7 @@ void app_main(void)
              reset_name(esp_reset_reason()), (unsigned)esp_get_free_heap_size());
     memdiag_start();                        // W-1094: what holds internal RAM (/api/mem)
     if (bootloader_common_get_rtc_retain_mem_factory_reset_state()) {
+        logbook_clear();
         ESP_LOGW(TAG, "power-up reset by the bootloader: settings erased, known-good firmware");
         s_boot_reset = 1;
     }
@@ -3395,6 +3418,7 @@ void app_main(void)
     esp_read_mac(mac, ESP_MAC_WIFI_STA);
     snprintf(s_suffix, sizeof s_suffix, "%02x%02x", mac[4], mac[5]);
     settings_load(&s_set, s_suffix);
+    logbook_set_names(s_set.ssid, s_set.hostname);
     // W-1088: a board's first boot on the printer list. One set up before
     // (Wi-Fi saved, no list) keeps its host name and DIP rule, and its records
     // are made from what it had; a new one is airwriter-xxxx, port on.
@@ -3402,6 +3426,7 @@ void app_main(void)
     int updated = has_wifi && !printers_stored();
     settings_first_boot(pr_default_host_fmt(has_wifi), s_suffix, pr_default_lt_port(has_wifi));
     settings_load(&s_set, s_suffix);
+    logbook_set_names(s_set.ssid, s_set.hostname);
     printers_cfg_t pc = {
         .epoch = CONFIG_AIRWRITER_LASER_UUID_EPOCH, .updated_board = updated,
         .legacy = { .model = s_set.model, .name = s_set.name, .airprint = s_set.airprint,
@@ -3546,7 +3571,7 @@ void app_main(void)
                            .changed = laser_changed, .relay = laser_relay };
         if (laser_start(&lc) == ESP_OK) printers_apply();
 
-        for (;;) vTaskDelay(pdMS_TO_TICKS(30000));
+        for (;;) { vTaskDelay(pdMS_TO_TICKS(1000)); logbook_tick(); }
     }
 
     ipp_server_cfg_t cfg = {
@@ -3598,5 +3623,5 @@ void app_main(void)
     ESP_LOGI(TAG, "%u bytes free after startup", (unsigned)esp_get_free_heap_size());
     memdiag_mark("ready");
 
-    for (;;) vTaskDelay(pdMS_TO_TICKS(30000));
+    for (;;) { vTaskDelay(pdMS_TO_TICKS(1000)); logbook_tick(); }
 }

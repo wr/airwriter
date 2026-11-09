@@ -136,7 +136,7 @@ static void pipe_task(void *arg)
     urf_t u;
     int rc = urf_open(&u, ring_read, NULL);
     if (rc != URF_OK) {
-        ESP_LOGE(TAG, "\"%s\": not a URF stream (%d)%s", s_name, rc,
+        ESP_LOGE(TAG, "not a URF stream (%d)%s", rc,
                  u.is_pwg ? " -- looks like PWG raster, which is not supported" : "");
         s_st.rc = rc;
     } else {

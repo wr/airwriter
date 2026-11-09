@@ -79,15 +79,18 @@ Where things are (`firmware/components/` unless a path is given):
 | LaserWriters | `laser`, `ps_page` | SPEC §3.14 |
 | The printer list, what the port asks | `printers` (`port_policy.c`) | SPEC §3.15, port-printers design |
 | StyleWriters | `stylewriter` | SPEC §3.16, StyleWriters design |
+| The log | `logbook` | SPEC §3.17, log design |
 | Status panel | `led_grid`; `tools/lights` renders every effect | status-language design |
 | Test page | `testpage` | test-page design |
 | Cable test, TashTalk flashing | `cable_test`, `pic_prog` | |
 | Settings page | `webui`; sources in `tools/webui` | settings-redesign design |
 
 The web UI and API are on port 80: `/api/status`, `/api/general` (settings), `/update` (OTA
-upload), `/api/update` (GitHub releases), `/api/printers`, `/api/lt`, `/api/et`, `/api/laser`,
-`/api/cable`, `/api/test`, `/api/restart`, `/api/erase`, `/api/localtalk/flash`, `/api/mem` and
-`/api/panel` (the LED frame: 37 × RGB, little-endian 8.8). Two settings have no control on the
+upload), `/api/update` (GitHub releases), `/api/printers`, `/api/lt`, `/api/et`, `/api/log`,
+`/api/laser`, `/api/cable`, `/api/test`, `/api/restart`, `/api/erase`, `/api/localtalk/flash`,
+`/api/mem` and `/api/panel` (the LED frame: 37 × RGB, little-endian 8.8). The page's own addresses
+(`/about`, `/about/log`, `/printers/2`) are listed in `webui_paths.h` and, for the preview,
+`tools/webui/preview.py`. Two settings have no control on the
 page: Top margin (`{"top_margin":N}`, 1/144 in, -216 to 144, default -144) and dot gain
 (`{"gain":N}`, 0–45, default 0). A board with no Wi-Fi credentials runs an open setup network,
 `AirWriter-xxxx`, at http://192.168.4.1/.
@@ -143,7 +146,8 @@ page: Top margin (`{"top_margin":N}`, 1/144 in, -216 to 144, default -144) and d
   `firmware/keys/airwriter-release.pub.pem`.
 - `firmware/sdkconfig` is gitignored and holds the Wi-Fi credentials (menuconfig, AirWriter
   menu); NVS namespace `wifi` overrides it. `sdkconfig.defaults{,.esp32s3}` only seed a new one;
-  main.c refuses to build an sdkconfig without rollback, IDF's own factory reset, or signing.
+  main.c refuses to build an sdkconfig without rollback, IDF's own factory reset, signing, or
+  the PSRAM noinit segment the log needs.
 - **Enclosure:** build123d; `enclosure/build.sh` runs the tests then writes `out/*.{step,stl}`.
   The lattice's part clearances come from kicad-cli's STEP export, so the build needs kicad-cli.
   `enclosure/tools/render.py` (PNG views) and `enclosure/tools/coupon.py` (fit-test cut-outs)
@@ -186,6 +190,10 @@ page: Top margin (`{"top_margin":N}`, 1/144 in, -216 to 144, default -144) and d
   at desktop and phone width, light and dark, before a change to the page goes to a board. Its
   `/api/panel` plays `tools/lights`' scene frames for each state's `ps` (it builds them with
   `make`; without a C compiler the dots show unlit).
+- **Log:** `make -C tools/rip test` holds the rings, the reader and the name removal, and fails
+  if a log statement carries a document or person's name. On a board, `GET /api/log?n=500` after a
+  restart or a power cut: the sequence numbers carry on across it, and repeated answers are the
+  same size.
 - **On a board:** with Top margin at 0 (`POST /api/general {"top_margin":0}`), an `ipptool`
   Print-Job of `fixtures/checker.urf` prints crc32 `8ee84844` (2672 bytes, the same as
   `checker.expected.bin`). At the default (-1 in) the checker, which sits in the page's top

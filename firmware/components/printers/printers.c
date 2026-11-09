@@ -448,8 +448,8 @@ static void migrate(pr_legacy_t *o)
     }
     pr_migrate(s_l, o);
     for (int i = 0; i < s_l->n; i++)
-        ESP_LOGI(TAG, "carried over: %s \"%s\" (%s), %s", pr_kind_name(s_l->r[i].kind),
-                 s_l->r[i].name, pr_where_name(s_l->r[i].where),
+        ESP_LOGI(TAG, "carried over: printer %d, %s (%s), %s", s_l->r[i].id,
+                 pr_kind_name(s_l->r[i].kind), pr_where_name(s_l->r[i].where),
                  s_l->r[i].shared ? "shared" : "not shared");
     free(ls);
 }
@@ -552,7 +552,7 @@ int printers_port_seen(int iw_model, int ready)
     int moved = mode_of() != before || cur_id() != before_id;
     if (moved) {
         const pr_rec_t *p = pr_port_current(s_l);
-        if (p) ESP_LOGI(TAG, "the port: %s \"%s\"", pr_kind_name(p->kind), p->name);
+        if (p) ESP_LOGI(TAG, "the port: printer %d, %s", p->id, pr_kind_name(p->kind));
     }
     after_change(moved);
     return r;
@@ -569,7 +569,7 @@ int printers_port_seen_sw(sw_model_t m)
     int moved = mode_of() != before || cur_id() != before_id;
     if (moved) {
         const pr_rec_t *p = pr_port_current(s_l);
-        if (p) ESP_LOGI(TAG, "the port: %s \"%s\"", pr_kind_name(p->kind), p->name);
+        if (p) ESP_LOGI(TAG, "the port: printer %d, %s", p->id, pr_kind_name(p->kind));
     }
     after_change(moved);
     return r;
@@ -582,8 +582,7 @@ void printers_at_seen(int at_link, const uint8_t *name, const uint8_t *type)
     int before = s_l->n;
     int id = pr_at_seen(s_l, where_of(at_link), name, type, 0);
     int added = s_l->n != before;
-    if (added) ESP_LOGI(TAG, "found: %s \"%s\"", pr_kind_name(pr_get(s_l, id)->kind),
-                        pr_get(s_l, id)->name);
+    if (added) ESP_LOGI(TAG, "found: printer %d, %s", id, pr_kind_name(pr_get(s_l, id)->kind));
     after_change(added);
 }
 
@@ -597,8 +596,8 @@ void printers_at_queried(int id, int ok, const lw_info_t *info, int at_link, uin
         live_fill();
         int to = pr_at_answered(s_l, id, where_of(at_link), net, node, pages, info, s_live);
         if (to >= 0 && to != id) {
-            ESP_LOGI(TAG, "printer %d is printer %d renamed: \"%s\", at %u.%u, %ld pages", id, to,
-                     pr_get(s_l, to)->name, (unsigned)net, (unsigned)node, (long)pages);
+            ESP_LOGI(TAG, "printer %d is printer %d renamed, at %u.%u, %ld pages", id, to,
+                     (unsigned)net, (unsigned)node, (long)pages);
             id = to;
             renamed = 1;
         }
@@ -843,7 +842,7 @@ void printers_port_set_sw_model(int id, sw_model_t m)
     // person asked, so the page and AirPrint are refreshed whether or not the model changed.
     pr_port_sw_found(s_l, id, pm);
     const pr_rec_t *p = pr_port_current(s_l);
-    if (p) ESP_LOGI(TAG, "the port: %s \"%s\"", pr_kind_name(p->kind), p->name);
+    if (p) ESP_LOGI(TAG, "the port: printer %d, %s", p->id, pr_kind_name(p->kind));
     after_change(1);
 }
 

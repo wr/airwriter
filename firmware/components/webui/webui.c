@@ -1,10 +1,12 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "webui.h"
+#include "webui_paths.h"
 #include "esp_heap_caps.h"
 #include "webui_page.h"
 #include "settings.h"
 #include "fw_update.h"
 #include "memdiag.h"
+#include "logbook.h"
 
 #include <string.h>
 #include <limits.h>
@@ -117,6 +119,43 @@ static esp_err_t panel_get(httpd_req_t *req)
         for (int c = 0; c < 3; c++) { *p++ = f[i][c] & 0xff; *p++ = f[i][c] >> 8; }
     httpd_resp_set_type(req, "application/octet-stream");
     return httpd_resp_send(req, (const char *)b, sizeof b);
+}
+
+// The log (W-1136): after=N the lines after N, n=M the newest M, neither all of them. Text,
+// not JSON: "#\t<newest>\t<errors>\t<dropped>\n", then lb_wire's lines. A 1 KB chunk at a
+// time, so the whole log never sits in memory.
+static esp_err_t log_get(httpd_req_t *req)
+{
+    enum { CHUNK = 1024 };
+    static char *buf;
+    static char *line_mem;
+    char *b = psram_buf(&buf, CHUNK);
+    lb_line_t *line = (lb_line_t *)psram_buf(&line_mem, sizeof(lb_line_t));
+    if (!b || !line) return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "no memory");
+
+    uint32_t after = 0;
+    unsigned n = 0;
+    char q[48], v[16];
+    if (httpd_req_get_url_query_str(req, q, sizeof q) == ESP_OK) {
+        if (httpd_query_key_value(q, "after", v, sizeof v) == ESP_OK) after = strtoul(v, NULL, 10);
+        if (httpd_query_key_value(q, "n", v, sizeof v) == ESP_OK) n = strtoul(v, NULL, 10);
+    }
+
+    httpd_resp_set_type(req, "text/plain; charset=utf-8");
+    int len = snprintf(b, CHUNK, "#\t%lu\t%u\t%d\n", (unsigned long)logbook_newest(),
+                       logbook_errors(), logbook_dropped());
+    logbook_read_begin(after, n);
+    while (logbook_read_next(line)) {
+        size_t w = lb_wire(line, b + len, CHUNK - len);
+        if (!w) {
+            if (httpd_resp_send_chunk(req, b, len) != ESP_OK) return ESP_FAIL;
+            len = 0;
+            w = lb_wire(line, b, CHUNK);
+        }
+        len += (int)w;
+    }
+    if (len && httpd_resp_send_chunk(req, b, len) != ESP_OK) return ESP_FAIL;
+    return httpd_resp_send_chunk(req, NULL, 0);
 }
 
 static esp_err_t lt_get(httpd_req_t *req)
@@ -608,11 +647,11 @@ static esp_err_t cable_post(httpd_req_t *req)
     return httpd_resp_sendstr(req, out);
 }
 
-// In captive mode every unknown path serves the page, so whatever the phone
-// probes for on joining the access point opens the setup screen.
+// The page's own addresses always serve it. In captive mode every unknown path does too, so
+// whatever the phone probes for on joining the access point opens the setup screen.
 static esp_err_t catch_all(httpd_req_t *req)
 {
-    if (!s_cfg.captive) {
+    if (!s_cfg.captive && !webui_is_page(req->uri)) {
         httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "no such page");
         return ESP_FAIL;
     }
@@ -641,6 +680,7 @@ esp_err_t webui_start(const webui_cfg_t *cfg)
         { .uri = "/api/status",   .method = HTTP_GET,  .handler = status_get },
         { .uri = "/api/panel",    .method = HTTP_GET,  .handler = panel_get },
         { .uri = "/api/scan",     .method = HTTP_GET,  .handler = scan_get },
+        { .uri = "/api/log",      .method = HTTP_GET,  .handler = log_get },
         { .uri = "/api/lt",       .method = HTTP_GET,  .handler = lt_get },
         { .uri = "/api/lt/job",   .method = HTTP_GET,  .handler = lt_job_get },
         { .uri = "/api/lt/echo",  .method = HTTP_POST, .handler = lt_echo_post },
