@@ -10,6 +10,11 @@ one answering online and the rest offline, so "the printer port holds one printe
 "changed" notice (accept or dismiss) below no longer hold; a different printer answering is a
 record of its own, once it has answered twice.
 
+**Amended 2026-11-09** by `W-1138 Every supported printer shows its own Apple icon`: a row
+shows Apple's icon for its printer's model, in colour at 32 px with no tile, where "icon by
+kind" below had one drawing per family. A printer of no known kind keeps a gray tile (SPEC
+§3.5).
+
 ## Why
 
 AirWriter assumes an ImageWriter. Its host name is `imagewriter-xxxx`, its default printer is

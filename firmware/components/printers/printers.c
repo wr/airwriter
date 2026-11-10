@@ -231,7 +231,7 @@ static void slot0_cfg(const slot0_t *w, ipp_printer_cfg_t *c)
     *c = (ipp_printer_cfg_t){ .resource = "ipp/print", .legacy_resource = w->path,
                               .name = w->name, .info = caps->make_model, .uuid = w->uuid,
                               .caps = caps,
-                              .icon = w->kind == PR_KIND_STYLEWRITER ? "stylewriter" : "icon",
+                              .icon = pr_icon(w->kind, w->model, NULL),
                               .sink = s_cfg.port_sink };
     c->sink.ctx = slot_ctx(0, w->id);
 }
@@ -348,13 +348,13 @@ static int others_apply(void)
                 lw_caps_fill(&s_big->caps, &w.lw);    // s_apply_mx held: the scratch is ours
                 c.caps = &s_big->caps.caps;
                 c.info = w.info;
-                c.icon = "laser";
+                c.icon = pr_icon(w.kind, w.model, &w.lw);
                 c.sink = s_cfg.at_sink;
             } else {
                 // W-1116: a port record, as slot 0's but at its own path.
                 c.caps = port_caps(w.kind, w.model);
                 c.info = c.caps->make_model;
-                c.icon = w.kind == PR_KIND_STYLEWRITER ? "stylewriter" : "icon";
+                c.icon = pr_icon(w.kind, w.model, NULL);
                 c.sink = s_cfg.port_sink;
             }
             c.sink.ctx = slot_ctx(k, w.id);

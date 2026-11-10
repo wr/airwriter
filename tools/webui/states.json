@@ -267,7 +267,8 @@
      "dither": "atkinson",
      "gain": 0,
      "rp": "ipp/print",
-     "start_page": null
+     "start_page": null,
+     "icon": "icon"
     },
     {
      "id": 2,
@@ -284,7 +285,8 @@
      "dither": "atkinson",
      "gain": 0,
      "rp": "ipp/laser",
-     "start_page": true
+     "start_page": true,
+     "icon": "lw2"
     },
     {
      "id": 3,
@@ -301,7 +303,8 @@
      "dither": "bluenoise",
      "gain": 0,
      "rp": "ipp/p3",
-     "start_page": null
+     "start_page": null,
+     "icon": "lwpro600"
     }
    ],
    "notes": [],
@@ -328,6 +331,7 @@
      "state": "ready",
      "uuid": "urn:uuid:41575254-4552-0001-10bd-a36e2434",
      "product": "",
+     "icon": "icon",
      "dither": "atkinson",
      "gain": 0,
      "rp": "ipp/print",
@@ -345,6 +349,7 @@
      "state": "ready",
      "uuid": "urn:uuid:41575254-4c57-0001-99d7-10bda36e2434",
      "product": "LaserWriter II NT",
+     "icon": "lw2",
      "dither": "atkinson",
      "gain": 0,
      "rp": "ipp/laser",
@@ -362,6 +367,7 @@
      "state": "ready",
      "uuid": "urn:uuid:41575254-4c57-0001-78fa-10bda36e2434",
      "product": "LaserWriter Pro 630",
+     "icon": "lwpro600",
      "dither": "bluenoise",
      "gain": 0,
      "rp": "ipp/p3",
@@ -508,7 +514,8 @@
        "dither": "atkinson",
        "gain": 0,
        "rp": "ipp/print",
-       "start_page": null
+       "start_page": null,
+       "icon": "icon"
       }
      ],
      "notes": [],
@@ -533,6 +540,7 @@
        "state": "ready",
        "uuid": "urn:uuid:41575254-4552-0001-10bd-a36e2434",
        "product": "",
+       "icon": "icon",
        "dither": "atkinson",
        "gain": 0,
        "rp": "ipp/print",
@@ -1236,7 +1244,8 @@
        "dither": "atkinson",
        "gain": 0,
        "rp": "ipp/print",
-       "start_page": null
+       "start_page": null,
+       "icon": "icon"
       }
      ],
      "notes": [],
@@ -1261,6 +1270,7 @@
        "state": "ready",
        "uuid": "urn:uuid:41575254-4552-0001-10bd-a36e2434",
        "product": "",
+       "icon": "icon",
        "dither": "atkinson",
        "gain": 0,
        "rp": "ipp/print",
@@ -1306,7 +1316,8 @@
        "dither": "atkinson",
        "gain": 0,
        "rp": "",
-       "start_page": null
+       "start_page": null,
+       "icon": ""
       }
      ],
      "notes": [
@@ -1335,6 +1346,7 @@
        "state": "ready",
        "uuid": "urn:uuid:41575254-4552-0001-10bd-a36e2434",
        "product": "",
+       "icon": "",
        "dither": "atkinson",
        "gain": 0,
        "rp": "",
@@ -1375,7 +1387,8 @@
        "dither": "atkinson",
        "gain": 0,
        "rp": "ipp/print",
-       "start_page": null
+       "start_page": null,
+       "icon": "icon"
       },
       {
        "id": 2,
@@ -1392,7 +1405,8 @@
        "dither": "atkinson",
        "gain": 0,
        "rp": "ipp/laser",
-       "start_page": true
+       "start_page": true,
+       "icon": "lw2"
       },
       {
        "id": 3,
@@ -1409,7 +1423,8 @@
        "dither": "bluenoise",
        "gain": 0,
        "rp": "ipp/p3",
-       "start_page": true
+       "start_page": true,
+       "icon": "lwpro600"
       }
      ],
      "notes": [],
@@ -1436,6 +1451,7 @@
        "state": "ready",
        "uuid": "urn:uuid:41575254-4552-0001-10bd-a36e2434",
        "product": "",
+       "icon": "icon",
        "dither": "atkinson",
        "gain": 0,
        "rp": "ipp/print",
@@ -1453,6 +1469,7 @@
        "state": "ready",
        "uuid": "urn:uuid:41575254-4c57-0001-99d7-10bda36e2434",
        "product": "LaserWriter II NT",
+       "icon": "lw2",
        "dither": "atkinson",
        "gain": 0,
        "rp": "ipp/laser",
@@ -1470,6 +1487,7 @@
        "state": "offline",
        "uuid": "urn:uuid:41575254-4c57-0001-78fa-10bda36e2434",
        "product": "LaserWriter Pro 630",
+       "icon": "lwpro600",
        "dither": "bluenoise",
        "gain": 0,
        "rp": "ipp/p3",
@@ -1508,7 +1526,8 @@
        "dither": "atkinson",
        "gain": 0,
        "rp": "ipp/print",
-       "start_page": null
+       "start_page": null,
+       "icon": "icon"
       },
       {
        "id": 2,
@@ -1525,7 +1544,8 @@
        "dither": "atkinson",
        "gain": 0,
        "rp": "ipp/laser",
-       "start_page": true
+       "start_page": true,
+       "icon": "lw2"
       },
       {
        "id": 3,
@@ -1542,7 +1562,8 @@
        "dither": "bluenoise",
        "gain": 0,
        "rp": "ipp/p3",
-       "start_page": true
+       "start_page": true,
+       "icon": "lwpro600"
       }
      ],
      "notes": [],
@@ -1569,6 +1590,7 @@
        "state": "ready",
        "uuid": "urn:uuid:41575254-4552-0001-10bd-a36e2434",
        "product": "",
+       "icon": "icon",
        "dither": "atkinson",
        "gain": 0,
        "rp": "ipp/print",
@@ -1586,6 +1608,7 @@
        "state": "attention",
        "uuid": "urn:uuid:41575254-4c57-0001-99d7-10bda36e2434",
        "product": "LaserWriter II NT",
+       "icon": "lw2",
        "dither": "atkinson",
        "gain": 0,
        "rp": "ipp/laser",
@@ -1603,6 +1626,7 @@
        "state": "ready",
        "uuid": "urn:uuid:41575254-4c57-0001-78fa-10bda36e2434",
        "product": "LaserWriter Pro 630",
+       "icon": "lwpro600",
        "dither": "bluenoise",
        "gain": 0,
        "rp": "ipp/p3",
@@ -1688,7 +1712,8 @@
        "dither": "atkinson",
        "gain": 0,
        "rp": "ipp/print",
-       "start_page": null
+       "start_page": null,
+       "icon": "icon"
       },
       {
        "id": 2,
@@ -1705,7 +1730,8 @@
        "dither": "atkinson",
        "gain": 0,
        "rp": "ipp/laser",
-       "start_page": true
+       "start_page": true,
+       "icon": "lw2"
       },
       {
        "id": 3,
@@ -1722,7 +1748,8 @@
        "dither": "bluenoise",
        "gain": 0,
        "rp": "",
-       "start_page": null
+       "start_page": null,
+       "icon": "lw2"
       }
      ],
      "notes": [
@@ -1754,6 +1781,7 @@
        "state": "ready",
        "uuid": "urn:uuid:41575254-4552-0001-10bd-a36e2434",
        "product": "",
+       "icon": "icon",
        "dither": "atkinson",
        "gain": 0,
        "rp": "ipp/print",
@@ -1771,6 +1799,7 @@
        "state": "ready",
        "uuid": "urn:uuid:41575254-4c57-0001-99d7-10bda36e2434",
        "product": "LaserWriter II NT",
+       "icon": "lw2",
        "dither": "atkinson",
        "gain": 0,
        "rp": "ipp/laser",
@@ -1788,6 +1817,7 @@
        "state": "ready",
        "uuid": "urn:uuid:41575254-4c57-0001-78fa-10bda36e2434",
        "product": "",
+       "icon": "lw2",
        "dither": "bluenoise",
        "gain": 0,
        "rp": "",
@@ -1831,7 +1861,8 @@
        "dither": "atkinson",
        "gain": 0,
        "rp": "",
-       "start_page": null
+       "start_page": null,
+       "icon": ""
       },
       {
        "id": 2,
@@ -1848,7 +1879,8 @@
        "dither": "atkinson",
        "gain": 0,
        "rp": "ipp/laser",
-       "start_page": true
+       "start_page": true,
+       "icon": "lw2"
       }
      ],
      "notes": [],
@@ -1873,6 +1905,7 @@
        "state": "ready",
        "uuid": "urn:uuid:41575254-4552-0001-10bd-a36e2434",
        "product": "",
+       "icon": "",
        "dither": "atkinson",
        "gain": 0,
        "rp": "",
@@ -1890,6 +1923,7 @@
        "state": "ready",
        "uuid": "urn:uuid:41575254-4c57-0001-99d7-10bda36e2434",
        "product": "LaserWriter II NT",
+       "icon": "lw2",
        "dither": "atkinson",
        "gain": 0,
        "rp": "ipp/laser",
@@ -1926,7 +1960,8 @@
        "dither": "atkinson",
        "gain": 0,
        "rp": "ipp/print",
-       "start_page": null
+       "start_page": null,
+       "icon": "icon"
       },
       {
        "id": 2,
@@ -1943,7 +1978,8 @@
        "dither": "atkinson",
        "gain": 0,
        "rp": "ipp/laser",
-       "start_page": true
+       "start_page": true,
+       "icon": "lw2"
       },
       {
        "id": 3,
@@ -1960,7 +1996,8 @@
        "dither": "bluenoise",
        "gain": 0,
        "rp": "ipp/p3",
-       "start_page": null
+       "start_page": null,
+       "icon": "lwpro600"
       },
       {
        "id": 4,
@@ -1977,7 +2014,8 @@
        "dither": "atkinson",
        "gain": 0,
        "rp": "ipp/p4",
-       "start_page": null
+       "start_page": null,
+       "icon": "sw2"
       }
      ],
      "notes": [],
@@ -2004,6 +2042,7 @@
        "state": "ready",
        "uuid": "urn:uuid:41575254-4552-0001-10bd-a36e2434",
        "product": "",
+       "icon": "icon",
        "dither": "atkinson",
        "gain": 0,
        "rp": "ipp/print",
@@ -2021,6 +2060,7 @@
        "state": "ready",
        "uuid": "urn:uuid:41575254-4c57-0001-99d7-10bda36e2434",
        "product": "LaserWriter II NT",
+       "icon": "lw2",
        "dither": "atkinson",
        "gain": 0,
        "rp": "ipp/laser",
@@ -2038,6 +2078,7 @@
        "state": "ready",
        "uuid": "urn:uuid:41575254-4c57-0001-78fa-10bda36e2434",
        "product": "LaserWriter Pro 630",
+       "icon": "lwpro600",
        "dither": "bluenoise",
        "gain": 0,
        "rp": "ipp/p3",
@@ -2055,6 +2096,7 @@
        "state": "offline",
        "uuid": "urn:uuid:41575254-4552-0002-10bd-a36e2434",
        "product": "",
+       "icon": "sw2",
        "dither": "atkinson",
        "gain": 0,
        "rp": "ipp/p4",
@@ -2105,7 +2147,8 @@
        "dither": "atkinson",
        "gain": 0,
        "rp": "ipp/print",
-       "start_page": null
+       "start_page": null,
+       "icon": "icon"
       },
       {
        "id": 2,
@@ -2122,7 +2165,8 @@
        "dither": "atkinson",
        "gain": 0,
        "rp": "ipp/laser",
-       "start_page": true
+       "start_page": true,
+       "icon": "lw2"
       },
       {
        "id": 3,
@@ -2139,7 +2183,8 @@
        "dither": "bluenoise",
        "gain": 0,
        "rp": "ipp/p3",
-       "start_page": null
+       "start_page": null,
+       "icon": "lwpro600"
       },
       {
        "id": 4,
@@ -2156,7 +2201,8 @@
        "dither": "atkinson",
        "gain": 0,
        "rp": "ipp/p4",
-       "start_page": null
+       "start_page": null,
+       "icon": "sw2"
       }
      ],
      "notes": [],
@@ -2183,6 +2229,7 @@
        "state": "offline",
        "uuid": "urn:uuid:41575254-4552-0001-10bd-a36e2434",
        "product": "",
+       "icon": "icon",
        "dither": "atkinson",
        "gain": 0,
        "rp": "ipp/print",
@@ -2200,6 +2247,7 @@
        "state": "ready",
        "uuid": "urn:uuid:41575254-4c57-0001-99d7-10bda36e2434",
        "product": "LaserWriter II NT",
+       "icon": "lw2",
        "dither": "atkinson",
        "gain": 0,
        "rp": "ipp/laser",
@@ -2217,6 +2265,7 @@
        "state": "ready",
        "uuid": "urn:uuid:41575254-4c57-0001-78fa-10bda36e2434",
        "product": "LaserWriter Pro 630",
+       "icon": "lwpro600",
        "dither": "bluenoise",
        "gain": 0,
        "rp": "ipp/p3",
@@ -2234,6 +2283,7 @@
        "state": "offline",
        "uuid": "urn:uuid:41575254-4552-0002-10bd-a36e2434",
        "product": "",
+       "icon": "sw2",
        "dither": "atkinson",
        "gain": 0,
        "rp": "ipp/p4",
@@ -2284,7 +2334,8 @@
        "dither": "atkinson",
        "gain": 0,
        "rp": "ipp/print",
-       "start_page": null
+       "start_page": null,
+       "icon": "icon"
       },
       {
        "id": 2,
@@ -2301,7 +2352,8 @@
        "dither": "atkinson",
        "gain": 0,
        "rp": "ipp/laser",
-       "start_page": true
+       "start_page": true,
+       "icon": "lw2"
       },
       {
        "id": 3,
@@ -2318,7 +2370,8 @@
        "dither": "bluenoise",
        "gain": 0,
        "rp": "ipp/p3",
-       "start_page": null
+       "start_page": null,
+       "icon": "lwpro600"
       },
       {
        "id": 4,
@@ -2336,7 +2389,8 @@
        "gain": 0,
        "rp": "ipp/p4",
        "start_page": null,
-       "cartridge": "black"
+       "cartridge": "black",
+       "icon": "sw2"
       }
      ],
      "notes": [],
@@ -2363,6 +2417,7 @@
        "state": "offline",
        "uuid": "urn:uuid:41575254-4552-0001-10bd-a36e2434",
        "product": "",
+       "icon": "icon",
        "dither": "atkinson",
        "gain": 0,
        "rp": "ipp/print",
@@ -2380,6 +2435,7 @@
        "state": "ready",
        "uuid": "urn:uuid:41575254-4c57-0001-99d7-10bda36e2434",
        "product": "LaserWriter II NT",
+       "icon": "lw2",
        "dither": "atkinson",
        "gain": 0,
        "rp": "ipp/laser",
@@ -2397,6 +2453,7 @@
        "state": "ready",
        "uuid": "urn:uuid:41575254-4c57-0001-78fa-10bda36e2434",
        "product": "LaserWriter Pro 630",
+       "icon": "lwpro600",
        "dither": "bluenoise",
        "gain": 0,
        "rp": "ipp/p3",
@@ -2414,6 +2471,7 @@
        "state": "ready",
        "uuid": "urn:uuid:41575254-4552-0002-10bd-a36e2434",
        "product": "",
+       "icon": "sw2",
        "dither": "atkinson",
        "gain": 0,
        "rp": "ipp/p4",
@@ -2463,7 +2521,8 @@
        "dither": "atkinson",
        "gain": 0,
        "rp": "ipp/print",
-       "start_page": null
+       "start_page": null,
+       "icon": "icon"
       },
       {
        "id": 2,
@@ -2480,7 +2539,8 @@
        "dither": "atkinson",
        "gain": 0,
        "rp": "ipp/laser",
-       "start_page": true
+       "start_page": true,
+       "icon": "lw2"
       },
       {
        "id": 4,
@@ -2497,7 +2557,8 @@
        "dither": "atkinson",
        "gain": 0,
        "rp": "",
-       "start_page": null
+       "start_page": null,
+       "icon": ""
       }
      ],
      "notes": [],
@@ -2523,6 +2584,7 @@
        "state": "offline",
        "uuid": "urn:uuid:41575254-4552-0001-10bd-a36e2434",
        "product": "",
+       "icon": "icon",
        "dither": "atkinson",
        "gain": 0,
        "rp": "ipp/print",
@@ -2540,6 +2602,7 @@
        "state": "ready",
        "uuid": "urn:uuid:41575254-4c57-0001-99d7-10bda36e2434",
        "product": "LaserWriter II NT",
+       "icon": "lw2",
        "dither": "atkinson",
        "gain": 0,
        "rp": "ipp/laser",
@@ -2557,6 +2620,7 @@
        "state": "ready",
        "uuid": "urn:uuid:41575254-4552-0001-10bd-a36e2435",
        "product": "",
+       "icon": "",
        "dither": "atkinson",
        "gain": 0,
        "rp": "",
@@ -2602,7 +2666,8 @@
        "dither": "atkinson",
        "gain": 0,
        "rp": "ipp/print",
-       "start_page": null
+       "start_page": null,
+       "icon": "icon"
       },
       {
        "id": 2,
@@ -2619,7 +2684,8 @@
        "dither": "atkinson",
        "gain": 0,
        "rp": "ipp/laser",
-       "start_page": true
+       "start_page": true,
+       "icon": "lw2"
       },
       {
        "id": 3,
@@ -2636,7 +2702,8 @@
        "dither": "bluenoise",
        "gain": 0,
        "rp": "ipp/p3",
-       "start_page": null
+       "start_page": null,
+       "icon": "lwpro600"
       },
       {
        "id": 4,
@@ -2653,7 +2720,8 @@
        "dither": "atkinson",
        "gain": 0,
        "rp": "ipp/p4",
-       "start_page": null
+       "start_page": null,
+       "icon": "sw2"
       },
       {
        "id": 5,
@@ -2670,7 +2738,8 @@
        "dither": "bluenoise",
        "gain": 0,
        "rp": "ipp/p5",
-       "start_page": true
+       "start_page": true,
+       "icon": "lwpro600"
       },
       {
        "id": 6,
@@ -2687,7 +2756,8 @@
        "dither": "bluenoise",
        "gain": 0,
        "rp": "ipp/p6",
-       "start_page": true
+       "start_page": true,
+       "icon": "plw"
       }
      ],
      "notes": [],
@@ -2716,6 +2786,7 @@
        "state": "ready",
        "uuid": "urn:uuid:41575254-4552-0001-10bd-a36e2434",
        "product": "",
+       "icon": "icon",
        "dither": "atkinson",
        "gain": 0,
        "rp": "ipp/print",
@@ -2733,6 +2804,7 @@
        "state": "ready",
        "uuid": "urn:uuid:41575254-4c57-0001-99d7-10bda36e2434",
        "product": "LaserWriter II NT",
+       "icon": "lw2",
        "dither": "atkinson",
        "gain": 0,
        "rp": "ipp/laser",
@@ -2750,6 +2822,7 @@
        "state": "ready",
        "uuid": "urn:uuid:41575254-4c57-0001-78fa-10bda36e2434",
        "product": "LaserWriter Pro 630",
+       "icon": "lwpro600",
        "dither": "bluenoise",
        "gain": 0,
        "rp": "ipp/p3",
@@ -2767,6 +2840,7 @@
        "state": "offline",
        "uuid": "urn:uuid:41575254-4552-0002-10bd-a36e2434",
        "product": "",
+       "icon": "sw2",
        "dither": "atkinson",
        "gain": 0,
        "rp": "ipp/p4",
@@ -2784,6 +2858,7 @@
        "state": "ready",
        "uuid": "urn:uuid:41575254-4c57-0001-78fa-10bda36e2435",
        "product": "LaserWriter 16/600 PS",
+       "icon": "lwpro600",
        "dither": "bluenoise",
        "gain": 0,
        "rp": "ipp/p5",
@@ -2801,6 +2876,7 @@
        "state": "ready",
        "uuid": "urn:uuid:41575254-4c57-0001-78fa-10bda36e2436",
        "product": "Personal LaserWriter NTR",
+       "icon": "plw",
        "dither": "bluenoise",
        "gain": 0,
        "rp": "ipp/p6",
@@ -2849,7 +2925,8 @@
        "dither": "atkinson",
        "gain": 0,
        "rp": "ipp/print",
-       "start_page": null
+       "start_page": null,
+       "icon": "icon"
       },
       {
        "id": 2,
@@ -2866,7 +2943,8 @@
        "dither": "atkinson",
        "gain": 0,
        "rp": "ipp/laser",
-       "start_page": true
+       "start_page": true,
+       "icon": "lw2"
       },
       {
        "id": 3,
@@ -2883,7 +2961,8 @@
        "dither": "bluenoise",
        "gain": 0,
        "rp": "ipp/p3",
-       "start_page": null
+       "start_page": null,
+       "icon": "lwpro600"
       },
       {
        "id": 4,
@@ -2900,7 +2979,8 @@
        "dither": "atkinson",
        "gain": 0,
        "rp": "ipp/p4",
-       "start_page": null
+       "start_page": null,
+       "icon": "sw2"
       },
       {
        "id": 5,
@@ -2917,7 +2997,8 @@
        "dither": "bluenoise",
        "gain": 0,
        "rp": "ipp/p5",
-       "start_page": true
+       "start_page": true,
+       "icon": "lwpro600"
       },
       {
        "id": 6,
@@ -2934,7 +3015,8 @@
        "dither": "bluenoise",
        "gain": 0,
        "rp": "ipp/p6",
-       "start_page": true
+       "start_page": true,
+       "icon": "plw"
       },
       {
        "id": 7,
@@ -2951,7 +3033,8 @@
        "dither": "bluenoise",
        "gain": 0,
        "rp": "",
-       "start_page": true
+       "start_page": true,
+       "icon": "plw"
       }
      ],
      "notes": [
@@ -2987,6 +3070,7 @@
        "state": "ready",
        "uuid": "urn:uuid:41575254-4552-0001-10bd-a36e2434",
        "product": "",
+       "icon": "icon",
        "dither": "atkinson",
        "gain": 0,
        "rp": "ipp/print",
@@ -3004,6 +3088,7 @@
        "state": "ready",
        "uuid": "urn:uuid:41575254-4c57-0001-99d7-10bda36e2434",
        "product": "LaserWriter II NT",
+       "icon": "lw2",
        "dither": "atkinson",
        "gain": 0,
        "rp": "ipp/laser",
@@ -3021,6 +3106,7 @@
        "state": "ready",
        "uuid": "urn:uuid:41575254-4c57-0001-78fa-10bda36e2434",
        "product": "LaserWriter Pro 630",
+       "icon": "lwpro600",
        "dither": "bluenoise",
        "gain": 0,
        "rp": "ipp/p3",
@@ -3038,6 +3124,7 @@
        "state": "offline",
        "uuid": "urn:uuid:41575254-4552-0002-10bd-a36e2434",
        "product": "",
+       "icon": "sw2",
        "dither": "atkinson",
        "gain": 0,
        "rp": "ipp/p4",
@@ -3055,6 +3142,7 @@
        "state": "ready",
        "uuid": "urn:uuid:41575254-4c57-0001-78fa-10bda36e2435",
        "product": "LaserWriter 16/600 PS",
+       "icon": "lwpro600",
        "dither": "bluenoise",
        "gain": 0,
        "rp": "ipp/p5",
@@ -3072,6 +3160,7 @@
        "state": "ready",
        "uuid": "urn:uuid:41575254-4c57-0001-78fa-10bda36e2436",
        "product": "Personal LaserWriter NTR",
+       "icon": "plw",
        "dither": "bluenoise",
        "gain": 0,
        "rp": "ipp/p6",
@@ -3089,6 +3178,7 @@
        "state": "ready",
        "uuid": "urn:uuid:41575254-4c57-0001-78fa-10bda36e2437",
        "product": "Personal LaserWriter NTR",
+       "icon": "plw",
        "dither": "bluenoise",
        "gain": 0,
        "rp": "",
@@ -3144,7 +3234,8 @@
        "dither": "atkinson",
        "gain": 0,
        "rp": "ipp/print",
-       "start_page": null
+       "start_page": null,
+       "icon": "icon"
       },
       {
        "id": 4,
@@ -3161,7 +3252,8 @@
        "dither": "atkinson",
        "gain": 0,
        "rp": "ipp/p4",
-       "start_page": null
+       "start_page": null,
+       "icon": "sw2"
       }
      ],
      "notes": [],
@@ -3186,6 +3278,7 @@
        "state": "ready",
        "uuid": "urn:uuid:41575254-4552-0001-10bd-a36e2434",
        "product": "",
+       "icon": "icon",
        "dither": "atkinson",
        "gain": 0,
        "rp": "ipp/print",
@@ -3203,6 +3296,7 @@
        "state": "offline",
        "uuid": "urn:uuid:41575254-4552-0002-10bd-a36e2434",
        "product": "",
+       "icon": "sw2",
        "dither": "atkinson",
        "gain": 0,
        "rp": "ipp/p4",
@@ -3256,7 +3350,8 @@
        "dither": "atkinson",
        "gain": 0,
        "rp": "ipp/print",
-       "start_page": null
+       "start_page": null,
+       "icon": "icon"
       },
       {
        "id": 2,
@@ -3273,7 +3368,8 @@
        "dither": "atkinson",
        "gain": 0,
        "rp": "ipp/laser",
-       "start_page": true
+       "start_page": true,
+       "icon": "lw2"
       },
       {
        "id": 3,
@@ -3290,7 +3386,8 @@
        "dither": "bluenoise",
        "gain": 0,
        "rp": "ipp/p3",
-       "start_page": true
+       "start_page": true,
+       "icon": "lwpro600"
       }
      ],
      "notes": [],
@@ -3317,6 +3414,7 @@
        "state": "printing",
        "uuid": "urn:uuid:41575254-4552-0001-10bd-a36e2434",
        "product": "",
+       "icon": "icon",
        "dither": "atkinson",
        "gain": 0,
        "rp": "ipp/print",
@@ -3334,6 +3432,7 @@
        "state": "ready",
        "uuid": "urn:uuid:41575254-4c57-0001-99d7-10bda36e2434",
        "product": "LaserWriter II NT",
+       "icon": "lw2",
        "dither": "atkinson",
        "gain": 0,
        "rp": "ipp/laser",
@@ -3351,6 +3450,7 @@
        "state": "ready",
        "uuid": "urn:uuid:41575254-4c57-0001-78fa-10bda36e2434",
        "product": "LaserWriter Pro 630",
+       "icon": "lwpro600",
        "dither": "bluenoise",
        "gain": 0,
        "rp": "ipp/p3",
@@ -3395,7 +3495,8 @@
        "gain": 0,
        "rp": "ipp/print",
        "start_page": null,
-       "cartridge": "colour"
+       "cartridge": "colour",
+       "icon": "stylewriter"
       },
       {
        "id": 2,
@@ -3412,7 +3513,8 @@
        "dither": "atkinson",
        "gain": 0,
        "rp": "ipp/laser",
-       "start_page": true
+       "start_page": true,
+       "icon": "lw2"
       },
       {
        "id": 3,
@@ -3429,7 +3531,8 @@
        "dither": "bluenoise",
        "gain": 0,
        "rp": "ipp/p3",
-       "start_page": null
+       "start_page": null,
+       "icon": "lwpro600"
       }
      ],
      "notes": [],
@@ -3455,6 +3558,7 @@
        "state": "ready",
        "uuid": "urn:uuid:41575254-4c57-0001-0002-10bda36e2434",
        "product": "",
+       "icon": "stylewriter",
        "dither": "atkinson",
        "gain": 0,
        "rp": "ipp/print",
@@ -3473,6 +3577,7 @@
        "state": "ready",
        "uuid": "urn:uuid:41575254-4c57-0001-99d7-10bda36e2434",
        "product": "LaserWriter II NT",
+       "icon": "lw2",
        "dither": "atkinson",
        "gain": 0,
        "rp": "ipp/laser",
@@ -3490,6 +3595,7 @@
        "state": "ready",
        "uuid": "urn:uuid:41575254-4c57-0001-78fa-10bda36e2434",
        "product": "LaserWriter Pro 630",
+       "icon": "lwpro600",
        "dither": "bluenoise",
        "gain": 0,
        "rp": "ipp/p3",
@@ -3538,7 +3644,8 @@
        "gain": 0,
        "rp": "ipp/print",
        "start_page": null,
-       "cartridge": "black"
+       "cartridge": "black",
+       "icon": "sw2"
       }
      ],
      "notes": [],
@@ -3561,6 +3668,7 @@
        "state": "ready",
        "uuid": "urn:uuid:41575254-4c57-0001-0002-10bda36e2434",
        "product": "",
+       "icon": "sw2",
        "dither": "atkinson",
        "gain": 0,
        "rp": "ipp/print",
@@ -3615,7 +3723,8 @@
        "dither": "atkinson",
        "gain": 0,
        "rp": "ipp/print",
-       "start_page": null
+       "start_page": null,
+       "icon": "sworiginal"
       }
      ],
      "notes": [],
@@ -3638,6 +3747,7 @@
        "state": "ready",
        "uuid": "urn:uuid:41575254-4c57-0001-0002-10bda36e2434",
        "product": "",
+       "icon": "sworiginal",
        "dither": "atkinson",
        "gain": 0,
        "rp": "ipp/print",
@@ -3693,7 +3803,8 @@
        "rp": "ipp/print",
        "start_page": null,
        "cartridge": "colour",
-       "fault": "paper"
+       "fault": "paper",
+       "icon": "csw2200"
       }
      ],
      "notes": [],
@@ -3716,6 +3827,7 @@
        "state": "attention",
        "uuid": "urn:uuid:41575254-4c57-0001-0002-10bda36e2434",
        "product": "",
+       "icon": "csw2200",
        "dither": "atkinson",
        "gain": 0,
        "rp": "ipp/print",
@@ -3776,7 +3888,8 @@
        "gain": 0,
        "rp": "ipp/print",
        "start_page": null,
-       "fault": "cartridge"
+       "fault": "cartridge",
+       "icon": "stylewriter"
       }
      ],
      "notes": [],
@@ -3799,6 +3912,7 @@
        "state": "attention",
        "uuid": "urn:uuid:41575254-4c57-0001-0002-10bda36e2434",
        "product": "",
+       "icon": "stylewriter",
        "dither": "atkinson",
        "gain": 0,
        "rp": "ipp/print",
@@ -3858,7 +3972,8 @@
        "gain": 0,
        "rp": "ipp/print",
        "start_page": null,
-       "fault": "cartridge"
+       "fault": "cartridge",
+       "icon": "sw2"
       }
      ],
      "notes": [],
@@ -3881,6 +3996,7 @@
        "state": "attention",
        "uuid": "urn:uuid:41575254-4c57-0001-0002-10bda36e2434",
        "product": "",
+       "icon": "sw2",
        "dither": "atkinson",
        "gain": 0,
        "rp": "ipp/print",
@@ -3941,7 +4057,8 @@
        "rp": "ipp/print",
        "start_page": null,
        "cartridge": "black",
-       "fault": "cover"
+       "fault": "cover",
+       "icon": "sw1200"
       }
      ],
      "notes": [],
@@ -3964,6 +4081,7 @@
        "state": "attention",
        "uuid": "urn:uuid:41575254-4c57-0001-0002-10bda36e2434",
        "product": "",
+       "icon": "sw1200",
        "dither": "atkinson",
        "gain": 0,
        "rp": "ipp/print",
@@ -4023,7 +4141,8 @@
        "dither": "atkinson",
        "gain": 0,
        "rp": "ipp/print",
-       "start_page": null
+       "start_page": null,
+       "icon": "csw1500"
       }
      ],
      "notes": [],
@@ -4046,6 +4165,7 @@
        "state": "offline",
        "uuid": "urn:uuid:41575254-4c57-0001-0002-10bda36e2434",
        "product": "",
+       "icon": "csw1500",
        "dither": "atkinson",
        "gain": 0,
        "rp": "ipp/print",
@@ -4103,7 +4223,8 @@
        "dither": "atkinson",
        "gain": 0,
        "rp": "ipp/print",
-       "start_page": null
+       "start_page": null,
+       "icon": "sworiginal"
       }
      ],
      "notes": [],
@@ -4126,6 +4247,7 @@
        "state": "offline",
        "uuid": "urn:uuid:41575254-4c57-0001-0002-10bda36e2434",
        "product": "",
+       "icon": "sworiginal",
        "dither": "atkinson",
        "gain": 0,
        "rp": "ipp/print",
@@ -4184,7 +4306,8 @@
        "gain": 0,
        "rp": "ipp/print",
        "start_page": null,
-       "cartridge": "black"
+       "cartridge": "black",
+       "icon": "sw2"
       }
      ],
      "notes": [],
@@ -4239,7 +4362,8 @@
        "gain": 0,
        "rp": "ipp/print",
        "start_page": null,
-       "cartridge": "colour"
+       "cartridge": "colour",
+       "icon": "stylewriter"
       },
       {
        "id": 2,
@@ -4256,7 +4380,8 @@
        "dither": "atkinson",
        "gain": 0,
        "rp": "ipp/laser",
-       "start_page": true
+       "start_page": true,
+       "icon": "lw2"
       },
       {
        "id": 3,
@@ -4273,7 +4398,8 @@
        "dither": "bluenoise",
        "gain": 0,
        "rp": "ipp/p3",
-       "start_page": null
+       "start_page": null,
+       "icon": "lwpro600"
       }
      ],
      "notes": [],
@@ -4299,6 +4425,7 @@
        "state": "cleaning",
        "uuid": "urn:uuid:41575254-4c57-0001-0002-10bda36e2434",
        "product": "",
+       "icon": "stylewriter",
        "dither": "atkinson",
        "gain": 0,
        "rp": "ipp/print",
@@ -4317,6 +4444,7 @@
        "state": "ready",
        "uuid": "urn:uuid:41575254-4c57-0001-99d7-10bda36e2434",
        "product": "LaserWriter II NT",
+       "icon": "lw2",
        "dither": "atkinson",
        "gain": 0,
        "rp": "ipp/laser",
@@ -4334,6 +4462,7 @@
        "state": "ready",
        "uuid": "urn:uuid:41575254-4c57-0001-78fa-10bda36e2434",
        "product": "LaserWriter Pro 630",
+       "icon": "lwpro600",
        "dither": "bluenoise",
        "gain": 0,
        "rp": "ipp/p3",
@@ -4384,7 +4513,8 @@
        "dither": "atkinson",
        "gain": 0,
        "rp": "",
-       "start_page": null
+       "start_page": null,
+       "icon": ""
       }
      ],
      "notes": [
@@ -4413,6 +4543,7 @@
        "state": "ready",
        "uuid": "urn:uuid:41575254-4552-0001-10bd-a36e2434",
        "product": "",
+       "icon": "",
        "dither": "atkinson",
        "gain": 0,
        "rp": "",
@@ -4486,7 +4617,8 @@
        "dither": "atkinson",
        "gain": 0,
        "rp": "ipp/print",
-       "start_page": null
+       "start_page": null,
+       "icon": "icon"
       },
       {
        "id": 3,
@@ -4503,7 +4635,8 @@
        "dither": "bluenoise",
        "gain": 0,
        "rp": "ipp/p3",
-       "start_page": true
+       "start_page": true,
+       "icon": "lwpro600"
       }
      ],
      "notes": [],
@@ -4529,6 +4662,7 @@
        "state": "ready",
        "uuid": "urn:uuid:41575254-4552-0001-10bd-a36e2434",
        "product": "",
+       "icon": "icon",
        "dither": "atkinson",
        "gain": 0,
        "rp": "ipp/print",
@@ -4546,6 +4680,7 @@
        "state": "ready",
        "uuid": "urn:uuid:41575254-4c57-0001-78fa-10bda36e2434",
        "product": "LaserWriter Pro 630",
+       "icon": "lwpro600",
        "dither": "bluenoise",
        "gain": 0,
        "rp": "ipp/p3",
@@ -4653,7 +4788,8 @@
        "dither": "atkinson",
        "gain": 0,
        "rp": "ipp/print",
-       "start_page": null
+       "start_page": null,
+       "icon": "icon"
       },
       {
        "id": 3,
@@ -4670,7 +4806,8 @@
        "dither": "bluenoise",
        "gain": 0,
        "rp": "ipp/p3",
-       "start_page": true
+       "start_page": true,
+       "icon": "lwpro600"
       }
      ],
      "notes": [],
@@ -4696,6 +4833,7 @@
        "state": "ready",
        "uuid": "urn:uuid:41575254-4552-0001-10bd-a36e2434",
        "product": "",
+       "icon": "icon",
        "dither": "atkinson",
        "gain": 0,
        "rp": "ipp/print",
@@ -4713,6 +4851,7 @@
        "state": "ready",
        "uuid": "urn:uuid:41575254-4c57-0001-78fa-10bda36e2434",
        "product": "LaserWriter Pro 630",
+       "icon": "lwpro600",
        "dither": "bluenoise",
        "gain": 0,
        "rp": "ipp/p3",
@@ -4749,6 +4888,7 @@
         "state": "ready",
         "uuid": "urn:uuid:41575254-4552-0001-10bd-a36e2434",
         "product": "",
+        "icon": "icon",
         "dither": "atkinson",
         "gain": 0,
         "rp": "ipp/print",
@@ -4766,6 +4906,7 @@
         "state": "ready",
         "uuid": "urn:uuid:41575254-4c57-0001-99d7-10bda36e2434",
         "product": "LaserWriter II NT",
+        "icon": "lw2",
         "dither": "atkinson",
         "gain": 0,
         "rp": "ipp/laser",
@@ -4783,6 +4924,7 @@
         "state": "ready",
         "uuid": "urn:uuid:41575254-4c57-0001-78fa-10bda36e2434",
         "product": "LaserWriter Pro 630",
+        "icon": "lwpro600",
         "dither": "bluenoise",
         "gain": 0,
         "rp": "ipp/p3",

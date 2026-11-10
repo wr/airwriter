@@ -357,3 +357,7 @@ int         pr_default_lt_port(int has_wifi);
 const char *pr_where_name(int where);      // "port", "cable", "network", "tunnel", "zone"
 const char *pr_kind_name(int kind);        // "unknown", "imagewriter", "laserwriter", ...
 const char *pr_model_name(int model);      // "ImageWriter II", "Color StyleWriter 2500" ...
+// The icon AirPrint shows for a printer (kind and model as a record has them, a
+// LaserWriter's query answers in lw): the name of a set of PNGs ipp_server serves,
+// and "" for a printer of no known kind, which AirPrint never shows.
+const char *pr_icon(int kind, int model, const lw_info_t *lw);

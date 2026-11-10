@@ -220,6 +220,11 @@ body:not(.ready) .sw span,body:not(.ready) .sw span:after{transition:none}
 .ic.unk{background:var(--fg3)}
 .prow .ic{width:30px;height:30px}
 .prow .ic svg{width:19px;height:19px}
+/* a printer's own icon: its 32 px grid at whole multiples, nothing around it */
+.ic.pr{border-radius:0;image-rendering:pixelated}
+.prow .ic.pr{width:32px;height:32px}
+.hero .ic.pr{width:64px;height:64px}
+#pd-ic{display:contents}
 .row .txt small{display:block;color:var(--fg2);font-size:var(--t-small);overflow-wrap:anywhere}
 .row small.mono{font-family:var(--mono);font-weight:400;color:var(--fg2)}
 .prow .chev,#log-row .chev{color:var(--fg3);font-size:20px;line-height:1;margin-left:-4px}
@@ -408,6 +413,8 @@ dialog::backdrop{background:var(--scrim)}
   body.setupmode .prow{min-height:64px}
   body.setupmode .prow .ic{width:40px;height:40px}
   body.setupmode .prow .ic svg{width:25px;height:25px}
+  body.setupmode .prow .ic.pr{width:32px;height:32px}
+  body.setupmode .hero .ic.pr{width:64px;height:64px}
   body.setupmode .prow .fld{max-width:none;padding:9px 11px;font-size:17px}
   body.setupmode .prow .fld+small{margin-top:8px}
   body.setupmode .prlist .txt{font-size:17px}

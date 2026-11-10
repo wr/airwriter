@@ -9,6 +9,7 @@
 #include "lw_caps.h"
 #include "sw_model.h"
 #include "sw_session.h"
+#include "ipp_icons.h"
 #include <stddef.h>
 #include <stdlib.h>
 
@@ -2749,8 +2750,80 @@ static void test_chooser_name(void)
     CHECK(strcmp(name, "Image") == 0);
 }
 
+#define ICON_NAME(p) #p,
+static const char *const k_served[] = { ICON_SETS(ICON_NAME) };
+
+static int served(const char *icon)
+{
+    for (size_t k = 0; k < sizeof k_served / sizeof k_served[0]; k++)
+        if (!strcmp(k_served[k], icon)) return 1;
+    return 0;
+}
+
+// Every name a Printer Description of Apple's gives, with the icon that file carries.
+static void test_icons(void)
+{
+    static const struct { const char *product, *icon; } lw[] = {
+        { "LaserWriter", "lw" }, { "LaserWriter Plus", "lw" },
+        { "LaserWriter II NT", "lw2" }, { "LaserWriter II NTX", "lw2" },
+        { "LaserWriter IIf", "lw2" }, { "LaserWriter IIg", "lw2" },
+        { "LaserWriter Personal NT", "plw" }, { "LaserWriter Personal NTR", "plw" },
+        { "LaserWriter Personal 320", "lw4600" }, { "LaserWriter 4/600 PS", "lw4600" },
+        { "LaserWriter Select 360", "lwselect" }, { "LaserWriter Select 360f", "lwselect" },
+        { "LaserWriter Select 610", "lwselect" },
+        { "LaserWriter Pro 400", "lwpro400" }, { "LaserWriter Pro 405", "lwpro400" },
+        { "PC-PR3000PS/4", "lwpro400" }, { "PC-PR3000PS/4F", "lwpro400" },
+        { "LaserWriter Pro 600", "lwpro600" }, { "LaserWriter Pro 630", "lwpro600" },
+        { "LaserWriter 16/600 PS", "lwpro600" }, { "LaserWriter 16/600 PS Fax", "lwpro600" },
+        { "LaserWriter 16/600 PS-J", "lwpro600" },
+        { "LaserWriter Pro 810", "lwpro810" }, { "LaserWriter Pro 810f", "lwpro810" },
+        { "LaserWriter 12/640 PS", "lw12640" }, { "LaserWriter 8500", "lw8500" },
+        { "Color LaserWriter 12/600 PS", "clw" }, { "Color LaserWriter 12/600 PS-J", "clw" },
+        { "Color LaserWriter 12/660 PS", "clw" },
+        { "HP LaserJet 4MP", "lw2" },                   // not one of Apple's
+    };
+    static const struct { int kind, model; const char *icon; } port[] = {
+        { PR_KIND_IMAGEWRITER, PR_MODEL_IW1, "icon" }, { PR_KIND_IMAGEWRITER, PR_MODEL_IW2, "icon" },
+        { PR_KIND_IMAGEWRITER, PR_MODEL_IWLQ, "iwlq" },
+        { PR_KIND_STYLEWRITER, PR_MODEL_SW1, "sworiginal" }, { PR_KIND_STYLEWRITER, PR_MODEL_SW2, "sw2" },
+        { PR_KIND_STYLEWRITER, PR_MODEL_SW1200, "sw1200" }, { PR_KIND_STYLEWRITER, PR_MODEL_SWC1500, "csw1500" },
+        { PR_KIND_STYLEWRITER, PR_MODEL_SWC2200, "csw2200" }, { PR_KIND_STYLEWRITER, PR_MODEL_SWC2400, "stylewriter" },
+        { PR_KIND_STYLEWRITER, PR_MODEL_SWC2500, "stylewriter" },
+        { PR_KIND_STYLEWRITER, PR_MODEL_NONE, "stylewriter" }, { PR_KIND_IMAGEWRITER, PR_MODEL_NONE, "icon" },
+    };
+    lw_info_t i;
+    char path[256];
+    for (size_t k = 0; k < sizeof lw / sizeof lw[0]; k++) {
+        lw_info_default(&i);
+        strcpy(i.product, lw[k].product);
+        strcpy(i.version, "47.0");
+        const char *icon = pr_icon(PR_KIND_LASERWRITER, PR_MODEL_NONE, &i);
+        CHECK(!strcmp(icon, lw[k].icon));
+        CHECK(served(icon));
+    }
+    lw_info_default(&i);                               // never answered: not the first LaserWriter
+    CHECK(!strcmp(pr_icon(PR_KIND_LASERWRITER, PR_MODEL_NONE, &i), "lw2"));
+    CHECK(!strcmp(pr_icon(PR_KIND_LASERWRITER, PR_MODEL_NONE, NULL), "lw2"));
+    for (size_t k = 0; k < sizeof port / sizeof port[0]; k++) {
+        const char *icon = pr_icon(port[k].kind, port[k].model, NULL);
+        CHECK(!strcmp(icon, port[k].icon));
+        CHECK(served(icon));
+    }
+    CHECK(!strcmp(pr_icon(PR_KIND_UNKNOWN, PR_MODEL_NONE, NULL), ""));
+    // Every set the board serves has its three PNGs.
+    static const int sizes[] = { 48, 128, 512 };
+    for (size_t k = 0; k < sizeof k_served / sizeof k_served[0]; k++)
+        for (size_t z = 0; z < sizeof sizes / sizeof sizes[0]; z++) {
+            snprintf(path, sizeof path, ICON_DIR "/%s-%d.png", k_served[k], sizes[z]);
+            FILE *f = fopen(path, "rb");
+            CHECK(f != NULL);
+            if (f) fclose(f);
+        }
+}
+
 int main(void)
 {
+    test_icons();
     test_at_renamed();
     test_at_renamed_named();
     test_at_not_renamed();

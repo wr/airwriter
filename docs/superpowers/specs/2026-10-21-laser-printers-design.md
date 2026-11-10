@@ -7,6 +7,10 @@ only: no firmware has changed. Supersedes the
 here because it was being edited in parallel). No laser printer is on the bench; everything this
 needs a printer to settle is listed under "What only a printer settles".
 
+**Amended 2026-11-09** by `W-1138 Every supported printer shows its own Apple icon`: a
+LaserWriter's icon is Apple's for its model, picked by its product name, in place of the one
+icon drawn for AirWriter that this design called for (SPEC §3.5).
+
 ## Intent
 
 Wells owns no laser printer and wants AirWriter to support any that would reasonably work. So

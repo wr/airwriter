@@ -743,7 +743,6 @@ setTimeout(()=>document.body.classList.add('ready'),1500);
    for what asks the person something; a new printer just appears in the list. */
 let PR=null, sel=null, LWT=null;
 const WHERE={port:'Printer port',cable:'AppleTalk port',network:'Your network',tunnel:'Basilisk II',zone:'Infinite Mac'};
-const KIND_IC={imagewriter:['k','g-iw'],stylewriter:['k','g-style'],laserwriter:['k','g-laser'],'appletalk-imagewriter':['b','g-iw'],unknown:['unk','g-printer']};
 const ST={ready:['g','Ready'],printing:['g','Printing'],cleaning:['g','Cleaning'],attention:['a','Needs attention'],failed:['r','The last job failed'],offline:['','Offline']};
 /* W-1103: the port's models, the board's own names for them (sw_model.c). The
    original StyleWriter has no cleaning, and only the Color ones take a color cartridge. */
@@ -779,7 +778,8 @@ function screenList(sw){
 }
 screenList(false);
 const prById=id=>PR&&PR.printers.find(p=>p.id===id);
-function icHTML(p){ const k=KIND_IC[p.kind]||KIND_IC.unknown; return '<span class="ic '+k[0]+'"><svg><use href="#'+k[1]+'"/></svg></span>'; }
+/* A printer's own icon, Apple's, the one AirPrint shows; a printer of no known kind has none. */
+function icHTML(p){ const u=ICONS[p.icon]; return u?'<img class="ic pr" src="'+u+'" alt="">':'<span class="ic unk"><svg><use href="#g-printer"/></svg></span>'; }
 /* What the box is: the most urgent of its shared printers, else how many. */
 function sideWord(){
   if(!PR) return '';
@@ -865,8 +865,7 @@ function pdDraw(){
   const p=prById(sel);
   if(!p){ prOpen(null); return; }
   const port=p.where==='port', iw=p.kind==='imagewriter', sw=p.kind==='stylewriter', unk=p.kind==='unknown';
-  const k=KIND_IC[p.kind]||KIND_IC.unknown;
-  $('pd-ic').className='ic '+k[0]; $('pd-ic').firstChild.firstChild.setAttribute('href','#'+k[1]);
+  { const h=icHTML(p); if($('pd-ic')._h!==h){ $('pd-ic')._h=h; $('pd-ic').innerHTML=h; } }
   $('pd-name').textContent=p.name;
   $('pd-where').textContent=(p.product&&p.product!==p.name?p.product+' · ':'')+(WHERE[p.where]||p.where);
   const [cls,text]=stWords(p);
