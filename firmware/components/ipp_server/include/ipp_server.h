@@ -117,7 +117,7 @@ struct ipp_printer_cfg {
     const char *info;            // printer-info: the printer's NBP name
     const char *uuid;            // urn:uuid:...
     const printer_caps_t *caps;  // make-and-model, device id, URF, media, margins, resolution
-    const char *icon;            // "laser": served as /laser-48.png and so on
+    const char *icon;            // pr_icon's: "plw" is served as /plw-48.png and so on
     ipp_doc_sink_t sink;
 };
 

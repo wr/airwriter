@@ -2,19 +2,20 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """Builds the printer-icons PNGs in firmware/components/ipp_server/icons/.
 
-imagewriter.txt is the icon as a pixel grid, one character per pixel ('.' is
-transparent). It is Apple's colour ImageWriter icon, redrawn pixel for pixel,
-and is not covered by this repository's licences (LICENSE.md).
-laserwriter.txt is a LaserWriter II for a shared LaserWriter (W-1082), drawn
-for AirWriter in the same style and palette (the palette must not grow: the
-ImageWriter's PNGs would change), under this repository's licence.
-stylewriter.txt is the Color StyleWriter's Chooser icon, written by
+Each icon is a pixel grid, one character per pixel ('.' is transparent). All of
+them are Apple's and are not covered by this repository's licences (LICENSE.md).
+
+imagewriter.txt is Apple's colour ImageWriter icon, redrawn pixel for pixel.
+stylewriter.txt is the Color StyleWriter 2500's Chooser icon, written by
 tools/stylewriter/mktables.py from Apple's driver in Apple's own colours (the
-Macintosh system palette's), so, like the ImageWriter's, it is Apple's and is not
-covered by this repository's licences (LICENSE.md). Each icon has its own palette
-(the PNG's PLTE): the StyleWriter's is PALETTE and the colours it adds, and the
-shared PALETTE does not grow, which would change the ImageWriter's and the
-LaserWriter's PNGs.
+Macintosh system palette's).
+apple/ holds the rest, one file for each drawing Apple made: the LaserWriters' from
+the model's own file in Mac OS 8.1's Printer Descriptions, the StyleWriters' and the
+ImageWriter LQ's from their drivers, each a 32 x 32 icl8 cut out by its ICN# mask. A
+file's name is the name of its PNGs and the name pr_icon (printers_core.c) gives it.
+
+The first two keep the palettes they always had, in full, so their PNGs do not
+change. An icon in apple/ has only the colours it uses in its PLTE.
 
 IPP Everywhere wants 48, 128 and 512 pixel icons. The grid is centred on a
 32 x 32 canvas; 128 and 512 are exact 4x and 16x enlargements of it, and 48 is
@@ -46,7 +47,13 @@ STYLEWRITER_PALETTE = dict(PALETTE, **{
     "f": (85, 85, 85), "F": (68, 68, 68), "E": (34, 34, 34),
     "B": (0, 0, 221), "N": (0, 187, 0), "Q": (221, 0, 0), "Y": (255, 255, 0), "O": (255, 102, 0),
 })
-PALETTES = {"stylewriter.txt": STYLEWRITER_PALETTE}
+
+# Apple's other printer icons: the same system palette, the few more of it that they use.
+APPLE_PALETTE = dict(STYLEWRITER_PALETTE, **{
+    "A": (0, 170, 0), "C": (255, 102, 51), "H": (17, 17, 17), "I": (51, 255, 153),
+    "J": (153, 153, 153), "L": (102, 102, 102), "M": (255, 0, 0), "P": (17, 0, 0),
+    "S": (204, 0, 0), "T": (51, 51, 51), "U": (238, 0, 0), "V": (0, 136, 0),
+})
 
 
 def canvas(name, palette=PALETTE):
@@ -91,16 +98,23 @@ def png(grid, size, palette=PALETTE):
             + chunk(b"IEND", b""))
 
 
+def icons():
+    """Every icon, as (name, grid, palette)."""
+    yield "icon", canvas("imagewriter.txt", PALETTE), PALETTE
+    yield "stylewriter", canvas("stylewriter.txt", STYLEWRITER_PALETTE), STYLEWRITER_PALETTE
+    for path in sorted((HERE / "apple").glob("*.txt")):
+        grid = canvas(f"apple/{path.name}", APPLE_PALETTE)
+        used = {c for row in grid for c in row} - {"."}
+        yield path.stem, grid, {k: APPLE_PALETTE[k] for k in used}
+
+
 def main():
     OUT.mkdir(parents=True, exist_ok=True)
-    for grid_file, prefix in (("imagewriter.txt", "icon"), ("laserwriter.txt", "laser"),
-                              ("stylewriter.txt", "stylewriter")):
-        palette = PALETTES.get(grid_file, PALETTE)
-        grid = canvas(grid_file, palette)
+    for name, grid, palette in icons():
         for size in SIZES:
             data = png(grid, size, palette)
-            (OUT / f"{prefix}-{size}.png").write_bytes(data)
-            print(f"{prefix}-{size}.png  {len(data)} bytes")
+            (OUT / f"{name}-{size}.png").write_bytes(data)
+            print(f"{name}-{size}.png  {len(data)} bytes")
 
 
 if __name__ == "__main__":

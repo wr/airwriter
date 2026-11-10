@@ -254,7 +254,9 @@ tools/ethertalk/      etpeer.py, a software EtherTalk Mac for the tunnel and the
                       a fake LaserWriter; test_interop.py
 tools/webui/          settings page sources; mkheader.py generates firmware's webui_page.h;
                       preview.py serves the page in any of states.json's states with no board
-tools/icon/           the printer icon as a pixel grid; mkicons.py writes ipp_server/icons/*.png
+tools/icon/           the printer icons as pixel grids (apple/, one per Apple icon); mkicons.py writes
+                      ipp_server/icons/*.png, and a new set also goes in ipp_icons.h and that
+                      component's CMakeLists.txt
 tools/iwview/         iwview.py draws any ImageWriter stream (test page, a LocalTalk capture) as paper
 tools/lights/         the wiki's GIF of every panel light effect, played through led_grid_core;
                       after changing an effect, `make -C tools/lights OUT=<wiki>/images/lights`

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "ipp_server.h"
+#include "ipp_icons.h"
 #include "ipp_req.h"
 #include "ipp_attrs.h"
 #include "ipp_http.h"
@@ -146,45 +147,22 @@ void ipp_server_legacy_uuid(char out[46])
 }
 
 // printer-icons, built in from icons/ by tools/icon/mkicons.py and served
-// on the IPP port itself.
-extern const uint8_t icon_48_start[]  asm("_binary_icon_48_png_start");
-extern const uint8_t icon_48_end[]    asm("_binary_icon_48_png_end");
-extern const uint8_t icon_128_start[] asm("_binary_icon_128_png_start");
-extern const uint8_t icon_128_end[]   asm("_binary_icon_128_png_end");
-extern const uint8_t icon_512_start[] asm("_binary_icon_512_png_start");
-extern const uint8_t icon_512_end[]   asm("_binary_icon_512_png_end");
-// W-1082: a LaserWriter, for a shared one.
-extern const uint8_t laser_48_start[]  asm("_binary_laser_48_png_start");
-extern const uint8_t laser_48_end[]    asm("_binary_laser_48_png_end");
-extern const uint8_t laser_128_start[] asm("_binary_laser_128_png_start");
-extern const uint8_t laser_128_end[]   asm("_binary_laser_128_png_end");
-extern const uint8_t laser_512_start[] asm("_binary_laser_512_png_start");
-extern const uint8_t laser_512_end[]   asm("_binary_laser_512_png_end");
-// W-1103: a StyleWriter, for the port's when its record is one.
-extern const uint8_t stylewriter_48_start[]  asm("_binary_stylewriter_48_png_start");
-extern const uint8_t stylewriter_48_end[]    asm("_binary_stylewriter_48_png_end");
-extern const uint8_t stylewriter_128_start[] asm("_binary_stylewriter_128_png_start");
-extern const uint8_t stylewriter_128_end[]   asm("_binary_stylewriter_128_png_end");
-extern const uint8_t stylewriter_512_start[] asm("_binary_stylewriter_512_png_start");
-extern const uint8_t stylewriter_512_end[]   asm("_binary_stylewriter_512_png_end");
+// here: one set of three PNGs for each of ipp_icons.h's names.
+#define ICON_EXTERN(p, s) \
+    extern const uint8_t p##_##s##_start[] asm("_binary_" #p "_" #s "_png_start"); \
+    extern const uint8_t p##_##s##_end[]   asm("_binary_" #p "_" #s "_png_end");
+#define ICON_EXTERNS(p) ICON_EXTERN(p, 48) ICON_EXTERN(p, 128) ICON_EXTERN(p, 512)
+ICON_SETS(ICON_EXTERNS)
 
-// The first three are the sizes every printer's icon URIs name (icon_uris);
-// a printer's `icon` picks the prefix.
+// Each set smallest first, as IPP Everywhere orders them, and icon_uris takes
+// the three sizes from the first.
+#define ICON_ROW(p, s) { #p, s, p##_##s##_start, p##_##s##_end },
+#define ICON_ROWS(p) ICON_ROW(p, 48) ICON_ROW(p, 128) ICON_ROW(p, 512)
 static const struct {
     const char    *prefix;
     unsigned       size;
     const uint8_t *start, *end;
-} k_icons[9] = {
-    { "icon",   48, icon_48_start,   icon_48_end   },
-    { "icon",  128, icon_128_start,  icon_128_end  },
-    { "icon",  512, icon_512_start,  icon_512_end  },
-    { "laser",  48, laser_48_start,  laser_48_end  },
-    { "laser", 128, laser_128_start, laser_128_end },
-    { "laser", 512, laser_512_start, laser_512_end },
-    { "stylewriter",  48, stylewriter_48_start,  stylewriter_48_end  },
-    { "stylewriter", 128, stylewriter_128_start, stylewriter_128_end },
-    { "stylewriter", 512, stylewriter_512_start, stylewriter_512_end },
-};
+} k_icons[] = { ICON_SETS(ICON_ROWS) };
 
 static void icon_uris(printer_t *p, const char *prefix)
 {

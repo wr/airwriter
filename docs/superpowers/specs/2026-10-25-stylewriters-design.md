@@ -5,6 +5,11 @@
 `W-1102 QuickDraw LaserWriters on the printer port (Personal LaserWriter LS/300, Select 300)`.
 Reverses the StyleWriter cut in `2026-08-04-printer-support-scope-design.md`.
 
+**Amended 2026-11-09** (`W-1138 Every supported printer shows its own Apple icon`): a
+StyleWriter's icon over AirPrint and on its Printers row is Apple's for its model, where the
+Settings page section below has one drawing for the family. The 2400 and 2500 share one. The
+test page's letterhead is still the family's (SPEC §3.5).
+
 **Amended 2026-11-08** (`W-1134 StyleWriter test page: show the three colour mixes, as the
 ImageWriter's does`, Wells's word on a mock): with a colour cartridge the test page's colour
 row is seven swatches across the page, the four inks and then red (magenta over yellow), green

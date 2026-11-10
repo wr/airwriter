@@ -64,6 +64,59 @@ const char *pr_model_name(int m)
     return sp ? sp->name : "";
 }
 
+// Apple drew one icon for each body, in its own Printer Descriptions, and the
+// names here are the products those files give for each. First match wins: a
+// name that starts another comes after it.
+static const struct { const char *product, *icon; } k_lw_icons[] = {
+    { "Color LaserWriter",        "clw" },
+    { "LaserWriter 12/640",       "lw12640" },
+    { "LaserWriter 16/600",       "lwpro600" },
+    { "LaserWriter 4/600",        "lw4600" },
+    { "LaserWriter 8500",         "lw8500" },
+    { "LaserWriter II",           "lw2" },
+    { "LaserWriter Personal 320", "lw4600" },
+    { "LaserWriter Personal",     "plw" },
+    { "LaserWriter Plus",         "lw" },
+    { "LaserWriter Pro 400",      "lwpro400" },
+    { "LaserWriter Pro 405",      "lwpro400" },
+    { "PC-PR3000PS",              "lwpro400" },     // what a Japanese Pro 400 or 405 answers
+    { "LaserWriter Pro 600",      "lwpro600" },
+    { "LaserWriter Pro 630",      "lwpro600" },
+    { "LaserWriter Pro 810",      "lwpro810" },
+    { "LaserWriter Select",       "lwselect" },
+};
+
+// One a LaserWriter shows when its name is none of Apple's, or it never said.
+#define LW_ICON_OTHER "lw2"
+
+static const char *lw_icon(const lw_info_t *lw)
+{
+    if (!lw) return LW_ICON_OTHER;
+    for (size_t i = 0; i < sizeof k_lw_icons / sizeof k_lw_icons[0]; i++)
+        if (!strncmp(lw->product, k_lw_icons[i].product, strlen(k_lw_icons[i].product)))
+            return k_lw_icons[i].icon;
+    // The first LaserWriter's whole name, and also what lw_info_default leaves when no
+    // answer came, which has no version.
+    return !strcmp(lw->product, "LaserWriter") && lw->version[0] ? "lw" : LW_ICON_OTHER;
+}
+
+const char *pr_icon(int kind, int model, const lw_info_t *lw)
+{
+    if (kind == PR_KIND_UNKNOWN) return "";
+    if (kind == PR_KIND_LASERWRITER) return lw_icon(lw);
+    switch (model) {
+    case PR_MODEL_IWLQ:    return "iwlq";
+    case PR_MODEL_SW1:     return "sworiginal";
+    case PR_MODEL_SW2:     return "sw2";
+    case PR_MODEL_SW1200:  return "sw1200";
+    case PR_MODEL_SWC1500: return "csw1500";
+    case PR_MODEL_SWC2200: return "csw2200";
+    case PR_MODEL_SWC2400:
+    case PR_MODEL_SWC2500: return "stylewriter";
+    default:               return kind == PR_KIND_STYLEWRITER ? "stylewriter" : "icon";
+    }
+}
+
 static int model_is_sw(int m) { return m >= PR_MODEL_SW1 && m <= PR_MODEL_SWC2500; }
 
 // A model by the name the page sends (pr_model_name's); -1 for none.
@@ -1308,11 +1361,12 @@ size_t pr_json(const pr_list_t *l, const pr_live_t live[PR_MAX], char *buf, size
         const char *st = o == PR_BOX_PRINTING && live[i].cleaning ? "cleaning" : states[o];
         PUT("%s{\"id\":%u,\"name\":\"%s\",\"where\":\"%s\",\"kind\":\"%s\",\"model\":\"%s\","
             "\"shared\":%s,\"identified\":%s,\"found\":\"%s\",\"state\":\"%s\",\"uuid\":\"%s\","
-            "\"product\":\"%s\",\"dither\":\"%s\",\"gain\":%u,\"rp\":\"%s\",\"start_page\":%s%s}",
+            "\"product\":\"%s\",\"icon\":\"%s\",\"dither\":\"%s\",\"gain\":%u,\"rp\":\"%s\",\"start_page\":%s%s}",
             i ? "," : "", r->id, e_name, pr_where_name(r->where), pr_kind_name(r->kind),
             pr_model_name(r->model), r->shared ? "true" : "false",
             r->identified ? "true" : "false", r->found_auto ? "auto" : "person",
-            st, r->uuid, e_prod, r->dither, r->gain, rp, sp, swx);
+            st, r->uuid, e_prod, pr_icon(r->kind, r->model, lw ? &r->lw : NULL), r->dither, r->gain,
+            rp, sp, swx);
     }
     PUT("],\"notes\":[");
     for (int i = 0; i < l->n_notes; i++)

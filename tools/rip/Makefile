@@ -100,7 +100,8 @@ build/test_pap_relay: test/test_pap_relay.c $(LT)/lt_proto.c $(LT)/lt_node.c $(L
 build/test_printers: test/test_printers.c $(COMP)/printers/printers_core.c $(COMP)/laser/lw_caps.c \
                      $(COMP)/laser/lw_query.c $(COMP)/printer_caps/printer_caps.c $(LT)/lt_proto.c \
                      $(COMP)/stylewriter/sw_model.c $(COMP)/halftone/apple_tables.c | build
-	$(CC) $(CFLAGS) $(INCS) -I$(COMP)/printers/include -I$(LT)/include -Itest -o $@ $^
+	$(CC) $(CFLAGS) $(INCS) -I$(COMP)/printers/include -I$(COMP)/ipp_server/include -I$(LT)/include -Itest \
+	      -DICON_DIR='"$(abspath $(COMP)/ipp_server/icons)"' -o $@ $^
 
 build/test_lw_core: test/test_lw_core.c $(COMP)/laser/lw_core.c $(COMP)/laser/lw_status.c \
                     $(LT)/lt_proto.c | build

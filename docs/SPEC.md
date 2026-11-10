@@ -303,14 +303,20 @@ from the top and 0.5in from the bottom at -7/8in.*
 **Media.** `na_letter_8.5x11in` plus the continuous fanfold sizes. Not borderless.
 
 **`printer-icons`.** Three PNGs served on the IPP port itself,
-`http://<host>.local:631/icon-{48,128,512}.png`, smallest first as IPP Everywhere orders
+`http://<host>.local:631/<set>-{48,128,512}.png`, smallest first as IPP Everywhere orders
 them. A Mac fetches them once, when the printer is added, and keeps an `.icns` in
 `/Library/Printers/Icons/` that the queue's PPD names (`*APPrinterIconPath`); a new icon
 shows only after the printer is removed and added again. The PNGs are built into the
-firmware by `tools/icon/mkicons.py` from a 32 × 32 pixel grid: 128 and 512 are exact 4× and
+firmware by `tools/icon/mkicons.py` from 32 × 32 pixel grids: 128 and 512 are exact 4× and
 16× enlargements, and 48 is the grid at 1× with a margin, since 1.5× would draw uneven
-pixels. The artwork is Apple's colour ImageWriter icon, redrawn pixel for pixel
-(`LICENSE.md`).
+pixels. The artwork is Apple's, pixel for pixel from its drivers and LaserWriter 8 printer
+descriptions (`LICENSE.md`), one set per printer body; models that share a body share a set.
+`pr_icon` (`printers_core.c`) picks a port printer's set by model and a LaserWriter's by the
+start of its PostScript product name, as Apple's printer descriptions spell them, with the
+LaserWriter II's for any other. `ipp_icons.h` lists the sets. `/api/printers` names each
+printer's set as `icon`, and the settings page draws the same grids at 32 px, inlined by
+`tools/webui/mkheader.py`. A printer of no known kind has an empty `icon` and shows the page's
+gray tile.
 
 **`printer-uuid`.** Derive from eFuse MAC so it survives reflashing. Add a `DEV_MODE`
 build flag that regenerates it on every boot — iOS caches capabilities against the UUID
@@ -687,7 +693,7 @@ ImageWriter on the port keeps its identity, UUID and bytes (`tools/ipp/test/gold
   W-1082 LaserWriter advertises `ipp/laser` and answers at both), its own Bonjour instance (its name in the list),
   `printer-uuid` `41575254-4c57-<CONFIG_AIRWRITER_LASER_UUID_EPOCH>-
   <hash of the NBP name>-<MAC>`, URF `RS300`, `W8`, only the paper it reported, margins from its
-  imageable area rounded outward, `laser-*.png` icons. One job at a time across every printer.
+  imageable area rounded outward, the icon set for its product name (3.5). One job at a time across every printer.
 - **The page** (`ps_page`): the rip at 300 dpi (`printer_caps`, `ripjob`'s output stage, the
   printer's own screen and gain) into Level 1 `imagemask` bands of at most 64 rows, ended by a
   blank row, trimmed to their ink; one LF before binary data; hex lines of 64 digits. A text
@@ -1105,8 +1111,8 @@ Apple's StyleWriter adapter (ADSP, not PAP), is not built.
   ImageWriter record's own, "Apple ImageWriter II", "Apple ImageWriter LQ" or "Apple
   ImageWriter", W-1116; the II with no ImageWriter record). `print-quality` 3, 4 and 5 are
   draft, normal and best, read from the Job
-  group into the sink's options (`ipp_job_opts_t`). The icon is Apple's StyleWriter Chooser
-  icon (LICENSE.md). Colour is advertised only while a colour cartridge was read in a colour
+  group into the sink's options (`ipp_job_opts_t`). The icon is Apple's for its model (3.5,
+  LICENSE.md). Colour is advertised only while a colour cartridge was read in a colour
   model, under the same UUID, as the colour ribbon is (3.8): the cartridge lives where the
   ribbon does (`s_ribbon`, `ipp_server_set_colour`, `/api/status` `ribbon`), and a black-only
   model never offers colour. `/api/printers` shows it as `cartridge` (`black`, `colour`) once
