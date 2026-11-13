@@ -97,6 +97,39 @@ int main(void)
     CHECK_EQ_INT(k.state, IPP_JSTATE_CANCELED);
     CHECK_EQ_INT(ipp_job_cancel(&k, 14), IPP_CANCEL_NOT_POSSIBLE);
 
+    /* W-1141: the pages printed so far, which a phone shows as "Printing 3 of 5". A job
+     * starts at none, its count moves only up while it prints, and a finished job keeps its
+     * count: a late report never lands on it, and the next job starts again at none. */
+    ipp_job_start(&k, 15, 900, "", "", URI);
+    CHECK_EQ_INT(k.pages, 0);
+    ipp_job_pages(&k, 1);
+    CHECK_EQ_INT(k.pages, 1);
+    ipp_job_pages(&k, 3);
+    CHECK_EQ_INT(k.pages, 3);
+    ipp_job_pages(&k, 2);                             /* never back */
+    CHECK_EQ_INT(k.pages, 3);
+    ipp_job_pages(&k, -1);
+    CHECK_EQ_INT(k.pages, 3);
+    ipp_job_view(&k, 1, &st, &why);                   /* paper out on page 4: still 3 */
+    CHECK_EQ_INT(st, IPP_JSTATE_STOPPED);
+    CHECK_EQ_INT(k.pages, 3);
+    CHECK_EQ_INT(ipp_job_done(&k, 1), 1);
+    ipp_job_pages(&k, 9);                             /* after the end: not this job's */
+    CHECK_EQ_INT(k.pages, 3);
+    ipp_job_start(&k, 16, 950, "", "", URI);
+    CHECK_EQ_INT(k.pages, 0);
+    /* Canceled mid-job: the pages already out still printed. */
+    ipp_job_pages(&k, 2);
+    CHECK_EQ_INT(ipp_job_cancel(&k, 16), IPP_CANCEL_STOP_PRINT);
+    ipp_job_pages(&k, 3);                             /* the page on the platen when it stopped */
+    CHECK_EQ_INT(ipp_job_done(&k, 0), 1);
+    CHECK_EQ_INT(k.state, IPP_JSTATE_CANCELED);
+    CHECK_EQ_INT(k.pages, 3);
+    /* The empty slot takes none. */
+    ipp_job_rec_t none = {0};
+    ipp_job_pages(&none, 4);
+    CHECK_EQ_INT(none.pages, 0);
+
     /* Job matching: -1 is the current job, anything else must be exact. */
     CHECK(ipp_job_matches(&j, -1));
     CHECK(ipp_job_matches(&j, 7));

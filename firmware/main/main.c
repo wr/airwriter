@@ -302,6 +302,9 @@ static void printer_fail(void)
 // doc_end's verdict on the transfer, for job_finished on the pipeline task.
 static volatile int s_doc_ok;
 
+// The AirPrint printer (slot) the LaserWriter job in the pipeline is for (W-1082).
+static int s_laser_slot = 1;
+
 // An IPP job holds s_job_lock: from doc_claim's take to job_finished's give.
 // A Cancel-Job before doc_begin must not reach the printer another job owns
 // -- a LocalTalk job holds it for minutes (W-1053 review). ipp_server passes
@@ -1021,12 +1024,23 @@ static void job_finished(const job_pipe_stats_t *st, int ok)
     ota_health_printed();       // W-1059: this firmware prints; under the job lock
     s_ipp_owns = 0;
     xSemaphoreGive(s_job_lock);
+    ipp_server_job_pages_for(s_port_job_slot, st->pages);   // W-1141: every page printed
     ipp_server_job_done_for(s_port_job_slot, 1);
 }
 
 static void laser_finished(const job_pipe_stats_t *st, int ok);
 static void sw_finished(const job_pipe_stats_t *st, int ok);
 static void qd_finished(const job_pipe_stats_t *st, int ok);
+
+// job_pipe's page_out (W-1141): a page's last byte has gone to the printer, so the phone's
+// "Printing 1 of 5" moves on. On the printer task, or the pipeline task for a LaserWriter's
+// job. Whose job it is was set at its begin, under the job lock, and holds until its finish.
+static void pipe_page_out(void *ctx, int pages)
+{
+    (void)ctx;
+    if (s_laser_owns) ipp_server_job_pages_for(s_laser_slot, pages);
+    else if (s_ipp_owns) ipp_server_job_pages_for(s_port_job_slot, pages);
+}
 
 // job_pipe's done callback: the pipeline has printed the document or let it go.
 static void pipe_done(void *ctx, const job_pipe_stats_t *st)
@@ -1095,7 +1109,6 @@ static void doc_end(void *ctx, int ok)
 // printer. The sink's ctx is (slot << 8 | record id), the printer list's.
 
 static int s_laser_pipe_ok;
-static int s_laser_slot = 1;
 
 static esp_err_t laser_doc_begin(void *ctx, const char *format, const char *name,
                                  const ipp_job_opts_t *opts)
@@ -1149,6 +1162,7 @@ static void laser_finished(const job_pipe_stats_t *st, int ok)
     s_laser_owns = 0;
     line_source();
     xSemaphoreGive(s_job_lock);
+    if (printed) ipp_server_job_pages_for(s_laser_slot, st->pages);   // W-1141
     ipp_server_job_done_for(s_laser_slot, printed);
     printers_apply();               // W-1088: a change to its slot waited for it
 }
@@ -1291,6 +1305,7 @@ static void sw_finished(const job_pipe_stats_t *st, int ok)
     s_ipp_owns = 0;
     line_source();
     xSemaphoreGive(s_job_lock);
+    if (printed) ipp_server_job_pages_for(s_port_job_slot, st->pages);   // W-1141
     ipp_server_job_done_for(s_port_job_slot, printed);
     printers_apply();                   // W-1088: a change to the port's printer waited for it
 }
@@ -3980,7 +3995,8 @@ void app_main(void)
 
     job_pipe_cfg_t pipe = { .out = printer_out, .dither = algo, .gain = s_set.gain,
                             .top_margin = s_set.top_margin,
-                            .done = pipe_done, .colour_ok = colour_ok };
+                            .done = pipe_done, .colour_ok = colour_ok,
+                            .page_out = pipe_page_out };
     ESP_ERROR_CHECK(job_pipe_init(&pipe));
 
     // Before wifi_start, which can block up to 60s joining: the debounce

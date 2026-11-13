@@ -54,7 +54,7 @@ typedef struct {
     uint8_t     state;              // IPP_JSTATE_*
     const char *state_reason;
     const char *state_message;      // job-state-message; NULL or "" omits it (W-1082)
-    int32_t     impressions_done;
+    int32_t     impressions_done;   // pages printed so far: impressions and sheets (W-1141)
     uint32_t    time_at_creation;
 } ipp_job_t;
 

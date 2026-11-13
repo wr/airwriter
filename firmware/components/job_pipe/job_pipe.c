@@ -67,6 +67,11 @@ static char s_name[64];
 static job_pipe_target_t s_target;    // this job's printer, when not the ImageWriter
 static int s_has_target;
 static job_pipe_prn_t    s_prn_to;    // who gets this job's printer bytes
+// W-1141: a buffered job's page ends, noted by the rip and read by the printer task, and the
+// job's printer bytes that task has handed on. Both only under the lock.
+static jp_pages_t   s_pages;
+static size_t       s_out_sent;
+static portMUX_TYPE s_pages_mux = portMUX_INITIALIZER_UNLOCKED;
 
 // urf_decode's source. Returns 1 only when all n bytes were delivered, which
 // is what makes a truncated document a decode error rather than a short page.
@@ -114,6 +119,34 @@ void job_pipe_out(const uint8_t *buf, size_t n)
         sent += xStreamBufferSend(s_out, buf + sent, n - sent, pdMS_TO_TICKS(250));
 }
 
+// W-1141: the rip has ended a page. A buffered job's page has printed only once the printer
+// task hands its last byte on (page_check); any other job's went to its printer as the rip
+// wrote it. On the pipeline task.
+static void page_ended(void *ctx, int pages)
+{
+    (void)ctx;
+    if (s_aborted) return;
+    if (!s_buffered) {
+        if (s_cfg.page_out) s_cfg.page_out(s_cfg.page_out_ctx, pages);
+        return;
+    }
+    portENTER_CRITICAL(&s_pages_mux);
+    jp_pages_end(&s_pages, s_st.printer_bytes, pages);
+    portEXIT_CRITICAL(&s_pages_mux);
+}
+
+// W-1141: `sent` more of the job's printer bytes have gone to its consumer: report the pages
+// that are whole now. On the printer task, every turn, since the rip may note a page's end
+// after this task has already sent its last byte.
+static void page_check(size_t sent)
+{
+    portENTER_CRITICAL(&s_pages_mux);
+    s_out_sent += sent;
+    int n = jp_pages_out(&s_pages, s_out_sent);
+    portEXIT_CRITICAL(&s_pages_mux);
+    if (n && !s_aborted && s_cfg.page_out) s_cfg.page_out(s_cfg.page_out_ctx, n);
+}
+
 // The ImageWriter's: the rip's `out`.
 static void count_out(void *ctx, const uint8_t *buf, size_t n)
 {
@@ -133,7 +166,12 @@ static void prn_task(void *arg)
         size_t r = xStreamBufferReceive(s_out, buf, sizeof buf, pdMS_TO_TICKS(100));
         // An abandoned job's bytes go nowhere: its tail has been purged, and
         // the rip unwinds sooner with room to write.
-        if (r && !s_aborted && s_prn_to.fn) s_prn_to.fn(s_prn_to.ctx, buf, r);
+        size_t sent = 0;
+        if (r && !s_aborted && s_prn_to.fn) {
+            s_prn_to.fn(s_prn_to.ctx, buf, r);
+            sent = r;
+        }
+        page_check(sent);
         // Only the rip fills s_out, and it is done: empty now is empty for good.
         if (s_out_eof && xStreamBufferIsEmpty(s_out)) {
             s_out_eof = 0;
@@ -157,6 +195,7 @@ static void pipe_task(void *arg)
             .dither  = s_cfg.dither,
             .gain    = s_cfg.gain,
             .top_margin = s_cfg.top_margin,
+            .page_done = page_ended,
             .log     = pipe_log,
             .clock_us = rip_clock_us,
         };
@@ -284,6 +323,10 @@ esp_err_t job_pipe_begin_to(const char *job_name, const job_pipe_target_t *t)
     uint8_t junk[64];
     while (xStreamBufferReceive(s_ring, junk, sizeof junk, 0) > 0) {}
     memset(&s_st, 0, sizeof s_st);
+    portENTER_CRITICAL(&s_pages_mux);
+    jp_pages_reset(&s_pages);
+    s_out_sent = 0;
+    portEXIT_CRITICAL(&s_pages_mux);
     s_t0 = esp_timer_get_time();
     s_wait_us = 0;
     s_eof = s_aborted = 0;

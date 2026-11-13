@@ -337,6 +337,8 @@ int ripjob_run(urf_t *u, const ripjob_cfg_t *cfg, ripjob_stats_t *st)
                     (unsigned)(p->t_screen / 1000), (unsigned)(p->t_second / 1000),
                     (unsigned)(p->t_out / 1000), (unsigned)(end / 1000));
             }
+            // W-1141: the page's last byte has left the rip.
+            if (rc >= 0 && cfg->page_done) cfg->page_done(cfg->page_ctx, pages + 1);
         }
 
 page_cleanup:

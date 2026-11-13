@@ -206,7 +206,7 @@ int main(void)
         .id = 7, .uri = "ipp://aw.local:631/ipp/print/7",
         .printer_uri = p.uri, .name = "Safari", .user = "wells",
         .state = IPP_JSTATE_PROCESSING, .state_reason = "job-printing",
-        .impressions_done = 0, .time_at_creation = 61,
+        .impressions_done = 3, .time_at_creation = 61,
     };
     ipp_enc_init(&e, buf, sizeof buf);
     ipp_resp_begin(&e, IPP_VERSION_1_1, IPP_STATUS_OK, 2);
@@ -225,6 +225,14 @@ int main(void)
     CHECK(ipp_val_is(&f, "job-printing"));
     CHECK(ipp_find(buf, n, "job-uri", &f));
     CHECK(ipp_val_is(&f, "ipp://aw.local:631/ipp/print/7"));
+    /* W-1141: the pages printed so far, as impressions and, every printer here printing one
+     * side of a sheet, as sheets: iOS shows one, CUPS reads both. */
+    CHECK(ipp_find(buf, n, "job-impressions-completed", &f));
+    CHECK_EQ_INT(ipp_val_int(&f), 3);
+    CHECK_EQ_INT(f.group, IPP_TAG_JOB);
+    CHECK(ipp_find(buf, n, "job-media-sheets-completed", &f));
+    CHECK_EQ_INT(ipp_val_int(&f), 3);
+    CHECK_EQ_INT(f.group, IPP_TAG_JOB);
 
     /* -- colour (W-1064): with the colour ribbon in, the four attributes
      *    that tell a client it may send colour, and nothing else changes -- */

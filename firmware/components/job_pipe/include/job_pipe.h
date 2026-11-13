@@ -68,6 +68,15 @@ typedef struct {
     // pipeline is already free for the next job_pipe_begin.
     void     (*done)(void *ctx, const job_pipe_stats_t *st);
     void      *done_ctx;
+    // W-1141: a page's last byte has gone to the printer, and `pages` of the job have (1
+    // the first). For a job whose printer bytes go through the ring, on the printer task
+    // once it has handed the page's last byte to its consumer (cfg.out, a target's prn),
+    // which may be minutes after the rip made it; for any other (a LaserWriter's stage
+    // sends its own, and a board with no PSRAM has no ring), on the pipeline task as the
+    // rip ends the page. Never for a page that failed, nor once the job is aborted; always
+    // before `done`. May be NULL.
+    void     (*page_out)(void *ctx, int pages);
+    void      *page_out_ctx;
 } job_pipe_cfg_t;
 
 esp_err_t job_pipe_init(const job_pipe_cfg_t *cfg);

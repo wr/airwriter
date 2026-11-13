@@ -144,3 +144,7 @@ void      ipp_server_set_state_for(int idx, const char *reason, const char *mess
 // job-state-message for the printer's job in the slot (copied): a
 // LaserWriter's PostScript error. Cleared when the next job starts.
 void      ipp_server_job_message_for(int idx, const char *msg);
+// W-1141: `pages` of the printing job in the slot have printed, for job-impressions-completed
+// and job-media-sheets-completed, which iOS shows as "Printing 3 of 5". Only the printing
+// job's count moves, and only up (ipp_job_pages); it starts at 0 with each job. Any task.
+void      ipp_server_job_pages_for(int idx, int32_t pages);
