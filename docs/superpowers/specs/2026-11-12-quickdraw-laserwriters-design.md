@@ -184,8 +184,9 @@ so; a jam lights Jam. Switched off, it shows Offline within a few seconds. A pag
 - **Clocked and nothing named yet:** the board sends `81 00`, `83 40`, `83 3E`, `82 00`. `29`
   makes an auto-found Personal LaserWriter 300 record (`port_new`, shared if there is room), as a
   StyleWriter's answer does. `0D`, `23` or anything else: the port has an Apple QuickDraw
-  LaserWriter AirWriter doesn't support yet, said on the settings page as the "Unrecognized
-  printer on the printer port" notice is, naming the model where the identity names it.
+  LaserWriter AirWriter doesn't support yet, shown on the settings page as a grayed row at the
+  end of the Printers list (`Printer port · Not supported yet`, nothing to open), naming the
+  model where the identity names it; it goes when the printer is unplugged.
 - **The plain question, `ESC ?` and the StyleWriter's status never go to a clocked port.** The
   300 sees a long space as a BREAK and a packet with a bad check as noise; nothing was harmed in
   the spike, but nothing is gained either.
@@ -428,7 +429,8 @@ found and printing as before.
   page named on the settings page.
 - One page in the printer at a time: about 25 s a page, not Apple's overlap.
 - The budget is 500,000 bytes of codes, below the measured 513,287.
-- An LS or Select 300 on the port is named and said to be unsupported, not shared.
+- An LS or Select 300 on the port is named and said to be unsupported, not shared: a grayed
+  row in the Printers list, not a notice (2026-11-13).
 - Copies stay out, as for every printer today.
 - Print density stays at Apple's default with no control.
 - The test page grows out of the StyleWriter's black-cartridge page.

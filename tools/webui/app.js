@@ -819,15 +819,13 @@ function stWords(p){
 const NOTE={
   unknown_port:(p)=>['Unrecognized printer on the printer port','If it’s an ImageWriter or StyleWriter, choose its model.',[['Choose Model…','open'],['Dismiss','dismiss']]],
   no_answer:(p)=>[q(p)+' isn’t responding','Make sure it’s connected and switched on.',[['Share Anyway','use_anyway'],['Dismiss','dismiss']]],
-  too_many:(p)=>[q(p)+' isn’t shared','You can share up to '+(PR.max_shared||6)+' printers. To share this one, stop sharing another.',[['OK','dismiss']]],
-  // W-1102: a QuickDraw LaserWriter on the port that AirWriter can't print to; it goes when it's unplugged
-  unsupported:(p,n)=>[nb(esc(n.name))+' on the printer port','This printer isn’t supported yet.',[]]};
+  too_many:(p)=>[q(p)+' isn’t shared','You can share up to '+(PR.max_shared||6)+' printers. To share this one, stop sharing another.',[['OK','dismiss']]]};
 const q=p=>nb(esc(p?p.name:'A printer'));
 function prDraw(){
   $('v-printers').textContent=sideWord();
   if(!PR) return;
   // a notice waiting: the caution mark beside the word, seen from any pane
-  const notes=PR.notes.concat(PR.port_unsupported?[{kind:'unsupported',name:PR.port_unsupported}]:[]);
+  const notes=PR.notes;
   if(notes.some(n=>NOTE[n.kind])) $('v-printers').insertAdjacentHTML('afterbegin','<svg class=warn><use href="#g-caution"/></svg>');
   // the notices, each with its keys
   let h='';
@@ -839,10 +837,13 @@ function prDraw(){
       '<button class=btn type=button data-note='+i+' data-act='+a+' data-id='+n.id+'>'+l+'</button>').join('')+'</div>':'')+'</div>';
   });
   if($('pr-notes')._h!==h){ $('pr-notes')._h=h; $('pr-notes').innerHTML=h; }
-  // the rows
-  h=PR.printers.length?PR.printers.map(p=>{ const [cls]=stWords(p);
+  // the rows; W-1102: a QuickDraw LaserWriter on the port that AirWriter can't print to is
+  // grayed at the end, with nothing to open, until it's unplugged (Wells, 2026-11-13)
+  const off=PR.port_unsupported?'<div class="row prow off"><span class="ic unk"><svg><use href="#g-printer"/></svg></span><span class=txt>'
+    +esc(PR.port_unsupported)+'<small>'+WHERE.port+' · Not supported yet</small></span><i class=lamp></i><span class=chev aria-hidden=true>›</span></div>':'';
+  h=PR.printers.length||off?PR.printers.map(p=>{ const [cls]=stWords(p);
     return '<button class="row link prow" type=button data-pr='+p.id+'>'+icHTML(p)+'<span class=txt>'+esc(p.name)
-      +'<small>'+esc(WHERE[p.where]||p.where)+(p.shared?'':' · Not shared')+'</small></span><i class="lamp '+cls+'"></i><span class=chev aria-hidden=true>›</span></button>'; }).join('')
+      +'<small>'+esc(WHERE[p.where]||p.where)+(p.shared?'':' · Not shared')+'</small></span><i class="lamp '+cls+'"></i><span class=chev aria-hidden=true>›</span></button>'; }).join('')+off
     :'<p class=empty>No printers yet. Connect your printer and switch it on, then Look for Printers.</p>';
   if($('pr-list')._h!==h){ $('pr-list')._h=h; $('pr-list').innerHTML=h; }
   // AirPrint: each shared printer's address
