@@ -446,6 +446,7 @@ static int                 s_qd_asked;
 // next job starts: a 300 page that didn't fit in its memory. And that job's first such page.
 static char                s_job_error[64];
 static volatile int        s_qd_bad_page;
+static volatile int        s_qd_skipped;       // W-1141: pages of the job too big to print
 // W-1116: the AirPrint printer (slot) the port's job came in on, and its record id, from the
 // sink's ctx (printers.c's slot_ctx). The job's end goes back to the slot; the record is the
 // job's own family (doc_begin) and the ImageWriter gate's (colour_ok), not the port's.
@@ -1042,8 +1043,14 @@ static void qd_finished(const job_pipe_stats_t *st, int ok);
 static void pipe_page_out(void *ctx, int pages)
 {
     (void)ctx;
-    if (s_laser_owns) ipp_server_job_pages_for(s_laser_slot, pages);
-    else if (s_ipp_owns) ipp_server_job_pages_for(s_port_job_slot, pages);
+    if (s_laser_owns) {
+        // After a PostScript error the printer throws the rest of the job away.
+        if (!laser_job_ps_error()) ipp_server_job_pages_for(s_laser_slot, pages);
+    } else if (s_ipp_owns) {
+        // A 300's page too big for its memory was skipped: no sheet came out for it.
+        if (s_job_fam == PR_FAM_QDLASER) pages -= s_qd_skipped;
+        ipp_server_job_pages_for(s_port_job_slot, pages);
+    }
 }
 
 // job_pipe's done callback: the pipeline has printed the document or let it go.
@@ -1325,6 +1332,7 @@ static esp_err_t qd_doc_begin(const char *format, const char *name, const ipp_jo
 {
     s_job_fam = PR_FAM_QDLASER;         // doc_claim took s_job_lock; qd_finished gives it
     s_qd_bad_page = 0;
+    s_qd_skipped = 0;
     qd_model_t m = pr_model_to_qd(printers_record_model(s_port_job_record));
     int manual = opts ? opts->manual : 0;
     s_last_job_id = opts ? opts->job_id : 0;
@@ -1362,6 +1370,7 @@ static void qd_page_cb(int page, int apple, uint32_t bytes, int too_big)
     if (too_big) {
         ESP_LOGW(TAG, "page %d: didn't fit in the printer's memory", page + 1);
         if (!s_qd_bad_page) s_qd_bad_page = page + 1;
+        s_qd_skipped++;                 // before its page_done, on the same task
     } else {
         ESP_LOGI(TAG, "page %d: %s screen, %u bytes of codes", page + 1,
                  apple ? "Apple's" : "the record's", (unsigned)bytes);
@@ -1411,7 +1420,7 @@ static void qd_finished(const job_pipe_stats_t *st, int ok)
     s_job_fam = PR_FAM_NONE;
     s_ipp_owns = 0;
     line_source();
-    if (printed) ipp_server_job_pages_for(s_port_job_slot, st->pages);   // W-1141
+    if (printed) ipp_server_job_pages_for(s_port_job_slot, st->pages - s_qd_skipped);   // W-1141
     xSemaphoreGive(s_job_lock);
     ipp_server_job_done_for(s_port_job_slot, printed);
     printers_apply();                   // a change to the port's printer waited for it

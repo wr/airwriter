@@ -233,6 +233,14 @@ static void pipe_task(void *arg)
         xSemaphoreTake(s_printed, portMAX_DELAY);
         // Abandoned after the rip, mid-print: the rest went nowhere.
         if (s_aborted && s_st.rc == 0) s_st.rc = -1;
+        // W-1141: every byte is out, so every page noted is whole. Reported here, before
+        // `done`, in case the last mark came after the printer task's last look; then the
+        // marks are cleared, so nothing the printer task reads later is this job's.
+        page_check(0);
+        portENTER_CRITICAL(&s_pages_mux);
+        jp_pages_reset(&s_pages);
+        s_out_sent = 0;
+        portEXIT_CRITICAL(&s_pages_mux);
     }
 
     // Set last: a peek that reads ms has every figure of the job.

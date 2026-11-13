@@ -88,6 +88,9 @@ int       laser_job_begin(int id, const char *name, job_pipe_target_t *t);
 int       laser_job_end(int ok);
 void      laser_job_cancel(void);
 int       laser_job_active(void);
+// W-1141: the job in progress has had a PostScript error back from the printer, which then
+// reads the rest of the job and throws it away: its pages from here on do not print. Any task.
+int       laser_job_ps_error(void);
 // W-1088: the PostScript test page to LaserWriter id, sent as it is, under the
 // job lock: 1 if it printed. laser_job_cancel stops it.
 int       laser_test_page(int id, const ps_tp_info_t *info);
