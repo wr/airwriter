@@ -25,6 +25,15 @@ const char *pr_kind_name(int k)
     return k >= 0 && k <= PR_KIND_STYLEWRITER ? n[k] : "?";
 }
 
+pr_family_t pr_family_of(int kind)
+{
+    switch (kind) {
+    case PR_KIND_IMAGEWRITER: return PR_FAM_IMAGEWRITER;
+    case PR_KIND_STYLEWRITER: return PR_FAM_STYLEWRITER;
+    default:                  return PR_FAM_NONE;
+    }
+}
+
 int pr_fault_from_sw(int st)
 {
     switch (st) {

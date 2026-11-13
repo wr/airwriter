@@ -34,6 +34,10 @@ typedef enum { PR_WHERE_PORT, PR_WHERE_CABLE, PR_WHERE_NETWORK, PR_WHERE_TUNNEL,
                PR_WHERE_ZONE } pr_where_t;
 typedef enum { PR_KIND_UNKNOWN, PR_KIND_IMAGEWRITER, PR_KIND_LASERWRITER,
                PR_KIND_AT_IMAGEWRITER, PR_KIND_STYLEWRITER } pr_kind_t;
+// W-1102: the printer-port families, each with its own line and its own job sink. A port
+// record's kind names its family; an AppleTalk printer and "Unknown printer" have none.
+typedef enum { PR_FAM_NONE, PR_FAM_IMAGEWRITER, PR_FAM_STYLEWRITER, PR_FAM_QDLASER } pr_family_t;
+pr_family_t pr_family_of(int kind);
 // The port printer's model; NONE is "Something else". The ImageWriters, then
 // (W-1103) the StyleWriters in sw_model_t's order: the original, II, 1200, then
 // the Color StyleWriters 1500, 2200, 2400, 2500. Stored numbers: append only.

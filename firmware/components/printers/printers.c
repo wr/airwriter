@@ -656,14 +656,22 @@ int printers_test_target(int *port)
     return id;
 }
 
-int printers_test_kind(int id)
+pr_test_kind_t printers_test_kind(int id)
 {
-    if (!s_started) return 0;
+    if (!s_started) return PR_TEST_NONE;
     lock();
     const pr_rec_t *r = pr_get(s_l, id);
-    int k = !r ? 0 : r->where == PR_WHERE_PORT && r->kind == PR_KIND_IMAGEWRITER ? 1
-          : r->where == PR_WHERE_PORT && r->kind == PR_KIND_STYLEWRITER ? 3
-          : r->kind == PR_KIND_LASERWRITER && r->identified ? 2 : 0;
+    pr_test_kind_t k = PR_TEST_NONE;
+    if (r && r->where == PR_WHERE_PORT) {
+        switch (pr_family_of(r->kind)) {
+        case PR_FAM_IMAGEWRITER: k = PR_TEST_IMAGEWRITER; break;
+        case PR_FAM_STYLEWRITER: k = PR_TEST_STYLEWRITER; break;
+        case PR_FAM_QDLASER:     k = PR_TEST_QDLASER; break;
+        default:                 break;
+        }
+    } else if (r && r->kind == PR_KIND_LASERWRITER && r->identified) {
+        k = PR_TEST_LASER;
+    }
     unlock();
     return k;
 }
@@ -794,14 +802,24 @@ int printers_port_on_is_imagewriter(void)
     return iw;
 }
 
-int printers_record_is_sw(int id)
+pr_family_t printers_record_family(int id)
 {
-    if (!s_started) return 0;
+    if (!s_started) return PR_FAM_NONE;
     lock();
     const pr_rec_t *r = pr_get(s_l, id);
-    int sw = r && r->where == PR_WHERE_PORT && r->kind == PR_KIND_STYLEWRITER;
+    pr_family_t f = r && r->where == PR_WHERE_PORT ? pr_family_of(r->kind) : PR_FAM_NONE;
     unlock();
-    return sw;
+    return f;
+}
+
+pr_family_t printers_port_family(void)
+{
+    if (!s_started) return PR_FAM_NONE;
+    lock();
+    const pr_rec_t *p = pr_port_said_other(s_l) ? NULL : pr_port_current(s_l);
+    pr_family_t f = p ? pr_family_of(p->kind) : PR_FAM_NONE;
+    unlock();
+    return f;
 }
 
 pr_model_t printers_record_model(int id)

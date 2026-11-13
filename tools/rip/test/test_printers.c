@@ -2821,6 +2821,15 @@ static void test_icons(void)
         }
 }
 
+static void test_family_of_kind(void)
+{
+    CHECK_EQ_INT(pr_family_of(PR_KIND_IMAGEWRITER), PR_FAM_IMAGEWRITER);
+    CHECK_EQ_INT(pr_family_of(PR_KIND_STYLEWRITER), PR_FAM_STYLEWRITER);
+    CHECK_EQ_INT(pr_family_of(PR_KIND_LASERWRITER), PR_FAM_NONE);
+    CHECK_EQ_INT(pr_family_of(PR_KIND_UNKNOWN), PR_FAM_NONE);
+    CHECK_EQ_INT(pr_family_of(-1), PR_FAM_NONE);
+}
+
 int main(void)
 {
     test_icons();
@@ -2869,6 +2878,7 @@ int main(void)
     test_sw_json();
     test_sw_fault();
     test_sw_cleaning();
+    test_family_of_kind();
     test_sw_test_target();
     test_sw_offers();
     test_sw_box_state();
