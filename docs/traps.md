@@ -454,7 +454,10 @@ Traps already explained in a code comment are listed only when the comment is ea
   keep; a list it merely cannot read is replaced. `pr_save` writes the lowest version that
   holds the list (1 until a record or notice names a StyleWriter), so an OTA rollback does not
   touch the printers of anyone with no StyleWriter. A StyleWriter's cartridge is no field of
-  the record: it is `pr_live_t.cart`, read by the board.
+  the record: it is `pr_live_t.cart`, read by the board. Version 4 (W-1102) adds the Personal
+  LaserWriter 300's kind and model and nothing else; it is written only while the list holds
+  one, versions 1 to 3 still load, and a board rolled back to a firmware before it keeps a 4
+  untouched and shares nothing until the next update.
 - **A printer switched on is not ready at its first frame.** The NTR spends 8 s on LLAP ENQs
   (TashTalk passes other nodes' ENQs; `/api/lt` counts them in `frames`, not `heard`), then
   looks up its own name five times 2 s apart, and answers lookups only after that. Look after

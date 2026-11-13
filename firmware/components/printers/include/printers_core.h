@@ -11,6 +11,7 @@
 #include <stddef.h>
 #include "lw_query.h"
 #include "sw_model.h"
+#include "qd_model.h"
 
 // PR_SHARE_MAX (W-1116): six shared over AirPrint, any mix of the port's records and
 // AppleTalk printers (before, the port's and three on AppleTalk); ipp_server has a slot
@@ -26,14 +27,14 @@ enum { PR_MAX = 8, PR_SHARE_MAX = 6, PR_NAME_MAX = 33, PR_NOTES_MAX = 8 };
 // takes a later stamp for a newer firmware's and keeps it (pr_blob_newer). A new
 // kind or model, or a shape the old reader's own rules can't hold, needs a new
 // version; a new fact beside the list does not (pr_seen_save).
-#define PR_BLOB_VER 3
+#define PR_BLOB_VER 4
 
 // Where a printer is: the printer port, or an AppleTalk link. The links'
 // order is the preference for a printer heard on more than one.
 typedef enum { PR_WHERE_PORT, PR_WHERE_CABLE, PR_WHERE_NETWORK, PR_WHERE_TUNNEL,
                PR_WHERE_ZONE } pr_where_t;
 typedef enum { PR_KIND_UNKNOWN, PR_KIND_IMAGEWRITER, PR_KIND_LASERWRITER,
-               PR_KIND_AT_IMAGEWRITER, PR_KIND_STYLEWRITER } pr_kind_t;
+               PR_KIND_AT_IMAGEWRITER, PR_KIND_STYLEWRITER, PR_KIND_QDLASER } pr_kind_t;
 // W-1102: the printer-port families, each with its own line and its own job sink. A port
 // record's kind names its family; an AppleTalk printer and "Unknown printer" have none.
 typedef enum { PR_FAM_NONE, PR_FAM_IMAGEWRITER, PR_FAM_STYLEWRITER, PR_FAM_QDLASER } pr_family_t;
@@ -43,7 +44,8 @@ pr_family_t pr_family_of(int kind);
 // the Color StyleWriters 1500, 2200, 2400, 2500. Stored numbers: append only.
 typedef enum { PR_MODEL_NONE, PR_MODEL_IW2, PR_MODEL_IWLQ, PR_MODEL_IW1,
                PR_MODEL_SW1, PR_MODEL_SW2, PR_MODEL_SW1200, PR_MODEL_SWC1500,
-               PR_MODEL_SWC2200, PR_MODEL_SWC2400, PR_MODEL_SWC2500 } pr_model_t;
+               PR_MODEL_SWC2200, PR_MODEL_SWC2400, PR_MODEL_SWC2500,
+               PR_MODEL_PLW300 } pr_model_t;     // W-1102: the Personal LaserWriter 300
 // What the port says when asked: nothing ready, ready but no answer to ESC ?,
 // or an ImageWriter that named itself. (A StyleWriter that answers is
 // pr_port_seen_sw's: it names its own model.)
@@ -53,12 +55,21 @@ typedef enum { PR_PORT_NOTHING, PR_PORT_SILENT, PR_PORT_IW2, PR_PORT_IWLQ } pr_p
 // named one; for an original ImageWriter record, its line was up and ESC ? got nothing) or a
 // StyleWriter (the plain question, the full sequence, `1` and `2`). Not stored: a start
 // knows nothing until the port answers again.
-typedef enum { PR_HEARD_NONE, PR_HEARD_IMAGEWRITER, PR_HEARD_STYLEWRITER } pr_heard_t;
+// W-1102: or a QuickDraw LaserWriter (its clock on HSKi, its engine identity to 83 3E).
+typedef enum { PR_HEARD_NONE, PR_HEARD_IMAGEWRITER, PR_HEARD_STYLEWRITER,
+               PR_HEARD_QDLASER } pr_heard_t;
 
 // A StyleWriter model as stylewriter's; SW_NONE for anything else.
 sw_model_t pr_model_to_sw(pr_model_t m);
 // And back; PR_MODEL_NONE for SW_NONE.
 pr_model_t pr_model_from_sw(sw_model_t m);
+// W-1102: a QuickDraw LaserWriter model as qdlaser's, QD_NONE for anything else; and back,
+// PR_MODEL_NONE for QD_NONE.
+qd_model_t pr_model_to_qd(pr_model_t m);
+pr_model_t pr_model_from_qd(qd_model_t m);
+// W-1102: a kind that may print in Apple's own screen ("apple"): the StyleWriters, in the
+// drivers' 16 x 16 screen, and the QuickDraw LaserWriters, in theirs.
+int pr_has_apple_screen(int kind);
 
 typedef struct {
     uint8_t   id;             // stable for the record's life; 0 is never used
@@ -115,6 +126,9 @@ typedef struct {
     uint8_t   heard;          // W-1103: pr_heard_t, the port's last answer; not stored
     uint8_t   heard_model;    // ...the pr_model_t it named (0: none), not stored
     uint8_t   pending_model;  // W-1116: a model answered once with no record yet; not stored
+    uint8_t   qd_other;       // W-1102: an unsupported QuickDraw LaserWriter's engine identity on
+                              // the port now, 0 none; not stored
+    uint8_t   qd_pending;     // ...one answered once; not stored
 } pr_list_t;
 
 // A StyleWriter's fault as the board last read it, said to the settings page so it can
@@ -161,6 +175,16 @@ void pr_init(pr_list_t *l, const uint8_t mac[6], uint16_t epoch);
 #define PR_SEEN_AGAIN (-2)
 int  pr_port_seen(pr_list_t *l, pr_port_seen_t what);
 int  pr_port_seen_sw(pr_list_t *l, pr_model_t m);
+// W-1102: a QuickDraw LaserWriter on the port answered 83 3E with `engine`. A Personal
+// LaserWriter 300 is pr_port_seen_sw's for its model: its record at once when it has one and
+// nothing else would change, else a record on the second answer in a row (R16), found and
+// shared. Any other engine is named and never a record: the second identical answer in a row
+// sets qd_other (pr_json's port_unsupported) and returns -1, the first PR_SEEN_AGAIN. Either
+// way the port's last answer is a QuickDraw LaserWriter's.
+int  pr_port_seen_qd(pr_list_t *l, uint8_t engine);
+// W-1102: the clock on HSKi stopped: no QuickDraw LaserWriter is on the port. Forgets
+// qd_other and a sighting of one pending.
+void pr_port_clock_gone(pr_list_t *l);
 // W-1103/W-1116: the printer, asked with the full sequence, says the port's StyleWriter is
 // `m`. The person named port record `id` a StyleWriter (Add a Printer…, the Model detail); its
 // record takes `m`, quietly, when `m` has no record of its own, and either way `m` is the
@@ -224,6 +248,7 @@ int  pr_index(const pr_list_t *l, int id);                  // its place in r[],
 // The printer on the port (pr_port_current) is an ImageWriter: its commands may go to J2.
 int  pr_port_is_imagewriter(const pr_list_t *l);
 int  pr_port_is_stylewriter(const pr_list_t *l);            // ... is a StyleWriter
+int  pr_port_is_qdlaser(const pr_list_t *l);                // ... is a QuickDraw LaserWriter
 
 // W-1103: who answered on the port last (pr_heard_t), and the model it named. pr_port_seen and
 // pr_port_seen_sw keep them; pr_port_answered is for an answer of the record's own printer that

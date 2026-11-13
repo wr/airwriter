@@ -389,7 +389,8 @@ static int port_line_speaks(void)
 
 static pr_family_t port_fam_of_mode(port_mode_t m)
 {
-    return m == PORT_STYLEWRITER ? PR_FAM_STYLEWRITER : PR_FAM_IMAGEWRITER;
+    return m == PORT_STYLEWRITER ? PR_FAM_STYLEWRITER
+         : m == PORT_QDLASER ? PR_FAM_QDLASER : PR_FAM_IMAGEWRITER;
 }
 // Events for the port task (kick_task), set by whoever knows and cleared by what acts on them.
 static volatile int        s_look;             // boot, setup or the Printers section asked

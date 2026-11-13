@@ -19,6 +19,7 @@ typedef enum {
     PORT_UNKNOWN_FOUND,     // something that never answered ESC ?: asked again at line-up
     PORT_UNKNOWN_SAID,      // the person said "Something else": nothing is sent to it
     PORT_STYLEWRITER,       // W-1103: a StyleWriter's own bytes (57600, no flow control) go to J2
+    PORT_QDLASER,           // W-1102: a QuickDraw LaserWriter's packets, at its own clock, go to J2
 } port_mode_t;
 
 typedef struct {
@@ -109,13 +110,20 @@ int         printers_describe(int id, char *name, size_t ncap, char *product, si
 port_mode_t printers_port_mode(void);
 int         printers_port_is_imagewriter(void);
 int         printers_port_is_stylewriter(void);
-// An ImageWriter or a StyleWriter on the port, shared over AirPrint: the panel
+// A printer of a port family (an ImageWriter, a StyleWriter, a QuickDraw LaserWriter) on the
+// port, shared over AirPrint: the panel
 // follows its state.
 int         printers_port_shared(void);
 // The port ImageWriter's model; PR_MODEL_NONE for anything else.
 pr_model_t  printers_port_model(void);
 // The port StyleWriter's model; SW_NONE for anything else.
 sw_model_t  printers_port_sw_model(void);
+// W-1102: a QuickDraw LaserWriter answered 83 3E on the port (pr_port_seen_qd: the record id,
+// PR_SEEN_AGAIN, or -1); the clock on HSKi stopped (pr_port_clock_gone); the port's QuickDraw
+// LaserWriter's model, QD_NONE for anything else.
+int         printers_port_seen_qd(uint8_t engine);
+void        printers_port_clock_gone(void);
+qd_model_t  printers_port_qd_model(void);
 // W-1116: what the port's records hold, for port_policy's order of questions, read in one
 // pass: any StyleWriter record (sw), an original ImageWriter record (iw1), an original
 // StyleWriter record (sw1). Each out may be NULL.

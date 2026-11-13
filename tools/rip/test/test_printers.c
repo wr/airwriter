@@ -9,6 +9,7 @@
 #include "lw_caps.h"
 #include "sw_model.h"
 #include "sw_session.h"
+#include "qd_model.h"
 #include "ipp_icons.h"
 #include <stddef.h>
 #include <stdlib.h>
@@ -1393,7 +1394,7 @@ static void test_sw_models(void)
     CHECK_EQ_INT(pr_model_to_sw((pr_model_t)(PR_MODEL_SWC2500 + 1)), SW_NONE);
     CHECK_EQ_INT(pr_model_from_sw(SW_NONE), PR_MODEL_NONE);
     CHECK(strcmp(pr_model_name(PR_MODEL_IW2), "ImageWriter II") == 0);   // as it was
-    CHECK(strcmp(pr_model_name(PR_MODEL_SWC2500 + 1), "") == 0);
+    CHECK(strcmp(pr_model_name(PR_MODEL_PLW300 + 1), "") == 0);   // W-1102: the 300 follows the 2500
 }
 
 // A StyleWriter that answers on an empty port (twice, W-1116): a shared record named by its
@@ -1914,7 +1915,7 @@ static void test_sw_blob(void)
 {
     enum { HDR = 6 };
     static uint8_t buf[4096], v1[4096], v2[4096], bad[4096];
-    CHECK_EQ_INT(PR_BLOB_VER, 3);
+    CHECK(PR_BLOB_VER >= 3);                                 // W-1102: 4 adds a kind, not a layout
 
     // A list with a StyleWriter in it round-trips as version 2, its notices with it.
     fresh();
@@ -1987,9 +1988,9 @@ static void test_sw_blob(void)
     bad[2] = 2;
     CHECK_EQ_INT(pr_load(&M, bad, n), -1);
 
-    // Version 4 is a newer firmware's: not read here, and kept.
+    // A version after ours is a newer firmware's: not read here, and kept.
     memcpy(bad, buf, n);
-    bad[2] = 4;
+    bad[2] = PR_BLOB_VER + 1;
     pr_init(&M, MAC, 1);
     pr_list_t keep = M;
     CHECK_EQ_INT(pr_load(&M, bad, n), -1);
@@ -2194,7 +2195,7 @@ static void test_one_port_unchanged(void)
 static void test_blob_v3(void)
 {
     static uint8_t buf[4096], again[4096], bad[4096];
-    CHECK_EQ_INT(PR_BLOB_VER, 3);
+    CHECK(PR_BLOB_VER >= 3);                                 // W-1102: 4 adds a kind, not a layout
     fresh();
     int iw = seen_iw(PR_PORT_IW2);
     size_t n = pr_save(&L, buf, sizeof buf);
@@ -2828,6 +2829,211 @@ static void test_family_of_kind(void)
     CHECK_EQ_INT(pr_family_of(PR_KIND_LASERWRITER), PR_FAM_NONE);
     CHECK_EQ_INT(pr_family_of(PR_KIND_UNKNOWN), PR_FAM_NONE);
     CHECK_EQ_INT(pr_family_of(-1), PR_FAM_NONE);
+    CHECK_EQ_INT(pr_family_of(PR_KIND_QDLASER), PR_FAM_QDLASER);
+}
+
+// ------------------------------------------------------------- W-1102: QuickDraw LaserWriters
+
+static int seen_qd(uint8_t engine) { pr_port_seen_qd(&L, engine); return pr_port_seen_qd(&L, engine); }
+
+static void test_qd_new_record_needs_two_answers(void)
+{
+    fresh();
+    CHECK_EQ_INT(pr_port_seen_qd(&L, 0x29), PR_SEEN_AGAIN);
+    CHECK_EQ_INT(L.n, 0);
+    int id = pr_port_seen_qd(&L, 0x29);
+    CHECK(id > 0);
+    const pr_rec_t *r = pr_get(&L, id);
+    CHECK(r != NULL);
+    if (!r) return;
+    CHECK_EQ_INT(r->where, PR_WHERE_PORT);
+    CHECK_EQ_INT(r->kind, PR_KIND_QDLASER);
+    CHECK_EQ_INT(r->model, PR_MODEL_PLW300);
+    CHECK_EQ_INT(r->shared, 1);
+    CHECK_EQ_INT(r->found_auto, 1);
+    CHECK_EQ_INT(r->identified, 1);
+    CHECK(!strcmp(r->name, "Personal LaserWriter 300"));
+    CHECK(!strcmp(r->dither, "atkinson"));
+    CHECK_EQ_INT(pr_family_of(r->kind), PR_FAM_QDLASER);
+    CHECK_EQ_INT(pr_port_is_qdlaser(&L), 1);
+    CHECK_EQ_INT(pr_port_is_stylewriter(&L), 0);
+    CHECK_EQ_INT(pr_port_is_imagewriter(&L), 0);
+    CHECK(!strcmp(pr_kind_name(PR_KIND_QDLASER), "qdlaser"));
+    CHECK(!strcmp(pr_model_name(PR_MODEL_PLW300), "Personal LaserWriter 300"));
+    CHECK_EQ_INT(pr_model_to_qd(PR_MODEL_PLW300), QD_PLW300);
+    CHECK_EQ_INT(pr_model_to_qd(PR_MODEL_SW2), QD_NONE);
+    CHECK_EQ_INT(pr_model_from_qd(QD_PLW300), PR_MODEL_PLW300);
+    CHECK_EQ_INT(pr_model_from_qd(QD_NONE), PR_MODEL_NONE);
+    CHECK_EQ_INT(pr_has_apple_screen(PR_KIND_QDLASER), 1);
+    CHECK_EQ_INT(pr_has_apple_screen(PR_KIND_STYLEWRITER), 1);
+    CHECK_EQ_INT(pr_has_apple_screen(PR_KIND_IMAGEWRITER), 0);
+    CHECK_EQ_INT(pr_has_apple_screen(PR_KIND_LASERWRITER), 0);
+
+    // One garbled answer in between starts over: a 300 then an LS then a 300 makes nothing.
+    fresh();
+    CHECK_EQ_INT(pr_port_seen_qd(&L, 0x29), PR_SEEN_AGAIN);
+    CHECK_EQ_INT(pr_port_seen_sw(&L, PR_MODEL_SW2), PR_SEEN_AGAIN);
+    CHECK_EQ_INT(pr_port_seen_qd(&L, 0x29), PR_SEEN_AGAIN);
+    CHECK_EQ_INT(L.n, 0);
+
+    // The printer that said nothing becomes it.
+    fresh();
+    int u = pr_port_seen(&L, PR_PORT_SILENT);
+    CHECK_EQ_INT(seen_qd(0x29), u);
+    CHECK_EQ_INT(pr_get(&L, u)->kind, PR_KIND_QDLASER);
+    CHECK_EQ_INT(notes_of(PR_NOTE_UNKNOWN_PORT), 0);
+}
+
+static void test_qd_known_record_at_once(void)
+{
+    fresh();
+    int id = seen_qd(0x29);
+    seen_iw(PR_PORT_IW2);                                    // another printer answered since
+    CHECK_EQ_INT(pr_port_seen_qd(&L, 0x29), id);             // one answer: its record at once
+    CHECK_EQ_INT(pr_port_heard(&L), PR_HEARD_QDLASER);
+    CHECK(pr_port_current(&L) == pr_get(&L, id));
+    CHECK_EQ_INT(L.n, 2);
+}
+
+static void test_qd_unsupported_named_not_shared(void)
+{
+    fresh();
+    CHECK_EQ_INT(pr_port_seen_qd(&L, 0x0D), PR_SEEN_AGAIN);
+    CHECK_EQ_INT(L.qd_other, 0);
+    CHECK_EQ_INT(pr_port_seen_qd(&L, 0x0D), -1);
+    CHECK_EQ_INT(L.n, 0);
+    CHECK_EQ_INT(L.qd_other, 0x0D);
+    pr_live_t live[PR_MAX];
+    memset(live, 0, sizeof live);
+    static char buf[4096];
+    pr_json(&L, live, buf, sizeof buf);
+    CHECK(strstr(buf, "\"port_unsupported\":\"Personal LaserWriter LS\"") != NULL);
+    pr_port_clock_gone(&L);
+    CHECK_EQ_INT(L.qd_other, 0);
+    pr_json(&L, live, buf, sizeof buf);
+    CHECK(strstr(buf, "\"port_unsupported\":\"\"") != NULL);
+    CHECK_EQ_INT(pr_port_seen_qd(&L, 0x0D), PR_SEEN_AGAIN); // and a pending one is forgotten too
+
+    // A Japanese model has no name of its own; any other answer is a Select 300.
+    fresh();
+    seen_qd(0x23);
+    pr_json(&L, live, buf, sizeof buf);
+    CHECK(strstr(buf, "\"port_unsupported\":\"QuickDraw LaserWriter\"") != NULL);
+    fresh();
+    seen_qd(0x55);
+    pr_json(&L, live, buf, sizeof buf);
+    CHECK(strstr(buf, "\"port_unsupported\":\"LaserWriter Select 300\"") != NULL);
+    // A 300 after it: named and shared, and the unsupported one is gone.
+    seen_qd(0x29);
+    CHECK_EQ_INT(L.qd_other, 0);
+    CHECK_EQ_INT(L.n, 1);
+}
+
+static void test_qd_uuid_family_3(void)
+{
+    fresh();
+    int id = seen_qd(0x29);
+    const pr_rec_t *r = pr_get(&L, id);
+    CHECK(r && !strncmp(r->uuid + 28, "0b03", 4));
+}
+
+static void test_qd_blob_v4(void)
+{
+    fresh();
+    seen_iw(PR_PORT_IW2);
+    static uint8_t buf[4096];
+    size_t n = pr_save(&L, buf, sizeof buf);
+    CHECK_EQ_INT(buf[2], 1);                                 // a list without one saves as before
+    int id = seen_qd(0x29);
+    n = pr_save(&L, buf, sizeof buf);
+    CHECK(n > 0);
+    CHECK_EQ_INT(buf[2], 4);
+    pr_list_t M;
+    pr_init(&M, MAC, 1);
+    CHECK_EQ_INT(pr_load(&M, buf, n), 0);
+    CHECK_EQ_INT(M.n, L.n);
+    CHECK(memcmp(M.r, L.r, sizeof L.r[0] * L.n) == 0);
+    CHECK_EQ_INT(pr_get(&M, id)->kind, PR_KIND_QDLASER);
+    uint8_t bad[4096];
+    memcpy(bad, buf, n);
+    bad[2] = 3;                                              // a 3 never holds one
+    CHECK_EQ_INT(pr_load(&M, bad, n), -1);
+    memcpy(bad, buf, n);                                     // kind and model must agree
+    size_t at = 6 + (size_t)pr_index(&L, id) * sizeof(pr_rec_t) + offsetof(pr_rec_t, model);
+    bad[at] = PR_MODEL_SW2;
+    CHECK_EQ_INT(pr_load(&M, bad, n), -1);
+    CHECK_EQ_INT(pr_blob_newer(buf, n), 0);
+    memcpy(bad, buf, n);
+    bad[2] = 5;
+    CHECK_EQ_INT(pr_blob_newer(bad, n), 1);
+    CHECK_EQ_INT(PR_BLOB_VER, 4);
+    CHECK_EQ_INT(sizeof(pr_rec_t), 284);
+}
+
+static void test_qd_apple_screen_allowed(void)
+{
+    fresh();
+    pr_post_t r;
+    char body[96];
+    int qd = seen_qd(0x29);
+    snprintf(body, sizeof body, "{\"id\":%d,\"dither\":\"apple\"}", qd);
+    CHECK_EQ_INT(pr_post(&L, body, &r), 0);
+    CHECK(!strcmp(pr_get(&L, qd)->dither, "apple"));
+    int iw = seen_iw(PR_PORT_IW2);
+    snprintf(body, sizeof body, "{\"id\":%d,\"dither\":\"apple\"}", iw);
+    CHECK_EQ_INT(pr_post(&L, body, &r), -1);
+}
+
+static void test_qd_takes_port_from_imagewriter(void)
+{
+    fresh();
+    int iw = seen_iw(PR_PORT_IW2);
+    int qd = seen_qd(0x29);
+    pr_live_t live[PR_MAX];
+    memset(live, 0, sizeof live);
+    live[pr_index(&L, qd)].present = 1;
+    CHECK_EQ_INT(pr_port_absent(&L, live, iw), 1);
+    CHECK_EQ_INT(pr_port_absent(&L, live, qd), 0);
+    CHECK_EQ_INT(pr_job_gate(&L, iw, PR_HEARD_QDLASER, PR_MODEL_NONE, 1), PR_GATE_OTHER);
+    CHECK_EQ_INT(pr_port_say(&L, live, iw), PR_PORT_SAY_TAKEN);
+    CHECK_EQ_INT(pr_port_live_id(&L), qd);
+    CHECK_EQ_INT(pr_test_target(&L, live), qd);
+    int ids[PR_MAX];
+    int n = pr_offers(&L, PR_WHERE_CABLE, ids, PR_MAX);      // vintage Macs get the ImageWriter only
+    CHECK_EQ_INT(n, 1);
+    CHECK_EQ_INT(ids[0], iw);
+    pr_port_answered(&L, PR_HEARD_QDLASER);                  // its own answer names it
+    CHECK_EQ_INT(pr_port_heard(&L), PR_HEARD_QDLASER);
+    CHECK(pr_port_current(&L) == pr_get(&L, qd));
+    live[pr_index(&L, qd)].attention = 1;
+    live[pr_index(&L, qd)].fault = PR_FAULT_JAM;
+    static char buf[4096];
+    pr_json(&L, live, buf, sizeof buf);
+    CHECK(strstr(buf, "\"kind\":\"qdlaser\"") != NULL);
+    CHECK(strstr(buf, "\"fault\":\"jam\"") != NULL);
+}
+
+static void test_qd_not_addable_by_hand(void)
+{
+    fresh();
+    pr_post_t r;
+    CHECK_EQ_INT(pr_post(&L, "{\"add_port\":\"Personal LaserWriter 300\"}", &r), -1);
+    CHECK_EQ_INT(L.n, 0);
+    int qd = seen_qd(0x29);
+    CHECK_EQ_INT(pr_set_model(&L, qd, PR_MODEL_IW2), -1);
+    CHECK_EQ_INT(pr_set_model(&L, qd, PR_MODEL_NONE), -1);
+    CHECK_EQ_INT(pr_get(&L, qd)->model, PR_MODEL_PLW300);
+    int iw = seen_iw(PR_PORT_IW2);
+    CHECK_EQ_INT(pr_set_model(&L, iw, PR_MODEL_PLW300), -1);
+    CHECK_EQ_INT(pr_add_port(&L, PR_MODEL_PLW300), -1);
+}
+
+static void test_qd_icon_served(void)
+{
+    const char *icon = pr_icon(PR_KIND_QDLASER, PR_MODEL_PLW300, NULL);
+    CHECK(!strcmp(icon, "plw300"));
+    CHECK(served(icon));
+    CHECK(!strcmp(pr_icon(PR_KIND_QDLASER, PR_MODEL_NONE, NULL), "plw300"));
 }
 
 int main(void)
@@ -2879,6 +3085,15 @@ int main(void)
     test_sw_fault();
     test_sw_cleaning();
     test_family_of_kind();
+    test_qd_new_record_needs_two_answers();
+    test_qd_known_record_at_once();
+    test_qd_unsupported_named_not_shared();
+    test_qd_uuid_family_3();
+    test_qd_blob_v4();
+    test_qd_apple_screen_allowed();
+    test_qd_takes_port_from_imagewriter();
+    test_qd_not_addable_by_hand();
+    test_qd_icon_served();
     test_sw_test_target();
     test_sw_offers();
     test_sw_box_state();

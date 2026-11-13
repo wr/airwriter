@@ -102,7 +102,8 @@ build/test_pap_relay: test/test_pap_relay.c $(LT)/lt_proto.c $(LT)/lt_node.c $(L
 # W-1088: the printer list, beside the LaserWriter pieces it names records with.
 build/test_printers: test/test_printers.c $(COMP)/printers/printers_core.c $(COMP)/laser/lw_caps.c \
                      $(COMP)/laser/lw_query.c $(COMP)/printer_caps/printer_caps.c $(LT)/lt_proto.c \
-                     $(COMP)/stylewriter/sw_model.c $(COMP)/halftone/apple_tables.c | build
+                     $(COMP)/stylewriter/sw_model.c $(COMP)/halftone/apple_tables.c \
+                     $(COMP)/qdlaser/qd_model.c $(COMP)/halftone/apple_tables_lw.c | build
 	$(CC) $(CFLAGS) $(INCS) -I$(COMP)/printers/include -I$(COMP)/ipp_server/include -I$(LT)/include -Itest \
 	      -DICON_DIR='"$(abspath $(COMP)/ipp_server/icons)"' -o $@ $^
 
