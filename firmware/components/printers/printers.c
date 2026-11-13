@@ -1087,7 +1087,8 @@ void printers_status_json(char *buf, size_t cap)
         return;
     }
     static const char *const modes[] = { "none", "imagewriter", "unknown", "something_else",
-                                         "stylewriter" };
+                                         "stylewriter", "qdlaser" };
+    _Static_assert(sizeof modes / sizeof modes[0] == PORT_QDLASER + 1, "a name for every port mode");
     lock();
     int shared = 0;
     for (int i = 0; i < s_l->n; i++) shared += s_l->r[i].shared;

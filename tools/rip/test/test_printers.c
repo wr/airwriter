@@ -3028,6 +3028,15 @@ static void test_qd_takes_port_from_imagewriter(void)
     pr_json(&L, live, buf, sizeof buf);
     CHECK(strstr(buf, "\"kind\":\"qdlaser\"") != NULL);
     CHECK(strstr(buf, "\"fault\":\"jam\"") != NULL);
+    // Its AirPrint path, for the settings page's AirPrint list: its own, as any second port
+    // record's (printers.c serves it there).
+    CHECK_EQ_INT(pr_get(&L, qd)->shared, 1);
+    char want[64];
+    snprintf(want, sizeof want, "\"id\":%d,\"name\":\"Personal LaserWriter 300\"", qd);
+    const char *rec = strstr(buf, want);
+    CHECK(rec != NULL);
+    snprintf(want, sizeof want, "\"rp\":\"ipp/p%d\"", qd);
+    CHECK(rec && strstr(rec, want) != NULL && strstr(rec, want) < strstr(rec, "}"));
 }
 
 static void test_qd_not_addable_by_hand(void)

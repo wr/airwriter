@@ -1426,7 +1426,8 @@ size_t pr_json(const pr_list_t *l, const pr_live_t live[PR_MAX], char *buf, size
         // had before W-1116) ipp/print, W-1082's LaserWriter's ipp/laser, every other's own.
         char rp[16] = "";
         if (r->shared && r->identified && r->where == PR_WHERE_PORT &&
-            (r->kind == PR_KIND_IMAGEWRITER || r->kind == PR_KIND_STYLEWRITER))
+            (r->kind == PR_KIND_IMAGEWRITER || r->kind == PR_KIND_STYLEWRITER ||
+             r->kind == PR_KIND_QDLASER))
             snprintf(rp, sizeof rp, r == oldest ? "ipp/print" : "ipp/p%u", r->id);
         else if (r->shared && r->identified && r->kind == PR_KIND_LASERWRITER)
             snprintf(rp, sizeof rp, r->ipp_laser ? "ipp/laser" : "ipp/p%u", r->id);

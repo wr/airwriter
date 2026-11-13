@@ -5002,6 +5002,811 @@
      "_body": "#\t2\t0\t0\n1\t4\t0\tS\tsys\treset=software version=v0.2.0-31-g4a93f60\n2\t4\t50\tW\tairwriter\tfactory reset: settings erased; restarting when the button is let go\n"
     }
    }
+  },
+  "qdlaser-ready": {
+   "about": "Printers: a Personal LaserWriter 300, ready",
+   "patch": {
+    "GET /api/printers": {
+     "printers": [
+      {
+       "id": 1,
+       "name": "Personal LaserWriter 300",
+       "where": "port",
+       "kind": "qdlaser",
+       "model": "Personal LaserWriter 300",
+       "shared": true,
+       "identified": true,
+       "found": "auto",
+       "state": "ready",
+       "uuid": "urn:uuid:41575254-4c57-0001-0003-10bda36e2434",
+       "product": "",
+       "icon": "plw300",
+       "dither": "atkinson",
+       "gain": 0,
+       "rp": "ipp/print",
+       "start_page": null
+      }
+     ],
+     "notes": [],
+     "port_on": 1,
+     "said_other": false,
+     "chooser": [],
+     "port_unsupported": "",
+     "max_shared": 6
+    },
+    "POST /api/printers": {
+     "printers": [
+      {
+       "id": 1,
+       "name": "Personal LaserWriter 300",
+       "where": "port",
+       "kind": "qdlaser",
+       "model": "Personal LaserWriter 300",
+       "shared": true,
+       "identified": true,
+       "found": "auto",
+       "state": "ready",
+       "uuid": "urn:uuid:41575254-4c57-0001-0003-10bda36e2434",
+       "product": "",
+       "icon": "plw300",
+       "dither": "atkinson",
+       "gain": 0,
+       "rp": "ipp/print",
+       "start_page": null
+      }
+     ],
+     "notes": [],
+     "port_on": 1,
+     "said_other": false,
+     "chooser": [],
+     "port_unsupported": "",
+     "max_shared": 6
+    },
+    "GET /api/laser": {
+     "heard": [],
+     "targets": [],
+     "job": {
+      "active": false,
+      "sent": 0,
+      "last": ""
+     }
+    },
+    "GET /api/status": {
+     "printers": {
+      "count": 1,
+      "shared": 1,
+      "notes": 0,
+      "port": "qdlaser"
+     },
+     "model": "Apple Personal LaserWriter 300",
+     "ribbon": "unknown"
+    }
+   }
+  },
+  "qdlaser-printing": {
+   "about": "Printers: a Personal LaserWriter 300 printing",
+   "patch": {
+    "GET /api/printers": {
+     "printers": [
+      {
+       "id": 1,
+       "name": "Personal LaserWriter 300",
+       "where": "port",
+       "kind": "qdlaser",
+       "model": "Personal LaserWriter 300",
+       "shared": true,
+       "identified": true,
+       "found": "auto",
+       "state": "printing",
+       "uuid": "urn:uuid:41575254-4c57-0001-0003-10bda36e2434",
+       "product": "",
+       "icon": "plw300",
+       "dither": "atkinson",
+       "gain": 0,
+       "rp": "ipp/print",
+       "start_page": null
+      }
+     ],
+     "notes": [],
+     "port_on": 1,
+     "said_other": false,
+     "chooser": [],
+     "port_unsupported": "",
+     "max_shared": 6
+    },
+    "POST /api/printers": {
+     "printers": [
+      {
+       "id": 1,
+       "name": "Personal LaserWriter 300",
+       "where": "port",
+       "kind": "qdlaser",
+       "model": "Personal LaserWriter 300",
+       "shared": true,
+       "identified": true,
+       "found": "auto",
+       "state": "printing",
+       "uuid": "urn:uuid:41575254-4c57-0001-0003-10bda36e2434",
+       "product": "",
+       "icon": "plw300",
+       "dither": "atkinson",
+       "gain": 0,
+       "rp": "ipp/print",
+       "start_page": null
+      }
+     ],
+     "notes": [],
+     "port_on": 1,
+     "said_other": false,
+     "chooser": [],
+     "port_unsupported": "",
+     "max_shared": 6
+    },
+    "GET /api/laser": {
+     "heard": [],
+     "targets": [],
+     "job": {
+      "active": false,
+      "sent": 0,
+      "last": ""
+     }
+    },
+    "GET /api/status": {
+     "printers": {
+      "count": 1,
+      "shared": 1,
+      "notes": 0,
+      "port": "qdlaser"
+     },
+     "model": "Apple Personal LaserWriter 300",
+     "ribbon": "unknown",
+     "ps": "printing",
+     "state": "Printing",
+     "printing": true,
+     "job": "Boarding pass.pdf"
+    }
+   }
+  },
+  "qdlaser-paper": {
+   "about": "Printers: a Personal LaserWriter 300 out of paper",
+   "patch": {
+    "GET /api/printers": {
+     "printers": [
+      {
+       "id": 1,
+       "name": "Personal LaserWriter 300",
+       "where": "port",
+       "kind": "qdlaser",
+       "model": "Personal LaserWriter 300",
+       "shared": true,
+       "identified": true,
+       "found": "auto",
+       "state": "attention",
+       "uuid": "urn:uuid:41575254-4c57-0001-0003-10bda36e2434",
+       "product": "",
+       "icon": "plw300",
+       "dither": "atkinson",
+       "gain": 0,
+       "rp": "ipp/print",
+       "start_page": null,
+       "fault": "paper"
+      }
+     ],
+     "notes": [],
+     "port_on": 1,
+     "said_other": false,
+     "chooser": [],
+     "port_unsupported": "",
+     "max_shared": 6
+    },
+    "POST /api/printers": {
+     "printers": [
+      {
+       "id": 1,
+       "name": "Personal LaserWriter 300",
+       "where": "port",
+       "kind": "qdlaser",
+       "model": "Personal LaserWriter 300",
+       "shared": true,
+       "identified": true,
+       "found": "auto",
+       "state": "attention",
+       "uuid": "urn:uuid:41575254-4c57-0001-0003-10bda36e2434",
+       "product": "",
+       "icon": "plw300",
+       "dither": "atkinson",
+       "gain": 0,
+       "rp": "ipp/print",
+       "start_page": null,
+       "fault": "paper"
+      }
+     ],
+     "notes": [],
+     "port_on": 1,
+     "said_other": false,
+     "chooser": [],
+     "port_unsupported": "",
+     "max_shared": 6
+    },
+    "GET /api/laser": {
+     "heard": [],
+     "targets": [],
+     "job": {
+      "active": false,
+      "sent": 0,
+      "last": ""
+     }
+    },
+    "GET /api/status": {
+     "printers": {
+      "count": 1,
+      "shared": 1,
+      "notes": 0,
+      "port": "qdlaser"
+     },
+     "model": "Apple Personal LaserWriter 300",
+     "ribbon": "unknown",
+     "ps": "attention",
+     "state": "Needs attention",
+     "fault": true,
+     "stopped": true
+    }
+   }
+  },
+  "qdlaser-jam": {
+   "about": "Printers: a Personal LaserWriter 300 with a paper jam",
+   "patch": {
+    "GET /api/printers": {
+     "printers": [
+      {
+       "id": 1,
+       "name": "Personal LaserWriter 300",
+       "where": "port",
+       "kind": "qdlaser",
+       "model": "Personal LaserWriter 300",
+       "shared": true,
+       "identified": true,
+       "found": "auto",
+       "state": "attention",
+       "uuid": "urn:uuid:41575254-4c57-0001-0003-10bda36e2434",
+       "product": "",
+       "icon": "plw300",
+       "dither": "atkinson",
+       "gain": 0,
+       "rp": "ipp/print",
+       "start_page": null,
+       "fault": "jam"
+      }
+     ],
+     "notes": [],
+     "port_on": 1,
+     "said_other": false,
+     "chooser": [],
+     "port_unsupported": "",
+     "max_shared": 6
+    },
+    "POST /api/printers": {
+     "printers": [
+      {
+       "id": 1,
+       "name": "Personal LaserWriter 300",
+       "where": "port",
+       "kind": "qdlaser",
+       "model": "Personal LaserWriter 300",
+       "shared": true,
+       "identified": true,
+       "found": "auto",
+       "state": "attention",
+       "uuid": "urn:uuid:41575254-4c57-0001-0003-10bda36e2434",
+       "product": "",
+       "icon": "plw300",
+       "dither": "atkinson",
+       "gain": 0,
+       "rp": "ipp/print",
+       "start_page": null,
+       "fault": "jam"
+      }
+     ],
+     "notes": [],
+     "port_on": 1,
+     "said_other": false,
+     "chooser": [],
+     "port_unsupported": "",
+     "max_shared": 6
+    },
+    "GET /api/laser": {
+     "heard": [],
+     "targets": [],
+     "job": {
+      "active": false,
+      "sent": 0,
+      "last": ""
+     }
+    },
+    "GET /api/status": {
+     "printers": {
+      "count": 1,
+      "shared": 1,
+      "notes": 0,
+      "port": "qdlaser"
+     },
+     "model": "Apple Personal LaserWriter 300",
+     "ribbon": "unknown",
+     "ps": "attention",
+     "state": "Needs attention",
+     "fault": true,
+     "stopped": true
+    }
+   }
+  },
+  "qdlaser-cover": {
+   "about": "Printers: a Personal LaserWriter 300 with its cover open",
+   "patch": {
+    "GET /api/printers": {
+     "printers": [
+      {
+       "id": 1,
+       "name": "Personal LaserWriter 300",
+       "where": "port",
+       "kind": "qdlaser",
+       "model": "Personal LaserWriter 300",
+       "shared": true,
+       "identified": true,
+       "found": "auto",
+       "state": "attention",
+       "uuid": "urn:uuid:41575254-4c57-0001-0003-10bda36e2434",
+       "product": "",
+       "icon": "plw300",
+       "dither": "atkinson",
+       "gain": 0,
+       "rp": "ipp/print",
+       "start_page": null,
+       "fault": "cover"
+      }
+     ],
+     "notes": [],
+     "port_on": 1,
+     "said_other": false,
+     "chooser": [],
+     "port_unsupported": "",
+     "max_shared": 6
+    },
+    "POST /api/printers": {
+     "printers": [
+      {
+       "id": 1,
+       "name": "Personal LaserWriter 300",
+       "where": "port",
+       "kind": "qdlaser",
+       "model": "Personal LaserWriter 300",
+       "shared": true,
+       "identified": true,
+       "found": "auto",
+       "state": "attention",
+       "uuid": "urn:uuid:41575254-4c57-0001-0003-10bda36e2434",
+       "product": "",
+       "icon": "plw300",
+       "dither": "atkinson",
+       "gain": 0,
+       "rp": "ipp/print",
+       "start_page": null,
+       "fault": "cover"
+      }
+     ],
+     "notes": [],
+     "port_on": 1,
+     "said_other": false,
+     "chooser": [],
+     "port_unsupported": "",
+     "max_shared": 6
+    },
+    "GET /api/laser": {
+     "heard": [],
+     "targets": [],
+     "job": {
+      "active": false,
+      "sent": 0,
+      "last": ""
+     }
+    },
+    "GET /api/status": {
+     "printers": {
+      "count": 1,
+      "shared": 1,
+      "notes": 0,
+      "port": "qdlaser"
+     },
+     "model": "Apple Personal LaserWriter 300",
+     "ribbon": "unknown",
+     "ps": "attention",
+     "state": "Needs attention",
+     "fault": true,
+     "stopped": true
+    }
+   }
+  },
+  "qdlaser-other": {
+   "about": "Printers: a Personal LaserWriter 300 with an engine fault",
+   "patch": {
+    "GET /api/printers": {
+     "printers": [
+      {
+       "id": 1,
+       "name": "Personal LaserWriter 300",
+       "where": "port",
+       "kind": "qdlaser",
+       "model": "Personal LaserWriter 300",
+       "shared": true,
+       "identified": true,
+       "found": "auto",
+       "state": "attention",
+       "uuid": "urn:uuid:41575254-4c57-0001-0003-10bda36e2434",
+       "product": "",
+       "icon": "plw300",
+       "dither": "atkinson",
+       "gain": 0,
+       "rp": "ipp/print",
+       "start_page": null,
+       "fault": "other"
+      }
+     ],
+     "notes": [],
+     "port_on": 1,
+     "said_other": false,
+     "chooser": [],
+     "port_unsupported": "",
+     "max_shared": 6
+    },
+    "POST /api/printers": {
+     "printers": [
+      {
+       "id": 1,
+       "name": "Personal LaserWriter 300",
+       "where": "port",
+       "kind": "qdlaser",
+       "model": "Personal LaserWriter 300",
+       "shared": true,
+       "identified": true,
+       "found": "auto",
+       "state": "attention",
+       "uuid": "urn:uuid:41575254-4c57-0001-0003-10bda36e2434",
+       "product": "",
+       "icon": "plw300",
+       "dither": "atkinson",
+       "gain": 0,
+       "rp": "ipp/print",
+       "start_page": null,
+       "fault": "other"
+      }
+     ],
+     "notes": [],
+     "port_on": 1,
+     "said_other": false,
+     "chooser": [],
+     "port_unsupported": "",
+     "max_shared": 6
+    },
+    "GET /api/laser": {
+     "heard": [],
+     "targets": [],
+     "job": {
+      "active": false,
+      "sent": 0,
+      "last": ""
+     }
+    },
+    "GET /api/status": {
+     "printers": {
+      "count": 1,
+      "shared": 1,
+      "notes": 0,
+      "port": "qdlaser"
+     },
+     "model": "Apple Personal LaserWriter 300",
+     "ribbon": "unknown",
+     "ps": "attention",
+     "state": "Needs attention",
+     "fault": true,
+     "stopped": true
+    }
+   }
+  },
+  "qdlaser-offline": {
+   "about": "Printers: a Personal LaserWriter 300 switched off",
+   "patch": {
+    "GET /api/printers": {
+     "printers": [
+      {
+       "id": 1,
+       "name": "Personal LaserWriter 300",
+       "where": "port",
+       "kind": "qdlaser",
+       "model": "Personal LaserWriter 300",
+       "shared": true,
+       "identified": true,
+       "found": "auto",
+       "state": "offline",
+       "uuid": "urn:uuid:41575254-4c57-0001-0003-10bda36e2434",
+       "product": "",
+       "icon": "plw300",
+       "dither": "atkinson",
+       "gain": 0,
+       "rp": "ipp/print",
+       "start_page": null
+      }
+     ],
+     "notes": [],
+     "port_on": 0,
+     "said_other": false,
+     "chooser": [],
+     "port_unsupported": "",
+     "max_shared": 6
+    },
+    "POST /api/printers": {
+     "printers": [
+      {
+       "id": 1,
+       "name": "Personal LaserWriter 300",
+       "where": "port",
+       "kind": "qdlaser",
+       "model": "Personal LaserWriter 300",
+       "shared": true,
+       "identified": true,
+       "found": "auto",
+       "state": "offline",
+       "uuid": "urn:uuid:41575254-4c57-0001-0003-10bda36e2434",
+       "product": "",
+       "icon": "plw300",
+       "dither": "atkinson",
+       "gain": 0,
+       "rp": "ipp/print",
+       "start_page": null
+      }
+     ],
+     "notes": [],
+     "port_on": 0,
+     "said_other": false,
+     "chooser": [],
+     "port_unsupported": "",
+     "max_shared": 6
+    },
+    "GET /api/laser": {
+     "heard": [],
+     "targets": [],
+     "job": {
+      "active": false,
+      "sent": 0,
+      "last": ""
+     }
+    },
+    "GET /api/status": {
+     "printers": {
+      "count": 1,
+      "shared": 1,
+      "notes": 0,
+      "port": "qdlaser"
+     },
+     "model": "Apple Personal LaserWriter 300",
+     "ribbon": "unknown",
+     "ps": "offline",
+     "state": "Offline",
+     "printer": false,
+     "stopped": true
+    }
+   }
+  },
+  "qdlaser-failed": {
+   "about": "Printers: a Personal LaserWriter 300 whose last job had a page too detailed for it",
+   "patch": {
+    "GET /api/printers": {
+     "printers": [
+      {
+       "id": 1,
+       "name": "Personal LaserWriter 300",
+       "where": "port",
+       "kind": "qdlaser",
+       "model": "Personal LaserWriter 300",
+       "shared": true,
+       "identified": true,
+       "found": "auto",
+       "state": "failed",
+       "uuid": "urn:uuid:41575254-4c57-0001-0003-10bda36e2434",
+       "product": "",
+       "icon": "plw300",
+       "dither": "atkinson",
+       "gain": 0,
+       "rp": "ipp/print",
+       "start_page": null
+      }
+     ],
+     "notes": [],
+     "port_on": 1,
+     "said_other": false,
+     "chooser": [],
+     "port_unsupported": "",
+     "max_shared": 6
+    },
+    "POST /api/printers": {
+     "printers": [
+      {
+       "id": 1,
+       "name": "Personal LaserWriter 300",
+       "where": "port",
+       "kind": "qdlaser",
+       "model": "Personal LaserWriter 300",
+       "shared": true,
+       "identified": true,
+       "found": "auto",
+       "state": "failed",
+       "uuid": "urn:uuid:41575254-4c57-0001-0003-10bda36e2434",
+       "product": "",
+       "icon": "plw300",
+       "dither": "atkinson",
+       "gain": 0,
+       "rp": "ipp/print",
+       "start_page": null
+      }
+     ],
+     "notes": [],
+     "port_on": 1,
+     "said_other": false,
+     "chooser": [],
+     "port_unsupported": "",
+     "max_shared": 6
+    },
+    "GET /api/laser": {
+     "heard": [],
+     "targets": [],
+     "job": {
+      "active": false,
+      "sent": 0,
+      "last": ""
+     }
+    },
+    "GET /api/status": {
+     "printers": {
+      "count": 1,
+      "shared": 1,
+      "notes": 0,
+      "port": "qdlaser"
+     },
+     "model": "Apple Personal LaserWriter 300",
+     "ribbon": "unknown",
+     "ps": "failed",
+     "state": "The last job failed",
+     "fault": true,
+     "job": "Photo album.pdf (3 pages)",
+     "job_error": "Page 2 is too detailed for this printer."
+    }
+   }
+  },
+  "qdlaser-ls": {
+   "about": "Printers: a Personal LaserWriter LS on the printer port, not supported yet",
+   "patch": {
+    "GET /api/printers": {
+     "printers": [],
+     "notes": [],
+     "port_on": 0,
+     "said_other": false,
+     "chooser": [],
+     "port_unsupported": "Personal LaserWriter LS",
+     "max_shared": 6
+    },
+    "POST /api/printers": {
+     "printers": [],
+     "notes": [],
+     "port_on": 0,
+     "said_other": false,
+     "chooser": [],
+     "port_unsupported": "Personal LaserWriter LS",
+     "max_shared": 6
+    },
+    "GET /api/laser": {
+     "heard": [],
+     "targets": [],
+     "job": {
+      "active": false,
+      "sent": 0,
+      "last": ""
+     }
+    },
+    "GET /api/status": {
+     "printers": {
+      "count": 0,
+      "shared": 0,
+      "notes": 0,
+      "port": "none"
+     },
+     "model": "",
+     "ribbon": "unknown",
+     "ps": "offline",
+     "state": "Offline",
+     "printer": false
+    }
+   }
+  },
+  "qdlaser-select": {
+   "about": "Printers: a LaserWriter Select 300 on the printer port beside a StyleWriter record",
+   "patch": {
+    "GET /api/printers": {
+     "printers": [
+      {
+       "id": 1,
+       "name": "StyleWriter II",
+       "where": "port",
+       "kind": "stylewriter",
+       "model": "StyleWriter II",
+       "shared": true,
+       "identified": true,
+       "found": "auto",
+       "state": "offline",
+       "uuid": "urn:uuid:41575254-4c57-0001-0002-10bda36e2434",
+       "product": "",
+       "icon": "sw2",
+       "dither": "atkinson",
+       "gain": 0,
+       "rp": "ipp/print",
+       "start_page": null
+      }
+     ],
+     "notes": [],
+     "port_on": 0,
+     "said_other": false,
+     "chooser": [],
+     "port_unsupported": "LaserWriter Select 300",
+     "max_shared": 6
+    },
+    "POST /api/printers": {
+     "printers": [
+      {
+       "id": 1,
+       "name": "StyleWriter II",
+       "where": "port",
+       "kind": "stylewriter",
+       "model": "StyleWriter II",
+       "shared": true,
+       "identified": true,
+       "found": "auto",
+       "state": "offline",
+       "uuid": "urn:uuid:41575254-4c57-0001-0002-10bda36e2434",
+       "product": "",
+       "icon": "sw2",
+       "dither": "atkinson",
+       "gain": 0,
+       "rp": "ipp/print",
+       "start_page": null
+      }
+     ],
+     "notes": [],
+     "port_on": 0,
+     "said_other": false,
+     "chooser": [],
+     "port_unsupported": "LaserWriter Select 300",
+     "max_shared": 6
+    },
+    "GET /api/laser": {
+     "heard": [],
+     "targets": [],
+     "job": {
+      "active": false,
+      "sent": 0,
+      "last": ""
+     }
+    },
+    "GET /api/status": {
+     "printers": {
+      "count": 1,
+      "shared": 1,
+      "notes": 0,
+      "port": "qdlaser"
+     },
+     "model": "Apple Personal LaserWriter 300",
+     "ribbon": "unknown",
+     "ps": "offline",
+     "state": "Offline",
+     "printer": false
+    }
+   }
   }
  }
 }
