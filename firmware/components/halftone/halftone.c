@@ -8,6 +8,11 @@
 #include "apple_tables.h"
 #include "apple_tables_lw.h"
 
+// The error rows carry ERR_PAD columns of slack on each side: a kernel tap past either edge of
+// the page lands there, where no pixel reads it and its row's clearing wipes it, so no tap
+// needs a check (W-1143).
+#define ERR_PAD 2
+
 // Bill Atkinson's kernel, written for the Macintosh in the same years the
 // ImageWriter shipped. It spreads only 6/8 of the error on purpose, which is
 // why it holds contrast on a bilevel device with no ink density control.
@@ -29,7 +34,7 @@ int ht_init(ht_t *h, ht_algo_t algo, uint32_t width)
     h->algo  = algo;
     h->width = width;
     for (int v = 0; v < 256; v++) h->tone[v] = (uint8_t)v;
-    h->err   = big_calloc((size_t)width * 3, sizeof *h->err);
+    h->err   = big_calloc((size_t)(width + 2 * ERR_PAD) * 3, sizeof *h->err);
     return h->err ? 0 : -1;
 }
 
@@ -99,43 +104,65 @@ uint8_t ht_bluenoise_at(uint32_t x, uint32_t y)
     return bluenoise64[(y & 63) * 64 + (x & 63)];
 }
 
-static int16_t *errrow(ht_t *h, uint32_t y) { return h->err + (size_t)(y % 3) * h->width; }
+static int16_t *errrow(const ht_t *h, uint32_t y)
+{
+    return h->err + (size_t)(y % 3) * (h->width + 2 * ERR_PAD) + ERR_PAD;
+}
 
 int16_t ht_peek_err(const ht_t *h, uint32_t ahead, uint32_t x)
 {
-    return h->err[(size_t)((h->y + ahead) % 3) * h->width + x];
+    return errrow(h, h->y + ahead)[x];
 }
 
-// One tap of the kernel: column x + dx of the given error row, if it exists.
-static inline void tap(int16_t *row, uint32_t x, int dx, uint32_t w, int e)
+static inline void set_ink(uint8_t *bits, uint32_t x)
 {
-    int64_t c = (int64_t)x + dx;
-    if (c >= 0 && c < (int64_t)w) row[c] += (int16_t)e;
+    bits[x >> 3] |= (uint8_t)(0x80 >> (x & 7));
 }
 
-// dir is +1 on a row scanned left to right and -1 on one scanned back, and
-// the kernel is mirrored with it: "ahead" is always the way the scan goes.
-static void spread(ht_t *h, uint32_t x, int err, int dir)
+// Atkinson or Floyd-Steinberg, serpentine: dir is +1 on a row scanned left to right and -1 on
+// one scanned back, and the kernel is mirrored with it, so "ahead" is always the way the scan
+// goes. Row pointers are taken once a row and the screen chosen once a row (W-1143).
+static void diffuse_row(ht_t *h, const uint8_t *gray, const uint8_t *avoid, uint8_t *bits)
 {
-    int16_t *r0 = errrow(h, h->y);
-    int16_t *r1 = errrow(h, h->y + 1);
-    int16_t *r2 = errrow(h, h->y + 2);
-    uint32_t w  = h->width;
+    const int32_t w = (int32_t)h->width;
+    int16_t *r0 = errrow(h, h->y), *r1 = errrow(h, h->y + 1), *r2 = errrow(h, h->y + 2);
+    const uint8_t *tone = h->tone;
+    const int atkinson = h->algo == HT_ATKINSON;
+    const int dir = (h->y & 1) ? -1 : 1;
+    int32_t x = dir > 0 ? 0 : w - 1;
 
-    if (h->algo == HT_ATKINSON) {
-        int e = err / 8;                    // six neighbours, one eighth each
-        tap(r0, x,  dir,     w, e);
-        tap(r0, x,  2 * dir, w, e);
-        tap(r1, x, -dir,     w, e);
-        tap(r1, x,  0,       w, e);
-        tap(r1, x,  dir,     w, e);
-        tap(r2, x,  0,       w, e);
-    } else {                                // Floyd-Steinberg
-        tap(r0, x,  dir, w, err * 7 / 16);
-        tap(r1, x, -dir, w, err * 3 / 16);
-        tap(r1, x,  0,   w, err * 5 / 16);
-        tap(r1, x,  dir, w, err * 1 / 16);
+    for (int32_t i = 0; i < w; i++, x += dir) {
+        int v = tone[gray[x]];
+        int carried = r0[x];
+        // White with nothing carried prints nothing and carries nothing on: most of a page.
+        if (v == 255 && carried == 0) continue;
+        // The published algorithms derive the quantisation error from the
+        // unclamped accumulated value. Clamping here instead would discard
+        // error whenever a pixel overshoots, which lightens or darkens the
+        // result and loses detail in extremes.
+        int raw = v + carried;
+        int cut = (avoid && (avoid[x >> 3] & (0x80 >> (x & 7)))) ? 64 : 128;
+        int out = raw < cut ? 0 : 255;
+        if (!out) set_ink(bits, (uint32_t)x);
+        int err = raw - out;
+        if (atkinson) {
+            int e = err / 8;                    // six neighbours, one eighth each
+            r0[x + dir]     += (int16_t)e;
+            r0[x + 2 * dir] += (int16_t)e;
+            r1[x - dir]     += (int16_t)e;
+            r1[x]           += (int16_t)e;
+            r1[x + dir]     += (int16_t)e;
+            r2[x]           += (int16_t)e;
+        } else {                                // Floyd-Steinberg
+            r0[x + dir] += (int16_t)(err * 7 / 16);
+            r1[x - dir] += (int16_t)(err * 3 / 16);
+            r1[x]       += (int16_t)(err * 5 / 16);
+            r1[x + dir] += (int16_t)(err * 1 / 16);
+        }
     }
+
+    // This row's error slot is finished with; clear it, slack and all, for reuse two rows on.
+    memset(r0 - ERR_PAD, 0, (size_t)(w + 2 * ERR_PAD) * sizeof *r0);
 }
 
 void ht_row(ht_t *h, const uint8_t *gray, uint8_t *bits)
@@ -145,75 +172,69 @@ void ht_row(ht_t *h, const uint8_t *gray, uint8_t *bits)
 
 void ht_row_avoid(ht_t *h, const uint8_t *gray, const uint8_t *avoid, uint8_t *bits)
 {
-    uint32_t w      = h->width;
-    size_t   nbytes = (w + 7) / 8;
-    memset(bits, 0, nbytes);
+    const uint32_t w = h->width;
+    memset(bits, 0, (w + 7) / 8);
 
-    int16_t *cur = errrow(h, h->y);
-    int diffusing = h->algo == HT_ATKINSON || h->algo == HT_FLOYD;
-    int dir = (diffusing && (h->y & 1)) ? -1 : 1;
-    uint32_t ty = h->y + h->phase_y;
-
-    for (uint32_t i = 0; i < w; i++) {
-        uint32_t x = dir > 0 ? i : w - 1 - i;
-        int v = h->tone[gray[x]];
-        int ink;
-
-        switch (h->algo) {
-        case HT_THRESHOLD:
-            ink = v < 128;
-            break;
-        case HT_BAYER: {
-            int t = (bayer8[ty % 8][(x + h->phase_x) % 8] * 255) / 64;
-            if (h->invert) t = 251 - t;
-            ink = v <= t;
-            break;
-        }
-        case HT_BLUENOISE: {
-            // 16 cells of the tile at each level, so a flat v prints
-            // (256 - v) / 256 of them; bare paper prints none at all.
-            int t = ht_bluenoise_at(x + h->phase_x, ty);
-            if (h->invert) t = 255 - t;
-            ink = v < 255 && v <= t;
-            break;
-        }
-        case HT_APPLE: {
-            // The Color StyleWriter drivers' pattern: an ink prints where its
-            // amount (255 less v) is over the tile's threshold. Cyan, magenta
-            // and yellow read the tile as it is, black reads it mirrored about
-            // 254, so black dots fall where colour dots are least likely.
-            int t = apple_screen16[((ty & 15) << 4) | ((x + h->phase_x) & 15)];
-            if (h->invert) t = 254 - t;
-            ink = 255 - v > t;
-            break;
-        }
-        case HT_APPLE_LW: {
-            // W-1102: the Personal LaserWriter 300 driver's screen. Each gray goes through
-            // its curve (GAMA 3, 0 to 33) after the gain, and prints where the tile's
-            // threshold (1 to 32) is over it. A page starts on the tile's first row: where
-            // Apple's driver starts it is not known.
-            int t = apple_lw_screen8[((ty & 7) << 3) | ((x + h->phase_x) & 7)];
-            ink = t > apple_lw_tone[v];
-            break;
-        }
-        default: {                              // HT_ATKINSON, HT_FLOYD
-            // The published algorithms derive the quantisation error from the
-            // unclamped accumulated value. Clamping here instead would discard
-            // error whenever a pixel overshoots, which lightens or darkens the
-            // result and loses detail in extremes.
-            int raw = v + cur[x];
-            int cut = (avoid && (avoid[x >> 3] & (0x80 >> (x & 7)))) ? 64 : 128;
-            int out = raw < cut ? 0 : 255;
-            ink = (out == 0);
-            spread(h, x, raw - out, dir);
-            break;
-        }
-        }
-
-        if (ink) bits[x >> 3] |= (uint8_t)(0x80 >> (x & 7));
+    if (h->algo == HT_ATKINSON || h->algo == HT_FLOYD) {
+        diffuse_row(h, gray, avoid, bits);
+        h->y++;
+        return;
     }
 
-    // This row's error slot is finished with; clear it for reuse two rows on.
-    memset(cur, 0, (size_t)w * sizeof *cur);
+    const uint8_t *tone = h->tone;
+    const uint32_t ty = h->y + h->phase_y, px = h->phase_x;
+    switch (h->algo) {
+    case HT_THRESHOLD:
+        for (uint32_t x = 0; x < w; x++)
+            if (tone[gray[x]] < 128) set_ink(bits, x);
+        break;
+    case HT_BAYER: {
+        int t8[8];
+        for (int j = 0; j < 8; j++) {
+            int t = (bayer8[ty % 8][j] * 255) / 64;
+            t8[j] = h->invert ? 251 - t : t;
+        }
+        for (uint32_t x = 0; x < w; x++)
+            if (tone[gray[x]] <= t8[(x + px) % 8]) set_ink(bits, x);
+        break;
+    }
+    case HT_BLUENOISE: {
+        // 16 cells of the tile at each level, so a flat v prints
+        // (256 - v) / 256 of them; bare paper prints none at all.
+        const uint8_t *row = bluenoise64 + (ty & 63) * 64;
+        for (uint32_t x = 0; x < w; x++) {
+            int v = tone[gray[x]];
+            int t = row[(x + px) & 63];
+            if (h->invert) t = 255 - t;
+            if (v < 255 && v <= t) set_ink(bits, x);
+        }
+        break;
+    }
+    case HT_APPLE: {
+        // The Color StyleWriter drivers' pattern: an ink prints where its
+        // amount (255 less v) is over the tile's threshold. Cyan, magenta
+        // and yellow read the tile as it is, black reads it mirrored about
+        // 254, so black dots fall where colour dots are least likely.
+        const uint8_t *row = apple_screen16 + ((ty & 15) << 4);
+        for (uint32_t x = 0; x < w; x++) {
+            int t = row[(x + px) & 15];
+            if (h->invert) t = 254 - t;
+            if (255 - tone[gray[x]] > t) set_ink(bits, x);
+        }
+        break;
+    }
+    case HT_APPLE_LW: {
+        // W-1102: the Personal LaserWriter 300 driver's screen. Each gray goes through
+        // its curve (GAMA 3, 0 to 33) after the gain, and prints where the tile's
+        // threshold (1 to 32) is over it. A page starts on the tile's first row: where
+        // Apple's driver starts it is not known.
+        const uint8_t *row = apple_lw_screen8 + ((ty & 7) << 3);
+        for (uint32_t x = 0; x < w; x++)
+            if (row[(x + px) & 7] > apple_lw_tone[tone[gray[x]]]) set_ink(bits, x);
+        break;
+    }
+    default:
+        break;
+    }
     h->y++;
 }

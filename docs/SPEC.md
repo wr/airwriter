@@ -404,6 +404,21 @@ another ink's dot only when a quarter darker and carry the rest on (dot-off-dot)
 screens put black and cyan on one tile upside down to each other and magenta and yellow on a
 tile far away, so the common two-ink tints never share a dot until they have to.*
 
+*Amended (W-1143): ripping a page was the slowest step of printing it (board 1, a Personal
+LaserWriter 300's blank page: about 21 s, against the printer's 17). The board runs at 240 MHz
+(`sdkconfig.defaults.esp32s3`; ESP-IDF's default is 160) and the rip's per-row code
+(`urf_decode`, `resample`, `halftone`, `ripjob`, `imagewriter`, the StyleWriter's and the 300's
+coders, `ps_page`) builds at `-O2`, the rest at ESP-IDF's `-Og`. The diffusion screens set up
+once a row, carry two columns of error slack a side so no tap is checked, and skip a white
+pixel with no error carried; the resampler passes a row through untouched when nothing scales.
+None of it changes a dot. Each page logs where its time went (`page N: T ms: read, scale,
+screen, second screen, out, end`, ripjob.h) and each job how long the rip waited for the
+upload; `rip --times` prints the same on the host. On board 1 with a Personal LaserWriter 300,
+three 300 dpi text pages (251,477 bytes of codes each) went from 40 s a page to 24.7 s: the
+rip's own work from about 22.6 s a page to 2.6 s (Atkinson 12.5 s to 1.3 s), leaving the line
+at 533 kHz (about 7.5 s for such a page) and the printer's 17 s. The board draws at most 0.45 A
+at 240 MHz (traps.md).*
+
 ### 3.8 The ImageWriter output stage
 
 Target for v1: **144 dpi horizontal, 72 dpi vertical, single pass.** Printable width 8

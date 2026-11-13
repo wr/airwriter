@@ -73,13 +73,27 @@ int qd_bits_put(uint8_t *buf, size_t cap_bits, size_t *pos, const uint8_t *pkt, 
     if (*pos > cap_bits || cap_bits - *pos < qd_bits_len(n)) return -1;
     put_run(buf, pos, QD_BREAK_BITS, 0);
     put_run(buf, pos, QD_IDLE_BITS, 1);
+    // Each byte is ten line bits, LSB first: a start space, its eight bits, a stop mark. They
+    // go into the line a whole byte at a time from an accumulator (W-1143), keeping the bits
+    // of the first byte below *pos and of the last byte past the packet as they were.
     size_t k = *pos;
+    uint8_t *p = buf + (k >> 3);
+    unsigned have = (unsigned)(k & 7);
+    uint32_t acc = *p & ((1u << have) - 1);
     for (size_t i = 0; i < n; i++) {
-        put_bit(buf, k++, 0);
-        for (int b = 0; b < 8; b++) put_bit(buf, k++, (pkt[i] >> b) & 1);
-        put_bit(buf, k++, 1);
+        acc |= (0x200u | (uint32_t)pkt[i] << 1) << have;
+        have += 10;
+        while (have >= 8) {
+            *p++ = (uint8_t)acc;
+            acc >>= 8;
+            have -= 8;
+        }
     }
-    *pos = k;
+    if (have) {
+        uint8_t m = (uint8_t)((1u << have) - 1);
+        *p = (uint8_t)((*p & ~m) | (acc & m));
+    }
+    *pos = k + 10 * n;
     put_run(buf, pos, QD_GAP_BITS, 1);
     return 0;
 }

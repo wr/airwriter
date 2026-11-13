@@ -28,7 +28,7 @@ typedef enum { HT_THRESHOLD, HT_ATKINSON, HT_FLOYD, HT_BAYER, HT_BLUENOISE, HT_A
 typedef struct {
     ht_algo_t algo;
     uint32_t  width;
-    int16_t  *err;      // 3 rows of width, used as a ring by row index % 3
+    int16_t  *err;      // 3 rows of width and 2 columns' slack a side, a ring by row index % 3
     uint32_t  y;
     uint8_t   tone[256];    // the curve every gray goes through; identity until ht_set_tone or ht_set_gain
     const uint8_t *tone_base;   // ht_set_tone's curve, which tone[] is the gain curve put on top of

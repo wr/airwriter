@@ -166,7 +166,8 @@ page: Top margin (`{"top_margin":N}`, 1/144 in, -216 to 144, default -144) and d
   ESP32 needed. The checker fixture is pure black and white and must never change; the other
   three move with any change to a screen, the curve, the ink order or how strips are sent, and
   are regenerated with the reason in the commit. A blank strip is only its held line feed, in
-  gray as in colour. `rip --colour --out-preview` draws a colour page in its four inks.
+  gray as in colour. `rip --colour --out-preview` draws a colour page in its four inks, and
+  `rip --times` logs where each page's time went, as the board does.
 - **Test page preview:** `tools/rip/build/rip --testpage colour --out-stream tp.bin` (or `black`,
   `unknown`), then `python3 tools/iwview/iwview.py tp.bin tp.png` draws it as ink on paper. Its
   text needs the printer's font dot patterns, extracted from the ImageWriter II Technical
@@ -198,7 +199,8 @@ page: Top margin (`{"top_margin":N}`, 1/144 in, -216 to 144, default -144) and d
 - **Firmware:** `idf.py build` clean, then `python3 tools/stackcheck/stackcheck.py` (needs the
   toolchain `export.sh` puts on PATH): every task that makes ESP-IDF's deep calls keeps 1 KB of
   its stack spare by GCC's count. A local sdkconfig that fails it on `app_main` needs
-  `CONFIG_ESP_MAIN_TASK_STACK_SIZE` 4608, as in `sdkconfig.defaults`.
+  `CONFIG_ESP_MAIN_TASK_STACK_SIZE` 4608, as in `sdkconfig.defaults`. One made before W-1143
+  runs the chip at 160 MHz: set `CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ_240=y`.
 - **Web page:** `python3 tools/webui/preview.py`, then http://localhost:8079/_states: every state
   at desktop and phone width, light and dark, before a change to the page goes to a board. Its
   `/api/panel` plays `tools/lights`' scene frames for each state's `ps` (it builds them with

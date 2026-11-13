@@ -10,3 +10,6 @@ idf_component_register(SRCS "sw_model.c" "sw_code.c" "sw_page.c" "sw_session.c" 
                        INCLUDE_DIRS "include"
                        REQUIRES printer_caps halftone ripjob bigmem serial_out job_pipe esp_timer
                                 esp_rom imagewriter)
+# W-1143: the rip's per-row code is built for speed rather than ESP-IDF's debug optimisation,
+# as tools/rip builds it for the host tests.
+set_source_files_properties(sw_code.c sw_page.c PROPERTIES COMPILE_OPTIONS -O2)
