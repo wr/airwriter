@@ -104,7 +104,9 @@ Traps already explained in a code comment are listed only when the comment is ea
 - **Rev A has no hardware LED current limit.** `LG_BRIGHTNESS_CAP` and friends in
   `led_grid_core.h` are the only limit on 37 SK6812s; raise them knowingly. All 37 lit at
   about the boot animation's heaviest draw (the Spin's then; the boot wave is held under it)
-  measured 5.2 V, 0.461 A for the whole board.
+  measured 5.2 V, 0.461 A for the whole board at 160 MHz. At 240 MHz (W-1143) the boot spin
+  peaked at 0.45 A, and a Personal LaserWriter 300 job drew about 0.19 A with a half-second
+  peak near 0.22 A (board 1, 2026-11-13), under USB's 0.5 A.
 - **Dithering one or two counts flickers.** There a dot can show only a few colours, and temporal
   dithering between them reads as flicker even at 400 fps: a rev A board's embers hopped red, yellow,
   white (W-1115). No dot rests below `LG_GLOW`, and only dots over `LG_BLEND` are dithered. A new
