@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "serial_out.h"
 #include "serial_writer.h"
+#include "serial_clock.h"
 
 #include <string.h>
 #include "esp_log.h"
@@ -111,25 +112,26 @@ static int clock_window(void)
 // callback must stay cheap; printer_state does the judging on its own clock.
 // W-1102: each 100 ms also counts the line's edges for 50 ms. A clock (a QuickDraw
 // LaserWriter switched on) is reported by on_clock, and while it runs the level is not.
+// serial_clock.h decides: found in two windows, gone after 2 s.
 static void line_task(void *arg)
 {
     (void)arg;
-    int last = -1, runs = 0;
+    int last = -1;
+    serial_clock_t clk = { 0, 0 };
     for (;;) {
         int hz = clock_window();
         int fast = hz >= CLOCK_HZ_MIN;
-        if (fast != s_clocked) {
-            if (++runs >= 2) {                      // two windows running decide it
-                runs = 0;
-                s_clocked = fast;
-                s_clock_hz = hz;
-                if (!fast) last = -1;               // the level is reported afresh
-                if (s_cfg.on_clock) s_cfg.on_clock(s_cfg.on_line_ctx, fast, hz);
-            }
-        } else {
-            runs = 0;
-            if (fast) s_clock_hz = hz;
+        int paused = clk.clocked && fast ? clk.runs : 0;   // slow windows just ridden out
+        if (serial_clock_window(&clk, fast)) {
+            s_clocked = clk.clocked;
+            s_clock_hz = hz;
+            if (!fast) last = -1;                   // the level is reported afresh
+            if (s_cfg.on_clock) s_cfg.on_clock(s_cfg.on_line_ctx, fast, hz);
+        } else if (fast && s_clocked) {
+            s_clock_hz = hz;
         }
+        if (paused >= 2)
+            ESP_LOGW(TAG, "the printer's clock stopped for about %d ms and came back", paused * 100);
         if (!s_clocked && !fast) {
             int now = clear_to_send();
             if (now != last) {

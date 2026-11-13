@@ -19,8 +19,9 @@ INCS    := -I$(COMP)/ripjob/include \
            -I$(COMP)/printers/include \
            -I$(COMP)/qdlaser/include \
            -I.
-# serial_out is IDF-bound except for serial_writer.c, which is pure by design
-# so the deadline loop can be tested here. Name it, don't wildcard the dir.
+# serial_out is IDF-bound except for serial_writer.c and serial_clock.c, which are pure by
+# design so the deadline loop and the clock's judging can be tested here. Name them, don't
+# wildcard the dir.
 SRCS    := $(wildcard $(COMP)/ripjob/*.c) \
            $(COMP)/printer_caps/printer_caps.c \
            $(wildcard $(COMP)/ps_page/*.c) \
@@ -37,7 +38,7 @@ SRCS    := $(wildcard $(COMP)/ripjob/*.c) \
            $(COMP)/printers/port_policy.c \
            $(COMP)/qdlaser/qd_model.c $(COMP)/qdlaser/qd_wire.c $(COMP)/qdlaser/qd_status.c \
            $(COMP)/qdlaser/qd_page.c $(COMP)/qdlaser/qd_session.c $(COMP)/qdlaser/qd_testpage.c \
-           $(COMP)/serial_out/serial_writer.c
+           $(COMP)/serial_out/serial_writer.c $(COMP)/serial_out/serial_clock.c
 TESTSRC := $(wildcard test/test_*.c)
 TESTBIN := $(patsubst test/%.c,build/%,$(TESTSRC))
 
