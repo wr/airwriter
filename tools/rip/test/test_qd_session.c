@@ -427,8 +427,27 @@ static void test_print_sequence(void)
     F.tn = 0;
     F.trace[0] = 0;
     CHECK_EQ_INT(qd_session_end(s), QD_OK);
-    CHECK_STR(F.trace, "8100 8401");
+    CHECK_STR(F.trace, "8301 8100 8401");
     CHECK_EQ_INT(last_state(), QDS_READY);
+    qd_session_free(s);
+}
+
+// W-1102 bench: page done comes while the sheet is still on its way out (83 01 bit 5 for about
+// 15 s more on board 1). The job ends Printing, not Ready, so the state doesn't flick back to
+// Printing at the next status; the status at rest says Ready once the sheet is out.
+static void test_end_while_the_sheet_comes_out(void)
+{
+    fake_reset();
+    qd_session_t *s = loaded(0, 0);
+    F.win[0] = (win_t){ .from = 0, .to = 60000, .s01 = 0x20 };
+    F.nwin = 1;
+    F.win_from_print = 1;
+    CHECK_EQ_INT(qd_session_print(s), QD_OK);
+    F.tn = 0;
+    F.trace[0] = 0;
+    CHECK_EQ_INT(qd_session_end(s), QD_OK);
+    CHECK_STR(F.trace, "8301 8100 8401");
+    CHECK_EQ_INT(last_state(), QDS_PRINTING);
     qd_session_free(s);
 }
 
@@ -664,6 +683,28 @@ static void test_refused_reply_retries_5_then_offline(void)
     CHECK_EQ_INT(st, QDS_READY);
 }
 
+// W-1102 bench: a status that gets nothing names the question that went unanswered, for the
+// log, so a printer that flickers offline on the bench says where.
+static void test_status_names_the_unanswered_question(void)
+{
+    fake_reset();
+    F.refuse01 = 5;
+    qd_state_t st;
+    qd_raw_t raw = { .miss = 0xFFFF };
+    CHECK_EQ_INT(qd_ask_status(&g_ops, QD_PLW300, 0, &st, &raw), QD_E_OFFLINE);
+    CHECK_EQ_INT(raw.miss, 0x8301);
+    fake_reset();
+    F.silent = 1;
+    raw.miss = 0;
+    CHECK_EQ_INT(qd_ask_status(&g_ops, QD_PLW300, 0, &st, &raw), QD_E_OFFLINE);
+    CHECK_EQ_INT(raw.miss, 0x8301);
+    // Answered: none.
+    fake_reset();
+    raw.miss = 0xFFFF;
+    CHECK_EQ_INT(qd_ask_status(&g_ops, QD_PLW300, 0, &st, &raw), QD_OK);
+    CHECK_EQ_INT(raw.miss, 0);
+}
+
 static void test_power_off_while_waiting_done(void)
 {
     fake_reset();
@@ -743,6 +784,8 @@ int main(void)
     test_clock_lost_mid_rows();
     test_readback_mismatch();
     test_refused_reply_retries_5_then_offline();
+    test_status_names_the_unanswered_question();
+    test_end_while_the_sheet_comes_out();
     test_power_off_while_waiting_done();
     test_status_idle();
     test_end_and_abort();

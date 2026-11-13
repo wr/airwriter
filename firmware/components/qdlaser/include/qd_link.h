@@ -31,6 +31,12 @@ const qd_ops_t *qd_link_ops(void);
 
 typedef struct {
     uint32_t chunks, bits, bad_bits, stalls;
+    uint32_t restarts;        // chunks that never started and went again
     int32_t  worst_end_us;    // how late a chunk's end came, against the middle of its tail
+    // The last chunk that failed, for the log: why (1 no result in time, 2 another chunk's
+    // result, 3 short: fewer bits clocked than sent, 4 the clock gone at a put), the bits
+    // clocked and sent, and how long it was on the line against when it was due.
+    uint32_t fail_why, fail_got, fail_want;
+    int32_t  fail_took_us, fail_due_us;
 } qd_link_stats_t;
 void qd_link_stats(qd_link_stats_t *out, int reset);

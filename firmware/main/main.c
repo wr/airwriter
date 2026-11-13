@@ -1381,9 +1381,11 @@ static void qd_finished(const job_pipe_stats_t *st, int ok)
     }
     qd_link_stats_t ls;
     qd_link_stats(&ls, 0);
-    ESP_LOGI(TAG, "LaserWriter 300 link: %u chunks, %u bits, %u bad, %u stalls, ends at most %d us late",
+    ESP_LOGI(TAG, "LaserWriter 300 link: %u chunks, %u bits, %u bad, %u stalls, %u sent again, "
+             "ends at most %d us late; last failure %u, %u of %u bits in %d us, due %d us",
              (unsigned)ls.chunks, (unsigned)ls.bits, (unsigned)ls.bad_bits, (unsigned)ls.stalls,
-             (int)ls.worst_end_us);
+             (unsigned)ls.restarts, (int)ls.worst_end_us, (unsigned)ls.fail_why,
+             (unsigned)ls.fail_got, (unsigned)ls.fail_want, (int)ls.fail_took_us, (int)ls.fail_due_us);
     printer_state_post(printed ? PS_EV_JOB_DONE : cancelled ? PS_EV_JOB_CANCELLED
                                                             : PS_EV_JOB_FAILED);
     s_last_qd_ms = uptime_ms();         // its status was just in the job: the next in 3 s
@@ -2205,10 +2207,30 @@ static void kick_task(void *arg)
         int qd_rc = QD_E_OFFLINE;
         if (act == PA_QDSTATUS) {
             qd_model_t qm = printers_port_qd_model();
+            uint32_t t0 = uptime_ms();
+            qd_link_stats(NULL, 1);             // this status's alone
             if (qm != QD_NONE) qd_rc = qdlaser_status(s_clock_hz, qm, &qst, &qraw);
             if (qd_rc == QD_OK) {
                 heard = PR_HEARD_QDLASER;
                 mine = 1;
+                qd_link_stats_t ls;
+                qd_link_stats(&ls, 0);
+                if (ls.restarts)
+                    ESP_LOGI(TAG, "LaserWriter 300: status sent %u chunk%s again", (unsigned)ls.restarts,
+                             ls.restarts == 1 ? "" : "s");
+            } else if (qm != QD_NONE) {
+                // Where a status with the clock still there went quiet, for the bench.
+                qd_link_stats_t ls;
+                qd_link_stats(&ls, 0);
+                if (qraw.miss)
+                    ESP_LOGW(TAG, "LaserWriter 300: no answer to %02x %02x (%u ms; link why %u, "
+                             "%u of %u bits in %d us, due %d us)",
+                             qraw.miss >> 8, qraw.miss & 0xFF, (unsigned)(uptime_ms() - t0),
+                             (unsigned)ls.fail_why, (unsigned)ls.fail_got, (unsigned)ls.fail_want,
+                             (int)ls.fail_took_us, (int)ls.fail_due_us);
+                else
+                    ESP_LOGW(TAG, "LaserWriter 300: status failed, %d (%u ms)", qd_rc,
+                             (unsigned)(uptime_ms() - t0));
             }
         }
 
@@ -2632,10 +2654,13 @@ static void qd_test_task(void *arg)
     if (rc == QD_OK) printers_port_answered(PR_HEARD_QDLASER);
     qd_link_stats_t ls;
     qd_link_stats(&ls, 0);
-    ESP_LOGI(TAG, "LaserWriter 300 test page: %s (%d); link %u chunks, %u bad bits, ends at most %d us late; "
-             "%u bytes of stack to spare",
+    ESP_LOGI(TAG, "LaserWriter 300 test page: %s (%d); link %u chunks, %u bad bits, %u stalls, "
+             "%u sent again, ends at most %d us late; last failure %u, %u of %u bits in %d us, "
+             "due %d us; %u bytes of stack to spare",
              rc == QD_OK ? "printed" : rc == QD_E_CANCEL ? "cancelled" : "not printed", rc,
-             (unsigned)ls.chunks, (unsigned)ls.bad_bits, (int)ls.worst_end_us,
+             (unsigned)ls.chunks, (unsigned)ls.bad_bits, (unsigned)ls.stalls, (unsigned)ls.restarts,
+             (int)ls.worst_end_us, (unsigned)ls.fail_why, (unsigned)ls.fail_got,
+             (unsigned)ls.fail_want, (int)ls.fail_took_us, (int)ls.fail_due_us,
              (unsigned)uxTaskGetStackHighWaterMark(NULL));
 
     portENTER_CRITICAL(&s_tap_mux);
@@ -2800,8 +2825,9 @@ static void test_button(void)
     // printer is not the one on the port, so that refusal is the page's alone (web_test_page).
     int port, id = printers_test_target(&port);
 #if CONFIG_AIRWRITER_PIC_CLK_PIN >= 0
-    // A StyleWriter's HSKo says nothing, so a low line is no sign of a cable (W-1103).
-    if (((port && !printers_port_is_stylewriter()) || id < 0) && !serial_out_clear()) {
+    // A StyleWriter's HSKo says nothing, so a low line is no sign of a cable (W-1103), and a
+    // 300's is its clock (W-1102): only an ImageWriter's line, or none known, speaks.
+    if (((port && port_line_speaks()) || id < 0) && !serial_out_clear()) {
         ESP_LOGI(TAG, "test button with the printer not ready: testing the cable");
         if (xTaskCreate(cable_button_task, "cable", 4096, NULL, 3, NULL) != pdPASS)
             xSemaphoreGive(s_job_lock);

@@ -10,8 +10,9 @@
 typedef enum { QDS_READY, QDS_PRINTING, QDS_NO_PAPER, QDS_NO_CASSETTE, QDS_MANUAL, QDS_JAM,
                QDS_COVER, QDS_ENGINE, QDS_OFFLINE } qd_state_t;
 
-// The replies to 83 01, 83 02, 83 04, 83 07, 83 2A and 82 00.
-typedef struct { uint8_t s01, s02, s04, s07, s2a, c82; } qd_raw_t;
+// The replies to 83 01, 83 02, 83 04, 83 07, 83 2A and 82 00, and (qd_ask_status) the question
+// that went unanswered when the printer said nothing, command then argument (0x8301), else 0.
+typedef struct { uint8_t s01, s02, s04, s07, s2a, c82; uint16_t miss; } qd_raw_t;
 
 // The state, first match wins: a jam (83 02 bit 3), the cover (bit 2), the cassette (bit 5), an
 // engine fault (83 01 bit 1; which one is in 83 04 and 83 07), no paper at the source asked for

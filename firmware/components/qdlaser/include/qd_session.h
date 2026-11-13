@@ -90,7 +90,8 @@ int  qd_session_row(qd_session_t *s, const uint8_t *codes, size_t n);
 // Every row is in (qd_sink_t.print): check the page arrived whole, wait for paper, print it,
 // and wait until it is done, through out of paper, a jam and the cover.
 int  qd_session_print(qd_session_t *s);
-// The job is over: 81 00, Ready on, QDS_READY.
+// The job is over: 83 01 once, 81 00, Ready on; QDS_PRINTING while the last sheet is still on
+// its way out (83 01 bit 5), else QDS_READY.
 int  qd_session_end(qd_session_t *s);
 // After an error: 8A 00, 81 00, 84 01, once, and only if the session ever wrote.
 void qd_session_abort(qd_session_t *s);

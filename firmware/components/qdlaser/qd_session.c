@@ -84,19 +84,29 @@ int qd_ask_identity(const qd_ops_t *o, uint8_t *engine, uint8_t *ctrl)
     return QD_OK;
 }
 
+// A status question that got nothing: which, for the log (qd_raw_t.miss).
+static int status_offline(const qd_ops_t *o, qd_raw_t *raw, uint8_t c, uint8_t a, int rc)
+{
+    if (raw && rc == QD_E_OFFLINE) raw->miss = (uint16_t)(c << 8 | a);
+    return offline(o, rc);
+}
+
 int qd_ask_status(const qd_ops_t *o, qd_model_t m, int manual, qd_state_t *st, qd_raw_t *raw)
 {
     const qd_spec_t *sp = qd_spec(m);
     if (!sp) return QD_E_MODEL;
+    if (raw) raw->miss = 0;
     static const uint8_t which[4] = { 0x01, 0x02, 0x2A, 0x00 };
     int v[4];
-    for (int i = 0; i < 4; i++)
-        if ((v[i] = ask(o, i == 3 ? 0x82 : 0x83, which[i], 0)) < 0) return offline(o, v[i]);
+    for (int i = 0; i < 4; i++) {
+        uint8_t c = i == 3 ? 0x82 : 0x83;
+        if ((v[i] = ask(o, c, which[i], 0)) < 0) return status_offline(o, raw, c, which[i], v[i]);
+    }
     qd_raw_t r = { .s01 = (uint8_t)v[0], .s02 = (uint8_t)v[1], .s2a = (uint8_t)v[2], .c82 = (uint8_t)v[3] };
     if (r.s01 & 0x12) {
         int a = ask(o, 0x83, 0x04, 0), b = a < 0 ? a : ask(o, 0x83, 0x07, 0);
-        if (a < 0) return offline(o, a);
-        if (b < 0) return offline(o, b);
+        if (a < 0) return status_offline(o, raw, 0x83, 0x04, a);
+        if (b < 0) return status_offline(o, raw, 0x83, 0x07, b);
         r.s04 = (uint8_t)a;
         r.s07 = (uint8_t)b;
     }
@@ -411,11 +421,17 @@ int qd_session_print(qd_session_t *s)
 
 int qd_session_end(qd_session_t *s)
 {
-    int rc = cmd(s, 0x81, 0x00);
+    // Page done comes while the last sheet is still on its way out (83 01 bit 5, about 15 s
+    // more on board 1): the job ends Printing then, and the status at rest says Ready once the
+    // sheet is out, rather than Ready now and Printing again at the next status. One quick
+    // try: a reply missed is Ready.
+    int v = ask(&s->o, 0x83, 0x01, 1);
+    int rc = v == QD_E_OFFLINE || v >= 0 ? 0 : v;
+    if (!rc) rc = cmd(s, 0x81, 0x00);
     if (!rc) rc = lights(s, 0x01);
     if (!rc) rc = flush(s);
     s->closed = 1;
-    if (!rc) state(s, QDS_READY);
+    if (!rc) state(s, v >= 0 && (v & 0x20) ? QDS_PRINTING : QDS_READY);
     return rc;
 }
 
