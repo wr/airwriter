@@ -75,7 +75,7 @@ static size_t job_answer(void)
         .id = 3, .uri = "ipp://airwriter.local:631/ipp/print/3",
         .printer_uri = "ipp://airwriter.local:631/ipp/print",
         .name = "Letter", .user = "wells", .state = IPP_JSTATE_PROCESSING,
-        .state_reason = "job-printing", .impressions_done = 0, .time_at_creation = 40,
+        .state_reason = "job-printing", .impressions_done = 2, .time_at_creation = 40,
     };
     ipp_enc_t e;
     ipp_enc_init(&e, buf, sizeof buf);

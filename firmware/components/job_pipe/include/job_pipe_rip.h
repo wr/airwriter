@@ -82,3 +82,26 @@ typedef struct {
 job_pipe_prn_t job_pipe_prn_for(const job_pipe_target_t *t,
                                 void (*out)(void *ctx, const uint8_t *buf, size_t n),
                                 void *out_ctx);
+
+// W-1141: which of a buffered job's pages have reached the printer. The rip runs up to the
+// ring's 512 KB ahead of the printer, so a page it has made has not printed: the rip notes
+// how many of the job's printer bytes it had written when each page ended, and the printer's
+// side says how many it has handed on and learns how many pages are whole. job_pipe.c keeps
+// one under a lock, the rip writing it and the printer task reading it.
+#define JP_PAGE_MARKS 16
+
+typedef struct {
+    size_t at[JP_PAGE_MARKS];       // printer bytes written when the page ended
+    int    pages[JP_PAGE_MARKS];    // pages whole once that many bytes are out
+    int    head, n;                 // the oldest mark not yet out, and how many there are
+    int    done;                    // pages reported so far
+} jp_pages_t;
+
+void jp_pages_reset(jp_pages_t *l);
+// The rip has ended page `pages` (1 the first) with `at` of the job's printer bytes written.
+// With every mark taken -- a printer that many pages behind -- the newest moves on to this
+// page instead, so the page it held is reported with this one: late, never early.
+void jp_pages_end(jp_pages_t *l, size_t at, int pages);
+// `out` of the job's printer bytes have gone to the printer. Returns the pages whole now
+// when that is more than last returned, else 0.
+int  jp_pages_out(jp_pages_t *l, size_t out);

@@ -480,6 +480,9 @@ void ipp_write_job_attrs(ipp_enc_t *e, const ipp_job_t *j)
         ipp_attr_str(e, IPP_TAG_TEXT, "job-state-message", j->state_message);
     ipp_attr_str(e, IPP_TAG_NAME, "job-name", j->name);
     ipp_attr_str(e, IPP_TAG_NAME, "job-originating-user-name", j->user);
+    // W-1141: the pages printed so far. Every printer here prints one side of a sheet, so
+    // the sheets are the impressions; CUPS reads both.
     ipp_attr_int(e, IPP_TAG_INTEGER, "job-impressions-completed", j->impressions_done);
+    ipp_attr_int(e, IPP_TAG_INTEGER, "job-media-sheets-completed", j->impressions_done);
     ipp_attr_int(e, IPP_TAG_INTEGER, "time-at-creation", (int32_t)j->time_at_creation);
 }

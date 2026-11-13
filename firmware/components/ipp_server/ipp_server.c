@@ -215,7 +215,7 @@ static void fill_job(const printer_t *p, ipp_job_t *j, const ipp_job_rec_t *src,
     j->user             = src->user[0] ? src->user : "anonymous";
     ipp_job_view(src, printer_stopped, &j->state, &j->state_reason);
     j->state_message    = msg;
-    j->impressions_done = 0;
+    j->impressions_done = src->pages;
     j->time_at_creation = src->created_s;
 }
 
@@ -1009,6 +1009,20 @@ void ipp_server_job_message_for(int idx, const char *msg)
     xSemaphoreTake(s_job_lock, portMAX_DELAY);
     snprintf(s_p[idx].job_message, sizeof s_p[idx].job_message, "%s", msg ? msg : "");
     xSemaphoreGive(s_job_lock);
+}
+
+void ipp_server_job_pages_for(int idx, int32_t pages)
+{
+    if (idx < 0 || idx >= IPP_PRINTERS || !s_p || !s_job_lock) return;
+    printer_t *p = &s_p[idx];
+    xSemaphoreTake(s_job_lock, portMAX_DELAY);
+    int32_t was = p->job.pages;
+    ipp_job_pages(&p->job, pages);
+    int32_t now = p->job.pages, id = p->job.id;
+    xSemaphoreGive(s_job_lock);
+    if (now != was)
+        ESP_LOGI(TAG, "printer %d job %d: %d page%s printed", idx, (int)id, (int)now,
+                 now == 1 ? "" : "s");
 }
 
 // A slot's printer from its cfg; strings and caps are copied.

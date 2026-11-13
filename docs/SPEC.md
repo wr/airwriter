@@ -269,7 +269,9 @@ Minimum viable set for iOS:
   (`pr_port_absent`, the port sink's `port_claim`, W-1116) -- is answered `server-error-busy`
   the same way, nothing held, so the printer that is there keeps printing and the phone keeps
   the job and asks again; it prints once the person swaps the cable (3.16).
-- `Get-Job-Attributes` (0x0009) — iOS polls this for progress
+- `Get-Job-Attributes` (0x0009) — iOS polls this for progress: the job's state, and the
+  pages printed so far as `job-impressions-completed` and `job-media-sheets-completed` (3.5,
+  W-1141)
 - `Get-Jobs` (0x000A)
 - `Cancel-Job` (0x0008)
 
@@ -364,6 +366,31 @@ AirWriter queue added since.
 
 Wi-Fi, firmware and page-count rows of their own were tried on board 1 and dropped: any bar in
 that panel reads as how much is left, and a row can't leave its right side blank (`docs/traps.md`).
+
+**Pages printed (W-1141).** `job-impressions-completed` and `job-media-sheets-completed`, the
+same number since every printer here prints one side of a sheet, count the job's pages whose
+last byte has gone to the printer. Until W-1141 both stayed 0 for the whole job, and an iPhone
+showed "Printing 1 of 19" from start to end on every printer. A page counts when it leaves for
+the printer, not when it is ripped: the rip runs up to the ring's 512 KB ahead of an ImageWriter
+or a StyleWriter (3.4), many pages on a light job. So the rip notes how many of the job's
+printer bytes it had written when each page ended (`jp_pages_t`, `job_pipe_rip.c`; 16 marks,
+and a rip further ahead than that folds the newest pages into one mark, reported late, never
+early), and the printer task reports a page once it has handed that many bytes on. An
+ImageWriter's page is then in the UART's 128-byte FIFO and the printer's own buffer; a
+StyleWriter's session has had the page's last band taken. A LaserWriter's stage sends its own
+PostScript through `laser.c`'s 16 KB spool, so its page counts as the stage ends it, at most
+16 KB before the spool has sent it and before the printer has imaged it: a job whose
+connection dies with its last page still in the spool can end with that page counted. Once
+the printer sends a PostScript error the count stops, since the printer reads the rest of the
+job and throws it away (`laser_job_ps_error`). Any job on a board with no PSRAM counts as the
+LaserWriter's does, its bytes going to the printer as they are ripped. A Personal LaserWriter
+300's page counts once its session has printed it, in the stage's page end (3.18, W-1102); a
+page too big for its memory, which the job skips and goes on past, does not count, and the
+job's message names it. A job that prints ends with its whole page count; a failed or
+canceled one keeps the pages that came out. Only the
+printing job's count moves, and only up (`ipp_job_pages`), set by slot through
+`ipp_server_job_pages_for`. Whether iOS's "Printing N of M" follows it is still to be seen on
+a phone.
 
 ### 3.6 Raster decode
 

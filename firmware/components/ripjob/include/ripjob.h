@@ -94,6 +94,10 @@ typedef struct {
     // have, before any row arrives. Return non-zero to abort the job.
     int       (*page)(void *ctx, int index, uint32_t dst_w, uint32_t dst_h);
     void       *page_ctx;
+    // Called as each page's last byte has gone to `out` (the ImageWriter's form feed), or
+    // the stage's page_end has taken it, with the pages whole so far, 1 the first (W-1141).
+    // Never for a page that failed. Gets page_ctx.
+    void      (*page_done)(void *ctx, int pages);
 
     // Called once per halftoned destination row, in order, before it reaches
     // the printer stage. The host tool builds its preview from this; the

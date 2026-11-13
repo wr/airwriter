@@ -923,6 +923,14 @@ int laser_ready(void) { return s_started ? s_ready : -1; }
 
 int laser_job_active(void) { return s_use == USE_JOB; }
 
+int laser_job_ps_error(void)
+{
+    lock();
+    int e = s_use == USE_JOB && s_ps_error[0];
+    unlock();
+    return e;
+}
+
 int laser_state(int id, laser_state_t *out)
 {
     memset(out, 0, sizeof *out);

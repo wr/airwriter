@@ -58,6 +58,11 @@ ipp_cancel_t ipp_job_cancel(ipp_job_rec_t *j, int32_t id)
     return IPP_CANCEL_STOP_PRINT;
 }
 
+void ipp_job_pages(ipp_job_rec_t *j, int32_t pages)
+{
+    if (j->printing && pages > j->pages) j->pages = pages;
+}
+
 void ipp_job_view(const ipp_job_rec_t *j, int printer_stopped,
                   uint8_t *state, const char **reason)
 {

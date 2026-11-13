@@ -302,6 +302,9 @@ static void printer_fail(void)
 // doc_end's verdict on the transfer, for job_finished on the pipeline task.
 static volatile int s_doc_ok;
 
+// The AirPrint printer (slot) the LaserWriter job in the pipeline is for (W-1082).
+static int s_laser_slot = 1;
+
 // An IPP job holds s_job_lock: from doc_claim's take to job_finished's give.
 // A Cancel-Job before doc_begin must not reach the printer another job owns
 // -- a LocalTalk job holds it for minutes (W-1053 review). ipp_server passes
@@ -443,6 +446,7 @@ static int                 s_qd_asked;
 // next job starts: a 300 page that didn't fit in its memory. And that job's first such page.
 static char                s_job_error[64];
 static volatile int        s_qd_bad_page;
+static volatile int        s_qd_skipped;       // W-1141: pages of the job too big to print
 // W-1116: the AirPrint printer (slot) the port's job came in on, and its record id, from the
 // sink's ctx (printers.c's slot_ctx). The job's end goes back to the slot; the record is the
 // job's own family (doc_begin) and the ImageWriter gate's (colour_ok), not the port's.
@@ -1020,6 +1024,9 @@ static void job_finished(const job_pipe_stats_t *st, int ok)
 
     ota_health_printed();       // W-1059: this firmware prints; under the job lock
     s_ipp_owns = 0;
+    // W-1141: every page printed. Under the job lock, as each finisher's is, so the slot is
+    // still this job's.
+    ipp_server_job_pages_for(s_port_job_slot, st->pages);
     xSemaphoreGive(s_job_lock);
     ipp_server_job_done_for(s_port_job_slot, 1);
 }
@@ -1027,6 +1034,24 @@ static void job_finished(const job_pipe_stats_t *st, int ok)
 static void laser_finished(const job_pipe_stats_t *st, int ok);
 static void sw_finished(const job_pipe_stats_t *st, int ok);
 static void qd_finished(const job_pipe_stats_t *st, int ok);
+
+// job_pipe's page_out (W-1141): a page's last byte has gone to the printer, so the phone's
+// "Printing 1 of 5" moves on. On the printer task for an ImageWriter's or a StyleWriter's
+// job; on the pipeline task for a LaserWriter's, and for a Personal LaserWriter 300's once its
+// session has printed the page. Whose job it is was set at its begin, under the job lock, and
+// holds until its finish.
+static void pipe_page_out(void *ctx, int pages)
+{
+    (void)ctx;
+    if (s_laser_owns) {
+        // After a PostScript error the printer throws the rest of the job away.
+        if (!laser_job_ps_error()) ipp_server_job_pages_for(s_laser_slot, pages);
+    } else if (s_ipp_owns) {
+        // A 300's page too big for its memory was skipped: no sheet came out for it.
+        if (s_job_fam == PR_FAM_QDLASER) pages -= s_qd_skipped;
+        ipp_server_job_pages_for(s_port_job_slot, pages);
+    }
+}
 
 // job_pipe's done callback: the pipeline has printed the document or let it go.
 static void pipe_done(void *ctx, const job_pipe_stats_t *st)
@@ -1095,7 +1120,6 @@ static void doc_end(void *ctx, int ok)
 // printer. The sink's ctx is (slot << 8 | record id), the printer list's.
 
 static int s_laser_pipe_ok;
-static int s_laser_slot = 1;
 
 static esp_err_t laser_doc_begin(void *ctx, const char *format, const char *name,
                                  const ipp_job_opts_t *opts)
@@ -1148,6 +1172,7 @@ static void laser_finished(const job_pipe_stats_t *st, int ok)
                                                                   : PS_EV_JOB_FAILED);
     s_laser_owns = 0;
     line_source();
+    if (printed) ipp_server_job_pages_for(s_laser_slot, st->pages);   // W-1141
     xSemaphoreGive(s_job_lock);
     ipp_server_job_done_for(s_laser_slot, printed);
     printers_apply();               // W-1088: a change to its slot waited for it
@@ -1290,6 +1315,7 @@ static void sw_finished(const job_pipe_stats_t *st, int ok)
     s_job_fam = PR_FAM_NONE;
     s_ipp_owns = 0;
     line_source();
+    if (printed) ipp_server_job_pages_for(s_port_job_slot, st->pages);   // W-1141
     xSemaphoreGive(s_job_lock);
     ipp_server_job_done_for(s_port_job_slot, printed);
     printers_apply();                   // W-1088: a change to the port's printer waited for it
@@ -1306,6 +1332,7 @@ static esp_err_t qd_doc_begin(const char *format, const char *name, const ipp_jo
 {
     s_job_fam = PR_FAM_QDLASER;         // doc_claim took s_job_lock; qd_finished gives it
     s_qd_bad_page = 0;
+    s_qd_skipped = 0;
     qd_model_t m = pr_model_to_qd(printers_record_model(s_port_job_record));
     int manual = opts ? opts->manual : 0;
     s_last_job_id = opts ? opts->job_id : 0;
@@ -1343,6 +1370,7 @@ static void qd_page_cb(int page, int apple, uint32_t bytes, int too_big)
     if (too_big) {
         ESP_LOGW(TAG, "page %d: didn't fit in the printer's memory", page + 1);
         if (!s_qd_bad_page) s_qd_bad_page = page + 1;
+        s_qd_skipped++;                 // before its page_done, on the same task
     } else {
         ESP_LOGI(TAG, "page %d: %s screen, %u bytes of codes", page + 1,
                  apple ? "Apple's" : "the record's", (unsigned)bytes);
@@ -1392,6 +1420,7 @@ static void qd_finished(const job_pipe_stats_t *st, int ok)
     s_job_fam = PR_FAM_NONE;
     s_ipp_owns = 0;
     line_source();
+    if (printed) ipp_server_job_pages_for(s_port_job_slot, st->pages - s_qd_skipped);   // W-1141
     xSemaphoreGive(s_job_lock);
     ipp_server_job_done_for(s_port_job_slot, printed);
     printers_apply();                   // a change to the port's printer waited for it
@@ -3980,7 +4009,8 @@ void app_main(void)
 
     job_pipe_cfg_t pipe = { .out = printer_out, .dither = algo, .gain = s_set.gain,
                             .top_margin = s_set.top_margin,
-                            .done = pipe_done, .colour_ok = colour_ok };
+                            .done = pipe_done, .colour_ok = colour_ok,
+                            .page_out = pipe_page_out };
     ESP_ERROR_CHECK(job_pipe_init(&pipe));
 
     // Before wifi_start, which can block up to 60s joining: the debounce

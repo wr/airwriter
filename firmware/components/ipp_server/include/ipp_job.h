@@ -21,6 +21,7 @@ typedef struct {
     uint8_t  canceled;       // Cancel-Job arrived while the document streamed
                              // or printed
     uint8_t  printing;       // the sink has the document; ipp_job_done ends it
+    int32_t  pages;          // pages printed so far (W-1141): job-impressions-completed
     uint32_t created_s;
     char     name[IPP_NAME_MAX];
     char     user[IPP_NAME_MAX];
@@ -57,6 +58,12 @@ void ipp_job_finish(ipp_job_rec_t *j, int ok);
 int ipp_job_done(ipp_job_rec_t *j, int ok);
 
 ipp_cancel_t ipp_job_cancel(ipp_job_rec_t *j, int32_t id);
+
+// The sink says `pages` of the job have printed (W-1141), which iOS shows as "Printing 3
+// of 5" and macOS as its page count. Only a printing job's count moves, and only up: a
+// report that comes late never lands on a finished job or takes a count back. A canceled
+// job still printing counts the pages that came out before the paper stopped.
+void ipp_job_pages(ipp_job_rec_t *j, int32_t pages);
 
 // The job-state and job-state-reasons a client is told. A printing job on a
 // stopped printer reads processing-stopped / printer-stopped: the job is
