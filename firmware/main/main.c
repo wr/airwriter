@@ -2664,6 +2664,7 @@ static void qd_test_task(void *arg)
     int cancelled = s_test_cancel;
     s_test_cancel = 0;
     portEXIT_CRITICAL(&s_tap_mux);
+    s_last_pages = rc == QD_OK;         // the page's count, not the job's before it
     printer_state_post(rc == QD_OK ? PS_EV_JOB_DONE : cancelled ? PS_EV_JOB_CANCELLED : PS_EV_JOB_FAILED);
     s_last_qd_ms = uptime_ms();         // its status was just in the page: the next in 3 s
     s_printing = 0;
@@ -2678,6 +2679,7 @@ static void qd_test_locked(int id)
 {
     s_job_error[0] = '\0';
     strncpy(s_last_job, "Test page", sizeof s_last_job - 1);
+    s_last_pages = 0;
     s_printing = 1;
     job_touch();
     led_grid_set_source(LG_SRC_AIRPRINT);
