@@ -449,6 +449,18 @@ int serial_out_clock(int *hz)
     return s_clocked;
 }
 
+int serial_out_clock_live(void)
+{
+    if (s_cfg.cts_pin < 0) return 0;
+    int last = gpio_ll_get_level(&GPIO, s_cfg.cts_pin), edges = 0;
+    for (int i = 0; i < 2048 && edges < 8; i++) {
+        int v = gpio_ll_get_level(&GPIO, s_cfg.cts_pin);
+        edges += v != last;
+        last = v;
+    }
+    return edges >= 8;
+}
+
 int serial_out_clock_duty(void)
 {
     if (s_cfg.cts_pin < 0) return -1;

@@ -466,8 +466,11 @@ Traps already explained in a code comment are listed only when the comment is ea
   2026-11-13). About one chunk in 20 to 30, never the first after the link opens, the slave's
   result has `trans_len` of 0 to 7 bits, no more than the chunk's lead, while the clock is
   there. Sending such a chunk again printed its rows twice on the test page and a photo: it had
-  reached the printer. `qd_link` counts it as `unchecked` and goes on; a chunk with more bits
-  recorded than its lead but fewer than sent is still a failure. The cause is not known.
+  reached the printer. `qd_link` counts it as `unchecked` and goes on, but only if the clock is
+  toggling at that moment (`serial_out_clock_live`): `serial_out_clock` holds a pause of up to
+  2 s as present, and a chunk that ended inside a pause never left, so it is short and the job
+  ends Offline. A chunk with more bits recorded than its lead but fewer than sent is a failure
+  too. The cause is not known.
 - **The 300 says a page is done while the sheet is still coming out.** `8E 00` bit 2 comes about
   15 s before the sheet leaves the printer, while `83 01` bit 5 (paper moving) is still set. A
   job that went to Ready at page done would go Ready, then Printing again on the next status

@@ -39,8 +39,9 @@ typedef struct {
     void    *on_line_ctx;
 
     // W-1102: a clock on cts_pin came or went, with its rate. Clocked is at least 100 kHz in
-    // two 50 ms windows running, gone is two below it, so a printer switched off is seen in
-    // about 200 ms. Only a QuickDraw LaserWriter drives HSKi like that. From the line task,
+    // two 50 ms windows running, gone is 20 below it (serial_clock.h), so a printer switched
+    // off is seen in about 2 s and a pause shorter than that is not. Only a QuickDraw
+    // LaserWriter drives HSKi like that. From the line task,
     // with on_line_ctx. While clocked, on_line is not called (a level read off a clock is
     // noise); when the clock goes, on_line reports the level afresh. May be NULL.
     void   (*on_clock)(void *ctx, int clocked, int hz);
@@ -150,8 +151,12 @@ int serial_out_read(uint8_t *b, size_t cap, uint32_t first_ms, uint32_t gap_ms);
 int serial_out_write_raw(const uint8_t *b, size_t n, uint32_t timeout_ms);
 
 // The clock on cts_pin (W-1102), counted by PCNT through the GPIO matrix, so the pad stays
-// UART1's CTS. 1 while clocked, else 0; *hz is the last window's rate (may be NULL).
+// UART1's CTS. 1 while clocked, else 0; *hz is the last window's rate (may be NULL). It holds a
+// pause of up to 2 s as clocked (serial_clock.h): the printer is there, not that bits move.
 int serial_out_clock(int *hz);
+// 1 if the clock on cts_pin is toggling now, read off the pad for at most about 100 us. Not for
+// an ISR.
+int serial_out_clock_live(void);
 // The fraction of time cts_pin reads high, per mille, from 200,000 samples taken at jittered
 // moments (about 0.1 s). For the log, when a clock is found. -1 with no CTS line.
 int serial_out_clock_duty(void);

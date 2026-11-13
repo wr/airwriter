@@ -27,8 +27,8 @@ built):
 - **The test button** prints a 300's test page, never the cable test, which reads HSKi's level.
 - **No paper at the source** answers `83 02` `10` and sets `83 01`'s fault bit as well, whether
   the cassette is empty or pulled out or the manual slot is chosen and empty (board 1). It reads
-  as no paper, never an engine fault, and a page waits for it. A job that took a page from the
-  manual slot ends by choosing the cassette again (`83 4C`).
+  as no paper, never an engine fault, and a page waits for it. A job that used or asked for the
+  manual slot chooses the cassette again (`83 4C`) however it ends.
 - **A Mac's Paper Feed** arrives as `InputSlot` "Manual", not media-col's `media-source`:
   macOS's print dialog sends no media-col. The board reads either.
 - **Clock gone** takes 2 s of no clock, not two windows: the 300 stopped its clock for under a

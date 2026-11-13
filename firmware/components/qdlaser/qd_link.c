@@ -248,11 +248,13 @@ static int chunk_wait(void)
     if (late > s_st.worst_end_us) s_st.worst_end_us = late;
     s_st.chunks++;
     s_st.bits += (uint32_t)s_bits[i];
-    // The read-back off the pad recorded nothing past the lead, with the clock still there: the
+    // The read-back off the pad recorded nothing past the lead, with the clock toggling: the
     // chunk went out unchecked. Board 1 does this on about one chunk in 20, never the first
     // after the link opens; sending such a chunk again printed its rows twice, so it did reach
-    // the printer (W-1102 bench, 2026-11-13).
-    if (done->trans_len <= LEAD_BITS && serial_out_clock(NULL)) {
+    // the printer (W-1102 bench, 2026-11-13). Toggling now, not serial_out_clock(): that holds
+    // a pause of up to 2 s as present, and a chunk ended in a pause never left (it is short,
+    // below, and the job ends Offline).
+    if (done->trans_len <= LEAD_BITS && serial_out_clock_live()) {
         s_st.unchecked++;
         return QD_OK;
     }

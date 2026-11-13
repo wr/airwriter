@@ -1417,7 +1417,9 @@ printer here to test on.
   broken cable would. On board 1 about one chunk in 20 to 30, never the first after the link
   opens, comes back with no more than its lead recorded (0 to 7 bits) though it reached the
   printer whole: sending it again printed its rows twice (2026-11-13). Such a chunk counts as
-  `unchecked` and the link goes on. The cause is not known (§4).
+  `unchecked` and the link goes on if the clock is toggling at that moment; a chunk that ended in
+  one of the printer's own clock pauses never left and ends the job Offline. The cause is not
+  known (§4).
 - **A page** (`qd_page`, `qdlaser.c`). The shared 300 dpi rip (`ripjob`), the sheet found by
   width and height, gray, cropped to Apple's image area for that sheet. Each row is screened in
   the record's screen and, through `rip_stage_t.gray_row`, in Apple's 300 screen (`HT_APPLE_LW`:
@@ -1465,8 +1467,9 @@ printer here to test on.
   again from the printer's memory. The cover opened mid-page reads as a jam (the sheet is
   caught), and the printer wants the cover opened and closed again once the sheet is pulled.
   Paper out mid-job stops the page (`8A 00`) and prints it (`8A 01`) once `83 2A` has paper. A
-  job ends with `83 01`, `83 4C` after a page from the manual slot (or the printer keeps the
-  slot, says it has no paper and pulls in any sheet put there), `81 00`, `84 01`; while `83 01`
+  job ends with `83 01`, `81 00`, `84 01`. A job that used or asked for the manual slot also
+  sends `83 4C` however it ends, done, cancelled or failed: the printer otherwise keeps the
+  slot, says it has no paper and pulls in any sheet put there; while `83 01`
   bit 5 says the sheet is still coming out (about 15 s past page done) the state stays Printing.
   A status question the printer leaves unanswered logs which one and the link's last failure.
 - **Settings.** The usual five screens plus Apple, which for a 300 is Apple's 300 screen.
