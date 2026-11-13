@@ -773,6 +773,29 @@ static void test_ring_attach_keeps_polls(void)
     CHECK_EQ_INT(l.run, 2);
 }
 
+// Not even a part's oldest line reads back: that memory isn't the log, so the whole ring starts
+// afresh and the board numbers the crash line after flash's last (W-1142 review).
+static void test_ring_attach_bad_oldest_poll(void)
+{
+    lb_ring_t *r = fresh_ring();
+    lb_ring_begin_run(r, 1, 0);
+    push_poll(r, 1);                                 // seqs 1, 2 in the asking's part
+    push_lines(r, 10, 'I', 0);                       // 3 to 12 in the other
+    uint8_t *mem = (uint8_t *)g_ring;
+    size_t at;
+    for (at = sizeof g_ring - LB_CHATTER_BYTES; at < sizeof g_ring && mem[at] != 0xA5; at++) {}
+    CHECK(at < sizeof g_ring);
+    mem[at + 1] = 'X';                               // the asking's oldest record, damaged
+    int kept = 1;
+    r = lb_ring_attach(g_ring, sizeof g_ring, &kept);
+    CHECK_EQ_INT(kept, 0);
+    CHECK_EQ_INT(read_all(r, NULL, 0, NULL, NULL), 0);
+    lb_ring_begin_run(r, 13, 1);                     // what logbook_start does with flash's last
+    lb_line_t l = mk(0, 'E', "sys", "crashed in task main on core 0 (abort)");
+    lb_ring_push(r, &l);
+    CHECK_EQ_INT(l.seq, 13);
+}
+
 static void test_reader_merge(void)
 {
     lb_flash_t f = ff_ops();
@@ -917,6 +940,7 @@ int main(void)
     test_save_skips_chatter();
     test_polls_keep_a_jobs_lines();
     test_ring_attach_keeps_polls();
+    test_ring_attach_bad_oldest_poll();
     test_reader_merge();
     test_reader_leaves_flash_alone_when_ram_has_it_all();
     test_reader_overwrite();

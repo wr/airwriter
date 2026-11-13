@@ -296,9 +296,9 @@ static int part_ok(const ring_part_t *p, uint32_t off, uint32_t cap)
     return p->off == off && p->cap == cap && p->tail < cap && p->head < cap;
 }
 
-// Trust only what reads back whole: the part ends at the first record that doesn't, and if not
-// even its oldest does, it starts empty. Its newest seq and run go in *seq and *run if newer.
-static void part_attach(lb_ring_t *r, ring_part_t *p, uint32_t *seq, uint16_t *run)
+// Trust only what reads back whole: the part ends at the first record that doesn't. Its newest
+// seq and run go in *seq and *run if newer. 0 if not even its oldest reads back.
+static int part_attach(lb_ring_t *r, ring_part_t *p, uint32_t *seq, uint16_t *run)
 {
     uint32_t pos = p->tail;
     int wrapped = 0;
@@ -318,10 +318,11 @@ static void part_attach(lb_ring_t *r, ring_part_t *p, uint32_t *seq, uint16_t *r
         }
         pos += (uint32_t)n;
     }
-    if (pos == p->head) return;
+    if (pos == p->head) return 1;
     const uint8_t *oldest = AT(r, p, p->tail);
-    if (*oldest != RING_WRAP && !rec_check(oldest, p->cap - p->tail)) p->tail = pos = 0;
+    if (*oldest != RING_WRAP && !rec_check(oldest, p->cap - p->tail)) return 0;
     p->head = pos;
+    return 1;
 }
 
 lb_ring_t *lb_ring_attach(void *mem, size_t bytes, int *kept)
@@ -337,7 +338,11 @@ lb_ring_t *lb_ring_attach(void *mem, size_t bytes, int *kept)
 
     uint32_t last_seq = 0;
     uint16_t last_run = 0;
-    for (unsigned i = 0; i < LB_RING_PARTS; i++) part_attach(r, &r->part[i], &last_seq, &last_run);
+    for (unsigned i = 0; i < LB_RING_PARTS; i++)
+        if (!part_attach(r, &r->part[i], &last_seq, &last_run)) {
+            ring_init(r, cap);              // not the log: start afresh, numbered after flash
+            return r;
+        }
     if (last_seq) {
         r->next_seq = last_seq + 1;
         r->run = last_run;
