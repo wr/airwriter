@@ -35,7 +35,7 @@ SRCS    := $(wildcard $(COMP)/ripjob/*.c) \
            $(COMP)/stylewriter/sw_session.c $(COMP)/stylewriter/sw_status.c \
            $(COMP)/stylewriter/sw_testpage.c $(COMP)/stylewriter/sw_unpack.c \
            $(COMP)/printers/port_policy.c \
-           $(COMP)/qdlaser/qd_model.c \
+           $(COMP)/qdlaser/qd_model.c $(COMP)/qdlaser/qd_wire.c $(COMP)/qdlaser/qd_status.c \
            $(COMP)/serial_out/serial_writer.c
 TESTSRC := $(wildcard test/test_*.c)
 TESTBIN := $(patsubst test/%.c,build/%,$(TESTSRC))
@@ -103,7 +103,8 @@ build/test_pap_relay: test/test_pap_relay.c $(LT)/lt_proto.c $(LT)/lt_node.c $(L
 build/test_printers: test/test_printers.c $(COMP)/printers/printers_core.c $(COMP)/laser/lw_caps.c \
                      $(COMP)/laser/lw_query.c $(COMP)/printer_caps/printer_caps.c $(LT)/lt_proto.c \
                      $(COMP)/stylewriter/sw_model.c $(COMP)/halftone/apple_tables.c \
-                     $(COMP)/qdlaser/qd_model.c $(COMP)/halftone/apple_tables_lw.c | build
+                     $(COMP)/qdlaser/qd_model.c $(COMP)/qdlaser/qd_status.c \
+                     $(COMP)/halftone/apple_tables_lw.c | build
 	$(CC) $(CFLAGS) $(INCS) -I$(COMP)/printers/include -I$(COMP)/ipp_server/include -I$(LT)/include -Itest \
 	      -DICON_DIR='"$(abspath $(COMP)/ipp_server/icons)"' -o $@ $^
 
@@ -169,7 +170,7 @@ build/sw_%.o: $(COMP)/stylewriter/sw_%.c | build
 	$(CC) $(CFLAGS) $(INCS) -c -o $@ $<
 
 # The QuickDraw LaserWriters' cores (W-1102), held to the same rule.
-QD_OBJS := build/qd_model.o
+QD_OBJS := build/qd_model.o build/qd_wire.o build/qd_status.o
 build/qd_%.o: $(COMP)/qdlaser/qd_%.c | build
 	$(CC) $(CFLAGS) $(INCS) -c -o $@ $<
 

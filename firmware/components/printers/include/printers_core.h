@@ -139,6 +139,9 @@ typedef enum { PR_FAULT_NONE, PR_FAULT_PAPER, PR_FAULT_JAM, PR_FAULT_CARTRIDGE,
                PR_FAULT_OTHER } pr_fault_t;
 // The fault for a sw_state_t (sw_session.h): PR_FAULT_NONE for ready, printing and offline.
 int pr_fault_from_sw(int sw_state);
+// The fault for a qd_state_t (qd_status.h): paper for no paper, no cassette and an empty manual
+// slot, then jam, cover, PR_FAULT_OTHER for an engine fault; none for ready, printing, offline.
+int pr_fault_from_qd(int qd_state);
 
 // A printer's live state, by its index in r[]: the board fills it in. cart
 // (W-1103) is a StyleWriter's cartridge as last read: 0 not known, 1 black,

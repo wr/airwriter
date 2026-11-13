@@ -3,6 +3,7 @@
 #include "lw_caps.h"
 #include "lt_proto.h"
 #include "sw_session.h"
+#include "qd_status.h"
 #include <stdio.h>
 #include <string.h>
 #include <strings.h>
@@ -47,6 +48,19 @@ int pr_fault_from_sw(int st)
     case SWS_WASTE:        return PR_FAULT_WASTE;
     case SWS_FAULT:        return PR_FAULT_OTHER;
     default:               return PR_FAULT_NONE;       // ready, printing, offline
+    }
+}
+
+int pr_fault_from_qd(int st)
+{
+    switch (st) {
+    case QDS_NO_PAPER:
+    case QDS_NO_CASSETTE:
+    case QDS_MANUAL:      return PR_FAULT_PAPER;
+    case QDS_JAM:         return PR_FAULT_JAM;
+    case QDS_COVER:       return PR_FAULT_COVER;
+    case QDS_ENGINE:      return PR_FAULT_OTHER;
+    default:              return PR_FAULT_NONE;       // ready, printing, offline
     }
 }
 

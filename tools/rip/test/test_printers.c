@@ -10,6 +10,7 @@
 #include "sw_model.h"
 #include "sw_session.h"
 #include "qd_model.h"
+#include "qd_status.h"
 #include "ipp_icons.h"
 #include <stddef.h>
 #include <stdlib.h>
@@ -1763,6 +1764,22 @@ static void test_sw_json(void)
     CHECK_EQ_INT(sizeof(pr_rec_t), 284);
 }
 
+// The fault a Personal LaserWriter 300 holds, in the page's words (W-1102).
+static void test_qd_fault(void)
+{
+    CHECK_EQ_INT(pr_fault_from_qd(QDS_READY), PR_FAULT_NONE);
+    CHECK_EQ_INT(pr_fault_from_qd(QDS_PRINTING), PR_FAULT_NONE);
+    CHECK_EQ_INT(pr_fault_from_qd(QDS_OFFLINE), PR_FAULT_NONE);
+    CHECK_EQ_INT(pr_fault_from_qd(QDS_NO_PAPER), PR_FAULT_PAPER);
+    CHECK_EQ_INT(pr_fault_from_qd(QDS_NO_CASSETTE), PR_FAULT_PAPER);
+    CHECK_EQ_INT(pr_fault_from_qd(QDS_MANUAL), PR_FAULT_PAPER);
+    CHECK_EQ_INT(pr_fault_from_qd(QDS_JAM), PR_FAULT_JAM);
+    CHECK_EQ_INT(pr_fault_from_qd(QDS_COVER), PR_FAULT_COVER);
+    CHECK_EQ_INT(pr_fault_from_qd(QDS_ENGINE), PR_FAULT_OTHER);
+    for (int st = QDS_READY; st <= QDS_OFFLINE; st++)
+        CHECK_EQ_INT(pr_fault_from_qd(st) != PR_FAULT_NONE, qd_state_fault((qd_state_t)st));
+}
+
 // The fault a StyleWriter holds, named for the page in its own words.
 static void test_sw_fault(void)
 {
@@ -3039,6 +3056,7 @@ static void test_qd_icon_served(void)
 int main(void)
 {
     test_icons();
+    test_qd_fault();
     test_at_renamed();
     test_at_renamed_named();
     test_at_not_renamed();
