@@ -1341,14 +1341,23 @@ in `make -C tools/rip test` holds the firmware to that. `lb_scrub` replaces the 
 host names in every line with `<network>` and `<host>`, and anything shaped like a MAC address in
 lines tagged `wifi` with `<mac>`, before the line is stored.
 
-**Two layers.** A 32 KB ring in PSRAM (about 400 lines), in the noinit segment with a magic number
-and a check on each boot, survives a panic and a software restart. The first 256 KB of `storage`
-(64 sectors of 4 KB, about 3,000 lines), raw `esp_partition`, survives a power cut. `logbook_tick`
-runs once a second on the main task. With no job it keeps two sectors erased ahead and saves
-what's new. During a job (`job_busy`: the job lock held, or a job within the last 5 s) it saves
-only when a warning or error is waiting, a page write with no erase. The per-request `op … asks`
-line for routine status polls stays in RAM. Flash calls come only from tasks with internal stacks.
-Erase All Settings and the power-up reset clear both layers.
+**Two layers.** A 40 KB ring in PSRAM, in the noinit segment with a magic number and a check on
+each boot, survives a panic and a software restart. The first 256 KB of `storage` (64 sectors of
+4 KB, about 3,000 lines), raw `esp_partition`, survives a power cut. `logbook_tick` runs once a
+second on the main task. With no job it keeps two sectors erased ahead and saves what's new. During
+a job (`job_busy`: the job lock held, or a job within the last 5 s) it saves only when a warning or
+error is waiting, a page write with no erase. Flash calls come only from tasks with internal
+stacks. Erase All Settings and the power-up reset clear both layers.
+
+**Routine status polls** (`lb_is_chatter`: `ipp`'s `op … asks` and `attributes of …` lines for
+Get-Printer-Attributes, Get-Job-Attributes and Get-Jobs) stay in RAM and never reach flash. The ring
+keeps them in a part of their own: 32 KB (about 400 lines) for every other line, 8 KB for the polls,
+so polls push out only older polls. 8 KB is about 34 polls, half a minute of a Mac that asks every
+second while it has a job queued. In one shared ring that asking pushed a job's first lines out
+before the job ended and they could be saved (`W-1142 Log: a Mac's status polls push a job's own
+lines out before they're saved`; board 1, 2026-11-13: a Personal LaserWriter 300 job with its cover
+opened mid-page left its end in the log and not its start). Both parts number their lines from one
+sequence, and a reader merges them with flash.
 
 **Reading.** `GET /api/log`: `?n=N` for the newest N, `?after=S` for the lines after sequence
 number S, neither for everything. Plain text: a header `#\t<newest>\t<errors this start>\t<dropped>\n`,

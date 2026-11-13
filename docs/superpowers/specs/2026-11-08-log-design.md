@@ -92,7 +92,9 @@ capture joins per task.
   own.
 - **Chatter.** The per-request line in `ipp_server` (`op 0x… asks …`) is kept in RAM but not saved
   to flash for routine status polls, so a phone polling all day can't push out the useful lines.
-  RAM keeps it because it's the only evidence of a phone that asks and never sends a job.
+  RAM keeps it because it's the only evidence of a phone that asks and never sends a job. In RAM it
+  has a part of the ring to itself, so it can't push out lines waiting to be saved either (see
+  Amendments).
 
 ## What's left out
 
@@ -120,11 +122,11 @@ stay. No message contains a password today, and that must stay true.
 
 ## How it's kept
 
-**RAM.** A 32 KB ring in PSRAM holds every line (about 400) and survives a panic or software
-restart. That needs a `.noinit` placement (`CONFIG_SPIRAM_ALLOW_NOINIT_SEG_EXTERNAL_MEMORY`, off
-today) with a magic number and check on each boot. `CONFIG_SPIRAM_MEMTEST` is on, and ESP-IDF's
-test skips that segment. On the bench, PSRAM kept its contents through a panic restart on rev A's
-module.
+**RAM.** A 40 KB ring in PSRAM survives a panic or software restart: 32 KB holds every line
+(about 400) but the routine polls, and 8 KB holds the polls (see Amendments). That needs a
+`.noinit` placement (`CONFIG_SPIRAM_ALLOW_NOINIT_SEG_EXTERNAL_MEMORY`, off today) with a magic
+number and check on each boot. `CONFIG_SPIRAM_MEMTEST` is on, and ESP-IDF's test skips that
+segment. On the bench, PSRAM kept its contents through a panic restart on rev A's module.
 
 **Flash.** The first 256 KB of the `storage` partition (1.9 MB, used by nothing: the icons are
 embedded in the app), about 3,000 lines. Raw `esp_partition` access, append-only records, a ring of
@@ -200,7 +202,8 @@ one. **Wiki** and **Report an issue** rows in About's style. Real page addresses
 out, and the rule behind that. The **View Log** link on the setup screens. **Wiki** going to the
 Troubleshooting page, so where people send logs can change without a firmware update. Erasing
 clears the log. The two AppleTalk event rings removed in favour of the log. Copy and Download
-staying oldest first. The screen asking every second rather than holding a connection open.
+staying oldest first. The screen asking every second rather than holding a connection open. The
+routine polls' own part of the RAM ring (2026-11-13).
 
 **Left to the builder:** record format, ring sizes within reason, the API's exact shape, how panic
 details are captured, the polling rate, the wording of dividers.
@@ -210,6 +213,19 @@ details are captured, the polling rate, the wording of dividers.
 After Wells has approved the build: a new section in `docs/SPEC.md`; the stale `storage` comment in
 `firmware/partitions.csv`; AGENTS.md's "Where things are", API list and verification; `docs/traps.md`
 for anything the bench turns up; the wiki's Troubleshooting page.
+
+## Amendments
+
+- **2026-11-13, from the bench** (`W-1142 Log: a Mac's status polls push a job's own lines out
+  before they're saved`; What's recorded, Chatter; How it's kept, RAM). The routine status polls get
+  a part of the RAM ring of their own, 8 KB beside the 32 KB for every other line. A Mac with a job
+  queued asks after the printer once a second, and during a job nothing is saved until a warning or
+  error, so in one shared ring that asking pushed out a job's first lines before they were saved. On
+  board 1 a Personal LaserWriter 300 job with its cover opened mid-page left its end in the log and
+  not its start. Now polls push out only older polls: the 8 KB holds about 34, half a minute of that
+  Mac's asking, and an open screen sees every one as it comes. Claude's call, for Wells to check.
+  Updating to the first build with it starts the RAM ring afresh once, so lines not yet saved when
+  the update restarts the board are lost; flash keeps the rest.
 
 ## Suggestions, not part of this
 
