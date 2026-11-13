@@ -546,6 +546,35 @@ static void test_paper_out_while_printing(void)
     qd_session_free(s);
 }
 
+// The cassette pulled out, as board 1's printer answered (2026-11-13): 83 01 says a fault is
+// stored, 83 02 sets 10 and 83 2A has no paper. The page waits for it, as for paper.
+static void test_cassette_out_while_printing(void)
+{
+    fake_reset();
+    qd_session_t *s = loaded(0, 0);
+    F.win_from_print = 1;
+    F.win[F.nwin++] = (win_t){ 2000, 6000, 0x02, 0x10, 1 };
+    CHECK_EQ_INT(qd_session_print(s), QD_OK);
+    CHECK(saw_state(QDS_NO_CASSETTE));
+    CHECK(!saw_state(QDS_ENGINE));
+    CHECK_HAS(after("8A01"), "8A00");
+    CHECK_EQ_INT(count_tok("8A01"), 2);
+    CHECK_EQ_INT(F.st[F.nst - 1], QDS_PRINTING);
+    qd_session_free(s);
+}
+
+static void test_cassette_out_before_print(void)
+{
+    fake_reset();
+    qd_session_t *s = loaded(0, 0);
+    F.win[F.nwin++] = (win_t){ 0, f_now() + 3000, 0x02, 0x10, 1 };
+    CHECK_EQ_INT(qd_session_print(s), QD_OK);
+    CHECK(saw_state(QDS_NO_CASSETTE));
+    CHECK(!saw_state(QDS_ENGINE));
+    CHECK_EQ_INT(count_tok("8A01"), 1);
+    qd_session_free(s);
+}
+
 static void jam_or_cover(uint8_t bit, qd_state_t want)
 {
     fake_reset();
@@ -774,6 +803,8 @@ int main(void)
     test_done_timeout_85s();
     test_paper_out_before_print();
     test_paper_out_while_printing();
+    test_cassette_out_while_printing();
+    test_cassette_out_before_print();
     test_jam_recovery_reprints();
     test_cover_open();
     test_engine_fault_fails();

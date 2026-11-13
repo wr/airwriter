@@ -54,6 +54,17 @@ static void test_state_from(void)
     CHECK_EQ_INT(qd_state_from(sp, &r, 1), QDS_MANUAL);
 }
 
+// The cassette pulled out, as board 1's printer answered (2026-11-13): 83 01 says a fault is
+// stored, 83 02 sets 10, 83 2A has no paper and 82 00 says the engine isn't ready. It is the
+// cassette, not an engine fault.
+static void test_cassette_out_as_the_bench_read_it(void)
+{
+    const qd_spec_t *sp = qd_spec(QD_PLW300);
+    qd_raw_t r = idle();
+    r.s01 = 0x02; r.s02 = 0x10; r.s2a = 0x01; r.c82 = 0xAC;
+    CHECK_EQ_INT(qd_state_from(sp, &r, 0), QDS_NO_CASSETTE);
+}
+
 static void test_ipp(void)
 {
     static const struct { qd_state_t st; const char *reason, *message; } T[] = {
@@ -99,6 +110,7 @@ static void test_lights(void)
 int main(void)
 {
     test_state_from();
+    test_cassette_out_as_the_bench_read_it();
     test_ipp();
     test_lights();
     TEST_END;

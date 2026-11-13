@@ -7,7 +7,7 @@ qd_state_t qd_state_from(const qd_spec_t *sp, const qd_raw_t *r, int manual)
 {
     if (r->s02 & 0x08) return QDS_JAM;
     if (r->s02 & 0x04) return QDS_COVER;
-    if (r->s02 & 0x20) return QDS_NO_CASSETTE;
+    if (r->s02 & QD_S02_CASSETTE) return QDS_NO_CASSETTE;
     if (r->s01 & 0x02) return QDS_ENGINE;
     if (manual) {
         if (!(r->s2a & sp->bit_manual)) return QDS_MANUAL;

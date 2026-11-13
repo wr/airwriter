@@ -47,7 +47,8 @@ What it models, from the design's command table:
   done 2 s later (a BREAK, then 8E bit 2). 8A 00 stops it.
 * A jam or the cover stops a page; once cleared, it prints again only after 83 5D, as
   Apple's recovery sends. 83 2A: 20 paper in the cassette, 40 a sheet in the manual slot
-  (83 4C and 83 4F choose).
+  (83 4C and 83 4F choose). The cassette pulled out answers as board 1's printer did:
+  83 02 sets 10, 83 01 says a fault is stored, 83 2A has no paper.
 
 Not modelled: the link's clock and timing, page memory's exact cost, density, copies.
 """
@@ -250,11 +251,12 @@ class QuickDrawLaser:
         return self.jam or self.cover or self.no_cassette or self.engine_fault or not self._has_paper()
 
     def _s01(self):
+        # A cassette pulled out also says a fault is stored, as board 1's printer did.
         return (0x20 if self.printing is not None else 0) | (0x10 if self.again else 0) | \
-               (0x02 if self.engine_fault else 0)
+               (0x02 if self.engine_fault or self.no_cassette else 0)
 
     def _s02(self):
-        return (0x08 if self.jam else 0) | (0x04 if self.cover else 0) | (0x20 if self.no_cassette else 0)
+        return (0x08 if self.jam else 0) | (0x04 if self.cover else 0) | (0x10 if self.no_cassette else 0)
 
     def _c82(self):
         v = 0xA0

@@ -204,9 +204,11 @@ class Faults(unittest.TestCase):
         self.assertEqual(self.reg(lw, 0x2A), 0x00)
         self.assertEqual(ask(lw, 0x82, 0) & 0x08, 0x08)           # engine not ready
         lw.command("ok")
-        lw.command("cassette")
-        self.assertEqual(self.reg(lw, 0x02), 0x20)
+        lw.command("cassette")                 # as board 1's printer answered, 2026-11-13
+        self.assertEqual(self.reg(lw, 0x02), 0x10)
+        self.assertEqual(self.reg(lw, 0x01) & 0x02, 0x02)          # a fault stored
         self.assertEqual(self.reg(lw, 0x2A), 0x00)
+        self.assertEqual(ask(lw, 0x82, 0) & 0x08, 0x08)           # engine not ready
         lw.command("ok")
         lw.command("manual")
         self.assertEqual(self.reg(lw, 0x2A), 0x60)

@@ -7,6 +7,10 @@
 #include <stdint.h>
 #include "qd_model.h"
 
+// 83 02's cassette bits: 10 the cassette pulled out (board 1's printer, 2026-11-13; 83 01 then
+// also says a fault is stored), 20 not in properly (Apple's driver).
+enum { QD_S02_CASSETTE = 0x30 };
+
 typedef enum { QDS_READY, QDS_PRINTING, QDS_NO_PAPER, QDS_NO_CASSETTE, QDS_MANUAL, QDS_JAM,
                QDS_COVER, QDS_ENGINE, QDS_OFFLINE } qd_state_t;
 
@@ -14,8 +18,8 @@ typedef enum { QDS_READY, QDS_PRINTING, QDS_NO_PAPER, QDS_NO_CASSETTE, QDS_MANUA
 // that went unanswered when the printer said nothing, command then argument (0x8301), else 0.
 typedef struct { uint8_t s01, s02, s04, s07, s2a, c82; uint16_t miss; } qd_raw_t;
 
-// The state, first match wins: a jam (83 02 bit 3), the cover (bit 2), the cassette (bit 5), an
-// engine fault (83 01 bit 1; which one is in 83 04 and 83 07), no paper at the source asked for
+// The state, first match wins: a jam (83 02 bit 3), the cover (bit 2), the cassette (bits 4 and
+// 5), an engine fault (83 01 bit 1; which one is in 83 04 and 83 07), no paper at the source asked for
 // (manual: the slot, QDS_MANUAL; else the cassette, QDS_NO_PAPER), paper moving (83 01 bit 5),
 // else ready. Offline is the caller's: a printer whose clock has gone answers nothing.
 qd_state_t qd_state_from(const qd_spec_t *sp, const qd_raw_t *r, int manual);

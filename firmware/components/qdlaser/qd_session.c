@@ -288,7 +288,7 @@ static int wait_paper(qd_session_t *s)
         if (!s->c.manual) {
             int b = q(s, 0x83, 0x02);
             if (b < 0) return b;
-            st = (b & 0x20) ? QDS_NO_CASSETTE : QDS_NO_PAPER;
+            st = (b & QD_S02_CASSETTE) ? QDS_NO_CASSETTE : QDS_NO_PAPER;
         }
         state(s, st);
         int rc = lights(s, qd_lights(st, 0));
@@ -375,7 +375,8 @@ static int wait_done(qd_session_t *s)
             printed = poll = now(s);
             continue;
         }
-        if (s01 & 0x02) {
+        // The cassette pulled out also says a fault is stored: it waits below, as for paper.
+        if ((s01 & 0x02) && !(s02 & QD_S02_CASSETTE)) {
             if ((rc = q(s, 0x83, 0x04)) < 0 || (rc = q(s, 0x83, 0x07)) < 0) return rc;
             state(s, QDS_ENGINE);
             return QD_E_FAULT;
