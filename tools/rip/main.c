@@ -6,6 +6,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 #include "urf_decode.h"
 #include "ripjob.h"
 #include "png_write.h"
@@ -110,6 +111,14 @@ static void stream_out(void *ctx, const uint8_t *b, size_t n)
 {
     host_t *h = (host_t *)ctx;
     if (h->stream && fwrite(b, 1, n, h->stream) != n) h->write_failed = 1;
+}
+
+/* --times (W-1143): ripjob's clock, so each page's log line says where its time went. */
+static uint32_t clock_us(void)
+{
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (uint32_t)((uint64_t)ts.tv_sec * 1000000u + (uint64_t)ts.tv_nsec / 1000u);
 }
 
 static void say(void *ctx, const char *msg)
@@ -407,7 +416,7 @@ static void usage(void)
 {
     fputs("usage: rip --in FILE [--out-stream FILE] [--out-preview FILE]\n"
           "           [--dither threshold|atkinson|floyd|bayer|bluenoise|apple] [--colour]\n"
-          "           [--gain PERCENT] [--top-margin N] [--out-pbm FILE]\n"
+          "           [--gain PERCENT] [--top-margin N] [--out-pbm FILE] [--times]\n"
           "       rip --in FILE --printer laser [--paper letter|a4|legal] [--ps FILE] [--hex]\n"
           "       rip --in FILE --printer stylewriter --model original|ii|1200|1500|2200|2400|2500\n"
           "           [--cart black|colour] [--tone none] [--out-sw FILE] [--out-pbm FILE]\n"
@@ -417,6 +426,8 @@ static void usage(void)
           "       rip --sw-testpage black|colour --model M --out-sw FILE [--dither ...] [--gain ...]\n"
           "  --colour   print RGB pages in four inks, as with the colour ribbon in\n"
           "  --gain     dot gain at a 50%% tint the tone curve makes up for (default 0, off)\n"
+          "  --times    log where each page's time went: read, scale, screen, second screen,\n"
+          "             out and end, in ms (W-1143; the board logs the same)\n"
           "  --top-margin  the board's top margin setting, 1/144 in: + adds paper ahead of\n"
           "             each page, - drops its first rows (the board's default is -144)\n"
           "  --testpage the board's test page for that ribbon, as board 1 would print it;\n"
@@ -455,7 +466,7 @@ int main(int argc, char **argv)
     const char *sw_tp = NULL, *qd_tp = NULL;
     const char *out_qd = NULL, *out_qd_bits = NULL, *source = "main";
     int sp_on = 0;
-    int colour = 0, gain = 0, top = 0, hex = 0;
+    int colour = 0, gain = 0, top = 0, hex = 0, times = 0;
 
     for (int i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "--in") && i + 1 < argc)               in = argv[++i];
@@ -470,6 +481,7 @@ int main(int argc, char **argv)
         else if (!strcmp(argv[i], "--paper") && i + 1 < argc)       paper = argv[++i];
         else if (!strcmp(argv[i], "--ps") && i + 1 < argc)          out_ps = argv[++i];
         else if (!strcmp(argv[i], "--hex"))                          hex = 1;
+        else if (!strcmp(argv[i], "--times"))                        times = 1;
         else if (!strcmp(argv[i], "--model") && i + 1 < argc)       model_arg = argv[++i];
         else if (!strcmp(argv[i], "--cart") && i + 1 < argc)        cart_arg = argv[++i];
         else if (!strcmp(argv[i], "--tone") && i + 1 < argc)        tone_arg = argv[++i];
@@ -607,6 +619,7 @@ int main(int argc, char **argv)
         .row_ctx  = &h,
         .ink_row  = out_preview || (stylewriter && out_pbm) ? on_ink_row : NULL,
         .log      = say,
+        .clock_us = times ? clock_us : NULL,
     };
     if (stylewriter) sw_rip_cfg(&cfg, &stage, swp, swm, algo, colour, !strcmp(tone_arg, "apple"));
 

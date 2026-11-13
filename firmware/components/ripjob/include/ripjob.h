@@ -107,6 +107,10 @@ typedef struct {
     // Human-readable diagnostics, already formatted. NULL stays silent.
     void      (*log)(void *ctx, const char *msg);
     void       *log_ctx;
+
+    // W-1143: a microsecond clock (it may wrap). Set, each page ends with a log line of where
+    // its time went (ripjob_run). NULL: no line.
+    uint32_t  (*clock_us)(void);
 } ripjob_cfg_t;
 
 typedef struct {
@@ -118,4 +122,11 @@ typedef struct {
 // Runs every page in an already-opened URF stream. Returns 0, or a negative
 // value on a truncated stream, an unsupported page or an allocation failure.
 // `st` may be NULL.
+//
+// With cfg->clock_us, each page that ends logs "page N: T ms: read R, scale S, screen H,
+// second screen K, out O, end E", in ms: R reading its rows (URF decoding, and waiting for
+// the upload), S the gray conversion and resampling, H the job's screen (or the four inks'),
+// K a stage's gray_row (the Personal LaserWriter 300's Apple-screen page, W-1102), O the
+// rows going on (the row callback, the stage's row or ink_row, or the ImageWriter's strips),
+// E the page's end (a stage's page_end: the 300's print and wait for page done).
 int ripjob_run(urf_t *u, const ripjob_cfg_t *cfg, ripjob_stats_t *st);

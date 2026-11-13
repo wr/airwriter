@@ -25,7 +25,14 @@ typedef struct {
     uint8_t  *ibits[IW_INKS];
     uint8_t  *gray;          // an RGB row as gray, for a black ribbon
     uint32_t  skip;          // rows of this page still to drop (top_margin < 0)
+    // W-1143: this page's time in each part, in us (ripjob.h), while cfg->clock_us is set.
+    uint32_t  t_read, t_scale, t_screen, t_second, t_out, t_emit;
 } pipe_t;
+
+static inline uint32_t clk(const pipe_t *p)
+{
+    return p->cfg->clock_us ? p->cfg->clock_us() : 0;
+}
 
 static void say(const ripjob_cfg_t *cfg, const char *fmt, ...)
     __attribute__((format(printf, 2, 3)));
@@ -46,13 +53,23 @@ static void say(const ripjob_cfg_t *cfg, const char *fmt, ...)
 static void on_row(void *ctx, const uint8_t *row, uint32_t w)
 {
     pipe_t *p = (pipe_t *)ctx;
-    if (p->cfg->stage && p->cfg->stage->gray_row) p->cfg->stage->gray_row(p->cfg->stage->ctx, row, w);
+    uint32_t t0 = clk(p), t1 = t0, t2;
+    if (p->cfg->stage && p->cfg->stage->gray_row) {
+        p->cfg->stage->gray_row(p->cfg->stage->ctx, row, w);
+        t1 = clk(p);
+    }
     ht_row(&p->ht, row, p->bits);
+    t2 = clk(p);
     if (p->cfg->row) p->cfg->row(p->cfg->row_ctx, p->bits, w, p->y);
     if (p->cfg->stage) p->cfg->stage->row(p->cfg->stage->ctx, p->bits);
     else if (p->skip) p->skip--;
     else iw_row(&p->iw, p->bits);
     p->y++;
+    uint32_t t3 = clk(p);
+    p->t_second += t1 - t0;
+    p->t_screen += t2 - t1;
+    p->t_out    += t3 - t2;
+    p->t_emit   += t3 - t0;
 }
 
 // One resampled RGB row of a colour page: split it into inks, halftone each,
@@ -60,13 +77,19 @@ static void on_row(void *ctx, const uint8_t *row, uint32_t w)
 static void on_rgb_row(void *ctx, const uint8_t *row, uint32_t w)
 {
     pipe_t *p = (pipe_t *)ctx;
+    uint32_t t0 = clk(p);
     ink_screens_row(&p->inks, row, p->ibits);
+    uint32_t t1 = clk(p);
     const uint8_t *const *bits = (const uint8_t *const *)p->ibits;
     if (p->cfg->ink_row) p->cfg->ink_row(p->cfg->row_ctx, bits, w, p->y);
     if (p->cfg->stage) p->cfg->stage->ink_row(p->cfg->stage->ctx, bits);
     else if (p->skip) p->skip--;
     else iwc_row(p->iwc, bits);
     p->y++;
+    uint32_t t2 = clk(p);
+    p->t_screen += t1 - t0;
+    p->t_out    += t2 - t1;
+    p->t_emit   += t2 - t0;
 }
 
 // Apple's drivers start a page on the screen's second row (apple_tables.h).
@@ -269,9 +292,14 @@ int ripjob_run(urf_t *u, const ripjob_cfg_t *cfg, ripjob_stats_t *st)
         {
             const uint8_t *row;
             int r;
+            p->t_read = p->t_scale = p->t_screen = p->t_second = p->t_out = p->t_emit = 0;
+            uint32_t page_t0 = clk(p), t0 = page_t0, t1, t2;
             // One byte per pixel for gray and three for RGB, so the crop is
             // that many bytes per pixel in.
             while ((r = urf_next_row(u, &row)) == URF_OK) {
+                t1 = clk(p);
+                p->t_read += t1 - t0;
+                uint32_t emitted = p->t_emit;
                 if (!rgb) {
                     rs_push(&rs, row + crop_left);
                 } else if (colour) {
@@ -280,7 +308,13 @@ int ripjob_run(urf_t *u, const ripjob_cfg_t *cfg, ripjob_stats_t *st)
                     ink_gray(row + crop_left * 3, src_w, p->gray);
                     rs_push(&rs, p->gray);
                 }
+                t2 = clk(p);
+                p->t_scale += (t2 - t1) - (p->t_emit - emitted);
+                t0 = t2;
             }
+            t1 = clk(p);
+            p->t_read += t1 - t0;
+            t0 = t1;
             if (r < 0) {
                 say(cfg, "page %d incomplete, stream is truncated", pages + 1);
                 rc = r;
@@ -293,6 +327,15 @@ int ripjob_run(urf_t *u, const ripjob_cfg_t *cfg, ripjob_stats_t *st)
                 iwc_end_page(p->iwc);
             } else {
                 iw_end_page(&p->iw);
+            }
+            if (cfg->clock_us && r >= 0) {
+                t1 = clk(p);
+                uint32_t end = t1 - t0;
+                say(cfg, "page %d: %u ms: read %u, scale %u, screen %u, second screen %u, "
+                         "out %u, end %u", pages + 1, (unsigned)((t1 - page_t0) / 1000),
+                    (unsigned)(p->t_read / 1000), (unsigned)(p->t_scale / 1000),
+                    (unsigned)(p->t_screen / 1000), (unsigned)(p->t_second / 1000),
+                    (unsigned)(p->t_out / 1000), (unsigned)(end / 1000));
             }
         }
 

@@ -62,6 +62,7 @@ static volatile int s_eof;        // producer has no more bytes
 static volatile int s_aborted;    // transfer was truncated; abandon the page
 static job_pipe_stats_t s_st;
 static int64_t s_t0;              // job_pipe_begin's time, which the stats count from
+static int64_t s_wait_us;         // W-1143: the rip's time waiting on an empty ring for the upload
 static char s_name[64];
 static job_pipe_target_t s_target;    // this job's printer, when not the ImageWriter
 static int s_has_target;
@@ -75,11 +76,20 @@ static int ring_read(void *ctx, uint8_t *buf, size_t n)
     size_t got = 0;
     while (got < n) {
         if (s_aborted) return 0;
+        // An empty ring with more to come: the rip waits for the upload (W-1143).
+        int64_t t0 = !s_eof && xStreamBufferIsEmpty(s_ring) ? esp_timer_get_time() : 0;
         size_t r = xStreamBufferReceive(s_ring, buf + got, n - got, pdMS_TO_TICKS(250));
+        if (t0) s_wait_us += esp_timer_get_time() - t0;
         got += r;
         if (r == 0 && s_eof && xStreamBufferIsEmpty(s_ring)) return 0;
     }
     return 1;
+}
+
+// ripjob's clock (W-1143): each page's log line says where its time went.
+static uint32_t rip_clock_us(void)
+{
+    return (uint32_t)esp_timer_get_time();
 }
 
 static void pipe_log(void *ctx, const char *msg)
@@ -148,6 +158,7 @@ static void pipe_task(void *arg)
             .gain    = s_cfg.gain,
             .top_margin = s_cfg.top_margin,
             .log     = pipe_log,
+            .clock_us = rip_clock_us,
         };
         ripjob_cfg_t cfg = job_pipe_rip_cfg(base, s_cfg.colour_ok, s_cfg.colour_ctx,
                                             s_has_target ? &s_target : NULL);
@@ -161,9 +172,13 @@ static void pipe_task(void *arg)
     urf_free(&u);
     s_st.rip_ms = (uint32_t)((esp_timer_get_time() - s_t0) / 1000);
     if (s_buffered)
-        ESP_LOGI(TAG, "rip done in %u ms; %u KB of %u still to print",
-                 (unsigned)s_st.rip_ms, (unsigned)(xStreamBufferBytesAvailable(s_out) / 1024),
+        ESP_LOGI(TAG, "rip done in %u ms, %u of them waiting for the upload; %u KB of %u still "
+                 "to print", (unsigned)s_st.rip_ms, (unsigned)(s_wait_us / 1000),
+                 (unsigned)(xStreamBufferBytesAvailable(s_out) / 1024),
                  (unsigned)(s_st.printer_bytes / 1024));
+    else
+        ESP_LOGI(TAG, "rip done in %u ms, %u of them waiting for the upload",
+                 (unsigned)s_st.rip_ms, (unsigned)(s_wait_us / 1000));
 
     // Whatever happened, drain the rest so the producer is never left blocked
     // on a full ring with nobody reading.
@@ -270,6 +285,7 @@ esp_err_t job_pipe_begin_to(const char *job_name, const job_pipe_target_t *t)
     while (xStreamBufferReceive(s_ring, junk, sizeof junk, 0) > 0) {}
     memset(&s_st, 0, sizeof s_st);
     s_t0 = esp_timer_get_time();
+    s_wait_us = 0;
     s_eof = s_aborted = 0;
     strncpy(s_name, job_name && job_name[0] ? job_name : "Untitled", sizeof s_name - 1);
     s_name[sizeof s_name - 1] = '\0';
