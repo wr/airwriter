@@ -102,7 +102,7 @@ int main(void)
     // A LaserWriter's job: the ImageWriter is never asked; the target's
     // geometry, stage and screen; no colour, no top margin.
     static const printer_caps_t caps = { .res_x = 300, .res_y = 300, .max_dots = 2550 };
-    static const rip_stage_t stage = { stage_begin, stage_row, stage_end, NULL, NULL };
+    static const rip_stage_t stage = { stage_begin, stage_row, stage_end, NULL, NULL, NULL };
     job_pipe_target_t t = { .caps = &caps, .stage = &stage, .dither = HT_BLUENOISE, .gain = 0 };
     g_asked = 0;
     ripjob_cfg_t lw = job_pipe_rip_cfg(base, ask_colour, NULL, &t);
@@ -119,7 +119,7 @@ int main(void)
     // W-1103, a StyleWriter's job: its target's colour and tone curve reach the rip.
     // The ImageWriter's ribbon is still not asked.
     static const uint8_t tone[256] = { 1, 2, 3 };
-    static const rip_stage_t ink_stage = { stage_begin, stage_row, stage_end, NULL, cnt_ink_row };
+    static const rip_stage_t ink_stage = { stage_begin, stage_row, stage_end, NULL, cnt_ink_row, NULL };
     job_pipe_target_t sw = { .caps = &caps, .stage = &ink_stage, .dither = HT_APPLE, .gain = 0,
                              .colour = 1, .buffered = 1, .tone = tone };
     g_asked = 0;
@@ -164,8 +164,8 @@ int main(void)
     // takes no ink rows falls back to gray, as ripjob's own tests hold.
     static const printer_caps_t rcaps = { .res_x = 300, .res_y = 300, .rip_dpi_x = 300,
                                           .rip_dpi_y = 300, .max_dots = 2550 };
-    static const rip_stage_t gray_stage = { cnt_begin, cnt_row, stage_end, NULL, NULL };
-    static const rip_stage_t both_stage = { cnt_begin, cnt_row, stage_end, NULL, cnt_ink_row };
+    static const rip_stage_t gray_stage = { cnt_begin, cnt_row, stage_end, NULL, NULL, NULL };
+    static const rip_stage_t both_stage = { cnt_begin, cnt_row, stage_end, NULL, cnt_ink_row, NULL };
     const uint32_t PW = 40, PH = 12;
     size_t rgb_n = make_page(1, PW, PH);
     uint8_t rgb_urf[sizeof g_page];

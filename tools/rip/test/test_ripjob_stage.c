@@ -8,6 +8,7 @@
 #include "printer_caps.h"
 #include "sw_model.h"
 #include "apple_tables.h"
+#include "resample.h"
 #include <stdlib.h>
 
 typedef struct {
@@ -226,7 +227,7 @@ static int rip_dots(const printer_caps_t *caps, uint32_t w, wrec_t *r, const uin
     size_t n = make_urf(gray_page, w, 4, 360, dots);
     CHECK(n < sizeof gray_page);
     memset(r, 0, sizeof *r);
-    rip_stage_t st = { w_begin, w_row, w_end, r, w_ink_row };
+    rip_stage_t st = { w_begin, w_row, w_end, r, w_ink_row, NULL };
     ripjob_cfg_t cfg = { .dither = HT_THRESHOLD, .caps = caps, .stage = &st };
     return rip(gray_page, n, &cfg);
 }
@@ -307,7 +308,7 @@ static void test_ink_rows(void)
     CHECK(n < sizeof rgb_page);
 
     // A stage that takes four planes gets them, and no gray row and no ImageWriter bytes.
-    rip_stage_t st = { w_begin, w_row, w_end, r, w_ink_row };
+    rip_stage_t st = { w_begin, w_row, w_end, r, w_ink_row, NULL };
     ripjob_cfg_t cfg = { .out = count, .dither = HT_THRESHOLD, .caps = c25, .stage = &st, .colour = 1 };
     out_n = 0;
     CHECK_EQ_INT(rip(rgb_page, n, &cfg), 0);
@@ -336,7 +337,7 @@ static void test_ink_rows(void)
 
     // A stage with no four-plane hook (a LaserWriter's) gets gray, whatever colour says.
     memset(r, 0, sizeof *r);
-    rip_stage_t gray_only = { w_begin, w_row, w_end, r, NULL };
+    rip_stage_t gray_only = { w_begin, w_row, w_end, r, NULL, NULL };
     cfg.colour = 1;
     cfg.stage = &gray_only;
     CHECK_EQ_INT(rip(rgb_page, n, &cfg), 0);
@@ -367,7 +368,7 @@ static void test_tone(void)
     g_flat = 250;                                  // nearly paper: no ink on a threshold
     size_t n = make_urf(gray_page, 3060, 4, 360, flat);
     CHECK(n < sizeof gray_page);
-    rip_stage_t st = { w_begin, w_row, w_end, r, w_ink_row };
+    rip_stage_t st = { w_begin, w_row, w_end, r, w_ink_row, NULL };
     ripjob_cfg_t cfg = { .dither = HT_THRESHOLD, .caps = ii, .stage = &st };
     CHECK_EQ_INT(rip(gray_page, n, &cfg), 0);
     CHECK_EQ_INT(popcount_row(r->first, r->w), 0);
@@ -388,7 +389,7 @@ static void test_tone(void)
     // A colour page: the curve is put on R, G and B before the split.
     size_t m = make_urf_rgb(rgb_page, 3060, 4, px_flat_rgb);
     CHECK(m < sizeof rgb_page);
-    rip_stage_t cst = { w_begin, w_row, w_end, r, w_ink_row };
+    rip_stage_t cst = { w_begin, w_row, w_end, r, w_ink_row, NULL };
     ripjob_cfg_t ccfg = { .dither = HT_THRESHOLD, .caps = sw_caps(SW_C2500), .stage = &cst, .colour = 1 };
     memset(r, 0, sizeof *r);
     CHECK_EQ_INT(rip(rgb_page, m, &ccfg), 0);
@@ -412,7 +413,7 @@ static void test_apple(void)
     g_flat = 128;
     size_t n = make_urf(gray_page, 3060, 20, 360, flat);
     CHECK(n < sizeof gray_page);
-    rip_stage_t st = { w_begin, w_row, w_end, r, w_ink_row };
+    rip_stage_t st = { w_begin, w_row, w_end, r, w_ink_row, NULL };
     ripjob_cfg_t cfg = { .dither = HT_APPLE, .caps = sw_caps(SW_II), .stage = &st };
     CHECK_EQ_INT(rip(gray_page, n, &cfg), 0);
     CHECK_EQ_INT(r->rows, 20);
@@ -468,7 +469,7 @@ static void test_other_screens_unmoved(void)
     size_t n = make_urf(gray_page, 3060, 12, 360, flat);
     CHECK(n < sizeof gray_page);
     for (size_t a = 0; a < sizeof algos / sizeof algos[0]; a++) {
-        rip_stage_t st = { w_begin, w_row, w_end, r, w_ink_row };
+        rip_stage_t st = { w_begin, w_row, w_end, r, w_ink_row, NULL };
         ripjob_cfg_t cfg = { .dither = algos[a], .caps = sw_caps(SW_II), .stage = &st };
         memset(r, 0, sizeof *r);
         CHECK_EQ_INT(rip(gray_page, n, &cfg), 0);
@@ -487,9 +488,144 @@ static void test_other_screens_unmoved(void)
     free(r);
 }
 
+// ---- the gray row (W-1102): a stage that screens a page twice gets each row's gray, as the
+// resampler made it and before any screen, ahead of the screened row.
+
+typedef struct {
+    char     ev[64];                     // 'g' for a gray row, 'r' for a screened one, in order
+    int      n_ev, grays, rows;
+    uint32_t gw_bad;                     // gray rows whose width was not the page's
+    uint32_t w;
+    uint8_t  gray[16][640];
+    uint8_t  bits[16][80];
+} grec_t;
+
+static int g_begin(void *ctx, int index, uint32_t w, uint32_t h)
+{
+    (void)index; (void)h;
+    ((grec_t *)ctx)->w = w;
+    return 0;
+}
+static void g_row(void *ctx, const uint8_t *bits)
+{
+    grec_t *r = ctx;
+    if (r->n_ev < 64) r->ev[r->n_ev++] = 'r';
+    if (r->rows < 16) memcpy(r->bits[r->rows], bits, (r->w + 7) / 8);
+    r->rows++;
+}
+static void g_gray(void *ctx, const uint8_t *gray, uint32_t w)
+{
+    grec_t *r = ctx;
+    if (r->n_ev < 64) r->ev[r->n_ev++] = 'g';
+    if (w != r->w) r->gw_bad++;
+    if (r->grays < 16 && w <= 640) memcpy(r->gray[r->grays], gray, w);
+    r->grays++;
+}
+static int g_end(void *ctx) { (void)ctx; return 0; }
+
+static uint8_t ramp(uint32_t x, uint32_t y) { return (uint8_t)((x * 3 + y * 40) & 255); }
+
+static uint8_t g_want[16][640];
+static int     g_want_n;
+static void keep_want(void *ctx, const uint8_t *row, uint32_t w)
+{
+    (void)ctx;
+    if (g_want_n < 16) memcpy(g_want[g_want_n], row, w);
+    g_want_n++;
+}
+
+static void test_gray_row_before_row(void)
+{
+    // 200 x 6 at 100 dpi into the 300 dpi stage: 600 dots across, 18 rows, resampled.
+    size_t n = make_urf(gray_page, 200, 6, 100, ramp);
+    grec_t *r = calloc(1, sizeof *r);
+    rip_stage_t st = { g_begin, g_row, g_end, r, NULL, g_gray };
+    ripjob_cfg_t cfg = { .dither = HT_ATKINSON, .caps = &k_laser, .stage = &st };
+    CHECK_EQ_INT(rip(gray_page, n, &cfg), 0);
+    CHECK_EQ_INT(r->w, 600);
+    CHECK_EQ_INT(r->grays, 18);
+    CHECK_EQ_INT(r->rows, 18);
+    CHECK_EQ_INT(r->gw_bad, 0);
+    int order = 1;
+    for (int i = 0; i + 1 < r->n_ev; i += 2) order &= r->ev[i] == 'g' && r->ev[i + 1] == 'r';
+    CHECK(order);
+
+    // The gray is the resampler's, untouched by the screen.
+    rs_t rs;
+    g_want_n = 0;
+    CHECK_EQ_INT(rs_init(&rs, 200, 6, 600, 18, keep_want, NULL), 0);
+    uint8_t src[200];
+    for (uint32_t y = 0; y < 6; y++) {
+        for (uint32_t x = 0; x < 200; x++) src[x] = ramp(x, y);
+        rs_push(&rs, src);
+    }
+    rs_free(&rs);
+    CHECK_EQ_INT(g_want_n, 18);
+    int bad = 0;
+    for (int y = 0; y < 16; y++) bad += memcmp(g_want[y], r->gray[y], 600) != 0;
+    CHECK_EQ_INT(bad, 0);
+    free(r);
+}
+
+static void test_gray_row_null_changes_nothing(void)
+{
+    // The same page into a stage with the gray row and one without: the screened rows match.
+    size_t n = make_urf(gray_page, 200, 6, 100, ramp);
+    grec_t *a = calloc(1, sizeof *a), *b = calloc(1, sizeof *b);
+    rip_stage_t with = { g_begin, g_row, g_end, a, NULL, g_gray };
+    rip_stage_t without = { g_begin, g_row, g_end, b, NULL, NULL };
+    ripjob_cfg_t cfg = { .dither = HT_ATKINSON, .caps = &k_laser, .stage = &with };
+    CHECK_EQ_INT(rip(gray_page, n, &cfg), 0);
+    cfg.stage = &without;
+    CHECK_EQ_INT(rip(gray_page, n, &cfg), 0);
+    CHECK_EQ_INT(b->grays, 0);
+    CHECK_EQ_INT(a->rows, b->rows);
+    CHECK(!memcmp(a->bits, b->bits, sizeof a->bits));
+    free(a);
+    free(b);
+}
+
+// Two sheets of one width (Letter and Legal at 300 dpi are both 2550 across): the page's height
+// tells them apart.
+static const printer_media_t k_two[] = {
+    { "na_letter_8.5x11in", 21590, 27940, 0, 0, 0, 0, 2550, 75, 2400, 3300 },
+    { "na_legal_8.5x14in",  21590, 35560, 0, 0, 0, 0, 2550, 275, 2000, 4200 },
+};
+
+static void test_sheet_by_height(void)
+{
+    printer_caps_t caps = k_laser;
+    caps.media_list = k_two;
+    caps.n_media = 2;
+    wrec_t *r = calloc(1, sizeof *r);
+    rip_stage_t st = { w_begin, w_row, w_end, r, NULL, NULL };
+    ripjob_cfg_t cfg = { .dither = HT_THRESHOLD, .caps = &caps, .stage = &st };
+    g_flat = 255;
+    // At 30 dpi, so the page is small: 255 x 420 is 2550 x 4200 at 300.
+    size_t n = make_urf(gray_page, 255, 420, 30, flat);
+    CHECK(n < sizeof gray_page);
+    memset(r, 0, sizeof *r);
+    CHECK_EQ_INT(rip(gray_page, n, &cfg), 0);
+    CHECK_EQ_INT(r->w, 2000);
+    CHECK_EQ_INT(r->h, 4200);
+    n = make_urf(gray_page, 255, 330, 30, flat);
+    memset(r, 0, sizeof *r);
+    CHECK_EQ_INT(rip(gray_page, n, &cfg), 0);
+    CHECK_EQ_INT(r->w, 2400);
+    // A height that is neither: the first of the sheets that width names.
+    n = make_urf(gray_page, 255, 360, 30, flat);
+    memset(r, 0, sizeof *r);
+    CHECK_EQ_INT(rip(gray_page, n, &cfg), 0);
+    CHECK_EQ_INT(r->w, 2400);
+    free(r);
+}
+
 int main(void)
 {
     test_media_pick();
+    test_gray_row_before_row();
+    test_gray_row_null_changes_nothing();
+    test_sheet_by_height();
     test_ink_rows();
     test_tone();
     test_apple();
@@ -508,7 +644,7 @@ int main(void)
 
     // The checker (288 x 144 at 144 dpi) into a 300 dpi stage.
     rec_t r = { 0 };
-    rip_stage_t st = { rec_begin, rec_row, rec_end, &r, NULL };
+    rip_stage_t st = { rec_begin, rec_row, rec_end, &r, NULL, NULL };
     ripjob_cfg_t cfg = { .out = count, .dither = HT_THRESHOLD, .caps = &k_laser, .stage = &st,
                          .top_margin = -144, .colour = 1 };
     out_n = 0;
@@ -542,7 +678,7 @@ int main(void)
     printer_caps_t narrow = k_laser;
     narrow.max_dots = 2400;
     rec_t c = { 0 };
-    rip_stage_t cst = { rec_begin, rec_row, rec_end, &c, NULL };
+    rip_stage_t cst = { rec_begin, rec_row, rec_end, &c, NULL, NULL };
     ripjob_cfg_t ccfg = { .dither = HT_THRESHOLD, .caps = &narrow, .stage = &cst,
                           .log = keep_log };
     logged[0] = '\0';

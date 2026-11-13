@@ -41,6 +41,10 @@ typedef struct {
     // (ink.h), and `row` is not called for it. NULL: RGB pages are gray, as for a
     // LaserWriter. Gets ctx.
     void (*ink_row)(void *ctx, const uint8_t *const bits[IW_INKS]);
+    // Set (W-1102): each gray page row, resampled and before its screen (0 black, w bytes), ahead
+    // of `row` for the same row, for a stage that screens a page a second way. A colour page's
+    // rows come through it as gray. Gets ctx.
+    void (*gray_row)(void *ctx, const uint8_t *gray, uint32_t w);
 } rip_stage_t;
 
 typedef struct {
