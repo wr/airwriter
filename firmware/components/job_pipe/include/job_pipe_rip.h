@@ -45,6 +45,12 @@ typedef struct {
     // cannot go on calls job_pipe_abort(), and the rip ends at its first read.
     int                 (*colour_ok)(void *ctx);
     void                 *colour_ctx;
+    // W-1102: the pool's second half is the target's own, to keep a page in (a Personal
+    // LaserWriter 300's page in Apple's screen, sent instead when the record's screen makes
+    // too much for the printer), from colour_ok until the job is done (job_pipe_keep). The URF
+    // is the first half, as for a buffered job; the stage sends its own bytes and `buffered`
+    // is ignored.
+    int                   keep;
 } job_pipe_target_t;
 
 // `base` with this job's printer in it. An ImageWriter job (t NULL) asks
@@ -60,6 +66,10 @@ ripjob_cfg_t job_pipe_rip_cfg(ripjob_cfg_t base, int (*colour_ok)(void *ctx), vo
 // ImageWriter's do whenever there is one (`have_ring`); another printer's only
 // when it asks (`buffered`).
 int job_pipe_buffered(const job_pipe_target_t *t, int have_ring);
+
+// Does this job keep a page in the pool's second half (W-1102)? Only a target that asks
+// (`keep`), and only when there is a pool to split (`have_pool`).
+int job_pipe_keeps(const job_pipe_target_t *t, int have_pool);
 
 // A consumer of printer bytes and its context.
 typedef struct {

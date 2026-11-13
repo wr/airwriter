@@ -213,6 +213,21 @@ int main(void)
     CHECK_EQ_INT(job_pipe_buffered(&swt, 1), 1);
     CHECK_EQ_INT(job_pipe_buffered(&swt, 0), 0);
 
+    // W-1102: a target that keeps a page (a Personal LaserWriter 300's) has the pool's second
+    // half for it, and never the printer-bytes ring, even if it set `buffered`; with no pool it
+    // has neither. The ImageWriter and the other targets are as they were.
+    job_pipe_target_t qdt = { .caps = &caps, .stage = &stage, .keep = 1 };
+    CHECK_EQ_INT(job_pipe_keeps(&qdt, 1), 1);
+    CHECK_EQ_INT(job_pipe_buffered(&qdt, 1), 0);
+    CHECK_EQ_INT(job_pipe_keeps(&qdt, 0), 0);
+    CHECK_EQ_INT(job_pipe_buffered(&qdt, 0), 0);
+    qdt.buffered = 1;
+    CHECK_EQ_INT(job_pipe_buffered(&qdt, 1), 0);
+    CHECK_EQ_INT(job_pipe_keeps(NULL, 1), 0);
+    CHECK_EQ_INT(job_pipe_keeps(&lwt, 1), 0);
+    CHECK_EQ_INT(job_pipe_keeps(&swt, 1), 0);
+    CHECK_EQ_INT(job_pipe_buffered(&swt, 1), 1);
+
     int prn_ctx_v, out_ctx_v;
     job_pipe_prn_t p = job_pipe_prn_for(NULL, out_nop, &out_ctx_v);        // the ImageWriter: cfg.out
     CHECK(p.fn == out_nop && p.ctx == &out_ctx_v);

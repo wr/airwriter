@@ -102,6 +102,11 @@ void job_pipe_out(const uint8_t *buf, size_t n);
 // is full -- a job bigger than it -- and that backpressure is the point.
 esp_err_t job_pipe_data(const uint8_t *buf, size_t n);
 
+// The pool's second half (512 KB) for the job in the pipeline, when its target asked to keep a
+// page there (job_pipe_target_t.keep, W-1102): from its colour_ok until its done. NULL with
+// *cap 0 otherwise, or on a board with no PSRAM.
+uint8_t  *job_pipe_keep(size_t *cap);
+
 // Abandons the page in flight. Safe to call from another task -- the pipeline
 // notices at its next read and unwinds through the normal truncation path.
 void job_pipe_abort(void);

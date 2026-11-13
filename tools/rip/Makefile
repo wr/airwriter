@@ -131,6 +131,10 @@ build/test_stylewriter_board: test/test_stylewriter_board.c $(COMP)/stylewriter/
                               $(SRCS) | build
 	$(CC) $(CFLAGS) $(INCS) -Itest/shim -Itest -o $@ $^ -lm -lz
 
+# The board's Personal LaserWriter 300 glue, the real qdlaser.c, the same way (W-1102).
+build/test_qd_board: test/test_qd_board.c $(COMP)/qdlaser/qdlaser.c $(SRCS) | build
+	$(CC) $(CFLAGS) $(INCS) -Itest/shim -Itest -o $@ $^ -lm -lz
+
 # The page stage's memory, counted through bigmem.h (BIGMEM_COUNT): it holds no page or band.
 build/test_sw_page_mem: CFLAGS += -DBIGMEM_COUNT
 build/test_sw_page_mem: test/test_sw_page_mem.c $(SRCS) | build
