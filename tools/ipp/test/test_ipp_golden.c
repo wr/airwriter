@@ -8,6 +8,7 @@
 // meant to reach every ImageWriter's clients should ever do.
 #include "test_util.h"
 #include "ipp_attrs.h"
+#include "qd_model.h"
 
 #include <stdlib.h>
 
@@ -152,6 +153,15 @@ int main(void)
     golden("imagewriter-gpa-colour.bin", buf, printer_answer(&c, NULL));
 
     golden("imagewriter-job.bin", buf, job_answer());
+
+    // W-1102: a Personal LaserWriter 300 on the port, idle, its six sheets and two sources.
+    ipp_printer_t q = imagewriter(0);
+    q.uri   = "ipp://airwriter.local:631/ipp/p3";
+    q.name  = "Personal LaserWriter 300";
+    q.info  = "Apple Personal LaserWriter 300";
+    q.uuid  = "urn:uuid:41575254-4552-0003-a1b2c3d4e5f6";
+    q.caps  = qd_caps(QD_PLW300);
+    golden("plw300-gpa-all.bin", buf, printer_answer(&q, NULL));
 
     char t[1024];
     size_t tn = txt(t, sizeof t, 0);

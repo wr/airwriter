@@ -72,6 +72,9 @@ int ipp_req_parse(ipp_req_t *r, const uint8_t *buf, size_t len)
     uint8_t group = 0;
     int have_job_id = 0;   // an explicit job-id outranks a job-uri
     int in_requested = 0;  // the values being walked extend requested-attributes
+    // The Job group's media-col (W-1102): how deep its collections go (0 outside it, 1 among
+    // its own members), and whether the member being walked at depth 1 is media-source.
+    int mcol = 0, depth = 0, src_member = 0;
     for (;;) {
         if (!need(&c, 1)) return IPP_REQ_SHORT;
         uint8_t tag = c.p[c.pos++];
@@ -105,9 +108,30 @@ int ipp_req_parse(ipp_req_t *r, const uint8_t *buf, size_t len)
                 r->requested.len = c.pos - (size_t)(r->requested.p - buf);
                 r->requested.n++;
             }
+            if (depth || tag == IPP_TAG_BEGIN_COLLECTION) {
+                if (tag == IPP_TAG_BEGIN_COLLECTION) {
+                    depth++;
+                    src_member = 0;
+                } else if (tag == IPP_TAG_END_COLLECTION) {
+                    depth--;
+                } else if (tag == IPP_TAG_MEMBERNAME) {
+                    src_member = depth == 1 && name_is(val, vlen, "media-source");
+                } else {
+                    if (mcol && src_member && tag == IPP_TAG_KEYWORD)
+                        r->opts.manual = name_is(val, vlen, "manual");
+                    src_member = 0;
+                }
+            }
             continue;
         }
         in_requested = 0;
+        // A new attribute: any collection walked before it has ended. Collections are tracked
+        // in every group, so a member never passes for an attribute; only the Job group's
+        // media-col is read.
+        mcol = group == IPP_TAG_JOB && tag == IPP_TAG_BEGIN_COLLECTION &&
+               name_is(name, nlen, "media-col");
+        depth = tag == IPP_TAG_BEGIN_COLLECTION;
+        src_member = 0;
 
         // Job attributes may legally repeat operation-attribute names with
         // different meaning, so each group has its own list: the job group's

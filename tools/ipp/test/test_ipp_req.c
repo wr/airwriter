@@ -55,8 +55,82 @@ static void member_i(bld_t *m, const char *member, int32_t val)
     attr_i(m, IPP_TAG_INTEGER, "", val);
 }
 
+/* W-1102: a job's paper source is the media-source member of the Job group's media-col, the
+ * manual slot only for `manual`. One in another collection, or in media-col's own media-size,
+ * is not the job's. */
+static void job_with_source(bld_t *m, const char *col, const char *src, int in_size)
+{
+    hdr(m, IPP_OP_PRINT_JOB, 40);
+    u8(m, IPP_TAG_OPERATION);
+    attr(m, IPP_TAG_NAME, "job-name", "Paper");
+    u8(m, IPP_TAG_JOB);
+    attr_raw(m, IPP_TAG_BEGIN_COLLECTION, col, NULL, 0);
+    attr(m, IPP_TAG_MEMBERNAME, "", "media-size");
+    attr_raw(m, IPP_TAG_BEGIN_COLLECTION, "", NULL, 0);
+    member_i(m, "x-dimension", 21590);
+    if (in_size) {
+        attr(m, IPP_TAG_MEMBERNAME, "", "media-source");
+        attr(m, IPP_TAG_KEYWORD, "", src);
+    }
+    member_i(m, "y-dimension", 27940);
+    attr_raw(m, IPP_TAG_END_COLLECTION, "", NULL, 0);
+    if (!in_size && src) {
+        attr(m, IPP_TAG_MEMBERNAME, "", "media-source");
+        attr(m, IPP_TAG_KEYWORD, "", src);
+    }
+    attr(m, IPP_TAG_MEMBERNAME, "", "media-type");
+    attr(m, IPP_TAG_KEYWORD, "", "stationery");
+    attr_raw(m, IPP_TAG_END_COLLECTION, "", NULL, 0);
+    attr_i(m, IPP_TAG_INTEGER, "copies", 1);
+    u8(m, IPP_TAG_END);
+}
+
+static void test_job_media_source_manual(void)
+{
+    bld_t m;
+    ipp_req_t r;
+    job_with_source(&m, "media-col", "manual", 0);
+    CHECK_EQ_INT(ipp_req_parse(&r, m.b, m.n), IPP_REQ_OK);
+    CHECK_EQ_INT(r.opts.manual, 1);
+    CHECK(strcmp(r.job_name, "Paper") == 0);
+    job_with_source(&m, "media-col", "main", 0);
+    CHECK_EQ_INT(ipp_req_parse(&r, m.b, m.n), IPP_REQ_OK);
+    CHECK_EQ_INT(r.opts.manual, 0);
+    job_with_source(&m, "media-col", NULL, 0);
+    CHECK_EQ_INT(ipp_req_parse(&r, m.b, m.n), IPP_REQ_OK);
+    CHECK_EQ_INT(r.opts.manual, 0);
+    job_with_source(&m, "x-other-col", "manual", 0);
+    CHECK_EQ_INT(ipp_req_parse(&r, m.b, m.n), IPP_REQ_OK);
+    CHECK_EQ_INT(r.opts.manual, 0);
+    job_with_source(&m, "media-col", "manual", 1);
+    CHECK_EQ_INT(ipp_req_parse(&r, m.b, m.n), IPP_REQ_OK);
+    CHECK_EQ_INT(r.opts.manual, 0);
+
+    /* No media-col at all; and media-source as a plain Job attribute is not media-col's. */
+    hdr(&m, IPP_OP_PRINT_JOB, 41);
+    u8(&m, IPP_TAG_JOB);
+    attr(&m, IPP_TAG_KEYWORD, "media-source", "manual");
+    u8(&m, IPP_TAG_END);
+    CHECK_EQ_INT(ipp_req_parse(&r, m.b, m.n), IPP_REQ_OK);
+    CHECK_EQ_INT(r.opts.manual, 0);
+
+    /* A media-col in the Operation group is not the job's either. */
+    hdr(&m, IPP_OP_PRINT_JOB, 42);
+    u8(&m, IPP_TAG_OPERATION);
+    attr_raw(&m, IPP_TAG_BEGIN_COLLECTION, "media-col", NULL, 0);
+    attr(&m, IPP_TAG_MEMBERNAME, "", "media-source");
+    attr(&m, IPP_TAG_KEYWORD, "", "manual");
+    attr_raw(&m, IPP_TAG_END_COLLECTION, "", NULL, 0);
+    attr(&m, IPP_TAG_NAME, "job-name", "Op");
+    u8(&m, IPP_TAG_END);
+    CHECK_EQ_INT(ipp_req_parse(&r, m.b, m.n), IPP_REQ_OK);
+    CHECK_EQ_INT(r.opts.manual, 0);
+    CHECK(strcmp(r.job_name, "Op") == 0);
+}
+
 int main(void)
 {
+    test_job_media_source_manual();
     bld_t m;
     ipp_req_t r;
 

@@ -196,6 +196,12 @@ Traps already explained in a code comment are listed only when the comment is ea
   the new one on the Mac for a while.
 - **Stale UUIDs linger as twins.** ESP mDNS does not cache-flush the previous boot's TXT record,
   so a UUID or name change shows two printers until client caches expire (~75 min).
+- **A printer's whole answer must fit `RESP_MAX`.** Get-Printer-Attributes is encoded into one
+  buffer per IPP worker (`ipp_server.c`); an answer that does not fit fails on the board and
+  nowhere else. The largest is a Personal LaserWriter 300's six sheets asked for as `all` with
+  `media-col-database`, 6,688 bytes (W-1102), so `RESP_MAX` is 7,680. The four workers' scratch
+  (~43 KB) is in PSRAM. `tools/ipp`'s `test_qd_caps` and `test_sw_caps` print each printer's
+  size; a printer with more sheets or sources raises it, in the tests too.
 - **Never advertise Create-Job / Send-Document.** With them in `operations-supported` the
   iPhone held every job at "Waiting" (SPEC §3.4).
 - **iOS and macOS open 25–50 parallel Get-Printer-Attributes connections.** Workers parked on

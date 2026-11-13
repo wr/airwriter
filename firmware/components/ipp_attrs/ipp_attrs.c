@@ -383,9 +383,13 @@ void ipp_write_printer_attrs(ipp_enc_t *e, const ipp_printer_t *p,
     }
     if (W("media-supported", JT)) write_media_names(e, "media-supported", c);
     if (W("media-ready", JT))     write_media_names(e, "media-ready", c);
-    if (W("media-source-supported", JT))
-        ipp_attr_strs(e, IPP_TAG_KEYWORD, "media-source-supported",
-                      k_media_source, NELEM(k_media_source));
+    if (W("media-source-supported", JT)) {
+        if (c->n_sources)                              // W-1102: the printer's own sources
+            ipp_attr_strs(e, IPP_TAG_KEYWORD, "media-source-supported", c->sources, c->n_sources);
+        else
+            ipp_attr_strs(e, IPP_TAG_KEYWORD, "media-source-supported",
+                          k_media_source, NELEM(k_media_source));
+    }
     if (W("media-type-supported", JT))
         ipp_attr_strs(e, IPP_TAG_KEYWORD, "media-type-supported",
                       k_media_type, NELEM(k_media_type));
