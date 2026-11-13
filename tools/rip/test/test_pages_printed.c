@@ -221,9 +221,11 @@ static void test_ledger(void)
 // The whole of it, as job_pipe runs an ImageWriter job: the rip notes its page ends in the
 // ledger as it writes, far ahead; the printer drains the bytes 512 at a time and reports.
 static jp_pages_t g_l;
+static size_t     g_end[16];          // where each page's form feed ends, as ripped
 static void mark(void *ctx, int pages)
 {
     (void)ctx;
+    if (pages >= 1 && pages <= 16) g_end[pages - 1] = g_out_n;
     jp_pages_end(&g_l, g_out_n, pages);
 }
 
@@ -233,19 +235,20 @@ static void test_pipeline(void)
     jp_pages_reset(&g_l);
     ripjob_cfg_t cfg = { .out = out, .dither = HT_ATKINSON, .page_done = mark };
     CHECK_EQ_INT(rip(make_urf(4, 1152, 40, 0), &cfg), 0);   // all four ripped before any prints
-    int last = 0, ffs = 0;
+    for (int p = 0; p < 4; p++) CHECK_EQ_INT(g_out[g_end[p] - 1], 0x0C);
+    int last = 0, reports = 0;
     for (size_t sent = 0; sent < g_out_n;) {
         size_t k = g_out_n - sent < 512 ? g_out_n - sent : 512;
-        for (size_t i = sent; i < sent + k; i++) ffs += g_out[i] == 0x0C;
         sent += k;
         int n = jp_pages_out(&g_l, sent);
-        if (n) {
-            CHECK(n > last);
-            CHECK(n <= ffs);                                // each one's form feed is out
-            last = n;
-        }
+        // Every page whose form feed is out by now, and none whose isn't.
+        int whole = 0;
+        while (whole < 4 && g_end[whole] <= sent) whole++;
+        CHECK_EQ_INT(n ? n : last, whole);
+        if (n) { last = n; reports++; }
     }
     CHECK_EQ_INT(last, 4);
+    CHECK(reports > 1);                                     // page by page, not all at the end
 }
 
 int main(void)

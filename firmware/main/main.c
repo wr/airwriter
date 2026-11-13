@@ -1023,8 +1023,10 @@ static void job_finished(const job_pipe_stats_t *st, int ok)
 
     ota_health_printed();       // W-1059: this firmware prints; under the job lock
     s_ipp_owns = 0;
+    // W-1141: every page printed. Under the job lock, as each finisher's is, so the slot is
+    // still this job's.
+    ipp_server_job_pages_for(s_port_job_slot, st->pages);
     xSemaphoreGive(s_job_lock);
-    ipp_server_job_pages_for(s_port_job_slot, st->pages);   // W-1141: every page printed
     ipp_server_job_done_for(s_port_job_slot, 1);
 }
 
@@ -1033,8 +1035,10 @@ static void sw_finished(const job_pipe_stats_t *st, int ok);
 static void qd_finished(const job_pipe_stats_t *st, int ok);
 
 // job_pipe's page_out (W-1141): a page's last byte has gone to the printer, so the phone's
-// "Printing 1 of 5" moves on. On the printer task, or the pipeline task for a LaserWriter's
-// job. Whose job it is was set at its begin, under the job lock, and holds until its finish.
+// "Printing 1 of 5" moves on. On the printer task for an ImageWriter's or a StyleWriter's
+// job; on the pipeline task for a LaserWriter's, and for a Personal LaserWriter 300's once its
+// session has printed the page. Whose job it is was set at its begin, under the job lock, and
+// holds until its finish.
 static void pipe_page_out(void *ctx, int pages)
 {
     (void)ctx;
@@ -1161,8 +1165,8 @@ static void laser_finished(const job_pipe_stats_t *st, int ok)
                                                                   : PS_EV_JOB_FAILED);
     s_laser_owns = 0;
     line_source();
-    xSemaphoreGive(s_job_lock);
     if (printed) ipp_server_job_pages_for(s_laser_slot, st->pages);   // W-1141
+    xSemaphoreGive(s_job_lock);
     ipp_server_job_done_for(s_laser_slot, printed);
     printers_apply();               // W-1088: a change to its slot waited for it
 }
@@ -1304,8 +1308,8 @@ static void sw_finished(const job_pipe_stats_t *st, int ok)
     s_job_fam = PR_FAM_NONE;
     s_ipp_owns = 0;
     line_source();
-    xSemaphoreGive(s_job_lock);
     if (printed) ipp_server_job_pages_for(s_port_job_slot, st->pages);   // W-1141
+    xSemaphoreGive(s_job_lock);
     ipp_server_job_done_for(s_port_job_slot, printed);
     printers_apply();                   // W-1088: a change to the port's printer waited for it
 }
@@ -1407,6 +1411,7 @@ static void qd_finished(const job_pipe_stats_t *st, int ok)
     s_job_fam = PR_FAM_NONE;
     s_ipp_owns = 0;
     line_source();
+    if (printed) ipp_server_job_pages_for(s_port_job_slot, st->pages);   // W-1141
     xSemaphoreGive(s_job_lock);
     ipp_server_job_done_for(s_port_job_slot, printed);
     printers_apply();                   // a change to the port's printer waited for it

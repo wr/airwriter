@@ -380,8 +380,11 @@ ImageWriter's page is then in the UART's 128-byte FIFO and the printer's own buf
 StyleWriter's session has had the page's last band taken. A LaserWriter's stage sends its own
 PostScript through `laser.c`'s 16 KB spool, so its page counts as the stage ends it, at most
 16 KB before the spool has sent it and before the printer has imaged it; so does any job on a
-board with no PSRAM, whose bytes go to the printer as they are ripped. A job that prints ends
-with its whole page count; a failed or canceled one keeps the pages that came out. Only the
+board with no PSRAM, whose bytes go to the printer as they are ripped. A Personal LaserWriter
+300's page counts once its session has printed it, in the stage's page end (3.18, W-1102); a
+page too big for its memory, which the job skips and goes on past, counts as well, so the
+count says how far the job has got and the job's message names the page. A job that prints
+ends with its whole page count; a failed or canceled one keeps the pages that came out. Only the
 printing job's count moves, and only up (`ipp_job_pages`), set by slot through
 `ipp_server_job_pages_for`. Whether iOS's "Printing N of M" follows it is still to be seen on
 a phone.
