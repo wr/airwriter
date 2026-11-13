@@ -24,6 +24,11 @@ static int reask(const port_in_t *in)
 void port_tick(port_in_t *in)
 {
     if (in->want_kick && in->kind == PR_KIND_IMAGEWRITER) in->answering = 0;
+    // W-1102: a QuickDraw LaserWriter switched off takes its clock with it.
+    if (!in->clocked) {
+        if (in->kind == PR_KIND_QDLASER) in->answering = 0;
+        in->qd_asked = 0;
+    }
     // A re-ask's plain question got nothing, and the record was named another way since (a
     // job's ESC ?): its ESC ? is no longer owed. With no look or edge pending, event_plain can
     // only be a re-ask's.
@@ -43,6 +48,17 @@ port_act_t port_policy(const port_in_t *in)
     // "Something else": nothing of AirWriter's own. The person's own look asks as any look
     // does, below, and nothing follows it.
     if (in->said_other && !person_look) return PA_NONE;
+
+    // W-1102: a clock on HSKi is a QuickDraw LaserWriter switched on. It hears its own two
+    // questions and nothing else.
+    if (in->clocked) {
+        if (in->said_other) return PA_QDID;                  // the person's look, once
+        if (in->kind == PR_KIND_QDLASER && answers)
+            return in->qd_break || in->look ||
+                   due(in->now_ms, in->last_qd_ms, PORT_QD_STATUS_EVERY_MS) ? PA_QDSTATUS : PA_NONE;
+        return !in->qd_asked || in->look || due(in->now_ms, in->last_qd_ms, PORT_QD_ID_EVERY_MS)
+               ? PA_QDID : PA_NONE;
+    }
 
     // A line-up edge while a StyleWriter answers may be another printer's line: the status at
     // once, so one that is gone turns into the stop's look now, not a status interval later.
@@ -159,6 +175,18 @@ void port_after(port_in_t *in, port_act_t act, int heard, int mine)
             in->heard = heard;
             in->answering = mine ? 1 : 0;
         }
+        break;
+    case PA_QDID:
+    case PA_QDSTATUS:
+        in->last_qd_ms = in->now_ms;
+        in->qd_asked = 1;
+        in->qd_break = 0;
+        events_over(in);
+        in->answering = mine ? 1 : 0;
+        if (heard != PR_HEARD_NONE) in->heard = heard;
+        // A status that got nothing: the printer there is asked who it is, now.
+        if (act == PA_QDSTATUS && heard == PR_HEARD_NONE)
+            in->last_qd_ms = in->now_ms - PORT_QD_ID_EVERY_MS;
         break;
     case PA_KICK:
     case PA_NONE:

@@ -21,6 +21,14 @@
 //              StyleWriter record listed: once at start-up, and after the person's look that
 //              got nothing. The original ignores the plain question until a reset (InkTalk's
 //              notes), so nothing else finds it.
+//   PA_QDID    W-1102: a QuickDraw LaserWriter's identity (81 00, 83 40, 83 3E, 82 00), sent
+//              at the clock it puts on HSKi while it is switched on.
+//   PA_QDSTATUS  W-1102: its status (83 01, 83 02, 83 2A, 82 00) and its lights, for a
+//              QuickDraw LaserWriter record that answers.
+//
+// While HSKi carries a clock (`clocked`) the printer on the port is a QuickDraw LaserWriter
+// switched on, whatever the list says: only those two questions go to it, never ESC ?, the
+// plain question, the StyleWriter's 1 and 2, or CTRL-X.
 //
 // A StyleWriter that has just been sent ESC ? may hear it as a command it does not know and
 // stop listening until it is reset (swfake.py models it so), so a port that is StyleWriter-
@@ -58,11 +66,15 @@
 #pragma once
 #include <stdint.h>
 
-typedef enum { PA_NONE, PA_ESCQ, PA_PLAIN, PA_STATUS, PA_KICK, PA_FULL } port_act_t;
+typedef enum { PA_NONE, PA_ESCQ, PA_PLAIN, PA_STATUS, PA_KICK, PA_FULL, PA_QDID,
+               PA_QDSTATUS } port_act_t;
 
 // How often the port's printer is asked, while it answers (the StyleWriter's status) and
 // while it does not (the plain question).
 enum { PORT_STATUS_EVERY_MS = 10000, PORT_PLAIN_EVERY_MS = 5000 };
+// W-1102: a clocked port's identity while nothing of ours answers it, and a QuickDraw
+// LaserWriter record's status while it does.
+enum { PORT_QD_ID_EVERY_MS = 2000, PORT_QD_STATUS_EVERY_MS = 3000 };
 
 typedef struct {
     // What is true now, each call.
@@ -78,10 +90,12 @@ typedef struct {
     int      want_kick;       // printer_state_want_kick()
     int      heard;           // pr_heard_t: the family that last answered on the port
     uint32_t now_ms;          // any 32-bit millisecond clock; the policy only subtracts
+    int      clocked;         // W-1102: HSKi carries a clock now: a QuickDraw LaserWriter is switched on
     // Events: the caller sets them, port_after clears them.
     int      line_up_edge;    // HSKo came up after a second or more down
     int      look;            // boot, setup, the Printers section, a family flip, a stop
     int      look_person;     // ...and it is the person's Look for Printers
+    int      qd_break;        // W-1102: the printer sent a BREAK since the last call
     // Kept between calls by port_tick, port_after and port_line_down.
     int      answering;       // the current record's printer answered its last question
     uint32_t last_plain_ms;   // when the plain question was last asked
@@ -90,6 +104,8 @@ typedef struct {
     int      plain_unanswered;  // the last plain question got nothing
     int      event_plain;     // the plain question asked for the pending line-up or look got nothing
     int      full_due;        // owed a StyleWriter record: start-up, or the person's look got nothing
+    uint32_t last_qd_ms;      // W-1102: when PA_QDID or PA_QDSTATUS was last asked
+    int      qd_asked;        // ...and whether one has been since the clock came
     port_act_t confirm;       // an act to repeat at once: the caller sets it after port_after, which clears it
 } port_in_t;
 
@@ -101,7 +117,9 @@ static inline uint32_t port_plain_due(uint32_t now_ms)
 }
 
 // Before each port_policy call: an ImageWriter record whose line has been down for the kick
-// delay (`want_kick`) is not answering any more, whatever it said before.
+// delay (`want_kick`) is not answering any more, whatever it said before; nor is a QuickDraw
+// LaserWriter record with no clock (W-1102), so rules 4 to 7 look for another printer as for
+// any silent record.
 void port_tick(port_in_t *in);
 
 // The one thing to ask now, or PA_NONE. When several apply the order is:
@@ -109,9 +127,16 @@ void port_tick(port_in_t *in);
 //   1. `confirm`     the act the caller wants repeated, whatever else is true.
 //   2. PA_NONE      the person said "Something else": nothing of AirWriter's own. The
 //                   person's own look (`look` with `look_person`) runs as any look does, rules
-//                   3 to 5, and nothing follows it: not the plain question that follows an
-//                   unanswered ESC ? elsewhere, not the cadence, not the full sequence (one
-//                   owed waits until the Something else record goes).
+//                   3 to 5 (on a clocked port, PA_QDID once), and nothing follows it: not the
+//                   plain question that follows an unanswered ESC ? elsewhere, not the cadence,
+//                   not the full sequence (one owed waits until the Something else record goes).
+//   2a. While `clocked` (W-1102), and nothing else, ever:
+//       PA_QDSTATUS for a QuickDraw LaserWriter record that answers, when the printer sent a
+//                   BREAK (`qd_break`), on a look, or when the last one is 3 s old;
+//       PA_QDID     for every other port (no record, a record of another family, a QuickDraw
+//                   LaserWriter record not answering): at once when none has been asked since
+//                   the clock came or on a look, then every 2 s.
+//       Rules 3 to 8 apply only while the port is not clocked.
 //   3. PA_STATUS    a StyleWriter record that answers (and only then), when its status
 //                   is 10 s old, on a look, or on a line-up edge: the line may be another
 //                   printer's, so a StyleWriter that is gone turns into the stop's look at
@@ -161,7 +186,9 @@ port_act_t port_policy(const port_in_t *in);
 // the plain question due at once, unless it was asked for this line-up or look already. The
 // person's look that got nothing owes the full sequence where a StyleWriter record is listed;
 // an answer of any kind, or the sequence itself, clears that. A status that got
-// nothing on the person's look keeps the look theirs.
+// nothing on the person's look keeps the look theirs. W-1102: PA_QDID and PA_QDSTATUS stamp
+// last_qd_ms, clear qd_break and the events, set `answering` to `mine`, and `heard` takes the
+// answer; a status that got nothing makes the identity due at once.
 void port_after(port_in_t *in, port_act_t act, int heard, int mine);
 
 // HSKo went down: a new busy spell gets a fresh plain question before its first kick.

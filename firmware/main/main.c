@@ -1941,6 +1941,8 @@ static void kick_task(void *arg)
             ESP_LOGI(TAG, "printer busy while idle; sent CTRL-X (%s)", esp_err_to_name(err));
             break;
         }
+        case PA_QDID:                   // W-1102: only on a clocked port, and in.clocked
+        case PA_QDSTATUS:               // is not set until the port task follows the clock
         case PA_NONE:
             break;
         }
