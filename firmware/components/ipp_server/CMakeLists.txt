@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # The printers' icons, tools/icon/mkicons.py's PNGs; ipp_server.c's ICON_SETS names the same list.
 set(icons icon stylewriter iwlq sworiginal sw2 sw1200 csw1500 csw2200
-          lw lw2 plw lw4600 lwselect lwpro400 lwpro600 lwpro810 lw12640 lw8500 clw)
+          lw lw2 plw lw4600 lwselect lwpro400 lwpro600 lwpro810 lw12640 lw8500 clw plw300)
 set(icon_files "")
 foreach(name ${icons})
     foreach(size 48 128 512)

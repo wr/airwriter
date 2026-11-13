@@ -19,7 +19,11 @@
 
 // Screens are stored by name ("apple" and the rest, ht_algo_from_name), so the order
 // is only a convention: new ones go last.
-typedef enum { HT_THRESHOLD, HT_ATKINSON, HT_FLOYD, HT_BAYER, HT_BLUENOISE, HT_APPLE } ht_algo_t;
+// HT_APPLE_LW (W-1102) is Apple's 8 x 8 clustered-dot screen for the Personal LaserWriter
+// 300 (apple_tables_lw.h): a QuickDraw LaserWriter's "Apple" screen. It has no name of its
+// own: a record that stores "apple" gets it through its family, never ht_algo_from_name.
+typedef enum { HT_THRESHOLD, HT_ATKINSON, HT_FLOYD, HT_BAYER, HT_BLUENOISE, HT_APPLE,
+               HT_APPLE_LW } ht_algo_t;
 
 typedef struct {
     ht_algo_t algo;
@@ -47,7 +51,7 @@ void ht_set_gain(ht_t *h, int gain_pct);
 // curve[] first (Apple's GAMA curves, apple_tables.h). NULL is none. The curve is
 // kept, not copied, so it has to outlive the halftoner. ht_set_gain puts the dot
 // gain curve on top of it, whichever of the two is set first: tone[v] is the gain
-// curve at curve[v].
+// curve at curve[v]. HT_APPLE_LW ignores it: that screen has its own curve.
 void ht_set_tone(ht_t *h, const uint8_t curve[256]);
 
 // Mask screens only: start the tile dx, dy in, and read it upside down if

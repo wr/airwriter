@@ -2,6 +2,7 @@
 #include "test_util.h"
 #include "halftone.h"
 #include "apple_tables.h"
+#include "apple_tables_lw.h"
 
 /* Row y of what Apple's tile should print at an amount of ink, as bits: a cell inks
  * where the amount is over its threshold, the threshold read mirrored about 254
@@ -16,6 +17,59 @@ static void apple_row(uint8_t *out, int w, int y, int px, int py, int turned, in
         if (turned) t = 254 - t;
         if (amount > t) out[x >> 3] |= (uint8_t)(0x80 >> (x & 7));
     }
+}
+
+/* W-1102: the Personal LaserWriter 300's screen, Apple's 8 x 8 tile after its own curve. */
+static void test_apple_lw_extremes(void)
+{
+    ht_t h;
+    uint8_t gray[64], bits[8], want[8];
+    CHECK_EQ_INT(ht_init(&h, HT_APPLE_LW, 64), 0);
+    memset(gray, 0, sizeof gray);
+    memset(want, 0xFF, sizeof want);
+    for (int y = 0; y < 8; y++) {                   /* black is all ink, on every row of the tile */
+        ht_row(&h, gray, bits);
+        CHECK_EQ_MEM(bits, want, 8);
+    }
+    memset(gray, 255, sizeof gray);
+    memset(want, 0, sizeof want);
+    for (int y = 0; y < 8; y++) {                   /* white is none */
+        ht_row(&h, gray, bits);
+        CHECK_EQ_MEM(bits, want, 8);
+    }
+    ht_free(&h);
+}
+
+static void test_apple_lw_tile(void)
+{
+    static const uint8_t grays[] = { 32, 96, 128, 200 };
+    for (size_t k = 0; k < sizeof grays; k++) {
+        int g = grays[k], want = 0, got = 0;
+        for (int i = 0; i < 64; i++) want += apple_lw_screen8[i] > apple_lw_tone[g];
+        ht_t h;
+        uint8_t gray[16], bits[2];
+        CHECK_EQ_INT(ht_init(&h, HT_APPLE_LW, 16), 0);
+        memset(gray, g, sizeof gray);
+        for (int y = 0; y < 16; y++) {
+            ht_row(&h, gray, bits);
+            for (int x = 0; x < 16; x++) {
+                int ink = (bits[x >> 3] >> (7 - (x & 7))) & 1;
+                CHECK_EQ_INT(ink, apple_lw_screen8[(y & 7) * 8 + (x & 7)] > apple_lw_tone[g]);
+                if (y < 8 && x < 8) got += ink;
+            }
+        }
+        CHECK_EQ_INT(got, want);
+        ht_set_tone(&h, apple_lw_tone);             /* ignored: the screen has its own curve */
+        CHECK_EQ_INT(h.tone[g], g);
+        ht_free(&h);
+    }
+}
+
+static void test_apple_name_is_the_stylewriters(void)
+{
+    ht_algo_t a = HT_ATKINSON;
+    CHECK_EQ_INT(ht_algo_from_name("apple", &a), 0);
+    CHECK_EQ_INT(a, HT_APPLE);
 }
 
 int main(void)
@@ -391,6 +445,10 @@ int main(void)
         CHECK_EQ_MEM(h.tone, g.tone, 256);
         ht_free(&h); ht_free(&g); ht_free(&k);
     }
+
+    test_apple_lw_extremes();
+    test_apple_lw_tile();
+    test_apple_name_is_the_stylewriters();
 
     TEST_END;
 }

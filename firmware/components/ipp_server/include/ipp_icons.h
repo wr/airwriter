@@ -7,4 +7,4 @@
 
 #define ICON_SETS(X) X(icon) X(stylewriter) X(iwlq) X(sworiginal) X(sw2) X(sw1200) \
                      X(csw1500) X(csw2200) X(lw) X(lw2) X(plw) X(lw4600) X(lwselect) \
-                     X(lwpro400) X(lwpro600) X(lwpro810) X(lw12640) X(lw8500) X(clw)
+                     X(lwpro400) X(lwpro600) X(lwpro810) X(lw12640) X(lw8500) X(clw) X(plw300)

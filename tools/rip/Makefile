@@ -17,6 +17,7 @@ INCS    := -I$(COMP)/ripjob/include \
            -I$(COMP)/stylewriter/include \
            -I$(COMP)/stylewriter \
            -I$(COMP)/printers/include \
+           -I$(COMP)/qdlaser/include \
            -I.
 # serial_out is IDF-bound except for serial_writer.c, which is pure by design
 # so the deadline loop can be tested here. Name it, don't wildcard the dir.
@@ -34,6 +35,7 @@ SRCS    := $(wildcard $(COMP)/ripjob/*.c) \
            $(COMP)/stylewriter/sw_session.c $(COMP)/stylewriter/sw_status.c \
            $(COMP)/stylewriter/sw_testpage.c $(COMP)/stylewriter/sw_unpack.c \
            $(COMP)/printers/port_policy.c \
+           $(COMP)/qdlaser/qd_model.c \
            $(COMP)/serial_out/serial_writer.c
 TESTSRC := $(wildcard test/test_*.c)
 TESTBIN := $(patsubst test/%.c,build/%,$(TESTSRC))
@@ -48,7 +50,8 @@ build:
 # `make scene` after changing tp_scene.c, ink_gray or the sizes in mkscene.c. It builds without
 # the header it writes, so a size change can always be made.
 build/mkscene: mkscene.c $(COMP)/testpage/tp_scene.c $(COMP)/ripjob/ink.c \
-               $(COMP)/halftone/halftone.c $(COMP)/halftone/apple_tables.c | build
+               $(COMP)/halftone/halftone.c $(COMP)/halftone/apple_tables.c \
+               $(COMP)/halftone/apple_tables_lw.c | build
 	$(CC) $(CFLAGS) $(INCS) -o $@ $^ -lm -lz
 
 scene: build/mkscene
@@ -164,9 +167,14 @@ SW_OBJS := build/sw_model.o build/sw_code.o build/sw_page.o build/sw_session.o b
 build/sw_%.o: $(COMP)/stylewriter/sw_%.c | build
 	$(CC) $(CFLAGS) $(INCS) -c -o $@ $<
 
-test: $(TESTBIN) build/printers_core.o build/port_policy.o build/logbook_core.o $(SW_OBJS)
+# The QuickDraw LaserWriters' cores (W-1102), held to the same rule.
+QD_OBJS := build/qd_model.o
+build/qd_%.o: $(COMP)/qdlaser/qd_%.c | build
+	$(CC) $(CFLAGS) $(INCS) -c -o $@ $<
+
+test: $(TESTBIN) build/printers_core.o build/port_policy.o build/logbook_core.o $(SW_OBJS) $(QD_OBJS)
 	@fail=0; for t in $(TESTBIN); do ./$$t || fail=1; done; \
-	for o in printers_core port_policy logbook_core $(basename $(notdir $(SW_OBJS))); do \
+	for o in printers_core port_policy logbook_core $(basename $(notdir $(SW_OBJS) $(QD_OBJS))); do \
 	  if nm build/$$o.o | grep -E ' [bBdD] ' | grep -v ' ltmp'; then \
 	    echo "FAIL $$o: writable statics (above)"; fail=1; \
 	  else echo "ok  $$o: no writable statics"; fi; \

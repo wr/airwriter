@@ -6,6 +6,7 @@
 #include <math.h>
 #include "bluenoise64.h"
 #include "apple_tables.h"
+#include "apple_tables_lw.h"
 
 // Bill Atkinson's kernel, written for the Macintosh in the same years the
 // ImageWriter shipped. It spreads only 6/8 of the error on purpose, which is
@@ -82,7 +83,7 @@ void ht_set_gain(ht_t *h, int gain_pct)
 
 void ht_set_tone(ht_t *h, const uint8_t curve[256])
 {
-    h->tone_base = curve;
+    h->tone_base = h->algo == HT_APPLE_LW ? NULL : curve;   // its own curve, in ht_row_avoid
     retone(h);
 }
 
@@ -184,6 +185,15 @@ void ht_row_avoid(ht_t *h, const uint8_t *gray, const uint8_t *avoid, uint8_t *b
             int t = apple_screen16[((ty & 15) << 4) | ((x + h->phase_x) & 15)];
             if (h->invert) t = 254 - t;
             ink = 255 - v > t;
+            break;
+        }
+        case HT_APPLE_LW: {
+            // W-1102: the Personal LaserWriter 300 driver's screen. Each gray goes through
+            // its curve (GAMA 3, 0 to 33) after the gain, and prints where the tile's
+            // threshold (1 to 32) is over it. A page starts on the tile's first row: where
+            // Apple's driver starts it is not known.
+            int t = apple_lw_screen8[((ty & 7) << 3) | ((x + h->phase_x) & 7)];
+            ink = t > apple_lw_tone[v];
             break;
         }
         default: {                              // HT_ATKINSON, HT_FLOYD

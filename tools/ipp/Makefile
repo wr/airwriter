@@ -12,6 +12,7 @@ INCS    := -I$(COMP)/ipp_attrs/include \
            -I$(COMP)/laser/include \
            -I$(COMP)/stylewriter/include \
            -I$(COMP)/halftone/include \
+           -I$(COMP)/qdlaser/include \
            -I../rip/test
 SRCS    := $(COMP)/printer_caps/printer_caps.c \
            $(COMP)/ipp_attrs/ipp_enc.c \
@@ -19,7 +20,9 @@ SRCS    := $(COMP)/printer_caps/printer_caps.c \
            $(COMP)/ipp_server/ipp_req.c \
            $(COMP)/ipp_server/ipp_job.c \
            $(COMP)/stylewriter/sw_model.c \
-           $(COMP)/halftone/apple_tables.c
+           $(COMP)/halftone/apple_tables.c \
+           $(COMP)/qdlaser/qd_model.c \
+           $(COMP)/halftone/apple_tables_lw.c
 TESTSRC := $(wildcard test/test_*.c)
 TESTBIN := $(patsubst test/%.c,build/%,$(TESTSRC))
 
