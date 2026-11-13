@@ -30,10 +30,10 @@ false.
 
 ## Source of truth
 - GitHub: github.com/wr/airwriter (public), remote `origin`. Everything committed is public.
-  Never commit the Apple manuals, Apple's StyleWriter drivers or captures of them, third-party
-  files without a licence (3D models above all), Wi-Fi credentials or other private details;
-  history was rewritten once to take such things out (`tools/release/purge-history.sh`). Run
-  `gitleaks git` before pushing anything unusual.
+  Never commit the Apple manuals, Apple's StyleWriter or LaserWriter 300 drivers or captures of
+  them, third-party files without a licence (3D models above all), Wi-Fi credentials or other
+  private details; history was rewritten once to take such things out
+  (`tools/release/purge-history.sh`). Run `gitleaks git` before pushing anything unusual.
   Plans and dated reviews are kept outside this repo.
 - Linear project: AirWriter (id: 9c428072-e8eb-4c3d-88e6-b3eadf604eed), team Personal
 - Branch prefix: wells/
@@ -54,8 +54,11 @@ in Linear and older docs) is drawn and routed, not yet made, and needs firmware 
   are found by the plain question or named by the person, and print over AirPrint in colour
   with a colour cartridge. All seven are host-tested against a software StyleWriter; a Color
   StyleWriter 2500 runs a page to its end, its dry cartridge leaving the sheet blank. On rev A
-  the others may need R9 fitted (`docs/hardware-rev-a.md`). Up to six printers are shared at
-  once, any mix of the port's records and AppleTalk printers.
+  the others may need R9 fitted (`docs/hardware-rev-a.md`). A Personal LaserWriter 300 on the
+  printer port is found by the clock it drives on HSKi and prints over AirPrint in gray, tested
+  on board 1; a Personal LaserWriter LS or LaserWriter Select 300 there is named and not
+  supported. Up to six printers are shared at once, any mix of the port's records and
+  AppleTalk printers.
 - **Ways in.** AirPrint (`image/urf`, Print-Job only) for phones and Macs. For vintage Macs, the
   LocalTalk port (TashTalk 2.1.3 in U7, which the ESP32 flashes over LVP) and three EtherTalk
   links: the board's own Wi-Fi, Basilisk II's UDP tunnel (port 6066) and Infinite Mac's zone
@@ -63,7 +66,8 @@ in Linear and older docs) is drawn and routed, not yet made, and needs firmware 
 - **Not built:** Mini vMac (LToUDP), PWG raster, HP LaserJets over serial (designed), AirPrint to
   an AppleTalk ImageWriter, colour on a colour LaserWriter (it prints gray), vintage Macs
   printing to a StyleWriter (AirWriter as Apple's StyleWriter network adapter), a StyleWriter's
-  fast mode.
+  fast mode, the Personal LaserWriter LS and Select 300, vintage Macs printing to a QuickDraw
+  LaserWriter.
 
 Where things are (`firmware/components/` unless a path is given):
 
@@ -79,6 +83,7 @@ Where things are (`firmware/components/` unless a path is given):
 | LaserWriters | `laser`, `ps_page` | SPEC §3.14 |
 | The printer list, what the port asks | `printers` (`port_policy.c`) | SPEC §3.15, port-printers design |
 | StyleWriters | `stylewriter` | SPEC §3.16, StyleWriters design |
+| QuickDraw LaserWriters | `qdlaser` | SPEC §3.18, QuickDraw LaserWriters design |
 | The log | `logbook` | SPEC §3.17, log design |
 | Status panel | `led_grid`; `tools/lights` renders every effect | status-language design |
 | Test page | `testpage` | test-page design |
@@ -188,8 +193,8 @@ page: Top margin (`{"top_margin":N}`, 1/144 in, -216 to 144, default -144) and d
   `build/qdhost` (the firmware's session on the host) to `qdfake.py` over a pty, through each
   fault, a cancel and a printer switched off (about 10 s); `python3 -m unittest
   tools/qdlaser/test_qdfake.py`. `rip --printer plw300 --out-qd F` writes a page as the printer
-  would be sent it, `rip --qd-testpage F` the test page, and `qdfake.py decode F` draws either. Apple's driver lives in
-  `~/.config/airwriter/lw300-driver/`, never committed.
+  would be sent it, `rip --qd-testpage F` the test page, and `qdfake.py decode F` draws either.
+  Apple's driver lives in `~/.config/airwriter/lw300-driver/`, never committed.
 - **Firmware:** `idf.py build` clean, then `python3 tools/stackcheck/stackcheck.py` (needs the
   toolchain `export.sh` puts on PATH): every task that makes ESP-IDF's deep calls keeps 1 KB of
   its stack spare by GCC's count. A local sdkconfig that fails it on `app_main` needs

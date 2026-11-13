@@ -159,4 +159,7 @@ pre-order review (2026-09-01).
   the EU's is 50 ns. About $0.60 a board more at prototype quantities ($1.01 against $0.36 at
   LCSC, 2026-10-26, 11,029 in stock); LCSC carries only the 0–70 °C grade in SOIC-16, and one
   of its listings for the part says not recommended for new designs, so check MaxLinear's
-  status before ordering. A rev A board can take the swap by hand to test it first.
+  status before ordering. A rev A board can take the swap by hand to test it first. The
+  Personal LaserWriter 300 needs none of it: it drives 533 kHz on HSKi whenever it is on, and
+  board 1's fitted SP3232EEN delivers that to IO8 at a 49 to 51% duty, with every chunk sent on
+  it read back whole (W-1102, 2026-11-13).

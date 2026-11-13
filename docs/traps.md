@@ -200,8 +200,17 @@ Traps already explained in a code comment are listed only when the comment is ea
   buffer per IPP worker (`ipp_server.c`); an answer that does not fit fails on the board and
   nowhere else. The largest is a Personal LaserWriter 300's six sheets asked for as `all` with
   `media-col-database`, 6,688 bytes (W-1102), so `RESP_MAX` is 7,680. The four workers' scratch
-  (~43 KB) is in PSRAM. `tools/ipp`'s `test_qd_caps` and `test_sw_caps` print each printer's
+  (~67 KB) is in PSRAM. `tools/ipp`'s `test_qd_caps` and `test_sw_caps` print each printer's
   size; a printer with more sheets or sources raises it, in the tests too.
+- **A Mac's print job carries about 50 settings of its own.** The print dialog adds
+  `com.apple.print.*` attributes to every Print-Job: a one-page job to a Personal LaserWriter 300
+  had a 2,082-byte attribute section (W-1102, 2026-11-13), past the 2,048 the board then read.
+  The board answered 400 and macOS paused the queue ("Print job was not accepted"). The section
+  must fit `HDRBUF_MAX`, now 8,192, in the same PSRAM scratch as `RESP_MAX`.
+- **A Mac's print dialog sends no `media-col`.** Its job carries `media` "Letter",
+  `PageSize` "Letter" and the PPD option `InputSlot` "Manual" (capitalised, nameWithoutLanguage)
+  as Job attributes of their own (macOS, board 1, 2026-11-13). `ipp_req` reads `InputSlot` as
+  well as media-col's `media-source`, or a Mac's manual-slot page feeds from the cassette.
 - **Never advertise Create-Job / Send-Document.** With them in `operations-supported` the
   iPhone held every job at "Waiting" (SPEC §3.4).
 - **iOS and macOS open 25–50 parallel Get-Printer-Attributes connections.** Workers parked on
@@ -425,8 +434,11 @@ Traps already explained in a code comment are listed only when the comment is ea
   UART1's CTS. PCNT's counter is 16 bits (32,767 here): the line task counts for 50 ms of each
   100 ms (26,650 edges at 533 kHz), clears the count each window, and lets the unit accumulate
   past its limit so a window stretched by a busy core still counts true. Clocked is two windows
-  running at 100 kHz or more, gone is two below, so a printer switched off is seen in about
-  200 ms. While clocked, the line's level is never reported: it is noise.
+  running at 100 kHz or more; gone is 20 below (`serial_clock.c`), about 2 s: board 1's 300
+  stopped its clock for under a second three times one afternoon with nobody near it
+  (2026-11-13), and at two windows each showed on the phones as Offline and back. A stop ridden
+  out is a warning in the log. While clocked, the line's level is never reported: it is
+  noise.
 - **IO17 is UART1's IO_MUX TxD pin.** A GPIO write reaches the pad only after
   `esp_rom_gpio_pad_select_gpio` moves it to the GPIO function; until then the UART still drives
   it. `qd_link_open` takes TxD from the UART with `serial_out_lend(1)` and does that first.
@@ -447,7 +459,32 @@ Traps already explained in a code comment are listed only when the comment is ea
   only when chip select rises, so each ends in a tail of 4,096 marks (7.7 ms at 533 kHz) and the
   end timer is armed from `post_setup_cb` as the chunk loads, aimed at the tail's middle: a rip
   that is slow to fill the next chunk can never leave one running past its tail. The spike's
-  timer was up to 873 us late against a 960 us tail; `worst_end_us` is in the job's log line.
+  timer was up to 873 us late against a 960 us tail; `worst_end_us` is in the job's log line,
+  and on board 1 it was never more than 1,828 us against the 4,096-mark tail's 3.8 ms half
+  (2026-11-13).
+- **A chunk's read-back can record nothing though the chunk went out** (W-1102, board 1,
+  2026-11-13). About one chunk in 20 to 30, never the first after the link opens, the slave's
+  result has `trans_len` of 0 to 7 bits, no more than the chunk's lead, while the clock is
+  there. Sending such a chunk again printed its rows twice on the test page and a photo: it had
+  reached the printer. `qd_link` counts it as `unchecked` and goes on; a chunk with more bits
+  recorded than its lead but fewer than sent is still a failure. The cause is not known.
+- **The 300 says a page is done while the sheet is still coming out.** `8E 00` bit 2 comes about
+  15 s before the sheet leaves the printer, while `83 01` bit 5 (paper moving) is still set. A
+  job that went to Ready at page done would go Ready, then Printing again on the next status
+  question; `qd_session_end` asks `83 01` and leaves the state Printing until the paper stops.
+- **A 300's `83 02` `10` is no paper at the source it was told to use, and sets `83 01`'s fault
+  bit too** (board 1, 2026-11-13). The cassette pulled out or empty, or the manual slot chosen
+  (`83 4F`) and empty after a page from it: `83 01` `02`, `83 02` `10`, `82 00` `AC` (engine not
+  ready); `83 2A` says which source has paper. Read as an engine fault, the phone said "check
+  the printer" and a page mid-print failed; read as the cassette, the board said "check the
+  paper cassette" with the cassette full after a manual-slot page. `qd_state_from` and the
+  page's wait skip the fault bit while `10` is set and go by `83 2A`. The job's end sends
+  `83 4C` after a manual-slot page: the printer otherwise keeps the slot, says it has no paper
+  and pulls in any sheet put there.
+- **With a 300 on the port, HSKi's level means nothing.** The test button's cable-test branch
+  reads that level for a printer that isn't there; with a clock it reads whatever edge it lands
+  on. The button goes by `port_line_speaks()`, false when the port's printer is a StyleWriter or
+  a 300, so a 300 gets its test page.
 
 ## LaserWriters (W-1082)
 

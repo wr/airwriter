@@ -14,7 +14,10 @@
   of Apple's Color StyleWriter 1500 and 2500 drivers (`tailtalk/src/stylewriter/*`, at
   `bf38658`): the command letters and their order per model, the margins, band heights and
   block caps. It is GPL-3.0 with no "or later" grant, so AirWriter reads it as a reference and
-  uses its facts; `components/stylewriter` is written fresh.
+  uses its facts; `components/stylewriter` is written fresh. Its `lw300/README.md`, from
+  Apple's LaserWriter 300 driver 1.1, documents most of the Personal LaserWriter 300's commands
+  and agrees with what board 1 measured; `components/qdlaser` uses those facts and none of its
+  code (W-1102).
 - **lpstyl** (Monroe Williams, 1996-2000, BSD-2-Clause; github.com/Godzil/lpstyl): the public
   account of the StyleWriters' serial protocol, for seven models (`README.protocol`), and of
   Apple's StyleWriter network adapter (`README.atalk`). The identity query, the buffer
@@ -29,6 +32,12 @@
 - **Apple's StyleWriter drivers** (Color StyleWriter 1500, 2200 and 2500): the source of the
   tone curves, the 16 × 16 screen and the printer's icon, read out by
   `tools/stylewriter/mktables.py` (LICENSE.md). The drivers are never committed.
+- **Apple's LaserWriter 300 driver 1.1** (Apple Developer CD, October 1993): the source of the
+  300's 8 × 8 screen (`HTSC` 2), its curve (`GAMA` 3), its icon and the image area of each
+  paper size, read out by `tools/qdlaser/mkqdtables.py` (LICENSE.md), and of the commands
+  TailTalk's notes leave out. The driver is never committed.
+- **Previous** (the NeXT emulator, `src/printer.c`): its model of a Canon laser engine's print
+  request and vertical sync, read as background on the 300's Canon engine. Nothing is ported.
 - **tashrouter** (lampmerchant): the reference TashTalk host. Its start-up (1024 NULs, an empty
   node bitmap, features off) and node acquisition are what `localtalk.c` copies.
 - **AirTalk**: ESP32 LocalTalk-over-Wi-Fi dongles. Relevant if mode 2 or a Wi-Fi tunnel is ever

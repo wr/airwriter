@@ -7,6 +7,35 @@ run coder, the port's questions), `W-1082` (LaserWriters: the 300 dpi rip) and `
 printer's own Apple icon). Reverses the QuickDraw non-goal in
 `2026-10-21-laser-printers-design.md`.
 
+**Amended 2026-11-13, while building and on board 1** (SPEC §3.18 is the record of what was
+built):
+
+- **Apple's tables** went in a generated pair of their own, `apple_tables_lw.{h,c}`, written by
+  `tools/qdlaser/mkqdtables.py`, not into `apple_tables.c`, which `mktables.py` writes whole
+  from the StyleWriter drivers.
+- **Offline** for a 300 whose clock has gone is `other` with the message "Offline", as for a
+  StyleWriter that stops answering; `offline-report` stays the reason for a port record whose
+  port another printer has, so the two stay tellable apart.
+- **Chip select** is the slave driver's, given TxD as its pad (TxD idles at mark, high, "not
+  selected"), then driven from the GPIO matrix's constants; no other pad is touched. A chunk ends
+  in 4,096 marks with the end aimed at their middle (`docs/traps.md`).
+- **A chunk read back empty** (no more than its lead recorded) though it went out is counted
+  as unchecked and not sent again: sending it again printed its rows twice. Any other mismatch
+  fails the job.
+- **A job's end** waits for the sheet: the state stays Printing while `83 01` says paper is
+  moving, about 15 s past page done.
+- **The test button** prints a 300's test page, never the cable test, which reads HSKi's level.
+- **No paper at the source** answers `83 02` `10` and sets `83 01`'s fault bit as well, whether
+  the cassette is empty or pulled out or the manual slot is chosen and empty (board 1). It reads
+  as no paper, never an engine fault, and a page waits for it. A job that took a page from the
+  manual slot ends by choosing the cassette again (`83 4C`).
+- **A Mac's Paper Feed** arrives as `InputSlot` "Manual", not media-col's `media-source`:
+  macOS's print dialog sends no media-col. The board reads either.
+- **Clock gone** takes 2 s of no clock, not two windows: the 300 stopped its clock for under a
+  second on its own, three times in an afternoon, each an Offline flicker on the phones.
+- **A page too big in both screens** says "Page N didn’t fit in the printer’s memory.", as
+  Apple's driver's alert did (Wells, 2026-11-13).
+
 ## Why
 
 Apple's QuickDraw LaserWriters have no PostScript. The Mac drew every page and sent the dots
@@ -94,8 +123,8 @@ its third byte is in).
 | `82 00` | Controller status. `A4` idle. Bits 7–6 controller type (`10`: no page RAM pointers). Bit 0 memory full; bit 1 memory past about half (set from about 300 KB of page); bit 3 engine not ready (set with no paper). |
 | `83 40` | Tells the engine the controller clocks its status. Sent after `81 00`. |
 | `83 3E` | Engine identity: `29` is a Personal LaserWriter 300 (`0D` LS, `23` a Japanese model, else Select 300, per Apple's driver). |
-| `83 01` | Engine status: `20` paper moving, `10` page to be sent again (after a jam), `02` a fault stored. |
-| `83 02` | Paper path: `08` jam, `04` cover open or no toner cartridge, `20` cassette not in properly. |
+| `83 01` | Engine status: `20` paper moving, `10` page to be sent again (after a jam), `02` a fault stored (also set with `83 02`'s `10`, board 1). |
+| `83 02` | Paper path: `08` jam, `04` cover open or no toner cartridge, `10` no paper at the source chosen, the cassette empty or out or the manual slot (board 1), `20` cassette not in properly. |
 | `83 04`, `83 07` | Service faults: fuser, laser, scanner motor. |
 | `83 2A` | Paper present: `20` cassette, `40` manual slot. |
 | `83 4C` / `83 4F` | Take paper from the cassette / the manual slot. |
@@ -130,8 +159,9 @@ cuts the page being printed is not known. Another copy is `81 00` and
 `83 40`, `83 3E`, `82 00`, `83 5D`, the paper source again, and `81 00`, `8A 01` reprints the
 page still in memory. Out of paper: `8A 00`, wait for `83 2A`, then `8A 01`.
 
-**Unknown:** whether a row whose check fails is refused, and whether anything says so. The read
-back off the pad proves what left IO17, not what the printer kept.
+**A row whose check fails** sets `8E 00` bit 1 (`FA`), with `82 00` as for any page loading
+(board 1, 2026-11-13, a test build that flipped one row's check). The read back off the pad
+proves what left IO17; `8E` says what the printer kept.
 
 **Memory.** About half a megabyte, and Apple's driver never measured it: a page that ran out
 mid-load was an alert and a lost page. Loads without printing put 513,287 bytes of codes in a

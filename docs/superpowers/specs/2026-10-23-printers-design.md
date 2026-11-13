@@ -10,6 +10,11 @@ one answering online and the rest offline, so "the printer port holds one printe
 "changed" notice (accept or dismiss) below no longer hold; a different printer answering is a
 record of its own, once it has answered twice.
 
+**Amended 2026-11-13** by `W-1102 QuickDraw LaserWriters on the printer port (Personal LaserWriter LS/300, Select 300)` (`2026-11-12-quickdraw-laserwriters-design.md`): a new kind, `qdlaser`, a Personal LaserWriter 300 on
+the printer port, found by the clock it drives on HSKi; its record has the model
+`Personal LaserWriter 300`, Apple's screen as a halftone choice, and makes the stored list
+version 4, which older firmware leaves unread (SPEC §3.15, §3.18).
+
 **Amended 2026-11-09** by `W-1138 Every supported printer shows its own Apple icon`: a row
 shows Apple's icon for its printer's model, in colour at 32 px with no tile, where "icon by
 kind" below had one drawing per family. A printer of no known kind keeps a gray tile (SPEC
