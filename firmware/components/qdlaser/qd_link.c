@@ -199,9 +199,7 @@ static void chunk_begin(int i)
     qd_bits_marks(s_tx[i], cap_bits(), &s_pos, LEAD_BITS);
 }
 
-static int chunk_wait(void);
-
-// The chunk being filled gets its tail and goes on the wire once the live one has ended.
+// The chunk being filled gets its tail and goes on the wire after any live one.
 static int chunk_send(void)
 {
     int i = s_fill;
@@ -211,12 +209,6 @@ static int chunk_send(void)
     s_due[i] = (int64_t)(s_pos - TAIL_BITS / 2) * 1000000 / s_hz;
     s_t[i] = (spi_slave_transaction_t){ .length = s_pos, .tx_buffer = s_tx[i], .rx_buffer = s_rx[i] };
     s_fill = -1;
-    // One chunk on the wire at a time: the live one ends and is checked before this one is
-    // queued, so one that never started can go again in its place (chunk_wait). The next is
-    // filled while this one is on the wire; between them the line idles at mark.
-    int rc;
-    while (s_nq)
-        if ((rc = chunk_wait())) return rc;
     if (spi_slave_queue_trans(HOST, &s_t[i], pdMS_TO_TICKS(DUE_MS)) != ESP_OK) return QD_E_LINK;
     s_q[s_nq++] = i;
     return QD_OK;
@@ -241,19 +233,6 @@ static int chunk_wait(void)
     for (int k = 0; k < s_nq; k++) ahead_us += s_due[s_q[k]];
     spi_slave_transaction_t *done = NULL;
     esp_err_t e = spi_slave_get_trans_result(HOST, &done, pdMS_TO_TICKS(ahead_us / 1000 + DUE_MS));
-    // A chunk that never started: no more than its lead of marks clocked in, with the clock
-    // still there. Only idle reached the printer, so it goes again (nothing is queued behind
-    // it: chunk_send). Board 1 saw it on about one chunk in 25, never the first after the link
-    // opened (W-1102 bench, 2026-11-13).
-    for (int again = 0; again < 3 && e == ESP_OK && done == &s_t[i] && s_nq == 1 &&
-                        done->trans_len <= LEAD_BITS && serial_out_clock(NULL); again++) {
-        s_st.restarts++;
-        s_t[i] = (spi_slave_transaction_t){ .length = s_bits[i], .tx_buffer = s_tx[i],
-                                            .rx_buffer = s_rx[i] };
-        if (spi_slave_queue_trans(HOST, &s_t[i], pdMS_TO_TICKS(DUE_MS)) != ESP_OK) break;
-        done = NULL;
-        e = spi_slave_get_trans_result(HOST, &done, pdMS_TO_TICKS(s_due[i] / 1000 + DUE_MS));
-    }
     if (e != ESP_OK || done != &s_t[i]) {
         s_st.stalls++;
         s_st.fail_why = e != ESP_OK ? 1 : 2;
@@ -269,6 +248,14 @@ static int chunk_wait(void)
     if (late > s_st.worst_end_us) s_st.worst_end_us = late;
     s_st.chunks++;
     s_st.bits += (uint32_t)s_bits[i];
+    // The read-back off the pad recorded nothing past the lead, with the clock still there: the
+    // chunk went out unchecked. Board 1 does this on about one chunk in 20, never the first
+    // after the link opens; sending such a chunk again printed its rows twice, so it did reach
+    // the printer (W-1102 bench, 2026-11-13).
+    if (done->trans_len <= LEAD_BITS && serial_out_clock(NULL)) {
+        s_st.unchecked++;
+        return QD_OK;
+    }
     // Every packet clocked out, or the clock stopped under it.
     if (done->trans_len + TAIL_BITS < s_bits[i]) {
         s_st.stalls++;

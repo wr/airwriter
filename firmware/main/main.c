@@ -1381,10 +1381,10 @@ static void qd_finished(const job_pipe_stats_t *st, int ok)
     }
     qd_link_stats_t ls;
     qd_link_stats(&ls, 0);
-    ESP_LOGI(TAG, "LaserWriter 300 link: %u chunks, %u bits, %u bad, %u stalls, %u sent again, "
+    ESP_LOGI(TAG, "LaserWriter 300 link: %u chunks, %u bits, %u bad, %u stalls, %u unchecked, "
              "ends at most %d us late; last failure %u, %u of %u bits in %d us, due %d us",
              (unsigned)ls.chunks, (unsigned)ls.bits, (unsigned)ls.bad_bits, (unsigned)ls.stalls,
-             (unsigned)ls.restarts, (int)ls.worst_end_us, (unsigned)ls.fail_why,
+             (unsigned)ls.unchecked, (int)ls.worst_end_us, (unsigned)ls.fail_why,
              (unsigned)ls.fail_got, (unsigned)ls.fail_want, (int)ls.fail_took_us, (int)ls.fail_due_us);
     printer_state_post(printed ? PS_EV_JOB_DONE : cancelled ? PS_EV_JOB_CANCELLED
                                                             : PS_EV_JOB_FAILED);
@@ -2213,11 +2213,6 @@ static void kick_task(void *arg)
             if (qd_rc == QD_OK) {
                 heard = PR_HEARD_QDLASER;
                 mine = 1;
-                qd_link_stats_t ls;
-                qd_link_stats(&ls, 0);
-                if (ls.restarts)
-                    ESP_LOGI(TAG, "LaserWriter 300: status sent %u chunk%s again", (unsigned)ls.restarts,
-                             ls.restarts == 1 ? "" : "s");
             } else if (qm != QD_NONE) {
                 // Where a status with the clock still there went quiet, for the bench.
                 qd_link_stats_t ls;
@@ -2655,10 +2650,10 @@ static void qd_test_task(void *arg)
     qd_link_stats_t ls;
     qd_link_stats(&ls, 0);
     ESP_LOGI(TAG, "LaserWriter 300 test page: %s (%d); link %u chunks, %u bad bits, %u stalls, "
-             "%u sent again, ends at most %d us late; last failure %u, %u of %u bits in %d us, "
+             "%u unchecked, ends at most %d us late; last failure %u, %u of %u bits in %d us, "
              "due %d us; %u bytes of stack to spare",
              rc == QD_OK ? "printed" : rc == QD_E_CANCEL ? "cancelled" : "not printed", rc,
-             (unsigned)ls.chunks, (unsigned)ls.bad_bits, (unsigned)ls.stalls, (unsigned)ls.restarts,
+             (unsigned)ls.chunks, (unsigned)ls.bad_bits, (unsigned)ls.stalls, (unsigned)ls.unchecked,
              (int)ls.worst_end_us, (unsigned)ls.fail_why, (unsigned)ls.fail_got,
              (unsigned)ls.fail_want, (int)ls.fail_took_us, (int)ls.fail_due_us,
              (unsigned)uxTaskGetStackHighWaterMark(NULL));
