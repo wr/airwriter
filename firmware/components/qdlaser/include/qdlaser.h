@@ -25,7 +25,7 @@ typedef struct {
     // The job (a test page) is to stop; asked between steps. NULL: never.
     int  (*cancelled)(void);
     // A page was settled (qd_sink_t.note): in Apple's screen or the record's, its bytes of codes,
-    // or too detailed for the printer's memory in both. On the rip task. May be NULL.
+    // or too big for the printer's memory in both. On the rip task. May be NULL.
     void (*page)(int page, int apple, uint32_t bytes, int too_big);
 } qdlaser_cfg_t;
 
@@ -59,8 +59,8 @@ int  qdlaser_job_error(void);
 int  qdlaser_job_failed_pages(void);
 // The job is over, on the rip task. A job that was not aborted and had no error ends the
 // session (81 00, Ready on); otherwise the session is aborted. Frees the job and closes the link.
-// QD_OK if every page printed; the session's error; QD_E_FAULT for a page too detailed for the
-// printer, or a job that ended short with no error of its own; QD_E_CANCEL for one cancelled.
+// QD_OK if every page printed; the session's error; QD_E_FAULT for a page that didn't fit in the
+// printer's memory, or a job that ended short with no error of its own; QD_E_CANCEL for one cancelled.
 int  qdlaser_job_end(int aborted);
 
 // ---- The test page (qd_testpage.h), under the caller's job lock, with a clock on the line

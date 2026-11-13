@@ -18,7 +18,7 @@
 //                `MS ! text` what happened
 //
 // One line a page: `page N: atkinson, B bytes` (the record's screen, by name), `page N: apple,
-// B bytes` (Apple's 300 screen), or `page N: too detailed for the printer's memory`. Exit 0:
+// B bytes` (Apple's 300 screen), or `page N: didn't fit in the printer's memory`. Exit 0:
 // every page printed. 1: the printer did not answer, is not a Personal LaserWriter 300, held
 // the job, faulted, a page fit neither screen, or the job was cancelled (SIGINT: the page
 // stops, the printer is reset). 2: a bad command line, device or page.
@@ -397,7 +397,7 @@ static void sink_note(void *ctx, int page, int apple, uint32_t bytes, int too_bi
     h->page_no++;
     if (too_big) {
         h->too_big++;
-        say(h, "page %d: too detailed for the printer's memory", h->page_no);
+        say(h, "page %d: didn't fit in the printer's memory", h->page_no);
     } else {
         say(h, "page %d: %s, %u bytes", h->page_no, apple ? "apple" : h->screen, (unsigned)bytes);
     }

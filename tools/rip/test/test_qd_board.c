@@ -9,7 +9,7 @@
 //   - a job's begin touches no printer and holds nothing without a clock; the link opens once,
 //     for pages, when the rip begins, and closes once at the job's end;
 //   - the page stage's sink is the session: a page's rows go to the printer and it prints;
-//   - a page too detailed for the printer in both screens fails the job, which goes on;
+//   - a page too big for the printer's memory in both screens fails the job, which goes on;
 //   - the abort contract: a session error aborts the session and the job pipeline, once;
 //   - a cancel ends the job, and is not left for the next one;
 //   - the port's questions open the link for a question and close it;

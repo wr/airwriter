@@ -100,7 +100,7 @@ static void tp_note(void *ctx, int page, int apple, uint32_t bytes, int too_big)
     (void)page; (void)apple; (void)bytes;   // (bytes: the log's alone)
     tp_ctx_t *c = ctx;
     c->too_big = too_big;
-    if (too_big) ESP_LOGW(TAG, "test page: too detailed for the printer's memory");
+    if (too_big) ESP_LOGW(TAG, "test page: didn't fit in the printer's memory");
     else ESP_LOGI(TAG, "test page: %u bytes of codes", (unsigned)bytes);
 }
 
@@ -315,7 +315,7 @@ int qdlaser_job_end(int aborted)
         rc = aborted ? QD_E_CANCEL : QD_E_FAULT;   // ended short with no error of its own
     }
     if (rc && s_job.s) qd_session_abort(s_job.s);
-    if (!rc && failed) rc = QD_E_FAULT;              // a page too detailed for the printer
+    if (!rc && failed) rc = QD_E_FAULT;              // a page that didn't fit in its memory
     if (s_job.s) ESP_LOGI(TAG, "job over: %s (%d)", rc ? "not printed" : "printed", rc);
     job_free();
     return rc;

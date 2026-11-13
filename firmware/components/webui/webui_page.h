@@ -1494,7 +1494,7 @@ static const char WEBUI_HTML[] =
 "  $('pd-where').textContent=(p.product&&p.product!==p.name?p.product+' · ':'')+(WHERE[p.where]||p.where);\n"
 "  const [cls,text]=stWords(p);\n"
 "  lamp($('prn-lamp'),cls); $('prn-state').textContent=text;\n"
-"  // W-1102: why the port's last job failed, when the board has a reason (a page too detailed)\n"
+"  // W-1102: why the port's last job failed, when the board has a reason (a page that didn't fit in the printer's memory)\n"
 "  $('prn-why').textContent=port&&p.state==='failed'&&S.job_error||'';\n"
 "  $('rib-row').classList.toggle('hide',!(port&&iw));\n"
 "  // W-1103: a StyleWriter's cartridge, read from the printer; the black-only models always hold\n"

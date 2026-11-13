@@ -880,7 +880,7 @@ function pdDraw(){
   $('pd-where').textContent=(p.product&&p.product!==p.name?p.product+' · ':'')+(WHERE[p.where]||p.where);
   const [cls,text]=stWords(p);
   lamp($('prn-lamp'),cls); $('prn-state').textContent=text;
-  // W-1102: why the port's last job failed, when the board has a reason (a page too detailed)
+  // W-1102: why the port's last job failed, when the board has a reason (a page that didn't fit in the printer's memory)
   $('prn-why').textContent=port&&p.state==='failed'&&S.job_error||'';
   $('rib-row').classList.toggle('hide',!(port&&iw));
   // W-1103: a StyleWriter's cartridge, read from the printer; the black-only models always hold

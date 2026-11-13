@@ -440,7 +440,7 @@ static volatile int        s_clocked, s_clock_hz;
 static uint32_t            s_last_qd_ms;
 static int                 s_qd_asked;
 // The last job's reason for a person, when it has one (/api/status job_error), cleared as the
-// next job starts: a 300 page too detailed for its memory. And that job's first such page.
+// next job starts: a 300 page that didn't fit in its memory. And that job's first such page.
 static char                s_job_error[64];
 static volatile int        s_qd_bad_page;
 // W-1116: the AirPrint printer (slot) the port's job came in on, and its record id, from the
@@ -1299,7 +1299,7 @@ static void sw_finished(const job_pipe_stats_t *st, int ok)
 // W-1102: the port's printer is a Personal LaserWriter 300. Its job takes the same sink, job
 // lock and pipeline again, rips at 300 dpi into qd_page's rows and runs its session on the rip
 // task (qdlaser.c): the link opens and the printer is asked who it is as the rip begins, each
-// page is loaded and printed as the rip makes it, and a page too detailed for the printer's
+// page is loaded and printed as the rip makes it, and a page too big for the printer's
 // memory in the record's screen goes in Apple's.
 
 static esp_err_t qd_doc_begin(const char *format, const char *name, const ipp_job_opts_t *opts)
@@ -1337,11 +1337,11 @@ static esp_err_t qd_doc_begin(const char *format, const char *name, const ipp_jo
     return err;
 }
 
-// A page was settled, on the rip task: the screen it went in, or too detailed for the printer.
+// A page was settled, on the rip task: the screen it went in, or too big for the printer's memory.
 static void qd_page_cb(int page, int apple, uint32_t bytes, int too_big)
 {
     if (too_big) {
-        ESP_LOGW(TAG, "page %d: too detailed for the printer's memory", page + 1);
+        ESP_LOGW(TAG, "page %d: didn't fit in the printer's memory", page + 1);
         if (!s_qd_bad_page) s_qd_bad_page = page + 1;
     } else {
         ESP_LOGI(TAG, "page %d: %s screen, %u bytes of codes", page + 1,
@@ -1364,7 +1364,7 @@ static void qd_finished(const job_pipe_stats_t *st, int ok)
     if (s_qd_bad_page) {
         // The job went on past it, and ends as failed with the page named, on the phone and
         // the settings page alike.
-        snprintf(s_job_error, sizeof s_job_error, "Page %d is too detailed for this printer.",
+        snprintf(s_job_error, sizeof s_job_error, "Page %d didn’t fit in the printer’s memory.",
                  s_qd_bad_page);
         ipp_server_job_message_for(s_port_job_slot, s_job_error);
     }

@@ -259,7 +259,7 @@ A link module for the family, the only part that touches ESP32 peripherals:
   (500,000 bytes of codes, under the 513,287 measured, so the printer's own count of a full page
   is never reached). A page that would pass it stops there: `81 00` drops what the printer holds,
   and the kept Apple-screen page goes instead. If that passes the budget too, the page fails with
-  its reason (too detailed for the printer's memory), and the job goes on to the next page, as
+  its reason (it didn't fit in the printer's memory, as Apple's driver said; Wells, 2026-11-13), and the job goes on to the next page, as
   Apple's Continue did. The job then ends as failed on the phone and the Mac, and the settings
   page says The last job failed, naming the page and why. A record set to Apple's screen keeps
   nothing; its rows are the page.

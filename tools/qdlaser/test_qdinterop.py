@@ -251,7 +251,7 @@ async def scenario_too_big(root, noisy, blank):
     code = await run.wait()
     await fake.stop()
     return [(code == 1, f"a page too big in both screens fails the job (exit {code}) {tail(run)}"),
-            ("page 1: too detailed for the printer's memory" in run.text, "qdhost says why"),
+            ("page 1: didn't fit in the printer's memory" in run.text, "qdhost says why"),
             (len(fake.pages()) == 1, f"the next page still prints ({len(fake.pages())})")]
 
 

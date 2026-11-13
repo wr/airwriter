@@ -5596,7 +5596,7 @@
    }
   },
   "qdlaser-failed": {
-   "about": "Printers: a Personal LaserWriter 300 whose last job had a page too detailed for it",
+   "about": "Printers: a Personal LaserWriter 300 whose last job had a page that didn't fit in its memory",
    "patch": {
     "GET /api/printers": {
      "printers": [
@@ -5676,7 +5676,7 @@
      "state": "The last job failed",
      "fault": true,
      "job": "Photo album.pdf (3 pages)",
-     "job_error": "Page 2 is too detailed for this printer."
+     "job_error": "Page 2 didn’t fit in the printer’s memory."
     }
    }
   },

@@ -345,7 +345,7 @@ static void qdw_note(void *ctx, int page, int apple, uint32_t bytes, int too_big
 {
     (void)page;
     qdw_t *w = ctx;
-    if (too_big) fprintf(stderr, "rip: page %d: too detailed for the printer's memory\n", ++w->page_no);
+    if (too_big) fprintf(stderr, "rip: page %d: didn't fit in the printer's memory\n", ++w->page_no);
     else fprintf(stderr, "rip: page %d: %s, %u bytes\n", ++w->page_no, apple ? "apple" : "record's screen",
                  (unsigned)bytes);
 }
@@ -353,7 +353,7 @@ static void qdw_note(void *ctx, int page, int apple, uint32_t bytes, int too_big
 static void qdt_note(void *ctx, int page, int apple, uint32_t bytes, int too_big)
 {
     (void)ctx; (void)page; (void)apple;
-    if (too_big) fprintf(stderr, "rip: test page: too detailed for the printer's memory\n");
+    if (too_big) fprintf(stderr, "rip: test page: didn't fit in the printer's memory\n");
     else fprintf(stderr, "rip: test page: %u bytes of codes\n", (unsigned)bytes);
 }
 
