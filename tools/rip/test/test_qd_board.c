@@ -315,10 +315,15 @@ static void test_questions_open_the_link(void)
     CHECK_EQ_INT(F.job_open, 0);
     CHECK_EQ_INT(F.closes, 1);
     qd_state_t st = QDS_OFFLINE;
-    CHECK_EQ_INT(qdlaser_status(533000, QD_PLW300, &st), QD_OK);
+    qd_raw_t raw;
+    memset(&raw, 0xEE, sizeof raw);
+    CHECK_EQ_INT(qdlaser_status(533000, QD_PLW300, &st, &raw), QD_OK);
     CHECK_EQ_INT(st, QDS_READY);
-    CHECK_EQ_INT(F.opens, 2);
-    CHECK_EQ_INT(F.closes, 2);
+    CHECK_EQ_INT(raw.c82, 0xA4);                          // the replies it came from
+    CHECK_EQ_INT(raw.s2a, 0x61);
+    CHECK_EQ_INT(qdlaser_status(533000, QD_PLW300, &st, NULL), QD_OK);
+    CHECK_EQ_INT(F.opens, 3);
+    CHECK_EQ_INT(F.closes, 3);
     CHECK_EQ_INT(F.open, 0);
 }
 

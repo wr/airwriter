@@ -40,8 +40,9 @@ enum { QD_E_NOMEM = -7 };
 // QD_E_NOMEM when the link cannot open.
 int  qdlaser_identity(int hz, uint8_t *engine);
 // The printer's state at rest, for the cassette (qd_ask_status, which also sets its lights):
-// QD_OK with *st, QD_E_OFFLINE, or QD_E_NOMEM.
-int  qdlaser_status(int hz, qd_model_t m, qd_state_t *st);
+// QD_OK with *st and, when raw is not NULL, the replies it came from (an engine fault's 83 04
+// and 83 07, for the log); QD_E_OFFLINE, or QD_E_NOMEM.
+int  qdlaser_status(int hz, qd_model_t m, qd_state_t *st, qd_raw_t *raw);
 
 // ---- A job
 

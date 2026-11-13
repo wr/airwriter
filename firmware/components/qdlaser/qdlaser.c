@@ -57,10 +57,10 @@ int qdlaser_identity(int hz, uint8_t *engine)
     return rc;
 }
 
-int qdlaser_status(int hz, qd_model_t m, qd_state_t *st)
+int qdlaser_status(int hz, qd_model_t m, qd_state_t *st, qd_raw_t *raw)
 {
     if (qd_link_open(hz, 0)) return QD_E_NOMEM;
-    int rc = qd_ask_status(qd_link_ops(), m, 0, st, NULL);
+    int rc = qd_ask_status(qd_link_ops(), m, 0, st, raw);
     qd_link_close();
     return rc;
 }
