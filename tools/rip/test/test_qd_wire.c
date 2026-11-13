@@ -5,6 +5,7 @@
 #include "test_util.h"
 #include "qd_wire.h"
 #include <string.h>
+#include <stdlib.h>
 
 static int bit_at(const uint8_t *buf, size_t k) { return (buf[k >> 3] >> (k & 7)) & 1; }
 
@@ -174,6 +175,34 @@ static void test_bits_match_the_rule(void)
     CHECK(same);
 }
 
+/* The packet ends exactly at the buffer's last bit, from every starting bit of a byte: the last
+ * byte, partial or whole, is written as the rule writes it and nothing past the buffer is touched.
+ * One bit less room is refused with the buffer left as it was. */
+static void test_bits_at_the_buffer_end(void)
+{
+    static const uint8_t pkt[5] = { 0x4F, 0xFF, 0x00, 0xA5, 0x5A };
+    int same = 1, refused = 1;
+    for (size_t n = 1; n <= sizeof pkt; n++) {
+        for (size_t start = 0; start < 16; start++) {
+            size_t cap = start + qd_bits_len(n), nb = (cap + 7) / 8;
+            uint8_t *a = malloc(nb + 1), *b = malloc(nb + 1);
+            if (!a || !b) { free(a); free(b); CHECK(0); return; }
+            for (size_t i = 0; i <= nb; i++) a[i] = b[i] = (uint8_t)(0x6B ^ (i * 29) ^ start);
+            size_t pa = start, pb = start;
+            if (qd_bits_put(a, cap, &pa, pkt, n)) same = 0;
+            ref_put(b, &pb, pkt, n);
+            if (pa != pb || pa != cap || memcmp(a, b, nb + 1)) same = 0;
+            memcpy(b, a, nb + 1);
+            size_t pc = start;
+            if (qd_bits_put(a, cap - 1, &pc, pkt, n) != -1 || pc != start || memcmp(a, b, nb + 1)) refused = 0;
+            free(a);
+            free(b);
+        }
+    }
+    CHECK(same);
+    CHECK(refused);
+}
+
 int main(void)
 {
     test_cmd();
@@ -183,5 +212,6 @@ int main(void)
     test_bits_one_packet();
     test_bits_no_room();
     test_bits_match_the_rule();
+    test_bits_at_the_buffer_end();
     TEST_END;
 }

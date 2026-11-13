@@ -405,7 +405,7 @@ screens put black and cyan on one tile upside down to each other and magenta and
 tile far away, so the common two-ink tints never share a dot until they have to.*
 
 *Amended (W-1143): ripping a page was the slowest step of printing it (board 1, a Personal
-LaserWriter 300's blank page: about 21 s, against the printer's 16). The board runs at 240 MHz
+LaserWriter 300's blank page: about 21 s, against the printer's 17). The board runs at 240 MHz
 (`sdkconfig.defaults.esp32s3`; ESP-IDF's default is 160) and the rip's per-row code
 (`urf_decode`, `resample`, `halftone`, `ripjob`, `imagewriter`, the StyleWriter's and the 300's
 coders, `ps_page`) builds at `-O2`, the rest at ESP-IDF's `-Og`. The diffusion screens set up
