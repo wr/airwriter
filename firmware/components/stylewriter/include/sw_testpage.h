@@ -25,12 +25,41 @@
 // by the stage), 2880 across and 3295 down at the most: the same on every model, which print
 // 3774 rows at the fewest. Nothing is drawn where a model cannot print, and the stage is given
 // the rows the margins cover as blank ones.
+//
+// W-1102: another family's page is the same page at its own dpi (sw_tp_geom_t): every size in
+// dots at 360 dpi is scaled by dpi / 360 (the 8 in layout is 2400 dots at 300 dpi, the inch
+// squares 300), the face is drawn 3 dots a pixel, the pictures are resampled from the stored
+// scenes, the letterhead is the family's own art, and the page is gray. The Personal
+// LaserWriter 300's is qd_testpage.h's.
 #pragma once
 #include <stdint.h>
 #include <stddef.h>
 #include "ripjob.h"
 #include "sw_model.h"
 #include "halftone.h"
+
+// A letterhead at a page's dpi (mkart.py writes them): "AirWriter" and "Test page" as bit rows
+// (MSB first, (w + 7) / 8 bytes a row), and the printer's icon as indexes into rgb.
+typedef struct {
+    uint16_t title_w, title_h, sub_w, sub_h, icon_w, icon_h;
+    const uint8_t *title, *sub, *icon;
+    const uint8_t (*rgb)[3];
+} sw_tp_art_t;
+
+// The page for a family that is not a StyleWriter: its dpi, the rows the stage is given and
+// where the image area sits on the sheet, and what is the family's own. The tone is none: the
+// page is screened as a job's gray rows are for that family (the gain alone).
+typedef struct {
+    uint16_t    dpi;                            // 300
+    uint16_t    sheet_w, sheet_h;               // each row's dots (the image area's width, at
+                                                // least the layout's 8 in) and the sheet's rows
+    uint16_t    margin_l, margin_t, margin_b;   // the image area on the sheet; the layout
+                                                // starts margin_t rows down
+    const char *model_name;                     // under Printer
+    ht_algo_t   apple;                          // the family's Apple screen, for HT_APPLE
+    const sw_tp_art_t *art;                     // the letterhead, at dpi
+    const char *const (*captions)[4];           // the squares' two lines of captions
+} sw_tp_geom_t;
 
 typedef struct {
     const char *printer;       // its name: "Den StyleWriter"
@@ -45,14 +74,17 @@ typedef struct {
     // sw_testpage returns SW_TP_STOPPED. NULL never stops.
     int       (*stop)(void *ctx);
     void       *stop_ctx;
+    // W-1102: NULL for a StyleWriter's page (from `model`); another family's geometry, which
+    // makes `model` and `colour_cart` unused.
+    const sw_tp_geom_t *geom;
 } sw_tp_info_t;
 
 enum { SW_TP_DONE = 0, SW_TP_NOMEM = -1, SW_TP_STAGE = -2, SW_TP_STOPPED = 1 };
 
 // One Letter page of rows to the stage: page_begin at the printable width and the sheet's
-// 3960 rows, every row (ink_row when the model takes a color cartridge and one is in, else
-// row), then page_end. SW_TP_DONE; SW_TP_NOMEM for a bad model or no memory (nothing is
-// left held, no page was ended); SW_TP_STAGE when the stage is missing a function the page
+// 3960 rows (with a geometry, its sheet_w and sheet_h), every row (ink_row when the model
+// takes a color cartridge and one is in, else row), then page_end. SW_TP_DONE; SW_TP_NOMEM
+// for a bad model or no memory (nothing is left held, no page was ended); SW_TP_STAGE when the stage is missing a function the page
 // needs or refused the page; SW_TP_STOPPED.
 int sw_testpage(const sw_tp_info_t *i, const rip_stage_t *st);
 
@@ -74,9 +106,10 @@ typedef struct {
     sw_tp_box_t screen_names;            // their names, over the panels
     sw_tp_box_t panel[6];                // the still life through each screen
     sw_tp_box_t panel_ramp[6];           // and a ramp
-    ht_algo_t   panel_screen[6];         // which screen
+    ht_algo_t   panel_screen[6];         // which screen (the family's Apple screen for Apple's)
+    int         ticked;                  // the panel ticked: the one info->screen names, or -1
     sw_tp_box_t ruler;                   // its edge and ticks (numbers below it are not in it)
-    sw_tp_box_t square[4];               // 360 x 360 dots each
+    sw_tp_box_t square[4];               // an inch each way: 360 x 360 dots at 360 dpi
     sw_tp_box_t footer;                  // the last line
     uint16_t    first_ink, last_ink;     // the first and last rows that carry ink
     int         colour;                  // the page is in four inks

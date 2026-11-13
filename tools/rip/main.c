@@ -21,6 +21,7 @@
 #include "qd_rip.h"
 #include "qd_session.h"
 #include "qd_wire.h"
+#include "qd_testpage.h"
 
 typedef struct {
     FILE    *stream;
@@ -349,6 +350,54 @@ static void qdw_note(void *ctx, int page, int apple, uint32_t bytes, int too_big
                  (unsigned)bytes);
 }
 
+static void qdt_note(void *ctx, int page, int apple, uint32_t bytes, int too_big)
+{
+    (void)ctx; (void)page; (void)apple;
+    if (too_big) fprintf(stderr, "rip: test page: too detailed for the printer's memory\n");
+    else fprintf(stderr, "rip: test page: %u bytes of codes\n", (unsigned)bytes);
+}
+
+/* --qd-testpage (W-1102): the 300's test page as the board draws it, through the same session
+ * and page stage as --printer plw300, its packets written in qdfake.py's framing (--out-qd's).
+ * Its rows go in the screen they are drawn in: nothing is kept. */
+static int print_qd_testpage(const char *path, ht_algo_t algo, int gain)
+{
+    qdw_t qw;
+    memset(&qw, 0, sizeof qw);
+    qw.screen = algo;
+    if (!(qw.frames = fopen(path, "wb"))) { perror(path); return 1; }
+    static const qd_ops_t qops = { .put = qdw_put, .flush = qdw_flush, .read = qdw_read,
+                                   .sleep_ms = qdw_sleep, .now_ms = qdw_now };
+    qd_ops_t ops = qops;
+    ops.ctx = &qw;
+    const qd_job_cfg_t jc = { .model = QD_PLW300 };
+    qd_page_cfg_t pc = { .model = QD_PLW300, .screen = algo, .gain = gain,
+                         .sink = { qdw_open, qdw_row, qdw_print, qdt_note, &qw } };
+    sw_tp_geom_t g;
+    qd_page_t *qdp = NULL;
+    int rc = -1;
+    if (!qd_tp_geom(QD_PLW300, &g) && (qw.sess = qd_session_new(&ops, &jc)) &&
+        (qdp = qd_page_new(&pc)) && !qd_session_begin(qw.sess)) {
+        rip_stage_t st;
+        qd_page_stage(qdp, &st);
+        sw_tp_info_t info = {
+            .printer = "Personal LaserWriter 300", .board = "AirWriter v0.3.0 at 10.0.1.115",
+            .host = "airwriter-2434.local", .gain = gain, .screen = algo, .geom = &g,
+        };
+        rc = sw_testpage(&info, &st);
+        if (rc == SW_TP_DONE && qd_session_end(qw.sess)) rc = -1;
+    }
+    qd_page_free(qdp);
+    qd_session_free(qw.sess);
+    if (fclose(qw.frames)) qw.failed = 1;
+    free(qw.bits);
+    if (rc != SW_TP_DONE || qw.failed) {
+        fprintf(stderr, "rip: the 300's test page failed (%d)\n", rc);
+        return 1;
+    }
+    return 0;
+}
+
 static void write_file(void *ctx, const uint8_t *b, size_t n)
 {
     fwrite(b, 1, n, (FILE *)ctx);
@@ -377,6 +426,8 @@ static void usage(void)
           "       rip --start-page-job on|off FILE  the job that sets its start page (W-1099)\n"
           "       rip --ps-testpage FILE  the PostScript printers' test page (W-1088)\n"
           "       --sw-testpage  a StyleWriter's test page for that cartridge, as the board draws it\n"
+          "       rip --qd-testpage FILE [--dither ...] [--gain ...]  the Personal LaserWriter 300's\n"
+          "             test page as the board sends it, in --out-qd's framing\n"
           "             (W-1103); --out-sw writes it as the printer gets it, for swfake.py decode\n"
           "  --printer stylewriter  rip at 360 dpi for a StyleWriter (W-1103), the sheet named by\n"
           "             the page's width. --out-sw writes the page as the printer gets it (rects,\n"
@@ -401,7 +452,7 @@ int main(int argc, char **argv)
     const char *printer = "imagewriter", *paper = "letter", *out_ps = NULL, *out_pbm = NULL;
     const char *query = NULL, *ps_tp = NULL, *sp_job = NULL;
     const char *model_arg = NULL, *cart_arg = "black", *tone_arg = "apple", *out_sw = NULL;
-    const char *sw_tp = NULL;
+    const char *sw_tp = NULL, *qd_tp = NULL;
     const char *out_qd = NULL, *out_qd_bits = NULL, *source = "main";
     int sp_on = 0;
     int colour = 0, gain = 0, top = 0, hex = 0;
@@ -434,6 +485,7 @@ int main(int argc, char **argv)
         }
         else if (!strcmp(argv[i], "--ps-testpage") && i + 1 < argc) ps_tp = argv[++i];
         else if (!strcmp(argv[i], "--sw-testpage") && i + 1 < argc) sw_tp = argv[++i];
+        else if (!strcmp(argv[i], "--qd-testpage") && i + 1 < argc) qd_tp = argv[++i];
         else { usage(); return 2; }
     }
     if (ps_tp) {
@@ -455,7 +507,7 @@ int main(int argc, char **argv)
         fclose(qf);
         return 0;
     }
-    if (!in && !(testpage && out_stream) && !(sw_tp && out_sw)) { usage(); return 2; }
+    if (!in && !(testpage && out_stream) && !(sw_tp && out_sw) && !qd_tp) { usage(); return 2; }
 
     ht_algo_t algo;
     if (ht_algo_from_name(dither, &algo)) {
@@ -470,6 +522,7 @@ int main(int argc, char **argv)
         }
         return print_sw_testpage(sw_tp, m, out_sw, algo, gain);
     }
+    if (qd_tp) return print_qd_testpage(qd_tp, algo, gain);
     if (testpage) return print_testpage(testpage, out_stream, algo, gain, top);
 
     FILE *f = fopen(in, "rb");

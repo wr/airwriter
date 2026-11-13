@@ -36,7 +36,7 @@ SRCS    := $(wildcard $(COMP)/ripjob/*.c) \
            $(COMP)/stylewriter/sw_testpage.c $(COMP)/stylewriter/sw_unpack.c \
            $(COMP)/printers/port_policy.c \
            $(COMP)/qdlaser/qd_model.c $(COMP)/qdlaser/qd_wire.c $(COMP)/qdlaser/qd_status.c \
-           $(COMP)/qdlaser/qd_page.c $(COMP)/qdlaser/qd_session.c \
+           $(COMP)/qdlaser/qd_page.c $(COMP)/qdlaser/qd_session.c $(COMP)/qdlaser/qd_testpage.c \
            $(COMP)/serial_out/serial_writer.c
 TESTSRC := $(wildcard test/test_*.c)
 TESTBIN := $(patsubst test/%.c,build/%,$(TESTSRC))
@@ -150,6 +150,11 @@ build/test_sw_testpage: CFLAGS += -DBIGMEM_COUNT
 build/test_sw_testpage: test/test_sw_testpage.c $(SRCS) | build
 	$(CC) $(CFLAGS) $(INCS) -Itest -o $@ $^ -lm -lz
 
+# And the 300's (W-1102), the same page at 300 dpi through its page stage.
+build/test_qd_testpage: CFLAGS += -DBIGMEM_COUNT
+build/test_qd_testpage: test/test_qd_testpage.c $(SRCS) | build
+	$(CC) $(CFLAGS) $(INCS) -Itest -o $@ $^ -lm -lz
+
 # W-1088 review: the printer list's core takes none of the board's internal
 # RAM of its own (docs/traps.md): no writable statics, its buffers are the
 # caller's (the board's are in PSRAM).
@@ -180,7 +185,7 @@ build/sw_%.o: $(COMP)/stylewriter/sw_%.c | build
 	$(CC) $(CFLAGS) $(INCS) -c -o $@ $<
 
 # The QuickDraw LaserWriters' cores (W-1102), held to the same rule.
-QD_OBJS := build/qd_model.o build/qd_wire.o build/qd_status.o build/qd_page.o build/qd_session.o
+QD_OBJS := build/qd_model.o build/qd_wire.o build/qd_status.o build/qd_page.o build/qd_session.o build/qd_testpage.o
 build/qd_%.o: $(COMP)/qdlaser/qd_%.c | build
 	$(CC) $(CFLAGS) $(INCS) -c -o $@ $<
 

@@ -169,7 +169,7 @@ static SemaphoreHandle_t s_job_lock;
 // finishes can never set its cancel on the next job instead.
 static portMUX_TYPE s_tap_mux = portMUX_INITIALIZER_UNLOCKED;
 static int s_test_running;      // the test page holds the lock
-static int s_sw_test_running;   // ... and it is a StyleWriter's: a session, not ImageWriter writes
+static int s_sw_test_running;   // ... and it is a StyleWriter's or a 300's: a session, not ImageWriter writes
 static volatile int s_test_cancel;  // a second tap asked to stop it
 
 static volatile int s_job_waiting;
@@ -2529,24 +2529,36 @@ static void ps_test_locked(int id)
 // poll task and the settings page are answered at once; the task's stack is internal, as the
 // cartridge it reads may be saved to flash. The second tap of the button is the cancel
 // (sw_cancelled), which the session reads between steps: a block in flight finishes.
-static void sw_test_task(void *arg)
+// What a raster test page prints about its record and the board (a StyleWriter's, a 300's).
+typedef struct { char name[PR_NAME_MAX], board[112], host[64]; } tp_text_t;
+
+static sw_tp_info_t tp_details(int id, tp_text_t *x)
 {
-    int id = (int)(intptr_t)arg;    // W-1116: the page's own StyleWriter record, not the port's
-    sw_model_t m = pr_model_to_sw(printers_record_model(id));
-    char screen[sizeof s_set.dither], name[PR_NAME_MAX] = "", board[112], host[64];
+    char screen[sizeof s_set.dither];
     int gain = 0;
     ht_algo_t algo = HT_ATKINSON;
     if (!printers_record_screen(id, screen, sizeof screen, &gain) && ht_algo_from_name(screen, &algo))
         algo = HT_ATKINSON;
-    printers_describe(id, name, sizeof name, NULL, 0, NULL, 0);
+    x->name[0] = '\0';
+    printers_describe(id, x->name, sizeof x->name, NULL, 0, NULL, 0);
     int has_ip = s_ip[0] && strcmp(s_ip, "0.0.0.0");
-    if (has_ip) snprintf(board, sizeof board, "AirWriter %s at %s", esp_app_get_description()->version, s_ip);
-    else        snprintf(board, sizeof board, "AirWriter %s, no IP yet", esp_app_get_description()->version);
+    if (has_ip) snprintf(x->board, sizeof x->board, "AirWriter %s at %s", esp_app_get_description()->version, s_ip);
+    else        snprintf(x->board, sizeof x->board, "AirWriter %s, no IP yet", esp_app_get_description()->version);
     // The settings page's address: its host name, or in setup mode the board's own.
-    if (s_ap_mode) snprintf(host, sizeof host, "%s", s_ip);
-    else           snprintf(host, sizeof host, "%s.local", s_set.hostname);
-    sw_tp_info_t info = { .printer = name, .board = board, .host = host, .model = m,
-                          .colour_cart = s_sw_cart == 2, .gain = gain, .screen = algo };
+    if (s_ap_mode) snprintf(x->host, sizeof x->host, "%s", s_ip);
+    else           snprintf(x->host, sizeof x->host, "%s.local", s_set.hostname);
+    return (sw_tp_info_t){ .printer = x->name, .board = x->board, .host = x->host, .gain = gain,
+                           .screen = algo };
+}
+
+static void sw_test_task(void *arg)
+{
+    int id = (int)(intptr_t)arg;    // W-1116: the page's own StyleWriter record, not the port's
+    sw_model_t m = pr_model_to_sw(printers_record_model(id));
+    tp_text_t x;
+    sw_tp_info_t info = tp_details(id, &x);
+    info.model = m;
+    info.colour_cart = s_sw_cart == 2;
     int rc = stylewriter_test_page(m, &info);
     s_sw_was_answering = 0;
     if (rc == SW_OK) printers_port_answered(PR_HEARD_STYLEWRITER);
@@ -2603,8 +2615,75 @@ static void sw_test_locked(int id)
     }
 }
 
+// W-1102: a Personal LaserWriter 300's test page is the StyleWriter's drawn at 300 dpi
+// (qd_testpage.h) and loaded into the printer as it is made (qdlaser_test_page): one session,
+// on its own task as the StyleWriter's is, so that the button's poll task and the settings page
+// are answered at once. The second tap of the button is the cancel (sw_cancelled), read between
+// the session's steps.
+static void qd_test_task(void *arg)
+{
+    int id = (int)(intptr_t)arg;
+    qd_model_t m = pr_model_to_qd(printers_record_model(id));
+    tp_text_t x;
+    sw_tp_info_t info = tp_details(id, &x);
+    int hz = 0;
+    qd_link_stats(NULL, 1);
+    int rc = serial_out_clock(&hz) ? qdlaser_test_page(hz, m, &info) : QD_E_OFFLINE;
+    if (rc == QD_OK) printers_port_answered(PR_HEARD_QDLASER);
+    qd_link_stats_t ls;
+    qd_link_stats(&ls, 0);
+    ESP_LOGI(TAG, "LaserWriter 300 test page: %s (%d); link %u chunks, %u bad bits, ends at most %d us late; "
+             "%u bytes of stack to spare",
+             rc == QD_OK ? "printed" : rc == QD_E_CANCEL ? "cancelled" : "not printed", rc,
+             (unsigned)ls.chunks, (unsigned)ls.bad_bits, (int)ls.worst_end_us,
+             (unsigned)uxTaskGetStackHighWaterMark(NULL));
+
+    portENTER_CRITICAL(&s_tap_mux);
+    s_test_running = 0;
+    s_sw_test_running = 0;
+    int cancelled = s_test_cancel;
+    s_test_cancel = 0;
+    portEXIT_CRITICAL(&s_tap_mux);
+    printer_state_post(rc == QD_OK ? PS_EV_JOB_DONE : cancelled ? PS_EV_JOB_CANCELLED : PS_EV_JOB_FAILED);
+    s_last_qd_ms = uptime_ms();         // its status was just in the page: the next in 3 s
+    s_printing = 0;
+    job_touch();
+    line_source();
+    xSemaphoreGive(s_job_lock);
+    vTaskDelete(NULL);
+}
+
+// s_job_lock is held; the page's task gives it back. `id` is the page's 300 record.
+static void qd_test_locked(int id)
+{
+    s_job_error[0] = '\0';
+    strncpy(s_last_job, "Test page", sizeof s_last_job - 1);
+    s_printing = 1;
+    job_touch();
+    led_grid_set_source(LG_SRC_AIRPRINT);
+    line_source();
+    printer_state_post(PS_EV_JOB_START);
+    portENTER_CRITICAL(&s_tap_mux);
+    s_test_running = 1;
+    s_sw_test_running = 1;              // a session: the button's cancel never aborts a write
+    s_test_cancel = 0;
+    portEXIT_CRITICAL(&s_tap_mux);
+    if (xTaskCreate(qd_test_task, "qd_test", 6144, (void *)(intptr_t)id, 3, NULL) != pdPASS) {
+        ESP_LOGE(TAG, "test page: could not create task");
+        portENTER_CRITICAL(&s_tap_mux);
+        s_test_running = 0;
+        s_sw_test_running = 0;
+        portEXIT_CRITICAL(&s_tap_mux);
+        printer_state_post(PS_EV_JOB_FAILED);
+        s_printing = 0;
+        job_touch();
+        line_source();
+        xSemaphoreGive(s_job_lock);
+    }
+}
+
 // The test page for whichever printer gets it (printers_test_target): the
-// port's ImageWriter's, a LaserWriter's, or the port's StyleWriter's. s_job_lock is held.
+// port's ImageWriter's, a LaserWriter's, the port's StyleWriter's or its 300's. s_job_lock is held.
 static void test_page_to(int id, int port)
 {
     // W-1116: a port record's page takes its family from that record, as a job does
@@ -2612,10 +2691,7 @@ static void test_page_to(int id, int port)
     port_fam_sync(port ? printers_record_family(id) : printers_port_family(), 1);
     switch (printers_test_kind(id)) {
     case PR_TEST_STYLEWRITER: sw_test_locked(id); break;
-    case PR_TEST_QDLASER:               // W-1102: not yet
-        ESP_LOGW(TAG, "test page: none for a Personal LaserWriter 300 yet");
-        xSemaphoreGive(s_job_lock);
-        break;
+    case PR_TEST_QDLASER:     qd_test_locked(id); break;
     default:
         if (port) test_page_locked(id);
         else ps_test_locked(id);

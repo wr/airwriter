@@ -12,7 +12,9 @@
 //   - a page too detailed for the printer in both screens fails the job, which goes on;
 //   - the abort contract: a session error aborts the session and the job pipeline, once;
 //   - a cancel ends the job, and is not left for the next one;
-//   - the port's questions open the link for a question and close it.
+//   - the port's questions open the link for a question and close it;
+//   - the test page is one session with the link open for pages: it prints, stops on a cancel
+//     or a session error, and leaves nothing for the next page or job.
 #include "test_util.h"
 #include "qdlaser.h"
 #include "qd_link.h"
@@ -327,6 +329,73 @@ static void test_questions_open_the_link(void)
     CHECK_EQ_INT(F.open, 0);
 }
 
+// ---- the test page
+
+static sw_tp_info_t tp_info(void)
+{
+    sw_tp_info_t i = { .printer = "Office LaserWriter", .board = "AirWriter v0.3.0 at 10.0.1.115",
+                       .host = "airwriter-2434.local", .screen = HT_ATKINSON };
+    return i;
+}
+
+static void test_test_page_prints(void)
+{
+    reset();
+    sw_tp_info_t info = tp_info();
+    CHECK_EQ_INT(qdlaser_test_page(533000, QD_PLW300, &info), QD_OK);
+    CHECK_EQ_INT(F.opens, 1);
+    CHECK_EQ_INT(F.job_open, 1);                          // the link opens for pages
+    CHECK_EQ_INT(F.closes, 1);
+    CHECK_EQ_INT(F.open, 0);
+    CHECK_EQ_INT(F.rows, 3175);                           // Letter's image area, every row
+    CHECK_EQ_INT(F.prints, 1);
+    CHECK_EQ_INT(F.stops, 0);
+    CHECK_EQ_INT(F.notes, 0);                             // a job's page callback is not told
+    CHECK_EQ_INT(F.aborts, 0);                            // nor is the job pipeline
+    CHECK_EQ_INT(F.last_state, QDS_READY);                // the session's states reach the board
+
+    // In Apple's screen too, and a model there is none of is refused before the link opens.
+    reset();
+    info.screen = HT_APPLE;
+    CHECK_EQ_INT(qdlaser_test_page(533000, QD_PLW300, &info), QD_OK);
+    CHECK_EQ_INT(F.prints, 1);
+    reset();
+    CHECK(qdlaser_test_page(533000, QD_NONE, &info) != QD_OK);
+    CHECK_EQ_INT(F.opens, 0);
+}
+
+static void test_test_page_cancel(void)
+{
+    reset();
+    F.cancel_at_row = 100;
+    sw_tp_info_t info = tp_info();
+    CHECK_EQ_INT(qdlaser_test_page(533000, QD_PLW300, &info), QD_E_CANCEL);
+    CHECK_EQ_INT(F.prints, 0);
+    CHECK(F.stops >= 1);                                  // 8A 00 went
+    CHECK(F.rows < 200);                                  // and the page stopped being drawn
+    CHECK_EQ_INT(F.closes, 1);
+    // Not left for the next page.
+    reset();
+    CHECK_EQ_INT(qdlaser_test_page(533000, QD_PLW300, &info), QD_OK);
+    CHECK_EQ_INT(F.prints, 1);
+    // Nor is one a job left behind this page's.
+    qdlaser_cancel();
+    reset();
+    CHECK_EQ_INT(qdlaser_test_page(533000, QD_PLW300, &info), QD_OK);
+}
+
+static void test_test_page_link_error(void)
+{
+    reset();
+    F.fail_put_at = 60;
+    sw_tp_info_t info = tp_info();
+    CHECK_EQ_INT(qdlaser_test_page(533000, QD_PLW300, &info), QD_E_LINK);
+    CHECK_EQ_INT(F.prints, 0);
+    CHECK(F.puts < 80);                                   // nothing more was sent
+    CHECK_EQ_INT(F.closes, 1);
+    CHECK_EQ_INT(F.open, 0);
+}
+
 int main(void)
 {
     static const qdlaser_cfg_t cfg = { .state = cb_state, .page = cb_page };
@@ -337,6 +406,9 @@ int main(void)
     test_session_error_aborts_pipe();
     test_cancel();
     test_questions_open_the_link();
+    test_test_page_prints();
+    test_test_page_cancel();
+    test_test_page_link_error();
     free(g_keep);
     TEST_END;
 }

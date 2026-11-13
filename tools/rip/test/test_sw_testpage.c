@@ -803,6 +803,57 @@ static void test_stops(void)
     CHECK_EQ_INT(r.begins, 0);
 }
 
+// ---- the StyleWriter's page, held to what it printed before the 300's (W-1102) geometry
+
+typedef struct { uint32_t crc, w, rows; } crc_t;
+
+static uint32_t crc_add(uint32_t c, const uint8_t *p, size_t n)
+{
+    c = ~c;
+    for (size_t i = 0; i < n; i++) {
+        c ^= p[i];
+        for (int k = 0; k < 8; k++) c = c >> 1 ^ (0xEDB88320u & (0u - (c & 1)));
+    }
+    return ~c;
+}
+static int  crc_begin(void *c, int i, uint32_t w, uint32_t h) { (void)i; (void)h; ((crc_t *)c)->w = w; return 0; }
+static void crc_row(void *c, const uint8_t *bits)
+{
+    crc_t *r = c;
+    r->crc = crc_add(r->crc, bits, (r->w + 7) / 8);
+    r->rows++;
+}
+static void crc_ink_row(void *c, const uint8_t *const bits[IW_INKS])
+{
+    crc_t *r = c;
+    for (int k = 0; k < IW_INKS; k++) r->crc = crc_add(r->crc, bits[k], (r->w + 7) / 8);
+    r->rows++;
+}
+static int crc_end(void *c) { (void)c; return 0; }
+
+static uint32_t page_crc(sw_model_t m, int cart, ht_algo_t screen)
+{
+    sw_tp_info_t info = info_for(m, cart);
+    info.screen = screen;
+    crc_t r = { 0 };
+    rip_stage_t st = { .page_begin = crc_begin, .row = crc_row, .page_end = crc_end, .ctx = &r };
+    if (cart) st.ink_row = crc_ink_row;
+    CHECK_EQ_INT(sw_testpage(&info, &st), SW_TP_DONE);
+    CHECK_EQ_INT(r.rows, SHEET_H);
+    return r.crc;
+}
+
+// Taken from the page before sw_tp_geom_t existed: with no geometry the page is the same, dot
+// for dot.
+static void test_stylewriter_page_unchanged(void)
+{
+    uint32_t gray = page_crc(SW_II, 0, HT_APPLE), colour = page_crc(SW_C2500, 1, HT_ATKINSON);
+    printf("    StyleWriter II gray page crc %08x, Color StyleWriter 2500 colour page crc %08x\n",
+           (unsigned)gray, (unsigned)colour);
+    CHECK_EQ_INT(gray, 0x06a7587bu);
+    CHECK_EQ_INT(colour, 0xcaa3ff48u);
+}
+
 // ---- memory: every buffer through bigmem.h, and not many of them
 
 static void test_memory(void)
@@ -833,6 +884,7 @@ int main(void)
     test_gray_page(SW_C2500, 0);
     test_gray_page(SW_II, 0);
     test_stops();
+    test_stylewriter_page_unchanged();
     test_memory();
     free(g_buf);
     TEST_END;

@@ -188,7 +188,7 @@ page: Top margin (`{"top_margin":N}`, 1/144 in, -216 to 144, default -144) and d
   `build/qdhost` (the firmware's session on the host) to `qdfake.py` over a pty, through each
   fault, a cancel and a printer switched off (about 10 s); `python3 -m unittest
   tools/qdlaser/test_qdfake.py`. `rip --printer plw300 --out-qd F` writes a page as the printer
-  would be sent it, and `qdfake.py decode F` draws it. Apple's driver lives in
+  would be sent it, `rip --qd-testpage F` the test page, and `qdfake.py decode F` draws either. Apple's driver lives in
   `~/.config/airwriter/lw300-driver/`, never committed.
 - **Firmware:** `idf.py build` clean, then `python3 tools/stackcheck/stackcheck.py` (needs the
   toolchain `export.sh` puts on PATH): every task that makes ESP-IDF's deep calls keeps 1 KB of

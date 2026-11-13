@@ -3,6 +3,7 @@
 #include "qdlaser.h"
 #include "qd_link.h"
 #include "qd_page.h"
+#include "qd_testpage.h"
 #include "serial_out.h"
 #include "job_pipe.h"
 
@@ -62,6 +63,94 @@ int qdlaser_status(int hz, qd_model_t m, qd_state_t *st, qd_raw_t *raw)
     if (qd_link_open(hz, 0)) return QD_E_NOMEM;
     int rc = qd_ask_status(qd_link_ops(), m, 0, st, raw);
     qd_link_close();
+    return rc;
+}
+
+// ---------------------------------------------------------------- the test page
+
+typedef struct {
+    qd_session_t *s;
+    int           err;           // the session's first error
+    int           too_big;
+} tp_ctx_t;
+
+static int tp_open(void *ctx, const qd_media_t *md)
+{
+    tp_ctx_t *c = ctx;
+    if (!c->err) c->err = qd_session_open(c->s, md);
+    return c->err;
+}
+
+static int tp_row(void *ctx, const uint8_t *codes, size_t n)
+{
+    tp_ctx_t *c = ctx;
+    if (!c->err) c->err = qd_session_row(c->s, codes, n);
+    return c->err;
+}
+
+static int tp_print(void *ctx)
+{
+    tp_ctx_t *c = ctx;
+    if (!c->err) c->err = qd_session_print(c->s);
+    return c->err;
+}
+
+static void tp_note(void *ctx, int page, int apple, uint32_t bytes, int too_big)
+{
+    (void)page; (void)apple; (void)bytes;   // (bytes: the log's alone)
+    tp_ctx_t *c = ctx;
+    c->too_big = too_big;
+    if (too_big) ESP_LOGW(TAG, "test page: too detailed for the printer's memory");
+    else ESP_LOGI(TAG, "test page: %u bytes of codes", (unsigned)bytes);
+}
+
+// The page is not drawn any further once the session has failed or been asked to stop.
+static int tp_stop(void *ctx)
+{
+    tp_ctx_t *c = ctx;
+    return c->err || ops_cancelled(NULL);
+}
+
+int qdlaser_test_page(int hz, qd_model_t m, const sw_tp_info_t *info)
+{
+    sw_tp_geom_t g;
+    if (!info || qd_tp_geom(m, &g)) return QD_E_MODEL;
+    s_cancel = 0;                    // a cancel a job left behind is not this page's
+    if (qd_link_open(hz, 1)) {
+        ESP_LOGE(TAG, "test page: no memory for the link");
+        return QD_E_NOMEM;
+    }
+    const qd_job_cfg_t jc = { .model = m, .stall_ms = CONFIG_AIRWRITER_STALL_ABORT * 1000u };
+    tp_ctx_t c = { .s = qd_session_new(qdlaser_ops(), &jc) };
+    qd_page_t *pg = NULL;
+    int rc = c.s ? qd_session_begin(c.s) : QD_E_NOMEM;
+    if (!rc) {
+        qd_page_cfg_t pc = { .model = m, .screen = info->screen, .gain = info->gain,
+                             .sink = { tp_open, tp_row, tp_print, tp_note, &c } };
+        pg = qd_page_new(&pc);
+        if (!pg) {
+            rc = QD_E_NOMEM;
+        } else {
+            rip_stage_t st;
+            qd_page_stage(pg, &st);
+            sw_tp_info_t ti = *info;
+            ti.geom = &g;
+            ti.stop = tp_stop;
+            ti.stop_ctx = &c;
+            int drawn = sw_testpage(&ti, &st);
+            rc = c.err ? c.err
+               : drawn == SW_TP_NOMEM ? QD_E_NOMEM
+               : drawn == SW_TP_STOPPED ? QD_E_CANCEL
+               : drawn == SW_TP_STAGE || c.too_big ? QD_E_FAULT
+               : qd_session_end(c.s);
+        }
+    }
+    if (rc && c.s) qd_session_abort(c.s);      // 8A 00, 81 00, Ready on: once, if it wrote
+    ESP_LOGI(TAG, "test page: %s (%d)", rc ? "not printed" : "printed", rc);
+    qd_page_free(pg);                          // both take NULL
+    qd_session_free(c.s);
+    qd_link_close();
+    s_cancel = 0;
     return rc;
 }
 
