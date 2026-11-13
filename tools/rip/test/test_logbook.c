@@ -662,6 +662,117 @@ static void test_save_skips_chatter(void)
     CHECK_EQ_INT(last, 7);
 }
 
+// Reads with s (NULL: RAM only, as during a job) and says whether line seq is there.
+static int has_seq(const lb_ring_t *r, const lb_store_t *s, uint32_t seq)
+{
+    lb_line_t l;
+    lb_read_begin(&g_rd, r, s, 0);
+    while (lb_read_next(&g_rd, &l)) if (l.seq == seq) return 1;
+    return 0;
+}
+
+static void push_poll(lb_ring_t *r, unsigned id)
+{
+    lb_line_t l = mk(0, 'I', "ipp", "");
+    snprintf(l.text, sizeof l.text, "op 0x000b id %u v2.0 to /ipp/print/2 (1) asks printer-state,"
+             "printer-state-reasons,printer-state-message,marker-levels,printer-is-accepting-jobs",
+             id);
+    l.ram_only = (uint8_t)lb_is_chatter(&l);
+    CHECK_EQ_INT(l.ram_only, 1);
+    lb_ring_push(r, &l);
+    l = mk(0, 'I', "ipp", "  attributes of /ipp/print/2: 1834 bytes, state 4");
+    l.ram_only = (uint8_t)lb_is_chatter(&l);
+    lb_ring_push(r, &l);
+}
+
+// W-1142: a Mac with a job queued asks after the printer about once a second (board 1,
+// 2026-11-13: a Personal LaserWriter 300 job, its cover opened mid-page). Nothing is saved during
+// a job until a warning, so the job's own lines wait in RAM: the asking mustn't push them out.
+static void test_polls_keep_a_jobs_lines(void)
+{
+    lb_flash_t f = ff_ops();
+    lb_store_open(&g_s, &f);
+    lb_ring_t *r = fresh_ring();
+    lb_ring_begin_run(r, 1, 0);
+    push_lines(r, 30, 'I', 0);                       // before the job, saved while idle
+    lb_store_prepare(&g_s);
+    CHECK_EQ_INT(lb_save(&g_s, r), 30);
+
+    lb_line_t l = mk(0, 'I', "airwriter", "job 12 for printer 2: started");
+    lb_ring_push(r, &l);
+    uint32_t start = l.seq;
+    lb_line_t first;                                 // the screen, open from the start
+    lb_read_begin(&g_rd, r, NULL, start - 1);
+    CHECK_EQ_INT(lb_read_next(&g_rd, &first), 1);
+    CHECK_EQ_INT(first.seq, start);
+    lb_reader_t open_screen = g_rd;
+
+    uint32_t page = 0, poll = 0;
+    for (unsigned i = 0; i < 1200; i++) {            // 20 minutes of asking
+        push_poll(r, 100 + i);
+        if (i == 300) {
+            l = mk(0, 'I', "lw300", "job 12: page 1 sent");
+            lb_ring_push(r, &l);
+            page = l.seq;
+        }
+        if (i == 30) poll = lb_ring_newest(r);
+        CHECK_EQ_INT(lb_has_urgent(&g_s, r), 0);     // so nothing goes to flash
+    }
+    l = mk(0, 'W', "lw300", "printer 2: cover open");
+    lb_ring_push(r, &l);
+    uint32_t warn = l.seq;
+
+    // What the screen shows during the job, from RAM alone: the job's lines, and the latest asking.
+    CHECK(has_seq(r, NULL, start));
+    CHECK(has_seq(r, NULL, page));
+    CHECK(has_seq(r, NULL, warn));
+    CHECK(has_seq(r, NULL, warn - 1));
+    CHECK(!has_seq(r, NULL, poll));                  // the asking at the start has gone
+    uint32_t last = 0;
+    CHECK(read_all(r, NULL, 0, NULL, &last) > 100);
+    CHECK_EQ_INT(last, warn);
+
+    // The screen left open carries on in order, past everything the asking pushed out.
+    g_rd = open_screen;
+    uint32_t prev = start;
+    int saw_page = 0;
+    while (lb_read_next(&g_rd, &l)) {
+        CHECK(l.seq > prev);
+        prev = l.seq;
+        saw_page |= l.seq == page;
+    }
+    CHECK(saw_page);
+    CHECK_EQ_INT(prev, warn);
+
+    // The warning saves the job's lines, and only those.
+    CHECK_EQ_INT(lb_has_urgent(&g_s, r), 1);
+    CHECK_EQ_INT(lb_save(&g_s, r), 3);
+    CHECK(has_seq(fresh_ring(), &g_s, start));       // flash alone has them, after a power cut
+    CHECK(has_seq(fresh_ring(), &g_s, page));
+}
+
+// The ring holds the asking apart from the rest; a restart keeps both, numbered as one.
+static void test_ring_attach_keeps_polls(void)
+{
+    lb_ring_t *r = fresh_ring();
+    lb_ring_begin_run(r, 1, 0);
+    push_lines(r, 5, 'I', 0);
+    push_poll(r, 1);                                 // the newest two are asking
+    int kept = 0;
+    r = lb_ring_attach(g_ring, sizeof g_ring, &kept);
+    CHECK_EQ_INT(kept, 1);
+    CHECK_EQ_INT(lb_ring_newest(r), 7);
+    uint32_t first = 0, last = 0;
+    CHECK_EQ_INT(read_all(r, NULL, 0, &first, &last), 7);
+    CHECK_EQ_INT(first, 1);
+    CHECK_EQ_INT(last, 7);
+    lb_ring_begin_run(r, 1, 0);
+    lb_line_t l = mk(0, 'S', "sys", "reset=panic");
+    lb_ring_push(r, &l);
+    CHECK_EQ_INT(l.seq, 8);
+    CHECK_EQ_INT(l.run, 2);
+}
+
 static void test_reader_merge(void)
 {
     lb_flash_t f = ff_ops();
@@ -804,6 +915,8 @@ int main(void)
     test_save_one_at_a_time();
     test_store_unknown_format();
     test_save_skips_chatter();
+    test_polls_keep_a_jobs_lines();
+    test_ring_attach_keeps_polls();
     test_reader_merge();
     test_reader_leaves_flash_alone_when_ram_has_it_all();
     test_reader_overwrite();

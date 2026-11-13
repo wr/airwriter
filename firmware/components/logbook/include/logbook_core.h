@@ -65,17 +65,21 @@ size_t lb_wire(const lb_line_t *l, char *buf, size_t cap);
 // The line a crash leaves behind.
 void lb_crash_text(const lb_crash_t *c, char *buf, size_t cap);
 
-#define LB_RING_BYTES   32768u
-#define LB_SECTOR_BYTES 4096u
-#define LB_SECTORS      64u
-#define LB_ERASED_AHEAD 2u
-#define LB_REC_MAX      (16u + LB_TAG_MAX + LB_TEXT_MAX + 1u)
+#define LB_RING_BYTES    40960u
+#define LB_CHATTER_BYTES 8192u              // of LB_RING_BYTES, the ram_only lines' part
+#define LB_SECTOR_BYTES  4096u
+#define LB_SECTORS       64u
+#define LB_ERASED_AHEAD  2u
+#define LB_REC_MAX       (16u + LB_TAG_MAX + LB_TEXT_MAX + 1u)
 
 // The RAM ring: encoded records, its header at the start of the memory it's given. Survives a
-// restart if the memory does; a push cut off part way loses that one line and no others.
+// restart if the memory does; a push cut off part way loses that one line and no others. It has
+// two parts, each oldest first: ram_only lines push out only each other, so a phone asking every
+// second can't push out lines still waiting to be saved. Numbers run across both.
 typedef struct lb_ring lb_ring_t;
+#define LB_RING_PARTS 2u
 
-lb_ring_t *lb_ring_attach(void *mem, size_t bytes, int *kept);
+lb_ring_t *lb_ring_attach(void *mem, size_t bytes, int *kept);              // bytes: LB_RING_BYTES
 void     lb_ring_begin_run(lb_ring_t *r, uint32_t min_seq, uint16_t last_run);  // next seq = max(its own, min_seq); run = max(its own, last_run) + 1
 void     lb_ring_push(lb_ring_t *r, lb_line_t *l);                              // sets l->seq and l->run
 uint32_t lb_ring_newest(const lb_ring_t *r);
@@ -106,7 +110,7 @@ typedef struct {
 void     lb_store_open(lb_store_t *s, const lb_flash_t *f);
 int      lb_store_append(lb_store_t *s, const lb_line_t *l);   // 0 when there's no erased room
 void     lb_store_prepare(lb_store_t *s);                      // erases until LB_ERASED_AHEAD sectors are ready
-unsigned lb_save(lb_store_t *s, const lb_ring_t *r);           // lines saved; moves last_seq past each, skipping ram_only
+unsigned lb_save(lb_store_t *s, const lb_ring_t *r);           // lines saved; moves last_seq past each (never the ram_only part)
 int      lb_save_next(lb_store_t *s, const lb_ring_t *r);      // lb_save a line at a time: the next one in s->line, for lb_store_append; 0 when caught up
 int      lb_has_urgent(const lb_store_t *s, const lb_ring_t *r);  // a warning or error newer than last_seq
 void     lb_store_clear(lb_store_t *s);
@@ -116,10 +120,10 @@ typedef struct {
     const lb_ring_t  *r;
     const lb_store_t *s;                    // NULL: RAM only
     uint32_t  last;                         // the last seq handed out
-    uint32_t  r_pos, r_gen;
+    uint32_t  r_pos[LB_RING_PARTS], r_gen[LB_RING_PARTS];
     uint32_t  f_no, f_idx, f_off;           // the sector being read; f_no 0: none yet
-    uint8_t   r_have, f_have;
-    lb_line_t r_line, f_line;
+    uint8_t   r_have[LB_RING_PARTS], f_have;
+    lb_line_t r_line[LB_RING_PARTS], f_line;
     uint8_t   buf[LB_REC_MAX];
 } lb_reader_t;
 

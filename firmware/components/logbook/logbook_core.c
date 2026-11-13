@@ -244,19 +244,31 @@ void lb_crash_text(const lb_crash_t *c, char *buf, size_t cap)
 }
 
 // ---- the RAM ring ----
+//
+// Two parts, each a ring of records oldest first: the lines flash keeps, and the ram_only ones it
+// never does. A Mac with a job queued asks after the printer every second, and during a job
+// nothing is saved until a warning, so in one ring the asking pushed out the job's own lines
+// before they were saved (W-1142, board 1, 2026-11-13).
 
 enum { RING_WRAP = 0x00 };                  // in place of a record: the next one is at offset 0
-#define RING_MAGIC 0x4C4F4731u
+#define RING_MAGIC 0x4C4F4732u              // "LOG2": in two parts
+
+typedef struct {
+    uint32_t off, cap;                      // where in data, and how much
+    uint32_t tail, head;                    // equal: empty. Never run into each other full.
+} ring_part_t;
 
 struct lb_ring {
-    uint32_t magic, cap;
-    uint32_t tail, head;                    // equal: empty. Never run into each other full.
-    uint32_t next_seq;
-    uint32_t gen;                           // moves when a record is dropped, for readers
-    uint16_t run;
-    uint16_t pad;
-    uint8_t  data[];
+    uint32_t    magic, cap;
+    ring_part_t part[LB_RING_PARTS];        // [0] the lines flash keeps, [1] the ram_only ones
+    uint32_t    next_seq;
+    uint32_t    gen;                        // moves when a record is dropped, for readers
+    uint16_t    run;
+    uint16_t    pad;
+    uint8_t     data[];
 };
+
+#define AT(r, p, pos) ((r)->data + (p)->off + (pos))
 
 static size_t rec_len(const uint8_t *p) { return REC_HEAD + (size_t)p[3] + get16(p + 4) + 1; }
 static uint32_t rec_seq(const uint8_t *p) { return get32(p + 8); }
@@ -265,7 +277,8 @@ static void ring_init(lb_ring_t *r, uint32_t cap)
 {
     r->magic = RING_MAGIC;
     r->cap = cap;
-    r->tail = r->head = 0;
+    r->part[0] = (ring_part_t){ 0, cap - LB_CHATTER_BYTES, 0, 0 };
+    r->part[1] = (ring_part_t){ cap - LB_CHATTER_BYTES, LB_CHATTER_BYTES, 0, 0 };
     r->next_seq = 1;
     r->gen = 0;
     r->run = 0;
@@ -273,45 +286,58 @@ static void ring_init(lb_ring_t *r, uint32_t cap)
 }
 
 // Goes round the end if a wrap marker is what's at pos.
-static uint32_t ring_norm(const lb_ring_t *r, uint32_t pos)
+static uint32_t ring_norm(const lb_ring_t *r, const ring_part_t *p, uint32_t pos)
 {
-    return pos != r->head && r->data[pos] == RING_WRAP ? 0 : pos;
+    return pos != p->head && *AT(r, p, pos) == RING_WRAP ? 0 : pos;
 }
 
-lb_ring_t *lb_ring_attach(void *mem, size_t bytes, int *kept)
+static int part_ok(const ring_part_t *p, uint32_t off, uint32_t cap)
 {
-    lb_ring_t *r = mem;
-    uint32_t cap = (uint32_t)(bytes - sizeof *r);
-    *kept = 0;
-    if (r->magic != RING_MAGIC || r->cap != cap || r->tail >= cap || r->head >= cap) {
-        ring_init(r, cap);
-        return r;
-    }
+    return p->off == off && p->cap == cap && p->tail < cap && p->head < cap;
+}
 
-    // Trust only what reads back whole: the end moves to the first record that doesn't.
-    uint32_t pos = r->tail, last_seq = 0;
-    uint16_t last_run = 0;
+// Trust only what reads back whole: the part ends at the first record that doesn't, and if not
+// even its oldest does, it starts empty. Its newest seq and run go in *seq and *run if newer.
+static void part_attach(lb_ring_t *r, ring_part_t *p, uint32_t *seq, uint16_t *run)
+{
+    uint32_t pos = p->tail;
     int wrapped = 0;
-    while (pos != r->head) {
-        if (r->data[pos] == RING_WRAP) {
+    while (pos != p->head) {
+        const uint8_t *at = AT(r, p, pos);
+        if (*at == RING_WRAP) {
             if (wrapped) break;
             wrapped = 1;
             pos = 0;
             continue;
         }
-        size_t n = rec_check(r->data + pos, cap - pos);
-        if (!n || pos + n >= cap) break;
-        last_seq = rec_seq(r->data + pos);
-        last_run = get16(r->data + pos + 6);
+        size_t n = rec_check(at, p->cap - pos);
+        if (!n || pos + n >= p->cap) break;
+        if (rec_seq(at) > *seq) {
+            *seq = rec_seq(at);
+            *run = get16(at + 6);
+        }
         pos += (uint32_t)n;
     }
-    if (pos != r->head) {
-        if (r->data[r->tail] != RING_WRAP && !rec_check(r->data + r->tail, cap - r->tail)) {
-            ring_init(r, cap);              // not even the oldest reads back
-            return r;
-        }
-        r->head = pos;
+    if (pos == p->head) return;
+    const uint8_t *oldest = AT(r, p, p->tail);
+    if (*oldest != RING_WRAP && !rec_check(oldest, p->cap - p->tail)) p->tail = pos = 0;
+    p->head = pos;
+}
+
+lb_ring_t *lb_ring_attach(void *mem, size_t bytes, int *kept)
+{
+    lb_ring_t *r = mem;
+    uint32_t cap = (uint32_t)(bytes - sizeof *r), keep = cap - LB_CHATTER_BYTES;
+    *kept = 0;
+    if (r->magic != RING_MAGIC || r->cap != cap || !part_ok(&r->part[0], 0, keep)
+        || !part_ok(&r->part[1], keep, LB_CHATTER_BYTES)) {
+        ring_init(r, cap);
+        return r;
     }
+
+    uint32_t last_seq = 0;
+    uint16_t last_run = 0;
+    for (unsigned i = 0; i < LB_RING_PARTS; i++) part_attach(r, &r->part[i], &last_seq, &last_run);
     if (last_seq) {
         r->next_seq = last_seq + 1;
         r->run = last_run;
@@ -327,39 +353,40 @@ void lb_ring_begin_run(lb_ring_t *r, uint32_t min_seq, uint16_t last_run)
     r->run = (uint16_t)((r->run > last_run ? r->run : last_run) + 1);
 }
 
-static void ring_drop_oldest(lb_ring_t *r)
+static void ring_drop_oldest(lb_ring_t *r, ring_part_t *p)
 {
-    uint32_t t = r->tail + (uint32_t)rec_len(r->data + r->tail);
+    uint32_t t = p->tail + (uint32_t)rec_len(AT(r, p, p->tail));
     r->gen++;
-    r->tail = ring_norm(r, t);
+    p->tail = ring_norm(r, p, t);
 }
 
 void lb_ring_push(lb_ring_t *r, lb_line_t *l)
 {
+    ring_part_t *p = &r->part[l->ram_only ? 1 : 0];
     l->seq = r->next_seq;
     l->run = r->run;
     size_t n = REC_HEAD + strnlen(l->tag, LB_TAG_MAX) + strnlen(l->text, LB_TEXT_MAX) + 1;
 
     for (;;) {
-        if (r->tail > r->head) {            // live data runs round the end
-            if (r->head + n < r->tail) break;
-            ring_drop_oldest(r);
-        } else if (r->head + n < r->cap) {
+        if (p->tail > p->head) {            // live data runs round the end
+            if (p->head + n < p->tail) break;
+            ring_drop_oldest(r, p);
+        } else if (p->head + n < p->cap) {
             break;
-        } else if (r->tail == r->head) {    // empty, with no room before the end
-            r->tail = r->head = 0;
+        } else if (p->tail == p->head) {    // empty, with no room before the end
+            p->tail = p->head = 0;
             break;
-        } else if (r->tail > n) {           // room at the front
-            r->data[r->head] = RING_WRAP;
-            r->head = 0;
+        } else if (p->tail > n) {           // room at the front
+            *AT(r, p, p->head) = RING_WRAP;
+            p->head = 0;
             break;
         } else {
-            ring_drop_oldest(r);
+            ring_drop_oldest(r, p);
         }
     }
 
-    lb_encode(l, r->data + r->head, r->cap - r->head);
-    r->head += (uint32_t)n;
+    lb_encode(l, AT(r, p, p->head), p->cap - p->head);
+    p->head += (uint32_t)n;
     r->next_seq++;
 }
 
@@ -489,26 +516,20 @@ int lb_store_append(lb_store_t *s, const lb_line_t *l)
     return 1;
 }
 
-// The first record in the ring newer than seq, or the ring's head.
-static uint32_t ring_seek(const lb_ring_t *r, uint32_t seq)
+// The first record in part p newer than seq, or the part's head.
+static uint32_t ring_seek(const lb_ring_t *r, const ring_part_t *p, uint32_t seq)
 {
-    uint32_t pos = ring_norm(r, r->tail);
-    while (pos != r->head && rec_seq(r->data + pos) <= seq)
-        pos = ring_norm(r, pos + (uint32_t)rec_len(r->data + pos));
+    uint32_t pos = ring_norm(r, p, p->tail);
+    while (pos != p->head && rec_seq(AT(r, p, pos)) <= seq)
+        pos = ring_norm(r, p, pos + (uint32_t)rec_len(AT(r, p, pos)));
     return pos;
 }
 
 int lb_save_next(lb_store_t *s, const lb_ring_t *r)
 {
-    uint32_t pos = ring_seek(r, s->last_seq);
-    while (pos != r->head) {
-        size_t n = lb_decode(r->data + pos, r->cap - pos, &s->line);
-        if (!n) return 0;
-        if (!s->line.ram_only) return 1;
-        s->last_seq = s->line.seq;
-        pos = ring_norm(r, pos + (uint32_t)n);
-    }
-    return 0;
+    const ring_part_t *p = &r->part[0];
+    uint32_t pos = ring_seek(r, p, s->last_seq);
+    return pos != p->head && lb_decode(AT(r, p, pos), p->cap - pos, &s->line);
 }
 
 unsigned lb_save(lb_store_t *s, const lb_ring_t *r)
@@ -520,11 +541,12 @@ unsigned lb_save(lb_store_t *s, const lb_ring_t *r)
 
 int lb_has_urgent(const lb_store_t *s, const lb_ring_t *r)
 {
-    uint32_t pos = ring_seek(r, s->last_seq);
-    while (pos != r->head) {
-        const uint8_t *p = r->data + pos;
-        if ((p[1] == 'W' || p[1] == 'E') && !(p[2] & FLAG_RAM_ONLY)) return 1;
-        pos = ring_norm(r, pos + (uint32_t)rec_len(p));
+    const ring_part_t *p = &r->part[0];
+    uint32_t pos = ring_seek(r, p, s->last_seq);
+    while (pos != p->head) {
+        const uint8_t *at = AT(r, p, pos);
+        if (at[1] == 'W' || at[1] == 'E') return 1;
+        pos = ring_norm(r, p, pos + (uint32_t)rec_len(at));
     }
     return 0;
 }
@@ -545,38 +567,44 @@ void lb_store_clear(lb_store_t *s)
 
 void lb_read_begin(lb_reader_t *rd, const lb_ring_t *r, const lb_store_t *s, uint32_t after)
 {
-    // The ring has every line from its oldest on, so a reader already there can leave flash alone.
-    uint32_t oldest = ring_norm(r, r->tail);
-    if (oldest != r->head && rec_seq(r->data + oldest) <= after + 1) s = NULL;
+    // Flash keeps only part 0's lines, and part 0 has every one from its oldest on, so a reader
+    // already there can leave flash alone.
+    const ring_part_t *p = &r->part[0];
+    uint32_t oldest = ring_norm(r, p, p->tail);
+    if (oldest != p->head && rec_seq(AT(r, p, oldest)) <= after + 1) s = NULL;
 
     rd->r = r;
     rd->s = s;
     rd->last = after;
-    rd->r_pos = ring_seek(r, after);
-    rd->r_gen = r->gen;
+    for (unsigned i = 0; i < LB_RING_PARTS; i++) {
+        rd->r_pos[i] = ring_seek(r, &r->part[i], after);
+        rd->r_gen[i] = r->gen;
+        rd->r_have[i] = 0;
+    }
     rd->f_no = rd->f_idx = rd->f_off = 0;
-    rd->r_have = rd->f_have = 0;
+    rd->f_have = 0;
 }
 
-static void r_fill(lb_reader_t *rd)
+static void r_fill(lb_reader_t *rd, unsigned i)
 {
     const lb_ring_t *r = rd->r;
-    if (rd->r_have) return;
-    if (rd->r_gen != r->gen) {              // records have gone: find our place again
-        rd->r_pos = ring_seek(r, rd->last);
-        rd->r_gen = r->gen;
+    const ring_part_t *p = &r->part[i];
+    if (rd->r_have[i]) return;
+    if (rd->r_gen[i] != r->gen) {           // records have gone: find our place again
+        rd->r_pos[i] = ring_seek(r, p, rd->last);
+        rd->r_gen[i] = r->gen;
     }
-    uint32_t pos = ring_norm(r, rd->r_pos);
-    while (pos != r->head && rec_seq(r->data + pos) <= rd->last)
-        pos = ring_norm(r, pos + (uint32_t)rec_len(r->data + pos));
-    if (pos != r->head) {
-        size_t n = lb_decode(r->data + pos, r->cap - pos, &rd->r_line);
+    uint32_t pos = ring_norm(r, p, rd->r_pos[i]);
+    while (pos != p->head && rec_seq(AT(r, p, pos)) <= rd->last)
+        pos = ring_norm(r, p, pos + (uint32_t)rec_len(AT(r, p, pos)));
+    if (pos != p->head) {
+        size_t n = lb_decode(AT(r, p, pos), p->cap - pos, &rd->r_line[i]);
         if (n) {
-            rd->r_have = 1;
-            pos = ring_norm(r, pos + (uint32_t)n);
+            rd->r_have[i] = 1;
+            pos = ring_norm(r, p, pos + (uint32_t)n);
         }
     }
-    rd->r_pos = pos;
+    rd->r_pos[i] = pos;
 }
 
 // Moves to the next sector worth reading. 0 when there are no more.
@@ -627,14 +655,25 @@ static void f_fill(lb_reader_t *rd)
 
 int lb_read_next(lb_reader_t *rd, lb_line_t *out)
 {
-    r_fill(rd);
     f_fill(rd);
-    if (rd->r_have && rd->f_have && rd->r_line.seq == rd->f_line.seq) rd->f_have = 0;
-    if (!rd->r_have && !rd->f_have) return 0;
-
-    int use_ram = rd->r_have && (!rd->f_have || rd->r_line.seq < rd->f_line.seq);
-    *out = use_ram ? rd->r_line : rd->f_line;
-    if (use_ram) rd->r_have = 0; else rd->f_have = 0;
+    const lb_line_t *next = NULL;
+    uint8_t *taken = NULL;
+    for (unsigned i = 0; i < LB_RING_PARTS; i++) {
+        r_fill(rd, i);
+        if (!rd->r_have[i]) continue;
+        if (rd->f_have && rd->f_line.seq == rd->r_line[i].seq) rd->f_have = 0;   // in both
+        if (!next || rd->r_line[i].seq < next->seq) {
+            next = &rd->r_line[i];
+            taken = &rd->r_have[i];
+        }
+    }
+    if (rd->f_have && (!next || rd->f_line.seq < next->seq)) {
+        next = &rd->f_line;
+        taken = &rd->f_have;
+    }
+    if (!next) return 0;
+    *out = *next;
+    *taken = 0;
     rd->last = out->seq;
     return 1;
 }
