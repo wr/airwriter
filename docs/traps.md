@@ -53,6 +53,11 @@ Traps already explained in a code comment are listed only when the comment is ea
 - **`SPIRAM_TRY_ALLOCATE_WIFI_LWIP` is not the cure.** It forces Wi-Fi to 16 static TX buffers in
   internal RAM: idle free fell from 29 KB to 13 KB with a 5 KB largest block, no job could
   start its rip task, and board 1 fell off Wi-Fi until replugged.
+- **ESP-IDF's defaults are slow: 160 MHz and `-Og`.** `sdkconfig.defaults.esp32s3` sets 240 MHz
+  (W-1143), but a local sdkconfig made before keeps 160 until it gets
+  `CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ_240=y`. The whole firmware stays at ESP-IDF's debug
+  optimisation; the rip's components ask for `-O2` in their own CMakeLists (SPEC §3.7), which a
+  new per-row component should do too.
 - **The rip task's stack is internal and tight.** A task that may write flash (the rip's
   `done` keeps the known-good record) needs an internal stack, and 8 KB in one piece is often
   not free when a job starts: raising `PIPE_STACK` made jobs fail at once. Keep big state off

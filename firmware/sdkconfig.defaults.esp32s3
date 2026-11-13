@@ -21,3 +21,7 @@ CONFIG_MBEDTLS_EXTERNAL_MEM_ALLOC=y
 # W-1136: the log's newest lines live in PSRAM that startup leaves alone, so what the board
 # was doing before a crash is still there after it. main.c checks it.
 CONFIG_SPIRAM_ALLOW_NOINIT_SEG_EXTERNAL_MEMORY=y
+# W-1143: the processor at its full 240 MHz rather than ESP-IDF's 160. Ripping a page is the
+# slowest step of printing one (on board 1 a blank page took a Personal LaserWriter 300's rip
+# about 21 s at 160 MHz).
+CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ_240=y
