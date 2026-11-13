@@ -7,12 +7,20 @@
 // into it.
 #define QD_OUT(d) (((d) * 2540 + 299) / 300)
 
-// The Personal LaserWriter 300's sheets, Letter first: the IPP name and size (1/100 mm),
-// Apple's paper (PREC 3 of Apple's LaserWriter 300 driver 1.1, in 1/120 in, times 2.5 and
-// rounded down), the page a client sends at 300 dpi, and the image area the driver gives the
-// printer for that paper, read out of the same driver's page setup (CODE -8191, -8195).
+// The Personal LaserWriter 300's sheets, Letter first, then as Apple's driver lists them: the
+// IPP name and size (1/100 mm), Apple's paper (PREC 3 of Apple's LaserWriter 300 driver 1.1,
+// in 1/120 in, times 2.5 and rounded down), the page a client sends at 300 dpi, and the image
+// area the driver gives the printer for that paper, read out of the same driver's page setup
+// (CODE -8262 makes the rectangle, CODE -8195 sends it). Where the driver's area is not a
+// whole number of bytes across (Executive 2067, #10 1133, Monarch 1067 dots), the width is the
+// row the driver sends, rounded up to a byte. Only Letter has been printed.
 #define PLW300_SHEETS(X) \
-    X("na_letter_8.5x11in", 21590, 27940, 2550, 3300, 2550, 3300, 2400, 3175)
+    X("na_letter_8.5x11in",       21590, 27940, 2550, 3300, 2550, 3300, 2400, 3175) \
+    X("na_legal_8.5x14in",        21590, 35560, 2550, 4200, 2550, 4200, 2000, 3750) \
+    X("na_executive_7.25x10.5in", 18415, 26670, 2175, 3150, 2175, 3150, 2072, 3025) \
+    X("na_number-10_4.125x9.5in", 10478, 24130, 1237, 2850, 1238, 2850, 1136, 2725) \
+    X("na_monarch_3.875x7.5in",    9843, 19050, 1162, 2250, 1163, 2250, 1072, 2125) \
+    X("iso_a4_210x297mm",         21000, 29700, 2475, 3500, 2480, 3508, 2400, 3375)
 
 #define QD_MEDIA_ROW(NAME, X_, Y_, PW, PH, GW, GH, IW, IH) { NAME, PW, PH, GW, GH, IW, IH },
 static const qd_media_t k_plw300_media[] = { PLW300_SHEETS(QD_MEDIA_ROW) };
