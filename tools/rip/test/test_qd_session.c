@@ -685,6 +685,24 @@ static void test_manual_never_fed_stalls_then_fails(void)
     CHECK(only_manual && F.nst >= 2);
     CHECK_EQ_INT(count_tok("8A01"), 0);
     CHECK_HAS(F.trace, "832A 8402");
+    // The job fails and its caller aborts: the cassette again, or the printer keeps the slot
+    // and pulls in the next sheet put there (board 1, 2026-11-13).
+    qd_session_abort(s);
+    const char *t = F.trace + F.tn - strlen("8A00 834C 8100 8401");
+    CHECK_STR(t, "8A00 834C 8100 8401");
+    qd_session_free(s);
+}
+
+static void test_cancel_while_waiting_for_the_manual_slot(void)
+{
+    fake_reset();
+    qd_session_t *s = loaded(1, 0);       // the cassette has paper, the slot none
+    F.cancel_at_ms = f_now() + 4000;
+    CHECK_EQ_INT(qd_session_print(s), QD_E_CANCEL);
+    CHECK(saw_state(QDS_MANUAL));
+    const char *t = F.trace + F.tn - strlen("8A00 834C 8100 8401");
+    CHECK_STR(t, "8A00 834C 8100 8401");
+    CHECK_EQ_INT(count_tok("8A01"), 0);
     qd_session_free(s);
 }
 
@@ -804,6 +822,15 @@ static void test_end_and_abort(void)
     qd_session_abort(s);                   // once
     CHECK_STR(F.trace, "8A00 8100 8401");
     qd_session_free(s);
+
+    fake_reset();                          // a manual-slot job: the cassette again
+    F.s2a = 0x60;
+    s = loaded(1, 0);
+    F.tn = 0;
+    F.trace[0] = 0;
+    qd_session_abort(s);
+    CHECK_STR(F.trace, "8A00 834C 8100 8401");
+    qd_session_free(s);
 }
 
 int main(void)
@@ -829,6 +856,7 @@ int main(void)
     test_cancel();
     test_cancel_while_waiting_for_paper();
     test_manual_never_fed_stalls_then_fails();
+    test_cancel_while_waiting_for_the_manual_slot();
     test_clock_lost_mid_rows();
     test_readback_mismatch();
     test_refused_reply_retries_5_then_offline();

@@ -167,9 +167,18 @@ static int cancelled(qd_session_t *s)
     return s->o.cancelled && s->o.cancelled(s->o.ctx);
 }
 
+// A job that took or asked for the manual slot sets the cassette again as it stops, however it
+// stops: the printer otherwise keeps the slot and pulls in the next sheet put there (board 1,
+// 2026-11-13). Its reply waits for the next question's drain.
+static void cassette_again(qd_session_t *s)
+{
+    if (s->c.manual) put_cmd(&s->o, 0x83, 0x4C);
+}
+
 static int cancel(qd_session_t *s)
 {
     cmd(s, 0x8A, 0x00);
+    cassette_again(s);
     cmd(s, 0x81, 0x00);
     cmd(s, 0x84, 0x01);
     s->o.flush(s->o.ctx);
@@ -447,6 +456,7 @@ void qd_session_abort(qd_session_t *s)
     if (!s->wrote || s->closed) return;
     s->closed = 1;
     put_cmd(&s->o, 0x8A, 0x00);
+    cassette_again(s);
     put_cmd(&s->o, 0x81, 0x00);
     put_cmd(&s->o, 0x84, 0x01);
     s->o.flush(s->o.ctx);
