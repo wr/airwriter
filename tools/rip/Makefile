@@ -36,7 +36,7 @@ SRCS    := $(wildcard $(COMP)/ripjob/*.c) \
            $(COMP)/stylewriter/sw_testpage.c $(COMP)/stylewriter/sw_unpack.c \
            $(COMP)/printers/port_policy.c \
            $(COMP)/qdlaser/qd_model.c $(COMP)/qdlaser/qd_wire.c $(COMP)/qdlaser/qd_status.c \
-           $(COMP)/qdlaser/qd_page.c \
+           $(COMP)/qdlaser/qd_page.c $(COMP)/qdlaser/qd_session.c \
            $(COMP)/serial_out/serial_writer.c
 TESTSRC := $(wildcard test/test_*.c)
 TESTBIN := $(patsubst test/%.c,build/%,$(TESTSRC))
@@ -176,7 +176,7 @@ build/sw_%.o: $(COMP)/stylewriter/sw_%.c | build
 	$(CC) $(CFLAGS) $(INCS) -c -o $@ $<
 
 # The QuickDraw LaserWriters' cores (W-1102), held to the same rule.
-QD_OBJS := build/qd_model.o build/qd_wire.o build/qd_status.o build/qd_page.o
+QD_OBJS := build/qd_model.o build/qd_wire.o build/qd_status.o build/qd_page.o build/qd_session.o
 build/qd_%.o: $(COMP)/qdlaser/qd_%.c | build
 	$(CC) $(CFLAGS) $(INCS) -c -o $@ $<
 
