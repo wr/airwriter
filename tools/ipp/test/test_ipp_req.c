@@ -128,9 +128,53 @@ static void test_job_media_source_manual(void)
     CHECK(strcmp(r.job_name, "Op") == 0);
 }
 
+/* W-1102: a Mac's print dialog sends no media-col. Its Paper Feed is the PPD option InputSlot,
+ * passed as a Job attribute of its own, with the paper as `media` (macOS 26, board 1,
+ * 2026-11-13: InputSlot "Manual", media "Letter", PageSize "Letter"). */
+static void mac_job(bld_t *m, const char *slot)
+{
+    hdr(m, IPP_OP_PRINT_JOB, 50);
+    u8(m, IPP_TAG_OPERATION);
+    attr(m, IPP_TAG_NAME, "job-name", "Mac");
+    u8(m, IPP_TAG_JOB);
+    attr(m, IPP_TAG_NAME, "HPColorMode", "grayscale");
+    attr(m, IPP_TAG_NAME, "InputSlot", slot);
+    attr(m, IPP_TAG_KEYWORD, "media", "Letter");
+    attr(m, IPP_TAG_NAME, "PageSize", "Letter");
+    attr_i(m, IPP_TAG_INTEGER, "copies", 1);
+    u8(m, IPP_TAG_END);
+}
+
+static void test_job_input_slot_from_a_mac(void)
+{
+    bld_t m;
+    ipp_req_t r;
+    mac_job(&m, "Manual");
+    CHECK_EQ_INT(ipp_req_parse(&r, m.b, m.n), IPP_REQ_OK);
+    CHECK_EQ_INT(r.opts.manual, 1);
+    mac_job(&m, "manual");
+    CHECK_EQ_INT(ipp_req_parse(&r, m.b, m.n), IPP_REQ_OK);
+    CHECK_EQ_INT(r.opts.manual, 1);
+    mac_job(&m, "Main");
+    CHECK_EQ_INT(ipp_req_parse(&r, m.b, m.n), IPP_REQ_OK);
+    CHECK_EQ_INT(r.opts.manual, 0);
+    mac_job(&m, "ManualFeed");
+    CHECK_EQ_INT(ipp_req_parse(&r, m.b, m.n), IPP_REQ_OK);
+    CHECK_EQ_INT(r.opts.manual, 0);
+
+    /* In the Operation group it is not the job's. */
+    hdr(&m, IPP_OP_PRINT_JOB, 51);
+    u8(&m, IPP_TAG_OPERATION);
+    attr(&m, IPP_TAG_NAME, "InputSlot", "Manual");
+    u8(&m, IPP_TAG_END);
+    CHECK_EQ_INT(ipp_req_parse(&r, m.b, m.n), IPP_REQ_OK);
+    CHECK_EQ_INT(r.opts.manual, 0);
+}
+
 int main(void)
 {
     test_job_media_source_manual();
+    test_job_input_slot_from_a_mac();
     bld_t m;
     ipp_req_t r;
 

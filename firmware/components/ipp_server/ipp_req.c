@@ -37,6 +37,18 @@ static int name_is(const uint8_t *name, size_t nlen, const char *want)
     return nlen == strlen(want) && memcmp(name, want, nlen) == 0;
 }
 
+// The same with ASCII case ignored: a Mac sends InputSlot's choice as "Manual".
+static int name_is_ci(const uint8_t *name, size_t nlen, const char *want)
+{
+    if (nlen != strlen(want)) return 0;
+    for (size_t i = 0; i < nlen; i++) {
+        uint8_t a = name[i], b = (uint8_t)want[i];
+        if (a >= 'A' && a <= 'Z') a = (uint8_t)(a - 'A' + 'a');
+        if (a != b) return 0;
+    }
+    return 1;
+}
+
 // The job-id a job-uri names: its last path segment, which is how
 // ipp_job_start builds it. 0 -- never a job we issued -- if that is not a
 // number.
@@ -138,6 +150,12 @@ int ipp_req_parse(ipp_req_t *r, const uint8_t *buf, size_t len)
         // is print-quality, the operation group's follows. A collection's
         // members have empty names and never get this far.
         if (group == IPP_TAG_JOB) {
+            // A Mac's Paper Feed is the PPD option InputSlot, sent as a Job attribute of its own
+            // with no media-col (W-1102, board 1, 2026-11-13).
+            if (name_is(name, nlen, "InputSlot") &&
+                (tag == IPP_TAG_NAME || tag == IPP_TAG_KEYWORD || tag == IPP_TAG_TEXT) &&
+                name_is_ci(val, vlen, "manual"))
+                r->opts.manual = 1;
             if (name_is(name, nlen, "print-quality") && tag == IPP_TAG_ENUM && vlen == 4 &&
                 !r->opts.quality) {
                 uint32_t q = ((uint32_t)val[0] << 24) | ((uint32_t)val[1] << 16) |
