@@ -200,16 +200,23 @@ class Faults(unittest.TestCase):
     def test_each_fault_sets_its_bits(self):
         lw, _ = printer()
         self.assertEqual(self.reg(lw, 0x2A), 0x20)
-        lw.command("paper")
-        self.assertEqual(self.reg(lw, 0x2A), 0x00)
-        self.assertEqual(ask(lw, 0x82, 0) & 0x08, 0x08)           # engine not ready
-        lw.command("ok")
-        lw.command("cassette")                 # as board 1's printer answered, 2026-11-13
+        # No paper at the source chosen: 83 02 10 and 83 01's fault bit with it, as board 1's
+        # printer answered (2026-11-13), whether the cassette is empty or out.
+        for fault in ("paper", "cassette"):
+            lw.command(fault)
+            self.assertEqual(self.reg(lw, 0x2A), 0x00)
+            self.assertEqual(self.reg(lw, 0x02), 0x10)
+            self.assertEqual(self.reg(lw, 0x01) & 0x02, 0x02)
+            self.assertEqual(ask(lw, 0x82, 0) & 0x08, 0x08)       # engine not ready
+            lw.command("ok")
+        self.assertEqual(self.reg(lw, 0x02), 0x00)
+        # The manual slot chosen and empty is the same, the cassette full or not.
+        ask(lw, 0x83, 0x4F)
         self.assertEqual(self.reg(lw, 0x02), 0x10)
-        self.assertEqual(self.reg(lw, 0x01) & 0x02, 0x02)          # a fault stored
-        self.assertEqual(self.reg(lw, 0x2A), 0x00)
-        self.assertEqual(ask(lw, 0x82, 0) & 0x08, 0x08)           # engine not ready
-        lw.command("ok")
+        self.assertEqual(self.reg(lw, 0x01) & 0x02, 0x02)
+        ask(lw, 0x83, 0x4C)
+        self.assertEqual(self.reg(lw, 0x02), 0x00)
+        self.assertEqual(self.reg(lw, 0x01) & 0x02, 0x00)
         lw.command("manual")
         self.assertEqual(self.reg(lw, 0x2A), 0x60)
         lw.command("jam")

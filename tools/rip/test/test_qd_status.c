@@ -54,15 +54,18 @@ static void test_state_from(void)
     CHECK_EQ_INT(qd_state_from(sp, &r, 1), QDS_MANUAL);
 }
 
-// The cassette pulled out, as board 1's printer answered (2026-11-13): 83 01 says a fault is
-// stored, 83 02 sets 10, 83 2A has no paper and 82 00 says the engine isn't ready. It is the
-// cassette, not an engine fault.
-static void test_cassette_out_as_the_bench_read_it(void)
+// 83 02's 10 is no paper where the printer was told to take it from, and 83 01 sets its fault
+// bit with it, as board 1's printer answered (2026-11-13). It is paper, not an engine fault.
+static void test_no_paper_at_the_source_as_the_bench_read_it(void)
 {
     const qd_spec_t *sp = qd_spec(QD_PLW300);
-    qd_raw_t r = idle();
+    qd_raw_t r = idle();                            // the cassette pulled out
     r.s01 = 0x02; r.s02 = 0x10; r.s2a = 0x01; r.c82 = 0xAC;
-    CHECK_EQ_INT(qd_state_from(sp, &r, 0), QDS_NO_CASSETTE);
+    CHECK_EQ_INT(qd_state_from(sp, &r, 0), QDS_NO_PAPER);
+    r = idle();                                     // a page from the slot done, the slot empty
+    r.s01 = 0x02; r.s02 = 0x10; r.s2a = 0x20; r.c82 = 0xAC;
+    CHECK_EQ_INT(qd_state_from(sp, &r, 0), QDS_READY);
+    CHECK_EQ_INT(qd_state_from(sp, &r, 1), QDS_MANUAL);
 }
 
 static void test_ipp(void)
@@ -110,7 +113,7 @@ static void test_lights(void)
 int main(void)
 {
     test_state_from();
-    test_cassette_out_as_the_bench_read_it();
+    test_no_paper_at_the_source_as_the_bench_read_it();
     test_ipp();
     test_lights();
     TEST_END;

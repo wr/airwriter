@@ -375,8 +375,8 @@ static int wait_done(qd_session_t *s)
             printed = poll = now(s);
             continue;
         }
-        // The cassette pulled out also says a fault is stored: it waits below, as for paper.
-        if ((s01 & 0x02) && !(s02 & QD_S02_CASSETTE)) {
+        // No paper at the source also says a fault is stored: it waits below, as for paper.
+        if ((s01 & 0x02) && !(s02 & QD_S02_NO_PAPER)) {
             if ((rc = q(s, 0x83, 0x04)) < 0 || (rc = q(s, 0x83, 0x07)) < 0) return rc;
             state(s, QDS_ENGINE);
             return QD_E_FAULT;
@@ -428,6 +428,12 @@ int qd_session_end(qd_session_t *s)
     // try: a reply missed is Ready.
     int v = ask(&s->o, 0x83, 0x01, 1);
     int rc = v == QD_E_OFFLINE || v >= 0 ? 0 : v;
+    // A page from the manual slot leaves the printer taking paper from it: empty, it says it
+    // has no paper, and it pulls in any sheet put there. The cassette again, as at rest.
+    if (!rc && s->c.manual) {
+        int a = ask(&s->o, 0x83, 0x4C, 1);
+        if (a < 0 && a != QD_E_OFFLINE) rc = a;
+    }
     if (!rc) rc = cmd(s, 0x81, 0x00);
     if (!rc) rc = lights(s, 0x01);
     if (!rc) rc = flush(s);

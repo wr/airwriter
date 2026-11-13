@@ -451,6 +451,22 @@ static void test_end_while_the_sheet_comes_out(void)
     qd_session_free(s);
 }
 
+// A page from the manual slot leaves the printer taking paper from the slot, which then says it
+// has none and pulls in any sheet put there (board 1, 2026-11-13): the job's end sets the
+// cassette back.
+static void test_end_after_a_manual_page_sets_the_cassette_back(void)
+{
+    fake_reset();
+    F.s2a = 0x60;                         // a sheet in the slot, paper in the cassette
+    qd_session_t *s = loaded(1, 0);
+    CHECK_EQ_INT(qd_session_print(s), QD_OK);
+    F.tn = 0;
+    F.trace[0] = 0;
+    CHECK_EQ_INT(qd_session_end(s), QD_OK);
+    CHECK_STR(F.trace, "8301 834C 8100 8401");
+    qd_session_free(s);
+}
+
 static void test_done_by_break(void)
 {
     fake_reset();
@@ -547,7 +563,8 @@ static void test_paper_out_while_printing(void)
 }
 
 // The cassette pulled out, as board 1's printer answered (2026-11-13): 83 01 says a fault is
-// stored, 83 02 sets 10 and 83 2A has no paper. The page waits for it, as for paper.
+// stored, 83 02 sets 10 (no paper at the source) and 83 2A has no paper. The page waits for
+// paper.
 static void test_cassette_out_while_printing(void)
 {
     fake_reset();
@@ -555,7 +572,7 @@ static void test_cassette_out_while_printing(void)
     F.win_from_print = 1;
     F.win[F.nwin++] = (win_t){ 2000, 6000, 0x02, 0x10, 1 };
     CHECK_EQ_INT(qd_session_print(s), QD_OK);
-    CHECK(saw_state(QDS_NO_CASSETTE));
+    CHECK(saw_state(QDS_NO_PAPER));
     CHECK(!saw_state(QDS_ENGINE));
     CHECK_HAS(after("8A01"), "8A00");
     CHECK_EQ_INT(count_tok("8A01"), 2);
@@ -569,7 +586,7 @@ static void test_cassette_out_before_print(void)
     qd_session_t *s = loaded(0, 0);
     F.win[F.nwin++] = (win_t){ 0, f_now() + 3000, 0x02, 0x10, 1 };
     CHECK_EQ_INT(qd_session_print(s), QD_OK);
-    CHECK(saw_state(QDS_NO_CASSETTE));
+    CHECK(saw_state(QDS_NO_PAPER));
     CHECK(!saw_state(QDS_ENGINE));
     CHECK_EQ_INT(count_tok("8A01"), 1);
     qd_session_free(s);
@@ -817,6 +834,7 @@ int main(void)
     test_refused_reply_retries_5_then_offline();
     test_status_names_the_unanswered_question();
     test_end_while_the_sheet_comes_out();
+    test_end_after_a_manual_page_sets_the_cassette_back();
     test_power_off_while_waiting_done();
     test_status_idle();
     test_end_and_abort();

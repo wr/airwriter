@@ -255,7 +255,8 @@ async def scenario_too_big(root, noisy, blank):
             (len(fake.pages()) == 1, f"the next page still prints ({len(fake.pages())})")]
 
 
-STATES = {"paper": "out of paper", "cassette": "the paper cassette is out", "jam": "paper jam",
+# The cassette pulled out reads as no paper: board 1's printer answers it as it does an empty one.
+STATES = {"paper": "out of paper", "cassette": "out of paper", "jam": "paper jam",
           "cover": "the cover is open"}
 
 
@@ -299,8 +300,12 @@ async def scenario_manual(root, page, sheet_first):
     code = await run.wait()
     await fake.stop()
     heard = fake.heard()
+    # 83 4F before the page; 83 4C only after it, setting the cassette back at the job's end.
+    printed = max((i for i, t in enumerate(heard) if t == "8a018b"), default=len(heard))
     res += [(code == 0, f"{tag}: the page prints (exit {code})"),
-            ("834fcc" in heard and "834ccf" not in heard, f"{tag}: 83 4F chose the slot"),
+            ("834fcc" in heard[:printed] and "834ccf" not in heard[:printed],
+             f"{tag}: 83 4F chose the slot"),
+            ("834ccf" in heard[printed:], f"{tag}: the job's end sets the cassette back"),
             (len(fake.pages()) == 1, f"{tag}: one page printed ({len(fake.pages())})")]
     return res
 
