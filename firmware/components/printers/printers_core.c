@@ -3,6 +3,7 @@
 #include "lw_caps.h"
 #include "lt_proto.h"
 #include "sw_session.h"
+#include "qd_status.h"
 #include <stdio.h>
 #include <string.h>
 #include <strings.h>
@@ -21,8 +22,18 @@ const char *pr_where_name(int w)
 const char *pr_kind_name(int k)
 {
     static const char *const n[] = { "unknown", "imagewriter", "laserwriter",
-                                     "appletalk-imagewriter", "stylewriter" };
-    return k >= 0 && k <= PR_KIND_STYLEWRITER ? n[k] : "?";
+                                     "appletalk-imagewriter", "stylewriter", "qdlaser" };
+    return k >= 0 && k <= PR_KIND_QDLASER ? n[k] : "?";
+}
+
+pr_family_t pr_family_of(int kind)
+{
+    switch (kind) {
+    case PR_KIND_IMAGEWRITER: return PR_FAM_IMAGEWRITER;
+    case PR_KIND_STYLEWRITER: return PR_FAM_STYLEWRITER;
+    case PR_KIND_QDLASER:     return PR_FAM_QDLASER;
+    default:                  return PR_FAM_NONE;
+    }
 }
 
 int pr_fault_from_sw(int st)
@@ -37,6 +48,19 @@ int pr_fault_from_sw(int st)
     case SWS_WASTE:        return PR_FAULT_WASTE;
     case SWS_FAULT:        return PR_FAULT_OTHER;
     default:               return PR_FAULT_NONE;       // ready, printing, offline
+    }
+}
+
+int pr_fault_from_qd(int st)
+{
+    switch (st) {
+    case QDS_NO_PAPER:
+    case QDS_NO_CASSETTE:
+    case QDS_MANUAL:      return PR_FAULT_PAPER;
+    case QDS_JAM:         return PR_FAULT_JAM;
+    case QDS_COVER:       return PR_FAULT_COVER;
+    case QDS_ENGINE:      return PR_FAULT_OTHER;
+    default:              return PR_FAULT_NONE;       // ready, printing, offline
     }
 }
 
@@ -56,10 +80,27 @@ pr_model_t pr_model_from_sw(sw_model_t m)
     return PR_MODEL_NONE;
 }
 
+qd_model_t pr_model_to_qd(pr_model_t m)
+{
+    return m == PR_MODEL_PLW300 ? QD_PLW300 : QD_NONE;
+}
+
+pr_model_t pr_model_from_qd(qd_model_t m)
+{
+    return m == QD_PLW300 ? PR_MODEL_PLW300 : PR_MODEL_NONE;
+}
+
+int pr_has_apple_screen(int kind)
+{
+    return kind == PR_KIND_STYLEWRITER || kind == PR_KIND_QDLASER;
+}
+
 const char *pr_model_name(int m)
 {
     static const char *const n[] = { "", "ImageWriter II", "ImageWriter LQ", "ImageWriter" };
     if (m >= 0 && m <= PR_MODEL_IW1) return n[m];
+    const qd_spec_t *qs = qd_spec(pr_model_to_qd((pr_model_t)m));
+    if (qs) return qs->name;
     const sw_spec_t *sp = sw_spec(pr_model_to_sw((pr_model_t)m));
     return sp ? sp->name : "";
 }
@@ -113,7 +154,9 @@ const char *pr_icon(int kind, int model, const lw_info_t *lw)
     case PR_MODEL_SWC2200: return "csw2200";
     case PR_MODEL_SWC2400:
     case PR_MODEL_SWC2500: return "stylewriter";
-    default:               return kind == PR_KIND_STYLEWRITER ? "stylewriter" : "icon";
+    case PR_MODEL_PLW300:  return qd_spec(QD_PLW300)->icon;
+    default:               return kind == PR_KIND_STYLEWRITER ? "stylewriter"
+                                : kind == PR_KIND_QDLASER ? qd_spec(QD_PLW300)->icon : "icon";
     }
 }
 
@@ -206,6 +249,12 @@ int pr_port_is_stylewriter(const pr_list_t *l)
 {
     const pr_rec_t *p = pr_port_current(l);
     return p && p->kind == PR_KIND_STYLEWRITER;
+}
+
+int pr_port_is_qdlaser(const pr_list_t *l)
+{
+    const pr_rec_t *p = pr_port_current(l);
+    return p && p->kind == PR_KIND_QDLASER;
 }
 
 // How many records besides `r` are shared: `r` may be one of them already (a model change
@@ -352,13 +401,13 @@ static pr_rec_t *rec_new(pr_list_t *l)
 // own tag in place of a name's hash, at offset 28. Before W-1116 the tag was the family
 // alone ("0001" an ImageWriter, "0002" a StyleWriter), the same for every record; now it
 // is the model and the family, "%02x%02x", so each model's record is its own printer to
-// phones. A form already taken (by a record since corrected to another model) sets the
+// phones (W-1102: family 3, a QuickDraw LaserWriter). A form already taken (by a record since corrected to another model) sets the
 // model byte's top bit, then the next bit down, so no two records share one. Records
 // from before keep theirs.
 static void port_uuid(const pr_list_t *l, char out[46], int model)
 {
     static const uint8_t tag[] = { 1, 1 };
-    int family = model_is_sw(model) ? 2 : 1;
+    int family = model_is_sw(model) ? 2 : model == PR_MODEL_PLW300 ? 3 : 1;
     char cand[46];
     lw_uuid(cand, l->mac, l->epoch, tag);
     for (int k = 0; k < 16; k++) {
@@ -383,14 +432,14 @@ static void announce(pr_list_t *l, pr_rec_t *r)
 
 // The port record takes a printer of `kind` and `model`: its own name follows
 // (a name the person gave stays); its uuid and its settings go on. The Apple
-// screen is a StyleWriter's alone.
+// screen is a StyleWriter's or a QuickDraw LaserWriter's alone.
 static void become_port_printer(pr_list_t *l, pr_rec_t *r, int kind, int model)
 {
     int own = name_is_own(r);
     r->kind = (uint8_t)kind;
     r->model = (uint8_t)model;
     r->identified = 1;
-    if (kind != PR_KIND_STYLEWRITER && !strcmp(r->dither, "apple"))
+    if (!pr_has_apple_screen(kind) && !strcmp(r->dither, "apple"))
         snprintf(r->dither, sizeof r->dither, "atkinson");
     if (own) {
         char n[PR_NAME_MAX];
@@ -414,6 +463,7 @@ static void become_stylewriter(pr_list_t *l, pr_rec_t *r, int model)
 static void become_model(pr_list_t *l, pr_rec_t *r, int model)
 {
     if (model_is_sw(model)) become_stylewriter(l, r, model);
+    else if (model == PR_MODEL_PLW300) become_port_printer(l, r, PR_KIND_QDLASER, model);
     else become_imagewriter(l, r, model);
 }
 
@@ -505,6 +555,31 @@ int pr_port_seen_sw(pr_list_t *l, pr_model_t m)
 {
     if (!model_is_sw(m)) return -1;
     return port_named(l, PR_HEARD_STYLEWRITER, m);
+}
+
+int pr_port_seen_qd(pr_list_t *l, uint8_t engine)
+{
+    pr_model_t m = pr_model_from_qd(qd_model_from_engine(engine));
+    if (m != PR_MODEL_NONE) {
+        l->qd_other = l->qd_pending = 0;
+        return port_named(l, PR_HEARD_QDLASER, m);
+    }
+    // One we cannot print to: named on the page, never a record, and only on the same answer
+    // twice in a row, as any change the port's answers make (R16).
+    port_heard(l, PR_HEARD_QDLASER, PR_MODEL_NONE);
+    l->pending_model = 0;
+    if (l->qd_pending != engine) {
+        l->qd_pending = engine;
+        return PR_SEEN_AGAIN;
+    }
+    l->qd_other = engine;
+    return -1;
+}
+
+void pr_port_clock_gone(pr_list_t *l)
+{
+    l->qd_other = l->qd_pending = 0;
+    if (l->pending_model == PR_MODEL_PLW300) l->pending_model = 0;
 }
 
 int pr_port_sw_found(pr_list_t *l, int id, pr_model_t m)
@@ -702,7 +777,10 @@ int pr_set_shared(pr_list_t *l, int id, int on)
 int pr_set_model(pr_list_t *l, int id, pr_model_t m)
 {
     pr_rec_t *r = pr_get(l, id);
-    if (!r || r->where != PR_WHERE_PORT || m > PR_MODEL_SWC2500) return -1;
+    // W-1102: a QuickDraw LaserWriter names itself by its clock and identity; no record becomes
+    // one, or stops being one, by hand.
+    if (!r || r->where != PR_WHERE_PORT || m > PR_MODEL_SWC2500 || r->kind == PR_KIND_QDLASER)
+        return -1;
     // W-1116: one record per model, and one "Something else" per port.
     const pr_rec_t *has = m == PR_MODEL_NONE ? pr_port_said_other(l) : pr_port_of(l, m);
     if (has && has != r) return -2;
@@ -799,12 +877,14 @@ int pr_port_heard(const pr_list_t *l)
 static int family_of_kind(int kind)
 {
     return kind == PR_KIND_IMAGEWRITER ? PR_HEARD_IMAGEWRITER
-         : kind == PR_KIND_STYLEWRITER ? PR_HEARD_STYLEWRITER : PR_HEARD_NONE;
+         : kind == PR_KIND_STYLEWRITER ? PR_HEARD_STYLEWRITER
+         : kind == PR_KIND_QDLASER ? PR_HEARD_QDLASER : PR_HEARD_NONE;
 }
 
 void pr_port_answered(pr_list_t *l, int heard)
 {
-    if (heard != PR_HEARD_IMAGEWRITER && heard != PR_HEARD_STYLEWRITER) return;
+    if (heard != PR_HEARD_IMAGEWRITER && heard != PR_HEARD_STYLEWRITER && heard != PR_HEARD_QDLASER)
+        return;
     // The printer on the port: its model, when the family is its record's.
     const pr_rec_t *p = pr_port_current(l);
     int own = p && family_of_kind(p->kind) == heard;
@@ -821,7 +901,7 @@ pr_gate_t pr_job_gate(const pr_list_t *l, int id, int heard, pr_model_t heard_mo
     int i = pr_index(l, id);
     const pr_rec_t *r = i < 0 ? NULL : &l->r[i];
     if (!r || r->where != PR_WHERE_PORT || r->kind != PR_KIND_IMAGEWRITER) return PR_GATE_OTHER;
-    if (heard == PR_HEARD_STYLEWRITER) return PR_GATE_OTHER;
+    if (heard == PR_HEARD_STYLEWRITER || heard == PR_HEARD_QDLASER) return PR_GATE_OTHER;
     if (heard == PR_HEARD_IMAGEWRITER && heard_model != PR_MODEL_NONE)
         return heard_model == r->model ? PR_GATE_GO : PR_GATE_OTHER;
     // Nothing named. The original ImageWriter has no self-ID: its line up is its answer.
@@ -935,7 +1015,7 @@ int pr_test_target(const pr_list_t *l, const pr_live_t live[PR_MAX])
     // no port record gets the page (its ImageWriter page would wait out the stall limit).
     int other = pr_port_said_other(l) != NULL;
     const pr_rec_t *p = other ? NULL : pr_port_current(l);
-    if (p && p->kind != PR_KIND_IMAGEWRITER && p->kind != PR_KIND_STYLEWRITER) p = NULL;
+    if (p && pr_family_of(p->kind) == PR_FAM_NONE) p = NULL;
     if (p && live[p - l->r].present) return p->id;
     for (int i = 0; i < l->n; i++)
         if (l->r[i].shared && !(other && l->r[i].where == PR_WHERE_PORT) &&
@@ -1002,6 +1082,12 @@ enum { HDR = 6 };
 // (pr_blob_newer) for the next update.
 static uint8_t blob_version(const pr_list_t *l)
 {
+    // W-1102: 4 holds a QuickDraw LaserWriter; a 3 never does, so a board rolled back keeps a 4
+    // untouched (pr_blob_newer).
+    for (int i = 0; i < l->n; i++)
+        if (l->r[i].kind == PR_KIND_QDLASER || l->r[i].model == PR_MODEL_PLW300) return 4;
+    for (int i = 0; i < l->n_notes; i++)
+        if (l->notes[i].model == PR_MODEL_PLW300) return 4;
     if (pr_port_count(l) >= 2) return 3;
     for (int i = 0; i < l->n; i++)
         if (l->r[i].kind > PR_KIND_AT_IMAGEWRITER || l->r[i].model > PR_MODEL_IW1) return 2;
@@ -1029,8 +1115,10 @@ int pr_load(pr_list_t *l, const uint8_t *buf, size_t n)
     // W-1103: a version 1 list has the ImageWriter kinds and models only. The
     // layout is the same, so what it may hold is all that differs; a 3 (W-1116,
     // a second port record) holds what a 2 does.
-    int max_kind = buf[2] == 1 ? PR_KIND_AT_IMAGEWRITER : PR_KIND_STYLEWRITER;
-    int max_model = buf[2] == 1 ? PR_MODEL_IW1 : PR_MODEL_SWC2500;
+    // W-1102: a 4 adds the QuickDraw LaserWriter's kind and model.
+    int max_kind = buf[2] == 1 ? PR_KIND_AT_IMAGEWRITER : buf[2] <= 3 ? PR_KIND_STYLEWRITER
+                 : PR_KIND_QDLASER;
+    int max_model = buf[2] == 1 ? PR_MODEL_IW1 : buf[2] <= 3 ? PR_MODEL_SWC2500 : PR_MODEL_PLW300;
     uint8_t cnt = buf[3], notes = buf[5];
     if (cnt > PR_MAX || notes > PR_NOTES_MAX) return -1;
     if (n != HDR + (size_t)cnt * sizeof(pr_rec_t) + (size_t)notes * sizeof(pr_note_t)) return -1;
@@ -1041,6 +1129,7 @@ int pr_load(pr_list_t *l, const uint8_t *buf, size_t n)
         memcpy(&r, buf + HDR + (size_t)i * sizeof r, sizeof r);
         if (!r.id || r.kind > max_kind || r.where > PR_WHERE_ZONE || r.model > max_model ||
             (r.kind == PR_KIND_STYLEWRITER) != model_is_sw(r.model) ||
+            (r.kind == PR_KIND_QDLASER) != (r.model == PR_MODEL_PLW300) ||
             !memchr(r.name, 0, sizeof r.name) ||
             !memchr(r.uuid, 0, sizeof r.uuid) || !memchr(r.dither, 0, sizeof r.dither))
             return -1;
@@ -1063,6 +1152,7 @@ int pr_load(pr_list_t *l, const uint8_t *buf, size_t n)
     l->next_id = buf[4] ? buf[4] : 1;
     // Who answered on the port, and a model answered once, are not stored.
     l->heard = l->heard_model = l->pending_model = 0;
+    l->qd_other = l->qd_pending = 0;
     return 0;
 }
 
@@ -1272,8 +1362,9 @@ int pr_post(pr_list_t *l, const char *body, pr_post_t *o)
                                           "apple" };
         const char *good = NULL;
         for (size_t i = 0; i < sizeof ok / sizeof ok[0]; i++) if (!strcmp(s, ok[i])) good = ok[i];
-        // Apple's screen is the StyleWriter drivers': only a StyleWriter is offered it.
-        if (good && !strcmp(good, "apple") && pr_get(l, id)->kind != PR_KIND_STYLEWRITER) good = NULL;
+        // Apple's screen is the StyleWriter drivers', and a QuickDraw LaserWriter's own (W-1102):
+        // only those are offered it.
+        if (good && !strcmp(good, "apple") && !pr_has_apple_screen(pr_get(l, id)->kind)) good = NULL;
         if (!good) return post_err(o, "Unknown halftone.");
         snprintf(pr_get(l, id)->dither, sizeof pr_get(l, id)->dither, "%s", good);
         o->changed = 1;
@@ -1335,7 +1426,8 @@ size_t pr_json(const pr_list_t *l, const pr_live_t live[PR_MAX], char *buf, size
         // had before W-1116) ipp/print, W-1082's LaserWriter's ipp/laser, every other's own.
         char rp[16] = "";
         if (r->shared && r->identified && r->where == PR_WHERE_PORT &&
-            (r->kind == PR_KIND_IMAGEWRITER || r->kind == PR_KIND_STYLEWRITER))
+            (r->kind == PR_KIND_IMAGEWRITER || r->kind == PR_KIND_STYLEWRITER ||
+             r->kind == PR_KIND_QDLASER))
             snprintf(rp, sizeof rp, r == oldest ? "ipp/print" : "ipp/p%u", r->id);
         else if (r->shared && r->identified && r->kind == PR_KIND_LASERWRITER)
             snprintf(rp, sizeof rp, r->ipp_laser ? "ipp/laser" : "ipp/p%u", r->id);
@@ -1350,7 +1442,7 @@ size_t pr_json(const pr_list_t *l, const pr_live_t live[PR_MAX], char *buf, size
         // and the fault it holds, for the page to name in its own words, said only while it has one
         static const char *const faults[] = { "", "paper", "jam", "cartridge", "cartridge-jam",
                                               "ink", "cover", "waste", "other" };
-        if (r->kind == PR_KIND_STYLEWRITER && live[i].fault > PR_FAULT_NONE &&
+        if (pr_has_apple_screen(r->kind) && live[i].fault > PR_FAULT_NONE &&
             live[i].fault <= PR_FAULT_OTHER) {
             size_t n = strlen(swx);
             snprintf(swx + n, sizeof swx - n, ",\"fault\":\"%s\"", faults[live[i].fault]);
@@ -1386,7 +1478,10 @@ size_t pr_json(const pr_list_t *l, const pr_live_t live[PR_MAX], char *buf, size
         esc(e_name, sizeof e_name, seen_as);
         PUT("%s\"%s\"", n++ ? "," : "", e_name);
     }
-    PUT("],\"max_shared\":%d}", PR_SHARE_MAX);
+    // W-1102: a QuickDraw LaserWriter on the port that is not one we print to, by name.
+    const char *unsup = l->qd_other ? qd_engine_name(l->qd_other) : "";
+    PUT("],\"port_unsupported\":\"%s\"", unsup ? unsup : "QuickDraw LaserWriter");
+    PUT(",\"max_shared\":%d}", PR_SHARE_MAX);
 #undef PUT
     if (k >= cap) {
         if (cap) buf[0] = '\0';

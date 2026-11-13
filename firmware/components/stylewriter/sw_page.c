@@ -249,4 +249,5 @@ void sw_page_stage(sw_page_t *p, rip_stage_t *st)
     st->page_end   = st_end;
     st->ctx        = p;
     st->ink_row    = st_ink_row;
+    st->gray_row   = NULL;
 }

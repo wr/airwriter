@@ -442,3 +442,18 @@ Rulings made during the build that change what the sections above say:
   LaserWriter), not only port printers: "check power and cable" pointed a printer that isn't
   plugged in, because another is, at the wrong fix. What to check goes in the wiki's Offline
   row. Print Test Page's own refusal on an offline printer keeps its line of help.
+
+## Amended 2026-11-13 by W-1102
+
+`W-1102 QuickDraw LaserWriters on the printer port (Personal LaserWriter LS/300, Select 300)`
+(`2026-11-12-quickdraw-laserwriters-design.md`, SPEC §3.18):
+
+- **A clocked port.** A clock on HSKi is a QuickDraw LaserWriter switched on, and comes first in
+  `port_policy`'s order. While it is there the line's level is not reported (no line-up,
+  line-down or settle), the port asks only the 300's identity (`81 00`, `83 40`, `83 3E`,
+  `82 00`) and status questions, and no ImageWriter command or StyleWriter question goes to J2.
+  The clock stopping is the printer gone.
+- **The family is an enum.** `s_port_sw` and `printers_test_kind`'s numbers became
+  `pr_family_t` (ImageWriter, StyleWriter, QuickDraw LaserWriter), on which the port policy,
+  `printers_port_mode()`, the job sink, the link and the test page branch. A 300's record is a
+  port record like the others: one per model, its UUID's family tag `03`.

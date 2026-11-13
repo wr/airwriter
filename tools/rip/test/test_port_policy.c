@@ -1788,6 +1788,153 @@ static void test_swaps(void)
     CHECK(s.listed[SW_MINE] && s.listed[SW_OTHER]);
 }
 
+// ------------------------------------------------------------- W-1102: a clocked port
+
+// A QuickDraw LaserWriter switched on puts its clock on HSKi; the port then hears only its own
+// two questions, identity and status, and nothing of the other families' ever.
+static port_in_t clocked(int kind)
+{
+    port_in_t i = base(kind);
+    i.clocked = 1;
+    i.line_ready = 0;
+    return i;
+}
+
+static void test_clocked_empty_port_asks_identity(void)
+{
+    port_in_t i = clocked(-1);
+    CHECK_EQ_INT(port_policy(&i), PA_QDID);                  // at once
+    port_after(&i, PA_QDID, PR_HEARD_NONE, 0);
+    CHECK_EQ_INT(i.last_qd_ms, i.now_ms);
+    uint32_t t0 = i.now_ms;
+    i.now_ms = t0 + PORT_QD_ID_EVERY_MS - 1;
+    port_tick(&i);
+    CHECK_EQ_INT(port_policy(&i), PA_NONE);
+    i.now_ms = t0 + PORT_QD_ID_EVERY_MS;
+    port_tick(&i);
+    CHECK_EQ_INT(port_policy(&i), PA_QDID);
+    CHECK_EQ_INT(PORT_QD_ID_EVERY_MS, 2000);
+    CHECK_EQ_INT(PORT_QD_STATUS_EVERY_MS, 3000);
+    // A record of another family on a clocked port is asked the same.
+    port_in_t s = clocked(PR_KIND_STYLEWRITER);
+    s.answering = 1;
+    CHECK_EQ_INT(port_policy(&s), PA_QDID);
+    port_in_t w = clocked(PR_KIND_IMAGEWRITER);
+    CHECK_EQ_INT(port_policy(&w), PA_QDID);
+}
+
+static void test_clocked_never_other_questions(void)
+{
+    static const int kinds[] = { -1, PR_KIND_UNKNOWN, PR_KIND_IMAGEWRITER, PR_KIND_STYLEWRITER,
+                                 PR_KIND_QDLASER };
+    for (size_t k = 0; k < sizeof kinds / sizeof kinds[0]; k++)
+        for (int m = 0; m < 512; m++) {
+            port_in_t i = clocked(kinds[k]);
+            i.sw_listed = m & 1;
+            i.iw1_listed = (m >> 1) & 1;
+            i.want_kick = (m >> 2) & 1;
+            i.look = (m >> 3) & 1;
+            i.line_up_edge = (m >> 4) & 1;
+            i.full_due = (m >> 5) & 1;
+            i.answering = (m >> 6) & 1;
+            i.sw1_listed = (m >> 7) & 1;
+            i.line_ready = (m >> 8) & 1;
+            i.iw_unnamed = i.line_ready;
+            for (int step = 0; step < 6; step++) {
+                port_tick(&i);
+                port_act_t a = port_policy(&i);
+                CHECK(a == PA_NONE || a == PA_QDID || a == PA_QDSTATUS);
+                port_after(&i, a, PR_HEARD_NONE, 0);
+                i.now_ms += 1700;
+            }
+        }
+}
+
+static void test_qd_status_cadence_and_break(void)
+{
+    port_in_t i = clocked(PR_KIND_QDLASER);
+    i.answering = 1;
+    i.last_qd_ms = i.now_ms;
+    i.qd_asked = 1;
+    CHECK_EQ_INT(port_policy(&i), PA_NONE);
+    i.now_ms += PORT_QD_STATUS_EVERY_MS - 1;
+    CHECK_EQ_INT(port_policy(&i), PA_NONE);
+    i.now_ms += 1;
+    CHECK_EQ_INT(port_policy(&i), PA_QDSTATUS);
+    port_after(&i, PA_QDSTATUS, PR_HEARD_QDLASER, 1);
+    CHECK_EQ_INT(i.answering, 1);
+    CHECK_EQ_INT(i.heard, PR_HEARD_QDLASER);
+    CHECK_EQ_INT(port_policy(&i), PA_NONE);
+    i.qd_break = 1;                                          // the printer's BREAK: at once
+    CHECK_EQ_INT(port_policy(&i), PA_QDSTATUS);
+    port_after(&i, PA_QDSTATUS, PR_HEARD_QDLASER, 1);
+    CHECK_EQ_INT(i.qd_break, 0);
+    i.look = i.look_person = 1;                              // and a look
+    CHECK_EQ_INT(port_policy(&i), PA_QDSTATUS);
+    port_after(&i, PA_QDSTATUS, PR_HEARD_QDLASER, 1);
+    CHECK_EQ_INT(i.look, 0);
+    CHECK_EQ_INT(i.look_person, 0);
+}
+
+static void test_qd_status_unanswered_reasks_identity(void)
+{
+    port_in_t i = clocked(PR_KIND_QDLASER);
+    i.answering = 1;
+    i.qd_asked = 1;
+    i.last_qd_ms = i.now_ms - PORT_QD_STATUS_EVERY_MS;
+    CHECK_EQ_INT(port_policy(&i), PA_QDSTATUS);
+    port_after(&i, PA_QDSTATUS, PR_HEARD_NONE, 0);
+    CHECK_EQ_INT(i.answering, 0);
+    CHECK_EQ_INT(port_policy(&i), PA_QDID);
+}
+
+static void test_clock_gone_looks_for_other_printers(void)
+{
+    port_in_t i = base(PR_KIND_QDLASER);
+    i.answering = 1;
+    i.heard = PR_HEARD_QDLASER;
+    i.clocked = 0;
+    port_tick(&i);
+    CHECK_EQ_INT(i.answering, 0);
+    uint32_t t0 = i.now_ms;
+    int plain = 0;
+    for (uint32_t ms = 0; ms <= PORT_PLAIN_EVERY_MS; ms += 500) {
+        i.now_ms = t0 + ms;
+        port_tick(&i);
+        port_act_t a = port_policy(&i);
+        CHECK(a != PA_QDID && a != PA_QDSTATUS);
+        if (a == PA_PLAIN) { plain = 1; port_after(&i, a, PR_HEARD_NONE, 0); }
+    }
+    CHECK(plain);
+    i.line_up_edge = 1;
+    CHECK_EQ_INT(port_policy(&i), PA_ESCQ);
+}
+
+static void test_clocked_said_other(void)
+{
+    port_in_t i = clocked(PR_KIND_UNKNOWN);
+    i.said_other = 1;
+    CHECK_EQ_INT(port_policy(&i), PA_NONE);
+    i.look = i.look_person = 1;
+    CHECK_EQ_INT(port_policy(&i), PA_QDID);
+    port_after(&i, PA_QDID, PR_HEARD_NONE, 0);
+    CHECK_EQ_INT(port_policy(&i), PA_NONE);
+    i.now_ms += 10 * SEC;
+    CHECK_EQ_INT(port_policy(&i), PA_NONE);                  // once: no cadence
+}
+
+static void test_qd_confirm_repeats_identity(void)
+{
+    port_in_t i = clocked(-1);
+    port_after(&i, PA_QDID, PR_HEARD_QDLASER, 0);            // one answer of a model with no record
+    i.confirm = PA_QDID;
+    CHECK_EQ_INT(port_policy(&i), PA_QDID);
+    port_in_t j = base(PR_KIND_STYLEWRITER);                 // whatever else is true
+    j.answering = 1;
+    j.confirm = PA_QDID;
+    CHECK_EQ_INT(port_policy(&j), PA_QDID);
+}
+
 int main(void)
 {
     test_invariants();
@@ -1816,5 +1963,12 @@ int main(void)
     test_stop_looks();
     test_ten_minutes();
     test_swaps();
+    test_clocked_empty_port_asks_identity();
+    test_clocked_never_other_questions();
+    test_qd_status_cadence_and_break();
+    test_qd_status_unanswered_reasks_identity();
+    test_clock_gone_looks_for_other_printers();
+    test_clocked_said_other();
+    test_qd_confirm_repeats_identity();
     TEST_END;
 }

@@ -119,6 +119,11 @@ colino.net's bench trace, VCF forum thread; colino.net found Pro Signal and Cabl
 | 7 | GPi | not connected | 7 |
 | 8 | RxD+, in | U2 A (receiver) | 6 TxD+ |
 
+**HSKi carries a clock from a QuickDraw LaserWriter** (W-1102, §3.18). A Personal LaserWriter
+300 drives 533 kHz on its handshake line whenever it is on, and takes the board's TxD one bit
+per clock. Rev A's U3 (the original SP3232EEN, R9 open) delivers it to IO8 at a 49 to 51% duty
+(board 1). TxD is clocked out by GP-SPI2 through the GPIO matrix, so the pin choices above stand.
+
 Printer-side polarity is unchanged from the corrected mapping below: the printer's TxD+
 still reaches U2's non-inverting A input and TxD− reaches B; U2's Y drives the printer's
 RxD+ and Z its RxD−. Net names stay printer-centric (`PR_TXD_*` = the printer's transmit
@@ -346,7 +351,8 @@ last gave ("Toner, 10,291 Pages Printed"). A row at 10 (`toner-low-warning`) or 
 (`toner-empty-error`, `marker-supply-empty-error`) is only ever the printer's own report, so the
 panel's warning triangle is true. Nothing known, no cartridge (`marker-supply-missing-error`) or
 a printer showing as Offline sends no rows, and macOS says "Information Not Available". An
-original ImageWriter never says its ribbon, so it has no row.
+original ImageWriter never says its ribbon, and a Personal LaserWriter 300 its toner (§3.18), so
+neither has a row.
 
 The six lists go only when named, like `media-col-database`: in a full answer they would take a
 Color StyleWriter past `RESP_MAX`. (`all`, `media-col-database` and all six in one request still
@@ -733,12 +739,12 @@ printers it has, found or told (`components/printers`: `printers_core.c` pure an
 read back is a list made again). At most 8 records.
 
 - **Records.** id (stable), where (port, or an AppleTalk link), kind (ImageWriter with model II,
-  LQ or original; StyleWriter with one of its seven models, 3.16; LaserWriter; AppleTalk
-  ImageWriter; unknown), name (from the printer: the
+  LQ or original; StyleWriter with one of its seven models, 3.16; Personal LaserWriter 300,
+  3.18; LaserWriter; AppleTalk ImageWriter; unknown), name (from the printer: the
   port's model, an AppleTalk printer's NBP name; two the same get " 2"; renamed freely, UTF-8,
   MacRoman for NBP), uuid (made once and never changed, whatever the record's model becomes:
   a port record `41575254-4c57-<epoch>-<model><family>-<MAC>`, the model's number and `01`
-  for an ImageWriter or `02` for a StyleWriter, since W-1116, each model's record its own
+  for an ImageWriter, `02` for a StyleWriter or `03` for a QuickDraw LaserWriter, since W-1116, each model's record its own
   printer to phones; before W-1116 the family tag alone, `0001` or `0002`, which records from
   then keep; a form a record since corrected to another model still holds sets the model
   byte's top bit; an AppleTalk printer W-1082's form), shared, found (auto or person),
@@ -760,7 +766,9 @@ read back is a list made again). At most 8 records.
   answers it is a port record of its own (3.16 has the rules and what each question costs).
   ImageWriter commands (the CTRL-X kick, resync, the job's self-ID, the test page) go to J2 only
   for an ImageWriter (the kick also with nothing found yet), and never to a StyleWriter.
-  "Something else" stops even the self-ID. W-1116 (3.16): the port keeps a record for every
+  A clock on HSKi is a QuickDraw LaserWriter (3.18): it is asked only its own questions, and
+  nothing for an ImageWriter or a StyleWriter goes to it. "Something else" stops even the
+  self-ID. W-1116 (3.16): the port keeps a record for every
   model that answers on it, one per model, and the one that answered last is the printer on
   the port. An answer naming a recorded model, where nothing else would change, is that
   record's, at once. One that would change the list (a model with no record, or one that
@@ -795,6 +803,7 @@ read back is a list made again). At most 8 records.
   | Original ImageWriter | About 3 s (line up, the settle, `ESC ?` and the plain question unanswered) | 3 s |
   | StyleWriter II, 1200, Color 1500-2500 | Within 5 s | Within 10 s |
   | Original StyleWriter | On Look for Printers or at start-up | Reads Ready while quiet once found |
+  | Personal LaserWriter 300 | Under 1 s from its clock | About 2 s |
   | LaserWriter on AppleTalk | In seconds | 30 s |
 
 - **Sharing.** Identified printers are shared at once, up to six (`PR_SHARE_MAX`, W-1116; any
@@ -826,7 +835,7 @@ read back is a list made again). At most 8 records.
   its slot and id in the ctx as a LaserWriter's does, so a job's end goes back to the slot it
   came in on. What a port record's slot says (`pr_port_say`, `main.c`'s `port_push`, on every
   change of the port's state or the list): the printer on the port its own state, in its
-  family's words (3.9's for an ImageWriter, 3.16's for a StyleWriter), and the colour the
+  family's words (3.9's for an ImageWriter, 3.16's for a StyleWriter, 3.18's for a 300), and the colour the
   ribbon or cartridge last read offers (a black-only StyleWriter and an original ImageWriter
   none; a record that is not on the port keeps the colour it last offered, unless its model
   has none, until its slot is put again for another printer, which starts with none until it
@@ -868,7 +877,7 @@ read back is a list made again). At most 8 records.
   printer on the port, or the Something else record while one is listed; every other port
   record's live state is offline, on the page, to phones and in the box's state alike.
 - **Test page.** The button, DIP4 and the page's Print Test Page (without an id) go to the
-  printer on the port (`pr_port_current`, an ImageWriter or StyleWriter record) while it is
+  printer on the port (`pr_port_current`, an ImageWriter, StyleWriter or Personal LaserWriter 300 record) while it is
   present, else the first shared printer that is ready, else that port record (the button then
   runs the cable test, as before), else the first shared printer (`pr_test_target`, W-1116);
   while a Something else record is listed no port record gets it. `POST /api/test {"id":N}`
@@ -1364,6 +1373,127 @@ job with the screen open, or the ImageWriter checker on this build.
 
 ---
 
+### 3.18 QuickDraw LaserWriters (W-1102)
+
+`W-1102 QuickDraw LaserWriters on the printer port (Personal LaserWriter LS/300, Select 300)`.
+Design: `docs/superpowers/specs/2026-11-12-quickdraw-laserwriters-design.md`, which holds the
+command table and the measurements this section stands on. `components/qdlaser`: `qd_model`,
+`qd_wire`, `qd_status`, `qd_page`, `qd_session` and `qd_testpage` are pure and host-tested in
+`tools/rip`; `qd_link.c` (the SPI slave) and `qdlaser.c` (the port's questions and the job
+pipeline's hooks) are the board's. `tools/qdlaser` holds `qdfake.py`, a software Personal
+LaserWriter 300 and page decoder, and `mkqdtables.py`, which reads Apple's 300 screen, curve and
+icon out of Apple's LaserWriter 300 driver 1.1 into `apple_tables_lw.{h,c}` and the icon files.
+**A Personal LaserWriter 300 prints from AirWriter on a rev A board (board 1, 2026-11-12 and
+13). The Personal LaserWriter LS and the LaserWriter Select 300 are not supported:** the same
+Apple driver, but a page memory with pointers, their own paper and density commands, and no
+printer here to test on.
+
+- **Finding it.** The 300 drives a 533 kHz clock on J2 pin 2 (HSKi; the port's CTS pin, IO8 on
+  rev A) the whole time it is on. `serial_out` counts its edges (`docs/traps.md`): clocked after
+  two 50 ms windows at 100 kHz or more, gone after 20 below (`serial_clock.c`, host-tested), so a
+  printer switched off reads gone in about 2 s and a sub-second stop, which board 1's printer
+  made on its own, only logs a warning. Clocked is first in `port_policy`'s order: no line-up, line-down or settle reaches
+  the ImageWriter logic, and the plain question, `ESC ?` and the StyleWriter's status never go to
+  a clocked port. With a clock and nothing named, the board asks `81 00`, `83 40`, `83 3E`,
+  `82 00`. Engine identity `29` makes an auto-found record (`PR_KIND_QDLASER`,
+  `PR_MODEL_PLW300`), shared if there is room; the same printer back is the same record. Any
+  other identity is a QuickDraw LaserWriter AirWriter doesn't support: `/api/printers` carries it
+  as `port_unsupported` and the page shows a grayed row at the end of the Printers list
+  (`Printer port · Not supported yet`, nothing to open) until the clock goes. Each find logs the
+  clock's rate and duty. The port's family is `pr_family_t` (ImageWriter, StyleWriter,
+  QuickDraw LaserWriter), the one switch the port policy, the job sink, the link and the test
+  page branch on. A 300 record makes the stored list version 4 (`docs/traps.md`, stored forms).
+- **The link** (`qd_link.c`). GP-SPI2 as a slave, mode 0, LSB first, clocked from HSKi through
+  the GPIO matrix, its MISO on TxD through the matrix and its MOSI fed from the TxD pad, so each
+  chunk comes back as the line carried it and is compared bit for bit. Chip select uses no pad
+  (`docs/traps.md`). A chunk is 64 lead marks, packets as line images (`qd_wire`: a 100-bit
+  BREAK, 120 marks, the bytes 8N1 LSB first, 180 marks), then a tail of 4,096 marks; a timer
+  armed as the chunk loads raises chip select at the tail's middle. A question uses two 1 KB
+  chunks, a job two 8 KB chunks (a whole row packet fits one), in internal DMA-capable RAM freed
+  when the link closes. Replies are UART1 at the measured clock, flow control off; the printer's
+  BREAK is UART1's break event (`serial_out_break_take`). A chunk that ends more than a second
+  after it should, or a packet put with no clock, ends the job as Offline.
+- **Read-back.** A chunk whose bits differ from those sent fails the job (`bad_bits`), as a
+  broken cable would. On board 1 about one chunk in 20 to 30, never the first after the link
+  opens, comes back with no more than its lead recorded (0 to 7 bits) though it reached the
+  printer whole: sending it again printed its rows twice (2026-11-13). Such a chunk counts as
+  `unchecked` and the link goes on if the clock is toggling at that moment; a chunk that ended in
+  one of the printer's own clock pauses never left and ends the job Offline. The cause is not
+  known (§4).
+- **A page** (`qd_page`, `qdlaser.c`). The shared 300 dpi rip (`ripjob`), the sheet found by
+  width and height, gray, cropped to Apple's image area for that sheet. Each row is screened in
+  the record's screen and, through `rip_stage_t.gray_row`, in Apple's 300 screen (`HT_APPLE_LW`:
+  `GAMA` 3's curve, then `HTSC` 2's 8 × 8 clustered thresholds), and coded both ways with
+  `sw_code_row(row, NULL, …)`. The record's rows go to the printer as they are made; the
+  Apple-screen rows are kept in the job buffer's second 512 KB (the URF ring has the first). The
+  page budget is 500,000 bytes of codes (a page in the printer's memory measured full at
+  513,287). A page that would pass it stops there: `81 00` drops what the printer holds and the
+  kept page goes instead (log: `page N: Apple's screen, B bytes of codes`). If that passes the
+  budget too, the page is skipped and the job goes on to the next, as Apple's alert's Continue
+  did; the job then ends failed, with "Page N didn’t fit in the printer’s memory." as its
+  `job-state-message` and in `/api/status`'s `job_error`. A record set to Apple's screen keeps
+  nothing. After the last row: `8E 00`, `82 00`, `83 2A` (paper at the chosen source), `84` with
+  the Paper light off, `8B 8B` twice, `8A 01`. Page done is `8E 00` bit 2, asked every 500 ms
+  and at once after the printer's BREAK; 85 s with none fails the page (Apple's limit). One page
+  is in the printer at a time: the next loads once the last is done. On board 1 the printer's
+  BREAK came with every page done, and a row with a bad check (a test build flipped one) set
+  `8E 00` bit 1 (`FA`) with `82 00` as for any page (`A0`): the page fails there, unprinted
+  (`8A 00`, `81 00`, `84 01`), as `qdinterop` checks against the software 300.
+- **Sizes and paper.** Letter, Legal, Executive, #10 and Monarch envelopes and A4, each with the
+  image area Apple's driver gives it (`qd_model.c`); only Letter has printed. `media-source` is
+  `main` (the cassette, `83 4C`, the default) or `manual` (the manual slot, `83 4F`), read from
+  the job's `media-col`, or from `InputSlot` "Manual", which is how a Mac sends its Paper Feed
+  choice: macOS's print dialog sends no `media-col` at all, only `media` "Letter" and
+  `InputSlot` beside about 50 settings of its own. AirWriter
+  never moves to the slot by itself.
+- **Status** (`qd_status`, `qd_session`). At rest the board asks `83 01`, `83 02`, `83 2A` and
+  `82 00` every 3 s under the job lock, and at once after the printer's BREAK. The first match
+  wins:
+
+  | Printer | `printer-state-message` | `printer-state-reasons` | Front lights (`84`) |
+  |---|---|---|---|
+  | Jam (`83 02` bit 3) | Needs attention: clear the paper jam | `media-jam-error` | Jam |
+  | Cover open or no cartridge (`83 02` bit 2) | Needs attention: close the cover | `door-open-error` | Jam |
+  | Cassette not in properly (`83 02` `20`, from Apple's driver) | Needs attention: check the paper cassette | `input-tray-missing-error` | Paper |
+  | Engine fault (`83 01` bit 1 without `83 02`'s `10`; `83 04`, `83 07` name it in the log) | Needs attention: check the printer | `other-error` | |
+  | No paper in the cassette, or the cassette pulled out (`83 2A`; the printer also sets `83 02` `10` and `83 01`'s fault bit) | Needs attention: check paper | `media-empty-error` | Paper |
+  | The manual slot asked for and empty | Needs attention: load the manual feed slot | `media-needed-report` | Paper |
+  | Paper moving (`83 01` bit 5), or a page loading | | | Ready, blinking once a second |
+  | Otherwise | | | Ready |
+  | No clock | Offline | `other` | (none: the printer is off) |
+
+  Jam and cover go through Apple's recovery once `83 02` clears: `81 00`, `84 08` for 280 ms,
+  `84 01`, `83 40`, `83 3E`, `82 00`, `83 5D`, the source, `81 00`, `8A 01`, which prints the page
+  again from the printer's memory. The cover opened mid-page reads as a jam (the sheet is
+  caught), and the printer wants the cover opened and closed again once the sheet is pulled.
+  Paper out mid-job stops the page (`8A 00`) and prints it (`8A 01`) once `83 2A` has paper. A
+  job ends with `83 01`, `81 00`, `84 01`. A job that used or asked for the manual slot also
+  sends `83 4C` however it ends, done, cancelled or failed: the printer otherwise keeps the
+  slot, says it has no paper and pulls in any sheet put there; while `83 01`
+  bit 5 says the sheet is still coming out (about 15 s past page done) the state stays Printing.
+  A status question the printer leaves unanswered logs which one and the link's last failure.
+- **Settings.** The usual five screens plus Apple, which for a 300 is Apple's 300 screen.
+  Default Atkinson.
+- **Test page** (`qd_testpage`). The StyleWriter black page's layout (`sw_testpage`) drawn at
+  300 dpi in the 300's image area, with its icon, loaded into the printer as it is made through
+  the same page path: 199,611 bytes of codes in Atkinson. The test button prints it, never the cable
+  test, which reads HSKi's level.
+- **Bench (rev A, board 1, with Wells's Personal LaserWriter 300, 2026-11-12 and 13).** Found
+  by itself at 533.5 to 533.7 kHz, duty 49 to 51%; switched off, Offline in about 2 s; switched
+  on, the same record. Mac pages and an iPhone page; a manual-slot page chosen from a Mac; a
+  three-page job, in order; a full-page photo that passed the budget in Atkinson and printed in
+  Apple's screen (63,625 bytes of codes, 300 chunks, 0 bad bits, 8 unchecked); the test page,
+  approved on paper by Wells. Every job: 0 bad bits, 0 stalls; internal RAM never under 42,967
+  bytes, 0 failed allocations; worst chunk end 1,877 µs late against the tail's 3.8 ms half.
+  The cassette pulled out and the cover opened at rest and mid-job, paper run out mid-job, a
+  jam pulled: each shown and recovered as above. Cancelled from a phone while waiting for paper
+  and from CUPS while a page loaded: nothing printed, Ready in 4 s. A test page cut by switching
+  the printer off failed with the clock gone. A Color StyleWriter 2500 and the ImageWriter II
+  were found on J2 afterwards, the StyleWriter's test page printed. Legal, A4 and the envelopes
+  have not been printed.
+
+---
+
 ## 4. Unverified assumptions
 
 These are marked because they must be checked against hardware or Apple's *ImageWriter II
@@ -1484,6 +1614,19 @@ never been scoped; see 4.
    memory.~~ **RESOLVED.** Taken from `cups/raster-stream.c` in OpenPrinting/cups and
    implemented in `urf_decode.c` with the offsets cited in comments. Confirmed against real iOS
    captures (`fixtures/ios-*.urf`) and iPhone prints on rev A.
+6. **QuickDraw LaserWriters (W-1102, §3.18). Open.**
+   - **Why some chunks come back empty.** On board 1 about one chunk in 20 to 30 is read back
+     with no more than its lead though it reached the printer whole (rows sent again printed
+     twice). It is counted as unchecked; a chunk that truly never went out would leave rows
+     missing with nothing in the log but the count. Every page printed since has been whole.
+   - **The LS and the Select 300.** Only their engine identities (`0D`, else not `29` or `23`)
+     are used, from Apple's driver, to name them as not supported. Neither has been seen.
+   - **Sizes other than Letter.** Legal, Executive, #10, Monarch and A4 use the image areas read
+     out of Apple's driver and have not been printed.
+   - **`81 00` while a page prints.** Whether it cuts the page is not known, which is why one
+     page at a time is in the printer.
+   - **A board with `CONFIG_AIRWRITER_INVERT_TX`.** The link's chip select assumes TxD idles high
+     (`docs/traps.md`); untested inverted.
 
 ---
 

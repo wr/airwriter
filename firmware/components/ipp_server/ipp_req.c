@@ -37,6 +37,18 @@ static int name_is(const uint8_t *name, size_t nlen, const char *want)
     return nlen == strlen(want) && memcmp(name, want, nlen) == 0;
 }
 
+// The same with ASCII case ignored: a Mac sends InputSlot's choice as "Manual".
+static int name_is_ci(const uint8_t *name, size_t nlen, const char *want)
+{
+    if (nlen != strlen(want)) return 0;
+    for (size_t i = 0; i < nlen; i++) {
+        uint8_t a = name[i], b = (uint8_t)want[i];
+        if (a >= 'A' && a <= 'Z') a = (uint8_t)(a - 'A' + 'a');
+        if (a != b) return 0;
+    }
+    return 1;
+}
+
 // The job-id a job-uri names: its last path segment, which is how
 // ipp_job_start builds it. 0 -- never a job we issued -- if that is not a
 // number.
@@ -72,6 +84,9 @@ int ipp_req_parse(ipp_req_t *r, const uint8_t *buf, size_t len)
     uint8_t group = 0;
     int have_job_id = 0;   // an explicit job-id outranks a job-uri
     int in_requested = 0;  // the values being walked extend requested-attributes
+    // The Job group's media-col (W-1102): how deep its collections go (0 outside it, 1 among
+    // its own members), and whether the member being walked at depth 1 is media-source.
+    int mcol = 0, depth = 0, src_member = 0;
     for (;;) {
         if (!need(&c, 1)) return IPP_REQ_SHORT;
         uint8_t tag = c.p[c.pos++];
@@ -105,15 +120,42 @@ int ipp_req_parse(ipp_req_t *r, const uint8_t *buf, size_t len)
                 r->requested.len = c.pos - (size_t)(r->requested.p - buf);
                 r->requested.n++;
             }
+            if (depth || tag == IPP_TAG_BEGIN_COLLECTION) {
+                if (tag == IPP_TAG_BEGIN_COLLECTION) {
+                    depth++;
+                    src_member = 0;
+                } else if (tag == IPP_TAG_END_COLLECTION) {
+                    depth--;
+                } else if (tag == IPP_TAG_MEMBERNAME) {
+                    src_member = depth == 1 && name_is(val, vlen, "media-source");
+                } else {
+                    if (mcol && src_member && tag == IPP_TAG_KEYWORD)
+                        r->opts.manual = name_is(val, vlen, "manual");
+                    src_member = 0;
+                }
+            }
             continue;
         }
         in_requested = 0;
+        // A new attribute: any collection walked before it has ended. Collections are tracked
+        // in every group, so a member never passes for an attribute; only the Job group's
+        // media-col is read.
+        mcol = group == IPP_TAG_JOB && tag == IPP_TAG_BEGIN_COLLECTION &&
+               name_is(name, nlen, "media-col");
+        depth = tag == IPP_TAG_BEGIN_COLLECTION;
+        src_member = 0;
 
         // Job attributes may legally repeat operation-attribute names with
         // different meaning, so each group has its own list: the job group's
         // is print-quality, the operation group's follows. A collection's
         // members have empty names and never get this far.
         if (group == IPP_TAG_JOB) {
+            // A Mac's Paper Feed is the PPD option InputSlot, sent as a Job attribute of its own
+            // with no media-col (W-1102, board 1, 2026-11-13).
+            if (name_is(name, nlen, "InputSlot") &&
+                (tag == IPP_TAG_NAME || tag == IPP_TAG_KEYWORD || tag == IPP_TAG_TEXT) &&
+                name_is_ci(val, vlen, "manual"))
+                r->opts.manual = 1;
             if (name_is(name, nlen, "print-quality") && tag == IPP_TAG_ENUM && vlen == 4 &&
                 !r->opts.quality) {
                 uint32_t q = ((uint32_t)val[0] << 24) | ((uint32_t)val[1] << 16) |

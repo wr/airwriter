@@ -29,8 +29,13 @@ static const char *TAG = "ipp";
 
 // One job at a time, in ipp_job's slot: enough to answer Get-Job-Attributes
 // while a job is in flight.
-#define RESP_MAX      5120   // printer attributes measure ~3.2KB with media-col, ~3.8KB with a StyleWriter's three sheets
-#define HDRBUF_MAX    2048   // the IPP attribute section, before the document
+// Printer attributes measure ~3.2 KB with media-col, ~3.8 KB with a StyleWriter's three sheets,
+// and 6.7 KB for a Personal LaserWriter 300's six sheets asked for with media-col-database
+// (W-1102; tools/ipp test_qd_caps prints it): 512 bytes spare at least, in whole 512s.
+#define RESP_MAX      7680
+// The IPP attribute section, before the document. A Mac's print dialog adds about 50
+// com.apple.print attributes: a one-page Print-Job's was 2,082 bytes (W-1102, 2026-11-13).
+#define HDRBUF_MAX    8192
 #define CHUNK         1024
 
 // iOS polls Get-Job-Attributes on a second connection while the document is
@@ -60,7 +65,8 @@ static const char *TAG = "ipp";
 #define FIRST_REQ_GRACE_MS  3000   // a fresh connection's request is still in flight
 
 // Per-connection scratch, too big for a task stack and allocated once per
-// worker rather than once per request.
+// worker rather than once per request. In PSRAM (W-1102): four of them are
+// ~67 KB, which internal RAM, where Wi-Fi buffers, cannot spare.
 typedef struct {
     hrb_t   rb;
     uint8_t resp[RESP_MAX];
@@ -687,7 +693,8 @@ static void handle_conn(work_t *w, int fd)
 // serialises. No dispatcher task and no connection queue of our own.
 static void worker_task(void *arg)
 {
-    work_t *w = calloc(1, sizeof *w);
+    work_t *w = heap_caps_calloc(1, sizeof *w, MALLOC_CAP_SPIRAM);
+    if (!w) w = calloc(1, sizeof *w);
     if (!w) {
         ESP_LOGE(TAG, "worker %d: out of memory", (int)(intptr_t)arg);
         vTaskDelete(NULL);

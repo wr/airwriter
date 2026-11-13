@@ -51,6 +51,8 @@ static StreamBufferHandle_t s_whole, s_urf, s_out;
 static StaticStreamBuffer_t s_whole_ctl, s_urf_ctl, s_out_ctl;
 static StreamBufferHandle_t s_ring;   // this job's URF: s_whole or s_urf
 static int               s_buffered;  // this job's printer bytes go through s_out
+static int               s_keep;      // this job keeps a page in the pool's second half (W-1102)
+static uint8_t          *s_pool;      // the pool, NULL with no PSRAM
 static SemaphoreHandle_t s_printed;   // the printer task sent the job's last byte
 static volatile int      s_out_eof;   // the rip is over: s_out gets no more
 static TaskHandle_t      s_task;
@@ -205,6 +207,7 @@ esp_err_t job_pipe_init(const job_pipe_cfg_t *cfg)
     uint8_t *pool = heap_caps_malloc(POOL_BYTES, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
     if (pool) s_printed = xSemaphoreCreateBinaryWithCaps(MALLOC_CAP_SPIRAM);
     if (s_printed) {
+        s_pool = pool;
         s_whole = xStreamBufferCreateStatic(POOL_BYTES, 1, pool, &s_whole_ctl);
         s_urf   = xStreamBufferCreateStatic(POOL_BYTES - OUT_BYTES, 1, pool, &s_urf_ctl);
         s_out   = xStreamBufferCreateStatic(OUT_BYTES, 1, pool + POOL_BYTES - OUT_BYTES,
@@ -220,6 +223,7 @@ esp_err_t job_pipe_init(const job_pipe_cfg_t *cfg)
         vSemaphoreDeleteWithCaps(s_printed);
         s_printed = NULL;
         s_out = NULL;
+        s_pool = NULL;
     }
 
     heap_caps_free(pool);
@@ -254,8 +258,10 @@ esp_err_t job_pipe_begin_to(const char *job_name, const job_pipe_target_t *t)
     // A target that writes printer bytes (a StyleWriter's, W-1103) asks for
     // the split, as the ImageWriter's job gets it.
     s_buffered = job_pipe_buffered(t, s_out != NULL);
+    // W-1102: a target that keeps a page has the second half for it, and the URF the first.
+    s_keep = job_pipe_keeps(t, s_pool != NULL);
     s_prn_to = job_pipe_prn_for(t, s_cfg.out, s_cfg.out_ctx);
-    s_ring = s_buffered ? s_urf : s_whole;
+    s_ring = s_buffered || s_keep ? s_urf : s_whole;
 
     // The last job's task drained the ring before it finished, so this is
     // belt and braces. Not xStreamBufferReset: with assertions on it memsets
@@ -291,6 +297,16 @@ esp_err_t job_pipe_data(const uint8_t *buf, size_t n)
         sent += w;
     }
     return ESP_OK;
+}
+
+uint8_t *job_pipe_keep(size_t *cap)
+{
+    if (!s_task || !s_keep || !s_pool) {
+        if (cap) *cap = 0;
+        return NULL;
+    }
+    if (cap) *cap = OUT_BYTES;
+    return s_pool + POOL_BYTES - OUT_BYTES;
 }
 
 void job_pipe_abort(void)

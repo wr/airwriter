@@ -17,9 +17,11 @@ INCS    := -I$(COMP)/ripjob/include \
            -I$(COMP)/stylewriter/include \
            -I$(COMP)/stylewriter \
            -I$(COMP)/printers/include \
+           -I$(COMP)/qdlaser/include \
            -I.
-# serial_out is IDF-bound except for serial_writer.c, which is pure by design
-# so the deadline loop can be tested here. Name it, don't wildcard the dir.
+# serial_out is IDF-bound except for serial_writer.c and serial_clock.c, which are pure by
+# design so the deadline loop and the clock's judging can be tested here. Name them, don't
+# wildcard the dir.
 SRCS    := $(wildcard $(COMP)/ripjob/*.c) \
            $(COMP)/printer_caps/printer_caps.c \
            $(wildcard $(COMP)/ps_page/*.c) \
@@ -34,7 +36,9 @@ SRCS    := $(wildcard $(COMP)/ripjob/*.c) \
            $(COMP)/stylewriter/sw_session.c $(COMP)/stylewriter/sw_status.c \
            $(COMP)/stylewriter/sw_testpage.c $(COMP)/stylewriter/sw_unpack.c \
            $(COMP)/printers/port_policy.c \
-           $(COMP)/serial_out/serial_writer.c
+           $(COMP)/qdlaser/qd_model.c $(COMP)/qdlaser/qd_wire.c $(COMP)/qdlaser/qd_status.c \
+           $(COMP)/qdlaser/qd_page.c $(COMP)/qdlaser/qd_session.c $(COMP)/qdlaser/qd_testpage.c \
+           $(COMP)/serial_out/serial_writer.c $(COMP)/serial_out/serial_clock.c
 TESTSRC := $(wildcard test/test_*.c)
 TESTBIN := $(patsubst test/%.c,build/%,$(TESTSRC))
 
@@ -48,7 +52,8 @@ build:
 # `make scene` after changing tp_scene.c, ink_gray or the sizes in mkscene.c. It builds without
 # the header it writes, so a size change can always be made.
 build/mkscene: mkscene.c $(COMP)/testpage/tp_scene.c $(COMP)/ripjob/ink.c \
-               $(COMP)/halftone/halftone.c $(COMP)/halftone/apple_tables.c | build
+               $(COMP)/halftone/halftone.c $(COMP)/halftone/apple_tables.c \
+               $(COMP)/halftone/apple_tables_lw.c | build
 	$(CC) $(CFLAGS) $(INCS) -o $@ $^ -lm -lz
 
 scene: build/mkscene
@@ -99,7 +104,9 @@ build/test_pap_relay: test/test_pap_relay.c $(LT)/lt_proto.c $(LT)/lt_node.c $(L
 # W-1088: the printer list, beside the LaserWriter pieces it names records with.
 build/test_printers: test/test_printers.c $(COMP)/printers/printers_core.c $(COMP)/laser/lw_caps.c \
                      $(COMP)/laser/lw_query.c $(COMP)/printer_caps/printer_caps.c $(LT)/lt_proto.c \
-                     $(COMP)/stylewriter/sw_model.c $(COMP)/halftone/apple_tables.c | build
+                     $(COMP)/stylewriter/sw_model.c $(COMP)/halftone/apple_tables.c \
+                     $(COMP)/qdlaser/qd_model.c $(COMP)/qdlaser/qd_status.c \
+                     $(COMP)/halftone/apple_tables_lw.c | build
 	$(CC) $(CFLAGS) $(INCS) -I$(COMP)/printers/include -I$(COMP)/ipp_server/include -I$(LT)/include -Itest \
 	      -DICON_DIR='"$(abspath $(COMP)/ipp_server/icons)"' -o $@ $^
 
@@ -125,14 +132,28 @@ build/test_stylewriter_board: test/test_stylewriter_board.c $(COMP)/stylewriter/
                               $(SRCS) | build
 	$(CC) $(CFLAGS) $(INCS) -Itest/shim -Itest -o $@ $^ -lm -lz
 
+# The board's Personal LaserWriter 300 glue, the real qdlaser.c, the same way (W-1102).
+build/test_qd_board: test/test_qd_board.c $(COMP)/qdlaser/qdlaser.c $(SRCS) | build
+	$(CC) $(CFLAGS) $(INCS) -Itest/shim -Itest -o $@ $^ -lm -lz
+
 # The page stage's memory, counted through bigmem.h (BIGMEM_COUNT): it holds no page or band.
 build/test_sw_page_mem: CFLAGS += -DBIGMEM_COUNT
 build/test_sw_page_mem: test/test_sw_page_mem.c $(SRCS) | build
 	$(CC) $(CFLAGS) $(INCS) -Itest -o $@ $^ -lm -lz
 
+# The 300's page stage (W-1102) is counted the same way: it keeps rows, not a page.
+build/test_qd_page: CFLAGS += -DBIGMEM_COUNT
+build/test_qd_page: test/test_qd_page.c $(SRCS) | build
+	$(CC) $(CFLAGS) $(INCS) -Itest -o $@ $^ -lm -lz
+
 # So is the test page's (test_sw_testpage.c): what it holds, once, is in PSRAM.
 build/test_sw_testpage: CFLAGS += -DBIGMEM_COUNT
 build/test_sw_testpage: test/test_sw_testpage.c $(SRCS) | build
+	$(CC) $(CFLAGS) $(INCS) -Itest -o $@ $^ -lm -lz
+
+# And the 300's (W-1102), the same page at 300 dpi through its page stage.
+build/test_qd_testpage: CFLAGS += -DBIGMEM_COUNT
+build/test_qd_testpage: test/test_qd_testpage.c $(SRCS) | build
 	$(CC) $(CFLAGS) $(INCS) -Itest -o $@ $^ -lm -lz
 
 # W-1088 review: the printer list's core takes none of the board's internal
@@ -164,9 +185,14 @@ SW_OBJS := build/sw_model.o build/sw_code.o build/sw_page.o build/sw_session.o b
 build/sw_%.o: $(COMP)/stylewriter/sw_%.c | build
 	$(CC) $(CFLAGS) $(INCS) -c -o $@ $<
 
-test: $(TESTBIN) build/printers_core.o build/port_policy.o build/logbook_core.o $(SW_OBJS)
+# The QuickDraw LaserWriters' cores (W-1102), held to the same rule.
+QD_OBJS := build/qd_model.o build/qd_wire.o build/qd_status.o build/qd_page.o build/qd_session.o build/qd_testpage.o
+build/qd_%.o: $(COMP)/qdlaser/qd_%.c | build
+	$(CC) $(CFLAGS) $(INCS) -c -o $@ $<
+
+test: $(TESTBIN) build/printers_core.o build/port_policy.o build/logbook_core.o $(SW_OBJS) $(QD_OBJS)
 	@fail=0; for t in $(TESTBIN); do ./$$t || fail=1; done; \
-	for o in printers_core port_policy logbook_core $(basename $(notdir $(SW_OBJS))); do \
+	for o in printers_core port_policy logbook_core $(basename $(notdir $(SW_OBJS) $(QD_OBJS))); do \
 	  if nm build/$$o.o | grep -E ' [bBdD] ' | grep -v ' ltmp'; then \
 	    echo "FAIL $$o: writable statics (above)"; fail=1; \
 	  else echo "ok  $$o: no writable statics"; fi; \
@@ -243,6 +269,20 @@ build/swprint: build/swhost
 .PHONY: swinterop
 swinterop: build/swhost build/rip
 	@python3.14 ../stylewriter/test_swinterop.py
+
+# The Personal LaserWriter 300 on the host (W-1102). qdcheck holds the page stage and session's
+# packets and line image, decoded by tools/qdlaser/qdfake.py, to the rip's dots; qdhost prints
+# through the firmware's session to qdfake.py over a pty, and qdinterop runs it through every
+# fault the printer has.
+build/qdhost: qdhost.c png_read.c $(SRCS) | build
+	$(CC) $(CFLAGS) $(INCS) -o $@ $^ -lm -lz
+
+.PHONY: qdcheck qdinterop
+qdcheck: build/rip
+	@python3.14 test/qdcheck.py
+
+qdinterop: build/qdhost build/rip
+	@python3.14 ../qdlaser/test_qdinterop.py
 
 # Apple's StyleWriter drivers' captures held to the firmware's session and rip (W-1103).
 # The captures are logs from the emulated-Mac rig (tools/stylewriter/capture.md), kept in

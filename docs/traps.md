@@ -196,6 +196,21 @@ Traps already explained in a code comment are listed only when the comment is ea
   the new one on the Mac for a while.
 - **Stale UUIDs linger as twins.** ESP mDNS does not cache-flush the previous boot's TXT record,
   so a UUID or name change shows two printers until client caches expire (~75 min).
+- **A printer's whole answer must fit `RESP_MAX`.** Get-Printer-Attributes is encoded into one
+  buffer per IPP worker (`ipp_server.c`); an answer that does not fit fails on the board and
+  nowhere else. The largest is a Personal LaserWriter 300's six sheets asked for as `all` with
+  `media-col-database`, 6,688 bytes (W-1102), so `RESP_MAX` is 7,680. The four workers' scratch
+  (~67 KB) is in PSRAM. `tools/ipp`'s `test_qd_caps` and `test_sw_caps` print each printer's
+  size; a printer with more sheets or sources raises it, in the tests too.
+- **A Mac's print job carries about 50 settings of its own.** The print dialog adds
+  `com.apple.print.*` attributes to every Print-Job: a one-page job to a Personal LaserWriter 300
+  had a 2,082-byte attribute section (W-1102, 2026-11-13), past the 2,048 the board then read.
+  The board answered 400 and macOS paused the queue ("Print job was not accepted"). The section
+  must fit `HDRBUF_MAX`, now 8,192, in the same PSRAM scratch as `RESP_MAX`.
+- **A Mac's print dialog sends no `media-col`.** Its job carries `media` "Letter",
+  `PageSize` "Letter" and the PPD option `InputSlot` "Manual" (capitalised, nameWithoutLanguage)
+  as Job attributes of their own (macOS, board 1, 2026-11-13). `ipp_req` reads `InputSlot` as
+  well as media-col's `media-source`, or a Mac's manual-slot page feeds from the cassette.
 - **Never advertise Create-Job / Send-Document.** With them in `operations-supported` the
   iPhone held every job at "Waiting" (SPEC §3.4).
 - **iOS and macOS open 25–50 parallel Get-Printer-Attributes connections.** Workers parked on
@@ -414,6 +429,66 @@ Traps already explained in a code comment are listed only when the comment is ea
   the densest 400-row band (the still life beside its ramps) is 73 KB, about 13 s on the wire
   however fast it is drawn.
 
+- **A Personal LaserWriter 300 drives a clock on HSKi, IO8 on rev A** (W-1102): 533 kHz while
+  it is on. `serial_out` counts its edges with PCNT through the GPIO matrix, so the pad stays
+  UART1's CTS. PCNT's counter is 16 bits (32,767 here): the line task counts for 50 ms of each
+  100 ms (26,650 edges at 533 kHz), clears the count each window, and lets the unit accumulate
+  past its limit so a window stretched by a busy core still counts true. Clocked is two windows
+  running at 100 kHz or more; gone is 20 below (`serial_clock.c`), about 2 s: board 1's 300
+  stopped its clock for under a second three times one afternoon with nobody near it
+  (2026-11-13), and at two windows each showed on the phones as Offline and back. A stop ridden
+  out is a warning in the log. While clocked, the line's level is never reported: it is
+  noise.
+- **IO17 is UART1's IO_MUX TxD pin.** A GPIO write reaches the pad only after
+  `esp_rom_gpio_pad_select_gpio` moves it to the GPIO function; until then the UART still drives
+  it. `qd_link_open` takes TxD from the UART with `serial_out_lend(1)` and does that first.
+- **ESP-IDF's SPI slave reads chip select from a pad at every transaction's start** (W-1102,
+  `qd_link.c`). `restore_cs` connects the pad named in `spics_io_num` to the chip-select input as
+  each transaction loads, and `freeze_cs` ties it high at the end. Given `spics_io_num = -1` the
+  driver never sets the signal number and would connect input signal 0, the flash's SPIQ, to a
+  pad numbered -1. The link gives the driver TxD as chip select instead: TxD is a GPIO holding
+  mark whenever the driver reads it, which is high, "not selected", on a board whose TxD is not
+  inverted, and `post_setup_cb` then drives chip select from the matrix's constant 0 before it
+  hands TxD to MISO; the chunk's end timer drives it from constant 1. No pad but TxD, RxD and
+  HSKi is touched, so J6 and rev 2026.11's spare pins stay free. Untested on a board with
+  `CONFIG_AIRWRITER_INVERT_TX`: there mark is low, the slave is selected a few microseconds
+  early, and the read-back may fail every chunk. `spicommon_cs_initialize` also points TxD's
+  output at the chip-select output for the moment between `spi_slave_initialize` and the link
+  setting TxD back to mark.
+- **The slave clocks out whatever follows its data while chip select stays low.** A chunk ends
+  only when chip select rises, so each ends in a tail of 4,096 marks (7.7 ms at 533 kHz) and the
+  end timer is armed from `post_setup_cb` as the chunk loads, aimed at the tail's middle: a rip
+  that is slow to fill the next chunk can never leave one running past its tail. The spike's
+  timer was up to 873 us late against a 960 us tail; `worst_end_us` is in the job's log line,
+  and on board 1 it was never more than 1,828 us against the 4,096-mark tail's 3.8 ms half
+  (2026-11-13).
+- **A chunk's read-back can record nothing though the chunk went out** (W-1102, board 1,
+  2026-11-13). About one chunk in 20 to 30, never the first after the link opens, the slave's
+  result has `trans_len` of 0 to 7 bits, no more than the chunk's lead, while the clock is
+  there. Sending such a chunk again printed its rows twice on the test page and a photo: it had
+  reached the printer. `qd_link` counts it as `unchecked` and goes on, but only if the clock is
+  toggling at that moment (`serial_out_clock_live`): `serial_out_clock` holds a pause of up to
+  2 s as present, and a chunk that ended inside a pause never left, so it is short and the job
+  ends Offline. A chunk with more bits recorded than its lead but fewer than sent is a failure
+  too. The cause is not known.
+- **The 300 says a page is done while the sheet is still coming out.** `8E 00` bit 2 comes about
+  15 s before the sheet leaves the printer, while `83 01` bit 5 (paper moving) is still set. A
+  job that went to Ready at page done would go Ready, then Printing again on the next status
+  question; `qd_session_end` asks `83 01` and leaves the state Printing until the paper stops.
+- **A 300's `83 02` `10` is no paper at the source it was told to use, and sets `83 01`'s fault
+  bit too** (board 1, 2026-11-13). The cassette pulled out or empty, or the manual slot chosen
+  (`83 4F`) and empty after a page from it: `83 01` `02`, `83 02` `10`, `82 00` `AC` (engine not
+  ready); `83 2A` says which source has paper. Read as an engine fault, the phone said "check
+  the printer" and a page mid-print failed; read as the cassette, the board said "check the
+  paper cassette" with the cassette full after a manual-slot page. `qd_state_from` and the
+  page's wait skip the fault bit while `10` is set and go by `83 2A`. The job's end sends
+  `83 4C` after a manual-slot page: the printer otherwise keeps the slot, says it has no paper
+  and pulls in any sheet put there.
+- **With a 300 on the port, HSKi's level means nothing.** The test button's cable-test branch
+  reads that level for a printer that isn't there; with a clock it reads whatever edge it lands
+  on. The button goes by `port_line_speaks()`, false when the port's printer is a StyleWriter or
+  a 300, so a 300 gets its test page.
+
 ## LaserWriters (W-1082)
 
 - **`gs` is aliased to `git status` in Wells's shell.** Call Ghostscript by path,
@@ -454,7 +529,10 @@ Traps already explained in a code comment are listed only when the comment is ea
   keep; a list it merely cannot read is replaced. `pr_save` writes the lowest version that
   holds the list (1 until a record or notice names a StyleWriter), so an OTA rollback does not
   touch the printers of anyone with no StyleWriter. A StyleWriter's cartridge is no field of
-  the record: it is `pr_live_t.cart`, read by the board.
+  the record: it is `pr_live_t.cart`, read by the board. Version 4 (W-1102) adds the Personal
+  LaserWriter 300's kind and model and nothing else; it is written only while the list holds
+  one, versions 1 to 3 still load, and a board rolled back to a firmware before it keeps a 4
+  untouched and shares nothing until the next update.
 - **A printer switched on is not ready at its first frame.** The NTR spends 8 s on LLAP ENQs
   (TashTalk passes other nodes' ENQs; `/api/lt` counts them in `frames`, not `heard`), then
   looks up its own name five times 2 s apart, and answers lookups only after that. Look after

@@ -44,6 +44,9 @@
 #include "port_policy.h"
 #include "stylewriter.h"
 #include "sw_status.h"
+#include "qdlaser.h"
+#include "qd_link.h"
+#include "qd_status.h"
 #include "ota_health.h"
 #include "fw_update.h"
 #include "cable_test.h"
@@ -166,7 +169,7 @@ static SemaphoreHandle_t s_job_lock;
 // finishes can never set its cancel on the next job instead.
 static portMUX_TYPE s_tap_mux = portMUX_INITIALIZER_UNLOCKED;
 static int s_test_running;      // the test page holds the lock
-static int s_sw_test_running;   // ... and it is a StyleWriter's: a session, not ImageWriter writes
+static int s_sw_test_running;   // ... and it is a StyleWriter's or a 300's: a session, not ImageWriter writes
 static volatile int s_test_cancel;  // a second tap asked to stop it
 
 static volatile int s_job_waiting;
@@ -365,13 +368,33 @@ static volatile int        s_laser_owns;       // the job in the pipeline is the
 
 // W-1103: a StyleWriter on the port. Its HSKo says nothing, so its own answers are its state:
 // `s_iw_ready` above is then what they say (-1 before the first), not the line.
-static volatile int        s_port_sw;          // the port's record is a StyleWriter (printers_changed)
+// W-1102: the port's record's family (printers_changed). PR_FAM_IMAGEWRITER also stands for a
+// port with no family yet: the line speaks for both (port_fam_norm).
+static volatile pr_family_t s_port_fam = PR_FAM_IMAGEWRITER;
 static volatile int        s_port_answering;   // the port's printer answered its last question
 static volatile sw_state_t s_sw_state = SWS_OFFLINE;   // and what it said (a job's session also reports it)
 static volatile int        s_sw_cart;          // pr_live_t.cart: 0 not read yet, 1 black, 2 colour
-static volatile int        s_sw_owns;          // the job in the pipeline is the StyleWriter's
+static volatile pr_family_t s_job_fam;         // the family whose own job is in the pipeline, PR_FAM_NONE otherwise
 static volatile int        s_hsko = -1;        // HSKo as last reported, whichever printer is there
 static volatile uint32_t   s_line_drops;       // and how often it has gone down
+
+// W-1102: the line (HSKo) speaks for an ImageWriter, and for a port with no family yet; a
+// StyleWriter's or a QuickDraw LaserWriter's own answers are its state.
+static pr_family_t port_fam_norm(pr_family_t f)
+{
+    return f == PR_FAM_NONE ? PR_FAM_IMAGEWRITER : f;
+}
+
+static int port_line_speaks(void)
+{
+    return s_port_fam == PR_FAM_IMAGEWRITER || s_port_fam == PR_FAM_NONE;
+}
+
+static pr_family_t port_fam_of_mode(port_mode_t m)
+{
+    return m == PORT_STYLEWRITER ? PR_FAM_STYLEWRITER
+         : m == PORT_QDLASER ? PR_FAM_QDLASER : PR_FAM_IMAGEWRITER;
+}
 // Events for the port task (kick_task), set by whoever knows and cleared by what acts on them.
 static volatile int        s_look;             // boot, setup or the Printers section asked
 static volatile int        s_confirm_sw;       // the person named the port's printer a StyleWriter
@@ -409,6 +432,17 @@ static volatile int        s_sw_job_silent;
 // (sw_idle_silent). Answering meanwhile leaves it set: the dark comes after.
 static volatile int        s_sw_asleep;
 static volatile sw_model_t s_sw_asleep_model;  // whose: another StyleWriter on the port is not asleep
+// W-1102: a Personal LaserWriter 300 on the port. Its state as it last said it (a job's session
+// reports it too), and the clock on HSKi as serial_out last reported it: clocked, and its rate.
+static volatile qd_state_t s_qd_state = QDS_OFFLINE;
+static volatile int        s_clocked, s_clock_hz;
+// The port task's books for port_policy's clocked port (port_in_t.last_qd_ms, qd_asked).
+static uint32_t            s_last_qd_ms;
+static int                 s_qd_asked;
+// The last job's reason for a person, when it has one (/api/status job_error), cleared as the
+// next job starts: a 300 page that didn't fit in its memory. And that job's first such page.
+static char                s_job_error[64];
+static volatile int        s_qd_bad_page;
 // W-1116: the AirPrint printer (slot) the port's job came in on, and its record id, from the
 // sink's ctx (printers.c's slot_ctx). The job's end goes back to the slot; the record is the
 // job's own family (doc_begin) and the ImageWriter gate's (colour_ok), not the port's.
@@ -747,7 +781,7 @@ static void printer_line_changed(void *ctx, int ready)
     if (!ready) s_line_drops++;
     // W-1103: a StyleWriter's line says nothing; its answers are its state, and the
     // line only tells the port task when an ImageWriter may have taken its place.
-    if (s_port_sw) return;
+    if (!port_line_speaks()) return;
     s_iw_ready = ready;
     printer_state_port_line(ready);     // the kick's, whatever line the panel follows
     // Mid-job the line toggles every printed line: this stays cheap.
@@ -770,7 +804,7 @@ static int box_ready(void)
     if (!iw && lw < 0) return s_iw_ready;
     // W-1116: an ImageWriter record is ready once ESC ? has named it, as port_live reads it,
     // so the panel does not read Ready before the record does.
-    int iw_up = s_iw_ready == 1 && (s_port_sw || s_iw_named);
+    int iw_up = s_iw_ready == 1 && (!port_line_speaks() || s_iw_named);
     if ((iw && iw_up) || lw == 1) return 1;
     if (iw && s_iw_ready < 0) return -1;
     return 0;
@@ -814,7 +848,8 @@ static int port_claim(void *ctx)
 }
 
 static esp_err_t sw_doc_begin(const char *format, const char *name, const ipp_job_opts_t *opts);
-static void port_sw_sync(int sw, int locked);
+static esp_err_t qd_doc_begin(const char *format, const char *name, const ipp_job_opts_t *opts);
+static void port_fam_sync(pr_family_t fam, int locked);
 
 static esp_err_t doc_begin(void *ctx, const char *format, const char *name,
                            const ipp_job_opts_t *opts)
@@ -832,10 +867,16 @@ static esp_err_t doc_begin(void *ctx, const char *format, const char *name,
     // printer on the port: port_claim already answered busy if another port record's printer
     // is there, so here the record is the one on the port or the port is quiet. An ImageWriter
     // job on a quiet port sends no page byte until its model answers (colour_ok's gate).
-    port_sw_sync(printers_record_is_sw(s_port_job_record), 1);
+    port_fam_sync(printers_record_family(s_port_job_record), 1);
     s_ipp_owns = 1;
-    // W-1103: the port's printer is a StyleWriter: the same sink, its own job.
-    if (s_port_sw) return sw_doc_begin(format, name, opts);
+    switch (s_port_fam) {
+    case PR_FAM_STYLEWRITER:            // W-1103: the same sink, its own job
+        return sw_doc_begin(format, name, opts);
+    case PR_FAM_QDLASER:                // W-1102: the same again
+        return qd_doc_begin(format, name, opts);
+    default:                            // an ImageWriter's, below
+        break;
+    }
     stylewriter_link(0);                // the ImageWriter's link, whatever the last job's was
     // W-1116: the rip's screen and gain are this job's own record's (the pipe's otherwise
     // follow the printer on the port, port_screen_follow), set under the job lock before the
@@ -857,6 +898,7 @@ static esp_err_t doc_begin(void *ctx, const char *format, const char *name,
     ESP_LOGI(TAG, "job %d format %s, rssi %d", (int)s_last_job_id,
              format[0] ? format : "(unspecified)", rssi);
     memdiag_mark("job start");          // W-1094
+    s_job_error[0] = '\0';
     strncpy(s_last_job, name && name[0] ? name : "Untitled", sizeof s_last_job - 1);
     s_last_job[sizeof s_last_job - 1] = '\0';
     s_stream_crc = 0;
@@ -886,7 +928,8 @@ static void doc_cancel(void *ctx)
     (void)ctx;
     if (!s_ipp_owns) return;
     s_job_cancelled = 1;
-    if (s_sw_owns) stylewriter_cancel();     // its session stops at its next step
+    if (s_job_fam == PR_FAM_STYLEWRITER) stylewriter_cancel();     // its session stops at its next step
+    else if (s_job_fam == PR_FAM_QDLASER) qdlaser_cancel();         // W-1102: the same
     else serial_out_set_abort(1);    // a paused printer must not hold the job hostage
     job_pipe_abort();
 }
@@ -983,13 +1026,16 @@ static void job_finished(const job_pipe_stats_t *st, int ok)
 
 static void laser_finished(const job_pipe_stats_t *st, int ok);
 static void sw_finished(const job_pipe_stats_t *st, int ok);
+static void qd_finished(const job_pipe_stats_t *st, int ok);
 
 // job_pipe's done callback: the pipeline has printed the document or let it go.
 static void pipe_done(void *ctx, const job_pipe_stats_t *st)
 {
     (void)ctx;
-    if (s_sw_owns) {
+    if (s_job_fam == PR_FAM_STYLEWRITER) {
         sw_finished(st, s_doc_ok);
+    } else if (s_job_fam == PR_FAM_QDLASER) {
+        qd_finished(st, s_doc_ok);
     } else if (s_laser_owns) {
         laser_finished(st, s_doc_ok);
     } else {
@@ -1012,16 +1058,22 @@ static void doc_end(void *ctx, int ok)
     // that is waiting out a paused printer, so the pipeline unwinds now
     // instead of after the stall limit. A StyleWriter's session stops at its next step.
     if (!ok) {
-        if (s_sw_owns) stylewriter_cancel();
+        if (s_job_fam == PR_FAM_STYLEWRITER) stylewriter_cancel();
+        else if (s_job_fam == PR_FAM_QDLASER) qdlaser_cancel();
         else serial_out_set_abort(1);
     }
     if (s_job_pipe_ok) {
         job_pipe_end(ok);
         return;
     }
-    if (s_sw_owns) {                    // the pipeline never started: finish here
+    if (s_job_fam == PR_FAM_STYLEWRITER) {                    // the pipeline never started: finish here
         job_pipe_stats_t none = {0};
         sw_finished(&none, 0);
+        return;
+    }
+    if (s_job_fam == PR_FAM_QDLASER) {                        // W-1102: the same
+        job_pipe_stats_t none = {0};
+        qd_finished(&none, 0);
         return;
     }
     // A failed job_pipe_begin never created the pipeline task, so nothing
@@ -1056,6 +1108,7 @@ static esp_err_t laser_doc_begin(void *ctx, const char *format, const char *name
     s_last_job_id = opts ? opts->job_id : 0;
     ESP_LOGI(TAG, "LaserWriter job %d for printer %d format %s", (int)s_last_job_id, id,
              format[0] ? format : "(unspecified)");
+    s_job_error[0] = '\0';
     strncpy(s_last_job, name && name[0] ? name : "Untitled", sizeof s_last_job - 1);
     s_last_job[sizeof s_last_job - 1] = '\0';
     s_job_cancelled = 0;
@@ -1141,7 +1194,8 @@ static int laser_relay(int take)
             s_job_waiting = 1;
             return -1;
         }
-        strncpy(s_last_job, "Relayed job", sizeof s_last_job - 1);
+        s_job_error[0] = '\0';
+    strncpy(s_last_job, "Relayed job", sizeof s_last_job - 1);
         s_printing = 1;
         s_laser_owns = 1;
         job_touch();
@@ -1167,7 +1221,7 @@ static int laser_relay(int take)
 
 static esp_err_t sw_doc_begin(const char *format, const char *name, const ipp_job_opts_t *opts)
 {
-    s_sw_owns = 1;                      // doc_claim took s_job_lock; sw_finished gives it
+    s_job_fam = PR_FAM_STYLEWRITER;     // doc_claim took s_job_lock; sw_finished gives it
     s_sw_job_silent = 0;                // a new session: what it finds is the state
     s_sw_was_answering = s_port_answering;
     // W-1116: the job's own record's model and screen (the one the phone picked), not the
@@ -1178,6 +1232,7 @@ static esp_err_t sw_doc_begin(const char *format, const char *name, const ipp_jo
     ESP_LOGI(TAG, "StyleWriter job %d format %s, quality %d", (int)s_last_job_id,
              format[0] ? format : "(unspecified)", opts ? opts->quality : 0);
     memdiag_mark("job start");          // W-1094
+    s_job_error[0] = '\0';
     strncpy(s_last_job, name && name[0] ? name : "Untitled", sizeof s_last_job - 1);
     s_last_job[sizeof s_last_job - 1] = '\0';
     s_printer_failed = 0;
@@ -1232,12 +1287,114 @@ static void sw_finished(const job_pipe_stats_t *st, int ok)
     // A job that stopped short reset the printer, which takes 2 s to settle: the port task's
     // next `1` and `2` are due in 10 s, not now, or a printer still starting reads as gone.
     s_last_status_ms = uptime_ms();
-    s_sw_owns = 0;
+    s_job_fam = PR_FAM_NONE;
     s_ipp_owns = 0;
     line_source();
     xSemaphoreGive(s_job_lock);
     ipp_server_job_done_for(s_port_job_slot, printed);
     printers_apply();                   // W-1088: a change to the port's printer waited for it
+}
+
+// ------------------------------------------------- Personal LaserWriter 300 jobs
+// W-1102: the port's printer is a Personal LaserWriter 300. Its job takes the same sink, job
+// lock and pipeline again, rips at 300 dpi into qd_page's rows and runs its session on the rip
+// task (qdlaser.c): the link opens and the printer is asked who it is as the rip begins, each
+// page is loaded and printed as the rip makes it, and a page too big for the printer's
+// memory in the record's screen goes in Apple's.
+
+static esp_err_t qd_doc_begin(const char *format, const char *name, const ipp_job_opts_t *opts)
+{
+    s_job_fam = PR_FAM_QDLASER;         // doc_claim took s_job_lock; qd_finished gives it
+    s_qd_bad_page = 0;
+    qd_model_t m = pr_model_to_qd(printers_record_model(s_port_job_record));
+    int manual = opts ? opts->manual : 0;
+    s_last_job_id = opts ? opts->job_id : 0;
+    ESP_LOGI(TAG, "LaserWriter 300 job %d format %s, source %s", (int)s_last_job_id,
+             format[0] ? format : "(unspecified)", manual ? "manual" : "cassette");
+    memdiag_mark("job start");          // W-1094
+    s_job_error[0] = '\0';
+    strncpy(s_last_job, name && name[0] ? name : "Untitled", sizeof s_last_job - 1);
+    s_last_job[sizeof s_last_job - 1] = '\0';
+    s_printer_failed = 0;
+    s_job_cancelled = 0;
+    s_printing = 1;
+    job_touch();
+    led_grid_set_source(LG_SRC_AIRPRINT);
+    line_source();
+    printer_state_post(PS_EV_JOB_START);
+    char screen[sizeof s_set.dither];
+    int gain = 0;
+    ht_algo_t algo = HT_ATKINSON;
+    if (!printers_record_screen(s_port_job_record, screen, sizeof screen, &gain) &&
+        ht_algo_from_name(screen, &algo))
+        algo = HT_ATKINSON;
+    job_pipe_target_t t = { 0 };
+    s_job_pipe_ok = 0;
+    qd_link_stats(NULL, 1);
+    if (qdlaser_job_begin(m, algo, gain, manual, &t)) return ESP_FAIL;
+    esp_err_t err = job_pipe_begin_to(name, &t);
+    s_job_pipe_ok = err == ESP_OK;
+    return err;
+}
+
+// A page was settled, on the rip task: the screen it went in, or too big for the printer's memory.
+static void qd_page_cb(int page, int apple, uint32_t bytes, int too_big)
+{
+    if (too_big) {
+        ESP_LOGW(TAG, "page %d: didn't fit in the printer's memory", page + 1);
+        if (!s_qd_bad_page) s_qd_bad_page = page + 1;
+    } else {
+        ESP_LOGI(TAG, "page %d: %s screen, %u bytes of codes", page + 1,
+                 apple ? "Apple's" : "the record's", (unsigned)bytes);
+    }
+}
+
+// The rip is over and every page that was going to print has, or the job was abandoned. On the
+// rip task (or the IPP worker, when the pipeline never started).
+static void qd_finished(const job_pipe_stats_t *st, int ok)
+{
+    int cancelled = s_job_cancelled;
+    int rc = qdlaser_job_end(!(st->rc == 0 && ok && !cancelled));
+    int printed = rc == QD_OK;
+    s_printing = 0;
+    job_touch();
+    memdiag_mark("job done");           // W-1094
+    s_last_pages = (size_t)st->pages;
+    s_last_bytes = st->printer_bytes;
+    if (s_qd_bad_page) {
+        // The job went on past it, and ends as failed with the page named, on the phone and
+        // the settings page alike.
+        snprintf(s_job_error, sizeof s_job_error, "Page %d didn’t fit in the printer’s memory.",
+                 s_qd_bad_page);
+        ipp_server_job_message_for(s_port_job_slot, s_job_error);
+    }
+    if (printed) {
+        printers_port_answered(PR_HEARD_QDLASER);   // its 83 3E named the record's model
+        ESP_LOGI(TAG, "LaserWriter 300 job: %d page%s, %u bytes in, all out in %u s",
+                 st->pages, st->pages == 1 ? "" : "s", (unsigned)st->doc_bytes,
+                 (unsigned)(st->ms / 1000));
+        ota_health_printed();           // W-1059: this firmware prints; under the job lock
+    } else {
+        ESP_LOGE(TAG, "LaserWriter 300 job %s: %d page%s, %u bytes in, rc %d, printer %d%s",
+                 cancelled ? "canceled" : "failed", st->pages, st->pages == 1 ? "" : "s",
+                 (unsigned)st->doc_bytes, st->rc, rc, ok ? "" : ", transfer truncated");
+    }
+    qd_link_stats_t ls;
+    qd_link_stats(&ls, 0);
+    ESP_LOGI(TAG, "LaserWriter 300 link: %u chunks, %u bits, %u bad, %u stalls, %u unchecked, "
+             "ends at most %d us late; last failure %u, %u of %u bits in %d us, due %d us",
+             (unsigned)ls.chunks, (unsigned)ls.bits, (unsigned)ls.bad_bits, (unsigned)ls.stalls,
+             (unsigned)ls.unchecked, (int)ls.worst_end_us, (unsigned)ls.fail_why,
+             (unsigned)ls.fail_got, (unsigned)ls.fail_want, (int)ls.fail_took_us, (int)ls.fail_due_us);
+    printer_state_post(printed ? PS_EV_JOB_DONE : cancelled ? PS_EV_JOB_CANCELLED
+                                                            : PS_EV_JOB_FAILED);
+    s_last_qd_ms = uptime_ms();         // its status was just in the job: the next in 3 s
+    s_job_fam = PR_FAM_NONE;
+    s_ipp_owns = 0;
+    line_source();
+    xSemaphoreGive(s_job_lock);
+    ipp_server_job_done_for(s_port_job_slot, printed);
+    printers_apply();                   // a change to the port's printer waited for it
 }
 
 // ------------------------------------------------------------- printers
@@ -1256,7 +1413,7 @@ static void port_live(pr_live_t *o)
     o->cleaning = o->printing && s_cleaning;
     o->attention = mine && v.state == PS_ATTENTION;
     o->failed = mine && v.state == PS_FAILED;
-    if (s_port_sw) {
+    if (s_port_fam == PR_FAM_STYLEWRITER) {
         // W-1103: its own answers. A fault it reports is attention whether or not a job is
         // printing, and the page names it; present means it answered, or is the original
         // StyleWriter reading as ready while it is silent (sw_idle_silent), and ready that it
@@ -1267,6 +1424,14 @@ static void port_live(pr_live_t *o)
         o->attention = s_port_answering && sw_state_fault(st);
         o->fault = o->attention ? (uint8_t)pr_fault_from_sw(st) : 0;
         o->cart = (uint8_t)s_sw_cart;
+    } else if (s_port_fam == PR_FAM_QDLASER) {
+        // W-1102: its own answers too. Present means it answered its last question, which
+        // only a clock on HSKi lets it be asked.
+        qd_state_t st = s_qd_state;
+        o->present = s_port_answering;
+        o->ready = o->present && qd_state_ready(st);
+        o->attention = o->present && qd_state_fault(st);
+        o->fault = o->attention ? (uint8_t)pr_fault_from_qd(st) : 0;
     }
 }
 
@@ -1303,11 +1468,12 @@ static void port_screen_follow(void)
 // with (its panel, IPP state and cartridge): `locked` when the caller holds the job lock, else
 // it is taken without waiting, and a flip that finds it held is the port task's to make once
 // the job is over.
-static void port_sw_sync(int sw, int locked)
+static void port_fam_sync(pr_family_t fam, int locked)
 {
-    if (sw == s_port_sw) return;
+    fam = port_fam_norm(fam);
+    if (fam == s_port_fam) return;
     if (!locked && xSemaphoreTake(s_job_lock, 0) != pdTRUE) return;
-    s_port_sw = sw;
+    s_port_fam = fam;
     s_port_answering = 0;
     s_sw_cart = 0;
     s_sw_job_silent = 0;
@@ -1319,11 +1485,15 @@ static void port_sw_sync(int sw, int locked)
     // flip is answered by the act that made it, so it is not a look asked during that act.
     if (xTaskGetCurrentTaskHandle() == s_kick_handle) s_look = 1;
     else look_ask();
-    if (sw) {
+    if (fam == PR_FAM_STYLEWRITER) {
         s_iw_ready = -1;                // its answers will say; HSKo says nothing
         s_iw_named = 0;                 // an ImageWriter's name is not this record's
         s_sw_state = SWS_OFFLINE;
         s_last_plain_ms = port_plain_due(uptime_ms());
+    } else if (fam == PR_FAM_QDLASER) {
+        s_iw_ready = -1;                // W-1102: its answers will say; HSKi is its clock
+        s_iw_named = 0;
+        s_qd_state = QDS_OFFLINE;
     } else {
         s_iw_ready = s_hsko;            // the line speaks again
         if (s_hsko >= 0) printer_state_port_line(s_hsko);
@@ -1361,6 +1531,7 @@ static void sw_cart_seen(int colour)
 // a colour cartridge's or a II's ribbon).
 static int colour_offered(int kind, int model)
 {
+    if (kind == PR_KIND_QDLASER) return 0;      // W-1102: black only
     if (kind != PR_KIND_STYLEWRITER) return model != PR_MODEL_IW1;
     const sw_spec_t *sp = sw_spec(pr_model_to_sw((pr_model_t)model));
     return sp && sp->colour;
@@ -1370,7 +1541,8 @@ static int colour_offered(int kind, int model)
 // which is the port's printer until anything answers).
 static int ribbon_offered(void)
 {
-    return s_port_sw ? colour_offered(PR_KIND_STYLEWRITER, pr_model_from_sw(printers_port_sw_model()))
+    return s_port_fam == PR_FAM_STYLEWRITER ? colour_offered(PR_KIND_STYLEWRITER, pr_model_from_sw(printers_port_sw_model()))
+         : s_port_fam == PR_FAM_QDLASER ? 0
                      : colour_offered(PR_KIND_IMAGEWRITER, printers_port_model());
 }
 
@@ -1436,6 +1608,94 @@ static void sw_online(sw_model_t m)
     s_last_status_ms = uptime_ms();     // `1` and `2` were just asked: not again in 10 s
 }
 
+// ------------------------------------------------- a Personal LaserWriter 300 on the port
+// W-1102: the port task asks it while its clock runs, a job's session reports through
+// qd_state_cb, and these turn what it says into the box's state, the panel's line and what the
+// phone is told, as the StyleWriter's do.
+
+// Each change of state, once, by name.
+static void qd_log_state(qd_state_t st, const qd_raw_t *raw)
+{
+    static const char *const k_names[] = {
+        [QDS_READY] = "ready", [QDS_PRINTING] = "printing", [QDS_NO_PAPER] = "paper out",
+        [QDS_NO_CASSETTE] = "cassette out", [QDS_MANUAL] = "waiting for a sheet in the manual slot",
+        [QDS_JAM] = "jam", [QDS_COVER] = "cover open", [QDS_ENGINE] = "engine fault",
+        [QDS_OFFLINE] = "offline",
+    };
+    if (st == QDS_ENGINE && raw)
+        ESP_LOGW(TAG, "LaserWriter 300: engine fault 83 04 %02x 83 07 %02x", raw->s04, raw->s07);
+    else
+        ESP_LOGI(TAG, "LaserWriter 300: %s", (unsigned)st < sizeof k_names / sizeof k_names[0]
+                                            ? k_names[st] : "?");
+}
+
+// A job's or the test page's session reports its state, on the rip task or the page's own:
+// nothing here writes flash. The fault goes to the panel at once and to IPP in its own words.
+static void qd_state_cb(qd_state_t st)
+{
+    if (st != s_qd_state) qd_log_state(st, NULL);
+    s_qd_state = st;
+    s_port_answering = st != QDS_OFFLINE;
+    s_iw_ready = qd_state_ready(st);
+    if (s_printing) {
+        printer_state_post(qd_state_fault(st) ? PS_EV_FAULT_ON : PS_EV_FAULT_OFF);
+        printer_state_post(st == QDS_OFFLINE ? PS_EV_LINE_NOT_READY : PS_EV_LINE_READY);
+    }
+    port_push(printer_state_view().state);
+}
+
+// What the port task's question found, idle: the state to show, and whether the record's
+// printer answered.
+static void qd_idle_state(qd_state_t st, int answered, const qd_raw_t *raw)
+{
+    if (st != s_qd_state) qd_log_state(st, raw);
+    s_qd_state = st;
+    s_port_answering = answered;
+    if (answered) printers_port_answered(PR_HEARD_QDLASER);
+    s_iw_ready = qd_state_ready(st);
+    line_source();
+    port_push(printer_state_view().state);
+}
+
+// The record's 300 asked for its state (and its lights set), under the job lock.
+static void qd_online(void)
+{
+    qd_model_t m = printers_port_qd_model();
+    qd_state_t st = QDS_OFFLINE;
+    qd_raw_t raw = { 0 };
+    if (m != QD_NONE && qdlaser_status(s_clock_hz, m, &st, &raw) == QD_OK) qd_idle_state(st, 1, &raw);
+    else qd_idle_state(QDS_OFFLINE, 0, NULL);
+}
+
+// serial_out's on_clock, from its line task: a clock on HSKi came (a QuickDraw LaserWriter was
+// switched on, or plugged in on) or went. Each find logs the clock's rate and duty, so a board
+// whose U3 carries a marginal clock shows in its log. A job in flight learns of a lost clock
+// from its own session.
+static void printer_clock_changed(void *ctx, int clocked, int hz)
+{
+    (void)ctx;
+    s_clock_hz = hz;
+    s_clocked = clocked;
+    if (clocked) {
+        int duty = serial_out_clock_duty();
+        ESP_LOGI(TAG, "printer port: a clock, %d Hz, duty %d.%d%%", hz, duty / 10, duty % 10);
+        if (s_kick_handle) xTaskAbortDelay(s_kick_handle);   // the port task asks at once
+        return;
+    }
+    printers_port_clock_gone();
+    if (s_port_fam == PR_FAM_QDLASER && !s_printing) qd_idle_state(QDS_OFFLINE, 0, NULL);
+    look_ask();
+    ESP_LOGI(TAG, "printer port: the clock stopped");
+}
+
+// J2's link for the port's record: a QuickDraw LaserWriter's opens per question and per job
+// (qd_link.c), so there is nothing to set; the others' are the StyleWriter glue's.
+static void port_link_record(void)
+{
+    if (printers_port_family() == PR_FAM_QDLASER) return;
+    stylewriter_link_record();
+}
+
 // The person named the port's printer a StyleWriter (Add a Printer…, the unknown printer's
 // notice, the detail's Model): the full sequence, which finds the original too, confirms it
 // and reads its model. A printer that stays silent keeps the pick, offline.
@@ -1443,7 +1703,7 @@ static void sw_confirm(void)
 {
     int id = s_confirm_sw_id;
     // The record the person picked; skip if it is no longer a port StyleWriter (changed since).
-    if (printers_test_kind(id) != 3) return;
+    if (printers_test_kind(id) != PR_TEST_STYLEWRITER) return;
     ESP_LOGI(TAG, "asking the port's StyleWriter what it is");
     sw_model_t m = stylewriter_ask_full();
     s_last_status_ms = uptime_ms();
@@ -1459,14 +1719,14 @@ static void sw_confirm(void)
     s_sw_asleep = 0;                    // the reset woke it: it stays awake now
     // The picked record takes the model it named (when free), and that model is on the port now.
     printers_port_set_sw_model(id, m);
-    port_sw_sync(printers_port_is_stylewriter(), 1);
+    port_fam_sync(printers_port_family(), 1);
     sw_online(m);
     ESP_LOGI(TAG, "port task: %u bytes of stack to spare", (unsigned)uxTaskGetStackHighWaterMark(NULL));
 }
 
 static int sw_cancelled(void)
 {
-    if (s_sw_owns) return s_job_cancelled;
+    if (s_job_fam == PR_FAM_STYLEWRITER || s_job_fam == PR_FAM_QDLASER) return s_job_cancelled;
     return s_test_running && s_test_cancel;      // the test page's second tap
 }
 
@@ -1504,14 +1764,14 @@ static void sw_clean_task(void *arg)
 // would wait on it with the lock held): stylewriter_clean_check decides, with the lock.
 static int sw_clean_web(int id)
 {
-    if (printers_test_kind(id) != 3) return 502;
+    if (printers_test_kind(id) != PR_TEST_STYLEWRITER) return 502;
     int busy = xSemaphoreTake(s_job_lock, 0) != pdTRUE;
     if (!busy) {
         // W-1116: the cleaning's family is its record's, a StyleWriter, under the lock, as a
         // job's (doc_begin) and a test page's (test_page_to) are: whose answers are the port's
         // state while it runs, and whose family the answer at its end names. The flip zeroes
         // answering, so what the StyleWriter was doing before is read after it.
-        port_sw_sync(1, 1);
+        port_fam_sync(PR_FAM_STYLEWRITER, 1);
         s_sw_job_silent = 0;                     // a new session: what it finds is the state
         s_sw_was_answering = s_port_answering;
     }
@@ -1580,11 +1840,11 @@ static void port_model_changed(int id)
 
 static void printers_changed(void)
 {
-    port_sw_sync(printers_port_is_stylewriter(), 0);
+    port_fam_sync(printers_port_family(), 0);
     // The record on the port may be another of the same family now (the LQ for the II): the
     // screen follows it under the job lock; a job in progress keeps its own, and the port task
     // follows once the job is over (s_screen_check).
-    if (!s_port_sw) {
+    if (port_line_speaks()) {
         if (xSemaphoreTake(s_job_lock, 0) == pdTRUE) {
             port_screen_follow();
             xSemaphoreGive(s_job_lock);
@@ -1645,22 +1905,23 @@ static int lt_print_begin(void *ctx, at_link_t link)
         return 1;
     }
     // A Mac's stream is the ImageWriter driver's, and goes to whichever ImageWriter answers on
-    // the port (W-1116): busy while the printer on the port is a StyleWriter now (s_port_sw),
+    // the port (W-1116): busy while the printer on the port is a StyleWriter now (s_port_fam),
     // a flip to or from one is pending, or a StyleWriter's first answer awaits its repeat (the
     // port task asks again within 500 ms, R16, and has let the lock go meanwhile: s_port_confirm
     // with the list's last answer a StyleWriter's), so the driver's bytes never reach a
     // StyleWriter. Not on the list's last answer alone: a StyleWriter sighted once, its repeat
     // over and gone, must not keep Macs busy while nothing answers. The offers keep Macs from
     // asking; this keeps a stray one from being heard. A family flip is the port task's to
-    // make, within a tick, not this task's: port_sw_sync pushes the AppleTalk status, whose
+    // make, within a tick, not this task's: port_fam_sync pushes the AppleTalk status, whose
     // stack lock this task holds (W-1116 review, NB1); the Mac hears busy until then.
-    int sw = printers_port_is_stylewriter();
+    pr_family_t fam = port_fam_norm(printers_port_family());
     int sighted = s_port_confirm != PA_NONE && printers_port_heard() == PR_HEARD_STYLEWRITER;
-    if (sw != s_port_sw || s_port_sw || sighted) {
+    if (fam != s_port_fam || !port_line_speaks() || sighted) {
         xSemaphoreGive(s_job_lock);
         return 1;
     }
     stylewriter_link(0);
+    s_job_error[0] = '\0';
     strncpy(s_last_job, lt_job_name(link), sizeof s_last_job - 1);
     s_stream_crc = 0;
     s_printer_failed = 0;
@@ -1773,19 +2034,20 @@ static void kick_task(void *arg)
         if (!again) vTaskDelay(pdMS_TO_TICKS(500));
         again = 0;
         port_mode_t mode = printers_port_mode();
-        port_sw_sync(mode == PORT_STYLEWRITER, 0);
-        if (s_port_sw != (mode == PORT_STYLEWRITER)) continue;   // a job has the port: after it
+        pr_family_t mode_fam = port_fam_of_mode(mode);
+        port_fam_sync(mode_fam, 0);
+        if (s_port_fam != mode_fam) continue;   // a job has the port: after it
 
         // J2's link follows the port's record (the kind may have changed), and a StyleWriter the
         // person named is asked what it is. Both need the printer to themselves.
         if ((s_link_check || s_confirm_sw || s_screen_check) && xSemaphoreTake(s_job_lock, 0) == pdTRUE) {
             if (s_link_check) {
                 s_link_check = 0;
-                stylewriter_link_record();
+                port_link_record();
             }
             if (s_screen_check) {
                 s_screen_check = 0;
-                if (!s_port_sw) port_screen_follow();   // an ImageWriter's; a StyleWriter job reads its own
+                if (port_line_speaks()) port_screen_follow();   // an ImageWriter's; a StyleWriter job reads its own
             }
             if (s_confirm_sw) {
                 s_confirm_sw = 0;
@@ -1829,7 +2091,8 @@ static void kick_task(void *arg)
 
         port_in_t in = {
             .kind = mode == PORT_NONE ? -1 : mode == PORT_IMAGEWRITER ? PR_KIND_IMAGEWRITER
-                  : mode == PORT_STYLEWRITER ? PR_KIND_STYLEWRITER : PR_KIND_UNKNOWN,
+                  : mode == PORT_STYLEWRITER ? PR_KIND_STYLEWRITER
+                  : mode == PORT_QDLASER ? PR_KIND_QDLASER : PR_KIND_UNKNOWN,
             .iw1_listed = iw1_listed, .sw_listed = sw_listed, .sw1_listed = sw1_listed,
             .said_other = mode == PORT_UNKNOWN_SAID, .line_ready = line_ready,
             // R20: an ImageWriter II or LQ record on the port that ESC ? has not named since its
@@ -1846,6 +2109,10 @@ static void kick_task(void *arg)
             .last_status_ms = s_last_status_ms, .plain_asked = s_plain_asked,
             .plain_unanswered = s_plain_unanswered, .event_plain = s_event_plain,
             .full_due = s_full_due, .confirm = s_port_confirm,
+            // W-1102: a clock on HSKi, and the printer's BREAK since the last look. Not taken
+            // while anything prints: a job's or the test page's session waits for that BREAK.
+            .clocked = s_clocked, .qd_break = s_clocked && !s_printing && serial_out_break_take(),
+            .last_qd_ms = s_last_qd_ms, .qd_asked = s_qd_asked,
         };
         if (s_line_drops != drops) {         // a new busy spell gets a fresh plain question
             drops = s_line_drops;
@@ -1864,7 +2131,7 @@ static void kick_task(void *arg)
             // stream answered busy for the sighting itself (lt_print_begin), the list's screen
             // follow -- must not make the port task forget it, or the Mac's next try slips
             // through before the repeat (task 6 round 3).
-            if (s_printing || s_ipp_owns || s_sw_owns) s_port_confirm = PA_NONE;
+            if (s_printing || s_ipp_owns || s_job_fam != PR_FAM_NONE) s_port_confirm = PA_NONE;
             continue;
         }
 
@@ -1886,7 +2153,7 @@ static void kick_task(void *arg)
             // StyleWriter's place): the flip is made here, under the lock, so the panel and the
             // phone go Ready in this iteration (printers_changed's own sync cannot take the
             // job lock the port task holds).
-            port_sw_sync(printers_port_is_stylewriter(), 1);
+            port_fam_sync(printers_port_family(), 1);
             heard = answered ? PR_HEARD_IMAGEWRITER : PR_HEARD_NONE;
             mine = seen > 0;
             again = !answered;                  // the plain question may follow at once
@@ -1900,7 +2167,7 @@ static void kick_task(void *arg)
             plain = act == PA_FULL ? stylewriter_ask_full() : stylewriter_ask_plain();
             if (plain != SW_NONE) {
                 seen = printers_port_seen_sw(plain);   // makes/finds the record, or PR_SEEN_AGAIN
-                port_sw_sync(printers_port_is_stylewriter(), 1);
+                port_fam_sync(printers_port_family(), 1);
                 heard = PR_HEARD_STYLEWRITER;
                 mine = seen > 0;
             }
@@ -1915,8 +2182,51 @@ static void kick_task(void *arg)
             ESP_LOGI(TAG, "printer busy while idle; sent CTRL-X (%s)", esp_err_to_name(err));
             break;
         }
+        case PA_QDID: {                 // W-1102: a clocked port: who is there
+            uint8_t engine = 0;
+            if (qdlaser_identity(s_clock_hz, &engine) == QD_OK) {
+                seen = printers_port_seen_qd(engine);  // makes/finds the record, or PR_SEEN_AGAIN
+                port_fam_sync(printers_port_family(), 1);
+                heard = PR_HEARD_QDLASER;
+                mine = seen > 0;
+                const char *who = qd_engine_name(engine);
+                ESP_LOGI(TAG, "port: QuickDraw LaserWriter identity %02x (%s)", engine,
+                         who ? who : "a Japanese model");
+            }
+            break;
+        }
+        case PA_QDSTATUS:               // asked below, with its state
         case PA_NONE:
             break;
+        }
+
+        // W-1102: the record's 300, asked its state; a status that gets nothing makes the
+        // identity due at once (port_after).
+        qd_state_t qst = QDS_OFFLINE;
+        qd_raw_t qraw = { 0 };
+        int qd_rc = QD_E_OFFLINE;
+        if (act == PA_QDSTATUS) {
+            qd_model_t qm = printers_port_qd_model();
+            uint32_t t0 = uptime_ms();
+            qd_link_stats(NULL, 1);             // this status's alone
+            if (qm != QD_NONE) qd_rc = qdlaser_status(s_clock_hz, qm, &qst, &qraw);
+            if (qd_rc == QD_OK) {
+                heard = PR_HEARD_QDLASER;
+                mine = 1;
+            } else if (qm != QD_NONE) {
+                // Where a status with the clock still there went quiet, for the bench.
+                qd_link_stats_t ls;
+                qd_link_stats(&ls, 0);
+                if (qraw.miss)
+                    ESP_LOGW(TAG, "LaserWriter 300: no answer to %02x %02x (%u ms; link why %u, "
+                             "%u of %u bits in %d us, due %d us)",
+                             qraw.miss >> 8, qraw.miss & 0xFF, (unsigned)(uptime_ms() - t0),
+                             (unsigned)ls.fail_why, (unsigned)ls.fail_got, (unsigned)ls.fail_want,
+                             (int)ls.fail_took_us, (int)ls.fail_due_us);
+                else
+                    ESP_LOGW(TAG, "LaserWriter 300: status failed, %d (%u ms)", qd_rc,
+                             (unsigned)(uptime_ms() - t0));
+            }
         }
 
         sw_model_t m = printers_port_sw_model();
@@ -1939,7 +2249,7 @@ static void kick_task(void *arg)
                 // Its record is current: the flip, if any, here under the lock. A first
                 // sighting changes nothing yet (the plain question repeats it, below), so the
                 // mode stays and the status just read is not written into another record.
-                if (sw_swap) port_sw_sync(printers_port_is_stylewriter(), 1);
+                if (sw_swap) port_fam_sync(printers_port_family(), 1);
             }
             // One that answered `?` but not `1` and `2` reads as its status says, not
             // answering: the stop's look (the plain question, then ESC ?) finds it again.
@@ -1960,6 +2270,8 @@ static void kick_task(void *arg)
         s_plain_unanswered = in.plain_unanswered;
         s_event_plain = in.event_plain;
         s_full_due = in.full_due;
+        s_last_qd_ms = in.last_qd_ms;
+        s_qd_asked = in.qd_asked;
         // A first sighting (PR_SEEN_AGAIN: the answer would change the list, R16): the same
         // question again at once, and the same answer twice makes the change (`confirm`).
         // A status check's sighting is confirmed by the plain question, which names the model
@@ -1977,13 +2289,13 @@ static void kick_task(void *arg)
             // (which saves the ribbon) and the status.
             ESP_LOGI(TAG, "port task: %u bytes of stack to spare",
                      (unsigned)uxTaskGetStackHighWaterMark(NULL));
-        } else if (act == PA_PLAIN && s_port_sw) {
+        } else if (act == PA_PLAIN && s_port_fam == PR_FAM_STYLEWRITER) {
             // A StyleWriter record whose printer did not answer as it: another StyleWriter there
             // is not the record's (the page and the phone show a swap), and silence is offline
             // (but the original's, sw_idle_silent).
             if (plain != SW_NONE) sw_idle_state(SWS_OFFLINE, 0);
             else sw_idle_quiet();
-        } else if (act == PA_FULL && s_port_sw) {
+        } else if (act == PA_FULL && s_port_fam == PR_FAM_STYLEWRITER) {
             // Start-up or the person's look, and not even the full sequence got the record's
             // printer: it is offline (another StyleWriter there shows as a swap), asleep or not.
             if (plain == SW_NONE) s_sw_job_silent = 1;
@@ -1997,6 +2309,17 @@ static void kick_task(void *arg)
                 if (status_rc == SW_OK) sw_idle_state(st, 1);
                 else sw_idle_quiet();
             }
+        } else if (act == PA_QDSTATUS) {
+            if (qd_rc == QD_OK) qd_idle_state(qst, 1, &qraw);
+            else qd_idle_state(QDS_OFFLINE, 0, NULL);
+        } else if (act == PA_QDID && mine) {
+            // W-1102: the 300 on the port is its record's: its state and lights at once.
+            qd_online();
+            if (s_look_gen == look_gen) s_look = 0;
+            ESP_LOGI(TAG, "port task: %u bytes of stack to spare",
+                     (unsigned)uxTaskGetStackHighWaterMark(NULL));
+        } else if (act == PA_QDID) {
+            port_push(printer_state_view().state);   // nothing of ours, or another family's
         } else if (act == PA_ESCQ && mine) {
             // The ImageWriter on the port is its record's: the flip's own look is answered, and
             // the screen follows the record while the lock is held (a look asked meanwhile stays).
@@ -2196,6 +2519,7 @@ static void ps_test_task(void *arg)
 
 static void ps_test_locked(int id)
 {
+    s_job_error[0] = '\0';
     strncpy(s_last_job, "Test page", sizeof s_last_job - 1);
     s_printing = 1;
     s_laser_owns = 1;
@@ -2222,24 +2546,36 @@ static void ps_test_locked(int id)
 // poll task and the settings page are answered at once; the task's stack is internal, as the
 // cartridge it reads may be saved to flash. The second tap of the button is the cancel
 // (sw_cancelled), which the session reads between steps: a block in flight finishes.
-static void sw_test_task(void *arg)
+// What a raster test page prints about its record and the board (a StyleWriter's, a 300's).
+typedef struct { char name[PR_NAME_MAX], board[112], host[64]; } tp_text_t;
+
+static sw_tp_info_t tp_details(int id, tp_text_t *x)
 {
-    int id = (int)(intptr_t)arg;    // W-1116: the page's own StyleWriter record, not the port's
-    sw_model_t m = pr_model_to_sw(printers_record_model(id));
-    char screen[sizeof s_set.dither], name[PR_NAME_MAX] = "", board[112], host[64];
+    char screen[sizeof s_set.dither];
     int gain = 0;
     ht_algo_t algo = HT_ATKINSON;
     if (!printers_record_screen(id, screen, sizeof screen, &gain) && ht_algo_from_name(screen, &algo))
         algo = HT_ATKINSON;
-    printers_describe(id, name, sizeof name, NULL, 0, NULL, 0);
+    x->name[0] = '\0';
+    printers_describe(id, x->name, sizeof x->name, NULL, 0, NULL, 0);
     int has_ip = s_ip[0] && strcmp(s_ip, "0.0.0.0");
-    if (has_ip) snprintf(board, sizeof board, "AirWriter %s at %s", esp_app_get_description()->version, s_ip);
-    else        snprintf(board, sizeof board, "AirWriter %s, no IP yet", esp_app_get_description()->version);
+    if (has_ip) snprintf(x->board, sizeof x->board, "AirWriter %s at %s", esp_app_get_description()->version, s_ip);
+    else        snprintf(x->board, sizeof x->board, "AirWriter %s, no IP yet", esp_app_get_description()->version);
     // The settings page's address: its host name, or in setup mode the board's own.
-    if (s_ap_mode) snprintf(host, sizeof host, "%s", s_ip);
-    else           snprintf(host, sizeof host, "%s.local", s_set.hostname);
-    sw_tp_info_t info = { .printer = name, .board = board, .host = host, .model = m,
-                          .colour_cart = s_sw_cart == 2, .gain = gain, .screen = algo };
+    if (s_ap_mode) snprintf(x->host, sizeof x->host, "%s", s_ip);
+    else           snprintf(x->host, sizeof x->host, "%s.local", s_set.hostname);
+    return (sw_tp_info_t){ .printer = x->name, .board = x->board, .host = x->host, .gain = gain,
+                           .screen = algo };
+}
+
+static void sw_test_task(void *arg)
+{
+    int id = (int)(intptr_t)arg;    // W-1116: the page's own StyleWriter record, not the port's
+    sw_model_t m = pr_model_to_sw(printers_record_model(id));
+    tp_text_t x;
+    sw_tp_info_t info = tp_details(id, &x);
+    info.model = m;
+    info.colour_cart = s_sw_cart == 2;
     int rc = stylewriter_test_page(m, &info);
     s_sw_was_answering = 0;
     if (rc == SW_OK) printers_port_answered(PR_HEARD_STYLEWRITER);
@@ -2270,6 +2606,7 @@ static void sw_test_locked(int id)
 {
     s_sw_job_silent = 0;                // a new session: what it finds is the state
     s_sw_was_answering = s_port_answering;
+    s_job_error[0] = '\0';
     strncpy(s_last_job, "Test page", sizeof s_last_job - 1);
     s_printing = 1;
     job_touch();
@@ -2295,16 +2632,93 @@ static void sw_test_locked(int id)
     }
 }
 
+// W-1102: a Personal LaserWriter 300's test page is the StyleWriter's drawn at 300 dpi
+// (qd_testpage.h) and loaded into the printer as it is made (qdlaser_test_page): one session,
+// on its own task as the StyleWriter's is, so that the button's poll task and the settings page
+// are answered at once. The second tap of the button is the cancel (sw_cancelled), read between
+// the session's steps.
+static void qd_test_task(void *arg)
+{
+    int id = (int)(intptr_t)arg;
+    qd_model_t m = pr_model_to_qd(printers_record_model(id));
+    tp_text_t x;
+    sw_tp_info_t info = tp_details(id, &x);
+    int hz = 0;
+    qd_link_stats(NULL, 1);
+    int rc = serial_out_clock(&hz) ? qdlaser_test_page(hz, m, &info) : QD_E_OFFLINE;
+    if (rc == QD_OK) printers_port_answered(PR_HEARD_QDLASER);
+    qd_link_stats_t ls;
+    qd_link_stats(&ls, 0);
+    ESP_LOGI(TAG, "LaserWriter 300 test page: %s (%d); link %u chunks, %u bad bits, %u stalls, "
+             "%u unchecked, ends at most %d us late; last failure %u, %u of %u bits in %d us, "
+             "due %d us; %u bytes of stack to spare",
+             rc == QD_OK ? "printed" : rc == QD_E_CANCEL ? "cancelled" : "not printed", rc,
+             (unsigned)ls.chunks, (unsigned)ls.bad_bits, (unsigned)ls.stalls, (unsigned)ls.unchecked,
+             (int)ls.worst_end_us, (unsigned)ls.fail_why, (unsigned)ls.fail_got,
+             (unsigned)ls.fail_want, (int)ls.fail_took_us, (int)ls.fail_due_us,
+             (unsigned)uxTaskGetStackHighWaterMark(NULL));
+
+    portENTER_CRITICAL(&s_tap_mux);
+    s_test_running = 0;
+    s_sw_test_running = 0;
+    int cancelled = s_test_cancel;
+    s_test_cancel = 0;
+    portEXIT_CRITICAL(&s_tap_mux);
+    s_last_pages = rc == QD_OK;         // the page's count, not the job's before it
+    printer_state_post(rc == QD_OK ? PS_EV_JOB_DONE : cancelled ? PS_EV_JOB_CANCELLED : PS_EV_JOB_FAILED);
+    s_last_qd_ms = uptime_ms();         // its status was just in the page: the next in 3 s
+    s_printing = 0;
+    job_touch();
+    line_source();
+    xSemaphoreGive(s_job_lock);
+    vTaskDelete(NULL);
+}
+
+// s_job_lock is held; the page's task gives it back. `id` is the page's 300 record.
+static void qd_test_locked(int id)
+{
+    s_job_error[0] = '\0';
+    strncpy(s_last_job, "Test page", sizeof s_last_job - 1);
+    s_last_pages = 0;
+    s_printing = 1;
+    job_touch();
+    led_grid_set_source(LG_SRC_AIRPRINT);
+    line_source();
+    printer_state_post(PS_EV_JOB_START);
+    portENTER_CRITICAL(&s_tap_mux);
+    s_test_running = 1;
+    s_sw_test_running = 1;              // a session: the button's cancel never aborts a write
+    s_test_cancel = 0;
+    portEXIT_CRITICAL(&s_tap_mux);
+    if (xTaskCreate(qd_test_task, "qd_test", 6144, (void *)(intptr_t)id, 3, NULL) != pdPASS) {
+        ESP_LOGE(TAG, "test page: could not create task");
+        portENTER_CRITICAL(&s_tap_mux);
+        s_test_running = 0;
+        s_sw_test_running = 0;
+        portEXIT_CRITICAL(&s_tap_mux);
+        printer_state_post(PS_EV_JOB_FAILED);
+        s_printing = 0;
+        job_touch();
+        line_source();
+        xSemaphoreGive(s_job_lock);
+    }
+}
+
 // The test page for whichever printer gets it (printers_test_target): the
-// port's ImageWriter's, a LaserWriter's, or the port's StyleWriter's. s_job_lock is held.
+// port's ImageWriter's, a LaserWriter's, the port's StyleWriter's or its 300's. s_job_lock is held.
 static void test_page_to(int id, int port)
 {
     // W-1116: a port record's page takes its family from that record, as a job does
     // (doc_begin); a LaserWriter's leaves the port's family as the port's record says.
-    port_sw_sync(port ? printers_record_is_sw(id) : printers_port_is_stylewriter(), 1);
-    if (printers_test_kind(id) == 3) sw_test_locked(id);
-    else if (port) test_page_locked(id);
-    else ps_test_locked(id);
+    port_fam_sync(port ? printers_record_family(id) : printers_port_family(), 1);
+    switch (printers_test_kind(id)) {
+    case PR_TEST_STYLEWRITER: sw_test_locked(id); break;
+    case PR_TEST_QDLASER:     qd_test_locked(id); break;
+    default:
+        if (port) test_page_locked(id);
+        else ps_test_locked(id);
+        break;
+    }
 }
 
 // W-1116: a test page for a port record that is not the one on the port -- another port
@@ -2408,8 +2822,9 @@ static void test_button(void)
     // printer is not the one on the port, so that refusal is the page's alone (web_test_page).
     int port, id = printers_test_target(&port);
 #if CONFIG_AIRWRITER_PIC_CLK_PIN >= 0
-    // A StyleWriter's HSKo says nothing, so a low line is no sign of a cable (W-1103).
-    if (((port && !printers_port_is_stylewriter()) || id < 0) && !serial_out_clear()) {
+    // A StyleWriter's HSKo says nothing, so a low line is no sign of a cable (W-1103), and a
+    // 300's is its clock (W-1102): only an ImageWriter's line, or none known, speaks.
+    if (((port && port_line_speaks()) || id < 0) && !serial_out_clear()) {
         ESP_LOGI(TAG, "test button with the printer not ready: testing the cable");
         if (xTaskCreate(cable_button_task, "cable", 4096, NULL, 3, NULL) != pdPASS)
             xSemaphoreGive(s_job_lock);
@@ -2536,7 +2951,7 @@ static int web_test_page(void *ctx, int which, char *msg, size_t cap)
         int k = printers_test_kind(which);
         if (!k) return 2;
         id = which;
-        port = k != 2;                             // the port's ImageWriter or StyleWriter
+        port = k != PR_TEST_LASER;                 // a port printer's
     }
     if (id < 0) return 2;
     // W-1116: this record is not the one on the port (another is): 409 with the sentence that
@@ -2821,11 +3236,13 @@ static void status_json(void *ctx, char *buf, size_t cap)
         dip[8] = '\0';
     }
     char e_ssid[80], e_queue[80], e_job[200], e_model[80], e_name[80], e_host[96], e_phost[96], e_uri[200];
+    char e_err[96];
     // W-1103/W-1116: the printer on the port, as AirPrint names it, whichever family and
     // model (an ImageWriter by its record's model; the II with no ImageWriter record, as it
     // has always been reported).
-    const sw_spec_t *swp = s_port_sw ? sw_spec(printers_port_sw_model()) : NULL;
-    const char *model = swp ? swp->make_model
+    const sw_spec_t *swp = s_port_fam == PR_FAM_STYLEWRITER ? sw_spec(printers_port_sw_model()) : NULL;
+    const printer_caps_t *qdc = s_port_fam == PR_FAM_QDLASER ? qd_caps(printers_port_qd_model()) : NULL;
+    const char *model = swp ? swp->make_model : qdc ? qdc->make_model
                       : printer_caps_imagewriter_model(printers_port_model())->make_model;
 
     char laser[300], printers[128];
@@ -2846,7 +3263,7 @@ static void status_json(void *ctx, char *buf, size_t cap)
 
     snprintf(buf, cap,
         "{\"state\":\"%s\",\"ps\":\"%s\",\"asleep\":%s,\"stopped\":%s,\"setup\":%s,\"job\":\"%s\","
-        "\"fault\":%s,\"printer\":%s,\"printing\":%s,\"ribbon\":\"%s\","
+        "\"job_error\":\"%s\",\"fault\":%s,\"printer\":%s,\"printing\":%s,\"ribbon\":\"%s\","
         "\"queue\":\"%s\",\"host\":\"%s.local\",\"ip\":\"%s\","
         "\"ssid\":\"%s\",\"dither\":\"%s\",\"gain\":%u,\"top_margin\":%d,\"signal\":\"%s\","
         "\"channel\":\"%s\",\"security\":\"%s\",\"uri\":\"%s\","
@@ -2864,8 +3281,9 @@ static void status_json(void *ctx, char *buf, size_t cap)
         attention || offline ? "true" : "false",
         s_ap_mode ? "true" : "false",
         json_esc(e_job, sizeof e_job, job),
+        json_esc(e_err, sizeof e_err, s_job_error),
         attention || failed ? "true" : "false",
-        (s_port_sw ? s_iw_ready == 1 : serial_out_clear()) ? "true" : "false",
+        (port_line_speaks() ? serial_out_clear() : s_iw_ready == 1) ? "true" : "false",
         s_printing ? "true" : "false", ribbon_name(s_ribbon),
         json_esc(e_queue, sizeof e_queue, s_set.queue), json_esc(e_host, sizeof e_host, s_set.hostname), s_ip,
         // in setup mode, the network it could not join ("" if none was set)
@@ -3217,7 +3635,7 @@ static ps_state_t port_state(ps_state_t box)
     if (s_iw_ready < 0) return box;                    // not heard from yet
     // W-1116: an ImageWriter's line is up but ESC ? has not named its model yet: offline on the
     // phone until the answer is in (port_live reads the same), so Ready appears with the answer.
-    if (!s_port_sw && !s_iw_named) return PS_OFFLINE;
+    if (port_line_speaks() && !s_iw_named) return PS_OFFLINE;
     return box == PS_OFFLINE || box == PS_ATTENTION ? PS_READY : box;
 }
 
@@ -3235,6 +3653,15 @@ static void port_push_own(int slot, int kind, ps_state_t st)
         sw_ipp_t w = sw_state_ipp(s_sw_state);
         if (s_iw_ready < 0 || !w.reason) ipp_server_set_state_for(slot, NULL, NULL, 0, 0);
         else ipp_server_set_state_for(slot, w.reason, w.message, 1, 0);
+        return;
+    }
+    if (kind == PR_KIND_QDLASER) {
+        // W-1102: what the 300 said. Waiting for a sheet in the manual slot is a report, not a
+        // stop: the job goes on as soon as one goes in.
+        qd_state_t q = s_qd_state;
+        qd_ipp_t w = qd_state_ipp(q);
+        if (s_iw_ready < 0 || !w.reason) ipp_server_set_state_for(slot, NULL, NULL, 0, 0);
+        else ipp_server_set_state_for(slot, w.reason, w.message, q != QDS_MANUAL, 0);
         return;
     }
     // SPEC.md 3.9: a stall mid-job becomes a real alert on the phone.
@@ -3268,6 +3695,9 @@ static void port_push_offline(int slot, int kind, int model, int say)
     if (kind == PR_KIND_STYLEWRITER) {
         sw_ipp_t w = sw_state_ipp(SWS_OFFLINE);
         ipp_server_set_stopped_for(slot, taken ? "offline-report" : w.reason, w.message);
+    } else if (kind == PR_KIND_QDLASER) {
+        qd_ipp_t w = qd_state_ipp(QDS_OFFLINE);
+        ipp_server_set_stopped_for(slot, taken ? "offline-report" : w.reason, w.message);
     } else {
         ipp_server_set_stopped_for(slot, taken ? "offline-report" : "other", IW_OFFLINE_WORDS);
     }
@@ -3280,6 +3710,7 @@ static void port_push_offline(int slot, int kind, int model, int say)
 // is claimed.
 static ipp_supply_t port_supply(int kind, int model, ps_state_t st)
 {
+    if (kind == PR_KIND_QDLASER) return IPP_SUPPLY_NONE;   // W-1102: nothing is claimed about toner
     int gone = kind == PR_KIND_STYLEWRITER ? s_sw_state == SWS_OFFLINE : st == PS_OFFLINE;
     if (gone || s_ribbon == IW_RIBBON_UNKNOWN) return IPP_SUPPLY_NONE;
     int colour = s_ribbon == IW_RIBBON_COLOUR && colour_offered(kind, model);
@@ -3460,7 +3891,7 @@ void app_main(void)
     };
     memcpy(pc.mac, mac, sizeof pc.mac);
     ESP_ERROR_CHECK(printers_start(&pc));
-    s_port_sw = printers_port_is_stylewriter();         // W-1103: whose answers are the port's state
+    s_port_fam = port_fam_norm(printers_port_family());  // W-1103: whose answers are the port's state
     if (updated && !s_set.airprint) {
         // W-1079's switch was the ImageWriter's alone: its record took it as
         // Share, and the switch is now the whole box's.
@@ -3515,8 +3946,15 @@ void app_main(void)
         .invert_cts      = AW_INVERT_CTS,
         .stall_abort_s   = CONFIG_AIRWRITER_STALL_ABORT,
         .on_line         = printer_line_changed,
+        .on_clock        = printer_clock_changed,   // W-1102
         .loopback        = AW_LOOPBACK,
     };
+    // W-1102: the 300's link, J2's pins; it touches nothing until a question opens it.
+    qd_link_init(&(qd_link_cfg_t){ .uart_num = CONFIG_AIRWRITER_UART_NUM,
+                                   .tx_pin = CONFIG_AIRWRITER_TX_PIN,
+                                   .rx_pin = CONFIG_AIRWRITER_RX_PIN,
+                                   .clk_pin = CONFIG_AIRWRITER_CTS_PIN,
+                                   .invert_tx = AW_INVERT_TX });
     ESP_ERROR_CHECK(serial_out_init(&ser));
 #if CONFIG_AIRWRITER_PIC_CLK_PIN >= 0
     cable_test_cfg_t ct = {
@@ -3533,6 +3971,9 @@ void app_main(void)
                               .cart = sw_cart_seen, .cancelled = sw_cancelled,
                               .swapped = sw_swapped };
     stylewriter_start(&swc);
+    static const qdlaser_cfg_t qdc = { .state = qd_state_cb, .cancelled = sw_cancelled,
+                                       .page = qd_page_cb };
+    qdlaser_start(&qdc);
     // 4 KB: a ribbon change saves to NVS and re-announces mDNS from here; the StyleWriter's
     // questions and its model and cartridge saves run here too.
     xTaskCreate(kick_task, "kick", 4096, NULL, 3, &s_kick_handle);

@@ -7,6 +7,10 @@ only: no firmware has changed. Supersedes the
 here because it was being edited in parallel). No laser printer is on the bench; everything this
 needs a printer to settle is listed under "What only a printer settles".
 
+**Amended 2026-11-13** by `W-1102 QuickDraw LaserWriters on the printer port (Personal LaserWriter LS/300, Select 300)` (`2026-11-12-quickdraw-laserwriters-design.md`): the QuickDraw-only Personal LaserWriter 300 is no
+longer a non-goal. It prints over AirPrint from the printer port, with no Mac, through this
+design's 300 dpi rip (SPEC §3.18). The LS, the Select 300 and the SCSI models still are.
+
 **Amended 2026-11-09** by `W-1138 Every supported printer shows its own Apple icon`: a
 LaserWriter's icon is Apple's for its model, picked by its product name, in place of the one
 icon drawn for AirWriter that this design called for (SPEC §3.5).

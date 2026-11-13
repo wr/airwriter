@@ -206,6 +206,7 @@ static void *slot_ctx(int slot, int id) { return (void *)(intptr_t)(slot << 8 | 
 static const printer_caps_t *port_caps(int kind, int model)
 {
     if (kind == PR_KIND_STYLEWRITER) return sw_caps(pr_model_to_sw((pr_model_t)model));
+    if (kind == PR_KIND_QDLASER) return qd_caps(pr_model_to_qd((pr_model_t)model));
     if (kind == PR_KIND_IMAGEWRITER) return printer_caps_imagewriter_model(model);
     return NULL;
 }
@@ -524,6 +525,7 @@ static port_mode_t mode_of(void)
     if (!p) return PORT_NONE;
     if (p->kind == PR_KIND_IMAGEWRITER) return PORT_IMAGEWRITER;
     if (p->kind == PR_KIND_STYLEWRITER) return PORT_STYLEWRITER;
+    if (p->kind == PR_KIND_QDLASER) return PORT_QDLASER;
     return p->found_auto ? PORT_UNKNOWN_FOUND : PORT_UNKNOWN_SAID;
 }
 
@@ -561,6 +563,40 @@ int printers_port_seen(int iw_model, int ready)
     }
     after_change(moved);
     return r;
+}
+
+int printers_port_seen_qd(uint8_t engine)
+{
+    if (!s_started) return -1;
+    lock();
+    port_mode_t before = mode_of();
+    int before_id = cur_id();
+    int r = pr_port_seen_qd(s_l, engine);
+    int moved = mode_of() != before || cur_id() != before_id;
+    if (moved) {
+        const pr_rec_t *p = pr_port_current(s_l);
+        if (p) ESP_LOGI(TAG, "the port: printer %d, %s", p->id, pr_kind_name(p->kind));
+    }
+    after_change(moved);
+    return r;
+}
+
+void printers_port_clock_gone(void)
+{
+    if (!s_started) return;
+    lock();
+    pr_port_clock_gone(s_l);
+    unlock();
+}
+
+qd_model_t printers_port_qd_model(void)
+{
+    if (!s_started) return QD_NONE;
+    lock();
+    const pr_rec_t *p = pr_port_current(s_l);
+    qd_model_t m = p && p->kind == PR_KIND_QDLASER ? pr_model_to_qd((pr_model_t)p->model) : QD_NONE;
+    unlock();
+    return m;
 }
 
 int printers_port_seen_sw(sw_model_t m)
@@ -656,14 +692,22 @@ int printers_test_target(int *port)
     return id;
 }
 
-int printers_test_kind(int id)
+pr_test_kind_t printers_test_kind(int id)
 {
-    if (!s_started) return 0;
+    if (!s_started) return PR_TEST_NONE;
     lock();
     const pr_rec_t *r = pr_get(s_l, id);
-    int k = !r ? 0 : r->where == PR_WHERE_PORT && r->kind == PR_KIND_IMAGEWRITER ? 1
-          : r->where == PR_WHERE_PORT && r->kind == PR_KIND_STYLEWRITER ? 3
-          : r->kind == PR_KIND_LASERWRITER && r->identified ? 2 : 0;
+    pr_test_kind_t k = PR_TEST_NONE;
+    if (r && r->where == PR_WHERE_PORT) {
+        switch (pr_family_of(r->kind)) {
+        case PR_FAM_IMAGEWRITER: k = PR_TEST_IMAGEWRITER; break;
+        case PR_FAM_STYLEWRITER: k = PR_TEST_STYLEWRITER; break;
+        case PR_FAM_QDLASER:     k = PR_TEST_QDLASER; break;
+        default:                 break;
+        }
+    } else if (r && r->kind == PR_KIND_LASERWRITER && r->identified) {
+        k = PR_TEST_LASER;
+    }
     unlock();
     return k;
 }
@@ -708,7 +752,7 @@ int printers_port_shared(void)
     if (!s_started) return 0;
     lock();
     const pr_rec_t *p = pr_port_current(s_l);
-    int on = p && (p->kind == PR_KIND_IMAGEWRITER || p->kind == PR_KIND_STYLEWRITER) && p->shared;
+    int on = p && pr_family_of(p->kind) != PR_FAM_NONE && p->shared;
     unlock();
     return on;
 }
@@ -794,14 +838,24 @@ int printers_port_on_is_imagewriter(void)
     return iw;
 }
 
-int printers_record_is_sw(int id)
+pr_family_t printers_record_family(int id)
 {
-    if (!s_started) return 0;
+    if (!s_started) return PR_FAM_NONE;
     lock();
     const pr_rec_t *r = pr_get(s_l, id);
-    int sw = r && r->where == PR_WHERE_PORT && r->kind == PR_KIND_STYLEWRITER;
+    pr_family_t f = r && r->where == PR_WHERE_PORT ? pr_family_of(r->kind) : PR_FAM_NONE;
     unlock();
-    return sw;
+    return f;
+}
+
+pr_family_t printers_port_family(void)
+{
+    if (!s_started) return PR_FAM_NONE;
+    lock();
+    const pr_rec_t *p = pr_port_said_other(s_l) ? NULL : pr_port_current(s_l);
+    pr_family_t f = p ? pr_family_of(p->kind) : PR_FAM_NONE;
+    unlock();
+    return f;
 }
 
 pr_model_t printers_record_model(int id)
@@ -1033,7 +1087,8 @@ void printers_status_json(char *buf, size_t cap)
         return;
     }
     static const char *const modes[] = { "none", "imagewriter", "unknown", "something_else",
-                                         "stylewriter" };
+                                         "stylewriter", "qdlaser" };
+    _Static_assert(sizeof modes / sizeof modes[0] == PORT_QDLASER + 1, "a name for every port mode");
     lock();
     int shared = 0;
     for (int i = 0; i < s_l->n; i++) shared += s_l->r[i].shared;

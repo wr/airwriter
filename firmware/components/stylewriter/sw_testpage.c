@@ -6,8 +6,9 @@
 // dots, one row at a time rather than in strips. Parts that screen a picture or a ramp make
 // their halftoners when their first row comes and free them after their last, so only the
 // parts on a row are held. All sizes are in dots at 360 dpi from the printable area's
-// top-left; `plan` lays the page out once and the same plan serves the page and the layout
-// the tests read.
+// top-left, scaled to the page's dpi where they are used (S, S8: the sizes themselves on a
+// StyleWriter's page); `plan` lays the page out once and the same plan serves the page and the
+// layout the tests read.
 //
 // Everything that grows is through bigmem.h; a row of text, a rule, the ruler and the squares
 // are drawn into the row's planes a dot at a time and cost nothing but time.
@@ -24,9 +25,7 @@
 #include <string.h>
 
 #define W        SW_TP_W            // the layout is 8 in across
-#define PX       4                  // dots to a pixel of the face
-#define CELL     (6 * PX)           // a character cell: five columns and a gap
-#define GH       (7 * PX)           // a glyph
+#define PX       4                  // dots to a pixel of the face (6 a cell, 7 a glyph)
 #define LINE     60                 // from one line of text to the next
 #define TOP      48                 // clear paper over the letterhead
 #define GAP      110                // between one part of the page and the next
@@ -45,7 +44,7 @@
 #define STEP_W   128
 #define STEP_DX  136
 #define ICON_S   6
-#define ICON_W   (SW_ICON_W * ICON_S)
+#define ICON_MAX (SW_ICON_W * ICON_S)  // the widest letterhead icon, in dots
 
 // The pictures are traced once on the host (tools/rip/mkscene.c, W-1133), at these sizes.
 _Static_assert(SW_SCENE_W == SCENE_W && SW_SCENE_H == SCENE_H, "sw_scene.h: make -C tools/rip scene");
@@ -73,10 +72,17 @@ typedef struct { uint16_t x, y; uint8_t n, bold; const char *s; } text_t;
 
 struct tp {
     const sw_tp_info_t *info;
+    const sw_tp_geom_t *geom;               // NULL: a StyleWriter's page
+    const sw_tp_art_t  *art;
     sw_model_t          model;
     int                 colour;
-    ht_algo_t           screen;
+    ht_algo_t           screen;             // the record's, HT_APPLE for the family's Apple
     int                 gain;
+    // The page's dpi and the sizes it scales once (the 360 dpi ones on a StyleWriter's).
+    uint32_t            dpi, w, px, cell, gh;
+    uint32_t            icon_s, icon_w, title_x, title_y, sub_y, head_h;
+    uint32_t            photo_w, photo_h, side_x, side_w, step_w, step_dx;
+    uint32_t            panel_w, panel_h, panel_dx;
     sw_tp_layout_t      lay;
     text_t              txt[MAX_TEXT];
     int                 ntxt;
@@ -86,6 +92,21 @@ struct tp {
     int                 nsec;
     uint32_t            lo, hi;              // the first and last rows with ink
     int                 full;                // the plan outgrew a table
+};
+
+// ------------------------------------------------------------------ sizes
+
+// A size in dots at 360 dpi, at the page's dpi, rounded; and the same down to a whole byte, for
+// a picture's columns. Both are the size itself at 360 dpi.
+static uint32_t scale(uint32_t dpi, uint32_t v) { return (v * dpi + 180) / 360; }
+static uint32_t S(const tp_t *t, uint32_t v) { return scale(t->dpi, v); }
+static uint32_t S8(const tp_t *t, uint32_t v) { return S(t, v) & ~7u; }
+
+// The StyleWriter's letterhead (sw_art.h, at 360 dpi).
+static const sw_tp_art_t k_sw_art = {
+    .title_w = SW_TITLE_W, .title_h = SW_TITLE_H, .sub_w = SW_SUB_W, .sub_h = SW_SUB_H,
+    .icon_w = SW_ICON_W, .icon_h = SW_ICON_H,
+    .title = &sw_title[0][0], .sub = &sw_sub[0][0], .icon = &sw_icon[0][0], .rgb = sw_icon_rgb,
 };
 
 // ------------------------------------------------------------------ bits
@@ -142,7 +163,7 @@ static void text(tp_t *t, uint32_t x, uint32_t y, const char *s, size_t cap, int
     t->pool_n += k;
     t->txt[t->ntxt++] = (text_t){ (uint16_t)x, (uint16_t)y, (uint8_t)k, (uint8_t)bold, d };
     if (y < t->lo) t->lo = y;
-    if (y + GH - 1 > t->hi) t->hi = y + GH - 1;
+    if (y + t->gh - 1 > t->hi) t->hi = y + t->gh - 1;
 }
 
 static void tick(tp_t *t, uint32_t x, uint32_t y, int bold)
@@ -155,12 +176,13 @@ static void text_row(const tp_t *t, uint32_t y, uint8_t *k)
 {
     for (int i = 0; i < t->ntxt; i++) {
         const text_t *it = &t->txt[i];
-        if (y < it->y || y >= it->y + GH) continue;
-        uint32_t py = (y - it->y) / PX;
+        if (y < it->y || y >= it->y + t->gh) continue;
+        uint32_t py = (y - it->y) / t->px;
         for (uint32_t c = 0; c < it->n; c++) {
             uint8_t g = glyph((unsigned char)it->s[c])[py];
             for (uint32_t col = 0; col < 5; col++)
-                if (g >> (4 - col) & 1) span(k, it->x + c * CELL + col * PX, PX + (uint32_t)it->bold);
+                if (g >> (4 - col) & 1)
+                    span(k, it->x + c * t->cell + col * t->px, t->px + (uint32_t)it->bold);
         }
     }
 }
@@ -184,9 +206,15 @@ static const ht_algo_t k_screens[6] = { HT_ATKINSON, HT_FLOYD, HT_BLUENOISE, HT_
 
 // A halftoner as a job makes it for one ink: the screen, the dot gain, the model's tone curve
 // for that screen, the ink's place on the tile, and Apple's tile started on its second row
-// (ripjob.c's apple_page_start). 0, or -1 for no memory.
+// (ripjob.c's apple_page_start). Another family's is its gray rows' (ripjob.c, no tone): the
+// screen, its own Apple screen for HT_APPLE, and the gain. 0, or -1 for no memory.
 static int ht_make(const tp_t *t, ht_t *h, ht_algo_t algo, uint32_t w, iw_ink_t ink)
 {
+    if (t->geom) {
+        if (ht_init(h, algo == HT_APPLE ? t->geom->apple : algo, w)) return -1;
+        ht_set_gain(h, t->gain);
+        return 0;
+    }
     if (ht_init(h, algo, w)) return -1;
     ht_set_gain(h, t->gain);
     ht_set_tone(h, sw_tone(t->model, algo));
@@ -217,21 +245,20 @@ static void fill_swatch(tp_t *t, sect_t *s, uint32_t y, uint8_t *const bits[IW_I
 typedef struct {
     ink_screens_t inks;                     // the icon, color cartridge
     ht_t          gray;                     // and without
-    uint8_t       rgb[ICON_W * 3], g[ICON_W], ib[IW_INKS][ICON_W / 8];
+    uint8_t       rgb[ICON_MAX * 3], g[ICON_MAX], ib[IW_INKS][ICON_MAX / 8];
 } head_t;
 
-#define TITLE_X  (ICON_W + 72)
+#define TITLE_DX 72                     // from the icon to the title
 #define TITLE_Y  56
 #define SUB_Y    106
-#define HEAD_H   (SUB_Y + SW_SUB_H)
 
 static int begin_head(tp_t *t, sect_t *s)
 {
     head_t *h = big_calloc(1, sizeof *h);
     if (!h) return -1;
     // The icon is pixel art: the ordered screen keeps its edges, in the inks it is drawn in.
-    if (t->colour ? ink_screens_init(&h->inks, HT_BAYER, 0, ICON_W)
-                  : ht_init(&h->gray, HT_BAYER, ICON_W)) {
+    if (t->colour ? ink_screens_init(&h->inks, HT_BAYER, 0, t->icon_w)
+                  : ht_init(&h->gray, HT_BAYER, t->icon_w)) {
         free(h);
         return -1;
     }
@@ -249,22 +276,25 @@ static void end_head(tp_t *t, sect_t *s)
 static void fill_head(tp_t *t, sect_t *s, uint32_t y, uint8_t *const bits[IW_INKS])
 {
     head_t *h = s->st;
-    if (y < SW_ICON_H * ICON_S) {
-        for (uint32_t x = 0; x < ICON_W; x++)
-            memcpy(h->rgb + x * 3, sw_icon_rgb[sw_icon[y / ICON_S][x / ICON_S]], 3);
+    const sw_tp_art_t *a = t->art;
+    if (y < a->icon_h * t->icon_s) {
+        const uint8_t *row = a->icon + (size_t)(y / t->icon_s) * a->icon_w;
+        for (uint32_t x = 0; x < t->icon_w; x++) memcpy(h->rgb + x * 3, a->rgb[row[x / t->icon_s]], 3);
         if (t->colour) {
             uint8_t *const ib[IW_INKS] = { h->ib[0], h->ib[1], h->ib[2], h->ib[3] };
             ink_screens_row(&h->inks, h->rgb, ib);
-            for (int i = 0; i < IW_INKS; i++) put_bits(bits[i], 0, h->ib[i], ICON_W);
+            for (int i = 0; i < IW_INKS; i++) put_bits(bits[i], 0, h->ib[i], t->icon_w);
         } else {
-            uint8_t b[ICON_W / 8];
-            ink_gray(h->rgb, ICON_W, h->g);
+            uint8_t b[ICON_MAX / 8];
+            ink_gray(h->rgb, t->icon_w, h->g);
             ht_row(&h->gray, h->g, b);
-            put_bits(bits[IW_BLACK], 0, b, ICON_W);
+            put_bits(bits[IW_BLACK], 0, b, t->icon_w);
         }
     }
-    if (y >= TITLE_Y && y < TITLE_Y + SW_TITLE_H) blit(bits[IW_BLACK], TITLE_X, sw_title[y - TITLE_Y], SW_TITLE_W);
-    if (y >= SUB_Y && y < SUB_Y + SW_SUB_H) blit(bits[IW_BLACK], W - SW_SUB_W, sw_sub[y - SUB_Y], SW_SUB_W);
+    if (y >= t->title_y && y < t->title_y + a->title_h)
+        blit(bits[IW_BLACK], t->title_x, a->title + (size_t)(y - t->title_y) * ((a->title_w + 7u) / 8), a->title_w);
+    if (y >= t->sub_y && y < t->sub_y + a->sub_h)
+        blit(bits[IW_BLACK], t->w - a->sub_w, a->sub + (size_t)(y - t->sub_y) * ((a->sub_w + 7u) / 8), a->sub_w);
 }
 
 // ------------------------------------------------------------------ part: the still life
@@ -275,6 +305,7 @@ typedef struct {
     ink_screens_t inks;
     ht_t          gray;
     sw_unpack_t  *z;                    // the stored still life, a row of the scene at a time
+    uint32_t      zrows;                // the scene's rows read
     uint8_t       scene[SCENE_W * 3], rgb[PHOTO_W * 3], g[PHOTO_W], b[PHOTO_NB], ib[IW_INKS][PHOTO_NB];
 } photo_t;
 
@@ -285,12 +316,12 @@ static int begin_photo(tp_t *t, sect_t *s)
     p->z = sw_unpack_new(sw_scene_photo_z, sizeof sw_scene_photo_z);
     if (!p->z) { free(p); return -1; }
     if (t->colour) {
-        if (ink_screens_init(&p->inks, t->screen, t->gain, PHOTO_W)) { sw_unpack_free(p->z); free(p); return -1; }
+        if (ink_screens_init(&p->inks, t->screen, t->gain, s->w)) { sw_unpack_free(p->z); free(p); return -1; }
         ink_screens_set_tone(&p->inks, sw_tone(t->model, t->screen));
         if (t->screen == HT_APPLE)
             for (int i = 0; i < IW_INKS; i++)
                 ht_set_phase(&p->inks.ht[i], p->inks.ht[i].phase_x, p->inks.ht[i].phase_y + 1, p->inks.ht[i].invert);
-    } else if (ht_make(t, &p->gray, t->screen, PHOTO_W, IW_BLACK)) {
+    } else if (ht_make(t, &p->gray, t->screen, s->w, IW_BLACK)) {
         sw_unpack_free(p->z);
         free(p);
         return -1;
@@ -310,22 +341,24 @@ static void end_photo(tp_t *t, sect_t *s)
 static void fill_photo(tp_t *t, sect_t *s, uint32_t y, uint8_t *const bits[IW_INKS])
 {
     photo_t *p = s->st;
-    if (y % 2 == 0) {                                   // two rows of dots to a row of the scene
+    // The scene's rows and columns to the picture's (two dots to a pixel of it at 360 dpi).
+    const uint32_t sy = y * SCENE_H / s->rows;
+    if (p->zrows <= sy) {
         // The stream is ours and held to tp_scene.c by the tests: a row it cannot give is paper.
-        if (sw_unpack_read(p->z, p->scene, sizeof p->scene)) memset(p->scene, 255, sizeof p->scene);
-        for (uint32_t x = 0; x < SCENE_W; x++) {
-            memcpy(p->rgb + x * 6, p->scene + x * 3, 3);
-            memcpy(p->rgb + x * 6 + 3, p->scene + x * 3, 3);
+        while (p->zrows <= sy) {
+            if (sw_unpack_read(p->z, p->scene, sizeof p->scene)) memset(p->scene, 255, sizeof p->scene);
+            p->zrows++;
         }
+        for (uint32_t x = 0; x < s->w; x++) memcpy(p->rgb + x * 3, p->scene + x * SCENE_W / s->w * 3, 3);
     }
     if (t->colour) {
         uint8_t *const ib[IW_INKS] = { p->ib[0], p->ib[1], p->ib[2], p->ib[3] };
         ink_screens_row(&p->inks, p->rgb, ib);
-        for (int i = 0; i < IW_INKS; i++) put_bits(bits[i], s->x, p->ib[i], PHOTO_W);
+        for (int i = 0; i < IW_INKS; i++) put_bits(bits[i], s->x, p->ib[i], s->w);
     } else {
-        ink_gray(p->rgb, PHOTO_W, p->g);
+        ink_gray(p->rgb, s->w, p->g);
         ht_row(&p->gray, p->g, p->b);
-        put_bits(bits[IW_BLACK], s->x, p->b, PHOTO_W);
+        put_bits(bits[IW_BLACK], s->x, p->b, s->w);
     }
 }
 
@@ -337,8 +370,8 @@ static int begin_ramp(tp_t *t, sect_t *s)
 {
     ramp_t *r = big_calloc(1, sizeof *r);
     if (!r) return -1;
-    if (ht_make(t, &r->h, t->screen, SIDE_W, (iw_ink_t)s->ink)) { free(r); return -1; }
-    for (uint32_t x = 0; x < SIDE_W; x++) r->g[x] = (uint8_t)(255.0 - 255.0 * x / (SIDE_W - 1));
+    if (ht_make(t, &r->h, t->screen, s->w, (iw_ink_t)s->ink)) { free(r); return -1; }
+    for (uint32_t x = 0; x < s->w; x++) r->g[x] = (uint8_t)(255.0 - 255.0 * x / (s->w - 1));
     s->st = r;
     return 0;
 }
@@ -356,7 +389,7 @@ static void fill_ramp(tp_t *t, sect_t *s, uint32_t y, uint8_t *const bits[IW_INK
     (void)t; (void)y;
     ramp_t *r = s->st;
     ht_row(&r->h, r->g, r->b);
-    put_bits(bits[s->ink], s->x, r->b, SIDE_W);
+    put_bits(bits[s->ink], s->x, r->b, s->w);
 }
 
 // ------------------------------------------------------------------ part: eleven gray steps
@@ -368,7 +401,7 @@ static int begin_steps(tp_t *t, sect_t *s)
     steps_t *p = big_calloc(1, sizeof *p);
     if (!p) return -1;
     for (int j = 0; j < 11; j++)
-        if (ht_make(t, &p->h[j], t->screen, STEP_W, IW_BLACK)) {
+        if (ht_make(t, &p->h[j], t->screen, s->w, IW_BLACK)) {
             while (j--) ht_free(&p->h[j]);
             free(p);
             return -1;
@@ -387,19 +420,24 @@ static void end_steps(tp_t *t, sect_t *s)
 
 static void fill_steps(tp_t *t, sect_t *s, uint32_t y, uint8_t *const bits[IW_INKS])
 {
-    (void)t; (void)y;
+    (void)y;
     steps_t *p = s->st;
     for (int j = 0; j < 11; j++) {
-        memset(p->g, 255 - 255 * j / 10, STEP_W);
+        memset(p->g, 255 - 255 * j / 10, s->w);
         ht_row(&p->h[j], p->g, p->b);
-        put_bits(bits[IW_BLACK], s->x + (uint32_t)j * STEP_DX, p->b, STEP_W);
+        put_bits(bits[IW_BLACK], s->x + (uint32_t)j * t->step_dx, p->b, s->w);
     }
 }
 
 // ------------------------------------------------------------------ part: the six screens
 
 // idx 0 is the panels themselves, which read the stored scene in gray; idx 1 the ramps under them.
-typedef struct { ht_t h[6]; sw_unpack_t *z; uint8_t g[PANEL_W], b[PANEL_W / 8]; } panels_t;
+typedef struct {
+    ht_t         h[6];
+    sw_unpack_t *z;
+    uint32_t     zrows;                 // the scene's rows read
+    uint8_t      src[SW_PANEL_W], g[PANEL_W], b[PANEL_W / 8];
+} panels_t;
 
 static int begin_panels(tp_t *t, sect_t *s)
 {
@@ -410,7 +448,7 @@ static int begin_panels(tp_t *t, sect_t *s)
         return -1;
     }
     for (int i = 0; i < 6; i++)
-        if (ht_make(t, &p->h[i], k_screens[i], PANEL_W, IW_BLACK)) {
+        if (ht_make(t, &p->h[i], k_screens[i], t->panel_w, IW_BLACK)) {
             while (i--) ht_free(&p->h[i]);
             sw_unpack_free(p->z);
             free(p);
@@ -429,20 +467,25 @@ static void end_panels(tp_t *t, sect_t *s)
     free(p);
 }
 
-// The still life through each screen, in black alone, and under it a ramp.
+// The still life through each screen, in black alone, and under it a ramp. The stored scene is
+// the panel's size at 360 dpi; at another, its rows and columns are picked to the panel's.
 static void fill_panels(tp_t *t, sect_t *s, uint32_t y, uint8_t *const bits[IW_INKS])
 {
-    (void)t;
-    (void)y;                                            // the stored rows come in order
     panels_t *p = s->st;
+    const uint32_t pw = t->panel_w;
     if (s->idx == 0) {
-        if (sw_unpack_read(p->z, p->g, sizeof p->g)) memset(p->g, 255, sizeof p->g);
+        const uint32_t sy = y * SW_PANEL_H / s->rows;
+        while (p->zrows <= sy) {
+            if (sw_unpack_read(p->z, p->src, sizeof p->src)) memset(p->src, 255, sizeof p->src);
+            p->zrows++;
+        }
+        for (uint32_t x = 0; x < pw; x++) p->g[x] = p->src[x * SW_PANEL_W / pw];
     } else {
-        for (uint32_t x = 0; x < PANEL_W; x++) p->g[x] = (uint8_t)(255.0 - 255.0 * x / (PANEL_W - 1));
+        for (uint32_t x = 0; x < pw; x++) p->g[x] = (uint8_t)(255.0 - 255.0 * x / (pw - 1));
     }
     for (int i = 0; i < 6; i++) {
         ht_row(&p->h[i], p->g, p->b);
-        put_bits(bits[IW_BLACK], (uint32_t)i * PANEL_DX, p->b, PANEL_W);
+        put_bits(bits[IW_BLACK], (uint32_t)i * t->panel_dx, p->b, pw);
     }
 }
 
@@ -458,13 +501,13 @@ static void fill_panels(tp_t *t, sect_t *s, uint32_t y, uint8_t *const bits[IW_I
 // is four rows thick, so that one dead nozzle thins it and cannot break it.
 static void fill_ruler(tp_t *t, sect_t *s, uint32_t y, uint8_t *const bits[IW_INKS])
 {
-    (void)t; (void)s;
+    (void)s;
     uint8_t *k = bits[IW_BLACK];
-    if (y < RULER_EDGE) { memset(k, 0xFF, W / 8); return; }
-    uint32_t d = y - RULER_EDGE;
+    if (y < S(t, RULER_EDGE)) { memset(k, 0xFF, t->w / 8); return; }
+    uint32_t d = y - S(t, RULER_EDGE), tw = S(t, 2);
     for (uint32_t i = 0; i <= 80; i++) {
-        uint32_t len = i % 10 == 0 ? TICK_INCH : i % 5 == 0 ? TICK_HALF : TICK_TENTH;
-        if (d < len) span(k, i < 80 ? i * 36 : W - 2, 2);       // (the last one inside the 8 in)
+        uint32_t len = S(t, i % 10 == 0 ? TICK_INCH : i % 5 == 0 ? TICK_HALF : TICK_TENTH);
+        if (d < len) span(k, i < 80 ? S(t, i * 36) : t->w - tw, tw);   // (the last one inside the 8 in)
     }
 }
 
@@ -474,27 +517,30 @@ static void fill_ruler(tp_t *t, sect_t *s, uint32_t y, uint8_t *const bits[IW_IN
 // lines every 8 dots and the finest checker. Each fills its 360 x 360 dots corner to corner.
 static void fill_squares(tp_t *t, sect_t *s, uint32_t y, uint8_t *const bits[IW_INKS])
 {
-    (void)t; (void)s;
+    (void)s;
     uint8_t *k = bits[IW_BLACK];
+    const uint32_t sq = S(t, SQ), th = S(t, 2), quarter = S(t, 90), pitch = S(t, 8);
     // 1: the grid
-    if (y % 90 < 2 || y >= SQ - 2) {
-        span(k, 0, SQ);
+    if (y % quarter < th || y >= sq - th) {
+        span(k, 0, sq);
     } else {
-        for (uint32_t x = 0; x < SQ; x += 90) span(k, x, 2);
-        span(k, SQ - 2, 2);
+        for (uint32_t x = 0; x < sq; x += quarter) span(k, x, th);
+        span(k, sq - th, th);
     }
     // 2: solid
-    memset(k + 720 / 8, 0xFF, SQ / 8);
+    span(k, S(t, 720), sq);
     // 3: lines, framed
-    if (y < 2 || y >= SQ - 2) {
-        span(k, 1440, SQ);
+    const uint32_t lx = S(t, 1440);
+    if (y < th || y >= sq - th) {
+        span(k, lx, sq);
     } else {
-        for (uint32_t x = 0; x < SQ; x += 8) span(k, 1440 + x, 2);
-        span(k, 1440 + SQ - 2, 2);
+        for (uint32_t x = 0; x < sq; x += pitch) span(k, lx + x, th);
+        span(k, lx + sq - th, th);
     }
     // 4: the checker
-    for (uint32_t x = 0; x < SQ; x++)
-        if ((x + y) % 2 == 0) setb(k, 2160 + x);
+    const uint32_t cx = S(t, 2160);
+    for (uint32_t x = 0; x < sq; x++)
+        if ((x + y) % 2 == 0) setb(k, cx + x);
 }
 
 // ------------------------------------------------------------------ the plan
@@ -514,15 +560,15 @@ static void push(tp_t *t, sect_t s)
 
 static void rule(tp_t *t, uint32_t y)
 {
-    push(t, (sect_t){ .y0 = y, .rows = 3, .x = 0, .w = W, .fill = fill_rule });
+    push(t, (sect_t){ .y0 = y, .rows = S(t, 3), .x = 0, .w = t->w, .fill = fill_rule });
 }
 
 // A heading: bold, with a rule under it. The part under it starts 64 dots on.
 static uint32_t heading(tp_t *t, uint32_t y, const char *s)
 {
     text(t, 0, y, s, 60, 1);
-    rule(t, y + 40);
-    return y + 64;
+    rule(t, y + S(t, 40));
+    return y + S(t, 64);
 }
 
 static void textf(tp_t *t, uint32_t x, uint32_t y, size_t cap, int bold, const char *fmt, ...)
@@ -557,47 +603,59 @@ _Static_assert((SW_TP_SWATCHES - 1) * SWATCH_DX + SWATCH_W == W, "the row spans 
 
 static void plan(tp_t *t)
 {
-    const sw_spec_t *sp = sw_spec(t->model);
+    const sw_spec_t *sp = t->geom ? NULL : sw_spec(t->model);
+    const sw_tp_geom_t *g = t->geom;
     sw_tp_layout_t *L = &t->lay;
-    uint32_t y = TOP;
+    const uint32_t W_ = t->w, CELL_ = t->cell, GH_ = t->gh, LINE_ = S(t, LINE), GAP_ = S(t, GAP);
+    uint32_t y = S(t, TOP);
     t->lo = UINT32_MAX;
     t->hi = 0;
 
     // The letterhead, and a rule.
-    L->letterhead = bx(0, y, W, HEAD_H);
-    push(t, (sect_t){ .y0 = y, .rows = HEAD_H, .begin = begin_head, .fill = fill_head, .end = end_head });
-    y += HEAD_H + 16;
+    L->letterhead = bx(0, y, W_, t->head_h);
+    push(t, (sect_t){ .y0 = y, .rows = t->head_h, .begin = begin_head, .fill = fill_head, .end = end_head });
+    y += t->head_h + S(t, 16);
     rule(t, y);
-    y += 3 + 56;
+    y += S(t, 3) + S(t, 56);
 
     // The board, in two columns: labels 11 characters, then the values.
     {
         const sw_tp_info_t *i = t->info;
         char printer[96], page[80], margins[80];
-        snprintf(printer, sizeof printer, "%s%s", sp->name,
-                 !sp->colour ? "" : t->colour ? ", color cartridge" : ", black cartridge");
-        uint32_t pw = sw_printable_w(t->model, SW_TP_SHEET_W);
-        snprintf(page, sizeof page, "Letter, %u x %u dots at 360 dpi", (unsigned)pw,
-                 (unsigned)(SW_TP_SHEET_H - sp->margin_t - sp->margin_b));
-        snprintf(margins, sizeof margins, "%u left, %u top, %u bottom dots", (unsigned)sp->margin_l,
-                 (unsigned)sp->margin_t, (unsigned)sp->margin_b);
+        uint32_t pw, rows, ml, mt, mb;
+        if (g) {
+            snprintf(printer, sizeof printer, "%s", g->model_name ? g->model_name : "");
+            pw = g->sheet_w;
+            rows = (uint32_t)g->sheet_h - g->margin_t - g->margin_b;
+            ml = g->margin_l, mt = g->margin_t, mb = g->margin_b;
+        } else {
+            snprintf(printer, sizeof printer, "%s%s", sp->name,
+                     !sp->colour ? "" : t->colour ? ", color cartridge" : ", black cartridge");
+            pw = sw_printable_w(t->model, SW_TP_SHEET_W);
+            rows = SW_TP_SHEET_H - sp->margin_t - sp->margin_b;
+            ml = sp->margin_l, mt = sp->margin_t, mb = sp->margin_b;
+        }
+        snprintf(page, sizeof page, "Letter, %u x %u dots at %u dpi", (unsigned)pw, (unsigned)rows,
+                 (unsigned)t->dpi);
+        snprintf(margins, sizeof margins, "%u left, %u top, %u bottom dots", (unsigned)ml,
+                 (unsigned)mt, (unsigned)mb);
         char url[96];
         snprintf(url, sizeof url, "http://%s", i->host ? i->host : "");
-        const uint32_t lx = 0, lv = 11 * CELL, rx = 60 * CELL, rv = rx + 11 * CELL;
-        L->details = bx(0, y, W, 3 * LINE + GH);
+        const uint32_t lx = 0, lv = 11 * CELL_, rx = 60 * CELL_, rv = rx + 11 * CELL_;
+        L->details = bx(0, y, W_, 3 * LINE_ + GH_);
         text(t, lx, y, "Printer", 11, 0);             text(t, lv, y, printer, 48, 0);
         text(t, rx, y, "AirWriter", 11, 0);           text(t, rv, y, i->board, 48, 0);
-        y += LINE;
+        y += LINE_;
         text(t, lx, y, "Name", 11, 0);                text(t, lv, y, i->printer, 48, 0);
         text(t, rx, y, "Halftone", 11, 0);
         if (t->gain > 0) textf(t, rv, y, 48, 0, "%s, dot gain %d%%", screen_name(t->screen), t->gain);
         else             text(t, rv, y, screen_name(t->screen), 48, 0);
-        y += LINE;
+        y += LINE_;
         text(t, lx, y, "Settings", 11, 0);            text(t, lv, y, url, 48, 0);
         text(t, rx, y, "Page", 11, 0);                text(t, rv, y, page, 48, 0);
-        y += LINE;
+        y += LINE_;
         text(t, rx, y, "Margins", 11, 0);             text(t, rv, y, margins, 48, 0);
-        y += LINE + GAP - 20;
+        y += S(t, LINE + GAP - 20);
     }
 
     // Ink: seven solid swatches (the four inks and the three they make in pairs), the still
@@ -605,88 +663,101 @@ static void plan(tp_t *t)
     // eleven steps and a ramp of black.
     if (t->colour) {
         y = heading(t, y, "Color");
+        const uint32_t sw = S8(t, SWATCH_W), sh = S(t, SWATCH_H);
         for (int i = 0; i < SW_TP_SWATCHES; i++) {
-            uint32_t x = (uint32_t)i * SWATCH_DX;
-            push(t, (sect_t){ .y0 = y, .rows = SWATCH_H, .x = x, .w = SWATCH_W, .idx = k_swatch_inks[i],
+            uint32_t x = S8(t, (uint32_t)i * SWATCH_DX);
+            push(t, (sect_t){ .y0 = y, .rows = sh, .x = x, .w = sw, .idx = k_swatch_inks[i],
                               .fill = fill_swatch });
-            L->swatch[i] = bx(x, y, SWATCH_W, SWATCH_H);
-            text(t, x, y + SWATCH_H + 16, k_swatch_name[i], 20, 0);
+            L->swatch[i] = bx(x, y, sw, sh);
+            text(t, x, y + sh + S(t, 16), k_swatch_name[i], 20, 0);
         }
-        y += SWATCH_H + 16 + GH + 64;
-        push(t, (sect_t){ .y0 = y, .rows = PHOTO_H, .x = 0, .begin = begin_photo, .fill = fill_photo, .end = end_photo });
-        L->photo = bx(0, y, PHOTO_W, PHOTO_H);
+        y += sh + S(t, 16) + GH_ + S(t, 64);
+        push(t, (sect_t){ .y0 = y, .rows = t->photo_h, .x = 0, .w = t->photo_w,
+                          .begin = begin_photo, .fill = fill_photo, .end = end_photo });
+        L->photo = bx(0, y, t->photo_w, t->photo_h);
         for (int i = 0; i < 4; i++) {
-            uint32_t ry = y + (uint32_t)i * 170;
-            text(t, SIDE_X, ry, k_ink_name[i], 20, 0);
-            push(t, (sect_t){ .y0 = ry + 44, .rows = 80, .x = SIDE_X, .ink = k_ink_of[i],
-                              .begin = begin_ramp, .fill = fill_ramp, .end = end_ramp });
-            L->ink_ramp[i] = bx(SIDE_X, ry + 44, SIDE_W, 80);
+            uint32_t ry = y + S(t, (uint32_t)i * 170);
+            text(t, t->side_x, ry, k_ink_name[i], 20, 0);
+            push(t, (sect_t){ .y0 = ry + S(t, 44), .rows = S(t, 80), .x = t->side_x, .w = t->side_w,
+                              .ink = k_ink_of[i], .begin = begin_ramp, .fill = fill_ramp, .end = end_ramp });
+            L->ink_ramp[i] = bx(t->side_x, ry + S(t, 44), t->side_w, S(t, 80));
         }
-        y += PHOTO_H + GAP;
+        y += t->photo_h + GAP_;
     } else {
         y = heading(t, y, "Photo");
-        if (sp->colour) {
+        if (sp && sp->colour) {
             text(t, 0, y, "The black cartridge is in. With a color cartridge in, this part prints in color.", 80, 0);
-            y += LINE + 12;
+            y += LINE_ + S(t, 12);
         }
-        push(t, (sect_t){ .y0 = y, .rows = PHOTO_H, .x = 0, .begin = begin_photo, .fill = fill_photo, .end = end_photo });
-        L->photo = bx(0, y, PHOTO_W, PHOTO_H);
-        push(t, (sect_t){ .y0 = y, .rows = 340, .x = SIDE_X, .begin = begin_steps, .fill = fill_steps, .end = end_steps });
+        push(t, (sect_t){ .y0 = y, .rows = t->photo_h, .x = 0, .w = t->photo_w,
+                          .begin = begin_photo, .fill = fill_photo, .end = end_photo });
+        L->photo = bx(0, y, t->photo_w, t->photo_h);
+        const uint32_t steps_h = S(t, 340);
+        push(t, (sect_t){ .y0 = y, .rows = steps_h, .x = t->side_x, .w = t->step_w,
+                          .begin = begin_steps, .fill = fill_steps, .end = end_steps });
         for (int j = 0; j < 11; j++) {
-            uint32_t x = SIDE_X + (uint32_t)j * STEP_DX;
-            L->gray_step[j] = bx(x, y, STEP_W, 340);
-            textf(t, x, y + 356, 5, 0, "%d%%", j * 10);
+            uint32_t x = t->side_x + (uint32_t)j * t->step_dx;
+            L->gray_step[j] = bx(x, y, t->step_w, steps_h);
+            textf(t, x, y + S(t, 356), 5, 0, "%d%%", j * 10);
         }
-        text(t, SIDE_X, y + 470, "Black", 20, 0);
-        push(t, (sect_t){ .y0 = y + 514, .rows = 80, .x = SIDE_X, .ink = IW_BLACK,
-                          .begin = begin_ramp, .fill = fill_ramp, .end = end_ramp });
-        L->ink_ramp[3] = bx(SIDE_X, y + 514, SIDE_W, 80);
-        y += PHOTO_H + GAP;
+        text(t, t->side_x, y + S(t, 470), "Black", 20, 0);
+        push(t, (sect_t){ .y0 = y + S(t, 514), .rows = S(t, 80), .x = t->side_x, .w = t->side_w,
+                          .ink = IW_BLACK, .begin = begin_ramp, .fill = fill_ramp, .end = end_ramp });
+        L->ink_ramp[3] = bx(t->side_x, y + S(t, 514), t->side_w, S(t, 80));
+        y += t->photo_h + GAP_;
     }
 
     // The six screens side by side, the one in use ticked.
     y = heading(t, y, "Halftone");
-    L->screen_names = bx(0, y, W, GH);
+    L->screen_names = bx(0, y, W_, GH_);
+    L->ticked = -1;
+    const uint32_t py = y + S(t, 44), ry = py + t->panel_h + S(t, 12), rh = S(t, PRAMP_H);
     for (int i = 0; i < 6; i++) {
-        uint32_t x = (uint32_t)i * PANEL_DX;
+        uint32_t x = (uint32_t)i * t->panel_dx;
         int on = k_screens[i] == t->screen;
         const char *name = screen_name(k_screens[i]);
         text(t, x, y, name, 18, on);
-        if (on) tick(t, x + ((uint32_t)strlen(name) + 1) * CELL, y, 1);
-        L->panel_screen[i] = k_screens[i];
-        L->panel[i] = bx(x, y + 44, PANEL_W, PANEL_H);
-        L->panel_ramp[i] = bx(x, y + 44 + PANEL_H + 12, PANEL_W, PRAMP_H);
+        if (on) {
+            tick(t, x + ((uint32_t)strlen(name) + 1) * CELL_, y, 1);
+            L->ticked = i;
+        }
+        L->panel_screen[i] = g && k_screens[i] == HT_APPLE ? g->apple : k_screens[i];
+        L->panel[i] = bx(x, py, t->panel_w, t->panel_h);
+        L->panel_ramp[i] = bx(x, ry, t->panel_w, rh);
     }
-    push(t, (sect_t){ .y0 = y + 44, .rows = PANEL_H, .idx = 0, .begin = begin_panels, .fill = fill_panels, .end = end_panels });
-    push(t, (sect_t){ .y0 = y + 44 + PANEL_H + 12, .rows = PRAMP_H, .idx = 1, .begin = begin_panels, .fill = fill_panels, .end = end_panels });
-    y += 44 + PANEL_H + 12 + PRAMP_H + 32;
+    push(t, (sect_t){ .y0 = py, .rows = t->panel_h, .idx = 0, .begin = begin_panels, .fill = fill_panels, .end = end_panels });
+    push(t, (sect_t){ .y0 = ry, .rows = rh, .idx = 1, .begin = begin_panels, .fill = fill_panels, .end = end_panels });
+    y = ry + rh + S(t, 32);
     text(t, 0, y, "The ticked screen prints your pages. Change it in the printer's settings.", 100, 0);
-    y += GH + GAP;
+    y += GH_ + GAP_;
 
     // Alignment: a ruler 8 in long, numbered, and four squares an inch each way with captions.
     y = heading(t, y, "Alignment");
-    push(t, (sect_t){ .y0 = y, .rows = RULER_H, .fill = fill_ruler });
-    L->ruler = bx(0, y, W, RULER_H);
+    const uint32_t rul_h = S(t, RULER_H);
+    push(t, (sect_t){ .y0 = y, .rows = rul_h, .fill = fill_ruler });
+    L->ruler = bx(0, y, W_, rul_h);
     for (uint32_t i = 0; i <= 8; i++) {
         char d[2] = { (char)('0' + i), '\0' };
-        text(t, i < 8 ? i * 360 : W - CELL, y + RULER_H + 12, d, 1, 0);
+        text(t, i < 8 ? S(t, i * 360) : W_ - CELL_, y + rul_h + S(t, 12), d, 1, 0);
     }
-    y += RULER_H + 12 + GH + 72;
-    push(t, (sect_t){ .y0 = y, .rows = SQ, .fill = fill_squares });
-    for (int i = 0; i < 4; i++) L->square[i] = bx((uint32_t)i * 720, y, SQ, SQ);
-    y += SQ + 28;
+    y += rul_h + S(t, 12) + GH_ + S(t, 72);
+    const uint32_t sq = S(t, SQ);
+    push(t, (sect_t){ .y0 = y, .rows = sq, .fill = fill_squares });
+    for (int i = 0; i < 4; i++) L->square[i] = bx(S(t, (uint32_t)i * 720), y, sq, sq);
+    y += sq + S(t, 28);
     static const char *const caps[2][4] = {
         { "One inch each way", "Solid black", "Straight lines", "Even gray" },
         { "Measure it with a ruler", "White line: a nozzle is out", "The head is aligned", "The paper feeds evenly" },
     };
-    for (int r = 0; r < 2; r++, y += LINE)
-        for (int i = 0; i < 4; i++) text(t, (uint32_t)i * 720, y, caps[r][i], 30, 0);
-    y += GAP - LINE + 20;
+    const char *const (*cap)[4] = g && g->captions ? g->captions : caps;
+    for (int r = 0; r < 2; r++, y += LINE_)
+        for (int i = 0; i < 4; i++) text(t, S(t, (uint32_t)i * 720), y, cap[r][i], 30, 0);
+    y += S(t, GAP - LINE + 20);
 
     // The footer.
     rule(t, y);
-    y += 3 + 24;
-    L->footer = bx(0, y, W, GH);
+    y += S(t, 3) + S(t, 24);
+    L->footer = bx(0, y, W_, GH_);
     text(t, 0, y, "AirWriter by Wells Workshop    wells.ee    github.com/wr/airwriter", 100, 0);
 
     L->first_ink = (uint16_t)t->lo;
@@ -694,20 +765,48 @@ static void plan(tp_t *t)
     L->colour = t->colour;
 }
 
+// The page's sizes at its dpi, then its plan. A geometry this page cannot draw (a dpi past
+// 360, which every buffer is sized for, or a letterhead icon wider than the StyleWriter's)
+// leaves the plan full: no page.
 static void setup(tp_t *t, const sw_tp_info_t *i)
 {
+    const sw_tp_geom_t *g = i->geom;
     t->info = i;
+    t->geom = g;
+    t->art = g ? g->art : &k_sw_art;
     t->model = i->model;
-    t->colour = i->colour_cart && sw_spec(i->model)->colour;
-    t->screen = i->screen;
+    t->colour = !g && i->colour_cart && sw_spec(i->model)->colour;
+    t->screen = i->screen == HT_APPLE_LW ? HT_APPLE : i->screen;
     t->gain = i->gain;
+    t->dpi = g ? g->dpi : 360;
+    if (t->dpi < 72 || t->dpi > 360 || !t->art) { t->full = 1; return; }
+    t->w = S(t, W);
+    t->px = S(t, PX);
+    t->cell = 6 * t->px;
+    t->gh = 7 * t->px;
+    t->icon_s = S(t, ICON_S);
+    t->icon_w = (uint32_t)t->art->icon_w * t->icon_s;
+    if (t->icon_w > ICON_MAX || t->icon_w % 8 || (uint32_t)t->art->sub_w > t->w) { t->full = 1; return; }
+    t->title_x = t->icon_w + S(t, TITLE_DX);
+    t->title_y = S(t, TITLE_Y);
+    t->sub_y = S(t, SUB_Y);
+    t->head_h = t->sub_y + t->art->sub_h;
+    t->photo_w = S8(t, PHOTO_W);
+    t->photo_h = S(t, PHOTO_H);
+    t->side_x = S8(t, SIDE_X);
+    t->side_w = t->w - t->side_x;
+    t->step_w = S8(t, STEP_W);
+    t->step_dx = S8(t, STEP_DX);
+    t->panel_w = S8(t, PANEL_W);
+    t->panel_h = S(t, PANEL_H);
+    t->panel_dx = S8(t, PANEL_DX);
     plan(t);
 }
 
 void sw_testpage_layout(const sw_tp_info_t *i, sw_tp_layout_t *out)
 {
     memset(out, 0, sizeof *out);
-    if (!i || !sw_spec(i->model)) return;
+    if (!i || (!i->geom && !sw_spec(i->model))) return;
     tp_t *t = big_calloc(1, sizeof *t);
     if (!t) return;
     setup(t, i);
@@ -719,13 +818,15 @@ void sw_testpage_layout(const sw_tp_info_t *i, sw_tp_layout_t *out)
 
 int sw_testpage(const sw_tp_info_t *i, const rip_stage_t *st)
 {
-    const sw_spec_t *sp = i ? sw_spec(i->model) : NULL;
-    if (!sp) return SW_TP_NOMEM;
-    int colour = i->colour_cart && sp->colour;
+    const sw_tp_geom_t *g = i ? i->geom : NULL;
+    const sw_spec_t *sp = i && !g ? sw_spec(i->model) : NULL;
+    if (!i || (!g && !sp)) return SW_TP_NOMEM;
+    int colour = !g && i->colour_cart && sp->colour;
     if (!st || !st->page_begin || !st->row || !st->page_end || (colour && !st->ink_row))
         return SW_TP_STAGE;                  // a stage that cannot take this page's rows
-    uint32_t pw = sw_printable_w(i->model, SW_TP_SHEET_W), rb = (pw + 7) / 8;
-    if (pw < W) return SW_TP_NOMEM;          // (no model has less than 8 in across)
+    const uint32_t pw = g ? g->sheet_w : sw_printable_w(i->model, SW_TP_SHEET_W), rb = (pw + 7) / 8;
+    const uint32_t sheet_h = g ? g->sheet_h : SW_TP_SHEET_H, mt = g ? g->margin_t : sp->margin_t;
+    if (pw < scale(g ? g->dpi : 360, W)) return SW_TP_NOMEM;   // (no model has less than 8 in across)
 
     tp_t *t = big_calloc(1, sizeof *t);
     uint8_t *rows = big_calloc(IW_INKS, rb);
@@ -739,13 +840,13 @@ int sw_testpage(const sw_tp_info_t *i, const rip_stage_t *st)
     for (int k = 0; k < IW_INKS; k++) planes[k] = rows + (size_t)k * rb;
     int rc = t->full ? SW_TP_NOMEM : SW_TP_DONE;
 
-    if (rc == SW_TP_DONE && st->page_begin(st->ctx, 0, pw, SW_TP_SHEET_H)) rc = SW_TP_STAGE;
-    for (uint32_t sy = 0; rc == SW_TP_DONE && sy < SW_TP_SHEET_H; sy++) {
+    if (rc == SW_TP_DONE && st->page_begin(st->ctx, 0, pw, sheet_h)) rc = SW_TP_STAGE;
+    for (uint32_t sy = 0; rc == SW_TP_DONE && sy < sheet_h; sy++) {
         if ((sy & 31) == 0 && i->stop && i->stop(i->stop_ctx)) { rc = SW_TP_STOPPED; break; }
         memset(rows, 0, (size_t)IW_INKS * rb);
         // The layout starts under the engine's top margin; the margins are blank rows.
-        if (sy >= sp->margin_t && sy - sp->margin_t <= t->hi) {
-            uint32_t y = sy - sp->margin_t;
+        if (sy >= mt && sy - mt <= t->hi) {
+            uint32_t y = sy - mt;
             for (int n = 0; n < t->nsec && rc == SW_TP_DONE; n++) {
                 sect_t *s = &t->sec[n];
                 if (y < s->y0 || y >= s->y0 + s->rows) continue;

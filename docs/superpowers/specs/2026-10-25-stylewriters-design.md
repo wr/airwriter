@@ -5,6 +5,13 @@
 `W-1102 QuickDraw LaserWriters on the printer port (Personal LaserWriter LS/300, Select 300)`.
 Reverses the StyleWriter cut in `2026-08-04-printer-support-scope-design.md`.
 
+**Amended 2026-11-13** by `W-1102 QuickDraw LaserWriters on the printer port (Personal LaserWriter LS/300, Select 300)` (`2026-11-12-quickdraw-laserwriters-design.md`): the run coder (`sw_code_row` with no previous row),
+the test page's renderer (`sw_testpage`, drawn at 300 dpi for a Personal LaserWriter 300) and
+the record's "Apple" screen are shared with the 300, where "Apple" means Apple's 300 screen. The
+port's family is one enum of three (`pr_family_t`) in place of the StyleWriter flag, and a clock
+on HSKi is a QuickDraw LaserWriter, never asked the plain question or a StyleWriter's status
+(SPEC §3.18).
+
 **Amended 2026-11-09** (`W-1138 Every supported printer shows its own Apple icon`): a
 StyleWriter's icon over AirPrint and on its Printers row is Apple's for its model, where the
 Settings page section below has one drawing for the family. The 2400 and 2500 share one. The

@@ -227,6 +227,7 @@ body:not(.ready) .sw span,body:not(.ready) .sw span:after{transition:none}
 #pd-ic{display:contents}
 .row .txt small{display:block;color:var(--fg2);font-size:var(--t-small);overflow-wrap:anywhere}
 .row small.mono{font-family:var(--mono);font-weight:400;color:var(--fg2)}
+.prow.off{opacity:.55} .prow.off .chev{visibility:hidden}  /* the lamp lines up with the rows above */
 .prow .chev,#log-row .chev{color:var(--fg3);font-size:20px;line-height:1;margin-left:-4px}
 .empty{margin:0;padding:14px;color:var(--fg2);font-size:var(--t-small)}
 /* a notice asks something: the caution mark, its words, its keys under them */

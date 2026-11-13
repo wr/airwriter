@@ -51,8 +51,8 @@ toolchain notes.
 
 LocalTalk runs on Tashtari's [TashTalk](https://github.com/lampmerchant/tashtalk). Monroe
 Williams worked out the StyleWriter's serial protocol in the 1990s and wrote
-[lpstyl](https://github.com/Godzil/lpstyl). FeralFirmware took Apple's StyleWriter drivers apart
-for [TailTalk](https://github.com/FeralFirmware/TailTalk) and InkTalk. Thank you all.
+[lpstyl](https://github.com/Godzil/lpstyl). FeralFirmware took Apple's StyleWriter and LaserWriter 300
+drivers apart for [TailTalk](https://github.com/FeralFirmware/TailTalk) and InkTalk. Thank you all.
 
 ## License
 

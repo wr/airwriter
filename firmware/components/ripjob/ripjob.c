@@ -46,6 +46,7 @@ static void say(const ripjob_cfg_t *cfg, const char *fmt, ...)
 static void on_row(void *ctx, const uint8_t *row, uint32_t w)
 {
     pipe_t *p = (pipe_t *)ctx;
+    if (p->cfg->stage && p->cfg->stage->gray_row) p->cfg->stage->gray_row(p->cfg->stage->ctx, row, w);
     ht_row(&p->ht, row, p->bits);
     if (p->cfg->row) p->cfg->row(p->cfg->row_ctx, p->bits, w, p->y);
     if (p->cfg->stage) p->cfg->stage->row(p->cfg->stage->ctx, p->bits);
@@ -74,13 +75,23 @@ static void apple_page_start(ht_t *h)
     ht_set_phase(h, h->phase_x, h->phase_y + 1, h->invert);
 }
 
-// The sheet of the caps' list this page's width names, or the first.
-static const printer_media_t *pick_media(const printer_caps_t *caps, uint32_t page_w)
+static int near(uint32_t a, uint32_t b)
+{
+    int32_t d = (int32_t)a - (int32_t)b;
+    return d >= -MEDIA_SLACK && d <= MEDIA_SLACK;
+}
+
+// The sheet of the caps' list this page's width and height name (W-1102: Letter and Legal are
+// both 2550 dots across at 300 dpi), an entry with no height matching any; else the first its
+// width names; else the first.
+static const printer_media_t *pick_media(const printer_caps_t *caps, uint32_t page_w, uint32_t page_h)
 {
     for (size_t i = 0; i < caps->n_media; i++) {
-        int32_t d = (int32_t)page_w - (int32_t)caps->media_list[i].page_w;
-        if (d >= -MEDIA_SLACK && d <= MEDIA_SLACK) return &caps->media_list[i];
+        const printer_media_t *m = &caps->media_list[i];
+        if (near(page_w, m->page_w) && (!m->page_h || near(page_h, m->page_h))) return m;
     }
+    for (size_t i = 0; i < caps->n_media; i++)
+        if (near(page_w, caps->media_list[i].page_w)) return &caps->media_list[i];
     return &caps->media_list[0];
 }
 
@@ -137,7 +148,8 @@ int ripjob_run(urf_t *u, const ripjob_cfg_t *cfg, ripjob_stats_t *st)
         uint32_t limit = max;
         int sheeted = caps->n_media != 0;
         if (sheeted) {
-            const printer_media_t *md = pick_media(caps, full_w);
+            uint32_t full_h = (uint32_t)((uint64_t)u->page.height * dpi_y / res);
+            const printer_media_t *md = pick_media(caps, full_w, full_h);
             uint32_t left = md->rip_left < full_w ? md->rip_left : 0;
             uint32_t keep = md->rip_w < full_w - left ? md->rip_w : full_w - left;
             crop_left = (uint32_t)((uint64_t)left * res / dpi_x);

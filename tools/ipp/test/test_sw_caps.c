@@ -4,13 +4,13 @@
 // engine's margins, where the ImageWriter has always offered one sheet. The
 // ImageWriter's own answers stay byte for byte (test_ipp_golden.c); here its
 // caps only have to say they list no sheets. The size of a full answer is
-// printed because RESP_MAX in ipp_server.c (5120) is chosen against it.
+// printed because RESP_MAX in ipp_server.c (7680) is chosen against it.
 #include "test_util.h"
 #include "ipp_attrs.h"
 #include "ipp_walk.h"
 #include "sw_model.h"
 
-#define RESP_MAX 5120               // ipp_server.c's buffer for an answer
+#define RESP_MAX 7680               // ipp_server.c's buffer for an answer
 
 static uint8_t buf[RESP_MAX];
 

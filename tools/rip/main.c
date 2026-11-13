@@ -17,6 +17,11 @@
 #include "sw_page.h"
 #include "sw_rip.h"
 #include "sw_testpage.h"
+#include "qd_page.h"
+#include "qd_rip.h"
+#include "qd_session.h"
+#include "qd_wire.h"
+#include "qd_testpage.h"
 
 typedef struct {
     FILE    *stream;
@@ -270,6 +275,129 @@ static int print_sw_testpage(const char *cart, sw_model_t model, const char *pat
     return 0;
 }
 
+/* --printer plw300 (W-1102): the firmware's session and page stage write the conversation as
+ * the pty carries it to qdfake.py (--out-qd: each packet as `P`, a u16 LE length, its bytes)
+ * and as the line the board clocks out (--out-qd-bits: qd_bits_put's image). Every question is
+ * answered as an idle Personal LaserWriter 300 with paper at both sources answers it, on a
+ * clock that moves only when the session waits. */
+typedef struct {
+    FILE    *frames;
+    uint8_t *bits;
+    size_t   bits_cap, bits_pos;     // in bits
+    int      failed;
+    uint8_t  asked[2];               // the question owed a reply
+    int      owed;
+    uint32_t ms;
+    int      page_no;
+    ht_algo_t screen;
+    qd_session_t *sess;
+} qdw_t;
+
+static int qdw_put(void *ctx, const uint8_t *p, size_t n)
+{
+    qdw_t *w = ctx;
+    uint8_t head[3] = { 'P', (uint8_t)n, (uint8_t)(n >> 8) };
+    if (w->frames && (fwrite(head, 1, 3, w->frames) != 3 || fwrite(p, 1, n, w->frames) != n))
+        w->failed = 1;
+    size_t need = w->bits_pos + qd_bits_len(n);
+    if (need > w->bits_cap) {
+        size_t cap = w->bits_cap ? w->bits_cap : 1 << 20;
+        while (cap < need) cap *= 2;
+        uint8_t *nb = realloc(w->bits, cap / 8);
+        if (!nb) { w->failed = 1; return QD_E_LINK; }
+        w->bits = nb;
+        w->bits_cap = cap;
+    }
+    qd_bits_put(w->bits, w->bits_cap, &w->bits_pos, p, n);
+    if (n == 3 && (p[0] == 0x82 || p[0] == 0x83 || p[0] == 0x8E)) {
+        w->asked[0] = p[0];
+        w->asked[1] = p[1];
+        w->owed = 1;
+    }
+    return 0;
+}
+
+static int qdw_flush(void *ctx) { (void)ctx; return 0; }
+
+static int qdw_read(void *ctx, uint8_t *b, size_t cap, uint32_t first_ms, uint32_t gap_ms)
+{
+    qdw_t *w = ctx;
+    (void)gap_ms;
+    if (!w->owed || !cap) { w->ms += first_ms; return 0; }
+    w->owed = 0;
+    switch (w->asked[0]) {
+    case 0x82: b[0] = 0xA4; break;                    // idle, memory empty
+    case 0x8E: b[0] = 0xFC; break;                    // page done: the page prints at once
+    default:   b[0] = w->asked[1] == 0x3E ? 0x29      // a Personal LaserWriter 300
+                    : w->asked[1] == 0x2A ? 0x61      // paper in the cassette and the slot
+                    : 0x01; break;                    // nothing to say
+    }
+    return 1;
+}
+
+static void qdw_sleep(void *ctx, uint32_t ms) { ((qdw_t *)ctx)->ms += ms; }
+static uint32_t qdw_now(void *ctx) { return ((qdw_t *)ctx)->ms; }
+
+static int qdw_open(void *ctx, const qd_media_t *md) { return qd_session_open(((qdw_t *)ctx)->sess, md); }
+static int qdw_row(void *ctx, const uint8_t *c, size_t n) { return qd_session_row(((qdw_t *)ctx)->sess, c, n); }
+static int qdw_print(void *ctx) { return qd_session_print(((qdw_t *)ctx)->sess); }
+static void qdw_note(void *ctx, int page, int apple, uint32_t bytes, int too_big)
+{
+    (void)page;
+    qdw_t *w = ctx;
+    if (too_big) fprintf(stderr, "rip: page %d: didn't fit in the printer's memory\n", ++w->page_no);
+    else fprintf(stderr, "rip: page %d: %s, %u bytes\n", ++w->page_no, apple ? "apple" : "record's screen",
+                 (unsigned)bytes);
+}
+
+static void qdt_note(void *ctx, int page, int apple, uint32_t bytes, int too_big)
+{
+    (void)ctx; (void)page; (void)apple;
+    if (too_big) fprintf(stderr, "rip: test page: didn't fit in the printer's memory\n");
+    else fprintf(stderr, "rip: test page: %u bytes of codes\n", (unsigned)bytes);
+}
+
+/* --qd-testpage (W-1102): the 300's test page as the board draws it, through the same session
+ * and page stage as --printer plw300, its packets written in qdfake.py's framing (--out-qd's).
+ * Its rows go in the screen they are drawn in: nothing is kept. */
+static int print_qd_testpage(const char *path, ht_algo_t algo, int gain)
+{
+    qdw_t qw;
+    memset(&qw, 0, sizeof qw);
+    qw.screen = algo;
+    if (!(qw.frames = fopen(path, "wb"))) { perror(path); return 1; }
+    static const qd_ops_t qops = { .put = qdw_put, .flush = qdw_flush, .read = qdw_read,
+                                   .sleep_ms = qdw_sleep, .now_ms = qdw_now };
+    qd_ops_t ops = qops;
+    ops.ctx = &qw;
+    const qd_job_cfg_t jc = { .model = QD_PLW300 };
+    qd_page_cfg_t pc = { .model = QD_PLW300, .screen = algo, .gain = gain,
+                         .sink = { qdw_open, qdw_row, qdw_print, qdt_note, &qw } };
+    sw_tp_geom_t g;
+    qd_page_t *qdp = NULL;
+    int rc = -1;
+    if (!qd_tp_geom(QD_PLW300, &g) && (qw.sess = qd_session_new(&ops, &jc)) &&
+        (qdp = qd_page_new(&pc)) && !qd_session_begin(qw.sess)) {
+        rip_stage_t st;
+        qd_page_stage(qdp, &st);
+        sw_tp_info_t info = {
+            .printer = "Personal LaserWriter 300", .board = "AirWriter v0.3.0 at 10.0.1.115",
+            .host = "airwriter-2434.local", .gain = gain, .screen = algo, .geom = &g,
+        };
+        rc = sw_testpage(&info, &st);
+        if (rc == SW_TP_DONE && qd_session_end(qw.sess)) rc = -1;
+    }
+    qd_page_free(qdp);
+    qd_session_free(qw.sess);
+    if (fclose(qw.frames)) qw.failed = 1;
+    free(qw.bits);
+    if (rc != SW_TP_DONE || qw.failed) {
+        fprintf(stderr, "rip: the 300's test page failed (%d)\n", rc);
+        return 1;
+    }
+    return 0;
+}
+
 static void write_file(void *ctx, const uint8_t *b, size_t n)
 {
     fwrite(b, 1, n, (FILE *)ctx);
@@ -283,6 +411,8 @@ static void usage(void)
           "       rip --in FILE --printer laser [--paper letter|a4|legal] [--ps FILE] [--hex]\n"
           "       rip --in FILE --printer stylewriter --model original|ii|1200|1500|2200|2400|2500\n"
           "           [--cart black|colour] [--tone none] [--out-sw FILE] [--out-pbm FILE]\n"
+          "       rip --in FILE --printer plw300 [--source main|manual] [--out-qd FILE]\n"
+          "           [--out-qd-bits FILE] [--out-pbm FILE]\n"
           "       rip --testpage colour|black|unknown --out-stream FILE [--dither ...] [--gain ...]\n"
           "       rip --sw-testpage black|colour --model M --out-sw FILE [--dither ...] [--gain ...]\n"
           "  --colour   print RGB pages in four inks, as with the colour ribbon in\n"
@@ -296,6 +426,8 @@ static void usage(void)
           "       rip --start-page-job on|off FILE  the job that sets its start page (W-1099)\n"
           "       rip --ps-testpage FILE  the PostScript printers' test page (W-1088)\n"
           "       --sw-testpage  a StyleWriter's test page for that cartridge, as the board draws it\n"
+          "       rip --qd-testpage FILE [--dither ...] [--gain ...]  the Personal LaserWriter 300's\n"
+          "             test page as the board sends it, in --out-qd's framing\n"
           "             (W-1103); --out-sw writes it as the printer gets it, for swfake.py decode\n"
           "  --printer stylewriter  rip at 360 dpi for a StyleWriter (W-1103), the sheet named by\n"
           "             the page's width. --out-sw writes the page as the printer gets it (rects,\n"
@@ -303,6 +435,10 @@ static void usage(void)
           "             --out-pbm writes a PBM per ink (p-c.pbm .. p-k.pbm) of the printable area;\n"
           "             --cart colour prints RGB pages in four inks, --tone none leaves out Apple's\n"
           "             tone curve\n"
+          "  --printer plw300  rip at 300 dpi for a Personal LaserWriter 300 (W-1102), through the\n"
+          "             firmware's page stage and session: --out-qd writes the packets in qdfake.py's\n"
+          "             framing, --out-qd-bits the line the board clocks out, --out-pbm the dots in\n"
+          "             the record's screen; --source manual takes the manual feed slot\n"
           "  --printer laser  rip at 300 dpi for a LaserWriter (W-1082); --ps writes its\n"
           "             PostScript, in binary, or with --hex as a Level 1 machine that\n"
           "             cannot take binary gets it\n",
@@ -316,7 +452,8 @@ int main(int argc, char **argv)
     const char *printer = "imagewriter", *paper = "letter", *out_ps = NULL, *out_pbm = NULL;
     const char *query = NULL, *ps_tp = NULL, *sp_job = NULL;
     const char *model_arg = NULL, *cart_arg = "black", *tone_arg = "apple", *out_sw = NULL;
-    const char *sw_tp = NULL;
+    const char *sw_tp = NULL, *qd_tp = NULL;
+    const char *out_qd = NULL, *out_qd_bits = NULL, *source = "main";
     int sp_on = 0;
     int colour = 0, gain = 0, top = 0, hex = 0;
 
@@ -338,6 +475,9 @@ int main(int argc, char **argv)
         else if (!strcmp(argv[i], "--tone") && i + 1 < argc)        tone_arg = argv[++i];
         else if (!strcmp(argv[i], "--out-sw") && i + 1 < argc)      out_sw = argv[++i];
         else if (!strcmp(argv[i], "--out-pbm") && i + 1 < argc)     out_pbm = argv[++i];
+        else if (!strcmp(argv[i], "--out-qd") && i + 1 < argc)      out_qd = argv[++i];
+        else if (!strcmp(argv[i], "--out-qd-bits") && i + 1 < argc) out_qd_bits = argv[++i];
+        else if (!strcmp(argv[i], "--source") && i + 1 < argc)      source = argv[++i];
         else if (!strcmp(argv[i], "--query-job") && i + 1 < argc)   query = argv[++i];
         else if (!strcmp(argv[i], "--start-page-job") && i + 2 < argc) {
             sp_on = !strcmp(argv[++i], "on");
@@ -345,6 +485,7 @@ int main(int argc, char **argv)
         }
         else if (!strcmp(argv[i], "--ps-testpage") && i + 1 < argc) ps_tp = argv[++i];
         else if (!strcmp(argv[i], "--sw-testpage") && i + 1 < argc) sw_tp = argv[++i];
+        else if (!strcmp(argv[i], "--qd-testpage") && i + 1 < argc) qd_tp = argv[++i];
         else { usage(); return 2; }
     }
     if (ps_tp) {
@@ -366,7 +507,7 @@ int main(int argc, char **argv)
         fclose(qf);
         return 0;
     }
-    if (!in && !(testpage && out_stream) && !(sw_tp && out_sw)) { usage(); return 2; }
+    if (!in && !(testpage && out_stream) && !(sw_tp && out_sw) && !qd_tp) { usage(); return 2; }
 
     ht_algo_t algo;
     if (ht_algo_from_name(dither, &algo)) {
@@ -381,6 +522,7 @@ int main(int argc, char **argv)
         }
         return print_sw_testpage(sw_tp, m, out_sw, algo, gain);
     }
+    if (qd_tp) return print_qd_testpage(qd_tp, algo, gain);
     if (testpage) return print_testpage(testpage, out_stream, algo, gain, top);
 
     FILE *f = fopen(in, "rb");
@@ -407,7 +549,9 @@ int main(int argc, char **argv)
     if (out_stream && !h.stream) { perror(out_stream); fclose(f); return 1; }
 
     int laser = !strcmp(printer, "laser"), stylewriter = !strcmp(printer, "stylewriter");
-    if (!laser && !stylewriter && strcmp(printer, "imagewriter")) { usage(); fclose(f); return 2; }
+    int plw300 = !strcmp(printer, "plw300");
+    if (!laser && !stylewriter && !plw300 && strcmp(printer, "imagewriter")) { usage(); fclose(f); return 2; }
+    if (plw300 && strcmp(source, "main") && strcmp(source, "manual")) { usage(); fclose(f); return 2; }
     printer_caps_t caps;
     uint32_t paper_h_pt = 792;
     ps_t *ps = NULL;
@@ -466,10 +610,53 @@ int main(int argc, char **argv)
     };
     if (stylewriter) sw_rip_cfg(&cfg, &stage, swp, swm, algo, colour, !strcmp(tone_arg, "apple"));
 
+    qdw_t qw;
+    memset(&qw, 0, sizeof qw);
+    qd_page_t *qdp = NULL;
+    uint8_t *qd_keep = NULL;
+    if (plw300) {
+        static const qd_ops_t qops = { .put = qdw_put, .flush = qdw_flush, .read = qdw_read,
+                                       .sleep_ms = qdw_sleep, .now_ms = qdw_now };
+        qd_ops_t ops = qops;
+        ops.ctx = &qw;
+        qw.screen = algo;
+        qw.frames = out_qd ? fopen(out_qd, "wb") : NULL;
+        if (out_qd && !qw.frames) { perror(out_qd); fclose(f); return 1; }
+        qd_job_cfg_t jc = { .model = QD_PLW300, .manual = !strcmp(source, "manual") };
+        qd_keep = malloc(QD_KEEP_CAP);
+        qd_page_cfg_t pc = { .model = QD_PLW300, .screen = algo, .gain = gain, .keep = qd_keep,
+                             .keep_cap = qd_keep ? QD_KEEP_CAP : 0,
+                             .sink = { qdw_open, qdw_row, qdw_print, qdw_note, &qw } };
+        if (!(qw.sess = qd_session_new(&ops, &jc)) || !(qdp = qd_page_new(&pc)) ||
+            qd_session_begin(qw.sess)) {
+            fprintf(stderr, "rip: the 300's session could not start\n");
+            fclose(f);
+            return 1;
+        }
+        qd_rip_cfg(&cfg, &stage, qdp, &pc);
+    }
+
     ripjob_stats_t st;
     memset(&st, 0, sizeof st);
 
     rc = ripjob_run(&u, &cfg, &st);
+    if (plw300) {
+        if (rc == 0 && qd_session_end(qw.sess)) rc = -1;
+        if (qd_page_failed(qdp)) rc = -1;
+        qd_page_free(qdp);
+        qd_session_free(qw.sess);
+        free(qd_keep);
+        if (qw.frames && fclose(qw.frames)) qw.failed = 1;
+        if (out_qd_bits) {
+            FILE *bf = fopen(out_qd_bits, "wb");
+            size_t nb = (qw.bits_pos + 7) / 8;
+            if (qw.bits_pos & 7) qd_bits_marks(qw.bits, nb * 8, &qw.bits_pos, 8);   // end on marks
+            if (!bf || fwrite(qw.bits, 1, nb, bf) != nb) qw.failed = 1;
+            if (bf) fclose(bf);
+        }
+        free(qw.bits);
+        if (qw.failed) { fprintf(stderr, "rip: could not write the 300's stream\n"); rc = -1; }
+    }
     if (ps) {
         ps_job_end(ps);
         ps_free(ps);

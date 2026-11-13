@@ -1,14 +1,20 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "serial_out.h"
 #include "serial_writer.h"
+#include "serial_clock.h"
 
 #include <string.h>
 #include "esp_log.h"
 #include "driver/uart.h"
 #include "driver/gpio.h"
+#include "driver/pulse_cnt.h"
+#include "esp_timer.h"
 #include "hal/uart_ll.h"
+#include "hal/gpio_ll.h"
+#include "soc/gpio_struct.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "freertos/queue.h"
 
 static const char *TAG = "serial";
 
@@ -21,11 +27,22 @@ static const char *TAG = "serial";
 #define RX_RING      1024   // the loopback self-check, and the printer's self-ID (W-1064)
 #define WATCH_PERIOD pdMS_TO_TICKS(100)
 
+// The clock on HSKi (W-1102). PCNT's counter is 16 bits: a 533 kHz clock is 26,650 edges in
+// a 50 ms window, and the unit accumulates past its limit, so a window stretched by a busy
+// core still counts true.
+#define CLOCK_WINDOW pdMS_TO_TICKS(50)
+#define CLOCK_HZ_MIN 100000
+#define CLOCK_LIMIT  32767
+#define EVENT_QUEUE  8
+
 static serial_out_cfg_t s_cfg;
 static unsigned s_stall_limit;   // poll periods; see serial_writer.h
 static volatile int s_abort;     // see serial_out_set_abort()
 static volatile size_t   s_lb_bytes;
 static volatile uint32_t s_lb_crc;
+static pcnt_unit_handle_t s_pcnt;      // rising edges on cts_pin; NULL with no CTS line
+static volatile int s_clocked, s_clock_hz;
+static QueueHandle_t s_events;         // the UART driver's, read only by serial_out_break_take
 
 // The port's link right now (serial_out_set_link): the ImageWriter's, 9600 with CTS, until a
 // StyleWriter's is asked for. Read and written under the job lock, like the calls that use it.
@@ -58,20 +75,72 @@ static int clear_to_send(void)
     return s_cfg.invert_cts ? level == 1 : level == 0;
 }
 
+// The edge counter on cts_pin. Its channel goes through the GPIO matrix, so the pad stays the
+// UART's CTS input.
+static void clock_counter_init(void)
+{
+    pcnt_unit_config_t uc = { .low_limit = -1, .high_limit = CLOCK_LIMIT, .flags.accum_count = 1 };
+    pcnt_chan_config_t cc = { .edge_gpio_num = s_cfg.cts_pin, .level_gpio_num = -1 };
+    pcnt_channel_handle_t ch = NULL;
+    if (pcnt_new_unit(&uc, &s_pcnt) != ESP_OK) { s_pcnt = NULL; return; }
+    if (pcnt_new_channel(s_pcnt, &cc, &ch) != ESP_OK ||
+        pcnt_channel_set_edge_action(ch, PCNT_CHANNEL_EDGE_ACTION_INCREASE,
+                                     PCNT_CHANNEL_EDGE_ACTION_HOLD) != ESP_OK ||
+        pcnt_unit_add_watch_point(s_pcnt, CLOCK_LIMIT) != ESP_OK ||
+        pcnt_unit_enable(s_pcnt) != ESP_OK || pcnt_unit_start(s_pcnt) != ESP_OK) {
+        ESP_LOGW(TAG, "no edge counter on the printer's handshake line");
+        if (ch) pcnt_del_channel(ch);
+        pcnt_del_unit(s_pcnt);
+        s_pcnt = NULL;
+    }
+}
+
+// The clock's rate over one window, in Hz; -1 with no counter.
+static int clock_window(void)
+{
+    if (!s_pcnt) return -1;
+    int n = 0;
+    pcnt_unit_clear_count(s_pcnt);
+    int64_t t0 = esp_timer_get_time();
+    vTaskDelay(CLOCK_WINDOW);
+    pcnt_unit_get_count(s_pcnt, &n);
+    int64_t dt = esp_timer_get_time() - t0;
+    return dt > 0 && n > 0 ? (int)((int64_t)n * 1000000 / dt) : 0;
+}
+
 // Reports HSKo edges. Mid-job the line toggles on every printed line, so the
 // callback must stay cheap; printer_state does the judging on its own clock.
+// W-1102: each 100 ms also counts the line's edges for 50 ms. A clock (a QuickDraw
+// LaserWriter switched on) is reported by on_clock, and while it runs the level is not.
+// serial_clock.h decides: found in two windows, gone after 2 s.
 static void line_task(void *arg)
 {
     (void)arg;
     int last = -1;
+    serial_clock_t clk = { 0, 0 };
     for (;;) {
-        int now = clear_to_send();
-        if (now != last) {
-            last = now;
-            ESP_LOGD(TAG, "printer %s", now ? "ready" : "not ready");
-            if (s_cfg.on_line) s_cfg.on_line(s_cfg.on_line_ctx, now);
+        int hz = clock_window();
+        int fast = hz >= CLOCK_HZ_MIN;
+        int paused = clk.clocked && fast ? clk.runs : 0;   // slow windows just ridden out
+        if (serial_clock_window(&clk, fast)) {
+            s_clocked = clk.clocked;
+            s_clock_hz = hz;
+            if (!fast) last = -1;                   // the level is reported afresh
+            if (s_cfg.on_clock) s_cfg.on_clock(s_cfg.on_line_ctx, fast, hz);
+        } else if (fast && s_clocked) {
+            s_clock_hz = hz;
         }
-        vTaskDelay(WATCH_PERIOD);
+        if (paused >= 2)
+            ESP_LOGW(TAG, "the printer's clock stopped for about %d ms and came back", paused * 100);
+        if (!s_clocked && !fast) {
+            int now = clear_to_send();
+            if (now != last) {
+                last = now;
+                ESP_LOGD(TAG, "printer %s", now ? "ready" : "not ready");
+                if (s_cfg.on_line) s_cfg.on_line(s_cfg.on_line_ctx, now);
+            }
+        }
+        vTaskDelay(s_pcnt ? WATCH_PERIOD - CLOCK_WINDOW : WATCH_PERIOD);
     }
 }
 
@@ -109,7 +178,9 @@ esp_err_t serial_out_init(const serial_out_cfg_t *cfg)
         .source_clk = UART_SCLK_DEFAULT,
     };
 
-    esp_err_t err = uart_driver_install(s_cfg.uart_num, RX_RING, TX_RING, 0, NULL, 0);
+    // The event queue is for the printer's BREAK alone (W-1102, serial_out_break_take).
+    esp_err_t err = uart_driver_install(s_cfg.uart_num, RX_RING, TX_RING, EVENT_QUEUE,
+                                        &s_events, 0);
     if (err != ESP_OK) return err;
 
     err = uart_param_config(s_cfg.uart_num, &uc);
@@ -142,6 +213,7 @@ esp_err_t serial_out_init(const serial_out_cfg_t *cfg)
         ESP_LOGW(TAG, "loopback on: TX feeds RX inside the peripheral, nothing "
                       "reaches a printer");
     } else if (s_cfg.cts_pin >= 0) {
+        clock_counter_init();
         xTaskCreate(line_task, "ser_line", 3072, NULL, 3, NULL);
     }
     // No line to watch: say so once, so the state is not left unknown.
@@ -369,4 +441,45 @@ int serial_out_write_raw(const uint8_t *b, size_t n, uint32_t timeout_ms)
         vTaskDelay(1);
     }
     return 0;
+}
+
+int serial_out_clock(int *hz)
+{
+    if (hz) *hz = s_clock_hz;
+    return s_clocked;
+}
+
+int serial_out_clock_live(void)
+{
+    if (s_cfg.cts_pin < 0) return 0;
+    int last = gpio_ll_get_level(&GPIO, s_cfg.cts_pin), edges = 0;
+    for (int i = 0; i < 2048 && edges < 8; i++) {
+        int v = gpio_ll_get_level(&GPIO, s_cfg.cts_pin);
+        edges += v != last;
+        last = v;
+    }
+    return edges >= 8;
+}
+
+int serial_out_clock_duty(void)
+{
+    if (s_cfg.cts_pin < 0) return -1;
+    uint32_t lfsr = 0xACE1u, highs = 0;
+    const uint32_t n = 200000;
+    for (uint32_t i = 0; i < n; i++) {
+        highs += gpio_ll_get_level(&GPIO, s_cfg.cts_pin);
+        lfsr = (lfsr >> 1) ^ (-(lfsr & 1u) & 0xB400u);
+        for (volatile uint32_t k = lfsr & 31; k; k--) { }
+    }
+    return (int)(highs * 1000 / n);
+}
+
+int serial_out_break_take(void)
+{
+    if (!s_events) return 0;
+    uart_event_t ev;
+    int seen = 0;
+    while (xQueueReceive(s_events, &ev, 0) == pdTRUE)
+        if (ev.type == UART_BREAK) seen = 1;
+    return seen;
 }

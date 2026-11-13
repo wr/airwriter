@@ -21,6 +21,8 @@ typedef struct {
     int32_t     margin_l, margin_r, margin_t, margin_b;   // 1/100 mm, rounded outward
     uint16_t    page_w;                     // the page's width at rip dpi: 3060, 2976, 3060
     uint16_t    rip_left, rip_w;            // dots kept across
+    uint16_t    page_h;                     // W-1102: the page's height at rip dpi, 0 any (a sheet
+                                            // named by width alone)
 } printer_media_t;
 
 typedef struct {
@@ -43,6 +45,10 @@ typedef struct {
     // IPP lists them all, and the rip crops each page by its own entry.
     const printer_media_t *media_list;
     uint8_t     n_media;
+    // Paper sources (W-1102), IPP media-source keywords, the first the default. NULL, 0: the
+    // one source "main".
+    const char *const *sources;
+    uint8_t     n_sources;
 } printer_caps_t;
 
 // The ImageWriter II as it has always been advertised: one pass at 144 x 72,

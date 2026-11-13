@@ -20,7 +20,12 @@ ripjob_cfg_t job_pipe_rip_cfg(ripjob_cfg_t base, int (*colour_ok)(void *ctx), vo
 
 int job_pipe_buffered(const job_pipe_target_t *t, int have_ring)
 {
-    return have_ring && (!t || t->buffered);
+    return have_ring && (!t || (t->buffered && !t->keep));
+}
+
+int job_pipe_keeps(const job_pipe_target_t *t, int have_pool)
+{
+    return have_pool && t && t->keep;
 }
 
 job_pipe_prn_t job_pipe_prn_for(const job_pipe_target_t *t,

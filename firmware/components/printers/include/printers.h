@@ -19,6 +19,7 @@ typedef enum {
     PORT_UNKNOWN_FOUND,     // something that never answered ESC ?: asked again at line-up
     PORT_UNKNOWN_SAID,      // the person said "Something else": nothing is sent to it
     PORT_STYLEWRITER,       // W-1103: a StyleWriter's own bytes (57600, no flow control) go to J2
+    PORT_QDLASER,           // W-1102: a QuickDraw LaserWriter's packets, at its own clock, go to J2
 } port_mode_t;
 
 typedef struct {
@@ -94,10 +95,13 @@ void        printers_offers(int at_link, int on, const char *host, lt_offers_t *
 // Who gets the test page (the button, DIP4, the page): the port's ImageWriter
 // or StyleWriter, else the first shared printer. Its id, *port 1 for the port's; -1 for none.
 int         printers_test_target(int *port);
-// What printer id's test page is: 1 the port's ImageWriter's, 2 a
-// LaserWriter's, 3 the port's StyleWriter's (W-1103), 0 none (no such
-// printer, or one with no page).
-int         printers_test_kind(int id);
+// What printer id's test page is: the port's ImageWriter's, an identified
+// LaserWriter's, the port's StyleWriter's (W-1103) or QuickDraw LaserWriter's
+// (W-1102), or none (no such printer, or one with no page). 0 to 3 are the
+// numbers this answered before W-1102.
+typedef enum { PR_TEST_NONE, PR_TEST_IMAGEWRITER, PR_TEST_LASER, PR_TEST_STYLEWRITER,
+               PR_TEST_QDLASER } pr_test_kind_t;
+pr_test_kind_t printers_test_kind(int id);
 // A printer's name, and a LaserWriter's product and PostScript version ("" for
 // none): -1 with no such printer.
 int         printers_describe(int id, char *name, size_t ncap, char *product, size_t pcap,
@@ -106,13 +110,20 @@ int         printers_describe(int id, char *name, size_t ncap, char *product, si
 port_mode_t printers_port_mode(void);
 int         printers_port_is_imagewriter(void);
 int         printers_port_is_stylewriter(void);
-// An ImageWriter or a StyleWriter on the port, shared over AirPrint: the panel
+// A printer of a port family (an ImageWriter, a StyleWriter, a QuickDraw LaserWriter) on the
+// port, shared over AirPrint: the panel
 // follows its state.
 int         printers_port_shared(void);
 // The port ImageWriter's model; PR_MODEL_NONE for anything else.
 pr_model_t  printers_port_model(void);
 // The port StyleWriter's model; SW_NONE for anything else.
 sw_model_t  printers_port_sw_model(void);
+// W-1102: a QuickDraw LaserWriter answered 83 3E on the port (pr_port_seen_qd: the record id,
+// PR_SEEN_AGAIN, or -1); the clock on HSKi stopped (pr_port_clock_gone); the port's QuickDraw
+// LaserWriter's model, QD_NONE for anything else.
+int         printers_port_seen_qd(uint8_t engine);
+void        printers_port_clock_gone(void);
+qd_model_t  printers_port_qd_model(void);
 // W-1116: what the port's records hold, for port_policy's order of questions, read in one
 // pass: any StyleWriter record (sw), an original ImageWriter record (iw1), an original
 // StyleWriter record (sw1). Each out may be NULL.
@@ -134,9 +145,12 @@ int         printers_port_absent(int id);
 // present (pr_port_on), not the list's last answer. The StyleWriter glue's `swapped`. Reads the
 // live state as printers_json does.
 int         printers_port_on_is_imagewriter(void);
-// W-1116: whether port record `id` is a StyleWriter (doc_begin reads the job's own family from
-// its record, not the port's). 0 for an ImageWriter, an AppleTalk printer, or no such record.
-int         printers_record_is_sw(int id);
+// W-1102: port record `id`'s family (doc_begin reads the job's own family from its record, not
+// the port's, W-1116). PR_FAM_NONE for an AppleTalk printer or no such record.
+pr_family_t printers_record_family(int id);
+// W-1102: the family of the printer on the port (pr_port_current); PR_FAM_NONE for none,
+// "Unknown printer" or "Something else".
+pr_family_t printers_port_family(void);
 // W-1116: port record `id`'s model (pr_model_t), PR_MODEL_NONE for no such port record, and its
 // halftone and gain (-1 for no such port record). A job or test page reads its own record's,
 // not the printer on the port's.

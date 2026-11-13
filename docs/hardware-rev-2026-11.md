@@ -42,6 +42,10 @@ swaps them, so J4's lines leave U3 on the side facing J4:
 | 13 | R1IN | `J4_HSKI` | J4.2 |
 | 14 | T1OUT | `J4_HSKO` | J4.1 |
 
+IO8 also carries a QuickDraw LaserWriter's clock: a Personal LaserWriter 300 drives 533 kHz
+on J2.2 whenever it is on, and the firmware clocks TxD out to it with GP-SPI2 through the GPIO
+matrix, so the link needs no pin of its own (SPEC §2.4, §3.18; measured on rev A only).
+
 Each port's HSKo has its own GPIO, on pins the DIP switches freed. The cable test drives
 each, and through a crossover IO8 reads J2.2 (from J4.1) and IO21 reads J4.2 (from J2.1).
 U1 is the ESP32-S3-WROOM-1-N16R8 (16 MB flash, 8 MB octal PSRAM; rev A's is the N8R2): its

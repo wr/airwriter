@@ -768,14 +768,17 @@ function markAdded(sel,own){
     if(o.disabled!==on||o.textContent!==label){ o.disabled=on; o.textContent=label; }
   }
 }
-/* The five screens, and a sixth on a StyleWriter: Apple's own (W-1103). */
-function screenList(sw){
-  const s=$('screen'); if(s._sw===sw) return;
-  const v=s.value; s._sw=sw; s.textContent='';
+/* The five screens, and a sixth on a StyleWriter or a Personal LaserWriter 300: Apple's own
+   for that printer (W-1103, W-1102). */
+function screenList(apple){
+  const s=$('screen'); if(s._apple===apple) return;
+  const v=s.value; s._apple=apple; s.textContent='';
   for(const k of ORDER) s.append(new Option(MODES[k].title,k));
-  if(sw) s.append(new Option('Apple','apple'));
+  if(apple) s.append(new Option('Apple','apple'));
   if(v) s.value=v;
 }
+/* W-1102: the port printers with their own Apple screen and fault words, and no SELECT key. */
+const ownFaults=p=>p.kind==='stylewriter'||p.kind==='qdlaser';
 screenList(false);
 const prById=id=>PR&&PR.printers.find(p=>p.id===id);
 /* A printer's own icon, Apple's, the one AirPrint shows; a printer of no known kind has none. */
@@ -792,7 +795,8 @@ function sideWord(){
 }
 /* A StyleWriter's fault, in the words the phone shows for it (sw_status.c), as
    the board names it in /api/printers: "check paper" for a missing cartridge
-   would send its owner to the wrong part of the printer. */
+   would send its owner to the wrong part of the printer. A Personal LaserWriter
+   300's are four of them: paper, jam, cover and other (W-1102). */
 const SW_FAULT={paper:'check paper',jam:'clear the paper jam',cartridge:'check the ink cartridge',
   'cartridge-jam':'check the ink cartridge',ink:'replace the ink cartridge',cover:'close the cover',
   waste:'the waste ink pad is full',other:'check the printer'};
@@ -802,9 +806,9 @@ function stWords(p){
   if(p.kind==='unknown') return ['','Unrecognized'];
   const t=LWT&&p.where!=='port'?LWT.find(t=>t.id===p.id):null;
   const low=w=>w?w[0].toLowerCase()+w.slice(1):w;
-  // W-1103: a StyleWriter has no SELECT key
-  const sw=p.kind==='stylewriter';
-  if(p.state==='attention') return ['a','Needs attention: '+(p.where==='port'?(sw?SW_FAULT[p.fault]||SW_FAULT.other:'check paper and SELECT'):low(t&&lwStatus(t.message))||'check the printer')];
+  // W-1103: a StyleWriter has no SELECT key, nor has a 300 (W-1102)
+  const own=ownFaults(p);
+  if(p.state==='attention') return ['a','Needs attention: '+(p.where==='port'?(own?SW_FAULT[p.fault]||SW_FAULT.other:'check paper and SELECT'):low(t&&lwStatus(t.message))||'check the printer')];
   // Offline is a status name alone, as on the phone, for every printer (Wells, 2026-10-31):
   // what to check is the wiki's Offline troubleshooting row's
   if(p.state==='offline') return ['','Offline'];
@@ -821,20 +825,25 @@ function prDraw(){
   $('v-printers').textContent=sideWord();
   if(!PR) return;
   // a notice waiting: the caution mark beside the word, seen from any pane
-  if(PR.notes.some(n=>NOTE[n.kind])) $('v-printers').insertAdjacentHTML('afterbegin','<svg class=warn><use href="#g-caution"/></svg>');
+  const notes=PR.notes;
+  if(notes.some(n=>NOTE[n.kind])) $('v-printers').insertAdjacentHTML('afterbegin','<svg class=warn><use href="#g-caution"/></svg>');
   // the notices, each with its keys
   let h='';
-  PR.notes.forEach((n,i)=>{
+  notes.forEach((n,i)=>{
     const p=prById(n.id), f=NOTE[n.kind]; if(!f) return;
     const [title,text,keys]=f(p,n);
-    h+='<div class="box note"><svg class=warn><use href="#g-caution"/></svg><p><b>'+title+'</b>'+text+'</p><div class=btnrow>'+keys.map(([l,a])=>
-      '<button class=btn type=button data-note='+i+' data-act='+a+' data-id='+n.id+'>'+l+'</button>').join('')+'</div></div>';
+    h+='<div class="box note"><svg class=warn><use href="#g-caution"/></svg><p><b>'+title+'</b>'+text+'</p>'
+      +(keys.length?'<div class=btnrow>'+keys.map(([l,a])=>
+      '<button class=btn type=button data-note='+i+' data-act='+a+' data-id='+n.id+'>'+l+'</button>').join('')+'</div>':'')+'</div>';
   });
   if($('pr-notes')._h!==h){ $('pr-notes')._h=h; $('pr-notes').innerHTML=h; }
-  // the rows
-  h=PR.printers.length?PR.printers.map(p=>{ const [cls]=stWords(p);
+  // the rows; W-1102: a QuickDraw LaserWriter on the port that AirWriter can't print to is
+  // grayed at the end, with nothing to open, until it's unplugged (Wells, 2026-11-13)
+  const off=PR.port_unsupported?'<div class="row prow off"><span class="ic unk"><svg><use href="#g-printer"/></svg></span><span class=txt>'
+    +esc(PR.port_unsupported)+'<small>'+WHERE.port+' · Not supported yet</small></span><i class=lamp></i><span class=chev aria-hidden=true>›</span></div>':'';
+  h=PR.printers.length||off?PR.printers.map(p=>{ const [cls]=stWords(p);
     return '<button class="row link prow" type=button data-pr='+p.id+'>'+icHTML(p)+'<span class=txt>'+esc(p.name)
-      +'<small>'+esc(WHERE[p.where]||p.where)+(p.shared?'':' · Not shared')+'</small></span><i class="lamp '+cls+'"></i><span class=chev aria-hidden=true>›</span></button>'; }).join('')
+      +'<small>'+esc(WHERE[p.where]||p.where)+(p.shared?'':' · Not shared')+'</small></span><i class="lamp '+cls+'"></i><span class=chev aria-hidden=true>›</span></button>'; }).join('')+off
     :'<p class=empty>No printers yet. Connect your printer and switch it on, then Look for Printers.</p>';
   if($('pr-list')._h!==h){ $('pr-list')._h=h; $('pr-list').innerHTML=h; }
   // AirPrint: each shared printer's address
@@ -865,11 +874,14 @@ function pdDraw(){
   const p=prById(sel);
   if(!p){ prOpen(null); return; }
   const port=p.where==='port', iw=p.kind==='imagewriter', sw=p.kind==='stylewriter', unk=p.kind==='unknown';
+  const qd=p.kind==='qdlaser';                      // W-1102: a Personal LaserWriter 300
   { const h=icHTML(p); if($('pd-ic')._h!==h){ $('pd-ic')._h=h; $('pd-ic').innerHTML=h; } }
   $('pd-name').textContent=p.name;
   $('pd-where').textContent=(p.product&&p.product!==p.name?p.product+' · ':'')+(WHERE[p.where]||p.where);
   const [cls,text]=stWords(p);
   lamp($('prn-lamp'),cls); $('prn-state').textContent=text;
+  // W-1102: why the port's last job failed, when the board has a reason (a page that didn't fit in the printer's memory)
+  $('prn-why').textContent=port&&p.state==='failed'&&S.job_error||'';
   $('rib-row').classList.toggle('hide',!(port&&iw));
   // W-1103: a StyleWriter's cartridge, read from the printer; the black-only models always hold
   // black, but not while the printer says the cartridge is missing or jammed
@@ -879,7 +891,7 @@ function pdDraw(){
   $('cart-colour').classList.toggle('hide',cart!=='colour');
   $('cart').textContent=cart==='colour'?'Color':'Black';
   if(document.activeElement!==$('pname')){ $('pname').value=p.name; }
-  $('model-row').classList.toggle('hide',!port);
+  $('model-row').classList.toggle('hide',!port||qd);   // a 300 names itself; there's nothing to choose
   // found, never said what it is: ask; told it is something else: say so
   const ask=unk&&p.found==='auto';
   $('model-ask').hidden=!ask;
@@ -897,7 +909,7 @@ function pdDraw(){
     :'AirWriter prints on ImageWriters, StyleWriters and LaserWriters.';
   $('ht-box').classList.toggle('hide',unk||atiw);
   $('ht-paper').classList.toggle('hide',!iw);       // the sample is the ImageWriter's dots
-  screenList(sw);                                   // W-1103: Apple's screen is a StyleWriter's
+  screenList(sw||qd);                               // W-1103: Apple's screen is a StyleWriter's or a 300's
   if(document.activeElement!==$('screen')&&p.dither&&p.dither!==$('screen').value){
     $('screen').value=p.dither;
     if(iw&&p.dither!==dither){ dither=p.dither; render(); }
@@ -986,7 +998,7 @@ $('testpage').onclick=async()=>{
   // to connect (an action's refusal); any other offline printer gets the page's one line
   const other=p.where==='port'&&p.kind!=='unknown'&&!PR.said_other&&PR.port_on&&PR.port_on!==p.id;
   if(p.state==='offline'&&!other){
-    say('prn-say',p.where==='port'?(p.kind==='stylewriter'?'The printer is offline. Check power and cable.':'The printer is offline. Check power, cable and SELECT.'):'The printer is offline. Check that it’s switched on.',1,4000);
+    say('prn-say',p.where==='port'?(ownFaults(p)?'The printer is offline. Check power and cable.':'The printer is offline. Check power, cable and SELECT.'):'The printer is offline. Check that it’s switched on.',1,4000);
     return;
   }
   const r=await postJSON('/api/test',{id:p.id});
@@ -1278,7 +1290,7 @@ function finDraw(){
   const ps=PR.printers, sh=ps.filter(p=>p.shared);
   const name=sh.length===1?'<b>'+esc(sh[0].name)+'</b>':'your printer';
   $('fin-list').innerHTML=ps.length?ps.map(p=>{ const [cls,t]=stWords(p);
-      const can=p.where==='port'?p.kind==='imagewriter'||p.kind==='stylewriter':p.kind==='laserwriter'&&p.identified;
+      const can=p.where==='port'?p.kind==='imagewriter'||ownFaults(p):p.kind==='laserwriter'&&p.identified;
       return '<div class="row prow">'+icHTML(p)+'<span class=txt>'+esc(p.name)+'<small>'+esc(t)
         +'</small></span><i class="lamp '+cls+'"></i>'+(can?'<button class=btn type=button data-fintest='+p.id+'>Print Test Page</button>':'')+'</div>'; }).join('')
     :'<p class=empty>No printers yet. Add one in Printers.</p>';
