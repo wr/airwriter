@@ -4,6 +4,7 @@
 // bytes LSB first, marks), which the link clocks out one bit per printer clock.
 #include "test_util.h"
 #include "qd_wire.h"
+#include <string.h>
 
 static int bit_at(const uint8_t *buf, size_t k) { return (buf[k >> 3] >> (k & 7)) & 1; }
 
@@ -124,6 +125,55 @@ static void test_bits_no_room(void)
     CHECK_EQ_INT(pos, 440);
 }
 
+/* W-1143: the packer builds the line a byte at a time; this reference is the rule bit by bit
+ * (bit k of the line is bit k & 7 of byte k >> 3, 1 a mark; BREAK, idle, each byte 8N1 LSB
+ * first, the gap), touching nothing else. */
+static void ref_bit(uint8_t *buf, size_t k, int v)
+{
+    uint8_t m = (uint8_t)(1u << (k & 7));
+    if (v) buf[k >> 3] |= m;
+    else buf[k >> 3] &= (uint8_t)~m;
+}
+
+static void ref_put(uint8_t *buf, size_t *pos, const uint8_t *pkt, size_t n)
+{
+    size_t k = *pos;
+    for (size_t i = 0; i < QD_BREAK_BITS; i++) ref_bit(buf, k++, 0);
+    for (size_t i = 0; i < QD_IDLE_BITS; i++) ref_bit(buf, k++, 1);
+    for (size_t i = 0; i < n; i++) {
+        ref_bit(buf, k++, 0);
+        for (int b = 0; b < 8; b++) ref_bit(buf, k++, (pkt[i] >> b) & 1);
+        ref_bit(buf, k++, 1);
+    }
+    for (size_t i = 0; i < QD_GAP_BITS; i++) ref_bit(buf, k++, 1);
+    *pos = k;
+}
+
+static void test_bits_match_the_rule(void)
+{
+    enum { CAP = 4400 };
+    static uint8_t a[CAP / 8 + 1], b[CAP / 8 + 1], pkt[300];
+    uint32_t seed = 1143;
+    int same = 1;
+    for (int run = 0; run < 400 && same; run++) {
+        // Whatever was in the buffer around the packet stays as it was.
+        for (size_t i = 0; i < sizeof a; i++) {
+            seed = seed * 1103515245u + 12345u;
+            a[i] = b[i] = (uint8_t)(seed >> 16);
+        }
+        size_t n = 1 + (size_t)run % 300;
+        for (size_t i = 0; i < n; i++) {
+            seed = seed * 1103515245u + 12345u;
+            pkt[i] = (uint8_t)(seed >> 16);
+        }
+        size_t start = (size_t)run % 37, pa = start, pb = start;
+        CHECK_EQ_INT(qd_bits_put(a, CAP, &pa, pkt, n), 0);
+        ref_put(b, &pb, pkt, n);
+        same = pa == pb && !memcmp(a, b, sizeof a);
+    }
+    CHECK(same);
+}
+
 int main(void)
 {
     test_cmd();
@@ -132,5 +182,6 @@ int main(void)
     test_row_packet();
     test_bits_one_packet();
     test_bits_no_room();
+    test_bits_match_the_rule();
     TEST_END;
 }
