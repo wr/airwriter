@@ -5,6 +5,9 @@
 // rs_init_n takes interleaved pixels of several channels (RGB, W-1064), each
 // channel resampled exactly as a grayscale plane would be.
 //
+// A page that scales in neither direction goes through untouched: each row pushed is the
+// row emitted, the caller's own bytes (W-1143).
+//
 // Contract: the caller must push exactly src_h rows. Pushing fewer leaves the
 // trailing destination rows unemitted — a truncated source yields a short page
 // rather than an error. Pushing more returns -1.
@@ -26,6 +29,8 @@ typedef struct {
     uint32_t  src_y;       // source rows consumed
     uint32_t  dst_y;       // destination rows emitted
     uint8_t  *out;         // dst_w * ch wide scratch
+    uint32_t *x0;          // W-1143: column x's source span is x0[x] to x0[x + 1] (dst_w + 1),
+                           // when the width scales; NULL when it doesn't
     rs_row_fn emit;
     void     *ctx;
 } rs_t;

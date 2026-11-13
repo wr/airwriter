@@ -16,6 +16,13 @@ int rs_init_n(rs_t *r, uint32_t src_w, uint32_t src_h, uint32_t dst_w, uint32_t 
     r->acc = big_calloc((size_t)dst_w * channels, sizeof *r->acc);
     r->out = big_calloc((size_t)dst_w * channels, 1);
     if (!r->acc || !r->out) { rs_free(r); return -1; }
+    // Each column's source span, worked out once a page instead of once a row (W-1143).
+    if (src_w != dst_w) {
+        r->x0 = big_calloc((size_t)dst_w + 1, sizeof *r->x0);
+        if (!r->x0) { rs_free(r); return -1; }
+        for (uint32_t x = 0; x <= dst_w; x++)
+            r->x0[x] = (uint32_t)((uint64_t)x * src_w / dst_w);
+    }
     return 0;
 }
 
@@ -36,8 +43,8 @@ static void fold(rs_t *r, const uint8_t *src)
         return;
     }
     for (uint32_t x = 0; x < r->dst_w; x++) {
-        uint32_t x0 = (uint32_t)((uint64_t)x       * r->src_w / r->dst_w);
-        uint32_t x1 = (uint32_t)((uint64_t)(x + 1) * r->src_w / r->dst_w);
+        uint32_t x0 = r->x0[x];
+        uint32_t x1 = r->x0[x + 1];
         if (x1 <= x0) x1 = x0 + 1;            // upscaling: take one pixel
         if (x1 > r->src_w) x1 = r->src_w;
         for (uint32_t c = 0; c < r->ch; c++) {
@@ -52,6 +59,14 @@ static void fold(rs_t *r, const uint8_t *src)
 int rs_push(rs_t *r, const uint8_t *src_row)
 {
     if (r->src_y >= r->src_h) return -1;
+    // Nothing scales: the row is the row (W-1143). The same bytes the accumulator would
+    // have averaged one row into, without adding, dividing and clearing each pixel.
+    if (r->src_w == r->dst_w && r->src_h == r->dst_h) {
+        r->src_y++;
+        r->dst_y++;
+        r->emit(r->ctx, src_row, r->dst_w);
+        return 0;
+    }
     fold(r, src_row);
     r->src_y++;
 
@@ -76,6 +91,6 @@ int rs_push(rs_t *r, const uint8_t *src_row)
 
 void rs_free(rs_t *r)
 {
-    free(r->acc); free(r->out);
-    r->acc = NULL; r->out = NULL;
+    free(r->acc); free(r->out); free(r->x0);
+    r->acc = NULL; r->out = NULL; r->x0 = NULL;
 }
