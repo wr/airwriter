@@ -260,6 +260,20 @@ build/swprint: build/swhost
 swinterop: build/swhost build/rip
 	@python3.14 ../stylewriter/test_swinterop.py
 
+# The Personal LaserWriter 300 on the host (W-1102). qdcheck holds the page stage and session's
+# packets and line image, decoded by tools/qdlaser/qdfake.py, to the rip's dots; qdhost prints
+# through the firmware's session to qdfake.py over a pty, and qdinterop runs it through every
+# fault the printer has.
+build/qdhost: qdhost.c png_read.c $(SRCS) | build
+	$(CC) $(CFLAGS) $(INCS) -o $@ $^ -lm -lz
+
+.PHONY: qdcheck qdinterop
+qdcheck: build/rip
+	@python3.14 test/qdcheck.py
+
+qdinterop: build/qdhost build/rip
+	@python3.14 ../qdlaser/test_qdinterop.py
+
 # Apple's StyleWriter drivers' captures held to the firmware's session and rip (W-1103).
 # The captures are logs from the emulated-Mac rig (tools/stylewriter/capture.md), kept in
 # ~/.config/airwriter/sw-captures/ and never committed; without them this prints a skip line

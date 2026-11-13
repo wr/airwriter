@@ -46,6 +46,10 @@ typedef struct {
 
 typedef struct qd_page qd_page_t;
 
+// The keep buffer a job gives the stage: a page at the budget kept whole, with each row's
+// two-byte head (Legal's 3,750 rows), rounded up.
+enum { QD_KEEP_CAP = 520 * 1024 };
+
 // Allocates the stage and a row's buffers, once (bigmem.h); the halftoner for the kept page is
 // made per page. NULL for QD_NONE, a sink without open, row or print, or no memory.
 qd_page_t *qd_page_new(const qd_page_cfg_t *cfg);

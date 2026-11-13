@@ -182,6 +182,14 @@ page: Top margin (`{"top_margin":N}`, 1/144 in, -216 to 144, default -144) and d
   stylewriter --model M --out-sw F` writes a page as the printer would be sent it, `rip
   --sw-testpage` the test page, and `swfake.py decode M F` draws either. Apple's drivers and
   captures live in `~/.config/airwriter/sw-drivers/` and `sw-captures/`, never committed.
+- **QuickDraw LaserWriters** (Python 3 with numpy): `make -C tools/rip qdcheck` decodes the
+  rip's packets and the line the board clocks out with `qdfake.py` (a software Personal
+  LaserWriter 300) and holds both to the rip's dots; `make -C tools/rip qdinterop` prints from
+  `build/qdhost` (the firmware's session on the host) to `qdfake.py` over a pty, through each
+  fault, a cancel and a printer switched off (about 10 s); `python3 -m unittest
+  tools/qdlaser/test_qdfake.py`. `rip --printer plw300 --out-qd F` writes a page as the printer
+  would be sent it, and `qdfake.py decode F` draws it. Apple's driver lives in
+  `~/.config/airwriter/lw300-driver/`, never committed.
 - **Firmware:** `idf.py build` clean, then `python3 tools/stackcheck/stackcheck.py` (needs the
   toolchain `export.sh` puts on PATH): every task that makes ESP-IDF's deep calls keeps 1 KB of
   its stack spare by GCC's count. A local sdkconfig that fails it on `app_main` needs
@@ -244,10 +252,14 @@ hardware/combined/    the snap-apart order panel and make_fab.sh
 firmware/             ESP-IDF 5.5 app (components/, above); bootloader_components/ holds the
                       bootloader's pin clamps and power-up reset
 tools/rip/            host build of the raster path + host tests for the pure-C cores; swhost
-                      (swprint for owners) is the StyleWriter session on the host
+                      (swprint for owners) is the StyleWriter session on the host, qdhost the
+                      Personal LaserWriter 300's
 tools/stylewriter/    swfake.py (a software StyleWriter and page decoder), mktables.py and
                       untome.py (Apple's tables and icon out of its drivers), the owners'
                       README, capture.md (the Apple-driver capture rig), and their tests
+tools/qdlaser/        qdfake.py (a software Personal LaserWriter 300 and page decoder),
+                      mkqdtables.py (Apple's 300 screen, curve and icon out of its driver), and
+                      their tests
 tools/ipp/            IPP host tests and gpa_server (the real encoder on localhost for ipptool)
 tools/ippcap/         stub IPP server that captures a Print-Job body (how fixtures were made)
 tools/ethertalk/      etpeer.py, a software EtherTalk Mac for the tunnel and the relay, and
