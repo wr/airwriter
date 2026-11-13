@@ -420,6 +420,35 @@ Traps already explained in a code comment are listed only when the comment is ea
   the densest 400-row band (the still life beside its ramps) is 73 KB, about 13 s on the wire
   however fast it is drawn.
 
+- **A Personal LaserWriter 300 drives a clock on HSKi, IO8 on rev A** (W-1102): 533 kHz while
+  it is on. `serial_out` counts its edges with PCNT through the GPIO matrix, so the pad stays
+  UART1's CTS. PCNT's counter is 16 bits (32,767 here): the line task counts for 50 ms of each
+  100 ms (26,650 edges at 533 kHz), clears the count each window, and lets the unit accumulate
+  past its limit so a window stretched by a busy core still counts true. Clocked is two windows
+  running at 100 kHz or more, gone is two below, so a printer switched off is seen in about
+  200 ms. While clocked, the line's level is never reported: it is noise.
+- **IO17 is UART1's IO_MUX TxD pin.** A GPIO write reaches the pad only after
+  `esp_rom_gpio_pad_select_gpio` moves it to the GPIO function; until then the UART still drives
+  it. `qd_link_open` takes TxD from the UART with `serial_out_lend(1)` and does that first.
+- **ESP-IDF's SPI slave reads chip select from a pad at every transaction's start** (W-1102,
+  `qd_link.c`). `restore_cs` connects the pad named in `spics_io_num` to the chip-select input as
+  each transaction loads, and `freeze_cs` ties it high at the end. Given `spics_io_num = -1` the
+  driver never sets the signal number and would connect input signal 0, the flash's SPIQ, to a
+  pad numbered -1. The link gives the driver TxD as chip select instead: TxD is a GPIO holding
+  mark whenever the driver reads it, which is high, "not selected", on a board whose TxD is not
+  inverted, and `post_setup_cb` then drives chip select from the matrix's constant 0 before it
+  hands TxD to MISO; the chunk's end timer drives it from constant 1. No pad but TxD, RxD and
+  HSKi is touched, so J6 and rev 2026.11's spare pins stay free. Untested on a board with
+  `CONFIG_AIRWRITER_INVERT_TX`: there mark is low, the slave is selected a few microseconds
+  early, and the read-back may fail every chunk. `spicommon_cs_initialize` also points TxD's
+  output at the chip-select output for the moment between `spi_slave_initialize` and the link
+  setting TxD back to mark.
+- **The slave clocks out whatever follows its data while chip select stays low.** A chunk ends
+  only when chip select rises, so each ends in a tail of 4,096 marks (7.7 ms at 533 kHz) and the
+  end timer is armed from `post_setup_cb` as the chunk loads, aimed at the tail's middle: a rip
+  that is slow to fill the next chunk can never leave one running past its tail. The spike's
+  timer was up to 873 us late against a 960 us tail; `worst_end_us` is in the job's log line.
+
 ## LaserWriters (W-1082)
 
 - **`gs` is aliased to `git status` in Wells's shell.** Call Ghostscript by path,
