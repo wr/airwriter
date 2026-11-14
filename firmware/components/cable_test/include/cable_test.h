@@ -18,12 +18,17 @@ typedef struct {
     int invert_tx;          // as serial_out has it, so the borrowed TX idles where the UART left it
     // TashTalk's UART, for when the LocalTalk node is not running
     int lt_uart, lt_tx, lt_rx, lt_cts, lt_mclr;
+    // W-1109, rev 2026.11: each port's handshake out (driven) and in (read);
+    // -1 on rev A, which can't drive J4's and skips the handshake legs.
+    int hsk_j2_out, hsk_j2_in, hsk_j4_out, hsk_j4_in;
 } cable_test_cfg_t;
 
 typedef struct {
     ct_verdict_t verdict;
     int          back_ok;   // J4 -> J2
     int          fwd_ok;    // J2 -> J4, tried only when back_ok
+    int          hsk;       // the handshake wires were tried (rev 2026.11, both data legs passed)
+    int          hsk_to_j2, hsk_to_j4;  // J4.1 -> J2.2, J2.1 -> J4.2
     esp_err_t    err;       // ESP_OK, or why the test could not run
 } cable_result_t;
 

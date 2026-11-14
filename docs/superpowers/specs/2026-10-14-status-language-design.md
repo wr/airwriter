@@ -299,6 +299,42 @@ cap for white.
 | Reset confirmed at boot | after the bootloader's factory reset (button held through power-up) | the same flash, drain and beats once the boot wave ends (2 s), then the state |
 | Reset failed | the erase failed | Job failed's red glitch and pulse for 3 s, then the board restarts |
 
+### AirWriter LC's one light (W-1109)
+
+The LC fits one LED of the 37, D26 under the test button, seen bare through a frosted dot in
+its clear acrylic top: its colours are true (no FR4, no mask), and it has no position, so
+there are no sweeps, ripples or print head. `lg_render_one16` draws the same view and options
+as the panel in time and colour alone: the same colours and meanings, the panel's caps and
+glow, the alert cap in Needs attention and in a task's red. Wells approved it on 2026-11-14
+from previews of every state drawn by the firmware's code; its brightness is tuned on the
+first LC.
+
+| | Pattern |
+|---|---|
+| Booting | round the colour wheel every 4 s (hue `90·t`), in over 0.6 s, easing to 60% between 3 and 4 s, out over 1.3 s once the board settles |
+| Setup | blue at 25%, flashing to 100% twice every 2.4 s; once a phone joins, steady at 88% ±12% over 4.2 s |
+| Joining Wi-Fi | a blue ping every 0.9 s from a 10% floor |
+| Wi-Fi connected | green, cross-fading to Ready between 2.2 and 3.2 s |
+| Ready | warm white breathing between 43% and 100% over 7 s; Rainbow status lights: round the wheel every 14 s, the same breath |
+| Printer offline | an amber ember (hue 34°) at 15%, swelling to full once every 10 s |
+| Printing | the ink (warm, or LocalTalk's stripe for each line) at 12–35%, with a white flick each 1.5 s as the head would pass the button |
+| Needs attention | amber (hue 24°) over a 12% floor, two pulses every 2 s, at the alert cap |
+| The last job failed | red blinking 200 ms on and off for 1.2 s, then pulsing 33–100% every 2 s |
+| Printer back, printer gone | green, or a white glint, at 550 ms (when the panel's wave would reach the button), then the state |
+| Page out, cancelled | the ink's bands for 0.5 s, then Ready; the print freezes and fades over 0.6 s |
+| Couldn't join | two red 500 ms pulses, then Setup |
+| Asleep | the state fades out over 10 s; then one slow white breath every 6 s (Rainbow: a slow hue), the old Mac laptops' sleep light |
+| Cable test | two swells as it runs, then green glowing and fading, or two red blinks; with no LocalTalk chip, two red blinks at once |
+| Reset | orange running to red, brighter and beating 1 Hz to 3 Hz; done: a white flash, the red draining over 1 s, two white beats, dark |
+| Update | pink rising with the download, a lavender shimmer every 0.8 s; checking, a pink pulse; done, green, then dark until the restart |
+| TashTalk flash | LocalTalk's four stripes in turn, a white flick each; done, green |
+| Acknowledgements | a Mac heard: the four stripes quickly; LocalTalk on: the stripes from the bottom up, then fading; busy: two orange pulses; saved: white gathering in and fading |
+
+A task wins over the state, and an acknowledgement shows over it except while booting, in Needs
+attention or the last job failed, or during the cable test or a moment. The rest of the LC's
+chain stays dark. The settings page's mark beside the name draws the one dot in the light's
+colour on a dark tile, unlit as frosted grey, and the page is named AirWriter LC.
+
 ## Architecture
 
 Units and their interfaces. Pure cores stay host-testable in `tools/rip`, as now.

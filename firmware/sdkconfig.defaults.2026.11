@@ -1,0 +1,10 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# W-1109: rev 2026.11, an ESP32-S3-WROOM-1-N16R8: 16 MB flash, 8 MB octal PSRAM (on IO35-IO37,
+# which the firmware never touches). Layered after sdkconfig.defaults and
+# sdkconfig.defaults.esp32s3 by CMakeLists.txt when built with -DAIRWRITER_BOARD=2026.11.
+CONFIG_AIRWRITER_BOARD_2026_11=y
+CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y
+CONFIG_SPIRAM_MODE_OCT=y
+# Three 3 MB app slots where rev A has 2 MB (its image is over 1.8 MB).
+CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions-16mb.csv"

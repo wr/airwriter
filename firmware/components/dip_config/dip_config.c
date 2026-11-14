@@ -19,6 +19,7 @@ static const int s_dip_pin[8] = {
     CONFIG_AIRWRITER_DIP7_PIN, CONFIG_AIRWRITER_DIP8_PIN,
 };
 static const int s_btn_pin = CONFIG_AIRWRITER_TEST_BTN_PIN;
+static int s_have_dips;
 
 static void (*s_on_change)(const dip_config_t *cfg);
 static void (*s_on_test_button)(void);
@@ -41,7 +42,9 @@ static void dip_task(void *arg)
                 on_bits = (uint8_t)(on_bits | (1u << i));
 
         on_bits = dip_physical(on_bits);   // net order -> the switches' printed labels
-        if (dip_stable(&dip_deb, on_bits, &dip_out) && s_on_change) {
+        // W-1109: a board with no DIP bank (rev 2026.11) reports none, rather
+        // than eight switches that read off: the page then hides them.
+        if (s_have_dips && dip_stable(&dip_deb, on_bits, &dip_out) && s_on_change) {
             dip_config_t cfg;
             dip_decode(dip_out, &cfg);
             s_on_change(&cfg);
@@ -81,7 +84,10 @@ esp_err_t dip_config_start(const dip_config_cb_t *cb)
     // a bare `1ULL << s_btn_pin` to a provably-negative constant shift and
     // warns even though the `>= 0` guard means it never executes.
     int all_pin[9];
-    for (int i = 0; i < 8; i++) all_pin[i] = s_dip_pin[i];
+    for (int i = 0; i < 8; i++) {
+        all_pin[i] = s_dip_pin[i];
+        if (s_dip_pin[i] >= 0) s_have_dips = 1;
+    }
     all_pin[8] = s_btn_pin;
 
     uint64_t mask = 0;

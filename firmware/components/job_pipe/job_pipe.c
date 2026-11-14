@@ -16,8 +16,12 @@
 static const char *TAG = "job";
 
 // The job buffer, in PSRAM. job_pipe.h has why the upload should not wait on
-// the paper, and how an ImageWriter job splits it.
-#define POOL_BYTES   (1024 * 1024)
+// the paper, and how an ImageWriter job splits it. 1 MB on rev A's 2 MB of
+// PSRAM; 6.5 MB on rev 2026.11's 8 MB (W-1109), so a full-page colour photo's
+// ~5.7 MB of URF fits ahead of the rip. If that much can't be had, 1 MB.
+#define POOL_WANT    ((size_t)CONFIG_AIRWRITER_JOB_POOL_KB * 1024)
+#define POOL_MIN     ((size_t)1024 * 1024)
+static size_t s_pool_bytes;
 // An ImageWriter job's printer bytes, the pool's second half: a page of
 // colour noise, the worst there is, rips to 460 KB of them, a full-page photo
 // to 250-350 KB, a gray page to at most 115 KB (W-1066).
@@ -266,20 +270,28 @@ esp_err_t job_pipe_init(const job_pipe_cfg_t *cfg)
 
     // Static, because the storage has to come from PSRAM explicitly: a plain
     // xStreamBufferCreate would put a 1MB ring in internal RAM, or fail.
-    uint8_t *pool = heap_caps_malloc(POOL_BYTES, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    size_t bytes = POOL_WANT;
+    uint8_t *pool = heap_caps_malloc(bytes, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    if (!pool && bytes > POOL_MIN) {
+        ESP_LOGE(TAG, "no %u KB of PSRAM for the job buffer; taking 1 MB",
+                 (unsigned)(bytes / 1024));
+        bytes = POOL_MIN;
+        pool = heap_caps_malloc(bytes, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    }
     if (pool) s_printed = xSemaphoreCreateBinaryWithCaps(MALLOC_CAP_SPIRAM);
     if (s_printed) {
         s_pool = pool;
-        s_whole = xStreamBufferCreateStatic(POOL_BYTES, 1, pool, &s_whole_ctl);
-        s_urf   = xStreamBufferCreateStatic(POOL_BYTES - OUT_BYTES, 1, pool, &s_urf_ctl);
-        s_out   = xStreamBufferCreateStatic(OUT_BYTES, 1, pool + POOL_BYTES - OUT_BYTES,
+        s_pool_bytes = bytes;
+        s_whole = xStreamBufferCreateStatic(bytes, 1, pool, &s_whole_ctl);
+        s_urf   = xStreamBufferCreateStatic(bytes - OUT_BYTES, 1, pool, &s_urf_ctl);
+        s_out   = xStreamBufferCreateStatic(OUT_BYTES, 1, pool + bytes - OUT_BYTES,
                                             &s_out_ctl);
         // Above the rip's 4, so a busy rip never keeps the printer waiting.
         if (xTaskCreateWithCaps(prn_task, "prn", PRN_STACK, NULL, 5, &s_prn,
                                 MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT) == pdPASS) {
             ESP_LOGI(TAG, "job buffer %u KB in PSRAM: %u KB of URF and %u KB to print "
-                     "for a job that writes printer bytes", POOL_BYTES / 1024,
-                     (POOL_BYTES - OUT_BYTES) / 1024, OUT_BYTES / 1024);
+                     "for a job that writes printer bytes", (unsigned)(bytes / 1024),
+                     (unsigned)((bytes - OUT_BYTES) / 1024), OUT_BYTES / 1024);
             return ESP_OK;
         }
         vSemaphoreDeleteWithCaps(s_printed);
@@ -373,7 +385,7 @@ uint8_t *job_pipe_keep(size_t *cap)
         return NULL;
     }
     if (cap) *cap = OUT_BYTES;
-    return s_pool + POOL_BYTES - OUT_BYTES;
+    return s_pool + s_pool_bytes - OUT_BYTES;
 }
 
 void job_pipe_abort(void)

@@ -798,3 +798,249 @@ void lg_dither(lg_dither_t *d, const uint16_t in[LG_NUM_LEDS][3],
         }
     }
 }
+
+// ---------------------------------------------------------------- the LC's one light
+// AirWriter LC has one LED of the 37, D26 under the test button, seen bare
+// through a frosted dot in the clear acrylic top: its colours are true (no
+// FR4, no mask), and it has no position, so every pattern is in time and
+// colour alone. The same states, tasks, moments and acknowledgements as the
+// panel, in the same colours, at the panel's caps and on its glow.
+
+static const lg_c3 ONE_WHITE = {1.00f, 0.95f, 0.88f};
+
+static float one_cap(const ps_view_t *v)
+{
+    return v->state == PS_ATTENTION || join_failed(v) ? LG_ALERT_CAP : LG_BRIGHTNESS_CAP;
+}
+
+// A short pulse centred on c (ms), sin^2 over w ms: 0 outside it.
+static float blink(float s, float c, float w)
+{
+    float x = (s - c) / w + 0.5f;
+    if (x <= 0 || x >= 1) return 0;
+    float y = sinf(3.1415927f * x);
+    return y * y;
+}
+
+static lg_c3 one_ink(const lg_opts_t *o, uint32_t t)
+{
+    static const float hue[4] = { 104, 55, 28, 240 };
+    if (o && o->src == LG_SRC_LOCALTALK)            // each line in its row's stripe
+        return hsv(hue[(t / 1500) % LG_ROWS * 4 / LG_ROWS], 0.85f, 1);
+    return hsv(38, 0.4f, 1);
+}
+
+static lg_c3 one_state(const ps_view_t *v, const lg_opts_t *o, uint32_t t, float cap)
+{
+    float glow = glow_at(cap);
+    float s = (float)v->since_ms;
+
+    if (v->cable == PS_CABLE_NO_CHIP) {             // no cable tested: two red blinks
+        float cs = (float)v->cable_ms;
+        return hsv(2, 0.95f, blink(cs, 300, 200) + blink(cs, 700, 200));
+    }
+    if (v->cable) {
+        // The test runs (two swells, out and back, 600 ms each), then the
+        // answer: green glows and fades, red blinks twice.
+        float cs = (float)v->cable_ms;
+        int pass = v->cable == PS_CABLE_PASS;
+        float lv;
+        if (cs < 1200) lv = fmaxf(0.08f + 0.6f * (0.5f - 0.5f * cosf(TAU * cs / 600.0f)), glow);
+        else if (pass) lv = ss(1200, 1400, cs) * (1 - ss(1700, 2300, cs));
+        else lv = cs < 1400 || (cs >= 1600 && cs < 1800) ? 1 : 0;
+        return hsv(pass ? 130 : 2, 0.9f, lv);
+    }
+
+    switch (v->state) {
+    case PS_BOOTING: {                              // round the colour wheel every 4 s
+        float ts = s / 1000.0f;
+        float lv = ss(0, 0.6f, ts) * (1 - 0.4f * ss(3.0f, 4.0f, ts));
+        if (v->spin_out) lv *= 1 - ss(0, LG_SPIN_OUT_MS, (float)v->spin_out_ms);
+        return hsv(90 * ts, 0.9f, lv);
+    }
+    case PS_SETUP: {
+        if (v->phone_joined)
+            return hsv(240, 0.85f, 0.88f + 0.12f * sinf(TAU * (float)(t % 4200) / 4200.0f));
+        uint32_t ph = t % 2400;                     // the pairing blink
+        float flash = gauss(((float)ph - 90) / 70.0f, 1) + gauss(((float)ph - 390) / 70.0f, 1);
+        return hsv(240, 0.85f, fmaxf(0.25f + 0.75f * clampf(flash), glow));
+    }
+    case PS_JOINING: {                              // a ping every 0.9 s
+        float ph = (float)(t % 900);
+        return hsv(240, 0.85f, fmaxf(0.10f + 0.90f * gauss((ph - 120) / 140.0f, 1), glow));
+    }
+    case PS_READY: {
+        float lvl = 0.715f + 0.285f * sinf(TAU * (float)(t % 7000) / 7000.0f);
+        lg_c3 base = o && o->gamer ? hsv((float)t / 40.0f, 0.75f, 0.07f + 0.93f * lvl)
+                                   : sc(ONE_WHITE, lvl);
+        if (!v->greeted || s >= 3200) return base;
+        lg_c3 green = hsv(130, 0.8f, 0.6f + 0.4f * blink(s, 500, 1000));
+        return mix(green, base, ss(2200, 3200, s));
+    }
+    case PS_OFFLINE: {                              // an ember: mostly low, swelling now and then
+        float ph = sinf(TAU * (float)(t % 10000) / 10000.0f);
+        float ember = ph > 0 ? ph * ph * ph : 0;
+        return hsv(34, 0.56f, fmaxf(0.15f + 0.85f * ember, glow));
+    }
+    case PS_PRINTING: {
+        // A line every 1.5 s, as the panel's head crosses a row: the head
+        // flicks white past the light, leaving the ink behind it.
+        float f = (float)(t % 1500);
+        float k = f < 750 ? 0.12f : 0.12f + 0.23f * (1 - ss(750, 1500, f));
+        lg_c3 ink = sc(one_ink(o, t), glow + (1 - glow) * k);
+        return add(ink, sc(FULL, gauss((f - 750) / 110.0f, 1)));
+    }
+    case PS_ATTENTION: {                            // a double pulse every 2 s, over amber
+        float ph = (float)(t % 2000);
+        float lv = 0.12f + blink(ph, 200, 360) + blink(ph, 550, 360);
+        return hsv(24, 1, fmaxf(clampf(lv), glow));
+    }
+    case PS_FAILED: {
+        lg_c3 red = hsv(2, 0.95f, 1);
+        if (s < 1200) return (uint32_t)s % 400 < 200 ? red : DARK;
+        return sc(red, 0.33f + 0.67f * (0.5f - 0.5f * cosf(TAU * (s - 1200) / 2000.0f)));
+    }
+    }
+    return DARK;
+}
+
+static lg_c3 one_view(const ps_view_t *v, const lg_opts_t *o, uint32_t t, float cap)
+{
+    float s = (float)v->since_ms;
+    lg_c3 now = one_state(v, o, t, cap);
+    ps_view_t was = *v;
+    was.state = v->prev;
+    was.since_ms = 100000;
+    was.greeted = was.phone_joined = 0;
+    const float at = 550;           // when the panel's wave from the printer reaches the test button
+
+    if (((v->state == PS_READY && v->prev == PS_OFFLINE) ||
+         (v->state == PS_PRINTING && v->prev == PS_ATTENTION)) && s < LG_BACK_MS) {
+        lg_c3 green = hsv(130, 0.8f, 1);            // printer back: a green flash, then the state
+        if (s < at) return mix(one_state(&was, o, t, cap), green, gauss((s - at) / 160.0f, 1));
+        return mix(green, now, ss(at + 150, at + 900, s));
+    }
+    if (v->state == PS_OFFLINE && v->prev == PS_READY && s < LG_GONE_MS) {
+        lg_c3 glint = sc(ONE_WHITE, gauss((s - at) / 130.0f, 1));   // printer gone
+        if (s < at) return screen(one_state(&was, o, t, cap), glint);
+        return screen(sc(now, ss(at + 250, at + 900, s)), glint);
+    }
+    if (cancel_out(v)) {
+        lg_c3 stopped = sc(one_state(&was, o, t - (uint32_t)s, cap), 1 - ss(0, 600, s));
+        return screen(stopped, sc(now, ss(300, LG_CANCEL_MS, s)));
+    }
+    if (page_out(v)) {                              // the page's bands roll past, then Ready
+        float band = 0.33f + 0.67f * (0.5f + 0.5f * cosf(TAU * s / 300.0f));
+        return mix(sc(one_ink(o, t), band), now, ss(500, 900, s));
+    }
+    if (v->state == PS_SETUP && v->join_failed && s < LG_JOINFAIL_MS) {
+        if (s < 1000) {
+            float x = sinf(3.1415927f * fmodf(s, 500) / 500.0f);
+            return hsv(2, 0.95f, x * x);
+        }
+        return sc(now, ss(1000, LG_JOINFAIL_MS, s));
+    }
+    return now;
+}
+
+static lg_c3 one_task(const lg_slot_t *k, uint32_t t, int *red)
+{
+    float s = (float)k->ms;
+    *red = 0;
+    switch (k->act) {
+    case LG_ACT_RESET_HOLD:
+    case LG_ACT_RESET_CANCEL: {
+        // Orange running to red as the hold goes on, brighter and beating
+        // faster, 1 Hz to 3 Hz; let go and it fades.
+        float back = k->act == LG_ACT_RESET_CANCEL ? 1 - ss(0, LG_RESET_CANCEL_MS, s) : 1;
+        float p = k->act == LG_ACT_RESET_HOLD ? clampf(s / LG_RESET_FILL_MS)
+                                              : (float)k->arg / 1000.0f * back;
+        float sec = k->act == LG_ACT_RESET_HOLD ? s / 1000.0f : 0, fill = LG_RESET_FILL_MS / 1000.0f;
+        float beat = 0.7f + 0.3f * cosf(TAU * (sec + sec * sec / fill));
+        *red = 1;
+        return hsv(38 - 38 * p * sqrtf(p), 1,
+                   fmaxf((0.35f + 0.65f * p) * beat, glow_at(LG_ALERT_CAP)) * back);
+    }
+    case LG_ACT_RESET_DONE:
+    case LG_ACT_RESET_CONFIRM:
+        if (s < 180) return ONE_WHITE;
+        *red = 1;
+        if (s < 1180) return hsv(2, 1, 1 - (s - 180) / 1000.0f);
+        if ((s >= 1300 && s < 1480) || (s >= 1660 && s < 1840)) { *red = 0; return ONE_WHITE; }
+        return DARK;
+    case LG_ACT_RESET_FAILED:
+    case LG_ACT_PIC_FAILED: {
+        ps_view_t f = { .state = PS_FAILED, .since_ms = k->ms };
+        *red = 1;
+        return one_state(&f, NULL, t, LG_ALERT_CAP);
+    }
+    case LG_ACT_FW_DOWNLOADING:
+    case LG_ACT_FW_INSTALLING: {
+        // Pink, brighter as it arrives, a lavender shimmer every 0.8 s.
+        lg_c3 pink = hsv(300, 0.9f, 1), lav = hsv(270, 0.9f, 1);
+        float sh = 0.5f - 0.5f * cosf(TAU * (float)(t % 800) / 800.0f);
+        float lv = k->arg == LG_PROGRESS_NONE ? 0.3f
+                 : 0.2f + 0.6f * (float)(k->arg > 1000 ? 1000 : k->arg) / 1000.0f;
+        return mix(sc(pink, fmaxf(lv, glow_at(LG_BRIGHTNESS_CAP))), lav, sh * lv);
+    }
+    case LG_ACT_FW_VERIFYING:
+        return sc(hsv(300, 0.9f, 1), pulse(t, 800, 0.35f, 1));
+    case LG_ACT_FW_VERIFIED:
+        return sc(mix(hsv(300, 0.9f, 0.71f), hsv(130, 0.8f, 1), ss(0, 500, s)),
+                  1 - ss(1200, LG_FW_VERIFIED_MS, s));
+    case LG_ACT_PIC_FLASHING: {                     // the stripes in turn, a white flick each
+        static const float hue[4] = { 104, 55, 28, 240 };
+        float f = (float)(t % 500);
+        return add(hsv(hue[(t / 500) % 4], 0.85f, 0.35f), sc(FULL, 0.9f * gauss((f - 250) / 60.0f, 1)));
+    }
+    case LG_ACT_PIC_OK: {
+        float lv = 0.85f * blink(s, 300, 600) + (s > 300 ? 0.35f : 0);
+        return sc(hsv(130, 0.8f, 1), clampf(lv) * (1 - ss(800, LG_PIC_OK_MS, s)));
+    }
+    }
+    return DARK;
+}
+
+static lg_c3 one_blip(uint8_t blip, uint32_t ms)
+{
+    static const float hue[4] = { 240, 28, 55, 104 };  // the stripes from the bottom up
+    float s = (float)ms;
+    switch (blip) {
+    case LG_BLIP_MAC:                               // the four stripes, quickly
+        return sc(hsv(hue[ms * 4 / LG_BLIP_MAC_MS % 4], 0.85f, 1), blink(s, 550, 1100));
+    case LG_BLIP_LT_ON:                             // the stripes rise in turn, green holds and fades
+        return hsv(hue[ms < 700 ? ms * 4 / 700 : 3], 0.85f,
+                   ss(0, 100, s) * (1 - ss(1000, LG_BLIP_LT_ON_MS, s)));
+    case LG_BLIP_BUSY:                              // two orange pulses: not now
+        return hsv(30, 1, blink(s, 150, 300) + blink(s, 450, 300));
+    case LG_BLIP_SAVED:                             // white gathers in, then fades
+        return sc(ONE_WHITE, s < 600 ? ss(0, 600, s) : 1 - ss(600, LG_BLIP_SAVED_MS, s));
+    }
+    return DARK;
+}
+
+void lg_render_one16(const ps_view_t *v, const lg_opts_t *o, uint32_t t_ms, uint16_t px[3])
+{
+    px[0] = px[1] = px[2] = 0;
+    if (o)
+        for (int f = 0; f < LG_FAMS; f++)
+            if (!lg_act_over(o->task[f].act, o->task[f].ms)) {
+                int red;
+                lg_c3 c = one_task(&o->task[f], t_ms, &red);
+                float cap = red ? LG_ALERT_CAP : LG_BRIGHTNESS_CAP;
+                put_dot(px, level16(c.r, cap), level16(c.g, cap), level16(c.b, cap));
+                return;
+            }
+    float cap = one_cap(v);
+    float sleep_k = v->asleep ? clampf((float)v->asleep_ms / 10000.0f) : 0;
+    lg_c3 c = sc(one_view(v, o, t_ms, cap), 1 - sleep_k);
+    int blip = o && !lg_blip_over(o->blip, o->blip_ms) && v->state != PS_BOOTING
+               && v->state != PS_ATTENTION && v->state != PS_FAILED && !busy_panel(v);
+    if (blip) c = screen(c, one_blip(o->blip, o->blip_ms));
+    put_dot(px, level16(c.r, cap), level16(c.g, cap), level16(c.b, cap));
+    if (!v->asleep) return;
+    // Asleep: the old Mac laptops' sleep light, one breath every 6 s.
+    float ph = (float)(t_ms % LG_BREATH_MS) / (float)LG_BREATH_MS;
+    float breath = (expf(sinf(TAU * ph - TAU / 4)) - 0.36787944f) / (2.71828183f - 0.36787944f);
+    put_linear(px, o && o->gamer ? hsv((float)t_ms / 60.0f, 0.75f, 1) : ONE_WHITE, breath * sleep_k);
+}

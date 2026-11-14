@@ -10,6 +10,7 @@
 #include "esp_log.h"
 #include "esp_private/esp_gpio_reserve.h"
 #include "esp_random.h"
+#include "esp_rom_sys.h"
 #include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
@@ -344,12 +345,35 @@ static int fwd_leg(link_t *lk, esp_err_t *err)
     return ok;
 }
 
+// ------------------------------------------------------- the handshakes
+
+// W-1109: drive `out` high, then low, and read `in` at the other port each time.
+// Through U3 a level comes back as itself (driver and receiver each invert). An
+// open wire leaves the receiver's input on its internal pull-down, which reads
+// high, so the low level is what finds it. Ends low: asserted, where both rest.
+static int hsk_follows(int out, int in)
+{
+    int ok = 1;
+    for (int level = 1; level >= 0; level--) {
+        gpio_set_level(out, level);
+        esp_rom_delay_us(200);          // SP3232: under 10 us each way; the cable, nothing
+        if (gpio_get_level(in) != level) ok = 0;
+    }
+    gpio_set_level(out, 0);
+    return ok;
+}
+
 // ------------------------------------------------------------- the test
 
 void cable_test_init(const cable_test_cfg_t *cfg)
 {
     s_cfg = *cfg;
     if (!s_rx_q) s_rx_q = xQueueCreate(4, sizeof(size_t));
+    // J4's handshake in is read only here; J2's is UART1's CTS, already an input.
+    if (s_cfg.hsk_j4_in >= 0) {
+        gpio_config_t io = { .pin_bit_mask = 1ULL << s_cfg.hsk_j4_in, .mode = GPIO_MODE_INPUT };
+        gpio_config(&io);
+    }
 }
 
 void cable_test_run(cable_result_t *r, int both)
@@ -393,11 +417,20 @@ void cable_test_run(cable_result_t *r, int both)
     }
     s_lt_owned = 0;
     r->verdict = ct_verdict(tt, r->back_ok, r->fwd_ok);
+    if (r->verdict == CT_PASS && s_cfg.hsk_j2_out >= 0 && s_cfg.hsk_j2_in >= 0 &&
+        s_cfg.hsk_j4_out >= 0 && s_cfg.hsk_j4_in >= 0) {
+        r->hsk = 1;
+        r->hsk_to_j2 = hsk_follows(s_cfg.hsk_j4_out, s_cfg.hsk_j2_in);
+        r->hsk_to_j4 = hsk_follows(s_cfg.hsk_j2_out, s_cfg.hsk_j4_in);
+        r->verdict = ct_verdict_hsk(r->verdict, r->hsk_to_j2, r->hsk_to_j4);
+    }
     if (r->err != ESP_OK)
         ESP_LOGE(TAG, "could not run: %s", esp_err_to_name(r->err));
-    ESP_LOGI(TAG, "J4->J2 %s, J2->J4 %s: %s (%lld ms, %s link)",
+    ESP_LOGI(TAG, "J4->J2 %s, J2->J4 %s%s%s%s%s: %s (%lld ms, %s link)",
              !ct_verdict_tested(r->verdict) ? "not tried" : r->back_ok ? "ok" : "nothing",
              r->fwd_ok ? "ok" : r->back_ok ? "nothing" : "not tried",
+             r->hsk ? ", J4.1->J2.2 " : "", r->hsk ? (r->hsk_to_j2 ? "ok" : "broken") : "",
+             r->hsk ? ", J2.1->J4.2 " : "", r->hsk ? (r->hsk_to_j4 ? "ok" : "broken") : "",
              ct_verdict_name(r->verdict), (esp_timer_get_time() - t0) / 1000,
              lk.owned ? "own" : "node's");
 }
@@ -408,9 +441,13 @@ void cable_result_json(const cable_result_t *r, char *buf, size_t cap)
     if (r->err != ESP_OK)
         k = snprintf(buf, cap, "{\"ok\":false,\"error\":\"%s\"", esp_err_to_name(r->err));
     else
-        k = snprintf(buf, cap, "{\"ok\":true,\"verdict\":\"%s\",\"back\":%s,\"fwd\":%s,\"text\":\"%s\"",
+        k = snprintf(buf, cap, "{\"ok\":true,\"verdict\":\"%s\",\"back\":%s,\"fwd\":%s,"
+                     "\"hsk\":%s,\"text\":\"%s\"",
                      ct_verdict_name(r->verdict), r->back_ok ? "true" : "false",
-                     r->fwd_ok ? "true" : "false", ct_verdict_text(r->verdict));
+                     r->fwd_ok ? "true" : "false",
+                     !r->hsk ? "null" : r->hsk_to_j2 && r->hsk_to_j4 ? "\"ok\""
+                     : r->hsk_to_j4 ? "\"to_j2 broken\"" : r->hsk_to_j2 ? "\"to_j4 broken\""
+                     : "\"both broken\"", ct_verdict_text(r->verdict));
     if (k < 0 || (size_t)k >= cap) return;
     k += snprintf(buf + k, cap - k, ",\"dbg\":{\"caps\":%d,\"syms\":[%d,%d,%d,%d,%d,%d],\"cts\":%d,"
                   "\"tt\":[%d,%d,%d],\"reset\":%d,\"devid\":%d,\"first\":\"", s_dbg.caps,

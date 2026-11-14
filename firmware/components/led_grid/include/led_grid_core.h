@@ -127,6 +127,10 @@ int  lg_sleep_dot(uint32_t breath);
 void lg_render16(const ps_view_t *v, const lg_opts_t *o, uint32_t t_ms,
                  uint16_t out[LG_NUM_LEDS][3]);
 
+// AirWriter LC's one light (D26, the chain's first LED there): the same view
+// and options drawn in time and colour alone, at 8.8 fixed point.
+void lg_render_one16(const ps_view_t *v, const lg_opts_t *o, uint32_t t_ms, uint16_t px[3]);
+
 // The dim end (W-1115). At one or two counts a dot can show only a few
 // colours, and a dot resting there either sits on a rough colour or, dithered,
 // flickers: an ember's floor (R 1, G 0.63, B 0.16 counts) went red, yellow,

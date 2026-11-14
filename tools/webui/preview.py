@@ -20,8 +20,9 @@ after "_down" seconds of restarting.
 
 /api/panel plays the panel's own frames (tools/lights' scenes, the firmware's
 renderer built for this computer) for the status's "ps": ready, printing,
-offline... ("asleep" plays the sleep). Without a C compiler it answers 404 and
-the sidebar's dots show unlit.
+offline... ("asleep" plays the sleep); with "lc" true, the LC's one light as
+the frame's first LED. Without a C compiler it answers 404 and the sidebar's
+dots show unlit.
 """
 import argparse, copy, http.server, json, pathlib, re, struct, subprocess, sys, time, urllib.parse
 
@@ -38,13 +39,14 @@ SCENE = {"booting": "boot-wave", "setup": "setup", "joining": "joining", "ready"
 STEP = 0.04                                 # scenes.c's STEP_MS
 
 
-def load_scenes():
-    """{scene: [frame, ...]}, each frame 111 drives at 8.8, looped as the
-    wiki's GIFs are: the last frames fade into the first."""
+def load_scenes(which="frames"):
+    """{scene: [frame, ...]}, each frame 111 drives at 8.8 (3 for "one", the
+    LC's light), looped as the wiki's GIFs are: the last frames fade into the
+    first."""
     try:
-        subprocess.run(["make", "-s", "-C", str(LIGHTS), "build/frames.txt"], check=True,
+        subprocess.run(["make", "-s", "-C", str(LIGHTS), "build/%s.txt" % which], check=True,
                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        lines = (LIGHTS / "build/frames.txt").read_text().splitlines()
+        lines = (LIGHTS / ("build/%s.txt" % which)).read_text().splitlines()
     except (OSError, subprocess.CalledProcessError):
         print("no C compiler for tools/lights: the panel shows unlit")
         return {}
@@ -71,6 +73,7 @@ def load_scenes():
 
 
 SCENES = {}
+ONE = {}
 
 
 def merge(base, patch):
@@ -151,10 +154,12 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if method == "GET" and url.path == "/api/panel":
             st = resp.get("GET /api/status")
             st = st if isinstance(st, dict) else {}
-            frames = SCENES.get("asleep" if st.get("asleep") else SCENE.get(st.get("ps"), "ready"))
+            scene = "asleep" if st.get("asleep") else SCENE.get(st.get("ps"), "ready")
+            frames = (ONE if st.get("lc") else SCENES).get(scene)
             if not frames:
                 return self.send(404, "no panel", "text/plain")
             f = frames[int((now - clock["loaded"]) / STEP) % len(frames)]
+            f = f + [0] * (111 - len(f))
             return self.send(200, struct.pack("<%dH" % len(f), *f), "application/octet-stream")
         if method == "POST":
             n = int(self.headers.get("Content-Length") or 0)
@@ -198,6 +203,7 @@ def main():
                     help="0.0.0.0 to try the page on a phone on this network")
     a = ap.parse_args()
     SCENES.update(load_scenes())
+    ONE.update(load_scenes("one"))
     srv = http.server.ThreadingHTTPServer((a.host, a.port), Handler)
     print("http://%s:%d/_states" % ("localhost" if a.host == "127.0.0.1" else a.host, a.port))
     srv.serve_forever()

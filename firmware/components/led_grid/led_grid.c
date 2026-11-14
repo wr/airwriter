@@ -19,6 +19,7 @@
 static led_strip_handle_t s_strip;
 static int s_count;
 static volatile uint8_t s_gamer;   // DIP7, set from dip_config's task
+static uint8_t s_one;              // AirWriter LC: one light, the chain's first LED
 
 // The tasks and the acknowledgement over the state, set from other tasks
 // (led_grid_action, led_grid_blip): what each shows and when it began.
@@ -86,7 +87,15 @@ static void lg_task(void *arg)
             o.blip = s_blip;
             o.blip_ms = lg_elapsed(now, s_blip_t0);
             portEXIT_CRITICAL(&s_act_mux);
-            lg_render16(&v, &o, (uint32_t)now, hi);    // animation phase: wraps harmlessly
+            // animation phase: wraps harmlessly
+            if (s_one) {
+                // The LC's light is D26, first in its chain; anything after
+                // it stays dark.
+                memset(hi, 0, sizeof hi);
+                lg_render_one16(&v, &o, (uint32_t)now, hi[0]);
+            } else {
+                lg_render16(&v, &o, (uint32_t)now, hi);
+            }
             portENTER_CRITICAL(&s_frame_mux);
             memcpy(s_frame, hi, sizeof s_frame);
             portEXIT_CRITICAL(&s_frame_mux);
@@ -145,8 +154,9 @@ static esp_err_t strip_start(void)
     return gptimer_start(tick);
 }
 
-esp_err_t led_grid_start(void)
+esp_err_t led_grid_start(int one)
 {
+    s_one = one ? 1 : 0;
     if (CONFIG_AIRWRITER_LED_DATA_PIN < 0) return ESP_OK;
     // Waits for the task to have the strip, so the RMT driver owns IO48 by
     // the time this returns, as the boot clamp in main expects.

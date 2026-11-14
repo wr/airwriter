@@ -64,6 +64,10 @@ typedef enum {
     CT_PASS = 0,     // both ways: a crossover
     CT_NO_LOOP,      // nothing came back: straight-through, broken, or not in both ports
     CT_ONE_WAY,      // crossed, but J2's transmit pair (the print data) is broken
+    // W-1109, rev 2026.11 only: data both ways, but a handshake wire is broken.
+    CT_NO_BUSY,      // J4.1 -> J2.2: the printer's busy line can't reach AirWriter
+    CT_NO_HSK_OUT,   // J2.1 -> J4.2: AirWriter's handshake out can't reach the printer
+    CT_NO_HSK,       // both
     // No cable was tested: TashTalk didn't answer.
     CT_NO_CHIP,      // U7 is empty
     CT_NO_TASHTALK,  // U7 holds a PIC that isn't running TashTalk
@@ -71,6 +75,11 @@ typedef enum {
 } ct_verdict_t;
 
 ct_verdict_t ct_verdict(ct_tt_t tt, int back_ok, int fwd_ok);
+// W-1109: rev 2026.11 drives each port's handshake out on its own pin (J2's on
+// IO47, J4's on IO13) and reads the other port's handshake in (J2's on IO8, J4's
+// on IO21), so a cable that passed both data legs is also checked wire by wire:
+// to_j2, J4.1 -> J2.2; to_j4, J2.1 -> J4.2. Anything but a pass is left as it is.
+ct_verdict_t ct_verdict_hsk(ct_verdict_t v, int to_j2_ok, int to_j4_ok);
 int          ct_verdict_tested(ct_verdict_t v); // 1 if a cable was tested: pass, no_loop, one_way
 const char  *ct_verdict_name(ct_verdict_t v);   // "pass", "no_loop", "one_way", "no_chip", ...
 const char  *ct_verdict_text(ct_verdict_t v);   // a sentence for the web page
