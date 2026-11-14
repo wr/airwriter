@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""A Personal LaserWriter 300 in software, for testing AirWriter without one (W-1102).
+"""A Personal LaserWriter 300 in software, for testing AirWriter without one (W-1102), and
+(W-1145) a Personal LaserWriter LS as its own driver has it.
 
 It answers packets as the printer does (design: docs/superpowers/specs/
 2026-11-12-quickdraw-laserwriters-design.md, "What the printer and the board allow"),
@@ -10,8 +11,8 @@ not any code of ours, so it can check the firmware's coder and line image.
     python3 tools/qdlaser/qdfake.py serve [--pty] [--engine 29|0d|23] [--mem BYTES]
                                           [--done S] [--exit S] [--warm S]
                                           [--out DIR] [--no-png] [--log FILE]
-    python3 tools/qdlaser/qdfake.py decode STREAM --out DIR [--no-png]
-    python3 tools/qdlaser/qdfake.py decode-bits FILE --out DIR [--no-png]
+    python3 tools/qdlaser/qdfake.py decode STREAM --out DIR [--no-png] [--engine 29|0d]
+    python3 tools/qdlaser/qdfake.py decode-bits FILE --out DIR [--no-png] [--engine 29|0d]
 
 The printer's link is synchronous on a clock it drives, which a pty cannot carry, so
 `serve` takes packets framed: from the host, `P`, a u16 little-endian length, and the
@@ -80,8 +81,24 @@ What it models, from the design's command table:
   and 83 01 says a fault is stored, the cassette empty or out, or the manual slot chosen
   and empty.
 
+`--engine 0d` is an LS. Nobody here has one: it is the LS's own driver (Personal LW LS 7.1)
+read as a printer, and AirWriter's choices for it held as rules. What differs from the 300:
+
+* 83 51 and 83 52 choose the cassette and the multipurpose tray. No paper is 83 02's 10.
+* Rows carry a 9-bit length: `0x4000 | (0x200 - n)`.
+* 87's left margin carries 0xB7 / 2 dots past the paper's edge, not 0x1A0 / 2.
+* The value after 83 9D is the paper's number as it is (Letter 04, A4 01, Legal 0C, B5 09,
+  else 21), logged; the reply is never read.
+* After a jam it needs no 83 5D: 81 00 and the page again.
+* What its driver never sends is logged as `not the LS's: ...` and fails a test: 83 2A, 83 A7,
+  83 5D, 83 4C, 83 4F, 84 08. 83 40 is answered and logged plainly, since the board asks it of
+  every printer before it knows which. `--refuse-40` answers it 80 (refused).
+* Rows while a page prints are logged as `rows while a page prints`: AirWriter gives an LS one
+  page at a time.
+
 Not modelled: the link's clock and timing, page memory's exact cost, the memory
-emptying as a page prints, a sheet jammed on its way out, density, copies.
+emptying as a page prints, a sheet jammed on its way out, density, copies, an LS's real
+memory (the 300's is used) and status bytes (the 300's).
 """
 import argparse
 import asyncio
@@ -101,6 +118,8 @@ EXIT_S = 2.0
 WARM_S = 0.3
 FULL_DONE = 0.08           # a sheet lost to memory full is done this much of DONE_S later
 EDGE = 0x1A0 // 2          # what 87's left margin carries past the paper's own (Apple's formula)
+LS_EDGE = 0xB7 // 2        # the LS's
+LS_NEVER = {0x2A: "83 2A", 0xA7: "83 A7", 0x5D: "83 5D", 0x4C: "83 4C", 0x4F: "83 4F"}
 ENGINES = {"29": 0x29, "0d": 0x0D, "23": 0x23}
 
 
@@ -193,13 +212,13 @@ def packets_from_bits(data):
 class Page:
     """The image area as loaded, a row of `width` bytes at a time."""
 
-    def __init__(self, top, left, width):
-        self.top, self.left, self.width = top, left, width
+    def __init__(self, top, left, width, edge=EDGE):
+        self.top, self.left, self.width, self.edge = top, left, width, edge
         self.rows = []
 
     @property
     def x0(self):
-        return max(0, self.left * 8 - EDGE)
+        return max(0, self.left * 8 - self.edge)
 
     def bits(self):
         if not self.rows:
@@ -239,8 +258,11 @@ class QuickDrawLaser:
     """One printer. packet() is a packet heard; it returns the reply byte or None."""
 
     def __init__(self, engine=0x29, mem=MEM, out=None, png=True, log=None, clock=time.monotonic,
-                 say=print, done_s=DONE_S, exit_s=0.0, warm_s=0.0):
+                 say=print, done_s=DONE_S, exit_s=0.0, warm_s=0.0, refuse_40=False):
         self.engine, self.mem, self.out_dir, self.png, self.log = engine, mem, out, png, log
+        self.ls = engine == 0x0D                # a Personal LaserWriter LS
+        self.refuse_40 = refuse_40
+        self.name = "fake LaserWriter LS" if self.ls else "fake LaserWriter 300"
         self.clock, self.say = clock, say
         self.done_s, self.exit_s, self.warm_s = done_s, exit_s, warm_s
         self.t0 = clock()
@@ -276,6 +298,8 @@ class QuickDrawLaser:
         self.done = False                       # 8E bit 2
         self.brk = 0                            # BREAKs to send
         self.value_next = False
+        self.value_for = 0                      # the 83 the value follows
+        self.size = None                        # an LS's paper number, from 83 9D
         self.lights = 0
         self.pages = []                         # the sheets that came out whole
         self.blanks = []                        # and why each blank one was
@@ -388,7 +412,7 @@ class QuickDrawLaser:
         self._event(f"done {len(self.pages)}")
         if self.out_dir:
             slot.page.save(self.out_dir, len(self.pages), self.png)
-            self.say(f"fake LaserWriter 300: page {len(self.pages)} in {self.out_dir}")
+            self.say(f"{self.name}: page {len(self.pages)} in {self.out_dir}")
 
     # ---- packets
     def packet(self, pkt):
@@ -414,10 +438,18 @@ class QuickDrawLaser:
         return r
 
     def _row(self, pkt):
-        n = 0x5000 - (pkt[0] << 8 | pkt[1])
+        if self.ls:
+            if pkt[0] & 0xFE != 0x40:
+                self._event(f"row length {pkt[:2].hex()}: not the LS's 9-bit length")
+                return
+            n = 0x200 - ((pkt[0] << 8 | pkt[1]) & 0x1FF)
+        else:
+            n = 0x5000 - (pkt[0] << 8 | pkt[1])
         if n != len(pkt) - 3:
             self._event(f"row length {n} in a packet of {len(pkt)}")
             return
+        if self.ls and self.printing is not None:
+            self._event("rows while a page prints: an LS takes one page at a time")
         if self._faulted():
             self._event("rows while a jam or the cover shows")
             self.error = True
@@ -433,7 +465,8 @@ class QuickDrawLaser:
             self.full = self.error = False
             self.stopped = None
         if not self.slots or self.slots[-1].ended:
-            self.slots.append(Slot(Page(-self.top, -self.left, -self.width)))
+            self.slots.append(Slot(Page(-self.top, -self.left, -self.width,
+                                        LS_EDGE if self.ls else EDGE)))
         slot = self.slots[-1]
         self.ended = 0
         slot.rows_heard += 1
@@ -482,6 +515,9 @@ class QuickDrawLaser:
     def _command(self, c, a):
         if self.value_next and c == 0x83:
             self.value_next = False
+            if self.ls and self.value_for == 0x9D:
+                self.size = a
+                self._event(f"paper number {a:02x}")
             return odd(0)
         if c == 0x82:
             return self._c82()
@@ -492,11 +528,18 @@ class QuickDrawLaser:
                 if self.clock() < self.quiet_until:
                     return None
                 self.quiet_until = None
+            if self.ls and a in LS_NEVER:
+                self._event(f"not the LS's: {LS_NEVER[a]}")
+            if self.ls and a == 0x40:
+                self._event("83 40, asked before the printer is known")
+                if self.refuse_40:
+                    return 0x80
             if a in (0x9D, 0xA7):
                 self.value_next = True
-            elif a == 0x4C:
+                self.value_for = a
+            elif a == (0x51 if self.ls else 0x4C):
                 self.manual = False
-            elif a == 0x4F:
+            elif a == (0x52 if self.ls else 0x4F):
                 self.manual = True
             elif a == 0x5D:
                 self.again = False
@@ -526,6 +569,8 @@ class QuickDrawLaser:
                 self.jam = self.again = True
                 self.sheets = 1
                 self._event(f"jammed again: {name} into a feed")
+        if c == 0x81 and self.ls:
+            self.again = False                  # its driver's recovery: 81 00, the page again
         if c == 0x81:
             if self.printing is not None:
                 # Bench A3: the sheet goes on out, blank, and no page done comes for it.
@@ -538,6 +583,8 @@ class QuickDrawLaser:
         elif c == 0x84:
             self.lights = a
             if a == 0x08:
+                if self.ls:
+                    self._event("not the LS's: 84 08")
                 self.quiet_until = self.clock() + self.warm_s
         elif c == 0x85:
             self.lo85 = a
@@ -582,8 +629,9 @@ class QuickDrawLaser:
             self.kept_print = True
             self._event("8A 01 while a jam or the cover shows: kept")
             return
-        if self.again or self._held():
-            self._event("8A 01 refused: " + ("waiting for 83 5D" if self.again else "held"))
+        again = self.again and not self.ls     # the LS's driver never sends 83 5D
+        if again or self._held():
+            self._event("8A 01 refused: " + ("waiting for 83 5D" if again else "held"))
             return
         if self.stopped is not None and self.stopped is not slot:
             self._event("wrong page: the first in the memory printed again, not the one that stopped")
@@ -650,11 +698,11 @@ class QuickDrawLaser:
                         self.again = False
                         self._event("fed by itself: the 8A 01 heard during the jam")
         else:
-            self.say(f"fake LaserWriter 300: unknown command {line.strip()!r}: paper, cassette, "
+            self.say(f"{self.name}: unknown command {line.strip()!r}: paper, cassette, "
                      "manual, jam, jam2, cover, engine, silent, badrow N, ok, clear")
             return
         self.tick()
-        self.say(f"fake LaserWriter 300: {line.strip()} -> 83 01 {self._s01():02x}, "
+        self.say(f"{self.name}: {line.strip()} -> 83 01 {self._s01():02x}, "
                  f"83 02 {self._s02():02x}, 83 2A {self._paper():02x}")
 
     # ---- the pty's framing
@@ -758,22 +806,26 @@ def stdin_commands(lw):
 async def serve(a):
     log = open(a.log, "a") if a.log else None
     lw = QuickDrawLaser(engine=ENGINES[a.engine], mem=a.mem, out=a.out, png=not a.no_png, log=log,
-                        done_s=a.done, exit_s=a.exit, warm_s=a.warm)
+                        done_s=a.done, exit_s=a.exit, warm_s=a.warm, refuse_40=a.refuse_40)
     stdin_commands(lw)
     master, slave, path = open_pty()
     print(path, flush=True)
-    print(f"fake LaserWriter 300: engine {lw.engine:02x}, memory {lw.mem} bytes", flush=True)
+    print(f"{lw.name}: engine {lw.engine:02x}, memory {lw.mem} bytes", flush=True)
     await pump_fd(lw, master)
 
 
+# What a test fails on, in the printer's log.
+BAD = ("bad", "row ", "a row", "8A 01 refused", "blank", "memory full", "moved", "wrong page",
+       "rows while", "81 00 while", "84 08 while", "8A 01 while", "fed by itself", "jammed again",
+       "not the LS's")
+
+
 def decode(a, packets):
-    lw = QuickDrawLaser(out=a.out, png=not a.no_png, done_s=0, exit_s=0, say=lambda s: None)
+    lw = QuickDrawLaser(engine=ENGINES[a.engine], out=a.out, png=not a.no_png, done_s=0, exit_s=0,
+                        say=lambda s: None)
     for p in packets:
         lw.packet(p)
-    bad = [e for e in lw.events if e.startswith(("bad", "row ", "a row", "8A 01 refused", "blank",
-                                                  "memory full", "moved", "wrong page", "rows while",
-                                                  "81 00 while", "84 08 while", "8A 01 while",
-                                                  "fed by itself", "jammed again"))]
+    bad = [e for e in lw.events if e.startswith(BAD)]
     if bad:
         print(f"qdfake: {bad[0]}", file=sys.stderr)
         return 1
@@ -795,9 +847,11 @@ def main(argv):
     s.add_argument("--out")
     s.add_argument("--no-png", action="store_true")
     s.add_argument("--log")
+    s.add_argument("--refuse-40", action="store_true", help="answer 83 40 refused (an LS)")
     for name in ("decode", "decode-bits"):
         d = sub.add_parser(name)
         d.add_argument("file")
+        d.add_argument("--engine", choices=list(ENGINES), default="29")
         d.add_argument("--out", required=True)
         d.add_argument("--no-png", action="store_true")
     a = ap.parse_args(argv)

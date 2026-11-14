@@ -41,7 +41,7 @@ static int s_row(void *ctx, const uint8_t *codes, size_t n)
 {
     sink_t *s = ctx;
     if (s->fail_after && s->pass_rows >= s->fail_after) return -1;
-    size_t rb = s->md->img_w / 8;
+    size_t rb = qd_row_bytes(s->md);
     if (s->pass_rows == 0) {
         s->first_n = n < 8 ? n : 8;
         memcpy(s->first_codes, codes, s->first_n);
@@ -475,6 +475,30 @@ static void test_new_refuses(void)
     sink_free(s);
 }
 
+// W-1145: an LS's Legal rows are 2,000 dots of image in the 252 bytes its driver sends, white
+// after; its budget is its own.
+static void test_ls_rows_padded_to_its_row(void)
+{
+    sink_t *s = sink_new();
+    qd_page_cfg_t c = cfg_for(s, HT_APPLE, NULL, 0, 0);
+    c.model = QD_PLWLS;
+    qd_page_t *p = qd_page_new(&c);
+    CHECK(p != NULL);
+    if (!p) { sink_free(s); return; }
+    rip_stage_t st;
+    qd_page_stage(p, &st);
+    CHECK_EQ_INT(feed(&st, 0, 2000, 4200, black, NULL), 0);
+    CHECK(s->md == &qd_spec(QD_PLWLS)->media[2]);
+    CHECK_EQ_INT(qd_row_bytes(s->md), 252);
+    CHECK_EQ_INT(s->pass_rows, 3750);
+    CHECK_EQ_INT(s->prints, 1);
+    CHECK_EQ_INT(s->bad_decode, 0);
+    CHECK(all_bytes(s->rows[0], 250, 0xFF) && all_bytes(s->rows[0] + 250, 2, 0x00));
+    CHECK(all_bytes(s->rows[3749], 250, 0xFF) && all_bytes(s->rows[3749] + 250, 2, 0x00));
+    qd_page_free(p);
+    sink_free(s);
+}
+
 int main(void)
 {
     test_small_page_goes_in_record_screen();
@@ -488,5 +512,6 @@ int main(void)
     test_budget_is_500000();
     test_sink_error_aborts();
     test_new_refuses();
+    test_ls_rows_padded_to_its_row();
     TEST_END;
 }

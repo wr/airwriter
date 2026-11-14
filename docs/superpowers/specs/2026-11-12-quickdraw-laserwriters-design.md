@@ -7,6 +7,25 @@ run coder, the port's questions), `W-1082` (LaserWriters: the 300 dpi rip) and `
 printer's own Apple icon). Reverses the QuickDraw non-goal in
 `2026-10-21-laser-printers-design.md`.
 
+**Amended 2026-11-14 by `W-1145 Personal LaserWriter LS on the printer port`** (SPEC §3.18,
+"The Personal LaserWriter LS", is the record). The LS leaves the non-goals; the Select 300
+stays. Read from the LS's own driver (Personal LW LS 7.1) and the LaserWriter 300 driver's LS
+branch, it is not page memory: it is the 300's page path, a row in the model table and a few
+differences, with no printer to try it on. Wells: found and shared like the 300, and called
+expected to work, untested, as the ImageWriter LQ is. Calls made while building:
+
+- **Where Apple's two drivers differ, the LS gets its own driver's way** (`qd_spec_t.driver`),
+  and beyond it only what the board can't work without: `83 3E`, `8E 00` polled while a page
+  prints, and the status at rest. The probe's `83 40`, which goes before the board knows which
+  printer it is asking, no longer ends the probe when it is refused or unanswered.
+- **One page at a time on an LS**, though its own driver loads the next page while one prints:
+  the 300's driver 1.2 added a wait for exactly that on an LS, and one page at a time asks
+  only one page of a memory nobody has measured.
+- **Its setup, sheets, paper number, row length and paper bit are its driver's**, its jam
+  recovery is `81 00` and the page again, and its page budget is 480,000 bytes of codes.
+- **No new path for a page the printer says it has no room for:** a lower budget for the LS
+  instead. An LS that fills before it would fail such a page; its owner's log says so.
+
 **Amended 2026-11-14** by `W-1140 One test page for every printer: the ImageWriter and PostScript
 LaserWriters print the shared page`: the test page is the page every printer prints
 (`testpage`; the test-page design's amendment block), no longer this family's own. The 300 keeps its 300 dpi image area, Apple's 300 screen as the Apple panel and its laser captions (`qd_tp_geom`).

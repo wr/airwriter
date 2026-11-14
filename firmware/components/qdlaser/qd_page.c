@@ -42,7 +42,7 @@ qd_page_t *qd_page_new(const qd_page_cfg_t *cfg)
     if (!sp || !cfg->sink.open || !cfg->sink.row || !cfg->sink.print) return NULL;
     size_t rb = 0;
     for (int i = 0; i < sp->n_media; i++)
-        if ((size_t)sp->media[i].img_w / 8 > rb) rb = sp->media[i].img_w / 8;
+        if (qd_row_bytes(&sp->media[i]) > rb) rb = qd_row_bytes(&sp->media[i]);
     size_t cmax = sw_code_max(rb);
     qd_page_t *p = big_calloc(1, sizeof *p + rb + cmax);
     if (!p) return NULL;
@@ -78,7 +78,7 @@ int qd_page_failed(const qd_page_t *p)
 // A row of w dots, cut or padded with white to the image area, coded.
 static size_t code(qd_page_t *p, const uint8_t *bits)
 {
-    size_t rb = p->md->img_w / 8, have = (p->w + 7) / 8;
+    size_t rb = qd_row_bytes(p->md), have = (p->w + 7) / 8;
     if (have >= rb) {
         memcpy(p->rowbuf, bits, rb);
     } else {
@@ -91,7 +91,7 @@ static size_t code(qd_page_t *p, const uint8_t *bits)
 
 static size_t code_blank(qd_page_t *p)
 {
-    size_t rb = p->md->img_w / 8;
+    size_t rb = qd_row_bytes(p->md);
     memset(p->rowbuf, 0, rb);
     return sw_code_row(p->rowbuf, NULL, rb, p->codes);
 }

@@ -2,7 +2,8 @@
 //
 // W-1102: what goes down the wire to a QuickDraw LaserWriter. Every packet is BREAK, idle, then
 // its bytes: a command (`cmd arg cmd^arg`), a value after an 83 (`(v << 1)` with odd parity), or
-// a row (`0x5000 - n` big-endian, n bytes of run codes, the XOR of everything before). The link
+// a row (`0x5000 - n` big-endian, n bytes of run codes, the XOR of everything before; W-1145:
+// the LS's own driver sends `0x4000 | (0x200 - n)`, a 9-bit length). The link
 // clocks a packet out as a line image, one bit per printer clock: BREAK (100 bits low), idle
 // (120 marks), each byte 8N1 LSB first, then marks before the next BREAK. Pure C, no state.
 #pragma once
@@ -17,9 +18,11 @@ size_t  qd_cmd(uint8_t cmd, uint8_t arg, uint8_t out[3]);
 uint8_t qd_value(uint8_t v);
 // An 83 reply the printer meant: odd parity over the byte, and bit 7 (refused) clear.
 int     qd_reply_ok(uint8_t r);
-// A row packet: 0x5000 - n big-endian, the codes, the XOR of all before. Returns n + 3, or 0 for
-// n == 0 or n > QD_ROW_MAX. out holds n + 3.
-size_t  qd_row_packet(const uint8_t *codes, size_t n, uint8_t *out);
+// A row packet: its length, the codes, the XOR of all before. bits is the length field's width
+// (qd_spec_t.row_bits): 12, 0x5000 - n big-endian (n up to QD_ROW_MAX); 9, 0x4000 | (0x200 - n)
+// (n up to 511). Returns n + 3, or 0 for n == 0 or n past qd_row_max(bits). out holds n + 3.
+size_t  qd_row_max(int bits);
+size_t  qd_row_packet(const uint8_t *codes, size_t n, int bits, uint8_t *out);
 
 // The line image: bit k is (buf[k >> 3] >> (k & 7)) & 1, 1 is mark. Bits are written, never
 // ORed, so buf need not be cleared first.

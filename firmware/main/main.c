@@ -1355,12 +1355,24 @@ static void sw_finished(const job_pipe_stats_t *st, int ok)
     printers_apply();                   // W-1088: a change to the port's printer waited for it
 }
 
-// ------------------------------------------------- Personal LaserWriter 300 jobs
-// W-1102: the port's printer is a Personal LaserWriter 300. Its job takes the same sink, job
-// lock and pipeline again, rips at 300 dpi into qd_page's rows and runs its session on the rip
-// task (qdlaser.c): the link opens and the printer is asked who it is as the rip begins, each
-// page is loaded as the rip makes it, while the page before it prints (W-1144), and a page too
-// big for the printer's memory in the record's screen goes in Apple's.
+// The QuickDraw LaserWriter last asked or printed to, by name, for the log (W-1145). Set where
+// its model is known (a job's start, its test page, the port task's status), so the rip task's
+// state callback takes no lock to name it.
+static volatile qd_model_t s_qd_model;
+
+static const char *qd_name(void)
+{
+    const qd_spec_t *sp = qd_spec(s_qd_model);
+    return sp ? sp->name : "QuickDraw LaserWriter";
+}
+
+// ------------------------------------------------- QuickDraw LaserWriter jobs
+// W-1102: the port's printer is a Personal LaserWriter 300 (W-1145: or LS). Its job takes the
+// same sink, job lock and pipeline again, rips at 300 dpi into qd_page's rows and runs its
+// session on the rip task (qdlaser.c): the link opens and the printer is asked who it is as the
+// rip begins, each page is loaded as the rip makes it, while the page before it prints (W-1144;
+// an LS's once that page is done), and a page too big for the printer's memory in the record's
+// screen goes in Apple's.
 
 static esp_err_t qd_doc_begin(const char *format, const char *name, const ipp_job_opts_t *opts)
 {
@@ -1368,9 +1380,11 @@ static esp_err_t qd_doc_begin(const char *format, const char *name, const ipp_jo
     s_qd_bad_page = 0;
     s_qd_skipped = 0;
     qd_model_t m = pr_model_to_qd(printers_record_model(s_port_job_record));
+    s_qd_model = m;
     int manual = opts ? opts->manual : 0;
     s_last_job_id = opts ? opts->job_id : 0;
-    ESP_LOGI(TAG, "LaserWriter 300 job %d format %s, source %s", (int)s_last_job_id,
+    ESP_LOGI(TAG, "%s job %d format %s, source %s", qd_spec(m) ? qd_spec(m)->name : "?",
+             (int)s_last_job_id,
              format[0] ? format : "(unspecified)", manual ? "manual" : "cassette");
     memdiag_mark("job start");          // W-1094
     s_job_error[0] = '\0';
@@ -1435,18 +1449,18 @@ static void qd_finished(const job_pipe_stats_t *st, int ok)
     }
     if (printed) {
         printers_port_answered(PR_HEARD_QDLASER);   // its 83 3E named the record's model
-        ESP_LOGI(TAG, "LaserWriter 300 job: %d page%s, %u bytes in, all out in %u s",
+        ESP_LOGI(TAG, "%s job: %d page%s, %u bytes in, all out in %u s", qd_name(),
                  st->pages, st->pages == 1 ? "" : "s", (unsigned)st->doc_bytes,
                  (unsigned)((st->ms + end_ms) / 1000));
         ota_health_printed();           // W-1059: this firmware prints; under the job lock
     } else {
-        ESP_LOGE(TAG, "LaserWriter 300 job %s: %d page%s, %u bytes in, rc %d, printer %d%s",
+        ESP_LOGE(TAG, "%s job %s: %d page%s, %u bytes in, rc %d, printer %d%s", qd_name(),
                  cancelled ? "canceled" : "failed", st->pages, st->pages == 1 ? "" : "s",
                  (unsigned)st->doc_bytes, st->rc, rc, ok ? "" : ", transfer truncated");
     }
     qd_link_stats_t ls;
     qd_link_stats(&ls, 0);
-    ESP_LOGI(TAG, "LaserWriter 300 link: %u chunks, %u bits, %u bad, %u stalls, %u unchecked, "
+    ESP_LOGI(TAG, "QuickDraw LaserWriter link: %u chunks, %u bits, %u bad, %u stalls, %u unchecked, "
              "ends at most %d us late; last failure %u, %u of %u bits in %d us, due %d us",
              (unsigned)ls.chunks, (unsigned)ls.bits, (unsigned)ls.bad_bits, (unsigned)ls.stalls,
              (unsigned)ls.unchecked, (int)ls.worst_end_us, (unsigned)ls.fail_why,
@@ -1674,10 +1688,10 @@ static void sw_online(sw_model_t m)
     s_last_status_ms = uptime_ms();     // `1` and `2` were just asked: not again in 10 s
 }
 
-// ------------------------------------------------- a Personal LaserWriter 300 on the port
+// ------------------------------------------------- a QuickDraw LaserWriter on the port
 // W-1102: the port task asks it while its clock runs, a job's session reports through
 // qd_state_cb, and these turn what it says into the box's state, the panel's line and what the
-// phone is told, as the StyleWriter's do.
+// phone is told, as the StyleWriter's do. W-1145: a Personal LaserWriter 300 or LS.
 
 // Each change of state, once, by name.
 static void qd_log_state(qd_state_t st, const qd_raw_t *raw)
@@ -1689,10 +1703,10 @@ static void qd_log_state(qd_state_t st, const qd_raw_t *raw)
         [QDS_OFFLINE] = "offline",
     };
     if (st == QDS_ENGINE && raw)
-        ESP_LOGW(TAG, "LaserWriter 300: engine fault 83 04 %02x 83 07 %02x", raw->s04, raw->s07);
+        ESP_LOGW(TAG, "%s: engine fault 83 04 %02x 83 07 %02x", qd_name(), raw->s04, raw->s07);
     else
-        ESP_LOGI(TAG, "LaserWriter 300: %s", (unsigned)st < sizeof k_names / sizeof k_names[0]
-                                            ? k_names[st] : "?");
+        ESP_LOGI(TAG, "%s: %s", qd_name(), (unsigned)st < sizeof k_names / sizeof k_names[0]
+                                           ? k_names[st] : "?");
 }
 
 // A job's or the test page's session reports its state, on the rip task or the page's own:
@@ -1729,6 +1743,7 @@ static void qd_online(void)
     qd_model_t m = printers_port_qd_model();
     qd_state_t st = QDS_OFFLINE;
     qd_raw_t raw = { 0 };
+    if (m != QD_NONE) s_qd_model = m;
     if (m != QD_NONE && qdlaser_status(s_clock_hz, m, &st, &raw) == QD_OK) qd_idle_state(st, 1, &raw);
     else qd_idle_state(QDS_OFFLINE, 0, NULL);
 }
@@ -2275,6 +2290,7 @@ static void kick_task(void *arg)
             qd_model_t qm = printers_port_qd_model();
             uint32_t t0 = uptime_ms();
             qd_link_stats(NULL, 1);             // this status's alone
+            if (qm != QD_NONE) s_qd_model = qm;
             if (qm != QD_NONE) qd_rc = qdlaser_status(s_clock_hz, qm, &qst, &qraw);
             if (qd_rc == QD_OK) {
                 heard = PR_HEARD_QDLASER;
@@ -2284,13 +2300,13 @@ static void kick_task(void *arg)
                 qd_link_stats_t ls;
                 qd_link_stats(&ls, 0);
                 if (qraw.miss)
-                    ESP_LOGW(TAG, "LaserWriter 300: no answer to %02x %02x (%u ms; link why %u, "
-                             "%u of %u bits in %d us, due %d us)",
+                    ESP_LOGW(TAG, "%s: no answer to %02x %02x (%u ms; link why %u, "
+                             "%u of %u bits in %d us, due %d us)", qd_spec(qm)->name,
                              qraw.miss >> 8, qraw.miss & 0xFF, (unsigned)(uptime_ms() - t0),
                              (unsigned)ls.fail_why, (unsigned)ls.fail_got, (unsigned)ls.fail_want,
                              (int)ls.fail_took_us, (int)ls.fail_due_us);
                 else
-                    ESP_LOGW(TAG, "LaserWriter 300: status failed, %d (%u ms)", qd_rc,
+                    ESP_LOGW(TAG, "%s: status failed, %d (%u ms)", qd_spec(qm)->name, qd_rc,
                              (unsigned)(uptime_ms() - t0));
             }
         }
@@ -2682,6 +2698,7 @@ static void qd_test_task(void *arg)
 {
     int id = (int)(intptr_t)arg;
     qd_model_t m = pr_model_to_qd(printers_record_model(id));
+    if (m != QD_NONE) s_qd_model = m;
     tp_text_t x;
     tp_info_t info = tp_details(id, &x);
     int hz = 0;
@@ -2690,9 +2707,9 @@ static void qd_test_task(void *arg)
     if (rc == QD_OK) printers_port_answered(PR_HEARD_QDLASER);
     qd_link_stats_t ls;
     qd_link_stats(&ls, 0);
-    ESP_LOGI(TAG, "LaserWriter 300 test page: %s (%d); link %u chunks, %u bad bits, %u stalls, "
+    ESP_LOGI(TAG, "%s test page: %s (%d); link %u chunks, %u bad bits, %u stalls, "
              "%u unchecked, ends at most %d us late; last failure %u, %u of %u bits in %d us, "
-             "due %d us; %u bytes of stack to spare",
+             "due %d us; %u bytes of stack to spare", qd_spec(m) ? qd_spec(m)->name : "?",
              rc == QD_OK ? "printed" : rc == QD_E_CANCEL ? "cancelled" : "not printed", rc,
              (unsigned)ls.chunks, (unsigned)ls.bad_bits, (unsigned)ls.stalls, (unsigned)ls.unchecked,
              (int)ls.worst_end_us, (unsigned)ls.fail_why, (unsigned)ls.fail_got,

@@ -1440,21 +1440,24 @@ job with the screen open, or the ImageWriter checker on this build.
 
 ---
 
-### 3.18 QuickDraw LaserWriters (W-1102, W-1144)
+### 3.18 QuickDraw LaserWriters (W-1102, W-1144, W-1145)
 
 `W-1102 QuickDraw LaserWriters on the printer port (Personal LaserWriter LS/300, Select 300)`;
-`W-1144 Personal LaserWriter 300: load the next page while one prints, so multi-page jobs finish sooner`.
+`W-1144 Personal LaserWriter 300: load the next page while one prints, so multi-page jobs finish sooner`;
+`W-1145 Personal LaserWriter LS on the printer port`.
 Design: `docs/superpowers/specs/2026-11-12-quickdraw-laserwriters-design.md`, which holds the
 command table and the measurements this section stands on. `components/qdlaser`: `qd_model`,
 `qd_wire`, `qd_status`, `qd_page`, `qd_session` and `qd_testpage` are pure and host-tested in
 `tools/rip`; `qd_link.c` (the SPI slave) and `qdlaser.c` (the port's questions and the job
 pipeline's hooks) are the board's. `tools/qdlaser` holds `qdfake.py`, a software Personal
-LaserWriter 300 and page decoder, and `mkqdtables.py`, which reads Apple's 300 screen, curve and
-icon out of Apple's LaserWriter 300 driver 1.1 into `apple_tables_lw.{h,c}` and the icon files.
+LaserWriter 300 (and LS) and page decoder, and `mkqdtables.py`, which reads Apple's 300 screen,
+curve and icon out of Apple's LaserWriter 300 driver 1.1 into `apple_tables_lw.{h,c}` and the
+icon files, and the LS's icon out of its own driver.
 **A Personal LaserWriter 300 prints from AirWriter on a rev A board (board 1, 2026-11-12 and
-13). The Personal LaserWriter LS and the LaserWriter Select 300 are not supported:** the same
-Apple driver, but a page memory with pointers, their own paper and density commands, and no
-printer here to test on.
+13). A Personal LaserWriter LS is found and shared, built from its own driver and expected to
+work, but no LS has been tried (W-1145, below). The LaserWriter Select 300 is not supported:**
+very likely a page memory with pointers, its own paper and density commands, and no printer
+here to test on.
 
 - **Finding it.** The 300 drives a 533 kHz clock on J2 pin 2 (HSKi; the port's CTS pin, IO8 on
   rev A) the whole time it is on. `serial_out` counts its edges (`docs/traps.md`): clocked after
@@ -1463,14 +1466,16 @@ printer here to test on.
   made on its own, only logs a warning. Clocked is first in `port_policy`'s order: no line-up, line-down or settle reaches
   the ImageWriter logic, and the plain question, `ESC ?` and the StyleWriter's status never go to
   a clocked port. With a clock and nothing named, the board asks `81 00`, `83 40`, `83 3E`,
-  `82 00`. Engine identity `29` makes an auto-found record (`PR_KIND_QDLASER`,
-  `PR_MODEL_PLW300`), shared if there is room; the same printer back is the same record. Any
-  other identity is a QuickDraw LaserWriter AirWriter doesn't support: `/api/printers` carries it
+  `82 00`; an `83 40` refused or unanswered does not end it (an LS's own driver never sends
+  it). Engine identity `29` makes an auto-found record (`PR_KIND_QDLASER`, `PR_MODEL_PLW300`),
+  `0D` an LS's (`PR_MODEL_PLWLS`), shared if there is room; the same printer back is the same
+  record. Any other identity is a QuickDraw LaserWriter AirWriter doesn't support: `/api/printers` carries it
   as `port_unsupported` and the page shows a grayed row at the end of the Printers list
   (`Printer port · Not supported yet`, nothing to open) until the clock goes. Each find logs the
   clock's rate and duty. The port's family is `pr_family_t` (ImageWriter, StyleWriter,
   QuickDraw LaserWriter), the one switch the port policy, the job sink, the link and the test
-  page branch on. A 300 record makes the stored list version 4 (`docs/traps.md`, stored forms).
+  page branch on. A 300 record makes the stored list version 4, an LS record version 5
+  (`docs/traps.md`, stored forms).
 - **The link** (`qd_link.c`). GP-SPI2 as a slave, mode 0, LSB first, clocked from HSKi through
   the GPIO matrix, its MISO on TxD through the matrix and its MOSI fed from the TxD pad, so each
   chunk comes back as the line carried it and is compared bit for bit. Chip select uses no pad
@@ -1632,6 +1637,44 @@ printer here to test on.
   300 dpi in the 300's image area, with its icon and Apple's 300 screen as the Apple panel,
   loaded into the printer as it is made through the same page path: 163,749 bytes of codes in
   Atkinson. The test button prints it, never the cable test, which reads HSKi's level.
+- **The Personal LaserWriter LS** (W-1145). Built from the LS's own driver (Personal LW LS 7.1)
+  and the LaserWriter 300 driver's LS branch, read for facts; no LS has been tried. Wells:
+  shared like the 300 and called expected to work, untested, as the ImageWriter LQ is. Where
+  the two Apple drivers differ, the LS gets what its own driver sends (`qd_spec_t.driver`
+  `QD_DRV_LS`), plus what the board can't work without: `83 3E` (the 300's driver asks an LS
+  it), `8E 00` every 500 ms while a page prints, and `83 01`, `83 02` and `82 00` at rest.
+  - *One page at a time.* Each page waits for the done of the one before, then has `81 00` and
+    its whole setup; no row goes while a page prints. The LS's own driver loads the next page
+    while one prints; the 300's driver 1.2 added a wait for exactly that on an LS. One at a time
+    also means only one page has to fit in a memory nobody has measured. About 8 s more a page
+    after the first than the 300.
+  - *Setup*, in its driver's order: `85`/`86`, `87`, `88`/`89`, the source (`83 51` the
+    cassette, `83 52` the multipurpose tray, IPP `manual`), then `83 9D` with the sheet's paper
+    number as it is, not shifted (Letter `04`, A4 `01`, Legal `0C`, B5 `09`, else `21`), each
+    sent once and its reply taken whatever it is, as its driver reads neither. No `83 40` in a
+    job, no density, no `84 00`.
+  - *Sheets:* Letter, A4, Legal, B5 (`iso_b5_176x250mm`) and #10, each with its driver's setup:
+    top (paper h − image h) / 2 rows, left (paper w − image w + 0xB7) / 16 bytes, the row
+    ((image w + 24) / 8) & ~3 bytes, so Legal's and B5's 2,000 dots go in 252-byte rows and
+    #10's 1,133 in 144, white past the image (`qd_row_bytes`; the rip keeps #10's as 1,136, a
+    whole number of bytes). Letter is `85 C1 86 FF`, `87 EC`, `88 D4 89 FE`.
+  - *Rows* carry its driver's 9-bit length, `0x4000 | (0x200 − n)` (`41 FF` for one byte of
+    codes; the 300's driver sends every model 12 bits). The run codes are the 300's.
+  - *Paper* is `83 02` bit 4, never `83 2A`; `83 02` bit 5 is not read as the cassette.
+    Nothing asks about paper before a page's `8A 01`, as its driver asks nothing: paper out is
+    known after. Paper out as a page prints: `8A 00`, then `8A 01` once bit 4 clears or every
+    15 s, as a person pressing its driver's Continue would, in case the bit stays set until
+    the printer next tries to feed; the state stays out of paper until a try finds paper, and
+    the stall limit counts from the first.
+  - *A jam or the cover:* `8A 00`, the wait until it has stayed clear, `81 00` alone, then the
+    page again from the job's copy with its whole setup; with no copy (the test page), `81 00`
+    and `8A 01` print the page in the printer again. No `84 08`, `83 40` or `83 5D`.
+  - *Memory:* a page budget of 480,000 bytes of codes, a little under the 300's 500,000 (512 KB
+    as Apple shipped both; the 300 took 513,287). The page timeout stays 85 s (its driver's is
+    45 s).
+  - `qdfake.py --engine 0d` is an LS as its driver has it, and logs anything its driver never
+    sends (`83 2A`, `83 A7`, `83 5D`, `83 4C`, `83 4F`, `84 08`) or a row while a page prints;
+    `qdcheck` and `qdinterop` print to it. Its icon is its driver's (`plwls`).
 - **Bench (rev A, board 1, with Wells's Personal LaserWriter 300, 2026-11-12 and 13).** Found
   by itself at 533.5 to 533.7 kHz, duty 49 to 51%; switched off, Offline in about 2 s; switched
   on, the same record. Mac pages and an iPhone page; a manual-slot page chosen from a Mac; a
@@ -1849,8 +1892,15 @@ never been scoped; see 4.
      with no more than its lead though it reached the printer whole (rows sent again printed
      twice). It is counted as unchecked; a chunk that truly never went out would leave rows
      missing with nothing in the log but the count. Every page printed since has been whole.
-   - **The LS and the Select 300.** Only their engine identities (`0D`, else not `29` or `23`)
-     are used, from Apple's driver, to name them as not supported. Neither has been seen.
+   - **The LS** (W-1145). Built from its own driver and never tried. Only an LS can settle: its
+     clock rate and whether rev A's U3 and the SPI slave follow it; whether it minds the `83 40`
+     the probe sends every printer; whether it wants `83 9D`'s value as it is (its driver) or
+     shifted with parity (the 300's driver); how much of a page fits; its real status bytes,
+     above all whether `83 02` bit 4 says no paper at rest and clears when paper goes in, and
+     whether `83 01` bit 1 without it is always an engine fault (the 300's rule, which ends the
+     job; its driver fails only on particular `83 04` and `83 07` bits).
+   - **The Select 300.** Only its engine identity (not `29`, `0D` or `23`) is used, to name it
+     as not supported. Never seen.
    - **Sizes other than Letter.** Legal, Executive, #10, Monarch and A4 use the image areas read
      out of Apple's driver and have not been printed.
    - **`81 00` while a page prints.** Whether it cuts the page is not known, which is why one

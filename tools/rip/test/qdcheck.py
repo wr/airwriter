@@ -1,6 +1,7 @@
 #!/usr/bin/env python3.14
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""The Personal LaserWriter 300's page held to a software printer, twice (W-1102).
+"""The Personal LaserWriter 300's page held to a software printer, twice (W-1102), and the
+Personal LaserWriter LS's (W-1145: `--printer plwls`, decoded by qdfake.py as an LS).
 
 For each page, `rip --printer plw300` runs the firmware's page stage and session and writes
 three things: the packets in qdfake.py's framing (--out-qd), the line the board clocks out
@@ -29,8 +30,10 @@ QDFAKE = HERE.parents[1] / "qdlaser" / "qdfake.py"
 FIX = HERE.parents[2] / "fixtures"
 PAGES = (FIX / "checker.urf", FIX / "ios-20260804-232652.urf")
 SCREENS = ("atkinson", "apple")
-# The image area's height for each of the 300's sheets, and the page height a client sends.
-SHEETS = {3175: 3300, 3750: 4200, 3025: 3150, 2725: 2850, 2125: 2250, 3375: 3508}
+PRINTERS = {"plw300": "29", "plwls": "0d"}
+# The image area's height for each of the 300's and the LS's sheets, and the page height a
+# client sends.
+SHEETS = {3175: 3300, 3750: 4200, 3025: 3150, 2725: 2850, 2125: 2250, 3375: 3508, 2825: 2953}
 
 
 def read_pbm(path):
@@ -47,13 +50,16 @@ def run(cmd):
         raise RuntimeError(f"{' '.join(map(str, cmd))}\n{r.stdout}{r.stderr}")
 
 
-def check(page, screen, tmp):
-    d = pathlib.Path(tmp) / f"{page.stem}-{screen}"
+def check(page, screen, printer, tmp):
+    d = pathlib.Path(tmp) / f"{page.stem}-{screen}-{printer}"
     d.mkdir()
-    run([RIP, "--in", page, "--printer", "plw300", "--dither", screen, "--out-qd", d / "s.bin",
+    engine = PRINTERS[printer]
+    run([RIP, "--in", page, "--printer", printer, "--dither", screen, "--out-qd", d / "s.bin",
          "--out-qd-bits", d / "b.bin", "--out-pbm", d / "p.pbm"])
-    run([sys.executable, QDFAKE, "decode", d / "s.bin", "--out", d / "a", "--no-png"])
-    run([sys.executable, QDFAKE, "decode-bits", d / "b.bin", "--out", d / "b", "--no-png"])
+    run([sys.executable, QDFAKE, "decode", d / "s.bin", "--out", d / "a", "--no-png",
+         "--engine", engine])
+    run([sys.executable, QDFAKE, "decode-bits", d / "b.bin", "--out", d / "b", "--no-png",
+         "--engine", engine])
     mine = read_pbm(d / "p.pbm")
     a, b = read_pbm(d / "a" / "page-1.pbm"), read_pbm(d / "b" / "page-1.pbm")
     problems = []
@@ -77,16 +83,17 @@ def main():
         sys.exit("qdcheck: build rip first: make -C tools/rip qdcheck")
     failed = 0
     with tempfile.TemporaryDirectory() as t:
-        for page in PAGES:
-            for screen in SCREENS:
-                problems = check(page, screen, t)
-                what = f"{page.name} in {screen}"
-                if problems:
-                    failed += 1
+        for printer in PRINTERS:
+            for page in PAGES:
+                for screen in SCREENS:
+                    problems = check(page, screen, printer, t)
+                    what = f"{page.name} in {screen} for {printer}"
                     for p in problems:
                         print(f"FAIL qdcheck {what}: {p}")
-                else:
-                    print(f"ok  qdcheck {what}: packets, line image and the rip's dots agree")
+                    if problems:
+                        failed += 1
+                    else:
+                        print(f"ok  qdcheck {what}: packets, line image and the rip's dots agree")
     return 1 if failed else 0
 
 

@@ -2,8 +2,9 @@
 //
 // W-1102: the page stage for a QuickDraw LaserWriter, the rip's last step, as sw_page.h is for a
 // StyleWriter. It takes the page's 300 dpi rows, keeps the sheet's image area (the rows from
-// (page_h - img_h) / 2 down, img_w dots across, cut or padded with white), run-codes each row on
-// its own (sw_code_row with no row before) and hands the codes to a sink as they are made.
+// (page_h - img_h) / 2 down, img_w dots across, cut or padded with white to the row the
+// printer is told, qd_row_bytes), run-codes each row on its own (sw_code_row with no row
+// before) and hands the codes to a sink as they are made.
 //
 // The printer holds about half a megabyte of codes and a page that runs out mid-load is lost, so
 // the stage counts what it sends against a budget. While the record's screen is not Apple's, it

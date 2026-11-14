@@ -82,13 +82,16 @@ pr_model_t pr_model_from_sw(sw_model_t m)
 
 qd_model_t pr_model_to_qd(pr_model_t m)
 {
-    return m == PR_MODEL_PLW300 ? QD_PLW300 : QD_NONE;
+    return m == PR_MODEL_PLW300 ? QD_PLW300 : m == PR_MODEL_PLWLS ? QD_PLWLS : QD_NONE;
 }
 
 pr_model_t pr_model_from_qd(qd_model_t m)
 {
-    return m == QD_PLW300 ? PR_MODEL_PLW300 : PR_MODEL_NONE;
+    return m == QD_PLW300 ? PR_MODEL_PLW300 : m == QD_PLWLS ? PR_MODEL_PLWLS : PR_MODEL_NONE;
 }
+
+// W-1145: the QuickDraw LaserWriters' models, which only the port finds (never named by hand).
+static int model_is_qd(int m) { return m == PR_MODEL_PLW300 || m == PR_MODEL_PLWLS; }
 
 int pr_has_apple_screen(int kind)
 {
@@ -154,7 +157,8 @@ const char *pr_icon(int kind, int model, const lw_info_t *lw)
     case PR_MODEL_SWC2200: return "csw2200";
     case PR_MODEL_SWC2400:
     case PR_MODEL_SWC2500: return "stylewriter";
-    case PR_MODEL_PLW300:  return qd_spec(QD_PLW300)->icon;
+    case PR_MODEL_PLW300:
+    case PR_MODEL_PLWLS:   return qd_spec(pr_model_to_qd((pr_model_t)model))->icon;
     default:               return kind == PR_KIND_STYLEWRITER ? "stylewriter"
                                 : kind == PR_KIND_QDLASER ? qd_spec(QD_PLW300)->icon : "icon";
     }
@@ -407,7 +411,7 @@ static pr_rec_t *rec_new(pr_list_t *l)
 static void port_uuid(const pr_list_t *l, char out[46], int model)
 {
     static const uint8_t tag[] = { 1, 1 };
-    int family = model_is_sw(model) ? 2 : model == PR_MODEL_PLW300 ? 3 : 1;
+    int family = model_is_sw(model) ? 2 : model_is_qd(model) ? 3 : 1;
     char cand[46];
     lw_uuid(cand, l->mac, l->epoch, tag);
     for (int k = 0; k < 16; k++) {
@@ -463,7 +467,7 @@ static void become_stylewriter(pr_list_t *l, pr_rec_t *r, int model)
 static void become_model(pr_list_t *l, pr_rec_t *r, int model)
 {
     if (model_is_sw(model)) become_stylewriter(l, r, model);
-    else if (model == PR_MODEL_PLW300) become_port_printer(l, r, PR_KIND_QDLASER, model);
+    else if (model_is_qd(model)) become_port_printer(l, r, PR_KIND_QDLASER, model);
     else become_imagewriter(l, r, model);
 }
 
@@ -579,7 +583,7 @@ int pr_port_seen_qd(pr_list_t *l, uint8_t engine)
 void pr_port_clock_gone(pr_list_t *l)
 {
     l->qd_other = l->qd_pending = 0;
-    if (l->pending_model == PR_MODEL_PLW300) l->pending_model = 0;
+    if (model_is_qd(l->pending_model)) l->pending_model = 0;
 }
 
 int pr_port_sw_found(pr_list_t *l, int id, pr_model_t m)
@@ -1082,6 +1086,11 @@ enum { HDR = 6 };
 // (pr_blob_newer) for the next update.
 static uint8_t blob_version(const pr_list_t *l)
 {
+    // W-1145: 5 holds a Personal LaserWriter LS, which a 4 never does.
+    for (int i = 0; i < l->n; i++)
+        if (l->r[i].model == PR_MODEL_PLWLS) return 5;
+    for (int i = 0; i < l->n_notes; i++)
+        if (l->notes[i].model == PR_MODEL_PLWLS) return 5;
     // W-1102: 4 holds a QuickDraw LaserWriter; a 3 never does, so a board rolled back keeps a 4
     // untouched (pr_blob_newer).
     for (int i = 0; i < l->n; i++)
@@ -1115,10 +1124,12 @@ int pr_load(pr_list_t *l, const uint8_t *buf, size_t n)
     // W-1103: a version 1 list has the ImageWriter kinds and models only. The
     // layout is the same, so what it may hold is all that differs; a 3 (W-1116,
     // a second port record) holds what a 2 does.
-    // W-1102: a 4 adds the QuickDraw LaserWriter's kind and model.
+    // W-1102: a 4 adds the QuickDraw LaserWriter's kind and model; W-1145: a 5 its second
+    // model, the LS.
     int max_kind = buf[2] == 1 ? PR_KIND_AT_IMAGEWRITER : buf[2] <= 3 ? PR_KIND_STYLEWRITER
                  : PR_KIND_QDLASER;
-    int max_model = buf[2] == 1 ? PR_MODEL_IW1 : buf[2] <= 3 ? PR_MODEL_SWC2500 : PR_MODEL_PLW300;
+    int max_model = buf[2] == 1 ? PR_MODEL_IW1 : buf[2] <= 3 ? PR_MODEL_SWC2500
+                  : buf[2] == 4 ? PR_MODEL_PLW300 : PR_MODEL_PLWLS;
     uint8_t cnt = buf[3], notes = buf[5];
     if (cnt > PR_MAX || notes > PR_NOTES_MAX) return -1;
     if (n != HDR + (size_t)cnt * sizeof(pr_rec_t) + (size_t)notes * sizeof(pr_note_t)) return -1;
@@ -1129,7 +1140,7 @@ int pr_load(pr_list_t *l, const uint8_t *buf, size_t n)
         memcpy(&r, buf + HDR + (size_t)i * sizeof r, sizeof r);
         if (!r.id || r.kind > max_kind || r.where > PR_WHERE_ZONE || r.model > max_model ||
             (r.kind == PR_KIND_STYLEWRITER) != model_is_sw(r.model) ||
-            (r.kind == PR_KIND_QDLASER) != (r.model == PR_MODEL_PLW300) ||
+            (r.kind == PR_KIND_QDLASER) != model_is_qd(r.model) ||
             !memchr(r.name, 0, sizeof r.name) ||
             !memchr(r.uuid, 0, sizeof r.uuid) || !memchr(r.dither, 0, sizeof r.dither))
             return -1;

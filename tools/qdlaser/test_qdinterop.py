@@ -1,7 +1,7 @@
 #!/usr/bin/env python3.14
 # SPDX-License-Identifier: GPL-3.0-or-later
 """The firmware's Personal LaserWriter 300 code against a software one, on this computer (W-1102,
-W-1144).
+W-1144), and its Personal LaserWriter LS code against a software LS (W-1145).
 
 tools/rip/build/qdhost is the board's session, page stage and rip built for the host; it
 prints over a pseudo-terminal that qdfake.py serves, in qdfake's framing (the clock the
@@ -34,8 +34,11 @@ Scenarios, each its own qdfake and qdhost, side by side:
   * paper, the cassette, a jam and the cover during a page, then put right: qdhost shows
     the state and the page prints (after a jam, once more from the printer's memory)
   * the manual slot, with a sheet in it and without (qdhost asks; a sheet goes in)
-  * the printer switched off mid-page, SIGINT mid-page, a Personal LaserWriter LS, a row
-    whose check fails
+  * the printer switched off mid-page, SIGINT mid-page, a row whose check fails
+  * a Personal LaserWriter LS (qdfake --engine 0d): three pages, each loaded only once the
+    one before is done, 81 00 and the whole setup before each, nothing its own driver never
+    sends; one that refuses 83 40; paper out and a jam as a page prints, put right; a
+    QuickDraw LaserWriter AirWriter has no model for, which gets nothing after the identity
 
 qdfake prints a page in 2 s here (--done), so the lot takes about 35 s.
 
@@ -199,9 +202,9 @@ def sh(cmd):
     return r
 
 
-def expected(urf, tmp, tag, screen="atkinson"):
+def expected(urf, tmp, tag, screen="atkinson", printer="plw300"):
     p = pathlib.Path(tmp) / f"exp-{tag}.pbm"
-    sh([RIP, "--in", urf, "--printer", "plw300", "--dither", screen, "--out-pbm", p])
+    sh([RIP, "--in", urf, "--printer", printer, "--dither", screen, "--out-pbm", p])
     return read_pbm(p)
 
 
@@ -231,11 +234,12 @@ ROWS = 3175                                 # a Letter page's rows
 
 
 def trouble(fake):
-    """What the fake printer answered with a blank, moved or wrong sheet."""
+    """What the fake printer answered with a blank, moved or wrong sheet, or (an LS) heard that
+    its own driver never sends."""
     return [e for e in fake.events()
             if e.startswith(("blank", "moved", "wrong page", "memory full", "8A 01 while",
                              "rows while", "81 00 while", "84 08 while", "fed by itself",
-                             "jammed again"))]
+                             "jammed again", "not the LS's", "row length"))]
 
 
 def timeline(fake):
@@ -263,7 +267,7 @@ def rows_while_printing(fake):
     return n
 
 
-async def in_order(fake, tmp, tag, files, screens=None, twice=None):
+async def in_order(fake, tmp, tag, files, screens=None, twice=None, printer="plw300"):
     """The pages the fake printed against the rip's of each file, in order. A problem, or None.
     twice: the index of a page that may have come out a second time, straight after the first."""
     got = fake.pages()
@@ -274,7 +278,7 @@ async def in_order(fake, tmp, tag, files, screens=None, twice=None):
     want = []
     for i, f in enumerate(files):
         screen = screens[i] if screens else "atkinson"
-        want.append(await asyncio.to_thread(expected, f, tmp, f"{tag}-{i}", screen))
+        want.append(await asyncio.to_thread(expected, f, tmp, f"{tag}-{i}", screen, printer))
     for i in range(1, len(want)):
         if files[i] != files[i - 1] and want[i].shape == want[i - 1].shape and not (want[i] != want[i - 1]).any():
             return f"pages {i} and {i + 1} are the same: the order would not show"
@@ -592,14 +596,68 @@ async def scenario_cancel(root, page):
             (len(fake.pages()) == 0, f"SIGINT: nothing printed ({len(fake.pages())})")]
 
 
-async def scenario_ls(root, page):
-    fake = await Fake.start(root, "ls", "--engine", "0d")
+# ---- W-1145: a Personal LaserWriter LS
+
+async def scenario_ls(root, tmp, files):
+    fake = await Fake.start(root, "ls", "--engine", "0d", "--done", DONE_S)
+    run = await Run.start(fake.path, *files)
+    code = await run.wait(90)
+    await fake.stop()
+    heard, ev = fake.heard(), fake.events()
+    order = await in_order(fake, tmp, "ls", files, printer="plwls")
+    bad = trouble(fake)
+    n = len(files)
+    return [(code == 0, f"an LS: {n} pages print (exit {code}) {tail(run)}"),
+            ("found: Personal LaserWriter LS" in run.text, "an LS: qdhost names it"),
+            (order is None, f"an LS: whole and in order ({order})"),
+            (rows_while_printing(fake) == 0,
+             f"an LS: no row while a page prints ({rows_while_printing(fake)})"),
+            (not bad, f"an LS: nothing blank, moved, or never sent by its driver ({bad[:2]})"),
+            # 81 00: qdhost's first question, the job's begin, each page's setup, the end.
+            (heard.count("810081") == 3 + n and heard.count("8351d2") == n,
+             f"an LS: 81 00 and 83 51 before each page ({heard.count('810081')} x 81 00, "
+             f"{heard.count('8351d2')} x 83 51)"),
+            (ev.count("paper number 04") == n, f"an LS: Letter's number with each page ({ev[:3]})"),
+            (heard.count("8340c3") == 1, f"an LS: 83 40 only in qdhost's first question ({heard.count('8340c3')})")]
+
+
+async def scenario_ls_refuses_40(root, page):
+    fake = await Fake.start(root, "ls-refuses-40", "--engine", "0d", "--refuse-40")
+    run = await Run.start(fake.path, page)
+    code = await run.wait(60)
+    await fake.stop()
+    return [(code == 0 and len(fake.pages()) == 1,
+             f"an LS that refuses 83 40: found and printed (exit {code}, {len(fake.pages())} page) {tail(run)}")]
+
+
+async def scenario_ls_fault(root, tmp, page, fault):
+    fake = await Fake.start(root, f"ls-{fault}", "--engine", "0d", "--done", 4)
+    run = await Run.start(fake.path, page)
+    printing = await until(lambda: "print" in fake.events(), 30)
+    await fake.say(fault)
+    shown = await until(lambda: STATES[fault] in run.text, 20)
+    await asyncio.sleep(0.5)
+    await fake.say("ok")
+    code = await run.wait()
+    await fake.stop()
+    order = await in_order(fake, tmp, f"ls-{fault}", [page], printer="plwls")
+    bad = trouble(fake)
+    res = [(printing and shown, f"an LS, {fault} as a page prints: qdhost shows \"{STATES[fault]}\" {tail(run)}"),
+           (code == 0 and order is None, f"an LS, {fault}: put right, the page prints whole (exit {code}, {order})"),
+           (not bad, f"an LS, {fault}: nothing its driver never sends ({bad[:2]})")]
+    if fault == "jam":
+        res.append(("page 1 sent again after a jam" in run.text, "an LS, jam: the page goes again from the copy"))
+    return res
+
+
+async def scenario_unsupported(root, page):
+    fake = await Fake.start(root, "unsupported", "--engine", "23")
     run = await Run.start(fake.path, page)
     code = await run.wait(30)
     await fake.stop()
     heard = fake.heard()
-    return [(code == 1, f"a Personal LaserWriter LS: exit 1 (exit {code}) {tail(run)}"),
-            ("Personal LaserWriter LS" in run.text, "qdhost names it"),
+    return [(code == 1, f"a QuickDraw LaserWriter with no model: exit 1 (exit {code}) {tail(run)}"),
+            ("does not support" in run.text, "qdhost says so"),
             (heard == ["810081", "8340c3", "833ebd", "820082"], f"nothing after the identity ({heard[:8]})")]
 
 
@@ -650,7 +708,11 @@ async def main():
             scenario_manual(root, pages["small"], False),
             scenario_silent(root, pages["letter"]),
             scenario_cancel(root, pages["letter"]),
-            scenario_ls(root, pages["small"]),
+            scenario_ls(root, tmp, ten[:3]),
+            scenario_ls_refuses_40(root, pages["small"]),
+            scenario_ls_fault(root, tmp, ten[0], "paper"),
+            scenario_ls_fault(root, tmp, ten[0], "jam"),
+            scenario_unsupported(root, pages["small"]),
             scenario_badrow(root, pages["small"]),
         ]
         for results in await asyncio.gather(*scenarios):

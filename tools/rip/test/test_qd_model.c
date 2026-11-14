@@ -1,16 +1,19 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // W-1102: the QuickDraw LaserWriters' model table: the Personal LaserWriter 300's sheets, the
-// setup values its page is sent with, and what AirPrint is told about it.
+// setup values its page is sent with, and what AirPrint is told about it. W-1145: the LS's.
 #include "test_util.h"
 #include "qd_model.h"
 #include "apple_tables_lw.h"
+#include "qd_wire.h"
+#include "sw_code.h"
 
 static void test_letter(void)
 {
     const qd_spec_t *s = qd_spec(QD_PLW300);
     CHECK(s && s->engine == 0x29 && s->budget == 500000 && s->density == 32);
     if (!s) return;
-    CHECK_EQ_INT(s->ctrl, 2);
+    CHECK_EQ_INT(s->driver, QD_DRV_LW300);
+    CHECK_EQ_INT(s->row_bits, 12);
     CHECK_EQ_INT(s->src_cassette, 0x4C);
     CHECK_EQ_INT(s->src_manual, 0x4F);
     CHECK_EQ_INT(s->bit_cassette, 0x20);
@@ -26,6 +29,8 @@ static void test_letter(void)
     CHECK_EQ_INT(l->img_w, 2400);   CHECK_EQ_INT(l->img_h, 3175);
     qd_setup_t u = qd_setup(l);
     CHECK_EQ_INT(u.top, -62); CHECK_EQ_INT(u.left, -35); CHECK_EQ_INT(u.width, -300);
+    CHECK_EQ_INT(qd_row_bytes(l), 300);
+    for (int i = 0; i < s->n_media; i++) CHECK_EQ_INT(s->media[i].size, 0x21);
     CHECK(qd_spec(QD_NONE) == NULL);
     CHECK(qd_spec(QD_MODELS) == NULL);
     CHECK(qd_spec((qd_model_t)-1) == NULL);
@@ -34,13 +39,70 @@ static void test_letter(void)
 static void test_engine_names(void)
 {
     CHECK_EQ_INT(qd_model_from_engine(0x29), QD_PLW300);
-    CHECK_EQ_INT(qd_model_from_engine(0x0D), QD_NONE);
+    CHECK_EQ_INT(qd_model_from_engine(0x0D), QD_PLWLS);
     CHECK_EQ_INT(qd_model_from_engine(0x23), QD_NONE);
     CHECK_EQ_INT(qd_model_from_engine(0x55), QD_NONE);
     CHECK(!strcmp(qd_engine_name(0x29), "Personal LaserWriter 300"));
     CHECK(!strcmp(qd_engine_name(0x0D), "Personal LaserWriter LS"));
     CHECK(qd_engine_name(0x23) == NULL);
     CHECK(!strcmp(qd_engine_name(0x55), "LaserWriter Select 300"));
+}
+
+// W-1145: the LS, from its own driver (Personal LW LS 7.1): its sources, no density, paper from
+// 83 02, 9-bit rows, and each sheet's setup by the driver's rule, from its paper and Apple's
+// image area: top (paper h - image h) / 2, left (paper w - image w + 0xB7) / 16, the row
+// ((image w + 24) / 8) & ~3 bytes. #10's area is 1,133 dots, kept as 1,136.
+static void test_ls(void)
+{
+    const qd_spec_t *s = qd_spec(QD_PLWLS);
+    CHECK(s != NULL);
+    if (!s) return;
+    CHECK(!strcmp(s->name, "Personal LaserWriter LS"));
+    CHECK(!strcmp(s->icon, "plwls"));
+    CHECK_EQ_INT(s->engine, 0x0D);
+    CHECK_EQ_INT(s->driver, QD_DRV_LS);
+    CHECK_EQ_INT(s->src_cassette, 0x51);
+    CHECK_EQ_INT(s->src_manual, 0x52);
+    CHECK_EQ_INT(s->density_cmd, 0);
+    CHECK_EQ_INT(s->row_bits, 9);
+    CHECK(s->budget > 0 && s->budget <= 500000);
+    CHECK(s->screen8 == apple_lw_screen8 && s->tone == apple_lw_tone);
+    static const struct { const char *media; int area_w, size, top, left, width; } want[] = {
+        { "na_letter_8.5x11in",       2400, 0x04,  63, 20, 300 },
+        { "iso_a4_210x297mm",         2400, 0x01,  63, 16, 300 },
+        { "na_legal_8.5x14in",        2000, 0x0C, 225, 45, 252 },
+        { "iso_b5_176x250mm",         2000, 0x09,  63, 16, 252 },
+        { "na_number-10_4.125x9.5in", 1133, 0x21,  63, 18, 144 },
+    };
+    CHECK_EQ_INT(s->n_media, 5);
+    for (int i = 0; i < s->n_media && i < 5; i++) {
+        const qd_media_t *m = &s->media[i];
+        CHECK(!strcmp(m->media, want[i].media));
+        CHECK_EQ_INT(m->size, want[i].size);
+        CHECK_EQ_INT(m->img_w, (want[i].area_w + 7) / 8 * 8);
+        qd_setup_t u = qd_setup(m);
+        CHECK_EQ_INT(-u.top, (m->paper_h - m->img_h) / 2);
+        CHECK_EQ_INT(-u.left, (m->paper_w - want[i].area_w + 0xB7) / 16);
+        CHECK_EQ_INT(-u.width, ((want[i].area_w + 24) / 8) & ~3);
+        CHECK_EQ_INT(-u.top, want[i].top);
+        CHECK_EQ_INT(-u.left, want[i].left);
+        CHECK_EQ_INT(-u.width, want[i].width);
+        CHECK_EQ_INT(qd_row_bytes(m), (size_t)want[i].width);
+        CHECK(qd_row_bytes(m) * 8 >= m->img_w);
+        CHECK(qd_media_for(QD_PLWLS, m->img_w, m->page_h) == m);
+    }
+    const printer_caps_t *c = qd_caps(QD_PLWLS);
+    CHECK(c != NULL);
+    if (!c) return;
+    CHECK(!strcmp(c->make_model, "Apple Personal LaserWriter LS"));
+    CHECK(!strcmp(c->device_id, "MFG:Apple;MDL:Personal LaserWriter LS;CMD:URF;"));
+    CHECK(!strcmp(c->urf_rs, "RS300"));
+    CHECK_EQ_INT(c->n_media, s->n_media);
+    CHECK_EQ_INT(c->n_sources, 2);
+    for (int i = 0; i < c->n_media; i++) {
+        CHECK(!strcmp(c->media_list[i].media, s->media[i].media));
+        CHECK_EQ_INT(c->media_list[i].rip_w, s->media[i].img_w);
+    }
 }
 
 static void test_media_for(void)
@@ -102,7 +164,8 @@ static void test_caps(void)
 
 static void test_every_size_fits(void)
 {
-    const qd_spec_t *s = qd_spec(QD_PLW300);
+    for (qd_model_t md = QD_PLW300; md < QD_MODELS; md++) {
+    const qd_spec_t *s = qd_spec(md);
     CHECK(s->n_media >= 1 && s->n_media <= 6);
     for (int i = 0; i < s->n_media; i++) {
         const qd_media_t *m = &s->media[i];
@@ -113,6 +176,9 @@ static void test_every_size_fits(void)
         CHECK(u.left >= -63 && u.left <= 0);
         CHECK(u.top <= 0);
         CHECK(u.width <= -(m->img_w / 8));
+        CHECK(qd_row_bytes(m) * 8 >= m->img_w);
+        CHECK(sw_code_max(qd_row_bytes(m)) <= qd_row_max(s->row_bits));
+    }
     }
 }
 
@@ -120,6 +186,7 @@ int main(void)
 {
     test_letter();
     test_engine_names();
+    test_ls();
     test_media_for();
     test_caps();
     test_every_size_fits();

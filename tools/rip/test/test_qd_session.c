@@ -11,6 +11,8 @@
 //   8340   the packet 83 40 (its check is held to cmd ^ arg, and counted in bad when not)
 //   =21    a value packet after 83 9D or 83 A7, with the value it carries
 //   R*n    n row packets in a row
+// W-1145: with `ls` set it is a Personal LaserWriter LS as its own driver has it: rows with a
+// 9-bit length, 83 9D's value as it is, no paper as 83 02 bit 4.
 #include "test_util.h"
 #include "qd_session.h"
 #include "qd_wire.h"
@@ -92,6 +94,12 @@ typedef struct {
     int nprint, ndone;
     struct { qd_event_t ev; int page; uint32_t ms; } ev[64];
     int nev;
+    // W-1145
+    int ls;                      // a Personal LaserWriter LS
+    int refuse40, silent40;      // 83 40 answers 80, or nothing
+    int latch;                   // 83 02 bit 4 stays set after paper comes back, until an 8A 01
+    int latched;
+    int bad_9d;                  // 83 9D and its value are answered 80
 } fake_t;
 
 static fake_t F;
@@ -192,7 +200,9 @@ static uint8_t reg(uint8_t which)
     in_win(&a, &b, &np);
     switch (which) {
     case 0x01: return odd((uint8_t)(F.s01 | a | (F.printing ? 0x20 : 0)));
-    case 0x02: return odd((uint8_t)(F.s02 | b));
+    case 0x02:
+        if (F.ls && np && F.latch) F.latched = 1;
+        return odd((uint8_t)(F.s02 | b | (F.ls && (np || F.latched) ? 0x10 : 0)));
     case 0x04: return odd(F.s04);
     case 0x07: return odd(F.s07);
     case 0x2A: return odd(np ? 0 : F.s2a);
@@ -214,10 +224,11 @@ static int f_put(void *ctx, const uint8_t *p, size_t n)
     if (F.nraw < 16 && n <= 8) memcpy(F.raw[F.nraw++], p, n);
     char t[16];
     if (p[0] < 0x80) {
-        unsigned len = 0x5000u - ((unsigned)p[0] << 8 | p[1]);
+        unsigned len = F.ls ? 0x200u - (((unsigned)p[0] << 8 | p[1]) & 0x1FF)
+                            : 0x5000u - ((unsigned)p[0] << 8 | p[1]);
         uint8_t x = 0;
         for (size_t i = 0; i + 1 < n; i++) x ^= p[i];
-        if (len + 3 != n || x != p[n - 1]) F.bad++;
+        if (len + 3 != n || x != p[n - 1] || (F.ls && (p[0] & 0xFE) != 0x40)) F.bad++;
         F.rows++;
         if (!F.rows_l) F.id_l = p[2];
         F.rows_l++;
@@ -235,10 +246,10 @@ static int f_put(void *ctx, const uint8_t *p, size_t n)
     if (F.value_next && p[0] == 0x83) {
         F.value_next = 0;
         uint8_t v = p[1];
-        if (odd(v) != v) F.bad++;
-        snprintf(t, sizeof t, "=%02X", v >> 1);
+        if (!F.ls && odd(v) != v) F.bad++;
+        snprintf(t, sizeof t, "=%02X", F.ls ? v : v >> 1);
         tok(t);
-        reply(odd(0));
+        reply(F.bad_9d ? 0x80 : odd(0));
         return 0;
     }
     snprintf(t, sizeof t, "%02X%02X", p[0], p[1]);
@@ -252,6 +263,9 @@ static int f_put(void *ctx, const uint8_t *p, size_t n)
             if (F.refuse01) { F.refuse01--; reply(0x80); break; }
         }
         if (p[1] == 0x4C && F.silent_4c) break;
+        if (p[1] == 0x40 && F.silent40) break;
+        if (p[1] == 0x40 && F.refuse40) { reply(0x80); break; }
+        if (p[1] == 0x9D && F.bad_9d) { reply(0x80); break; }
         reply(reg(p[1]));
         if (p[1] == 0x02 && !F.silent) F.told = (reg(0x02) & 0x0C) != 0;
         break;
@@ -277,6 +291,12 @@ static int f_put(void *ctx, const uint8_t *p, size_t n)
     case 0x8A:
         if (p[1] == 0x01) {
             if (F.printing) { F.twice++; break; }
+            {
+                uint8_t a8 = 0, b8 = 0;
+                int np8 = 0;
+                in_win(&a8, &b8, &np8);
+                if (!np8) F.latched = 0;        // a try to feed reads the paper afresh
+            }
             if (!F.first_print) F.first_print = f_now() ? f_now() : 1;
             F.printing = 1;
             F.print_start = f_now();
@@ -1953,6 +1973,328 @@ static void test_copy_of_a_page_opened_again(void)
     qd_session_free(s);
 }
 
+// ---- W-1145: the Personal LaserWriter LS, as its own driver talks to it
+
+static void fake_ls(void)
+{
+    fake_reset();
+    F.ls = 1;
+    F.engine = 0x0D;
+    F.s2a = 0;                          // never asked: an LS's paper is 83 02's
+}
+
+static const qd_media_t *ls_sheet(int i) { return &qd_spec(QD_PLWLS)->media[i]; }
+
+// The commands the LS's own driver never sends, in the trace.
+static int not_ls(void)
+{
+    static const char *const t[] = { "8340", "83A7", "832A", "835D", "834C", "834F", "8408" };
+    int n = 0;
+    for (size_t i = 0; i < sizeof t / sizeof t[0]; i++) n += count_tok(t[i]);
+    return n;
+}
+
+static qd_session_t *ls_job(int manual, uint8_t *copy, size_t cap)
+{
+    qd_job_cfg_t c = { .model = QD_PLWLS, .manual = manual, .copy = copy, .copy_cap = cap };
+    qd_session_t *s = qd_session_new(&g_ops, &c);
+    CHECK(s != NULL);
+    if (s) CHECK_EQ_INT(qd_session_begin(s), QD_OK);
+    return s;
+}
+
+// 83 40 goes to every printer before it says which it is. An LS that refuses it, or says
+// nothing to it, is asked who it is all the same.
+static void test_ls_probe_takes_a_refused_8340(void)
+{
+    fake_ls();
+    F.refuse40 = 1;
+    uint8_t e = 0, c = 0;
+    CHECK_EQ_INT(qd_ask_identity(&g_ops, &e, &c), QD_OK);
+    CHECK_EQ_INT(e, 0x0D);
+    CHECK_EQ_INT(count_tok("8340"), 5);         // tried as any 83 is, then let go
+    CHECK(ends_with("833E 8200"));
+    fake_ls();
+    F.silent40 = 1;
+    CHECK_EQ_INT(qd_ask_identity(&g_ops, &e, &c), QD_OK);
+    CHECK_EQ_INT(e, 0x0D);
+    fake_ls();
+    F.silent = 1;                               // nobody there is still offline
+    CHECK_EQ_INT(qd_ask_identity(&g_ops, &e, &c), QD_E_OFFLINE);
+    CHECK_EQ_INT(last_state(), QDS_OFFLINE);
+}
+
+// A page as the LS's driver sends one: its setup in its order, 83 9D with Letter's number as
+// it is, 9-bit rows, the print sequence; nothing it never sends.
+static void test_ls_page(void)
+{
+    fake_ls();
+    qd_session_t *s = ls_job(0, NULL, 0);
+    CHECK_STR(F.trace, "8100 833E 8200 8301");
+    trace_clear();
+    CHECK_EQ_INT(qd_session_open(s, 1, ls_sheet(0)), QD_OK);
+    CHECK_STR(F.trace, "8100 833E 8200 85C1 86FF 87EC 88D4 89FE 8351 839D =04 8401");
+    CHECK_EQ_INT(rows(s, 3175), QD_OK);
+    CHECK_EQ_INT(qd_session_print(s), QD_OK);
+    // No paper question before 8A 01: its driver asks none; paper out is known after.
+    CHECK(!strncmp(after("8E00"), "8E00 8200 8302 8401 8B8B 8B8B 8A01", 34));
+    CHECK_EQ_INT(qd_session_end(s), QD_OK);
+    CHECK(ends_with("8E00 8301 8100 8401"));
+    CHECK_EQ_INT(last_state(), QDS_READY);
+    CHECK_EQ_INT(F.rows, 3175);
+    CHECK_EQ_INT(F.bad, 0);
+    CHECK_EQ_INT(not_ls(), 0);
+    // A 300 job refuses it, and an LS job a 300.
+    qd_session_free(s);
+    fake_ls();
+    qd_job_cfg_t c = { .model = QD_PLW300 };
+    s = qd_session_new(&g_ops, &c);
+    CHECK_EQ_INT(qd_session_begin(s), QD_E_MODEL);
+    qd_session_free(s);
+    fake_reset();
+    qd_job_cfg_t d = { .model = QD_PLWLS };
+    s = qd_session_new(&g_ops, &d);
+    CHECK_EQ_INT(qd_session_begin(s), QD_E_MODEL);
+    qd_session_free(s);
+}
+
+// One page at a time: the next page waits for the done, then has 81 00 and its whole setup.
+static void test_ls_one_page_at_a_time(void)
+{
+    fake_ls();
+    qd_session_t *s = ls_job(0, NULL, 0);
+    CHECK_EQ_INT(qd_session_open(s, 1, ls_sheet(0)), QD_OK);
+    CHECK_EQ_INT(rows(s, 3175), QD_OK);
+    CHECK_EQ_INT(qd_session_print(s), QD_OK);
+    trace_clear();
+    uint32_t t0 = f_now();
+    CHECK_EQ_INT(qd_session_open(s, 2, ls_sheet(0)), QD_OK);
+    CHECK(f_now() - t0 >= 12500);
+    CHECK_HAS(F.trace, "8100 833E 8200 85C1 86FF 87EC 88D4 89FE 8351 839D =04 8401");
+    CHECK_EQ_INT(ev_count(QD_EV_DONE), 1);
+    CHECK_EQ_INT(rows(s, 3175), QD_OK);
+    CHECK_EQ_INT(qd_session_print(s), QD_OK);
+    CHECK_EQ_INT(qd_session_end(s), QD_OK);
+    CHECK_EQ_INT(F.rows_while, 0);
+    CHECK_EQ_INT(F.blanked + F.twice + F.moved, 0);
+    CHECK_EQ_INT(ev_count(QD_EV_DONE), 2);
+    CHECK_EQ_INT(not_ls(), 0);
+    qd_session_free(s);
+}
+
+// Legal from the multipurpose tray: Legal's setup and number, 83 52; the job's end sets the
+// cassette back with the LS's own command.
+static void test_ls_legal_from_the_tray(void)
+{
+    fake_ls();
+    qd_session_t *s = ls_job(1, NULL, 0);
+    trace_clear();
+    CHECK_EQ_INT(qd_session_open(s, 1, ls_sheet(2)), QD_OK);
+    CHECK_STR(F.trace, "8100 833E 8200 851F 86FF 87D3 8804 89FF 8352 839D =0C 8401");
+    CHECK_EQ_INT(rows(s, 3750), QD_OK);
+    CHECK_EQ_INT(qd_session_print(s), QD_OK);
+    CHECK_EQ_INT(qd_session_end(s), QD_OK);
+    CHECK(ends_with("8301 8351 8100 8401"));
+    CHECK_EQ_INT(not_ls(), 0);
+    qd_session_free(s);
+}
+
+// No paper is 83 02's bit 4. Before the print nothing is asked about paper (the tray empty:
+// 8A 01 goes, the sheet doesn't feed, and the page waits); as a page prints, 8A 00 and 8A 01
+// again once it is back.
+static void test_ls_paper(void)
+{
+    fake_ls();
+    qd_session_t *s = ls_job(1, NULL, 0);
+    CHECK_EQ_INT(qd_session_open(s, 1, ls_sheet(0)), QD_OK);
+    CHECK_EQ_INT(rows(s, 3175), QD_OK);
+    F.win[F.nwin++] = (win_t){ 0, f_now() + 3000, 0x02, 0, 1 };
+    CHECK_EQ_INT(qd_session_print(s), QD_OK);
+    CHECK_EQ_INT(qd_session_end(s), QD_OK);
+    CHECK(saw_state(QDS_MANUAL));
+    CHECK(!saw_state(QDS_ENGINE));
+    CHECK_HAS(F.trace, "8A00");
+    CHECK_EQ_INT(count_tok("8A01"), 2);
+    CHECK_EQ_INT(F.nout, 1);
+    CHECK_EQ_INT(last_state(), QDS_READY);
+    CHECK_EQ_INT(not_ls(), 0);
+    qd_session_free(s);
+
+    fake_ls();
+    s = ls_job(0, NULL, 0);
+    CHECK_EQ_INT(qd_session_open(s, 1, ls_sheet(0)), QD_OK);
+    CHECK_EQ_INT(rows(s, 3175), QD_OK);
+    F.win_from_print = 1;
+    F.win[F.nwin++] = (win_t){ 2000, 6000, 0x02, 0, 1 };
+    CHECK_EQ_INT(qd_session_print(s), QD_OK);
+    CHECK_EQ_INT(qd_session_end(s), QD_OK);
+    CHECK(saw_state(QDS_NO_PAPER));
+    CHECK(!saw_state(QDS_ENGINE));
+    CHECK_HAS(after("8A01"), "8A00");
+    CHECK_EQ_INT(count_tok("8A01"), 2);
+    CHECK_EQ_INT(last_state(), QDS_READY);
+    CHECK_EQ_INT(not_ls(), 0);
+    qd_session_free(s);
+
+    // 83 02 bit 4 left set at rest does not hold a print: nothing asks it first.
+    fake_ls();
+    F.s02 = 0x10;
+    s = ls_job(0, NULL, 0);
+    CHECK_EQ_INT(qd_session_open(s, 1, ls_sheet(0)), QD_OK);
+    CHECK_EQ_INT(rows(s, 3175), QD_OK);
+    CHECK_EQ_INT(qd_session_print(s), QD_OK);
+    CHECK_EQ_INT(qd_session_end(s), QD_OK);
+    CHECK_EQ_INT(F.nout, 1);
+    CHECK_EQ_INT(count_tok("8A01"), 1);
+    qd_session_free(s);
+}
+
+// Paper back, but 83 02 bit 4 stays set until the printer next tries to feed: 8A 01 goes
+// again 15 s on, as its driver's Continue did, and the page prints. The state stays out of
+// paper until then, and a paper never put back still ends at the stall limit.
+static void test_ls_paper_bit_that_sticks(void)
+{
+    fake_ls();
+    F.latch = 1;
+    qd_session_t *s = ls_job(0, NULL, 0);
+    CHECK_EQ_INT(qd_session_open(s, 1, ls_sheet(0)), QD_OK);
+    CHECK_EQ_INT(rows(s, 3175), QD_OK);
+    F.win_from_print = 1;
+    F.win[F.nwin++] = (win_t){ 2000, 6000, 0x02, 0, 1 };
+    CHECK_EQ_INT(qd_session_print(s), QD_OK);
+    uint32_t t0 = f_now();
+    CHECK_EQ_INT(qd_session_end(s), QD_OK);
+    CHECK(f_now() - t0 >= 15000);
+    CHECK(saw_state(QDS_NO_PAPER));
+    CHECK_EQ_INT(count_tok("8A01"), 2);
+    CHECK_EQ_INT(F.nout, 1);
+    CHECK_EQ_INT(last_state(), QDS_READY);
+    qd_session_free(s);
+
+    fake_ls();
+    qd_job_cfg_t c = { .model = QD_PLWLS, .stall_ms = 60000 };
+    s = qd_session_new(&g_ops, &c);
+    CHECK_EQ_INT(qd_session_begin(s), QD_OK);
+    CHECK_EQ_INT(qd_session_open(s, 1, ls_sheet(0)), QD_OK);
+    CHECK_EQ_INT(rows(s, 3175), QD_OK);
+    F.win_from_print = 1;
+    F.win[F.nwin++] = (win_t){ 2000, 600000, 0x02, 0, 1 };
+    CHECK_EQ_INT(qd_session_print(s), QD_OK);
+    t0 = f_now();
+    CHECK_EQ_INT(qd_session_end(s), QD_E_STALL);
+    CHECK(f_now() - t0 >= 60000 && f_now() - t0 < 80000);
+    CHECK(count_tok("8A01") >= 4);              // a try every 15 s, as a person's Continue
+    CHECK_EQ_INT(F.nout, 0);
+    qd_session_free(s);
+}
+
+// 83 9D and its value are sent once each, whatever comes back: its driver reads neither reply.
+static void test_ls_9d_reply_not_read(void)
+{
+    fake_ls();
+    F.bad_9d = 1;
+    qd_session_t *s = ls_job(0, NULL, 0);
+    trace_clear();
+    CHECK_EQ_INT(qd_session_open(s, 1, ls_sheet(0)), QD_OK);
+    CHECK_STR(F.trace, "8100 833E 8200 85C1 86FF 87EC 88D4 89FE 8351 839D =04 8401");
+    qd_session_free(s);
+}
+
+// Cancel as the rows go: 8A 00, 81 00, 84 01, as for the 300, and nothing its driver never
+// sends. A page opened again (to go in Apple's screen) has 81 00 and its whole setup again.
+static void test_ls_cancel_and_open_again(void)
+{
+    fake_ls();
+    qd_session_t *s = ls_job(1, NULL, 0);
+    CHECK_EQ_INT(qd_session_open(s, 1, ls_sheet(0)), QD_OK);
+    F.cancel_rows = 500;
+    CHECK_EQ_INT(rows(s, 3175), QD_E_CANCEL);
+    CHECK(ends_with("8A00 8351 8100 8401"));
+    CHECK_EQ_INT(not_ls(), 0);
+    qd_session_free(s);
+
+    fake_ls();
+    s = ls_job(0, NULL, 0);
+    CHECK_EQ_INT(qd_session_open(s, 1, ls_sheet(0)), QD_OK);
+    CHECK_EQ_INT(rows(s, 1000), QD_OK);
+    trace_clear();
+    CHECK_EQ_INT(qd_session_open(s, 1, ls_sheet(0)), QD_OK);
+    CHECK_STR(F.trace, "8100 833E 8200 85C1 86FF 87EC 88D4 89FE 8351 839D =04 8401");
+    CHECK_EQ_INT(rows(s, 3175), QD_OK);
+    CHECK_EQ_INT(qd_session_print(s), QD_OK);
+    CHECK_EQ_INT(qd_session_end(s), QD_OK);
+    CHECK_EQ_INT(F.nout, 1);
+    CHECK_EQ_INT(F.out_rows[0], 3175);
+    CHECK_EQ_INT(not_ls(), 0);
+    qd_session_free(s);
+}
+
+// A jam: 8A 00, the wait until it is gone, 81 00 alone, then the page again from the copy with
+// its whole setup. With no copy, 81 00 and 8A 01 print the page in the printer again.
+static void test_ls_jam(void)
+{
+    fake_ls();
+    qd_session_t *s = ls_job(0, g_copy, QD_COPY_CAP);
+    CHECK_EQ_INT(qd_session_open(s, 1, ls_sheet(0)), QD_OK);
+    CHECK_EQ_INT(rows_of(s, 1, 100, 4), QD_OK);
+    CHECK_EQ_INT(qd_session_print(s), QD_OK);
+    F.win_from_print = 1;
+    F.win[F.nwin++] = (win_t){ 2000, 6000, 0x12, 0x08, 0 };
+    CHECK_EQ_INT(qd_session_end(s), QD_OK);
+    CHECK(saw_state(QDS_JAM));
+    CHECK(resent(1));
+    CHECK_HAS(F.trace, "8A00 8404");
+    CHECK_HAS(F.trace, "8100 8401 8302 8100 833E 8200 85C1");
+    CHECK_STR(sheets(), "1:100");
+    CHECK_EQ_INT(F.into_fault, 0);
+    CHECK_EQ_INT(F.bad, 0);
+    CHECK_EQ_INT(not_ls(), 0);
+    qd_session_free(s);
+
+    fake_ls();
+    s = ls_job(0, NULL, 0);
+    CHECK_EQ_INT(qd_session_open(s, 1, ls_sheet(0)), QD_OK);
+    CHECK_EQ_INT(rows(s, 3175), QD_OK);
+    CHECK_EQ_INT(qd_session_print(s), QD_OK);
+    F.win_from_print = 1;
+    F.win[F.nwin++] = (win_t){ 2000, 6000, 0x12, 0x08, 0 };
+    CHECK_EQ_INT(qd_session_end(s), QD_OK);
+    CHECK_HAS(F.trace, "8100 8401 8302 8100 8A01");
+    int pg = 0;
+    CHECK(ev_n(QD_EV_REPRINT, 0, &pg, NULL) && pg == 1);
+    CHECK_EQ_INT(F.into_fault, 0);
+    CHECK_EQ_INT(not_ls(), 0);
+    qd_session_free(s);
+}
+
+// At rest: 83 01, 83 02 and 82 00, never 83 2A; no paper from 83 02; its bit 5 is not the
+// cassette for an LS.
+static void test_ls_status(void)
+{
+    qd_state_t st;
+    qd_raw_t raw;
+    fake_ls();
+    CHECK_EQ_INT(qd_ask_status(&g_ops, QD_PLWLS, 0, &st, &raw), QD_OK);
+    CHECK_STR(F.trace, "8301 8302 8200 8401");
+    CHECK_EQ_INT(st, QDS_READY);
+    fake_ls();
+    F.s01 = 0x02;
+    F.s02 = 0x10;
+    CHECK_EQ_INT(qd_ask_status(&g_ops, QD_PLWLS, 0, &st, &raw), QD_OK);
+    CHECK_STR(F.trace, "8301 8302 8200 8304 8307 8402");
+    CHECK_EQ_INT(st, QDS_NO_PAPER);
+    CHECK_EQ_INT(qd_ask_status(&g_ops, QD_PLWLS, 1, &st, &raw), QD_OK);
+    CHECK_EQ_INT(st, QDS_MANUAL);
+    fake_ls();
+    F.s02 = 0x20;
+    CHECK_EQ_INT(qd_ask_status(&g_ops, QD_PLWLS, 0, &st, &raw), QD_OK);
+    CHECK_EQ_INT(st, QDS_READY);
+    fake_ls();
+    F.s02 = 0x08;
+    CHECK_EQ_INT(qd_ask_status(&g_ops, QD_PLWLS, 0, &st, &raw), QD_OK);
+    CHECK_EQ_INT(st, QDS_JAM);
+}
+
 int main(void)
 {
     test_identity_sequence();
@@ -2017,5 +2359,15 @@ int main(void)
     test_copy_of_a_page_near_the_budget_then_another();
     test_copy_never_overwrites_a_page_in_the_printer();
     test_copy_of_a_page_opened_again();
+    test_ls_probe_takes_a_refused_8340();
+    test_ls_page();
+    test_ls_one_page_at_a_time();
+    test_ls_legal_from_the_tray();
+    test_ls_paper();
+    test_ls_paper_bit_that_sticks();
+    test_ls_9d_reply_not_read();
+    test_ls_cancel_and_open_again();
+    test_ls_jam();
+    test_ls_status();
     TEST_END;
 }

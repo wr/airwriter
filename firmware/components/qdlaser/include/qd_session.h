@@ -39,6 +39,15 @@
 // design's "What the printer and the board allow"): every packet is BREAK, idle, then its bytes
 // (qd_wire.h); only 82, 83 (and a value after 83 9D or 83 A7) and 8E reply, one byte each.
 //
+// W-1145: a Personal LaserWriter LS (qd_spec_t.driver QD_DRV_LS) is sent only what its own
+// driver sends it, and what the board can't work without: 83 3E for the identity (LaserWriter
+// 300's driver asks an LS it), 8E 00 every half second while a page prints, and 83 01, 83 02
+// and 82 00 at rest. It takes one page at a time: each page waits for the done of the one
+// before, then has 81 00 and its whole setup (no page loads behind one printing). Its setup is
+// its driver's, in its driver's order; no paper is 83 02's bit 4 (never 83 2A); after a jam,
+// 81 00 alone goes before the page again (no 84 08, 83 40 or 83 5D). None of it has been tried
+// on a printer.
+//
 // A question: drain, put, flush, then a byte within 1000 ms. An 83 whose reply is refused or
 // garbled (qd_reply_ok) or does not come is sent again, five tries in all; 82 and 8E two. 8E's
 // 00 says read one more byte: that is its status. While a page prints, the board asks every
@@ -110,9 +119,10 @@ typedef struct {
 // ---- Idle, under the caller's job lock
 
 // 81 00, 83 40, 83 3E, 82 00. *engine is 83 3E's answer, *ctrl 82 00's. QD_OK or QD_E_OFFLINE.
+// An 83 40 refused or unanswered does not end it: an LS's own driver never sends it (W-1145).
 int qd_ask_identity(const qd_ops_t *o, uint8_t *engine, uint8_t *ctrl);
-// 83 01, 83 02, 83 2A, 82 00 (then 83 04 and 83 07 when 83 01 & 0x12), then 84 with the
-// state's lights. QD_OK with *st and *raw, or QD_E_OFFLINE.
+// 83 01, 83 02, 83 2A (not to an LS), 82 00 (then 83 04 and 83 07 when 83 01 & 0x12), then 84
+// with the state's lights. QD_OK with *st and *raw, or QD_E_OFFLINE.
 int qd_ask_status(const qd_ops_t *o, qd_model_t m, int manual, qd_state_t *st, qd_raw_t *raw);
 
 // ---- A job
@@ -142,7 +152,9 @@ qd_session_t *qd_session_new(const qd_ops_t *o, const qd_job_cfg_t *c);
 int  qd_session_begin(qd_session_t *s);
 // A page's setup (qd_sink_t.open); `page` is its number, for the events.
 //   - Nothing printing (a job's first page): 81 00, the identity, the sheet's offsets and
-//     width, Apple's 83 9D and density, the paper source, Ready on.
+//     width, Apple's 83 9D and density, the paper source, Ready on. (An LS: 81 00, 83 3E,
+//     82 00, the offsets and width, the paper source, 83 9D with the sheet's number, Ready on.)
+//   - An LS, a page printing: waits for its done, then the whole setup.
 //   - A page printing, on the same sheet: the paper source alone. The rows that follow go in
 //     behind the page printing.
 //   - A page printing, and this one on another sheet: waits for its done (as qd_session_end

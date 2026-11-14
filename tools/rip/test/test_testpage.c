@@ -149,7 +149,7 @@ static void test_font(void)
 static void test_icons(void)
 {
     static const char *const names[] = { "icon", "iwlq", "stylewriter", "sworiginal", "sw2", "sw1200",
-                                         "csw1500", "csw2200", "plw300", "lw", "lw2", "plw", "clw",
+                                         "csw1500", "csw2200", "plw300", "plwls", "lw", "lw2", "plw", "clw",
                                          "lwselect", "lwpro400", "lwpro600", "lwpro810", "lw4600",
                                          "lw8500", "lw12640" };
     CHECK_EQ_INT(sizeof tp_icons / sizeof tp_icons[0], sizeof names / sizeof names[0]);

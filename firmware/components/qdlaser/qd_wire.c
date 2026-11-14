@@ -28,10 +28,15 @@ int qd_reply_ok(uint8_t r)
     return !(r & 0x80) && (ones(r) & 1);
 }
 
-size_t qd_row_packet(const uint8_t *codes, size_t n, uint8_t *out)
+size_t qd_row_max(int bits)
 {
-    if (n == 0 || n > QD_ROW_MAX) return 0;
-    unsigned len = 0x5000u - (unsigned)n;
+    return bits == 9 ? 511 : QD_ROW_MAX;
+}
+
+size_t qd_row_packet(const uint8_t *codes, size_t n, int bits, uint8_t *out)
+{
+    if (n == 0 || n > qd_row_max(bits)) return 0;
+    unsigned len = bits == 9 ? 0x4000u | (0x200u - (unsigned)n) : 0x5000u - (unsigned)n;
     out[0] = (uint8_t)(len >> 8);
     out[1] = (uint8_t)len;
     uint8_t x = out[0] ^ out[1];
