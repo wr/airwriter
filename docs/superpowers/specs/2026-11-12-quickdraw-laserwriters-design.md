@@ -36,6 +36,30 @@ built):
 - **A page too big in both screens** says "Page N didn’t fit in the printer’s memory.", as
   Apple's driver's alert did (Wells, 2026-11-13).
 
+**Amended 2026-11-13 by `W-1144 Personal LaserWriter 300: load the next page while one prints,
+so multi-page jobs finish sooner`** (SPEC §3.18, "The next page loads while one prints", is the
+record; the bench that answered this design's open question is there too):
+
+- **Pages overlap, as Apple's driver had them.** The next page's rows go in while a page prints,
+  with only the paper source before them, and its print sequence goes at that page's done: a
+  page follows about 17 s behind the one before, not about 25 s. "One page at a time" below is
+  replaced.
+- **The budget is the printer's as well as the page's.** The page printing and the page loading
+  stay inside 500,000 bytes together; a row that would pass it waits for the done. Past the
+  printer's memory while a page prints, both sheets come out blank.
+- **`81 00` cuts a page that is printing** (a blank sheet, and no page done): the bench's answer
+  to the question "One page at a time" left open. So a page on another sheet, a page going again
+  in Apple's screen and the job's end all wait for the page printing first. `81 00` goes back
+  to the start of the printer's memory and clears nothing.
+- **A jam reprints only the first page since the last `81 00`**, which is where Apple's
+  recovery starts; a page loaded behind it prints after. A jam on a later page stops the job
+  and names the page. A copy of the printer's memory kept on the board, which would print any
+  page again, is not built.
+- **Cancel lets the sheet that is printing come out**, then stops: stopped mid-sheet it comes
+  out blank.
+- **`qdfake.py`** holds two pages as the printer does: the memory, `81 00`, the offsets read as
+  a page prints, a jam's recovery, a print time and a time for the sheet to leave.
+
 ## Why
 
 Apple's QuickDraw LaserWriters have no PostScript. The Mac drew every page and sent the dots
@@ -302,12 +326,12 @@ A link module for the family, the only part that touches ESP32 peripherals:
   the Paper light off, `8B 8B` twice, `8A 01`. Page done is the printer's BREAK, then `8E 00` bit 2; with no BREAK seen,
   polling `8E 00` every half second finds it too (the spike did). 85 s with no page done fails the
   page (Apple's limit).
-- **One page at a time.** The next page of a job loads only after the last one is done. Apple's
-  driver overlapped them, but whether `81 00` (the fallback's drop, the jam recovery) cuts a page
-  that is printing is not known, and with one page in the printer the budget is exact and a jam
-  can always reprint. A page takes about its load (5 to 13 s) plus 17 s. Overlap is a later
-  change, once the bench has answered that.
-- **Cancel:** `8A 00`, `81 00`, Ready light on.
+- **The next page loads while one prints** (W-1144; this was "One page at a time" until the
+  bench showed what `81 00` does to a page that is printing: SPEC §3.18). The print sequence
+  goes once the page before is done, and the wait for a page's done is the next page's. A page
+  follows about 17 s behind the one before.
+- **Cancel:** the sheet printing comes out, then `8A 00`, `81 00`, Ready light on; with nothing
+  printing, at once.
 
 ### During a job and at rest
 
@@ -322,8 +346,8 @@ A link module for the family, the only part that touches ESP32 peripherals:
 - **Manual slot empty** when the job asked for it: the phone says to load the manual slot
   (`media-needed`), Paper light on, and the page prints when a sheet goes in.
 - **Jam** or **cover open**: Jam light, the phone says so, and Apple's recovery when it is
-  cleared, reprinting the page from the printer's memory, which with one page at a time is always
-  the page that jammed.
+  cleared, reprinting the page at the start of the printer's memory: the page that jammed when
+  it is the first since the last `81 00`. A jam on a later page stops the job (W-1144).
 - **Engine fault** (fuser, laser, scanner): Needs attention on the page, `other` on the phone,
   with the fault named in the log.
 - **Lights:** Ready on at rest and ready; blinking about once a second while a page loads and
@@ -457,7 +481,8 @@ found and printing as before.
 - A page too big in Atkinson prints in Apple's 300 screen, decided per page, with no notice
   beyond the log; a page too big in both fails, the job goes on, and it ends as failed with the
   page named on the settings page.
-- One page in the printer at a time: about 25 s a page, not Apple's overlap.
+- One page in the printer at a time: about 25 s a page, not Apple's overlap. (Replaced by
+  W-1144: Apple's overlap, about 17 s a page after the first.)
 - The budget is 500,000 bytes of codes, below the measured 513,287.
 - An LS or Select 300 on the port is named and said to be unsupported, not shared: a grayed
   row in the Printers list, not a notice (2026-11-13).

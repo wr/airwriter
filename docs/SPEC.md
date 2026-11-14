@@ -1397,9 +1397,10 @@ job with the screen open, or the ImageWriter checker on this build.
 
 ---
 
-### 3.18 QuickDraw LaserWriters (W-1102)
+### 3.18 QuickDraw LaserWriters (W-1102, W-1144)
 
-`W-1102 QuickDraw LaserWriters on the printer port (Personal LaserWriter LS/300, Select 300)`.
+`W-1102 QuickDraw LaserWriters on the printer port (Personal LaserWriter LS/300, Select 300)`;
+`W-1144 Personal LaserWriter 300: load the next page while one prints, so multi-page jobs finish sooner`.
 Design: `docs/superpowers/specs/2026-11-12-quickdraw-laserwriters-design.md`, which holds the
 command table and the measurements this section stands on. `components/qdlaser`: `qd_model`,
 `qd_wire`, `qd_status`, `qd_page`, `qd_session` and `qd_testpage` are pure and host-tested in
@@ -1451,18 +1452,75 @@ printer here to test on.
   `sw_code_row(row, NULL, …)`. The record's rows go to the printer as they are made; the
   Apple-screen rows are kept in the job buffer's second 512 KB (the URF ring has the first). The
   page budget is 500,000 bytes of codes (a page in the printer's memory measured full at
-  513,287). A page that would pass it stops there: `81 00` drops what the printer holds and the
-  kept page goes instead (log: `page N: Apple's screen, B bytes of codes`). If that passes the
+  513,287). A page that would pass it stops there: the sink is opened again for the same page,
+  which waits for the page printing before it to be done; then `81 00` and the whole setup drop
+  the rows already in, and the kept page goes instead (log: `page N: Apple's screen, B bytes of
+  codes`). If that passes the
   budget too, the page is skipped and the job goes on to the next, as Apple's alert's Continue
   did; the job then ends failed, with "Page N didn’t fit in the printer’s memory." as its
   `job-state-message` and in `/api/status`'s `job_error`. A record set to Apple's screen keeps
-  nothing. After the last row: `8E 00`, `82 00`, `83 2A` (paper at the chosen source), `84` with
-  the Paper light off, `8B 8B` twice, `8A 01`. Page done is `8E 00` bit 2, asked every 500 ms
-  and at once after the printer's BREAK; 85 s with none fails the page (Apple's limit). One page
-  is in the printer at a time: the next loads once the last is done. On board 1 the printer's
-  BREAK came with every page done, and a row with a bad check (a test build flipped one) set
-  `8E 00` bit 1 (`FA`) with `82 00` as for any page (`A0`): the page fails there, unprinted
-  (`8A 00`, `81 00`, `84 01`), as `qdinterop` checks against the software 300.
+  nothing. After the last row, once the page before it is done: `8E 00`, `82 00`, `83 2A` (paper
+  at the chosen source), `84` with the Paper light off, `8B 8B` twice, `8A 01`. Page done is
+  `8E 00` bit 2, asked every 500 ms and at once after the printer's BREAK; 85 s from `8A 01`
+  with none fails the page (Apple's limit). On board 1 the printer's BREAK came with every page
+  done, and a row with a bad check (a test build flipped one) set `8E 00` bit 1 (`FA`) with
+  `82 00` as for any page (`A0`): the page fails there, unprinted (`8A 00`, `81 00`, `84 01`),
+  as `qdinterop` checks against the software 300.
+- **The next page loads while one prints** (W-1144, `qd_session`). `qd_session_print` sends a
+  page's print sequence and returns; the wait for its done is the next page's print, or the
+  job's end (`qd_session_end`, from `qdlaser_job_end`). Each page after the first follows a
+  print's time behind the one before, not a load and a print. One task still: the rip's rows go
+  straight to the printer and the session runs the conversation between them. What board 1's
+  printer did on the bench (2026-11-13, runs A1 to A5 below), and what the session does about
+  each:
+  - *The next page's rows go in while a page prints*, with no `81 00` and only the paper
+    source (`83 4C` or `83 4F`) before them; its own print sequence, sent at the printing
+    page's done, prints it. A job's first page has the whole setup; each page after it on the
+    same sheet sends the source alone.
+  - *The offsets and the width (`85` to `89`) are read as a page prints*: changed 3 s into a
+    print, both sheets moved. A page on another sheet waits for the printing page's done, then
+    has the whole setup, `81 00` first.
+  - *The memory holds both pages.* 513,287 bytes of codes fit; 533,655 was full. Past it while
+    a page prints: `8E 00` bit 0 with a BREAK, the page printing done early (6 s after its
+    `8A 01`), and both sheets blank. A page's room is free once it is done: three 221 KB pages,
+    each loaded while the last printed, never filled it. `82 00` bit 1 comes past about 262 KB
+    and bit 2 says nothing waits; bit 0 was never set. The session keeps the page printing and
+    the page loading inside 500,000 bytes together (`qd_job_cfg_t.room`): a row that would pass
+    it waits for the printing page's done (log: `page N waited T ms for room in the printer`).
+    A page alone keeps its 500,000 budget and its fallback.
+  - *`81 00` while a page prints blanks the sheet*, and no page done comes for it. `81 00` goes
+    back to the start of the memory and clears nothing. The session sends none between a
+    page's `8A 01` and its done except to stop it.
+  - *Between rows*, at the printer's BREAK or every 500 ms, one `8E 00`, then `83 01` and
+    `83 02` when that is not done. `8E`'s page done is cleared by the read, so every `8E` read
+    that says done is the printing page's, wherever it was asked, and its bits 0 and 1 are
+    kept from every read for the loading page's check. A jam, the cover or no paper seen there
+    stops the page (`8A 00`) and sets the state and the lights at once; the rows go on, and
+    the next wait for the done (the print's, or a wait for room) puts it right. An engine
+    fault ends the job there. Two status rounds in a row with no answer are Offline.
+  - *Cancel* sends no more rows. A sheet printing with nothing wrong comes out (to its done,
+    inside the 85 s), then `8A 00`, `81 00`, `84 01`; with nothing printing, or the page
+    printing stopped for paper or a jam, at once. An abort with no error of the session's own
+    (the upload cut off, a page size refused, no memory) is the same; after a printer failure
+    (Offline, the link, an engine fault) it stops at once.
+  - *A jam or the cover.* Apple's recovery prints again the page at the start of the memory,
+    the first printed since the last `81 00`, and a page loaded behind it is still there: the
+    cover opened 7 s into page 1 with page 2 loaded printed a whole page 1, then a whole page 2
+    from page 2's own print sequence. So when the page stopped is the first since the last
+    `81 00` (a job's first, or the first after a change of sheet, a fallback or a recovery),
+    the session recovers as before and the page behind prints after; the page after that waits
+    for the done and starts the memory over with a whole setup, since the recovery left the
+    printer writing at the start of its memory. When the page stopped is a later one, the
+    job stops (`QD_E_FAULT`, log: `page N: lost to a jam or the cover…`), the state showing
+    the jam until it clears: the recovery would print the first page again. The job stops too
+    when the first page jams while the next waits for room: the recovery's `81 00` leaves the
+    rest of that page's rows nowhere to follow the rows already in. `jam_reprints` in
+    `qd_session.c` holds the choice. Not built: a copy of what is in the printer, kept on the
+    board and sent again, which would print any jammed page again.
+  - *The log*, per page: `page N: printing` (its `8A 01`), `page N: done, read T ms after its
+    print`, and any wait for room. The rip's per-page line's `end` is now the wait for the page
+    before and this page's print sequence. The job's `all out in N s` counts the end's wait for
+    the last page.
 - **Sizes and paper.** Letter, Legal, Executive, #10 and Monarch envelopes and A4, each with the
   image area Apple's driver gives it (`qd_model.c`); only Letter has printed. `media-source` is
   `main` (the cassette, `83 4C`, the default) or `manual` (the manual slot, `83 4F`), read from
@@ -1487,9 +1545,12 @@ printer here to test on.
   | No clock | Offline | `other` | (none: the printer is off) |
 
   Jam and cover go through Apple's recovery once `83 02` clears: `81 00`, `84 08` for 280 ms,
-  `84 01`, `83 40`, `83 3E`, `82 00`, `83 5D`, the source, `81 00`, `8A 01`, which prints the page
-  again from the printer's memory. The cover opened mid-page reads as a jam (the sheet is
-  caught), and the printer wants the cover opened and closed again once the sheet is pulled.
+  `84 01`, `83 40`, `83 3E`, `82 00`, `83 5D`, the source, `81 00`, `8A 01`, which prints again
+  the page at the start of the printer's memory: the page that jammed when it is the first
+  since the last `81 00`, and otherwise the job stops (above). The cover opened mid-page reads
+  as a jam (the sheet is caught: `83 01` `13`, `83 02` `0D`), and the printer wants the cover
+  opened and closed again once the sheet is pulled; for a few seconds after it closes the `83`
+  questions go unanswered, which the five tries of each ride out.
   Paper out mid-job stops the page (`8A 00`) and prints it (`8A 01`) once `83 2A` has paper. A
   job ends with `83 01`, `81 00`, `84 01`. A job that used or asked for the manual slot also
   sends `83 4C` however it ends, done, cancelled or failed: the printer otherwise keeps the
@@ -1515,6 +1576,19 @@ printer here to test on.
   the printer off failed with the clock gone. A Color StyleWriter 2500 and the ImageWriter II
   were found on J2 afterwards, the StyleWriter's test page printed. Legal, A4 and the envelopes
   have not been printed.
+- **Bench for W-1144 (the same board and printer, 2026-11-13 evening, a throwaway build that
+  ran scripted packets).** A1: two and three 153 KB pages, each loaded while the last printed
+  with only `83 4C` between: page done to page done 17.0 to 17.4 s, against 24.2 to 25.2 s for
+  the same pages a page at a time; a page's rows took 5.6 s. A2: one 364 KB page printed; two
+  filled the memory 158 KB into the second, both sheets blank; three 221 KB pages printed. A3:
+  `81 00` 5 s into a print, a blank sheet and no page done. A4c: the cover opened 7.2 s into
+  page 1 with page 2 loaded, then Apple's recovery: page 1 whole 20.6 s later, page 2 whole
+  17.3 s after its own print sequence. A5: the offsets changed 3 s into page 1's print, both
+  sheets 4.5 mm down and 5.5 mm left. Free PSRAM during a three-page job never under 597 KB.
+  **The firmware that loads the next page while one prints has run against `qdfake.py` only
+  (`test_qd_session`, `qdinterop`), not yet on a board.** Not known: whether the printer
+  takes rows while a jam or the open cover holds it (the session sends them), and whether its
+  recovery can print again a page that is not the first since the last `81 00`.
 
 ---
 

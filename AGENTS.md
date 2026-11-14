@@ -191,8 +191,9 @@ page: Top margin (`{"top_margin":N}`, 1/144 in, -216 to 144, default -144) and d
 - **QuickDraw LaserWriters** (Python 3 with numpy): `make -C tools/rip qdcheck` decodes the
   rip's packets and the line the board clocks out with `qdfake.py` (a software Personal
   LaserWriter 300) and holds both to the rip's dots; `make -C tools/rip qdinterop` prints from
-  `build/qdhost` (the firmware's session on the host) to `qdfake.py` over a pty, through each
-  fault, a cancel and a printer switched off (about 10 s); `python3 -m unittest
+  `build/qdhost` (the firmware's session on the host) to `qdfake.py` over a pty: three and ten
+  pages, each loaded while the last prints, then each fault, a cancel and a printer switched
+  off (about 25 s); `python3 -m unittest
   tools/qdlaser/test_qdfake.py`. `rip --printer plw300 --out-qd F` writes a page as the printer
   would be sent it, `rip --qd-testpage F` the test page, and `qdfake.py decode F` draws either.
   Apple's driver lives in `~/.config/airwriter/lw300-driver/`, never committed.
