@@ -226,13 +226,11 @@ const char *ct_verdict_text(ct_verdict_t v)
     case CT_ONE_WAY:
         return "This crossover cable has a broken wire, so pages can’t reach the printer.";
     case CT_NO_BUSY:
-        return "This crossover cable has a broken wire, so the printer can’t tell AirWriter "
-               "to wait.";
+        return "Broken wire: printer port pin 2 to AppleTalk port pin 1.";
     case CT_NO_HSK_OUT:
-        return "This crossover cable has a broken wire, so some printers won’t answer.";
+        return "Broken wire: printer port pin 1 to AppleTalk port pin 2.";
     case CT_NO_HSK:
-        return "This crossover cable has two broken wires, so the printer can’t tell "
-               "AirWriter to wait.";
+        return "Broken wires: printer port pin 1 to AppleTalk port pin 2, and pin 2 to pin 1.";
     case CT_NO_CHIP:
         return "Couldn’t test the cable. The LocalTalk chip is missing. See LocalTalk Chip "
                "(TashTalk) in the wiki.";
