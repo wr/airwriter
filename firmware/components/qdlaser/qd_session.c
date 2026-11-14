@@ -13,6 +13,19 @@
 #define STALL_MS 600000
 #define RESET_MS    280        // 84 08 held during a jam's recovery, as Apple's driver holds it
 #define CLEAR_MS   3000        // how long 83 02 must stay clear before a jam counts as cleared
+#define OUT_MS    20000        // a sheet is on its way out this long after its page done
+#define AGAIN     (-100)       // inside a resend: a jam again; never returned to a caller
+
+// A page in the copy of what the printer holds: its rows, [u16 LE n][codes] each, in the ring.
+enum { CP_LOADING, CP_PRINTING, CP_DONE };
+enum { CP_MAX = 4 };
+typedef struct {
+    int      no;
+    const qd_media_t *md;
+    uint32_t start, bytes, rows;
+    uint8_t  state, complete;
+    uint32_t done_at;
+} cpage_t;
 
 struct qd_session {
     qd_ops_t         o;
@@ -49,6 +62,16 @@ struct qd_session {
     uint32_t poll_at;           // the last one between rows
     int      misses;            // polls in a row with no answer
     int      late;              // the last 8E went unanswered: its reply may still come
+    // The copy (qd_job_cfg_t.copy): the pages the printer holds or has just let go, oldest
+    // first, end to end in the ring.
+    cpage_t  cp[CP_MAX];
+    int      ncp;
+    uint32_t cused;             // bytes of the ring the pages take, from cp[0].start
+    int      cl, cc;            // the page loading's and the page printing's, or -1
+    int      rip_open;          // the last is the rip's own page, opened and not yet printed
+    int      resending;         // its pages are going to the printer again after a jam
+    uint8_t  again_s02;
+    uint8_t  row_tmp[QD_ROW_MAX];
     uint8_t  pkt[QD_ROW_MAX + 3];
 };
 
@@ -250,6 +273,7 @@ qd_session_t *qd_session_new(const qd_ops_t *o, const qd_job_cfg_t *c)
     s->stall = c->stall_ms ? c->stall_ms : STALL_MS;
     s->room = c->room ? c->room : sp->budget;
     s->lights = 0x01;
+    s->cl = s->cc = -1;
     return s;
 }
 
@@ -315,6 +339,96 @@ static int wait_paper(qd_session_t *s)
     }
 }
 
+// ---- the copy of what is in the printer (W-1144)
+
+static int copying(const qd_session_t *s) { return s->c.copy && s->c.copy_cap; }
+
+// Lets go of the oldest page, which the caller knows is done.
+static void copy_drop(qd_session_t *s)
+{
+    s->cused -= s->cp[0].bytes;
+    memmove(s->cp, s->cp + 1, (size_t)(--s->ncp) * sizeof s->cp[0]);
+    if (s->cl >= 0) s->cl--;
+    if (s->cc >= 0) s->cc--;
+}
+
+// Only the newest page that is done is worth keeping: its sheet may still be on its way out.
+static void copy_trim(qd_session_t *s)
+{
+    if (s->resending) return;
+    while (s->ncp > 1 && s->cp[0].state == CP_DONE && s->cp[1].state == CP_DONE) copy_drop(s);
+}
+
+// A page's record begins: the rip's new page, or its open page from the top again.
+static void copy_open(qd_session_t *s, int page, const qd_media_t *md, int again)
+{
+    if (!copying(s) || s->resending) return;
+    cpage_t *c;
+    if (again && s->rip_open && s->ncp) {
+        c = &s->cp[s->ncp - 1];
+        s->cused -= c->bytes;
+    } else {
+        copy_trim(s);
+        while (s->ncp >= CP_MAX && s->cp[0].state == CP_DONE) copy_drop(s);
+        if (s->ncp >= CP_MAX) {             // never: a page done, one printing, one loading
+            s->cl = -1;
+            return;
+        }
+        c = &s->cp[s->ncp++];
+        const cpage_t *b = s->ncp > 1 ? c - 1 : NULL;
+        c->start = b ? (uint32_t)((b->start + b->bytes) % s->c.copy_cap) : 0;
+    }
+    c->no = page;
+    c->md = md;
+    c->bytes = c->rows = 0;
+    c->state = CP_LOADING;
+    c->complete = 1;
+    s->cl = (int)(c - s->cp);
+    s->rip_open = 1;
+}
+
+static void ring_put(qd_session_t *s, uint32_t at, const uint8_t *b, size_t n)
+{
+    const size_t cap = s->c.copy_cap;
+    at %= cap;
+    size_t first = n < cap - at ? n : cap - at;
+    memcpy(s->c.copy + at, b, first);
+    memcpy(s->c.copy, b + first, n - first);
+}
+
+static void ring_get(const qd_session_t *s, uint32_t at, uint8_t *b, size_t n)
+{
+    const size_t cap = s->c.copy_cap;
+    at %= cap;
+    size_t first = n < cap - at ? n : cap - at;
+    memcpy(b, s->c.copy + at, first);
+    memcpy(b + first, s->c.copy, n - first);
+}
+
+// A row that went to the printer goes into the loading page's copy. Room comes from the
+// oldest page that is done, never from one still in the printer: with none to be had, this
+// page's copy is given up, and a jam finds it has none.
+static void copy_row(qd_session_t *s, const uint8_t *codes, size_t n)
+{
+    if (!copying(s) || s->resending || s->cl < 0) return;
+    cpage_t *c = &s->cp[s->cl];
+    if (!c->complete) return;
+    while (s->cused + 2 + n > s->c.copy_cap) {
+        if (s->cl == 0 || s->cp[0].state != CP_DONE) {
+            c->complete = 0;
+            return;
+        }
+        copy_drop(s);
+        c = &s->cp[s->cl];
+    }
+    const uint8_t head[2] = { (uint8_t)n, (uint8_t)(n >> 8) };
+    ring_put(s, c->start + c->bytes, head, 2);
+    ring_put(s, c->start + c->bytes + 2, codes, n);
+    c->bytes += (uint32_t)(2 + n);
+    c->rows++;
+    s->cused += (uint32_t)(2 + n);
+}
+
 // A jam or the cover shows (83 02 bits 3 and 2): the state and the Jam light, and nothing
 // sent but the question until it is gone. Gone is 83 02 clear on reads 3 s apart, and nothing
 // moving (83 01 bit 5): board 1's printer read clear once and jammed again with a second
@@ -353,9 +467,8 @@ static int wait_clear(qd_session_t *s, uint8_t s02)
 }
 
 // A jam or the cover stopped the page printing: stop, wait until it is gone, then Apple's
-// recovery, which prints again the page at the start of the printer's memory. 8A 01 goes only
-// with 83 02 clear: sent into a jam, the printer keeps it and feeds when the jam clears.
-static int recover(qd_session_t *s, uint8_t s02)
+// recovery up to its last 8A 01, and 83 02 once more: back again, wait again.
+static int recover_to_print(qd_session_t *s, uint8_t s02)
 {
     int rc = cmd(s, 0x8A, 0x00);
     if (rc) return rc;
@@ -369,21 +482,43 @@ static int recover(qd_session_t *s, uint8_t s02)
             if ((rc = q(s, i == 2 ? 0x82 : 0x83, again[i])) < 0) return rc;
         if ((rc = q(s, 0x83, source(s))) < 0) return rc;
         if ((rc = q(s, 0x83, 0x02)) < 0) return rc;
-        if (!(rc & 0x0C)) break;
-        s02 = (uint8_t)rc;                 // back again: wait again
+        if (!(rc & 0x0C)) return 0;
+        s02 = (uint8_t)rc;
     }
+}
+
+// The printer's own recovery, with no copy to send again: its 81 00 and 8A 01 print again the
+// page at the start of the printer's memory. 8A 01 goes only with 83 02 clear: sent into a
+// jam, the printer keeps it and feeds when the jam clears.
+static int recover(qd_session_t *s, uint8_t s02)
+{
+    int rc = recover_to_print(s, s02);
+    if (rc) return rc;
     if ((rc = cmd(s, 0x81, 0x00)) || (rc = cmd(s, 0x8A, 0x01)) || (rc = flush(s))) return rc;
     state(s, QDS_PRINTING);
     return 0;
 }
 
-// Does the printer's own recovery print the page printing again? It prints from the start of
-// its memory, where the first page since the last 81 00 is (bench A4c: that page again, and
-// the page loaded behind it after). W-1144 keeps this choice here, to be swapped: a later
-// page would need the board to keep a copy of what is in the printer and send it again.
+static int resend(qd_session_t *s, uint8_t s02);
+static int open_page(qd_session_t *s, int page, const qd_media_t *md);
+static int row(qd_session_t *s, const uint8_t *codes, size_t n);
+static int print(qd_session_t *s);
+
+// With no copy: does the printer's own recovery print the page printing again? It prints
+// from the start of its memory, where the first page since the last 81 00 is (bench A4c: that
+// page again, and the page loaded behind it after; after a jam on page 2 it printed page 1).
 static int jam_reprints(const qd_session_t *s)
 {
     return s->p_first;
+}
+
+// Is there a copy of every page a jam now would need sent again?
+static int copy_whole(const qd_session_t *s)
+{
+    if (!copying(s) || s->cc < 0) return 0;
+    for (int i = s->cc; i < s->ncp; i++)
+        if (!s->cp[i].complete) return 0;
+    return 1;
 }
 
 // A jam or the cover stopped the page printing.
@@ -391,6 +526,11 @@ static int jammed(qd_session_t *s, uint8_t s02)
 {
     s->fault = 1;
     if (stopping(s)) return stop_now(s);
+    if (s->resending) {                    // a jam as the pages go again: from the top
+        s->again_s02 = s02;
+        return AGAIN;
+    }
+    if (copy_whole(s)) return resend(s, s02);
     if (!jam_reprints(s)) {
         // The job stops; the state shows the jam, as the status at rest will until it clears.
         const qd_state_t st = (s02 & 0x08) ? QDS_JAM : QDS_COVER;
@@ -463,6 +603,12 @@ static void page_done(qd_session_t *s)
 {
     s->printing = 0;
     s->p_bytes = 0;
+    if (s->cc >= 0) {
+        s->cp[s->cc].state = CP_DONE;
+        s->cp[s->cc].done_at = now(s);
+        s->cc = -1;
+        copy_trim(s);
+    }
     event(s, QD_EV_DONE, s->p_no, since(s, s->p_at));
 }
 
@@ -518,6 +664,7 @@ static int wait_done(qd_session_t *s)
     int rc;
     uint32_t poll_at = now(s) - POLL_MS;       // the first question at once
     for (;;) {
+        if (!s->printing) return QD_OK;        // done as the pages went again after a jam
         // The next half second, or at once when the printer sends a BREAK.
         int brk = 0;
         while (!brk && since(s, poll_at) < POLL_MS) {
@@ -596,6 +743,7 @@ static int open_page(qd_session_t *s, int page, const qd_media_t *md)
         if ((v = setup(s, md))) return v;
     }
     if ((v = flush(s))) return v;
+    copy_open(s, page, md, s->loading);
     s->loading = 1;
     s->l_no = page;
     s->l_md = md;
@@ -686,6 +834,7 @@ static int row(qd_session_t *s, const uint8_t *codes, size_t n)
     if (rc) return fail(s, rc);
     s->rows++;
     s->l_bytes += (uint32_t)n;
+    copy_row(s, codes, n);
     return blink(s);
 }
 
@@ -724,8 +873,66 @@ static int print(qd_session_t *s)
     s->loading = 0;
     s->l_bytes = 0;
     s->misses = 0;
+    if (s->cl >= 0) {
+        s->cp[s->cl].state = CP_PRINTING;
+        s->cc = s->cl;
+        s->cl = -1;
+    }
+    if (!s->resending) s->rip_open = 0;
     event(s, QD_EV_PRINT, s->p_no, 0);
     return QD_OK;
+}
+
+// A jam or the cover, with a copy of what the printer held: once it is gone, the pages that
+// may not have come out go again from the copy, by the path they went by the first time
+// (setup, rows, the check, the print sequence, each waiting for the done before it). They
+// are the page whose done came less than 20 s before the jam (its sheet may be the one that
+// jammed on its way out; it may come out twice), the page that was printing, and the rows so
+// far of the page loading, which the rip then goes on with. The printer's own recovery is
+// not relied on: after a jam on page 2 it printed page 1 (bench).
+static int resend(qd_session_t *s, uint8_t s02)
+{
+    for (;;) {
+        const uint32_t jam_at = now(s);
+        s->resending = 0;
+        int rc = recover_to_print(s, s02);
+        if (rc) return rc;
+        state(s, QDS_PRINTING);
+        // The first to go: the page just done, if its sheet may still have been inside.
+        int first = 0;
+        while (first < s->ncp && s->cp[first].state == CP_DONE) first++;
+        if (first > 0 && s->cp[first - 1].complete && jam_at - s->cp[first - 1].done_at < OUT_MS)
+            first--;
+        while (first-- > 0) copy_drop(s);
+        s->printing = 0;
+        s->loading = 0;
+        s->p_bytes = 0;
+        s->cc = -1;
+        s->resending = 1;
+        for (int i = 0; i < s->ncp && !rc; i++) {
+            const cpage_t *c = &s->cp[i];
+            const int whole = !(i == s->ncp - 1 && s->rip_open);
+            event(s, QD_EV_RESENT, c->no, 0);
+            if ((rc = open_page(s, c->no, c->md))) break;
+            s->cl = i;
+            s->cp[i].state = CP_LOADING;
+            for (uint32_t at = 0; at < c->bytes && !rc;) {
+                uint8_t head[2];
+                ring_get(s, c->start + at, head, 2);
+                const size_t n = (size_t)head[0] | (size_t)head[1] << 8;
+                ring_get(s, c->start + at + 2, s->row_tmp, n);
+                rc = row(s, s->row_tmp, n);
+                at += (uint32_t)(2 + n);
+            }
+            if (!rc && whole) rc = print(s);
+        }
+        s->resending = 0;
+        if (rc != AGAIN) {
+            if (!rc) copy_trim(s);
+            return rc;
+        }
+        s02 = s->again_s02;
+    }
 }
 
 static int end(qd_session_t *s)

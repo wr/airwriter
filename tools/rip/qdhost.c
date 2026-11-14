@@ -8,7 +8,7 @@
 // answers `R` and a reply byte, or `B` for a BREAK of its own.
 //
 //   qdhost --dev PATH [--screen NAME] [--source main|manual] [--budget N] [--room N]
-//          [--log FILE] PAGE.urf|PAGE.png...
+//          [--no-copy] [--log FILE] PAGE.urf|PAGE.png...
 //
 //   --dev PATH   qdfake's pty
 //   --screen     the record's screen (rip's names; atkinson by default)
@@ -16,13 +16,17 @@
 //   --budget N   bytes of codes a page may take (the model's 500,000 by default)
 //   --room N     bytes of codes the page printing and the page loading behind it may take
 //                together (the same 500,000 by default)
+//   --row-us N   wait N microseconds after each row, so a test can catch a page part loaded
+//   --no-copy    keep no copy of what the printer holds: a jam then has the printer's own
+//                recovery, as a board with no memory for the copy has
 //   --log FILE   every packet both ways, a line each: `MS > HEX` sent, `MS < HEX` heard,
 //                `MS ! text` what happened
 //
 // One line a page: `page N: atkinson, B bytes` (the record's screen, by name), `page N: apple,
 // B bytes` (Apple's 300 screen), or `page N: didn't fit in the printer's memory`; and as each
 // happens, `page N: printing`, `page N: done`, `page N waited T ms for room in the printer`,
-// `page N: printing again after a jam`, `page N: lost to a jam`. Exit 0:
+// `page N: printing again after a jam`, `page N sent again after a jam`, `page N: lost to a
+// jam`. Exit 0:
 // every page printed. 1: the printer did not answer, is not a Personal LaserWriter 300, held
 // the job, faulted, a page fit neither screen, or the job was cancelled (SIGINT: the page
 // stops, the printer is reset). 2: a bad command line, device or page.
@@ -60,6 +64,7 @@ typedef struct {
     uint32_t t0;
     int      failed;             // the first thing that went wrong: a session result, or RIP_FAILED
     int      page_no, too_big;
+    long     row_us;             // a test's wait after each row
     const char *screen;
     qd_session_t *sess;
     uint8_t  raw[512];           // what came off the line, not yet parsed
@@ -294,6 +299,7 @@ static void op_event(void *ctx, qd_event_t ev, int page, uint32_t ms)
     case QD_EV_DONE:    say(ctx, "page %d: done", page); break;
     case QD_EV_ROOM:    say(ctx, "page %d waited %u ms for room in the printer", page, (unsigned)ms); break;
     case QD_EV_REPRINT: say(ctx, "page %d: printing again after a jam", page); break;
+    case QD_EV_RESENT:  say(ctx, "page %d sent again after a jam", page); break;
     case QD_EV_LOST:    say(ctx, "page %d: lost to a jam", page); break;
     }
 }
@@ -395,6 +401,10 @@ static int sink_row(void *ctx, const uint8_t *codes, size_t n)
     host_t *h = ctx;
     int rc = qd_session_row(h->sess, codes, n);
     if (rc) h->failed = rc;
+    if (!rc && h->row_us > 0) {
+        struct timespec ts = { 0, h->row_us * 1000L };
+        nanosleep(&ts, NULL);
+    }
     return rc;
 }
 
@@ -427,13 +437,15 @@ static void rip_log(void *ctx, const char *msg)
 static void usage(void)
 {
     fprintf(stderr, "usage: qdhost --dev PATH [--screen NAME] [--source main|manual] [--budget N]\n"
-                    "              [--room N] [--log FILE] PAGE.urf|PAGE.png...\n");
+                    "              [--room N] [--no-copy] [--log FILE] PAGE.urf|PAGE.png...\n");
 }
 
 int main(int argc, char **argv)
 {
     const char *dev = NULL, *logpath = NULL, *screen = "atkinson", *source = "main";
     long budget = 0, room = 0;
+    int no_copy = 0;
+    long row_us = 0;
     int first_page = argc;
     for (int i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "--dev") && i + 1 < argc)          dev = argv[++i];
@@ -441,6 +453,8 @@ int main(int argc, char **argv)
         else if (!strcmp(argv[i], "--source") && i + 1 < argc) source = argv[++i];
         else if (!strcmp(argv[i], "--budget") && i + 1 < argc)  budget = atol(argv[++i]);
         else if (!strcmp(argv[i], "--room") && i + 1 < argc)    room = atol(argv[++i]);
+        else if (!strcmp(argv[i], "--no-copy"))                 no_copy = 1;
+        else if (!strcmp(argv[i], "--row-us") && i + 1 < argc)  row_us = atol(argv[++i]);
         else if (!strcmp(argv[i], "--log") && i + 1 < argc)     logpath = argv[++i];
         else if (argv[i][0] == '-' && argv[i][1] == '-')        { usage(); return 2; }
         else { first_page = i; break; }
@@ -457,6 +471,7 @@ int main(int argc, char **argv)
     h.fd = -1;
     h.t0 = clock_ms();
     h.screen = screen;
+    h.row_us = row_us;
     if (logpath && !(h.log = fopen(logpath, "w"))) {
         fprintf(stderr, "qdhost: cannot write %s: %s\n", logpath, strerror(errno));
         return 2;
@@ -466,8 +481,9 @@ int main(int argc, char **argv)
     uint8_t **urf = calloc((size_t)nfiles, sizeof *urf);
     size_t *urf_n = calloc((size_t)nfiles, sizeof *urf_n);
     uint8_t *keep = malloc(QD_KEEP_CAP);
+    uint8_t *copy = no_copy ? NULL : malloc(QD_COPY_CAP);
     qd_page_t *page = NULL;
-    if (!urf || !urf_n || !keep) goto out;
+    if (!urf || !urf_n || !keep || (!copy && !no_copy)) goto out;
     for (int i = 0; i < nfiles; i++)
         if (load(argv[first_page + i], &urf[i], &urf_n[i])) goto out;
 
@@ -501,7 +517,8 @@ int main(int argc, char **argv)
     say(&h, "found: %s", qd_spec(model)->name);
 
     const qd_job_cfg_t jc = { .model = model, .manual = !strcmp(source, "manual"),
-                              .room = (uint32_t)room };
+                              .room = (uint32_t)room,
+                              .copy = copy, .copy_cap = copy ? QD_COPY_CAP : 0 };
     if (!(h.sess = qd_session_new(&ops, &jc))) { say(&h, "out of memory"); goto out; }
     qd_page_cfg_t pc = { .model = model, .screen = algo, .keep = keep, .keep_cap = QD_KEEP_CAP,
                          .budget = (uint32_t)budget,
@@ -541,6 +558,7 @@ out:
     free(urf);
     free(urf_n);
     free(keep);
+    free(copy);
     if (h.fd >= 0) close(h.fd);
     if (h.log) fclose(h.log);
     return rc;

@@ -513,8 +513,9 @@ Traps already explained in a code comment are listed only when the comment is ea
      sequence. `8B 8B` sent straight after the recovery's `81 00` lands on that first page's
      start and blanks it (the bench's first two tries). After a recovery the printer writes
      from the start of its memory again, so the page after the one behind must start over
-     with `81 00`. A jammed page that is not the first can't be had back this way: the job
-     stops. The cover opened mid-page reads `83 01` `13`, `83 02` `0D`, and for about 3 s
+     with `81 00`. A jammed page that is not the first can't be had back this way: after
+     a jam on page 2 the recovery printed page 1. A job sends its pages again from the copy
+     it keeps (`qd_session.c`, `resend`) and never relies on the printer's reprint. The cover opened mid-page reads `83 01` `13`, `83 02` `0D`, and for about 3 s
      after it closes, and after `84 08`, the `83` questions go unanswered.
 - **A 300 that says jam is to be sent nothing but questions, `8A 00` and the lights** (W-1144;
   board 1's printer, 2026-11-13, runs A4d and A4e). An `8A 01` sent while `83 02` says jam is

@@ -51,8 +51,10 @@ int  qdlaser_status(int hz, qd_model_t m, qd_state_t *st, qd_raw_t *raw);
 // From the sink's begin under the job lock: fills `t` for job_pipe_begin_to (the model's caps,
 // the page stage, the screen ripjob is to use, the gain, keep when the record's screen is not
 // Apple's, and colour_ok, the hook that opens the link and begins the session on the rip task).
-// manual: take the paper from the manual feed slot. 0, or -1 with no clock on the line, no
-// memory or no such model; nothing is held then.
+// manual: take the paper from the manual feed slot. It also takes QD_COPY_CAP (512 KB) of
+// PSRAM for the session's copy of what the printer holds (W-1144), freed at the job's end;
+// with none to be had the job goes on with the printer's own jam recovery. 0, or -1 with no
+// clock on the line, no memory or no such model; nothing is held then.
 int  qdlaser_job_begin(qd_model_t m, ht_algo_t screen, int gain, int manual, job_pipe_target_t *t);
 // The first session error of the job so far, 0 for none.
 int  qdlaser_job_error(void);

@@ -41,6 +41,8 @@ typedef struct {
     uint8_t late[2];
     int late_n;
     int told;                    // the last 83 02 answered said jam or cover
+    int id_l, rows_l, id_p, rows_p;   // the loading and the printing page: its rows' first code, and how many
+    int out_id[16], out_rows[16], nout;   // the sheets that came out
     int into_fault;              // rows, 81 00, 84 08 or 8A 01 sent after it said so
     int just_done;
     int err_once;                // 8E's bit 1 once, cleared by that read
@@ -118,6 +120,7 @@ static void page_out(void)
 {
     F.printing = 0;
     F.done = 1;
+    if (F.nout < 16) { F.out_id[F.nout] = F.id_p; F.out_rows[F.nout++] = F.rows_p; }
     F.just_done = 1;
     F.brk_pending = 1;                  // the printer says so with a BREAK
     F.mem_p = 0;
@@ -216,6 +219,8 @@ static int f_put(void *ctx, const uint8_t *p, size_t n)
         for (size_t i = 0; i + 1 < n; i++) x ^= p[i];
         if (len + 3 != n || x != p[n - 1]) F.bad++;
         F.rows++;
+        if (!F.rows_l) F.id_l = p[2];
+        F.rows_l++;
         F.mem_l += len;
         if (F.printing) {
             F.rows_while++;
@@ -276,7 +281,13 @@ static int f_put(void *ctx, const uint8_t *p, size_t n)
             F.printing = 1;
             F.print_start = f_now();
             if (F.nprint < 16) F.t_print[F.nprint++] = f_now();
-            if (F.mem_l) { F.mem_p = F.mem_l; F.mem_l = 0; }   // not a page printed again
+            if (F.mem_l) {                      // not a page printed again
+                F.mem_p = F.mem_l;
+                F.mem_l = 0;
+                F.id_p = F.id_l;
+                F.rows_p = F.rows_l;
+                F.rows_l = 0;
+            }
             if (F.silent_after_print) F.silent = 1;
         } else if (p[1] == 0x00) {
             if (F.printing) F.stops++;
@@ -286,6 +297,7 @@ static int f_put(void *ctx, const uint8_t *p, size_t n)
     case 0x81:
         if (F.printing) { F.blanked++; F.printing = 0; }
         F.mem_l = 0;                            // the next row starts the memory over
+        F.rows_l = 0;
         break;
     case 0x85: case 0x86: case 0x87: case 0x88: case 0x89:
         if (F.printing) F.moved++;
@@ -1681,6 +1693,266 @@ static void test_a_done_is_not_lost_to_a_missed_answer(void)
     qd_session_free(s);
 }
 
+// ---- W-1144: the copy of what is in the printer, sent again after a jam
+
+static uint8_t g_copy[QD_COPY_CAP];
+
+static qd_session_t *copy_job(size_t cap)
+{
+    memset(g_copy, 0xEE, sizeof g_copy);
+    qd_job_cfg_t c = { .model = QD_PLW300, .copy = g_copy, .copy_cap = cap };
+    qd_session_t *s = qd_session_new(&g_ops, &c);
+    CHECK(s != NULL);
+    CHECK_EQ_INT(qd_session_begin(s), QD_OK);
+    return s;
+}
+
+// n rows of `size` codes, each the page's number.
+static int rows_of(qd_session_t *s, int no, int n, size_t size)
+{
+    uint8_t codes[512];
+    memset(codes, no, sizeof codes);
+    for (int i = 0; i < n; i++) {
+        int rc = qd_session_row(s, codes, size);
+        if (rc) return rc;
+    }
+    return 0;
+}
+
+static int page_of(qd_session_t *s, int no, int n, size_t size)
+{
+    int rc = qd_session_open(s, no, letter());
+    if (!rc) rc = rows_of(s, no, n, size);
+    if (!rc) rc = qd_session_print(s);
+    return rc;
+}
+
+// The sheets that came out: "1:100 2:100".
+static const char *sheets(void)
+{
+    static char t[256];
+    size_t n = 0;
+    t[0] = 0;
+    for (int i = 0; i < F.nout; i++)
+        n += (size_t)snprintf(t + n, sizeof t - n, "%s%d:%d", i ? " " : "", F.out_id[i], F.out_rows[i]);
+    return t;
+}
+
+static int resent(int page)
+{
+    for (int i = 0; i < F.nev; i++)
+        if (F.ev[i].ev == QD_EV_RESENT && F.ev[i].page == page) return 1;
+    return 0;
+}
+
+// A jam as page 2 prints, page 3 part loaded, page 1's sheet long out: pages 2 and 3 go again
+// from the copy and the rip carries on with page 3. The printer's own recovery, which would
+// print page 1, is not used: its last 8A 01 never goes.
+static void test_copy_jam_on_page_2_with_page_3_part_loaded(void)
+{
+    fake_reset();
+    F.print_ms = 30000;
+    qd_session_t *s = copy_job(QD_COPY_CAP);
+    CHECK_EQ_INT(page_of(s, 1, 100, 4), QD_OK);
+    CHECK_EQ_INT(page_of(s, 2, 100, 4), QD_OK);        // prints 30 s on, at page 1's done
+    F.win_from_print = 1;
+    F.win[F.nwin++] = (win_t){ 52000, 56000, 0x12, 0x0C, 0 };   // 22 s after page 1's done
+    CHECK_EQ_INT(qd_session_open(s, 3, letter()), QD_OK);
+    F.put_us = 50000;                                  // 30 s of rows
+    CHECK_EQ_INT(rows_of(s, 3, 600, 4), QD_OK);
+    F.put_us = 0;
+    CHECK(saw_state(QDS_JAM));
+    CHECK(!resent(1) && resent(2) && resent(3));
+    CHECK_HAS(F.trace, "8100 8408 8401 8340 833E 8200 835D 834C 8302 8100 8340 833E 8200 87DD");
+    CHECK_EQ_INT(qd_session_print(s), QD_OK);
+    CHECK_EQ_INT(qd_session_end(s), QD_OK);
+    CHECK_STR(sheets(), "1:100 2:100 3:600");
+    CHECK_EQ_INT(F.blanked + F.twice + F.moved + F.into_fault, 0);
+    CHECK_EQ_INT(ev_count(QD_EV_LOST) + ev_count(QD_EV_REPRINT), 0);
+    CHECK_EQ_INT(F.bad, 0);
+    qd_session_free(s);
+}
+
+// The jam comes 5 s after page 1's done: its sheet may be the one that jammed on its way out,
+// so it goes again too, and may come out twice.
+static void test_copy_jam_soon_after_a_done_sends_that_page_too(void)
+{
+    fake_reset();
+    F.print_ms = 30000;
+    qd_session_t *s = copy_job(QD_COPY_CAP);
+    CHECK_EQ_INT(page_of(s, 1, 100, 4), QD_OK);
+    CHECK_EQ_INT(page_of(s, 2, 100, 4), QD_OK);
+    F.win_from_print = 1;
+    F.win[F.nwin++] = (win_t){ 35000, 39000, 0x12, 0x08, 0 };
+    CHECK_EQ_INT(qd_session_open(s, 3, letter()), QD_OK);
+    F.put_us = 50000;
+    CHECK_EQ_INT(rows_of(s, 3, 600, 4), QD_OK);
+    F.put_us = 0;
+    CHECK(resent(1) && resent(2) && resent(3));
+    CHECK_EQ_INT(qd_session_print(s), QD_OK);
+    CHECK_EQ_INT(qd_session_end(s), QD_OK);
+    CHECK_STR(sheets(), "1:100 1:100 2:100 3:600");
+    CHECK_EQ_INT(F.blanked + F.twice + F.moved + F.into_fault, 0);
+    qd_session_free(s);
+}
+
+// A jam on page 1 while page 2 part loads: with the copy nothing is lost.
+static void test_copy_jam_on_page_1_while_page_2_loads(void)
+{
+    fake_reset();
+    qd_session_t *s = copy_job(QD_COPY_CAP);
+    CHECK_EQ_INT(page_of(s, 1, 100, 4), QD_OK);
+    F.win_from_print = 1;
+    F.win[F.nwin++] = (win_t){ 3000, 6000, 0x12, 0x08, 0 };
+    CHECK_EQ_INT(qd_session_open(s, 2, letter()), QD_OK);
+    F.put_us = 20000;                                  // 12 s of rows
+    CHECK_EQ_INT(rows_of(s, 2, 600, 4), QD_OK);
+    F.put_us = 0;
+    CHECK(resent(1) && resent(2));
+    CHECK_EQ_INT(qd_session_print(s), QD_OK);
+    CHECK_EQ_INT(qd_session_end(s), QD_OK);
+    CHECK_STR(sheets(), "1:100 2:600");
+    CHECK_EQ_INT(F.blanked + F.twice + F.moved + F.into_fault, 0);
+    CHECK_EQ_INT(ev_count(QD_EV_LOST), 0);
+    qd_session_free(s);
+}
+
+// A jam again while the pages go again: from the top, once it has cleared.
+static void test_copy_jam_during_the_resend(void)
+{
+    fake_reset();
+    qd_session_t *s = copy_job(QD_COPY_CAP);
+    CHECK_EQ_INT(page_of(s, 1, 100, 4), QD_OK);
+    F.win_from_print = 1;
+    F.win[F.nwin++] = (win_t){ 3000, 6000, 0x12, 0x08, 0 };
+    F.win[F.nwin++] = (win_t){ 13000, 16000, 0x12, 0x08, 0 };   // as page 2's rows go again
+    CHECK_EQ_INT(qd_session_open(s, 2, letter()), QD_OK);
+    F.put_us = 20000;
+    CHECK_EQ_INT(rows_of(s, 2, 600, 4), QD_OK);
+    F.put_us = 0;
+    CHECK_EQ_INT(count_tok("8408"), 2);
+    CHECK_EQ_INT(qd_session_print(s), QD_OK);
+    CHECK_EQ_INT(qd_session_end(s), QD_OK);
+    CHECK_STR(sheets(), "1:100 2:600");
+    CHECK_EQ_INT(F.blanked + F.twice + F.moved + F.into_fault, 0);
+    qd_session_free(s);
+}
+
+// A jam as the last page prints, and a Cancel while the pages go again.
+static void test_copy_jam_at_the_end_and_cancel(void)
+{
+    fake_reset();
+    F.print_ms = 30000;
+    qd_session_t *s = copy_job(QD_COPY_CAP);
+    CHECK_EQ_INT(page_of(s, 1, 100, 4), QD_OK);
+    CHECK_EQ_INT(page_of(s, 2, 100, 4), QD_OK);
+    F.win_from_print = 1;
+    F.win[F.nwin++] = (win_t){ 55000, 58000, 0x12, 0x08, 0 };   // page 2 printing, page 1 long out
+    CHECK_EQ_INT(qd_session_end(s), QD_OK);
+    CHECK_STR(sheets(), "1:100 2:100");
+    CHECK(resent(2) && !resent(1));
+    qd_session_free(s);
+
+    fake_reset();
+    s = copy_job(QD_COPY_CAP);
+    CHECK_EQ_INT(page_of(s, 1, 100, 4), QD_OK);
+    F.win_from_print = 1;
+    F.win[F.nwin++] = (win_t){ 3000, 6000, 0x12, 0x08, 0 };
+    F.cancel_at_ms = F.first_print + 7000;             // the jam just gone, not yet stayed clear
+    CHECK_EQ_INT(qd_session_end(s), QD_E_CANCEL);
+    CHECK_EQ_INT(F.nout, 0);
+    CHECK_EQ_INT(F.into_fault, 0);
+    qd_session_free(s);
+}
+
+// A page near the budget, then another: the second's rows wait for room in the printer, and
+// its copy takes the first's place only once the first is done.
+static void test_copy_of_a_page_near_the_budget_then_another(void)
+{
+    fake_reset();
+    qd_session_t *s = copy_job(QD_COPY_CAP);
+    CHECK_EQ_INT(page_of(s, 1, 1660, 300), QD_OK);     // 498,000 bytes of codes
+    CHECK_EQ_INT(qd_session_open(s, 2, letter()), QD_OK);
+    CHECK_EQ_INT(rows_of(s, 2, 6, 300), QD_OK);        // all that fits beside it
+    CHECK_EQ_INT(F.ndone, 0);
+    int same = 1;
+    for (int i = 0; i < 302 * 1660; i++) {             // page 1's copy is whole: [2C 01][300 x 01]
+        int at = i % 302;
+        same &= g_copy[i] == (at == 0 ? 0x2C : 1);
+    }
+    CHECK(same);
+    CHECK_EQ_INT(rows_of(s, 2, 1654, 300), QD_OK);     // the rest, once page 1 is done
+    CHECK_EQ_INT(F.ndone, 1);
+    CHECK_EQ_INT(qd_session_print(s), QD_OK);
+    F.win_from_print = 1;
+    uint32_t at = F.t_print[1] - F.first_print;
+    F.win[F.nwin++] = (win_t){ at + 5000, at + 8000, 0x12, 0x08, 0 };
+    CHECK_EQ_INT(qd_session_end(s), QD_OK);
+    CHECK(resent(2) && !resent(1));                    // page 1's copy made way for page 2's
+    CHECK_STR(sheets(), "1:1660 2:1660");
+    CHECK(F.mem_peak <= 500000);
+    CHECK_EQ_INT(F.blanked + F.twice + F.into_fault, 0);
+    qd_session_free(s);
+}
+
+// A copy too small for two pages: a row never goes in over a page still in the printer. The
+// page loading has no copy then, and a jam has the rules of a job with none.
+static void test_copy_never_overwrites_a_page_in_the_printer(void)
+{
+    fake_reset();
+    qd_session_t *s = copy_job(1000);
+    CHECK_EQ_INT(page_of(s, 1, 100, 4), QD_OK);        // 600 bytes of the copy
+    F.win_from_print = 1;
+    F.win[F.nwin++] = (win_t){ 6000, 9000, 0x12, 0x08, 0 };
+    CHECK_EQ_INT(qd_session_open(s, 2, letter()), QD_OK);
+    F.put_us = 20000;
+    CHECK_EQ_INT(rows_of(s, 2, 200, 4), QD_OK);        // 4 s: page 1 still printing
+    int same = 1;
+    for (int i = 0; i < 600; i++) same &= g_copy[i] == (i % 6 == 0 ? 4 : i % 6 == 1 ? 0 : 1);
+    CHECK(same);                                       // page 1's copy untouched
+    CHECK_EQ_INT(g_copy[1000], 0xEE);                  // and nothing past the ring
+    CHECK_EQ_INT(rows_of(s, 2, 400, 4), QD_E_FAULT);   // the jam: no copy of page 2
+    CHECK_EQ_INT(ev_count(QD_EV_RESENT), 0);
+    int pg = 0;
+    CHECK(ev_n(QD_EV_REPRINT, 0, &pg, NULL) && pg == 1);
+    CHECK(ev_n(QD_EV_LOST, 0, &pg, NULL) && pg == 2);
+    qd_session_free(s);
+
+    // The ring wraps: five pages through a copy that holds two and a bit, a jam on the last.
+    fake_reset();
+    s = copy_job(1500);
+    for (int i = 1; i <= 4; i++) CHECK_EQ_INT(page_of(s, i, 100, 4), QD_OK);
+    CHECK_EQ_INT(page_of(s, 5, 100, 4), QD_OK);
+    uint32_t at = F.t_print[4] - F.first_print;
+    F.win[F.nwin++] = (win_t){ at + 3000, at + 6000, 0x12, 0x08, 0 };
+    F.win_from_print = 1;
+    CHECK_EQ_INT(qd_session_end(s), QD_OK);
+    CHECK_STR(sheets(), "1:100 2:100 3:100 4:100 4:100 5:100");
+    CHECK_EQ_INT(g_copy[1500], 0xEE);
+    qd_session_free(s);
+}
+
+// A page opened again for Apple's screen: its copy starts over with it.
+static void test_copy_of_a_page_opened_again(void)
+{
+    fake_reset();
+    qd_session_t *s = copy_job(QD_COPY_CAP);
+    CHECK_EQ_INT(page_of(s, 1, 100, 4), QD_OK);
+    CHECK_EQ_INT(qd_session_open(s, 2, letter()), QD_OK);
+    CHECK_EQ_INT(rows_of(s, 9, 300, 4), QD_OK);        // the rows that will not print
+    CHECK_EQ_INT(qd_session_open(s, 2, letter()), QD_OK);
+    CHECK_EQ_INT(rows_of(s, 2, 50, 4), QD_OK);
+    CHECK_EQ_INT(qd_session_print(s), QD_OK);
+    F.win_from_print = 1;
+    uint32_t at = F.t_print[1] - F.first_print;
+    F.win[F.nwin++] = (win_t){ at + 3000, at + 6000, 0x12, 0x08, 0 };
+    CHECK_EQ_INT(qd_session_end(s), QD_OK);
+    CHECK(resent(2));
+    CHECK_EQ_INT(F.out_id[F.nout - 1], 2);
+    CHECK_EQ_INT(F.out_rows[F.nout - 1], 50);
+    qd_session_free(s);
+}
+
 int main(void)
 {
     test_identity_sequence();
@@ -1737,5 +2009,13 @@ int main(void)
     test_misses_are_counted_in_a_row();
     test_cancel_as_the_last_page_prints();
     test_a_done_is_not_lost_to_a_missed_answer();
+    test_copy_jam_on_page_2_with_page_3_part_loaded();
+    test_copy_jam_soon_after_a_done_sends_that_page_too();
+    test_copy_jam_on_page_1_while_page_2_loads();
+    test_copy_jam_during_the_resend();
+    test_copy_jam_at_the_end_and_cancel();
+    test_copy_of_a_page_near_the_budget_then_another();
+    test_copy_never_overwrites_a_page_in_the_printer();
+    test_copy_of_a_page_opened_again();
     TEST_END;
 }

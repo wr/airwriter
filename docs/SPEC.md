@@ -1517,22 +1517,31 @@ printer here to test on.
     sheet still in the path, a jam on page 2 read clear once after the cover closed, then jam
     again until the second sheet was out. The recovery asks `83 02` once more before its
     `8A 01`, and waits again if the jam is back.
-  - *A jam or the cover.* Apple's recovery prints again the page at the start of the memory,
-    the first printed since the last `81 00`, and a page loaded behind it is still there: the
-    cover opened 7 s into page 1 with page 2 loaded printed a whole page 1, then a whole page 2
-    from page 2's own print sequence. So when the page stopped is the first since the last
-    `81 00` (a job's first, or the first after a change of sheet, a fallback or a recovery),
-    the session recovers as before and the page behind prints after; the page after that waits
-    for the done and starts the memory over with a whole setup, since the recovery left the
-    printer writing at the start of its memory. When the page stopped is a later one, the
-    job stops (`QD_E_FAULT`, log: `page N: lost to a jam or the cover…`), the state showing
-    the jam until it clears: the recovery would print the first page again. The job stops too
-    when the first page jams while the next is part loaded (its rows going in, or waiting for
-    room): the first page is recovered, but the recovery's `81 00` leaves the rest of the next
-    page's rows nowhere to follow the rows already in. With none of its rows in yet, it waits
-    for the done and starts the memory over. `jam_reprints` in
-    `qd_session.c` holds the choice. Not built: a copy of what is in the printer, kept on the
-    board and sent again, which would print any jammed page again.
+  - *A jam or the cover: the pages go again from the board's copy.* The printer's own
+    recovery prints again the page at the start of its memory, the first since the last
+    `81 00`: after a jam on page 2 it printed page 1 (bench), and a jam as page 2 prints
+    usually has page 1's sheet in the path too. So the board never relies on it for a job.
+    `qdlaser_job_begin` takes 512 KB of PSRAM (`QD_COPY_CAP`; the log gives PSRAM free before
+    and after) and the session keeps in it, as a ring, every row it puts into the printer
+    (`[u16 n][codes]`), with a record a page: its number, sheet, place, bytes, rows, whether
+    it is loading, printing or done, and when its done came. Room comes back from the oldest
+    page that is done, never from one still in the printer; two pages at the budget with two
+    bytes a row are 515,000 bytes. A row that could only go in over a page still in the
+    printer is left out and its page's copy marked not whole. After a jam: `8A 00`; the wait
+    until `83 02` has stayed clear; Apple's recovery up to but not its last `81 00`, `8A 01`;
+    then, by the path they first went by (the whole setup for the first, rows, the check, the
+    print sequence, each waiting for the done before it, inside the room), the page whose done
+    came less than 20 s before the jam (its sheet may be the one that jammed on its way out;
+    it may come out twice), the page that was printing, and the rows so far of the page
+    loading, which the rip then goes on with. Log: `page N sent again after a jam`. A jam
+    while they go again starts over once it has cleared.
+  - *With no copy* (no PSRAM for it at the job's start, logged; a copy not whole; the test
+    page, which is one page at the start of the memory): the printer's own recovery when the
+    page stopped is the first since the last `81 00`, and a page loaded whole behind it prints
+    after (bench A4c). Any other jam stops the job (`QD_E_FAULT`, log: `page N: lost to a jam
+    or the cover…`), the state showing the jam until it clears; so does a jam on the first
+    page with the next part loaded, whose other rows the recovery's `81 00` leaves nowhere to
+    go. `jam_reprints` in `qd_session.c` holds that rule.
   - *The log*, per page: `page N: printing` (its `8A 01`), `page N: done, read T ms after its
     print`, and any wait for room. The rip's per-page line's `end` is now the wait for the page
     before and this page's print sequence. The job's `all out in N s` counts the end's wait for
@@ -1562,8 +1571,9 @@ printer here to test on.
 
   Jam and cover go through Apple's recovery once `83 02` clears: `81 00`, `84 08` for 280 ms,
   `84 01`, `83 40`, `83 3E`, `82 00`, `83 5D`, the source, `83 02`, `81 00`, `8A 01`, which prints again
-  the page at the start of the printer's memory: the page that jammed when it is the first
-  since the last `81 00`, and otherwise the job stops (above). The cover opened mid-page reads
+  the page at the start of the printer's memory. A job uses it only up to that last `81 00`,
+  `8A 01`, and then sends its pages again from its copy (above); the test page, one page at
+  the start of the memory, uses it whole. The cover opened mid-page reads
   as a jam (the sheet is caught: `83 01` `13`, `83 02` `0D`), and the printer wants the cover
   opened and closed again once the sheet is pulled; for a few seconds after it closes the `83`
   questions go unanswered, which the five tries of each ride out.
@@ -1608,8 +1618,9 @@ printer here to test on.
   near the exit and taken out; the recovery's `8A 01`, sent while the printer said jam,
   printed nothing then, and ran by itself when the jam cleared (`83 01` `20` within 9 s);
   `81 00` and `84 08` sent into that feed jammed it again. Not known: whether the printer
-  takes rows while a jam or the open cover holds it (the session sends none), and whether
-  its recovery can print again a page that is not the first since the last `81 00`.
+  takes rows while a jam or the open cover holds it (the session sends none). Asked again
+  after A4e: the printer's own recovery after a jam on page 2 printed page 1. The copy's
+  resend has run against `qdfake.py` only.
 
 ---
 

@@ -51,10 +51,12 @@ record; the bench that answered this design's open question is there too):
   to the question "One page at a time" left open. So a page on another sheet, a page going again
   in Apple's screen and the job's end all wait for the page printing first. `81 00` goes back
   to the start of the printer's memory and clears nothing.
-- **A jam reprints only the first page since the last `81 00`**, which is where Apple's
-  recovery starts; a page loaded behind it prints after. A jam on a later page stops the job
-  and names the page. A copy of the printer's memory kept on the board, which would print any
-  page again, is not built.
+- **After a jam the board sends the pages again itself.** Apple's recovery reprints the first
+  page since the last `81 00`, which is where it starts: after a jam on page 2 it printed
+  page 1. So a job keeps a 512 KB copy of what the printer holds and, once the jam has
+  cleared, sends again the page whose sheet may still have been on its way out, the page that
+  was printing and the rows of the page loading. With no memory for the copy, a jam on the
+  job's first page has the printer's recovery and any other stops the job and names the page.
 - **Cancel lets the sheet that is printing come out**, then stops: stopped mid-sheet it comes
   out blank.
 - **Nothing but questions and `8A 00` goes to a printer that says jam or cover**, and a jam is

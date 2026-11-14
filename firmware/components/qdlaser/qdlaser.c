@@ -7,9 +7,13 @@
 #include "serial_out.h"
 #include "job_pipe.h"
 
+#include <stdlib.h>
 #include <string.h>
 #include "sdkconfig.h"
 #include "esp_log.h"
+#ifdef ESP_PLATFORM
+#include "esp_heap_caps.h"
+#endif
 
 static const char *TAG = "qdlaser";
 
@@ -46,6 +50,9 @@ static void ops_event(void *ctx, qd_event_t ev, int page, uint32_t ms)
         break;
     case QD_EV_REPRINT:
         ESP_LOGW(TAG, "page %d: stopped by a jam or the cover; the printer prints it again", page);
+        break;
+    case QD_EV_RESENT:
+        ESP_LOGW(TAG, "page %d sent again after a jam", page);
         break;
     case QD_EV_LOST:
         ESP_LOGE(TAG, "page %d: lost to a jam or the cover, and the printer can't print it again; "
@@ -185,6 +192,7 @@ int qdlaser_test_page(int hz, qd_model_t m, const sw_tp_info_t *info)
 typedef struct {
     qd_session_t *s;
     qd_page_t    *page;
+    uint8_t      *copy;          // the session's copy of what the printer holds (W-1144)
     rip_stage_t   stage;         // the target's by pointer; filled in when the rip begins
     qd_model_t    model;
     ht_algo_t     screen;
@@ -197,10 +205,31 @@ typedef struct {
 
 static job_t s_job;
 
+// PSRAM free, for the log; 0 on a host.
+static unsigned psram_free(void)
+{
+#ifdef ESP_PLATFORM
+    return (unsigned)heap_caps_get_free_size(MALLOC_CAP_SPIRAM);
+#else
+    return 0;
+#endif
+}
+
+// The copy is PSRAM's or nothing: half a megabyte never comes out of internal RAM.
+static uint8_t *copy_alloc(void)
+{
+#ifdef ESP_PLATFORM
+    return heap_caps_malloc(QD_COPY_CAP, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+#else
+    return malloc(QD_COPY_CAP);
+#endif
+}
+
 static void job_free(void)
 {
     qd_page_free(s_job.page);        // both take NULL
     qd_session_free(s_job.s);
+    free(s_job.copy);
     if (s_job.linked) qd_link_close();
     memset(&s_job, 0, sizeof s_job);
     s_cancel = 0;                    // a cancel is the job's: it ends with it
@@ -301,11 +330,24 @@ int qdlaser_job_begin(qd_model_t m, ht_algo_t screen, int gain, int manual, job_
     if (!caps || !t) return -1;
     job_free();                      // nothing should be held; belt and braces
     if (!serial_out_clock(NULL)) return -1;
+    // W-1144: a copy of what the printer holds, to send again after a jam. Without it a jam
+    // has the printer's own recovery, which prints again only the first page it was sent.
+    const unsigned before = psram_free();
+    (void)before;                    // (the log's alone)
+    s_job.copy = copy_alloc();
+    if (s_job.copy)
+        ESP_LOGI(TAG, "copy of the printer's pages: %u bytes; PSRAM free %u, then %u",
+                 (unsigned)QD_COPY_CAP, before, psram_free());
+    else
+        ESP_LOGW(TAG, "no memory for a copy of the printer's pages (PSRAM free %u): a jam "
+                      "after the first page will stop the job", before);
     const qd_job_cfg_t jc = { .model = m, .manual = manual,
-                              .stall_ms = CONFIG_AIRWRITER_STALL_ABORT * 1000u };
+                              .stall_ms = CONFIG_AIRWRITER_STALL_ABORT * 1000u,
+                              .copy = s_job.copy, .copy_cap = s_job.copy ? QD_COPY_CAP : 0 };
     s_job.s = qd_session_new(qdlaser_ops(), &jc);
     if (!s_job.s) {
         ESP_LOGE(TAG, "no memory for the session");
+        job_free();
         return -1;
     }
     const int apple = screen == HT_APPLE || screen == HT_APPLE_LW;

@@ -21,9 +21,14 @@
 //   - 81 00 never goes between a page's 8A 01 and its done, unless to stop it: the sheet
 //     comes out blank;
 //   - after a jam or the cover, Apple's recovery prints again the page at the start of the
-//     printer's memory: the first printed since the last 81 00. A page loaded behind it is
-//     still there and prints after it. A later page can't be had back (jam_reprints in
-//     qd_session.c holds that choice), and the job stops;
+//     printer's memory: the first printed since the last 81 00 (after a jam on page 2 it
+//     printed page 1). A job that gives the session a copy buffer never relies on it: the
+//     session keeps every row it sends, and after a jam sends again, by the path they first
+//     went by, the page whose done came less than 20 s before (its sheet may be the one that
+//     jammed on its way out), the page that was printing and the rows so far of the page
+//     loading (QD_EV_RESENT each). With no copy, or one that is not whole: the printer's own
+//     recovery for the first page since the last 81 00, with a page loaded whole behind it
+//     printing after, and any other jam stops the job (jam_reprints in qd_session.c);
 //   - while 83 02 says jam or cover, nothing goes but questions, 8A 00 and the lights: no
 //     row, no 81 00, no 84 08, no 8A 01 (the printer keeps an 8A 01 sent into a jam and feeds
 //     by itself when it clears, and 81 00 and 84 08 sent into that feed jammed it again). A
@@ -74,6 +79,7 @@ typedef enum {
     QD_EV_ROOM,      // its rows waited ms for the page before it to be done and free its room
     QD_EV_REPRINT,   // a jam or the cover stopped it, and the printer's recovery prints it again
     QD_EV_LOST,      // a jam or the cover, and the printer can't print it again: the job stops
+    QD_EV_RESENT,    // a jam or the cover: its rows go to the printer again from the copy
 } qd_event_t;
 
 typedef struct {
@@ -117,7 +123,14 @@ typedef struct {
     uint32_t   stall_ms;     // the longest a fault holds the job; 0: 600000
     uint32_t   room;         // bytes of codes the printing and the loading page may take
                              // together; 0: the model's budget (500000)
+    uint8_t   *copy;         // where the session keeps a copy of what the printer holds, to
+    size_t     copy_cap;     // send again after a jam; NULL: the printer's own recovery
 } qd_job_cfg_t;
+
+// The copy a job gives the session: a ring of the rows in the printer, [u16 LE n][codes]
+// each. Two pages at the budget with two bytes a row (Legal's 3,750 rows) are 515,000 bytes.
+// Room comes back from the oldest page that is done, never from one still in the printer.
+enum { QD_COPY_CAP = 512 * 1024 };
 
 typedef struct qd_session qd_session_t;
 
@@ -143,10 +156,11 @@ int  qd_session_open(qd_session_t *s, int page, const qd_media_t *md);
 // (QD_EV_ROOM). Otherwise, at the printer's BREAK or every 500 ms, the status: 8E 00 with a
 // page printing, and 83 01 and 83 02 when that is not done or nothing prints. What it finds
 // wrong is seen to before another row goes:
-//   - a jam or the cover with a page printing: 8A 00, the wait until it is gone, the
-//     recovery. A page with rows already behind the page printing is then lost
-//     (QD_EV_LOST, QD_E_FAULT): the recovery's 81 00 leaves the rest nowhere to follow them.
-//     With none in yet, it waits for the done and starts the memory over;
+//   - a jam or the cover with a page printing: 8A 00, the wait until it is gone, and the
+//     pages sent again from the copy, this page's rows so far among them. With no copy, the
+//     printer's recovery: a page with rows already behind the page printing is then lost
+//     (QD_EV_LOST, QD_E_FAULT), since the recovery's 81 00 leaves the rest nowhere to follow
+//     them; with none in yet, it waits for the done and starts the memory over;
 //   - a jam or the cover with nothing printing: the rows wait until it is gone;
 //   - no paper for the page printing: 8A 00, the wait for paper, 8A 01;
 //   - an engine fault ends the job.
