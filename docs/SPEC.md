@@ -1654,16 +1654,26 @@ printer here to test on.
   page 1 with page 2 loaded, then Apple's recovery: page 1 whole 20.6 s later, page 2 whole
   17.3 s after its own print sequence. A5: the offsets changed 3 s into page 1's print, both
   sheets 4.5 mm down and 5.5 mm left. Free PSRAM during a three-page job never under 597 KB.
-  **The firmware that loads the next page while one prints has run against `qdfake.py` only
-  (`test_qd_session`, `qdinterop`), not yet on a board.** A4d, A4e (later that evening): the
+  A4d, A4e (later that evening): the
   cover opened 8.5 s into page 2's print, page 1's sheet still on its way out. After it
   closed, `83 02` read clear once, then jam for 15 minutes, until a second sheet was found
   near the exit and taken out; the recovery's `8A 01`, sent while the printer said jam,
   printed nothing then, and ran by itself when the jam cleared (`83 01` `20` within 9 s);
   `81 00` and `84 08` sent into that feed jammed it again. Not known: whether the printer
   takes rows while a jam or the open cover holds it (the session sends none). Asked again
-  after A4e: the printer's own recovery after a jam on page 2 printed page 1. The copy's
-  resend has run against `qdfake.py` only.
+  after A4e: the printer's own recovery after a jam on page 2 printed page 1.
+- **Bench for W-1144's firmware (board 1 and the same printer, 51e4243, 2026-11-13 night,
+  `ipptool` from a Mac).** Three pages all out in 63 s (75 s a page at a time), prints 17.2 and
+  17.4 s apart; the copy took its 524,288 bytes of PSRAM with 648,988 free. Ten pages of 118 to
+  123 KB of codes in 191 s (about 250 s before), each 17.05 to 17.22 s after the last. Two
+  364 KB pages: page 2 waited 9.65 s for room and printed 10.9 s after page 1's done. A Cancel
+  during page 2 of three: page 2 came out, page 3 never went, the job ended canceled. Wells
+  checked every sheet: whole and in order. The cover opened during the ten pages, as sheet 3
+  landed 16.0 s after its done, with page 4 printing and page 5 loading: the board read jam at
+  once and, once it cleared, sent page 3 again from the copy (its done inside the 20 s), then
+  page 4 and page 5's rows. `83 2A` then read no paper for 2.8 s (the cassette was out to clear
+  the jam), the page waited and printed, and pages 5 to 10 followed 16.8 to 16.9 s apart:
+  all ten, page 3 twice, in 270 s. 0 bad bits in every job.
 
 ### 3.19 Two boards: rev A and rev 2026.11 (W-1109)
 

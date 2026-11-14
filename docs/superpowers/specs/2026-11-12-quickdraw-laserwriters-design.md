@@ -69,6 +69,10 @@ record; the bench that answered this design's open question is there too):
   `84 08` sent into that feed.
 - **`qdfake.py`** holds two pages as the printer does: the memory, `81 00`, the offsets read as
   a page prints, a jam's recovery, a print time and a time for the sheet to leave.
+- **The command table below now says what the bench found** (2026-11-14): `82 00` bit 0 never
+  came on, the memory full or not, so nothing waits on it; bit 1 comes past about 262 KB and
+  bit 2 means nothing waits to print. `81 00`, the offsets, `8E 00` bit 0 and Apple's jam
+  recovery carry their W-1144 findings there too.
 
 ## Why
 
@@ -153,8 +157,8 @@ its third byte is in).
 
 | Packet | Meaning on the 300 |
 |---|---|
-| `81 00` | Reset the link and the page memory's pointers. No reply. |
-| `82 00` | Controller status. `A4` idle. Bits 7–6 controller type (`10`: no page RAM pointers). Bit 0 memory full; bit 1 memory past about half (set from about 300 KB of page); bit 3 engine not ready (set with no paper). |
+| `81 00` | Reset the link and the page memory's pointers. No reply. Back to the start of the memory, clearing nothing; while a page prints, that sheet comes out blank and no page done comes (W-1144). |
+| `82 00` | Controller status. `A4` idle. Bits 7–6 controller type (`10`: no page RAM pointers). Bit 0 memory full by Apple's driver, never set on board 1's printer, the memory full or not (W-1144: `8E 00` bit 0 says it); bit 1 more than about 262 KB of codes held; bit 2 nothing waiting to print (`A0` with a page in); bit 3 engine not ready (set with no paper or the cover open). |
 | `83 40` | Tells the engine the controller clocks its status. Sent after `81 00`. |
 | `83 3E` | Engine identity: `29` is a Personal LaserWriter 300 (`0D` LS, `23` a Japanese model, else Select 300, per Apple's driver). |
 | `83 01` | Engine status: `20` paper moving, `10` page to be sent again (after a jam), `02` a fault stored (also set with `83 02`'s `10`, board 1). |
@@ -166,9 +170,9 @@ its third byte is in).
 | `83 9D`, value | Sent with `21` before each job. A value goes as a second `83` packet, `(v << 1)` with odd parity. |
 | `83 A7`, value | Density, 0–63, Apple's default 32. |
 | `84 v` | The front lights and engine lines: bit 0 Ready, bit 1 Paper, bit 2 Jam, bit 3 engine reset. Write only. |
-| `85`/`86`, `87`, `88`/`89` | Top offset in rows, left margin in bytes, row width in bytes, each sent negative (`88 D4 89 FE` is −300). |
+| `85`/`86`, `87`, `88`/`89` | Top offset in rows, left margin in bytes, row width in bytes, each sent negative (`88 D4 89 FE` is −300). The offsets are read as a page prints: changed 3 s into a print for the next page, they moved both sheets (W-1144). |
 | `8B 8B` ×2, then `8A 01` | End the page, then print it. `8A 00` stops. |
-| `8E 00` | Status: bit 2 page done (cleared by the read), bit 1 error, bit 0 memory full. |
+| `8E 00` | Status: bit 2 page done (cleared by the read), bit 1 error, bit 0 memory full (with a BREAK; while a page prints, that sheet and the next come out blank, W-1144). |
 
 **A page.** One packet per row: `BREAK 4F|4E len codes... xor`, the length a 12-bit negative
 count (`4F FF` one byte of codes, `4E FF` 257), the last byte the XOR of every byte before it.
@@ -187,11 +191,13 @@ Apple's job: `81 00`, `83 40`, `83 3E`, `82 00`, `87`, `85`, `86`, `83 9D`/`21`,
 second), then `83 2A`, `84` with the Paper light off, `8B 8B` twice and `8A 01`. On the bench
 the page came out 17 s after `8A 01`. The driver learns a page is done from the printer's BREAK
 and `8E 00` bit 2, and gives up after 85 s. Apple's driver sends the next page's rows while a
-page prints, and on memory full waits for `82 00` bit 0 to clear; whether `81 00` during a print
-cuts the page being printed is not known. Another copy is `81 00` and
+page prints, and on memory full waits for `82 00` bit 0 to clear, which board 1's printer never
+set: memory full while a page prints lost both pages (W-1144). `81 00` during a print blanks
+that sheet (W-1144). Another copy is `81 00` and
 `8A 01` again, with no data. A jam: `8A 00`, then `81 00`, `84 08` for about 280 ms, `84 01`,
 `83 40`, `83 3E`, `82 00`, `83 5D`, the paper source again, and `81 00`, `8A 01` reprints the
-page still in memory. Out of paper: `8A 00`, wait for `83 2A`, then `8A 01`.
+first page loaded since the `81 00` before the jam, whichever page jammed: after a jam on page 2
+it printed page 1 (W-1144). Out of paper: `8A 00`, wait for `83 2A`, then `8A 01`.
 
 **A row whose check fails** sets `8E 00` bit 1 (`FA`), with `82 00` as for any page loading
 (board 1, 2026-11-13, a test build that flipped one row's check). The read back off the pad
@@ -199,7 +205,8 @@ proves what left IO17; `8E` says what the printer kept.
 
 **Memory.** About half a megabyte, and Apple's driver never measured it: a page that ran out
 mid-load was an alert and a lost page. Loads without printing put 513,287 bytes of codes in a
-whole page and no more than 533,655. A full-bleed 300 dpi photo codes to 75 KB in Apple's 300
+whole page and no more than 533,655. The page printing and the page loading behind it share it,
+and a page's room is free again at its done (W-1144). A full-bleed 300 dpi photo codes to 75 KB in Apple's 300
 screen, 238 KB in Bayer, 366 KB in AirWriter's StyleWriter "apple" screen, and 934 to 955 KB
 in Atkinson, Floyd and blue noise. A page of text codes to a few hundred KB (Apple's own text
 page was 395 KB).
