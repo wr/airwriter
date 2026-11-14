@@ -13,7 +13,9 @@
 #include "testpage.h"
 #include "printer_caps.h"
 #include "ps_page.h"
-#include "ps_testpage.h"
+#include "lw_caps.h"
+#include "tp_iw.h"
+#include "iw_stage.h"
 #include "lw_query.h"
 #include "sw_page.h"
 #include "sw_rip.h"
@@ -222,21 +224,32 @@ static void on_ink_row(void *ctx, const uint8_t *const bits[IW_INKS], uint32_t w
     }
 }
 
-/* The test page with board 1's details, for tools/iwview to draw. */
+/* The details every host-built test page prints: board 1's. */
+static tp_info_t tp_board1(const char *printer, ht_algo_t algo, int gain)
+{
+    return (tp_info_t){ .printer = printer, .board = "v0.4.0 at 10.0.1.115",
+                        .settings = "http://airwriter-2434.local", .screen = algo, .gain = gain };
+}
+
+/* The ImageWriter's test page (W-1140: the page every printer prints) for a ribbon, through the
+ * strips a phone's page goes through, with the top margin as the board puts it on the page (no
+ * more than the sheet's blank first inch dropped), for tools/iwview to draw. */
 static int print_testpage(const char *ribbon, const char *path, ht_algo_t algo, int gain, int top)
 {
-    tp_info_t info = {
-        .version = "v0.2.0-29", .built = "Oct 20 2026", .model = "ImageWriter II",
-        .name = "ImageWriter II", .host = "imagewriter-2434", .ip = "10.0.1.115",
-        .appletalk = "AppleTalk port", .screen = algo, .gain = gain, .top_margin = top,
-        .ribbon = !strcmp(ribbon, "colour") ? IW_RIBBON_COLOUR
-                : !strcmp(ribbon, "black")  ? IW_RIBBON_BLACK : IW_RIBBON_UNKNOWN,
-    };
+    tp_geom_t g;
+    tp_iw_geom("ImageWriter II", "icon", !strcmp(ribbon, "colour") ? IW_RIBBON_COLOUR
+               : !strcmp(ribbon, "black") ? IW_RIBBON_BLACK : IW_RIBBON_UNKNOWN, &g);
+    tp_info_t info = tp_board1("ImageWriter II", algo, gain);
+    info.geom = &g;
     host_t h;
     memset(&h, 0, sizeof h);
     if (!(h.stream = fopen(path, "wb"))) { perror(path); return 1; }
-    tp_io_t io = { .out = stream_out, .out_ctx = &h };
-    tp_result_t rc = tp_print(&info, &io);
+    iw_stage_t ist;
+    iw_stage_init(&ist, stream_out, &h, g.colour, top < -144 ? -144 : top);
+    rip_stage_t st;
+    iw_stage(&ist, &st);
+    int rc = tp_page(&info, &st);
+    iw_stage_free(&ist);
     long n = ftell(h.stream);
     fclose(h.stream);
     if (rc != TP_DONE || h.write_failed) {
@@ -266,17 +279,16 @@ static int print_sw_testpage(const char *cart, sw_model_t model, const char *pat
     int rc = -1;
     if (p) {
         sw_page_stage(p, &st);
-        sw_tp_info_t info = {
-            .printer = sw_spec(model)->name, .board = "AirWriter v0.3.0 at 10.0.1.115",
-            .host = "airwriter-2434.local", .model = model, .colour_cart = colour, .gain = gain,
-            .screen = algo,
-        };
-        rc = sw_testpage(&info, &st);
+        tp_geom_t g;
+        sw_tp_geom(model, colour, &g);
+        tp_info_t info = tp_board1(sw_spec(model)->name, algo, gain);
+        info.geom = &g;
+        rc = tp_page(&info, &st);
         sw_page_free(p);
     }
     long n = ftell(h.sw);
     fclose(h.sw);
-    if (rc != SW_TP_DONE || h.write_failed) {
+    if (rc != TP_DONE || h.write_failed) {
         fprintf(stderr, "rip: test page failed (%d)\n", rc);
         return 1;
     }
@@ -382,25 +394,23 @@ static int print_qd_testpage(const char *path, ht_algo_t algo, int gain)
     const qd_job_cfg_t jc = { .model = QD_PLW300 };
     qd_page_cfg_t pc = { .model = QD_PLW300, .screen = algo, .gain = gain,
                          .sink = { qdw_open, qdw_row, qdw_print, qdt_note, &qw } };
-    sw_tp_geom_t g;
+    tp_geom_t g;
     qd_page_t *qdp = NULL;
     int rc = -1;
     if (!qd_tp_geom(QD_PLW300, &g) && (qw.sess = qd_session_new(&ops, &jc)) &&
         (qdp = qd_page_new(&pc)) && !qd_session_begin(qw.sess)) {
         rip_stage_t st;
         qd_page_stage(qdp, &st);
-        sw_tp_info_t info = {
-            .printer = "Personal LaserWriter 300", .board = "AirWriter v0.3.0 at 10.0.1.115",
-            .host = "airwriter-2434.local", .gain = gain, .screen = algo, .geom = &g,
-        };
-        rc = sw_testpage(&info, &st);
-        if (rc == SW_TP_DONE && qd_session_end(qw.sess)) rc = -1;
+        tp_info_t info = tp_board1("Personal LaserWriter 300", algo, gain);
+        info.geom = &g;
+        rc = tp_page(&info, &st);
+        if (rc == TP_DONE && qd_session_end(qw.sess)) rc = -1;
     }
     qd_page_free(qdp);
     qd_session_free(qw.sess);
     if (fclose(qw.frames)) qw.failed = 1;
     free(qw.bits);
-    if (rc != SW_TP_DONE || qw.failed) {
+    if (rc != TP_DONE || qw.failed) {
         fprintf(stderr, "rip: the 300's test page failed (%d)\n", rc);
         return 1;
     }
@@ -410,6 +420,42 @@ static int print_qd_testpage(const char *path, ht_algo_t algo, int gain)
 static void write_file(void *ctx, const uint8_t *b, size_t n)
 {
     fwrite(b, 1, n, (FILE *)ctx);
+}
+
+/* --ps-testpage (W-1140): a LaserWriter II NT's test page, the page every printer prints, as the
+ * PostScript a phone's page becomes (binary, or hex with --hex), on Letter with the quarter-inch
+ * imageable area a LaserWriter that never answered is given. */
+static int print_ps_testpage(const char *path, ht_algo_t algo, int gain, int hex)
+{
+    FILE *f = fopen(path, "wb");
+    if (!f) { perror(path); return 1; }
+    lw_info_t li;
+    lw_info_default(&li);
+    snprintf(li.product, sizeof li.product, "LaserWriter II NT");
+    snprintf(li.version, sizeof li.version, "47.0");
+    tp_geom_t g;
+    lw_tp_geom(&li, "lw2", &g);
+    tp_info_t info = tp_board1("LaserWriter II NT", algo, gain);
+    info.geom = &g;
+    ps_cfg_t pc = { .out = write_file, .ctx = f, .binary = !hex, .paper_h_pt = 792,
+                    .title = "AirWriter test page", .creator = "AirWriter v0.4.0" };
+    ps_t *ps = ps_new(&pc);
+    int rc = -1;
+    if (ps) {
+        rip_stage_t st;
+        ps_stage(ps, &st);
+        ps_job_begin(ps);
+        rc = tp_page(&info, &st);
+        ps_job_end(ps);
+        ps_free(ps);
+    }
+    long n = ftell(f);
+    if (fclose(f) || rc != TP_DONE) {
+        fprintf(stderr, "rip: the LaserWriter's test page failed (%d)\n", rc);
+        return 1;
+    }
+    fprintf(stderr, "rip: LaserWriter test page, %ld bytes of PostScript\n", n);
+    return 0;
 }
 
 static void usage(void)
@@ -435,7 +481,8 @@ static void usage(void)
           "  --out-pbm  page 1's dots as a raw PBM, 1 = ink\n"
           "       rip --query-job FILE   the LaserWriter query job, probe and all\n"
           "       rip --start-page-job on|off FILE  the job that sets its start page (W-1099)\n"
-          "       rip --ps-testpage FILE  the PostScript printers' test page (W-1088)\n"
+          "       rip --ps-testpage FILE [--hex] [--dither ...] [--gain ...]  a LaserWriter II NT's\n"
+          "             test page as the PostScript the board sends it (W-1140)\n"
           "       --sw-testpage  a StyleWriter's test page for that cartridge, as the board draws it\n"
           "       rip --qd-testpage FILE [--dither ...] [--gain ...]  the Personal LaserWriter 300's\n"
           "             test page as the board sends it, in --out-qd's framing\n"
@@ -500,16 +547,6 @@ int main(int argc, char **argv)
         else if (!strcmp(argv[i], "--qd-testpage") && i + 1 < argc) qd_tp = argv[++i];
         else { usage(); return 2; }
     }
-    if (ps_tp) {
-        FILE *tf = fopen(ps_tp, "wb");
-        if (!tf) { perror(ps_tp); return 1; }
-        ps_tp_info_t ti = { .printer = "LaserWriter II NT", .product = "LaserWriter II NT",
-                            .version = "47.0", .host = "airwriter-2434.local",
-                            .board = "AirWriter (host build) at 10.0.1.115" };
-        int rc = ps_testpage(&ti, write_file, tf);
-        fclose(tf);
-        return rc ? 1 : 0;
-    }
     if (query || sp_job) {
         static uint8_t q[4096];
         size_t n = query ? lw_query_job(q, sizeof q) : lw_start_page_job(q, sizeof q, sp_on);
@@ -519,7 +556,7 @@ int main(int argc, char **argv)
         fclose(qf);
         return 0;
     }
-    if (!in && !(testpage && out_stream) && !(sw_tp && out_sw) && !qd_tp) { usage(); return 2; }
+    if (!in && !(testpage && out_stream) && !(sw_tp && out_sw) && !qd_tp && !ps_tp) { usage(); return 2; }
 
     ht_algo_t algo;
     if (ht_algo_from_name(dither, &algo)) {
@@ -535,6 +572,7 @@ int main(int argc, char **argv)
         return print_sw_testpage(sw_tp, m, out_sw, algo, gain);
     }
     if (qd_tp) return print_qd_testpage(qd_tp, algo, gain);
+    if (ps_tp) return print_ps_testpage(ps_tp, algo, gain, hex);
     if (testpage) return print_testpage(testpage, out_stream, algo, gain, top);
 
     FILE *f = fopen(in, "rb");

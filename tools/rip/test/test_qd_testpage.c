@@ -1,60 +1,65 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// W-1102: the Personal LaserWriter 300's test page, the StyleWriter's drawn at 300 dpi on
-// Letter's image area (qd_testpage.h, sw_testpage.h's sw_tp_geom_t). The layout scaled to 8 in
-// at 300 dpi, the six screens with Apple's 300 screen in the Apple panel, and the page through
-// the 300's own page stage within its memory in every screen.
+// W-1102: the Personal LaserWriter 300's test page, the page every printer prints (testpage.h,
+// W-1140) drawn at 300 dpi on Letter's image area (qd_testpage.h). The layout scaled to 8 in at
+// 300 dpi, the six screens with Apple's 300 screen in the Apple panel, and the page through the
+// 300's own page stage within its memory in every screen.
 #include "test_util.h"
 #include "qd_testpage.h"
 #include "qd_page.h"
-#include "sw_font.h"
+#include "tp_face.h"
+#include "sw_testpage.h"
 #include "bigmem.h"
 #include <stdlib.h>
 
 size_t big_asked_bytes, big_asked_n;     // BIGMEM_COUNT (bigmem.h)
 
-static sw_tp_geom_t g_geom;
+static tp_geom_t g_geom;
 
-static sw_tp_info_t info_300(ht_algo_t screen)
+static tp_info_t info_300(ht_algo_t screen)
 {
     CHECK_EQ_INT(qd_tp_geom(QD_PLW300, &g_geom), 0);
-    sw_tp_info_t i = {
-        .printer = "Office LaserWriter", .board = "AirWriter v0.3.0 at 10.0.1.115",
-        .host = "airwriter-2434.local", .model = SW_NONE, .gain = 0, .screen = screen,
-        .geom = &g_geom,
+    tp_info_t i = {
+        .printer = "Office LaserWriter", .board = "v0.3.0 at 10.0.1.115",
+        .settings = "http://airwriter-2434.local", .gain = 0, .screen = screen, .geom = &g_geom,
     };
     return i;
 }
 
 static void test_geom(void)
 {
-    sw_tp_geom_t g;
+    tp_geom_t g;
     CHECK_EQ_INT(qd_tp_geom(QD_PLW300, &g), 0);
-    CHECK_EQ_INT(g.dpi, 300);
+    CHECK_EQ_INT(g.dpi_x, 300);
+    CHECK_EQ_INT(g.dpi_y, 300);
     CHECK_EQ_INT(g.sheet_w, 2400);                // Letter's image area across
     CHECK_EQ_INT(g.sheet_h, 3300);                // and the sheet's rows
     CHECK_EQ_INT(g.margin_l, 75);
     CHECK_EQ_INT(g.margin_t, 62);
     CHECK_EQ_INT(g.margin_b, 63);
-    CHECK_EQ_INT(g.apple, HT_APPLE_LW);
-    CHECK(g.model_name && !strcmp(g.model_name, "Personal LaserWriter 300"));
-    CHECK(g.art && g.art->icon && g.art->title && g.art->sub && g.art->rgb);
+    CHECK_EQ_INT(g.left, 0);
+    CHECK_EQ_INT(g.top, 62);
+    CHECK_EQ_INT(g.apple, 1);
+    CHECK_EQ_INT(g.apple_algo, HT_APPLE_LW);
+    CHECK_EQ_INT(g.colour, 0);
+    CHECK(!strcmp(g.model, "Personal LaserWriter 300"));
+    CHECK(g.icon && !strcmp(g.icon, "plw300"));
     CHECK(g.captions != NULL);
     CHECK_EQ_INT(qd_tp_geom(QD_NONE, &g), -1);
 }
 
 // ---- the layout
 
-static int inside(const sw_tp_box_t *b)
+static int inside(const tp_box_t *b)
 {
     return (uint32_t)b->x + b->w <= 2400 && (uint32_t)b->y + b->h <= 3175;
 }
 
 static void test_layout_300dpi(void)
 {
-    sw_tp_info_t info = info_300(HT_ATKINSON);
-    sw_tp_layout_t l;
-    sw_testpage_layout(&info, &l);
+    tp_info_t info = info_300(HT_ATKINSON);
+    tp_layout_t l;
+    tp_layout(&info, &l);
     CHECK_EQ_INT(l.colour, 0);                    // gray only
     CHECK_EQ_INT(l.ruler.x, 0);
     CHECK_EQ_INT(l.ruler.w, 2400);                // 8 in
@@ -64,12 +69,13 @@ static void test_layout_300dpi(void)
         CHECK_EQ_INT(l.square[i].x, 600 * i);
         CHECK(inside(&l.square[i]));
     }
-    CHECK(inside(&l.letterhead) && inside(&l.details) && inside(&l.photo) && inside(&l.ruler));
+    CHECK(inside(&l.letterhead) && inside(&l.details) && inside(&l.type) && inside(&l.ruler));
     CHECK(inside(&l.screen_names) && inside(&l.footer) && inside(&l.ink_ramp[3]));
     for (int i = 0; i < 11; i++) CHECK(inside(&l.gray_step[i]) && l.gray_step[i].w > 0);
     for (int i = 0; i < 6; i++) CHECK(inside(&l.panel[i]) && inside(&l.panel_ramp[i]) && l.panel[i].w > 0);
     for (int i = 1; i < 6; i++) CHECK(l.panel[i].x >= l.panel[i - 1].x + l.panel[i - 1].w);
-    CHECK(l.photo.x + l.photo.w <= l.ink_ramp[3].x);
+    CHECK(l.gray_step[10].x + l.gray_step[10].w <= l.ink_ramp[3].x);
+    CHECK_EQ_INT(l.panels, 6);
     CHECK(l.first_ink < 100);
     CHECK(l.last_ink < 3175);
     CHECK_EQ_INT(l.last_ink, l.footer.y + l.footer.h - 1);
@@ -81,16 +87,18 @@ static void test_six_panels(void)
     static const ht_algo_t want[6] = { HT_ATKINSON, HT_FLOYD, HT_BLUENOISE, HT_BAYER, HT_THRESHOLD, HT_APPLE_LW };
     static const ht_algo_t sw[6] = { HT_ATKINSON, HT_FLOYD, HT_BLUENOISE, HT_BAYER, HT_THRESHOLD, HT_APPLE };
     for (int k = 0; k < 6; k++) {
-        sw_tp_info_t info = info_300(sw[k]);
-        sw_tp_layout_t l;
-        sw_testpage_layout(&info, &l);
+        tp_info_t info = info_300(sw[k]);
+        tp_layout_t l;
+        tp_layout(&info, &l);
         for (int i = 0; i < 6; i++) CHECK_EQ_INT(l.panel_screen[i], want[i]);
         CHECK_EQ_INT(l.ticked, k);                // the record's screen; HT_APPLE ticks Apple
     }
     // The StyleWriter's keeps its own Apple screen, and ticks the same way.
-    sw_tp_info_t s = { .printer = "x", .board = "y", .host = "z", .model = SW_II, .screen = HT_APPLE };
-    sw_tp_layout_t l;
-    sw_testpage_layout(&s, &l);
+    tp_geom_t sg;
+    CHECK_EQ_INT(sw_tp_geom(SW_II, 0, &sg), 0);
+    tp_info_t s = { .printer = "x", .board = "y", .settings = "z", .screen = HT_APPLE, .geom = &sg };
+    tp_layout_t l;
+    tp_layout(&s, &l);
     CHECK_EQ_INT(l.panel_screen[5], HT_APPLE);
     CHECK_EQ_INT(l.ticked, 5);
 }
@@ -129,7 +137,7 @@ static int dot(const cap_t *r, uint32_t x, uint32_t y)
     return r->img[(size_t)y * ((r->w + 7) / 8) + (x >> 3)] >> (7 - (x & 7)) & 1;
 }
 
-static uint32_t ink_in(const cap_t *r, const sw_tp_box_t *b)
+static uint32_t ink_in(const cap_t *r, const tp_box_t *b)
 {
     uint32_t n = 0;
     for (uint32_t y = b->y; y < (uint32_t)b->y + b->h; y++)
@@ -139,13 +147,13 @@ static uint32_t ink_in(const cap_t *r, const sw_tp_box_t *b)
 
 // The face at 300 dpi: each pixel 3 x 3 dots, a cell of 6 pixels across. Whether `s` is drawn
 // in the box, exactly (every dot of it, and none other in its cells).
-static int has_text(const cap_t *r, const sw_tp_box_t *b, const char *s)
+static int has_text(const cap_t *r, const tp_box_t *b, const char *s)
 {
     const uint32_t px = 3, cell = 6 * px, gh = 7 * px;
     uint32_t bw = (uint32_t)strlen(s) * cell;
     uint8_t *bm = calloc((size_t)bw * gh, 1);
     for (uint32_t i = 0; s[i]; i++) {
-        const uint8_t *g = sw_font[s[i] - 0x20];
+        const uint8_t *g = tp_face[s[i] - 0x20];
         for (uint32_t row = 0; row < 7; row++)
             for (uint32_t col = 0; col < 5; col++)
                 if (g[row] >> (4 - col) & 1)
@@ -166,18 +174,18 @@ static int has_text(const cap_t *r, const sw_tp_box_t *b, const char *s)
     return found;
 }
 
-static void render(const sw_tp_info_t *info, cap_t *r)
+static void render(const tp_info_t *info, cap_t *r)
 {
     memset(r, 0, sizeof *r);
     rip_stage_t st = { .page_begin = cap_begin, .row = cap_row, .page_end = cap_end, .ctx = r };
-    CHECK_EQ_INT(sw_testpage(info, &st), SW_TP_DONE);
+    CHECK_EQ_INT(tp_page(info, &st), TP_DONE);
 }
 
 static void test_page_dots(void)
 {
-    sw_tp_info_t info = info_300(HT_ATKINSON);
-    sw_tp_layout_t l;
-    sw_testpage_layout(&info, &l);
+    tp_info_t info = info_300(HT_ATKINSON);
+    tp_layout_t l;
+    tp_layout(&info, &l);
     cap_t r;
     render(&info, &r);
     CHECK_EQ_INT(r.begins, 1);
@@ -194,7 +202,7 @@ static void test_page_dots(void)
 
     CHECK(has_text(&r, &l.details, "Personal LaserWriter 300"));
     CHECK(has_text(&r, &l.details, "Office LaserWriter"));
-    CHECK(has_text(&r, &l.details, "Letter, 2400 x 3175 dots at 300 dpi"));
+    CHECK(has_text(&r, &l.details, "Letter, 2400 x 3175 at 300 dpi"));
     CHECK(has_text(&r, &l.details, "75 left, 62 top, 63 bottom dots"));
     CHECK(has_text(&r, &l.details, "Atkinson"));
     CHECK(!has_text(&r, &l.details, "cartridge"));
@@ -220,7 +228,7 @@ static void test_page_dots(void)
     CHECK_EQ_INT(last, area);
     uint32_t mid = ink_in(&r, &l.gray_step[5]);
     CHECK(mid > area * 4 / 10 && mid < area * 6 / 10);
-    CHECK(ink_in(&r, &l.photo) > (uint32_t)l.photo.w * l.photo.h / 10);
+    for (int n = 0; n < 5; n++) CHECK(ink_in(&r, &l.type_line[n]) > (uint32_t)l.type_line[n].w * l.type_line[n].h / 200);
     for (int i = 0; i < 6; i++) CHECK(ink_in(&r, &l.panel[i]) > (uint32_t)l.panel[i].w * l.panel[i].h / 20);
     free(r.img);
 
@@ -273,8 +281,8 @@ static void test_page_through_qd_page(void)
         CHECK(p != NULL);
         rip_stage_t st;
         qd_page_stage(p, &st);
-        sw_tp_info_t info = info_300(screens[k]);
-        CHECK_EQ_INT(sw_testpage(&info, &st), SW_TP_DONE);
+        tp_info_t info = info_300(screens[k]);
+        CHECK_EQ_INT(tp_page(&info, &st), TP_DONE);
         CHECK_EQ_INT(c.opens, 1);
         CHECK_EQ_INT(c.rows, 3175);
         CHECK_EQ_INT(c.prints, 1);
@@ -290,7 +298,7 @@ static void test_page_through_qd_page(void)
 
 static void test_memory_through_bigmem(void)
 {
-    sw_tp_info_t info = info_300(HT_ATKINSON);
+    tp_info_t info = info_300(HT_ATKINSON);
     count_t c = { 0 };
     qd_page_cfg_t pc = { .model = QD_PLW300, .screen = HT_ATKINSON,
                          .sink = { c_open, c_row, c_print, c_note, &c } };
@@ -298,7 +306,7 @@ static void test_memory_through_bigmem(void)
     rip_stage_t st;
     qd_page_stage(p, &st);
     big_asked_bytes = big_asked_n = 0;
-    CHECK_EQ_INT(sw_testpage(&info, &st), SW_TP_DONE);
+    CHECK_EQ_INT(tp_page(&info, &st), TP_DONE);
     printf("    the 300's test page asks bigmem for %zu bytes in %zu requests\n", big_asked_bytes, big_asked_n);
     CHECK(big_asked_bytes > 8 * 1024);
     CHECK(big_asked_bytes < 200 * 1024);

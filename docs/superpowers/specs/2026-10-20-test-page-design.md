@@ -9,6 +9,46 @@ Wells asked for "a full letter page that tests the various functions, text sizes
 color, images... you know." He approved the preview (round 1, 2026-10-20) as it stands: "Build
 the test page as shown: keep the letterhead and the footer."
 
+**Amended 2026-11-14** (`W-1140 One test page for every printer: the ImageWriter and PostScript
+LaserWriters print the shared page`, Wells's word on a mock): every printer prints one page, the
+one StyleWriters and the Personal LaserWriter 300 already printed (`W-1103`, `W-1102`), drawn on
+the board as rows of dots and given to the stage a phone's page goes to. What changes from
+printer to printer is its icon, its name, its dots and whether it prints in color. Wells kept
+nothing ImageWriter-only: on a simulated ImageWriter II the printer's draft and correspondence
+type looked like the board's face (only near letter quality was smoother), and AirPrint pages
+can never use the printer's type. So the Text section, the page's own escape codes and its
+traced still life are gone, and the rest of this design below is the ImageWriter's page as it
+was. The page now (`testpage.h`), top to bottom:
+
+1. **Letterhead.** The printer's own AirPrint icon (every model's, `tp_icons.h`) beside
+   "AirWriter" and "Test page" in Apple Garamond Light (`tp_words.h`, at each family's dots), and
+   a rule.
+2. **The board**, in the 5 × 7 face: Printer (its model, and its ribbon or cartridge), Name,
+   Settings (its address; on the setup network, the address and the network to join); AirWriter
+   (version and IP), Halftone, Page (the printable dots and dpi), Margins.
+3. **Type** (new). A sans and a serif, TeX Gyre Heros and Termes (free copies of Helvetica and
+   Times), at 6, 8, 10, 12 and 18 pt, each size labelled. Stored as 1-bit rows at 720 dpi
+   (`tp_type.h`, 43 KB, `testpage/tools/mktype.py`), averaged down to the printer's dots as a
+   phone's page is and screened with the screen in use, so it shows how a person's documents
+   print. On an ImageWriter, 6 pt is a smudge and 8 pt reads.
+4. **Color** (a colour ribbon or cartridge): seven swatches (the four inks and the three they
+   make printed over each other), then a ramp of each ink, two by two. **Gray** (otherwise):
+   eleven steps and a black ramp side by side, and on a printer that prints in color a line
+   saying why this one is gray. Every label sits under what it names. The big still life is
+   gone: the screen panels show it.
+5. **Halftone.** The still life and a ramp through each screen, five of them, or six with the
+   family's own Apple screen (StyleWriters, the 300); the one in use ticked.
+6. **Alignment.** The ruler and four one-inch squares, the captions the family's own.
+7. **Footer.**
+
+The layout is in 360 dpi units, scaled across and down apart (144 × 72 on an ImageWriter), and
+fits 9.5 in down, the ImageWriter's printable sheet (from 1 in to 10.5 in). On an ImageWriter the
+rows go through `iw_stage`, the strips a phone's page goes through (byte for byte what ripjob
+writes for the same rows), with the top margin setting as a job has it but dropping no more than
+the sheet's blank first inch: about 89 KB on a colour ribbon and 81 KB on black, against 64 KB and
+41 KB before. A PostScript LaserWriter's rows go through its PostScript stage: about 375 KB
+binary and 760 KB hex, against 83 KB of PostScript before, about 30 s over LocalTalk.
+
 ## The page
 
 Laid out as an AirPrint page is, from the sheet's top edge: its content from 1 in down (where

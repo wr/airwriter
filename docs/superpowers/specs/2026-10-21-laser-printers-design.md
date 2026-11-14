@@ -7,6 +7,10 @@ only: no firmware has changed. Supersedes the
 here because it was being edited in parallel). No laser printer is on the bench; everything this
 needs a printer to settle is listed under "What only a printer settles".
 
+**Amended 2026-11-14** by `W-1140 One test page for every printer: the ImageWriter and PostScript
+LaserWriters print the shared page`: the test page is the page every printer prints
+(`testpage`; the test-page design's amendment block), no longer this family's own. A PostScript LaserWriter's page is drawn at 300 dpi on its imageable area and sent through the PostScript stage a phone's page goes through, about 375 KB binary against the 83 KB of PostScript in its own Times and Helvetica it was (`lw_tp_geom`, `laser_test_page`). Wells chose the picture: it is the path a phone's page takes, and the type tester then shows how a person's documents print.
+
 **Amended 2026-11-13** by `W-1102 QuickDraw LaserWriters on the printer port (Personal LaserWriter LS/300, Select 300)` (`2026-11-12-quickdraw-laserwriters-design.md`): the QuickDraw-only Personal LaserWriter 300 is no
 longer a non-goal. It prints over AirPrint from the printer port, with no Mac, through this
 design's 300 dpi rip (SPEC §3.18). The LS, the Select 300 and the SCSI models still are.

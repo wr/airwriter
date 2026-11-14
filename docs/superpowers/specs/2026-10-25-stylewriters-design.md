@@ -5,6 +5,10 @@
 `W-1102 QuickDraw LaserWriters on the printer port (Personal LaserWriter LS/300, Select 300)`.
 Reverses the StyleWriter cut in `2026-08-04-printer-support-scope-design.md`.
 
+**Amended 2026-11-14** by `W-1140 One test page for every printer: the ImageWriter and PostScript
+LaserWriters print the shared page`: the test page is the page every printer prints
+(`testpage`; the test-page design's amendment block), no longer this family's own. A StyleWriter keeps what was its own: the 360 dpi grid, its model's tone curves and ink placement, its Apple screen, its captions (`sw_tp_geom`), and each model now shows its own icon. The page gained the type tester, lost the big still life, and puts the ink ramps two by two.
+
 **Amended 2026-11-13** by `W-1102 QuickDraw LaserWriters on the printer port (Personal LaserWriter LS/300, Select 300)` (`2026-11-12-quickdraw-laserwriters-design.md`): the run coder (`sw_code_row` with no previous row),
 the test page's renderer (`sw_testpage`, drawn at 300 dpi for a Personal LaserWriter 300) and
 the record's "Apple" screen are shared with the 300, where "Apple" means Apple's 300 screen. The

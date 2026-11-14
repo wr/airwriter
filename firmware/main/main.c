@@ -52,6 +52,8 @@
 #include "fw_update.h"
 #include "cable_test.h"
 #include "testpage.h"
+#include "tp_iw.h"
+#include "iw_stage.h"
 #include "esp_heap_caps.h"
 #include "bigmem.h"
 #include "memdiag.h"
@@ -2403,8 +2405,8 @@ static void on_activity(void)
     printer_state_post(PS_EV_ACTIVITY);
 }
 
-// The page's stop: a second tap. Asked before every line and strip, so it
-// also notes how low the internal heap goes while the page holds its bands.
+// The page's stop: a second tap. Asked every 32 rows, so it also notes how
+// low the internal heap goes while the page holds its parts.
 static size_t s_tp_heap_low;
 static size_t s_tp_bytes;
 
@@ -2423,23 +2425,30 @@ static void test_page_out(void *ctx, const uint8_t *buf, size_t n)
     printer_out(ctx, buf, n);
 }
 
-// What the page says AppleTalk is: the ways in that are on, as the settings
-// page's cards name them.
-static void appletalk_text(char *out, size_t cap)
+// W-1140: every printer's test page is the same page (testpage.h), drawn on the board as rows
+// and given to the stage a phone's page goes to. What it prints about its record and the board:
+// the record's name, screen and dot gain (the board's own, for a record with none), the
+// firmware and its address, and where the settings page is.
+typedef struct { char name[PR_NAME_MAX], board[112], settings[96]; } tp_text_t;
+
+static tp_info_t tp_details(int id, tp_text_t *x)
 {
-    int tunnel = 0, radio = 0, infinite = 0;
-    char zone[40];
-    if (ethertalk_running()) ethertalk_settings(&tunnel, &radio, &infinite, zone, sizeof zone);
-    const char *on[4];
-    int n = 0;
-    if (localtalk_serving()) on[n++] = "AppleTalk port";
-    if (radio)    on[n++] = "networked Macs";
-    if (tunnel)   on[n++] = "Basilisk II";
-    if (infinite) on[n++] = "Infinite Mac";
-    out[0] = '\0';
-    for (int i = 0; i < n; i++)
-        snprintf(out + strlen(out), cap - strlen(out), "%s%s", i ? ", " : "", on[i]);
-    if (!n) snprintf(out, cap, "Off");
+    char screen[sizeof s_set.dither];
+    int gain = s_set.gain;
+    ht_algo_t algo;
+    if (printers_record_screen(id, screen, sizeof screen, &gain))
+        snprintf(screen, sizeof screen, "%s", s_set.dither);
+    if (ht_algo_from_name(screen, &algo)) algo = HT_ATKINSON;
+    x->name[0] = '\0';
+    printers_describe(id, x->name, sizeof x->name, NULL, 0, NULL, 0);
+    int has_ip = s_ip[0] && strcmp(s_ip, "0.0.0.0");
+    if (has_ip) snprintf(x->board, sizeof x->board, "%s at %s", esp_app_get_description()->version, s_ip);
+    else        snprintf(x->board, sizeof x->board, "%s, no IP yet", esp_app_get_description()->version);
+    // The settings page's address: its host name, or in setup mode the board's own on its network.
+    if (s_ap_mode) snprintf(x->settings, sizeof x->settings, "http://%s, join AirWriter-%s", s_ip, s_suffix);
+    else           snprintf(x->settings, sizeof x->settings, "http://%s.local", s_set.hostname);
+    return (tp_info_t){ .printer = x->name, .board = x->board, .settings = x->settings, .gain = gain,
+                        .screen = algo };
 }
 
 static void test_page_task(void *arg)
@@ -2466,44 +2475,36 @@ static void test_page_task(void *arg)
         ESP_LOGW(TAG, "test page for printer %d stopped: %s", id,
                  g == PR_GATE_OTHER ? "another printer was connected on the printer port"
                  : s_test_cancel    ? "cancelled" : "its printer never answered");
-        s_printer_failed = 1;       // tp_print stops before its first byte (test_page_stop)
+        s_printer_failed = 1;       // tp_page stops before its first byte (test_page_stop)
     }
 
-    // The page's own record's screen and gain (W-1116), as its job prints with.
-    char dither[sizeof s_set.dither];
-    int gain = s_set.gain;
-    ht_algo_t algo;
-    if (printers_record_screen(id, dither, sizeof dither, &gain))
-        snprintf(dither, sizeof dither, "%s", s_set.dither);
-    if (ht_algo_from_name(dither, &algo)) algo = HT_ATKINSON;
-    const esp_app_desc_t *app = esp_app_get_description();
-    char built[sizeof app->date], ap[32], at[80];
-    size_t k = 0;                               // "Oct  5 2026" reads "Oct 5 2026"
-    for (const char *c = app->date; *c && k + 1 < sizeof built; c++)
-        if (!(*c == ' ' && k && built[k - 1] == ' ')) built[k++] = *c;
-    built[k] = '\0';
-    snprintf(ap, sizeof ap, "AirWriter-%s", s_suffix);
-    appletalk_text(at, sizeof at);
-    char name[PR_NAME_MAX] = "";
-    printers_describe(id, name, sizeof name, NULL, 0, NULL, 0);     // the page's own record's
-    tp_info_t info = {
-        .version = app->version, .built = built, .model = pr_model_name(printers_record_model(id)),
-        .name = name,
-        .host = s_set.hostname, .ip = s_ip, .setup_ssid = s_ap_mode ? ap : NULL,
-        .appletalk = at, .screen = algo, .gain = gain,
-        // an original ImageWriter never says its ribbon: its page is the unknown ribbon's
-        .ribbon = printers_record_model(id) == PR_MODEL_IW1 ? IW_RIBBON_UNKNOWN : (iw_ribbon_t)s_ribbon,
-        .top_margin = s_set.top_margin,
-    };
-    tp_io_t io = { .out = test_page_out, .stop = test_page_stop };
+    // W-1140: the page every printer prints, for the ribbon that is in and its own record's
+    // screen and gain (W-1116), through the strips a phone's page goes through. The top margin
+    // setting moves it as it moves a phone's page, but drops no more than the sheet's blank first
+    // inch, so the letterhead is never cut.
+    int pm = printers_record_model(id);
+    tp_text_t x;
+    tp_info_t info = tp_details(id, &x);
+    tp_geom_t geom;
+    tp_iw_geom(pm == PR_MODEL_NONE ? "ImageWriter II" : pr_model_name(pm),
+               pr_icon(PR_KIND_IMAGEWRITER, pm, NULL),
+               // an original ImageWriter never says its ribbon: its page is the unknown ribbon's
+               pm == PR_MODEL_IW1 ? IW_RIBBON_UNKNOWN : (iw_ribbon_t)s_ribbon, &geom);
+    info.geom = &geom;
+    info.stop = test_page_stop;
+    iw_stage_t ist;
+    iw_stage_init(&ist, test_page_out, NULL, geom.colour, s_set.top_margin < -144 ? -144 : s_set.top_margin);
+    rip_stage_t st;
+    iw_stage(&ist, &st);
     size_t heap0 = heap_caps_get_free_size(MALLOC_CAP_INTERNAL);
     s_tp_heap_low = heap0;
     s_tp_bytes = 0;
-    tp_result_t rc = tp_print(&info, &io);
-    if (rc == TP_NOMEM) s_printer_failed = 1;
+    int rc = tp_page(&info, &st);
+    iw_stage_free(&ist);
+    if (rc == TP_NOMEM || rc == TP_STAGE) s_printer_failed = 1;
     ESP_LOGI(TAG, "test page: %s, %u bytes, crc32 %08x; internal heap %u KB free, "
                   "%u KB at its lowest; %u bytes of stack to spare",
-             rc == TP_DONE ? "sent" : rc == TP_STOPPED ? "stopped" : "out of memory",
+             rc == TP_DONE ? "sent" : rc == TP_STOPPED ? "stopped" : "not drawn",
              (unsigned)s_tp_bytes, (unsigned)s_stream_crc, (unsigned)(heap0 / 1024),
              (unsigned)(s_tp_heap_low / 1024), (unsigned)uxTaskGetStackHighWaterMark(NULL));
 
@@ -2556,21 +2557,21 @@ static void test_page_locked(int id)
     }
 }
 
-// W-1088: a LaserWriter's test page (ps_testpage), sent as it is on its own
-// task: the printer takes its time. s_job_lock is held; the task gives it back.
+// W-1088: a LaserWriter's test page (laser_test_page, W-1140: the page every
+// printer prints, as PostScript), on its own task: the printer takes its time. s_job_lock is held; the task gives it back.
 static volatile int s_ps_test_running;
 
 static void ps_test_task(void *arg)
 {
     int id = (int)(intptr_t)arg;
-    char name[PR_NAME_MAX] = "", product[64] = "", version[16] = "", board[96], host[64];
-    printers_describe(id, name, sizeof name, product, sizeof product, version, sizeof version);
-    snprintf(board, sizeof board, "AirWriter %s at %s", esp_app_get_description()->version, s_ip);
-    snprintf(host, sizeof host, "http://%s.local/", s_set.hostname);
-    ps_tp_info_t ti = { .printer = name, .product = product, .version = version, .host = host,
-                        .board = board };
-    int printed = laser_test_page(id, &ti);
-    ESP_LOGI(TAG, "test page to printer %d: %s", id, printed ? "printed" : "not printed");
+    tp_text_t x;
+    tp_info_t info = tp_details(id, &x);
+    // Its AirPrint icon, by the product and version it answered with.
+    lw_info_t lw = { 0 };
+    printers_describe(id, NULL, 0, lw.product, sizeof lw.product, lw.version, sizeof lw.version);
+    int printed = laser_test_page(id, &info, pr_icon(PR_KIND_LASERWRITER, PR_MODEL_NONE, &lw));
+    ESP_LOGI(TAG, "test page to printer %d: %s; %u bytes of stack to spare", id,
+             printed ? "printed" : "not printed", (unsigned)uxTaskGetStackHighWaterMark(NULL));
     printer_state_post(printed ? PS_EV_JOB_DONE : PS_EV_JOB_FAILED);
     s_ps_test_running = 0;
     s_printing = 0;
@@ -2604,42 +2605,18 @@ static void ps_test_locked(int id)
     }
 }
 
-// W-1103: a StyleWriter's test page is a raster drawn on the board (sw_testpage.h) and fed to
-// a session as it is made (stylewriter_test_page). It never hears the ImageWriter's page, which
-// is ImageWriter commands. Its own task, as the ImageWriter's page has, so that the button's
-// poll task and the settings page are answered at once; the task's stack is internal, as the
-// cartridge it reads may be saved to flash. The second tap of the button is the cancel
-// (sw_cancelled), which the session reads between steps: a block in flight finishes.
-// What a raster test page prints about its record and the board (a StyleWriter's, a 300's).
-typedef struct { char name[PR_NAME_MAX], board[112], host[64]; } tp_text_t;
-
-static sw_tp_info_t tp_details(int id, tp_text_t *x)
-{
-    char screen[sizeof s_set.dither];
-    int gain = 0;
-    ht_algo_t algo = HT_ATKINSON;
-    if (!printers_record_screen(id, screen, sizeof screen, &gain) && ht_algo_from_name(screen, &algo))
-        algo = HT_ATKINSON;
-    x->name[0] = '\0';
-    printers_describe(id, x->name, sizeof x->name, NULL, 0, NULL, 0);
-    int has_ip = s_ip[0] && strcmp(s_ip, "0.0.0.0");
-    if (has_ip) snprintf(x->board, sizeof x->board, "AirWriter %s at %s", esp_app_get_description()->version, s_ip);
-    else        snprintf(x->board, sizeof x->board, "AirWriter %s, no IP yet", esp_app_get_description()->version);
-    // The settings page's address: its host name, or in setup mode the board's own.
-    if (s_ap_mode) snprintf(x->host, sizeof x->host, "%s", s_ip);
-    else           snprintf(x->host, sizeof x->host, "%s.local", s_set.hostname);
-    return (sw_tp_info_t){ .printer = x->name, .board = x->board, .host = x->host, .gain = gain,
-                           .screen = algo };
-}
+// W-1103: a StyleWriter's test page is fed to a session as it is made (stylewriter_test_page).
+// It never hears the ImageWriter's stream. Its own task, as the ImageWriter's page has, so that
+// the button's poll task and the settings page are answered at once; the task's stack is
+// internal, as the cartridge it reads may be saved to flash. The second tap of the button is the
+// cancel (sw_cancelled), which the session reads between steps: a block in flight finishes.
 
 static void sw_test_task(void *arg)
 {
     int id = (int)(intptr_t)arg;    // W-1116: the page's own StyleWriter record, not the port's
     sw_model_t m = pr_model_to_sw(printers_record_model(id));
     tp_text_t x;
-    sw_tp_info_t info = tp_details(id, &x);
-    info.model = m;
-    info.colour_cart = s_sw_cart == 2;
+    tp_info_t info = tp_details(id, &x);
     int rc = stylewriter_test_page(m, &info);
     s_sw_was_answering = 0;
     if (rc == SW_OK) printers_port_answered(PR_HEARD_STYLEWRITER);
@@ -2696,8 +2673,8 @@ static void sw_test_locked(int id)
     }
 }
 
-// W-1102: a Personal LaserWriter 300's test page is the StyleWriter's drawn at 300 dpi
-// (qd_testpage.h) and loaded into the printer as it is made (qdlaser_test_page): one session,
+// W-1102: a Personal LaserWriter 300's test page is drawn at 300 dpi (qd_testpage.h) and
+// loaded into the printer as it is made (qdlaser_test_page): one session,
 // on its own task as the StyleWriter's is, so that the button's poll task and the settings page
 // are answered at once. The second tap of the button is the cancel (sw_cancelled), read between
 // the session's steps.
@@ -2706,7 +2683,7 @@ static void qd_test_task(void *arg)
     int id = (int)(intptr_t)arg;
     qd_model_t m = pr_model_to_qd(printers_record_model(id));
     tp_text_t x;
-    sw_tp_info_t info = tp_details(id, &x);
+    tp_info_t info = tp_details(id, &x);
     int hz = 0;
     qd_link_stats(NULL, 1);
     int rc = serial_out_clock(&hz) ? qdlaser_test_page(hz, m, &info) : QD_E_OFFLINE;

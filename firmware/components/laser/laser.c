@@ -13,7 +13,6 @@
 #include "lw_query.h"
 #include "lw_caps.h"
 #include "ps_page.h"
-#include "ps_testpage.h"
 #include "localtalk.h"
 #include "ethertalk.h"
 #include "pap_client.h"
@@ -980,7 +979,9 @@ static void spool_write(void *ctx, const uint8_t *b, size_t n)
 
 // A job's connection to target id: the PostScript header from the rip's
 // writer, or nothing (raw: the caller writes the whole job with spool_write).
-static int begin(int id, const char *name, job_pipe_target_t *t, int raw)
+// An AirPrint job goes only to a shared LaserWriter; the test page (test) to
+// any of the list's.
+static int begin(int id, const char *name, job_pipe_target_t *t, int raw, int test)
 {
     if (!s_started) return -1;
     // A query in flight is short: wait for it, as a second job would.
@@ -995,7 +996,7 @@ static int begin(int id, const char *name, job_pipe_target_t *t, int raw)
     int link = v.idx >= 0 ? s_core.heard[v.idx].link : -1;
     // An AirPrint job comes through a slot; the test page goes to any
     // LaserWriter of the list's, shared or not (review I3).
-    int ok = g && g->kind == LASER_KIND_LW && (raw || g->slot > 0) && g->have_info && link >= 0;
+    int ok = g && g->kind == LASER_KIND_LW && (raw || test || g->slot > 0) && g->have_info && link >= 0;
     ps_cfg_t pc = { .out = spool_write };
     ht_algo_t algo = HT_ATKINSON;
     int gain = 0;
@@ -1083,14 +1084,39 @@ static int begin(int id, const char *name, job_pipe_target_t *t, int raw)
 
 int laser_job_begin(int id, const char *name, job_pipe_target_t *t)
 {
-    return begin(id, name, t, 0);
+    return begin(id, name, t, 0, 0);
 }
 
-int laser_test_page(int id, const ps_tp_info_t *info)
+// The test page stops drawing once the job has failed or been cancelled.
+static int tp_stop(void *ctx)
 {
-    if (begin(id, "AirWriter test page", NULL, 1)) return 0;
-    int ok = !ps_testpage(info, spool_write, NULL);
-    return laser_job_end(ok);
+    (void)ctx;
+    return s_job_failed || s_job_abort || s_cancel_req;
+}
+
+int laser_test_page(int id, const tp_info_t *info, const char *icon)
+{
+    job_pipe_target_t tg;
+    if (!info || begin(id, "AirWriter test page", &tg, 0, 1)) return 0;
+    lw_info_t li;
+    lock();
+    int ti = ti_of(id);
+    if (ti >= 0) li = s_tg[ti].info;
+    unlock();
+    if (ti < 0) return laser_job_end(0);
+    // W-1140: the page every printer prints, in this printer's screen and gain, through the
+    // PostScript stage a phone's page goes through.
+    tp_geom_t geom;
+    lw_tp_geom(&li, icon, &geom);
+    tp_info_t tpi = *info;
+    tpi.geom = &geom;
+    tpi.screen = tg.dither;
+    tpi.gain = tg.gain;
+    tpi.stop = tp_stop;
+    tpi.stop_ctx = NULL;
+    int rc = tp_page(&tpi, tg.stage);
+    if (rc != TP_DONE) ESP_LOGW(TAG, "test page: %s", rc == TP_STOPPED ? "stopped" : "not drawn");
+    return laser_job_end(rc == TP_DONE);
 }
 
 int laser_job_end(int ok)

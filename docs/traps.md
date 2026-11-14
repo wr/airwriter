@@ -322,7 +322,9 @@ Traps already explained in a code comment are listed only when the comment is ea
   went back cleanly on board 1, 2026-10-20), but it counts its page from its top of form: pulled
   back past it, a form feed only returns to it. `ESC v` sets top of form where the head is.
 - **Board 1's ImageWriter has a dead top pin.** Every strip's first row is blank, so a one-dot
-  rule on bit 0 does not print at all: the test page's rules use pin 5.
+  rule on bit 0 does not print at all. The test page (W-1140) draws its rules a row thick
+  wherever they fall, as a phone's page does, so on board 1 a rule on that row is missing: the
+  printer, not the page.
 - **`LT_DE` floats whenever the PIC is not driving it** (no PIC, or PIC held in reset, which
   tristates it). Tack 10 k across U6 pins 3–5 before connecting a LocalTalk network.
 - **Never high-voltage program the PIC in its socket.** VPP (~9 V) lands on ESP32 IO2
@@ -441,8 +443,9 @@ Traps already explained in a code comment are listed only when the comment is ea
   2500, 2026-11-07, `W-1133`). The page is drawn and sent from one task, and `serial_out` has no
   TX ring, so the link is idle while the board draws a row. Tracing the still life and the
   panels there stopped the 2500 twice partway down the page, the second time with the noises it
-  makes at power-up; they are stored now (`sw_scene.h`). Anything new on the page that costs
-  the board time costs the printer the same. The link itself is 57600 baud, 5.76 KB a second:
+  makes at power-up; they are stored now (`tp_pictures.h`). Anything new on the page that costs
+  the board time costs the printer the same: the type tester (W-1140) is stored too, and its
+  rows only averaged down and screened as they are sent. The link itself is 57600 baud, 5.76 KB a second:
   the densest 400-row band (the still life beside its ramps) is 73 KB, about 13 s on the wire
   however fast it is drawn.
 

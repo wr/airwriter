@@ -485,6 +485,12 @@ Reference p. 123): `ESC K n` (1 yellow, 2 magenta, 3 cyan, 0 black) when the ink
 with no ink only adds its LF. The page ends on black. With a black ribbon an sRGB page is
 turned to gray (Rec. 601 luma) and printed as above.*
 
+*Amended (2026-11-14, W-1140): the test page is the page every printer prints (`testpage`, the
+test-page design's amendment block), drawn as rows at 144 × 72 and given to `iw_stage`, a rip
+stage over these same strip writers, which writes byte for byte what ripjob writes for the same
+rows and top margin. The Top margin setting moves the page as it moves a job's, but drops no
+more than the sheet's blank first inch.*
+
 Defer 144x144 double-pass mode to v2. It needs half-line feeds and two passes per strip,
 and it doubles the time on a printer that is already slow.
 
@@ -766,10 +772,11 @@ ImageWriter on the port keeps its identity, UUID and bytes (`tools/ipp/test/gold
   message); `toner-low-warning` does not stop it; busy and warming up are `processing`. A
   PostScript error in its output becomes the job's `job-state-message`. The texts are guesses
   until a LaserWriter is benched.
-- **Test page** (`ps_page/ps_testpage.c`): one Letter page of Level 1 PostScript, hex only, in
-  the printer's own Times and Helvetica: the mark, its name and product, the board, a type
-  sample, its gray ramp, AirWriter's five screens as 300 dpi swatches, a ruler and four
-  one-inch squares; sent as it is (`laser_test_page`).
+- **Test page** (W-1140): the page every printer prints (`testpage`), drawn at 300 dpi on the
+  printer's paper with its 8 in centred on the imageable area it reported (`lw_tp_geom`), and
+  given to the PostScript stage a phone's page goes to (`laser_test_page`), in the record's
+  screen and gain: about 375 KB binary, 760 KB hex. Under Printer, its product and PostScript
+  version. It goes to any LaserWriter in the list, shared or not.
 - **Start page** (W-1099). The printer's detail has a Start page switch where the query read
   `statusdict /dostartpage`. Flipping it sends LaserWriter Utility's recipe on the laser task as
   a query goes (`lw_start_page_job`: `serverdict begin 0 exitserver statusdict begin <bool>
@@ -1305,25 +1312,25 @@ Apple's StyleWriter adapter (ADSP, not PAP), is not built.
   cartridge. The panel
   shows the box's state, and the port's own while it prints.
 - **Test page.** The button, DIP4 and the page's Print Test Page reach a port StyleWriter as
-  they reach an ImageWriter; a second tap cancels. A StyleWriter has no fonts, so the page is a
-  raster drawn on the board at 360 dpi, one Letter page, rows made as they are sent through the
-  same stage: the letterhead (the icon and Apple Garamond as dots, `sw_art.h`), the board's
-  details in a 5 × 7 face (the HD44780 shapes, `sw_font.h`, LICENSE.md), the inks (with a colour
-  cartridge, seven solid swatches in a row across the page, 336 dots wide on 424-dot centres:
-  cyan, magenta, yellow, black, then red, green and blue, each two inks printed over each other,
-  as the ImageWriter's colour page shows its overprints (W-1134); then the still life and a ramp
-  of each ink; without, the still life in gray, a gray scale and a black ramp), the six screens
-  side by side with the one in use
-  ticked, a ruler with a tick every 0.1 in and four one-inch squares. The still life and the
-  scene the six screens show are not traced on the board: the page is drawn and sent from one
-  task with nothing between them, so tracing them there kept the printer waiting partway down
-  the page (W-1133). `tools/rip/mkscene.c` traces them once with `tp_scene.c` (632 × 350 RGB,
-  and 400 × 300 gray through `ink_gray`) and `sw_scene.h` stores them as zlib streams, 53 KB of
-  flash; `sw_unpack.c` reads them a row at a time, with the ROM's tinfl on the board (its state
-  and 32 KB window, 44 KB, held only while a picture's rows are made) and zlib on the host. The
-  page is the same dots as when it was traced. Over a page it asks PSRAM for about 173 KB in
-  gray and 226 KB in colour, each part's freed after its last row. `rip --sw-testpage colour|black --model M --out-sw F` makes it on
-  the host; `swfake.py decode` draws it.
+  they reach an ImageWriter; a second tap cancels. The page is the one every printer prints
+  (`testpage`, W-1140; the test-page design's amendment block), drawn on the board at 360 dpi
+  for the model's printable width and the cartridge the session reads (`sw_tp_geom`), its rows
+  made as they are sent through the same stage a job's go through, each screen with the model's
+  tone curve and ink placement: the model's icon and the letterhead, the board's details in a
+  5 × 7 face (the HD44780 shapes, `tp_face.h`, LICENSE.md), the type tester, the inks (with a
+  colour cartridge, seven solid swatches across the page, the four inks and the three they make
+  over each other (W-1134), then a ramp of each ink, two by two; without, eleven gray steps and
+  a black ramp), the six screens with the one in use ticked, a ruler with a tick every 0.1 in and
+  four one-inch squares. Nothing on it is traced or set on the board: the page is drawn and sent
+  from one task with nothing between them, so tracing there kept the printer waiting partway down
+  the page (W-1133). `tools/rip/mkscene.c` traces the screens' still life once with `tp_scene.c`
+  (400 × 300 gray through `ink_gray`) into `tp_pictures.h`, 12 KB; the type tester is 43 KB
+  (`tp_type.h`); `tp_unpack.c` reads both a row at a time, with the ROM's tinfl on the board (its
+  state and 32 KB window, 44 KB, held only while a picture's rows are made) and zlib on the host.
+  Over a page it asks PSRAM for about 125 KB in gray and 154 KB in colour (`test_testpage.c`'s
+  count), each part's freed after its last row.
+  `rip --sw-testpage colour|black --model M --out-sw F` makes it on the host; `swfake.py decode`
+  draws it.
 - **Clean Print Head.** One press is one cleaning: the job's reset and setup with a single `P` in
   it, wait for `1` to say the cleaning is over (up to 600 s), then `E` (`Y` on the 1200) and `l`.
   Over is busy (01) gone off after reading on, or page done (08) come on after reading off,
@@ -1621,10 +1628,10 @@ printer here to test on.
   A status question the printer leaves unanswered logs which one and the link's last failure.
 - **Settings.** The usual five screens plus Apple, which for a 300 is Apple's 300 screen.
   Default Atkinson.
-- **Test page** (`qd_testpage`). The StyleWriter black page's layout (`sw_testpage`) drawn at
-  300 dpi in the 300's image area, with its icon, loaded into the printer as it is made through
-  the same page path: 199,611 bytes of codes in Atkinson. The test button prints it, never the cable
-  test, which reads HSKi's level.
+- **Test page** (`qd_testpage`). The page every printer prints (`testpage`, W-1140) drawn at
+  300 dpi in the 300's image area, with its icon and Apple's 300 screen as the Apple panel,
+  loaded into the printer as it is made through the same page path: 163,749 bytes of codes in
+  Atkinson. The test button prints it, never the cable test, which reads HSKi's level.
 - **Bench (rev A, board 1, with Wells's Personal LaserWriter 300, 2026-11-12 and 13).** Found
   by itself at 533.5 to 533.7 kHz, duty 49 to 51%; switched off, Offline in about 2 s; switched
   on, the same record. Mac pages and an iPhone page; a manual-slot page chosen from a Mac; a

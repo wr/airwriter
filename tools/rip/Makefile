@@ -16,6 +16,7 @@ INCS    := -I$(COMP)/ripjob/include \
            -I$(COMP)/testpage/include \
            -I$(COMP)/stylewriter/include \
            -I$(COMP)/stylewriter \
+           -I$(COMP)/testpage \
            -I$(COMP)/printers/include \
            -I$(COMP)/qdlaser/include \
            -I.
@@ -34,7 +35,7 @@ SRCS    := $(wildcard $(COMP)/ripjob/*.c) \
            $(wildcard $(COMP)/testpage/*.c) \
            $(COMP)/stylewriter/sw_model.c $(COMP)/stylewriter/sw_code.c $(COMP)/stylewriter/sw_page.c \
            $(COMP)/stylewriter/sw_session.c $(COMP)/stylewriter/sw_status.c \
-           $(COMP)/stylewriter/sw_testpage.c $(COMP)/stylewriter/sw_unpack.c \
+           $(COMP)/stylewriter/sw_testpage.c \
            $(COMP)/printers/port_policy.c \
            $(COMP)/qdlaser/qd_model.c $(COMP)/qdlaser/qd_wire.c $(COMP)/qdlaser/qd_status.c \
            $(COMP)/qdlaser/qd_page.c $(COMP)/qdlaser/qd_session.c $(COMP)/qdlaser/qd_testpage.c \
@@ -48,7 +49,7 @@ all: build/rip
 build:
 	@mkdir -p build
 
-# The StyleWriter test page's pictures, traced here once and stored deflated (W-1133): run
+# The test page's picture, traced here once and stored deflated (W-1133): run
 # `make scene` after changing tp_scene.c, ink_gray or the sizes in mkscene.c. It builds without
 # the header it writes, so a size change can always be made.
 build/mkscene: mkscene.c $(COMP)/testpage/tp_scene.c $(COMP)/ripjob/ink.c \
@@ -57,7 +58,7 @@ build/mkscene: mkscene.c $(COMP)/testpage/tp_scene.c $(COMP)/ripjob/ink.c \
 	$(CC) $(CFLAGS) $(INCS) -o $@ $^ -lm -lz
 
 scene: build/mkscene
-	./build/mkscene $(COMP)/stylewriter/sw_scene.h
+	./build/mkscene $(COMP)/testpage/tp_pictures.h
 
 build/rip: main.c png_write.c $(SRCS) | build
 	$(CC) $(CFLAGS) $(INCS) -Itest -o $@ $^ -lm -lz
@@ -146,9 +147,9 @@ build/test_qd_page: CFLAGS += -DBIGMEM_COUNT
 build/test_qd_page: test/test_qd_page.c $(SRCS) | build
 	$(CC) $(CFLAGS) $(INCS) -Itest -o $@ $^ -lm -lz
 
-# So is the test page's (test_sw_testpage.c): what it holds, once, is in PSRAM.
-build/test_sw_testpage: CFLAGS += -DBIGMEM_COUNT
-build/test_sw_testpage: test/test_sw_testpage.c $(SRCS) | build
+# So is the test page's (test_testpage.c): what it holds, once, is in PSRAM.
+build/test_testpage: CFLAGS += -DBIGMEM_COUNT
+build/test_testpage: test/test_testpage.c $(SRCS) | build
 	$(CC) $(CFLAGS) $(INCS) -Itest -o $@ $^ -lm -lz
 
 # And the 300's (W-1102), the same page at 300 dpi through its page stage.
@@ -177,12 +178,19 @@ build/test_webui_paths: test/test_webui_paths.c $(COMP)/webui/include/webui_path
 build/logbook_core.o: $(LB)/logbook_core.c | build
 	$(CC) $(CFLAGS) -I$(LB)/include -c -o $@ $<
 
-# The StyleWriter's model table, run coder, page stage, session and test page are held to the same rule
+# The StyleWriter's model table, run coder, page stage, session and test page geometry are held to the same rule
 # as the printer list's core (W-1103): no writable statics; the page stage's block and the
 # session's frame buffer come from the board's PSRAM allocator (bigmem.h).
 SW_OBJS := build/sw_model.o build/sw_code.o build/sw_page.o build/sw_session.o build/sw_status.o \
-           build/sw_testpage.o build/sw_unpack.o
+           build/sw_testpage.o
 build/sw_%.o: $(COMP)/stylewriter/sw_%.c | build
+	$(CC) $(CFLAGS) $(INCS) -c -o $@ $<
+
+# The test page every printer prints (W-1140), and the ImageWriter's stage it prints through.
+TP_OBJS := build/testpage.o build/tp_iw.o build/tp_unpack.o build/iw_stage.o
+build/testpage.o build/tp_iw.o build/tp_unpack.o: build/%.o: $(COMP)/testpage/%.c | build
+	$(CC) $(CFLAGS) $(INCS) -c -o $@ $<
+build/iw_stage.o: $(COMP)/ripjob/iw_stage.c | build
 	$(CC) $(CFLAGS) $(INCS) -c -o $@ $<
 
 # The QuickDraw LaserWriters' cores (W-1102), held to the same rule.
@@ -190,16 +198,16 @@ QD_OBJS := build/qd_model.o build/qd_wire.o build/qd_status.o build/qd_page.o bu
 build/qd_%.o: $(COMP)/qdlaser/qd_%.c | build
 	$(CC) $(CFLAGS) $(INCS) -c -o $@ $<
 
-test: $(TESTBIN) build/printers_core.o build/port_policy.o build/logbook_core.o $(SW_OBJS) $(QD_OBJS)
+test: $(TESTBIN) build/printers_core.o build/port_policy.o build/logbook_core.o $(SW_OBJS) $(QD_OBJS) $(TP_OBJS)
 	@fail=0; for t in $(TESTBIN); do ./$$t || fail=1; done; \
-	for o in printers_core port_policy logbook_core $(basename $(notdir $(SW_OBJS) $(QD_OBJS))); do \
+	for o in printers_core port_policy logbook_core $(basename $(notdir $(SW_OBJS) $(QD_OBJS) $(TP_OBJS))); do \
 	  if nm build/$$o.o | grep -E ' [bBdD] ' | grep -v ' ltmp'; then \
 	    echo "FAIL $$o: writable statics (above)"; fail=1; \
 	  else echo "ok  $$o: no writable statics"; fi; \
 	done; \
-	if grep -nE '(^|[^_a-z])(malloc|calloc|realloc)\(' $(COMP)/stylewriter/sw_testpage.c; then \
-	  echo "FAIL sw_testpage: a buffer not through bigmem.h (above)"; fail=1; \
-	else echo "ok  sw_testpage: every buffer through bigmem.h"; fi; \
+	if grep -nE '(^|[^_a-z])(malloc|calloc|realloc)\(' $(COMP)/testpage/testpage.c $(COMP)/ripjob/iw_stage.c; then \
+	  echo "FAIL testpage: a buffer not through bigmem.h (above)"; fail=1; \
+	else echo "ok  testpage: every buffer through bigmem.h"; fi; \
 	if grep -rnE 'ESP_LOG[EWID]\(.*(requesting_user|job \\"%s\\"|s_last_job[^_]|p->name)' $(COMP) ../../firmware/main --include=*.c; then \
 	  echo "FAIL a document or person's name in a log line (above)"; fail=1; \
 	else echo "ok  no document or person's name in a log line"; fi; \

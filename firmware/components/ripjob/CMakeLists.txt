@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-idf_component_register(SRCS "ripjob.c" "ink.c"
+idf_component_register(SRCS "ripjob.c" "ink.c" "iw_stage.c"
                        INCLUDE_DIRS "include"
                        REQUIRES urf_decode resample halftone imagewriter printer_caps bigmem)
 # W-1143: the rip's per-row code is built for speed rather than ESP-IDF's debug optimisation,

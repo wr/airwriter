@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// The StyleWriter test page's small face (sw_testpage.c): printable ASCII, 0x20 to 0x7E, on a
+// The test page's small face (testpage.c): printable ASCII, 0x20 to 0x7E, on a
 // grid 5 columns by 7 rows. These are the common 5 x 7 dot-matrix character shapes, as in
 // Hitachi's HD44780 character ROM (A00), the set LCD modules and their libraries carry. The table
 // was retyped for this repository, a row at a time from the shapes, not copied from a file, and it
@@ -9,7 +9,8 @@
 // seven rows; the backslash and the tilde, which are the ASCII shapes where the ROM has a yen
 // sign and an arrow; and the check mark the page draws itself, which the ROM has not.
 // LICENSE.md lists it with the third-party material. The page draws a pixel as 4 x 4 dots at
-// 360 dpi, so a glyph is 20 x 28 dots and a character cell 24 across.
+// 360 dpi, so a glyph is 20 x 28 dots and a character cell 24 across; 3 x 3 at 300 dpi, and 2
+// dots by a row on the ImageWriter's 144 x 72.
 //
 // A row is a byte whose low five bits are the columns, the leftmost in bit 4 (0x10). Capitals
 // and digits fill all seven rows. The lowercase letters sit on the seventh row with an x-height
@@ -18,7 +19,7 @@
 #pragma once
 #include <stdint.h>
 
-static const uint8_t sw_font[95][7] = {
+static const uint8_t tp_face[95][7] = {
     { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 },   // space
     { 0x04, 0x04, 0x04, 0x04, 0x04, 0x00, 0x04 },   // !
     { 0x0A, 0x0A, 0x0A, 0x00, 0x00, 0x00, 0x00 },   // "

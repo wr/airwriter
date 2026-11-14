@@ -358,17 +358,17 @@ static void test_questions_open_the_link(void)
 
 // ---- the test page
 
-static sw_tp_info_t tp_info(void)
+static tp_info_t tp_info(void)
 {
-    sw_tp_info_t i = { .printer = "Office LaserWriter", .board = "AirWriter v0.3.0 at 10.0.1.115",
-                       .host = "airwriter-2434.local", .screen = HT_ATKINSON };
+    tp_info_t i = { .printer = "Office LaserWriter", .board = "v0.3.0 at 10.0.1.115",
+                    .settings = "http://airwriter-2434.local", .screen = HT_ATKINSON };
     return i;
 }
 
 static void test_test_page_prints(void)
 {
     reset();
-    sw_tp_info_t info = tp_info();
+    tp_info_t info = tp_info();
     CHECK_EQ_INT(qdlaser_test_page(533000, QD_PLW300, &info), QD_OK);
     CHECK_EQ_INT(F.opens, 1);
     CHECK_EQ_INT(F.job_open, 1);                          // the link opens for pages
@@ -395,7 +395,7 @@ static void test_test_page_cancel(void)
 {
     reset();
     F.cancel_at_row = 100;
-    sw_tp_info_t info = tp_info();
+    tp_info_t info = tp_info();
     CHECK_EQ_INT(qdlaser_test_page(533000, QD_PLW300, &info), QD_E_CANCEL);
     CHECK_EQ_INT(F.prints, 0);
     CHECK(F.stops >= 1);                                  // 8A 00 went
@@ -415,7 +415,7 @@ static void test_test_page_link_error(void)
 {
     reset();
     F.fail_put_at = 60;
-    sw_tp_info_t info = tp_info();
+    tp_info_t info = tp_info();
     CHECK_EQ_INT(qdlaser_test_page(533000, QD_PLW300, &info), QD_E_LINK);
     CHECK_EQ_INT(F.prints, 0);
     CHECK(F.puts < 80);                                   // nothing more was sent

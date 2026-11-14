@@ -8,6 +8,7 @@
 #include <stdint.h>
 #include "printer_caps.h"
 #include "lw_query.h"
+#include "testpage.h"
 
 typedef struct {
     char           make_model[72];
@@ -23,3 +24,10 @@ uint32_t lw_paper_h_pt(lw_page_t p);     // 792, 842, 1008
 // Sharing another LaserWriter is another printer to iOS, which it is; the
 // ImageWriter's UUID never moves.
 void     lw_uuid(char out[46], const uint8_t mac[6], uint16_t epoch, const uint8_t *pascal_name);
+
+// W-1140: the test page (testpage.h) for a queried LaserWriter: its paper (Letter, A4 or Legal,
+// named on the page) at the rip's 300 dpi,
+// the page's 8 in centred on the printer's imageable area and from its top, in gray, the
+// printer's AirPrint icon (pr_icon's name) and, under Printer, its product and PostScript version.
+// The page goes to the PostScript stage (ps_page.h) as a phone's page does.
+void     lw_tp_geom(const lw_info_t *i, const char *icon, tp_geom_t *g);
