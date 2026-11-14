@@ -23,7 +23,12 @@
 //   - after a jam or the cover, Apple's recovery prints again the page at the start of the
 //     printer's memory: the first printed since the last 81 00. A page loaded behind it is
 //     still there and prints after it. A later page can't be had back (jam_reprints in
-//     qd_session.c holds that choice), and the job stops.
+//     qd_session.c holds that choice), and the job stops;
+//   - while 83 02 says jam or cover, nothing goes but questions, 8A 00 and the lights: no
+//     row, no 81 00, no 84 08, no 8A 01 (the printer keeps an 8A 01 sent into a jam and feeds
+//     by itself when it clears, and 81 00 and 84 08 sent into that feed jammed it again). A
+//     jam counts as gone once 83 02 has stayed clear on reads 3 s apart and nothing moves
+//     (83 01 bit 5): with a second sheet in the path it read clear once, then jam again.
 //
 // The commands and their order are Apple's (the LaserWriter 300 driver 1.1, read for facts; the
 // design's "What the printer and the board allow"): every packet is BREAK, idle, then its bytes
@@ -33,9 +38,11 @@
 // garbled (qd_reply_ok) or does not come is sent again, five tries in all; 82 and 8E two. 8E's
 // 00 says read one more byte: that is its status. While a page prints, the board asks every
 // 500 ms (at once when the printer sends a BREAK), between the next page's rows too, and each
-// question is tried once: two polls in a row with no answer are a printer switched off. 8E's
-// page done is cleared by the read, so every 8E read counts: one that says done is the
-// printing page's, wherever it was asked.
+// question is tried once: two polls in a row with no answer (any answer between ends the run)
+// are a printer switched off. 8E's page done is cleared by the read, so every 8E read counts:
+// one that says done is the printing page's, wherever it was asked. An 8E unanswered after
+// the printer's BREAK is asked again at once, and a reply that comes just after its wait is
+// read before the next question's drain can drop it.
 #pragma once
 #include <stddef.h>
 #include <stdint.h>
@@ -51,8 +58,9 @@
 //   QD_E_FAULT    the page did not print: memory full or an error after its rows, an engine
 //                 fault (named in the state as QDS_ENGINE), 85 s with no page done, or a jam
 //                 the printer can't print again after (QD_EV_LOST names the page).
-//   QD_E_CANCEL   cancelled said so. A sheet printing with nothing wrong came out first; then
-//                 8A 00, 81 00 and 84 01 have gone; abort sends nothing more.
+//   QD_E_CANCEL   cancelled said so, at the job's end too. A sheet printing with nothing wrong
+//                 came out first; then 8A 00, 81 00 and 84 01 have gone (8A 00 alone with a jam
+//                 or the cover showing); abort sends nothing more.
 //   QD_E_LINK     what went out on the wire was not what was meant (the link read it back).
 enum { QD_OK = 0, QD_E_OFFLINE = -1, QD_E_MODEL = -2, QD_E_STALL = -3, QD_E_FAULT = -4,
        QD_E_CANCEL = -5, QD_E_LINK = -6 };
@@ -131,23 +139,31 @@ int  qd_session_begin(qd_session_t *s);
 //     the done of any page printing, then the whole setup, whose 81 00 drops the rows.
 int  qd_session_open(qd_session_t *s, int page, const qd_media_t *md);
 // One row's codes (qd_sink_t.row). The Ready light blinks about once a second. While a page
-// prints: a row that would take the two pages past `room` first waits for its done
-// (QD_EV_ROOM); otherwise, at the printer's BREAK or every 500 ms, one 8E 00, and 83 01 and
-// 83 02 when that is not done. A jam, the cover or no paper seen there stops the page (8A 00)
-// and shows in the state and the lights at once; the rows go on, and the next wait for the
-// done puts it right. An engine fault ends the job there.
+// prints, a row that would take the two pages past `room` first waits for its done
+// (QD_EV_ROOM). Otherwise, at the printer's BREAK or every 500 ms, the status: 8E 00 with a
+// page printing, and 83 01 and 83 02 when that is not done or nothing prints. What it finds
+// wrong is seen to before another row goes:
+//   - a jam or the cover with a page printing: 8A 00, the wait until it is gone, the
+//     recovery. A page with rows already behind the page printing is then lost
+//     (QD_EV_LOST, QD_E_FAULT): the recovery's 81 00 leaves the rest nowhere to follow them.
+//     With none in yet, it waits for the done and starts the memory over;
+//   - a jam or the cover with nothing printing: the rows wait until it is gone;
+//   - no paper for the page printing: 8A 00, the wait for paper, 8A 01;
+//   - an engine fault ends the job.
 int  qd_session_row(qd_session_t *s, const uint8_t *codes, size_t n);
 // Every row is in (qd_sink_t.print): waits for the page before it to be done, through out of
-// paper, a jam and the cover; checks this page arrived whole; waits for paper; sends its print
-// sequence, and returns. It is the page printing from then on.
+// paper, a jam and the cover; checks this page arrived whole; waits for paper, and for a jam
+// or the cover to be gone; sends its print sequence, and returns. It is the page printing
+// from then on.
 int  qd_session_print(qd_session_t *s);
 // The job is over: waits for the last page's done, as qd_session_print does for the page
 // before; then 83 01 once, 81 00, Ready on; QDS_PRINTING while the last sheet is still on
-// its way out (83 01 bit 5), else QDS_READY.
+// its way out (83 01 bit 5), else QDS_READY. Cancelled by then, it is QD_E_CANCEL.
 int  qd_session_end(qd_session_t *s);
-// The job is given up, once, and only if the session ever wrote. After an error of the
-// session's own (the printer's, or a cancel): 8A 00, 81 00, 84 01 at once. With none (the rip
-// failed, the upload was cut off): as a cancel, so a sheet printing with nothing wrong comes
-// out first.
+// The job is given up, once, and only if the session ever wrote. After a printer's error (no
+// clock, an engine fault, a jam it can't print again after): 8A 00, 81 00, 84 01 at once,
+// 8A 00 alone while a jam or the cover shows. With no error of the session's (the rip failed,
+// the upload was cut off), or one that was the line's (QD_E_LINK, the paper source unanswered
+// as a page opened): as a cancel, so a sheet printing with nothing wrong comes out first.
 void qd_session_abort(qd_session_t *s);
 void qd_session_free(qd_session_t *s);

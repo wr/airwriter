@@ -26,10 +26,12 @@ printed goes to DIR/page-N.pbm (the image area as loaded, 1 = toner) and DIR/pag
 reply and `MS ! text` for what happened.
 
 Lines on stdin fault it: `paper` (the cassette is empty), `cassette` (the cassette is
-out), `manual` (a sheet in the manual slot), `jam`, `cover` (open), `engine` (a fuser
-fault), `silent` (it hears and says nothing: switched off), `badrow N` (row packet N of
-the next page fails its check: dropped, and 8E's error bit set), `ok` (every fault gone,
-paper in the cassette).
+out), `manual` (a sheet in the manual slot), `jam`, `jam2` (a jam with two sheets in the
+paper path), `cover` (open), `engine` (a fuser fault), `silent` (it hears and says
+nothing: switched off), `badrow N` (row packet N of the next page fails its check:
+dropped, and 8E's error bit set), `ok` (the cover closed, the sheet that jammed pulled,
+paper in the cassette: with a second sheet still in the path, 83 02 reads clear once
+and then jam again), `clear` (`ok`, and every sheet out of the path).
 
 What it models, from the design's command table:
 
@@ -64,6 +66,15 @@ What it models, from the design's command table:
   83 5D, as Apple's recovery sends, and for --warm seconds after the cover closes the 83
   questions go unanswered. The recovery's 81 00 means the page printed again is the first
   since the 81 00 before: when another was stopped, the log says the wrong page printed.
+* A jam as a page prints while the sheet before it is still on its way out has two sheets
+  in the path (bench A4d): after `ok`, 83 02 reads clear once, then jam again, until
+  `clear`. An 8A 01 heard while a jam or the cover shows is kept, and the printer feeds by
+  itself when the jam clears; 81 00 or 84 08 into that feed jams it again (A4e). 84 08
+  is followed by --warm seconds of unanswered 83s, as the cover closing is.
+* Once an 83 02 has said jam or cover, and until one says clear, the host is to send
+  nothing but questions, 8A 00 and the lights. A row, 81 00, 84 08 or 8A 01 then is
+  logged (`rows while…`, `81 00 while…`, `84 08 while…`, `8A 01 while…`), and the page
+  loading never prints: nobody has tried the real printer with them, so a test fails.
   83 2A: 20 paper in the cassette, 40 a sheet in the manual slot (83 4C and 83 4F
   choose). No paper at the source chosen answers as board 1's printer did: 83 02 sets 10
   and 83 01 says a fault is stored, the cassette empty or out, or the manual slot chosen
@@ -252,6 +263,11 @@ class QuickDrawLaser:
         self.error = False                      # 8E bit 1
         self.again = False                      # 83 01 bit 4: a jam's page to send again
         self.stopped = None                     # the page a jam or the cover stopped
+        self.sheets = 0                         # sheets in the paper path at a jam
+        self.rejam = False                      # one clear 83 02, then the jam again
+        self.told = False                       # the last 83 02 said jam or cover
+        self.kept_print = False                 # an 8A 01 heard during a jam
+        self.fed = False                        # the page printing started by itself
         # the page printing
         self.printing = None                    # its slot
         self.print_at = self.done_at = 0.0
@@ -298,6 +314,10 @@ class QuickDrawLaser:
     def _moving(self):
         return self.printing is not None or \
             (self.moving_until is not None and self.clock() < self.moving_until)
+
+    def _faulted(self):
+        """A jam or the cover shows, and the host has been told so."""
+        return self.told and (self.jam or self.cover)
 
     def _next_ended(self):
         return self.rd < len(self.slots) and self.slots[self.rd].ended
@@ -398,6 +418,12 @@ class QuickDrawLaser:
         if n != len(pkt) - 3:
             self._event(f"row length {n} in a packet of {len(pkt)}")
             return
+        if self._faulted():
+            self._event("rows while a jam or the cover shows")
+            self.error = True
+            if self.slots and not self.slots[-1].ended:
+                self.slots[-1].error = True
+            return
         if self.fresh:
             self.fresh = False
             if self.printing is not None:
@@ -474,6 +500,14 @@ class QuickDrawLaser:
                 self.manual = True
             elif a == 0x5D:
                 self.again = False
+            if a == 0x02:
+                self.told = bool(self._s02() & 0x0C)
+                if not self.told and self.rejam:
+                    self.rejam = False
+                    reply = odd(self._s02())
+                    self.jam = True             # the second sheet: a jam again at the next look
+                    self._event("jam again: a second sheet is in the path")
+                    return reply
             regs = {0x40: 0, 0x01: self._s01(), 0x02: self._s02(), 0x2A: self._paper(),
                     0x04: 0x10 if self.engine_fault else 0, 0x07: 0, 0x25: 0x80}
             if a == 0x3E:
@@ -481,6 +515,17 @@ class QuickDrawLaser:
             if a == 0x25:
                 return 0x80
             return odd(regs.get(a, 0))
+        if c == 0x81 or (c == 0x84 and a == 0x08):
+            name = "81 00" if c == 0x81 else "84 08"
+            if self._faulted():
+                self._event(f"{name} while a jam or the cover shows")
+            if self.printing is not None and self.fed:
+                # Bench A4e: sent into the printer's own feed, it jammed again.
+                self.stopped = self.printing
+                self.printing = None
+                self.jam = self.again = True
+                self.sheets = 1
+                self._event(f"jammed again: {name} into a feed")
         if c == 0x81:
             if self.printing is not None:
                 # Bench A3: the sheet goes on out, blank, and no page done comes for it.
@@ -492,6 +537,8 @@ class QuickDrawLaser:
             self.rd = self.freed = 0
         elif c == 0x84:
             self.lights = a
+            if a == 0x08:
+                self.quiet_until = self.clock() + self.warm_s
         elif c == 0x85:
             self.lo85 = a
         elif c == 0x86:
@@ -530,13 +577,22 @@ class QuickDrawLaser:
         if slot.error:
             self._event("8A 01 refused: a row was bad")
             return
+        if self.jam or self.cover:
+            # Bench A4e: kept, and run when the jam clears.
+            self.kept_print = True
+            self._event("8A 01 while a jam or the cover shows: kept")
+            return
         if self.again or self._held():
             self._event("8A 01 refused: " + ("waiting for 83 5D" if self.again else "held"))
             return
         if self.stopped is not None and self.stopped is not slot:
             self._event("wrong page: the first in the memory printed again, not the one that stopped")
             self.stopped = None
+        self._start(slot)
+
+    def _start(self, slot, fed=False):
         self.printing = slot
+        self.fed = fed
         self.blank = None
         slot.page.top, slot.page.left = -self.top, -self.left
         self.print_at = self.clock()
@@ -557,14 +613,15 @@ class QuickDrawLaser:
             self.no_cassette = True
         elif cmd == "manual":
             self.manual_sheet = True
-        elif cmd == "jam":
-            self.jam = True
-            if self.printing is not None or self._next_ended():
-                self.again = True
-        elif cmd == "cover":
-            self.cover = True
-            if self.printing is not None:
-                self.jam = True                 # the sheet inside is a jam too (83 02 0D)
+        elif cmd in ("jam", "jam2", "cover"):
+            self.tick()
+            if cmd == "cover":
+                self.cover = True
+            if cmd != "cover" or self.printing is not None:
+                self.jam = True                 # the cover mid-page: the sheet inside is a jam too
+                # The sheet before, still on its way out, is caught as well (bench A4d).
+                behind = self.moving_until is not None and self.clock() < self.moving_until
+                self.sheets = 2 if cmd == "jam2" or (self.printing is not None and behind) else 1
             if self.printing is not None or self._next_ended():
                 self.again = True
         elif cmd == "engine":
@@ -573,15 +630,28 @@ class QuickDrawLaser:
             self.silent = True
         elif cmd == "badrow" and len(w) == 2 and w[1].isdigit():
             self.badrow = int(w[1])            # of the next page
-        elif cmd == "ok":
+        elif cmd in ("ok", "clear"):
             self.tick()
             if self.cover:
                 self.quiet_until = self.clock() + self.warm_s
+            was_jam = self.jam or self.cover
             self.no_paper = self.no_cassette = self.jam = self.cover = False
             self.engine_fault = self.silent = False
+            if cmd == "ok" and was_jam and self.sheets > 1:
+                self.sheets -= 1
+                self.rejam = True               # clear at the next look, then a jam again
+            else:
+                self.sheets = 0
+                self.rejam = False
+                if self.kept_print:
+                    self.kept_print = False
+                    if self._next_ended() and not self._held():
+                        self._start(self.slots[self.rd], fed=True)
+                        self.again = False
+                        self._event("fed by itself: the 8A 01 heard during the jam")
         else:
             self.say(f"fake LaserWriter 300: unknown command {line.strip()!r}: paper, cassette, "
-                     "manual, jam, cover, engine, silent, badrow N, ok")
+                     "manual, jam, jam2, cover, engine, silent, badrow N, ok, clear")
             return
         self.tick()
         self.say(f"fake LaserWriter 300: {line.strip()} -> 83 01 {self._s01():02x}, "
@@ -701,7 +771,9 @@ def decode(a, packets):
     for p in packets:
         lw.packet(p)
     bad = [e for e in lw.events if e.startswith(("bad", "row ", "a row", "8A 01 refused", "blank",
-                                                  "memory full", "moved", "wrong page"))]
+                                                  "memory full", "moved", "wrong page", "rows while",
+                                                  "81 00 while", "84 08 while", "8A 01 while",
+                                                  "fed by itself", "jammed again"))]
     if bad:
         print(f"qdfake: {bad[0]}", file=sys.stderr)
         return 1

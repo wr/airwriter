@@ -33,6 +33,16 @@ typedef struct {
     uint8_t engine, c82, s01, s02, s04, s07, s2a;
     int memfull;                 // 8E answers F9
     int memfull_once;            // 8E's bit 0 once, cleared by that read
+    int drop_8e_at_done;         // the first 8E after a page done gets no answer
+    int late_8e_at_done;         // ... or its answer comes just after the wait for it
+    int drop_8e_alt;             // every other 8E gets no answer
+    int silent_4c;               // 83 4C gets no answer
+    int put_fail_once;           // the next row's put fails with put_rc, once
+    uint8_t late[2];
+    int late_n;
+    int told;                    // the last 83 02 answered said jam or cover
+    int into_fault;              // rows, 81 00, 84 08 or 8A 01 sent after it said so
+    int just_done;
     int err_once;                // 8E's bit 1 once, cleared by that read
     int zero_first;              // 8E answers 00 and then the status, this many times
     int refuse01;                // 83 01 answers 80, this many times
@@ -108,6 +118,7 @@ static void page_out(void)
 {
     F.printing = 0;
     F.done = 1;
+    F.just_done = 1;
     F.brk_pending = 1;                  // the printer says so with a BREAK
     F.mem_p = 0;
     if (F.ndone < 16) F.t_done[F.ndone++] = f_now();
@@ -192,6 +203,10 @@ static int f_put(void *ctx, const uint8_t *p, size_t n)
     (void)ctx;
     F.puts++;
     if (F.put_fail_row && F.rows >= F.put_fail_row) return F.put_rc;
+    if (F.put_fail_once && p[0] < 0x80) { F.put_fail_once = 0; return F.put_rc; }
+    if (F.told && (p[0] < 0x80 || (n == 3 && ((p[0] == 0x81) || (p[0] == 0x84 && p[1] == 0x08) ||
+                                              (p[0] == 0x8A && p[1] == 0x01)))))
+        F.into_fault++;
     adv_us(F.put_us ? F.put_us : (uint64_t)qd_bits_len(n) * 15 / 8);
     if (F.nraw < 16 && n <= 8) memcpy(F.raw[F.nraw++], p, n);
     char t[16];
@@ -231,14 +246,25 @@ static int f_put(void *ctx, const uint8_t *p, size_t n)
             F.tries01++;
             if (F.refuse01) { F.refuse01--; reply(0x80); break; }
         }
+        if (p[1] == 0x4C && F.silent_4c) break;
         reply(reg(p[1]));
+        if (p[1] == 0x02 && !F.silent) F.told = (reg(0x02) & 0x0C) != 0;
         break;
     case 0x8E:
         if (F.n8e < 512) F.t8e[F.n8e++] = f_now();
         {
             uint8_t st = (uint8_t)(0xF8 | (F.done ? 0x04 : 0) | (F.err_once ? 0x02 : 0) |
                                    (F.memfull || F.memfull_once ? 0x01 : 0));
+            int drop = F.drop_8e_alt && (F.n8e & 1);
+            int late = 0;
+            if (F.just_done && (st & 0x04)) {
+                F.just_done = 0;
+                drop |= F.drop_8e_at_done;
+                late = F.late_8e_at_done;
+            }
+            if (drop) break;                    // unheard: nothing is cleared
             F.done = F.memfull_once = F.err_once = 0;
+            if (late) { F.late[0] = st; F.late_n = 1; break; }
             if (F.zero_first) { F.zero_first--; reply(0x00); }
             reply(st);
         }
@@ -274,7 +300,15 @@ static int f_flush(void *ctx) { (void)ctx; return F.flush_rc; }
 static int f_read(void *ctx, uint8_t *b, size_t cap, uint32_t first_ms, uint32_t gap_ms)
 {
     (void)ctx; (void)gap_ms;
-    if (!F.in_n) { adv_us((uint64_t)first_ms * 1000); return 0; }
+    if (!F.in_n) {
+        adv_us((uint64_t)first_ms * 1000);
+        if (F.late_n && first_ms) {             // it comes as the wait ends: too late for it
+            memcpy(F.in, F.late, (size_t)F.late_n);
+            F.in_n = F.late_n;
+            F.late_n = 0;
+        }
+        return 0;
+    }
     adv_us(1000);
     int n = F.in_n < (int)cap ? F.in_n : (int)cap;
     memcpy(b, F.in, (size_t)n);
@@ -523,7 +557,7 @@ static void test_print_sequence(void)
     qd_session_t *s = loaded(0, 0);
     int nst = F.nst;
     CHECK_EQ_INT(qd_session_print(s), QD_OK);
-    CHECK(!strncmp(after("8E00"), "8E00 8200 832A 8401 8B8B 8B8B 8A01", 34));
+    CHECK(!strncmp(after("8E00"), "8E00 8200 832A 8302 8401 8B8B 8B8B 8A01", 39));
     CHECK(ends_with("8A01"));              // nothing after it: print did not wait
     CHECK_EQ_INT(F.printing, 1);
     CHECK_EQ_INT(F.nst, nst);              // PRINTING since begin, and nothing more
@@ -717,8 +751,9 @@ static void jam_or_cover(uint8_t bit, qd_state_t want)
     CHECK_EQ_INT(qd_session_end(s), QD_OK);
     CHECK(saw_state(want));
     CHECK_HAS(F.trace, "8A00 8404");
-    CHECK_HAS(F.trace, "8100 8408 8401 8340 833E 8200 835D 834C 8100 8A01");
+    CHECK_HAS(F.trace, "8100 8408 8401 8340 833E 8200 835D 834C 8302 8100 8A01");
     CHECK_EQ_INT(count_tok("8A01"), 2);
+    CHECK_EQ_INT(F.into_fault, 0);
     int pg = 0;
     CHECK(ev_n(QD_EV_REPRINT, 0, &pg, NULL) && pg == 1);
     CHECK_EQ_INT(ev_count(QD_EV_DONE), 1);
@@ -954,12 +989,12 @@ static void test_end_and_abort(void)
 
 // ---- W-1144: the next page loads while one prints
 
-static const char *RECOVERY = "8100 8408 8401 8340 833E 8200 835D 834C 8100 8A01";
-static const char *PRINT_SEQ = "8E00 8200 832A 8401 8B8B 8B8B 8A01";
+static const char *RECOVERY = "8100 8408 8401 8340 833E 8200 835D 834C 8302 8100 8A01";
+static const char *PRINT_SEQ = "8E00 8200 832A 8302 8401 8B8B 8B8B 8A01";
 
 static const qd_media_t *legal(void) { return &qd_spec(QD_PLW300)->media[1]; }
 
-static int nothing_lost(void) { return F.blanked + F.twice + F.moved + F.stops == 0; }
+static int nothing_lost(void) { return F.blanked + F.twice + F.moved + F.stops + F.into_fault == 0; }
 
 // Bench A1: only the paper source goes before the next page's rows, which go in while the
 // page before prints; its print sequence goes at that page's done.
@@ -1132,7 +1167,8 @@ static void test_cancel_lets_the_sheet_printing_come_out(void)
     qd_session_free(s);
 }
 
-// A page printing that a jam has stopped has nothing to wait for: Cancel stops at once.
+// A page printing that a jam has stopped has nothing to wait for: Cancel stops at once, and
+// only the stop goes: no 81 00 into a jam (bench A4e).
 static void test_cancel_with_the_page_printing_jammed_stops_at_once(void)
 {
     fake_reset();
@@ -1144,11 +1180,12 @@ static void test_cancel_with_the_page_printing_jammed_stops_at_once(void)
     F.put_us = 3000;
     F.cancel_at_ms = F.first_print + 4000;
     CHECK_EQ_INT(rows(s, 3175), QD_E_CANCEL);
-    CHECK(f_now() - F.first_print < 4500);
+    CHECK(f_now() - F.first_print < 4700);
     CHECK(saw_state(QDS_JAM));
     CHECK_EQ_INT(F.ndone, 0);
-    CHECK(ends_with("8A00 8100 8401"));
+    CHECK(ends_with("8302 8A00"));
     CHECK_EQ_INT(count_tok("835D"), 0);        // no recovery
+    CHECK_EQ_INT(F.into_fault, 0);
     qd_session_free(s);
 
     // And from the wait itself: the jam comes while Cancel waits for the sheet.
@@ -1162,7 +1199,8 @@ static void test_cancel_with_the_page_printing_jammed_stops_at_once(void)
     CHECK_EQ_INT(rows(s, 3175), QD_E_CANCEL);
     CHECK(f_now() - F.first_print >= 5000 && f_now() - F.first_print < 6000);
     CHECK_EQ_INT(count_tok("835D"), 0);
-    CHECK(ends_with("8A00 8100 8401"));
+    CHECK(ends_with("8302 8A00"));
+    CHECK_EQ_INT(F.into_fault, 0);
     qd_session_free(s);
 }
 
@@ -1269,8 +1307,9 @@ static void test_jam_on_the_first_page_with_the_next_loaded(void)
     qd_session_free(s);
 }
 
-// The jam comes while page 2's rows go in: the state and the lights show it at the next
-// status between rows, the rows go on, and the print's wait recovers.
+// The jam comes while page 2's rows go in. The rows stop at the next status between rows
+// (the printer was never tried taking rows with a jam showing), page 1 is recovered there,
+// and page 2, whose first rows the recovery's 81 00 left stranded, is lost: the job stops.
 static void test_jam_seen_between_rows(void)
 {
     fake_reset();
@@ -1281,19 +1320,96 @@ static void test_jam_seen_between_rows(void)
     CHECK_EQ_INT(qd_session_open(s, 2, letter()), QD_OK);
     F.put_us = 4000;                           // 12.7 s of rows
     trace_clear();
-    CHECK_EQ_INT(rows(s, 3175), QD_OK);
+    CHECK_EQ_INT(rows(s, 3175), QD_E_FAULT);
     int at = -1;
     for (int i = 0; i < F.nst; i++) if (F.st[i] == QDS_JAM) at = F.st_rows[i] - 3175;
     CHECK(at >= 440 && at <= 640);             // within 600 ms of the jam, 2 s (some 480 rows) in
+    CHECK_EQ_INT(F.rows - 3175, at);           // and not a row after it
     CHECK_HAS(F.trace, "8E00 8301 8302 8A00 8404");
-    CHECK_EQ_INT(count_tok("8100"), 0);        // the recovery waits for the rows
-    CHECK(!strstr(after("8404"), "8400") && !strstr(after("8404"), "8401"));   // no blinking over it
-    CHECK_EQ_INT(qd_session_print(s), QD_OK);
     CHECK_HAS(F.trace, RECOVERY);
-    CHECK_HAS(after(RECOVERY), PRINT_SEQ);
-    CHECK_EQ_INT(F.nprint, 3);
+    CHECK_EQ_INT(F.into_fault, 0);
+    int pg = 0;
+    CHECK(ev_n(QD_EV_REPRINT, 0, &pg, NULL) && pg == 1);
+    CHECK(ev_n(QD_EV_LOST, 0, &pg, NULL) && pg == 2);
+    qd_session_free(s);
+
+    // Seen before any of page 2's rows went: nothing is stranded. Page 1 prints again, and
+    // page 2 starts the memory over once it is done.
+    fake_reset();
+    s = loaded(0, 0);
+    CHECK_EQ_INT(qd_session_print(s), QD_OK);
+    F.win_from_print = 1;
+    F.win[F.nwin++] = (win_t){ 0, 5000, 0x12, 0x08, 0 };
+    CHECK_EQ_INT(qd_session_open(s, 2, letter()), QD_OK);
+    f_sleep(NULL, 600);                        // the rip takes a while over its first row
+    trace_clear();
+    CHECK_EQ_INT(rows(s, 3175), QD_OK);
+    CHECK_HAS(F.trace, RECOVERY);
+    CHECK_EQ_INT(F.ndone, 1);
+    CHECK_EQ_INT(F.rows, 2 * 3175);
+    CHECK_HAS(F.trace, "8100 8340 833E 8200 87DD");
+    CHECK_EQ_INT(qd_session_print(s), QD_OK);
     CHECK_EQ_INT(qd_session_end(s), QD_OK);
     CHECK_EQ_INT(F.ndone, 2);
+    CHECK_EQ_INT(F.blanked + F.twice + F.moved + F.into_fault, 0);
+    qd_session_free(s);
+}
+
+// The cover opened while a job's first page loads, nothing printing: the rows wait until it
+// has stayed closed, then go on. No recovery: nothing was printing.
+static void test_cover_while_the_first_page_loads(void)
+{
+    fake_reset();
+    qd_session_t *s = job(0, 0);
+    CHECK_EQ_INT(qd_session_begin(s), QD_OK);
+    CHECK_EQ_INT(qd_session_open(s, 1, letter()), QD_OK);
+    uint32_t t0 = f_now();
+    F.win[F.nwin++] = (win_t){ t0 + 1000, t0 + 5000, 0x02, 0x04, 0 };
+    F.put_us = 2000;
+    CHECK_EQ_INT(rows(s, 3175), QD_OK);
+    CHECK(saw_state(QDS_COVER));
+    CHECK(f_now() - t0 >= 6350 + 4000 + 3000); // the rows, the cover, and 3 s closed
+    CHECK_EQ_INT(F.into_fault, 0);
+    CHECK_EQ_INT(count_tok("835D"), 0);
+    CHECK_EQ_INT(count_tok("8100"), 2);        // begin's and the setup's
+    CHECK_EQ_INT(last_state(), QDS_PRINTING);
+    CHECK_EQ_INT(qd_session_print(s), QD_OK);
+    CHECK_EQ_INT(qd_session_end(s), QD_OK);
+    CHECK_EQ_INT(F.ndone, 1);
+    qd_session_free(s);
+}
+
+// Bench A4d: with a second sheet in the path the printer read clear once after the cover
+// closed, then jam again. The recovery waits until 83 02 has stayed clear 3 s and nothing
+// moves; nothing but the question goes before that.
+static void test_recovery_waits_for_the_printer_to_stay_clear(void)
+{
+    fake_reset();
+    qd_session_t *s = loaded(0, 0);
+    CHECK_EQ_INT(qd_session_print(s), QD_OK);
+    F.win_from_print = 1;
+    F.win[F.nwin++] = (win_t){ 2000, 6000, 0x12, 0x0C, 0 };
+    F.win[F.nwin++] = (win_t){ 7000, 12000, 0x02, 0x08, 0 };    // clear for 1 s, then a jam again
+    F.win[F.nwin++] = (win_t){ 12000, 18000, 0x20, 0, 0 };      // then the sheet goes out
+    CHECK_EQ_INT(qd_session_end(s), QD_OK);
+    CHECK_EQ_INT(count_tok("8408"), 1);        // one recovery, not one a clear read
+    CHECK_EQ_INT(F.nprint, 2);
+    CHECK(F.t_print[1] - F.first_print >= 18000 && F.t_print[1] - F.first_print < 19500);
+    CHECK_EQ_INT(F.into_fault, 0);
+    CHECK_EQ_INT(F.ndone, 1);
+    qd_session_free(s);
+
+    // The page's own print sequence waits out a jam too: 8A 01 sent into one is kept by the
+    // printer and runs when the jam clears (bench A4e).
+    fake_reset();
+    s = loaded(0, 0);
+    uint32_t t0 = f_now();
+    F.win[F.nwin++] = (win_t){ t0, t0 + 4000, 0x02, 0x08, 0 };
+    CHECK_EQ_INT(qd_session_print(s), QD_OK);
+    CHECK(saw_state(QDS_JAM));
+    CHECK(F.t_print[0] - t0 >= 7000);
+    CHECK_EQ_INT(F.into_fault, 0);
+    CHECK_EQ_INT(last_state(), QDS_PRINTING);
     qd_session_free(s);
 }
 
@@ -1306,7 +1422,7 @@ static void test_jam_on_a_later_page_stops_the_job(void)
     CHECK_EQ_INT(qd_session_print(s), QD_OK);
     CHECK_EQ_INT(page(s, 2), QD_OK);           // prints at page 1's done, 13 s on
     F.win_from_print = 1;
-    F.win[F.nwin++] = (win_t){ 15000, 40000, 0x12, 0x08, 0 };
+    F.win[F.nwin++] = (win_t){ 17000, 40000, 0x12, 0x08, 0 };
     CHECK_EQ_INT(qd_session_open(s, 3, letter()), QD_OK);
     CHECK_EQ_INT(rows(s, 3175), QD_OK);
     CHECK_EQ_INT(qd_session_print(s), QD_E_FAULT);
@@ -1318,7 +1434,8 @@ static void test_jam_on_a_later_page_stops_the_job(void)
     CHECK(ends_with("8A00 8404"));
     trace_clear();
     qd_session_abort(s);
-    CHECK_STR(F.trace, "8A00 8100 8401");
+    CHECK_STR(F.trace, "8A00");                // and nothing else into the jam
+    CHECK_EQ_INT(F.into_fault, 0);
     qd_session_free(s);
 }
 
@@ -1361,8 +1478,9 @@ static void test_paper_out_with_the_next_page_loading(void)
     for (int i = 0; i < F.nst; i++) if (F.st[i] == QDS_NO_PAPER) at = F.st_rows[i] - 3175;
     CHECK(at >= 440 && at <= 640);             // shown while the rows went in
     CHECK(!saw_state(QDS_ENGINE));
-    CHECK_HAS(F.trace, "832A 8A00 8402");
+    CHECK_HAS(F.trace, "832A 8A00 832A 8302 8402");
     CHECK_EQ_INT(F.rows, 2 * 3175);
+    CHECK_EQ_INT(F.nprint, 2);                 // page 1 again as soon as the paper was back
     CHECK_EQ_INT(qd_session_print(s), QD_OK);  // page 1 again with paper, its done, then page 2
     CHECK_EQ_INT(F.nprint, 3);
     CHECK_EQ_INT(F.ndone, 1);
@@ -1438,8 +1556,128 @@ static void test_abort_lets_the_sheet_printing_come_out(void)
     F.win[F.nwin++] = (win_t){ 3000, 100000, 0x12, 0x08, 0 };
     qd_session_abort(s);
     CHECK(f_now() - F.first_print < 4000);
-    CHECK_EQ_INT(count_tok("8100"), 3);        // begin, the page's setup, and the stop
-    CHECK(ends_with("8A00 8100 8401"));
+    CHECK_EQ_INT(count_tok("8100"), 2);        // begin's and the page's setup: none into the jam
+    CHECK(ends_with("8302 8A00"));
+    CHECK_EQ_INT(F.into_fault, 0);
+    qd_session_free(s);
+}
+
+// A chunk read back wrong, or the paper source's answer missed as a page opens, is the
+// line's trouble: the sheet printing is sound and comes out before the job is given up.
+static void test_a_line_error_lets_the_sheet_printing_come_out(void)
+{
+    fake_reset();
+    qd_session_t *s = loaded(0, 0);
+    CHECK_EQ_INT(qd_session_print(s), QD_OK);
+    CHECK_EQ_INT(qd_session_open(s, 2, letter()), QD_OK);
+    CHECK_EQ_INT(rows(s, 100), QD_OK);
+    F.put_fail_once = 1;
+    F.put_rc = QD_E_LINK;
+    CHECK_EQ_INT(rows(s, 100), QD_E_LINK);
+    qd_session_abort(s);
+    CHECK_EQ_INT(F.ndone, 1);
+    CHECK(nothing_lost());
+    CHECK(ends_with("8E00 8A00 8100 8401"));
+    qd_session_free(s);
+
+    fake_reset();
+    s = loaded(0, 0);
+    CHECK_EQ_INT(qd_session_print(s), QD_OK);
+    F.silent_4c = 1;
+    int nst = F.nst;
+    CHECK_EQ_INT(qd_session_open(s, 2, letter()), QD_E_OFFLINE);
+    CHECK_EQ_INT(F.nst, nst);                  // the printer is not said to be offline
+    qd_session_abort(s);
+    CHECK_EQ_INT(F.ndone, 1);
+    CHECK(nothing_lost());
+    CHECK(ends_with("8E00 8A00 8100 8401"));
+    qd_session_free(s);
+
+    // No clock is the printer's: at once, as before.
+    fake_reset();
+    s = loaded(0, 0);
+    CHECK_EQ_INT(qd_session_print(s), QD_OK);
+    CHECK_EQ_INT(qd_session_open(s, 2, letter()), QD_OK);
+    F.put_fail_once = 1;
+    F.put_rc = QD_E_OFFLINE;
+    CHECK_EQ_INT(rows(s, 100), QD_E_OFFLINE);
+    uint32_t t0 = f_now();
+    qd_session_abort(s);
+    CHECK(f_now() - t0 < 100);
+    CHECK_EQ_INT(F.ndone, 0);
+    qd_session_free(s);
+}
+
+// One poll in two unanswered is a poor line, not a printer switched off: any answer ends a
+// run of misses.
+static void test_misses_are_counted_in_a_row(void)
+{
+    fake_reset();
+    qd_session_t *s = loaded(0, 0);
+    CHECK_EQ_INT(qd_session_print(s), QD_OK);
+    F.drop_8e_alt = 1;
+    CHECK_EQ_INT(qd_session_open(s, 2, letter()), QD_OK);
+    F.put_us = 4000;
+    CHECK_EQ_INT(rows(s, 3175), QD_OK);
+    CHECK_EQ_INT(qd_session_print(s), QD_OK);
+    CHECK_EQ_INT(qd_session_end(s), QD_OK);
+    CHECK_EQ_INT(F.ndone, 2);
+    CHECK(!saw_state(QDS_OFFLINE));
+    qd_session_free(s);
+}
+
+// A Cancel that comes while the last page prints: its sheet comes out, and the job ends
+// cancelled, not done.
+static void test_cancel_as_the_last_page_prints(void)
+{
+    fake_reset();
+    qd_session_t *s = loaded(0, 0);
+    CHECK_EQ_INT(qd_session_print(s), QD_OK);
+    F.cancel_at_ms = f_now() + 3000;
+    CHECK_EQ_INT(qd_session_end(s), QD_E_CANCEL);
+    CHECK_EQ_INT(F.ndone, 1);
+    CHECK(nothing_lost());
+    CHECK(ends_with("8E00 8A00 8100 8401"));
+    qd_session_free(s);
+}
+
+// 8E's page done is said once. The printer's BREAK with no answer to the 8E after it: asked
+// again at once. An answer that comes just after the wait for it is taken, not thrown away
+// by the next question's drain.
+static void test_a_done_is_not_lost_to_a_missed_answer(void)
+{
+    fake_reset();
+    qd_session_t *s = loaded(0, 0);
+    CHECK_EQ_INT(qd_session_print(s), QD_OK);
+    F.drop_8e_at_done = 1;
+    CHECK_EQ_INT(qd_session_end(s), QD_OK);
+    uint32_t d = F.t8e[F.n8e - 1] - F.t8e[F.n8e - 2];
+    CHECK(d >= 1000 && d < 1100);              // the wait for the answer, and no half second more
+    CHECK(!saw_state(QDS_OFFLINE));
+    qd_session_free(s);
+
+    fake_reset();
+    s = loaded(0, 0);
+    CHECK_EQ_INT(qd_session_print(s), QD_OK);
+    F.late_8e_at_done = 1;
+    uint32_t t0 = f_now();
+    CHECK_EQ_INT(qd_session_end(s), QD_OK);    // not 85 s later: the late answer was the done
+    CHECK(f_now() - t0 < 15000);
+    CHECK_EQ_INT(ev_count(QD_EV_DONE), 1);
+    qd_session_free(s);
+
+    // Between rows too.
+    fake_reset();
+    s = loaded(0, 0);
+    CHECK_EQ_INT(qd_session_print(s), QD_OK);
+    F.late_8e_at_done = 1;
+    CHECK_EQ_INT(qd_session_open(s, 2, letter()), QD_OK);
+    F.put_us = 6000;
+    CHECK_EQ_INT(rows(s, 3175), QD_OK);
+    CHECK_EQ_INT(ev_count(QD_EV_DONE), 1);
+    uint32_t t1 = f_now();
+    CHECK_EQ_INT(qd_session_print(s), QD_OK);
+    CHECK(f_now() - t1 < 100);
     qd_session_free(s);
 }
 
@@ -1487,11 +1725,17 @@ int main(void)
     test_a_page_opened_again_while_one_prints();
     test_jam_on_the_first_page_with_the_next_loaded();
     test_jam_seen_between_rows();
+    test_cover_while_the_first_page_loads();
+    test_recovery_waits_for_the_printer_to_stay_clear();
     test_jam_on_a_later_page_stops_the_job();
     test_jam_while_a_page_waits_for_room();
     test_paper_out_with_the_next_page_loading();
     test_engine_fault_between_rows();
     test_switched_off_between_rows();
     test_abort_lets_the_sheet_printing_come_out();
+    test_a_line_error_lets_the_sheet_printing_come_out();
+    test_misses_are_counted_in_a_row();
+    test_cancel_as_the_last_page_prints();
+    test_a_done_is_not_lost_to_a_missed_answer();
     TEST_END;
 }

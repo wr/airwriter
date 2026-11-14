@@ -514,8 +514,17 @@ Traps already explained in a code comment are listed only when the comment is ea
      start and blanks it (the bench's first two tries). After a recovery the printer writes
      from the start of its memory again, so the page after the one behind must start over
      with `81 00`. A jammed page that is not the first can't be had back this way: the job
-     stops. The cover opened mid-page reads `83 01` `13`, `83 02` `0D`, and for a few seconds
-     after it closes the `83` questions go unanswered.
+     stops. The cover opened mid-page reads `83 01` `13`, `83 02` `0D`, and for about 3 s
+     after it closes, and after `84 08`, the `83` questions go unanswered.
+- **A 300 that says jam is to be sent nothing but questions, `8A 00` and the lights** (W-1144;
+  board 1's printer, 2026-11-13, runs A4d and A4e). An `8A 01` sent while `83 02` says jam is
+  kept: when the jam clears the printer feeds by itself, and `81 00` and `84 08` sent into
+  that feed jammed it again. A jam during the second page of two usually has the first page's
+  sheet in the path as well: after the cover closed `83 02` read clear once, then jam again
+  until that sheet was out too. So a jam is gone only when `83 02` has stayed clear on reads
+  3 s apart and `83 01` bit 5 (moving) is clear (`wait_clear`), and the recovery, a Cancel
+  and an abort all hold back `81 00` until then. Rows were never tried with a jam or the
+  cover showing: the session stops them, and `qdfake.py` fails a page sent any.
 - **With a 300 on the port, HSKi's level means nothing.** The test button's cable-test branch
   reads that level for a printer that isn't there; with a clock it reads whatever edge it lands
   on. The button goes by `port_line_speaks()`, false when the port's printer is a StyleWriter or

@@ -18,6 +18,9 @@ Scenarios, each its own qdfake and qdhost, side by side:
   * two pages too big for the printer together: the second waits for room, and both print
   * a jam as page 1 prints with page 2 loaded: page 1 prints again from the printer's
     memory, then page 2, with no row sent again
+  * a jam as page 1 prints that leaves two sheets in the path: clear once, a jam again,
+    and the recovery only once every sheet is out
+  * a jam as page 2 prints: the job stops, and nothing but the stop goes into the jam
   * SIGINT as page 1 prints: its sheet comes out whole, and page 2 never prints
   * the paper gone as page 1 prints with page 2 behind it: both print once it is back
   * a noisy page over a small budget behind a page printing: that page finishes, and the
@@ -227,7 +230,9 @@ ROWS = 3175                                 # a Letter page's rows
 def trouble(fake):
     """What the fake printer answered with a blank, moved or wrong sheet."""
     return [e for e in fake.events()
-            if e.startswith(("blank", "moved", "wrong page", "memory full", "8A 01 while"))]
+            if e.startswith(("blank", "moved", "wrong page", "memory full", "8A 01 while",
+                             "rows while", "81 00 while", "84 08 while", "fed by itself",
+                             "jammed again"))]
 
 
 def timeline(fake):
@@ -337,6 +342,45 @@ async def scenario_jam_behind(root, tmp, first, second):
             (order is None, f"jam on page 1: page 1 then page 2, whole ({order})"),
             (fake.rows_heard() == 2 * ROWS, f"jam on page 1: no row sent again ({fake.rows_heard()})"),
             (not bad, f"jam on page 1: no sheet blank or wrong ({bad[:2]})")]
+
+
+async def scenario_jam_two_sheets(root, tmp, first, second):
+    fake = await Fake.start(root, "jam-two-sheets", "--done", DONE_S)
+    run = await Run.start(fake.path, first, second)
+    await until(lambda: fake.rows_heard() >= 2 * ROWS and "print" in fake.events(), 20)
+    await fake.say("jam2")
+    shown = await until(lambda: "paper jam" in run.text, 20)
+    await fake.say("ok")                    # clear once, then a jam again
+    again = await until(lambda: any(e.startswith("jam again") for e in fake.events()), 20)
+    await asyncio.sleep(4.5)                # longer than the session waits on a clear answer
+    early = "print" in fake.events()[fake.events().index("stopped"):] if "stopped" in fake.events() else True
+    await fake.say("clear")
+    code = await run.wait()
+    await fake.stop()
+    order = await in_order(fake, tmp, "jam-two-sheets", [first, second])
+    bad = trouble(fake)
+    return [(shown and again, f"two sheets jammed: clear once, then a jam again {tail(run)}"),
+            (not early, "two sheets jammed: no recovery while the jam was back"),
+            (code == 0, f"two sheets jammed: every sheet out, both pages print (exit {code})"),
+            (order is None, f"two sheets jammed: page 1 then page 2, whole ({order})"),
+            (not bad, f"two sheets jammed: nothing sent into the jam ({bad[:2]})")]
+
+
+async def scenario_jam_later(root, tmp, first, second, third):
+    fake = await Fake.start(root, "jam-later", "--done", DONE_S)
+    run = await Run.start(fake.path, first, second, third)
+    await until(lambda: any(e.startswith("done 1") for e in fake.events())
+                and fake.events().count("print") == 2, 30)
+    await fake.say("jam")
+    code = await run.wait(60)
+    await fake.stop()
+    bad = trouble(fake)
+    after = fake.heard()[-4:]
+    return [(code == 1, f"jam on page 2: the job stops (exit {code}) {tail(run)}"),
+            ("page 2: lost to a jam" in run.text, "jam on page 2: qdhost names the page"),
+            (len(fake.pages()) == 1, f"jam on page 2: page 1 is out, and no page printed twice ({len(fake.pages())})"),
+            (not bad, f"jam on page 2: nothing but the stop sent into the jam ({bad[:2]})"),
+            ("810081" not in after and "8a008a" in after, f"jam on page 2: 8A 00 and no 81 00 at the end ({after})")]
 
 
 async def scenario_cancel_sheet(root, tmp, first, second):
@@ -555,6 +599,8 @@ async def main():
             scenario_pages(root, tmp, ten),
             scenario_room(root, tmp, pages["noisy"]),
             scenario_jam_behind(root, tmp, ten[0], ten[1]),
+            scenario_jam_two_sheets(root, tmp, ten[0], ten[1]),
+            scenario_jam_later(root, tmp, ten[0], ten[1], ten[2]),
             scenario_cancel_sheet(root, tmp, ten[0], pages["letter"]),
             scenario_paper_behind(root, tmp, ten[0], ten[1]),
             scenario_apple_behind(root, tmp, ten[0], pages["noisy"]),

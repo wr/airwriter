@@ -57,6 +57,10 @@ record; the bench that answered this design's open question is there too):
   page again, is not built.
 - **Cancel lets the sheet that is printing come out**, then stops: stopped mid-sheet it comes
   out blank.
+- **Nothing but questions and `8A 00` goes to a printer that says jam or cover**, and a jam is
+  gone only once `83 02` has stayed clear for 3 s with nothing moving: the printer keeps an
+  `8A 01` sent into a jam, feeds by itself when it clears, and jams again on `81 00` or
+  `84 08` sent into that feed.
 - **`qdfake.py`** holds two pages as the printer does: the memory, `81 00`, the offsets read as
   a page prints, a jam's recovery, a print time and a time for the sheet to leave.
 

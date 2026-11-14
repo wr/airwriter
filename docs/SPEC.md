@@ -1494,15 +1494,29 @@ printer here to test on.
   - *Between rows*, at the printer's BREAK or every 500 ms, one `8E 00`, then `83 01` and
     `83 02` when that is not done. `8E`'s page done is cleared by the read, so every `8E` read
     that says done is the printing page's, wherever it was asked, and its bits 0 and 1 are
-    kept from every read for the loading page's check. A jam, the cover or no paper seen there
-    stops the page (`8A 00`) and sets the state and the lights at once; the rows go on, and
-    the next wait for the done (the print's, or a wait for room) puts it right. An engine
-    fault ends the job there. Two status rounds in a row with no answer are Offline.
+    kept from every read for the loading page's check. An `8E` unanswered after the printer's
+    BREAK is asked again at once, and a reply that comes just after its 1 s wait is read
+    before the next question's drain can drop it. With nothing printing, `83 01` and `83 02`
+    alone. What they find wrong is seen to before another row goes (the printer was never
+    tried taking rows with a jam or its cover open): no paper for the page printing waits
+    for paper and prints it again; a jam or the cover with nothing printing holds the rows
+    until it is gone; with a page printing, see jams below. An engine fault ends the job
+    there. Two polls in a row with no answer are Offline; any answer ends the run.
   - *Cancel* sends no more rows. A sheet printing with nothing wrong comes out (to its done,
     inside the 85 s), then `8A 00`, `81 00`, `84 01`; with nothing printing, or the page
-    printing stopped for paper or a jam, at once. An abort with no error of the session's own
-    (the upload cut off, a page size refused, no memory) is the same; after a printer failure
-    (Offline, the link, an engine fault) it stops at once.
+    printing stopped for paper or a jam, at once. A Cancel that comes as the last page prints
+    ends the job cancelled once that sheet is out. An abort with no error of the session's own
+    (the upload cut off, a page size refused, no memory), or with one that was the line's (a
+    chunk read back wrong, the paper source unanswered as a page opened), is the same; after
+    a printer failure (no clock, an engine fault) it stops at once.
+  - *While `83 02` says jam or cover, only questions, `8A 00` and the lights go*: no row, no
+    `81 00`, no `84 08`, no `8A 01`, from the recovery, a Cancel or an abort alike. The
+    printer keeps an `8A 01` sent into a jam and feeds by itself when the jam clears, and
+    `81 00` and `84 08` sent into that feed jammed it again. A jam counts as gone once `83 02`
+    has stayed clear on reads 3 s apart and `83 01` bit 5 (moving) is clear: with page 1's
+    sheet still in the path, a jam on page 2 read clear once after the cover closed, then jam
+    again until the second sheet was out. The recovery asks `83 02` once more before its
+    `8A 01`, and waits again if the jam is back.
   - *A jam or the cover.* Apple's recovery prints again the page at the start of the memory,
     the first printed since the last `81 00`, and a page loaded behind it is still there: the
     cover opened 7 s into page 1 with page 2 loaded printed a whole page 1, then a whole page 2
@@ -1513,8 +1527,10 @@ printer here to test on.
     printer writing at the start of its memory. When the page stopped is a later one, the
     job stops (`QD_E_FAULT`, log: `page N: lost to a jam or the cover…`), the state showing
     the jam until it clears: the recovery would print the first page again. The job stops too
-    when the first page jams while the next waits for room: the recovery's `81 00` leaves the
-    rest of that page's rows nowhere to follow the rows already in. `jam_reprints` in
+    when the first page jams while the next is part loaded (its rows going in, or waiting for
+    room): the first page is recovered, but the recovery's `81 00` leaves the rest of the next
+    page's rows nowhere to follow the rows already in. With none of its rows in yet, it waits
+    for the done and starts the memory over. `jam_reprints` in
     `qd_session.c` holds the choice. Not built: a copy of what is in the printer, kept on the
     board and sent again, which would print any jammed page again.
   - *The log*, per page: `page N: printing` (its `8A 01`), `page N: done, read T ms after its
@@ -1545,7 +1561,7 @@ printer here to test on.
   | No clock | Offline | `other` | (none: the printer is off) |
 
   Jam and cover go through Apple's recovery once `83 02` clears: `81 00`, `84 08` for 280 ms,
-  `84 01`, `83 40`, `83 3E`, `82 00`, `83 5D`, the source, `81 00`, `8A 01`, which prints again
+  `84 01`, `83 40`, `83 3E`, `82 00`, `83 5D`, the source, `83 02`, `81 00`, `8A 01`, which prints again
   the page at the start of the printer's memory: the page that jammed when it is the first
   since the last `81 00`, and otherwise the job stops (above). The cover opened mid-page reads
   as a jam (the sheet is caught: `83 01` `13`, `83 02` `0D`), and the printer wants the cover
@@ -1586,9 +1602,14 @@ printer here to test on.
   17.3 s after its own print sequence. A5: the offsets changed 3 s into page 1's print, both
   sheets 4.5 mm down and 5.5 mm left. Free PSRAM during a three-page job never under 597 KB.
   **The firmware that loads the next page while one prints has run against `qdfake.py` only
-  (`test_qd_session`, `qdinterop`), not yet on a board.** Not known: whether the printer
-  takes rows while a jam or the open cover holds it (the session sends them), and whether its
-  recovery can print again a page that is not the first since the last `81 00`.
+  (`test_qd_session`, `qdinterop`), not yet on a board.** A4d, A4e (later that evening): the
+  cover opened 8.5 s into page 2's print, page 1's sheet still on its way out. After it
+  closed, `83 02` read clear once, then jam for 15 minutes, until a second sheet was found
+  near the exit and taken out; the recovery's `8A 01`, sent while the printer said jam,
+  printed nothing then, and ran by itself when the jam cleared (`83 01` `20` within 9 s);
+  `81 00` and `84 08` sent into that feed jammed it again. Not known: whether the printer
+  takes rows while a jam or the open cover holds it (the session sends none), and whether
+  its recovery can print again a page that is not the first since the last `81 00`.
 
 ---
 

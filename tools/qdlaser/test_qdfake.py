@@ -345,7 +345,9 @@ class Overlap(unittest.TestCase):
         self.assertEqual(ask(lw, 0x82, 0x00) & 0xF0, 0xA0)        # 82 still answers
         clock.t += 3.1
         self.assertEqual(ask(lw, 0x83, 0x02) & 0x0C, 0)
-        send(lw, self.RECOVERY)
+        send(lw, self.RECOVERY[:3])
+        clock.t += 3.1                                            # 84 08: no answers for a while
+        send(lw, self.RECOVERY[3:])
         self.assertEqual(ask(lw, 0x82, 0x00) & 4, 4)              # "empty", but nothing is gone
         clock.t += 2.1
         self.assertEqual(ask(lw, 0x8E, 0x00), 0xFC)
@@ -374,6 +376,91 @@ class Overlap(unittest.TestCase):
         lw.tick()
         self.assertEqual([p.rows for p in lw.pages], [WANT, WANT])
         self.assertTrue(any(e.startswith("wrong page") for e in lw.events))
+
+    def test_a_second_sheet_in_the_path_jams_again(self):
+        # A4d: the cover opened as page 2 printed, page 1's sheet still on its way out. After
+        # it closed, 83 02 read clear once, then jam again until the second sheet was out.
+        lw, clock = printer(exit_s=2.0)
+        send(lw, LETTER + [row(r) for r in ROWS] + END + PRINT + NEXT + [row(r) for r in ROWS])
+        clock.t += 2.1
+        lw.tick()
+        send(lw, END + PRINT)
+        clock.t += 0.8
+        lw.command("cover")
+        self.assertEqual(ask(lw, 0x83, 0x02), 0x0D)
+        send(lw, [cmd(0x8A, 0)])
+        lw.command("ok")
+        self.assertEqual(ask(lw, 0x83, 0x02) & 0x0C, 0)           # clear, once
+        for _ in range(3):
+            self.assertEqual(ask(lw, 0x83, 0x02) & 0x0C, 0x08)    # and a jam again
+            clock.t += 300
+        lw.command("clear")                                       # every sheet out
+        for _ in range(3):
+            self.assertEqual(ask(lw, 0x83, 0x02) & 0x0C, 0)
+
+    def test_one_sheet_stays_clear(self):
+        lw, clock = printer()
+        send(lw, LETTER + [row(r) for r in ROWS] + END + PRINT)
+        clock.t += 0.5
+        lw.command("jam")
+        self.assertEqual(ask(lw, 0x83, 0x02) & 0x0C, 0x08)
+        lw.command("ok")
+        for _ in range(3):
+            self.assertEqual(ask(lw, 0x83, 0x02) & 0x0C, 0)
+
+    def test_8a_01_during_a_jam_is_kept(self):
+        # A4e: the printer kept an 8A 01 sent while it said jam, and fed by itself when the
+        # jam was cleared; 81 00 and 84 08 sent into that feed jammed it again.
+        lw, clock = printer()
+        send(lw, LETTER + [row(r) for r in ROWS] + END + PRINT)
+        clock.t += 0.5
+        lw.command("jam")
+        ask(lw, 0x83, 0x02)
+        send(lw, [cmd(0x8A, 0), cmd(0x83, 0x5D), cmd(0x8A, 1)])
+        self.assertTrue(any(e.startswith("8A 01 while") for e in lw.events))
+        clock.t += 5
+        lw.tick()
+        self.assertEqual(lw.pages, [])
+        lw.command("ok")
+        self.assertEqual(ask(lw, 0x83, 0x01) & 0x20, 0x20)        # feeding, by itself
+        self.assertTrue(any(e.startswith("fed by itself") for e in lw.events))
+        send(lw, [cmd(0x81, 0), cmd(0x84, 8)])
+        self.assertEqual(ask(lw, 0x83, 0x02) & 0x08, 0x08)
+        self.assertTrue(any(e.startswith("jammed again") for e in lw.events))
+        clock.t += 5
+        lw.tick()
+        self.assertEqual(lw.pages, [])
+
+    def test_84_08_is_followed_by_silence(self):
+        lw, clock = printer(warm_s=3.0)
+        send(lw, [cmd(0x84, 8)])
+        clock.t += 0.3
+        send(lw, [cmd(0x84, 1)])
+        self.assertIsNone(ask(lw, 0x83, 0x40))
+        self.assertEqual(ask(lw, 0x82, 0x00) & 0xF0, 0xA0)
+        clock.t += 2.8
+        self.assertEqual(ask(lw, 0x83, 0x40), 0x01)
+
+    def test_nothing_but_questions_once_a_jam_is_told(self):
+        # Rows, 81 00 and 84 08 after an 83 02 has said jam: logged, and the page loading
+        # never prints. Before the host has been told, rows are taken.
+        lw, clock = printer()
+        send(lw, LETTER + [row(r) for r in ROWS] + END + PRINT + NEXT + [row(ROWS[0])])
+        clock.t += 0.5
+        lw.command("jam")
+        send(lw, [row(ROWS[1])])                                  # not told yet
+        self.assertFalse(any(e.startswith("rows while") for e in lw.events))
+        self.assertEqual(ask(lw, 0x83, 0x02) & 0x08, 0x08)
+        send(lw, [cmd(0x8A, 0), cmd(0x84, 4)])                    # the stop and the lights: fine
+        self.assertFalse(any(" while a jam" in e for e in lw.events))
+        send(lw, [row(ROWS[2]), cmd(0x81, 0), cmd(0x84, 8)])
+        for start in ("rows while", "81 00 while", "84 08 while"):
+            self.assertTrue(any(e.startswith(start) for e in lw.events), start)
+        self.assertEqual(ask(lw, 0x8E, 0x00) & 2, 2)
+        lw.command("ok")
+        ask(lw, 0x83, 0x02)
+        send(lw, [row(ROWS[2])])                                  # told clear: rows again
+        self.assertEqual(sum(e.startswith("rows while") for e in lw.events), 1)
 
     def test_rows_that_start_the_memory_over_blank_the_page_printing(self):
         lw, clock = printer()

@@ -12,9 +12,7 @@
 #define DONE_MS   85000        // Apple's limit for a page to come out after 8A 01
 #define STALL_MS 600000
 #define RESET_MS    280        // 84 08 held during a jam's recovery, as Apple's driver holds it
-
-// What a status between rows saw of the page printing, for the next wait for its done.
-enum { SEEN_JAM = 1, SEEN_PAPER = 2 };
+#define CLEAR_MS   3000        // how long 83 02 must stay clear before a jam counts as cleared
 
 struct qd_session {
     qd_ops_t         o;
@@ -26,6 +24,8 @@ struct qd_session {
     int      wrote, closed;
     int      err;               // the first error a call returned: the printer's, or a cancel
     int      stopping;          // the job is ending early: a fault stops it at once
+    int      soft;              // the error was the line's, not the printer's (abort)
+    int      fault;             // a jam or the cover shows: nothing but 8A 00 goes
     int      have_st;
     qd_state_t st;
     // The page printing: its 8A 01 has gone and its done has not been read.
@@ -45,11 +45,10 @@ struct qd_session {
     int      printed;           // pages printed since the last 81 00
     int      rewound;           // a recovery's 81 00 went: the next page starts the memory over
     unsigned recoveries;
-    // Between rows, while a page prints.
-    uint32_t poll_at;           // the last 8E
+    // The status asked between rows and while a page prints.
+    uint32_t poll_at;           // the last one between rows
     int      misses;            // polls in a row with no answer
-    int      seen;              // SEEN_: the page printing is stopped, and the state shows why
-    uint8_t  seen_s02;
+    int      late;              // the last 8E went unanswered: its reply may still come
     uint8_t  pkt[QD_ROW_MAX + 3];
 };
 
@@ -206,13 +205,17 @@ static void event(qd_session_t *s, qd_event_t ev, int page, uint32_t ms)
     if (s->o.event) s->o.event(s->o.ctx, ev, page, ms);
 }
 
-// The job stops here: whatever prints is stopped, and what is loaded is dropped.
+// The job stops here: whatever prints is stopped, and what is loaded is dropped. While a jam
+// or the cover shows, only the stop goes: 81 00 sent into a printer clearing a jam jammed it
+// again (bench A4e); the next job's 81 00 drops what is loaded.
 static int stop_now(qd_session_t *s)
 {
     cmd(s, 0x8A, 0x00);
     cassette_again(s);
-    cmd(s, 0x81, 0x00);
-    cmd(s, 0x84, 0x01);
+    if (!s->fault) {
+        cmd(s, 0x81, 0x00);
+        cmd(s, 0x84, 0x01);
+    }
     s->o.flush(s->o.ctx);
     s->closed = 1;
     s->printing = 0;
@@ -312,31 +315,63 @@ static int wait_paper(qd_session_t *s)
     }
 }
 
-// A jam or the cover: stop, show it, wait for it to clear, then Apple's recovery, which prints
-// again the page at the start of the printer's memory.
-static int recover(qd_session_t *s, uint8_t s02)
+// A jam or the cover shows (83 02 bits 3 and 2): the state and the Jam light, and nothing
+// sent but the question until it is gone. Gone is 83 02 clear on reads 3 s apart, and nothing
+// moving (83 01 bit 5): board 1's printer read clear once and jammed again with a second
+// sheet still in its path, and feeds by itself once a jam clears (bench A4d, A4e).
+static int wait_clear(qd_session_t *s, uint8_t s02)
 {
-    qd_state_t st = (s02 & 0x08) ? QDS_JAM : QDS_COVER;
-    int rc = cmd(s, 0x8A, 0x00);
-    if (rc) return rc;
-    state(s, st);
-    if ((rc = lights(s, qd_lights(st, 0))) || (rc = flush(s))) return rc;
-    uint32_t t0 = now(s);
+    const uint32_t t0 = now(s);
+    uint32_t clear_at = 0;
+    int clear = 0, rc;
+    s->fault = 1;
     for (;;) {
-        s->o.sleep_ms(s->o.ctx, POLL_MS);
+        if (s02 & 0x0C) {
+            const qd_state_t st = (s02 & 0x08) ? QDS_JAM : QDS_COVER;
+            if (!s->have_st || s->st != st || clear) {
+                state(s, st);
+                if ((rc = lights(s, qd_lights(st, 0))) || (rc = flush(s))) return rc;
+            }
+            clear = 0;
+        } else if (!clear) {
+            clear = 1;
+            clear_at = now(s);
+        } else if (since(s, clear_at) >= CLEAR_MS) {
+            int a = q(s, 0x83, 0x01);
+            if (a < 0) return a;
+            if (!(a & 0x20)) break;
+        }
         if (stopping(s)) return stop_now(s);
+        if (since(s, t0) >= s->stall) return QD_E_STALL;
+        s->o.sleep_ms(s->o.ctx, POLL_MS);
         int b = q(s, 0x83, 0x02);
         if (b < 0) return b;
-        if (!(b & 0x0C)) break;
-        if (since(s, t0) >= s->stall) return QD_E_STALL;
+        s02 = (uint8_t)b;
     }
-    if ((rc = cmd(s, 0x81, 0x00)) || (rc = cmd(s, 0x84, 0x08)) || (rc = flush(s))) return rc;
-    s->o.sleep_ms(s->o.ctx, RESET_MS);
-    if ((rc = lights(s, 0x01))) return rc;
-    static const uint8_t again[4] = { 0x40, 0x3E, 0x00, 0x5D };
-    for (int i = 0; i < 4; i++)
-        if ((rc = q(s, i == 2 ? 0x82 : 0x83, again[i])) < 0) return rc;
-    if ((rc = q(s, 0x83, source(s))) < 0) return rc;
+    s->fault = 0;
+    return 0;
+}
+
+// A jam or the cover stopped the page printing: stop, wait until it is gone, then Apple's
+// recovery, which prints again the page at the start of the printer's memory. 8A 01 goes only
+// with 83 02 clear: sent into a jam, the printer keeps it and feeds when the jam clears.
+static int recover(qd_session_t *s, uint8_t s02)
+{
+    int rc = cmd(s, 0x8A, 0x00);
+    if (rc) return rc;
+    for (;;) {
+        if ((rc = wait_clear(s, s02))) return rc;
+        if ((rc = cmd(s, 0x81, 0x00)) || (rc = cmd(s, 0x84, 0x08)) || (rc = flush(s))) return rc;
+        s->o.sleep_ms(s->o.ctx, RESET_MS);
+        if ((rc = lights(s, 0x01))) return rc;
+        static const uint8_t again[4] = { 0x40, 0x3E, 0x00, 0x5D };
+        for (int i = 0; i < 4; i++)
+            if ((rc = q(s, i == 2 ? 0x82 : 0x83, again[i])) < 0) return rc;
+        if ((rc = q(s, 0x83, source(s))) < 0) return rc;
+        if ((rc = q(s, 0x83, 0x02)) < 0) return rc;
+        if (!(rc & 0x0C)) break;
+        s02 = (uint8_t)rc;                 // back again: wait again
+    }
     if ((rc = cmd(s, 0x81, 0x00)) || (rc = cmd(s, 0x8A, 0x01)) || (rc = flush(s))) return rc;
     state(s, QDS_PRINTING);
     return 0;
@@ -354,6 +389,7 @@ static int jam_reprints(const qd_session_t *s)
 // A jam or the cover stopped the page printing.
 static int jammed(qd_session_t *s, uint8_t s02)
 {
+    s->fault = 1;
     if (stopping(s)) return stop_now(s);
     if (!jam_reprints(s)) {
         // The job stops; the state shows the jam, as the status at rest will until it clears.
@@ -367,7 +403,6 @@ static int jammed(qd_session_t *s, uint8_t s02)
     }
     int rc = recover(s, s02);
     if (rc) return rc;
-    s->seen = 0;
     s->recoveries++;
     s->rewound = 1;
     s->p_at = now(s);
@@ -381,9 +416,10 @@ static int out_of_paper(qd_session_t *s)
     if (stopping(s)) return stop_now(s);
     int rc;
     if ((rc = cmd(s, 0x8A, 0x00)) || (rc = wait_paper(s))) return rc;
+    if ((rc = q(s, 0x83, 0x02)) < 0) return rc;
+    if (rc & 0x0C) return jammed(s, (uint8_t)rc);      // no 8A 01 into a jam
     if ((rc = lights(s, 0x01)) || (rc = cmd(s, 0x8A, 0x01)) || (rc = flush(s))) return rc;
     state(s, QDS_PRINTING);
-    s->seen = 0;
     s->p_at = now(s);
     return 0;
 }
@@ -396,6 +432,14 @@ static int engine_fault(qd_session_t *s)
     return QD_E_FAULT;
 }
 
+// One question, one try: any answer ends a run of polls with none.
+static int poll(qd_session_t *s, uint8_t c, uint8_t a)
+{
+    int v = ask(&s->o, c, a, 1);
+    if (v >= 0) s->misses = 0;
+    return v;
+}
+
 // The printer stops answering: two polls in a row with no reply.
 static int missed(qd_session_t *s, int v)
 {
@@ -403,12 +447,65 @@ static int missed(qd_session_t *s, int v)
     return ++s->misses >= 2 ? fail(s, QD_E_OFFLINE) : 0;
 }
 
+// An 8E reply that came after its question's wait was over: taken before the next question's
+// drain throws it away, since its page done is said once. 8E's status has its top five bits
+// set, which no 83 reply has.
+static int late_8e(qd_session_t *s)
+{
+    const qd_ops_t *o = &s->o;
+    uint8_t b;
+    if (o->read(o->ctx, &b, 1, 0, 0) != 1) return QD_E_OFFLINE;
+    if (b == 0x00 && o->read(o->ctx, &b, 1, 50, 0) != 1) return QD_E_OFFLINE;
+    return (b & 0xF8) == 0xF8 ? b : QD_E_OFFLINE;
+}
+
 static void page_done(qd_session_t *s)
 {
     s->printing = 0;
     s->p_bytes = 0;
-    s->misses = 0;
     event(s, QD_EV_DONE, s->p_no, since(s, s->p_at));
+}
+
+// 8E 00 for the page printing, one try; after the printer's BREAK, which says the page is
+// done, one more at once if that got nothing. 1 done, 0 not, else a QD_E_ (QD_E_OFFLINE: no
+// answer; missed() counts it).
+static int ask_done(qd_session_t *s, int brk)
+{
+    int e = s->late ? late_8e(s) : QD_E_OFFLINE;
+    s->late = 0;
+    for (int try = 0; e == QD_E_OFFLINE; try++) {
+        e = ask(&s->o, 0x8E, 0x00, 1);
+        if (e == QD_E_OFFLINE) e = late_8e(s);
+        if (!brk || try) break;
+    }
+    if (e < 0) {
+        s->late = e == QD_E_OFFLINE;
+        return e;
+    }
+    s->misses = 0;
+    s->e_bits |= (uint8_t)(e & 0x03);
+    if (!(e & 0x04)) return 0;
+    page_done(s);
+    return 1;
+}
+
+// 83 01 and 83 02 with a page printing, and what they say is wrong with it: a jam or the
+// cover (recovered, or the job stops), an engine fault, no paper. 0, or a QD_E_.
+static int printing_status(qd_session_t *s)
+{
+    int s01 = poll(s, 0x83, 0x01);
+    int s02 = s01 < 0 ? s01 : poll(s, 0x83, 0x02);
+    if (s02 < 0) return missed(s, s02);
+    if (s02 & 0x0C) return jammed(s, (uint8_t)s02);
+    // No paper at the source also says a fault is stored: it waits below, as for paper.
+    if ((s01 & 0x02) && !(s02 & QD_S02_NO_PAPER)) return engine_fault(s);
+    if (!(s01 & 0x20)) {
+        // Not moving: is the paper gone? Then the page waits in the printer for more.
+        int a = poll(s, 0x83, 0x2A);
+        if (a < 0) return missed(s, a);
+        if (!(a & paper_bit(s))) return out_of_paper(s);
+    }
+    return 0;
 }
 
 // The page printing, to its done: a question every half second (at once at the printer's
@@ -419,59 +516,27 @@ static int wait_done(qd_session_t *s)
 {
     const qd_ops_t *o = &s->o;
     int rc;
-    // What a status between rows saw, and stopped the page for.
-    if (s->seen & SEEN_JAM) {
-        if ((rc = jammed(s, s->seen_s02))) return rc;
-    } else if (s->seen & SEEN_PAPER) {
-        if ((rc = out_of_paper(s))) return rc;
-    }
-    uint32_t poll = now(s) - POLL_MS;          // the first question at once
+    uint32_t poll_at = now(s) - POLL_MS;       // the first question at once
     for (;;) {
         // The next half second, or at once when the printer sends a BREAK.
-        while (since(s, poll) < POLL_MS) {
-            if (o->brk && o->brk(o->ctx)) break;
-            uint32_t left = POLL_MS - since(s, poll);
+        int brk = 0;
+        while (!brk && since(s, poll_at) < POLL_MS) {
+            if (o->brk && o->brk(o->ctx)) { brk = 1; break; }
+            uint32_t left = POLL_MS - since(s, poll_at);
             o->sleep_ms(o->ctx, left < 50 ? left : 50);
         }
-        poll = now(s);
-        int e = ask(o, 0x8E, 0x00, 1);
-        if (e < 0) {
-            if ((rc = missed(s, e))) return rc;
-            if (since(s, s->p_at) >= DONE_MS) return QD_E_FAULT;
-            continue;
-        }
-        s->e_bits |= (uint8_t)(e & 0x03);
-        if (e & 0x04) {
-            page_done(s);
-            return QD_OK;
-        }
+        poll_at = now(s);
+        int e = ask_done(s, brk);
+        if (e > 0) return QD_OK;
+        if (e < 0 && (rc = missed(s, e))) return rc;
         if (since(s, s->p_at) >= DONE_MS) return QD_E_FAULT;
-        int s01 = ask(o, 0x83, 0x01, 1);
-        int s02 = s01 < 0 ? s01 : ask(o, 0x83, 0x02, 1);
-        if (s02 < 0) {
-            if ((rc = missed(s, s02))) return rc;
+        if (e < 0) continue;
+        const unsigned rec = s->recoveries;
+        const uint32_t at = s->p_at;
+        if ((rc = printing_status(s))) return rc;
+        if (s->recoveries != rec || s->p_at != at) {
+            poll_at = now(s);                  // printing again: its first question in 500 ms
             continue;
-        }
-        s->misses = 0;
-        if (s02 & 0x0C) {
-            if ((rc = jammed(s, (uint8_t)s02))) return rc;
-            poll = now(s);
-            continue;
-        }
-        // No paper at the source also says a fault is stored: it waits below, as for paper.
-        if ((s01 & 0x02) && !(s02 & QD_S02_NO_PAPER)) return engine_fault(s);
-        if (!(s01 & 0x20)) {
-            // Not moving: is the paper gone? Then the page waits in the printer for more.
-            int a = ask(o, 0x83, 0x2A, 1);
-            if (a < 0) {
-                if ((rc = missed(s, a))) return rc;
-                continue;
-            }
-            if (!(a & paper_bit(s))) {
-                if ((rc = out_of_paper(s))) return rc;
-                poll = now(s);
-                continue;
-            }
         }
         if ((rc = blink(s)) || (rc = flush(s))) return rc;
     }
@@ -480,7 +545,7 @@ static int wait_done(qd_session_t *s)
 // The job is to stop. A sheet printing with nothing wrong comes out first.
 static int cancel(qd_session_t *s)
 {
-    if (s->printing && !s->seen) {
+    if (s->printing) {
         s->stopping = 1;
         int rc = wait_done(s);
         if (rc) return rc;
@@ -516,8 +581,12 @@ static int open_page(qd_session_t *s, int page, const qd_media_t *md)
     int v;
     if (s->printing && !s->loading && !s->rewound && md == s->p_md) {
         // The next page, behind the one printing: the offsets and the width are that page's
-        // while it prints, and are this one's too.
-        if ((v = q(s, 0x83, source(s))) < 0) return v;
+        // while it prints, and are this one's too. No answer here is the line's trouble, not
+        // the page's: the state is left alone, and abort lets the sheet printing come out.
+        if ((v = ask(&s->o, 0x83, source(s), 0)) < 0) {
+            s->soft = v == QD_E_OFFLINE;
+            return v;
+        }
     } else {
         // Another sheet; or rows are in that will not print (this page's, when it goes again
         // in Apple's screen, or a page's that fit neither); or a recovery left the printer at
@@ -533,8 +602,23 @@ static int open_page(qd_session_t *s, int page, const qd_media_t *md)
     s->l_bytes = 0;
     s->rows = 0;
     s->e_bits = 0;
-    s->blink_at = now(s);
+    s->blink_at = s->poll_at = now(s);
     return QD_OK;
+}
+
+// A recovery's 81 00 took the printer back to the start of its memory while this page was
+// loading. With rows of it already in, the rest would land at the start, not behind them:
+// the page is lost. With none in, it starts the memory over once the page printing is done.
+static int after_recovery(qd_session_t *s)
+{
+    if (s->rows) {
+        event(s, QD_EV_LOST, s->l_no, 0);
+        return QD_E_FAULT;
+    }
+    int rc = s->printing ? wait_done(s) : 0;
+    if (!rc) rc = setup(s, s->l_md);
+    if (!rc) rc = flush(s);
+    return rc;
 }
 
 // A row would take the page printing and this one past the printer's memory: the page
@@ -542,79 +626,67 @@ static int open_page(qd_session_t *s, int page, const qd_media_t *md)
 static int make_room(qd_session_t *s)
 {
     const uint32_t t0 = now(s);
-    const unsigned rec = s->recoveries;
     int rc = flush(s);
     if (!rc) rc = wait_done(s);
     if (rc) return rc;
-    if (s->recoveries != rec) {
-        // A recovery's 81 00 took the printer back to the start of its memory: the rest of
-        // this page's rows would land there, not behind the rows already in.
-        event(s, QD_EV_LOST, s->l_no, 0);
-        return QD_E_FAULT;
-    }
     event(s, QD_EV_ROOM, s->l_no, since(s, t0));
     return 0;
 }
 
-// Between rows, while a page prints: is it done, and is anything wrong? One try a question.
-// A jam, the cover or no paper stops the page and shows at once; wait_done puts it right.
-static int watch(qd_session_t *s)
+// Between rows, at the printer's BREAK or every 500 ms: is the page printing done, and is
+// anything wrong? One try a question. Whatever is wrong is seen to here, before another row
+// goes: the printer was never tried taking rows with a jam or its cover open.
+static int watch(qd_session_t *s, int brk)
 {
-    const qd_ops_t *o = &s->o;
     int rc = flush(s);
     if (rc) return rc;
     s->poll_at = now(s);
-    int e = ask(o, 0x8E, 0x00, 1);
-    if (e < 0) return missed(s, e);
-    s->e_bits |= (uint8_t)(e & 0x03);
-    if (e & 0x04) {
-        page_done(s);
-        return 0;
+    if (s->printing) {
+        int e = ask_done(s, brk);
+        if (e < 0) return missed(s, e);
+        if (e > 0) return 0;
+        return printing_status(s);
     }
-    if (s->seen) return 0;
-    int s01 = ask(o, 0x83, 0x01, 1);
-    int s02 = s01 < 0 ? s01 : ask(o, 0x83, 0x02, 1);
+    // Nothing printing: a jam or the cover holds the rows until it is gone; paper is the
+    // print's to wait for.
+    int s01 = poll(s, 0x83, 0x01);
+    int s02 = s01 < 0 ? s01 : poll(s, 0x83, 0x02);
     if (s02 < 0) return missed(s, s02);
-    s->misses = 0;
-    qd_state_t st;
     if (s02 & 0x0C) {
-        s->seen = SEEN_JAM;
-        s->seen_s02 = (uint8_t)s02;
-        st = (s02 & 0x08) ? QDS_JAM : QDS_COVER;
-    } else if ((s01 & 0x02) && !(s02 & QD_S02_NO_PAPER)) {
-        return engine_fault(s);
-    } else if (!(s01 & 0x20)) {
-        int a = ask(o, 0x83, 0x2A, 1);
-        if (a < 0) return missed(s, a);
-        if (a & paper_bit(s)) return 0;
-        s->seen = SEEN_PAPER;
-        st = s->c.manual ? QDS_MANUAL : (s02 & QD_S02_CASSETTE) ? QDS_NO_CASSETTE : QDS_NO_PAPER;
-    } else {
-        return 0;
+        if (stopping(s)) {
+            s->fault = 1;
+            return stop_now(s);
+        }
+        if ((rc = wait_clear(s, (uint8_t)s02))) return rc;
+        state(s, QDS_PRINTING);
+        if ((rc = lights(s, 0x01))) return rc;
+        return flush(s);
     }
-    if ((rc = cmd(s, 0x8A, 0x00))) return rc;
-    state(s, st);
-    if ((rc = lights(s, qd_lights(st, 0)))) return rc;
-    return flush(s);
+    if ((s01 & 0x02) && !(s02 & QD_S02_NO_PAPER)) return engine_fault(s);
+    return 0;
 }
 
 static int row(qd_session_t *s, const uint8_t *codes, size_t n)
 {
     if (!(s->rows & 31) && cancelled(s)) return cancel(s);
-    if (s->printing) {
-        int rc = 0;
-        if (s->p_bytes + s->l_bytes + n > s->room) rc = make_room(s);
-        else if ((s->o.brk && s->o.brk(s->o.ctx)) || since(s, s->poll_at) >= POLL_MS) rc = watch(s);
-        if (rc) return rc;
+    const unsigned rec = s->recoveries;
+    int rc = 0;
+    if (s->printing && s->p_bytes + s->l_bytes + n > s->room) {
+        rc = make_room(s);
+    } else {
+        int brk = s->o.brk && s->o.brk(s->o.ctx);
+        if (brk || since(s, s->poll_at) >= POLL_MS) rc = watch(s, brk);
     }
+    if (!rc && s->recoveries != rec) rc = after_recovery(s);
+    if (rc) return rc;
     size_t len = qd_row_packet(codes, n, s->pkt);
     if (!len) return QD_E_FAULT;
     s->wrote = 1;
-    int rc = s->o.put(s->o.ctx, s->pkt, len);
+    rc = s->o.put(s->o.ctx, s->pkt, len);
     if (rc) return fail(s, rc);
     s->rows++;
     s->l_bytes += (uint32_t)n;
-    return s->seen ? 0 : blink(s);         // a fault's lights stay as they are
+    return blink(s);
 }
 
 static int print(qd_session_t *s)
@@ -631,7 +703,13 @@ static int print(qd_session_t *s)
     int c = q(s, 0x82, 0x00);
     if (c < 0) return c;
     if (((e | s->e_bits) & 0x03) || (c & 0x01)) return QD_E_FAULT;
-    if ((rc = wait_paper(s))) return rc;
+    // Paper, and no jam or cover: 8A 01 sent into one is kept and runs when it clears.
+    for (;;) {
+        if ((rc = wait_paper(s))) return rc;
+        if ((rc = q(s, 0x83, 0x02)) < 0) return rc;
+        if (!(rc & 0x0C)) break;
+        if ((rc = wait_clear(s, (uint8_t)rc))) return rc;
+    }
     if ((rc = lights(s, 0x01)) || (rc = cmd(s, 0x8B, 0x8B)) || (rc = cmd(s, 0x8B, 0x8B)) ||
         (rc = cmd(s, 0x8A, 0x01)))
         return rc;
@@ -646,7 +724,6 @@ static int print(qd_session_t *s)
     s->loading = 0;
     s->l_bytes = 0;
     s->misses = 0;
-    s->seen = 0;
     event(s, QD_EV_PRINT, s->p_no, 0);
     return QD_OK;
 }
@@ -655,6 +732,9 @@ static int end(qd_session_t *s)
 {
     int rc;
     if (s->printing && (rc = wait_done(s))) return rc;
+    // A Cancel that came as the last page printed: its sheet is out, and the job ends
+    // cancelled all the same.
+    if (cancelled(s)) return stop_now(s);
     // Page done comes while the last sheet is still on its way out (83 01 bit 5, about 15 s
     // more on board 1): the job ends Printing then, and the status at rest says Ready once the
     // sheet is out, rather than Ready now and Printing again at the next status. One quick
@@ -679,7 +759,10 @@ static int end(qd_session_t *s)
 
 static int kept(qd_session_t *s, int rc)
 {
-    if (rc && !s->err) s->err = rc;
+    if (rc && !s->err) {
+        s->err = rc;
+        if (rc == QD_E_LINK) s->soft = 1;
+    }
     return rc;
 }
 
@@ -692,16 +775,19 @@ int qd_session_end(qd_session_t *s) { return kept(s, end(s)); }
 void qd_session_abort(qd_session_t *s)
 {
     if (!s->wrote || s->closed) return;
-    // The session has no error of its own: the rip gave up, or the upload was cut off. As a
-    // cancel, a sheet printing with nothing wrong comes out first.
-    if (s->printing && !s->err && !s->seen) {
+    // No error of the session's own (the rip gave up, the upload was cut off), or one that
+    // was the line's and not the printer's (a chunk read back wrong, the paper source's
+    // answer missed): the sheet printing is sound. As a cancel, it comes out first.
+    if (s->printing && !s->fault && (!s->err || s->soft)) {
         s->stopping = 1;
         if (wait_done(s) == QD_E_CANCEL) return;      // a fault came: stopped there
     }
     s->closed = 1;
     put_cmd(&s->o, 0x8A, 0x00);
     cassette_again(s);
-    put_cmd(&s->o, 0x81, 0x00);
-    put_cmd(&s->o, 0x84, 0x01);
+    if (!s->fault) {                                  // (stop_now: nothing into a jam)
+        put_cmd(&s->o, 0x81, 0x00);
+        put_cmd(&s->o, 0x84, 0x01);
+    }
     s->o.flush(s->o.ctx);
 }
