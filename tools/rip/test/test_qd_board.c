@@ -36,6 +36,7 @@ static struct {
     int      puts, fail_put_at;    // the put that fails with QD_E_LINK (0: never)
     int      cancel_at_row;        // qdlaser_cancel() as this row goes (0: never)
     int      rows, prints, stops;  // row packets, 8A 01, 8A 00
+    int      setups, asked_done;   // 87 (a page's whole setup), 8E 00
     int      aborts;               // job_pipe_abort
     int      notes, note_apple, note_too_big;
     qd_state_t last_state;
@@ -71,6 +72,8 @@ static int f_put(void *ctx, const uint8_t *p, size_t n)
         return QD_OK;
     }
     if (n == 3 && p[0] == 0x8A) { if (p[1]) F.prints++; else F.stops++; }
+    if (n == 3 && p[0] == 0x87) F.setups++;
+    if (n == 3 && p[0] == 0x8E) F.asked_done++;
     if (n == 3 && (p[0] == 0x82 || p[0] == 0x83 || p[0] == 0x8E)) {
         F.asked[0] = p[0];
         F.asked[1] = p[1];
@@ -206,6 +209,30 @@ static void test_job_prints_a_page(void)
     CHECK_EQ_INT(F.prints, 1);
     CHECK_EQ_INT(F.note_apple, 1);
     CHECK_EQ_INT(qdlaser_job_end(0), QD_OK);
+    CHECK_EQ_INT(F.closes, 1);
+}
+
+// W-1144: a job's second page goes in behind the first with no setup of its own, and the job's
+// end asks for the last page's done before it ends the session.
+static void test_job_prints_two_pages(void)
+{
+    reset();
+    job_pipe_target_t t;
+    memset(&t, 0, sizeof t);
+    CHECK_EQ_INT(qdlaser_job_begin(QD_PLW300, HT_APPLE, 0, 0, &t), 0);
+    CHECK_EQ_INT(t.colour_ok(t.colour_ctx), 0);
+    CHECK_EQ_INT(page(&t, 0), 0);
+    CHECK_EQ_INT(page(&t, 0), 0);
+    CHECK_EQ_INT(F.rows, 2 * 3175);
+    CHECK_EQ_INT(F.prints, 2);
+    CHECK_EQ_INT(F.setups, 1);
+    CHECK_EQ_INT(F.notes, 2);
+    int asked = F.asked_done;
+    CHECK_EQ_INT(qdlaser_job_end(0), QD_OK);
+    CHECK(F.asked_done > asked);
+    CHECK_EQ_INT(F.stops, 0);
+    CHECK_EQ_INT(F.aborts, 0);
+    CHECK_EQ_INT(F.last_state, QDS_READY);
     CHECK_EQ_INT(F.closes, 1);
 }
 
@@ -401,6 +428,7 @@ int main(void)
     static const qdlaser_cfg_t cfg = { .state = cb_state, .page = cb_page };
     qdlaser_start(&cfg);
     test_job_prints_a_page();
+    test_job_prints_two_pages();
     test_job_no_clock_refused();
     test_too_big_page_fails_job();
     test_session_error_aborts_pipe();
