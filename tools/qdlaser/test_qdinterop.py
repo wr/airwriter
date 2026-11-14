@@ -1,6 +1,7 @@
 #!/usr/bin/env python3.14
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""The firmware's Personal LaserWriter 300 code against a software one, on this computer (W-1102).
+"""The firmware's Personal LaserWriter 300 code against a software one, on this computer (W-1102,
+W-1144).
 
 tools/rip/build/qdhost is the board's session, page stage and rip built for the host; it
 prints over a pseudo-terminal that qdfake.py serves, in qdfake's framing (the clock the
@@ -11,8 +12,22 @@ a line against a printer that checks every packet.
 Scenarios, each its own qdfake and qdhost, side by side:
 
   * a Letter page: printed, the dots `rip --printer plw300 --out-pbm` makes of it
-  * three pages: three printed, loaded one at a time (no row between a page's 8A 01 and
-    its page done in qdfake's log)
+  * three pages and ten, each unlike the others: all printed whole and in order, each
+    loaded while the one before printed, each done one print's time after the last, and
+    nothing the printer answers with a blank or a moved sheet
+  * two pages too big for the printer together: the second waits for room, and both print
+  * a jam as page 1 prints with page 2 loaded: both go again from the board's copy
+  * a jam as page 1 prints that leaves two sheets in the path: clear once, a jam again,
+    and the recovery only once every sheet is out
+  * a jam as page 2 of three prints, page 3 part loaded, and a jam in the middle of ten:
+    the pages go again from the board's copy, and every page comes out, in order, the page
+    before the jam at most twice
+  * the same jam with no copy (--no-copy): the job stops, and nothing but the stop goes
+    into the jam
+  * SIGINT as page 1 prints: its sheet comes out whole, and page 2 never prints
+  * the paper gone as page 1 prints with page 2 behind it: both print once it is back
+  * a noisy page over a small budget behind a page printing: that page finishes, and the
+    noisy one goes in Apple's screen
   * a noisy page over a small budget: it goes in Apple's screen, the dots `rip --dither
     apple` makes; under a budget it cannot meet even so, it fails, the next page prints,
     and qdhost exits 1
@@ -21,6 +36,8 @@ Scenarios, each its own qdfake and qdhost, side by side:
   * the manual slot, with a sheet in it and without (qdhost asks; a sheet goes in)
   * the printer switched off mid-page, SIGINT mid-page, a Personal LaserWriter LS, a row
     whose check fails
+
+qdfake prints a page in 2 s here (--done), so the lot takes about 35 s.
 
     make -C tools/rip qdinterop          (builds build/qdhost and build/rip first)
 """
@@ -87,7 +104,7 @@ class Fake:
         out, log = d / "pages", d / "fake.log"
         proc = await asyncio.create_subprocess_exec(
             sys.executable, QDFAKE, "serve", "--pty", "--out", out, "--no-png", "--log", log,
-            *extra, stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE,
+            *map(str, extra), stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.STDOUT, preexec_fn=default_sigint,
             env={**os.environ, "PYTHONUNBUFFERED": "1"})
         path = (await asyncio.wait_for(proc.stdout.readline(), 15)).decode().strip()
@@ -209,23 +226,257 @@ async def scenario_letter(root, tmp, page):
     return res
 
 
-async def scenario_three(root, small):
-    fake = await Fake.start(root, "three")
-    run = await Run.start(fake.path, small, small, small)
-    code = await run.wait()
-    await fake.stop()
-    # No row heard between a page's print and its done.
-    printing, overlap = False, 0
-    for arrow, text in fake.entries():
+DONE_S = 2.0                                # qdfake's --done: a page's print
+ROWS = 3175                                 # a Letter page's rows
+
+
+def trouble(fake):
+    """What the fake printer answered with a blank, moved or wrong sheet."""
+    return [e for e in fake.events()
+            if e.startswith(("blank", "moved", "wrong page", "memory full", "8A 01 while",
+                             "rows while", "81 00 while", "84 08 while", "fed by itself",
+                             "jammed again"))]
+
+
+def timeline(fake):
+    """(ms, arrow, text) for each line of the fake's log."""
+    out = []
+    try:
+        for line in fake.log.read_text().splitlines():
+            m = re.match(r"^\s*(\d+) (.) (.*)$", line)
+            if m:
+                out.append((int(m.group(1)), m.group(2), m.group(3)))
+    except FileNotFoundError:
+        pass
+    return out
+
+
+def rows_while_printing(fake):
+    printing, n = False, 0
+    for _, arrow, text in timeline(fake):
         if arrow == "!" and text == "print":
             printing = True
         elif arrow == "!" and text.startswith("done"):
             printing = False
         elif arrow == ">" and printing and text[:1] in "01234567":
-            overlap += 1
-    return [(code == 0, f"three pages print (exit {code}) {tail(run)}"),
-            (len(fake.pages()) == 3, f"three pages printed ({len(fake.pages())})"),
-            (overlap == 0, f"one page in the printer at a time ({overlap} rows sent while one printed)")]
+            n += 1
+    return n
+
+
+async def in_order(fake, tmp, tag, files, screens=None, twice=None):
+    """The pages the fake printed against the rip's of each file, in order. A problem, or None.
+    twice: the index of a page that may have come out a second time, straight after the first."""
+    got = fake.pages()
+    if len(got) == len(files) + 1 and twice is not None:
+        files = files[:twice + 1] + files[twice:]
+    if len(got) != len(files):
+        return f"{len(got)} pages printed, {len(files)} sent"
+    want = []
+    for i, f in enumerate(files):
+        screen = screens[i] if screens else "atkinson"
+        want.append(await asyncio.to_thread(expected, f, tmp, f"{tag}-{i}", screen))
+    for i in range(1, len(want)):
+        if files[i] != files[i - 1] and want[i].shape == want[i - 1].shape and not (want[i] != want[i - 1]).any():
+            return f"pages {i} and {i + 1} are the same: the order would not show"
+    for i, (w, g) in enumerate(zip(want, got)):
+        diff = same_area(w, read_pbm(g))
+        if diff:
+            return f"page {i + 1}: {diff}"
+    return None
+
+
+async def scenario_pages(root, tmp, files):
+    n = len(files)
+    name = {3: "three", 10: "ten"}.get(n, str(n))
+    fake = await Fake.start(root, name, "--done", DONE_S)
+    run = await Run.start(fake.path, *files)
+    code = await run.wait(60 + 5 * n)
+    await fake.stop()
+    done = [ms for ms, a, t in timeline(fake) if a == "!" and t.startswith("done")]
+    gaps = [b - a for a, b in zip(done, done[1:])]
+    late = [g for g in gaps if not DONE_S * 1000 - 20 <= g <= DONE_S * 1000 + 800]
+    order = await in_order(fake, tmp, name, files)
+    bad = trouble(fake)
+    heard = fake.heard()
+    return [(code == 0, f"{name} pages print (exit {code}) {tail(run)}"),
+            (order is None, f"{name} pages: whole and in order ({order})"),
+            (len(gaps) == n - 1 and not late,
+             f"{name} pages: each done a print's time after the last ({gaps} ms)"),
+            (rows_while_printing(fake) >= (n - 1) * ROWS,
+             f"{name} pages: each loaded while the one before printed ({rows_while_printing(fake)} rows)"),
+            (not bad, f"{name} pages: no sheet blank or moved ({bad[:2]})"),
+            # 81 00: qdhost's first question, the job's begin, the first page's setup, the end.
+            (heard.count("810081") == 4 and heard.count("87dd5a") == 1,
+             f"{name} pages: one setup, and no 81 00 between pages "
+             f"({heard.count('810081')} x 81 00, {heard.count('87dd5a')} x 87)")]
+
+
+async def scenario_room(root, tmp, noisy):
+    # The noisy page is about 165 KB of codes: two are past a printer of 210,000 bytes.
+    fake = await Fake.start(root, "room", "--done", DONE_S, "--mem", 210000)
+    run = await Run.start(fake.path, "--room", 200000, noisy, noisy)
+    code = await run.wait()
+    await fake.stop()
+    bad = trouble(fake)
+    got = fake.pages()
+    res = [(code == 0, f"room: two pages too big together print (exit {code}) {tail(run)}"),
+           (re.search(r"page 2 waited \d+ ms for room", run.text) is not None, "room: qdhost says page 2 waited"),
+           (not bad, f"room: no sheet blank ({bad[:2]})"),
+           (len(got) == 2, f"room: two pages printed ({len(got)})")]
+    if len(got) == 2:
+        want = await asyncio.to_thread(expected, noisy, tmp, "room")
+        diffs = [same_area(want, read_pbm(g)) for g in got]
+        res.append((diffs == [None, None], f"room: both whole ({diffs})"))
+    return res
+
+
+async def scenario_jam_behind(root, tmp, first, second):
+    fake = await Fake.start(root, "jam-behind", "--done", DONE_S)
+    run = await Run.start(fake.path, first, second)
+    loaded = await until(lambda: fake.rows_heard() >= 2 * ROWS and "print" in fake.events(), 20)
+    await fake.say("jam")
+    shown = await until(lambda: "paper jam" in run.text, 20)
+    await asyncio.sleep(0.5)
+    await fake.say("ok")
+    code = await run.wait()
+    await fake.stop()
+    order = await in_order(fake, tmp, "jam-behind", [first, second])
+    bad = trouble(fake)
+    return [(loaded and shown, f"jam on page 1, page 2 loaded: qdhost shows the jam {tail(run)}"),
+            (code == 0, f"jam on page 1, page 2 loaded: put right, both print (exit {code})"),
+            ("page 1 sent again after a jam" in run.text and "page 2 sent again after a jam" in run.text,
+             "jam on page 1: qdhost says both went again"),
+            (order is None, f"jam on page 1: page 1 then page 2, whole ({order})"),
+            (fake.rows_heard() == 4 * ROWS, f"jam on page 1: both pages' rows went again ({fake.rows_heard()})"),
+            (not bad, f"jam on page 1: no sheet blank or wrong ({bad[:2]})")]
+
+
+async def scenario_jam_two_sheets(root, tmp, first, second):
+    fake = await Fake.start(root, "jam-two-sheets", "--done", DONE_S)
+    run = await Run.start(fake.path, first, second)
+    await until(lambda: fake.rows_heard() >= 2 * ROWS and "print" in fake.events(), 20)
+    await fake.say("jam2")
+    shown = await until(lambda: "paper jam" in run.text, 20)
+    await fake.say("ok")                    # clear once, then a jam again
+    again = await until(lambda: any(e.startswith("jam again") for e in fake.events()), 20)
+    await asyncio.sleep(4.5)                # longer than the session waits on a clear answer
+    early = "print" in fake.events()[fake.events().index("stopped"):] if "stopped" in fake.events() else True
+    await fake.say("clear")
+    code = await run.wait()
+    await fake.stop()
+    order = await in_order(fake, tmp, "jam-two-sheets", [first, second])
+    bad = trouble(fake)
+    return [(shown and again, f"two sheets jammed: clear once, then a jam again {tail(run)}"),
+            (not early, "two sheets jammed: no recovery while the jam was back"),
+            (code == 0, f"two sheets jammed: every sheet out, both pages print (exit {code})"),
+            (order is None, f"two sheets jammed: page 1 then page 2, whole ({order})"),
+            (not bad, f"two sheets jammed: nothing sent into the jam ({bad[:2]})")]
+
+
+async def scenario_jam_later(root, tmp, first, second, third):
+    # With no copy, as a board with no memory for one: the printer's own recovery would print
+    # page 1 again, so the job stops.
+    fake = await Fake.start(root, "jam-later", "--done", DONE_S)
+    run = await Run.start(fake.path, "--no-copy", first, second, third)
+    await until(lambda: any(e.startswith("done 1") for e in fake.events())
+                and fake.events().count("print") == 2, 30)
+    await fake.say("jam")
+    code = await run.wait(60)
+    await fake.stop()
+    bad = trouble(fake)
+    after = fake.heard()[-4:]
+    return [(code == 1, f"jam on page 2, no copy: the job stops (exit {code}) {tail(run)}"),
+            ("page 2: lost to a jam" in run.text, "jam on page 2, no copy: qdhost names the page"),
+            (len(fake.pages()) == 1, f"jam on page 2, no copy: page 1 is out, and no page printed twice ({len(fake.pages())})"),
+            (not bad, f"jam on page 2, no copy: nothing but the stop sent into the jam ({bad[:2]})"),
+            ("810081" not in after and "8a008a" in after, f"jam on page 2, no copy: 8A 00 and no 81 00 at the end ({after})")]
+
+
+async def scenario_jam_resend(root, tmp, files, at):
+    """A jam as page `at` (from 1) prints, the next page part loaded: every page comes out, in
+    order, the page before the jam at most twice."""
+    name = f"jam-resend-{len(files)}"
+    fake = await Fake.start(root, name, "--done", DONE_S)
+    run = await Run.start(fake.path, "--row-us", 300, *files)
+    part = await until(lambda: fake.events().count("print") == at and any(
+        e.startswith(f"done {at - 1}") for e in fake.events()) and
+        fake.rows_heard() >= at * ROWS + 300, 60, 0.005)
+    loaded = fake.rows_heard()
+    await fake.say("jam")                   # page at-1's sheet is on its way out: two in the path
+    shown = await until(lambda: "paper jam" in run.text, 20)
+    await asyncio.sleep(0.5)
+    await fake.say("clear")
+    code = await run.wait(60 + 5 * len(files))
+    await fake.stop()
+    order = await in_order(fake, tmp, name, files, twice=at - 2)
+    bad = trouble(fake)
+    what = f"{len(files)} pages, a jam on page {at}"
+    return [(part and loaded < (at + 1) * ROWS and shown,
+             f"{what}: page {at + 1} was part loaded ({loaded - at * ROWS} rows) {tail(run)}"),
+            (code == 0, f"{what}: the job prints (exit {code})"),
+            (f"page {at} sent again after a jam" in run.text and f"page {at + 1} sent again after a jam" in run.text,
+             f"{what}: qdhost says pages {at} and {at + 1} went again"),
+            (order is None, f"{what}: every page out, in order, page {at - 1} at most twice ({order})"),
+            (not bad, f"{what}: nothing sent into the jam, no sheet blank or wrong ({bad[:2]})")]
+
+
+async def scenario_cancel_sheet(root, tmp, first, second):
+    fake = await Fake.start(root, "cancel-sheet", "--done", DONE_S)
+    run = await Run.start(fake.path, first, second)
+    await until(lambda: fake.rows_heard() > ROWS and "print" in fake.events(), 20)
+    run.proc.send_signal(signal.SIGINT)
+    code = await run.wait(30)
+    await fake.stop()
+    order = await in_order(fake, tmp, "cancel-sheet", [first])
+    bad = trouble(fake)
+    stopped = [e for e in fake.events() if e.startswith("8A 00")]
+    return [(code == 1, f"SIGINT as page 1 prints: exit 1 (exit {code}) {tail(run)}"),
+            (order is None, f"SIGINT as page 1 prints: its sheet comes out whole, alone ({order})"),
+            (not bad and not stopped, f"SIGINT as page 1 prints: not stopped mid-sheet ({(bad + stopped)[:2]})"),
+            (fake.heard()[-3:] == ["8a008a", "810081", "840185"],
+             f"SIGINT as page 1 prints: then 8A 00, 81 00, Ready on ({fake.heard()[-3:]})")]
+
+
+async def scenario_paper_behind(root, tmp, first, second):
+    fake = await Fake.start(root, "paper-behind", "--done", DONE_S)
+    run = await Run.start(fake.path, first, second)
+    await until(lambda: fake.rows_heard() > ROWS and "print" in fake.events(), 20)
+    await fake.say("paper")
+    shown = await until(lambda: "out of paper" in run.text, 20)
+    await asyncio.sleep(0.5)
+    await fake.say("ok")
+    code = await run.wait()
+    await fake.stop()
+    order = await in_order(fake, tmp, "paper-behind", [first, second])
+    bad = trouble(fake)
+    return [(shown, f"paper gone as page 1 prints: qdhost shows it {tail(run)}"),
+            (code == 0, f"paper gone as page 1 prints: put right, both print (exit {code})"),
+            (order is None, f"paper gone as page 1 prints: page 1 then page 2, whole ({order})"),
+            (not bad, f"paper gone as page 1 prints: no sheet blank ({bad[:2]})")]
+
+
+async def scenario_apple_behind(root, tmp, first, noisy):
+    fake = await Fake.start(root, "apple-behind", "--done", DONE_S)
+    # The noisy page's Atkinson rows stop at 100 KB, behind page 1 as it prints.
+    run = await Run.start(fake.path, "--budget", 100000, first, noisy)
+    code = await run.wait()
+    await fake.stop()
+    order = await in_order(fake, tmp, "apple-behind", [first, noisy], ["atkinson", "apple"])
+    bad = trouble(fake)
+    # The page's second setup, 81 00 and all, comes only once page 1 is done.
+    seen, after_done = [], None
+    for _, arrow, text in timeline(fake):
+        if arrow == "!" and text.startswith("done 1"):
+            seen.append("done")
+        elif arrow == ">" and text == "87dd5a":
+            seen.append("setup")
+    after_done = seen == ["setup", "done", "setup"]
+    return [(code == 0, f"too big behind a page printing: both print (exit {code}) {tail(run)}"),
+            (re.search(r"page 2: apple, \d+ bytes", run.text) is not None, "too big behind: page 2 went in Apple's screen"),
+            (rows_while_printing(fake) > 0, f"too big behind: its first rows went in as page 1 printed ({rows_while_printing(fake)})"),
+            (after_done, f"too big behind: its second setup waited for page 1's done ({seen})"),
+            (order is None, f"too big behind: page 1, then page 2 in Apple's screen, whole ({order})"),
+            (not bad, f"too big behind: no sheet blank or moved ({bad[:2]})")]
 
 
 async def scenario_apple(root, tmp, noisy):
@@ -374,12 +625,24 @@ async def main():
         tmp.mkdir()
         pages = {}
         for kind, name, extra in (("text", "letter", []), ("text", "small", ["--rows", "700"]),
-                                  ("photo", "noisy", ["--rows", "700"]), ("text", "blank", ["--rows", "250"])):
+                                  ("photo", "noisy", ["--rows", "700"]), ("text", "blank", ["--rows", "250"]),
+                                  *[("text", f"t{i}", ["--rows", str(700 + 150 * i)]) for i in range(1, 11)]):
             pages[name] = tmp / f"{name}.urf"
             sh([sys.executable, MAKER, kind, pages[name], *extra])
+        ten = [pages[f"t{i}"] for i in range(1, 11)]
         scenarios = [
             scenario_letter(root, tmp, pages["letter"]),
-            scenario_three(root, pages["small"]),
+            scenario_pages(root, tmp, ten[:3]),
+            scenario_pages(root, tmp, ten),
+            scenario_room(root, tmp, pages["noisy"]),
+            scenario_jam_behind(root, tmp, ten[0], ten[1]),
+            scenario_jam_two_sheets(root, tmp, ten[0], ten[1]),
+            scenario_jam_later(root, tmp, ten[0], ten[1], ten[2]),
+            scenario_jam_resend(root, tmp, ten[:3], 2),
+            scenario_jam_resend(root, tmp, ten, 5),
+            scenario_cancel_sheet(root, tmp, ten[0], pages["letter"]),
+            scenario_paper_behind(root, tmp, ten[0], ten[1]),
+            scenario_apple_behind(root, tmp, ten[0], pages["noisy"]),
             scenario_apple(root, tmp, pages["noisy"]),
             scenario_too_big(root, pages["noisy"], pages["blank"]),
             *[scenario_fault(root, pages["letter"], f) for f in STATES],

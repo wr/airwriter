@@ -491,6 +491,42 @@ Traps already explained in a code comment are listed only when the comment is ea
   page's wait skip the fault bit while `10` is set and go by `83 2A`. The job's end sends
   `83 4C` after a manual-slot page: the printer otherwise keeps the slot, says it has no paper
   and pulls in any sheet put there.
+- **A 300 takes the next page's rows while a page prints, and five things go with that**
+  (W-1144; board 1's printer, 2026-11-13; SPEC §3.18 has the runs). `qd_session` keeps to each,
+  and `qdfake.py` answers as the printer did:
+  1. *Only the paper source goes before the next page's rows*: no `81 00`. Its print sequence
+     (`83 2A`, `84`, `8B 8B` twice, `8A 01`) goes at the printing page's done (`8E 00` bit 2,
+     with the printer's BREAK), never before: `8E`'s done is cleared by the read, so a done
+     read anywhere, between rows too, must be counted.
+  2. *The two pages share the memory.* 513,287 bytes of codes fit and 533,655 did not. Past it
+     while a page prints, `8E 00` bit 0 and a BREAK, and both sheets come out blank, the
+     printing one "done" early. A page's room is free at its done. `82 00` bit 0 never said
+     full; don't wait on it. The session's limit for the two together is 500,000.
+  3. *`81 00` while a page prints blanks that sheet* and no page done ever comes. It goes back
+     to the start of the memory and clears nothing (`82 00` then says empty all the same). Send
+     it between a page's `8A 01` and its done only to stop the page.
+  4. *The offsets and width (`85` to `89`) are read as a page prints.* Sent for the next page
+     3 s into a print, they moved both sheets. Change them only with nothing printing: a page
+     on another sheet waits for the done.
+  5. *Apple's jam recovery prints the page at the start of the memory*, the first since the
+     last `81 00`, and a page loaded behind it survives and prints from its own print
+     sequence. `8B 8B` sent straight after the recovery's `81 00` lands on that first page's
+     start and blanks it (the bench's first two tries). After a recovery the printer writes
+     from the start of its memory again, so the page after the one behind must start over
+     with `81 00`. A jammed page that is not the first can't be had back this way: after
+     a jam on page 2 the recovery printed page 1. A job sends its pages again from the copy
+     it keeps (`qd_session.c`, `resend`) and never relies on the printer's reprint. The cover
+     opened mid-page reads `83 01` `13`, `83 02` `0D`, and for about 3 s after it closes, and
+     after `84 08`, the `83` questions go unanswered.
+- **A 300 that says jam is to be sent nothing but questions, `8A 00` and the lights** (W-1144;
+  board 1's printer, 2026-11-13, runs A4d and A4e). An `8A 01` sent while `83 02` says jam is
+  kept: when the jam clears the printer feeds by itself, and `81 00` and `84 08` sent into
+  that feed jammed it again. A jam during the second page of two usually has the first page's
+  sheet in the path as well: after the cover closed `83 02` read clear once, then jam again
+  until that sheet was out too. So a jam is gone only when `83 02` has stayed clear on reads
+  3 s apart and `83 01` bit 5 (moving) is clear (`wait_clear`), and the recovery, a Cancel
+  and an abort all hold back `81 00` until then. Rows were never tried with a jam or the
+  cover showing: the session stops them, and `qdfake.py` fails a page sent any.
 - **With a 300 on the port, HSKi's level means nothing.** The test button's cable-test branch
   reads that level for a printer that isn't there; with a clock it reads whatever edge it lands
   on. The button goes by `port_line_speaks()`, false when the port's printer is a StyleWriter or

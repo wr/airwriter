@@ -132,5 +132,6 @@ typedef struct {
 // the upload), S the gray conversion and resampling, H the job's screen (or the four inks'),
 // K a stage's gray_row (the Personal LaserWriter 300's Apple-screen page, W-1102), O the
 // rows going on (the row callback, the stage's row or ink_row, or the ImageWriter's strips),
-// E the page's end (a stage's page_end: the 300's print and wait for page done).
+// E the page's end (a stage's page_end: for the 300, the wait for the page before it to be
+// done, and this page's print sequence; W-1144).
 int ripjob_run(urf_t *u, const ripjob_cfg_t *cfg, ripjob_stats_t *st);

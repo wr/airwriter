@@ -150,7 +150,7 @@ static int st_begin(void *ctx, int index, uint32_t w, uint32_t h)
         p->ht_ready = 1;
         ht_set_gain(&p->ht, p->cfg.gain);
     }
-    return p->cfg.sink.open(p->cfg.sink.ctx, p->md);
+    return p->cfg.sink.open(p->cfg.sink.ctx, index, p->md);
 }
 
 static void st_gray(void *ctx, const uint8_t *gray, uint32_t w)
@@ -183,7 +183,7 @@ static int st_end(void *ctx)
         rc = s->print(s->ctx);
         if (!rc && s->note) s->note(s->ctx, p->index, !p->keeping, p->sent, 0);
     } else if (p->keeping && !p->kover) {
-        if ((rc = s->open(s->ctx, p->md))) goto done;
+        if ((rc = s->open(s->ctx, p->index, p->md))) goto done;
         for (size_t at = 0; at < p->keep_len;) {
             const uint8_t *k = p->cfg.keep + at;
             size_t n = (size_t)k[0] | (size_t)k[1] << 8;

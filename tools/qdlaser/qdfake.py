@@ -8,6 +8,7 @@ decodes the pages it is sent, and draws them. Its decoder follows the design's r
 not any code of ours, so it can check the firmware's coder and line image.
 
     python3 tools/qdlaser/qdfake.py serve [--pty] [--engine 29|0d|23] [--mem BYTES]
+                                          [--done S] [--exit S] [--warm S]
                                           [--out DIR] [--no-png] [--log FILE]
     python3 tools/qdlaser/qdfake.py decode STREAM --out DIR [--no-png]
     python3 tools/qdlaser/qdfake.py decode-bits FILE --out DIR [--no-png]
@@ -25,10 +26,12 @@ printed goes to DIR/page-N.pbm (the image area as loaded, 1 = toner) and DIR/pag
 reply and `MS ! text` for what happened.
 
 Lines on stdin fault it: `paper` (the cassette is empty), `cassette` (the cassette is
-out), `manual` (a sheet in the manual slot), `jam`, `cover` (open), `engine` (a fuser
-fault), `silent` (it hears and says nothing: switched off), `badrow N` (row packet N of
-the next page fails its check: dropped, and 8E's error bit set), `ok` (every fault gone,
-paper in the cassette).
+out), `manual` (a sheet in the manual slot), `jam`, `jam2` (a jam with two sheets in the
+paper path), `cover` (open), `engine` (a fuser fault), `silent` (it hears and says
+nothing: switched off), `badrow N` (row packet N of the next page fails its check:
+dropped, and 8E's error bit set), `ok` (the cover closed, the sheet that jammed pulled,
+paper in the cassette: with a second sheet still in the path, 83 02 reads clear once
+and then jam again), `clear` (`ok`, and every sheet out of the path).
 
 What it models, from the design's command table:
 
@@ -40,21 +43,49 @@ What it models, from the design's command table:
 * 85/86, 87 and 88/89 (each negative) place the rows: top rows down, a left margin in
   bytes that carries Apple's 0x1A0 / 2 dots past the paper's edge, the row width in
   bytes. Every row must decode to that width.
-* Memory: row codes count against --mem (513,287 by default, what board 1's printer
-  took); past it 8E bit 0 and 82 bit 0, and rows are lost; 82 bit 1 past 300,000.
-* 81 00 starts a new page with the next row (and keeps the last one for a reprint);
-  8B 8B twice ends a page; 8A 01 prints a page so ended, if nothing holds it, and it is
-  done 2 s later (a BREAK, then 8E bit 2). 8A 00 stops it.
-* A jam or the cover stops a page; once cleared, it prints again only after 83 5D, as
-  Apple's recovery sends. 83 2A: 20 paper in the cassette, 40 a sheet in the manual slot
-  (83 4C and 83 4F choose). No paper at the source chosen answers as board 1's printer
-  did: 83 02 sets 10 and 83 01 says a fault is stored, the cassette empty or out, or the
-  manual slot chosen and empty.
+* Memory (W-1144, board 1's printer on the bench): the pages in it are kept in the order
+  they were loaded, and --mem (513,287 by default, what the printer took) holds the codes
+  of every page not yet done, so the next page's rows go in while one prints and a page's
+  room is free again at its done. 82 bit 1 says more than 262,144 bytes are held, bit 2
+  that nothing waits to print; 82 bit 0 is never set.
+* Past --mem, 8E bit 0. While a page prints that is the end of both: a BREAK, the sheet
+  printing comes out blank and is done early, and the page loading prints blank too.
+* 8B 8B twice ends the page loading; the next row starts another behind it. 8A 01 prints
+  the next page not yet printed, if it is ended and nothing holds it; it is done --done
+  seconds later (2 by default: a BREAK, then 8E bit 2), and its sheet is on its way out
+  for --exit seconds more (83 01 bit 5 through both). 8A 00 stops it.
+* 81 00 goes back to the start of the memory and clears nothing: 8A 01 then prints the
+  first page loaded since the 81 00 before, and the pages behind it after that; the next
+  row starts the memory over. 81 00 while a page prints: that sheet comes out blank and
+  no page done comes for it. Rows that start the memory over while a page prints blank
+  that sheet too (the real printer may hold them; nobody has tried).
+* 85/86, 87 and 88/89 are read as a page prints: changed while one prints, they move that
+  sheet (its page records where it ended up, and the log says so).
+* A jam or the cover stops a page (83 01 13; 83 02 0D for both, as the cover opened
+  mid-page gives, 04 for the cover alone); once cleared, it prints again only after
+  83 5D, as Apple's recovery sends, and for --warm seconds after the cover closes the 83
+  questions go unanswered. The recovery's 81 00 means the page printed again is the first
+  since the 81 00 before: when another was stopped, the log says the wrong page printed.
+* A jam as a page prints while the sheet before it is still on its way out has two sheets
+  in the path (bench A4d): after `ok`, 83 02 reads clear once, then jam again, until
+  `clear`. An 8A 01 heard while a jam or the cover shows is kept, and the printer feeds by
+  itself when the jam clears; 81 00 or 84 08 into that feed jams it again (A4e). 84 08
+  is followed by --warm seconds of unanswered 83s, as the cover closing is.
+* Once an 83 02 has said jam or cover, and until one says clear, the host is to send
+  nothing but questions, 8A 00 and the lights. A row, 81 00, 84 08 or 8A 01 then is
+  logged (`rows while…`, `81 00 while…`, `84 08 while…`, `8A 01 while…`), and the page
+  loading never prints: nobody has tried the real printer with them, so a test fails.
+  83 2A: 20 paper in the cassette, 40 a sheet in the manual slot (83 4C and 83 4F
+  choose). No paper at the source chosen answers as board 1's printer did: 83 02 sets 10
+  and 83 01 says a fault is stored, the cassette empty or out, or the manual slot chosen
+  and empty.
 
-Not modelled: the link's clock and timing, page memory's exact cost, density, copies.
+Not modelled: the link's clock and timing, page memory's exact cost, the memory
+emptying as a page prints, a sheet jammed on its way out, density, copies.
 """
 import argparse
 import asyncio
+import copy
 import os
 import pathlib
 import sys
@@ -64,8 +95,11 @@ import tty
 import numpy as np
 
 MEM = 513287
-HALF = 300000
+HALF = 262144
 DONE_S = 2.0
+EXIT_S = 2.0
+WARM_S = 0.3
+FULL_DONE = 0.08           # a sheet lost to memory full is done this much of DONE_S later
 EDGE = 0x1A0 // 2          # what 87's left margin carries past the paper's own (Apple's formula)
 ENGINES = {"29": 0x29, "0d": 0x0D, "23": 0x23}
 
@@ -189,36 +223,62 @@ class Page:
             Image.fromarray(sheet).save(d / f"page-{n}.png", compress_level=3)
 
 
+class Slot:
+    """A page in the printer's memory."""
+
+    def __init__(self, page):
+        self.page = page
+        self.bytes = 0                          # its codes
+        self.rows_heard = 0
+        self.ended = False                      # 8B 8B twice came after its rows
+        self.error = False                      # a row was bad: it never prints
+        self.ruined = False                     # memory filled as it loaded: it prints blank
+
+
 class QuickDrawLaser:
     """One printer. packet() is a packet heard; it returns the reply byte or None."""
 
     def __init__(self, engine=0x29, mem=MEM, out=None, png=True, log=None, clock=time.monotonic,
-                 say=print, done_s=DONE_S):
+                 say=print, done_s=DONE_S, exit_s=0.0, warm_s=0.0):
         self.engine, self.mem, self.out_dir, self.png, self.log = engine, mem, out, png, log
-        self.clock, self.say, self.done_s = clock, say, done_s
+        self.clock, self.say = clock, say
+        self.done_s, self.exit_s, self.warm_s = done_s, exit_s, warm_s
         self.t0 = clock()
         # the faults and the paper
         self.no_paper = self.no_cassette = self.manual_sheet = False
         self.jam = self.cover = self.engine_fault = self.silent = False
         self.badrow = 0                         # row N of the next page fails its check
         self.manual = False                     # 83 4F chose the slot
-        # the page
+        self.quiet_until = None                 # the 83 questions go unanswered until then
+        # the registers
         self.top = self.left = self.width = 0
         self.lo85 = self.lo88 = 0
-        self.fresh = True                       # 81 00: the next row starts a new page
-        self.page = None
-        self.loaded = 0                         # bytes of codes in memory
-        self.rows_heard = 0
+        # the memory
+        self.slots = []                         # the pages in it, in the order loaded
+        self.rd = 0                             # the next to print
+        self.freed = 0                          # the pages before this one are done: their room is free
+        self.fresh = True                       # 81 00: the next row starts the memory over
+        self.full = False                       # 8E bit 0
         self.ended = 0                          # 8B 8B packets since the last row
-        self.ready = False                      # ended with 8B 8B twice: 8A 01 prints it
         self.error = False                      # 8E bit 1
         self.again = False                      # 83 01 bit 4: a jam's page to send again
-        self.printing = None                    # when 8A 01 started it
+        self.stopped = None                     # the page a jam or the cover stopped
+        self.sheets = 0                         # sheets in the paper path at a jam
+        self.rejam = False                      # one clear 83 02, then the jam again
+        self.told = False                       # the last 83 02 said jam or cover
+        self.kept_print = False                 # an 8A 01 heard during a jam
+        self.fed = False                        # the page printing started by itself
+        # the page printing
+        self.printing = None                    # its slot
+        self.print_at = self.done_at = 0.0
+        self.blank = None                       # why its sheet comes out blank
+        self.moving_until = None                # a sheet on its way out
         self.done = False                       # 8E bit 2
         self.brk = 0                            # BREAKs to send
         self.value_next = False
         self.lights = 0
-        self.pages = []
+        self.pages = []                         # the sheets that came out whole
+        self.blanks = []                        # and why each blank one was
         self.heard = []                         # packets, for tests
         self.buf = bytearray()                  # framed bytes not yet whole
         self.events = []
@@ -251,10 +311,26 @@ class QuickDrawLaser:
     def _held(self):
         return self.jam or self.cover or self.no_cassette or self.engine_fault or not self._has_paper()
 
+    def _moving(self):
+        return self.printing is not None or \
+            (self.moving_until is not None and self.clock() < self.moving_until)
+
+    def _faulted(self):
+        """A jam or the cover shows, and the host has been told so."""
+        return self.told and (self.jam or self.cover)
+
+    def _next_ended(self):
+        return self.rd < len(self.slots) and self.slots[self.rd].ended
+
+    def _used(self):
+        return sum(s.bytes for s in self.slots[self.freed:])
+
     def _s01(self):
-        # No paper at the source chosen also says a fault is stored, as board 1's printer did.
-        return (0x20 if self.printing is not None else 0) | (0x10 if self.again else 0) | \
-               (0x02 if self.engine_fault or not self._has_paper() else 0)
+        # No paper at the source chosen also says a fault is stored, as board 1's printer did;
+        # so do a jam and the cover (83 01 02 with the cover open at rest, 13 with a page
+        # stopped, on the bench).
+        return (0x20 if self._moving() else 0) | (0x10 if self.again else 0) | \
+               (0x02 if self.engine_fault or self.jam or self.cover or not self._has_paper() else 0)
 
     def _s02(self):
         # 10: no paper at the source chosen (83 4C the cassette, 83 4F the manual slot).
@@ -263,43 +339,56 @@ class QuickDrawLaser:
 
     def _c82(self):
         v = 0xA0
-        if self.page is None or not self.page.rows:
+        if self.fresh or not any(s.page.rows for s in self.slots[self.freed:]):
             v |= 0x04
         if not self._has_paper():
             v |= 0x08
-        if self.loaded > HALF:
+        if self._used() > HALF:
             v |= 0x02
-        if self.loaded > self.mem:
-            v |= 0x01
         return v
 
     def _e8e(self):
         v = 0xF8 | (0x04 if self.done else 0) | (0x02 if self.error else 0) | \
-            (0x01 if self.loaded > self.mem else 0)
+            (0x01 if self.full else 0)
         self.done = False
         return v
 
     # ---- time
+    def _sheet_blank(self, why):
+        self.blanks.append(why)
+        self._event(f"blank sheet: {why}")
+
     def tick(self):
         """The page printing comes out; a fault stops it."""
         if self.printing is None:
             return
         if self._held():
+            if self.jam or self.cover:
+                self.stopped = self.printing
             self.printing = None
             self._event("stopped")
             return
-        if self.clock() - self.printing >= self.done_s:
-            self.printing = None
-            self.done = True
-            self.brk += 1
-            page = self.page
-            self.pages.append(page)
-            if self.manual:
-                self.manual_sheet = False
-            self._event(f"done {len(self.pages)}")
-            if self.out_dir:
-                page.save(self.out_dir, len(self.pages), self.png)
-                self.say(f"fake LaserWriter 300: page {len(self.pages)} in {self.out_dir}")
+        if self.clock() < self.done_at:
+            return
+        slot, self.printing = self.printing, None
+        self.done = True
+        self.brk += 1
+        self.moving_until = self.done_at + self.exit_s
+        self.rd += 1
+        self.freed = self.rd
+        if self.stopped is slot:
+            self.stopped = None
+        if self.manual:
+            self.manual_sheet = False
+        if self.blank or slot.ruined:
+            self._sheet_blank(self.blank or "memory filled as it loaded")
+            self._event("done, blank")
+            return
+        self.pages.append(copy.copy(slot.page))
+        self._event(f"done {len(self.pages)}")
+        if self.out_dir:
+            slot.page.save(self.out_dir, len(self.pages), self.png)
+            self.say(f"fake LaserWriter 300: page {len(self.pages)} in {self.out_dir}")
 
     # ---- packets
     def packet(self, pkt):
@@ -329,38 +418,66 @@ class QuickDrawLaser:
         if n != len(pkt) - 3:
             self._event(f"row length {n} in a packet of {len(pkt)}")
             return
+        if self._faulted():
+            self._event("rows while a jam or the cover shows")
+            self.error = True
+            if self.slots and not self.slots[-1].ended:
+                self.slots[-1].error = True
+            return
         if self.fresh:
             self.fresh = False
-            self.page = Page(-self.top, -self.left, -self.width)
-            self.loaded = 0
-            self.rows_heard = 0
-            self.ready = False
-            self.error = False
-            self.ended = 0
-        self.rows_heard += 1
-        if self.badrow and self.rows_heard == self.badrow:
+            if self.printing is not None:
+                self.blank = "rows started the memory over while it printed"
+            self.slots = []
+            self.rd = self.freed = 0
+            self.full = self.error = False
+            self.stopped = None
+        if not self.slots or self.slots[-1].ended:
+            self.slots.append(Slot(Page(-self.top, -self.left, -self.width)))
+        slot = self.slots[-1]
+        self.ended = 0
+        slot.rows_heard += 1
+        if self.badrow and slot.rows_heard == self.badrow:
             self.badrow = 0
-            self.error = True
-            self._event(f"row {self.rows_heard}: check failed")
+            self.error = slot.error = True
+            self._event(f"row {slot.rows_heard}: check failed")
             return
-        if self.loaded + n > self.mem:
-            self.loaded = self.mem + 1
+        if self.full:
             return
-        self.loaded += n
-        if self.page.width <= 0:
+        if self._used() + n > self.mem:
+            self.full = True
+            slot.ruined = True
+            self._event(f"memory full: {self._used()} bytes held and {n} more")
+            if self.printing is not None:
+                # Bench A2b: a BREAK, the page printing is done early, and both sheets are blank.
+                self.brk += 1
+                self.blank = "memory filled while it printed"
+                self.done_at = min(self.done_at, self.clock() + FULL_DONE * self.done_s)
+            return
+        slot.bytes += n
+        if slot.page.width <= 0:
             self._event("a row before the width")
-            self.error = True
+            self.error = slot.error = True
             return
         try:
-            self.page.rows.append(decode_row(pkt[2:-1], self.page.width))
+            slot.page.rows.append(decode_row(pkt[2:-1], slot.page.width))
         except Fault as e:
-            self._event(f"bad row {self.rows_heard}: {e}")
-            self.error = True
+            self._event(f"bad row {slot.rows_heard}: {e}")
+            self.error = slot.error = True
 
     @staticmethod
     def _neg(lo, hi=0xFF):
         v = lo | hi << 8
         return v - 0x10000 if v & 0x8000 else v
+
+    def _moved(self):
+        """85 to 89 are read as a page prints: the sheet printing goes where they now say."""
+        if self.printing is None:
+            return
+        page = self.printing.page
+        if (page.top, page.left) != (-self.top, -self.left):
+            page.top, page.left = -self.top, -self.left
+            self._event("moved: the offsets changed while a page printed")
 
     def _command(self, c, a):
         if self.value_next and c == 0x83:
@@ -371,6 +488,10 @@ class QuickDrawLaser:
         if c == 0x8E:
             return self._e8e()
         if c == 0x83:
+            if self.quiet_until is not None:
+                if self.clock() < self.quiet_until:
+                    return None
+                self.quiet_until = None
             if a in (0x9D, 0xA7):
                 self.value_next = True
             elif a == 0x4C:
@@ -379,6 +500,14 @@ class QuickDrawLaser:
                 self.manual = True
             elif a == 0x5D:
                 self.again = False
+            if a == 0x02:
+                self.told = bool(self._s02() & 0x0C)
+                if not self.told and self.rejam:
+                    self.rejam = False
+                    reply = odd(self._s02())
+                    self.jam = True             # the second sheet: a jam again at the next look
+                    self._event("jam again: a second sheet is in the path")
+                    return reply
             regs = {0x40: 0, 0x01: self._s01(), 0x02: self._s02(), 0x2A: self._paper(),
                     0x04: 0x10 if self.engine_fault else 0, 0x07: 0, 0x25: 0x80}
             if a == 0x3E:
@@ -386,26 +515,48 @@ class QuickDrawLaser:
             if a == 0x25:
                 return 0x80
             return odd(regs.get(a, 0))
+        if c == 0x81 or (c == 0x84 and a == 0x08):
+            name = "81 00" if c == 0x81 else "84 08"
+            if self._faulted():
+                self._event(f"{name} while a jam or the cover shows")
+            if self.printing is not None and self.fed:
+                # Bench A4e: sent into the printer's own feed, it jammed again.
+                self.stopped = self.printing
+                self.printing = None
+                self.jam = self.again = True
+                self.sheets = 1
+                self._event(f"jammed again: {name} into a feed")
         if c == 0x81:
+            if self.printing is not None:
+                # Bench A3: the sheet goes on out, blank, and no page done comes for it.
+                self.printing = None
+                self.moving_until = self.clock() + self.done_s + self.exit_s
+                self._sheet_blank("81 00 while it printed")
             self.fresh = True
             self.ended = 0
+            self.rd = self.freed = 0
         elif c == 0x84:
             self.lights = a
+            if a == 0x08:
+                self.quiet_until = self.clock() + self.warm_s
         elif c == 0x85:
             self.lo85 = a
         elif c == 0x86:
             self.top = self._neg(self.lo85, a)
+            self._moved()
         elif c == 0x87:
             self.left = a - 0x100 if a & 0x80 else a
+            self._moved()
         elif c == 0x88:
             self.lo88 = a
         elif c == 0x89:
             self.width = self._neg(self.lo88, a)
+            if self.printing is not None and -self.width != self.printing.page.width:
+                self._event("moved: the width changed while a page printed")
         elif c == 0x8B and a == 0x8B:
             self.ended += 1
-            if self.ended >= 2 and self.page is not None:
-                self.ready = True
-                self.fresh = True
+            if self.ended >= 2 and self.slots and self.slots[-1].page.rows:
+                self.slots[-1].ended = True
         elif c == 0x8A:
             if a == 0x00:
                 if self.printing is not None:
@@ -416,16 +567,36 @@ class QuickDrawLaser:
         return None
 
     def _print(self):
-        if not self.ready or self.page is None:
+        if self.printing is not None:
+            self._event("8A 01 while a page prints")
+            return
+        if not self._next_ended():
             self._event("8A 01 with no page ended")
             return
-        if self.error:
+        slot = self.slots[self.rd]
+        if slot.error:
             self._event("8A 01 refused: a row was bad")
+            return
+        if self.jam or self.cover:
+            # Bench A4e: kept, and run when the jam clears.
+            self.kept_print = True
+            self._event("8A 01 while a jam or the cover shows: kept")
             return
         if self.again or self._held():
             self._event("8A 01 refused: " + ("waiting for 83 5D" if self.again else "held"))
             return
-        self.printing = self.clock()
+        if self.stopped is not None and self.stopped is not slot:
+            self._event("wrong page: the first in the memory printed again, not the one that stopped")
+            self.stopped = None
+        self._start(slot)
+
+    def _start(self, slot, fed=False):
+        self.printing = slot
+        self.fed = fed
+        self.blank = None
+        slot.page.top, slot.page.left = -self.top, -self.left
+        self.print_at = self.clock()
+        self.done_at = self.print_at + self.done_s
         self._event("print")
         if self.done_s <= 0:
             self.tick()
@@ -442,13 +613,16 @@ class QuickDrawLaser:
             self.no_cassette = True
         elif cmd == "manual":
             self.manual_sheet = True
-        elif cmd == "jam":
-            self.jam = True
-            if self.printing is not None or self.ready:
-                self.again = True
-        elif cmd == "cover":
-            self.cover = True
-            if self.printing is not None or self.ready:
+        elif cmd in ("jam", "jam2", "cover"):
+            self.tick()
+            if cmd == "cover":
+                self.cover = True
+            if cmd != "cover" or self.printing is not None:
+                self.jam = True                 # the cover mid-page: the sheet inside is a jam too
+                # The sheet before, still on its way out, is caught as well (bench A4d).
+                behind = self.moving_until is not None and self.clock() < self.moving_until
+                self.sheets = 2 if cmd == "jam2" or (self.printing is not None and behind) else 1
+            if self.printing is not None or self._next_ended():
                 self.again = True
         elif cmd == "engine":
             self.engine_fault = True
@@ -456,12 +630,28 @@ class QuickDrawLaser:
             self.silent = True
         elif cmd == "badrow" and len(w) == 2 and w[1].isdigit():
             self.badrow = int(w[1])            # of the next page
-        elif cmd == "ok":
+        elif cmd in ("ok", "clear"):
+            self.tick()
+            if self.cover:
+                self.quiet_until = self.clock() + self.warm_s
+            was_jam = self.jam or self.cover
             self.no_paper = self.no_cassette = self.jam = self.cover = False
             self.engine_fault = self.silent = False
+            if cmd == "ok" and was_jam and self.sheets > 1:
+                self.sheets -= 1
+                self.rejam = True               # clear at the next look, then a jam again
+            else:
+                self.sheets = 0
+                self.rejam = False
+                if self.kept_print:
+                    self.kept_print = False
+                    if self._next_ended() and not self._held():
+                        self._start(self.slots[self.rd], fed=True)
+                        self.again = False
+                        self._event("fed by itself: the 8A 01 heard during the jam")
         else:
             self.say(f"fake LaserWriter 300: unknown command {line.strip()!r}: paper, cassette, "
-                     "manual, jam, cover, engine, silent, badrow N, ok")
+                     "manual, jam, jam2, cover, engine, silent, badrow N, ok, clear")
             return
         self.tick()
         self.say(f"fake LaserWriter 300: {line.strip()} -> 83 01 {self._s01():02x}, "
@@ -567,7 +757,8 @@ def stdin_commands(lw):
 
 async def serve(a):
     log = open(a.log, "a") if a.log else None
-    lw = QuickDrawLaser(engine=ENGINES[a.engine], mem=a.mem, out=a.out, png=not a.no_png, log=log)
+    lw = QuickDrawLaser(engine=ENGINES[a.engine], mem=a.mem, out=a.out, png=not a.no_png, log=log,
+                        done_s=a.done, exit_s=a.exit, warm_s=a.warm)
     stdin_commands(lw)
     master, slave, path = open_pty()
     print(path, flush=True)
@@ -576,10 +767,13 @@ async def serve(a):
 
 
 def decode(a, packets):
-    lw = QuickDrawLaser(out=a.out, png=not a.no_png, done_s=0, say=lambda s: None)
+    lw = QuickDrawLaser(out=a.out, png=not a.no_png, done_s=0, exit_s=0, say=lambda s: None)
     for p in packets:
         lw.packet(p)
-    bad = [e for e in lw.events if e.startswith(("bad", "row ", "a row", "8A 01 refused"))]
+    bad = [e for e in lw.events if e.startswith(("bad", "row ", "a row", "8A 01 refused", "blank",
+                                                  "memory full", "moved", "wrong page", "rows while",
+                                                  "81 00 while", "84 08 while", "8A 01 while",
+                                                  "fed by itself", "jammed again"))]
     if bad:
         print(f"qdfake: {bad[0]}", file=sys.stderr)
         return 1
@@ -594,6 +788,10 @@ def main(argv):
     s.add_argument("--pty", action="store_true", required=True)
     s.add_argument("--engine", choices=list(ENGINES), default="29")
     s.add_argument("--mem", type=int, default=MEM)
+    s.add_argument("--done", type=float, default=DONE_S, help="seconds a page takes to print")
+    s.add_argument("--exit", type=float, default=EXIT_S, help="seconds its sheet then takes to come out")
+    s.add_argument("--warm", type=float, default=WARM_S,
+                   help="seconds the 83 questions go unanswered after the cover closes")
     s.add_argument("--out")
     s.add_argument("--no-png", action="store_true")
     s.add_argument("--log")

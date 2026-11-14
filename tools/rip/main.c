@@ -347,7 +347,7 @@ static int qdw_read(void *ctx, uint8_t *b, size_t cap, uint32_t first_ms, uint32
 static void qdw_sleep(void *ctx, uint32_t ms) { ((qdw_t *)ctx)->ms += ms; }
 static uint32_t qdw_now(void *ctx) { return ((qdw_t *)ctx)->ms; }
 
-static int qdw_open(void *ctx, const qd_media_t *md) { return qd_session_open(((qdw_t *)ctx)->sess, md); }
+static int qdw_open(void *ctx, int page, const qd_media_t *md) { return qd_session_open(((qdw_t *)ctx)->sess, page + 1, md); }
 static int qdw_row(void *ctx, const uint8_t *c, size_t n) { return qd_session_row(((qdw_t *)ctx)->sess, c, n); }
 static int qdw_print(void *ctx) { return qd_session_print(((qdw_t *)ctx)->sess); }
 static void qdw_note(void *ctx, int page, int apple, uint32_t bytes, int too_big)
