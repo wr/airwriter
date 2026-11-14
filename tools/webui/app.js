@@ -540,7 +540,7 @@ function waitFor(title,html,reload,late){
 $('reload').onclick=()=>location.reload();
 
 /* ── status ────────────────────────────────────────────────────────── */
-let S={}, setup=false, first=true;
+let S={}, setup=false, first=true, markLc=false, repaintMark=()=>{};
 const BARS={Excellent:3,Good:3,Fair:2,Weak:1};
 const RESET={'power-on':'Plugged in','software':'After a restart','panic':'After a crash',
   'task watchdog':'After a crash','interrupt watchdog':'After a crash','watchdog':'After a crash',
@@ -548,6 +548,7 @@ const RESET={'power-on':'Plugged in','software':'After a restart','panic':'After
 
 function draw(s){
   S=s; setup=!!s.setup;
+  if(!!s.lc!==markLc){ markLc=!!s.lc; repaintMark(); }   // one dot or the panel
   // the port's ImageWriter: its ribbon and gain draw the halftone sample
   const colour=s.ribbon==='colour';
   $('rib-colour').classList.toggle('hide',!colour);
@@ -678,7 +679,8 @@ setTimeout(()=>document.body.classList.add('ready'),1500);
      shift them. */
   const FROST=[58,58,60];
   function paintOne(f){
-    const x=W/2, y=H/2, r=Math.min(W,H)*.16, c=[f[0],f[1],f[2]].map(v=>Math.min(1,Math.max(v,0)/48));
+    const x=W/2, y=H/2, r=Math.min(W,H)*.16, d=[f[0],f[1],f[2]].map(v=>Math.max(v,0)),
+      c=d.map(v=>v/Math.max(48,...d));    // over the cap, the light's hue at full
     ctx.globalCompositeOperation='source-over';
     ctx.fillStyle=BG; ctx.fillRect(0,0,W,H);
     if(Math.max(f[0],f[1],f[2])<.5){ disc(x,y,r,'rgb('+FROST.join()+')'); return; }
@@ -750,6 +752,7 @@ setTimeout(()=>document.body.classList.add('ready'),1500);
   }
   document.addEventListener('visibilitychange',()=>{ if(!document.hidden&&!timer) ask(); });
   new ResizeObserver(()=>{ size(); paint(now()); }).observe(cv);
+  repaintMark=()=>paint(now());
   ask();
 })();
 
