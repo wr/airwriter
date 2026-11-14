@@ -3987,7 +3987,13 @@ void app_main(void)
     // W-1088: a board's first boot on the printer list. One set up before
     // (Wi-Fi saved, no list) keeps its host name and DIP rule, and its records
     // are made from what it had; a new one is airwriter-xxxx, port on.
+    // Rev 2026.11 has no board from before the list, so Wi-Fi saved there
+    // (a bench sdkconfig's) is still a new board.
+#if CONFIG_AIRWRITER_BOARD_2026_11
+    int has_wifi = 0;
+#else
     int has_wifi = s_set.ssid[0] != 0;
+#endif
     int updated = has_wifi && !printers_stored();
     settings_first_boot(pr_default_host_fmt(has_wifi), s_suffix, pr_default_lt_port(has_wifi));
     settings_load(&s_set, s_suffix);

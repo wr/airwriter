@@ -636,7 +636,8 @@ it, then tags and publishes. The board reads
 The manifest is a hint: the image's own version and project name are checked as it starts to
 download, and its signature at the end. The project name is the board's (`airwriter`,
 `airwriter-2026.11`), and a board refuses the other board's image, on download and on `/update`
-("that firmware is for a different AirWriter board"): its PSRAM mode and pins would be wrong. A release build's version is exactly `vX.Y.Z`;
+("that firmware is for a different AirWriter board"): its PSRAM mode and pins would be wrong. An
+upload refused that way has its slot's first sector erased, so nothing boots it. A release build's version is exactly `vX.Y.Z`;
 anything else (`v0.1.0-3-gabc1234-dirty`) is a dev build, and a release is newer only if its
 `vX.Y.Z` is past the running one's.
 

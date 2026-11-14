@@ -13,6 +13,7 @@
 #include "esp_https_ota.h"
 #include "esp_log.h"
 #include "esp_ota_ops.h"
+#include "esp_partition.h"
 #include "esp_secure_boot.h"
 #include "esp_system.h"
 #include "esp_timer.h"
@@ -244,13 +245,14 @@ esp_err_t fw_update_stream_end(const char **why)
     }
     const esp_partition_t *part = s_part;
     // Signed by the right key is not enough: a signed image for the other
-    // board would boot into the wrong PSRAM mode and pins. The slot is left
-    // as it is, never made bootable.
+    // board would boot into the wrong PSRAM mode and pins. Its first sector is
+    // erased, so not even the power-up reset's last resort can boot it.
     esp_app_desc_t d = { 0 };
     const char *other = esp_ota_get_partition_description(part, &d) == ESP_OK
         ? other_board(&d) : WHY_NOT_OURS;
     if (other) {
         ESP_LOGE(TAG, "upload refused: project %.32s", d.project_name);
+        esp_partition_erase_range(part, 0, part->erase_size);
         led_grid_action(LG_ACT_FW_REFUSED, 0);
         *why = other;
         set_state(ST_FAILED, other);
