@@ -8,6 +8,7 @@
 #include <stdio.h>
 
 #include "driver/gpio.h"
+#include "esp_rom_sys.h"
 #include "esp_log.h"
 #include "esp_system.h"
 #include "esp_timer.h"
@@ -112,6 +113,31 @@ static const char *TAG = "airwriter";
 #if !CONFIG_SECURE_SIGNED_APPS_NO_SECURE_BOOT || !CONFIG_SECURE_SIGNED_APPS_RSA_SCHEME || \
     !CONFIG_SECURE_SIGNED_ON_UPDATE_NO_SECURE_BOOT || !CONFIG_SECURE_BOOT_BUILD_SIGNED_BINARIES
 #error "sdkconfig predates W-1048: copy the signing options from sdkconfig.defaults"
+#endif
+// W-1109: each board's build carries its own module and pins. An sdkconfig made for one
+// board and switched to the other in menuconfig keeps the first board's values; this is
+// where that shows. Rev 2026.11's PSRAM is on IO35-IO37: nothing may name them.
+#if CONFIG_AIRWRITER_BOARD_2026_11
+// The bootloader hook knows the board only by the flash size.
+#if !CONFIG_SPIRAM_MODE_OCT || !CONFIG_ESPTOOLPY_FLASHSIZE_16MB
+#error "a rev 2026.11 build needs octal PSRAM and 16 MB flash (sdkconfig.defaults.2026.11)"
+#endif
+#if CONFIG_AIRWRITER_HSKI_DRV_PIN != 47 || CONFIG_AIRWRITER_J4_HSKO_DRV_PIN != 13 || \
+    CONFIG_AIRWRITER_J4_HSKI_PIN != 21 || CONFIG_AIRWRITER_BOARD_REV_PIN != 16 || \
+    CONFIG_AIRWRITER_BOARD_LC_PIN != 15
+#error "this sdkconfig has rev A's pins: start sdkconfig.2026.11 again from the defaults"
+#endif
+#if CONFIG_AIRWRITER_DIP1_PIN >= 0 || CONFIG_AIRWRITER_DIP2_PIN >= 0 || CONFIG_AIRWRITER_DIP3_PIN >= 0 || \
+    CONFIG_AIRWRITER_DIP4_PIN >= 0 || CONFIG_AIRWRITER_DIP5_PIN >= 0 || CONFIG_AIRWRITER_DIP6_PIN >= 0 || \
+    CONFIG_AIRWRITER_DIP7_PIN >= 0 || CONFIG_AIRWRITER_DIP8_PIN >= 0
+#error "rev 2026.11 has no DIP switches: start sdkconfig.2026.11 again from the defaults"
+#endif
+#else
+#if CONFIG_IDF_TARGET_ESP32S3 && (!CONFIG_SPIRAM_MODE_QUAD || !CONFIG_ESPTOOLPY_FLASHSIZE_8MB || \
+    CONFIG_AIRWRITER_HSKI_DRV_PIN != 35 || CONFIG_AIRWRITER_J4_HSKO_DRV_PIN >= 0 || \
+    CONFIG_AIRWRITER_BOARD_REV_PIN >= 0)
+#error "this sdkconfig has rev 2026.11's module or pins: build it with -DAIRWRITER_BOARD=2026.11"
+#endif
 #endif
 _Static_assert(LG_RESET_FILL_MS == BTN_FILL_MS,
                "the panel's countdown must run out when the button commits");
@@ -530,6 +556,12 @@ static void general_saved(void *ctx)
     if (fresh.lt_port >= 0 && fresh.lt_port != s_set.lt_port) {
         s_set.lt_port = fresh.lt_port;
         lt_port_apply(s_set.lt_port);
+    }
+    if (fresh.rainbow != s_set.rainbow) {
+        s_set.rainbow = fresh.rainbow;
+#if CONFIG_AIRWRITER_DIP7_PIN < 0
+        led_grid_set_gamer(s_set.rainbow);  // on rev A, DIP 7 decides
+#endif
     }
 }
 
@@ -2872,6 +2904,44 @@ static void test_button(void)
     test_page_to(id, port);
 }
 
+// W-1109: the board, as built and as its straps read. A rev 2026.11 build reads
+// IO16 (BOARD_REV, R32 to GND on every 2026.11 board) and IO15 (BOARD_LC, R33
+// to GND on the LC only) once at boot. Rev A has no straps: what it is was
+// fixed when it was built.
+#if CONFIG_AIRWRITER_BOARD_2026_11
+#define BOARD_NAME "2026.11"
+#else
+#define BOARD_NAME "rev-a"
+#endif
+static int s_board_ok = 1;      // the straps agree with the build
+static int s_board_lc;          // AirWriter LC: one status light, no LocalTalk port
+
+static void read_straps(void)
+{
+#if CONFIG_AIRWRITER_BOARD_REV_PIN >= 0 && CONFIG_AIRWRITER_BOARD_LC_PIN >= 0
+    const int pins[2] = { CONFIG_AIRWRITER_BOARD_REV_PIN, CONFIG_AIRWRITER_BOARD_LC_PIN };
+    gpio_config_t io = {
+        .pin_bit_mask = 1ULL << pins[0] | 1ULL << pins[1],
+        .mode = GPIO_MODE_INPUT, .pull_up_en = GPIO_PULLUP_ENABLE,
+    };
+    gpio_config(&io);
+    esp_rom_delay_us(100);              // the pull-up against the pin's own capacitance
+    int rev_low = gpio_get_level(pins[0]) == 0, lc_low = gpio_get_level(pins[1]) == 0;
+    // A strap that reads low has its resistor to GND: the pull-up would only
+    // waste current through it. One that reads high keeps it, so it never floats.
+    if (rev_low) gpio_set_pull_mode(pins[0], GPIO_FLOATING);
+    if (lc_low) gpio_set_pull_mode(pins[1], GPIO_FLOATING);
+    s_board_ok = rev_low;
+    s_board_lc = lc_low;
+    if (!rev_low)
+        ESP_LOGE(TAG, "board: this is a rev 2026.11 build, but IO16 reads high: R32 is missing "
+                      "or this is another board");
+    ESP_LOGI(TAG, "board: 2026.11, %s", s_board_lc ? "AirWriter LC" : "AirWriter");
+#else
+    ESP_LOGI(TAG, "board: " BOARD_NAME);
+#endif
+}
+
 // Latched by dip_on_change from the boot-time read, consumed once app_main
 // has brought the servers up.
 static int s_test_on_boot;
@@ -3304,7 +3374,8 @@ static void status_json(void *ctx, char *buf, size_t cap)
         "\"known_good\":\"%s\",\"known_good_version\":\"%s\","
         "\"model\":\"%s\",\"pic\":%s,"
         "\"pmodel\":\"%s\",\"pname\":\"%s\",\"phost\":\"%s\",\"airprint\":%s,"
-        "\"lt_port\":%d,\"lt\":%s,\"lt_chip\":\"%s\",\"dip\":\"%s\",\"ap\":\"AirWriter-%s\","
+        "\"lt_port\":%d,\"lt\":%s,\"lt_chip\":\"%s\",\"dip\":\"%s\",\"board\":\"%s\",\"lc\":%s,"
+        "\"board_ok\":%s,\"rainbow\":%s,\"ap\":\"AirWriter-%s\","
         "\"laser\":%s,\"printers\":%s,\"fresh\":%s,\"internal\":{\"free\":%u,\"lowest\":%u},"
         "\"pipe\":{\"in\":%u,\"out\":%u,\"queued\":%u,\"upload_ms\":%u,\"rip_ms\":%u,\"ms\":%u}}",
         state_text(v.state),
@@ -3335,7 +3406,9 @@ static void status_json(void *ctx, char *buf, size_t cap)
         json_esc(e_model, sizeof e_model, s_saved_model), json_esc(e_name, sizeof e_name, s_saved_name),
         json_esc(e_phost, sizeof e_phost, s_saved_host), s_set.airprint ? "true" : "false", s_set.lt_port,
         localtalk_serving() ? "true" : "false", lt_chip_name(s_lt_chip),
-        dip, s_suffix, laser, printers, settings_fresh() ? "true" : "false",
+        dip, BOARD_NAME, s_board_lc ? "true" : "false", s_board_ok ? "true" : "false",
+        s_set.rainbow ? "true" : "false", s_suffix, laser, printers,
+        settings_fresh() ? "true" : "false",
         // Internal RAM is what Wi-Fi and lwIP live on: below ~20 KB, replies stall.
         (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
         (unsigned)heap_caps_get_minimum_free_size(MALLOC_CAP_INTERNAL),
@@ -3845,10 +3918,12 @@ void app_main(void)
     gpio_set_level(CONFIG_AIRWRITER_PIC_CLK_PIN, 1);
     gpio_config(&lt_tx_clamp);
 #endif
-    // IO35 is the SP3232's T1IN, a driver input with no pull-up that must be
-    // tied. T1OUT reaches only the DNP R9 on rev A, but a floating CMOS input
-    // can idle at threshold, on the same chip that carries the CTS receiver.
-    // Rev B ties T1IN to GND.
+    // The SP3232's driver inputs have no pull-ups and must be tied: a floating
+    // CMOS input can idle at threshold, on the chip that carries the CTS
+    // receiver. Low asserts the port's handshake out. J2's: IO35 on rev A
+    // (T1OUT reaches only R9, DNP), IO47 on rev 2026.11 (to J2.1). J4's, rev
+    // 2026.11 only: IO13. The bootloader hook drove them low already; this
+    // keeps them so once the app owns the pins.
 #if CONFIG_AIRWRITER_HSKI_DRV_PIN >= 0
     gpio_config_t hski_clamp = {
         .pin_bit_mask = 1ULL << CONFIG_AIRWRITER_HSKI_DRV_PIN,
@@ -3856,6 +3931,14 @@ void app_main(void)
     };
     gpio_set_level(CONFIG_AIRWRITER_HSKI_DRV_PIN, 0);
     gpio_config(&hski_clamp);
+#endif
+#if CONFIG_AIRWRITER_J4_HSKO_DRV_PIN >= 0
+    gpio_config_t j4_hsko_clamp = {
+        .pin_bit_mask = 1ULL << CONFIG_AIRWRITER_J4_HSKO_DRV_PIN,
+        .mode         = GPIO_MODE_OUTPUT,
+    };
+    gpio_set_level(CONFIG_AIRWRITER_J4_HSKO_DRV_PIN, 0);
+    gpio_config(&j4_hsko_clamp);
 #endif
 
     // Before anything that can call doc_begin or test_page: dip_config's poll
@@ -3867,6 +3950,8 @@ void app_main(void)
 #if CONFIG_AIRWRITER_PIC_CLK_PIN >= 0 && CONFIG_AIRWRITER_PIC_DAT_PIN >= 0
     s_lt_mx = xSemaphoreCreateMutex();
 #endif
+
+    read_straps();
 
     ps_timing_t tm = PS_TIMING_DEFAULT;
     tm.stall_attention_ms = CONFIG_AIRWRITER_STALL_TIMEOUT * 1000u;
@@ -3907,6 +3992,9 @@ void app_main(void)
     settings_first_boot(pr_default_host_fmt(has_wifi), s_suffix, pr_default_lt_port(has_wifi));
     settings_load(&s_set, s_suffix);
     logbook_set_names(s_set.ssid, s_set.hostname);
+#if CONFIG_AIRWRITER_DIP7_PIN < 0
+    led_grid_set_gamer(s_set.rainbow);      // W-1109: no DIP 7, the page's switch
+#endif
     printers_cfg_t pc = {
         .epoch = CONFIG_AIRWRITER_LASER_UUID_EPOCH, .updated_board = updated,
         .legacy = { .model = s_set.model, .name = s_set.name, .airprint = s_set.airprint,
@@ -3995,6 +4083,9 @@ void app_main(void)
         .lt_uart = CONFIG_AIRWRITER_LT_UART_NUM,  .lt_tx  = CONFIG_AIRWRITER_PIC_CLK_PIN,
         .lt_rx   = CONFIG_AIRWRITER_PIC_DAT_PIN,  .lt_cts = CONFIG_AIRWRITER_LT_CTS_PIN,
         .lt_mclr = CONFIG_AIRWRITER_PIC_MCLR_PIN,
+        // W-1109: rev 2026.11's handshake legs; -1 on rev A skips them.
+        .hsk_j2_out = CONFIG_AIRWRITER_HSKI_DRV_PIN,     .hsk_j2_in = CONFIG_AIRWRITER_CTS_PIN,
+        .hsk_j4_out = CONFIG_AIRWRITER_J4_HSKO_DRV_PIN,  .hsk_j4_in = CONFIG_AIRWRITER_J4_HSKI_PIN,
     };
     cable_test_init(&ct);
 #endif

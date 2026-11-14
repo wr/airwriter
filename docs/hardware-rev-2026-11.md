@@ -49,7 +49,8 @@ matrix, so the link needs no pin of its own (SPEC §2.4, §3.18; measured on rev
 Each port's HSKo has its own GPIO, on pins the DIP switches freed. The cable test drives
 each, and through a crossover IO8 reads J2.2 (from J4.1) and IO21 reads J4.2 (from J2.1).
 U1 is the ESP32-S3-WROOM-1-N16R8 (16 MB flash, 8 MB octal PSRAM; rev A's is the N8R2): its
-PSRAM takes IO35–IO37, so those stay off every net. It needs its own firmware build, and it
+PSRAM takes IO35–IO37, so those stay off every net. It needs its own firmware build (SPEC §3.19:
+`idf.py -B build-2026.11 -DAIRWRITER_BOARD=2026.11 build`), and it
 is rated to 65 °C.
 
 ## GPIOs that changed

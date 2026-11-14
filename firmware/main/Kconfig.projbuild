@@ -1,5 +1,22 @@
 menu "AirWriter"
 
+choice AIRWRITER_BOARD
+    prompt "Main board"
+    default AIRWRITER_BOARD_REV_A
+    help
+        W-1109: which main board this build is for. firmware/CMakeLists.txt sets
+        it from -DAIRWRITER_BOARD (rev-a, the default, or 2026.11) through
+        sdkconfig.defaults.2026.11, and stops if the sdkconfig disagrees. The pin
+        defaults below follow it.
+
+config AIRWRITER_BOARD_REV_A
+    bool "Rev A: ESP32-S3-WROOM-1-N8R2, DIP switches"
+
+config AIRWRITER_BOARD_2026_11
+    bool "Rev 2026.11: ESP32-S3-WROOM-1-N16R8, board straps, no DIP switches"
+
+endchoice
+
 config AIRWRITER_WIFI_SSID
     string "WiFi SSID"
     default ""
@@ -82,14 +99,53 @@ config AIRWRITER_CTS_PIN
         the same line doubles as the paper sensor.
 
 config AIRWRITER_HSKI_DRV_PIN
-    int "SP3232 T1IN pin, -1 if absent"
+    int "J2's HSKo drive (U3 driver input), -1 if absent"
+    default 47 if AIRWRITER_BOARD_2026_11
     default 35 if IDF_TARGET_ESP32S3
     default -1
     help
-        Board net HSKI_DRV: IO35 into U3.11, the SP3232's T1IN. Driver inputs
-        have no pull-ups and must be tied, so app_main clamps this pin low as
-        one of its first acts. T1OUT reaches only the DNP R9 on rev A; rev B
-        ties T1IN to GND. Devkits without the transceiver leave it at -1.
+        Board net HSKI_DRV, the driver that sets J2's handshake out (the
+        printer's HSKi). Rev A: IO35 into U3.11, T1OUT reaching only R9 (DNP).
+        Rev 2026.11: IO47 into U3.10, T2OUT through R9 (0 R) to J2.1, R24
+        holding it low until firmware runs. Driver inputs have no pull-ups, so
+        the bootloader hook and app_main hold it low (asserted at the port:
+        StyleWriters answer only then). Devkits without the transceiver: -1.
+
+config AIRWRITER_J4_HSKO_DRV_PIN
+    int "J4's HSKo drive (U3 driver input), -1 if absent"
+    default 13 if AIRWRITER_BOARD_2026_11
+    default -1
+    help
+        Rev 2026.11 board net J4_HSKO_DRV: IO13 into U3.11, T1OUT to J4.1. It
+        has no pull-down, so the bootloader hook drives it low at once. The
+        cable test drives it to check a crossover cable's other handshake
+        wire. Rev A has no such pin.
+
+config AIRWRITER_J4_HSKI_PIN
+    int "J4's HSKi (U3 receiver output), -1 if absent"
+    default 21 if AIRWRITER_BOARD_2026_11
+    default -1
+    help
+        Rev 2026.11 board net J4_HSKI_RX: J4.2 through U3's receiver 1 to
+        IO21. Read by the cable test. Rev A's IO37 is never read.
+
+config AIRWRITER_BOARD_REV_PIN
+    int "Board strap BOARD_REV, -1 if absent"
+    default 16 if AIRWRITER_BOARD_2026_11
+    default -1
+    help
+        Rev 2026.11: IO16, R32 to GND on every 2026.11 board (rev A leaves it
+        floating). Read once at boot with the pull-up on: low is a 2026.11
+        board, high means this build is on some other board.
+
+config AIRWRITER_BOARD_LC_PIN
+    int "Board strap BOARD_LC, -1 if absent"
+    default 15 if AIRWRITER_BOARD_2026_11
+    default -1
+    help
+        Rev 2026.11: IO15, R33 to GND fitted on AirWriter LC only. Read once at
+        boot with the pull-up on: low is an LC (one status light, no LocalTalk
+        port), high a full AirWriter.
 
 config AIRWRITER_BAUD
     int "Printer baud rate"
@@ -154,6 +210,18 @@ config AIRWRITER_TOP_MARGIN
         the iPhone laid it out. Positive adds blank paper ahead of each page.
         The settings page sets it in sixteenths of an inch, -1 1/2 to +1 in.
 
+config AIRWRITER_JOB_POOL_KB
+    int "Job buffer in PSRAM, KB"
+    range 1024 7168
+    default 6656 if AIRWRITER_BOARD_2026_11
+    default 1024
+    help
+        Where an AirPrint job's bytes wait for the rip and the printer
+        (components/job_pipe). 1 MB on rev A, half its 2 MB of PSRAM. 6.5 MB on
+        rev 2026.11's 8 MB (W-1109): a full-page colour photo is about 5.7 MB
+        of URF, and an ImageWriter job keeps 512 KB of the buffer for the
+        printer's bytes. If the board can't spare it, the buffer is 1 MB.
+
 config AIRWRITER_LED_DATA_PIN
     int "LED chain data pin, -1 if absent"
     default 48 if IDF_TARGET_ESP32S3
@@ -185,6 +253,7 @@ config AIRWRITER_UART_LOOPBACK
 
 config AIRWRITER_DIP1_PIN
     int "DIP1 pin, -1 if absent"
+    default -1 if AIRWRITER_BOARD_2026_11
     default 38 if IDF_TARGET_ESP32S3
     default -1
     help
@@ -192,6 +261,7 @@ config AIRWRITER_DIP1_PIN
 
 config AIRWRITER_DIP2_PIN
     int "DIP2 pin, -1 if absent"
+    default -1 if AIRWRITER_BOARD_2026_11
     default 39 if IDF_TARGET_ESP32S3
     default -1
     help
@@ -199,6 +269,7 @@ config AIRWRITER_DIP2_PIN
 
 config AIRWRITER_DIP3_PIN
     int "DIP3 pin, -1 if absent"
+    default -1 if AIRWRITER_BOARD_2026_11
     default 40 if IDF_TARGET_ESP32S3
     default -1
     help
@@ -206,6 +277,7 @@ config AIRWRITER_DIP3_PIN
 
 config AIRWRITER_DIP4_PIN
     int "DIP4 pin, -1 if absent"
+    default -1 if AIRWRITER_BOARD_2026_11
     default 41 if IDF_TARGET_ESP32S3
     default -1
     help
@@ -213,6 +285,7 @@ config AIRWRITER_DIP4_PIN
 
 config AIRWRITER_DIP5_PIN
     int "DIP5 pin, -1 if absent"
+    default -1 if AIRWRITER_BOARD_2026_11
     default 42 if IDF_TARGET_ESP32S3
     default -1
     help
@@ -220,6 +293,7 @@ config AIRWRITER_DIP5_PIN
 
 config AIRWRITER_DIP6_PIN
     int "DIP6 pin, -1 if absent"
+    default -1 if AIRWRITER_BOARD_2026_11
     default 47 if IDF_TARGET_ESP32S3
     default -1
     help
@@ -227,6 +301,7 @@ config AIRWRITER_DIP6_PIN
 
 config AIRWRITER_DIP7_PIN
     int "DIP7 pin, -1 if absent"
+    default -1 if AIRWRITER_BOARD_2026_11
     default 21 if IDF_TARGET_ESP32S3
     default -1
     help
@@ -234,6 +309,7 @@ config AIRWRITER_DIP7_PIN
 
 config AIRWRITER_DIP8_PIN
     int "DIP8 pin, -1 if absent"
+    default -1 if AIRWRITER_BOARD_2026_11
     default 13 if IDF_TARGET_ESP32S3
     default -1
     help
@@ -320,6 +396,15 @@ config AIRWRITER_UPDATE_REPO
         airwriter.json, then the image it names. A fork that publishes its
         own releases, signed with its own key, names its repository here and
         its key's digest below.
+
+config AIRWRITER_UPDATE_TARGET
+    string
+    default "2026.11" if AIRWRITER_BOARD_2026_11
+    default IDF_TARGET
+    help
+        W-1109: the key this board reads in a release's airwriter.json, and the
+        image it fetches, airwriter-<this>.bin. Rev A keeps the chip's name,
+        esp32s3, which every release before rev 2026.11 used.
 
 config AIRWRITER_UPDATE_KEY_DIGEST
     string "Firmware updates: release key digest (64 hex digits)"

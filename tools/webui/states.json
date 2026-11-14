@@ -40,6 +40,10 @@
    "lt": true,
    "lt_chip": "ok",
    "dip": "01000111",
+   "board": "rev-a",
+   "lc": false,
+   "board_ok": true,
+   "rainbow": false,
    "ap": "AirWriter-2434",
    "printers": {
     "count": 3,
@@ -1153,6 +1157,16 @@
    "patch": {
     "GET /api/status": {
      "dip": ""
+    }
+   }
+  },
+  "rev-2026-11": {
+   "about": "Rev 2026.11: no DIP switches, Rainbow status lights on",
+   "patch": {
+    "GET /api/status": {
+     "dip": "",
+     "board": "2026.11",
+     "rainbow": true
     }
    }
   },

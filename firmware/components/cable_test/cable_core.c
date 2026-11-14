@@ -186,9 +186,17 @@ ct_verdict_t ct_verdict(ct_tt_t tt, int back_ok, int fwd_ok)
     return fwd_ok ? CT_PASS : CT_ONE_WAY;
 }
 
+ct_verdict_t ct_verdict_hsk(ct_verdict_t v, int to_j2_ok, int to_j4_ok)
+{
+    if (v != CT_PASS) return v;
+    if (!to_j2_ok) return to_j4_ok ? CT_NO_BUSY : CT_NO_HSK;
+    return to_j4_ok ? CT_PASS : CT_NO_HSK_OUT;
+}
+
 int ct_verdict_tested(ct_verdict_t v)
 {
-    return v == CT_PASS || v == CT_NO_LOOP || v == CT_ONE_WAY;
+    return v == CT_PASS || v == CT_NO_LOOP || v == CT_ONE_WAY || v == CT_NO_BUSY ||
+           v == CT_NO_HSK_OUT || v == CT_NO_HSK;
 }
 
 const char *ct_verdict_name(ct_verdict_t v)
@@ -197,6 +205,9 @@ const char *ct_verdict_name(ct_verdict_t v)
     case CT_PASS:        return "pass";
     case CT_NO_LOOP:     return "no_loop";
     case CT_ONE_WAY:     return "one_way";
+    case CT_NO_BUSY:     return "no_busy";
+    case CT_NO_HSK_OUT:  return "no_hsk_out";
+    case CT_NO_HSK:      return "no_hsk";
     case CT_NO_CHIP:     return "no_chip";
     case CT_NO_TASHTALK: return "no_tashtalk";
     case CT_CHIP_SILENT: return "chip_silent";
@@ -214,6 +225,14 @@ const char *ct_verdict_text(ct_verdict_t v)
                "The ImageWriter needs a crossover cable.";
     case CT_ONE_WAY:
         return "This crossover cable has a broken wire, so pages can’t reach the printer.";
+    case CT_NO_BUSY:
+        return "This crossover cable has a broken wire, so the printer can’t tell AirWriter "
+               "to wait.";
+    case CT_NO_HSK_OUT:
+        return "This crossover cable has a broken wire, so some printers won’t answer.";
+    case CT_NO_HSK:
+        return "This crossover cable has two broken wires, so the printer can’t tell "
+               "AirWriter to wait.";
     case CT_NO_CHIP:
         return "Couldn’t test the cable. The LocalTalk chip is missing. See LocalTalk Chip "
                "(TashTalk) in the wiki.";

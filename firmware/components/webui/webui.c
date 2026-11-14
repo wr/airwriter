@@ -379,6 +379,9 @@ static esp_err_t general_post(httpd_req_t *req)
     int has_name = json_str(body, "name", name, sizeof name);
     if ((has_model && model[0]) || has_name)
         settings_save_printer(has_model ? model : NULL, has_name ? name : NULL);
+    // W-1109: Rainbow status lights, the page's switch where there is no DIP 7.
+    int rainbow = json_bool(body, "rainbow");
+    if (rainbow >= 0) settings_save_rainbow(rainbow);
     int ap = json_bool(body, "airprint"), lt = json_bool(body, "localtalk");
     if (ap >= 0 || lt >= 0) settings_save_switches(ap, lt);
     if (json_bool(body, "finish") == 1) settings_set_fresh(0);   // W-1088: the sheet closed

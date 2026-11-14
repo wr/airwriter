@@ -580,6 +580,7 @@ function draw(s){
   $('log-val').textContent=logN?logN+' error'+(logN===1?'':'s'):'';
   $('log-val').classList.toggle('bad',logN>0);
   drawDips(s.dip,s.lt_port);
+  drawBoard(s);
   $('apname').textContent=s.ap||'AirWriter';
   // in setup mode only the printer, Wi-Fi and About make sense
   for(const id of ['airprint','appletalk'])
@@ -1482,6 +1483,21 @@ $('erase').onclick=async()=>{
   const r=await postJSON('/api/erase');
   if(r.error){ $('d-erase').close(); say('about-say',r.error,1); return; }
   waitFor('Erasing','AirWriter is starting over. Join the '+esc($('apname').textContent)+' network to set it up again.',false);
+};
+/* Which board this is (W-1109). Rev 2026.11 has no DIP switches, so its one
+   switch that still does something, Rainbow status lights, is on the page. */
+function drawBoard(s){
+  const banked=!s.board||s.board==='rev-a';
+  $('about-rev').textContent=(banked?'Rev A':s.board)+' · Wells Workshop';
+  $('rbbox').classList.toggle('hide',banked);
+  if(!banked&&!rbBusy) $('rainbow').checked=!!s.rainbow;
+}
+let rbBusy=false;
+$('rainbow').onchange=async()=>{
+  const on=$('rainbow').checked; rbBusy=true;
+  const r=await postJSON('/api/general',{rainbow:on});
+  rbBusy=false;
+  if(r.error){ $('rainbow').checked=!on; say('about-say',r.error,1); }
 };
 /* The bank as it sits on the board, switch 1 on the left, and what each
    group of switches does now. */

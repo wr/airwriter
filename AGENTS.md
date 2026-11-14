@@ -42,8 +42,9 @@ false.
 ## What's built
 
 Rev A boards are built and print from iPhones, Macs and vintage Macs. Rev 2026.11 (called rev B
-in Linear and older docs) is drawn and routed, not yet made, and needs firmware of its own
-(ESP32-S3-WROOM-1-N16R8, no DIP switches, a handshake GPIO per port), not yet written.
+in Linear and older docs) is drawn and routed, not yet made. It has a build of its own
+(ESP32-S3-WROOM-1-N16R8, board straps, no DIP switches, a handshake GPIO per port; SPEC §3.19),
+which nothing has run on yet; the LC's one status light is not built.
 
 - **Printers.** Tested on the ImageWriter II. The original ImageWriter and the ImageWriter LQ
   take the same stream and are expected to work, untested; docs say so rather than excluding
@@ -131,7 +132,10 @@ page: Top margin (`{"top_margin":N}`, 1/144 in, -216 to 144, default -144) and d
   `ln -s "$PWD/hardware/airwriter/lib/airwriter.kicad_sym" /Applications/KiCad/KiCad.app/Contents/SharedSupport/symbols/`
   and the same for `lib/airwriter.pretty` into `.../SharedSupport/footprints/`.
 - **ESP-IDF v5.5.1** (esp32s3 tools). Source its `export.sh`, then from `firmware/`:
-  - build: `idf.py build`
+  - build: `idf.py build` (rev A); rev 2026.11: `idf.py -B build-2026.11
+    -DAIRWRITER_BOARD=2026.11 build`, which keeps its own `sdkconfig.2026.11` and makes
+    `build-2026.11/airwriter-2026.11.bin`. After a change to `main/Kconfig.projbuild`, add
+    `reconfigure` once per build directory
   - flash over USB: `idf.py -p /dev/cu.usbmodemNNNN flash` writes the bootloader, partition
     table, a blank otadata, a blank known-good record and the app into ota_0, so the board boots
     that and its power-up reset returns to it (the printer stays not-ready until SELECT is
@@ -141,8 +145,9 @@ page: Top margin (`{"top_margin":N}`, 1/144 in, -216 to 144, default -144) and d
     `/update` refuses another until `/api/status` shows `"trial":false` (up to 2 min). 409 while
     a job prints, 400 for an unsigned or tampered image
   - release: `tools/release/release.sh vX.Y.Z [notes]` from a clean `main` level with origin
-    (`--dry-run` builds and checks only). It builds from `sdkconfig.defaults` alone, never the
-    local sdkconfig, and publishes `airwriter-esp32s3.bin` + `airwriter.json`
+    (`--dry-run` builds and checks only). It builds both boards from the defaults alone, never a
+    local sdkconfig, and publishes `airwriter-esp32s3.bin`, `airwriter-2026.11.bin` and
+    `airwriter.json`
 - **Signing.** Every build is signed. `sdkconfig.defaults` signs with
   `firmware/firmware_signing_key.pem` (gitignored; the build says how to make one); an older
   local sdkconfig needs its five `CONFIG_SECURE_*` lines. A board takes an OTA image only if the
@@ -197,8 +202,9 @@ page: Top margin (`{"top_margin":N}`, 1/144 in, -216 to 144, default -144) and d
   tools/qdlaser/test_qdfake.py`. `rip --printer plw300 --out-qd F` writes a page as the printer
   would be sent it, `rip --qd-testpage F` the test page, and `qdfake.py decode F` draws either.
   Apple's driver lives in `~/.config/airwriter/lw300-driver/`, never committed.
-- **Firmware:** `idf.py build` clean, then `python3 tools/stackcheck/stackcheck.py` (needs the
-  toolchain `export.sh` puts on PATH): every task that makes ESP-IDF's deep calls keeps 1 KB of
+- **Firmware:** both boards' builds clean, then `python3 tools/stackcheck/stackcheck.py` and
+  `python3 tools/stackcheck/stackcheck.py firmware/build-2026.11` (needs the toolchain
+  `export.sh` puts on PATH): every task that makes ESP-IDF's deep calls keeps 1 KB of
   its stack spare by GCC's count. A local sdkconfig that fails it on `app_main` needs
   `CONFIG_ESP_MAIN_TASK_STACK_SIZE` 4608, as in `sdkconfig.defaults`. One made before W-1143
   runs the chip at 160 MHz: set `CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ_240=y`.

@@ -246,8 +246,8 @@ Minimum viable set for iOS:
 - Each printer answers at its own resource (3.15), `ipp/p<id>`, port records included; the
   oldest port record also at `ipp/print`, and any other path goes to it while it is shared
   (W-1116; before, `ipp/print` was the port's one record and `ipp/p<id>` AppleTalk's).
-- `Print-Job` (0x0002) — body arrives chunked, into a 1 MB PSRAM buffer as fast as Wi-Fi
-  delivers it. An ImageWriter job holds 512 KB of URF in it, and the rip runs as the URF
+- `Print-Job` (0x0002) — body arrives chunked, into a PSRAM buffer as fast as Wi-Fi
+  delivers it: 1 MB on rev A, 6.5 MB on rev 2026.11 (3.19). An ImageWriter job holds 512 KB of URF in it, and the rip runs as the URF
   arrives into the other 512 KB, which holds the printer's bytes and drains to the port at
   9600 baud (W-1066): an iPhone Letter page is ~140 KB of URF and a full-page colour photo
   ~5.7 MB, but either rips to under 460 KB of ImageWriter bytes, while pixels would be 1.9 MB
@@ -257,8 +257,8 @@ Minimum viable set for iOS:
   paper stops, and holds the printer until then (W-1042). Reading the socket to the end is
   also what makes a dropped upload visible at once: without the buffer a paused printer
   stalls the upload behind a zero window, and the client's FIN waits behind its unsent
-  data until paper returns. A document whose half outruns its 512 KB (a LaserWriter's URF
-  past 1 MB, an ImageWriter job's printer bytes past 512 KB), or a board with no PSRAM (8 KB
+  data until paper returns. A document whose half outruns it (a LaserWriter's URF
+  past the buffer, an ImageWriter job's printer bytes past 512 KB), or a board with no PSRAM (8 KB
   internal ring), falls back to streaming with TCP backpressure.
   A Print-Job that finds the printer taken (another phone's job, a Mac's on AppleTalk, the
   test page, an update) is answered `server-error-busy` at once, its body read to the end,
@@ -529,7 +529,8 @@ An owner must always be able to get back to a working printer without a computer
 **Partitions** (`firmware/partitions.csv`, 8 MB): nvs 24K at 0x9000, otadata at 0xf000,
 phy_init, **known_good** 8K at 0x12000, ota_0 2M at 0x20000, ota_1 2M at 0x220000, ota_2 2M at
 0x420000, storage 1.9M (its first 256 KB is the log, 3.17). Three equal app slots, no factory
-slot.
+slot. Rev 2026.11 (`partitions-16mb.csv`, 16 MB): the same up to 0x20000, then ota_0, ota_1 and
+ota_2 3M each at 0x20000, 0x320000 and 0x620000, storage 6.9M at 0x920000.
 
 **The known-good slot.** `known_good` holds a 32-byte record (magic, sequence number, slot, the
 first 16 bytes of the image's `app_elf_sha256`, CRC-32) twice, one per 4 KB sector; the valid
@@ -576,8 +577,9 @@ slot the power-up reset boots) and `known_good_version`.
   nvs, and leaves the RTC flag the app reads for the panel cue; the bootloader's own slot
   choice then boots it. The bootloader never writes the record: a fallback image becomes
   known-good after its first real print. The panel stays dark while the button is held (the
-  bootloader has no LED driver; the hook first clamps IO48, IO35 and IO4 so the hold does not
-  leave them floating), then shows the boot wave, then the reset's confirmation.
+  bootloader has no LED driver; the hook first clamps IO48, IO4 and J2's handshake drive, IO35
+  on rev A, with J4's on rev 2026.11 (IO47 and IO13, told by its 16 MB flash, 3.19), so the hold
+  does not leave them floating), then shows the boot wave, then the reset's confirmation.
 
 IO14 is not a strapping pin (the S3's are IO0, IO3, IO45, IO46), and SW3 shorts it straight to
 GND with no external pull-up or capacitor; the bootloader enables the internal pull-up before
@@ -620,15 +622,21 @@ digest `6f11af9cd8eec9923985957400aa753ba034e7e057e18ebf61033cb4d327ad89`
 (`CONFIG_AIRWRITER_UPDATE_KEY_DIGEST`). A build from someone else's key makes a board that takes
 only their builds, and its web page says it can't install AirWriter releases.
 
-**Releases.** A tag `vX.Y.Z` with two assets, `airwriter-esp32s3.bin` (the signed app image) and
-`airwriter.json` (`{"version":"vX.Y.Z","esp32s3":"airwriter-esp32s3.bin"}`), made only by
-`tools/release/release.sh`: it builds from `sdkconfig.defaults` alone in a throwaway worktree,
-checks the version, the bench options, the signature and that no local Wi-Fi credential or
-purge-list string is in the image, then tags and publishes. The board reads
+**Releases.** A tag `vX.Y.Z` with an image per board (W-1109, 3.19): `airwriter-esp32s3.bin`
+(rev A) and `airwriter-2026.11.bin`, each signed, and `airwriter.json`
+(`{"version":"vX.Y.Z","esp32s3":"airwriter-esp32s3.bin","2026.11":"airwriter-2026.11.bin"}`;
+a release made before W-1109 has rev A's alone). A board reads the key its build names
+(`CONFIG_AIRWRITER_UPDATE_TARGET`: rev A keeps `esp32s3`, the key every earlier release used),
+and an install by tag fetches `airwriter-<key>.bin`. Made only by `tools/release/release.sh`: it
+builds both from the defaults alone in a throwaway worktree, checks each one's version, project,
+key, bench options and signature and that no local Wi-Fi credential or purge-list string is in
+it, then tags and publishes. The board reads
 `github.com/<repo>/releases/latest/download/airwriter.json` (no API, no rate limit;
 `CONFIG_AIRWRITER_UPDATE_REPO`, default `wr/airwriter`) and installs with `esp_https_ota`.
 The manifest is a hint: the image's own version and project name are checked as it starts to
-download, and its signature at the end. A release build's version is exactly `vX.Y.Z`;
+download, and its signature at the end. The project name is the board's (`airwriter`,
+`airwriter-2026.11`), and a board refuses the other board's image, on download and on `/update`
+("that firmware is for a different AirWriter board"): its PSRAM mode and pins would be wrong. A release build's version is exactly `vX.Y.Z`;
 anything else (`v0.1.0-3-gabc1234-dirty`) is a dev build, and a release is newer only if its
 `vX.Y.Z` is past the running one's.
 
@@ -1648,6 +1656,50 @@ printer here to test on.
   takes rows while a jam or the open cover holds it (the session sends none). Asked again
   after A4e: the printer's own recovery after a jam on page 2 printed page 1. The copy's
   resend has run against `qdfake.py` only.
+
+### 3.19 Two boards: rev A and rev 2026.11 (W-1109)
+
+`W-1109 Firmware for rev 2026.11 boards: N16R8 build, straps, own handshake pins, no DIPs, LC`.
+Rev 2026.11 (`docs/hardware-rev-2026-11.md`) has an ESP32-S3-WROOM-1-N16R8, 16 MB flash and
+8 MB octal PSRAM on IO35-IO37, where rev A's N8R2 has 8 MB and 2 MB quad. ESP-IDF fixes the
+PSRAM mode at build time, so each board has its own build from the same source:
+`idf.py build` is rev A as before; `idf.py -B build-2026.11 -DAIRWRITER_BOARD=2026.11 build`
+layers `sdkconfig.defaults.2026.11` on the defaults, keeps `sdkconfig.2026.11`, and makes
+`airwriter-2026.11.bin`. `CMakeLists.txt` and main.c stop a build whose sdkconfig is the other
+board's. Neither image runs on the other board, and each board refuses the other's (3.12).
+
+- **Pins.** Kconfig's board choice (`AIRWRITER_BOARD_REV_A`, `AIRWRITER_BOARD_2026_11`) sets the
+  defaults. J2's handshake drive (`HSKI_DRV`) is IO47 on rev 2026.11, not IO35; J4's (IO13) and
+  J4's handshake in (IO21) exist only there. The bootloader hook drives IO47 and IO13 low and
+  never touches IO35-IO37; it tells the board by the flash size, the one part of the board
+  choice its build sees. App_main holds both low (asserted at the port) from its first lines.
+- **Straps**, rev 2026.11 only, read once at boot with the pull-ups on, which stay on only where
+  a strap reads high: IO16 (`BOARD_REV`, low on every 2026.11 board) and IO15 (`BOARD_LC`, low on
+  the LC). `/api/status` has `board` (`rev-a` or `2026.11`), `lc`, and `board_ok`, false when a
+  2026.11 build reads IO16 high (R32 missing, or another board), which the log says too.
+- **No DIP switches.** Rev 2026.11 has none, so `dip_config` reports none and `dip` stays ""
+  (the page hides the bank). What they set: the AppleTalk port follows the page's switch alone
+  (on for a new board, as W-1088 set it); no test page at power-on (the test button prints one);
+  Rainbow status lights (DIP 7) is a switch on the page's About (`{"rainbow":true}` to
+  `/api/general`, NVS `rainbow`), shown only on a board with no DIPs. About's line under the
+  name reads `2026.11 · Wells Workshop`.
+- **Cable test.** After both data legs pass, rev 2026.11 checks each handshake wire: it drives
+  J4's handshake out high then low and reads J2's in (IO8, J4.1 to J2.2), then J2's out against
+  J4's in (IO21, J2.1 to J4.2). A level comes back as itself through U3; an open wire leaves the
+  receiver's input on its pull-down, which reads high, so the low level finds it. Verdicts
+  `no_busy` (J4.1 to J2.2: the printer can't tell AirWriter to wait), `no_hsk_out` (J2.1 to
+  J4.2) and `no_hsk` (both); the reply's `hsk` names the leg.
+- **Job buffer** (3.4): 6.5 MB of the 8 MB (`AIRWRITER_JOB_POOL_KB`), so a full-page colour
+  photo's ~5.7 MB of URF fits ahead of the rip; 1 MB if that much can't be had.
+- **U7's socket on an LC** is empty: every start-up check of U7 (`lt_go("boot", 1)`) leaves its
+  pins on the chip's pull-ups, so they never float.
+- **Not built yet:** the LC's one status light (D26, a frame's first pixel, needing a one-light
+  summary of the status language, designed first), and the page's one-dot mark for it.
+- **Tested:** both builds, the stack check on both, and the host tests (the manifest with both
+  keys, the handshake verdicts). Nothing has run on a rev 2026.11 board: none exists yet. On
+  the first, check the straps, the handshake legs through Apple's crossover, a StyleWriter
+  (J2's handshake held asserted by IO47) and the Personal LaserWriter 300's clock through
+  rev 2026.11's U3.
 
 ---
 

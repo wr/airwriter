@@ -6,6 +6,16 @@ Traps already explained in a code comment are listed only when the comment is ea
 
 ## Firmware, FreeRTOS, ESP-IDF
 
+- **A new Kconfig option doesn't reach an existing build directory by itself.** After an edit
+  to `main/Kconfig.projbuild`, `idf.py build` in a build directory configured before it can
+  compile with the old `sdkconfig.h`: a new `CONFIG_` reads as undeclared (W-1109's job buffer
+  size). `idf.py reconfigure build` brings it in. Each board's build directory (`build/`,
+  `build-2026.11/`) needs it once.
+- **The bootloader doesn't see main's Kconfig.** Its hook (`bootloader_components/airwriter_boot`)
+  can't read `CONFIG_AIRWRITER_*`, so it tells rev 2026.11 from rev A by
+  `CONFIG_ESPTOOLPY_FLASHSIZE_16MB`, and main.c ties each board's build to its flash size. Its
+  pins are numbers, checked against main's in main.c.
+
 - **A held TLS session in internal RAM starves Wi-Fi.** With mbedTLS on internal RAM, Infinite
   Mac's relay (W-1076) took ~45 KB and left 4-13 KB (91 bytes at a handshake's worst): the
   settings page stalled 25 s at a time and every reconnect failed. `CONFIG_MBEDTLS_EXTERNAL_MEM_ALLOC`

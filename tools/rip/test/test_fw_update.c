@@ -40,6 +40,23 @@ static void manifest(void)
                               "esp32s3", v, sizeof v, f, sizeof f) == FWU_M_NO_TARGET);
     // A value too long for the caller's buffer is refused, not cut short.
     assert(fwu_parse_manifest(MANIFEST, "esp32s3", v, sizeof v, f, 8) == FWU_M_BAD);
+
+    // W-1109: a release for both boards. Each takes its own image, in either order, and a
+    // file named after one board's key is not that key.
+    static const char *const BOTH[] = {
+        "{\"version\":\"v0.5.0\",\"esp32s3\":\"airwriter-esp32s3.bin\","
+        "\"2026.11\":\"airwriter-2026.11.bin\"}",
+        "{\"version\":\"v0.5.0\",\"2026.11\":\"airwriter-2026.11.bin\","
+        "\"esp32s3\":\"airwriter-esp32s3.bin\"}",
+    };
+    for (int i = 0; i < 2; i++) {
+        assert(fwu_parse_manifest(BOTH[i], "esp32s3", v, sizeof v, f, sizeof f) == FWU_M_OK);
+        assert(!strcmp(v, "v0.5.0") && !strcmp(f, "airwriter-esp32s3.bin"));
+        assert(fwu_parse_manifest(BOTH[i], "2026.11", v, sizeof v, f, sizeof f) == FWU_M_OK);
+        assert(!strcmp(v, "v0.5.0") && !strcmp(f, "airwriter-2026.11.bin"));
+    }
+    // A release from before rev 2026.11 has nothing for it.
+    assert(fwu_parse_manifest(MANIFEST, "2026.11", v, sizeof v, f, sizeof f) == FWU_M_NO_TARGET);
 }
 
 static void urls(void)

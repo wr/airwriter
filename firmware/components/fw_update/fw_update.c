@@ -55,7 +55,7 @@ static st_t    s_state;
 static int     s_permille = -1;
 static char    s_error[WHY_MAX];
 static char    s_latest[32];            // the newest release's version, from its manifest
-static char    s_file[65];              // and this chip's image in it
+static char    s_file[65];              // and this board's image in it
 static int     s_newer;
 static int     s_no_target;
 static int64_t s_joined_s = -1, s_last_check_s = -1;
@@ -134,6 +134,19 @@ static void release(void)
 }
 
 static const char *const WHY_JOB = "a job started printing. Try again when it’s done";
+static const char *const WHY_NOT_OURS = "the download isn’t AirWriter firmware";
+
+// W-1109: each board's build has its own project name (airwriter on rev A,
+// airwriter-2026.11), and an image runs only on its own board: its PSRAM mode
+// and pins are fixed when it is built. NULL if `d` is this board's.
+static const char *other_board(const esp_app_desc_t *d)
+{
+    const char *mine = esp_app_get_description()->project_name;
+    if (!strncmp(d->project_name, mine, sizeof d->project_name)) return NULL;
+    if (!strncmp(d->project_name, "airwriter", 9))
+        return "that firmware is for a different AirWriter board";
+    return WHY_NOT_OURS;
+}
 static const char *const WHY_REFUSED = "not a signed AirWriter update, or damaged";
 
 // ------------------------------------------------------------- the upload
@@ -230,6 +243,20 @@ esp_err_t fw_update_stream_end(const char **why)
         return ESP_ERR_OTA_VALIDATE_FAILED;
     }
     const esp_partition_t *part = s_part;
+    // Signed by the right key is not enough: a signed image for the other
+    // board would boot into the wrong PSRAM mode and pins. The slot is left
+    // as it is, never made bootable.
+    esp_app_desc_t d = { 0 };
+    const char *other = esp_ota_get_partition_description(part, &d) == ESP_OK
+        ? other_board(&d) : WHY_NOT_OURS;
+    if (other) {
+        ESP_LOGE(TAG, "upload refused: project %.32s", d.project_name);
+        led_grid_action(LG_ACT_FW_REFUSED, 0);
+        *why = other;
+        set_state(ST_FAILED, other);
+        release();
+        return ESP_ERR_OTA_VALIDATE_FAILED;
+    }
     err = esp_ota_set_boot_partition(part);
     if (err != ESP_OK) {
         led_grid_action(LG_ACT_FW_REFUSED, 0);
@@ -316,7 +343,8 @@ static void do_check(void)
     else if (status == 404)  why = "no updates yet";
     else if (status != 200)  why = "couldn’t check for updates";
     else {
-        m = fwu_parse_manifest(s_body, CONFIG_IDF_TARGET, ver, sizeof ver, file, sizeof file);
+        m = fwu_parse_manifest(s_body, CONFIG_AIRWRITER_UPDATE_TARGET, ver, sizeof ver,
+                               file, sizeof file);
         if (m == FWU_M_BAD) why = "couldn’t check for updates";
     }
     if (why) ESP_LOGW(TAG, "check: %s (%s, HTTP %d)", why, esp_err_to_name(err), status);
@@ -338,7 +366,7 @@ static void do_check(void)
     if (why) { set_state(ST_FAILED, why); return; }
     set_state(ST_IDLE, NULL);
     ESP_LOGI(TAG, "check: newest release %s%s; running %s", ver,
-             m == FWU_M_NO_TARGET ? " (no image for this chip)" : newer ? " is newer" : "",
+             m == FWU_M_NO_TARGET ? " (no image for this board)" : newer ? " is newer" : "",
              app_ver);
 }
 
@@ -352,7 +380,7 @@ static void do_install(const char *tag, int automatic)
     s_install_tried = 1;
     if (tag[0]) {
         snprintf(want, sizeof want, "%s", tag);
-        snprintf(file, sizeof file, "airwriter-%s.bin", CONFIG_IDF_TARGET);
+        snprintf(file, sizeof file, "airwriter-%s.bin", CONFIG_AIRWRITER_UPDATE_TARGET);
     } else {
         snprintf(want, sizeof want, "%s", s_latest);
         snprintf(file, sizeof file, "%s", s_file);
@@ -392,8 +420,8 @@ static void do_install(const char *tag, int automatic)
     // what would install.
     esp_app_desc_t d;
     err = esp_https_ota_get_img_desc(h, &d);
-    if (err != ESP_OK || strncmp(d.project_name, "airwriter", sizeof d.project_name)) {
-        why = "the download isn’t AirWriter firmware";
+    if (err != ESP_OK || (why = other_board(&d)) != NULL) {
+        if (!why) why = WHY_NOT_OURS;
         goto refuse;
     }
     if (!tag[0] && strncmp(d.version, want, sizeof d.version)) {

@@ -12,6 +12,10 @@ firmware/build/
 firmware/.cache/
 firmware/sdkconfig
 firmware/sdkconfig.old
+# Rev 2026.11's build (W-1109); its sdkconfig can hold Wi-Fi credentials too.
+firmware/build-2026.11/
+firmware/sdkconfig.2026.11
+firmware/sdkconfig.2026.11.old
 # Left over from the retired ESP32-C6 devkit target; sdkconfig.c6 can hold Wi-Fi credentials.
 firmware/build_c6/
 firmware/sdkconfig.c6

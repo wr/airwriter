@@ -8,8 +8,9 @@
 // is down, and until app_main runs nothing drives the pins that must not
 // float (docs/traps.md): IO48 floating feeds the LED chain noise, which can
 // brownout-loop the board on a 500 mA port. So the pins are clamped first, to
-// the levels app_main's first statements set. The numbers are the S3 board's:
-// the bootloader build does not see main's Kconfig, and main.c checks them.
+// the levels app_main's first statements set. The numbers are the S3 boards':
+// the bootloader build does not see main's Kconfig, so the board is told by
+// the flash size it does see (rev 2026.11's 16 MB), and main.c checks them.
 #include <stdbool.h>
 #include <string.h>
 #include "sdkconfig.h"
@@ -200,7 +201,14 @@ void bootloader_after_init(void)
 {
 #if CONFIG_IDF_TARGET_ESP32S3
     drive(48, 0);       // LED data into U9 (AIRWRITER_LED_DATA_PIN)
+#if CONFIG_ESPTOOLPY_FLASHSIZE_16MB
+    // Rev 2026.11 (W-1109; main.c ties its build to 16 MB flash). IO35-IO37
+    // are the N16R8's PSRAM here: never touch them.
+    drive(47, 0);       // J2's HSKo, U3 T2IN (AIRWRITER_HSKI_DRV_PIN); R24 held it until now
+    drive(13, 0);       // J4's HSKo, U3 T1IN (AIRWRITER_J4_HSKO_DRV_PIN); no pull-down
+#else
     drive(35, 0);       // SP3232 T1IN (AIRWRITER_HSKI_DRV_PIN)
+#endif
     drive(4, 1);        // the PIC's RA1, TashTalk's UART receive: idle high (AIRWRITER_PIC_CLK_PIN)
 
     if (esp_rom_get_reset_reason(0) != RESET_REASON_CORE_DEEP_SLEEP &&

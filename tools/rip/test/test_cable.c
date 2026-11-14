@@ -171,6 +171,20 @@ static void test_verdict(void)
     CHECK(!strcmp(ct_verdict_name(CT_NO_LOOP), "no_loop"));
     CHECK(!strcmp(ct_verdict_name(CT_ONE_WAY), "one_way"));
     CHECK(strlen(ct_verdict_text(CT_ONE_WAY)) > 10);
+    // W-1109: the handshake wires, on rev 2026.11, only once the data legs pass.
+    CHECK_EQ_INT(ct_verdict_hsk(CT_PASS, 1, 1), CT_PASS);
+    CHECK_EQ_INT(ct_verdict_hsk(CT_PASS, 0, 1), CT_NO_BUSY);
+    CHECK_EQ_INT(ct_verdict_hsk(CT_PASS, 1, 0), CT_NO_HSK_OUT);
+    CHECK_EQ_INT(ct_verdict_hsk(CT_PASS, 0, 0), CT_NO_HSK);
+    CHECK_EQ_INT(ct_verdict_hsk(CT_ONE_WAY, 0, 0), CT_ONE_WAY);
+    CHECK_EQ_INT(ct_verdict_hsk(CT_NO_LOOP, 1, 1), CT_NO_LOOP);
+    CHECK_EQ_INT(ct_verdict_hsk(CT_NO_CHIP, 0, 0), CT_NO_CHIP);
+    const ct_verdict_t hsk[] = { CT_NO_BUSY, CT_NO_HSK_OUT, CT_NO_HSK };
+    for (int i = 0; i < 3; i++) {
+        CHECK(ct_verdict_tested(hsk[i]));
+        CHECK(strlen(ct_verdict_text(hsk[i])) > 10);
+        CHECK(strcmp(ct_verdict_name(hsk[i]), "?"));
+    }
 
     // W-1063: TashTalk silent means no cable was tested, whatever the legs
     // say, and the verdict names what U7 holds instead of blaming the cable.

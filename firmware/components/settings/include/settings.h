@@ -29,6 +29,8 @@ typedef struct {
     uint8_t airprint;                // advertise and take AirPrint jobs (W-1079); on
     int8_t  lt_port;                 // the AppleTalk port (W-1079): 1 on, 0 off, -1 as
                                      // DIP switches 1-2 say (mode 2 on), until set
+    uint8_t rainbow;                 // Rainbow status lights (W-1109): the page's switch
+                                     // where there is no DIP 7 (rev 2026.11); off
     int16_t top_margin;              // 1/144 in: + blank paper ahead of each AirPrint
                                      // page and the test page, - drops their first
                                      // rows; CONFIG_AIRWRITER_TOP_MARGIN
@@ -57,6 +59,7 @@ int       settings_take_wifi_fresh(void);
 esp_err_t settings_save_general(const char *hostname, const char *queue,
                                 const char *dither, int gain);
 esp_err_t settings_save_auto_update(int on);
+esp_err_t settings_save_rainbow(int on);
 // The printer's model and the user's own name for it (W-1079). NULL keeps
 // each; an empty name goes back to the model's. Also stores the name in
 // effect as "queue", which firmware from before W-1079 reads.
