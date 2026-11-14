@@ -1299,8 +1299,8 @@ static void sw_finished(const job_pipe_stats_t *st, int ok)
 // W-1102: the port's printer is a Personal LaserWriter 300. Its job takes the same sink, job
 // lock and pipeline again, rips at 300 dpi into qd_page's rows and runs its session on the rip
 // task (qdlaser.c): the link opens and the printer is asked who it is as the rip begins, each
-// page is loaded and printed as the rip makes it, and a page too big for the printer's
-// memory in the record's screen goes in Apple's.
+// page is loaded as the rip makes it, while the page before it prints (W-1144), and a page too
+// big for the printer's memory in the record's screen goes in Apple's.
 
 static esp_err_t qd_doc_begin(const char *format, const char *name, const ipp_job_opts_t *opts)
 {
@@ -1349,12 +1349,15 @@ static void qd_page_cb(int page, int apple, uint32_t bytes, int too_big)
     }
 }
 
-// The rip is over and every page that was going to print has, or the job was abandoned. On the
-// rip task (or the IPP worker, when the pipeline never started).
+// The rip is over and every page that was going to print is loaded, the last still printing,
+// or the job was abandoned. On the rip task (or the IPP worker, when the pipeline never started).
 static void qd_finished(const job_pipe_stats_t *st, int ok)
 {
     int cancelled = s_job_cancelled;
+    // W-1144: the last page is still printing as the rip ends; the job's end waits for its done.
+    int64_t t_end = esp_timer_get_time();
     int rc = qdlaser_job_end(!(st->rc == 0 && ok && !cancelled));
+    uint32_t end_ms = (uint32_t)((esp_timer_get_time() - t_end) / 1000);
     int printed = rc == QD_OK;
     s_printing = 0;
     job_touch();
@@ -1372,7 +1375,7 @@ static void qd_finished(const job_pipe_stats_t *st, int ok)
         printers_port_answered(PR_HEARD_QDLASER);   // its 83 3E named the record's model
         ESP_LOGI(TAG, "LaserWriter 300 job: %d page%s, %u bytes in, all out in %u s",
                  st->pages, st->pages == 1 ? "" : "s", (unsigned)st->doc_bytes,
-                 (unsigned)(st->ms / 1000));
+                 (unsigned)((st->ms + end_ms) / 1000));
         ota_health_printed();           // W-1059: this firmware prints; under the job lock
     } else {
         ESP_LOGE(TAG, "LaserWriter 300 job %s: %d page%s, %u bytes in, rc %d, printer %d%s",

@@ -242,7 +242,7 @@ static void test_page_dots(void)
 
 typedef struct { int opens, prints, notes, too_big; uint32_t rows, bytes; } count_t;
 
-static int  c_open(void *ctx, const qd_media_t *md) { (void)md; ((count_t *)ctx)->opens++; return 0; }
+static int  c_open(void *ctx, int page, const qd_media_t *md) { (void)page; (void)md; ((count_t *)ctx)->opens++; return 0; }
 static int  c_row(void *ctx, const uint8_t *codes, size_t n)
 {
     (void)codes;

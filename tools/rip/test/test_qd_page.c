@@ -16,6 +16,7 @@ enum { MAXROWS = 4000, MAXB = 300 };
 
 typedef struct {
     int opens, prints, notes, pass_rows, fail_after;
+    int open_page[4];          // the page each of the first opens named
     const qd_media_t *md;
     uint32_t pass_bytes;
     int note_page, note_apple, note_too_big;
@@ -26,9 +27,10 @@ typedef struct {
     size_t  first_n;
 } sink_t;
 
-static int s_open(void *ctx, const qd_media_t *md)
+static int s_open(void *ctx, int page, const qd_media_t *md)
 {
     sink_t *s = ctx;
+    if (s->opens < 4) s->open_page[s->opens] = page;
     s->opens++;
     s->md = md;
     s->pass_rows = 0;
@@ -214,8 +216,11 @@ static void test_over_budget_falls_back_to_apple(void)
     rip_stage_t st;
     qd_page_stage(p, &st);
     g_seed = 1;
-    CHECK_EQ_INT(feed(&st, 0, 2400, 3300, noise, mid_gray), 0);
+    CHECK_EQ_INT(feed(&st, 5, 2400, 3300, noise, mid_gray), 0);
     CHECK_EQ_INT(s->opens, 2);
+    // W-1144: both opens name the page, so the sink knows the second is the same page again.
+    CHECK_EQ_INT(s->open_page[0], 5);
+    CHECK_EQ_INT(s->open_page[1], 5);
     CHECK_EQ_INT(s->pass_rows, 3175);
     CHECK_EQ_INT(s->pass_bytes, apple_bytes);
     CHECK_EQ_INT(s->prints, 1);

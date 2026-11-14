@@ -7,8 +7,9 @@
 // everything here that touches J2 is called with that lock held.
 //
 // A job's whole session runs on the rip task: the link opens and the session begins as the rip
-// begins (job_pipe_target_t.colour_ok), each page is loaded and printed from the page stage as
-// the rip makes it, and the job ends on the same task. Nothing here writes flash.
+// begins (job_pipe_target_t.colour_ok), each page is loaded from the page stage as the rip makes
+// it, behind the page before it while that one prints (W-1144), and the job ends on the same
+// task, where the last page's done is waited for. Nothing here writes flash.
 #pragma once
 #include <stdint.h>
 #include "qd_session.h"
@@ -58,7 +59,9 @@ int  qdlaser_job_error(void);
 // Pages so far that fit neither screen (the job goes on past them).
 int  qdlaser_job_failed_pages(void);
 // The job is over, on the rip task. A job that was not aborted and had no error ends the
-// session (81 00, Ready on); otherwise the session is aborted. Frees the job and closes the link.
+// session (the last page's done, up to 85 s; 81 00, Ready on); otherwise the session is aborted
+// (qd_session_abort: a sheet printing with nothing wrong comes out first, unless the printer
+// failed). Frees the job and closes the link.
 // QD_OK if every page printed; the session's error; QD_E_FAULT for a page that didn't fit in the
 // printer's memory, or a job that ended short with no error of its own; QD_E_CANCEL for one cancelled.
 int  qdlaser_job_end(int aborted);
@@ -66,7 +69,8 @@ int  qdlaser_job_end(int aborted);
 // ---- The test page (qd_testpage.h), under the caller's job lock, with a clock on the line
 
 // One session with the link open for pages: the page drawn into the page stage as it is made,
-// in info->screen (Apple's 300 screen for HT_APPLE) with info->gain, then printed. Its rows are
+// in info->screen (Apple's 300 screen for HT_APPLE) with info->gain, then printed and seen to
+// its done. Its rows are
 // drawn already screened, so nothing is kept: the page is about 200 KB of codes, well inside
 // the printer's memory in every screen. QD_OK; a session error (QD_E_CANCEL for a cancel);
 // QD_E_MODEL for a model there is none of; QD_E_NOMEM; QD_E_FAULT for a page the printer could

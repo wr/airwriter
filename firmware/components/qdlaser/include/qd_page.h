@@ -9,8 +9,8 @@
 // the stage counts what it sends against a budget. While the record's screen is not Apple's, it
 // also screens each row's gray in Apple's 300 screen (HT_APPLE_LW, from the gray_row hook) and
 // keeps those codes in a buffer of the caller's. A page that passes the budget stops being sent;
-// at its end the sink is opened again (which drops what the printer holds) and the kept page
-// goes instead. A page that passes it in both fails: the sink is told so, and the job goes on.
+// at its end the sink is opened again for the same page (which drops the rows of it the printer
+// holds, once the page printing before it is done) and the kept page goes instead. A page that passes it in both fails: the sink is told so, and the job goes on.
 // A record set to Apple's screen keeps nothing: ripjob screens its rows in Apple's screen.
 // Pure C; tools/rip builds it on the host.
 #pragma once
@@ -21,12 +21,14 @@
 #include "qd_model.h"
 
 typedef struct {
-    // The page's setup. The sink starts it with 81 00, so it also drops a page already loaded.
-    // Non-zero aborts the job.
-    int  (*open)(void *ctx, const qd_media_t *md);
+    // The page's setup; page is its index in the job, as note's. Opened a second time before
+    // its print, the rows sent since the first are dropped (qd_session_open). Non-zero aborts
+    // the job.
+    int  (*open)(void *ctx, int page, const qd_media_t *md);
     // One row's codes, top to bottom. Non-zero aborts the job.
     int  (*row)(void *ctx, const uint8_t *codes, size_t n);
-    // Every row is in: check, print, and wait until the page is done. Non-zero aborts the job.
+    // Every row is in: check and print, once the page before it is done (W-1144: it returns as
+    // the page starts to print). Non-zero aborts the job.
     int  (*print)(void *ctx);
     // The page is settled: apple 1 if it went in Apple's screen, bytes its codes, too_big 1 if
     // it fit neither screen (nothing was printed). May be NULL.

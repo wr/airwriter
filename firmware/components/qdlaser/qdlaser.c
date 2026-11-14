@@ -29,6 +29,31 @@ static void ops_state(void *ctx, qd_state_t st)
     if (s_cfg.state) s_cfg.state(st);
 }
 
+// W-1144: when each page's print went, its done, and what held it, for the log. On whichever
+// task runs the session.
+static void ops_event(void *ctx, qd_event_t ev, int page, uint32_t ms)
+{
+    (void)ctx; (void)page; (void)ms;        // (the log's alone)
+    switch (ev) {
+    case QD_EV_PRINT:
+        ESP_LOGI(TAG, "page %d: printing", page);
+        break;
+    case QD_EV_DONE:
+        ESP_LOGI(TAG, "page %d: done, read %u ms after its print", page, (unsigned)ms);
+        break;
+    case QD_EV_ROOM:
+        ESP_LOGI(TAG, "page %d waited %u ms for room in the printer", page, (unsigned)ms);
+        break;
+    case QD_EV_REPRINT:
+        ESP_LOGW(TAG, "page %d: stopped by a jam or the cover; the printer prints it again", page);
+        break;
+    case QD_EV_LOST:
+        ESP_LOGE(TAG, "page %d: lost to a jam or the cover, and the printer can't print it again; "
+                      "the job stops", page);
+        break;
+    }
+}
+
 void qdlaser_start(const qdlaser_cfg_t *cfg)
 {
     s_cfg = *cfg;
@@ -39,6 +64,7 @@ const qd_ops_t *qdlaser_ops(void)
     s_ops = *qd_link_ops();
     s_ops.cancelled = ops_cancelled;
     s_ops.state = ops_state;
+    s_ops.event = ops_event;
     return &s_ops;
 }
 
@@ -74,10 +100,10 @@ typedef struct {
     int           too_big;
 } tp_ctx_t;
 
-static int tp_open(void *ctx, const qd_media_t *md)
+static int tp_open(void *ctx, int page, const qd_media_t *md)
 {
     tp_ctx_t *c = ctx;
-    if (!c->err) c->err = qd_session_open(c->s, md);
+    if (!c->err) c->err = qd_session_open(c->s, page + 1, md);
     return c->err;
 }
 
@@ -181,7 +207,8 @@ static void job_free(void)
 }
 
 // The job cannot go on: the first error is kept, the printer is told (8A 00, 81 00, 84 01:
-// once, and only if the session wrote), and the job pipeline is released. On the rip task.
+// once, and only if the session wrote; qd_session_abort), and the job pipeline is released. On
+// the rip task.
 static void job_failed(int rc)
 {
     if (s_job.err) return;
@@ -191,10 +218,10 @@ static void job_failed(int rc)
 }
 
 // The page stage's sink is the session.
-static int sk_open(void *ctx, const qd_media_t *md)
+static int sk_open(void *ctx, int page, const qd_media_t *md)
 {
     (void)ctx;
-    int rc = s_job.err ? s_job.err : qd_session_open(s_job.s, md);
+    int rc = s_job.err ? s_job.err : qd_session_open(s_job.s, page + 1, md);
     if (rc) job_failed(rc);
     return rc;
 }
