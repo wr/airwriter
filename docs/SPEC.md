@@ -1570,11 +1570,11 @@ printer here to test on.
   | No clock | Offline | `other` | (none: the printer is off) |
 
   Jam and cover go through Apple's recovery once `83 02` clears: `81 00`, `84 08` for 280 ms,
-  `84 01`, `83 40`, `83 3E`, `82 00`, `83 5D`, the source, `83 02`, `81 00`, `8A 01`, which prints again
-  the page at the start of the printer's memory. A job uses it only up to that last `81 00`,
-  `8A 01`, and then sends its pages again from its copy (above); the test page, one page at
-  the start of the memory, uses it whole. The cover opened mid-page reads
-  as a jam (the sheet is caught: `83 01` `13`, `83 02` `0D`), and the printer wants the cover
+  `84 01`, `83 40`, `83 3E`, `82 00`, `83 5D`, the source, `83 02`, `81 00`, `8A 01`, which
+  prints again the page at the start of the printer's memory. A job uses it only up to that
+  last `81 00`, `8A 01`, and then sends its pages again from its copy (above); the test page,
+  one page at the start of the memory, uses it whole. The cover opened mid-page reads as a
+  jam (the sheet is caught: `83 01` `13`, `83 02` `0D`), and the printer wants the cover
   opened and closed again once the sheet is pulled; for a few seconds after it closes the `83`
   questions go unanswered, which the five tries of each ride out.
   Paper out mid-job stops the page (`8A 00`) and prints it (`8A 01`) once `83 2A` has paper. A
