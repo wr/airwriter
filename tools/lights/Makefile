@@ -21,5 +21,9 @@ build/scenes: scenes.c $(COMP)/led_grid/led_grid_core.c $(COMP)/led_grid/led_map
 build/frames.txt: build/scenes
 	build/scenes > $@
 
+# AirWriter LC's one light: three numbers a frame
+build/one.txt: build/scenes
+	build/scenes one > $@
+
 clean:
 	rm -rf build

@@ -3,8 +3,8 @@
 // (docs/superpowers/specs/2026-10-14-status-language-design.md): caps, which
 // dots each state may light, that the array varies dot to dot, the boot wave,
 // the Wi-Fi-connected green moment, gamer mode, joining's outward rings,
-// setup's two cues, attention, failure, the bidirectional print head, and
-// the asleep fireflies.
+// setup's two cues, attention, failure, the bidirectional print head, the
+// asleep fireflies, and AirWriter LC's one light (W-1109).
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -521,6 +521,158 @@ static void test_w1049(uint8_t f[LG_NUM_LEDS][3], uint8_t g[LG_NUM_LEDS][3])
         o = blip(LG_BLIP_SAVED, 300);
         lg_render(&v, &o, 0, f);
         assert(lit_count(f) > 2);
+    }
+}
+
+// AirWriter LC's one light (W-1109): the same view in time and colour alone.
+static void one(const ps_view_t *v, const lg_opts_t *o, uint32_t t, uint16_t px[3])
+{
+    lg_render_one16(v, o, t, px);
+}
+
+static int one_max(const uint16_t px[3])
+{
+    int m = px[0];
+    if (px[1] > m) m = px[1];
+    if (px[2] > m) m = px[2];
+    return m;
+}
+
+static void test_one(void)
+{
+    const ps_state_t all[] = { PS_BOOTING, PS_SETUP, PS_JOINING, PS_ATTENTION,
+                               PS_FAILED, PS_PRINTING, PS_OFFLINE, PS_READY };
+    uint16_t px[3];
+
+    // Caps, as the panel's FR4 dots: Needs attention alone may reach the alert
+    // cap, awake or asleep, white or Rainbow.
+    for (int mode = 0; mode < 2; mode++)
+        for (int s = 0; s < 8; s++)
+            for (int asleep = 0; asleep < 2; asleep++)
+                for (uint32_t t = 0; t < 14000; t += 37) {
+                    ps_view_t v = view(all[s], t);
+                    v.greeted = t < 6000;
+                    v.asleep = (uint8_t)asleep;
+                    v.asleep_ms = t;
+                    one(&v, mode ? &GAMER_MODE : &WHITE_MODE, t, px);
+                    int cap = all[s] == PS_ATTENTION ? LG_ALERT_CAP : LG_BRIGHTNESS_CAP;
+                    for (int ch = 0; ch < 3; ch++) assert(px[ch] <= cap * 256);
+                }
+
+    // The steady states never go dark: the light sits on the glow at least.
+    const ps_state_t steady[] = { PS_SETUP, PS_JOINING, PS_ATTENTION, PS_PRINTING,
+                                  PS_OFFLINE, PS_READY };
+    for (int s = 0; s < 6; s++)
+        for (uint32_t t = 0; t < 14000; t += 41) {
+            ps_view_t v = view(steady[s], 60000 + t);
+            one(&v, &WHITE_MODE, t, px);
+            assert(one_max(px) >= LG_GLOW - 256);
+        }
+
+    // Colours: Ready white, Setup and Joining blue, Offline and Needs
+    // attention amber, the last job failed red.
+    for (uint32_t t = 0; t < 7000; t += 250) {
+        ps_view_t v = view(PS_READY, 60000);
+        one(&v, &WHITE_MODE, t, px);
+        assert(px[0] >= px[1] && px[1] >= px[2] && px[2] * 10 >= px[0] * 6);
+        v = view(PS_SETUP, 60000);
+        one(&v, &WHITE_MODE, t, px);
+        assert(px[2] > 2 * px[0] && px[2] > 2 * px[1]);
+        v = view(PS_JOINING, 60000);
+        one(&v, &WHITE_MODE, t, px);
+        assert(px[2] > 2 * px[0] && px[2] > 2 * px[1]);
+        v = view(PS_OFFLINE, 60000);
+        one(&v, &WHITE_MODE, t, px);
+        assert(px[0] > px[1] && px[1] > px[2]);
+        v = view(PS_ATTENTION, 60000);
+        one(&v, &WHITE_MODE, t, px);
+        assert(px[0] > px[1] && px[1] >= px[2]);
+        v = view(PS_FAILED, 1200 + t);
+        one(&v, &WHITE_MODE, t, px);
+        assert(px[0] > 3 * px[1] && px[0] > 3 * px[2]);
+    }
+
+    // The printer back: green as the wave would reach the button, then Ready.
+    {
+        ps_view_t v = view(PS_READY, 550);
+        v.prev = PS_OFFLINE;
+        one(&v, &WHITE_MODE, 0, px);
+        assert(px[1] > px[0] && px[1] > px[2]);
+        v.since_ms = LG_BACK_MS + 100;
+        uint16_t ready[3];
+        ps_view_t r = view(PS_READY, 60000);
+        one(&v, &WHITE_MODE, 0, px);
+        one(&r, &WHITE_MODE, 0, ready);
+        assert(memcmp(px, ready, sizeof ready) == 0);
+    }
+
+    // No LocalTalk chip: two red blinks, dark between and after.
+    {
+        ps_view_t v = view(PS_OFFLINE, 60000);
+        v.cable = PS_CABLE_NO_CHIP;
+        const uint32_t at[] = { 100, 300, 500, 700, 900 };
+        const int lit[] = { 0, 1, 0, 1, 0 };
+        for (int k = 0; k < 5; k++) {
+            v.cable_ms = at[k];
+            one(&v, &WHITE_MODE, 0, px);
+            if (lit[k]) assert(px[0] > 3 * px[1] && px[0] > 3 * px[2]);
+            else assert(one_max(px) == 0);
+        }
+    }
+
+    // A task wins over the state, and its red reaches the alert cap; once
+    // over, the state is back.
+    {
+        ps_view_t v = view(PS_READY, 60000);
+        lg_opts_t o = act(LG_ACT_RESET_HOLD, LG_RESET_FILL_MS);
+        one(&v, &o, 0, px);
+        assert(px[0] > LG_BRIGHTNESS_CAP * 256 && px[1] < px[0] / 4);
+        o = act(LG_ACT_RESET_CONFIRM, LG_RESET_DONE_MS - 50);
+        one(&v, &o, 0, px);
+        assert(one_max(px) == 0);
+        o = act(LG_ACT_FW_VERIFIED, 300);
+        one(&v, &o, 0, px);
+        assert(px[1] > px[0] && px[1] > px[2]);
+        o = act(LG_ACT_FW_DOWNLOADING, 0);
+        o.task[lg_family(LG_ACT_FW_DOWNLOADING)].arg = 500;
+        one(&v, &o, 0, px);
+        assert(px[0] > px[1] && px[2] > px[1]);        // pink
+        uint16_t ready[3];
+        one(&v, &WHITE_MODE, 0, ready);
+        o = act(LG_ACT_PIC_OK, 60000);
+        one(&v, &o, 0, px);
+        assert(memcmp(px, ready, sizeof ready) == 0);
+    }
+
+    // An acknowledgement shows over Ready, never over Needs attention.
+    {
+        lg_opts_t o = WHITE_MODE;
+        o.blip = LG_BLIP_BUSY;
+        o.blip_ms = 150;
+        uint16_t plain[3];
+        ps_view_t v = view(PS_READY, 60000);
+        one(&v, &o, 0, px);
+        one(&v, &WHITE_MODE, 0, plain);
+        assert(memcmp(px, plain, sizeof plain) != 0);
+        v = view(PS_ATTENTION, 60000);
+        one(&v, &o, 0, px);
+        one(&v, &WHITE_MODE, 0, plain);
+        assert(memcmp(px, plain, sizeof plain) == 0);
+    }
+
+    // Asleep: Ready fades out over 10 s, then one slow white breath every
+    // LG_BREATH_MS, all but dark between.
+    {
+        ps_view_t v = view(PS_READY, 60000);
+        v.asleep = 1;
+        v.asleep_ms = 60000;
+        int hi = 0, lo = 1 << 30;
+        for (uint32_t t = 0; t < LG_BREATH_MS; t += 50) {
+            one(&v, &WHITE_MODE, t, px);
+            if (one_max(px) > hi) hi = one_max(px);
+            if (one_max(px) < lo) lo = one_max(px);
+        }
+        assert(hi > LG_BRIGHTNESS_CAP * 256 * 9 / 10 && lo < 256);
     }
 }
 
@@ -1142,6 +1294,7 @@ int main(void)
 
     test_reset(f, g);
     test_w1049(f, g);
+    test_one();
     printf("test_led_grid: ok\n");
     return 0;
 }

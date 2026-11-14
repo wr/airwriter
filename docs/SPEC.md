@@ -1693,10 +1693,13 @@ board's. Neither image runs on the other board, and each board refuses the other
   photo's ~5.7 MB of URF fits ahead of the rip; 1 MB if that much can't be had.
 - **U7's socket on an LC** is empty: every start-up check of U7 (`lt_go("boot", 1)`) leaves its
   pins on the chip's pull-ups, so they never float.
-- **Not built yet:** the LC's one status light (D26, a frame's first pixel, needing a one-light
-  summary of the status language, designed first), and the page's one-dot mark for it.
+- **The LC's light.** When `BOARD_LC` reads low, `led_grid` draws D26, the chain's first LED
+  there, with `lg_render_one16`: the status language in time and colour alone (the status
+  language design's LC section), and the rest of the chain dark. `/api/panel` sends that frame,
+  and the page's mark beside the name draws the one dot when `/api/status` has `lc`, and
+  the page is named AirWriter LC.
 - **Tested:** both builds, the stack check on both, and the host tests (the manifest with both
-  keys, the handshake verdicts). Nothing has run on a rev 2026.11 board: none exists yet. On
+  keys, the handshake verdicts, the LC light's caps, colours, endings and priorities). Nothing has run on a rev 2026.11 board: none exists yet. On
   the first, check the straps, the handshake legs through Apple's crossover, a StyleWriter
   (J2's handshake held asserted by IO47) and the Personal LaserWriter 300's clock through
   rev 2026.11's U3.

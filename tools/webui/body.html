@@ -35,7 +35,7 @@
 
 <div class=app>
   <nav class=side aria-label=Settings>
-    <div class=brand><canvas class=dots id=dots aria-hidden=true></canvas><b>AirWriter</b></div>
+    <div class=brand><canvas class=dots id=dots aria-hidden=true></canvas><b id=brand>AirWriter</b></div>
     <div class=nav>
       <button data-go=printers type=button><span class="ic k"><svg><use href="#g-printer"/></svg></span><span class=l>Printers</span><span class=v id=v-printers></span></button>
       <button data-go=airprint type=button><span class="ic g"><svg><use href="#g-airprint"/></svg></span><span class=l>AirPrint</span><span class=v id=v-airprint></span></button>
@@ -185,7 +185,7 @@
     <!-- ── About ─────────────────────────────────────────────── -->
     <section class=pane id=p-about>
       <div id=ab-home>
-        <div class=hero><i class=awm></i><h2>AirWriter</h2><p id=about-rev>Rev A · Wells Workshop</p></div>
+        <div class=hero><i class=awm></i><h2 id=about-name>AirWriter</h2><p id=about-rev>Rev A · Wells Workshop</p></div>
         <div class=box>
           <div class=row><span class=txt>Version <span class="mono" id=fw-ver></span></span><span class=val><i class=lamp id=fw-lamp></i><span id=fw-state></span></span><button class=btn type=button id=fw-btn>Check Now</button></div>
           <div class=row><span class=txt>Update automatically</span><label class=sw><input type=checkbox role=switch id=fwauto aria-label="Update automatically"><span></span></label></div>

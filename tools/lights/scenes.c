@@ -27,6 +27,7 @@ typedef struct {
 } seg_t;
 
 static uint32_t T;              // the panel's clock, continuous across a scene's segments
+static int ONE;                 // "one": the LC's one light, three numbers a frame
 
 static void seg(seg_t g)
 {
@@ -63,6 +64,12 @@ static void seg(seg_t g)
         o.blip = g.blip;
         o.blip_ms = s;
         uint16_t hi[LG_NUM_LEDS][3];
+        if (ONE) {
+            memset(hi, 0, sizeof hi);
+            if (!g.dark) lg_render_one16(&v, &o, T, hi[0]);
+            printf("%u %u %u\n", hi[0][0], hi[0][1], hi[0][2]);
+            continue;
+        }
         if (g.dark) memset(hi, 0, sizeof hi);
         else lg_render16(&v, &o, T, hi);
         for (int i = 0; i < LG_NUM_LEDS; i++)
@@ -82,14 +89,19 @@ static void scene(const char *name, const char *loop, uint32_t t0)
 #define READY(ms) SEG(.len = ms, .st = PS_READY, .prev = PS_JOINING, .since0 = 60000)
 #define OFFLINE(ms) SEG(.len = ms, .st = PS_OFFLINE, .prev = PS_READY, .since0 = 60000)
 
-int main(void)
+int main(int argc, char **argv)
 {
+    ONE = argc > 1 && strcmp(argv[1], "one") == 0;
     printf("M");
     for (int i = 0; i < LG_NUM_LEDS; i++)
         printf(" %d,%d,%c", LG_MAP[i].r, LG_MAP[i].c, LG_MAP[i].mat);
     printf("\n");
 
     // ---------------------------------------------------------- the states
+    if (ONE) {      // the LC's one light: Rainbow status lights in Ready, too
+        scene("rainbow-one", "1000", 100000);
+        SEG(.len = 14400, .st = PS_READY, .prev = PS_JOINING, .since0 = 60000, .gamer = 1);
+    }
     scene("boot-wave", "cut", 0);   // a board that settles early: the shortest boot, 3 s
     SEG(.len = 3000, .st = PS_BOOTING, .settle = 1700);
     SEG(.len = 600, .st = PS_BOOTING, .since0 = 3000, .settle = 1700);

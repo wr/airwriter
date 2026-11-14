@@ -1170,6 +1170,30 @@
     }
    }
   },
+  "lc": {
+   "about": "AirWriter LC: one status light, Rainbow status lights off",
+   "patch": {
+    "GET /api/status": {
+     "dip": "",
+     "board": "2026.11",
+     "lc": true
+    }
+   }
+  },
+  "lc-printing": {
+   "about": "AirWriter LC printing",
+   "patch": {
+    "GET /api/status": {
+     "dip": "",
+     "board": "2026.11",
+     "lc": true,
+     "ps": "printing",
+     "state": "Printing",
+     "printing": true,
+     "job": "Holiday card.pdf (2 pages)"
+    }
+   }
+  },
   "long-names": {
    "about": "Longest printer name, host name and network",
    "patch": {

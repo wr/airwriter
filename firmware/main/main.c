@@ -3960,7 +3960,7 @@ void app_main(void)
     printer_state_start(&tm, on_ps_change);
     // After the clamp above: the RMT driver takes IO48 over from here, and
     // by the first frame the line is driven, never floating.
-    ESP_ERROR_CHECK(led_grid_start());
+    ESP_ERROR_CHECK(led_grid_start(s_board_lc));
 
     ESP_LOGI(TAG, "AirWriter starting after %s reset, %u bytes free",
              reset_name(esp_reset_reason()), (unsigned)esp_get_free_heap_size());

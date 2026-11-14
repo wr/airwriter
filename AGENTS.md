@@ -44,7 +44,7 @@ false.
 Rev A boards are built and print from iPhones, Macs and vintage Macs. Rev 2026.11 (called rev B
 in Linear and older docs) is drawn and routed, not yet made. It has a build of its own
 (ESP32-S3-WROOM-1-N16R8, board straps, no DIP switches, a handshake GPIO per port; SPEC §3.19),
-which nothing has run on yet; the LC's one status light is not built.
+which nothing has run on yet, the LC's one status light included.
 
 - **Printers.** Tested on the ImageWriter II. The original ImageWriter and the ImageWriter LQ
   take the same stream and are expected to work, untested; docs say so rather than excluding
