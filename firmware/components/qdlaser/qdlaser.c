@@ -144,9 +144,9 @@ static int tp_stop(void *ctx)
     return c->err || ops_cancelled(NULL);
 }
 
-int qdlaser_test_page(int hz, qd_model_t m, const sw_tp_info_t *info)
+int qdlaser_test_page(int hz, qd_model_t m, const tp_info_t *info)
 {
-    sw_tp_geom_t g;
+    tp_geom_t g;
     if (!info || qd_tp_geom(m, &g)) return QD_E_MODEL;
     s_cancel = 0;                    // a cancel a job left behind is not this page's
     if (qd_link_open(hz, 1)) {
@@ -166,15 +166,15 @@ int qdlaser_test_page(int hz, qd_model_t m, const sw_tp_info_t *info)
         } else {
             rip_stage_t st;
             qd_page_stage(pg, &st);
-            sw_tp_info_t ti = *info;
+            tp_info_t ti = *info;
             ti.geom = &g;
             ti.stop = tp_stop;
             ti.stop_ctx = &c;
-            int drawn = sw_testpage(&ti, &st);
+            int drawn = tp_page(&ti, &st);
             rc = c.err ? c.err
-               : drawn == SW_TP_NOMEM ? QD_E_NOMEM
-               : drawn == SW_TP_STOPPED ? QD_E_CANCEL
-               : drawn == SW_TP_STAGE || c.too_big ? QD_E_FAULT
+               : drawn == TP_NOMEM ? QD_E_NOMEM
+               : drawn == TP_STOPPED ? QD_E_CANCEL
+               : drawn == TP_STAGE || c.too_big ? QD_E_FAULT
                : qd_session_end(c.s);
         }
     }

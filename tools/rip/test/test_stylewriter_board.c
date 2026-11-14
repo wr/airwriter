@@ -275,11 +275,11 @@ static void start(int record_sw)
     g_record_sw = record_sw;
 }
 
-static sw_tp_info_t tp_info(sw_model_t m)
+static tp_info_t tp_info(sw_model_t m)
 {
-    sw_tp_info_t i = { .printer = "Den StyleWriter", .board = "AirWriter v0.3.0 at 10.0.1.115",
-                       .host = "airwriter-2434.local", .model = m, .colour_cart = 1,
-                       .screen = HT_ATKINSON };
+    (void)m;                     // the page's model and cartridge are the session's
+    tp_info_t i = { .printer = "Den StyleWriter", .board = "v0.3.0 at 10.0.1.115",
+                    .settings = "http://airwriter-2434.local", .screen = HT_ATKINSON };
     return i;
 }
 
@@ -579,7 +579,7 @@ int main(void)
     F.cart_colour = 1;
     stylewriter_cancel();
     CHECK_EQ_INT(stylewriter_ops()->cancelled(NULL), 1);
-    sw_tp_info_t ti = tp_info(SW_C2500);
+    tp_info_t ti = tp_info(SW_C2500);
     g_cart_calls = 0;
     CHECK_EQ_INT(stylewriter_test_page(SW_C2500, &ti), 0);
     CHECK_EQ_INT(F.pages, 1);
@@ -609,11 +609,13 @@ int main(void)
     CHECK_EQ_INT(F.links[1].baud, 57600);                     // and the record's link stays after it
 
     // A black cartridge in a colour model: the page is the gray one (black rects only), whatever
-    // the caller said, and the board is told black.
+    // geometry the caller gave, and the board is told black.
     reset_all(SW_C2500);
     F.cart_colour = 0;
     ti = tp_info(SW_C2500);
-    ti.colour_cart = 1;
+    tp_geom_t colour_geom;
+    sw_tp_geom(SW_C2500, 1, &colour_geom);
+    ti.geom = &colour_geom;
     CHECK_EQ_INT(stylewriter_test_page(SW_C2500, &ti), 0);
     CHECK_EQ_INT(g_cart_val, 0);
     CHECK_EQ_INT(F.pages, 1);

@@ -17,7 +17,7 @@
 #include "qd_status.h"
 #include "job_pipe_rip.h"
 #include "halftone.h"
-#include "sw_testpage.h"
+#include "testpage.h"
 
 typedef struct {
     // The printer's state changed during a job or a test page. From whichever task runs the
@@ -70,14 +70,13 @@ int  qdlaser_job_end(int aborted);
 
 // ---- The test page (qd_testpage.h), under the caller's job lock, with a clock on the line
 
-// One session with the link open for pages: the page drawn into the page stage as it is made,
-// in info->screen (Apple's 300 screen for HT_APPLE) with info->gain, then printed and seen to
-// its done. Its rows are
-// drawn already screened, so nothing is kept: the page is about 200 KB of codes, well inside
-// the printer's memory in every screen. QD_OK; a session error (QD_E_CANCEL for a cancel);
-// QD_E_MODEL for a model there is none of; QD_E_NOMEM; QD_E_FAULT for a page the printer could
-// not hold. The model and colour cartridge in info are not used.
-int  qdlaser_test_page(int hz, qd_model_t m, const sw_tp_info_t *info);
+// One session with the link open for pages: the page (testpage.h) drawn into the page stage as
+// it is made, in info->screen (Apple's 300 screen for HT_APPLE) with info->gain, then printed and
+// seen to its done. Its rows are drawn already screened, so nothing is kept: the page is under
+// 200 KB of codes, well inside the printer's memory in every screen. QD_OK; a session error
+// (QD_E_CANCEL for a cancel); QD_E_MODEL for a model there is none of; QD_E_NOMEM; QD_E_FAULT
+// for a page the printer could not hold. info->geom and its stop hook are this function's own.
+int  qdlaser_test_page(int hz, qd_model_t m, const tp_info_t *info);
 
 // Stops the job or test page at the session's next step. Cleared as each starts and ends. Any
 // task.

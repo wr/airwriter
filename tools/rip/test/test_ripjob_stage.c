@@ -9,6 +9,7 @@
 #include "sw_model.h"
 #include "apple_tables.h"
 #include "resample.h"
+#include "iw_stage.h"
 #include <stdlib.h>
 
 typedef struct {
@@ -620,8 +621,70 @@ static void test_sheet_by_height(void)
     free(r);
 }
 
+// ---- W-1140: the ImageWriter's strips as a stage write what the rip writes on its own
+
+typedef struct { uint8_t *b; size_t n, cap; } grow_t;
+
+static void grow(void *ctx, const uint8_t *b, size_t n)
+{
+    grow_t *g = ctx;
+    if (g->n + n > g->cap) {
+        g->cap = (g->n + n) * 2;
+        g->b = realloc(g->b, g->cap);
+    }
+    memcpy(g->b + g->n, b, n);
+    g->n += n;
+}
+
+// A full Letter page at 144 dpi, as an iPhone sends the ImageWriter: rules, a ramp and blank
+// strips between, so the stream has every kind of strip.
+static uint8_t gray_lines(uint32_t x, uint32_t y)
+{
+    if (y % 200 < 3) return 0;
+    if (y > 400 && y < 460) return (uint8_t)(x * 255 / 1224);
+    return (y / 37 + x / 51) % 7 == 0 ? 60 : 255;
+}
+
+static void rgb_bands(uint32_t x, uint32_t y, uint8_t rgb[3])
+{
+    rgb[0] = (uint8_t)(y < 60 ? 255 : x % 255);
+    rgb[1] = (uint8_t)(y % 120 < 40 ? 255 : 30);
+    rgb[2] = (uint8_t)(x / 12);
+}
+
+static void test_iw_stage_is_the_rips_strips(void)
+{
+    static uint8_t gray_page[1300 * 1600 + 4096];
+    static uint8_t rgb_page[3060 * 3 * 720 + 32768];
+    const size_t gn = make_urf(gray_page, 1224, 1584, 144, gray_lines);
+    const size_t cn = make_urf_rgb(rgb_page, 3060, 720, rgb_bands);
+    static const int margins[] = { -144, -30, -1, 0, 1, 36 };
+    for (size_t m = 0; m < sizeof margins / sizeof margins[0]; m++)
+        for (int colour = 0; colour < 2; colour++) {
+            grow_t own = { 0 }, staged = { 0 };
+            ripjob_cfg_t cfg = { .out = grow, .out_ctx = &own, .dither = HT_ATKINSON, .gain = 9,
+                                 .colour = colour, .top_margin = margins[m] };
+            CHECK_EQ_INT(rip(colour ? rgb_page : gray_page, colour ? cn : gn, &cfg), 0);
+            iw_stage_t ist;
+            iw_stage_init(&ist, grow, &staged, colour, margins[m]);
+            rip_stage_t st;
+            iw_stage(&ist, &st);
+            cfg.out = NULL;
+            cfg.out_ctx = NULL;
+            cfg.stage = &st;
+            CHECK_EQ_INT(rip(colour ? rgb_page : gray_page, colour ? cn : gn, &cfg), 0);
+            iw_stage_free(&ist);
+            CHECK(own.n > 1000);
+            CHECK_EQ_INT(staged.n, own.n);
+            CHECK(staged.n == own.n && !memcmp(staged.b, own.b, own.n));
+            free(own.b);
+            free(staged.b);
+        }
+}
+
 int main(void)
 {
+    test_iw_stage_is_the_rips_strips();
     test_media_pick();
     test_gray_row_before_row();
     test_gray_row_null_changes_nothing();

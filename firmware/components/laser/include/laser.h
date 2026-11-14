@@ -19,7 +19,7 @@
 #include "ipp_server.h"
 #include "job_pipe.h"
 #include "lw_query.h"
-#include "ps_testpage.h"
+#include "testpage.h"
 
 // W-1098: where a printer answered its query (at_link_t, its net and node)
 // and the page count it gave (-1 none): how a renamed one is told.
@@ -91,9 +91,12 @@ int       laser_job_active(void);
 // W-1141: the job in progress has had a PostScript error back from the printer, which then
 // reads the rest of the job and throws it away: its pages from here on do not print. Any task.
 int       laser_job_ps_error(void);
-// W-1088: the PostScript test page to LaserWriter id, sent as it is, under the
-// job lock: 1 if it printed. laser_job_cancel stops it.
-int       laser_test_page(int id, const ps_tp_info_t *info);
+// The test page (testpage.h, W-1140) to LaserWriter id, shared or not, under the
+// job lock: the page drawn in its record's screen and gain and given to the
+// PostScript stage as a phone's page is (lw_caps.h lw_tp_geom); info's printer,
+// board and settings lines are the caller's, icon its AirPrint icon's name. 1
+// if it printed. laser_job_cancel stops it.
+int       laser_test_page(int id, const tp_info_t *info, const char *icon);
 
 // W-1099: turns LaserWriter id's start page on (1) or off (0) with a job
 // that prints nothing (lw_start_page_job), on the laser task as a query is,

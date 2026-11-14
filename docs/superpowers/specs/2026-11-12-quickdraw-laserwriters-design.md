@@ -7,6 +7,10 @@ run coder, the port's questions), `W-1082` (LaserWriters: the 300 dpi rip) and `
 printer's own Apple icon). Reverses the QuickDraw non-goal in
 `2026-10-21-laser-printers-design.md`.
 
+**Amended 2026-11-14** by `W-1140 One test page for every printer: the ImageWriter and PostScript
+LaserWriters print the shared page`: the test page is the page every printer prints
+(`testpage`; the test-page design's amendment block), no longer this family's own. The 300 keeps its 300 dpi image area, Apple's 300 screen as the Apple panel and its laser captions (`qd_tp_geom`).
+
 **Amended 2026-11-13, while building and on board 1** (SPEC §3.18 is the record of what was
 built):
 

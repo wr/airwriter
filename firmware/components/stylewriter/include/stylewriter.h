@@ -80,11 +80,11 @@ int        stylewriter_clean(sw_model_t m);
 // not `busy`.
 int        stylewriter_clean_check(sw_model_t m, int busy);
 
-// The test page (sw_testpage.h), under the caller's job lock and with no job in the pipeline:
+// The test page (testpage.h), under the caller's job lock and with no job in the pipeline:
 // one session at normal quality for `m`, the printer reset and its cartridge read (the board is
 // told through the cfg's cart callback, which may write flash, so call this from a task whose
-// stack is internal), the page drawn for that cartridge (info->colour_cart and ->model are the
-// session's, not the caller's), its frames fed straight to the session as they are made, the
+// stack is internal), the page drawn for `m` and that cartridge (sw_testpage.h: info->geom and
+// its stop hook are the session's, not the caller's), its frames fed straight to the session as they are made, the
 // last page waited out and `E` and `l` sent (sw_session_end). The cfg's cancelled callback and
 // stylewriter_cancel() stop it between steps (a block in flight finishes: the page is drawn
 // to a stop hook and fed through the session, which never cuts a `G` block), after which
@@ -92,7 +92,7 @@ int        stylewriter_clean_check(sw_model_t m, int busy);
 // session the same way. 0 if the page printed, else the session's error or SW_E_NOMEM, or
 // SW_E_SWAPPED with nothing sent while another printer has the port. The cancel flag is
 // cleared as it starts and as it ends.
-int        stylewriter_test_page(sw_model_t m, const sw_tp_info_t *info);
+int        stylewriter_test_page(sw_model_t m, const tp_info_t *info);
 
 // The session's line, for whoever else sends a StyleWriter bytes under the lock (the test
 // page). Its cancelled op is the callback's and stylewriter_cancel's.

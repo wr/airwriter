@@ -67,6 +67,46 @@ void lw_caps_fill(lw_caps_t *c, const lw_info_t *i)
     p->crop_margin = 0;
 }
 
+// 1/100 pt to dots at 300 dpi, rounded in or out.
+static int32_t px_in(int32_t pt100)  { return (int32_t)(((int64_t)pt100 * 300 + 7199) / 7200); }
+static int32_t px_out(int32_t pt100) { return (int32_t)(((int64_t)pt100 * 300) / 7200); }
+
+// Under the four squares: what each is, and what a good print of it looks like on a laser.
+static const char *const k_captions[2][4] = {
+    { "One inch each way", "Solid black", "Straight lines", "Even gray" },
+    { "Measure it with a ruler", "Pale or streaky: low toner", "Sharp, even lines", "The paper feeds evenly" },
+};
+
+void lw_tp_geom(const lw_info_t *i, const char *icon, tp_geom_t *g)
+{
+    lw_page_t pg = i->page <= LW_LEGAL ? i->page : LW_LETTER;
+    const int32_t pw = (int32_t)k_paper[pg].w_px, ph = (int32_t)(((int64_t)k_paper[pg].h_pt * 300 + 3600) / 7200);
+    // The imageable area in dots from the sheet's top-left; one the printer never gave (or that
+    // makes no sense) is a quarter inch in from every edge.
+    int32_t l = px_in(i->area[0]), r = px_out(i->area[2]);
+    int32_t t = px_in(k_paper[pg].h_pt - i->area[3]), b = px_in(i->area[1]);
+    if (r - l < 300 || r > pw || l < 0 || t < 0 || b < 0 || t + b >= ph - 300) {
+        l = 75; r = pw - 75; t = 75; b = 75;
+    }
+    const int32_t lw = (int32_t)(TP_W_360 * 300 / 360);
+    int32_t left = l + (r - l - lw) / 2;            // centred; on narrow paper, cut evenly
+    if (left < 0) left = 0;
+    if (left + lw > pw) left = pw - lw;
+    *g = (tp_geom_t){
+        .dpi_x = 300, .dpi_y = 300,
+        .sheet_w = (uint16_t)pw, .sheet_h = (uint16_t)ph, .left = (uint16_t)left, .top = (uint16_t)t,
+        .print_w = (uint16_t)(r - l), .print_h = (uint16_t)(ph - t - b),
+        .paper = pg == LW_A4 ? "A4" : pg == LW_LEGAL ? "Legal" : "Letter",
+        .margin_l = (uint16_t)l, .margin_t = (uint16_t)t, .margin_b = (uint16_t)b,
+        .icon = icon, .colour = 0, .gray_note = NULL,
+        .apple = 0, .apple_algo = HT_APPLE, .tone = NULL, .ink_place = 0, .captions = k_captions,
+    };
+    if (i->version[0])
+        snprintf(g->model, sizeof g->model, "%s, PostScript %s", i->product, i->version);
+    else
+        snprintf(g->model, sizeof g->model, "%s", i->product);
+}
+
 void lw_uuid(char out[46], const uint8_t mac[6], uint16_t epoch, const uint8_t *pascal_name)
 {
     uint32_t h = 2166136261u;                   // FNV-1a 32

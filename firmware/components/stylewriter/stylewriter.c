@@ -191,7 +191,7 @@ static int tp_stop(void *ctx)
     return c->err || op_cancelled(NULL);
 }
 
-int stylewriter_test_page(sw_model_t m, const sw_tp_info_t *info)
+int stylewriter_test_page(sw_model_t m, const tp_info_t *info)
 {
     const sw_spec_t *sp = sw_spec(m);
     if (!sp || !info) return SW_E_FAULT;
@@ -215,16 +215,17 @@ int stylewriter_test_page(sw_model_t m, const sw_tp_info_t *info)
         } else {
             rip_stage_t st;
             sw_page_stage(pg, &st);
-            sw_tp_info_t ti = *info;
-            ti.model = m;
-            ti.colour_cart = cart;
+            tp_geom_t geom;
+            sw_tp_geom(m, cart, &geom);
+            tp_info_t ti = *info;
+            ti.geom = &geom;
             ti.stop = tp_stop;
             ti.stop_ctx = &c;
-            int drawn = sw_testpage(&ti, &st);
+            int drawn = tp_page(&ti, &st);
             rc = c.err ? c.err
-               : drawn == SW_TP_NOMEM ? SW_E_NOMEM
-               : drawn == SW_TP_STAGE ? SW_E_FAULT
-               : drawn == SW_TP_STOPPED ? SW_E_CANCEL
+               : drawn == TP_NOMEM ? SW_E_NOMEM
+               : drawn == TP_STAGE ? SW_E_FAULT
+               : drawn == TP_STOPPED ? SW_E_CANCEL
                : sw_session_end(s);
         }
     }

@@ -109,9 +109,11 @@ page: Top margin (`{"top_margin":N}`, 1/144 in, -216 to 144, default -144) and d
   changes.
 - The settings page makes no request off the board. Never hand-edit `webui_page.h`;
   `tools/webui/mkheader.py` builds it.
-- Never hand-edit the StyleWriter test page's pictures, `sw_scene.h`: after a change to
-  `tp_scene.c` or `ink_gray`, `make -C tools/rip scene` traces them again (the host tests fail
-  until it does).
+- Never hand-edit the test page's generated headers: after a change to `tp_scene.c` or
+  `ink_gray`, `make -C tools/rip scene` traces `tp_pictures.h` again (the host tests fail until it
+  does); `testpage/tools/mkart.py` writes `tp_words.h` and `tp_icons.h`, and
+  `testpage/tools/mktype.py` `tp_type.h` (its fonts, TeX Gyre Heros and Termes, live in
+  `~/.config/airwriter/type-fonts/`, never committed).
 - Never change `fixtures/checker.expected.bin` (see Verification).
 - Generate `.kicad_sch` and `.kicad_pcb` files with the tools, never by hand.
 - Releases are cut only by `tools/release/release.sh`, by a maintainer.
@@ -173,14 +175,17 @@ page: Top margin (`{"top_margin":N}`, 1/144 in, -216 to 144, default -144) and d
   are regenerated with the reason in the commit. A blank strip is only its held line feed, in
   gray as in colour. `rip --colour --out-preview` draws a colour page in its four inks, and
   `rip --times` logs where each page's time went, as the board does.
-- **Test page preview:** `tools/rip/build/rip --testpage colour --out-stream tp.bin` (or `black`,
-  `unknown`), then `python3 tools/iwview/iwview.py tp.bin tp.png` draws it as ink on paper. Its
-  text needs the printer's font dot patterns, extracted from the ImageWriter II Technical
-  Reference's Appendix C into `~/.config/airwriter/iw-fonts/*.json` (or `--fonts`) and never
-  committed; without them text draws as boxes.
+- **Test page preview:** every printer prints the same page (`testpage`). `tools/rip/build/rip
+  --testpage colour --out-stream tp.bin` (or `black`, `unknown`) makes the ImageWriter's and
+  `python3 tools/iwview/iwview.py tp.bin tp.png` draws it as ink on paper; `--sw-testpage`,
+  `--qd-testpage` and `--ps-testpage` make the others' (below). The page has no printer type,
+  but iwview needs the printer's font dot patterns for streams that do (a LocalTalk capture):
+  extracted from the ImageWriter II Technical Reference's Appendix C into
+  `~/.config/airwriter/iw-fonts/*.json` (or `--fonts`) and never committed; without them text
+  draws as boxes.
 - **LaserWriters:** `make -C tools/rip pscheck` (Ghostscript at `$GS` or `/opt/homebrew/bin/gs`)
   renders the rip's PostScript and requires its own dots, binary and hex, with every
-  non-Level-1 operator trapped; `make -C tools/rip interop` prints with the firmware's PAP client
+  non-Level-1 operator trapped, and the test page (`rip --ps-testpage F [--hex]`) to render; `make -C tools/rip interop` prints with the firmware's PAP client
   to `etpeer.py`'s fake LaserWriter (lookup, query, print, busy, paper out, PostScript error,
   cancel, a silent printer). `tools/ipp/test/golden/` pins the IPP answers byte for byte.
 - **StyleWriters** (Python 3 with numpy): `make -C tools/rip swcheck` decodes the rip's pages

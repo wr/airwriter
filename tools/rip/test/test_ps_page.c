@@ -5,7 +5,8 @@
 // dots is pscheck.py's job (make -C tools/rip pscheck).
 #include "test_util.h"
 #include "ps_page.h"
-#include "ps_testpage.h"
+#include "testpage.h"
+#include "lw_caps.h"
 #include <stdlib.h>
 #include <ctype.h>
 
@@ -94,33 +95,48 @@ static void full_width(uint32_t y, uint8_t *row) { (void)y; memset(row, 0xA5, 51
 
 static int hexval(int c) { return isdigit(c) ? c - '0' : tolower(c) - 'a' + 10; }
 
-// W-1088: the PostScript printers' test page, in the printer's own type.
-static void test_testpage_text(void)
+// W-1140: a LaserWriter's test page is the page every printer prints, as the PostScript a
+// phone's page becomes: one page of imagemask bands, Level 1, and nothing of the printer's own
+// fonts (pscheck.py holds its dots to Ghostscript's).
+static void test_testpage(void)
 {
-    out_n = 0;
-    ps_tp_info_t i = { .printer = "Wells\xE2\x80\x99s (Office) LW\\", .product = "LaserWriter II NT",
-                       .version = "47.0", .host = "airwriter-2434.local",
-                       .board = "AirWriter v0.3.0, 10.0.1.115" };
-    ps_testpage(&i, put, NULL);
-    CHECK(memcmp(out, "%!PS-Adobe-3.0\n", 15) == 0);
-    CHECK(count("%%Title: (AirWriter test page)\n") == 1);
-    CHECK(count("%%LanguageLevel: 1\n") == 1);
-    CHECK(count("/Times-Roman findfont") >= 1);
-    CHECK(count("/Helvetica findfont") >= 1);
-    // The name in the printer's StandardEncoding: the curly apostrophe is
-    // quoteright (the ASCII one), parentheses and the backslash escaped.
-    CHECK(count("(Wells's \\(Office\\) LW\\\\)") == 2);     // the heading and the details
-    CHECK(count("(LaserWriter II NT, PostScript version 47.0)") == 1);
-    CHECK(count("imagemask") >= 5);                    // the five screens, at least
-    CHECK(count("showpage") == 1);
-    CHECK(count("rectfill") == 0);                     // Level 2: not on a LaserWriter II
-    const char *tail = "%%EOF\n";
-    CHECK(out_n > 5 && memcmp(out + out_n - strlen(tail), tail, strlen(tail)) == 0);
+    for (int hex = 0; hex < 2; hex++) {
+        out_n = 0;
+        lw_info_t li;
+        lw_info_default(&li);
+        snprintf(li.product, sizeof li.product, "LaserWriter II NT");
+        snprintf(li.version, sizeof li.version, "47.0");
+        tp_geom_t g;
+        lw_tp_geom(&li, "lw2", &g);
+        tp_info_t i = { .printer = "Office LW", .board = "v0.4.0 at 10.0.1.115",
+                        .settings = "http://airwriter-2434.local", .screen = HT_ATKINSON, .geom = &g };
+        ps_cfg_t pc = { .out = put, .binary = !hex, .paper_h_pt = 792, .title = "AirWriter test page",
+                        .creator = "AirWriter test" };
+        ps_t *ps = ps_new(&pc);
+        rip_stage_t st;
+        ps_stage(ps, &st);
+        ps_job_begin(ps);
+        CHECK_EQ_INT(tp_page(&i, &st), TP_DONE);
+        ps_job_end(ps);
+        ps_free(ps);
+        CHECK(out_n < sizeof out);
+        CHECK(memcmp(out, "%!PS-Adobe-3.0\n", 15) == 0);
+        CHECK(count("%%Title: (AirWriter test page)\n") == 1);
+        CHECK(count("%%LanguageLevel: 1\n") == 1);
+        CHECK(count("%%Pages: 1\n") == 1);
+        CHECK(count("findfont") == 0);                     // the page is dots, as a phone's is
+        CHECK(count(" awb\n") >= 20);                      // bands of the page's rows
+        CHECK(count("showpage") == 1);
+        CHECK(count("rectfill") == 0);                     // Level 2: not on a LaserWriter II
+        const char *tail = "%%EOF\n";
+        CHECK(out_n > 5 && memcmp(out + out_n - strlen(tail), tail, strlen(tail)) == 0);
+        printf("    LaserWriter test page, %s: %zu bytes of PostScript\n", hex ? "hex" : "binary", out_n);
+    }
 }
 
 int main(void)
 {
-    test_testpage_text();
+    test_testpage();
     // Header, prolog, title escaping, trailer.
     ps_t *ps = job(1, "a (b) \\c \xc3\xa9");
     page(ps, 0, 2550, 130, two_bands);

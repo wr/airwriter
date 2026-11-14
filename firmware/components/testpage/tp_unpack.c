@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// sw_unpack.h. On the board, tinfl from the ROM writes into a 32 KB window that wraps, and a
+// tp_unpack.h. On the board, tinfl from the ROM writes into a 32 KB window that wraps, and a
 // read copies out what it made before asking for more, so nothing is read after tinfl has
 // written over it. On the host, zlib's inflate writes straight into the caller's row.
-#include "sw_unpack.h"
+#include "tp_unpack.h"
 #include "bigmem.h"
 
 #include <stdlib.h>
@@ -13,7 +13,7 @@
 
 #include "miniz.h"
 
-struct sw_unpack {
+struct tp_unpack {
     tinfl_decompressor d;
     const uint8_t     *in;
     size_t             in_left;
@@ -23,9 +23,9 @@ struct sw_unpack {
     uint8_t            win[TINFL_LZ_DICT_SIZE];
 };
 
-sw_unpack_t *sw_unpack_new(const uint8_t *z, size_t n)
+tp_unpack_t *tp_unpack_new(const uint8_t *z, size_t n)
 {
-    sw_unpack_t *u = big_calloc(1, sizeof *u);
+    tp_unpack_t *u = big_calloc(1, sizeof *u);
     if (!u) return NULL;
     tinfl_init(&u->d);
     u->in = z;
@@ -33,7 +33,7 @@ sw_unpack_t *sw_unpack_new(const uint8_t *z, size_t n)
     return u;
 }
 
-int sw_unpack_read(sw_unpack_t *u, uint8_t *out, size_t len)
+int tp_unpack_read(tp_unpack_t *u, uint8_t *out, size_t len)
 {
     while (len) {
         if (u->have) {
@@ -64,7 +64,7 @@ int sw_unpack_read(sw_unpack_t *u, uint8_t *out, size_t len)
     return 0;
 }
 
-void sw_unpack_free(sw_unpack_t *u)
+void tp_unpack_free(tp_unpack_t *u)
 {
     free(u);
 }
@@ -73,14 +73,14 @@ void sw_unpack_free(sw_unpack_t *u)
 
 #include <zlib.h>
 
-struct sw_unpack {
+struct tp_unpack {
     z_stream z;
     int      bad;
 };
 
-sw_unpack_t *sw_unpack_new(const uint8_t *z, size_t n)
+tp_unpack_t *tp_unpack_new(const uint8_t *z, size_t n)
 {
-    sw_unpack_t *u = big_calloc(1, sizeof *u);
+    tp_unpack_t *u = big_calloc(1, sizeof *u);
     if (!u) return NULL;
     u->z.next_in = (Bytef *)(uintptr_t)z;
     u->z.avail_in = (uInt)n;
@@ -91,7 +91,7 @@ sw_unpack_t *sw_unpack_new(const uint8_t *z, size_t n)
     return u;
 }
 
-int sw_unpack_read(sw_unpack_t *u, uint8_t *out, size_t len)
+int tp_unpack_read(tp_unpack_t *u, uint8_t *out, size_t len)
 {
     if (u->bad) return -1;
     u->z.next_out = out;
@@ -106,7 +106,7 @@ int sw_unpack_read(sw_unpack_t *u, uint8_t *out, size_t len)
     return 0;
 }
 
-void sw_unpack_free(sw_unpack_t *u)
+void tp_unpack_free(tp_unpack_t *u)
 {
     if (!u) return;
     inflateEnd(&u->z);
