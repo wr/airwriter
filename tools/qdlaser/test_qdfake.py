@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-or-later
 """qdfake.py's printer held to the design's command table (W-1102) and to what board 1's
-printer did with a second page loaded while the first printed (W-1144).
+printer did with a second page loaded while the first printed (W-1144); and its LS (W-1145)
+to the LS's own driver as the notes read it.
 
 Packets here are built by hand from the design ("What the printer and the board allow"),
 not by our C code, and the line image by a second writer in this file, so the fake is an
@@ -599,6 +600,126 @@ class Decoders(unittest.TestCase):
         # Zero bytes on the line: 9 zero bits at most between stop bits.
         packets = [cmd(0x81, 0), row(bytes([0x00]))]
         self.assertEqual(qdfake.packets_from_bits(line(packets)), packets)
+
+
+def ls_row(codes):
+    """A row as the LS's own driver frames it: a 9-bit length."""
+    n = len(codes)
+    head = bytes([0x40 | (0x200 - n) >> 8, (0x200 - n) & 0xFF])
+    x = 0
+    for b in head + codes:
+        x ^= b
+    return head + bytes(codes) + bytes([x])
+
+
+# The LS's Letter setup, as its driver sends it: 81 00, top 63, left 20, the row 300 bytes,
+# the multipurpose tray, 83 9D and Letter's number 04 as it is.
+LS_LETTER = [cmd(0x81, 0), cmd(0x85, 0xC1), cmd(0x86, 0xFF), cmd(0x87, 0xEC), cmd(0x88, 0xD4),
+             cmd(0x89, 0xFE), cmd(0x83, 0x52), cmd(0x83, 0x9D), cmd(0x83, 0x04), cmd(0x84, 1)]
+
+
+class LS(unittest.TestCase):
+    def test_identity(self):
+        lw, _ = printer(engine=0x0D)
+        self.assertEqual(ask(lw, 0x83, 0x40), 0x01)
+        self.assertIn("83 40, asked before the printer is known", lw.events)
+        self.assertEqual(ask(lw, 0x83, 0x3E), 0x0D)
+        lw, _ = printer(engine=0x0D, refuse_40=True)
+        self.assertEqual(ask(lw, 0x83, 0x40), 0x80)
+        self.assertEqual(ask(lw, 0x83, 0x3E), 0x0D)
+
+    def test_letter_page(self):
+        lw, clock = printer(engine=0x0D)
+        send(lw, LS_LETTER + [ls_row(r) for r in ROWS] + END + PRINT)
+        clock.t += 2.1
+        lw.tick()
+        self.assertEqual(len(lw.pages), 1)
+        p = lw.pages[0]
+        self.assertEqual(p.rows, WANT)
+        self.assertEqual(p.top, 63)
+        self.assertEqual(p.x0, 20 * 8 - 0xB7 // 2)
+        self.assertEqual(p.width, 300)
+        self.assertEqual(lw.size, 0x04)
+        self.assertIn("paper number 04", lw.events)
+        self.assertFalse([e for e in lw.events if e.startswith(qdfake.BAD)])
+
+    def test_the_300s_rows_are_not_the_LSs(self):
+        lw, clock = printer(engine=0x0D)
+        send(lw, LS_LETTER + [row(r) for r in ROWS] + END + PRINT)
+        self.assertTrue(any(e.startswith("row length") for e in lw.events))
+        lw, clock = printer()
+        send(lw, LETTER + [ls_row(ROWS[0])])
+        self.assertTrue(any(e.startswith("row length") for e in lw.events))
+
+    def test_what_its_driver_never_sends(self):
+        for c, a in ((0x83, 0x2A), (0x83, 0xA7), (0x83, 0x5D), (0x83, 0x4C), (0x83, 0x4F), (0x84, 0x08)):
+            lw, _ = printer(engine=0x0D)
+            ask(lw, c, a)
+            self.assertTrue(any(e.startswith("not the LS's") for e in lw.events), f"{c:02x} {a:02x}")
+            lw, _ = printer()
+            ask(lw, c, a)
+            self.assertFalse(any(e.startswith("not the LS's") for e in lw.events), f"the 300: {c:02x} {a:02x}")
+
+    def test_tray_and_no_cassette(self):
+        # The tray is chosen at power-up and holds a stack; the cassette isn't fitted.
+        lw, clock = printer(engine=0x0D)
+        self.assertEqual(ask(lw, 0x83, 0x02) & 0x10, 0)
+        ask(lw, 0x83, 0x51)
+        self.assertEqual(ask(lw, 0x83, 0x02) & 0x10, 0x10)       # no cassette, so no paper
+        ask(lw, 0x83, 0x52)
+        self.assertEqual(ask(lw, 0x83, 0x02) & 0x10, 0)
+        lw.command("paper")
+        self.assertEqual(ask(lw, 0x83, 0x02) & 0x10, 0x10)       # the tray empty
+        lw.command("ok")
+        self.assertEqual(ask(lw, 0x83, 0x02) & 0x10, 0)
+
+    def test_a_page_from_the_cassette_never_prints(self):
+        lw, clock = printer(engine=0x0D)
+        setup = [cmd(0x83, 0x51) if p == cmd(0x83, 0x52) else p for p in LS_LETTER]
+        send(lw, setup + [ls_row(r) for r in ROWS] + END + PRINT)
+        clock.t += 3
+        lw.tick()
+        self.assertEqual(lw.pages, [])
+
+    def test_the_tray_takes_page_after_page(self):
+        lw, clock = printer(engine=0x0D)
+        for _ in range(2):
+            send(lw, LS_LETTER + [ls_row(r) for r in ROWS] + END + PRINT)
+            clock.t += 30
+            lw.tick()
+        self.assertEqual(len(lw.pages), 2)
+
+    def test_rows_while_a_page_prints(self):
+        lw, clock = printer(engine=0x0D)
+        send(lw, LS_LETTER + [ls_row(r) for r in ROWS] + END + PRINT + [ls_row(ROWS[0])])
+        self.assertTrue(any(e.startswith("rows while a page prints") for e in lw.events))
+
+    def test_jam_needs_only_81_00_and_the_page_again(self):
+        lw, clock = printer(engine=0x0D)
+        send(lw, LS_LETTER + [ls_row(r) for r in ROWS] + END + PRINT)
+        clock.t += 0.5
+        lw.command("jam")
+        clock.t += 3
+        lw.tick()
+        self.assertEqual(lw.pages, [])
+        lw.command("ok")
+        self.assertEqual(ask(lw, 0x83, 0x02) & 0x0C, 0)
+        send(lw, LS_LETTER + [ls_row(r) for r in ROWS] + END + PRINT)
+        clock.t += 2.1
+        lw.tick()
+        self.assertEqual(len(lw.pages), 1)
+        self.assertEqual(lw.pages[0].rows, WANT)
+        self.assertFalse([e for e in lw.events if e.startswith(qdfake.BAD)])
+
+    def test_decode(self):
+        packets = LS_LETTER + [ls_row(r) for r in ROWS] + END + PRINT
+        with tempfile.TemporaryDirectory() as t:
+            t = pathlib.Path(t)
+            (t / "s.bin").write_bytes(frames(packets))
+            self.assertEqual(qdfake.main(["decode", str(t / "s.bin"), "--out", str(t / "a"), "--no-png",
+                                          "--engine", "0d"]), 0)
+            self.assertEqual((t / "a" / "page-1.pbm").read_bytes(), b"P4\n2400 3\n" + b"".join(WANT))
+            self.assertEqual(qdfake.main(["decode", str(t / "s.bin"), "--out", str(t / "b"), "--no-png"]), 1)
 
 
 if __name__ == "__main__":

@@ -5719,24 +5719,62 @@
    }
   },
   "qdlaser-ls": {
-   "about": "Printers: a Personal LaserWriter LS on the printer port, not supported yet",
+   "about": "Printers: a Personal LaserWriter LS on the printer port, ready (W-1145: built from its driver, untested)",
    "patch": {
     "GET /api/printers": {
-     "printers": [],
+     "printers": [
+      {
+       "id": 1,
+       "name": "Personal LaserWriter LS",
+       "where": "port",
+       "kind": "qdlaser",
+       "model": "Personal LaserWriter LS",
+       "shared": true,
+       "identified": true,
+       "found": "auto",
+       "state": "ready",
+       "uuid": "urn:uuid:41575254-4c57-0002-0003-10bda36e2434",
+       "product": "",
+       "icon": "plwls",
+       "dither": "atkinson",
+       "gain": 0,
+       "rp": "ipp/print",
+       "start_page": null
+      }
+     ],
      "notes": [],
-     "port_on": 0,
+     "port_on": 1,
      "said_other": false,
      "chooser": [],
-     "port_unsupported": "Personal LaserWriter LS",
+     "port_unsupported": "",
      "max_shared": 6
     },
     "POST /api/printers": {
-     "printers": [],
+     "printers": [
+      {
+       "id": 1,
+       "name": "Personal LaserWriter LS",
+       "where": "port",
+       "kind": "qdlaser",
+       "model": "Personal LaserWriter LS",
+       "shared": true,
+       "identified": true,
+       "found": "auto",
+       "state": "ready",
+       "uuid": "urn:uuid:41575254-4c57-0002-0003-10bda36e2434",
+       "product": "",
+       "icon": "plwls",
+       "dither": "atkinson",
+       "gain": 0,
+       "rp": "ipp/print",
+       "start_page": null
+      }
+     ],
      "notes": [],
-     "port_on": 0,
+     "port_on": 1,
      "said_other": false,
      "chooser": [],
-     "port_unsupported": "Personal LaserWriter LS",
+     "port_unsupported": "",
      "max_shared": 6
     },
     "GET /api/laser": {
@@ -5750,16 +5788,13 @@
     },
     "GET /api/status": {
      "printers": {
-      "count": 0,
-      "shared": 0,
+      "count": 1,
+      "shared": 1,
       "notes": 0,
-      "port": "none"
+      "port": "qdlaser"
      },
-     "model": "",
-     "ribbon": "unknown",
-     "ps": "offline",
-     "state": "Offline",
-     "printer": false
+     "model": "Apple Personal LaserWriter LS",
+     "ribbon": "unknown"
     }
    }
   },

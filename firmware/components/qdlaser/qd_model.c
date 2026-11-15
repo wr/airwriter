@@ -22,9 +22,30 @@
     X("na_monarch_3.875x7.5in",    9843, 19050, 1162, 2250, 1163, 2250, 1072, 2125) \
     X("iso_a4_210x297mm",         21000, 29700, 2475, 3500, 2480, 3508, 2400, 3375)
 
-#define QD_MEDIA_ROW(NAME, X_, Y_, PW, PH, GW, GH, IW, IH) { NAME, PW, PH, GW, GH, IW, IH },
+#define QD_MEDIA_ROW(NAME, X_, Y_, PW, PH, GW, GH, IW, IH) \
+    { NAME, PW, PH, GW, GH, IW, IH, { 0, 0, 0 }, 0x21 },
 static const qd_media_t k_plw300_media[] = { PLW300_SHEETS(QD_MEDIA_ROW) };
 #define N_PLW300 ((uint8_t)(sizeof k_plw300_media / sizeof k_plw300_media[0]))
+
+// W-1145: the Personal LaserWriter LS's sheets, from its own driver (Personal LW LS 7.1, PREC 3
+// and the page setup it sends; nothing here has been tried on a printer). As above, then the
+// setup the driver sends for each (top, left, row width, already negative) and its 83 9D
+// paper number. The driver's rule: top (paper h - image h) / 2 rows; left (paper w - image w +
+// 0xB7) / 16 bytes; the row ((image w + 24) / 8) & ~3 bytes, padded with white past the image
+// (Legal and B5 2,000 dots in 252 bytes, #10 1,133 dots in 144). Its paper is a dot over on
+// some edges, as the driver works it out. #10's image area, 1,133 dots, is kept as 1,136, a
+// whole number of bytes; the left margin is the driver's, from 1,133.
+#define PLWLS_SHEETS(X) \
+    X("na_letter_8.5x11in",  21590, 27940, 2550, 3301, 2550, 3300, 2400, 3175,  -63, -20, -300, 0x04) \
+    X("iso_a4_210x297mm",    21000, 29700, 2476, 3501, 2480, 3508, 2400, 3375,  -63, -16, -300, 0x01) \
+    X("na_legal_8.5x14in",   21590, 35560, 2550, 4200, 2550, 4200, 2000, 3750, -225, -45, -252, 0x0C) \
+    X("iso_b5_176x250mm",    17600, 25000, 2080, 2951, 2079, 2953, 2000, 2825,  -63, -16, -252, 0x09) \
+    X("na_number-10_4.125x9.5in", 10478, 24130, 1238, 2851, 1238, 2850, 1136, 2725, -63, -18, -144, 0x21)
+
+#define LS_MEDIA_ROW(NAME, X_, Y_, PW, PH, GW, GH, IW, IH, TOP, LEFT, WIDTH, SIZE) \
+    { NAME, PW, PH, GW, GH, IW, IH, { TOP, LEFT, WIDTH }, SIZE },
+static const qd_media_t k_plwls_media[] = { PLWLS_SHEETS(LS_MEDIA_ROW) };
+#define N_PLWLS ((uint8_t)(sizeof k_plwls_media / sizeof k_plwls_media[0]))
 
 // What AirPrint is told for each sheet: the rip keeps img_w dots from the middle of the
 // page's width, and the rows from (page_h - img_h) / 2 down; the rest is the margin.
@@ -33,18 +54,34 @@ static const qd_media_t k_plw300_media[] = { PLW300_SHEETS(QD_MEDIA_ROW) };
     QD_OUT(((GW) - (IW)) / 2), QD_OUT((GW) - (IW) - ((GW) - (IW)) / 2), \
     QD_OUT(((GH) - (IH)) / 2), QD_OUT((GH) - (IH) - ((GH) - (IH)) / 2), \
     GW, ((GW) - (IW)) / 2, IW, GH },
+#define LS_CAPS_ROW(NAME, X_, Y_, PW, PH, GW, GH, IW, IH, TOP, LEFT, WIDTH, SIZE) \
+    QD_CAPS_ROW(NAME, X_, Y_, PW, PH, GW, GH, IW, IH)
 static const printer_media_t k_plw300_caps_media[] = { PLW300_SHEETS(QD_CAPS_ROW) };
+static const printer_media_t k_plwls_caps_media[] = { PLWLS_SHEETS(LS_CAPS_ROW) };
 
 static const qd_spec_t s_spec[QD_MODELS] = {
     [QD_PLW300] = {
-        .name = "Personal LaserWriter 300", .engine = QD_ENGINE_PLW300,
-        .ctrl = 2, .page_ram = 0,
-        .src_cassette = 0x4C, .src_manual = 0x4F, .bit_cassette = 0x20, .bit_manual = 0x40,
-        .density_cmd = 0xA7, .density = 32,
+        .name = "Personal LaserWriter 300", .engine = QD_ENGINE_PLW300, .driver = QD_DRV_LW300,
+        .src_main = 0x4C, .src_manual = 0x4F, .bit_cassette = 0x20, .bit_manual = 0x40,
+        .density_cmd = 0xA7, .density = 32, .row_bits = 12,
         .budget = 500000,
         .screen8 = apple_lw_screen8, .tone = apple_lw_tone,
         .media = k_plw300_media, .n_media = N_PLW300,
         .icon = "plw300",
+    },
+    // Its memory is unmeasured (512 KB as Apple shipped it, as the 300's, which took 513,287
+    // bytes of codes): its budget leaves a little more room than the 300's, and it takes one
+    // page at a time. Every LS has the multipurpose tray, and its Print dialog chooses it; the
+    // paper cassette was an optional feeder (the LS Owner's Guide, 1991), so a job never asks
+    // for it, and a sheet fed by hand goes in the same tray.
+    [QD_PLWLS] = {
+        .name = "Personal LaserWriter LS", .engine = QD_ENGINE_LS, .driver = QD_DRV_LS,
+        .src_main = 0x52,
+        .row_bits = 9,
+        .budget = 480000,
+        .screen8 = apple_lw_screen8, .tone = apple_lw_tone,
+        .media = k_plwls_media, .n_media = N_PLWLS,
+        .icon = "plwls",
     },
 };
 
@@ -66,6 +103,19 @@ static const printer_caps_t s_caps[QD_MODELS] = {
         .media_list = k_plw300_caps_media, .n_media = N_PLW300,
         .sources = k_sources, .n_sources = 2,
     },
+    [QD_PLWLS] = {
+        .make_model = "Apple Personal LaserWriter LS",
+        .device_id  = "MFG:Apple;MDL:Personal LaserWriter LS;CMD:URF;",
+        .urf_rs     = "RS300",
+        .res_x = 300, .res_y = 300,
+        .media = "na_letter_8.5x11in", .media_x = 21590, .media_y = 27940,
+        .margin_l = QD_OUT(75), .margin_r = QD_OUT(75), .margin_t = QD_OUT(62), .margin_b = QD_OUT(63),
+        .ppm = 2,
+        .rip_dpi_x = 300, .rip_dpi_y = 300,
+        .max_dots = 2400, .crop_margin = 0,
+        .media_list = k_plwls_caps_media, .n_media = N_PLWLS,
+        .sources = k_sources, .n_sources = 1,          // the tray alone
+    },
 };
 
 const qd_spec_t *qd_spec(qd_model_t m)
@@ -75,14 +125,14 @@ const qd_spec_t *qd_spec(qd_model_t m)
 
 qd_model_t qd_model_from_engine(uint8_t engine)
 {
-    return engine == QD_ENGINE_PLW300 ? QD_PLW300 : QD_NONE;
+    return engine == QD_ENGINE_PLW300 ? QD_PLW300 : engine == QD_ENGINE_LS ? QD_PLWLS : QD_NONE;
 }
 
 const char *qd_engine_name(uint8_t engine)
 {
     switch (engine) {
     case QD_ENGINE_PLW300: return s_spec[QD_PLW300].name;
-    case QD_ENGINE_LS:     return "Personal LaserWriter LS";
+    case QD_ENGINE_LS:     return s_spec[QD_PLWLS].name;
     case QD_ENGINE_JP:     return NULL;
     default:               return "LaserWriter Select 300";
     }
@@ -102,17 +152,23 @@ const qd_media_t *qd_media_for(qd_model_t m, uint32_t w, uint32_t h)
     return &s->media[0];
 }
 
-// Apple's driver's page setup for the 300: the top is half the paper the image area leaves,
-// the left margin is (paper - image + 0x1A0) / 2 in dots sent in bytes, and what it cannot
-// carry past 0x1FF goes into the row width.
+// Apple's driver's page setup: the LS's sheets carry their own; for the 300, the top is half
+// the paper the image area leaves, the left margin is (paper - image + 0x1A0) / 2 in dots sent
+// in bytes, and what it cannot carry past 0x1FF goes into the row width.
 qd_setup_t qd_setup(const qd_media_t *md)
 {
+    if (md->set.width) return md->set;
     int m = (md->paper_w - md->img_w + 0x1A0) / 2;
     qd_setup_t u;
     u.top = (int16_t)-((md->paper_h - md->img_h) / 2);
     u.left = (int16_t)-((m > 0x1FF ? 0x1FF : m) >> 3);
     u.width = (int16_t)-(md->img_w / 8 + (m > 0x1FF ? (m - 0x1FF + 7) / 8 : 0));
     return u;
+}
+
+size_t qd_row_bytes(const qd_media_t *md)
+{
+    return (size_t)-qd_setup(md).width;
 }
 
 const printer_caps_t *qd_caps(qd_model_t m)

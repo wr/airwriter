@@ -163,6 +163,12 @@ int main(void)
     q.caps  = qd_caps(QD_PLW300);
     golden("plw300-gpa-all.bin", buf, printer_answer(&q, NULL));
 
+    // W-1145: a Personal LaserWriter LS, its five sheets and two sources.
+    q.name  = "Personal LaserWriter LS";
+    q.info  = "Apple Personal LaserWriter LS";
+    q.caps  = qd_caps(QD_PLWLS);
+    golden("plwls-gpa-all.bin", buf, printer_answer(&q, NULL));
+
     char t[1024];
     size_t tn = txt(t, sizeof t, 0);
     tn += txt(t + tn, sizeof t - tn, 1);

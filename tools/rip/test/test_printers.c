@@ -1395,7 +1395,7 @@ static void test_sw_models(void)
     CHECK_EQ_INT(pr_model_to_sw((pr_model_t)(PR_MODEL_SWC2500 + 1)), SW_NONE);
     CHECK_EQ_INT(pr_model_from_sw(SW_NONE), PR_MODEL_NONE);
     CHECK(strcmp(pr_model_name(PR_MODEL_IW2), "ImageWriter II") == 0);   // as it was
-    CHECK(strcmp(pr_model_name(PR_MODEL_PLW300 + 1), "") == 0);   // W-1102: the 300 follows the 2500
+    CHECK(strcmp(pr_model_name(PR_MODEL_PLWLS + 1), "") == 0);    // W-1145: the LS follows the 300
 }
 
 // A StyleWriter that answers on an empty port (twice, W-1116): a shared record named by its
@@ -2915,23 +2915,24 @@ static void test_qd_known_record_at_once(void)
 static void test_qd_unsupported_named_not_shared(void)
 {
     fresh();
-    CHECK_EQ_INT(pr_port_seen_qd(&L, 0x0D), PR_SEEN_AGAIN);
+    CHECK_EQ_INT(pr_port_seen_qd(&L, 0x55), PR_SEEN_AGAIN);
     CHECK_EQ_INT(L.qd_other, 0);
-    CHECK_EQ_INT(pr_port_seen_qd(&L, 0x0D), -1);
+    CHECK_EQ_INT(pr_port_seen_qd(&L, 0x55), -1);
     CHECK_EQ_INT(L.n, 0);
-    CHECK_EQ_INT(L.qd_other, 0x0D);
+    CHECK_EQ_INT(L.qd_other, 0x55);
     pr_live_t live[PR_MAX];
     memset(live, 0, sizeof live);
     static char buf[4096];
     pr_json(&L, live, buf, sizeof buf);
-    CHECK(strstr(buf, "\"port_unsupported\":\"Personal LaserWriter LS\"") != NULL);
+    CHECK(strstr(buf, "\"port_unsupported\":\"LaserWriter Select 300\"") != NULL);
     pr_port_clock_gone(&L);
     CHECK_EQ_INT(L.qd_other, 0);
     pr_json(&L, live, buf, sizeof buf);
     CHECK(strstr(buf, "\"port_unsupported\":\"\"") != NULL);
-    CHECK_EQ_INT(pr_port_seen_qd(&L, 0x0D), PR_SEEN_AGAIN); // and a pending one is forgotten too
+    CHECK_EQ_INT(pr_port_seen_qd(&L, 0x55), PR_SEEN_AGAIN); // and a pending one is forgotten too
 
-    // A Japanese model has no name of its own; any other answer is a Select 300.
+    // A Japanese model has no name of its own; any other answer but the 300's and the LS's is
+    // a Select 300.
     fresh();
     seen_qd(0x23);
     pr_json(&L, live, buf, sizeof buf);
@@ -2944,6 +2945,66 @@ static void test_qd_unsupported_named_not_shared(void)
     seen_qd(0x29);
     CHECK_EQ_INT(L.qd_other, 0);
     CHECK_EQ_INT(L.n, 1);
+}
+
+// W-1145: an LS is found and shared as the 300 is: two answers make its record, a model of its
+// own (its own name, icon and uuid), stored only in a version 5 list.
+static void test_qd_ls_record(void)
+{
+    fresh();
+    CHECK_EQ_INT(pr_port_seen_qd(&L, 0x0D), PR_SEEN_AGAIN);
+    CHECK_EQ_INT(L.n, 0);
+    int id = pr_port_seen_qd(&L, 0x0D);
+    CHECK(id > 0);
+    const pr_rec_t *r = pr_get(&L, id);
+    CHECK(r != NULL);
+    if (!r) return;
+    CHECK_EQ_INT(r->kind, PR_KIND_QDLASER);
+    CHECK_EQ_INT(r->model, PR_MODEL_PLWLS);
+    CHECK_EQ_INT(r->shared, 1);
+    CHECK_EQ_INT(L.qd_other, 0);
+    CHECK(!strcmp(r->name, "Personal LaserWriter LS"));
+    CHECK(!strcmp(pr_icon(r->kind, r->model, NULL), "plwls"));
+    CHECK(!strncmp(r->uuid + 28, "0c03", 4));
+    CHECK_EQ_INT(pr_model_to_qd(PR_MODEL_PLWLS), QD_PLWLS);
+    CHECK_EQ_INT(pr_model_from_qd(QD_PLWLS), PR_MODEL_PLWLS);
+    pr_live_t live[PR_MAX];
+    memset(live, 0, sizeof live);
+    static char buf[4096];
+    pr_json(&L, live, buf, sizeof buf);
+    CHECK(strstr(buf, "\"port_unsupported\":\"\"") != NULL);
+    // Never named by hand, as the 300 isn't.
+    int iw = seen_iw(PR_PORT_IW2);
+    CHECK_EQ_INT(pr_set_model(&L, iw, PR_MODEL_PLWLS), -1);
+    CHECK_EQ_INT(pr_add_port(&L, PR_MODEL_PLWLS), -1);
+    // A 300 on the port afterwards is a record of its own.
+    int lw = seen_qd(0x29);
+    CHECK(lw > 0 && lw != id);
+    CHECK_EQ_INT(pr_get(&L, lw)->model, PR_MODEL_PLW300);
+
+    // Stored as 5; a 4 never holds one, a 5 loads back the same.
+    static uint8_t blob[4096];
+    size_t n = pr_save(&L, blob, sizeof blob);
+    CHECK(n > 0);
+    CHECK_EQ_INT(blob[2], 5);
+    pr_list_t M;
+    pr_init(&M, MAC, 1);
+    CHECK_EQ_INT(pr_load(&M, blob, n), 0);
+    CHECK_EQ_INT(M.n, L.n);
+    CHECK(memcmp(M.r, L.r, sizeof L.r[0] * L.n) == 0);
+    uint8_t bad[4096];
+    memcpy(bad, blob, n);
+    bad[2] = 4;
+    CHECK_EQ_INT(pr_load(&M, bad, n), -1);
+    memcpy(bad, blob, n);                                    // kind and model must agree
+    size_t at = 6 + (size_t)pr_index(&L, id) * sizeof(pr_rec_t) + offsetof(pr_rec_t, kind);
+    bad[at] = PR_KIND_IMAGEWRITER;
+    CHECK_EQ_INT(pr_load(&M, bad, n), -1);
+    // Without it, the list goes back to 4.
+    fresh();
+    seen_qd(0x29);
+    n = pr_save(&L, blob, sizeof blob);
+    CHECK_EQ_INT(blob[2], 4);
 }
 
 static void test_qd_uuid_family_3(void)
@@ -2981,9 +3042,9 @@ static void test_qd_blob_v4(void)
     CHECK_EQ_INT(pr_load(&M, bad, n), -1);
     CHECK_EQ_INT(pr_blob_newer(buf, n), 0);
     memcpy(bad, buf, n);
-    bad[2] = 5;
+    bad[2] = 6;
     CHECK_EQ_INT(pr_blob_newer(bad, n), 1);
-    CHECK_EQ_INT(PR_BLOB_VER, 4);
+    CHECK_EQ_INT(PR_BLOB_VER, 5);
     CHECK_EQ_INT(sizeof(pr_rec_t), 284);
 }
 
@@ -3115,6 +3176,7 @@ int main(void)
     test_qd_new_record_needs_two_answers();
     test_qd_known_record_at_once();
     test_qd_unsupported_named_not_shared();
+    test_qd_ls_record();
     test_qd_uuid_family_3();
     test_qd_blob_v4();
     test_qd_apple_screen_allowed();

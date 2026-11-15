@@ -42,22 +42,36 @@ static void test_row_packet(void)
 {
     uint8_t out[QD_ROW_MAX + 8];
     uint8_t one[1] = {0x80};
-    CHECK_EQ_INT(qd_row_packet(one, 1, out), 4);
+    CHECK_EQ_INT(qd_row_packet(one, 1, 12, out), 4);
     CHECK_EQ_MEM(out, ((uint8_t[]){0x4F, 0xFF, 0x80, 0x30}), 4);
 
     uint8_t codes[QD_ROW_MAX + 1];
     for (size_t i = 0; i < sizeof codes; i++) codes[i] = (uint8_t)(i * 7 + 3);
-    CHECK_EQ_INT(qd_row_packet(codes, 257, out), 260);
+    CHECK_EQ_INT(qd_row_packet(codes, 257, 12, out), 260);
     CHECK_EQ_INT(out[0], 0x4E); CHECK_EQ_INT(out[1], 0xFF);
     CHECK_EQ_MEM(out + 2, codes, 257);
     uint8_t x = 0;
     for (int i = 0; i < 259; i++) x ^= out[i];
     CHECK_EQ_INT(out[259], x);
 
-    CHECK_EQ_INT(qd_row_packet(codes, QD_ROW_MAX, out), QD_ROW_MAX + 3);
+    CHECK_EQ_INT(qd_row_packet(codes, QD_ROW_MAX, 12, out), QD_ROW_MAX + 3);
     CHECK_EQ_INT(out[0], (0x5000 - QD_ROW_MAX) >> 8);
-    CHECK_EQ_INT(qd_row_packet(codes, 0, out), 0);
-    CHECK_EQ_INT(qd_row_packet(codes, QD_ROW_MAX + 1, out), 0);
+    CHECK_EQ_INT(qd_row_packet(codes, 0, 12, out), 0);
+    CHECK_EQ_INT(qd_row_packet(codes, QD_ROW_MAX + 1, 12, out), 0);
+
+    // W-1145: the LS's own driver's 9-bit length: 41 FF for one byte of codes.
+    CHECK_EQ_INT(qd_row_packet(one, 1, 9, out), 4);
+    CHECK_EQ_MEM(out, ((uint8_t[]){0x41, 0xFF, 0x80, 0x3E}), 4);
+    CHECK_EQ_INT(qd_row_packet(codes, 257, 9, out), 260);
+    CHECK_EQ_INT(out[0], 0x40); CHECK_EQ_INT(out[1], 0xFF);
+    x = 0;
+    for (int i = 0; i < 259; i++) x ^= out[i];
+    CHECK_EQ_INT(out[259], x);
+    CHECK_EQ_INT(qd_row_packet(codes, 511, 9, out), 514);
+    CHECK_EQ_INT(out[0], 0x40); CHECK_EQ_INT(out[1], 0x01);
+    CHECK_EQ_INT(qd_row_packet(codes, 512, 9, out), 0);
+    CHECK_EQ_INT(qd_row_max(9), 511);
+    CHECK_EQ_INT(qd_row_max(12), QD_ROW_MAX);
 }
 
 static void test_bits_one_packet(void)

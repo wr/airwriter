@@ -5,15 +5,15 @@
 
 qd_state_t qd_state_from(const qd_spec_t *sp, const qd_raw_t *r, int manual)
 {
+    const int ls = sp->driver == QD_DRV_LS;
     if (r->s02 & 0x08) return QDS_JAM;
     if (r->s02 & 0x04) return QDS_COVER;
-    if (r->s02 & QD_S02_CASSETTE) return QDS_NO_CASSETTE;
+    if (!ls && (r->s02 & QD_S02_CASSETTE)) return QDS_NO_CASSETTE;
     if ((r->s01 & 0x02) && !(r->s02 & QD_S02_NO_PAPER)) return QDS_ENGINE;
-    if (manual) {
-        if (!(r->s2a & sp->bit_manual)) return QDS_MANUAL;
-    } else if (!(r->s2a & sp->bit_cassette)) {
-        return QDS_NO_PAPER;
-    }
+    // The LS's own driver reads paper only from 83 02 (it never asks 83 2A).
+    const int paper = ls ? !(r->s02 & QD_S02_NO_PAPER)
+                         : !!(r->s2a & (manual ? sp->bit_manual : sp->bit_cassette));
+    if (!paper) return manual ? QDS_MANUAL : QDS_NO_PAPER;
     if (r->s01 & 0x20) return QDS_PRINTING;
     return QDS_READY;
 }

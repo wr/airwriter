@@ -27,7 +27,7 @@ enum { PR_MAX = 8, PR_SHARE_MAX = 6, PR_NAME_MAX = 33, PR_NOTES_MAX = 8 };
 // takes a later stamp for a newer firmware's and keeps it (pr_blob_newer). A new
 // kind or model, or a shape the old reader's own rules can't hold, needs a new
 // version; a new fact beside the list does not (pr_seen_save).
-#define PR_BLOB_VER 4
+#define PR_BLOB_VER 5
 
 // Where a printer is: the printer port, or an AppleTalk link. The links'
 // order is the preference for a printer heard on more than one.
@@ -45,7 +45,8 @@ pr_family_t pr_family_of(int kind);
 typedef enum { PR_MODEL_NONE, PR_MODEL_IW2, PR_MODEL_IWLQ, PR_MODEL_IW1,
                PR_MODEL_SW1, PR_MODEL_SW2, PR_MODEL_SW1200, PR_MODEL_SWC1500,
                PR_MODEL_SWC2200, PR_MODEL_SWC2400, PR_MODEL_SWC2500,
-               PR_MODEL_PLW300 } pr_model_t;     // W-1102: the Personal LaserWriter 300
+               PR_MODEL_PLW300,                   // W-1102: the Personal LaserWriter 300
+               PR_MODEL_PLWLS } pr_model_t;       // W-1145: the Personal LaserWriter LS
 // What the port says when asked: nothing ready, ready but no answer to ESC ?,
 // or an ImageWriter that named itself. (A StyleWriter that answers is
 // pr_port_seen_sw's: it names its own model.)

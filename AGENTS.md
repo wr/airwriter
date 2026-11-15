@@ -57,8 +57,9 @@ which nothing has run on yet, the LC's one status light included.
   StyleWriter 2500 runs a page to its end, its dry cartridge leaving the sheet blank. On rev A
   the others may need R9 fitted (`docs/hardware-rev-a.md`). A Personal LaserWriter 300 on the
   printer port is found by the clock it drives on HSKi and prints over AirPrint in gray, tested
-  on board 1; a Personal LaserWriter LS or LaserWriter Select 300 there is named and not
-  supported. Up to six printers are shared at once, any mix of the port's records and
+  on board 1. A Personal LaserWriter LS is found and shared the same way, built from its own
+  driver and expected to work, untested; docs say so. A LaserWriter Select 300 there is named
+  and not supported. Up to six printers are shared at once, any mix of the port's records and
   AppleTalk printers.
 - **Ways in.** AirPrint (`image/urf`, Print-Job only) for phones and Macs. For vintage Macs, the
   LocalTalk port (TashTalk 2.1.3 in U7, which the ESP32 flashes over LVP) and three EtherTalk
@@ -67,8 +68,7 @@ which nothing has run on yet, the LC's one status light included.
 - **Not built:** Mini vMac (LToUDP), PWG raster, HP LaserJets over serial (designed), AirPrint to
   an AppleTalk ImageWriter, colour on a colour LaserWriter (it prints gray), vintage Macs
   printing to a StyleWriter (AirWriter as Apple's StyleWriter network adapter), a StyleWriter's
-  fast mode, the Personal LaserWriter LS and Select 300, vintage Macs printing to a QuickDraw
-  LaserWriter.
+  fast mode, the LaserWriter Select 300, vintage Macs printing to a QuickDraw LaserWriter.
 
 Where things are (`firmware/components/` unless a path is given):
 
@@ -200,13 +200,15 @@ page: Top margin (`{"top_margin":N}`, 1/144 in, -216 to 144, default -144) and d
   captures live in `~/.config/airwriter/sw-drivers/` and `sw-captures/`, never committed.
 - **QuickDraw LaserWriters** (Python 3 with numpy): `make -C tools/rip qdcheck` decodes the
   rip's packets and the line the board clocks out with `qdfake.py` (a software Personal
-  LaserWriter 300) and holds both to the rip's dots; `make -C tools/rip qdinterop` prints from
-  `build/qdhost` (the firmware's session on the host) to `qdfake.py` over a pty: three and ten
-  pages, each loaded while the last prints, then each fault, jams with pages sent again from
-  the board's copy, a cancel and a printer switched off (about 35 s); `python3 -m unittest
-  tools/qdlaser/test_qdfake.py`. `rip --printer plw300 --out-qd F` writes a page as the printer
-  would be sent it, `rip --qd-testpage F` the test page, and `qdfake.py decode F` draws either.
-  Apple's driver lives in `~/.config/airwriter/lw300-driver/`, never committed.
+  LaserWriter 300, and with `--engine 0d` an LS) and holds both to the rip's dots, for each;
+  `make -C tools/rip qdinterop` prints from `build/qdhost` (the firmware's session on the host)
+  to `qdfake.py` over a pty: three and ten pages, each loaded while the last prints, then each
+  fault, jams with pages sent again from the board's copy, a cancel, a printer switched off,
+  and an LS's pages, paper out and jam (about 35 s); `python3 -m unittest
+  tools/qdlaser/test_qdfake.py`. `rip --printer plw300 --out-qd F` (or `plwls`) writes a page as
+  the printer would be sent it, `rip --qd-testpage F [--printer plwls]` the test page, and
+  `qdfake.py decode F [--engine 0d]` draws either. Apple's drivers live in
+  `~/.config/airwriter/lw300-driver/` and `plw-ls-driver/`, never committed.
 - **Firmware:** both boards' builds clean, then `python3 tools/stackcheck/stackcheck.py` and
   `python3 tools/stackcheck/stackcheck.py firmware/build-2026.11` (needs the toolchain
   `export.sh` puts on PATH): every task that makes ESP-IDF's deep calls keeps 1 KB of
@@ -272,13 +274,13 @@ firmware/             ESP-IDF 5.5 app (components/, above); bootloader_component
                       bootloader's pin clamps and power-up reset
 tools/rip/            host build of the raster path + host tests for the pure-C cores; swhost
                       (swprint for owners) is the StyleWriter session on the host, qdhost the
-                      Personal LaserWriter 300's
+                      Personal LaserWriter 300's and LS's
 tools/stylewriter/    swfake.py (a software StyleWriter and page decoder), mktables.py and
                       untome.py (Apple's tables and icon out of its drivers), the owners'
                       README, capture.md (the Apple-driver capture rig), and their tests
-tools/qdlaser/        qdfake.py (a software Personal LaserWriter 300 and page decoder),
-                      mkqdtables.py (Apple's 300 screen, curve and icon out of its driver), and
-                      their tests
+tools/qdlaser/        qdfake.py (a software Personal LaserWriter 300 or LS and page decoder),
+                      mkqdtables.py (Apple's 300 screen, curve and icons out of their drivers),
+                      and their tests
 tools/ipp/            IPP host tests and gpa_server (the real encoder on localhost for ipptool)
 tools/ippcap/         stub IPP server that captures a Print-Job body (how fixtures were made)
 tools/ethertalk/      etpeer.py, a software EtherTalk Mac for the tunnel and the relay, and
