@@ -53,7 +53,7 @@ typedef struct {
     uint32_t budget;              // bytes of row codes a page may take: 500000
     const uint8_t *screen8, *tone;       // apple_lw_screen8, apple_lw_tone
     const qd_media_t *media; uint8_t n_media;   // Letter first
-    const char *icon;             // "plw300"
+    const char *icon;             // "lw4600"
 } qd_spec_t;
 
 const qd_spec_t      *qd_spec(qd_model_t m);                 // NULL for QD_NONE or out of range

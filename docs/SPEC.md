@@ -1450,9 +1450,10 @@ command table and the measurements this section stands on. `components/qdlaser`:
 `qd_wire`, `qd_status`, `qd_page`, `qd_session` and `qd_testpage` are pure and host-tested in
 `tools/rip`; `qd_link.c` (the SPI slave) and `qdlaser.c` (the port's questions and the job
 pipeline's hooks) are the board's. `tools/qdlaser` holds `qdfake.py`, a software Personal
-LaserWriter 300 (and LS) and page decoder, and `mkqdtables.py`, which reads Apple's 300 screen,
-curve and icon out of Apple's LaserWriter 300 driver 1.1 into `apple_tables_lw.{h,c}` and the
-icon files, and the LS's icon out of its own driver.
+LaserWriter 300 (and LS) and page decoder, and `mkqdtables.py`, which reads Apple's 300 screen
+and curve out of Apple's LaserWriter 300 driver 1.1 into `apple_tables_lw.{h,c}`, and the LS's
+icon out of its own driver. The 300 shows its body's icon, the LaserWriter 4/600 PS's
+(`lw4600`, W-1151), not its driver's, which the driver also gives the Select 300.
 **A Personal LaserWriter 300 prints from AirWriter on a rev A board (board 1, 2026-11-12 and
 13). A Personal LaserWriter LS is found and shared, built from its own driver and expected to
 work, but no LS has been tried (W-1145, below). The LaserWriter Select 300 is not supported:**

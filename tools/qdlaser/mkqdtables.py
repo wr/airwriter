@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""Reads the Personal LaserWriter 300's halftone screen, tone curve and icon out of Apple's
+"""Reads the Personal LaserWriter 300's halftone screen and tone curve out of Apple's
 LaserWriter 300 driver (W-1102), and the Personal LaserWriter LS's icon out of its own driver
 (W-1145), and writes them as source.
 
@@ -17,11 +17,11 @@ What it takes, and from where:
   HTSC 2, an 8 x 8 clustered-dot screen with a four byte header: apple_lw_screen8.
   GAMA 3, 256 bytes from 0 to 33, the curve the driver puts each gray through before that
   screen: apple_lw_tone.
-  icl8 128 cut out by ICN# 128, the printer's Chooser icon, as a pixel grid
-  (tools/icon/apple/plw300.txt, which tools/icon/mkicons.py turns into the PNGs), in the
-  Macintosh system palette's colours mapped to mkicons.py's APPLE_PALETTE.
-  From the LS's driver (Personal LW LS 7.1), its icl8 128 cut out by ICN# 128 the same way:
-  tools/icon/apple/plwls.txt. Either driver may be given alone.
+  From the LS's driver (Personal LW LS 7.1), icl8 128 cut out by ICN# 128, the printer's
+  Chooser icon, as a pixel grid (tools/icon/apple/plwls.txt, which tools/icon/mkicons.py turns
+  into the PNGs), in the Macintosh system palette's colours mapped to mkicons.py's
+  APPLE_PALETTE. Either driver may be given alone. The 300 takes no icon from its driver,
+  which gives the Select 300 the same one: it shows its body's, the LaserWriter 4/600 PS's.
 
 Before it writes anything: HTSC 2 is 68 bytes with the header 00 08 00 08, and its 64
 thresholds are 1 to 32, each twice; GAMA 3 is 256 bytes, never falls, starts at 0 and ends at
@@ -36,7 +36,6 @@ import sys
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 HEADER = ROOT / "firmware/components/halftone/include/apple_tables_lw.h"
 SOURCE = ROOT / "firmware/components/halftone/apple_tables_lw.c"
-GRID = ROOT / "tools/icon/apple/plw300.txt"
 LS_GRID = ROOT / "tools/icon/apple/plwls.txt"
 MKTABLES = ROOT / "tools/stylewriter/mktables.py"
 MKICONS = ROOT / "tools/icon/mkicons.py"
@@ -153,7 +152,6 @@ def main():
     ap.add_argument("--ls-driver", help="Apple's Personal LW LS driver (its resource fork)")
     ap.add_argument("--header", default=str(HEADER))
     ap.add_argument("--source", default=str(SOURCE))
-    ap.add_argument("--icon-grid", default=str(GRID))
     ap.add_argument("--ls-icon-grid", default=str(LS_GRID))
     ap.add_argument("--dry-run", action="store_true", help="check; write nothing")
     ap.add_argument("--sizes", action="store_true", help="print PREC 3's paper sizes, 1/120 in")
@@ -166,13 +164,11 @@ def main():
         res = mk.resources(mk.resource_fork(a.driver))
         version = mk.short_version(res)
         scr, tn = screen(res), tone(res)
-        rows, mapped = icon_grid(res)
-        report(DRIVER, version, rows, mapped)
+        print("%s %s" % (DRIVER, version))
         if a.sizes:
             for name, (h, w) in sizes(res):
                 print("  %-18s %4d x %4d (height x width, 1/120 in)" % (name, h, w))
-        writes += [(a.header, header_text(version)), (a.source, source_text(version, scr, tn)),
-                   (a.icon_grid, "\n".join(rows) + "\n")]
+        writes += [(a.header, header_text(version)), (a.source, source_text(version, scr, tn))]
     if a.ls_driver:
         res = mk.resources(mk.resource_fork(a.ls_driver))
         rows, mapped = icon_grid(res)
