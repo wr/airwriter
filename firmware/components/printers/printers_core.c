@@ -568,7 +568,13 @@ int pr_port_seen_qd(pr_list_t *l, uint8_t engine)
 {
     pr_model_t m = pr_model_from_qd(qd_model_from_engine(engine));
     if (m != PR_MODEL_NONE) {
-        l->qd_other = l->qd_pending = 0;
+        // W-1146: a Select 300 has no number of its own, so any answer but the others' is one.
+        // Two different answers in a row (another printer's reply garbled twice) start over, as
+        // two models' answers would: the same Select answers the same each time.
+        if (m == PR_MODEL_SEL300 && l->qd_pending != engine && l->pending_model == PR_MODEL_SEL300)
+            l->pending_model = 0;
+        l->qd_other = 0;
+        l->qd_pending = m == PR_MODEL_SEL300 ? engine : 0;
         return port_named(l, PR_HEARD_QDLASER, m);
     }
     // One we cannot print to: named on the page, never a record, and only on the same answer

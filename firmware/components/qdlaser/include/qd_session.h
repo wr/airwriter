@@ -56,10 +56,13 @@
 // the probe and 92 at the job's start; the setup with the left margin and width in dots, 8C
 // and A2/A3, and once a job the PGRD table, again only for another sheet; each page's start
 // read from the write address (C0-C2) after 8B 8B twice; the read address (E3-E5) set to it
-// before each 8A 01; done by 8E bit 2 or by the read address (C3-C5) come to the write address;
-// 8E's reply one byte; a jam or the cover printing the page again from the printer's memory
-// (the write address read, 81 00, put back). The job ends with Ready and 83 67, no 81 00. None
-// of it has been tried on a printer.
+// before each 8A 01; done when the read address (C3-C5) has come to the write address, asked
+// every 500 ms with 83 01 and 83 02; 8E asked only after the printer's BREAK, as its driver
+// asks it, its reply one byte, its done bit only bringing the addresses on at once (a done
+// read late would end the next page early); a jam or the cover printing the page again from
+// the printer's memory (the write address read, 81 00, put back). No identity before the
+// setup: the probe's is the job's. The job ends with Ready and 83 67, no 81 00. None of it has
+// been tried on a printer.
 //
 // A question: drain, put, flush, then a byte within 1000 ms. An 83 whose reply is refused or
 // garbled (qd_reply_ok) or does not come is sent again, five tries in all; 82 and 8E two. 8E's

@@ -121,9 +121,11 @@ printer, and AirWriter's choices for it held as rules. Every row is the 300's. W
   the margin) and A0/A1 the PGRD table, which must have come before any page prints.
   8B 8B twice with no page open starts one at the write address, and twice after its rows
   ends it; rows go to memory at the write address (no page open: logged, dropped). 8A 01
-  prints the ended page that starts at the read address (none there: logged); its done
-  brings the read address to the write address. 81 00 puts the write address back to 0
-  (what a real one does nobody knows). A page past the memory is memory full.
+  prints the ended page that starts at the read address (none there: logged); the read
+  address is halfway through the page halfway through its print, and at its done comes to
+  the write address. 81 00 puts the write address back to 0 (what a real one does nobody
+  knows). A page past the memory is memory full. 8E asked with no BREAK since the last is
+  logged as `8E with no BREAK before it` (its driver asks it only after one).
 
 Not modelled: the link's clock and timing, page memory's exact cost, the memory
 emptying as a page prints, a sheet jammed on its way out, density, copies, an LS's or a
@@ -324,6 +326,8 @@ class QuickDrawLaser:
         self.probe_told = None                  # what 92 last carried
         self.lower = False                      # 83 52: a Select's lower cassette, not fitted
         self.front = False                      # a Select's 83 02 bit 6
+        self.pm_printing = None                 # the PmPage printing
+        self.brk_heard = False                  # a BREAK went since the last 8E
         self.clock, self.say = clock, say
         self.done_s, self.exit_s, self.warm_s = done_s, exit_s, warm_s
         self.t0 = clock()
@@ -463,11 +467,16 @@ class QuickDrawLaser:
             if self.jam or self.cover or self.front:
                 self.stopped = self.printing
             self.printing = None
+            self.pm_printing = None             # the read address stays where it stopped
             self._event("stopped")
             return
         if self.clock() < self.done_at:
+            pg = self.pm_printing
+            if pg is not None and self.clock() >= (self.print_at + self.done_at) / 2:
+                self.ra = (pg.start + pg.bytes // 2) % self.mem    # halfway through it
             return
         slot, self.printing = self.printing, None
+        self.pm_printing = None
         self.done = True
         self.brk += 1
         if self.pm:
@@ -674,6 +683,7 @@ class QuickDrawLaser:
         slot.ruined = pg.ruined
         slot.ended = True
         self._start(slot)
+        self.pm_printing = pg
 
     @staticmethod
     def _neg(lo, hi=0xFF):
@@ -701,6 +711,9 @@ class QuickDrawLaser:
         if c == 0x82:
             return self._c82()
         if c == 0x8E:
+            if self.pm and not self.brk_heard:
+                self._event("8E with no BREAK before it")
+            self.brk_heard = False
             return self._e8e()
         if c == 0x83:
             if self.quiet_until is not None:
@@ -759,6 +772,7 @@ class QuickDrawLaser:
         if c == 0x81 and self.pm:
             self.wa = 0
             self.marks = 0
+            self.pm_printing = None
         if c == 0x81:
             if self.printing is not None:
                 # Bench A3: the sheet goes on out, blank, and no page done comes for it.
@@ -805,6 +819,7 @@ class QuickDrawLaser:
                 if self.printing is not None:
                     self._event("8A 00: stopped")
                 self.printing = None
+                self.pm_printing = None
             elif a == 0x01:
                 self._pm_print() if self.pm else self._print()
             elif a == 0x02 and self.sel:
@@ -957,6 +972,8 @@ class QuickDrawLaser:
     def breaks(self):
         self.tick()
         out = b"B" * self.brk if not self.silent else b""
+        if out:
+            self.brk_heard = True
         self.brk = 0
         return out
 
@@ -1048,7 +1065,7 @@ async def serve(a):
 BAD = ("bad", "row ", "a row", "8A 01 refused", "blank", "memory full", "moved", "wrong page",
        "rows while", "81 00 while", "84 08 while", "8A 01 while", "fed by itself", "jammed again",
        "not the LS's", "not sent to a Select", "8A 01 at", "printed with no PGRD", "A2 18/19",
-       "a width of")
+       "a width of", "8E with no BREAK")
 
 
 def decode(a, packets):

@@ -117,6 +117,14 @@ typedef struct {
     uint8_t a0, pgrd[0x60];
     int pgrd_n, a0_n;
     int no_8e_done;              // 8E never says done: only the addresses do
+    uint32_t pm_done_late_ms;    // 8E's done and the BREAK come this long after the addresses meet
+    uint32_t late_done_at;
+    int pm8e_raw;                // 8E answers pm8e_val as it is (one byte, no F8)
+    uint8_t pm8e_val;
+    int n8e_unasked;             // 8E asked on page memory with no BREAK since the last
+    int brk_owed;
+    int after_8e;                // the last packet was 8E 00
+    uint32_t gap8e_max;          // the longest from an 8E to the next packet
 } fake_t;
 
 static fake_t F;
@@ -150,7 +158,16 @@ static void page_out(void)
     F.brk_pending = 1;                  // the printer says so with a BREAK
     F.mem_p = 0;
     if (F.ndone < 16) F.t_done[F.ndone++] = f_now();
-    if (F.pm) F.ra = F.wa;
+    if (F.pm) {
+        F.ra = F.wa;
+        F.brk_owed = 1;
+        if (F.pm_done_late_ms) {            // the addresses meet now; 8E and the BREAK later
+            F.done = 0;
+            F.brk_pending = 0;
+            F.brk_owed = 0;
+            F.late_done_at = f_now() + F.pm_done_late_ms;
+        }
+    }
 }
 
 // Page memory's cells: past pm_mem nothing under 1 MB; at 1 MB and up, the address wraps.
@@ -187,6 +204,12 @@ static void tick(void)
     if (F.printing && (b & (F.sel ? 0x4C : 0x0C) || np)) F.printing = 0;
     if (F.printing && !F.never_done && !F.done_on_brk && f_now() - F.print_start >= F.print_ms)
         page_out();
+    if (F.late_done_at && f_now() >= F.late_done_at) {
+        F.late_done_at = 0;
+        F.done = 1;
+        F.brk_pending = 1;
+        F.brk_owed = 1;
+    }
     if (F.brk_at && !F.brk_fired && f_now() >= F.brk_at) {
         F.brk_fired = 1;
         F.brk_pending = 1;
@@ -263,6 +286,9 @@ static int f_put(void *ctx, const uint8_t *p, size_t n)
     if (F.told && (p[0] < 0x80 || (n == 3 && ((p[0] == 0x81) || (p[0] == 0x84 && p[1] == 0x08) ||
                                               (p[0] == 0x8A && p[1] == 0x01)))))
         F.into_fault++;
+    if (F.after_8e && F.n8e && f_now() - F.t8e[F.n8e - 1] > F.gap8e_max)
+        F.gap8e_max = f_now() - F.t8e[F.n8e - 1];
+    F.after_8e = n == 3 && p[0] == 0x8E;
     adv_us(F.put_us ? F.put_us : (uint64_t)qd_bits_len(n) * 15 / 8);
     if (F.nraw < 16 && n <= 8) memcpy(F.raw[F.nraw++], p, n);
     char t[16];
@@ -315,6 +341,15 @@ static int f_put(void *ctx, const uint8_t *p, size_t n)
         break;
     case 0x8E:
         if (F.n8e < 512) F.t8e[F.n8e++] = f_now();
+        if (F.pm) {
+            if (!F.brk_owed) F.n8e_unasked++;
+            F.brk_owed = 0;
+        }
+        if (F.pm && F.pm8e_raw) {
+            reply(F.done && !F.no_8e_done ? (uint8_t)(F.pm8e_val | 0x04) : F.pm8e_val);
+            F.done = 0;
+            break;
+        }
         {
             uint8_t st = (uint8_t)(0xF8 | (F.done && !F.no_8e_done ? 0x04 : 0) | (F.err_once ? 0x02 : 0) |
                                    (F.memfull || F.memfull_once ? 0x01 : 0));
@@ -2421,8 +2456,9 @@ static void test_sel_pm_page(void)
     CHECK(ends_with("CF00 9207 8411 8100 833E 8200 8301"));
     trace_clear();
     CHECK_EQ_INT(qd_session_open(s, 1, sel_sheet(0)), QD_OK);
-    CHECK(!strncmp(F.trace, "8100 833E 8200 8700 8CFF A219 A3FF A218 A30B 859B 86FF 835B 83C2 "
-                            "8358 83E9 88A0 89F6 8401 A000 A1", 87));
+    static const char *open1 = "8700 8CFF A219 A3FF A218 A30B 859B 86FF 835B 83C2 8358 83E9 88A0 "
+                               "89F6 8401 A000 A1";
+    CHECK(!strncmp(F.trace, open1, strlen(open1)));   // no identity: the probe's is the job's
     CHECK(ends_with("A200 A3C0 A060 A100 8351 8401 8B8B 8B8B C000 C100 C200"));
     CHECK_EQ_INT(F.a0_n, 97);
     CHECK_EQ_INT(F.pgrd_n, 96);
@@ -2431,11 +2467,11 @@ static void test_sel_pm_page(void)
         CHECK_EQ_INT(F.pgrd[0x20 + i], apple_lw_pgrd[4 * i]);
         CHECK_EQ_INT(F.pgrd[0x40 + i], apple_lw_pgrd[4 * i + 3]);
     }
-    CHECK_EQ_INT(F.wa, 2);                      // 81 00, then 8B 8B twice
+    CHECK_EQ_INT(F.wa, 2);                      // the probe's 81 00, then 8B 8B twice
     CHECK_EQ_INT(rows(s, 3175), QD_OK);
     trace_clear();
     CHECK_EQ_INT(qd_session_print(s), QD_OK);
-    CHECK_STR(F.trace, "8E00 8200 8302 8401 8B8B 8B8B E302 E400 E500 8A01");
+    CHECK_STR(F.trace, "8200 8302 8401 8B8B 8B8B E302 E400 E500 8A01");    // no unprompted 8E
     CHECK_EQ_INT(F.pm_printed_at, 2);
     CHECK_EQ_INT(qd_session_end(s), QD_OK);
     CHECK(ends_with("8301 8401 8367"));
@@ -2443,6 +2479,7 @@ static void test_sel_pm_page(void)
     CHECK_EQ_INT(last_state(), QDS_READY);
     CHECK_EQ_INT(F.ra, F.wa);
     CHECK_EQ_INT(F.nout, 1);
+    CHECK_EQ_INT(F.n8e_unasked, 0);
     CHECK_EQ_INT(F.bad, 0);
     CHECK_EQ_INT(not_sel(), 0);
     qd_session_free(s);
@@ -2495,7 +2532,9 @@ static void test_sel_pm_pages(void)
     CHECK_EQ_INT(F.pm_printed_at, start2);
     trace_clear();
     CHECK_EQ_INT(qd_session_open(s, 3, sel_sheet(2)), QD_OK);   // Legal
-    CHECK_HAS(F.trace, "8100 833E 8200 8738 8CFE A219 A3FE A218 A343 85F8 86FE");
+    CHECK_HAS(F.trace, "8351 8401 8B8B 8B8B C000 C100 C200");
+    CHECK(!strncmp(after("8738"), "8738 8CFE A219 A3FE A218 A343 85F8 86FE", 39));
+    CHECK_EQ_INT(count_tok("8100"), 0);         // another sheet, no 81 00 mid-job
     CHECK_HAS(F.trace, "8830 89F8");
     CHECK_EQ_INT(count_tok("A200"), 0);
     CHECK_EQ_INT(rows_of(s, 3, 100, 4), QD_OK);
@@ -2561,12 +2600,13 @@ static void test_sel_pm_jam_and_cover(void)
     }
 }
 
-// Done is also the read address come to the write address, as its driver takes it: a Select
-// whose 8E never says so still finishes each page.
+// Done is the read address come to the write address, as its driver takes it. 8E goes only
+// after the printer's BREAK, its reply one byte (00 is nothing), and its done bit, read late
+// after the next page has started, does not end that page early.
 static void test_sel_pm_done_by_addresses(void)
 {
     fake_sel(1);
-    F.no_8e_done = 1;
+    F.no_8e_done = 1;                           // 8E never says done: the addresses do
     qd_session_t *s = sel_job(0);
     CHECK_EQ_INT(page_on(s, 1, sel_sheet(0)), QD_OK);
     CHECK_EQ_INT(page_on(s, 2, sel_sheet(0)), QD_OK);
@@ -2574,6 +2614,43 @@ static void test_sel_pm_done_by_addresses(void)
     CHECK_EQ_INT(ev_count(QD_EV_DONE), 2);
     CHECK_HAS(F.trace, "C000 C100 C200 C300 C400 C500");
     CHECK_EQ_INT(F.nout, 2);
+    CHECK_EQ_INT(F.n8e_unasked, 0);
+    qd_session_free(s);
+
+    // 8E answers one byte, 00 for nothing: taken as it is, no second byte waited for. (Page
+    // 1's done BREAK brings it as page 2's rows load.)
+    fake_sel(1);
+    F.pm8e_raw = 1;
+    F.pm8e_val = 0x00;
+    F.no_8e_done = 1;
+    s = sel_job(0);
+    CHECK_EQ_INT(page_on(s, 1, sel_sheet(0)), QD_OK);
+    CHECK_EQ_INT(page_on(s, 2, sel_sheet(0)), QD_OK);
+    CHECK_EQ_INT(qd_session_end(s), QD_OK);
+    CHECK(count_tok("8E00") >= 1);
+    CHECK(F.gap8e_max < 100);
+    CHECK_EQ_INT(F.nout, 2);
+    CHECK_EQ_INT(last_state(), QDS_READY);
+    qd_session_free(s);
+
+    // 8E's done 6 s after the addresses met: page 2 is printing by then, and its done is still
+    // its own, a page's print after its 8A 01.
+    fake_sel(1);
+    F.pm_done_late_ms = 6000;
+    s = sel_job(0);
+    CHECK_EQ_INT(page_on(s, 1, sel_sheet(0)), QD_OK);
+    CHECK_EQ_INT(page_on(s, 2, sel_sheet(0)), QD_OK);
+    CHECK_EQ_INT(page_on(s, 3, sel_sheet(0)), QD_OK);
+    CHECK_EQ_INT(qd_session_end(s), QD_OK);
+    for (int i = 0; i < 3; i++) {
+        int pg = 0;
+        uint32_t ms = 0;
+        CHECK(ev_n(QD_EV_DONE, i, &pg, &ms) && pg == i + 1);
+        CHECK(ms >= F.print_ms);
+    }
+    CHECK_EQ_INT(F.twice, 0);
+    CHECK_EQ_INT(F.nout, 3);
+    CHECK_EQ_INT(F.n8e_unasked, 0);
     qd_session_free(s);
 }
 
@@ -2588,7 +2665,7 @@ static void test_sel_paper_and_manual(void)
     F.win[F.nwin++] = (win_t){ 0, f_now() + 3000, 0x02, 0x00, 1 };
     CHECK_EQ_INT(qd_session_print(s), QD_OK);
     CHECK(saw_state(QDS_NO_PAPER));
-    CHECK_HAS(F.trace, "8E00 8200 8302 8302 8402 8302");
+    CHECK_HAS(F.trace, "8200 8302 8302 8402 8302");
     CHECK(ends_with("8302 8401 8B8B 8B8B E302 E400 E500 8A01"));
     CHECK_EQ_INT(qd_session_end(s), QD_OK);
     CHECK_EQ_INT(F.nout, 1);

@@ -342,6 +342,7 @@ static int qdw_put(void *ctx, const uint8_t *p, size_t n)
         if (p[0] < 0x80) w->wa += (uint32_t)(n - 3);
         else if (p[0] == 0x8B) w->wa++;
         else if (p[0] == 0x81) w->wa = 0;
+        else if (p[0] == 0x8A && p[1] == 0x01) w->ra = w->wa;     // printed at once
         else if (p[0] >= 0xE0 && p[0] <= 0xE5) {
             uint32_t *a = p[0] < 0xE3 ? &w->wa : &w->ra;
             const int k = 8 * ((p[0] - 0xE0) % 3);

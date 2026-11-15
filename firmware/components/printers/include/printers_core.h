@@ -183,7 +183,7 @@ int  pr_port_seen_sw(pr_list_t *l, pr_model_t m);
 // W-1102: a QuickDraw LaserWriter on the port answered 83 3E with `engine`. A model the board
 // prints to (qd_model_from_engine: the 300, the LS, a Select 300) is pr_port_seen_sw's for its
 // model: its record at once when it has one and nothing else would change, else a record on
-// the second answer in a row (R16), found and shared. A Japanese model (23) is named and never
+// the second answer in a row (R16; for a Select, the same answer), found and shared. A Japanese model (23) is named and never
 // a record: the second identical answer in a row sets qd_other (pr_json's port_unsupported)
 // and returns -1, the first PR_SEEN_AGAIN. Either way the port's last answer is a QuickDraw
 // LaserWriter's.

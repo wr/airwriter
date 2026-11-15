@@ -1706,15 +1706,19 @@ from its own driver, but neither has been tried (W-1145 and W-1146, below).**
     byte), `A2 19`/`A3` and `A2 18`/`A3` with 11 less it (high, low), the width `88`/`89` in
     dots; once a job the `PGRD` table (`apple_lw_pgrd`: entry i's first word's low byte at
     `A0` i, high byte at `A0` 20+i, the second word's low byte at `A0` 40+i, each with `A1`),
-    `A2 00`/`A3 C0`, `A0 60`/`A1 00`. On page memory the setup goes with the first page and
-    again only for another sheet; on the 300's path, `81 00` and the setup before every page.
+    `A2 00`/`A3 C0`, `A0 60`/`A1 00`. On page memory the setup goes with the first page,
+    straight after the probe's identity, and again only for another sheet, with no `81 00`; on
+    the 300's path, `81 00` and the setup before every page.
     Letter: `85 9B 86 FF`; plain `87 E0`, `88 D4 89 FE`; page memory `87 00 8C FF`,
     `A3 FF`/`A3 0B`, `88 A0 89 F6`.
   - *A page on page memory:* the source, `8B 8B` twice, then `C0-C2`, the write address, is
     the page's start; its rows (the 300's packets and codes) go where the printer writes;
     `83 02` for paper (and the jam and cover); `8B 8B` twice, `E3-E5` the page's start,
-    `8A 01`. Done is `8E` bit 2, or the read address (`C3-C5`) come to the write address,
-    asked every 500 ms with the rest. `8E`'s reply is one byte. Opened again before it
+    `8A 01`. Done is the read address (`C3-C5`) come to the write address, asked every 500 ms
+    with `83 01` and `83 02`. `8E` goes only after the printer's BREAK, as its driver asks it,
+    its reply one byte: its memory-full and error bits stop the page from printing, and its
+    done bit only brings the addresses on at once, since a done read late would end the next
+    page early. Opened again before it
     printed (Apple's screen after a page too big), `E0-E2` go back to its start and the new
     rows go over the old. No `8A 02` (it readies the engine early; every reprint and copy
     prints without it), no size check (`83 0B`/`0D`: a phone can't change a cassette).

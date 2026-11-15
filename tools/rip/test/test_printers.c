@@ -2986,6 +2986,14 @@ static void test_qd_select_record(void)
     memcpy(bad, blob, n);
     bad[2] = 5;
     CHECK_EQ_INT(pr_load(&M, bad, n), -1);
+    // Two different answers in a row are not a Select (another printer's reply garbled): the
+    // same one twice is.
+    fresh();
+    CHECK_EQ_INT(pr_port_seen_qd(&L, 0x31), PR_SEEN_AGAIN);
+    CHECK_EQ_INT(pr_port_seen_qd(&L, 0x55), PR_SEEN_AGAIN);
+    CHECK_EQ_INT(L.n, 0);
+    CHECK(pr_port_seen_qd(&L, 0x55) > 0);
+    CHECK_EQ_INT(L.n, 1);
     // An LS with it: still 6. Without it, the LS's 5.
     fresh();
     seen_qd(0x0D);

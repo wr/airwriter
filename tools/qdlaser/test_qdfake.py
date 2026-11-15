@@ -852,6 +852,29 @@ class Select(unittest.TestCase):
         self.assertEqual(get_addr(lw, 0xC0), w)
         self.assertFalse([e for e in lw.events if e.startswith(qdfake.BAD)])
 
+    def test_a_stopped_page_needs_its_start_again(self):
+        # Stopped halfway, the read address is halfway: 8A 01 from there is no page's start.
+        lw, clock = printer(engine=0x31)
+        start = pm_page(lw)
+        clock.t += 1.5
+        lw.tick()
+        self.assertNotEqual(get_addr(lw, 0xC3), start)
+        lw.command("jam")
+        lw.command("ok")
+        send(lw, [cmd(0x83, 0x5D), cmd(0x8A, 1)])
+        self.assertTrue(any(e.startswith("8A 01 at") for e in lw.events))
+
+    def test_8e_only_after_a_break(self):
+        lw, clock = printer(engine=0x31)
+        ask(lw, 0x8E, 0)
+        self.assertIn("8E with no BREAK before it", lw.events)
+        lw, clock = printer(engine=0x31)
+        pm_page(lw)
+        clock.t += 2.1
+        self.assertEqual(lw.breaks(), b"B")
+        self.assertEqual(ask(lw, 0x8E, 0) & 0x04, 0x04)
+        self.assertNotIn("8E with no BREAK before it", lw.events)
+
     def test_sources_front_and_cassette(self):
         lw, _ = printer(engine=0x31)
         self.assertEqual(ask(lw, 0x83, 0x02) & 0x70, 0)

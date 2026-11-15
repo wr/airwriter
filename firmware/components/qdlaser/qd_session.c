@@ -295,12 +295,7 @@ static int q_any(qd_session_t *s, uint8_t a)
     int v = ask(&s->o, 0x83, a, ASK_ANY);
     return v == QD_E_OFFLINE ? 0 : v < 0 ? fail(s, v) : v;
 }
-static int q8e(qd_session_t *s)
-{
-    s->wrote = 1;
-    int v = ask(&s->o, 0x8E, 0x00, s->pm ? ASK_8E1 : 0);
-    return v < 0 ? fail(s, v) : v;
-}
+
 static uint8_t source(const qd_session_t *s) { return s->c.manual ? s->sp->src_manual : s->sp->src_main; }
 static uint8_t paper_bit(const qd_session_t *s) { return s->c.manual ? s->sp->bit_manual : s->sp->bit_cassette; }
 
@@ -765,7 +760,7 @@ static int late_8e(qd_session_t *s)
     uint8_t b;
     if (o->read(o->ctx, &b, 1, 0, 0) != 1) return QD_E_OFFLINE;
     if (b == 0x00 && !s->pm && o->read(o->ctx, &b, 1, 50, 0) != 1) return QD_E_OFFLINE;
-    return (b & 0xF8) == 0xF8 ? b : QD_E_OFFLINE;
+    return s->pm || (b & 0xF8) == 0xF8 ? b : QD_E_OFFLINE;
 }
 
 static void page_done(qd_session_t *s)
@@ -800,7 +795,9 @@ static int ask_done(qd_session_t *s, int brk)
     }
     s->misses = 0;
     s->e_bits |= (uint8_t)(e & 0x03);
-    if (!(e & 0x04)) return 0;
+    // W-1146: on page memory a page is done when the addresses meet (printing_status): an 8E
+    // done read late, after the next page has started, would end that page early.
+    if (!(e & 0x04) || s->pm) return 0;
     page_done(s);
     return 1;
 }
@@ -824,8 +821,8 @@ static int printing_status(qd_session_t *s)
             if (!(a & paper_bit(s))) return out_of_paper(s);
         }
     }
-    // W-1146: on page memory the page is also done once the read address has come to the
-    // write address, as its driver also takes it.
+    // W-1146: on page memory the page is done once the read address has come to the write
+    // address, as its driver takes it (8E's done only brings this question on at once).
     if (s->pm) {
         uint32_t w, r;
         int rc = get_addr(s, 0xC0, &w, ASK_QUICK);
@@ -856,7 +853,8 @@ static int wait_done(qd_session_t *s)
             o->sleep_ms(o->ctx, left < 50 ? left : 50);
         }
         poll_at = now(s);
-        int e = ask_done(s, brk);
+        // On page memory 8E is asked only after the printer's BREAK, as its driver asks it.
+        int e = s->pm && !brk ? 0 : ask_done(s, brk);
         if (e > 0) return QD_OK;
         if (e < 0 && (rc = missed(s, e))) return rc;
         if (since(s, s->p_at) >= DONE_MS) return QD_E_FAULT;
@@ -951,7 +949,9 @@ static int setup_sel(qd_session_t *s, const qd_media_t *md)
 static int setup(qd_session_t *s, const qd_media_t *md)
 {
     qd_setup_t u = qd_setup(md);
-    int v = identity(s);
+    // On page memory the setup follows the probe's identity, as its driver has it, and goes
+    // again for another sheet without one: 81 00 mid-job is the 300's path's.
+    int v = s->pm ? 0 : identity(s);
     if (v) return v;
     if (sel(s)) {
         if ((v = setup_sel(s, md))) return v;
@@ -1078,7 +1078,15 @@ static int watch(qd_session_t *s, int brk)
         return printing_status(s);
     }
     // Nothing printing: a jam or the cover holds the rows until it is gone; paper is the
-    // print's to wait for.
+    // print's to wait for. On page memory the printer's BREAK as rows load is answered with
+    // 8E, as its driver does: memory full or an error, for the print to see.
+    if (s->pm && brk) {
+        int e = ask(&s->o, 0x8E, 0x00, ASK_QUICK | ASK_8E1);
+        if (e >= 0) {
+            s->misses = 0;
+            s->e_bits |= (uint8_t)(e & 0x03);
+        }
+    }
     int s01 = poll(s, 0x83, 0x01);
     int s02 = s01 < 0 ? s01 : poll(s, 0x83, 0x02);
     if (s02 < 0) return missed(s, s02);
@@ -1128,8 +1136,8 @@ static int print(qd_session_t *s)
     if (s->printing && (rc = wait_done(s))) return rc;
     if (cancelled(s)) return stop_now(s);
     // Did the page arrive whole? Memory full in either, or 8E's error bit, now or at any 8E
-    // since its first row: it never prints.
-    int e = q8e(s);
+    // since its first row: it never prints. Page memory's 8E only follows a BREAK.
+    int e = s->pm ? 0 : q(s, 0x8E, 0x00);
     if (e < 0) return e;
     int c = q(s, 0x82, 0x00);
     if (c < 0) return c;

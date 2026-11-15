@@ -248,7 +248,7 @@ def trouble(fake):
                              "rows while", "81 00 while", "84 08 while", "fed by itself",
                              "jammed again", "not the LS's", "row length", "not sent to a Select",
                              "8A 01 at", "a row before", "printed with no PGRD", "A2 18/19",
-                             "a width of", "8A 01 refused", "bad"))]
+                             "a width of", "8A 01 refused", "8E with no BREAK", "bad"))]
 
 
 def timeline(fake):
@@ -689,8 +689,9 @@ async def scenario_sel(root, tmp, files, plain=False):
                     f"{what}: 81 00 and the setup before each page, no addresses "
                     f"({heard.count('810081')} x 81 00)"))
     else:
-        # 81 00: qdhost's first question, the job's begin, the probe's identity, the setup; once.
-        res += [(heard.count("810081") == 4, f"{what}: the setup once ({heard.count('810081')} x 81 00)"),
+        # 81 00: qdhost's first question, the job's begin, the probe's identity; none after it.
+        res += [(heard.count("810081") == 3, f"{what}: no 81 00 after the probe ({heard.count('810081')} x 81 00)"),
+                (heard.count("870087") == 1, f"{what}: the setup once ({heard.count('870087')} x 87)"),
                 ("92 07" in ev, f"{what}: the probe tells 92 under 1 MB ({[e for e in ev if e.startswith('92')]})"),
                 (heard.count("8b8b00") == 4 * n, f"{what}: 8B 8B twice at each page's start and end "
                                                   f"({heard.count('8b8b00')})")]
