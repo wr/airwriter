@@ -43,7 +43,10 @@ typedef struct {
     const char *name;             // "Personal LaserWriter 300"
     uint8_t  engine;              // 83 3E's answer
     qd_driver_t driver;
-    uint8_t  src_cassette, src_manual;   // 83 4C, 83 4F (the LS: 83 51, 83 52)
+    // A job's source unless it asks for the manual one: the 300's cassette, 83 4C, or the LS's
+    // multipurpose tray, 83 52 (its cassette, 83 51, is an optional feeder; the tray feeds a
+    // stack or a sheet by hand). src_manual: the 300's manual slot, 83 4F; 0 on the LS.
+    uint8_t  src_main, src_manual;
     uint8_t  bit_cassette, bit_manual;   // 83 2A: 0x20, 0x40 (QD_DRV_LW300 only)
     uint8_t  density_cmd, density;       // 0xA7, 32; 0: none sent
     uint8_t  row_bits;            // the row packet's length field: 12, or 9 (qd_wire.h)

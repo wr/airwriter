@@ -62,7 +62,7 @@ static const printer_media_t k_plwls_caps_media[] = { PLWLS_SHEETS(LS_CAPS_ROW) 
 static const qd_spec_t s_spec[QD_MODELS] = {
     [QD_PLW300] = {
         .name = "Personal LaserWriter 300", .engine = QD_ENGINE_PLW300, .driver = QD_DRV_LW300,
-        .src_cassette = 0x4C, .src_manual = 0x4F, .bit_cassette = 0x20, .bit_manual = 0x40,
+        .src_main = 0x4C, .src_manual = 0x4F, .bit_cassette = 0x20, .bit_manual = 0x40,
         .density_cmd = 0xA7, .density = 32, .row_bits = 12,
         .budget = 500000,
         .screen8 = apple_lw_screen8, .tone = apple_lw_tone,
@@ -71,10 +71,12 @@ static const qd_spec_t s_spec[QD_MODELS] = {
     },
     // Its memory is unmeasured (512 KB as Apple shipped it, as the 300's, which took 513,287
     // bytes of codes): its budget leaves a little more room than the 300's, and it takes one
-    // page at a time.
+    // page at a time. Every LS has the multipurpose tray, and its Print dialog chooses it; the
+    // paper cassette was an optional feeder (the LS Owner's Guide, 1991), so a job never asks
+    // for it, and a sheet fed by hand goes in the same tray.
     [QD_PLWLS] = {
         .name = "Personal LaserWriter LS", .engine = QD_ENGINE_LS, .driver = QD_DRV_LS,
-        .src_cassette = 0x51, .src_manual = 0x52,
+        .src_main = 0x52,
         .row_bits = 9,
         .budget = 480000,
         .screen8 = apple_lw_screen8, .tone = apple_lw_tone,
@@ -112,7 +114,7 @@ static const printer_caps_t s_caps[QD_MODELS] = {
         .rip_dpi_x = 300, .rip_dpi_y = 300,
         .max_dots = 2400, .crop_margin = 0,
         .media_list = k_plwls_caps_media, .n_media = N_PLWLS,
-        .sources = k_sources, .n_sources = 2,
+        .sources = k_sources, .n_sources = 1,          // the tray alone
     },
 };
 

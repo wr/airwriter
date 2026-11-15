@@ -235,7 +235,7 @@ static int cancelled(qd_session_t *s)
 // 2026-11-13). Its reply waits for the next question's drain.
 static void cassette_again(qd_session_t *s)
 {
-    if (s->c.manual) put_cmd(&s->o, 0x83, s->sp->src_cassette);
+    if (s->c.manual) put_cmd(&s->o, 0x83, s->sp->src_main);
 }
 
 static void event(qd_session_t *s, qd_event_t ev, int page, uint32_t ms)
@@ -274,7 +274,7 @@ static int blink(qd_session_t *s)
 }
 
 static int ls(const qd_session_t *s) { return s->sp->driver == QD_DRV_LS; }
-static uint8_t source(const qd_session_t *s) { return s->c.manual ? s->sp->src_manual : s->sp->src_cassette; }
+static uint8_t source(const qd_session_t *s) { return s->c.manual ? s->sp->src_manual : s->sp->src_main; }
 static uint8_t paper_bit(const qd_session_t *s) { return s->c.manual ? s->sp->bit_manual : s->sp->bit_cassette; }
 
 qd_session_t *qd_session_new(const qd_ops_t *o, const qd_job_cfg_t *c)
@@ -286,6 +286,7 @@ qd_session_t *qd_session_new(const qd_ops_t *o, const qd_job_cfg_t *c)
     s->o = *o;
     s->c = *c;
     s->sp = sp;
+    if (!sp->src_manual) s->c.manual = 0;   // the LS: a sheet by hand goes in its tray too
     s->stall = c->stall_ms ? c->stall_ms : STALL_MS;
     s->room = c->room ? c->room : sp->budget;
     s->lights = 0x01;
@@ -1019,7 +1020,7 @@ static int end(qd_session_t *s)
     // A page from the manual slot leaves the printer taking paper from it: empty, it says it
     // has no paper, and it pulls in any sheet put there. The cassette again, as at rest.
     if (!rc && s->c.manual) {
-        int a = ask(&s->o, 0x83, s->sp->src_cassette, ASK_QUICK);
+        int a = ask(&s->o, 0x83, s->sp->src_main, ASK_QUICK);
         if (a < 0 && a != QD_E_OFFLINE) rc = a;
     }
     if (!rc) rc = cmd(s, 0x81, 0x00);

@@ -614,9 +614,10 @@ async def scenario_ls(root, tmp, files):
              f"an LS: no row while a page prints ({rows_while_printing(fake)})"),
             (not bad, f"an LS: nothing blank, moved, or never sent by its driver ({bad[:2]})"),
             # 81 00: qdhost's first question, the job's begin, each page's setup, the end.
-            (heard.count("810081") == 3 + n and heard.count("8351d2") == n,
-             f"an LS: 81 00 and 83 51 before each page ({heard.count('810081')} x 81 00, "
-             f"{heard.count('8351d2')} x 83 51)"),
+            (heard.count("810081") == 3 + n and heard.count("8352d1") == n,
+             f"an LS: 81 00 and 83 52 (its tray) before each page ({heard.count('810081')} x 81 00, "
+             f"{heard.count('8352d1')} x 83 52)"),
+            ("8351d2" not in heard, "an LS: never 83 51, the cassette most LSs don't have"),
             (ev.count("paper number 04") == n, f"an LS: Letter's number with each page ({ev[:3]})"),
             (heard.count("8340c3") == 1, f"an LS: 83 40 only in qdhost's first question ({heard.count('8340c3')})")]
 

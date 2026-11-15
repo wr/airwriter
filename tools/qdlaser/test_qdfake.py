@@ -613,9 +613,9 @@ def ls_row(codes):
 
 
 # The LS's Letter setup, as its driver sends it: 81 00, top 63, left 20, the row 300 bytes,
-# the cassette, 83 9D and Letter's number 04 as it is.
+# the multipurpose tray, 83 9D and Letter's number 04 as it is.
 LS_LETTER = [cmd(0x81, 0), cmd(0x85, 0xC1), cmd(0x86, 0xFF), cmd(0x87, 0xEC), cmd(0x88, 0xD4),
-             cmd(0x89, 0xFE), cmd(0x83, 0x51), cmd(0x83, 0x9D), cmd(0x83, 0x04), cmd(0x84, 1)]
+             cmd(0x89, 0xFE), cmd(0x83, 0x52), cmd(0x83, 0x9D), cmd(0x83, 0x04), cmd(0x84, 1)]
 
 
 class LS(unittest.TestCase):
@@ -660,15 +660,34 @@ class LS(unittest.TestCase):
             ask(lw, c, a)
             self.assertFalse(any(e.startswith("not the LS's") for e in lw.events), f"the 300: {c:02x} {a:02x}")
 
-    def test_tray_and_cassette(self):
+    def test_tray_and_no_cassette(self):
+        # The tray is chosen at power-up and holds a stack; the cassette isn't fitted.
         lw, clock = printer(engine=0x0D)
-        ask(lw, 0x83, 0x52)
-        self.assertTrue(lw.manual)
-        self.assertEqual(ask(lw, 0x83, 0x02) & 0x10, 0x10)       # no sheet in the tray
-        lw.command("manual")
         self.assertEqual(ask(lw, 0x83, 0x02) & 0x10, 0)
         ask(lw, 0x83, 0x51)
-        self.assertFalse(lw.manual)
+        self.assertEqual(ask(lw, 0x83, 0x02) & 0x10, 0x10)       # no cassette, so no paper
+        ask(lw, 0x83, 0x52)
+        self.assertEqual(ask(lw, 0x83, 0x02) & 0x10, 0)
+        lw.command("paper")
+        self.assertEqual(ask(lw, 0x83, 0x02) & 0x10, 0x10)       # the tray empty
+        lw.command("ok")
+        self.assertEqual(ask(lw, 0x83, 0x02) & 0x10, 0)
+
+    def test_a_page_from_the_cassette_never_prints(self):
+        lw, clock = printer(engine=0x0D)
+        setup = [cmd(0x83, 0x51) if p == cmd(0x83, 0x52) else p for p in LS_LETTER]
+        send(lw, setup + [ls_row(r) for r in ROWS] + END + PRINT)
+        clock.t += 3
+        lw.tick()
+        self.assertEqual(lw.pages, [])
+
+    def test_the_tray_takes_page_after_page(self):
+        lw, clock = printer(engine=0x0D)
+        for _ in range(2):
+            send(lw, LS_LETTER + [ls_row(r) for r in ROWS] + END + PRINT)
+            clock.t += 30
+            lw.tick()
+        self.assertEqual(len(lw.pages), 2)
 
     def test_rows_while_a_page_prints(self):
         lw, clock = printer(engine=0x0D)

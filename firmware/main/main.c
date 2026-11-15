@@ -1381,11 +1381,12 @@ static esp_err_t qd_doc_begin(const char *format, const char *name, const ipp_jo
     s_qd_skipped = 0;
     qd_model_t m = pr_model_to_qd(printers_record_model(s_port_job_record));
     s_qd_model = m;
-    int manual = opts ? opts->manual : 0;
+    // An LS has no manual source of its own: a sheet by hand goes in its tray, as any page.
+    int manual = opts && opts->manual && qd_spec(m) && qd_spec(m)->src_manual;
     s_last_job_id = opts ? opts->job_id : 0;
     ESP_LOGI(TAG, "%s job %d format %s, source %s", qd_spec(m) ? qd_spec(m)->name : "?",
              (int)s_last_job_id,
-             format[0] ? format : "(unspecified)", manual ? "manual" : "cassette");
+             format[0] ? format : "(unspecified)", manual ? "manual" : "main");
     memdiag_mark("job start");          // W-1094
     s_job_error[0] = '\0';
     strncpy(s_last_job, name && name[0] ? name : "Untitled", sizeof s_last_job - 1);

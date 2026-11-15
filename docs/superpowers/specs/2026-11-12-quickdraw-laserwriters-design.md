@@ -23,6 +23,10 @@ expected to work, untested, as the ImageWriter LQ is. Calls made while building:
   only one page of a memory nobody has measured.
 - **Its setup, sheets, paper number, row length and paper bit are its driver's**, its jam
   recovery is `81 00` and the page again, and its page budget is 480,000 bytes of codes.
+- **Its paper comes from the multipurpose tray, always** (`83 52`): every LS has it and its
+  Print dialog chooses it, while the cassette was an optional feeder (its Owner's Guide). One
+  source, `main`; a sheet by hand goes in the same tray. Found after board 1's bench, when
+  the first build still sent the 300's choice, the cassette, as `83 51`.
 - **No new path for a page the printer says it has no room for:** a lower budget for the LS
   instead. An LS that fills before it would fail such a page; its owner's log says so.
 

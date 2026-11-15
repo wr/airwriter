@@ -26,7 +26,7 @@ printed goes to DIR/page-N.pbm (the image area as loaded, 1 = toner) and DIR/pag
 (the sheet). --log FILE writes `MS > HEX` for each packet heard, `MS < HEX` for each
 reply and `MS ! text` for what happened.
 
-Lines on stdin fault it: `paper` (the cassette is empty), `cassette` (the cassette is
+Lines on stdin fault it: `paper` (the cassette is empty; an LS's tray), `cassette` (the cassette is
 out), `manual` (a sheet in the manual slot), `jam`, `jam2` (a jam with two sheets in the
 paper path), `cover` (open), `engine` (a fuser fault), `silent` (it hears and says
 nothing: switched off), `badrow N` (row packet N of the next page fails its check:
@@ -84,7 +84,10 @@ What it models, from the design's command table:
 `--engine 0d` is an LS. Nobody here has one: it is the LS's own driver (Personal LW LS 7.1)
 read as a printer, and AirWriter's choices for it held as rules. What differs from the 300:
 
-* 83 51 and 83 52 choose the cassette and the multipurpose tray. No paper is 83 02's 10.
+* 83 51 and 83 52 choose the paper cassette and the multipurpose tray. The tray holds a
+  stack and is chosen at power-up (the LS Owner's Guide: only the Ready light on). This LS
+  has no cassette, an optional feeder most never had: chosen, it has no paper. No paper is
+  83 02's 10.
 * Rows carry a 9-bit length: `0x4000 | (0x200 - n)`.
 * 87's left margin carries 0xB7 / 2 dots past the paper's edge, not 0x1A0 / 2.
 * The value after 83 9D is the paper's number as it is (Letter 04, A4 01, Legal 0C, B5 09,
@@ -270,7 +273,7 @@ class QuickDrawLaser:
         self.no_paper = self.no_cassette = self.manual_sheet = False
         self.jam = self.cover = self.engine_fault = self.silent = False
         self.badrow = 0                         # row N of the next page fails its check
-        self.manual = False                     # 83 4F chose the slot
+        self.manual = self.ls                   # 83 4F chose the slot (an LS: 83 52, its tray)
         self.quiet_until = None                 # the 83 questions go unanswered until then
         # the registers
         self.top = self.left = self.width = 0
@@ -330,6 +333,8 @@ class QuickDrawLaser:
         return v
 
     def _has_paper(self):
+        if self.ls:                             # the tray's stack; no cassette fitted
+            return self.manual and not self.no_paper
         return bool(self._paper() & (0x40 if self.manual else 0x20))
 
     def _held(self):
@@ -357,7 +362,8 @@ class QuickDrawLaser:
                (0x02 if self.engine_fault or self.jam or self.cover or not self._has_paper() else 0)
 
     def _s02(self):
-        # 10: no paper at the source chosen (83 4C the cassette, 83 4F the manual slot).
+        # 10: no paper at the source chosen (83 4C the cassette, 83 4F the manual slot; an LS's
+        # 83 52 tray, or 83 51 the cassette it doesn't have).
         return (0x08 if self.jam else 0) | (0x04 if self.cover else 0) | \
                (0x10 if not self._has_paper() else 0)
 
@@ -402,7 +408,7 @@ class QuickDrawLaser:
         self.freed = self.rd
         if self.stopped is slot:
             self.stopped = None
-        if self.manual:
+        if self.manual and not self.ls:
             self.manual_sheet = False
         if self.blank or slot.ruined:
             self._sheet_blank(self.blank or "memory filled as it loaded")

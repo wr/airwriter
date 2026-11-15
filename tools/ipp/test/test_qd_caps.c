@@ -134,7 +134,7 @@ static void test_plw300_size(void)
     CHECK(nb < RESP_MAX);
 }
 
-// W-1145: the LS, from its own driver's five sheets, Letter first.
+// W-1145: the LS, from its own driver's five sheets, Letter first, and one source.
 static void test_plwls_attrs(void)
 {
     const printer_caps_t *c = qd_caps(QD_PLWLS);
@@ -150,7 +150,7 @@ static void test_plwls_attrs(void)
     CHECK(strcmp(w, "na_letter_8.5x11in iso_a4_210x297mm na_legal_8.5x14in iso_b5_176x250mm "
                     "na_number-10_4.125x9.5in") == 0);
     words(buf, n, "media-source-supported", w, sizeof w);
-    CHECK(strcmp(w, "main manual") == 0);
+    CHECK(strcmp(w, "main") == 0);        // its multipurpose tray, by hand or a stack
     ipp_found_t f;
     CHECK(ipp_find(buf, n, "printer-make-and-model", &f));
     CHECK(ipp_val_is(&f, "Apple Personal LaserWriter LS"));

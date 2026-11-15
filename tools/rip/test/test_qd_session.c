@@ -2033,7 +2033,7 @@ static void test_ls_page(void)
     CHECK_STR(F.trace, "8100 833E 8200 8301");
     trace_clear();
     CHECK_EQ_INT(qd_session_open(s, 1, ls_sheet(0)), QD_OK);
-    CHECK_STR(F.trace, "8100 833E 8200 85C1 86FF 87EC 88D4 89FE 8351 839D =04 8401");
+    CHECK_STR(F.trace, "8100 833E 8200 85C1 86FF 87EC 88D4 89FE 8352 839D =04 8401");
     CHECK_EQ_INT(rows(s, 3175), QD_OK);
     CHECK_EQ_INT(qd_session_print(s), QD_OK);
     // No paper question before 8A 01: its driver asks none; paper out is known after.
@@ -2070,7 +2070,7 @@ static void test_ls_one_page_at_a_time(void)
     uint32_t t0 = f_now();
     CHECK_EQ_INT(qd_session_open(s, 2, ls_sheet(0)), QD_OK);
     CHECK(f_now() - t0 >= 12500);
-    CHECK_HAS(F.trace, "8100 833E 8200 85C1 86FF 87EC 88D4 89FE 8351 839D =04 8401");
+    CHECK_HAS(F.trace, "8100 833E 8200 85C1 86FF 87EC 88D4 89FE 8352 839D =04 8401");
     CHECK_EQ_INT(ev_count(QD_EV_DONE), 1);
     CHECK_EQ_INT(rows(s, 3175), QD_OK);
     CHECK_EQ_INT(qd_session_print(s), QD_OK);
@@ -2082,9 +2082,9 @@ static void test_ls_one_page_at_a_time(void)
     qd_session_free(s);
 }
 
-// Legal from the multipurpose tray: Legal's setup and number, 83 52; the job's end sets the
-// cassette back with the LS's own command.
-static void test_ls_legal_from_the_tray(void)
+// Legal, and a job that asks for the manual source: an LS has none of its own (a sheet by hand
+// goes in its multipurpose tray), so 83 52 as for any page, and nothing set back at the end.
+static void test_ls_legal_and_manual_from_the_tray(void)
 {
     fake_ls();
     qd_session_t *s = ls_job(1, NULL, 0);
@@ -2094,14 +2094,15 @@ static void test_ls_legal_from_the_tray(void)
     CHECK_EQ_INT(rows(s, 3750), QD_OK);
     CHECK_EQ_INT(qd_session_print(s), QD_OK);
     CHECK_EQ_INT(qd_session_end(s), QD_OK);
-    CHECK(ends_with("8301 8351 8100 8401"));
+    CHECK(ends_with("8301 8100 8401"));
     CHECK_EQ_INT(not_ls(), 0);
     qd_session_free(s);
 }
 
 // No paper is 83 02's bit 4. Before the print nothing is asked about paper (the tray empty:
 // 8A 01 goes, the sheet doesn't feed, and the page waits); as a page prints, 8A 00 and 8A 01
-// again once it is back.
+// again once it is back. A job that asked for the manual source shows the same: out of paper,
+// since its sheet goes in the one tray.
 static void test_ls_paper(void)
 {
     fake_ls();
@@ -2111,7 +2112,8 @@ static void test_ls_paper(void)
     F.win[F.nwin++] = (win_t){ 0, f_now() + 3000, 0x02, 0, 1 };
     CHECK_EQ_INT(qd_session_print(s), QD_OK);
     CHECK_EQ_INT(qd_session_end(s), QD_OK);
-    CHECK(saw_state(QDS_MANUAL));
+    CHECK(saw_state(QDS_NO_PAPER));
+    CHECK(!saw_state(QDS_MANUAL));
     CHECK(!saw_state(QDS_ENGINE));
     CHECK_HAS(F.trace, "8A00");
     CHECK_EQ_INT(count_tok("8A01"), 2);
@@ -2196,7 +2198,7 @@ static void test_ls_9d_reply_not_read(void)
     qd_session_t *s = ls_job(0, NULL, 0);
     trace_clear();
     CHECK_EQ_INT(qd_session_open(s, 1, ls_sheet(0)), QD_OK);
-    CHECK_STR(F.trace, "8100 833E 8200 85C1 86FF 87EC 88D4 89FE 8351 839D =04 8401");
+    CHECK_STR(F.trace, "8100 833E 8200 85C1 86FF 87EC 88D4 89FE 8352 839D =04 8401");
     qd_session_free(s);
 }
 
@@ -2209,7 +2211,7 @@ static void test_ls_cancel_and_open_again(void)
     CHECK_EQ_INT(qd_session_open(s, 1, ls_sheet(0)), QD_OK);
     F.cancel_rows = 500;
     CHECK_EQ_INT(rows(s, 3175), QD_E_CANCEL);
-    CHECK(ends_with("8A00 8351 8100 8401"));
+    CHECK(ends_with("8A00 8100 8401"));
     CHECK_EQ_INT(not_ls(), 0);
     qd_session_free(s);
 
@@ -2219,7 +2221,7 @@ static void test_ls_cancel_and_open_again(void)
     CHECK_EQ_INT(rows(s, 1000), QD_OK);
     trace_clear();
     CHECK_EQ_INT(qd_session_open(s, 1, ls_sheet(0)), QD_OK);
-    CHECK_STR(F.trace, "8100 833E 8200 85C1 86FF 87EC 88D4 89FE 8351 839D =04 8401");
+    CHECK_STR(F.trace, "8100 833E 8200 85C1 86FF 87EC 88D4 89FE 8352 839D =04 8401");
     CHECK_EQ_INT(rows(s, 3175), QD_OK);
     CHECK_EQ_INT(qd_session_print(s), QD_OK);
     CHECK_EQ_INT(qd_session_end(s), QD_OK);
@@ -2362,7 +2364,7 @@ int main(void)
     test_ls_probe_takes_a_refused_8340();
     test_ls_page();
     test_ls_one_page_at_a_time();
-    test_ls_legal_from_the_tray();
+    test_ls_legal_and_manual_from_the_tray();
     test_ls_paper();
     test_ls_paper_bit_that_sticks();
     test_ls_9d_reply_not_read();

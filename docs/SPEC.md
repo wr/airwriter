@@ -1648,11 +1648,17 @@ here to test on.
     while one prints; the 300's driver 1.2 added a wait for exactly that on an LS. One at a time
     also means only one page has to fit in a memory nobody has measured. About 8 s more a page
     after the first than the 300.
-  - *Setup*, in its driver's order: `85`/`86`, `87`, `88`/`89`, the source (`83 51` the
-    cassette, `83 52` the multipurpose tray, IPP `manual`), then `83 9D` with the sheet's paper
-    number as it is, not shifted (Letter `04`, A4 `01`, Legal `0C`, B5 `09`, else `21`), each
-    sent once and its reply taken whatever it is, as its driver reads neither. No `83 40` in a
-    job, no density, no `84 00`.
+  - *Setup*, in its driver's order: `85`/`86`, `87`, `88`/`89`, the source, then `83 9D` with
+    the sheet's paper number as it is, not shifted (Letter `04`, A4 `01`, Legal `0C`, B5 `09`,
+    else `21`), each sent once and its reply taken whatever it is, as its driver reads
+    neither. No `83 40` in a job, no density, no `84 00`.
+  - *The source* is always `83 52`, the multipurpose tray: IPP `main` alone, and a job asking
+    for `manual` gets the tray too. Every LS has the tray, which feeds a stack of up to 70
+    sheets or a sheet by hand, and its Print dialog chooses it; the paper cassette (`83 51`)
+    was an optional feeder (Personal LaserWriter LS Owner's Guide, 1991). Its driver's
+    `83 25` bit 0x20 may say a cassette is fitted, which is inferred, so the cassette is
+    never used. A build that sent `83 51` had every page of an LS without the cassette
+    wait for paper; `qdfake.py`'s LS has no cassette, so that fails `qdinterop`.
   - *Sheets:* Letter, A4, Legal, B5 (`iso_b5_176x250mm`) and #10, each with its driver's setup:
     top (paper h − image h) / 2 rows, left (paper w − image w + 0xB7) / 16 bytes, the row
     ((image w + 24) / 8) & ~3 bytes, so Legal's and B5's 2,000 dots go in 252-byte rows and
@@ -1898,7 +1904,9 @@ never been scoped; see 4.
      shifted with parity (the 300's driver); how much of a page fits; its real status bytes,
      above all whether `83 02` bit 4 says no paper at rest and clears when paper goes in, and
      whether `83 01` bit 1 without it is always an engine fault (the 300's rule, which ends the
-     job; its driver fails only on particular `83 04` and `83 07` bits).
+     job; its driver fails only on particular `83 04` and `83 07` bits); which source it
+     takes at power-up (the tray, as its guide's lights suggest, is what `qdfake.py` does);
+     whether `83 25` bit 0x20 says the cassette is fitted, to offer it.
    - **The Select 300.** Only its engine identity (not `29`, `0D` or `23`) is used, to name it
      as not supported. Never seen.
    - **Sizes other than Letter.** Legal, Executive, #10, Monarch and A4 use the image areas read

@@ -14,7 +14,7 @@ static void test_letter(void)
     if (!s) return;
     CHECK_EQ_INT(s->driver, QD_DRV_LW300);
     CHECK_EQ_INT(s->row_bits, 12);
-    CHECK_EQ_INT(s->src_cassette, 0x4C);
+    CHECK_EQ_INT(s->src_main, 0x4C);
     CHECK_EQ_INT(s->src_manual, 0x4F);
     CHECK_EQ_INT(s->bit_cassette, 0x20);
     CHECK_EQ_INT(s->bit_manual, 0x40);
@@ -61,8 +61,8 @@ static void test_ls(void)
     CHECK(!strcmp(s->icon, "plwls"));
     CHECK_EQ_INT(s->engine, 0x0D);
     CHECK_EQ_INT(s->driver, QD_DRV_LS);
-    CHECK_EQ_INT(s->src_cassette, 0x51);
-    CHECK_EQ_INT(s->src_manual, 0x52);
+    CHECK_EQ_INT(s->src_main, 0x52);       // the multipurpose tray, never the optional cassette
+    CHECK_EQ_INT(s->src_manual, 0);
     CHECK_EQ_INT(s->density_cmd, 0);
     CHECK_EQ_INT(s->row_bits, 9);
     CHECK(s->budget > 0 && s->budget <= 500000);
@@ -98,7 +98,8 @@ static void test_ls(void)
     CHECK(!strcmp(c->device_id, "MFG:Apple;MDL:Personal LaserWriter LS;CMD:URF;"));
     CHECK(!strcmp(c->urf_rs, "RS300"));
     CHECK_EQ_INT(c->n_media, s->n_media);
-    CHECK_EQ_INT(c->n_sources, 2);
+    CHECK_EQ_INT(c->n_sources, 1);
+    CHECK(c->sources && !strcmp(c->sources[0], "main"));
     for (int i = 0; i < c->n_media; i++) {
         CHECK(!strcmp(c->media_list[i].media, s->media[i].media));
         CHECK_EQ_INT(c->media_list[i].rip_w, s->media[i].img_w);
