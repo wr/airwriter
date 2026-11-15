@@ -7,6 +7,11 @@ run coder, the port's questions), `W-1082` (LaserWriters: the 300 dpi rip) and `
 printer's own Apple icon). Reverses the QuickDraw non-goal in
 `2026-10-21-laser-printers-design.md`.
 
+**Amended 2026-11-15 by `W-1151 Personal LaserWriter 300 shows its own body's icon, the
+LaserWriter 4/600 PS's`.** Wells: the 300 shows the icon of its body, which the LaserWriter 320
+and 4/600 PS share, as every other printer does. The icon in Apple's LaserWriter 300 driver is
+the one it gives the Select 300 too, so it is no longer read out or shipped.
+
 **Amended 2026-11-15 by `W-1146 LaserWriter Select 300 on the printer port`** (SPEC §3.18,
 "The LaserWriter Select 300", is the record). The Select 300 leaves the non-goals, and no
 QuickDraw LaserWriter but a Japanese model (`23`) is named and left unsupported any more. Read
@@ -355,7 +360,8 @@ A link module for the family, the only part that touches ESP32 peripherals:
   `media-source` is one static `main` in `ipp_attrs`; it becomes part of the printer's caps. A
   job asking for `manual` sends `83 4F` instead of `83 4C`. AirWriter never moves to the slot by
   itself.
-- **Icon:** Apple's for the 300, from its driver (`ICON`/`icl8`), as `W-1138` did for the others.
+- **Icon:** its body's, the LaserWriter 4/600 PS's (amended 2026-11-15, `W-1151`; it was Apple's
+  for the 300, from its driver).
 - Its own endpoint and Bonjour record as every port record has (`printers.c:others_apply`).
 - **Response size:** `ipp_server`'s `RESP_MAX` is 5,120 bytes and a StyleWriter's three sheets
   already take about 3.8 KB of Get-Printer-Attributes. Six sizes and two sources must fit, by a
@@ -524,7 +530,7 @@ found and printing as before.
 
 ## Licences and prior art
 
-- **Apple's driver** is never committed. Its `HTSC` 2, `GAMA` 3 and the 300's icon are read out
+- **Apple's driver** is never committed. Its `HTSC` 2 and `GAMA` 3 are read out
   by a tool, as `tools/stylewriter/mktables.py` reads the StyleWriters' tables, into
   `apple_tables.c` and the icon files, each with a `LICENSE.md` row (© Apple, not licensed here).
 - **TailTalk** is GPL-3.0 with no "or later": read as a reference, facts used, nothing ported.

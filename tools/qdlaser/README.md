@@ -18,8 +18,8 @@ Tools for the Personal LaserWriter 300 (`W-1102`) and LS (`W-1145`) on the print
   built for this computer) against `qdfake.py`: pages, faults, the manual slot, a cancel, a
   printer switched off, and an LS's pages, faults and its refusal of `83 40`. Run it with
   `make -C tools/rip qdinterop`. It takes about 35 seconds.
-- `mkqdtables.py` reads Apple's 300 screen, its tone curve and the printer's icon out of Apple's
-  LaserWriter 300 driver, and the LS's icon out of its own driver, and writes them as source.
+- `mkqdtables.py` reads Apple's 300 screen and its tone curve out of Apple's LaserWriter 300
+  driver, and the LS's icon out of its own driver, and writes them as source.
   The drivers are never committed.
 
 `make -C tools/rip qdcheck` checks the firmware's packets and line image against `qdfake.py`

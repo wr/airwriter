@@ -3177,9 +3177,9 @@ static void test_qd_not_addable_by_hand(void)
 static void test_qd_icon_served(void)
 {
     const char *icon = pr_icon(PR_KIND_QDLASER, PR_MODEL_PLW300, NULL);
-    CHECK(!strcmp(icon, "plw300"));
+    CHECK(!strcmp(icon, "lw4600"));
     CHECK(served(icon));
-    CHECK(!strcmp(pr_icon(PR_KIND_QDLASER, PR_MODEL_NONE, NULL), "plw300"));
+    CHECK(!strcmp(pr_icon(PR_KIND_QDLASER, PR_MODEL_NONE, NULL), "lw4600"));
 }
 
 int main(void)
