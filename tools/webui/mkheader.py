@@ -40,14 +40,19 @@ def panel_js():
     """The panel for the sidebar's picture of it: the dot grid (one letter a
     dot, row by row: G gold, T the test button, P FR4, B and L mask), the dot
     behind each LED in chain order, and per material the 24 measured hues and
-    the white, as tools/lights/render.py draws them."""
+    the white, as tools/lights/render.py draws them. All of it as seen from
+    the front, the sockets at the back (W-1153): the layout and the LED map
+    are in the board's rows and columns, so both are turned 180 degrees."""
     lay = json.loads(LAYOUT.read_text())
     g = lay["grid"]
     grid = {(d["r"], d["c"]): d["mat"] for d in lay["dots"]}
     dots = "".join(grid[r, c] for r in range(g["rows"]) for c in range(g["cols"]))
     chain = [int(r) * g["cols"] + int(c) for r, c, _ in
              re.findall(r"\{(\d+), (\d+), '(\w)'\}", LEDMAP.read_text())]
+    last = g["rows"] * g["cols"] - 1
+    dots, chain = dots[::-1], [last - i for i in chain]
     assert len(chain) == 37 and all(dots[i] in "PBL" for i in chain)
+    assert dots[4 * g["cols"] + 3] == "T", "the mark shows the panel from the front"
     col = json.loads(COLOURS.read_text())
     out = {"w": lay["panel"]["w"], "pitch": g["pitch"], "dia": g["dot_dia"], "origin": g["origin"][0],
            "hole": g["hole_dia"], "cols": g["cols"], "rows": g["rows"], "dots": dots, "chain": chain,

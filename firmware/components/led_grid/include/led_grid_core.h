@@ -54,7 +54,7 @@ lg_fam_t lg_family(uint8_t act);
 typedef enum {
     LG_BLIP_NONE,
     LG_BLIP_MAC,            // a Mac heard on LocalTalk: an arc of stripes from its socket
-    LG_BLIP_LT_ON,          // the LocalTalk node has its ID: the stripes rise from its socket
+    LG_BLIP_LT_ON,          // the LocalTalk node has its ID: the stripes come out of its socket
     LG_BLIP_BUSY,           // the test button tapped during another job: two orange rings
     LG_BLIP_SAVED,          // settings saved: a white ring closes into the test button
 } lg_blip_t;
@@ -111,7 +111,13 @@ int  lg_act_over(uint8_t act, uint32_t act_ms);
 
 void lg_render(const ps_view_t *v, const lg_opts_t *o, uint32_t t_ms,
                uint8_t out[LG_NUM_LEDS][3]);
-int  lg_pilot_index(void);      // the FR4 dot right of the test button (row 3, col 4)
+// Where LED i sits as seen from the front, the side away from the sockets
+// (W-1153): row 0 is the row farthest from you, column 0 on your left, and the
+// test button is at row 4, column 3. Every effect is drawn in these; LG_MAP
+// stays in the board's own rows and columns, the sockets below its row 7.
+int  lg_row(int i);
+int  lg_col(int i);
+int  lg_pilot_index(void);      // the FR4 dot beside the test button: on its left from the front (row 4, col 2)
 
 // Asleep: fireflies. A breath starts every LG_FIREFLY_MS at a new FR4 dot and
 // lasts LG_BREATH_MS, so three overlap. The dot of breath k (t_ms /

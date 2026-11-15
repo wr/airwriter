@@ -241,21 +241,23 @@
 <!-- ── dialogs ────────────────────────────────────────────────── -->
 <dialog id=d-cable><div class=dlg>
   <b>Test a cable</b>
-  <!-- the case's port edge as the cover prints it, a cable from the printer
-       port to the AppleTalk port; the test runs along it and colours it. To
-       scale, 19.5 mm between ports: each plug's moulding (12.7 mm, flat on
-       top and round below, about its socket) hides the socket, the cable
-       leaves its back through the boot and hangs between them, and the USB-C
-       socket sits low, on the board -->
+  <!-- the box as it reads from the front, its sockets at the back: the
+       cover's label strip along its far edge (power, appletalk, serial, each
+       label over its socket's third, a rule under it), and beyond the edge a
+       cable from the AppleTalk port to the printer port, looping between the
+       two plugs; the test runs along it and colours it. To scale, 19.5 mm
+       between ports: each plug's moulding (12.7 mm) seen from above, the
+       cable leaving its boot, and the USB-C socket in the wall -->
   <svg class=ports id=ports viewBox="0 0 360 160" aria-hidden=true>
-    <g fill=none stroke=#f7f6f2 stroke-width=1.4 opacity=.9><path d="M16 22h104M128 22h104M240 22h104"/></g>
+    <rect x=4 y=100 width=352 height=80 rx=8 fill=#1f1e1b />
+    <path class=cable d="M180 46C180 4 292 4 292 46"/>
+    <path class=flow id=flow d="M180 46C180 4 292 4 292 46C292 4 180 4 180 46"/>
+    <g fill=#d6d3c9><path d="M160 53l6-13h28l6 13z"/><path d="M272 53l6-13h28l6 13z"/></g>
+    <g fill=#e9e7e0 stroke=#aeaa9f><path d="M143.5 100V58a5 5 0 0 1 5-5h63a5 5 0 0 1 5 5V100z"/><path d="M255.5 100V58a5 5 0 0 1 5-5h63a5 5 0 0 1 5 5V100z"/></g>
+    <rect x=42.5 y=97 width=51 height=6 rx=3 fill=#2c2b28 stroke=#8a877e stroke-width=1.5 />
     <g font-family="-apple-system,BlinkMacSystemFont,'Helvetica Neue',sans-serif" font-size=13 font-style=italic fill=#f7f6f2>
-      <text x=20 y=44>serial</text><text x=132 y=44>appletalk</text><text x=244 y=44>power</text></g>
-    <rect x=266.5 y=109.25 width=51 height=19 rx=9.5 fill=#2c2b28 stroke=#8a877e stroke-width=1.5 />
-    <g fill=#e9e7e0 stroke=#aeaa9f><path d="M31.5 92V60.5a5 5 0 0 1 5-5h63a5 5 0 0 1 5 5V92a36.5 36.5 0 0 1-73 0z"/><path d="M143.5 92V60.5a5 5 0 0 1 5-5h63a5 5 0 0 1 5 5V92a36.5 36.5 0 0 1-73 0z"/></g>
-    <g fill=#d6d3c9><circle cx=68 cy=92 r=27 /><circle cx=180 cy=92 r=27 /></g>
-    <path class=cable d="M68 92C68 160 180 160 180 92"/>
-    <path class=flow id=flow d="M180 92C180 160 68 160 68 92C68 160 180 160 180 92"/>
+      <text x=20 y=122>power</text><text x=132 y=122>appletalk</text><text x=244 y=122>serial</text></g>
+    <g fill=none stroke=#f7f6f2 stroke-width=1.4 opacity=.9><path d="M16 134h104M128 134h104M240 134h104"/></g>
   </svg>
   <p>Plug one cable into both ports, then choose Test.</p>
   <p class=say id=cable-say></p>

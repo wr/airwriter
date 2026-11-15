@@ -13,7 +13,9 @@ mask, as on the panel. The FR4 dots are crisp with a little glow; the mask
 dots (B single, L double) are fuzzy. The dots with no LED behind them are drawn
 dim, so a lit dot never reads as one of the gold ones. The corners are rounded
 by transparency (GIF has no partial alpha), so they sit on a light or a dark
-page alike.
+page alike. The panel is drawn as seen from the front, the sockets at the back
+(W-1153): the layout and the LED map are in the board's rows and columns, so
+the drawing is turned 180 degrees.
 """
 import argparse, colorsys, json, os, shutil, subprocess
 import numpy as np
@@ -61,7 +63,7 @@ class Panel:
             if d['mat'] == 'T':
                 a = disc(d['x'] * sc, d['y'] * sc, g['hole_dia'] * sc / 2)[..., None]
                 base = base * (1 - a) + a * 6
-        self.base = base
+        self.base = base[::-1, ::-1]                    # as seen from the front
         # Rounded corners, radius a twentieth of the width: transparent outside.
         cr = width / 20
         cx = np.clip(xx + 0.5, cr, self.W - cr)
@@ -76,7 +78,7 @@ class Panel:
             d = dots[(r, c)]
             k = 1.0 if m == 'P' else 1.25 if m == 'B' else 1.05
             maps.append(disc(d['x'] * sc, d['y'] * sc, rad * k))
-        self.maps = np.stack(maps)                      # (37, H, W)
+        self.maps = np.stack(maps)[:, ::-1, ::-1]       # (37, H, W), from the front
         self.glow_r = 4 * sc / 5
         self.haze_r = 5 * sc / 5
 
