@@ -6,6 +6,7 @@
 // setup's two cues, attention, failure, the bidirectional print head, the
 // asleep fireflies, and AirWriter LC's one light (W-1109).
 #include <assert.h>
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -48,11 +49,21 @@ static ps_view_t view(ps_state_t st, uint32_t since)
     return v;
 }
 
+// The LED at (r, c) as seen from the front (W-1153): row 0 is the row
+// farthest from you, the sockets at the back; the test button is at (4, 3).
 static int idx(int r, int c)
 {
     for (int i = 0; i < LG_NUM_LEDS; i++)
-        if (LG_MAP[i].r == r && LG_MAP[i].c == c) return i;
+        if (lg_row(i) == r && lg_col(i) == c) return i;
     return -1;
+}
+
+// An LED's distance from a socket as the board was drawn before W-1153, the
+// sockets below row 8.6 in the chain's own rows and columns: a socket effect
+// has to light the LEDs it lit then.
+static float old_dist(int i, float col)
+{
+    return hypotf((float)LG_MAP[i].r - 8.6f, (float)LG_MAP[i].c - col);
 }
 
 static int lit_count(uint8_t f[LG_NUM_LEDS][3])
@@ -137,7 +148,7 @@ static void test_reset(uint8_t f[LG_NUM_LEDS][3], uint8_t g[LG_NUM_LEDS][3])
 
         lg_opts_t o = act(LG_ACT_RESET_HOLD, LG_RESET_FILL_MS / 2);
         lg_render(&v, &o, 0, f);
-        assert(max3(f[idx(3, 4)]) > 8 && max3(f[idx(3, 2)]) <= LG_GLOW / 256);   // 3 o'clock lit, 9 at most the glow
+        assert(max3(f[idx(4, 4)]) > 8 && max3(f[idx(4, 2)]) <= LG_GLOW / 256);   // 3 o'clock lit, 9 at most the glow
 
         int orange = idx(0, 4), red = orange;           // just right of 12 o'clock
         o = act(LG_ACT_RESET_HOLD, 900);
@@ -469,7 +480,7 @@ static void test_w1049(uint8_t f[LG_NUM_LEDS][3], uint8_t g[LG_NUM_LEDS][3])
             float d = (float)((LG_MAP[i].r - 3) * (LG_MAP[i].r - 3) + (LG_MAP[i].c - 3) * (LG_MAP[i].c - 3));
             if (d > 1.6f * 1.6f) assert(memcmp(f[i], g[i], 3) == 0);
         }
-        int b = idx(3, 4);
+        int b = idx(4, 2);
         assert(f[b][0] > f[b][1] && f[b][1] > f[b][2]);
     }
 
@@ -536,6 +547,103 @@ static int one_max(const uint16_t px[3])
     if (px[1] > m) m = px[1];
     if (px[2] > m) m = px[2];
     return m;
+}
+
+static int p0(void)                 // the chain's first FR4 dot
+{
+    for (int i = 0; i < LG_NUM_LEDS; i++)
+        if (LG_MAP[i].mat == 'P') return i;
+    return -1;
+}
+
+// W-1153: the panel as seen from the front, the side away from the sockets.
+// Effects that follow the reader run that way from there; effects that come
+// out of a socket light the LEDs they lit before.
+static void test_front(uint8_t f[LG_NUM_LEDS][3], uint8_t g[LG_NUM_LEDS][3])
+{
+    (void)g;
+    for (int i = 0; i < LG_NUM_LEDS; i++) {
+        assert(lg_row(i) == LG_ROWS - 1 - LG_MAP[i].r && lg_col(i) == LG_COLS - 1 - LG_MAP[i].c);
+        assert(!(lg_row(i) == 4 && lg_col(i) == 3));     // the test button has no LED
+    }
+
+    // The finished page rises off the top: 450 ms in, its edge is at row 3.5,
+    // the ink above it, Ready's white below.
+    {
+        ps_view_t v = view(PS_READY, 450);
+        v.prev = PS_PRINTING;
+        lg_render(&v, &WHITE_MODE, 0, f);
+        for (int i = 0; i < LG_NUM_LEDS; i++) {
+            if (LG_MAP[i].mat != 'P') continue;
+            if (lg_row(i) >= 5) assert(neutral(f[i]));
+            if (lg_row(i) <= 2) assert(!neutral(f[i]) && f[i][0] > f[i][2]);
+        }
+    }
+
+    // The reset hand starts at 12 o'clock: early on, the only dots past the
+    // glow are straight above the test button.
+    {
+        ps_view_t v = view(PS_READY, 60000);
+        lg_opts_t o = act(LG_ACT_RESET_HOLD, LG_RESET_FILL_MS * 3 / 100);
+        lg_render(&v, &o, 0, f);
+        for (int i = 0; i < LG_NUM_LEDS; i++)
+            assert((max3(f[i]) > 8) == (lg_col(i) == 3 && lg_row(i) < 4));
+    }
+
+    // Printer back: the green starts at the FR4 dot nearest the printer
+    // socket (Ready and Offline light only the FR4 dots).
+    {
+        static uint16_t hi[LG_NUM_LEDS][3];
+        ps_view_t v = view(PS_READY, 150);
+        v.prev = PS_OFFLINE;
+        lg_render16(&v, &WHITE_MODE, 0, hi);
+        int greenest = p0(), nearest = greenest;
+        for (int i = 0; i < LG_NUM_LEDS; i++) {
+            if (LG_MAP[i].mat != 'P') continue;
+            int gi = hi[i][1] - (hi[i][0] > hi[i][2] ? hi[i][0] : hi[i][2]);
+            int gg = hi[greenest][1] - (hi[greenest][0] > hi[greenest][2] ? hi[greenest][0] : hi[greenest][2]);
+            if (gi > gg) greenest = i;
+            if (old_dist(i, 0.9f) < old_dist(nearest, 0.9f)) nearest = i;
+        }
+        assert(greenest == nearest);
+    }
+
+    // TashTalk written and a Mac heard: the ripple is by the LocalTalk socket,
+    // not across the panel.
+    {
+        ps_view_t v = view(PS_READY, 100000);
+        lg_opts_t os[2] = { act(LG_ACT_PIC_OK, 150), blip(LG_BLIP_MAC, 120) };
+        for (int k = 0; k < 2; k++) {
+            lg_render(&v, &os[k], 0, f);
+            lg_render(&v, &WHITE_MODE, 0, g);
+            int near = 0;
+            for (int i = 0; i < LG_NUM_LEDS; i++) {
+                float d = old_dist(i, 3.2f);
+                if (d > 4.5f && k == 0) assert(max3(f[i]) == 0);
+                if (d > 4.5f && k == 1) assert(memcmp(f[i], g[i], 3) == 0);
+                if (d < 2.5f && memcmp(f[i], g[i], 3)) near = 1;
+            }
+            assert(near);
+        }
+    }
+
+    // LocalTalk on: the stripes come down out of the socket, green first.
+    {
+        ps_view_t v = view(PS_READY, 100000);
+        lg_opts_t o = blip(LG_BLIP_LT_ON, 150);
+        lg_render(&v, &o, 0, f);
+        lg_render(&v, &WHITE_MODE, 0, g);
+        int row0 = 0, row1 = 0;
+        for (int i = 0; i < LG_NUM_LEDS; i++) {
+            if (lg_row(i) >= 3) assert(memcmp(f[i], g[i], 3) == 0);
+            if (lg_row(i) == 0 && LG_MAP[i].mat == 'P') {
+                if (max3(f[i]) > row0) row0 = max3(f[i]);
+                assert(f[i][1] > f[i][2]);              // the stripes' green, at the top
+            }
+            if (lg_row(i) == 1 && LG_MAP[i].mat == 'P' && max3(f[i]) > row1) row1 = max3(f[i]);
+        }
+        assert(row0 > row1);
+    }
 }
 
 static void test_one(void)
@@ -683,7 +791,7 @@ int main(void)
                                PS_FAILED, PS_PRINTING, PS_OFFLINE, PS_READY };
     const int n_all = (int)(sizeof all / sizeof all[0]);
     const int p = lg_pilot_index();
-    assert(p == idx(3, 4) && LG_MAP[p].mat == 'P');
+    assert(p == idx(4, 2) && LG_MAP[p].mat == 'P');
 
     // Caps: FR4 dots never exceed LG_BRIGHTNESS_CAP, mask dots LG_MASK_CAP,
     // in any state, phase or mode.
@@ -751,13 +859,13 @@ int main(void)
         // another, and a second later it has moved on.
         v = view(PS_BOOTING, 1500);
         lg_render(&v, &WHITE_MODE, 1500, f);
-        const uint8_t *d6 = f[idx(2, 4)];
-        assert(!memcmp(d6, f[idx(6, 0)], 3) && !memcmp(d6, f[idx(5, 1)], 3)
-               && !memcmp(d6, f[idx(4, 2)], 3));
-        assert(memcmp(d6, f[idx(3, 4)], 3));
+        const uint8_t *d7 = f[idx(5, 2)];
+        assert(!memcmp(d7, f[idx(1, 6)], 3) && !memcmp(d7, f[idx(2, 5)], 3)
+               && !memcmp(d7, f[idx(3, 4)], 3));
+        assert(memcmp(d7, f[idx(4, 2)], 3));
         v = view(PS_BOOTING, 2500);
         lg_render(&v, &WHITE_MODE, 2500, g);
-        assert(memcmp(d6, g[idx(2, 4)], 3));
+        assert(memcmp(d7, g[idx(5, 2)], 3));
         // A board settled early starts going out at 1.7 s and is dark at 3.0 s.
         v = view(PS_BOOTING, LG_BOOT_MS);
         v.spin_out = 1;
@@ -793,7 +901,7 @@ int main(void)
         v.spin_out = 1;
         v.spin_out_ms = 900;
         lg_render(&v, &WHITE_MODE, 20000, f);
-        assert(max3(f[idx(7, 6)]) > 0);              // the bottom-right corner still lit ...
+        assert(max3(f[idx(6, 6)]) > 0);              // by the bottom-right corner still lit ...
         assert(max3(f[idx(0, 2)]) == 0 && max3(f[idx(1, 1)]) == 0);   // ... the top-left gone first
         v.spin_out_ms = LG_SPIN_OUT_MS;
         lg_render(&v, &WHITE_MODE, 20000, f);
@@ -847,7 +955,7 @@ int main(void)
 
     // Joining: rings move outward -- a near dot peaks before a far one.
     {
-        int near = p, far = idx(7, 4);
+        int near = p, far = idx(0, 2);
         assert(far >= 0 && LG_MAP[far].mat == 'P');
         int best_near = -1, best_far = -1, t_near = 0, t_far = 0;
         for (uint32_t t = 0; t < 900; t += 5) {
@@ -1031,7 +1139,7 @@ int main(void)
                 lg_render16(&v, &o, t, hi);
                 for (int i = 0; i < LG_NUM_LEDS; i++) {
                     if (LG_MAP[i].mat != 'P' && !all) continue;
-                    if (S[k].st == PS_PRINTING && LG_MAP[i].r == (int)((t / 1500) % LG_ROWS))
+                    if (S[k].st == PS_PRINTING && lg_row(i) == (int)((t / 1500) % LG_ROWS))
                         continue;           // the head's row: dark ahead of the head
                     int m = hi[i][0] > hi[i][1] ? (hi[i][0] > hi[i][2] ? hi[i][0] : hi[i][2])
                                                 : (hi[i][1] > hi[i][2] ? hi[i][1] : hi[i][2]);
@@ -1077,7 +1185,7 @@ int main(void)
             ps_view_t m = view(PS_PRINTING, 30);
             m.prev = PS_ATTENTION;
             lg_render16(&m, &WHITE_MODE, 0, hi);
-            int far = idx(0, 4);            // the far corner from the printer socket
+            int far = idx(7, 2);            // the far corner from the printer socket
             assert(hi[far][0] >= LG_GLOW - 1);
         }
         for (int arg = 0; arg <= 1001; arg += 77) {
@@ -1097,7 +1205,7 @@ int main(void)
         static uint16_t hi[LG_NUM_LEDS][3];
         ps_view_t v = view(PS_READY, 60000);
         v.asleep = 1;
-        const int dot = idx(0, 2);
+        const int dot = idx(7, 4);
         int prev = 1 << 30, under = 0, on_glow = 0, under_one = 0;
         for (uint32_t ms = 5000; ms <= 10000; ms += 25) {
             v.asleep_ms = ms;
@@ -1216,21 +1324,22 @@ int main(void)
         }
 
         v = view(PS_JOINING, 0);
-        int far = idx(7, 4);
+        int far = idx(0, 2);
         lg_render16(&v, &WHITE_MODE, 0, hi);        // t=0: ring at the centre, far dot at the floor
         assert(abs((int)hi[far][2] - LG_GLOW) <= 1);
         lg_dither(&d, hi, f);
         assert(f[far][2] > 2 * f[far][1] && f[far][2] > 2 * f[far][0]);
     }
 
-    // W-1055: a cable test's answer stays in the bottom three rows between
-    // the sockets (columns 0-4), the rest dark. A band runs from the LocalTalk
+    // W-1055: a cable test's answer stays in the three rows by the sockets,
+    // between them (from the front, the top three rows, columns 2-6), the
+    // rest dark. A band runs from the LocalTalk
     // end to the printer end and back; then green glows there, or red blinks
     // twice.
     {
         ps_view_t v = view(PS_OFFLINE, 60000);
-        int lt_end = idx(5, 4), pr_end = idx(5, 1), mask = idx(7, 2);
-        const int outside[] = { idx(4, 2), idx(3, 4), idx(6, 6), idx(5, 6), idx(0, 4) };
+        int lt_end = idx(2, 2), pr_end = idx(2, 5), mask = idx(0, 4);
+        const int outside[] = { idx(3, 4), idx(4, 2), idx(1, 0), idx(2, 0), idx(7, 2) };
         for (int k = 0; k < 2; k++) {
             v.cable = k ? PS_CABLE_FAIL : PS_CABLE_PASS;
             for (uint32_t ms = 0; ms < PS_CABLE_MS; ms += 37) {
@@ -1280,7 +1389,7 @@ int main(void)
     {
         ps_view_t v = view(PS_OFFLINE, 60000);
         v.cable = PS_CABLE_NO_CHIP;
-        int lt = idx(7, 4), button = idx(3, 4), top = idx(0, 4);
+        int lt = idx(0, 2), button = idx(4, 2), far = idx(7, 2);
         const uint32_t at[] = { 100, 300, 500, 700, 900 };
         const int lit[] = { 0, 1, 0, 1, 0 };
         for (int k = 0; k < 5; k++) {
@@ -1288,12 +1397,15 @@ int main(void)
             lg_render(&v, &WHITE_MODE, 0, f);
             assert(lit_count(f) == (lit[k] ? 5 : 0));
             if (lit[k]) assert(f[lt][0] > f[lt][1] && f[lt][0] > f[lt][2]);
-            assert(max3(f[button]) == 0 && max3(f[top]) == 0);
+            assert(max3(f[button]) == 0 && max3(f[far]) == 0);
+            for (int i = 0; i < LG_NUM_LEDS; i++)
+                assert((max3(f[i]) > 0) == (lit[k] && old_dist(i, 3.2f) < 2.8f));
         }
     }
 
     test_reset(f, g);
     test_w1049(f, g);
+    test_front(f, g);
     test_one();
     printf("test_led_grid: ok\n");
     return 0;

@@ -272,7 +272,8 @@ page: Top margin (`{"top_margin":N}`, 1/144 in, -216 to 144, default -144) and d
 ## Layout
 ```
 hardware/airwriter/   KiCad 10 main board (sch, pcb, lib/, route.py, stitch.py, tools_pcb/)
-hardware/panel/       art panel generator (Figma SVG → panel.kicad_pcb), and the LC's
+hardware/panel/       art panel generator (Figma SVG, drawn from the front and turned by
+                      front.py → panel.kicad_pcb), and the LC's
                       acrylic top laser file (svg/lc.svg → lc_top.py → airwriter-lc-top.svg)
 hardware/combined/    the snap-apart order panel and make_fab.sh
 firmware/             ESP-IDF 5.5 app (components/, above); bootloader_components/ holds the

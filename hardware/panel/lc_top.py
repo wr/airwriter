@@ -26,6 +26,8 @@ a re-export of the art flows through on the next run (generate.sh runs this).
 """
 import json, math, pathlib, re
 
+from front import _ARGS, _NUM, board_art, parse_path
+
 HERE = pathlib.Path(__file__).parent
 ART = HERE / "svg" / "lc.svg"
 OUT = HERE / "airwriter-lc-top.svg"
@@ -37,32 +39,9 @@ CUT = "#FF0000"
 ENGRAVE = "#000000"
 GOLD, WHITE, FR4, INK = "#dda857", "white", "#e7ba9b", "#111111"
 
-_NUM = r"[-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?"
-# Absolute commands only; Figma writes nothing else. One letter per argument:
-# x or y a coordinate, r a radius (both scale), - an arc's rotation or flag.
-_ARGS = {"M": "xy", "L": "xy", "H": "x", "V": "y", "C": "xyxyxy", "S": "xyxy",
-         "Q": "xyxy", "T": "xy", "A": "rr---xy", "Z": ""}
-
-
 def _attr(tag, name):
     m = re.search(rf'\b{name}="([^"]+)"', tag)
     return m.group(1) if m else None
-
-
-def parse_path(d):
-    """Path data -> [(cmd, [floats])], one entry per command repetition."""
-    out = []
-    for cmd, body in re.findall(r"([A-Za-z])([^A-Za-z]*)", d):
-        assert cmd in _ARGS, f"relative or unknown path command {cmd!r} in {d[:40]}"
-        nums = [float(n) for n in re.findall(_NUM, body)]
-        n = len(_ARGS[cmd])
-        if n == 0:
-            out.append((cmd, []))
-            continue
-        assert nums and len(nums) % n == 0, f"{cmd} takes {n} numbers, got {nums}"
-        for i in range(0, len(nums), n):
-            out.append((cmd, nums[i:i + n]))
-    return out
 
 
 def fmt_path(cmds, s):
@@ -226,6 +205,16 @@ def read_art(svg):
             cx, cy = a * cx + c * cy + e, b * cx + d * cy + f
             r *= math.sqrt(abs(a * d - b * c))
         circles.append(dict(cx=cx, cy=cy, r=r, fill=_attr(tag, "fill").lower()))
+    for tag in re.findall(r"<rect[^>]*>", svg):
+        # A plain rectangle (a label's rule) as Figma writes it; the background
+        # and its clip are the panel's whole size and aren't art.
+        assert not _attr(tag, "transform"), "a rect with a transform; flatten it in Figma"
+        x, y = float(_attr(tag, "x") or 0), float(_attr(tag, "y") or 0)
+        w, h = float(_attr(tag, "width")), float(_attr(tag, "height"))
+        if w >= 1000 and h >= 1000:
+            continue
+        paths.append(dict(cmds=[("M", [x, y]), ("H", [x + w]), ("V", [y + h]), ("H", [x]), ("Z", [])],
+                          fill=(_attr(tag, "fill") or "").lower()))
     for tag in re.findall(r"<path[^>]*>", svg):
         assert not _attr(tag, "transform"), "a path with a transform; flatten it in Figma"
         cmds = parse_path(_attr(tag, "d"))
@@ -253,14 +242,23 @@ def test_dot(dot, circles, paths):
     tabs = [p for p in paths if p["fill"] == GOLD and inside(bbox(p["cmds"]))]
     assert len(tabs) == 1, f"expected one tab on the test dot, found {len(tabs)}"
     tab = tabs[0]["cmds"]
-    # The tab is the dot's south-east quadrant with its outer corner
-    # rounded: M c,c H c+r <outer edge, ending H c> V c Z. Its outer edge plus
-    # the disc's other three quadrants is the union's outline.
-    assert bbox(tab) == (cx, cy, cx + r, cy + r), "test tab is no longer the SE quadrant"
-    assert tab[0] == ("M", [cx, cy]) and tab[1] == ("H", [cx + r]), "test tab drawn differently"
+    # The tab is one quadrant of the dot with its outer corner rounded:
+    # M c,c H c+-r <outer edge, ending H c> V c Z. Its outer edge plus the
+    # disc's other three quadrants is the union's outline. Drawn from the front
+    # (W-1153) it is the lower-right quadrant as read there, which the board's
+    # frame turns to the upper-left; any quadrant is taken.
+    quads = {(sx, sy): (min(cx, cx + sx * r), min(cy, cy + sy * r), max(cx, cx + sx * r), max(cy, cy + sy * r))
+             for sx in (1, -1) for sy in (1, -1)}
+    (sx, sy), = [q for q, box in quads.items() if bbox(tab) == box] or [(None, None)]
+    assert sx, "test tab is no longer a quadrant of the dot"
+    assert tab[0] == ("M", [cx, cy]) and tab[1] == ("H", [cx + sx * r]), "test tab drawn differently"
     end = max(i for i, (c, a) in enumerate(tab) if c == "H" and a == [cx])
     assert [c for c, _ in tab[end + 1:]] in (["V", "Z"], ["Z"]), "test tab drawn differently"
-    outline = [("M", [cx, cy + r]), ("A", [r, r, 0, 1, 1, cx + r, cy])] + tab[2:end + 1] + [("Z", [])]
+    # The long way round, from the tab's end on the y-axis to its start on the
+    # x-axis: clockwise for the SE and NW quadrants, anticlockwise for the others.
+    sweep = 1 if sx * sy > 0 else 0
+    outline = ([("M", [cx, cy + sy * r]), ("A", [r, r, 0, 1, sweep, cx + sx * r, cy])]
+               + tab[2:end + 1] + [("Z", [])])
 
     holes = [circle_path(c["cx"], c["cy"], c["r"]) for c in circles
              if c["fill"] in ("black", INK) and inside((c["cx"] - c["r"], c["cy"] - c["r"],
@@ -270,14 +268,14 @@ def test_dot(dot, circles, paths):
     return [outline] + holes
 
 
-def engraved(welded=True):
+def engraved(welded=True, art=None):
     """The engraved layer: ([shape], s), each shape its subpaths in Figma px
     (fill even-odd), s mm per px. Welded, as the laser file has it: where marks
     overlap, one outline, its counters and the dots of its i's bridged in. Not
     welded, each mark on its own, with the art's own subpaths: what a renderer
     that triangulates (the shop's 3D model) wants."""
     lay = json.loads((HERE / "panel_layout.json").read_text())
-    svg = ART.read_text()
+    svg = board_art(art or ART)
     vw, vh = (float(v) for v in re.search(r'viewBox="0 0 ([\d.]+) ([\d.]+)"', svg).groups())
     s = lay["panel"]["w"] / vw  # mm per Figma px
     # Frame 13 was 1801 px, 3 mm short: its slash stood behind the power LED.
@@ -291,6 +289,8 @@ def engraved(welded=True):
     # SW3's plunger comes up through it. Figma puts every dot on whole pixels.
     tdot = next(d for d in lay["dots"] if d["mat"] == "T")
     at = (round(tdot["x"] / s), round(tdot["y"] / s))
+    assert any(20 < c["r"] < 40 and (round(c["cx"]), round(c["cy"])) == at for c in circles), \
+        "the art must be drawn from the front, sockets at the top: the test hole is a row off"
     (t,) = [c for c in circles if c["fill"] == GOLD and (round(c["cx"]), round(c["cy"])) == at]
 
     engrave = [[circle_path(c["cx"], c["cy"], c["r"])] for c in circles
@@ -338,7 +338,7 @@ def build():
 def slash():
     """The art's power slash (its one tan shape) as polys.json: [{outline,
     holes}] in mm, y down, flattened to 0.02 mm."""
-    svg = ART.read_text()
+    svg = board_art(ART)
     s = json.loads((HERE / "panel_layout.json").read_text())["panel"]["w"] / \
         float(re.search(r'viewBox="0 0 ([\d.]+) ', svg).group(1))
     (p,) = [p for p in read_art(svg)[1] if p["fill"] == FR4]

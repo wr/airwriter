@@ -3,6 +3,17 @@
 Linear: W-1037. Written 2026-10-14, after rev A bring-up. Supersedes the "States" bullet of
 `2026-08-20-dot-panel-cover-design.md` §5 and the teal-only material model in its §1 table.
 
+**Amended 2026-11-15: the panel is read from the front** (`W-1153 The panel reads from the
+front, with the sockets at the back`, `2026-11-15-which-way-it-faces-design.md`). AirWriter
+sits with its sockets toward the wall, so every pattern here is drawn as seen from the side away
+from them: row 0 is the row farthest from you, column 0 is on your left, and the test button is
+at row 4, column 3. `lg_row()` and `lg_col()` turn each LED's place in `LG_MAP`, which stays in
+the board's own rows and columns. Directions in this design read from the front: the boot wave
+from the top-left, the print head down the rows, the page off the top, the update's fill from
+the bottom, the stripes green at the top. Patterns that come out of a socket light the same LEDs
+as before, which are now along the top edge (below). Per-dot hashes key on the front positions,
+so each dot's tint and phase moved to another dot. Every board does this, rev A included.
+
 ## Goal
 
 Anyone across the room can tell what the AirWriter is doing, without opening the web page:
@@ -151,7 +162,7 @@ only, since under the mask it turns mint.
 | Printing | all; mask at 4× | **print head**: a bright white dot crosses the current row in 1.5 s, inking it warm (hue 28–48°) behind; rows advance top to bottom and alternate direction like the ImageWriter's bidirectional head; the two rows above hold fading ink (25%, 12%), the rest 3%. Every ink level k is drawn at glow + (1 − glow)·k, so the trail steps down to the glow and still reads (W-1115) |
 | Needs attention | all; FR4 at the alert cap (96/255), mask at 4× | deep amber (hue 18–30°: at 36° the bright green die washed it toward white) **double ripple** from the test button: two wide rings 350 ms apart every 2 s over a 12% amber floor (resting on the glow), so the panel is never dark while it needs a person |
 | Job failed | all; mask at 4× | red (hue 352–12°): three 200 ms **glitch flashes**, each on a different random ~65% of dots, then a pulse 33%→100% whose period varies ±15% per dot, until the hold ends |
-| Cable test | the strip between the sockets; mask at 4× | everything stays in the bottom three rows, columns 0–4 (from the printer socket to just past LocalTalk's: 10 dots), the rest dark (Wells, 2026-10-16: it was the whole panel). A band **sweeps** from the LocalTalk socket to the printer's and back (600 ms each way), the order the test runs in, over an 8% floor (resting on the glow). Green (hue 130° ±14°), a crossover: then the strip **glows** 100% and fades by 2.4 s. Red (hue 352–12°), a straight, broken or missing cable: then the strip **blinks twice** (200 ms on, 200 off, 200 on). **No cable tested** (TashTalk didn't answer, W-1063): no sweep; after 200 ms dark the five dots within 2.8 rows of the LocalTalk socket blink red twice (200 on, 200 off, 200 on), the rest dark, 1 s in all. Red says no; where it blinks says LocalTalk |
+| Cable test | the strip between the sockets; mask at 4× | everything stays in the three rows by the sockets, from the front the top three rows, columns 2–6 (from just past LocalTalk's socket to the printer's: 10 dots), the rest dark (Wells, 2026-10-16: it was the whole panel). A band **sweeps** from the LocalTalk socket to the printer's and back (600 ms each way), the order the test runs in, over an 8% floor (resting on the glow). Green (hue 130° ±14°), a crossover: then the strip **glows** 100% and fades by 2.4 s. Red (hue 352–12°), a straight, broken or missing cable: then the strip **blinks twice** (200 ms on, 200 off, 200 on). **No cable tested** (TashTalk didn't answer, W-1063): no sweep; after 200 ms dark the five dots within 2.8 rows of the LocalTalk socket blink red twice (200 on, 200 off, 200 on), the rest dark, 1 s in all. Red says no; where it blinks says LocalTalk |
 | Asleep | two or three FR4 dots at a time | **fireflies** (W-1117): a breath starts every 2 s at a new FR4 dot and lasts 6 s, so three overlap and two or three dots are always lit. Each breath is in the curve of the old Mac laptops' sleep light, `(e^sin − 1/e)/(e − 1/e)` driven linearly: from off up to 100% of the cap and back to off. Every FR4 dot takes a turn, in a shuffled order, before any repeats, and no dot breathes twice at once (a round never opens on either of the last round's last two dots). Neutral white, or in gamer mode a slowly cycling hue, each firefly 40° on from the one before. Fade into sleep over 10 s; wake instantly. (Was a fixed pilot dot at 3–12% with a rare twinkle, too dim on board 1; then one breath every 5 s at a new dot, too subtle: one dot of 14, somewhere new each time and dark most of the time. Wells picked fireflies on 2026-10-30 from previews, over a fixed dot by the test button at twice the cap and the whole panel breathing out from the test button, and approved it on board 1.) |
 
 **The glow** (W-1115). At one or two counts of drive a dot can show only a few colours, and
@@ -200,9 +211,10 @@ the classic Apple logo's without its red and purple (red is for failures, and pu
 update's pink), top to bottom over the eight rows, two rows each: hue 104°, 55°, 28°, 240°
 (stripe `⌊(row + 0.5)·4/8⌋`), saturation 85%, ±4° per dot.
 
-**The sockets are on the bottom edge**: the printer (J2) under column 0.9, LocalTalk (J4) under
-column 3.2, USB-C under 5.5. A pattern about a cable starts at its socket, drawn from row 8.6,
-just below the grid (the sockets themselves are 4.6 rows lower), so the wave enters at once.
+**The sockets are along the far edge**, as seen from the front: the printer (J2) beyond column
+5.1, LocalTalk (J4) beyond 2.8, USB-C beyond 0.5. A pattern about a cable starts at its socket,
+drawn from row −1.6, just above the grid (the sockets themselves are 4.6 rows farther), so the
+wave enters at once.
 
 **Priority**, highest first:
 
@@ -265,7 +277,7 @@ holds until the restart. The update's own flow decides when; W-1048 drives it.
 
 | Acknowledgement | When | Pattern | Length |
 |---|---|---|---|
-| LocalTalk on | the node has its node ID (at boot in DIP mode 2, or when mode 2 is switched on) | the stripes rise out of the LocalTalk socket: a front climbs from row 8.5 to −1.5 in 0.7 s, rows below it at 72% with a crest to 100%; holds; fades out 1.0–1.6 s. All dots. | 1.6 s |
+| LocalTalk on | the node has its node ID (at boot in DIP mode 2, or when mode 2 is switched on) | the stripes come out of the LocalTalk socket, down from the top as seen from the front: a front runs from row −1.5 to 8.5 in 0.7 s, rows above it at 72% with a crest to 100%; holds; fades out 1.0–1.6 s. All dots. | 1.6 s |
 | A Mac heard | an NBP LkUp answered (a Chooser looking), or a frame from a node not heard since boot; at most once every 6 s | an arc of stripes out of the LocalTalk socket, crossing the panel in 0.9 s (100% at the crest, ±0.7 rows), fading out 0.8–1.1 s. All dots. | 1.1 s |
 | Busy | the test button tapped during an IPP or LocalTalk job | two orange pulses (hue 30° ±4°, 300 ms each, peak 100%) on the dots around the test button (distance 0.5–1.6) | 0.6 s |
 | Saved | settings saved on the web page; for Wi-Fi, just before its restart | a white ring closes into the test button in 0.6 s (100% at the ring), then the dots around the button glow 75% and fade out by 0.9 s. FR4 only: under the mask white turns mint. | 0.9 s |
@@ -328,7 +340,7 @@ first LC.
 | Reset | orange running to red, brighter and beating 1 Hz to 3 Hz; done: a white flash, the red draining over 1 s, two white beats, dark |
 | Update | pink rising with the download, a lavender shimmer every 0.8 s; checking, a pink pulse; done, green, then dark until the restart |
 | TashTalk flash | LocalTalk's four stripes in turn, a white flick each; done, green |
-| Acknowledgements | a Mac heard: the four stripes quickly; LocalTalk on: the stripes from the bottom up, then fading; busy: two orange pulses; saved: white gathering in and fading |
+| Acknowledgements | a Mac heard: the four stripes quickly; LocalTalk on: the stripes in turn, blue first and green last, then fading; busy: two orange pulses; saved: white gathering in and fading |
 
 A task wins over the state, and an acknowledgement shows over it except while booting, in Needs
 attention or the last job failed, or during the cable test or a moment. The rest of the LC's

@@ -4,16 +4,18 @@ set -e
 cd "$(dirname "$0")"
 KIPY=/Applications/KiCad/KiCad.app/Contents/Frameworks/Python.framework/Versions/3.9/bin/python3
 S=$(python3 -c "print(62.0/1100)")
+# svg/*.svg are drawn from the front (sockets at the top), as Figma's "from the
+# front" frames are; every reader turns them into the board's frame (front.py).
 python3 panel_layout.py
-python3 svg2poly.py svg/panel.svg "$S" "#dda857" gold.polys.json
+python3 svg2poly.py svg/panel.svg "$S" "#dda857" gold.polys.json front
 # Ink, not silkscreen: geometry decides each poly's fate downstream. A poly
 # that sits fully inside a gold dot becomes a mask knockout (dark letters on
 # exposed gold); everything else is real silkscreen. Frame 9b draws the test
 # tag in #111111 rather than white, which is what it looks like in the
 # product -- white was only ever a proxy for "knock this out". The artboard
 # background is #111111 too, and svg2poly drops it by its viewbox-sized bbox.
-python3 svg2poly.py svg/panel.svg "$S" "white,#ffffff,#111111" silk.polys.json
-python3 svg2poly.py svg/panel.svg "$S" "#e7ba9b" fr4.polys.json
+python3 svg2poly.py svg/panel.svg "$S" "white,#ffffff,#111111" silk.polys.json front
+python3 svg2poly.py svg/panel.svg "$S" "#e7ba9b" fr4.polys.json front
 # The LC's acrylic top, from its own art (svg/lc.svg).
 python3 lc_top.py
 python3 floors.py

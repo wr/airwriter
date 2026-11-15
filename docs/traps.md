@@ -121,6 +121,10 @@ Traps already explained in a code comment are listed only when the comment is ea
   dithering between them reads as flicker even at 400 fps: a rev A board's embers hopped red, yellow,
   white (W-1115). No dot rests below `LG_GLOW`, and only dots over `LG_BLEND` are dithered. A new
   dim floor goes through `glow_at` or `rest()`; a fade to or from dark may pass through.
+- **`LG_MAP` is in the board's rows and columns; the lights are drawn from the front** (W-1153).
+  Every effect reads an LED's place through `lg_row(i)` and `lg_col(i)`: row 0 farthest from you,
+  the sockets at the back, the test button at (4, 3). An effect that reads `LG_MAP[i].r` runs
+  upside down from the front. The socket anchors are front positions too (`PORT_ROW` −1.6).
 - **The panel is not true RGB.** Through the FR4, blue reads cyan except at hue 240 (sky blue),
   270 is pale lavender, 285 onward pink, and there is no purple; under the mask white turns
   mint. Pick colours from the measured map (`tools/lights/panel_colours.json`, the
@@ -676,6 +680,10 @@ Traps already explained in a code comment are listed only when the comment is ea
   test pad, annulus and tab art touch without a DRC short. Don't "fix" either end.
 
 **Art panel (`hardware/panel/`)**
+- **The art is drawn from the front, sockets at the top; the board's frame is upside down to
+  it** (W-1153). Read `svg/*.svg` only through `front.board_art()` / `to_board()`, or
+  `svg2poly.py`'s `front` argument. An export of Figma's Frames 16 and 17, the old drawing,
+  stops the build: export "Frame 16 · from the front" and "Frame 17 · from the front".
 - **svgelements yields `<mask>` content as ordinary elements** and ignores mask attributes; the
   generator strips defs and rect-crops masked paths.
 - **The Figma export's final `<rect fill="white">` lives inside `<clipPath>`.** Hiding or deleting

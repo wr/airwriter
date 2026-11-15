@@ -137,10 +137,16 @@ static int all_dots(ps_state_t st)
     return st == PS_BOOTING || st == PS_PRINTING || st == PS_ATTENTION || st == PS_FAILED;
 }
 
+// The panel as seen from the front: the sockets are at the back (W-1153).
+#define TEST_ROW 4
+#define TEST_COL 3
+int lg_row(int i) { return LG_ROWS - 1 - LG_MAP[i].r; }
+int lg_col(int i) { return LG_COLS - 1 - LG_MAP[i].c; }
+
 int lg_pilot_index(void)
 {
     for (int i = 0; i < LG_NUM_LEDS; i++)
-        if (LG_MAP[i].r == 3 && LG_MAP[i].c == 4) return i;
+        if (lg_row(i) == TEST_ROW && lg_col(i) == TEST_COL - 1) return i;
     return 0;
 }
 
@@ -176,12 +182,12 @@ static lg_c3 stripe(int r, int c)
     return hsv(hue[k] + (dot_hash(r, c, 3) - 0.5f) * 8, 0.85f, 1);
 }
 
-// The sockets are on the bottom edge: the printer (J2) under column 0.9,
-// LocalTalk (J4) under 3.2. Waves start from row 8.6, just below the grid (the
-// sockets are 4.6 rows lower), so they enter at once.
-#define PORT_ROW    8.6f
-#define PRINTER_COL 0.9f
-#define LT_COL      3.2f
+// The sockets are along the far edge, seen from the front: the printer (J2)
+// beyond column 5.1, LocalTalk (J4) beyond 2.8. Waves start from row -1.6,
+// just above the grid (the sockets are 4.6 rows farther), so they enter at once.
+#define PORT_ROW    -1.6f
+#define PRINTER_COL 5.1f
+#define LT_COL      2.8f
 #define FAR         10.5f       // a socket to the far corner, in rows
 #define CROSS_MS    1100.0f     // a cable wave's time to cross the panel
 
@@ -193,8 +199,8 @@ static float dist_to(int r, int c, float pr, float pc)
 // cap: the cap the dot is drawn under, for the glow its resting levels sit on.
 static lg_c3 state_dot(const ps_view_t *v, const lg_opts_t *o, int i, uint32_t t, float cap)
 {
-    int r = LG_MAP[i].r, c = LG_MAP[i].c;
-    float dr = (float)r - 3, dc = (float)c - 3;
+    int r = lg_row(i), c = lg_col(i);
+    float dr = (float)(r - TEST_ROW), dc = (float)(c - TEST_COL);
     float dist = hypotf(dr, dc);
     float h1 = dot_hash(r, c, 1), h2 = dot_hash(r, c, 2);
     float glow = glow_at(cap);
@@ -211,19 +217,19 @@ static lg_c3 state_dot(const ps_view_t *v, const lg_opts_t *o, int i, uint32_t t
     }
     if (v->cable) {
         // A cable test's answer (W-1055) stays between the two sockets: the
-        // bottom three rows, columns 0-4, the rest dark. A band runs from the
+        // top three rows, columns 2-6, the rest dark. A band runs from the
         // LocalTalk socket to the printer's and back, 600 ms each way, as the
         // test does (J4 -> J2, then J2 -> J4). Green, the cable works: the
         // strip glows and fades. Red, it doesn't or there isn't one: the strip
         // blinks twice.
-        if (r < 5 || c > 4) return DARK;
+        if (r > 2 || c < 2) return DARK;
         uint32_t cs = v->cable_ms;
         const uint32_t sweep = 600;
         int pass = v->cable == PS_CABLE_PASS;
         float hue = pass ? jitter(r, c, 130, 14, t, 0) : jitter(r, c, 2, 10, t, 0);
         float lv;
         if (cs < 2 * sweep) {
-            const float a = LT_COL + 1.3f, b = PRINTER_COL - 1.3f;
+            const float a = LT_COL - 1.3f, b = PRINTER_COL + 1.3f;
             float x = cs < sweep ? a + (b - a) * (float)cs / (float)sweep
                                  : b + (a - b) * (float)(cs - sweep) / (float)sweep;
             lv = fmaxf(0.08f + 0.92f * gauss((float)c - x, 0.8f), glow);
@@ -394,7 +400,7 @@ static int busy_panel(const ps_view_t *v)
 
 static lg_c3 view_dot(const ps_view_t *v, const lg_opts_t *o, int i, uint32_t t)
 {
-    int r = LG_MAP[i].r, c = LG_MAP[i].c, fr4 = LG_MAP[i].mat == 'P';
+    int r = lg_row(i), c = lg_col(i), fr4 = LG_MAP[i].mat == 'P';
     float s = (float)v->since_ms;
     float cap = dot_cap(v, i);          // the old state is drawn under the new one's cap
     lg_c3 now = state_dot(v, o, i, t, cap);
@@ -485,7 +491,7 @@ int lg_act_over(uint8_t act, uint32_t act_ms)
 // clock running out. The newest dots glow; the rest beat faster as it fills.
 static lg_c3 reset_fill(int r, int c, float p, uint32_t s, uint32_t t, float lo)
 {
-    float dr = (float)r - 3, dc = (float)c - 3;
+    float dr = (float)(r - TEST_ROW), dc = (float)(c - TEST_COL);
     float turn = atan2f(dc, -dr) / TAU;                 // 0 at 12 o'clock, clockwise
     if (turn < 0) turn += 1;
     // Orange to red, late: through gamma 2.2 anything under ~30 degrees
@@ -521,8 +527,8 @@ static void task_frame(const lg_slot_t *k, uint32_t t, uint16_t out[LG_NUM_LEDS]
 {
     uint32_t s = k->ms;
     for (int i = 0; i < LG_NUM_LEDS; i++) {
-        int r = LG_MAP[i].r, c = LG_MAP[i].c, fr4 = LG_MAP[i].mat == 'P';
-        float dist = hypotf((float)r - 3, (float)c - 3);
+        int r = lg_row(i), c = lg_col(i), fr4 = LG_MAP[i].mat == 'P';
+        float dist = hypotf((float)(r - TEST_ROW), (float)(c - TEST_COL));
         lg_c3 col = DARK;
         int red = 0, white = 0;
         switch (k->act) {
@@ -624,17 +630,17 @@ int lg_blip_over(uint8_t blip, uint32_t ms)
 
 static lg_c3 blip_dot(uint8_t blip, uint32_t ms, int i, uint32_t t)
 {
-    int r = LG_MAP[i].r, c = LG_MAP[i].c;
-    float s = (float)ms, dist = hypotf((float)r - 3, (float)c - 3);
+    int r = lg_row(i), c = lg_col(i);
+    float s = (float)ms, dist = hypotf((float)(r - TEST_ROW), (float)(c - TEST_COL));
     switch (blip) {
     case LG_BLIP_MAC: {             // an arc of stripes out of the LocalTalk socket
         float front = s / 900.0f * FAR;
         float lvl = gauss(dist_to(r, c, PORT_ROW, LT_COL) - front, 0.7f);
         return sc(stripe(r, c), lvl * (1 - ss(800, LG_BLIP_MAC_MS, s)));
     }
-    case LG_BLIP_LT_ON: {           // the stripes rise out of it and fade
-        float edge = 8.5f - s / 700.0f * 10.0f;
-        float lit = ss(-0.5f, 0.5f, (float)r - edge);
+    case LG_BLIP_LT_ON: {           // the stripes come down out of it and fade
+        float edge = -1.5f + s / 700.0f * 10.0f;
+        float lit = ss(-0.5f, 0.5f, edge - (float)r);
         float lvl = 0.715f * lit + 0.415f * gauss((float)r - edge, 0.5f);   // peaks at 100%
         return sc(stripe(r, c), lvl * (1 - ss(1000, LG_BLIP_LT_ON_MS, s)));
     }
@@ -757,7 +763,7 @@ void lg_render16(const ps_view_t *v, const lg_opts_t *o, uint32_t t_ms,
         float breath = (expf(sinf(TAU * ph - TAU / 4)) - 0.36787944f) / (2.71828183f - 0.36787944f);
         int d = lg_sleep_dot(b);
         lg_c3 col = gamer ? hsv((float)t_ms / 60.0f + (float)b * 40, 0.75f, 1)
-                          : white_of(LG_MAP[d].r, LG_MAP[d].c);
+                          : white_of(lg_row(d), lg_col(d));
         put_linear(out[d], col, breath * sleep_k);
     }
 }
@@ -1003,12 +1009,12 @@ static lg_c3 one_task(const lg_slot_t *k, uint32_t t, int *red)
 
 static lg_c3 one_blip(uint8_t blip, uint32_t ms)
 {
-    static const float hue[4] = { 240, 28, 55, 104 };  // the stripes from the bottom up
+    static const float hue[4] = { 240, 28, 55, 104 };  // the stripes in turn, green last
     float s = (float)ms;
     switch (blip) {
     case LG_BLIP_MAC:                               // the four stripes, quickly
         return sc(hsv(hue[ms * 4 / LG_BLIP_MAC_MS % 4], 0.85f, 1), blink(s, 550, 1100));
-    case LG_BLIP_LT_ON:                             // the stripes rise in turn, green holds and fades
+    case LG_BLIP_LT_ON:                             // the stripes in turn, green holds and fades
         return hsv(hue[ms < 700 ? ms * 4 / 700 : 3], 0.85f,
                    ss(0, 100, s) * (1 - ss(1000, LG_BLIP_LT_ON_MS, s)));
     case LG_BLIP_BUSY:                              // two orange pulses: not now
