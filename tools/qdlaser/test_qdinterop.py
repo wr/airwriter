@@ -1,7 +1,8 @@
 #!/usr/bin/env python3.14
 # SPDX-License-Identifier: GPL-3.0-or-later
 """The firmware's Personal LaserWriter 300 code against a software one, on this computer (W-1102,
-W-1144), and its Personal LaserWriter LS code against a software LS (W-1145).
+W-1144), its Personal LaserWriter LS code against a software LS (W-1145), and its LaserWriter
+Select 300 code against a software Select, on page memory and on the 300's path (W-1146).
 
 tools/rip/build/qdhost is the board's session, page stage and rip built for the host; it
 prints over a pseudo-terminal that qdfake.py serves, in qdfake's framing (the clock the
@@ -39,6 +40,11 @@ Scenarios, each its own qdfake and qdhost, side by side:
     one before is done, 81 00 and the whole setup before each, nothing its own driver never
     sends; one that refuses 83 40; paper out and a jam as a page prints, put right; a
     QuickDraw LaserWriter AirWriter has no model for, which gets nothing after the identity
+  * a LaserWriter Select 300 (qdfake --engine 31) on page memory: three pages, each loaded
+    once the one before is done, the setup and the PGRD table once, each page started where
+    the printer says, nothing AirWriter never sends a Select; a jam and its front cover as a
+    page prints, the page printed again from the printer's memory; paper out; and three
+    pages on the 300's path (--plain)
 
 qdfake prints a page in 2 s here (--done), so the lot takes about 35 s.
 
@@ -235,11 +241,14 @@ ROWS = 3175                                 # a Letter page's rows
 
 def trouble(fake):
     """What the fake printer answered with a blank, moved or wrong sheet, or (an LS) heard that
-    its own driver never sends."""
+    its own driver never sends, or (a Select) what AirWriter never sends it or a page memory it
+    could not follow."""
     return [e for e in fake.events()
             if e.startswith(("blank", "moved", "wrong page", "memory full", "8A 01 while",
                              "rows while", "81 00 while", "84 08 while", "fed by itself",
-                             "jammed again", "not the LS's", "row length"))]
+                             "jammed again", "not the LS's", "row length", "not sent to a Select",
+                             "8A 01 at", "a row before", "printed with no PGRD", "A2 18/19",
+                             "a width of", "8A 01 refused", "bad"))]
 
 
 def timeline(fake):
@@ -512,7 +521,7 @@ async def scenario_too_big(root, noisy, blank):
 
 # The cassette pulled out reads as no paper: board 1's printer answers it as it does an empty one.
 STATES = {"paper": "out of paper", "cassette": "out of paper", "jam": "paper jam",
-          "cover": "the cover is open"}
+          "cover": "the cover is open", "front": "the cover is open"}
 
 
 async def scenario_fault(root, page, fault):
@@ -651,6 +660,70 @@ async def scenario_ls_fault(root, tmp, page, fault):
     return res
 
 
+# ---- W-1146: a LaserWriter Select 300
+
+async def scenario_sel(root, tmp, files, plain=False):
+    tag = "sel-plain" if plain else "sel"
+    what = "a Select on the 300's path" if plain else "a Select on page memory"
+    fake = await Fake.start(root, tag, "--engine", "31", "--done", DONE_S, *(["--plain"] if plain else []))
+    run = await Run.start(fake.path, *files)
+    code = await run.wait(90)
+    await fake.stop()
+    heard, ev = fake.heard(), fake.events()
+    order = await in_order(fake, tmp, tag, files, printer="sel300-plain" if plain else "sel300")
+    bad = trouble(fake)
+    n = len(files)
+    res = [(code == 0, f"{what}: {n} pages print (exit {code}) {tail(run)}"),
+           ("found: LaserWriter Select 300" in run.text, f"{what}: qdhost names it"),
+           (order is None, f"{what}: whole and in order ({order})"),
+           (rows_while_printing(fake) == 0, f"{what}: no row while a page prints ({rows_while_printing(fake)})"),
+           (not bad, f"{what}: nothing blank, moved, or never sent a Select ({bad[:2]})"),
+           (ev.count("job opens (83 68)") == 1 and ev.count("job ends (83 67)") == 1,
+            f"{what}: 83 68 opens the job and 83 67 ends it"),
+           (ev.count("density e9") >= 1, f"{what}: Apple's density ({[e for e in ev if 'density' in e][:2]})"),
+           (heard.count("8351d2") >= 1 and "834fcc" not in heard, f"{what}: the cassette, 83 51"),
+           (heard.count("8340c3") == 1, f"{what}: 83 40 only in qdhost's first question")]
+    if plain:
+        # 81 00: qdhost's first question, the job's begin, each page's setup; none at the end.
+        res.append((heard.count("810081") == 2 + n and "c000c0" not in heard,
+                    f"{what}: 81 00 and the setup before each page, no addresses "
+                    f"({heard.count('810081')} x 81 00)"))
+    else:
+        # 81 00: qdhost's first question, the job's begin, the probe's identity, the setup; once.
+        res += [(heard.count("810081") == 4, f"{what}: the setup once ({heard.count('810081')} x 81 00)"),
+                ("92 07" in ev, f"{what}: the probe tells 92 under 1 MB ({[e for e in ev if e.startswith('92')]})"),
+                (heard.count("8b8b00") == 4 * n, f"{what}: 8B 8B twice at each page's start and end "
+                                                  f"({heard.count('8b8b00')})")]
+    return res
+
+
+async def scenario_sel_fault(root, tmp, page, fault):
+    """A jam and paper out as the page prints; the front cover (83 02 bit 6 alone) as it loads,
+    since opened mid-page the sheet inside jams too."""
+    fake = await Fake.start(root, f"sel-{fault}", "--engine", "31", "--done", 4)
+    run = await Run.start(fake.path, page)
+    if fault == "front":
+        printing = await until(lambda: fake.rows_heard() > 0, 30)
+    else:
+        printing = await until(lambda: "print" in fake.events(), 30)
+    await fake.say(fault)
+    shown = await until(lambda: STATES[fault] in run.text, 20)
+    await asyncio.sleep(0.5)
+    await fake.say("ok")
+    code = await run.wait()
+    await fake.stop()
+    order = await in_order(fake, tmp, f"sel-{fault}", [page], printer="sel300")
+    bad = trouble(fake)
+    when = "loads" if fault == "front" else "prints"
+    res = [(printing and shown, f"a Select, {fault} as a page {when}: qdhost shows \"{STATES[fault]}\" {tail(run)}"),
+           (code == 0 and order is None, f"a Select, {fault}: put right, the page prints whole (exit {code}, {order})"),
+           (not bad, f"a Select, {fault}: nothing never sent a Select, nothing it couldn't follow ({bad[:2]})")]
+    if fault == "jam":
+        res.append(("page 1: printing again after a jam" in run.text and "sent again" not in run.text,
+                    f"a Select, {fault}: the page printed again from the printer's memory"))
+    return res
+
+
 async def scenario_unsupported(root, page):
     fake = await Fake.start(root, "unsupported", "--engine", "23")
     run = await Run.start(fake.path, page)
@@ -704,7 +777,7 @@ async def main():
             scenario_apple_behind(root, tmp, ten[0], pages["noisy"]),
             scenario_apple(root, tmp, pages["noisy"]),
             scenario_too_big(root, pages["noisy"], pages["blank"]),
-            *[scenario_fault(root, pages["letter"], f) for f in STATES],
+            *[scenario_fault(root, pages["letter"], f) for f in STATES if f != "front"],
             scenario_manual(root, pages["small"], True),
             scenario_manual(root, pages["small"], False),
             scenario_silent(root, pages["letter"]),
@@ -713,6 +786,11 @@ async def main():
             scenario_ls_refuses_40(root, pages["small"]),
             scenario_ls_fault(root, tmp, ten[0], "paper"),
             scenario_ls_fault(root, tmp, ten[0], "jam"),
+            scenario_sel(root, tmp, ten[:3]),
+            scenario_sel(root, tmp, ten[3:6], plain=True),
+            scenario_sel_fault(root, tmp, ten[0], "jam"),
+            scenario_sel_fault(root, tmp, ten[0], "front"),
+            scenario_sel_fault(root, tmp, ten[0], "paper"),
             scenario_unsupported(root, pages["small"]),
             scenario_badrow(root, pages["small"]),
         ]

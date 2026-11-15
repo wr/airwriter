@@ -296,11 +296,13 @@ static int print_sw_testpage(const char *cart, sw_model_t model, const char *pat
     return 0;
 }
 
-/* --printer plw300 (W-1102), plwls (W-1145): the firmware's session and page stage write the
- * conversation as the pty carries it to qdfake.py (--out-qd: each packet as `P`, a u16 LE
- * length, its bytes) and as the line the board clocks out (--out-qd-bits: qd_bits_put's image).
- * Every question is answered as an idle Personal LaserWriter 300 (or LS) with paper at both
- * sources answers it, on a clock that moves only when the session waits. */
+/* --printer plw300 (W-1102), plwls (W-1145), sel300 and sel300-plain (W-1146): the firmware's
+ * session and page stage write the conversation as the pty carries it to qdfake.py (--out-qd:
+ * each packet as `P`, a u16 LE length, its bytes) and as the line the board clocks out
+ * (--out-qd-bits: qd_bits_put's image). Every question is answered as an idle Personal
+ * LaserWriter 300 (or LS, or Select 300) with paper at both sources answers it, on a clock that
+ * moves only when the session waits; a Select on page memory keeps its write and read addresses
+ * (qdfake.py's rules) and has under 1 MB. */
 typedef struct {
     FILE    *frames;
     uint8_t *bits;
@@ -312,8 +314,13 @@ typedef struct {
     int      page_no;
     ht_algo_t screen;
     uint8_t  engine;                 // what 83 3E answers: the model's
+    int      pm;                     // a Select on page memory
+    uint32_t wa, ra;                 // its write and read addresses
     qd_session_t *sess;
 } qdw_t;
+
+// What a Select answers to 83 3E here: any answer but 29, 0D or 23 is one.
+enum { QDW_SELECT = 0x31 };
 
 static int qdw_put(void *ctx, const uint8_t *p, size_t n)
 {
@@ -331,7 +338,18 @@ static int qdw_put(void *ctx, const uint8_t *p, size_t n)
         w->bits_cap = cap;
     }
     qd_bits_put(w->bits, w->bits_cap, &w->bits_pos, p, n);
-    if (n == 3 && (p[0] == 0x82 || p[0] == 0x83 || p[0] == 0x8E)) {
+    if (w->pm) {
+        if (p[0] < 0x80) w->wa += (uint32_t)(n - 3);
+        else if (p[0] == 0x8B) w->wa++;
+        else if (p[0] == 0x81) w->wa = 0;
+        else if (p[0] >= 0xE0 && p[0] <= 0xE5) {
+            uint32_t *a = p[0] < 0xE3 ? &w->wa : &w->ra;
+            const int k = 8 * ((p[0] - 0xE0) % 3);
+            *a = (*a & ~(0xFFu << k)) | (uint32_t)p[1] << k;
+        }
+    }
+    if (n == 3 && (p[0] == 0x82 || p[0] == 0x83 || p[0] == 0x8E ||
+                   (w->pm && ((p[0] >= 0xC0 && p[0] <= 0xC5) || p[0] == 0xCF)))) {
         w->asked[0] = p[0];
         w->asked[1] = p[1];
         w->owed = 1;
@@ -348,7 +366,10 @@ static int qdw_read(void *ctx, uint8_t *b, size_t cap, uint32_t first_ms, uint32
     if (!w->owed || !cap) { w->ms += first_ms; return 0; }
     w->owed = 0;
     switch (w->asked[0]) {
-    case 0x82: b[0] = 0xA4; break;                    // idle, memory empty
+    case 0x82: b[0] = w->pm ? 0x44 : 0xA4; break;     // idle, memory empty (bits 7-6: the path)
+    case 0xC0: case 0xC1: case 0xC2: b[0] = (uint8_t)(w->wa >> (8 * (w->asked[0] - 0xC0))); break;
+    case 0xC3: case 0xC4: case 0xC5: b[0] = (uint8_t)(w->ra >> (8 * (w->asked[0] - 0xC3))); break;
+    case 0xCF: b[0] = 0xFF; break;                    // nothing at 1 MB: under 1 MB
     case 0x8E: b[0] = 0xFC; break;                    // page done: the page prints at once
     default:   b[0] = w->asked[1] == 0x3E ? w->engine // a Personal LaserWriter 300 or LS
                     : w->asked[1] == 0x2A ? 0x61      // paper in the cassette and the slot
@@ -388,7 +409,8 @@ static int print_qd_testpage(const char *path, qd_model_t model, ht_algo_t algo,
     qdw_t qw;
     memset(&qw, 0, sizeof qw);
     qw.screen = algo;
-    qw.engine = qd_spec(model)->engine;
+    qw.engine = qd_spec(model)->engine ? qd_spec(model)->engine : QDW_SELECT;
+    qw.pm = model == QD_SEL300;
     if (!(qw.frames = fopen(path, "wb"))) { perror(path); return 1; }
     static const qd_ops_t qops = { .put = qdw_put, .flush = qdw_flush, .read = qdw_read,
                                    .sleep_ms = qdw_sleep, .now_ms = qdw_now };
@@ -469,7 +491,8 @@ static void usage(void)
           "       rip --in FILE --printer laser [--paper letter|a4|legal] [--ps FILE] [--hex]\n"
           "       rip --in FILE --printer stylewriter --model original|ii|1200|1500|2200|2400|2500\n"
           "           [--cart black|colour] [--tone none] [--out-sw FILE] [--out-pbm FILE]\n"
-          "       rip --in FILE --printer plw300|plwls [--source main|manual] [--out-qd FILE]\n"
+          "       rip --in FILE --printer plw300|plwls|sel300|sel300-plain [--source main|manual]\n"
+          "           [--out-qd FILE]\n"
           "           [--out-qd-bits FILE] [--out-pbm FILE]\n"
           "       rip --testpage colour|black|unknown --out-stream FILE [--dither ...] [--gain ...]\n"
           "       rip --sw-testpage black|colour --model M --out-sw FILE [--dither ...] [--gain ...]\n"
@@ -487,8 +510,9 @@ static void usage(void)
           "       rip --ps-testpage FILE [--hex] [--dither ...] [--gain ...]  a LaserWriter II NT's\n"
           "             test page as the PostScript the board sends it (W-1140)\n"
           "       --sw-testpage  a StyleWriter's test page for that cartridge, as the board draws it\n"
-          "       rip --qd-testpage FILE [--printer plwls] [--dither ...] [--gain ...]  the Personal\n"
-          "             LaserWriter 300's (or LS's) test page as the board sends it, in --out-qd's framing\n"
+          "       rip --qd-testpage FILE [--printer plwls|sel300] [--dither ...] [--gain ...]  the\n"
+          "             Personal LaserWriter 300's (or LS's, or Select 300's) test page as the board\n"
+          "             sends it, in --out-qd's framing\n"
           "             (W-1103); --out-sw writes it as the printer gets it, for swfake.py decode\n"
           "  --printer stylewriter  rip at 360 dpi for a StyleWriter (W-1103), the sheet named by\n"
           "             the page's width. --out-sw writes the page as the printer gets it (rects,\n"
@@ -500,7 +524,9 @@ static void usage(void)
           "             firmware's page stage and session: --out-qd writes the packets in qdfake.py's\n"
           "             framing, --out-qd-bits the line the board clocks out, --out-pbm the dots in\n"
           "             the record's screen; --source manual takes the manual feed slot. plwls: the\n"
-          "             same for a Personal LaserWriter LS (W-1145), --source manual its multipurpose tray\n"
+          "             same for a Personal LaserWriter LS (W-1145), --source manual its multipurpose tray;\n"
+          "             sel300 for a LaserWriter Select 300 on page memory, sel300-plain one on the\n"
+          "             300's path (W-1146)\n"
           "  --printer laser  rip at 300 dpi for a LaserWriter (W-1082); --ps writes its\n"
           "             PostScript, in binary, or with --hex as a Level 1 machine that\n"
           "             cannot take binary gets it\n",
@@ -575,7 +601,8 @@ int main(int argc, char **argv)
         }
         return print_sw_testpage(sw_tp, m, out_sw, algo, gain);
     }
-    if (qd_tp) return print_qd_testpage(qd_tp, printer && !strcmp(printer, "plwls") ? QD_PLWLS : QD_PLW300,
+    if (qd_tp) return print_qd_testpage(qd_tp, printer && !strcmp(printer, "plwls") ? QD_PLWLS
+                                             : printer && !strcmp(printer, "sel300") ? QD_SEL300 : QD_PLW300,
                                         algo, gain);
     if (ps_tp) return print_ps_testpage(ps_tp, algo, gain, hex);
     if (testpage) return print_testpage(testpage, out_stream, algo, gain, top);
@@ -604,9 +631,11 @@ int main(int argc, char **argv)
     if (out_stream && !h.stream) { perror(out_stream); fclose(f); return 1; }
 
     int laser = !strcmp(printer, "laser"), stylewriter = !strcmp(printer, "stylewriter");
-    // W-1145: plwls is the LS, through the same paths as the 300.
+    // W-1145: plwls is the LS, through the same paths as the 300; W-1146: sel300 a Select 300 on
+    // page memory, sel300-plain one on the 300's path.
     qd_model_t qdm = !strcmp(printer, "plw300") ? QD_PLW300 : !strcmp(printer, "plwls") ? QD_PLWLS
-                   : QD_NONE;
+                   : !strncmp(printer, "sel300", 6) ? QD_SEL300 : QD_NONE;
+    if (qdm == QD_SEL300 && strcmp(printer, "sel300") && strcmp(printer, "sel300-plain")) qdm = QD_NONE;
     int plw300 = qdm != QD_NONE;
     if (!laser && !stylewriter && !plw300 && strcmp(printer, "imagewriter")) { usage(); fclose(f); return 2; }
     if (plw300 && strcmp(source, "main") && strcmp(source, "manual")) { usage(); fclose(f); return 2; }
@@ -679,7 +708,8 @@ int main(int argc, char **argv)
         qd_ops_t ops = qops;
         ops.ctx = &qw;
         qw.screen = algo;
-        qw.engine = qd_spec(qdm)->engine;
+        qw.engine = qd_spec(qdm)->engine ? qd_spec(qdm)->engine : QDW_SELECT;
+        qw.pm = !strcmp(printer, "sel300");
         qw.frames = out_qd ? fopen(out_qd, "wb") : NULL;
         if (out_qd && !qw.frames) { perror(out_qd); fclose(f); return 1; }
         qd_job_cfg_t jc = { .model = qdm, .manual = !strcmp(source, "manual") };
@@ -689,7 +719,7 @@ int main(int argc, char **argv)
                              .sink = { qdw_open, qdw_row, qdw_print, qdw_note, &qw } };
         if (!(qw.sess = qd_session_new(&ops, &jc)) || !(qdp = qd_page_new(&pc)) ||
             qd_session_begin(qw.sess)) {
-            fprintf(stderr, "rip: the 300's session could not start\n");
+            fprintf(stderr, "rip: the printer's session could not start\n");
             fclose(f);
             return 1;
         }
@@ -715,7 +745,7 @@ int main(int argc, char **argv)
             if (bf) fclose(bf);
         }
         free(qw.bits);
-        if (qw.failed) { fprintf(stderr, "rip: could not write the 300's stream\n"); rc = -1; }
+        if (qw.failed) { fprintf(stderr, "rip: could not write the printer's stream\n"); rc = -1; }
     }
     if (ps) {
         ps_job_end(ps);

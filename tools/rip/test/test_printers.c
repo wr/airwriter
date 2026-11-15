@@ -1395,7 +1395,7 @@ static void test_sw_models(void)
     CHECK_EQ_INT(pr_model_to_sw((pr_model_t)(PR_MODEL_SWC2500 + 1)), SW_NONE);
     CHECK_EQ_INT(pr_model_from_sw(SW_NONE), PR_MODEL_NONE);
     CHECK(strcmp(pr_model_name(PR_MODEL_IW2), "ImageWriter II") == 0);   // as it was
-    CHECK(strcmp(pr_model_name(PR_MODEL_PLWLS + 1), "") == 0);    // W-1145: the LS follows the 300
+    CHECK(strcmp(pr_model_name(PR_MODEL_SEL300 + 1), "") == 0);   // W-1146: the Select follows the LS
 }
 
 // A StyleWriter that answers on an empty port (twice, W-1116): a shared record named by its
@@ -2914,37 +2914,88 @@ static void test_qd_known_record_at_once(void)
 
 static void test_qd_unsupported_named_not_shared(void)
 {
+    // A Japanese model (23): named, never a record, and only on the second answer in a row.
     fresh();
-    CHECK_EQ_INT(pr_port_seen_qd(&L, 0x55), PR_SEEN_AGAIN);
+    CHECK_EQ_INT(pr_port_seen_qd(&L, 0x23), PR_SEEN_AGAIN);
     CHECK_EQ_INT(L.qd_other, 0);
-    CHECK_EQ_INT(pr_port_seen_qd(&L, 0x55), -1);
+    CHECK_EQ_INT(pr_port_seen_qd(&L, 0x23), -1);
     CHECK_EQ_INT(L.n, 0);
-    CHECK_EQ_INT(L.qd_other, 0x55);
+    CHECK_EQ_INT(L.qd_other, 0x23);
     pr_live_t live[PR_MAX];
     memset(live, 0, sizeof live);
     static char buf[4096];
     pr_json(&L, live, buf, sizeof buf);
-    CHECK(strstr(buf, "\"port_unsupported\":\"LaserWriter Select 300\"") != NULL);
+    CHECK(strstr(buf, "\"port_unsupported\":\"QuickDraw LaserWriter\"") != NULL);
     pr_port_clock_gone(&L);
     CHECK_EQ_INT(L.qd_other, 0);
     pr_json(&L, live, buf, sizeof buf);
     CHECK(strstr(buf, "\"port_unsupported\":\"\"") != NULL);
-    CHECK_EQ_INT(pr_port_seen_qd(&L, 0x55), PR_SEEN_AGAIN); // and a pending one is forgotten too
-
-    // A Japanese model has no name of its own; any other answer but the 300's and the LS's is
-    // a Select 300.
+    CHECK_EQ_INT(pr_port_seen_qd(&L, 0x23), PR_SEEN_AGAIN); // and a pending one is forgotten too
+    // A 300 after it: named and shared, and the unsupported one is gone.
     fresh();
     seen_qd(0x23);
-    pr_json(&L, live, buf, sizeof buf);
-    CHECK(strstr(buf, "\"port_unsupported\":\"QuickDraw LaserWriter\"") != NULL);
-    fresh();
-    seen_qd(0x55);
-    pr_json(&L, live, buf, sizeof buf);
-    CHECK(strstr(buf, "\"port_unsupported\":\"LaserWriter Select 300\"") != NULL);
-    // A 300 after it: named and shared, and the unsupported one is gone.
     seen_qd(0x29);
     CHECK_EQ_INT(L.qd_other, 0);
     CHECK_EQ_INT(L.n, 1);
+}
+
+// W-1146: any answer but the 300's, the LS's and a Japanese model's is a Select 300, found and
+// shared as they are: a model of its own (its name, icon and uuid), stored only in a version 6
+// list.
+static void test_qd_select_record(void)
+{
+    fresh();
+    CHECK_EQ_INT(pr_port_seen_qd(&L, 0x55), PR_SEEN_AGAIN);
+    int id = pr_port_seen_qd(&L, 0x55);
+    CHECK(id > 0);
+    const pr_rec_t *r = pr_get(&L, id);
+    CHECK(r != NULL);
+    if (!r) return;
+    CHECK_EQ_INT(r->kind, PR_KIND_QDLASER);
+    CHECK_EQ_INT(r->model, PR_MODEL_SEL300);
+    CHECK_EQ_INT(r->shared, 1);
+    CHECK_EQ_INT(L.qd_other, 0);
+    CHECK(!strcmp(r->name, "LaserWriter Select 300"));
+    CHECK(!strcmp(pr_icon(r->kind, r->model, NULL), qd_spec(QD_SEL300)->icon));
+    CHECK(!strncmp(r->uuid + 28, "0d03", 4));
+    CHECK_EQ_INT(pr_model_to_qd(PR_MODEL_SEL300), QD_SEL300);
+    CHECK_EQ_INT(pr_model_from_qd(QD_SEL300), PR_MODEL_SEL300);
+    pr_live_t live[PR_MAX];
+    memset(live, 0, sizeof live);
+    static char buf[4096];
+    pr_json(&L, live, buf, sizeof buf);
+    CHECK(strstr(buf, "\"port_unsupported\":\"\"") != NULL);
+    // Another answer that is not the 300's or the LS's is the same Select: the same record.
+    CHECK_EQ_INT(pr_port_seen_qd(&L, 0x31), id);
+    // Never named by hand, as the 300 isn't.
+    int iw = seen_iw(PR_PORT_IW2);
+    CHECK_EQ_INT(pr_set_model(&L, iw, PR_MODEL_SEL300), -1);
+    CHECK_EQ_INT(pr_add_port(&L, PR_MODEL_SEL300), -1);
+
+    // Stored as 6; a 5 never holds one, a 6 loads back the same.
+    static uint8_t blob[4096];
+    size_t n = pr_save(&L, blob, sizeof blob);
+    CHECK(n > 0);
+    CHECK_EQ_INT(blob[2], 6);
+    pr_list_t M;
+    pr_init(&M, MAC, 1);
+    CHECK_EQ_INT(pr_load(&M, blob, n), 0);
+    CHECK_EQ_INT(M.n, L.n);
+    CHECK(memcmp(M.r, L.r, sizeof L.r[0] * L.n) == 0);
+    uint8_t bad[4096];
+    memcpy(bad, blob, n);
+    bad[2] = 5;
+    CHECK_EQ_INT(pr_load(&M, bad, n), -1);
+    // An LS with it: still 6. Without it, the LS's 5.
+    fresh();
+    seen_qd(0x0D);
+    seen_qd(0x55);
+    n = pr_save(&L, blob, sizeof blob);
+    CHECK_EQ_INT(blob[2], 6);
+    fresh();
+    seen_qd(0x0D);
+    n = pr_save(&L, blob, sizeof blob);
+    CHECK_EQ_INT(blob[2], 5);
 }
 
 // W-1145: an LS is found and shared as the 300 is: two answers make its record, a model of its
@@ -3042,9 +3093,9 @@ static void test_qd_blob_v4(void)
     CHECK_EQ_INT(pr_load(&M, bad, n), -1);
     CHECK_EQ_INT(pr_blob_newer(buf, n), 0);
     memcpy(bad, buf, n);
-    bad[2] = 6;
+    bad[2] = 7;
     CHECK_EQ_INT(pr_blob_newer(bad, n), 1);
-    CHECK_EQ_INT(PR_BLOB_VER, 5);
+    CHECK_EQ_INT(PR_BLOB_VER, 6);
     CHECK_EQ_INT(sizeof(pr_rec_t), 284);
 }
 
@@ -3177,6 +3228,7 @@ int main(void)
     test_qd_known_record_at_once();
     test_qd_unsupported_named_not_shared();
     test_qd_ls_record();
+    test_qd_select_record();
     test_qd_uuid_family_3();
     test_qd_blob_v4();
     test_qd_apple_screen_allowed();

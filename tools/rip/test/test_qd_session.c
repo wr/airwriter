@@ -13,9 +13,17 @@
 //   R*n    n row packets in a row
 // W-1145: with `ls` set it is a Personal LaserWriter LS as its own driver has it: rows with a
 // 9-bit length, 83 9D's value as it is, no paper as 83 02 bit 4.
+// W-1146: with `sel` set it is a LaserWriter Select 300 (no paper as 83 02 bit 4), and with
+// `pm` too, one on page memory as its driver has it: a write and a read address (E0-E5 set
+// them, C0-C5 read them), 8B v and each row's codes written at the write address, which moves
+// on; CF 00 the byte at the read address, in a memory of pm_mem bytes (past it nothing under
+// 1 MB, the same byte again at 1 MB); 8A 01 prints from the read address, and its done brings
+// the read address to the write address; 81 00 puts the write address back to 0 (nobody knows
+// what a real one does); 8E answers one byte.
 #include "test_util.h"
 #include "qd_session.h"
 #include "qd_wire.h"
+#include "apple_tables_lw.h"
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -100,6 +108,15 @@ typedef struct {
     int latch;                   // 83 02 bit 4 stays set after paper comes back, until an 8A 01
     int latched;
     int bad_9d;                  // 83 9D and its value are answered 80
+    // W-1146
+    int sel, pm;
+    uint32_t wa, ra, pm_mem;
+    uint32_t pm_printed_at;      // the read address its last 8A 01 printed from
+    struct { uint32_t a; uint8_t v; } cell[8];
+    int ncell;
+    uint8_t a0, pgrd[0x60];
+    int pgrd_n, a0_n;
+    int no_8e_done;              // 8E never says done: only the addresses do
 } fake_t;
 
 static fake_t F;
@@ -133,6 +150,32 @@ static void page_out(void)
     F.brk_pending = 1;                  // the printer says so with a BREAK
     F.mem_p = 0;
     if (F.ndone < 16) F.t_done[F.ndone++] = f_now();
+    if (F.pm) F.ra = F.wa;
+}
+
+// Page memory's cells: past pm_mem nothing under 1 MB; at 1 MB and up, the address wraps.
+static int pm_at(uint32_t *a)
+{
+    if (F.pm_mem >= 0x100000) *a &= F.pm_mem - 1;
+    return *a < F.pm_mem;
+}
+
+static void pm_write(uint8_t v)
+{
+    uint32_t a = F.wa++;
+    if (!pm_at(&a)) return;
+    for (int i = 0; i < F.ncell; i++)
+        if (F.cell[i].a == a) { F.cell[i].v = v; return; }
+    if (F.ncell < 8) { F.cell[F.ncell].a = a; F.cell[F.ncell++].v = v; }
+}
+
+static uint8_t pm_read(void)
+{
+    uint32_t a = F.ra;
+    if (!pm_at(&a)) return 0xFF;
+    for (int i = 0; i < F.ncell; i++)
+        if (F.cell[i].a == a) return F.cell[i].v;
+    return 0x00;
 }
 
 // The page goes on printing while nothing holds it; a jam, the cover or no paper stops it.
@@ -141,7 +184,7 @@ static void tick(void)
     uint8_t a = 0, b = 0;
     int np = 0;
     in_win(&a, &b, &np);
-    if (F.printing && (b & 0x0C || np)) F.printing = 0;
+    if (F.printing && (b & (F.sel ? 0x4C : 0x0C) || np)) F.printing = 0;
     if (F.printing && !F.never_done && !F.done_on_brk && f_now() - F.print_start >= F.print_ms)
         page_out();
     if (F.brk_at && !F.brk_fired && f_now() >= F.brk_at) {
@@ -202,7 +245,7 @@ static uint8_t reg(uint8_t which)
     case 0x01: return odd((uint8_t)(F.s01 | a | (F.printing ? 0x20 : 0)));
     case 0x02:
         if (F.ls && np && F.latch) F.latched = 1;
-        return odd((uint8_t)(F.s02 | b | (F.ls && (np || F.latched) ? 0x10 : 0)));
+        return odd((uint8_t)(F.s02 | b | ((F.ls || F.sel) && (np || F.latched) ? 0x10 : 0)));
     case 0x04: return odd(F.s04);
     case 0x07: return odd(F.s07);
     case 0x2A: return odd(np ? 0 : F.s2a);
@@ -230,6 +273,7 @@ static int f_put(void *ctx, const uint8_t *p, size_t n)
         for (size_t i = 0; i + 1 < n; i++) x ^= p[i];
         if (len + 3 != n || x != p[n - 1] || (F.ls && (p[0] & 0xFE) != 0x40)) F.bad++;
         F.rows++;
+        if (F.pm) F.wa += len;
         if (!F.rows_l) F.id_l = p[2];
         F.rows_l++;
         F.mem_l += len;
@@ -267,12 +311,12 @@ static int f_put(void *ctx, const uint8_t *p, size_t n)
         if (p[1] == 0x40 && F.refuse40) { reply(0x80); break; }
         if (p[1] == 0x9D && F.bad_9d) { reply(0x80); break; }
         reply(reg(p[1]));
-        if (p[1] == 0x02 && !F.silent) F.told = (reg(0x02) & 0x0C) != 0;
+        if (p[1] == 0x02 && !F.silent) F.told = (reg(0x02) & (F.sel ? 0x4C : 0x0C)) != 0;
         break;
     case 0x8E:
         if (F.n8e < 512) F.t8e[F.n8e++] = f_now();
         {
-            uint8_t st = (uint8_t)(0xF8 | (F.done ? 0x04 : 0) | (F.err_once ? 0x02 : 0) |
+            uint8_t st = (uint8_t)(0xF8 | (F.done && !F.no_8e_done ? 0x04 : 0) | (F.err_once ? 0x02 : 0) |
                                    (F.memfull || F.memfull_once ? 0x01 : 0));
             int drop = F.drop_8e_alt && (F.n8e & 1);
             int late = 0;
@@ -284,9 +328,29 @@ static int f_put(void *ctx, const uint8_t *p, size_t n)
             if (drop) break;                    // unheard: nothing is cleared
             F.done = F.memfull_once = F.err_once = 0;
             if (late) { F.late[0] = st; F.late_n = 1; break; }
-            if (F.zero_first) { F.zero_first--; reply(0x00); }
+            if (F.zero_first && !F.pm) { F.zero_first--; reply(0x00); }
             reply(st);
         }
+        break;
+    case 0x8B:
+        if (F.pm) pm_write(p[1]);
+        break;
+    case 0xE0: case 0xE1: case 0xE2: {
+        const int k = 8 * (p[0] - 0xE0);
+        F.wa = (F.wa & ~(0xFFu << k)) | (uint32_t)p[1] << k;
+        break;
+    }
+    case 0xE3: case 0xE4: case 0xE5: {
+        const int k = 8 * (p[0] - 0xE3);
+        F.ra = (F.ra & ~(0xFFu << k)) | (uint32_t)p[1] << k;
+        break;
+    }
+    case 0xC0: case 0xC1: case 0xC2: reply((uint8_t)(F.wa >> (8 * (p[0] - 0xC0)))); break;
+    case 0xC3: case 0xC4: case 0xC5: reply((uint8_t)(F.ra >> (8 * (p[0] - 0xC3)))); break;
+    case 0xCF: reply(pm_read()); break;
+    case 0xA0: F.a0 = p[1]; F.a0_n++; break;
+    case 0xA1:
+        if (F.a0 < 0x60) { F.pgrd[F.a0] = p[1]; F.pgrd_n++; }
         break;
     case 0x8A:
         if (p[1] == 0x01) {
@@ -299,6 +363,7 @@ static int f_put(void *ctx, const uint8_t *p, size_t n)
             }
             if (!F.first_print) F.first_print = f_now() ? f_now() : 1;
             F.printing = 1;
+            F.pm_printed_at = F.ra;
             F.print_start = f_now();
             if (F.nprint < 16) F.t_print[F.nprint++] = f_now();
             if (F.mem_l) {                      // not a page printed again
@@ -316,6 +381,7 @@ static int f_put(void *ctx, const uint8_t *p, size_t n)
         break;
     case 0x81:
         if (F.printing) { F.blanked++; F.printing = 0; }
+        if (F.pm) F.wa = 0;
         F.mem_l = 0;                            // the next row starts the memory over
         F.rows_l = 0;
         break;
@@ -2297,6 +2363,316 @@ static void test_ls_status(void)
     CHECK_EQ_INT(st, QDS_JAM);
 }
 
+// ---- W-1146: the LaserWriter Select 300
+
+static void fake_sel(int pm)
+{
+    fake_reset();
+    F.sel = 1;
+    F.pm = pm;
+    F.engine = 0x31;                    // any answer but 29, 0D or 23
+    F.c82 = pm ? 0x44 : 0xA4;           // bits 7-6: 01 page memory, else the 300's path
+    F.s2a = 0;                          // never asked: a Select's paper is 83 02's
+    F.pm_mem = 512 * 1024;
+}
+
+static const qd_media_t *sel_sheet(int i) { return &qd_spec(QD_SEL300)->media[i]; }
+
+// What a Select job never sends: the 300's own commands, 83 40, the lower cassette, the size
+// questions, 8A 02 and 84 08.
+static int not_sel(void)
+{
+    static const char *const t[] = { "8340", "83A7", "839D", "832A", "834C", "8352", "8325",
+                                     "830B", "830D", "8A02", "8408" };
+    int n = 0;
+    for (size_t i = 0; i < sizeof t / sizeof t[0]; i++) n += count_tok(t[i]);
+    return n;
+}
+
+static qd_session_t *sel_job(int manual)
+{
+    qd_job_cfg_t c = { .model = QD_SEL300, .manual = manual, .stall_ms = 60000 };
+    qd_session_t *s = qd_session_new(&g_ops, &c);
+    CHECK(s != NULL);
+    if (s) CHECK_EQ_INT(qd_session_begin(s), QD_OK);
+    return s;
+}
+
+static int page_on(qd_session_t *s, int no, const qd_media_t *md)
+{
+    int rc = qd_session_open(s, no, md);
+    if (!rc) rc = rows_of(s, no, 100, 4);
+    if (!rc) rc = qd_session_print(s);
+    return rc;
+}
+
+static const char *SEL_PROBE =
+    "8100 833E 8200 8368 9200 E000 E100 E200 8B5A E0FF E1FF E20F 8BA5 E3FF E4FF E50F CF00";
+
+// A page on page memory as the Select's driver sends one: 83 68, the probe, the identity
+// again; the setup in dots with 8C and A2/A3, 83 5B, density, the PGRD table once; the page's
+// start read after 8B 8B twice; its rows; the read address at that start before 8A 01; the
+// job's end with 83 67 and no 81 00.
+static void test_sel_pm_page(void)
+{
+    fake_sel(1);
+    qd_session_t *s = sel_job(0);
+    CHECK(!strncmp(F.trace, SEL_PROBE, strlen(SEL_PROBE)));
+    CHECK(ends_with("CF00 9207 8411 8100 833E 8200 8301"));
+    trace_clear();
+    CHECK_EQ_INT(qd_session_open(s, 1, sel_sheet(0)), QD_OK);
+    CHECK(!strncmp(F.trace, "8100 833E 8200 8700 8CFF A219 A3FF A218 A30B 859B 86FF 835B 83C2 "
+                            "8358 83E9 88A0 89F6 8401 A000 A1", 87));
+    CHECK(ends_with("A200 A3C0 A060 A100 8351 8401 8B8B 8B8B C000 C100 C200"));
+    CHECK_EQ_INT(F.a0_n, 97);
+    CHECK_EQ_INT(F.pgrd_n, 96);
+    for (int i = 0; i < 32; i++) {
+        CHECK_EQ_INT(F.pgrd[i], apple_lw_pgrd[4 * i + 1]);
+        CHECK_EQ_INT(F.pgrd[0x20 + i], apple_lw_pgrd[4 * i]);
+        CHECK_EQ_INT(F.pgrd[0x40 + i], apple_lw_pgrd[4 * i + 3]);
+    }
+    CHECK_EQ_INT(F.wa, 2);                      // 81 00, then 8B 8B twice
+    CHECK_EQ_INT(rows(s, 3175), QD_OK);
+    trace_clear();
+    CHECK_EQ_INT(qd_session_print(s), QD_OK);
+    CHECK_STR(F.trace, "8E00 8200 8302 8401 8B8B 8B8B E302 E400 E500 8A01");
+    CHECK_EQ_INT(F.pm_printed_at, 2);
+    CHECK_EQ_INT(qd_session_end(s), QD_OK);
+    CHECK(ends_with("8301 8401 8367"));
+    CHECK_EQ_INT(count_tok("8100"), 0);
+    CHECK_EQ_INT(last_state(), QDS_READY);
+    CHECK_EQ_INT(F.ra, F.wa);
+    CHECK_EQ_INT(F.nout, 1);
+    CHECK_EQ_INT(F.bad, 0);
+    CHECK_EQ_INT(not_sel(), 0);
+    qd_session_free(s);
+
+    // The probe's three answers: under 1 MB 7, 1 MB 5, more 0.
+    fake_sel(1);
+    F.pm_mem = 0x100000;
+    s = sel_job(0);
+    CHECK_HAS(F.trace, "E0FF E1FF E23F 8B5A E3FF E4FF E50F CF00 9205 8411");
+    qd_session_free(s);
+    fake_sel(1);
+    F.pm_mem = 0x400000;
+    s = sel_job(0);
+    CHECK_HAS(F.trace, "CF00 9200 8411");
+    qd_session_free(s);
+
+    // A 300 job refuses a Select, a Select job a 300 and an LS.
+    fake_sel(1);
+    qd_job_cfg_t c = { .model = QD_PLW300 };
+    s = qd_session_new(&g_ops, &c);
+    CHECK_EQ_INT(qd_session_begin(s), QD_E_MODEL);
+    qd_session_free(s);
+    fake_reset();
+    qd_job_cfg_t d = { .model = QD_SEL300 };
+    s = qd_session_new(&g_ops, &d);
+    CHECK_EQ_INT(qd_session_begin(s), QD_E_MODEL);
+    qd_session_free(s);
+    fake_ls();
+    s = qd_session_new(&g_ops, &d);
+    CHECK_EQ_INT(qd_session_begin(s), QD_E_MODEL);
+    qd_session_free(s);
+}
+
+// One page at a time on page memory: the next waits for the done, then has only its source
+// and its start; another sheet has the setup again (but not the PGRD table).
+static void test_sel_pm_pages(void)
+{
+    fake_sel(1);
+    qd_session_t *s = sel_job(0);
+    CHECK_EQ_INT(qd_session_open(s, 1, sel_sheet(0)), QD_OK);
+    CHECK_EQ_INT(rows_of(s, 1, 100, 4), QD_OK);
+    CHECK_EQ_INT(qd_session_print(s), QD_OK);
+    trace_clear();
+    const uint32_t start2 = F.wa + 2;
+    CHECK_EQ_INT(qd_session_open(s, 2, sel_sheet(0)), QD_OK);
+    CHECK_EQ_INT(F.nout, 1);                    // the first was done before
+    CHECK(ends_with("8351 8B8B 8B8B C000 C100 C200"));
+    CHECK_EQ_INT(rows_of(s, 2, 100, 4), QD_OK);
+    CHECK_EQ_INT(qd_session_print(s), QD_OK);
+    CHECK_EQ_INT(F.pm_printed_at, start2);
+    trace_clear();
+    CHECK_EQ_INT(qd_session_open(s, 3, sel_sheet(2)), QD_OK);   // Legal
+    CHECK_HAS(F.trace, "8100 833E 8200 8738 8CFE A219 A3FE A218 A343 85F8 86FE");
+    CHECK_HAS(F.trace, "8830 89F8");
+    CHECK_EQ_INT(count_tok("A200"), 0);
+    CHECK_EQ_INT(rows_of(s, 3, 100, 4), QD_OK);
+    CHECK_EQ_INT(qd_session_print(s), QD_OK);
+    CHECK_EQ_INT(qd_session_end(s), QD_OK);
+    CHECK_EQ_INT(F.nout, 3);
+    CHECK_EQ_INT(F.rows_while, 0);
+    CHECK_EQ_INT(F.blanked, 0);
+    CHECK_EQ_INT(F.bad, 0);
+    CHECK_EQ_INT(not_sel(), 0);
+    qd_session_free(s);
+}
+
+// A page opened again before it printed (Apple's screen after a page too big): the write
+// address goes back to its start, and the new rows go over the old.
+static void test_sel_pm_open_again(void)
+{
+    fake_sel(1);
+    qd_session_t *s = sel_job(0);
+    CHECK_EQ_INT(qd_session_open(s, 1, sel_sheet(0)), QD_OK);
+    CHECK_EQ_INT(rows_of(s, 1, 500, 4), QD_OK);
+    trace_clear();
+    CHECK_EQ_INT(qd_session_open(s, 1, sel_sheet(0)), QD_OK);
+    CHECK_STR(F.trace, "E002 E100 E200");
+    CHECK_EQ_INT(F.wa, 2);
+    CHECK_EQ_INT(rows_of(s, 1, 100, 4), QD_OK);
+    CHECK_EQ_INT(qd_session_print(s), QD_OK);
+    CHECK_EQ_INT(F.pm_printed_at, 2);
+    CHECK_EQ_INT(qd_session_end(s), QD_OK);
+    CHECK_EQ_INT(F.nout, 1);
+    qd_session_free(s);
+}
+
+// A jam, or a Select's front cover (83 02 bit 6), as a page prints: 8A 00 and 83 5D, the wait,
+// then the page again from the printer's memory: write address read, 81 00, put back, the
+// read address at its start, 8A 01. Nothing goes into the jam.
+static void test_sel_pm_jam_and_cover(void)
+{
+    for (int cover = 0; cover < 2; cover++) {
+        fake_sel(1);
+        qd_session_t *s = sel_job(0);
+        CHECK_EQ_INT(qd_session_open(s, 1, sel_sheet(0)), QD_OK);
+        CHECK_EQ_INT(rows(s, 3175), QD_OK);
+        CHECK_EQ_INT(qd_session_print(s), QD_OK);
+        const uint32_t wa = F.wa;
+        F.win_from_print = 1;
+        F.win[F.nwin++] = (win_t){ 2000, 6000, 0x12, (uint8_t)(cover ? 0x40 : 0x08), 0 };
+        CHECK_EQ_INT(qd_session_end(s), QD_OK);
+        CHECK(saw_state(cover ? QDS_COVER : QDS_JAM));
+        CHECK_HAS(F.trace, "8A00 835D");
+        char want[96];
+        snprintf(want, sizeof want, "C000 C100 C200 8100 E0%02X E1%02X E200 8401 8302 E302 E400 E500 8A01",
+                 wa & 0xFF, (wa >> 8) & 0xFF);
+        CHECK_HAS(F.trace, want);
+        CHECK_EQ_INT(F.wa, wa);
+        int pg = 0;
+        CHECK(ev_n(QD_EV_REPRINT, 0, &pg, NULL) && pg == 1);
+        CHECK_EQ_INT(F.nout, 1);
+        CHECK_EQ_INT(F.into_fault, 0);
+        CHECK_EQ_INT(F.bad, 0);
+        CHECK_EQ_INT(not_sel(), 0);
+        qd_session_free(s);
+    }
+}
+
+// Done is also the read address come to the write address, as its driver takes it: a Select
+// whose 8E never says so still finishes each page.
+static void test_sel_pm_done_by_addresses(void)
+{
+    fake_sel(1);
+    F.no_8e_done = 1;
+    qd_session_t *s = sel_job(0);
+    CHECK_EQ_INT(page_on(s, 1, sel_sheet(0)), QD_OK);
+    CHECK_EQ_INT(page_on(s, 2, sel_sheet(0)), QD_OK);
+    CHECK_EQ_INT(qd_session_end(s), QD_OK);
+    CHECK_EQ_INT(ev_count(QD_EV_DONE), 2);
+    CHECK_HAS(F.trace, "C000 C100 C200 C300 C400 C500");
+    CHECK_EQ_INT(F.nout, 2);
+    qd_session_free(s);
+}
+
+// No paper before a page's 8A 01, from 83 02, and the manual feed: 83 4F, then the cassette
+// again at the job's end.
+static void test_sel_paper_and_manual(void)
+{
+    fake_sel(1);
+    qd_session_t *s = sel_job(0);
+    CHECK_EQ_INT(qd_session_open(s, 1, sel_sheet(0)), QD_OK);
+    CHECK_EQ_INT(rows(s, 100), QD_OK);
+    F.win[F.nwin++] = (win_t){ 0, f_now() + 3000, 0x02, 0x00, 1 };
+    CHECK_EQ_INT(qd_session_print(s), QD_OK);
+    CHECK(saw_state(QDS_NO_PAPER));
+    CHECK_HAS(F.trace, "8E00 8200 8302 8302 8402 8302");
+    CHECK(ends_with("8302 8401 8B8B 8B8B E302 E400 E500 8A01"));
+    CHECK_EQ_INT(qd_session_end(s), QD_OK);
+    CHECK_EQ_INT(F.nout, 1);
+    qd_session_free(s);
+
+    fake_sel(1);
+    s = sel_job(1);
+    CHECK_EQ_INT(qd_session_open(s, 1, sel_sheet(0)), QD_OK);
+    CHECK(ends_with("834F 8401 8B8B 8B8B C000 C100 C200"));
+    CHECK_EQ_INT(rows(s, 100), QD_OK);
+    CHECK_EQ_INT(qd_session_print(s), QD_OK);
+    CHECK_EQ_INT(qd_session_end(s), QD_OK);
+    CHECK(ends_with("8301 8351 8401 8367"));
+    qd_session_free(s);
+}
+
+// The 300's path, for a Select that doesn't answer 01: its setup in bytes, one page at a time
+// with 81 00 and the setup each, and its jam: 8A 00, 83 5D, the wait, 81 00, the page again.
+static void test_sel_plain(void)
+{
+    fake_sel(0);
+    qd_session_t *s = sel_job(0);
+    CHECK_STR(F.trace, "8100 833E 8200 8368 8301");
+    trace_clear();
+    CHECK_EQ_INT(qd_session_open(s, 1, sel_sheet(0)), QD_OK);
+    CHECK_STR(F.trace, "8100 833E 8200 87E0 859B 86FF 835B 83C2 8358 83E9 88D4 89FE 8351 8401");
+    CHECK_EQ_INT(rows(s, 3175), QD_OK);
+    trace_clear();
+    CHECK_EQ_INT(qd_session_print(s), QD_OK);
+    CHECK_STR(F.trace, "8E00 8200 8302 8401 8B8B 8B8B 8A01");
+    trace_clear();
+    CHECK_EQ_INT(qd_session_open(s, 2, sel_sheet(0)), QD_OK);
+    CHECK_EQ_INT(F.nout, 1);
+    CHECK(ends_with("8100 833E 8200 87E0 859B 86FF 835B 83C2 8358 83E9 88D4 89FE 8351 8401"));
+    CHECK_EQ_INT(rows(s, 3175), QD_OK);
+    CHECK_EQ_INT(qd_session_print(s), QD_OK);
+    F.win_from_print = 1;
+    F.win[F.nwin++] = (win_t){ 15000, 19000, 0x12, 0x08, 0 };
+    CHECK_EQ_INT(qd_session_end(s), QD_OK);
+    CHECK_HAS(F.trace, "8A00 835D");
+    CHECK_HAS(F.trace, "8100 8401 8302 8100 8A01");
+    CHECK(ends_with("8301 8401 8367"));
+    CHECK_EQ_INT(count_tok("C000"), 0);
+    CHECK_EQ_INT(count_tok("9200"), 0);
+    CHECK_EQ_INT(F.nout, 2);
+    CHECK_EQ_INT(F.into_fault, 0);
+    CHECK_EQ_INT(F.bad, 0);
+    CHECK_EQ_INT(not_sel(), 0);
+    qd_session_free(s);
+}
+
+// At rest: 83 01, 83 02 and 82 00, never 83 2A; no paper from 83 02, its bit 5 the cassette,
+// its bit 6 a cover.
+static void test_sel_status(void)
+{
+    qd_state_t st;
+    qd_raw_t raw;
+    fake_sel(1);
+    CHECK_EQ_INT(qd_ask_status(&g_ops, QD_SEL300, 0, &st, &raw), QD_OK);
+    CHECK_STR(F.trace, "8301 8302 8200 8401");
+    CHECK_EQ_INT(st, QDS_READY);
+    fake_sel(1);
+    F.s01 = 0x02;
+    F.s02 = 0x10;
+    CHECK_EQ_INT(qd_ask_status(&g_ops, QD_SEL300, 0, &st, &raw), QD_OK);
+    CHECK_STR(F.trace, "8301 8302 8200 8304 8307 8402");
+    CHECK_EQ_INT(st, QDS_NO_PAPER);
+    CHECK_EQ_INT(qd_ask_status(&g_ops, QD_SEL300, 1, &st, &raw), QD_OK);
+    CHECK_EQ_INT(st, QDS_MANUAL);
+    fake_sel(1);
+    F.s02 = 0x20;
+    CHECK_EQ_INT(qd_ask_status(&g_ops, QD_SEL300, 0, &st, &raw), QD_OK);
+    CHECK_EQ_INT(st, QDS_NO_CASSETTE);
+    fake_sel(1);
+    F.s02 = 0x40;
+    CHECK_EQ_INT(qd_ask_status(&g_ops, QD_SEL300, 0, &st, &raw), QD_OK);
+    CHECK_EQ_INT(st, QDS_COVER);
+    // An LS's 83 02 bit 6 is nothing.
+    fake_ls();
+    F.s02 = 0x40;
+    CHECK_EQ_INT(qd_ask_status(&g_ops, QD_PLWLS, 0, &st, &raw), QD_OK);
+    CHECK_EQ_INT(st, QDS_READY);
+}
+
 int main(void)
 {
     test_identity_sequence();
@@ -2371,5 +2747,13 @@ int main(void)
     test_ls_cancel_and_open_again();
     test_ls_jam();
     test_ls_status();
+    test_sel_pm_page();
+    test_sel_pm_pages();
+    test_sel_pm_open_again();
+    test_sel_pm_jam_and_cover();
+    test_sel_pm_done_by_addresses();
+    test_sel_paper_and_manual();
+    test_sel_plain();
+    test_sel_status();
     TEST_END;
 }

@@ -48,6 +48,19 @@
 // 81 00 alone goes before the page again (no 84 08, 83 40 or 83 5D). None of it has been tried
 // on a printer.
 //
+// W-1146: a LaserWriter Select 300 (QD_DRV_SEL) is sent what its own driver sends (LW Select
+// 300 1.0), and LaserWriter 300 1.2's 83 68 and 83 67, whose replies are dropped. One page at a
+// time, paper from 83 02, no 83 40 in a job, a jam's 8A 00 followed by 83 5D. 82 00's bits 7-6
+// at qd_session_begin choose its page path: 01 page memory, else the 300's (with its own
+// setup, 81 00 and the setup before every page, as the LS). Page memory, as its driver has it:
+// the probe and 92 at the job's start; the setup with the left margin and width in dots, 8C
+// and A2/A3, and once a job the PGRD table, again only for another sheet; each page's start
+// read from the write address (C0-C2) after 8B 8B twice; the read address (E3-E5) set to it
+// before each 8A 01; done by 8E bit 2 or by the read address (C3-C5) come to the write address;
+// 8E's reply one byte; a jam or the cover printing the page again from the printer's memory
+// (the write address read, 81 00, put back). The job ends with Ready and 83 67, no 81 00. None
+// of it has been tried on a printer.
+//
 // A question: drain, put, flush, then a byte within 1000 ms. An 83 whose reply is refused or
 // garbled (qd_reply_ok) or does not come is sent again, five tries in all; 82 and 8E two. 8E's
 // 00 says read one more byte: that is its status. While a page prints, the board asks every
