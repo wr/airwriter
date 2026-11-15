@@ -84,7 +84,9 @@ static const qd_spec_t s_spec[QD_MODELS] = {
         .budget = 500000,
         .screen8 = apple_lw_screen8, .tone = apple_lw_tone,
         .media = k_plw300_media, .n_media = N_PLW300,
-        .icon = "plw300",
+        // Its body's icon, which the LaserWriter 320 and 4/600 PS share, not its driver's: Apple's
+        // 300 driver gives the Select 300 the same icon as the 300.
+        .icon = "lw4600",
     },
     // Its memory is unmeasured (512 KB as Apple shipped it, as the 300's, which took 513,287
     // bytes of codes): its budget leaves a little more room than the 300's, and it takes one

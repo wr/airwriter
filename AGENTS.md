@@ -284,7 +284,7 @@ tools/stylewriter/    swfake.py (a software StyleWriter and page decoder), mktab
                       untome.py (Apple's tables and icon out of its drivers), the owners'
                       README, capture.md (the Apple-driver capture rig), and their tests
 tools/qdlaser/        qdfake.py (a software Personal LaserWriter 300 or LS and page decoder),
-                      mkqdtables.py (Apple's 300 screen, curve and icons out of their drivers),
+                      mkqdtables.py (Apple's 300 screen and curve, and the LS's icon, out of their drivers),
                       and their tests
 tools/ipp/            IPP host tests and gpa_server (the real encoder on localhost for ipptool)
 tools/ippcap/         stub IPP server that captures a Print-Job body (how fixtures were made)

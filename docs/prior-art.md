@@ -33,7 +33,7 @@
   tone curves, the 16 × 16 screen and the printer's icon, read out by
   `tools/stylewriter/mktables.py` (LICENSE.md). The drivers are never committed.
 - **Apple's LaserWriter 300 driver 1.1** (Apple Developer CD, October 1993): the source of the
-  300's 8 × 8 screen (`HTSC` 2), its curve (`GAMA` 3), its icon and the image area of each
+  300's 8 × 8 screen (`HTSC` 2), its curve (`GAMA` 3) and the image area of each
   paper size, read out by `tools/qdlaser/mkqdtables.py` (LICENSE.md), and of the commands
   TailTalk's notes leave out. The driver is never committed.
 - **Previous** (the NeXT emulator, `src/printer.c`): its model of a Canon laser engine's print

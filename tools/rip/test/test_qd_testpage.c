@@ -43,7 +43,7 @@ static void test_geom(void)
     CHECK_EQ_INT(g.apple_algo, HT_APPLE_LW);
     CHECK_EQ_INT(g.colour, 0);
     CHECK(!strcmp(g.model, "Personal LaserWriter 300"));
-    CHECK(g.icon && !strcmp(g.icon, "plw300"));
+    CHECK(g.icon && !strcmp(g.icon, "lw4600"));
     CHECK(g.captions != NULL);
     CHECK_EQ_INT(qd_tp_geom(QD_NONE, &g), -1);
 }

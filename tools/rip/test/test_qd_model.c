@@ -21,7 +21,7 @@ static void test_letter(void)
     CHECK_EQ_INT(s->density_cmd, 0xA7);
     CHECK(s->screen8 == apple_lw_screen8 && s->tone == apple_lw_tone);
     CHECK(!strcmp(s->name, "Personal LaserWriter 300"));
-    CHECK(!strcmp(s->icon, "plw300"));
+    CHECK(!strcmp(s->icon, "lw4600"));
     const qd_media_t *l = &s->media[0];
     CHECK(!strcmp(l->media, "na_letter_8.5x11in"));
     CHECK_EQ_INT(l->paper_w, 2550); CHECK_EQ_INT(l->paper_h, 3300);
