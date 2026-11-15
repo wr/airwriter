@@ -27,7 +27,9 @@ settle before it cured.
 
 `hardware/panel/airwriter-lc-top.svg`, from `lc_top.py`: the panel's own outline cut
 (62.00 × 104.27, R2.0), the test hole cut at the panel's 3.8 mm, and the LC's own art,
-`hardware/panel/svg/lc.svg` (Wells's Figma Frame 17), frosted: "AirWriter LC", "airprint
+`hardware/panel/svg/lc.svg` (Wells's Figma "Frame 17 · from the front", drawn as read from the
+side away from the sockets and turned into the board's frame by `front.py`; was Frame 17 until
+W-1153), frosted: "AirWriter LC", "airprint
 to serial bridge", rev 2026.11, the 18 gold dots, the test dot and the dot under it, the
 serial and power labels and the three rules, the power slash. The art draws the Pro's 37
 lit dots in the background's colour, and they stay clear but for one: the LC fits one of

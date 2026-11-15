@@ -24,12 +24,13 @@ class TestFloors(unittest.TestCase):
         warnings = check_floors(classes)
         pinches = [w for w in warnings if w.startswith("gold pinch")]
         self.assertTrue(pinches, warnings)
-        # The known microprint pinch sits near x=6.87, y=83.93 (subtitle glyph
-        # counter close to its own outline) - allow a couple mm of slack since
-        # the exact sample point depends on svg2poly's curve sampling.
+        # The known microprint pinch sits near x=55.44, y=78.45 (subtitle glyph
+        # counter close to its own outline; it moved there when the words
+        # turned to read from the front, W-1153) - allow a couple mm of slack
+        # since the exact sample point depends on svg2poly's curve sampling.
         self.assertTrue(
-            any(abs(float(w.split("x ")[1].split(",")[0]) - 6.87) < 2
-                and abs(float(w.split("y ")[1]) - 83.93) < 2
+            any(abs(float(w.split("x ")[1].split(",")[0]) - 55.44) < 2
+                and abs(float(w.split("y ")[1]) - 78.45) < 2
                 for w in pinches),
             pinches)
 

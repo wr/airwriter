@@ -41,7 +41,7 @@ class TestLCTop(unittest.TestCase):
         r = self.lay["grid"]["dot_dia"] / 2
         starts = {(round(float(x) + r, 2), round(float(y), 2)) for x, y in
                   re.findall(r'<path d="M([\d.]+) ([\d.]+)A', self.engrave)}
-        circles, _ = lc_top.read_art(lc_top.ART.read_text())
+        circles, _ = lc_top.read_art(lc_top.board_art(lc_top.ART))
         s = self.lay["panel"]["w"] / 1100
         dots = [c for c in circles if abs(c["r"] * s - r) < 0.01]
         self.assertEqual(len(dots), 56)

@@ -29,6 +29,13 @@ MASKED_BAND = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 200">
 <path d="M0 36V44H100V36V32H0V36Z" fill="white" mask="url(#m1)"/>
 </svg>"""
 
+FIGMA_SHAPES = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200">
+<rect width="200" height="200" fill="#111111"/>
+<rect x="10" y="20" width="60" height="4" fill="white"/>
+<circle cx="100" cy="100" r="50" fill="#DDA857"/>
+<circle cx="138" cy="138" r="8" fill="#111111"/>
+</svg>"""
+
 class TestFlatten(unittest.TestCase):
     def _write(self, text):
         f = tempfile.NamedTemporaryFile(suffix=".svg", delete=False, mode="w")
@@ -43,12 +50,23 @@ class TestFlatten(unittest.TestCase):
         self.assertAlmostEqual(min(xs), 5.0, places=2)   # 10px * 0.5
         self.assertAlmostEqual(max(xs), 45.0, places=2)
 
+    def test_figma_rects_and_small_circles_are_art(self):
+        # Figma writes a plain rectangle as <rect> and a small dot as <circle>:
+        # both are art. A circle the size of a grid dot is the layout's, not art.
+        silk = flatten(self._write(FIGMA_SHAPES), scale=1.0, fills={"white", "#ffffff", "#111111"})
+        boxes = sorted((round(min(x for x, _ in p["outline"])), round(min(y for _, y in p["outline"])),
+                        round(max(x for x, _ in p["outline"])), round(max(y for _, y in p["outline"])))
+                       for p in silk)
+        self.assertEqual(boxes, [(10, 20, 70, 24), (130, 130, 146, 146)])
+        gold = flatten(self._write(FIGMA_SHAPES), scale=1.0, fills={"#dda857"})
+        self.assertEqual(gold, [])
+
     def test_real_panel_classes(self):
         svg = str(pathlib.Path(__file__).parent / "svg" / "panel.svg")
         s = 62.0 / 1100
-        gold = flatten(svg, scale=s, fills={"#dda857"})
-        silk = flatten(svg, scale=s, fills={"white", "#ffffff"})
-        fr4 = flatten(svg, scale=s, fills={"#e7ba9b"})
+        gold = flatten(svg, scale=s, fills={"#dda857"}, front=True)
+        silk = flatten(svg, scale=s, fills={"white", "#ffffff"}, front=True)
+        fr4 = flatten(svg, scale=s, fills={"#e7ba9b"}, front=True)
         self.assertGreaterEqual(len(gold), 3)      # wordmark, subtitle, marks
         self.assertGreaterEqual(len(silk), 4)      # rules, three labels, test tag
         self.assertEqual(len(fr4), 1)              # the slash
@@ -78,7 +96,7 @@ class TestFlatten(unittest.TestCase):
         # voided space instead of plate-coloured islands.
         svg = str(pathlib.Path(__file__).parent / "svg" / "panel.svg")
         s = 62.0 / 1100
-        silk = flatten(svg, scale=s, fills={"white", "#ffffff"})
+        silk = flatten(svg, scale=s, fills={"white", "#ffffff"}, front=True)
         for p in silk:
             holes = p["holes"]
             for i, h in enumerate(holes):
@@ -113,7 +131,7 @@ class TestFlatten(unittest.TestCase):
         # =~ 4.7mm^2. 30mm^2 is comfortably between the two.
         svg = str(pathlib.Path(__file__).parent / "svg" / "panel.svg")
         s = 62.0 / 1100
-        silk = flatten(svg, scale=s, fills={"white", "#ffffff"})
+        silk = flatten(svg, scale=s, fills={"white", "#ffffff"}, front=True)
         for p in silk:
             xs = [x for x, y in p["outline"]]
             ys = [y for x, y in p["outline"]]

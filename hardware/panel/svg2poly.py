@@ -2,7 +2,9 @@
 """Flatten fill-filtered SVG <path> art to polygons in absolute mm."""
 import json, re, sys
 from io import StringIO
-from svgelements import SVG, Path, Line, Close
+from svgelements import SVG, Path, Line, Close, Rect, Circle
+
+from front import to_board
 
 TOL = 0.05  # mm sampling tolerance
 
@@ -120,16 +122,25 @@ def _mask_rect_bboxes(svg_text):
         boxes[mask_id] = bbox
     return boxes
 
-def flatten(svg_path, scale, fills):
+def flatten(svg_path, scale, fills, *, front=False):
+    """front: the file is the panel's art, drawn from the front (sockets at the
+    top); it is turned into the board's frame (front.py) before it is read."""
     fills = {f.lower() for f in fills}
     with open(svg_path) as f:
         svg_text = f.read()
+    if front:
+        svg_text = to_board(svg_text)
     mask_boxes_raw = _mask_rect_bboxes(svg_text)
     stripped = _MASK_DEF_RE.sub("", svg_text)
     svg = SVG.parse(StringIO(stripped), reify=True)
     vb = svg.viewbox
     rings = []
     for el in svg.elements():
+        # Figma writes a plain rectangle (a label's rule) as <rect> and a small
+        # dot (the test tab's) as <circle>: both are art. A circle a grid dot's
+        # size or the test hole's marker is the layout's (panel_layout.py).
+        if isinstance(el, Rect) or (isinstance(el, Circle) and el.bbox()[2] - el.bbox()[0] < 40):
+            el = Path(el)
         if not isinstance(el, Path):
             continue
         fill = str(getattr(el, "fill", "")).lower()
@@ -213,6 +224,7 @@ def _classify(rings):
 
 if __name__ == "__main__":
     inp, scale, fills, outp = sys.argv[1], float(sys.argv[2]), sys.argv[3], sys.argv[4]
+    turn = sys.argv[5:] == ["front"]
     with open(outp, "w") as f:
-        json.dump(flatten(inp, scale, set(fills.split(","))), f)
+        json.dump(flatten(inp, scale, set(fills.split(",")), front=turn), f)
     print("wrote", outp)

@@ -55,6 +55,34 @@ stale lines in place; this block is the correction:
   "mask ridge" (the solid mask between letter strokes has the same practical
   minimum as any other feature).
 
+## Amendment, 2026-11-15 (read from the front)
+
+`W-1153 The panel reads from the front, with the sockets at the back`; the design is
+`2026-11-15-which-way-it-faces-design.md`. AirWriter sits with its sockets toward the wall, so
+the panel's words turned to read from the side away from them. Every dot, window, hole and the
+power slash stayed where they were.
+
+- **The art is drawn from the front.** `hardware/panel/svg/panel.svg` and `lc.svg` are exports
+  of Figma's "Frame 16 · from the front" and "Frame 17 · from the front", sockets along the top.
+  `hardware/panel/front.py` turns an export 180° into the board's frame, as text, and
+  `panel_layout.py`, `svg2poly.py` (the `front` argument in `generate.sh`) and `lc_top.py` read
+  the art only through it. An export drawn the old way stops the build ("drawn from the
+  front"). Frames 16 and 17 are the old drawing; Frame 16's dots in Figma have since changed and
+  no longer match the board.
+- **What turned.** The labels sit along the socket edge, power, appletalk and serial left to
+  right from the front, each at the left of its socket's third (power 1.5 mm right of the
+  slash), with the tops of their letters 1.53 mm from the edge. The name block keeps its left
+  margin, with its gaps to the rules and the grid swapped. The test tab's squared corner and
+  small dot are at its lower right from the front. The rules land where they were.
+- **What came out the same.** `panel_layout.json`, `dotmap.txt` and the LED map, byte for byte.
+  The FR4 slash and the LC's frosted slash are within 0.0004 mm (the same outline, sampled from
+  another start point). The panel DRC and the combined panel's known items are unchanged.
+- **Figma's plain shapes are art.** The exports draw the rules as `<rect>` and the test tab's
+  dot as a small `<circle>`; `svg2poly.py` and `lc_top.py` read both. A circle under 20 px is
+  art, not a dot, and the hole's marker (r 34) may be black or `#111111`.
+- **The known subtitle pinch moved with the words**, to near x 55.44, y 78.45 (the first
+  amendment block names its old place). `floors.py` still reports the same 7 pinches.
+
 ## 1. Art panel
 
 **62 × 100 × 1.6 mm FR4, matte black soldermask, ENIG, 2-layer, zero components,

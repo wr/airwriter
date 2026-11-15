@@ -1,6 +1,11 @@
 #!/usr/bin/env python3
-"""svg/panel.svg circles -> panel_layout.json (+ dotmap.txt, derived)."""
+"""svg/panel.svg circles -> panel_layout.json (+ dotmap.txt, derived).
+
+The art is drawn from the front, sockets at the top; it is read turned into
+the board's frame (front.py), where row 0 is the row farthest from the sockets."""
 import json, pathlib, re
+
+from front import board_art
 
 VIEW_W_PX = 1100.0
 SCALE = 62.0 / VIEW_W_PX          # mm per px
@@ -26,24 +31,28 @@ def _circles(svg_text):
             return m.group(1) if m else None
         yield float(attr("cx")), float(attr("cy")), float(attr("r")), attr("fill").lower()
 
-def load_layout():
+def load_layout(svg_path=None):
     here = pathlib.Path(__file__).parent
-    svg = (here / "svg" / "panel.svg").read_text()
+    svg = board_art(svg_path or here / "svg" / "panel.svg")
     m = re.search(r'viewBox="0 0 (\d+) (\d+)"', svg)
     assert m and float(m.group(1)) == VIEW_W_PX, "unexpected viewBox"
     panel_h = round(float(m.group(2)) * SCALE, 2)
 
     cells, hole = {}, None
     for cx, cy, r, fill in _circles(svg):
+        if r < 20:      # art Figma wrote as a circle (the test tab's small dot), not a dot
+            continue
         col = (cx - GRID0_PX) / PITCH_PX
         row = (cy - GRID0_PX) / PITCH_PX
         assert abs(col - round(col)) < 0.01 and abs(row - round(row)) < 0.01, \
             f"circle off-grid at ({cx},{cy})"
         rc = (int(round(row)), int(round(col)))
-        if fill == "black" and r < 40:  # hole marker (r34 since the 3.8mm hole)
+        if r < 40:      # hole marker (r34 since the 3.8mm hole), black or #111111
             hole = (rc, round(2 * r * SCALE, 2)); continue
         cells[rc] = MAT_BY_FILL[fill]
     assert hole, "no test hole circle found"
+    assert hole[0] == (3, 3), \
+        "the art must be drawn from the front, sockets at the top: the test hole is a row off"
     assert cells[hole[0]] == "G", "test hole must sit on a gold dot"
     cells[hole[0]] = "T"
 

@@ -97,6 +97,10 @@ External footprint **68.00 × 110.27 mm** — the board's 62.00 × 104.27 outlin
 of wall each side. The board pocket is cut 0.20 mm oversize inward on each side (62.40 ×
 104.67), so the effective wall is 2.80 mm and the *outside* dimensions stay exact.
 
+*Amended 2026-11-15 (`W-1153 The panel reads from the front, with the sockets at the back`):
+AirWriter sits with the socket wall toward the back, and the panel and its lights read from the
+opposite side. This design and the case code keep calling the socket wall the front.*
+
 ## 3. Wall thickness: uniform 3.00 mm
 
 Two placement rulings in `docs/HANDOFF.md` each named a wall thickness, and they are not
