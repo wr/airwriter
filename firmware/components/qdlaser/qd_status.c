@@ -5,13 +5,13 @@
 
 qd_state_t qd_state_from(const qd_spec_t *sp, const qd_raw_t *r, int manual)
 {
-    const int ls = sp->driver == QD_DRV_LS;
+    const int ls = sp->driver == QD_DRV_LS, sel = sp->driver == QD_DRV_SEL;
     if (r->s02 & 0x08) return QDS_JAM;
-    if (r->s02 & 0x04) return QDS_COVER;
+    if (r->s02 & (sel ? 0x44 : 0x04)) return QDS_COVER;     // a Select's 40: front or toner
     if (!ls && (r->s02 & QD_S02_CASSETTE)) return QDS_NO_CASSETTE;
     if ((r->s01 & 0x02) && !(r->s02 & QD_S02_NO_PAPER)) return QDS_ENGINE;
-    // The LS's own driver reads paper only from 83 02 (it never asks 83 2A).
-    const int paper = ls ? !(r->s02 & QD_S02_NO_PAPER)
+    // The LS's and the Select's own drivers read paper only from 83 02 (never 83 2A).
+    const int paper = ls || sel ? !(r->s02 & QD_S02_NO_PAPER)
                          : !!(r->s2a & (manual ? sp->bit_manual : sp->bit_cassette));
     if (!paper) return manual ? QDS_MANUAL : QDS_NO_PAPER;
     if (r->s01 & 0x20) return QDS_PRINTING;

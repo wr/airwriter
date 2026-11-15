@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // W-1102: a QuickDraw LaserWriter's conversation (qd_session.h). W-1144: the next page loads
-// while one prints.
+// while one prints. W-1146: a Select 300's page memory.
 #include "qd_session.h"
 #include "qd_wire.h"
+#include "apple_tables_lw.h"
 #include "bigmem.h"
 #include <string.h>
 
@@ -74,6 +75,13 @@ struct qd_session {
     int      rip_open;          // the last is the rip's own page, opened and not yet printed
     int      resending;         // its pages are going to the printer again after a jam
     uint8_t  again_s02;
+    // W-1146: a Select 300 on page memory (82 00's bits 7-6 01 at the job's start).
+    int      pm;
+    uint8_t  c82;               // 82 00's answer at the last identity
+    uint8_t  probe;             // what 92 was told: 7, 5 or 0 (qd_session.h)
+    int      pgrd;              // the PGRD table has gone this job
+    const qd_media_t *set_md;   // the sheet of the last setup on page memory
+    uint32_t l_start, p_start;  // where the page loading and the page printing start in its memory
     uint8_t  row_tmp[QD_ROW_MAX];
     uint8_t  pkt[QD_ROW_MAX + 3];
 };
@@ -92,6 +100,7 @@ enum {
     ASK_QUICK = 1,     // a try that gets nothing ends the question at once (the done wait's polls)
     ASK_ANY   = 2,     // one try, and whatever byte comes is the answer (the LS's 83 9D and
                        // its value, whose replies its driver never reads)
+    ASK_8E1   = 4,     // 8E's reply is one byte, even 00 (page memory, W-1146)
 };
 
 // One question and its byte: >= 0 the reply, else a QD_E_ (QD_E_OFFLINE: no reply after the
@@ -112,7 +121,7 @@ static int ask(const qd_ops_t *o, uint8_t c, uint8_t a, int how)
             continue;
         }
         // 8E's 00 says the status is the next byte.
-        if (c == 0x8E && b == 0x00 && o->read(o->ctx, &b, 1, REPLY_MS, 0) != 1) {
+        if (c == 0x8E && b == 0x00 && !(how & ASK_8E1) && o->read(o->ctx, &b, 1, REPLY_MS, 0) != 1) {
             if (quick) return QD_E_OFFLINE;
             continue;
         }
@@ -161,7 +170,7 @@ int qd_ask_status(const qd_ops_t *o, qd_model_t m, int manual, qd_state_t *st, q
     static const uint8_t which[4] = { 0x01, 0x02, 0x2A, 0x00 };
     int v[4] = { 0 };
     for (int i = 0; i < 4; i++) {
-        if (i == 2 && sp->driver == QD_DRV_LS) continue;   // its driver never asks 83 2A
+        if (i == 2 && sp->driver != QD_DRV_LW300) continue;   // the LS's and the Select's never ask 83 2A
         uint8_t c = i == 3 ? 0x82 : 0x83;
         if ((v[i] = ask(o, c, which[i], 0)) < 0) return status_offline(o, raw, c, which[i], v[i]);
     }
@@ -274,6 +283,19 @@ static int blink(qd_session_t *s)
 }
 
 static int ls(const qd_session_t *s) { return s->sp->driver == QD_DRV_LS; }
+static int sel(const qd_session_t *s) { return s->sp->driver == QD_DRV_SEL; }
+// The LS and the Select 300: one page at a time, paper from 83 02, no 83 40 in a job.
+static int single(const qd_session_t *s) { return s->sp->driver != QD_DRV_LW300; }
+// 83 02's jam (08) and cover (04); a Select's 40 is its front or toner cartridge, a cover too.
+static uint8_t stops(const qd_session_t *s) { return sel(s) ? 0x4C : 0x0C; }
+// An 83 whose reply its driver drops: one try, any byte, none at all no matter.
+static int q_any(qd_session_t *s, uint8_t a)
+{
+    s->wrote = 1;
+    int v = ask(&s->o, 0x83, a, ASK_ANY);
+    return v == QD_E_OFFLINE ? 0 : v < 0 ? fail(s, v) : v;
+}
+
 static uint8_t source(const qd_session_t *s) { return s->c.manual ? s->sp->src_manual : s->sp->src_main; }
 static uint8_t paper_bit(const qd_session_t *s) { return s->c.manual ? s->sp->bit_manual : s->sp->bit_cassette; }
 
@@ -303,21 +325,80 @@ static int identity(qd_session_t *s)
 {
     int v;
     if ((v = cmd(s, 0x81, 0x00))) return v;
-    if (!ls(s) && (v = q(s, 0x83, 0x40)) < 0) return v;
+    if (!single(s) && (v = q(s, 0x83, 0x40)) < 0) return v;
     int e = q(s, 0x83, 0x3E);
     if (e < 0) return e;
     if ((v = q(s, 0x82, 0x00)) < 0) return v;
-    if (e != s->sp->engine) {
+    s->c82 = (uint8_t)v;
+    if (qd_model_from_engine((uint8_t)e) != s->c.model) {
         s->closed = 1;               // another printer: nothing more goes to it
         return QD_E_MODEL;
     }
     return 0;
 }
 
+// ---- page memory (W-1146): a Select 300's addresses, 24 bits sent low byte first
+
+// E0-E2 set the write address, E3-E5 the read address.
+static int set_addr(qd_session_t *s, uint8_t base, uint32_t v)
+{
+    int rc;
+    for (int i = 0; i < 3; i++)
+        if ((rc = cmd(s, (uint8_t)(base + i), (uint8_t)(v >> (8 * i))))) return rc;
+    return 0;
+}
+
+// C0-C2 read the write address, C3-C5 the read address, a byte each. how: 0 in a job's
+// step, ASK_QUICK in a poll (one try; the caller counts it missed).
+static int get_addr(qd_session_t *s, uint8_t base, uint32_t *v, int how)
+{
+    uint32_t a = 0;
+    s->wrote = 1;
+    for (int i = 0; i < 3; i++) {
+        int b = ask(&s->o, (uint8_t)(base + i), 0x00, how);
+        if (b < 0) return how ? b : fail(s, b);
+        a |= (uint32_t)b << (8 * i);
+    }
+    *v = a;
+    return 0;
+}
+
+// The driver's memory probe: 92 00; 5A at 0 and A5 at 0x0FFFFF, read back at 0x0FFFFF: not
+// A5, nothing is there (under 1 MB): 7. Else 5A at 0x3FFFFF, read back at 0x0FFFFF: 5A, the
+// two are one byte (1 MB): 5; else more: 0. A read with no answer is nothing there. Then 92
+// with the result, 84 with bit 4 for once, and the identity again, as its driver has it.
+static int probe(qd_session_t *s)
+{
+    int rc, b;
+    if ((rc = cmd(s, 0x92, 0x00)) || (rc = set_addr(s, 0xE0, 0)) || (rc = cmd(s, 0x8B, 0x5A)) ||
+        (rc = set_addr(s, 0xE0, 0x0FFFFF)) || (rc = cmd(s, 0x8B, 0xA5)) ||
+        (rc = set_addr(s, 0xE3, 0x0FFFFF)))
+        return rc;
+    s->wrote = 1;
+    if ((b = ask(&s->o, 0xCF, 0x00, ASK_ANY)) < 0 && b != QD_E_OFFLINE) return fail(s, b);
+    s->probe = 7;
+    if (b == 0xA5) {
+        if ((rc = set_addr(s, 0xE0, 0x3FFFFF)) || (rc = cmd(s, 0x8B, 0x5A)) ||
+            (rc = set_addr(s, 0xE3, 0x0FFFFF)))
+            return rc;
+        if ((b = ask(&s->o, 0xCF, 0x00, ASK_ANY)) < 0 && b != QD_E_OFFLINE) return fail(s, b);
+        s->probe = b == 0x5A ? 5 : 0;
+    }
+    if ((rc = cmd(s, 0x92, s->probe)) || (rc = cmd(s, 0x84, (uint8_t)(s->lights | 0x10)))) return rc;
+    return identity(s);
+}
+
 static int begin(qd_session_t *s)
 {
     int rc = identity(s);
     if (rc) return rc;
+    // W-1146: a Select 300 takes page memory when 82 00's bits 7-6 are 01, its driver's one
+    // test; 83 68 opens its job (LaserWriter 300 1.2, its reply dropped), then the probe.
+    if (sel(s)) {
+        s->pm = (s->c82 & 0xC0) == 0x40;
+        if ((rc = q_any(s, 0x68)) < 0) return rc;
+        if (s->pm && (rc = probe(s))) return rc;
+    }
     state(s, QDS_PRINTING);
     // A page still coming out of the printer finishes first.
     uint32_t t0 = now(s);
@@ -344,11 +425,11 @@ static int wait_paper(qd_session_t *s, uint32_t most)
     }
     for (;;) {
         qd_state_t st = QDS_MANUAL;
-        if (ls(s)) {
+        if (single(s)) {
             int b = q(s, 0x83, 0x02);
             if (b < 0) return b;
             if (!(b & QD_S02_NO_PAPER)) return s->paper_out = 0;
-            if (!s->c.manual) st = QDS_NO_PAPER;
+            if (!s->c.manual) st = sel(s) && (b & QD_S02_CASSETTE) ? QDS_NO_CASSETTE : QDS_NO_PAPER;
         } else {
             int a = q(s, 0x83, 0x2A);
             if (a < 0) return a;
@@ -471,7 +552,7 @@ static int wait_clear(qd_session_t *s, uint8_t s02)
     int clear = 0, rc;
     s->fault = 1;
     for (;;) {
-        if (s02 & 0x0C) {
+        if (s02 & stops(s)) {
             const qd_state_t st = (s02 & 0x08) ? QDS_JAM : QDS_COVER;
             if (!s->have_st || s->st != st || clear) {
                 state(s, st);
@@ -503,10 +584,11 @@ static int wait_clear(qd_session_t *s, uint8_t s02)
 static int recover_to_print(qd_session_t *s, uint8_t s02)
 {
     int rc = cmd(s, 0x8A, 0x00);
-    if (rc) return rc;
+    if (!rc && sel(s)) rc = q_any(s, 0x5D);        // the Select's driver, at the jam
+    if (rc < 0) return rc;
     for (;;) {
         if ((rc = wait_clear(s, s02))) return rc;
-        if (ls(s)) {
+        if (single(s)) {
             if ((rc = cmd(s, 0x81, 0x00)) || (rc = lights(s, 0x01))) return rc;
         } else {
             if ((rc = cmd(s, 0x81, 0x00)) || (rc = cmd(s, 0x84, 0x08)) || (rc = flush(s))) return rc;
@@ -518,9 +600,41 @@ static int recover_to_print(qd_session_t *s, uint8_t s02)
             if ((rc = q(s, 0x83, source(s))) < 0) return rc;
         }
         if ((rc = q(s, 0x83, 0x02)) < 0) return rc;
-        if (!(rc & 0x0C)) return 0;
+        if (!(rc & stops(s))) return 0;
         s02 = (uint8_t)rc;
     }
+}
+
+// Every print sequence's last step: on page memory the read address goes to the page's start
+// first, so a page that stopped part way prints from its top again.
+static int start_print(qd_session_t *s, uint32_t at)
+{
+    int rc = s->pm ? set_addr(s, 0xE3, at) : 0;
+    return rc ? rc : cmd(s, 0x8A, 0x01);
+}
+
+// W-1146: a jam or the cover on page memory, the Select's driver's way: 8A 00 and 83 5D, the
+// wait until it is gone and for paper; then the page again from the printer's memory, where
+// it still is whole (one page at a time): the write address read, 81 00, the write address
+// put back, the read address at the page's start, 8A 01. Nothing is sent again.
+static int pm_reprint(qd_session_t *s, uint8_t s02)
+{
+    int rc = cmd(s, 0x8A, 0x00);
+    if (!rc) rc = q_any(s, 0x5D);
+    if (rc < 0) return rc;
+    for (;;) {
+        uint32_t w;
+        if ((rc = wait_clear(s, s02)) || (rc = wait_paper(s, 0))) return rc;
+        if ((rc = get_addr(s, 0xC0, &w, 0)) || (rc = cmd(s, 0x81, 0x00)) ||
+            (rc = set_addr(s, 0xE0, w)) || (rc = lights(s, 0x01)))
+            return rc;
+        if ((rc = q(s, 0x83, 0x02)) < 0) return rc;
+        if (!(rc & stops(s))) break;
+        s02 = (uint8_t)rc;
+    }
+    if ((rc = start_print(s, s->p_start)) || (rc = flush(s))) return rc;
+    state(s, QDS_PRINTING);
+    return 0;
 }
 
 // The printer's own recovery, with no copy to send again: its 81 00 and 8A 01 print again the
@@ -530,7 +644,7 @@ static int recover(qd_session_t *s, uint8_t s02)
 {
     int rc = recover_to_print(s, s02);
     if (rc) return rc;
-    if ((rc = cmd(s, 0x81, 0x00)) || (rc = cmd(s, 0x8A, 0x01)) || (rc = flush(s))) return rc;
+    if ((rc = cmd(s, 0x81, 0x00)) || (rc = start_print(s, s->p_start)) || (rc = flush(s))) return rc;
     state(s, QDS_PRINTING);
     return 0;
 }
@@ -562,6 +676,14 @@ static int jammed(qd_session_t *s, uint8_t s02)
 {
     s->fault = 1;
     if (stopping(s)) return stop_now(s);
+    if (s->pm) {
+        int rc = pm_reprint(s, s02);
+        if (rc) return rc;
+        s->recoveries++;
+        s->p_at = now(s);
+        event(s, QD_EV_REPRINT, s->p_no, 0);
+        return 0;
+    }
     if (s->resending) {                    // a jam as the pages go again: from the top
         s->again_s02 = s02;
         return AGAIN;
@@ -598,8 +720,9 @@ static int out_of_paper(qd_session_t *s)
     if ((rc = wait_paper(s, ls(s) ? RETRY_MS : 0)) < 0) return rc;
     const int retry = rc == 1;
     if ((rc = q(s, 0x83, 0x02)) < 0) return rc;
-    if (rc & 0x0C) return jammed(s, (uint8_t)rc);      // no 8A 01 into a jam
-    if ((!retry && (rc = lights(s, 0x01))) || (rc = cmd(s, 0x8A, 0x01)) || (rc = flush(s))) return rc;
+    if (rc & stops(s)) return jammed(s, (uint8_t)rc);  // no 8A 01 into a jam
+    if ((!retry && (rc = lights(s, 0x01))) || (rc = start_print(s, s->p_start)) || (rc = flush(s)))
+        return rc;
     if (!retry) state(s, QDS_PRINTING);
     s->p_at = now(s);
     return 0;
@@ -636,8 +759,8 @@ static int late_8e(qd_session_t *s)
     const qd_ops_t *o = &s->o;
     uint8_t b;
     if (o->read(o->ctx, &b, 1, 0, 0) != 1) return QD_E_OFFLINE;
-    if (b == 0x00 && o->read(o->ctx, &b, 1, 50, 0) != 1) return QD_E_OFFLINE;
-    return (b & 0xF8) == 0xF8 ? b : QD_E_OFFLINE;
+    if (b == 0x00 && !s->pm && o->read(o->ctx, &b, 1, 50, 0) != 1) return QD_E_OFFLINE;
+    return s->pm || (b & 0xF8) == 0xF8 ? b : QD_E_OFFLINE;
 }
 
 static void page_done(qd_session_t *s)
@@ -662,7 +785,7 @@ static int ask_done(qd_session_t *s, int brk)
     int e = s->late ? late_8e(s) : QD_E_OFFLINE;
     s->late = 0;
     for (int try = 0; e == QD_E_OFFLINE; try++) {
-        e = ask(&s->o, 0x8E, 0x00, ASK_QUICK);
+        e = ask(&s->o, 0x8E, 0x00, ASK_QUICK | (s->pm ? ASK_8E1 : 0));
         if (e == QD_E_OFFLINE) e = late_8e(s);
         if (!brk || try) break;
     }
@@ -672,7 +795,9 @@ static int ask_done(qd_session_t *s, int brk)
     }
     s->misses = 0;
     s->e_bits |= (uint8_t)(e & 0x03);
-    if (!(e & 0x04)) return 0;
+    // W-1146: on page memory a page is done when the addresses meet (printing_status): an 8E
+    // done read late, after the next page has started, would end that page early.
+    if (!(e & 0x04) || s->pm) return 0;
     page_done(s);
     return 1;
 }
@@ -684,15 +809,27 @@ static int printing_status(qd_session_t *s)
     int s01 = poll(s, 0x83, 0x01);
     int s02 = s01 < 0 ? s01 : poll(s, 0x83, 0x02);
     if (s02 < 0) return missed(s, s02);
-    if (s02 & 0x0C) return jammed(s, (uint8_t)s02);
+    if (s02 & stops(s)) return jammed(s, (uint8_t)s02);
     // No paper at the source also says a fault is stored: it waits below, as for paper.
     if ((s01 & 0x02) && !(s02 & QD_S02_NO_PAPER)) return engine_fault(s);
     if (!(s01 & 0x20)) {
         // Not moving: is the paper gone? Then the page waits in the printer for more.
-        if (ls(s)) return (s02 & QD_S02_NO_PAPER) ? out_of_paper(s) : 0;
-        int a = poll(s, 0x83, 0x2A);
-        if (a < 0) return missed(s, a);
-        if (!(a & paper_bit(s))) return out_of_paper(s);
+        if (single(s) && (s02 & QD_S02_NO_PAPER)) return out_of_paper(s);
+        if (!single(s)) {
+            int a = poll(s, 0x83, 0x2A);
+            if (a < 0) return missed(s, a);
+            if (!(a & paper_bit(s))) return out_of_paper(s);
+        }
+    }
+    // W-1146: on page memory the page is done once the read address has come to the write
+    // address, as its driver takes it (8E's done only brings this question on at once).
+    if (s->pm) {
+        uint32_t w, r;
+        int rc = get_addr(s, 0xC0, &w, ASK_QUICK);
+        if (!rc) rc = get_addr(s, 0xC3, &r, ASK_QUICK);
+        if (rc) return missed(s, rc);
+        s->misses = 0;
+        if (w == r) page_done(s);
     }
     return 0;
 }
@@ -716,7 +853,8 @@ static int wait_done(qd_session_t *s)
             o->sleep_ms(o->ctx, left < 50 ? left : 50);
         }
         poll_at = now(s);
-        int e = ask_done(s, brk);
+        // On page memory 8E is asked only after the printer's BREAK, as its driver asks it.
+        int e = s->pm && !brk ? 0 : ask_done(s, brk);
         if (e > 0) return QD_OK;
         if (e < 0 && (rc = missed(s, e))) return rc;
         if (since(s, s->p_at) >= DONE_MS) return QD_E_FAULT;
@@ -759,12 +897,68 @@ static int setup_ls(qd_session_t *s, const qd_media_t *md, qd_setup_t u)
     return lights(s, 0x01);
 }
 
+// W-1146: the Select 300's setup, in its own driver's order (LW Select 300 1.0): the left
+// margin, the top, 83 5B with its value, density, the row width, and the paper source, whose
+// replies it drops. On page memory the left margin and the width go in dots, the left with
+// 8C (its high byte) and A2 19/A3, A2 18/A3 (11 less the margin, high and low; what the
+// registers are is not known), and once a job the PGRD table: entry i's first word's low byte
+// at A0 i, its high byte at A0 20+i, the second word's low byte at A0 40+i (each value with
+// A1), then A2 00/A3 C0 (one bit a dot) and A0 60/A1 00.
+static int setup_sel(qd_session_t *s, const qd_media_t *md)
+{
+    const qd_setup_t u = s->pm ? qd_setup_pm(md) : qd_setup(md);
+    int v;
+    if ((v = cmd(s, 0x87, (uint8_t)u.left))) return v;
+    if (s->pm) {
+        const uint16_t a3 = (uint16_t)(11 + u.left);
+        if ((v = cmd(s, 0x8C, (uint8_t)((uint16_t)u.left >> 8))) || (v = cmd(s, 0xA2, 0x19)) ||
+            (v = cmd(s, 0xA3, (uint8_t)(a3 >> 8))) || (v = cmd(s, 0xA2, 0x18)) ||
+            (v = cmd(s, 0xA3, (uint8_t)a3)))
+            return v;
+    }
+    if ((v = cmd(s, 0x85, (uint8_t)u.top)) || (v = cmd(s, 0x86, (uint8_t)((uint16_t)u.top >> 8))))
+        return v;
+    // 83 5B's value is the driver's own byte: 0x21 shifted, with bit 7 for its parity.
+    if ((v = q_any(s, 0x5B)) < 0 || (v = q_any(s, 0xC2)) < 0) return v;
+    // Density: no value when 83 58's answer has bits 7-6 10.
+    if ((v = q_any(s, s->sp->density_cmd)) < 0) return v;
+    if ((v & 0xC0) != 0x80 && (v = q_any(s, qd_value(s->sp->density))) < 0) return v;
+    if ((v = cmd(s, 0x88, (uint8_t)u.width)) || (v = cmd(s, 0x89, (uint8_t)((uint16_t)u.width >> 8))))
+        return v;
+    if (s->pm && !s->pgrd) {
+        if ((v = lights(s, (uint8_t)(s->lights & ~0x40)))) return v;
+        for (int i = 0; i < 32 && !v; i++) {
+            const uint8_t *e = apple_lw_pgrd + 4 * i;    // two big-endian words
+            if ((v = cmd(s, 0xA0, (uint8_t)i)) || (v = cmd(s, 0xA1, e[1])) ||
+                (v = cmd(s, 0xA0, (uint8_t)(0x20 + i))) || (v = cmd(s, 0xA1, e[0])) ||
+                (v = cmd(s, 0xA0, (uint8_t)(0x40 + i))))
+                break;
+            v = cmd(s, 0xA1, e[3]);
+        }
+        if (v || (v = cmd(s, 0xA2, 0x00)) || (v = cmd(s, 0xA3, 0xC0)) || (v = cmd(s, 0xA0, 0x60)) ||
+            (v = cmd(s, 0xA1, 0x00)))
+            return v;
+        s->pgrd = 1;
+    }
+    if ((v = q_any(s, source(s))) < 0) return v;
+    s->set_md = md;
+    return lights(s, 0x01);
+}
+
 // The setup of a page with nothing printing: 81 00 starts the printer's memory over.
 static int setup(qd_session_t *s, const qd_media_t *md)
 {
     qd_setup_t u = qd_setup(md);
-    int v = identity(s);
+    // On page memory the setup follows the probe's identity, as its driver has it, and goes
+    // again for another sheet without one: 81 00 mid-job is the 300's path's.
+    int v = s->pm ? 0 : identity(s);
     if (v) return v;
+    if (sel(s)) {
+        if ((v = setup_sel(s, md))) return v;
+        s->printed = 0;
+        s->rewound = 0;
+        return 0;
+    }
     if (ls(s)) {
         if ((v = setup_ls(s, md, u))) return v;
         s->printed = 0;
@@ -790,11 +984,31 @@ static int setup(qd_session_t *s, const qd_media_t *md)
     return 0;
 }
 
+// W-1146: a page's start on page memory: 8B 8B twice, then the write address, where its rows
+// begin. Opened again before it printed, the write address goes back there instead and the
+// new rows go over the old.
+static int pm_open(qd_session_t *s, const qd_media_t *md)
+{
+    int v;
+    if (s->loading && md == s->set_md) return set_addr(s, 0xE0, s->l_start);
+    if (md != s->set_md) {
+        if ((v = setup(s, md))) return v;
+    } else if ((v = q_any(s, source(s))) < 0) {
+        return v;
+    }
+    if ((v = cmd(s, 0x8B, 0x8B)) || (v = cmd(s, 0x8B, 0x8B))) return v;
+    return get_addr(s, 0xC0, &s->l_start, 0);
+}
+
 static int open_page(qd_session_t *s, int page, const qd_media_t *md)
 {
     int v;
-    // The LS takes one page at a time: the next waits for the done and has the whole setup.
-    if (s->printing && !ls(s) && !s->loading && !s->rewound && md == s->p_md) {
+    // The LS and the Select take one page at a time: the next waits for the done. The LS's
+    // has the whole setup; on page memory, the Select's has it only for another sheet.
+    if (s->pm) {
+        if (s->printing && (v = wait_done(s))) return v;
+        if ((v = pm_open(s, md))) return v;
+    } else if (s->printing && !single(s) && !s->loading && !s->rewound && md == s->p_md) {
         // The next page, behind the one printing: the offsets and the width are that page's
         // while it prints, and are this one's too. No answer here is the line's trouble, not
         // the page's: the state is left alone, and abort lets the sheet printing come out.
@@ -864,11 +1078,19 @@ static int watch(qd_session_t *s, int brk)
         return printing_status(s);
     }
     // Nothing printing: a jam or the cover holds the rows until it is gone; paper is the
-    // print's to wait for.
+    // print's to wait for. On page memory the printer's BREAK as rows load is answered with
+    // 8E, as its driver does: memory full or an error, for the print to see.
+    if (s->pm && brk) {
+        int e = ask(&s->o, 0x8E, 0x00, ASK_QUICK | ASK_8E1);
+        if (e >= 0) {
+            s->misses = 0;
+            s->e_bits |= (uint8_t)(e & 0x03);
+        }
+    }
     int s01 = poll(s, 0x83, 0x01);
     int s02 = s01 < 0 ? s01 : poll(s, 0x83, 0x02);
     if (s02 < 0) return missed(s, s02);
-    if (s02 & 0x0C) {
+    if (s02 & stops(s)) {
         if (stopping(s)) {
             s->fault = 1;
             return stop_now(s);
@@ -914,22 +1136,28 @@ static int print(qd_session_t *s)
     if (s->printing && (rc = wait_done(s))) return rc;
     if (cancelled(s)) return stop_now(s);
     // Did the page arrive whole? Memory full in either, or 8E's error bit, now or at any 8E
-    // since its first row: it never prints.
-    int e = q(s, 0x8E, 0x00);
+    // since its first row: it never prints. Page memory's 8E only follows a BREAK.
+    int e = s->pm ? 0 : q(s, 0x8E, 0x00);
     if (e < 0) return e;
     int c = q(s, 0x82, 0x00);
     if (c < 0) return c;
     if (((e | s->e_bits) & 0x03) || (c & 0x01)) return QD_E_FAULT;
     // Paper, and no jam or cover: 8A 01 sent into one is kept and runs when it clears. An LS's
     // own driver never asks about paper before its 8A 01: paper out is known after (W-1145).
+    // A Select's paper is in the same 83 02 (its drivers check it before each 8A 01).
     for (;;) {
-        if (!ls(s) && (rc = wait_paper(s, 0))) return rc;
+        if (!single(s) && (rc = wait_paper(s, 0))) return rc;
         if ((rc = q(s, 0x83, 0x02)) < 0) return rc;
-        if (!(rc & 0x0C)) break;
-        if ((rc = wait_clear(s, (uint8_t)rc))) return rc;
+        if (rc & stops(s)) {
+            if ((rc = wait_clear(s, (uint8_t)rc))) return rc;
+        } else if (sel(s) && (rc & QD_S02_NO_PAPER)) {
+            if ((rc = wait_paper(s, 0))) return rc;
+        } else {
+            break;
+        }
     }
     if ((rc = lights(s, 0x01)) || (rc = cmd(s, 0x8B, 0x8B)) || (rc = cmd(s, 0x8B, 0x8B)) ||
-        (rc = cmd(s, 0x8A, 0x01)))
+        (rc = start_print(s, s->l_start)))
         return rc;
     state(s, QDS_PRINTING);
     if ((rc = flush(s))) return rc;
@@ -938,6 +1166,7 @@ static int print(qd_session_t *s)
     s->p_no = s->l_no;
     s->p_md = s->l_md;
     s->p_bytes = s->l_bytes;
+    s->p_start = s->l_start;
     s->p_first = s->printed++ == 0;
     s->loading = 0;
     s->l_bytes = 0;
@@ -1023,8 +1252,14 @@ static int end(qd_session_t *s)
         int a = ask(&s->o, 0x83, s->sp->src_main, ASK_QUICK);
         if (a < 0 && a != QD_E_OFFLINE) rc = a;
     }
-    if (!rc) rc = cmd(s, 0x81, 0x00);
+    // A Select's job ends with Ready and 83 67 (LaserWriter 300 1.2, its reply dropped), and no
+    // 81 00, as both its drivers end it.
+    if (!rc && !sel(s)) rc = cmd(s, 0x81, 0x00);
     if (!rc) rc = lights(s, 0x01);
+    if (!rc && sel(s)) {
+        int b = q_any(s, 0x67);
+        if (b < 0) rc = b;
+    }
     if (!rc) rc = flush(s);
     s->closed = 1;
     if (!rc) state(s, v >= 0 && (v & 0x20) ? QDS_PRINTING : QDS_READY);

@@ -5799,7 +5799,87 @@
    }
   },
   "qdlaser-select": {
-   "about": "Printers: a LaserWriter Select 300 on the printer port beside a StyleWriter record",
+   "about": "Printers: a LaserWriter Select 300 on the printer port, ready (W-1146: built from its driver, untested)",
+   "patch": {
+    "GET /api/printers": {
+     "printers": [
+      {
+       "id": 1,
+       "name": "LaserWriter Select 300",
+       "where": "port",
+       "kind": "qdlaser",
+       "model": "LaserWriter Select 300",
+       "shared": true,
+       "identified": true,
+       "found": "auto",
+       "state": "ready",
+       "uuid": "urn:uuid:41575254-4c57-0002-0d03-10bda36e2434",
+       "product": "",
+       "icon": "lwselect",
+       "dither": "atkinson",
+       "gain": 0,
+       "rp": "ipp/print",
+       "start_page": null
+      }
+     ],
+     "notes": [],
+     "port_on": 1,
+     "said_other": false,
+     "chooser": [],
+     "port_unsupported": "",
+     "max_shared": 6
+    },
+    "POST /api/printers": {
+     "printers": [
+      {
+       "id": 1,
+       "name": "LaserWriter Select 300",
+       "where": "port",
+       "kind": "qdlaser",
+       "model": "LaserWriter Select 300",
+       "shared": true,
+       "identified": true,
+       "found": "auto",
+       "state": "ready",
+       "uuid": "urn:uuid:41575254-4c57-0002-0d03-10bda36e2434",
+       "product": "",
+       "icon": "lwselect",
+       "dither": "atkinson",
+       "gain": 0,
+       "rp": "ipp/print",
+       "start_page": null
+      }
+     ],
+     "notes": [],
+     "port_on": 1,
+     "said_other": false,
+     "chooser": [],
+     "port_unsupported": "",
+     "max_shared": 6
+    },
+    "GET /api/laser": {
+     "heard": [],
+     "targets": [],
+     "job": {
+      "active": false,
+      "sent": 0,
+      "last": ""
+     }
+    },
+    "GET /api/status": {
+     "printers": {
+      "count": 1,
+      "shared": 1,
+      "notes": 0,
+      "port": "qdlaser"
+     },
+     "model": "Apple LaserWriter Select 300",
+     "ribbon": "unknown"
+    }
+   }
+  },
+  "qdlaser-unsupported": {
+   "about": "Printers: a QuickDraw LaserWriter AirWriter has no model for (a Japanese one) on the printer port beside a StyleWriter record",
    "patch": {
     "GET /api/printers": {
      "printers": [
@@ -5826,7 +5906,7 @@
      "port_on": 0,
      "said_other": false,
      "chooser": [],
-     "port_unsupported": "LaserWriter Select 300",
+     "port_unsupported": "QuickDraw LaserWriter",
      "max_shared": 6
     },
     "POST /api/printers": {
@@ -5854,7 +5934,7 @@
      "port_on": 0,
      "said_other": false,
      "chooser": [],
-     "port_unsupported": "LaserWriter Select 300",
+     "port_unsupported": "QuickDraw LaserWriter",
      "max_shared": 6
     },
     "GET /api/laser": {

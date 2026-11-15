@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-or-later
 """qdfake.py's printer held to the design's command table (W-1102) and to what board 1's
-printer did with a second page loaded while the first printed (W-1144); and its LS (W-1145)
-to the LS's own driver as the notes read it.
+printer did with a second page loaded while the first printed (W-1144); its LS (W-1145)
+to the LS's own driver as the notes read it; and its Select 300 (W-1146) to the Select's own
+driver, page memory above all, as the notes read it.
 
 Packets here are built by hand from the design ("What the printer and the board allow"),
 not by our C code, and the line image by a second writer in this file, so the fake is an
@@ -720,6 +721,208 @@ class LS(unittest.TestCase):
                                           "--engine", "0d"]), 0)
             self.assertEqual((t / "a" / "page-1.pbm").read_bytes(), b"P4\n2400 3\n" + b"".join(WANT))
             self.assertEqual(qdfake.main(["decode", str(t / "s.bin"), "--out", str(t / "b"), "--no-png"]), 1)
+
+
+# ---- W-1146: a LaserWriter Select 300
+
+def set_addr(base, v):
+    return [cmd(base + i, (v >> (8 * i)) & 0xFF) for i in range(3)]
+
+
+def get_addr(lw, base):
+    return sum(lw.packet(cmd(base + i, 0)) << (8 * i) for i in range(3))
+
+
+def probe(lw):
+    """The driver's probe, as it sends it; what it would tell 92."""
+    send(lw, [cmd(0x92, 0)] + set_addr(0xE0, 0) + [cmd(0x8B, 0x5A)] + set_addr(0xE0, 0x0FFFFF) +
+         [cmd(0x8B, 0xA5)] + set_addr(0xE3, 0x0FFFFF))
+    if lw.packet(cmd(0xCF, 0)) != 0xA5:
+        return 7
+    send(lw, set_addr(0xE0, 0x3FFFFF) + [cmd(0x8B, 0x5A)] + set_addr(0xE3, 0x0FFFFF))
+    return 5 if lw.packet(cmd(0xCF, 0)) == 0x5A else 0
+
+
+# Letter on page memory, as its driver sends it: the left margin 256 dots (87, 8C), A2 19/18
+# with 11 - 256, top 101, 83 5B and density, the width 2400 dots; the PGRD table (any 96
+# bytes here), A2 00/A3 C0, A0 60/A1 00; the cassette.
+SEL_PM_LETTER = ([cmd(0x81, 0), cmd(0x83, 0x3E), cmd(0x82, 0), cmd(0x87, 0x00), cmd(0x8C, 0xFF),
+                  cmd(0xA2, 0x19), cmd(0xA3, 0xFF), cmd(0xA2, 0x18), cmd(0xA3, 0x0B), cmd(0x85, 0x9B),
+                  cmd(0x86, 0xFF), cmd(0x83, 0x5B), cmd(0x83, 0xC2), cmd(0x83, 0x58), cmd(0x83, 0xE9),
+                  cmd(0x88, 0xA0), cmd(0x89, 0xF6), cmd(0x84, 1)] +
+                 [p for i in range(0x60) for p in (cmd(0xA0, i), cmd(0xA1, i))] +
+                 [cmd(0xA2, 0), cmd(0xA3, 0xC0), cmd(0xA0, 0x60), cmd(0xA1, 0), cmd(0x83, 0x51), cmd(0x84, 1)])
+SEL_PLAIN_LETTER = [cmd(0x81, 0), cmd(0x83, 0x3E), cmd(0x82, 0), cmd(0x87, 0xE0), cmd(0x85, 0x9B),
+                    cmd(0x86, 0xFF), cmd(0x83, 0x5B), cmd(0x83, 0xC2), cmd(0x83, 0x58), cmd(0x83, 0xE9),
+                    cmd(0x88, 0xD4), cmd(0x89, 0xFE), cmd(0x83, 0x51), cmd(0x84, 1)]
+MARKS = [cmd(0x8B, 0x8B), cmd(0x8B, 0x8B)]
+
+
+def pm_page(lw, setup=True):
+    """A page on page memory: its start read, rows, ended, the read address there, 8A 01."""
+    if setup:
+        send(lw, SEL_PM_LETTER)
+    send(lw, MARKS)
+    start = get_addr(lw, 0xC0)
+    send(lw, [row(r) for r in ROWS] + MARKS + set_addr(0xE3, start) + PRINT)
+    return start
+
+
+class Select(unittest.TestCase):
+    def test_identity_and_path(self):
+        lw, _ = printer(engine=0x31)
+        self.assertEqual(ask(lw, 0x83, 0x3E), 0x31)
+        self.assertEqual(ask(lw, 0x82, 0) & 0xC0, 0x40)          # page memory
+        lw, _ = printer(engine=0x31, plain=True)
+        self.assertEqual(ask(lw, 0x82, 0) & 0xC0, 0x80)          # the 300's path
+        lw, _ = printer()
+        self.assertEqual(ask(lw, 0x82, 0) & 0xC0, 0x80)
+
+    def test_probe(self):
+        for mem, want in ((512 * 1024, 7), (0x100000, 5), (0x400000, 0)):
+            lw, _ = printer(engine=0x31, mem=mem)
+            self.assertEqual(probe(lw), want, mem)
+
+    def test_letter_on_page_memory(self):
+        lw, clock = printer(engine=0x31)
+        start = pm_page(lw)
+        self.assertEqual(start, 2)                               # 81 00 left it at 0
+        self.assertEqual(lw.events.count("print"), 1)
+        clock.t += 2.1
+        lw.tick()
+        self.assertEqual(len(lw.pages), 1)
+        p = lw.pages[0]
+        self.assertEqual(p.rows, WANT)
+        self.assertEqual(p.top, 62)                              # 101 less the driver's 0x27
+        self.assertEqual(p.x0, 256 - 0x16A // 2)
+        self.assertEqual(p.width, 300)
+        self.assertEqual(get_addr(lw, 0xC3), get_addr(lw, 0xC0))  # done: the addresses meet
+        self.assertIn("density e9", lw.events)
+        self.assertIn("83 5B's value c2", lw.events)
+        self.assertFalse([e for e in lw.events if e.startswith(qdfake.BAD)])
+        # The next page: its source, its start, no setup.
+        send(lw, [cmd(0x83, 0x51)])
+        start2 = pm_page(lw, setup=False)
+        self.assertEqual(start2, start + len(b"".join(ROWS)) + 2 + 2)   # its end, then the next start
+        clock.t += 2.1
+        lw.tick()
+        self.assertEqual(len(lw.pages), 2)
+        self.assertFalse([e for e in lw.events if e.startswith(qdfake.BAD)])
+
+    def test_what_breaks_a_page(self):
+        # No PGRD table; 8A 01 where no page starts; a row before the page's start; A2 18/19
+        # that don't match the margin.
+        lw, _ = printer(engine=0x31)
+        send(lw, [p for p in SEL_PM_LETTER if p[0] not in (0xA0, 0xA1)])
+        send(lw, MARKS)
+        start = get_addr(lw, 0xC0)
+        send(lw, [row(r) for r in ROWS] + MARKS + set_addr(0xE3, start) + PRINT)
+        self.assertTrue(any(e.startswith("printed with no PGRD") for e in lw.events))
+        lw, _ = printer(engine=0x31)
+        send(lw, SEL_PM_LETTER + MARKS + [row(r) for r in ROWS] + MARKS + set_addr(0xE3, 0) + PRINT)
+        self.assertTrue(any(e.startswith("8A 01 at 000000") for e in lw.events))
+        lw, _ = printer(engine=0x31)
+        send(lw, SEL_PM_LETTER + [row(ROWS[0])])
+        self.assertTrue(any(e.startswith("a row before its page") for e in lw.events))
+        lw, _ = printer(engine=0x31)
+        send(lw, [cmd(0xA3, 0x0C) if p == cmd(0xA3, 0x0B) else p for p in SEL_PM_LETTER] + MARKS)
+        self.assertTrue(any(e.startswith("A2 18/19") for e in lw.events))
+
+    def test_jam_and_the_reprint_from_memory(self):
+        lw, clock = printer(engine=0x31)
+        start = pm_page(lw)
+        clock.t += 0.5
+        lw.command("jam")
+        clock.t += 3
+        lw.tick()
+        self.assertEqual(lw.pages, [])
+        lw.command("ok")
+        ask(lw, 0x83, 0x02)
+        w = get_addr(lw, 0xC0)
+        send(lw, [cmd(0x81, 0)])
+        self.assertEqual(get_addr(lw, 0xC0), 0)                  # this one's 81 00
+        send(lw, set_addr(0xE0, w) + set_addr(0xE3, start) + PRINT)
+        self.assertTrue(any(e.startswith("8A 01 refused: waiting for 83 5D") for e in lw.events))
+        lw.events.clear()
+        send(lw, [cmd(0x83, 0x5D)] + set_addr(0xE3, start) + PRINT)
+        clock.t += 2.1
+        lw.tick()
+        self.assertEqual(len(lw.pages), 1)
+        self.assertEqual(lw.pages[0].rows, WANT)
+        self.assertEqual(get_addr(lw, 0xC0), w)
+        self.assertFalse([e for e in lw.events if e.startswith(qdfake.BAD)])
+
+    def test_a_stopped_page_needs_its_start_again(self):
+        # Stopped halfway, the read address is halfway: 8A 01 from there is no page's start.
+        lw, clock = printer(engine=0x31)
+        start = pm_page(lw)
+        clock.t += 1.5
+        lw.tick()
+        self.assertNotEqual(get_addr(lw, 0xC3), start)
+        lw.command("jam")
+        lw.command("ok")
+        send(lw, [cmd(0x83, 0x5D), cmd(0x8A, 1)])
+        self.assertTrue(any(e.startswith("8A 01 at") for e in lw.events))
+
+    def test_8e_only_after_a_break(self):
+        lw, clock = printer(engine=0x31)
+        ask(lw, 0x8E, 0)
+        self.assertIn("8E with no BREAK before it", lw.events)
+        lw, clock = printer(engine=0x31)
+        pm_page(lw)
+        clock.t += 2.1
+        self.assertEqual(lw.breaks(), b"B")
+        self.assertEqual(ask(lw, 0x8E, 0) & 0x04, 0x04)
+        self.assertNotIn("8E with no BREAK before it", lw.events)
+
+    def test_sources_front_and_cassette(self):
+        lw, _ = printer(engine=0x31)
+        self.assertEqual(ask(lw, 0x83, 0x02) & 0x70, 0)
+        ask(lw, 0x83, 0x52)                                      # the lower cassette: not fitted
+        self.assertEqual(ask(lw, 0x83, 0x02) & 0x10, 0x10)
+        ask(lw, 0x83, 0x4F)                                      # the manual feed, empty
+        self.assertEqual(ask(lw, 0x83, 0x02) & 0x10, 0x10)
+        lw.command("manual")
+        self.assertEqual(ask(lw, 0x83, 0x02) & 0x10, 0)
+        ask(lw, 0x83, 0x51)
+        lw.command("cassette")
+        self.assertEqual(ask(lw, 0x83, 0x02) & 0x30, 0x30)
+        lw.command("ok")
+        lw.command("front")
+        self.assertEqual(ask(lw, 0x83, 0x02) & 0x40, 0x40)
+        self.assertEqual(ask(lw, 0x83, 0x01) & 0x02, 0x02)
+
+    def test_what_a_select_is_never_sent(self):
+        for c, a in ((0x83, 0xA7), (0x83, 0x9D), (0x83, 0x4C), (0x83, 0x2A), (0x83, 0x25),
+                     (0x83, 0x0B), (0x83, 0x0D), (0x84, 0x08), (0x8A, 0x02)):
+            lw, _ = printer(engine=0x31)
+            ask(lw, c, a)
+            self.assertTrue(any(e.startswith("not sent to a Select") for e in lw.events), f"{c:02x} {a:02x}")
+        lw, _ = printer(engine=0x31)
+        ask(lw, 0x83, 0x68)
+        ask(lw, 0x83, 0x67)
+        self.assertEqual(lw.events, ["job opens (83 68)", "job ends (83 67)"])
+
+    def test_the_300s_path(self):
+        lw, clock = printer(engine=0x31, plain=True)
+        send(lw, SEL_PLAIN_LETTER + [row(r) for r in ROWS] + END + PRINT)
+        clock.t += 2.1
+        lw.tick()
+        self.assertEqual(len(lw.pages), 1)
+        p = lw.pages[0]
+        self.assertEqual(p.rows, WANT)
+        self.assertEqual(p.top, 62)
+        self.assertEqual(p.x0, 32 * 8 - 0x16A // 2)
+        self.assertFalse([e for e in lw.events if e.startswith(qdfake.BAD)])
+
+    def test_decode(self):
+        packets = SEL_PLAIN_LETTER + [row(r) for r in ROWS] + END + PRINT
+        with tempfile.TemporaryDirectory() as t:
+            t = pathlib.Path(t)
+            (t / "s.bin").write_bytes(frames(packets))
+            self.assertEqual(qdfake.main(["decode", str(t / "s.bin"), "--out", str(t / "a"), "--no-png",
+                                          "--engine", "31", "--plain"]), 0)
+            self.assertEqual((t / "a" / "page-1.pbm").read_bytes(), b"P4\n2400 3\n" + b"".join(WANT))
 
 
 if __name__ == "__main__":

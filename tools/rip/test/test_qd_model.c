@@ -41,7 +41,8 @@ static void test_engine_names(void)
     CHECK_EQ_INT(qd_model_from_engine(0x29), QD_PLW300);
     CHECK_EQ_INT(qd_model_from_engine(0x0D), QD_PLWLS);
     CHECK_EQ_INT(qd_model_from_engine(0x23), QD_NONE);
-    CHECK_EQ_INT(qd_model_from_engine(0x55), QD_NONE);
+    CHECK_EQ_INT(qd_model_from_engine(0x55), QD_SEL300);     // W-1146: any other is a Select 300
+    CHECK_EQ_INT(qd_model_from_engine(0x00), QD_SEL300);
     CHECK(!strcmp(qd_engine_name(0x29), "Personal LaserWriter 300"));
     CHECK(!strcmp(qd_engine_name(0x0D), "Personal LaserWriter LS"));
     CHECK(qd_engine_name(0x23) == NULL);
@@ -183,11 +184,66 @@ static void test_every_size_fits(void)
     }
 }
 
+// W-1146: the Select 300, from its own driver (LW Select 300 1.0): its sources and density,
+// Letter, A4 and Legal, the 300's path's setup (top (paper h - image h) / 2 + 0x27, left
+// (2550 - image w + 0x16A) / 16 bytes, the row in bytes) and page memory's (left and width in
+// dots).
+static void test_sel(void)
+{
+    const qd_spec_t *s = qd_spec(QD_SEL300);
+    CHECK(s != NULL);
+    if (!s) return;
+    CHECK(!strcmp(s->name, "LaserWriter Select 300"));
+    CHECK(!strcmp(s->icon, "lwselect"));
+    CHECK_EQ_INT(s->driver, QD_DRV_SEL);
+    CHECK_EQ_INT(s->src_main, 0x51);
+    CHECK_EQ_INT(s->src_manual, 0x4F);
+    CHECK_EQ_INT(s->density_cmd, 0x58);
+    CHECK_EQ_INT(qd_value(s->density), 0xE9);  // Apple's default as its driver sends it
+    CHECK_EQ_INT(s->row_bits, 12);
+    CHECK(s->budget > 0 && s->budget <= 500000);
+    static const struct { const char *media; int top, left, width, pm_left, pm_width; } want[] = {
+        { "na_letter_8.5x11in", 101, 32, 300, 256, 2400 },
+        { "iso_a4_210x297mm",   101, 32, 300, 256, 2400 },
+        { "na_legal_8.5x14in",  264, 57, 250, 456, 2000 },
+    };
+    CHECK_EQ_INT(s->n_media, 3);
+    for (int i = 0; i < s->n_media && i < 3; i++) {
+        const qd_media_t *m = &s->media[i];
+        CHECK(!strcmp(m->media, want[i].media));
+        qd_setup_t u = qd_setup(m), v = qd_setup_pm(m);
+        CHECK_EQ_INT(-u.top, (m->paper_h - m->img_h) / 2 + 0x27);
+        CHECK_EQ_INT(-u.left, (2550 - m->img_w + 0x16A) / 16);
+        CHECK_EQ_INT(-u.width, m->img_w / 8);
+        CHECK_EQ_INT(-u.top, want[i].top);
+        CHECK_EQ_INT(-u.left, want[i].left);
+        CHECK_EQ_INT(-u.width, want[i].width);
+        CHECK_EQ_INT(v.top, u.top);
+        CHECK_EQ_INT(-v.left, want[i].pm_left);
+        CHECK(-v.left <= 0x1FF);               // its driver's cap, never reached
+        CHECK_EQ_INT(-v.width, want[i].pm_width);
+        CHECK_EQ_INT(qd_row_bytes(m), (size_t)want[i].width);
+        CHECK(qd_media_for(QD_SEL300, m->img_w, m->page_h) == m);
+    }
+    const printer_caps_t *c = qd_caps(QD_SEL300);
+    CHECK(c != NULL);
+    if (!c) return;
+    CHECK(!strcmp(c->make_model, "Apple LaserWriter Select 300"));
+    CHECK(!strcmp(c->device_id, "MFG:Apple;MDL:LaserWriter Select 300;CMD:URF;"));
+    CHECK_EQ_INT(c->n_media, s->n_media);
+    CHECK_EQ_INT(c->n_sources, 2);
+    for (int i = 0; i < c->n_media; i++) {
+        CHECK(!strcmp(c->media_list[i].media, s->media[i].media));
+        CHECK_EQ_INT(c->media_list[i].rip_w, s->media[i].img_w);
+    }
+}
+
 int main(void)
 {
     test_letter();
     test_engine_names();
     test_ls();
+    test_sel();
     test_media_for();
     test_caps();
     test_every_size_fits();

@@ -47,6 +47,22 @@ static const qd_media_t k_plw300_media[] = { PLW300_SHEETS(QD_MEDIA_ROW) };
 static const qd_media_t k_plwls_media[] = { PLWLS_SHEETS(LS_MEDIA_ROW) };
 #define N_PLWLS ((uint8_t)(sizeof k_plwls_media / sizeof k_plwls_media[0]))
 
+// W-1146: the LaserWriter Select 300's sheets, from its own driver (LW Select 300 1.0: PREC 3,
+// and the 300's image areas, whose code it shares instruction for instruction; nothing here
+// has been tried on a printer). Letter, A4 and Legal: its envelopes would need the margin it
+// can't carry moved into every row, and its Executive is drawn 5.5 x 8.5 in, a slip. As the
+// LS's, then the setup the 300's path sends (top, left in bytes, row width in bytes, already
+// negative): top (paper h - image h) / 2 + 0x27 rows; left (2550 - image w + 0x16A) / 16, the
+// paper centred on the engine's 2,550 dots; the row image w / 8. Page memory sends the left
+// margin and the width in dots (qd_setup_pm).
+#define SEL300_SHEETS(X) \
+    X("na_letter_8.5x11in", 21590, 27940, 2550, 3300, 2550, 3300, 2400, 3175, -101, -32, -300, 0x21) \
+    X("iso_a4_210x297mm",   21000, 29700, 2475, 3500, 2480, 3508, 2400, 3375, -101, -32, -300, 0x21) \
+    X("na_legal_8.5x14in",  21590, 35560, 2550, 4200, 2550, 4200, 2000, 3750, -264, -57, -250, 0x21)
+
+static const qd_media_t k_sel300_media[] = { SEL300_SHEETS(LS_MEDIA_ROW) };
+#define N_SEL300 ((uint8_t)(sizeof k_sel300_media / sizeof k_sel300_media[0]))
+
 // What AirPrint is told for each sheet: the rip keeps img_w dots from the middle of the
 // page's width, and the rows from (page_h - img_h) / 2 down; the rest is the margin.
 #define QD_CAPS_ROW(NAME, X_, Y_, PW, PH, GW, GH, IW, IH) { \
@@ -58,6 +74,7 @@ static const qd_media_t k_plwls_media[] = { PLWLS_SHEETS(LS_MEDIA_ROW) };
     QD_CAPS_ROW(NAME, X_, Y_, PW, PH, GW, GH, IW, IH)
 static const printer_media_t k_plw300_caps_media[] = { PLW300_SHEETS(QD_CAPS_ROW) };
 static const printer_media_t k_plwls_caps_media[] = { PLWLS_SHEETS(LS_CAPS_ROW) };
+static const printer_media_t k_sel300_caps_media[] = { SEL300_SHEETS(LS_CAPS_ROW) };
 
 static const qd_spec_t s_spec[QD_MODELS] = {
     [QD_PLW300] = {
@@ -84,6 +101,22 @@ static const qd_spec_t s_spec[QD_MODELS] = {
         .screen8 = apple_lw_screen8, .tone = apple_lw_tone,
         .media = k_plwls_media, .n_media = N_PLWLS,
         .icon = "plwls",
+    },
+    // W-1146: from its own driver (LW Select 300 1.0); never tried on a printer. The upper
+    // cassette, 83 51, and the multipurpose tray as the manual feed, 83 4F; the lower cassette,
+    // 83 52, an option, is never used. Density 83 58 with Apple's default, 32, sent as
+    // (32 >> 3) | 0x70. Its memory is unmeasured (it takes one page at a time): the LS's budget.
+    // The icon is Apple's for the LaserWriter Select's body; its own driver only reuses the
+    // 300's.
+    [QD_SEL300] = {
+        .name = "LaserWriter Select 300", .engine = 0, .driver = QD_DRV_SEL,
+        .src_main = 0x51, .src_manual = 0x4F,
+        .density_cmd = 0x58, .density = (32 >> 3) | 0x70,
+        .row_bits = 12,
+        .budget = 480000,
+        .screen8 = apple_lw_screen8, .tone = apple_lw_tone,
+        .media = k_sel300_media, .n_media = N_SEL300,
+        .icon = "lwselect",
     },
 };
 
@@ -118,6 +151,19 @@ static const printer_caps_t s_caps[QD_MODELS] = {
         .media_list = k_plwls_caps_media, .n_media = N_PLWLS,
         .sources = k_sources, .n_sources = 1,          // the tray alone
     },
+    [QD_SEL300] = {
+        .make_model = "Apple LaserWriter Select 300",
+        .device_id  = "MFG:Apple;MDL:LaserWriter Select 300;CMD:URF;",
+        .urf_rs     = "RS300",
+        .res_x = 300, .res_y = 300,
+        .media = "na_letter_8.5x11in", .media_x = 21590, .media_y = 27940,
+        .margin_l = QD_OUT(75), .margin_r = QD_OUT(75), .margin_t = QD_OUT(62), .margin_b = QD_OUT(63),
+        .ppm = 2,
+        .rip_dpi_x = 300, .rip_dpi_y = 300,
+        .max_dots = 2400, .crop_margin = 0,
+        .media_list = k_sel300_caps_media, .n_media = N_SEL300,
+        .sources = k_sources, .n_sources = 2,
+    },
 };
 
 const qd_spec_t *qd_spec(qd_model_t m)
@@ -127,7 +173,8 @@ const qd_spec_t *qd_spec(qd_model_t m)
 
 qd_model_t qd_model_from_engine(uint8_t engine)
 {
-    return engine == QD_ENGINE_PLW300 ? QD_PLW300 : engine == QD_ENGINE_LS ? QD_PLWLS : QD_NONE;
+    return engine == QD_ENGINE_PLW300 ? QD_PLW300 : engine == QD_ENGINE_LS ? QD_PLWLS
+         : engine == QD_ENGINE_JP ? QD_NONE : QD_SEL300;
 }
 
 const char *qd_engine_name(uint8_t engine)
@@ -136,7 +183,7 @@ const char *qd_engine_name(uint8_t engine)
     case QD_ENGINE_PLW300: return s_spec[QD_PLW300].name;
     case QD_ENGINE_LS:     return s_spec[QD_PLWLS].name;
     case QD_ENGINE_JP:     return NULL;
-    default:               return "LaserWriter Select 300";
+    default:               return s_spec[QD_SEL300].name;
     }
 }
 
@@ -165,6 +212,15 @@ qd_setup_t qd_setup(const qd_media_t *md)
     u.top = (int16_t)-((md->paper_h - md->img_h) / 2);
     u.left = (int16_t)-((m > 0x1FF ? 0x1FF : m) >> 3);
     u.width = (int16_t)-(md->img_w / 8 + (m > 0x1FF ? (m - 0x1FF + 7) / 8 : 0));
+    return u;
+}
+
+qd_setup_t qd_setup_pm(const qd_media_t *md)
+{
+    qd_setup_t u = qd_setup(md);
+    int m = (QD_SEL_ENGINE_W - md->img_w + QD_SEL_LEFT) >> 1;
+    u.left = (int16_t)-m;
+    u.width = (int16_t)-md->img_w;
     return u;
 }
 

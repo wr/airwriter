@@ -7,6 +7,8 @@
 // Where each table is from: 'LaserWriter 300' 1.1, the driver for the Personal LaserWriter 300.
 //   apple_lw_screen8  HTSC 2, 8 x 8 thresholds 1 to 32, row by row, after its four byte header.
 //   apple_lw_tone     GAMA 3, which takes a gray (0 black, 255 white) to 0 to 33.
+//   apple_lw_pgrd     PGRD 1 after its count: 32 entries of two big-endian words, which the
+//                     driver sends a printer on page memory at each job's start (qd_session.c).
 // How the driver uses them: a pixel is ink where the screen's threshold is over the toned gray
 // (halftone.c, HT_APPLE_LW).
 #pragma once
@@ -14,3 +16,4 @@
 
 extern const uint8_t apple_lw_screen8[64];
 extern const uint8_t apple_lw_tone[256];
+extern const uint8_t apple_lw_pgrd[128];
