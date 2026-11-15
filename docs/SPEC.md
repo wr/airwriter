@@ -1440,24 +1440,23 @@ job with the screen open, or the ImageWriter checker on this build.
 
 ---
 
-### 3.18 QuickDraw LaserWriters (W-1102, W-1144, W-1145)
+### 3.18 QuickDraw LaserWriters (W-1102, W-1144, W-1145, W-1146)
 
 `W-1102 QuickDraw LaserWriters on the printer port (Personal LaserWriter LS/300, Select 300)`;
 `W-1144 Personal LaserWriter 300: load the next page while one prints, so multi-page jobs finish sooner`;
-`W-1145 Personal LaserWriter LS on the printer port`.
+`W-1145 Personal LaserWriter LS on the printer port`;
+`W-1146 LaserWriter Select 300 on the printer port`.
 Design: `docs/superpowers/specs/2026-11-12-quickdraw-laserwriters-design.md`, which holds the
 command table and the measurements this section stands on. `components/qdlaser`: `qd_model`,
 `qd_wire`, `qd_status`, `qd_page`, `qd_session` and `qd_testpage` are pure and host-tested in
 `tools/rip`; `qd_link.c` (the SPI slave) and `qdlaser.c` (the port's questions and the job
 pipeline's hooks) are the board's. `tools/qdlaser` holds `qdfake.py`, a software Personal
-LaserWriter 300 (and LS) and page decoder, and `mkqdtables.py`, which reads Apple's 300 screen,
-curve and icon out of Apple's LaserWriter 300 driver 1.1 into `apple_tables_lw.{h,c}` and the
-icon files, and the LS's icon out of its own driver.
+LaserWriter 300 (and LS, and Select 300) and page decoder, and `mkqdtables.py`, which reads
+Apple's 300 screen, curve, icon and the PGRD table out of Apple's LaserWriter 300 driver 1.1
+into `apple_tables_lw.{h,c}` and the icon files, and the LS's icon out of its own driver.
 **A Personal LaserWriter 300 prints from AirWriter on a rev A board (board 1, 2026-11-12 and
-13). A Personal LaserWriter LS is found and shared, built from its own driver and expected to
-work, but no LS has been tried (W-1145, below). The LaserWriter Select 300 is not supported:**
-very likely a page memory with pointers, its own paper and density commands, and no printer
-here to test on.
+13). A Personal LaserWriter LS and a LaserWriter Select 300 are found and shared, each built
+from its own driver, but neither has been tried (W-1145 and W-1146, below).**
 
 - **Finding it.** The 300 drives a 533 kHz clock on J2 pin 2 (HSKi; the port's CTS pin, IO8 on
   rev A) the whole time it is on. `serial_out` counts its edges (`docs/traps.md`): clocked after
@@ -1468,13 +1467,15 @@ here to test on.
   a clocked port. With a clock and nothing named, the board asks `81 00`, `83 40`, `83 3E`,
   `82 00`; an `83 40` refused or unanswered does not end it (an LS's own driver never sends
   it). Engine identity `29` makes an auto-found record (`PR_KIND_QDLASER`, `PR_MODEL_PLW300`),
-  `0D` an LS's (`PR_MODEL_PLWLS`), shared if there is room; the same printer back is the same
-  record. Any other identity is a QuickDraw LaserWriter AirWriter doesn't support: `/api/printers` carries it
-  as `port_unsupported` and the page shows a grayed row at the end of the Printers list
-  (`Printer port · Not supported yet`, nothing to open) until the clock goes. Each find logs the
-  clock's rate and duty. The port's family is `pr_family_t` (ImageWriter, StyleWriter,
-  QuickDraw LaserWriter), the one switch the port policy, the job sink, the link and the test
-  page branch on. A 300 record makes the stored list version 4, an LS record version 5
+  `0D` an LS's (`PR_MODEL_PLWLS`), `23` none (a Japanese model Apple's driver half covers),
+  any other a Select 300's (`PR_MODEL_SEL300`: Apple's drivers have no number for it), shared
+  if there is room; the same printer back is the same record. A `23` is a QuickDraw
+  LaserWriter AirWriter doesn't support: `/api/printers` carries it as `port_unsupported` and
+  the page shows a grayed row at the end of the Printers list (`Printer port · Not supported
+  yet`, nothing to open) until the clock goes. Each find logs the clock's rate and duty. The
+  port's family is `pr_family_t` (ImageWriter, StyleWriter, QuickDraw LaserWriter), the one
+  switch the port policy, the job sink, the link and the test page branch on. A 300 record
+  makes the stored list version 4, an LS record version 5, a Select record version 6
   (`docs/traps.md`, stored forms).
 - **The link** (`qd_link.c`). GP-SPI2 as a slave, mode 0, LSB first, clocked from HSKi through
   the GPIO matrix, its MISO on TxD through the matrix and its MOSI fed from the TxD pad, so each
@@ -1681,6 +1682,61 @@ here to test on.
   - `qdfake.py --engine 0d` is an LS as its driver has it, and logs anything its driver never
     sends (`83 2A`, `83 A7`, `83 5D`, `83 4C`, `83 4F`, `84 08`) or a row while a page prints;
     `qdcheck` and `qdinterop` print to it. Its icon is its driver's (`plwls`).
+- **The LaserWriter Select 300** (W-1146). Built from its own driver (LW Select 300 1.0) and
+  LaserWriter 300 1.2's Select branch, read for facts (the notes are kept outside this repo);
+  no Select has been tried. Wells: found and shared like the LS, called untested in the docs and
+  wiki. Where the drivers differ, the Select's own wins, but for 1.2's `83 68` and `83 67`,
+  which 1.2 sends only to a Select. `qd_spec_t.driver` `QD_DRV_SEL`; the icon is Apple's for
+  the LaserWriter Select's body (`lwselect`), since its driver only reuses the 300's.
+  - *Two page paths, by `82 00`.* At each job's start, bits 7-6 of `82 00` `01` take page
+    memory, anything else the 300's path, its driver's one test. Every clue in the driver
+    (PhotoGrade, its curve, its plain-path margin left alone) says a real Select answers
+    `01`. One page at a time on both: each waits for the done of the one before.
+  - *Job.* `81 00`, `83 3E`, `82 00` (no `83 40`), `83 68` (one try, its reply dropped). On
+    page memory then the driver's probe: `92 00`; `5A` written at 0 and `A5` at 0x0FFFFF with
+    `E0-E2` and `8B`, read back at 0x0FFFFF with `E3-E5` and `CF 00`: not `A5` is under 1 MB
+    (7); else `5A` at 0x3FFFFF and read back at 0x0FFFFF: `5A` is 1 MB (5), else more (0); `92`
+    with the result, `84` with bit 4 once, and the identity again. The result changes nothing
+    else: the page budget is 480,000 bytes of codes, as the LS's.
+  - *Setup*, in its driver's order: the left margin, top (`85`/`86`, (paper h − image h) / 2
+    + 0x27 rows), `83 5B` and its value byte `C2`, density `83 58` and Apple's default as
+    `E9` (no value when `83 58`'s answer has bits 7-6 `10`), the row width, the source (replies
+    dropped), Ready. The 300's path: left `87` (2550 − image w + 0x16A) / 16 bytes, the width
+    in bytes. Page memory: left (2550 − image w + 0x16A) / 2 dots as `87` and `8C` (its high
+    byte), `A2 19`/`A3` and `A2 18`/`A3` with 11 less it (high, low), the width `88`/`89` in
+    dots; once a job the `PGRD` table (`apple_lw_pgrd`: entry i's first word's low byte at
+    `A0` i, high byte at `A0` 20+i, the second word's low byte at `A0` 40+i, each with `A1`),
+    `A2 00`/`A3 C0`, `A0 60`/`A1 00`. On page memory the setup goes with the first page,
+    straight after the probe's identity, and again only for another sheet, with no `81 00`; on
+    the 300's path, `81 00` and the setup before every page.
+    Letter: `85 9B 86 FF`; plain `87 E0`, `88 D4 89 FE`; page memory `87 00 8C FF`,
+    `A3 FF`/`A3 0B`, `88 A0 89 F6`.
+  - *A page on page memory:* the source, `8B 8B` twice, then `C0-C2`, the write address, is
+    the page's start; its rows (the 300's packets and codes) go where the printer writes;
+    `83 02` for paper (and the jam and cover); `8B 8B` twice, `E3-E5` the page's start,
+    `8A 01`. Done is the read address (`C3-C5`) come to the write address, asked every 500 ms
+    with `83 01` and `83 02`. `8E` goes only after the printer's BREAK, as its driver asks it,
+    its reply one byte: its memory-full and error bits stop the page from printing, and its
+    done bit only brings the addresses on at once, since a done read late would end the next
+    page early. Opened again before it
+    printed (Apple's screen after a page too big), `E0-E2` go back to its start and the new
+    rows go over the old. No `8A 02` (it readies the engine early; every reprint and copy
+    prints without it), no size check (`83 0B`/`0D`: a phone can't change a cassette).
+  - *Sheets:* Letter, A4 and Legal, the 300's image areas (its driver shares the code). Its
+    envelopes would need the margin it can't carry moved into every row, and its driver's
+    Executive is drawn 5.5 × 8.5 in.
+  - *Paper* from `83 01`/`83 02` as the LS: `83 02` bit 4 no paper, bit 5 the cassette, bit 6
+    its front cover or toner cartridge, shown as the cover. The cassette is `83 51`, IPP
+    `main`; the multipurpose tray `83 4F`, `manual`; the optional lower cassette (`83 52`,
+    fitted when `83 25` bit 0x20) is never used. Never `83 2A`.
+  - *A jam or the cover:* `8A 00` and `83 5D`, the wait until it has stayed clear, and on page
+    memory Apple's reprint from the printer's memory, where the page is still whole: `C0-C2`
+    read, `81 00`, `E0-E2` put back, `E3-E5` the page's start, `8A 01`. Nothing is sent again.
+    On the 300's path: `81 00` and the page again from the job's copy.
+  - *Job end:* Ready, `83 67` (one try, its reply dropped), no `81 00`, as both its drivers end.
+  - `qdfake.py --engine 31` is a Select on page memory (`--plain`: on the 300's path), with
+    addressable memory, the probe, the addresses and the PGRD table, and logs anything
+    AirWriter never sends a Select; `qdcheck` and `qdinterop` print to it on both paths.
 - **Bench (rev A, board 1, with Wells's Personal LaserWriter 300, 2026-11-12 and 13).** Found
   by itself at 533.5 to 533.7 kHz, duty 49 to 51%; switched off, Offline in about 2 s; switched
   on, the same record. Mac pages and an iPhone page; a manual-slot page chosen from a Mac; a
@@ -1907,8 +1963,15 @@ never been scoped; see 4.
      job; its driver fails only on particular `83 04` and `83 07` bits); which source it
      takes at power-up (the tray, as its guide's lights suggest, is what `qdfake.py` does);
      whether `83 25` bit 0x20 says the cassette is fitted, to offer it.
-   - **The Select 300.** Only its engine identity (not `29`, `0D` or `23`) is used, to name it
-     as not supported. Never seen.
+   - **The Select 300** (W-1146). Built from its own driver and never tried. Only a Select can
+     settle: its `82 00` answer, on which the page path hangs; whether the probe, the
+     addresses and `8B 8B` behave as read, and what `81 00` does to the write address (the
+     reprint puts it back either way); what happens when the write address reaches the end of
+     its memory (the driver never handles it; AirWriter takes it to wrap); its memory as
+     shipped; the left margin on page memory (0x16A in its own driver, 0x1A0 in LaserWriter 300
+     1.1 and 1.2, 27 dots apart); its Fuji Xerox engine's real status bytes; its clock rate and
+     whether rev A's U3 follows it; whether it wants `83 68`/`83 67`, minds the probe's
+     `83 40`, and needs the PGRD table for a page of one bit a dot.
    - **Sizes other than Letter.** Legal, Executive, #10, Monarch and A4 use the image areas read
      out of Apple's driver and have not been printed.
    - **`81 00` while a page prints.** Whether it cuts the page is not known, which is why one

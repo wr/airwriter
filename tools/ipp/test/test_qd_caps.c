@@ -158,6 +158,29 @@ static void test_plwls_attrs(void)
     CHECK(answer(&p, both) < RESP_MAX);
 }
 
+// W-1146: the Select 300, Letter, A4 and Legal, from the cassette or the manual feed.
+static void test_sel300_attrs(void)
+{
+    const printer_caps_t *c = qd_caps(QD_SEL300);
+    CHECK(c != NULL);
+    if (!c) return;
+    ipp_printer_t p = printer(c, 0);
+    size_t n = answer(&p, NULL);
+    CHECK(n < RESP_MAX);
+    char w[320];
+    words(buf, n, "print-color-mode-supported", w, sizeof w);
+    CHECK(strcmp(w, "monochrome") == 0);
+    words(buf, n, "media-supported", w, sizeof w);
+    CHECK(strcmp(w, "na_letter_8.5x11in iso_a4_210x297mm na_legal_8.5x14in") == 0);
+    words(buf, n, "media-source-supported", w, sizeof w);
+    CHECK(strcmp(w, "main manual") == 0);
+    ipp_found_t f;
+    CHECK(ipp_find(buf, n, "printer-make-and-model", &f));
+    CHECK(ipp_val_is(&f, "Apple LaserWriter Select 300"));
+    const char *both[] = { "all", "media-col-database", NULL };
+    CHECK(answer(&p, both) < RESP_MAX);
+}
+
 static void test_other_printers_one_source(void)
 {
     char w[64];
@@ -176,6 +199,7 @@ int main(void)
     test_plw300_attrs();
     test_plw300_size();
     test_plwls_attrs();
+    test_sel300_attrs();
     test_other_printers_one_source();
     TEST_END;
 }

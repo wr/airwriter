@@ -58,9 +58,10 @@ which nothing has run on yet, the LC's one status light included.
   the others may need R9 fitted (`docs/hardware-rev-a.md`). A Personal LaserWriter 300 on the
   printer port is found by the clock it drives on HSKi and prints over AirPrint in gray, tested
   on board 1. A Personal LaserWriter LS is found and shared the same way, built from its own
-  driver and expected to work, untested; docs say so. A LaserWriter Select 300 there is named
-  and not supported. Up to six printers are shared at once, any mix of the port's records and
-  AppleTalk printers.
+  driver and expected to work, untested; docs say so. A LaserWriter Select 300 is found and
+  shared the same way, built from its own driver (its page memory as well as the 300's path),
+  untested; docs say so. Up to six printers are shared at once, any mix of the port's records
+  and AppleTalk printers.
 - **Ways in.** AirPrint (`image/urf`, Print-Job only) for phones and Macs. For vintage Macs, the
   LocalTalk port (TashTalk 2.1.3 in U7, which the ESP32 flashes over LVP) and three EtherTalk
   links: the board's own Wi-Fi, Basilisk II's UDP tunnel (port 6066) and Infinite Mac's zone
@@ -68,7 +69,8 @@ which nothing has run on yet, the LC's one status light included.
 - **Not built:** Mini vMac (LToUDP), PWG raster, HP LaserJets over serial (designed), AirPrint to
   an AppleTalk ImageWriter, colour on a colour LaserWriter (it prints gray), vintage Macs
   printing to a StyleWriter (AirWriter as Apple's StyleWriter network adapter), a StyleWriter's
-  fast mode, the LaserWriter Select 300, vintage Macs printing to a QuickDraw LaserWriter.
+  fast mode, a Select 300's PhotoGrade and its lower cassette, vintage Macs printing to a
+  QuickDraw LaserWriter.
 
 Where things are (`firmware/components/` unless a path is given):
 
@@ -200,15 +202,18 @@ page: Top margin (`{"top_margin":N}`, 1/144 in, -216 to 144, default -144) and d
   captures live in `~/.config/airwriter/sw-drivers/` and `sw-captures/`, never committed.
 - **QuickDraw LaserWriters** (Python 3 with numpy): `make -C tools/rip qdcheck` decodes the
   rip's packets and the line the board clocks out with `qdfake.py` (a software Personal
-  LaserWriter 300, and with `--engine 0d` an LS) and holds both to the rip's dots, for each;
+  LaserWriter 300, with `--engine 0d` an LS, with `--engine 31` a Select 300 on page memory and
+  with `--plain` too one on the 300's path) and holds both to the rip's dots, for each;
   `make -C tools/rip qdinterop` prints from `build/qdhost` (the firmware's session on the host)
   to `qdfake.py` over a pty: three and ten pages, each loaded while the last prints, then each
   fault, jams with pages sent again from the board's copy, a cancel, a printer switched off,
-  and an LS's pages, paper out and jam (about 35 s); `python3 -m unittest
-  tools/qdlaser/test_qdfake.py`. `rip --printer plw300 --out-qd F` (or `plwls`) writes a page as
-  the printer would be sent it, `rip --qd-testpage F [--printer plwls]` the test page, and
-  `qdfake.py decode F [--engine 0d]` draws either. Apple's drivers live in
-  `~/.config/airwriter/lw300-driver/` and `plw-ls-driver/`, never committed.
+  an LS's pages, paper out and jam, and a Select's pages on both paths, a jam printed again from
+  its memory, its front cover and paper out (about 35 s); `python3 -m unittest
+  tools/qdlaser/test_qdfake.py`. `rip --printer plw300 --out-qd F` (or `plwls`, `sel300`,
+  `sel300-plain`) writes a page as the printer would be sent it, `rip --qd-testpage F
+  [--printer plwls|sel300]` the test page, and `qdfake.py decode F [--engine 0d|31] [--plain]`
+  draws either. Apple's drivers live in `~/.config/airwriter/lw300-driver/`, `plw-ls-driver/`
+  and `sel300-driver/`, never committed.
 - **Firmware:** both boards' builds clean, then `python3 tools/stackcheck/stackcheck.py` and
   `python3 tools/stackcheck/stackcheck.py firmware/build-2026.11` (needs the toolchain
   `export.sh` puts on PATH): every task that makes ESP-IDF's deep calls keeps 1 KB of

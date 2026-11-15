@@ -1,7 +1,9 @@
 #!/usr/bin/env python3.14
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""The Personal LaserWriter 300's page held to a software printer, twice (W-1102), and the
-Personal LaserWriter LS's (W-1145: `--printer plwls`, decoded by qdfake.py as an LS).
+"""The Personal LaserWriter 300's page held to a software printer, twice (W-1102), the
+Personal LaserWriter LS's (W-1145: `--printer plwls`, decoded by qdfake.py as an LS), and the
+LaserWriter Select 300's on page memory and on the 300's path (W-1146: `--printer sel300` and
+`sel300-plain`, decoded by qdfake.py as a Select).
 
 For each page, `rip --printer plw300` runs the firmware's page stage and session and writes
 three things: the packets in qdfake.py's framing (--out-qd), the line the board clocks out
@@ -30,7 +32,7 @@ QDFAKE = HERE.parents[1] / "qdlaser" / "qdfake.py"
 FIX = HERE.parents[2] / "fixtures"
 PAGES = (FIX / "checker.urf", FIX / "ios-20260804-232652.urf")
 SCREENS = ("atkinson", "apple")
-PRINTERS = {"plw300": "29", "plwls": "0d"}
+PRINTERS = {"plw300": ["29"], "plwls": ["0d"], "sel300": ["31"], "sel300-plain": ["31", "--plain"]}
 # The image area's height for each of the 300's and the LS's sheets, and the page height a
 # client sends.
 SHEETS = {3175: 3300, 3750: 4200, 3025: 3150, 2725: 2850, 2125: 2250, 3375: 3508, 2825: 2953}
@@ -57,9 +59,9 @@ def check(page, screen, printer, tmp):
     run([RIP, "--in", page, "--printer", printer, "--dither", screen, "--out-qd", d / "s.bin",
          "--out-qd-bits", d / "b.bin", "--out-pbm", d / "p.pbm"])
     run([sys.executable, QDFAKE, "decode", d / "s.bin", "--out", d / "a", "--no-png",
-         "--engine", engine])
+         "--engine", *engine])
     run([sys.executable, QDFAKE, "decode-bits", d / "b.bin", "--out", d / "b", "--no-png",
-         "--engine", engine])
+         "--engine", *engine])
     mine = read_pbm(d / "p.pbm")
     a, b = read_pbm(d / "a" / "page-1.pbm"), read_pbm(d / "b" / "page-1.pbm")
     problems = []

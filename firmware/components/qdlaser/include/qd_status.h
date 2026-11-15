@@ -19,10 +19,11 @@ typedef enum { QDS_READY, QDS_PRINTING, QDS_NO_PAPER, QDS_NO_CASSETTE, QDS_MANUA
 // that went unanswered when the printer said nothing, command then argument (0x8301), else 0.
 typedef struct { uint8_t s01, s02, s04, s07, s2a, c82; uint16_t miss; } qd_raw_t;
 
-// The state, first match wins: a jam (83 02 bit 3), the cover (bit 2), the cassette (bit 5; not
-// for the LS, whose driver never reads it), an engine fault (83 01 bit 1 without 83 02's
-// no-paper bit; which one is in 83 04 and 83 07), no paper at the source asked for (83 2A's bit
-// for it; for the LS, 83 02's no-paper bit) (manual: the slot, QDS_MANUAL; else the cassette,
+// The state, first match wins: a jam (83 02 bit 3), the cover (bit 2; a Select 300's bit 6 too,
+// its front or toner cartridge), the cassette (bit 5; not for the LS, whose driver never reads
+// it), an engine fault (83 01 bit 1 without 83 02's no-paper bit; which one is in 83 04 and
+// 83 07), no paper at the source asked for (83 2A's bit for it; for the LS and the Select, 83
+// 02's no-paper bit) (manual: the slot, QDS_MANUAL; else the cassette,
 // QDS_NO_PAPER), paper moving (83 01 bit 5), else ready. Offline is the caller's: a printer
 // whose clock has gone answers nothing.
 qd_state_t qd_state_from(const qd_spec_t *sp, const qd_raw_t *r, int manual);

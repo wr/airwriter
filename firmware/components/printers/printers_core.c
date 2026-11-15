@@ -82,16 +82,18 @@ pr_model_t pr_model_from_sw(sw_model_t m)
 
 qd_model_t pr_model_to_qd(pr_model_t m)
 {
-    return m == PR_MODEL_PLW300 ? QD_PLW300 : m == PR_MODEL_PLWLS ? QD_PLWLS : QD_NONE;
+    return m == PR_MODEL_PLW300 ? QD_PLW300 : m == PR_MODEL_PLWLS ? QD_PLWLS
+         : m == PR_MODEL_SEL300 ? QD_SEL300 : QD_NONE;
 }
 
 pr_model_t pr_model_from_qd(qd_model_t m)
 {
-    return m == QD_PLW300 ? PR_MODEL_PLW300 : m == QD_PLWLS ? PR_MODEL_PLWLS : PR_MODEL_NONE;
+    return m == QD_PLW300 ? PR_MODEL_PLW300 : m == QD_PLWLS ? PR_MODEL_PLWLS
+         : m == QD_SEL300 ? PR_MODEL_SEL300 : PR_MODEL_NONE;
 }
 
 // W-1145: the QuickDraw LaserWriters' models, which only the port finds (never named by hand).
-static int model_is_qd(int m) { return m == PR_MODEL_PLW300 || m == PR_MODEL_PLWLS; }
+static int model_is_qd(int m) { return m >= PR_MODEL_PLW300 && m <= PR_MODEL_SEL300; }
 
 int pr_has_apple_screen(int kind)
 {
@@ -158,7 +160,8 @@ const char *pr_icon(int kind, int model, const lw_info_t *lw)
     case PR_MODEL_SWC2400:
     case PR_MODEL_SWC2500: return "stylewriter";
     case PR_MODEL_PLW300:
-    case PR_MODEL_PLWLS:   return qd_spec(pr_model_to_qd((pr_model_t)model))->icon;
+    case PR_MODEL_PLWLS:
+    case PR_MODEL_SEL300:  return qd_spec(pr_model_to_qd((pr_model_t)model))->icon;
     default:               return kind == PR_KIND_STYLEWRITER ? "stylewriter"
                                 : kind == PR_KIND_QDLASER ? qd_spec(QD_PLW300)->icon : "icon";
     }
@@ -565,7 +568,13 @@ int pr_port_seen_qd(pr_list_t *l, uint8_t engine)
 {
     pr_model_t m = pr_model_from_qd(qd_model_from_engine(engine));
     if (m != PR_MODEL_NONE) {
-        l->qd_other = l->qd_pending = 0;
+        // W-1146: a Select 300 has no number of its own, so any answer but the others' is one.
+        // Two different answers in a row (another printer's reply garbled twice) start over, as
+        // two models' answers would: the same Select answers the same each time.
+        if (m == PR_MODEL_SEL300 && l->qd_pending != engine && l->pending_model == PR_MODEL_SEL300)
+            l->pending_model = 0;
+        l->qd_other = 0;
+        l->qd_pending = m == PR_MODEL_SEL300 ? engine : 0;
         return port_named(l, PR_HEARD_QDLASER, m);
     }
     // One we cannot print to: named on the page, never a record, and only on the same answer
@@ -1086,6 +1095,11 @@ enum { HDR = 6 };
 // (pr_blob_newer) for the next update.
 static uint8_t blob_version(const pr_list_t *l)
 {
+    // W-1146: 6 holds a LaserWriter Select 300, which a 5 never does.
+    for (int i = 0; i < l->n; i++)
+        if (l->r[i].model == PR_MODEL_SEL300) return 6;
+    for (int i = 0; i < l->n_notes; i++)
+        if (l->notes[i].model == PR_MODEL_SEL300) return 6;
     // W-1145: 5 holds a Personal LaserWriter LS, which a 4 never does.
     for (int i = 0; i < l->n; i++)
         if (l->r[i].model == PR_MODEL_PLWLS) return 5;
@@ -1125,11 +1139,11 @@ int pr_load(pr_list_t *l, const uint8_t *buf, size_t n)
     // layout is the same, so what it may hold is all that differs; a 3 (W-1116,
     // a second port record) holds what a 2 does.
     // W-1102: a 4 adds the QuickDraw LaserWriter's kind and model; W-1145: a 5 its second
-    // model, the LS.
+    // model, the LS; W-1146: a 6 its third, the Select 300.
     int max_kind = buf[2] == 1 ? PR_KIND_AT_IMAGEWRITER : buf[2] <= 3 ? PR_KIND_STYLEWRITER
                  : PR_KIND_QDLASER;
     int max_model = buf[2] == 1 ? PR_MODEL_IW1 : buf[2] <= 3 ? PR_MODEL_SWC2500
-                  : buf[2] == 4 ? PR_MODEL_PLW300 : PR_MODEL_PLWLS;
+                  : buf[2] == 4 ? PR_MODEL_PLW300 : buf[2] == 5 ? PR_MODEL_PLWLS : PR_MODEL_SEL300;
     uint8_t cnt = buf[3], notes = buf[5];
     if (cnt > PR_MAX || notes > PR_NOTES_MAX) return -1;
     if (n != HDR + (size_t)cnt * sizeof(pr_rec_t) + (size_t)notes * sizeof(pr_note_t)) return -1;

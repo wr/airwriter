@@ -589,7 +589,8 @@ Traps already explained in a code comment are listed only when the comment is ea
   LaserWriter 300's kind and model and nothing else; it is written only while the list holds
   one, versions 1 to 3 still load, and a board rolled back to a firmware before it keeps a 4
   untouched and shares nothing until the next update. Version 5 (W-1145) adds the Personal
-  LaserWriter LS's model, the same way: written only while a record or notice names an LS.
+  LaserWriter LS's model, the same way: written only while a record or notice names an LS;
+  version 6 (W-1146) the LaserWriter Select 300's, written only while one names a Select.
 - **A printer switched on is not ready at its first frame.** The NTR spends 8 s on LLAP ENQs
   (TashTalk passes other nodes' ENQs; `/api/lt` counts them in `frames`, not `heard`), then
   looks up its own name five times 2 s apart, and answers lookups only after that. Look after

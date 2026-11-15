@@ -7,6 +7,31 @@ run coder, the port's questions), `W-1082` (LaserWriters: the 300 dpi rip) and `
 printer's own Apple icon). Reverses the QuickDraw non-goal in
 `2026-10-21-laser-printers-design.md`.
 
+**Amended 2026-11-15 by `W-1146 LaserWriter Select 300 on the printer port`** (SPEC §3.18,
+"The LaserWriter Select 300", is the record). The Select 300 leaves the non-goals, and no
+QuickDraw LaserWriter but a Japanese model (`23`) is named and left unsupported any more. Read
+from the Select's own driver (LW Select 300 1.0) and LaserWriter 300 1.1 and 1.2, with no
+printer to try it on. Wells: found and shared like the LS, called untested in the docs and
+wiki, no switch to turn it on. Calls made while building:
+
+- **Both page paths, by `82 00`'s bits 7-6, as its driver chooses:** `01` page memory, else
+  the 300's path. One page at a time on both.
+- **The Select's own driver wins where they differ**, but for 1.2's `83 68` and `83 67`,
+  which 1.2 sends only to a Select (one try each, replies dropped), and the page-memory left
+  margin stays its own driver's 0x16A (1.1 and 1.2's 0x1A0 looks like the 300's constant in
+  shared code).
+- **Page memory as its driver has it:** the probe and `92`, the setup in dots with `8C` and
+  `A2`/`A3`, the `PGRD` table once a job (read out of the 300's driver by `mkqdtables.py`, the
+  same table in all three drivers), each page's start read after `8B 8B`, the read address set
+  to it before `8A 01`, done also when the addresses meet, and a jam's page printed again from
+  the printer's memory. Left out: `8A 02`, the size check, `83 25`, PhotoGrade.
+- **Paper from `83 02`** (1.0's way, not 1.2's `83 2A`); its bit 6, the front cover or toner
+  cartridge, is a cover. The cassette is `main`, the multipurpose tray `manual`; the lower
+  cassette is never used.
+- **Letter, A4 and Legal** only; **the `lwselect` icon**, Apple's for the Select's body.
+- **Budget 480,000 bytes of codes**, as the LS; the probe's result changes nothing.
+- `qdfake.py` grew a Select with page memory (`--engine 31`, `--plain`).
+
 **Amended 2026-11-14 by `W-1145 Personal LaserWriter LS on the printer port`** (SPEC §3.18,
 "The Personal LaserWriter LS", is the record). The LS leaves the non-goals; the Select 300
 stays. Read from the LS's own driver (Personal LW LS 7.1) and the LaserWriter 300 driver's LS
@@ -525,7 +550,8 @@ found and printing as before.
   W-1144: Apple's overlap, about 17 s a page after the first.)
 - The budget is 500,000 bytes of codes, below the measured 513,287.
 - An LS or Select 300 on the port is named and said to be unsupported, not shared: a grayed
-  row in the Printers list, not a notice (2026-11-13).
+  row in the Printers list, not a notice (2026-11-13). (Replaced by W-1145 and W-1146: both are
+  shared; only a Japanese model is named so.)
 - Copies stay out, as for every printer today.
 - Print density stays at Apple's default with no control.
 - The test page grows out of the StyleWriter's black-cartridge page.

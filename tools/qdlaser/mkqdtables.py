@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-or-later
 """Reads the Personal LaserWriter 300's halftone screen, tone curve and icon out of Apple's
-LaserWriter 300 driver (W-1102), and the Personal LaserWriter LS's icon out of its own driver
-(W-1145), and writes them as source.
+LaserWriter 300 driver (W-1102), the Personal LaserWriter LS's icon out of its own driver
+(W-1145), and the PGRD table a LaserWriter Select 300 is sent out of the 300's driver
+(W-1146), and writes them as source.
 
 Apple's drivers are never committed (they live in ~/.config/airwriter/lw300-driver/ and
 plw-ls-driver/); what comes out is the tables and the icons, which are Apple's (LICENSE.md). The input is the driver's
@@ -17,6 +18,9 @@ What it takes, and from where:
   HTSC 2, an 8 x 8 clustered-dot screen with a four byte header: apple_lw_screen8.
   GAMA 3, 256 bytes from 0 to 33, the curve the driver puts each gray through before that
   screen: apple_lw_tone.
+  PGRD 1, a count of 32 then 32 entries of two big-endian words, which the driver sends a
+  printer on page memory at the start of every job: apple_lw_pgrd, the 128 bytes after the
+  count.
   icl8 128 cut out by ICN# 128, the printer's Chooser icon, as a pixel grid
   (tools/icon/apple/plw300.txt, which tools/icon/mkicons.py turns into the PNGs), in the
   Macintosh system palette's colours mapped to mkicons.py's APPLE_PALETTE.
@@ -25,7 +29,7 @@ What it takes, and from where:
 
 Before it writes anything: HTSC 2 is 68 bytes with the header 00 08 00 08, and its 64
 thresholds are 1 to 32, each twice; GAMA 3 is 256 bytes, never falls, starts at 0 and ends at
-33. --sizes prints PREC 3's paper names with their sizes in 1/120 in.
+33; PGRD 1 is 130 bytes with the count 32. --sizes prints PREC 3's paper names with their sizes in 1/120 in.
 """
 import argparse
 import importlib.util
@@ -74,6 +78,13 @@ def tone(res):
     if t[0] != 0 or t[-1] != 33:
         raise ValueError("GAMA 3 runs %d to %d, not 0 to 33" % (t[0], t[-1]))
     return list(t)
+
+
+def pgrd(res):
+    t = res["PGRD"][1]
+    if len(t) != 2 + 32 * 4 or struct.unpack(">H", t[:2])[0] != 32:
+        raise ValueError("PGRD 1 is not a count of 32 and 32 entries of two words")
+    return list(t[2:])
 
 
 def sizes(res):
@@ -128,6 +139,8 @@ def header_text(version):
 // Where each table is from: '%(d)s' %(v)s, the driver for the Personal LaserWriter 300.
 //   apple_lw_screen8  HTSC 2, 8 x 8 thresholds 1 to 32, row by row, after its four byte header.
 //   apple_lw_tone     GAMA 3, which takes a gray (0 black, 255 white) to 0 to 33.
+//   apple_lw_pgrd     PGRD 1 after its count: 32 entries of two big-endian words, which the
+//                     driver sends a printer on page memory at each job's start (qd_session.c).
 // How the driver uses them: a pixel is ink where the screen's threshold is over the toned gray
 // (halftone.c, HT_APPLE_LW).
 #pragma once
@@ -135,16 +148,18 @@ def header_text(version):
 
 extern const uint8_t apple_lw_screen8[64];
 extern const uint8_t apple_lw_tone[256];
+extern const uint8_t apple_lw_pgrd[128];
 """ % {"d": DRIVER, "v": version}
 
 
-def source_text(version, scr, tn):
+def source_text(version, scr, tn, pg):
     return (PREAMBLE % {"v": version} + """\
 //
 // The tables declared in apple_tables_lw.h, where the driver they are from is named.
 #include "apple_tables_lw.h"
 
-""" + mk.c_array("apple_lw_screen8", scr, 8) + "\n\n" + mk.c_array("apple_lw_tone", tn) + "\n")
+""" + mk.c_array("apple_lw_screen8", scr, 8) + "\n\n" + mk.c_array("apple_lw_tone", tn) + "\n\n"
+            + mk.c_array("apple_lw_pgrd", pg, 8) + "\n")
 
 
 def main():
@@ -165,13 +180,13 @@ def main():
     if a.driver:
         res = mk.resources(mk.resource_fork(a.driver))
         version = mk.short_version(res)
-        scr, tn = screen(res), tone(res)
+        scr, tn, pg = screen(res), tone(res), pgrd(res)
         rows, mapped = icon_grid(res)
         report(DRIVER, version, rows, mapped)
         if a.sizes:
             for name, (h, w) in sizes(res):
                 print("  %-18s %4d x %4d (height x width, 1/120 in)" % (name, h, w))
-        writes += [(a.header, header_text(version)), (a.source, source_text(version, scr, tn)),
+        writes += [(a.header, header_text(version)), (a.source, source_text(version, scr, tn, pg)),
                    (a.icon_grid, "\n".join(rows) + "\n")]
     if a.ls_driver:
         res = mk.resources(mk.resource_fork(a.ls_driver))
