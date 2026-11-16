@@ -65,8 +65,9 @@ esp_err_t webui_auth_refuse(httpd_req_t *req)
 {
     httpd_resp_set_status(req, "401 Unauthorized");
     httpd_resp_set_type(req, "application/json");
-    return httpd_resp_sendstr(req, auth_label() ? "{\"signin\":true,\"label\":true}"
-                                                : "{\"signin\":true,\"label\":false}");
+    // label: the password on the board's label still works (it hasn't been changed).
+    return httpd_resp_sendstr(req, auth_kind() == AUTH_LABEL ? "{\"signin\":true,\"label\":true}"
+                                                            : "{\"signin\":true,\"label\":false}");
 }
 
 static esp_err_t signed_in_with(httpd_req_t *req, const char *tok)

@@ -530,7 +530,7 @@ document.querySelector('.back').onclick=()=>{
    click on the dimmed page around it */
 for(const b of $$('[data-dlg]')) b.onclick=()=>$(b.dataset.dlg).showModal();
 for(const b of $$('[data-close]')) b.onclick=()=>b.closest('dialog').close();
-for(const d of $$('dialog')) d.addEventListener('click',e=>{ if(e.target===d&&d.id!=='d-wait') d.close(); });
+for(const d of $$('dialog')) d.addEventListener('click',e=>{ if(e.target===d&&d.id!=='d-wait'&&d.id!=='d-signin') d.close(); });
 /* While AirWriter restarts: the page waits for it to answer, then reloads.
    After 90 s it says what to do instead, and keeps listening. */
 function waitFor(title,html,reload,late){
@@ -1554,12 +1554,18 @@ function needSignin(label){
   if(SIGNIN) return;
   SIGNIN=true;
   for(const d of $$('dialog')) if(d.open) d.close();
-  $('si-lede').classList.toggle('hide',!label);
-  document.body.classList.add('setupmode','in');
-  for(const p of $$('.pane')) p.classList.toggle('on',p.id==='p-signin');
+  SIGNIN_LABEL=label;
   setLost(false);
-  setTimeout(()=>$('si-pw').focus(),0);
+  $('d-signin').showModal();
 }
+$('d-signin').addEventListener('cancel',e=>e.preventDefault());   // Escape doesn't close it
+/* Forgot password? answers truly: where the label's password is while it
+   still works, how to start over once it's been changed or set. */
+let SIGNIN_LABEL=false;
+$('si-forgot').onclick=()=>{
+  $('si-forgot').classList.add('hide');
+  $(SIGNIN_LABEL?'si-label':'si-reset').classList.remove('hide');
+};
 function pwProblem(p){
   if(p.length<8) return 'Use at least 8 characters.';
   if(p.length>63||!/^[\x20-\x7e]+$/.test(p)) return 'Use letters, numbers and punctuation only.';

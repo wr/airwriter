@@ -163,10 +163,8 @@ the foot. Any 401 shows it and stops the polling; signing in reloads the state.
 
 | Where | Text |
 |---|---|
-| Sign-in title | AirWriter |
-| Under it | The password is on the bottom of AirWriter. (Nothing, on a board with none burned in.) |
-| Field | Password |
-| Button | Sign In |
+| Sign-in alert | Sign in to AirWriter · Password · **Sign In** |
+| Under it | Forgot password?, which opens "It’s on the bottom of AirWriter." while the label's password works, or else "Hold the test button while you plug in AirWriter, and keep holding for 5 seconds. That erases all its settings." |
 | Errors | Wrong password. · Too many tries. Try again in a minute. (Sign In dims until it may) · Try again. |
 | About | Password · **Change…** (or **Set…** on a board with none) |
 | About's buttons | **Sign Out** beside **Restart…**, while signed in to a board with a password |
@@ -174,7 +172,8 @@ the foot. Any 401 shows it and stops the polling; signing in reloads the state.
 | Set dialog | Set password · New password · **Cancel** **Set** |
 | Set and change errors | Wrong password. · Use at least 8 characters. · Use letters, numbers and punctuation only. |
 
-The erase dialog keeps its words. No help lines in the dialogs and no confirmation after a change
+The sign-in is an alert like the page's other dialogs, alone on the page's background, and
+nothing closes it but signing in (Wells, 2026-11-16, look A). The erase dialog keeps its words. No help lines in the dialogs and no confirmation after a change
 (Wells, 2026-11-16: "you're adding too much UI copy"); resetting a forgotten password is the
 wiki's. Changes from the mocks Wells saw: the change dialog asks for the current password, Sign
 Out moved beside Restart…, and the forgot-password line and the This browser row went.

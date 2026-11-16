@@ -1890,8 +1890,10 @@ Its captive page never asks: joining took the password.
 
 **Signing in.** On the home network, on a board with a password, every route on port 80 but the
 page (`/` and its addresses) and `/api/auth/*` answers 401 `{"signin":true,"label":bool}` to a
-browser without a known token. The page shows its sign-in screen (laid out as setup is) on the
-first 401 and stills its other asks until signing in reloads it.
+browser without a known token (`label`: the password on the label still works, unchanged). The
+page shows its sign-in alert on the first 401, over its plain background, and stills its other
+asks until signing in reloads it. Its Forgot password? answers where the label's password is
+while it works, and how to erase the settings once it doesn't.
 
 1. `GET /api/auth/nonce` → `{"nonce","salt","iter"}`: a challenge good once, for 60 s (4 kept),
    the board's salt (16 random bytes in NVS `auth/salt`, new after an erase) and 10000 rounds
