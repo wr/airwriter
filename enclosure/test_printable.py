@@ -92,6 +92,24 @@ def foot_bridges():
     return out
 
 
+MAX_BED_BRIDGE_DEPTH = 0.40
+"""A pocket in the floor's underside no deeper than this, two layers, has its
+ceiling printed one or two layers off the bed. However far that bridge sags,
+the bed is right under it, so its span is not capped as a lintel's is."""
+
+
+def label_bridge():
+    """(name, bounding box, span) for the label recess in the floor's
+    underside (case.label_recess). Its ceiling is a bridge across the
+    recess's width, LABEL_DEPTH off the bed."""
+    from build123d import Box, Pos
+    w = p.LABEL_W + 2 * p.LABEL_CLEAR
+    l = p.LABEL_L + 2 * p.LABEL_CLEAR
+    box = Pos(p.BOARD_W / 2, p.BOARD_L / 2, p.Z_FLOOR_BOTTOM + p.LABEL_DEPTH / 2) * Box(
+        w, l, p.LABEL_DEPTH)
+    return ("label", box.bounding_box(), min(w, l))
+
+
 def _inside(face, box, tol=0.02):
     fb = face.bounding_box()
     return all(
@@ -175,7 +193,7 @@ class TestTray(unittest.TestCase):
         self.assertEqual(len(self.t.solids()), 1)
 
     def test_no_unsupported_downward_flats(self):
-        lintels = [box for _, box, _ in wall_lintels() + foot_bridges()]
+        lintels = [box for _, box, _ in wall_lintels() + foot_bridges() + [label_bridge()]]
         flats = [f for f in downward_flats(self.t, p.Z_FLOOR_BOTTOM)
                  if not any(_inside(f, box) for box in lintels)]
         self.assertEqual(
@@ -185,6 +203,10 @@ class TestTray(unittest.TestCase):
     def test_every_lintel_is_a_short_bridge(self):
         for name, _, span in wall_lintels() + foot_bridges():
             self.assertLessEqual(span, MAX_BRIDGE_SPAN, name)
+
+    def test_the_label_ceiling_bridges_just_off_the_bed(self):
+        # 32.75 across, past MAX_BRIDGE_SPAN, so it must stay shallow.
+        self.assertLessEqual(p.LABEL_DEPTH, MAX_BED_BRIDGE_DEPTH)
 
     def test_walls_keep_their_thickness(self):
         # Probe each wall mid-height, and the floor mid-span, away from any
@@ -211,8 +233,10 @@ class TestTray(unittest.TestCase):
              p.THIN_WALL * 4.0 * 2.0),
             ("back", Pos(31.0, p.BOARD_L + p.WALL / 2, 4.0), (4.0, p.WALL, 2.0),
              p.THIN_WALL * 4.0 * 2.0),
+            # Under the label recess, the thinnest the floor gets away from
+            # a screw hole.
             ("floor", Pos(31.0, 52.0, (p.Z_FLOOR_TOP + p.Z_FLOOR_BOTTOM) / 2),
-             (4.0, 4.0, p.FLOOR), p.FLOOR * 4.0 * 4.0),
+             (4.0, 4.0, p.FLOOR), (p.FLOOR - p.LABEL_DEPTH) * 4.0 * 4.0),
         ]
         for name, pos, size, want in probes:
             probe = pos * Box(*size)

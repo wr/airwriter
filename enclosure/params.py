@@ -174,6 +174,29 @@ FOOT_COVER = 0.50
 """How far inside its foot's edge each screw counterbore stays, so the foot
 hides the screw."""
 
+LABEL_W = 31.75
+LABEL_L = 63.50
+"""A 2.5 x 1.25 in sheet label, the size the bench's foil label sheets come
+in (Wells, 2026-11-15; 2.5 x 1 in from 2026-11-14), in a recess in the middle
+of the floor's underside, its long side running front to back. Across, it
+would leave under a millimetre of flat beside the bottom chamfer and run into
+the feet."""
+
+LABEL_CLEAR = 0.50
+"""Per side, round the label in its recess: room to lay it in by hand, and
+for the die-cut's own tolerance."""
+
+LABEL_R = 1.50
+"""The recess's corner radius. Sheet labels are usually rounded 1/16 in
+(1.59); at LABEL_CLEAR, a corner this round also takes a square-cornered
+label, so either fits."""
+
+LABEL_DEPTH = 0.20
+"""One layer. Label stock is about 0.1 thick, so the label sits just under
+the floor's face and its edges can't catch. The recess's ceiling prints as a
+bridge one layer off the bed (test_printable.MAX_BED_BRIDGE_DEPTH); the first
+print of it came out clean (Wells, 2026-11-16: "printed, looks good")."""
+
 STANDOFF_D = 6.00
 """Boss diameter under each mounting hole, in the tray. Wide enough to carry
 the board and to leave a printable wall around the 2.80 clearance bore."""
