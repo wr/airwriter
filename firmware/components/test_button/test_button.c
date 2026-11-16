@@ -1,15 +1,16 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// ESP glue for the test button: owns its GPIO and the 100ms poll task. The
-// tap / hold / reset timing is the pure code in test_button_core.c.
+// ESP glue for the test button: owns its GPIO and the poll task. The tap /
+// hold / reset timing and the poll rate are the pure code in test_button_core.h.
 #include "test_button.h"
 #include "driver/gpio.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "esp_timer.h"
 
-#define BTN_POLL_MS   100
 #define BTN_STACK     2560
 #define BTN_PRIO      2
+
+_Static_assert(pdMS_TO_TICKS(BTN_POLL_MS) >= 1, "the button's poll is under one tick");
 
 static void (*s_on_tap)(void);
 static void (*s_on_hold)(btn_ev_t ev);
