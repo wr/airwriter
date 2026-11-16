@@ -355,3 +355,25 @@ void auth_hex_encode(const uint8_t *in, size_t n, char *out)
     }
     out[2 * n] = 0;
 }
+
+int auth_cookie_token(const char *h, char tok_hex[33])
+{
+    if (!h) return 0;
+    while (*h) {
+        while (*h == ' ' || *h == ';') h++;
+        const char *end = h;
+        while (*end && *end != ';') end++;
+        if (end - h == 3 + 32 && !strncmp(h, "aw=", 3)) {
+            uint8_t t[16];
+            char v[33];
+            memcpy(v, h + 3, 32);
+            v[32] = 0;
+            if (!auth_hex_decode(v, t, 16)) {
+                auth_hex_encode(t, 16, tok_hex);
+                return 1;
+            }
+        }
+        h = end;
+    }
+    return 0;
+}

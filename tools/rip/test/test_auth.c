@@ -269,8 +269,27 @@ static void hex(void)
     CHECK_EQ_INT(auth_hex_decode("", b, 2), -1);
 }
 
+// The Cookie header the board reads: other cookies may ride along (W-1156 review focus 1).
+static void cookie(void)
+{
+    char t[33];
+    CHECK_EQ_INT(auth_cookie_token("state=pw-none; aw=00112233445566778899aabbccddeeff; x=1", t), 1);
+    CHECK(!strcmp(t, "00112233445566778899aabbccddeeff"));
+    CHECK_EQ_INT(auth_cookie_token("aw=00112233445566778899AABBCCDDEEFF", t), 1);
+    CHECK_EQ_INT(auth_cookie_token("aw=00112233445566778899aabbccddeeff;x=1", t), 1);
+    CHECK_EQ_INT(auth_cookie_token("aw=short", t), 0);
+    CHECK_EQ_INT(auth_cookie_token("xaw=00112233445566778899aabbccddeeff", t), 0);
+    CHECK_EQ_INT(auth_cookie_token("aw=00112233445566778899aabbccddeeff00", t), 0);
+    CHECK_EQ_INT(auth_cookie_token("aw=zz112233445566778899aabbccddeeff", t), 0);
+    CHECK_EQ_INT(auth_cookie_token("", t), 0);
+    CHECK_EQ_INT(auth_cookie_token(NULL, t), 0);
+    // A stale aw= first and a good one after it: the good one counts.
+    CHECK_EQ_INT(auth_cookie_token("aw=; aw=00112233445566778899aabbccddeeff", t), 1);
+}
+
 int main(void)
 {
+    cookie();
     hashes();
     transcript();
     label();

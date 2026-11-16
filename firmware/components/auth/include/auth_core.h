@@ -85,3 +85,7 @@ int auth_change_open(const uint8_t key[32], const uint8_t nonce[16], const uint8
 int  auth_hex_decode(const char *hex, uint8_t *out, size_t n);
 // n bytes to 2n lowercase hex digits and a terminating zero.
 void auth_hex_encode(const uint8_t *in, size_t n, char *out);
+
+// The aw token out of a Cookie header, among any others: 1 with tok_hex (32
+// hex digits and a zero) filled, or 0. Only well-formed tokens count.
+int  auth_cookie_token(const char *cookie_header, char tok_hex[33]);
