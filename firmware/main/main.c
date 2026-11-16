@@ -35,6 +35,7 @@
 #include "settings.h"
 #include "webui.h"
 #include "net_provision.h"
+#include "auth.h"
 #include "pic_prog.h"
 #include "localtalk.h"
 #include "ethertalk.h"
@@ -3370,7 +3371,7 @@ static void status_json(void *ctx, char *buf, size_t cap)
         "\"model\":\"%s\",\"pic\":%s,"
         "\"pmodel\":\"%s\",\"pname\":\"%s\",\"phost\":\"%s\",\"airprint\":%s,"
         "\"lt_port\":%d,\"lt\":%s,\"lt_chip\":\"%s\",\"dip\":\"%s\",\"board\":\"%s\",\"lc\":%s,"
-        "\"board_ok\":%s,\"rainbow\":%s,\"ap\":\"AirWriter-%s\","
+        "\"board_ok\":%s,\"rainbow\":%s,\"ap\":\"AirWriter-%s\",\"pw\":\"%s\","
         "\"laser\":%s,\"printers\":%s,\"fresh\":%s,\"internal\":{\"free\":%u,\"lowest\":%u},"
         "\"pipe\":{\"in\":%u,\"out\":%u,\"queued\":%u,\"upload_ms\":%u,\"rip_ms\":%u,\"ms\":%u}}",
         state_text(v.state),
@@ -3402,7 +3403,7 @@ static void status_json(void *ctx, char *buf, size_t cap)
         json_esc(e_phost, sizeof e_phost, s_saved_host), s_set.airprint ? "true" : "false", s_set.lt_port,
         localtalk_serving() ? "true" : "false", lt_chip_name(s_lt_chip),
         dip, BOARD_NAME, s_board_lc ? "true" : "false", s_board_ok ? "true" : "false",
-        s_set.rainbow ? "true" : "false", s_suffix, laser, printers,
+        s_set.rainbow ? "true" : "false", s_suffix, auth_kind_name(), laser, printers,
         settings_fresh() ? "true" : "false",
         // Internal RAM is what Wi-Fi and lwIP live on: below ~20 KB, replies stall.
         (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
@@ -3972,6 +3973,9 @@ void app_main(void)
         err = nvs_flash_init();
     }
     ESP_ERROR_CHECK(err);
+    // W-1156: the password, from the chip, the build or NVS, before anything
+    // that serves a page or opens the setup network.
+    ESP_ERROR_CHECK(auth_init());
 
     // Default hostname imagewriter-XXXX, the last two MAC bytes. SPEC.md 3.2.
     uint8_t mac[6] = {0};
@@ -4136,7 +4140,7 @@ void app_main(void)
             WIFI_EVENT, WIFI_EVENT_AP_STACONNECTED, ap_event, NULL, NULL));
         ESP_ERROR_CHECK(esp_event_handler_instance_register(
             WIFI_EVENT, WIFI_EVENT_AP_STADISCONNECTED, ap_event, NULL, NULL));
-        ESP_ERROR_CHECK(net_provision_start(ap));
+        ESP_ERROR_CHECK(net_provision_start(ap, auth_password()));
         ota_health_set(OH_AP_UP, 1);
         fwu_start(1);
         webui_cfg_t wcfg = { .status_json = status_json, .general_saved = general_saved, .captive = 1,

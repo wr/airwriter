@@ -85,6 +85,15 @@ build/test_known_good: test/test_known_good.c ../../firmware/components/ota_heal
 build/test_fw_update: test/test_fw_update.c ../../firmware/components/fw_update/fw_update_core.c | build
 	$(CC) $(CFLAGS) -I../../firmware/components/fw_update/include -Itest -o $@ $^
 
+# W-1156: the password's core, and (below) the same no-writable-statics rule:
+# its state is the caller's, so the board can hold it under one lock.
+AU := ../../firmware/components/auth
+build/test_auth: test/test_auth.c $(AU)/auth_core.c | build
+	$(CC) $(CFLAGS) -I$(AU)/include -Itest -o $@ $^
+
+build/auth_core.o: $(AU)/auth_core.c | build
+	$(CC) $(CFLAGS) -I$(AU)/include -c -o $@ $<
+
 build/test_pic_prog:test/test_pic_prog.c test/pic_sim.c ../../firmware/components/pic_prog/pic_prog_core.c | build
 	$(CC) $(CFLAGS) -I../../firmware/components/pic_prog/include -Itest -o $@ $^
 
@@ -198,9 +207,9 @@ QD_OBJS := build/qd_model.o build/qd_wire.o build/qd_status.o build/qd_page.o bu
 build/qd_%.o: $(COMP)/qdlaser/qd_%.c | build
 	$(CC) $(CFLAGS) $(INCS) -c -o $@ $<
 
-test: $(TESTBIN) build/printers_core.o build/port_policy.o build/logbook_core.o $(SW_OBJS) $(QD_OBJS) $(TP_OBJS)
+test: $(TESTBIN) build/printers_core.o build/port_policy.o build/logbook_core.o build/auth_core.o $(SW_OBJS) $(QD_OBJS) $(TP_OBJS)
 	@fail=0; for t in $(TESTBIN); do ./$$t || fail=1; done; \
-	for o in printers_core port_policy logbook_core $(basename $(notdir $(SW_OBJS) $(QD_OBJS) $(TP_OBJS))); do \
+	for o in printers_core port_policy logbook_core auth_core $(basename $(notdir $(SW_OBJS) $(QD_OBJS) $(TP_OBJS))); do \
 	  if nm build/$$o.o | grep -E ' [bBdD] ' | grep -v ' ltmp'; then \
 	    echo "FAIL $$o: writable statics (above)"; fail=1; \
 	  else echo "ok  $$o: no writable statics"; fi; \

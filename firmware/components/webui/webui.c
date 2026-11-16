@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "webui.h"
 #include "webui_paths.h"
+#include "webui_internal.h"
 #include "esp_heap_caps.h"
 #include "webui_page.h"
 #include "settings.h"
@@ -22,8 +23,8 @@
 
 static const char *TAG = "webui";
 
-#define BODY_MAX 512
 #define OTA_CHUNK 4096
+#define WEBUI_STACK 6144
 
 static httpd_handle_t s_httpd;
 static webui_cfg_t    s_cfg;
@@ -75,6 +76,24 @@ static int read_body(httpd_req_t *req, char *buf, size_t cap)
     }
     buf[got] = '\0';
     return (int)got;
+}
+
+int webui_json_str(const char *body, const char *key, char *out, size_t cap)
+{
+    return json_str(body, key, out, cap);
+}
+
+int webui_read_body(httpd_req_t *req, char *buf, size_t cap) { return read_body(req, buf, cap); }
+
+int webui_captive(void) { return s_cfg.captive; }
+
+// W-1156: every route but the page and the sign-in's own answers only to a
+// signed-in browser, on a board with a password, off the setup network. The
+// route's own handler rides in user_ctx.
+static esp_err_t guarded(httpd_req_t *req)
+{
+    if (!webui_signed_in(req, s_cfg.captive)) return webui_auth_refuse(req);
+    return ((esp_err_t (*)(httpd_req_t *))req->user_ctx)(req);
 }
 
 static esp_err_t page_get(httpd_req_t *req)
@@ -668,8 +687,8 @@ esp_err_t webui_start(const webui_cfg_t *cfg)
     httpd_config_t hc = HTTPD_DEFAULT_CONFIG();
     hc.server_port      = 80;
     hc.ctrl_port        = 32080;
-    hc.max_uri_handlers = 32;
-    hc.stack_size       = 6144;
+    hc.max_uri_handlers = 40;
+    hc.stack_size       = WEBUI_STACK;
     hc.lru_purge_enable = true;
     hc.uri_match_fn     = httpd_uri_match_wildcard;
     hc.recv_wait_timeout = 20;
@@ -708,10 +727,21 @@ esp_err_t webui_start(const webui_cfg_t *cfg)
         { .uri = "/api/restart",  .method = HTTP_POST, .handler = restart_post },
         { .uri = "/api/erase",    .method = HTTP_POST, .handler = erase_post },
         { .uri = "/api/test",     .method = HTTP_POST, .handler = test_post },
+        { .uri = "/api/auth/*",   .method = HTTP_GET,  .handler = webui_auth_get },
+        { .uri = "/api/auth/*",   .method = HTTP_POST, .handler = webui_auth_post },
         { .uri = "/*",            .method = HTTP_GET,  .handler = catch_all },
     };
-    for (size_t i = 0; i < sizeof routes / sizeof routes[0]; i++)
-        ESP_ERROR_CHECK(httpd_register_uri_handler(s_httpd, &routes[i]));
+    for (size_t i = 0; i < sizeof routes / sizeof routes[0]; i++) {
+        httpd_uri_t r = routes[i];
+        // The page, its addresses and the sign-in's own routes stay open: the
+        // page is only the app, and it shows sign-in on the first 401.
+        if (r.handler != page_get && r.handler != catch_all &&
+            r.handler != webui_auth_get && r.handler != webui_auth_post) {
+            r.user_ctx = (void *)r.handler;
+            r.handler = guarded;
+        }
+        ESP_ERROR_CHECK(httpd_register_uri_handler(s_httpd, &r));
+    }
 
     ESP_LOGI(TAG, "config page on port 80%s", s_cfg.captive ? " (captive)" : "");
     return ESP_OK;

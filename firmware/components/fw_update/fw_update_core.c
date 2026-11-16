@@ -84,6 +84,14 @@ static int cmp(const fwu_ver_t *a, const fwu_ver_t *b)
     return 0;
 }
 
+int fwu_floor_refuses(const char *running, const char *incoming, const char *floor)
+{
+    fwu_ver_t r, in, f;
+    if (!fwu_parse_version(floor, &f) || !fwu_parse_version(running, &r) ||
+        !fwu_parse_version(incoming, &in)) return 0;
+    return cmp(&r, &f) >= 0 && cmp(&in, &f) < 0;
+}
+
 int fwu_newer(const char *latest, const char *running)
 {
     fwu_ver_t l, r;

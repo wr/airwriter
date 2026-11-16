@@ -401,6 +401,14 @@ dialog::backdrop{background:var(--scrim)}
   /* a dev build's version is long: it goes under its label */
   #fw-ver{display:block}
 }
+/* W-1156: the sign-in alert, alone on the page's background */
+#d-signin::backdrop{background:var(--bg)}
+#si-go:disabled{opacity:.45}
+.forgot{align-self:flex-start;border:0;background:none;padding:0;cursor:pointer;font:inherit;
+  font-size:var(--t-small);color:var(--fg2);text-decoration:underline;text-underline-offset:2px;
+  text-decoration-color:color-mix(in srgb,var(--fg2) 40%,transparent)}
+.dlg .fld+.fld{margin-top:8px}
+
 /* W-1088 (Wells: "proportions are kinda small for mobile"): on a phone, setup
    fills the screen as a phone's own setup does: a bigger mark and title,
    roomier rows, and full-width keys at the foot, the next step last, under

@@ -66,6 +66,10 @@ which nothing has run on yet, the LC's one status light included.
   LocalTalk port (TashTalk 2.1.3 in U7, which the ESP32 flashes over LVP) and three EtherTalk
   links: the board's own Wi-Fi, Basilisk II's UDP tunnel (port 6066) and Infinite Mac's zone
   relay (off until switched on). One job at a time across all of them, under one job lock.
+- **Password.** A sold board's password is burned into its chip with its serial at the bench
+  (`tools/bench`) and printed on its label. The setup network takes it and the settings page
+  signs in with it; printing never asks. A board with none burned (rev A, a dev board) is open
+  until its owner sets one. Nothing has run on a burned board yet.
 - **Not built:** Mini vMac (LToUDP), PWG raster, HP LaserJets over serial (designed), AirPrint to
   an AppleTalk ImageWriter, colour on a colour LaserWriter (it prints gray), vintage Macs
   printing to a StyleWriter (AirWriter as Apple's StyleWriter network adapter), a StyleWriter's
@@ -92,16 +96,20 @@ Where things are (`firmware/components/` unless a path is given):
 | Test page | `testpage` | test-page design |
 | Cable test, TashTalk flashing | `cable_test`, `pic_prog` | |
 | Settings page | `webui`; sources in `tools/webui` | settings-redesign design |
+| Password and sign-in, the bench | `auth`, `webui_auth.c`; `tools/bench` | SPEC §3.20, setup-password design |
 
 The web UI and API are on port 80: `/api/status`, `/api/general` (settings), `/update` (OTA
 upload), `/api/update` (GitHub releases), `/api/printers`, `/api/lt`, `/api/et`, `/api/log`,
 `/api/laser`, `/api/cable`, `/api/test`, `/api/restart`, `/api/erase`, `/api/localtalk/flash`,
-`/api/mem` and `/api/panel` (the LED frame: 37 × RGB, little-endian 8.8). The page's own addresses
+`/api/mem`, `/api/panel` (the LED frame: 37 × RGB, little-endian 8.8) and `/api/auth/*`. On a
+board with a password every route but the page and `/api/auth/*` answers 401 until the browser
+signs in (`tools/webui/signin.py` for curl). The page's own addresses
 (`/about`, `/about/log`, `/printers/2`) are listed in `webui_paths.h` and, for the preview,
 `tools/webui/preview.py`. Two settings have no control on the
 page: Top margin (`{"top_margin":N}`, 1/144 in, -216 to 144, default -144) and dot gain
-(`{"gain":N}`, 0–45, default 0). A board with no Wi-Fi credentials runs an open setup network,
-`AirWriter-xxxx`, at http://192.168.4.1/.
+(`{"gain":N}`, 0–45, default 0). A board with no Wi-Fi credentials runs its setup network,
+`AirWriter-xxxx` (WPA2 with AirWriter's password; open on a board with none), at
+http://192.168.4.1/.
 
 ## Rules
 - Write UI text, wiki pages, the README and commit messages by `docs/voice-and-tone.md`. Name
@@ -154,7 +162,11 @@ page: Top margin (`{"top_margin":N}`, 1/144 in, -216 to 144, default -144) and d
   - release: `tools/release/release.sh vX.Y.Z [notes]` from a clean `main` level with origin
     (`--dry-run` builds and checks only). It builds both boards from the defaults alone, never a
     local sdkconfig, and publishes `airwriter-esp32s3.bin`, `airwriter-2026.11.bin` and
-    `airwriter.json`
+    `airwriter.json`. The release that first ships sign-in sets `FWU_SIGNIN_FLOOR`
+    (`fw_update_core.h`) to its own tag first; `tools/release/floor_check.py` refuses a release
+    below the floor, or a floor at or below a release without sign-in
+  - a bench board's password: `CONFIG_AIRWRITER_TEST_PASSWORD` in the local sdkconfig (AirWriter
+    menu) stands in for a burned one. Never burn board 1
 - **Signing.** Every build is signed. `sdkconfig.defaults` signs with
   `firmware/firmware_signing_key.pem` (gitignored; the build says how to make one); an older
   local sdkconfig needs its five `CONFIG_SECURE_*` lines. A board takes an OTA image only if the
@@ -226,7 +238,13 @@ page: Top margin (`{"top_margin":N}`, 1/144 in, -216 to 144, default -144) and d
 - **Web page:** `python3 tools/webui/preview.py`, then http://localhost:8079/_states: every state
   at desktop and phone width, light and dark, before a change to the page goes to a board. Its
   `/api/panel` plays `tools/lights`' scene frames for each state's `ps` (it builds them with
-  `make`; without a C compiler the dots show unlit).
+  `make`; without a C compiler the dots show unlit). The signed-out states sign in with
+  `k7m2x9qp`, checked as the board checks it.
+- **Password** (W-1156): `make -C tools/rip test` holds the core; `node tools/webui/test_crypto.mjs`
+  the page's hashes; `python3 -m unittest tools/webui/test_signin.py` signs in against the
+  preview; `python3.14 -m unittest tools/bench/test_labels.py tools/bench/test_sheet.py` (Pillow
+  and numpy) holds the book, the block, a sheet through the rip and `qdfake.py` dot for dot, a
+  Print-Job to `ippcap.py` and a burn against a stand-in espefuse.
 - **Log:** `make -C tools/rip test` holds the rings, the reader and the name removal, and fails
   if a log statement carries a document or person's name. On a board, `GET /api/log?n=500` after a
   restart or a power cut: the sequence numbers carry on across it, and repeated answers are the
@@ -254,6 +272,8 @@ page: Top margin (`{"top_margin":N}`, 1/144 in, -216 to 144, default -144) and d
   floor (`docs/ORDER-NOTES.md`).
 
 ## On a real board
+- **A board with a password answers curl 401.** `python3 tools/webui/signin.py http://<board>`,
+  then add `-b ~/.config/airwriter/cookies.txt` to each curl (OTA included).
 - **Never update firmware while a job prints.** Make sure nothing is printing: `/api/status`
   shows `printing=false` and no job ended in the last ~10 s, then OTA. `/update` refuses (409)
   while a job holds the job lock, but an image from before signed updates does not.
@@ -267,7 +287,8 @@ page: Top margin (`{"top_margin":N}`, 1/144 in, -216 to 144, default -144) and d
   not Ready.
 - A slow upload is the link until proven otherwise: check `rssi` in the `doc_begin` log.
 - Holding `test` through power-up for 5 s erases the settings and boots the known-good slot. A
-  board whose sdkconfig has no Wi-Fi credentials comes back on its open setup network. To keep
+  board whose sdkconfig has no Wi-Fi credentials comes back on its setup network (open, or with
+  its test password). To keep
   the reset's own log, attach `idf.py monitor --no-reset` before it.
 - Rev A sometimes powers up in the S3's download mode (power LED only, panel dark, no Wi-Fi);
   `docs/traps.md` says how to tell and how to get out.
@@ -303,6 +324,8 @@ tools/iwview/         iwview.py draws any ImageWriter stream (test page, a Local
 tools/lights/         the wiki's GIF of every panel light effect, played through led_grid_core;
                       after changing an effect, `make -C tools/lights OUT=<wiki>/images/lights`
 tools/release/        release.sh (build, check, sign, publish), tamper.py (refusal-test images)
+tools/bench/          bench.py: label sheets on the Personal LaserWriter 300, and each board's
+                      serial and password burned into its chip (W-1156)
 tools/stackcheck/     stackcheck.py: worst-case stack of the tasks that make ESP-IDF's deep calls
 fixtures/             captured URF samples and expected streams
 enclosure/            3D printed case (build123d): tray, LC frame and lid, Pro lattice; out/*.stl committed
