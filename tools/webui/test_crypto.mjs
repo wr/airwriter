@@ -41,8 +41,8 @@ eq(awChangeSeal(K, nonce, 'new-password-1'), 'ecac32bd55dfe0e2784e171a1a87', 'ch
 eq(awUnhex('0aFf').join(','), '10,255', 'unhex');
 
 const t0 = performance.now();
-awPbkdf2(awUtf8('k7m2x9qp'), awUnhex(salt), 100000);
+awPbkdf2(awUtf8('k7m2x9qp'), awUnhex(salt), 10000);
 const ms = Math.round(performance.now() - t0);
 
 if (failed) { console.error(`${failed}/${checks} checks FAILED`); process.exit(1); }
-console.log(`ok  test_crypto.mjs  (${checks} checks; PBKDF2 at 100000 rounds: ${ms} ms here)`);
+console.log(`ok  test_crypto.mjs  (${checks} checks; PBKDF2 at 10000 rounds: ${ms} ms here)`);

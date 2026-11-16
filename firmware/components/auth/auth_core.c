@@ -19,12 +19,9 @@ static const uint32_t K256[64] = {
 
 #define ROR(x, n) (((x) >> (n)) | ((x) << (32 - (n))))
 
-static void sha_block(uint32_t h[8], const uint8_t *p)
+// One block from words: w[0..15] in, w[16..63] scratch.
+static void sha_words(uint32_t h[8], uint32_t w[64])
 {
-    uint32_t w[64];
-    for (int i = 0; i < 16; i++)
-        w[i] = (uint32_t)p[4 * i] << 24 | (uint32_t)p[4 * i + 1] << 16 |
-               (uint32_t)p[4 * i + 2] << 8 | p[4 * i + 3];
     for (int i = 16; i < 64; i++) {
         uint32_t s0 = ROR(w[i - 15], 7) ^ ROR(w[i - 15], 18) ^ (w[i - 15] >> 3);
         uint32_t s1 = ROR(w[i - 2], 17) ^ ROR(w[i - 2], 19) ^ (w[i - 2] >> 10);
@@ -37,6 +34,15 @@ static void sha_block(uint32_t h[8], const uint8_t *p)
         hh = g; g = f; f = e; e = d + t1; d = c; c = b; b = a; a = t1 + t2;
     }
     h[0] += a; h[1] += b; h[2] += c; h[3] += d; h[4] += e; h[5] += f; h[6] += g; h[7] += hh;
+}
+
+static void sha_block(uint32_t h[8], const uint8_t *p)
+{
+    uint32_t w[64];
+    for (int i = 0; i < 16; i++)
+        w[i] = (uint32_t)p[4 * i] << 24 | (uint32_t)p[4 * i + 1] << 16 |
+               (uint32_t)p[4 * i + 2] << 8 | p[4 * i + 3];
+    sha_words(h, w);
 }
 
 static void sha_init(sha_t *s)
@@ -140,9 +146,33 @@ void aw_pbkdf2_sha256(const uint8_t *pw, size_t pwn, const uint8_t *salt, size_t
     sha_final(&s, u);
     memcpy(out, u, 32);
 
+    // Each later round is two compressions of one padded block (32 bytes of
+    // digest, 0x80, the length 768 bits) from the pads' saved states, in words:
+    // a board runs a whole round in what one hmac_run spent on its padding.
+    uint32_t U[8], T[8], S[8], w[64];
+    for (int j = 0; j < 8; j++)
+        T[j] = U[j] = (uint32_t)u[4 * j] << 24 | (uint32_t)u[4 * j + 1] << 16 |
+                      (uint32_t)u[4 * j + 2] << 8 | u[4 * j + 3];
     for (uint32_t i = 1; i < iter; i++) {
-        hmac_run(&h, u, 32, u);
-        for (int j = 0; j < 32; j++) out[j] ^= u[j];
+        memcpy(S, h.in.h, sizeof S);
+        memcpy(w, U, 32);
+        w[8] = 0x80000000u;
+        memset(w + 9, 0, 6 * 4);
+        w[15] = 768;
+        sha_words(S, w);
+        memcpy(U, h.out.h, sizeof U);
+        memcpy(w, S, 32);
+        w[8] = 0x80000000u;
+        memset(w + 9, 0, 6 * 4);
+        w[15] = 768;
+        sha_words(U, w);
+        for (int j = 0; j < 8; j++) T[j] ^= U[j];
+    }
+    for (int j = 0; j < 8; j++) {
+        out[4 * j]     = (uint8_t)(T[j] >> 24);
+        out[4 * j + 1] = (uint8_t)(T[j] >> 16);
+        out[4 * j + 2] = (uint8_t)(T[j] >> 8);
+        out[4 * j + 3] = (uint8_t)T[j];
     }
 }
 

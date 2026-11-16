@@ -45,7 +45,7 @@ STEP = 0.04                                 # scenes.c's STEP_MS
 # Python's hashlib). Signing in sets aw=preview; /?state= starts signed out.
 PREVIEW_PASSWORD = "k7m2x9qp"
 SALT = bytes(range(16))
-ITER = 100000
+ITER = 10000
 AUTH = {"nonces": set(), "key": None, "password": PREVIEW_PASSWORD}
 DEFAULT = {"state": "normal"}                # --state: for asks with no state cookie (signin.py's test)
 

@@ -43,7 +43,7 @@ function awHmac(k,m){
   return awSha256(awJoin(op,awSha256(awJoin(ip,m))));
 }
 /* One 32-byte block. After U1, each round is two compressions of a single
-   padded block from the pads' saved states, so 100000 rounds stay quick. */
+   padded block from the pads' saved states, so the rounds stay quick. */
 function awPbkdf2(pw,salt,iter){
   var k=pw.length>64?awSha256(pw):pw, W=new Int32Array(64), I=new Int32Array(AW_IV), O=new Int32Array(AW_IV),
       pad=new Uint8Array(64), i, c, U=new Int32Array(8), T=new Int32Array(8), S=new Int32Array(8), u;

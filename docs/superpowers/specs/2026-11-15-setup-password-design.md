@@ -133,8 +133,10 @@ kept. The page on the setup network never asks: joining took the password.
      new after an erase), checks the proof in constant time, and answers 200 with
      `Set-Cookie: aw=<32 hex>; Max-Age=15552000; Path=/; HttpOnly; SameSite=Strict`.
 
-  `N` (my call: 100,000) makes each guess at a recorded sign-in cost as much as a guess at the
-  setup network's handshake; the builder may lower it if a phone takes over a second. Plain
+  `N` is 10,000, so each guess at a recorded sign-in costs more than a guess at the setup
+  network's WPA2 handshake (4096 rounds). (Planned at 100,000; the first board took 7 s to derive
+  that at start-up, so it came down, and the board keeps `K` in NVS rather than deriving it at
+  every start.) Plain
   http has no `crypto.subtle`, so SHA-256, HMAC and PBKDF2 are a small script in the page.
 - **Tokens.** Up to 8 are kept in NVS; a new sign-in pushes out the oldest. The browser drops
   its cookie after 6 months; the board needs no clock. `POST /api/auth/signout` forgets this
@@ -162,23 +164,20 @@ the foot. Any 401 shows it and stops the polling; signing in reloads the state.
 | Where | Text |
 |---|---|
 | Sign-in title | AirWriter |
-| Under it | Enter the password on the bottom of AirWriter, unless you’ve changed it. (On a board with none burned: Enter AirWriter’s password.) |
+| Under it | The password is on the bottom of AirWriter. (Nothing, on a board with none burned in.) |
 | Field | Password |
 | Button | Sign In |
-| Wrong password | Wrong password. |
-| After 5 wrong | Too many tries. Try again in a minute. (Sign In dims until it may) |
-| Foot | Forgot it? Hold the test button while you plug in AirWriter, and keep holding for 5 seconds. That erases all its settings. |
-| About, row 1 | Password · From the label, Changed or On · **Change…**; or Password · None · **Set…** |
-| About, row 2 | This browser · Signed in · **Sign Out** |
-| Change dialog | Change password · Current password · New password · "At least 8 characters. Erase All Settings brings back the one on the label." · **Cancel** **Change** |
-| Set dialog | Set password · New password · "At least 8 characters. Erase All Settings removes it." · **Cancel** **Set** |
-| Change errors | Wrong password. · Use at least 8 characters. |
-| Erase dialog | Your Wi-Fi network, printers, password and every other setting are erased, and AirWriter restarts. To set it up again, join the AirWriter-xxxx network with the password on the bottom of AirWriter. |
+| Errors | Wrong password. · Too many tries. Try again in a minute. (Sign In dims until it may) · Try again. |
+| About | Password · **Change…** (or **Set…** on a board with none) |
+| About's buttons | **Sign Out** beside **Restart…**, while signed in to a board with a password |
+| Change dialog | Change password · Current password · New password · **Cancel** **Change** |
+| Set dialog | Set password · New password · **Cancel** **Set** |
+| Set and change errors | Wrong password. · Use at least 8 characters. · Use letters, numbers and punctuation only. |
 
-The This browser row shows only while signed in to a board with a password. On a board with a
-set password the change dialog's help says "Erase All Settings removes it." Changes from the
-mocks Wells saw: the change dialog asks for the current password, the foot's wording says how
-long to hold, and the Set row and dialog are new.
+The erase dialog keeps its words. No help lines in the dialogs and no confirmation after a change
+(Wells, 2026-11-16: "you're adding too much UI copy"); resetting a forgotten password is the
+wiki's. Changes from the mocks Wells saw: the change dialog asks for the current password, Sign
+Out moved beside Restart…, and the forgot-password line and the This browser row went.
 
 ### The bench tool
 

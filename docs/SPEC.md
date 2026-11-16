@@ -1894,11 +1894,13 @@ browser without a known token. The page shows its sign-in screen (laid out as se
 first 401 and stills its other asks until signing in reloads it.
 
 1. `GET /api/auth/nonce` → `{"nonce","salt","iter"}`: a challenge good once, for 60 s (4 kept),
-   the board's salt (16 random bytes in NVS `auth/salt`, new after an erase) and 100000 rounds.
+   the board's salt (16 random bytes in NVS `auth/salt`, new after an erase) and 10000 rounds
+   (each guess at a recorded sign-in costs more than one at WPA2's 4096).
 2. The page derives `K = PBKDF2-HMAC-SHA256(password, salt, iter, 32)` and sends
    `POST /api/auth/signin {"nonce","proof"}`, `proof = HMAC-SHA256(K, "signin" ‖ nonce)`. Plain
    http offers no `crypto.subtle`, so the page carries its own (`tools/webui/crypto.js`).
-3. The board holds `K` (derived at boot and on a change, its time logged) and compares in
+3. The board holds `K` (derived when the password or salt changes, its time logged, and kept in
+   NVS `auth/key` beside a check of both, so a start-up doesn't derive it) and compares in
    constant time. A right proof gets `Set-Cookie: aw=<32 hex>; Max-Age=15552000; Path=/;
    HttpOnly; SameSite=Strict`; 8 tokens are kept in NVS `auth/tok`, the oldest pushed out.
 

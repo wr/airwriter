@@ -1543,22 +1543,18 @@ $('restart').onclick=async()=>{
 $('erase').onclick=async()=>{
   const r=await postJSON('/api/erase');
   if(r.error){ $('d-erase').close(); say('about-say',r.error,1); return; }
-  const label=S.pw==='label'||S.pw==='changed';
-  waitFor('Erasing','AirWriter is starting over. Join the '+esc($('apname').textContent)+' network'
-    +(label?' with the password on the bottom of AirWriter':'')+' to set it up again.',false);
+  waitFor('Erasing','AirWriter is starting over. Join the '+esc($('apname').textContent)+' network to set it up again.',false);
 };
 
 /* ── the password (W-1156) ─────────────────────────────────────────── */
 /* The page proves the password with a challenge from the board, so it never
    crosses the network (crypto.js). A first answer of 400 is a challenge the
    board no longer has (it restarted): one more try with a fresh one. */
-const PW_LEDE={true:'Enter the password on the bottom of AirWriter, unless you’ve changed it.',
-  false:'Enter AirWriter’s password.'};
 function needSignin(label){
   if(SIGNIN) return;
   SIGNIN=true;
   for(const d of $$('dialog')) if(d.open) d.close();
-  $('si-lede').textContent=PW_LEDE[!!label];
+  $('si-lede').classList.toggle('hide',!label);
   document.body.classList.add('setupmode','in');
   for(const p of $$('.pane')) p.classList.toggle('on',p.id==='p-signin');
   setLost(false);
@@ -1601,14 +1597,9 @@ $('si').onsubmit=async e=>{
   $('si-pw').select();
 };
 function drawPassword(pw){
-  $('pw-val').textContent={label:'From the label',changed:'Changed',set:'On',none:'None'}[pw]||'';
   $('pw-btn').textContent=pw==='none'?'Set…':'Change…';
   $('pw-btn').dataset.dlg=pw==='none'?'d-pwset':'d-pwchange';
-  $('br-row').classList.toggle('hide',pw==='none'||setup);
-  $('pwc-help').textContent='At least 8 characters. Erase All Settings '
-    +(pw==='set'?'removes it.':'brings back the one on the label.');
-  $('er-pw').classList.toggle('hide',pw==='none');
-  $('er-label').classList.toggle('hide',!(pw==='label'||pw==='changed'));
+  $('signout').classList.toggle('hide',pw==='none'||setup);
 }
 $('pwc-go').onclick=async()=>{
   const cur=$('pwc-cur').value, nw=$('pwc-new').value, bad=pwProblem(nw), go=$('pwc-go');
@@ -1625,7 +1616,7 @@ $('pwc-go').onclick=async()=>{
   go.disabled=false;
   if(r.error) return say('pwc-say',r.error,1);
   $('pwc-cur').value=$('pwc-new').value='';
-  $('d-pwchange').close(); say('about-say','Password changed.',0,4000); poll();
+  $('d-pwchange').close(); poll();
 };
 $('pws-go').onclick=async()=>{
   const nw=$('pws-new').value, bad=pwProblem(nw), go=$('pws-go');
@@ -1635,7 +1626,7 @@ $('pws-go').onclick=async()=>{
   go.disabled=false;
   if(r.error) return say('pws-say',r.error,1);
   $('pws-new').value='';
-  $('d-pwset').close(); say('about-say','Password set.',0,4000); poll();
+  $('d-pwset').close(); poll();
 };
 $('signout').onclick=async()=>{ await postJSON('/api/auth/signout'); location.reload(); };
 /* Which board this is (W-1109), and the LC's name. Rev 2026.11 has no DIP switches, so its one

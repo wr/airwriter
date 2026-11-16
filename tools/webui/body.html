@@ -78,13 +78,12 @@
          until the page signs in. Laid out as setup is: the key at the foot. -->
     <section class=pane id=p-signin>
       <form id=si action="#" autocomplete=on>
-        <div class=hero><i class=awm></i><h2>AirWriter</h2><p id=si-lede>Enter the password on the bottom of AirWriter, unless you’ve changed it.</p></div>
+        <div class=hero><i class=awm></i><h2>AirWriter</h2><p id=si-lede>The password is on the bottom of AirWriter.</p></div>
         <div class=box><div class="row prow">
           <input class=hide autocomplete=username value=AirWriter aria-hidden=true tabindex=-1>
           <input class=fld type=password id=si-pw placeholder=Password autocomplete=current-password autocapitalize=off spellcheck=false maxlength=63 aria-label=Password>
         </div></div>
         <p class="say err" id=si-say></p>
-        <p class=foot>Forgot it? Hold the test button while you plug in AirWriter, and keep holding for 5 seconds. That erases all its settings.</p>
         <div class="btnrow one"><button class="btn primary" type=submit id=si-go>Sign In</button></div>
       </form>
     </section>
@@ -209,8 +208,7 @@
           <div class=row><span class=txt>Install from a file</span><button class=btn type=button id=fw-file>Choose File…</button></div>
         </div>
         <div class=box>
-          <div class=row><span class=txt>Password</span><span class=val id=pw-val></span><button class=btn type=button id=pw-btn data-dlg=d-pwset>Set…</button></div>
-          <div class="row hide" id=br-row><span class=txt>This browser</span><span class=val>Signed in</span><button class=btn type=button id=signout>Sign Out</button></div>
+          <div class=row><span class=txt>Password</span><button class=btn type=button id=pw-btn data-dlg=d-pwset>Set…</button></div>
         </div>
         <div class=box>
           <div class=row><span class=txt>On for</span><span class=val id=uptime></span></div>
@@ -218,7 +216,7 @@
           <button class="row link" id=log-row type=button><span class=txt>Log</span><span class=val id=log-val></span><span class=chev aria-hidden=true>›</span></button>
         </div>
         <p class=say id=about-say></p>
-        <div class=btnrow><button class="btn danger" type=button data-dlg=d-erase>Erase All Settings…</button><button class=btn type=button data-dlg=d-restart>Restart…</button></div>
+        <div class=btnrow><button class="btn danger" type=button data-dlg=d-erase>Erase All Settings…</button><button class="btn hide" type=button id=signout>Sign Out</button><button class=btn type=button data-dlg=d-restart>Restart…</button></div>
         <div class=grp id=dipgrp><h3>DIP Switches</h3><div class=box><div class=dips id=dips></div><div id=dip-rows></div></div></div>
         <div class="box hide" id=rbbox><div class=row><span class=txt>Rainbow status lights</span><label class=sw><input type=checkbox role=switch id=rainbow aria-label="Rainbow status lights"><span></span></label></div></div>
         <div class=box>
@@ -351,7 +349,6 @@
   <input class=hide autocomplete=username value=AirWriter aria-hidden=true tabindex=-1>
   <input class=fld type=password id=pwc-cur placeholder="Current password" autocomplete=current-password autocapitalize=off spellcheck=false maxlength=63 aria-label="Current password">
   <input class=fld type=password id=pwc-new placeholder="New password" autocomplete=new-password autocapitalize=off spellcheck=false maxlength=63 aria-label="New password">
-  <p id=pwc-help>At least 8 characters. Erase All Settings brings back the one on the label.</p>
   <p class="say err" id=pwc-say></p>
   <div class=btnrow><button class=btn type=button data-close>Cancel</button><button class="btn primary" type=button id=pwc-go>Change</button></div>
 </div></dialog>
@@ -360,14 +357,13 @@
   <b>Set password</b>
   <input class=hide autocomplete=username value=AirWriter aria-hidden=true tabindex=-1>
   <input class=fld type=password id=pws-new placeholder="New password" autocomplete=new-password autocapitalize=off spellcheck=false maxlength=63 aria-label="New password">
-  <p>At least 8 characters. Erase All Settings removes it.</p>
   <p class="say err" id=pws-say></p>
   <div class=btnrow><button class=btn type=button data-close>Cancel</button><button class="btn primary" type=button id=pws-go>Set</button></div>
 </div></dialog>
 
 <dialog id=d-erase><div class=dlg>
   <b>Erase all settings?</b>
-  <p>Your Wi-Fi network, printers<span id=er-pw>, password</span> and every other setting are erased, and AirWriter restarts. To set it up again, join the <span id=apname>AirWriter</span> network<span id=er-label> with the password on the bottom of AirWriter</span>.</p>
+  <p>Your Wi-Fi network, printers and every other setting are erased, and AirWriter restarts. Join the <span id=apname>AirWriter</span> network to set it up again.</p>
   <div class=btnrow><button class=btn type=button data-close>Cancel</button><button class="btn danger primary" type=button id=erase>Erase</button></div>
 </div></dialog>
 

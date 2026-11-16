@@ -15,7 +15,8 @@
 #define AUTH_NONCE_MS  60000u     // a challenge is good once, for this long
 #define AUTH_TRIES     5          // wrong proofs in a row before the wait
 #define AUTH_WAIT_MS   60000u     // the wait
-#define AUTH_ITER      100000u    // PBKDF2 rounds: a guess at a recorded sign-in costs this much
+#define AUTH_ITER      10000u     // PBKDF2 rounds: a guess at a recorded sign-in costs more
+                                  // than one at the setup network's WPA2 handshake (4096)
 
 #define AUTH_ALPHABET  "abcdefghjkmnpqrstuvwxyz23456789"
 #define AUTH_PW_MAX    63         // WPA2's longest passphrase

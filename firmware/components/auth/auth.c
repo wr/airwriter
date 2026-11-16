@@ -27,11 +27,38 @@ static uint32_t now_ms(void) { return (uint32_t)(esp_timer_get_time() / 1000); }
 static void lock(void)   { xSemaphoreTake(s_mu, portMAX_DELAY); }
 static void unlock(void) { xSemaphoreGive(s_mu); }
 
+// The sign-in key, kept in NVS beside a check of the password and salt it
+// came from, so a start-up only derives it when either has changed. (Whoever
+// can read NVS over USB can read the password too.)
 static void derive(void)
 {
+    uint8_t chk[32], saved[32];
+    size_t n = sizeof saved;
+    uint8_t in[sizeof s_salt + AUTH_PW_MAX];
+    size_t pn = strlen(s_pw);
+    memcpy(in, s_salt, sizeof s_salt);
+    memcpy(in + sizeof s_salt, s_pw, pn);
+    aw_sha256(in, sizeof s_salt + pn, chk);
+    memset(in, 0, sizeof in);
+
+    nvs_handle_t h;
+    if (nvs_open(NS, NVS_READWRITE, &h) != ESP_OK) h = 0;
+    if (h && nvs_get_blob(h, "keychk", saved, &n) == ESP_OK && n == 32 && !memcmp(saved, chk, 32)) {
+        n = sizeof s_st.key;
+        if (nvs_get_blob(h, "key", s_st.key, &n) == ESP_OK && n == sizeof s_st.key) {
+            nvs_close(h);
+            return;
+        }
+    }
     int64_t t0 = esp_timer_get_time();
-    aw_pbkdf2_sha256((const uint8_t *)s_pw, strlen(s_pw), s_salt, sizeof s_salt, AUTH_ITER, s_st.key);
+    aw_pbkdf2_sha256((const uint8_t *)s_pw, pn, s_salt, sizeof s_salt, AUTH_ITER, s_st.key);
     ESP_LOGI(TAG, "sign-in key derived in %d ms", (int)((esp_timer_get_time() - t0) / 1000));
+    if (h) {
+        nvs_set_blob(h, "key", s_st.key, sizeof s_st.key);
+        nvs_set_blob(h, "keychk", chk, sizeof chk);
+        nvs_commit(h);
+        nvs_close(h);
+    }
 }
 
 static void save_tokens(void)
