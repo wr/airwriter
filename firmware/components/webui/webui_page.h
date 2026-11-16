@@ -693,7 +693,7 @@ static const char WEBUI_HTML[] =
 "  <div class=btnrow><button class=\"btn primary\" type=submit id=si-go>Sign In</button></div>\n"
 "  <button class=forgot type=button id=si-forgot>Forgot password?</button>\n"
 "  <p class=hide id=si-label>It’s on the bottom of AirWriter.</p>\n"
-"  <p class=hide id=si-reset>Hold the test button while you plug in AirWriter, and keep holding for 5 seconds. That erases all its settings.</p>\n"
+"  <p class=hide id=si-reset>Hold the test button for about 8 seconds. That erases all its settings.</p>\n"
 "</form></dialog>\n"
 "\n"
 "\n"

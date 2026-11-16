@@ -164,7 +164,7 @@ the foot. Any 401 shows it and stops the polling; signing in reloads the state.
 | Where | Text |
 |---|---|
 | Sign-in alert | Sign in to AirWriter · Password · **Sign In** |
-| Under it | Forgot password?, which opens "It’s on the bottom of AirWriter." while the label's password works, or else "Hold the test button while you plug in AirWriter, and keep holding for 5 seconds. That erases all its settings." |
+| Under it | Forgot password?, which opens "It’s on the bottom of AirWriter." while the label's password works, or else "Hold the test button for about 8 seconds. That erases all its settings." (the running reset, as the wiki's Test Button page has it) |
 | Errors | Wrong password. · Too many tries. Try again in a minute. (Sign In dims until it may) · Try again. |
 | About | Password · **Change…** (or **Set…** on a board with none) |
 | About's buttons | **Sign Out** beside **Restart…**, while signed in to a board with a password |
