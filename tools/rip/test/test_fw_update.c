@@ -181,6 +181,15 @@ int main(void)
     assert(!fwu_newer("garbage", "v0.1.0"));
     assert(!fwu_newer("v0.1.1-rc.1", "v0.1.0"));     // only a release is ever newer
 
+    // W-1156: no going back before sign-in, once a board runs a release that has it.
+    assert(fwu_floor_refuses("v0.5.0", "v0.4.0", "v0.5.0"));
+    assert(!fwu_floor_refuses("v0.5.1", "v0.5.0", "v0.5.0"));
+    assert(!fwu_floor_refuses("v0.4.0-31-g4a93f60", "v0.4.0", "v0.5.0"));   // a dev build below it
+    assert(fwu_floor_refuses("v0.5.0-2-gabc1234", "v0.4.9", "v0.5.0"));
+    assert(!fwu_floor_refuses("v0.5.0", "junk", "v0.5.0"));
+    assert(!fwu_floor_refuses("v0.6.0", "v0.5.0-3-gabc1234", "v0.5.0"));   // a dev build above it
+    assert(fwu_floor_refuses("v1.0.0", "v0.4.0", "v0.5.0"));
+
     manifest();
     urls();
     policy(0);

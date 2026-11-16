@@ -12,7 +12,8 @@ relay, an update error...). Nothing is sent to a board.
 
 /?state=NAME opens the page in that state, and /printers/1?state=NAME that
 printer's detail, without the query so that the page's own reloads keep it. In states.json a response can be {"_status": 404, "_body":
-"..."} for a refusal, {"_drop": true} for no answer at all, {"_delay": s} to
+"..."} for a refusal, {"_drop": true} for no answer at all, "_headers": [[name, value]] to add
+headers, {"_delay": s} to
 answer late, and "_first": n to apply only to the first n asks. A state's
 "_down_after": s stops answering s seconds after the page loads, as a board
 unplugged mid-poll. A POST's "_then" is the state the board comes back in
@@ -24,7 +25,7 @@ offline... ("asleep" plays the sleep); with "lc" true, the LC's one light as
 the frame's first LED. Without a C compiler it answers 404 and the sidebar's
 dots show unlit.
 """
-import argparse, copy, http.server, json, pathlib, re, struct, subprocess, sys, time, urllib.parse
+import argparse, copy, hashlib, hmac, http.server, json, os, pathlib, re, struct, subprocess, sys, time, urllib.parse
 
 HERE = pathlib.Path(__file__).parent
 sys.path.insert(0, str(HERE))
@@ -37,6 +38,16 @@ clock = {"loaded": 0.0, "down_until": 0.0, "override": None, "seen": {}}
 SCENE = {"booting": "boot-wave", "setup": "setup", "joining": "joining", "ready": "ready", "offline": "offline",
          "printing": "printing", "attention": "attention", "failed": "failed"}
 STEP = 0.04                                 # scenes.c's STEP_MS
+
+# W-1156: a state with "_signin": {"label": true|false} answers every /api/
+# ask but the sign-in's own with 401 until the page signs in, with this
+# password, checked as the board checks it (so the page's script is held to
+# Python's hashlib). Signing in sets aw=preview; /?state= starts signed out.
+PREVIEW_PASSWORD = "k7m2x9qp"
+SALT = bytes(range(16))
+ITER = 10000
+AUTH = {"nonces": set(), "key": None, "password": PREVIEW_PASSWORD}
+DEFAULT = {"state": "normal"}                # --state: for asks with no state cookie (signin.py's test)
 
 
 def load_scenes(which="frames"):
@@ -102,18 +113,65 @@ class Handler(http.server.BaseHTTPRequestHandler):
             k, _, v = part.strip().partition("=")
             if k == "state":
                 return urllib.parse.unquote(v)
-        return "normal"
+        return DEFAULT["state"]
 
-    def send(self, code, body, ctype="application/json", cookie=None):
+    def send(self, code, body, ctype="application/json", cookie=None, headers=()):
         data = body if isinstance(body, bytes) else body.encode()
         self.send_response(code)
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(data)))
         self.send_header("Cache-Control", "no-store")
+        for k, v in headers:
+            self.send_header(k, v)
         if cookie is not None:
             self.send_header("Set-Cookie", "state=%s; Path=/" % urllib.parse.quote(cookie))
         self.end_headers()
         self.wfile.write(data)
+
+    def signed_in(self):
+        c = self.headers.get("Cookie") or ""
+        return any(part.strip() == "aw=preview" for part in c.split(";"))
+
+    def auth(self, method, path, body):
+        """The board's sign-in (webui_auth.c), with PREVIEW_PASSWORD."""
+        if AUTH["key"] is None or AUTH["key"][0] != AUTH["password"]:
+            AUTH["key"] = (AUTH["password"],
+                           hashlib.pbkdf2_hmac("sha256", AUTH["password"].encode(), SALT, ITER, 32))
+        key = AUTH["key"][1]
+        text = "text/plain; charset=utf-8"
+        signin = [("Set-Cookie", "aw=preview; Max-Age=15552000; Path=/; HttpOnly; SameSite=Strict")]
+        if method == "GET" and path == "/api/auth/nonce":
+            n = os.urandom(16).hex()
+            AUTH["nonces"].add(n)
+            return self.send(200, json.dumps({"nonce": n, "salt": SALT.hex(), "iter": ITER}))
+        try:
+            b = json.loads(body or "{}")
+        except ValueError:
+            b = {}
+        if path == "/api/auth/signout":
+            return self.send(200, '{"ok":true}', headers=[("Set-Cookie", "aw=; Max-Age=0; Path=/")])
+        if path == "/api/auth/password" and "new" in b:
+            AUTH["password"] = b["new"]
+            print("preview: password set to %r" % b["new"])
+            return self.send(200, '{"ok":true}', headers=signin)
+        what = {"/api/auth/signin": b"signin", "/api/auth/password": b"change"}.get(path)
+        if not what:
+            return self.send(404, "no such page", "text/plain")
+        n = b.get("nonce", "")
+        if n not in AUTH["nonces"]:
+            return self.send(400, "Try again.", text)
+        AUTH["nonces"].discard(n)
+        want = hmac.new(key, what + bytes.fromhex(n), "sha256").hexdigest()
+        if not hmac.compare_digest(want, b.get("proof", "")):
+            return self.send(403, "Wrong password.", text)
+        if what == b"signin":
+            return self.send(200, '{"ok":true}', headers=signin)
+        stream = b"".join(hmac.new(key, b"change" + bytes.fromhex(n) + bytes([i]), "sha256").digest()
+                          for i in (1, 2))
+        new = bytes(x ^ y for x, y in zip(bytes.fromhex(b.get("enc", "")), stream)).decode("latin-1")
+        AUTH["password"] = new
+        print("preview: password changed to %r" % new)
+        return self.send(200, '{"ok":true}')
 
     def drop(self):
         self.close_connection = True       # no status line: the browser sees no answer
@@ -135,6 +193,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 self.send_response(302)
                 self.send_header("Location", url.path)
                 self.send_header("Set-Cookie", "state=%s; Path=/" % urllib.parse.quote(name))
+                self.send_header("Set-Cookie", "aw=; Max-Age=0; Path=/")
+                AUTH["password"] = PREVIEW_PASSWORD
                 self.send_header("Content-Length", "0")
                 return self.end_headers()
             clock["loaded"] = time.time()
@@ -151,6 +211,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if meta.get("_down_after") is not None and now - clock["loaded"] > meta["_down_after"]:
             return self.drop()
 
+        signin = meta.get("_signin")
+        if signin and not url.path.startswith("/api/auth/") and not self.signed_in():
+            return self.send(401, json.dumps({"signin": True, "label": signin.get("label", True)}))
         if method == "GET" and url.path == "/api/panel":
             st = resp.get("GET /api/status")
             st = st if isinstance(st, dict) else {}
@@ -161,15 +224,20 @@ class Handler(http.server.BaseHTTPRequestHandler):
             f = frames[int((now - clock["loaded"]) / STEP) % len(frames)]
             f = f + [0] * (111 - len(f))
             return self.send(200, struct.pack("<%dH" % len(f), *f), "application/octet-stream")
+        body = ""
         if method == "POST":
             n = int(self.headers.get("Content-Length") or 0)
             body = self.rfile.read(n).decode("utf-8", "replace")
             print("POST %s %s" % (url.path, body))
         key = "%s %s" % (method, url.path)
+        if url.path.startswith("/api/auth/") and key not in resp:
+            return self.auth(method, url.path, body if method == "POST" else "")
         r = resp.get(key)
         seen = clock["seen"][key] = clock["seen"].get(key, 0) + 1
         if isinstance(r, dict) and r.get("_first") and seen > r["_first"]:
             r = json.loads(STATES.read_text())["base"].get(key)
+            if r is None and url.path.startswith("/api/auth/"):
+                return self.auth(method, url.path, body if method == "POST" else "")
         if r is None and method == "POST":
             r = {"ok": True}
         if r is None:
@@ -184,9 +252,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 clock["override"] = r["_then"]     # back from the restart in this state
             body = r.get("_body", {"ok": True})
             code = r.get("_status", 200)
+            hdrs = [tuple(h) for h in r.get("_headers", [])]
             if isinstance(body, str):
-                return self.send(code, body, "application/json" if r.get("_json") else "text/plain")
-            return self.send(code, json.dumps(body, ensure_ascii=False))
+                return self.send(code, body, "application/json" if r.get("_json") else "text/plain",
+                                 headers=hdrs)
+            return self.send(code, json.dumps(body, ensure_ascii=False), headers=hdrs)
         return self.send(200, json.dumps(r, ensure_ascii=False))
 
     def do_GET(self):
@@ -201,7 +271,9 @@ def main():
     ap.add_argument("--port", type=int, default=8079)
     ap.add_argument("--host", default="127.0.0.1",
                     help="0.0.0.0 to try the page on a phone on this network")
+    ap.add_argument("--state", default="normal", help="the state for asks that carry no state cookie")
     a = ap.parse_args()
+    DEFAULT["state"] = a.state
     SCENES.update(load_scenes())
     ONE.update(load_scenes("one"))
     srv = http.server.ThreadingHTTPServer((a.host, a.port), Handler)

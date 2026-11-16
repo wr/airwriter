@@ -29,6 +29,15 @@ config AIRWRITER_WIFI_PASSWORD
     string "WiFi password"
     default ""
 
+config AIRWRITER_TEST_PASSWORD
+    string "Test password"
+    default ""
+    help
+        Development only. Stands in for the password burned into a sold
+        board's chip, so a bench board can be tested without burning it.
+        Lands in sdkconfig, which is gitignored. Release builds leave it
+        empty. 8 to 63 printable ASCII characters (WPA2's rules).
+
 config AIRWRITER_QUEUE_NAME
     string "Print queue name"
     default "ImageWriter II"

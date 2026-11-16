@@ -16,9 +16,10 @@
 #include "esp_netif.h"
 
 // Brings up the access point and the DNS responder. The caller starts the web
-// UI with captive = 1 afterwards. `ap_name` is the SSID; the network is open,
-// because a password nobody has been told is just a locked door.
-esp_err_t net_provision_start(const char *ap_name);
+// UI with captive = 1 afterwards. `ap_name` is the SSID. With a `password`
+// (W-1156: the one on the board's label, or one its owner set) the network is
+// WPA2; NULL or "" leaves it open, as on a board with no password.
+esp_err_t net_provision_start(const char *ap_name, const char *password);
 void      net_provision_stop(void);
 
 // True once the user has saved credentials through the portal. The device

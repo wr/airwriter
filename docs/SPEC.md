@@ -169,14 +169,15 @@ ESP-IDF 5.x, C. Project at `firmware/`. Components under `firmware/components/`:
 
 | Component | Responsibility |
 |---|---|
-| `net_provision` | Setup network (open AP, every DNS answer pointing at the setup page), NVS credential storage |
+| `net_provision` | Setup network (WPA2 with AirWriter's password, open without one; every DNS answer pointing at the setup page), NVS credential storage |
 | `ipp_server` | IPP/1.1 over HTTP on port 631 |
 | `ipp_attrs` | Printer attribute set, job attributes, state reasons |
 | `urf_decode` | URF and PWG raster stream decoder |
 | `halftone` | Grayscale → 1bpp dithering |
 | `imagewriter` | Column transpose, escape code emission |
 | `serial_out` | UART driver with hardware CTS, DTR watchdog |
-| `webui` | Config page on port 80 |
+| `webui` | Config page on port 80, and its sign-in (§3.20) |
+| `auth` | The password: the chip's, the build's or one set on the page, and the sign-in's state (§3.20) |
 | `localtalk` | AppleTalk: the cable's LocalTalk node, EtherTalk for Basilisk II and Infinite Mac, the printer they share (§3.13) |
 | `printer_state` | Job queue and state machine |
 
@@ -619,8 +620,9 @@ a print job. A USB flash must write a signed build, or the board takes any image
 **Signing.** IDF's signed apps without secure boot (`CONFIG_SECURE_SIGNED_APPS_NO_SECURE_BOOT`,
 RSA-3072, `SECURE_SIGNED_ON_UPDATE_NO_SECURE_BOOT`, `SECURE_BOOT_BUILD_SIGNED_BINARIES`; main.c
 refuses to build without them). `esp_ota_end` checks the new image's signature block against the
-key that signed the *running* image, so `/update` and the GitHub path share one check. No eFuse
-is burned and the bootloader is unchanged. A board running an unsigned image accepts any valid
+key that signed the *running* image, so `/update` and the GitHub path share one check. Signing
+burns no eFuse and leaves the bootloader unchanged (a sold board's user block holds its password,
+§3.20, which signing never reads). A board running an unsigned image accepts any valid
 image once; after that only images signed with the same key. Changing the key takes a USB
 flash. The release signing key is kept outside the repo, by the maintainer, with a backup;
 its public half is `firmware/keys/airwriter-release.pub.pem`,
@@ -647,6 +649,17 @@ upload refused that way has its slot's first sector erased, so nothing boots it.
 anything else (`v0.1.0-3-gabc1234-dirty`) is a dev build, and a release is newer only if its
 `vX.Y.Z` is past the running one's.
 
+**No going back before sign-in** (W-1156, §3.20). A board with a password burned in (or a test
+one) that runs `FWU_SIGNIN_FLOOR` (`fw_update_core.h`, the first release with sign-in) or later
+refuses an older image, by tag and on `/update` ("This AirWriter can’t go back to a version
+before vX.Y.Z"): older firmware would come up with an open setup network. A refused upload's slot
+has its first sector erased, as the other board's does. A dev build numbered below the floor has
+none, so a bench board moves between builds; a later version, and a USB flash, are never
+limited. The release that first ships sign-in sets the floor to its own tag; `release.sh` runs
+`tools/release/floor_check.py`, which refuses a tag below the floor and a floor at or below any
+earlier tag without sign-in. A sold board is flashed only with a release at or past the floor,
+never a dev build (a dev build below it would leave the board without one).
+
 **When.** An update takes the job lock without waiting and holds it to the restart. A job that
 finds the lock taken raises a flag, and the update aborts at its next chunk and lets the job
 print; `/update` answers 409. Not while the last update is on trial, never in setup mode
@@ -662,7 +675,8 @@ rolled back, and tries each release once per check. The panel shows progress thr
 `LG_ACT_FW_*` overlays.
 
 **Web.** `GET /api/update`; `POST /api/update/check`, `/api/update/install` (optional
-`{"tag":"vX.Y.Z"}`, which may be older or a prerelease), `/api/update/auto` (`{"auto":true}`).
+`{"tag":"vX.Y.Z"}`, which may be older, down to the floor above, or a prerelease),
+`/api/update/auto` (`{"auto":true}`).
 
 ### 3.13 AppleTalk: the cable, Basilisk II and Infinite Mac
 
@@ -1849,6 +1863,83 @@ board's. Neither image runs on the other board, and each board refuses the other
   the first, check the straps, the handshake legs through Apple's crossover, a StyleWriter
   (J2's handshake held asserted by IO47) and the Personal LaserWriter 300's clock through
   rev 2026.11's U3.
+
+### 3.20 Password and sign-in (W-1156)
+
+`W-1156 Setup and the settings page are locked by a password`; design in
+`docs/superpowers/specs/2026-11-15-setup-password-design.md`. It is what lets the EU paperwork
+self-declare EN 18031: a sold board has a password the person can't skip.
+
+**The password**, in the `auth` component (`auth_core.c`, pure and host-tested, and `auth.c`).
+It is the first of: one set or changed on the page (NVS `auth/pw`, 8 to 63 printable ASCII, WPA2's
+rules); the one burned into the chip at the bench; or, on a blank chip, the build's
+`CONFIG_AIRWRITER_TEST_PASSWORD` (empty in every release, so a bench board is tested without
+being burned). A sold board's password and serial are burned together into the user eFuse block
+(`EFUSE_BLK_USER_DATA`, BLOCK3, written once and whole):
+
+| Bytes | Holds |
+|---|---|
+| 0 | Layout version, `1` |
+| 1–16 | Serial, ASCII, zero-padded (`2652AWF2611-002`) |
+| 17–24 | Password: 8 of `abcdefghjkmnpqrstuvwxyz23456789` |
+| 25–31 | Zero (the S3's custom-MAC field, never used) |
+
+All zero is no password; anything else malformed is logged and counts as none. The serial stays
+out of the log and the page. `/api/status` carries the kind, `"pw":"label"`, `"changed"`, `"set"`
+or `"none"`, never the password. Erase All Settings and both test-button erases wipe NVS, so a
+burned board goes back to its label's password and any other board to none.
+
+**The setup network** is WPA2-PSK (CCMP) with the current password, open on a board with none.
+Its captive page never asks: joining took the password.
+
+**Signing in.** On the home network, on a board with a password, every route on port 80 but the
+page (`/` and its addresses) and `/api/auth/*` answers 401 `{"signin":true,"label":bool}` to a
+browser without a known token (`label`: the password on the label still works, unchanged). The
+page shows its sign-in alert on the first 401, over its plain background, and stills its other
+asks until signing in reloads it. Its Forgot password? answers where the label's password is
+while it works, and how to erase the settings once it doesn't.
+
+1. `GET /api/auth/nonce` → `{"nonce","salt","iter"}`: a challenge good once, for 60 s (4 kept),
+   the board's salt (16 random bytes in NVS `auth/salt`, new after an erase) and 10000 rounds
+   (each guess at a recorded sign-in costs more than one at WPA2's 4096).
+2. The page derives `K = PBKDF2-HMAC-SHA256(password, salt, iter, 32)` and sends
+   `POST /api/auth/signin {"nonce","proof"}`, `proof = HMAC-SHA256(K, "signin" ‖ nonce)`. Plain
+   http offers no `crypto.subtle`, so the page carries its own (`tools/webui/crypto.js`).
+3. The board holds `K` (derived when the password or salt changes, its time logged, and kept in
+   NVS `auth/key` beside a check of both, so a start-up doesn't derive it) and compares in
+   constant time. A right proof gets `Set-Cookie: aw=<32 hex>; Max-Age=15552000; Path=/;
+   HttpOnly; SameSite=Strict`; 8 tokens are kept in NVS `auth/tok`, the oldest pushed out.
+
+400 "Try again." is a challenge the board doesn't have (it restarted): the page tries once more
+with a fresh one. 403 "Wrong password."; after 5 in a row, 429 "Too many tries. Try again in a
+minute." with `Retry-After` for 60 s (kept in RAM). `POST /api/auth/signout` forgets the
+caller's token. `POST /api/auth/password {"nonce","proof","enc"}` changes it: the proof is made
+with `"change"` and the new password comes XORed with `HMAC-SHA256(K, "change" ‖ nonce ‖ i)` for
+i = 1, 2, so neither crosses the network; every other browser is signed out. On a board with
+none, `{"new"}` sets the first one in the clear (there is no key yet) and signs that browser in.
+Nothing is guarded in captive mode or on a board with no password; IPP on 631 and AppleTalk never
+are. `tools/webui/signin.py` signs in for `curl`.
+
+**Older firmware**: a board with a burned or test password refuses images before the first
+release with sign-in once it runs one (§3.12).
+
+**The bench** (`tools/bench/bench.py`, on a Python with Pillow) prints a whole sheet of labels
+through an AirWriter sharing the Personal LaserWriter 300: drawn at 300 dpi in pure black and
+white (nothing for the printer to screen), sent as one URF page in an IPP Print-Job. Every label
+gets a serial and a password, recorded in a private book (`labels.csv`, never in a repo). Then
+`burn` reads the board's user block (`espefuse dump --format split`), and on a blank one burns the
+next label of the kind asked for (`burn_block_data BLOCK_USR_DATA`), reads it back and records
+the MAC. Serials are one count across full and LC boards from 001, given out as a sheet prints,
+the week being the sheet's ISO week; a void label's number is never reused. The 300's image area
+is 8 in, centred on a letter page: a label within 1/4 in of the sheet's left or right edge loses
+its edge.
+
+- **Tested:** the core on the host (hashes against Python's hashlib, the block, challenges, the
+  lockout, tokens, the cookie), the page's script against the same values, the page against
+  `preview.py`'s sign-in (right and wrong, a stale challenge, the wait, change, set, signing out
+  in one tab), `signin.py` against the preview, and the bench tool (the book, the block, a sheet
+  through the rip and `qdfake.py` dot for dot, a Print-Job to `ippcap.py`, a burn against a
+  stand-in espefuse). Both builds and both stack checks. Not yet on a board; no chip is burned.
 
 ---
 

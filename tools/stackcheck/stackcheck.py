@@ -44,6 +44,9 @@ def roots(build):
          "ota_health's trial gate, GATE_STACK"),
         ('key_task', define(os.path.join(comp, 'fw_update/fw_update.c'), 'KEY_STACK'),
          "fw_update's look at the running image's key, KEY_STACK"),
+        # W-1156: a password change derives its key in the handler (httpd's own frames come on top).
+        ('webui_auth_post', define(os.path.join(comp, 'webui/webui.c'), 'WEBUI_STACK'),
+         "the web server's sign-in handler, WEBUI_STACK"),
     ]
 
 

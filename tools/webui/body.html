@@ -193,12 +193,15 @@
           <div class=row><span class=txt>Install from a file</span><button class=btn type=button id=fw-file>Choose File…</button></div>
         </div>
         <div class=box>
+          <div class=row><span class=txt>Password</span><button class=btn type=button id=pw-btn data-dlg=d-pwset>Set…</button></div>
+        </div>
+        <div class=box>
           <div class=row><span class=txt>On for</span><span class=val id=uptime></span></div>
           <div class=row><span class=txt>Last started</span><span class=val id=reset></span></div>
           <button class="row link" id=log-row type=button><span class=txt>Log</span><span class=val id=log-val></span><span class=chev aria-hidden=true>›</span></button>
         </div>
         <p class=say id=about-say></p>
-        <div class=btnrow><button class="btn danger" type=button data-dlg=d-erase>Erase All Settings…</button><button class=btn type=button data-dlg=d-restart>Restart…</button></div>
+        <div class=btnrow><button class="btn danger" type=button data-dlg=d-erase>Erase All Settings…</button><button class="btn hide" type=button id=signout>Sign Out</button><button class=btn type=button data-dlg=d-restart>Restart…</button></div>
         <div class=box><div class=row><span class=txt>Rainbow status lights</span><label class=sw><input type=checkbox role=switch id=rainbow aria-label="Rainbow status lights"><span></span></label></div></div>
         <div class=box>
           <a class="row link" href="https://github.com/wr/airwriter/wiki/Status-Lights" target=_blank rel=noopener><span class=txt>Status lights</span><span class=out aria-hidden=true>↗</span></a>
@@ -321,6 +324,39 @@
   <p class=say id=net-say></p>
   <button class="btn back2 hide" type=button id=su-log>View Log</button>
   <div class=btnrow><button class=btn type=button id=rescan>Scan Again</button><button class=btn type=button data-close>Cancel</button><button class="btn primary" type=button id=join disabled>Join</button></div>
+</div></dialog>
+
+<!-- W-1156: on the home network, a board with a password shows nothing until
+     the page signs in: an alert over the page's own background, which nothing
+     closes but signing in -->
+<dialog id=d-signin><form class=dlg id=si action="#" autocomplete=on>
+  <b>Sign in to AirWriter</b>
+  <input class=hide autocomplete=username value=AirWriter aria-hidden=true tabindex=-1>
+  <input class=fld type=password id=si-pw placeholder=Password autocomplete=current-password autocapitalize=off spellcheck=false maxlength=63 aria-label=Password>
+  <p class="say err" id=si-say></p>
+  <div class=btnrow><button class="btn primary" type=submit id=si-go>Sign In</button></div>
+  <button class=forgot type=button id=si-forgot>Forgot password?</button>
+  <p class=hide id=si-label>It’s on the bottom of AirWriter.</p>
+  <p class=hide id=si-reset>Hold the test button for about 8 seconds. That erases all its settings.</p>
+</form></dialog>
+
+<!-- W-1156: changing the password proves the current one; setting the first
+     one is only for a board with none burned in -->
+<dialog id=d-pwchange><div class=dlg>
+  <b>Change password</b>
+  <input class=hide autocomplete=username value=AirWriter aria-hidden=true tabindex=-1>
+  <input class=fld type=password id=pwc-cur placeholder="Current password" autocomplete=current-password autocapitalize=off spellcheck=false maxlength=63 aria-label="Current password">
+  <input class=fld type=password id=pwc-new placeholder="New password" autocomplete=new-password autocapitalize=off spellcheck=false maxlength=63 aria-label="New password">
+  <p class="say err" id=pwc-say></p>
+  <div class=btnrow><button class=btn type=button data-close>Cancel</button><button class="btn primary" type=button id=pwc-go>Change</button></div>
+</div></dialog>
+
+<dialog id=d-pwset><div class=dlg>
+  <b>Set password</b>
+  <input class=hide autocomplete=username value=AirWriter aria-hidden=true tabindex=-1>
+  <input class=fld type=password id=pws-new placeholder="New password" autocomplete=new-password autocapitalize=off spellcheck=false maxlength=63 aria-label="New password">
+  <p class="say err" id=pws-say></p>
+  <div class=btnrow><button class=btn type=button data-close>Cancel</button><button class="btn primary" type=button id=pws-go>Set</button></div>
 </div></dialog>
 
 <dialog id=d-erase><div class=dlg>
