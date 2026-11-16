@@ -8,8 +8,8 @@
 
 #include <string.h>
 #include <stdio.h>
+#include <stdlib.h>
 
-#define COOKIE_MAX 600
 #define SET_COOKIE "aw=%s; Max-Age=15552000; Path=/; HttpOnly; SameSite=Strict"
 
 static const char *sentence(int rc)
@@ -39,12 +39,19 @@ static esp_err_t refuse(httpd_req_t *req, int rc, uint32_t wait_s)
     return httpd_resp_sendstr(req, sentence(rc));
 }
 
-// The caller's token, if its Cookie header carries a well-formed one.
+// The caller's token, if its Cookie header carries a well-formed one. The
+// header is read whole, however long (a router's cookies for the same address
+// can ride along): cut short, it would read as signed out, sign-in after
+// sign-in. httpd caps the whole header at CONFIG_HTTPD_MAX_REQ_HDR_LEN.
 static int cookie_token(httpd_req_t *req, char tok[33])
 {
-    char h[COOKIE_MAX];
-    if (httpd_req_get_hdr_value_str(req, "Cookie", h, sizeof h) != ESP_OK) return 0;
-    return auth_cookie_token(h, tok);
+    size_t n = httpd_req_get_hdr_value_len(req, "Cookie");
+    if (!n) return 0;
+    char *h = malloc(n + 1);
+    if (!h) return 0;
+    int ok = httpd_req_get_hdr_value_str(req, "Cookie", h, n + 1) == ESP_OK && auth_cookie_token(h, tok);
+    free(h);
+    return ok;
 }
 
 int webui_signed_in(httpd_req_t *req, int captive)
