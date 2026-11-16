@@ -1730,6 +1730,89 @@
     }
    }
   },
+  "confirmed-only": {
+   "about": "Printers: only confirmed ones, an ImageWriter II and a Personal LaserWriter NTR (W-1154: no “not yet confirmed” line on either)",
+   "patch": {
+    "GET /api/printers": {
+     "printers": [
+      {
+       "id": 1,
+       "name": "ImageWriter II",
+       "where": "port",
+       "kind": "imagewriter",
+       "model": "ImageWriter II",
+       "shared": true,
+       "identified": true,
+       "found": "person",
+       "state": "ready",
+       "uuid": "urn:uuid:41575254-4552-0001-10bd-a36e2434",
+       "product": "",
+       "dither": "atkinson",
+       "gain": 0,
+       "rp": "ipp/print",
+       "start_page": null,
+       "icon": "icon"
+      },
+      {
+       "id": 3,
+       "name": "Personal LaserWriter NTR",
+       "where": "cable",
+       "kind": "laserwriter",
+       "model": "",
+       "shared": true,
+       "identified": true,
+       "found": "auto",
+       "state": "ready",
+       "uuid": "urn:uuid:41575254-4c57-0001-50d8-10bda36e2434",
+       "product": "LaserWriter Personal NTR",
+       "dither": "atkinson",
+       "gain": 0,
+       "rp": "ipp/p3",
+       "start_page": false,
+       "icon": "plw"
+      }
+     ],
+     "notes": [],
+     "port_on": 1,
+     "said_other": false,
+     "chooser": [
+      "ImageWriter II",
+      "Personal LaserWriter NTR"
+     ],
+     "max_shared": 6
+    },
+    "GET /api/laser": {
+     "heard": [
+      {
+       "name": "Personal LaserWriter NTR",
+       "kind": "laserwriter",
+       "link": "cable",
+       "ago_s": 3,
+       "airwriter": false
+      }
+     ],
+     "targets": [
+      {
+       "id": 3,
+       "name": "Personal LaserWriter NTR",
+       "slot": 1,
+       "link": "cable",
+       "state": "idle",
+       "reason": "none",
+       "message": "%%[ status: idle ]%%",
+       "product": "LaserWriter Personal NTR",
+       "queried": true
+      }
+     ],
+     "job": {
+      "active": false,
+      "sent": 0,
+      "last": "",
+      "ms": 0
+     }
+    }
+   }
+  },
   "lw-no-answer": {
    "about": "Printers: a LaserWriter that never answered its query",
    "patch": {

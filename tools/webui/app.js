@@ -441,13 +441,19 @@ function logClose(){
   try{ history.replaceState(null,'','/about'); }catch(e){}
 }
 function logHeader(){
-  const ps=(PR&&PR.printers||[]).map(p=>(p.model||p.product||p.kind)+' ('+(p.where==='port'?'printer port':'AppleTalk')+')');
+  // W-1154: each printer by its model, never the name its owner gave it, then where it is and its
+  // state, and an AppleTalk printer's own status line, which lwStatus keeps free of job names
+  const ps=(PR&&PR.printers||[]).map(p=>{
+    const t=LWT&&p.where!=='port'?LWT.find(t=>t.id===p.id):null, own=t&&t.message?lwStatus(t.message):'';
+    const w=stWords(p)[1], more=own&&!w.toLowerCase().includes(own.toLowerCase());
+    return '  '+prLabel(p)+', '+(WHERE[p.where]||p.where)+': '+w+(more?'; its status line: '+own:'');
+  });
   return ['AirWriter log',
     'Firmware: '+S.version+' (slot '+S.slot+')',
     'Board: '+$('about-rev').textContent.split(' · ')[0],
     'On for: '+S.uptime,
     'Last started: '+(RESET[S.reset]||cap(S.reset||'')),
-    'Printers: '+(ps.join('; ')||'None'),
+    'Printers:'+(ps.length?'\n'+ps.join('\n'):' None'),
     'Free memory: '+S.heap,
     'Times count from each start.'].join('\n');
 }
@@ -467,15 +473,17 @@ $('log-copy').onclick=()=>{
   $('log-buf').value=logHeader()+'\n\n'+logText(shown.slice(-LOG_COPY));
   copyFrom($('log-buf'),$('log-copy'));
 };
-$('log-dl').onclick=async()=>{
-  const btn=$('log-dl');
+$('log-dl').onclick=()=>logDownload($('log-dl'),'log-say');
+async function logDownload(btn,sayId){
   btn.disabled=true;
   const r=await logFetch('',60000);
+  const lw=r&&PR&&PR.printers.some(p=>p.where!=='port')?await getJSON('/api/laser'):null;
+  if(lw&&lw.targets) LWT=lw.targets;               // AppleTalk printers' status lines, for the header
   btn.disabled=false;
-  if(!r){ say('log-say','Can’t reach AirWriter.',1,4000); return; }
+  if(!r){ say(sayId,'Can’t reach AirWriter.',1,4000); return; }
   const a=document.createElement('a');
   a.href=URL.createObjectURL(new Blob([logHeader()+'\n\n'+logText(r.lines)+'\n'],{type:'text/plain'}));
-  a.download='airwriter-'+((S.ap||'').split('-')[1]||'board').toLowerCase()+'-log.txt';
+  a.download=logFile();
   a.click();
   setTimeout(()=>URL.revokeObjectURL(a.href),10000);
 };
@@ -888,6 +896,32 @@ function prOpen(id){
   say('prn-say',''); say('pd-clean-say','');
   if(id!==null){ document.querySelector('.detail').scrollTop=0; pdDraw(); requestAnimationFrame(render); lwtPoll(); }
 }
+/* W-1154: a printer the wiki's Supported Printers page marks Yes*, one AirWriter prints to that
+   nobody has confirmed on a real one yet, gets one line under its status. Every other printer
+   AirWriter prints to is a Yes. Confirmations come from W-1161's statistics, not from here. */
+const CONFIRMED=['ImageWriter II','Personal LaserWriter 300','LaserWriter Personal NTR'];
+const prModel=p=>p.where==='port'?p.model:p.product;
+/* What to call a printer anywhere it's posted: its model, else what kind it is */
+const prLabel=p=>prModel(p)||{unknown:'Unrecognized printer',laserwriter:'LaserWriter','appletalk-imagewriter':'AppleTalk ImageWriter'}[p.kind]||'Printer';
+function unconfirmed(p){
+  const ours=p.where==='port'?['imagewriter','stylewriter','qdlaser'].includes(p.kind):p.kind==='laserwriter';
+  return ours&&!!prModel(p)&&!CONFIRMED.includes(prModel(p));
+}
+/* A problem, reported as a new GitHub issue filled in from what the page knows: the printer's
+   model (never the name its owner gave it), its connection, the firmware and the board. GitHub
+   takes no file by address, so the person downloads the log first and drags it in. */
+const boardName=()=>!S.board||S.board==='rev-a'?'Rev A':'Rev '+S.board+(S.lc?' LC':'');
+const logFile=()=>'airwriter-'+((S.ap||'').split('-')[1]||'board').toLowerCase()+'-log.txt';
+function problemURL(p){
+  const m=p?prLabel(p):'';
+  const lines=['What happened:','','','What you expected:','','',
+    ...(p?['Printed from (phone, computer or vintage Mac):','','','Printer: '+m,'Connection: '+(WHERE[p.where]||p.where)]:[]),
+    'Firmware: '+S.version,'Board: '+boardName(),'','Log: drag '+logFile()+' here.'];
+  return 'https://github.com/wr/airwriter/issues/new?title='+encodeURIComponent(m?m+': ':'')+'&body='+encodeURIComponent(lines.join('\n'));
+}
+$('rep-log').onclick=()=>logDownload($('rep-log'),'rep-say');
+$('rep-go').onclick=()=>setTimeout(()=>$('d-report').close(),0);
+$('log-report').onclick=()=>{ $('log-report').href=problemURL(null); };
 let spSaving=false;                 // W-1099: the start page on its way to the printer
 function pdDraw(){
   const p=prById(sel);
@@ -901,6 +935,9 @@ function pdDraw(){
   lamp($('prn-lamp'),cls); $('prn-state').textContent=text;
   // W-1102: why the port's last job failed, when the board has a reason (a page that didn't fit in the printer's memory)
   $('prn-why').textContent=port&&p.state==='failed'&&S.job_error||'';
+  $('pd-unconf').classList.toggle('hide',!unconfirmed(p));
+  // W-1154: Report a Problem…'s sheet names the printer by its model, and its issue is this printer's
+  $('rep-model').textContent=prModel(p)?'the '+nb(prModel(p)):'this printer'; $('rep-go').href=problemURL(p);
   $('rib-row').classList.toggle('hide',!(port&&iw));
   // W-1103: a StyleWriter's cartridge, read from the printer; the black-only models always hold
   // black, but not while the printer says the cartridge is missing or jammed

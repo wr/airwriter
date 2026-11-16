@@ -238,6 +238,10 @@ body:not(.ready) .sw span,body:not(.ready) .sw span:after{transition:none}
 .note .btnrow{grid-column:2}
 .nav .v .warn{width:13px;height:13px;color:var(--lamp-a);vertical-align:-2px;margin-right:5px}
 .note+.note{margin-top:10px}
+/* W-1154: a printer not yet confirmed, a foot line with the info mark */
+.unconf{display:flex;gap:6px;align-items:flex-start}
+.unconf .inf{flex:0 0 auto;width:13px;height:13px;margin-top:2px;color:var(--fg3)}
+.unconf.hide{display:none}
 #pr-notes:empty{display:none}
 .back2{align-self:flex-start;border:0;background:none;box-shadow:none;color:var(--accent);padding:2px 0;cursor:pointer}
 .back2:hover{text-decoration:underline;background:none}

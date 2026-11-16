@@ -58,7 +58,10 @@ These apply to the product, docs and Wells voices.
 4. **Confident.** No "untested", "should work", "never tried" or "this part is new". Test
    status belongs in Linear and the engineering docs. One exception: the wiki's Supported
    Printers table marks a printer not yet confirmed on paper **Yes\***, with a footnote asking
-   owners to report it. Drop the star once one prints.
+   owners to report it, and the settings page shows those same printers one line under
+   Status: "Expected to work, but not yet confirmed on this model." Nowhere else on the page:
+   not the Printers list, the sidebar or a status name. Drop the star, and the line, once one
+   prints.
 5. **Labels where a label will do.** Headings, table headers and list leads: "Port", not "Where
    it is".
 6. **Plain and short.** One idea per sentence, with no lists packed into a sentence behind a

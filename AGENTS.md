@@ -111,6 +111,9 @@ page: Top margin (`{"top_margin":N}`, 1/144 in, -216 to 144, default -144) and d
   changes.
 - The settings page makes no request off the board. Never hand-edit `webui_page.h`;
   `tools/webui/mkheader.py` builds it.
+- When the wiki's Supported Printers page drops a printer's **Yes\*** star, add its model to
+  `CONFIRMED` in `tools/webui/app.js` (a port printer's model, an AppleTalk printer's `product`)
+  in the same change, so its page stops saying it isn't confirmed.
 - Never hand-edit the test page's generated headers: after a change to `tp_scene.c` or
   `ink_gray`, `make -C tools/rip scene` traces `tp_pictures.h` again (the host tests fail until it
   does); `testpage/tools/mkart.py` writes `tp_words.h` and `tp_icons.h`, and

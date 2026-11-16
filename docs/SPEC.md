@@ -962,6 +962,20 @@ read back is a list made again). At most 8 records.
   record has, "Something else is already in Printers." for `model` `none` while another port
   record is one, "You can share up to 6 printers." at the cap, W-1116). A StyleWriter's record
   also carries `cartridge` and `fault` (3.16).
+- **Reporting a problem** (`W-1154 Settings page: Report a Problem on every printer, and a line
+  for printers not yet confirmed`). Every printer's detail has **Report a Problem…** beside Test
+  Cable… and Print Test Page. Its sheet downloads the log (3.17) and opens
+  `github.com/wr/airwriter/issues/new` with `title` and `body` filled in from what the page
+  holds: the printer's model (`model` for a port printer, `product` for an AppleTalk one; never
+  `name`, which the owner may have typed), its connection, `version` and the board, with blanks
+  for what happened, what was expected and what printed it, and the log's file name. About 400
+  characters of address. GitHub takes no file by address, so the person drags the log in. The
+  page sends nothing itself. The log screen's Report an issue fills in the same way, without a
+  printer. A printer the wiki's Supported Printers page marks **Yes\*** shows "Expected to work,
+  but not yet confirmed on this model." under its status: every port ImageWriter, StyleWriter or
+  QuickDraw LaserWriter and every AppleTalk LaserWriter except those whose model is in
+  `CONFIRMED` in `tools/webui/app.js` (ImageWriter II, Personal LaserWriter 300, and the
+  product "LaserWriter Personal NTR"). Unknown printers and AppleTalk ImageWriters show no line.
 
 ### 3.16 StyleWriters (W-1103)
 
@@ -1430,7 +1444,10 @@ at most 500 lines, asking for new lines every second, or every 3 s during a prin
 response would tie up the web server, which answers one request at a time. Times are `+MM:SS` or
 `+H:MM:SS` since that start, because the board has no clock. The current start's divider shows when
 it began, from the viewer's clock, on screen only. **Copy** (the newest 300 under the filter) and
-**Download** (everything) are oldest first, with a header.
+**Download** (everything) are oldest first, with a header. The header lists each printer by model
+(never its name), connection and status, and an AppleTalk printer's own status line when it says
+more than the status (W-1154; `lwStatus` turns a busy line naming a job into "Busy"). A printer's
+Report a Problem… downloads the same file (3.15).
 
 **Bench (rev A, board 1).** A NULL dereference and an abort each left their line with earlier lines
 intact. RAM wiped and restarted lost no lines, and neither did unplugging an idle board. A
