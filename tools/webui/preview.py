@@ -47,6 +47,7 @@ PREVIEW_PASSWORD = "k7m2x9qp"
 SALT = bytes(range(16))
 ITER = 100000
 AUTH = {"nonces": set(), "key": None, "password": PREVIEW_PASSWORD}
+DEFAULT = {"state": "normal"}                # --state: for asks with no state cookie (signin.py's test)
 
 
 def load_scenes(which="frames"):
@@ -112,7 +113,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             k, _, v = part.strip().partition("=")
             if k == "state":
                 return urllib.parse.unquote(v)
-        return "normal"
+        return DEFAULT["state"]
 
     def send(self, code, body, ctype="application/json", cookie=None, headers=()):
         data = body if isinstance(body, bytes) else body.encode()
@@ -270,7 +271,9 @@ def main():
     ap.add_argument("--port", type=int, default=8079)
     ap.add_argument("--host", default="127.0.0.1",
                     help="0.0.0.0 to try the page on a phone on this network")
+    ap.add_argument("--state", default="normal", help="the state for asks that carry no state cookie")
     a = ap.parse_args()
+    DEFAULT["state"] = a.state
     SCENES.update(load_scenes())
     ONE.update(load_scenes("one"))
     srv = http.server.ThreadingHTTPServer((a.host, a.port), Handler)
