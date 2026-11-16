@@ -100,8 +100,11 @@ Wells chose from mocks of all three ways and of the sign-in screen; they are not
 
 ### Older firmware
 
-A board with a burned password (or a test one) refuses, by `/update` and by install-by-tag, any image older than the
-first release with sign-in: on older firmware it would come up with an open network. The page
+A board with a burned password (or a test one) that runs the first release with sign-in or later
+refuses, by `/update` and by install-by-tag, any image older than that release: on older
+firmware it would come up with an open network. A dev build numbered below that release has no
+floor, so a bench board moves freely between builds. The release that first ships sign-in sets
+the floor to its own tag. The page
 shows "This AirWriter can’t go back to a version before vX.Y." Going back to any later version
 stays allowed, and a USB flash is not limited. The signed-updates section (SPEC §3.12) is
 amended to say so in the same change. A board with only a set password has no floor: it is its
