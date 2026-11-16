@@ -4140,7 +4140,7 @@ void app_main(void)
             WIFI_EVENT, WIFI_EVENT_AP_STACONNECTED, ap_event, NULL, NULL));
         ESP_ERROR_CHECK(esp_event_handler_instance_register(
             WIFI_EVENT, WIFI_EVENT_AP_STADISCONNECTED, ap_event, NULL, NULL));
-        ESP_ERROR_CHECK(net_provision_start(ap));
+        ESP_ERROR_CHECK(net_provision_start(ap, auth_password()));
         ota_health_set(OH_AP_UP, 1);
         fwu_start(1);
         webui_cfg_t wcfg = { .status_json = status_json, .general_saved = general_saved, .captive = 1,

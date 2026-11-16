@@ -99,7 +99,7 @@ static esp_err_t start_dns(void)
     return ESP_OK;
 }
 
-esp_err_t net_provision_start(const char *ap_name)
+esp_err_t net_provision_start(const char *ap_name, const char *password)
 {
     s_ap_netif = esp_netif_create_default_wifi_ap();
 
@@ -109,6 +109,12 @@ esp_err_t net_provision_start(const char *ap_name)
     wc.ap.channel        = 1;
     wc.ap.max_connection = 4;
     wc.ap.authmode       = WIFI_AUTH_OPEN;
+    if (password && password[0]) {
+        // AES only: TKIP is long deprecated and phones warn about it.
+        strncpy((char *)wc.ap.password, password, sizeof wc.ap.password - 1);
+        wc.ap.authmode        = WIFI_AUTH_WPA2_PSK;
+        wc.ap.pairwise_cipher = WIFI_CIPHER_TYPE_CCMP;
+    }
 
     // The station half has to be told to stop before the access point comes
     // up. Left half-alive it keeps retrying and rescanning in the background,
@@ -128,7 +134,8 @@ esp_err_t net_provision_start(const char *ap_name)
     esp_err_t err = start_dns();
     if (err != ESP_OK) return err;
 
-    ESP_LOGW(TAG, "no network yet: join \"%s\" and the setup page opens", ap_name);
+    ESP_LOGW(TAG, "no network yet: join \"%s\"%s and the setup page opens", ap_name,
+             wc.ap.authmode == WIFI_AUTH_OPEN ? "" : " with AirWriter's password");
     ESP_LOGW(TAG, "or browse to http://%s/", AP_IP);
     return ESP_OK;
 }
