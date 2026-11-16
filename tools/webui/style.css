@@ -401,6 +401,12 @@ dialog::backdrop{background:var(--scrim)}
   /* a dev build's version is long: it goes under its label */
   #fw-ver{display:block}
 }
+/* W-1156: the sign-in screen, in setup's layout */
+#si{display:flex;flex-direction:column;gap:20px}
+#si .prow .fld{max-width:none}
+#si-go:disabled{opacity:.45}
+.dlg .fld+.fld{margin-top:8px}
+
 /* W-1088 (Wells: "proportions are kinda small for mobile"): on a phone, setup
    fills the screen as a phone's own setup does: a bigger mark and title,
    roomier rows, and full-width keys at the foot, the next step last, under
@@ -408,7 +414,7 @@ dialog::backdrop{background:var(--scrim)}
 @media (max-width:760px){
   body.setupmode .pane.on{min-height:100svh;display:flex;flex-direction:column;
     padding-top:max(24px,env(safe-area-inset-top,0px));padding-bottom:max(24px,env(safe-area-inset-bottom,0px))}
-  body.setupmode #su-1,body.setupmode #su-2,body.setupmode #su-3{flex:1 1 auto;gap:22px}
+  body.setupmode #su-1,body.setupmode #su-2,body.setupmode #su-3,body.setupmode #si{flex:1 1 auto;gap:22px}
   body.setupmode .hero{padding:32px 22px 28px;gap:10px}
   body.setupmode .hero .awm{width:72px;height:124px}
   body.setupmode .hero .ic{width:76px;height:76px}

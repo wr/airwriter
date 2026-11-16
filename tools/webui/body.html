@@ -73,6 +73,22 @@
       </div>
     </section>
 
+    <!-- ── Sign in ───────────────────────────────────────────── -->
+    <!-- W-1156: on the home network, a board with a password shows nothing
+         until the page signs in. Laid out as setup is: the key at the foot. -->
+    <section class=pane id=p-signin>
+      <form id=si action="#" autocomplete=on>
+        <div class=hero><i class=awm></i><h2>AirWriter</h2><p id=si-lede>Enter the password on the bottom of AirWriter, unless you’ve changed it.</p></div>
+        <div class=box><div class="row prow">
+          <input class=hide autocomplete=username value=AirWriter aria-hidden=true tabindex=-1>
+          <input class=fld type=password id=si-pw placeholder=Password autocomplete=current-password autocapitalize=off spellcheck=false maxlength=63 aria-label=Password>
+        </div></div>
+        <p class="say err" id=si-say></p>
+        <p class=foot>Forgot it? Hold the test button while you plug in AirWriter, and keep holding for 5 seconds. That erases all its settings.</p>
+        <div class="btnrow one"><button class="btn primary" type=submit id=si-go>Sign In</button></div>
+      </form>
+    </section>
+
     <!-- ── Printers ──────────────────────────────────────────── -->
     <!-- W-1088: every printer AirWriter has, found or told: notices (only what
          asks you something), one row each, and a printer's detail in its place
@@ -191,6 +207,10 @@
           <div class=row><span class=txt>Version <span class="mono" id=fw-ver></span></span><span class=val><i class=lamp id=fw-lamp></i><span id=fw-state></span></span><button class=btn type=button id=fw-btn>Check Now</button></div>
           <div class=row><span class=txt>Update automatically</span><label class=sw><input type=checkbox role=switch id=fwauto aria-label="Update automatically"><span></span></label></div>
           <div class=row><span class=txt>Install from a file</span><button class=btn type=button id=fw-file>Choose File…</button></div>
+        </div>
+        <div class=box>
+          <div class=row><span class=txt>Password</span><span class=val id=pw-val></span><button class=btn type=button id=pw-btn data-dlg=d-pwset>Set…</button></div>
+          <div class="row hide" id=br-row><span class=txt>This browser</span><span class=val>Signed in</span><button class=btn type=button id=signout>Sign Out</button></div>
         </div>
         <div class=box>
           <div class=row><span class=txt>On for</span><span class=val id=uptime></span></div>
@@ -324,9 +344,30 @@
   <div class=btnrow><button class=btn type=button id=rescan>Scan Again</button><button class=btn type=button data-close>Cancel</button><button class="btn primary" type=button id=join disabled>Join</button></div>
 </div></dialog>
 
+<!-- W-1156: changing the password proves the current one; setting the first
+     one is only for a board with none burned in -->
+<dialog id=d-pwchange><div class=dlg>
+  <b>Change password</b>
+  <input class=hide autocomplete=username value=AirWriter aria-hidden=true tabindex=-1>
+  <input class=fld type=password id=pwc-cur placeholder="Current password" autocomplete=current-password autocapitalize=off spellcheck=false maxlength=63 aria-label="Current password">
+  <input class=fld type=password id=pwc-new placeholder="New password" autocomplete=new-password autocapitalize=off spellcheck=false maxlength=63 aria-label="New password">
+  <p id=pwc-help>At least 8 characters. Erase All Settings brings back the one on the label.</p>
+  <p class="say err" id=pwc-say></p>
+  <div class=btnrow><button class=btn type=button data-close>Cancel</button><button class="btn primary" type=button id=pwc-go>Change</button></div>
+</div></dialog>
+
+<dialog id=d-pwset><div class=dlg>
+  <b>Set password</b>
+  <input class=hide autocomplete=username value=AirWriter aria-hidden=true tabindex=-1>
+  <input class=fld type=password id=pws-new placeholder="New password" autocomplete=new-password autocapitalize=off spellcheck=false maxlength=63 aria-label="New password">
+  <p>At least 8 characters. Erase All Settings removes it.</p>
+  <p class="say err" id=pws-say></p>
+  <div class=btnrow><button class=btn type=button data-close>Cancel</button><button class="btn primary" type=button id=pws-go>Set</button></div>
+</div></dialog>
+
 <dialog id=d-erase><div class=dlg>
   <b>Erase all settings?</b>
-  <p>Your Wi-Fi network, printers and every other setting are erased, and AirWriter restarts. Join the <span id=apname>AirWriter</span> network to set it up again.</p>
+  <p>Your Wi-Fi network, printers<span id=er-pw>, password</span> and every other setting are erased, and AirWriter restarts. To set it up again, join the <span id=apname>AirWriter</span> network<span id=er-label> with the password on the bottom of AirWriter</span>.</p>
   <div class=btnrow><button class=btn type=button data-close>Cancel</button><button class="btn danger primary" type=button id=erase>Erase</button></div>
 </div></dialog>
 

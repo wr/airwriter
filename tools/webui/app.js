@@ -1,13 +1,18 @@
 const $=i=>document.getElementById(i), $$=s=>[...document.querySelectorAll(s)];
 
 /* ── helpers ───────────────────────────────────────────────────────── */
+let SIGNIN=false;
 const cap=s=>s?s[0].toUpperCase()+s.slice(1):'';
 const plural=(n,one,many)=>n+' '+(n===1?one:many);
 /* Every ask has a time limit: a board that has gone away never answers at
    all, and a fetch would wait for minutes. */
 function fetchIn(url,ms,opt){
+  // W-1156: once the board says sign in, every other ask waits for the reload signing in makes
+  if(SIGNIN&&url.indexOf('/api/auth/')!==0) return new Promise(()=>{});
   const c=new AbortController(), t=setTimeout(()=>c.abort(),ms||8000);
-  return fetch(url,Object.assign({signal:c.signal,cache:'no-store'},opt)).finally(()=>clearTimeout(t));
+  return fetch(url,Object.assign({signal:c.signal,cache:'no-store'},opt)).finally(()=>clearTimeout(t))
+    .then(r=>{ if(r.status===401&&url.indexOf('/api/auth/')!==0)
+      r.clone().json().then(b=>needSignin(b.label!==false),()=>needSignin(true)); return r; });
 }
 async function getJSON(url,ms){
   try{ const r=await fetchIn(url,ms); return r.ok?await r.json():null; }catch(e){ return null; }
@@ -591,6 +596,7 @@ function draw(s){
   drawDips(s.dip,s.lt_port);
   drawBoard(s);
   $('apname').textContent=s.ap||'AirWriter';
+  drawPassword(s.pw||'none');
   // in setup mode only the printer, Wi-Fi and About make sense
   for(const id of ['airprint','appletalk'])
     document.querySelector('.nav [data-go="'+id+'"]').classList.toggle('hide',setup);
@@ -1537,8 +1543,101 @@ $('restart').onclick=async()=>{
 $('erase').onclick=async()=>{
   const r=await postJSON('/api/erase');
   if(r.error){ $('d-erase').close(); say('about-say',r.error,1); return; }
-  waitFor('Erasing','AirWriter is starting over. Join the '+esc($('apname').textContent)+' network to set it up again.',false);
+  const label=S.pw==='label'||S.pw==='changed';
+  waitFor('Erasing','AirWriter is starting over. Join the '+esc($('apname').textContent)+' network'
+    +(label?' with the password on the bottom of AirWriter':'')+' to set it up again.',false);
 };
+
+/* ── the password (W-1156) ─────────────────────────────────────────── */
+/* The page proves the password with a challenge from the board, so it never
+   crosses the network (crypto.js). A first answer of 400 is a challenge the
+   board no longer has (it restarted): one more try with a fresh one. */
+const PW_LEDE={true:'Enter the password on the bottom of AirWriter, unless you’ve changed it.',
+  false:'Enter AirWriter’s password.'};
+function needSignin(label){
+  if(SIGNIN) return;
+  SIGNIN=true;
+  for(const d of $$('dialog')) if(d.open) d.close();
+  $('si-lede').textContent=PW_LEDE[!!label];
+  document.body.classList.add('setupmode','in');
+  for(const p of $$('.pane')) p.classList.toggle('on',p.id==='p-signin');
+  setLost(false);
+  setTimeout(()=>$('si-pw').focus(),0);
+}
+function pwProblem(p){
+  if(p.length<8) return 'Use at least 8 characters.';
+  if(p.length>63||!/^[\x20-\x7e]+$/.test(p)) return 'Use letters, numbers and punctuation only.';
+  return '';
+}
+/* A fresh challenge, and the key password pw makes with the board's salt. */
+async function pwProve(pw){
+  const n=await getJSON('/api/auth/nonce',8000);
+  if(!n) return null;
+  return {nonce:n.nonce,K:awPbkdf2(awUtf8(pw),awUnhex(n.salt),n.iter)};
+}
+$('si').onsubmit=async e=>{
+  e.preventDefault();
+  const pw=$('si-pw').value, go=$('si-go');
+  if(!pw||go.disabled) return;
+  go.disabled=true; say('si-say','');
+  for(let tries=0;tries<2;tries++){
+    const p=await pwProve(pw);
+    let r=null;
+    if(p) r=await fetchIn('/api/auth/signin',30000,{method:'POST',
+      body:JSON.stringify({nonce:p.nonce,proof:awSignProof(p.K,'signin',p.nonce)})}).catch(()=>null);
+    if(!r){ say('si-say','Can’t reach AirWriter.',1); break; }
+    if(r.ok){ location.reload(); return; }
+    if(r.status===400&&!tries) continue;
+    const t=(await r.text()).trim()||'Try again.';
+    say('si-say',t,1);
+    if(r.status===429){
+      const wait=Math.max(1,+r.headers.get('Retry-After')||60);
+      setTimeout(()=>{ go.disabled=false; say('si-say',''); },wait*1000);
+      return;
+    }
+    break;
+  }
+  go.disabled=false;
+  $('si-pw').select();
+};
+function drawPassword(pw){
+  $('pw-val').textContent={label:'From the label',changed:'Changed',set:'On',none:'None'}[pw]||'';
+  $('pw-btn').textContent=pw==='none'?'Set…':'Change…';
+  $('pw-btn').dataset.dlg=pw==='none'?'d-pwset':'d-pwchange';
+  $('br-row').classList.toggle('hide',pw==='none'||setup);
+  $('pwc-help').textContent='At least 8 characters. Erase All Settings '
+    +(pw==='set'?'removes it.':'brings back the one on the label.');
+  $('er-pw').classList.toggle('hide',pw==='none');
+  $('er-label').classList.toggle('hide',!(pw==='label'||pw==='changed'));
+}
+$('pwc-go').onclick=async()=>{
+  const cur=$('pwc-cur').value, nw=$('pwc-new').value, bad=pwProblem(nw), go=$('pwc-go');
+  if(!cur) return say('pwc-say','Wrong password.',1);
+  if(bad) return say('pwc-say',bad,1);
+  go.disabled=true; say('pwc-say','');
+  let r;
+  for(let tries=0;tries<2;tries++){
+    const p=await pwProve(cur);
+    r=p?await postJSON('/api/auth/password',{nonce:p.nonce,proof:awSignProof(p.K,'change',p.nonce),
+      enc:awChangeSeal(p.K,p.nonce,nw)}):{error:'Can’t reach AirWriter.'};
+    if(r.error!=='Try again.'||tries) break;
+  }
+  go.disabled=false;
+  if(r.error) return say('pwc-say',r.error,1);
+  $('pwc-cur').value=$('pwc-new').value='';
+  $('d-pwchange').close(); say('about-say','Password changed.',0,4000); poll();
+};
+$('pws-go').onclick=async()=>{
+  const nw=$('pws-new').value, bad=pwProblem(nw), go=$('pws-go');
+  if(bad) return say('pws-say',bad,1);
+  go.disabled=true; say('pws-say','');
+  const r=await postJSON('/api/auth/password',{new:nw});
+  go.disabled=false;
+  if(r.error) return say('pws-say',r.error,1);
+  $('pws-new').value='';
+  $('d-pwset').close(); say('about-say','Password set.',0,4000); poll();
+};
+$('signout').onclick=async()=>{ await postJSON('/api/auth/signout'); location.reload(); };
 /* Which board this is (W-1109), and the LC's name. Rev 2026.11 has no DIP switches, so its one
    switch that still does something, Rainbow status lights, is on the page. */
 function drawBoard(s){
