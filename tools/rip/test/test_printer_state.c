@@ -409,6 +409,25 @@ int main(void)
     v = ps_update(&ps, 8000);
     assert(v.state == PS_READY && v.prev == PS_PRINTING && !v.cancelled);
 
+    // W-1165: the test button's stop shows at the tap. The panel goes to Ready with the
+    // Cancelled moment while a sheet already in the printer finishes; the job's own end,
+    // seconds later, changes nothing on the panel: no second moment, no Printing again.
+    up_and_ready(&ps, 0);
+    ps_post(&ps, PS_EV_JOB_START, 5000);
+    assert(st(&ps, 5000) == PS_PRINTING);
+    ps_post(&ps, PS_EV_JOB_CANCELLED, 6000);         // the tap
+    v = ps_update(&ps, 6000);
+    assert(v.state == PS_READY && v.prev == PS_PRINTING && v.cancelled && v.since_ms == 0);
+    ps_post(&ps, PS_EV_JOB_CANCELLED, 23000);        // the sheet is out, the job ends
+    v = ps_update(&ps, 23000);
+    assert(v.state == PS_READY && v.prev == PS_PRINTING && v.cancelled && v.since_ms == 17000);
+    ps_post(&ps, PS_EV_JOB_DONE, 24000);             // or it ends as printed: the same
+    v = ps_update(&ps, 24000);
+    assert(v.state == PS_READY && v.since_ms == 18000);
+    ps_post(&ps, PS_EV_JOB_START, 25000);            // and the next job prints as ever
+    v = ps_update(&ps, 25000);
+    assert(v.state == PS_PRINTING && !v.cancelled);
+
     assert(strcmp(ps_name(PS_READY), "ready") == 0);
     assert(strcmp(ps_name(PS_OFFLINE), "offline") == 0);
     assert(strcmp(ps_name(PS_ATTENTION), "attention") == 0);

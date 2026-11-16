@@ -97,6 +97,39 @@ int main(void)
     CHECK_EQ_INT(k.state, IPP_JSTATE_CANCELED);
     CHECK_EQ_INT(ipp_job_cancel(&k, 14), IPP_CANCEL_NOT_POSSIBLE);
 
+    /* W-1165: the test button stops the job at the printer. Canceled at once, as
+     * Cancel-Job is, but the phone or Mac is told the printer stopped it; the done
+     * that follows keeps it so, and a Cancel-Job after it is not possible. */
+    ipp_job_start(&k, 17, 960, "", "", URI);
+    CHECK_EQ_INT(ipp_job_cancel_at_device(&k), IPP_CANCEL_STOP_PRINT);
+    CHECK_EQ_INT(k.state, IPP_JSTATE_CANCELED);
+    CHECK_EQ_INT(k.printing, 1);
+    ipp_job_view(&k, 1, &st, &why);
+    CHECK_EQ_INT(st, IPP_JSTATE_CANCELED);
+    CHECK(strcmp(why, "job-canceled-at-device") == 0);
+    CHECK_EQ_INT(ipp_job_cancel_at_device(&k), IPP_CANCEL_NOT_POSSIBLE);
+    CHECK_EQ_INT(ipp_job_done(&k, 0), 1);
+    ipp_job_view(&k, 0, &st, &why);
+    CHECK_EQ_INT(st, IPP_JSTATE_CANCELED);
+    CHECK(strcmp(why, "job-canceled-at-device") == 0);
+    /* macOS sends Cancel-Job once it reads that, and shows a refusal on its queue as
+     * "Unable to cancel print job.": the job is already what it asks, so it is told so,
+     * with nothing more to stop, before the end as after it. A job its own client
+     * canceled is still refused a second time (job 14 above). */
+    CHECK_EQ_INT(ipp_job_cancel(&k, 17), IPP_CANCEL_ALREADY);
+    CHECK_EQ_INT(ipp_job_cancel(&k, -1), IPP_CANCEL_ALREADY);
+    CHECK_EQ_INT(k.state, IPP_JSTATE_CANCELED);
+    CHECK_EQ_INT(ipp_job_cancel(&k, 18), IPP_CANCEL_NOT_FOUND);
+    ipp_job_start(&k, 19, 970, "", "", URI);
+    CHECK_EQ_INT(ipp_job_cancel_at_device(&k), IPP_CANCEL_STOP_PRINT);
+    CHECK_EQ_INT(ipp_job_cancel(&k, 19), IPP_CANCEL_ALREADY);     /* still printing */
+    CHECK_EQ_INT(k.printing, 1);
+    CHECK_EQ_INT(ipp_job_done(&k, 0), 1);
+    /* Nothing printing, nothing to stop. */
+    CHECK_EQ_INT(ipp_job_cancel_at_device(&k), IPP_CANCEL_NOT_POSSIBLE);
+    ipp_job_rec_t idle = {0};
+    CHECK_EQ_INT(ipp_job_cancel_at_device(&idle), IPP_CANCEL_NOT_FOUND);
+
     /* W-1141: the pages printed so far, which a phone shows as "Printing 3 of 5". A job
      * starts at none, its count moves only up while it prints, and a finished job keeps its
      * count: a late report never lands on it, and the next job starts again at none. */

@@ -3,6 +3,14 @@
 Linear: W-1037. Written 2026-10-14, after rev A bring-up. Supersedes the "States" bullet of
 `2026-08-20-dot-panel-cover-design.md` §5 and the teal-only material model in its §1 table.
 
+**Amended 2026-11-16** (`W-1165 A tap of the test button stops any print job`): a tap stops
+whatever prints, anyone's job and not only the test page, and the panel shows Cancelled at the
+tap, though a sheet already in the printer still comes out; Busy is for a tap the board can't act
+on. Wells picked showing the stop at the tap from three previews (at the tap; the frozen print
+held dim until the sheet is out; Saved's ring at the tap, Cancelled at the end) and approved it
+on board 1 with the Personal LaserWriter 300, whose last sheet takes up to 17 s. See Cancelled,
+Busy and the test button below.
+
 **Amended 2026-11-16** (`W-1162 Remove the DIP switch code: rev A boards ignore S1, the page's switches decide`): gamer mode is Rainbow status lights, a switch on the settings
 page's About on every board, not DIP7, and no DIP change wakes the panel: no board reads its
 switches.
@@ -247,15 +255,17 @@ normal cap except in red phases (alert cap); mask dots use the mask cap.
 | Printer gone | Ready → Printer offline | the white drains toward the printer socket: a front runs from the far corner to the socket in 1.1 s with a white glint (100%, ±130 ms), each dot going dark as it passes, the embers fading in 250–900 ms behind it. FR4 only. | 2 s |
 | Printer back | Printer offline → Ready, or Needs attention → Printing | a green wave (hue 130° ±14°, 100%) rolls out of the printer socket, crossing the panel in 1.1 s; ahead of it the old state, behind it green cross-fading to the new state over 150–900 ms after it passes. FR4 only from offline; all dots from attention (Printing's dots). | 2 s |
 | Page out | Printing → Ready, the job finished | the inked sheet rises off the top: its bottom edge climbs from row 8.5 to −1.5 in 0.9 s, the ink in bands (33–100%, period 3 rows) scrolling up with it; the job's ink (warm, or the stripes for LocalTalk); Ready below the edge; mask dots carry the ink and go dark below it. | 1 s |
-| Cancelled | Printing → Ready, the job cancelled | the print freezes where it stood (Printing's frame at the moment of the cancel) and fades out over 0.6 s; Ready fades in 0.3–0.9 s. No page out. | 0.9 s |
+| Cancelled | Printing → Ready, the job cancelled; for a tap of the test button, at the tap | the print freezes where it stood (Printing's frame at the moment of the cancel) and fades out over 0.6 s; Ready fades in 0.3–0.9 s. No page out. | 0.9 s |
 | Could not join | Setup after the saved network was tried and failed (from Joining, or straight from the boot wave; `ps_view_t.join_failed`) | two red pulses (hue 2° ±8°, 500 ms each, peak 100%) on all dots, FR4 at the alert cap, then Setup fades in 1.0–1.6 s. FeatherFrame's failed-join signal. | 1.6 s |
 
 Any other change of state opens with no moment: the new state shows as it is (a job cancelled
 while it waits for paper goes from Needs attention straight to Printer offline's embers).
 
-"Cancelled" covers a second tap of the test button during its page and an IPP Cancel-Job. A
-LocalTalk job always ends as finished: a Mac that cancels closes the connection like one that is
-done, and the two can't be told apart.
+"Cancelled" covers a tap of the test button during any job (W-1165) and an IPP Cancel-Job. The
+tap's shows at once (`PS_EV_JOB_CANCELLED` from the button): a sheet already in the printer still
+comes out, a laser's for up to 17 s, and the job's own end after it changes nothing on the panel.
+A LocalTalk job its Mac cancels ends as finished: a Mac that cancels closes the connection like
+one that is done, and the two can't be told apart.
 
 **LocalTalk printing.** Printing keeps its print head for every job, and the ink says whose job
 it is: AirPrint and the test page ink warm (as above); a LocalTalk (PAP) job inks each row in
@@ -283,16 +293,26 @@ holds until the restart. The update's own flow decides when; W-1048 drives it.
 |---|---|---|---|
 | LocalTalk on | the node has its node ID (at boot in DIP mode 2, or when mode 2 is switched on) | the stripes come out of the LocalTalk socket, down from the top as seen from the front: a front runs from row −1.5 to 8.5 in 0.7 s, rows above it at 72% with a crest to 100%; holds; fades out 1.0–1.6 s. All dots. | 1.6 s |
 | A Mac heard | an NBP LkUp answered (a Chooser looking), or a frame from a node not heard since boot; at most once every 6 s | an arc of stripes out of the LocalTalk socket, crossing the panel in 0.9 s (100% at the crest, ±0.7 rows), fading out 0.8–1.1 s. All dots. | 1.1 s |
-| Busy | the test button tapped during an IPP or LocalTalk job | two orange pulses (hue 30° ±4°, 300 ms each, peak 100%) on the dots around the test button (distance 0.5–1.6) | 0.6 s |
+| Busy | the test button tapped while the board is busy with something a tap doesn't stop (an update, a cable test, a head cleaning), or while a stopped job's last sheet finishes | two orange pulses (hue 30° ±4°, 300 ms each, peak 100%) on the dots around the test button (distance 0.5–1.6) | 0.6 s |
 | Saved | settings saved on the web page; for Wi-Fi, just before its restart | a white ring closes into the test button in 0.6 s (100% at the ring), then the dots around the button glow 75% and fade out by 0.9 s. FR4 only: under the mask white turns mint. | 0.9 s |
 
-**The test button.** A tap while the test page prints cancels it: the page stops (the write is
-aborted and the queue purged, as a Cancel-Job does), it ends as cancelled, and W-1041's resync
-runs before the next job. A cancel that comes too late to cut anything is a page that printed.
-A tap during an IPP or LocalTalk job, or a cable test, shows Busy and does nothing else.
-Otherwise a tap tests the cable when the printer is not ready (W-1055) and prints the test page
-when it is. The tap and the page's end decide under one lock, so a tap as the page finishes
-never lands on the next job. A hold is the factory reset (unchanged).
+**The test button.** A tap while anything prints stops it (W-1165), and the panel shows
+Cancelled at once:
+- the test page: the page stops (the write is aborted and the queue purged, as a Cancel-Job
+  does), it ends as cancelled, and W-1041's resync runs before the next job;
+- an AirPrint job to any printer: as a Cancel-Job, and its phone or Mac reads it as cancelled
+  at the printer (SPEC 3.4);
+- a vintage Mac's job to the port's printer: the rest is dropped and the Mac's connection is
+  ended, as when the printer gives up (`at_job_stop`), and the job ends cancelled;
+- a vintage Mac's job the relay carries to a LaserWriter: the printer's connection is cancelled
+  and the Mac's ends with it (`pap_relay_stop`).
+
+What is already in the printer comes out: a laser's sheet once it has started, the few lines in
+an ImageWriter's buffer. A tap while that finishes, or during a firmware update, a cable test, a
+head cleaning or a TashTalk flash, shows Busy and does nothing else. Otherwise a tap tests the
+cable when the printer is not ready (W-1055) and prints the test page when it is. Each kind of
+job takes a tap and its own end under one lock, so a tap as a job finishes never lands on the
+next one. A hold is the factory reset (unchanged).
 
 **Held back** (Wells, 2026-10-16), not built: update kept (the trial passed), update refused,
 update rolled back, and DIP switch flipped. Their `lg_act_t` values stay, because W-1048 calls

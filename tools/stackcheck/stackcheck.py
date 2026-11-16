@@ -47,6 +47,10 @@ def roots(build):
         # W-1156: a password change derives its key in the handler (httpd's own frames come on top).
         ('webui_auth_post', define(os.path.join(comp, 'webui/webui.c'), 'WEBUI_STACK'),
          "the web server's sign-in handler, WEBUI_STACK"),
+        # W-1165: a tap stops whatever prints, from the button's poll task (btn_task calls it
+        # through a pointer, which GCC's count does not follow, so the root is the tap itself).
+        ('test_button', define(os.path.join(comp, 'test_button/test_button.c'), 'BTN_STACK'),
+         "the test button's poll task, a tap (main.c), BTN_STACK"),
     ]
 
 

@@ -63,6 +63,14 @@ ps_view_t printer_state_view(void)
     return v;
 }
 
+int printer_state_job(void)
+{
+    xSemaphoreTake(s_mtx, portMAX_DELAY);
+    int job = s_ps.job;
+    xSemaphoreGive(s_mtx);
+    return job;
+}
+
 int printer_state_want_kick(void)
 {
     xSemaphoreTake(s_mtx, portMAX_DELAY);

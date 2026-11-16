@@ -515,7 +515,8 @@ static int dispatch(work_t *w, int fd, const ipp_req_t *r, hbody_t *body,
             return send_status(w, fd, r, IPP_STATUS_ERR_NOT_FOUND, keep_alive);
         if (c == IPP_CANCEL_NOT_POSSIBLE)
             return send_status(w, fd, r, IPP_STATUS_ERR_NOT_POSSIBLE, keep_alive);
-        ESP_LOGI(TAG, "job %d canceled", (int)id);
+        if (c == IPP_CANCEL_ALREADY) ESP_LOGI(TAG, "job %d: already canceled at the printer", (int)id);
+        else ESP_LOGI(TAG, "job %d canceled", (int)id);
         return send_status(w, fd, r, IPP_STATUS_OK, keep_alive);
     }
 
@@ -962,6 +963,27 @@ void ipp_server_job_done_for(int idx, int ok)
 }
 
 void ipp_server_job_done(int ok) { ipp_server_job_done_for(0, ok); }
+
+int ipp_server_cancel_printing(void)
+{
+    if (!s_p) return 0;
+    int n = 0;
+    for (int i = 0; i < IPP_PRINTERS; i++) {
+        printer_t *p = &s_p[i];
+        // As Cancel-Job does: the paper stops under the lock, so the job cannot end in
+        // between and hand the printer to the next one, which the cancel would land on.
+        xSemaphoreTake(s_job_lock, portMAX_DELAY);
+        int32_t id = p->job.id;
+        int stop = ipp_job_cancel_at_device(&p->job) == IPP_CANCEL_STOP_PRINT;
+        if (stop && p->sink.cancel) p->sink.cancel(p->sink.ctx);
+        xSemaphoreGive(s_job_lock);
+        if (stop) {
+            ESP_LOGI(TAG, "printer %d job %d canceled at the printer", i, (int)id);
+            n++;
+        }
+    }
+    return n;
+}
 
 void ipp_server_set_stopped_for(int idx, const char *reason_or_null, const char *message)
 {

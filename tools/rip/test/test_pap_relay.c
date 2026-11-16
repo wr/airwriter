@@ -329,6 +329,39 @@ static void test_relay_close_mid_job(void)
     CHECK(!node[PRN].pap.open);
 }
 
+// W-1165: the test button stops a Mac's job partway: the printer's connection is
+// cancelled, the Mac's ends with it, and the relay is free for the next job.
+static void test_relay_stop(void)
+{
+    setup(40 * 1024, 0);
+    CHECK_EQ_INT(pap_relay_stop(&relay), 0);       // nothing relayed: nothing to stop
+    CHECK_EQ_INT(papc_open_multi(mc, &B_REG, 60000, T), 0);
+    while (T < 60000 && p_job_n < 8192) step();
+    CHECK(p_job_n >= 8192 && p_job_n < 40 * 1024);
+    CHECK_EQ_INT(pap_relay_stop(&relay), 1);
+    CHECK_EQ_INT(pap_relay_stop(&relay), 1);       // a second tap before the tick: the same stop
+    run_until(T + 40000);
+    CHECK(acts & PR_RELAY_DO_CANCEL);
+    CHECK(acts & PR_RELAY_DO_ABORT_MAC);
+    CHECK(!(acts & (PR_RELAY_DO_CLOSE | PR_RELAY_DO_FINISH)));
+    CHECK_EQ_INT(bc_end, PAPC_END_CANCELED);
+    CHECK(m_end >= 0 && m_end != PAPC_END_OK);     // the Mac hears its job did not print
+    CHECK(p_job_n < 40 * 1024);
+    CHECK_EQ_INT(done_seen, 1);
+    CHECK(!pap_relay_active(&relay));
+    CHECK(!node[BOARD_B].pap.open);
+    CHECK(!node[PRN].pap.open);
+    CHECK_EQ_INT(pap_relay_stop(&relay), 0);       // over: nothing left to stop
+
+    // The next Mac's job goes through whole: the stop went with the last one.
+    setup(20 * 1024, 0);
+    CHECK_EQ_INT(papc_open(mc, &B_REG, 60000, T), 0);
+    run_until(T + 120000);
+    CHECK_EQ_INT(bc_end, PAPC_END_OK);
+    CHECK_EQ_INT((int)p_job_n, 20 * 1024);
+    CHECK(!(acts & PR_RELAY_DO_CANCEL));
+}
+
 // W-1095: the SE/30's driver closes as soon as its last EOF is out, before
 // the printer's, with the document's tail still in the relay. A LaserWriter
 // would have every byte by then and print it: the printer still gets the
@@ -426,5 +459,6 @@ int main(void)
     test_relay_jobs();
     test_relay_close_mid_job();
     test_relay_close_after_eof();
+    test_relay_stop();
     TEST_END;
 }

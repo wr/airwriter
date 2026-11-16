@@ -49,13 +49,28 @@ int ipp_job_done(ipp_job_rec_t *j, int ok)
     return 1;
 }
 
-ipp_cancel_t ipp_job_cancel(ipp_job_rec_t *j, int32_t id)
+static ipp_cancel_t cancel(ipp_job_rec_t *j, int32_t id, uint8_t by)
 {
     if (!ipp_job_matches(j, id)) return IPP_CANCEL_NOT_FOUND;
+    // W-1165: macOS sends Cancel-Job when it reads job-canceled-at-device, and shows
+    // a refusal (RFC 8011 4.3.3's not-possible) under the printer's name as "Unable to
+    // cancel print job.". The job is already what it asks for.
+    if (by == IPP_CANCELED_BY_USER && j->canceled == IPP_CANCELED_AT_DEVICE)
+        return IPP_CANCEL_ALREADY;
     if (!ipp_job_active(j)) return IPP_CANCEL_NOT_POSSIBLE;
-    j->canceled = 1;
+    j->canceled = by;
     j->state = IPP_JSTATE_CANCELED;
     return IPP_CANCEL_STOP_PRINT;
+}
+
+ipp_cancel_t ipp_job_cancel(ipp_job_rec_t *j, int32_t id)
+{
+    return cancel(j, id, IPP_CANCELED_BY_USER);
+}
+
+ipp_cancel_t ipp_job_cancel_at_device(ipp_job_rec_t *j)
+{
+    return cancel(j, -1, IPP_CANCELED_AT_DEVICE);
 }
 
 void ipp_job_pages(ipp_job_rec_t *j, int32_t pages)
@@ -79,7 +94,10 @@ void ipp_job_view(const ipp_job_rec_t *j, int printer_stopped,
         }
         break;
     case IPP_JSTATE_COMPLETED: *reason = "job-completed-successfully"; break;
-    case IPP_JSTATE_CANCELED:  *reason = "job-canceled-by-user";       break;
+    case IPP_JSTATE_CANCELED:
+        *reason = j->canceled == IPP_CANCELED_AT_DEVICE ? "job-canceled-at-device"
+                                                        : "job-canceled-by-user";
+        break;
     case IPP_JSTATE_ABORTED:   *reason = "aborted-by-system";          break;
     default:                   *reason = "none";                       break;
     }

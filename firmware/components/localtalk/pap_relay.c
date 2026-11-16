@@ -33,7 +33,7 @@ static void empty(pap_relay_t *r)
 {
     r->m2p.head = r->m2p.tail = r->p2m.head = r->p2m.tail = 0;
     r->asked = r->mac_eof = r->mac_gone = r->mac_had = r->prn_open = 0;
-    r->prn_ended = r->cancelled = r->aborted = 0;
+    r->prn_ended = r->cancelled = r->aborted = r->stop = 0;
     r->prn_eof = r->mac_mid = r->told = r->closed = 0;
     r->answered = 0;
     r->prn_end = -1;
@@ -79,6 +79,16 @@ int pap_relay_mac_open(pap_relay_t *r, const lt_node_t *mac, int reg, uint64_t n
 
 int pap_relay_active(const pap_relay_t *r) { return r->state != PR_RELAY_IDLE; }
 
+int pap_relay_stop(pap_relay_t *r)
+{
+    L(r);
+    // Only a Mac's job under way: until then the Mac hears busy and nothing prints.
+    int k = r->state == PR_RELAY_BOTH && !r->prn_ended && (!r->cancelled || r->stop);
+    if (k) r->stop = 1;
+    U(r);
+    return k;
+}
+
 int pap_relay_tick(pap_relay_t *r, uint64_t now)
 {
     int act = 0;
@@ -109,6 +119,12 @@ int pap_relay_tick(pap_relay_t *r, uint64_t now)
         // W-1095: between jobs the Mac's last EOF has gone to the printer and
         // the printer has answered it with its own.
         int between = !r->mac_mid && !r->mac_eof && r->answered >= r->jobs;
+        // W-1165: stopped by the test button. Cancelled, as when the Mac goes mid-job: the
+        // printer's job ends, and the Mac's connection with it, below.
+        if (r->stop && !r->prn_ended && !r->cancelled) {
+            r->cancelled = 1;
+            act |= PR_RELAY_DO_CANCEL;
+        }
         // The Mac is done or gone: between jobs the printer's closes normally;
         // after its EOF (its driver closes before the printer's) the job is
         // all here, and a LaserWriter would print it: the rest goes to the

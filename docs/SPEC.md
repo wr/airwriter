@@ -274,7 +274,12 @@ Minimum viable set for iOS:
   pages printed so far as `job-impressions-completed` and `job-media-sheets-completed` (3.5,
   W-1141)
 - `Get-Jobs` (0x000A)
-- `Cancel-Job` (0x0008)
+- `Cancel-Job` (0x0008). The test button stops a printing job too (W-1165,
+  `ipp_server_cancel_printing`): the job ends `canceled` with `job-canceled-at-device`. macOS
+  sends Cancel-Job when it reads that reason, and shows a refusal under the printer's name as
+  "Unable to cancel print job.", so a Cancel-Job for a job stopped at the printer is answered
+  `successful-ok` (`IPP_CANCEL_ALREADY`), not RFC 8011's `client-error-not-possible`. A second
+  Cancel-Job for a job its client canceled is still refused.
 
 Return `server-error-operation-not-supported` for everything else rather than dropping the
 connection.
@@ -567,7 +572,8 @@ slot the power-up reset boots) and `known_good_version`.
 
 **Factory reset, two levels, both on the test button** (SW3, IO14):
 
-- *Settings*, in the app (W-1045). A tap (under 1 s) prints a test page, on release. Held
+- *Settings*, in the app (W-1045). A tap (under 1 s) prints a test page, on release; while
+  anything prints, a tap stops it (W-1165; the status-language design's test button). Held
   past 1 s the panel counts down; letting go cancels. At 8 s the whole nvs partition is erased
   (Wi-Fi, queue name, hostname, dither, the LocalTalk node ID) and the board restarts once the
   button is let go. The firmware stays.
