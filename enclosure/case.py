@@ -189,6 +189,16 @@ def foot_pockets() -> Part:
     return out
 
 
+def label_recess() -> Part:
+    """A LABEL_DEPTH recess in the middle of the floor's underside for a
+    2.5 x 1.25 in label, its long side front to back, LABEL_CLEAR round it."""
+    h = p.LABEL_DEPTH + 0.01  # opens through the underside cleanly
+    return _rounded_box(
+        p.LABEL_W + 2 * p.LABEL_CLEAR, p.LABEL_L + 2 * p.LABEL_CLEAR, h,
+        p.BOARD_W / 2, p.BOARD_L / 2, p.Z_FLOOR_BOTTOM - 0.01 + h / 2,
+        p.LABEL_R)
+
+
 _STEP_CACHE: dict[str, Part] = {}
 
 
@@ -604,6 +614,7 @@ def tray() -> Part:
     anyway.
     """
     body = shell() + standoffs()
-    tray = body - screw_holes() - foot_pockets() - port_cutouts() - reset_pinhole()
+    tray = (body - screw_holes() - foot_pockets() - label_recess() - port_cutouts()
+            - reset_pinhole())
     slot = dip_slot()
     return tray - slot if slot is not None else tray

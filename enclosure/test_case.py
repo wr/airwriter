@@ -866,6 +866,67 @@ class TestFeet(unittest.TestCase):
         self.assertAlmostEqual(p.SCREW_HEAD_DEPTH - p.FOOT_POCKET_DEPTH, 0.90, places=6)
 
 
+class TestLabelRecess(unittest.TestCase):
+    """A recess in the floor's underside for a 2.5 x 1.25 in label, its long side
+    running front to back, in the middle of the case (Wells, 2026-11-15)."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.t = case.tray()
+        cls.cx, cls.cy = p.BOARD_W / 2, p.BOARD_L / 2
+        cls.half_w = p.LABEL_W / 2 + p.LABEL_CLEAR
+        cls.half_l = p.LABEL_L / 2 + p.LABEL_CLEAR
+
+    def _plastic(self, probe):
+        hit = self.t & probe
+        return hit.volume if hit else 0.0
+
+    def test_it_is_the_label_plus_clearance_in_the_middle(self):
+        bb = case.label_recess().bounding_box()
+        self.assertAlmostEqual((bb.min.X + bb.max.X) / 2, self.cx, places=3)
+        self.assertAlmostEqual((bb.min.Y + bb.max.Y) / 2, self.cy, places=3)
+        self.assertAlmostEqual(bb.size.X, 2 * self.half_w, places=3)
+        self.assertAlmostEqual(bb.size.Y, 2 * self.half_l, places=3)
+
+    def test_a_label_lies_in_it(self):
+        # A square-cornered label, so a sheet label fits whether its corners
+        # are rounded or not.
+        from build123d import Box, Pos
+        label = Pos(self.cx, self.cy, p.Z_FLOOR_BOTTOM + p.LABEL_DEPTH / 2) * Box(
+            p.LABEL_W, p.LABEL_L, p.LABEL_DEPTH - 0.02)
+        self.assertAlmostEqual(self._plastic(label), 0.0, places=4)
+
+    def test_its_edges_and_ceiling_are_where_they_should_be(self):
+        # 0.15 inside each edge is air, 0.15 outside is plastic; just over the
+        # ceiling is plastic.
+        from build123d import Box, Pos
+        z = p.Z_FLOOR_BOTTOM + p.LABEL_DEPTH / 2
+        for dx, dy in ((self.half_w, 0), (-self.half_w, 0),
+                       (0, self.half_l), (0, -self.half_l)):
+            for k, solid in ((-1, False), (1, True)):
+                sx = math.copysign(1, dx) if dx else 0
+                sy = math.copysign(1, dy) if dy else 0
+                probe = Pos(self.cx + dx + k * 0.15 * sx, self.cy + dy + k * 0.15 * sy, z) * Box(
+                    0.1, 0.1, p.LABEL_DEPTH - 0.04)
+                want = probe.volume if solid else 0.0
+                self.assertAlmostEqual(self._plastic(probe), want, places=5,
+                                       msg=f"edge ({dx:.2f},{dy:.2f}) k={k}")
+        ceiling = Pos(self.cx, self.cy, p.Z_FLOOR_BOTTOM + p.LABEL_DEPTH + 0.1) * Box(
+            4.0, 4.0, 0.1)
+        self.assertAlmostEqual(self._plastic(ceiling), ceiling.volume, places=4)
+
+    def test_it_keeps_a_web_to_the_feet_and_the_chamfer(self):
+        r = p.FOOT_D / 2 + p.FOOT_POCKET_CLEAR
+        for fx, fy in case.foot_positions():
+            nx = min(max(fx, self.cx - self.half_w), self.cx + self.half_w)
+            ny = min(max(fy, self.cy - self.half_l), self.cy + self.half_l)
+            self.assertGreater(math.hypot(fx - nx, fy - ny) - r, 2.0, f"foot ({fx:.1f},{fy:.1f})")
+        flat_w = p.EXT_W / 2 - p.BOTTOM_CHAMFER
+        flat_l = p.EXT_L / 2 - p.BOTTOM_CHAMFER
+        self.assertGreater(flat_w - self.half_w, 2.0)
+        self.assertGreater(flat_l - self.half_l, 2.0)
+
+
 class TestLCLid(unittest.TestCase):
     @classmethod
     def setUpClass(cls):

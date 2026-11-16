@@ -78,7 +78,9 @@ the seat. From the same Z = -5.70 head seat, an 18 mm screw ends at Z 12.30,
 
 Press the four inserts into the **bottom** of the frame's or lid's legs before
 assembly.
-Rubber feet go on the floor's underside, over the screw counterbores.
+Rubber feet go on the floor's underside, over the screw counterbores. The
+2.5 × 1.25 in label goes in the shallow recess between them, its long side
+front to back.
 
 ## Acrylic top and frame (LC)
 
