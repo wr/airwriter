@@ -169,14 +169,15 @@ ESP-IDF 5.x, C. Project at `firmware/`. Components under `firmware/components/`:
 
 | Component | Responsibility |
 |---|---|
-| `net_provision` | Setup network (open AP, every DNS answer pointing at the setup page), NVS credential storage |
+| `net_provision` | Setup network (WPA2 with AirWriter's password, open without one; every DNS answer pointing at the setup page), NVS credential storage |
 | `ipp_server` | IPP/1.1 over HTTP on port 631 |
 | `ipp_attrs` | Printer attribute set, job attributes, state reasons |
 | `urf_decode` | URF and PWG raster stream decoder |
 | `halftone` | Grayscale → 1bpp dithering |
 | `imagewriter` | Column transpose, escape code emission |
 | `serial_out` | UART driver with hardware CTS, DTR watchdog |
-| `webui` | Config page on port 80 |
+| `webui` | Config page on port 80, and its sign-in (§3.20) |
+| `auth` | The password: the chip's, the build's or one set on the page, and the sign-in's state (§3.20) |
 | `localtalk` | AppleTalk: the cable's LocalTalk node, EtherTalk for Basilisk II and Infinite Mac, the printer they share (§3.13) |
 | `printer_state` | Job queue and state machine |
 
@@ -1855,6 +1856,79 @@ board's. Neither image runs on the other board, and each board refuses the other
   the first, check the straps, the handshake legs through Apple's crossover, a StyleWriter
   (J2's handshake held asserted by IO47) and the Personal LaserWriter 300's clock through
   rev 2026.11's U3.
+
+### 3.20 Password and sign-in (W-1156)
+
+`W-1156 Setup and the settings page are locked by a password`; design in
+`docs/superpowers/specs/2026-11-15-setup-password-design.md`. It is what lets the EU paperwork
+self-declare EN 18031: a sold board has a password the person can't skip.
+
+**The password**, in the `auth` component (`auth_core.c`, pure and host-tested, and `auth.c`).
+It is the first of: one set or changed on the page (NVS `auth/pw`, 8 to 63 printable ASCII, WPA2's
+rules); the one burned into the chip at the bench; or, on a blank chip, the build's
+`CONFIG_AIRWRITER_TEST_PASSWORD` (empty in every release, so a bench board is tested without
+being burned). A sold board's password and serial are burned together into the user eFuse block
+(`EFUSE_BLK_USER_DATA`, BLOCK3, written once and whole):
+
+| Bytes | Holds |
+|---|---|
+| 0 | Layout version, `1` |
+| 1–16 | Serial, ASCII, zero-padded (`2652AWF2611-002`) |
+| 17–24 | Password: 8 of `abcdefghjkmnpqrstuvwxyz23456789` |
+| 25–31 | Zero (the S3's custom-MAC field, never used) |
+
+All zero is no password; anything else malformed is logged and counts as none. The serial stays
+out of the log and the page. `/api/status` carries the kind, `"pw":"label"`, `"changed"`, `"set"`
+or `"none"`, never the password. Erase All Settings and both test-button erases wipe NVS, so a
+burned board goes back to its label's password and any other board to none.
+
+**The setup network** is WPA2-PSK (CCMP) with the current password, open on a board with none.
+Its captive page never asks: joining took the password.
+
+**Signing in.** On the home network, on a board with a password, every route on port 80 but the
+page (`/` and its addresses) and `/api/auth/*` answers 401 `{"signin":true,"label":bool}` to a
+browser without a known token. The page shows its sign-in screen (laid out as setup is) on the
+first 401 and stills its other asks until signing in reloads it.
+
+1. `GET /api/auth/nonce` → `{"nonce","salt","iter"}`: a challenge good once, for 60 s (4 kept),
+   the board's salt (16 random bytes in NVS `auth/salt`, new after an erase) and 100000 rounds.
+2. The page derives `K = PBKDF2-HMAC-SHA256(password, salt, iter, 32)` and sends
+   `POST /api/auth/signin {"nonce","proof"}`, `proof = HMAC-SHA256(K, "signin" ‖ nonce)`. Plain
+   http offers no `crypto.subtle`, so the page carries its own (`tools/webui/crypto.js`).
+3. The board holds `K` (derived at boot and on a change, its time logged) and compares in
+   constant time. A right proof gets `Set-Cookie: aw=<32 hex>; Max-Age=15552000; Path=/;
+   HttpOnly; SameSite=Strict`; 8 tokens are kept in NVS `auth/tok`, the oldest pushed out.
+
+400 "Try again." is a challenge the board doesn't have (it restarted): the page tries once more
+with a fresh one. 403 "Wrong password."; after 5 in a row, 429 "Too many tries. Try again in a
+minute." with `Retry-After` for 60 s (kept in RAM). `POST /api/auth/signout` forgets the
+caller's token. `POST /api/auth/password {"nonce","proof","enc"}` changes it: the proof is made
+with `"change"` and the new password comes XORed with `HMAC-SHA256(K, "change" ‖ nonce ‖ i)` for
+i = 1, 2, so neither crosses the network; every other browser is signed out. On a board with
+none, `{"new"}` sets the first one in the clear (there is no key yet) and signs that browser in.
+Nothing is guarded in captive mode or on a board with no password; IPP on 631 and AppleTalk never
+are. `tools/webui/signin.py` signs in for `curl`.
+
+**Older firmware**: a board with a burned or test password refuses images before the first
+release with sign-in once it runs one (§3.12).
+
+**The bench** (`tools/bench/bench.py`, on a Python with Pillow) prints a whole sheet of labels
+through an AirWriter sharing the Personal LaserWriter 300: drawn at 300 dpi in pure black and
+white (nothing for the printer to screen), sent as one URF page in an IPP Print-Job. Every label
+gets a serial and a password, recorded in a private book (`labels.csv`, never in a repo). Then
+`burn` reads the board's user block (`espefuse dump --format split`), and on a blank one burns the
+next label of the kind asked for (`burn_block_data BLOCK_USR_DATA`), reads it back and records
+the MAC. Serials are one count across full and LC boards from 001, given out as a sheet prints,
+the week being the sheet's ISO week; a void label's number is never reused. The 300's image area
+is 8 in, centred on a letter page: a label within 1/4 in of the sheet's left or right edge loses
+its edge.
+
+- **Tested:** the core on the host (hashes against Python's hashlib, the block, challenges, the
+  lockout, tokens, the cookie), the page's script against the same values, the page against
+  `preview.py`'s sign-in (right and wrong, a stale challenge, the wait, change, set, signing out
+  in one tab), `signin.py` against the preview, and the bench tool (the book, the block, a sheet
+  through the rip and `qdfake.py` dot for dot, a Print-Job to `ippcap.py`, a burn against a
+  stand-in espefuse). Both builds and both stack checks. Not yet on a board; no chip is burned.
 
 ---
 

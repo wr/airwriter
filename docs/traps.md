@@ -6,6 +6,10 @@ Traps already explained in a code comment are listed only when the comment is ea
 
 ## Firmware, FreeRTOS, ESP-IDF
 
+- **An eFuse burn can't be undone.** `bench.py burn` writes the user block (BLOCK3) once and
+  for good (W-1156). Never point it at board 1 or a dev board: test a password with
+  `CONFIG_AIRWRITER_TEST_PASSWORD` instead. Bytes 25–31 are the S3's custom-MAC field; keep
+  them zero.
 - **A new Kconfig option doesn't reach an existing build directory by itself.** After an edit
   to `main/Kconfig.projbuild`, `idf.py build` in a build directory configured before it can
   compile with the old `sdkconfig.h`: a new `CONFIG_` reads as undeclared (W-1109's job buffer
@@ -267,6 +271,12 @@ Traps already explained in a code comment are listed only when the comment is ea
 
 ## Wi-Fi and network
 
+- **The setup network's password must be 8 to 63 printable ASCII.** WPA2 takes nothing else,
+  so a set or changed password follows those rules even though signing in never needs them
+  (W-1156).
+- **The settings page gets no `crypto.subtle`:** plain http isn't a secure context. It carries
+  its own SHA-256 (`crypto.js`). Keep the round constants in a closure: read as a global on
+  every round, 100000 PBKDF2 rounds took ten times as long.
 - **The home mesh: a fast scan joins the first node that answers.** It took a far node on
   channel 1 (−80 to −87 dBm) over a −46 dBm node in the same room; uploads ran at ~6 KB/s and an
   OTA failed. Firmware now scans all channels and joins the strongest AP; don't revert that.
