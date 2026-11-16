@@ -73,8 +73,8 @@ build/test_led_grid: test/test_led_grid.c \
 	$(CC) $(CFLAGS) $(INCS) -I../../firmware/components/led_grid/include \
 	  -I../../firmware/components/printer_state/include -Itest -o $@ $^ -lm
 
-build/test_dip_config: test/test_dip_config.c ../../firmware/components/dip_config/dip_config_core.c | build
-	$(CC) $(CFLAGS) $(INCS) -I../../firmware/components/dip_config/include -Itest -o $@ $^
+build/test_test_button: test/test_test_button.c ../../firmware/components/test_button/test_button_core.c | build
+	$(CC) $(CFLAGS) $(INCS) -I../../firmware/components/test_button/include -Itest -o $@ $^
 
 build/test_ota_health: test/test_ota_health.c ../../firmware/components/ota_health/ota_health_core.c | build
 	$(CC) $(CFLAGS) -I../../firmware/components/ota_health/include -Itest -o $@ $^

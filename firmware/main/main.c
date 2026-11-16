@@ -23,7 +23,7 @@
 #include "freertos/event_groups.h"
 #include "freertos/semphr.h"
 
-#include "dip_config.h"
+#include "test_button.h"
 #include "halftone.h"
 #include "imagewriter.h"
 #include "ipp_server.h"
@@ -130,11 +130,6 @@ static const char *TAG = "airwriter";
     CONFIG_AIRWRITER_BOARD_LC_PIN != 15
 #error "this sdkconfig has rev A's pins: start sdkconfig.2026.11 again from the defaults"
 #endif
-#if CONFIG_AIRWRITER_DIP1_PIN >= 0 || CONFIG_AIRWRITER_DIP2_PIN >= 0 || CONFIG_AIRWRITER_DIP3_PIN >= 0 || \
-    CONFIG_AIRWRITER_DIP4_PIN >= 0 || CONFIG_AIRWRITER_DIP5_PIN >= 0 || CONFIG_AIRWRITER_DIP6_PIN >= 0 || \
-    CONFIG_AIRWRITER_DIP7_PIN >= 0 || CONFIG_AIRWRITER_DIP8_PIN >= 0
-#error "rev 2026.11 has no DIP switches: start sdkconfig.2026.11 again from the defaults"
-#endif
 #else
 #if CONFIG_IDF_TARGET_ESP32S3 && (!CONFIG_SPIRAM_MODE_QUAD || !CONFIG_ESPTOOLPY_FLASHSIZE_8MB || \
     CONFIG_AIRWRITER_HSKI_DRV_PIN != 35 || CONFIG_AIRWRITER_J4_HSKO_DRV_PIN >= 0 || \
@@ -178,14 +173,14 @@ static size_t s_last_pages, s_last_bytes;
 static volatile int s_cleaning;
 
 // The real mutual exclusion between a real IPP job and a test page: taken
-// (blocking) at the top of doc_begin and (non-blocking) in test_page, given
+// (blocking) at the top of doc_begin and (non-blocking) for a test page, given
 // back in job_finished -- when the job has printed, not when its upload
 // ended -- and at the bottom of test_page_task. s_printing above is
 // merely the status page's idea of "busy" -- it is not itself a lock, since
 // checking it and then setting it is not atomic across tasks.
 //
-// A binary semaphore, not a mutex: test_page takes it on dip_config's poll
-// task and test_page_task gives it back, and a mutex given by a task that
+// A binary semaphore, not a mutex: a test page takes it on the test button's
+// poll task and test_page_task gives it back, and a mutex given by a task that
 // does not hold it trips FreeRTOS's priority-disinherit assert (W-1033).
 static SemaphoreHandle_t s_job_lock;
 
@@ -500,10 +495,6 @@ static char s_suffix[8];            // the MAC's last two bytes, the default hos
 // W-1079: what the page last saved, beside s_set's names in use since boot:
 // a new name or hostname reaches mDNS and the Chooser only at a restart.
 static char s_saved_model[SET_QUEUE_MAX], s_saved_name[SET_QUEUE_MAX], s_saved_host[SET_HOST_MAX];
-// The DIP bank as last read, for the page (W-1079). Unknown until the first.
-static dip_config_t s_dip;
-static volatile int s_dip_known;
-
 // W-1081: whether U7 runs TashTalk, for the AppleTalk Port card: asked at
 // boot, whenever the node starts, and after a flash. Unknown until then.
 typedef enum { LT_CHIP_UNKNOWN, LT_CHIP_OK, LT_CHIP_NONE, LT_CHIP_NO_TASHTALK,
@@ -556,15 +547,13 @@ static void general_saved(void *ctx)
         ipp_server_set_airprint(s_set.airprint);
         line_source();                       // W-1082: no ImageWriter, the LaserWriter's lights
     }
-    if (fresh.lt_port >= 0 && fresh.lt_port != s_set.lt_port) {
+    if (fresh.lt_port != s_set.lt_port) {
         s_set.lt_port = fresh.lt_port;
         lt_port_apply(s_set.lt_port);
     }
     if (fresh.rainbow != s_set.rainbow) {
         s_set.rainbow = fresh.rainbow;
-#if CONFIG_AIRWRITER_DIP7_PIN < 0
-        led_grid_set_gamer(s_set.rainbow);  // on rev A, DIP 7 decides
-#endif
+        led_grid_set_gamer(s_set.rainbow);
     }
 }
 
@@ -2088,11 +2077,7 @@ static int lt_print_end(void *ctx, int normal)
     return flushed == ESP_OK;
 }
 
-// ------------------------------------------------------------- dip / test
-// DIP1-8 select mode/dev-mode/test-on-boot/dither-override/spare; a press of
-// the test button prints a self-test page. dev_mode and dither_ovr land in
-// later milestones -- for this rev dev_mode is a log note only (each
-// printer's uuid is its record's since W-1088).
+// ------------------------------------------------------------ port / test
 
 // The port task. It runs every 500 ms and asks the printer on J2 whatever the policy
 // (port_policy.h, W-1103) says the port is due, under the job lock, taken without waiting,
@@ -2417,7 +2402,7 @@ static void kick_task(void *arg)
     }
 }
 
-// A person did something; wake the panel. From the IPP, DIP and test-button paths.
+// A person did something; wake the panel. From the IPP and test-button paths.
 static void on_activity(void)
 {
     printer_state_post(PS_EV_ACTIVITY);
@@ -2553,8 +2538,8 @@ static void test_page_task(void *arg)
 }
 
 // Starts the test page; s_job_lock is held, and the page's task gives it
-// back. Only ever spawns the real work: the caller is normally dip_config's
-// poll task, which has to stay free to keep debouncing.
+// back. Only ever spawns the real work: the caller is normally the test
+// button's poll task, which has to stay free to keep timing the button.
 static void test_page_locked(int id)
 {
     s_printing = 1;
@@ -2786,7 +2771,7 @@ static void test_page_to(int id, int port)
 // nothing asks the port and the page would hold the job lock to the stall limit -- is
 // refused, and the page's Print Test Page answers 409 "Connect <name> to the printer port
 // first." (web_test_page builds the sentence). Only the page can name such a record: the
-// button's and DIP4's target (pr_test_target) is the printer on the port, a ready shared
+// button's target (pr_test_target) is the printer on the port, a ready shared
 // printer, or the port's record for the cable test, and never a port record while a
 // Something else record is listed. 0 for the one on the port, a quiet port, or an AppleTalk
 // printer.
@@ -2800,24 +2785,6 @@ static int port_page_refused(int id, int port)
     if (!printers_port_absent(id)) return 0;
     ESP_LOGW(TAG, "test page for printer %d refused: another printer is on the printer port", id);
     return 1;
-}
-
-// DIP4 at boot. Non-blocking: a test page never queues behind whatever is
-// printing; s_job_lock is the actual mutual exclusion.
-static void test_page(void)
-{
-    on_activity();
-    int port, id = printers_test_target(&port);
-    if (id < 0) {
-        ESP_LOGW(TAG, "test page: no printer to print it on");
-        return;
-    }
-    if (xSemaphoreTake(s_job_lock, 0) != pdTRUE) {
-        ESP_LOGW(TAG, "test page requested but the printer is already busy");
-        s_job_waiting = 1;
-        return;
-    }
-    test_page_to(id, port);
 }
 
 // W-1055: the cable test, from the button or the web page, under the job lock
@@ -2938,30 +2905,6 @@ static void read_straps(void)
 #endif
 }
 
-// Latched by dip_on_change from the boot-time read, consumed once app_main
-// has brought the servers up.
-static int s_test_on_boot;
-
-static void lt_start(const char *why);
-
-static void dip_on_change(const dip_config_t *cfg)
-{
-    on_activity();
-    ESP_LOGI(TAG, "dip: mode=%u dev_mode=%u test_on_boot=%u dither_ovr=%u gamer=%u spare=%u",
-             cfg->mode, cfg->dev_mode, cfg->test_on_boot, cfg->dither_ovr, cfg->gamer,
-             cfg->spare);
-    led_grid_set_gamer(cfg->gamer);
-    if (cfg->dev_mode)
-        ESP_LOGI(TAG, "dip: dev_mode is on; it changes nothing this rev");
-    if (cfg->test_on_boot) s_test_on_boot = 1;
-    s_dip = *cfg;
-    s_dip_known = 1;
-    // W-1079: once the page has set the AppleTalk port, its switch decides.
-    if (cfg->mode == 2 && s_set.lt_port < 0) lt_start("DIP mode 2");
-    else if (localtalk_running())
-        ESP_LOGI(TAG, "dip: LocalTalk stays on until the board restarts");
-}
-
 // --------------------------------------------------------- factory reset
 // W-1045: hold the test button. Past a tap (1 s) the panel counts down; at
 // 8 s every setting is erased -- the point of no return -- and the board
@@ -3065,7 +3008,7 @@ static int web_test_page(void *ctx, int which, char *msg, size_t cap)
     return 0;
 }
 
-// On dip_config's poll task: start work, never wait on it.
+// On the test button's poll task: start work, never wait on it.
 static void on_hold(btn_ev_t ev)
 {
     switch (ev) {
@@ -3325,14 +3268,6 @@ static void status_json(void *ctx, char *buf, size_t cap)
     wifi_ap_record_t ap;
     int joined = !s_ap_mode && esp_wifi_sta_get_ap_info(&ap) == ESP_OK;
 
-    // W-1079: the DIP bank as switches 1-8, "1" for on; "" before the first read.
-    char dip[9] = "";
-    if (s_dip_known) {
-        uint8_t on = (uint8_t)(s_dip.mode | s_dip.dev_mode << 2 | s_dip.test_on_boot << 3 |
-                               s_dip.dither_ovr << 4 | s_dip.gamer << 6 | s_dip.spare << 7);
-        for (int i = 0; i < 8; i++) dip[i] = (on >> i) & 1 ? '1' : '0';
-        dip[8] = '\0';
-    }
     char e_ssid[80], e_queue[80], e_job[200], e_model[80], e_name[80], e_host[96], e_phost[96], e_uri[200];
     char e_err[96];
     // W-1103/W-1116: the printer on the port, as AirPrint names it, whichever family and
@@ -3370,7 +3305,7 @@ static void status_json(void *ctx, char *buf, size_t cap)
         "\"known_good\":\"%s\",\"known_good_version\":\"%s\","
         "\"model\":\"%s\",\"pic\":%s,"
         "\"pmodel\":\"%s\",\"pname\":\"%s\",\"phost\":\"%s\",\"airprint\":%s,"
-        "\"lt_port\":%d,\"lt\":%s,\"lt_chip\":\"%s\",\"dip\":\"%s\",\"board\":\"%s\",\"lc\":%s,"
+        "\"lt_port\":%d,\"lt\":%s,\"lt_chip\":\"%s\",\"board\":\"%s\",\"lc\":%s,"
         "\"board_ok\":%s,\"rainbow\":%s,\"ap\":\"AirWriter-%s\",\"pw\":\"%s\","
         "\"laser\":%s,\"printers\":%s,\"fresh\":%s,\"internal\":{\"free\":%u,\"lowest\":%u},"
         "\"pipe\":{\"in\":%u,\"out\":%u,\"queued\":%u,\"upload_ms\":%u,\"rip_ms\":%u,\"ms\":%u}}",
@@ -3402,7 +3337,7 @@ static void status_json(void *ctx, char *buf, size_t cap)
         json_esc(e_model, sizeof e_model, s_saved_model), json_esc(e_name, sizeof e_name, s_saved_name),
         json_esc(e_phost, sizeof e_phost, s_saved_host), s_set.airprint ? "true" : "false", s_set.lt_port,
         localtalk_serving() ? "true" : "false", lt_chip_name(s_lt_chip),
-        dip, BOARD_NAME, s_board_lc ? "true" : "false", s_board_ok ? "true" : "false",
+        BOARD_NAME, s_board_lc ? "true" : "false", s_board_ok ? "true" : "false",
         s_set.rainbow ? "true" : "false", s_suffix, auth_kind_name(), laser, printers,
         settings_fresh() ? "true" : "false",
         // Internal RAM is what Wi-Fi and lwIP live on: below ~20 KB, replies stall.
@@ -3512,7 +3447,7 @@ static lt_chip_t lt_chip_check(void)
     }
 }
 
-static SemaphoreHandle_t s_lt_mx;   // one start or probe at a time: DIP task, page, boot
+static SemaphoreHandle_t s_lt_mx;   // one start or probe at a time: page, boot
 
 static localtalk_cfg_t lt_cfg(void)
 {
@@ -3530,7 +3465,7 @@ static localtalk_cfg_t lt_cfg(void)
 }
 #endif
 
-// W-1051: the LocalTalk node, in DIP mode 2 or on a bench build. It owns its
+// W-1051: the LocalTalk node, with the AppleTalk port on or on a bench build. It owns its
 // UART and the PIC's pins from here until reboot, unless TashTalk is not
 // there to take them (W-1081): then it does not start, and says why.
 // probe_only asks U7 the same way and leaves the node off.
@@ -3542,7 +3477,7 @@ static void lt_go(const char *why, int probe_only)
         xSemaphoreGive(s_lt_mx);
         return;
     }
-    // A DIP flip mid cable test: let the test give UART2 back first.
+    // Started mid cable test: let the test give UART2 back first.
     for (int i = 0; i < 30 && cable_test_lt_busy(); i++) vTaskDelay(pdMS_TO_TICKS(10));
     localtalk_cfg_t c = lt_cfg();
     esp_err_t err = probe_only ? localtalk_probe(&c) : localtalk_start(&c);
@@ -3564,14 +3499,14 @@ static void lt_go(const char *why, int probe_only)
 
 static void lt_start(const char *why) { lt_go(why, 0); }
 
-// Whether the node should run: the page's switch once it has been used, else
-// DIP mode 2. A bench build always runs it, quiet while switched off.
+// Whether the node should run: the page's switch. A bench build always runs
+// it, quiet while switched off.
 static int lt_wanted(void)
 {
 #if CONFIG_AIRWRITER_LT_BENCH
     return 1;
 #else
-    return s_set.lt_port >= 0 ? s_set.lt_port == 1 : s_dip_known && s_dip.mode == 2;
+    return s_set.lt_port == 1;
 #endif
 }
 
@@ -3645,7 +3580,7 @@ static void laser_links(int cable, int tunnel, int radio)
 }
 
 // W-1076, W-1078: EtherTalk for Macs on this network, Basilisk II and
-// Infinite Mac, whatever the DIP mode, once the station has an address. Each
+// Infinite Mac, whatever the AppleTalk port, once the station has an address. Each
 // way in is a setting.
 static void et_start(void)
 {
@@ -3936,10 +3871,23 @@ void app_main(void)
     gpio_set_level(CONFIG_AIRWRITER_J4_HSKO_DRV_PIN, 0);
     gpio_config(&j4_hsko_clamp);
 #endif
+#if CONFIG_AIRWRITER_BOARD_REV_A && CONFIG_IDF_TARGET_ESP32S3
+    // Rev A's S1, a bank of eight DIP switches, is still fitted, but nothing
+    // reads it. Its legs go straight to GND, and IO39-42 come out of reset in
+    // their JTAG function, where MTDO (IO40) is a driven output that a switch
+    // left on would short. gpio_config selects the plain GPIO function and
+    // turns each pad off, so a switch in either position draws nothing. Do not
+    // "simplify" this to gpio_reset_pin or per-pin calls that skip the func-sel.
+    gpio_config_t s1_park = {
+        .pin_bit_mask = 1ULL << 38 | 1ULL << 39 | 1ULL << 40 | 1ULL << 41 |
+                        1ULL << 42 | 1ULL << 47 | 1ULL << 21 | 1ULL << 13,
+        .mode         = GPIO_MODE_DISABLE,
+    };
+    gpio_config(&s1_park);
+#endif
 
-    // Before anything that can call doc_begin or test_page: dip_config's poll
-    // task starts soon and a button press must not race the lock into
-    // existence.
+    // Before anything that can call doc_begin or print a test page: the test button's
+    // poll task starts soon and a press must not race the lock into existence.
     s_job_lock = xSemaphoreCreateBinary();
     xSemaphoreGive(s_job_lock);             // created empty; start it free
     s_offers_mx = xSemaphoreCreateMutex();
@@ -3984,8 +3932,8 @@ void app_main(void)
     settings_load(&s_set, s_suffix);
     logbook_set_names(s_set.ssid, s_set.hostname);
     // W-1088: a board's first boot on the printer list. One set up before
-    // (Wi-Fi saved, no list) keeps its host name and DIP rule, and its records
-    // are made from what it had; a new one is airwriter-xxxx, port on.
+    // (Wi-Fi saved, no list) keeps its host name, and its records are made
+    // from what it had; a new one is airwriter-xxxx.
     // Rev 2026.11 has no board from before the list, so Wi-Fi saved there
     // (a bench sdkconfig's) is still a new board.
 #if CONFIG_AIRWRITER_BOARD_2026_11
@@ -3994,12 +3942,10 @@ void app_main(void)
     int has_wifi = s_set.ssid[0] != 0;
 #endif
     int updated = has_wifi && !printers_stored();
-    settings_first_boot(pr_default_host_fmt(has_wifi), s_suffix, pr_default_lt_port(has_wifi));
+    settings_first_boot(pr_default_host_fmt(has_wifi), s_suffix);
     settings_load(&s_set, s_suffix);
     logbook_set_names(s_set.ssid, s_set.hostname);
-#if CONFIG_AIRWRITER_DIP7_PIN < 0
-    led_grid_set_gamer(s_set.rainbow);      // W-1109: no DIP 7, the page's switch
-#endif
+    led_grid_set_gamer(s_set.rainbow);
     printers_cfg_t pc = {
         .epoch = CONFIG_AIRWRITER_LASER_UUID_EPOCH, .updated_board = updated,
         .legacy = { .model = s_set.model, .name = s_set.name, .airprint = s_set.airprint,
@@ -4048,8 +3994,7 @@ void app_main(void)
     if (s_set.lt_port == 0) lt_roles_apply();
 #endif
     if (s_set.lt_port == 1) lt_start("the settings page");
-    // W-1081: off or not, the card says whether U7 can run the port. DIP
-    // mode 2, read later, starts the node as before.
+    // W-1081: off or not, the card says whether U7 can run the port.
     if (!localtalk_running()) lt_go("boot", 1);
 
     raster_selftest();
@@ -4112,12 +4057,9 @@ void app_main(void)
                             .page_out = pipe_page_out };
     ESP_ERROR_CHECK(job_pipe_init(&pipe));
 
-    // Before wifi_start, which can block up to 60s joining: the debounce
-    // settles in ~300ms, so the boot-time read is long ready by the time
-    // test_on_boot is checked below, whichever path gets there.
-    dip_config_cb_t dip_cb = { .on_change = dip_on_change, .on_test_button = test_button,
-                               .on_hold = on_hold };
-    ESP_ERROR_CHECK(dip_config_start(&dip_cb));
+    // Before wifi_start, which can block up to 60s joining.
+    test_button_cb_t btn_cb = { .on_tap = test_button, .on_hold = on_hold };
+    ESP_ERROR_CHECK(test_button_start(&btn_cb));
 
     // No credentials, or they no longer work: become an access point and let
     // the user fix it from a phone. This is the only path a person who did not
@@ -4198,12 +4140,6 @@ void app_main(void)
     err = laser_start(&lc);
     if (err != ESP_OK) ESP_LOGE(TAG, "AppleTalk printers did not start: %s", esp_err_to_name(err));
     printers_apply();                           // W-1116: the other slots are placed, and pushed (placed)
-
-    if (s_test_on_boot) {
-        s_test_on_boot = 0;
-        ESP_LOGI(TAG, "DIP4 was on at boot; printing a test page");
-        test_page();
-    }
 
     ESP_LOGI(TAG, "ready: %s", ipp_server_uri());
     ESP_LOGI(TAG, "settings at http://%s.local/", s_set.hostname);

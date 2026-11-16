@@ -593,7 +593,6 @@ function draw(s){
   const logN=+s.log_errors||0;
   $('log-val').textContent=logN?logN+' error'+(logN===1?'':'s'):'';
   $('log-val').classList.toggle('bad',logN>0);
-  drawDips(s.dip,s.lt_port);
   drawBoard(s);
   $('apname').textContent=s.ap||'AirWriter';
   drawPassword(s.pw||'none');
@@ -1479,7 +1478,7 @@ $('host').onchange=async()=>{
 };
 $('host').onkeydown=e=>{ if(e.key==='Enter') $('host').blur(); };
 
-/* ── About: software, restart, erase, DIP switches ─────────────────── */
+/* ── About: software, restart, erase, Rainbow status lights ────────── */
 /* Releases come from GitHub, and the board installs only what is signed with
    the AirWriter key. Opening About looks for one at most once an hour. */
 let U={}, fwFast=0, fwChecked=false;
@@ -1635,15 +1634,12 @@ $('pws-go').onclick=async()=>{
   $('d-pwset').close(); poll();
 };
 $('signout').onclick=async()=>{ await postJSON('/api/auth/signout'); location.reload(); };
-/* Which board this is (W-1109), and the LC's name. Rev 2026.11 has no DIP switches, so its one
-   switch that still does something, Rainbow status lights, is on the page. */
+/* Which board this is (W-1109), the LC's name, and Rainbow status lights. */
 function drawBoard(s){
-  const banked=!s.board||s.board==='rev-a';
-  $('about-rev').textContent=(banked?'Rev A':s.board)+' · Wells Workshop';
+  $('about-rev').textContent=(!s.board||s.board==='rev-a'?'Rev A':s.board)+' · Wells Workshop';
   const name=s.lc?'AirWriter LC':'AirWriter';
   $('brand').textContent=$('about-name').textContent=document.title=name;
-  $('rbbox').classList.toggle('hide',banked);
-  if(!banked&&!rbBusy) $('rainbow').checked=!!s.rainbow;
+  if(!rbBusy) $('rainbow').checked=!!s.rainbow;
 }
 let rbBusy=false;
 $('rainbow').onchange=async()=>{
@@ -1652,27 +1648,6 @@ $('rainbow').onchange=async()=>{
   rbBusy=false;
   if(r.error){ $('rainbow').checked=!on; say('about-say',r.error,1); }
 };
-/* The bank as it sits on the board, switch 1 on the left, and what each
-   group of switches does now. */
-function drawDips(bits,ltPort){
-  $('dipgrp').classList.toggle('hide',!bits||bits.length!==8);
-  if(!bits||bits.length!==8) return;
-  const on=i=>bits[i]==='1';
-  $('dips').innerHTML='<div class=dipbody><b>ON</b>'
-    +[...bits].map((b,i)=>'<span class="dip'+(b==='1'?' on':'')+'"><i></i>'+(i+1)+'</span>').join('')+'</div>';
-  /* what each switch does, then what it is set to: the AppleTalk port's pair
-     stops counting once the port's own switch has been used */
-  const mode=(on(0)?1:0)|(on(1)?2:0), yn=x=>x?'On':'Off';
-  const rows=[
-    ['AppleTalk port','1, 2', ltPort>=0?'<a href="/appletalk" data-goto=appletalk>Set in AppleTalk</a>':yn(mode===2)],
-    ['Developer mode','3', yn(on(2))],
-    ['Test page when switched on','4', yn(on(3))],
-    ['Halftone','5, 6', 'Not used'],
-    ['Rainbow status lights','7', yn(on(6))],
-    ['Spare','8', 'Not used']];
-  $('dip-rows').innerHTML=rows.map(r=>'<div class=row><span class=txt>'+r[0]+'<span class=num>'+r[1]+'</span></span><span class=val>'+r[2]+'</span></div>').join('');
-  for(const a of $$('#dip-rows [data-goto]')) a.onclick=e=>{ e.preventDefault(); go(a.dataset.goto); };
-}
 
 
 let rt; addEventListener('resize',()=>{ clearTimeout(rt); rt=setTimeout(()=>{ if(pane==='printers'&&sel!==null) render(); },150); });

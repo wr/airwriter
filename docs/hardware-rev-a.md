@@ -40,8 +40,8 @@ router; AirPrint is IP and runs alongside either. Only mode 1 exists in firmware
   H1 (105.636, 65.636) and H2 (156.364, 65.636) under the two gold top-corner dots,
   H3 (105.636, 151.930), H4 (153.364, 151.930). The pattern is deliberately asymmetric.
 - S1's keys overhang the west edge to x = 97.8. Net `/DIP1` (S1 pin 1) is at the bottom, but
-  the part's printed numbers run the other way: net DIPn sits under label 9−n, and firmware reads
-  switches by printed label (`dip_config_core.h`). SW1 (Panasonic
+  the part's printed numbers run the other way: net DIPn sits under label 9−n. Since W-1162 the
+  firmware reads none of them and parks their pins (SPEC §3.19). SW1 (Panasonic
   EVQP44B3M side-press, EN reset) is on the east edge, plate face x ≈ 159.4. SW2 (B3U-1000P) is
   BOOT on IO0, on the component side. SW3's plunger is centred under the test dot.
 - The WROOM antenna is flush at x = 162 (no case bump); its keepout is the module width + 5 mm a

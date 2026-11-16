@@ -3,6 +3,10 @@
 Linear: W-1037. Written 2026-10-14, after rev A bring-up. Supersedes the "States" bullet of
 `2026-08-20-dot-panel-cover-design.md` §5 and the teal-only material model in its §1 table.
 
+**Amended 2026-11-16** (`W-1162 Remove the DIP switch code: rev A boards ignore S1, the page's switches decide`): gamer mode is Rainbow status lights, a switch on the settings
+page's About on every board, not DIP7, and no DIP change wakes the panel: no board reads its
+switches.
+
 **Amended 2026-11-15: the panel is read from the front** (`W-1153 The panel reads from the
 front, with the sockets at the back`, `2026-11-15-which-way-it-faces-design.md`). AirWriter
 sits with its sockets toward the wall, so every pattern here is drawn as seen from the side away

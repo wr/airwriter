@@ -154,6 +154,11 @@ Each was looked at in `tools/webui/preview.py` at desktop and phone width, light
 
 ## Amendments
 
+- **2026-11-16, no DIP switches on any board** (`W-1162 Remove the DIP switch code: rev A boards ignore S1, the page's switches decide`; SPEC §3.19). About loses its DIP
+  Switches group, and `/api/status` its `dip`. Rainbow status lights, a switch on About, shows
+  on every board. The AppleTalk port's switch alone decides: `lt_port` is 1 or 0, never -1, and
+  a board that never used the switch reads it as on.
+
 - **2026-11-16, Report a Problem… and printers not yet confirmed** (`W-1154 Settings page: Report
   a Problem on every printer, and a line for printers not yet confirmed`; SPEC §3.15). Every
   printer's detail gains **Report a Problem…**, a key beside Test Cable… and Print Test Page

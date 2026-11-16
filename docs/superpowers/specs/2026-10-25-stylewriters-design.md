@@ -5,6 +5,9 @@
 `W-1102 QuickDraw LaserWriters on the printer port (Personal LaserWriter LS/300, Select 300)`.
 Reverses the StyleWriter cut in `2026-08-04-printer-support-scope-design.md`.
 
+**Amended 2026-11-16** by `W-1162 Remove the DIP switch code: rev A boards ignore S1, the page's switches decide`: DIP4 no longer prints a test page at power-on, so the
+button and the page's Print Test Page are the two ways to one.
+
 **Amended 2026-11-14** by `W-1140 One test page for every printer: the ImageWriter and PostScript
 LaserWriters print the shared page`: the test page is the page every printer prints
 (`testpage`; the test-page design's amendment block), no longer this family's own. A StyleWriter keeps what was its own: the 360 dpi grid, its model's tone curves and ink placement, its Apple screen, its captions (`sw_tp_geom`), and each model now shows its own icon. The page gained the type tester, lost the big still life, and puts the ink ramps two by two.

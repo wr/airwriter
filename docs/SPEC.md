@@ -687,7 +687,7 @@ printer (`components/localtalk`):
 
 - **The cable** (`W-1051 LocalTalk node: show up in the Chooser as an ImageWriter`, `W-1053
   LocalTalk: print PAP jobs from the Mac's AppleTalk ImageWriter driver`): LocalTalk through
-  TashTalk in U7 on J4, in DIP mode 2. LLAP node acquisition by ENQ (TashTalk answers ENQ and
+  TashTalk in U7 on J4, while the AppleTalk port is on. LLAP node acquisition by ENQ (TashTalk answers ENQ and
   RTS for the claimed ID), short DDP headers.
 - **Basilisk II's UDP tunnel** (W-1076, design `docs/superpowers/specs/2026-10-19-ethertalk-design.md`):
   EtherTalk frames as UDP datagrams to port 6066 on the home network (`udptunnel true` in
@@ -948,7 +948,7 @@ read back is a list made again). At most 8 records.
   LaserWriter's. The port's own state belongs to one record (`pr_port_live_id`, W-1116): the
   printer on the port, or the Something else record while one is listed; every other port
   record's live state is offline, on the page, to phones and in the box's state alike.
-- **Test page.** The button, DIP4 and the page's Print Test Page (without an id) go to the
+- **Test page.** The button and the page's Print Test Page (without an id) go to the
   printer on the port (`pr_port_current`, an ImageWriter, StyleWriter or Personal LaserWriter 300 record) while it is
   present, else the first shared printer that is ready, else that port record (the button then
   runs the cable test, as before), else the first shared printer (`pr_test_target`, W-1116);
@@ -1158,7 +1158,7 @@ Apple's StyleWriter adapter (ADSP, not PAP), is not built.
   port (W-1116's job commit): a job for a port record while another port record's printer is
   on the port is answered busy (`port_claim` on `pr_port_absent`, 3.4), and the page's Print
   Test Page and Clean Print Head for it answer 409 "Connect <name> to the printer port first."
-  (only the page can name such a record: the button's and DIP4's target, `pr_test_target`, is
+  (only the page can name such a record: the button's target, `pr_test_target`, is
   the printer on the port, a ready shared printer, or the port's record for the cable test, as
   before). A job or test page takes its family, model and screen from its own record
   (`printers_record_is_sw`, `printers_record_model`, `printers_record_screen`), not the port's.
@@ -1339,7 +1339,7 @@ Apple's StyleWriter adapter (ADSP, not PAP), is not built.
   and `H` for its cartridge, as a record that changes family is asked for its ribbon or
   cartridge. The panel
   shows the box's state, and the port's own while it prints.
-- **Test page.** The button, DIP4 and the page's Print Test Page reach a port StyleWriter as
+- **Test page.** The button and the page's Print Test Page reach a port StyleWriter as
   they reach an ImageWriter; a second tap cancels. The page is the one every printer prints
   (`testpage`, W-1140; the test-page design's amendment block), drawn on the board at 360 dpi
   for the model's printable width and the cartridge the session reads (`sw_tp_geom`), its rows
@@ -1833,12 +1833,16 @@ board's. Neither image runs on the other board, and each board refuses the other
   a strap reads high: IO16 (`BOARD_REV`, low on every 2026.11 board) and IO15 (`BOARD_LC`, low on
   the LC). `/api/status` has `board` (`rev-a` or `2026.11`), `lc`, and `board_ok`, false when a
   2026.11 build reads IO16 high (R32 missing, or another board), which the log says too.
-- **No DIP switches.** Rev 2026.11 has none, so `dip_config` reports none and `dip` stays ""
-  (the page hides the bank). What they set: the AppleTalk port follows the page's switch alone
-  (on for a new board, as W-1088 set it); no test page at power-on (the test button prints one);
-  Rainbow status lights (DIP 7) is a switch on the page's About (`{"rainbow":true}` to
-  `/api/general`, NVS `rainbow`), shown only on a board with no DIPs. About's line under the
-  name reads `2026.11 · Wells Workshop`.
+- **No DIP switches.** Rev 2026.11 has none, and since `W-1162 Remove the DIP switch code: rev A
+  boards ignore S1, the page's switches decide` no board reads any: rev A's S1 is still fitted
+  and does nothing. The test button is `test_button`. What the switches set: the AppleTalk port
+  follows the page's switch alone, on unless switched off (NVS `lt_port`, stored at first boot;
+  a rev A board that never used the switch reads it as on); no test page at power-on (the test
+  button prints one); Rainbow status lights is a switch on the page's About on every board
+  (`{"rainbow":true}` to `/api/general`, NVS `rainbow`). On rev A the app parks S1's pins (IO13,
+  21, 38-42, 47) in their GPIO function with the pad off: IO39-42 come out of reset as JTAG,
+  where MTDO is a driven output that a switch left on would short. About's line under the name
+  reads `2026.11 · Wells Workshop` or `Rev A · Wells Workshop`.
 - **Cable test.** After both data legs pass, rev 2026.11 checks each handshake wire: it drives
   J4's handshake out high then low and reads J2's in (IO8, J4.1 to J2.2), then J2's out against
   J4's in (IO21, J2.1 to J4.2). A level comes back as itself through U3; an open wire leaves the

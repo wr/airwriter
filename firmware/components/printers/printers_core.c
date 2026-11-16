@@ -178,7 +178,6 @@ static int model_by_name(const char *s)
 }
 
 const char *pr_default_host_fmt(int has_wifi) { return has_wifi ? "imagewriter-%s" : "airwriter-%s"; }
-int pr_default_lt_port(int has_wifi) { return has_wifi ? -1 : 1; }
 
 void pr_init(pr_list_t *l, const uint8_t mac[6], uint16_t epoch)
 {
