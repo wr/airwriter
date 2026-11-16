@@ -75,7 +75,7 @@ esp_err_t settings_load(settings_t *out, const char *mac_suffix)
         uint8_t ap = 1, lt = 0xFF;
         nvs_get_u8(h, "airprint", &ap);
         out->airprint = ap ? 1 : 0;
-        out->lt_port = nvs_get_u8(h, "lt_port", &lt) == ESP_OK && lt <= 1 ? (int8_t)lt : -1;
+        out->lt_port = nvs_get_u8(h, "lt_port", &lt) == ESP_OK && lt <= 1 ? (int8_t)lt : 1;
         int16_t tm;
         out->top_margin = nvs_get_i16(h, "topmargin", &tm) == ESP_OK && tm >= SET_TOP_MIN &&
                           tm <= SET_TOP_MAX ? tm : CONFIG_AIRWRITER_TOP_MARGIN;
@@ -89,7 +89,7 @@ esp_err_t settings_load(settings_t *out, const char *mac_suffix)
         strncpy(out->dither, "atkinson", sizeof out->dither - 1);
         out->gain = CONFIG_AIRWRITER_DOT_GAIN;
         out->airprint = 1;
-        out->lt_port = -1;
+        out->lt_port = 1;
         out->top_margin = CONFIG_AIRWRITER_TOP_MARGIN;
     }
 
@@ -104,7 +104,7 @@ esp_err_t settings_load(settings_t *out, const char *mac_suffix)
     return ESP_OK;
 }
 
-esp_err_t settings_first_boot(const char *host_fmt, const char *mac_suffix, int lt_port)
+esp_err_t settings_first_boot(const char *host_fmt, const char *mac_suffix)
 {
     nvs_handle_t h;
     esp_err_t err = nvs_open(NS, NVS_READWRITE, &h);
@@ -117,8 +117,8 @@ esp_err_t settings_first_boot(const char *host_fmt, const char *mac_suffix, int 
         ESP_LOGI(TAG, "host name saved");
     }
     uint8_t lt;
-    if (lt_port >= 0 && nvs_get_u8(h, "lt_port", &lt) != ESP_OK)
-        nvs_set_u8(h, "lt_port", lt_port ? 1 : 0);
+    if (nvs_get_u8(h, "lt_port", &lt) != ESP_OK)
+        nvs_set_u8(h, "lt_port", 1);
     err = nvs_commit(h);
     nvs_close(h);
     return err;

@@ -55,6 +55,13 @@ stale lines in place; this block is the correction:
   "mask ridge" (the solid mask between letter strokes has the same practical
   minimum as any other feature).
 
+## Amendment, 2026-11-16 (no DIP config)
+
+`W-1162 Remove the DIP switch code: rev A boards ignore S1, the page's switches decide`. Rev 2026.11 dropped the DIP bank (W-1109), and the firmware now reads none on rev A
+either: `dip_config` is gone, the test button is `test_button`, and what the switches set lives
+on the settings page (the AppleTalk port's switch, Rainbow status lights). Rev A's S1 stays
+fitted and does nothing; the app parks its pins.
+
 ## Amendment, 2026-11-15 (read from the front)
 
 `W-1153 The panel reads from the front, with the sockets at the back`; the design is

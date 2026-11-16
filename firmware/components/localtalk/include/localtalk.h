@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
 // The LocalTalk node on the board (W-1051): UART2 to TashTalk in U7, the pure
-// node in lt_node.c, and what the web UI shows of it. Runs in DIP mode 2, or
-// always on a bench build (CONFIG_AIRWRITER_LT_BENCH).
+// node in lt_node.c, and what the web UI shows of it. Runs with the AppleTalk
+// port on, or always on a bench build (CONFIG_AIRWRITER_LT_BENCH).
 //
 // A PAP job is the Mac driver's own ImageWriter stream (W-1053), printed
 // through the printer every AppleTalk link shares (at_printer.h, W-1076).

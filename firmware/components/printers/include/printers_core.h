@@ -383,10 +383,8 @@ typedef struct {
 int pr_post(pr_list_t *l, const char *body, pr_post_t *out);
 
 // A board's first boot on W-1088 (no host name stored yet): one set up before
-// (Wi-Fi saved) keeps "imagewriter-%s" and its DIP rule for the AppleTalk
-// port (-1); a new board is "airwriter-%s" with the port on (1). Stored then.
+// (Wi-Fi saved) keeps "imagewriter-%s"; a new board is "airwriter-%s". Stored then.
 const char *pr_default_host_fmt(int has_wifi);
-int         pr_default_lt_port(int has_wifi);
 
 // Names for the page and the log.
 const char *pr_where_name(int where);      // "port", "cable", "network", "tunnel", "zone"

@@ -9,6 +9,9 @@ Wells asked for "a full letter page that tests the various functions, text sizes
 color, images... you know." He approved the preview (round 1, 2026-10-20) as it stands: "Build
 the test page as shown: keep the letterhead and the footer."
 
+**Amended 2026-11-16** (`W-1162 Remove the DIP switch code: rev A boards ignore S1, the page's switches decide`): two triggers now, a tap of `test` and the page's Print Test
+Page. DIP4 no longer prints one at power-on.
+
 **Amended 2026-11-14** (`W-1140 One test page for every printer: the ImageWriter and PostScript
 LaserWriters print the shared page`, Wells's word on a mock): every printer prints one page, the
 one StyleWriters and the Personal LaserWriter 300 already printed (`W-1103`, `W-1102`), drawn on

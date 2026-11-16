@@ -99,7 +99,7 @@ typedef struct {
 } lg_slot_t;
 
 typedef struct {
-    uint8_t   gamer;            // DIP7: Ready and Asleep drift through RGB instead of white
+    uint8_t   gamer;            // Rainbow status lights: Ready and Asleep drift through RGB instead of white
     uint8_t   src;              // lg_src_t: whose job Printing is
     lg_slot_t task[LG_FAMS];    // one per family, in priority order
     uint8_t   blip;             // lg_blip_t

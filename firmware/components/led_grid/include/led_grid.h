@@ -20,7 +20,7 @@ esp_err_t led_grid_start(int one);
 // board with no strip. Safe from any task.
 int led_grid_frame(uint16_t out[LG_NUM_LEDS][3]);
 
-// Gamer mode (DIP7): Ready and Asleep drift through RGB instead of white.
+// Rainbow status lights, the page's switch: Ready and Asleep drift through RGB instead of white.
 // Safe from any task; the render task picks it up on its next frame.
 void led_grid_set_gamer(int on);
 

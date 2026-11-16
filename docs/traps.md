@@ -347,9 +347,8 @@ Traps already explained in a code comment are listed only when the comment is ea
   a printer, build with `CONFIG_AIRWRITER_UART_LOOPBACK`: the line reads ready and the log checks
   the job's bytes as they come back (never on a board that should print).
 - **The LocalTalk node owns IO4/IO5, which are also the PIC's ICSP lines.** The web UI's
-  TashTalk flash refuses while the node runs: switch the AppleTalk Port off on the page (with
-  the switch never used, set DIP1-2 off mode 2; and build without `CONFIG_AIRWRITER_LT_BENCH`),
-  restart, then flash. A chip without TashTalk never starts the node (W-1081), so it flashes
+  TashTalk flash refuses while the node runs: switch the AppleTalk Port off on the page (and
+  build without `CONFIG_AIRWRITER_LT_BENCH`), restart, then flash. A chip without TashTalk never starts the node (W-1081), so it flashes
   straight from the AppleTalk Port card.
 - **The Option Card's PAP status is a two-byte word, low byte first, not a string** (Apple TN
   NW20; `LT_IW_*` in `lt_node.h`). A LaserWriter-style `%%[ status: ... ]%%` string is wrong here.

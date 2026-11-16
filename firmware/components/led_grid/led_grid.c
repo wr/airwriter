@@ -18,7 +18,7 @@
 
 static led_strip_handle_t s_strip;
 static int s_count;
-static volatile uint8_t s_gamer;   // DIP7, set from dip_config's task
+static volatile uint8_t s_gamer;   // Rainbow status lights, from the settings
 static uint8_t s_one;              // AirWriter LC: one light, the chain's first LED
 
 // The tasks and the acknowledgement over the state, set from other tasks

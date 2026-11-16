@@ -443,6 +443,11 @@ Rulings made during the build that change what the sections above say:
   plugged in, because another is, at the wrong fix. What to check goes in the wiki's Offline
   row. Print Test Page's own refusal on an offline printer keeps its line of help.
 
+## Amended 2026-11-16 by W-1162
+
+`W-1162 Remove the DIP switch code: rev A boards ignore S1, the page's switches decide`: DIP4 no longer prints a test page at power-on. The test button and the page's Print Test
+Page go where this design says.
+
 ## Amended 2026-11-13 by W-1102
 
 `W-1102 QuickDraw LaserWriters on the printer port (Personal LaserWriter LS/300, Select 300)`

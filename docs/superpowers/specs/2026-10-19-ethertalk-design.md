@@ -5,6 +5,9 @@ Written 2026-10-19. Adds a SPEC §3.13 (AppleTalk), which also covers the LocalT
 (W-1051, W-1053); there is no AppleTalk section today. Lifts "EtherTalk" from AGENTS.md's
 "Not built" line, except EtherTalk on the Wi-Fi radio (below).
 
+**Amended 2026-11-16** (`W-1162 Remove the DIP switch code: rev A boards ignore S1, the page's switches decide`): the cable's node runs while the settings page's AppleTalk port
+switch is on, not in DIP mode 2.
+
 ## Intent
 
 The board prints from a real Mac over its LocalTalk cable (W-1053). Wells wants the same from

@@ -38,7 +38,7 @@ static const uint32_t k_edge[N_BUCKETS] = {
 static const char *const k_tasks[] = {
     "main", "ipp0", "ipp1", "ipp2", "ipp3", "httpd", "ethertalk", "websocket_task",
     "localtalk", "lt_print", "laser", "fw_update", "kick", "ps_poll", "ser_line", "led_grid",
-    "dip_config", "prn", "memdiag", "captivedns",
+    "test_btn", "prn", "memdiag", "captivedns",
     "tiT", "wifi", "sys_evt", "esp_timer", "Tmr Svc", "mdns", "ipc0", "ipc1",
     "IDLE0", "IDLE1",
 };

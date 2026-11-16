@@ -92,7 +92,7 @@ void        printers_at_queried(int id, int ok, const lw_info_t *info, int at_li
 // on one that is off, nothing. The AirWriter marker (host) either way.
 void        printers_offers(int at_link, int on, const char *host, lt_offers_t *o);
 
-// Who gets the test page (the button, DIP4, the page): the port's ImageWriter
+// Who gets the test page (the button, the page): the port's ImageWriter
 // or StyleWriter, else the first shared printer. Its id, *port 1 for the port's; -1 for none.
 int         printers_test_target(int *port);
 // What printer id's test page is: the port's ImageWriter's, an identified

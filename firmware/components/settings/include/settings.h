@@ -27,10 +27,8 @@ typedef struct {
     uint8_t ribbon;                  // the last ribbon self-ID reported (W-1064):
                                      // 0 unknown, 1 black, 2 colour (iw_ribbon_t)
     uint8_t airprint;                // advertise and take AirPrint jobs (W-1079); on
-    int8_t  lt_port;                 // the AppleTalk port (W-1079): 1 on, 0 off, -1 as
-                                     // DIP switches 1-2 say (mode 2 on), until set
-    uint8_t rainbow;                 // Rainbow status lights (W-1109): the page's switch
-                                     // where there is no DIP 7 (rev 2026.11); off
+    int8_t  lt_port;                 // the AppleTalk port (W-1079): 1 on, 0 off; on
+    uint8_t rainbow;                 // Rainbow status lights (W-1109): the page's switch; off
     int16_t top_margin;              // 1/144 in: + blank paper ahead of each AirPrint
                                      // page and the test page, - drops their first
                                      // rows; CONFIG_AIRWRITER_TOP_MARGIN
@@ -46,9 +44,8 @@ esp_err_t settings_load(settings_t *out, const char *mac_suffix);
 // W-1088: stores what a board would otherwise only default to, so a later
 // default cannot move it. With no host name stored, host_fmt's (with the MAC
 // suffix): a board set up before keeps "imagewriter-%s", a new one gets
-// "airwriter-%s". With no AppleTalk port setting and lt_port 0 or 1, that; -1
-// leaves it to the DIP switches. Anything stored is kept.
-esp_err_t settings_first_boot(const char *host_fmt, const char *mac_suffix, int lt_port);
+// "airwriter-%s". With no AppleTalk port setting, on. Anything stored is kept.
+esp_err_t settings_first_boot(const char *host_fmt, const char *mac_suffix);
 
 esp_err_t settings_save_wifi(const char *ssid, const char *pass);
 // Whether Wi-Fi was saved before this restart, once: the panel greets the

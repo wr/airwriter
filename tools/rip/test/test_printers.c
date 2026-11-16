@@ -756,15 +756,12 @@ static void test_json(void)
     CHECK(strstr(buf, "\"rp\":\"ipp/print\"") == NULL);
 }
 
-// A board's first boot on W-1088 fixes its host name and AppleTalk port for
-// good: one already set up (Wi-Fi saved) keeps imagewriter-xxxx and its DIP
-// rule; a new one is airwriter-xxxx with the AppleTalk port on.
+// A board's first boot on W-1088 fixes its host name for good: one already set
+// up (Wi-Fi saved) keeps imagewriter-xxxx; a new one is airwriter-xxxx.
 static void test_defaults(void)
 {
     CHECK(strcmp(pr_default_host_fmt(1), "imagewriter-%s") == 0);
     CHECK(strcmp(pr_default_host_fmt(0), "airwriter-%s") == 0);
-    CHECK_EQ_INT(pr_default_lt_port(1), -1);
-    CHECK_EQ_INT(pr_default_lt_port(0), 1);
 }
 
 // What the Printers section sends, flat JSON: {"id":N, ...one action...}.
@@ -2532,7 +2529,7 @@ static void test_json_ports(void)
 }
 
 // W-1116: while a Something else record is listed no port record gets the test page (the
-// button's, or DIP4's at boot): an ImageWriter record's would hold the job lock to the stall
+// button's): an ImageWriter record's would hold the job lock to the stall
 // limit. An AppleTalk printer still gets it; with none, nothing does.
 static void test_test_target_said_other(void)
 {
