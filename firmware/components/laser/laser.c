@@ -1170,6 +1170,13 @@ void laser_job_cancel(void)
     if (s_task) xTaskNotifyGive(s_task);
 }
 
+int laser_relay_stop(void)
+{
+    if (!s_big || !pap_relay_stop(&s_big->relay)) return 0;
+    if (s_task) xTaskNotifyGive(s_task);        // the laser task's tick acts on it now
+    return 1;
+}
+
 // ------------------------------------------------------------- the web page
 
 static size_t esc(char *out, size_t cap, const char *s)

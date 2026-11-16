@@ -18,8 +18,8 @@
 typedef struct {
     int32_t  id;
     uint8_t  state;          // IPP_JSTATE_*
-    uint8_t  canceled;       // Cancel-Job arrived while the document streamed
-                             // or printed
+    uint8_t  canceled;       // stopped while the document streamed or printed:
+                             // IPP_CANCELED_BY_USER or _AT_DEVICE, 0 for not
     uint8_t  printing;       // the sink has the document; ipp_job_done ends it
     int32_t  pages;          // pages printed so far (W-1141): job-impressions-completed
     uint32_t created_s;
@@ -28,11 +28,17 @@ typedef struct {
     char     uri[160];
 } ipp_job_rec_t;
 
+// Who stopped the job (ipp_job_rec_t.canceled): its client, with Cancel-Job, or the
+// person at the printer, with the test button (W-1165).
+enum { IPP_CANCELED_BY_USER = 1, IPP_CANCELED_AT_DEVICE = 2 };
+
 // What Cancel-Job has to do beyond the bookkeeping.
 typedef enum {
     IPP_CANCEL_NOT_FOUND,      // no such job
     IPP_CANCEL_NOT_POSSIBLE,   // already completed, canceled or aborted
     IPP_CANCEL_STOP_PRINT,     // printing: stop the paper
+    IPP_CANCEL_ALREADY,        // W-1165: Cancel-Job of a job stopped at the printer: done,
+                               // nothing more to stop
 } ipp_cancel_t;
 
 // Puts a new, processing job in the slot. The job-uri is the printer-uri with
@@ -58,6 +64,9 @@ void ipp_job_finish(ipp_job_rec_t *j, int ok);
 int ipp_job_done(ipp_job_rec_t *j, int ok);
 
 ipp_cancel_t ipp_job_cancel(ipp_job_rec_t *j, int32_t id);
+// The job in the slot, stopped at the printer (W-1165): as Cancel-Job, but its
+// client reads job-canceled-at-device.
+ipp_cancel_t ipp_job_cancel_at_device(ipp_job_rec_t *j);
 
 // The sink says `pages` of the job have printed (W-1141), which iOS shows as "Printing 3
 // of 5" and macOS as its page count. Only a printing job's count moves, and only up: a

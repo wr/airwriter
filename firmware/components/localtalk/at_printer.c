@@ -32,6 +32,7 @@ static TaskHandle_t s_print_task;
 static const at_owner_t *volatile s_owner;
 static volatile int s_job_active, s_job_ended, s_job_normal, s_job_failed;
 static volatile int s_job_pending;           // begin is running for s_owner
+static volatile int s_job_stop;              // W-1165: the test button; the print task acts
 static SemaphoreHandle_t s_begin_lock;       // links begin from their own tasks
 static uint32_t     s_jobs_printed, s_jobs_failed;
 static uint8_t     *s_job;
@@ -46,6 +47,16 @@ static void print_task(void *arg)
     (void)arg;
     uint8_t buf[256];
     for (;;) {
+        // W-1165: stopped by the test button: as a printer that gave up, here, where telling
+        // the Mac has the stack it needs (a send on the link), not on the button's task.
+        if (s_job_stop) {
+            s_job_stop = 0;
+            if (s_job_active && !s_job_failed) {
+                s_job_failed = 1;
+                const at_owner_t *o = s_owner;
+                if (o && o->abort) o->abort(o->ctx);
+            }
+        }
         size_t n = xStreamBufferReceive(s_spool, buf, sizeof buf, pdMS_TO_TICKS(100));
         if (n) {
             int drop = s_job_failed || (s_job_ended && !s_job_normal);
@@ -104,7 +115,7 @@ int at_job_begin(const at_owner_t *o)
         xSemaphoreGive(s_begin_lock);
         return 1;
     }
-    s_job_ended = s_job_normal = s_job_failed = 0;
+    s_job_ended = s_job_normal = s_job_failed = s_job_stop = 0;
     s_job_active = 1;
     s_job_pending = 0;
     xSemaphoreGive(s_begin_lock);
@@ -149,6 +160,14 @@ int at_job_link(void)
 {
     const at_owner_t *o = s_owner;
     return (s_job_active || s_job_pending) && o ? (int)o->link : -1;
+}
+
+int at_job_stop(void)
+{
+    if (!s_job_active || s_job_failed || !s_owner) return 0;
+    s_job_stop = 1;                     // the print task drops the rest and tells the Mac
+    xTaskNotifyGive(s_print_task);
+    return 1;
 }
 
 void at_printer_note(const char *line)

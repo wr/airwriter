@@ -67,6 +67,10 @@ size_t    at_job_room(const at_owner_t *o);
 void      at_job_end(const at_owner_t *o, int normal);
 // The link holding the printer, from begin until its end has run; -1 for none.
 int       at_job_link(void);
+// W-1165: the test button stops the job: the print task drops the rest of its bytes and tells
+// its Mac (its node's abort) within 100 ms, as when the printer gives up; end then runs with
+// normal 0. 1 if a job was printing. Any task; never blocks.
+int       at_job_stop(void);
 // A line for the holder's log (lt_print_end's summary); dropped with no holder.
 void      at_printer_note(const char *line);
 // The last job's bytes as captured (up to 256 KB), or NULL.

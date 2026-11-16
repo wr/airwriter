@@ -48,6 +48,7 @@ typedef struct pap_relay {
     uint64_t         since;
     pr_ring_t        m2p, p2m;       // the Mac's data, the printer's output
     uint8_t          asked, mac_eof, mac_gone, mac_had, prn_open, prn_ended, cancelled, aborted;
+    uint8_t          stop;           // W-1165: the test button stopped the job
     // W-1095, per job: the printer's EOF not yet given to the Mac, the Mac's
     // bytes since its last EOF; and the connection's own end given to it.
     uint8_t          prn_eof, mac_mid, told, closed;
@@ -71,6 +72,10 @@ void   pap_relay_init(pap_relay_t *r, uint8_t *m2p, uint8_t *p2m, size_t cap);
 int    pap_relay_mac_open(pap_relay_t *r, const lt_node_t *mac, int reg, uint64_t now);
 int    pap_relay_active(const pap_relay_t *r);
 int    pap_relay_tick(pap_relay_t *r, uint64_t now);     // PR_RELAY_DO_* bits
+// W-1165: the test button. A Mac's job in the relay is stopped: the next tick cancels the
+// printer's connection, and the Mac's ends with it. 1 while there is such a job to stop (a
+// second call before it ends is the same stop), 0 for none. Any task.
+int    pap_relay_stop(pap_relay_t *r);
 
 // The Mac's side, from its node's ops while the connection is the relay's.
 void   pap_relay_mac_data(pap_relay_t *r, const uint8_t *d, size_t n);

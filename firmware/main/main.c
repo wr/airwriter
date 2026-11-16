@@ -195,6 +195,10 @@ static portMUX_TYPE s_tap_mux = portMUX_INITIALIZER_UNLOCKED;
 static int s_test_running;      // the test page holds the lock
 static int s_sw_test_running;   // ... and it is a StyleWriter's or a 300's: a session, not ImageWriter writes
 static volatile int s_test_cancel;  // a second tap asked to stop it
+// W-1165: a tap stops a vintage Mac's job too. Its start and end set s_lt_owns under
+// s_tap_mux, so a tap as the job ends never lands its cancel on the next one.
+static int s_lt_owns;               // a Mac's job to the port's printer holds the lock
+static volatile int s_relay_stopped;    // a tap stopped the job the relay carries
 
 static volatile int s_job_waiting;
 // Uptime seconds of the last job's start or end, -1 for none yet:
@@ -1244,7 +1248,8 @@ static int laser_relay(int take)
             return -1;
         }
         s_job_error[0] = '\0';
-    strncpy(s_last_job, "Relayed job", sizeof s_last_job - 1);
+        strncpy(s_last_job, "Relayed job", sizeof s_last_job - 1);
+        s_relay_stopped = 0;
         s_printing = 1;
         s_laser_owns = 1;
         job_touch();
@@ -1253,7 +1258,7 @@ static int laser_relay(int take)
         printer_state_post(PS_EV_JOB_START);
         return 0;
     }
-    printer_state_post(PS_EV_JOB_DONE);
+    printer_state_post(s_relay_stopped ? PS_EV_JOB_CANCELLED : PS_EV_JOB_DONE);
     s_printing = 0;
     s_laser_owns = 0;
     job_touch();
@@ -1326,10 +1331,12 @@ static void sw_finished(const job_pipe_stats_t *st, int ok)
                  "all out in %ums", st->pages, st->pages == 1 ? "" : "s", (unsigned)st->doc_bytes,
                  (unsigned)st->printer_bytes, (unsigned)st->rip_ms, (unsigned)st->ms);
         ota_health_printed();           // W-1059: this firmware prints; under the job lock
+    } else if (cancelled) {             // a person's choice, not an error (W-1165)
+        ESP_LOGI(TAG, "StyleWriter job canceled: %u bytes in, rc %d, printer %d%s",
+                 (unsigned)st->doc_bytes, st->rc, rc, ok ? "" : ", transfer truncated");
     } else {
-        ESP_LOGE(TAG, "StyleWriter job %s: %u bytes in, rc %d, printer %d%s",
-                 cancelled ? "canceled" : "failed", (unsigned)st->doc_bytes, st->rc, rc,
-                 ok ? "" : ", transfer truncated");
+        ESP_LOGE(TAG, "StyleWriter job failed: %u bytes in, rc %d, printer %d%s",
+                 (unsigned)st->doc_bytes, st->rc, rc, ok ? "" : ", transfer truncated");
     }
     printer_state_post(printed ? PS_EV_JOB_DONE : cancelled ? PS_EV_JOB_CANCELLED
                                                             : PS_EV_JOB_FAILED);
@@ -1444,10 +1451,14 @@ static void qd_finished(const job_pipe_stats_t *st, int ok)
                  st->pages, st->pages == 1 ? "" : "s", (unsigned)st->doc_bytes,
                  (unsigned)((st->ms + end_ms) / 1000));
         ota_health_printed();           // W-1059: this firmware prints; under the job lock
+    } else if (cancelled) {             // a person's choice, not an error (W-1165)
+        ESP_LOGI(TAG, "%s job canceled: %d page%s, %u bytes in, rc %d, printer %d%s", qd_name(),
+                 st->pages, st->pages == 1 ? "" : "s", (unsigned)st->doc_bytes, st->rc, rc,
+                 ok ? "" : ", transfer truncated");
     } else {
-        ESP_LOGE(TAG, "%s job %s: %d page%s, %u bytes in, rc %d, printer %d%s", qd_name(),
-                 cancelled ? "canceled" : "failed", st->pages, st->pages == 1 ? "" : "s",
-                 (unsigned)st->doc_bytes, st->rc, rc, ok ? "" : ", transfer truncated");
+        ESP_LOGE(TAG, "%s job failed: %d page%s, %u bytes in, rc %d, printer %d%s", qd_name(),
+                 st->pages, st->pages == 1 ? "" : "s", (unsigned)st->doc_bytes, st->rc, rc,
+                 ok ? "" : ", transfer truncated");
     }
     qd_link_stats_t ls;
     qd_link_stats(&ls, 0);
@@ -1997,10 +2008,13 @@ static int lt_print_begin(void *ctx, at_link_t link)
     strncpy(s_last_job, lt_job_name(link), sizeof s_last_job - 1);
     s_stream_crc = 0;
     s_printer_failed = 0;
-    s_job_cancelled = 0;
     s_lt_bytes = 0;
     iw_scan_init(&s_lt_scan);
+    portENTER_CRITICAL(&s_tap_mux);
+    s_job_cancelled = 0;
     serial_out_set_abort(0);
+    s_lt_owns = 1;
+    portEXIT_CRITICAL(&s_tap_mux);
     iw_link_job_start(&s_link);
     s_printing = 1;
     job_touch();
@@ -2019,7 +2033,7 @@ static int lt_print_write(void *ctx, const uint8_t *d, size_t n)
     s_stream_crc = crc32_up(s_stream_crc, d, n);
     iw_scan(&s_lt_scan, d, n);
     s_lt_bytes += n;
-    if (s_printer_failed) return 1;
+    if (s_printer_failed || s_job_cancelled) return 1;
     if (iw_link_need_resync(&s_link) && !AW_LOOPBACK) {
         ESP_LOGW(TAG, "last job was cut short; resyncing the printer first");
         esp_err_t err = ESP_OK;
@@ -2029,9 +2043,9 @@ static int lt_print_write(void *ctx, const uint8_t *d, size_t n)
     if (paper_to_tof() != ESP_OK) goto fail;
     if (serial_out_write(d, n) == ESP_OK) return 0;
 fail:
-    // Paused past STALL_ABORT: the Mac is told (CloseConn) and its queued
-    // tail must not print ahead of the next job.
-    s_printer_failed = 1;
+    // Paused past STALL_ABORT, or stopped by the test button (W-1165): the Mac is told
+    // (CloseConn) and its queued tail must not print ahead of the next job.
+    if (!s_job_cancelled) s_printer_failed = 1;
     serial_out_purge();
     return 1;
 }
@@ -2041,8 +2055,13 @@ static int lt_print_end(void *ctx, int normal)
     (void)ctx;
     int clean = normal && !s_printer_failed && iw_scan_between(&s_lt_scan);
     esp_err_t flushed = clean ? serial_out_flush(CONFIG_AIRWRITER_STALL_ABORT * 1000u) : ESP_FAIL;
+    // From here a tap is not this job's to stop (W-1165).
+    portENTER_CRITICAL(&s_tap_mux);
+    s_lt_owns = 0;
+    int cancelled = s_job_cancelled;
+    portEXIT_CRITICAL(&s_tap_mux);
     // The last bytes never left: paper out on the last line, past the limit.
-    if (clean && flushed != ESP_OK) s_printer_failed = 1;
+    if (clean && flushed != ESP_OK && !cancelled) s_printer_failed = 1;
     if (flushed != ESP_OK) serial_out_purge();
     // The Mac's driver feeds to the next page by line, never by form feed.
     iw_link_job_end_at(&s_link, flushed == ESP_OK, iw_scan_at_tof(&s_lt_scan));
@@ -2052,7 +2071,7 @@ static int lt_print_end(void *ctx, int normal)
     char line[100];
     snprintf(line, sizeof line, "job %s: %u bytes, crc32 %08x",
              flushed == ESP_OK ? (s_lt_bytes ? "printed" : "empty") : s_printer_failed ? "failed"
-             : normal ? "cut short" : "abandoned",
+             : cancelled ? "stopped at the printer" : normal ? "cut short" : "abandoned",
              (unsigned)s_lt_bytes, (unsigned)s_stream_crc);
     at_printer_note(line);
     if (AW_LOOPBACK && flushed == ESP_OK) {
@@ -2065,8 +2084,9 @@ static int lt_print_end(void *ctx, int normal)
         at_printer_note(line);
     }
     // A Mac that cancels is a done job, as Cancel-Job is; a printer that gave
-    // up is a failed one.
-    printer_state_post(s_printer_failed ? PS_EV_JOB_FAILED : PS_EV_JOB_DONE);
+    // up is a failed one; one the test button stopped is cancelled (W-1165).
+    printer_state_post(s_printer_failed ? PS_EV_JOB_FAILED
+                       : cancelled && flushed != ESP_OK ? PS_EV_JOB_CANCELLED : PS_EV_JOB_DONE);
     s_printing = 0;
     job_touch();
     line_source();
@@ -2809,39 +2829,75 @@ static void cable_button_task(void *arg)
 }
 #endif
 
-// A tap of the test button. While the test page prints, a second tap cancels
-// it (W-1049); during anyone else's job the panel says busy. Otherwise a cable
-// from J2 to J4 leaves the printer's handshake line down, so a tap while the
-// printer is not ready tests the cable instead of printing (W-1055). With no
-// crossover plugged in that shows the fail, which is also the honest answer to
-// "print a test page" with no printer ready.
+// W-1165: a tap of the test button while something prints stops it, whatever and whoever's
+// it is: a test page (W-1049), an AirPrint job to any printer (as Cancel-Job, which the
+// phone or Mac reads as cancelled at the printer), a vintage Mac's job to the port's printer
+// (its connection ends, as when the printer gives up), or one the relay carries to a
+// LaserWriter. 1 if it stopped one. On the button's task, under nobody's lock.
+static int stop_printing(void)
+{
+    if (s_ps_test_running) {                   // W-1088: a LaserWriter's page
+        ESP_LOGI(TAG, "test button: cancelling the test page");
+        laser_job_cancel();
+        return 1;
+    }
+    int test = 0, lt = 0;
+    portENTER_CRITICAL(&s_tap_mux);
+    if (s_test_running) {
+        // An ImageWriter's write in progress is aborted; W-1041's resync runs before
+        // the next job. A StyleWriter's session stops at its next step instead (its
+        // writes are in whole blocks and never cut), and leaves the abort flag alone.
+        s_test_cancel = 1;
+        if (!s_sw_test_running) serial_out_set_abort(1);
+        test = 1;
+    } else if (s_lt_owns) {
+        // A write waiting out a paused printer gives up now, and the rest is dropped.
+        s_job_cancelled = 1;
+        serial_out_set_abort(1);
+        lt = 1;
+    }
+    portEXIT_CRITICAL(&s_tap_mux);
+    if (test) {
+        ESP_LOGI(TAG, "test button: cancelling the test page");
+        return 1;
+    }
+    if (lt) {
+        at_job_stop();                          // its Mac is told now, not at its next send
+        ESP_LOGI(TAG, "test button: stopping the Mac's job");
+        return 1;
+    }
+    if (ipp_server_cancel_printing()) {
+        ESP_LOGI(TAG, "test button: cancelling the AirPrint job");
+        return 1;
+    }
+    if (laser_relay_stop()) {
+        s_relay_stopped = 1;
+        ESP_LOGI(TAG, "test button: stopping the Mac's job to the LaserWriter");
+        return 1;
+    }
+    return 0;
+}
+
+// A tap of the test button. While anything prints, it stops it (stop_printing), and the
+// panel shows the stop at once: Cancelled, then Ready, though a sheet already in the printer
+// still comes out and the job's own end follows (W-1165; it changes nothing on the panel).
+// A tap after that, while the sheet finishes, or while the board is busy otherwise (an
+// update, the cable test, a head cleaning), says busy.
+// Otherwise a cable from J2 to J4 leaves the printer's handshake line down, so a tap while
+// the printer is not ready tests the cable instead of printing (W-1055). With no crossover
+// plugged in that shows the fail, which is also the honest answer to "print a test page"
+// with no printer ready.
 static void test_button(void)
 {
     on_activity();
     if (xSemaphoreTake(s_job_lock, 0) != pdTRUE) {
-        int cancel = 0;
-        if (s_ps_test_running) {                   // W-1088: a LaserWriter's page
-            ESP_LOGI(TAG, "test button tapped again: cancelling the test page");
-            laser_job_cancel();
+        if (printer_state_job() && stop_printing()) {
+            printer_state_post(PS_EV_JOB_CANCELLED);
             return;
         }
-        portENTER_CRITICAL(&s_tap_mux);
-        if (s_test_running) {
-            // An ImageWriter's write in progress is aborted; W-1041's resync runs before
-            // the next job. A StyleWriter's session stops at its next step instead (its
-            // writes are in whole blocks and never cut), and leaves the abort flag alone.
-            s_test_cancel = 1;
-            if (!s_sw_test_running) serial_out_set_abort(1);
-            cancel = 1;
-        }
-        portEXIT_CRITICAL(&s_tap_mux);
-        if (cancel) {
-            ESP_LOGI(TAG, "test button tapped again: cancelling the test page");
-        } else {
-            ESP_LOGW(TAG, "test button tapped but the printer is busy");
-            s_job_waiting = 1;          // an update in progress gives way (W-1048)
-            led_grid_blip(LG_BLIP_BUSY);
-        }
+        ESP_LOGW(TAG, "test button tapped but the printer is busy");
+        s_job_waiting = 1;          // an update in progress gives way (W-1048)
+        led_grid_blip(LG_BLIP_BUSY);
         return;
     }
     // W-1088: the printer on the port, else the first ready shared printer, else the port's

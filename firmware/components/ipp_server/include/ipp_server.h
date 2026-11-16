@@ -76,6 +76,11 @@ const char *ipp_server_uri(void);
 // it -- and the printer is free for the next job. Any task.
 void ipp_server_job_done(int ok);
 
+// The test button (W-1165): stops whichever printer's job is printing, as Cancel-Job
+// would, and its client reads job-canceled-at-device. Returns how many it stopped
+// (one job prints at a time, so 0 or 1). Any task but the sink's own cancel.
+int  ipp_server_cancel_printing(void);
+
 // Reports the printer stopped, with an IPP printer-state-reasons keyword such
 // as "media-empty-error" and a printer-state-message to go with it. Pass NULL
 // to clear both. A job printing meanwhile reads processing-stopped. This is
