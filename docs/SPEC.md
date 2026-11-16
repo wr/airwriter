@@ -619,8 +619,9 @@ a print job. A USB flash must write a signed build, or the board takes any image
 **Signing.** IDF's signed apps without secure boot (`CONFIG_SECURE_SIGNED_APPS_NO_SECURE_BOOT`,
 RSA-3072, `SECURE_SIGNED_ON_UPDATE_NO_SECURE_BOOT`, `SECURE_BOOT_BUILD_SIGNED_BINARIES`; main.c
 refuses to build without them). `esp_ota_end` checks the new image's signature block against the
-key that signed the *running* image, so `/update` and the GitHub path share one check. No eFuse
-is burned and the bootloader is unchanged. A board running an unsigned image accepts any valid
+key that signed the *running* image, so `/update` and the GitHub path share one check. Signing
+burns no eFuse and leaves the bootloader unchanged (a sold board's user block holds its password,
+§3.20, which signing never reads). A board running an unsigned image accepts any valid
 image once; after that only images signed with the same key. Changing the key takes a USB
 flash. The release signing key is kept outside the repo, by the maintainer, with a backup;
 its public half is `firmware/keys/airwriter-release.pub.pem`,
@@ -647,6 +648,14 @@ upload refused that way has its slot's first sector erased, so nothing boots it.
 anything else (`v0.1.0-3-gabc1234-dirty`) is a dev build, and a release is newer only if its
 `vX.Y.Z` is past the running one's.
 
+**No going back before sign-in** (W-1156, §3.20). A board with a password burned in (or a test
+one) that runs `FWU_SIGNIN_FLOOR` (`fw_update_core.h`, the first release with sign-in) or later
+refuses an older image, by tag and on `/update` ("This AirWriter can’t go back to a version
+before vX.Y.Z"): older firmware would come up with an open setup network. A refused upload's slot
+has its first sector erased, as the other board's does. A dev build numbered below the floor has
+none, so a bench board moves between builds; a later version, and a USB flash, are never
+limited. The release that first ships sign-in sets the floor to its own tag.
+
 **When.** An update takes the job lock without waiting and holds it to the restart. A job that
 finds the lock taken raises a flag, and the update aborts at its next chunk and lets the job
 print; `/update` answers 409. Not while the last update is on trial, never in setup mode
@@ -662,7 +671,8 @@ rolled back, and tries each release once per check. The panel shows progress thr
 `LG_ACT_FW_*` overlays.
 
 **Web.** `GET /api/update`; `POST /api/update/check`, `/api/update/install` (optional
-`{"tag":"vX.Y.Z"}`, which may be older or a prerelease), `/api/update/auto` (`{"auto":true}`).
+`{"tag":"vX.Y.Z"}`, which may be older, down to the floor above, or a prerelease),
+`/api/update/auto` (`{"auto":true}`).
 
 ### 3.13 AppleTalk: the cable, Basilisk II and Infinite Mac
 

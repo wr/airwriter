@@ -23,6 +23,7 @@
 #include "led_grid.h"
 #include "ota_health.h"
 #include "settings.h"
+#include "auth.h"
 #include "sdkconfig.h"
 
 static const char *TAG = "fw_update";
@@ -150,6 +151,16 @@ static const char *other_board(const esp_app_desc_t *d)
 }
 static const char *const WHY_REFUSED = "not a signed AirWriter update, or damaged";
 
+// W-1156: a board with a password that runs a release with sign-in won't go
+// back to firmware without it, which would open its setup network.
+static const char *const WHY_FLOOR = "this AirWriter can’t go back to a version before " FWU_SIGNIN_FLOOR;
+
+static int below_floor(const esp_app_desc_t *d)
+{
+    return auth_floor_applies() &&
+           fwu_floor_refuses(esp_app_get_description()->version, d->version, FWU_SIGNIN_FLOOR);
+}
+
 // ------------------------------------------------------------- the upload
 
 esp_err_t fw_update_stream_begin(size_t len, const char **why)
@@ -250,8 +261,9 @@ esp_err_t fw_update_stream_end(const char **why)
     esp_app_desc_t d = { 0 };
     const char *other = esp_ota_get_partition_description(part, &d) == ESP_OK
         ? other_board(&d) : WHY_NOT_OURS;
+    if (!other && below_floor(&d)) other = WHY_FLOOR;
     if (other) {
-        ESP_LOGE(TAG, "upload refused: project %.32s", d.project_name);
+        ESP_LOGE(TAG, "upload refused: project %.32s, version %.32s", d.project_name, d.version);
         esp_partition_erase_range(part, 0, part->erase_size);
         led_grid_action(LG_ACT_FW_REFUSED, 0);
         *why = other;
@@ -426,6 +438,7 @@ static void do_install(const char *tag, int automatic)
         if (!why) why = WHY_NOT_OURS;
         goto refuse;
     }
+    if (below_floor(&d)) { why = WHY_FLOOR; goto refuse; }
     if (!tag[0] && strncmp(d.version, want, sizeof d.version)) {
         why = "the download is the wrong version";
         goto refuse;

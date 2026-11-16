@@ -26,6 +26,16 @@ int fwu_valid_file(const char *s);
 // past v0.1.0 (v0.1.0-3-g...) counts as v0.1.0, so v0.1.0 is not offered to it.
 int fwu_newer(const char *latest, const char *running);
 
+// W-1156: the first release with sign-in. A board with a password that runs
+// it or later won't take an image older than it, which would come up with an
+// open setup network and no sign-in. The release that first ships sign-in
+// sets this to its own tag (AGENTS.md).
+#define FWU_SIGNIN_FLOOR "v0.5.0"
+// 1 when `running` reads at or past `floor` and `incoming` reads before it.
+// A dev build below the floor has none, so a bench board moves between
+// builds; an incoming version that doesn't read is left to the signature.
+int fwu_floor_refuses(const char *running, const char *incoming, const char *floor);
+
 typedef enum {
     FWU_M_OK,
     FWU_M_BAD,              // not a manifest, or a version or file name that fails the checks
