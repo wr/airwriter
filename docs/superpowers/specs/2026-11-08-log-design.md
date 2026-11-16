@@ -68,7 +68,7 @@ first, how a log file reads, and say "26 h 14 min ago" where the screen gives a 
 time of day in a posted log gives away a time zone.
 
 The header makes a pasted log stand alone: firmware version and slot, board revision, time on,
-last reset reason, each printer's model and connection, and free memory.
+last reset reason, each printer's model, connection and status (see Amendments), and free memory.
 
 **The setup screens.** Setup hides the sidebar, so About can't be reached by someone whose board
 can't join Wi-Fi, which is a likely reason to want the log. In the "Couldn't join" state only, the
@@ -226,6 +226,14 @@ for anything the bench turns up; the wiki's Troubleshooting page.
   Mac's asking, and an open screen sees every one as it comes. Claude's call, for Wells to check.
   Updating to the first build with it starts the RAM ring afresh once, so lines not yet saved when
   the update restarts the board are lost; flash keeps the rest.
+- **2026-11-16, a printer's Report a Problem…** (`W-1154 Settings page: Report a Problem on every
+  printer, and a line for printers not yet confirmed`; the settings-redesign design's amendment).
+  The header gives each printer its own line: model, connection and status ("Color StyleWriter
+  2500, Printer port: Needs attention: clear the paper jam"), and for an AppleTalk printer its own
+  status line when that says more. A report needs the state the printer was in; the busy line
+  that names a job becomes "Busy", so no document name gets in. A printer's Report a Problem…
+  downloads this file, and **Report an issue** below the log now opens an issue filled in with
+  the firmware, the board and the file's name. Wells approved it on board 1.
 
 ## Suggestions, not part of this
 

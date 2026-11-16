@@ -10,8 +10,8 @@ relay, an update error...). Nothing is sent to a board.
     python3 tools/webui/preview.py            # then open http://localhost:8079/_states
     python3 tools/webui/preview.py --port 9000
 
-/?state=NAME opens the page in that state, at / so that the page's own
-reloads keep it. In states.json a response can be {"_status": 404, "_body":
+/?state=NAME opens the page in that state, and /printers/1?state=NAME that
+printer's detail, without the query so that the page's own reloads keep it. In states.json a response can be {"_status": 404, "_body":
 "..."} for a refusal, {"_drop": true} for no answer at all, {"_delay": s} to
 answer late, and "_first": n to apply only to the first n asks. A state's
 "_down_after": s stops answering s seconds after the page loads, as a board
@@ -129,11 +129,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if method == "GET" and PAGES.fullmatch(url.path):
             q = urllib.parse.parse_qs(url.query)
             name = q.get("state", [None])[0]
-            if name is not None:            # a fresh start in that state, at /
+            if name is not None:            # a fresh start in that state, at the same page
                 clock["override"] = None    # so the page's own reloads keep it
                 clock["down_until"] = 0.0
                 self.send_response(302)
-                self.send_header("Location", "/")
+                self.send_header("Location", url.path)
                 self.send_header("Set-Cookie", "state=%s; Path=/" % urllib.parse.quote(name))
                 self.send_header("Content-Length", "0")
                 return self.end_headers()

@@ -98,6 +98,7 @@
           <div class="row hide" id=cart-row><span class=txt>Cartridge</span><span class=val><span class="ribbon hide" id=cart-colour><i class=y></i><i class=m></i><i class=c></i><i class=k></i></span><span id=cart></span></span></div>
         </div>
         <p class=say id=prn-why></p>
+        <p class="foot unconf hide" id=pd-unconf><svg class=inf aria-hidden=true><use href="#g-info"/></svg><span>Expected to work, but not yet confirmed on this model.</span></p>
         <div class=box>
           <div class=row><span class=txt>Name</span><input class="fld short" id=pname autocomplete=off spellcheck=false maxlength=32 aria-label=Name></div>
           <div class="row hide" id=model-row><span class=txt>Model</span><select class=pop id=model aria-label=Model></select></div>
@@ -115,7 +116,7 @@
         <p class="foot hide" id=pd-cleannote>Cleaning uses ink.</p>
         <p class=say id=pd-clean-say></p>
         <p class=say id=prn-say></p>
-        <div class=btnrow><button class="btn danger" type=button id=pd-remove>Remove Printer…</button><button class=btn type=button data-dlg=d-cable id=pd-cable>Test Cable…</button><button class=btn type=button id=testpage>Print Test Page</button></div>
+        <div class=btnrow><button class="btn danger" type=button id=pd-remove>Remove Printer…</button><button class=btn type=button data-dlg=d-cable id=pd-cable>Test Cable…</button><button class=btn type=button data-dlg=d-report id=pd-report>Report a Problem…</button><button class=btn type=button id=testpage>Print Test Page</button></div>
       </div>
     </section>
 
@@ -229,7 +230,7 @@
         <p class=foot>Times count from each start.</p>
         <div class=box>
           <a class="row link" href="https://github.com/wr/airwriter/wiki/Troubleshooting" target=_blank rel=noopener><span class=txt>Wiki</span><span class=out aria-hidden=true>↗</span></a>
-          <a class="row link" href="https://github.com/wr/airwriter/issues/new" target=_blank rel=noopener><span class=txt>Report an issue</span><span class=out aria-hidden=true>↗</span></a>
+          <a class="row link" id=log-report href="https://github.com/wr/airwriter/issues/new" target=_blank rel=noopener><span class=txt>Report an issue</span><span class=out aria-hidden=true>↗</span></a>
         </div>
         <textarea id=log-buf tabindex=-1 aria-hidden=true readonly></textarea>
       </div>
@@ -262,6 +263,14 @@
   <p>Plug one cable into both ports, then choose Test.</p>
   <p class=say id=cable-say></p>
   <div class=btnrow><button class="btn hide" type=button id=ltflash>Flash TashTalk</button><button class=btn type=button data-close>Cancel</button><button class="btn primary" type=button id=cabletest>Test</button></div>
+</div></dialog>
+
+<!-- W-1154: a problem with a printer, reported on GitHub with the log attached -->
+<dialog id=d-report><div class=dlg>
+  <b>Report a problem with <span id=rep-model></span></b>
+  <p>Download the log, then attach it to your report on GitHub.</p>
+  <p class=say id=rep-say></p>
+  <div class=btnrow><button class=btn type=button data-close>Cancel</button><button class=btn type=button id=rep-log>Download Log</button><a class="btn primary" id=rep-go target=_blank rel=noopener>Open Report…</a></div>
 </div></dialog>
 
 <dialog id=d-remove><div class=dlg>

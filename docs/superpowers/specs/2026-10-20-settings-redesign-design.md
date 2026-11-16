@@ -151,3 +151,29 @@ Each was looked at in `tools/webui/preview.py` at desktop and phone width, light
 - Mac names from NBP. AirWriter shows each Mac's AppleTalk address; System 7 and later should
   answer a lookup of `=:Workstation@*` with the Macintosh name, which needs a bench check.
 - The captive setup page keeps its own short form.
+
+## Amendments
+
+- **2026-11-16, Report a Problem… and printers not yet confirmed** (`W-1154 Settings page: Report
+  a Problem on every printer, and a line for printers not yet confirmed`; SPEC §3.15). Every
+  printer's detail gains **Report a Problem…**, a key beside Test Cable… and Print Test Page
+  (Wells chose it over a row of its own). It opens a sheet: "Report a problem with the Color
+  StyleWriter 2500" / "Download the log, then attach it to your report on GitHub." / **Cancel**,
+  **Download Log**, **Open Report…**. Open Report… opens a new GitHub issue titled with the
+  printer's model, with blanks for what happened, what you expected and what you printed from,
+  then the printer, connection, firmware and board, and "Log: drag airwriter-xxxx-log.txt here."
+  The issue uses the model, never the name the owner gave the printer, so nothing personal is
+  posted. The page still makes no request of its own: GitHub takes no file by address, so the
+  person attaches the log. A printer the wiki's Supported Printers page marks **Yes\*** shows one
+  quiet line under Status, with the info mark: "Expected to work, but not yet confirmed on this
+  model." No keys and no question: `docs/voice-and-tone.md` principle 4 has it as its one
+  settings-page exception. The models confirmed are a list in `app.js`, kept to the wiki.
+
+  How it got here, for whoever picks it up: the first ask was a box for starred printers asking
+  for bug reports, then a yes/no question ("Does your Color StyleWriter 2500 print?") with a
+  report either way. Wells dropped the "yes" report: nobody opens a GitHub issue to say a
+  printer works, and a page that sends nothing can't collect it any other way. Confirmations
+  moved to `W-1161 Opt-in printer statistics: a public printers leaderboard, and stars that come
+  off by themselves`, where the board itself reports what printed, if its owner switches that on.
+  Problems need a log on any printer, so the report went to every printer's page and the starred
+  box shrank to a line. Wells approved it on board 1.
