@@ -43,6 +43,8 @@ done
 [ $# -ge 1 ] || die "usage: release.sh [--branch] [--dry-run] vX.Y.Z [notes-file]"
 VER=$1 NOTES=${2:-}
 [[ $VER =~ ^v[0-9]{1,4}\.[0-9]{1,4}\.[0-9]{1,4}$ ]] || die "$VER is not vX.Y.Z"
+# W-1156: sold boards keep their floor only if it is the first release with sign-in.
+python3 "$(dirname "$0")/floor_check.py" "$VER" || die "the version floor (above)"
 [ -z "$NOTES" ] || [ -f "$NOTES" ] || die "no notes file $NOTES"
 [ -f "$KEY" ] || die "no signing key at $KEY"
 

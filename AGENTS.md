@@ -163,7 +163,8 @@ http://192.168.4.1/.
     (`--dry-run` builds and checks only). It builds both boards from the defaults alone, never a
     local sdkconfig, and publishes `airwriter-esp32s3.bin`, `airwriter-2026.11.bin` and
     `airwriter.json`. The release that first ships sign-in sets `FWU_SIGNIN_FLOOR`
-    (`fw_update_core.h`) to its own tag first
+    (`fw_update_core.h`) to its own tag first; `tools/release/floor_check.py` refuses a release
+    below the floor, or a floor at or below a release without sign-in
   - a bench board's password: `CONFIG_AIRWRITER_TEST_PASSWORD` in the local sdkconfig (AirWriter
     menu) stands in for a burned one. Never burn board 1
 - **Signing.** Every build is signed. `sdkconfig.defaults` signs with

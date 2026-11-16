@@ -655,7 +655,10 @@ refuses an older image, by tag and on `/update` ("This AirWriter can’t go back
 before vX.Y.Z"): older firmware would come up with an open setup network. A refused upload's slot
 has its first sector erased, as the other board's does. A dev build numbered below the floor has
 none, so a bench board moves between builds; a later version, and a USB flash, are never
-limited. The release that first ships sign-in sets the floor to its own tag.
+limited. The release that first ships sign-in sets the floor to its own tag; `release.sh` runs
+`tools/release/floor_check.py`, which refuses a tag below the floor and a floor at or below any
+earlier tag without sign-in. A sold board is flashed only with a release at or past the floor,
+never a dev build (a dev build below it would leave the board without one).
 
 **When.** An update takes the job lock without waiting and holds it to the restart. A job that
 finds the lock taken raises a flag, and the update aborts at its next chunk and lets the job
