@@ -139,7 +139,9 @@ case "$*" in
   *burn_block_data*)
     f=$(echo "$*" | sed 's/.*BLOCK_USR_DATA //')
     cp "$f" "$STUB_BLOCK" ;;
-  *summary*) echo "MAC (BLOCK1) Factory MAC Address = dc:da:0c:01:02:03 (OK) R/W" ;;
+  *summary*)
+    [ -n "$STUB_SUMMARY_FAILS" ] && exit 2
+    echo "MAC (BLOCK1) Factory MAC Address = ${STUB_MAC:-dc:da:0c:01:02:03} (OK) R/W" ;;
 esac
 """
 
@@ -186,6 +188,26 @@ class Burn(unittest.TestCase):
         with self.assertRaises(bench.Refused):
             self.burn()
         self.assertNotIn("burn_block_data", self.log.read_text())
+
+    def test_a_burn_cut_short_never_hands_its_label_to_the_next_board(self):
+        # Final review: the block is burned, then the MAC read fails (USB dropped, Ctrl-C).
+        self.block.write_bytes(bytes(32))
+        os.environ["STUB_SUMMARY_FAILS"] = "1"
+        try:
+            with self.assertRaises(bench.Refused):
+                self.burn()
+        finally:
+            del os.environ["STUB_SUMMARY_FAILS"]
+        # The same board again: it has label 1, and now the book knows its MAC.
+        self.assertEqual(self.burn(), "Label 1: 2652AWF2611-001 (already burned)")
+        self.assertEqual(labels.Book(self.dir / "labels.csv").rows[0].mac, "dc:da:0c:01:02:03")
+        # The next, blank board gets label 2, never label 1's password.
+        self.block.write_bytes(bytes(32))
+        os.environ["STUB_MAC"] = "dc:da:0c:0a:0b:0c"
+        try:
+            self.assertEqual(self.burn(), "Label 2: 2652AWF2611-002")
+        finally:
+            del os.environ["STUB_MAC"]
 
     def test_no_burn_without_a_yes(self):
         self.block.write_bytes(bytes(32))

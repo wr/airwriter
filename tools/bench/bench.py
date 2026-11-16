@@ -66,6 +66,8 @@ def burn(folder, kind, port, cmd="espefuse.py", confirm=ask):
         raise Refused("%s. Nothing burned." % e)
     if got:
         row = book.by_serial(got[0])
+        if row and row.mac in ("", "burning"):
+            book.mark_burned(row, read_mac(cmd, port))     # a burn cut short last time
         where = "Label %d: " % row.position if row else ""
         return "%s%s (already burned%s)" % (where, got[0], "" if row else ", not in this book")
 
@@ -76,6 +78,8 @@ def burn(folder, kind, port, cmd="espefuse.py", confirm=ask):
     if not confirm():
         raise Refused("Nothing burned.")
     block = labels.pack_block(row.serial, row.password)
+    # Taken before the burn: if anything after it fails, this label never goes to another board.
+    book.mark_burned(row, "burning")
     with tempfile.TemporaryDirectory() as d:
         f = pathlib.Path(d) / "usr.bin"
         f.write_bytes(block)
