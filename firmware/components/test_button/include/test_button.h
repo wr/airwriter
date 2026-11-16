@@ -16,7 +16,7 @@ typedef struct {
 } test_button_cb_t;
 
 // Configures the button's pin as an input with the internal pull-up, then
-// starts the 100ms poll task. ESP_OK no-op, no task created, when the board
+// starts the poll task (BTN_POLL_MS). ESP_OK no-op, no task created, when the board
 // has no button (pin < 0). The callbacks are copied out of *cb before this
 // returns; cb may be NULL, and either member of it may be NULL. Call once.
 esp_err_t test_button_start(const test_button_cb_t *cb);

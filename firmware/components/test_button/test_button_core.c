@@ -8,13 +8,16 @@ btn_ev_t btn_step(btn_t *b, int pressed, uint32_t now_ms)
     if (!b->seeded) {
         b->seeded = 1;
         b->last = b->down = s;
+        b->t_last = now_ms;
         b->armed = !s;
         return BTN_EV_NONE;
     }
-    // Two equal samples in a row change the level.
-    uint8_t same = s == b->last;
-    b->last = s;
-    if (same && s != b->down) {
+    // A raw level held for BTN_DEBOUNCE_MS changes the level.
+    if (s != b->last) {
+        b->last = s;
+        b->t_last = now_ms;
+    }
+    if (s != b->down && now_ms - b->t_last >= BTN_DEBOUNCE_MS) {
         b->down = s;
         if (s) {
             b->t_down = now_ms;
