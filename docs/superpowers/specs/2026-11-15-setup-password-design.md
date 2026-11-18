@@ -58,7 +58,7 @@ representative`).
 | How the page sends it | Plain http, challenge-response, so the password never crosses the network | **Chosen** |
 | | https with a certificate made on the board | Rejected: every browser warns on it |
 | | Plain http, password posted as typed | Rejected: readable by anyone on the network |
-| How labels are printed | At the bench, on the Personal LaserWriter 300, sheets of 2.5 × 1.25 in foil labels | **Chosen** by Wells |
+| How labels are printed | At the bench, on the Personal LaserWriter 300, sheets of 2.5 × 1.25 in white matte polyester labels | **Chosen** by Wells |
 | | Ordered pre-printed from a list | Rejected: the password list leaves the bench |
 
 Wells chose from mocks of all three ways and of the sign-in screen; they are not in the repo.
@@ -246,7 +246,7 @@ burned in.
   print with no prompt; holding test through power-up brings back the test password; `curl`
   with `signin.py`'s cookie reaches `/api/status` and OTA.
 - **A blank rev 2026.11 board**, burned once with `bench.py burn` from a test sheet printed on
-  plain paper, before any foil sheet.
+  plain paper, before any label sheet.
 
 ## Docs to update in the same change
 
@@ -276,5 +276,3 @@ second-on-a-phone limit, the URF encoder, and the sheet's offset handling.
 - **Plain http.** The token travels in the clear, as on any http page: someone on the home
   network who records traffic can use a signed-in browser's token. The password itself stays
   private.
-- **Labels.** That the foil sheets take the Personal LaserWriter 300's heat, and that 4 pt small
-  print holds at 300 dpi: one test sheet each.

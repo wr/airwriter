@@ -176,8 +176,8 @@ hides the screw."""
 
 LABEL_W = 31.75
 LABEL_L = 63.50
-"""A 2.5 x 1.25 in sheet label, the size the bench's foil label sheets come
-in (Wells, 2026-11-15; 2.5 x 1 in from 2026-11-14), in a recess in the middle
+"""A 2.5 x 1.25 in sheet label, the size the bench's polyester label sheets
+come in (Wells, 2026-11-15; 2.5 x 1 in from 2026-11-14), in a recess in the middle
 of the floor's underside, its long side running front to back. Across, it
 would leave under a millimetre of flat beside the bottom chamfer and run into
 the feet."""
