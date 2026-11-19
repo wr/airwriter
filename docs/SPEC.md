@@ -1833,6 +1833,12 @@ layers `sdkconfig.defaults.2026.11` on the defaults, keeps `sdkconfig.2026.11`, 
 `airwriter-2026.11.bin`. `CMakeLists.txt` and main.c stop a build whose sdkconfig is the other
 board's. Neither image runs on the other board, and each board refuses the other's (3.12).
 
+Espressif rates the N16R8 to 65 °C around it, and to 85 °C, rev A's N8R2's rating, with the
+PSRAM's error correction on, so rev 2026.11's build turns it on (`CONFIG_SPIRAM_ECC_ENABLE` in
+`sdkconfig.defaults.2026.11`; main.c stops a 2026.11 build without it). ESP-IDF then keeps 1/16
+of the PSRAM for the check bits and maps the other 7.5 MB. Built, never run: no rev 2026.11
+board exists.
+
 - **Pins.** Kconfig's board choice (`AIRWRITER_BOARD_REV_A`, `AIRWRITER_BOARD_2026_11`) sets the
   defaults. J2's handshake drive (`HSKI_DRV`) is IO47 on rev 2026.11, not IO35; J4's (IO13) and
   J4's handshake in (IO21) exist only there. The bootloader hook drives IO47 and IO13 low and
@@ -1858,8 +1864,10 @@ board's. Neither image runs on the other board, and each board refuses the other
   receiver's input on its pull-down, which reads high, so the low level finds it. Verdicts
   `no_busy` (J4.1 to J2.2: the printer can't tell AirWriter to wait), `no_hsk_out` (J2.1 to
   J4.2) and `no_hsk` (both); the reply's `hsk` names the leg.
-- **Job buffer** (3.4): 6.5 MB of the 8 MB (`AIRWRITER_JOB_POOL_KB`), so a full-page colour
-  photo's ~5.7 MB of URF fits ahead of the rip; 1 MB if that much can't be had.
+- **Job buffer** (3.4): 6.5 MB of the 7.5 MB the error correction leaves
+  (`AIRWRITER_JOB_POOL_KB`), so a full-page colour photo's ~5.7 MB of URF fits ahead of the
+  rip; 1 MB if that much can't be had. That leaves the rest of the firmware 1 MB of PSRAM, as
+  rev A's 2 MB does.
 - **U7's socket on an LC** is empty: every start-up check of U7 (`lt_go("boot", 1)`) leaves its
   pins on the chip's pull-ups, so they never float.
 - **The LC's light.** When `BOARD_LC` reads low, `led_grid` draws D26, the chain's first LED

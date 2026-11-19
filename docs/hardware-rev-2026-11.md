@@ -50,8 +50,9 @@ Each port's HSKo has its own GPIO, on pins the DIP switches freed. The cable tes
 each, and through a crossover IO8 reads J2.2 (from J4.1) and IO21 reads J4.2 (from J2.1).
 U1 is the ESP32-S3-WROOM-1-N16R8 (16 MB flash, 8 MB octal PSRAM; rev A's is the N8R2): its
 PSRAM takes IO35–IO37, so those stay off every net. It needs its own firmware build (SPEC §3.19:
-`idf.py -B build-2026.11 -DAIRWRITER_BOARD=2026.11 build`), and it
-is rated to 65 °C.
+`idf.py -B build-2026.11 -DAIRWRITER_BOARD=2026.11 build`). Espressif
+rates it to 65 °C around it, and to 85 °C with the PSRAM's error correction on, which that
+build turns on at the cost of 1/16 of the PSRAM (7.5 MB usable).
 
 ## GPIOs that changed
 
