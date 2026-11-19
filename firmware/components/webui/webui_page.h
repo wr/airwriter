@@ -1621,7 +1621,7 @@ static const char WEBUI_HTML[] =
 "  if(id!==null){ document.querySelector('.detail').scrollTop=0; pdDraw(); requestAnimationFrame(render); lwtPoll(); }\n"
 "}\n"
 "\n"
-"const CONFIRMED=['ImageWriter II','Personal LaserWriter 300','LaserWriter Personal NTR'];\n"
+"const CONFIRMED=['ImageWriter II','Color StyleWriter 2500','Personal LaserWriter 300','LaserWriter Personal NTR'];\n"
 "const prModel=p=>p.where==='port'?p.model:p.product;\n"
 "\n"
 "const prLabel=p=>prModel(p)||{unknown:'Unrecognized printer',laserwriter:'LaserWriter','appletalk-imagewriter':'AppleTalk ImageWriter'}[p.kind]||'Printer';\n"

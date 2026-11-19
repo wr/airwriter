@@ -994,8 +994,10 @@ read back is a list made again). At most 8 records.
   printer. A printer the wiki's Supported Printers page marks **Yes\*** shows "Expected to work,
   but not yet confirmed on this model." under its status: every port ImageWriter, StyleWriter or
   QuickDraw LaserWriter and every AppleTalk LaserWriter except those whose model is in
-  `CONFIRMED` in `tools/webui/app.js` (ImageWriter II, Personal LaserWriter 300, and the
-  product "LaserWriter Personal NTR"). Unknown printers and AppleTalk ImageWriters show no line.
+  `CONFIRMED` in `tools/webui/app.js` (ImageWriter II, Color StyleWriter 2500, Personal
+  LaserWriter 300, and the product "LaserWriter Personal NTR"; the 2500 since
+  `W-1168 The Color StyleWriter 2500 is confirmed on paper`). Unknown printers and AppleTalk
+  ImageWriters show no line.
 
 ### 3.16 StyleWriters (W-1103)
 
@@ -1004,9 +1006,10 @@ StyleWriter on the printer port: `components/stylewriter` (`sw_model`, `sw_code`
 `sw_status` and `sw_testpage` are pure and host-tested in `tools/rip`; `stylewriter.c` is the
 board's), `components/printers/port_policy.c`, and `tools/stylewriter` (the software printer
 and the owner's tool). **Built and host-tested against a software StyleWriter
-(`tools/stylewriter/swfake.py`) and a second coder (lpstyl's); a Color StyleWriter 2500 ran the
-test page to its end on a rev A board (2026-11-02, its dry cartridge left the sheet blank), no other
-model has printed from AirWriter, and Apple's drivers have not been captured** (the rig stops at a 68k Mac ROM,
+(`tools/stylewriter/swfake.py`) and a second coder (lpstyl's); a Color StyleWriter 2500 prints on a
+rev A board, in colour since 2026-11-07 with a new old stock colour cartridge (its black
+cartridge is dry: on 2026-11-02 its first test page ran to its end blank), no other model has
+printed from AirWriter, and Apple's drivers have not been captured** (the rig stops at a 68k Mac ROM,
 `tools/stylewriter/capture.md`). The command letters, orders, geometry and block caps are
 TailTalk's reading of Apple's drivers (`tailtalk/src/stylewriter/*`, FeralFirmware; read for
 facts, never copied) and lpstyl's `README.protocol`; only the Color StyleWriter 2200 has

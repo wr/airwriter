@@ -54,7 +54,7 @@ which nothing has run on yet, the LC's one status light included.
   port, the seven models lpstyl covers (StyleWriter, II, 1200, Color 1500, 2200, 2400, 2500),
   are found by the plain question or named by the person, and print over AirPrint in colour
   with a colour cartridge. All seven are host-tested against a software StyleWriter; a Color
-  StyleWriter 2500 runs a page to its end, its dry cartridge leaving the sheet blank. On rev A
+  StyleWriter 2500 prints in colour, tested on board 1, and the other six are untested. On rev A
   the others may need R9 fitted (`docs/hardware-rev-a.md`). A Personal LaserWriter 300 on the
   printer port is found by the clock it drives on HSKi and prints over AirPrint in gray, tested
   on board 1. A Personal LaserWriter LS is found and shared the same way, built from its own
