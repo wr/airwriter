@@ -58,6 +58,7 @@
 #include "esp_heap_caps.h"
 #include "bigmem.h"
 #include "memdiag.h"
+#include "chip_temp.h"
 #include "logbook.h"
 #include "esp_app_desc.h"
 #include "esp_partition.h"
@@ -3334,7 +3335,8 @@ static void status_json(void *ctx, char *buf, size_t cap)
     const char *model = swp ? swp->make_model : qdc ? qdc->make_model
                       : printer_caps_imagewriter_model(printers_port_model())->make_model;
 
-    char laser[300], printers[128];
+    char laser[300], printers[128], temp[48];
+    chip_temp_json(temp, sizeof temp);
     laser_status_json(laser, sizeof laser);
     printers_status_json(printers, sizeof printers);
 
@@ -3363,7 +3365,7 @@ static void status_json(void *ctx, char *buf, size_t cap)
         "\"pmodel\":\"%s\",\"pname\":\"%s\",\"phost\":\"%s\",\"airprint\":%s,"
         "\"lt_port\":%d,\"lt\":%s,\"lt_chip\":\"%s\",\"board\":\"%s\",\"lc\":%s,"
         "\"board_ok\":%s,\"rainbow\":%s,\"ap\":\"AirWriter-%s\",\"pw\":\"%s\","
-        "\"laser\":%s,\"printers\":%s,\"fresh\":%s,\"internal\":{\"free\":%u,\"lowest\":%u},"
+        "\"laser\":%s,\"printers\":%s,\"fresh\":%s,\"internal\":{\"free\":%u,\"lowest\":%u}%s,"
         "\"pipe\":{\"in\":%u,\"out\":%u,\"queued\":%u,\"upload_ms\":%u,\"rip_ms\":%u,\"ms\":%u}}",
         state_text(v.state),
         ps_name(v.state),
@@ -3399,6 +3401,7 @@ static void status_json(void *ctx, char *buf, size_t cap)
         // Internal RAM is what Wi-Fi and lwIP live on: below ~20 KB, replies stall.
         (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
         (unsigned)heap_caps_get_minimum_free_size(MALLOC_CAP_INTERNAL),
+        temp,       // how hot the chip is, and the hottest since boot
         (unsigned)pst.doc_bytes, (unsigned)pst.printer_bytes, (unsigned)queued,
         (unsigned)pst.upload_ms, (unsigned)pst.rip_ms, (unsigned)pst.ms);
 }
@@ -3965,6 +3968,7 @@ void app_main(void)
     ESP_LOGI(TAG, "AirWriter starting after %s reset, %u bytes free",
              reset_name(esp_reset_reason()), (unsigned)esp_get_free_heap_size());
     memdiag_start();                        // W-1094: what holds internal RAM (/api/mem)
+    chip_temp_start();                      // the chip's own temperature (/api/status)
     if (bootloader_common_get_rtc_retain_mem_factory_reset_state()) {
         logbook_clear();
         ESP_LOGW(TAG, "power-up reset by the bootloader: settings erased, known-good firmware");
@@ -4156,7 +4160,7 @@ void app_main(void)
                            .changed = laser_changed, .relay = laser_relay };
         if (laser_start(&lc) == ESP_OK) printers_apply();
 
-        for (;;) { vTaskDelay(pdMS_TO_TICKS(1000)); logbook_tick(); }
+        for (;;) { vTaskDelay(pdMS_TO_TICKS(1000)); logbook_tick(); chip_temp_sample(); }
     }
 
     ipp_server_cfg_t cfg = {
@@ -4202,5 +4206,5 @@ void app_main(void)
     ESP_LOGI(TAG, "%u bytes free after startup", (unsigned)esp_get_free_heap_size());
     memdiag_mark("ready");
 
-    for (;;) { vTaskDelay(pdMS_TO_TICKS(1000)); logbook_tick(); }
+    for (;;) { vTaskDelay(pdMS_TO_TICKS(1000)); logbook_tick(); chip_temp_sample(); }
 }

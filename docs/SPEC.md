@@ -1867,6 +1867,15 @@ board's. Neither image runs on the other board, and each board refuses the other
   language design's LC section), and the rest of the chain dark. `/api/panel` sends that frame,
   and the page's mark beside the name draws the one dot when `/api/status` has `lc`, and
   the page is named AirWriter LC.
+- **Chip temperature** (`chip_temp`). The N16R8 is rated to 65 °C of air around it, rev A's
+  N8R2 to 85 °C, and neither has been measured in its closed case. Both builds read the
+  ESP32-S3's own sensor (ESP-IDF's `temperature_sensor` driver, started in its -10 to 80 °C
+  range, where it is within 1 °C; the driver moves to 20 to 100 °C, within 2 °C, by itself)
+  once a second from the main task's loop, and `/api/status` has `temp`, that reading in °C to
+  a tenth, and `temp_max`, the highest since boot; each is `null` on a board whose sensor did
+  not start or whose last reading failed. The sensor is on the die, so it reads above the air
+  in the case, by how much depends on what the chip is doing. Nothing acts on the number and
+  the settings page does not show it. Not yet read on a board.
 - **Tested:** both builds, the stack check on both, and the host tests (the manifest with both
   keys, the handshake verdicts, the LC light's caps, colours, endings and priorities). Nothing has run on a rev 2026.11 board: none exists yet. On
   the first, check the straps, the handshake legs through Apple's crossover, a StyleWriter

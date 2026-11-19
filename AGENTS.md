@@ -93,6 +93,7 @@ Where things are (`firmware/components/` unless a path is given):
 | QuickDraw LaserWriters | `qdlaser` | SPEC §3.18, QuickDraw LaserWriters design |
 | The log | `logbook` | SPEC §3.17, log design |
 | Status panel | `led_grid`; `tools/lights` renders every effect | status-language design |
+| The chip's temperature (`/api/status` `temp`, `temp_max`) | `chip_temp` | SPEC §3.19 |
 | Test page | `testpage` | test-page design |
 | Cable test, TashTalk flashing | `cable_test`, `pic_prog` | |
 | Settings page | `webui`; sources in `tools/webui` | settings-redesign design |
