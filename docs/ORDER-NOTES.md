@@ -40,8 +40,8 @@ Position file `combined-pos.csv`, BOM `combined-assembly-bom.csv`, 135 placement
 top side of the file. R33 is left off; its pads stay bare.
 
 1. **J2 and J4 (mini-DIN-8): DO NOT ASSEMBLE, and keep all 22 of their holes free of
-   solder.** They are fitted after delivery and are absent from the position file and the BOM. If the
-   through-hole parts are wave or selectively soldered, mask J2's and J4's holes.
+   solder.** They are fitted after delivery and are absent from the position file and the
+   BOM. If the through-hole parts are wave or selectively soldered, mask J2's and J4's holes.
 2. **U7: fit ONLY the DIP-8 socket, LCSC C72124, and leave it empty.** Do not buy or fit the
    PIC.
 3. **D3: through-hole 3 mm flat-top green LED (LCSC C20613324) standing on a HIWA LED4*8
@@ -92,8 +92,8 @@ R20 and C29. Leave off D10–D25, D27–D46, C30–C45, C47–C66 and C21.** The
 the position file and the BOM; their pads stay bare. R33 is fitted.
 
 1. **J2 and J4 (mini-DIN-8): DO NOT ASSEMBLE, and keep all 22 of their holes free of
-   solder.** They are fitted after delivery and are absent from the position file and the BOM. If the
-   through-hole parts are wave or selectively soldered, mask J2's and J4's holes.
+   solder.** They are fitted after delivery and are absent from the position file and the
+   BOM. If the through-hole parts are wave or selectively soldered, mask J2's and J4's holes.
 2. **U7: fit ONLY the DIP-8 socket, LCSC C72124, and leave it empty.** Do not buy or fit the
    PIC.
 3. **D3: through-hole 3 mm flat-top green LED (LCSC C20613324) standing on a HIWA LED4*8
