@@ -1867,8 +1867,8 @@ board's. Neither image runs on the other board, and each board refuses the other
   language design's LC section), and the rest of the chain dark. `/api/panel` sends that frame,
   and the page's mark beside the name draws the one dot when `/api/status` has `lc`, and
   the page is named AirWriter LC.
-- **Chip temperature** (`chip_temp`). The N16R8 is rated to 65 °C of air around it, rev A's
-  N8R2 to 85 °C, and neither has been measured in its closed case. Both builds read the
+- **Chip temperature** (`chip_temp`). A module's rating is for the air around it, and
+  neither board has been measured in its closed case. Both builds read the
   ESP32-S3's own sensor (ESP-IDF's `temperature_sensor` driver, started in its -10 to 80 °C
   range, where it is within 1 °C; the driver moves to 20 to 100 °C, within 2 °C, by itself)
   once a second from the main task's loop, and `/api/status` has `temp`, that reading in °C to

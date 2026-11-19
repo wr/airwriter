@@ -3,8 +3,8 @@
 // task, with the highest reading since boot. /api/status shows both.
 //
 // The sensor is on the die, so it reads above the air in the case and above
-// the module's can; rev 2026.11's module is rated to 65 °C around it (SPEC
-// §3.19). A bench diagnostic: nothing acts on the number.
+// the module's can, which is what a module's rating is for (SPEC §3.19). A
+// bench diagnostic: nothing acts on the number.
 #pragma once
 #include <stddef.h>
 

@@ -16,9 +16,12 @@ static volatile int s_now = NONE, s_max = NONE;
 
 static const char *tenths(char *buf, size_t cap, int t)
 {
-    int a = t < 0 ? -t : t;
-    if (t == NONE) snprintf(buf, cap, "null");
-    else snprintf(buf, cap, "%s%d.%d", t < 0 ? "-" : "", a / 10, a % 10);
+    if (t == NONE) {
+        snprintf(buf, cap, "null");
+    } else {
+        int a = t < 0 ? -t : t;
+        snprintf(buf, cap, "%s%d.%d", t < 0 ? "-" : "", a / 10, a % 10);
+    }
     return buf;
 }
 
