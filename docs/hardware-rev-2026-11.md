@@ -177,6 +177,6 @@ IO16 and IO15.
   front silk off the board, D3's K and SW1's RESET in place.
 - `enclosure/build.sh`: all tests pass; the tray has no DIP slot (a board without S1 gets
   none), and the reset pinhole aims at the new button, 1.90 mm up.
-- `make_fab.sh`: 135 placements on AirWriter's panel, 54 on the LC's main board alone, drill
+- `make_fab.sh`: 135 placements on AirWriter's panel, 59 on the LC's main board alone, drill
   floor 0.30 mm on both. Neither places J2, J4 or a PIC: Wells fits them after delivery, and
   U7's socket goes on empty.
