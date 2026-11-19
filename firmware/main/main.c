@@ -125,6 +125,10 @@ static const char *TAG = "airwriter";
 #if !CONFIG_SPIRAM_MODE_OCT || !CONFIG_ESPTOOLPY_FLASHSIZE_16MB
 #error "a rev 2026.11 build needs octal PSRAM and 16 MB flash (sdkconfig.defaults.2026.11)"
 #endif
+// Without it the module is rated to 65 °C, not 85 °C.
+#if !CONFIG_SPIRAM_ECC_ENABLE
+#error "a rev 2026.11 build needs CONFIG_SPIRAM_ECC_ENABLE (sdkconfig.defaults.2026.11)"
+#endif
 #if CONFIG_AIRWRITER_HSKI_DRV_PIN != 47 || CONFIG_AIRWRITER_J4_HSKO_DRV_PIN != 13 || \
     CONFIG_AIRWRITER_J4_HSKI_PIN != 21 || CONFIG_AIRWRITER_BOARD_REV_PIN != 16 || \
     CONFIG_AIRWRITER_BOARD_LC_PIN != 15

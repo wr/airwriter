@@ -227,7 +227,8 @@ config AIRWRITER_JOB_POOL_KB
     help
         Where an AirPrint job's bytes wait for the rip and the printer
         (components/job_pipe). 1 MB on rev A, half its 2 MB of PSRAM. 6.5 MB on
-        rev 2026.11's 8 MB (W-1109): a full-page colour photo is about 5.7 MB
+        rev 2026.11's 8 MB, 7.5 MB of it usable with the PSRAM's error
+        correction on (W-1109): a full-page colour photo is about 5.7 MB
         of URF, and an ImageWriter job keeps 512 KB of the buffer for the
         printer's bytes. If the board can't spare it, the buffer is 1 MB.
 
