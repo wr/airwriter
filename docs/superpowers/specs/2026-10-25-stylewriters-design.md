@@ -5,6 +5,11 @@
 `W-1102 QuickDraw LaserWriters on the printer port (Personal LaserWriter LS/300, Select 300)`.
 Reverses the StyleWriter cut in `2026-08-04-printer-support-scope-design.md`.
 
+**Amended 2026-11-19** by `W-1168 The Color StyleWriter 2500 is confirmed on paper`: board 1's
+2500 has printed in colour since 2026-11-07 with a new old stock colour cartridge, so the wiki's
+Supported Printers page lists it as **Yes** and its settings page drops the not-confirmed line
+(Docs, below). The other six stay **Yes\***.
+
 **Amended 2026-11-16** by `W-1162 Remove the DIP switch code: rev A boards ignore S1, the page's switches decide`: DIP4 no longer prints a test page at power-on, so the
 button and the page's Print Test Page are the two ways to one.
 
@@ -60,7 +65,7 @@ The 2500 counts a row's bytes from the rect's width rounded down, so Letter's 29
 Geometry). lpstyl's rects are always whole bytes; TailTalk's are the printable width, which on
 Letter is not. With 2920-dot rects the test page ran to its end at 57600 baud, with blank rows
 skipped, several bands in the buffer, `m2bA` and `B`, and pauses of 13 to 20 s between a rect
-and its blocks while the board drew them. The cartridge was dry, so the sheet came out blank.
+and its blocks while the board drew them. The cartridge was dry, so the sheet came out blank (a colour cartridge printed from 2026-11-07).
 The same bench changed two rules. The 2400 and 2500's `2` 80, read as spurious, also marks a
 page the printer has stopped on (`1` not busy, nothing draining), which now fails after 10 s
 rather than the 600 s stall limit. And the full sequence at start-up and on the person's Look

@@ -904,7 +904,7 @@ function prOpen(id){
 /* W-1154: a printer the wiki's Supported Printers page marks Yes*, one AirWriter prints to that
    nobody has confirmed on a real one yet, gets one line under its status. Every other printer
    AirWriter prints to is a Yes. Confirmations come from W-1161's statistics, not from here. */
-const CONFIRMED=['ImageWriter II','Personal LaserWriter 300','LaserWriter Personal NTR'];
+const CONFIRMED=['ImageWriter II','Color StyleWriter 2500','Personal LaserWriter 300','LaserWriter Personal NTR'];
 const prModel=p=>p.where==='port'?p.model:p.product;
 /* What to call a printer anywhere it's posted: its model, else what kind it is */
 const prLabel=p=>prModel(p)||{unknown:'Unrecognized printer',laserwriter:'LaserWriter','appletalk-imagewriter':'AppleTalk ImageWriter'}[p.kind]||'Printer';
