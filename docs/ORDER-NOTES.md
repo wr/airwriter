@@ -40,8 +40,8 @@ Position file `combined-pos.csv`, BOM `combined-assembly-bom.csv`, 135 placement
 top side of the file. R33 is left off; its pads stay bare.
 
 1. **J2 and J4 (mini-DIN-8): DO NOT ASSEMBLE, and keep all 22 of their holes free of
-   solder.** They are fitted after delivery and are absent from the position file. If the
-   through-hole parts are wave or selectively soldered, mask J2's and J4's holes.
+   solder.** They are fitted after delivery and are absent from the position file and the
+   BOM. If the through-hole parts are wave or selectively soldered, mask J2's and J4's holes.
 2. **U7: fit ONLY the DIP-8 socket, LCSC C72124, and leave it empty.** Do not buy or fit the
    PIC.
 3. **D3: through-hole 3 mm flat-top green LED (LCSC C20613324) standing on a HIWA LED4*8
@@ -54,15 +54,15 @@ top side of the file. R33 is left off; its pads stay bare.
 4. **Through-hole parts (SW3, U7's socket, D3): solder every joint fully.** Rev A's
    first boards came back with U7 and SW3 only tacked.
 5. **MT1–MT4: Wurth 9774030151R** M2.5 SMT standoff, not at LCSC; source from Digi-Key or
-   consign (labelled "MT1-MT4, Wurth 9774030151R, qty 4 + 2 spares"). Reflow on the top
-   side; paste is the ring aperture in the paste layer; the seat centre is bare ENIG with
-   no paste.
+   consign (labelled "MT1-MT4, Wurth 9774030151R"): four for every board, plus six spares
+   for the order. Reflow on the top side; paste is the ring aperture in the paste layer;
+   the seat centre is bare ENIG with no paste.
 6. **D10–D46 (37 × SK6812MINI-C, C7423117): align by the CHAMFERED corner**, which must sit
    on the footprint's chamfer/notch corner, the top-left corner of every LED in the top-view
    image. The footprint's pad numbering is rotated 180° from the datasheet's pin numbers:
    align by the chamfer, not by "pad 1". A 180° placement breaks the whole chain.
-7. Substitutions allowed: any 10 k 1 % 0603 for C25804, any 15 k 1 % 0603 for C22809 and any
-   1 k 1 % 0603 for C21190.
+7. Substitutions allowed: any 100 nF 50 V X7R 10 % 0603 for C14663, any 10 k 1 % 0603 for
+   C25804, any 15 k 1 % 0603 for C22809 and any 1 k 1 % 0603 for C21190.
    **No substitution** for U1–U9, J1, SW1–SW3 or D3, and U1 must be the
    **ESP32-S3-WROOM-1-N16R8** (16 MB flash, 8 MB octal PSRAM, LCSC C2913202), never a
    quad-PSRAM (R2) variant: the firmware is built for the octal PSRAM.
@@ -92,8 +92,8 @@ R20 and C29. Leave off D10–D25, D27–D46, C30–C45, C47–C66 and C21.** The
 the position file and the BOM; their pads stay bare. R33 is fitted.
 
 1. **J2 and J4 (mini-DIN-8): DO NOT ASSEMBLE, and keep all 22 of their holes free of
-   solder.** They are fitted after delivery and are absent from the position file. If the
-   through-hole parts are wave or selectively soldered, mask J2's and J4's holes.
+   solder.** They are fitted after delivery and are absent from the position file and the
+   BOM. If the through-hole parts are wave or selectively soldered, mask J2's and J4's holes.
 2. **U7: fit ONLY the DIP-8 socket, LCSC C72124, and leave it empty.** Do not buy or fit the
    PIC.
 3. **D3: through-hole 3 mm flat-top green LED (LCSC C20613324) standing on a HIWA LED4*8
@@ -109,8 +109,8 @@ the position file and the BOM; their pads stay bare. R33 is fitted.
    footprint's chamfer/notch corner, the top-left corner of the LED in the top-view image.
    The footprint's pad numbering is rotated 180° from the datasheet's pin numbers: align by
    the chamfer, not by "pad 1".
-6. Substitutions allowed: any 10 k 1 % 0603 for C25804, any 15 k 1 % 0603 for C22809 and any
-   1 k 1 % 0603 for C21190.
+6. Substitutions allowed: any 100 nF 50 V X7R 10 % 0603 for C14663, any 10 k 1 % 0603 for
+   C25804, any 15 k 1 % 0603 for C22809 and any 1 k 1 % 0603 for C21190.
    **No substitution** for U1–U9, J1, SW1–SW3 or D3, and U1 must be the
    **ESP32-S3-WROOM-1-N16R8** (16 MB flash, 8 MB octal PSRAM, LCSC C2913202), never a
    quad-PSRAM (R2) variant: the firmware is built for the octal PSRAM.
