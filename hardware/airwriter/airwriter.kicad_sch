@@ -14630,7 +14630,7 @@
 				)
 			)
 		)
-		(property "LCSC" "C7423117"
+		(property "LCSC" "C2886570"
 			(at 457.2 110.49 0)
 			(hide yes)
 			(effects
@@ -14639,7 +14639,7 @@
 				)
 			)
 		)
-		(property "Value" "SK6812MINI-C"
+		(property "Value" "SK6812MINI-012"
 			(at 457.2 118.11 0)
 			(effects
 				(font
@@ -14656,7 +14656,7 @@
 				)
 			)
 		)
-		(property "Datasheet" "https://www.lcsc.com/product-detail/C7423117.html"
+		(property "Datasheet" "https://www.lcsc.com/product-detail/C2886570.html"
 			(at 457.2 114.3 0)
 			(hide yes)
 			(effects
@@ -14665,7 +14665,7 @@
 				)
 			)
 		)
-		(property "MPN" "SK6812MINI-C"
+		(property "MPN" "SK6812MINI-012"
 			(at 457.2 114.3 0)
 			(hide yes)
 			(effects
@@ -14777,7 +14777,7 @@
 				)
 			)
 		)
-		(property "LCSC" "C7423117"
+		(property "LCSC" "C2886570"
 			(at 474.98 110.49 0)
 			(hide yes)
 			(effects
@@ -14786,7 +14786,7 @@
 				)
 			)
 		)
-		(property "Value" "SK6812MINI-C"
+		(property "Value" "SK6812MINI-012"
 			(at 474.98 118.11 0)
 			(effects
 				(font
@@ -14803,7 +14803,7 @@
 				)
 			)
 		)
-		(property "Datasheet" "https://www.lcsc.com/product-detail/C7423117.html"
+		(property "Datasheet" "https://www.lcsc.com/product-detail/C2886570.html"
 			(at 474.98 114.3 0)
 			(hide yes)
 			(effects
@@ -14812,7 +14812,7 @@
 				)
 			)
 		)
-		(property "MPN" "SK6812MINI-C"
+		(property "MPN" "SK6812MINI-012"
 			(at 474.98 114.3 0)
 			(hide yes)
 			(effects
@@ -14924,7 +14924,7 @@
 				)
 			)
 		)
-		(property "LCSC" "C7423117"
+		(property "LCSC" "C2886570"
 			(at 492.76 110.49 0)
 			(hide yes)
 			(effects
@@ -14933,7 +14933,7 @@
 				)
 			)
 		)
-		(property "Value" "SK6812MINI-C"
+		(property "Value" "SK6812MINI-012"
 			(at 492.76 118.11 0)
 			(effects
 				(font
@@ -14950,7 +14950,7 @@
 				)
 			)
 		)
-		(property "Datasheet" "https://www.lcsc.com/product-detail/C7423117.html"
+		(property "Datasheet" "https://www.lcsc.com/product-detail/C2886570.html"
 			(at 492.76 114.3 0)
 			(hide yes)
 			(effects
@@ -14959,7 +14959,7 @@
 				)
 			)
 		)
-		(property "MPN" "SK6812MINI-C"
+		(property "MPN" "SK6812MINI-012"
 			(at 492.76 114.3 0)
 			(hide yes)
 			(effects
@@ -15071,7 +15071,7 @@
 				)
 			)
 		)
-		(property "LCSC" "C7423117"
+		(property "LCSC" "C2886570"
 			(at 510.53999999999996 110.49 0)
 			(hide yes)
 			(effects
@@ -15080,7 +15080,7 @@
 				)
 			)
 		)
-		(property "Value" "SK6812MINI-C"
+		(property "Value" "SK6812MINI-012"
 			(at 510.53999999999996 118.11 0)
 			(effects
 				(font
@@ -15097,7 +15097,7 @@
 				)
 			)
 		)
-		(property "Datasheet" "https://www.lcsc.com/product-detail/C7423117.html"
+		(property "Datasheet" "https://www.lcsc.com/product-detail/C2886570.html"
 			(at 510.53999999999996 114.3 0)
 			(hide yes)
 			(effects
@@ -15106,7 +15106,7 @@
 				)
 			)
 		)
-		(property "MPN" "SK6812MINI-C"
+		(property "MPN" "SK6812MINI-012"
 			(at 510.53999999999996 114.3 0)
 			(hide yes)
 			(effects
@@ -15218,7 +15218,7 @@
 				)
 			)
 		)
-		(property "LCSC" "C7423117"
+		(property "LCSC" "C2886570"
 			(at 528.3199999999999 110.49 0)
 			(hide yes)
 			(effects
@@ -15227,7 +15227,7 @@
 				)
 			)
 		)
-		(property "Value" "SK6812MINI-C"
+		(property "Value" "SK6812MINI-012"
 			(at 528.3199999999999 118.11 0)
 			(effects
 				(font
@@ -15244,7 +15244,7 @@
 				)
 			)
 		)
-		(property "Datasheet" "https://www.lcsc.com/product-detail/C7423117.html"
+		(property "Datasheet" "https://www.lcsc.com/product-detail/C2886570.html"
 			(at 528.3199999999999 114.3 0)
 			(hide yes)
 			(effects
@@ -15253,7 +15253,7 @@
 				)
 			)
 		)
-		(property "MPN" "SK6812MINI-C"
+		(property "MPN" "SK6812MINI-012"
 			(at 528.3199999999999 114.3 0)
 			(hide yes)
 			(effects
@@ -15365,7 +15365,7 @@
 				)
 			)
 		)
-		(property "LCSC" "C7423117"
+		(property "LCSC" "C2886570"
 			(at 546.1 110.49 0)
 			(hide yes)
 			(effects
@@ -15374,7 +15374,7 @@
 				)
 			)
 		)
-		(property "Value" "SK6812MINI-C"
+		(property "Value" "SK6812MINI-012"
 			(at 546.1 118.11 0)
 			(effects
 				(font
@@ -15391,7 +15391,7 @@
 				)
 			)
 		)
-		(property "Datasheet" "https://www.lcsc.com/product-detail/C7423117.html"
+		(property "Datasheet" "https://www.lcsc.com/product-detail/C2886570.html"
 			(at 546.1 114.3 0)
 			(hide yes)
 			(effects
@@ -15400,7 +15400,7 @@
 				)
 			)
 		)
-		(property "MPN" "SK6812MINI-C"
+		(property "MPN" "SK6812MINI-012"
 			(at 546.1 114.3 0)
 			(hide yes)
 			(effects
@@ -15512,7 +15512,7 @@
 				)
 			)
 		)
-		(property "LCSC" "C7423117"
+		(property "LCSC" "C2886570"
 			(at 563.88 110.49 0)
 			(hide yes)
 			(effects
@@ -15521,7 +15521,7 @@
 				)
 			)
 		)
-		(property "Value" "SK6812MINI-C"
+		(property "Value" "SK6812MINI-012"
 			(at 563.88 118.11 0)
 			(effects
 				(font
@@ -15538,7 +15538,7 @@
 				)
 			)
 		)
-		(property "Datasheet" "https://www.lcsc.com/product-detail/C7423117.html"
+		(property "Datasheet" "https://www.lcsc.com/product-detail/C2886570.html"
 			(at 563.88 114.3 0)
 			(hide yes)
 			(effects
@@ -15547,7 +15547,7 @@
 				)
 			)
 		)
-		(property "MPN" "SK6812MINI-C"
+		(property "MPN" "SK6812MINI-012"
 			(at 563.88 114.3 0)
 			(hide yes)
 			(effects
@@ -15659,7 +15659,7 @@
 				)
 			)
 		)
-		(property "LCSC" "C7423117"
+		(property "LCSC" "C2886570"
 			(at 581.66 110.49 0)
 			(hide yes)
 			(effects
@@ -15668,7 +15668,7 @@
 				)
 			)
 		)
-		(property "Value" "SK6812MINI-C"
+		(property "Value" "SK6812MINI-012"
 			(at 581.66 118.11 0)
 			(effects
 				(font
@@ -15685,7 +15685,7 @@
 				)
 			)
 		)
-		(property "Datasheet" "https://www.lcsc.com/product-detail/C7423117.html"
+		(property "Datasheet" "https://www.lcsc.com/product-detail/C2886570.html"
 			(at 581.66 114.3 0)
 			(hide yes)
 			(effects
@@ -15694,7 +15694,7 @@
 				)
 			)
 		)
-		(property "MPN" "SK6812MINI-C"
+		(property "MPN" "SK6812MINI-012"
 			(at 581.66 114.3 0)
 			(hide yes)
 			(effects
@@ -15806,7 +15806,7 @@
 				)
 			)
 		)
-		(property "LCSC" "C7423117"
+		(property "LCSC" "C2886570"
 			(at 457.2 128.26999999999998 0)
 			(hide yes)
 			(effects
@@ -15815,7 +15815,7 @@
 				)
 			)
 		)
-		(property "Value" "SK6812MINI-C"
+		(property "Value" "SK6812MINI-012"
 			(at 457.2 135.89 0)
 			(effects
 				(font
@@ -15832,7 +15832,7 @@
 				)
 			)
 		)
-		(property "Datasheet" "https://www.lcsc.com/product-detail/C7423117.html"
+		(property "Datasheet" "https://www.lcsc.com/product-detail/C2886570.html"
 			(at 457.2 132.07999999999998 0)
 			(hide yes)
 			(effects
@@ -15841,7 +15841,7 @@
 				)
 			)
 		)
-		(property "MPN" "SK6812MINI-C"
+		(property "MPN" "SK6812MINI-012"
 			(at 457.2 132.07999999999998 0)
 			(hide yes)
 			(effects
@@ -15953,7 +15953,7 @@
 				)
 			)
 		)
-		(property "LCSC" "C7423117"
+		(property "LCSC" "C2886570"
 			(at 474.98 128.26999999999998 0)
 			(hide yes)
 			(effects
@@ -15962,7 +15962,7 @@
 				)
 			)
 		)
-		(property "Value" "SK6812MINI-C"
+		(property "Value" "SK6812MINI-012"
 			(at 474.98 135.89 0)
 			(effects
 				(font
@@ -15979,7 +15979,7 @@
 				)
 			)
 		)
-		(property "Datasheet" "https://www.lcsc.com/product-detail/C7423117.html"
+		(property "Datasheet" "https://www.lcsc.com/product-detail/C2886570.html"
 			(at 474.98 132.07999999999998 0)
 			(hide yes)
 			(effects
@@ -15988,7 +15988,7 @@
 				)
 			)
 		)
-		(property "MPN" "SK6812MINI-C"
+		(property "MPN" "SK6812MINI-012"
 			(at 474.98 132.07999999999998 0)
 			(hide yes)
 			(effects
@@ -16100,7 +16100,7 @@
 				)
 			)
 		)
-		(property "LCSC" "C7423117"
+		(property "LCSC" "C2886570"
 			(at 492.76 128.26999999999998 0)
 			(hide yes)
 			(effects
@@ -16109,7 +16109,7 @@
 				)
 			)
 		)
-		(property "Value" "SK6812MINI-C"
+		(property "Value" "SK6812MINI-012"
 			(at 492.76 135.89 0)
 			(effects
 				(font
@@ -16126,7 +16126,7 @@
 				)
 			)
 		)
-		(property "Datasheet" "https://www.lcsc.com/product-detail/C7423117.html"
+		(property "Datasheet" "https://www.lcsc.com/product-detail/C2886570.html"
 			(at 492.76 132.07999999999998 0)
 			(hide yes)
 			(effects
@@ -16135,7 +16135,7 @@
 				)
 			)
 		)
-		(property "MPN" "SK6812MINI-C"
+		(property "MPN" "SK6812MINI-012"
 			(at 492.76 132.07999999999998 0)
 			(hide yes)
 			(effects
@@ -16247,7 +16247,7 @@
 				)
 			)
 		)
-		(property "LCSC" "C7423117"
+		(property "LCSC" "C2886570"
 			(at 510.53999999999996 128.26999999999998 0)
 			(hide yes)
 			(effects
@@ -16256,7 +16256,7 @@
 				)
 			)
 		)
-		(property "Value" "SK6812MINI-C"
+		(property "Value" "SK6812MINI-012"
 			(at 510.53999999999996 135.89 0)
 			(effects
 				(font
@@ -16273,7 +16273,7 @@
 				)
 			)
 		)
-		(property "Datasheet" "https://www.lcsc.com/product-detail/C7423117.html"
+		(property "Datasheet" "https://www.lcsc.com/product-detail/C2886570.html"
 			(at 510.53999999999996 132.07999999999998 0)
 			(hide yes)
 			(effects
@@ -16282,7 +16282,7 @@
 				)
 			)
 		)
-		(property "MPN" "SK6812MINI-C"
+		(property "MPN" "SK6812MINI-012"
 			(at 510.53999999999996 132.07999999999998 0)
 			(hide yes)
 			(effects
@@ -16394,7 +16394,7 @@
 				)
 			)
 		)
-		(property "LCSC" "C7423117"
+		(property "LCSC" "C2886570"
 			(at 528.3199999999999 128.26999999999998 0)
 			(hide yes)
 			(effects
@@ -16403,7 +16403,7 @@
 				)
 			)
 		)
-		(property "Value" "SK6812MINI-C"
+		(property "Value" "SK6812MINI-012"
 			(at 528.3199999999999 135.89 0)
 			(effects
 				(font
@@ -16420,7 +16420,7 @@
 				)
 			)
 		)
-		(property "Datasheet" "https://www.lcsc.com/product-detail/C7423117.html"
+		(property "Datasheet" "https://www.lcsc.com/product-detail/C2886570.html"
 			(at 528.3199999999999 132.07999999999998 0)
 			(hide yes)
 			(effects
@@ -16429,7 +16429,7 @@
 				)
 			)
 		)
-		(property "MPN" "SK6812MINI-C"
+		(property "MPN" "SK6812MINI-012"
 			(at 528.3199999999999 132.07999999999998 0)
 			(hide yes)
 			(effects
@@ -16541,7 +16541,7 @@
 				)
 			)
 		)
-		(property "LCSC" "C7423117"
+		(property "LCSC" "C2886570"
 			(at 546.1 128.26999999999998 0)
 			(hide yes)
 			(effects
@@ -16550,7 +16550,7 @@
 				)
 			)
 		)
-		(property "Value" "SK6812MINI-C"
+		(property "Value" "SK6812MINI-012"
 			(at 546.1 135.89 0)
 			(effects
 				(font
@@ -16567,7 +16567,7 @@
 				)
 			)
 		)
-		(property "Datasheet" "https://www.lcsc.com/product-detail/C7423117.html"
+		(property "Datasheet" "https://www.lcsc.com/product-detail/C2886570.html"
 			(at 546.1 132.07999999999998 0)
 			(hide yes)
 			(effects
@@ -16576,7 +16576,7 @@
 				)
 			)
 		)
-		(property "MPN" "SK6812MINI-C"
+		(property "MPN" "SK6812MINI-012"
 			(at 546.1 132.07999999999998 0)
 			(hide yes)
 			(effects
@@ -16688,7 +16688,7 @@
 				)
 			)
 		)
-		(property "LCSC" "C7423117"
+		(property "LCSC" "C2886570"
 			(at 563.88 128.26999999999998 0)
 			(hide yes)
 			(effects
@@ -16697,7 +16697,7 @@
 				)
 			)
 		)
-		(property "Value" "SK6812MINI-C"
+		(property "Value" "SK6812MINI-012"
 			(at 563.88 135.89 0)
 			(effects
 				(font
@@ -16714,7 +16714,7 @@
 				)
 			)
 		)
-		(property "Datasheet" "https://www.lcsc.com/product-detail/C7423117.html"
+		(property "Datasheet" "https://www.lcsc.com/product-detail/C2886570.html"
 			(at 563.88 132.07999999999998 0)
 			(hide yes)
 			(effects
@@ -16723,7 +16723,7 @@
 				)
 			)
 		)
-		(property "MPN" "SK6812MINI-C"
+		(property "MPN" "SK6812MINI-012"
 			(at 563.88 132.07999999999998 0)
 			(hide yes)
 			(effects
@@ -16835,7 +16835,7 @@
 				)
 			)
 		)
-		(property "LCSC" "C7423117"
+		(property "LCSC" "C2886570"
 			(at 581.66 128.26999999999998 0)
 			(hide yes)
 			(effects
@@ -16844,7 +16844,7 @@
 				)
 			)
 		)
-		(property "Value" "SK6812MINI-C"
+		(property "Value" "SK6812MINI-012"
 			(at 581.66 135.89 0)
 			(effects
 				(font
@@ -16861,7 +16861,7 @@
 				)
 			)
 		)
-		(property "Datasheet" "https://www.lcsc.com/product-detail/C7423117.html"
+		(property "Datasheet" "https://www.lcsc.com/product-detail/C2886570.html"
 			(at 581.66 132.07999999999998 0)
 			(hide yes)
 			(effects
@@ -16870,7 +16870,7 @@
 				)
 			)
 		)
-		(property "MPN" "SK6812MINI-C"
+		(property "MPN" "SK6812MINI-012"
 			(at 581.66 132.07999999999998 0)
 			(hide yes)
 			(effects
@@ -16982,7 +16982,7 @@
 				)
 			)
 		)
-		(property "LCSC" "C7423117"
+		(property "LCSC" "C2886570"
 			(at 457.2 146.05 0)
 			(hide yes)
 			(effects
@@ -16991,7 +16991,7 @@
 				)
 			)
 		)
-		(property "Value" "SK6812MINI-C"
+		(property "Value" "SK6812MINI-012"
 			(at 457.2 153.67000000000002 0)
 			(effects
 				(font
@@ -17008,7 +17008,7 @@
 				)
 			)
 		)
-		(property "Datasheet" "https://www.lcsc.com/product-detail/C7423117.html"
+		(property "Datasheet" "https://www.lcsc.com/product-detail/C2886570.html"
 			(at 457.2 149.86 0)
 			(hide yes)
 			(effects
@@ -17017,7 +17017,7 @@
 				)
 			)
 		)
-		(property "MPN" "SK6812MINI-C"
+		(property "MPN" "SK6812MINI-012"
 			(at 457.2 149.86 0)
 			(hide yes)
 			(effects
@@ -17129,7 +17129,7 @@
 				)
 			)
 		)
-		(property "LCSC" "C7423117"
+		(property "LCSC" "C2886570"
 			(at 474.98 146.05 0)
 			(hide yes)
 			(effects
@@ -17138,7 +17138,7 @@
 				)
 			)
 		)
-		(property "Value" "SK6812MINI-C"
+		(property "Value" "SK6812MINI-012"
 			(at 474.98 153.67000000000002 0)
 			(effects
 				(font
@@ -17155,7 +17155,7 @@
 				)
 			)
 		)
-		(property "Datasheet" "https://www.lcsc.com/product-detail/C7423117.html"
+		(property "Datasheet" "https://www.lcsc.com/product-detail/C2886570.html"
 			(at 474.98 149.86 0)
 			(hide yes)
 			(effects
@@ -17164,7 +17164,7 @@
 				)
 			)
 		)
-		(property "MPN" "SK6812MINI-C"
+		(property "MPN" "SK6812MINI-012"
 			(at 474.98 149.86 0)
 			(hide yes)
 			(effects
@@ -17276,7 +17276,7 @@
 				)
 			)
 		)
-		(property "LCSC" "C7423117"
+		(property "LCSC" "C2886570"
 			(at 492.76 146.05 0)
 			(hide yes)
 			(effects
@@ -17285,7 +17285,7 @@
 				)
 			)
 		)
-		(property "Value" "SK6812MINI-C"
+		(property "Value" "SK6812MINI-012"
 			(at 492.76 153.67000000000002 0)
 			(effects
 				(font
@@ -17302,7 +17302,7 @@
 				)
 			)
 		)
-		(property "Datasheet" "https://www.lcsc.com/product-detail/C7423117.html"
+		(property "Datasheet" "https://www.lcsc.com/product-detail/C2886570.html"
 			(at 492.76 149.86 0)
 			(hide yes)
 			(effects
@@ -17311,7 +17311,7 @@
 				)
 			)
 		)
-		(property "MPN" "SK6812MINI-C"
+		(property "MPN" "SK6812MINI-012"
 			(at 492.76 149.86 0)
 			(hide yes)
 			(effects
@@ -17423,7 +17423,7 @@
 				)
 			)
 		)
-		(property "LCSC" "C7423117"
+		(property "LCSC" "C2886570"
 			(at 510.53999999999996 146.05 0)
 			(hide yes)
 			(effects
@@ -17432,7 +17432,7 @@
 				)
 			)
 		)
-		(property "Value" "SK6812MINI-C"
+		(property "Value" "SK6812MINI-012"
 			(at 510.53999999999996 153.67000000000002 0)
 			(effects
 				(font
@@ -17449,7 +17449,7 @@
 				)
 			)
 		)
-		(property "Datasheet" "https://www.lcsc.com/product-detail/C7423117.html"
+		(property "Datasheet" "https://www.lcsc.com/product-detail/C2886570.html"
 			(at 510.53999999999996 149.86 0)
 			(hide yes)
 			(effects
@@ -17458,7 +17458,7 @@
 				)
 			)
 		)
-		(property "MPN" "SK6812MINI-C"
+		(property "MPN" "SK6812MINI-012"
 			(at 510.53999999999996 149.86 0)
 			(hide yes)
 			(effects
@@ -17570,7 +17570,7 @@
 				)
 			)
 		)
-		(property "LCSC" "C7423117"
+		(property "LCSC" "C2886570"
 			(at 528.3199999999999 146.05 0)
 			(hide yes)
 			(effects
@@ -17579,7 +17579,7 @@
 				)
 			)
 		)
-		(property "Value" "SK6812MINI-C"
+		(property "Value" "SK6812MINI-012"
 			(at 528.3199999999999 153.67000000000002 0)
 			(effects
 				(font
@@ -17596,7 +17596,7 @@
 				)
 			)
 		)
-		(property "Datasheet" "https://www.lcsc.com/product-detail/C7423117.html"
+		(property "Datasheet" "https://www.lcsc.com/product-detail/C2886570.html"
 			(at 528.3199999999999 149.86 0)
 			(hide yes)
 			(effects
@@ -17605,7 +17605,7 @@
 				)
 			)
 		)
-		(property "MPN" "SK6812MINI-C"
+		(property "MPN" "SK6812MINI-012"
 			(at 528.3199999999999 149.86 0)
 			(hide yes)
 			(effects
@@ -17717,7 +17717,7 @@
 				)
 			)
 		)
-		(property "LCSC" "C7423117"
+		(property "LCSC" "C2886570"
 			(at 546.1 146.05 0)
 			(hide yes)
 			(effects
@@ -17726,7 +17726,7 @@
 				)
 			)
 		)
-		(property "Value" "SK6812MINI-C"
+		(property "Value" "SK6812MINI-012"
 			(at 546.1 153.67000000000002 0)
 			(effects
 				(font
@@ -17743,7 +17743,7 @@
 				)
 			)
 		)
-		(property "Datasheet" "https://www.lcsc.com/product-detail/C7423117.html"
+		(property "Datasheet" "https://www.lcsc.com/product-detail/C2886570.html"
 			(at 546.1 149.86 0)
 			(hide yes)
 			(effects
@@ -17752,7 +17752,7 @@
 				)
 			)
 		)
-		(property "MPN" "SK6812MINI-C"
+		(property "MPN" "SK6812MINI-012"
 			(at 546.1 149.86 0)
 			(hide yes)
 			(effects
@@ -17864,7 +17864,7 @@
 				)
 			)
 		)
-		(property "LCSC" "C7423117"
+		(property "LCSC" "C2886570"
 			(at 563.88 146.05 0)
 			(hide yes)
 			(effects
@@ -17873,7 +17873,7 @@
 				)
 			)
 		)
-		(property "Value" "SK6812MINI-C"
+		(property "Value" "SK6812MINI-012"
 			(at 563.88 153.67000000000002 0)
 			(effects
 				(font
@@ -17890,7 +17890,7 @@
 				)
 			)
 		)
-		(property "Datasheet" "https://www.lcsc.com/product-detail/C7423117.html"
+		(property "Datasheet" "https://www.lcsc.com/product-detail/C2886570.html"
 			(at 563.88 149.86 0)
 			(hide yes)
 			(effects
@@ -17899,7 +17899,7 @@
 				)
 			)
 		)
-		(property "MPN" "SK6812MINI-C"
+		(property "MPN" "SK6812MINI-012"
 			(at 563.88 149.86 0)
 			(hide yes)
 			(effects
@@ -18011,7 +18011,7 @@
 				)
 			)
 		)
-		(property "LCSC" "C7423117"
+		(property "LCSC" "C2886570"
 			(at 581.66 146.05 0)
 			(hide yes)
 			(effects
@@ -18020,7 +18020,7 @@
 				)
 			)
 		)
-		(property "Value" "SK6812MINI-C"
+		(property "Value" "SK6812MINI-012"
 			(at 581.66 153.67000000000002 0)
 			(effects
 				(font
@@ -18037,7 +18037,7 @@
 				)
 			)
 		)
-		(property "Datasheet" "https://www.lcsc.com/product-detail/C7423117.html"
+		(property "Datasheet" "https://www.lcsc.com/product-detail/C2886570.html"
 			(at 581.66 149.86 0)
 			(hide yes)
 			(effects
@@ -18046,7 +18046,7 @@
 				)
 			)
 		)
-		(property "MPN" "SK6812MINI-C"
+		(property "MPN" "SK6812MINI-012"
 			(at 581.66 149.86 0)
 			(hide yes)
 			(effects
@@ -18158,7 +18158,7 @@
 				)
 			)
 		)
-		(property "LCSC" "C7423117"
+		(property "LCSC" "C2886570"
 			(at 457.2 163.82999999999998 0)
 			(hide yes)
 			(effects
@@ -18167,7 +18167,7 @@
 				)
 			)
 		)
-		(property "Value" "SK6812MINI-C"
+		(property "Value" "SK6812MINI-012"
 			(at 457.2 171.45 0)
 			(effects
 				(font
@@ -18184,7 +18184,7 @@
 				)
 			)
 		)
-		(property "Datasheet" "https://www.lcsc.com/product-detail/C7423117.html"
+		(property "Datasheet" "https://www.lcsc.com/product-detail/C2886570.html"
 			(at 457.2 167.64 0)
 			(hide yes)
 			(effects
@@ -18193,7 +18193,7 @@
 				)
 			)
 		)
-		(property "MPN" "SK6812MINI-C"
+		(property "MPN" "SK6812MINI-012"
 			(at 457.2 167.64 0)
 			(hide yes)
 			(effects
@@ -18305,7 +18305,7 @@
 				)
 			)
 		)
-		(property "LCSC" "C7423117"
+		(property "LCSC" "C2886570"
 			(at 474.98 163.82999999999998 0)
 			(hide yes)
 			(effects
@@ -18314,7 +18314,7 @@
 				)
 			)
 		)
-		(property "Value" "SK6812MINI-C"
+		(property "Value" "SK6812MINI-012"
 			(at 474.98 171.45 0)
 			(effects
 				(font
@@ -18331,7 +18331,7 @@
 				)
 			)
 		)
-		(property "Datasheet" "https://www.lcsc.com/product-detail/C7423117.html"
+		(property "Datasheet" "https://www.lcsc.com/product-detail/C2886570.html"
 			(at 474.98 167.64 0)
 			(hide yes)
 			(effects
@@ -18340,7 +18340,7 @@
 				)
 			)
 		)
-		(property "MPN" "SK6812MINI-C"
+		(property "MPN" "SK6812MINI-012"
 			(at 474.98 167.64 0)
 			(hide yes)
 			(effects
@@ -18452,7 +18452,7 @@
 				)
 			)
 		)
-		(property "LCSC" "C7423117"
+		(property "LCSC" "C2886570"
 			(at 492.76 163.82999999999998 0)
 			(hide yes)
 			(effects
@@ -18461,7 +18461,7 @@
 				)
 			)
 		)
-		(property "Value" "SK6812MINI-C"
+		(property "Value" "SK6812MINI-012"
 			(at 492.76 171.45 0)
 			(effects
 				(font
@@ -18478,7 +18478,7 @@
 				)
 			)
 		)
-		(property "Datasheet" "https://www.lcsc.com/product-detail/C7423117.html"
+		(property "Datasheet" "https://www.lcsc.com/product-detail/C2886570.html"
 			(at 492.76 167.64 0)
 			(hide yes)
 			(effects
@@ -18487,7 +18487,7 @@
 				)
 			)
 		)
-		(property "MPN" "SK6812MINI-C"
+		(property "MPN" "SK6812MINI-012"
 			(at 492.76 167.64 0)
 			(hide yes)
 			(effects
@@ -18599,7 +18599,7 @@
 				)
 			)
 		)
-		(property "LCSC" "C7423117"
+		(property "LCSC" "C2886570"
 			(at 510.53999999999996 163.82999999999998 0)
 			(hide yes)
 			(effects
@@ -18608,7 +18608,7 @@
 				)
 			)
 		)
-		(property "Value" "SK6812MINI-C"
+		(property "Value" "SK6812MINI-012"
 			(at 510.53999999999996 171.45 0)
 			(effects
 				(font
@@ -18625,7 +18625,7 @@
 				)
 			)
 		)
-		(property "Datasheet" "https://www.lcsc.com/product-detail/C7423117.html"
+		(property "Datasheet" "https://www.lcsc.com/product-detail/C2886570.html"
 			(at 510.53999999999996 167.64 0)
 			(hide yes)
 			(effects
@@ -18634,7 +18634,7 @@
 				)
 			)
 		)
-		(property "MPN" "SK6812MINI-C"
+		(property "MPN" "SK6812MINI-012"
 			(at 510.53999999999996 167.64 0)
 			(hide yes)
 			(effects
@@ -18746,7 +18746,7 @@
 				)
 			)
 		)
-		(property "LCSC" "C7423117"
+		(property "LCSC" "C2886570"
 			(at 528.3199999999999 163.82999999999998 0)
 			(hide yes)
 			(effects
@@ -18755,7 +18755,7 @@
 				)
 			)
 		)
-		(property "Value" "SK6812MINI-C"
+		(property "Value" "SK6812MINI-012"
 			(at 528.3199999999999 171.45 0)
 			(effects
 				(font
@@ -18772,7 +18772,7 @@
 				)
 			)
 		)
-		(property "Datasheet" "https://www.lcsc.com/product-detail/C7423117.html"
+		(property "Datasheet" "https://www.lcsc.com/product-detail/C2886570.html"
 			(at 528.3199999999999 167.64 0)
 			(hide yes)
 			(effects
@@ -18781,7 +18781,7 @@
 				)
 			)
 		)
-		(property "MPN" "SK6812MINI-C"
+		(property "MPN" "SK6812MINI-012"
 			(at 528.3199999999999 167.64 0)
 			(hide yes)
 			(effects
@@ -18893,7 +18893,7 @@
 				)
 			)
 		)
-		(property "LCSC" "C7423117"
+		(property "LCSC" "C2886570"
 			(at 546.1 163.82999999999998 0)
 			(hide yes)
 			(effects
@@ -18902,7 +18902,7 @@
 				)
 			)
 		)
-		(property "Value" "SK6812MINI-C"
+		(property "Value" "SK6812MINI-012"
 			(at 546.1 171.45 0)
 			(effects
 				(font
@@ -18919,7 +18919,7 @@
 				)
 			)
 		)
-		(property "Datasheet" "https://www.lcsc.com/product-detail/C7423117.html"
+		(property "Datasheet" "https://www.lcsc.com/product-detail/C2886570.html"
 			(at 546.1 167.64 0)
 			(hide yes)
 			(effects
@@ -18928,7 +18928,7 @@
 				)
 			)
 		)
-		(property "MPN" "SK6812MINI-C"
+		(property "MPN" "SK6812MINI-012"
 			(at 546.1 167.64 0)
 			(hide yes)
 			(effects
@@ -19040,7 +19040,7 @@
 				)
 			)
 		)
-		(property "LCSC" "C7423117"
+		(property "LCSC" "C2886570"
 			(at 563.88 163.82999999999998 0)
 			(hide yes)
 			(effects
@@ -19049,7 +19049,7 @@
 				)
 			)
 		)
-		(property "Value" "SK6812MINI-C"
+		(property "Value" "SK6812MINI-012"
 			(at 563.88 171.45 0)
 			(effects
 				(font
@@ -19066,7 +19066,7 @@
 				)
 			)
 		)
-		(property "Datasheet" "https://www.lcsc.com/product-detail/C7423117.html"
+		(property "Datasheet" "https://www.lcsc.com/product-detail/C2886570.html"
 			(at 563.88 167.64 0)
 			(hide yes)
 			(effects
@@ -19075,7 +19075,7 @@
 				)
 			)
 		)
-		(property "MPN" "SK6812MINI-C"
+		(property "MPN" "SK6812MINI-012"
 			(at 563.88 167.64 0)
 			(hide yes)
 			(effects
@@ -19187,7 +19187,7 @@
 				)
 			)
 		)
-		(property "LCSC" "C7423117"
+		(property "LCSC" "C2886570"
 			(at 581.66 163.82999999999998 0)
 			(hide yes)
 			(effects
@@ -19196,7 +19196,7 @@
 				)
 			)
 		)
-		(property "Value" "SK6812MINI-C"
+		(property "Value" "SK6812MINI-012"
 			(at 581.66 171.45 0)
 			(effects
 				(font
@@ -19213,7 +19213,7 @@
 				)
 			)
 		)
-		(property "Datasheet" "https://www.lcsc.com/product-detail/C7423117.html"
+		(property "Datasheet" "https://www.lcsc.com/product-detail/C2886570.html"
 			(at 581.66 167.64 0)
 			(hide yes)
 			(effects
@@ -19222,7 +19222,7 @@
 				)
 			)
 		)
-		(property "MPN" "SK6812MINI-C"
+		(property "MPN" "SK6812MINI-012"
 			(at 581.66 167.64 0)
 			(hide yes)
 			(effects
@@ -19334,7 +19334,7 @@
 				)
 			)
 		)
-		(property "LCSC" "C7423117"
+		(property "LCSC" "C2886570"
 			(at 457.2 181.61 0)
 			(hide yes)
 			(effects
@@ -19343,7 +19343,7 @@
 				)
 			)
 		)
-		(property "Value" "SK6812MINI-C"
+		(property "Value" "SK6812MINI-012"
 			(at 457.2 189.23000000000002 0)
 			(effects
 				(font
@@ -19360,7 +19360,7 @@
 				)
 			)
 		)
-		(property "Datasheet" "https://www.lcsc.com/product-detail/C7423117.html"
+		(property "Datasheet" "https://www.lcsc.com/product-detail/C2886570.html"
 			(at 457.2 185.42000000000002 0)
 			(hide yes)
 			(effects
@@ -19369,7 +19369,7 @@
 				)
 			)
 		)
-		(property "MPN" "SK6812MINI-C"
+		(property "MPN" "SK6812MINI-012"
 			(at 457.2 185.42000000000002 0)
 			(hide yes)
 			(effects
@@ -19481,7 +19481,7 @@
 				)
 			)
 		)
-		(property "LCSC" "C7423117"
+		(property "LCSC" "C2886570"
 			(at 474.98 181.61 0)
 			(hide yes)
 			(effects
@@ -19490,7 +19490,7 @@
 				)
 			)
 		)
-		(property "Value" "SK6812MINI-C"
+		(property "Value" "SK6812MINI-012"
 			(at 474.98 189.23000000000002 0)
 			(effects
 				(font
@@ -19507,7 +19507,7 @@
 				)
 			)
 		)
-		(property "Datasheet" "https://www.lcsc.com/product-detail/C7423117.html"
+		(property "Datasheet" "https://www.lcsc.com/product-detail/C2886570.html"
 			(at 474.98 185.42000000000002 0)
 			(hide yes)
 			(effects
@@ -19516,7 +19516,7 @@
 				)
 			)
 		)
-		(property "MPN" "SK6812MINI-C"
+		(property "MPN" "SK6812MINI-012"
 			(at 474.98 185.42000000000002 0)
 			(hide yes)
 			(effects
@@ -19628,7 +19628,7 @@
 				)
 			)
 		)
-		(property "LCSC" "C7423117"
+		(property "LCSC" "C2886570"
 			(at 492.76 181.61 0)
 			(hide yes)
 			(effects
@@ -19637,7 +19637,7 @@
 				)
 			)
 		)
-		(property "Value" "SK6812MINI-C"
+		(property "Value" "SK6812MINI-012"
 			(at 492.76 189.23000000000002 0)
 			(effects
 				(font
@@ -19654,7 +19654,7 @@
 				)
 			)
 		)
-		(property "Datasheet" "https://www.lcsc.com/product-detail/C7423117.html"
+		(property "Datasheet" "https://www.lcsc.com/product-detail/C2886570.html"
 			(at 492.76 185.42000000000002 0)
 			(hide yes)
 			(effects
@@ -19663,7 +19663,7 @@
 				)
 			)
 		)
-		(property "MPN" "SK6812MINI-C"
+		(property "MPN" "SK6812MINI-012"
 			(at 492.76 185.42000000000002 0)
 			(hide yes)
 			(effects
@@ -19775,7 +19775,7 @@
 				)
 			)
 		)
-		(property "LCSC" "C7423117"
+		(property "LCSC" "C2886570"
 			(at 510.53999999999996 181.61 0)
 			(hide yes)
 			(effects
@@ -19784,7 +19784,7 @@
 				)
 			)
 		)
-		(property "Value" "SK6812MINI-C"
+		(property "Value" "SK6812MINI-012"
 			(at 510.53999999999996 189.23000000000002 0)
 			(effects
 				(font
@@ -19801,7 +19801,7 @@
 				)
 			)
 		)
-		(property "Datasheet" "https://www.lcsc.com/product-detail/C7423117.html"
+		(property "Datasheet" "https://www.lcsc.com/product-detail/C2886570.html"
 			(at 510.53999999999996 185.42000000000002 0)
 			(hide yes)
 			(effects
@@ -19810,7 +19810,7 @@
 				)
 			)
 		)
-		(property "MPN" "SK6812MINI-C"
+		(property "MPN" "SK6812MINI-012"
 			(at 510.53999999999996 185.42000000000002 0)
 			(hide yes)
 			(effects
@@ -19922,7 +19922,7 @@
 				)
 			)
 		)
-		(property "LCSC" "C7423117"
+		(property "LCSC" "C2886570"
 			(at 528.3199999999999 181.61 0)
 			(hide yes)
 			(effects
@@ -19931,7 +19931,7 @@
 				)
 			)
 		)
-		(property "Value" "SK6812MINI-C"
+		(property "Value" "SK6812MINI-012"
 			(at 528.3199999999999 189.23000000000002 0)
 			(effects
 				(font
@@ -19948,7 +19948,7 @@
 				)
 			)
 		)
-		(property "Datasheet" "https://www.lcsc.com/product-detail/C7423117.html"
+		(property "Datasheet" "https://www.lcsc.com/product-detail/C2886570.html"
 			(at 528.3199999999999 185.42000000000002 0)
 			(hide yes)
 			(effects
@@ -19957,7 +19957,7 @@
 				)
 			)
 		)
-		(property "MPN" "SK6812MINI-C"
+		(property "MPN" "SK6812MINI-012"
 			(at 528.3199999999999 185.42000000000002 0)
 			(hide yes)
 			(effects
