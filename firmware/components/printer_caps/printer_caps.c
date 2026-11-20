@@ -69,8 +69,9 @@ int printer_caps_wants_roll(const printer_caps_t *c, int32_t media_len, int medi
 {
     if (!c || !c->roll) return 0;
     if (media_roll) return 1;
+    if (media_len <= 0) return 0;               // none sent; and no overflow below on a hostile one
     int32_t d = media_len - c->media_y;
-    return media_len > 0 && (d > PRINTER_CAPS_LEN_SLACK || d < -PRINTER_CAPS_LEN_SLACK);
+    return d > PRINTER_CAPS_LEN_SLACK || d < -PRINTER_CAPS_LEN_SLACK;
 }
 
 size_t printer_caps_urf_keywords(const printer_caps_t *c, int colour, const char *kw[9])

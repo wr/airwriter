@@ -90,6 +90,9 @@ int main(void)
         CHECK_EQ_INT(printer_caps_wants_roll(iw, 101600, 0), 1);
         CHECK_EQ_INT(printer_caps_wants_roll(iw, 0, 1), 1);
         CHECK_EQ_INT(printer_caps_wants_roll(iw, 0, 0), 0);
+        CHECK_EQ_INT(printer_caps_wants_roll(iw, -2147483647 - 1, 0), 0);   // from the network
+        CHECK_EQ_INT(printer_caps_wants_roll(iw, -101600, 0), 0);
+        CHECK_EQ_INT(printer_caps_wants_roll(iw, 2147483647, 0), 1);
         // A printer with no roll never prints one.
         printer_caps_t sheets = *iw;
         sheets.roll = NULL;

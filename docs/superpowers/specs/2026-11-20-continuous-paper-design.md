@@ -31,7 +31,8 @@ margin setting) and iOS keeps the page's 1 in top and 0.5 in bottom margins blan
 - **Anti-goals**, which would make this a failure even if it builds:
   - Safari, Photos or any app that doesn't ask for a roll printing differently than today
   - a Mac's existing queue for the printer breaking
-  - a runaway job feeding more than about 10 ft
+  - a runaway page feeding more than about 10 ft (the cap is a page's: copies or several
+    pages each get their own 10 ft, as each is its own strip)
 
 ## What the test showed
 
