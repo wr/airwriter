@@ -206,6 +206,8 @@ void bootloader_after_init(void)
     // are the N16R8's PSRAM here: never touch them.
     drive(47, 0);       // J2's HSKo, U3 T2IN (AIRWRITER_HSKI_DRV_PIN); R24 held it until now
     drive(13, 0);       // J4's HSKo, U3 T1IN (AIRWRITER_J4_HSKO_DRV_PIN); no pull-down
+    drive(42, 0);       // J2's TashTalk, U10 MCLR (AIRWRITER_J2_PIC_MCLR_PIN): held in reset
+                        // until the app gives J2 its job (W-1176)
 #else
     drive(35, 0);       // SP3232 T1IN (AIRWRITER_HSKI_DRV_PIN)
 #endif

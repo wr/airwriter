@@ -39,15 +39,17 @@ cp "$MAIN.kicad_pro" "$TMP/airwriter-lc.kicad_pro"
 # under the test button, with its cap, U9 and its cap, and R20; the LC strap R33
 # fitted). The schematic carries every part; the lists here say which each variant
 # leaves off. The cover has no schematic, so its standoff line is added here, on
-# AirWriter only. Neither places J2, J4 or a PIC: Wells fits them after delivery
+# AirWriter only. Neither places J2, J4 or U7's PIC: Wells fits them after delivery
 # (the board keeps J2 and J4 out of its position files), and on the LC bridges JP1,
-# a solder jumper, which no BOM lists.
+# a solder jumper, which no BOM lists. U10, J2's TashTalk (W-1176), is a SOIC that
+# AirWriter's order places blank; the ESP32 flashes it in place. The LC leaves it off.
 python3 - "$TMP/bom.csv" "$OUT" "$LC_OUT" <<'PY'
 import csv, os, re, sys
 bom_path, out, lc_out = sys.argv[1:]
 POS, LC_POS = os.path.join(out, 'combined-pos.csv'), os.path.join(lc_out, 'airwriter-lc-pos.csv')
 NOTES = {
   'U7': 'Fit the DIP-8 SOCKET only (LCSC C72124) and leave it empty: no PIC',
+  'U10': 'A BLANK part, as LCSC ships it: do not program it; the board does',
 }
 # Wells fits the mini-DINs after delivery, so no BOM lists them: an assembler buys from
 # the part number and quantity columns, whatever the note says.
@@ -64,13 +66,13 @@ def expand(spec):
             out.append(part)
     return out
 AIRWRITER_OFF = ['R33']                                   # the LC strap
-LC_OFF = expand('D10-D25,D27-D46,C30-C45,C47-C66') + ['C21']   # every LED but D26, their caps, the LED bulk cap
+LC_OFF = expand('D10-D25,D27-D46,C30-C45,C47-C66') + ['C21', 'U10']   # every LED but D26, their caps, the LED bulk cap; J2's TashTalk
 STANDOFFS = ['MT1,MT2,MT3,MT4', '9774030151R (Wurth WA-SMSI M2.5x3 SMT spacer)',
              'panel:SMT_Standoff_M2.5_D6.0mm', '', '4',
              'Not at LCSC: source from Digi-Key or consign; panel is art-face-down in this production panel so these reflow on the SAME side as all other parts; ring paste aperture in stencil data']
 SPACER = ['D3 (spacer)', 'LED4*8 nylon LED spacer, 4 mm x 8 mm', '-', 'C92326', '1',
           'Under D3: LED leads through the spacer bore, LED flange seated on it, lens up']
-PLACEMENTS = {'AirWriter': 135, 'AirWriter LC': 59}
+PLACEMENTS = {'AirWriter': 146, 'AirWriter LC': 69}
 
 bom = list(csv.reader(open(bom_path)))
 bom = [bom[0]] + [r for r in bom[1:] if not r[2].startswith('Jumper:SolderJumper')]   # copper, not parts

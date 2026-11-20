@@ -376,9 +376,11 @@ Traps already explained in a code comment are listed only when the comment is ea
 - **The bench Mac's 8.1 install had no AppleTalk ImageWriter driver**, and the plain
   "ImageWriter" Chooser driver is serial only.
   Apple's `AppleTalk_ImageWriter_7.0.1.sea.bin` (Wayback copy of download.info.apple.com) works.
-- **U8's ~RE rides `LT_DE`, so U8 shuts down while the PIC transmits.** Deliberate: wake is
-  ≤ 1.8 µs against LocalTalk's ~200 µs inter-dialogue gap. It mirrors the U6 bug fixed on 08-22
-  but is not that bug; don't "fix" it.
+- **Rev A: U8's ~RE rides `LT_DE`, so U8 shuts down while the PIC transmits.** Deliberate: wake
+  is ≤ 1.8 µs against LocalTalk's ~200 µs inter-dialogue gap. It mirrors the U6 bug fixed on
+  08-22 but is not that bug; don't "fix" it. Rev 2026.11 has no U8: its THVD1452s wake in up to
+  14 µs, so their ~RE is tied low and the receiver never sleeps; its output reaches the PIC's
+  data pin through 2.2 k, which the PIC's own drive overrides while it transmits (W-1176).
 - **A port record and the printer on the port can be of different families** (W-1103, W-1116). A
   StyleWriter answering on a port whose records are ImageWriters, or the reverse, is a record of
   its own once it has answered twice (`pr_port_seen_sw`, `pr_port_seen`: one answer is
@@ -617,6 +619,11 @@ Traps already explained in a code comment are listed only when the comment is ea
 - **KiCad silently reverts external edits.** A session open before a scripted edit writes its
   stale copy back on save (ate the outline once, the design rules twice). Close KiCad (no
   `~*.lck` files) before editing, re-verify after.
+- **konnect rewrites the whole schematic in its own order** (W-1176: a few parts' edit came out
+  as a 7,000-line diff), and `kicad-cli sch upgrade --force` keeps whatever order it reads.
+  Re-save the edited file with `kicad-cli sch upgrade --force`, then put the change back on the
+  committed file with `tools_sch/keep_order.py`, and check the netlist matches before
+  committing.
 - **konnect `set_design_rules` and `set_board_size` corrupt this project.** The first writes
   rules into `.kicad_pcb` (KiCad 10 reads `.kicad_pro`: duplicate keys, unloadable board); the
   second appends a second outline. Edit `airwriter.kicad_pro` directly; rebuild outlines in script.

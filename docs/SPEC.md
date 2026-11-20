@@ -119,6 +119,11 @@ colino.net's bench trace, VCF forum thread; colino.net found Pro Signal and Cabl
 | 7 | GPi | not connected | 7 |
 | 8 | RxD+, in | U2 A (receiver) | 6 TxD+ |
 
+**Rev 2026.11 (W-1176)** gives both sockets the same circuit, so either is the printer port
+or LocalTalk: the pins and the cable above hold for both, and the transceiver
+behind each is a THVD1452 whose driver a GPIO or that socket's TashTalk enables
+(`docs/hardware-rev-2026-11.md`, "Either socket, either job"; 3.19 for the firmware).
+
 **HSKi carries a clock from a QuickDraw LaserWriter** (W-1102, §3.18). A Personal LaserWriter
 300 drives 533 kHz on its handshake line whenever it is on, and takes the board's TxD one bit
 per clock. Rev A's U3 (the original SP3232EEN, R9 open) delivers it to IO8 at a 49 to 51% duty
@@ -1844,6 +1849,15 @@ board exists.
   J4's handshake in (IO21) exist only there. The bootloader hook drives IO47 and IO13 low and
   never touches IO35-IO37; it tells the board by the flash size, the one part of the board
   choice its build sees. App_main holds both low (asserted at the port) from its first lines.
+- **Either socket, either job** (`W-1176 Rev 2026.11: either socket takes a serial printer or
+  AppleTalk`). Rev 2026.11's J2 and J4 have the same circuit (`docs/hardware-rev-2026-11.md`):
+  a THVD1452 whose receiver is always on, a TashTalk of its own (U10 for J2, U7 for J4), and
+  GPIOs that take the line over when that TashTalk is held in reset. Until the page lets you
+  choose, J2 is the printer port and J4 LocalTalk, as on rev A. The bootloader hook drives IO42
+  low (U10 in reset); right after `serial_out_init`, app_main holds it there and drives IO7
+  (`J2_DE`) high, J2's driver on, carrying UART1's TX on IO17 through R38, and leaves J4's
+  printer-side pins (IO3, IO9, IO10) as inputs with no pulls, so U7 owns J4's line, and U10's
+  (IO11, IO12, IO41) as inputs pulled down, so its programming lines never float. The cable test is unchanged: its frames leave J2 through the same driver.
 - **Straps**, rev 2026.11 only, read once at boot with the pull-ups on, which stay on only where
   a strap reads high: IO16 (`BOARD_REV`, low on every 2026.11 board) and IO15 (`BOARD_LC`, low on
   the LC). `/api/status` has `board` (`rev-a` or `2026.11`), `lc`, and `board_ok`, false when a

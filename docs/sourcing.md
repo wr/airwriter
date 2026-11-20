@@ -35,7 +35,8 @@ current BOMs are `hardware/combined/fab/combined-assembly-bom.csv` (AirWriter) a
     footprint has a Ø2.3 hole; won't fit. MD-80S is worse (unshielded, no posts).
   - HOOYA / Legion DIN-802 (LCSC C20611694 / C41409494): pads 0.15–0.20 mm out and an oval
     centre slot; unusable without a new footprint.
-- **U7: PIC12F1840-I/P (PDIP-8) from Digi-Key or Mouser.** LCSC stocks only the SOIC. PCBWay fits
+- **U7: PIC12F1840-I/P (PDIP-8) from Digi-Key or Mouser.** LCSC stocks only the SOIC (U10's
+  part, below). PCBWay fits
   the socket only (CONNFLY DS1009-08AT1NX-0A2, LCSC C72124), empty, on both builds. **Wells
   buys the PIC and presses a blank one into each full AirWriter** at its bench test; the LC's
   socket ships empty. TashTalk is no longer an add-on.
@@ -45,11 +46,21 @@ current BOMs are `hardware/combined/fab/combined-assembly-bom.csv` (AirWriter) a
   SK6812MINI-C (C7423117) is discontinued at LCSC (15 left on 2026-11-19). The -012 is the
   same package and pinout; the SK6812MINI-HS is not (`docs/hardware-rev-2026-11.md`).
 
+## J2's PIC and the port transceivers (W-1176)
+
+- **U10: PIC12F1840-I/SN (SOIC-8, LCSC C39594)**, J2's TashTalk on rev 2026.11, placed blank by
+  PCBWay on AirWriter and left off the LC. LCSC had only 173 on 2026-11-20 (the reel part,
+  C512104, none): check stock before the order, and buy the batch's worth early if it is short.
+- **U2, U6: TI THVD1452DGSR (VSSOP-10, LCSC C2879202)**, one per socket, $1.47 at 50 and 2,248
+  in stock on 2026-11-20. It replaced the THVD1451 ($3.09) on J2 and two SP3485s on J4.
+
 ## Programming the PIC
 
 The ESP32 flashes TashTalk into U7 in its socket over LVP (`pic_prog`,
 `W-1028 Firmware: flash TashTalk into the PIC from the ESP32 over LVP`), so no external
-programmer is needed. An erased PIC12F1840 has LVP on, so a blank part straight from the
+programmer is needed. U10 on rev 2026.11 is wired the same way (IO42 to MCLR, IO11 and IO12
+through 100 Ω to ICSPCLK and ICSPDAT); flashing it waits on the firmware that lets J2 run
+LocalTalk. An erased PIC12F1840 has LVP on, so a blank part straight from the
 distributor takes TashTalk in its socket: buy them blank, never pre-programmed. Proved on board 1
 (2026-10-29): a new blank part took TashTalk in its socket. Upstream TashTalk's config clears LVP, so a stock-programmed part needs
 high-voltage programming, off the board (never in the socket, `docs/traps.md`). For that: a
@@ -59,5 +70,7 @@ fallback. The MPLAB Snap is LVP-only, and the TL866II does not support the 12F18
 ## Notes
 
 - Full-duplex RS-422 transceivers keep going out of stock at LCSC (ISL3177EIBZ, MAX3491ESD+
-  were both zero); half-duplex RS-485 is commodity. That is why LocalTalk uses two SP3485s.
+  were both zero); half-duplex RS-485 is commodity. That is why rev A's LocalTalk uses two
+  SP3485s. Rev 2026.11's THVD1452 is full duplex too: check its stock before each order, and
+  the fallback is rev A's pair of SP3485s per socket, which means a new layout.
 - The printer cable is Apple's 590-0552-A / M0197 crossover; see SPEC §2.4 before buying any other.
