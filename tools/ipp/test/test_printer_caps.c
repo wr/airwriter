@@ -64,5 +64,37 @@ int main(void)
         CHECK(strcmp(a, b) == 0);
         CHECK(printer_caps_imagewriter_model(0) == &printer_caps_imagewriter);
     }
+
+    // W-1173: every ImageWriter has continuous fanfold beside Letter, 8.5 in by 1 in to 10 ft,
+    // no top or bottom margin.
+    {
+        const printer_roll_t *r = iw->roll;
+        CHECK(r != NULL);
+        CHECK(printer_caps_imagewriter_model(2)->roll == r);
+        CHECK(printer_caps_imagewriter_model(3)->roll == r);
+        CHECK_EQ_INT(r->x, 21590);
+        CHECK_EQ_INT(r->len_min, 2540);
+        CHECK_EQ_INT(r->len_max, 304800);
+        CHECK_EQ_INT(r->margin_l, 635);
+        CHECK_EQ_INT(r->margin_r, 635);
+        CHECK(strcmp(r->min_kw, "roll_min_8.5x1in") == 0);
+        CHECK(strcmp(r->max_kw, "roll_max_8.5x120in") == 0);
+        CHECK(strcmp(r->ready_kw, "roll_current_8.5x0in") == 0);
+
+        // A job asks for the roll by naming one, or by a length more than 1/8 in from the sheet's.
+        CHECK_EQ_INT(printer_caps_wants_roll(iw, 27940, 0), 0);
+        CHECK_EQ_INT(printer_caps_wants_roll(iw, 27940 + 318, 0), 0);
+        CHECK_EQ_INT(printer_caps_wants_roll(iw, 27940 - 318, 0), 0);
+        CHECK_EQ_INT(printer_caps_wants_roll(iw, 27940 + 319, 0), 1);
+        CHECK_EQ_INT(printer_caps_wants_roll(iw, 27940 - 319, 0), 1);
+        CHECK_EQ_INT(printer_caps_wants_roll(iw, 101600, 0), 1);
+        CHECK_EQ_INT(printer_caps_wants_roll(iw, 0, 1), 1);
+        CHECK_EQ_INT(printer_caps_wants_roll(iw, 0, 0), 0);
+        // A printer with no roll never prints one.
+        printer_caps_t sheets = *iw;
+        sheets.roll = NULL;
+        CHECK_EQ_INT(printer_caps_wants_roll(&sheets, 101600, 1), 0);
+        CHECK_EQ_INT(printer_caps_wants_roll(NULL, 101600, 1), 0);
+    }
     TEST_END;
 }
