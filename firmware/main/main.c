@@ -940,8 +940,11 @@ static esp_err_t doc_begin(void *ctx, const char *format, const char *name,
     wifi_ap_record_t ap;
     int rssi = esp_wifi_sta_get_ap_info(&ap) == ESP_OK ? ap.rssi : 0;
     s_last_job_id = opts ? opts->job_id : 0;
-    ESP_LOGI(TAG, "job %d format %s, rssi %d", (int)s_last_job_id,
-             format[0] ? format : "(unspecified)", rssi);
+    // W-1173: a banner app's job asks for the continuous roll by the length it cut.
+    int roll = opts && printer_caps_wants_roll(&printer_caps_imagewriter, opts->media_len,
+                                               opts->media_roll);
+    ESP_LOGI(TAG, "job %d format %s, rssi %d%s", (int)s_last_job_id,
+             format[0] ? format : "(unspecified)", rssi, roll ? ", continuous paper" : "");
     memdiag_mark("job start");          // W-1094
     s_job_error[0] = '\0';
     strncpy(s_last_job, name && name[0] ? name : "Untitled", sizeof s_last_job - 1);
@@ -957,7 +960,7 @@ static esp_err_t doc_begin(void *ctx, const char *format, const char *name,
     line_source();                  // the port's own line, not the box's
     printer_state_post(PS_EV_JOB_START);
     serial_out_loopback_reset();
-    esp_err_t err = job_pipe_begin(name);
+    esp_err_t err = job_pipe_begin(name, roll);
     s_job_pipe_ok = (err == ESP_OK);
     return err;
 }

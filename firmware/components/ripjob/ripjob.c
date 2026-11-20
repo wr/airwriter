@@ -25,6 +25,8 @@ typedef struct {
     uint8_t  *ibits[IW_INKS];
     uint8_t  *gray;          // an RGB row as gray, for a black ribbon
     uint32_t  skip;          // rows of this page still to drop (top_margin < 0)
+    uint32_t  room;          // W-1173: rows the roll has left for this page; UINT32_MAX off it
+    int       spilled;       // W-1173: rows came past the roll's end
     // W-1143: this page's time in each part, in us (ripjob.h), while cfg->clock_us is set.
     uint32_t  t_read, t_scale, t_screen, t_second, t_out, t_emit;
 } pipe_t;
@@ -63,7 +65,8 @@ static void on_row(void *ctx, const uint8_t *row, uint32_t w)
     if (p->cfg->row) p->cfg->row(p->cfg->row_ctx, p->bits, w, p->y);
     if (p->cfg->stage) p->cfg->stage->row(p->cfg->stage->ctx, p->bits);
     else if (p->skip) p->skip--;
-    else iw_row(&p->iw, p->bits);
+    else if (!p->room) p->spilled = 1;
+    else { iw_row(&p->iw, p->bits); p->room--; }
     p->y++;
     uint32_t t3 = clk(p);
     p->t_second += t1 - t0;
@@ -84,7 +87,8 @@ static void on_rgb_row(void *ctx, const uint8_t *row, uint32_t w)
     if (p->cfg->ink_row) p->cfg->ink_row(p->cfg->row_ctx, bits, w, p->y);
     if (p->cfg->stage) p->cfg->stage->ink_row(p->cfg->stage->ctx, bits);
     else if (p->skip) p->skip--;
-    else iwc_row(p->iwc, bits);
+    else if (!p->room) p->spilled = 1;
+    else { iwc_row(p->iwc, bits); p->room--; }
     p->y++;
     uint32_t t2 = clk(p);
     p->t_screen += t1 - t0;
@@ -116,6 +120,17 @@ static const printer_media_t *pick_media(const printer_caps_t *caps, uint32_t pa
     for (size_t i = 0; i < caps->n_media; i++)
         if (near(page_w, caps->media_list[i].page_w)) return &caps->media_list[i];
     return &caps->media_list[0];
+}
+
+// W-1173: whether a page prints on the caps' roll: its job asked, or it is more than 1/8 in
+// longer than the sheet. A stage's printer has no roll.
+static int on_roll(const ripjob_cfg_t *cfg, const printer_caps_t *caps, const urf_page_t *pg,
+                   uint32_t res)
+{
+    if (cfg->stage || !caps->roll) return 0;
+    if (cfg->continuous) return 1;
+    uint64_t len = (uint64_t)pg->height * 2540 / res;            // 1/100 mm
+    return len > (uint64_t)caps->media_y + PRINTER_CAPS_LEN_SLACK;
 }
 
 // URF colour spaces that are plain RGB: 1 sRGB, 3 AdobeRGB, 5 device RGB.
@@ -218,7 +233,12 @@ int ripjob_run(urf_t *u, const ripjob_cfg_t *cfg, ripjob_stats_t *st)
 
         p->dst_w = dst_w;
         p->y     = 0;
-        p->skip  = !stage && cfg->top_margin < 0 ? (uint32_t)(-cfg->top_margin / 2) : 0;
+        // A roll page has no margin of its own to drop or add to: it starts at the head.
+        int roll = on_roll(cfg, caps, &u->page, res);
+        int pad  = roll ? 0 : cfg->top_margin / 2;
+        p->skip  = !stage && !roll && cfg->top_margin < 0 ? (uint32_t)(-cfg->top_margin / 2) : 0;
+        p->room  = roll ? (uint32_t)((uint64_t)caps->roll->len_max * dpi_y / 2540) : UINT32_MAX;
+        p->spilled = 0;
         if (st) { st->dst_w = dst_w; st->dst_h = dst_h; st->crop_per_side = crop_per_side; }
 
         if (cfg->page && cfg->page(cfg->page_ctx, pages, dst_w, dst_h)) {
@@ -257,7 +277,7 @@ int ripjob_run(urf_t *u, const ripjob_cfg_t *cfg, ripjob_stats_t *st)
                 iwc_init(p->iwc, dst_w, cfg->out, cfg->out_ctx);
                 iwc_begin_page(p->iwc);
                 // The margin's blank rows: ibits are still all zeros here.
-                for (int r = 0; r < cfg->top_margin / 2; r++)
+                for (int r = 0; r < pad; r++)
                     iwc_row(p->iwc, (const uint8_t *const *)p->ibits);
             }
             if (rs_init_n(&rs, src_w, u->page.height, dst_w, dst_h, 3, on_rgb_row, p)) {
@@ -280,7 +300,7 @@ int ripjob_run(urf_t *u, const ripjob_cfg_t *cfg, ripjob_stats_t *st)
             if (!stage) {
                 iw_init(&p->iw, dst_w, cfg->out, cfg->out_ctx);
                 iw_begin_page(&p->iw);
-                for (int r = 0; r < cfg->top_margin / 2; r++) iw_row(&p->iw, p->bits);   // still zeros
+                for (int r = 0; r < pad; r++) iw_row(&p->iw, p->bits);   // still zeros
             }
 
             if (rs_init(&rs, src_w, u->page.height, dst_w, dst_h, on_row, p)) {
@@ -328,6 +348,9 @@ int ripjob_run(urf_t *u, const ripjob_cfg_t *cfg, ripjob_stats_t *st)
             } else {
                 iw_end_page(&p->iw);
             }
+            if (p->spilled)
+                say(cfg, "page %d is longer than the roll's %u rows: the rest was dropped",
+                    pages + 1, (unsigned)((uint64_t)caps->roll->len_max * dpi_y / 2540));
             if (cfg->clock_us && r >= 0) {
                 t1 = clk(p);
                 uint32_t end = t1 - t0;
