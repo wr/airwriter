@@ -93,7 +93,7 @@ front edge, Z up from its top face). Dot centres: case x = panel x, case y =
 
   | Part | Height | Source |
   |---|---|---|
-  | SK6812MINI-C ×37 | 1.60 | conservative over the 3.5 × 3.5 × 1.45 package |
+  | SK6812MINI-012 ×37 (rev A: SK6812MINI-C) | 1.60 | conservative over the 3.5 × 3.5 × 1.45 package |
   | S1 | 9.41 | `test_case` / dp08rp.mjs body top |
   | SW1 | 3.50 | footprint descr, 6.2 × 2.55 × 3.5 |
   | U7 with the PIC seated | 9.00 | the "socketed PIC ~9 mm proud" ceiling |

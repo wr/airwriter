@@ -57,7 +57,7 @@ top side of the file. R33 is left off; its pads stay bare.
    consign (labelled "MT1-MT4, Wurth 9774030151R"): four for every board, plus six spares
    for the order. Reflow on the top side; paste is the ring aperture in the paste layer;
    the seat centre is bare ENIG with no paste.
-6. **D10–D46 (37 × SK6812MINI-C, C7423117): align by the CHAMFERED corner**, which must sit
+6. **D10–D46 (37 × SK6812MINI-012, C2886570): align by the CHAMFERED corner**, which must sit
    on the footprint's chamfer/notch corner, the top-left corner of every LED in the top-view
    image. The footprint's pad numbering is rotated 180° from the datasheet's pin numbers:
    align by the chamfer, not by "pad 1". A 180° placement breaks the whole chain.
@@ -105,7 +105,7 @@ the position file and the BOM; their pads stay bare. R33 is fitted.
    edge.
 4. **Through-hole parts (SW3, U7's socket, D3): solder every joint fully.** Rev A's
    first boards came back with U7 and SW3 only tacked.
-5. **D26 (SK6812MINI-C, C7423117): align by the CHAMFERED corner**, which must sit on the
+5. **D26 (SK6812MINI-012, C2886570): align by the CHAMFERED corner**, which must sit on the
    footprint's chamfer/notch corner, the top-left corner of the LED in the top-view image.
    The footprint's pad numbering is rotated 180° from the datasheet's pin numbers: align by
    the chamfer, not by "pad 1".

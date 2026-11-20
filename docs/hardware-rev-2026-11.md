@@ -110,6 +110,19 @@ The new resistors sit beside what they serve: R24 below U3, R25 east of U6 (off 
 back run by a via), R27 east of U7 in LT_RESET's back run, R21 above SW2, R32 and R33 above
 IO16 and IO15.
 
+## The status LEDs
+
+D10–D46 are OPSCO's SK6812MINI-012 (LCSC C2886570). Rev A's SK6812MINI-C (C7423117) is
+discontinued at LCSC and no longer on OPSCO's list. By the two datasheets the -012 has the
+same package, pads, chamfer corner and pin positions, the same GRB order and timing, so the
+footprint, the nets, the chamfer rule in the order notes and `led_grid` are unchanged
+(`tools_sch/led_part.py` renames the part in the schematic and the board). Two differences,
+neither seen on a board yet: its blue is binned brighter (200–385 mcd against 160–320) and
+5 nm longer, and its lens is called translucent where the -C's is silicone gel. On the first
+board, look at white and Wi-Fi's blue through the lattice and the cover; if they have moved,
+the balance is `led_grid_core.h`'s. The SK6812MINI-HS that LCSC lists as similar does not
+fit: its pins are in other corners and it is 1.95 mm tall.
+
 ## Rev A copper that changed
 
 - U3's 3.3 V feed runs from pin 16 under U3's body (x 117.3) to the branch at y 144.24,

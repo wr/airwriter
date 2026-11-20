@@ -12,7 +12,8 @@ PCB = ROOT / "hardware/airwriter/airwriter.kicad_pcb"
 OUT_H = ROOT / "firmware/components/led_grid/include/led_map.h"
 OUT_C = ROOT / "firmware/components/led_grid/led_map.c"
 DX, DY = 100.0, 60.0          # board = panel + (DX, DY)
-# SK6812MINI-C on the stock PLCC4 footprint: pad 3 = DIN, pad 1 = DOUT.
+# SK6812MINI (rev A's -C, rev 2026.11's -012) on the stock PLCC4 footprint: pad 3 = DIN,
+# pad 1 = DOUT.
 PAD_DIN, PAD_DOUT = "3", "1"
 
 net = subprocess.run([K, "sch", "export", "netlist", "--format", "kicadxml",

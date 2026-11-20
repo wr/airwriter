@@ -507,7 +507,7 @@
 				)
 			)
 		)
-		(property "Value" "SK6812MINI-C"
+		(property "Value" "SK6812MINI-012"
 			(at 0 3.25 180)
 			(layer "F.Fab")
 			(uuid "55e69812-1731-41d6-9a1f-d5e6a45b39c4")
@@ -518,7 +518,7 @@
 				)
 			)
 		)
-		(property "Datasheet" "https://www.lcsc.com/product-detail/C7423117.html"
+		(property "Datasheet" "https://www.lcsc.com/product-detail/C2886570.html"
 			(at 0 0 180)
 			(unlocked yes)
 			(layer "F.Fab")
@@ -544,7 +544,7 @@
 				)
 			)
 		)
-		(property "LCSC" "C7423117"
+		(property "LCSC" "C2886570"
 			(at 0 0 0)
 			(layer "F.Fab")
 			(hide yes)
@@ -556,7 +556,7 @@
 				)
 			)
 		)
-		(property "MPN" "SK6812MINI-C"
+		(property "MPN" "SK6812MINI-012"
 			(at 0 0 0)
 			(layer "F.Fab")
 			(hide yes)
@@ -1875,7 +1875,7 @@
 				)
 			)
 		)
-		(property "Value" "SK6812MINI-C"
+		(property "Value" "SK6812MINI-012"
 			(at 0 3.25 180)
 			(layer "F.Fab")
 			(uuid "470d20a7-3722-4592-a39f-778a5a4743d8")
@@ -1886,7 +1886,7 @@
 				)
 			)
 		)
-		(property "Datasheet" "https://www.lcsc.com/product-detail/C7423117.html"
+		(property "Datasheet" "https://www.lcsc.com/product-detail/C2886570.html"
 			(at 0 0 180)
 			(unlocked yes)
 			(layer "F.Fab")
@@ -1912,7 +1912,7 @@
 				)
 			)
 		)
-		(property "LCSC" "C7423117"
+		(property "LCSC" "C2886570"
 			(at 0 0 0)
 			(layer "F.Fab")
 			(hide yes)
@@ -1924,7 +1924,7 @@
 				)
 			)
 		)
-		(property "MPN" "SK6812MINI-C"
+		(property "MPN" "SK6812MINI-012"
 			(at 0 0 0)
 			(layer "F.Fab")
 			(hide yes)
@@ -2171,7 +2171,7 @@
 				)
 			)
 		)
-		(property "Value" "SK6812MINI-C"
+		(property "Value" "SK6812MINI-012"
 			(at 0 3.25 180)
 			(layer "F.Fab")
 			(uuid "7306472f-0a04-4e67-8b25-130af2ead899")
@@ -2182,7 +2182,7 @@
 				)
 			)
 		)
-		(property "Datasheet" "https://www.lcsc.com/product-detail/C7423117.html"
+		(property "Datasheet" "https://www.lcsc.com/product-detail/C2886570.html"
 			(at 0 0 180)
 			(unlocked yes)
 			(layer "F.Fab")
@@ -2208,7 +2208,7 @@
 				)
 			)
 		)
-		(property "LCSC" "C7423117"
+		(property "LCSC" "C2886570"
 			(at 0 0 0)
 			(layer "F.Fab")
 			(hide yes)
@@ -2220,7 +2220,7 @@
 				)
 			)
 		)
-		(property "MPN" "SK6812MINI-C"
+		(property "MPN" "SK6812MINI-012"
 			(at 0 0 0)
 			(layer "F.Fab")
 			(hide yes)
@@ -2467,7 +2467,7 @@
 				)
 			)
 		)
-		(property "Value" "SK6812MINI-C"
+		(property "Value" "SK6812MINI-012"
 			(at 0 3.25 180)
 			(layer "F.Fab")
 			(uuid "704a9c4a-14a9-40ce-8915-fecc03cf2917")
@@ -2478,7 +2478,7 @@
 				)
 			)
 		)
-		(property "Datasheet" "https://www.lcsc.com/product-detail/C7423117.html"
+		(property "Datasheet" "https://www.lcsc.com/product-detail/C2886570.html"
 			(at 0 0 180)
 			(unlocked yes)
 			(layer "F.Fab")
@@ -2504,7 +2504,7 @@
 				)
 			)
 		)
-		(property "LCSC" "C7423117"
+		(property "LCSC" "C2886570"
 			(at 0 0 0)
 			(layer "F.Fab")
 			(hide yes)
@@ -2516,7 +2516,7 @@
 				)
 			)
 		)
-		(property "MPN" "SK6812MINI-C"
+		(property "MPN" "SK6812MINI-012"
 			(at 0 0 0)
 			(layer "F.Fab")
 			(hide yes)
@@ -4035,7 +4035,7 @@
 				)
 			)
 		)
-		(property "Value" "SK6812MINI-C"
+		(property "Value" "SK6812MINI-012"
 			(at 0 3.25 180)
 			(layer "F.Fab")
 			(uuid "3b8b4b51-0fea-4aa8-81d2-5a0055ac22da")
@@ -4046,7 +4046,7 @@
 				)
 			)
 		)
-		(property "Datasheet" "https://www.lcsc.com/product-detail/C7423117.html"
+		(property "Datasheet" "https://www.lcsc.com/product-detail/C2886570.html"
 			(at 0 0 180)
 			(unlocked yes)
 			(layer "F.Fab")
@@ -4072,7 +4072,7 @@
 				)
 			)
 		)
-		(property "LCSC" "C7423117"
+		(property "LCSC" "C2886570"
 			(at 0 0 0)
 			(layer "F.Fab")
 			(hide yes)
@@ -4084,7 +4084,7 @@
 				)
 			)
 		)
-		(property "MPN" "SK6812MINI-C"
+		(property "MPN" "SK6812MINI-012"
 			(at 0 0 0)
 			(layer "F.Fab")
 			(hide yes)
@@ -6604,7 +6604,7 @@
 				)
 			)
 		)
-		(property "Value" "SK6812MINI-C"
+		(property "Value" "SK6812MINI-012"
 			(at 0 3.25 180)
 			(layer "F.Fab")
 			(uuid "75fda3d0-c7f9-489c-b3a5-4821e2801ede")
@@ -6615,7 +6615,7 @@
 				)
 			)
 		)
-		(property "Datasheet" "https://www.lcsc.com/product-detail/C7423117.html"
+		(property "Datasheet" "https://www.lcsc.com/product-detail/C2886570.html"
 			(at 0 0 180)
 			(unlocked yes)
 			(layer "F.Fab")
@@ -6641,7 +6641,7 @@
 				)
 			)
 		)
-		(property "LCSC" "C7423117"
+		(property "LCSC" "C2886570"
 			(at 0 0 0)
 			(layer "F.Fab")
 			(hide yes)
@@ -6653,7 +6653,7 @@
 				)
 			)
 		)
-		(property "MPN" "SK6812MINI-C"
+		(property "MPN" "SK6812MINI-012"
 			(at 0 0 0)
 			(layer "F.Fab")
 			(hide yes)
@@ -7516,7 +7516,7 @@
 				)
 			)
 		)
-		(property "Value" "SK6812MINI-C"
+		(property "Value" "SK6812MINI-012"
 			(at 0 3.25 180)
 			(layer "F.Fab")
 			(uuid "e4b90bed-5a70-40f8-a0ae-2f0e698b0761")
@@ -7527,7 +7527,7 @@
 				)
 			)
 		)
-		(property "Datasheet" "https://www.lcsc.com/product-detail/C7423117.html"
+		(property "Datasheet" "https://www.lcsc.com/product-detail/C2886570.html"
 			(at 0 0 180)
 			(unlocked yes)
 			(layer "F.Fab")
@@ -7553,7 +7553,7 @@
 				)
 			)
 		)
-		(property "LCSC" "C7423117"
+		(property "LCSC" "C2886570"
 			(at 0 0 0)
 			(layer "F.Fab")
 			(hide yes)
@@ -7565,7 +7565,7 @@
 				)
 			)
 		)
-		(property "MPN" "SK6812MINI-C"
+		(property "MPN" "SK6812MINI-012"
 			(at 0 0 0)
 			(layer "F.Fab")
 			(hide yes)
@@ -8180,7 +8180,7 @@
 				)
 			)
 		)
-		(property "Value" "SK6812MINI-C"
+		(property "Value" "SK6812MINI-012"
 			(at 0 3.25 180)
 			(layer "F.Fab")
 			(uuid "010f2e54-d767-4e20-a61a-8ecbbed2bddb")
@@ -8191,7 +8191,7 @@
 				)
 			)
 		)
-		(property "Datasheet" "https://www.lcsc.com/product-detail/C7423117.html"
+		(property "Datasheet" "https://www.lcsc.com/product-detail/C2886570.html"
 			(at 0 0 180)
 			(unlocked yes)
 			(layer "F.Fab")
@@ -8217,7 +8217,7 @@
 				)
 			)
 		)
-		(property "LCSC" "C7423117"
+		(property "LCSC" "C2886570"
 			(at 0 0 0)
 			(layer "F.Fab")
 			(hide yes)
@@ -8229,7 +8229,7 @@
 				)
 			)
 		)
-		(property "MPN" "SK6812MINI-C"
+		(property "MPN" "SK6812MINI-012"
 			(at 0 0 0)
 			(layer "F.Fab")
 			(hide yes)
@@ -8844,7 +8844,7 @@
 				)
 			)
 		)
-		(property "Value" "SK6812MINI-C"
+		(property "Value" "SK6812MINI-012"
 			(at 0 3.25 180)
 			(layer "F.Fab")
 			(uuid "d8df1c0f-616b-4fde-bacd-d7a76a65b9c1")
@@ -8855,7 +8855,7 @@
 				)
 			)
 		)
-		(property "Datasheet" "https://www.lcsc.com/product-detail/C7423117.html"
+		(property "Datasheet" "https://www.lcsc.com/product-detail/C2886570.html"
 			(at 0 0 180)
 			(unlocked yes)
 			(layer "F.Fab")
@@ -8881,7 +8881,7 @@
 				)
 			)
 		)
-		(property "LCSC" "C7423117"
+		(property "LCSC" "C2886570"
 			(at 0 0 0)
 			(layer "F.Fab")
 			(hide yes)
@@ -8893,7 +8893,7 @@
 				)
 			)
 		)
-		(property "MPN" "SK6812MINI-C"
+		(property "MPN" "SK6812MINI-012"
 			(at 0 0 0)
 			(layer "F.Fab")
 			(hide yes)
@@ -9820,7 +9820,7 @@
 				)
 			)
 		)
-		(property "Value" "SK6812MINI-C"
+		(property "Value" "SK6812MINI-012"
 			(at 0 3.25 180)
 			(layer "F.Fab")
 			(uuid "965111ec-5e7a-4e88-aee0-504e07591e3e")
@@ -9831,7 +9831,7 @@
 				)
 			)
 		)
-		(property "Datasheet" "https://www.lcsc.com/product-detail/C7423117.html"
+		(property "Datasheet" "https://www.lcsc.com/product-detail/C2886570.html"
 			(at 0 0 180)
 			(unlocked yes)
 			(layer "F.Fab")
@@ -9857,7 +9857,7 @@
 				)
 			)
 		)
-		(property "LCSC" "C7423117"
+		(property "LCSC" "C2886570"
 			(at 0 0 0)
 			(layer "F.Fab")
 			(hide yes)
@@ -9869,7 +9869,7 @@
 				)
 			)
 		)
-		(property "MPN" "SK6812MINI-C"
+		(property "MPN" "SK6812MINI-012"
 			(at 0 0 0)
 			(layer "F.Fab")
 			(hide yes)
@@ -10427,7 +10427,7 @@
 				)
 			)
 		)
-		(property "Value" "SK6812MINI-C"
+		(property "Value" "SK6812MINI-012"
 			(at 0 3.25 180)
 			(layer "F.Fab")
 			(uuid "0c2638e5-d174-401c-9e76-aa13d7840f5e")
@@ -10438,7 +10438,7 @@
 				)
 			)
 		)
-		(property "Datasheet" "https://www.lcsc.com/product-detail/C7423117.html"
+		(property "Datasheet" "https://www.lcsc.com/product-detail/C2886570.html"
 			(at 0 0 180)
 			(unlocked yes)
 			(layer "F.Fab")
@@ -10464,7 +10464,7 @@
 				)
 			)
 		)
-		(property "LCSC" "C7423117"
+		(property "LCSC" "C2886570"
 			(at 0 0 0)
 			(layer "F.Fab")
 			(hide yes)
@@ -10476,7 +10476,7 @@
 				)
 			)
 		)
-		(property "MPN" "SK6812MINI-C"
+		(property "MPN" "SK6812MINI-012"
 			(at 0 0 0)
 			(layer "F.Fab")
 			(hide yes)
@@ -11052,7 +11052,7 @@
 				)
 			)
 		)
-		(property "Value" "SK6812MINI-C"
+		(property "Value" "SK6812MINI-012"
 			(at 0 3.25 180)
 			(layer "F.Fab")
 			(uuid "338ccf65-ff2c-469f-99dd-42e429f21219")
@@ -11063,7 +11063,7 @@
 				)
 			)
 		)
-		(property "Datasheet" "https://www.lcsc.com/product-detail/C7423117.html"
+		(property "Datasheet" "https://www.lcsc.com/product-detail/C2886570.html"
 			(at 0 0 180)
 			(unlocked yes)
 			(layer "F.Fab")
@@ -11089,7 +11089,7 @@
 				)
 			)
 		)
-		(property "LCSC" "C7423117"
+		(property "LCSC" "C2886570"
 			(at 0 0 0)
 			(layer "F.Fab")
 			(hide yes)
@@ -11101,7 +11101,7 @@
 				)
 			)
 		)
-		(property "MPN" "SK6812MINI-C"
+		(property "MPN" "SK6812MINI-012"
 			(at 0 0 0)
 			(layer "F.Fab")
 			(hide yes)
@@ -11939,7 +11939,7 @@
 				)
 			)
 		)
-		(property "Value" "SK6812MINI-C"
+		(property "Value" "SK6812MINI-012"
 			(at 0 3.25 180)
 			(layer "F.Fab")
 			(uuid "197456b5-d97e-478b-b1c8-057634943f4c")
@@ -11950,7 +11950,7 @@
 				)
 			)
 		)
-		(property "Datasheet" "https://www.lcsc.com/product-detail/C7423117.html"
+		(property "Datasheet" "https://www.lcsc.com/product-detail/C2886570.html"
 			(at 0 0 180)
 			(unlocked yes)
 			(layer "F.Fab")
@@ -11976,7 +11976,7 @@
 				)
 			)
 		)
-		(property "LCSC" "C7423117"
+		(property "LCSC" "C2886570"
 			(at 0 0 0)
 			(layer "F.Fab")
 			(hide yes)
@@ -11988,7 +11988,7 @@
 				)
 			)
 		)
-		(property "MPN" "SK6812MINI-C"
+		(property "MPN" "SK6812MINI-012"
 			(at 0 0 0)
 			(layer "F.Fab")
 			(hide yes)
@@ -12826,7 +12826,7 @@
 				)
 			)
 		)
-		(property "Value" "SK6812MINI-C"
+		(property "Value" "SK6812MINI-012"
 			(at 0 3.25 180)
 			(layer "F.Fab")
 			(uuid "d63d433d-bba3-46c7-94a8-cb0fad6cd3bb")
@@ -12837,7 +12837,7 @@
 				)
 			)
 		)
-		(property "Datasheet" "https://www.lcsc.com/product-detail/C7423117.html"
+		(property "Datasheet" "https://www.lcsc.com/product-detail/C2886570.html"
 			(at 0 0 180)
 			(unlocked yes)
 			(layer "F.Fab")
@@ -12863,7 +12863,7 @@
 				)
 			)
 		)
-		(property "LCSC" "C7423117"
+		(property "LCSC" "C2886570"
 			(at 0 0 0)
 			(layer "F.Fab")
 			(hide yes)
@@ -12875,7 +12875,7 @@
 				)
 			)
 		)
-		(property "MPN" "SK6812MINI-C"
+		(property "MPN" "SK6812MINI-012"
 			(at 0 0 0)
 			(layer "F.Fab")
 			(hide yes)
@@ -13292,7 +13292,7 @@
 				)
 			)
 		)
-		(property "Value" "SK6812MINI-C"
+		(property "Value" "SK6812MINI-012"
 			(at 0 3.25 180)
 			(layer "F.Fab")
 			(uuid "6f9f77d7-9e54-4767-ab20-1a1ec4246d6b")
@@ -13303,7 +13303,7 @@
 				)
 			)
 		)
-		(property "Datasheet" "https://www.lcsc.com/product-detail/C7423117.html"
+		(property "Datasheet" "https://www.lcsc.com/product-detail/C2886570.html"
 			(at 0 0 180)
 			(unlocked yes)
 			(layer "F.Fab")
@@ -13329,7 +13329,7 @@
 				)
 			)
 		)
-		(property "LCSC" "C7423117"
+		(property "LCSC" "C2886570"
 			(at 0 0 0)
 			(layer "F.Fab")
 			(hide yes)
@@ -13341,7 +13341,7 @@
 				)
 			)
 		)
-		(property "MPN" "SK6812MINI-C"
+		(property "MPN" "SK6812MINI-012"
 			(at 0 0 0)
 			(layer "F.Fab")
 			(hide yes)
@@ -14504,7 +14504,7 @@
 				)
 			)
 		)
-		(property "Value" "SK6812MINI-C"
+		(property "Value" "SK6812MINI-012"
 			(at 0 3.25 180)
 			(layer "F.Fab")
 			(uuid "363cd9e4-b21d-422d-a28d-6a0a22033c4e")
@@ -14515,7 +14515,7 @@
 				)
 			)
 		)
-		(property "Datasheet" "https://www.lcsc.com/product-detail/C7423117.html"
+		(property "Datasheet" "https://www.lcsc.com/product-detail/C2886570.html"
 			(at 0 0 180)
 			(unlocked yes)
 			(layer "F.Fab")
@@ -14541,7 +14541,7 @@
 				)
 			)
 		)
-		(property "LCSC" "C7423117"
+		(property "LCSC" "C2886570"
 			(at 0 0 0)
 			(layer "F.Fab")
 			(hide yes)
@@ -14553,7 +14553,7 @@
 				)
 			)
 		)
-		(property "MPN" "SK6812MINI-C"
+		(property "MPN" "SK6812MINI-012"
 			(at 0 0 0)
 			(layer "F.Fab")
 			(hide yes)
@@ -14800,7 +14800,7 @@
 				)
 			)
 		)
-		(property "Value" "SK6812MINI-C"
+		(property "Value" "SK6812MINI-012"
 			(at 0 3.25 180)
 			(layer "F.Fab")
 			(uuid "63011544-c174-4ff3-918f-e3347ec62960")
@@ -14811,7 +14811,7 @@
 				)
 			)
 		)
-		(property "Datasheet" "https://www.lcsc.com/product-detail/C7423117.html"
+		(property "Datasheet" "https://www.lcsc.com/product-detail/C2886570.html"
 			(at 0 0 180)
 			(unlocked yes)
 			(layer "F.Fab")
@@ -14837,7 +14837,7 @@
 				)
 			)
 		)
-		(property "LCSC" "C7423117"
+		(property "LCSC" "C2886570"
 			(at 0 0 0)
 			(layer "F.Fab")
 			(hide yes)
@@ -14849,7 +14849,7 @@
 				)
 			)
 		)
-		(property "MPN" "SK6812MINI-C"
+		(property "MPN" "SK6812MINI-012"
 			(at 0 0 0)
 			(layer "F.Fab")
 			(hide yes)
@@ -15096,7 +15096,7 @@
 				)
 			)
 		)
-		(property "Value" "SK6812MINI-C"
+		(property "Value" "SK6812MINI-012"
 			(at 0 3.25 180)
 			(layer "F.Fab")
 			(uuid "787c9da8-9ea6-4430-b962-ff7720022288")
@@ -15107,7 +15107,7 @@
 				)
 			)
 		)
-		(property "Datasheet" "https://www.lcsc.com/product-detail/C7423117.html"
+		(property "Datasheet" "https://www.lcsc.com/product-detail/C2886570.html"
 			(at 0 0 180)
 			(unlocked yes)
 			(layer "F.Fab")
@@ -15133,7 +15133,7 @@
 				)
 			)
 		)
-		(property "LCSC" "C7423117"
+		(property "LCSC" "C2886570"
 			(at 0 0 0)
 			(layer "F.Fab")
 			(hide yes)
@@ -15145,7 +15145,7 @@
 				)
 			)
 		)
-		(property "MPN" "SK6812MINI-C"
+		(property "MPN" "SK6812MINI-012"
 			(at 0 0 0)
 			(layer "F.Fab")
 			(hide yes)
@@ -15392,7 +15392,7 @@
 				)
 			)
 		)
-		(property "Value" "SK6812MINI-C"
+		(property "Value" "SK6812MINI-012"
 			(at 0 3.25 180)
 			(layer "F.Fab")
 			(uuid "aed2dd2a-e6d1-49a1-8bbc-86380ae6efe9")
@@ -15403,7 +15403,7 @@
 				)
 			)
 		)
-		(property "Datasheet" "https://www.lcsc.com/product-detail/C7423117.html"
+		(property "Datasheet" "https://www.lcsc.com/product-detail/C2886570.html"
 			(at 0 0 180)
 			(unlocked yes)
 			(layer "F.Fab")
@@ -15429,7 +15429,7 @@
 				)
 			)
 		)
-		(property "LCSC" "C7423117"
+		(property "LCSC" "C2886570"
 			(at 0 0 0)
 			(layer "F.Fab")
 			(hide yes)
@@ -15441,7 +15441,7 @@
 				)
 			)
 		)
-		(property "MPN" "SK6812MINI-C"
+		(property "MPN" "SK6812MINI-012"
 			(at 0 0 0)
 			(layer "F.Fab")
 			(hide yes)
@@ -15884,7 +15884,7 @@
 				)
 			)
 		)
-		(property "Value" "SK6812MINI-C"
+		(property "Value" "SK6812MINI-012"
 			(at 0 3.25 180)
 			(layer "F.Fab")
 			(uuid "2b538d30-8620-418f-b9c1-87e73c57f245")
@@ -15895,7 +15895,7 @@
 				)
 			)
 		)
-		(property "Datasheet" "https://www.lcsc.com/product-detail/C7423117.html"
+		(property "Datasheet" "https://www.lcsc.com/product-detail/C2886570.html"
 			(at 0 0 180)
 			(unlocked yes)
 			(layer "F.Fab")
@@ -15921,7 +15921,7 @@
 				)
 			)
 		)
-		(property "LCSC" "C7423117"
+		(property "LCSC" "C2886570"
 			(at 0 0 0)
 			(layer "F.Fab")
 			(hide yes)
@@ -15933,7 +15933,7 @@
 				)
 			)
 		)
-		(property "MPN" "SK6812MINI-C"
+		(property "MPN" "SK6812MINI-012"
 			(at 0 0 0)
 			(layer "F.Fab")
 			(hide yes)
@@ -18261,7 +18261,7 @@
 				)
 			)
 		)
-		(property "Value" "SK6812MINI-C"
+		(property "Value" "SK6812MINI-012"
 			(at 0 3.25 180)
 			(layer "F.Fab")
 			(uuid "c1450e1a-2ccb-4f4b-9968-777cfb4f8e9f")
@@ -18272,7 +18272,7 @@
 				)
 			)
 		)
-		(property "Datasheet" "https://www.lcsc.com/product-detail/C7423117.html"
+		(property "Datasheet" "https://www.lcsc.com/product-detail/C2886570.html"
 			(at 0 0 180)
 			(unlocked yes)
 			(layer "F.Fab")
@@ -18298,7 +18298,7 @@
 				)
 			)
 		)
-		(property "LCSC" "C7423117"
+		(property "LCSC" "C2886570"
 			(at 0 0 0)
 			(layer "F.Fab")
 			(hide yes)
@@ -18310,7 +18310,7 @@
 				)
 			)
 		)
-		(property "MPN" "SK6812MINI-C"
+		(property "MPN" "SK6812MINI-012"
 			(at 0 0 0)
 			(layer "F.Fab")
 			(hide yes)
@@ -18557,7 +18557,7 @@
 				)
 			)
 		)
-		(property "Value" "SK6812MINI-C"
+		(property "Value" "SK6812MINI-012"
 			(at 0 3.25 180)
 			(layer "F.Fab")
 			(uuid "6b352548-f24f-463f-86e6-62d9f96a4f7b")
@@ -18568,7 +18568,7 @@
 				)
 			)
 		)
-		(property "Datasheet" "https://www.lcsc.com/product-detail/C7423117.html"
+		(property "Datasheet" "https://www.lcsc.com/product-detail/C2886570.html"
 			(at 0 0 180)
 			(unlocked yes)
 			(layer "F.Fab")
@@ -18594,7 +18594,7 @@
 				)
 			)
 		)
-		(property "LCSC" "C7423117"
+		(property "LCSC" "C2886570"
 			(at 0 0 0)
 			(layer "F.Fab")
 			(hide yes)
@@ -18606,7 +18606,7 @@
 				)
 			)
 		)
-		(property "MPN" "SK6812MINI-C"
+		(property "MPN" "SK6812MINI-012"
 			(at 0 0 0)
 			(layer "F.Fab")
 			(hide yes)
@@ -19012,7 +19012,7 @@
 				)
 			)
 		)
-		(property "Value" "SK6812MINI-C"
+		(property "Value" "SK6812MINI-012"
 			(at 0 3.25 180)
 			(layer "F.Fab")
 			(uuid "9730344f-fbdc-444f-b978-035d9006e1ba")
@@ -19023,7 +19023,7 @@
 				)
 			)
 		)
-		(property "Datasheet" "https://www.lcsc.com/product-detail/C7423117.html"
+		(property "Datasheet" "https://www.lcsc.com/product-detail/C2886570.html"
 			(at 0 0 180)
 			(unlocked yes)
 			(layer "F.Fab")
@@ -19049,7 +19049,7 @@
 				)
 			)
 		)
-		(property "LCSC" "C7423117"
+		(property "LCSC" "C2886570"
 			(at 0 0 0)
 			(layer "F.Fab")
 			(hide yes)
@@ -19061,7 +19061,7 @@
 				)
 			)
 		)
-		(property "MPN" "SK6812MINI-C"
+		(property "MPN" "SK6812MINI-012"
 			(at 0 0 0)
 			(layer "F.Fab")
 			(hide yes)
@@ -19308,7 +19308,7 @@
 				)
 			)
 		)
-		(property "Value" "SK6812MINI-C"
+		(property "Value" "SK6812MINI-012"
 			(at 0 3.25 180)
 			(layer "F.Fab")
 			(uuid "8f7f3f17-c2a4-4064-8c70-059888b8e94d")
@@ -19319,7 +19319,7 @@
 				)
 			)
 		)
-		(property "Datasheet" "https://www.lcsc.com/product-detail/C7423117.html"
+		(property "Datasheet" "https://www.lcsc.com/product-detail/C2886570.html"
 			(at 0 0 180)
 			(unlocked yes)
 			(layer "F.Fab")
@@ -19345,7 +19345,7 @@
 				)
 			)
 		)
-		(property "LCSC" "C7423117"
+		(property "LCSC" "C2886570"
 			(at 0 0 0)
 			(layer "F.Fab")
 			(hide yes)
@@ -19357,7 +19357,7 @@
 				)
 			)
 		)
-		(property "MPN" "SK6812MINI-C"
+		(property "MPN" "SK6812MINI-012"
 			(at 0 0 0)
 			(layer "F.Fab")
 			(hide yes)
@@ -20050,7 +20050,7 @@
 				)
 			)
 		)
-		(property "Value" "SK6812MINI-C"
+		(property "Value" "SK6812MINI-012"
 			(at 0 3.25 180)
 			(layer "F.Fab")
 			(uuid "dc6a9f64-3933-40dc-a79b-556b81eb5cbb")
@@ -20061,7 +20061,7 @@
 				)
 			)
 		)
-		(property "Datasheet" "https://www.lcsc.com/product-detail/C7423117.html"
+		(property "Datasheet" "https://www.lcsc.com/product-detail/C2886570.html"
 			(at 0 0 180)
 			(unlocked yes)
 			(layer "F.Fab")
@@ -20087,7 +20087,7 @@
 				)
 			)
 		)
-		(property "LCSC" "C7423117"
+		(property "LCSC" "C2886570"
 			(at 0 0 0)
 			(layer "F.Fab")
 			(hide yes)
@@ -20099,7 +20099,7 @@
 				)
 			)
 		)
-		(property "MPN" "SK6812MINI-C"
+		(property "MPN" "SK6812MINI-012"
 			(at 0 0 0)
 			(layer "F.Fab")
 			(hide yes)
@@ -21274,7 +21274,7 @@
 				)
 			)
 		)
-		(property "Value" "SK6812MINI-C"
+		(property "Value" "SK6812MINI-012"
 			(at 0 3.25 180)
 			(layer "F.Fab")
 			(uuid "74ebc4ca-e605-4cfa-b4e5-936f4311bb45")
@@ -21285,7 +21285,7 @@
 				)
 			)
 		)
-		(property "Datasheet" "https://www.lcsc.com/product-detail/C7423117.html"
+		(property "Datasheet" "https://www.lcsc.com/product-detail/C2886570.html"
 			(at 0 0 180)
 			(unlocked yes)
 			(layer "F.Fab")
@@ -21311,7 +21311,7 @@
 				)
 			)
 		)
-		(property "LCSC" "C7423117"
+		(property "LCSC" "C2886570"
 			(at 0 0 0)
 			(layer "F.Fab")
 			(hide yes)
@@ -21323,7 +21323,7 @@
 				)
 			)
 		)
-		(property "MPN" "SK6812MINI-C"
+		(property "MPN" "SK6812MINI-012"
 			(at 0 0 0)
 			(layer "F.Fab")
 			(hide yes)
@@ -24399,7 +24399,7 @@
 				)
 			)
 		)
-		(property "Value" "SK6812MINI-C"
+		(property "Value" "SK6812MINI-012"
 			(at 0 3.25 180)
 			(layer "F.Fab")
 			(uuid "87e6129d-a394-44fb-949e-f8be4783117b")
@@ -24410,7 +24410,7 @@
 				)
 			)
 		)
-		(property "Datasheet" "https://www.lcsc.com/product-detail/C7423117.html"
+		(property "Datasheet" "https://www.lcsc.com/product-detail/C2886570.html"
 			(at 0 0 180)
 			(unlocked yes)
 			(layer "F.Fab")
@@ -24436,7 +24436,7 @@
 				)
 			)
 		)
-		(property "LCSC" "C7423117"
+		(property "LCSC" "C2886570"
 			(at 0 0 0)
 			(layer "F.Fab")
 			(hide yes)
@@ -24448,7 +24448,7 @@
 				)
 			)
 		)
-		(property "MPN" "SK6812MINI-C"
+		(property "MPN" "SK6812MINI-012"
 			(at 0 0 0)
 			(layer "F.Fab")
 			(hide yes)
@@ -25802,7 +25802,7 @@
 				)
 			)
 		)
-		(property "Value" "SK6812MINI-C"
+		(property "Value" "SK6812MINI-012"
 			(at 0 3.25 180)
 			(layer "F.Fab")
 			(uuid "6c9c3ec3-4df4-485c-b798-fd7ed0df23e3")
@@ -25813,7 +25813,7 @@
 				)
 			)
 		)
-		(property "Datasheet" "https://www.lcsc.com/product-detail/C7423117.html"
+		(property "Datasheet" "https://www.lcsc.com/product-detail/C2886570.html"
 			(at 0 0 180)
 			(unlocked yes)
 			(layer "F.Fab")
@@ -25839,7 +25839,7 @@
 				)
 			)
 		)
-		(property "LCSC" "C7423117"
+		(property "LCSC" "C2886570"
 			(at 0 0 0)
 			(layer "F.Fab")
 			(hide yes)
@@ -25851,7 +25851,7 @@
 				)
 			)
 		)
-		(property "MPN" "SK6812MINI-C"
+		(property "MPN" "SK6812MINI-012"
 			(at 0 0 0)
 			(layer "F.Fab")
 			(hide yes)
@@ -26464,7 +26464,7 @@
 				)
 			)
 		)
-		(property "Value" "SK6812MINI-C"
+		(property "Value" "SK6812MINI-012"
 			(at 0 3.25 180)
 			(layer "F.Fab")
 			(uuid "cefabb52-2f08-4728-a5ff-dc583ddf4ec8")
@@ -26475,7 +26475,7 @@
 				)
 			)
 		)
-		(property "Datasheet" "https://www.lcsc.com/product-detail/C7423117.html"
+		(property "Datasheet" "https://www.lcsc.com/product-detail/C2886570.html"
 			(at 0 0 180)
 			(unlocked yes)
 			(layer "F.Fab")
@@ -26501,7 +26501,7 @@
 				)
 			)
 		)
-		(property "LCSC" "C7423117"
+		(property "LCSC" "C2886570"
 			(at 0 0 0)
 			(layer "F.Fab")
 			(hide yes)
@@ -26513,7 +26513,7 @@
 				)
 			)
 		)
-		(property "MPN" "SK6812MINI-C"
+		(property "MPN" "SK6812MINI-012"
 			(at 0 0 0)
 			(layer "F.Fab")
 			(hide yes)
@@ -27646,7 +27646,7 @@
 				)
 			)
 		)
-		(property "Value" "SK6812MINI-C"
+		(property "Value" "SK6812MINI-012"
 			(at 0 3.25 180)
 			(layer "F.Fab")
 			(uuid "f9648728-214e-40ad-8d12-5548170ee033")
@@ -27657,7 +27657,7 @@
 				)
 			)
 		)
-		(property "Datasheet" "https://www.lcsc.com/product-detail/C7423117.html"
+		(property "Datasheet" "https://www.lcsc.com/product-detail/C2886570.html"
 			(at 0 0 180)
 			(unlocked yes)
 			(layer "F.Fab")
@@ -27683,7 +27683,7 @@
 				)
 			)
 		)
-		(property "LCSC" "C7423117"
+		(property "LCSC" "C2886570"
 			(at 0 0 0)
 			(layer "F.Fab")
 			(hide yes)
@@ -27695,7 +27695,7 @@
 				)
 			)
 		)
-		(property "MPN" "SK6812MINI-C"
+		(property "MPN" "SK6812MINI-012"
 			(at 0 0 0)
 			(layer "F.Fab")
 			(hide yes)
@@ -28112,7 +28112,7 @@
 				)
 			)
 		)
-		(property "Value" "SK6812MINI-C"
+		(property "Value" "SK6812MINI-012"
 			(at 0 3.25 180)
 			(layer "F.Fab")
 			(uuid "1bd76128-bad7-4a87-8dc9-81cebe4cac6d")
@@ -28123,7 +28123,7 @@
 				)
 			)
 		)
-		(property "Datasheet" "https://www.lcsc.com/product-detail/C7423117.html"
+		(property "Datasheet" "https://www.lcsc.com/product-detail/C2886570.html"
 			(at 0 0 180)
 			(unlocked yes)
 			(layer "F.Fab")
@@ -28149,7 +28149,7 @@
 				)
 			)
 		)
-		(property "LCSC" "C7423117"
+		(property "LCSC" "C2886570"
 			(at 0 0 0)
 			(layer "F.Fab")
 			(hide yes)
@@ -28161,7 +28161,7 @@
 				)
 			)
 		)
-		(property "MPN" "SK6812MINI-C"
+		(property "MPN" "SK6812MINI-012"
 			(at 0 0 0)
 			(layer "F.Fab")
 			(hide yes)
@@ -28408,7 +28408,7 @@
 				)
 			)
 		)
-		(property "Value" "SK6812MINI-C"
+		(property "Value" "SK6812MINI-012"
 			(at 0 3.25 180)
 			(layer "F.Fab")
 			(uuid "55b579ff-8969-4262-94c2-77bb0b84037c")
@@ -28419,7 +28419,7 @@
 				)
 			)
 		)
-		(property "Datasheet" "https://www.lcsc.com/product-detail/C7423117.html"
+		(property "Datasheet" "https://www.lcsc.com/product-detail/C2886570.html"
 			(at 0 0 180)
 			(unlocked yes)
 			(layer "F.Fab")
@@ -28445,7 +28445,7 @@
 				)
 			)
 		)
-		(property "LCSC" "C7423117"
+		(property "LCSC" "C2886570"
 			(at 0 0 0)
 			(layer "F.Fab")
 			(hide yes)
@@ -28457,7 +28457,7 @@
 				)
 			)
 		)
-		(property "MPN" "SK6812MINI-C"
+		(property "MPN" "SK6812MINI-012"
 			(at 0 0 0)
 			(layer "F.Fab")
 			(hide yes)
@@ -28900,7 +28900,7 @@
 				)
 			)
 		)
-		(property "Value" "SK6812MINI-C"
+		(property "Value" "SK6812MINI-012"
 			(at 0 3.25 180)
 			(layer "F.Fab")
 			(uuid "a2cb2b13-084b-481f-8325-59bd551b6ac7")
@@ -28911,7 +28911,7 @@
 				)
 			)
 		)
-		(property "Datasheet" "https://www.lcsc.com/product-detail/C7423117.html"
+		(property "Datasheet" "https://www.lcsc.com/product-detail/C2886570.html"
 			(at 0 0 180)
 			(unlocked yes)
 			(layer "F.Fab")
@@ -28937,7 +28937,7 @@
 				)
 			)
 		)
-		(property "LCSC" "C7423117"
+		(property "LCSC" "C2886570"
 			(at 0 0 0)
 			(layer "F.Fab")
 			(hide yes)
@@ -28949,7 +28949,7 @@
 				)
 			)
 		)
-		(property "MPN" "SK6812MINI-C"
+		(property "MPN" "SK6812MINI-012"
 			(at 0 0 0)
 			(layer "F.Fab")
 			(hide yes)
@@ -29392,7 +29392,7 @@
 				)
 			)
 		)
-		(property "Value" "SK6812MINI-C"
+		(property "Value" "SK6812MINI-012"
 			(at 0 3.25 180)
 			(layer "F.Fab")
 			(uuid "501d4162-9273-4b02-b161-415baeb5576d")
@@ -29403,7 +29403,7 @@
 				)
 			)
 		)
-		(property "Datasheet" "https://www.lcsc.com/product-detail/C7423117.html"
+		(property "Datasheet" "https://www.lcsc.com/product-detail/C2886570.html"
 			(at 0 0 180)
 			(unlocked yes)
 			(layer "F.Fab")
@@ -29429,7 +29429,7 @@
 				)
 			)
 		)
-		(property "LCSC" "C7423117"
+		(property "LCSC" "C2886570"
 			(at 0 0 0)
 			(layer "F.Fab")
 			(hide yes)
@@ -29441,7 +29441,7 @@
 				)
 			)
 		)
-		(property "MPN" "SK6812MINI-C"
+		(property "MPN" "SK6812MINI-012"
 			(at 0 0 0)
 			(layer "F.Fab")
 			(hide yes)
@@ -31000,7 +31000,7 @@
 				)
 			)
 		)
-		(property "Value" "SK6812MINI-C"
+		(property "Value" "SK6812MINI-012"
 			(at 0 3.25 180)
 			(layer "F.Fab")
 			(uuid "5b011d80-e7c8-4902-9421-f77ec62aa8ac")
@@ -31011,7 +31011,7 @@
 				)
 			)
 		)
-		(property "Datasheet" "https://www.lcsc.com/product-detail/C7423117.html"
+		(property "Datasheet" "https://www.lcsc.com/product-detail/C2886570.html"
 			(at 0 0 180)
 			(unlocked yes)
 			(layer "F.Fab")
@@ -31037,7 +31037,7 @@
 				)
 			)
 		)
-		(property "LCSC" "C7423117"
+		(property "LCSC" "C2886570"
 			(at 0 0 0)
 			(layer "F.Fab")
 			(hide yes)
@@ -31049,7 +31049,7 @@
 				)
 			)
 		)
-		(property "MPN" "SK6812MINI-C"
+		(property "MPN" "SK6812MINI-012"
 			(at 0 0 0)
 			(layer "F.Fab")
 			(hide yes)
@@ -32378,7 +32378,7 @@
 				)
 			)
 		)
-		(property "Value" "SK6812MINI-C"
+		(property "Value" "SK6812MINI-012"
 			(at 0 3.25 180)
 			(layer "F.Fab")
 			(uuid "e93ef3d8-1af5-412b-bee0-2b201b573c4e")
@@ -32389,7 +32389,7 @@
 				)
 			)
 		)
-		(property "Datasheet" "https://www.lcsc.com/product-detail/C7423117.html"
+		(property "Datasheet" "https://www.lcsc.com/product-detail/C2886570.html"
 			(at 0 0 180)
 			(unlocked yes)
 			(layer "F.Fab")
@@ -32415,7 +32415,7 @@
 				)
 			)
 		)
-		(property "LCSC" "C7423117"
+		(property "LCSC" "C2886570"
 			(at 0 0 0)
 			(layer "F.Fab")
 			(hide yes)
@@ -32427,7 +32427,7 @@
 				)
 			)
 		)
-		(property "MPN" "SK6812MINI-C"
+		(property "MPN" "SK6812MINI-012"
 			(at 0 0 0)
 			(layer "F.Fab")
 			(hide yes)
@@ -32674,7 +32674,7 @@
 				)
 			)
 		)
-		(property "Value" "SK6812MINI-C"
+		(property "Value" "SK6812MINI-012"
 			(at 0 3.25 180)
 			(layer "F.Fab")
 			(uuid "489015eb-4d5c-4400-b177-2f13d66dea53")
@@ -32685,7 +32685,7 @@
 				)
 			)
 		)
-		(property "Datasheet" "https://www.lcsc.com/product-detail/C7423117.html"
+		(property "Datasheet" "https://www.lcsc.com/product-detail/C2886570.html"
 			(at 0 0 180)
 			(unlocked yes)
 			(layer "F.Fab")
@@ -32711,7 +32711,7 @@
 				)
 			)
 		)
-		(property "LCSC" "C7423117"
+		(property "LCSC" "C2886570"
 			(at 0 0 0)
 			(layer "F.Fab")
 			(hide yes)
@@ -32723,7 +32723,7 @@
 				)
 			)
 		)
-		(property "MPN" "SK6812MINI-C"
+		(property "MPN" "SK6812MINI-012"
 			(at 0 0 0)
 			(layer "F.Fab")
 			(hide yes)

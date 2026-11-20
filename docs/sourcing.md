@@ -41,6 +41,9 @@ current BOMs are `hardware/combined/fab/combined-assembly-bom.csv` (AirWriter) a
   socket ships empty. TashTalk is no longer an add-on.
 - **Standoffs: Würth 9774030151R (WA-SMSI M2.5 × 3)**, four per panel (AirWriter only). Not on LCSC; PCBWay
   sourced them for rev A ($0.48 each). Consign from Digi-Key only as the fallback.
+- **Status LEDs: OPSCO SK6812MINI-012 (LCSC C2886570)** from rev 2026.11. Rev A's
+  SK6812MINI-C (C7423117) is discontinued at LCSC (15 left on 2026-11-19). The -012 is the
+  same package and pinout; the SK6812MINI-HS is not (`docs/hardware-rev-2026-11.md`).
 
 ## Programming the PIC
 
