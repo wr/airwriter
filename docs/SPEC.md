@@ -445,8 +445,8 @@ coders, `ps_page`) builds at `-O2`, the rest at ESP-IDF's `-Og`. The diffusion s
 once a row, carry two columns of error slack a side so no tap is checked, and skip a white
 pixel with no error carried; the resampler passes a row through untouched when nothing scales.
 None of it changes a dot. Each page logs where its time went (`page N: T ms: read, scale,
-screen, second screen, out, end`, ripjob.h) and each job how long the rip waited for the
-upload; `rip --times` prints the same on the host. On board 1 with a Personal LaserWriter 300,
+screen, second screen, out, end, lines`, ripjob.h; lines since W-1174) and each job how long
+the rip waited for the upload; `rip --times` prints the same on the host. On board 1 with a Personal LaserWriter 300,
 three 300 dpi text pages (251,477 bytes of codes each) went from 40 s a page to 24.7 s: the
 rip's own work from about 22.6 s a page to 2.6 s (Atkinson 12.5 s to 1.3 s), leaving the line
 at 533 kHz (about 7.5 s for such a page) and the printer's 17 s. The board draws at most 0.45 A
@@ -1537,7 +1537,8 @@ from its own driver, but neither has been tried (W-1145 and W-1146, below).**
   one of the printer's own clock pauses never left and ends the job Offline. The cause is not
   known (§4).
 - **A page** (`qd_page`, `qdlaser.c`). The shared 300 dpi rip (`ripjob`), the sheet found by
-  width and height, gray, cropped to Apple's image area for that sheet. Each row is screened in
+  width and height, gray, cropped to Apple's image area for that sheet. First, text and thin
+  lines (W-1174, below). Each row is screened in
   the record's screen and, through `rip_stage_t.gray_row`, in Apple's 300 screen (`HT_APPLE_LW`:
   `GAMA` 3's curve, then `HTSC` 2's 8 × 8 clustered thresholds), and coded both ways with
   `sw_code_row(row, NULL, …)`. The record's rows go to the printer as they are made; the
@@ -1675,11 +1676,42 @@ from its own driver, but neither has been tried (W-1145 and W-1146, below).**
   bit 5 says the sheet is still coming out (about 15 s past page done) the state stays Printing.
   A status question the printer leaves unanswered logs which one and the link's last failure.
 - **Settings.** The usual five screens plus Apple, which for a 300 is Apple's 300 screen.
-  Default Atkinson.
+  Default blue noise (W-1174): a record found is made with it, and a record still on Atkinson,
+  the default before, moved to it once at start-up (`w1174` in NVS `printers`), so a screen
+  picked since stays.
+- **Light tints, thin lines and pictures** (`W-1174 Personal LaserWriter 300: light tints, thin
+  lines and dark pictures print as they look`; design amendment). An order slip from a Mac lost
+  its 5% panel and its 16% outlines and dividers, and printed its navy photo near-black.
+  Atkinson prints no dot under about 12% ink and nothing but ink over about 88%, and the 300's
+  toner spreads: from a photo of a printed strip of blue noise against 12-dot squares, 10% of
+  dots printed about 26% dark, 30% about 58%, 50% about 79% (its blank paper streaky that day).
+  Every page now has, ahead of both screens:
+  - *Crisp text and lines* (`halftone/lineart.c`, `ripjob_cfg_t.lineart`): a thin dark feature
+    on paper or a light tint prints solid with no soft edge, gray text black; a thin light one
+    (192 to 231) with white paper (250 up) within 4 dots on both sides an unbroken line one dot
+    wide, so a photo's pale grain and a line on a tint are left to the screen; the soft edge of
+    any dark shape on paper (a QR code's squares, a headline) crisp; a gray area 9 dots wide and
+    the 2 dots around it are the screen's, so a filled icon is screened whole. Rows come out ten
+    rows behind, in about 59 KB (`la_bytes`) taken last of a page's buffers and from PSRAM only
+    (`big_malloc_only`); a page with no room for it prints without, logged (board 1's first
+    build asked 81 KB and failed a job: once the 512 KB copy is made about 115 KB of PSRAM is
+    left).
+    The first build took 4.2 s of the order slip's 10.7 s rip on board 1 (`lines` in the
+    page's time line); skipping rows with only paper within ten and merging two planes halved
+    it on the host (17 ms to 8, the same dots), not yet timed on the board.
+  - *The toner curve* (`ht_toner_curve`, `qd_toner_curve`): the gain law at `QD_TONER_GAIN` 13,
+    24 and under solid, eased over 25 to 39, 253 and over paper, on every screen but Apple's
+    (its own curve) and the threshold (`qd_tone_for`). Wells chose 13 on paper over 25 and none:
+    a Mac's grays are a screen's, lighter in the middle than the ink a page needs, and the
+    spread puts some of that back.
+  A mask screen (blue noise, Bayer, threshold, Apple's) allocates no error rows (`ht_init`),
+  about 14 KB a halftoner, two of them on a 300's page.
 - **Test page** (`qd_testpage`). The page every printer prints (`testpage`, W-1140) drawn at
   300 dpi in the 300's image area, with its icon and Apple's 300 screen as the Apple panel,
-  loaded into the printer as it is made through the same page path: 163,749 bytes of codes in
-  Atkinson. The test button prints it, never the cable test, which reads HSKi's level.
+  its screens through the toner curve as a job's are (W-1174),
+  loaded into the printer as it is made through the same page path: 171,067 bytes of codes in
+  blue noise, 160,330 in Atkinson. The test button prints it, never the cable test, which reads
+  HSKi's level.
 - **The Personal LaserWriter LS** (W-1145). Built from the LS's own driver (Personal LW LS 7.1)
   and the LaserWriter 300 driver's LS branch, read for facts; no LS has been tried. Wells:
   shared like the 300 and called expected to work, untested, as the ImageWriter LQ is. Where

@@ -34,6 +34,9 @@ int ht_init(ht_t *h, ht_algo_t algo, uint32_t width)
     h->algo  = algo;
     h->width = width;
     for (int v = 0; v < 256; v++) h->tone[v] = (uint8_t)v;
+    // Only error diffusion carries error: a mask screen holds none (W-1174: a Personal
+    // LaserWriter 300's page has two halftoners, and 14 KB each counts there).
+    if (algo != HT_ATKINSON && algo != HT_FLOYD) return 0;
     h->err   = big_calloc((size_t)(width + 2 * ERR_PAD) * 3, sizeof *h->err);
     return h->err ? 0 : -1;
 }
@@ -70,6 +73,20 @@ static void gain_curve(int gain_pct, uint8_t curve[256])
     }
     curve[0] = 0;
     curve[255] = 255;
+}
+
+void ht_toner_curve(uint8_t curve[256], int gain_pct)
+{
+    gain_curve(gain_pct, curve);            // in place: no table on the caller's stack
+    for (int v = 0; v < 256; v++) {
+        int c = curve[v];
+        if (v <= 24) c = 0;
+        else if (v < 40) c = (c * (v - 24) + 8) / 16;     // from solid to the law
+        else if (v >= 253) c = 255;
+        // A gray that isn't paper prints a dot somewhere: 255 would print none.
+        if (v < 253 && c > 254) c = 254;
+        curve[v] = (uint8_t)c;
+    }
 }
 
 // tone[] is the gain curve, if any, put on top of the tone curve, if any.
@@ -111,7 +128,7 @@ static int16_t *errrow(const ht_t *h, uint32_t y)
 
 int16_t ht_peek_err(const ht_t *h, uint32_t ahead, uint32_t x)
 {
-    return errrow(h, h->y + ahead)[x];
+    return h->err ? errrow(h, h->y + ahead)[x] : 0;
 }
 
 static inline void set_ink(uint8_t *bits, uint32_t x)

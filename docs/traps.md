@@ -15,6 +15,16 @@ Traps already explained in a code comment are listed only when the comment is ea
   compile with the old `sdkconfig.h`: a new `CONFIG_` reads as undeclared (W-1109's job buffer
   size). `idf.py reconfigure build` brings it in. Each board's build directory (`build/`,
   `build-2026.11/`) needs it once.
+- **A Personal LaserWriter 300's page on rev A has about 115 KB of PSRAM.** Once the job's
+  512 KB copy of the printer's pages is made (W-1144), about 115 KB is left for everything a
+  page allocates. W-1174's first build asked 81 KB more for its text-and-lines pass and board 1
+  failed the job at its first page (`mem job done: … 2 failed allocations`, the job ended as
+  cancelled, -5). A new per-page buffer on the 300's path counts against that; read the `mem`
+  lines of a 300 job on board 1 before shipping one.
+- **`make -C tools/rip build/rip` doesn't rebuild when only a header changed.** Its rule lists
+  the `.c` files alone, so after an edit to a header (`qd_page.h`, `tools/rip/sw_rip.h`) the
+  old binary runs on. `rm tools/rip/build/rip` first, or `make -B`. W-1174 read a colour preview
+  from a stale one once.
 - **The bootloader doesn't see main's Kconfig.** Its hook (`bootloader_components/airwriter_boot`)
   can't read `CONFIG_AIRWRITER_*`, so it tells rev 2026.11 from rev A by
   `CONFIG_ESPTOOLPY_FLASHSIZE_16MB`, and main.c ties each board's build to its flash size. Its
