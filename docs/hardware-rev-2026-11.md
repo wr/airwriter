@@ -152,8 +152,8 @@ its two contacts sit over rev A's EN and GND pads. It is held by two plastic peg
 holes and two bracket pads; rev A's EVQP44B3M lifted off its two small pads. Its RESET label
 is board silk now, not a field of the old footprint.
 
-The new resistors sit beside what they serve: R24 below U3, R27 north-east of U7 on
-LT_RESET's via, R21 above SW2, R32 and R33 above IO16 and IO15. W-1176's parts:
+The new resistors sit beside what they serve: R24 below U3, R27 north-west of U7 beside its
+pin 4, R21 above SW2, R32 and R33 above IO16 and IO15. W-1176's parts:
 
 | Part | Where | |
 |---|---|---|
@@ -161,8 +161,8 @@ LT_RESET's via, R21 above SW2, R32 and R33 above IO16 and IO15. W-1176's parts:
 | C68 | (122.03, 144.50) | U10's bypass, on the 3.3 V run into pin 1 |
 | R36–R39 | between U2 and U10 | DE pull-down, and the 2.2 k and 220 Ω into `LT2_DATA` and `LT2_DE` |
 | R40, R41 | below U2 | J2's TX pair to mark |
-| R34, R35 | above U10 | 100 Ω in U10's ICSPCLK and ICSPDAT |
-| R42, R43 | below U7's socket | 2.2 k and 220 Ω into `LT_DATA`; `LT_DE` passes between R42's pads |
+| R34, R42 | below U7's TASHTALK label | 100 Ω in U10's ICSPCLK; 2.2 k from U6's RO into `LT_DATA`, with `LT_DE` between its pads |
+| R43, R35 | between U7 and the module | 220 Ω from IO9 into `LT_DATA`; 100 Ω in U10's ICSPDAT |
 | R44 | (135.80, 128.60) | 220 Ω from IO3 to `LT_DE`, north of the module (below) |
 | R45, R46 | below U6, with R12 and R13 | J4's TX pair to mark |
 
@@ -184,8 +184,9 @@ fit: its pins are in other corners and it is 1.95 mm tall.
 - U3's 3.3 V feed runs from pin 16 under U3's body (x 117.3) to the branch at y 144.24,
   not down U3's right side.
 - The printer port's handshakes rejoin rev A's routes by short steps from pins 7–10.
-- `LT_RESET` meets R27 north-east of U7; `LT_MCLR` runs straight west from R27 at y 136.4
-  and up to U7.4. `LT_ICSPCLK` and `LT_ICSPDAT` step east inside U7's rows.
+- `LT_RESET` runs west on the back under U7's north row to R27, north-west of U7, and
+  `LT_MCLR` is a short front run from R27 to U7.4. `LT_ICSPCLK` and `LT_ICSPDAT` step east
+  inside U7's rows.
 - EN steps round SW1's bracket pad into its pad 1.
 - `BOOT_CFG` goes straight down from IO0 to R21 and SW2.
 - `LED_DATA`'s run north of the module is 0.37 mm higher, which makes room for R32 and R33's
@@ -209,10 +210,13 @@ fit: its pins are in other corners and it is 1.95 mm tall.
   rows of pins, and a via just west of pin 21 (BTN_TEST passes on the front).
 - Ground vias for R24, R32, R33, TP9's patch of the back pour and U5.2.
 - W-1176: IO17, IO18, IO7, IO41 and IO42 run on the front under the module to a via, then
-  west on the back at y 145.55 to 148.8, the last three dipping under U10. IO9 to IO12 each
-  take a via beside the pin (as IO13 does), back lanes at y 135.35–138.57 into U7's rows,
-  and a second via. U7's south row carries two tracks per gap, 0.15 mm from the DIP pins.
-  3.3 V reaches U2.10 and C3 by a 1.45 mm back hop under `PR_HSKO`.
+  west on the back at y 145.55 to 148.8, the last three dipping under U10. IO9 and IO12 hop
+  on the back to R43 and R35, east of U7; from them `LT_DATA` runs west on the back to U7's
+  own run, and `LT2_ICSPDAT` between U7's pins and under U10 into its pin 7. IO10 and IO11
+  take back lanes into U7's rows. Two gaps in U7's south row carry two tracks each, 0.15 mm
+  from the DIP pins. 3.3 V reaches U2.10 and C3 by a 1.45 mm back hop under `PR_HSKO`.
+- A ground via at (123.75, 134.95) joins the front pour round U3.15 to the plane, which
+  `LT_MCLR`'s run cut off.
 - Spare pins: IO38, IO39 and IO40 each run straight down from the module's pin to a via
   and a bare 1 mm pad on the back (TP10–TP12, labelled 38, 39, 40), for trying an idea on
   a built board with a few wires; 3V3 is at TP2 and GND at TP9 nearby. On the back, so the
@@ -230,11 +234,9 @@ fit: its pins are in other corners and it is 1.95 mm tall.
   the 3.3 V run pass under it, IO46's pad beside it). So R44 sits north of the module, west
   of dot (7,4)'s light, and `LT_DE` reaches it by a 10 mm back run at y 128.35 from a via at
   R22.1.
-- U7's TASHTALK label is inside its socket's outline: R34, R35, R42 and R43 stand where it
-  was. A fitted socket covers it.
 - The 3.3 V feed from U6.10 down to R45, and by a via to R21 on the back, is 0.2 mm: at 0.3
   it comes within 0.15 mm of U6's Y pad. It carries only the pull-ups.
-- Vias meet the pads of C3, R27, R37, R38, R40 and R41 on their own nets, as stitch vias
+- Vias meet the pads of C3, R37, R38, R40 and R41 on their own nets, as stitch vias
   already met ground pads (`docs/ORDER-NOTES.md`, via fill).
 - U2 and U6 are TI's THVD1452 (W-1176; the design had the SP3490 on J2, then the THVD1451),
   rated ±30 kV HBM on their bus pins, and their receivers work with ±15 V on their inputs

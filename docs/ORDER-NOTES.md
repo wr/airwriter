@@ -132,10 +132,10 @@ from the position file and the BOM; their pads stay bare. R33 is fitted.
 - **JP1** (two gold pads marked LC, south-east of D26): a solder jumper, not a part. No
   paste, nothing fitted, left open; Wells bridges it on the LC after delivery.
 - **Via fill:** none. All vias standard plated, unfilled; do not add the via-fill or cap
-  process. Twenty board vias meet SMD pads, each on its pad's own net: the five in U4's tab;
-  ground stitch vias on C3.2, C9.2, C12.2, C17.2, D29.2, D37.2, R1.2 and U1.1 (U1's centre
-  paddle has its own thermal holes in the footprint); and signal vias on C3.1, R27.1, R27.2,
-  R37.1, R38.1, R40.2 and R41.1. Minor paste wicking into those barrels is acceptable.
+  process. Eighteen board vias meet SMD pads, each on its pad's own net: the five in U4's tab;
+  ground stitch vias on C3.2, C9.2, C12.2, C17.2, D29.2, D37.2, R1.2 and U1.1 (U1's center
+  paddle has its own thermal holes in the footprint); and signal vias on C3.1, R37.1, R38.1,
+  R40.2 and R41.1. Minor paste wicking into those barrels is acceptable.
 
 ## Wells's part, after delivery
 

@@ -38,8 +38,8 @@ PLACE = {  # ref: (x, y, orientation); a 0603's pad 1 is west at 0, south at 90,
     # J4
     'U6': (132.45, 148.40, 0),       # over J4's centre line; U7's two lines and RO come in under it
     'C14': (134.20, 145.80, 0),      # U6's bypass, pad 1 on the 3.3 V run into pin 10
-    'R42': (129.185, 143.30, 0),     # 2.2 k, RO (west) to LT_DATA (east); LT_DE passes between its pads
-    'R43': (131.485, 143.80, -90),   # 220 R, IO9 (north) to LT_DATA
+    'R42': (130.15, 145.00, 0),      # 2.2 k, RO (west) to LT_DATA (east), below U7's label; LT_DE passes between its pads
+    'R43': (134.12, 135.775, -90),    # 220 R, IO9 (north) to LT_DATA, between U7 and the module with a via each end
     'R44': (135.80, 128.60, 90),     # 220 R, IO3 (south) to LT_DE, north of the module's pin and west of dot (7,4)'s light:
                                      # IO3 has no other way out
     'R10': (128.75, 153.07, -90),    # 15 k, U6's B to J4.5
@@ -49,9 +49,9 @@ PLACE = {  # ref: (x, y, orientation); a 0603's pad 1 is west at 0, south at 90,
     'R13': (134.95, 152.05, -90),    # 10 R, TxD+ to J4.6
     'R45': (136.50, 152.05, -90),    # 4.7 k, 3.3 V to TxD+
     # U10's programming lines and U7's reset
-    'R35': (125.335, 144.20, -90),    # 100 R, IO12 to U10's ICSPDAT
-    'R34': (126.885, 144.20, -90),    # 100 R, IO11 to U10's ICSPCLK
-    'R27': (134.12, 135.05, -90),    # 1 k in LT_RESET, 0.95 mm north: LT_MCLR leaves its south pad straight west
+    'R35': (134.12, 139.625, -90),   # 100 R, IO12 (north) to U10's ICSPDAT, below R43 with a via each end
+    'R34': (127.10, 145.00, 0),      # 100 R, IO11 (west) to U10's ICSPCLK, below U7's label
+    'R27': (122.60, 130.60, 0),      # 1 k, LT_RESET (west) to U7.4, north-west of U7: R43 and R35 have its old place
 }
 
 
@@ -61,12 +61,13 @@ def main():
         e.place(ref, x, y, deg)
     for ref in list(PLACE) + ['U2']:                 # references on the fab layer, like the rest of the board
         e.b.FindFootprintByReference(ref).Reference().SetLayer(pcbnew.F_Fab)
-    # R34, R35, R42 and R43 stand where U7's TASHTALK label was: it moves inside the socket's outline,
-    # under U7's own reference
+    # U7's TASHTALK label and reference stay where rev 2026.11 has them: nothing else stands in the label's box
     u7 = e.b.FindFootprintByReference('U7')
     label = [f for f in u7.GetFields() if f.GetName() == 'Name'][0]
-    label.SetPosition(pcbnew.VECTOR2I(nm(127.9), nm(138.3)))
-    u7.Reference().SetPosition(pcbnew.VECTOR2I(nm(127.9), nm(135.7)))
+    label.SetPosition(pcbnew.VECTOR2I(nm(127.9), nm(143.0)))
+    label.SetTextAngleDegrees(0)
+    u7.Reference().SetPosition(pcbnew.VECTOR2I(nm(127.9), nm(136.9)))
+    u7.Reference().SetTextAngleDegrees(90)
     e.save()
     print(f'{len(PLACE)} parts placed')
 
