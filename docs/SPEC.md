@@ -866,9 +866,11 @@ read back is a list made again). At most 8 records.
   (never from the line alone), so the page never shows the wrong ImageWriter for a moment. A
   line-up mid-job (a paper reload drops the line) keeps the name, and so does one while the
   link is dirty after a job cut short, when the idle `ESC ?` waits for a job's resync (3.8)
-  (R17; the plain question still runs while the printer isn't answering). A II or LQ record
-  on the port whose `ESC ?` answer was lost gets the 5 s plain question and then `ESC ?` when
-  it got nothing, while its line is up (R20, 3.16). Removing the record on the port forgets
+  (R17; the plain question still runs while the printer isn't answering). A line whose
+  `ESC ?` answer was lost gets the 5 s plain question and then `ESC ?` when it got nothing,
+  while it is up, whatever printer's record is on the port: after a restart that is the
+  oldest port record until a printer answers, so an ImageWriter that misses its start-up `ESC ?` is still
+  found (R20, W-1175, 3.16). Removing the record on the port forgets
   the port's last answer,
   and the port is asked again at once (R19). `/api/status` `model` is the record
   on the port's make and model, an ImageWriter's by its model. How long a change takes to
@@ -1094,11 +1096,16 @@ Apple's StyleWriter adapter (ADSP, not PAP), is not built.
   StyleWriter branch), whatever the list holds and whatever answered last, so a StyleWriter
   plugged in is found in seconds by someone who never added it, at boot after the quiet
   power-on, when `ESC ?` went unanswered, and once per busy spell when a kick is wanted and
-  none has been asked since the line went down; an ImageWriter II or LQ record on the port
-  that `ESC ?` has not named since its line came up (a lost answer, `iw_unnamed`: not on a
-  dirty link, not before the line-up's own question has run, and not while a StyleWriter
-  answered last) gets the 5 s plain question and then `ESC ?` when it got nothing, while its
-  line is up and it does not answer (R20); the CTRL-X kick last, only after a plain
+  none has been asked since the line went down; a line that `ESC ?` has not named since it
+  came up, whatever printer's record is on the port (a lost answer, `iw_unnamed`: not on an
+  Unknown printer or Something else record, not for an original ImageWriter record, not on a
+  dirty link, not before the
+  line-up's own question has run, and not while a StyleWriter answered last) gets the 5 s
+  plain question and then `ESC ?` when it got nothing, while it is up and the record on the
+  port does not answer (R20, widened by W-1175: a restart makes the oldest port record the
+  current one, which may be a QuickDraw LaserWriter switched off); an idle self-ID that gets
+  nothing is logged once until something answers or the line comes up again; the CTRL-X kick
+  last, only after a plain
   question since the line went down that got nothing, and never while the current record is a
   StyleWriter, so a StyleWriter that answers the plain question is never kicked (the
   StyleWriter branch's quiet ImageWriter record, nothing of its own and one kick a look while a

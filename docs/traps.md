@@ -207,6 +207,12 @@ Traps already explained in a code comment are listed only when the comment is ea
   while the link is dirty must keep the record it named, or the printer reads Offline until
   the next job (ruling R17, 2026-10-30). The plain question still runs every 5 s while the
   printer isn't answering.
+- **A restart forgets the port's last answer and its dirty link.** Until a printer answers, the
+  record on the port is the oldest port record, whatever is plugged in, and a printer left
+  mid-command by a job cut short just before the restart gets a plain `ESC ?` with no resync.
+  On board 1 (2026-11-20) a test page cut short, then an OTA, left the ImageWriter II silent to
+  its start-up `ESC ?` with the Personal LaserWriter 300 as the oldest record; before W-1175 it
+  was never asked again until Look for Printers.
 
 ## IPP, iOS, macOS, mDNS
 

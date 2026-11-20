@@ -429,7 +429,7 @@ Rulings made during the build that change what the sections above say:
   `ESC ?` answer was lost gets the 5 s plain question and then `ESC ?` when it got nothing,
   while its line is up; not while a Something else or Unknown printer record is listed, not
   on a dirty link, not before the line-up's own question has run (the 2 s settle), and not
-  while a StyleWriter answered last.
+  while a StyleWriter answered last. Widened to any record on the port by W-1175 (below).
 - **R27** (Wells, 2026-10-31, The settings page and phones; Jobs to a printer that isn't
   plugged in): one kind of Offline. A port printer whose port is another's reads its family's
   one Offline line on the page and the phone, the same as with nothing answering; the two
@@ -442,6 +442,22 @@ Rulings made during the build that change what the sections above say:
   LaserWriter), not only port printers: "check power and cable" pointed a printer that isn't
   plugged in, because another is, at the wrong fix. What to check goes in the wiki's Offline
   row. Print Test Page's own refusal on an offline printer keeps its line of help.
+
+## Amended 2026-11-20 by W-1175
+
+`W-1175 An ImageWriter that misses its first "who are you?" after a restart is never found`:
+R20 is no longer an ImageWriter record's alone. A restart forgets which printer answered last,
+so the record on the port is the oldest until one answers. On board 1 that was a Personal
+LaserWriter 300 switched off; its ImageWriter II missed the start-up `ESC ?` and stayed Offline
+until Look for Printers. Now a line `ESC ?` hasn't named since it came up is asked again every
+5 s (the plain question, then `ESC ?`) whatever printer's record is on the port: none, a
+QuickDraw LaserWriter with no clock, or a StyleWriter that doesn't answer. The other guards
+stay: not on an Unknown printer or Something else record (a device there that never answers
+would hear `ESC ?` and a CR every 5 s, and the job lock would be held about 1.5 s of every 5),
+not for an original ImageWriter record, not on a dirty link, not inside the 2 s settle, not
+once a StyleWriter answered. An idle self-ID that gets nothing is logged once until something
+answers or the line comes up again, so a printer that never answers, asked every 5 s, doesn't
+push the log's history out.
 
 ## Amended 2026-11-16 by W-1162
 
