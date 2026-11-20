@@ -171,10 +171,98 @@ static void test_job_input_slot_from_a_mac(void)
     CHECK_EQ_INT(r.opts.manual, 0);
 }
 
+/* W-1173: a job asks for continuous paper by the length in its media-col's media-size, or by
+ * naming a roll or custom paper in `media` or `PageSize`. */
+static void job_with_size(bld_t *m, uint8_t group, const char *col, int32_t x, int32_t y)
+{
+    hdr(m, IPP_OP_PRINT_JOB, 60);
+    u8(m, IPP_TAG_OPERATION);
+    attr(m, IPP_TAG_NAME, "job-name", "Banner");
+    u8(m, group);
+    attr_raw(m, IPP_TAG_BEGIN_COLLECTION, col, NULL, 0);
+    attr(m, IPP_TAG_MEMBERNAME, "", "media-size");
+    attr_raw(m, IPP_TAG_BEGIN_COLLECTION, "", NULL, 0);
+    if (x) member_i(m, "x-dimension", x);
+    if (y) member_i(m, "y-dimension", y);
+    attr_raw(m, IPP_TAG_END_COLLECTION, "", NULL, 0);
+    member_i(m, "media-top-margin", 0);
+    attr(m, IPP_TAG_MEMBERNAME, "", "media-source");
+    attr(m, IPP_TAG_KEYWORD, "", "main");
+    attr_raw(m, IPP_TAG_END_COLLECTION, "", NULL, 0);
+    attr_i(m, IPP_TAG_INTEGER, "copies", 1);
+    u8(m, IPP_TAG_END);
+}
+
+static void job_with_paper(bld_t *m, uint8_t tag, const char *name, const char *paper)
+{
+    hdr(m, IPP_OP_PRINT_JOB, 61);
+    u8(m, IPP_TAG_JOB);
+    attr(m, tag, name, paper);
+    u8(m, IPP_TAG_END);
+}
+
+static void test_job_media_length(void)
+{
+    bld_t m;
+    ipp_req_t r;
+    job_with_size(&m, IPP_TAG_JOB, "media-col", 21590, 27940);
+    CHECK_EQ_INT(ipp_req_parse(&r, m.b, m.n), IPP_REQ_OK);
+    CHECK_EQ_INT(r.opts.media_len, 27940);
+    CHECK_EQ_INT(r.opts.media_roll, 0);
+    CHECK_EQ_INT(r.opts.manual, 0);
+    job_with_size(&m, IPP_TAG_JOB, "media-col", 21590, 101600);
+    CHECK_EQ_INT(ipp_req_parse(&r, m.b, m.n), IPP_REQ_OK);
+    CHECK_EQ_INT(r.opts.media_len, 101600);
+    /* x-dimension is never the length. */
+    job_with_size(&m, IPP_TAG_JOB, "media-col", 21590, 0);
+    CHECK_EQ_INT(ipp_req_parse(&r, m.b, m.n), IPP_REQ_OK);
+    CHECK_EQ_INT(r.opts.media_len, 0);
+    /* Not the Job group's media-col: another collection, or the Operation group's. */
+    job_with_size(&m, IPP_TAG_JOB, "x-other-col", 21590, 101600);
+    CHECK_EQ_INT(ipp_req_parse(&r, m.b, m.n), IPP_REQ_OK);
+    CHECK_EQ_INT(r.opts.media_len, 0);
+    job_with_size(&m, IPP_TAG_OPERATION, "media-col", 21590, 101600);
+    CHECK_EQ_INT(ipp_req_parse(&r, m.b, m.n), IPP_REQ_OK);
+    CHECK_EQ_INT(r.opts.media_len, 0);
+    CHECK(strcmp(r.job_name, "Banner") == 0);
+
+    /* A y-dimension straight in media-col, outside its media-size, is not the paper's. */
+    hdr(&m, IPP_OP_PRINT_JOB, 62);
+    u8(&m, IPP_TAG_JOB);
+    attr_raw(&m, IPP_TAG_BEGIN_COLLECTION, "media-col", NULL, 0);
+    member_i(&m, "y-dimension", 101600);
+    attr_raw(&m, IPP_TAG_END_COLLECTION, "", NULL, 0);
+    u8(&m, IPP_TAG_END);
+    CHECK_EQ_INT(ipp_req_parse(&r, m.b, m.n), IPP_REQ_OK);
+    CHECK_EQ_INT(r.opts.media_len, 0);
+
+    /* Paper named as a roll or a custom size; a sheet's name is not one. */
+    job_with_paper(&m, IPP_TAG_KEYWORD, "media", "roll_current_8.5x0in");
+    CHECK_EQ_INT(ipp_req_parse(&r, m.b, m.n), IPP_REQ_OK);
+    CHECK_EQ_INT(r.opts.media_roll, 1);
+    job_with_paper(&m, IPP_TAG_KEYWORD, "media", "custom_8.5x40in_8.5x40in");
+    CHECK_EQ_INT(ipp_req_parse(&r, m.b, m.n), IPP_REQ_OK);
+    CHECK_EQ_INT(r.opts.media_roll, 1);
+    job_with_paper(&m, IPP_TAG_NAME, "PageSize", "Custom.612x2880");
+    CHECK_EQ_INT(ipp_req_parse(&r, m.b, m.n), IPP_REQ_OK);
+    CHECK_EQ_INT(r.opts.media_roll, 1);
+    job_with_paper(&m, IPP_TAG_KEYWORD, "media", "na_letter_8.5x11in");
+    CHECK_EQ_INT(ipp_req_parse(&r, m.b, m.n), IPP_REQ_OK);
+    CHECK_EQ_INT(r.opts.media_roll, 0);
+    CHECK_EQ_INT(r.opts.media_len, 0);
+    mac_job(&m, "Main");                               /* media and PageSize "Letter" */
+    CHECK_EQ_INT(ipp_req_parse(&r, m.b, m.n), IPP_REQ_OK);
+    CHECK_EQ_INT(r.opts.media_roll, 0);
+    job_with_paper(&m, IPP_TAG_KEYWORD, "media-source", "roll_1");
+    CHECK_EQ_INT(ipp_req_parse(&r, m.b, m.n), IPP_REQ_OK);
+    CHECK_EQ_INT(r.opts.media_roll, 0);
+}
+
 int main(void)
 {
     test_job_media_source_manual();
     test_job_input_slot_from_a_mac();
+    test_job_media_length();
     bld_t m;
     ipp_req_t r;
 

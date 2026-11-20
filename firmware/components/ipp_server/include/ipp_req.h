@@ -35,6 +35,12 @@ typedef struct {
     // media-source `manual`, or a Mac's InputSlot "Manual" (its Paper Feed, sent with no
     // media-col); 0 for anything else.
     int manual;
+    // W-1173: the paper's length, 1/100 mm, from the Job group's media-col media-size
+    // y-dimension; 0 when it sent none. A banner app's job on iOS names the length it cut.
+    int32_t media_len;
+    // W-1173: 1 when the Job group's `media` or `PageSize` names a roll or a custom size
+    // (roll_..., custom_..., or a Mac's Custom.WxH); 0 for anything else.
+    int media_roll;
     // The job's number, for the log, which never holds the document's name (W-1136). Set
     // by ipp_server before a sink's begin.
     int32_t job_id;
