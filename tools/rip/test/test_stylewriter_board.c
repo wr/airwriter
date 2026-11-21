@@ -391,6 +391,7 @@ int main(void)
     g_target = &t;
     CHECK(t.caps == sw_caps(SW_C2500));
     CHECK(t.tone == sw_tone(SW_C2500, HT_APPLE));
+    CHECK_EQ_INT(t.inkjet, 1);                      // W-1177: an inkjet's split, not the ribbon's
     CHECK_EQ_INT(t.buffered, 1);
     CHECK(t.prn == stylewriter_prn);
     CHECK_EQ_INT(t.dither, HT_APPLE);

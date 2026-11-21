@@ -460,23 +460,23 @@ static void migrate(pr_legacy_t *o)
     free(ls);
 }
 
-// W-1174: a QuickDraw LaserWriter's record left on Atkinson, the default before, moves to blue
-// noise, once: "w1174" in NVS says it has, so a screen picked afterwards stays picked. A list a
-// newer firmware wrote is left alone (s_keep).
-static void qd_screens_once(void)
+// A record of `kind` left on Atkinson, the default before, moves to blue noise, once: `key` in
+// NVS says it has, so a screen picked afterwards stays picked. "w1174" the QuickDraw
+// LaserWriters, "w1177" the StyleWriters. A list a newer firmware wrote is left alone (s_keep).
+static void screens_once(const char *key, int kind, const char *what)
 {
     if (s_keep) return;
     nvs_handle_t h;
     if (nvs_open(NS, NVS_READWRITE, &h) != ESP_OK) return;
     uint8_t done = 0;
-    if (nvs_get_u8(h, "w1174", &done) != ESP_OK || !done) {
-        int n = pr_qd_to_bluenoise(s_l);
+    if (nvs_get_u8(h, key, &done) != ESP_OK || !done) {
+        int n = pr_to_bluenoise(s_l, kind);
         if (n) {
-            ESP_LOGI(TAG, "%d QuickDraw LaserWriter%s now print%s in blue noise", n,
+            ESP_LOGI(TAG, "%d %s%s now print%s in blue noise", n, what,
                      n == 1 ? "" : "s", n == 1 ? "s" : "");
             save();
         }
-        if (nvs_set_u8(h, "w1174", 1) == ESP_OK) nvs_commit(h);
+        if (nvs_set_u8(h, key, 1) == ESP_OK) nvs_commit(h);
     }
     nvs_close(h);
 }
@@ -509,7 +509,8 @@ esp_err_t printers_start(const printers_cfg_t *cfg)
         }
         save();
     }
-    qd_screens_once();
+    screens_once("w1174", PR_KIND_QDLASER, "QuickDraw LaserWriter");
+    screens_once("w1177", PR_KIND_STYLEWRITER, "StyleWriter");
     s_started = 1;
     return ESP_OK;
 }

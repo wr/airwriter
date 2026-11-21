@@ -1322,11 +1322,18 @@ Apple's StyleWriter adapter (ADSP, not PAP), is not built.
   ring's reads and runs the session, so the upload waits on the printer once the 512 KB fills.
   Nothing is ripped before the cartridge is known: the printer is reset and `H` read as the
   rip begins.
-- **Screens and Apple's tables.** The record's screen at 360 dpi after the tone curve. A gray
-  page or a black cartridge screens one plane; a colour page goes through `ink_split` and
-  `ink_screens` into C, M, Y, K as 3.7 says for the ribbon. Apple's drivers carry the
-  calibration of StyleWriter ink on paper: two tone curves (`GAMA` 1 with the ordered and mask
-  screens, `GAMA` 2 with error diffusion, a pairing not yet confirmed by a print; the 2200
+- **Screens and Apple's tables.** The record's screen at 360 dpi after the tone curve, blue
+  noise by default (W-1177, below). A gray page or a black cartridge screens one plane; a
+  colour page goes through `ink_screens` into C, M, Y, K with the inkjet's own split
+  (`ink_screens_set_inkjet`, `ripjob_cfg_t.inkjet`), not the ribbon's (3.7): black takes the
+  gray the three colour inks share where the colour is near gray, all of it with the three equal
+  and none once they differ by 96 of 255 (`INKJET_CHROMA`), and more again in a dark colour, none
+  with the least of the three at 96 (`INKJET_DEEP`, 38% dark) and all of it at 255; the colour
+  inks print what lies above that gray at its full strength, as if the colour were no darker
+  than its hue, less so the nearer gray. So a strong colour lighter than 38% has no black dots
+  in it, and a navy prints in cyan and magenta with a little black. Apple's drivers carry the
+  calibration of StyleWriter ink on paper: two tone curves (`GAMA` 1 with the ordered screens,
+  `GAMA` 2 with error diffusion and blue noise; the 2200
   driver's for the 2200, 2400 and 2500, the
   1500 driver's for the other four) and a 16 × 16 threshold screen (`HTSC` 1). The curve is the
   StyleWriter's default tone correction, in place of the dot-gain curve's 0, and `gain` still
@@ -1335,6 +1342,32 @@ Apple's StyleWriter adapter (ADSP, not PAP), is not built.
   (`tools/stylewriter/mktables.py`; `untome.py` takes the files out of Apple's Installer
   packages) into `halftone/apple_tables.{h,c}`, whose header says where each table came from.
   The drivers are never committed, and nothing is copied from TailTalk's source.
+- **Pale tints, thin lines and clean colours** (`W-1177 Color StyleWriter: colours print clean
+  and bright, with black only for grays`, 2026-11-20). An order slip from a Mac, on board 1's
+  Color StyleWriter 2500 in Atkinson, lost its 5% panel, its gray tile, its 16% card outlines and
+  dividers, and printed its gray text faint: Atkinson prints no dot under about 12% ink. Blue
+  noise brought them back but printed the photo and logo too dark on `GAMA` 1, made for Apple's
+  pattern screen; on `GAMA` 2, Apple's curve for scattered dots, it printed about as light as
+  Atkinson. Blue noise also showed what Atkinson had hidden: the ribbon's split, which puts
+  black under every colour short of full strength, spotted the logo's red and blue with black
+  and turned the photo's royal blue to a muted navy. Wells chose on paper from four splits
+  printed side by side as exact dots (the ribbon's; black for grays only; that deepened;
+  deepened further) and took the third. A review then found it printed a dark colour light: a
+  navy came out mid-blue. The split above puts the colour at full strength and adds black from
+  38% dark. Wells chose it on paper from three starting points for that black (50%, 38% and 25%
+  dark), printed as exact dots on a colour chart, the slip, three photos and six very dark
+  colours: on the photos the three looked the same, and only very dark, saturated colours told
+  them apart, the earliest black the deepest and the most spotted with black. A fourth, the
+  colour inks keeping the gray black leaves them, kept those colours dark but turned a dark blue
+  teal and puts more ink on the page; it was not chosen. A very dark colour still prints lighter
+  than it is: a chocolate brown as a deep orange, Oxford blue as a strong blue. Blue noise
+  is the StyleWriter's default: a record that becomes a StyleWriter on Atkinson takes it, one
+  that stops being a StyleWriter or QuickDraw LaserWriter goes back from it to Atkinson
+  (`default_screen`), and a record still on Atkinson moved to it once at start-up (`w1177` in NVS
+  `printers`), so a screen picked since stays, as the 300's did (3.18). The test page's blue
+  noise patch takes `GAMA` 2 with the jobs; the rest of the page and the ImageWriter's split are
+  unchanged. Wells approved the slip printed through board 1 with this split (2026-11-21). Not
+  yet printed from a Mac: the slip was converted to a page on the host and sent over IPP.
 - **The session** (`sw_session`, pure behind an ops table so the host tests run it against a
   scripted printer on a fake clock). A job: the reset, the settle, `1` and `2` clear (up to
   three resets, each given `1` twice, 5 s each, the second and third with the long settle, so a

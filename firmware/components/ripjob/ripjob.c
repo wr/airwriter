@@ -355,6 +355,7 @@ int ripjob_run(urf_t *u, const ripjob_cfg_t *cfg, ripjob_stats_t *st)
             }
             inks_ready = 1;
             if (cfg->tone) ink_screens_set_tone(&p->inks, cfg->tone);
+            ink_screens_set_inkjet(&p->inks, cfg->inkjet);
             if (cfg->dither == HT_APPLE)
                 for (int i = 0; i < IW_INKS; i++) apple_page_start(&p->inks.ht[i]);
             if (!stage) {

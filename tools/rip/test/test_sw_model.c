@@ -195,11 +195,12 @@ static void test_specs(void)
     CHECK(sw_spec((sw_model_t)99) == NULL);
 }
 
-// The tone curve: its family by model, GAMA 1 or 2 by screen (apple_tables.h says why).
+// The tone curve: its family by model, GAMA 1 or 2 by screen (apple_tables.h says why). W-1177:
+// blue noise scatters its dots as the diffusion screens do, and takes GAMA 2 with them.
 static void test_tone(void)
 {
-    static const ht_algo_t ordered[] = { HT_APPLE, HT_BAYER, HT_BLUENOISE, HT_THRESHOLD };
-    static const ht_algo_t diffused[] = { HT_ATKINSON, HT_FLOYD };
+    static const ht_algo_t ordered[] = { HT_APPLE, HT_BAYER, HT_THRESHOLD };
+    static const ht_algo_t diffused[] = { HT_ATKINSON, HT_FLOYD, HT_BLUENOISE };
     for (int m = SW_ORIGINAL; m < SW_MODELS; m++) {
         int cs = m == SW_C2200 || m == SW_C2400 || m == SW_C2500;
         const uint8_t (*t)[256] = cs ? apple_tone_cs : apple_tone_sw;
