@@ -70,6 +70,7 @@ static int64_t s_wait_us;         // W-1143: the rip's time waiting on an empty 
 static char s_name[64];
 static job_pipe_target_t s_target;    // this job's printer, when not the ImageWriter
 static int s_has_target;
+static int s_continuous;          // W-1173: this job asked for the roll (ripjob_cfg_t)
 static job_pipe_prn_t    s_prn_to;    // who gets this job's printer bytes
 // W-1141: a buffered job's page ends, noted by the rip and read by the printer task, and the
 // job's printer bytes that task has handed on. Both only under the lock.
@@ -203,6 +204,7 @@ static void pipe_task(void *arg)
             .lineart = 1,
             .lineart_light = 247,
             .top_margin = s_cfg.top_margin,
+            .continuous = s_continuous,
             .page_done = page_ended,
             .log     = pipe_log,
             .clock_us = rip_clock_us,
@@ -321,14 +323,22 @@ void job_pipe_set_top_margin(int top)
     s_cfg.top_margin = top;
 }
 
-esp_err_t job_pipe_begin(const char *job_name)
+static esp_err_t begin(const char *job_name, const job_pipe_target_t *t, int continuous);
+
+esp_err_t job_pipe_begin(const char *job_name, int continuous)
 {
-    return job_pipe_begin_to(job_name, NULL);
+    return begin(job_name, NULL, continuous);
 }
 
 esp_err_t job_pipe_begin_to(const char *job_name, const job_pipe_target_t *t)
 {
+    return begin(job_name, t, 0);
+}
+
+static esp_err_t begin(const char *job_name, const job_pipe_target_t *t, int continuous)
+{
     if (s_task) return ESP_ERR_INVALID_STATE;
+    s_continuous = continuous;
     s_has_target = t != NULL;
     if (t) s_target = *t;
     // A LaserWriter's rows go to its own stage, not to the printer-bytes ring,
