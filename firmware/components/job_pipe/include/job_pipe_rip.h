@@ -51,6 +51,8 @@ typedef struct {
     // is the first half, as for a buffered job; the stage sends its own bytes and `buffered`
     // is ignored.
     int                   keep;
+    // W-1174: text and thin lines decided ahead of the screen (ripjob_cfg_t.lineart).
+    int                   lineart;
 } job_pipe_target_t;
 
 // `base` with this job's printer in it. An ImageWriter job (t NULL) asks

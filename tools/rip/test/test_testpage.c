@@ -268,7 +268,8 @@ static int families(fam_t *f, int max)
             CHECK_EQ_INT(sw_tp_geom((sw_model_t)m, cart, &f[n++].g), 0);
         }
     f[n].what = "Personal LaserWriter 300";
-    CHECK_EQ_INT(qd_tp_geom(QD_PLW300, &f[n++].g), 0);
+    static uint8_t toner[256];
+    CHECK_EQ_INT(qd_tp_geom(QD_PLW300, &f[n++].g, toner), 0);
     static const lw_page_t pages[3] = { LW_LETTER, LW_A4, LW_LEGAL };
     for (int p = 0; p < 3; p++) {
         lw_info_t li;

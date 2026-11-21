@@ -2850,6 +2850,40 @@ static void test_family_of_kind(void)
 
 static int seen_qd(uint8_t engine) { pr_port_seen_qd(&L, engine); return pr_port_seen_qd(&L, engine); }
 
+// W-1174: a QuickDraw LaserWriter's record on Atkinson moves to blue noise; any other screen,
+// and any other printer's record, stays.
+static void test_qd_to_bluenoise(void)
+{
+    fresh();
+    int id = seen_qd(0x29);
+    CHECK(id > 0);
+    pr_rec_t *r = pr_get(&L, id);
+    if (!r) return;
+    snprintf(r->dither, sizeof r->dither, "atkinson");
+    CHECK_EQ_INT(pr_qd_to_bluenoise(&L), 1);
+    CHECK(!strcmp(r->dither, "bluenoise"));
+    CHECK_EQ_INT(pr_qd_to_bluenoise(&L), 0);
+    snprintf(r->dither, sizeof r->dither, "floyd");
+    CHECK_EQ_INT(pr_qd_to_bluenoise(&L), 0);
+    CHECK(!strcmp(r->dither, "floyd"));
+    int iw = pr_add_port(&L, PR_MODEL_IW2);
+    CHECK(iw > 0);
+    const pr_rec_t *w = pr_get(&L, iw);
+    CHECK(w && !strcmp(w->dither, "atkinson"));
+    CHECK_EQ_INT(pr_qd_to_bluenoise(&L), 0);
+    CHECK(w && !strcmp(w->dither, "atkinson"));
+
+    // An Unknown printer's record, made when the port said nothing, that a 300 then takes over.
+    fresh();
+    int u = seen_iw(PR_PORT_SILENT);
+    CHECK(u > 0);
+    int q = seen_qd(0x29);
+    CHECK_EQ_INT(q, u);                                     // the same record, converted
+    const pr_rec_t *qr = pr_get(&L, q);
+    CHECK(qr && qr->kind == PR_KIND_QDLASER);
+    CHECK(qr && !strcmp(qr->dither, "bluenoise"));
+}
+
 static void test_qd_new_record_needs_two_answers(void)
 {
     fresh();
@@ -2867,7 +2901,7 @@ static void test_qd_new_record_needs_two_answers(void)
     CHECK_EQ_INT(r->found_auto, 1);
     CHECK_EQ_INT(r->identified, 1);
     CHECK(!strcmp(r->name, "Personal LaserWriter 300"));
-    CHECK(!strcmp(r->dither, "atkinson"));
+    CHECK(!strcmp(r->dither, "bluenoise"));                 // W-1174
     CHECK_EQ_INT(pr_family_of(r->kind), PR_FAM_QDLASER);
     CHECK_EQ_INT(pr_port_is_qdlaser(&L), 1);
     CHECK_EQ_INT(pr_port_is_stylewriter(&L), 0);
@@ -3230,6 +3264,7 @@ int main(void)
     test_sw_cleaning();
     test_family_of_kind();
     test_qd_new_record_needs_two_answers();
+    test_qd_to_bluenoise();
     test_qd_known_record_at_once();
     test_qd_unsupported_named_not_shared();
     test_qd_ls_record();

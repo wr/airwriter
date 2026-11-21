@@ -438,10 +438,14 @@ static void announce(pr_list_t *l, pr_rec_t *r)
 
 // The port record takes a printer of `kind` and `model`: its own name follows
 // (a name the person gave stays); its uuid and its settings go on. The Apple
-// screen is a StyleWriter's or a QuickDraw LaserWriter's alone.
+// screen is a StyleWriter's or a QuickDraw LaserWriter's alone. A record that becomes a
+// QuickDraw LaserWriter on the default screen, Atkinson, takes blue noise (W-1174): Atkinson
+// prints none of its light tints, and its toner spreads. A new record, or an Unknown printer's.
 static void become_port_printer(pr_list_t *l, pr_rec_t *r, int kind, int model)
 {
     int own = name_is_own(r);
+    if (kind == PR_KIND_QDLASER && r->kind != PR_KIND_QDLASER && !strcmp(r->dither, "atkinson"))
+        snprintf(r->dither, sizeof r->dither, "bluenoise");
     r->kind = (uint8_t)kind;
     r->model = (uint8_t)model;
     r->identified = 1;
@@ -1081,6 +1085,18 @@ void pr_migrate(pr_list_t *l, const pr_legacy_t *o)
     char n[PR_NAME_MAX];
     own_name(r, n, sizeof n);
     set_name(l, r, n);
+}
+
+int pr_qd_to_bluenoise(pr_list_t *l)
+{
+    int n = 0;
+    for (int i = 0; i < l->n; i++) {
+        pr_rec_t *r = &l->r[i];
+        if (r->kind != PR_KIND_QDLASER || strcmp(r->dither, "atkinson")) continue;
+        snprintf(r->dither, sizeof r->dither, "bluenoise");
+        n++;
+    }
+    return n;
 }
 
 // ------------------------------------------------------------- stored form

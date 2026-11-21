@@ -28,7 +28,8 @@ typedef enum { HT_THRESHOLD, HT_ATKINSON, HT_FLOYD, HT_BAYER, HT_BLUENOISE, HT_A
 typedef struct {
     ht_algo_t algo;
     uint32_t  width;
-    int16_t  *err;      // 3 rows of width and 2 columns' slack a side, a ring by row index % 3
+    int16_t  *err;      // 3 rows of width and 2 columns' slack a side, a ring by row index % 3;
+                        // Atkinson's and Floyd-Steinberg's only, NULL for a mask screen
     uint32_t  y;
     uint8_t   tone[256];    // the curve every gray goes through; identity until ht_set_tone or ht_set_gain
     const uint8_t *tone_base;   // ht_set_tone's curve, which tone[] is the gain curve put on top of
@@ -46,6 +47,12 @@ int  ht_algo_from_name(const char *name, ht_algo_t *out);
 // at seventy. The curve asks for the number of dots that will read right
 // once they have spread; 0 and 255 stay themselves. 0 removes the curve.
 void ht_set_gain(ht_t *h, int gain_pct);
+
+// W-1174: the curve for a laser whose toner spreads (a QuickDraw LaserWriter), for
+// ht_set_tone: ht_set_gain's law at gain_pct for the grays between, 24 and under solid so
+// black type and a QR code's squares print black, eased into the law over 25 to 39 so a dark
+// picture has no step, and 253 and over paper so a page's near-white prints nothing.
+void ht_toner_curve(uint8_t curve[256], int gain_pct);
 
 // A tone curve ahead of every screen: each gray, 0 black to 255 white, goes through
 // curve[] first (Apple's GAMA curves, apple_tables.h). NULL is none. The curve is
