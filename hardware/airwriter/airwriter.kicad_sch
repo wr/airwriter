@@ -14337,7 +14337,7 @@
 				)
 			)
 		)
-		(property "Value" "PIC12F1840-I/P"
+		(property "Value" "PIC12F1840-I/SN"
 			(at 270.51 233.68 0)
 			(effects
 				(font
@@ -14345,7 +14345,7 @@
 				)
 			)
 		)
-		(property "LCSC" "C72124"
+		(property "LCSC" "C39594"
 			(at 270.51 233.68 0)
 			(effects
 				(font
@@ -14353,7 +14353,7 @@
 				)
 			)
 		)
-		(property "Footprint" "Package_DIP:DIP-8_W7.62mm_Socket"
+		(property "Footprint" "Package_SO:SOIC-8_3.9x4.9mm_P1.27mm"
 			(at 270.51 229.87 0)
 			(hide yes)
 			(effects
@@ -14362,7 +14362,7 @@
 				)
 			)
 		)
-		(property "MPN" "PIC12F1840-I/P"
+		(property "MPN" "PIC12F1840-I/SN"
 			(at 270.51 229.87 0)
 			(hide yes)
 			(effects
@@ -14380,7 +14380,7 @@
 				)
 			)
 		)
-		(property "Description" "8-bit MCU, PDIP-8 in an 8-pin DIP socket. Runs TashTalk. Program it in a chip programmer before inserting - there is no ICSP header"
+		(property "Description" "8-bit MCU, SOIC-8. Runs TashTalk for J4; the ESP32 flashes it in place over LVP"
 			(at 270.51 229.87 0)
 			(hide yes)
 			(effects
@@ -14389,7 +14389,7 @@
 				)
 			)
 		)
-		(property "Datasheet" ""
+		(property "Datasheet" "https://ww1.microchip.com/downloads/en/DeviceDoc/40001441F.pdf"
 			(at 270.51 229.87 0)
 			(hide yes)
 			(effects

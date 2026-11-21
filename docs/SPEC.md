@@ -1882,8 +1882,8 @@ board exists.
   (`AIRWRITER_JOB_POOL_KB`), so a full-page colour photo's ~5.7 MB of URF fits ahead of the
   rip; 1 MB if that much can't be had. That leaves the rest of the firmware 1 MB of PSRAM, as
   rev A's 2 MB does.
-- **U7's socket on an LC** is empty: every start-up check of U7 (`lt_go("boot", 1)`) leaves its
-  pins on the chip's pull-ups, so they never float.
+- **U7 is left off an LC**: every start-up check of U7 (`lt_go("boot", 1)`) leaves its pins on
+  the chip's pull-ups, so they never float.
 - **The LC's light.** When `BOARD_LC` reads low, `led_grid` draws D26, the chain's first LED
   there, with `lg_render_one16`: the status language in time and colour alone (the status
   language design's LC section), and the rest of the chain dark. `/api/panel` sends that frame,
