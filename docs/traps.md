@@ -212,7 +212,9 @@ Traps already explained in a code comment are listed only when the comment is ea
   mid-command by a job cut short just before the restart gets a plain `ESC ?` with no resync.
   On board 1 (2026-11-20) a test page cut short, then an OTA, left the ImageWriter II silent to
   its start-up `ESC ?` with the Personal LaserWriter 300 as the oldest record; before W-1175 it
-  was never asked again until Look for Printers.
+  was never asked again until Look for Printers. An IPP Cancel-Job 1 s into a page, then
+  `/api/restart`, recreated it the same day (the restart itself waits for a printing page to
+  finish, so it can't cut one).
 
 ## IPP, iOS, macOS, mDNS
 

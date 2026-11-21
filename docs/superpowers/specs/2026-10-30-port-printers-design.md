@@ -459,6 +459,10 @@ once a StyleWriter answered. An idle self-ID that gets nothing is logged once un
 answers or the line comes up again, so a printer that never answers, asked every 5 s, doesn't
 push the log's history out.
 
+Benched on board 1 the same day: a checker page to the ImageWriter II cancelled 1 s into
+printing, then a restart. The start-up `ESC ?` got nothing, as in the failure, and the re-ask
+named it 4 s later; the port showed it Ready 8 s after the restart.
+
 ## Amended 2026-11-16 by W-1162
 
 `W-1162 Remove the DIP switch code: rev A boards ignore S1, the page's switches decide`: DIP4 no longer prints a test page at power-on. The test button and the page's Print Test
