@@ -2022,9 +2022,10 @@ board exists.
     ends. Each socket keeps its own line, ribbon (port 1's is the one saved), StyleWriter and
     QuickDraw LaserWriter state, and CTRL-X kick. The panel follows the printing socket's line;
     idle, it is Ready while any shared printer is. 3.15 has the records.
-  - **TashTalk on U10.** U10 ships blank (`pic_prog` takes either socket's pins); the first time
-    J2 does LocalTalk with a blank U10, TashTalk goes on as U7's does. `/api/localtalk/flash`
-    takes `{"port":1|2}` (default: the LocalTalk socket).
+  - **TashTalk on U10 and U7.** Both ship blank (W-1176; `pic_prog` takes either socket's
+    pins); the first time a socket does LocalTalk with a blank PIC, TashTalk goes on, as the
+    page's button puts it on rev A's U7. `/api/localtalk/flash` takes `{"port":1|2}` (default:
+    the LocalTalk socket).
   - The cable test needs a socket on each job; its frames leave the printer socket's driver.
 - **Straps**, rev 2026.11 only, read once at boot with the pull-ups on, which stay on only where
   a strap reads high: IO16 (`BOARD_REV`, low on every 2026.11 board) and IO15 (`BOARD_LC`, low on
@@ -2073,7 +2074,7 @@ board exists.
   the first, check the straps, the handshake legs through Apple's crossover, a StyleWriter
   (J2's handshake held asserted by IO47) and the Personal LaserWriter 300's clock through
   rev 2026.11's U3; then each socket's jobs: a printer on each, LocalTalk on each, a printer
-  moved from one to the other, and U10's first TashTalk flash.
+  moved from one to the other, and U10's and U7's first TashTalk flash.
 
 ### 3.20 Password and sign-in (W-1156)
 

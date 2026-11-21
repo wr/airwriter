@@ -3799,22 +3799,24 @@ static lt_chip_t lt_chip_check(void)
     }
 }
 
-// W-1179: U10, J2's TashTalk on rev 2026.11, ships blank. Soldered in, it is there only for
-// TashTalk, so the first time J2 is to do LocalTalk and its PIC answers with no TashTalk on it,
-// TashTalk goes on (U7, socketed, is left to the page's button). The caller holds the job lock;
-// J2 does LocalTalk and nothing holds its PIC's pins. 1 when flashed.
-static int u10_flash_if_blank(int sock)
+// W-1179: rev 2026.11's TashTalks, U10 on J2 and U7 on J4, are soldered and placed blank
+// (W-1176). Each is there only for TashTalk, so the first time a socket is to do LocalTalk and
+// its PIC answers with no TashTalk on it, TashTalk goes on. Rev A's U7, socketed, is left to the
+// page's button. The caller holds the job lock; the socket does LocalTalk and nothing holds its
+// PIC's pins. 1 when flashed.
+static int tashtalk_flash_if_blank(int sock)
 {
-    if (sock != 0 || !ports_either()) return 0;
-    pic_pins_t pins = ports_sock(0)->pic;
+    if (!ports_either() || sock < 0 || sock >= ports_count()) return 0;
+    const char *chip = sock == 0 ? "U10" : "U7";
+    pic_pins_t pins = ports_sock(sock)->pic;
     pins.keep_reset = 0;
     uint16_t id = 0;
     pic_err_t e = pic_prog_read_id_on(&pins, &id);
     if (e != PIC_OK) {
-        ESP_LOGW(TAG, "port 1: U10 reads 0x%04X: %s", id, pic_err_str(e));
+        ESP_LOGW(TAG, "port %d: %s reads 0x%04X: %s", sock + 1, chip, id, pic_err_str(e));
         return 0;
     }
-    ESP_LOGW(TAG, "port 1: U10 has no TashTalk: installing it");
+    ESP_LOGW(TAG, "port %d: %s has no TashTalk: installing it", sock + 1, chip);
     led_grid_action(LG_ACT_PIC_FLASHING, 0);
     pic_result_t r;
     e = pic_prog_flash_tashtalk_on(&pins, &r);
@@ -3864,8 +3866,8 @@ static void lt_go(const char *why, int probe_only)
     for (int i = 0; i < 30 && cable_test_lt_busy(); i++) vTaskDelay(pdMS_TO_TICKS(10));
     localtalk_cfg_t c = lt_cfg(sock);
     esp_err_t err = probe_only ? localtalk_probe(&c) : localtalk_start(&c);
-    if (err == ESP_ERR_NOT_FOUND && sock == 0 && xSemaphoreTake(s_job_lock, 0) == pdTRUE) {
-        int flashed = u10_flash_if_blank(0);
+    if (err == ESP_ERR_NOT_FOUND && xSemaphoreTake(s_job_lock, 0) == pdTRUE) {
+        int flashed = tashtalk_flash_if_blank(sock);
         xSemaphoreGive(s_job_lock);
         if (flashed) err = probe_only ? localtalk_probe(&c) : localtalk_start(&c);
     }
@@ -4162,7 +4164,7 @@ static int sock_job_set(int i, port_job_t job, const char *why, uint32_t wait_ms
         if (localtalk_running()) {
             localtalk_cfg_t c = lt_cfg(i);
             esp_err_t e = localtalk_move(&c);
-            if (e == ESP_ERR_NOT_FOUND && u10_flash_if_blank(i)) e = localtalk_move(&c);
+            if (e == ESP_ERR_NOT_FOUND && tashtalk_flash_if_blank(i)) e = localtalk_move(&c);
             s_lt_chip = e == ESP_OK ? LT_CHIP_OK : lt_chip_check();
         }
     } else {
