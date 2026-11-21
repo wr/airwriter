@@ -19,11 +19,14 @@ scripts, so every change can be read and re-run:
    short stubs round a part's own pins are found by a small grid search in a corridor.
 3. `tools_pcb/r14_lc_light.py`, after `r13_sync.py` has brought JP1 in from the
    schematic: JP1 placed, its two runs drawn by the same grid search, two ground vias (below).
-4. W-1176's two-way sockets, after `r13_sync.py` has brought the new parts in:
-   `tools_pcb/r15_clean.py` (copper to pads that changed nets, on the port nets only), then
-   `r13_sync.py` again (U7's socket becomes a SOIC and its label goes), `r15_place.py`
-   (positions, set outright) and `r15_route.py` (every new run drawn point by point; a
-   second run reports it is already drawn). `r15_route.py`'s docstring has the commands.
+4. W-1176's two-way sockets: `r13_sync.py` with a fresh netlist (the new parts in; R12,
+   R13 and R27 out; U7's socket becomes a SOIC and its label goes), then
+   `tools_pcb/r15_clean.py` (the copper of both sockets' parts, their handshakes and the
+   nets the schematic dropped; it stops if a piece it expects is missing), `r15_place.py`
+   (one table of positions from the socket's centre line, set at J2 and again at J4, plus
+   R24 and the marks) and `r15_route.py` (one socket's copper drawn at each socket, then
+   the runs between; a second run reports it is already drawn). `r15_route.py`'s docstring
+   has the commands.
 
 D3's and SW1's footprints are `r13_mkfp_d3.py` and `r13_mkfp_sw1.py`, their 3D models
 `lib/make_led_spacer_model.py` and `lib/make_sw1_model.py`.
@@ -61,8 +64,8 @@ build turns on at the cost of 1/16 of the PSRAM (7.5 MB usable).
 
 ## Either socket, either job (W-1176)
 
-J2 and J4 have the same circuit, but for the last three rows below, so each runs a serial
-printer or LocalTalk. Per socket:
+J2 and J4 have the same circuit, laid out the same way over each socket, but for the shell
+(the last row), so each runs a serial printer or LocalTalk. Per socket:
 
 | | J2 | J4 |
 |---|---|---|
@@ -75,10 +78,8 @@ printer or LocalTalk. Per socket:
 | GPIO to DE through 220 Ω | `J2_DE` (IO7), R39 | `J4_DE` (IO3), R44 |
 | TX pair biased to mark, 4.7 k to 3V3 and to GND | R40, R41 | R45, R46 |
 | Receive pair, 15 k in each leg | R29, R30 | R10, R11 |
-| PIC MCLR / ICSPCLK / ICSPDAT / CTS | IO42 / IO11 via R34 / IO12 via R35 / IO41 | IO2 via R27 / IO4 via R15 / IO5 via R16 / IO6 |
-| 10 Ω in each TX leg | none | R12, R13 |
+| PIC MCLR / ICSPCLK / ICSPDAT / CTS | IO42 / IO11 via R34 / IO12 via R35 / IO41 | IO2 / IO4 via R15 / IO5 via R16 / IO6 |
 | Shell | to GND through R8 and C15 | straight to GND |
-| 1 k in MCLR, kept from rev A's socket | none | R27 |
 
 - **LocalTalk:** the socket's GPIOs are inputs and its PIC runs TashTalk: RA5 drives the data
   net while it sends (overriding the receiver through the 2.2 k) and reads it otherwise.
@@ -135,16 +136,15 @@ clear the flag); `make_fab.sh` leaves solder jumpers off both orders' BOMs.
 
 | Part | Rev A | Now | Why |
 |---|---|---|---|
-| C3 | (116.90, 152.40) | (112.90, 150.80) | under U2's VCC pin; R40 takes its old 3.3 V pad |
-| C14 | (132.30, 152.40) | (134.20, 145.80) | above U6's VCC pin |
-| U6 | (130.80, 148.20) | (132.45, 148.40) | over J4's center line; now a THVD1452 (W-1176) |
-| R10 | (121.20, 152.40) | (128.75, 153.07) | 15 k in `LT_RXD_N`, beside J4.5 |
-| R11 | (122.70, 152.40) | (130.30, 152.00) | 15 k in `LT_RXD_P`, beside J4.8; the other leg passes between its pads |
 | SW2 | (144.50, 151.20) | (140.00, 152.70) | below IO0, so `BOOT_CFG` runs straight down; BOOT label to its right |
 
-The maker's marks are on the top silk where S1 was, where the LC's clear lid shows them:
-the WW mark (the Macintosh Mini board's two chevrons, 7 mm wide) above KiCad's OSHW logo
-(7.5 × 8 mm, LOGO1, a board-only footprint).
+Rev A's parts round the sockets (U2, U6, U7, C3, C14, C16, R10, R11, R15, R16) are in
+W-1176's two blocks now (below).
+
+The maker's marks are on the top silk where S1 was, in the west column above J2's parts,
+where the LC's clear lid shows them: the WW mark (the Macintosh Mini board's two chevrons,
+7 mm wide, y 124.2 to 129.7) above KiCad's OSHW logo (7.5 × 8 mm, LOGO1, a board-only
+footprint, at (105.30, 134.20)).
 
 Gone: S1, the eight DIP switches, and with them rev A's eight runs from the west edge to the
 module. SW1 is now the BZCN TSB001A3518A side-press switch (the Macintosh Mini's), at
@@ -153,19 +153,28 @@ its two contacts sit over rev A's EN and GND pads. It is held by two plastic peg
 holes and two bracket pads; rev A's EVQP44B3M lifted off its two small pads. Its RESET label
 is board silk now, not a field of the old footprint.
 
-The new resistors sit beside what they serve: R24 below U3, R27 north-west of U7 beside its
-pin 4, R21 above SW2, R32 and R33 above IO16 and IO15. W-1176's parts:
+The new resistors sit beside what they serve: R24 between the two sockets' parts below U3,
+R21 above SW2, R32 and R33 above IO16 and IO15.
 
-| Part | Where | |
+W-1176's two blocks: each socket's parts, placed the same way against the socket. J4's are
+J2's moved 19.5 mm east, so only J2's positions are given.
+
+| J2 / J4 | J2's position, rotation | |
 |---|---|---|
-| U10 | (124.70, 148.80) | J2's PIC, on U8's old spot; pins 2 and 3 face U2 |
-| U7 | (127.90, 136.00) | J4's PIC, a SOIC where its socket was, pins 1–4 north as before |
-| C68 | (122.03, 144.50) | U10's bypass, on the 3.3 V run into pin 1 |
-| R36–R39 | between U2 and U10 | DE pull-down, and the 2.2 k and 220 Ω into `LT2_DATA` and `LT2_DE` |
-| R40, R41 | below U2 | J2's TX pair to mark |
-| R34, R35, R42, R43 | a row above U10 and U6 | 100 Ω in U10's ICSPCLK and ICSPDAT; 2.2 k from U6's RO and 220 Ω from IO9 into `LT_DATA`, with `LT_DE` between R42's pads |
-| R44 | (135.80, 128.60) | 220 Ω from IO3 to `LT_DE`, north of the module (below) |
-| R45, R46 | below U6, with R12 and R13 | J4's TX pair to mark |
+| U2 / U6 | (113.00, 148.40), 0° | transceiver, over the socket's centre line |
+| U10 / U7 | (105.60, 145.06), 180° | TashTalk PIC, to the west |
+| R39 / R44 | (110.60, 145.05), −90° | 220 Ω from the GPIO to DE |
+| R37 / R42 | (112.15, 145.05), 90° | 2.2 k from RO to the data net |
+| R38 / R43 | (113.70, 145.05), −90° | 220 Ω from the GPIO to the data net |
+| R34 / R15 | (104.95, 140.75), −90° | 100 Ω in ICSPCLK, above the PIC |
+| R35 / R16 | (106.55, 140.75), −90° | 100 Ω in ICSPDAT |
+| R36 / R22 | (109.95, 140.75), 90° | 10 k DE pull-down |
+| C68 / C16 | (107.80, 148.58), 0° | the PIC's bypass |
+| R30 / R10 | (109.25, 153.07), 90° (R10 −90°) | 15 k in the B leg |
+| R29 / R11 | (110.80, 152.05), 90° (R11 −90°) | 15 k in the A leg |
+| R41 / R46 | (113.70, 152.05), −90° | 4.7 k from Z to GND |
+| C3 / C14 | (115.25, 152.05), −90° | the transceiver's bypass |
+| R40 / R45 | (116.80, 152.05), −90° | 4.7 k from 3.3 V to Y |
 
 ## The status LEDs
 
@@ -182,19 +191,19 @@ fit: its pins are in other corners and it is 1.95 mm tall.
 
 ## Rev A copper that changed
 
-- U3's 3.3 V feed runs from pin 16 under U3's body (x 117.3) to the branch at y 144.24,
-  not down U3's right side.
-- The printer port's handshakes rejoin rev A's routes by short steps from pins 7–10.
-- `LT_RESET` runs along the back at y 134.17 under U7 to R27, north-west of U7, and
-  `LT_MCLR` is a short front run from R27 to U7.4. U7's other lines leave between its pads.
-- 3.3 V: a via where the socket's pin 1 was, (131.71, 133.09), joins the front to the back,
-  as that pin did. The run to U6 goes east from it and down at x 134.3 beside `BTN_TEST`.
+- U3.16 takes 3.3 V from C17 alone. Rev A's run on from it, under U3 and down to J2's
+  parts, is gone: J2's block is fed from J4's (New runs).
+- `LT_RESET` keeps rev A's back run at y 134.17, carried west to a via at (127.90, 134.17),
+  then runs south on the front to U7.4. `LT_CTS` keeps rev A's back run at y 142.39 and
+  `LT_UART_TX` and `LT_UART_RX` their back runs and vias, each carried on to U7's block.
+- 3.3 V: a via where U7's socket pin 1 was, (131.71, 133.09), joins the front to the back,
+  as that pin did. The run to U6 goes east from it and down at x 134.25 to U6.10.
 - EN steps round SW1's bracket pad into its pad 1.
 - `BOOT_CFG` goes straight down from IO0 to R21 and SW2.
 - `LED_DATA`'s run north of the module is 0.37 mm higher, which makes room for R32 and R33's
   ground vias.
-- J4's receive pair: R10 and R11 stand beside J4, so U6 reaches them on the front and the
-  old runs from the J2 side are gone. J2's keeps its back route to J2.6 and J2.3.
+- Both sockets' bus pairs are their block's own front copper; rev A's runs to J4 from the
+  J2 side and J2's back route to J2.6 and J2.3 are gone.
 - The VBUS via at the H4 crossing is 0.5 mm drill (rev A 0.4), not doubled: its plated wall
   now holds more copper than the 0.5 mm track that feeds it, so that track, unchanged from
   rev A, is the limit.
@@ -203,20 +212,41 @@ fit: its pins are in other corners and it is 1.95 mm tall.
 
 ## New runs
 
-- J4.1 and J4.2 from U3.14 and U3.13: down beside U3, under U10 (U8's old spot), a via each
-  just below it, then the back layer to J4.
+- J4.1 and J4.2 from U3.14 and U3.13: on the front down U3's east side and west of U7 to a
+  via each, then the back layer to J4.
 - IO21 (`J4_HSKI_RX`) and IO47 (`HSKI_DRV`): a via each by U3, then side by side on the
   back, along rev A's `HSKI_DRV` run, to a via each just west of the module and a short
   stub into pins 23 and 24.
-- IO13 (`J4_HSKO_DRV`): a via beside U3.11, one straight run on the back under U7's
-  south row, and a via just west of pin 21 (BTN_TEST passes on the front).
+- IO13 (`J4_HSKO_DRV`): a via beside U3.11, one straight run on the back at y 138.97,
+  and a via just west of pin 21 (BTN_TEST passes on the front).
 - Ground vias for R24, R32, R33, TP9's patch of the back pour and U5.2.
-- W-1176: IO17, IO18, IO7, IO41 and IO42 run on the front under the module to a via, then
-  west on the back at y 145.55 to 148.8, the last three dipping under U10. IO9 to IO12
-  each take a via beside the module's pin, a back run under `BTN_TEST`, and a second via
-  (IO9's east of U7, the others west of it), then run south on the front. 3.3 V reaches
-  U2.10 and C3 by a 1.45 mm back hop under `PR_HSKO`.
-- A ground via at (123.75, 134.95) joins the front pour round U3.15 to the plane.
+- W-1176, inside each block (the same copper at both sockets, front unless said): DE and
+  the data net leave the transceiver west and turn north to the PIC's pins 3 and 2, DE on
+  up to its pull-down with its 220 Ω hanging on it. RO runs north between R39 and R37, the
+  data net north under the transceiver between R37 and R38. MCLR and CTS go north from the
+  PIC; ICSPCLK and ICSPDAT run north under its body into R34 and R35 (R15 and R16). A, B
+  and Z leave under the transceiver to the south: B passes between the pads of A's
+  resistor, Z goes between the socket's rows to pin 3, and Y straight down to pin 6.
+  3.3 V comes in at a via above the transceiver's bypass, up its east side to pin 10, and
+  along the back to a via beside the PIC's bypass and pin 1, passing north of the
+  transceiver's ground via so that pin 5 reaches the bypass and the socket's ground pin
+  across the back plane. Ground vias under the
+  transceiver, between it and the PIC, by the PIC's pin 8, by the pull-down and by the
+  bypass.
+- J2's lines from the module: IO17, IO18, IO7, IO41 and IO42 run on the front under the
+  module to a via each, then west on the back in one band at y 145.3 to 146.9, under J4's
+  block, to a via at each line's place in J2's block. IO11 and IO12 take a via beside the
+  module's pin and run west on the back at y 137.6 and 138.05, under U3, to vias above R34
+  and R35.
+- J4's lines from the module: IO9 and IO10 take a via beside the pin, a short back run and
+  a second via, then run south on the front into the block. IO3 (`J4_DE`) goes north off
+  its pin to a via, west on the back at y 128.35, and south on the front to R44.
+- 3.3 V to J2's block: a 0.3 mm back run along y 148.9 from J4's PIC via to J2's
+  transceiver via, about 9.5 mm. R21 is fed on the back from J4's transceiver via.
+- J2's handshakes, `PR_HSKO` and `PR_HSKI`, run on the front only: east below U3 from U3.8
+  and R9, down between the two blocks, and west below J2's lower row into J2.2 and J2.1
+  from below. R24 stands between them and J4's handshake pair, with a ground via below it.
+- A ground via for C13.2, whose patch of the front pour `PR_HSKI` cut off.
 - Spare pins: IO38, IO39 and IO40 each run straight down from the module's pin to a via
   and a bare 1 mm pad on the back (TP10–TP12, labelled 38, 39, 40), for trying an idea on
   a built board with a few wires; 3V3 is at TP2 and GND at TP9 nearby. On the back, so the
@@ -229,15 +259,23 @@ fit: its pins are in other corners and it is 1.95 mm tall.
   stub, and nothing on J4 reads pin 1 at power-up; firmware drives it within about 0.1 s.
   J2's (IO47) keeps R24: a StyleWriter on J2 watches its HSKo.
 - TP9 and the old test pads sit on the back under U1's courtyard.
-- Vias under U5's, U6's and U10's bodies are tented, as every via is.
+- Vias under U2's, U5's and U6's bodies are tented, as every via is.
 - IO3 (`J4_DE`) leaves the module north: its pad has no room for a via (`LT2_UART_RX` and
-  the 3.3 V run pass under it, IO46's pad beside it). So R44 sits north of the module, west
-  of dot (7,4)'s light, and `LT_DE` reaches it by a 10 mm back run at y 128.35 from a via at
-  R22.1.
-- The 3.3 V feed from U6.10 down to R45, and by a via to R21 on the back, is 0.2 mm: at 0.3
-  it comes within 0.15 mm of U6's Y pad. It carries only the pull-ups.
-- Vias meet the pads of C3, R37, R38, R40 and R41 on their own nets, as stitch vias
-  already met ground pads (`docs/ORDER-NOTES.md`, via fill).
+  the 3.3 V run pass under it, IO46's pad beside it). So `J4_DE` reaches R44 by a back run
+  at y 128.35 from a via north of the module.
+- The two blocks differ only where they must: R10 and R11 are turned half a turn from R30
+  and R29, because the schematic numbers their pads the other way round (the copper is the
+  same); J2's lines from the module reach their places in the block on the back, so each
+  has a via there, where J4's arrive on the front (`LT_CTS` has a via in both); J4's
+  transceiver also takes 3.3 V from the north; and the handshakes come from different
+  places.
+- J2's block takes its 3.3 V from J4's, by 9.5 mm of 0.3 mm back track: the other way was
+  a hop of two vias under the handshakes. Both blocks draw a few milliamps.
+- Each block's 3.3 V run up the transceiver's east side to pin 10 is 0.2 mm. It carries
+  that block's few milliamps, and J4's carries J2's too.
+- C3 and C14 sit in the row below their transceiver, about 3.5 mm of track from pin 10 at
+  the 3.3 V via: beside the pin there is no room on J4 (the module and its pin 23 and 24
+  vias), and the blocks match.
 - U2 and U6 are TI's THVD1452 (W-1176; the design had the SP3490 on J2, then the THVD1451),
   rated ±30 kV HBM on their bus pins, and their receivers work with ±15 V on their inputs
   (absolute maximum ±18 V), so an RS-232 printer's line is in range on its own. R29 and R30
@@ -253,11 +291,11 @@ fit: its pins are in other corners and it is 1.95 mm tall.
 - R17's pads sit 0.58 mm in from the east edge: PCBWay's minimum is 0.30, with ±0.2 mm on a
   routed edge.
 
-## Checks, 2026-11-20 (W-1176)
+## Checks, 2026-11-21 (W-1176)
 
 - ERC: 0 errors, 45 known warnings (40 `lib_symbol_mismatch`; 5 `isolated_pin_label`: TXD0,
   RXD0 and the three spare pins, each a label on one pin by design).
-- `tools_sch/check_rev2026_11.py`: 48 nets, 36 parts, 12 removed.
+- `tools_sch/check_rev2026_11.py`: 45 nets, 35 parts, 15 removed.
 - DRC with `--severity-all --schematic-parity --refill-zones`: 0 errors, 0 unconnected, 5
   `lib_footprint_mismatch` warnings, no field-parity warnings (`r13_sync.py` now copies the
   Description, Manufacturer and Datasheet fields too).
@@ -269,6 +307,6 @@ fit: its pins are in other corners and it is 1.95 mm tall.
 - `enclosure/build.sh`: all tests pass; the tray has no DIP slot (a board without S1 gets
   none), and the reset pinhole aims at the new button, 1.90 mm up. The lattice's clearances
   follow the new parts.
-- `make_fab.sh`: 146 placements on AirWriter's panel, 68 on the LC's main board alone, drill
+- `make_fab.sh`: 143 placements on AirWriter's panel, 65 on the LC's main board alone, drill
   floor 0.30 mm on both. Neither places J2 or J4: Wells fits them after delivery. U7 and U10
   go on AirWriter only, blank.

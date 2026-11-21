@@ -264,7 +264,7 @@ http://192.168.4.1/.
   `hardware/airwriter/airwriter.kicad_pcb` → 0 errors, 0 unconnected, 5 `lib_footprint_mismatch`
   warnings, no field-parity warnings. Treat any unconnected item as real; `tools_pcb/r12_gnd.py`
   checks that every GND pad is on the main plane. The combined panel under its default rules
-  shows only known items (~221 false clearance, 6 copper_edge and 4 silk_edge where J1, J2, J4
+  shows only known items (~218 false clearance, 6 copper_edge and 4 silk_edge where J1, J2, J4
   and U1 meet the edge, 16 hole_clearance where NPTH holes meet the pours, 6 seam
   invalid_outline). Rev 2026.11's netlist gate:
   `python3 hardware/airwriter/tools_sch/check_rev2026_11.py <kicadxml netlist>`; its board gate,

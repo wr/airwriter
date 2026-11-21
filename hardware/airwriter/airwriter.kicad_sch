@@ -10614,36 +10614,6 @@
 		)
 		(uuid "61bd93af-5d4e-43ac-b694-b95e111d37cd")
 	)
-	(label "LT_RESET"
-		(at 60.96 237.49 0)
-		(effects
-			(font
-				(size 1.27 1.27)
-			)
-			(justify left bottom)
-		)
-		(uuid "7c8846f0-79cb-45e4-86ca-dbdecf606811")
-	)
-	(label "LT_MCLR"
-		(at 60.96 245.11 0)
-		(effects
-			(font
-				(size 1.27 1.27)
-			)
-			(justify left bottom)
-		)
-		(uuid "a6244c44-99a6-4656-90fd-9aed91f8eda8")
-	)
-	(label "LT_MCLR"
-		(at 285.75 227.33 0)
-		(effects
-			(font
-				(size 1.27 1.27)
-			)
-			(justify left bottom)
-		)
-		(uuid "941ab808-aac5-4a62-9edb-e3cb6f796c8b")
-	)
 	(label "PR_TXD_P"
 		(at 101.6 237.49 0)
 		(effects
@@ -10773,66 +10743,6 @@
 			(justify right bottom)
 		)
 		(uuid "ad85fd6a-4559-4ae6-9bf5-296ef2d1a918")
-	)
-	(label "LT_TXD_N"
-		(at 405.13 210.82 0)
-		(effects
-			(font
-				(size 1.27 1.27)
-			)
-			(justify left bottom)
-		)
-		(uuid "d2493c79-82f3-4b50-afc4-94f23c63a113")
-	)
-	(label "LT_PORT_TXD_N"
-		(at 405.13 218.44 0)
-		(effects
-			(font
-				(size 1.27 1.27)
-			)
-			(justify left bottom)
-		)
-		(uuid "b56c5086-370a-4e43-8729-9c4a65da4023")
-	)
-	(label "LT_PORT_TXD_N"
-		(at 426.72 224.79 180)
-		(effects
-			(font
-				(size 1.27 1.27)
-			)
-			(justify right bottom)
-		)
-		(uuid "eb1ce7c6-df15-450e-985c-c49e9c49ef89")
-	)
-	(label "LT_TXD_P"
-		(at 415.29 210.82 0)
-		(effects
-			(font
-				(size 1.27 1.27)
-			)
-			(justify left bottom)
-		)
-		(uuid "d50e5187-a198-4dbb-ade4-0bb0df65a52f")
-	)
-	(label "LT_PORT_TXD_P"
-		(at 415.29 218.44 0)
-		(effects
-			(font
-				(size 1.27 1.27)
-			)
-			(justify left bottom)
-		)
-		(uuid "46eef85a-8c0a-4ef0-aa66-1ce5e60c4908")
-	)
-	(label "LT_PORT_TXD_P"
-		(at 426.72 232.41 180)
-		(effects
-			(font
-				(size 1.27 1.27)
-			)
-			(justify right bottom)
-		)
-		(uuid "e35c9605-570a-4f18-915b-387141e73954")
 	)
 	(label "BOARD_REV"
 		(at 189.23 162.56 180)
@@ -11655,6 +11565,36 @@
 			(justify left bottom)
 		)
 		(uuid "fa478ad2-2974-4f2d-ba26-51fa3b9bed6b")
+	)
+  (label "LT_TXD_P"
+		(at 426.72 232.41 180)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right bottom)
+		)
+		(uuid "4e2594da-11b3-4a3d-8051-f6f71c77c1e3")
+	)
+  (label "LT_RESET"
+		(at 285.75 227.33 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left bottom)
+		)
+		(uuid "baacc1e8-96c3-4e6f-bcb5-64d355e5f0fe")
+	)
+  (label "LT_TXD_N"
+		(at 426.72 224.79 180)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right bottom)
+		)
+		(uuid "f1a037ef-4481-498b-9cb2-4445e2d5c4ab")
 	)
 	(symbol
 		(lib_id "Connector:USB_C_Receptacle_USB2.0_16P")
@@ -14667,184 +14607,6 @@
 			(project "airwriter"
 				(path "/b907fa76-c5fe-4a7a-8e4e-adfdab62cb9c"
 					(reference "R11")
-					(unit 1)
-				)
-			)
-		)
-	)
-	(symbol
-		(lib_id "Device:R")
-		(at 405.13 214.63 0)
-		(unit 1)
-		(body_style 1)
-		(exclude_from_sim no)
-		(in_bom yes)
-		(on_board yes)
-		(in_pos_files yes)
-		(dnp no)
-		(uuid "82a50e9e-0d20-4d63-9725-adf6cb8729a7")
-		(property "Reference" "R12"
-			(at 405.13 210.82 0)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Value" "10R"
-			(at 405.13 218.44 0)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Footprint" "Resistor_SMD:R_0603_1608Metric"
-			(at 405.13 214.63 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Datasheet" ""
-			(at 405.13 214.63 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Description" ""
-			(at 405.13 214.63 0)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "LCSC" "C22859"
-			(at 405.13 218.44 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(pin "1"
-			(uuid "238d479c-f7d4-44b8-b77a-a6dadc465ab1")
-		)
-		(pin "2"
-			(uuid "764c4f17-2a5d-4548-af79-aca1c32e2958")
-		)
-		(instances
-			(project "airwriter"
-				(path "/b907fa76-c5fe-4a7a-8e4e-adfdab62cb9c"
-					(reference "R12")
-					(unit 1)
-				)
-			)
-		)
-	)
-	(symbol
-		(lib_id "Device:R")
-		(at 415.29 214.63 0)
-		(unit 1)
-		(body_style 1)
-		(exclude_from_sim no)
-		(in_bom yes)
-		(on_board yes)
-		(in_pos_files yes)
-		(dnp no)
-		(uuid "6493f852-f236-43fa-9fd6-a85cb1e5a4bd")
-		(property "Reference" "R13"
-			(at 415.29 210.82 0)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Value" "10R"
-			(at 415.29 218.44 0)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Footprint" "Resistor_SMD:R_0603_1608Metric"
-			(at 415.29 214.63 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Datasheet" ""
-			(at 415.29 214.63 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Description" ""
-			(at 415.29 214.63 0)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "LCSC" "C22859"
-			(at 415.29 218.44 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(pin "1"
-			(uuid "6a9e9867-f6e8-434c-8bf0-80f6649012f7")
-		)
-		(pin "2"
-			(uuid "cec4ebbc-f31c-4d73-b136-bc0f0e8de3f0")
-		)
-		(instances
-			(project "airwriter"
-				(path "/b907fa76-c5fe-4a7a-8e4e-adfdab62cb9c"
-					(reference "R13")
 					(unit 1)
 				)
 			)
@@ -23068,96 +22830,6 @@
 			(project "airwriter"
 				(path "/b907fa76-c5fe-4a7a-8e4e-adfdab62cb9c"
 					(reference "R24")
-					(unit 1)
-				)
-			)
-		)
-	)
-	(symbol
-		(lib_id "Device:R")
-		(at 60.96 241.3 0)
-		(unit 1)
-		(body_style 1)
-		(exclude_from_sim no)
-		(in_bom yes)
-		(on_board yes)
-		(in_pos_files yes)
-		(dnp no)
-		(uuid "b5aeee16-27c4-448a-9a8e-0edab6192c3d")
-		(property "Reference" "R27"
-			(at 62.992 241.3 90)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Value" "1k"
-			(at 60.96 241.3 90)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Footprint" "Resistor_SMD:R_0603_1608Metric"
-			(at 60.96 241.3 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Datasheet" ""
-			(at 60.96 241.3 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Description" "Resistor"
-			(at 60.96 241.3 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "LCSC" "C21190"
-			(at 60.96 241.3 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(pin "1"
-			(uuid "e697c869-fb77-4514-a2f9-24f7a7fcdee8")
-		)
-		(pin "2"
-			(uuid "eab343b5-a8af-4557-b784-47d3aeb8c7de")
-		)
-		(instances
-			(project "airwriter"
-				(path "/b907fa76-c5fe-4a7a-8e4e-adfdab62cb9c"
-					(reference "R27")
 					(unit 1)
 				)
 			)

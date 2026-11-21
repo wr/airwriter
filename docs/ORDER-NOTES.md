@@ -9,8 +9,8 @@ Standing rule: quote to Wells before either order is placed. Rev A's order and i
 
 | Order | Upload only | Placements |
 |---|---|---|
-| AirWriter | `hardware/combined-fab.zip`, `hardware/combined/combined-top.png`, `hardware/combined/airwriter-top.png` | 146 |
-| AirWriter LC | `hardware/airwriter-lc-fab.zip`, `hardware/combined/airwriter-top.png` | 68 |
+| AirWriter | `hardware/combined-fab.zip`, `hardware/combined/combined-top.png`, `hardware/combined/airwriter-top.png` | 143 |
+| AirWriter LC | `hardware/airwriter-lc-fab.zip`, `hardware/combined/airwriter-top.png` | 65 |
 
 Each order's section below is paste-ready on its own.
 
@@ -37,7 +37,7 @@ Each order's section below is paste-ready on its own.
 
 ### Assembly
 
-Position file `combined-pos.csv`, BOM `combined-assembly-bom.csv`, 146 placements, all on the
+Position file `combined-pos.csv`, BOM `combined-assembly-bom.csv`, 143 placements, all on the
 top side of the file. R33 is left off; its pads stay bare.
 
 1. **J2 and J4 (mini-DIN-8): DO NOT ASSEMBLE, and keep all 22 of their holes free of
@@ -63,7 +63,7 @@ top side of the file. R33 is left off; its pads stay bare.
    image. The footprint's pad numbering is rotated 180° from the datasheet's pin numbers:
    align by the chamfer, not by "pad 1". A 180° placement breaks the whole chain.
 7. Substitutions allowed: any 100 nF 50 V X7R 10 % 0603 for C14663, any 10 k 1 % 0603 for
-   C25804, any 15 k 1 % 0603 for C22809, any 1 k 1 % 0603 for C21190, and any 2.2 k, 220 Ω or
+   C25804, any 15 k 1 % 0603 for C22809, and any 2.2 k, 220 Ω or
    4.7 k 1 % 0603 for C4190, C22962 or C23162.
    **No substitution** for U1–U10, J1, SW1–SW3 or D3, and U1 must be the
    **ESP32-S3-WROOM-1-N16R8** (16 MB flash, 8 MB octal PSRAM, LCSC C2913202), never a
@@ -88,7 +88,7 @@ top side of the file. R33 is left off; its pads stay bare.
 
 ### Assembly
 
-Position file `airwriter-lc-pos.csv`, BOM `airwriter-lc-assembly-bom.csv`, 68 placements, all
+Position file `airwriter-lc-pos.csv`, BOM `airwriter-lc-assembly-bom.csv`, 65 placements, all
 on the top side. **Of the LED array fit only D26 (the LED under the test button), C46, U9,
 R20 and C29. Leave off D10–D25, D27–D46, C30–C45, C47–C66, C21, U7 and U10.** They are absent
 from the position file and the BOM; their pads stay bare. R33 is fitted.
@@ -110,7 +110,7 @@ from the position file and the BOM; their pads stay bare. R33 is fitted.
    The footprint's pad numbering is rotated 180° from the datasheet's pin numbers: align by
    the chamfer, not by "pad 1".
 5. Substitutions allowed: any 100 nF 50 V X7R 10 % 0603 for C14663, any 10 k 1 % 0603 for
-   C25804, any 15 k 1 % 0603 for C22809, any 1 k 1 % 0603 for C21190, and any 2.2 k, 220 Ω or
+   C25804, any 15 k 1 % 0603 for C22809, and any 2.2 k, 220 Ω or
    4.7 k 1 % 0603 for C4190, C22962 or C23162.
    **No substitution** for U1–U10, J1, SW1–SW3 or D3, and U1 must be the
    **ESP32-S3-WROOM-1-N16R8** (16 MB flash, 8 MB octal PSRAM, LCSC C2913202), never a
@@ -129,10 +129,10 @@ from the position file and the BOM; their pads stay bare. R33 is fitted.
 - **JP1** (two gold pads marked LC, south-east of D26): a solder jumper, not a part. No
   paste, nothing fitted, left open; Wells bridges it on the LC after delivery.
 - **Via fill:** none. All vias standard plated, unfilled; do not add the via-fill or cap
-  process. Eighteen board vias meet SMD pads, each on its pad's own net: the five in U4's tab;
-  ground stitch vias on C3.2, C9.2, C12.2, C17.2, D29.2, D37.2, R1.2 and U1.1 (U1's center
-  paddle has its own thermal holes in the footprint); and signal vias on C3.1, R37.1, R38.1,
-  R40.2 and R41.1. Minor paste wicking into those barrels is acceptable.
+  process. Twelve board vias meet SMD pads, each on its pad's own net: the five in U4's tab, and
+  ground stitch vias on C9.2, C12.2, C17.2, D29.2, D37.2, R1.2 and U1.1 (U1's center paddle
+  has its own thermal holes in the footprint). Minor paste wicking into those barrels is
+  acceptable.
 
 ## Wells's part, after delivery
 
@@ -161,7 +161,7 @@ Upload only the files in the table at the top. Never upload anything else, and n
 
 Regenerate both packages only with `python3 hardware/combine_boards.py` then
 `sh hardware/combined/make_fab.sh`, and check them with the battery in `AGENTS.md`
-(Verification): ERC, both DRCs with `--severity-all`, the drill floor, 146 and 68 position
+(Verification): ERC, both DRCs with `--severity-all`, the drill floor, 143 and 65 position
 rows (the script asserts both). Both pictures are `kicad-cli pcb render --side top
 --quality high --use-board-stackup-colors`, flattened onto white: `combined-top.png` from
 `hardware/combined/combined.kicad_pcb` at `-w 2328 -h 1264`, `airwriter-top.png` from
