@@ -174,11 +174,12 @@ int main(void)
         }
     }
 
-    /* 10 ft and no further: rows past 8640 are dropped, with one line in the log. */
-    {
+    /* 10 ft and no further: rows past 8640 are dropped, with one line in the log, in gray and
+     * in colour. */
+    for (int rgb = 0; rgb < 2; rgb++) {
         static const int ink[] = { 0, 8632, 8639, 8640, 8700 };
-        n = make_urf(urf, 122 * RES, 0, ink, 5);
-        CHECK_EQ_INT(rip_with(urf, n, iw, 0, -144, 1), 0);
+        n = make_urf(urf, 122 * RES, rgb, ink, 5);
+        CHECK_EQ_INT(rip_with(urf, n, iw, rgb, -144, 1), 0);
         int f, l;
         dot_rows(&f, &l);
         CHECK_EQ_INT(f, 0);
@@ -187,8 +188,8 @@ int main(void)
         CHECK(stream[stream_n - 1] == 0x0C);
         CHECK_EQ_INT(dropped_lines, 1);
         /* 10 ft exactly drops nothing and says nothing. */
-        n = make_urf(urf, 120 * RES, 0, ink, 3);
-        CHECK_EQ_INT(rip_with(urf, n, iw, 0, -144, 1), 0);
+        n = make_urf(urf, 120 * RES, rgb, ink, 3);
+        CHECK_EQ_INT(rip_with(urf, n, iw, rgb, -144, 1), 0);
         dot_rows(&f, &l);
         CHECK_EQ_INT(l, 8639);
         CHECK_EQ_INT(dropped_lines, 0);

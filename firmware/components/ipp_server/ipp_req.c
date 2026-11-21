@@ -99,9 +99,10 @@ int ipp_req_parse(ipp_req_t *r, const uint8_t *buf, size_t len)
     // The Job group's media-col (W-1102): how deep its collections go (0 outside it, 1 among
     // its own members), and whether the member being walked at depth 1 is media-source.
     // W-1173: whether the depth-1 member is media-size (`size_member`), whether the depth-2
-    // collection being walked is that media-size (`in_size`), and whether its member being
-    // walked is y-dimension.
-    int mcol = 0, depth = 0, src_member = 0, size_member = 0, in_size = 0, y_member = 0;
+    // collection being walked is that media-size (`in_size`), whether its member being
+    // walked is y-dimension, and whether the depth-1 member is media-top-margin.
+    int mcol = 0, depth = 0, src_member = 0, size_member = 0, in_size = 0, y_member = 0,
+        top_member = 0;
     for (;;) {
         if (!need(&c, 1)) return IPP_REQ_SHORT;
         uint8_t tag = c.p[c.pos++];
@@ -139,7 +140,7 @@ int ipp_req_parse(ipp_req_t *r, const uint8_t *buf, size_t len)
                 if (tag == IPP_TAG_BEGIN_COLLECTION) {
                     depth++;
                     in_size = depth == 2 && size_member;
-                    src_member = size_member = y_member = 0;
+                    src_member = size_member = y_member = top_member = 0;
                 } else if (tag == IPP_TAG_END_COLLECTION) {
                     depth--;
                     in_size = 0;
@@ -147,6 +148,7 @@ int ipp_req_parse(ipp_req_t *r, const uint8_t *buf, size_t len)
                     src_member  = depth == 1 && name_is(val, vlen, "media-source");
                     size_member = depth == 1 && name_is(val, vlen, "media-size");
                     y_member    = depth == 2 && in_size && name_is(val, vlen, "y-dimension");
+                    top_member  = depth == 1 && name_is(val, vlen, "media-top-margin");
                 } else {
                     if (mcol && src_member && tag == IPP_TAG_KEYWORD)
                         r->opts.manual = name_is(val, vlen, "manual");
@@ -154,7 +156,12 @@ int ipp_req_parse(ipp_req_t *r, const uint8_t *buf, size_t len)
                         r->opts.media_len = (int32_t)(((uint32_t)val[0] << 24) |
                                                       ((uint32_t)val[1] << 16) |
                                                       ((uint32_t)val[2] << 8) | (uint32_t)val[3]);
-                    src_member = size_member = y_member = 0;
+                    // No top margin: only the roll has none (Letter's is 1 in), so a banner
+                    // cut within 1/8 in of Letter's length still asks for the roll.
+                    if (mcol && top_member && tag == IPP_TAG_INTEGER && vlen == 4 &&
+                        !(val[0] | val[1] | val[2] | val[3]))
+                        r->opts.media_roll = 1;
+                    src_member = size_member = y_member = top_member = 0;
                 }
             }
             continue;
@@ -166,7 +173,7 @@ int ipp_req_parse(ipp_req_t *r, const uint8_t *buf, size_t len)
         mcol = group == IPP_TAG_JOB && tag == IPP_TAG_BEGIN_COLLECTION &&
                name_is(name, nlen, "media-col");
         depth = tag == IPP_TAG_BEGIN_COLLECTION;
-        src_member = size_member = in_size = y_member = 0;
+        src_member = size_member = in_size = y_member = top_member = 0;
 
         // Job attributes may legally repeat operation-attribute names with
         // different meaning, so each group has its own list: the job group's

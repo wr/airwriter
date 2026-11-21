@@ -171,9 +171,11 @@ static void test_job_input_slot_from_a_mac(void)
     CHECK_EQ_INT(r.opts.manual, 0);
 }
 
-/* W-1173: a job asks for continuous paper by the length in its media-col's media-size, or by
- * naming a roll or custom paper in `media` or `PageSize`. */
-static void job_with_size(bld_t *m, uint8_t group, const char *col, int32_t x, int32_t y)
+/* W-1173: a job asks for continuous paper by the length in its media-col's media-size, by giving
+ * its paper no top margin, or by naming a roll or custom paper in `media` or `PageSize`. `top` is
+ * media-col's media-top-margin, or -1 for none. */
+static void job_with_size(bld_t *m, uint8_t group, const char *col, int32_t x, int32_t y,
+                          int32_t top)
 {
     hdr(m, IPP_OP_PRINT_JOB, 60);
     u8(m, IPP_TAG_OPERATION);
@@ -185,7 +187,7 @@ static void job_with_size(bld_t *m, uint8_t group, const char *col, int32_t x, i
     if (x) member_i(m, "x-dimension", x);
     if (y) member_i(m, "y-dimension", y);
     attr_raw(m, IPP_TAG_END_COLLECTION, "", NULL, 0);
-    member_i(m, "media-top-margin", 0);
+    if (top >= 0) member_i(m, "media-top-margin", top);
     attr(m, IPP_TAG_MEMBERNAME, "", "media-source");
     attr(m, IPP_TAG_KEYWORD, "", "main");
     attr_raw(m, IPP_TAG_END_COLLECTION, "", NULL, 0);
@@ -205,26 +207,57 @@ static void test_job_media_length(void)
 {
     bld_t m;
     ipp_req_t r;
-    job_with_size(&m, IPP_TAG_JOB, "media-col", 21590, 27940);
+    job_with_size(&m, IPP_TAG_JOB, "media-col", 21590, 27940, 2540);
     CHECK_EQ_INT(ipp_req_parse(&r, m.b, m.n), IPP_REQ_OK);
     CHECK_EQ_INT(r.opts.media_len, 27940);
     CHECK_EQ_INT(r.opts.media_roll, 0);
     CHECK_EQ_INT(r.opts.manual, 0);
-    job_with_size(&m, IPP_TAG_JOB, "media-col", 21590, 101600);
+    job_with_size(&m, IPP_TAG_JOB, "media-col", 21590, 101600, 0);
     CHECK_EQ_INT(ipp_req_parse(&r, m.b, m.n), IPP_REQ_OK);
     CHECK_EQ_INT(r.opts.media_len, 101600);
+    CHECK_EQ_INT(r.opts.media_roll, 1);
     /* x-dimension is never the length. */
-    job_with_size(&m, IPP_TAG_JOB, "media-col", 21590, 0);
+    job_with_size(&m, IPP_TAG_JOB, "media-col", 21590, 0, -1);
     CHECK_EQ_INT(ipp_req_parse(&r, m.b, m.n), IPP_REQ_OK);
     CHECK_EQ_INT(r.opts.media_len, 0);
     /* Not the Job group's media-col: another collection, or the Operation group's. */
-    job_with_size(&m, IPP_TAG_JOB, "x-other-col", 21590, 101600);
+    job_with_size(&m, IPP_TAG_JOB, "x-other-col", 21590, 101600, 0);
     CHECK_EQ_INT(ipp_req_parse(&r, m.b, m.n), IPP_REQ_OK);
     CHECK_EQ_INT(r.opts.media_len, 0);
-    job_with_size(&m, IPP_TAG_OPERATION, "media-col", 21590, 101600);
+    CHECK_EQ_INT(r.opts.media_roll, 0);
+    job_with_size(&m, IPP_TAG_OPERATION, "media-col", 21590, 101600, 0);
     CHECK_EQ_INT(ipp_req_parse(&r, m.b, m.n), IPP_REQ_OK);
     CHECK_EQ_INT(r.opts.media_len, 0);
+    CHECK_EQ_INT(r.opts.media_roll, 0);
     CHECK(strcmp(r.job_name, "Banner") == 0);
+
+    /* A banner cut within 1/8 in of 11 in has Letter's length, but no top margin: Letter's is
+     * 1 in, so a 0 asks for the roll (Fable's review). No margin sent, or Letter's, is not. */
+    job_with_size(&m, IPP_TAG_JOB, "media-col", 21590, 27940, 0);
+    CHECK_EQ_INT(ipp_req_parse(&r, m.b, m.n), IPP_REQ_OK);
+    CHECK_EQ_INT(r.opts.media_len, 27940);
+    CHECK_EQ_INT(r.opts.media_roll, 1);
+    job_with_size(&m, IPP_TAG_JOB, "media-col", 21590, 27940, -1);
+    CHECK_EQ_INT(ipp_req_parse(&r, m.b, m.n), IPP_REQ_OK);
+    CHECK_EQ_INT(r.opts.media_roll, 0);
+    job_with_size(&m, IPP_TAG_JOB, "media-col", 21590, 27940, 1);
+    CHECK_EQ_INT(ipp_req_parse(&r, m.b, m.n), IPP_REQ_OK);
+    CHECK_EQ_INT(r.opts.media_roll, 0);
+    /* Only media-col's own media-top-margin: not one inside its media-size, and not one sent as
+     * anything but a 4-byte integer. */
+    hdr(&m, IPP_OP_PRINT_JOB, 63);
+    u8(&m, IPP_TAG_JOB);
+    attr_raw(&m, IPP_TAG_BEGIN_COLLECTION, "media-col", NULL, 0);
+    attr(&m, IPP_TAG_MEMBERNAME, "", "media-size");
+    attr_raw(&m, IPP_TAG_BEGIN_COLLECTION, "", NULL, 0);
+    member_i(&m, "media-top-margin", 0);
+    attr_raw(&m, IPP_TAG_END_COLLECTION, "", NULL, 0);
+    attr(&m, IPP_TAG_MEMBERNAME, "", "media-top-margin");
+    attr(&m, IPP_TAG_KEYWORD, "", "0");
+    attr_raw(&m, IPP_TAG_END_COLLECTION, "", NULL, 0);
+    u8(&m, IPP_TAG_END);
+    CHECK_EQ_INT(ipp_req_parse(&r, m.b, m.n), IPP_REQ_OK);
+    CHECK_EQ_INT(r.opts.media_roll, 0);
 
     /* A y-dimension straight in media-col, outside its media-size, is not the paper's. */
     hdr(&m, IPP_OP_PRINT_JOB, 62);

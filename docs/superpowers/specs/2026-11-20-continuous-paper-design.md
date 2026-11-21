@@ -96,9 +96,11 @@ the icons (SPEC §3.5).
 ### Which pages print continuous
 
 - **The job asks for it.** `ipp_req` reads the Job group's `media-col` `media-size`
-  `y-dimension`, and the `media` and `PageSize` keywords. A length more than 1/8 in from Letter's
-  27940, or a keyword naming a roll or a custom size (`roll_`, `custom_`, `Custom.`), makes every
-  page of the job continuous.
+  `y-dimension` and `media-top-margin`, and the `media` and `PageSize` keywords. A length more
+  than 1/8 in from Letter's 27940, a top margin of 0, or a keyword naming a roll or a custom size
+  (`roll_`, `custom_`, `Custom.`), makes every page of the job continuous. The top margin is
+  there for a banner cut within 1/8 in of 11 in, which has Letter's length; only the roll has no
+  top margin (a review on Fable found the gap).
 - **The page is longer than Letter.** Otherwise a page more than 1/8 in longer than 11 in prints
   continuous; anything else prints as Letter does today. A shorter page (the 2 × 1 in checker
   fixture) stays on the Letter path, so `checker.expected.bin` and the on-board checker test are

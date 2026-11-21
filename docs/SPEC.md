@@ -331,8 +331,9 @@ for a banner too, with the strip in its preview. A Mac turns the range into cust
 so 1 in top and 0.5 in bottom; a queue added before keeps its PPD until removed and added again.
 No UUID epoch bump: iOS asked for `media-col-ready` at every print sheet, and a new UUID would
 orphan every Mac's queue. A job asks for the roll by its media-col's `y-dimension` (more than
-1/8 in from Letter's) or by `media`/`PageSize` naming a roll or custom size (`ipp_req`,
-`printer_caps_wants_roll`); how a roll page prints is §3.8.*
+1/8 in from Letter's), by a media-col `media-top-margin` of 0 (only the roll has none, so a
+banner cut within 1/8 in of 11 in still asks), or by `media`/`PageSize` naming a roll or custom
+size (`ipp_req`, `printer_caps_wants_roll`); how a roll page prints is §3.8.*
 
 **`printer-icons`.** Three PNGs served on the IPP port itself,
 `http://<host>.local:631/<set>-{48,128,512}.png`, smallest first as IPP Everywhere orders
