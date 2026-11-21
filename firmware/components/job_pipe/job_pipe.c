@@ -195,10 +195,14 @@ static void pipe_task(void *arg)
                  u.is_pwg ? " -- looks like PWG raster, which is not supported" : "");
         s_st.rc = rc;
     } else {
+        // W-1178: an ImageWriter's page has crisp text and lines too, faint hairlines with them:
+        // its rows are 1/72 in, so a hairline averages to a gray of about 245 before it is seen.
         ripjob_cfg_t base = {
             .out     = count_out,
             .dither  = s_cfg.dither,
             .gain    = s_cfg.gain,
+            .lineart = 1,
+            .lineart_light = 247,
             .top_margin = s_cfg.top_margin,
             .continuous = s_continuous,
             .page_done = page_ended,

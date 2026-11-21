@@ -168,6 +168,64 @@ static void test_soft_border(void)
     }
 }
 
+// W-1178: a faint hairline, as an ImageWriter's 1/72 in rows average one (245): no line at
+// the 300's 231, a line one dot wide at the ImageWriter's 247. A lone pale dot on white paper is
+// no line: it goes, rather than print as a black speck.
+static int run_light(int light)
+{
+    la_t la;
+    CHECK_EQ_INT(la_init(&la, W), 0);
+    la.light = light;
+    la_page(&la);
+    int n = 0;
+    const uint8_t *o;
+    for (int y = 0; y < H; y++)
+        if ((o = la_push(&la, g_in[y]))) memcpy(g_out[n++], o, W);
+    while ((o = la_flush(&la))) memcpy(g_out[n++], o, W);
+    la_free(&la);
+    return n;
+}
+
+static void test_faint_line(void)
+{
+    paper(255);
+    box(8, 30, 88, 31, 245);
+    g_in[12][40] = 240;                                     // a lone pale dot
+    CHECK_EQ_INT(run_light(231), H);
+    CHECK(!memcmp(g_out, g_in, sizeof g_in));
+    CHECK_EQ_INT(run_light(247), H);
+    for (int x = 10; x < 86; x++) CHECK_EQ_INT(g_out[30][x], 0);
+    CHECK_EQ_INT(g_out[12][40], 255);                       // paper, not a black speck
+}
+
+// A thin light line at a slant goes on along itself through a corner, not only beside it: a
+// 45° line, a steep one and a shallow one all print, ends and all, at 231 as at 247 (the
+// review of W-1178).
+static void test_slanted_light_lines(void)
+{
+    static const struct { int dx, dy; } slope[] = { { 1, 1 }, { 1, 3 }, { 8, 1 } };
+    for (int light = 231; light <= 247; light += 16)
+        for (size_t k = 0; k < sizeof slope / sizeof slope[0]; k++) {
+            paper(255);
+            int n = 0;
+            for (int t = 0; t < 40; t++) {
+                int x, y;
+                if (slope[k].dx > slope[k].dy) x = 20 + t, y = 10 + t / slope[k].dx;
+                else x = 20 + t / slope[k].dy, y = 10 + t;
+                if (x < W && y < H) g_in[y][x] = 210, n++;
+            }
+            CHECK_EQ_INT(run_light(light), H);
+            int black = 0, other = 0;
+            for (int y = 0; y < H; y++)
+                for (int x = 0; x < W; x++) {
+                    if (g_in[y][x] == 210) black += g_out[y][x] == 0;
+                    else other += g_out[y][x] != 255;
+                }
+            CHECK_EQ_INT(black, n);
+            CHECK_EQ_INT(other, 0);
+        }
+}
+
 // Wide areas and photos with no paper around: untouched.
 static void test_no_paper(void)
 {
@@ -199,6 +257,8 @@ int main(void)
     test_wide_gray();
     test_black_wide();
     test_pale_grain();
+    test_faint_line();
+    test_slanted_light_lines();
     test_soft_border();
     test_no_paper();
     TEST_END;

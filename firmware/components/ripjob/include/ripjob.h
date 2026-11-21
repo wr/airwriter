@@ -82,10 +82,13 @@ typedef struct {
     // inks. NULL is none. Kept by pointer, so it has to outlive the job.
     const uint8_t *tone;
 
-    // W-1174: text and thin lines on paper decided ahead of the screen (lineart.h), each gray
-    // page's rows coming out ten rows behind. A colour page in four inks has none, and a page
-    // with no memory for it prints without (logged).
+    // W-1174: text and thin lines on paper decided ahead of the screen (lineart.h), each
+    // page's rows coming out ten rows behind; a page with no memory for it prints without
+    // (logged). W-1178: a colour page's too, its gray deciding and only its gray pixels changed.
     int         lineart;
+    // The lightest gray a thin light line may be (lineart.h la_t.light): 0 is 231. A printer
+    // whose rows average a hairline nearly away takes it lighter: an ImageWriter's, 247.
+    int         lineart_light;
 
     // The top margin setting, in 1/144 in: positive adds that much blank
     // paper ahead of each page, negative drops the page's first rows, which
