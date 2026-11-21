@@ -60,6 +60,8 @@
 #include "memdiag.h"
 #include "chip_temp.h"
 #include "logbook.h"
+#include "ports.h"
+#include "port_detect_core.h"
 #include "esp_app_desc.h"
 #include "esp_partition.h"
 #if CONFIG_BOOTLOADER_RESERVE_RTC_MEM
@@ -568,6 +570,14 @@ static void general_saved(void *ctx)
         s_set.rainbow = fresh.rainbow;
         led_grid_set_gamer(s_set.rainbow);
     }
+    // W-1179: a socket set to a job takes it as soon as no job holds the lock (sock_jobs_tick).
+    for (int i = 0; i < 2; i++) {
+        if (fresh.port_set[i] == s_set.port_set[i]) continue;
+        s_set.port_set[i] = fresh.port_set[i];
+        ESP_LOGI(TAG, "port %d set to %s", i + 1, fresh.port_set[i] == SET_PORT_PRINTER ? "printer"
+                 : fresh.port_set[i] == SET_PORT_LOCALTALK ? "localtalk" : "auto");
+        if (s_kick_handle) xTaskAbortDelay(s_kick_handle);
+    }
 }
 
 static const char *ribbon_name(uint8_t r)
@@ -800,6 +810,26 @@ static int colour_ok(void *ctx)
 // Only after the line was down a second or more (power, SELECT, the lid) or
 // at its first report: the printer's own busy blips are not a ribbon swap,
 // and a check whose CR blipped the line must not schedule the next.
+
+static void printer_line_changed(void *ctx, int ready);
+static void printer_clock_changed(void *ctx, int clocked, int hz);
+
+// W-1179: the socket whose printer line is selected (ports.h: 0 J2, 1 J4), -1 for none.
+// Changed only under the job lock (printer_sock_select). One printer port for now: with both
+// sockets doing the printer job, J2's.
+static volatile int s_psock;
+static qd_link_cfg_t s_qd_cfg[PORTS_MAX];
+
+// serial_out's callbacks, each with its socket: the selected one's is the printer port's line.
+static void sock_line(void *ctx, int ready)
+{
+    if ((int)(intptr_t)ctx == s_psock) printer_line_changed(NULL, ready);
+}
+
+static void sock_clock(void *ctx, int clocked, int hz)
+{
+    if ((int)(intptr_t)ctx == s_psock) printer_clock_changed(NULL, clocked, hz);
+}
 
 static void printer_line_changed(void *ctx, int ready)
 {
@@ -2120,6 +2150,9 @@ static int lt_print_end(void *ctx, int normal)
 //              its buffer. printer_state decides when (idle, busy 5 s, then every 60 s at
 //              most), and only an ImageWriter, or a port nothing has been found on yet (one
 //              left busy at power-up never answers ESC ?), is ever kicked (W-1088).
+static void sock_jobs_tick(void);
+static int  cable_possible(void);
+
 static void kick_task(void *arg)
 {
     (void)arg;
@@ -2130,6 +2163,7 @@ static void kick_task(void *arg)
     for (;;) {
         if (!again) vTaskDelay(pdMS_TO_TICKS(500));
         again = 0;
+        sock_jobs_tick();                    // W-1179: each socket's job, between questions
         port_mode_t mode = printers_port_mode();
         pr_family_t mode_fam = port_fam_of_mode(mode);
         port_fam_sync(mode_fam, 0);
@@ -2916,7 +2950,7 @@ static void test_button(void)
 #if CONFIG_AIRWRITER_PIC_CLK_PIN >= 0
     // A StyleWriter's HSKo says nothing, so a low line is no sign of a cable (W-1103), and a
     // 300's is its clock (W-1102): only an ImageWriter's line, or none known, speaks.
-    if (((port && port_line_speaks()) || id < 0) && !serial_out_clear()) {
+    if (((port && port_line_speaks()) || id < 0) && !serial_out_clear() && cable_possible()) {
         ESP_LOGI(TAG, "test button with the printer not ready: testing the cable");
         if (xTaskCreate(cable_button_task, "cable", 4096, NULL, 3, NULL) != pdPASS)
             xSemaphoreGive(s_job_lock);
@@ -3343,8 +3377,22 @@ static void status_json(void *ctx, char *buf, size_t cap)
     const char *model = swp ? swp->make_model : qdc ? qdc->make_model
                       : printer_caps_imagewriter_model(printers_port_model())->make_model;
 
-    char laser[300], printers[128], temp[48];
+    char laser[300], printers[128], temp[48 + 200];
     chip_temp_json(temp, sizeof temp);
+    // W-1179: each socket's job, and what it is set to ("auto", "printer", "localtalk"; "fixed"
+    // on rev A and the LC, whose sockets have one job each).
+    {
+        size_t n = strlen(temp);
+        n += (size_t)snprintf(temp + n, sizeof temp - n, ",\"ports\":[");
+        for (int i = 0; i < ports_count() && n < sizeof temp; i++) {
+            uint8_t set = s_set.port_set[i];
+            n += (size_t)snprintf(temp + n, sizeof temp - n, "%s{\"port\":%d,\"job\":\"%s\",\"set\":\"%s\"}",
+                                  i ? "," : "", i + 1, ports_job_name(ports_job(i)),
+                                  !ports_either() ? "fixed" : set == SET_PORT_PRINTER ? "printer"
+                                  : set == SET_PORT_LOCALTALK ? "localtalk" : "auto");
+        }
+        if (n < sizeof temp) snprintf(temp + n, sizeof temp - n, "]");
+    }
     laser_status_json(laser, sizeof laser);
     printers_status_json(printers, sizeof printers);
 
@@ -3503,9 +3551,11 @@ static void lt_event(lt_event_t ev)
 static lt_chip_t lt_chip_check(void)
 {
     if (cable_test_lt_busy()) return LT_CHIP_SILENT;
+    int sock = ports_with(PORT_JOB_LOCALTALK);
+    if (sock < 0) return LT_CHIP_UNKNOWN;
     uint16_t id = 0;
-    pic_err_t e = pic_prog_read_id(&id);
-    ESP_LOGW(TAG, "LocalTalk: U7 reads 0x%04X: %s", id, pic_err_str(e));
+    pic_err_t e = pic_prog_read_id_on(&ports_sock(sock)->pic, &id);
+    ESP_LOGW(TAG, "LocalTalk: %s reads 0x%04X: %s", sock ? "U7" : "U10", id, pic_err_str(e));
     switch (e) {
     case PIC_ERR_NO_DEVICE:    return LT_CHIP_NONE;
     case PIC_OK:
@@ -3514,15 +3564,40 @@ static lt_chip_t lt_chip_check(void)
     }
 }
 
+// W-1179: U10, J2's TashTalk on rev 2026.11, ships blank. Soldered in, it is there only for
+// TashTalk, so the first time J2 is to do LocalTalk and its PIC answers with no TashTalk on it,
+// TashTalk goes on (U7, socketed, is left to the page's button). The caller holds the job lock;
+// J2 does LocalTalk and nothing holds its PIC's pins. 1 when flashed.
+static int u10_flash_if_blank(int sock)
+{
+    if (sock != 0 || !ports_either()) return 0;
+    pic_pins_t pins = ports_sock(0)->pic;
+    pins.keep_reset = 0;
+    uint16_t id = 0;
+    pic_err_t e = pic_prog_read_id_on(&pins, &id);
+    if (e != PIC_OK) {
+        ESP_LOGW(TAG, "port 1: U10 reads 0x%04X: %s", id, pic_err_str(e));
+        return 0;
+    }
+    ESP_LOGW(TAG, "port 1: U10 has no TashTalk: installing it");
+    led_grid_action(LG_ACT_PIC_FLASHING, 0);
+    pic_result_t r;
+    e = pic_prog_flash_tashtalk_on(&pins, &r);
+    led_grid_action(e == PIC_OK ? LG_ACT_PIC_OK : LG_ACT_PIC_FAILED, 0);
+    return e == PIC_OK;
+}
+
 static SemaphoreHandle_t s_lt_mx;   // one start or probe at a time: page, boot
 
-static localtalk_cfg_t lt_cfg(void)
+// W-1179: on the socket doing LocalTalk (J4 on rev A; either on rev 2026.11).
+static localtalk_cfg_t lt_cfg(int sock)
 {
+    const port_sock_t *ps = ports_sock(sock);
     return (localtalk_cfg_t){
         .uart_num = CONFIG_AIRWRITER_LT_UART_NUM,
-        .tx_pin   = CONFIG_AIRWRITER_PIC_CLK_PIN,
-        .rx_pin   = CONFIG_AIRWRITER_PIC_DAT_PIN,
-        .cts_pin  = CONFIG_AIRWRITER_LT_CTS_PIN,
+        .tx_pin   = ps ? ps->pic.clk : -1,
+        .rx_pin   = ps ? ps->pic.dat : -1,
+        .cts_pin  = ps ? ps->lt_cts : -1,
         .object   = s_set.queue,
         .type     = CONFIG_AIRWRITER_LT_NBP_TYPE,
         .status   = lt_status(printer_state_view().state, AT_LINK_CABLE),
@@ -3544,10 +3619,21 @@ static void lt_go(const char *why, int probe_only)
         xSemaphoreGive(s_lt_mx);
         return;
     }
+    // W-1179: no socket does LocalTalk (two printers on rev 2026.11): nothing to start.
+    int sock = ports_with(PORT_JOB_LOCALTALK);
+    if (sock < 0) {
+        xSemaphoreGive(s_lt_mx);
+        return;
+    }
     // Started mid cable test: let the test give UART2 back first.
     for (int i = 0; i < 30 && cable_test_lt_busy(); i++) vTaskDelay(pdMS_TO_TICKS(10));
-    localtalk_cfg_t c = lt_cfg();
+    localtalk_cfg_t c = lt_cfg(sock);
     esp_err_t err = probe_only ? localtalk_probe(&c) : localtalk_start(&c);
+    if (err == ESP_ERR_NOT_FOUND && sock == 0 && xSemaphoreTake(s_job_lock, 0) == pdTRUE) {
+        int flashed = u10_flash_if_blank(0);
+        xSemaphoreGive(s_job_lock);
+        if (flashed) err = probe_only ? localtalk_probe(&c) : localtalk_start(&c);
+    }
     if (err == ESP_ERR_NOT_FOUND) {
         s_lt_chip = lt_chip_check();
         ESP_LOGW(TAG, "LocalTalk (%s): %s", why, lt_chip_name(s_lt_chip));
@@ -3669,12 +3755,21 @@ static void et_start(void)
     if (err != ESP_OK) ESP_LOGE(TAG, "EtherTalk did not start: %s", esp_err_to_name(err));
 }
 
-static void localtalk_flash(void *ctx, char *buf, size_t cap)
+static void localtalk_flash(void *ctx, int port, char *buf, size_t cap)
 {
     (void)ctx;
+    // W-1179: which TashTalk: port 1 or 2 names a socket's (rev 2026.11), 0 the LocalTalk
+    // socket's. Rev A has one, J4's U7.
+    int sock = port >= 1 && port <= ports_count() ? port - 1 : ports_with(PORT_JOB_LOCALTALK);
+    const port_sock_t *ps = ports_sock(sock);
+    if (!ps || !ps->can_lt) {
+        snprintf(buf, cap, "{\"ok\":false,\"err\":\"No TashTalk chip on that port\"}");
+        return;
+    }
+    int lt_here = ports_job(sock) == PORT_JOB_LOCALTALK;
     // The node holds the PIC's UART pins; flashing would fight it. "err", as
     // pic_result_json has it, is what the page shows.
-    if (localtalk_running()) {
+    if (lt_here && localtalk_running() && !localtalk_parked()) {
         snprintf(buf, cap, "{\"ok\":false,\"err\":\"TashTalk is already installed\"}");
         return;
     }
@@ -3687,15 +3782,21 @@ static void localtalk_flash(void *ctx, char *buf, size_t cap)
     pic_result_t r;
     on_activity();
     led_grid_action(LG_ACT_PIC_FLASHING, 0);
-    pic_err_t err = pic_prog_flash_tashtalk(&r);
+    // A socket doing the printer job keeps its PIC in reset afterwards (ports.h).
+    pic_pins_t pins = ps->pic;
+    pins.keep_reset = !lt_here;
+    pic_err_t err = pic_prog_flash_tashtalk_on(&pins, &r);
     xSemaphoreGive(s_job_lock);
     led_grid_action(err == PIC_OK ? LG_ACT_PIC_OK : LG_ACT_PIC_FAILED, 0);
     pic_result_json(&r, buf, cap);
     // W-1081: TashTalk is on the chip now. A port that was wanted (or the
-    // printers' lookups, W-1088) starts with no restart; otherwise U7 is only
-    // asked, for the card.
-    if (err == PIC_OK) {
-        if (!lt_wanted() && !s_laser_cable) lt_go("TashTalk flashed", 1);
+    // printers' lookups, W-1088) starts with no restart; otherwise the chip is only
+    // asked, for the card. W-1179: a parked node moves onto it.
+    if (err == PIC_OK && lt_here) {
+        if (localtalk_running() && localtalk_parked()) {
+            localtalk_cfg_t c = lt_cfg(sock);
+            if (localtalk_move(&c) == ESP_OK) s_lt_chip = LT_CHIP_OK;
+        } else if (!lt_wanted() && !s_laser_cable) lt_go("TashTalk flashed", 1);
         else {
             lt_start("TashTalk flashed");
             lt_roles_apply();
@@ -3709,6 +3810,11 @@ static void cable_web(void *ctx, int both, char *buf, size_t cap)
     (void)ctx;
     (void)both;
 #if CONFIG_AIRWRITER_PIC_CLK_PIN >= 0
+    // W-1179: two printers on rev 2026.11 leave no TashTalk to test with.
+    if (!cable_possible()) {
+        snprintf(buf, cap, "{\"ok\":false,\"error\":\"no LocalTalk port\"}");
+        return;
+    }
     if (xSemaphoreTake(s_job_lock, 0) != pdTRUE) {
         snprintf(buf, cap, "{\"ok\":false,\"error\":\"The printer is busy. Try again when "
                  "it’s done\"}");
@@ -3722,6 +3828,166 @@ static void cable_web(void *ctx, int both, char *buf, size_t cap)
 #else
     snprintf(buf, cap, "{\"ok\":false,\"error\":\"no LocalTalk port\"}");
 #endif
+}
+
+// ---------------------------------------------------------- the sockets
+// W-1179: on rev 2026.11 either socket takes either job (ports.h). What each does is decided
+// here and handed over under the job lock; the rest of the board follows: the printer line is
+// selected on a socket doing the printer job, and LocalTalk runs on the one doing LocalTalk,
+// never two.
+
+// Socket i's job at boot: its setting if it names one, else what it last did, else J2 the
+// printer and J4 LocalTalk (rev A's, and rev 2026.11's before W-1179).
+static port_job_t sock_job_saved(int i)
+{
+    if (s_set.port_set[i] == SET_PORT_PRINTER) return PORT_JOB_PRINTER;
+    if (s_set.port_set[i] == SET_PORT_LOCALTALK) return PORT_JOB_LOCALTALK;
+    if (s_set.port_job[i] == PORT_JOB_PRINTER || s_set.port_job[i] == PORT_JOB_LOCALTALK)
+        return (port_job_t)s_set.port_job[i];
+    return i ? PORT_JOB_LOCALTALK : PORT_JOB_PRINTER;
+}
+
+// The printer line's socket, under the job lock (or before anything runs). What was heard on
+// the old socket is not the new one's: as a printer unplugged and another plugged in. The new
+// socket's line is reported afresh by serial_out's line task.
+static void printer_sock_select(int i)
+{
+    if (i == s_psock) return;
+    ESP_LOGI(TAG, "printer port: port %d", i + 1);
+    s_psock = -1;                            // the old socket's callbacks stop counting
+    if (i >= 0) {
+        serial_out_select(i);
+        qd_link_init(&s_qd_cfg[i]);
+    }
+    if (s_clocked) printer_clock_changed(NULL, 0, 0);
+    printer_line_changed(NULL, 0);
+    s_psock = i;
+    look_ask();
+    if (s_kick_handle) xTaskAbortDelay(s_kick_handle);
+}
+
+// The cable test's pins: the printer line's socket, and the LocalTalk socket's TashTalk.
+static void cable_cfg_apply(void)
+{
+#if CONFIG_AIRWRITER_PIC_CLK_PIN >= 0
+    const port_sock_t *pr = ports_sock(s_psock), *lt = ports_sock(ports_with(PORT_JOB_LOCALTALK));
+    if (!pr || !lt) return;                  // no cable test then (cable_possible)
+    cable_test_cfg_t ct = {
+        .tx_pin  = pr->tx,       .rx_pin = pr->rx,
+        .invert_tx = AW_INVERT_TX,
+        .lt_uart = CONFIG_AIRWRITER_LT_UART_NUM,  .lt_tx  = lt->pic.clk,
+        .lt_rx   = lt->pic.dat,  .lt_cts = lt->lt_cts,
+        .lt_mclr = lt->pic.mclr,
+        // W-1109: rev 2026.11's handshake legs, by socket; -1 on rev A skips them.
+        .hsk_j2_out = CONFIG_AIRWRITER_HSKI_DRV_PIN,     .hsk_j2_in = CONFIG_AIRWRITER_CTS_PIN,
+        .hsk_j4_out = CONFIG_AIRWRITER_J4_HSKO_DRV_PIN,  .hsk_j4_in = CONFIG_AIRWRITER_J4_HSKI_PIN,
+    };
+    cable_test_init(&ct);
+#endif
+}
+
+// A cable test needs a socket on each job.
+static int cable_possible(void)
+{
+    return s_psock >= 0 && ports_with(PORT_JOB_LOCALTALK) >= 0;
+}
+
+// Socket i takes `job`, and what follows: never two LocalTalk sockets (the other takes the
+// printer job), the printer line kept where it is unless its socket leaves the job, LocalTalk
+// moved or parked, the cable test's pins, and the job saved so a restart keeps it. Takes the
+// job lock, waiting up to wait_ms. 0, or -1 when a job held the lock.
+static int sock_job_set(int i, port_job_t job, const char *why, uint32_t wait_ms)
+{
+    if (!ports_either() || i < 0 || i >= ports_count() || ports_job(i) == job) return 0;
+    if (xSemaphoreTake(s_job_lock, pdMS_TO_TICKS(wait_ms)) != pdTRUE) return -1;
+    int other = 1 - i;
+    ESP_LOGW(TAG, "port %d: %s, was %s (%s)", i + 1, ports_job_name(job),
+             ports_job_name(ports_job(i)), why);
+    if (job == PORT_JOB_LOCALTALK) {
+        if (ports_job(other) == PORT_JOB_LOCALTALK) {
+            localtalk_park();
+            ports_hw(other, PORT_JOB_PRINTER);
+            settings_save_port_job(other, PORT_JOB_PRINTER);
+            ESP_LOGW(TAG, "port %d: printer, was localtalk (port %d took LocalTalk)", other + 1,
+                     i + 1);
+        }
+        if (s_psock == i) printer_sock_select(other);
+        ports_hw(i, PORT_JOB_LOCALTALK);
+        if (localtalk_running()) {
+            localtalk_cfg_t c = lt_cfg(i);
+            esp_err_t e = localtalk_move(&c);
+            if (e == ESP_ERR_NOT_FOUND && u10_flash_if_blank(i)) e = localtalk_move(&c);
+            s_lt_chip = e == ESP_OK ? LT_CHIP_OK : lt_chip_check();
+        }
+    } else {
+        if (localtalk_running() && !localtalk_parked()) localtalk_park();
+        ports_hw(i, PORT_JOB_PRINTER);
+        if (s_psock < 0) printer_sock_select(i);
+    }
+    settings_save_port_job(i, job);
+    cable_cfg_apply();
+    xSemaphoreGive(s_job_lock);
+    // A node not yet started starts on its socket now, if it is wanted.
+    if (job == PORT_JOB_LOCALTALK && !localtalk_running()) lt_roles_apply();
+    if (!localtalk_running()) lt_go("its port changed", 1);
+    port_push(printer_state_view().state);
+    return 0;
+}
+
+// What each socket shows, for port_detect_core: its handshake and clock, LocalTalk frames on the
+// LocalTalk socket, framing errors and breaks on a printer socket with no printer showing.
+static pd_t     s_pd;
+static int      s_pd_on;
+static uint32_t s_pd_frames;
+
+static void sock_detect(void)
+{
+    uint32_t now = uptime_ms();
+    if (!s_pd_on) {
+        pd_init(&s_pd, ports_count(), now);
+        s_pd_frames = localtalk_frames();
+        s_pd_on = 1;
+    }
+    uint32_t frames = localtalk_frames(), heard = frames - s_pd_frames;
+    s_pd_frames = frames;
+    int idle = !job_busy() && !s_printing;
+    pd_in_t in[PD_SOCKS] = { 0 };
+    for (int i = 0; i < ports_count() && i < PD_SOCKS; i++) {
+        const port_sock_t *ps = ports_sock(i);
+        int hz;
+        in[i] = (pd_in_t){
+            .job = (uint8_t)ports_job(i), .fixed = s_set.port_set[i] != SET_PORT_AUTO,
+            .can_print = ps->can_print, .can_lt = ps->can_lt,
+            .ready = (uint8_t)serial_out_clear_of(i), .clocked = (uint8_t)serial_out_clock_of(i, &hz),
+        };
+        if (in[i].job == PORT_JOB_LOCALTALK)
+            in[i].frames = heard && !localtalk_parked() ? 1 : 0;
+        // The junk is read under the job lock: a question in flight is reading that UART.
+        if (idle && in[i].job == PORT_JOB_PRINTER && !in[i].clocked && !in[i].ready &&
+            xSemaphoreTake(s_job_lock, 0) == pdTRUE) {
+            int n = serial_out_junk_of(i);
+            xSemaphoreGive(s_job_lock);
+            in[i].junk = (uint8_t)(n > 255 ? 255 : n);
+        }
+    }
+    pd_act_t a;
+    if (pd_tick(&s_pd, in, now, idle, &a) && sock_job_set(a.sock, (port_job_t)a.job,
+                                                          pd_why_name(a.why), 0) == 0)
+        pd_applied(&s_pd, &a, uptime_ms());
+}
+
+// Between the port task's questions: a socket set to a job (/api/general's port1, port2) takes
+// it once no job holds the lock; the others follow what is plugged into them.
+static void sock_jobs_tick(void)
+{
+    if (!ports_either()) return;
+    for (int i = 0; i < ports_count(); i++) {
+        uint8_t set = s_set.port_set[i];
+        port_job_t want = set == SET_PORT_PRINTER ? PORT_JOB_PRINTER
+                        : set == SET_PORT_LOCALTALK ? PORT_JOB_LOCALTALK : PORT_JOB_NONE;
+        if (want != PORT_JOB_NONE && ports_job(i) != want) sock_job_set(i, want, "its setting", 0);
+    }
+    sock_detect();
 }
 
 // ----------------------------------------------------------------- main
@@ -4057,6 +4323,14 @@ void app_main(void)
     snprintf(s_saved_model, sizeof s_saved_model, "%s", s_set.model);
     snprintf(s_saved_name, sizeof s_saved_name, "%s", s_set.name);
     snprintf(s_saved_host, sizeof s_saved_host, "%s", s_set.hostname);
+    // W-1179: each socket's job, before LocalTalk starts on its socket and the printer lines
+    // come up below.
+    {
+        port_job_t jobs[PORTS_MAX];
+        for (int i = 0; i < PORTS_MAX; i++) jobs[i] = sock_job_saved(i);
+        ports_init(s_board_lc, jobs);
+        s_psock = ports_with(PORT_JOB_PRINTER);
+    }
 #if CONFIG_AIRWRITER_LT_BENCH
     lt_start("bench build");
     if (s_set.lt_port == 0) lt_roles_apply();
@@ -4073,69 +4347,39 @@ void app_main(void)
     ht_algo_t algo;
     if (ht_algo_from_name(s_set.dither, &algo)) algo = HT_ATKINSON;
 
-    serial_out_cfg_t ser = {
-        .uart_num        = CONFIG_AIRWRITER_UART_NUM,
-        .tx_pin          = CONFIG_AIRWRITER_TX_PIN,
-        .rx_pin          = CONFIG_AIRWRITER_RX_PIN,
-        .cts_pin         = CONFIG_AIRWRITER_CTS_PIN,
-        .baud            = CONFIG_AIRWRITER_BAUD,
-        .invert_tx       = AW_INVERT_TX,
-        .invert_rx       = AW_INVERT_RX,
-        .invert_cts      = AW_INVERT_CTS,
-        .stall_abort_s   = CONFIG_AIRWRITER_STALL_ABORT,
-        .on_line         = printer_line_changed,
-        .on_clock        = printer_clock_changed,   // W-1102
-        .loopback        = AW_LOOPBACK,
-    };
-    // W-1102: the 300's link, J2's pins; it touches nothing until a question opens it.
-    qd_link_init(&(qd_link_cfg_t){ .uart_num = CONFIG_AIRWRITER_UART_NUM,
-                                   .tx_pin = CONFIG_AIRWRITER_TX_PIN,
-                                   .rx_pin = CONFIG_AIRWRITER_RX_PIN,
-                                   .clk_pin = CONFIG_AIRWRITER_CTS_PIN,
-                                   .invert_tx = AW_INVERT_TX });
-    ESP_ERROR_CHECK(serial_out_init(&ser));
-#if CONFIG_AIRWRITER_J2_DE_PIN >= 0
-    // W-1176: each rev 2026.11 socket can be the printer port or LocalTalk.
-    // Until the page lets you choose, J2 is the printer port and J4 LocalTalk,
-    // as on rev A. J2: its TashTalk (U10) held in reset first, so its pins let
-    // go, then its THVD1452's driver on, carrying UART1's TX (idle high now).
-    // J4: the printer-side pins stay inputs, with no pulls, so U7 owns the line.
-    // U10's programming and CTS lines are pulled down: with U10 in reset nothing
-    // else drives them, and a PIC in reset listens there for the LVP key.
-    gpio_config_t j2_pic = { .pin_bit_mask = 1ULL << CONFIG_AIRWRITER_J2_PIC_MCLR_PIN,
-                             .mode = GPIO_MODE_OUTPUT };
-    gpio_set_level(CONFIG_AIRWRITER_J2_PIC_MCLR_PIN, 0);
-    gpio_config(&j2_pic);
-    gpio_config_t j2_de = { .pin_bit_mask = 1ULL << CONFIG_AIRWRITER_J2_DE_PIN, .mode = GPIO_MODE_OUTPUT };
-    gpio_set_level(CONFIG_AIRWRITER_J2_DE_PIN, 1);
-    gpio_config(&j2_de);
-    gpio_config_t j4_idle = {
-        .pin_bit_mask = 1ULL << CONFIG_AIRWRITER_J4_TX_PIN | 1ULL << CONFIG_AIRWRITER_J4_RX_PIN |
-                        1ULL << CONFIG_AIRWRITER_J4_DE_PIN,
-        .mode = GPIO_MODE_INPUT,
-    };
-    gpio_config(&j4_idle);
-    gpio_config_t j2_pic_idle = {
-        .pin_bit_mask = 1ULL << CONFIG_AIRWRITER_J2_PIC_CLK_PIN | 1ULL << CONFIG_AIRWRITER_J2_PIC_DAT_PIN |
-                        1ULL << CONFIG_AIRWRITER_J2_LT_CTS_PIN,
-        .mode = GPIO_MODE_INPUT,
-        .pull_down_en = GPIO_PULLDOWN_ENABLE,
-    };
-    gpio_config(&j2_pic_idle);
-#endif
-#if CONFIG_AIRWRITER_PIC_CLK_PIN >= 0
-    cable_test_cfg_t ct = {
-        .tx_pin  = CONFIG_AIRWRITER_TX_PIN,       .rx_pin = CONFIG_AIRWRITER_RX_PIN,
-        .invert_tx = AW_INVERT_TX,
-        .lt_uart = CONFIG_AIRWRITER_LT_UART_NUM,  .lt_tx  = CONFIG_AIRWRITER_PIC_CLK_PIN,
-        .lt_rx   = CONFIG_AIRWRITER_PIC_DAT_PIN,  .lt_cts = CONFIG_AIRWRITER_LT_CTS_PIN,
-        .lt_mclr = CONFIG_AIRWRITER_PIC_MCLR_PIN,
-        // W-1109: rev 2026.11's handshake legs; -1 on rev A skips them.
-        .hsk_j2_out = CONFIG_AIRWRITER_HSKI_DRV_PIN,     .hsk_j2_in = CONFIG_AIRWRITER_CTS_PIN,
-        .hsk_j4_out = CONFIG_AIRWRITER_J4_HSKO_DRV_PIN,  .hsk_j4_in = CONFIG_AIRWRITER_J4_HSKI_PIN,
-    };
-    cable_test_init(&ct);
-#endif
+    // W-1179: a printer line on each socket that can print (J2's on
+    // UART1, rev 2026.11's J4 on UART0), parked where the socket does LocalTalk. The printer
+    // port is the first socket doing the printer job.
+    for (int i = 0; i < ports_count(); i++) {
+        const port_sock_t *ps = ports_sock(i);
+        if (!ps->can_print) continue;
+        serial_out_cfg_t ser = {
+            .uart_num        = ps->uart,
+            .tx_pin          = ps->tx,
+            .rx_pin          = ps->rx,
+            .cts_pin         = ps->hski,
+            .baud            = CONFIG_AIRWRITER_BAUD,
+            .invert_tx       = AW_INVERT_TX,
+            .invert_rx       = AW_INVERT_RX,
+            .invert_cts      = AW_INVERT_CTS,
+            .stall_abort_s   = CONFIG_AIRWRITER_STALL_ABORT,
+            .on_line         = sock_line,
+            .on_clock        = sock_clock,     // W-1102
+            .on_line_ctx     = (void *)(intptr_t)i,
+            .loopback        = i == 0 ? AW_LOOPBACK : 0,
+            .start_parked    = ports_job(i) != PORT_JOB_PRINTER,
+        };
+        // W-1102: the 300's link, on this socket's pins; it touches nothing until a question
+        // opens it.
+        s_qd_cfg[i] = (qd_link_cfg_t){ .uart_num = ps->uart, .tx_pin = ps->tx, .rx_pin = ps->rx,
+                                       .clk_pin = ps->hski, .invert_tx = AW_INVERT_TX };
+        ESP_ERROR_CHECK(serial_out_init_port(i, &ser));
+    }
+    if (s_psock >= 0) {
+        serial_out_select(s_psock);
+        qd_link_init(&s_qd_cfg[s_psock]);
+    }
+    cable_cfg_apply();
     // W-1103: the StyleWriter's line, over the port serial_out just brought up.
     stylewriter_cfg_t swc = { .record_is_sw = printers_port_is_stylewriter, .state = sw_state_cb,
                               .cart = sw_cart_seen, .cancelled = sw_cancelled,

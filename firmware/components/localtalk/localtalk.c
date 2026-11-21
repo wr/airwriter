@@ -12,6 +12,9 @@
 #include "esp_heap_caps.h"
 #include "esp_log.h"
 #include "esp_random.h"
+#include "esp_rom_gpio.h"
+#include "soc/gpio_pins.h"
+#include "soc/uart_periph.h"
 #include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
@@ -29,9 +32,13 @@ static const char *TAG = "lt";
 #define JSON_MACS 8         // Macs in /api/lt: eight, named, keep it inside its 4.5 KB
 
 static SemaphoreHandle_t s_lock;
-static int        s_uart = -1, s_cts_pin = -1;
+static int        s_uart = -1, s_cts_pin = -1, s_tx_pin = -1, s_rx_pin = -1;
 static int        s_running;
 static volatile int s_quiet;        // W-1079: switched off on the settings page
+// W-1179: no socket does LocalTalk: the node is quiet and its UART reaches no pin. s_want_on is
+// what localtalk_set_quiet last asked for meanwhile, for when a socket takes the job again.
+static volatile int s_parked;
+static int        s_want_on;
 static lt_cfg_t   s_nc;             // the node's set-up, for coming back on
 static lt_ops_t   s_ops;
 static char       s_obj[NBP_NAME_MAX + 1], s_type[NBP_NAME_MAX + 1];
@@ -61,6 +68,7 @@ __attribute__((constructor)) static void lt_mem_make(void)
     if (!s_mem) abort();
 }
 static unsigned   s_fcs_bad, s_errors, s_tx;
+static volatile uint32_t s_rx_good;   // W-1179: frames with a good FCS, from any node
 static void     (*s_tap)(void *ctx, const uint8_t *f, size_t n);
 // W-1082: answer as the ImageWriter; the PAP client riding the node; where
 // LaserWriters' NBP answers go.
@@ -213,6 +221,7 @@ static void on_frame(void *ctx, tt_event_t ev, const uint8_t *f, size_t n)
         return;
     }
     n -= 2;
+    s_rx_good++;
     if (s_tap) s_tap(s_tap_ctx, f, n);
     if (s_quiet) return;
     // Frames to us, not the Chooser's broadcasts or other nodes' traffic.
@@ -323,6 +332,8 @@ esp_err_t localtalk_start(const localtalk_cfg_t *cfg)
     if (err != ESP_OK) return err;
     s_uart = cfg->uart_num;
     s_cts_pin = cfg->cts_pin;
+    s_tx_pin = cfg->tx_pin;
+    s_rx_pin = cfg->rx_pin;
 
     s_lock = xSemaphoreCreateMutex();
     strncpy(s_obj, cfg->object, sizeof s_obj - 1);
@@ -366,13 +377,19 @@ esp_err_t localtalk_start(const localtalk_cfg_t *cfg)
 }
 
 int localtalk_running(void) { return s_running; }
+uint32_t localtalk_frames(void) { return s_rx_good; }
 int localtalk_quiet(void) { return s_running && s_quiet; }
 int localtalk_serving(void) { return s_running && !s_quiet && s_serve; }
 
 void localtalk_set_quiet(int quiet)
 {
     quiet = quiet ? 1 : 0;
-    if (!s_running || quiet == s_quiet) return;
+    if (!s_running) return;
+    if (s_parked) {
+        s_want_on = !quiet;
+        return;
+    }
+    if (quiet == s_quiet) return;
     xSemaphoreTake(s_lock, portMAX_DELAY);
     uint64_t now = now_ms();
     if (quiet) {
@@ -399,6 +416,71 @@ void localtalk_set_quiet(int quiet)
         op_log(NULL, "the AppleTalk port is on");
     }
     xSemaphoreGive(s_lock);
+}
+
+// W-1179: the UART's inputs from no pad: RX idles high (no bytes), CTS high holds TX. Its
+// output pad goes back to a plain GPIO. Under s_lock.
+static void pins_drop(void)
+{
+    uart_wait_tx_done(s_uart, pdMS_TO_TICKS(20));
+    esp_rom_gpio_connect_in_signal(GPIO_MATRIX_CONST_ONE_INPUT,
+                                   UART_PERIPH_SIGNAL(s_uart, SOC_UART_RX_PIN_IDX), false);
+    esp_rom_gpio_connect_in_signal(GPIO_MATRIX_CONST_ONE_INPUT,
+                                   UART_PERIPH_SIGNAL(s_uart, SOC_UART_CTS_PIN_IDX), false);
+    gpio_reset_pin(s_tx_pin);
+    gpio_reset_pin(s_rx_pin);
+    if (s_cts_pin >= 0) gpio_reset_pin(s_cts_pin);
+    uart_flush_input(s_uart);
+}
+
+void localtalk_park(void)
+{
+    if (!s_running || s_parked) return;
+    int on = !s_quiet;
+    localtalk_set_quiet(1);
+    xSemaphoreTake(s_lock, portMAX_DELAY);
+    pins_drop();
+    s_want_on = on;
+    s_parked = 1;
+    op_log(NULL, "no socket for LocalTalk");
+    xSemaphoreGive(s_lock);
+}
+
+int localtalk_parked(void) { return s_running && s_parked; }
+
+esp_err_t localtalk_move(const localtalk_cfg_t *cfg)
+{
+    if (!s_running) return ESP_ERR_INVALID_STATE;
+    if (!s_parked) localtalk_park();
+    xSemaphoreTake(s_lock, portMAX_DELAY);
+    uart_set_pin(s_uart, cfg->tx_pin, cfg->rx_pin, UART_PIN_NO_CHANGE,
+                 cfg->cts_pin >= 0 ? cfg->cts_pin : UART_PIN_NO_CHANGE);
+    uart_set_hw_flow_ctrl(s_uart, cfg->cts_pin >= 0 ? UART_HW_FLOWCTRL_CTS
+                                                    : UART_HW_FLOWCTRL_DISABLE, 0);
+    s_tx_pin = cfg->tx_pin;
+    s_rx_pin = cfg->rx_pin;
+    s_cts_pin = cfg->cts_pin;
+    uart_flush_input(s_uart);
+    tt_rx_init(&s_rx);
+    // The start-up sync again, on this socket's TashTalk.
+    static const uint8_t nops[64];
+    for (int i = 0; i < TT_SYNC_LEN / (int)sizeof nops; i++)
+        uart_write_bytes(s_uart, nops, sizeof nops);
+    static const uint8_t features[] = { TT_CMD_FEATURES, 0x00 };
+    uart_write_bytes(s_uart, features, sizeof features);
+    if (uart_wait_tx_done(s_uart, pdMS_TO_TICKS(LT_ALIVE_MS)) != ESP_OK) {
+        uart_flush(s_uart);
+        pins_drop();
+        xSemaphoreGive(s_lock);
+        ESP_LOGW(TAG, "TashTalk on IO%d took none of the sync", cfg->tx_pin);
+        return ESP_ERR_NOT_FOUND;
+    }
+    s_parked = 0;
+    op_log(NULL, "LocalTalk moved");
+    xSemaphoreGive(s_lock);
+    ESP_LOGI(TAG, "LocalTalk now tx IO%d rx IO%d cts IO%d", cfg->tx_pin, cfg->rx_pin, cfg->cts_pin);
+    if (s_want_on) localtalk_set_quiet(0);
+    return ESP_OK;
 }
 
 // W-1088: the cable's offers, in PSRAM (internal RAM is Wi-Fi's), for each new node.

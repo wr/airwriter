@@ -43,6 +43,18 @@ esp_err_t localtalk_start(const localtalk_cfg_t *cfg);
 // UART of cfg are used. ESP_OK at once while the node runs.
 esp_err_t localtalk_probe(const localtalk_cfg_t *cfg);
 int       localtalk_running(void);
+// W-1179: the socket the node is on, on rev 2026.11 where either socket takes LocalTalk.
+// localtalk_park lets go of the pins with the node quiet: no socket does LocalTalk now.
+// localtalk_move puts a running node on another socket's TashTalk (cfg's pins and CTS; the
+// UART stays), syncs it as at start and acquires a node there if it was on; ESP_ERR_NOT_FOUND,
+// parked, when that TashTalk takes none of the sync. Neither stops the node's task. The
+// switch (localtalk_set_quiet) is remembered while parked.
+// Frames TashTalk relayed with a good FCS, from any node, quiet or not, since start: a socket
+// whose count moves has a LocalTalk network on it.
+uint32_t  localtalk_frames(void);
+void      localtalk_park(void);
+int       localtalk_parked(void);
+esp_err_t localtalk_move(const localtalk_cfg_t *cfg);
 // The AppleTalk port's switch on the settings page (W-1079). The node cannot
 // stop once started (it keeps UART2 and its task), so off is quiet: a job is
 // cut short, TashTalk answers for no node and frames are dropped, so the
