@@ -24,6 +24,12 @@ static inline void *big_realloc(void *old, size_t n)
     void *p = heap_caps_realloc(old, n, BIGMEM_CAPS);
     return p ? p : realloc(old, n);
 }
+// PSRAM or nothing, for a buffer a job can do without (W-1174's text and lines): never
+// internal RAM.
+static inline void *big_malloc_only(size_t n)
+{
+    return heap_caps_malloc(n, BIGMEM_CAPS);
+}
 #else
 #ifdef BIGMEM_COUNT
 // A host test that wants to know what a stage asks for defines BIGMEM_COUNT, defines
@@ -37,4 +43,5 @@ extern size_t big_asked_bytes, big_asked_n;
 static inline void *big_malloc(size_t n) { BIGMEM_ASK(n); return malloc(n); }
 static inline void *big_calloc(size_t n, size_t size) { BIGMEM_ASK(n * size); return calloc(n, size); }
 static inline void *big_realloc(void *old, size_t n) { BIGMEM_ASK(n); return realloc(old, n); }
+static inline void *big_malloc_only(size_t n) { BIGMEM_ASK(n); return malloc(n); }
 #endif

@@ -2,6 +2,7 @@
 #include "ripjob.h"
 #include "bigmem.h"
 #include "resample.h"
+#include "lineart.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -25,10 +26,19 @@ typedef struct {
     uint8_t  *ibits[IW_INKS];
     uint8_t  *gray;          // an RGB row as gray, for a black ribbon
     uint32_t  skip;          // rows of this page still to drop (top_margin < 0)
+    // W-1174: text and thin lines (cfg->lineart, a gray page): rows go through it first.
+    la_t      la;
+    int       la_on;
+    // A colour page's text and lines (W-1178): its RGB rows held while the gray goes through,
+    // LA_DELAY + 1 of them, and the gray of the row going in.
+    uint8_t  *la_rgb;
+    uint8_t  *la_gray;
+    int32_t   la_in;                    // RGB rows taken, and rows the text and lines gave back
+    int32_t   la_out;
     uint32_t  room;          // W-1173: rows the roll has left for this page; UINT32_MAX off it
     int       spilled;       // W-1173: rows came past the roll's end
     // W-1143: this page's time in each part, in us (ripjob.h), while cfg->clock_us is set.
-    uint32_t  t_read, t_scale, t_screen, t_second, t_out, t_emit;
+    uint32_t  t_read, t_scale, t_screen, t_second, t_out, t_emit, t_line;
 } pipe_t;
 
 static inline uint32_t clk(const pipe_t *p)
@@ -50,11 +60,10 @@ static void say(const ripjob_cfg_t *cfg, const char *fmt, ...)
     cfg->log(cfg->log_ctx, msg);
 }
 
-// One resampled row: halftone it, hand it to the printer stage, and show it to
-// whoever asked for rows.
-static void on_row(void *ctx, const uint8_t *row, uint32_t w)
+// One page row, its text and lines decided: halftone it, hand it to the printer stage, and
+// show it to whoever asked for rows.
+static void screen_row(pipe_t *p, const uint8_t *row, uint32_t w)
 {
-    pipe_t *p = (pipe_t *)ctx;
     uint32_t t0 = clk(p), t1 = t0, t2;
     if (p->cfg->stage && p->cfg->stage->gray_row) {
         p->cfg->stage->gray_row(p->cfg->stage->ctx, row, w);
@@ -75,11 +84,27 @@ static void on_row(void *ctx, const uint8_t *row, uint32_t w)
     p->t_emit   += t3 - t0;
 }
 
-// One resampled RGB row of a colour page: split it into inks, halftone each,
-// and hand the four rows to the colour strip writer, or to a stage that takes them.
-static void on_rgb_row(void *ctx, const uint8_t *row, uint32_t w)
+// One resampled row: through the text and lines (W-1174), which hands back the row ten above
+// it once there is one, then to its screen.
+static void on_row(void *ctx, const uint8_t *row, uint32_t w)
 {
     pipe_t *p = (pipe_t *)ctx;
+    if (p->la_on) {
+        uint32_t t0 = clk(p);
+        row = la_push(&p->la, row);
+        uint32_t t1 = clk(p);
+        p->t_line += t1 - t0;
+        p->t_emit += t1 - t0;
+        if (!row) return;
+    }
+    screen_row(p, row, w);
+}
+
+
+// One RGB page row, its text and lines decided: split it into inks, halftone each,
+// and hand the four rows to the colour strip writer, or to a stage that takes them.
+static void screen_rgb_row(pipe_t *p, const uint8_t *row, uint32_t w)
+{
     uint32_t t0 = clk(p);
     ink_screens_row(&p->inks, row, p->ibits);
     uint32_t t1 = clk(p);
@@ -94,6 +119,65 @@ static void on_rgb_row(void *ctx, const uint8_t *row, uint32_t w)
     p->t_screen += t1 - t0;
     p->t_out    += t2 - t1;
     p->t_emit   += t2 - t0;
+}
+
+// W-1178: a colour row's text and lines. Where the gray came out decided (`dec`, lineart.h)
+// and the pixel is a gray (black text, a gray line), it becomes that black or paper; a
+// coloured pixel keeps its colour, so blue text stays blue.
+#define LA_NEUTRAL 48
+static void la_apply_rgb(uint8_t *rgb, const uint8_t *dec, uint32_t w)
+{
+    for (uint32_t x = 0; x < w; x++, rgb += 3) {
+        uint8_t r = rgb[0], g = rgb[1], b = rgb[2];
+        uint8_t hi = r > g ? (r > b ? r : b) : (g > b ? g : b);
+        uint8_t lo = r < g ? (r < b ? r : b) : (g < b ? g : b);
+        if (hi - lo >= LA_NEUTRAL) continue;
+        uint8_t was = (uint8_t)((77u * r + 150u * g + 29u * b + 128u) >> 8);
+        if (dec[x] == was) continue;
+        rgb[0] = rgb[1] = rgb[2] = dec[x];
+    }
+}
+
+static uint8_t *la_rgb_row(const pipe_t *p, int32_t y, uint32_t w)
+{
+    return p->la_rgb + (size_t)(y % (LA_DELAY + 1)) * w * 3;
+}
+
+// One resampled RGB row: through the text and lines when the page has them (its gray decides,
+// ten rows behind), then to its screens.
+static void on_rgb_row(void *ctx, const uint8_t *row, uint32_t w)
+{
+    pipe_t *p = (pipe_t *)ctx;
+    if (!p->la_rgb) {
+        screen_rgb_row(p, row, w);
+        return;
+    }
+    uint32_t t0 = clk(p);
+    memcpy(la_rgb_row(p, p->la_in, w), row, (size_t)w * 3);
+    ink_gray(row, w, p->la_gray);
+    const uint8_t *dec = la_push(&p->la, p->la_gray);
+    p->la_in++;
+    int32_t y = dec ? p->la_out++ : 0;        // a row comes back for each taken, in order
+    if (dec) la_apply_rgb(la_rgb_row(p, y, w), dec, w);
+    uint32_t t1 = clk(p);
+    p->t_line += t1 - t0;
+    p->t_emit += t1 - t0;
+    if (dec) screen_rgb_row(p, la_rgb_row(p, y, w), w);
+}
+
+// The page's last rows, held for the ten below them.
+static void la_end(pipe_t *p, uint32_t w)
+{
+    for (;;) {
+        uint32_t t0 = clk(p);
+        const uint8_t *row = la_flush(&p->la);
+        int32_t y = row ? p->la_out++ : 0;    // counted as they come: a page under ten rows
+        if (row && p->la_rgb) la_apply_rgb(la_rgb_row(p, y, w), row, w);   // gives fewer
+        p->t_line += clk(p) - t0;
+        if (!row) break;
+        if (p->la_rgb) screen_rgb_row(p, la_rgb_row(p, y, w), w);
+        else screen_row(p, row, w);
+    }
 }
 
 // Apple's drivers start a page on the screen's second row (apple_tables.h).
@@ -271,6 +355,7 @@ int ripjob_run(urf_t *u, const ripjob_cfg_t *cfg, ripjob_stats_t *st)
             }
             inks_ready = 1;
             if (cfg->tone) ink_screens_set_tone(&p->inks, cfg->tone);
+            ink_screens_set_inkjet(&p->inks, cfg->inkjet);
             if (cfg->dither == HT_APPLE)
                 for (int i = 0; i < IW_INKS; i++) apple_page_start(&p->inks.ht[i]);
             if (!stage) {
@@ -282,6 +367,24 @@ int ripjob_run(urf_t *u, const ripjob_cfg_t *cfg, ripjob_stats_t *st)
             }
             if (rs_init_n(&rs, src_w, u->page.height, dst_w, dst_h, 3, on_rgb_row, p)) {
                 rc = -1; goto page_cleanup;
+            }
+            // W-1178: text and lines on a colour page, last and from PSRAM only as on a gray
+            // one: its gray decides, its RGB rows held meanwhile.
+            if (cfg->lineart) {
+                p->la_rgb = big_malloc_only((size_t)(LA_DELAY + 1) * dst_w * 3);
+                p->la_gray = big_malloc_only(dst_w);
+                if (!p->la_rgb || !p->la_gray || la_init(&p->la, dst_w)) {
+                    free(p->la_rgb);
+                    free(p->la_gray);
+                    p->la_rgb = p->la_gray = NULL;
+                    say(cfg, "page %d: no memory for crisp text and lines: printed without",
+                        pages + 1);
+                } else {
+                    if (cfg->lineart_light) p->la.light = cfg->lineart_light;
+                    la_page(&p->la);
+                    p->la_on = 1;
+                    p->la_in = p->la_out = 0;
+                }
             }
         } else {
             p->bits = big_calloc((dst_w + 7) / 8, 1);
@@ -306,6 +409,16 @@ int ripjob_run(urf_t *u, const ripjob_cfg_t *cfg, ripjob_stats_t *st)
             if (rs_init(&rs, src_w, u->page.height, dst_w, dst_h, on_row, p)) {
                 rc = -1; goto page_cleanup;
             }
+            // W-1174: the text and lines last, once all the page needs is had, and only from
+            // PSRAM (lineart.h): no room for them costs the page its crisp edges, not the page.
+            if (cfg->lineart && la_init(&p->la, dst_w))
+                say(cfg, "page %d: no memory for crisp text and lines (%u bytes): printed without",
+                    pages + 1, (unsigned)la_bytes(dst_w));
+            else if (cfg->lineart) {
+                if (cfg->lineart_light) p->la.light = cfg->lineart_light;
+                la_page(&p->la);
+                p->la_on = 1;
+            }
         }
         rs_ready = 1;
 
@@ -313,6 +426,7 @@ int ripjob_run(urf_t *u, const ripjob_cfg_t *cfg, ripjob_stats_t *st)
             const uint8_t *row;
             int r;
             p->t_read = p->t_scale = p->t_screen = p->t_second = p->t_out = p->t_emit = 0;
+            p->t_line = 0;
             uint32_t page_t0 = clk(p), t0 = page_t0, t1, t2;
             // One byte per pixel for gray and three for RGB, so the crop is
             // that many bytes per pixel in.
@@ -334,6 +448,10 @@ int ripjob_run(urf_t *u, const ripjob_cfg_t *cfg, ripjob_stats_t *st)
             }
             t1 = clk(p);
             p->t_read += t1 - t0;
+            if (r >= 0 && p->la_on) {
+                la_end(p, dst_w);
+                t1 = clk(p);
+            }
             t0 = t1;
             if (r < 0) {
                 say(cfg, "page %d incomplete, stream is truncated", pages + 1);
@@ -355,10 +473,11 @@ int ripjob_run(urf_t *u, const ripjob_cfg_t *cfg, ripjob_stats_t *st)
                 t1 = clk(p);
                 uint32_t end = t1 - t0;
                 say(cfg, "page %d: %u ms: read %u, scale %u, screen %u, second screen %u, "
-                         "out %u, end %u", pages + 1, (unsigned)((t1 - page_t0) / 1000),
+                         "out %u, end %u, lines %u", pages + 1, (unsigned)((t1 - page_t0) / 1000),
                     (unsigned)(p->t_read / 1000), (unsigned)(p->t_scale / 1000),
                     (unsigned)(p->t_screen / 1000), (unsigned)(p->t_second / 1000),
-                    (unsigned)(p->t_out / 1000), (unsigned)(end / 1000));
+                    (unsigned)(p->t_out / 1000), (unsigned)(end / 1000),
+                    (unsigned)(p->t_line / 1000));
             }
             // W-1141: the page's last byte has left the rip.
             if (rc >= 0 && cfg->page_done) cfg->page_done(cfg->page_ctx, pages + 1);
@@ -367,6 +486,11 @@ int ripjob_run(urf_t *u, const ripjob_cfg_t *cfg, ripjob_stats_t *st)
 page_cleanup:
         if (rs_ready) rs_free(&rs);
         if (ht_ready) ht_free(&p->ht);
+        if (p->la_on) la_free(&p->la);
+        p->la_on = 0;
+        free(p->la_rgb);
+        free(p->la_gray);
+        p->la_rgb = p->la_gray = NULL;
         free(p->bits);
         p->bits = NULL;
         free(p->gray);

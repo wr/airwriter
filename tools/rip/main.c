@@ -421,9 +421,10 @@ static int print_qd_testpage(const char *path, qd_model_t model, ht_algo_t algo,
     qd_page_cfg_t pc = { .model = model, .screen = algo, .gain = gain,
                          .sink = { qdw_open, qdw_row, qdw_print, qdt_note, &qw } };
     tp_geom_t g;
+    static uint8_t toner[256];
     qd_page_t *qdp = NULL;
     int rc = -1;
-    if (!qd_tp_geom(model, &g) && (qw.sess = qd_session_new(&ops, &jc)) &&
+    if (!qd_tp_geom(model, &g, toner) && (qw.sess = qd_session_new(&ops, &jc)) &&
         (qdp = qd_page_new(&pc)) && !qd_session_begin(qw.sess)) {
         rip_stage_t st;
         qd_page_stage(qdp, &st);
@@ -497,10 +498,13 @@ static void usage(void)
           "           [--out-qd-bits FILE] [--out-pbm FILE]\n"
           "       rip --testpage colour|black|unknown --out-stream FILE [--dither ...] [--gain ...]\n"
           "       rip --sw-testpage black|colour --model M --out-sw FILE [--dither ...] [--gain ...]\n"
+          "  --no-lineart  an ImageWriter page without its crisp text and thin lines (W-1178),\n"
+          "             as the board printed it before\n"
           "  --colour   print RGB pages in four inks, as with the colour ribbon in\n"
           "  --gain     dot gain at a 50%% tint the tone curve makes up for (default 0, off)\n"
           "  --times    log where each page's time went: read, scale, screen, second screen,\n"
-          "             out and end, in ms (W-1143; the board logs the same)\n"
+          "             out, end and lines (W-1174's text and thin lines), in ms (W-1143; the\n"
+          "             board logs the same)\n"
           "  --top-margin  the board's top margin setting, 1/144 in: + adds paper ahead of\n"
           "             each page, - drops its first rows (the board's default is -144)\n"
           "  --testpage the board's test page for that ribbon, as board 1 would print it;\n"
@@ -544,7 +548,7 @@ int main(int argc, char **argv)
     const char *sw_tp = NULL, *qd_tp = NULL;
     const char *out_qd = NULL, *out_qd_bits = NULL, *source = "main";
     int sp_on = 0;
-    int colour = 0, gain = 0, top = 0, hex = 0, times = 0;
+    int colour = 0, gain = 0, top = 0, hex = 0, times = 0, no_lineart = 0;
 
     for (int i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "--in") && i + 1 < argc)               in = argv[++i];
@@ -552,6 +556,7 @@ int main(int argc, char **argv)
         else if (!strcmp(argv[i], "--out-preview") && i + 1 < argc) out_preview = argv[++i];
         else if (!strcmp(argv[i], "--dither") && i + 1 < argc)      dither = argv[++i];
         else if (!strcmp(argv[i], "--colour"))                       colour = 1;
+        else if (!strcmp(argv[i], "--no-lineart"))                   no_lineart = 1;
         else if (!strcmp(argv[i], "--gain") && i + 1 < argc)        gain = atoi(argv[++i]);
         else if (!strcmp(argv[i], "--testpage") && i + 1 < argc)    testpage = argv[++i];
         else if (!strcmp(argv[i], "--top-margin") && i + 1 < argc)  top = atoi(argv[++i]);
@@ -686,6 +691,10 @@ int main(int argc, char **argv)
         .dither   = algo,
         .gain     = gain,
         .colour   = colour,
+        // W-1178: an ImageWriter's page has crisp text and lines, faint hairlines included, as
+        // the board's job_pipe gives it; the other printers' set their own below.
+        .lineart  = !no_lineart && !laser,
+        .lineart_light = 247,
         .top_margin = top,
         .caps     = laser ? &caps : NULL,
         .stage    = laser ? &stage : NULL,

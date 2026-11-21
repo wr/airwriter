@@ -116,23 +116,25 @@ int main(void)
 
     CHECK(lw.tone == NULL);
 
-    // W-1103, a StyleWriter's job: its target's colour and tone curve reach the rip.
-    // The ImageWriter's ribbon is still not asked.
+    // W-1103, a StyleWriter's job: its target's colour, tone curve and (W-1177) inkjet split
+    // reach the rip. The ImageWriter's ribbon is still not asked.
     static const uint8_t tone[256] = { 1, 2, 3 };
     static const rip_stage_t ink_stage = { stage_begin, stage_row, stage_end, NULL, cnt_ink_row, NULL };
     job_pipe_target_t sw = { .caps = &caps, .stage = &ink_stage, .dither = HT_APPLE, .gain = 0,
-                             .colour = 1, .buffered = 1, .tone = tone };
+                             .colour = 1, .buffered = 1, .tone = tone, .inkjet = 1 };
     g_asked = 0;
     ripjob_cfg_t sc = job_pipe_rip_cfg(base, ask_colour, NULL, &sw);
     CHECK_EQ_INT(g_asked, 0);
     CHECK_EQ_INT(sc.colour, 1);
     CHECK(sc.tone == tone);
+    CHECK_EQ_INT(sc.inkjet, 1);
     CHECK_EQ_INT(sc.top_margin, 0);
     CHECK(sc.stage == &ink_stage);
     CHECK_EQ_INT(sc.dither, HT_APPLE);
     sw.colour = 0;
     CHECK_EQ_INT(job_pipe_rip_cfg(base, ask_colour, NULL, &sw).colour, 0);
     CHECK(job_pipe_rip_cfg(base, ask_colour, NULL, NULL).tone == NULL);   // the ImageWriter has none
+    CHECK_EQ_INT(job_pipe_rip_cfg(base, ask_colour, NULL, NULL).inkjet, 0); // and the ribbon's split
 
     // A target's own colour_ok (a StyleWriter is reset and its cartridge read first) is asked
     // once, on the way to the rip, and its answer is the job's colour in place of `colour`;

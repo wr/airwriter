@@ -26,9 +26,61 @@ static void split1(uint8_t r, uint8_t g, uint8_t b, uint8_t out[IW_INKS])
     for (int i = 0; i < IW_INKS; i++) out[i] = p[i][0];
 }
 
+/* W-1177: the inkjet's split of one pixel, through a set of screens with no tone curve. */
+static void jet1(uint8_t r, uint8_t g, uint8_t b, uint8_t out[IW_INKS])
+{
+    ink_screens_t s;
+    const uint8_t rgb[3] = { r, g, b };
+    uint8_t bits[IW_INKS][1];
+    uint8_t *const rows[IW_INKS] = { bits[0], bits[1], bits[2], bits[3] };
+    CHECK_EQ_INT(ink_screens_init(&s, HT_BLUENOISE, 0, 1), 0);
+    ink_screens_set_inkjet(&s, 1);
+    ink_screens_row(&s, rgb, rows);
+    for (int i = 0; i < IW_INKS; i++) out[i] = s.plane[i][0];
+    ink_screens_free(&s);
+}
+
+static void test_inkjet_split(void)
+{
+    uint8_t o[IW_INKS];
+    jet1(255, 255, 255, o);                         /* white: nothing */
+    CHECK_EQ_INT(o[IW_BLACK], 255); CHECK_EQ_INT(o[IW_CYAN], 255);
+    CHECK_EQ_INT(o[IW_MAGENTA], 255); CHECK_EQ_INT(o[IW_YELLOW], 255);
+    jet1(0, 0, 0, o);                               /* black: black alone */
+    CHECK_EQ_INT(o[IW_BLACK], 0); CHECK_EQ_INT(o[IW_CYAN], 255);
+    CHECK_EQ_INT(o[IW_MAGENTA], 255); CHECK_EQ_INT(o[IW_YELLOW], 255);
+    jet1(128, 128, 128, o);                         /* a gray: black alone, as much as it is */
+    CHECK_EQ_INT(o[IW_BLACK], 128); CHECK_EQ_INT(o[IW_CYAN], 255);
+    CHECK_EQ_INT(o[IW_MAGENTA], 255); CHECK_EQ_INT(o[IW_YELLOW], 255);
+    jet1(229, 72, 77, o);                           /* the logo's red: no black dots in it */
+    CHECK_EQ_INT(o[IW_BLACK], 255); CHECK_EQ_INT(o[IW_CYAN], 255);
+    CHECK(o[IW_MAGENTA] < 90 && o[IW_YELLOW] < 95);
+    jet1(40, 70, 170, o);                           /* a blue under 40% dark: no black, */
+    CHECK_EQ_INT(o[IW_BLACK], 255);                 /* no yellow, cyan and magenta at full */
+    CHECK_EQ_INT(o[IW_YELLOW], 255);
+    CHECK_EQ_INT(o[IW_CYAN], 255 - (215 - 85) * (255 * 256 / 170) / 256);
+    CHECK_EQ_INT(o[IW_MAGENTA], 255 - (185 - 85) * (255 * 256 / 170) / 256);
+    jet1(30, 58, 138, o);                           /* the navy, 46% dark: cyan and magenta at */
+    CHECK_EQ_INT(o[IW_YELLOW], 255);                /* full, no yellow, a little black */
+    CHECK_EQ_INT(o[IW_BLACK], 255 - 117 * ((117 - 96) * 256 / 159) / 256);
+    CHECK(o[IW_BLACK] > 230);
+    CHECK_EQ_INT(o[IW_CYAN], 255 - (225 - 117) * (255 * 256 / 138) / 256);
+    CHECK_EQ_INT(o[IW_MAGENTA], 255 - (197 - 117) * (255 * 256 / 138) / 256);
+    jet1(0, 66, 37, o);                             /* racing green: more black than its gray */
+    CHECK(o[IW_BLACK] < 255 - 189 * ((96 - 66) * 256 / 96) / 256);  /* alone gives it */
+    jet1(10, 10, 40, o);                            /* a deep shadow keeps some black */
+    CHECK(o[IW_BLACK] < 160);
+    /* The ribbon's split is still the ribbon's: the navy takes black there. */
+    uint8_t rgb[3] = { 30, 58, 138 }, p[IW_INKS][1];
+    uint8_t *const planes[IW_INKS] = { p[0], p[1], p[2], p[3] };
+    ink_split(rgb, 1, planes);
+    CHECK(p[IW_BLACK][0] < 255);
+}
+
 int main(void)
 {
     uint8_t o[IW_INKS];
+    test_inkjet_split();
 
     /* Planes are halftone's convention: 255 = no ink, 0 = full ink. */
     split1(255, 255, 255, o);                       /* white: nothing */

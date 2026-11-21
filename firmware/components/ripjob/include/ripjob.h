@@ -82,6 +82,17 @@ typedef struct {
     // inks. NULL is none. Kept by pointer, so it has to outlive the job.
     const uint8_t *tone;
 
+    // W-1174: text and thin lines on paper decided ahead of the screen (lineart.h), each
+    // page's rows coming out ten rows behind; a page with no memory for it prints without
+    // (logged). W-1178: a colour page's too, its gray deciding and only its gray pixels changed.
+    int         lineart;
+    // The lightest gray a thin light line may be (lineart.h la_t.light): 0 is 231. A printer
+    // whose rows average a hairline nearly away takes it lighter: an ImageWriter's, 247.
+    int         lineart_light;
+    // W-1177: a colour page's split into inks is an inkjet's (ink.h ink_screens_set_inkjet): a
+    // StyleWriter's.
+    int         inkjet;
+
     // The top margin setting, in 1/144 in: positive adds that much blank
     // paper ahead of each page, negative drops the page's first rows, which
     // past its own blank margin crops what is on it. In whole printer rows
@@ -136,10 +147,10 @@ typedef struct {
 // `st` may be NULL.
 //
 // With cfg->clock_us, each page that ends logs "page N: T ms: read R, scale S, screen H,
-// second screen K, out O, end E", in ms: R reading its rows (URF decoding, and waiting for
-// the upload), S the gray conversion and resampling, H the job's screen (or the four inks'),
+// second screen K, out O, end E, lines L", in ms: R reading its rows (URF decoding, and waiting
+// for the upload), S the gray conversion and resampling, H the job's screen (or the four inks'),
 // K a stage's gray_row (the Personal LaserWriter 300's Apple-screen page, W-1102), O the
 // rows going on (the row callback, the stage's row or ink_row, or the ImageWriter's strips),
 // E the page's end (a stage's page_end: for the 300, the wait for the page before it to be
-// done, and this page's print sequence; W-1144).
+// done, and this page's print sequence; W-1144), L deciding text and thin lines (W-1174).
 int ripjob_run(urf_t *u, const ripjob_cfg_t *cfg, ripjob_stats_t *st);

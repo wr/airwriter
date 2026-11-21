@@ -470,8 +470,8 @@ coders, `ps_page`) builds at `-O2`, the rest at ESP-IDF's `-Og`. The diffusion s
 once a row, carry two columns of error slack a side so no tap is checked, and skip a white
 pixel with no error carried; the resampler passes a row through untouched when nothing scales.
 None of it changes a dot. Each page logs where its time went (`page N: T ms: read, scale,
-screen, second screen, out, end`, ripjob.h) and each job how long the rip waited for the
-upload; `rip --times` prints the same on the host. On board 1 with a Personal LaserWriter 300,
+screen, second screen, out, end, lines`, ripjob.h; lines since W-1174) and each job how long
+the rip waited for the upload; `rip --times` prints the same on the host. On board 1 with a Personal LaserWriter 300,
 three 300 dpi text pages (251,477 bytes of codes each) went from 40 s a page to 24.7 s: the
 rip's own work from about 22.6 s a page to 2.6 s (Atkinson 12.5 s to 1.3 s), leaving the line
 at 533 kHz (about 7.5 s for such a page) and the printer's 17 s. The board draws at most 0.45 A
@@ -515,6 +515,24 @@ Reference p. 123): `ESC K n` (1 yellow, 2 magenta, 3 cyan, 0 black) when the ink
 `ESC G` with that pass's count trimmed to its last dot, the columns, CR with no LF. A strip
 with no ink only adds its LF. The page ends on black. With a black ribbon an sRGB page is
 turned to gray (Rec. 601 luma) and printed as above.*
+
+*Amended (2026-11-20, `W-1178 ImageWriter: text and thin lines print crisp, faint hairlines
+included`): an ImageWriter's page, gray or colour, goes through W-1174's text and lines
+(`halftone/lineart.c`, §3.18) ahead of its screen, Atkinson still the default. On a colour page
+the gray decides and only a gray pixel (R, G and B within 48) becomes black or paper, so
+coloured text and icons keep their inks (`ripjob.c` `la_apply_rgb`, the RGB rows held ten rows
+behind). A thin light line may be as light as 247 (`ripjob_cfg_t.lineart_light`, the 300 keeps
+231): a row is 1/72 in, so a hairline averages to about 245 before it is seen. Chosen on board
+1's ImageWriter II with the colour ribbon, against a control printed as exact dots through the
+same ribbon and pins: an order slip's card outlines and dividers print, its gray text black and
+sharp. Blue noise, which the 300 took, was rejected on screen: a 5% tint becomes a scatter of
+big coloured dots and small text goes ragged, so a pale tint stays blank. `rip --no-lineart`
+prints as before; the iOS and colour-as-gray fixtures moved, the checker didn't. The test page
+draws its own rows (`testpage`) and is unchanged. A review on a different model found two
+faults, fixed with tests: a colour page under ten rows paired its rows with colour rows before
+the ring (now counted as they come back), and a pale line had to go on straight, so a slanted
+one printed as nothing or dashes (now it may go on through a corner, on either side). The 300's
+order slip prints the same dots as before W-1178.*
 
 *Amended (2026-11-14, W-1140): the test page is the page every printer prints (`testpage`, the
 test-page design's amendment block), drawn as rows at 144 × 72 and given to `iw_stage`, a rip
@@ -1327,11 +1345,18 @@ Apple's StyleWriter adapter (ADSP, not PAP), is not built.
   ring's reads and runs the session, so the upload waits on the printer once the 512 KB fills.
   Nothing is ripped before the cartridge is known: the printer is reset and `H` read as the
   rip begins.
-- **Screens and Apple's tables.** The record's screen at 360 dpi after the tone curve. A gray
-  page or a black cartridge screens one plane; a colour page goes through `ink_split` and
-  `ink_screens` into C, M, Y, K as 3.7 says for the ribbon. Apple's drivers carry the
-  calibration of StyleWriter ink on paper: two tone curves (`GAMA` 1 with the ordered and mask
-  screens, `GAMA` 2 with error diffusion, a pairing not yet confirmed by a print; the 2200
+- **Screens and Apple's tables.** The record's screen at 360 dpi after the tone curve, blue
+  noise by default (W-1177, below). A gray page or a black cartridge screens one plane; a
+  colour page goes through `ink_screens` into C, M, Y, K with the inkjet's own split
+  (`ink_screens_set_inkjet`, `ripjob_cfg_t.inkjet`), not the ribbon's (3.7): black takes the
+  gray the three colour inks share where the colour is near gray, all of it with the three equal
+  and none once they differ by 96 of 255 (`INKJET_CHROMA`), and more again in a dark colour, none
+  with the least of the three at 96 (`INKJET_DEEP`, 38% dark) and all of it at 255; the colour
+  inks print what lies above that gray at its full strength, as if the colour were no darker
+  than its hue, less so the nearer gray. So a strong colour lighter than 38% has no black dots
+  in it, and a navy prints in cyan and magenta with a little black. Apple's drivers carry the
+  calibration of StyleWriter ink on paper: two tone curves (`GAMA` 1 with the ordered screens,
+  `GAMA` 2 with error diffusion and blue noise; the 2200
   driver's for the 2200, 2400 and 2500, the
   1500 driver's for the other four) and a 16 × 16 threshold screen (`HTSC` 1). The curve is the
   StyleWriter's default tone correction, in place of the dot-gain curve's 0, and `gain` still
@@ -1340,6 +1365,32 @@ Apple's StyleWriter adapter (ADSP, not PAP), is not built.
   (`tools/stylewriter/mktables.py`; `untome.py` takes the files out of Apple's Installer
   packages) into `halftone/apple_tables.{h,c}`, whose header says where each table came from.
   The drivers are never committed, and nothing is copied from TailTalk's source.
+- **Pale tints, thin lines and clean colours** (`W-1177 Color StyleWriter: colours print clean
+  and bright, with black only for grays`, 2026-11-20). An order slip from a Mac, on board 1's
+  Color StyleWriter 2500 in Atkinson, lost its 5% panel, its gray tile, its 16% card outlines and
+  dividers, and printed its gray text faint: Atkinson prints no dot under about 12% ink. Blue
+  noise brought them back but printed the photo and logo too dark on `GAMA` 1, made for Apple's
+  pattern screen; on `GAMA` 2, Apple's curve for scattered dots, it printed about as light as
+  Atkinson. Blue noise also showed what Atkinson had hidden: the ribbon's split, which puts
+  black under every colour short of full strength, spotted the logo's red and blue with black
+  and turned the photo's royal blue to a muted navy. Wells chose on paper from four splits
+  printed side by side as exact dots (the ribbon's; black for grays only; that deepened;
+  deepened further) and took the third. A review then found it printed a dark colour light: a
+  navy came out mid-blue. The split above puts the colour at full strength and adds black from
+  38% dark. Wells chose it on paper from three starting points for that black (50%, 38% and 25%
+  dark), printed as exact dots on a colour chart, the slip, three photos and six very dark
+  colours: on the photos the three looked the same, and only very dark, saturated colours told
+  them apart, the earliest black the deepest and the most spotted with black. A fourth, the
+  colour inks keeping the gray black leaves them, kept those colours dark but turned a dark blue
+  teal and puts more ink on the page; it was not chosen. A very dark colour still prints lighter
+  than it is: a chocolate brown as a deep orange, Oxford blue as a strong blue. Blue noise
+  is the StyleWriter's default: a record that becomes a StyleWriter on Atkinson takes it, one
+  that stops being a StyleWriter or QuickDraw LaserWriter goes back from it to Atkinson
+  (`default_screen`), and a record still on Atkinson moved to it once at start-up (`w1177` in NVS
+  `printers`), so a screen picked since stays, as the 300's did (3.18). The test page's blue
+  noise patch takes `GAMA` 2 with the jobs; the rest of the page and the ImageWriter's split are
+  unchanged. Wells approved the slip printed through board 1 with this split (2026-11-21). Not
+  yet printed from a Mac: the slip was converted to a page on the host and sent over IPP.
 - **The session** (`sw_session`, pure behind an ops table so the host tests run it against a
   scripted printer on a fake clock). A job: the reset, the settle, `1` and `2` clear (up to
   three resets, each given `1` twice, 5 s each, the second and third with the long settle, so a
@@ -1596,7 +1647,8 @@ from its own driver, but neither has been tried (W-1145 and W-1146, below).**
   one of the printer's own clock pauses never left and ends the job Offline. The cause is not
   known (§4).
 - **A page** (`qd_page`, `qdlaser.c`). The shared 300 dpi rip (`ripjob`), the sheet found by
-  width and height, gray, cropped to Apple's image area for that sheet. Each row is screened in
+  width and height, gray, cropped to Apple's image area for that sheet. First, text and thin
+  lines (W-1174, below). Each row is screened in
   the record's screen and, through `rip_stage_t.gray_row`, in Apple's 300 screen (`HT_APPLE_LW`:
   `GAMA` 3's curve, then `HTSC` 2's 8 × 8 clustered thresholds), and coded both ways with
   `sw_code_row(row, NULL, …)`. The record's rows go to the printer as they are made; the
@@ -1734,11 +1786,44 @@ from its own driver, but neither has been tried (W-1145 and W-1146, below).**
   bit 5 says the sheet is still coming out (about 15 s past page done) the state stays Printing.
   A status question the printer leaves unanswered logs which one and the link's last failure.
 - **Settings.** The usual five screens plus Apple, which for a 300 is Apple's 300 screen.
-  Default Atkinson.
+  Default blue noise (W-1174): a record found is made with it, and a record still on Atkinson,
+  the default before, moved to it once at start-up (`w1174` in NVS `printers`), so a screen
+  picked since stays.
+- **Light tints, thin lines and pictures** (`W-1174 Personal LaserWriter 300: light tints, thin
+  lines and dark pictures print as they look`; design amendment). An order slip from a Mac lost
+  its 5% panel and its 16% outlines and dividers, and printed its navy photo near-black.
+  Atkinson prints no dot under about 12% ink and nothing but ink over about 88%, and the 300's
+  toner spreads: from a photo of a printed strip of blue noise against 12-dot squares, 10% of
+  dots printed about 26% dark, 30% about 58%, 50% about 79% (its blank paper streaky that day).
+  Every page now has, ahead of both screens:
+  - *Crisp text and lines* (`halftone/lineart.c`, `ripjob_cfg_t.lineart`): a thin dark feature
+    on paper or a light tint prints solid with no soft edge, gray text black; a thin light one
+    (192 to 231) with white paper (250 up) within 4 dots on both sides, and going on along
+    itself, straight or through a corner, an unbroken line one dot wide, so a photo's pale grain
+    and a line on a tint are left to the screen and a lone pale dot on white is paper (W-1178);
+    the soft edge of
+    any dark shape on paper (a QR code's squares, a headline) crisp; a gray area 9 dots wide and
+    the 2 dots around it are the screen's, so a filled icon is screened whole. Rows come out ten
+    rows behind, in about 59 KB (`la_bytes`) taken last of a page's buffers and from PSRAM only
+    (`big_malloc_only`); a page with no room for it prints without, logged (board 1's first
+    build asked 81 KB and failed a job: once the 512 KB copy is made about 115 KB of PSRAM is
+    left).
+    The first build took 4.2 s of the order slip's 10.7 s rip on board 1 (`lines` in the
+    page's time line); skipping rows with only paper within ten and merging two planes halved
+    it on the host (17 ms to 8, the same dots), not yet timed on the board.
+  - *The toner curve* (`ht_toner_curve`, `qd_toner_curve`): the gain law at `QD_TONER_GAIN` 13,
+    24 and under solid, eased over 25 to 39, 253 and over paper, on every screen but Apple's
+    (its own curve) and the threshold (`qd_tone_for`). Wells chose 13 on paper over 25 and none:
+    a Mac's grays are a screen's, lighter in the middle than the ink a page needs, and the
+    spread puts some of that back.
+  A mask screen (blue noise, Bayer, threshold, Apple's) allocates no error rows (`ht_init`),
+  about 14 KB a halftoner, two of them on a 300's page.
 - **Test page** (`qd_testpage`). The page every printer prints (`testpage`, W-1140) drawn at
   300 dpi in the 300's image area, with its icon and Apple's 300 screen as the Apple panel,
-  loaded into the printer as it is made through the same page path: 163,749 bytes of codes in
-  Atkinson. The test button prints it, never the cable test, which reads HSKi's level.
+  its screens through the toner curve as a job's are (W-1174),
+  loaded into the printer as it is made through the same page path: 171,067 bytes of codes in
+  blue noise, 160,330 in Atkinson. The test button prints it, never the cable test, which reads
+  HSKi's level.
 - **The Personal LaserWriter LS** (W-1145). Built from the LS's own driver (Personal LW LS 7.1)
   and the LaserWriter 300 driver's LS branch, read for facts; no LS has been tried. Wells:
   shared like the 300 and called expected to work, untested, as the ImageWriter LQ is. Where

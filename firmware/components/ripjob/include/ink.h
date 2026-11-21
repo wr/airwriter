@@ -34,6 +34,7 @@ typedef struct {
     uint8_t *avoid;
     uint32_t w;
     const uint8_t *tone;        // ink_screens_set_tone's curve, or NULL
+    int      inkjet;            // ink_screens_set_inkjet's
 } ink_screens_t;
 
 // 0, or -1 if out of memory (nothing is left allocated).
@@ -43,6 +44,10 @@ int  ink_screens_init(ink_screens_t *s, ht_algo_t algo, int gain, uint32_t w);
 // out, 0 black to 255 white. NULL, the way it starts, is none. The curve is
 // kept, not copied, so it has to outlive the screens.
 void ink_screens_set_tone(ink_screens_t *s, const uint8_t curve[256]);
+// W-1177: an inkjet's split, not the ribbon's (ink.c split_inkjet): black for grays, text and
+// colours past 38% dark, a colour in its own inks at full strength. 0, the way it starts, is the
+// ribbon's: black takes the gray of every pixel, which a ribbon's one black pass suits.
+void ink_screens_set_inkjet(ink_screens_t *s, int on);
 // One RGB row of w pixels to a 1bpp row per ink, indexed by iw_ink_t.
 void ink_screens_row(ink_screens_t *s, const uint8_t *rgb, uint8_t *const bits[IW_INKS]);
 void ink_screens_free(ink_screens_t *s);

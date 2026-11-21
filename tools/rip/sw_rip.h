@@ -33,4 +33,6 @@ static inline void sw_rip_cfg(ripjob_cfg_t *cfg, rip_stage_t *stage, sw_page_t *
     cfg->stage  = stage;
     cfg->colour = colour;
     cfg->tone   = tone ? sw_tone(m, algo) : NULL;
+    cfg->lineart = 0;                   // a StyleWriter's page goes as it came (W-1178)
+    cfg->inkjet = 1;                    // W-1177: black for grays, a colour in its own inks
 }

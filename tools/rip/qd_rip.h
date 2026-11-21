@@ -9,14 +9,19 @@
 
 // The printer side of a job's config: the model's caps, the page stage `p` as its output stage,
 // the screen the stage asks for (Apple's 300 screen when the record's is Apple's or nothing is
-// kept), the record's gain. Gray only: the printer is black.
+// kept), the record's gain, and the toner curve and crisp text and lines (W-1174), as
+// qdlaser_job_begin gives the board's. Gray only: the printer is black.
 static inline void qd_rip_cfg(ripjob_cfg_t *cfg, rip_stage_t *stage, qd_page_t *p, const qd_page_cfg_t *pc)
 {
+    static uint8_t toner[256];
+    qd_toner_curve(toner);
     qd_page_stage(p, stage);
-    cfg->caps   = qd_caps(pc->model);
-    cfg->stage  = stage;
-    cfg->dither = qd_page_rip_screen(pc);
-    cfg->gain   = pc->gain;
-    cfg->colour = 0;
-    cfg->tone   = NULL;
+    cfg->caps    = qd_caps(pc->model);
+    cfg->stage   = stage;
+    cfg->dither  = qd_page_rip_screen(pc);
+    cfg->gain    = pc->gain;
+    cfg->colour  = 0;
+    cfg->tone    = qd_tone_for(cfg->dither, toner);
+    cfg->lineart = 1;
+    cfg->lineart_light = 0;
 }

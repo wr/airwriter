@@ -377,6 +377,12 @@ typedef struct {
 } pr_legacy_t;
 void pr_migrate(pr_list_t *l, const pr_legacy_t *old);
 
+// A record of `kind` still on Atkinson, the default before, moves to blue noise: a QuickDraw
+// LaserWriter's (W-1174), which a 300 prints light tints, thin lines and pictures in, and a
+// StyleWriter's (W-1177), which prints its pale tints and thin lines. The board does this once
+// for each (printers.c), so one chosen since stays. How many moved.
+int pr_to_bluenoise(pr_list_t *l, int kind);
+
 size_t pr_save(const pr_list_t *l, uint8_t *buf, size_t cap);   // 0: too small
 int    pr_load(pr_list_t *l, const uint8_t *buf, size_t n);     // -1: refused, l untouched
 // 1 when buf is a list stored by a newer firmware (a later PR_BLOB_VER): one

@@ -147,7 +147,8 @@ static int tp_stop(void *ctx)
 int qdlaser_test_page(int hz, qd_model_t m, const tp_info_t *info)
 {
     tp_geom_t g;
-    if (!info || qd_tp_geom(m, &g)) return QD_E_MODEL;
+    static uint8_t toner[256];
+    if (!info || qd_tp_geom(m, &g, toner)) return QD_E_MODEL;
     s_cancel = 0;                    // a cancel a job left behind is not this page's
     if (qd_link_open(hz, 1)) {
         ESP_LOGE(TAG, "test page: no memory for the link");
@@ -356,9 +357,12 @@ int qdlaser_job_begin(qd_model_t m, ht_algo_t screen, int gain, int manual, job_
     s_job.gain = gain;
     s_job.keep = !apple;
     s_job.stage.page_begin = stage_refuse;
+    // W-1174: the toner curve and crisp text and lines, as qd_rip_cfg gives the host's.
+    static uint8_t toner[256];
+    qd_toner_curve(toner);
     *t = (job_pipe_target_t){
         .caps = caps, .stage = &s_job.stage, .dither = apple ? HT_APPLE_LW : screen,
-        .gain = gain, .keep = !apple, .colour_ok = job_rip_begin,
+        .gain = gain, .keep = !apple, .colour_ok = job_rip_begin, .tone = qd_tone_for(screen, toner), .lineart = 1,
     };
     return 0;
 }

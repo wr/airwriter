@@ -15,10 +15,11 @@
 size_t big_asked_bytes, big_asked_n;     // BIGMEM_COUNT (bigmem.h)
 
 static tp_geom_t g_geom;
+static uint8_t g_toner[256];
 
 static tp_info_t info_300(ht_algo_t screen)
 {
-    CHECK_EQ_INT(qd_tp_geom(QD_PLW300, &g_geom), 0);
+    CHECK_EQ_INT(qd_tp_geom(QD_PLW300, &g_geom, g_toner), 0);
     tp_info_t i = {
         .printer = "Office LaserWriter", .board = "v0.3.0 at 10.0.1.115",
         .settings = "http://airwriter-2434.local", .gain = 0, .screen = screen, .geom = &g_geom,
@@ -29,7 +30,7 @@ static tp_info_t info_300(ht_algo_t screen)
 static void test_geom(void)
 {
     tp_geom_t g;
-    CHECK_EQ_INT(qd_tp_geom(QD_PLW300, &g), 0);
+    CHECK_EQ_INT(qd_tp_geom(QD_PLW300, &g, g_toner), 0);
     CHECK_EQ_INT(g.dpi_x, 300);
     CHECK_EQ_INT(g.dpi_y, 300);
     CHECK_EQ_INT(g.sheet_w, 2400);                // Letter's image area across
@@ -45,7 +46,12 @@ static void test_geom(void)
     CHECK(!strcmp(g.model, "Personal LaserWriter 300"));
     CHECK(g.icon && !strcmp(g.icon, "lw4600"));
     CHECK(g.captions != NULL);
-    CHECK_EQ_INT(qd_tp_geom(QD_NONE, &g), -1);
+    CHECK(g.tone != NULL);                        // W-1174: a job's toner curve
+    CHECK(g.tone(g.tone_ctx, HT_BLUENOISE) == g_toner);
+    CHECK(g.tone(g.tone_ctx, HT_APPLE_LW) == NULL);
+    CHECK_EQ_INT(g_toner[0], 0);
+    CHECK_EQ_INT(g_toner[255], 255);
+    CHECK_EQ_INT(qd_tp_geom(QD_NONE, &g, g_toner), -1);
 }
 
 // ---- the layout
@@ -214,9 +220,8 @@ static void test_page_dots(void)
     CHECK_EQ_INT(ink_in(&r, &l.square[1]), 300 * 300);
     for (uint32_t k = 0; k < 4; k++) CHECK(dot(&r, l.square[0].x + 1, l.square[0].y + 75 * k));
     CHECK(!dot(&r, l.square[0].x + 30, l.square[0].y + 30));
-    // Eleven steps, none lighter than the last, white to black. Atkinson, with no tone curve
-    // (a 300 job's gray has none), loses the lightest and darkest steps: 10% prints white and
-    // 90% black, as the same grays in a job would.
+    // Eleven steps, none lighter than the last, white to black, through the toner curve as a
+    // job's grays go (W-1174).
     const uint32_t area = (uint32_t)l.gray_step[0].w * l.gray_step[0].h;
     uint32_t last = 0;
     for (int j = 0; j < 11; j++) {
@@ -227,7 +232,9 @@ static void test_page_dots(void)
     }
     CHECK_EQ_INT(last, area);
     uint32_t mid = ink_in(&r, &l.gray_step[5]);
-    CHECK(mid > area * 4 / 10 && mid < area * 6 / 10);
+    // The half step asks for what the curve says; Atkinson prints a little less than it's asked.
+    const double want = 1 - g_toner[128] / 255.0;
+    CHECK(mid > area * (want - 0.12) && mid < area * (want + 0.04));
     for (int n = 0; n < 5; n++) CHECK(ink_in(&r, &l.type_line[n]) > (uint32_t)l.type_line[n].w * l.type_line[n].h / 200);
     for (int i = 0; i < 6; i++) CHECK(ink_in(&r, &l.panel[i]) > (uint32_t)l.panel[i].w * l.panel[i].h / 20);
     free(r.img);

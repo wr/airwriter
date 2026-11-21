@@ -513,12 +513,26 @@ static void announce(pr_list_t *l, pr_rec_t *r)
     else note_add(l, PR_NOTE_TOO_MANY, r->id, 0);
 }
 
+static void default_screen(pr_rec_t *r, int kind)
+{
+    int was = pr_has_apple_screen(r->kind), now = pr_has_apple_screen(kind);
+    if (now && !was && !strcmp(r->dither, "atkinson"))
+        snprintf(r->dither, sizeof r->dither, "bluenoise");
+    else if (was && !now && !strcmp(r->dither, "bluenoise"))
+        snprintf(r->dither, sizeof r->dither, "atkinson");
+}
+
 // The port record takes a printer of `kind` and `model`: its own name follows
 // (a name the person gave stays); its uuid and its settings go on. The Apple
-// screen is a StyleWriter's or a QuickDraw LaserWriter's alone.
+// screen is a StyleWriter's or a QuickDraw LaserWriter's alone. The default screen follows the
+// family: a record that becomes either on Atkinson, the others' default, takes blue noise
+// (W-1174, W-1177), since Atkinson prints none of their light tints (a new record, an Unknown
+// printer's, one the person names as one), and one that stops being either goes back from blue
+// noise to Atkinson.
 static void become_port_printer(pr_list_t *l, pr_rec_t *r, int kind, int model)
 {
     int own = name_is_own(r);
+    default_screen(r, kind);
     r->kind = (uint8_t)kind;
     r->model = (uint8_t)model;
     r->identified = 1;
@@ -895,6 +909,7 @@ int pr_set_model(pr_list_t *l, int id, pr_model_t m)
     int on_port = pr_port_current(l, sock) == r;  // before its model moves
     if (m == PR_MODEL_NONE) {
         int own = name_is_own(r);
+        default_screen(r, PR_KIND_UNKNOWN);
         r->kind = PR_KIND_UNKNOWN;
         r->model = PR_MODEL_NONE;
         r->identified = 0;
@@ -1201,6 +1216,18 @@ void pr_migrate(pr_list_t *l, const pr_legacy_t *o)
     char n[PR_NAME_MAX];
     own_name(r, n, sizeof n);
     set_name(l, r, n);
+}
+
+int pr_to_bluenoise(pr_list_t *l, int kind)
+{
+    int n = 0;
+    for (int i = 0; i < l->n; i++) {
+        pr_rec_t *r = &l->r[i];
+        if (r->kind != kind || strcmp(r->dither, "atkinson")) continue;
+        snprintf(r->dither, sizeof r->dither, "bluenoise");
+        n++;
+    }
+    return n;
 }
 
 // ------------------------------------------------------------- stored form

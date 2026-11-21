@@ -460,6 +460,27 @@ static void migrate(pr_legacy_t *o)
     free(ls);
 }
 
+// A record of `kind` left on Atkinson, the default before, moves to blue noise, once: `key` in
+// NVS says it has, so a screen picked afterwards stays picked. "w1174" the QuickDraw
+// LaserWriters, "w1177" the StyleWriters. A list a newer firmware wrote is left alone (s_keep).
+static void screens_once(const char *key, int kind, const char *what)
+{
+    if (s_keep) return;
+    nvs_handle_t h;
+    if (nvs_open(NS, NVS_READWRITE, &h) != ESP_OK) return;
+    uint8_t done = 0;
+    if (nvs_get_u8(h, key, &done) != ESP_OK || !done) {
+        int n = pr_to_bluenoise(s_l, kind);
+        if (n) {
+            ESP_LOGI(TAG, "%d %s%s now print%s in blue noise", n, what,
+                     n == 1 ? "" : "s", n == 1 ? "s" : "");
+            save();
+        }
+        if (nvs_set_u8(h, key, 1) == ESP_OK) nvs_commit(h);
+    }
+    nvs_close(h);
+}
+
 esp_err_t printers_start(const printers_cfg_t *cfg)
 {
     s_big = heap_caps_calloc(1, sizeof *s_big, MALLOC_CAP_SPIRAM);
@@ -491,6 +512,8 @@ esp_err_t printers_start(const printers_cfg_t *cfg)
     // W-1179: rev 2026.11's two printer sockets; every other board has one.
     s_l->n_ports = cfg->n_ports > 1 ? 2 : 1;
     s_l->port_names = cfg->port_names ? 1 : 0;
+    screens_once("w1174", PR_KIND_QDLASER, "QuickDraw LaserWriter");
+    screens_once("w1177", PR_KIND_STYLEWRITER, "StyleWriter");
     s_started = 1;
     return ESP_OK;
 }

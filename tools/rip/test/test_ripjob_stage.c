@@ -408,6 +408,29 @@ static void test_tone(void)
 // Apple's screen as the drivers read it (apple_tables.h): a gray page prints on the
 // black ink's placement, its tile turned over, and every page starts on the tile's
 // second row. Written out here from the table, not from the halftoner.
+// W-1177: cfg.inkjet puts the page through an inkjet's split. A dark teal (0, 105, 105) on the
+// ribbon's split is black under a pale cyan; on an inkjet's it is full cyan, with no black.
+static void test_inkjet(void)
+{
+    wrec_t *r = calloc(1, sizeof *r);
+    g_rgb[0] = 0; g_rgb[1] = 105; g_rgb[2] = 105;
+    size_t m = make_urf_rgb(rgb_page, 3060, 4, px_const_rgb);
+    CHECK(m < sizeof rgb_page);
+    rip_stage_t cst = { w_begin, w_row, w_end, r, w_ink_row, NULL };
+    ripjob_cfg_t ccfg = { .dither = HT_THRESHOLD, .caps = sw_caps(SW_C2500), .stage = &cst, .colour = 1 };
+    CHECK_EQ_INT(rip(rgb_page, m, &ccfg), 0);
+    CHECK_EQ_INT(popcount_row(r->plane[IW_BLACK], r->w), (int)r->w);
+    CHECK_EQ_INT(popcount_row(r->plane[IW_CYAN], r->w), 0);
+    memset(r, 0, sizeof *r);
+    ccfg.inkjet = 1;
+    CHECK_EQ_INT(rip(rgb_page, m, &ccfg), 0);
+    CHECK_EQ_INT(popcount_row(r->plane[IW_BLACK], r->w), 0);
+    CHECK_EQ_INT(popcount_row(r->plane[IW_CYAN], r->w), (int)r->w);
+    CHECK_EQ_INT(popcount_row(r->plane[IW_MAGENTA], r->w), 0);
+    CHECK_EQ_INT(popcount_row(r->plane[IW_YELLOW], r->w), 0);
+    free(r);
+}
+
 static void test_apple(void)
 {
     wrec_t *r = calloc(1, sizeof *r);
@@ -691,6 +714,7 @@ int main(void)
     test_sheet_by_height();
     test_ink_rows();
     test_tone();
+    test_inkjet();
     test_apple();
     test_other_screens_unmoved();
 

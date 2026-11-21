@@ -4,6 +4,44 @@
 #include <stdlib.h>
 #include <string.h>
 
+// An inkjet's split (ink_screens_set_inkjet): a colour prints in its own inks, so a red or a blue
+// has no black dots in it and a navy stays blue. Black takes a pixel's gray (the least of cyan,
+// magenta and yellow): all of it for a gray, less the more colourful it is, none at
+// INKJET_CHROMA from gray; and in a dark colour more again, none at INKJET_DEEP and all of it at
+// full black, so the darkest colours keep some depth. The colour inks print what lies above that
+// gray at its full strength, as if no darker than its hue, and less so the nearer gray. Wells
+// chose this on paper on a Color StyleWriter 2500 (2026-11-20, version F): it still prints a very
+// dark colour lighter than it is, a chocolate brown as a deep orange (SPEC 3.16).
+#define INKJET_CHROMA 96
+#define INKJET_DEEP 96
+static void split_inkjet(const uint8_t *rgb, uint32_t w, const uint8_t *tone,
+                         uint8_t *const planes[IW_INKS])
+{
+    for (uint32_t x = 0; x < w; x++, rgb += 3) {
+        uint8_t r = rgb[0], g = rgb[1], b = rgb[2];
+        if (tone) { r = tone[r]; g = tone[g]; b = tone[b]; }
+        int c = 255 - r, m = 255 - g, y = 255 - b;
+        int lo = c < m ? (c < y ? c : y) : (m < y ? m : y);
+        int hi = c > m ? (c > y ? c : y) : (m > y ? m : y);
+        int chroma = hi - lo;
+        int gray = chroma >= INKJET_CHROMA ? 0 : (INKJET_CHROMA - chroma) * 256 / INKJET_CHROMA;
+        int deep = lo <= INKJET_DEEP ? 0 : (lo - INKJET_DEEP) * 256 / (255 - INKJET_DEEP);
+        int k = lo * (gray > deep ? gray : deep) / 256;
+        int full = lo >= 255 ? 0 : 255 * 256 / (255 - lo);          // 8.8
+        int f = 256 + (full - 256) * (256 - gray) / 256;
+        int cc = (c - lo) * f / 256, mm = (m - lo) * f / 256, yy = (y - lo) * f / 256;
+        planes[IW_BLACK][x]   = (uint8_t)(255 - k);
+        planes[IW_CYAN][x]    = (uint8_t)(255 - (cc > 255 ? 255 : cc));
+        planes[IW_MAGENTA][x] = (uint8_t)(255 - (mm > 255 ? 255 : mm));
+        planes[IW_YELLOW][x]  = (uint8_t)(255 - (yy > 255 ? 255 : yy));
+    }
+}
+
+void ink_screens_set_inkjet(ink_screens_t *s, int on)
+{
+    s->inkjet = on;
+}
+
 // tone, if there is one, goes on each channel first: it is a curve on light, so it
 // goes before the split, which is not a straight line (the largest channel is black).
 static void split(const uint8_t *rgb, uint32_t w, const uint8_t *tone, uint8_t *const planes[IW_INKS])
@@ -84,7 +122,8 @@ void ink_screens_set_tone(ink_screens_t *s, const uint8_t curve[256])
 
 void ink_screens_row(ink_screens_t *s, const uint8_t *rgb, uint8_t *const bits[IW_INKS])
 {
-    split(rgb, s->w, s->tone, s->plane);
+    if (s->inkjet) split_inkjet(rgb, s->w, s->tone, s->plane);
+    else           split(rgb, s->w, s->tone, s->plane);
     size_t nb = (s->w + 7) / 8;
     memset(s->avoid, 0, nb);
     for (int k = 0; k < IW_INKS; k++) {

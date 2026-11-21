@@ -59,6 +59,26 @@ qd_page_t *qd_page_new(const qd_page_cfg_t *cfg);
 // What ripjob screens `row` with: cfg->screen, or HT_APPLE_LW when that is HT_APPLE (or
 // HT_APPLE_LW) or there is no keep buffer.
 ht_algo_t  qd_page_rip_screen(const qd_page_cfg_t *cfg);
+// W-1174: how much a QuickDraw LaserWriter's curve makes up for its toner's spread, in percent at
+// a half tint (halftone.h ht_set_gain). Board 1's 300 spreads more, about 29 measured from a
+// photo of a printed strip; but a Mac's grays are made for a screen, lighter in the middle than
+// the ink a page needs, and the spread puts some of that back. Of 25, 13 and none on paper,
+// 13 printed an order slip's middle grays as they look (Wells, 2026-11-20). The LS and the
+// Select 300 are given the 300's.
+#define QD_TONER_GAIN 13
+// The curve every gray goes through ahead of the record's screen (ripjob_cfg_t.tone; Apple's
+// screen has its own): ht_toner_curve at QD_TONER_GAIN. Text and thin lines are decided ahead
+// of it (ripjob_cfg_t.lineart) whatever the screen.
+static inline void qd_toner_curve(uint8_t curve[256])
+{
+    ht_toner_curve(curve, QD_TONER_GAIN);
+}
+// The curve a screen gets: the toner's, but none for Apple's (it has its own) or the threshold
+// (it makes no tints for the toner to darken).
+static inline const uint8_t *qd_tone_for(ht_algo_t screen, const uint8_t *toner)
+{
+    return screen == HT_APPLE || screen == HT_APPLE_LW || screen == HT_THRESHOLD ? NULL : toner;
+}
 // The stage to hand ripjob_cfg_t: page_begin, row, page_end, and gray_row only while a page is
 // kept. ink_row is NULL: the printer is black only.
 void       qd_page_stage(qd_page_t *p, rip_stage_t *st);

@@ -37,6 +37,8 @@ typedef struct {
     void                (*prn)(void *ctx, const uint8_t *buf, size_t n);
     void                 *prn_ctx;
     const uint8_t        *tone;
+    // W-1177: an inkjet's colour split (ripjob_cfg_t.inkjet): a StyleWriter's.
+    int                   inkjet;
     // Asked on the pipeline task as the job's rip begins, under the job lock and before
     // any row, where the ImageWriter's colour_ok is asked: the place for a printer that
     // has to be settled before its first row (a StyleWriter is reset and its cartridge read,
@@ -51,6 +53,8 @@ typedef struct {
     // is the first half, as for a buffered job; the stage sends its own bytes and `buffered`
     // is ignored.
     int                   keep;
+    // W-1174: text and thin lines decided ahead of the screen (ripjob_cfg_t.lineart).
+    int                   lineart;
 } job_pipe_target_t;
 
 // `base` with this job's printer in it. An ImageWriter job (t NULL) asks

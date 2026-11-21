@@ -187,6 +187,8 @@ const uint8_t *sw_tone(sw_model_t m, ht_algo_t algo)
 {
     if ((int)m <= SW_NONE || (int)m >= SW_MODELS) return NULL;
     int cs = m == SW_C2200 || m == SW_C2400 || m == SW_C2500;
-    int diffusing = algo == HT_ATKINSON || algo == HT_FLOYD;
+    // W-1177: blue noise scatters its dots as error diffusion does, so it takes the curve Apple's
+    // drivers gave their scattered dots (GAMA 2), not the pattern screen's.
+    int diffusing = algo == HT_ATKINSON || algo == HT_FLOYD || algo == HT_BLUENOISE;
     return cs ? apple_tone_cs[diffusing] : apple_tone_sw[diffusing];
 }
