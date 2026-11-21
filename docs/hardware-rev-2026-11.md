@@ -257,7 +257,7 @@ fit: its pins are in other corners and it is 1.95 mm tall.
 
 - ERC: 0 errors, 45 known warnings (40 `lib_symbol_mismatch`; 5 `isolated_pin_label`: TXD0,
   RXD0 and the three spare pins, each a label on one pin by design).
-- `tools_sch/check_rev2026_11.py`: 48 nets, 35 parts, 12 removed.
+- `tools_sch/check_rev2026_11.py`: 48 nets, 36 parts, 12 removed.
 - DRC with `--severity-all --schematic-parity --refill-zones`: 0 errors, 0 unconnected, 5
   `lib_footprint_mismatch` warnings, no field-parity warnings (`r13_sync.py` now copies the
   Description, Manufacturer and Datasheet fields too).
