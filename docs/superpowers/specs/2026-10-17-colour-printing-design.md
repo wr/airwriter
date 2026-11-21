@@ -4,6 +4,14 @@ Linear: `W-1064 Colour printing over AirPrint with the ImageWriter II colour rib
 Written 2026-10-17. Amends SPEC §3.2 (TXT `Color`, `printer-uuid`), §3.3 (the URF string), §3.5 (printer
 attributes) and §3.6–3.8 (decode, halftoning, output stage), and lifts the "Colour" exclusion in `plans/2026-08-04-rip-host-pipeline.md`.
 
+**Amended 2026-11-20 by `W-1178 ImageWriter: text and thin lines print crisp, faint hairlines
+included`** (SPEC §3.8's amendment is the record). A colour page now goes through W-1174's
+text and lines too: its gray decides, and only gray pixels become black or paper, so the split
+above still prints coloured text and icons in their own inks. Wells chose Atkinson with crisp
+lines, faint hairlines included, over Atkinson alone and over blue noise, which on the
+ImageWriter turned a pale tint into coloured confetti; the split itself is unchanged (the
+StyleWriter's has its own since W-1177).
+
 ## Intent
 
 AirWriter tells AirPrint clients it is black-only, so an iPhone or Mac sends a grayscale page
