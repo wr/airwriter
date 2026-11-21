@@ -90,7 +90,15 @@ static void test_a_live_network_is_not_dropped_for_a_handshake(void)
         CHECK_EQ_INT(run(&r, 10000, NULL), 0);
     }
     CHECK_EQ_INT(r.in[1].job, LT);
-    // Then nothing for PD_QUIET_MS: the printer gets it.
+    // Quiet for PD_QUIET_MS with the line still up: what sent the frames holds it (a Mac on a
+    // direct cable), so LocalTalk stays (review of #51).
+    CHECK_EQ_INT(run(&r, PD_QUIET_MS + 5000, NULL), 0);
+    CHECK_EQ_INT(r.in[1].job, LT);
+    // The cable swapped for a printer's: the line drops and comes up again, and the printer
+    // gets the socket once the network has been quiet.
+    r.in[1].ready = 0;
+    run(&r, 1500, NULL);
+    r.in[1].ready = 1;
     pd_act_t a;
     CHECK_EQ_INT(run(&r, PD_QUIET_MS + 1000, &a), 1);
     CHECK_EQ_INT(a.sock, 1);
@@ -227,6 +235,39 @@ static void test_the_lc_has_one_socket(void)
     }
 }
 
+// Review of #51: a Mac on a direct cable that holds its handshake ready looks like a printer on
+// the LocalTalk socket once it has been quiet. On the printer job nothing answers there, so its
+// traffic, read with the line up, tries LocalTalk again, and its frames keep it.
+static void test_a_mac_holding_the_handshake_comes_back(void)
+{
+    rig_t r;
+    rig(&r, PR, LT);
+    r.in[1].ready = 1;
+    pd_act_t a;
+    CHECK_EQ_INT(run(&r, PD_QUIET_MS + 3000, &a), 1);
+    CHECK_EQ_INT(a.why, PD_WHY_HANDSHAKE);
+    CHECK_EQ_INT(r.in[1].job, PR);
+    r.in[1].silent = 1;                          // nothing answers ESC ? or the plain question
+    for (int k = 0; k < 3; k++) {
+        r.in[1].junk = 1;
+        run(&r, 1000, NULL);
+    }
+    CHECK_EQ_INT(r.in[1].job, LT);
+    run(&r, 1000, NULL);
+    r.in[1].frames = 1;
+    CHECK_EQ_INT(run(&r, PD_TRIAL_MS * 2, NULL), 0);
+    CHECK_EQ_INT(r.in[1].job, LT);
+    // A printer that answered on a ready line keeps its socket, whatever noise it makes.
+    rig(&r, PR, PR);
+    run(&r, 5000, NULL);
+    r.in[0].ready = 1;
+    r.in[0].silent = 0;
+    for (int k = 0; k < 6; k++) {
+        r.in[0].junk = 1;
+        CHECK_EQ_INT(run(&r, 1000, NULL), 0);
+    }
+}
+
 int main(void)
 {
     test_quiet_sockets_keep_their_jobs();
@@ -237,6 +278,7 @@ int main(void)
     test_a_failed_trial_goes_back_and_waits();
     test_no_trial_takes_a_live_network();
     test_no_trial_with_a_printer_on_the_line();
+    test_a_mac_holding_the_handshake_comes_back();
     test_a_socket_set_to_a_job_is_never_changed();
     test_nothing_changes_mid_job();
     test_the_lc_has_one_socket();

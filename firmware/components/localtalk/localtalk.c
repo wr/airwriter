@@ -469,8 +469,12 @@ esp_err_t localtalk_move(const localtalk_cfg_t *cfg)
     static const uint8_t features[] = { TT_CMD_FEATURES, 0x00 };
     uart_write_bytes(s_uart, features, sizeof features);
     if (uart_wait_tx_done(s_uart, pdMS_TO_TICKS(LT_ALIVE_MS)) != ESP_OK) {
-        uart_flush(s_uart);
+        // uart_flush clears only what came in. With CTS off and the pins let go, the sync
+        // still queued goes out into nothing, so a later move's writes never wait on it.
+        uart_set_hw_flow_ctrl(s_uart, UART_HW_FLOWCTRL_DISABLE, 0);
         pins_drop();
+        uart_wait_tx_done(s_uart, pdMS_TO_TICKS(LT_ALIVE_MS));
+        uart_flush_input(s_uart);
         xSemaphoreGive(s_lock);
         ESP_LOGW(TAG, "TashTalk on IO%d took none of the sync", cfg->tx_pin);
         return ESP_ERR_NOT_FOUND;
@@ -635,6 +639,13 @@ static void json_ring(char **p, char *end, char ring[][LINE_LEN], unsigned lines
 
 void localtalk_json(char *buf, size_t cap)
 {
+    // W-1179: parked (two printers on rev 2026.11, no socket for LocalTalk), the card's "on" is
+    // its setting, kept for when a socket takes LocalTalk again; nothing is heard meanwhile.
+    if (s_running && s_parked) {
+        snprintf(buf, cap, "{\"on\":%s,\"parked\":true,\"macs\":[]}",
+                 s_want_on && s_serve ? "true" : "false");
+        return;
+    }
     // W-1082: the AppleTalk Port card's "on" is the ImageWriter answering on
     // the cable, not a node running for a LaserWriter alone (review C1).
     if (!s_running || s_quiet || !s_serve) {

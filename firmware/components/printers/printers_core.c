@@ -1667,7 +1667,8 @@ size_t pr_json(const pr_list_t *l, const pr_live_t live[PR_MAX], char *buf, size
     int us = two && !l->ports[0].qd_other && l->ports[1].qd_other ? 1 : 0;
     const char *unsup = l->ports[us].qd_other ? qd_engine_name(l->ports[us].qd_other) : "";
     PUT("],\"port_unsupported\":\"%s\"", unsup ? unsup : "QuickDraw LaserWriter");
-    if (two) PUT(",\"port_unsupported_port\":%d", l->ports[us].qd_other ? us + 1 : 0);
+    if (two || l->port_names)                // the LC names its one port too
+        PUT(",\"port_unsupported_port\":%d", l->ports[us].qd_other ? us + 1 : 0);
     PUT(",\"max_shared\":%d}", PR_SHARE_MAX);
 #undef PUT
     if (k >= cap) {

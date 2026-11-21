@@ -3437,7 +3437,13 @@ static void test_two_sockets_json(void)
     // AirWriter LC: one socket, which its case calls port 1.
     L.port_names = 1;
     CHECK(pr_json(&L, live, buf, sizeof buf) > 0);
-    CHECK(strstr(buf, "\"port\":1") && !strstr(buf, "port2_on") && !strstr(buf, "port_unsupported_port"));
+    CHECK(strstr(buf, "\"port\":1") && !strstr(buf, "port2_on") &&
+          strstr(buf, "\"port_unsupported_port\":0"));
+    // ...and an unsupported QuickDraw LaserWriter on it is on port 1 (review of #51).
+    pr_port_seen_qd(&L, 0, 0x23);
+    pr_port_seen_qd(&L, 0, 0x23);
+    CHECK(pr_json(&L, live, buf, sizeof buf) > 0);
+    CHECK(strstr(buf, "\"port_unsupported_port\":1") != NULL);
     // Two: each record's port, port 2's printer, and which port an unsupported LaserWriter is on.
     fresh2();
     int iw = seen_iw_on(0, PR_PORT_IW2), sw = seen_sw_on(1, PR_MODEL_SW2);

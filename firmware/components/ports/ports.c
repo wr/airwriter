@@ -55,6 +55,12 @@ static void input(int pin, gpio_pull_mode_t pull)
     gpio_set_pull_mode(pin, pull);
 }
 
+#ifdef CONFIG_AIRWRITER_INVERT_TX
+#define TX_IDLE 0
+#else
+#define TX_IDLE 1
+#endif
+
 static void output(int pin, int level)
 {
     if (pin < 0) return;
@@ -81,12 +87,19 @@ static void hand_over(int i, port_job_t job, int start)
             input(s->pic.dat, GPIO_PULLDOWN_ONLY);
             input(s->lt_cts, GPIO_PULLDOWN_ONLY);
         }
+        // The ESP32's TX takes the driver's input, idle, before the driver goes on, so nothing
+        // floats onto the line (W-1176's order): the UART's at a change, the pin's own at boot,
+        // before the UART exists.
+        if (start) serial_out_park(i, 0);
+        else if (s->tx >= 0) {
+            gpio_reset_pin(s->tx);
+            output(s->tx, TX_IDLE);
+        }
         if (s->de >= 0) {
             gpio_reset_pin(s->de);
             gpio_set_pull_mode(s->de, GPIO_FLOATING);
             output(s->de, 1);
         }
-        if (start) serial_out_park(i, 0);
     } else {
         if (start) serial_out_park(i, 1);
         else {

@@ -1047,6 +1047,9 @@ static int port_claim(void *ctx)
 {
     int id = (int)((intptr_t)ctx & 0xFF);
     if (printers_port_absent(id)) return 0;
+    // W-1179: its printer's socket does LocalTalk now, so its printer is on neither socket that
+    // we know of: busy too, never the other socket's printer (job_sock_take's fallback).
+    if (ports_either() && !sock_prints(printers_record_sock(id))) return 0;
     return doc_claim(ctx);
 }
 
@@ -2341,6 +2344,7 @@ static int lt_print_end(void *ctx, int normal)
 //              left busy at power-up never answers ESC ?), is ever kicked (W-1088).
 static void sock_jobs_tick(void);
 static int  cable_possible(void);
+static int  sock_job_set(int i, port_job_t job, const char *why, uint32_t wait_ms);
 
 // W-1102: the printer's BREAK on socket k since the last look (serial_out_break_take reads the
 // selected socket's UART, so another socket is selected for it under the job lock; a lock held
@@ -3867,7 +3871,8 @@ static void lt_go(const char *why, int probe_only)
     localtalk_cfg_t c = lt_cfg(sock);
     esp_err_t err = probe_only ? localtalk_probe(&c) : localtalk_start(&c);
     if (err == ESP_ERR_NOT_FOUND && xSemaphoreTake(s_job_lock, 0) == pdTRUE) {
-        int flashed = tashtalk_flash_if_blank(sock);
+        // The port task may have given the socket the printer job since: then no flash.
+        int flashed = ports_job(sock) == PORT_JOB_LOCALTALK && tashtalk_flash_if_blank(sock);
         xSemaphoreGive(s_job_lock);
         if (flashed) err = probe_only ? localtalk_probe(&c) : localtalk_start(&c);
     }
@@ -4047,7 +4052,15 @@ static void cable_web(void *ctx, int both, char *buf, size_t cap)
     (void)ctx;
     (void)both;
 #if CONFIG_AIRWRITER_PIC_CLK_PIN >= 0
-    // W-1179: two printers on rev 2026.11 leave no TashTalk to test with.
+    // W-1179: a test cable from port 1 to port 2 shows each socket the other's handshake, so by
+    // now both may do the printer job. The socket that isn't the printer line's takes LocalTalk
+    // for the test, unless it is set to the printer job (review of #51).
+    if (!cable_possible() && ports_either() && s_psock >= 0) {
+        int o = 1 - s_psock;
+        if (s_set.port_set[o] != SET_PORT_PRINTER)
+            sock_job_set(o, PORT_JOB_LOCALTALK, "the cable test", 1000);
+    }
+    // Two printers set so leave no TashTalk to test with.
     if (!cable_possible()) {
         snprintf(buf, cap, "{\"ok\":false,\"error\":\"no LocalTalk port\"}");
         return;
@@ -4152,8 +4165,8 @@ static int sock_job_set(int i, port_job_t job, const char *why, uint32_t wait_ms
     if (job == PORT_JOB_LOCALTALK) {
         if (ports_job(other) == PORT_JOB_LOCALTALK) {
             localtalk_park();
+            psock_reset(other);                  // before its line reports, so nothing is lost
             ports_hw(other, PORT_JOB_PRINTER);
-            psock_reset(other);
             settings_save_port_job(other, PORT_JOB_PRINTER);
             ESP_LOGW(TAG, "port %d: printer, was localtalk (port %d took LocalTalk)", other + 1,
                      i + 1);
@@ -4169,8 +4182,8 @@ static int sock_job_set(int i, port_job_t job, const char *why, uint32_t wait_ms
         }
     } else {
         if (localtalk_running() && !localtalk_parked()) localtalk_park();
+        psock_reset(i);                          // before its line reports, so nothing is lost
         ports_hw(i, PORT_JOB_PRINTER);
-        psock_reset(i);
         if (s_psock < 0) printer_sock_select(i);
     }
     settings_save_port_job(i, job);
@@ -4213,8 +4226,11 @@ static void sock_detect(void)
         };
         if (in[i].job == PORT_JOB_LOCALTALK)
             in[i].frames = heard && !localtalk_parked() ? 1 : 0;
+        else
+            in[i].silent = printers_port_heard(i) == PR_HEARD_NONE;
         // The junk is read under the job lock: a question in flight is reading that UART.
-        if (idle && in[i].job == PORT_JOB_PRINTER && !in[i].clocked && !in[i].ready &&
+        if (idle && in[i].job == PORT_JOB_PRINTER && !in[i].clocked &&
+            (!in[i].ready || in[i].silent) &&
             xSemaphoreTake(s_job_lock, 0) == pdTRUE) {
             int n = serial_out_junk_of(i);
             xSemaphoreGive(s_job_lock);

@@ -48,6 +48,13 @@ static int heard_lately(const pd_sock_t *s, uint32_t now)
     return s->frame_at && !since(now, s->frame_at, PD_QUIET_MS);
 }
 
+// A LocalTalk frame heard since the handshake went ready: the line is held by what sends them
+// (a Mac on a direct cable), not a printer, until the cable comes out and the line drops.
+static int ready_by_localtalk(const pd_sock_t *s)
+{
+    return s->ready_since && s->frame_at && (int32_t)(s->frame_at - s->ready_since) >= 0;
+}
+
 static int act(pd_act_t *a, int sock, uint8_t job, pd_why_t why)
 {
     a->sock = sock;
@@ -87,13 +94,14 @@ int pd_tick(pd_t *d, const pd_in_t in[], uint32_t now, int idle, pd_act_t *a)
         if (x->job == JOB_LT && x->can_print && !heard_lately(s, now) &&
             since(now, s->job_at, PD_READY_MS)) {
             if (x->clocked) return act(a, i, JOB_PRINTER, PD_WHY_CLOCK);
-            if (s->ready_since && since(now, s->ready_since, PD_READY_MS))
+            if (s->ready_since && since(now, s->ready_since, PD_READY_MS) && !ready_by_localtalk(s))
                 return act(a, i, JOB_PRINTER, PD_WHY_HANDSHAKE);
         }
 
-        // LocalTalk, perhaps, on a printer socket with no printer on it: a trial, unless the
-        // other socket's LocalTalk is in use or can't be given up.
-        if (x->job == JOB_PRINTER && x->can_lt && !x->ready && !x->clocked &&
+        // LocalTalk, perhaps, on a printer socket with no printer on it (its line down, or up
+        // with nothing answering there, as a Mac on a direct cable may hold it): a trial, unless
+        // the other socket's LocalTalk is in use or can't be given up.
+        if (x->job == JOB_PRINTER && x->can_lt && (!x->ready || x->silent) && !x->clocked &&
             s->junk_at[PD_JUNK_N - 1] && !since(now, s->junk_at[PD_JUNK_N - 1], PD_JUNK_MS) &&
             (!s->backoff_until || (int32_t)(now - s->backoff_until) >= 0)) {
             int taken = in[other].job == JOB_LT;

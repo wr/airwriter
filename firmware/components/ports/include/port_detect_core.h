@@ -38,6 +38,8 @@ typedef struct {
     uint8_t clocked;       // a clock on it
     uint8_t frames;        // LocalTalk job: TashTalk heard a frame since the last tick
     uint8_t junk;          // printer job: framing errors and breaks since the last tick
+    uint8_t silent;        // printer job: no printer has answered on it (a Mac on a direct
+                           // cable may hold the handshake ready, W-1179 review)
 } pd_in_t;
 
 typedef struct {

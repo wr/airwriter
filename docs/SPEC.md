@@ -2005,10 +2005,13 @@ board exists.
   - **What's plugged in** (`port_detect_core.c`, pure and host-tested; `sock_detect` in main,
     between the port task's questions). Nothing is sent to find out. A printer's handshake held
     ready for 2 s, or a clock on HSKi, on the LocalTalk socket with no LocalTalk frame heard
-    meanwhile moves that socket to the printer job; framing errors and breaks on a printer
-    socket with no printer showing put it on LocalTalk on trial, kept only if TashTalk hears a
-    frame. Quiet sockets keep their last job; with nothing plugged in, J2 prints and J4 does
-    LocalTalk. Every change is a log line naming the port, its old and new job and the signal.
+    for 30 s moves that socket to the printer job, unless a frame was heard since the handshake
+    went ready: then what holds it is a Mac on a direct cable, and LocalTalk stays until the
+    line drops. Framing errors and breaks on a printer socket with no printer showing (its line
+    down, or up with nothing answering there) put it on LocalTalk on trial, kept only if
+    TashTalk hears a frame. Quiet sockets keep their last job; with nothing plugged in, J2
+    prints and J4 does LocalTalk. Every change is a log line naming the port, its old and new
+    job and the signal.
   - **Saved.** Each socket's last job (NVS `general` `port1job`, `port2job`), so a restart
     keeps it. `/api/general` `{"port1":"auto"|"printer"|"localtalk","port2":…}` fixes one
     (`port1set`, `port2set`; auto by default); the page has no control for it. `/api/status`
@@ -2019,7 +2022,8 @@ board exists.
     Jobs stay one at a time under that lock: a job selects its record's socket
     (`job_sock_take`), a vintage Mac's ImageWriter stream the first socket with an ImageWriter
     there (`lt_sock`), and a job for the other socket's printer is told busy until the first
-    ends. Each socket keeps its own line, ribbon (port 1's is the one saved), StyleWriter and
+    ends. A job for a record whose socket now does LocalTalk is told busy too (`port_claim`),
+    never sent to the other socket's printer. Each socket keeps its own line, ribbon (port 1's is the one saved), StyleWriter and
     QuickDraw LaserWriter state, and CTRL-X kick. The panel follows the printing socket's line;
     idle, it is Ready while any shared printer is. 3.15 has the records.
   - **TashTalk on U10 and U7.** Both ship blank (W-1176; `pic_prog` takes either socket's
@@ -2027,6 +2031,12 @@ board exists.
     page's button puts it on rev A's U7. `/api/localtalk/flash` takes `{"port":1|2}` (default:
     the LocalTalk socket).
   - The cable test needs a socket on each job; its frames leave the printer socket's driver.
+    A test cable from port 1 to port 2 shows each socket the other's handshake, so both may
+    be on the printer job by the time the page's **Test Cable…** runs: the socket that isn't
+    the printer line's then takes LocalTalk for the test, unless it is set to the printer job.
+    The test button's cable test does not (it runs with the job lock already held).
+  - With no socket on LocalTalk the node is parked: `/api/lt` gives `"parked":true`, `port` 0
+    and `on` as its setting, so the LocalTalk card's switch keeps its place.
 - **Straps**, rev 2026.11 only, read once at boot with the pull-ups on, which stay on only where
   a strap reads high: IO16 (`BOARD_REV`, low on every 2026.11 board) and IO15 (`BOARD_LC`, low on
   the LC). `/api/status` has `board` (`rev-a` or `2026.11`), `lc`, and `board_ok`, false when a
