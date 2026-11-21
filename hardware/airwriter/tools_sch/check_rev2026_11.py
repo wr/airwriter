@@ -77,6 +77,7 @@ PARTS = {  # ref: (value, LCSC)
     'U1': ('ESP32-S3-WROOM-1-N16R8', 'C2913202'),       # its octal PSRAM takes IO35-IO37 (FREE)
     'U2': ('THVD1452DGSR', 'C2879202'), 'U6': ('THVD1452DGSR', 'C2879202'),   # DE and ~RE, +-15 V inputs, +-30 kV
     'U10': ('PIC12F1840-I/SN', 'C39594'),                # J2's TashTalk, flashed in place
+    'U7': ('PIC12F1840-I/SN', 'C39594'),                 # J4's, soldered too: no socket (W-1176)
     'R10': ('15k', 'C22809'), 'R11': ('15k', 'C22809'),  # J4's receive pair, as J2's R29/R30
     **{f'R{n}': ('2.2k', 'C4190') for n in (37, 42)},
     **{f'R{n}': ('220R', 'C22962') for n in (38, 39, 43, 44)},

@@ -343,7 +343,7 @@ Traps already explained in a code comment are listed only when the comment is ea
   first (the cable test does, W-1063) or it fills the 4 KB ring and blocks with the node's lock
   held.
 - **An empty U7 and a PIC with LVP off both read device ID 0x0000** (DAT is pulled down). Only
-  with TashTalk silent too does 0x0000 mean an empty socket; a chip flashed with stock TashTalk
+  with TashTalk silent too does 0x0000 mean no chip (rev A's empty socket, the LC's missing U7); a chip flashed with stock TashTalk
   elsewhere answers on the UART and reads 0x0000 over ICSP.
 - **`uart_set_pin` releases every pin the UART had, CTS included, before routing new ones.**
   Re-routing TX and RX alone (after lending them to RMT, which also moves IO18 off the IOMUX)
@@ -371,9 +371,10 @@ Traps already explained in a code comment are listed only when the comment is ea
   printer, not the page.
 - **`LT_DE` floats whenever the PIC is not driving it** (no PIC, or PIC held in reset, which
   tristates it). Tack 10 k across U6 pins 3–5 before connecting a LocalTalk network.
-- **Never high-voltage program the PIC in its socket.** VPP (~9 V) lands on ESP32 IO2
-  (`LT_RESET`). The ESP32 flashes it over LVP and keeps CONFIG2.LVP set so it stays
-  reprogrammable without high voltage (`pic_prog.h`).
+- **Never high-voltage program a PIC on the board.** VPP (~9 V) lands on ESP32 IO2
+  (`LT_RESET`, through R27 on rev 2026.11) or, for rev 2026.11's U10, straight on IO42. The
+  ESP32 flashes them over LVP and keeps CONFIG2.LVP set so they stay reprogrammable without
+  high voltage (`pic_prog.h`).
 - **TashTalk never says whether a frame went out.** It does the RTS/CTS handshake itself and
   drops a frame silently after 32 failed attempts, and it relays every frame but its own. Prove
   the transmit path with `POST /api/lt/echo` (body: a Mac's node number) and look for the echo
@@ -750,7 +751,7 @@ Traps already explained in a code comment are listed only when the comment is ea
 - **The east-wall reset pinhole is at SW1's plate face, x ≈ 159.4**, not on the west wall at
   x = 100 as an old note said.
 - **Heights the KiCad models get wrong.** SW3's footprint is `SW_PUSH_6mm_H13mm`, but the
-  TS-1002-BR16026 stands 16 mm. U7's model is the empty socket; a seated PIC stands ~9 mm.
+  TS-1002-BR16026 stands 16 mm.
 - **Measure the parts the case touches; the models are off.** Mini-DIN shells stand 13.04, not the
   STEP's 12.75 (`MINIDIN_TOP`). SW3's plunger is 3.1 at the lattice top tapering to 3.5, and it
   stands 0.2 E / 0.2 S of the model's axis (`TEST_PLUNGER_*`).

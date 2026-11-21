@@ -62,9 +62,11 @@ class TestEnvelopes(unittest.TestCase):
         self.assertLess(top[1] - top[0], 4.0)            # 3.5 mm plunger
         self.assertAlmostEqual(top[4], 15.0, delta=0.1)
 
-    def test_no_model_parts_and_overrides(self):
-        self.assertAlmostEqual(max(b[4] for b in self.env["U7"]), 9.00)
+    def test_no_model_parts_and_low_tashtalks(self):
         self.assertAlmostEqual(max(b[4] for b in self.env["D13"]), 1.60)
+        # W-1176: both TashTalks are SOICs, no socket or seated DIP to clear.
+        for ref in ("U7", "U10"):
+            self.assertLess(max(b[4] for b in self.env[ref]), 2.0)
 
     def test_sw1_is_read_from_its_model_button_and_all(self):
         # Rev 2026.11's BZCN TSB001A3518A has a model (lib/make_sw1_model.py):

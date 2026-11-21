@@ -28,6 +28,5 @@ U1,ESP32-S3-WROOM-1-N16R8,RF_Module:ESP32-S3-WROOM-1,C2913202,1,
 U3,SP3232EBEN-L/TR,Package_SO:SOIC-16_3.9x9.9mm_P1.27mm,C6852,1,
 U4,AP7361C-33E,Package_TO_SOT_SMD:SOT-223-3_TabPin2,C500795,1,
 U5,USBLC6-2SC6,Package_TO_SOT_SMD:SOT-23-6,C7519,1,
-U7,"DIP-8 socket, left empty (no PIC)",Package_DIP:DIP-8_W7.62mm_Socket,C72124,1,Fit the DIP-8 SOCKET only (LCSC C72124) and leave it empty: no PIC
 U9,SN74LV1T125DCKR,Package_TO_SOT_SMD:SOT-353_SC-70-5,C75925,1,
 D3 (spacer),"LED4*8 nylon LED spacer, 4 mm x 8 mm",-,C92326,1,"Under D3: LED leads through the spacer bore, LED flange seated on it, lens up"
