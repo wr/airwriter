@@ -2860,17 +2860,17 @@ static void test_qd_to_bluenoise(void)
     pr_rec_t *r = pr_get(&L, id);
     if (!r) return;
     snprintf(r->dither, sizeof r->dither, "atkinson");
-    CHECK_EQ_INT(pr_qd_to_bluenoise(&L), 1);
+    CHECK_EQ_INT(pr_to_bluenoise(&L, PR_KIND_QDLASER), 1);
     CHECK(!strcmp(r->dither, "bluenoise"));
-    CHECK_EQ_INT(pr_qd_to_bluenoise(&L), 0);
+    CHECK_EQ_INT(pr_to_bluenoise(&L, PR_KIND_QDLASER), 0);
     snprintf(r->dither, sizeof r->dither, "floyd");
-    CHECK_EQ_INT(pr_qd_to_bluenoise(&L), 0);
+    CHECK_EQ_INT(pr_to_bluenoise(&L, PR_KIND_QDLASER), 0);
     CHECK(!strcmp(r->dither, "floyd"));
     int iw = pr_add_port(&L, PR_MODEL_IW2);
     CHECK(iw > 0);
     const pr_rec_t *w = pr_get(&L, iw);
     CHECK(w && !strcmp(w->dither, "atkinson"));
-    CHECK_EQ_INT(pr_qd_to_bluenoise(&L), 0);
+    CHECK_EQ_INT(pr_to_bluenoise(&L, PR_KIND_QDLASER), 0);
     CHECK(w && !strcmp(w->dither, "atkinson"));
 
     // An Unknown printer's record, made when the port said nothing, that a 300 then takes over.
@@ -2882,6 +2882,53 @@ static void test_qd_to_bluenoise(void)
     const pr_rec_t *qr = pr_get(&L, q);
     CHECK(qr && qr->kind == PR_KIND_QDLASER);
     CHECK(qr && !strcmp(qr->dither, "bluenoise"));
+}
+
+// W-1177: a StyleWriter takes blue noise as the 300 does: a found one, an Unknown printer's
+// record a StyleWriter takes over, one the person names, and once a record left on Atkinson.
+static void test_sw_to_bluenoise(void)
+{
+    fresh();
+    int id = seen_sw(PR_MODEL_SWC2500);
+    CHECK(id > 0);
+    pr_rec_t *r = pr_get(&L, id);
+    if (!r) return;
+    CHECK(!strcmp(r->dither, "bluenoise"));                 // found
+    snprintf(r->dither, sizeof r->dither, "atkinson");      // a record from before
+    CHECK_EQ_INT(pr_to_bluenoise(&L, PR_KIND_QDLASER), 0);
+    CHECK_EQ_INT(pr_to_bluenoise(&L, PR_KIND_STYLEWRITER), 1);
+    CHECK(!strcmp(r->dither, "bluenoise"));
+    CHECK_EQ_INT(pr_to_bluenoise(&L, PR_KIND_STYLEWRITER), 0);
+    snprintf(r->dither, sizeof r->dither, "apple");         // one picked stays
+    CHECK_EQ_INT(pr_to_bluenoise(&L, PR_KIND_STYLEWRITER), 0);
+    CHECK(!strcmp(r->dither, "apple"));
+    CHECK_EQ_INT(pr_set_model(&L, id, PR_MODEL_SWC2400), 0); // another StyleWriter: stays
+    CHECK(!strcmp(r->dither, "apple"));
+    snprintf(r->dither, sizeof r->dither, "atkinson");
+    CHECK_EQ_INT(pr_set_model(&L, id, PR_MODEL_SW2), 0);
+    CHECK(!strcmp(r->dither, "atkinson"));                  // already a StyleWriter's
+
+    fresh();
+    int u = seen_iw(PR_PORT_SILENT);
+    CHECK(u > 0);
+    CHECK_EQ_INT(seen_sw(PR_MODEL_SWC2500), u);             // the same record, converted
+    CHECK(pr_get(&L, u) && !strcmp(pr_get(&L, u)->dither, "bluenoise"));
+
+    fresh();
+    int iw = seen_iw(PR_PORT_IW2);                          // an ImageWriter keeps Atkinson
+    CHECK(iw > 0 && !strcmp(pr_get(&L, iw)->dither, "atkinson"));
+    CHECK_EQ_INT(pr_to_bluenoise(&L, PR_KIND_STYLEWRITER), 0);
+    CHECK_EQ_INT(pr_set_model(&L, iw, PR_MODEL_SW2), 0);    // named a StyleWriter: blue noise
+    CHECK(!strcmp(pr_get(&L, iw)->dither, "bluenoise"));
+    CHECK_EQ_INT(pr_set_model(&L, iw, PR_MODEL_IW2), 0);    // an ImageWriter after all: back
+    CHECK(!strcmp(pr_get(&L, iw)->dither, "atkinson"));
+    CHECK_EQ_INT(pr_set_model(&L, iw, PR_MODEL_SW2), 0);
+    CHECK_EQ_INT(pr_set_model(&L, iw, PR_MODEL_NONE), 0);   // Something else: back
+    CHECK(!strcmp(pr_get(&L, iw)->dither, "atkinson"));
+    CHECK_EQ_INT(pr_set_model(&L, iw, PR_MODEL_SW2), 0);    // a screen picked on the way stays
+    snprintf(pr_get(&L, iw)->dither, sizeof pr_get(&L, iw)->dither, "floyd");
+    CHECK_EQ_INT(pr_set_model(&L, iw, PR_MODEL_IW2), 0);
+    CHECK(!strcmp(pr_get(&L, iw)->dither, "floyd"));
 }
 
 static void test_qd_new_record_needs_two_answers(void)
@@ -3265,6 +3312,7 @@ int main(void)
     test_family_of_kind();
     test_qd_new_record_needs_two_answers();
     test_qd_to_bluenoise();
+    test_sw_to_bluenoise();
     test_qd_known_record_at_once();
     test_qd_unsupported_named_not_shared();
     test_qd_ls_record();

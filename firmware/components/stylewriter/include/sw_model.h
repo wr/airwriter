@@ -69,7 +69,7 @@ const printer_caps_t *sw_caps(sw_model_t m);
 
 // Apple's tone curve for a job (apple_tables.h): the Color StyleWriter 2200, 2400
 // and 2500 take the 2200 driver's, the other four the 1500 driver's; GAMA 1 goes
-// with the ordered and mask screens (Apple's, Bayer, blue noise, threshold) and
-// GAMA 2 with error diffusion (Atkinson, Floyd-Steinberg). NULL for SW_NONE. The
+// with the ordered screens (Apple's, Bayer, threshold) and GAMA 2 with scattered
+// dots (Atkinson, Floyd-Steinberg and, W-1177, blue noise). NULL for SW_NONE. The
 // table is static; ripjob_cfg_t.tone keeps it by pointer.
 const uint8_t *sw_tone(sw_model_t m, ht_algo_t algo);

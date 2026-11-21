@@ -335,6 +335,7 @@ int stylewriter_job_begin(sw_model_t m, int quality, ht_algo_t dither, int gain,
     *t = (job_pipe_target_t){
         .caps = caps, .stage = &s_job.stage, .dither = dither, .gain = gain,
         .colour = sp->colour, .buffered = 1, .prn = stylewriter_prn, .tone = sw_tone(m, dither),
+        .inkjet = 1,
         .colour_ok = job_rip_begin,
     };
     return 0;

@@ -37,6 +37,8 @@ typedef struct {
     void                (*prn)(void *ctx, const uint8_t *buf, size_t n);
     void                 *prn_ctx;
     const uint8_t        *tone;
+    // W-1177: an inkjet's colour split (ripjob_cfg_t.inkjet): a StyleWriter's.
+    int                   inkjet;
     // Asked on the pipeline task as the job's rip begins, under the job lock and before
     // any row, where the ImageWriter's colour_ok is asked: the place for a printer that
     // has to be settled before its first row (a StyleWriter is reset and its cartridge read,

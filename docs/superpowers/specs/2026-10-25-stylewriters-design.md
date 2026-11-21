@@ -5,6 +5,15 @@
 `W-1102 QuickDraw LaserWriters on the printer port (Personal LaserWriter LS/300, Select 300)`.
 Reverses the StyleWriter cut in `2026-08-04-printer-support-scope-design.md`.
 
+**Amended 2026-11-20** by `W-1177 Color StyleWriter: colours print clean and bright, with
+black only for grays` (SPEC §3.16 has the record): blue noise is a StyleWriter's default screen,
+on Apple's `GAMA` 2, the curve its drivers pair with scattered dots, and a colour page has the
+inkjet's own split: black for grays and, from 38% dark, dark colours, and a colour in its own
+inks at full strength.
+Atkinson lost an order slip's pale panel, outlines and dividers; the ribbon's split, made for
+the ImageWriter, spotted every colour short of full strength with black. Wells chose both on
+paper on board 1's Color StyleWriter 2500.
+
 **Amended 2026-11-19** by `W-1168 The Color StyleWriter 2500 is confirmed on paper`: board 1's
 2500 has printed in colour since 2026-11-07 with a new old stock colour cartridge, so the wiki's
 Supported Printers page lists it as **Yes** and its settings page drops the not-confirmed line

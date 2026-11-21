@@ -89,6 +89,9 @@ typedef struct {
     // The lightest gray a thin light line may be (lineart.h la_t.light): 0 is 231. A printer
     // whose rows average a hairline nearly away takes it lighter: an ImageWriter's, 247.
     int         lineart_light;
+    // W-1177: a colour page's split into inks is an inkjet's (ink.h ink_screens_set_inkjet): a
+    // StyleWriter's.
+    int         inkjet;
 
     // The top margin setting, in 1/144 in: positive adds that much blank
     // paper ahead of each page, negative drops the page's first rows, which

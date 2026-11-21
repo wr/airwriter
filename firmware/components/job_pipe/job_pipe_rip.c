@@ -16,6 +16,7 @@ ripjob_cfg_t job_pipe_rip_cfg(ripjob_cfg_t base, int (*colour_ok)(void *ctx), vo
     base.tone       = t->tone;
     base.lineart    = t->lineart;
     base.lineart_light = 0;
+    base.inkjet     = t->inkjet;
     base.top_margin = 0;
     return base;
 }
