@@ -939,8 +939,9 @@ void lt_node_rx(lt_node_t *n, const uint8_t *f, size_t len, uint64_t now)
         return;
     }
     if (dst != n->node && dst != LLAP_BCAST) return;
-    // Someone else sending as us. TashTalk does not hear its own frames (U8 is
-    // off while the PIC transmits), so this is a duplicate ID; count it.
+    // Someone else sending as us. TashTalk does not hear its own frames (rev A's
+    // U8 is off while the PIC transmits; on rev 2026.11 the PIC drives its data
+    // pin and does not read it while it sends), so this is a duplicate ID; count it.
     if (n->link == LT_LINK_LLAP && src == n->node && type != LLAP_ENQ && type != LLAP_CTS)
         n->st.dup_suspect++;
     if (type != LLAP_SHORT && type != LLAP_LONG) return;

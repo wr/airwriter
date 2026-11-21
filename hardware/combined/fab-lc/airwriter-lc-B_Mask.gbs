@@ -1,33 +1,17 @@
 %TF.GenerationSoftware,KiCad,Pcbnew,10.0.6*%
-%TF.CreationDate,2026-11-19T18:45:37-05:00*%
+%TF.CreationDate,2026-11-20T19:51:19-05:00*%
 %TF.ProjectId,airwriter-lc,61697277-7269-4746-9572-2d6c632e6b69,rev?*%
 %TF.SameCoordinates,Original*%
 %TF.FileFunction,Soldermask,Bot*%
 %TF.FilePolarity,Negative*%
 %FSLAX46Y46*%
 G04 Gerber Fmt 4.6, Leading zero omitted, Abs format (unit mm)*
-G04 Created by KiCad (PCBNEW 10.0.6) date 2026-11-19 18:45:37*
+G04 Created by KiCad (PCBNEW 10.0.6) date 2026-11-20 19:51:19*
 %MOMM*%
 %LPD*%
 G01*
 G04 APERTURE LIST*
 G04 Aperture macros list*
-%AMRoundRect*
-0 Rectangle with rounded corners*
-0 $1 Rounding radius*
-0 $2 $3 $4 $5 $6 $7 $8 $9 X,Y pos of 4 corners*
-0 Add a 4 corners polygon primitive as box body*
-4,1,4,$2,$3,$4,$5,$6,$7,$8,$9,$2,$3,0*
-0 Add four circle primitives for the rounded corners*
-1,1,$1+$1,$2,$3*
-1,1,$1+$1,$4,$5*
-1,1,$1+$1,$6,$7*
-1,1,$1+$1,$8,$9*
-0 Add four rect primitives between the rounded corners*
-20,1,$1+$1,$2,$3,$4,$5,0*
-20,1,$1+$1,$4,$5,$6,$7,0*
-20,1,$1+$1,$6,$7,$8,$9,0*
-20,1,$1+$1,$8,$9,$2,$3,0*%
 %AMRotRect*
 0 Rectangle, with rotation*
 0 The origin of the aperture is its center*
@@ -48,9 +32,7 @@ G04 Aperture macros list end*
 %ADD18O,1.000000X1.600000*%
 %ADD19RotRect,1.800000X1.800000X257.500000*%
 %ADD20C,1.800000*%
-%ADD21RoundRect,0.250000X-0.550000X0.550000X-0.550000X-0.550000X0.550000X-0.550000X0.550000X0.550000X0*%
-%ADD22C,1.600000*%
-%ADD23C,1.000000*%
+%ADD21C,1.000000*%
 G04 APERTURE END LIST*
 D10*
 %TO.C,SW3*%
@@ -127,23 +109,10 @@ D14*
 %TO.C,H1*%
 X105636000Y-65636000D03*
 %TD*%
-D21*
-%TO.C,U7*%
-X131710000Y-133090000D03*
-D22*
-X129170000Y-133090000D03*
-X126630000Y-133090000D03*
-X124090000Y-133090000D03*
-X124090000Y-140710000D03*
-X126630000Y-140710000D03*
-X129170000Y-140710000D03*
-X131710000Y-140710000D03*
-%TD*%
-D14*
 %TO.C,H4*%
 X153364000Y-151930000D03*
 %TD*%
-D23*
+D21*
 %TO.C,TP8*%
 X153900000Y-144100000D03*
 %TD*%
