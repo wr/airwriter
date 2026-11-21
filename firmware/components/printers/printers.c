@@ -488,6 +488,9 @@ esp_err_t printers_start(const printers_cfg_t *cfg)
         }
         save();
     }
+    // W-1179: rev 2026.11's two printer sockets; every other board has one.
+    s_l->n_ports = cfg->n_ports > 1 ? 2 : 1;
+    s_l->port_names = cfg->port_names ? 1 : 0;
     s_started = 1;
     return ESP_OK;
 }
@@ -496,18 +499,20 @@ esp_err_t printers_start(const printers_cfg_t *cfg)
 
 static pr_live_t s_live[PR_MAX];
 
-// Every record's live state; the port's from main, to the one record it belongs to
+static int n_socks(void) { return s_l->n_ports > 1 ? 2 : 1; }
+
+// Every record's live state; each socket's from main, to the one record it belongs to
 // (pr_port_live_id, W-1116): every other port record is offline. Under s_mu.
 static void live_fill(void)
 {
     memset(s_live, 0, sizeof s_live);
-    int port_id = pr_port_live_id(s_l);
+    for (int k = 0; k < n_socks(); k++) {
+        int i = pr_index(s_l, pr_port_live_id(s_l, k));
+        if (i >= 0 && s_cfg.port_live) s_cfg.port_live(k, &s_live[i]);
+    }
     for (int i = 0; i < s_l->n; i++) {
         const pr_rec_t *r = &s_l->r[i];
-        if (r->where == PR_WHERE_PORT) {
-            if (r->id == port_id && s_cfg.port_live) s_cfg.port_live(&s_live[i]);
-            continue;
-        }
+        if (r->where == PR_WHERE_PORT) continue;
         laser_state_t st;
         if (laser_state(r->id, &st)) continue;
         s_live[i] = (pr_live_t){ .present = st.online, .ready = st.ready, .printing = st.printing,
@@ -515,13 +520,24 @@ static void live_fill(void)
     }
 }
 
+// W-1179: before an answer on a socket, whether a printer shows itself on each (pr_port_up), so
+// that a record the other socket's printer holds is not taken for a moved one. Under s_mu.
+static void ups_fill(void)
+{
+    for (int k = 0; k < n_socks(); k++) {
+        pr_live_t v = { 0 };
+        if (pr_port_live_id(s_l, k) > 0 && s_cfg.port_live) s_cfg.port_live(k, &v);
+        pr_port_up(s_l, k, v.present);
+    }
+}
+
 // Under s_mu. W-1116: the printer on the port is the current record (pr_port_current, whose
 // model answered last), not the oldest; a Something else record in the list silences the port
-// whatever else is there (PORT_UNKNOWN_SAID), as the design's rule 1 says.
-static port_mode_t mode_of(void)
+// whatever else is there (PORT_UNKNOWN_SAID), as the design's rule 1 says. W-1179: socket k's.
+static port_mode_t mode_of(int k)
 {
-    if (pr_port_said_other(s_l)) return PORT_UNKNOWN_SAID;
-    const pr_rec_t *p = pr_port_current(s_l);
+    if (pr_port_said_other(s_l, k)) return PORT_UNKNOWN_SAID;
+    const pr_rec_t *p = pr_port_current(s_l, k);
     if (!p) return PORT_NONE;
     if (p->kind == PR_KIND_IMAGEWRITER) return PORT_IMAGEWRITER;
     if (p->kind == PR_KIND_STYLEWRITER) return PORT_STYLEWRITER;
@@ -532,10 +548,35 @@ static port_mode_t mode_of(void)
 // Under s_mu. The record on the port's id (pr_port_current), 0 for none: a change of it, even
 // within a family (the LQ for the II), is a change the board follows (its screen and gain, its
 // name, what Macs are offered), so it is told (W-1116).
-static int cur_id(void)
+static int cur_id(int k)
 {
-    const pr_rec_t *p = pr_port_current(s_l);
+    const pr_rec_t *p = pr_port_current(s_l, k);
     return p ? p->id : 0;
+}
+
+// Under s_mu: what socket k's answer moved. Either socket's current record may change (a
+// printer moved from the other socket leaves it), so both are compared.
+typedef struct { port_mode_t mode[2]; int id[2]; } port_snap_t;
+
+static port_snap_t snap(void)
+{
+    port_snap_t a = { 0 };
+    for (int k = 0; k < n_socks(); k++) { a.mode[k] = mode_of(k); a.id[k] = cur_id(k); }
+    return a;
+}
+
+static int moved_since(const port_snap_t *b)
+{
+    int moved = 0;
+    for (int k = 0; k < n_socks(); k++) {
+        if (mode_of(k) == b->mode[k] && cur_id(k) == b->id[k]) continue;
+        moved = 1;
+        const pr_rec_t *p = pr_port_current(s_l, k);
+        if (!p) continue;
+        if (n_socks() > 1) ESP_LOGI(TAG, "port %d: printer %d, %s", k + 1, p->id, pr_kind_name(p->kind));
+        else ESP_LOGI(TAG, "the port: printer %d, %s", p->id, pr_kind_name(p->kind));
+    }
+    return moved;
 }
 
 static void after_change(int notify)
@@ -546,73 +587,58 @@ static void after_change(int notify)
     if (notify && s_cfg.changed) s_cfg.changed();
 }
 
-int printers_port_seen(int iw_model, int ready)
+int printers_port_seen(int k, int iw_model, int ready)
 {
     if (!s_started) return -1;
     pr_port_seen_t what = !ready ? PR_PORT_NOTHING
                         : iw_model == IW_MODEL_LQ ? PR_PORT_IWLQ
                         : iw_model == IW_MODEL_II ? PR_PORT_IW2 : PR_PORT_SILENT;
     lock();
-    port_mode_t before = mode_of();
-    int before_id = cur_id();
-    int r = pr_port_seen(s_l, what);
-    int moved = mode_of() != before || cur_id() != before_id;
-    if (moved) {
-        const pr_rec_t *p = pr_port_current(s_l);
-        if (p) ESP_LOGI(TAG, "the port: printer %d, %s", p->id, pr_kind_name(p->kind));
-    }
-    after_change(moved);
+    ups_fill();
+    port_snap_t before = snap();
+    int r = pr_port_seen(s_l, k, what);
+    after_change(moved_since(&before));
     return r;
 }
 
-int printers_port_seen_qd(uint8_t engine)
+int printers_port_seen_qd(int k, uint8_t engine)
 {
     if (!s_started) return -1;
     lock();
-    port_mode_t before = mode_of();
-    int before_id = cur_id();
-    int r = pr_port_seen_qd(s_l, engine);
-    int moved = mode_of() != before || cur_id() != before_id;
-    if (moved) {
-        const pr_rec_t *p = pr_port_current(s_l);
-        if (p) ESP_LOGI(TAG, "the port: printer %d, %s", p->id, pr_kind_name(p->kind));
-    }
-    after_change(moved);
+    ups_fill();
+    port_snap_t before = snap();
+    int r = pr_port_seen_qd(s_l, k, engine);
+    after_change(moved_since(&before));
     return r;
 }
 
-void printers_port_clock_gone(void)
+void printers_port_clock_gone(int k)
 {
     if (!s_started) return;
     lock();
-    pr_port_clock_gone(s_l);
+    pr_port_clock_gone(s_l, k);
     unlock();
 }
 
-qd_model_t printers_port_qd_model(void)
+qd_model_t printers_port_qd_model(int k)
 {
     if (!s_started) return QD_NONE;
     lock();
-    const pr_rec_t *p = pr_port_current(s_l);
+    const pr_rec_t *p = pr_port_current(s_l, k);
     qd_model_t m = p && p->kind == PR_KIND_QDLASER ? pr_model_to_qd((pr_model_t)p->model) : QD_NONE;
     unlock();
     return m;
 }
 
-int printers_port_seen_sw(sw_model_t m)
+int printers_port_seen_sw(int k, sw_model_t m)
 {
     pr_model_t pm = pr_model_from_sw(m);
     if (!s_started || pm == PR_MODEL_NONE) return -1;
     lock();
-    port_mode_t before = mode_of();
-    int before_id = cur_id();
-    int r = pr_port_seen_sw(s_l, pm);
-    int moved = mode_of() != before || cur_id() != before_id;
-    if (moved) {
-        const pr_rec_t *p = pr_port_current(s_l);
-        if (p) ESP_LOGI(TAG, "the port: printer %d, %s", p->id, pr_kind_name(p->kind));
-    }
-    after_change(moved);
+    ups_fill();
+    port_snap_t before = snap();
+    int r = pr_port_seen_sw(s_l, k, pm);
+    after_change(moved_since(&before));
     return r;
 }
 
@@ -728,50 +754,50 @@ int printers_describe(int id, char *name, size_t ncap, char *product, size_t pca
     return r ? 0 : -1;
 }
 
-port_mode_t printers_port_mode(void)
+port_mode_t printers_port_mode(int k)
 {
     if (!s_started) return PORT_NONE;
     lock();
-    port_mode_t m = mode_of();
+    port_mode_t m = mode_of(k);
     unlock();
     return m;
 }
 
-int printers_port_is_imagewriter(void)
+int printers_port_is_imagewriter(int k)
 {
-    return printers_port_mode() == PORT_IMAGEWRITER;
+    return printers_port_mode(k) == PORT_IMAGEWRITER;
 }
 
-int printers_port_is_stylewriter(void)
+int printers_port_is_stylewriter(int k)
 {
-    return printers_port_mode() == PORT_STYLEWRITER;
+    return printers_port_mode(k) == PORT_STYLEWRITER;
 }
 
-int printers_port_shared(void)
+int printers_port_shared(int k)
 {
     if (!s_started) return 0;
     lock();
-    const pr_rec_t *p = pr_port_current(s_l);
+    const pr_rec_t *p = pr_port_current(s_l, k);
     int on = p && pr_family_of(p->kind) != PR_FAM_NONE && p->shared;
     unlock();
     return on;
 }
 
-pr_model_t printers_port_model(void)      // the port ImageWriter's, else PR_MODEL_NONE
+pr_model_t printers_port_model(int k)     // socket k's ImageWriter's, else PR_MODEL_NONE
 {
     if (!s_started) return PR_MODEL_NONE;
     lock();
-    const pr_rec_t *p = pr_port_current(s_l);
+    const pr_rec_t *p = pr_port_current(s_l, k);
     pr_model_t m = p && p->kind == PR_KIND_IMAGEWRITER ? (pr_model_t)p->model : PR_MODEL_NONE;
     unlock();
     return m;
 }
 
-sw_model_t printers_port_sw_model(void)
+sw_model_t printers_port_sw_model(int k)
 {
     if (!s_started) return SW_NONE;
     lock();
-    const pr_rec_t *p = pr_port_current(s_l);
+    const pr_rec_t *p = pr_port_current(s_l, k);
     sw_model_t m = p && p->kind == PR_KIND_STYLEWRITER ? pr_model_to_sw((pr_model_t)p->model) : SW_NONE;
     unlock();
     return m;
@@ -796,20 +822,20 @@ void printers_port_listed(int *sw, int *iw1, int *sw1)
     if (sw1) *sw1 = any_sw1;
 }
 
-int printers_port_heard(void)
+int printers_port_heard(int k)
 {
     if (!s_started) return PR_HEARD_NONE;
     lock();
-    int h = pr_port_heard(s_l);
+    int h = pr_port_heard(s_l, k);
     unlock();
     return h;
 }
 
-void printers_port_answered(int heard)
+void printers_port_answered(int k, int heard)
 {
     if (!s_started) return;
     lock();
-    pr_port_answered(s_l, heard);            // not stored: nothing to save
+    pr_port_answered(s_l, k, heard);         // not stored: nothing to save
     unlock();
 }
 
@@ -826,12 +852,12 @@ int printers_port_absent(int id)
     return a;
 }
 
-int printers_port_on_is_imagewriter(void)
+int printers_port_on_is_imagewriter(int k)
 {
     if (!s_started) return 0;
     lock();
     live_fill();
-    int on = pr_port_on(s_l, s_live);
+    int on = pr_port_on(s_l, k, s_live);
     const pr_rec_t *r = on ? pr_get(s_l, on) : NULL;
     int iw = r && r->kind == PR_KIND_IMAGEWRITER;
     unlock();
@@ -848,11 +874,11 @@ pr_family_t printers_record_family(int id)
     return f;
 }
 
-pr_family_t printers_port_family(void)
+pr_family_t printers_port_family(int k)
 {
     if (!s_started) return PR_FAM_NONE;
     lock();
-    const pr_rec_t *p = pr_port_said_other(s_l) ? NULL : pr_port_current(s_l);
+    const pr_rec_t *p = pr_port_said_other(s_l, k) ? NULL : pr_port_current(s_l, k);
     pr_family_t f = p ? pr_family_of(p->kind) : PR_FAM_NONE;
     unlock();
     return f;
@@ -866,6 +892,24 @@ pr_model_t printers_record_model(int id)
     pr_model_t m = r && r->where == PR_WHERE_PORT ? (pr_model_t)r->model : PR_MODEL_NONE;
     unlock();
     return m;
+}
+
+int printers_record_sock(int id)
+{
+    if (!s_started) return 0;
+    lock();
+    const pr_rec_t *r = pr_get(s_l, id);
+    int k = r && r->where == PR_WHERE_PORT ? pr_port_sock(s_l, r) : 0;
+    unlock();
+    return k;
+}
+
+void printers_set_lt_port(int port)
+{
+    if (!s_started) return;
+    lock();
+    s_l->lt_port = (uint8_t)(port == 1 || port == 2 ? port : 0);
+    unlock();
 }
 
 int printers_record_screen(int id, char *dither, size_t cap, int *gain)
@@ -894,26 +938,27 @@ pr_gate_t printers_job_gate(int id, int heard, pr_model_t heard_model, int line_
     return g;
 }
 
-void printers_port_set_sw_model(int id, sw_model_t m)
+void printers_port_set_sw_model(int k, int id, sw_model_t m)
 {
     pr_model_t pm = pr_model_from_sw(m);
     if (!s_started || pm == PR_MODEL_NONE) return;
     lock();
+    ups_fill();
     // The full sequence named `m` on the port for the record the person picked (W-1116, `id`):
     // that record takes it, and either way `m` is the printer on the port now (heard set). The
     // person asked, so the page and AirPrint are refreshed whether or not the model changed.
-    pr_port_sw_found(s_l, id, pm);
-    const pr_rec_t *p = pr_port_current(s_l);
-    if (p) ESP_LOGI(TAG, "the port: printer %d, %s", p->id, pr_kind_name(p->kind));
+    port_snap_t before = snap();
+    pr_port_sw_found(s_l, k, id, pm);
+    moved_since(&before);
     after_change(1);
 }
 
-void printers_port_name(char *out, size_t cap)
+void printers_port_name(int k, char *out, size_t cap)
 {
     if (cap) out[0] = '\0';
     if (!s_started) return;
     lock();
-    const pr_rec_t *p = pr_port_current(s_l);
+    const pr_rec_t *p = pr_port_current(s_l, k);
     if (p) snprintf(out, cap, "%s", p->name);
     unlock();
 }
@@ -951,6 +996,7 @@ int printers_port_slots(printers_port_slot_t out[], int max)
         if (k < 0) continue;
         printers_port_slot_t *s = &out[n++];
         s->slot = (uint8_t)k;
+        s->sock = (uint8_t)pr_port_sock(s_l, r);
         s->id = r->id;
         s->kind = r->kind;
         s->model = r->model;
@@ -960,11 +1006,11 @@ int printers_port_slots(printers_port_slot_t out[], int max)
     return n;
 }
 
-int printers_port_screen(char *dither, size_t cap, int *gain)
+int printers_port_screen(int k, char *dither, size_t cap, int *gain)
 {
     if (!s_started) return -1;
     lock();
-    const pr_rec_t *p = pr_port_current(s_l);
+    const pr_rec_t *p = pr_port_current(s_l, k);
     if (p) {
         snprintf(dither, cap, "%s", p->dither);
         *gain = p->gain;
@@ -977,7 +1023,7 @@ void printers_port_set_screen(const char *dither, int gain)
 {
     if (!s_started) return;
     lock();
-    pr_rec_t *p = (pr_rec_t *)pr_port_current(s_l);
+    pr_rec_t *p = (pr_rec_t *)pr_port_current(s_l, 0);
     if (p) {
         if (dither && dither[0]) snprintf(p->dither, sizeof p->dither, "%s", dither);
         if (gain >= 0 && gain <= 45) p->gain = (uint8_t)gain;
@@ -1037,7 +1083,9 @@ static int clean_head(int id, char *err, size_t cap)
         const pr_rec_t *r = pr_get(s_l, id);
         if (r) snprintf(name, sizeof name, "%s", r->name);
         unlock();
-        snprintf(err, cap, "Connect %s to the printer port first.", name);
+        // W-1179: with two ports, either takes it.
+        snprintf(err, cap, n_socks() > 1 || s_l->port_names ? "Connect %s first."
+                                                            : "Connect %s to the printer port first.", name);
         return 409;
     }
     int rc = s_cfg.clean(id);
@@ -1064,7 +1112,7 @@ int printers_post(const char *body, char *err, size_t cap)
     *s_l = s_big->scratch;
     char dither[sizeof s_l->r[0].dither] = "";
     int gain = -1;
-    const pr_rec_t *p = pr_port_current(s_l);
+    const pr_rec_t *p = pr_port_current(s_l, 0);       // the old Printer pane's: port 1's
     int port_screen = o.screen_id >= 0 && p && p->id == o.screen_id;
     if (port_screen) {
         snprintf(dither, sizeof dither, "%s", p->dither);
@@ -1092,7 +1140,11 @@ void printers_status_json(char *buf, size_t cap)
     lock();
     int shared = 0;
     for (int i = 0; i < s_l->n; i++) shared += s_l->r[i].shared;
-    snprintf(buf, cap, "{\"count\":%u,\"shared\":%d,\"notes\":%u,\"port\":\"%s\"}", s_l->n,
-             shared, s_l->n_notes, modes[mode_of()]);
+    if (n_socks() > 1)
+        snprintf(buf, cap, "{\"count\":%u,\"shared\":%d,\"notes\":%u,\"port\":\"%s\",\"port2\":\"%s\"}",
+                 s_l->n, shared, s_l->n_notes, modes[mode_of(0)], modes[mode_of(1)]);
+    else
+        snprintf(buf, cap, "{\"count\":%u,\"shared\":%d,\"notes\":%u,\"port\":\"%s\"}", s_l->n,
+                 shared, s_l->n_notes, modes[mode_of(0)]);
     unlock();
 }

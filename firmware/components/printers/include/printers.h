@@ -37,8 +37,9 @@ typedef struct {
     // (slot << 8 | record id), for laser_job_begin and ipp_server_job_done_for.
     ipp_doc_sink_t at_sink;
     // The port's own state now: the printer on the port's (pr_port_live_id; every other
-    // port record is offline, W-1116).
-    void (*port_live)(pr_live_t *out);
+    // port record is offline, W-1116). W-1179: socket `sock`'s (0 port 1, 1 port 2); all zero for
+    // a socket doing LocalTalk. No list lock is taken in it.
+    void (*port_live)(int sock, pr_live_t *out);
     void (*port_screen)(const char *dither, int gain);  // its halftone was changed
     void (*look)(void);              // "Look for printers": ask the port again
     void (*changed)(void);           // names, sharing or the port's kind changed
@@ -59,6 +60,9 @@ typedef struct {
     // is gone by then); the port's last answer is forgotten for the record on the port, so
     // the board asks the port again at once.
     void (*port_model)(int id);
+    // W-1179: how many printer sockets the board has: 2 on rev 2026.11, else 1 (or 0); and
+    // whether its case names its sockets port 1 and port 2 (rev 2026.11, the LC included).
+    int  n_ports, port_names;
 } printers_cfg_t;
 
 // Whether a list is stored and reads back: before printers_start, to tell a
@@ -67,17 +71,22 @@ int         printers_stored(void);
 // Before ipp_server_start: loads (or makes) the list.
 esp_err_t   printers_start(const printers_cfg_t *cfg);
 
+// W-1179: every printers_port_* below that takes `k` is about socket k (0 port 1, 1 port 2); a
+// board with one printer socket passes 0. Answers on one socket never move the other's printer,
+// but may move its record: a printer moved from the other socket keeps its record
+// (printers_core.h, pr_port_seen).
+//
 // What the port said when asked: the self-ID's model (iw_model_t) with the
 // line ready, or not ready. Returns the core's result (pr_port_seen): the record id the
 // answer belongs to, PR_SEEN_AGAIN for the first of the two answers that change the list
 // (R16: a new model, or one that replaces Something else or drops an Unknown record), or -1.
-int         printers_port_seen(int iw_model, int ready);
+int         printers_port_seen(int k, int iw_model, int ready);
 // W-1103: a StyleWriter answered on the port as `m` (SW_NONE: nothing did, no
 // change). Its record's at once where nothing else would change; else (a record
 // of its own to make, a Something else record to replace, an Unknown record to
 // drop: R16) once it has answered twice (pr_port_seen_sw, W-1116). Returns the
 // core's result (the record id, PR_SEEN_AGAIN for the first of those two, or -1).
-int         printers_port_seen_sw(sw_model_t m);
+int         printers_port_seen_sw(int k, sw_model_t m);
 // What laser.c heard (once per printer, its link as at_link_t) and its query:
 // answered on at_link at net.node with its page count (-1 none), or not
 // (at_link -1). W-1098: a printer the list has under an old name keeps its
@@ -107,23 +116,23 @@ pr_test_kind_t printers_test_kind(int id);
 int         printers_describe(int id, char *name, size_t ncap, char *product, size_t pcap,
                               char *version, size_t vcap);
 
-port_mode_t printers_port_mode(void);
-int         printers_port_is_imagewriter(void);
-int         printers_port_is_stylewriter(void);
+port_mode_t printers_port_mode(int k);
+int         printers_port_is_imagewriter(int k);
+int         printers_port_is_stylewriter(int k);
 // A printer of a port family (an ImageWriter, a StyleWriter, a QuickDraw LaserWriter) on the
 // port, shared over AirPrint: the panel
 // follows its state.
-int         printers_port_shared(void);
+int         printers_port_shared(int k);
 // The port ImageWriter's model; PR_MODEL_NONE for anything else.
-pr_model_t  printers_port_model(void);
+pr_model_t  printers_port_model(int k);
 // The port StyleWriter's model; SW_NONE for anything else.
-sw_model_t  printers_port_sw_model(void);
+sw_model_t  printers_port_sw_model(int k);
 // W-1102: a QuickDraw LaserWriter answered 83 3E on the port (pr_port_seen_qd: the record id,
 // PR_SEEN_AGAIN, or -1); the clock on HSKi stopped (pr_port_clock_gone); the port's QuickDraw
 // LaserWriter's model, QD_NONE for anything else.
-int         printers_port_seen_qd(uint8_t engine);
-void        printers_port_clock_gone(void);
-qd_model_t  printers_port_qd_model(void);
+int         printers_port_seen_qd(int k, uint8_t engine);
+void        printers_port_clock_gone(int k);
+qd_model_t  printers_port_qd_model(int k);
 // W-1116: what the port's records hold, for port_policy's order of questions, read in one
 // pass: any StyleWriter record (sw), an original ImageWriter record (iw1), an original
 // StyleWriter record (sw1). Each out may be NULL.
@@ -134,8 +143,8 @@ void        printers_port_listed(int *sw, int *iw1, int *sw1);
 // that names no model (a StyleWriter's `1` and `2`, a job that printed, the full sequence once
 // the record has its model; PR_HEARD_NONE changes nothing). Not stored. Any task, the printer
 // task included: nothing here writes flash.
-int         printers_port_heard(void);
-void        printers_port_answered(int heard);
+int         printers_port_heard(int k);
+void        printers_port_answered(int k, int heard);
 // W-1116: a job, test page or cleaning is for port record `id`, but another port record's
 // printer is the one on the port (pr_port_absent): the job is answered busy and the test page
 // and cleaning 409, so one record's work never goes to another's printer. 0 for the one on the
@@ -144,17 +153,22 @@ int         printers_port_absent(int id);
 // W-1116: an ImageWriter is the printer on the port now: the current record is one and it is
 // present (pr_port_on), not the list's last answer. The StyleWriter glue's `swapped`. Reads the
 // live state as printers_json does.
-int         printers_port_on_is_imagewriter(void);
+int         printers_port_on_is_imagewriter(int k);
 // W-1102: port record `id`'s family (doc_begin reads the job's own family from its record, not
 // the port's, W-1116). PR_FAM_NONE for an AppleTalk printer or no such record.
 pr_family_t printers_record_family(int id);
 // W-1102: the family of the printer on the port (pr_port_current); PR_FAM_NONE for none,
 // "Unknown printer" or "Something else".
-pr_family_t printers_port_family(void);
+pr_family_t printers_port_family(int k);
 // W-1116: port record `id`'s model (pr_model_t), PR_MODEL_NONE for no such port record, and its
 // halftone and gain (-1 for no such port record). A job or test page reads its own record's,
 // not the printer on the port's.
 pr_model_t  printers_record_model(int id);
+// W-1179: the socket port record `id` was last seen on (0 for any other id, or a board with one),
+// which a job, test page or cleaning for it selects; and the socket LocalTalk is on, 1 or 2 (0
+// none), which /api/printers gives the printers heard there.
+int         printers_record_sock(int id);
+void        printers_set_lt_port(int port);
 int         printers_record_screen(int id, char *dither, size_t cap, int *gain);
 // W-1116: what an ImageWriter job (or test page) on port record `id` does after its own ESC ?
 // and plain questions (pr_job_gate), given only what they got -- `heard` (pr_heard_t) and the
@@ -166,9 +180,9 @@ pr_gate_t   printers_job_gate(int id, int heard, pr_model_t heard_model, int lin
 // (W-1116, `id`) takes it (no notice: the person had named it a StyleWriter already; sharing
 // stays as it was), and `m` is the printer on the port now. No-op for an `id` that is not a
 // StyleWriter port record.
-void        printers_port_set_sw_model(int id, sw_model_t m);
+void        printers_port_set_sw_model(int k, int id, sw_model_t m);
 // The printer on the port's name (pr_port_current), "" with none: the test page's.
-void        printers_port_name(char *out, size_t cap);
+void        printers_port_name(int k, char *out, size_t cap);
 // W-1116: the name vintage Macs see for the printer port and the queue name at boot
 // (pr_chooser_name): the oldest ImageWriter record's, fixed across swaps, else the oldest
 // port record's, else "AirWriter".
@@ -179,11 +193,12 @@ int         printers_slot_of(int id);
 // (main's port_push): its slot, kind and model and what it says of itself (pr_port_say_t).
 // The live state is read as printers_json reads it. How many; a record without a slot is
 // left out.
-typedef struct { uint8_t slot, id, kind, model, say; } printers_port_slot_t;
+// W-1179: sock is the socket the record was last seen on, whose state is its own (say OWN).
+typedef struct { uint8_t slot, sock, id, kind, model, say; } printers_port_slot_t;
 int         printers_port_slots(printers_port_slot_t out[], int max);
-// The port printer's halftone and gain, from its record: -1 with no port printer.
-int         printers_port_screen(char *dither, size_t cap, int *gain);
-// The page's old Printer pane changed the screen: the port record follows.
+// Socket k's printer's halftone and gain, from its record: -1 with no port printer.
+int         printers_port_screen(int k, char *dither, size_t cap, int *gain);
+// The page's old Printer pane changed the screen: port 1's record follows.
 void        printers_port_set_screen(const char *dither, int gain);
 
 // Printer 0 as its record says (the oldest port record, at ipp/print and its own ipp/p<id>),
@@ -201,5 +216,6 @@ void        printers_apply(void);
 // HTTP status with a sentence for the page in err.
 void        printers_json(char *buf, size_t cap);
 int         printers_post(const char *body, char *err, size_t cap);
-// The "printers" member of /api/status: {"count":N,"shared":M,"port":"..."}.
+// The "printers" member of /api/status: {"count":N,"shared":M,"port":"..."} (W-1179: and
+// "port2" with two printer sockets).
 void        printers_status_json(char *buf, size_t cap);

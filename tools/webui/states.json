@@ -1152,20 +1152,350 @@
    }
   },
   "rev-2026-11": {
-   "about": "Rev 2026.11, Rainbow status lights on",
+   "about": "Rev 2026.11, Rainbow status lights on: the ImageWriter II on port 1, LocalTalk on port 2 with the Office LaserWriter and a Mac",
    "patch": {
     "GET /api/status": {
      "board": "2026.11",
      "rainbow": true
+    },
+    "GET /api/printers": {
+     "printers": [
+      {
+       "id": 1,
+       "name": "ImageWriter II",
+       "where": "port",
+       "kind": "imagewriter",
+       "model": "ImageWriter II",
+       "shared": true,
+       "identified": true,
+       "found": "person",
+       "state": "ready",
+       "uuid": "urn:uuid:41575254-4552-0001-10bd-a36e2434",
+       "product": "",
+       "dither": "atkinson",
+       "gain": 0,
+       "rp": "ipp/print",
+       "start_page": null,
+       "icon": "icon",
+       "port": 1
+      },
+      {
+       "id": 2,
+       "name": "LaserWriter II NT",
+       "where": "tunnel",
+       "kind": "laserwriter",
+       "model": "",
+       "shared": true,
+       "identified": true,
+       "found": "person",
+       "state": "ready",
+       "uuid": "urn:uuid:41575254-4c57-0001-99d7-10bda36e2434",
+       "product": "LaserWriter II NT",
+       "dither": "atkinson",
+       "gain": 0,
+       "rp": "ipp/laser",
+       "start_page": true,
+       "icon": "lw2"
+      },
+      {
+       "id": 3,
+       "name": "Office LaserWriter",
+       "where": "cable",
+       "kind": "laserwriter",
+       "model": "",
+       "shared": true,
+       "identified": true,
+       "found": "auto",
+       "state": "ready",
+       "uuid": "urn:uuid:41575254-4c57-0001-78fa-10bda36e2434",
+       "product": "LaserWriter Pro 630",
+       "dither": "bluenoise",
+       "gain": 0,
+       "rp": "ipp/p3",
+       "start_page": null,
+       "icon": "lwpro600",
+       "port": 2
+      }
+     ],
+     "port_on": 1,
+     "port2_on": 0
+    },
+    "GET /api/lt": {
+     "port": 2,
+     "macs": [
+      {
+       "node": 83,
+       "name": "Wells’s Mac",
+       "ago": 40
+      }
+     ]
+    }
+   }
+  },
+  "ports-two-printers": {
+   "about": "W-1179 rev 2026.11: two printers at once, the ImageWriter II on port 1 and a StyleWriter on port 2; no port has LocalTalk",
+   "patch": {
+    "GET /api/status": {
+     "board": "2026.11",
+     "printers": {
+      "count": 3,
+      "shared": 3,
+      "notes": 0,
+      "port": "imagewriter"
+     }
+    },
+    "GET /api/printers": {
+     "printers": [
+      {
+       "id": 1,
+       "name": "ImageWriter II",
+       "where": "port",
+       "kind": "imagewriter",
+       "model": "ImageWriter II",
+       "shared": true,
+       "identified": true,
+       "found": "person",
+       "state": "ready",
+       "uuid": "urn:uuid:41575254-4552-0001-10bd-a36e2434",
+       "product": "",
+       "dither": "atkinson",
+       "gain": 0,
+       "rp": "ipp/print",
+       "start_page": null,
+       "icon": "icon",
+       "port": 1
+      },
+      {
+       "id": 2,
+       "name": "LaserWriter II NT",
+       "where": "tunnel",
+       "kind": "laserwriter",
+       "model": "",
+       "shared": true,
+       "identified": true,
+       "found": "person",
+       "state": "ready",
+       "uuid": "urn:uuid:41575254-4c57-0001-99d7-10bda36e2434",
+       "product": "LaserWriter II NT",
+       "dither": "atkinson",
+       "gain": 0,
+       "rp": "ipp/laser",
+       "start_page": true,
+       "icon": "lw2"
+      },
+      {
+       "id": 4,
+       "name": "Color StyleWriter 2500",
+       "where": "port",
+       "kind": "stylewriter",
+       "model": "Color StyleWriter 2500",
+       "shared": true,
+       "identified": true,
+       "found": "auto",
+       "state": "ready",
+       "uuid": "urn:uuid:41575254-4552-0002-10bd-a36e2434",
+       "product": "",
+       "dither": "atkinson",
+       "gain": 0,
+       "rp": "ipp/p4",
+       "start_page": null,
+       "icon": "sw2",
+       "port": 2
+      }
+     ],
+     "chooser": [
+      "ImageWriter II",
+      "LaserWriter II NT",
+      "Color StyleWriter 2500"
+     ],
+     "port_on": 1,
+     "port2_on": 4
+    },
+    "GET /api/lt": {
+     "port": 0,
+     "macs": []
+    }
+   }
+  },
+  "ports-swapped": {
+   "about": "W-1179 rev 2026.11: plugged in the other way round, LocalTalk on port 1 (the Office LaserWriter and a Mac) and the ImageWriter II on port 2",
+   "patch": {
+    "GET /api/status": {
+     "board": "2026.11"
+    },
+    "GET /api/printers": {
+     "printers": [
+      {
+       "id": 1,
+       "name": "ImageWriter II",
+       "where": "port",
+       "kind": "imagewriter",
+       "model": "ImageWriter II",
+       "shared": true,
+       "identified": true,
+       "found": "person",
+       "state": "ready",
+       "uuid": "urn:uuid:41575254-4552-0001-10bd-a36e2434",
+       "product": "",
+       "dither": "atkinson",
+       "gain": 0,
+       "rp": "ipp/print",
+       "start_page": null,
+       "icon": "icon",
+       "port": 2
+      },
+      {
+       "id": 2,
+       "name": "LaserWriter II NT",
+       "where": "tunnel",
+       "kind": "laserwriter",
+       "model": "",
+       "shared": true,
+       "identified": true,
+       "found": "person",
+       "state": "ready",
+       "uuid": "urn:uuid:41575254-4c57-0001-99d7-10bda36e2434",
+       "product": "LaserWriter II NT",
+       "dither": "atkinson",
+       "gain": 0,
+       "rp": "ipp/laser",
+       "start_page": true,
+       "icon": "lw2"
+      },
+      {
+       "id": 3,
+       "name": "Office LaserWriter",
+       "where": "cable",
+       "kind": "laserwriter",
+       "model": "",
+       "shared": true,
+       "identified": true,
+       "found": "auto",
+       "state": "ready",
+       "uuid": "urn:uuid:41575254-4c57-0001-78fa-10bda36e2434",
+       "product": "LaserWriter Pro 630",
+       "dither": "bluenoise",
+       "gain": 0,
+       "rp": "ipp/p3",
+       "start_page": null,
+       "icon": "lwpro600",
+       "port": 1
+      }
+     ],
+     "port_on": 0,
+     "port2_on": 1
+    },
+    "GET /api/lt": {
+     "port": 1,
+     "macs": [
+      {
+       "node": 83,
+       "name": "Wells’s Mac",
+       "ago": 40
+      }
+     ]
+    }
+   }
+  },
+  "ports-unknown": {
+   "about": "W-1179 rev 2026.11: an unrecognized printer on port 2",
+   "patch": {
+    "GET /api/status": {
+     "board": "2026.11"
+    },
+    "GET /api/printers": {
+     "printers": [
+      {
+       "id": 1,
+       "name": "Unknown printer",
+       "where": "port",
+       "kind": "unknown",
+       "model": "",
+       "shared": false,
+       "identified": false,
+       "found": "auto",
+       "state": "ready",
+       "uuid": "urn:uuid:41575254-4552-0001-10bd-a36e2434",
+       "product": "",
+       "dither": "atkinson",
+       "gain": 0,
+       "rp": "",
+       "start_page": null,
+       "icon": "",
+       "port": 2
+      }
+     ],
+     "notes": [
+      {
+       "kind": "unknown_port",
+       "id": 1,
+       "model": ""
+      }
+     ],
+     "port_on": 0,
+     "said_other": false,
+     "chooser": [],
+     "max_shared": 6,
+     "port2_on": 1
+    },
+    "GET /api/lt": {
+     "port": 0,
+     "macs": []
     }
    }
   },
   "lc": {
-   "about": "AirWriter LC: one status light, Rainbow status lights off",
+   "about": "AirWriter LC: one status light, Rainbow status lights off, one port (port 1) and no LocalTalk",
    "patch": {
     "GET /api/status": {
      "board": "2026.11",
      "lc": true
+    },
+    "GET /api/printers": {
+     "printers": [
+      {
+       "id": 1,
+       "name": "ImageWriter II",
+       "where": "port",
+       "kind": "imagewriter",
+       "model": "ImageWriter II",
+       "shared": true,
+       "identified": true,
+       "found": "person",
+       "state": "ready",
+       "uuid": "urn:uuid:41575254-4552-0001-10bd-a36e2434",
+       "product": "",
+       "dither": "atkinson",
+       "gain": 0,
+       "rp": "ipp/print",
+       "start_page": null,
+       "icon": "icon",
+       "port": 1
+      },
+      {
+       "id": 2,
+       "name": "LaserWriter II NT",
+       "where": "tunnel",
+       "kind": "laserwriter",
+       "model": "",
+       "shared": true,
+       "identified": true,
+       "found": "person",
+       "state": "ready",
+       "uuid": "urn:uuid:41575254-4c57-0001-99d7-10bda36e2434",
+       "product": "LaserWriter II NT",
+       "dither": "atkinson",
+       "gain": 0,
+       "rp": "ipp/laser",
+       "start_page": true,
+       "icon": "lw2"
+      }
+     ],
+     "chooser": [
+      "ImageWriter II",
+      "LaserWriter II NT"
+     ],
+     "port_on": 1
     }
    }
   },

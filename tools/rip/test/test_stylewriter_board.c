@@ -63,6 +63,7 @@ static int g_tap;                  // what the board's cancelled callback answer
 int64_t esp_timer_get_time(void) { return (int64_t)F.us; }
 void vTaskDelay(TickType_t ticks) { F.us += (uint64_t)ticks * 10000u; }
 void serial_out_rx_drop(void) { F.rx_n = F.rx_pos = 0; }
+int  serial_out_selected(void) { return 0; }   // W-1179: one printer line here
 
 void serial_out_set_link(int baud, int cts)
 {

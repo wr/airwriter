@@ -8,7 +8,8 @@ void ps_init(ps_t *ps, const ps_timing_t *tm, uint64_t now)
 {
     memset(ps, 0, sizeof *ps);
     ps->tm = *tm;
-    ps->boot_at = ps->line_since = ps->activity_at = ps->state_since = ps->port_since = now;
+    ps->boot_at = ps->line_since = ps->activity_at = ps->state_since = now;
+    for (int i = 0; i < PS_PORTS; i++) ps->port_since[i] = now;
     ps->last = ps->prev = PS_BOOTING;
 }
 
@@ -61,7 +62,7 @@ void ps_post(ps_t *ps, ps_event_t ev, uint64_t now)
         break;
     case PS_EV_WIFI_FRESH:     ps->fresh = 1; break;
     case PS_EV_LINE_READY:
-        if (!ps->line_ready) { ps->line_ready = 1; ps->line_since = now; ps->kicked = 0; }
+        if (!ps->line_ready) { ps->line_ready = 1; ps->line_since = now; ps->kicked[0] = 0; }
         ps->job_started_low = 0;
         break;
     case PS_EV_LINE_NOT_READY:
@@ -172,24 +173,27 @@ const char *ps_name(ps_state_t st)
     return "?";
 }
 
-int ps_want_kick(const ps_t *ps, uint64_t now)
+int ps_want_kick(const ps_t *ps, int port, uint64_t now)
 {
-    if (ps->job || ps->port_ready || ps->setup) return 0;
-    if (now - ps->port_since < ps->tm.kick_after_ms) return 0;
-    return !ps->kicked || now - ps->kicked_at >= ps->tm.kick_every_ms;
+    if ((unsigned)port >= PS_PORTS) return 0;
+    if (ps->job || ps->port_ready[port] || ps->setup) return 0;
+    if (now - ps->port_since[port] < ps->tm.kick_after_ms) return 0;
+    return !ps->kicked[port] || now - ps->kicked_at[port] >= ps->tm.kick_every_ms;
 }
 
-void ps_port_line(ps_t *ps, int ready, uint64_t now)
+void ps_port_line(ps_t *ps, int port, int ready, uint64_t now)
 {
+    if ((unsigned)port >= PS_PORTS) return;
     ready = ready ? 1 : 0;
-    if (ready == ps->port_ready) return;
-    ps->port_ready = (uint8_t)ready;
-    ps->port_since = now;
-    if (ready) ps->kicked = 0;
+    if (ready == ps->port_ready[port]) return;
+    ps->port_ready[port] = (uint8_t)ready;
+    ps->port_since[port] = now;
+    if (ready) ps->kicked[port] = 0;
 }
 
-void ps_kicked(ps_t *ps, uint64_t now)
+void ps_kicked(ps_t *ps, int port, uint64_t now)
 {
-    ps->kicked = 1;
-    ps->kicked_at = now;
+    if ((unsigned)port >= PS_PORTS) return;
+    ps->kicked[port] = 1;
+    ps->kicked_at[port] = now;
 }

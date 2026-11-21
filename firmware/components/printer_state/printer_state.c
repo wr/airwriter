@@ -71,24 +71,24 @@ int printer_state_job(void)
     return job;
 }
 
-int printer_state_want_kick(void)
+int printer_state_want_kick(int port)
 {
     xSemaphoreTake(s_mtx, portMAX_DELAY);
-    int want = ps_want_kick(&s_ps, now_ms());
+    int want = ps_want_kick(&s_ps, port, now_ms());
     xSemaphoreGive(s_mtx);
     return want;
 }
 
-void printer_state_port_line(int ready)
+void printer_state_port_line(int port, int ready)
 {
     xSemaphoreTake(s_mtx, portMAX_DELAY);
-    ps_port_line(&s_ps, ready, now_ms());
+    ps_port_line(&s_ps, port, ready, now_ms());
     xSemaphoreGive(s_mtx);
 }
 
-void printer_state_kicked(void)
+void printer_state_kicked(int port)
 {
     xSemaphoreTake(s_mtx, portMAX_DELAY);
-    ps_kicked(&s_ps, now_ms());
+    ps_kicked(&s_ps, port, now_ms());
     xSemaphoreGive(s_mtx);
 }

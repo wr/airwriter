@@ -699,7 +699,10 @@ printer (`components/localtalk`):
 - **The cable** (`W-1051 LocalTalk node: show up in the Chooser as an ImageWriter`, `W-1053
   LocalTalk: print PAP jobs from the Mac's AppleTalk ImageWriter driver`): LocalTalk through
   TashTalk in U7 on J4, while the AppleTalk port is on. LLAP node acquisition by ENQ (TashTalk answers ENQ and
-  RTS for the claimed ID), short DDP headers.
+  RTS for the claimed ID), short DDP headers. On rev 2026.11 the cable is whichever socket does
+  LocalTalk (3.19): U7 on J4 or U10 on J2, moved between them with its node as the sockets'
+  jobs change (`localtalk_move`), parked while neither does; `/api/lt` has `port` (1 or 2, 0
+  for none), which the page's LocalTalk card shows.
 - **Basilisk II's UDP tunnel** (W-1076, design `docs/superpowers/specs/2026-10-19-ethertalk-design.md`):
   EtherTalk frames as UDP datagrams to port 6066 on the home network (`udptunnel true` in
   Basilisk II's prefs, and `udpappletalkonly true` to keep the Mac's internet through its
@@ -821,6 +824,21 @@ printers it has, found or told (`components/printers`: `printers_core.c` pure an
 `printers.c` the board's), in NVS `printers`/`list` (`pr_save`, versioned; a blob that does not
 read back is a list made again). At most 8 records.
 
+- **Two printer sockets** (W-1179, rev 2026.11; 3.19). Every rule below holds per socket: each
+  has its own last answer, pending sighting, current record, Unknown printer and Something
+  else (`pr_list_t.ports[]`, `pr_port_*(l, s, …)`). A record is a printer, not a socket: it
+  carries `port`, the socket it was last seen on (the byte `pr_rec_t` always padded at offset
+  171, stored as 0 by every firmware before it, so the stored form and `PR_BLOB_VER` are
+  unchanged), read only where `n_ports` is 2. An answer naming a model whose record was last
+  seen on the other socket is that record's when nothing shows itself on the other socket now
+  (`pr_port_up`, from main's live state): the printer was moved, and keeps its record, name,
+  uuid and AirPrint slot. When the other socket's printer is there and is that record, the
+  answer is a second printer of the model, which gets a record of its own ("ImageWriter II 2")
+  by R16. Add a Printer… makes a record on port 1 until its printer answers on one. The test
+  page goes to port 1's printer, then port 2's, then as below. `/api/printers` gives each port
+  record's `port` (1 or 2) and a printer heard on LocalTalk the LocalTalk socket's, on any
+  board whose case names its ports (the LC too); with two sockets also `port2_on` and
+  `port_unsupported_port`. Rev A's list and JSON are as before.
 - **Records.** id (stable), where (port, or an AppleTalk link), kind (ImageWriter with model II,
   LQ or original; StyleWriter with one of its seven models, 3.16; Personal LaserWriter 300,
   3.18; LaserWriter; AppleTalk ImageWriter; unknown), name (from the printer: the
@@ -1850,14 +1868,43 @@ board exists.
   never touches IO35-IO37; it tells the board by the flash size, the one part of the board
   choice its build sees. App_main holds both low (asserted at the port) from its first lines.
 - **Either socket, either job** (`W-1176 Rev 2026.11: either socket takes a serial printer or
-  AppleTalk`). Rev 2026.11's J2 and J4 have the same circuit (`docs/hardware-rev-2026-11.md`):
+  AppleTalk`, `W-1179 Rev 2026.11: plug anything into either socket and AirWriter works out
+  what it is`). Rev 2026.11's J2 and J4 have the same circuit (`docs/hardware-rev-2026-11.md`):
   a THVD1452 whose receiver is always on, a TashTalk of its own (U10 for J2, U7 for J4), and
-  GPIOs that take the line over when that TashTalk is held in reset. Until the page lets you
-  choose, J2 is the printer port and J4 LocalTalk, as on rev A. The bootloader hook drives IO42
-  low (U10 in reset); right after `serial_out_init`, app_main holds it there and drives IO7
-  (`J2_DE`) high, J2's driver on, carrying UART1's TX on IO17 through R38, and leaves J4's
-  printer-side pins (IO3, IO9, IO10) as inputs with no pulls, so U7 owns J4's line, and U10's
-  (IO11, IO12, IO41) as inputs pulled down, so its programming lines never float. The cable test is unchanged: its frames leave J2 through the same driver.
+  GPIOs that take the line over when that TashTalk is held in reset. The case calls J2 port 1
+  (socket 0 in the code; the LC's only socket) and J4 port 2 (socket 1), and so does the page.
+  The bootloader hook drives IO42 low (U10 in reset); app_main then gives each socket its job.
+  - **The jobs** (`components/ports`). A socket doing the printer job holds its PIC in reset
+    (CLK, DAT and CTS pulled down), drives its DE high and has a printer line of its own in
+    `serial_out` (J2's on UART1, J4's on UART0, each with its own clock counter and line task);
+    one doing LocalTalk parks that line (TX an input with no pull), lets DE go and releases its
+    PIC. `ports_hw` is the one place the pins change hands, under the job lock. At most one
+    socket does LocalTalk, so at least one is always a printer port. Rev A and the LC keep one
+    job per socket, set up as before.
+  - **What's plugged in** (`port_detect_core.c`, pure and host-tested; `sock_detect` in main,
+    between the port task's questions). Nothing is sent to find out. A printer's handshake held
+    ready for 2 s, or a clock on HSKi, on the LocalTalk socket with no LocalTalk frame heard
+    meanwhile moves that socket to the printer job; framing errors and breaks on a printer
+    socket with no printer showing put it on LocalTalk on trial, kept only if TashTalk hears a
+    frame. Quiet sockets keep their last job; with nothing plugged in, J2 prints and J4 does
+    LocalTalk. Every change is a log line naming the port, its old and new job and the signal.
+  - **Saved.** Each socket's last job (NVS `general` `port1job`, `port2job`), so a restart
+    keeps it. `/api/general` `{"port1":"auto"|"printer"|"localtalk","port2":…}` fixes one
+    (`port1set`, `port2set`; auto by default); the page has no control for it. `/api/status`
+    `ports` lists each socket's `job` and `set` (`fixed` on rev A and the LC).
+  - **Two printers at once.** Both printer sockets are live and shared: the port task visits
+    each in turn (`port_visit`) and asks it its own questions (3.16's policy, with books per
+    socket, `psock_t`), selecting it (`serial_out_select`, `qd_link_init`) under the job lock.
+    Jobs stay one at a time under that lock: a job selects its record's socket
+    (`job_sock_take`), a vintage Mac's ImageWriter stream the first socket with an ImageWriter
+    there (`lt_sock`), and a job for the other socket's printer is told busy until the first
+    ends. Each socket keeps its own line, ribbon (port 1's is the one saved), StyleWriter and
+    QuickDraw LaserWriter state, and CTRL-X kick. The panel follows the printing socket's line;
+    idle, it is Ready while any shared printer is. 3.15 has the records.
+  - **TashTalk on U10.** U10 ships blank (`pic_prog` takes either socket's pins); the first time
+    J2 does LocalTalk with a blank U10, TashTalk goes on as U7's does. `/api/localtalk/flash`
+    takes `{"port":1|2}` (default: the LocalTalk socket).
+  - The cable test needs a socket on each job; its frames leave the printer socket's driver.
 - **Straps**, rev 2026.11 only, read once at boot with the pull-ups on, which stay on only where
   a strap reads high: IO16 (`BOARD_REV`, low on every 2026.11 board) and IO15 (`BOARD_LC`, low on
   the LC). `/api/status` has `board` (`rev-a` or `2026.11`), `lc`, and `board_ok`, false when a
@@ -1899,10 +1946,13 @@ board exists.
   in the case, by how much depends on what the chip is doing. Nothing acts on the number and
   the settings page does not show it. Not yet read on a board.
 - **Tested:** both builds, the stack check on both, and the host tests (the manifest with both
-  keys, the handshake verdicts, the LC light's caps, colours, endings and priorities). Nothing has run on a rev 2026.11 board: none exists yet. On
+  keys, the handshake verdicts, the LC light's caps, colours, endings and priorities; W-1179's
+  socket detector, the printer list with two sockets, the port policy's books per socket and
+  the kick per socket). Nothing has run on a rev 2026.11 board: none exists yet. On
   the first, check the straps, the handshake legs through Apple's crossover, a StyleWriter
   (J2's handshake held asserted by IO47) and the Personal LaserWriter 300's clock through
-  rev 2026.11's U3.
+  rev 2026.11's U3; then each socket's jobs: a printer on each, LocalTalk on each, a printer
+  moved from one to the other, and U10's first TashTalk flash.
 
 ### 3.20 Password and sign-in (W-1156)
 

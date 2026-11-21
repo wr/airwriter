@@ -75,7 +75,9 @@ These apply to the product, docs and Wells voices.
 | phones and computers | iPhone, iPad and Mac (except in per-platform steps) |
 | vintage Macs | old Macs |
 | connection, or the card's name | way in |
-| printer port, AppleTalk port | J2, J4, LocalTalk port, serial port |
+| printer port, AppleTalk port (rev A) | J2, J4, LocalTalk port, serial port |
+| port 1, port 2 (rev 2026.11 and AirWriter LC, as the case says) | J2, J4, printer port, socket |
+| LocalTalk (the card for a Mac's cable on rev 2026.11) | AppleTalk port |
 | test button | test dot |
 | settings page | web UI, dashboard, the page |
 | switch on, switch off | power on, power up |
