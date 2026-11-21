@@ -498,6 +498,8 @@ static void usage(void)
           "           [--out-qd-bits FILE] [--out-pbm FILE]\n"
           "       rip --testpage colour|black|unknown --out-stream FILE [--dither ...] [--gain ...]\n"
           "       rip --sw-testpage black|colour --model M --out-sw FILE [--dither ...] [--gain ...]\n"
+          "  --no-lineart  an ImageWriter page without its crisp text and thin lines (W-1178),\n"
+          "             as the board printed it before\n"
           "  --colour   print RGB pages in four inks, as with the colour ribbon in\n"
           "  --gain     dot gain at a 50%% tint the tone curve makes up for (default 0, off)\n"
           "  --times    log where each page's time went: read, scale, screen, second screen,\n"
@@ -546,7 +548,7 @@ int main(int argc, char **argv)
     const char *sw_tp = NULL, *qd_tp = NULL;
     const char *out_qd = NULL, *out_qd_bits = NULL, *source = "main";
     int sp_on = 0;
-    int colour = 0, gain = 0, top = 0, hex = 0, times = 0;
+    int colour = 0, gain = 0, top = 0, hex = 0, times = 0, no_lineart = 0;
 
     for (int i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "--in") && i + 1 < argc)               in = argv[++i];
@@ -554,6 +556,7 @@ int main(int argc, char **argv)
         else if (!strcmp(argv[i], "--out-preview") && i + 1 < argc) out_preview = argv[++i];
         else if (!strcmp(argv[i], "--dither") && i + 1 < argc)      dither = argv[++i];
         else if (!strcmp(argv[i], "--colour"))                       colour = 1;
+        else if (!strcmp(argv[i], "--no-lineart"))                   no_lineart = 1;
         else if (!strcmp(argv[i], "--gain") && i + 1 < argc)        gain = atoi(argv[++i]);
         else if (!strcmp(argv[i], "--testpage") && i + 1 < argc)    testpage = argv[++i];
         else if (!strcmp(argv[i], "--top-margin") && i + 1 < argc)  top = atoi(argv[++i]);
@@ -688,6 +691,10 @@ int main(int argc, char **argv)
         .dither   = algo,
         .gain     = gain,
         .colour   = colour,
+        // W-1178: an ImageWriter's page has crisp text and lines, faint hairlines included, as
+        // the board's job_pipe gives it; the other printers' set their own below.
+        .lineart  = !no_lineart && !laser,
+        .lineart_light = 247,
         .top_margin = top,
         .caps     = laser ? &caps : NULL,
         .stage    = laser ? &stage : NULL,

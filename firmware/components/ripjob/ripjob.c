@@ -29,6 +29,12 @@ typedef struct {
     // W-1174: text and thin lines (cfg->lineart, a gray page): rows go through it first.
     la_t      la;
     int       la_on;
+    // A colour page's text and lines (W-1178): its RGB rows held while the gray goes through,
+    // LA_DELAY + 1 of them, and the gray of the row going in.
+    uint8_t  *la_rgb;
+    uint8_t  *la_gray;
+    int32_t   la_in;                    // RGB rows taken, and rows the text and lines gave back
+    int32_t   la_out;
     // W-1143: this page's time in each part, in us (ripjob.h), while cfg->clock_us is set.
     uint32_t  t_read, t_scale, t_screen, t_second, t_out, t_emit, t_line;
 } pipe_t;
@@ -91,23 +97,11 @@ static void on_row(void *ctx, const uint8_t *row, uint32_t w)
     screen_row(p, row, w);
 }
 
-// The page's last rows, held for the ten below them.
-static void la_end(pipe_t *p, uint32_t w)
-{
-    for (;;) {
-        uint32_t t0 = clk(p);
-        const uint8_t *row = la_flush(&p->la);
-        p->t_line += clk(p) - t0;
-        if (!row) break;
-        screen_row(p, row, w);
-    }
-}
 
-// One resampled RGB row of a colour page: split it into inks, halftone each,
+// One RGB page row, its text and lines decided: split it into inks, halftone each,
 // and hand the four rows to the colour strip writer, or to a stage that takes them.
-static void on_rgb_row(void *ctx, const uint8_t *row, uint32_t w)
+static void screen_rgb_row(pipe_t *p, const uint8_t *row, uint32_t w)
 {
-    pipe_t *p = (pipe_t *)ctx;
     uint32_t t0 = clk(p);
     ink_screens_row(&p->inks, row, p->ibits);
     uint32_t t1 = clk(p);
@@ -121,6 +115,65 @@ static void on_rgb_row(void *ctx, const uint8_t *row, uint32_t w)
     p->t_screen += t1 - t0;
     p->t_out    += t2 - t1;
     p->t_emit   += t2 - t0;
+}
+
+// W-1178: a colour row's text and lines. Where the gray came out decided (`dec`, lineart.h)
+// and the pixel is a gray (black text, a gray line), it becomes that black or paper; a
+// coloured pixel keeps its colour, so blue text stays blue.
+#define LA_NEUTRAL 48
+static void la_apply_rgb(uint8_t *rgb, const uint8_t *dec, uint32_t w)
+{
+    for (uint32_t x = 0; x < w; x++, rgb += 3) {
+        uint8_t r = rgb[0], g = rgb[1], b = rgb[2];
+        uint8_t hi = r > g ? (r > b ? r : b) : (g > b ? g : b);
+        uint8_t lo = r < g ? (r < b ? r : b) : (g < b ? g : b);
+        if (hi - lo >= LA_NEUTRAL) continue;
+        uint8_t was = (uint8_t)((77u * r + 150u * g + 29u * b + 128u) >> 8);
+        if (dec[x] == was) continue;
+        rgb[0] = rgb[1] = rgb[2] = dec[x];
+    }
+}
+
+static uint8_t *la_rgb_row(const pipe_t *p, int32_t y, uint32_t w)
+{
+    return p->la_rgb + (size_t)(y % (LA_DELAY + 1)) * w * 3;
+}
+
+// One resampled RGB row: through the text and lines when the page has them (its gray decides,
+// ten rows behind), then to its screens.
+static void on_rgb_row(void *ctx, const uint8_t *row, uint32_t w)
+{
+    pipe_t *p = (pipe_t *)ctx;
+    if (!p->la_rgb) {
+        screen_rgb_row(p, row, w);
+        return;
+    }
+    uint32_t t0 = clk(p);
+    memcpy(la_rgb_row(p, p->la_in, w), row, (size_t)w * 3);
+    ink_gray(row, w, p->la_gray);
+    const uint8_t *dec = la_push(&p->la, p->la_gray);
+    p->la_in++;
+    int32_t y = dec ? p->la_out++ : 0;        // a row comes back for each taken, in order
+    if (dec) la_apply_rgb(la_rgb_row(p, y, w), dec, w);
+    uint32_t t1 = clk(p);
+    p->t_line += t1 - t0;
+    p->t_emit += t1 - t0;
+    if (dec) screen_rgb_row(p, la_rgb_row(p, y, w), w);
+}
+
+// The page's last rows, held for the ten below them.
+static void la_end(pipe_t *p, uint32_t w)
+{
+    for (;;) {
+        uint32_t t0 = clk(p);
+        const uint8_t *row = la_flush(&p->la);
+        int32_t y = row ? p->la_out++ : 0;    // counted as they come: a page under ten rows
+        if (row && p->la_rgb) la_apply_rgb(la_rgb_row(p, y, w), row, w);   // gives fewer
+        p->t_line += clk(p) - t0;
+        if (!row) break;
+        if (p->la_rgb) screen_rgb_row(p, la_rgb_row(p, y, w), w);
+        else screen_row(p, row, w);
+    }
 }
 
 // Apple's drivers start a page on the screen's second row (apple_tables.h).
@@ -294,6 +347,24 @@ int ripjob_run(urf_t *u, const ripjob_cfg_t *cfg, ripjob_stats_t *st)
             if (rs_init_n(&rs, src_w, u->page.height, dst_w, dst_h, 3, on_rgb_row, p)) {
                 rc = -1; goto page_cleanup;
             }
+            // W-1178: text and lines on a colour page, last and from PSRAM only as on a gray
+            // one: its gray decides, its RGB rows held meanwhile.
+            if (cfg->lineart) {
+                p->la_rgb = big_malloc_only((size_t)(LA_DELAY + 1) * dst_w * 3);
+                p->la_gray = big_malloc_only(dst_w);
+                if (!p->la_rgb || !p->la_gray || la_init(&p->la, dst_w)) {
+                    free(p->la_rgb);
+                    free(p->la_gray);
+                    p->la_rgb = p->la_gray = NULL;
+                    say(cfg, "page %d: no memory for crisp text and lines: printed without",
+                        pages + 1);
+                } else {
+                    if (cfg->lineart_light) p->la.light = cfg->lineart_light;
+                    la_page(&p->la);
+                    p->la_on = 1;
+                    p->la_in = p->la_out = 0;
+                }
+            }
         } else {
             p->bits = big_calloc((dst_w + 7) / 8, 1);
             if (!p->bits) { rc = -1; goto page_cleanup; }
@@ -323,6 +394,7 @@ int ripjob_run(urf_t *u, const ripjob_cfg_t *cfg, ripjob_stats_t *st)
                 say(cfg, "page %d: no memory for crisp text and lines (%u bytes): printed without",
                     pages + 1, (unsigned)la_bytes(dst_w));
             else if (cfg->lineart) {
+                if (cfg->lineart_light) p->la.light = cfg->lineart_light;
                 la_page(&p->la);
                 p->la_on = 1;
             }
@@ -392,6 +464,9 @@ page_cleanup:
         if (ht_ready) ht_free(&p->ht);
         if (p->la_on) la_free(&p->la);
         p->la_on = 0;
+        free(p->la_rgb);
+        free(p->la_gray);
+        p->la_rgb = p->la_gray = NULL;
         free(p->bits);
         p->bits = NULL;
         free(p->gray);

@@ -491,6 +491,24 @@ Reference p. 123): `ESC K n` (1 yellow, 2 magenta, 3 cyan, 0 black) when the ink
 with no ink only adds its LF. The page ends on black. With a black ribbon an sRGB page is
 turned to gray (Rec. 601 luma) and printed as above.*
 
+*Amended (2026-11-20, `W-1178 ImageWriter: text and thin lines print crisp, faint hairlines
+included`): an ImageWriter's page, gray or colour, goes through W-1174's text and lines
+(`halftone/lineart.c`, §3.18) ahead of its screen, Atkinson still the default. On a colour page
+the gray decides and only a gray pixel (R, G and B within 48) becomes black or paper, so
+coloured text and icons keep their inks (`ripjob.c` `la_apply_rgb`, the RGB rows held ten rows
+behind). A thin light line may be as light as 247 (`ripjob_cfg_t.lineart_light`, the 300 keeps
+231): a row is 1/72 in, so a hairline averages to about 245 before it is seen. Chosen on board
+1's ImageWriter II with the colour ribbon, against a control printed as exact dots through the
+same ribbon and pins: an order slip's card outlines and dividers print, its gray text black and
+sharp. Blue noise, which the 300 took, was rejected on screen: a 5% tint becomes a scatter of
+big coloured dots and small text goes ragged, so a pale tint stays blank. `rip --no-lineart`
+prints as before; the iOS and colour-as-gray fixtures moved, the checker didn't. The test page
+draws its own rows (`testpage`) and is unchanged. A review on a different model found two
+faults, fixed with tests: a colour page under ten rows paired its rows with colour rows before
+the ring (now counted as they come back), and a pale line had to go on straight, so a slanted
+one printed as nothing or dashes (now it may go on through a corner, on either side). The 300's
+order slip prints the same dots as before W-1178.*
+
 *Amended (2026-11-14, W-1140): the test page is the page every printer prints (`testpage`, the
 test-page design's amendment block), drawn as rows at 144 × 72 and given to `iw_stage`, a rip
 stage over these same strip writers, which writes byte for byte what ripjob writes for the same
@@ -1688,8 +1706,10 @@ from its own driver, but neither has been tried (W-1145 and W-1146, below).**
   Every page now has, ahead of both screens:
   - *Crisp text and lines* (`halftone/lineart.c`, `ripjob_cfg_t.lineart`): a thin dark feature
     on paper or a light tint prints solid with no soft edge, gray text black; a thin light one
-    (192 to 231) with white paper (250 up) within 4 dots on both sides an unbroken line one dot
-    wide, so a photo's pale grain and a line on a tint are left to the screen; the soft edge of
+    (192 to 231) with white paper (250 up) within 4 dots on both sides, and going on along
+    itself, straight or through a corner, an unbroken line one dot wide, so a photo's pale grain
+    and a line on a tint are left to the screen and a lone pale dot on white is paper (W-1178);
+    the soft edge of
     any dark shape on paper (a QR code's squares, a headline) crisp; a gray area 9 dots wide and
     the 2 dots around it are the screen's, so a filled icon is screened whole. Rows come out ten
     rows behind, in about 59 KB (`la_bytes`) taken last of a page's buffers and from PSRAM only

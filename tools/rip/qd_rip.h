@@ -23,4 +23,5 @@ static inline void qd_rip_cfg(ripjob_cfg_t *cfg, rip_stage_t *stage, qd_page_t *
     cfg->colour  = 0;
     cfg->tone    = qd_tone_for(cfg->dither, toner);
     cfg->lineart = 1;
+    cfg->lineart_light = 0;
 }

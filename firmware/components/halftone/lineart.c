@@ -106,6 +106,7 @@ int la_init(la_t *la, uint32_t w)
         return -1;
     }
     la->out = la->gray + (size_t)GRAY_ROWS * w;
+    la->light = LIGHT;
     return 0;
 }
 
@@ -234,6 +235,25 @@ static int near_at(const uint8_t *up, const uint8_t *g, const uint8_t *dn, int32
     return 0;
 }
 
+// The darkest of column c's three dots (above, here, below), or of row r's three around x;
+// paper off the page.
+static int col_min(const uint8_t *up, const uint8_t *g, const uint8_t *dn, int32_t c, int32_t w)
+{
+    if (c < 0 || c >= w) return 255;
+    int m = g[c];
+    if (up[c] < m) m = up[c];
+    if (dn[c] < m) m = dn[c];
+    return m;
+}
+
+static int row_min(const uint8_t *r, int32_t x, int32_t w)
+{
+    int m = r[x];
+    if (x > 0 && r[x - 1] < m) m = r[x - 1];
+    if (x + 1 < w && r[x + 1] < m) m = r[x + 1];
+    return m;
+}
+
 // The dots of row y that aren't left to the screen: thin features and their fringe, and the
 // edge of any dark shape on paper (lineart.h). The row itself when none change.
 static const uint8_t *decide(la_t *la, int32_t y)
@@ -264,20 +284,28 @@ static const uint8_t *decide(la_t *la, int32_t y)
                 if (near_at(up, g, dn, x, w, DARK)) to = crisp(la, x, y, v);
             } else if (v <= DARK) {
                 to = crisp(la, x, y, v);
-            } else if (v <= LIGHT) {
+            } else if (v <= la->light) {
                 // A thin light line has white paper on both sides. A photo's pale grain, or a
                 // line on a tint, has none, and is the screen's.
                 // Next to dark text it is that text's soft edge, on paper or a tint.
                 int ud = paper_ud(la, x, y), lr = paper_lr(g, x, w);
                 if (ud || lr) {
                     int lf = x > 0 ? g[x - 1] : 255, rt = x + 1 < w ? g[x + 1] : 255;
-                    int line = (ud && v < up[x] && v <= dn[x]) || (lr && v < lf && v <= rt);
+                    // Darkest across the line, and the line goes on along it, straight or
+                    // through a corner: a lone light dot on paper is not a line, a slanted one
+                    // is, and a line keeps its ends.
+                    const int li = la->light;
+                    int line = (ud && v < up[x] && v <= dn[x] &&
+                                (col_min(up, g, dn, x - 1, w) <= li ||
+                                 col_min(up, g, dn, x + 1, w) <= li)) ||
+                               (lr && v < lf && v <= rt &&
+                                (row_min(up, x, w) <= li || row_min(dn, x, w) <= li));
                     to = line ? 0 : 255;
                 } else if (near_at(up, g, dn, x, w, DARK)) {
                     to = 255;
                 }
             } else if (near_at(up, g, dn, x, w, DARK) ||
-                       (near_at(up, g, dn, x, w, LIGHT) && (paper_ud(la, x, y) || paper_lr(g, x, w)))) {
+                       (near_at(up, g, dn, x, w, la->light) && (paper_ud(la, x, y) || paper_lr(g, x, w)))) {
                 to = 255;
             }
             if (to == v) continue;
