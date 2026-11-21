@@ -7,6 +7,30 @@ run coder, the port's questions), `W-1082` (LaserWriters: the 300 dpi rip) and `
 printer's own Apple icon). Reverses the QuickDraw non-goal in
 `2026-10-21-laser-printers-design.md`.
 
+**Amended 2026-11-20 by `W-1174 Personal LaserWriter 300: light tints, thin lines and dark
+pictures print as they look`** (SPEC §3.18, "Light tints, thin lines and pictures", is the
+record). Wells printed an order slip from his Mac and lost its pale panel, outlines and
+dividers, and got a near-black photo. Chosen on paper on board 1's 300, from sheets the host
+made and the board passed through dot for dot:
+- **Blue noise is the family's default screen**, not Atkinson, whose patterns Wells found worse
+  than random dots and which drops every tint under about 12%. Clumped random dots (two sizes)
+  looked blotchy in the photo and logo; Apple's 300 screen kept tints but showed its pattern.
+- **Text and thin lines are decided before the screen**, as QuickDraw drew them at the
+  printer's resolution: thin dark features and the soft edges of dark shapes on paper print
+  crisp, gray text black; thin light lines one dot wide and unbroken; filled gray shapes are
+  left whole to the screen. Wells first saw rough QR edges (wider shapes weren't covered) and
+  then approved.
+- **A toner curve at 13%**, the darkest grays solid and near-white paper. 25% (sheet 5) made the
+  middle grays too light against the Mac's Atkinson print; none (sheet 9) and 13 (sheet 8)
+  bracketed it, and Wells chose 13.
+- **Memory**: the pass holds only the rows it reads back (about 59 KB a page), asks last and
+  from PSRAM only, and a page with no room prints without it, after the first build ran out on
+  board 1 and failed his job.
+- **A review** (a different model) found a pale, grainy photo area straddling 236 would have
+  had its light dots turned into black specks and lines: a thin light line now needs white
+  paper beside it. It also found a 300 that first showed up as an Unknown printer kept
+  Atkinson; any record that becomes a QuickDraw LaserWriter on Atkinson takes blue noise.
+
 **Amended 2026-11-15 by `W-1151 Personal LaserWriter 300 shows its own body's icon, the
 LaserWriter 4/600 PS's`.** Wells: the 300 shows the icon of its body, which the LaserWriter 320
 and 4/600 PS share, as every other printer does. The icon in Apple's LaserWriter 300 driver is

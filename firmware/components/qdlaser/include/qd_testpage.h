@@ -10,5 +10,7 @@
 #include "qd_model.h"
 
 // Fills g for model m's first sheet: rows of its image area's width, the sheet's height, the
-// area's place on it. 0, or -1 for a model there is none of.
-int qd_tp_geom(qd_model_t m, tp_geom_t *g);
+// area's place on it. Its screens go through the toner curve as a job's do (W-1174, qd_page.h
+// qd_tone_for), written to `toner`, which has to last while the page is drawn. 0, or -1 for a
+// model there is none of.
+int qd_tp_geom(qd_model_t m, tp_geom_t *g, uint8_t toner[256]);

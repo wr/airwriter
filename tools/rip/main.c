@@ -421,9 +421,10 @@ static int print_qd_testpage(const char *path, qd_model_t model, ht_algo_t algo,
     qd_page_cfg_t pc = { .model = model, .screen = algo, .gain = gain,
                          .sink = { qdw_open, qdw_row, qdw_print, qdt_note, &qw } };
     tp_geom_t g;
+    static uint8_t toner[256];
     qd_page_t *qdp = NULL;
     int rc = -1;
-    if (!qd_tp_geom(model, &g) && (qw.sess = qd_session_new(&ops, &jc)) &&
+    if (!qd_tp_geom(model, &g, toner) && (qw.sess = qd_session_new(&ops, &jc)) &&
         (qdp = qd_page_new(&pc)) && !qd_session_begin(qw.sess)) {
         rip_stage_t st;
         qd_page_stage(qdp, &st);
@@ -500,7 +501,8 @@ static void usage(void)
           "  --colour   print RGB pages in four inks, as with the colour ribbon in\n"
           "  --gain     dot gain at a 50%% tint the tone curve makes up for (default 0, off)\n"
           "  --times    log where each page's time went: read, scale, screen, second screen,\n"
-          "             out and end, in ms (W-1143; the board logs the same)\n"
+          "             out, end and lines (W-1174's text and thin lines), in ms (W-1143; the\n"
+          "             board logs the same)\n"
           "  --top-margin  the board's top margin setting, 1/144 in: + adds paper ahead of\n"
           "             each page, - drops its first rows (the board's default is -144)\n"
           "  --testpage the board's test page for that ribbon, as board 1 would print it;\n"
