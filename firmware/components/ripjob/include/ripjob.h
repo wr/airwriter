@@ -95,6 +95,14 @@ typedef struct {
     // bits they would with no margin.
     int         top_margin;
 
+    // W-1173: the job asked for the continuous roll (printer_caps_wants_roll). Every page of
+    // it prints on the roll, as does any page more than 1/8 in longer than the caps' sheet
+    // whatever the job asked; only with caps->roll and no stage. A roll page prints straight
+    // through from where the head stands: top_margin neither drops nor adds rows, and rows
+    // past the roll's len_max are dropped with a log line. It ends with the form feed every
+    // page ends with, which on fanfold is the next fold.
+    int         continuous;
+
     // Called as each page starts, with the geometry every later row will
     // have, before any row arrives. Return non-zero to abort the job.
     int       (*page)(void *ctx, int index, uint32_t dst_w, uint32_t dst_h);

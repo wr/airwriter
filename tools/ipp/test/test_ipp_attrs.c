@@ -7,7 +7,78 @@
 #include "ipp_attrs.h"
 #include "ipp_walk.h"
 
-static uint8_t buf[4096];
+static uint8_t buf[8192];
+
+/* Each token of the attribute `name`, its own and every empty-named one after it (further
+ * values, and a collection's members and their values): its tag and value. Returns how many
+ * tokens matched `want`, which sees each in turn. */
+typedef int (*tok_fn)(uint8_t tag, const uint8_t *v, size_t vlen, const void *arg);
+static int walk_attr(const uint8_t *b, size_t len, const char *name, tok_fn want, const void *arg)
+{
+    size_t pos = 8;
+    int in = 0, hits = 0;
+    while (pos < len) {
+        uint8_t tag = b[pos++];
+        if (tag == 0x03) break;
+        if (tag <= 0x0F) { if (in) break; continue; }
+        size_t nlen = (size_t)((b[pos] << 8) | b[pos + 1]);
+        const uint8_t *nm = b + pos + 2;
+        pos += 2 + nlen;
+        size_t vlen = (size_t)((b[pos] << 8) | b[pos + 1]);
+        const uint8_t *v = b + pos + 2;
+        pos += 2 + vlen;
+        if (nlen) {
+            if (in) break;
+            in = nlen == strlen(name) && memcmp(nm, name, nlen) == 0;
+        }
+        if (in) hits += want(tag, v, vlen, arg);
+    }
+    return hits;
+}
+
+static int32_t be32(const uint8_t *v)
+{
+    return (int32_t)(((uint32_t)v[0] << 24) | ((uint32_t)v[1] << 16) | ((uint32_t)v[2] << 8) | v[3]);
+}
+static int is_kw(uint8_t tag, const uint8_t *v, size_t vlen, const void *s)
+{
+    return tag == IPP_TAG_KEYWORD && vlen == strlen(s) && !memcmp(v, s, vlen);
+}
+static int is_int(uint8_t tag, const uint8_t *v, size_t vlen, const void *want)
+{
+    return tag == IPP_TAG_INTEGER && vlen == 4 && be32(v) == *(const int32_t *)want;
+}
+static int is_range(uint8_t tag, const uint8_t *v, size_t vlen, const void *want)
+{
+    const int32_t *r = want;
+    return tag == 0x33 && vlen == 8 && be32(v) == r[0] && be32(v + 4) == r[1];
+}
+static int col_depth;
+static int is_outer_col(uint8_t tag, const uint8_t *v, size_t vlen, const void *arg)
+{
+    (void)v; (void)vlen; (void)arg;
+    if (tag == IPP_TAG_BEGIN_COLLECTION) return col_depth++ == 0;
+    if (tag == IPP_TAG_END_COLLECTION) col_depth--;
+    return 0;
+}
+static int attr_has_value(const uint8_t *b, size_t n, const char *name, const char *s)
+{
+    return walk_attr(b, n, name, is_kw, s) > 0;
+}
+static int attr_has_int(const uint8_t *b, size_t n, const char *name, int32_t v)
+{
+    return walk_attr(b, n, name, is_int, &v) > 0;
+}
+static int count_ranges(const uint8_t *b, size_t n, const char *name, int32_t lo, int32_t hi)
+{
+    const int32_t r[2] = { lo, hi };
+    return walk_attr(b, n, name, is_range, r);
+}
+static int count_cols(const uint8_t *b, size_t n, const char *name)
+{
+    col_depth = 0;
+    return walk_attr(b, n, name, is_outer_col, NULL);
+}
 
 /* Whether any value of a multi-valued attribute is s: each further value is
  * its tag, an empty name, its length, then the value. */
@@ -163,6 +234,33 @@ int main(void)
     CHECK(ipp_val_is(&f, "one-sided"));
     CHECK(ipp_find(buf, n, "media-default", &f));
     CHECK(ipp_val_is(&f, "na_letter_8.5x11in"));
+
+    /* W-1173: continuous fanfold beside Letter. iOS offers a roll only when it is listed as
+     * loaded, in media-col-ready, with a range of lengths; Letter stays first and the default. */
+    CHECK(ipp_find(buf, n, "media-supported", &f));
+    CHECK_EQ_INT(f.nvalues, 3);
+    CHECK(ipp_val_is(&f, "na_letter_8.5x11in"));
+    CHECK(attr_has_value(buf, n, "media-supported", "roll_min_8.5x1in"));
+    CHECK(attr_has_value(buf, n, "media-supported", "roll_max_8.5x120in"));
+    CHECK(ipp_find(buf, n, "media-ready", &f));
+    CHECK_EQ_INT(f.nvalues, 2);
+    CHECK(ipp_val_is(&f, "na_letter_8.5x11in"));
+    CHECK(attr_has_value(buf, n, "media-ready", "roll_current_8.5x0in"));
+    CHECK_EQ_INT(count_cols(buf, n, "media-col-ready"), 2);
+    CHECK_EQ_INT(count_cols(buf, n, "media-col-default"), 1);
+    CHECK_EQ_INT(count_cols(buf, n, "media-size-supported"), 2);
+    CHECK_EQ_INT(count_ranges(buf, n, "media-col-ready", 2540, 304800), 1);
+    CHECK_EQ_INT(count_ranges(buf, n, "media-size-supported", 2540, 304800), 1);
+    CHECK_EQ_INT(count_ranges(buf, n, "media-col-default", 2540, 304800), 0);
+    CHECK(!ipp_find(buf, n, "media-col-database", &f));     /* only when named */
+    CHECK(ipp_find(buf, n, "media-top-margin-supported", &f));
+    CHECK_EQ_INT(f.nvalues, 2);
+    CHECK(attr_has_int(buf, n, "media-top-margin-supported", 0));
+    CHECK(ipp_find(buf, n, "media-bottom-margin-supported", &f));
+    CHECK_EQ_INT(f.nvalues, 2);
+    CHECK(attr_has_int(buf, n, "media-bottom-margin-supported", 0));
+    CHECK(ipp_find(buf, n, "media-left-margin-supported", &f));
+    CHECK_EQ_INT(f.nvalues, 1);
 
     /* The whole set has to fit the buffer the server hands it with room to
      * spare, or Get-Printer-Attributes fails on target and nowhere else.

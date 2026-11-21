@@ -58,9 +58,12 @@
 //    with no record, or one that would replace a Something else record or drop an Unknown
 //    one; the first of the two in a row that make the change, R16) is not a record's yet:
 //    the caller then sets `confirm` to the act, after port_after, and the next call repeats
-//    it at once. It fills `iw_unnamed` (R20) when the current record is an ImageWriter II or
-//    LQ that ESC ? has not named since its line came up, on a clean link; the policy then
-//    re-asks only while nothing answers and a StyleWriter did not answer last.
+//    it at once. It fills `iw_unnamed` (R20) when ESC ? has not named the line since it came
+//    up, on a clean link, whatever the current record (not a Something else port, not an
+//    original ImageWriter record): after a restart the current record is the oldest, which
+//    need not be the printer plugged in (W-1175). The policy then re-asks only while the
+//    current record is not an Unknown printer and does not answer, and a StyleWriter did not
+//    answer last.
 //  - may set `answering` itself from other answers (a job's, a status read elsewhere), and
 //    `last_status_ms` when something else asked `1` and `2`.
 #pragma once
@@ -83,9 +86,9 @@ typedef struct {
     int      sw_listed;       // a StyleWriter record is listed
     int      sw1_listed;      // an original StyleWriter record is listed: it ignores ? until reset
     int      said_other;      // "Something else": the person said what is there is not a printer we ask
-    int      iw_unnamed;      // R20: the current record is an ImageWriter II or LQ whose ESC ? answer
-                              // is not in since its line came up (a lost answer), the link clean and
-                              // the line-up's own question run (the board holds it off in the settle)
+    int      iw_unnamed;      // R20: ESC ? has not named the line since it came up (a lost answer),
+                              // whatever the current record, the link clean and the line-up's own
+                              // question run (the board holds it off in the settle)
     int      line_ready;      // HSKo
     int      want_kick;       // printer_state_want_kick()
     int      heard;           // pr_heard_t: the family that last answered on the port
@@ -149,9 +152,11 @@ void port_tick(port_in_t *in);
 //                   record listed, which gives no self-ID), then PA_ESCQ once that got
 //                   nothing (`event_plain`); PA_ESCQ alone everywhere else (an empty port,
 //                   ImageWriter II or LQ records only), so an ImageWriter swapped in is noticed.
-//                   R20: the same question, every 5 s on rule 7's clock, for an ImageWriter II
-//                   or LQ record on the port that ESC ? has not named since its line came up
-//                   (`iw_unnamed`, a lost answer) while its line is up and it does not answer,
+//                   R20: the same question, every 5 s on rule 7's clock, for a line that ESC ?
+//                   has not named since it came up (`iw_unnamed`, a lost answer) while it is
+//                   up and the current record does not answer, whatever printer that record is
+//                   (W-1175: after a restart it is the oldest, a QuickDraw LaserWriter switched
+//                   off say; not an Unknown printer, whose device would be asked for good),
 //                   unless a StyleWriter answered last (a once-sighted one must not hear ESC ?);
 //                   PA_ESCQ follows that re-ask's plain question when it got nothing.
 //   5. PA_PLAIN     on a look with the line down, while the port's printer is not answering.

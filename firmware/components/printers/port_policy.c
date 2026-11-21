@@ -9,15 +9,18 @@ static int due(uint32_t now_ms, uint32_t last_ms, uint32_t every_ms)
     return (uint32_t)(now_ms - last_ms) >= every_ms;
 }
 
-// R20: an ImageWriter II or LQ record on the port whose ESC ? answer was lost (its line up,
-// not named since it came up, not answering) is asked for it again every 5 s.
-// Not while a StyleWriter answered last: one that raised its line and was sighted once (no
-// record yet, so an ImageWriter record is current by fallback) must not hear ESC ?, which
-// could leave it deaf; an ImageWriter put in its place raises its line, and that line-up
-// asks it.
+// R20: a port whose ESC ? answer was lost (its line up, not named since it came up, its
+// record not answering) is asked for it again every 5 s, whatever printer its record is:
+// after a restart that is the oldest port record, not the printer plugged in (board 1,
+// 2026-11-20, W-1175). Not on an Unknown printer or Something else record: the line there
+// is a device that never answered, which would hear ESC ? and a CR every 5 s, the job lock
+// held for each, for as long as it stays. Not while a StyleWriter answered last: one that
+// raised its line and was sighted once (no record yet, so another record is current by
+// fallback) must not hear ESC ?, which could leave it deaf; an ImageWriter put in its place
+// raises its line, and that line-up asks it.
 static int reask(const port_in_t *in)
 {
-    return in->line_ready && in->kind == PR_KIND_IMAGEWRITER && in->iw_unnamed && !in->answering &&
+    return in->line_ready && in->iw_unnamed && !in->answering && in->kind != PR_KIND_UNKNOWN &&
            in->heard != PR_HEARD_STYLEWRITER;
 }
 

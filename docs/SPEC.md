@@ -313,7 +313,27 @@ and iOS, told the inch is margin, draws nothing there: every row prints where iO
 printable area is 8 x 9.5in. On a rev A board the calibration page's lines landed exactly 1in
 from the top and 0.5in from the bottom at -7/8in.*
 
-**Media.** `na_letter_8.5x11in` plus the continuous fanfold sizes. Not borderless.
+**Media.** `na_letter_8.5x11in`, the default, and on an ImageWriter continuous fanfold. Not
+borderless.
+
+*Amended (`W-1173 Continuous paper on ImageWriters: a banner prints as one unbroken strip`):
+the three ImageWriters list a roll after Letter (`printer_caps_t.roll`): `media-supported`
+`roll_min_8.5x1in` and `roll_max_8.5x120in`, `media-ready` `roll_current_8.5x0in`, and in
+`media-col-ready`, `media-col-database` and `media-size-supported` a `media-size` of
+`x-dimension` 21590 and `y-dimension` the range 2540–304800 (1 in to 10 ft, Wells's limit),
+margins 635 at the sides and 0 at the top and bottom. Letter stays first and the default. It
+has to be in `media-col-ready`: iOS 26.5 (simulator, 2026-11-20) asked a roll-aware app for a
+cut length (`printInteractionController(_:cutLengthFor:)`, handed 612 × 8640 pt, the range's
+maximum) only then, and ignored a roll in `media-col-database` alone. Safari and Photos, which
+don't ask, listed only US Letter and printed Letter pages; the print sheet reads "US Letter"
+for a banner too, with the strip in its preview. A Mac turns the range into custom page sizes
+(`*CustomPageSize`, CUPS `ppd-cache.c`) with each margin list's largest value as their margins,
+so 1 in top and 0.5 in bottom; a queue added before keeps its PPD until removed and added again.
+No UUID epoch bump: iOS asked for `media-col-ready` at every print sheet, and a new UUID would
+orphan every Mac's queue. A job asks for the roll by its media-col's `y-dimension` (more than
+1/8 in from Letter's), by a media-col `media-top-margin` of 0 (only the roll has none, so a
+banner cut within 1/8 in of 11 in still asks), or by `media`/`PageSize` naming a roll or custom
+size (`ipp_req`, `printer_caps_wants_roll`); how a roll page prints is §3.8.*
 
 **`printer-icons`.** Three PNGs served on the IPP port itself,
 `http://<host>.local:631/<set>-{48,128,512}.png`, smallest first as IPP Everywhere orders
@@ -496,6 +516,15 @@ test-page design's amendment block), drawn as rows at 144 × 72 and given to `iw
 stage over these same strip writers, which writes byte for byte what ripjob writes for the same
 rows and top margin. The Top margin setting moves the page as it moves a job's, but drops no
 more than the sheet's blank first inch.*
+
+*Amended (W-1173): a page on the continuous roll (§3.5) prints straight through. Its job
+asked for the roll, or it is more than 1/8 in longer than Letter (a Mac's custom size names no
+roll); either way only on an ImageWriter. The Top margin setting neither drops nor adds rows,
+since a roll page has no margin: its first row prints where the head stands, about 1 in below
+a fold after the job's opening form feed. Rows past 10 ft are dropped and logged ("page N is
+longer than the roll's 8640 rows"). The page ends with its form feed as every page does, which
+on fanfold feeds to the next fold past the strip, so a banner tears off at folds. A page the
+same length as Letter or shorter, with no ask, prints byte for byte as before.*
 
 Defer 144x144 double-pass mode to v2. It needs half-line feeds and two passes per strip,
 and it doubles the time on a printer that is already slow.
@@ -866,9 +895,11 @@ read back is a list made again). At most 8 records.
   (never from the line alone), so the page never shows the wrong ImageWriter for a moment. A
   line-up mid-job (a paper reload drops the line) keeps the name, and so does one while the
   link is dirty after a job cut short, when the idle `ESC ?` waits for a job's resync (3.8)
-  (R17; the plain question still runs while the printer isn't answering). A II or LQ record
-  on the port whose `ESC ?` answer was lost gets the 5 s plain question and then `ESC ?` when
-  it got nothing, while its line is up (R20, 3.16). Removing the record on the port forgets
+  (R17; the plain question still runs while the printer isn't answering). A line whose
+  `ESC ?` answer was lost gets the 5 s plain question and then `ESC ?` when it got nothing,
+  while it is up, whatever printer's record is on the port: after a restart that is the
+  oldest port record until a printer answers, so an ImageWriter that misses its start-up `ESC ?` is still
+  found (R20, W-1175, 3.16). Removing the record on the port forgets
   the port's last answer,
   and the port is asked again at once (R19). `/api/status` `model` is the record
   on the port's make and model, an ImageWriter's by its model. How long a change takes to
@@ -1094,11 +1125,16 @@ Apple's StyleWriter adapter (ADSP, not PAP), is not built.
   StyleWriter branch), whatever the list holds and whatever answered last, so a StyleWriter
   plugged in is found in seconds by someone who never added it, at boot after the quiet
   power-on, when `ESC ?` went unanswered, and once per busy spell when a kick is wanted and
-  none has been asked since the line went down; an ImageWriter II or LQ record on the port
-  that `ESC ?` has not named since its line came up (a lost answer, `iw_unnamed`: not on a
-  dirty link, not before the line-up's own question has run, and not while a StyleWriter
-  answered last) gets the 5 s plain question and then `ESC ?` when it got nothing, while its
-  line is up and it does not answer (R20); the CTRL-X kick last, only after a plain
+  none has been asked since the line went down; a line that `ESC ?` has not named since it
+  came up, whatever printer's record is on the port (a lost answer, `iw_unnamed`: not on an
+  Unknown printer or Something else record, not for an original ImageWriter record, not on a
+  dirty link, not before the
+  line-up's own question has run, and not while a StyleWriter answered last) gets the 5 s
+  plain question and then `ESC ?` when it got nothing, while it is up and the record on the
+  port does not answer (R20, widened by W-1175: a restart makes the oldest port record the
+  current one, which may be a QuickDraw LaserWriter switched off); an idle self-ID that gets
+  nothing is logged once until something answers or the line comes up again; the CTRL-X kick
+  last, only after a plain
   question since the line went down that got nothing, and never while the current record is a
   StyleWriter, so a StyleWriter that answers the plain question is never kicked (the
   StyleWriter branch's quiet ImageWriter record, nothing of its own and one kick a look while a
