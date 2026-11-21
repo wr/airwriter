@@ -62,7 +62,9 @@ static printer_media_t sheet(const printer_caps_t *c, size_t i)
 // the printer's caps (printer_caps.h; the ImageWriter's say why its are what
 // they are). The first value of an attribute carries its name; with `first`
 // clear this is a later value of the same attribute.
-static void write_media_col(ipp_enc_t *e, const char *name, const printer_media_t *m, int first)
+// W-1173: a `y_max` past m->y makes the length a range, m->y to y_max: the roll's.
+static void write_media_col(ipp_enc_t *e, const char *name, const printer_media_t *m,
+                            int32_t y_max, int first)
 {
     ipp_col_begin(e, first ? name : NULL);
 
@@ -71,7 +73,8 @@ static void write_media_col(ipp_enc_t *e, const char *name, const printer_media_
     ipp_col_member(e, "x-dimension");
     ipp_addl_int(e, IPP_TAG_INTEGER, m->x);
     ipp_col_member(e, "y-dimension");
-    ipp_addl_int(e, IPP_TAG_INTEGER, m->y);
+    if (y_max > m->y) ipp_attr_range(e, "", m->y, y_max);   // nameless: the member's value
+    else              ipp_addl_int(e, IPP_TAG_INTEGER, m->y);
     ipp_col_end(e);
 
     ipp_col_member(e, "media-bottom-margin");
@@ -91,34 +94,59 @@ static void write_media_col(ipp_enc_t *e, const char *name, const printer_media_
     ipp_col_end(e);
 }
 
-// Every sheet as a media-col value of `name`, the default's alone when `all` is clear.
+// W-1173: the roll as a sheet whose length is its shortest, for the lists below; its longest
+// is c->roll->len_max.
+static printer_media_t roll_sheet(const printer_caps_t *c)
+{
+    const printer_roll_t *r = c->roll;
+    printer_media_t m = {
+        .media = r->ready_kw, .x = r->x, .y = r->len_min,
+        .margin_l = r->margin_l, .margin_r = r->margin_r, .margin_t = 0, .margin_b = 0,
+    };
+    return m;
+}
+
+// Every sheet, then the roll, as a media-col value of `name`; the default's alone when `all`
+// is clear.
 static void write_media_cols(ipp_enc_t *e, const char *name, const printer_caps_t *c, int all)
 {
     size_t n = all ? n_sheets(c) : 1;
     for (size_t i = 0; i < n; i++) {
         printer_media_t m = sheet(c, i);
-        write_media_col(e, name, &m, i == 0);
+        write_media_col(e, name, &m, 0, i == 0);
+    }
+    if (all && c->roll) {
+        printer_media_t m = roll_sheet(c);
+        write_media_col(e, name, &m, c->roll->len_max, 0);
     }
 }
 
-// The sheets' media keywords as the values of `name`.
-static void write_media_names(ipp_enc_t *e, const char *name, const printer_caps_t *c)
+// The sheets' media keywords as the values of `name`, then the roll's: its least and
+// greatest sizes for media-supported (`ready` clear), the one loaded for media-ready.
+static void write_media_names(ipp_enc_t *e, const char *name, const printer_caps_t *c, int ready)
 {
     for (size_t i = 0; i < n_sheets(c); i++) {
         printer_media_t m = sheet(c, i);
         if (i == 0) ipp_attr_str(e, IPP_TAG_KEYWORD, name, m.media);
         else        ipp_addl_str(e, IPP_TAG_KEYWORD, m.media);
     }
+    if (!c->roll) return;
+    if (ready) {
+        ipp_addl_str(e, IPP_TAG_KEYWORD, c->roll->ready_kw);
+    } else {
+        ipp_addl_str(e, IPP_TAG_KEYWORD, c->roll->min_kw);
+        ipp_addl_str(e, IPP_TAG_KEYWORD, c->roll->max_kw);
+    }
 }
 
-// The distinct values of one margin over the sheets, in the order first met.
+// The distinct values of one margin over the sheets and the roll, in the order first met.
 // `which` picks the margin: 'l', 'r', 't' or 'b'.
 static void write_margins(ipp_enc_t *e, const char *name, const printer_caps_t *c, char which)
 {
     int32_t seen[8];
-    size_t n = 0;
-    for (size_t i = 0; i < n_sheets(c) && n < sizeof seen / sizeof seen[0]; i++) {
-        printer_media_t m = sheet(c, i);
+    size_t n = 0, sheets = n_sheets(c) + (c->roll ? 1 : 0);
+    for (size_t i = 0; i < sheets && n < sizeof seen / sizeof seen[0]; i++) {
+        printer_media_t m = i < n_sheets(c) ? sheet(c, i) : roll_sheet(c);
         int32_t v = which == 'l' ? m.margin_l : which == 'r' ? m.margin_r
                   : which == 't' ? m.margin_t : m.margin_b;
         size_t k = 0;
@@ -381,8 +409,8 @@ void ipp_write_printer_attrs(ipp_enc_t *e, const ipp_printer_t *p,
         printer_media_t m = sheet(c, 0);
         ipp_attr_str(e, IPP_TAG_KEYWORD, "media-default", m.media);
     }
-    if (W("media-supported", JT)) write_media_names(e, "media-supported", c);
-    if (W("media-ready", JT))     write_media_names(e, "media-ready", c);
+    if (W("media-supported", JT)) write_media_names(e, "media-supported", c, 0);
+    if (W("media-ready", JT))     write_media_names(e, "media-ready", c, 1);
     if (W("media-source-supported", JT)) {
         if (c->n_sources)                              // W-1102: the printer's own sources
             ipp_attr_strs(e, IPP_TAG_KEYWORD, "media-source-supported", c->sources, c->n_sources);
@@ -406,6 +434,14 @@ void ipp_write_printer_attrs(ipp_enc_t *e, const ipp_printer_t *p,
             ipp_addl_int(e, IPP_TAG_INTEGER, m.x);
             ipp_col_member(e, "y-dimension");
             ipp_addl_int(e, IPP_TAG_INTEGER, m.y);
+            ipp_col_end(e);
+        }
+        if (c->roll) {                                     // W-1173: the roll's lengths
+            ipp_col_begin(e, NULL);
+            ipp_col_member(e, "x-dimension");
+            ipp_addl_int(e, IPP_TAG_INTEGER, c->roll->x);
+            ipp_col_member(e, "y-dimension");
+            ipp_attr_range(e, "", c->roll->len_min, c->roll->len_max);
             ipp_col_end(e);
         }
     }

@@ -43,7 +43,7 @@ static port_in_t at(port_in_t i, uint32_t since_plain, uint32_t since_status)
 }
 
 static const int KINDS[] = { -1, PR_KIND_UNKNOWN, PR_KIND_IMAGEWRITER, PR_KIND_LASERWRITER,
-                             PR_KIND_AT_IMAGEWRITER, PR_KIND_STYLEWRITER };
+                             PR_KIND_AT_IMAGEWRITER, PR_KIND_STYLEWRITER, PR_KIND_QDLASER };
 #define N_KINDS ((int)(sizeof KINDS / sizeof KINDS[0]))
 
 // The caller as the board runs it, with a printer that never answers but a StyleWriter
@@ -114,9 +114,9 @@ static void test_invariants(void)
         int answers = KINDS[k] >= 0 && in.answering;
         int event = in.line_up_edge || (in.look && in.line_ready);
         int person_look = in.look && in.look_person;
-        // R20: an ImageWriter II or LQ record on the port whose ESC ? answer was lost, its line
-        // up, not answering: asked for it again.
-        int reask = in.line_ready && in.kind == PR_KIND_IMAGEWRITER && in.iw_unnamed && !answers &&
+        // R20: a port whose ESC ? answer was lost, its line up, its record not answering (any
+        // printer's record, or none; not an Unknown printer or Something else): asked again.
+        int reask = in.line_ready && in.iw_unnamed && !in.answering && in.kind != PR_KIND_UNKNOWN &&
                     in.heard != PR_HEARD_STYLEWRITER;
 
         // An act the board wants repeated goes first, whatever else is true.
@@ -261,6 +261,72 @@ static void test_lost_answer_reask(void)
     port_after(&in, PA_PLAIN, PR_HEARD_NONE, 0);
     in.now_ms += 500;
     CHECK_EQ_INT(port_policy(&in), PA_ESCQ);                  // then ESC ? 500 ms later
+}
+
+// R20, widened (2026-11-20, board 1): a restart forgets which record answered last, so the
+// port's record is the oldest one, whatever is plugged in. An ImageWriter II whose start-up
+// ESC ? was lost is asked again every 5 s whatever printer that record is: a QuickDraw
+// LaserWriter switched off (no clock), a StyleWriter that does not answer, or none. Board 1
+// had a Personal LaserWriter 300 as its oldest record, and its ImageWriter II stayed unfound
+// until Look for Printers. Not an Unknown printer record: that line is a device that never
+// answered, and asking it every 5 s would hold the job lock about 1.5 s of every 5 for good.
+static void test_lost_answer_reask_any_record(void)
+{
+    static const int kinds[] = { -1, PR_KIND_QDLASER, PR_KIND_STYLEWRITER };
+    for (size_t k = 0; k < sizeof kinds / sizeof kinds[0]; k++) {
+        port_in_t in = base(kinds[k]);
+        in.iw_unnamed = 1;
+        tally_t t = run(in, in.now_ms, in.now_ms + 61 * SEC);
+        CHECK_EQ_INT(t.counts[PA_PLAIN], 12);
+        CHECK_EQ_INT(t.counts[PA_ESCQ], 12);
+        for (int i = 0; i < 12; i++) CHECK_EQ_INT(t.at[PA_ESCQ][i] - t.at[PA_PLAIN][i], 500);
+        // ...but not once a StyleWriter answered since the restart: it must not hear ESC ?.
+        in.heard = PR_HEARD_STYLEWRITER;
+        t = run(in, in.now_ms, in.now_ms + 61 * SEC);
+        CHECK_EQ_INT(t.counts[PA_ESCQ], 0);
+    }
+    // A 300 that answered and was switched off for an ImageWriter II, whose line-up ESC ? was
+    // lost: asked again, as after a restart.
+    port_in_t q = base(PR_KIND_QDLASER);
+    q.heard = PR_HEARD_QDLASER;
+    q.iw_unnamed = 1;
+    tally_t t = run(q, q.now_ms, q.now_ms + 61 * SEC);
+    CHECK_EQ_INT(t.counts[PA_ESCQ], 12);
+    // An Unknown printer record: the cadence's plain question alone.
+    port_in_t u = base(PR_KIND_UNKNOWN);
+    u.iw_unnamed = 1;
+    t = run(u, u.now_ms, u.now_ms + 61 * SEC);
+    CHECK_EQ_INT(t.counts[PA_PLAIN], 12);
+    CHECK_EQ_INT(t.counts[PA_ESCQ], 0);
+
+    // Board 1's start-up, step by step: the oldest record a Personal LaserWriter 300 switched
+    // off, a StyleWriter record listed (so the plain question first and the full sequence
+    // owed), an ImageWriter II on the port that misses its first ESC ?.
+    port_in_t in = base(PR_KIND_QDLASER);
+    in.sw_listed = 1;
+    in.full_due = 1;
+    in.line_up_edge = 1;                                      // the line, first seen, settled
+    CHECK_EQ_INT(port_policy(&in), PA_PLAIN);
+    port_after(&in, PA_PLAIN, PR_HEARD_NONE, 0);
+    in.now_ms += 500;
+    CHECK_EQ_INT(port_policy(&in), PA_ESCQ);
+    port_after(&in, PA_ESCQ, PR_HEARD_NONE, 0);               // lost
+    in.iw_unnamed = 1;                                        // the board: not named since it came up
+    in.now_ms += 500;
+    CHECK_EQ_INT(port_policy(&in), PA_FULL);                  // the StyleWriter record's, once
+    port_after(&in, PA_FULL, PR_HEARD_NONE, 0);
+    // From here the ImageWriter answers: found within the next 5 s.
+    uint32_t lost_at = in.now_ms;
+    int found = 0;
+    for (uint32_t ms = 500; ms <= 6 * SEC && !found; ms += 500) {
+        in.now_ms = lost_at + ms;
+        port_tick(&in);
+        port_act_t a = port_policy(&in);
+        int heard = a == PA_ESCQ ? PR_HEARD_IMAGEWRITER : PR_HEARD_NONE;
+        port_after(&in, a, heard, heard != PR_HEARD_NONE);
+        found = a == PA_ESCQ;
+    }
+    CHECK(found);
 }
 
 static void test_said_other(void)
@@ -1989,6 +2055,7 @@ int main(void)
     test_imagewriter_silent();
     test_quiet_cadence();
     test_lost_answer_reask();
+    test_lost_answer_reask_any_record();
     test_original_imagewriter();
     test_no_record();
     test_kick();

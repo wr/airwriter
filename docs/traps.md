@@ -207,6 +207,14 @@ Traps already explained in a code comment are listed only when the comment is ea
   while the link is dirty must keep the record it named, or the printer reads Offline until
   the next job (ruling R17, 2026-10-30). The plain question still runs every 5 s while the
   printer isn't answering.
+- **A restart forgets the port's last answer and its dirty link.** Until a printer answers, the
+  record on the port is the oldest port record, whatever is plugged in, and a printer left
+  mid-command by a job cut short just before the restart gets a plain `ESC ?` with no resync.
+  On board 1 (2026-11-20) a test page cut short, then an OTA, left the ImageWriter II silent to
+  its start-up `ESC ?` with the Personal LaserWriter 300 as the oldest record; before W-1175 it
+  was never asked again until Look for Printers. An IPP Cancel-Job 1 s into a page, then
+  `/api/restart`, recreated it the same day (the restart itself waits for a printing page to
+  finish, so it can't cut one).
 
 ## IPP, iOS, macOS, mDNS
 
@@ -236,6 +244,18 @@ Traps already explained in a code comment are listed only when the comment is ea
   `PageSize` "Letter" and the PPD option `InputSlot` "Manual" (capitalised, nameWithoutLanguage)
   as Job attributes of their own (macOS, board 1, 2026-11-13). `ipp_req` reads `InputSlot` as
   well as media-col's `media-source`, or a Mac's manual-slot page feeds from the cassette.
+- **iOS offers a roll only when it is listed as loaded** (W-1173). A roll in
+  `media-col-database` and `media-size-supported` but not `media-col-ready` was ignored: no
+  cut-length call, Letter only. The print sheet's Paper Size row reads "US Letter" even for a
+  banner on the roll; only its preview shows the strip.
+- **The iPhone simulator never sends a print job** (iOS 26.5, 2026-11-20). It renders the job,
+  logs "Opening output stream" and stops, even to a plain Letter printer, so test what a job
+  carries on a phone. It also sees only printers advertised on the network, not `dns-sd -lo`
+  or `-i lo0` ones, and a test server must listen on IPv6 too or the print sheet's printer
+  reads "no longer available".
+- **A Mac's queue keeps the paper sizes it was added with.** Its PPD is made once, when the
+  printer is added, like the icon: a printer that gains a paper size (W-1173's custom sizes)
+  shows it on a Mac only after the printer is removed and added again.
 - **Never advertise Create-Job / Send-Document.** With them in `operations-supported` the
   iPhone held every job at "Waiting" (SPEC §3.4).
 - **iOS and macOS open 25–50 parallel Get-Printer-Attributes connections.** Workers parked on

@@ -39,8 +39,11 @@ LASER   := $(COMP)/laser/lw_caps.c $(COMP)/laser/lw_query.c
 
 # Not part of `test`: a host stand-in for ipptool's conformance suites (see
 # the comment at the top of gpa_server.c).
+# lw_caps.h names the test page's geometry (testpage.h), which brings in the rip's headers.
+LASERINC := -I$(COMP)/testpage/include -I$(COMP)/ripjob/include -I$(COMP)/urf_decode/include \
+            -I$(COMP)/imagewriter/include
 build/gpa_server: gpa_server.c $(SRCS) $(LASER) | build
-	$(CC) $(CFLAGS) -D_GNU_SOURCE $(INCS) -o $@ $^
+	$(CC) $(CFLAGS) -D_GNU_SOURCE $(INCS) $(LASERINC) -o $@ $^
 
 test: $(TESTBIN)
 	@fail=0; for t in $(TESTBIN); do ./$$t || fail=1; done; exit $$fail

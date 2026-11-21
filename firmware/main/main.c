@@ -337,6 +337,7 @@ typedef struct {
     // a moment. Cleared on a line-up after a second or more down, set when ESC ? names the
     // current record's model (or an original ImageWriter record's silent line).
     volatile int         iw_named;
+    volatile int         self_id_quiet;   // an idle ESC ? got nothing, logged once (ribbon_ask)
     // W-1103: a StyleWriter on the port. Its HSKo says nothing, so its own answers are its state:
     // `iw_ready` is then what they say (-1 before the first), not the line. W-1102: the socket's
     // record's family (printers_changed). PR_FAM_IMAGEWRITER also stands for a socket with no
@@ -800,9 +801,15 @@ static int ribbon_ask(int for_job)
     for (int i = 0; i < n; i++) snprintf(hex + 3 * i, 4, " %02x", reply[i]);
     iw_self_id_t id = iw_self_id(reply, (size_t)n);
     iw_ribbon_t r = id.ribbon;
-    ESP_LOGI(TAG, "self-ID%s: %d byte%s%s, %s, %s ribbon", port_on_tag(SK), n, n == 1 ? "" : "s", hex,
-             id.model == IW_MODEL_LQ ? "LQ" : id.model == IW_MODEL_II ? "II" : "no model",
-             ribbon_name(r));
+    // An idle silent line is logged once until something answers or the line comes up again:
+    // R20 asks one every 5 s while it stays up, which would push the log's history out. A
+    // job's are all logged, as its wait is bounded.
+    if (n > 0 || for_job || !P->self_id_quiet)
+        ESP_LOGI(TAG, "self-ID%s: %d byte%s%s, %s, %s ribbon", port_on_tag(SK), n, n == 1 ? "" : "s", hex,
+                 id.model == IW_MODEL_LQ ? "LQ" : id.model == IW_MODEL_II ? "II" : "no model",
+                 ribbon_name(r));
+    if (n > 0) P->self_id_quiet = 0;
+    else if (!for_job) P->self_id_quiet = 1;
     P->seen_again = printers_port_seen(SK, id.model, 1);
     int answered = id.model != IW_MODEL_NONE;
     // W-1116: what this job's own ESC ? got, for its gate. The line up with ESC ? and the plain
@@ -938,6 +945,7 @@ static void printer_line_changed(psock_t *p, int ready)
         p->ribbon_due  = now + pdMS_TO_TICKS(2000);
         p->ribbon_want = 1;
         p->ribbon_gen++;
+        p->self_id_quiet = 0;            // this line-up's own silence is logged
         // A fresh line is not Ready until ESC ? names the model (W-1116). Not mid-job (a paper
         // reload drops the line), and not while the link is dirty after a job cut short (the
         // idle ESC ? waits for a job's resync, so the record it named is kept, ruling R17; the
@@ -1091,8 +1099,11 @@ static esp_err_t doc_begin(void *ctx, const char *format, const char *name,
     wifi_ap_record_t ap;
     int rssi = esp_wifi_sta_get_ap_info(&ap) == ESP_OK ? ap.rssi : 0;
     s_last_job_id = opts ? opts->job_id : 0;
-    ESP_LOGI(TAG, "job %d format %s, rssi %d", (int)s_last_job_id,
-             format[0] ? format : "(unspecified)", rssi);
+    // W-1173: a banner app's job asks for the continuous roll by the length it cut.
+    int roll = opts && printer_caps_wants_roll(&printer_caps_imagewriter, opts->media_len,
+                                               opts->media_roll);
+    ESP_LOGI(TAG, "job %d format %s, rssi %d%s", (int)s_last_job_id,
+             format[0] ? format : "(unspecified)", rssi, roll ? ", continuous paper" : "");
     memdiag_mark("job start");          // W-1094
     s_job_error[0] = '\0';
     strncpy(s_last_job, name && name[0] ? name : "Untitled", sizeof s_last_job - 1);
@@ -1108,7 +1119,7 @@ static esp_err_t doc_begin(void *ctx, const char *format, const char *name,
     line_source();                  // the port's own line, not the box's
     printer_state_post(PS_EV_JOB_START);
     serial_out_loopback_reset();
-    esp_err_t err = job_pipe_begin(name);
+    esp_err_t err = job_pipe_begin(name, roll);
     s_job_pipe_ok = (err == ESP_OK);
     return err;
 }
@@ -2414,12 +2425,15 @@ static int port_visit(int k)
               : mode == PORT_QDLASER ? PR_KIND_QDLASER : PR_KIND_UNKNOWN,
         .iw1_listed = iw1_listed, .sw_listed = sw_listed, .sw1_listed = sw1_listed,
         .said_other = mode == PORT_UNKNOWN_SAID, .line_ready = line_ready,
-        // R20: an ImageWriter II or LQ record on the port that ESC ? has not named since its
-        // line came up (a lost answer) is asked again every 5 s; not on a dirty link, where
-        // the idle ESC ? waits for a job's resync (R17), and not before the line-up's own
+        // R20: a line ESC ? has not named since it came up (a lost answer) is asked again
+        // every 5 s, whatever printer the socket's record is: after a restart that is the
+        // oldest record on it, which may be another family's (board 1, 2026-11-20, W-1175; the
+        // policy leaves out an Unknown printer record). Not on a Something else socket, nor for
+        // an original ImageWriter record, whose silence is its answer; not on a dirty link,
+        // where the idle ESC ? waits for a job's resync (R17), and not before the line-up's own
         // question has run (p->ribbon_want holds through the 2 s settle), so the re-ask never
         // sends ESC ? inside the settle, nor ahead of a StyleWriter-first port's plain question.
-        .iw_unnamed = mode == PORT_IMAGEWRITER && !p->iw_named && !p->link.dirty &&
+        .iw_unnamed = mode != PORT_UNKNOWN_SAID && !p->iw_named && !p->link.dirty &&
                       !p->ribbon_want && printers_port_model(k) != PR_MODEL_IW1,
         .want_kick = (mode == PORT_IMAGEWRITER || mode == PORT_NONE) && printer_state_want_kick(k),
         .heard = printers_port_heard(k), .now_ms = now,

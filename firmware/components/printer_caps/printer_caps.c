@@ -10,6 +10,20 @@
 // put it. 144 dpi across, 72 down: one pass, SPEC.md 3.8. iOS honoured
 // RS72-144 in the capture at fixtures/ios-20260804-232652.urf -- it rendered
 // at 144 dpi rather than sending 300 -- so no RS300 fallback is advertised.
+//
+// W-1173: continuous fanfold beside Letter, 8.5 in wide and 1 in to 10 ft long (Wells's
+// limit, 2026-11-20: a mistaken job stops after about 11 sheets). Side margins as Letter's;
+// none at the top or bottom, since a roll page prints straight through.
+static const printer_roll_t imagewriter_roll = {
+    .min_kw   = "roll_min_8.5x1in",
+    .max_kw   = "roll_max_8.5x120in",
+    .ready_kw = "roll_current_8.5x0in",
+    .x        = 21590,
+    .len_min  = 2540,                               // 1 in
+    .len_max  = 304800,                             // 10 ft
+    .margin_l = 635, .margin_r = 635,
+};
+
 const printer_caps_t printer_caps_imagewriter = {
     .make_model  = "Apple ImageWriter II",
     .device_id   = "MFG:Apple;MDL:ImageWriter II;CMD:URF;",
@@ -24,6 +38,7 @@ const printer_caps_t printer_caps_imagewriter = {
     .rip_dpi_x   = 144, .rip_dpi_y = 72,
     .max_dots    = 1152,                          // IW_MAX_DOTS: 8 in at 144 dpi
     .crop_margin = 1,
+    .roll        = &imagewriter_roll,
 };
 
 // W-1088: the LQ and the original take the same stream (the scope spec's
@@ -34,7 +49,7 @@ static const printer_caps_t imagewriter_lq = {
     .urf_rs = "RS72-144", .res_x = 144, .res_y = 72, .media = "na_letter_8.5x11in",
     .media_x = 21590, .media_y = 27940, .margin_l = 635, .margin_r = 635, .margin_t = 2540,
     .margin_b = 1270, .ppm = 1, .rip_dpi_x = 144, .rip_dpi_y = 72, .max_dots = 1152,
-    .crop_margin = 1,
+    .crop_margin = 1, .roll = &imagewriter_roll,
 };
 static const printer_caps_t imagewriter_1 = {
     .make_model  = "Apple ImageWriter",
@@ -42,12 +57,21 @@ static const printer_caps_t imagewriter_1 = {
     .urf_rs = "RS72-144", .res_x = 144, .res_y = 72, .media = "na_letter_8.5x11in",
     .media_x = 21590, .media_y = 27940, .margin_l = 635, .margin_r = 635, .margin_t = 2540,
     .margin_b = 1270, .ppm = 1, .rip_dpi_x = 144, .rip_dpi_y = 72, .max_dots = 1152,
-    .crop_margin = 1,
+    .crop_margin = 1, .roll = &imagewriter_roll,
 };
 
 const printer_caps_t *printer_caps_imagewriter_model(int model)
 {
     return model == 2 ? &imagewriter_lq : model == 3 ? &imagewriter_1 : &printer_caps_imagewriter;
+}
+
+int printer_caps_wants_roll(const printer_caps_t *c, int32_t media_len, int media_roll)
+{
+    if (!c || !c->roll) return 0;
+    if (media_roll) return 1;
+    if (media_len <= 0) return 0;               // none sent; and no overflow below on a hostile one
+    int32_t d = media_len - c->media_y;
+    return d > PRINTER_CAPS_LEN_SLACK || d < -PRINTER_CAPS_LEN_SLACK;
 }
 
 size_t printer_caps_urf_keywords(const printer_caps_t *c, int colour, const char *kw[9])

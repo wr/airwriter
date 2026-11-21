@@ -86,8 +86,9 @@ void      job_pipe_set_screen(ht_algo_t dither, int gain);
 // The top margin the next job prints with, 1/144 in (ripjob_cfg_t).
 void      job_pipe_set_top_margin(int top);
 
-// Starts the pipeline task for one document.
-esp_err_t job_pipe_begin(const char *job_name);
+// Starts the pipeline task for one document. `continuous`: the job asked for the
+// ImageWriter's continuous roll (W-1173, printer_caps_wants_roll; ripjob_cfg_t).
+esp_err_t job_pipe_begin(const char *job_name, int continuous);
 
 // W-1082: a document for another printer than the ImageWriter
 // (job_pipe_target_t, in job_pipe_rip.h).

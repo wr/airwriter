@@ -49,6 +49,18 @@ static int name_is_ci(const uint8_t *name, size_t nlen, const char *want)
     return 1;
 }
 
+// W-1173: paper named as a roll or a custom size: a PWG name of either class (PWG 5101.1), or
+// the PPD name a Mac gives a custom size, Custom.WxH in points.
+static int names_roll(const uint8_t *val, size_t n)
+{
+    static const char *const prefixes[] = { "roll_", "custom_", "Custom." };
+    for (size_t i = 0; i < sizeof prefixes / sizeof prefixes[0]; i++) {
+        size_t k = strlen(prefixes[i]);
+        if (n > k && memcmp(val, prefixes[i], k) == 0) return 1;
+    }
+    return 0;
+}
+
 // The job-id a job-uri names: its last path segment, which is how
 // ipp_job_start builds it. 0 -- never a job we issued -- if that is not a
 // number.
@@ -86,7 +98,11 @@ int ipp_req_parse(ipp_req_t *r, const uint8_t *buf, size_t len)
     int in_requested = 0;  // the values being walked extend requested-attributes
     // The Job group's media-col (W-1102): how deep its collections go (0 outside it, 1 among
     // its own members), and whether the member being walked at depth 1 is media-source.
-    int mcol = 0, depth = 0, src_member = 0;
+    // W-1173: whether the depth-1 member is media-size (`size_member`), whether the depth-2
+    // collection being walked is that media-size (`in_size`), whether its member being
+    // walked is y-dimension, and whether the depth-1 member is media-top-margin.
+    int mcol = 0, depth = 0, src_member = 0, size_member = 0, in_size = 0, y_member = 0,
+        top_member = 0;
     for (;;) {
         if (!need(&c, 1)) return IPP_REQ_SHORT;
         uint8_t tag = c.p[c.pos++];
@@ -123,15 +139,29 @@ int ipp_req_parse(ipp_req_t *r, const uint8_t *buf, size_t len)
             if (depth || tag == IPP_TAG_BEGIN_COLLECTION) {
                 if (tag == IPP_TAG_BEGIN_COLLECTION) {
                     depth++;
-                    src_member = 0;
+                    in_size = depth == 2 && size_member;
+                    src_member = size_member = y_member = top_member = 0;
                 } else if (tag == IPP_TAG_END_COLLECTION) {
                     depth--;
+                    in_size = 0;
                 } else if (tag == IPP_TAG_MEMBERNAME) {
-                    src_member = depth == 1 && name_is(val, vlen, "media-source");
+                    src_member  = depth == 1 && name_is(val, vlen, "media-source");
+                    size_member = depth == 1 && name_is(val, vlen, "media-size");
+                    y_member    = depth == 2 && in_size && name_is(val, vlen, "y-dimension");
+                    top_member  = depth == 1 && name_is(val, vlen, "media-top-margin");
                 } else {
                     if (mcol && src_member && tag == IPP_TAG_KEYWORD)
                         r->opts.manual = name_is(val, vlen, "manual");
-                    src_member = 0;
+                    if (mcol && y_member && tag == IPP_TAG_INTEGER && vlen == 4)
+                        r->opts.media_len = (int32_t)(((uint32_t)val[0] << 24) |
+                                                      ((uint32_t)val[1] << 16) |
+                                                      ((uint32_t)val[2] << 8) | (uint32_t)val[3]);
+                    // No top margin: only the roll has none (Letter's is 1 in), so a banner
+                    // cut within 1/8 in of Letter's length still asks for the roll.
+                    if (mcol && top_member && tag == IPP_TAG_INTEGER && vlen == 4 &&
+                        !(val[0] | val[1] | val[2] | val[3]))
+                        r->opts.media_roll = 1;
+                    src_member = size_member = y_member = top_member = 0;
                 }
             }
             continue;
@@ -143,7 +173,7 @@ int ipp_req_parse(ipp_req_t *r, const uint8_t *buf, size_t len)
         mcol = group == IPP_TAG_JOB && tag == IPP_TAG_BEGIN_COLLECTION &&
                name_is(name, nlen, "media-col");
         depth = tag == IPP_TAG_BEGIN_COLLECTION;
-        src_member = 0;
+        src_member = size_member = in_size = y_member = top_member = 0;
 
         // Job attributes may legally repeat operation-attribute names with
         // different meaning, so each group has its own list: the job group's
@@ -156,6 +186,11 @@ int ipp_req_parse(ipp_req_t *r, const uint8_t *buf, size_t len)
                 (tag == IPP_TAG_NAME || tag == IPP_TAG_KEYWORD || tag == IPP_TAG_TEXT) &&
                 name_is_ci(val, vlen, "manual"))
                 r->opts.manual = 1;
+            // W-1173: a roll or custom paper by name. iOS names the paper in media-col; a Mac
+            // sends its PPD's names as `media` and `PageSize` (traps.md).
+            if ((name_is(name, nlen, "media") || name_is(name, nlen, "PageSize")) &&
+                (tag == IPP_TAG_KEYWORD || tag == IPP_TAG_NAME) && names_roll(val, vlen))
+                r->opts.media_roll = 1;
             if (name_is(name, nlen, "print-quality") && tag == IPP_TAG_ENUM && vlen == 4 &&
                 !r->opts.quality) {
                 uint32_t q = ((uint32_t)val[0] << 24) | ((uint32_t)val[1] << 16) |

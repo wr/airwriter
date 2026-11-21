@@ -53,7 +53,9 @@ and AppleTalk port.
 - **Printers.** Tested on the ImageWriter II. The original ImageWriter and the ImageWriter LQ
   take the same stream and are expected to work, untested; docs say so rather than excluding
   them. The LQ's self-ID reply is taken from GSport's emulator; the original ImageWriter sends
-  none, so it never prints in colour. PostScript LaserWriters on AppleTalk are shared as
+  none, so it never prints in colour. ImageWriters offer continuous fanfold beside Letter, so
+  an app that asks for a roll prints a banner up to 10 ft as one strip (SPEC §3.5, §3.8).
+  PostScript LaserWriters on AppleTalk are shared as
   printers of their own, tested on a Personal LaserWriter NTR only. StyleWriters on the printer
   port, the seven models lpstyl covers (StyleWriter, II, 1200, Color 1500, 2200, 2400, 2500),
   are found by the plain question or named by the person, and print over AirPrint in colour
