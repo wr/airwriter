@@ -25,6 +25,18 @@ typedef struct {
                                             // named by width alone)
 } printer_media_t;
 
+// W-1173: continuous fanfold, offered beside the one sheet for a banner. Listed as loaded
+// (media-col-ready) with a range of lengths, which is what makes iOS ask a roll-aware app for
+// a cut length; an app that doesn't ask never sees it. No top or bottom margin: a roll page
+// prints straight through from where the head stands and ends at the next fold.
+typedef struct {
+    const char *min_kw, *max_kw;    // media-supported: "roll_min_8.5x1in", "roll_max_8.5x120in"
+    const char *ready_kw;           // media-ready: "roll_current_8.5x0in" (PWG 5101.1: 0, any)
+    int32_t     x;                  // width, 1/100 mm
+    int32_t     len_min, len_max;   // length, 1/100 mm: the range a client may cut
+    int32_t     margin_l, margin_r; // 1/100 mm; top and bottom are 0
+} printer_roll_t;
+
 typedef struct {
     // What clients are told.
     const char *make_model;      // printer-make-and-model, TXT ty
@@ -49,6 +61,9 @@ typedef struct {
     // one source "main".
     const char *const *sources;
     uint8_t     n_sources;
+    // W-1173: the continuous roll after the sheets, NULL for none (every printer but the
+    // ImageWriters). The rip prints a roll page with no top margin of its own (ripjob.h).
+    const printer_roll_t *roll;
 } printer_caps_t;
 
 // The ImageWriter II as it has always been advertised: one pass at 144 x 72,
@@ -57,6 +72,12 @@ extern const printer_caps_t printer_caps_imagewriter;
 // W-1088: an ImageWriter by model, pr_model_t's numbers: 1 the II (the one
 // above), 2 the LQ, 3 the original; anything else the II.
 const printer_caps_t *printer_caps_imagewriter_model(int model);
+
+// W-1173: whether a job prints on `c`'s roll, from what its Job group asked for (ipp_req.h's
+// media_len and media_roll): a paper it names as a roll or a custom size, or a length more
+// than 1/8 in from the sheet's. 0 for a printer with no roll, or NULL.
+#define PRINTER_CAPS_LEN_SLACK 318      // 1/8 in, 1/100 mm
+int printer_caps_wants_roll(const printer_caps_t *c, int32_t media_len, int media_roll);
 
 // The URF capability string (SPEC.md 3.3): "V1.4,CP1,<rs>,W8[,SRGB24],DM1,
 // IS1,MT1,FN3", SRGB24 when `colour`. Its length, or 0 (and "" when cap > 0)

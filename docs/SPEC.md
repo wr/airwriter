@@ -313,7 +313,27 @@ and iOS, told the inch is margin, draws nothing there: every row prints where iO
 printable area is 8 x 9.5in. On a rev A board the calibration page's lines landed exactly 1in
 from the top and 0.5in from the bottom at -7/8in.*
 
-**Media.** `na_letter_8.5x11in` plus the continuous fanfold sizes. Not borderless.
+**Media.** `na_letter_8.5x11in`, the default, and on an ImageWriter continuous fanfold. Not
+borderless.
+
+*Amended (`W-1173 Continuous paper on ImageWriters: a banner prints as one unbroken strip`):
+the three ImageWriters list a roll after Letter (`printer_caps_t.roll`): `media-supported`
+`roll_min_8.5x1in` and `roll_max_8.5x120in`, `media-ready` `roll_current_8.5x0in`, and in
+`media-col-ready`, `media-col-database` and `media-size-supported` a `media-size` of
+`x-dimension` 21590 and `y-dimension` the range 2540–304800 (1 in to 10 ft, Wells's limit),
+margins 635 at the sides and 0 at the top and bottom. Letter stays first and the default. It
+has to be in `media-col-ready`: iOS 26.5 (simulator, 2026-11-20) asked a roll-aware app for a
+cut length (`printInteractionController(_:cutLengthFor:)`, handed 612 × 8640 pt, the range's
+maximum) only then, and ignored a roll in `media-col-database` alone. Safari and Photos, which
+don't ask, listed only US Letter and printed Letter pages; the print sheet reads "US Letter"
+for a banner too, with the strip in its preview. A Mac turns the range into custom page sizes
+(`*CustomPageSize`, CUPS `ppd-cache.c`) with each margin list's largest value as their margins,
+so 1 in top and 0.5 in bottom; a queue added before keeps its PPD until removed and added again.
+No UUID epoch bump: iOS asked for `media-col-ready` at every print sheet, and a new UUID would
+orphan every Mac's queue. A job asks for the roll by its media-col's `y-dimension` (more than
+1/8 in from Letter's), by a media-col `media-top-margin` of 0 (only the roll has none, so a
+banner cut within 1/8 in of 11 in still asks), or by `media`/`PageSize` naming a roll or custom
+size (`ipp_req`, `printer_caps_wants_roll`); how a roll page prints is §3.8.*
 
 **`printer-icons`.** Three PNGs served on the IPP port itself,
 `http://<host>.local:631/<set>-{48,128,512}.png`, smallest first as IPP Everywhere orders
@@ -496,6 +516,15 @@ test-page design's amendment block), drawn as rows at 144 × 72 and given to `iw
 stage over these same strip writers, which writes byte for byte what ripjob writes for the same
 rows and top margin. The Top margin setting moves the page as it moves a job's, but drops no
 more than the sheet's blank first inch.*
+
+*Amended (W-1173): a page on the continuous roll (§3.5) prints straight through. Its job
+asked for the roll, or it is more than 1/8 in longer than Letter (a Mac's custom size names no
+roll); either way only on an ImageWriter. The Top margin setting neither drops nor adds rows,
+since a roll page has no margin: its first row prints where the head stands, about 1 in below
+a fold after the job's opening form feed. Rows past 10 ft are dropped and logged ("page N is
+longer than the roll's 8640 rows"). The page ends with its form feed as every page does, which
+on fanfold feeds to the next fold past the strip, so a banner tears off at folds. A page the
+same length as Letter or shorter, with no ask, prints byte for byte as before.*
 
 Defer 144x144 double-pass mode to v2. It needs half-line feeds and two passes per strip,
 and it doubles the time on a printer that is already slow.
