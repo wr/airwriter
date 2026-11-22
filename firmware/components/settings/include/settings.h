@@ -34,6 +34,9 @@ typedef struct {
     // keeps what was worked out. No control on the page: /api/general's port1 and port2.
     uint8_t port_set[2];
     uint8_t port_job[2];
+    // ... and whether LocalTalk had been heard on it in that job: AppleTalk goes out on a
+    // socket only once it has (W-1179), and a restart keeps that.
+    uint8_t port_heard[2];
     int16_t top_margin;              // 1/144 in: + blank paper ahead of each AirPrint
                                      // page and the test page, - drops their first
                                      // rows; CONFIG_AIRWRITER_TOP_MARGIN
@@ -76,6 +79,7 @@ esp_err_t settings_save_ribbon(uint8_t ribbon);
 // W-1179: socket i's setting (SET_PORT_*) and the job it last did (port_job_t, 0 to 2).
 esp_err_t settings_save_port_set(int i, int set);
 esp_err_t settings_save_port_job(int i, int job);
+esp_err_t settings_save_port_heard(int i, int heard);
 // SET_TOP_MIN to SET_TOP_MAX, 1/144 in.
 esp_err_t settings_save_top_margin(int top);
 

@@ -268,6 +268,197 @@ static void test_a_mac_holding_the_handshake_comes_back(void)
     }
 }
 
+static int may(const rig_t *r, int i)
+{
+    return pd_may_send(&r->d, r->in, i, r->now);
+}
+
+// Frames sent into a printer print as junk, selected or not: AppleTalk only where LocalTalk has
+// been heard (board 1, 2026-11-21).
+static void test_a_localtalk_socket_listens_until_heard(void)
+{
+    rig_t r;
+    rig(&r, PR, LT);                             // nothing known: J4 does LocalTalk
+    run(&r, 60000, NULL);
+    CHECK_EQ_INT(may(&r, 1), 0);
+    CHECK_EQ_INT(pd_heard(&r.d, 1), 0);
+    CHECK_EQ_INT(may(&r, 0), 0);                 // a printer socket never sends AppleTalk
+    r.in[1].frames = 1;                          // a Mac's Chooser, or a LaserWriter switched on
+    run(&r, 500, NULL);
+    CHECK_EQ_INT(may(&r, 1), 1);
+    CHECK_EQ_INT(pd_heard(&r.d, 1), 1);
+    CHECK_EQ_INT(run(&r, 600000, NULL), 0);      // a quiet network keeps it
+    CHECK_EQ_INT(may(&r, 1), 1);
+}
+
+static void test_a_printer_where_localtalk_was_heard_stops_it_at_once(void)
+{
+    rig_t r;
+    rig(&r, PR, LT);
+    r.in[1].frames = 1;
+    run(&r, 40000, NULL);
+    CHECK_EQ_INT(may(&r, 1), 1);
+    r.in[1].ready = 1;                           // the cable swapped for an ImageWriter's
+    run(&r, 500, NULL);
+    CHECK_EQ_INT(may(&r, 1), 0);                 // the next tick, not after PD_READY_MS
+    CHECK_EQ_INT(pd_heard(&r.d, 1), 0);
+    r.in[1].ready = 0;                           // deselected before the socket changed job
+    run(&r, 500, NULL);
+    CHECK_EQ_INT(may(&r, 1), 0);                 // still nothing until LocalTalk is heard
+    r.in[1].frames = 1;
+    run(&r, 500, NULL);
+    CHECK_EQ_INT(may(&r, 1), 1);
+    // A QuickDraw LaserWriter's clock, the same.
+    r.in[1].clocked = 1;
+    run(&r, 500, NULL);
+    CHECK_EQ_INT(may(&r, 1), 0);
+}
+
+static void test_a_mac_holding_the_handshake_may_send(void)
+{
+    rig_t r;
+    rig(&r, PR, LT);
+    r.in[1].ready = 1;                           // a Mac on a direct cable holds HSKo ready
+    run(&r, 1000, NULL);
+    CHECK_EQ_INT(may(&r, 1), 0);
+    r.in[1].frames = 1;                          // and talks
+    run(&r, 500, NULL);
+    CHECK_EQ_INT(may(&r, 1), 1);
+    CHECK_EQ_INT(r.in[1].job, LT);
+}
+
+static void test_heard_before_a_restart_waits_for_the_line(void)
+{
+    rig_t r;
+    rig(&r, PR, LT);
+    pd_start(&r.d, 1, LT, 1);
+    pd_start(&r.d, 0, PR, 1);                    // a printer socket's is not kept
+    CHECK_EQ_INT(pd_heard(&r.d, 0), 0);
+    CHECK_EQ_INT(may(&r, 1), 0);                 // before the first tick
+    run(&r, 500, NULL);
+    CHECK_EQ_INT(may(&r, 1), 0);
+    run(&r, PD_BOOT_MS - 500, NULL);
+    CHECK_EQ_INT(may(&r, 1), 1);                 // the line showed no printer
+    // An ImageWriter plugged in while AirWriter was off shows at the first tick.
+    rig(&r, PR, LT);
+    pd_start(&r.d, 1, LT, 1);
+    r.in[1].ready = 1;
+    run(&r, 500, NULL);
+    CHECK_EQ_INT(pd_heard(&r.d, 1), 0);
+    r.in[1].ready = 0;
+    run(&r, PD_BOOT_MS, NULL);
+    CHECK_EQ_INT(may(&r, 1), 0);
+    // A frame heard since the restart needs no wait.
+    rig(&r, PR, LT);
+    pd_start(&r.d, 1, LT, 1);
+    r.in[1].frames = 1;
+    run(&r, 500, NULL);
+    CHECK_EQ_INT(may(&r, 1), 1);
+}
+
+static void test_a_trial_sends_once_heard(void)
+{
+    rig_t r;
+    rig(&r, PR, LT);
+    run(&r, 40000, NULL);
+    for (int k = 0; k < 3; k++) {
+        r.in[0].junk = 1;
+        run(&r, 1000, NULL);
+    }
+    CHECK_EQ_INT(r.in[0].job, LT);
+    CHECK_EQ_INT(may(&r, 0), 0);                 // junk is only a hint
+    run(&r, 2000, NULL);
+    CHECK_EQ_INT(may(&r, 0), 0);
+    r.in[0].frames = 1;
+    run(&r, 500, NULL);
+    CHECK_EQ_INT(may(&r, 0), 1);
+}
+
+static void test_a_failed_trial_gives_back_what_was_heard(void)
+{
+    rig_t r;
+    rig(&r, PR, LT);
+    r.in[1].frames = 1;                          // a LaserWriter on J4, heard, then quiet
+    run(&r, PD_QUIET_MS + 5000, NULL);
+    CHECK_EQ_INT(may(&r, 1), 1);
+    for (int k = 0; k < 3; k++) {
+        r.in[0].junk = 1;
+        run(&r, 1000, NULL);
+    }
+    CHECK_EQ_INT(r.in[0].job, LT);               // the trial took LocalTalk from J4
+    CHECK_EQ_INT(pd_heard(&r.d, 1), 0);
+    pd_act_t a;
+    CHECK_EQ_INT(run(&r, PD_TRIAL_MS + 500, &a), 1);
+    CHECK_EQ_INT(a.why, PD_WHY_NO_FRAME);
+    CHECK_EQ_INT(r.in[1].job, LT);
+    CHECK_EQ_INT(may(&r, 1), 1);                 // the LaserWriter is still reached
+    CHECK_EQ_INT(may(&r, 0), 0);
+    // Not if a printer showed on J4 meanwhile.
+    rig(&r, PR, LT);
+    r.in[1].frames = 1;
+    run(&r, PD_QUIET_MS + 5000, NULL);
+    for (int k = 0; k < 3; k++) {
+        r.in[0].junk = 1;
+        run(&r, 1000, NULL);
+    }
+    r.in[1].ready = 1;
+    run(&r, PD_TRIAL_MS + 500, NULL);
+    CHECK_EQ_INT(r.in[1].job, LT);
+    CHECK_EQ_INT(may(&r, 1), 0);
+}
+
+static void test_a_socket_set_to_localtalk_sends(void)
+{
+    rig_t r;
+    rig(&r, PR, LT);
+    r.in[1].fixed = 1;
+    run(&r, 500, NULL);
+    CHECK_EQ_INT(may(&r, 1), 1);
+    // Changed from outside (its setting, the cable test): heard again first.
+    rig(&r, PR, LT);
+    r.in[1].frames = 1;
+    run(&r, 1000, NULL);
+    CHECK_EQ_INT(may(&r, 1), 1);
+    r.in[0].job = LT;
+    r.in[1].job = PR;
+    run(&r, 500, NULL);
+    CHECK_EQ_INT(may(&r, 0), 0);
+    r.in[0].job = PR;
+    r.in[1].job = LT;
+    run(&r, 500, NULL);
+    CHECK_EQ_INT(may(&r, 1), 0);
+}
+
+// Junk on each socket in turn: a trial that took LocalTalk from a socket on trial ends that one,
+// so the failed one's backoff lands on the socket that had it (review).
+static void test_a_trial_over_a_trial(void)
+{
+    rig_t r;
+    rig(&r, PR, LT);
+    run(&r, 40000, NULL);
+    for (int k = 0; k < 3; k++) {
+        r.in[0].junk = 1;
+        run(&r, 1000, NULL);
+    }
+    CHECK_EQ_INT(r.in[0].job, LT);               // J2 on trial
+    for (int k = 0; k < 3; k++) {
+        r.in[1].junk = 1;
+        run(&r, 1000, NULL);
+    }
+    CHECK_EQ_INT(r.in[1].job, LT);               // J4 on trial, J2 back to printing
+    CHECK_EQ_INT(r.in[0].job, PR);
+    pd_act_t a;
+    CHECK_EQ_INT(run(&r, PD_TRIAL_MS + 500, &a), 1);
+    CHECK_EQ_INT(a.why, PD_WHY_NO_FRAME);
+    CHECK_EQ_INT(r.in[0].job, LT);               // LocalTalk back to J2
+    CHECK_EQ_INT(r.d.s[1].trial, 0);
+    CHECK_EQ_INT(r.d.s[0].trial, 0);
+    for (int k = 0; k < 6; k++) {                // J4 waits out its backoff
+        r.in[1].junk = 1;
+        CHECK_EQ_INT(run(&r, 1000, NULL), 0);
+    }
+}
+
 int main(void)
 {
     test_quiet_sockets_keep_their_jobs();
@@ -282,5 +473,13 @@ int main(void)
     test_a_socket_set_to_a_job_is_never_changed();
     test_nothing_changes_mid_job();
     test_the_lc_has_one_socket();
+    test_a_localtalk_socket_listens_until_heard();
+    test_a_printer_where_localtalk_was_heard_stops_it_at_once();
+    test_a_mac_holding_the_handshake_may_send();
+    test_heard_before_a_restart_waits_for_the_line();
+    test_a_trial_sends_once_heard();
+    test_a_failed_trial_gives_back_what_was_heard();
+    test_a_socket_set_to_localtalk_sends();
+    test_a_trial_over_a_trial();
     TEST_END;
 }

@@ -1444,6 +1444,44 @@
     }
    }
   },
+  "ports-listening": {
+   "about": "W-1179 rev 2026.11: LocalTalk on port 2 with nothing heard there yet, so AirWriter sends nothing on it; the ImageWriter II on port 1",
+   "patch": {
+    "GET /api/status": {
+     "board": "2026.11"
+    },
+    "GET /api/printers": {
+     "printers": [
+      {
+       "id": 1,
+       "name": "ImageWriter II",
+       "where": "port",
+       "kind": "imagewriter",
+       "model": "ImageWriter II",
+       "shared": true,
+       "identified": true,
+       "found": "person",
+       "state": "ready",
+       "uuid": "urn:uuid:41575254-4552-0001-10bd-a36e2434",
+       "product": "",
+       "dither": "atkinson",
+       "gain": 0,
+       "rp": "ipp/print",
+       "start_page": null,
+       "icon": "icon",
+       "port": 1
+      }
+     ],
+     "port_on": 1,
+     "port2_on": 0
+    },
+    "GET /api/lt": {
+     "port": 2,
+     "phase": "listening",
+     "macs": []
+    }
+   }
+  },
   "lc": {
    "about": "AirWriter LC: one status light, Rainbow status lights off, one port (port 1) and no LocalTalk",
    "patch": {

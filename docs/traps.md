@@ -330,6 +330,13 @@ Traps already explained in a code comment are listed only when the comment is ea
   cables are wired straight and give a false "out of paper"; buzz pin 1 → pin 2 first (SPEC §2.4),
   or plug it from J2 to J4 and press test (the cable test, W-1055). The test can't reach pins 1/2
   (J4's are not connected), so a cable crossed on data but straight on the handshake passes.
+- **AppleTalk sent into an ImageWriter prints junk, selected or not** (board 1, 2026-11-21,
+  W-1179). 20 ENQs at a restart, a look and 520 echoes into an ImageWriter II on rev A's
+  AppleTalk port fed about 3 sheets, junk every 8 or 9 lines with line feeds and form feeds. With
+  SELECT off it took 20 echoes with nothing on paper and printed them when SELECT was pressed:
+  a deselected ImageWriter keeps what it is sent, and looks like an empty socket (not ready).
+  Nothing is sent on a rev 2026.11 socket until LocalTalk is heard there (SPEC 3.19, Listening
+  first); don't add a send that bypasses `localtalk_set_hold`.
 - **TashTalk can go deaf to a fresh UART2 link with the node off** (seen once on board 1, W-1055):
   no transmit and no relay, while its CTS read ready and it took the 1024-NUL sync. A node-mode
   boot in between cleared it; the PIC is never reset by an ESP32 reboot. The cable test retries

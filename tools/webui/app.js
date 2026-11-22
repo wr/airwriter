@@ -1221,7 +1221,8 @@ function atDraw(){
     }
     else if(live){
       on++; macs+=(LT.macs||[]).length;
-      put(c,(LT.phase!=='online'?stLine('a','Joining the AppleTalk network…'):twoPorts()?stLine('g','On port '+LT.port):'')
+      // W-1179: 'listening', nothing heard on the port yet, is not joining
+      put(c,(LT.phase==='acquiring'?stLine('a','Joining the AppleTalk network…'):twoPorts()?stLine('g','On port '+LT.port):'')
         +macList(LT.macs||[],m=>'Node '+m.node));
     }
   }

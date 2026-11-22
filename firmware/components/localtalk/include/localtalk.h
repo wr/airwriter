@@ -52,6 +52,14 @@ int       localtalk_running(void);
 // Frames TashTalk relayed with a good FCS, from any node, quiet or not, since start: a socket
 // whose count moves has a LocalTalk network on it.
 uint32_t  localtalk_frames(void);
+// W-1179: listening. The node sends nothing (TashTalk answers for no node, and lookups, the PAP
+// client and echoes send nothing) while frames are still heard and counted, until main lets it
+// once LocalTalk has been heard on its socket: frames sent into a printer print as junk,
+// selected or not. Letting it acquires a node as at start. Set before start, the node starts
+// listening. The switch (localtalk_set_quiet) is remembered meanwhile, and the cable test's
+// frames (localtalk_send_raw) still go.
+void      localtalk_set_hold(int hold);
+int       localtalk_holding(void);
 void      localtalk_park(void);
 int       localtalk_parked(void);
 esp_err_t localtalk_move(const localtalk_cfg_t *cfg);

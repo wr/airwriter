@@ -3082,10 +3082,20 @@ static int port_page_refused(int id, int port)
 // W-1055: the cable test, from the button or the web page, under the job lock
 // (it borrows the printer port's pins). The panel shows the answer, and with
 // no TashTalk to run the test, says that instead of blaming the cable (W-1063).
+// W-1179: a cable test's own frames, from one of AirWriter's ports to the other, are not a
+// network heard (sock_detect).
+static volatile uint32_t s_ct_seq;       // odd while a test runs
+static volatile uint32_t s_ct_frames;    // localtalk_frames() as the last test ended
+// ... and LocalTalk moved to another socket (sock_job_set): what was counted was the old one's.
+static volatile int      s_pd_resync;
+
 #if CONFIG_AIRWRITER_PIC_CLK_PIN >= 0
 static void cable_test_locked(cable_result_t *r, int both)
 {
+    s_ct_seq++;
     cable_test_run(r, both);
+    s_ct_frames = localtalk_frames();
+    s_ct_seq++;
     printer_state_cable(r->err == ESP_OK && !ct_verdict_tested(r->verdict) ? PS_CABLE_NO_CHIP
                         : r->err == ESP_OK && r->verdict == CT_PASS        ? PS_CABLE_PASS
                                                                            : PS_CABLE_FAIL);
@@ -4174,6 +4184,9 @@ static int sock_job_set(int i, port_job_t job, const char *why, uint32_t wait_ms
         if (s_psock == i) printer_sock_select(other);
         ports_hw(i, PORT_JOB_LOCALTALK);
         psock_reset(i);
+        // Listening on its new socket until LocalTalk is heard there (sock_detect lets it).
+        localtalk_set_hold(1);
+        s_pd_resync = 1;
         if (localtalk_running()) {
             localtalk_cfg_t c = lt_cfg(i);
             esp_err_t e = localtalk_move(&c);
@@ -4199,7 +4212,9 @@ static int sock_job_set(int i, port_job_t job, const char *why, uint32_t wait_ms
 }
 
 // What each socket shows, for port_detect_core: its handshake and clock, LocalTalk frames on the
-// LocalTalk socket, framing errors and breaks on a printer socket with no printer showing.
+// LocalTalk socket, framing errors and breaks on a printer socket with no printer showing. And
+// whether the LocalTalk socket may send: only once LocalTalk has been heard on it, since frames
+// sent into a printer print as junk, selected or not.
 static pd_t     s_pd;
 static int      s_pd_on;
 static uint32_t s_pd_frames;
@@ -4209,10 +4224,19 @@ static void sock_detect(void)
     uint32_t now = uptime_ms();
     if (!s_pd_on) {
         pd_init(&s_pd, ports_count(), now);
+        for (int i = 0; i < ports_count() && i < PD_SOCKS; i++)
+            pd_start(&s_pd, i, (uint8_t)ports_job(i), s_set.port_heard[i]);
         s_pd_frames = localtalk_frames();
         s_pd_on = 1;
     }
-    uint32_t frames = localtalk_frames(), heard = frames - s_pd_frames;
+    uint32_t seq = s_ct_seq, ct_frames = s_ct_frames, frames = localtalk_frames();
+    if ((seq & 1) || seq != s_ct_seq || s_pd_resync) {
+        s_pd_resync = 0;
+        s_pd_frames = frames;                // a cable test's own, or the old socket's
+    } else if ((int32_t)(ct_frames - s_pd_frames) > 0) {
+        s_pd_frames = ct_frames;             // counted up to a test's end
+    }
+    uint32_t heard = (int32_t)(frames - s_pd_frames) > 0 ? frames - s_pd_frames : 0;
     s_pd_frames = frames;
     int idle = !job_busy() && !s_printing;
     pd_in_t in[PD_SOCKS] = { 0 };
@@ -4238,9 +4262,22 @@ static void sock_detect(void)
         }
     }
     pd_act_t a;
+    int moved = 0;
     if (pd_tick(&s_pd, in, now, idle, &a) && sock_job_set(a.sock, (port_job_t)a.job,
-                                                          pd_why_name(a.why), 0) == 0)
+                                                          pd_why_name(a.why), 0) == 0) {
         pd_applied(&s_pd, &a, uptime_ms());
+        moved = 1;                           // sock_job_set left LocalTalk listening
+    }
+    for (int i = 0; i < ports_count() && i < PD_SOCKS; i++) {
+        uint8_t h = (uint8_t)pd_heard(&s_pd, i);
+        if (h == s_set.port_heard[i]) continue;
+        s_set.port_heard[i] = h;
+        settings_save_port_heard(i, h);
+    }
+    if (!moved) {
+        int lt = ports_with(PORT_JOB_LOCALTALK);
+        localtalk_set_hold(!(lt >= 0 && lt < PD_SOCKS && pd_may_send(&s_pd, in, lt, now)));
+    }
 }
 
 // Between the port task's questions: a socket set to a job (/api/general's port1, port2) takes
@@ -4611,6 +4648,10 @@ void app_main(void)
         s_psock = ports_with(PORT_JOB_PRINTER);
         s_job_sock = s_psock > 0 ? s_psock : 0;
         printers_set_lt_port(ports_with(PORT_JOB_LOCALTALK) + 1);
+        // W-1179: on rev 2026.11 the node starts listening, sending nothing until sock_detect
+        // has seen its socket: LocalTalk heard there, or heard before the restart and no
+        // printer showing since. Frames sent into a printer print as junk.
+        if (ports_either()) localtalk_set_hold(1);
     }
 #if CONFIG_AIRWRITER_LT_BENCH
     lt_start("bench build");

@@ -2012,6 +2012,30 @@ board exists.
     TashTalk hears a frame. Quiet sockets keep their last job; with nothing plugged in, J2
     prints and J4 does LocalTalk. Every change is a log line naming the port, its old and new
     job and the signal.
+  - **Listening first.** AppleTalk frames sent into an ImageWriter II print as junk, selected or
+    not: a deselected one keeps them and prints them when SELECT is pressed (board 1,
+    2026-11-21: about 3 sheets, line feeds and form feeds included). So the node sends nothing
+    from a socket until LocalTalk has been heard there (`localtalk_set_hold`, `pd_may_send`):
+    it starts listening, holds no node ID in TashTalk, and its ticks, NBP lookups, the PAP
+    client and echoes send nothing, while TashTalk's frames are still counted. A good-FCS frame
+    on that socket lets it send, and it acquires a node as at start; a socket fixed to
+    LocalTalk (`port1`, `port2`) sends at once. What was heard is dropped when the socket
+    changes job, and at the first check a printer shows there (a handshake ready with no frame
+    since it went ready, or a clock), so the node goes quiet before the socket moves; it must
+    be heard again after. A failed trial gives the socket
+    it took LocalTalk from back what that had heard, unless a printer shows there. Heard is saved
+    (`port1heard`, `port2heard`): after a restart the socket sends once its line has shown no
+    printer for 1 s (`PD_BOOT_MS`). A cable test's own frames don't count. The cost: a
+    LaserWriter already switched on when its cable goes into a socket that hasn't heard
+    LocalTalk is found only when it, or a Mac on that network, next sends a frame (switched off
+    and on, it does). `W-1185 Rev 2026.11: read each port's handshake voltage, so a switched-on
+    printer that isn't ready is seen` would let a socket with nothing driving its handshake
+    send at once. While listening, `/api/lt` gives `"phase":"listening"` with `on` as its
+    setting, and the LocalTalk card reads On port N with no Macs. Rev A and the LC send as
+    before. Not covered: a printer deselected before its cable goes into a socket that has
+    heard LocalTalk shows nothing there, so that socket still sends (W-1185 again), and so does
+    the test button's cable test. A Mac on a direct cable whose handshake drops for one check
+    makes its socket listen until the Mac next sends.
   - **Saved.** Each socket's last job (NVS `general` `port1job`, `port2job`), so a restart
     keeps it. `/api/general` `{"port1":"auto"|"printer"|"localtalk","port2":…}` fixes one
     (`port1set`, `port2set`; auto by default); the page has no control for it. `/api/status`
