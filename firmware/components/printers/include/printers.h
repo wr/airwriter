@@ -91,7 +91,8 @@ int         printers_port_seen_sw(int k, sw_model_t m);
 // answered on at_link at net.node with its page count (-1 none), or not
 // (at_link -1). W-1098: a printer the list has under an old name keeps its
 // record (pr_at_answered).
-void        printers_at_seen(int at_link, const uint8_t *name, const uint8_t *type);
+// W-1186: twin: the same name still answers on the other cable, so this is a second printer.
+void        printers_at_seen(int at_link, const uint8_t *name, const uint8_t *type, int twin);
 void        printers_at_queried(int id, int ok, const lw_info_t *info, int at_link, uint16_t net,
                                 uint8_t node, int32_t pages);
 

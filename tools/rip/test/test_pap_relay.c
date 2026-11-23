@@ -18,7 +18,7 @@
 #include <stdlib.h>
 
 enum { MAC, BOARD_B, BOARD_A, PRN, NODES };
-static const uint8_t HINT[NODES] = { 130, 140, 150, 160 };   // server IDs: 128-254
+static uint8_t HINT[NODES] = { 130, 140, 150, 160 };         // server IDs: 128-254
 static lt_node_t node[NODES];
 static int       wire_of[NODES] = { 1, 1, 2, 2 };
 
@@ -184,7 +184,7 @@ static void m_job_eof(void *ctx) { (void)ctx; m_job_eofs++; }
 // ------------------------------------------------------------- the run
 
 static const lt_route_t B_REG = { { 0, 140, LT_SOCK_REG(1) }, 140, 0 };
-static const lt_route_t P_REG = { { 0, 160, LT_SOCK_REG(1) }, 160, 0 };
+static lt_route_t P_REG = { { 0, 160, LT_SOCK_REG(1) }, 160, 0 };
 static uint64_t T;
 static int done_seen, acts;
 
@@ -272,6 +272,46 @@ static void test_relay_bytes(void)
     CHECK(!pap_relay_active(&relay));
     CHECK(!node[BOARD_B].pap.open);
     CHECK(!node[PRN].pap.open);
+}
+
+// W-1186: the two wires are two networks, as rev 2026.11's two LocalTalk ports are: the same
+// node IDs on each (the board's two nodes share one, and the printer has the Mac's), and a
+// lookup on one wire is answered on that wire alone, yet the job crosses whole.
+static int found_n, found_node;
+static void m_found(void *ctx, const nbp_tuple_t *t, const lt_route_t *r)
+{
+    (void)ctx;
+    (void)t;
+    found_n++;
+    found_node = r->addr.node;
+}
+
+static void test_relay_same_ids(void)
+{
+    static const uint8_t two[NODES] = { 130, 140, 140, 130 }, was[NODES] = { 130, 140, 150, 160 };
+    memcpy(HINT, two, sizeof HINT);
+    P_REG.addr.node = P_REG.via = 130;
+    setup(40 * 1024, 3 * 1024);
+    CHECK_EQ_INT(node[BOARD_A].node, node[BOARD_B].node);
+    CHECK_EQ_INT(node[PRN].node, node[MAC].node);
+    // The Mac's wire has one "Office", the board's offer of the other wire's printer.
+    found_n = found_node = 0;
+    node[MAC].ops.found = m_found;
+    lt_node_lookup(&node[MAC], "LaserWriter", T);
+    run_until(T + 1000);
+    CHECK_EQ_INT(found_n, 1);
+    CHECK_EQ_INT(found_node, 140);
+    CHECK_EQ_INT(papc_open(mc, &B_REG, 60000, T), 0);
+    run_until(T + 120000);
+    CHECK_EQ_INT(m_end, PAPC_END_OK);
+    CHECK_EQ_INT(bc_end, PAPC_END_OK);
+    CHECK(p_job_n == m_src_len && !memcmp(p_job, m_src, p_job_n));
+    CHECK_EQ_INT((int)m_out_n, 3 * 1024);
+    CHECK(!memcmp(m_out, p_out, m_out_n));
+    CHECK_EQ_INT(done_seen, 1);
+    CHECK(!pap_relay_active(&relay));
+    memcpy(HINT, was, sizeof HINT);
+    P_REG.addr.node = P_REG.via = 160;
 }
 
 // W-1095: the Mac's LaserWriter driver asks first (a query job), reads the
@@ -453,6 +493,7 @@ static void test_relay_peer_closes(void)
 int main(void)
 {
     test_relay_bytes();
+    test_relay_same_ids();
     test_relay_status();
     test_relay_busy();
     test_relay_peer_closes();

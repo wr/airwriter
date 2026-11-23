@@ -104,7 +104,11 @@ typedef struct {
     lg_slot_t task[LG_FAMS];    // one per family, in priority order
     uint8_t   blip;             // lg_blip_t
     uint32_t  blip_ms;          // time since the acknowledgement began
+    // W-1186: the socket an LG_BLIP_MAC's arc comes out of: J4's (LG_AT_J4, 0: rev A's
+    // AppleTalk port, rev 2026.11's port 2, and EtherTalk's Macs) or J2's (port 1).
+    uint8_t   blip_at;
 } lg_opts_t;
+enum { LG_AT_J4 = 0, LG_AT_J2 = 1 };
 
 // Whether a one-shot action has run its course and the state shows again.
 int  lg_act_over(uint8_t act, uint32_t act_ms);

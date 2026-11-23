@@ -5,7 +5,8 @@
 // its own (J2's U10, J4's U7), so either takes either job (W-1176): the printer job holds the
 // socket's PIC in reset and drives its transceiver from the ESP32; the LocalTalk job leaves the
 // line to the PIC. AirWriter LC has one socket, J2, and no TashTalk. Socket 0 is J2 (port 1),
-// socket 1 J4 (port 2).
+// socket 1 J4 (port 2). W-1186: the two are independent: both may print, both may do LocalTalk
+// (two networks, a node on each), or one each.
 //
 // This is only the hardware hand-over. Who decides a socket's job, and what follows from it
 // (which printer line is selected, where LocalTalk runs, the printer list), is main's.
@@ -42,7 +43,7 @@ int               ports_with(port_job_t job);
 // Hands socket i's pins to `job`: for the printer job its PIC goes into reset (CLK, DAT and
 // CTS pulled down), its driver is enabled and serial_out takes the line; for LocalTalk the
 // line is let go, the driver enable is an input and the PIC runs. The caller holds the job
-// lock, has stopped whatever used the socket (LocalTalk moved or parked, no printer selected
+// lock, has stopped whatever used the socket (its LocalTalk node parked, no printer selected
 // on it), and then starts what uses it. A no-op for a job the socket can't do.
 void              ports_hw(int i, port_job_t job);
 const char       *ports_job_name(port_job_t j);   // "printer", "localtalk", "none"

@@ -609,11 +609,19 @@ static char s_suffix[8];            // the MAC's last two bytes, the default hos
 // W-1079: what the page last saved, beside s_set's names in use since boot:
 // a new name or hostname reaches mDNS and the Chooser only at a restart.
 static char s_saved_model[SET_QUEUE_MAX], s_saved_name[SET_QUEUE_MAX], s_saved_host[SET_HOST_MAX];
-// W-1081: whether U7 runs TashTalk, for the AppleTalk Port card: asked at
-// boot, whenever the node starts, and after a flash. Unknown until then.
+// W-1081: whether a socket's PIC (U7 on J4, rev 2026.11's U10 on J2) runs TashTalk, for the
+// AppleTalk Port card: asked at boot, whenever its node starts, and after a flash. Unknown
+// until then.
 typedef enum { LT_CHIP_UNKNOWN, LT_CHIP_OK, LT_CHIP_NONE, LT_CHIP_NO_TASHTALK,
                LT_CHIP_SILENT } lt_chip_t;
-static volatile lt_chip_t s_lt_chip;
+static volatile lt_chip_t s_lt_chip[PORTS_MAX];
+static lt_chip_t lt_chip_shown(void);
+// One start or probe at a time: page, boot. W-1186: and no start while a socket's job changes
+// hands (sock_job_set takes it after the job lock, never the other way round): a socket's
+// UART has one driver, and a node started between its park and the printer line's unpark, or
+// before its socket is told to listen, would take the UART or send into a printer. On every
+// build, a board with no PIC pins included.
+static SemaphoreHandle_t s_lt_mx;
 
 static const char *lt_chip_name(lt_chip_t c)
 {
@@ -993,13 +1001,15 @@ static int box_ready(void)
     }
     if (!any && lw < 0) {
         // Nothing shared: the printer lines, ready if either is, unknown while none has reported.
-        int line = -1;
+        // W-1186: with no printer socket (both do LocalTalk) there is no line: not ready.
+        int line = -1, prints = 0;
         for (int k = 0; k < ports_count(); k++) {
             if (!sock_prints(k)) continue;
+            prints = 1;
             if (s_ps[k].iw_ready == 1) return 1;
             if (s_ps[k].iw_ready == 0) line = 0;
         }
-        return line;
+        return prints ? line : 0;
     }
     if (lw == 1) return 1;
     return unknown ? -1 : 0;
@@ -1404,9 +1414,9 @@ static void laser_changed(void)
 }
 
 // laser.c heard a printer, or its query ended: the printer list's.
-static void laser_found(int link, const uint8_t *name, const uint8_t *type)
+static void laser_found(int link, const uint8_t *name, const uint8_t *type, int twin)
 {
-    printers_at_seen(link, name, type);
+    printers_at_seen(link, name, type, twin);
 }
 
 static void laser_queried(int id, int ok, const lw_info_t *info, const laser_at_t *at)
@@ -2048,6 +2058,8 @@ static void sw_clean_task(void *arg)
 static int sw_clean_web(int id)
 {
     if (printers_test_kind(id) != PR_TEST_STYLEWRITER) return 502;
+    // W-1186: its socket does LocalTalk now: its printer is not there.
+    if (ports_either() && !sock_prints(printers_record_sock(id))) return 502;
     int busy = xSemaphoreTake(s_job_lock, 0) != pdTRUE;
     if (!busy) {
         // W-1116: the cleaning's family is its record's, a StyleWriter, under the lock, as a
@@ -2196,14 +2208,14 @@ static const char *lt_job_name(at_link_t link)
 
 // W-1179: the socket a vintage Mac's ImageWriter stream goes to: the first doing the printer job
 // with an ImageWriter there now, else the first whose line speaks for an ImageWriter, else the
-// selected one.
+// selected one. W-1186: -1 when no socket does the printer job (both do LocalTalk).
 static int lt_sock(void)
 {
     for (int k = 0; k < ports_count(); k++)
         if (sock_prints(k) && s_ps[k].fam == PR_FAM_IMAGEWRITER && sock_up(k)) return k;
     for (int k = 0; k < ports_count(); k++)
         if (sock_prints(k) && port_line_speaks(&s_ps[k])) return k;
-    return SK;
+    return sock_prints(SK) ? SK : -1;
 }
 
 static int lt_print_begin(void *ctx, at_link_t link)
@@ -2226,7 +2238,13 @@ static int lt_print_begin(void *ctx, at_link_t link)
     // make, within a tick, not this task's: port_fam_sync pushes the AppleTalk status, whose
     // stack lock this task holds (W-1116 review, NB1); the Mac hears busy until then. W-1179:
     // the socket whose ImageWriter is there, port 1 first (lt_sock), selected for the job.
-    printer_sock_select(lt_sock());
+    // W-1186: with no printer socket there is no ImageWriter: busy.
+    int iw = lt_sock();
+    if (iw < 0) {
+        xSemaphoreGive(s_job_lock);
+        return 1;
+    }
+    printer_sock_select(iw);
     pr_family_t fam = port_fam_norm(printers_port_family(SK));
     int sighted = P->confirm != PA_NONE && printers_port_heard(SK) == PR_HEARD_STYLEWRITER;
     if (fam != P->fam || !port_line_speaks(P) || sighted) {
@@ -3045,8 +3063,10 @@ static void test_page_to(int id, int port)
     // W-1116: a port record's page takes its family from that record, as a job does
     // (doc_begin); a LaserWriter's leaves the port's family as the port's record says. W-1179:
     // a port record's page goes to its socket.
+    // W-1186: a LaserWriter's with no printer socket (both do LocalTalk) leaves the sockets be.
     if (port) job_sock_take(id);
-    port_fam_sync(SK, port ? printers_record_family(id) : printers_port_family(SK), 1);
+    if (port || sock_prints(SK))
+        port_fam_sync(SK, port ? printers_record_family(id) : printers_port_family(SK), 1);
     switch (printers_test_kind(id)) {
     case PR_TEST_STYLEWRITER: sw_test_locked(id); break;
     case PR_TEST_QDLASER:     qd_test_locked(id); break;
@@ -3070,6 +3090,10 @@ static int port_page_refused(int id, int port)
 {
     if (!port) return 0;
     int k = printers_record_sock(id);           // W-1179: its own socket's
+    if (ports_either() && !sock_prints(k)) {    // W-1186: LocalTalk is on its socket now
+        ESP_LOGW(TAG, "test page for printer %d refused: %s does LocalTalk", id, port_tag(k));
+        return 1;
+    }
     if (printers_port_mode(k) == PORT_UNKNOWN_SAID) {
         ESP_LOGW(TAG, "test page for printer %d refused: %s is set to Something else", id, port_tag(k));
         return 1;
@@ -3085,16 +3109,14 @@ static int port_page_refused(int id, int port)
 // W-1179: a cable test's own frames, from one of AirWriter's ports to the other, are not a
 // network heard (sock_detect).
 static volatile uint32_t s_ct_seq;       // odd while a test runs
-static volatile uint32_t s_ct_frames;    // localtalk_frames() as the last test ended
-// ... and LocalTalk moved to another socket (sock_job_set): what was counted was the old one's.
-static volatile int      s_pd_resync;
+static volatile uint32_t s_ct_frames[PORTS_MAX];   // localtalk_frames() as the last test ended
 
 #if CONFIG_AIRWRITER_PIC_CLK_PIN >= 0
 static void cable_test_locked(cable_result_t *r, int both)
 {
     s_ct_seq++;
     cable_test_run(r, both);
-    s_ct_frames = localtalk_frames();
+    for (int i = 0; i < PORTS_MAX; i++) s_ct_frames[i] = localtalk_frames(i);
     s_ct_seq++;
     printer_state_cable(r->err == ESP_OK && !ct_verdict_tested(r->verdict) ? PS_CABLE_NO_CHIP
                         : r->err == ESP_OK && r->verdict == CT_PASS        ? PS_CABLE_PASS
@@ -3197,6 +3219,8 @@ static void test_button(void)
         return;
     }
 #endif
+    // W-1186: a port record whose socket does LocalTalk now has no printer to print on.
+    if (port && ports_either() && !sock_prints(printers_record_sock(id))) id = -1;
     if (id < 0) {
         ESP_LOGW(TAG, "test button: no printer to print the test page on");
         xSemaphoreGive(s_job_lock);
@@ -3615,26 +3639,29 @@ static void status_json(void *ctx, char *buf, size_t cap)
     // model (an ImageWriter by its record's model; the II with no ImageWriter record, as it
     // has always been reported).
     // W-1179: the printer port's (port 1's on rev 2026.11, or port 2's while port 1 does LocalTalk).
-    int sk = sock_prints(0) ? 0 : 1;
+    int sk = sock_prints(0) || !sock_prints(1) ? 0 : 1;
     const psock_t *sp = &s_ps[sk];
     const sw_spec_t *swp = sp->fam == PR_FAM_STYLEWRITER ? sw_spec(printers_port_sw_model(sk)) : NULL;
     const printer_caps_t *qdc = sp->fam == PR_FAM_QDLASER ? qd_caps(printers_port_qd_model(sk)) : NULL;
     const char *model = swp ? swp->make_model : qdc ? qdc->make_model
                       : printer_caps_imagewriter_model(printers_port_model(sk))->make_model;
 
-    char laser[300], printers[128], temp[48 + 200];
+    char laser[300], printers[128], temp[48 + 260];
     chip_temp_json(temp, sizeof temp);
     // W-1179: each socket's job, and what it is set to ("auto", "printer", "localtalk"; "fixed"
-    // on rev A and the LC, whose sockets have one job each).
+    // on rev A and the LC, whose sockets have one job each). W-1186: and whether its PIC runs
+    // TashTalk ("lt_chip", as the top-level one, which is the lowest LocalTalk port's).
     {
         size_t n = strlen(temp);
         n += (size_t)snprintf(temp + n, sizeof temp - n, ",\"ports\":[");
         for (int i = 0; i < ports_count() && n < sizeof temp; i++) {
             uint8_t set = s_set.port_set[i];
-            n += (size_t)snprintf(temp + n, sizeof temp - n, "%s{\"port\":%d,\"job\":\"%s\",\"set\":\"%s\"}",
+            n += (size_t)snprintf(temp + n, sizeof temp - n,
+                                  "%s{\"port\":%d,\"job\":\"%s\",\"set\":\"%s\",\"lt_chip\":\"%s\"}",
                                   i ? "," : "", i + 1, ports_job_name(ports_job(i)),
                                   !ports_either() ? "fixed" : set == SET_PORT_PRINTER ? "printer"
-                                  : set == SET_PORT_LOCALTALK ? "localtalk" : "auto");
+                                  : set == SET_PORT_LOCALTALK ? "localtalk" : "auto",
+                                  lt_chip_name(s_lt_chip[i]));
         }
         if (n < sizeof temp) snprintf(temp + n, sizeof temp - n, "]");
     }
@@ -3676,7 +3703,7 @@ static void status_json(void *ctx, char *buf, size_t cap)
         json_esc(e_job, sizeof e_job, job),
         json_esc(e_err, sizeof e_err, s_job_error),
         attention || failed ? "true" : "false",
-        (port_line_speaks(sp) ? serial_out_clear_of(sk) : sp->iw_ready == 1) ? "true" : "false",
+        sock_prints(sk) && (port_line_speaks(sp) ? serial_out_clear_of(sk) : sp->iw_ready == 1) ? "true" : "false",
         s_printing ? "true" : "false", ribbon_name(sp->ribbon),
         json_esc(e_queue, sizeof e_queue, s_set.queue), json_esc(e_host, sizeof e_host, s_set.hostname), s_ip,
         // in setup mode, the network it could not join ("" if none was set)
@@ -3695,7 +3722,7 @@ static void status_json(void *ctx, char *buf, size_t cap)
         pic_prog_available() ? "true" : "false",
         json_esc(e_model, sizeof e_model, s_saved_model), json_esc(e_name, sizeof e_name, s_saved_name),
         json_esc(e_phost, sizeof e_phost, s_saved_host), s_set.airprint ? "true" : "false", s_set.lt_port,
-        localtalk_serving() ? "true" : "false", lt_chip_name(s_lt_chip),
+        localtalk_serving() ? "true" : "false", lt_chip_name(lt_chip_shown()),
         BOARD_NAME, s_board_lc ? "true" : "false", s_board_ok ? "true" : "false",
         s_set.rainbow ? "true" : "false", s_suffix, auth_kind_name(), laser, printers,
         settings_fresh() ? "true" : "false",
@@ -3707,14 +3734,37 @@ static void status_json(void *ctx, char *buf, size_t cap)
         (unsigned)pst.upload_ms, (unsigned)pst.rip_ms, (unsigned)pst.ms);
 }
 
+static int lt_wanted(void);
+
+// GET /api/lt. Its top-level members are the lowest-numbered LocalTalk port's node, as they
+// were with one. W-1186: "ports" has a row for each port doing LocalTalk, lowest first, for
+// the card: its "port", its "chip" (lt_chip's words) and localtalk_json_port's "phase",
+// "node", "on", "laser" and "macs".
 static void lt_json(void *ctx, char *buf, size_t cap)
 {
     (void)ctx;
-    localtalk_json(buf, cap);
+    enum { ROWS = 2560 };                    // kept for the rows: 8 named Macs a port
+    size_t top = cap > 2 * ROWS ? cap - ROWS : cap;
+    int sock = ports_with(PORT_JOB_LOCALTALK);
+    // W-1179: two printers on rev 2026.11, no socket for LocalTalk: the card's "on" is its
+    // setting, kept for when a socket takes LocalTalk again; nothing is heard meanwhile.
+    if (sock < 0 && ports_either())
+        snprintf(buf, top, "{\"on\":%s,\"parked\":true,\"macs\":[]}", lt_wanted() ? "true" : "false");
+    else
+        localtalk_json(sock, buf, top);
     // W-1179: the socket LocalTalk is on, 1 or 2 (0 none), for the LocalTalk card's "On port N".
     size_t n = strlen(buf);
-    if (n >= 2 && buf[n - 1] == '}' && n + 12 < cap)
-        snprintf(buf + n - 1, cap - n + 1, ",\"port\":%d}", ports_with(PORT_JOB_LOCALTALK) + 1);
+    if (n < 2 || buf[n - 1] != '}' || n + 64 >= cap) return;
+    char *p = buf + n - 1, *end = buf + cap - 4;
+    p += snprintf(p, end - p, ",\"port\":%d,\"ports\":[", sock + 1);
+    for (int k = 0, rows = 0; k < ports_count(); k++) {
+        if (ports_job(k) != PORT_JOB_LOCALTALK || end - p < 200) continue;
+        p += snprintf(p, end - p, "%s{\"port\":%d,\"chip\":\"%s\",", rows++ ? "," : "", k + 1,
+                      lt_chip_name(s_lt_chip[k]));
+        p += localtalk_json_port(k, p, (size_t)(end - p));
+        *p++ = '}';
+    }
+    snprintf(p, (size_t)(buf + cap - p), "]}");
 }
 
 static const uint8_t *lt_job(void *ctx, size_t *len)
@@ -3726,7 +3776,7 @@ static const uint8_t *lt_job(void *ctx, size_t *len)
 static void lt_echo(void *ctx, int node)
 {
     (void)ctx;
-    localtalk_echo((uint8_t)node);
+    localtalk_echo(ports_with(PORT_JOB_LOCALTALK), (uint8_t)node);
 }
 
 // W-1076: the EtherTalk links on the web page.
@@ -3778,30 +3828,49 @@ static uint16_t lt_status(ps_state_t st, at_link_t link)
 // 6 s; each one still keeps the panel awake.
 #define MAC_BLIP_EVERY_MS 6000
 
-// Both the cable's node and the EtherTalk links (W-1076) report here.
-static void lt_event(lt_event_t ev)
+// Both the cables' nodes and the EtherTalk links (W-1076) report here. W-1186: a Mac heard on
+// port 1's cable (sock 0, rev 2026.11) shows from J2's socket, with its own 6 s; J4's cable
+// and the EtherTalk links (sock -1) from J4's, as before.
+static void lt_event_from(int sock, lt_event_t ev)
 {
-    static uint32_t last;
+    static uint32_t last[2];
     if (ev == LT_EV_ONLINE) {
         led_grid_blip(LG_BLIP_LT_ON);
         return;
     }
     printer_state_post(PS_EV_ACTIVITY);
+    int j2 = sock == 0;
     uint32_t now = uptime_ms();
-    if (last && now - last < MAC_BLIP_EVERY_MS) return;
-    last = now;
-    led_grid_blip(LG_BLIP_MAC);
+    if (last[j2] && now - last[j2] < MAC_BLIP_EVERY_MS) return;
+    last[j2] = now;
+    led_grid_blip_at(LG_BLIP_MAC, j2 ? LG_AT_J2 : LG_AT_J4);
+}
+
+static void lt_event(lt_event_t ev) { lt_event_from(-1, ev); }
+
+// The chip the card and /api/status speak of: the lowest-numbered LocalTalk socket's; with no
+// LocalTalk socket, the last one known.
+static lt_chip_t lt_chip_shown(void)
+{
+    int sock = ports_with(PORT_JOB_LOCALTALK);
+    if (sock >= 0) return s_lt_chip[sock];
+    return s_lt_chip[1] != LT_CHIP_UNKNOWN ? s_lt_chip[1] : s_lt_chip[0];
 }
 
 #if CONFIG_AIRWRITER_PIC_CLK_PIN >= 0 && CONFIG_AIRWRITER_PIC_DAT_PIN >= 0
-// TashTalk took none of the sync, so the pins are free: U7's device ID
+// A cable's node reports as the EtherTalk links do, from its own socket.
+static void lt_cable_event(int sock, lt_event_t ev)
+{
+    lt_event_from(sock, ev);
+}
+
+// TashTalk took none of the sync, so the pins are free: the PIC's device ID
 // tells an empty socket from a PIC without TashTalk, as the cable test does
 // (W-1063). The read resets the PIC.
-static lt_chip_t lt_chip_check(void)
+static lt_chip_t lt_chip_check(int sock)
 {
     if (cable_test_lt_busy()) return LT_CHIP_SILENT;
-    int sock = ports_with(PORT_JOB_LOCALTALK);
-    if (sock < 0) return LT_CHIP_UNKNOWN;
+    if (ports_job(sock) != PORT_JOB_LOCALTALK) return LT_CHIP_UNKNOWN;
     uint16_t id = 0;
     pic_err_t e = pic_prog_read_id_on(&ports_sock(sock)->pic, &id);
     ESP_LOGW(TAG, "LocalTalk: %s reads 0x%04X: %s", sock ? "U7" : "U10", id, pic_err_str(e));
@@ -3846,56 +3915,61 @@ static void tashtalk_install(void)
     xSemaphoreGive(s_job_lock);
 }
 
-static SemaphoreHandle_t s_lt_mx;   // one start or probe at a time: page, boot
 
-// W-1179: on the socket doing LocalTalk (J4 on rev A; either on rev 2026.11).
+// W-1186: the UART a socket's LocalTalk node uses. Rev A's is UART2, LocalTalk's alone. On rev
+// 2026.11 each socket has one UART for whichever job it does (J2's UART1, J4's UART0), which
+// serial_out gives up while the socket is parked; UART2 is spare there.
+static int lt_uart(int sock)
+{
+    const port_sock_t *ps = ports_sock(sock);
+    return ports_either() && ps ? ps->uart : CONFIG_AIRWRITER_LT_UART_NUM;
+}
+
+// W-1179: on a socket doing LocalTalk (J4 on rev A; either on rev 2026.11).
 static localtalk_cfg_t lt_cfg(int sock)
 {
     const port_sock_t *ps = ports_sock(sock);
     return (localtalk_cfg_t){
-        .uart_num = CONFIG_AIRWRITER_LT_UART_NUM,
+        .uart_num = lt_uart(sock),
+        .lent     = ports_either(),
         .tx_pin   = ps ? ps->pic.clk : -1,
         .rx_pin   = ps ? ps->pic.dat : -1,
         .cts_pin  = ps ? ps->lt_cts : -1,
         .object   = s_set.queue,
         .type     = CONFIG_AIRWRITER_LT_NBP_TYPE,
-        .status   = lt_status(printer_state_view().state, AT_LINK_CABLE),
+        .status   = lt_status(printer_state_view().state, at_link_of_sock(sock)),
         .printer  = { .begin = lt_print_begin, .write = lt_print_write, .end = lt_print_end },
-        .on_event = lt_event,
+        .on_event = lt_cable_event,
     };
 }
 #endif
 
-// W-1051: the LocalTalk node, with the AppleTalk port on or on a bench build. It owns its
-// UART and the PIC's pins from here until reboot, unless TashTalk is not
-// there to take them (W-1081): then it does not start, and says why.
-// probe_only asks U7 the same way and leaves the node off.
+// W-1051: the LocalTalk node of each socket doing LocalTalk that has none running, with the
+// AppleTalk port on or on a bench build. It owns its UART and the PIC's pins from here until
+// its socket takes the printer job, unless TashTalk is not there to take them (W-1081): then
+// it does not start, and says why. probe_only asks the PIC the same way and leaves the node
+// off. W-1179: no socket doing LocalTalk (two printers on rev 2026.11), nothing to start.
 static void lt_go(const char *why, int probe_only)
 {
 #if CONFIG_AIRWRITER_PIC_CLK_PIN >= 0 && CONFIG_AIRWRITER_PIC_DAT_PIN >= 0
     xSemaphoreTake(s_lt_mx, portMAX_DELAY);
-    if (localtalk_running()) {
-        xSemaphoreGive(s_lt_mx);
-        return;
-    }
-    // W-1179: no socket does LocalTalk (two printers on rev 2026.11): nothing to start.
-    int sock = ports_with(PORT_JOB_LOCALTALK);
-    if (sock < 0) {
-        xSemaphoreGive(s_lt_mx);
-        return;
-    }
-    // Started mid cable test: let the test give UART2 back first.
-    for (int i = 0; i < 30 && cable_test_lt_busy(); i++) vTaskDelay(pdMS_TO_TICKS(10));
-    localtalk_cfg_t c = lt_cfg(sock);
-    esp_err_t err = probe_only ? localtalk_probe(&c) : localtalk_start(&c);
-    if (err == ESP_ERR_NOT_FOUND) {
-        s_lt_chip = lt_chip_check();
-        ESP_LOGW(TAG, "LocalTalk (%s): %s", why, lt_chip_name(s_lt_chip));
-    } else if (err != ESP_OK) {
-        ESP_LOGE(TAG, "LocalTalk (%s) did not start: %s", why, esp_err_to_name(err));
-    } else {
-        s_lt_chip = LT_CHIP_OK;
-        ESP_LOGI(TAG, "LocalTalk %s (%s)", probe_only ? "chip runs TashTalk" : "on", why);
+    for (int sock = 0; sock < ports_count(); sock++) {
+        if (ports_job(sock) != PORT_JOB_LOCALTALK || localtalk_running(sock)) continue;
+        // Started mid cable test: let the test give the UART back first.
+        for (int i = 0; i < 30 && cable_test_lt_busy(); i++) vTaskDelay(pdMS_TO_TICKS(10));
+        localtalk_cfg_t c = lt_cfg(sock);
+        esp_err_t err = probe_only ? localtalk_probe(sock, &c) : localtalk_start(sock, &c);
+        if (err == ESP_ERR_NOT_FOUND) {
+            s_lt_chip[sock] = lt_chip_check(sock);
+            ESP_LOGW(TAG, "LocalTalk%s (%s): %s", port_on_tag(sock), why, lt_chip_name(s_lt_chip[sock]));
+        } else if (err != ESP_OK) {
+            ESP_LOGE(TAG, "LocalTalk%s (%s) did not start: %s", port_on_tag(sock), why,
+                     esp_err_to_name(err));
+        } else {
+            s_lt_chip[sock] = LT_CHIP_OK;
+            ESP_LOGI(TAG, "LocalTalk%s %s (%s)", port_on_tag(sock),
+                     probe_only ? "chip runs TashTalk" : "on", why);
+        }
     }
     xSemaphoreGive(s_lt_mx);
 #else
@@ -3937,8 +4011,12 @@ static void offers_apply(void)
     int tunnel = 0, radio = 0, infinite = 0;
     char zone[40];
     if (ethertalk_running()) ethertalk_settings(&tunnel, &radio, &infinite, zone, sizeof zone);
-    printers_offers(AT_LINK_CABLE, lt_wanted(), s_set.hostname, o);
-    localtalk_set_offers(o);
+    // W-1186: each cable its own: what a Mac on one is offered includes the other's printers.
+    for (int k = 0; k < ports_count(); k++) {
+        if (!ports_sock(k)->can_lt) continue;
+        printers_offers(at_link_of_sock(k), lt_wanted(), s_set.hostname, o);
+        localtalk_set_offers(k, o);
+    }
     if (ethertalk_running()) {
         printers_offers(AT_LINK_TUNNEL, tunnel, s_set.hostname, o);
         ethertalk_set_offers(AT_LINK_TUNNEL, o);
@@ -3953,18 +4031,18 @@ static void offers_apply(void)
 // W-1082: whether a LaserWriter needs the cable (laser.c's links callback).
 static volatile int s_laser_cable;
 
-// The cable's node runs while the ImageWriter is shared there (the AppleTalk
+// A cable's node runs while the ImageWriter is shared there (the AppleTalk
 // Port card's switch, W-1079) or the printers need it (laser.c: always, for
 // the lookups). It cannot stop once started; it answers as the ImageWriter
-// only while the switch says so.
+// only while the switch says so. Every LocalTalk socket's alike.
 static void lt_roles_apply(void)
 {
     int serve = lt_wanted();
     if (!serve && !s_laser_cable) {
-        if (localtalk_running()) localtalk_set_roles(0, 0);
+        localtalk_set_roles(0, 0);
         return;
     }
-    if (!localtalk_running()) lt_start(serve ? "the settings page" : "the printers");
+    lt_start(serve ? "the settings page" : "the printers");
     localtalk_set_roles(serve, s_laser_cable);
     offers_apply();
 }
@@ -4023,7 +4101,7 @@ static void localtalk_flash(void *ctx, int port, char *buf, size_t cap)
     int lt_here = ports_job(sock) == PORT_JOB_LOCALTALK;
     // The node holds the PIC's UART pins; flashing would fight it. "err", as
     // pic_result_json has it, is what the page shows.
-    if (lt_here && localtalk_running() && !localtalk_parked()) {
+    if (lt_here && localtalk_running(sock)) {
         snprintf(buf, cap, "{\"ok\":false,\"err\":\"TashTalk is already installed\"}");
         return;
     }
@@ -4045,12 +4123,9 @@ static void localtalk_flash(void *ctx, int port, char *buf, size_t cap)
     pic_result_json(&r, buf, cap);
     // W-1081: TashTalk is on the chip now. A port that was wanted (or the
     // printers' lookups, W-1088) starts with no restart; otherwise the chip is only
-    // asked, for the card. W-1179: a parked node moves onto it.
+    // asked, for the card.
     if (err == PIC_OK && lt_here) {
-        if (localtalk_running() && localtalk_parked()) {
-            localtalk_cfg_t c = lt_cfg(sock);
-            if (localtalk_move(&c) == ESP_OK) s_lt_chip = LT_CHIP_OK;
-        } else if (!lt_wanted() && !s_laser_cable) lt_go("TashTalk flashed", 1);
+        if (!lt_wanted() && !s_laser_cable) lt_go("TashTalk flashed", 1);
         else {
             lt_start("TashTalk flashed");
             lt_roles_apply();
@@ -4067,12 +4142,18 @@ static void cable_web(void *ctx, int both, char *buf, size_t cap)
     // W-1179: a test cable from port 1 to port 2 shows each socket the other's handshake, so by
     // now both may do the printer job. The socket that isn't the printer line's takes LocalTalk
     // for the test, unless it is set to the printer job (review of #51).
+    // W-1186: and with both on LocalTalk, port 1 takes the printer job for the test, unless it
+    // is set to LocalTalk; then port 2, unless it is too.
     if (!cable_possible() && ports_either() && s_psock >= 0) {
         int o = 1 - s_psock;
         if (s_set.port_set[o] != SET_PORT_PRINTER)
             sock_job_set(o, PORT_JOB_LOCALTALK, "the cable test", 1000);
+    } else if (!cable_possible() && ports_either()) {
+        for (int k = 0; k < ports_count() && s_psock < 0; k++)
+            if (s_set.port_set[k] != SET_PORT_LOCALTALK)
+                sock_job_set(k, PORT_JOB_PRINTER, "the cable test", 1000);
     }
-    // Two printers set so leave no TashTalk to test with.
+    // Two sockets set to one job leave nothing to test with.
     if (!cable_possible()) {
         snprintf(buf, cap, "{\"ok\":false,\"error\":\"no LocalTalk port\"}");
         return;
@@ -4095,8 +4176,9 @@ static void cable_web(void *ctx, int both, char *buf, size_t cap)
 // ---------------------------------------------------------- the sockets
 // W-1179: on rev 2026.11 either socket takes either job (ports.h). What each does is decided
 // here and handed over under the job lock; the rest of the board follows: the printer line is
-// selected on a socket doing the printer job, and LocalTalk runs on the one doing LocalTalk,
-// never two.
+// selected on a socket doing the printer job, and a LocalTalk node runs on each socket doing
+// LocalTalk. W-1186: each socket by itself, so both may print, both may do LocalTalk (two
+// networks; no printer line is selected then, s_psock -1), or one each.
 
 // Socket i's job at boot: its setting if it names one, else what it last did, else J2 the
 // printer and J4 LocalTalk (rev A's, and rev 2026.11's before W-1179).
@@ -4146,9 +4228,10 @@ static void cable_cfg_apply(void)
     cable_test_cfg_t ct = {
         .tx_pin  = pr->tx,       .rx_pin = pr->rx,
         .invert_tx = AW_INVERT_TX,
-        .lt_uart = CONFIG_AIRWRITER_LT_UART_NUM,  .lt_tx  = lt->pic.clk,
+        .lt_uart = lt_uart(ports_with(PORT_JOB_LOCALTALK)),  .lt_tx  = lt->pic.clk,
         .lt_rx   = lt->pic.dat,  .lt_cts = lt->lt_cts,
         .lt_mclr = lt->pic.mclr,
+        .lt_sock = ports_with(PORT_JOB_LOCALTALK),
         // W-1109: rev 2026.11's handshake legs, by socket; -1 on rev A skips them.
         .hsk_j2_out = CONFIG_AIRWRITER_HSKI_DRV_PIN,     .hsk_j2_in = CONFIG_AIRWRITER_CTS_PIN,
         .hsk_j4_out = CONFIG_AIRWRITER_J4_HSKO_DRV_PIN,  .hsk_j4_in = CONFIG_AIRWRITER_J4_HSKI_PIN,
@@ -4163,10 +4246,10 @@ static int cable_possible(void)
     return s_psock >= 0 && ports_with(PORT_JOB_LOCALTALK) >= 0;
 }
 
-// Socket i takes `job`, and what follows: never two LocalTalk sockets (the other takes the
-// printer job), the printer line kept where it is unless its socket leaves the job, LocalTalk
-// moved or parked, the cable test's pins, and the job saved so a restart keeps it. Takes the
-// job lock, waiting up to wait_ms. 0, or -1 when a job held the lock.
+// Socket i takes `job`, and what follows: the printer line kept where it is unless its socket
+// leaves the job (then the other printing socket's, or none), its LocalTalk node parked or
+// started, the cable test's pins, and the job saved so a restart keeps it. The other socket
+// keeps its job. Takes the job lock, waiting up to wait_ms. 0, or -1 when a job held the lock.
 static int sock_job_set(int i, port_job_t job, const char *why, uint32_t wait_ms)
 {
     if (!ports_either() || i < 0 || i >= ports_count() || ports_job(i) == job) return 0;
@@ -4174,51 +4257,44 @@ static int sock_job_set(int i, port_job_t job, const char *why, uint32_t wait_ms
     int other = 1 - i;
     ESP_LOGW(TAG, "port %d: %s, was %s (%s)", i + 1, ports_job_name(job),
              ports_job_name(ports_job(i)), why);
+    xSemaphoreTake(s_lt_mx, portMAX_DELAY);      // no node starts until the socket has its job
     if (job == PORT_JOB_LOCALTALK) {
-        if (ports_job(other) == PORT_JOB_LOCALTALK) {
-            localtalk_park();
-            psock_reset(other);                  // before its line reports, so nothing is lost
-            ports_hw(other, PORT_JOB_PRINTER);
-            settings_save_port_job(other, PORT_JOB_PRINTER);
-            ESP_LOGW(TAG, "port %d: printer, was localtalk (port %d took LocalTalk)", other + 1,
-                     i + 1);
-        }
-        if (s_psock == i) printer_sock_select(other);
+        // The printer line goes to the other socket if that one prints; with both on
+        // LocalTalk none is selected, and nothing is sent to a printer until one prints again.
+        if (s_psock == i && sock_prints(other)) printer_sock_select(other);
+        else if (s_psock == i) s_psock = -1;
+        // Listening on its socket until LocalTalk is heard there (sock_detect lets it): set
+        // before the socket reads as LocalTalk's.
+        localtalk_set_hold(i, 1);
         ports_hw(i, PORT_JOB_LOCALTALK);
         psock_reset(i);
-        // Listening on its new socket until LocalTalk is heard there (sock_detect lets it).
-        localtalk_set_hold(1);
-        s_pd_resync = 1;
-        if (localtalk_running()) {
-            localtalk_cfg_t c = lt_cfg(i);
-            esp_err_t e = localtalk_move(&c);
-            s_lt_chip = e == ESP_OK ? LT_CHIP_OK : lt_chip_check();
-        }
     } else {
-        if (localtalk_running() && !localtalk_parked()) localtalk_park();
+        localtalk_park(i);
         psock_reset(i);                          // before its line reports, so nothing is lost
         ports_hw(i, PORT_JOB_PRINTER);
         if (s_psock < 0) printer_sock_select(i);
     }
+    xSemaphoreGive(s_lt_mx);
     settings_save_port_job(i, job);
     cable_cfg_apply();
     printers_set_lt_port(ports_with(PORT_JOB_LOCALTALK) + 1);
     xSemaphoreGive(s_job_lock);
     printers_changed();                      // each socket's family, the panel, what Macs see
-    // A node not yet started starts on its socket now, if it is wanted.
-    if (job == PORT_JOB_LOCALTALK && !localtalk_running()) lt_roles_apply();
-    if (!localtalk_running()) lt_go("its port changed", 1);
+    // Its node starts on its socket now, or comes back to it, if it is wanted; else its PIC is
+    // only asked, for the card.
+    if (job == PORT_JOB_LOCALTALK) lt_roles_apply();
+    lt_go("its port changed", 1);
     port_push(printer_state_view().state);
     return 0;
 }
 
-// What each socket shows, for port_detect_core: its handshake and clock, LocalTalk frames on the
+// What each socket shows, for port_detect_core: its handshake and clock, LocalTalk frames on a
 // LocalTalk socket, framing errors and breaks on a printer socket with no printer showing. And
-// whether the LocalTalk socket may send: only once LocalTalk has been heard on it, since frames
-// sent into a printer print as junk, selected or not.
+// whether each LocalTalk socket may send: only once LocalTalk has been heard on it, since
+// frames sent into a printer print as junk, selected or not.
 static pd_t     s_pd;
 static int      s_pd_on;
-static uint32_t s_pd_frames;
+static uint32_t s_pd_frames[PD_SOCKS];      // each socket's own count (localtalk_frames)
 
 static void sock_detect(void)
 {
@@ -4227,18 +4303,17 @@ static void sock_detect(void)
         pd_init(&s_pd, ports_count(), now);
         for (int i = 0; i < ports_count() && i < PD_SOCKS; i++)
             pd_start(&s_pd, i, (uint8_t)ports_job(i), s_set.port_heard[i]);
-        s_pd_frames = localtalk_frames();
+        for (int i = 0; i < PD_SOCKS; i++) s_pd_frames[i] = localtalk_frames(i);
         s_pd_on = 1;
     }
-    uint32_t seq = s_ct_seq, ct_frames = s_ct_frames, frames = localtalk_frames();
-    if ((seq & 1) || seq != s_ct_seq || s_pd_resync) {
-        s_pd_resync = 0;
-        s_pd_frames = frames;                // a cable test's own, or the old socket's
-    } else if ((int32_t)(ct_frames - s_pd_frames) > 0) {
-        s_pd_frames = ct_frames;             // counted up to a test's end
+    uint32_t seq = s_ct_seq, heard[PD_SOCKS];
+    for (int i = 0; i < PD_SOCKS; i++) {
+        uint32_t ct_frames = s_ct_frames[i], frames = localtalk_frames(i);
+        if ((seq & 1) || seq != s_ct_seq) s_pd_frames[i] = frames;    // a cable test's own
+        else if ((int32_t)(ct_frames - s_pd_frames[i]) > 0) s_pd_frames[i] = ct_frames;   // counted up to a test's end
+        heard[i] = (int32_t)(frames - s_pd_frames[i]) > 0 ? frames - s_pd_frames[i] : 0;
+        s_pd_frames[i] = frames;
     }
-    uint32_t heard = (int32_t)(frames - s_pd_frames) > 0 ? frames - s_pd_frames : 0;
-    s_pd_frames = frames;
     int idle = !job_busy() && !s_printing;
     pd_in_t in[PD_SOCKS] = { 0 };
     for (int i = 0; i < ports_count() && i < PD_SOCKS; i++) {
@@ -4249,8 +4324,8 @@ static void sock_detect(void)
             .can_print = ps->can_print, .can_lt = ps->can_lt,
             .ready = (uint8_t)serial_out_clear_of(i), .clocked = (uint8_t)serial_out_clock_of(i, &hz),
         };
-        if (in[i].job == PORT_JOB_LOCALTALK)
-            in[i].frames = heard && !localtalk_parked() ? 1 : 0;
+        if (in[i].job == PORT_JOB_LOCALTALK)             // its own node's count, its own network's
+            in[i].frames = heard[i] && localtalk_running(i) ? 1 : 0;
         else
             in[i].silent = printers_port_heard(i) == PR_HEARD_NONE;
         // The junk is read under the job lock: a question in flight is reading that UART.
@@ -4275,10 +4350,8 @@ static void sock_detect(void)
         s_set.port_heard[i] = h;
         settings_save_port_heard(i, h);
     }
-    if (!moved) {
-        int lt = ports_with(PORT_JOB_LOCALTALK);
-        localtalk_set_hold(!(lt >= 0 && lt < PD_SOCKS && pd_may_send(&s_pd, in, lt, now)));
-    }
+    for (int i = 0; !moved && i < ports_count() && i < PD_SOCKS; i++)
+        if (ports_job(i) == PORT_JOB_LOCALTALK) localtalk_set_hold(i, !pd_may_send(&s_pd, in, i, now));
 }
 
 // Between the port task's questions: a socket set to a job (/api/general's port1, port2) takes
@@ -4422,8 +4495,10 @@ static void port_push(ps_state_t box)
                               s->say == PR_PORT_SAY_OWN ? PR_PORT_SAY_OFFLINE : s->say);
         }
     }
-    ps_state_t st = port_state(lt_sock(), box);
-    localtalk_set_status(lt_status(st, AT_LINK_CABLE));
+    // W-1186: with no printer socket the ImageWriter the nodes answer as is offline.
+    int iw = lt_sock();
+    ps_state_t st = iw >= 0 ? port_state(iw, box) : PS_OFFLINE;
+    for (int k = 0; k < ports_count(); k++) localtalk_set_status(k, lt_status(st, at_link_of_sock(k)));
     ethertalk_set_status(lt_status(st, AT_LINK_TUNNEL), lt_status(st, AT_LINK_ZONE),
                          lt_status(st, AT_LINK_RADIO));
 }
@@ -4538,9 +4613,7 @@ void app_main(void)
     s_job_lock = xSemaphoreCreateBinary();
     xSemaphoreGive(s_job_lock);             // created empty; start it free
     s_offers_mx = xSemaphoreCreateMutex();
-#if CONFIG_AIRWRITER_PIC_CLK_PIN >= 0 && CONFIG_AIRWRITER_PIC_DAT_PIN >= 0
     s_lt_mx = xSemaphoreCreateMutex();
-#endif
 
     read_straps();
 
@@ -4632,7 +4705,6 @@ void app_main(void)
         // the oldest port record's, else AirWriter.
         printers_chooser_name(s_set.queue, sizeof s_set.queue);
     }
-    offers_apply();                 // the cable's, kept for its node's start
     s_ps[0].ribbon = s_set.ribbon;     // W-1179: port 1's is the one kept
     // Wi-Fi saved before this restart: green greets the join (W-1049).
     if (settings_take_wifi_fresh()) printer_state_post(PS_EV_WIFI_FRESH);
@@ -4652,8 +4724,11 @@ void app_main(void)
         // W-1179: on rev 2026.11 the node starts listening, sending nothing until sock_detect
         // has seen its socket: LocalTalk heard there, or heard before the restart and no
         // printer showing since. Frames sent into a printer print as junk.
-        if (ports_either()) localtalk_set_hold(1);
+        for (int i = 0; ports_either() && i < PORTS_MAX; i++) localtalk_set_hold(i, 1);
     }
+    // The cables' offers, kept for each node's start: after the sockets are known (the offers
+    // are per socket, W-1186), before any node starts.
+    offers_apply();
 #if CONFIG_AIRWRITER_PIC_CLK_PIN >= 0 && CONFIG_AIRWRITER_PIC_DAT_PIN >= 0
     tashtalk_install();
 #endif
@@ -4662,8 +4737,8 @@ void app_main(void)
     if (s_set.lt_port == 0) lt_roles_apply();
 #endif
     if (s_set.lt_port == 1) lt_start("the settings page");
-    // W-1081: off or not, the card says whether U7 can run the port.
-    if (!localtalk_running()) lt_go("boot", 1);
+    // W-1081: off or not, the card says whether the PIC can run the port.
+    lt_go("boot", 1);
 
     raster_selftest();
     // W-1082: no ImageWriter and a LaserWriter shared: the panel follows the

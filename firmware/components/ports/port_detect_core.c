@@ -10,10 +10,7 @@ void pd_init(pd_t *d, int n, uint32_t now_ms)
     memset(d, 0, sizeof *d);
     d->n = n < 0 ? 0 : n > PD_SOCKS ? PD_SOCKS : n;
     d->boot_at = now_ms;
-    for (int i = 0; i < PD_SOCKS; i++) {
-        d->s[i].trial_from = -1;
-        d->s[i].job_at = now_ms;
-    }
+    for (int i = 0; i < PD_SOCKS; i++) d->s[i].job_at = now_ms;
 }
 
 void pd_start(pd_t *d, int i, uint8_t job, int heard)
@@ -48,7 +45,6 @@ static void take_in(pd_sock_t *s, const pd_in_t *in, uint32_t now)
         s->job = in->job;
         s->job_at = now;
         s->trial = 0;
-        s->trial_from = -1;
         s->ready_since = 0;
         s->heard = s->heard_boot = 0;
         memset(s->junk_at, 0, sizeof s->junk_at);
@@ -93,24 +89,20 @@ int pd_tick(pd_t *d, const pd_in_t in[], uint32_t now, int idle, pd_act_t *a)
     for (int i = 0; i < d->n; i++) {
         pd_sock_t *s = &d->s[i];
         const pd_in_t *x = &in[i];
-        int other = 1 - i;
 
-        // A trial: kept once a frame is heard; else, past its wait, undone.
+        // A trial: kept once a frame is heard; else, past its wait, back to the printer job.
+        // W-1186: and back at the first check a printer shows on it, a clock or a handshake
+        // that came up since the trial began (one up before it, with nothing answering, is
+        // what a Mac on a direct cable holds, and may be why the trial began): a printer
+        // switched on mid-trial does not wait the trial out with its jobs told busy.
         if (x->job == JOB_LT && s->trial) {
-            if (s->frame_at) {                  // pd_applied cleared it as the trial began
-                s->trial = 0;
-                s->trial_from = -1;
-            } else if (since(now, s->job_at, PD_TRIAL_MS)) {
-                // LocalTalk back to the socket it came from (which frees this one), or this
-                // socket back to the printer job. What it had heard goes back with it, unless
-                // a printer shows there now.
-                int from = s->trial_from;
-                if (from >= 0 && !in[from].fixed && in[from].can_lt) {
-                    if (in[from].ready || in[from].clocked) s->trial_heard = 0;
-                    return act(a, from, JOB_LT, PD_WHY_NO_FRAME);
-                }
-                if (!x->fixed) return act(a, i, JOB_PRINTER, PD_WHY_NO_FRAME);
-            }
+            if (s->frame_at) s->trial = 0;      // pd_applied cleared it as the trial began
+            else if (x->fixed) { }
+            else if (x->clocked) return act(a, i, JOB_PRINTER, PD_WHY_CLOCK);
+            else if (s->ready_since && (int32_t)(s->ready_since - s->job_at) > 0)
+                return act(a, i, JOB_PRINTER, PD_WHY_HANDSHAKE);
+            else if (since(now, s->job_at, PD_TRIAL_MS))
+                return act(a, i, JOB_PRINTER, PD_WHY_NO_FRAME);
             continue;
         }
         if (x->fixed) continue;
@@ -124,15 +116,12 @@ int pd_tick(pd_t *d, const pd_in_t in[], uint32_t now, int idle, pd_act_t *a)
         }
 
         // LocalTalk, perhaps, on a printer socket with no printer on it (its line down, or up
-        // with nothing answering there, as a Mac on a direct cable may hold it): a trial, unless
-        // the other socket's LocalTalk is in use or can't be given up.
+        // with nothing answering there, as a Mac on a direct cable may hold it): a trial,
+        // whatever the other socket does.
         if (x->job == JOB_PRINTER && x->can_lt && (!x->ready || x->silent) && !x->clocked &&
             s->junk_at[PD_JUNK_N - 1] && !since(now, s->junk_at[PD_JUNK_N - 1], PD_JUNK_MS) &&
-            (!s->backoff_until || (int32_t)(now - s->backoff_until) >= 0)) {
-            int taken = in[other].job == JOB_LT;
-            if (taken && (in[other].fixed || heard_lately(&d->s[other], now))) continue;
+            (!s->backoff_until || (int32_t)(now - s->backoff_until) >= 0))
             return act(a, i, JOB_LT, PD_WHY_TRAFFIC);
-        }
     }
     return 0;
 }
@@ -141,47 +130,24 @@ void pd_applied(pd_t *d, const pd_act_t *a, uint32_t now)
 {
     if (a->sock < 0 || a->sock >= d->n) return;
     pd_sock_t *s = &d->s[a->sock];
-    int other = 1 - a->sock;
     if (a->why == PD_WHY_TRAFFIC) {
-        int from = d->s[other].job == JOB_LT ? other : -1;
         s->job = JOB_LT;
         s->job_at = now;
         s->trial = 1;
-        s->trial_from = (int8_t)from;
-        s->trial_heard = from >= 0 && d->s[from].heard;
         s->frame_at = 0;
         s->heard = s->heard_boot = 0;
         memset(s->junk_at, 0, sizeof s->junk_at);
-        if (from >= 0) {
-            d->s[from].job = JOB_PRINTER;
-            d->s[from].job_at = now;
-            d->s[from].heard = d->s[from].heard_boot = 0;
-            d->s[from].trial = 0;            // a trial of its own, if it had one, is over
-            d->s[from].trial_from = -1;
-        }
         return;
     }
-    uint8_t back = 0;
-    if (a->why == PD_WHY_NO_FRAME) {
-        // Whichever socket had the trial waits before the next.
-        int t = d->s[a->sock].trial ? a->sock : other;
-        back = a->sock != t && a->job == JOB_LT && d->s[t].trial_heard;
-        d->s[t].trial = 0;
-        d->s[t].trial_from = -1;
-        d->s[t].trial_heard = 0;
-        d->s[t].backoff_until = now + PD_BACKOFF_MS;
-        if (!d->s[t].backoff_until) d->s[t].backoff_until = 1;
-        memset(d->s[t].junk_at, 0, sizeof d->s[t].junk_at);
+    if (a->why == PD_WHY_NO_FRAME) {         // the socket waits before its next trial
+        s->backoff_until = now + PD_BACKOFF_MS;
+        if (!s->backoff_until) s->backoff_until = 1;
+        memset(s->junk_at, 0, sizeof s->junk_at);
     }
+    s->trial = 0;
     s->job = a->job;
     s->job_at = now;
-    s->heard = back;                         // LocalTalk back where it had been heard
-    s->heard_boot = 0;
-    if (a->job == JOB_LT && d->s[other].job == JOB_LT) {
-        d->s[other].job = JOB_PRINTER;
-        d->s[other].job_at = now;
-        d->s[other].heard = d->s[other].heard_boot = 0;
-    }
+    s->heard = s->heard_boot = 0;
 }
 
 int pd_heard(const pd_t *d, int i)

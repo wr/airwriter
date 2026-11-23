@@ -154,7 +154,8 @@ static uint64_t now_ms(void) { return (uint64_t)(esp_timer_get_time() / 1000); }
 static const char *link_name(int link)
 {
     switch (link) {
-    case AT_LINK_CABLE:  return "cable";
+    case AT_LINK_CABLE:
+    case AT_LINK_CABLE_P1: return "cable";
     case AT_LINK_TUNNEL: return "tunnel";
     case AT_LINK_ZONE:   return "zone";
     case AT_LINK_RADIO:  return "radio";
@@ -194,8 +195,8 @@ static int call(int op, const lt_route_t *r, uint32_t busy)
     call_t c = { .op = op, .busy = busy, .rc = -1 };
     if (r) c.r = *r;
     if (s_pc_link < 0) return -1;
-    int ran = s_pc_link == AT_LINK_CABLE ? localtalk_locked(do_call, &c)
-                                         : ethertalk_locked(do_call, &c);
+    int sock = at_link_cable_sock(s_pc_link);
+    int ran = sock >= 0 ? localtalk_locked(sock, do_call, &c) : ethertalk_locked(do_call, &c);
     return ran < 0 ? -1 : op == OP_OPEN || op == OP_OPEN_MULTI ? c.rc : 0;
 }
 
@@ -203,9 +204,9 @@ static int call(int op, const lt_route_t *r, uint32_t busy)
 static void ride(int link)
 {
     if (link == s_pc_link) return;
-    if (s_pc_link == AT_LINK_CABLE) localtalk_attach(NULL);
+    if (at_link_cable_sock(s_pc_link) >= 0) localtalk_attach(at_link_cable_sock(s_pc_link), NULL);
     else if (s_pc_link >= 0) ethertalk_attach(s_pc_link, NULL);
-    if (link == AT_LINK_CABLE) localtalk_attach(s_pc);
+    if (at_link_cable_sock(link) >= 0) localtalk_attach(at_link_cable_sock(link), s_pc);
     else if (link >= 0) ethertalk_attach(link, s_pc);
     s_pc_link = link;
 }
@@ -345,7 +346,10 @@ void laser_set_targets(const laser_target_t *in, int n)
     int old_n = s_big->n_tg;
     memcpy(old, s_tg, sizeof s_big->was);
     for (int k = 0; k < n; k++) {
-        ci[k] = (lwc_target_in_t){ .id = in[k].id, .kind = in[k].kind };
+        ci[k] = (lwc_target_in_t){ .id = in[k].id, .kind = in[k].kind,
+                                   .cable = in[k].any_cable ? LWC_ANY
+                                          : in[k].where == AT_LINK_CABLE ? LWC_ON_CABLE
+                                          : in[k].where == AT_LINK_CABLE_P1 ? LWC_ON_CABLE_P1 : LWC_ANY };
         memcpy(ci[k].name, in[k].name, sizeof ci[k].name);
         tgt_t *g = &s_tg[k];
         memset(g, 0, sizeof *g);
@@ -572,20 +576,32 @@ static void query_done(void)
 static void relay_lock(void *ctx)   { (void)ctx; xSemaphoreTake(s_relay_mx, portMAX_DELAY); }
 static void relay_unlock(void *ctx) { (void)ctx; xSemaphoreGive(s_relay_mx); }
 
-// The target a node's registration offers: its NBP name, of its kind. Under s_mu.
-static int target_of_reg(const lt_node_t *node, int reg)
+// The target a node's registration offers: its NBP name, of its kind. W-1186: two targets may
+// have one name, one on each cable; a Mac on `link` is offered the other cable's (its own
+// cable's speaks for itself there), so that one first. Under s_mu.
+static int target_of_reg(int link, const lt_node_t *node, int reg)
 {
     if (reg < 1 || reg >= LT_REG_MAX || !node->reg) return -1;
+    // Whose the registration is, as the list offered it: its name there may not be the
+    // printer's own (two of one name).
+    int sock = at_link_cable_sock(link);
+    int id = sock >= 0 ? localtalk_offer_id(sock, reg) : ethertalk_offer_id(link, reg);
+    for (int k = 0; id > 0 && k < s_big->n_tg; k++)
+        if (s_tg[k].id == id) return k;
     const uint8_t *obj = node->reg[reg].obj, *type = node->reg[reg].type;
     uint8_t lw[NBP_NAME_MAX + 1], iw[NBP_NAME_MAX + 1];
     nbp_name(lw, "LaserWriter");
     nbp_name(iw, "ImageWriter");
     int kind = nbp_match(lw, type) ? LASER_KIND_LW : nbp_match(iw, type) ? LASER_KIND_IW : 0;
-    for (int k = 0; kind && k < s_big->n_tg; k++)
-        if (s_tg[k].kind == kind && s_tg[k].name[0] == obj[0] &&
-            !memcmp(s_tg[k].name + 1, obj + 1, obj[0]))
-            return k;
-    return -1;
+    int same = -1;
+    for (int k = 0; kind && k < s_big->n_tg; k++) {
+        if (s_tg[k].kind != kind || s_tg[k].name[0] != obj[0] ||
+            memcmp(s_tg[k].name + 1, obj + 1, obj[0]))
+            continue;
+        if (s_tg[k].where != link) return k;
+        if (same < 0) same = k;
+    }
+    return same;
 }
 
 static int r_open(int link, const lt_node_t *node, int reg, uint64_t now)
@@ -594,7 +610,7 @@ static int r_open(int link, const lt_node_t *node, int reg, uint64_t now)
     if (pap_relay_active(&s_big->relay)) return pap_relay_mac_open(&s_big->relay, node, reg, now);
     if (s_use != USE_NONE) return 1;                // a LaserWriter job or a query has the client
     lock();
-    int k = target_of_reg(node, reg);
+    int k = target_of_reg(link, node, reg);
     int id = k >= 0 && lwc_view(&s_core, k, now_ms()).idx >= 0 ? s_tg[k].id : -1;
     unlock();
     if (id < 0) return 1;                           // not in the list, or not heard
@@ -621,10 +637,9 @@ static size_t r_output(uint8_t *buf, size_t max, int *eof, int again)
 // SendStatus on a registration: the printer's own words, as it last said them.
 static size_t r_status(int link, const lt_node_t *node, int reg, uint8_t *pstr, size_t cap)
 {
-    (void)link;
     if (!s_started) return 0;
     lock();
-    int k = target_of_reg(node, reg);
+    int k = target_of_reg(link, node, reg);
     size_t n = k >= 0 && s_tg[k].raw_status[0] ? 1 + (size_t)s_tg[k].raw_status[0] : 0;
     if (n > cap) n = 0;
     if (n) memcpy(pstr, s_tg[k].raw_status, n);
@@ -684,7 +699,8 @@ static void relay_act(uint64_t now)
     }
     if (act & PR_RELAY_DO_ABORT_MAC) {
         lt_node_t *node = (lt_node_t *)s_relay_node;
-        if (s_relay_mac_link == AT_LINK_CABLE) localtalk_locked(abort_mac, node);
+        int sock = at_link_cable_sock(s_relay_mac_link);
+        if (sock >= 0) localtalk_locked(sock, abort_mac, node);
         else ethertalk_locked(abort_mac, node);
     }
     if (act & PR_RELAY_DO_DONE) {
@@ -716,7 +732,7 @@ static void links(void)
     lock();
     for (int k = 0; k < s_big->n_tg; k++) {
         int w = s_tg[k].where;
-        want[0] |= w == AT_LINK_CABLE;
+        want[0] |= at_link_cable_sock(w) >= 0;
         want[1] |= w == AT_LINK_TUNNEL;
         want[2] |= w == AT_LINK_RADIO;
     }
@@ -825,7 +841,7 @@ static void laser_task(void *arg)
             if (h >= 0) job_link = s_core.heard[h].link;
         }
         uint8_t tell_link = 0, tell_name[NBP_NAME_MAX + 1], tell_type[NBP_NAME_MAX + 1];
-        int tell = w.tell != LWC_NONE;
+        int tell = w.tell != LWC_NONE, tell_twin = w.tell_twin;
         if (tell) {
             const lw_heard_t *h = &s_core.heard[w.tell];
             tell_link = h->link;
@@ -843,7 +859,7 @@ static void laser_task(void *arg)
         if (tell) {
             ESP_LOGI(TAG, "heard a %s on the %s",
                      tell_type[1] == 'I' ? "ImageWriter" : "LaserWriter", link_name(tell_link));
-            if (s_cfg.found) s_cfg.found(tell_link, tell_name, tell_type);
+            if (s_cfg.found) s_cfg.found(tell_link, tell_name, tell_type, tell_twin);
         }
         if (status_link >= 0) {
             xSemaphoreTake(s_client_mx, portMAX_DELAY);

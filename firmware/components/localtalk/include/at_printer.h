@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// The printer as every AppleTalk link shares it (W-1076): the cable's
-// LocalTalk node and both EtherTalk links print through one spool and one
+// The printer as every AppleTalk link shares it (W-1076): the cables'
+// LocalTalk nodes and the EtherTalk links print through one spool and one
 // print task, one job at a time. A PAP job is the Mac driver's own
 // ImageWriter stream (W-1053): spooled in 16 KB and written to the printer
 // through main.c's hooks by the print task, so a paused printer holds the Mac
@@ -13,7 +13,21 @@
 #include "esp_err.h"
 #include "lt_node.h"
 
-typedef enum { AT_LINK_CABLE = 0, AT_LINK_TUNNEL, AT_LINK_ZONE, AT_LINK_RADIO } at_link_t;
+// W-1186: two cables on rev 2026.11, each a network of its own. AT_LINK_CABLE is J4's (rev A's
+// AppleTalk port, rev 2026.11's port 2) and AT_LINK_CABLE_P1 J2's (port 1), added last so the
+// numbers stored and logged before keep their meaning.
+typedef enum { AT_LINK_CABLE = 0, AT_LINK_TUNNEL, AT_LINK_ZONE, AT_LINK_RADIO,
+               AT_LINK_CABLE_P1, AT_LINK_N } at_link_t;
+
+// A cable link's socket (ports.h: 0 J2, 1 J4), -1 for an EtherTalk link; and a socket's link.
+static inline int at_link_cable_sock(int link)
+{
+    return link == AT_LINK_CABLE ? 1 : link == AT_LINK_CABLE_P1 ? 0 : -1;
+}
+static inline at_link_t at_link_of_sock(int sock)
+{
+    return sock == 0 ? AT_LINK_CABLE_P1 : AT_LINK_CABLE;
+}
 
 // The printer, as main.c owns it. All run on the print task except begin.
 typedef struct {

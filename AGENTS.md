@@ -47,8 +47,9 @@ in Linear and older docs) is drawn and routed, not yet made. It has a build of i
 which nothing has run on yet, the LC's one status light included. Its two sockets have the same
 circuit, each with its own TashTalk, so either can be a printer port or LocalTalk (W-1176), and
 its firmware works out each socket's job from what is plugged in and shares a printer on each
-at once (W-1179). Its case, docs and page call J2 port 1 and J4 port 2; rev A keeps printer port
-and AppleTalk port.
+at once (W-1179), or joins a LocalTalk network on each, a node on both, and shares the
+LaserWriters on each (W-1186). Its case, docs and page call J2 port 1 and J4 port 2; rev A keeps
+printer port and AppleTalk port.
 
 - **Printers.** Tested on the ImageWriter II. The original ImageWriter and the ImageWriter LQ
   take the same stream and are expected to work, untested; docs say so rather than excluding

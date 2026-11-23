@@ -797,6 +797,15 @@ void ethertalk_set_offers(int link, const lt_offers_t *o)
     if (s_lock) xSemaphoreGive(s_lock);
 }
 
+int ethertalk_offer_id(int link, int reg)
+{
+    const et_side_t *s = link == AT_LINK_TUNNEL ? &s_tun : link == AT_LINK_ZONE ? &s_zone
+                       : link == AT_LINK_RADIO ? &s_radio : NULL;
+    if (!s || !s->offers || reg < 1 || reg > s->offers->n_rel || reg > (int)sizeof s->offers->ids)
+        return 0;
+    return s->offers->ids[reg - 1];
+}
+
 void ethertalk_set_laser(int link, int on)
 {
     on = on ? 1 : 0;

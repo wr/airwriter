@@ -201,6 +201,7 @@ body:not(.ready) .sw span,body:not(.ready) .sw span:after{transition:none}
 .card .ctls{display:flex;align-items:center;gap:10px;align-self:center}
 .card .body{border-top:1px solid var(--line);padding:11px 14px 13px;display:flex;flex-direction:column;gap:8px}
 .card .count{color:var(--fg2);font-size:var(--t-small)}
+.card .body hr.sep{border:0;border-top:1px solid var(--line);margin:3px -14px}
 .st{display:flex;align-items:center;gap:7px;color:var(--fg2);font-size:var(--t-small)}
 /* Infinite Mac's zone name: a little field, in the page's mono face, that copies itself */
 .chip{display:inline-flex;align-items:center;gap:5px;margin:0 1px;padding:1px 6px 1px 7px;border-radius:var(--r-ctl);

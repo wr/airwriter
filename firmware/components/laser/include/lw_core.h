@@ -45,8 +45,9 @@
 #define LW_QUERY_TRIES     3          // then every LW_LOOK_SLOW_MS
 #define LW_CHECK_SETTLE_MS 3000       // a name check's look, this long after the last check
 
-// The same numbers as at_printer.h's at_link_t.
-enum { LW_LINK_CABLE = 0, LW_LINK_TUNNEL, LW_LINK_ZONE, LW_LINK_RADIO };
+// The same numbers as at_printer.h's at_link_t. W-1186: two cables, J4's and J2's.
+enum { LW_LINK_CABLE = 0, LW_LINK_TUNNEL, LW_LINK_ZONE, LW_LINK_RADIO, LW_LINK_CABLE_P1 };
+#define LW_TWIN_MS         12000      // a name on the other cable heard this lately still answers
 enum { LWC_KIND_LW = 1, LWC_KIND_IW = 2 };
 
 #define LWC_NONE 0xFF
@@ -60,14 +61,19 @@ typedef struct {
     uint64_t   first, heard;                      // first and last answer (NBP or status)
 } lw_heard_t;
 
-// A printer of the list's, as it gives it.
+// A printer of the list's, as it gives it. W-1186: cable is the one cable it is on
+// (LW_LINK_CABLE or LW_LINK_CABLE_P1), which it is never reached by the other of, or LWC_ANY
+// (0, so a target that names none is as before): two LaserWriters with one name, one on each
+// cable, are two targets.
+enum { LWC_ANY = 0, LWC_ON_CABLE, LWC_ON_CABLE_P1 };
 typedef struct {
     uint8_t id, kind;
     uint8_t name[NBP_NAME_MAX + 1];
+    uint8_t cable;
 } lwc_target_in_t;
 
 typedef struct {
-    uint8_t    used, id, kind;
+    uint8_t    used, id, kind, cable;
     uint8_t    name[NBP_NAME_MAX + 1];
     uint8_t    online, queried, printing, fails;
     uint64_t   answered, asked, query_at;
@@ -96,6 +102,8 @@ typedef struct {
     uint8_t status_ti;                    // SendStatus to t[status_ti], or LWC_NONE
     uint8_t query_ti;                     // run the query job at t[query_ti], or LWC_NONE
     uint8_t tell;                         // tell the list about heard[tell], or LWC_NONE
+    uint8_t tell_twin;                    // W-1186: its name answered on the other cable too
+                                          // within LW_TWIN_MS: two printers, not one moved
 } lwc_want_t;
 
 typedef struct {

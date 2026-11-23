@@ -207,6 +207,40 @@ esp_err_t serial_out_init(const serial_out_cfg_t *cfg)
     return serial_out_init_port(0, cfg);
 }
 
+// The port's UART as the printer line has it: the driver, and the speed and flow control
+// given. Its pins and inversion are the caller's to set after.
+static esp_err_t uart_up(port_t *p, int baud, int cts)
+{
+    uart_config_t uc = {
+        .baud_rate = baud,
+        .data_bits = UART_DATA_8_BITS,
+        .parity    = UART_PARITY_DISABLE,
+        .stop_bits = UART_STOP_BITS_1,
+        // CTS only. The printer never asks us to stop receiving, and RTS is
+        // not wired to anything.
+        .flow_ctrl = cts ? UART_HW_FLOWCTRL_CTS : UART_HW_FLOWCTRL_DISABLE,
+        .source_clk = UART_SCLK_DEFAULT,
+    };
+    // The event queue is for the printer's BREAK alone (W-1102, serial_out_break_take).
+    esp_err_t err = uart_driver_install(p->cfg.uart_num, RX_RING, TX_RING, EVENT_QUEUE,
+                                        &p->events, 0);
+    if (err != ESP_OK) {
+        p->events = NULL;
+        return err;
+    }
+    return uart_param_config(p->cfg.uart_num, &uc);
+}
+
+static uint32_t line_inverse(const port_t *p)
+{
+    uint32_t inv = 0;
+    if (p->cfg.invert_tx) inv |= UART_SIGNAL_TXD_INV;
+    if (p->cfg.invert_rx) inv |= UART_SIGNAL_RXD_INV;
+    if (p->cfg.invert_cts && p->cfg.cts_pin >= 0 && !p->cfg.loopback)
+        inv |= UART_SIGNAL_CTS_INV;
+    return inv;
+}
+
 esp_err_t serial_out_init_port(int port, const serial_out_cfg_t *cfg)
 {
     if (port < 0 || port >= SERIAL_OUT_PORTS || s_port[port].present) return ESP_ERR_INVALID_ARG;
@@ -219,49 +253,30 @@ esp_err_t serial_out_init_port(int port, const serial_out_cfg_t *cfg)
     p->stall_limit = (unsigned)(p->cfg.stall_abort_s > 0 ? p->cfg.stall_abort_s : 600)
                      * (1000u / 100u);   // WATCH_PERIOD is 100 ms
 
-    uart_config_t uc = {
-        .baud_rate = p->cfg.baud,
-        .data_bits = UART_DATA_8_BITS,
-        .parity    = UART_PARITY_DISABLE,
-        .stop_bits = UART_STOP_BITS_1,
-        // CTS only. The printer never asks us to stop receiving, and RTS is
-        // not wired to anything.
-        .flow_ctrl = (p->cfg.cts_pin >= 0 && !p->cfg.loopback)
-                       ? UART_HW_FLOWCTRL_CTS : UART_HW_FLOWCTRL_DISABLE,
-        .source_clk = UART_SCLK_DEFAULT,
-    };
-
-    // The event queue is for the printer's BREAK alone (W-1102, serial_out_break_take).
-    esp_err_t err = uart_driver_install(p->cfg.uart_num, RX_RING, TX_RING, EVENT_QUEUE,
-                                        &p->events, 0);
-    if (err != ESP_OK) return err;
-
-    err = uart_param_config(p->cfg.uart_num, &uc);
-    if (err != ESP_OK) return err;
-
+    esp_err_t err = ESP_OK;
+    uint32_t inv = line_inverse(p);
     if (p->cfg.start_parked && !p->cfg.loopback) {
+        // W-1186: the socket does LocalTalk, and its UART is its node's: no driver until the
+        // port is unparked.
         p->parked = 1;
     } else {
+        err = uart_up(p, p->cfg.baud, p->cfg.cts_pin >= 0 && !p->cfg.loopback);
+        if (err != ESP_OK) return err;
         err = uart_set_pin(p->cfg.uart_num, p->cfg.tx_pin, p->cfg.rx_pin,
                            UART_PIN_NO_CHANGE,
                            (p->cfg.cts_pin >= 0 && !p->cfg.loopback)
                              ? p->cfg.cts_pin : UART_PIN_NO_CHANGE);
         if (err != ESP_OK) return err;
+        if (inv) {
+            err = uart_set_line_inverse(p->cfg.uart_num, inv);
+            if (err != ESP_OK) return err;
+        }
     }
-
-    uint32_t inv = 0;
-    if (p->cfg.invert_tx) inv |= UART_SIGNAL_TXD_INV;
-    if (p->cfg.invert_rx) inv |= UART_SIGNAL_RXD_INV;
-    if (p->cfg.invert_cts && p->cfg.cts_pin >= 0 && !p->cfg.loopback)
-        inv |= UART_SIGNAL_CTS_INV;
-    if (inv) {
-        err = uart_set_line_inverse(p->cfg.uart_num, inv);
-        if (err != ESP_OK) return err;
+    if (inv)
         ESP_LOGI(TAG, "line inversion: tx %s, rx %s, cts %s",
                  p->cfg.invert_tx ? "inverted" : "normal",
                  p->cfg.invert_rx ? "inverted" : "normal",
                  p->cfg.invert_cts ? "inverted" : "normal");
-    }
 
     if (p->cfg.loopback) {
         err = uart_set_loop_back(p->cfg.uart_num, true);
@@ -313,19 +328,28 @@ void serial_out_park(int port, int park)
         if (uart_wait_tx_done(p->cfg.uart_num, pdMS_TO_TICKS(LINK_DRAIN_MS)) != ESP_OK)
             uart_ll_txfifo_rst(UART_LL_GET_HW(p->cfg.uart_num));
         p->parked = 1;
+        // W-1186: the UART goes with the socket: its LocalTalk node installs its own driver.
+        uart_driver_delete(p->cfg.uart_num);
+        p->events = NULL;
         gpio_reset_pin(p->cfg.tx_pin);
         gpio_set_pull_mode(p->cfg.tx_pin, GPIO_FLOATING);
         gpio_set_direction(p->cfg.tx_pin, GPIO_MODE_INPUT);
         ESP_LOGI(TAG, "port %d: line let go", port + 1);
         return;
     }
+    // W-1186: the printer line's driver again, on a UART its LocalTalk node has let go of.
+    esp_err_t err = uart_up(p, p->link_baud, p->link_cts);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "port %d: its UART is not free: %s", port + 1, esp_err_to_name(err));
+        return;
+    }
+    uart_set_line_inverse(p->cfg.uart_num, line_inverse(p));
     uart_set_pin(p->cfg.uart_num, p->cfg.tx_pin, p->cfg.rx_pin, UART_PIN_NO_CHANGE,
                  p->cfg.cts_pin >= 0 ? p->cfg.cts_pin : UART_PIN_NO_CHANGE);
     if (p->cfg.cts_pin >= 0)
         uart_set_hw_flow_ctrl(p->cfg.uart_num,
                               p->link_cts ? UART_HW_FLOWCTRL_CTS : UART_HW_FLOWCTRL_DISABLE, 0);
     uart_flush_input(p->cfg.uart_num);
-    if (p->events) xQueueReset(p->events);
     p->last = -1;
     // A clock found while parked is reported afresh, as at start.
     p->clocked = 0;
@@ -397,6 +421,7 @@ esp_err_t serial_out_write(const uint8_t *buf, size_t n)
         .aborted     = ops_aborted,
         .stall_limit = P->stall_limit,
     };
+    if (P->parked) return ESP_FAIL;          // W-1186: its UART is LocalTalk's
     return serial_writer_write(&ops, buf, n) == 0 ? ESP_OK : ESP_FAIL;
 }
 
@@ -407,6 +432,7 @@ void serial_out_set_abort(int on)
 
 void serial_out_purge(void)
 {
+    if (P->parked) return;
     uart_ll_txfifo_rst(UART_LL_GET_HW(CFG.uart_num));
 }
 
@@ -415,6 +441,7 @@ esp_err_t serial_out_flush(uint32_t timeout_ms)
     // In WATCH_PERIOD slices, so a cancel ends the wait: a job whose last
     // FIFO is stuck behind a paused printer has ripped everything already,
     // and nothing else would be checking.
+    if (P->parked) return ESP_FAIL;
     for (uint32_t waited = 0; ; waited += 100) {
         if (uart_wait_tx_done(CFG.uart_num, WATCH_PERIOD) == ESP_OK) return ESP_OK;
         if (s_abort) return ESP_FAIL;
@@ -438,6 +465,7 @@ static TickType_t ms_to_ticks_up(uint32_t ms)
 
 void serial_out_lend(int lend)
 {
+    if (P->parked) return;
     if (lend) {
         uart_wait_tx_done(CFG.uart_num, pdMS_TO_TICKS(200));
         return;
@@ -485,7 +513,7 @@ void serial_out_loopback_reset(void)
 esp_err_t serial_out_send_unflowed(const uint8_t *buf, size_t n)
 {
     // Not on a StyleWriter's link: this is the ImageWriter's CTRL-X, and only at its 9600.
-    if (CFG.cts_pin < 0 || CFG.loopback || !P->link_cts) return ESP_ERR_INVALID_STATE;
+    if (CFG.cts_pin < 0 || CFG.loopback || !P->link_cts || P->parked) return ESP_ERR_INVALID_STATE;
     uart_set_hw_flow_ctrl(CFG.uart_num, UART_HW_FLOWCTRL_DISABLE, 0);
     int w = uart_tx_chars(CFG.uart_num, (const char *)buf, n);
     uart_wait_tx_done(CFG.uart_num, pdMS_TO_TICKS(100));
@@ -495,6 +523,7 @@ esp_err_t serial_out_send_unflowed(const uint8_t *buf, size_t n)
 
 void serial_out_rx_drop(void)
 {
+    if (P->parked) return;
     uart_flush_input(CFG.uart_num);
 }
 
@@ -503,7 +532,7 @@ int serial_out_query(const uint8_t *cmd, size_t n, uint8_t *reply, size_t cap,
 {
     // -1 too on a StyleWriter's link (serial_out_set_link): flow controlled, a byte queued
     // with HSKo low would go out later at whatever baud the port has then.
-    if (CFG.cts_pin < 0 || CFG.loopback || !P->link_cts) return -1;
+    if (CFG.cts_pin < 0 || CFG.loopback || !P->link_cts || P->parked) return -1;
     if (uart_tx_chars(CFG.uart_num, (const char *)cmd, n) != (int)n) return -1;
     int got = uart_read_bytes(CFG.uart_num, reply, 1, pdMS_TO_TICKS(wait_ms));
     if (got <= 0) return 0;
@@ -518,7 +547,7 @@ int serial_out_query(const uint8_t *cmd, size_t n, uint8_t *reply, size_t cap,
 
 void serial_out_set_link(int baud, int cts)
 {
-    if (CFG.loopback) return;
+    if (CFG.loopback || P->parked) return;
     cts = cts && CFG.cts_pin >= 0;
     if (baud == P->link_baud && cts == P->link_cts) {
         uart_flush_input(CFG.uart_num);
@@ -542,7 +571,7 @@ void serial_out_set_link(int baud, int cts)
 int serial_out_read(uint8_t *b, size_t cap, uint32_t first_ms, uint32_t gap_ms)
 {
     if (CFG.loopback) return -1;
-    if (!b || !cap) return 0;
+    if (!b || !cap || P->parked) return 0;
     int got = uart_read_bytes(CFG.uart_num, b, 1, ms_to_ticks_up(first_ms));
     if (got <= 0) return 0;
     // One byte at a time while waiting, so the gap runs from the last byte (a read of the
@@ -563,7 +592,7 @@ int serial_out_read(uint8_t *b, size_t cap, uint32_t first_ms, uint32_t gap_ms)
 
 int serial_out_write_raw(const uint8_t *b, size_t n, uint32_t timeout_ms)
 {
-    if (CFG.loopback) return -1;
+    if (CFG.loopback || P->parked) return -1;
     const TickType_t limit = ms_to_ticks_up(timeout_ms);
     const TickType_t start = xTaskGetTickCount();
     while (n) {
