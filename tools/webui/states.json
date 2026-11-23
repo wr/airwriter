@@ -1071,6 +1071,89 @@
     }
    }
   },
+  "ethertalk-named": {
+   "about": "Real and emulated Macs in one EtherTalk list, named and not; one in Infinite Mac",
+   "patch": {
+    "GET /api/et/settings": {
+     "infinite": true
+    },
+    "GET /api/et": {
+     "radio": {
+      "macs": [
+       {
+        "addr": "65284.12",
+        "mac": "08:00:07:1a:2b:0c",
+        "ago": 3,
+        "name": "Quadra 650"
+       },
+       {
+        "addr": "65284.45",
+        "mac": "08:00:07:1a:2b:2d",
+        "ago": 240
+       }
+      ]
+     },
+     "tunnel": {
+      "macs": [
+       {
+        "addr": "65393.18",
+        "mac": "42:32:0a:00:01:0c",
+        "ago": 60,
+        "ip": "10.0.1.12",
+        "name": "Wells’s Basilisk"
+       }
+      ]
+     },
+     "zone": {
+      "state": "online",
+      "address": "65280.142",
+      "macs": [
+       {
+        "addr": "65280.12",
+        "mac": "b2:1a:2b:3c:4d:5e",
+        "ago": 20,
+        "name": "Macintosh"
+       }
+      ]
+     },
+     "relay": {
+      "connected": true
+     }
+    }
+   }
+  },
+  "ethertalk-half": {
+   "about": "A board set before W-1189 with Basilisk II off: EtherTalk's switch is on, its list the Wi-Fi's Macs",
+   "patch": {
+    "GET /api/et/settings": {
+     "tunnel": false
+    },
+    "GET /api/et": {
+     "radio": {
+      "macs": [
+       {
+        "addr": "65284.12",
+        "mac": "08:00:07:1a:2b:0c",
+        "ago": 3,
+        "name": "Quadra 650"
+       }
+      ]
+     },
+     "tunnel": {
+      "state": "off",
+      "address": "",
+      "macs": [
+       {
+        "addr": "65393.18",
+        "mac": "42:32:0a:00:01:0c",
+        "ago": 60,
+        "ip": "10.0.1.12"
+       }
+      ]
+     }
+    }
+   }
+  },
   "et-down": {
    "about": "/api/et and its settings fail once at load",
    "patch": {

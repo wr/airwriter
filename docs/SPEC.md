@@ -808,7 +808,8 @@ the LC none; the page's one LocalTalk switch is every port's, and with two rows 
 card draws one per port: its lamp and Port N, then its chip's trouble, Joining, or its Macs), `GET /api/et` (both EtherTalk links, the shared
 printer, internal RAM), `GET`/`POST /api/et/settings`
 (`{"radio":true,"tunnel":true,"infinite":true,"zone":"…"}`; 400 for a zone name outside the rule
-above).
+above). The page's EtherTalk card (W-1189) sets `radio` and `tunnel` together under one switch
+and lists both links' Macs; Infinite Mac has a card and switch of its own.
 
 ### 3.14 LaserWriters on AppleTalk (W-1082)
 

@@ -17,7 +17,7 @@
        Kycon's model of the part: the key at the top, the shoulders at the
        foot, eight pins three, three and two, the middle one off centre -->
   <symbol id=g-port viewBox="0 0 16 16"><path fill=currentColor fill-rule=evenodd d="M6.48 1.68v1.69h3.04V1.68a6.5 6.5 0 0 1 4.25 9.31h-1.63v2.02a6.5 6.5 0 0 1-8.28 0v-2.02H2.23a6.5 6.5 0 0 1 4.25-9.31zM4.03 5.06a.85 .85 0 1 0 1.7 0 .85 .85 0 1 0-1.7 0zM7.15 5.06a.85 .85 0 1 0 1.7 0 .85 .85 0 1 0-1.7 0zM10.27 5.06a.85 .85 0 1 0 1.7 0 .85 .85 0 1 0-1.7 0zM2.93 8.61a.85 .85 0 1 0 1.7 0 .85 .85 0 1 0-1.7 0zM7.74 8.61a.85 .85 0 1 0 1.7 0 .85 .85 0 1 0-1.7 0zM11.37 8.61a.85 .85 0 1 0 1.7 0 .85 .85 0 1 0-1.7 0zM5.46 12.07a.85 .85 0 1 0 1.7 0 .85 .85 0 1 0-1.7 0zM8.84 12.07a.85 .85 0 1 0 1.7 0 .85 .85 0 1 0-1.7 0z"/></symbol>
-  <!-- Networked Macs: an Ethernet socket, an 8P8C jack's opening (11.7 by
+  <!-- EtherTalk: an Ethernet socket, an 8P8C jack's opening (11.7 by
        6.6 mm, the latch slot 6.4 wide) with its eight contacts at the top -->
   <symbol id=g-rj45 viewBox="0 0 16 16"><path fill=currentColor fill-rule=evenodd d="M2.5 2h11A1.5 1.5 0 0 1 15 3.5v9a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 1 12.5v-9A1.5 1.5 0 0 1 2.5 2zm.25 2.25v6h2.5v1.5h5.5v-1.5h2.5v-6z"/><path fill=currentColor d="M4.58 3.75h.45v2.5h-.45zM5.49 3.75h.45v2.5h-.45zM6.4 3.75h.45v2.5h-.45zM7.31 3.75h.45v2.5h-.45zM8.22 3.75h.45v2.5h-.45zM9.13 3.75h.45v2.5h-.45zM10.04 3.75h.45v2.5h-.45zM10.95 3.75h.45v2.5h-.45z"/></symbol>
   <!-- a clipboard, on what a click copies -->
@@ -31,6 +31,9 @@
   <symbol id=g-off viewBox="0 0 16 16"><path fill=none stroke=currentColor stroke-width=1.5 stroke-linecap=round stroke-linejoin=round d="M10 2.75 4.75 8 10 13.25"/></symbol>
   <!-- a compact Mac, one for each Mac a link can see -->
   <symbol id=g-mac viewBox="0 0 16 16"><path fill=currentColor fill-rule=evenodd d="M4.25 1.5h7.5A1.25 1.25 0 0 1 13 2.75v10.5h-.75v1.25h-8.5v-1.25H3V2.75A1.25 1.25 0 0 1 4.25 1.5zM5 3a.75.75 0 0 0-.75.75v4c0 .41.34.75.75.75h6c.41 0 .75-.34.75-.75v-4A.75.75 0 0 0 11 3zm2.75 7v1h3.75v-1z"/></symbol>
+  <!-- W-1189: an emulated Mac (Basilisk II, Infinite Mac), a compact Mac on a
+       modern screen: the screen's shape reads at 16 px when the Mac in it doesn't -->
+  <symbol id=g-emac viewBox="0 0 16 16"><path fill=currentColor fill-rule=evenodd d="M2.5 1.5h11A1.5 1.5 0 0 1 15 3v7a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 1 10V3a1.5 1.5 0 0 1 1.5-1.5zM2.5 3v7h11V3zM6.75 11.5h2.5v1.75h-2.5zM4.5 13.25h7a.625 .625 0 0 1 0 1.25h-7a.625 .625 0 0 1 0-1.25zM6.6 4h2.8a.5 .5 0 0 1 .5 .5V9.25h-3.8V4.5a.5 .5 0 0 1 .5-.5zM7.2 4.6v2h1.6v-2z"/></symbol>
 </svg>
 
 <div class=app>
@@ -146,16 +149,12 @@
           <div class=ctls><button class="btn hide" type=button id=lt-flash>Flash TashTalk</button><label class=sw><input type=checkbox role=switch data-way=lt aria-label="AppleTalk Port"><span></span></label></div></div>
         <div class=body></div>
       </div>
-      <div class="box card" id=c-radio>
+      <!-- W-1189: real Macs and Basilisk II's are one card under one switch;
+           Basilisk II's two settings are on the wiki -->
+      <div class="box card" id=c-et>
         <div class=top><span class="ic b"><svg><use href="#g-rj45"/></svg></span>
-          <div><b>Networked Macs</b><p>Macs on your network, wired or with a BlueSCSI Wi-Fi adapter.</p></div>
-          <div class=ctls><label class=sw><input type=checkbox role=switch data-way=radio aria-label="Networked Macs"><span></span></label></div></div>
-        <div class=body></div>
-      </div>
-      <div class="box card" id=c-tun>
-        <div class=top><img class=ic src="{{basilisk}}" alt="">
-          <div><b>Basilisk II</b><p>Emulated Macs on your network.</p></div>
-          <div class=ctls><button class=btn type=button data-dlg=d-bas>Set Up…</button><label class=sw><input type=checkbox role=switch data-way=tun aria-label="Basilisk II"><span></span></label></div></div>
+          <div><b>EtherTalk</b><p>Macs on your network: wired, with a BlueSCSI Wi-Fi adapter, or in Basilisk II.</p></div>
+          <div class=ctls><label class=sw><input type=checkbox role=switch data-way=et aria-label=EtherTalk><span></span></label></div></div>
         <div class=body></div>
       </div>
       <div class="box card" id=c-zone>
@@ -296,16 +295,6 @@
   <p id=fin-how></p>
   <p class=say id=fin-say></p>
   <div class=btnrow><button class="btn primary" type=button id=fin-done>Done</button></div>
-</div></dialog>
-
-<dialog id=d-bas><div class=dlg>
-  <b>Set up Basilisk II</b>
-  <ol>
-    <li>In Basilisk II’s settings, open Ports and turn on <span class=q>Tunnel Mac OS networking over UDP</span> and <span class=q>Tunnel AppleTalk only</span>.</li>
-    <li>Start the Mac and choose EtherTalk in its Network control panel.</li>
-  </ol>
-  <p>The second keeps the Mac on the internet. Older versions of Basilisk II don’t have it, and the Mac loses the internet while the tunnel is on. <a href="https://github.com/wr/airwriter/wiki/Vintage-Macs-(LocalTalk)" target=_blank rel=noopener>Learn&nbsp;More…</a></p>
-  <div class=btnrow><button class="btn primary" type=button data-close>Done</button></div>
 </div></dialog>
 
 <dialog id=d-inf><div class=dlg>

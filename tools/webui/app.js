@@ -1136,24 +1136,25 @@ $('ap-list').addEventListener('click',e=>{
 });
 
 /* ── AppleTalk ─────────────────────────────────────────────────────── */
-/* Four ways in, one card each. The cable is the LocalTalk node's; the other
-   three are EtherTalk links. A Mac is "connected" when its link heard it in
-   the last 10 minutes: AppleTalk has no connection to watch. */
+/* Three cards. The cable is the LocalTalk node's. EtherTalk is two links
+   under one switch (W-1189): the board's own Wi-Fi for real Macs, Basilisk
+   II's UDP tunnel for emulated ones. Infinite Mac is the third EtherTalk link,
+   on a switch of its own because it reaches out to the internet. A Mac is
+   "connected" when its link heard it in the last 10 minutes: AppleTalk has
+   no connection to watch. */
 let LT=null, ET=null, ETS=null;
-const WAYS={
-  lt:   {card:'c-lt'},
-  radio:{card:'c-radio', key:'radio', side:'radio'},
-  tun:  {card:'c-tun', key:'tunnel', side:'tunnel'},
-  zone: {card:'c-zone', key:'infinite', side:'zone'}};
-const MAC='<svg><use href="#g-mac"/></svg>';
+const MAC='<svg><use href="#g-mac"/></svg>', EMAC='<svg><use href="#g-emac"/></svg>';
 const esc=t=>String(t).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'})[c]);
+/* A link's Macs for the list: its icon, a real Mac or an emulated one on a
+   screen, and its address there. */
+const macsOf=(macs,ic,addr)=>(macs||[]).map(m=>({name:m.name,addr:addr(m),ago:m.ago,ic}));
 /* A Mac by its name from Sharing Setup when it gave one (System 7 on), its
    address beside the time; else by its address. */
-function macList(macs,addr){
-  const n=macs.length;
+function macList(list){
+  const n=list.length;
   let h='<span class=count>'+(n?plural(n,'Mac','Macs')+' connected':'No Macs connected')+'</span>';
-  if(n) h+='<ul class=macs>'+macs.map(m=>'<li>'+MAC+'<span>'+esc(m.name||addr(m))+'</span><small>'
-    +(m.name?esc(addr(m))+' · ':'')+ago(m.ago)+'</small></li>').join('')+'</ul>';
+  if(n) h+='<ul class=macs>'+list.map(m=>'<li>'+m.ic+'<span>'+esc(m.name||m.addr)+'</span><small>'
+    +(m.name?esc(m.addr)+' · ':'')+ago(m.ago)+'</small></li>').join('')+'</ul>';
   return h;
 }
 function stHTML(cls,html,why){ return '<span class=st'+(why?' title="'+esc(why)+'"':'')+'><i class="lamp '+cls+'"></i><span>'+html+'</span></span>'; }
@@ -1210,7 +1211,7 @@ function ltRow(r){
     +(flashing&&r.port===flashPort?'Flashing TashTalk…':chip[1])+'</span>';
   if(r.phase==='acquiring') return stLine('a','Port '+r.port)+'<span class=count>Joining the AppleTalk network…</span>';
   if(r.phase==='off') return stLine('a','Port '+r.port)+'<span class=count>Off</span>';
-  return stLine('g','Port '+r.port)+macList(r.macs||[],m=>'Node '+m.node);
+  return stLine('g','Port '+r.port)+macList(macsOf(r.macs,MAC,m=>'Node '+m.node));
 }
 /* The port whose chip the card's Flash TashTalk key is for: 0 for the board's choice. */
 let flashPort=0;
@@ -1241,34 +1242,49 @@ function atDraw(){
     }
     else if(live&&twoPorts()&&!LT.port){
       // W-1179: no port has LocalTalk on it yet; a Mac plugged into either is heard when it talks
-      on++; put(c,macList([],m=>''));
+      on++; put(c,macList([]));
     }
     else if(live){
       on++; macs+=(LT.macs||[]).length;
       // W-1179: 'listening', nothing heard on the port yet, is not joining
       put(c,(LT.phase==='acquiring'?stLine('a','Joining the AppleTalk network…'):twoPorts()?stLine('g','On port '+LT.port):'')
-        +macList(LT.macs||[],m=>'Node '+m.node));
+        +macList(macsOf(LT.macs,MAC,m=>'Node '+m.node)));
     }
   }
-  for(const w of ['radio','tun','zone']){
-    const W=WAYS[w], c=$(W.card), sw=c.querySelector('[data-way='+w+']');
-    const set=ETS?!!ETS[W.key]:false, side=ET&&ET.on?ET[W.side]:null;
+  // EtherTalk: the switch is on while either link is (a board set before
+  // W-1189 may have one off), and the list is both links' Macs, newest first
+  {
+    const c=$('c-et'), sw=c.querySelector('[data-way=et]');
+    const set=!!ETS&&!!(ETS.radio||ETS.tunnel), up=set&&ET&&ET.on;
+    const r=up&&ETS.radio?ET.radio:null, t=up&&ETS.tunnel?ET.tunnel:null;
     sw.checked=set; sw.disabled=!ETS;
     c.classList.toggle('off',!set);
-    if(!set||!side) continue;
-    on++;
-    let h='';
-    if(w==='zone'){
-      h+=side.state==='online'?stHTML('g','Connected to '+zoneChip())
+    if(r||t){
+      on++;
+      const st=[r,t].filter(Boolean).map(s=>s.state);
+      const list=[...macsOf(r&&r.macs,MAC,m=>m.addr),...macsOf(t&&t.macs,EMAC,m=>m.ip||m.addr)]
+        .sort((a,b)=>a.ago-b.ago);
+      macs+=list.length;
+      put(c,(t&&t.state==='no socket'?stLine('r','Couldn’t open UDP port 6066 for Basilisk II'):'')
+        +(st.includes('no address')?stLine('a','Waiting for a network address')
+          :st.includes('acquiring')?stLine('a','Joining the AppleTalk network…'):'')
+        +macList(list));
+    }
+  }
+  // Infinite Mac
+  {
+    const c=$('c-zone'), sw=c.querySelector('[data-way=zone]');
+    const set=!!ETS&&!!ETS.infinite, side=set&&ET&&ET.on?ET.zone:null;
+    sw.checked=set; sw.disabled=!ETS;
+    c.classList.toggle('off',!set);
+    if(side){
+      on++;
+      const list=macsOf(side.macs,EMAC,m=>m.addr); macs+=list.length;
+      put(c,(side.state==='online'?stHTML('g','Connected to '+zoneChip())
         :side.state==='acquiring'?stHTML('a','Joining '+zoneChip()+'…')
         :ET.relay&&ET.relay.last_error?stLine('r','Can’t reach infinitemac.org. Trying again.',ET.relay.last_error)
-        :stLine('a','Connecting to infinitemac.org…');
-    }else if(side.state==='no address') h+=stLine('a','Waiting for a network address');
-    else if(side.state==='no socket') h+=stLine('r','Couldn’t open UDP port 6066');
-    else if(side.state==='acquiring') h+=stLine('a','Joining the AppleTalk network…');
-    const list=side.macs||[]; macs+=list.length;
-    h+=macList(list,m=>m.ip?m.ip:m.addr);
-    put(c,h);
+        :stLine('a','Connecting to infinitemac.org…'))+macList(list));
+    }
   }
   $('v-appletalk').textContent=macs?plural(macs,'Mac','Macs'):on?'On':'Off';
 }
@@ -1292,7 +1308,8 @@ for(const sw of $$('[data-way]')) sw.onchange=async()=>{
     if(!r.error) LT=on?(LT&&LT.on?LT:{on:true,phase:'acquiring',macs:[]}):{on:false,quiet:true};
   }
   else{
-    const body={}; body[WAYS[w].key]=on;
+    // EtherTalk's one switch sets both of its links
+    const body=w==='et'?{radio:on,tunnel:on}:{infinite:on};
     // Infinite Mac's zone is a made-up name until someone types one: anyone
     // who knows it can print, so it should not be guessable
     if(w==='zone'&&on&&ETS&&!ETS.zone) body.zone=zoneName();
