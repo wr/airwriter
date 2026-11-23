@@ -633,6 +633,15 @@ void localtalk_set_offers(int sock, const lt_offers_t *o)
     if (s_lock) xSemaphoreGive(s_lock);
 }
 
+int localtalk_offer_id(int sock, int reg)
+{
+    const lt_side_t *sd = side(sock);
+    if (!sd || !sd->offers || reg < 1 || reg > sd->offers->n_rel ||
+        reg > (int)sizeof sd->offers->ids)
+        return 0;
+    return sd->offers->ids[reg - 1];
+}
+
 void localtalk_set_roles(int serve, int laser)
 {
     serve = serve ? 1 : 0;

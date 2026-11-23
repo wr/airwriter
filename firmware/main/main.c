@@ -995,13 +995,15 @@ static int box_ready(void)
     }
     if (!any && lw < 0) {
         // Nothing shared: the printer lines, ready if either is, unknown while none has reported.
-        int line = -1;
+        // W-1186: with no printer socket (both do LocalTalk) there is no line: not ready.
+        int line = -1, prints = 0;
         for (int k = 0; k < ports_count(); k++) {
             if (!sock_prints(k)) continue;
+            prints = 1;
             if (s_ps[k].iw_ready == 1) return 1;
             if (s_ps[k].iw_ready == 0) line = 0;
         }
-        return line;
+        return prints ? line : 0;
     }
     if (lw == 1) return 1;
     return unknown ? -1 : 0;
@@ -3907,7 +3909,11 @@ static void tashtalk_install(void)
     xSemaphoreGive(s_job_lock);
 }
 
-static SemaphoreHandle_t s_lt_mx;   // one start or probe at a time: page, boot
+// One start or probe at a time: page, boot. W-1186: and no start while a socket's job changes
+// hands (sock_job_set takes it after the job lock, never the other way round): a socket's
+// UART has one driver, and a node started between its park and the printer line's unpark, or
+// before its socket is told to listen, would take the UART or send into a printer.
+static SemaphoreHandle_t s_lt_mx;
 
 // W-1186: the UART a socket's LocalTalk node uses. Rev A's is UART2, LocalTalk's alone. On rev
 // 2026.11 each socket has one UART for whichever job it does (J2's UART1, J4's UART0), which
@@ -4250,21 +4256,24 @@ static int sock_job_set(int i, port_job_t job, const char *why, uint32_t wait_ms
     int other = 1 - i;
     ESP_LOGW(TAG, "port %d: %s, was %s (%s)", i + 1, ports_job_name(job),
              ports_job_name(ports_job(i)), why);
+    xSemaphoreTake(s_lt_mx, portMAX_DELAY);      // no node starts until the socket has its job
     if (job == PORT_JOB_LOCALTALK) {
         // The printer line goes to the other socket if that one prints; with both on
         // LocalTalk none is selected, and nothing is sent to a printer until one prints again.
         if (s_psock == i && sock_prints(other)) printer_sock_select(other);
         else if (s_psock == i) s_psock = -1;
+        // Listening on its socket until LocalTalk is heard there (sock_detect lets it): set
+        // before the socket reads as LocalTalk's.
+        localtalk_set_hold(i, 1);
         ports_hw(i, PORT_JOB_LOCALTALK);
         psock_reset(i);
-        // Listening on its socket until LocalTalk is heard there (sock_detect lets it).
-        localtalk_set_hold(i, 1);
     } else {
         localtalk_park(i);
         psock_reset(i);                          // before its line reports, so nothing is lost
         ports_hw(i, PORT_JOB_PRINTER);
         if (s_psock < 0) printer_sock_select(i);
     }
+    xSemaphoreGive(s_lt_mx);
     settings_save_port_job(i, job);
     cable_cfg_apply();
     printers_set_lt_port(ports_with(PORT_JOB_LOCALTALK) + 1);
@@ -4697,7 +4706,6 @@ void app_main(void)
         // the oldest port record's, else AirWriter.
         printers_chooser_name(s_set.queue, sizeof s_set.queue);
     }
-    offers_apply();                 // the cable's, kept for its node's start
     s_ps[0].ribbon = s_set.ribbon;     // W-1179: port 1's is the one kept
     // Wi-Fi saved before this restart: green greets the join (W-1049).
     if (settings_take_wifi_fresh()) printer_state_post(PS_EV_WIFI_FRESH);
@@ -4719,6 +4727,9 @@ void app_main(void)
         // printer showing since. Frames sent into a printer print as junk.
         for (int i = 0; ports_either() && i < PORTS_MAX; i++) localtalk_set_hold(i, 1);
     }
+    // The cables' offers, kept for each node's start: after the sockets are known (the offers
+    // are per socket, W-1186), before any node starts.
+    offers_apply();
 #if CONFIG_AIRWRITER_PIC_CLK_PIN >= 0 && CONFIG_AIRWRITER_PIC_DAT_PIN >= 0
     tashtalk_install();
 #endif

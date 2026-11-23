@@ -68,6 +68,9 @@ void      ethertalk_json(char *buf, size_t cap);
 void      ethertalk_set_laser(int link, int on);
 // W-1088: what old Macs on one link (at_link_t) are offered (lt_node_offer).
 void      ethertalk_set_offers(int link, const lt_offers_t *o);
+// W-1186: the printer list's record id behind a link's registration `reg` (lt_offers_t.ids),
+// 0 for none. On the EtherTalk task, the lock held (at_relay_t's calls).
+int       ethertalk_offer_id(int link, int reg);
 void      ethertalk_lookup(const char *type);
 void      ethertalk_set_found(void (*found)(int link, const nbp_tuple_t *t, const lt_route_t *r));
 // W-1098: a node on a link looked up one name (lt_ops_t's name_check).

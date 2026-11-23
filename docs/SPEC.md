@@ -933,7 +933,7 @@ read back is a list made again). At most 8 records.
   get a port`). An AppleTalk record matches a printer heard by kind and NBP name. A record heard
   on a LocalTalk cable also keeps the port its cable is on, 1 or 2, in the record's `port` byte
   (the one a port record keeps its socket in; 0 until it is next heard, for a record from
-  before). `where` stays the cable for both ports and the blob's version does not change, so a
+  before, which stays online as it learns its port, rev A's too). `where` stays the cable for both ports and the blob's version does not change, so a
   firmware from before reads the list after a rollback and ignores the byte. A name heard on
   one cable that the list has on the other is a second printer when the first still answers
   (3.14's twin): a record of its own, with its own UUID (the name's hash with one byte more)
@@ -1054,9 +1054,14 @@ read back is a list made again). At most 8 records.
   registration 4 on every running link (`lt_node_offer`, sockets 0x85-0x88). Rev 2026.11's two
   cables are two links (W-1186), so a Mac on one is offered the LaserWriter on the other as an
   EtherTalk Mac is offered a cable's, and nothing else crosses between the two networks. A
-  link takes a name once: two LaserWriters both named LaserWriter, one on each cable, are each
-  seen by the Macs on their own cable and not offered on the other's, and EtherTalk Macs are
-  offered the first record's. Renaming one (Apple's Namer) lets every Mac reach both. A Mac's
+  link takes a name once, so a printer whose NBP name a printer of its kind already has on a
+  link is offered there under its record's name (`pr_offer_as`), and if that is taken too,
+  that name with 2 to 9 after it. Two LaserWriters both named LaserWriter, one on each cable,
+  are "LaserWriter" and "LaserWriter 2" on the page, on phones (Bonjour and IPP take the
+  record's name, which the list keeps unique) and to EtherTalk Macs; a Mac on port 1 sees its
+  own "LaserWriter" and port 2's as "LaserWriter 2", and a Mac on port 2 the same the other
+  way round, so each Mac's "LaserWriter" is the one on its own cable. The offers carry each
+  name's record id (`lt_offers_t.ids`), which the relay goes by, not the name. A Mac's
   connection on a relayed name goes through `localtalk/pap_relay.c`, run by `laser.c` with the
   one PAP client under the job lock: busy, in the printer's own status words, until the
   printer's connection is open; then both ways as they are, the printer's output 256 bytes a
@@ -2050,8 +2055,11 @@ board exists.
     may print, both may do LocalTalk, or one each. With both on LocalTalk no printer line is
     selected (`s_psock` -1): a job, test page or cleaning for a port record is told busy or
     refused, a vintage Mac's ImageWriter job is told busy and the nodes' status word says
-    offline, the port task asks nothing, and the panel follows the LaserWriters. Rev A and the
-    LC keep one job per socket, set up as before.
+    offline, the port task asks nothing, and the panel follows the LaserWriters, or with none
+    shared reads the line as not ready (`box_ready`). A node starts only between job changes
+    (`s_lt_mx`, taken by `sock_job_set` after the job lock), so a socket's UART never has two
+    drivers asked for at once and a node never starts before its socket is told to listen.
+    Rev A and the LC keep one job per socket, set up as before.
   - **What's plugged in** (`port_detect_core.c`, pure and host-tested; `sock_detect` in main,
     between the port task's questions). Nothing is sent to find out. A printer's handshake held
     ready for 2 s, or a clock on HSKi, on the LocalTalk socket with no LocalTalk frame heard
@@ -2060,7 +2068,9 @@ board exists.
     line drops. Framing errors and breaks on a printer socket with no printer showing (its line
     down, or up with nothing answering there) put it on LocalTalk on trial, kept only if
     TashTalk hears a frame there within 20 s; else it goes back to the printer job and waits
-    10 min before another. Each socket is worked out by itself, whatever the other does or
+    10 min before another. A printer that shows on it mid-trial (a clock, or its handshake
+    coming up after the trial began) ends the trial at that check, with no wait after: noise
+    from a printer switched off and on may be what began it. Each socket is worked out by itself, whatever the other does or
     hears (W-1186). Quiet sockets keep their last job; with nothing plugged in, J2
     prints and J4 does LocalTalk. Every change is a log line naming the port, its old and new
     job and the signal.

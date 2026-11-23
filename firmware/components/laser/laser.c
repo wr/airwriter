@@ -582,6 +582,12 @@ static void relay_unlock(void *ctx) { (void)ctx; xSemaphoreGive(s_relay_mx); }
 static int target_of_reg(int link, const lt_node_t *node, int reg)
 {
     if (reg < 1 || reg >= LT_REG_MAX || !node->reg) return -1;
+    // Whose the registration is, as the list offered it: its name there may not be the
+    // printer's own (two of one name).
+    int sock = at_link_cable_sock(link);
+    int id = sock >= 0 ? localtalk_offer_id(sock, reg) : ethertalk_offer_id(link, reg);
+    for (int k = 0; id > 0 && k < s_big->n_tg; k++)
+        if (s_tg[k].id == id) return k;
     const uint8_t *obj = node->reg[reg].obj, *type = node->reg[reg].type;
     uint8_t lw[NBP_NAME_MAX + 1], iw[NBP_NAME_MAX + 1];
     nbp_name(lw, "LaserWriter");

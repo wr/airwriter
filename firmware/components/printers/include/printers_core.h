@@ -331,9 +331,12 @@ pr_gate_t pr_job_gate(const pr_list_t *l, int id, int heard, pr_model_t heard_mo
 // StyleWriter is carried to none until StyleWriters phase 2.
 int  pr_offers(const pr_list_t *l, pr_where_t link, int ids[], int max);
 // W-1186: on the cable on port `cable_port` (1 or 2; 0 as pr_offers): the other cable's
-// printers too, each under its own name, unless a printer of that kind and name is on this
-// cable already (the name is taken there).
+// printers too. pr_offer_as gives the NBP name (Pascal, MacRoman) an AppleTalk printer is
+// offered under there, 0 when it is not: its own, or, where a printer of its kind has that
+// name already (two LaserWriters with one name, one on each cable), its record's name, with
+// 2 to 9 after it if that is taken too.
 int  pr_offers_on(const pr_list_t *l, pr_where_t link, int cable_port, int ids[], int max);
+int  pr_offer_as(const pr_list_t *l, int id, pr_where_t link, int cable_port, uint8_t out[33]);
 
 pr_box_t pr_box_state(const pr_list_t *l, const pr_live_t live[PR_MAX]);
 // Where the test page goes (W-1116): the printer on the port (pr_port_current, an ImageWriter

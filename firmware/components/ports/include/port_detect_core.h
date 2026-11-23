@@ -13,7 +13,8 @@
 //     set for 9600 as framing errors and breaks that nobody asked for. A printer answers only
 //     when asked, at the speed it is asked at. That is only a hint, so the socket takes
 //     LocalTalk on trial: if TashTalk hears no frame there within PD_TRIAL_MS, the socket goes
-//     back to the printer job, and the hint is ignored for PD_BACKOFF_MS.
+//     back to the printer job, and the hint is ignored for PD_BACKOFF_MS. A printer that
+//     shows on it mid-trial (a clock, or its handshake coming up) ends the trial at once.
 //   - A socket set to a job (/api/general's port1, port2) is never changed here, and a quiet
 //     socket keeps the job it has.
 // What it allows. A LocalTalk socket sends AppleTalk only once it has heard LocalTalk there

@@ -729,9 +729,11 @@ void printers_offers(int at_link, int on, const char *host, lt_offers_t *o)
             pr_chooser_name(s_l, own, sizeof own);
             nbp_name(o->own, own);
         } else if (o->n_rel < (int)(sizeof o->rel / sizeof o->rel[0])) {
-            lt_offer_t *x = &o->rel[o->n_rel++];
-            memcpy(x->obj, r->nbp, sizeof x->obj);
+            // W-1186: under the name this link has room for, and whose it is, for the relay.
+            lt_offer_t *x = &o->rel[o->n_rel];
+            if (!pr_offer_as(s_l, r->id, where_of(at_link), cable_port_of(at_link), x->obj)) continue;
             memcpy(x->type, r->nbp_type, sizeof x->type);
+            o->ids[o->n_rel++] = r->id;
         }
     }
     unlock();

@@ -354,6 +354,11 @@ Traps already explained in a code comment are listed only when the comment is ea
   printer's; park the node (`localtalk_park`) before unparking the port, or the install fails
   and the port stays parked. A parked port's `serial_out` calls do nothing, so nothing reaches
   TashTalk at 9600.
+- **Lock order for a socket's job: the job lock, then `s_lt_mx`** (W-1186). `sock_job_set`
+  holds both while a socket changes hands, and `lt_go` (every node start and probe) holds
+  `s_lt_mx` alone and checks the socket's job under it. Never take the job lock with `s_lt_mx`
+  held. Without it a node could start between its park and the printer line's unpark and take
+  the UART, leaving the port parked with its job reading printer.
 - **The LocalTalk task must never wait inside a UART driver** (W-1186). One task serves both
   sockets' nodes, and a socket that takes the printer job has its driver deleted under the
   nodes' lock, so every read is `uart_read_bytes(…, 0)` under that lock; the task sleeps on a

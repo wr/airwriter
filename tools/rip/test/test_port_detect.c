@@ -458,6 +458,43 @@ static void test_a_socket_set_to_localtalk_sends(void)
     CHECK_EQ_INT(may(&r, 1), 0);
 }
 
+// W-1186: an ImageWriter switched off and on makes noise on its line, which may start a trial
+// while it is down. Its handshake coming up ends the trial at that check, not 20 s later, and
+// so does a QuickDraw LaserWriter's clock; neither waits a backoff out.
+static void test_a_printer_showing_ends_a_trial(void)
+{
+    rig_t r;
+    rig(&r, PR, LT);
+    run(&r, 40000, NULL);
+    for (int k = 0; k < 3; k++) {
+        r.in[0].junk = 1;
+        run(&r, 1000, NULL);
+    }
+    CHECK_EQ_INT(r.in[0].job, LT);               // J2 on trial, its printer still starting
+    CHECK_EQ_INT(run(&r, 2000, NULL), 0);
+    r.in[0].ready = 1;                           // and now ready
+    pd_act_t a;
+    CHECK_EQ_INT(run(&r, 500, &a), 1);
+    CHECK_EQ_INT(a.sock, 0);
+    CHECK_EQ_INT(a.job, PR);
+    CHECK_EQ_INT(a.why, PD_WHY_HANDSHAKE);
+    CHECK_EQ_INT(r.d.s[0].trial, 0);
+    CHECK_EQ_INT(r.in[1].job, LT);
+    CHECK_EQ_INT(run(&r, 60000, NULL), 0);       // and it stays a printer port
+    // A clock, the same.
+    rig(&r, PR, LT);
+    run(&r, 40000, NULL);
+    for (int k = 0; k < 3; k++) {
+        r.in[0].junk = 1;
+        run(&r, 1000, NULL);
+    }
+    CHECK_EQ_INT(r.in[0].job, LT);
+    r.in[0].clocked = 1;
+    CHECK_EQ_INT(run(&r, 500, &a), 1);
+    CHECK_EQ_INT(a.why, PD_WHY_CLOCK);
+    CHECK_EQ_INT(r.in[0].job, PR);
+}
+
 // Junk on each socket in turn: two trials at once, each its own. The one that hears a frame is
 // kept; the other goes back to the printer job and waits out its own backoff.
 static void test_two_trials_at_once(void)
@@ -514,6 +551,7 @@ int main(void)
     test_a_trial_sends_once_heard();
     test_a_trial_leaves_what_the_other_heard();
     test_a_socket_set_to_localtalk_sends();
+    test_a_printer_showing_ends_a_trial();
     test_two_trials_at_once();
     TEST_END;
 }

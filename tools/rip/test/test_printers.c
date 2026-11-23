@@ -502,19 +502,38 @@ static void test_two_cables(void)
     CHECK_EQ_INT(pr_at_seen_on(&L, PR_WHERE_CABLE, 2, P("LaserWriter"), P("LaserWriter"), 0, 0), b);
     CHECK_EQ_INT(pr_at_seen_on(&L, PR_WHERE_CABLE, 1, P("LaserWriter"), P("LaserWriter"), 0, 1), a);
     CHECK_EQ_INT(L.n, 2);
-    // Two of one name: neither is offered on the other's cable, where the name is taken, and
-    // EtherTalk gets the name once, the first's.
+    // Two of one name, and a link takes a name once: each is offered on the other's cable
+    // under a name that is free there, so a Mac on either port reaches both. Port 1 has the
+    // real "LaserWriter" (a), so b is "LaserWriter 2" there, its record's name; port 2 has the
+    // real "LaserWriter" (b), where a's own name and its record's are that name, so a is
+    // "LaserWriter 2" there. EtherTalk Macs see "LaserWriter" (a) and "LaserWriter 2" (b), as
+    // the page and phones name them.
     int ids[8];
-    CHECK_EQ_INT(pr_offers_on(&L, PR_WHERE_CABLE, 1, ids, 8), 0);
-    CHECK_EQ_INT(pr_offers_on(&L, PR_WHERE_CABLE, 2, ids, 8), 0);
-    CHECK_EQ_INT(pr_offers(&L, PR_WHERE_NETWORK, ids, 8), 1);
+    uint8_t as[33];
+    CHECK(!strcmp(pr_get(&L, a)->name, "LaserWriter"));
+    CHECK(!strcmp(pr_get(&L, b)->name, "LaserWriter 2"));
+    CHECK_EQ_INT(pr_offers_on(&L, PR_WHERE_CABLE, 1, ids, 8), 1);
+    CHECK_EQ_INT(ids[0], b);
+    CHECK(pr_offer_as(&L, b, PR_WHERE_CABLE, 1, as) && !memcmp(as, P("LaserWriter 2"), 14));
+    CHECK_EQ_INT(pr_offer_as(&L, a, PR_WHERE_CABLE, 1, as), 0);     // on its own cable
+    CHECK_EQ_INT(pr_offers_on(&L, PR_WHERE_CABLE, 2, ids, 8), 1);
     CHECK_EQ_INT(ids[0], a);
-    // Differently named, each is offered to the Macs on the other cable, never on its own.
+    CHECK(pr_offer_as(&L, a, PR_WHERE_CABLE, 2, as) && !memcmp(as, P("LaserWriter 2"), 14));
+    CHECK_EQ_INT(pr_offers(&L, PR_WHERE_NETWORK, ids, 8), 2);
+    CHECK(pr_offer_as(&L, a, PR_WHERE_NETWORK, 0, as) && !memcmp(as, P("LaserWriter"), 12));
+    CHECK(pr_offer_as(&L, b, PR_WHERE_NETWORK, 0, as) && !memcmp(as, P("LaserWriter 2"), 14));
+    // The person's own name for the second is the one Macs see too, where it is needed.
+    CHECK_EQ_INT(pr_rename(&L, b, "Basement"), 0);
+    CHECK(pr_offer_as(&L, b, PR_WHERE_CABLE, 1, as) && !memcmp(as, P("Basement"), 9));
+    CHECK(pr_offer_as(&L, b, PR_WHERE_NETWORK, 0, as) && !memcmp(as, P("Basement"), 9));
+    // Differently named, each is offered to the Macs on the other cable under its own name,
+    // never on its own cable.
     int c = pr_at_seen_on(&L, PR_WHERE_CABLE, 2, P("Upstairs"), P("LaserWriter"), 0, 0);
     pr_at_queried(&L, c, 1, &info);
-    CHECK_EQ_INT(pr_offers_on(&L, PR_WHERE_CABLE, 1, ids, 8), 1);
-    CHECK_EQ_INT(ids[0], c);
-    CHECK_EQ_INT(pr_offers_on(&L, PR_WHERE_CABLE, 2, ids, 8), 0);
+    CHECK_EQ_INT(pr_offers_on(&L, PR_WHERE_CABLE, 1, ids, 8), 2);
+    CHECK(pr_offer_as(&L, c, PR_WHERE_CABLE, 1, as) && !memcmp(as, P("Upstairs"), 9));
+    CHECK_EQ_INT(pr_offer_as(&L, c, PR_WHERE_CABLE, 2, as), 0);
+    CHECK_EQ_INT(pr_offers_on(&L, PR_WHERE_CABLE, 2, ids, 8), 1);
     // The stored form: `where` is the cable for all three, so a firmware from before reads it,
     // and the port comes back.
     static uint8_t blob[4096];

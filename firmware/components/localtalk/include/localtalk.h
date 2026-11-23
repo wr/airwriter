@@ -104,6 +104,9 @@ void localtalk_set_roles(int serve, int laser);
 // W-1088: what old Macs on a side's cable are offered (lt_node_offer), kept for a
 // node started later or anew. Any task.
 void localtalk_set_offers(int sock, const lt_offers_t *o);
+// W-1186: the printer list's record id behind a side's registration `reg` (lt_offers_t.ids),
+// 0 for none. On the LocalTalk task, the lock held (at_relay_t's calls).
+int  localtalk_offer_id(int sock, int reg);
 // NBP =:type@* to every node on every running side's cable; the answers go to the found
 // callback (localtalk_set_found) with the side's link (at_link_of_sock).
 void localtalk_lookup(const char *type);

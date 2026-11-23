@@ -97,9 +97,12 @@ void lwc_targets(lwc_t *c, const lwc_target_in_t *in, int n, uint64_t now)
             *t = old[j];
             kept = 1;
         }
-        if (kept && t->cable != in[k].cable) {        // W-1186: its cable is in another port
+        // W-1186: its cable is in another port: it starts again there. One that only learns
+        // which cable it is on (a record from before, heard for the first time since) is the
+        // printer it was, and stays online.
+        if (kept && t->cable != in[k].cable) {
+            if (t->cable != LWC_ANY) reset_target(t);
             t->cable = in[k].cable;
-            reset_target(t);
         }
         if (kept) continue;
         t->used = 1;

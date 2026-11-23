@@ -91,9 +91,17 @@ int pd_tick(pd_t *d, const pd_in_t in[], uint32_t now, int idle, pd_act_t *a)
         const pd_in_t *x = &in[i];
 
         // A trial: kept once a frame is heard; else, past its wait, back to the printer job.
+        // W-1186: and back at the first check a printer shows on it, a clock or a handshake
+        // that came up since the trial began (one up before it, with nothing answering, is
+        // what a Mac on a direct cable holds, and may be why the trial began): a printer
+        // switched on mid-trial does not wait the trial out with its jobs told busy.
         if (x->job == JOB_LT && s->trial) {
             if (s->frame_at) s->trial = 0;      // pd_applied cleared it as the trial began
-            else if (since(now, s->job_at, PD_TRIAL_MS) && !x->fixed)
+            else if (x->fixed) { }
+            else if (x->clocked) return act(a, i, JOB_PRINTER, PD_WHY_CLOCK);
+            else if (s->ready_since && (int32_t)(s->ready_since - s->job_at) > 0)
+                return act(a, i, JOB_PRINTER, PD_WHY_HANDSHAKE);
+            else if (since(now, s->job_at, PD_TRIAL_MS))
                 return act(a, i, JOB_PRINTER, PD_WHY_NO_FRAME);
             continue;
         }

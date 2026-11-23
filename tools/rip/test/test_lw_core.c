@@ -406,13 +406,21 @@ static void test_two_cables(void)
     w = lwc_tick(&c, 4500);
     CHECK(w.tell != LWC_NONE);
     CHECK_EQ_INT(w.tell_twin, 0);
-    // The list gives its target the cable once it knows it: the target starts again there.
+    // The list gives its target the cable once it knows it (a record from before, on rev A
+    // too): the same printer, still online and not asked again.
     lwc_init(&c, 0);
     in[0] = target(5, "Hall", LWC_KIND_LW);
     lwc_targets(&c, in, 1, 0);
     found(&c, "Hall", LW_LINK_CABLE, 30, 1000);
     CHECK(lwc_view(&c, lwc_target(&c, 5), 1000).online);
-    in[0].cable = LWC_ON_CABLE_P1;                           // moved, says the list
+    lwc_queried(&c, lwc_target(&c, 5), 1, 1500);
+    in[0].cable = LWC_ON_CABLE;
+    lwc_targets(&c, in, 1, 2000);
+    CHECK(lwc_view(&c, lwc_target(&c, 5), 2000).online);
+    CHECK(lwc_view(&c, lwc_target(&c, 5), 2000).idx >= 0);
+    CHECK_EQ_INT(c.t[lwc_target(&c, 5)].queried, 1);
+    // Its cable moved to the other port, says the list: the target starts again there.
+    in[0].cable = LWC_ON_CABLE_P1;
     lwc_targets(&c, in, 1, 2000);
     CHECK(!lwc_view(&c, lwc_target(&c, 5), 2000).online);
     CHECK_EQ_INT(lwc_view(&c, lwc_target(&c, 5), 2000).idx, -1);
