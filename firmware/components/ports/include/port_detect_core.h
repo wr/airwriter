@@ -13,7 +13,7 @@
 //     set for 9600 as framing errors and breaks that nobody asked for. A printer answers only
 //     when asked, at the speed it is asked at. That is only a hint, so the socket takes
 //     LocalTalk on trial: if TashTalk hears no frame there within PD_TRIAL_MS, the socket goes
-//     back (and LocalTalk back where it was), and the hint is ignored for PD_BACKOFF_MS.
+//     back to the printer job, and the hint is ignored for PD_BACKOFF_MS.
 //   - A socket set to a job (/api/general's port1, port2) is never changed here, and a quiet
 //     socket keeps the job it has.
 // What it allows. A LocalTalk socket sends AppleTalk only once it has heard LocalTalk there
@@ -21,8 +21,8 @@
 // ImageWriter keeps them for when it is selected again (board 1, 2026-11-21). Until then the
 // node listens. What was heard is kept across a restart (pd_start), and dropped when the
 // socket changes job or a printer shows on it.
-// One LocalTalk socket at most: giving a socket LocalTalk takes it from the other (main's
-// sock_job_set), so the trial never takes it from a socket that hears frames.
+// W-1186: each socket is worked out by itself. Both may do LocalTalk at once (two networks),
+// both the printer job, or one each; nothing a socket shows changes the other.
 #pragma once
 #include <stdint.h>
 
@@ -56,8 +56,6 @@ typedef struct {
     uint32_t junk_at[PD_JUNK_N];   // the last PD_JUNK_N ticks with junk, newest first
     uint32_t backoff_until;
     uint8_t  trial;        // its LocalTalk is a trial
-    int8_t   trial_from;   // the socket the trial took LocalTalk from, -1 none
-    uint8_t  trial_heard;  // that socket had heard LocalTalk, for its going back
     uint8_t  job;          // the job last seen
     uint8_t  heard;        // LocalTalk heard on it in its present LocalTalk job
     uint8_t  heard_boot;   // ... only before the restart, so far

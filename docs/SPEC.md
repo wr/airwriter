@@ -746,11 +746,12 @@ printer (`components/localtalk`):
 - **The cable** (`W-1051 LocalTalk node: show up in the Chooser as an ImageWriter`, `W-1053
   LocalTalk: print PAP jobs from the Mac's AppleTalk ImageWriter driver`): LocalTalk through
   TashTalk in U7 on J4, while the AppleTalk port is on. LLAP node acquisition by ENQ (TashTalk answers ENQ and
-  RTS for the claimed ID), short DDP headers. On rev 2026.11 the cable is whichever socket does
-  LocalTalk (3.19): U7 on J4 or U10 on J2; `/api/lt` has `port` (1 or 2, 0 for none), which the
-  page's LocalTalk card shows.
+  RTS for the claimed ID), short DDP headers. On rev 2026.11 a cable is a socket doing
+  LocalTalk (3.19): U7 on J4, U10 on J2, or both; `/api/lt` has `port` (1 or 2, 0 for none;
+  the lower with both), which the page's LocalTalk card shows.
   `W-1186 Rev 2026.11: LocalTalk on both ports at once, so two LaserWriters each get a port`:
-  each socket has a node of its own (`localtalk.c`'s sides, as `ethertalk.c` keeps one per
+  two LocalTalk sockets are two networks, and nothing crosses between them but a job to a
+  printer on the other (3.15's relay). Each socket has a node of its own (`localtalk.c`'s sides, as `ethertalk.c` keeps one per
   link), with its own node ID, kept in NVS `lt`/`node` for J4's and `lt`/`node_p1` for J2's, its
   own offers and its own link in the printer list (`AT_LINK_CABLE` J4's, `AT_LINK_CABLE_P1`
   J2's). One task and one lock serve both: the task waits a tick at most for a byte on either
@@ -2014,9 +2015,12 @@ board exists.
     the same UART (1 Mbaud, the PIC's pins through the GPIO matrix, no inversion), and
     unparking puts the printer line's back once the node has let go (`localtalk_park` first).
     UART2 is spare on rev 2026.11; rev A's LocalTalk keeps it. `ports_hw` is the one place the
-    pins change hands, under the job lock. At most one
-    socket does LocalTalk, so at least one is always a printer port. Rev A and the LC keep one
-    job per socket, set up as before.
+    pins change hands, under the job lock. Each socket has its job by itself (W-1186): both
+    may print, both may do LocalTalk, or one each. With both on LocalTalk no printer line is
+    selected (`s_psock` -1): a job, test page or cleaning for a port record is told busy or
+    refused, a vintage Mac's ImageWriter job is told busy and the nodes' status word says
+    offline, the port task asks nothing, and the panel follows the LaserWriters. Rev A and the
+    LC keep one job per socket, set up as before.
   - **What's plugged in** (`port_detect_core.c`, pure and host-tested; `sock_detect` in main,
     between the port task's questions). Nothing is sent to find out. A printer's handshake held
     ready for 2 s, or a clock on HSKi, on the LocalTalk socket with no LocalTalk frame heard
@@ -2024,7 +2028,9 @@ board exists.
     went ready: then what holds it is a Mac on a direct cable, and LocalTalk stays until the
     line drops. Framing errors and breaks on a printer socket with no printer showing (its line
     down, or up with nothing answering there) put it on LocalTalk on trial, kept only if
-    TashTalk hears a frame. Quiet sockets keep their last job; with nothing plugged in, J2
+    TashTalk hears a frame there within 20 s; else it goes back to the printer job and waits
+    10 min before another. Each socket is worked out by itself, whatever the other does or
+    hears (W-1186). Quiet sockets keep their last job; with nothing plugged in, J2
     prints and J4 does LocalTalk. Every change is a log line naming the port, its old and new
     job and the signal.
   - **Listening first.** AppleTalk frames sent into an ImageWriter II print as junk, selected or
@@ -2037,8 +2043,8 @@ board exists.
     LocalTalk (`port1`, `port2`) sends at once. What was heard is dropped when the socket
     changes job, and at the first check a printer shows there (a handshake ready with no frame
     since it went ready, or a clock), so the node goes quiet before the socket moves; it must
-    be heard again after. A failed trial gives the socket
-    it took LocalTalk from back what that had heard, unless a printer shows there. Heard is saved
+    be heard again after. Each socket's node has its own hold, and its own count of frames
+    (W-1186), so one network heard lets only its own socket send. Heard is saved
     (`port1heard`, `port2heard`): after a restart the socket sends once its line has shown no
     printer for 1 s (`PD_BOOT_MS`). A cable test's own frames don't count. The cost: a
     LaserWriter already switched on when its cable goes into a socket that hasn't heard
@@ -2073,11 +2079,13 @@ board exists.
     the LocalTalk card, and the page's button puts it on, as on rev A's U7. `/api/localtalk/flash` takes `{"port":1|2}` (default:
     the LocalTalk socket).
   - The cable test needs a socket on each job; its frames leave the printer socket's driver.
+    With both sockets on LocalTalk, the page's **Test Cable…** gives port 1 the printer job
+    first (port 2 if port 1 is set to LocalTalk).
     A test cable from port 1 to port 2 shows each socket the other's handshake, so both may
     be on the printer job by the time the page's **Test Cable…** runs: the socket that isn't
     the printer line's then takes LocalTalk for the test, unless it is set to the printer job.
     The test button's cable test does not (it runs with the job lock already held).
-  - With no socket on LocalTalk the node is parked: `/api/lt` gives `"parked":true`, `port` 0
+  - With no socket on LocalTalk every node is parked: `/api/lt` gives `"parked":true`, `port` 0
     and `on` as its setting, so the LocalTalk card's switch keeps its place.
 - **Straps**, rev 2026.11 only, read once at boot with the pull-ups on, which stay on only where
   a strap reads high: IO16 (`BOARD_REV`, low on every 2026.11 board) and IO15 (`BOARD_LC`, low on
