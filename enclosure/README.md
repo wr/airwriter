@@ -152,10 +152,10 @@ Every part on the board is cleared using KiCad's own STEP export
 (`components.py`), so `./build.sh` needs kicad-cli (path in AGENTS.md; set
 `KICAD_CLI` to override). The build prints every wall a clearance notch cuts
 straight through (a notch that only thins a wall lets no light out). Today
-there are four, all from a lit cell into a gold cell or the front region,
-which show nothing: S1 opens r7c1 west and front, R3 opens r7c6 west, and
-C9/C5 open r7c6 front. A notch into another lit cell or the test cell fails
-the build.
+four lit cells have them, two walls each, all into a dark cell or the front
+region, which show nothing: r4c3 east and front, r5c4 west and back, r7c4
+east and front, r7c6 west and front. A notch into another lit cell or the
+test cell fails the build.
 
 **Print** in matte black PLA or PETG, **panel face down** (the flattest face
 seals against the panel), no supports.

@@ -69,7 +69,7 @@ STANDOFFS = ['MT1,MT2,MT3,MT4', '9774030151R (Wurth WA-SMSI M2.5x3 SMT spacer)',
              'Not at LCSC: source from Digi-Key or consign; panel is art-face-down in this production panel so these reflow on the SAME side as all other parts; ring paste aperture in stencil data']
 SPACER = ['D3 (spacer)', 'LED4*8 nylon LED spacer, 4 mm x 8 mm', '-', 'C92326', '1',
           'Under D3: LED leads through the spacer bore, LED flange seated on it, lens up']
-PLACEMENTS = {'AirWriter': 146, 'AirWriter LC': 68}
+PLACEMENTS = {'AirWriter': 141, 'AirWriter LC': 63}
 
 bom = list(csv.reader(open(bom_path)))
 bom = [bom[0]] + [r for r in bom[1:] if not r[2].startswith('Jumper:SolderJumper')]   # copper, not parts

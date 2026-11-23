@@ -4,323 +4,291 @@
 
     <KiCad python> tools_pcb/r15_route.py
 
-U7 is a SOIC-8 now, so the board is built in this order from the board
-r15_clean.py left, with KiCad closed:
+The board is built in this order from rev 2026.11's board before W-1176 (the
+one r14_lc_light.py left, commit 7ba7f07), with KiCad closed:
 
     kicad-cli sch export netlist --format kicadxml -o net.xml airwriter.kicad_sch
-    <KiCad python> tools_pcb/r13_sync.py net.xml     (U7's socket becomes the SOIC, its label goes)
+    <KiCad python> tools_pcb/r13_sync.py net.xml
+    <KiCad python> tools_pcb/r15_clean.py
     <KiCad python> tools_pcb/r15_place.py
     <KiCad python> tools_pcb/r15_route.py
+    <KiCad python> tools_pcb/r15_silk.py
+    <KiCad python> tools_pcb/r15_names.py
+    kicad-cli sch export netlist --format kicadxml -o net.xml airwriter.kicad_sch
+    <KiCad python> tools_pcb/r13_sync.py net.xml
+    <KiCad python> tools_pcb/r15_shell.py
 
-Like r13_route.py: the runs whose path is the design are drawn point by point
-(HAND), the short stubs are found by r13_route's grid search (CONNECTIONS),
-and the copper the new placement makes wrong, the runs to the socket's pins
-among it, is named and removed first (DROP). A board that already has
-LT2_DATA drawn is left alone.
+R15_BOARD=<path> runs the whole chain, r13_sync.py too, on another copy of
+the board. Every run is drawn point by point. A board that already has LT2_DATA drawn is
+left alone.
 
-J2's five lines from the module (IO17, IO18 and IO7 on its north edge, IO41
-and IO42 on its south) each run on the front under the module to a via, then
-west on the back: UART_RX and UART_TX where rev 2026.11's ran, the other
-three south of them, under U6 and U10.
+The two blocks. block() draws one socket's copper from its centre line, so
+J4's is J2's 19.5 mm east, track for track:
 
-U7 stands as its socket did, pins 1 to 4 north, so its resistors and C16 stay
-where they were. Its socket's pin 1 joined the front's 3.3 V to the back's: a
-via does that now, and the run to U6 goes east from it and down beside
-BTN_TEST, which leaves the ground between U7 and that run to the module's
-lines. ICSPCLK and ICSPDAT come down between U7's north pads and under its
-body to pins 6 and 7; LT_DE and LT_DATA leave pins 3 and 2 the same way,
-between its south pads, to U6. LT_CTS reaches pin 5 by a via below it.
+  - DE and the data net leave the transceiver west and turn north to the
+    PIC's pins 3 and 2; DE goes on up to its pull-down, and the 220 R from
+    the GPIO hangs on it. RO goes north from its pad, the data net north
+    under the transceiver, and the 2.2 k stands between them.
+  - A, B and Z leave under the transceiver to the south. B passes between
+    the pads of A's resistor, so each reaches its socket pin in the socket's
+    order; Z goes down between pins 8 and 7 and along between the two rows
+    to pin 3; Y goes straight down to pin 6.
+  - 3.3 V comes in at a via above the bypass, goes up the transceiver's east
+    side to its pin 10, and along the back to a via at the PIC's bypass. The
+    back run passes north of the transceiver's ground via, so pin 5 reaches
+    the bypass and the socket's ground pin across the back plane, not round
+    the run's ends.
+  - Each line from the ESP32 ends at the same place in each block (PORTS).
+    J2's arrive on the back, so each has a via there; J4's arrive on the
+    front, but for LT_CTS, which keeps rev A's run on the back.
 
-The module's west pins sit between BTN_TEST and LED_DATA, so IO9 to IO12 each
-take a via beside the pin (as IO13 does) and the back under BTN_TEST to one
-more via: IO9's east of U7, the other three west of it, staggered so each
-front run passes the next via. From there the front runs south to R43, R42,
-R34 and R35 above U6 and U10. IO3 has no room for that via (LT_UART_RX and
-the 3.3 V run pass under its pin), so R44 stands north of it and LT_DE comes
-to R44 along the back from R22.
+J2's lines from the module. IO17, IO18 and IO7 (north edge) and IO41 and IO42
+(south edge) run on the front under the module to a via each, then west on
+the back in one band at y 145.3 to 146.9, under J4's block, to their ports.
+IO11 and IO12 take a via beside the pin, as IO13 does, and run west on the
+back at y 137.6 and 138.05, under U3, to the two programming resistors.
 
-R27 stands north-west of U7 beside pin 4, and LT_RESET reaches it along the
-back under U7, where LT_MCLR ran.
+J4's lines. IO9 and IO10 take a via beside the pin, the back under BTN_TEST,
+and a second via; IO3 has no room for a via at its pin (IO46's pad is beside
+it), so it runs north first. From there, and from rev A's vias for LT_RESET,
+LT_UART_TX and LT_UART_RX, each runs straight south on the front to its part.
 
-U6's bus pins leave under its own body, and R11 bridges B so A and B reach
-J4.8 and J4.5 in the socket's order; TxD- goes down between J4.8 and J4.7 as
-before.
+The handshake lines. J2's leave U3's west side, pass below U3 and run down
+between the two blocks and round below the socket's lower row to pins 1 and
+2. J4's run down U3's east side, west of J4's PIC, to rev 2026.11's two vias
+and its back runs to pins 1 and 2.
+
+3.3 V. J4's block is fed from the via that stands where U7's socket had its
+pin 1, by a run down to U6's pin 10; J2's from J4's along the back. R21 is
+fed from J4's via.
 """
 import os
-import sys
 
 import pcbnew
 
-import r13_route as R
-from r13_edit import Board, near, mm
+from r13_edit import Board, mm
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 BOARD = os.environ.get('R15_BOARD') or os.path.join(HERE, '..', 'airwriter.kicad_pcb')
-R.BOARD = BOARD
 F, B = pcbnew.F_Cu, pcbnew.B_Cu
 
-# Nets drawn again from nothing: every track and via of theirs goes.
-DROP_NETS = ['/LT_PORT_RXD_N', '/LT_PORT_RXD_P', '/LT_PORT_TXD_N', '/LT_PORT_TXD_P']
-# (net, a, b) tracks and (net, 'via', p) vias that go; then (net, layer or 'via', points, width) to draw
-DROP = [
-    # 3.3 V: the stubs to U2's and U8's old supply pins and C18, U8's ground via
-    ('/+3V3', (117.175, 150.105), (116.9, 150.38)),
-    ('/+3V3', (116.9, 150.38), (116.9, 151.625)),
-    ('/+3V3', (120.925, 150.105), (122.351, 150.105)),
-    ('/+3V3', (122.351, 150.105), (122.351, 145.354)),
-    ('/+3V3', (120.925, 150.105), (121.55, 150.73)),
-    ('/+3V3', (121.55, 150.73), (121.55, 151.62)),
-    ('/+3V3', (122.351, 145.354), (121.237, 144.24)),
-    ('/GND', 'via', (120.925, 146.74)),
-    # U6's old supply, C14's and R25's
-    ('/+3V3', (133.275, 146.295), (132.927, 146.295)),
-    ('/+3V3', (132.927, 146.295), (132.718, 146.295)),
-    ('/+3V3', (132.718, 146.295), (131.893, 147.12)),
-    ('/+3V3', (131.893, 147.12), (131.893, 151.218)),
-    ('/+3V3', (131.893, 151.218), (132.3, 151.625)),
-    ('/+3V3', (132.1, 150.825), (131.893, 150.825)),
-    ('/+3V3', (132.125, 144.6), (132.927, 144.6)),
-    ('/+3V3', 'via', (132.1, 150.825)),
-    ('/+3V3', (132.9, 151.625), (132.1, 150.825)),
-    ('/+3V3', (134.4, 151.625), (132.9, 151.625)),
-    ('/+3V3', (135.6, 151.625), (134.4, 151.625)),
-    ('/+3V3', (136.0, 151.825), (135.6, 151.625)),
-    # TxD- left U2's old pin 6
-    ('/PR_RXD_N', (112.225, 147.565), (110.2, 147.565)),
-    ('/PR_RXD_N', (110.2, 147.565), (110.2, 151.35)),
-    # ground vias that sat on C14's and R12's old pads; R25's and R21's feed from C14
-    ('/GND', 'via', (133.3, 150.97)),
-    ('/GND', 'via', (134.983, 152.98)),
-    ('/+3V3', 'via', (134.4, 151.625)),
-    ('/+3V3', (134.6, 151.5), (134.4, 151.625)),
-    ('/+3V3', (139.2, 151.5), (134.6, 151.5)),
-    # R27 moves north and LT_MCLR runs straight west from it, between U7's rows
-    ('/LT_RESET', (134.12, 134.171), (134.12, 135.175)),
-    ('/LT_RESET', 'via', (134.12, 134.171)),
-    ('/LT_MCLR', (130.39, 134.17), (125.171, 134.171)),
-    ('/LT_MCLR', (125.171, 134.171), (124.09, 133.09)),
-    ('/LT_MCLR', (134.12, 136.825), (134.12, 137.9)),
-    ('/LT_MCLR', 'via', (134.12, 137.9)),
-    ('/LT_MCLR', (134.12, 137.9), (130.39, 134.17)),
-    # the runs to U7's socket pins: ICSPCLK, ICSPDAT, LT_DE, LT_CTS, and the 3.3 V run from pin 1 to U6
-    ('/LT_ICSPCLK', (125.36, 139.44), (125.36, 131.285)),
-    ('/LT_ICSPCLK', (126.63, 140.71), (125.36, 139.44)),
-    ('/LT_ICSPDAT', (127.875, 139.415), (127.875, 130.8)),
-    ('/LT_ICSPDAT', (129.17, 140.71), (127.875, 139.415)),
-    ('/LT_DE', (125.825, 129.45), (125.825, 131.75)),
-    ('/LT_DE', (125.825, 131.75), (126.425, 132.35)),
-    ('/LT_DE', (126.425, 132.35), (126.63, 133.09)),
-    ('/LT_CTS', (125.768, 142.388), (124.09, 140.71)),
-    ('/+3V3', (132.927, 134.307), (131.71, 133.09)),
-    ('/+3V3', (132.927, 146.295), (132.927, 134.307)),
+J2_X, J4_X = 113.0, 132.5
+NETS = {    # the block's lines by what they do: J2's net, J4's net
+    'RO': ('/UART_RX', '/J4_RX'), 'TX': ('/UART_TX', '/J4_TX'), 'GPIO_DE': ('/J2_DE', '/J4_DE'),
+    'DATA': ('/LT2_DATA', '/LT_DATA'), 'DE': ('/LT2_DE', '/LT_DE'),
+    'MCLR': ('/LT2_MCLR', '/LT_RESET'), 'CTS': ('/LT2_CTS', '/LT_CTS'),
+    'CLK': ('/LT2_ICSPCLK', '/LT_ICSPCLK'), 'DAT': ('/LT2_ICSPDAT', '/LT_ICSPDAT'),
+    'UTX': ('/LT2_UART_TX', '/LT_UART_TX'), 'URX': ('/LT2_UART_RX', '/LT_UART_RX'),
+    'A': ('/PR_TXD_P_IN', '/LT_RXD_P'), 'B': ('/PR_TXD_N_IN', '/LT_RXD_N'),
+    'AJ': ('/PR_TXD_P', '/LT_PORT_RXD_P'), 'BJ': ('/PR_TXD_N', '/LT_PORT_RXD_N'),
+    'Z': ('/PR_RXD_N', '/LT_TXD_N'), 'Y': ('/PR_RXD_P', '/LT_TXD_P'),
+    'V': ('/+3V3', '/+3V3'), 'G': ('/GND', '/GND'),
+}
+# One socket's copper, x from its centre line: (line, layer or 'via', points, width)
+BLOCK = [
+    # DE: west from the transceiver, north past the PIC's pin 3 to the pull-down; the GPIO's 220 R on the way
+    ('DE', F, [(-2.1, 148.4), (-3.25, 148.4), (-3.25, 141.9), (-3.05, 141.7), (-3.05, 141.575)], 0.2),
+    ('DE', F, [(-3.25, 144.425), (-4.925, 144.425)], 0.2),
+    ('DE', F, [(-3.25, 145.875), (-2.4, 145.875)], 0.2),
+    # the data net: west and north to the PIC's pin 2; north under the transceiver to the 2.2 k and the 220 R
+    ('DATA', F, [(-2.1, 148.9), (-3.65, 148.9), (-3.65, 145.695), (-4.925, 145.695)], 0.2),
+    ('DATA', F, [(-2.1, 148.9), (-0.2, 148.9), (-0.2, 146.75), (-0.075, 146.625), (-0.075, 144.225),
+                 (-0.85, 144.225)], 0.2),
+    ('DATA', F, [(-0.075, 145.875), (0.7, 145.875)], 0.2),
+    # RO: north from its pad, past the 2.2 k, to its port
+    ('RO', F, [(-2.1, 147.4), (-1.625, 147.4), (-1.625, 143.3)], 0.2),
+    ('RO', F, [(-1.625, 145.875), (-0.85, 145.875)], 0.2),
+    ('GPIO_DE', F, [(-2.4, 144.225), (-2.4, 143.3)], 0.2),
+    ('TX', F, [(0.7, 144.225), (0.7, 143.3)], 0.2),
+    # the PIC: MCLR and CTS north from their pads, the programming lines north under it to their resistors
+    ('MCLR', F, [(-4.925, 143.155), (-4.6, 143.155), (-4.6, 142.2)], 0.2),
+    ('CTS', F, [(-9.875, 143.155), (-9.1, 143.155), (-9.1, 141.4)], 0.2),
+    ('CLK', F, [(-9.875, 144.425), (-8.05, 144.425), (-8.05, 141.575)], 0.2),
+    ('DAT', F, [(-9.875, 145.695), (-6.45, 145.695), (-6.45, 141.575)], 0.2),
+    ('UTX', F, [(-8.05, 139.925), (-8.05, 138.95)], 0.2),
+    ('URX', F, [(-6.45, 139.925), (-6.45, 138.95)], 0.2),
+    # the bus pins: A to its 15 k, B between that resistor's pads to its own, both on to pins 8 and 5
+    ('A', F, [(2.1, 147.9), (0.2, 147.9), (0.2, 150.0), (-1.9, 150.0), (-2.2, 150.3), (-2.2, 151.225)], 0.2),
+    ('B', F, [(2.1, 148.4), (0.6, 148.4), (0.6, 150.4), (-0.9, 150.4), (-1.3, 150.8), (-1.3, 151.65),
+              (-1.7, 152.05), (-3.2, 152.05), (-3.75, 152.245)], 0.2),
+    ('AJ', F, [(-2.2, 152.875), (-2.2, 153.6), (-3.4, 154.8), (-3.4, 156.02)], 0.2),
+    ('BJ', F, [(-3.75, 153.895), (-4.55, 154.695), (-4.55, 157.37), (-3.4, 158.52)], 0.2),
+    # Z to its 4.7 k, then between pins 8 and 7 and between the rows to pin 3; Y down to pin 6, its 4.7 k on the pin
+    ('Z', F, [(2.1, 148.9), (1.0, 148.9), (1.0, 151.0), (0.7, 151.225)], 0.2),
+    ('Z', F, [(0.7, 151.225), (-0.2, 151.225), (-0.65, 151.675), (-0.65, 153.9), (-2.15, 155.4), (-2.15, 156.45),
+              (-1.33, 157.27), (2.15, 157.27), (3.4, 158.52)], 0.2),
+    ('Y', F, [(2.1, 149.4), (1.475, 150.025), (1.475, 153.9), (2.975, 155.4), (3.4, 155.6), (3.4, 156.02)], 0.2),
+    ('Y', F, [(3.8, 152.875), (3.8, 154.9), (3.4, 155.3)], 0.2),
+    # 3.3 V: the via above the bypass, the bypass and the 4.7 k, up to pin 10; the back to the PIC's bypass and pin 1
+    ('V', 'via', [(3.025, 150.2)], None),
+    ('V', F, [(3.025, 150.2), (2.25, 150.975), (2.25, 151.275)], 0.25),
+    ('V', F, [(3.025, 150.2), (3.8, 150.975), (3.8, 151.225)], 0.25),
+    ('V', F, [(3.025, 150.2), (3.15, 150.075), (3.15, 147.7), (2.85, 147.4), (2.1, 147.4)], 0.2),
+    ('V', B, [(3.025, 150.2), (1.75, 148.925), (-6.675, 148.925), (-7.0, 148.6), (-7.0, 148.58)], 0.3),   # north of pin 5's ground via
+    ('V', 'via', [(-7.0, 148.58)], None),
+    ('V', F, [(-7.0, 148.58), (-5.975, 148.58)], 0.3),
+    ('V', F, [(-5.975, 148.58), (-5.975, 146.965), (-4.925, 146.965)], 0.3),
+    # ground: the transceiver's pin 2 under its body; its pin 5 and the PIC's bypass; the PIC's pin 8; the
+    # pull-down; the bypass; Z's 4.7 k to the socket's ground pin
+    ('G', 'via', [(-0.8, 147.9)], None),
+    ('G', F, [(-2.1, 147.9), (-0.8, 147.9)], 0.2),
+    ('G', 'via', [(-3.7, 149.95)], None),
+    ('G', F, [(-2.1, 149.4), (-3.0, 149.4), (-3.55, 149.95), (-3.7, 149.95)], 0.2),
+    ('G', F, [(-4.425, 148.58), (-4.425, 149.5), (-3.975, 149.95), (-3.7, 149.95)], 0.2),
+    ('G', 'via', [(-9.875, 148.0)], None),
+    ('G', F, [(-9.875, 146.965), (-9.875, 148.0)], 0.2),
+    ('G', 'via', [(-4.0, 139.925)], None),
+    ('G', F, [(-3.05, 139.925), (-4.0, 139.925)], 0.2),
+    ('G', 'via', [(2.6, 153.95)], None),
+    ('G', F, [(2.25, 152.825), (2.25, 153.6), (2.6, 153.95)], 0.2),
+    ('G', F, [(0.7, 152.875), (0.7, 154.7), (1.3, 155.3), (1.3, 156.02)], 0.2),
 ]
+# where each line from the ESP32 meets the block: J2's have a via here
+PORTS = {'RO': (-1.625, 143.3), 'GPIO_DE': (-2.4, 143.3), 'TX': (0.7, 143.3), 'MCLR': (-4.6, 142.2),
+         'CTS': (-9.1, 141.4), 'UTX': (-8.05, 138.95), 'URX': (-6.45, 138.95)}
 
-HAND = [
-    # ---- J2 ----
-    # 3.3 V: straight down into U10.1 past C68; under PR_HSKO on the back to C3 and U2.10
-    ('/+3V3', F, [(121.237, 144.24), (122.95, 144.24), (122.95, 146.895)], 0.5),
-    ('/+3V3', 'via', [(115.4, 150.1)], None),
-    ('/+3V3', B, [(115.4, 150.1), (113.95, 150.1)], 0.3),
-    ('/+3V3', 'via', [(113.95, 150.1)], None),
-    ('/+3V3', F, [(113.675, 150.8), (113.95, 150.1), (113.25, 149.4), (113.25, 149.2), (112.6, 149.2)], 0.3),
-    ('/GND', 'via', [(111.95, 150.3)], None),                          # C3
-    ('/GND', F, [(111.95, 150.3), (112.125, 150.8)], 0.3),
-    ('/GND', 'via', [(121.15, 144.95)], None),                          # C68
-    ('/GND', F, [(121.15, 144.95), (121.475, 145.275), (122.03, 145.275)], 0.3),
-    ('/PR_TXD_P', F, [(112.75, 153.325), (112.75, 153.925)], 0.2),     # R29, moved
-    # the bus pins: TxD+ and TxD- west and down to the back as before, the receive pair to R30 and R29
-    ('/PR_RXD_P', F, [(112.6, 147.2), (109.9, 147.2), (109.2, 147.9), (109.2, 151.5)], 0.2),
-    ('/PR_RXD_P', 'via', [(109.2, 151.5)], None),
-    ('/PR_RXD_P', B, [(109.2, 151.5), (109.2, 151.75), (109.4, 151.95), (117.6, 151.95), (117.6, 154.82),
-                      (116.4, 156.02)], 0.2),
-    ('/PR_RXD_P', 'via', [(117.6, 153.6)], None),                      # R40
-    ('/PR_RXD_P', F, [(117.6, 153.6), (117.075, 153.075), (117.05, 153.075)], 0.2),
-    ('/PR_RXD_N', F, [(112.6, 147.7), (110.5, 147.7), (110.2, 148.0), (110.2, 151.35)], 0.2),
-    ('/PR_RXD_N', 'via', [(118.45, 152.9)], None),                     # R41
-    ('/PR_RXD_N', B, [(118.45, 152.9), (118.15, 152.9)], 0.2),
-    ('/PR_RXD_N', F, [(118.45, 152.9), (118.925, 152.9)], 0.2),
-    ('/PR_TXD_N_IN', F, [(112.6, 148.2), (111.2, 148.2), (110.875, 148.525), (110.875, 152.335),
-                         (110.375, 152.835), (110.575, 153.25)], 0.2),
-    ('/PR_TXD_P_IN', F, [(112.6, 148.7), (111.6, 148.7), (111.35, 148.95), (111.35, 151.45),
-                         (112.175, 152.275), (112.75, 152.275)], 0.2),
-    # U2 and U10 share DATA and DE across the gap, through the resistors' pads
-    ('/LT2_DATA', F, [(116.8, 147.7), (120.9, 147.7), (121.365, 148.165), (122.225, 148.165)], 0.2),
-    ('/LT2_DE', F, [(116.8, 148.2), (117.9, 148.2), (118.8, 149.1), (120.7, 149.1), (121.035, 149.435),
-                    (122.225, 149.435)], 0.2),
-    # IO18 (UART_RX): down under the module, the back to R37, on to U2's RO
-    ('/UART_RX', F, [(141.81, 131.044), (141.81, 144.6665), (140.75, 145.7265)], 0.2),
-    ('/UART_RX', 'via', [(140.75, 145.7265)], None),
-    ('/UART_RX', B, [(140.75, 145.7265), (140.5735, 145.55), (118.73, 145.55), (118.63, 145.65)], 0.2),
-    ('/UART_RX', 'via', [(118.63, 145.65)], None),
-    ('/UART_RX', F, [(118.63, 145.65), (118.63, 146.05)], 0.2),
-    ('/UART_RX', B, [(118.63, 145.65), (117.2, 147.08), (117.2, 150.3)], 0.2),
-    ('/UART_RX', 'via', [(117.2, 150.3)], None),
-    ('/UART_RX', F, [(117.2, 150.3), (117.2, 149.2), (116.8, 149.2)], 0.2),
-    # IO17 (UART_TX) to R38
-    ('/UART_TX', F, [(143.08, 131.044), (143.08, 144.322), (140.2454, 147.1566)], 0.2),
-    ('/UART_TX', 'via', [(140.2454, 147.1566)], None),
-    ('/UART_TX', B, [(140.2454, 147.1566), (139.0888, 146.0), (120.38, 146.0), (120.18, 146.2)], 0.2),
-    ('/UART_TX', 'via', [(120.18, 146.2)], None),
-    # IO7 (J2_DE): round the module's ground pad, the back to R39
+
+def port(x0, name):
+    return (round(x0 + PORTS[name][0], 4), PORTS[name][1])
+
+
+def block(x0, which):
+    out = []
+    for line, layer, pts, width in BLOCK:
+        out.append((NETS[line][which], layer, [(round(x0 + x, 4), y) for x, y in pts], width))
+    return out
+
+
+P2 = {k: port(J2_X, k) for k in PORTS}
+P4 = {k: port(J4_X, k) for k in PORTS}
+
+LINES = [
+    # ---- J2's lines from the module ----
+    # IO17 (UART_TX), IO18 (UART_RX), IO7 (J2_DE): the front under the module, a via, the back west
+    ('/UART_TX', F, [(143.08, 131.044), (143.08, 144.6)], 0.2),
+    ('/UART_TX', 'via', [(143.08, 144.6)], None),
+    ('/UART_TX', B, [(143.08, 144.6), (142.38, 145.3), (114.4, 145.3), (113.7, 144.6), P2['TX']], 0.2),
+    ('/UART_TX', 'via', [P2['TX']], None),
+    ('/UART_RX', F, [(141.81, 131.044), (141.81, 145.2), (140.95, 146.06)], 0.2),
+    ('/UART_RX', 'via', [(140.95, 146.06)], None),
+    ('/UART_RX', B, [(140.95, 146.06), (140.59, 145.7), (111.975, 145.7), (111.375, 145.1), P2['RO']], 0.2),
+    ('/UART_RX', 'via', [P2['RO']], None),
     ('/J2_DE', F, [(146.89, 131.044), (146.89, 132.9), (144.2, 135.59), (144.2, 145.2), (142.5, 146.9)], 0.2),
     ('/J2_DE', 'via', [(142.5, 146.9)], None),
-    ('/J2_DE', B, [(142.5, 146.9), (141.6, 147.8), (131.9, 147.8), (130.3, 149.4), (122.28, 149.4), (120.18, 151.5)], 0.2),
-    ('/J2_DE', 'via', [(120.18, 151.5)], None),
-    ('/J2_DE', F, [(120.18, 151.5), (120.18, 150.75)], 0.2),
-    # IO42 (LT2_MCLR) to U10.4, IO41 (LT2_CTS) to U10.5: a via each under U10
+    ('/J2_DE', B, [(142.5, 146.9), (141.6, 147.8), (138.5, 147.8), (136.8, 146.1), (111.2, 146.1), (110.6, 145.5),
+                   P2['GPIO_DE']], 0.2),
+    ('/J2_DE', 'via', [P2['GPIO_DE']], None),
+    # IO42 (LT2_MCLR), IO41 (LT2_CTS): the same from the module's south edge
     ('/LT2_MCLR', F, [(148.16, 148.544), (148.16, 147.0), (147.46, 146.3), (144.3, 146.3)], 0.2),
     ('/LT2_MCLR', 'via', [(144.3, 146.3)], None),
-    ('/LT2_MCLR', B, [(144.3, 146.3), (142.4, 148.2), (132.3, 148.2), (130.7, 149.8), (123.95, 149.8), (122.3, 151.45)], 0.2),
-    ('/LT2_MCLR', 'via', [(122.3, 151.45)], None),
-    ('/LT2_MCLR', F, [(122.3, 151.45), (122.3, 150.705)], 0.2),
+    ('/LT2_MCLR', B, [(144.3, 146.3), (142.4, 148.2), (138.33, 148.2), (136.63, 146.5), (109.0, 146.5),
+                      (108.4, 145.9), P2['MCLR']], 0.2),
+    ('/LT2_MCLR', 'via', [P2['MCLR']], None),
     ('/LT2_CTS', F, [(146.89, 148.544), (146.89, 147.5), (146.49, 147.1), (145.3, 147.1)], 0.2),
     ('/LT2_CTS', 'via', [(145.3, 147.1)], None),
-    ('/LT2_CTS', B, [(145.3, 147.1), (144.9, 147.1), (143.2, 148.8), (132.3, 148.8), (130.7, 150.4), (125.45, 150.4)], 0.2),
-    ('/LT2_CTS', 'via', [(125.45, 150.4)], None),
-    ('/LT2_CTS', F, [(125.45, 150.4), (125.755, 150.705), (127.175, 150.705)], 0.2),
-    # ground vias
-    ('/GND', 'via', [(118.95, 151.6)], None),                          # R36
-    ('/GND', F, [(118.95, 151.6), (118.63, 151.28), (118.63, 150.75)], 0.2),
-    ('/GND', 'via', [(121.4, 152.9)], None),                           # R41
-    ('/GND', F, [(121.4, 152.9), (120.575, 152.9)], 0.2),
-    ('/GND', F, [(116.8, 147.2), (117.3, 147.2), (117.611, 146.889), (117.611, 145.401)], 0.2),      # U2.5
-    ('/GND', F, [(116.8, 148.7), (117.6, 148.7), (117.85, 148.95), (117.85, 150.55), (118.05, 150.75),
-                 (118.63, 150.75)], 0.2),                                                           # U2.2
-    # ---- J4 ----
-    # 3.3 V: a via where the socket's pin 1 joined front and back, C16 and U7.1 on it; east and down
-    # beside BTN_TEST into U6.10 past C14, then down U6's east side to R45 and, by the back, R21
-    ('/+3V3', 'via', [(131.71, 133.09)], None),
-    ('/+3V3', F, [(129.805, 133.525), (130.5, 133.525), (130.935, 133.09), (131.71, 133.09)], 0.3),
-    ('/+3V3', F, [(131.71, 133.09), (134.0, 133.09), (134.3, 133.39), (134.3, 146.9), (134.55, 147.4)], 0.3),
-    ('/+3V3', F, [(134.55, 147.4), (135.4, 147.4), (135.6, 147.6), (135.6, 149.9), (136.5, 150.8),
-                  (136.5, 151.225)], 0.2),
-    ('/+3V3', 'via', [(136.0, 150.3)], None),
-    ('/+3V3', B, [(136.0, 150.3), (137.2, 151.5), (139.2, 151.5)], 0.3),
-    ('/GND', 'via', [(133.025, 146.65)], None),                        # C14
-    ('/GND', F, [(133.025, 145.8), (133.025, 146.65)], 0.3),
-    ('/GND', 'via', [(129.45, 146.7)], None),                          # U6.2 and U6.5
-    ('/GND', F, [(129.45, 146.7), (129.35, 146.8), (129.35, 149.4), (130.35, 149.4)], 0.2),
-    ('/GND', F, [(129.35, 147.9), (130.35, 147.9)], 0.2),
-    ('/GND', 'via', [(125.6, 146.9)], None),                           # U10.8
-    ('/GND', F, [(125.6, 146.9), (127.175, 146.895)], 0.2),
-    ('/GND', 'via', [(130.75, 139.6)], None),                          # U7.8
-    ('/GND', F, [(129.805, 138.475), (130.3, 139.15), (130.75, 139.6)], 0.2),
-    ('/GND', 'via', [(131.85, 153.6)], None),                          # R46
-    ('/GND', F, [(131.85, 152.875), (131.85, 153.6)], 0.2),
-    # the bus pins leave under U6: A to R11, B through R11 to R10, Z to R12 and R46, Y to R13 and R45
-    ('/LT_RXD_P', F, [(134.55, 147.9), (132.6, 147.9), (132.6, 149.75), (132.4, 149.95), (130.75, 149.95),
-                      (130.3, 150.4), (130.3, 151.175)], 0.2),
-    ('/LT_RXD_N', F, [(134.55, 148.4), (133.0, 148.4), (133.0, 150.15), (132.8, 150.35), (131.075, 150.35),
-                      (131.075, 151.75), (130.825, 152.0), (128.75, 152.0), (128.75, 152.245)], 0.2),
-    ('/LT_TXD_N', F, [(134.55, 148.9), (133.4, 148.9), (133.4, 151.225), (131.85, 151.225)], 0.2),
-    ('/LT_TXD_P', F, [(134.55, 149.4), (134.95, 149.8), (134.95, 151.225), (135.35, 151.225), (135.725, 151.6),
-                      (135.725, 152.5), (136.1, 152.875), (136.5, 152.875)], 0.2),
-    ('/LT_PORT_RXD_P', F, [(130.3, 152.825), (130.3, 154.0), (129.5, 154.8), (129.1, 155.2), (129.1, 156.02)], 0.2),
-    ('/LT_PORT_RXD_N', F, [(128.75, 153.895), (127.95, 154.695), (127.95, 157.37), (129.1, 158.52)], 0.2),
-    ('/LT_PORT_TXD_N', F, [(133.4, 152.875), (133.4, 153.6), (132.8, 154.2), (131.2, 154.2), (130.35, 155.05),
-                           (130.35, 156.381), (131.162, 157.193), (134.573, 157.193), (135.9, 158.52)], 0.2),
-    ('/LT_PORT_TXD_P', F, [(134.95, 152.875), (134.95, 154.3), (135.9, 155.25), (135.9, 156.02)], 0.2),
-    # U7's reset: LT_RESET along the back under U7 to R27, beside U7.4
-    ('/LT_RESET', B, [(134.12, 134.171), (121.6, 134.171), (121.6, 129.75), (121.75, 129.6)], 0.2),
-    ('/LT_RESET', 'via', [(121.75, 129.6)], None),
-    ('/LT_RESET', F, [(121.75, 129.6), (121.775, 130.6)], 0.2),
-    ('/LT_MCLR', F, [(123.425, 130.6), (123.425, 131.9), (124.9, 133.375), (125.05, 133.525), (125.995, 133.525)], 0.2),
-    ('/GND', 'via', [(123.75, 134.95)], None),      # the front pour round U3.15, which LT_MCLR's run cuts off
-    # U7: ICSPCLK and ICSPDAT down between its north pads and under it to pins 6 and 7; LT_DE and LT_DATA
-    # from pins 3 and 2 under it and out between its south pads; each steps 0.635 mm east on the way
-    ('/LT_ICSPCLK', F, [(125.36, 131.285), (125.36, 131.75), (125.61, 132.0), (126.38, 132.0), (126.63, 132.25),
-                        (126.63, 135.85), (127.265, 136.485), (127.265, 138.475)], 0.2),
-    ('/LT_ICSPDAT', F, [(127.875, 130.8), (127.875, 134.75), (128.535, 135.41), (128.535, 138.475)], 0.2),
-    ('/LT_DE', F, [(125.825, 129.45), (125.825, 131.4), (126.025, 131.6), (127.065, 131.6), (127.265, 131.8),
-                   (127.265, 135.3), (127.9, 135.935), (127.9, 141.68), (128.12, 141.9), (128.6, 142.38),
-                   (128.865, 142.38), (129.185, 142.7), (129.185, 144.0), (131.8, 146.615), (131.8, 148.4),
-                   (130.35, 148.4)], 0.2),
-    ('/LT_DATA', F, [(128.535, 133.525), (129.17, 134.16), (129.17, 139.7), (130.22, 140.75), (130.22, 144.3),
-                     (130.545, 144.625), (131.485, 144.625), (131.485, 145.1), (132.2, 145.815), (132.2, 148.9),
-                     (130.35, 148.9)], 0.2),
-    ('/LT_CTS', B, [(125.768, 142.388), (125.995, 142.161), (125.995, 139.8)], 0.2),
-    ('/LT_CTS', 'via', [(125.995, 139.8)], None),
-    ('/LT_CTS', F, [(125.995, 139.8), (125.995, 138.475)], 0.2),
-    # IO9 (J4_TX): a via beside the pin, the back to a via east of U7, straight down the front to R43
-    ('/J4_TX', F, [(136.75, 135.349), (135.65, 135.35)], 0.2),
-    ('/J4_TX', 'via', [(135.65, 135.35)], None),
-    ('/J4_TX', B, [(135.65, 135.35), (131.485, 135.35)], 0.2),
-    ('/J4_TX', 'via', [(131.485, 135.35)], None),
-    ('/J4_TX', F, [(131.485, 135.35), (131.485, 142.975)], 0.2),
-    # IO10 (J4_RX), IO11 and IO12 (U10's UART): the same, under U7 to three vias west of it
-    ('/J4_RX', F, [(136.75, 136.619), (135.65, 136.62)], 0.2),
-    ('/J4_RX', 'via', [(135.65, 136.62)], None),
-    ('/J4_RX', B, [(135.65, 136.62), (135.37, 136.9), (125.15, 136.9)], 0.2),
-    ('/J4_RX', 'via', [(125.15, 136.9)], None),
-    ('/J4_RX', F, [(125.15, 136.9), (125.15, 140.0), (127.68, 142.53), (127.68, 143.0), (127.98, 143.3),
-                   (128.36, 143.3), (128.36, 144.2), (131.4, 147.24), (131.4, 147.4), (130.35, 147.4)], 0.2),
+    ('/LT2_CTS', B, [(145.3, 147.1), (144.9, 147.1), (143.2, 148.8), (138.36, 148.8), (136.46, 146.9), (104.5, 146.9),
+                     (103.9, 146.3), P2['CTS']], 0.2),
+    ('/LT2_CTS', 'via', [P2['CTS']], None),
+    # IO11 (LT2_UART_TX), IO12 (LT2_UART_RX): a via beside the pin, the back under BTN_TEST and U3
     ('/LT2_UART_TX', F, [(136.75, 137.889), (135.65, 137.89)], 0.2),
     ('/LT2_UART_TX', 'via', [(135.65, 137.89)], None),
-    ('/LT2_UART_TX', B, [(135.65, 137.89), (135.36, 137.6), (124.55, 137.6)], 0.2),
-    ('/LT2_UART_TX', 'via', [(124.55, 137.6)], None),
-    ('/LT2_UART_TX', F, [(124.55, 137.6), (124.55, 140.6), (125.58, 141.63), (125.58, 142.3), (126.485, 143.205),
-                         (126.885, 143.375)], 0.2),
+    ('/LT2_UART_TX', B, [(135.65, 137.89), (135.36, 137.6), (105.35, 137.6), (104.95, 138.0), P2['UTX']], 0.2),
+    ('/LT2_UART_TX', 'via', [P2['UTX']], None),
     ('/LT2_UART_RX', F, [(136.75, 139.159), (135.65, 139.16)], 0.2),
     ('/LT2_UART_RX', 'via', [(135.65, 139.16)], None),
-    ('/LT2_UART_RX', B, [(135.65, 139.16), (134.79, 138.3), (123.95, 138.3)], 0.2),
-    ('/LT2_UART_RX', 'via', [(123.95, 138.3)], None),
-    ('/LT2_UART_RX', F, [(123.95, 138.3), (123.95, 141.0), (125.14, 142.19), (125.14, 143.375), (125.335, 143.375)], 0.2),
-    ('/LT2_ICSPDAT', F, [(125.335, 145.025), (125.335, 145.535), (125.7, 145.9), (128.05, 145.9), (128.45, 146.3),
-                         (128.45, 148.0), (128.285, 148.165), (127.175, 148.165)], 0.2),
-    ('/LT2_ICSPCLK', F, [(126.885, 145.025), (128.5, 145.025), (128.85, 145.375), (128.85, 149.2),
-                         (128.615, 149.435), (127.175, 149.435)], 0.2),
-    # IO3 (J4_DE): north to R44, the one way off its pin; LT_DE comes to it on the back from R22
-    ('/J4_DE', F, [(136.75, 132.809), (136.2, 132.3), (135.8, 131.9), (135.8, 129.425)], 0.2),
-    ('/LT_DE', F, [(135.8, 127.775), (135.575, 127.775), (135.0, 128.35)], 0.2),
-    ('/LT_DE', 'via', [(135.0, 128.35)], None),
-    ('/LT_DE', B, [(135.0, 128.35), (125.2, 128.35), (124.9, 128.65)], 0.2),
-    ('/LT_DE', 'via', [(124.9, 128.65)], None),
-    ('/LT_DE', F, [(124.9, 128.65), (125.3, 129.05), (125.725, 129.05)], 0.2),
+    ('/LT2_UART_RX', B, [(135.65, 139.16), (134.54, 138.05), (107.45, 138.05), P2['URX']], 0.2),
+    ('/LT2_UART_RX', 'via', [P2['URX']], None),
+    # ---- J4's lines from the module ----
+    # IO9 (J4_TX), IO10 (J4_RX): a via beside the pin, the back under BTN_TEST, a via, the front south
+    ('/J4_TX', F, [(136.75, 135.349), (135.65, 135.35)], 0.2),
+    ('/J4_TX', 'via', [(135.65, 135.35)], None),
+    ('/J4_TX', B, [(135.65, 135.35), (133.2, 135.35)], 0.2),
+    ('/J4_TX', 'via', [(133.2, 135.35)], None),
+    ('/J4_TX', F, [(133.2, 135.35), P4['TX']], 0.2),
+    ('/J4_RX', F, [(136.75, 136.619), (135.65, 136.62)], 0.2),
+    ('/J4_RX', 'via', [(135.65, 136.62)], None),
+    ('/J4_RX', B, [(135.65, 136.62), (135.37, 136.9), (131.2, 136.9)], 0.2),
+    ('/J4_RX', 'via', [(131.2, 136.9)], None),
+    ('/J4_RX', F, [(131.2, 136.9), (131.2, 142.5), (130.875, 142.825), P4['RO']], 0.2),
+    # IO3 (J4_DE): north off its pin, the back under BTN_TEST, the front south beside J4_RX
+    ('/J4_DE', F, [(136.75, 132.809), (136.2, 132.3), (135.8, 131.9), (135.8, 129.4)], 0.2),
+    ('/J4_DE', 'via', [(135.8, 129.4)], None),
+    ('/J4_DE', B, [(135.8, 129.4), (134.75, 128.35), (130.4, 128.35)], 0.2),
+    ('/J4_DE', 'via', [(130.4, 128.35)], None),
+    ('/J4_DE', F, [(130.4, 128.35), (130.4, 142.6), (130.1, 142.9), P4['GPIO_DE']], 0.2),
+    # IO2 (LT_RESET): rev A's run along the back, on to a via above U7's pin 4
+    ('/LT_RESET', F, [(151.97, 148.544), (151.97, 147.5423), (152.0301, 147.4822), (152.0301, 145.2155),
+                      (151.0144, 144.1998), (151.0144, 133.874)], 0.2),
+    ('/LT_RESET', 'via', [(151.0144, 133.874)], None),
+    ('/LT_RESET', B, [(151.0144, 133.874), (150.7174, 134.171), (127.9, 134.171)], 0.2),
+    ('/LT_RESET', 'via', [(127.9, 134.171)], None),
+    ('/LT_RESET', F, [(127.9, 134.171), P4['MCLR']], 0.2),
+    # IO6 (LT_CTS): rev A's run along the back, on to its port
+    ('/LT_CTS', F, [(148.16, 131.044), (148.16, 134.8508), (148.6852, 135.376)], 0.2),
+    ('/LT_CTS', 'via', [(148.6852, 135.376)], None),
+    ('/LT_CTS', B, [(148.6852, 135.376), (144.2456, 135.376), (137.2337, 142.3879), (124.3879, 142.3879),
+                    P4['CTS']], 0.2),
+    ('/LT_CTS', 'via', [P4['CTS']], None),
+    # IO4 (LT_UART_TX), IO5 (LT_UART_RX): rev A's runs north of the module and its two vias, then the front south
+    ('/LT_UART_TX', F, [(150.7, 131.044), (150.7, 132.0457), (149.6557, 132.0457), (149.3844, 132.317)], 0.2),
+    ('/LT_UART_TX', 'via', [(149.3844, 132.317)], None),
+    ('/LT_UART_TX', B, [(149.3844, 132.317), (149.7672, 131.9342), (149.7672, 129.1354), (148.3153, 127.6835),
+                        (132.8052, 127.6835), (131.3915, 126.2698), (125.839, 126.2698)], 0.2),
+    ('/LT_UART_TX', 'via', [(125.839, 126.2698)], None),
+    ('/LT_UART_TX', F, [(125.839, 126.2698), (124.45, 127.6588), P4['UTX']], 0.2),
+    ('/LT_UART_RX', F, [(149.43, 131.044), (149.43, 129.5956), (149.2154, 129.381)], 0.2),
+    ('/LT_UART_RX', 'via', [(149.2154, 129.381)], None),
+    ('/LT_UART_RX', B, [(149.2154, 129.381), (146.138, 132.4584), (134.6927, 132.4584), (131.6303, 129.396),
+                        (128.7227, 129.396)], 0.2),
+    ('/LT_UART_RX', 'via', [(128.7227, 129.396)], None),
+    ('/LT_UART_RX', F, [(128.7227, 129.396), (126.05, 132.0687), P4['URX']], 0.2),
+    # ---- 3.3 V ----
+    # a via where the socket's pin 1 joined front and back; east, and down beside BTN_TEST to U6's pin 10
+    ('/+3V3', 'bigvia', [(131.71, 133.09)], None),
+    ('/+3V3', F, [(131.71, 133.09), (133.95, 133.09), (134.25, 133.39), (134.25, 147.4)], 0.3),
+    # J4's block to J2's along the back, and to R21's via
+    ('/+3V3', B, [(125.5, 148.58), (125.18, 148.9), (118.3, 148.9), (117.0, 150.2), (116.025, 150.2)], 0.3),
+    ('/+3V3', B, [(135.525, 150.2), (136.825, 151.5), (139.2, 151.5)], 0.3),
+    # ---- the handshake lines ----
+    # J2's: below U3, down between the blocks, round below the socket's lower row
+    ('/PR_HSKO', F, [(115.1, 141.51), (115.1, 141.9), (115.4, 142.2), (118.2, 142.2), (118.2, 159.3), (117.3, 160.2),
+                     (112.3, 160.2), (111.7, 159.6), (111.7, 158.52)], 0.2),
+    ('/PR_HSKI', F, [(111.475, 139.26), (110.75, 139.985), (110.75, 141.9), (111.45, 142.6), (117.8, 142.6),
+                     (117.8, 158.9), (116.9, 159.8), (114.9, 159.8), (114.3, 159.2), (114.3, 158.52)], 0.2),
+    ('/GND', F, [(111.525, 140.76), (111.525, 141.75)], 0.2),          # C13, which PR_HSKI now cuts off from the pour
+    ('/GND', 'via', [(111.525, 141.75)], None),
+    # J4's: down U3's east side, west of U7, to rev 2026.11's vias and back runs
+    ('/J4_HSKI', F, [(120.05, 136.43), (122.3, 136.43), (122.3, 142.1), (120.95, 142.1), (120.95, 149.6),
+                     (123.75, 152.4), (123.95, 152.4)], 0.2),
+    ('/J4_HSKI', 'via', [(123.95, 152.4)], None),
+    ('/J4_HSKI', B, [(123.95, 152.4), (124.6, 153.05), (128.2, 153.05), (130.35, 155.2), (130.35, 157.67),
+                     (131.2, 158.52)], 0.2),
+    ('/J4_HSKO', F, [(120.05, 135.16), (122.8, 135.16), (122.8, 142.5), (121.35, 142.5), (121.35, 148.05),
+                     (124.55, 151.25), (124.6, 151.25)], 0.2),
+    ('/J4_HSKO', 'via', [(124.6, 151.25)], None),
+    ('/J4_HSKO', B, [(124.6, 151.25), (128.6, 151.25), (132.7, 155.35), (132.7, 157.4), (133.8, 158.5)], 0.2),
+    # R24, turned: HSKI_DRV from its via, ground by a via south of the band on the back
+    ('/HSKI_DRV', F, [(119.75, 142.34), (119.575, 142.9), (119.575, 143.075)], 0.2),
+    ('/GND', F, [(119.575, 144.725), (119.575, 147.6)], 0.2),
+    ('/GND', 'via', [(119.575, 147.6)], None),
 ]
-
-# Nothing is left to the grid search: every run above is drawn. A stub added later goes here, as in r13_route.py.
-CONNECTIONS = []
-
-
-def drop(e):
-    for t in list(e.b.GetTracks()):
-        if t.GetNetname() in DROP_NETS:
-            e.drop(t)
-    for item in DROP:
-        if item[1] == 'via':                # by place alone: KiCad gives a free via the net of a pad put on it
-            hit = [t for t in e.b.GetTracks() if isinstance(t, pcbnew.PCB_VIA)
-                   and near((mm(t.GetPosition().x), mm(t.GetPosition().y)), item[2], 0.01)]
-            if len(hit) != 1:
-                raise SystemExit(f'missing via {item[0]} {item[2]}')
-            e.drop(hit[0])
-        else:
-            e.drop(e.track(item[0], item[1], item[2]))
 
 
 def main():
-    only = sys.argv[sys.argv.index('--only') + 1:] if '--only' in sys.argv else None
     e = Board(BOARD)
     if any(t.GetNetname() == '/LT2_DATA' for t in e.b.GetTracks()):
         print('already drawn')
-    else:
-        drop(e)
-        for net, layer, pts, width in HAND:
-            if layer == 'via':
-                e.add_via(net, pts[0])
-            else:
-                e.draw(net, pts, layer, width)
-        e.save()
-        print(f'{len(DROP)} items removed, {len(HAND)} hand runs drawn')
-    done = []
-    todo = list(CONNECTIONS)
-    for extra in (0.0, 3.0):
-        todo = R.route_all(todo, only, done, extra)
-        if not todo:
-            break
-    board = pcbnew.LoadBoard(BOARD)
-    pcbnew.ZONE_FILLER(board).Fill(board.Zones())
-    board.Save(BOARD)
-    print(f'{len(done)} connections drawn, {len(todo)} not; zones refilled')
+        return
+    runs = block(J2_X, 0) + block(J4_X, 1) + LINES
+    for net, layer, pts, width in runs:
+        if layer == 'via':
+            e.add_via(net, pts[0])
+        elif layer == 'bigvia':
+            e.add_via(net, pts[0], 0.8, 0.4)
+        else:
+            e.draw(net, pts, layer, width)
+    e.save()                                 # refills the zones
+    print(f'{len(runs)} runs drawn: {len(BLOCK)} in each block, {len(LINES)} between them; zones refilled')
 
 
 if __name__ == '__main__':

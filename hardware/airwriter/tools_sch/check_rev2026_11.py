@@ -21,8 +21,7 @@ WANT = {
     '/HSKI_DRV': {'U1.24', 'U3.10', 'R24.1'},            # IO47: J2's HSKo
     '/J4_HSKO_DRV': {'U1.21', 'U3.11'},                  # IO13: J4's HSKo, firmware-held
     '/UART_TX': {'U1.10', 'R38.1'},                      # IO17: J2's data, through R38
-    '/LT_RESET': {'U1.38', 'R27.1'},
-    '/LT_MCLR': {'R27.2', 'U7.4'},
+    '/LT_RESET': {'U1.38', 'U7.4'},                     # IO2 straight to MCLR, as IO42 to U10's
     '/PR_TXD_P': {'J2.8', 'R29.1'},
     '/PR_TXD_P_IN': {'R29.2', 'U2.9'},
     '/PR_TXD_N': {'J2.5', 'R30.1'},
@@ -40,8 +39,8 @@ WANT = {
     '/PR_HSKI': {'J2.1', 'R9.2'},
     '/LT_RXD_N': {'R10.1', 'U6.8'},
     '/LT_RXD_P': {'R11.1', 'U6.9'},
-    '/LT_TXD_N': {'R12.1', 'U6.7', 'R46.1'},
-    '/LT_TXD_P': {'R13.1', 'U6.6', 'R45.2'},
+    '/LT_TXD_N': {'J4.3', 'U6.7', 'R46.1'},             # straight to J4, as J2's pair
+    '/LT_TXD_P': {'J4.6', 'U6.6', 'R45.2'},
     # W-1176, J2's block
     '/UART_RX': {'U1.11', 'U2.1', 'R37.1'},              # IO18: J2's receiver
     '/LT2_DATA': {'U2.4', 'U10.2', 'R37.2', 'R38.2'},
@@ -62,17 +61,19 @@ WANT = {
     '/J4_DE': {'U1.15', 'R44.1'},                         # IO3
     '/LT_PORT_RXD_N': {'R10.2', 'J4.5'},
     '/LT_PORT_RXD_P': {'R11.2', 'J4.8'},
-    '/LT_PORT_TXD_N': {'R12.2', 'J4.3'},
-    '/LT_PORT_TXD_P': {'R13.2', 'J4.6'},
 }
 ON_RAIL = {'/+3V3': {'R21.1', 'U2.10', 'U6.10', 'U10.1', 'C68.1', 'R40.1', 'R45.1'},
            '/GND': {'R22.2', 'R23.2', 'R24.2', 'R32.2', 'R33.2', 'R36.2', 'R41.2', 'R46.2',
-                    'U2.2', 'U2.5', 'U6.2', 'U6.5', 'U10.8', 'C68.2'}}   # U2.2, U6.2: ~RE, receivers always on
+                    'U2.2', 'U2.5', 'U6.2', 'U6.5', 'U10.8', 'C68.2',     # U2.2, U6.2: ~RE, receivers always on
+                    'J2.9', 'J4.9'}}                                     # both shells straight to ground
 OFF_RAIL = {'/GND': {'U3.8', 'U3.10'}}
 GONE_REFS = {'C7', 'R5', 'R6', 'R7', 'R26', 'R28', 'R31', 'S1',  # R26: IO3 boxed in; S1, R28: no DIPs; R31: see the design
-             'U8', 'R14', 'R25', 'C18'}                          # W-1176: one THVD1452 per socket
+             'U8', 'R14', 'R25', 'C18',                          # W-1176: one THVD1452 per socket
+             'R12', 'R13', 'R27',                                # W-1176: J4's block matches J2's
+             'R8', 'C15'}                                        # W-1176: J2's shell tied as J4's
 FREE = {'U1.28', 'U1.29', 'U1.30'}     # IO35-37: an octal-PSRAM module's own
-GONE_NETS = {*(f'/DIP{n}' for n in range(1, 9)), '/DIP3_GPIO', '/LT_A', '/LT_B', '/LT_Y', '/LT_Z', '/LT_PORT_A', '/LT_PORT_B', '/LT_PORT_Y', '/LT_PORT_Z'}
+GONE_NETS = {*(f'/DIP{n}' for n in range(1, 9)), '/DIP3_GPIO', '/LT_A', '/LT_B', '/LT_Y', '/LT_Z', '/LT_PORT_A', '/LT_PORT_B', '/LT_PORT_Y', '/LT_PORT_Z',
+             '/LT_MCLR', '/LT_PORT_TXD_N', '/LT_PORT_TXD_P', '/SHELL'}
 PARTS = {  # ref: (value, LCSC)
     'U1': ('ESP32-S3-WROOM-1-N16R8', 'C2913202'),       # its octal PSRAM takes IO35-IO37 (FREE)
     'U2': ('THVD1452DGSR', 'C2879202'), 'U6': ('THVD1452DGSR', 'C2879202'),   # DE and ~RE, +-15 V inputs, +-30 kV
@@ -85,7 +86,7 @@ PARTS = {  # ref: (value, LCSC)
     **{f'R{n}': ('100R', 'C22775') for n in (34, 35)},
     'U3': ('SP3232EBEN-L/TR', 'C6852'), 'U9': ('SN74LV1T125DCKR', 'C75925'),
     'R17': ('150R', 'C22808'), 'SW3': ('TS-1002-BR15026', 'C920209'), 'D3': (None, 'C20613324'),
-    'R9': ('0R', 'C21189'), 'R27': ('1k', 'C21190'), 'SW1': ('TSB001A3518A', 'C2888448'),
+    'R9': ('0R', 'C21189'), 'SW1': ('TSB001A3518A', 'C2888448'),
     'R29': ('15k', 'C22809'), 'R30': ('15k', 'C22809'),
     **{f'R{n}': ('10k', 'C25804') for n in (21, 22, 23, 24, 32, 33, 36)},
 }

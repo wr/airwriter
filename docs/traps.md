@@ -379,7 +379,7 @@ Traps already explained in a code comment are listed only when the comment is ea
 - **`LT_DE` floats whenever the PIC is not driving it** (no PIC, or PIC held in reset, which
   tristates it). Tack 10 k across U6 pins 3–5 before connecting a LocalTalk network.
 - **Never high-voltage program a PIC on the board.** VPP (~9 V) lands on ESP32 IO2
-  (`LT_RESET`, through R27 on rev 2026.11) or, for rev 2026.11's U10, straight on IO42. The
+  (`LT_RESET`; through rev A's 1 k, straight on rev 2026.11) or, for rev 2026.11's U10, on IO42. The
   ESP32 flashes them over LVP and keeps CONFIG2.LVP set so they stay reprogrammable without
   high voltage (`pic_prog.h`).
 - **TashTalk never says whether a frame went out.** It does the RTS/CTS handshake itself and
@@ -724,6 +724,10 @@ Traps already explained in a code comment are listed only when the comment is ea
   green. The GND zones' seam edge sits at y 60.5 for this.
 - **Fabs clip silk over exposed copper; neither DRC nor renders show it.** The `test` tag is a
   mask knockout for that reason.
+- **The main board's silk reads with the sockets at the top, like the art.** A label placed in
+  the board's frame at 0° prints upside down through the LC's lid; use 180° (270° running up
+  the board), on the back too. `r13_check.py` fails any other angle. Keep KeepUpright off, or
+  KiCad turns it back.
 - **`kicad-cli pcb render` tints bare FR4 by the mask colour**, so glowing FR4 dots look black
   in renders.
 - **The BOM must group by the DNP flag** or a DNP row swallows fitted parts (R8 was once left off).

@@ -10,7 +10,8 @@ konnect writes the whole schematic back in an order of its own, and KiCad keeps
 whatever order it reads, so an edit of a few parts shows as a rewrite of the file.
 This keeps OLD's text for every item NEW leaves unchanged (matched by uuid, a lib
 symbol by name; compared ignoring the fields KiCad writes out as defaults, pin
-uuids and the order of an item's own fields), takes NEW's text for one it changed,
+uuids, the project name in a symbol's instances, which konnect may write blank,
+and the order of an item's own fields), takes NEW's text for one it changed,
 drops one it deleted, and adds one it added after OLD's last item of the same
 kind. The diff is then the change. Check that out.kicad_sch exports the same
 netlist as NEW before copying it over the schematic (W-1176 did).
@@ -58,6 +59,8 @@ def relaxed(text):
         if isinstance(x, list):
             if x and str(x[0]) in DEFAULTS:
                 return None
+            if x and str(x[0]) == 'project':          # konnect can blank an instance's project name
+                x = [x[0], ''] + x[2:]
             kids = [w for w in (walk(i) for i in x[1:]) if w is not None]
             return (walk(x[0]),) + tuple(sorted(kids, key=repr))
         s = str(x)
