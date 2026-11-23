@@ -98,7 +98,10 @@ def main():
                             and mm(d.GetBoundingBox().GetTop()) >= up[1] - 0.01
                             and mm(d.GetBoundingBox().GetRight()) <= up[2] + 0.01
                             and mm(d.GetBoundingBox().GetBottom()) <= up[3] + 0.01)
-        if moved_already != 2:
+        # None at all is right once r15_silk.py has moved the mark to the back's nameplate.
+        nameplate = any(d.GetLayer() == pcbnew.B_SilkS and d.GetClass() == 'PCB_SHAPE'
+                        for d in e.b.GetDrawings())
+        if moved_already != 2 and not (moved_already == 0 and nameplate):
             raise SystemExit(f'the WW mark is in neither place ({moved_already} pieces up)')
     elif moved != 2:
         raise SystemExit(f'{moved} pieces of the WW mark found, not 2')

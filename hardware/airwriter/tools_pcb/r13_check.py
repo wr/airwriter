@@ -10,7 +10,11 @@
 - No front silk text runs off the board.
 - D3 has a cathode mark outside its spacer: the square pad is hidden once the
   spacer is on, and PCBWay fits D3 by hand.
-- SW1 has its RESET label beside it, and the top carries the OSHW logo and the WW mark.
+- SW1 has its RESET label beside it.
+- Every label on both sides reads with the sockets at the top (r15_silk.py): the
+  board's own frame turned half a turn, so a label's angle is 180, or 270 if it
+  runs up the board. The top carries the OSHW logo, the back the Wells Workshop
+  nameplate.
 Writes nothing.
 """
 import math
@@ -70,10 +74,22 @@ def main():
                and math.dist((mm(t.GetPosition().x), mm(t.GetPosition().y)), (mm(sw1.x), mm(sw1.y))) < 4.0
                for t in texts):
         bad.append('no RESET label beside SW1')
-    if not b.FindFootprintByReference('LOGO1') or not any(
-            d.GetClass() == 'PCB_SHAPE' and d.GetLayer() == pcbnew.F_SilkS for d in b.GetDrawings()):
-        bad.append('the OSHW logo or the WW mark is missing from the top')
-    print('\n'.join(bad) if bad else 'ok: pads clear of the edge, silk on the board, D3 and SW1 marked, logos on top')
+    fields = [f for fp in b.GetFootprints() for f in fp.GetFields()
+              if f.GetName() not in ('Reference', 'Value')]      # those two are in texts
+    for t in texts + fields:
+        if t.GetLayer() in (pcbnew.F_SilkS, pcbnew.B_SilkS) and t.IsVisible() and t.GetText() \
+                and round(t.GetDrawRotation().AsDegrees()) % 360 not in (180, 270):
+            bad.append(f'"{t.GetShownText(False)}" reads with the sockets at the bottom '
+                       f'({t.GetDrawRotation().AsDegrees():.0f} degrees)')
+    logo = b.FindFootprintByReference('LOGO1')
+    if not logo or logo.IsFlipped():
+        bad.append('the OSHW logo is missing from the top')
+    back = [d for d in b.GetDrawings() if d.GetLayer() == pcbnew.B_SilkS and d.GetClass() == 'PCB_SHAPE']
+    if not any(d.GetShape() == pcbnew.SHAPE_T_RECT for d in back) \
+            or sum(d.GetShape() == pcbnew.SHAPE_T_POLY for d in back) < 3:
+        bad.append('the Wells Workshop nameplate is missing from the back')
+    print('\n'.join(bad) if bad else 'ok: pads clear of the edge, silk on the board, D3 and SW1 marked, '
+          'labels turned, the logo on top and the nameplate on the back')
     sys.exit(1 if bad else 0)
 
 

@@ -24,9 +24,10 @@ scripts, so every change can be read and re-run:
    `tools_pcb/r15_clean.py` (the copper of both sockets' parts, their handshakes and the
    nets the schematic dropped; it stops if a piece it expects is missing), `r15_place.py`
    (one table of positions from the socket's centre line, set at J2 and again at J4, plus
-   R24 and the marks) and `r15_route.py` (one socket's copper drawn at each socket, then
-   the runs between; a second run reports it is already drawn). `r15_route.py`'s docstring
-   has the commands.
+   R24 and the marks), `r15_route.py` (one socket's copper drawn at each socket, then
+   the runs between; a second run reports it is already drawn) and `r15_silk.py` (every
+   label turned half a turn, the WW mark off the front, the nameplate on the back; a second
+   run stops). `r15_route.py`'s docstring has the commands.
 
 D3's and SW1's footprints are `r13_mkfp_d3.py` and `r13_mkfp_sw1.py`, their 3D models
 `lib/make_led_spacer_model.py` and `lib/make_sw1_model.py`.
@@ -141,10 +142,19 @@ clear the flag); `make_fab.sh` leaves solder jumpers off both orders' BOMs.
 Rev A's parts round the sockets (U2, U6, U7, C3, C14, C16, R10, R11, R15, R16) are in
 W-1176's two blocks now (below).
 
-The maker's marks are on the top silk where S1 was, in the west column above J2's parts,
-where the LC's clear lid shows them: the WW mark (the Macintosh Mini board's two chevrons,
-7 mm wide, y 124.2 to 129.7) above KiCad's OSHW logo (7.5 × 8 mm, LOGO1, a board-only
-footprint, at (105.30, 134.20)).
+The silk reads with the sockets at the top, as AirWriter stands: from the front, and from
+the back once the board is turned over left to right. Every label is turned half a turn
+about its own centre from where the board's frame would put it (`r15_silk.py`), so a label's
+angle is 180°, or 270° if it runs up the board.
+
+KiCad's OSHW logo (7.5 × 8 mm, LOGO1, a board-only footprint, at (105.30, 134.20)) is on the
+top silk where S1 was, in the west column above J2's parts, where the LC's clear lid shows
+it. The Wells Workshop nameplate is on the back at the north edge, centred on the board,
+30.6 × 10.7 mm, y 62.05 to 72.75: the mark 5 mm tall, and beside it the name in its own
+lettering (2 mm, to its descender) over "AirWriter rev 2026.11" (1.1 mm), the repository and
+the licence (0.9 mm), left-aligned, in a 0.2 mm frame with 0.35 mm corners. It is the one
+stretch that wide with no via in it: a via under the art would print as a dot. The art is
+`hardware/airwriter/art/wells-workshop.svg`.
 
 Gone: S1, the eight DIP switches, and with them rev A's eight runs from the west edge to the
 module. SW1 is now the BZCN TSB001A3518A side-press switch (the Macintosh Mini's), at
@@ -303,7 +313,8 @@ fit: its pins are in other corners and it is 1.95 mm tall.
 - `r7_verify.py`: rev A's known FAIL lines, plus TP9 under U1; the same lines as before
   W-1176.
 - `r13_check.py`: every pad of a part inside the board 0.30 mm or more from the edge, no
-  front silk off the board, D3's K and SW1's RESET in place.
+  front silk off the board, D3's K and SW1's RESET in place, every label reading with the
+  sockets at the top, the OSHW logo on top and the nameplate on the back.
 - `enclosure/build.sh`: all tests pass; the tray has no DIP slot (a board without S1 gets
   none), and the reset pinhole aims at the new button, 1.90 mm up. The lattice's clearances
   follow the new parts.
