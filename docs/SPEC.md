@@ -802,7 +802,8 @@ session in internal RAM left Wi-Fi and lwIP starving.
 one; W-1186 adds `ports`, a row for each port doing LocalTalk, lowest first, with `port`,
 `chip` (`lt_chip`'s words), `phase` (`online`, `acquiring`, `listening`, or `off` for a node
 quiet or not running), `node`, `on`, `laser` and that network's `macs`; rev A has one row and
-the LC none; the page's one LocalTalk switch is every port's), `GET /api/et` (both EtherTalk links, the shared
+the LC none; the page's one LocalTalk switch is every port's, and with two rows the LocalTalk
+card draws one per port: its lamp and Port N, then its chip's trouble, Joining, or its Macs), `GET /api/et` (both EtherTalk links, the shared
 printer, internal RAM), `GET`/`POST /api/et/settings`
 (`{"radio":true,"tunnel":true,"infinite":true,"zone":"…"}`; 400 for a zone name outside the rule
 above).

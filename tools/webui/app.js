@@ -1202,6 +1202,17 @@ function flashErr(r){
   for(const k in FLASH_ERR) if(e.startsWith(k)) return FLASH_ERR[k];
   return 'Couldn’t flash TashTalk.';
 }
+/* W-1186: one port's row on the LocalTalk card when both ports do LocalTalk: the port, then
+   its chip's trouble, joining, or its Macs. */
+function ltRow(r){
+  const chip=r.phase==='off'&&CHIP[r.chip];
+  if(chip) return stLine(chip[0],'Port '+r.port)+'<span class=count>'
+    +(flashing&&r.port===flashPort?'Flashing TashTalk…':chip[1])+'</span>';
+  if(r.phase==='acquiring') return stLine('a','Port '+r.port)+'<span class=count>Joining the AppleTalk network…</span>';
+  return stLine('g','Port '+r.port)+macList(r.macs||[],m=>'Node '+m.node);
+}
+/* The port whose chip the card's Flash TashTalk key is for: 0 for the board's choice. */
+let flashPort=0;
 function atDraw(){
   let macs=0, on=0;
   // the cable
@@ -1213,11 +1224,19 @@ function atDraw(){
     sw.checked=live; sw.disabled=!S.pic;
     sw.closest('.sw').classList.toggle('hide',!!chip);
     c.classList.toggle('off',!live&&!chip);
-    $('lt-flash').classList.toggle('hide',!flashing&&!(chip&&S.lt_chip==='no_tashtalk'));
+    // W-1186: with both ports on LocalTalk, a row whose chip needs TashTalk gets the key
+    const need=live&&twoPorts()&&(LT.ports||[]).length>1&&LT.ports.find(r=>r.phase==='off'&&r.chip==='no_tashtalk');
+    flashPort=need?need.port:0;
+    $('lt-flash').classList.toggle('hide',!flashing&&!(chip&&S.lt_chip==='no_tashtalk')&&!need);
     if(chip) put(c,flashing?stLine('a','Flashing TashTalk…'):stHTML(chip[0],chip[1]));
     else if(live&&twoPorts()&&!LT.port){
       // W-1179: no port has LocalTalk on it yet; a Mac plugged into either is heard when it talks
       on++; put(c,macList([],m=>''));
+    }
+    else if(live&&twoPorts()&&(LT.ports||[]).length>1){
+      // W-1186: LocalTalk on both ports, two networks: a row for each, with its own Macs
+      on++;
+      put(c,LT.ports.map(r=>{ macs+=(r.macs||[]).length; return ltRow(r); }).join('<hr class=sep>'));
     }
     else if(live){
       on++; macs+=(LT.macs||[]).length;
@@ -1291,7 +1310,7 @@ function lwStatus(t){
 $('lt-flash').onclick=async()=>{
   const b=$('lt-flash'); if(b.disabled) return; b.disabled=true;
   flashing=true; say('at-say',''); atDraw();
-  const r=await postJSON('/api/localtalk/flash');
+  const r=await postJSON('/api/localtalk/flash',flashPort?{port:flashPort}:undefined);
   flashing=false; b.disabled=false;
   if(r.error||!r.ok) say('at-say',r.error||flashErr(r),1);
   else {
