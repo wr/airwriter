@@ -27,7 +27,8 @@ scripts, so every change can be read and re-run:
    R24 and the marks), `r15_route.py` (one socket's copper drawn at each socket, then
    the runs between; a second run reports it is already drawn) and `r15_silk.py` (every
    label turned half a turn, the WW mark off the front, the nameplate on the back; a second
-   run stops). `r15_route.py`'s docstring has the commands.
+   run stops) and `r15_names.py` (the sockets named Port 1 and Port 2, below).
+   `r15_route.py`'s docstring has the commands.
 
 D3's and SW1's footprints are `r13_mkfp_d3.py` and `r13_mkfp_sw1.py`, their 3D models
 `lib/make_led_spacer_model.py` and `lib/make_sw1_model.py`.
@@ -66,7 +67,9 @@ build turns on at the cost of 1/16 of the PSRAM (7.5 MB usable).
 ## Either socket, either job (W-1176)
 
 J2 and J4 have the same circuit, laid out the same way over each socket, but for the shell
-(the last row), so each runs a serial printer or LocalTalk. Per socket:
+(the last row), so each runs a serial printer or LocalTalk. Neither is named for a job: J2 is
+Port 1 and J4 Port 2, in the schematic's values (Mini-DIN-8 Port 1 and Port 2) and on the
+back's silk under each socket (PORT 1, PORT 2). Per socket:
 
 | | J2 | J4 |
 |---|---|---|

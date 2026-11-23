@@ -14047,7 +14047,7 @@
 				)
 			)
 		)
-		(property "Value" "Mini-DIN-8 to printer"
+		(property "Value" "Mini-DIN-8 Port 1"
 			(at 439.42 114.3 0)
 			(effects
 				(font
@@ -14372,7 +14372,7 @@
 				)
 			)
 		)
-		(property "Value" "Mini-DIN-8 LocalTalk"
+		(property "Value" "Mini-DIN-8 Port 2"
 			(at 439.42 233.68 0)
 			(effects
 				(font

@@ -6213,7 +6213,7 @@
 				)
 			)
 		)
-		(property "Value" "Mini-DIN-8 LocalTalk"
+		(property "Value" "Mini-DIN-8 Port 2"
 			(at 0 0 0)
 			(layer "F.Fab")
 			(uuid "c0fce93c-c35d-4829-87c9-8b7e03878d25")
@@ -13999,7 +13999,7 @@
 				)
 			)
 		)
-		(property "Value" "Mini-DIN-8 to printer"
+		(property "Value" "Mini-DIN-8 Port 1"
 			(at 0 15 180)
 			(layer "F.Fab")
 			(uuid "04215110-6df9-493a-b001-fe68f52ccd9f")
@@ -35708,8 +35708,8 @@
 		(uuid "51dccd45-46c0-4499-a6a1-06f956c85d09")
 	)
 	(gr_rect
-		(start 115.700239 72.75)
-		(end 146.299761 62.05)
+		(start 115.700239 62.05)
+		(end 146.299761 72.75)
 		(radius 0.35)
 		(stroke
 			(width 0.2)
@@ -35860,7 +35860,7 @@
 			(justify mirror)
 		)
 	)
-	(gr_text "SERIAL"
+	(gr_text "PORT 1"
 		(at 113 153.8 180)
 		(layer "B.SilkS")
 		(uuid "3d500258-ca66-46d0-bc89-acd4e2a754ad")
@@ -35872,7 +35872,7 @@
 			(justify mirror)
 		)
 	)
-	(gr_text "LOCALTALK"
+	(gr_text "PORT 2"
 		(at 132.5 153.8 180)
 		(layer "B.SilkS")
 		(uuid "4689def6-4b5b-40dd-acb9-f0fc518cb4dc")

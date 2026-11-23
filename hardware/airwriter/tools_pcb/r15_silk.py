@@ -5,8 +5,8 @@ Wells Workshop nameplate on the back.
 
     <KiCad python> tools_pcb/r15_silk.py
 
-Run last, after r15_route.py, with KiCad closed. A second run finds the nameplate
-and stops.
+Run after r15_route.py and before r15_names.py, with KiCad closed. A second run
+finds the nameplate and stops.
 
 AirWriter stands with its sockets at the back, so seen from above, and through the
 LC's clear lid, the board is its own frame turned half a turn. Every label on both
