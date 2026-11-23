@@ -36,6 +36,9 @@ void led_grid_action(lg_act_t act, uint16_t arg);
 // One raised while the panel is booting waits for the boot wave to end, then plays
 // whole. Safe from any task.
 void led_grid_blip(lg_blip_t b);
+// W-1186: the same, out of a socket: LG_AT_J2 for a Mac heard on port 1's cable (rev 2026.11);
+// led_grid_blip is LG_AT_J4, rev A's AppleTalk port and port 2.
+void led_grid_blip_at(lg_blip_t b, int at);
 
 // Whose job the next Printing is: set it before posting PS_EV_JOB_START.
 void led_grid_set_source(lg_src_t s);

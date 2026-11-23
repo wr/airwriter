@@ -39,7 +39,8 @@ typedef struct {
     // the cable's node and sets EtherTalk roles from it.
     void (*links)(int cable, int tunnel, int radio);
     // A printer heard (once): its link (at_link_t), NBP name and type, Pascal.
-    void (*found)(int link, const uint8_t *name, const uint8_t *type);
+    // W-1186: twin: the same name still answers on the other cable (lwc_want_t.tell_twin).
+    void (*found)(int link, const uint8_t *name, const uint8_t *type, int twin);
     // The query job for target `id` ended: answered (info, and where: at)
     // or not (both NULL).
     void (*queried)(int id, int ok, const lw_info_t *info, const laser_at_t *at);
@@ -59,6 +60,7 @@ enum { LASER_KIND_LW = 1, LASER_KIND_IW = 2 };
 typedef struct {
     uint8_t   id, kind;
     int8_t    where;              // at_link_t it is reached on, the list's
+    uint8_t   any_cable;          // W-1186: on a cable, which one not known yet
     int8_t    slot;               // its AirPrint printer (1 to IPP_PRINTERS-1), or -1 not shared
     uint8_t   name[33];           // NBP, Pascal, MacRoman
     char      dither[12];

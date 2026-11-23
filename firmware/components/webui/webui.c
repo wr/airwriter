@@ -180,7 +180,7 @@ static esp_err_t log_get(httpd_req_t *req)
 static esp_err_t lt_get(httpd_req_t *req)
 {
     if (!s_cfg.lt_json) return httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "no localtalk log");
-    enum { LT_JSON = 4608 };
+    enum { LT_JSON = 8192 };                 // W-1186: /api/lt, and a row for each LocalTalk port
     static char *buf;
     char *json = psram_buf(&buf, LT_JSON);
     if (!json) return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "no memory");

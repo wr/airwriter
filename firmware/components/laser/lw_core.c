@@ -40,14 +40,18 @@ void lwc_look_now(lwc_t *c, uint64_t now)
 static int link_rank(uint8_t link)
 {
     switch (link) {
-    case LW_LINK_CABLE:  return 0;
+    case LW_LINK_CABLE:
+    case LW_LINK_CABLE_P1: return 0;
     case LW_LINK_RADIO:  return 1;
     case LW_LINK_TUNNEL: return 2;
     default:             return 3;
     }
 }
 
-// The heard[] entry target ti rides, or -1 when it has not been heard.
+static int is_cable(uint8_t link) { return link == LW_LINK_CABLE || link == LW_LINK_CABLE_P1; }
+
+// The heard[] entry target ti rides, or -1 when it has not been heard. W-1186: never the other
+// cable's printer of its name.
 static int heard_of(const lwc_t *c, int ti)
 {
     const lwc_target_t *t = &c->t[ti];
@@ -55,6 +59,9 @@ static int heard_of(const lwc_t *c, int ti)
     for (int i = 0; i < LW_HEARD_MAX; i++) {
         const lw_heard_t *h = &c->heard[i];
         if (!h->used || h->aw || h->kind != t->kind || !same_name(h->name, t->name)) continue;
+        if (t->cable != LWC_ANY && is_cable(h->link) &&
+            h->link != (t->cable == LWC_ON_CABLE_P1 ? LW_LINK_CABLE_P1 : LW_LINK_CABLE))
+            continue;
         if (best < 0 || link_rank(h->link) < link_rank(c->heard[best].link)) best = i;
     }
     return best;
@@ -90,10 +97,18 @@ void lwc_targets(lwc_t *c, const lwc_target_in_t *in, int n, uint64_t now)
             *t = old[j];
             kept = 1;
         }
+        // W-1186: its cable is in another port: it starts again there. One that only learns
+        // which cable it is on (a record from before, heard for the first time since) is the
+        // printer it was, and stays online.
+        if (kept && t->cable != in[k].cable) {
+            if (t->cable != LWC_ANY) reset_target(t);
+            t->cable = in[k].cable;
+        }
         if (kept) continue;
         t->used = 1;
         t->id = in[k].id;
         t->kind = in[k].kind;
+        t->cable = in[k].cable;
         memcpy(t->name, in[k].name, 1 + (size_t)(in[k].name[0] <= NBP_NAME_MAX ? in[k].name[0]
                                                                                : NBP_NAME_MAX));
         if (t->name[0] > NBP_NAME_MAX) t->name[0] = NBP_NAME_MAX;
@@ -239,7 +254,7 @@ void lwc_job(lwc_t *c, int ti, int printing)
 
 lwc_want_t lwc_tick(lwc_t *c, uint64_t now)
 {
-    lwc_want_t w = { 0, LWC_NONE, LWC_NONE, LWC_NONE };
+    lwc_want_t w = { 0, LWC_NONE, LWC_NONE, LWC_NONE, 0 };
     for (int i = 0; i < LW_HEARD_MAX; i++)
         if (c->heard[i].used && since(now, c->heard[i].heard) >= LW_FORGET_MS) c->heard[i].used = 0;
     for (int i = 0; i < LWC_AW_MAX; i++)
@@ -262,6 +277,12 @@ lwc_want_t lwc_tick(lwc_t *c, uint64_t now)
         if (!h->used || h->told || h->aw || since(now, h->first) < LW_TELL_MS) continue;
         h->told = 1;
         w.tell = (uint8_t)i;
+        for (int j = 0; j < LW_HEARD_MAX && is_cable(h->link); j++) {
+            const lw_heard_t *o = &c->heard[j];
+            if (o->used && !o->aw && o->kind == h->kind && is_cable(o->link) && o->link != h->link &&
+                same_name(o->name, h->name) && since(now, o->heard) < LW_TWIN_MS)
+                w.tell_twin = 1;
+        }
         break;
     }
 

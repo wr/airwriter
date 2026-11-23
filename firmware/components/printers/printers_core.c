@@ -736,20 +736,45 @@ int pr_port_sw_found(pr_list_t *l, int s, int id, pr_model_t m)
 int pr_at_seen(pr_list_t *l, pr_where_t link, const uint8_t *nbp_name, const uint8_t *nbp_type,
                int from_airwriter)
 {
+    return pr_at_seen_on(l, link, 0, nbp_name, nbp_type, from_airwriter, 0);
+}
+
+int pr_at_seen_on(pr_list_t *l, pr_where_t link, int cable_port, const uint8_t *nbp_name,
+                  const uint8_t *nbp_type, int from_airwriter, int twin)
+{
     if (from_airwriter || link == PR_WHERE_PORT || !nbp_name || !nbp_type || !nbp_name[0])
         return -1;
     int kind = pstr_is(nbp_type, "LaserWriter") ? PR_KIND_LASERWRITER
              : pstr_is(nbp_type, "ImageWriter") ? PR_KIND_AT_IMAGEWRITER : -1;
     if (kind < 0) return -1;
+    uint8_t port = link == PR_WHERE_CABLE && cable_port >= 1 && cable_port <= PR_PORTS
+                 ? (uint8_t)cable_port : 0;
+    pr_rec_t *moved = NULL;
     for (int i = 0; i < l->n; i++) {
         pr_rec_t *r = &l->r[i];
         if (r->where == PR_WHERE_PORT || r->kind != kind || !pstr_eq(r->nbp, nbp_name)) continue;
-        if (link < r->where) r->where = (uint8_t)link;      // the cable, then the network ...
+        // W-1186: the same name on the other cable: another printer if that one still answers,
+        // else this one, its cable now in the other port.
+        if (port && r->where == PR_WHERE_CABLE && r->port && r->port != port) {
+            if (!twin && !moved) moved = r;
+            continue;
+        }
+        if (link < r->where) {                              // the cable, then the network ...
+            r->where = (uint8_t)link;
+            r->port = port;
+        } else if (port && r->where == PR_WHERE_CABLE && !r->port) {
+            r->port = port;                                 // not known until now
+        }
         return r->id;
+    }
+    if (moved) {
+        moved->port = port;
+        return moved->id;
     }
     pr_rec_t *r = rec_new(l);
     if (!r) return -1;
     r->where = (uint8_t)link;
+    r->port = port;
     r->kind = (uint8_t)kind;
     r->found_auto = 1;
     memcpy(r->nbp, nbp_name, 1 + (size_t)(nbp_name[0] > 32 ? 32 : nbp_name[0]));
@@ -757,6 +782,17 @@ int pr_at_seen(pr_list_t *l, pr_where_t link, const uint8_t *nbp_name, const uin
     memcpy(r->nbp_type, nbp_type, 1 + (size_t)(nbp_type[0] > 32 ? 32 : nbp_type[0]));
     r->nbp_type[0] = nbp_type[0] > 32 ? 32 : nbp_type[0];
     lw_uuid(r->uuid, l->mac, l->epoch, r->nbp);
+    // W-1186: the UUID is made from the name, and the other cable's printer may have the same
+    // one: a second printer's is made from its name and one byte more.
+    for (uint8_t salt = 1; salt < 8; salt++) {
+        int taken = 0;
+        for (int i = 0; i < l->n; i++) taken |= &l->r[i] != r && !strcmp(l->r[i].uuid, r->uuid);
+        if (!taken) break;
+        uint8_t alt[sizeof r->nbp + 1];
+        memcpy(alt, r->nbp, sizeof r->nbp);
+        alt[++alt[0]] = salt;
+        lw_uuid(r->uuid, l->mac, l->epoch, alt);
+    }
     char n[PR_NAME_MAX];
     own_name(r, n, sizeof n);
     set_name(l, r, n);
@@ -818,6 +854,8 @@ static int renamed_from(const pr_list_t *l, const pr_rec_t *b, pr_where_t where,
     for (int i = 0; i < l->n; i++) {
         const pr_rec_t *c = &l->r[i];
         const pr_seen_t *s = pr_seen_of(l, c->id);
+        // W-1186: an address on one cable is not that address on the other.
+        if (where == PR_WHERE_CABLE && c->port && b->port && c->port != b->port) continue;
         if (c->id == b->id || c->kind != PR_KIND_LASERWRITER || !c->identified || !s ||
             s->where != where || s->net != net || s->node != node || s->pages < 0 ||
             pages < s->pages || strcmp(c->lw.product, info->product) || live[i].present ||
@@ -843,6 +881,7 @@ int pr_at_answered(pr_list_t *l, int id, pr_where_t where, uint16_t net, uint8_t
         memcpy(c->nbp, b->nbp, sizeof c->nbp);
         memcpy(c->nbp_type, b->nbp_type, sizeof c->nbp_type);
         if (b->where < c->where) c->where = b->where;
+        if (c->where == PR_WHERE_CABLE && b->where == PR_WHERE_CABLE && b->port) c->port = b->port;
         pr_remove(l, id);                            // c moves down if it was after b
         c = pr_get(l, cid);
         if (own) {
@@ -1048,22 +1087,95 @@ static const pr_rec_t *port_offer(const pr_list_t *l)
     return NULL;
 }
 
-// Whether vintage Macs on `link` (any link: -1) are offered `r`: the port's one ImageWriter
-// (`own`, port_offer's), or an identified AppleTalk printer not on its own link, where it
-// speaks for itself.
-static int offered(const pr_rec_t *r, const pr_rec_t *own, int link)
+// W-1186: an AppleTalk printer `r` is on `link` itself: its link, and for a cable the cable on
+// `port` (1 or 2). With the port not known on either side (0) any cable is its own.
+static int on_link(const pr_rec_t *r, int link, int port)
 {
-    if (r->where == PR_WHERE_PORT) return r == own;
-    return r->identified && r->where != link;
+    if (r->where == PR_WHERE_PORT || r->where != link) return 0;
+    return link != PR_WHERE_CABLE || !port || !r->port || r->port == port;
+}
+
+// W-1186: the name each AppleTalk printer is offered under on a link (any link: -1; a cable:
+// the one on `port`), names[i] for r[i], empty where it is not offered: on that link itself,
+// where it speaks for itself, or not identified. One pass in list order, nothing on the stack
+// but the caller's names.
+//  - A printer whose NBP name no other record of its kind has is offered under it, as ever.
+//  - One that shares its NBP name (two LaserWriters that kept the name they shipped with, one
+//    on each cable) is offered under its record's name, the page's and the phones': Macs see
+//    the page's names wherever they are free.
+//  - A name the link has already (a printer of that kind on the link, or an offer before this
+//    one) gets " 2" to " 9" after it, cut to fit as MacRoman, and never a name that is another
+//    record's page name or NBP name: nobody's name is taken by a suffix.
+static void offer_names(const pr_list_t *l, int link, int port,
+                        uint8_t names[PR_MAX][NBP_NAME_MAX + 1])
+{
+    for (int i = 0; i < l->n; i++) {
+        const pr_rec_t *r = &l->r[i];
+        names[i][0] = 0;
+        if (r->where == PR_WHERE_PORT || !r->identified || on_link(r, link, port)) continue;
+        int shared = 0;
+        for (int j = 0; j < l->n; j++) {
+            const pr_rec_t *q = &l->r[j];
+            shared |= q != r && q->where != PR_WHERE_PORT && q->kind == r->kind &&
+                      pstr_eq(q->nbp, r->nbp);
+        }
+        uint8_t base[NBP_NAME_MAX + 1] = { 0 };
+        if (shared) nbp_name(base, r->name);
+        if (!base[0]) memcpy(base, r->nbp, sizeof base);
+        if (base[0] > NBP_NAME_MAX) base[0] = NBP_NAME_MAX;
+        for (int k = 1; k < 10; k++) {
+            uint8_t c[NBP_NAME_MAX + 1];
+            memcpy(c, base, sizeof c);
+            if (k > 1) {
+                if (c[0] > NBP_NAME_MAX - 2) c[0] = NBP_NAME_MAX - 2;
+                c[++c[0]] = ' ';
+                c[++c[0]] = (uint8_t)('0' + k);
+            }
+            int taken = 0;
+            for (int j = 0; j < l->n && !taken; j++) {
+                const pr_rec_t *q = &l->r[j];
+                if (q == r || q->where == PR_WHERE_PORT || q->kind != r->kind) continue;
+                if (on_link(q, link, port)) taken = pstr_eq(q->nbp, c);
+                else if (j < i) taken = names[j][0] && pstr_eq(names[j], c);
+                if (k > 1 && !taken) {                // a suffix takes nobody's name
+                    uint8_t pn[NBP_NAME_MAX + 1] = { 0 };
+                    nbp_name(pn, q->name);
+                    taken = pstr_eq(q->nbp, c) || pstr_eq(pn, c);
+                }
+            }
+            if (taken) continue;
+            memcpy(names[i], c, sizeof c);
+            break;
+        }
+    }
+}
+
+int pr_offer_as(const pr_list_t *l, int id, pr_where_t link, int cable_port,
+                uint8_t out[NBP_NAME_MAX + 1])
+{
+    uint8_t names[PR_MAX][NBP_NAME_MAX + 1];
+    int i = pr_index(l, id);
+    if (i < 0) return 0;
+    offer_names(l, link, cable_port, names);
+    memcpy(out, names[i], NBP_NAME_MAX + 1);
+    return out[0] != 0;
+}
+
+int pr_offers_on(const pr_list_t *l, pr_where_t link, int cable_port, int ids[], int max)
+{
+    // The port's one ImageWriter (port_offer's), and the AppleTalk printers of other links.
+    const pr_rec_t *own = port_offer(l);
+    uint8_t names[PR_MAX][NBP_NAME_MAX + 1];
+    offer_names(l, link, cable_port, names);
+    int n = 0;
+    for (int i = 0; i < l->n && n < max; i++)
+        if (l->r[i].where == PR_WHERE_PORT ? &l->r[i] == own : names[i][0]) ids[n++] = l->r[i].id;
+    return n;
 }
 
 int pr_offers(const pr_list_t *l, pr_where_t link, int ids[], int max)
 {
-    const pr_rec_t *own = port_offer(l);
-    int n = 0;
-    for (int i = 0; i < l->n && n < max; i++)
-        if (offered(&l->r[i], own, link)) ids[n++] = l->r[i].id;
-    return n;
+    return pr_offers_on(l, link, 0, ids, max);
 }
 
 static pr_box_t one_state(const pr_live_t *v)
@@ -1322,9 +1434,15 @@ int pr_load(pr_list_t *l, const uint8_t *buf, size_t n)
     l->n_notes = kept;
     l->next_id = buf[4] ? buf[4] : 1;
     // Who answered on the port, and a model answered once, are not stored. W-1179: a record's
-    // socket is (a byte no firmware before it wrote but 0).
+    // socket is (a byte no firmware before it wrote but 0). W-1186: and a cable printer's
+    // port, 1 or 2.
     memset(l->ports, 0, sizeof l->ports);
-    for (int i = 0; i < l->n; i++) if (l->r[i].port >= PR_PORTS) l->r[i].port = 0;
+    for (int i = 0; i < l->n; i++) {
+        pr_rec_t *r = &l->r[i];
+        if (r->where == PR_WHERE_PORT ? r->port >= PR_PORTS
+            : r->where == PR_WHERE_CABLE ? r->port > PR_PORTS : r->port != 0)
+            r->port = 0;
+    }
     return 0;
 }
 
@@ -1624,13 +1742,14 @@ size_t pr_json(const pr_list_t *l, const pr_live_t live[PR_MAX], char *buf, size
         pr_box_t o = one_state(&live[i]);
         const char *st = o == PR_BOX_PRINTING && live[i].cleaning ? "cleaning" : states[o];
         // W-1179: with two printer sockets, the port it's on: a port record's last, and a printer
-        // heard on LocalTalk the LocalTalk socket's.
+        // heard on LocalTalk its own cable's (W-1186), or the LocalTalk socket's until it is
+        // heard again.
         char px[24] = "";
         int named = l->n_ports > 1 || l->port_names;
         if (named && r->where == PR_WHERE_PORT)
             snprintf(px, sizeof px, ",\"port\":%d", pr_port_sock(l, r) + 1);
-        else if (named && r->where == PR_WHERE_CABLE && l->lt_port)
-            snprintf(px, sizeof px, ",\"port\":%u", l->lt_port);
+        else if (named && r->where == PR_WHERE_CABLE && (r->port || l->lt_port))
+            snprintf(px, sizeof px, ",\"port\":%u", r->port ? r->port : l->lt_port);
         PUT("%s{\"id\":%u,\"name\":\"%s\",\"where\":\"%s\",\"kind\":\"%s\",\"model\":\"%s\","
             "\"shared\":%s,\"identified\":%s,\"found\":\"%s\",\"state\":\"%s\",\"uuid\":\"%s\","
             "\"product\":\"%s\",\"icon\":\"%s\",\"dither\":\"%s\",\"gain\":%u,\"rp\":\"%s\",\"start_page\":%s%s%s}",
@@ -1653,12 +1772,14 @@ size_t pr_json(const pr_list_t *l, const pr_live_t live[PR_MAX], char *buf, size
     if (two) PUT(",\"port2_on\":%u", pr_port_on(l, 1, live));
     PUT(",\"said_other\":%s,\"chooser\":[",
         pr_port_said_other(l, 0) || (two && pr_port_said_other(l, 1)) ? "true" : "false");
+    uint8_t seen[PR_MAX][NBP_NAME_MAX + 1];
+    offer_names(l, -1, 0, seen);                 // as a link with no printer of its own sees them
     for (int i = 0, n = 0; i < l->n; i++) {
         const pr_rec_t *r = &l->r[i];
-        if (!offered(r, own, -1)) continue;
-        char seen_as[PR_NAME_MAX];
+        char seen_as[3 * NBP_NAME_MAX + 1];
+        if (r->where == PR_WHERE_PORT ? r != own : !seen[i][0]) continue;
         if (r->where == PR_WHERE_PORT) snprintf(seen_as, sizeof seen_as, "%s", r->name);
-        else own_name(r, seen_as, sizeof seen_as);
+        else nbp_utf8(seen_as, sizeof seen_as, seen[i]);
         esc(e_name, sizeof e_name, seen_as);
         PUT("%s\"%s\"", n++ ? "," : "", e_name);
     }

@@ -1565,6 +1565,406 @@
     }
    }
   },
+  "ports-two-localtalk": {
+   "about": "W-1186 rev 2026.11: LocalTalk on both ports, two networks: a LaserWriter on each, a Mac on port 1's, nothing heard yet on port 2's",
+   "patch": {
+    "GET /api/status": {
+     "board": "2026.11",
+     "ports": [
+      {
+       "port": 1,
+       "job": "localtalk",
+       "set": "auto",
+       "lt_chip": "ok"
+      },
+      {
+       "port": 2,
+       "job": "localtalk",
+       "set": "auto",
+       "lt_chip": "ok"
+      }
+     ]
+    },
+    "GET /api/printers": {
+     "printers": [
+      {
+       "id": 1,
+       "name": "Personal LaserWriter NTR",
+       "where": "cable",
+       "kind": "laserwriter",
+       "model": "",
+       "shared": true,
+       "identified": true,
+       "found": "auto",
+       "state": "ready",
+       "uuid": "urn:uuid:41575254-4c57-0001-78fa-10bda36e2401",
+       "product": "Personal LaserWriter NTR",
+       "dither": "bluenoise",
+       "gain": 0,
+       "rp": "ipp/p1",
+       "start_page": null,
+       "icon": "lw2",
+       "port": 1
+      },
+      {
+       "id": 2,
+       "name": "LaserWriter Pro 630",
+       "where": "cable",
+       "kind": "laserwriter",
+       "model": "",
+       "shared": true,
+       "identified": true,
+       "found": "auto",
+       "state": "ready",
+       "uuid": "urn:uuid:41575254-4c57-0002-78fa-10bda36e2402",
+       "product": "LaserWriter Pro 630",
+       "dither": "bluenoise",
+       "gain": 0,
+       "rp": "ipp/p2",
+       "start_page": null,
+       "icon": "lwpro600",
+       "port": 2
+      }
+     ],
+     "port_on": 0,
+     "port2_on": 0
+    },
+    "GET /api/lt": {
+     "on": true,
+     "phase": "online",
+     "node": 21,
+     "port": 1,
+     "macs": [
+      {
+       "node": 12,
+       "name": "Wells’s SE/30",
+       "ago": 40
+      }
+     ],
+     "ports": [
+      {
+       "port": 1,
+       "chip": "ok",
+       "phase": "online",
+       "node": 21,
+       "on": true,
+       "laser": false,
+       "macs": [
+        {
+         "node": 12,
+         "name": "Wells’s SE/30",
+         "ago": 40
+        }
+       ]
+      },
+      {
+       "port": 2,
+       "chip": "ok",
+       "phase": "listening",
+       "node": 0,
+       "on": true,
+       "laser": false,
+       "macs": []
+      }
+     ]
+    }
+   }
+  },
+  "ports-two-localtalk-joining": {
+   "about": "W-1186 rev 2026.11: LocalTalk on both ports; port 1 joining its network, port 2's chip without TashTalk (its install failed), so the card offers Flash TashTalk for port 2",
+   "patch": {
+    "GET /api/status": {
+     "board": "2026.11",
+     "ports": [
+      {
+       "port": 1,
+       "job": "localtalk",
+       "set": "auto",
+       "lt_chip": "ok"
+      },
+      {
+       "port": 2,
+       "job": "localtalk",
+       "set": "auto",
+       "lt_chip": "no_tashtalk"
+      }
+     ]
+    },
+    "GET /api/printers": {
+     "printers": [
+      {
+       "id": 1,
+       "name": "Personal LaserWriter NTR",
+       "where": "cable",
+       "kind": "laserwriter",
+       "model": "",
+       "shared": true,
+       "identified": true,
+       "found": "auto",
+       "state": "ready",
+       "uuid": "urn:uuid:41575254-4c57-0001-78fa-10bda36e2401",
+       "product": "Personal LaserWriter NTR",
+       "dither": "bluenoise",
+       "gain": 0,
+       "rp": "ipp/p1",
+       "start_page": null,
+       "icon": "lw2",
+       "port": 1
+      },
+      {
+       "id": 2,
+       "name": "LaserWriter Pro 630",
+       "where": "cable",
+       "kind": "laserwriter",
+       "model": "",
+       "shared": true,
+       "identified": true,
+       "found": "auto",
+       "state": "ready",
+       "uuid": "urn:uuid:41575254-4c57-0002-78fa-10bda36e2402",
+       "product": "LaserWriter Pro 630",
+       "dither": "bluenoise",
+       "gain": 0,
+       "rp": "ipp/p2",
+       "start_page": null,
+       "icon": "lwpro600",
+       "port": 2
+      }
+     ],
+     "port_on": 0,
+     "port2_on": 0
+    },
+    "GET /api/lt": {
+     "on": true,
+     "phase": "acquiring",
+     "node": 0,
+     "port": 1,
+     "macs": [],
+     "ports": [
+      {
+       "port": 1,
+       "chip": "ok",
+       "phase": "acquiring",
+       "node": 0,
+       "on": true,
+       "laser": false,
+       "macs": []
+      },
+      {
+       "port": 2,
+       "chip": "no_tashtalk",
+       "phase": "off",
+       "node": 0,
+       "on": false,
+       "laser": false,
+       "macs": []
+      }
+     ]
+    }
+   }
+  },
+  "ports-two-localtalk-port1-chip": {
+   "about": "W-1186 rev 2026.11: LocalTalk on both ports, port 1's chip without TashTalk (its node never started, so the top level reads off), port 2 online with a Mac: both rows, the switch on, and Flash TashTalk for port 1",
+   "patch": {
+    "GET /api/status": {
+     "board": "2026.11",
+     "ports": [
+      {
+       "port": 1,
+       "job": "localtalk",
+       "set": "auto",
+       "lt_chip": "no_tashtalk"
+      },
+      {
+       "port": 2,
+       "job": "localtalk",
+       "set": "auto",
+       "lt_chip": "ok"
+      }
+     ],
+     "lt_chip": "no_tashtalk"
+    },
+    "GET /api/printers": {
+     "printers": [
+      {
+       "id": 1,
+       "name": "Personal LaserWriter NTR",
+       "where": "cable",
+       "kind": "laserwriter",
+       "model": "",
+       "shared": true,
+       "identified": true,
+       "found": "auto",
+       "state": "ready",
+       "uuid": "urn:uuid:41575254-4c57-0001-78fa-10bda36e2401",
+       "product": "Personal LaserWriter NTR",
+       "dither": "bluenoise",
+       "gain": 0,
+       "rp": "ipp/p1",
+       "start_page": null,
+       "icon": "lw2",
+       "port": 1
+      },
+      {
+       "id": 2,
+       "name": "LaserWriter Pro 630",
+       "where": "cable",
+       "kind": "laserwriter",
+       "model": "",
+       "shared": true,
+       "identified": true,
+       "found": "auto",
+       "state": "ready",
+       "uuid": "urn:uuid:41575254-4c57-0002-78fa-10bda36e2402",
+       "product": "LaserWriter Pro 630",
+       "dither": "bluenoise",
+       "gain": 0,
+       "rp": "ipp/p2",
+       "start_page": null,
+       "icon": "lwpro600",
+       "port": 2
+      }
+     ],
+     "port_on": 0,
+     "port2_on": 0
+    },
+    "GET /api/lt": {
+     "on": false,
+     "quiet": false,
+     "laser": false,
+     "port": 1,
+     "ports": [
+      {
+       "port": 1,
+       "chip": "no_tashtalk",
+       "phase": "off",
+       "node": 0,
+       "on": false,
+       "laser": false,
+       "macs": []
+      },
+      {
+       "port": 2,
+       "chip": "ok",
+       "phase": "online",
+       "node": 22,
+       "on": true,
+       "laser": false,
+       "macs": [
+        {
+         "node": 40,
+         "name": "Classroom Classic II",
+         "ago": 90
+        }
+       ]
+      }
+     ]
+    },
+    "POST /api/localtalk/flash": {
+     "_delay": 2,
+     "_body": {
+      "ok": true,
+      "err": "ok",
+      "devid": "0x1B84",
+      "rev": 4
+     }
+    }
+   }
+  },
+  "ports-two-localtalk-off": {
+   "about": "W-1186 rev 2026.11: LocalTalk switched off with both ports on it, port 2's chip without TashTalk: only port 2's row, with Flash TashTalk",
+   "patch": {
+    "GET /api/status": {
+     "board": "2026.11",
+     "ports": [
+      {
+       "port": 1,
+       "job": "localtalk",
+       "set": "auto",
+       "lt_chip": "ok"
+      },
+      {
+       "port": 2,
+       "job": "localtalk",
+       "set": "auto",
+       "lt_chip": "no_tashtalk"
+      }
+     ],
+     "lt": false,
+     "lt_port": 0
+    },
+    "GET /api/printers": {
+     "printers": [
+      {
+       "id": 1,
+       "name": "Personal LaserWriter NTR",
+       "where": "cable",
+       "kind": "laserwriter",
+       "model": "",
+       "shared": true,
+       "identified": true,
+       "found": "auto",
+       "state": "ready",
+       "uuid": "urn:uuid:41575254-4c57-0001-78fa-10bda36e2401",
+       "product": "Personal LaserWriter NTR",
+       "dither": "bluenoise",
+       "gain": 0,
+       "rp": "ipp/p1",
+       "start_page": null,
+       "icon": "lw2",
+       "port": 1
+      },
+      {
+       "id": 2,
+       "name": "LaserWriter Pro 630",
+       "where": "cable",
+       "kind": "laserwriter",
+       "model": "",
+       "shared": true,
+       "identified": true,
+       "found": "auto",
+       "state": "ready",
+       "uuid": "urn:uuid:41575254-4c57-0002-78fa-10bda36e2402",
+       "product": "LaserWriter Pro 630",
+       "dither": "bluenoise",
+       "gain": 0,
+       "rp": "ipp/p2",
+       "start_page": null,
+       "icon": "lwpro600",
+       "port": 2
+      }
+     ],
+     "port_on": 0,
+     "port2_on": 0
+    },
+    "GET /api/lt": {
+     "on": false,
+     "quiet": true,
+     "laser": false,
+     "port": 1,
+     "ports": [
+      {
+       "port": 1,
+       "chip": "ok",
+       "phase": "off",
+       "node": 0,
+       "on": false,
+       "laser": false,
+       "macs": []
+      },
+      {
+       "port": 2,
+       "chip": "no_tashtalk",
+       "phase": "off",
+       "node": 0,
+       "on": false,
+       "laser": false,
+       "macs": []
+      }
+     ]
+    }
+   }
+  },
   "lc": {
    "about": "AirWriter LC: one status light, Rainbow status lights off, one port (port 1) and no LocalTalk",
    "patch": {

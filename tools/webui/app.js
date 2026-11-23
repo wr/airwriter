@@ -1203,19 +1203,43 @@ function flashErr(r){
   for(const k in FLASH_ERR) if(e.startsWith(k)) return FLASH_ERR[k];
   return 'Couldn’t flash TashTalk.';
 }
+/* W-1186: one port's row on the LocalTalk card when both ports do LocalTalk: the port, then
+   its chip's trouble, joining, or its Macs. */
+function ltRow(r){
+  const chip=r.phase==='off'&&CHIP[r.chip];
+  if(chip) return stLine(chip[0],'Port '+r.port)+'<span class=count>'
+    +(flashing&&r.port===flashPort?'Flashing TashTalk…':chip[1])+'</span>';
+  if(r.phase==='acquiring') return stLine('a','Port '+r.port)+'<span class=count>Joining the AppleTalk network…</span>';
+  if(r.phase==='off') return stLine('a','Port '+r.port)+'<span class=count>Off</span>';
+  return stLine('g','Port '+r.port)+macList(macsOf(r.macs,MAC,m=>'Node '+m.node));
+}
+/* The port whose chip the card's Flash TashTalk key is for: 0 for the board's choice. */
+let flashPort=0;
 function atDraw(){
   let macs=0, on=0;
   // the cable
   {
-    const c=$('c-lt'), sw=c.querySelector('[data-way=lt]'), live=!!(LT&&LT.on);
-    const chip=!live&&CHIP[S.lt_chip];
+    const c=$('c-lt'), sw=c.querySelector('[data-way=lt]');
+    // W-1186: both ports on LocalTalk, two networks: a row for each. The top level is the
+    // lowest port's node, so the switch reads on if either port's does, and a port whose chip
+    // needs seeing to shows it whether the switch is on or off, as one port's card does.
+    const rows=twoPorts()&&LT&&(LT.ports||[]).length>1?LT.ports:null;
+    const live=!!(LT&&(LT.on||rows&&rows.some(r=>r.on)));
+    const chip=!rows&&!live&&CHIP[S.lt_chip];
+    const trouble=rows?rows.filter(r=>r.phase==='off'&&CHIP[r.chip]):[];
+    const need=trouble.find(r=>r.chip==='no_tashtalk');
+    flashPort=need?need.port:0;
     c.classList.toggle('hide',S.pic===false||!!S.lc);
     $('tt-credit').classList.toggle('hide',S.pic===false||!!S.lc);
     sw.checked=live; sw.disabled=!S.pic;
     sw.closest('.sw').classList.toggle('hide',!!chip);
-    c.classList.toggle('off',!live&&!chip);
-    $('lt-flash').classList.toggle('hide',!flashing&&!(chip&&S.lt_chip==='no_tashtalk'));
+    c.classList.toggle('off',!live&&!chip&&!trouble.length);
+    $('lt-flash').classList.toggle('hide',!flashing&&!(chip&&S.lt_chip==='no_tashtalk')&&!need);
     if(chip) put(c,flashing?stLine('a','Flashing TashTalk…'):stHTML(chip[0],chip[1]));
+    else if(rows&&(live||trouble.length)){
+      if(live) on++;
+      put(c,(live?rows:trouble).map(r=>{ macs+=(r.macs||[]).length; return ltRow(r); }).join('<hr class=sep>'));
+    }
     else if(live&&twoPorts()&&!LT.port){
       // W-1179: no port has LocalTalk on it yet; a Mac plugged into either is heard when it talks
       on++; put(c,macList([]));
@@ -1308,9 +1332,16 @@ function lwStatus(t){
 $('lt-flash').onclick=async()=>{
   const b=$('lt-flash'); if(b.disabled) return; b.disabled=true;
   flashing=true; say('at-say',''); atDraw();
-  const r=await postJSON('/api/localtalk/flash');
+  const fp=flashPort;
+  const r=await postJSON('/api/localtalk/flash',fp?{port:fp}:undefined);
   flashing=false; b.disabled=false;
   if(r.error||!r.ok) say('at-say',r.error||flashErr(r),1);
+  else if(fp&&LT&&LT.ports){
+    // W-1186: that port's row starts; the other keeps its Macs until the next answer
+    LT.ports=LT.ports.map(x=>x.port===fp?Object.assign({},x,{chip:'ok',
+      phase:S.lt_port===1?'acquiring':'off',on:S.lt_port===1}):x);
+    setTimeout(atPoll,1500); setTimeout(poll,600);
+  }
   else {
     S.lt_chip='ok';
     if(S.lt_port===1) LT={on:true,phase:'acquiring',macs:[]};

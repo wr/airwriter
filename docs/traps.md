@@ -347,8 +347,23 @@ Traps already explained in a code comment are listed only when the comment is ea
   and the panel played "LocalTalk on". `localtalk_start` now refuses (`ESP_ERR_NOT_FOUND`) unless
   TashTalk drains the 1024-NUL sync within 100 ms. A TashTalk that stops answering after the start
   still leaves the node running: anything sending through it must check `localtalk_tt_alive()`
-  first (the cable test does, W-1063) or it fills the 4 KB ring and blocks with the node's lock
+  first (the cable test does, W-1063) or it fills the 2 KB ring and blocks with the nodes' lock
   held.
+- **On rev 2026.11 a socket's UART has one driver at a time** (W-1186): the printer line's
+  (`serial_out`) or its LocalTalk node's, never both. `serial_out_park(port, 1)` deletes the
+  printer's; park the node (`localtalk_park`) before unparking the port, or the install fails
+  and the port stays parked. A parked port's `serial_out` calls do nothing, so nothing reaches
+  TashTalk at 9600.
+- **Lock order for a socket's job: the job lock, then `s_lt_mx`** (W-1186). `sock_job_set`
+  holds both while a socket changes hands, and `lt_go` (every node start and probe) holds
+  `s_lt_mx` alone and checks the socket's job under it. Never take the job lock with `s_lt_mx`
+  held. Without it a node could start between its park and the printer line's unpark and take
+  the UART, leaving the port parked with its job reading printer.
+- **The LocalTalk task must never wait inside a UART driver** (W-1186). One task serves both
+  sockets' nodes, and a socket that takes the printer job has its driver deleted under the
+  nodes' lock, so every read is `uart_read_bytes(…, 0)` under that lock; the task sleeps on a
+  notification the drivers' receive interrupts give (`uart_set_select_notif_callback`). A read
+  with a timeout outside the lock would run into a deleted driver.
 - **An empty U7 and a PIC with LVP off both read device ID 0x0000** (DAT is pulled down). Only
   with TashTalk silent too does 0x0000 mean no chip (rev A's empty socket, the LC's missing U7); a chip flashed with stock TashTalk
   elsewhere answers on the UART and reads 0x0000 over ICSP.

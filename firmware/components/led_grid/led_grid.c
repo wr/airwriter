@@ -29,7 +29,7 @@ static uint8_t s_one;              // AirWriter LC: one light, the chain's first
 typedef struct { uint8_t act; uint16_t arg; uint64_t t0; } slot_t;
 static portMUX_TYPE s_act_mux = portMUX_INITIALIZER_UNLOCKED;
 static slot_t   s_task[LG_FAMS];
-static uint8_t  s_blip;
+static uint8_t  s_blip, s_blip_at;
 static uint64_t s_blip_t0;
 static volatile uint8_t s_src;     // lg_src_t, whose job Printing is
 
@@ -85,6 +85,7 @@ static void lg_task(void *arg)
             // clock starts again every frame until the panel has booted.
             if (v.state == PS_BOOTING) s_blip_t0 = now;
             o.blip = s_blip;
+            o.blip_at = s_blip_at;
             o.blip_ms = lg_elapsed(now, s_blip_t0);
             portEXIT_CRITICAL(&s_act_mux);
             // animation phase: wraps harmlessly
@@ -197,9 +198,15 @@ void led_grid_action(lg_act_t act, uint16_t arg)
 
 void led_grid_blip(lg_blip_t b)
 {
+    led_grid_blip_at(b, LG_AT_J4);
+}
+
+void led_grid_blip_at(lg_blip_t b, int at)
+{
     uint64_t now = now_ms();
     portENTER_CRITICAL(&s_act_mux);
     s_blip = (uint8_t)b;
+    s_blip_at = (uint8_t)(at == LG_AT_J2 ? LG_AT_J2 : LG_AT_J4);
     s_blip_t0 = now;
     portEXIT_CRITICAL(&s_act_mux);
 }

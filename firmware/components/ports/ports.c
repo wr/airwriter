@@ -129,9 +129,6 @@ void ports_init(int lc, const port_job_t jobs[PORTS_MAX])
         if (s_either) hand_over(i, j, 0);
         else s_job[i] = j;      // rev A, the LC: fixed, and set up as before W-1179
     }
-    // Never two LocalTalk sockets: one node, one TashTalk UART.
-    if (s_either && s_job[0] == PORT_JOB_LOCALTALK && s_job[1] == PORT_JOB_LOCALTALK)
-        hand_over(1, PORT_JOB_PRINTER, 0);
     for (int i = 0; i < s_count; i++)
         ESP_LOGI(TAG, "port %d (J%d): %s", i + 1, i ? 4 : 2, ports_job_name(s_job[i]));
 }

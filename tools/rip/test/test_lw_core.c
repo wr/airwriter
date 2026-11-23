@@ -355,6 +355,79 @@ static void test_name_check_renamed(void)
     CHECK_EQ_INT(c.checks.dropped, 1);
 }
 
+// W-1186: two LaserWriters with one name, one on each of rev 2026.11's two cables, are two
+// targets: each rides its own cable's printer, never the other's, and the second told is told
+// as a twin while the first still answers; a name that turns up on the other cable after the
+// first went quiet is one printer moved.
+static void test_two_cables(void)
+{
+    static lwc_t c;
+    lwc_init(&c, 0);
+    lwc_target_in_t in[2] = { target(2, "LaserWriter", LWC_KIND_LW), target(3, "LaserWriter", LWC_KIND_LW) };
+    in[0].cable = LWC_ON_CABLE_P1;
+    in[1].cable = LWC_ON_CABLE;
+    lwc_targets(&c, in, 2, 0);
+    int a = lwc_target(&c, 2), b = lwc_target(&c, 3);
+    CHECK(a >= 0 && b >= 0 && a != b);
+    found(&c, "LaserWriter", LW_LINK_CABLE_P1, 200, 1000);
+    CHECK(lwc_view(&c, a, 1000).online);
+    CHECK(!lwc_view(&c, b, 1000).online);
+    CHECK_EQ_INT(lwc_view(&c, b, 1000).idx, -1);
+    lwc_want_t w = lwc_tick(&c, 2500);
+    CHECK(w.tell != LWC_NONE);
+    CHECK_EQ_INT(w.tell_twin, 0);
+    found(&c, "LaserWriter", LW_LINK_CABLE, 200, 3000);      // the same node ID on the other network
+    CHECK(lwc_view(&c, b, 3000).online);
+    int ha = lwc_view(&c, a, 3000).idx, hb = lwc_view(&c, b, 3000).idx;
+    CHECK(ha >= 0 && hb >= 0 && ha != hb);
+    CHECK_EQ_INT(c.heard[ha].link, LW_LINK_CABLE_P1);
+    CHECK_EQ_INT(c.heard[hb].link, LW_LINK_CABLE);
+    w = lwc_tick(&c, 4500);
+    CHECK_EQ_INT(w.tell, hb);
+    CHECK_EQ_INT(w.tell_twin, 1);
+    // A target that names no cable rides either, as before.
+    lwc_init(&c, 0);
+    in[0] = target(4, "Office", LWC_KIND_LW);
+    lwc_targets(&c, in, 1, 0);
+    found(&c, "Office", LW_LINK_CABLE_P1, 20, 1000);
+    CHECK(lwc_view(&c, lwc_target(&c, 4), 1000).online);
+    // Its cable moved to the other port: heard there long after the first went quiet, no twin.
+    w = lwc_tick(&c, 2500);
+    CHECK_EQ_INT(w.tell_twin, 0);
+    found(&c, "Office", LW_LINK_CABLE, 20, 2500 + LW_TWIN_MS);
+    w = lwc_tick(&c, 4000 + LW_TWIN_MS);
+    CHECK(w.tell != LWC_NONE);
+    CHECK_EQ_INT(w.tell_twin, 0);
+    // A name on EtherTalk and a cable is one printer heard twice, never a twin.
+    lwc_init(&c, 0);
+    found(&c, "Den", LW_LINK_RADIO, 20, 1000);
+    w = lwc_tick(&c, 2500);
+    found(&c, "Den", LW_LINK_CABLE, 21, 3000);
+    w = lwc_tick(&c, 4500);
+    CHECK(w.tell != LWC_NONE);
+    CHECK_EQ_INT(w.tell_twin, 0);
+    // The list gives its target the cable once it knows it (a record from before, on rev A
+    // too): the same printer, still online and not asked again.
+    lwc_init(&c, 0);
+    in[0] = target(5, "Hall", LWC_KIND_LW);
+    lwc_targets(&c, in, 1, 0);
+    found(&c, "Hall", LW_LINK_CABLE, 30, 1000);
+    CHECK(lwc_view(&c, lwc_target(&c, 5), 1000).online);
+    lwc_queried(&c, lwc_target(&c, 5), 1, 1500);
+    in[0].cable = LWC_ON_CABLE;
+    lwc_targets(&c, in, 1, 2000);
+    CHECK(lwc_view(&c, lwc_target(&c, 5), 2000).online);
+    CHECK(lwc_view(&c, lwc_target(&c, 5), 2000).idx >= 0);
+    CHECK_EQ_INT(c.t[lwc_target(&c, 5)].queried, 1);
+    // Its cable moved to the other port, says the list: the target starts again there.
+    in[0].cable = LWC_ON_CABLE_P1;
+    lwc_targets(&c, in, 1, 2000);
+    CHECK(!lwc_view(&c, lwc_target(&c, 5), 2000).online);
+    CHECK_EQ_INT(lwc_view(&c, lwc_target(&c, 5), 2000).idx, -1);
+    found(&c, "Hall", LW_LINK_CABLE_P1, 30, 3000);
+    CHECK(lwc_view(&c, lwc_target(&c, 5), 3000).online);
+}
+
 int main(void)
 {
     test_cadence();
@@ -365,5 +438,6 @@ int main(void)
     test_heard_list();
     test_name_check();
     test_name_check_renamed();
+    test_two_cables();
     TEST_END;
 }

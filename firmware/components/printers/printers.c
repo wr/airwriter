@@ -176,10 +176,11 @@ static void save(void)
 // ------------------------------------------------------------- the port's slot
 
 // The printer list's links and at_printer's.
-static int at_link_of(int where)
+// W-1186: a cable record's link is its port's cable: port 1 J2's, port 2 (or not known) J4's.
+static int at_link_of(const pr_rec_t *r)
 {
-    switch (where) {
-    case PR_WHERE_CABLE:   return AT_LINK_CABLE;
+    switch (r->where) {
+    case PR_WHERE_CABLE:   return r->port == 1 ? AT_LINK_CABLE_P1 : AT_LINK_CABLE;
     case PR_WHERE_NETWORK: return AT_LINK_RADIO;
     case PR_WHERE_TUNNEL:  return AT_LINK_TUNNEL;
     case PR_WHERE_ZONE:    return AT_LINK_ZONE;
@@ -195,6 +196,13 @@ static pr_where_t where_of(int at_link)
     case AT_LINK_RADIO:  return PR_WHERE_NETWORK;
     default:             return PR_WHERE_CABLE;
     }
+}
+
+// The port a cable link is on (1 J2, 2 J4), 0 for a link that is no cable.
+static int cable_port_of(int at_link)
+{
+    int sock = at_link_cable_sock(at_link);
+    return sock < 0 ? 0 : sock + 1;
 }
 
 // The record id and slot a job's sink carries in its ctx (laser_job_begin, main's
@@ -314,7 +322,8 @@ static int targets_fill(void)
         memset(t, 0, sizeof *t);
         t->id = r->id;
         t->kind = r->kind == PR_KIND_LASERWRITER ? LASER_KIND_LW : LASER_KIND_IW;
-        t->where = (int8_t)at_link_of(r->where);
+        t->where = (int8_t)at_link_of(r);
+        t->any_cable = r->where == PR_WHERE_CABLE && !r->port;
         t->slot = (int8_t)slot_of(r->id);
         memcpy(t->name, r->nbp, sizeof t->name);
         snprintf(t->dither, sizeof t->dither, "%s", r->dither);
@@ -665,15 +674,17 @@ int printers_port_seen_sw(int k, sw_model_t m)
     return r;
 }
 
-void printers_at_seen(int at_link, const uint8_t *name, const uint8_t *type)
+void printers_at_seen(int at_link, const uint8_t *name, const uint8_t *type, int twin)
 {
     if (!s_started) return;
     lock();
-    int before = s_l->n;
-    int id = pr_at_seen(s_l, where_of(at_link), name, type, 0);
+    int before = s_l->n, ports = 0;
+    for (int i = 0; i < s_l->n; i++) ports += s_l->r[i].where * 4 + s_l->r[i].port;
+    int id = pr_at_seen_on(s_l, where_of(at_link), cable_port_of(at_link), name, type, 0, twin);
     int added = s_l->n != before;
     if (added) ESP_LOGI(TAG, "found: printer %d, %s", id, pr_kind_name(pr_get(s_l, id)->kind));
-    after_change(added);
+    for (int i = 0; i < s_l->n && !added; i++) ports -= s_l->r[i].where * 4 + s_l->r[i].port;
+    after_change(added || ports);            // W-1186: or its cable is in another port now
 }
 
 void printers_at_queried(int id, int ok, const lw_info_t *info, int at_link, uint16_t net,
@@ -710,7 +721,7 @@ void printers_offers(int at_link, int on, const char *host, lt_offers_t *o)
     int ids[PR_MAX];
     char own[PR_NAME_MAX];
     lock();
-    int n = pr_offers(s_l, where_of(at_link), ids, PR_MAX);
+    int n = pr_offers_on(s_l, where_of(at_link), cable_port_of(at_link), ids, PR_MAX);
     for (int k = 0; k < n; k++) {
         const pr_rec_t *r = pr_get(s_l, ids[k]);
         if (r->where == PR_WHERE_PORT) {
@@ -718,9 +729,11 @@ void printers_offers(int at_link, int on, const char *host, lt_offers_t *o)
             pr_chooser_name(s_l, own, sizeof own);
             nbp_name(o->own, own);
         } else if (o->n_rel < (int)(sizeof o->rel / sizeof o->rel[0])) {
-            lt_offer_t *x = &o->rel[o->n_rel++];
-            memcpy(x->obj, r->nbp, sizeof x->obj);
+            // W-1186: under the name this link has room for, and whose it is, for the relay.
+            lt_offer_t *x = &o->rel[o->n_rel];
+            if (!pr_offer_as(s_l, r->id, where_of(at_link), cable_port_of(at_link), x->obj)) continue;
             memcpy(x->type, r->nbp_type, sizeof x->type);
+            o->ids[o->n_rel++] = r->id;
         }
     }
     unlock();

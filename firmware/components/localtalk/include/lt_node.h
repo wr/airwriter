@@ -359,6 +359,9 @@ typedef struct {
     uint8_t    own[NBP_NAME_MAX + 1], marker[NBP_NAME_MAX + 1];
     lt_offer_t rel[LT_REG_MAX - 2];
     int        n_rel;
+    // W-1186: whose each relayed name is, the printer list's record id: a name may not be the
+    // printer's own NBP name (two LaserWriters with one name), so the relay goes by this.
+    uint8_t    ids[LT_REG_MAX - 2];
 } lt_offers_t;
 // Which registration the open connection is on (0 the node's own).
 int      lt_node_pap_reg(const lt_node_t *n);

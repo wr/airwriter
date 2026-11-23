@@ -100,8 +100,8 @@ static void tt_sync(void);
 static esp_err_t link_open(link_t *lk)
 {
     memset(lk, 0, sizeof *lk);
-    if (localtalk_running()) {
-        localtalk_set_tap(on_tap, NULL);
+    if (localtalk_running(s_cfg.lt_sock)) {
+        localtalk_set_tap(s_cfg.lt_sock, on_tap, NULL);
         return ESP_OK;
     }
     // TashTalk runs whenever the board does (the PIC's reset idles released),
@@ -162,7 +162,7 @@ static void tt_sync(void)
 static void link_send(link_t *lk, const uint8_t *f, size_t n)
 {
     if (!lk->owned) {
-        localtalk_send_raw(f, n);
+        localtalk_send_raw(s_cfg.lt_sock, f, n);
         return;
     }
     uint8_t cmd[1 + CT_FRAME_MAX + 2];
@@ -186,7 +186,7 @@ static void link_poll(link_t *lk, int ms)
 static void link_close(link_t *lk)
 {
     if (!lk->owned) {
-        localtalk_set_tap(NULL, NULL);
+        localtalk_set_tap(s_cfg.lt_sock, NULL, NULL);
         return;
     }
     uart_driver_delete(s_cfg.lt_uart);
@@ -391,7 +391,7 @@ void cable_test_run(cable_result_t *r, int both)
         link_close(&lk);
         tt = chip_check();
         r->err = ESP_OK;
-    } else if (r->err == ESP_OK && !lk.owned && !localtalk_tt_alive(ALIVE_WAIT_MS)) {
+    } else if (r->err == ESP_OK && !lk.owned && !localtalk_tt_alive(s_cfg.lt_sock, ALIVE_WAIT_MS)) {
         // The node runs whether or not TashTalk is there, and holds U7's
         // pins: say so without asking U7, and add nothing to a UART that
         // isn't draining.

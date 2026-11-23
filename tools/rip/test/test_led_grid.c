@@ -226,6 +226,35 @@ static lg_opts_t blip(lg_blip_t b, uint32_t ms)
     return o;
 }
 
+// W-1186: a Mac heard on port 1's cable: its arc comes out of J2's socket, to the right of
+// J4's as the board's columns run, and nothing else about it changes.
+static void check_blip_socket(void)
+{
+    uint8_t base[LG_NUM_LEDS][3], a[LG_NUM_LEDS][3], b[LG_NUM_LEDS][3];
+    ps_view_t v = moment(PS_OFFLINE, PS_OFFLINE, 61200);
+    lg_opts_t o = blip(LG_BLIP_MAC, LG_BLIP_MAC_MS + 1);     // over: the state alone
+    lg_render(&v, &o, 61200, base);
+    o = blip(LG_BLIP_MAC, 200);
+    lg_render(&v, &o, 61200, a);
+    o.blip_at = LG_AT_J2;
+    lg_render(&v, &o, 61200, b);
+    float ca = 0, wa = 0, cb = 0, wb = 0;
+    for (int i = 0; i < LG_NUM_LEDS; i++) {
+        int z = base[i][0] + base[i][1] + base[i][2];
+        int da = a[i][0] + a[i][1] + a[i][2] - z, db = b[i][0] + b[i][1] + b[i][2] - z;
+        if (da > 0) { ca += (float)da * (float)lg_col(i); wa += (float)da; }
+        if (db > 0) { cb += (float)db * (float)lg_col(i); wb += (float)db; }
+    }
+    assert(wa > 0 && wb > 0);
+    assert(cb / wb > ca / wa + 1.0f);
+    // The node coming online looks the same from either.
+    o = blip(LG_BLIP_LT_ON, 400);
+    lg_render(&v, &o, 61200, a);
+    o.blip_at = LG_AT_J2;
+    lg_render(&v, &o, 61200, b);
+    assert(memcmp(a, b, sizeof a) == 0);
+}
+
 static int boot_heaviest(void)
 {
     uint8_t f[LG_NUM_LEDS][3];
@@ -791,6 +820,7 @@ int main(void)
                                PS_FAILED, PS_PRINTING, PS_OFFLINE, PS_READY };
     const int n_all = (int)(sizeof all / sizeof all[0]);
     const int p = lg_pilot_index();
+    check_blip_socket();
     assert(p == idx(4, 2) && LG_MAP[p].mat == 'P');
 
     // Caps: FR4 dots never exceed LG_BRIGHTNESS_CAP, mask dots LG_MASK_CAP,

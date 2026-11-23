@@ -73,14 +73,20 @@ int       serial_out_selected(void);
 // unparked, its pins are routed back, its flow control is the link's and RX is dropped, and
 // the line is reported afresh. Callers hold the job lock and never park the selected port
 // mid-job.
+// W-1186: a socket has one UART for whichever job it does, so a parked port has no driver on
+// its UART: parking deletes it, and the socket's LocalTalk node installs its own there
+// (localtalk_cfg_t.lent). Unparking installs the printer line's again, at the link's speed
+// and with the line's inversion, so LocalTalk's must be gone first (localtalk_park). A port
+// that starts parked starts with none. While the selected port is parked every call below
+// that would touch its UART does nothing (a write fails).
 void      serial_out_park(int port, int park);
 int       serial_out_parked(int port);
 // Another port's handshake line and clock, as serial_out_clear and serial_out_clock read the
 // selected one's. Any task.
 int       serial_out_clear_of(int port);
 int       serial_out_clock_of(int port, int *hz);
-// W-1179: framing errors, breaks and parity errors on a port's RX since the last call, parked
-// or not: LocalTalk reaching a UART set for a printer. Empties the port's event queue, so it
+// W-1179: framing errors, breaks and parity errors on a port's RX since the last call (none
+// while it is parked): LocalTalk reaching a UART set for a printer. Empties the port's event queue, so it
 // takes a QuickDraw LaserWriter's BREAK too (serial_out_break_take): only for a port with no
 // clock, outside a question or a job (callers hold the job lock).
 int       serial_out_junk_of(int port);
