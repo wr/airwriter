@@ -616,6 +616,12 @@ typedef enum { LT_CHIP_UNKNOWN, LT_CHIP_OK, LT_CHIP_NONE, LT_CHIP_NO_TASHTALK,
                LT_CHIP_SILENT } lt_chip_t;
 static volatile lt_chip_t s_lt_chip[PORTS_MAX];
 static lt_chip_t lt_chip_shown(void);
+// One start or probe at a time: page, boot. W-1186: and no start while a socket's job changes
+// hands (sock_job_set takes it after the job lock, never the other way round): a socket's
+// UART has one driver, and a node started between its park and the printer line's unpark, or
+// before its socket is told to listen, would take the UART or send into a printer. On every
+// build, a board with no PIC pins included.
+static SemaphoreHandle_t s_lt_mx;
 
 static const char *lt_chip_name(lt_chip_t c)
 {
@@ -3909,11 +3915,6 @@ static void tashtalk_install(void)
     xSemaphoreGive(s_job_lock);
 }
 
-// One start or probe at a time: page, boot. W-1186: and no start while a socket's job changes
-// hands (sock_job_set takes it after the job lock, never the other way round): a socket's
-// UART has one driver, and a node started between its park and the printer line's unpark, or
-// before its socket is told to listen, would take the UART or send into a printer.
-static SemaphoreHandle_t s_lt_mx;
 
 // W-1186: the UART a socket's LocalTalk node uses. Rev A's is UART2, LocalTalk's alone. On rev
 // 2026.11 each socket has one UART for whichever job it does (J2's UART1, J4's UART0), which
@@ -4612,9 +4613,7 @@ void app_main(void)
     s_job_lock = xSemaphoreCreateBinary();
     xSemaphoreGive(s_job_lock);             // created empty; start it free
     s_offers_mx = xSemaphoreCreateMutex();
-#if CONFIG_AIRWRITER_PIC_CLK_PIN >= 0 && CONFIG_AIRWRITER_PIC_DAT_PIN >= 0
     s_lt_mx = xSemaphoreCreateMutex();
-#endif
 
     read_straps();
 

@@ -332,9 +332,9 @@ pr_gate_t pr_job_gate(const pr_list_t *l, int id, int heard, pr_model_t heard_mo
 int  pr_offers(const pr_list_t *l, pr_where_t link, int ids[], int max);
 // W-1186: on the cable on port `cable_port` (1 or 2; 0 as pr_offers): the other cable's
 // printers too. pr_offer_as gives the NBP name (Pascal, MacRoman) an AppleTalk printer is
-// offered under there, 0 when it is not: its own, or, where a printer of its kind has that
-// name already (two LaserWriters with one name, one on each cable), its record's name, with
-// 2 to 9 after it if that is taken too.
+// offered under there, 0 when it is not: its own NBP name, or, when another record of its
+// kind has that name too (two LaserWriters with one name, one on each cable), its record's
+// name, the page's. A name the link has already gets " 2" to " 9", never another record's.
 int  pr_offers_on(const pr_list_t *l, pr_where_t link, int cable_port, int ids[], int max);
 int  pr_offer_as(const pr_list_t *l, int id, pr_where_t link, int cable_port, uint8_t out[33]);
 

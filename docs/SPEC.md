@@ -1054,14 +1054,19 @@ read back is a list made again). At most 8 records.
   registration 4 on every running link (`lt_node_offer`, sockets 0x85-0x88). Rev 2026.11's two
   cables are two links (W-1186), so a Mac on one is offered the LaserWriter on the other as an
   EtherTalk Mac is offered a cable's, and nothing else crosses between the two networks. A
-  link takes a name once, so a printer whose NBP name a printer of its kind already has on a
-  link is offered there under its record's name (`pr_offer_as`), and if that is taken too,
-  that name with 2 to 9 after it. Two LaserWriters both named LaserWriter, one on each cable,
-  are "LaserWriter" and "LaserWriter 2" on the page, on phones (Bonjour and IPP take the
-  record's name, which the list keeps unique) and to EtherTalk Macs; a Mac on port 1 sees its
-  own "LaserWriter" and port 2's as "LaserWriter 2", and a Mac on port 2 the same the other
-  way round, so each Mac's "LaserWriter" is the one on its own cable. The offers carry each
-  name's record id (`lt_offers_t.ids`), which the relay goes by, not the name. A Mac's
+  link takes a name once (`offer_names`, one pass in list order; `pr_offer_as`). A printer
+  whose NBP name no other record of its kind has is offered under it. One that shares its
+  NBP name is offered under its record's name, so Macs see the page's names wherever they are
+  free, whatever order the list is in and whatever the person renamed. A name the link has
+  already (a printer of that kind on the link itself, or an earlier offer) gets " 2" to " 9"
+  after it, cut to fit as MacRoman characters, and never one that is another record's page
+  name or NBP name. Two LaserWriters both named LaserWriter, one on each cable, are
+  "LaserWriter" and "LaserWriter 2" on the page, on phones (Bonjour and IPP take the record's
+  name, which the list keeps unique) and to EtherTalk Macs. A Mac on port 1 sees its own
+  "LaserWriter" and port 2's as "LaserWriter 2". A Mac on port 2 sees its own as "LaserWriter"
+  (the page's "LaserWriter 2", which answers there itself) and port 1's as "LaserWriter 3":
+  on a cable, the plain name is always that cable's own printer. The offers carry each name's
+  record id (`lt_offers_t.ids`), which the relay goes by, not the name. A Mac's
   connection on a relayed name goes through `localtalk/pap_relay.c`, run by `laser.c` with the
   one PAP client under the job lock: busy, in the printer's own status words, until the
   printer's connection is open; then both ways as they are, the printer's output 256 bytes a

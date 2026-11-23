@@ -505,9 +505,9 @@ static void test_two_cables(void)
     // Two of one name, and a link takes a name once: each is offered on the other's cable
     // under a name that is free there, so a Mac on either port reaches both. Port 1 has the
     // real "LaserWriter" (a), so b is "LaserWriter 2" there, its record's name; port 2 has the
-    // real "LaserWriter" (b), where a's own name and its record's are that name, so a is
-    // "LaserWriter 2" there. EtherTalk Macs see "LaserWriter" (a) and "LaserWriter 2" (b), as
-    // the page and phones name them.
+    // real "LaserWriter" (b), where a's record name is that name, so a gets a number, and not
+    // 2, which is b's name on the page: "LaserWriter 3". EtherTalk Macs see "LaserWriter" (a)
+    // and "LaserWriter 2" (b), as the page and phones name them.
     int ids[8];
     uint8_t as[33];
     CHECK(!strcmp(pr_get(&L, a)->name, "LaserWriter"));
@@ -518,7 +518,7 @@ static void test_two_cables(void)
     CHECK_EQ_INT(pr_offer_as(&L, a, PR_WHERE_CABLE, 1, as), 0);     // on its own cable
     CHECK_EQ_INT(pr_offers_on(&L, PR_WHERE_CABLE, 2, ids, 8), 1);
     CHECK_EQ_INT(ids[0], a);
-    CHECK(pr_offer_as(&L, a, PR_WHERE_CABLE, 2, as) && !memcmp(as, P("LaserWriter 2"), 14));
+    CHECK(pr_offer_as(&L, a, PR_WHERE_CABLE, 2, as) && !memcmp(as, P("LaserWriter 3"), 14));
     CHECK_EQ_INT(pr_offers(&L, PR_WHERE_NETWORK, ids, 8), 2);
     CHECK(pr_offer_as(&L, a, PR_WHERE_NETWORK, 0, as) && !memcmp(as, P("LaserWriter"), 12));
     CHECK(pr_offer_as(&L, b, PR_WHERE_NETWORK, 0, as) && !memcmp(as, P("LaserWriter 2"), 14));
@@ -586,6 +586,98 @@ static void test_two_cables(void)
     pr_init(&M2, MAC, 1);
     CHECK_EQ_INT(pr_load(&M2, blob, n), 0);
     CHECK_EQ_INT(pr_get(&M2, d)->port, 0);
+}
+
+// W-1186: the names Macs are offered follow the page's names, not the list's order.
+static void test_offer_names(void)
+{
+    lw_info_t info;
+    lw_info_default(&info);
+    uint8_t as[33];
+    pr_live_t live[PR_MAX] = { 0 };
+    static char js[8192];
+    // (a) Two of one name; the first is removed and found again, so it is after the second in
+    // the list, and "LaserWriter" on the page again. Macs see each under its page name.
+    fresh();
+    int a = pr_at_seen_on(&L, PR_WHERE_CABLE, 1, P("LaserWriter"), P("LaserWriter"), 0, 0);
+    pr_at_queried(&L, a, 1, &info);
+    int b = pr_at_seen_on(&L, PR_WHERE_CABLE, 2, P("LaserWriter"), P("LaserWriter"), 0, 1);
+    pr_at_queried(&L, b, 1, &info);
+    CHECK_EQ_INT(pr_remove(&L, a), 0);
+    a = pr_at_seen_on(&L, PR_WHERE_CABLE, 1, P("LaserWriter"), P("LaserWriter"), 0, 1);
+    pr_at_queried(&L, a, 1, &info);
+    CHECK(pr_index(&L, a) > pr_index(&L, b));
+    CHECK(!strcmp(pr_get(&L, a)->name, "LaserWriter"));
+    CHECK(!strcmp(pr_get(&L, b)->name, "LaserWriter 2"));
+    CHECK(pr_offer_as(&L, a, PR_WHERE_NETWORK, 0, as) && !memcmp(as, P("LaserWriter"), 12));
+    CHECK(pr_offer_as(&L, b, PR_WHERE_NETWORK, 0, as) && !memcmp(as, P("LaserWriter 2"), 14));
+    CHECK(pr_offer_as(&L, b, PR_WHERE_CABLE, 1, as) && !memcmp(as, P("LaserWriter 2"), 14));
+    CHECK(pr_offer_as(&L, a, PR_WHERE_CABLE, 2, as) && !memcmp(as, P("LaserWriter 3"), 14));
+    // The page's list of what the Chooser shows is those names.
+    CHECK(pr_json(&L, live, js, sizeof js) > 0);
+    CHECK(strstr(js, "\"chooser\":[\"LaserWriter 2\",\"LaserWriter\"]") != NULL);
+    // (b) Renamed: the names the person gave are the names Macs see.
+    CHECK_EQ_INT(pr_rename(&L, a, "Office"), 0);
+    CHECK_EQ_INT(pr_rename(&L, b, "LaserWriter"), 0);
+    CHECK(pr_offer_as(&L, a, PR_WHERE_NETWORK, 0, as) && !memcmp(as, P("Office"), 7));
+    CHECK(pr_offer_as(&L, b, PR_WHERE_NETWORK, 0, as) && !memcmp(as, P("LaserWriter"), 12));
+    CHECK(pr_offer_as(&L, b, PR_WHERE_CABLE, 1, as) && !memcmp(as, P("LaserWriter 2"), 14));  // port 1's own has it
+    CHECK(pr_offer_as(&L, a, PR_WHERE_CABLE, 2, as) && !memcmp(as, P("Office"), 7));
+    CHECK(pr_json(&L, live, js, sizeof js) > 0);
+    CHECK(strstr(js, "\"chooser\":[\"LaserWriter\",\"Office\"]") != NULL);
+    // A printer nobody shares a name with keeps its NBP name, whatever the page calls it.
+    int u = pr_at_seen_on(&L, PR_WHERE_CABLE, 2, P("Upstairs"), P("LaserWriter"), 0, 0);
+    pr_at_queried(&L, u, 1, &info);
+    CHECK_EQ_INT(pr_rename(&L, u, "Loft"), 0);
+    CHECK(pr_offer_as(&L, u, PR_WHERE_NETWORK, 0, as) && !memcmp(as, P("Upstairs"), 9));
+
+    // (c) Three of one name: port 1, port 2 and one on the Wi-Fi's EtherTalk. There the Wi-Fi
+    // one has the plain name, the second keeps its page name, and the first's number is
+    // nobody's page name.
+    fresh();
+    a = pr_at_seen_on(&L, PR_WHERE_CABLE, 1, P("LaserWriter"), P("LaserWriter"), 0, 0);
+    pr_at_queried(&L, a, 1, &info);
+    b = pr_at_seen_on(&L, PR_WHERE_CABLE, 2, P("LaserWriter"), P("LaserWriter"), 0, 1);
+    pr_at_queried(&L, b, 1, &info);
+    int w = pr_at_seen(&L, PR_WHERE_NETWORK, P("Wifi"), P("LaserWriter"), 0);
+    pr_at_queried(&L, w, 1, &info);
+    memcpy(pr_get(&L, w)->nbp, P("LaserWriter"), 12);
+    CHECK_EQ_INT(pr_rename(&L, w, "LaserWriter 3"), 0);
+    CHECK(pr_offer_as(&L, a, PR_WHERE_NETWORK, 0, as) && !memcmp(as, P("LaserWriter 4"), 14));
+    CHECK(pr_offer_as(&L, b, PR_WHERE_NETWORK, 0, as) && !memcmp(as, P("LaserWriter 2"), 14));
+    CHECK_EQ_INT(pr_offer_as(&L, w, PR_WHERE_NETWORK, 0, as), 0);
+    CHECK(pr_offer_as(&L, b, PR_WHERE_CABLE, 1, as) && !memcmp(as, P("LaserWriter 2"), 14));
+    CHECK(pr_offer_as(&L, w, PR_WHERE_CABLE, 1, as) && !memcmp(as, P("LaserWriter 3"), 14));
+    CHECK(pr_offer_as(&L, a, PR_WHERE_TUNNEL, 0, as) && !memcmp(as, P("LaserWriter"), 12));
+    CHECK(pr_offer_as(&L, b, PR_WHERE_TUNNEL, 0, as) && !memcmp(as, P("LaserWriter 2"), 14));
+    CHECK(pr_offer_as(&L, w, PR_WHERE_TUNNEL, 0, as) && !memcmp(as, P("LaserWriter 3"), 14));
+
+    // A name as long as NBP allows: the number takes the place of its last two characters.
+    fresh();
+    const char *lng = "ABCDEFGHIJKLMNOPQRSTUVWXYZ012345";       // 32
+    a = pr_at_seen_on(&L, PR_WHERE_CABLE, 1, P(lng), P("LaserWriter"), 0, 0);
+    pr_at_queried(&L, a, 1, &info);
+    b = pr_at_seen_on(&L, PR_WHERE_CABLE, 2, P(lng), P("LaserWriter"), 0, 1);
+    pr_at_queried(&L, b, 1, &info);
+    CHECK(pr_offer_as(&L, a, PR_WHERE_CABLE, 2, as));
+    CHECK_EQ_INT(as[0], 32);
+    CHECK(!memcmp(as + 1, lng, 30) && as[31] == ' ' && as[32] >= '2' && as[32] <= '9');
+    CHECK(pr_offer_as(&L, b, PR_WHERE_CABLE, 1, as) && as[0] <= 32 && memcmp(as + 1, lng, as[0]) != 0);
+    // An accented letter where the cut falls (MacRoman 0x8E, two bytes of UTF-8 in the page's
+    // name): the cut counts MacRoman characters, so the letter stays whole.
+    fresh();
+    uint8_t acc[33];
+    memcpy(acc, P("ABCDEFGHIJKLMNOPQRSTUVWXYZ012xy"), 32);        // 31: the 30th becomes the letter
+    acc[30] = 0x8E;
+    a = pr_at_seen_on(&L, PR_WHERE_CABLE, 1, acc, P("LaserWriter"), 0, 0);
+    pr_at_queried(&L, a, 1, &info);
+    b = pr_at_seen_on(&L, PR_WHERE_CABLE, 2, acc, P("LaserWriter"), 0, 1);
+    pr_at_queried(&L, b, 1, &info);
+    CHECK_EQ_INT((int)strlen(pr_get(&L, a)->name), 32);
+    CHECK(pr_offer_as(&L, a, PR_WHERE_CABLE, 2, as));
+    CHECK_EQ_INT(as[0], 32);
+    CHECK(!memcmp(as + 1, acc + 1, 30) && as[30] == 0x8E && as[31] == ' ' && as[32] >= '2');
+    CHECK(!memchr(as + 1, '?', as[0]));
 }
 
 static void test_offers(void)
@@ -3639,6 +3731,7 @@ int main(void)
     test_macroman_name();
     test_remove();
     test_two_cables();
+    test_offer_names();
     test_offers();
     test_box_state();
     test_migrate();

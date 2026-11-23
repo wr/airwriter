@@ -1095,75 +1095,81 @@ static int on_link(const pr_rec_t *r, int link, int port)
     return link != PR_WHERE_CABLE || !port || !r->port || r->port == port;
 }
 
-static int offer_name(const pr_list_t *l, const pr_rec_t *r, int link, int port,
-                      uint8_t out[NBP_NAME_MAX + 1]);
-
-// A printer of r's kind other than r has the name `c` on the link: one that is on it, or a
-// record before r offered there under it.
-static int offer_name_used(const pr_list_t *l, const pr_rec_t *r, int link, int port,
-                           const uint8_t *c)
+// W-1186: the name each AppleTalk printer is offered under on a link (any link: -1; a cable:
+// the one on `port`), names[i] for r[i], empty where it is not offered: on that link itself,
+// where it speaks for itself, or not identified. One pass in list order, nothing on the stack
+// but the caller's names.
+//  - A printer whose NBP name no other record of its kind has is offered under it, as ever.
+//  - One that shares its NBP name (two LaserWriters that kept the name they shipped with, one
+//    on each cable) is offered under its record's name, the page's and the phones': Macs see
+//    the page's names wherever they are free.
+//  - A name the link has already (a printer of that kind on the link, or an offer before this
+//    one) gets " 2" to " 9" after it, cut to fit as MacRoman, and never a name that is another
+//    record's page name or NBP name: nobody's name is taken by a suffix.
+static void offer_names(const pr_list_t *l, int link, int port,
+                        uint8_t names[PR_MAX][NBP_NAME_MAX + 1])
 {
     for (int i = 0; i < l->n; i++) {
-        const pr_rec_t *q = &l->r[i];
-        if (q == r || q->where == PR_WHERE_PORT || q->kind != r->kind) continue;
-        if (on_link(q, link, port)) {
-            if (pstr_eq(q->nbp, c)) return 1;
-            continue;
+        const pr_rec_t *r = &l->r[i];
+        names[i][0] = 0;
+        if (r->where == PR_WHERE_PORT || !r->identified || on_link(r, link, port)) continue;
+        int shared = 0;
+        for (int j = 0; j < l->n; j++) {
+            const pr_rec_t *q = &l->r[j];
+            shared |= q != r && q->where != PR_WHERE_PORT && q->kind == r->kind &&
+                      pstr_eq(q->nbp, r->nbp);
         }
-        uint8_t as[NBP_NAME_MAX + 1];
-        if (q < r && offer_name(l, q, link, port, as) && pstr_eq(as, c)) return 1;
+        uint8_t base[NBP_NAME_MAX + 1] = { 0 };
+        if (shared) nbp_name(base, r->name);
+        if (!base[0]) memcpy(base, r->nbp, sizeof base);
+        if (base[0] > NBP_NAME_MAX) base[0] = NBP_NAME_MAX;
+        for (int k = 1; k < 10; k++) {
+            uint8_t c[NBP_NAME_MAX + 1];
+            memcpy(c, base, sizeof c);
+            if (k > 1) {
+                if (c[0] > NBP_NAME_MAX - 2) c[0] = NBP_NAME_MAX - 2;
+                c[++c[0]] = ' ';
+                c[++c[0]] = (uint8_t)('0' + k);
+            }
+            int taken = 0;
+            for (int j = 0; j < l->n && !taken; j++) {
+                const pr_rec_t *q = &l->r[j];
+                if (q == r || q->where == PR_WHERE_PORT || q->kind != r->kind) continue;
+                if (on_link(q, link, port)) taken = pstr_eq(q->nbp, c);
+                else if (j < i) taken = names[j][0] && pstr_eq(names[j], c);
+                if (k > 1 && !taken) {                // a suffix takes nobody's name
+                    uint8_t pn[NBP_NAME_MAX + 1] = { 0 };
+                    nbp_name(pn, q->name);
+                    taken = pstr_eq(q->nbp, c) || pstr_eq(pn, c);
+                }
+            }
+            if (taken) continue;
+            memcpy(names[i], c, sizeof c);
+            break;
+        }
     }
-    return 0;
-}
-
-// W-1186: the name an AppleTalk printer `r` is offered under on `link` (any link: -1; a
-// cable: the one on `port`), 0 when it is not offered there: it is on that link itself, where
-// it speaks for itself, or not identified. Its own NBP name, as ever, unless a printer of its
-// kind has that name there already, as two LaserWriters that both kept the name they shipped
-// with do, one on each cable. Then the name its record has (the second of two is "LaserWriter
-// 2" on the page and on phones), and if that is taken there too, that name with 2 to 9 after
-// it: a link takes a name once, and every printer is reached from every link but its own.
-static int offer_name(const pr_list_t *l, const pr_rec_t *r, int link, int port,
-                      uint8_t out[NBP_NAME_MAX + 1])
-{
-    if (r->where == PR_WHERE_PORT || !r->identified || on_link(r, link, port)) return 0;
-    if (!offer_name_used(l, r, link, port, r->nbp)) {
-        memcpy(out, r->nbp, NBP_NAME_MAX + 1);
-        return 1;
-    }
-    for (int k = 1; k < 10; k++) {
-        char n[PR_NAME_MAX + 4];
-        if (k == 1) snprintf(n, sizeof n, "%s", r->name);
-        else snprintf(n, sizeof n, "%.*s %d", NBP_NAME_MAX - 2, r->name, k);
-        nbp_name(out, n);
-        if (out[0] && !offer_name_used(l, r, link, port, out)) return 1;
-    }
-    return 0;
-}
-
-// Whether vintage Macs on `link` (any link: -1; a cable: the one on `port`) are offered `r`:
-// the port's one ImageWriter (`own`, port_offer's), or an AppleTalk printer from another link
-// (offer_name).
-static int offered(const pr_list_t *l, const pr_rec_t *r, const pr_rec_t *own, int link, int port)
-{
-    uint8_t as[NBP_NAME_MAX + 1];
-    if (r->where == PR_WHERE_PORT) return r == own;
-    return offer_name(l, r, link, port, as);
 }
 
 int pr_offer_as(const pr_list_t *l, int id, pr_where_t link, int cable_port,
                 uint8_t out[NBP_NAME_MAX + 1])
 {
-    const pr_rec_t *r = pr_get((pr_list_t *)l, id);
-    return r ? offer_name(l, r, link, cable_port, out) : 0;
+    uint8_t names[PR_MAX][NBP_NAME_MAX + 1];
+    int i = pr_index(l, id);
+    if (i < 0) return 0;
+    offer_names(l, link, cable_port, names);
+    memcpy(out, names[i], NBP_NAME_MAX + 1);
+    return out[0] != 0;
 }
 
 int pr_offers_on(const pr_list_t *l, pr_where_t link, int cable_port, int ids[], int max)
 {
+    // The port's one ImageWriter (port_offer's), and the AppleTalk printers of other links.
     const pr_rec_t *own = port_offer(l);
+    uint8_t names[PR_MAX][NBP_NAME_MAX + 1];
+    offer_names(l, link, cable_port, names);
     int n = 0;
     for (int i = 0; i < l->n && n < max; i++)
-        if (offered(l, &l->r[i], own, link, cable_port)) ids[n++] = l->r[i].id;
+        if (l->r[i].where == PR_WHERE_PORT ? &l->r[i] == own : names[i][0]) ids[n++] = l->r[i].id;
     return n;
 }
 
@@ -1766,14 +1772,14 @@ size_t pr_json(const pr_list_t *l, const pr_live_t live[PR_MAX], char *buf, size
     if (two) PUT(",\"port2_on\":%u", pr_port_on(l, 1, live));
     PUT(",\"said_other\":%s,\"chooser\":[",
         pr_port_said_other(l, 0) || (two && pr_port_said_other(l, 1)) ? "true" : "false");
+    uint8_t seen[PR_MAX][NBP_NAME_MAX + 1];
+    offer_names(l, -1, 0, seen);                 // as a link with no printer of its own sees them
     for (int i = 0, n = 0; i < l->n; i++) {
         const pr_rec_t *r = &l->r[i];
-        if (!offered(l, r, own, -1, 0)) continue;
         char seen_as[3 * NBP_NAME_MAX + 1];
-        uint8_t as[NBP_NAME_MAX + 1];
+        if (r->where == PR_WHERE_PORT ? r != own : !seen[i][0]) continue;
         if (r->where == PR_WHERE_PORT) snprintf(seen_as, sizeof seen_as, "%s", r->name);
-        else if (offer_name(l, r, -1, 0, as)) nbp_utf8(seen_as, sizeof seen_as, as);
-        else continue;
+        else nbp_utf8(seen_as, sizeof seen_as, seen[i]);
         esc(e_name, sizeof e_name, seen_as);
         PUT("%s\"%s\"", n++ ? "," : "", e_name);
     }
