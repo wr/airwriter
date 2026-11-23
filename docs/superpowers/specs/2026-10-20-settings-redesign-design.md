@@ -182,3 +182,19 @@ Each was looked at in `tools/webui/preview.py` at desktop and phone width, light
   off by themselves`, where the board itself reports what printed, if its owner switches that on.
   Problems need a log on any printer, so the report went to every printer's page and the starred
   box shrank to a line. Wells approved it on board 1.
+
+- **2026-11-23, EtherTalk, with Basilisk II's Macs in it** (`W-1189 Settings page: call
+  Networked Macs EtherTalk, with Basilisk II's Macs in it`; SPEC §3.13). AppleTalk has three
+  cards: AppleTalk Port, EtherTalk, Infinite Mac. "Networked Macs" read as any Mac, and modern
+  Macs print over AirPrint; EtherTalk is Apple's name for what a vintage Mac speaks on a network,
+  the pair to LocalTalk, and a modern Mac never uses it. (This design ruled out "Ethernet"
+  because AirWriter has none; EtherTalk names the Mac's side.) The EtherTalk card holds the
+  Wi-Fi link and Basilisk II's tunnel: one switch sets `radio` and `tunnel` together, and is on
+  while either is (a board set before may have one off). Its list is both links' Macs, newest
+  first. An emulated Mac, Basilisk II's here and Infinite Mac's in its own card, shows as a
+  compact Mac on a modern screen (`g-emac`), a real one as the compact Mac; Wells chose it over a
+  Mac in a window and an outlined Mac. Basilisk II's own icon is a smudge at 16 px.
+  Basilisk II's card, its icon and its Set Up… sheet are gone: its two Ports settings are on the
+  wiki's Vintage Macs (LocalTalk) page. Infinite Mac keeps its own card and switch because it
+  reaches out to the internet. A printer heard over the tunnel is still "Basilisk II" in
+  Printers.

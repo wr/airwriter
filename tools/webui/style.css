@@ -322,8 +322,6 @@ dialog::backdrop{background:var(--scrim)}
 .dlg{display:flex;flex-direction:column;gap:14px;padding:20px}
 .dlg>b{font-size:var(--t-head);font-weight:600}
 .dlg p{margin:0;color:var(--fg2)}
-.dlg ol{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:6px}
-.dlg .q{font-weight:600;color:var(--fg)}
 .dlg .box{box-shadow:0 0 0 1px var(--line)}
 .nets{max-height:260px;overflow-y:auto}
 .nets .none{color:var(--fg2)}
