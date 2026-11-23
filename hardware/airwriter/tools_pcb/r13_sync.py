@@ -29,7 +29,7 @@ import xml.etree.ElementTree as ET
 import pcbnew
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-BOARD = os.path.join(HERE, '..', 'airwriter.kicad_pcb')
+BOARD = os.environ.get('R15_BOARD') or os.path.join(HERE, '..', 'airwriter.kicad_pcb')
 FP_ROOT = '/Applications/KiCad/KiCad.app/Contents/SharedSupport/footprints'
 BOARD_ONLY = ('H', 'TP', 'LOGO')              # refs with no symbol, by design
 RENAMED = {                                   # rev A net -> rev 2026.11 net

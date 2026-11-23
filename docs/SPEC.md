@@ -157,7 +157,9 @@ Apple's own cables were unterminated, but the pads cost nothing.
 - The ESP32-S3-WROOM-1 antenna keepout must overhang the board edge. No copper, no ground
   pour, no traces under the antenna region on either layer.
 - Star-ground the DIN8 shell to signal ground through a single 0R jumper plus a footprint
-  for a 1nF capacitor in parallel, so the shield strategy can be changed after testing.
+  for a 1nF capacitor in parallel, so the shield strategy can be changed after testing (rev A,
+  J2 only). Rev 2026.11 ties both sockets' shells straight to signal ground (W-1176): rev A's
+  link was never lifted, and the two sockets are made the same.
 - **USB-C carries data as well as power.** D+ and D- go to the S3's native USB peripheral
   on GPIO19/20 through U5, so the same cable that powers the board also flashes and
   consoles it. Both flip orientations are tied (A6+B6, A7+B7). J3, the 4-pin 1.27mm
