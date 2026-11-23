@@ -101,7 +101,10 @@ back's silk under each socket (PORT 1, PORT 2). Per socket:
   Against the receiver's load the signal arrives at about 85 % and its edges slow, which
   should be fine at LocalTalk's 230 kbit/s. If a built board's LocalTalk is marginal, smaller
   resistors there trade some of the RS-232 protection for signal.
-- The firmware keeps J2 the printer port and J4 LocalTalk for now (SPEC 3.19).
+- The case calls J2 port 1 and J4 port 2. The firmware works out each socket's job from what
+  is plugged into it, and shares a printer on each at once (`W-1179 Rev 2026.11: plug anything
+  into either socket and AirWriter works out what it is`, SPEC 3.19). The LC's one socket, J2,
+  is a printer port only.
 
 ## GPIOs that changed
 

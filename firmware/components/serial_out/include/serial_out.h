@@ -49,9 +49,41 @@ typedef struct {
     // Loops TX back into RX inside the peripheral, so the byte stream can be
     // verified on a devkit with no transceiver and no printer attached.
     int      loopback;
+
+    // W-1179: the socket starts on LocalTalk: the port starts parked (serial_out_park), its
+    // pins never routed until it is unparked.
+    int      start_parked;
 } serial_out_cfg_t;
 
+// W-1179: rev 2026.11 has a printer line on each socket (J2's on UART1, J4's on UART0). One
+// job at a time, so every call below except the _of ones and serial_out_park works on the
+// selected port, which callers change only under the job lock. Port 0 is J2, rev A's only
+// one. Loopback is port 0's alone.
+#define SERIAL_OUT_PORTS 2
+
+// serial_out_init is serial_out_init_port(0, cfg).
 esp_err_t serial_out_init(const serial_out_cfg_t *cfg);
+esp_err_t serial_out_init_port(int port, const serial_out_cfg_t *cfg);
+int       serial_out_present(int port);
+// Which port the calls below use: 0 until changed. A port not set up is not taken.
+void      serial_out_select(int port);
+int       serial_out_selected(void);
+// W-1179: the socket's other job, LocalTalk. Parked, the port's TX pad is an input with no
+// pull, its line is not reported (on_line, on_clock) and its clock state is forgotten;
+// unparked, its pins are routed back, its flow control is the link's and RX is dropped, and
+// the line is reported afresh. Callers hold the job lock and never park the selected port
+// mid-job.
+void      serial_out_park(int port, int park);
+int       serial_out_parked(int port);
+// Another port's handshake line and clock, as serial_out_clear and serial_out_clock read the
+// selected one's. Any task.
+int       serial_out_clear_of(int port);
+int       serial_out_clock_of(int port, int *hz);
+// W-1179: framing errors, breaks and parity errors on a port's RX since the last call, parked
+// or not: LocalTalk reaching a UART set for a printer. Empties the port's event queue, so it
+// takes a QuickDraw LaserWriter's BREAK too (serial_out_break_take): only for a port with no
+// clock, outside a question or a job (callers hold the job lock).
+int       serial_out_junk_of(int port);
 
 // Blocks until every byte is queued. With CTS flow control that means it
 // waits while the printer is busy or paused, which is the backpressure the

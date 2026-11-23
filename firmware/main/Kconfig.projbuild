@@ -197,6 +197,14 @@ config AIRWRITER_J4_RX_PIN
     help
         Rev 2026.11 board net J4_RX: IO10 straight from U6's RO.
 
+config AIRWRITER_J4_UART_NUM
+    int "J4's printer UART"
+    default 0
+    help
+        W-1179: rev 2026.11's second printer line, J4's, for when that socket does the
+        printer job. UART0: UART1 is J2's, UART2 TashTalk's, and the console is on
+        USB-Serial-JTAG.
+
 config AIRWRITER_J4_DE_PIN
     int "J4's driver enable, -1 if absent"
     default 3 if AIRWRITER_BOARD_2026_11

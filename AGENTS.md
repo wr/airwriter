@@ -45,8 +45,10 @@ Rev A boards are built and print from iPhones, Macs and vintage Macs. Rev 2026.1
 in Linear and older docs) is drawn and routed, not yet made. It has a build of its own
 (ESP32-S3-WROOM-1-N16R8, board straps, no DIP switches, a handshake GPIO per port; SPEC §3.19),
 which nothing has run on yet, the LC's one status light included. Its two sockets have the same
-circuit, each with its own TashTalk, so either can be the printer port or LocalTalk (W-1176);
-until the page lets you choose, its firmware keeps J2 the printer port and J4 LocalTalk.
+circuit, each with its own TashTalk, so either can be a printer port or LocalTalk (W-1176), and
+its firmware works out each socket's job from what is plugged in and shares a printer on each
+at once (W-1179). Its case, docs and page call J2 port 1 and J4 port 2; rev A keeps printer port
+and AppleTalk port.
 
 - **Printers.** Tested on the ImageWriter II. The original ImageWriter and the ImageWriter LQ
   take the same stream and are expected to work, untested; docs say so rather than excluding
@@ -102,6 +104,7 @@ Where things are (`firmware/components/` unless a path is given):
 | Cable test, TashTalk flashing | `cable_test`, `pic_prog` | |
 | Settings page | `webui`; sources in `tools/webui` | settings-redesign design |
 | Password and sign-in, the bench | `auth`, `webui_auth.c`; `tools/bench` | SPEC §3.20, setup-password design |
+| Rev 2026.11's sockets: each one's job, what's plugged in | `ports` (`port_detect_core.c`); main's `psock_t` | SPEC §3.19, rev 2026.11 board design |
 
 The web UI and API are on port 80: `/api/status`, `/api/general` (settings), `/update` (OTA
 upload), `/api/update` (GitHub releases), `/api/printers`, `/api/lt`, `/api/et`, `/api/log`,
@@ -110,9 +113,10 @@ upload), `/api/update` (GitHub releases), `/api/printers`, `/api/lt`, `/api/et`,
 board with a password every route but the page and `/api/auth/*` answers 401 until the browser
 signs in (`tools/webui/signin.py` for curl). The page's own addresses
 (`/about`, `/about/log`, `/printers/2`) are listed in `webui_paths.h` and, for the preview,
-`tools/webui/preview.py`. Two settings have no control on the
-page: Top margin (`{"top_margin":N}`, 1/144 in, -216 to 144, default -144) and dot gain
-(`{"gain":N}`, 0–45, default 0). A board with no Wi-Fi credentials runs its setup network,
+`tools/webui/preview.py`. Some settings have no control on the
+page: Top margin (`{"top_margin":N}`, 1/144 in, -216 to 144, default -144), dot gain
+(`{"gain":N}`, 0–45, default 0) and, on rev 2026.11, each socket's job (`{"port1":"auto"}`,
+`"printer"` or `"localtalk"`, and `port2`; default auto). A board with no Wi-Fi credentials runs its setup network,
 `AirWriter-xxxx` (WPA2 with AirWriter's password; open on a board with none), at
 http://192.168.4.1/.
 

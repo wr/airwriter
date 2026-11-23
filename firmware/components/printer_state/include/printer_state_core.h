@@ -61,22 +61,26 @@ typedef struct {
 #define PS_CABLE_MS      2400   // a sweep between the sockets and back, then the answer there
 #define PS_CABLE_NO_CHIP_MS 1000   // no sweep: two red blinks by the LocalTalk socket
 
+#define PS_PORTS 2              // W-1179: the printer sockets a board may have
+
 typedef struct {
     ps_timing_t tm;
-    uint64_t    boot_at, line_since, failed_at, activity_at, state_since, kicked_at, cable_at;
+    uint64_t    boot_at, line_since, failed_at, activity_at, state_since, cable_at;
     uint64_t    wifi_at, setup_at, job_at, out_at;  // W-1049: when each happened; out_at is
                                                      // when the boot wave started going out
     uint8_t     out;               // out_at is set
     uint8_t     tried;             // the saved network was tried (PS_EV_WIFI_JOINING)
     uint8_t     join_failed;       // setup mode after a failed try
     uint8_t     fresh;             // PS_EV_WIFI_FRESH: Wi-Fi was just saved
-    uint8_t     setup, wifi_up, line_ready, job, failed, ap_stations, greeted, kicked;
+    uint8_t     setup, wifi_up, line_ready, job, failed, ap_stations, greeted;
     uint8_t     fault;             // PS_EV_FAULT_ON, until FAULT_OFF or the job's start or end
     uint8_t     job_started_low;   // the line was down when this job began: no printer to wait for
     uint8_t     cable;             // PS_CABLE_*, the last test's result, or 0
     uint8_t     cancelled;         // the last job was cancelled, not finished
-    uint8_t     port_ready;        // W-1088: the port printer's own line (ps_port_line)
-    uint64_t    port_since;
+    // W-1088: the port printer's own line (ps_port_line), and W-1039's kick. W-1179: per printer
+    // socket, port 1's first.
+    uint8_t     port_ready[PS_PORTS], kicked[PS_PORTS];
+    uint64_t    port_since[PS_PORTS], kicked_at[PS_PORTS];
     ps_state_t  last, prev;
 } ps_t;
 
@@ -118,6 +122,8 @@ const char *ps_name(ps_state_t st);   // "ready", "offline", ...
 // ps_kicked() after sending. W-1088: the port's line is its own, given by
 // ps_port_line (not ready from init): idle, the line the events carry is the
 // box's (main.c's box_ready: the port printer's record if shared, or a shared LaserWriter).
-void        ps_port_line(ps_t *ps, int ready, uint64_t now_ms);
-int         ps_want_kick(const ps_t *ps, uint64_t now_ms);
-void        ps_kicked(ps_t *ps, uint64_t now_ms);
+// W-1179: per printer socket (`port`, 0 port 1, 1 port 2): each one's printer is kicked on its
+// own line. Port 1's kick also starts over when the panel's line comes up, as it always did.
+void        ps_port_line(ps_t *ps, int port, int ready, uint64_t now_ms);
+int         ps_want_kick(const ps_t *ps, int port, uint64_t now_ms);
+void        ps_kicked(ps_t *ps, int port, uint64_t now_ms);

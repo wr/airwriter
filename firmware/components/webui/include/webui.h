@@ -20,7 +20,8 @@ typedef struct {
 
     // Flashes TashTalk into the LocalTalk PIC and writes the result JSON into
     // `buf`. NULL leaves POST /api/localtalk/flash answering 404.
-    void  (*localtalk_flash)(void *ctx, char *buf, size_t cap);
+    // W-1179: port 1 or 2 is that socket's TashTalk, 0 the LocalTalk socket's.
+    void  (*localtalk_flash)(void *ctx, int port, char *buf, size_t cap);
     // The LocalTalk node's state and log for GET /api/lt. NULL answers 404.
     void  (*lt_json)(void *ctx, char *buf, size_t cap);
     // The last PAP job's bytes for GET /api/lt/job; NULL (or no job) is 404.

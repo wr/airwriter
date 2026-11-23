@@ -22,7 +22,9 @@
 static const char *TAG = "stylewriter";
 
 static stylewriter_cfg_t s_cfg;
-static int               s_link_sw;       // J2 is at a StyleWriter's link; the ImageWriter's at boot
+// Each printer line is at a StyleWriter's link; the ImageWriter's at boot. W-1179: per line, as
+// serial_out keeps each one's link; the calls below act on the selected one.
+static int               s_link_sw[SERIAL_OUT_PORTS];
 static volatile int      s_cancel;
 
 // ---------------------------------------------------------------- the session's line
@@ -102,10 +104,12 @@ static int swapped(void)
 void stylewriter_link(int sw)
 {
     sw = sw ? 1 : 0;
-    if (sw == s_link_sw) return;
+    int port = serial_out_selected();
+    if (port < 0 || port >= SERIAL_OUT_PORTS) port = 0;
+    if (sw == s_link_sw[port]) return;
     if (sw) serial_out_set_link(57600, 0);
     else    serial_out_set_link(CONFIG_AIRWRITER_BAUD, 1);
-    s_link_sw = sw;
+    s_link_sw[port] = sw;
 }
 
 void stylewriter_link_record(void)

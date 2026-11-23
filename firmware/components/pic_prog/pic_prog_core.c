@@ -294,6 +294,45 @@ static pic_err_t flash_body(const pic_hal_t *h, const pic_image_t *img, pic_resu
     return PIC_OK;
 }
 
+// The configuration words first: a part stopped mid-flash has them blank, and so does a blank
+// part, so neither reads the program memory.
+static pic_err_t check_body(const pic_hal_t *h, const pic_image_t *img, pic_result_t *r)
+{
+    load_word(h, CMD_LOAD_CONFIG, PIC_BLANK);
+    r->devid = read_devid_from_8000(h);
+    r->err = classify_id(r->devid);
+    if (r->err != PIC_OK) return r->err;
+
+    command(h, CMD_INC_ADDR);
+    uint16_t got = read_word(h);
+    if ((got ^ img->config1) & PIC_CONFIG1_MASK)
+        return mismatch(r, PIC_ADDR_CONFIG1, img->config1, got);
+    command(h, CMD_INC_ADDR);
+    got = read_word(h);
+    if ((got ^ img->config2) & PIC_CONFIG2_MASK)
+        return mismatch(r, PIC_ADDR_CONFIG2, img->config2, got);
+
+    command(h, CMD_RESET_ADDR);
+    for (uint32_t a = 0; a < PIC_PROG_WORDS; a++) {
+        got = read_word(h);
+        if (got != img->prog[a]) return mismatch(r, a, img->prog[a], got);
+        command(h, CMD_INC_ADDR);
+    }
+    return PIC_OK;
+}
+
+pic_err_t pic_check(const pic_hal_t *h, const pic_image_t *img, pic_result_t *r)
+{
+    memset(r, 0, sizeof *r);
+    if (!img->has_config) return r->err = PIC_ERR_IMAGE;
+
+    enter_lvp(h);
+    pic_err_t e = check_body(h, img, r);
+    exit_lvp(h);
+    r->err = e;
+    return e;
+}
+
 pic_err_t pic_flash(const pic_hal_t *h, const pic_image_t *img, pic_result_t *r)
 {
     memset(r, 0, sizeof *r);

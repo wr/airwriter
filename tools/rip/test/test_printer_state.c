@@ -15,11 +15,32 @@ static void up_and_ready(ps_t *ps, uint64_t t0)
     ps_init(ps, &TM, t0);
     ps_post(ps, PS_EV_WIFI_JOINING, t0);
     ps_post(ps, PS_EV_LINE_READY, t0);
-    ps_port_line(ps, 1, t0);
+    ps_port_line(ps, 0, 1, t0);
     ps_post(ps, PS_EV_WIFI_UP, t0 + 1000);
 }
 
 static ps_state_t st(ps_t *ps, uint64_t t) { return ps_update(ps, t).state; }
+
+// W-1179: two printer sockets, each kicked on its own line: port 2's ImageWriter stuck busy is
+// kicked while port 1's is ready, and kicking it leaves port 1's count alone.
+static void test_kick_per_port(void)
+{
+    ps_t ps;
+    ps_init(&ps, &TM, 0);
+    ps_port_line(&ps, 0, 1, 1000);
+    ps_port_line(&ps, 1, 1, 1000);
+    ps_port_line(&ps, 1, 0, 10000);
+    assert(!ps_want_kick(&ps, 1, 14999));
+    assert(ps_want_kick(&ps, 1, 15000));
+    assert(!ps_want_kick(&ps, 0, 15000));
+    ps_kicked(&ps, 1, 15000);
+    assert(!ps_want_kick(&ps, 1, 74999));
+    assert(ps_want_kick(&ps, 1, 75000));
+    ps_port_line(&ps, 0, 0, 80000);                 // port 1 now stuck too: its own clock
+    assert(!ps_want_kick(&ps, 0, 84999));
+    assert(ps_want_kick(&ps, 0, 85000));
+    assert(!ps_want_kick(&ps, 2, 85000));           // no third socket
+}
 
 int main(void)
 {
@@ -308,44 +329,44 @@ int main(void)
     up_and_ready(&ps, 0);
     st(&ps, 4000);
     ps_post(&ps, PS_EV_LINE_NOT_READY, 10000);
-    ps_port_line(&ps, 0, 10000);
-    assert(!ps_want_kick(&ps, 14999));
-    assert(ps_want_kick(&ps, 15000));
-    ps_kicked(&ps, 15000);
-    assert(!ps_want_kick(&ps, 74999));
-    assert(ps_want_kick(&ps, 75000));
-    ps_kicked(&ps, 75000);
+    ps_port_line(&ps, 0, 0, 10000);
+    assert(!ps_want_kick(&ps, 0, 14999));
+    assert(ps_want_kick(&ps, 0, 15000));
+    ps_kicked(&ps, 0, 15000);
+    assert(!ps_want_kick(&ps, 0, 74999));
+    assert(ps_want_kick(&ps, 0, 75000));
+    ps_kicked(&ps, 0, 75000);
     // The line coming back resets it: a later stall is kicked 5 s in again.
     ps_post(&ps, PS_EV_LINE_READY, 80000);
-    ps_port_line(&ps, 1, 80000);
-    assert(!ps_want_kick(&ps, 80000));
+    ps_port_line(&ps, 0, 1, 80000);
+    assert(!ps_want_kick(&ps, 0, 80000));
     ps_post(&ps, PS_EV_LINE_NOT_READY, 100000);
-    ps_port_line(&ps, 0, 100000);
-    assert(!ps_want_kick(&ps, 104999));
-    assert(ps_want_kick(&ps, 105000));
+    ps_port_line(&ps, 0, 0, 100000);
+    assert(!ps_want_kick(&ps, 0, 104999));
+    assert(ps_want_kick(&ps, 0, 105000));
     // W-1088: idle, the box's line is ready while a shared LaserWriter is, but
     // the kick is for the port's ImageWriter: its own line decides (board 1,
     // 2026-10-24: stuck busy after a USB replug, never kicked, the next job
     // stalled at once).
     up_and_ready(&ps, 0);
     ps_post(&ps, PS_EV_LINE_READY, 4000);           // the box: a LaserWriter is ready
-    ps_port_line(&ps, 0, 10000);                    // the ImageWriter, stuck busy
-    assert(!ps_want_kick(&ps, 14999));
-    assert(ps_want_kick(&ps, 15000));
-    ps_port_line(&ps, 1, 20000);
-    assert(!ps_want_kick(&ps, 90000));
+    ps_port_line(&ps, 0, 0, 10000);                    // the ImageWriter, stuck busy
+    assert(!ps_want_kick(&ps, 0, 14999));
+    assert(ps_want_kick(&ps, 0, 15000));
+    ps_port_line(&ps, 0, 1, 20000);
+    assert(!ps_want_kick(&ps, 0, 90000));
     // Never mid-job: there a low line is paper or a jam, and CTRL-X would
     // erase a line of the page.
     up_and_ready(&ps, 0);
     ps_post(&ps, PS_EV_JOB_START, 5000);
     ps_post(&ps, PS_EV_LINE_NOT_READY, 6000);
-    ps_port_line(&ps, 0, 6000);
-    assert(!ps_want_kick(&ps, 60000));
+    ps_port_line(&ps, 0, 0, 6000);
+    assert(!ps_want_kick(&ps, 0, 60000));
     // Busy from power-up past the boot settle: kicked like any other stall.
     ps_init(&ps, &TM, 0);
     ps_post(&ps, PS_EV_WIFI_UP, 2000);
-    assert(!ps_want_kick(&ps, 4999));
-    assert(ps_want_kick(&ps, 5000));
+    assert(!ps_want_kick(&ps, 0, 4999));
+    assert(ps_want_kick(&ps, 0, 5000));
 
     // W-1055: a cable test's result shows over the idle states for its hold,
     // wakes the panel, and gives way to a job.
@@ -431,6 +452,8 @@ int main(void)
     assert(strcmp(ps_name(PS_READY), "ready") == 0);
     assert(strcmp(ps_name(PS_OFFLINE), "offline") == 0);
     assert(strcmp(ps_name(PS_ATTENTION), "attention") == 0);
+
+    test_kick_per_port();
 
     printf("test_printer_state: ok\n");
     return 0;

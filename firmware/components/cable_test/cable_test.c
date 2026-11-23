@@ -206,8 +206,10 @@ int cable_test_lt_busy(void) { return s_lt_owned; }
 static ct_tt_t chip_check(void)
 {
     uint16_t id = 0;
-    pic_err_t e = pic_prog_read_id(&id);
-    ESP_LOGW(TAG, "TashTalk took no bytes; U7 reads 0x%04X: %s", id, pic_err_str(e));
+    // W-1179: the LocalTalk socket's PIC, J4's U7 or rev 2026.11's J2 U10.
+    pic_pins_t pins = { s_cfg.lt_mclr, s_cfg.lt_tx, s_cfg.lt_rx, 0 };
+    pic_err_t e = pic_prog_read_id_on(&pins, &id);
+    ESP_LOGW(TAG, "TashTalk took no bytes; its PIC reads 0x%04X: %s", id, pic_err_str(e));
     switch (e) {
     case PIC_ERR_NO_DEVICE:
         s_dbg.devid = id;
