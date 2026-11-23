@@ -39,21 +39,20 @@ cp "$MAIN.kicad_pro" "$TMP/airwriter-lc.kicad_pro"
 # under the test button, with its cap, U9 and its cap, and R20; the LC strap R33
 # fitted). The schematic carries every part; the lists here say which each variant
 # leaves off. The cover has no schematic, so its standoff line is added here, on
-# AirWriter only. Neither places J2, J4 or a PIC: Wells fits them after delivery
-# (the board keeps J2 and J4 out of its position files), and on the LC bridges JP1,
-# a solder jumper, which no BOM lists.
+# AirWriter only. Neither places J2 or J4: Wells fits them after delivery (the board
+# keeps them out of its position files), and on the LC bridges JP1, a solder jumper,
+# which no BOM lists. U7 and U10, the two sockets' TashTalks (W-1176), are SOICs that
+# AirWriter's order places blank; the ESP32 flashes them in place. The LC leaves both off.
 python3 - "$TMP/bom.csv" "$OUT" "$LC_OUT" <<'PY'
 import csv, os, re, sys
 bom_path, out, lc_out = sys.argv[1:]
 POS, LC_POS = os.path.join(out, 'combined-pos.csv'), os.path.join(lc_out, 'airwriter-lc-pos.csv')
-NOTES = {
-  'U7': 'Fit the DIP-8 SOCKET only (LCSC C72124) and leave it empty: no PIC',
+NOTES = {  # by any one of a line's parts
+  'U10': 'BLANK parts, as LCSC ships them: do not program them; the board does',
 }
 # Wells fits the mini-DINs after delivery, so no BOM lists them: an assembler buys from
 # the part number and quantity columns, whatever the note says.
 NOT_BOUGHT = {'J2', 'J4'}
-# U7's value in the schematic is the PIC; what is bought and placed is its socket.
-SOCKET = 'DIP-8 socket, left empty (no PIC)'
 def expand(spec):
     out = []
     for part in spec.split(','):
@@ -64,26 +63,24 @@ def expand(spec):
             out.append(part)
     return out
 AIRWRITER_OFF = ['R33']                                   # the LC strap
-LC_OFF = expand('D10-D25,D27-D46,C30-C45,C47-C66') + ['C21']   # every LED but D26, their caps, the LED bulk cap
+LC_OFF = expand('D10-D25,D27-D46,C30-C45,C47-C66') + ['C21', 'U7', 'U10']   # every LED but D26, their caps, the LED bulk cap; the TashTalks
 STANDOFFS = ['MT1,MT2,MT3,MT4', '9774030151R (Wurth WA-SMSI M2.5x3 SMT spacer)',
              'panel:SMT_Standoff_M2.5_D6.0mm', '', '4',
              'Not at LCSC: source from Digi-Key or consign; panel is art-face-down in this production panel so these reflow on the SAME side as all other parts; ring paste aperture in stencil data']
 SPACER = ['D3 (spacer)', 'LED4*8 nylon LED spacer, 4 mm x 8 mm', '-', 'C92326', '1',
           'Under D3: LED leads through the spacer bore, LED flange seated on it, lens up']
-PLACEMENTS = {'AirWriter': 135, 'AirWriter LC': 59}
+PLACEMENTS = {'AirWriter': 141, 'AirWriter LC': 63}
 
 bom = list(csv.reader(open(bom_path)))
 bom = [bom[0]] + [r for r in bom[1:] if not r[2].startswith('Jumper:SolderJumper')]   # copper, not parts
 assert NOT_BOUGHT <= {r[0] for r in bom[1:]}, 'the mini-DINs are no longer lines of their own'
 bom = [bom[0]] + [r for r in bom[1:] if r[0] not in NOT_BOUGHT]
 for r in bom[1:]:
-    if r[0] in NOTES: r[5] = NOTES[r[0]]
-    if r[0] == 'U7': r[1] = SOCKET
+    for ref in expand(r[0]):
+        if ref in NOTES: r[5] = NOTES[ref]
     if r[5].startswith('LC only'): r[5] = ''   # R33's schematic note: the lists here say it
 pos = list(csv.reader(open(POS)))
 lc_pos = list(csv.reader(open(LC_POS)))
-for r in pos[1:] + lc_pos[1:]:
-    if r[0] == 'U7': r[1] = SOCKET
 on_board = {r[0] for r in lc_pos[1:]}
 missing = [r for r in AIRWRITER_OFF + LC_OFF if r not in on_board]
 assert not missing, f'variant lists name parts the board does not place: {missing}'

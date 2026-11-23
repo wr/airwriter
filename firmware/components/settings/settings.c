@@ -76,6 +76,17 @@ esp_err_t settings_load(settings_t *out, const char *mac_suffix)
         nvs_get_u8(h, "airprint", &ap);
         out->airprint = ap ? 1 : 0;
         out->lt_port = nvs_get_u8(h, "lt_port", &lt) == ESP_OK && lt <= 1 ? (int8_t)lt : 1;
+        static const char *const set_key[2] = { "port1set", "port2set" };
+        static const char *const job_key[2] = { "port1job", "port2job" };
+        static const char *const heard_key[2] = { "port1heard", "port2heard" };
+        for (int i = 0; i < 2; i++) {
+            uint8_t v = 0;
+            out->port_set[i] = nvs_get_u8(h, set_key[i], &v) == ESP_OK && v <= 2 ? v : 0;
+            v = 0;
+            out->port_job[i] = nvs_get_u8(h, job_key[i], &v) == ESP_OK && v <= 2 ? v : 0;
+            v = 0;
+            out->port_heard[i] = nvs_get_u8(h, heard_key[i], &v) == ESP_OK && v == 1;
+        }
         int16_t tm;
         out->top_margin = nvs_get_i16(h, "topmargin", &tm) == ESP_OK && tm >= SET_TOP_MIN &&
                           tm <= SET_TOP_MAX ? tm : CONFIG_AIRWRITER_TOP_MARGIN;
@@ -212,6 +223,38 @@ esp_err_t settings_save_switches(int airprint, int lt_port)
     err = nvs_commit(h);
     nvs_close(h);
     return err;
+}
+
+static esp_err_t save_u8(const char *key, uint8_t v)
+{
+    nvs_handle_t h;
+    esp_err_t err = nvs_open(NS, NVS_READWRITE, &h);
+    if (err != ESP_OK) return err;
+    uint8_t was;
+    if (nvs_get_u8(h, key, &was) != ESP_OK || was != v) {
+        nvs_set_u8(h, key, v);
+        err = nvs_commit(h);
+    }
+    nvs_close(h);
+    return err;
+}
+
+esp_err_t settings_save_port_set(int i, int set)
+{
+    if (i < 0 || i > 1 || set < 0 || set > 2) return ESP_ERR_INVALID_ARG;
+    return save_u8(i ? "port2set" : "port1set", (uint8_t)set);
+}
+
+esp_err_t settings_save_port_job(int i, int job)
+{
+    if (i < 0 || i > 1 || job < 0 || job > 2) return ESP_ERR_INVALID_ARG;
+    return save_u8(i ? "port2job" : "port1job", (uint8_t)job);
+}
+
+esp_err_t settings_save_port_heard(int i, int heard)
+{
+    if (i < 0 || i > 1) return ESP_ERR_INVALID_ARG;
+    return save_u8(i ? "port2heard" : "port1heard", heard ? 1 : 0);
 }
 
 esp_err_t settings_save_ribbon(uint8_t ribbon)

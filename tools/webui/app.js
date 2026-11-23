@@ -451,7 +451,7 @@ function logHeader(){
   const ps=(PR&&PR.printers||[]).map(p=>{
     const t=LWT&&p.where!=='port'?LWT.find(t=>t.id===p.id):null, own=t&&t.message?lwStatus(t.message):'';
     const w=stWords(p)[1], more=own&&!w.toLowerCase().includes(own.toLowerCase());
-    return '  '+prLabel(p)+', '+(WHERE[p.where]||p.where)+': '+w+(more?'; its status line: '+own:'');
+    return '  '+prLabel(p)+', '+whereOf(p)+': '+w+(more?'; its status line: '+own:'');
   });
   return ['AirWriter log',
     'Firmware: '+S.version+' (slot '+S.slot+')',
@@ -559,8 +559,20 @@ const RESET={'power-on':'Plugged in','software':'After a restart','panic':'After
   'task watchdog':'After a crash','interrupt watchdog':'After a crash','watchdog':'After a crash',
   'brownout':'After the power dipped','reset pin':'Reset','usb':'Over USB','deep sleep':'Woke up'};
 
+/* W-1179: the words for the sockets, from what the case says on this board. */
+const LT_CARD='LocalTalk';   // the AppleTalk card's name on rev 2026.11
+function portWords(){
+  const two=twoPorts();
+  $('lt-name').textContent=two?LT_CARD:'AppleTalk Port';
+  document.querySelector('#c-lt [data-way=lt]').setAttribute('aria-label',two?LT_CARD:'AppleTalk Port');
+  $('lt-desc').textContent=two?'A Mac plugged into port 1 or 2 with a LocalTalk cable.':'A Mac plugged in with a LocalTalk cable.';
+  $('tt-what').textContent=two?LT_CARD:'The AppleTalk Port';
+  $('lbl-p2').textContent=two?'port 2':'appletalk';
+  $('lbl-p1').textContent=two?'port 1':'serial';
+  $('add-title').textContent=two?'Add a printer':'Add a printer on the printer port';
+}
 function draw(s){
-  S=s; setup=!!s.setup;
+  S=s; setup=!!s.setup; portWords();
   if(!!s.lc!==markLc){ markLc=!!s.lc; repaintMark(); }   // one dot or the panel
   // the port's ImageWriter: its ribbon and gain draw the halftone sample
   const colour=s.ribbon==='colour';
@@ -775,6 +787,12 @@ setTimeout(()=>document.body.classList.add('ready'),1500);
    for what asks the person something; a new printer just appears in the list. */
 let PR=null, sel=null, LWT=null;
 const WHERE={port:'Printer port',cable:'AppleTalk port',network:'Your network',tunnel:'Basilisk II',zone:'Infinite Mac'};
+/* W-1179: on rev 2026.11 either socket takes a printer or LocalTalk, and the
+   case calls them port 1 (the one every AirWriter has) and port 2. A printer,
+   or a LaserWriter on LocalTalk, shows the port it's plugged into. Rev A's
+   case still says serial and appletalk, so its page keeps its old words. */
+const twoPorts=()=>!!S.board&&S.board!=='rev-a';
+const whereOf=p=>(p.where==='port'||p.where==='cable')&&twoPorts()&&p.port?'Port '+p.port:WHERE[p.where]||p.where;
 const ST={ready:['g','Ready'],printing:['g','Printing'],cleaning:['g','Cleaning'],attention:['a','Needs attention'],failed:['r','The last job failed'],offline:['','Offline']};
 /* W-1103: the port's models, the board's own names for them (sw_model.c). The
    original StyleWriter has no cleaning, and only the Color ones take a color cartridge. */
@@ -849,7 +867,7 @@ function stWords(p){
 }
 /* A notice: what is wrong, in bold, then what to do. */
 const NOTE={
-  unknown_port:(p)=>['Unrecognized printer on the printer port','If it’s an ImageWriter or StyleWriter, choose its model.',[['Choose Model…','open'],['Dismiss','dismiss']]],
+  unknown_port:(p)=>['Unrecognized printer on '+(twoPorts()&&p&&p.port?'port '+p.port:'the printer port'),'If it’s an ImageWriter or StyleWriter, choose its model.',[['Choose Model…','open'],['Dismiss','dismiss']]],
   no_answer:(p)=>[q(p)+' isn’t responding','Make sure it’s connected and switched on.',[['Share Anyway','use_anyway'],['Dismiss','dismiss']]],
   too_many:(p)=>[q(p)+' isn’t shared','You can share up to '+(PR.max_shared||6)+' printers. To share this one, stop sharing another.',[['OK','dismiss']]]};
 const q=p=>nb(esc(p?p.name:'A printer'));
@@ -872,10 +890,10 @@ function prDraw(){
   // the rows; W-1102: a QuickDraw LaserWriter on the port that AirWriter can't print to is
   // grayed at the end, with nothing to open, until it's unplugged (Wells, 2026-11-13)
   const off=PR.port_unsupported?'<div class="row prow off"><span class="ic unk"><svg><use href="#g-printer"/></svg></span><span class=txt>'
-    +esc(PR.port_unsupported)+'<small>'+WHERE.port+' · Not supported yet</small></span><i class=lamp></i><span class=chev aria-hidden=true>›</span></div>':'';
+    +esc(PR.port_unsupported)+'<small>'+whereOf({where:'port',port:PR.port_unsupported_port})+' · Not supported yet</small></span><i class=lamp></i><span class=chev aria-hidden=true>›</span></div>':'';
   h=PR.printers.length||off?PR.printers.map(p=>{ const [cls]=stWords(p);
     return '<button class="row link prow" type=button data-pr='+p.id+'>'+icHTML(p)+'<span class=txt>'+esc(p.name)
-      +'<small>'+esc(WHERE[p.where]||p.where)+(p.shared?'':' · Not shared')+'</small></span><i class="lamp '+cls+'"></i><span class=chev aria-hidden=true>›</span></button>'; }).join('')+off
+      +'<small>'+esc(whereOf(p))+(p.shared?'':' · Not shared')+'</small></span><i class="lamp '+cls+'"></i><span class=chev aria-hidden=true>›</span></button>'; }).join('')+off
     :'<p class=empty>No printers yet. Connect your printer and switch it on, then Look for Printers.</p>';
   if($('pr-list')._h!==h){ $('pr-list')._h=h; $('pr-list').innerHTML=h; }
   // AirPrint: each shared printer's address
@@ -920,7 +938,7 @@ const logFile=()=>'airwriter-'+((S.ap||'').split('-')[1]||'board').toLowerCase()
 function problemURL(p){
   const m=p?prLabel(p):'';
   const lines=['What happened:','','','What you expected:','','',
-    ...(p?['Printed from (phone, computer or vintage Mac):','','','Printer: '+m,'Connection: '+(WHERE[p.where]||p.where)]:[]),
+    ...(p?['Printed from (phone, computer or vintage Mac):','','','Printer: '+m,'Connection: '+whereOf(p)]:[]),
     'Firmware: '+S.version,'Board: '+boardName(),'','Log: drag '+logFile()+' here.'];
   return 'https://github.com/wr/airwriter/issues/new?title='+encodeURIComponent(m?m+': ':'')+'&body='+encodeURIComponent(lines.join('\n'));
 }
@@ -935,7 +953,7 @@ function pdDraw(){
   const qd=p.kind==='qdlaser';                      // W-1102: a Personal LaserWriter 300
   { const h=icHTML(p); if($('pd-ic')._h!==h){ $('pd-ic')._h=h; $('pd-ic').innerHTML=h; } }
   $('pd-name').textContent=p.name;
-  $('pd-where').textContent=(p.product&&p.product!==p.name?p.product+' · ':'')+(WHERE[p.where]||p.where);
+  $('pd-where').textContent=(p.product&&p.product!==p.name?p.product+' · ':'')+whereOf(p);
   const [cls,text]=stWords(p);
   lamp($('prn-lamp'),cls); $('prn-state').textContent=text;
   // W-1102: why the port's last job failed, when the board has a reason (a page that didn't fit in the printer's memory)
@@ -1057,7 +1075,9 @@ $('testpage').onclick=async()=>{
   const p=prById(sel); if(!p) return;
   // W-1116: a port printer while another one is connected: the board answers 409 with which
   // to connect (an action's refusal); any other offline printer gets the page's one line
-  const other=p.where==='port'&&p.kind!=='unknown'&&!PR.said_other&&PR.port_on&&PR.port_on!==p.id;
+  // W-1179: on rev 2026.11, the printer on this record's own port (port 2's is port2_on)
+  const on=p.port===2?PR.port2_on:PR.port_on;
+  const other=p.where==='port'&&p.kind!=='unknown'&&!PR.said_other&&on&&on!==p.id;
   if(p.state==='offline'&&!other){
     say('prn-say',p.where==='port'?(ownFaults(p)?'The printer is offline. Check power and cable.':'The printer is offline. Check power, cable and SELECT.'):'The printer is offline. Check that it’s switched on.',1,4000);
     return;
@@ -1189,16 +1209,21 @@ function atDraw(){
   {
     const c=$('c-lt'), sw=c.querySelector('[data-way=lt]'), live=!!(LT&&LT.on);
     const chip=!live&&CHIP[S.lt_chip];
-    c.classList.toggle('hide',S.pic===false);
-    $('tt-credit').classList.toggle('hide',S.pic===false);
+    c.classList.toggle('hide',S.pic===false||!!S.lc);
+    $('tt-credit').classList.toggle('hide',S.pic===false||!!S.lc);
     sw.checked=live; sw.disabled=!S.pic;
     sw.closest('.sw').classList.toggle('hide',!!chip);
     c.classList.toggle('off',!live&&!chip);
     $('lt-flash').classList.toggle('hide',!flashing&&!(chip&&S.lt_chip==='no_tashtalk'));
     if(chip) put(c,flashing?stLine('a','Flashing TashTalk…'):stHTML(chip[0],chip[1]));
+    else if(live&&twoPorts()&&!LT.port){
+      // W-1179: no port has LocalTalk on it yet; a Mac plugged into either is heard when it talks
+      on++; put(c,macList([]));
+    }
     else if(live){
       on++; macs+=(LT.macs||[]).length;
-      put(c,(LT.phase!=='online'?stLine('a','Joining the AppleTalk network…'):'')
+      // W-1179: 'listening', nothing heard on the port yet, is not joining
+      put(c,(LT.phase==='acquiring'?stLine('a','Joining the AppleTalk network…'):twoPorts()?stLine('g','On port '+LT.port):'')
         +macList(macsOf(LT.macs,MAC,m=>'Node '+m.node)));
     }
   }
@@ -1342,7 +1367,7 @@ function suDraw(){
     :ps.length?(ps.length===1?'Here’s your printer. Rename it if you like.':'Here are your printers. Rename them if you like.'):'';
   const h=ps.length?ps.map(p=>'<div class="row prow">'+icHTML(p)+'<span class=txt><input class=fld data-rename='+p.id
       +' value="'+esc(p.name)+'" maxlength=32 autocomplete=off spellcheck=false aria-label="Name"><small>'
-      +esc(WHERE[p.where]||p.where)+'</small></span></div>').join('')
+      +esc(whereOf(p))+'</small></span></div>').join('')
     :'<p class=empty>'+(looking?'Looking…':'No printers yet.')+'</p>';
   // a name being typed is kept
   if(!$('su-list').contains(document.activeElement)&&$('su-list')._h!==h){ $('su-list')._h=h; $('su-list').innerHTML=h; }

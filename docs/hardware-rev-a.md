@@ -126,7 +126,8 @@ pre-order review (2026-09-01).
 - A partner VBUS via at the H4 crossing (one 0.4 mm via carries a modelled 1.94 A worst case).
 - U5 (USB ESD) sits on an 8 mm stub on D−; put it in line.
 - 74LVC1G125 for U9: the AHCT part wants 4.5 V minimum against USB's 4.40 V.
-- Decide J4's shell: an R/C tie like J2's R8, or document why it is hard GND.
+- Decide J4's shell: an R/C tie like J2's R8, or document why it is hard GND. Rev 2026.11
+  (W-1176): both shells straight to GND; R8 and C15 are gone.
 - Port legends print under the connector bodies; SW1 has no silk.
 - A GND test pad beside TP7/TP8.
 - Rename the `LT_A/LT_B/LT_Y/LT_Z` nets: the names are swapped but U6/U8 polarity is right.

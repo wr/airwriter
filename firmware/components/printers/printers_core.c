@@ -185,6 +185,7 @@ void pr_init(pr_list_t *l, const uint8_t mac[6], uint16_t epoch)
     memcpy(l->mac, mac, 6);
     l->epoch = epoch;
     l->next_id = 1;
+    l->n_ports = 1;
 }
 
 // ------------------------------------------------------------- lookups
@@ -215,27 +216,84 @@ const pr_rec_t *pr_port_of(const pr_list_t *l, pr_model_t m)
     return NULL;
 }
 
-const pr_rec_t *pr_port_current(const pr_list_t *l)
+// W-1179: socket s's live state; any other s is socket 0's, the only one a board may lack.
+static pr_port_state_t *sock_state(pr_list_t *l, int s)
 {
-    const pr_rec_t *p = pr_port_of(l, (pr_model_t)l->heard_model);
-    return p ? p : pr_port(l);
+    return &l->ports[(unsigned)s < PR_PORTS ? s : 0];
+}
+
+static const pr_port_state_t *sock_state_c(const pr_list_t *l, int s)
+{
+    return &l->ports[(unsigned)s < PR_PORTS ? s : 0];
+}
+
+int pr_port_sock(const pr_list_t *l, const pr_rec_t *r)
+{
+    return l->n_ports > 1 && r && r->port < PR_PORTS ? r->port : 0;
+}
+
+// Port record r is socket s's: the board has one socket, or r was last seen on s.
+static int on_sock(const pr_list_t *l, const pr_rec_t *r, int s)
+{
+    return r->where == PR_WHERE_PORT && pr_port_sock(l, r) == s;
+}
+
+// Socket s's record of model m (on a board with one socket, pr_port_of's).
+static const pr_rec_t *port_of_on(const pr_list_t *l, int s, int m)
+{
+    if (m == PR_MODEL_NONE) return NULL;
+    for (int i = 0; i < l->n; i++)
+        if (on_sock(l, &l->r[i], s) && l->r[i].model == m) return &l->r[i];
+    return NULL;
+}
+
+const pr_rec_t *pr_port_current(const pr_list_t *l, int s)
+{
+    const pr_rec_t *p = port_of_on(l, s, sock_state_c(l, s)->heard_model);
+    if (p) return p;
+    for (int i = 0; i < l->n; i++) if (on_sock(l, &l->r[i], s)) return &l->r[i];
+    return NULL;
+}
+
+// W-1179: r is the printer another socket than s holds now: its current record, with a printer
+// showing itself there.
+static int held_elsewhere(const pr_list_t *l, const pr_rec_t *r, int s)
+{
+    for (int o = 0; o < l->n_ports && o < PR_PORTS; o++)
+        if (o != s && l->ports[o].up && pr_port_current(l, o) == r) return 1;
+    return 0;
+}
+
+// W-1179: the record an answer of model m on socket s belongs to: socket s's, else one last seen
+// on the other socket whose printer is not there now (it was moved). NULL for none, and when
+// every record of the model is a printer the other socket holds: a second printer of the model.
+static pr_rec_t *port_answer_rec(pr_list_t *l, int s, int m)
+{
+    pr_rec_t *r = (pr_rec_t *)port_of_on(l, s, m);
+    if (r || l->n_ports < 2 || m == PR_MODEL_NONE) return r;
+    for (int i = 0; i < l->n; i++) {
+        pr_rec_t *c = &l->r[i];
+        if (c->where == PR_WHERE_PORT && c->model == m && !held_elsewhere(l, c, s)) return c;
+    }
+    return NULL;
 }
 
 // The port's record of `kind` that the person made so, or the board found: at most one of
 // each (an "Unknown printer" is made only on an empty port, "Something else" is one per port).
-static pr_rec_t *port_unknown(const pr_list_t *l, int found_auto)
+// W-1179: socket s's.
+static pr_rec_t *port_unknown(const pr_list_t *l, int s, int found_auto)
 {
     for (int i = 0; i < l->n; i++) {
         const pr_rec_t *r = &l->r[i];
-        if (r->where == PR_WHERE_PORT && r->kind == PR_KIND_UNKNOWN && !r->found_auto == !found_auto)
+        if (on_sock(l, r, s) && r->kind == PR_KIND_UNKNOWN && !r->found_auto == !found_auto)
             return (pr_rec_t *)r;
     }
     return NULL;
 }
 
-const pr_rec_t *pr_port_said_other(const pr_list_t *l)
+const pr_rec_t *pr_port_said_other(const pr_list_t *l, int s)
 {
-    return port_unknown(l, 0);
+    return port_unknown(l, s, 0);
 }
 
 int pr_port_count(const pr_list_t *l)
@@ -245,21 +303,21 @@ int pr_port_count(const pr_list_t *l)
     return c;
 }
 
-int pr_port_is_imagewriter(const pr_list_t *l)
+int pr_port_is_imagewriter(const pr_list_t *l, int s)
 {
-    const pr_rec_t *p = pr_port_current(l);
+    const pr_rec_t *p = pr_port_current(l, s);
     return p && p->kind == PR_KIND_IMAGEWRITER;
 }
 
-int pr_port_is_stylewriter(const pr_list_t *l)
+int pr_port_is_stylewriter(const pr_list_t *l, int s)
 {
-    const pr_rec_t *p = pr_port_current(l);
+    const pr_rec_t *p = pr_port_current(l, s);
     return p && p->kind == PR_KIND_STYLEWRITER;
 }
 
-int pr_port_is_qdlaser(const pr_list_t *l)
+int pr_port_is_qdlaser(const pr_list_t *l, int s)
 {
-    const pr_rec_t *p = pr_port_current(l);
+    const pr_rec_t *p = pr_port_current(l, s);
     return p && p->kind == PR_KIND_QDLASER;
 }
 
@@ -317,20 +375,39 @@ static void notes_clear(pr_list_t *l, int id, int kind)     // kind -1: every ki
         if (l->notes[i].id == id && (kind < 0 || l->notes[i].kind == kind)) note_drop(l, i);
 }
 
-// W-1103: the port's printer answered as `model` (a pr_model_t) of family `heard`.
-static void port_heard(pr_list_t *l, int heard, int model)
+// W-1103: socket s's printer answered as `model` (a pr_model_t) of family `heard`.
+static void port_heard(pr_list_t *l, int s, int heard, int model)
 {
-    l->heard = (uint8_t)heard;
-    l->heard_model = (uint8_t)model;
+    pr_port_state_t *ps = sock_state(l, s);
+    ps->heard = (uint8_t)heard;
+    ps->heard_model = (uint8_t)model;
 }
 
-// The port's last answer is forgotten (R10, R19): the person's word is the newest, and a
+// Socket s's last answer is forgotten (R10, R19): the person's word is the newest, and a
 // sighting pending from before it is not the first of the two answers that make a change.
-static void port_forget(pr_list_t *l)
+static void port_forget(pr_list_t *l, int s)
 {
-    l->heard = PR_HEARD_NONE;
-    l->heard_model = 0;
-    l->pending_model = 0;
+    pr_port_state_t *ps = sock_state(l, s);
+    ps->heard = PR_HEARD_NONE;
+    ps->heard_model = 0;
+    ps->pending_model = 0;
+}
+
+// W-1179: record r answered on socket s, so it is s's now. The socket it was last seen on forgets
+// its last answer when that named r's model: r's printer is no longer there.
+static void port_move(pr_list_t *l, pr_rec_t *r, int s)
+{
+    if (l->n_ports < 2 || !r || r->where != PR_WHERE_PORT || (unsigned)s >= PR_PORTS ||
+        r->port == s)
+        return;
+    int from = pr_port_sock(l, r);
+    r->port = (uint8_t)s;
+    if (l->ports[from].heard_model == r->model) port_forget(l, from);
+}
+
+void pr_port_up(pr_list_t *l, int s, int up)
+{
+    sock_state(l, s)->up = up ? 1 : 0;
 }
 
 // ------------------------------------------------------------- names
@@ -487,12 +564,13 @@ static void become_model(pr_list_t *l, pr_rec_t *r, int model)
     else become_imagewriter(l, r, model);
 }
 
-// A port record for a printer that named itself: found, named by its model, shared.
-static pr_rec_t *port_new(pr_list_t *l, int model)
+// A port record for a printer that named itself on socket s: found, named by its model, shared.
+static pr_rec_t *port_new(pr_list_t *l, int s, int model)
 {
     pr_rec_t *p = rec_new(l);
     if (!p) return NULL;
     p->where = PR_WHERE_PORT;
+    p->port = l->n_ports > 1 && (unsigned)s < PR_PORTS ? (uint8_t)s : 0;
     p->found_auto = 1;
     port_uuid(l, p->uuid, model);
     become_model(l, p, model);
@@ -509,20 +587,26 @@ static pr_rec_t *port_new(pr_list_t *l, int model)
 // same answer twice in a row: the first is PR_SEEN_AGAIN, even when the model has a record
 // of its own (ruling R16: one garbled reply never changes the list, and the board repeats
 // the question at once); any other model's answer in between starts over.
-static int port_named(pr_list_t *l, int heard, int model)
+//
+// W-1179: socket s's answer, its records the ones last seen there (port_answer_rec: a record the
+// other socket's printer left is this one's, and a record of its own is made for a second
+// printer of a model), and the record it names moves to s.
+static int port_named(pr_list_t *l, int s, int heard, int model)
 {
-    port_heard(l, heard, model);
-    pr_rec_t *rec = (pr_rec_t *)pr_port_of(l, (pr_model_t)model);
-    pr_rec_t *unknown = port_unknown(l, 1), *other = port_unknown(l, 0);
+    pr_port_state_t *ps = sock_state(l, s);
+    port_heard(l, s, heard, model);
+    pr_rec_t *rec = port_answer_rec(l, s, model);
+    pr_rec_t *unknown = port_unknown(l, s, 1), *other = port_unknown(l, s, 0);
     if (rec && !unknown && !other) {
-        l->pending_model = 0;
+        ps->pending_model = 0;
+        port_move(l, rec, s);
         return rec->id;
     }
-    if (l->pending_model != model) {
-        l->pending_model = (uint8_t)model;
+    if (ps->pending_model != model) {
+        ps->pending_model = (uint8_t)model;
         return PR_SEEN_AGAIN;
     }
-    l->pending_model = 0;
+    ps->pending_model = 0;
     // The printer that said nothing before was this one: its record becomes it, unless the
     // model has a record already, when it goes. The person's "Something else" is replaced.
     // By id: a removal moves the records after it.
@@ -534,32 +618,36 @@ static int port_named(pr_list_t *l, int heard, int model)
         pr_remove(l, unknown->id);
     }
     if (other_id) pr_remove(l, other_id);
-    rec = (pr_rec_t *)pr_port_of(l, (pr_model_t)model);
-    if (!rec) rec = port_new(l, model);
-    port_heard(l, heard, model);        // a removal above may have forgotten it (pr_remove, R19)
+    rec = port_answer_rec(l, s, model);
+    if (rec) port_move(l, rec, s);
+    else rec = port_new(l, s, model);
+    port_heard(l, s, heard, model);     // a removal above may have forgotten it (pr_remove, R19)
     return rec ? rec->id : -1;
 }
 
-int pr_port_seen(pr_list_t *l, pr_port_seen_t what)
+int pr_port_seen(pr_list_t *l, int s, pr_port_seen_t what)
 {
+    pr_port_state_t *ps = sock_state(l, s);
     if (what == PR_PORT_NOTHING) {
-        const pr_rec_t *p = pr_port_current(l);
+        const pr_rec_t *p = pr_port_current(l, s);
         return p ? p->id : -1;
     }
     if (what == PR_PORT_SILENT) {
         // The original ImageWriter has no self-ID: its line up and nothing said is its answer.
-        const pr_rec_t *iw1 = pr_port_of(l, PR_MODEL_IW1);
+        pr_rec_t *iw1 = port_answer_rec(l, s, PR_MODEL_IW1);
         if (iw1 && iw1->kind == PR_KIND_IMAGEWRITER) {
-            port_heard(l, PR_HEARD_IMAGEWRITER, PR_MODEL_IW1);
-            l->pending_model = 0;
+            port_heard(l, s, PR_HEARD_IMAGEWRITER, PR_MODEL_IW1);
+            ps->pending_model = 0;
+            port_move(l, iw1, s);
             return iw1->id;
         }
-        l->pending_model = 0;             // nothing said is another answer
-        const pr_rec_t *p = pr_port_current(l);
+        ps->pending_model = 0;            // nothing said is another answer
+        const pr_rec_t *p = pr_port_current(l, s);
         if (p) return p->id;              // a lost answer: no churn
         pr_rec_t *u = rec_new(l);
         if (!u) return -1;
         u->where = PR_WHERE_PORT;
+        u->port = l->n_ports > 1 && (unsigned)s < PR_PORTS ? (uint8_t)s : 0;
         u->kind = PR_KIND_UNKNOWN;
         u->found_auto = 1;
         port_uuid(l, u->uuid, PR_MODEL_NONE);
@@ -568,47 +656,49 @@ int pr_port_seen(pr_list_t *l, pr_port_seen_t what)
         return u->id;
     }
     int model = what == PR_PORT_IWLQ ? PR_MODEL_IWLQ : PR_MODEL_IW2;
-    return port_named(l, PR_HEARD_IMAGEWRITER, model);
+    return port_named(l, s, PR_HEARD_IMAGEWRITER, model);
 }
 
-int pr_port_seen_sw(pr_list_t *l, pr_model_t m)
+int pr_port_seen_sw(pr_list_t *l, int s, pr_model_t m)
 {
     if (!model_is_sw(m)) return -1;
-    return port_named(l, PR_HEARD_STYLEWRITER, m);
+    return port_named(l, s, PR_HEARD_STYLEWRITER, m);
 }
 
-int pr_port_seen_qd(pr_list_t *l, uint8_t engine)
+int pr_port_seen_qd(pr_list_t *l, int s, uint8_t engine)
 {
+    pr_port_state_t *ps = sock_state(l, s);
     pr_model_t m = pr_model_from_qd(qd_model_from_engine(engine));
     if (m != PR_MODEL_NONE) {
         // W-1146: a Select 300 has no number of its own, so any answer but the others' is one.
         // Two different answers in a row (another printer's reply garbled twice) start over, as
         // two models' answers would: the same Select answers the same each time.
-        if (m == PR_MODEL_SEL300 && l->qd_pending != engine && l->pending_model == PR_MODEL_SEL300)
-            l->pending_model = 0;
-        l->qd_other = 0;
-        l->qd_pending = m == PR_MODEL_SEL300 ? engine : 0;
-        return port_named(l, PR_HEARD_QDLASER, m);
+        if (m == PR_MODEL_SEL300 && ps->qd_pending != engine && ps->pending_model == PR_MODEL_SEL300)
+            ps->pending_model = 0;
+        ps->qd_other = 0;
+        ps->qd_pending = m == PR_MODEL_SEL300 ? engine : 0;
+        return port_named(l, s, PR_HEARD_QDLASER, m);
     }
     // One we cannot print to: named on the page, never a record, and only on the same answer
     // twice in a row, as any change the port's answers make (R16).
-    port_heard(l, PR_HEARD_QDLASER, PR_MODEL_NONE);
-    l->pending_model = 0;
-    if (l->qd_pending != engine) {
-        l->qd_pending = engine;
+    port_heard(l, s, PR_HEARD_QDLASER, PR_MODEL_NONE);
+    ps->pending_model = 0;
+    if (ps->qd_pending != engine) {
+        ps->qd_pending = engine;
         return PR_SEEN_AGAIN;
     }
-    l->qd_other = engine;
+    ps->qd_other = engine;
     return -1;
 }
 
-void pr_port_clock_gone(pr_list_t *l)
+void pr_port_clock_gone(pr_list_t *l, int s)
 {
-    l->qd_other = l->qd_pending = 0;
-    if (model_is_qd(l->pending_model)) l->pending_model = 0;
+    pr_port_state_t *ps = sock_state(l, s);
+    ps->qd_other = ps->qd_pending = 0;
+    if (model_is_qd(ps->pending_model)) ps->pending_model = 0;
 }
 
-int pr_port_sw_found(pr_list_t *l, int id, pr_model_t m)
+int pr_port_sw_found(pr_list_t *l, int s, int id, pr_model_t m)
 {
     if (!model_is_sw(m)) return 0;
     // The record the person named, when `id` names one (W-1116: the full sequence confirms
@@ -617,7 +707,7 @@ int pr_port_sw_found(pr_list_t *l, int id, pr_model_t m)
     pr_rec_t *p = id > 0 ? pr_get(l, id) : NULL;
     if (p && (p->where != PR_WHERE_PORT || p->kind != PR_KIND_STYLEWRITER)) p = NULL;
     if (!p && id <= 0) {
-        p = (pr_rec_t *)pr_port_current(l);
+        p = (pr_rec_t *)pr_port_current(l, s);
         if (!p || p->kind != PR_KIND_STYLEWRITER) {
             p = NULL;
             for (int i = 0; i < l->n; i++)
@@ -628,14 +718,18 @@ int pr_port_sw_found(pr_list_t *l, int id, pr_model_t m)
     // The full sequence named `m` on the port: that model is the printer on the port now.
     // When `m` already has its own record, that one is the printer; leave the picked record as
     // the person set it. Else the picked record becomes `m`.
-    pr_rec_t *other = (pr_rec_t *)pr_port_of(l, m);
+    // W-1179: the model's record is socket s's, or one the other socket's printer left (a record
+    // the other socket's printer holds is not this one: p becomes `m` beside it).
+    pr_rec_t *other = port_answer_rec(l, s, m);
     if (other && other != p) {
-        port_heard(l, PR_HEARD_STYLEWRITER, m);
+        port_heard(l, s, PR_HEARD_STYLEWRITER, m);
+        port_move(l, other, s);
         return 0;
     }
     int changed = p->model != m;
     if (changed) become_stylewriter(l, p, m);
-    port_heard(l, PR_HEARD_STYLEWRITER, m);
+    port_move(l, p, s);
+    port_heard(l, s, PR_HEARD_STYLEWRITER, m);
     return changed;
 }
 
@@ -807,11 +901,12 @@ int pr_set_model(pr_list_t *l, int id, pr_model_t m)
     // one, or stops being one, by hand.
     if (!r || r->where != PR_WHERE_PORT || m > PR_MODEL_SWC2500 || r->kind == PR_KIND_QDLASER)
         return -1;
-    // W-1116: one record per model, and one "Something else" per port.
-    const pr_rec_t *has = m == PR_MODEL_NONE ? pr_port_said_other(l) : pr_port_of(l, m);
+    // W-1116: one record per model, and one "Something else" per port (W-1179: per socket).
+    int sock = pr_port_sock(l, r);
+    const pr_rec_t *has = m == PR_MODEL_NONE ? pr_port_said_other(l, sock) : pr_port_of(l, m);
     if (has && has != r) return -2;
     r->found_auto = 0;
-    int on_port = pr_port_current(l) == r;        // before its model moves
+    int on_port = pr_port_current(l, sock) == r;  // before its model moves
     if (m == PR_MODEL_NONE) {
         int own = name_is_own(r);
         default_screen(r, PR_KIND_UNKNOWN);
@@ -822,7 +917,7 @@ int pr_set_model(pr_list_t *l, int id, pr_model_t m)
         if (!strcmp(r->dither, "apple")) snprintf(r->dither, sizeof r->dither, "atkinson");
         if (own) set_name(l, r, UNKNOWN_NAME);
         notes_clear(l, id, PR_NOTE_UNKNOWN_PORT);
-        if (on_port) port_forget(l);              // their word; a sighting before it is dropped
+        if (on_port) port_forget(l, sock);        // their word; a sighting before it is dropped
         return 0;
     }
     become_model(l, r, m);
@@ -836,7 +931,7 @@ int pr_set_model(pr_list_t *l, int id, pr_model_t m)
     // under a model this record no longer has would make a record added later with that
     // model the one on the port without its printer ever answering). Named on another record
     // (W-1116), nothing is forgotten: the printer on the port is still there.
-    if (on_port) port_forget(l);
+    if (on_port) port_forget(l, sock);
     return 0;
 }
 
@@ -845,9 +940,11 @@ int pr_add_port(pr_list_t *l, pr_model_t m)
     if (m < PR_MODEL_IW2 || m > PR_MODEL_SWC2500) return -1;
     if (pr_port_of(l, m)) return -2;
     // The printer that said nothing, or the person's "Something else", is the one the
-    // model names; else a record beside the ones there (W-1116).
-    pr_rec_t *p = port_unknown(l, 1);
-    if (!p) p = port_unknown(l, 0);
+    // model names; else a record beside the ones there (W-1116). W-1179: either socket's, port 1
+    // first; a new record is port 1's until its printer answers on one.
+    pr_rec_t *p = NULL;
+    for (int s = 0; !p && s < PR_PORTS; s++) p = port_unknown(l, s, 1);
+    for (int s = 0; !p && s < PR_PORTS; s++) p = port_unknown(l, s, 0);
     if (!p) {
         p = rec_new(l);
         if (!p) return -1;
@@ -865,7 +962,8 @@ int pr_remove(pr_list_t *l, int id)
     if (i < 0) return -1;
     // The record on the port goes: the port's last answer was its and is forgotten (R19), so
     // the oldest record is the port's only until something answers; the board asks at once.
-    if (&l->r[i] == pr_port_current(l)) port_forget(l);
+    for (int s = 0; s < PR_PORTS; s++)
+        if (&l->r[i] == pr_port_current(l, s)) port_forget(l, s);
     notes_clear(l, id, -1);
     seen_drop(l, id);
     memmove(&l->r[i], &l->r[i + 1], (size_t)(l->n - i - 1) * sizeof l->r[0]);
@@ -895,9 +993,9 @@ void pr_dismiss(pr_list_t *l, int note)
 
 // ------------------------------------------------------------- who answered
 
-int pr_port_heard(const pr_list_t *l)
+int pr_port_heard(const pr_list_t *l, int s)
 {
-    return l->heard;
+    return sock_state_c(l, s)->heard;
 }
 
 // The family a port record's kind speaks, PR_HEARD_NONE for one that is neither.
@@ -908,19 +1006,20 @@ static int family_of_kind(int kind)
          : kind == PR_KIND_QDLASER ? PR_HEARD_QDLASER : PR_HEARD_NONE;
 }
 
-void pr_port_answered(pr_list_t *l, int heard)
+void pr_port_answered(pr_list_t *l, int s, int heard)
 {
     if (heard != PR_HEARD_IMAGEWRITER && heard != PR_HEARD_STYLEWRITER && heard != PR_HEARD_QDLASER)
         return;
     // The printer on the port: its model, when the family is its record's.
-    const pr_rec_t *p = pr_port_current(l);
+    const pr_rec_t *p = pr_port_current(l, s);
     int own = p && family_of_kind(p->kind) == heard;
-    port_heard(l, heard, own ? p->model : 0);
+    port_heard(l, s, heard, own ? p->model : 0);
 }
 
-int pr_port_other_family(const pr_list_t *l, int family)
+int pr_port_other_family(const pr_list_t *l, int s, int family)
 {
-    return l->heard != PR_HEARD_NONE && l->heard != family;
+    int heard = sock_state_c(l, s)->heard;
+    return heard != PR_HEARD_NONE && heard != family;
 }
 
 pr_gate_t pr_job_gate(const pr_list_t *l, int id, int heard, pr_model_t heard_model, int line_up)
@@ -989,11 +1088,11 @@ pr_box_t pr_box_state(const pr_list_t *l, const pr_live_t live[PR_MAX])
     return s;
 }
 
-// The port record whose printer is the one on the port right now: the one that answered
+// The port record whose printer is the one on socket s right now: the one that answered
 // last (pr_port_current), while it is present. Its index in r[], or -1.
-static int port_on(const pr_list_t *l, const pr_live_t live[PR_MAX])
+static int port_on(const pr_list_t *l, int s, const pr_live_t live[PR_MAX])
 {
-    const pr_rec_t *p = pr_port_current(l);
+    const pr_rec_t *p = pr_port_current(l, s);
     if (!p) return -1;
     int i = (int)(p - l->r);
     return live[i].present ? i : -1;
@@ -1001,32 +1100,36 @@ static int port_on(const pr_list_t *l, const pr_live_t live[PR_MAX])
 
 int pr_port_absent(const pr_list_t *l, const pr_live_t live[PR_MAX], int id)
 {
-    int i = pr_index(l, id), on = port_on(l, live);
-    return i >= 0 && on >= 0 && i != on && l->r[i].where == PR_WHERE_PORT;
+    int i = pr_index(l, id);
+    if (i < 0 || l->r[i].where != PR_WHERE_PORT) return 0;
+    int on = port_on(l, pr_port_sock(l, &l->r[i]), live);
+    return on >= 0 && i != on;
 }
 
-int pr_port_live_id(const pr_list_t *l)
+int pr_port_live_id(const pr_list_t *l, int s)
 {
-    const pr_rec_t *p = pr_port_said_other(l);
-    if (!p) p = pr_port_current(l);
+    const pr_rec_t *p = pr_port_said_other(l, s);
+    if (!p) p = pr_port_current(l, s);
     return p ? p->id : -1;
 }
 
-int pr_port_on(const pr_list_t *l, const pr_live_t live[PR_MAX])
+int pr_port_on(const pr_list_t *l, int s, const pr_live_t live[PR_MAX])
 {
-    int on = port_on(l, live);
+    int on = port_on(l, s, live);
     return on < 0 ? 0 : l->r[on].id;
 }
 
 pr_port_say_t pr_port_say(const pr_list_t *l, const pr_live_t live[PR_MAX], int id)
 {
     int i = pr_index(l, id);
-    const pr_rec_t *r = i < 0 ? NULL : &l->r[i], *other = pr_port_said_other(l);
+    const pr_rec_t *r = i < 0 ? NULL : &l->r[i];
     if (!r || r->where != PR_WHERE_PORT) return PR_PORT_SAY_OWN;
+    int s = pr_port_sock(l, r);
+    const pr_rec_t *other = pr_port_said_other(l, s);
     // The port is the Something else record's while one is listed (pr_port_live_id).
     if (other) return r == other ? PR_PORT_SAY_OWN : PR_PORT_SAY_TAKEN;
-    if (r == pr_port_current(l)) return PR_PORT_SAY_OWN;
-    return port_on(l, live) >= 0 ? PR_PORT_SAY_TAKEN : PR_PORT_SAY_OFFLINE;
+    if (r == pr_port_current(l, s)) return PR_PORT_SAY_OWN;
+    return port_on(l, s, live) >= 0 ? PR_PORT_SAY_TAKEN : PR_PORT_SAY_OFFLINE;
 }
 
 void pr_chooser_name(const pr_list_t *l, char *out, size_t cap)
@@ -1036,20 +1139,37 @@ void pr_chooser_name(const pr_list_t *l, char *out, size_t cap)
     snprintf(out, cap, "%s", p ? p->name : "AirWriter");
 }
 
+// W-1116: while a Something else record is listed the port's printer is none of ours, so
+// no port record gets the page (its ImageWriter page would wait out the stall limit). W-1179:
+// a socket's Something else record keeps that socket's records from it.
+static int said_other_on(const pr_list_t *l, const pr_rec_t *r)
+{
+    return r->where == PR_WHERE_PORT && pr_port_said_other(l, pr_port_sock(l, r)) != NULL;
+}
+
+// Socket s's printer, when it is one of a port family the page goes to.
+static const pr_rec_t *test_port_rec(const pr_list_t *l, int s)
+{
+    const pr_rec_t *p = pr_port_said_other(l, s) ? NULL : pr_port_current(l, s);
+    return p && pr_family_of(p->kind) != PR_FAM_NONE ? p : NULL;
+}
+
 int pr_test_target(const pr_list_t *l, const pr_live_t live[PR_MAX])
 {
-    // W-1116: while a Something else record is listed the port's printer is none of ours, so
-    // no port record gets the page (its ImageWriter page would wait out the stall limit).
-    int other = pr_port_said_other(l) != NULL;
-    const pr_rec_t *p = other ? NULL : pr_port_current(l);
-    if (p && pr_family_of(p->kind) == PR_FAM_NONE) p = NULL;
-    if (p && live[p - l->r].present) return p->id;
+    int n = l->n_ports > 1 ? PR_PORTS : 1;
+    for (int s = 0; s < n; s++) {
+        const pr_rec_t *p = test_port_rec(l, s);
+        if (p && live[p - l->r].present) return p->id;
+    }
     for (int i = 0; i < l->n; i++)
-        if (l->r[i].shared && !(other && l->r[i].where == PR_WHERE_PORT) &&
-            one_state(&live[i]) == PR_BOX_READY) return l->r[i].id;
-    if (p) return p->id;
+        if (l->r[i].shared && !said_other_on(l, &l->r[i]) && one_state(&live[i]) == PR_BOX_READY)
+            return l->r[i].id;
+    for (int s = 0; s < n; s++) {
+        const pr_rec_t *p = test_port_rec(l, s);
+        if (p) return p->id;
+    }
     for (int i = 0; i < l->n; i++)
-        if (l->r[i].shared && !(other && l->r[i].where == PR_WHERE_PORT)) return l->r[i].id;
+        if (l->r[i].shared && !said_other_on(l, &l->r[i])) return l->r[i].id;
     return -1;
 }
 
@@ -1201,9 +1321,10 @@ int pr_load(pr_list_t *l, const uint8_t *buf, size_t n)
     l->n = cnt;
     l->n_notes = kept;
     l->next_id = buf[4] ? buf[4] : 1;
-    // Who answered on the port, and a model answered once, are not stored.
-    l->heard = l->heard_model = l->pending_model = 0;
-    l->qd_other = l->qd_pending = 0;
+    // Who answered on the port, and a model answered once, are not stored. W-1179: a record's
+    // socket is (a byte no firmware before it wrote but 0).
+    memset(l->ports, 0, sizeof l->ports);
+    for (int i = 0; i < l->n; i++) if (l->r[i].port >= PR_PORTS) l->r[i].port = 0;
     return 0;
 }
 
@@ -1502,14 +1623,22 @@ size_t pr_json(const pr_list_t *l, const pr_live_t live[PR_MAX], char *buf, size
         // the box (pr_box_state) does not, where a cleaning is the printer at work as a job is.
         pr_box_t o = one_state(&live[i]);
         const char *st = o == PR_BOX_PRINTING && live[i].cleaning ? "cleaning" : states[o];
+        // W-1179: with two printer sockets, the port it's on: a port record's last, and a printer
+        // heard on LocalTalk the LocalTalk socket's.
+        char px[24] = "";
+        int named = l->n_ports > 1 || l->port_names;
+        if (named && r->where == PR_WHERE_PORT)
+            snprintf(px, sizeof px, ",\"port\":%d", pr_port_sock(l, r) + 1);
+        else if (named && r->where == PR_WHERE_CABLE && l->lt_port)
+            snprintf(px, sizeof px, ",\"port\":%u", l->lt_port);
         PUT("%s{\"id\":%u,\"name\":\"%s\",\"where\":\"%s\",\"kind\":\"%s\",\"model\":\"%s\","
             "\"shared\":%s,\"identified\":%s,\"found\":\"%s\",\"state\":\"%s\",\"uuid\":\"%s\","
-            "\"product\":\"%s\",\"icon\":\"%s\",\"dither\":\"%s\",\"gain\":%u,\"rp\":\"%s\",\"start_page\":%s%s}",
+            "\"product\":\"%s\",\"icon\":\"%s\",\"dither\":\"%s\",\"gain\":%u,\"rp\":\"%s\",\"start_page\":%s%s%s}",
             i ? "," : "", r->id, e_name, pr_where_name(r->where), pr_kind_name(r->kind),
             pr_model_name(r->model), r->shared ? "true" : "false",
             r->identified ? "true" : "false", r->found_auto ? "auto" : "person",
             st, r->uuid, e_prod, pr_icon(r->kind, r->model, lw ? &r->lw : NULL), r->dither, r->gain,
-            rp, sp, swx);
+            rp, sp, px, swx);
     }
     PUT("],\"notes\":[");
     for (int i = 0; i < l->n_notes; i++)
@@ -1518,8 +1647,12 @@ size_t pr_json(const pr_list_t *l, const pr_live_t live[PR_MAX], char *buf, size
     // W-1116: the port's printer, a Something else record listed, and what the Chooser on
     // vintage Macs shows: the port ImageWriter's name as on the page (the node's own), an
     // AppleTalk printer's own NBP name (relayed as it is, whatever the page calls it).
-    PUT("],\"port_on\":%u,\"said_other\":%s,\"chooser\":[", pr_port_on(l, live),
-        pr_port_said_other(l) ? "true" : "false");
+    // W-1179: port 1's printer as port_on, port 2's as port2_on; a Something else on either.
+    int two = l->n_ports > 1;
+    PUT("],\"port_on\":%u", pr_port_on(l, 0, live));
+    if (two) PUT(",\"port2_on\":%u", pr_port_on(l, 1, live));
+    PUT(",\"said_other\":%s,\"chooser\":[",
+        pr_port_said_other(l, 0) || (two && pr_port_said_other(l, 1)) ? "true" : "false");
     for (int i = 0, n = 0; i < l->n; i++) {
         const pr_rec_t *r = &l->r[i];
         if (!offered(r, own, -1)) continue;
@@ -1529,9 +1662,13 @@ size_t pr_json(const pr_list_t *l, const pr_live_t live[PR_MAX], char *buf, size
         esc(e_name, sizeof e_name, seen_as);
         PUT("%s\"%s\"", n++ ? "," : "", e_name);
     }
-    // W-1102: a QuickDraw LaserWriter on the port that is not one we print to, by name.
-    const char *unsup = l->qd_other ? qd_engine_name(l->qd_other) : "";
+    // W-1102: a QuickDraw LaserWriter on the port that is not one we print to, by name. W-1179:
+    // either socket's, port 1 first, and which.
+    int us = two && !l->ports[0].qd_other && l->ports[1].qd_other ? 1 : 0;
+    const char *unsup = l->ports[us].qd_other ? qd_engine_name(l->ports[us].qd_other) : "";
     PUT("],\"port_unsupported\":\"%s\"", unsup ? unsup : "QuickDraw LaserWriter");
+    if (two || l->port_names)                // the LC names its one port too
+        PUT(",\"port_unsupported_port\":%d", l->ports[us].qd_other ? us + 1 : 0);
     PUT(",\"max_shared\":%d}", PR_SHARE_MAX);
 #undef PUT
     if (k >= cap) {

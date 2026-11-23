@@ -403,6 +403,17 @@ static esp_err_t general_post(httpd_req_t *req)
     if (rainbow >= 0) settings_save_rainbow(rainbow);
     int ap = json_bool(body, "airprint"), lt = json_bool(body, "localtalk");
     if (ap >= 0 || lt >= 0) settings_save_switches(ap, lt);
+    // W-1179: each rev 2026.11 socket's job, "auto" by default (no control on the page).
+    for (int i = 0; i < 2; i++) {
+        char job[12] = {0};
+        if (!json_str(body, i ? "port2" : "port1", job, sizeof job)) continue;
+        int set = !strcmp(job, "auto") ? SET_PORT_AUTO : !strcmp(job, "printer") ? SET_PORT_PRINTER
+                : !strcmp(job, "localtalk") ? SET_PORT_LOCALTALK : -1;
+        if (set < 0)
+            return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST,
+                                       "port1 and port2 are auto, printer or localtalk");
+        settings_save_port_set(i, set);
+    }
     if (json_bool(body, "finish") == 1) settings_set_fresh(0);   // W-1088: the sheet closed
     if (s_cfg.general_saved) s_cfg.general_saved(s_cfg.ctx);
     led_grid_blip(LG_BLIP_SAVED);
@@ -610,8 +621,12 @@ static esp_err_t localtalk_flash_post(httpd_req_t *req)
         httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "no localtalk");
         return ESP_FAIL;
     }
+    // W-1179: {"port":1|2} names the socket's TashTalk on rev 2026.11; none, or 0, the
+    // LocalTalk socket's.
+    char body[64];
+    int port = read_body(req, body, sizeof body) > 0 ? json_int(body, "port", 0) : 0;
     char out[256];
-    s_cfg.localtalk_flash(s_cfg.ctx, out, sizeof out);
+    s_cfg.localtalk_flash(s_cfg.ctx, port, out, sizeof out);
     httpd_resp_set_type(req, "application/json");
     return httpd_resp_sendstr(req, out);
 }

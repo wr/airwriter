@@ -29,10 +29,20 @@ typedef struct {
     uint8_t airprint;                // advertise and take AirPrint jobs (W-1079); on
     int8_t  lt_port;                 // the AppleTalk port (W-1079): 1 on, 0 off; on
     uint8_t rainbow;                 // Rainbow status lights (W-1109): the page's switch; off
+    // W-1179, rev 2026.11: what each socket (0 J2, port 1; 1 J4, port 2) is set to do,
+    // SET_PORT_*, and the job it last did (ports.h's port_job_t; 0 none yet), so a restart
+    // keeps what was worked out. No control on the page: /api/general's port1 and port2.
+    uint8_t port_set[2];
+    uint8_t port_job[2];
+    // ... and whether LocalTalk had been heard on it in that job: AppleTalk goes out on a
+    // socket only once it has (W-1179), and a restart keeps that.
+    uint8_t port_heard[2];
     int16_t top_margin;              // 1/144 in: + blank paper ahead of each AirPrint
                                      // page and the test page, - drops their first
                                      // rows; CONFIG_AIRWRITER_TOP_MARGIN
 } settings_t;
+
+enum { SET_PORT_AUTO = 0, SET_PORT_PRINTER = 1, SET_PORT_LOCALTALK = 2 };
 
 #define SET_TOP_MIN (-216)           // -1 1/2 in
 #define SET_TOP_MAX 144              // +1 in
@@ -66,6 +76,10 @@ esp_err_t settings_save_switches(int airprint, int lt_port);
 // Kept so a restart advertises what the printer last said, not black until it
 // answers again: what clients see must not flip back and forth (W-1064).
 esp_err_t settings_save_ribbon(uint8_t ribbon);
+// W-1179: socket i's setting (SET_PORT_*) and the job it last did (port_job_t, 0 to 2).
+esp_err_t settings_save_port_set(int i, int set);
+esp_err_t settings_save_port_job(int i, int job);
+esp_err_t settings_save_port_heard(int i, int heard);
 // SET_TOP_MIN to SET_TOP_MAX, 1/144 in.
 esp_err_t settings_save_top_margin(int top);
 

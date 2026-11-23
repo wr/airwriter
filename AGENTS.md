@@ -44,7 +44,11 @@ false.
 Rev A boards are built and print from iPhones, Macs and vintage Macs. Rev 2026.11 (called rev B
 in Linear and older docs) is drawn and routed, not yet made. It has a build of its own
 (ESP32-S3-WROOM-1-N16R8, board straps, no DIP switches, a handshake GPIO per port; SPEC §3.19),
-which nothing has run on yet, the LC's one status light included.
+which nothing has run on yet, the LC's one status light included. Its two sockets have the same
+circuit, each with its own TashTalk, so either can be a printer port or LocalTalk (W-1176), and
+its firmware works out each socket's job from what is plugged in and shares a printer on each
+at once (W-1179). Its case, docs and page call J2 port 1 and J4 port 2; rev A keeps printer port
+and AppleTalk port.
 
 - **Printers.** Tested on the ImageWriter II. The original ImageWriter and the ImageWriter LQ
   take the same stream and are expected to work, untested; docs say so rather than excluding
@@ -100,6 +104,7 @@ Where things are (`firmware/components/` unless a path is given):
 | Cable test, TashTalk flashing | `cable_test`, `pic_prog` | |
 | Settings page | `webui`; sources in `tools/webui` | settings-redesign design |
 | Password and sign-in, the bench | `auth`, `webui_auth.c`; `tools/bench` | SPEC §3.20, setup-password design |
+| Rev 2026.11's sockets: each one's job, what's plugged in | `ports` (`port_detect_core.c`); main's `psock_t` | SPEC §3.19, rev 2026.11 board design |
 
 The web UI and API are on port 80: `/api/status`, `/api/general` (settings), `/update` (OTA
 upload), `/api/update` (GitHub releases), `/api/printers`, `/api/lt`, `/api/et`, `/api/log`,
@@ -108,9 +113,10 @@ upload), `/api/update` (GitHub releases), `/api/printers`, `/api/lt`, `/api/et`,
 board with a password every route but the page and `/api/auth/*` answers 401 until the browser
 signs in (`tools/webui/signin.py` for curl). The page's own addresses
 (`/about`, `/about/log`, `/printers/2`) are listed in `webui_paths.h` and, for the preview,
-`tools/webui/preview.py`. Two settings have no control on the
-page: Top margin (`{"top_margin":N}`, 1/144 in, -216 to 144, default -144) and dot gain
-(`{"gain":N}`, 0–45, default 0). A board with no Wi-Fi credentials runs its setup network,
+`tools/webui/preview.py`. Some settings have no control on the
+page: Top margin (`{"top_margin":N}`, 1/144 in, -216 to 144, default -144), dot gain
+(`{"gain":N}`, 0–45, default 0) and, on rev 2026.11, each socket's job (`{"port1":"auto"}`,
+`"printer"` or `"localtalk"`, and `port2`; default auto). A board with no Wi-Fi credentials runs its setup network,
 `AirWriter-xxxx` (WPA2 with AirWriter's password; open on a board with none), at
 http://192.168.4.1/.
 
@@ -141,8 +147,10 @@ http://192.168.4.1/.
 - **pcbnew scripts** run on KiCad's bundled interpreter:
   `/Applications/KiCad/KiCad.app/Contents/Frameworks/Python.framework/Versions/3.9/bin/python3`.
   `hardware/airwriter/route.py` does export DSN → round → Freerouting → import → DRC headless.
-  Rev 2026.11's board is built from rev A by `tools_pcb/r13_build.sh` then `r13_route.py` and
-  `r14_lc_light.py` (`docs/hardware-rev-2026-11.md`); never re-run them over hand edits.
+  Rev 2026.11's board is built from rev A by `tools_pcb/r13_build.sh` then `r13_route.py`,
+  `r14_lc_light.py` and W-1176's `r15_clean.py`, `r15_place.py`, `r15_route.py`, `r15_silk.py`,
+  `r15_names.py` and `r15_shell.py` (`docs/hardware-rev-2026-11.md`); never re-run them over
+  hand edits.
 - **Freerouting 2.2.4** on Java 25 (`hardware/airwriter/README.md`).
 - **konnect** resolves `lib_id` only against KiCad's install directory, so the project libraries
   must be symlinked into the app bundle before any konnect placement (a KiCad upgrade removes
@@ -257,18 +265,19 @@ http://192.168.4.1/.
   `checker.expected.bin`). At the default (-1 in) the checker, which sits in the page's top
   inch, prints blank (crc32 `0e5fc630`, 9 bytes). After an OTA, `/api/status` reaches
   `"trial":false` with the new `version`.
-- **Schematic:** `kicad-cli sch erc` → 0 errors; 47 known warnings (42 `lib_symbol_mismatch`,
+- **Schematic:** `kicad-cli sch erc` → 0 errors; 45 known warnings (40 `lib_symbol_mismatch`,
   5 `isolated_pin_label`: TXD0, RXD0 and rev 2026.11's three spare pins).
 - **Board:** `kicad-cli pcb drc --severity-all --schematic-parity --refill-zones` on
   `hardware/airwriter/airwriter.kicad_pcb` → 0 errors, 0 unconnected, 5 `lib_footprint_mismatch`
   warnings, no field-parity warnings. Treat any unconnected item as real; `tools_pcb/r12_gnd.py`
   checks that every GND pad is on the main plane. The combined panel under its default rules
-  shows only known items (~221 false clearance, 6 copper_edge and 4 silk_edge where J1, J2, J4
+  shows only known items (~218 false clearance, 6 copper_edge and 4 silk_edge where J1, J2, J4
   and U1 meet the edge, 16 hole_clearance where NPTH holes meet the pours, 6 seam
-  invalid_outline, 1 benign starved_thermal on U7.8). Rev 2026.11's netlist gate:
+  invalid_outline). Rev 2026.11's netlist gate:
   `python3 hardware/airwriter/tools_sch/check_rev2026_11.py <kicadxml netlist>`; its board gate,
   on KiCad's python: `hardware/airwriter/tools_pcb/r13_check.py` (pads 0.30 mm from the edge,
-  silk on the board, D3's K, SW1's RESET).
+  silk on the board and turned to read with the sockets at the top, D3's K, SW1's RESET, the
+  logo on top and the nameplate on the back).
 - **Fab packages:** `python3 hardware/combine_boards.py` then `sh hardware/combined/make_fab.sh`
   writes AirWriter's panel (`hardware/combined-fab.zip`) and the LC's main board
   (`hardware/airwriter-lc-fab.zip`), and asserts their position-row counts and the 0.30 drill

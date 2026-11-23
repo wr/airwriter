@@ -2001,6 +2001,48 @@ static void test_qd_confirm_repeats_identity(void)
     CHECK_EQ_INT(port_policy(&j), PA_QDID);
 }
 
+// W-1179: rev 2026.11's two printer sockets each keep their own books, asked in turn by the one
+// port task, while what the list holds is read for both. A StyleWriter answering on port 1 is
+// asked its status and nothing else; port 2, quiet with that StyleWriter record listed, is asked
+// the plain question every 5 s, so a StyleWriter moved there (which may never raise its line) is
+// found, and its answer makes it port 2's own, asked its status from then on.
+static void test_two_sockets_own_books(void)
+{
+    port_in_t a = base(PR_KIND_STYLEWRITER), b = base(-1);
+    a.answering = 1;
+    b.sw_listed = 1;
+    b.line_ready = 0;
+    uint32_t t0 = a.now_ms;
+    int status_a = 0, other_a = 0, plain_b = 0, status_b = 0, escq_b = 0;
+    uint32_t first_plain_b = 0;
+    for (uint32_t ms = t0; ms < t0 + 120 * SEC; ms += 500) {
+        a.now_ms = b.now_ms = ms;
+        port_tick(&a);
+        port_act_t x = port_policy(&a);
+        if (x == PA_STATUS) status_a++;
+        else if (x != PA_NONE) other_a++;
+        port_after(&a, x, x == PA_STATUS ? PR_HEARD_STYLEWRITER : PR_HEARD_NONE, x == PA_STATUS);
+        port_tick(&b);
+        port_act_t y = port_policy(&b);
+        if (y == PA_PLAIN && !plain_b++) first_plain_b = ms - t0;
+        if (y == PA_STATUS) status_b++;
+        if (y == PA_ESCQ) escq_b++;
+        // At 60 s a StyleWriter is plugged into port 2: its next plain question names it, and the
+        // board makes port 2's record current (kind) as it would.
+        int sw_there = ms >= t0 + 60 * SEC;
+        int heard = sw_there && (y == PA_PLAIN || y == PA_STATUS) ? PR_HEARD_STYLEWRITER : PR_HEARD_NONE;
+        if (heard && b.kind != PR_KIND_STYLEWRITER) b.kind = PR_KIND_STYLEWRITER;
+        port_after(&b, y, heard, heard != PR_HEARD_NONE);
+    }
+    CHECK(status_a >= 11);
+    CHECK_EQ_INT(other_a, 0);
+    CHECK(plain_b >= 10);
+    CHECK(first_plain_b <= 5 * SEC);
+    CHECK(status_b >= 5);               // port 2's StyleWriter, once found, is asked as port 1's is
+    CHECK(b.answering);
+    CHECK_EQ_INT(escq_b, 0);            // its line never came up: nothing an ImageWriter speaks
+}
+
 int main(void)
 {
     test_invariants();
@@ -2037,5 +2079,6 @@ int main(void)
     test_clock_gone_looks_for_other_printers();
     test_clocked_said_other();
     test_qd_confirm_repeats_identity();
+    test_two_sockets_own_books();
     TEST_END;
 }

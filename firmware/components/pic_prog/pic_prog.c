@@ -15,37 +15,41 @@ static const char *TAG = "pic_prog";
 extern const char tashtalk_hex_start[] asm("_binary_tashtalk_2_1_3_hex_start");
 extern const char tashtalk_hex_end[]   asm("_binary_tashtalk_2_1_3_hex_end");
 
-#define PIN_MCLR CONFIG_AIRWRITER_PIC_MCLR_PIN
-#define PIN_CLK  CONFIG_AIRWRITER_PIC_CLK_PIN
-#define PIN_DAT  CONFIG_AIRWRITER_PIC_DAT_PIN
+pic_pins_t pic_prog_u7(void)
+{
+    return (pic_pins_t){ CONFIG_AIRWRITER_PIC_MCLR_PIN, CONFIG_AIRWRITER_PIC_CLK_PIN,
+                         CONFIG_AIRWRITER_PIC_DAT_PIN, 0 };
+}
+
+static int pins_ok(const pic_pins_t *p) { return p->mclr >= 0 && p->clk >= 0 && p->dat >= 0; }
 
 int pic_prog_available(void)
 {
-    return PIN_MCLR >= 0 && PIN_CLK >= 0 && PIN_DAT >= 0;
+    pic_pins_t u7 = pic_prog_u7();
+    return pins_ok(&u7);
 }
 
-#if CONFIG_AIRWRITER_PIC_MCLR_PIN >= 0 && CONFIG_AIRWRITER_PIC_CLK_PIN >= 0 && \
-    CONFIG_AIRWRITER_PIC_DAT_PIN >= 0
+static atomic_flag s_busy = ATOMIC_FLAG_INIT;     // a flash or an ID read, on any PIC
 
-static atomic_flag s_busy = ATOMIC_FLAG_INIT;     // a flash or an ID read
-
-static void h_mclr(void *ctx, int v) { gpio_set_level(PIN_MCLR, v); }
-static void h_clk(void *ctx, int v)  { gpio_set_level(PIN_CLK, v); }
+static void h_mclr(void *ctx, int v) { gpio_set_level(((const pic_pins_t *)ctx)->mclr, v); }
+static void h_clk(void *ctx, int v)  { gpio_set_level(((const pic_pins_t *)ctx)->clk, v); }
 
 static void h_dat_out(void *ctx, int v)
 {
-    gpio_set_level(PIN_DAT, v);
-    gpio_set_direction(PIN_DAT, GPIO_MODE_INPUT_OUTPUT);
+    int dat = ((const pic_pins_t *)ctx)->dat;
+    gpio_set_level(dat, v);
+    gpio_set_direction(dat, GPIO_MODE_INPUT_OUTPUT);
 }
 
-static void h_dat_release(void *ctx) { gpio_set_direction(PIN_DAT, GPIO_MODE_INPUT); }
-static int  h_dat_in(void *ctx)      { return gpio_get_level(PIN_DAT); }
+static void h_dat_release(void *ctx) { gpio_set_direction(((const pic_pins_t *)ctx)->dat, GPIO_MODE_INPUT); }
+static int  h_dat_in(void *ctx)      { return gpio_get_level(((const pic_pins_t *)ctx)->dat); }
 
 // Microsecond waits spin; the 3-10 ms programming and erase waits sleep, so a
 // two-second flash doesn't starve lower-priority tasks. ICSP has no maximum
 // on any of these gaps, so oversleeping by a tick costs only time.
 static void h_delay(void *ctx, uint32_t us)
 {
+    (void)ctx;
     uint32_t t = pic_sleep_ticks(us, portTICK_PERIOD_MS * 1000u);
     if (t) vTaskDelay(t);
     else   esp_rom_delay_us(us);
@@ -53,56 +57,69 @@ static void h_delay(void *ctx, uint32_t us)
 
 // Starts from gpio_reset_pin so a pad some peripheral had routed through the
 // GPIO matrix becomes a plain GPIO again. MCLR goes low before the others are
-// driven: the PIC sits in reset, outputs tristated, before IO5 drives RA0.
+// driven: the PIC sits in reset, outputs tristated, before the ESP32 drives RA0.
 // DAT gets a pull-down so an empty socket reads 0x0000 ("no PIC") rather than
 // whatever a floating pin makes up; a real PIC drives through it easily.
-static void pins_claim(void)
+static void pins_claim(const pic_pins_t *p)
 {
-    gpio_reset_pin(PIN_MCLR);
-    gpio_set_pull_mode(PIN_MCLR, GPIO_FLOATING);
-    gpio_set_level(PIN_MCLR, 0);
-    gpio_set_direction(PIN_MCLR, GPIO_MODE_OUTPUT);
+    gpio_reset_pin(p->mclr);
+    gpio_set_pull_mode(p->mclr, GPIO_FLOATING);
+    gpio_set_level(p->mclr, 0);
+    gpio_set_direction(p->mclr, GPIO_MODE_OUTPUT);
 
-    gpio_reset_pin(PIN_CLK);
-    gpio_set_pull_mode(PIN_CLK, GPIO_FLOATING);
-    gpio_set_level(PIN_CLK, 0);
-    gpio_set_direction(PIN_CLK, GPIO_MODE_OUTPUT);
+    gpio_reset_pin(p->clk);
+    gpio_set_pull_mode(p->clk, GPIO_FLOATING);
+    gpio_set_level(p->clk, 0);
+    gpio_set_direction(p->clk, GPIO_MODE_OUTPUT);
 
-    gpio_reset_pin(PIN_DAT);
-    gpio_set_pull_mode(PIN_DAT, GPIO_PULLDOWN_ONLY);
-    gpio_set_direction(PIN_DAT, GPIO_MODE_INPUT);
+    gpio_reset_pin(p->dat);
+    gpio_set_pull_mode(p->dat, GPIO_PULLDOWN_ONLY);
+    gpio_set_direction(p->dat, GPIO_MODE_INPUT);
 }
 
-// Back to inputs with pull-ups. MCLR rises and TashTalk runs; IO4 idles high,
-// which is its UART's idle level and what app_main's boot clamp drove.
-static void pins_release(void)
+// Back to inputs with pull-ups: MCLR rises and TashTalk runs; CLK idles high, which is its
+// UART's idle level and what app_main's boot clamp drove. With keep_reset (W-1179, a socket
+// doing the printer job), MCLR stays low and CLK and DAT are pulled down: nothing else drives
+// them then, and a PIC in reset listens there for the LVP key.
+static void pins_release(const pic_pins_t *p)
 {
-    gpio_reset_pin(PIN_CLK);
-    gpio_reset_pin(PIN_DAT);
-    gpio_reset_pin(PIN_MCLR);
+    if (p->keep_reset) {
+        gpio_set_level(p->clk, 0);
+        gpio_set_direction(p->clk, GPIO_MODE_INPUT);
+        gpio_set_pull_mode(p->clk, GPIO_PULLDOWN_ONLY);
+        gpio_set_direction(p->dat, GPIO_MODE_INPUT);
+        gpio_set_pull_mode(p->dat, GPIO_PULLDOWN_ONLY);
+        gpio_set_level(p->mclr, 0);
+        return;
+    }
+    gpio_reset_pin(p->clk);
+    gpio_reset_pin(p->dat);
+    gpio_reset_pin(p->mclr);
 }
 
-static const pic_hal_t HAL = { h_mclr, h_clk, h_dat_out, h_dat_release, h_dat_in, h_delay, NULL };
+static pic_hal_t hal_for(const pic_pins_t *p)
+{
+    return (pic_hal_t){ h_mclr, h_clk, h_dat_out, h_dat_release, h_dat_in, h_delay, (void *)p };
+}
 
-pic_err_t pic_prog_read_id(uint16_t *devid)
+pic_err_t pic_prog_read_id_on(const pic_pins_t *pins, uint16_t *devid)
 {
     *devid = 0;
+    if (!pins_ok(pins)) return PIC_ERR_UNAVAILABLE;
     if (atomic_flag_test_and_set(&s_busy)) return PIC_ERR_BUSY;
-    pins_claim();
-    pic_err_t e = pic_read_id(&HAL, devid);
-    pins_release();
+    pins_claim(pins);
+    pic_hal_t hal = hal_for(pins);
+    pic_err_t e = pic_read_id(&hal, devid);
+    pins_release(pins);
     atomic_flag_clear(&s_busy);
     return e;
 }
 
-pic_err_t pic_prog_flash_tashtalk(pic_result_t *res)
+// The embedded TashTalk with CONFIG2.LVP set, malloc'd (8 KB), or NULL and *err.
+static pic_image_t *tashtalk_image(pic_err_t *err)
 {
-    *res = (pic_result_t){0};
-    if (atomic_flag_test_and_set(&s_busy)) return res->err = PIC_ERR_BUSY;
-
     pic_image_t *img = malloc(sizeof *img);
-    if (!img) { atomic_flag_clear(&s_busy); return res->err = PIC_ERR_NOMEM; }
-
+    if (!img) { *err = PIC_ERR_NOMEM; return NULL; }
     int line = 0;
     pic_hex_err_t he = pic_hex_parse(tashtalk_hex_start,
                                      (size_t)(tashtalk_hex_end - tashtalk_hex_start), img, &line);
@@ -110,15 +127,29 @@ pic_err_t pic_prog_flash_tashtalk(pic_result_t *res)
         // The image is compiled in and host-tested; this means a bad build.
         ESP_LOGE(TAG, "embedded hex: error %d at line %d", he, line);
         free(img);
-        atomic_flag_clear(&s_busy);
-        return res->err = PIC_ERR_IMAGE;
+        *err = PIC_ERR_IMAGE;
+        return NULL;
     }
     pic_image_enable_lvp(img);
+    return img;
+}
 
-    ESP_LOGW(TAG, "flashing TashTalk 2.1.3 (MCLR=%d CLK=%d DAT=%d)", PIN_MCLR, PIN_CLK, PIN_DAT);
-    pins_claim();
-    pic_err_t e = pic_flash(&HAL, img, res);
-    pins_release();
+pic_err_t pic_prog_flash_tashtalk_on(const pic_pins_t *pins, pic_result_t *res)
+{
+    *res = (pic_result_t){0};
+    if (!pins_ok(pins)) return res->err = PIC_ERR_UNAVAILABLE;
+    if (atomic_flag_test_and_set(&s_busy)) return res->err = PIC_ERR_BUSY;
+
+    pic_err_t e;
+    pic_image_t *img = tashtalk_image(&e);
+    if (!img) { atomic_flag_clear(&s_busy); return res->err = e; }
+
+    ESP_LOGW(TAG, "flashing TashTalk 2.1.3 (MCLR=%d CLK=%d DAT=%d)", pins->mclr, pins->clk,
+             pins->dat);
+    pins_claim(pins);
+    pic_hal_t hal = hal_for(pins);
+    e = pic_flash(&hal, img, res);
+    pins_release(pins);
     free(img);
 
     if (e == PIC_OK) {
@@ -138,18 +169,33 @@ pic_err_t pic_prog_flash_tashtalk(pic_result_t *res)
     return e;
 }
 
-#else
+pic_err_t pic_prog_check_tashtalk_on(const pic_pins_t *pins, pic_result_t *res)
+{
+    *res = (pic_result_t){0};
+    if (!pins_ok(pins)) return res->err = PIC_ERR_UNAVAILABLE;
+    if (atomic_flag_test_and_set(&s_busy)) return res->err = PIC_ERR_BUSY;
+
+    pic_err_t e;
+    pic_image_t *img = tashtalk_image(&e);
+    if (!img) { atomic_flag_clear(&s_busy); return res->err = e; }
+
+    pins_claim(pins);
+    pic_hal_t hal = hal_for(pins);
+    e = pic_check(&hal, img, res);
+    pins_release(pins);
+    free(img);
+    atomic_flag_clear(&s_busy);
+    return e;
+}
 
 pic_err_t pic_prog_read_id(uint16_t *devid)
 {
-    *devid = 0;
-    return PIC_ERR_UNAVAILABLE;
+    pic_pins_t u7 = pic_prog_u7();
+    return pic_prog_read_id_on(&u7, devid);
 }
 
 pic_err_t pic_prog_flash_tashtalk(pic_result_t *res)
 {
-    *res = (pic_result_t){ .err = PIC_ERR_UNAVAILABLE };
-    return PIC_ERR_UNAVAILABLE;
+    pic_pins_t u7 = pic_prog_u7();
+    return pic_prog_flash_tashtalk_on(&u7, res);
 }
-
-#endif

@@ -138,6 +138,81 @@ config AIRWRITER_J4_HSKI_PIN
         Rev 2026.11 board net J4_HSKI_RX: J4.2 through U3's receiver 1 to
         IO21. Read by the cable test. Rev A's IO37 is never read.
 
+config AIRWRITER_J2_DE_PIN
+    int "J2's driver enable (THVD1452 DE), -1 if absent"
+    default 7 if AIRWRITER_BOARD_2026_11
+    default -1
+    help
+        Rev 2026.11 board net J2_DE (W-1176): IO7 through R39 (220 R) to U2's DE,
+        which R36 pulls low. Either socket can be the printer port or LocalTalk:
+        as the printer port, U10 (J2's TashTalk) is held in reset and this pin
+        drives the transceiver's driver on; as LocalTalk it is an input and
+        U10 drives DE itself. Rev A's J2 driver is always on: -1.
+
+config AIRWRITER_J2_PIC_MCLR_PIN
+    int "J2's TashTalk PIC MCLR pin, -1 if absent"
+    default 42 if AIRWRITER_BOARD_2026_11
+    default -1
+    help
+        Rev 2026.11 board net LT2_MCLR: IO42 straight to U10 pin 4 (RA3/MCLR).
+        Low holds J2's TashTalk in reset, which leaves its pins to the printer
+        port; low plus the LVP key programs it, as LT_RESET does U7.
+
+config AIRWRITER_J2_PIC_CLK_PIN
+    int "J2's TashTalk PIC ICSPCLK pin (its UART receive), -1 if absent"
+    default 11 if AIRWRITER_BOARD_2026_11
+    default -1
+    help
+        Rev 2026.11 board net LT2_UART_TX: IO11 through R34 (100 R) to U10 pin 6
+        (RA1/ICSPCLK).
+
+config AIRWRITER_J2_PIC_DAT_PIN
+    int "J2's TashTalk PIC ICSPDAT pin (its UART transmit), -1 if absent"
+    default 12 if AIRWRITER_BOARD_2026_11
+    default -1
+    help
+        Rev 2026.11 board net LT2_UART_RX: IO12 through R35 (100 R) from U10
+        pin 7 (RA0/ICSPDAT).
+
+config AIRWRITER_J2_LT_CTS_PIN
+    int "J2's TashTalk CTS pin, -1 if absent"
+    default 41 if AIRWRITER_BOARD_2026_11
+    default -1
+    help
+        Rev 2026.11 board net LT2_CTS: IO41 straight from U10 pin 5 (RA2).
+
+config AIRWRITER_J4_TX_PIN
+    int "J4's printer transmit pin, -1 if absent"
+    default 9 if AIRWRITER_BOARD_2026_11
+    default -1
+    help
+        Rev 2026.11 board net J4_TX: IO9 through R43 (220 R) to U6's DI, where
+        U7's TashTalk drives the same net. Only with U7 held in reset may this
+        pin drive: then J4 is a printer port. Otherwise it stays an input.
+
+config AIRWRITER_J4_RX_PIN
+    int "J4's printer receive pin, -1 if absent"
+    default 10 if AIRWRITER_BOARD_2026_11
+    default -1
+    help
+        Rev 2026.11 board net J4_RX: IO10 straight from U6's RO.
+
+config AIRWRITER_J4_UART_NUM
+    int "J4's printer UART"
+    default 0
+    help
+        W-1179: rev 2026.11's second printer line, J4's, for when that socket does the
+        printer job. UART0: UART1 is J2's, UART2 TashTalk's, and the console is on
+        USB-Serial-JTAG.
+
+config AIRWRITER_J4_DE_PIN
+    int "J4's driver enable, -1 if absent"
+    default 3 if AIRWRITER_BOARD_2026_11
+    default -1
+    help
+        Rev 2026.11 board net J4_DE: IO3 through R44 (220 R) to U6's DE, which
+        U7 drives and R22 pulls low. As J2_DE, for J4 as a printer port.
+
 config AIRWRITER_BOARD_REV_PIN
     int "Board strap BOARD_REV, -1 if absent"
     default 16 if AIRWRITER_BOARD_2026_11

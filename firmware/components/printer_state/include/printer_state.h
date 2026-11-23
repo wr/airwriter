@@ -22,6 +22,7 @@ int       printer_state_job(void);
 
 // W-1039: whether to send the printer a CTRL-X now, and that one was sent.
 // W-1088: judged on the port printer's own line, given here at every report.
-void      printer_state_port_line(int ready);          // any task
-int       printer_state_want_kick(void);               // any task
-void      printer_state_kicked(void);                  // any task
+// W-1179: per printer socket (0 port 1, 1 port 2).
+void      printer_state_port_line(int port, int ready);   // any task
+int       printer_state_want_kick(int port);              // any task
+void      printer_state_kicked(int port);                 // any task

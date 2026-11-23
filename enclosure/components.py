@@ -38,9 +38,6 @@ NO_MODEL_LIB = {"LED_SK6812MINI_PLCC4_3.5x3.5mm_P1.75mm": 1.60}
 """KiCad 10 ships no SK6812MINI model; 1.60 is conservative over the
 3.5 x 3.5 x 1.45 package."""
 
-TOP_OVERRIDE = {"U7": 9.00}
-"""U7's model is the empty DIP socket; the PIC seated in it stands ~9 mm."""
-
 FLAT = re.compile(r"(H|TP|LOGO)\d+")
 """Footprints with nothing standing on the board: mounting holes, test pads,
 and silkscreen art (rev 2026.11's OSHW mark, LOGO1)."""
@@ -166,9 +163,5 @@ def envelopes() -> dict[str, list[Band]]:
         if top is None or yard is None:
             raise RuntimeError(f"{ref} ({lib}) has no 3D model and no NO_MODEL height")
         env[ref] = [(*yard, top)]
-    for ref, top in TOP_OVERRIDE.items():
-        bands = env[ref]
-        env[ref] = [(min(b[0] for b in bands), max(b[1] for b in bands),
-                     min(b[2] for b in bands), max(b[3] for b in bands), top)]
     _ENV = env
     return env

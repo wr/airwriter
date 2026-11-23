@@ -235,6 +235,42 @@ static void test_read_id(void)
     assert(sim.lvp_entries == 1 && pic_sim_errors(&sim) == 0);
 }
 
+// W-1179: power-up reads each PIC and flashes only one without this TashTalk.
+static void test_check(void)
+{
+    load_tashtalk(1);
+    pic_result_t r;
+
+    pic_sim_init(&sim, 0x1B85);                       // blank, as PCBWay places it
+    pic_hal_t h = pic_sim_hal(&sim);
+    assert(pic_check(&h, &img, &r) == PIC_ERR_VERIFY);
+    assert(r.bad_addr == PIC_ADDR_CONFIG1 && r.got == PIC_BLANK && r.devid == 0x1B85);
+    assert(pic_sim_errors(&sim) == 0 && !sim.in_prog && sim.mclr && !sim.dat_driving);
+    for (unsigned i = 0; i < PIC_PROG_WORDS; i++) assert(sim.prog[i] == PIC_BLANK);
+
+    assert(pic_flash(&h, &img, &r) == PIC_OK);
+    uint64_t t0 = sim.now_us;
+    assert(pic_check(&h, &img, &r) == PIC_OK && r.devid == 0x1B85);
+    assert(pic_sim_errors(&sim) == 0 && !sim.in_prog && sim.mclr);
+    printf("  check: TashTalk read back in %.2f s simulated\n", (sim.now_us - t0) / 1e6);
+
+    sim.prog[0xFC7] ^= 1;                              // the last word TashTalk uses
+    assert(pic_check(&h, &img, &r) == PIC_ERR_VERIFY && r.bad_addr == 0xFC7);
+    sim.prog[0xFC7] ^= 1;
+
+    sim.cfg[8] = 0x1FFF;                               // upstream's CONFIG2, LVP off
+    assert(pic_check(&h, &img, &r) == PIC_ERR_VERIFY && r.bad_addr == PIC_ADDR_CONFIG2);
+
+    pic_sim_init(&sim, 0x1B85);
+    sim.absent = 1;
+    h = pic_sim_hal(&sim);
+    assert(pic_check(&h, &img, &r) == PIC_ERR_NO_DEVICE);
+
+    pic_sim_init(&sim, 0x1A00);                        // not a PIC12F1840
+    h = pic_sim_hal(&sim);
+    assert(pic_check(&h, &img, &r) == PIC_ERR_WRONG_DEVICE);
+}
+
 // The simulator's contention rule has to bite, or the ordering tests above
 // prove nothing: driving DAT while the part runs TashTalk is a short.
 static void test_sim_catches_contention(void)
@@ -261,6 +297,7 @@ int main(void)
     test_wrong_device_is_not_erased();
     test_no_device();
     test_stuck_bit_reported();
+    test_check();
     printf("test_pic_prog: ok\n");
     return 0;
 }
