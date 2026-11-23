@@ -3055,8 +3055,10 @@ static void test_page_to(int id, int port)
     // W-1116: a port record's page takes its family from that record, as a job does
     // (doc_begin); a LaserWriter's leaves the port's family as the port's record says. W-1179:
     // a port record's page goes to its socket.
+    // W-1186: a LaserWriter's with no printer socket (both do LocalTalk) leaves the sockets be.
     if (port) job_sock_take(id);
-    port_fam_sync(SK, port ? printers_record_family(id) : printers_port_family(SK), 1);
+    if (port || sock_prints(SK))
+        port_fam_sync(SK, port ? printers_record_family(id) : printers_port_family(SK), 1);
     switch (printers_test_kind(id)) {
     case PR_TEST_STYLEWRITER: sw_test_locked(id); break;
     case PR_TEST_QDLASER:     qd_test_locked(id); break;

@@ -638,16 +638,15 @@ void localtalk_set_roles(int serve, int laser)
     serve = serve ? 1 : 0;
     state_take();
     int any = 0;
-    for (int i = 0; i < LT_SIDES; i++) any |= s_side[i].started;
-    if (any && (serve || laser)) s_serve = serve;
     for (int i = 0; i < LT_SIDES; i++) {
         lt_side_t *sd = &s_side[i];
         if (!sd->started) continue;
+        any = 1;
         if (!serve && !laser) {
             set_quiet(sd, 1);
             continue;
         }
-        if (sd->quiet) set_quiet(sd, 0);
+        if (sd->quiet) set_quiet(sd, 0);         // as it was; its role changes below
         xSemaphoreTake(s_lock, portMAX_DELAY);
         if (sd->serve != serve) {
             lt_node_t *node = &sd->mem->node;
@@ -659,6 +658,7 @@ void localtalk_set_roles(int serve, int laser)
         }
         xSemaphoreGive(s_lock);
     }
+    if (any && (serve || laser)) s_serve = serve;    // for a node acquired anew, or a side started later
     state_give();
 }
 
