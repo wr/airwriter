@@ -1406,9 +1406,9 @@ static void laser_changed(void)
 }
 
 // laser.c heard a printer, or its query ended: the printer list's.
-static void laser_found(int link, const uint8_t *name, const uint8_t *type)
+static void laser_found(int link, const uint8_t *name, const uint8_t *type, int twin)
 {
-    printers_at_seen(link, name, type);
+    printers_at_seen(link, name, type, twin);
 }
 
 static void laser_queried(int id, int ok, const lw_info_t *info, const laser_at_t *at)

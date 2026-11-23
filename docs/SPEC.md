@@ -818,6 +818,15 @@ ImageWriter on the port keeps its identity, UUID and bytes (`tools/ipp/test/gold
   policy is `laser/lw_core.c`. Heard on two links, the cable's wins, then the network, the
   tunnel, the zone. A printer answering from another AirWriter's node is skipped. No answer for
   30 s is `stopped` + `offline-report`.
+  `W-1186 Rev 2026.11: LocalTalk on both ports at once, so two LaserWriters each get a port`:
+  the lookups go out on both cables, and each is a link of its own, so the one PAP client
+  rides whichever cable a job's printer is on (jobs stay one at a time under the job lock).
+  Two LaserWriters often keep the name they shipped with: a target whose record names its
+  cable is reached on that cable alone, never by the other cable's printer of its name. A name
+  told from one cable while the same name answered on the other within 12 s (`LW_TWIN_MS`,
+  two status rounds) is told as a twin, a second printer; one that turns up on the other
+  cable after the first went quiet is the same printer, its cable moved. Not covered: both
+  ports on one LocalTalk network, where a LaserWriter answers on both and is listed twice.
 - **Switched on** (W-1098). A printer coming up checks no one has its name before it takes it,
   an NBP LkUp of that one name a few times about 2 s apart (Inside AppleTalk 7-9; a Personal
   LaserWriter NTR: five, after 8 s of LLAP ENQs reusing its node ID). Every link's node passes a
@@ -915,6 +924,18 @@ read back is a list made again). At most 8 records.
   with as many pages or more, is that one renamed: the old record takes the new NBP name, its
   own name following unless the person gave it one, and keeps its id, uuid, AirPrint printer and
   settings; the new record goes, with no notice. Otherwise a new name is a new printer.
+- **Two cables** (`W-1186 Rev 2026.11: LocalTalk on both ports at once, so two LaserWriters each
+  get a port`). An AppleTalk record matches a printer heard by kind and NBP name. A record heard
+  on a LocalTalk cable also keeps the port its cable is on, 1 or 2, in the record's `port` byte
+  (the one a port record keeps its socket in; 0 until it is next heard, for a record from
+  before). `where` stays the cable for both ports and the blob's version does not change, so a
+  firmware from before reads the list after a rollback and ignores the byte. A name heard on
+  one cable that the list has on the other is a second printer when the first still answers
+  (3.14's twin): a record of its own, with its own UUID (the name's hash with one byte more)
+  and its own name on phones (" 2"). When the first has gone quiet it is that printer, its
+  cable moved: the record takes the new port and keeps its id, UUID and settings. The Renamed
+  match never crosses cables. The page's `port` for a cable record is its own (the lowest
+  LocalTalk port's until it is heard); rev A's JSON has none, as before.
 - **The port.** At line-up after 1 s or more down (and at the first report) the board sends
   `ESC ?` and `CR`: `IW10`… is an ImageWriter II, `LQ`… an LQ, no answer with the line ready an
   unknown device, named "Unknown printer", never shared (made only with no port record; with
@@ -1025,7 +1046,12 @@ read back is a list made again). At most 8 records.
   A Mac's ImageWriter job goes to whichever ImageWriter answers on the port (the II, LQ and
   original take the same stream). Registrations 1-3 are the AppleTalk printers from other
   links under their own NBP names and types (relayed), and `<host name>:AirWriter` is at
-  registration 4 on every running link (`lt_node_offer`, sockets 0x85-0x88). A Mac's
+  registration 4 on every running link (`lt_node_offer`, sockets 0x85-0x88). Rev 2026.11's two
+  cables are two links (W-1186), so a Mac on one is offered the LaserWriter on the other as an
+  EtherTalk Mac is offered a cable's, and nothing else crosses between the two networks. A
+  link takes a name once: two LaserWriters both named LaserWriter, one on each cable, are each
+  seen by the Macs on their own cable and not offered on the other's, and EtherTalk Macs are
+  offered the first record's. Renaming one (Apple's Namer) lets every Mac reach both. A Mac's
   connection on a relayed name goes through `localtalk/pap_relay.c`, run by `laser.c` with the
   one PAP client under the job lock: busy, in the printer's own status words, until the
   printer's connection is open; then both ways as they are, the printer's output 256 bytes a

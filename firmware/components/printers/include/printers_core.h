@@ -96,6 +96,10 @@ typedef struct {
     // only on a board with two printer sockets (pr_list_t.n_ports). It is the byte the layout
     // always padded here, stored as 0 by every firmware before it, so a board with one socket
     // never reads it and the stored form is the same.
+    // W-1186: for a printer heard on a LocalTalk cable (where PR_WHERE_CABLE), the port its
+    // cable is on: 1 (J2) or 2 (J4, rev A's AppleTalk port), 0 not known yet (a record from
+    // before, until it is next heard). `where` stays the cable for both, so a firmware from
+    // before reads the list as it is and ignores this.
     uint8_t   port;
     lw_info_t lw;             // LaserWriters: the query's answers
 } pr_rec_t;
@@ -232,6 +236,14 @@ void pr_port_clock_gone(pr_list_t *l, int s);
 // StyleWriter record, or `m` has a record of its own already, which is then the one on the
 // port).
 int  pr_port_sw_found(pr_list_t *l, int s, int id, pr_model_t m);
+// W-1186: heard on the cable on port `cable_port` (1 or 2; 0 not known, as pr_at_seen). Rev
+// 2026.11's two cables are two networks, and two LaserWriters often keep one default name: a
+// name heard on one cable while the list has it on the other is a second printer, a record of
+// its own, when `twin` says the other still answers; else it is that record's printer moved,
+// and the record follows it. A record whose port is not known takes the first cable it is
+// heard on.
+int  pr_at_seen_on(pr_list_t *l, pr_where_t link, int cable_port, const uint8_t *nbp_name,
+                   const uint8_t *nbp_type, int from_airwriter, int twin);
 int  pr_at_seen(pr_list_t *l, pr_where_t link, const uint8_t *nbp_name, const uint8_t *nbp_type,
                 int from_airwriter);
 void pr_at_queried(pr_list_t *l, int id, int ok, const lw_info_t *info);
@@ -318,6 +330,10 @@ pr_gate_t pr_job_gate(const pr_list_t *l, int id, int heard, pr_model_t heard_mo
 // identified AppleTalk printer, shared over AirPrint or not, never on its own link. A port
 // StyleWriter is carried to none until StyleWriters phase 2.
 int  pr_offers(const pr_list_t *l, pr_where_t link, int ids[], int max);
+// W-1186: on the cable on port `cable_port` (1 or 2; 0 as pr_offers): the other cable's
+// printers too, each under its own name, unless a printer of that kind and name is on this
+// cable already (the name is taken there).
+int  pr_offers_on(const pr_list_t *l, pr_where_t link, int cable_port, int ids[], int max);
 
 pr_box_t pr_box_state(const pr_list_t *l, const pr_live_t live[PR_MAX]);
 // Where the test page goes (W-1116): the printer on the port (pr_port_current, an ImageWriter

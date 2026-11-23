@@ -474,6 +474,101 @@ static void test_remove(void)
     CHECK_EQ_INT(pr_port_other_family(&L, 0, PR_HEARD_IMAGEWRITER), 0);
 }
 
+// W-1186: rev 2026.11's two LocalTalk ports are two networks. A LaserWriter on each, both with
+// the name they shipped with, are two records, each with its port, its own UUID and its own
+// name on phones; one whose cable moves to the other port keeps its record.
+static void test_two_cables(void)
+{
+    fresh();
+    lw_info_t info;
+    lw_info_default(&info);
+    // A list from before, or a board that names no port: not known until it is heard.
+    int a = pr_at_seen(&L, PR_WHERE_CABLE, P("LaserWriter"), P("LaserWriter"), 0);
+    CHECK_EQ_INT(pr_get(&L, a)->port, 0);
+    CHECK_EQ_INT(pr_at_seen_on(&L, PR_WHERE_CABLE, 1, P("LaserWriter"), P("LaserWriter"), 0, 0), a);
+    CHECK_EQ_INT(pr_get(&L, a)->port, 1);
+    CHECK_EQ_INT(L.n, 1);
+    pr_at_queried(&L, a, 1, &info);
+    // The same name on port 2 while port 1's still answers: a second printer.
+    int b = pr_at_seen_on(&L, PR_WHERE_CABLE, 2, P("LaserWriter"), P("LaserWriter"), 0, 1);
+    CHECK(b > 0 && b != a);
+    CHECK_EQ_INT(L.n, 2);
+    CHECK_EQ_INT(pr_get(&L, b)->port, 2);
+    CHECK_EQ_INT(pr_get(&L, b)->where, PR_WHERE_CABLE);
+    CHECK(strcmp(pr_get(&L, a)->uuid, pr_get(&L, b)->uuid) != 0);
+    CHECK(strcmp(pr_get(&L, a)->name, pr_get(&L, b)->name) != 0);
+    pr_at_queried(&L, b, 1, &info);
+    // Each heard again is its own record, whichever answers first.
+    CHECK_EQ_INT(pr_at_seen_on(&L, PR_WHERE_CABLE, 2, P("LaserWriter"), P("LaserWriter"), 0, 0), b);
+    CHECK_EQ_INT(pr_at_seen_on(&L, PR_WHERE_CABLE, 1, P("LaserWriter"), P("LaserWriter"), 0, 1), a);
+    CHECK_EQ_INT(L.n, 2);
+    // Two of one name: neither is offered on the other's cable, where the name is taken, and
+    // EtherTalk gets the name once, the first's.
+    int ids[8];
+    CHECK_EQ_INT(pr_offers_on(&L, PR_WHERE_CABLE, 1, ids, 8), 0);
+    CHECK_EQ_INT(pr_offers_on(&L, PR_WHERE_CABLE, 2, ids, 8), 0);
+    CHECK_EQ_INT(pr_offers(&L, PR_WHERE_NETWORK, ids, 8), 1);
+    CHECK_EQ_INT(ids[0], a);
+    // Differently named, each is offered to the Macs on the other cable, never on its own.
+    int c = pr_at_seen_on(&L, PR_WHERE_CABLE, 2, P("Upstairs"), P("LaserWriter"), 0, 0);
+    pr_at_queried(&L, c, 1, &info);
+    CHECK_EQ_INT(pr_offers_on(&L, PR_WHERE_CABLE, 1, ids, 8), 1);
+    CHECK_EQ_INT(ids[0], c);
+    CHECK_EQ_INT(pr_offers_on(&L, PR_WHERE_CABLE, 2, ids, 8), 0);
+    // The stored form: `where` is the cable for all three, so a firmware from before reads it,
+    // and the port comes back.
+    static uint8_t blob[4096];
+    size_t n = pr_save(&L, blob, sizeof blob);
+    CHECK(n > 0);
+    static pr_list_t M2;
+    pr_init(&M2, MAC, 1);
+    CHECK_EQ_INT(pr_load(&M2, blob, n), 0);
+    CHECK_EQ_INT(pr_get(&M2, a)->where, PR_WHERE_CABLE);
+    CHECK_EQ_INT(pr_get(&M2, a)->port, 1);
+    CHECK_EQ_INT(pr_get(&M2, b)->port, 2);
+    CHECK_EQ_INT(pr_get(&M2, c)->port, 2);
+    // The page's port is each record's own, not the one LocalTalk socket's.
+    L.port_names = 1;
+    L.lt_port = 1;
+    pr_live_t live[PR_MAX] = { 0 };
+    static char js[8192];
+    CHECK(pr_json(&L, live, js, sizeof js) > 0);
+    char want[64];
+    snprintf(want, sizeof want, "{\"id\":%d,", b);
+    const char *at = strstr(js, want);
+    CHECK(at && strstr(at, "\"port\":2") && strstr(at, "\"port\":2") < strstr(at, "}"));
+    L.port_names = 0;
+    L.lt_port = 0;
+
+    // One printer whose cable moves from port 1 to port 2 (port 1 quiet by then): its record
+    // follows, with its identity.
+    fresh();
+    a = pr_at_seen_on(&L, PR_WHERE_CABLE, 1, P("Office"), P("LaserWriter"), 0, 0);
+    pr_at_queried(&L, a, 1, &info);
+    char uuid[46];
+    snprintf(uuid, sizeof uuid, "%s", pr_get(&L, a)->uuid);
+    CHECK_EQ_INT(pr_at_seen_on(&L, PR_WHERE_CABLE, 2, P("Office"), P("LaserWriter"), 0, 0), a);
+    CHECK_EQ_INT(L.n, 1);
+    CHECK_EQ_INT(pr_get(&L, a)->port, 2);
+    CHECK(!strcmp(uuid, pr_get(&L, a)->uuid));
+    // Heard on EtherTalk too, it stays the cable's.
+    CHECK_EQ_INT(pr_at_seen(&L, PR_WHERE_NETWORK, P("Office"), P("LaserWriter"), 0), a);
+    CHECK_EQ_INT(pr_get(&L, a)->where, PR_WHERE_CABLE);
+    CHECK_EQ_INT(pr_get(&L, a)->port, 2);
+    // A network printer later heard on a cable takes that cable's port.
+    int d = pr_at_seen(&L, PR_WHERE_NETWORK, P("Den"), P("LaserWriter"), 0);
+    CHECK_EQ_INT(pr_get(&L, d)->port, 0);
+    CHECK_EQ_INT(pr_at_seen_on(&L, PR_WHERE_CABLE, 1, P("Den"), P("LaserWriter"), 0, 0), d);
+    CHECK_EQ_INT(pr_get(&L, d)->where, PR_WHERE_CABLE);
+    CHECK_EQ_INT(pr_get(&L, d)->port, 1);
+    // A port out of range in a stored list is not known.
+    pr_get(&L, d)->port = 9;
+    n = pr_save(&L, blob, sizeof blob);
+    pr_init(&M2, MAC, 1);
+    CHECK_EQ_INT(pr_load(&M2, blob, n), 0);
+    CHECK_EQ_INT(pr_get(&M2, d)->port, 0);
+}
+
 static void test_offers(void)
 {
     fresh();
@@ -3524,6 +3619,7 @@ int main(void)
     test_names_unique();
     test_macroman_name();
     test_remove();
+    test_two_cables();
     test_offers();
     test_box_state();
     test_migrate();
