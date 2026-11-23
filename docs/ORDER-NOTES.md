@@ -29,7 +29,7 @@ Each order's section below is paste-ready on its own.
 - Min trace/space **0.15 mm (6 mil)** generally. **Exception: four spots need 0.12 mm
   (4.7 mil) space**, all around U4's SOT-223 tab at approx. x 115–120 / y 113–120 mm of the
   main-board half (the project's `GND_STITCH_012` rule area). Everywhere else is ≥ 0.15 mm.
-- Vias: 0.6 mm pad / 0.3 mm drill, plus five 0.8/0.4, one 0.6/0.4 and one 0.9/0.5 (the
+- Vias: 0.6 mm pad / 0.3 mm drill, plus six 0.8/0.4, one 0.6/0.4 and one 0.9/0.5 (the
   VBUS via). Drill floor 0.30 mm.
 - **NPTH:** 2 × 0.65 mm (J1 pegs), 2 × 0.9 mm (SW1 pegs) and 4 × 2.75 mm (mounting) only.
   The **3.8 mm hole is PLATED on purpose** (netless gold bore on the art panel; it is in the
@@ -82,7 +82,7 @@ top side of the file. R33 is left off; its pads stay bare.
 - Min trace/space **0.15 mm (6 mil)** generally. **Exception: four spots need 0.12 mm
   (4.7 mil) space**, all around U4's SOT-223 tab at approx. x 115–120 / y 113–120 mm (the
   project's `GND_STITCH_012` rule area). Everywhere else is ≥ 0.15 mm.
-- Vias: 0.6 mm pad / 0.3 mm drill, plus five 0.8/0.4, one 0.6/0.4 and one 0.9/0.5 (the
+- Vias: 0.6 mm pad / 0.3 mm drill, plus six 0.8/0.4, one 0.6/0.4 and one 0.9/0.5 (the
   VBUS via). Drill floor 0.30 mm.
 - **NPTH:** 2 × 0.65 mm (J1 pegs), 2 × 0.9 mm (SW1 pegs) and 4 × 2.75 mm (mounting) only.
 
@@ -121,10 +121,11 @@ from the position file and the BOM; their pads stay bare. R33 is fitted.
 
 ## Known engineering-query answers (both orders)
 
-- **Soldermask bridges:** no bridges needed on the fine-pitch USB-C (J1) pin rows; gang-open
-  them. The file's 0.20 mm dams there are under PCBWay's 0.22 mm matte-black-ink minimum,
-  and shrinking apertures onto 0.3 mm pads is worse than no dams. Every other IC's dams clear
-  0.22 mm; keep the mask as designed. On the AirWriter panel, the art-panel half's fine mask
+- **Soldermask bridges:** no bridges needed on the fine-pitch USB-C (J1) pin rows or between
+  the pins of the two transceivers (U2 and U6, VSSOP-10); gang-open them. The file's dams
+  there (0.20 mm on J1, 0.15 mm on U2 and U6) are under PCBWay's 0.22 mm matte-black-ink
+  minimum, and shrinking apertures onto 0.3–0.35 mm pads is worse than no dams. Every other
+  IC's dams clear 0.22 mm; keep the mask as designed. On the AirWriter panel, the art-panel half's fine mask
   features are decorative: produce as-is.
 - **JP1** (two gold pads marked LC, south-east of D26): a solder jumper, not a part. No
   paste, nothing fitted, left open; Wells bridges it on the LC after delivery.
