@@ -798,7 +798,11 @@ closing, Wi-Fi going, a new IP) ends its job abandoned at once.
 **Memory.** mbedTLS allocates from PSRAM (`CONFIG_MBEDTLS_EXTERNAL_MEM_ALLOC`): a held TLS
 session in internal RAM left Wi-Fi and lwIP starving.
 
-**Web.** `GET /api/lt` (the cable node), `GET /api/et` (both EtherTalk links, the shared
+**Web.** `GET /api/lt` (the cable node: the lowest-numbered LocalTalk port's, as it was with
+one; W-1186 adds `ports`, a row for each port doing LocalTalk, lowest first, with `port`,
+`chip` (`lt_chip`'s words), `phase` (`online`, `acquiring`, `listening`, or `off` for a node
+quiet or not running), `node`, `on`, `laser` and that network's `macs`; rev A has one row and
+the LC none; the page's one LocalTalk switch is every port's), `GET /api/et` (both EtherTalk links, the shared
 printer, internal RAM), `GET`/`POST /api/et/settings`
 (`{"radio":true,"tunnel":true,"infinite":true,"zone":"…"}`; 400 for a zone name outside the rule
 above).
@@ -2086,7 +2090,9 @@ board exists.
   - **Saved.** Each socket's last job (NVS `general` `port1job`, `port2job`), so a restart
     keeps it. `/api/general` `{"port1":"auto"|"printer"|"localtalk","port2":…}` fixes one
     (`port1set`, `port2set`; auto by default); the page has no control for it. `/api/status`
-    `ports` lists each socket's `job` and `set` (`fixed` on rev A and the LC).
+    `ports` lists each socket's `job` and `set` (`fixed` on rev A and the LC), and its
+    `lt_chip` (W-1186: the top-level `lt_chip` and `lt` are the lowest LocalTalk port's chip,
+    and any port's node answering as the ImageWriter).
   - **Two printers at once.** Both printer sockets are live and shared: the port task visits
     each in turn (`port_visit`) and asks it its own questions (3.16's policy, with books per
     socket, `psock_t`), selecting it (`serial_out_select`, `qd_link_init`) under the job lock.

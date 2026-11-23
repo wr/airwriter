@@ -779,6 +779,55 @@ static void json_ring(char **p, char *end, char ring[][LINE_LEN], unsigned lines
     }
 }
 
+// The Macs heard in the last 10 minutes (W-1079), with the Macintosh name of each that gave
+// one: "macs":[...] at p. Under s_lock.
+static char *json_macs(char *p, char *end, const lt_node_t *n)
+{
+    lt_seen_t seen[JSON_MACS];
+    size_t ns = lt_node_seen(n, now_ms(), LT_SEEN_MS, seen, JSON_MACS);
+    if (p < end) p += snprintf(p, end - p, "\"macs\":[");
+    for (size_t i = 0; i < ns && p < end; i++) {
+        p += snprintf(p, end - p, "%s{\"node\":%u,\"ago\":%lu", i ? "," : "",
+                      seen[i].node, (unsigned long)seen[i].ago_s);
+        if (seen[i].name && p < end) {
+            char u[3 * NBP_NAME_MAX + 1];
+            nbp_utf8(u, sizeof u, seen[i].name);
+            p += snprintf(p, end - p, ",\"name\":");
+            if (p < end) json_str(&p, end, u);
+        }
+        if (p < end) *p++ = '}';
+    }
+    if (p < end) *p++ = ']';
+    return p;
+}
+
+size_t localtalk_json_port(int sock, char *buf, size_t cap)
+{
+    lt_side_t *sd = side(sock);
+    if (cap < 96) return 0;
+    if (!up(sd) || sd->hold || sd->quiet) {
+        int listening = up(sd) && sd->hold;
+        return (size_t)snprintf(buf, cap, "\"phase\":\"%s\",\"node\":0,\"on\":%s,\"laser\":%s,\"macs\":[]",
+                                listening ? "listening" : "off",
+                                listening && sd->want_on && s_serve ? "true" : "false",
+                                listening && sd->want_on && !s_serve ? "true" : "false");
+    }
+    char *p = buf, *end = buf + cap - 8;
+    xSemaphoreTake(s_lock, portMAX_DELAY);
+    const lt_node_t *n = &sd->mem->node;
+    p += snprintf(p, end - p, "\"phase\":\"%s\",\"node\":%u,\"on\":%s,\"laser\":%s,",
+                  n->phase == LT_ONLINE ? "online" : "acquiring", n->node,
+                  sd->serve ? "true" : "false", sd->serve ? "false" : "true");
+    p = json_macs(p, end, n);
+    xSemaphoreGive(s_lock);
+    if (p >= end) {                              // cut short: the row without its Macs
+        return (size_t)snprintf(buf, cap, "\"phase\":\"online\",\"node\":0,\"on\":%s,\"laser\":%s,\"macs\":[]",
+                                sd->serve ? "true" : "false", sd->serve ? "false" : "true");
+    }
+    *p = '\0';
+    return (size_t)(p - buf);
+}
+
 void localtalk_json(int sock, char *buf, size_t cap)
 {
     lt_side_t *sd = side(sock);
@@ -826,23 +875,8 @@ void localtalk_json(int sock, char *buf, size_t cap)
         first = 0;
     }
     if (p < end) *p++ = ']';
-    // W-1079: the Macs heard in the last 10 minutes, for the settings page,
-    // with the Macintosh name of each that gave one.
-    lt_seen_t seen[JSON_MACS];
-    size_t ns = lt_node_seen(n, now_ms(), LT_SEEN_MS, seen, JSON_MACS);
-    if (p < end) p += snprintf(p, end - p, ",\"macs\":[");
-    for (size_t i = 0; i < ns && p < end; i++) {
-        p += snprintf(p, end - p, "%s{\"node\":%u,\"ago\":%lu", i ? "," : "",
-                      seen[i].node, (unsigned long)seen[i].ago_s);
-        if (seen[i].name && p < end) {
-            char u[3 * NBP_NAME_MAX + 1];
-            nbp_utf8(u, sizeof u, seen[i].name);
-            p += snprintf(p, end - p, ",\"name\":");
-            if (p < end) json_str(&p, end, u);
-        }
-        if (p < end) *p++ = '}';
-    }
-    if (p < end) *p++ = ']';
+    if (p < end) *p++ = ',';
+    p = json_macs(p, end, n);
     if (p < end) p += snprintf(p, end - p,
         ",\"frames\":%lu,\"fcs_bad\":%u,\"errors\":%u,\"tx\":%u,\"for_us\":%lu,"
         "\"lookups\":%lu,\"replies\":%lu,\"statuses\":%lu,\"opens\":%lu,\"busy\":%lu,"

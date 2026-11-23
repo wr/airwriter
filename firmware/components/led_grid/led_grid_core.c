@@ -628,14 +628,14 @@ int lg_blip_over(uint8_t blip, uint32_t ms)
     }
 }
 
-static lg_c3 blip_dot(uint8_t blip, uint32_t ms, int i, uint32_t t)
+static lg_c3 blip_dot(uint8_t blip, uint8_t at, uint32_t ms, int i, uint32_t t)
 {
     int r = lg_row(i), c = lg_col(i);
     float s = (float)ms, dist = hypotf((float)(r - TEST_ROW), (float)(c - TEST_COL));
     switch (blip) {
-    case LG_BLIP_MAC: {             // an arc of stripes out of the LocalTalk socket
+    case LG_BLIP_MAC: {             // an arc of stripes out of the socket that heard it
         float front = s / 900.0f * FAR;
-        float lvl = gauss(dist_to(r, c, PORT_ROW, LT_COL) - front, 0.7f);
+        float lvl = gauss(dist_to(r, c, PORT_ROW, at == LG_AT_J2 ? PRINTER_COL : LT_COL) - front, 0.7f);
         return sc(stripe(r, c), lvl * (1 - ss(800, LG_BLIP_MAC_MS, s)));
     }
     case LG_BLIP_LT_ON: {           // the stripes come down out of it and fade
@@ -745,7 +745,7 @@ void lg_render16(const ps_view_t *v, const lg_opts_t *o, uint32_t t_ms,
         int fr4 = LG_MAP[i].mat == 'P';
         if (!fr4 && !all && !blip) continue;   // FR4-only state: mask dot stays dark
         lg_c3 c = fr4 || all ? sc(view_dot(v, o, i, t_ms), 1 - sleep_k) : DARK;
-        if (blip) c = screen(c, blip_dot(o->blip, o->blip_ms, i, t_ms));
+        if (blip) c = screen(c, blip_dot(o->blip, o->blip_at, o->blip_ms, i, t_ms));
         float cap = dot_cap(v, i);
         put_dot(out[i], level16(c.r, cap), level16(c.g, cap), level16(c.b, cap));
     }

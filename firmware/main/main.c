@@ -3636,19 +3636,22 @@ static void status_json(void *ctx, char *buf, size_t cap)
     const char *model = swp ? swp->make_model : qdc ? qdc->make_model
                       : printer_caps_imagewriter_model(printers_port_model(sk))->make_model;
 
-    char laser[300], printers[128], temp[48 + 200];
+    char laser[300], printers[128], temp[48 + 260];
     chip_temp_json(temp, sizeof temp);
     // W-1179: each socket's job, and what it is set to ("auto", "printer", "localtalk"; "fixed"
-    // on rev A and the LC, whose sockets have one job each).
+    // on rev A and the LC, whose sockets have one job each). W-1186: and whether its PIC runs
+    // TashTalk ("lt_chip", as the top-level one, which is the lowest LocalTalk port's).
     {
         size_t n = strlen(temp);
         n += (size_t)snprintf(temp + n, sizeof temp - n, ",\"ports\":[");
         for (int i = 0; i < ports_count() && n < sizeof temp; i++) {
             uint8_t set = s_set.port_set[i];
-            n += (size_t)snprintf(temp + n, sizeof temp - n, "%s{\"port\":%d,\"job\":\"%s\",\"set\":\"%s\"}",
+            n += (size_t)snprintf(temp + n, sizeof temp - n,
+                                  "%s{\"port\":%d,\"job\":\"%s\",\"set\":\"%s\",\"lt_chip\":\"%s\"}",
                                   i ? "," : "", i + 1, ports_job_name(ports_job(i)),
                                   !ports_either() ? "fixed" : set == SET_PORT_PRINTER ? "printer"
-                                  : set == SET_PORT_LOCALTALK ? "localtalk" : "auto");
+                                  : set == SET_PORT_LOCALTALK ? "localtalk" : "auto",
+                                  lt_chip_name(s_lt_chip[i]));
         }
         if (n < sizeof temp) snprintf(temp + n, sizeof temp - n, "]");
     }
@@ -3723,20 +3726,35 @@ static void status_json(void *ctx, char *buf, size_t cap)
 
 static int lt_wanted(void);
 
+// GET /api/lt. Its top-level members are the lowest-numbered LocalTalk port's node, as they
+// were with one. W-1186: "ports" has a row for each port doing LocalTalk, lowest first, for
+// the card: its "port", its "chip" (lt_chip's words) and localtalk_json_port's "phase",
+// "node", "on", "laser" and "macs".
 static void lt_json(void *ctx, char *buf, size_t cap)
 {
     (void)ctx;
+    enum { ROWS = 2560 };                    // kept for the rows: 8 named Macs a port
+    size_t top = cap > 2 * ROWS ? cap - ROWS : cap;
     int sock = ports_with(PORT_JOB_LOCALTALK);
     // W-1179: two printers on rev 2026.11, no socket for LocalTalk: the card's "on" is its
     // setting, kept for when a socket takes LocalTalk again; nothing is heard meanwhile.
     if (sock < 0 && ports_either())
-        snprintf(buf, cap, "{\"on\":%s,\"parked\":true,\"macs\":[]}", lt_wanted() ? "true" : "false");
+        snprintf(buf, top, "{\"on\":%s,\"parked\":true,\"macs\":[]}", lt_wanted() ? "true" : "false");
     else
-        localtalk_json(sock, buf, cap);
+        localtalk_json(sock, buf, top);
     // W-1179: the socket LocalTalk is on, 1 or 2 (0 none), for the LocalTalk card's "On port N".
     size_t n = strlen(buf);
-    if (n >= 2 && buf[n - 1] == '}' && n + 12 < cap)
-        snprintf(buf + n - 1, cap - n + 1, ",\"port\":%d}", sock + 1);
+    if (n < 2 || buf[n - 1] != '}' || n + 64 >= cap) return;
+    char *p = buf + n - 1, *end = buf + cap - 4;
+    p += snprintf(p, end - p, ",\"port\":%d,\"ports\":[", sock + 1);
+    for (int k = 0, rows = 0; k < ports_count(); k++) {
+        if (ports_job(k) != PORT_JOB_LOCALTALK || end - p < 200) continue;
+        p += snprintf(p, end - p, "%s{\"port\":%d,\"chip\":\"%s\",", rows++ ? "," : "", k + 1,
+                      lt_chip_name(s_lt_chip[k]));
+        p += localtalk_json_port(k, p, (size_t)(end - p));
+        *p++ = '}';
+    }
+    snprintf(p, (size_t)(buf + cap - p), "]}");
 }
 
 static const uint8_t *lt_job(void *ctx, size_t *len)
@@ -3800,20 +3818,25 @@ static uint16_t lt_status(ps_state_t st, at_link_t link)
 // 6 s; each one still keeps the panel awake.
 #define MAC_BLIP_EVERY_MS 6000
 
-// Both the cables' nodes and the EtherTalk links (W-1076) report here.
-static void lt_event(lt_event_t ev)
+// Both the cables' nodes and the EtherTalk links (W-1076) report here. W-1186: a Mac heard on
+// port 1's cable (sock 0, rev 2026.11) shows from J2's socket, with its own 6 s; J4's cable
+// and the EtherTalk links (sock -1) from J4's, as before.
+static void lt_event_from(int sock, lt_event_t ev)
 {
-    static uint32_t last;
+    static uint32_t last[2];
     if (ev == LT_EV_ONLINE) {
         led_grid_blip(LG_BLIP_LT_ON);
         return;
     }
     printer_state_post(PS_EV_ACTIVITY);
+    int j2 = sock == 0;
     uint32_t now = uptime_ms();
-    if (last && now - last < MAC_BLIP_EVERY_MS) return;
-    last = now;
-    led_grid_blip(LG_BLIP_MAC);
+    if (last[j2] && now - last[j2] < MAC_BLIP_EVERY_MS) return;
+    last[j2] = now;
+    led_grid_blip_at(LG_BLIP_MAC, j2 ? LG_AT_J2 : LG_AT_J4);
 }
+
+static void lt_event(lt_event_t ev) { lt_event_from(-1, ev); }
 
 // The chip the card and /api/status speak of: the lowest-numbered LocalTalk socket's; with no
 // LocalTalk socket, the last one known.
@@ -3825,11 +3848,10 @@ static lt_chip_t lt_chip_shown(void)
 }
 
 #if CONFIG_AIRWRITER_PIC_CLK_PIN >= 0 && CONFIG_AIRWRITER_PIC_DAT_PIN >= 0
-// A cable's node reports as the EtherTalk links do.
+// A cable's node reports as the EtherTalk links do, from its own socket.
 static void lt_cable_event(int sock, lt_event_t ev)
 {
-    (void)sock;
-    lt_event(ev);
+    lt_event_from(sock, ev);
 }
 
 // TashTalk took none of the sync, so the pins are free: the PIC's device ID

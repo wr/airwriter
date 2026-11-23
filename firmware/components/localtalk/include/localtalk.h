@@ -78,6 +78,10 @@ int       localtalk_serving(void);
 void      localtalk_set_status(int sock, uint16_t status);
 // State, counters and the latest lines, for GET /api/lt.
 void      localtalk_json(int sock, char *buf, size_t cap);
+// W-1186: one port's row for the LocalTalk card, the members of an object without its braces:
+// "phase" ("online", "acquiring", "listening", or "off" for a node quiet or not running),
+// "node", "on" and "laser" as /api/lt's, and "macs" as /api/lt's. Returns its length.
+size_t    localtalk_json_port(int sock, char *buf, size_t cap);
 // Bench check: an AEP echo request to `node`; the reply shows in the log.
 void      localtalk_echo(int sock, uint8_t node);
 // The last PAP job's bytes as captured (up to the capture size), or NULL.
