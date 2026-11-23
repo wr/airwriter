@@ -94,8 +94,9 @@ class TestArtDrawnTheOldWay(unittest.TestCase):
 
 
 # The label sections along the socket edge, in the board's frame (mm): Figma's
-# three rule cells, 0-360, 370-730 and 740-1100 px.
-THIRDS = {"serial": (0.0, 20.3), "appletalk": (20.9, 41.1), "power": (41.7, 62.0)}
+# three rule cells, 0-360, 370-730 and 740-1100 px. Port 1 is J2, the socket
+# every AirWriter has; port 2 is J4.
+THIRDS = {"port 1": (0.0, 20.3), "port 2": (20.9, 41.1), "power": (41.7, 62.0)}
 LABEL_TOP = 96.0        # letters start below this; the rules sit at 95.08
 
 
@@ -103,14 +104,15 @@ def third_of(x0, x1):
     return next((k for k, (a, b) in THIRDS.items() if a <= x0 and x1 <= b), None)
 
 
-def label_counts(boxes):
-    """Shapes in the label band (bbox x0, y0, x1, y1 in mm), counted per socket's third."""
-    counts = {}
+def label_words(boxes):
+    """The label band's shapes (bbox x0, y0, x1, y1 in mm), per socket's third: how many,
+    and how wide the word is, to 0.1 mm."""
+    found = {}
     for x0, y0, x1, y1 in boxes:
         if y0 >= LABEL_TOP:
-            k = third_of(x0, x1)
-            counts[k] = counts.get(k, 0) + 1
-    return counts
+            found.setdefault(third_of(x0, x1), []).append((x0, x1))
+    return {k: (len(v), round(max(b for _, b in v) - min(a for a, _ in v), 1))
+            for k, v in found.items()}
 
 
 def overlaps(a, b):
@@ -121,31 +123,32 @@ class TestTheTurnedArt(unittest.TestCase):
     """What the generated files must show once the art is drawn from the front."""
 
     def test_labels_over_their_sockets(self):
-        # Each word has its own number of shapes in the board's silk (serial
-        # 6 letters and the i's dot, appletalk 9, power 5), so a label over the
-        # wrong socket shows as the wrong count in that socket's third.
+        # Each word is five shapes, and each is its own width (the 1 is narrower
+        # than the 2), so a label over the wrong socket shows as the wrong width
+        # in that socket's third.
         import json, lc_top
         silk = json.loads((HERE / "silk.polys.json").read_text())
         (slash,) = json.loads((HERE / "fr4.polys.json").read_text())
         boxes = [(min(x for x, _ in p["outline"]), min(y for _, y in p["outline"]),
                   max(x for x, _ in p["outline"]), max(y for _, y in p["outline"])) for p in silk]
-        self.assertEqual(label_counts(boxes), {"serial": 7, "appletalk": 9, "power": 5})
-        # Swapped round (power over the printer port, serial over the power
-        # light), the same shapes don't pass.
+        words = {"port 1": (5, 6.2), "port 2": (5, 6.4), "power": (5, 7.3)}
+        self.assertEqual(label_words(boxes), words)
+        # Swapped round (power over port 1, port 1 over the power light), the
+        # same shapes don't pass.
         swapped = [(62.0 - x1, y0, 62.0 - x0, y1) for x0, y0, x1, y1 in boxes]
-        self.assertNotEqual(label_counts(swapped), {"serial": 7, "appletalk": 9, "power": 5})
+        self.assertNotEqual(label_words(swapped), words)
         # Power's letters stay clear of the power light's slash.
         sb = (min(x for x, _ in slash["outline"]), min(y for _, y in slash["outline"]),
               max(x for x, _ in slash["outline"]), max(y for _, y in slash["outline"]))
         self.assertFalse(any(overlaps(b, sb) for b in boxes if b[1] >= LABEL_TOP))
-        # The LC's top: serial and power, no appletalk; its frosted slash isn't a letter.
+        # The LC's top: port 1 and power, no port 2; its frosted slash isn't a letter.
         (lc_slash,) = json.loads((HERE / "lc_slash.polys.json").read_text())
         lb = (min(x for x, _ in lc_slash["outline"]), min(y for _, y in lc_slash["outline"]),
               max(x for x, _ in lc_slash["outline"]), max(y for _, y in lc_slash["outline"]))
         engraved = [lc_top.bbox(lc_top.parse_path(d)) for d in
                     re.findall(r'<path d="([^"]+)"', (HERE / "airwriter-lc-top.svg").read_text())]
-        self.assertEqual(label_counts([b for b in engraved if not overlaps(b, lb)]),
-                         {"serial": 6, "power": 5})
+        self.assertEqual(label_words([b for b in engraved if not overlaps(b, lb)]),
+                         {"port 1": (5, 6.2), "power": (5, 7.3)})
 
     def test_rules_under_the_labels(self):
         # Three rules, 360 x 4 px, at the top of the label band in the board's

@@ -50,7 +50,8 @@ drops off the bottom, an update fills from the top.
 As seen from the front (the sockets along the top edge), on both the Pro panel and the LC top:
 
 - **Labels** along the top edge, each in its socket's third: power on the left, appletalk in the
-  middle, serial on the right (the LC has no appletalk label, as now). Each sits at the left of
+  middle, serial on the right (the LC has no appletalk label, as now). Since W-1176 they read
+  power, port 2 and port 1 (the dot-panel cover design's 2026-11-23 amendment). Each sits at the left of
   its section with today's inset, except power, which starts 26 px (1.5 mm) right of the power
   slash, as in the mock.
   The label band is today's mirrored, as in the mock: the tops of the letters sit 1.53 mm from
