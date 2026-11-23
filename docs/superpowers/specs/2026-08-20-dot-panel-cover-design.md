@@ -55,6 +55,15 @@ stale lines in place; this block is the correction:
   "mask ridge" (the solid mask between letter strokes has the same practical
   minimum as any other feature).
 
+## Amendment, 2026-11-23 (port 1 and port 2)
+
+`W-1176 Rev 2026.11: either socket takes a serial printer or AppleTalk`. Either socket now
+takes either job, so neither label names one. From the front the labels read power, port 2
+and port 1 left to right: port 1 over J2, the socket every AirWriter has, and port 2 over J4.
+The LC's top says port 1 and power (Wells, 2026-11-23, from his Figma "Frame 16 · from the
+front" and "Frame 17 · from the front"). Only the words changed; every dot, rule and the slash
+stayed where they were, and `floors.py` reports the same 7 pinches.
+
 ## Amendment, 2026-11-16 (no DIP config)
 
 `W-1162 Remove the DIP switch code: rev A boards ignore S1, the page's switches decide`. Rev 2026.11 dropped the DIP bank (W-1109), and the firmware now reads none on rev A

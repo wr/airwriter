@@ -132,7 +132,11 @@ static const char *TAG = "airwriter";
 #endif
 #if CONFIG_AIRWRITER_HSKI_DRV_PIN != 47 || CONFIG_AIRWRITER_J4_HSKO_DRV_PIN != 13 || \
     CONFIG_AIRWRITER_J4_HSKI_PIN != 21 || CONFIG_AIRWRITER_BOARD_REV_PIN != 16 || \
-    CONFIG_AIRWRITER_BOARD_LC_PIN != 15
+    CONFIG_AIRWRITER_BOARD_LC_PIN != 15 || CONFIG_AIRWRITER_J2_DE_PIN != 7 || \
+    CONFIG_AIRWRITER_J2_PIC_MCLR_PIN != 42 || CONFIG_AIRWRITER_J2_PIC_CLK_PIN != 11 || \
+    CONFIG_AIRWRITER_J2_PIC_DAT_PIN != 12 || CONFIG_AIRWRITER_J2_LT_CTS_PIN != 41 || \
+    CONFIG_AIRWRITER_J4_TX_PIN != 9 || CONFIG_AIRWRITER_J4_RX_PIN != 10 || \
+    CONFIG_AIRWRITER_J4_DE_PIN != 3
 #error "this sdkconfig has rev A's pins: start sdkconfig.2026.11 again from the defaults"
 #endif
 #else
@@ -4105,6 +4109,35 @@ void app_main(void)
                                    .clk_pin = CONFIG_AIRWRITER_CTS_PIN,
                                    .invert_tx = AW_INVERT_TX });
     ESP_ERROR_CHECK(serial_out_init(&ser));
+#if CONFIG_AIRWRITER_J2_DE_PIN >= 0
+    // W-1176: each rev 2026.11 socket can be the printer port or LocalTalk.
+    // Until the page lets you choose, J2 is the printer port and J4 LocalTalk,
+    // as on rev A. J2: its TashTalk (U10) held in reset first, so its pins let
+    // go, then its THVD1452's driver on, carrying UART1's TX (idle high now).
+    // J4: the printer-side pins stay inputs, with no pulls, so U7 owns the line.
+    // U10's programming and CTS lines are pulled down: with U10 in reset nothing
+    // else drives them, and a PIC in reset listens there for the LVP key.
+    gpio_config_t j2_pic = { .pin_bit_mask = 1ULL << CONFIG_AIRWRITER_J2_PIC_MCLR_PIN,
+                             .mode = GPIO_MODE_OUTPUT };
+    gpio_set_level(CONFIG_AIRWRITER_J2_PIC_MCLR_PIN, 0);
+    gpio_config(&j2_pic);
+    gpio_config_t j2_de = { .pin_bit_mask = 1ULL << CONFIG_AIRWRITER_J2_DE_PIN, .mode = GPIO_MODE_OUTPUT };
+    gpio_set_level(CONFIG_AIRWRITER_J2_DE_PIN, 1);
+    gpio_config(&j2_de);
+    gpio_config_t j4_idle = {
+        .pin_bit_mask = 1ULL << CONFIG_AIRWRITER_J4_TX_PIN | 1ULL << CONFIG_AIRWRITER_J4_RX_PIN |
+                        1ULL << CONFIG_AIRWRITER_J4_DE_PIN,
+        .mode = GPIO_MODE_INPUT,
+    };
+    gpio_config(&j4_idle);
+    gpio_config_t j2_pic_idle = {
+        .pin_bit_mask = 1ULL << CONFIG_AIRWRITER_J2_PIC_CLK_PIN | 1ULL << CONFIG_AIRWRITER_J2_PIC_DAT_PIN |
+                        1ULL << CONFIG_AIRWRITER_J2_LT_CTS_PIN,
+        .mode = GPIO_MODE_INPUT,
+        .pull_down_en = GPIO_PULLDOWN_ENABLE,
+    };
+    gpio_config(&j2_pic_idle);
+#endif
 #if CONFIG_AIRWRITER_PIC_CLK_PIN >= 0
     cable_test_cfg_t ct = {
         .tx_pin  = CONFIG_AIRWRITER_TX_PIN,       .rx_pin = CONFIG_AIRWRITER_RX_PIN,

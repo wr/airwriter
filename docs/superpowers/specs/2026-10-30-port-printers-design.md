@@ -76,8 +76,8 @@ Facts the design rests on (survey of 2026-10-30 at `4e798b8`):
 - **No presence sense on either board.** Every J2 line goes through a receiver that gives a plain
   yes or no. The handshake (J2.2, HSKi) is an RS-232 receiver: up means an ImageWriter that is on
   and selected; unplugged, switched off, deselected and out of paper all read down. The receive
-  pair (J2.5, J2.8) on rev 2026.11 is the THVD1451, whose fail-safe reads an open or idle line as
-  mark, on purpose. J2.7 (GPi) is not connected. Rev 2026.11's spare pads (IO38–IO40) could carry
+  pair (J2.5, J2.8) on rev 2026.11 is a THVD1452 (the THVD1451 until W-1176), whose fail-safe
+  reads an open or idle line as mark, on purpose. J2.7 (GPi) is not connected. Rev 2026.11's spare pads (IO38–IO40) could carry
   a trial later; the idea tabled was J2's shell to a spare pad in place of R8, read through the
   cable's shield and the printer's chassis.
 - **An ImageWriter** is seen by its handshake line at once and answers `ESC ?`: `IW10`… the II,

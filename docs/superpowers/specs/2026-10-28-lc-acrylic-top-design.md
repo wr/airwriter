@@ -31,7 +31,7 @@ settle before it cured.
 side away from the sockets and turned into the board's frame by `front.py`; was Frame 17 until
 W-1153), frosted: "AirWriter LC", "airprint
 to serial bridge", rev 2026.11, the 18 gold dots, the test dot and the dot under it, the
-serial and power labels and the three rules, the power slash. The art draws the Pro's 37
+port 1 and power labels (serial and power until W-1176) and the three rules, the power slash. The art draws the Pro's 37
 lit dots in the background's colour, and they stay clear but for one: the LC fits one of
 the 37 LEDs, D26, the one under the test dot, as its status light
 (`docs/hardware-rev-2026-11.md`, "The LC's one light"), and the art draws its dot gold, so
