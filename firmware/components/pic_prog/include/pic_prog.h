@@ -38,6 +38,13 @@ pic_err_t pic_prog_read_id_on(const pic_pins_t *pins, uint16_t *devid);
 // verify failure, the first bad address.
 pic_err_t pic_prog_flash_tashtalk_on(const pic_pins_t *pins, pic_result_t *res);
 
+// W-1179: whether the PIC holds TashTalk 2.1.3 as pic_prog_flash_tashtalk_on leaves it, read
+// back and nothing written: PIC_OK, PIC_ERR_VERIFY (*res names the first difference; a blank
+// PIC's is CONFIG1), or the ID's errors. About a third of a second for a PIC with TashTalk, a
+// few milliseconds for a blank one; the PIC restarts, or stays in reset (keep_reset). Same pin
+// rules as a flash.
+pic_err_t pic_prog_check_tashtalk_on(const pic_pins_t *pins, pic_result_t *res);
+
 // U7's, as before W-1179.
 pic_err_t pic_prog_read_id(uint16_t *devid);
 pic_err_t pic_prog_flash_tashtalk(pic_result_t *res);

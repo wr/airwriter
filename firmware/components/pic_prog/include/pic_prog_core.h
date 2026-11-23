@@ -88,6 +88,12 @@ pic_err_t pic_read_id(const pic_hal_t *hal, uint16_t *devid);
 // words. Refuses to erase anything that is not a PIC12F1840. Exits as above.
 pic_err_t pic_flash(const pic_hal_t *hal, const pic_image_t *img, pic_result_t *res);
 
+// W-1179: whether the part holds img, as pic_flash leaves it: identify, then the configuration
+// words and every program word read back and compared, nothing erased or written. PIC_OK, or
+// PIC_ERR_VERIFY at the first difference (a blank part's is CONFIG1), or the ID's errors.
+// Exits as pic_read_id.
+pic_err_t pic_check(const pic_hal_t *hal, const pic_image_t *img, pic_result_t *res);
+
 // For a delay_us that sleeps on an RTOS tick of tick_us: the tick count that
 // sleeps at least us, or 0 when the wait is short enough to spin instead.
 uint32_t pic_sleep_ticks(uint32_t us, uint32_t tick_us);

@@ -3814,28 +3814,36 @@ static lt_chip_t lt_chip_check(void)
 }
 
 // W-1179: rev 2026.11's TashTalks, U10 on J2 and U7 on J4, are soldered and placed blank
-// (W-1176). Each is there only for TashTalk, so the first time a socket is to do LocalTalk and
-// its PIC answers with no TashTalk on it, TashTalk goes on. Rev A's U7, socketed, is left to the
-// page's button. The caller holds the job lock; the socket does LocalTalk and nothing holds its
-// PIC's pins. 1 when flashed.
-static int tashtalk_flash_if_blank(int sock)
+// (W-1176), and each is there only for TashTalk. At power-up, after the sockets get their jobs
+// and before LocalTalk starts, each PIC that answers is read back, and one without this build's
+// TashTalk gets it then, whatever its socket's job, so both are ready before any cable is. A
+// socket doing the printer job keeps its PIC in reset after. Rev A's U7, socketed, is left to
+// the page's button; the LC has neither PIC.
+static void tashtalk_install(void)
 {
-    if (!ports_either() || sock < 0 || sock >= ports_count()) return 0;
-    const char *chip = sock == 0 ? "U10" : "U7";
-    pic_pins_t pins = ports_sock(sock)->pic;
-    pins.keep_reset = 0;
-    uint16_t id = 0;
-    pic_err_t e = pic_prog_read_id_on(&pins, &id);
-    if (e != PIC_OK) {
-        ESP_LOGW(TAG, "port %d: %s reads 0x%04X: %s", sock + 1, chip, id, pic_err_str(e));
-        return 0;
+    if (!ports_either()) return;
+    xSemaphoreTake(s_job_lock, portMAX_DELAY);
+    for (int i = 0; i < ports_count(); i++) {
+        const char *chip = i == 0 ? "U10" : "U7";
+        pic_pins_t pins = ports_sock(i)->pic;
+        pins.keep_reset = ports_job(i) != PORT_JOB_LOCALTALK;
+        pic_result_t r;
+        pic_err_t e = pic_prog_check_tashtalk_on(&pins, &r);
+        if (e == PIC_OK) {
+            ESP_LOGI(TAG, "port %d: %s has TashTalk", i + 1, chip);
+            continue;
+        }
+        if (e != PIC_ERR_VERIFY) {
+            ESP_LOGW(TAG, "port %d: %s reads 0x%04X: %s", i + 1, chip, r.devid, pic_err_str(e));
+            continue;
+        }
+        ESP_LOGW(TAG, "port %d: %s has no TashTalk (0x%04X at 0x%04X): installing it", i + 1,
+                 chip, r.got, (unsigned)r.bad_addr);
+        led_grid_action(LG_ACT_PIC_FLASHING, 0);
+        e = pic_prog_flash_tashtalk_on(&pins, &r);
+        led_grid_action(e == PIC_OK ? LG_ACT_PIC_OK : LG_ACT_PIC_FAILED, 0);
     }
-    ESP_LOGW(TAG, "port %d: %s has no TashTalk: installing it", sock + 1, chip);
-    led_grid_action(LG_ACT_PIC_FLASHING, 0);
-    pic_result_t r;
-    e = pic_prog_flash_tashtalk_on(&pins, &r);
-    led_grid_action(e == PIC_OK ? LG_ACT_PIC_OK : LG_ACT_PIC_FAILED, 0);
-    return e == PIC_OK;
+    xSemaphoreGive(s_job_lock);
 }
 
 static SemaphoreHandle_t s_lt_mx;   // one start or probe at a time: page, boot
@@ -3880,12 +3888,6 @@ static void lt_go(const char *why, int probe_only)
     for (int i = 0; i < 30 && cable_test_lt_busy(); i++) vTaskDelay(pdMS_TO_TICKS(10));
     localtalk_cfg_t c = lt_cfg(sock);
     esp_err_t err = probe_only ? localtalk_probe(&c) : localtalk_start(&c);
-    if (err == ESP_ERR_NOT_FOUND && xSemaphoreTake(s_job_lock, 0) == pdTRUE) {
-        // The port task may have given the socket the printer job since: then no flash.
-        int flashed = ports_job(sock) == PORT_JOB_LOCALTALK && tashtalk_flash_if_blank(sock);
-        xSemaphoreGive(s_job_lock);
-        if (flashed) err = probe_only ? localtalk_probe(&c) : localtalk_start(&c);
-    }
     if (err == ESP_ERR_NOT_FOUND) {
         s_lt_chip = lt_chip_check();
         ESP_LOGW(TAG, "LocalTalk (%s): %s", why, lt_chip_name(s_lt_chip));
@@ -4190,7 +4192,6 @@ static int sock_job_set(int i, port_job_t job, const char *why, uint32_t wait_ms
         if (localtalk_running()) {
             localtalk_cfg_t c = lt_cfg(i);
             esp_err_t e = localtalk_move(&c);
-            if (e == ESP_ERR_NOT_FOUND && tashtalk_flash_if_blank(i)) e = localtalk_move(&c);
             s_lt_chip = e == ESP_OK ? LT_CHIP_OK : lt_chip_check();
         }
     } else {
@@ -4653,6 +4654,9 @@ void app_main(void)
         // printer showing since. Frames sent into a printer print as junk.
         if (ports_either()) localtalk_set_hold(1);
     }
+#if CONFIG_AIRWRITER_PIC_CLK_PIN >= 0 && CONFIG_AIRWRITER_PIC_DAT_PIN >= 0
+    tashtalk_install();
+#endif
 #if CONFIG_AIRWRITER_LT_BENCH
     lt_start("bench build");
     if (s_set.lt_port == 0) lt_roles_apply();

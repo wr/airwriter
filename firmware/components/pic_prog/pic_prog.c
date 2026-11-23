@@ -115,15 +115,11 @@ pic_err_t pic_prog_read_id_on(const pic_pins_t *pins, uint16_t *devid)
     return e;
 }
 
-pic_err_t pic_prog_flash_tashtalk_on(const pic_pins_t *pins, pic_result_t *res)
+// The embedded TashTalk with CONFIG2.LVP set, malloc'd (8 KB), or NULL and *err.
+static pic_image_t *tashtalk_image(pic_err_t *err)
 {
-    *res = (pic_result_t){0};
-    if (!pins_ok(pins)) return res->err = PIC_ERR_UNAVAILABLE;
-    if (atomic_flag_test_and_set(&s_busy)) return res->err = PIC_ERR_BUSY;
-
     pic_image_t *img = malloc(sizeof *img);
-    if (!img) { atomic_flag_clear(&s_busy); return res->err = PIC_ERR_NOMEM; }
-
+    if (!img) { *err = PIC_ERR_NOMEM; return NULL; }
     int line = 0;
     pic_hex_err_t he = pic_hex_parse(tashtalk_hex_start,
                                      (size_t)(tashtalk_hex_end - tashtalk_hex_start), img, &line);
@@ -131,16 +127,28 @@ pic_err_t pic_prog_flash_tashtalk_on(const pic_pins_t *pins, pic_result_t *res)
         // The image is compiled in and host-tested; this means a bad build.
         ESP_LOGE(TAG, "embedded hex: error %d at line %d", he, line);
         free(img);
-        atomic_flag_clear(&s_busy);
-        return res->err = PIC_ERR_IMAGE;
+        *err = PIC_ERR_IMAGE;
+        return NULL;
     }
     pic_image_enable_lvp(img);
+    return img;
+}
+
+pic_err_t pic_prog_flash_tashtalk_on(const pic_pins_t *pins, pic_result_t *res)
+{
+    *res = (pic_result_t){0};
+    if (!pins_ok(pins)) return res->err = PIC_ERR_UNAVAILABLE;
+    if (atomic_flag_test_and_set(&s_busy)) return res->err = PIC_ERR_BUSY;
+
+    pic_err_t e;
+    pic_image_t *img = tashtalk_image(&e);
+    if (!img) { atomic_flag_clear(&s_busy); return res->err = e; }
 
     ESP_LOGW(TAG, "flashing TashTalk 2.1.3 (MCLR=%d CLK=%d DAT=%d)", pins->mclr, pins->clk,
              pins->dat);
     pins_claim(pins);
     pic_hal_t hal = hal_for(pins);
-    pic_err_t e = pic_flash(&hal, img, res);
+    e = pic_flash(&hal, img, res);
     pins_release(pins);
     free(img);
 
@@ -157,6 +165,25 @@ pic_err_t pic_prog_flash_tashtalk_on(const pic_pins_t *pins, pic_result_t *res)
     else
         ESP_LOGE(TAG, "%s (device ID read 0x%04X)", pic_err_str(e), res->devid);
 
+    atomic_flag_clear(&s_busy);
+    return e;
+}
+
+pic_err_t pic_prog_check_tashtalk_on(const pic_pins_t *pins, pic_result_t *res)
+{
+    *res = (pic_result_t){0};
+    if (!pins_ok(pins)) return res->err = PIC_ERR_UNAVAILABLE;
+    if (atomic_flag_test_and_set(&s_busy)) return res->err = PIC_ERR_BUSY;
+
+    pic_err_t e;
+    pic_image_t *img = tashtalk_image(&e);
+    if (!img) { atomic_flag_clear(&s_busy); return res->err = e; }
+
+    pins_claim(pins);
+    pic_hal_t hal = hal_for(pins);
+    e = pic_check(&hal, img, res);
+    pins_release(pins);
+    free(img);
     atomic_flag_clear(&s_busy);
     return e;
 }

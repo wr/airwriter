@@ -2051,8 +2051,11 @@ board exists.
     QuickDraw LaserWriter state, and CTRL-X kick. The panel follows the printing socket's line;
     idle, it is Ready while any shared printer is. 3.15 has the records.
   - **TashTalk on U10 and U7.** Both ship blank (W-1176; `pic_prog` takes either socket's
-    pins); the first time a socket does LocalTalk with a blank PIC, TashTalk goes on, as the
-    page's button puts it on rev A's U7. `/api/localtalk/flash` takes `{"port":1|2}` (default:
+    pins). At power-up, before LocalTalk starts, each PIC that answers is read back
+    (`pic_check`: about a third of a second with TashTalk on it, milliseconds blank), and one
+    without this build's TashTalk gets it then, whatever its socket's job, so both are ready
+    before any cable is; a printer socket's PIC stays in reset after. A failed install shows on
+    the LocalTalk card, and the page's button puts it on, as on rev A's U7. `/api/localtalk/flash` takes `{"port":1|2}` (default:
     the LocalTalk socket).
   - The cable test needs a socket on each job; its frames leave the printer socket's driver.
     A test cable from port 1 to port 2 shows each socket the other's handshake, so both may
