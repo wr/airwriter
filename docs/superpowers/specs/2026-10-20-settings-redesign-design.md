@@ -197,4 +197,4 @@ Each was looked at in `tools/webui/preview.py` at desktop and phone width, light
   Basilisk II's card, its icon and its Set Up… sheet are gone: its two Ports settings are on the
   wiki's Vintage Macs (LocalTalk) page. Infinite Mac keeps its own card and switch because it
   reaches out to the internet. A printer heard over the tunnel is still "Basilisk II" in
-  Printers.
+  Printers. Wells approved it on board 1.
