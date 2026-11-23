@@ -64,14 +64,16 @@ WANT = {
 }
 ON_RAIL = {'/+3V3': {'R21.1', 'U2.10', 'U6.10', 'U10.1', 'C68.1', 'R40.1', 'R45.1'},
            '/GND': {'R22.2', 'R23.2', 'R24.2', 'R32.2', 'R33.2', 'R36.2', 'R41.2', 'R46.2',
-                    'U2.2', 'U2.5', 'U6.2', 'U6.5', 'U10.8', 'C68.2'}}   # U2.2, U6.2: ~RE, receivers always on
+                    'U2.2', 'U2.5', 'U6.2', 'U6.5', 'U10.8', 'C68.2',     # U2.2, U6.2: ~RE, receivers always on
+                    'J2.9', 'J4.9'}}                                     # both shells straight to ground
 OFF_RAIL = {'/GND': {'U3.8', 'U3.10'}}
 GONE_REFS = {'C7', 'R5', 'R6', 'R7', 'R26', 'R28', 'R31', 'S1',  # R26: IO3 boxed in; S1, R28: no DIPs; R31: see the design
              'U8', 'R14', 'R25', 'C18',                          # W-1176: one THVD1452 per socket
-             'R12', 'R13', 'R27'}                                # W-1176: J4's block matches J2's
+             'R12', 'R13', 'R27',                                # W-1176: J4's block matches J2's
+             'R8', 'C15'}                                        # W-1176: J2's shell tied as J4's
 FREE = {'U1.28', 'U1.29', 'U1.30'}     # IO35-37: an octal-PSRAM module's own
 GONE_NETS = {*(f'/DIP{n}' for n in range(1, 9)), '/DIP3_GPIO', '/LT_A', '/LT_B', '/LT_Y', '/LT_Z', '/LT_PORT_A', '/LT_PORT_B', '/LT_PORT_Y', '/LT_PORT_Z',
-             '/LT_MCLR', '/LT_PORT_TXD_N', '/LT_PORT_TXD_P'}
+             '/LT_MCLR', '/LT_PORT_TXD_N', '/LT_PORT_TXD_P', '/SHELL'}
 PARTS = {  # ref: (value, LCSC)
     'U1': ('ESP32-S3-WROOM-1-N16R8', 'C2913202'),       # its octal PSRAM takes IO35-IO37 (FREE)
     'U2': ('THVD1452DGSR', 'C2879202'), 'U6': ('THVD1452DGSR', 'C2879202'),   # DE and ~RE, +-15 V inputs, +-30 kV

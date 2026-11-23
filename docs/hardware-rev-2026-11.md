@@ -27,7 +27,9 @@ scripts, so every change can be read and re-run:
    R24 and the marks), `r15_route.py` (one socket's copper drawn at each socket, then
    the runs between; a second run reports it is already drawn) and `r15_silk.py` (every
    label turned half a turn, the WW mark off the front, the nameplate on the back; a second
-   run stops) and `r15_names.py` (the sockets named Port 1 and Port 2, below).
+   run stops), `r15_names.py` (the sockets named Port 1 and Port 2, below) and, after
+   `r13_sync.py` with a fresh netlist once more, `r15_shell.py` (J2's shell runs gone, so its
+   shell reaches the ground pours as J4's does).
    `r15_route.py`'s docstring has the commands.
 
 D3's and SW1's footprints are `r13_mkfp_d3.py` and `r13_mkfp_sw1.py`, their 3D models
@@ -66,8 +68,8 @@ build turns on at the cost of 1/16 of the PSRAM (7.5 MB usable).
 
 ## Either socket, either job (W-1176)
 
-J2 and J4 have the same circuit, laid out the same way over each socket, but for the shell
-(the last row), so each runs a serial printer or LocalTalk. Neither is named for a job: J2 is
+J2 and J4 have the same circuit, laid out the same way over each socket, so each runs a serial
+printer or LocalTalk. Neither is named for a job: J2 is
 Port 1 and J4 Port 2, in the schematic's values (Mini-DIN-8 Port 1 and Port 2) and on the
 back's silk under each socket (PORT 1, PORT 2). Per socket:
 
@@ -83,7 +85,7 @@ back's silk under each socket (PORT 1, PORT 2). Per socket:
 | TX pair biased to mark, 4.7 k to 3V3 and to GND | R40, R41 | R45, R46 |
 | Receive pair, 15 k in each leg | R29, R30 | R10, R11 |
 | PIC MCLR / ICSPCLK / ICSPDAT / CTS | IO42 / IO11 via R34 / IO12 via R35 / IO41 | IO2 / IO4 via R15 / IO5 via R16 / IO6 |
-| Shell | to GND through R8 and C15 | straight to GND |
+| Shell | straight to GND | straight to GND |
 
 - **LocalTalk:** the socket's GPIOs are inputs and its PIC runs TashTalk: RA5 drives the data
   net while it sends (overriding the receiver through the 2.2 k) and reads it otherwise.
@@ -308,7 +310,7 @@ fit: its pins are in other corners and it is 1.95 mm tall.
 
 - ERC: 0 errors, 45 known warnings (40 `lib_symbol_mismatch`; 5 `isolated_pin_label`: TXD0,
   RXD0 and the three spare pins, each a label on one pin by design).
-- `tools_sch/check_rev2026_11.py`: 45 nets, 35 parts, 15 removed.
+- `tools_sch/check_rev2026_11.py`: 45 nets, 35 parts, 17 removed.
 - DRC with `--severity-all --schematic-parity --refill-zones`: 0 errors, 0 unconnected, 5
   `lib_footprint_mismatch` warnings, no field-parity warnings (`r13_sync.py` now copies the
   Description, Manufacturer and Datasheet fields too).
@@ -321,6 +323,6 @@ fit: its pins are in other corners and it is 1.95 mm tall.
 - `enclosure/build.sh`: all tests pass; the tray has no DIP slot (a board without S1 gets
   none), and the reset pinhole aims at the new button, 1.90 mm up. The lattice's clearances
   follow the new parts.
-- `make_fab.sh`: 143 placements on AirWriter's panel, 65 on the LC's main board alone, drill
+- `make_fab.sh`: 141 placements on AirWriter's panel, 63 on the LC's main board alone, drill
   floor 0.30 mm on both. Neither places J2 or J4: Wells fits them after delivery. U7 and U10
   go on AirWriter only, blank.

@@ -14,6 +14,9 @@ one r14_lc_light.py left, commit 7ba7f07), with KiCad closed:
     <KiCad python> tools_pcb/r15_route.py
     <KiCad python> tools_pcb/r15_silk.py
     <KiCad python> tools_pcb/r15_names.py
+    kicad-cli sch export netlist --format kicadxml -o net.xml airwriter.kicad_sch
+    <KiCad python> tools_pcb/r13_sync.py net.xml
+    <KiCad python> tools_pcb/r15_shell.py
 
 R15_BOARD=<path> runs the whole chain, r13_sync.py too, on another copy of
 the board. Every run is drawn point by point. A board that already has LT2_DATA drawn is

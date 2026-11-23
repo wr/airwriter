@@ -8805,16 +8805,6 @@
 		(uuid "a9a229fb-3168-4ceb-bd08-69858a46da8a")
 	)
 	(label "GND"
-		(at 431.8 163.83 0)
-		(effects
-			(font
-				(size 1.27 1.27)
-			)
-			(justify left bottom)
-		)
-		(uuid "2be24ccf-5083-4578-bf6f-ebbdfc0832a2")
-	)
-	(label "GND"
 		(at 204.47 167.64 0)
 		(effects
 			(font
@@ -8863,16 +8853,6 @@
 			(justify left bottom)
 		)
 		(uuid "576bf18a-f44f-474d-95ac-25e870a4f059")
-	)
-	(label "GND"
-		(at 420.37 163.83 0)
-		(effects
-			(font
-				(size 1.27 1.27)
-			)
-			(justify left bottom)
-		)
-		(uuid "6458859a-612c-4134-862c-85f6aece2126")
 	)
 	(label "GND"
 		(at 426.72 107.95 0)
@@ -9053,36 +9033,6 @@
 			(justify left bottom)
 		)
 		(uuid "682e7dd8-7f0c-43ec-afea-e12bbc5715fe")
-	)
-	(label "SHELL"
-		(at 426.72 123.19 0)
-		(effects
-			(font
-				(size 1.27 1.27)
-			)
-			(justify left bottom)
-		)
-		(uuid "3d6059f4-fadb-44a5-a10a-f91ed544f713")
-	)
-	(label "SHELL"
-		(at 420.37 156.21 0)
-		(effects
-			(font
-				(size 1.27 1.27)
-			)
-			(justify left bottom)
-		)
-		(uuid "f8f93163-6a98-45c8-b857-ac0d746b6243")
-	)
-	(label "SHELL"
-		(at 431.8 156.21 0)
-		(effects
-			(font
-				(size 1.27 1.27)
-			)
-			(justify left bottom)
-		)
-		(uuid "e5f1e1a3-65f8-45da-b6fe-aa162a278bd9")
 	)
 	(label "CP1P"
 		(at 320.04 127 0)
@@ -11596,6 +11546,16 @@
 		)
 		(uuid "f1a037ef-4481-498b-9cb2-4445e2d5c4ab")
 	)
+  (label "GND"
+		(at 426.72 123.19 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left bottom)
+		)
+		(uuid "d4d92980-3438-48a8-a5d1-198d1ae43a29")
+	)
 	(symbol
 		(lib_id "Connector:USB_C_Receptacle_USB2.0_16P")
 		(at 35.56 59.69 0)
@@ -13793,230 +13753,6 @@
 			(project "airwriter"
 				(path "/b907fa76-c5fe-4a7a-8e4e-adfdab62cb9c"
 					(reference "C14")
-					(unit 1)
-				)
-			)
-		)
-	)
-	(symbol
-		(lib_id "Device:R")
-		(at 420.37 160.02 0)
-		(unit 1)
-		(body_style 1)
-		(exclude_from_sim no)
-		(in_bom yes)
-		(on_board yes)
-		(in_pos_files yes)
-		(dnp no)
-		(uuid "f1518d89-f833-4548-bc0f-e21a740441db")
-		(property "Reference" "R8"
-			(at 420.37 156.21 0)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Value" "0R"
-			(at 420.37 163.83 0)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Footprint" "Resistor_SMD:R_0603_1608Metric"
-			(at 420.37 160.02 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Datasheet" ""
-			(at 420.37 160.02 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Description" "RES 0R jumper 0603, or equivalent"
-			(at 420.37 156.21 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "LCSC" "C21189"
-			(at 420.37 163.83 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "MPN" ""
-			(at 420.37 156.21 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Manufacturer" "Any"
-			(at 420.37 156.21 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(pin "1"
-			(uuid "d2158c2d-2aee-46e9-903d-85dc76a83ea2")
-		)
-		(pin "2"
-			(uuid "bc9967bf-0cfc-4287-895a-382201a8569a")
-		)
-		(instances
-			(project "airwriter"
-				(path "/b907fa76-c5fe-4a7a-8e4e-adfdab62cb9c"
-					(reference "R8")
-					(unit 1)
-				)
-			)
-		)
-	)
-	(symbol
-		(lib_id "Device:C")
-		(at 431.8 160.02 0)
-		(unit 1)
-		(body_style 1)
-		(exclude_from_sim no)
-		(in_bom yes)
-		(on_board yes)
-		(in_pos_files yes)
-		(dnp no)
-		(uuid "a6348ac7-0d9e-442f-9b23-ac474a345102")
-		(property "Reference" "C15"
-			(at 431.8 156.21 0)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Value" "1n"
-			(at 431.8 163.83 0)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Footprint" "Capacitor_SMD:C_0603_1608Metric"
-			(at 431.8 160.02 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Datasheet" ""
-			(at 431.8 160.02 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Description" "CAP 1nF >=50V X7R/C0G 0603, or equivalent"
-			(at 431.8 156.21 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "LCSC" "C1588"
-			(at 431.8 163.83 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "MPN" ""
-			(at 431.8 156.21 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Manufacturer" "Any"
-			(at 431.8 156.21 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(pin "1"
-			(uuid "6655ad1f-dd5f-43eb-845c-19d7de4f05d7")
-		)
-		(pin "2"
-			(uuid "a31b7368-dc81-49d4-9476-874b3365a98b")
-		)
-		(instances
-			(project "airwriter"
-				(path "/b907fa76-c5fe-4a7a-8e4e-adfdab62cb9c"
-					(reference "C15")
 					(unit 1)
 				)
 			)
