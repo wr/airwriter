@@ -18,6 +18,7 @@ typedef struct {
     int invert_tx;          // as serial_out has it, so the borrowed TX idles where the UART left it
     // TashTalk's UART, for when the LocalTalk node is not running
     int lt_uart, lt_tx, lt_rx, lt_cts, lt_mclr;
+    int lt_sock;            // W-1186: the socket whose LocalTalk node the test borrows
     // W-1109, rev 2026.11: each port's handshake out (driven) and in (read);
     // -1 on rev A, which can't drive J4's and skips the handshake legs.
     int hsk_j2_out, hsk_j2_in, hsk_j4_out, hsk_j4_in;

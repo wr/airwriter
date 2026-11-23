@@ -154,7 +154,8 @@ static uint64_t now_ms(void) { return (uint64_t)(esp_timer_get_time() / 1000); }
 static const char *link_name(int link)
 {
     switch (link) {
-    case AT_LINK_CABLE:  return "cable";
+    case AT_LINK_CABLE:
+    case AT_LINK_CABLE_P1: return "cable";
     case AT_LINK_TUNNEL: return "tunnel";
     case AT_LINK_ZONE:   return "zone";
     case AT_LINK_RADIO:  return "radio";
@@ -194,8 +195,8 @@ static int call(int op, const lt_route_t *r, uint32_t busy)
     call_t c = { .op = op, .busy = busy, .rc = -1 };
     if (r) c.r = *r;
     if (s_pc_link < 0) return -1;
-    int ran = s_pc_link == AT_LINK_CABLE ? localtalk_locked(do_call, &c)
-                                         : ethertalk_locked(do_call, &c);
+    int sock = at_link_cable_sock(s_pc_link);
+    int ran = sock >= 0 ? localtalk_locked(sock, do_call, &c) : ethertalk_locked(do_call, &c);
     return ran < 0 ? -1 : op == OP_OPEN || op == OP_OPEN_MULTI ? c.rc : 0;
 }
 
@@ -203,9 +204,9 @@ static int call(int op, const lt_route_t *r, uint32_t busy)
 static void ride(int link)
 {
     if (link == s_pc_link) return;
-    if (s_pc_link == AT_LINK_CABLE) localtalk_attach(NULL);
+    if (at_link_cable_sock(s_pc_link) >= 0) localtalk_attach(at_link_cable_sock(s_pc_link), NULL);
     else if (s_pc_link >= 0) ethertalk_attach(s_pc_link, NULL);
-    if (link == AT_LINK_CABLE) localtalk_attach(s_pc);
+    if (at_link_cable_sock(link) >= 0) localtalk_attach(at_link_cable_sock(link), s_pc);
     else if (link >= 0) ethertalk_attach(link, s_pc);
     s_pc_link = link;
 }
@@ -684,7 +685,8 @@ static void relay_act(uint64_t now)
     }
     if (act & PR_RELAY_DO_ABORT_MAC) {
         lt_node_t *node = (lt_node_t *)s_relay_node;
-        if (s_relay_mac_link == AT_LINK_CABLE) localtalk_locked(abort_mac, node);
+        int sock = at_link_cable_sock(s_relay_mac_link);
+        if (sock >= 0) localtalk_locked(sock, abort_mac, node);
         else ethertalk_locked(abort_mac, node);
     }
     if (act & PR_RELAY_DO_DONE) {

@@ -747,9 +747,19 @@ printer (`components/localtalk`):
   LocalTalk: print PAP jobs from the Mac's AppleTalk ImageWriter driver`): LocalTalk through
   TashTalk in U7 on J4, while the AppleTalk port is on. LLAP node acquisition by ENQ (TashTalk answers ENQ and
   RTS for the claimed ID), short DDP headers. On rev 2026.11 the cable is whichever socket does
-  LocalTalk (3.19): U7 on J4 or U10 on J2, moved between them with its node as the sockets'
-  jobs change (`localtalk_move`), parked while neither does; `/api/lt` has `port` (1 or 2, 0
-  for none), which the page's LocalTalk card shows.
+  LocalTalk (3.19): U7 on J4 or U10 on J2; `/api/lt` has `port` (1 or 2, 0 for none), which the
+  page's LocalTalk card shows.
+  `W-1186 Rev 2026.11: LocalTalk on both ports at once, so two LaserWriters each get a port`:
+  each socket has a node of its own (`localtalk.c`'s sides, as `ethertalk.c` keeps one per
+  link), with its own node ID, kept in NVS `lt`/`node` for J4's and `lt`/`node_p1` for J2's, its
+  own offers and its own link in the printer list (`AT_LINK_CABLE` J4's, `AT_LINK_CABLE_P1`
+  J2's). One task and one lock serve both: the task waits a tick at most for a byte on either
+  UART (each driver's receive interrupt wakes it) and never blocks inside a driver. A socket
+  that takes the printer job parks its node: quiet, its UART driver deleted and the pins given
+  back; `localtalk_start` brings it back on its TashTalk as it was. Each side's UART rings are
+  4 KB in and 2 KB out, internal RAM (8 and 4 KB before): a frame is at most 605 bytes and
+  arrives at the cable's 230.4 kbit/s, so 4 KB is 140 ms of it, and a PAP burst of 8 frames
+  waits about 100 ms on a 2 KB ring that TashTalk's CTS drains at the same rate.
 - **Basilisk II's UDP tunnel** (W-1076, design `docs/superpowers/specs/2026-10-19-ethertalk-design.md`):
   EtherTalk frames as UDP datagrams to port 6066 on the home network (`udptunnel true` in
   Basilisk II's prefs, and `udpappletalkonly true` to keep the Mac's internet through its
