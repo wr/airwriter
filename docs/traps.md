@@ -349,6 +349,11 @@ Traps already explained in a code comment are listed only when the comment is ea
   still leaves the node running: anything sending through it must check `localtalk_tt_alive()`
   first (the cable test does, W-1063) or it fills the 2 KB ring and blocks with the nodes' lock
   held.
+- **On rev 2026.11 a socket's UART has one driver at a time** (W-1186): the printer line's
+  (`serial_out`) or its LocalTalk node's, never both. `serial_out_park(port, 1)` deletes the
+  printer's; park the node (`localtalk_park`) before unparking the port, or the install fails
+  and the port stays parked. A parked port's `serial_out` calls do nothing, so nothing reaches
+  TashTalk at 9600.
 - **The LocalTalk task must never wait inside a UART driver** (W-1186). One task serves both
   sockets' nodes, and a socket that takes the printer job has its driver deleted under the
   nodes' lock, so every read is `uart_read_bytes(…, 0)` under that lock; the task sleeps on a

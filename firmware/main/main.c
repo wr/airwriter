@@ -3871,12 +3871,22 @@ static void tashtalk_install(void)
 
 static SemaphoreHandle_t s_lt_mx;   // one start or probe at a time: page, boot
 
-// W-1179: on the socket doing LocalTalk (J4 on rev A; either on rev 2026.11).
+// W-1186: the UART a socket's LocalTalk node uses. Rev A's is UART2, LocalTalk's alone. On rev
+// 2026.11 each socket has one UART for whichever job it does (J2's UART1, J4's UART0), which
+// serial_out gives up while the socket is parked; UART2 is spare there.
+static int lt_uart(int sock)
+{
+    const port_sock_t *ps = ports_sock(sock);
+    return ports_either() && ps ? ps->uart : CONFIG_AIRWRITER_LT_UART_NUM;
+}
+
+// W-1179: on a socket doing LocalTalk (J4 on rev A; either on rev 2026.11).
 static localtalk_cfg_t lt_cfg(int sock)
 {
     const port_sock_t *ps = ports_sock(sock);
     return (localtalk_cfg_t){
-        .uart_num = CONFIG_AIRWRITER_LT_UART_NUM,
+        .uart_num = lt_uart(sock),
+        .lent     = ports_either(),
         .tx_pin   = ps ? ps->pic.clk : -1,
         .rx_pin   = ps ? ps->pic.dat : -1,
         .cts_pin  = ps ? ps->lt_cts : -1,
@@ -4166,7 +4176,7 @@ static void cable_cfg_apply(void)
     cable_test_cfg_t ct = {
         .tx_pin  = pr->tx,       .rx_pin = pr->rx,
         .invert_tx = AW_INVERT_TX,
-        .lt_uart = CONFIG_AIRWRITER_LT_UART_NUM,  .lt_tx  = lt->pic.clk,
+        .lt_uart = lt_uart(ports_with(PORT_JOB_LOCALTALK)),  .lt_tx  = lt->pic.clk,
         .lt_rx   = lt->pic.dat,  .lt_cts = lt->lt_cts,
         .lt_mclr = lt->pic.mclr,
         .lt_sock = ports_with(PORT_JOB_LOCALTALK),

@@ -2009,7 +2009,12 @@ board exists.
     (CLK, DAT and CTS pulled down), drives its DE high and has a printer line of its own in
     `serial_out` (J2's on UART1, J4's on UART0, each with its own clock counter and line task);
     one doing LocalTalk parks that line (TX an input with no pull), lets DE go and releases its
-    PIC. `ports_hw` is the one place the pins change hands, under the job lock. At most one
+    PIC. The S3 has three UARTs, so a socket has one for whichever job it does (W-1186):
+    parking deletes the printer line's driver, the socket's LocalTalk node installs its own on
+    the same UART (1 Mbaud, the PIC's pins through the GPIO matrix, no inversion), and
+    unparking puts the printer line's back once the node has let go (`localtalk_park` first).
+    UART2 is spare on rev 2026.11; rev A's LocalTalk keeps it. `ports_hw` is the one place the
+    pins change hands, under the job lock. At most one
     socket does LocalTalk, so at least one is always a printer port. Rev A and the LC keep one
     job per socket, set up as before.
   - **What's plugged in** (`port_detect_core.c`, pure and host-tested; `sock_detect` in main,
