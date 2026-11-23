@@ -2098,9 +2098,9 @@ board exists.
     printer for 1 s (`PD_BOOT_MS`). A cable test's own frames don't count. The cost: a
     LaserWriter already switched on when its cable goes into a socket that hasn't heard
     LocalTalk is found only when it, or a Mac on that network, next sends a frame (switched off
-    and on, it does). `W-1185 Rev 2026.11: read each port's handshake voltage, so a switched-on
-    printer that isn't ready is seen` would let a socket with nothing driving its handshake
-    send at once. While listening, `/api/lt` gives `"phase":"listening"` with `on` as its
+    and on, it does). `W-1185 Rev 2026.11: sense each port's receive pair, so a switched-on
+    printer that isn't ready is seen` (the port sense, below) would let a socket with no
+    printer powered on it send at once. While listening, `/api/lt` gives `"phase":"listening"` with `on` as its
     setting, and the LocalTalk card reads On port N with no Macs. Rev A and the LC send as
     before. Not covered: a printer deselected before its cable goes into a socket that has
     heard LocalTalk shows nothing there, so that socket still sends (W-1185 again), and so does
@@ -2138,6 +2138,15 @@ board exists.
     The test button's cable test does not (it runs with the job lock already held).
   - With no socket on LocalTalk every node is parked: `/api/lt` gives `"parked":true`, `port` 0
     and `on` as its setting, so the LocalTalk card's switch keeps its place.
+- **Port sense** (`W-1185 Rev 2026.11: sense each port's receive pair, so a switched-on printer
+  that isn't ready is seen`), hardware only so far. Each socket's sense line, IO39 for port 1 (J2)
+  and IO38 for port 2 (J4), is open-collector through 4.7 k: read with the internal pull-up on, it's low
+  while a device holds that socket's pin 8 above about +2.5 V or its pin 5 below about −3.5 V,
+  as a serial printer with power does whether it's ready or not, and high for an empty socket,
+  a LocalTalk box or device between frames, or a printer with no power
+  (`docs/superpowers/specs/2026-11-23-port-sense-design.md`). IO39 leaves reset as JTAG's MTCK,
+  so it must be set to a GPIO first. A frame on the line pulses it, so it counts only when held
+  longer than a frame (about 21 ms). Nothing reads it yet: W-1179's listen-first rule stands.
 - **Straps**, rev 2026.11 only, read once at boot with the pull-ups on, which stay on only where
   a strap reads high: IO16 (`BOARD_REV`, low on every 2026.11 board) and IO15 (`BOARD_LC`, low on
   the LC). `/api/status` has `board` (`rev-a` or `2026.11`), `lc`, and `board_ok`, false when a

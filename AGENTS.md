@@ -49,7 +49,8 @@ circuit, each with its own TashTalk, so either can be a printer port or LocalTal
 its firmware works out each socket's job from what is plugged in and shares a printer on each
 at once (W-1179), or joins a LocalTalk network on each, a node on both, and shares the
 LaserWriters on each (W-1186). Its case, docs and page call J2 port 1 and J4 port 2; rev A keeps
-printer port and AppleTalk port.
+printer port and AppleTalk port. Each socket also senses a serial printer that has power on its
+receive pair (W-1185: IO39 for port 1, IO38 for port 2); no firmware reads it yet.
 
 - **Printers.** Tested on the ImageWriter II. The original ImageWriter and the ImageWriter LQ
   take the same stream and are expected to work, untested; docs say so rather than excluding
@@ -150,8 +151,8 @@ http://192.168.4.1/.
   `hardware/airwriter/route.py` does export DSN → round → Freerouting → import → DRC headless.
   Rev 2026.11's board is built from rev A by `tools_pcb/r13_build.sh` then `r13_route.py`,
   `r14_lc_light.py` and W-1176's `r15_clean.py`, `r15_place.py`, `r15_route.py`, `r15_silk.py`,
-  `r15_names.py` and `r15_shell.py` (`docs/hardware-rev-2026-11.md`); never re-run them over
-  hand edits.
+  `r15_names.py` and `r15_shell.py`, then W-1185's `r16_sense.py`
+  (`docs/hardware-rev-2026-11.md`); never re-run them over hand edits.
 - **Freerouting 2.2.4** on Java 25 (`hardware/airwriter/README.md`).
 - **konnect** resolves `lib_id` only against KiCad's install directory, so the project libraries
   must be symlinked into the app bundle before any konnect placement (a KiCad upgrade removes
@@ -266,8 +267,8 @@ http://192.168.4.1/.
   `checker.expected.bin`). At the default (-1 in) the checker, which sits in the page's top
   inch, prints blank (crc32 `0e5fc630`, 9 bytes). After an OTA, `/api/status` reaches
   `"trial":false` with the new `version`.
-- **Schematic:** `kicad-cli sch erc` → 0 errors; 45 known warnings (40 `lib_symbol_mismatch`,
-  5 `isolated_pin_label`: TXD0, RXD0 and rev 2026.11's three spare pins).
+- **Schematic:** `kicad-cli sch erc` → 0 errors; 43 known warnings (40 `lib_symbol_mismatch`,
+  3 `isolated_pin_label`: TXD0, RXD0 and rev 2026.11's spare IO40).
 - **Board:** `kicad-cli pcb drc --severity-all --schematic-parity --refill-zones` on
   `hardware/airwriter/airwriter.kicad_pcb` → 0 errors, 0 unconnected, 5 `lib_footprint_mismatch`
   warnings, no field-parity warnings. Treat any unconnected item as real; `tools_pcb/r12_gnd.py`

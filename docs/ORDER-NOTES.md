@@ -9,7 +9,7 @@ Standing rule: quote to Wells before either order is placed. Rev A's order and i
 
 | Order | Upload only | Placements |
 |---|---|---|
-| AirWriter | `hardware/combined-fab.zip`, `hardware/combined/combined-top.png`, `hardware/combined/airwriter-top.png` | 141 |
+| AirWriter | `hardware/combined-fab.zip`, `hardware/combined/combined-top.png`, `hardware/combined/airwriter-top.png` | 153 |
 | AirWriter LC | `hardware/airwriter-lc-fab.zip`, `hardware/combined/airwriter-top.png` | 63 |
 
 Each order's section below is paste-ready on its own.
@@ -37,8 +37,9 @@ Each order's section below is paste-ready on its own.
 
 ### Assembly
 
-Position file `combined-pos.csv`, BOM `combined-assembly-bom.csv`, 141 placements, all on the
-top side of the file. R33 is left off; its pads stay bare.
+Position file `combined-pos.csv`, BOM `combined-assembly-bom.csv`, 153 placements, all on the
+top side of the file. R33 is left off; its pads stay bare. Q1, Q2 (SOT-363) and R47–R56
+(0402, the board's only 0402s) are fitted.
 
 1. **J2 and J4 (mini-DIN-8): DO NOT ASSEMBLE, and keep all 22 of their holes free of
    solder.** They are fitted after delivery and are absent from the position file and the
@@ -90,8 +91,9 @@ top side of the file. R33 is left off; its pads stay bare.
 
 Position file `airwriter-lc-pos.csv`, BOM `airwriter-lc-assembly-bom.csv`, 63 placements, all
 on the top side. **Of the LED array fit only D26 (the LED under the test button), C46, U9,
-R20 and C29. Leave off D10–D25, D27–D46, C30–C45, C47–C66, C21, U7 and U10.** They are absent
-from the position file and the BOM; their pads stay bare. R33 is fitted.
+R20 and C29. Leave off D10–D25, D27–D46, C30–C45, C47–C66, C21, U7, U10, Q1, Q2 and
+R47–R56.** They are absent from the position file and the BOM; their pads stay bare. R33 is
+fitted.
 
 1. **J2 and J4 (mini-DIN-8): DO NOT ASSEMBLE, and keep all 22 of their holes free of
    solder.** They are fitted after delivery and are absent from the position file and the
@@ -162,7 +164,7 @@ Upload only the files in the table at the top. Never upload anything else, and n
 
 Regenerate both packages only with `python3 hardware/combine_boards.py` then
 `sh hardware/combined/make_fab.sh`, and check them with the battery in `AGENTS.md`
-(Verification): ERC, both DRCs with `--severity-all`, the drill floor, 141 and 63 position
+(Verification): ERC, both DRCs with `--severity-all`, the drill floor, 153 and 63 position
 rows (the script asserts both). Both pictures are `kicad-cli pcb render --side top
 --quality high --use-board-stackup-colors`, flattened onto white: `combined-top.png` from
 `hardware/combined/combined.kicad_pcb` at `-w 2328 -h 1264`, `airwriter-top.png` from
