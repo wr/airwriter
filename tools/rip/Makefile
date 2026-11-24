@@ -113,6 +113,14 @@ build/test_pap_client: test/test_pap_client.c $(LT)/lt_proto.c $(LT)/lt_node.c $
 build/test_pap_relay: test/test_pap_relay.c $(LT)/lt_proto.c $(LT)/lt_node.c $(LT)/pap_client.c $(LT)/pap_relay.c | build
 	$(CC) $(CFLAGS) -I$(LT)/include -Itest -o $@ $^
 
+# W-1193: ADSP, the connections a Mac's StyleWriter driver makes. The engine keeps no state of
+# its own (below): the owner allocates it, in PSRAM on the board.
+build/test_adsp: test/test_adsp.c $(LT)/adsp.c $(LT)/lt_proto.c | build
+	$(CC) $(CFLAGS) -I$(LT)/include -Itest -o $@ $^
+
+build/adsp.o: $(LT)/adsp.c | build
+	$(CC) $(CFLAGS) -I$(LT)/include -c -o $@ $<
+
 # W-1088: the printer list, beside the LaserWriter pieces it names records with.
 build/test_printers: test/test_printers.c $(COMP)/printers/printers_core.c $(COMP)/laser/lw_caps.c \
                      $(COMP)/laser/lw_query.c $(COMP)/printer_caps/printer_caps.c $(LT)/lt_proto.c \
@@ -209,9 +217,9 @@ QD_OBJS := build/qd_model.o build/qd_wire.o build/qd_status.o build/qd_page.o bu
 build/qd_%.o: $(COMP)/qdlaser/qd_%.c | build
 	$(CC) $(CFLAGS) $(INCS) -c -o $@ $<
 
-test: $(TESTBIN) build/printers_core.o build/port_policy.o build/logbook_core.o build/auth_core.o $(SW_OBJS) $(QD_OBJS) $(TP_OBJS)
+test: $(TESTBIN) build/printers_core.o build/port_policy.o build/logbook_core.o build/auth_core.o build/adsp.o $(SW_OBJS) $(QD_OBJS) $(TP_OBJS)
 	@fail=0; for t in $(TESTBIN); do ./$$t || fail=1; done; \
-	for o in printers_core port_policy logbook_core auth_core $(basename $(notdir $(SW_OBJS) $(QD_OBJS) $(TP_OBJS))); do \
+	for o in printers_core port_policy logbook_core auth_core adsp $(basename $(notdir $(SW_OBJS) $(QD_OBJS) $(TP_OBJS))); do \
 	  if nm build/$$o.o | grep -E ' [bBdD] ' | grep -v ' ltmp'; then \
 	    echo "FAIL $$o: writable statics (above)"; fail=1; \
 	  else echo "ok  $$o: no writable statics"; fi; \

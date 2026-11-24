@@ -32,7 +32,7 @@ int llap_fcs_ok(const uint8_t *f, size_t n);
 #define DDP_LONG_HDR  13
 #define DDP_MAX_DATA  586
 
-enum { DDP_RTMP = 1, DDP_NBP = 2, DDP_ATP = 3, DDP_AEP = 4 };
+enum { DDP_RTMP = 1, DDP_NBP = 2, DDP_ATP = 3, DDP_AEP = 4, DDP_ADSP = 7 };
 enum { SOCK_RTMP = 1, SOCK_NIS = 2, SOCK_AEP = 4 };
 
 typedef struct {
