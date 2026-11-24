@@ -64,12 +64,13 @@ def expand(spec):
     return out
 AIRWRITER_OFF = ['R33']                                   # the LC strap
 LC_OFF = expand('D10-D25,D27-D46,C30-C45,C47-C66') + ['C21', 'U7', 'U10']   # every LED but D26, their caps, the LED bulk cap; the TashTalks
+LC_OFF += ['Q1', 'Q2'] + expand('R47-R56')   # the port sense (W-1185): the LC never sends AppleTalk
 STANDOFFS = ['MT1,MT2,MT3,MT4', '9774030151R (Wurth WA-SMSI M2.5x3 SMT spacer)',
              'panel:SMT_Standoff_M2.5_D6.0mm', '', '4',
              'Not at LCSC: source from Digi-Key or consign; panel is art-face-down in this production panel so these reflow on the SAME side as all other parts; ring paste aperture in stencil data']
 SPACER = ['D3 (spacer)', 'LED4*8 nylon LED spacer, 4 mm x 8 mm', '-', 'C92326', '1',
           'Under D3: LED leads through the spacer bore, LED flange seated on it, lens up']
-PLACEMENTS = {'AirWriter': 141, 'AirWriter LC': 63}
+PLACEMENTS = {'AirWriter': 153, 'AirWriter LC': 63}
 
 bom = list(csv.reader(open(bom_path)))
 bom = [bom[0]] + [r for r in bom[1:] if not r[2].startswith('Jumper:SolderJumper')]   # copper, not parts

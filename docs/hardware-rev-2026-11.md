@@ -30,6 +30,9 @@ scripts, so every change can be read and re-run:
    run stops), `r15_names.py` (the sockets named Port 1 and Port 2, below) and, after
    `r13_sync.py` with a fresh netlist once more, `r15_shell.py` (J2's shell runs gone, so its
    shell reaches the ground pours as J4's does).
+5. W-1185's port sense: `tools_sch/add_port_sense.py` adds the parts to the schematic, then
+   `r13_sync.py` with a fresh netlist and `tools_pcb/r16_sense.py` (the parts placed, their
+   copper drawn point by point; a second run redraws the same).
    `r15_route.py`'s docstring has the commands.
 
 D3's and SW1's footprints are `r13_mkfp_d3.py` and `r13_mkfp_sw1.py`, their 3D models
@@ -121,9 +124,50 @@ back's silk under each socket (PORT 1, PORT 2). Per socket:
 | IO21 | `J4_HSKI_RX` | J4.2 through U3's receiver 1 |
 | IO47 | `HSKI_DRV` | J2's HSKo, through U3's driver 2; R24 holds it low until firmware |
 | IO35–IO37 | the N16R8's PSRAM | rev A's `HSKI_DRV` (IO35) and `J4_HSKI_RX` (IO37) |
-| IO38–IO40 | `SPARE_IO38`–`40` | rev A's DIP switches; now bare pads on the back (below) |
+| IO38 | `J4_SENSE` | J4's port sense, through R56 (W-1185, below); TP10 on the back |
+| IO39 | `J2_SENSE` | J2's port sense, through R51 (W-1185, below); TP11 on the back; leaves reset as MTCK |
+| IO40 | `SPARE_IO40` | rev A's DIP switches; now a bare pad on the back (below) |
 
-Free: IO1, IO45, IO46, and IO38–IO40 on their pads.
+Free: IO1, IO45, IO46, and IO40 on its pad.
+
+## Port sense (W-1185)
+
+Each socket can tell when a serial printer that has power is plugged into it, ready or not, so
+the firmware never sends AppleTalk into one: an ImageWriter prints it as junk. A printer with
+power holds its transmitter at idle mark, pin 8 near +4.5 V and often pin 5 near −4.7 V; a
+LocalTalk device, a passive LocalTalk box, an unpowered printer and an empty socket hold
+neither (Wells's measurements are in W-1185 and the port-sense design).
+
+| | J2 | J4 |
+|---|---|---|
+| Dual NPN, BC847BDW1 (SOT-363) | Q1 | Q2 |
+| Qa: pin 8 → 22 k → base, 6.8 k base to GND, emitter to GND | R47, R48 | R52, R53 |
+| Qb: pin 5 → 15 k → emitter, 6.8 k emitter to GND, base to GND | R49, R50 | R54, R55 |
+| Collectors joined, 4.7 k on to the GPIO (internal pull-up) | R51, IO39 | R56, IO38 |
+
+- Qa turns on with pin 8 above about +2.5 V, Qb with pin 5 below about −3.5 V; the sense
+  line reads low. Qa alone pulls the GPIO to +0.5 V at most. Qb's collector follows its
+  emitter below ground, to about −0.6 V, so when Qb pulls alone (an RS-232 printer, pin 8
+  grounded by its cable) the GPIO sits between 0 and −0.35 V with its pull-up on, and near
+  −0.4 V on the pad's protection diode with it off, at under 0.1 mA through the 4.7 k.
+- The taps are on the connector side of the 15 k receive legs, which are unchanged. They load
+  pin 8 with 28.8 k and pin 5 with 21.8 k: pin 5 the heavier, so an empty socket's receiver
+  still reads mark, never a break.
+- Open-collector: an unpowered AirWriter can't be powered through it by a printer.
+- 0402 resistors, the board's first, to fit: J2's group sits west of the socket between it and
+  the edge, J4's in the 1.9 mm gap between the two sockets' bodies with Q2 just above. Each
+  taps its socket's pins 8 and 5 on the back. R51 and R56 sit between IO39's and IO38's
+  vias and their collector lines' vias, by TP11 and TP10; SW2's BOOT label moved down 1.7 mm
+  and the back's 38/39/40 down 1.55 mm for them, and a ground via keeps the front pour east of
+  them joined.
+- The two collector lines cross the back in the one gap past J4's handshake runs, J4's over
+  C16's ground via at (128.8, 149.95) and J2's under it. J2 takes IO39 and J4 IO38 so the
+  lines never cross. J4's passes the via and the +3V3 run above it at 0.185 and 0.19 mm: inside
+  the board's 0.15 mm rule, so the combined panel's 0.2 mm default counts them among its
+  false clearance items (about 220 in all).
+- The LC leaves all twelve off: it has one socket and never sends AppleTalk.
+- The firmware doesn't read the sense yet (W-1179's listen-first rule still stands); it's
+  untested on hardware.
 
 ## The LC's one light: D26 and JP1
 
@@ -267,7 +311,7 @@ fit: its pins are in other corners and it is 1.95 mm tall.
 - A ground via for C13.2, whose patch of the front pour `PR_HSKI` cut off.
 - Spare pins: IO38, IO39 and IO40 each run straight down from the module's pin to a via
   and a bare 1 mm pad on the back (TP10–TP12, labelled 38, 39, 40), for trying an idea on
-  a built board with a few wires; 3V3 is at TP2 and GND at TP9 nearby. On the back, so the
+  a built board with a few wires (IO38 and IO39 now carry the port sense, above); 3V3 is at TP2 and GND at TP9 nearby. On the back, so the
   front keeps only a short stub per pin and the ground pour still reaches C1 and C22. IO41
   has no way down past USB D− on the back, and IO42 has C1 over it.
 
@@ -311,9 +355,9 @@ fit: its pins are in other corners and it is 1.95 mm tall.
 
 ## Checks, 2026-11-21 (W-1176)
 
-- ERC: 0 errors, 45 known warnings (40 `lib_symbol_mismatch`; 5 `isolated_pin_label`: TXD0,
-  RXD0 and the three spare pins, each a label on one pin by design).
-- `tools_sch/check_rev2026_11.py`: 45 nets, 35 parts, 17 removed.
+- ERC: 0 errors, 43 known warnings (40 `lib_symbol_mismatch`; 3 `isolated_pin_label`: TXD0,
+  RXD0 and the spare IO40, each a label on one pin by design).
+- `tools_sch/check_rev2026_11.py`: 51 nets, 47 parts, 17 removed.
 - DRC with `--severity-all --schematic-parity --refill-zones`: 0 errors, 0 unconnected, 5
   `lib_footprint_mismatch` warnings, no field-parity warnings (`r13_sync.py` now copies the
   Description, Manufacturer and Datasheet fields too).
@@ -326,6 +370,6 @@ fit: its pins are in other corners and it is 1.95 mm tall.
 - `enclosure/build.sh`: all tests pass; the tray has no DIP slot (a board without S1 gets
   none), and the reset pinhole aims at the new button, 1.90 mm up. The lattice's clearances
   follow the new parts.
-- `make_fab.sh`: 141 placements on AirWriter's panel, 63 on the LC's main board alone, drill
+- `make_fab.sh`: 153 placements on AirWriter's panel, 63 on the LC's main board alone, drill
   floor 0.30 mm on both. Neither places J2 or J4: Wells fits them after delivery. U7 and U10
   go on AirWriter only, blank.

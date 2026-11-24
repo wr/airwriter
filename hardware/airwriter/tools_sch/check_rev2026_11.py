@@ -22,15 +22,21 @@ WANT = {
     '/J4_HSKO_DRV': {'U1.21', 'U3.11'},                  # IO13: J4's HSKo, firmware-held
     '/UART_TX': {'U1.10', 'R38.1'},                      # IO17: J2's data, through R38
     '/LT_RESET': {'U1.38', 'U7.4'},                     # IO2 straight to MCLR, as IO42 to U10's
-    '/PR_TXD_P': {'J2.8', 'R29.1'},
+    '/PR_TXD_P': {'J2.8', 'R29.1', 'R47.1'},                 # R47: J2's port sense (W-1185)
     '/PR_TXD_P_IN': {'R29.2', 'U2.9'},
-    '/PR_TXD_N': {'J2.5', 'R30.1'},
+    '/PR_TXD_N': {'J2.5', 'R30.1', 'R49.1'},
     '/PR_TXD_N_IN': {'R30.2', 'U2.8'},
     # U3's channels: J2 on driver 2 / receiver 2 (pins 7-10), J4 on driver 1 / receiver 1 (11-14)
     '/J4_HSKO': {'U3.14', 'J4.1'},
     '/J4_HSKI': {'U3.13', 'J4.2'},
     '/J4_HSKI_RX': {'U3.12', 'U1.23'},                   # IO21
-    **{f'/SPARE_IO{n}': {f'U1.{n - 7}'} for n in (38, 39, 40)},   # to bare pads on the board
+    '/SPARE_IO40': {'U1.33'},                               # to a bare pad on the board
+    # W-1185: each socket's port sense. Qa (pins 1, 2, 6) sees pin 8 held high, Qb (4, 5, 3) pin 5
+    # held low; their collectors pull the sense line low through 4.7 k. J2's is IO39, J4's IO38.
+    '/J2_SNS_P': {'R47.2', 'R48.1', 'Q1.2'}, '/J2_SNS_N': {'R49.2', 'R50.1', 'Q1.4'},
+    '/J2_SNS': {'Q1.6', 'Q1.3', 'R51.1'}, '/J2_SENSE': {'R51.2', 'U1.32'},
+    '/J4_SNS_P': {'R52.2', 'R53.1', 'Q2.2'}, '/J4_SNS_N': {'R54.2', 'R55.1', 'Q2.4'},
+    '/J4_SNS': {'Q2.6', 'Q2.3', 'R56.1'}, '/J4_SENSE': {'R56.2', 'U1.31'},
     '/BOARD_REV': {'U1.9', 'R32.1'},
     '/BOARD_LC': {'U1.8', 'R33.1'},
     '/HSKI_RS232': {'U3.7', 'R9.1'},
@@ -59,13 +65,14 @@ WANT = {
     '/LT_DATA': {'U6.4', 'U7.2', 'R42.2', 'R43.2'},
     '/J4_TX': {'U1.17', 'R43.1'},                         # IO9
     '/J4_DE': {'U1.15', 'R44.1'},                         # IO3
-    '/LT_PORT_RXD_N': {'R10.2', 'J4.5'},
-    '/LT_PORT_RXD_P': {'R11.2', 'J4.8'},
+    '/LT_PORT_RXD_N': {'R10.2', 'J4.5', 'R54.1'},
+    '/LT_PORT_RXD_P': {'R11.2', 'J4.8', 'R52.1'},
 }
 ON_RAIL = {'/+3V3': {'R21.1', 'U2.10', 'U6.10', 'U10.1', 'C68.1', 'R40.1', 'R45.1'},
            '/GND': {'R22.2', 'R23.2', 'R24.2', 'R32.2', 'R33.2', 'R36.2', 'R41.2', 'R46.2',
                     'U2.2', 'U2.5', 'U6.2', 'U6.5', 'U10.8', 'C68.2',     # U2.2, U6.2: ~RE, receivers always on
-                    'J2.9', 'J4.9'}}                                     # both shells straight to ground
+                    'J2.9', 'J4.9',                                      # both shells straight to ground
+                    'Q1.1', 'Q1.5', 'Q2.1', 'Q2.5', 'R48.2', 'R50.2', 'R53.2', 'R55.2'}}   # the port sense
 OFF_RAIL = {'/GND': {'U3.8', 'U3.10'}}
 GONE_REFS = {'C7', 'R5', 'R6', 'R7', 'R26', 'R28', 'R31', 'S1',  # R26: IO3 boxed in; S1, R28: no DIPs; R31: see the design
              'U8', 'R14', 'R25', 'C18',                          # W-1176: one THVD1452 per socket
@@ -89,6 +96,9 @@ PARTS = {  # ref: (value, LCSC)
     'R9': ('0R', 'C21189'), 'SW1': ('TSB001A3518A', 'C2888448'),
     'R29': ('15k', 'C22809'), 'R30': ('15k', 'C22809'),
     **{f'R{n}': ('10k', 'C25804') for n in (21, 22, 23, 24, 32, 33, 36)},
+    'Q1': ('BC847BDW1', 'C82368'), 'Q2': ('BC847BDW1', 'C82368'),   # W-1185: dual NPN, VEBO 6 V
+    **{f'R{n}': ('22k', 'C25768') for n in (47, 52)}, **{f'R{n}': ('15k', 'C25756') for n in (49, 54)},
+    **{f'R{n}': ('6.8k', 'C25917') for n in (48, 50, 53, 55)}, **{f'R{n}': ('4.7k', 'C25900') for n in (51, 56)},
 }
 
 root = ET.parse(sys.argv[1]).getroot()
