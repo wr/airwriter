@@ -158,6 +158,13 @@ build/lwhost: lwhost.c $(LT)/et_proto.c $(LT)/et_link.c $(LT)/lt_node.c $(LT)/pa
               $(LT)/lt_proto.c $(LT)/adsp.c $(LT)/sw_adapter.c $(COMP)/laser/lw_query.c | build
 	$(CC) $(CFLAGS) -I$(LT)/include -I$(COMP)/laser/include -o $@ $^
 
+# The board's StyleWriter adapter on the host, for test_sw_adapter_interop.py (W-1193): the
+# link, the adapter, the pipe and a pump thread, the port swfake.py's pty. sw_reset is the
+# session's, so the StyleWriter's sources come with it.
+build/swahost: swahost.c $(LT)/et_proto.c $(LT)/et_link.c $(LT)/lt_node.c $(LT)/pap_client.c \
+               $(LT)/lt_proto.c $(LT)/adsp.c $(LT)/sw_adapter.c $(LT)/sw_pipe.c $(SRCS) | build
+	$(CC) $(CFLAGS) $(INCS) -I$(LT)/include -o $@ $^ -lm -lz -lpthread
+
 CT := ../../firmware/components/cable_test
 build/test_cable: test/test_cable.c $(CT)/cable_core.c $(LT)/lt_proto.c | build
 	$(CC) $(CFLAGS) -I$(CT)/include -I$(LT)/include -Itest -o $@ $^
@@ -315,6 +322,12 @@ build/swprint: build/swhost
 .PHONY: swinterop
 swinterop: build/swhost build/rip
 	@python3.14 ../stylewriter/test_swinterop.py
+
+# A software Mac printing as Apple's StyleWriter driver does, through the firmware's adapter
+# on the host (swahost) to swfake.py, held to the rip's dots (W-1193). About 2.5 minutes.
+.PHONY: swainterop
+swainterop: build/swahost build/rip
+	@python3.14 ../ethertalk/test_sw_adapter_interop.py
 
 # The Personal LaserWriter 300 on the host (W-1102). qdcheck holds the page stage and session's
 # packets and line image, decoded by tools/qdlaser/qdfake.py, to the rip's dots; qdhost prints
