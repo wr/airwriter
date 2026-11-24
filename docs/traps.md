@@ -320,9 +320,6 @@ Traps already explained in a code comment are listed only when the comment is ea
   once on W-1076's bench with a correctly signed image (`python -m espsecure verify_signature
   --version 2 --keyfile firmware/keys/airwriter-release.pub.pem build/airwriter.bin` passed); the
   same file went in on the next try. Verify the image, then retry once.
-- **Never OTA while a job prints.** It cut two jobs on 2026-10-15. Since W-1048 `/update` refuses
-  (409) while a job holds the job lock and gives way to one that arrives mid-upload, but an
-  image from before W-1048 still on a board does not. AGENTS.md, On a real board.
 
 ## Serial, printer, LocalTalk
 

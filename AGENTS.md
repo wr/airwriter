@@ -289,17 +289,12 @@ http://192.168.4.1/.
 ## On a real board
 - **A board with a password answers curl 401.** `python3 tools/webui/signin.py http://<board>`,
   then add `-b ~/.config/airwriter/cookies.txt` to each curl (OTA included).
-- **Never update firmware while a job prints.** Make sure nothing is printing: `/api/status`
-  shows `printing=false` and no job ended in the last ~10 s, then OTA. `/update` refuses (409)
-  while a job holds the job lock, but an image from before signed updates does not.
 - **Read the console only through `idf.py monitor` under `script`.** A raw pyserial open drops
   the S3 into download mode. From a non-TTY shell:
   `script -q LOG idf.py -p /dev/cu.usbmodemNNNN monitor </dev/null &`, then
   `pkill -f idf_monitor` and strip ANSI from `LOG`. OpenOCD (`board/esp32s3-builtin.cfg`) beside
   the monitor reads registers live, but a gdb attach halts both cores and detaching can reset
   the board: never with a job on paper. `thread apply all bt` names where every task waits.
-- Read `/api/status` (`ps`) before judging the panel: a deselected printer shows offline embers,
-  not Ready.
 - A slow upload is the link until proven otherwise: check `rssi` in the `doc_begin` log.
 - Holding `test` through power-up for 5 s erases the settings and boots the known-good slot. A
   board whose sdkconfig has no Wi-Fi credentials comes back on its setup network (open, or with
