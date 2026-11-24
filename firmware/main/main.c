@@ -138,13 +138,15 @@ static const char *TAG = "airwriter";
     CONFIG_AIRWRITER_J2_PIC_MCLR_PIN != 42 || CONFIG_AIRWRITER_J2_PIC_CLK_PIN != 11 || \
     CONFIG_AIRWRITER_J2_PIC_DAT_PIN != 12 || CONFIG_AIRWRITER_J2_LT_CTS_PIN != 41 || \
     CONFIG_AIRWRITER_J4_TX_PIN != 9 || CONFIG_AIRWRITER_J4_RX_PIN != 10 || \
-    CONFIG_AIRWRITER_J4_DE_PIN != 3
+    CONFIG_AIRWRITER_J4_DE_PIN != 3 || CONFIG_AIRWRITER_J2_SENSE_PIN != 39 || \
+    CONFIG_AIRWRITER_J4_SENSE_PIN != 38
 #error "this sdkconfig has rev A's pins: start sdkconfig.2026.11 again from the defaults"
 #endif
 #else
 #if CONFIG_IDF_TARGET_ESP32S3 && (!CONFIG_SPIRAM_MODE_QUAD || !CONFIG_ESPTOOLPY_FLASHSIZE_8MB || \
     CONFIG_AIRWRITER_HSKI_DRV_PIN != 35 || CONFIG_AIRWRITER_J4_HSKO_DRV_PIN >= 0 || \
-    CONFIG_AIRWRITER_BOARD_REV_PIN >= 0)
+    CONFIG_AIRWRITER_BOARD_REV_PIN >= 0 || CONFIG_AIRWRITER_J2_SENSE_PIN >= 0 || \
+    CONFIG_AIRWRITER_J4_SENSE_PIN >= 0)
 #error "this sdkconfig has rev 2026.11's module or pins: build it with -DAIRWRITER_BOARD=2026.11"
 #endif
 #endif
@@ -3112,8 +3114,35 @@ static volatile uint32_t s_ct_seq;       // odd while a test runs
 static volatile uint32_t s_ct_frames[PORTS_MAX];   // localtalk_frames() as the last test ended
 
 #if CONFIG_AIRWRITER_PIC_CLK_PIN >= 0
-static void cable_test_locked(cable_result_t *r, int both)
+// W-1185: the test's frames go out of the LocalTalk socket, and a printer with power there
+// would print them as junk. Its sense holds a printer then, but so does a test cable's: the
+// printer socket's transmitter idles at mark at the cable's other end. The cable shows itself
+// by carrying the LocalTalk socket's handshake across to the printer socket's, four times
+// over; toggling it sends nothing a printer reads as data. A clock on the printer socket (a
+// QuickDraw LaserWriter) is no test cable, and would follow by chance one time in four. Under
+// the job lock. The socket the test would send into, else -1.
+static int cable_into_printer(void)
 {
+    int k = ports_with(PORT_JOB_LOCALTALK), hz;
+    const port_sock_t *pr = ports_sock(s_psock), *lt = ports_sock(k);
+    if (!pr || !lt) return -1;
+    uint8_t sense = ports_sense(k);
+    int joined = sense == PD_SENSE_PRINTER && !serial_out_clock_of(s_psock, &hz);
+    for (int n = 0; joined && n < 4; n++) joined = cable_test_hsk_follows(lt->hsko_drv, pr->hski);
+    return pd_test_may_send(sense, joined) ? -1 : k;
+}
+
+// -1 once the test has run, else the socket it refused to send into (the panel shows a fail,
+// as with no cable at all).
+static int cable_test_locked(cable_result_t *r, int both)
+{
+    int k = cable_into_printer();
+    if (k >= 0) {
+        ESP_LOGW(TAG, "cable test: a printer with power on %s, so no test frames", port_tag(k));
+        memset(r, 0, sizeof *r);
+        printer_state_cable(PS_CABLE_FAIL);
+        return k;
+    }
     s_ct_seq++;
     cable_test_run(r, both);
     for (int i = 0; i < PORTS_MAX; i++) s_ct_frames[i] = localtalk_frames(i);
@@ -3121,6 +3150,7 @@ static void cable_test_locked(cable_result_t *r, int both)
     printer_state_cable(r->err == ESP_OK && !ct_verdict_tested(r->verdict) ? PS_CABLE_NO_CHIP
                         : r->err == ESP_OK && r->verdict == CT_PASS        ? PS_CABLE_PASS
                                                                            : PS_CABLE_FAIL);
+    return -1;
 }
 
 static void cable_button_task(void *arg)
@@ -4165,8 +4195,13 @@ static void cable_web(void *ctx, int both, char *buf, size_t cap)
     }
     on_activity();
     cable_result_t r;
-    cable_test_locked(&r, both);
+    int k = cable_test_locked(&r, both);
     xSemaphoreGive(s_job_lock);
+    if (k >= 0) {
+        snprintf(buf, cap, "{\"ok\":false,\"error\":\"Unplug the printer from %s first\"}",
+                 port_tag(k));
+        return;
+    }
     cable_result_json(&r, buf, cap);
 #else
     snprintf(buf, cap, "{\"ok\":false,\"error\":\"no LocalTalk port\"}");
@@ -4263,8 +4298,8 @@ static int sock_job_set(int i, port_job_t job, const char *why, uint32_t wait_ms
         // LocalTalk none is selected, and nothing is sent to a printer until one prints again.
         if (s_psock == i && sock_prints(other)) printer_sock_select(other);
         else if (s_psock == i) s_psock = -1;
-        // Listening on its socket until LocalTalk is heard there (sock_detect lets it): set
-        // before the socket reads as LocalTalk's.
+        // Listening on its socket until LocalTalk is heard there or its sense is held clear
+        // (sock_detect lets it): set before the socket reads as LocalTalk's.
         localtalk_set_hold(i, 1);
         ports_hw(i, PORT_JOB_LOCALTALK);
         psock_reset(i);
@@ -4289,12 +4324,21 @@ static int sock_job_set(int i, port_job_t job, const char *why, uint32_t wait_ms
 }
 
 // What each socket shows, for port_detect_core: its handshake and clock, LocalTalk frames on a
-// LocalTalk socket, framing errors and breaks on a printer socket with no printer showing. And
-// whether each LocalTalk socket may send: only once LocalTalk has been heard on it, since
+// LocalTalk socket, framing errors and breaks on a printer socket with no printer showing, and
+// W-1185 its port sense. And whether each LocalTalk socket may send: once its sense is held
+// clear or LocalTalk has been heard on it, and never while its sense holds a printer, since
 // frames sent into a printer print as junk, selected or not.
 static pd_t     s_pd;
 static int      s_pd_on;
+
+// W-1185: a node's frame may go out unless its socket's sense holds a printer with power, from
+// the moment it does, not at sock_detect's next check (localtalk_set_gate).
+static int sock_sense_clear(int sock)
+{
+    return ports_sense(sock) != PD_SENSE_PRINTER;
+}
 static uint32_t s_pd_frames[PD_SOCKS];      // each socket's own count (localtalk_frames)
+static uint8_t  s_pd_sense[PD_SOCKS];       // each socket's sense as last logged
 
 static void sock_detect(void)
 {
@@ -4328,6 +4372,12 @@ static void sock_detect(void)
             in[i].frames = heard[i] && localtalk_running(i) ? 1 : 0;
         else
             in[i].silent = printers_port_heard(i) == PR_HEARD_NONE;
+        in[i].sense = ports_sense(i);
+        if (in[i].sense != s_pd_sense[i]) {
+            ESP_LOGI(TAG, "%s's sense: %s, was %s", port_tag(i), pd_sense_name(in[i].sense),
+                     pd_sense_name(s_pd_sense[i]));
+            s_pd_sense[i] = in[i].sense;
+        }
         // The junk is read under the job lock: a question in flight is reading that UART.
         if (idle && in[i].job == PORT_JOB_PRINTER && !in[i].clocked &&
             (!in[i].ready || in[i].silent) &&
@@ -4593,6 +4643,18 @@ void app_main(void)
     gpio_set_level(CONFIG_AIRWRITER_J4_HSKO_DRV_PIN, 0);
     gpio_config(&j4_hsko_clamp);
 #endif
+#if CONFIG_AIRWRITER_J2_SENSE_PIN >= 0 && CONFIG_AIRWRITER_J4_SENSE_PIN >= 0
+    // W-1185: the port sense pins inputs with their pull-ups from here, so an RS-232 printer
+    // pulling one below ground holds it at 0 to -0.35 V, not near -0.4 V on the pad's diode.
+    // gpio_config selects the GPIO function: IO39 leaves reset as JTAG's MTCK. The LC fits
+    // no sense parts, and its lines just read high. ports_sense_start reads them.
+    gpio_config_t sense_pins = {
+        .pin_bit_mask = 1ULL << CONFIG_AIRWRITER_J2_SENSE_PIN | 1ULL << CONFIG_AIRWRITER_J4_SENSE_PIN,
+        .mode         = GPIO_MODE_INPUT,
+        .pull_up_en   = GPIO_PULLUP_ENABLE,
+    };
+    gpio_config(&sense_pins);
+#endif
 #if CONFIG_AIRWRITER_BOARD_REV_A && CONFIG_IDF_TARGET_ESP32S3
     // Rev A's S1, a bank of eight DIP switches, is still fitted, but nothing
     // reads it. Its legs go straight to GND, and IO39-42 come out of reset in
@@ -4723,8 +4785,11 @@ void app_main(void)
         printers_set_lt_port(ports_with(PORT_JOB_LOCALTALK) + 1);
         // W-1179: on rev 2026.11 the node starts listening, sending nothing until sock_detect
         // has seen its socket: LocalTalk heard there, or heard before the restart and no
-        // printer showing since. Frames sent into a printer print as junk.
+        // printer showing since, or W-1185 its sense held clear. Frames sent into a printer
+        // print as junk.
         for (int i = 0; ports_either() && i < PORTS_MAX; i++) localtalk_set_hold(i, 1);
+        ports_sense_start(localtalk_tx_at);      // W-1185: rev 2026.11's full board alone
+        localtalk_set_gate(sock_sense_clear);
     }
     // The cables' offers, kept for each node's start: after the sockets are known (the offers
     // are per socket, W-1186), before any node starts.

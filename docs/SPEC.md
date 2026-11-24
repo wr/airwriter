@@ -2073,39 +2073,44 @@ board exists.
     ready for 2 s, or a clock on HSKi, on the LocalTalk socket with no LocalTalk frame heard
     for 30 s moves that socket to the printer job, unless a frame was heard since the handshake
     went ready: then what holds it is a Mac on a direct cable, and LocalTalk stays until the
-    line drops. Framing errors and breaks on a printer socket with no printer showing (its line
-    down, or up with nothing answering there) put it on LocalTalk on trial, kept only if
-    TashTalk hears a frame there within 20 s; else it goes back to the printer job and waits
-    10 min before another. A printer that shows on it mid-trial (a clock, or its handshake
-    coming up after the trial began) ends the trial at that check, with no wait after: noise
-    from a printer switched off and on may be what began it. Each socket is worked out by itself, whatever the other does or
+    line drops. The port sense (below) holding a printer with power for 2 s moves it too,
+    however lately LocalTalk was heard; a frame heard meanwhile starts the 2 s again, since a
+    frame pulses the line and a live network never holds it low. Framing errors and breaks on a
+    printer socket with no printer showing (its line down, or up with nothing answering there,
+    and its sense holding no printer) put it on LocalTalk on trial, kept only if TashTalk hears
+    a frame there within 20 s; else it goes back to the printer job and waits 10 min before
+    another. A printer that shows on it mid-trial (its sense, a clock, or its handshake coming
+    up after the trial began) ends the trial at that check, with no wait after: noise from a
+    printer switched off and on may be what began it. Each socket is worked out by itself, whatever the other does or
     hears (W-1186). Quiet sockets keep their last job; with nothing plugged in, J2
     prints and J4 does LocalTalk. Every change is a log line naming the port, its old and new
     job and the signal.
   - **Listening first.** AppleTalk frames sent into an ImageWriter II print as junk, selected or
     not: a deselected one keeps them and prints them when SELECT is pressed (board 1,
-    2026-11-21: about 3 sheets, line feeds and form feeds included). So the node sends nothing
-    from a socket until LocalTalk has been heard there (`localtalk_set_hold`, `pd_may_send`):
-    it starts listening, holds no node ID in TashTalk, and its ticks, NBP lookups, the PAP
-    client and echoes send nothing, while TashTalk's frames are still counted. A good-FCS frame
-    on that socket lets it send, and it acquires a node as at start; a socket fixed to
-    LocalTalk (`port1`, `port2`) sends at once. What was heard is dropped when the socket
-    changes job, and at the first check a printer shows there (a handshake ready with no frame
-    since it went ready, or a clock), so the node goes quiet before the socket moves; it must
-    be heard again after. Each socket's node has its own hold, and its own count of frames
-    (W-1186), so one network heard lets only its own socket send. Heard is saved
-    (`port1heard`, `port2heard`): after a restart the socket sends once its line has shown no
-    printer for 1 s (`PD_BOOT_MS`). A cable test's own frames don't count. The cost: a
-    LaserWriter already switched on when its cable goes into a socket that hasn't heard
-    LocalTalk is found only when it, or a Mac on that network, next sends a frame (switched off
-    and on, it does). `W-1185 Rev 2026.11: sense each port's receive pair, so a switched-on
-    printer that isn't ready is seen` (the port sense, below) would let a socket with no
-    printer powered on it send at once. While listening, `/api/lt` gives `"phase":"listening"` with `on` as its
-    setting, and the LocalTalk card reads On port N with no Macs. Rev A and the LC send as
-    before. Not covered: a printer deselected before its cable goes into a socket that has
-    heard LocalTalk shows nothing there, so that socket still sends (W-1185 again), and so does
-    the test button's cable test. A Mac on a direct cable whose handshake drops for one check
-    makes its socket listen until the Mac next sends.
+    2026-11-21: about 3 sheets, line feeds and form feeds included). So a socket's node sends
+    nothing until the socket is known to be safe (`localtalk_set_hold`, `pd_may_send`): it
+    starts listening, holds no node ID in TashTalk, and its ticks, NBP lookups, the PAP client
+    and echoes send nothing, while TashTalk's frames are still counted. It may send, and
+    acquires a node as at start, once its port sense (W-1185, below) is held clear and 1 s has
+    passed since boot (`PD_BOOT_MS`, for the handshake and the clock to show), or once a
+    good-FCS frame is heard there. So a LaserWriter switched on before its cable goes in is
+    found at once. A socket fixed to LocalTalk (`port1`, `port2`) sends at once. Wherever the
+    sense holds a printer with power, the socket sends nothing, heard or fixed: the hold
+    follows at `sock_detect`'s next check, every half second, and meanwhile each of the node's
+    frames is checked against the sense as it goes (`localtalk_set_gate`). A handshake
+    ready with no frame since it went ready, or a clock, stops it as before. What was heard is
+    dropped when the socket changes job, and at the first check a printer shows there (by its
+    sense, handshake or clock), so the node goes quiet before the socket moves. Each socket's
+    node has its own hold, and its own count of frames (W-1186). Heard is saved (`port1heard`,
+    `port2heard`): after a restart the socket sends once its line has shown no printer for 1 s.
+    A cable test's own frames don't count. While listening, `/api/lt` gives
+    `"phase":"listening"` with `on` as its setting, and the LocalTalk card reads On port N with
+    no Macs. Rev A sends as before; the LC has no LocalTalk. Not covered: with no level held
+    yet, as on a network that never leaves the line still for 50 ms, the socket listens as it
+    did before the sense, sending once LocalTalk is heard. A Mac on a direct cable whose
+    handshake drops for one check makes its socket listen until the Mac next sends. A Mac's
+    serial port on a direct cable holds the line at mark as a printer does: the socket listens,
+    takes the printer job, and asks it the printer questions, which a Mac ignores.
   - **Saved.** Each socket's last job (NVS `general` `port1job`, `port2job`), so a restart
     keeps it. `/api/general` `{"port1":"auto"|"printer"|"localtalk","port2":…}` fixes one
     (`port1set`, `port2set`; auto by default); the page has no control for it. `/api/status`
@@ -2129,7 +2134,14 @@ board exists.
     before any cable is; a printer socket's PIC stays in reset after. A failed install shows on
     the LocalTalk card, and the page's button puts it on, as on rev A's U7. `/api/localtalk/flash` takes `{"port":1|2}` (default:
     the LocalTalk socket).
-  - The cable test needs a socket on each job; its frames leave the printer socket's driver.
+  - The cable test needs a socket on each job. Its first frame leaves the LocalTalk socket's
+    TashTalk, and the printer socket's driver sends only once that frame has come back through
+    the cable. So with the LocalTalk socket's sense holding a printer the test sends nothing (`cable_into_printer`): the panel shows a fail, as with no cable,
+    and the page says to unplug the printer from that port. A test cable holds that sense low
+    too, the printer socket's driver idling at mark at the other end (about 3 V on pin 8 by the
+    circuit's numbers, over Qa's 1.8 to 2.9 V; with DE off the TX pair's 4.7 k bias still holds
+    it near 2.7 V), so the test first drives the LocalTalk socket's handshake out high and low:
+    if the printer socket's handshake in follows, the cable joins them and the test runs.
     With both sockets on LocalTalk, the page's **Test Cable…** gives port 1 the printer job
     first (port 2 if port 1 is set to LocalTalk).
     A test cable from port 1 to port 2 shows each socket the other's handshake, so both may
@@ -2139,16 +2151,28 @@ board exists.
   - With no socket on LocalTalk every node is parked: `/api/lt` gives `"parked":true`, `port` 0
     and `on` as its setting, so the LocalTalk card's switch keeps its place.
 - **Port sense** (`W-1185 Rev 2026.11: sense each port's receive pair, so a switched-on printer
-  that isn't ready is seen`), hardware only so far. Each socket's sense line, IO39 for port 1 (J2)
-  and IO38 for port 2 (J4), is open-collector through 4.7 k: read with the internal pull-up on, it's low
-  while a device holds that socket's pin 8 above about +2.5 V or its pin 5 below about −3.5 V,
-  as a serial printer with power does whether it's ready or not, and high for an empty socket,
-  a LocalTalk box or device between frames, or a printer with no power
-  (`docs/superpowers/specs/2026-11-23-port-sense-design.md`). IO39 leaves reset as JTAG's MTCK,
-  so it must be set to a GPIO first. A frame on the line pulses it, and the frames of one
-  exchange are only about 200 µs apart, so it counts only once it has stayed low with no high
-  at all for longer than a frame (about 21 ms), caught by an interrupt on the line going high,
-  not by polling. Nothing reads it yet: W-1179's listen-first rule stands.
+  that isn't ready is seen`). Each socket's sense line, IO39 for port 1 (J2) and IO38 for port
+  2 (J4) (Kconfig `AIRWRITER_J2_SENSE_PIN`, `AIRWRITER_J4_SENSE_PIN`; -1 on rev A, and main.c
+  stops a build with the other board's), is open-collector through 4.7 k: read with the
+  internal pull-up on, it's low while a device holds that socket's pin 8 above about +2.5 V or
+  its pin 5 below about −3.5 V, as a serial printer with power does whether it's ready or not,
+  and high for an empty socket, a LocalTalk box or device between frames, or a printer with no
+  power (`docs/superpowers/specs/2026-11-23-port-sense-design.md`). App_main's first lines make
+  both pins inputs with their pull-ups, with `gpio_config`, which selects the GPIO function
+  (IO39 leaves reset as JTAG's MTCK). `ports_sense_start` gives each a PCNT unit counting its
+  rising edges (1 µs glitch filter; the printer lines' clock counters have the other two) and
+  looks every 50 ms on an esp_timer (`pd_sense_look`, host-tested). A frame on the line pulses
+  it, and the frames of one exchange are only about 200 µs apart, so polling could take
+  back-to-back frames for one long low. The counter catches every high in hardware, with no
+  interrupt: a level counts only after a whole window with no edge, longer than a frame (at
+  most about 21 ms). The socket's own frames may reach the line through an Apple LocalTalk box
+  that joins the pairs; they leave edges like any other, and high also waits 100 ms after the
+  node last queued one (`localtalk_tx_at`). Low doesn't wait: a printer plugged in while the
+  node sends must stop it. Until another level holds, the last one held stands, so a printer
+  answering or a frame changes nothing. `sock_detect` passes it to
+  `port_detect_core` and logs each change ("port 2's sense: a printer with power, was
+  clear"). The LC fits no sense parts and starts none. A socket with no counter has no sense
+  and listens first. Built, never run: no rev 2026.11 board exists.
 - **Straps**, rev 2026.11 only, read once at boot with the pull-ups on, which stay on only where
   a strap reads high: IO16 (`BOARD_REV`, low on every 2026.11 board) and IO15 (`BOARD_LC`, low on
   the LC). `/api/status` has `board` (`rev-a` or `2026.11`), `lc`, and `board_ok`, false when a

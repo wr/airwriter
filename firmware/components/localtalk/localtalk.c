@@ -61,8 +61,9 @@ typedef struct lt_side {
     // asked for, for when the side may send again.
     int         want_on;
     // W-1179: listening. The node sends nothing (TashTalk answers for no node, nothing goes
-    // out) until main lets it, once LocalTalk has been heard on its socket: frames sent into a
-    // printer print as junk, selected or not. Frames are still counted (localtalk_frames).
+    // out) until main lets it, once LocalTalk has been heard on its socket or W-1185 its sense
+    // is held clear: frames sent into a printer print as junk, selected or not. Frames are
+    // still counted (localtalk_frames).
     volatile int hold;
     int         serve;              // the role its node has now
     lt_cfg_t    nc;                 // the node's set-up, for coming back on
@@ -72,6 +73,7 @@ typedef struct lt_side {
     lt_mem_t   *mem;
     unsigned    fcs_bad, errors, tx;
     volatile uint32_t rx_good;      // W-1179: frames with a good FCS, from any node
+    volatile uint32_t tx_at;        // W-1185: when it last queued a frame, in ms (0: never)
     void      (*tap)(void *ctx, const uint8_t *f, size_t n);
     void       *tap_ctx;
     pap_client_t *client;           // W-1082: the PAP client riding the node
@@ -97,6 +99,7 @@ static portMUX_TYPE      s_state_mux = portMUX_INITIALIZER_UNLOCKED;
 // W-1082: answer as the ImageWriter, every side alike; where LaserWriters' NBP answers go.
 static int        s_serve = 1;
 static void     (*s_found)(int link, const nbp_tuple_t *t, const lt_route_t *r);
+static int      (*s_may_send)(int sock);   // W-1185: localtalk_set_gate
 static void     (*s_name_check)(int link, const nbp_tuple_t *t);
 
 static void state_take(void)
@@ -154,15 +157,18 @@ static void tt_out(lt_side_t *sd, const uint8_t *f, size_t n)
     size_t cl = tt_send_cmd(cmd, sizeof sd->mem->cmd, f, n);
     if (!cl) return;
     uart_write_bytes(sd->uart, cmd, cl);         // TashTalk's CTS paces the hardware FIFO
+    uint32_t at = (uint32_t)now_ms();
+    sd->tx_at = at ? at : 1;
     sd->tx++;
     if (f[2] != LLAP_ENQ) note_frame(sd, "tx", f, n);
 }
 
 // The node's frames: none while listening, whatever asks (a lookup, the PAP client, an echo).
+// W-1185: nor between main's checks once the socket's sense holds a printer.
 static void op_send(void *ctx, const uint8_t *f, size_t n)
 {
     lt_side_t *sd = ctx;
-    if (!sd->hold) tt_out(sd, f, n);
+    if (!sd->hold && (!s_may_send || s_may_send(sd->sock))) tt_out(sd, f, n);
 }
 
 static void op_claim(void *ctx, uint8_t node)
@@ -525,6 +531,12 @@ uint32_t localtalk_frames(int sock)
     return sd ? sd->rx_good : 0;
 }
 
+uint32_t localtalk_tx_at(int sock)
+{
+    const lt_side_t *sd = side(sock);
+    return sd ? sd->tx_at : 0;
+}
+
 int localtalk_serving(void)
 {
     for (int i = 0; i < LT_SIDES; i++)
@@ -583,14 +595,19 @@ void localtalk_set_hold(int sock, int hold)
         int on = !sd->quiet;
         sd->hold = 1;                            // first: a job cut short sends nothing either
         if (sd->open) {                          // parked, want_on is already kept
-            quiet_now(sd, 1, "listening: sending nothing until LocalTalk is heard");
+            quiet_now(sd, 1, "listening: sending nothing for now");
             sd->want_on = on;
         }
     } else if (hold != sd->hold) {
         sd->hold = 0;
-        if (sd->open && sd->want_on) quiet_now(sd, 0, "LocalTalk heard: the node comes on");
+        if (sd->open && sd->want_on) quiet_now(sd, 0, "the socket is safe to send on: the node comes on");
     }
     state_give();
+}
+
+void localtalk_set_gate(int (*may_send)(int sock))
+{
+    s_may_send = may_send;
 }
 
 int localtalk_holding(int sock)

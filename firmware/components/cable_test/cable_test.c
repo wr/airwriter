@@ -365,6 +365,11 @@ static int hsk_follows(int out, int in)
     return ok;
 }
 
+int cable_test_hsk_follows(int out, int in)
+{
+    return out >= 0 && in >= 0 && hsk_follows(out, in);
+}
+
 // ------------------------------------------------------------- the test
 
 void cable_test_init(const cable_test_cfg_t *cfg)

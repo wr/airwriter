@@ -213,6 +213,24 @@ config AIRWRITER_J4_DE_PIN
         Rev 2026.11 board net J4_DE: IO3 through R44 (220 R) to U6's DE, which
         U7 drives and R22 pulls low. As J2_DE, for J4 as a printer port.
 
+config AIRWRITER_J2_SENSE_PIN
+    int "J2's port sense, -1 if absent"
+    default 39 if AIRWRITER_BOARD_2026_11
+    default -1
+    help
+        Rev 2026.11 board net J2_SENSE (W-1185): Q1's collectors through R51
+        (4.7 k) to IO39, read with the internal pull-up. Low while a serial
+        printer with power is plugged into J2 (port 1), ready or not. IO39
+        leaves reset as JTAG's MTCK. The LC fits no sense parts; rev A has none.
+
+config AIRWRITER_J4_SENSE_PIN
+    int "J4's port sense, -1 if absent"
+    default 38 if AIRWRITER_BOARD_2026_11
+    default -1
+    help
+        Rev 2026.11 board net J4_SENSE (W-1185): Q2's collectors through R56
+        (4.7 k) to IO38. As J2's, for J4 (port 2).
+
 config AIRWRITER_BOARD_REV_PIN
     int "Board strap BOARD_REV, -1 if absent"
     default 16 if AIRWRITER_BOARD_2026_11

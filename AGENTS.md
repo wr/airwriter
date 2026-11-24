@@ -50,7 +50,8 @@ its firmware works out each socket's job from what is plugged in and shares a pr
 at once (W-1179), or joins a LocalTalk network on each, a node on both, and shares the
 LaserWriters on each (W-1186). Its case, docs and page call J2 port 1 and J4 port 2; rev A keeps
 printer port and AppleTalk port. Each socket also senses a serial printer that has power on its
-receive pair (W-1185: IO39 for port 1, IO38 for port 2); no firmware reads it yet.
+receive pair (W-1185: IO39 for port 1, IO38 for port 2): a socket sends AppleTalk once its sense
+reads clear or LocalTalk is heard there, and never into a printer with power.
 
 - **Printers.** Tested on the ImageWriter II. The original ImageWriter and the ImageWriter LQ
   take the same stream and are expected to work, untested; docs say so rather than excluding
@@ -106,7 +107,7 @@ Where things are (`firmware/components/` unless a path is given):
 | Cable test, TashTalk flashing | `cable_test`, `pic_prog` | |
 | Settings page | `webui`; sources in `tools/webui` | settings-redesign design |
 | Password and sign-in, the bench | `auth`, `webui_auth.c`; `tools/bench` | SPEC §3.20, setup-password design |
-| Rev 2026.11's sockets: each one's job, what's plugged in | `ports` (`port_detect_core.c`); main's `psock_t` | SPEC §3.19, rev 2026.11 board design |
+| Rev 2026.11's sockets: each one's job, what's plugged in, the port sense | `ports` (`port_detect_core.c`); main's `psock_t` | SPEC §3.19, rev 2026.11 board design, port-sense design |
 
 The web UI and API are on port 80: `/api/status`, `/api/general` (settings), `/update` (OTA
 upload), `/api/update` (GitHub releases), `/api/printers`, `/api/lt`, `/api/et`, `/api/log`,
