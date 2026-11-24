@@ -3,7 +3,10 @@
 
 #include "sdkconfig.h"
 #include "driver/gpio.h"
+#include "driver/pulse_cnt.h"
 #include "esp_log.h"
+#include "esp_timer.h"
+#include "port_detect_core.h"
 #include "serial_out.h"
 
 static const char *TAG = "ports";
@@ -15,6 +18,12 @@ static int s_count, s_either;
 #ifndef CONFIG_AIRWRITER_J4_UART_NUM
 #define CONFIG_AIRWRITER_J4_UART_NUM 0
 #endif
+#ifndef CONFIG_AIRWRITER_J2_SENSE_PIN
+#define CONFIG_AIRWRITER_J2_SENSE_PIN -1
+#endif
+#ifndef CONFIG_AIRWRITER_J4_SENSE_PIN
+#define CONFIG_AIRWRITER_J4_SENSE_PIN -1
+#endif
 
 static void table(int lc)
 {
@@ -25,7 +34,8 @@ static void table(int lc)
         .hski = CONFIG_AIRWRITER_CTS_PIN, .hsko_drv = CONFIG_AIRWRITER_HSKI_DRV_PIN,
         .pic = { CONFIG_AIRWRITER_J2_PIC_MCLR_PIN, CONFIG_AIRWRITER_J2_PIC_CLK_PIN,
                  CONFIG_AIRWRITER_J2_PIC_DAT_PIN, 0 },
-        .lt_cts = CONFIG_AIRWRITER_J2_LT_CTS_PIN, .can_print = 1,
+        .lt_cts = CONFIG_AIRWRITER_J2_LT_CTS_PIN, .sense = CONFIG_AIRWRITER_J2_SENSE_PIN,
+        .can_print = 1,
     };
     // J4: rev A's AppleTalk port; rev 2026.11's second socket, with a printer line too.
     s_sock[1] = (port_sock_t){
@@ -33,16 +43,18 @@ static void table(int lc)
         .rx = CONFIG_AIRWRITER_J4_RX_PIN, .de = CONFIG_AIRWRITER_J4_DE_PIN,
         .hski = CONFIG_AIRWRITER_J4_HSKI_PIN, .hsko_drv = CONFIG_AIRWRITER_J4_HSKO_DRV_PIN,
         .pic = pic_prog_u7(), .lt_cts = CONFIG_AIRWRITER_LT_CTS_PIN,
+        .sense = CONFIG_AIRWRITER_J4_SENSE_PIN,
     };
     s_sock[1].can_lt = s_sock[1].pic.clk >= 0 && s_sock[1].pic.dat >= 0;
     s_sock[1].can_print = s_sock[1].tx >= 0 && s_sock[1].rx >= 0 && s_sock[1].de >= 0;
     s_sock[0].can_lt = s_sock[0].pic.mclr >= 0 && s_sock[0].pic.clk >= 0 &&
                        s_sock[0].pic.dat >= 0;
     s_count = 2;
-    // The LC: J2 alone, U10 not fitted.
+    // The LC: J2 alone, U10 and the sense parts not fitted.
     if (lc) {
         s_count = 1;
         s_sock[0].can_lt = 0;
+        s_sock[0].sense = s_sock[1].sense = -1;
     }
     s_either = s_count == 2 && s_sock[0].can_lt && s_sock[1].can_print;
 }
@@ -164,4 +176,90 @@ void ports_hw(int i, port_job_t job)
 const char *ports_job_name(port_job_t j)
 {
     return j == PORT_JOB_PRINTER ? "printer" : j == PORT_JOB_LOCALTALK ? "localtalk" : "none";
+}
+
+// ------------------------------------------------------------------ W-1185: the port sense
+// Each socket's sense line through 4.7 k to its GPIO, open-collector, so the pin's pull-up
+// holds it high. A LocalTalk frame pulses it at up to 230.4 kbit/s, faster than any look:
+// PCNT counts its rising edges between looks (a single fall shows in the level), so a look
+// that saw none knows the line held all window. 32767 rising edges are 140 ms of frames; the
+// unit accumulates past that, so a late look still counts true.
+#define SENSE_LIMIT  32767
+
+static pcnt_unit_handle_t s_sense_pcnt[PORTS_MAX];
+static pd_sense_t         s_sense[PORTS_MAX];
+static volatile uint8_t   s_sense_held[PORTS_MAX];
+static uint32_t         (*s_sense_tx_at)(int sock);
+static esp_timer_handle_t s_sense_timer;
+
+static pcnt_unit_handle_t sense_counter(int pin)
+{
+    pcnt_unit_handle_t u = NULL;
+    pcnt_channel_handle_t ch = NULL;
+    pcnt_unit_config_t uc = { .low_limit = -1, .high_limit = SENSE_LIMIT, .flags.accum_count = 1 };
+    pcnt_chan_config_t cc = { .edge_gpio_num = pin, .level_gpio_num = -1 };
+    // Glitches under 1 us are noise: a frame's half cells are 2.2 us.
+    pcnt_glitch_filter_config_t gf = { .max_glitch_ns = 1000 };
+    if (pcnt_new_unit(&uc, &u) != ESP_OK) return NULL;
+    if (pcnt_new_channel(u, &cc, &ch) != ESP_OK ||
+        pcnt_channel_set_edge_action(ch, PCNT_CHANNEL_EDGE_ACTION_INCREASE,
+                                     PCNT_CHANNEL_EDGE_ACTION_HOLD) != ESP_OK ||
+        pcnt_unit_set_glitch_filter(u, &gf) != ESP_OK ||
+        pcnt_unit_add_watch_point(u, SENSE_LIMIT) != ESP_OK ||
+        pcnt_unit_enable(u) != ESP_OK || pcnt_unit_start(u) != ESP_OK) {
+        if (ch) pcnt_del_channel(ch);
+        pcnt_del_unit(u);
+        return NULL;
+    }
+    return u;
+}
+
+// On the esp_timer task, every PD_SENSE_LOOK_MS: cheap, and nothing logged here.
+static void sense_look(void *arg)
+{
+    (void)arg;
+    uint32_t now = (uint32_t)(esp_timer_get_time() / 1000);
+    for (int i = 0; i < s_count; i++) {
+        if (!s_sense_pcnt[i]) continue;
+        int n = 0;
+        pcnt_unit_get_count(s_sense_pcnt[i], &n);
+        pcnt_unit_clear_count(s_sense_pcnt[i]);
+        int level = gpio_get_level(s_sock[i].sense);
+        uint32_t tx = s_sense_tx_at ? s_sense_tx_at(i) : 0;
+        s_sense_held[i] = pd_sense_look(&s_sense[i], level, n != 0, tx, now);
+    }
+}
+
+void ports_sense_start(uint32_t (*tx_at)(int sock))
+{
+    if (!s_either || s_sense_timer) return;
+    s_sense_tx_at = tx_at;
+    int any = 0;
+    for (int i = 0; i < s_count; i++) {
+        int pin = s_sock[i].sense;
+        if (pin < 0) continue;
+        // As app_main's first lines left it. gpio_config selects the GPIO function: IO39 leaves
+        // reset as JTAG's MTCK.
+        gpio_config_t io = { .pin_bit_mask = 1ULL << pin, .mode = GPIO_MODE_INPUT,
+                             .pull_up_en = GPIO_PULLUP_ENABLE };
+        gpio_config(&io);
+        s_sense_pcnt[i] = sense_counter(pin);
+        if (!s_sense_pcnt[i]) {
+            ESP_LOGW(TAG, "port %d: no edge counter for its sense; it listens first", i + 1);
+            continue;
+        }
+        any = 1;
+    }
+    if (!any) return;
+    const esp_timer_create_args_t ta = { .callback = sense_look, .name = "port_sense" };
+    if (esp_timer_create(&ta, &s_sense_timer) != ESP_OK ||
+        esp_timer_start_periodic(s_sense_timer, PD_SENSE_LOOK_MS * 1000ULL) != ESP_OK) {
+        ESP_LOGW(TAG, "no timer for the port sense; the ports listen first");
+        for (int i = 0; i < s_count; i++) s_sense_pcnt[i] = NULL;
+    }
+}
+
+uint8_t ports_sense(int i)
+{
+    return i >= 0 && i < s_count ? s_sense_held[i] : PD_SENSE_NONE;
 }

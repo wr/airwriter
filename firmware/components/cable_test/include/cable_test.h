@@ -50,3 +50,8 @@ void cable_result_json(const cable_result_t *r, char *buf, size_t cap);
 // 1 while a test holds UART2 itself (the node off): starting the node then
 // would find the driver taken. Never longer than ~150 ms.
 int  cable_test_lt_busy(void);
+
+// W-1185: drives handshake out `out` high, then low, and reads `in` at the other port each
+// time: 1 if `in` followed both, so a cable joins the two (the handshake legs' own check, run
+// on its own). Ends low. Under the job lock; 0 with either pin -1.
+int  cable_test_hsk_follows(int out, int in);

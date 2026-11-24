@@ -10,6 +10,8 @@
 //
 // This is only the hardware hand-over. Who decides a socket's job, and what follows from it
 // (which printer line is selected, where LocalTalk runs, the printer list), is main's.
+// W-1185: and each rev 2026.11 socket's port sense, looked at here and held by
+// port_detect_core's pd_sense_look.
 #pragma once
 #include <stdint.h>
 #include "pic_prog.h"
@@ -26,6 +28,7 @@ typedef struct {
     int        hsko_drv;   // drives the printer's HSKi
     pic_pins_t pic;        // the socket's TashTalk, mclr -1 for none
     int        lt_cts;     // TashTalk's CTS out
+    int        sense;      // W-1185: the port sense, low with a printer that has power; -1 none
     uint8_t    can_print, can_lt;
 } port_sock_t;
 
@@ -47,3 +50,10 @@ int               ports_with(port_job_t job);
 // on it), and then starts what uses it. A no-op for a job the socket can't do.
 void              ports_hw(int i, port_job_t job);
 const char       *ports_job_name(port_job_t j);   // "printer", "localtalk", "none"
+// W-1185: starts looking at each socket's sense, on rev 2026.11's full board alone (the LC
+// fits no sense parts): the pin an input with its pull-up, an edge counter on it, and a look
+// every PD_SENSE_LOOK_MS. tx_at(sock) is when that socket's LocalTalk node last queued a frame
+// (0: never), in esp_timer milliseconds. A socket whose counter can't be had has no sense.
+void              ports_sense_start(uint32_t (*tx_at)(int sock));
+// PD_SENSE_* as held now.
+uint8_t           ports_sense(int i);

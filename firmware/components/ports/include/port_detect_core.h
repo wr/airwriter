@@ -24,6 +24,13 @@
 // socket changes job or a printer shows on it.
 // W-1186: each socket is worked out by itself. Both may do LocalTalk at once (two networks),
 // both the printer job, or one each; nothing a socket shows changes the other.
+// W-1185: rev 2026.11's port sense relaxes the listening. Each socket's sense line is low while
+// a serial printer with power is plugged in, ready or not: it holds its transmitter at idle
+// mark, pin 8 high or pin 5 low. It is high for an empty socket, a LocalTalk device or box
+// between frames, and a printer with no power. Held high, a LocalTalk socket sends at once,
+// heard or not; held low, it never sends, heard or set to LocalTalk or not, and the socket goes
+// to the printer job (PD_WHY_SENSE). The handshake and the clock count as before. A board with
+// no sense (rev A, the LC) passes PD_SENSE_NONE, and the listening is as it was.
 #pragma once
 #include <stdint.h>
 
@@ -37,6 +44,19 @@
 #define PD_BOOT_MS        1000     // a socket heard before a restart sends once its line has
                                    // shown no printer this long
 
+// W-1185: what a socket's port sense holds (pd_sense_look).
+enum {
+    PD_SENSE_NONE = 0,             // no sense on the socket, or no level held yet
+    PD_SENSE_CLEAR,                // held high: nothing with power holds the line
+    PD_SENSE_PRINTER,              // held low: a serial printer with power (or a Mac's serial port)
+};
+#define PD_SENSE_LOOK_MS  50       // the line is looked at this often, its edges counted between
+#define PD_SENSE_HOLD_MS  40       // a level counts once it has held this long with no edge at
+                                   // all: a LocalTalk frame, 21 ms at most, pulses the line
+#define PD_SENSE_TX_MS    100      // and high not within this long of the socket's own node
+                                   // queuing a frame (a LocalTalk box may join the pairs):
+                                   // TashTalk's 2 KB of queue is 71 ms on the wire
+
 // What a socket does and shows, this tick. Jobs are ports.h's (1 printer, 2 LocalTalk).
 typedef struct {
     uint8_t job;
@@ -48,6 +68,7 @@ typedef struct {
     uint8_t junk;          // printer job: framing errors and breaks since the last tick
     uint8_t silent;        // printer job: no printer has answered on it (a Mac on a direct
                            // cable may hold the handshake ready, W-1179 review)
+    uint8_t sense;         // W-1185: PD_SENSE_*, as pd_sense_look holds it now
 } pd_in_t;
 
 typedef struct {
@@ -60,6 +81,7 @@ typedef struct {
     uint8_t  job;          // the job last seen
     uint8_t  heard;        // LocalTalk heard on it in its present LocalTalk job
     uint8_t  heard_boot;   // ... only before the restart, so far
+    uint32_t sensed_at;    // W-1185: when its sense first held a printer (0: it doesn't)
 } pd_sock_t;
 
 typedef struct {
@@ -74,6 +96,7 @@ typedef enum {
     PD_WHY_CLOCK,          // a QuickDraw LaserWriter's clock on a LocalTalk socket
     PD_WHY_TRAFFIC,        // LocalTalk traffic on a printer socket: the trial
     PD_WHY_NO_FRAME,       // the trial heard nothing: back as it was
+    PD_WHY_SENSE,          // W-1185: a printer with power on a LocalTalk socket, by its sense
 } pd_why_t;
 
 typedef struct {
@@ -93,8 +116,33 @@ int         pd_tick(pd_t *d, const pd_in_t in[], uint32_t now_ms, int idle, pd_a
 void        pd_applied(pd_t *d, const pd_act_t *act, uint32_t now_ms);
 // Whether socket i has heard LocalTalk in its present LocalTalk job, for main to save.
 int         pd_heard(const pd_t *d, int i);
-// Whether socket i may send AppleTalk now, after a tick: it does LocalTalk and is set to, or
-// it has heard LocalTalk and shows no printer (a handshake held ready with no frame since, or
-// a clock). One heard only before the restart waits PD_BOOT_MS from pd_init first.
+// Whether socket i may send AppleTalk now, after a tick. Never where its sense holds a printer.
+// Otherwise: it does LocalTalk and is set to; or it shows no printer (a handshake held ready
+// with no frame since, or a clock) and either its sense is held clear or it has heard
+// LocalTalk. One clear by its sense, or heard only before the restart, waits PD_BOOT_MS from
+// pd_init first, for the handshake and the clock to show.
 int         pd_may_send(const pd_t *d, const pd_in_t in[], int i, uint32_t now_ms);
 const char *pd_why_name(pd_why_t w);
+
+// W-1185: one socket's port sense, looked at every PD_SENSE_LOOK_MS or so. A level counts once
+// it has held PD_SENSE_HOLD_MS with no edge, and high only with the socket's node quiet too;
+// until another does, the last one held stands, so a printer answering or a frame on the line
+// changes nothing. The node's own frames leave edges like any other; a printer plugged in
+// while it sends holds low regardless, and stops it (localtalk_set_gate).
+typedef struct {
+    uint32_t run_at;       // when the present run began
+    uint8_t  run;          // its level, 1 high
+    uint8_t  on;           // a run has begun
+    uint8_t  held;         // PD_SENSE_*
+} pd_sense_t;
+
+// One look: the line's level now (1 high), whether it moved since the last look (an edge
+// counted), and when the socket's own node last queued a frame (0: never). Returns what is
+// held. A zeroed pd_sense_t holds PD_SENSE_NONE.
+uint8_t     pd_sense_look(pd_sense_t *s, int level, int moved, uint32_t tx_at, uint32_t now_ms);
+// Whether the cable test may send its frames out of a LocalTalk socket whose sense holds
+// `sense`: never into a printer with power. A test cable from the printer socket holds it so
+// too, that socket's transmitter idling at mark, and shows itself by carrying the printer
+// socket's handshake across (joined).
+int         pd_test_may_send(uint8_t sense, int joined);
+const char *pd_sense_name(uint8_t sense);

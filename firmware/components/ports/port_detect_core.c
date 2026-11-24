@@ -32,10 +32,12 @@ static int ready_by_localtalk(const pd_sock_t *s)
     return s->ready_since && s->frame_at && (int32_t)(s->frame_at - s->ready_since) >= 0;
 }
 
-// A printer on socket s, by what it shows: its handshake held ready by no Mac, or a clock.
+// A printer on socket s, by what it shows: its handshake held ready by no Mac, a clock, or
+// W-1185 its sense.
 static int printer_shows(const pd_sock_t *s, const pd_in_t *in)
 {
-    return in->clocked || (s->ready_since && !ready_by_localtalk(s));
+    return in->clocked || (s->ready_since && !ready_by_localtalk(s)) ||
+           in->sense == PD_SENSE_PRINTER;
 }
 
 // Takes in what socket i shows.
@@ -59,6 +61,10 @@ static void take_in(pd_sock_t *s, const pd_in_t *in, uint32_t now)
         s->heard = 1;
         s->heard_boot = 0;
     }
+    // W-1185: when the sense began to hold a printer. A frame heard meanwhile starts it again:
+    // the sense is stale while a network leaves the line no gap to hold another level in.
+    if (in->sense != PD_SENSE_PRINTER) s->sensed_at = 0;
+    else if (!s->sensed_at || (in->job == JOB_LT && in->frames)) s->sensed_at = now ? now : 1;
     // A printer plugged in where LocalTalk was heard: not a word more until it is heard again.
     if (in->job == JOB_LT && printer_shows(s, in)) s->heard = s->heard_boot = 0;
     if (in->job == JOB_PRINTER && in->junk) {
@@ -98,6 +104,7 @@ int pd_tick(pd_t *d, const pd_in_t in[], uint32_t now, int idle, pd_act_t *a)
         if (x->job == JOB_LT && s->trial) {
             if (s->frame_at) s->trial = 0;      // pd_applied cleared it as the trial began
             else if (x->fixed) { }
+            else if (x->sense == PD_SENSE_PRINTER) return act(a, i, JOB_PRINTER, PD_WHY_SENSE);
             else if (x->clocked) return act(a, i, JOB_PRINTER, PD_WHY_CLOCK);
             else if (s->ready_since && (int32_t)(s->ready_since - s->job_at) > 0)
                 return act(a, i, JOB_PRINTER, PD_WHY_HANDSHAKE);
@@ -115,10 +122,18 @@ int pd_tick(pd_t *d, const pd_in_t in[], uint32_t now, int idle, pd_act_t *a)
                 return act(a, i, JOB_PRINTER, PD_WHY_HANDSHAKE);
         }
 
+        // W-1185: a printer with power on a LocalTalk socket, by its sense held PD_READY_MS
+        // with no frame heard since: at once, however lately the network was heard. A frame
+        // pulses the line, so a live network never holds it low.
+        if (x->job == JOB_LT && x->can_print && s->sensed_at &&
+            since(now, s->sensed_at, PD_READY_MS) && since(now, s->job_at, PD_READY_MS))
+            return act(a, i, JOB_PRINTER, PD_WHY_SENSE);
+
         // LocalTalk, perhaps, on a printer socket with no printer on it (its line down, or up
-        // with nothing answering there, as a Mac on a direct cable may hold it): a trial,
-        // whatever the other socket does.
+        // with nothing answering there, as a Mac on a direct cable may hold it, and W-1185 no
+        // printer with power by its sense): a trial, whatever the other socket does.
         if (x->job == JOB_PRINTER && x->can_lt && (!x->ready || x->silent) && !x->clocked &&
+            x->sense != PD_SENSE_PRINTER &&
             s->junk_at[PD_JUNK_N - 1] && !since(now, s->junk_at[PD_JUNK_N - 1], PD_JUNK_MS) &&
             (!s->backoff_until || (int32_t)(now - s->backoff_until) >= 0))
             return act(a, i, JOB_LT, PD_WHY_TRAFFIC);
@@ -158,9 +173,12 @@ int pd_heard(const pd_t *d, int i)
 int pd_may_send(const pd_t *d, const pd_in_t in[], int i, uint32_t now)
 {
     if (i < 0 || i >= d->n || in[i].job != JOB_LT) return 0;
+    if (in[i].sense == PD_SENSE_PRINTER) return 0;     // W-1185: set to LocalTalk or not
     if (in[i].fixed) return 1;
     const pd_sock_t *s = &d->s[i];
-    if (!s->heard || printer_shows(s, &in[i])) return 0;
+    if (printer_shows(s, &in[i])) return 0;
+    if (in[i].sense == PD_SENSE_CLEAR) return since(now, d->boot_at, PD_BOOT_MS);
+    if (!s->heard) return 0;
     return !s->heard_boot || since(now, d->boot_at, PD_BOOT_MS);
 }
 
@@ -171,6 +189,39 @@ const char *pd_why_name(pd_why_t w)
     case PD_WHY_CLOCK:     return "a printer's clock";
     case PD_WHY_TRAFFIC:   return "LocalTalk traffic, on trial";
     case PD_WHY_NO_FRAME:  return "no LocalTalk frame on trial";
+    case PD_WHY_SENSE:     return "a printer with power";
     default:               return "nothing";
     }
+}
+
+uint8_t pd_sense_look(pd_sense_t *s, int level, int moved, uint32_t tx_at, uint32_t now)
+{
+    level = level ? 1 : 0;
+    // Its own frame queued within PD_SENSE_TX_MS, or in the moment since `now` was read. A
+    // frame queued long ago reads as long ago, however long: 2^31 ms is not the future.
+    uint32_t ago = now - tx_at;
+    int sending = tx_at && (ago < PD_SENSE_TX_MS || ago > UINT32_MAX - PD_SENSE_LOOK_MS);
+    if (moved || !s->on || level != s->run) {
+        s->run = (uint8_t)level;
+        s->run_at = now;
+        s->on = 1;
+    } else if (sending && level) {
+        // Not taken as clear while its own node sends. A low still holds: its frames would
+        // leave edges, and a printer plugged in mid-burst must stop them at once.
+        s->run_at = now;
+    } else if (since(now, s->run_at, PD_SENSE_HOLD_MS)) {
+        s->held = level ? PD_SENSE_CLEAR : PD_SENSE_PRINTER;
+    }
+    return s->held;
+}
+
+int pd_test_may_send(uint8_t sense, int joined)
+{
+    return sense != PD_SENSE_PRINTER || joined;
+}
+
+const char *pd_sense_name(uint8_t sense)
+{
+    return sense == PD_SENSE_CLEAR ? "clear" : sense == PD_SENSE_PRINTER ? "a printer with power"
+                                                                        : "none";
 }
