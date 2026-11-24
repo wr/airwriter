@@ -149,7 +149,9 @@ neither (Wells's measurements are in W-1185 and the port-sense design).
   line reads low. Qa alone pulls the GPIO to +0.5 V at most. Qb's collector follows its
   emitter below ground, to about −0.6 V, so when Qb pulls alone (an RS-232 printer, pin 8
   grounded by its cable) the GPIO sits between 0 and −0.35 V with its pull-up on, and near
-  −0.4 V on the pad's protection diode with it off, at under 0.1 mA through the 4.7 k.
+  −0.4 V on the pad's protection diode with it off, at under 0.1 mA through the 4.7 k. That
+  needs no Schottky: the ESP32-S3's datasheet sets no voltage limit on an I/O pin (−0.3 V is
+  the bottom of its input-low range) and tests latch-up at 200 mA.
 - The taps are on the connector side of the 15 k receive legs, which are unchanged. They load
   pin 8 with 28.8 k and pin 5 with 21.8 k: pin 5 the heavier, so an empty socket's receiver
   still reads mark, never a break.

@@ -106,6 +106,12 @@ of collector current; the loads leave the receiver's fail-safe at +25 to +120 mV
 stress stays inside 6 V at ±15 V. The below-ground collector is why the 4.7 k is there. No
 simpler circuit turned up: one transistor across the pair misses the StyleWriter.
 
+No Schottky diode on the sense lines. The ESP32-S3's −0.3 V is the bottom of its input-low
+range, not a rating: its datasheet sets no voltage limit on an I/O pin, and its latch-up test
+drives 200 mA into one, against under 0.1 mA here. The pin still reads low, which is the right
+answer, and only an RS-232 printer gets it there. A diode would add two parts in the board's
+most crowded corner for no gain.
+
 ## Firmware
 
 Per socket:
@@ -123,7 +129,5 @@ This relaxes W-1179's listen-first rule. It's W-1179's code to change, after the
 - Whether an Apple LocalTalk box joins the transmit and receive pairs, so AirWriter's own
   frames pulse the sense while it sends. The firmware should read the sense only while the
   socket is quiet.
-- Whether each sense line wants a Schottky diode to GND, two more parts, so an RS-232 printer
-  can't take the GPIO past −0.3 V even with the pull-up off.
 - A Mac on a direct cable reads as a printer. AirWriter then asks it the printer question,
   which a Mac ignores.
