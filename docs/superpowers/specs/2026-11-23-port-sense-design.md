@@ -78,8 +78,8 @@ Checks on the numbers:
   node sends. A frame lasts at most about 21 ms at 230.4 kbit/s, and the line rests between
   frames, but the frames of one exchange are only about 200 µs apart: polling every few
   milliseconds could miss the gaps and take back-to-back frames for one long low. So the
-  firmware watches for the line going high (an interrupt) and takes the sense as held only
-  after it has stayed low, with no high at all, for longer than a frame.
+  firmware counts the line's rising edges in hardware (a PCNT unit, no interrupt) and takes
+  the sense as held only after a window, longer than a frame, with no high at all.
 
 ## On the board
 
@@ -109,8 +109,9 @@ simpler circuit turned up: one transistor across the pair misses the StyleWriter
 No Schottky diode on the sense lines. The ESP32-S3's −0.3 V is the bottom of its input-low
 range, not a rating: its datasheet sets no voltage limit on an I/O pin, and its latch-up test
 drives 200 mA into one, against under 0.1 mA here. The pin still reads low, which is the right
-answer, and only an RS-232 printer gets it there. A diode would add two parts in the board's
-most crowded corner for no gain.
+answer, and only an RS-232 printer gets it there. The firmware turns the pull-ups on in
+app_main's first lines, so the pull-up-off stretch is short. A diode would add two parts in the
+board's most crowded corner for no gain.
 
 ## Firmware
 
@@ -121,13 +122,34 @@ Per socket:
 - **Sense low, held:** a powered serial printer, or a Mac on a direct cable. Never send
   AppleTalk there, and treat it as a printer port.
 
-This relaxes W-1179's listen-first rule. It's W-1179's code to change, after the board.
+This relaxes W-1179's listen-first rule.
+
+Built with the board change (SPEC 3.19, Port sense and Listening first):
+
+- The firmware turns each pin's pull-up on in app_main's first lines, and looks at each sense
+  every 50 ms, with a PCNT unit counting the line's rising edges between looks. It takes a
+  level as held only after a whole window with none, and high only with none of the socket's
+  own frames queued in the last 100 ms. Low doesn't wait for the node: its own frames leave
+  edges like any other, and a printer plugged in while it sends must stop it. Until another
+  holds, the last one stands. With no level held yet the socket listens as before.
+- Held clear, a LocalTalk socket sends once 1 s has passed since boot, for the handshake and
+  the clock to show; they still stop it.
+- Held as a printer, it sends nothing, set to LocalTalk or not, and takes the printer job after
+  2 s, however lately LocalTalk was heard. A frame heard meanwhile starts the 2 s again. A
+  printer socket holding one is never tried for LocalTalk, and a trial ends at once.
+- The cable test sends nothing into a LocalTalk socket holding a printer. A test cable holds it
+  too: the printer socket's driver idles at mark, about 3 V on the far pin 8, over Qa's 2.9 V
+  at worst, and the TX pair's 4.7 k bias holds it near 2.7 V even with DE off. So the test
+  first checks that the LocalTalk socket's handshake out reaches the printer socket's handshake
+  in, as a test cable carries it, and runs if it does.
 
 ## Left open
 
 - Loaded readings on a built board, and the 300's pins while it clocks for a host.
 - Whether an Apple LocalTalk box joins the transmit and receive pairs, so AirWriter's own
-  frames pulse the sense while it sends. The firmware should read the sense only while the
-  socket is quiet.
+  frames pulse the sense while it sends. The edge count keeps them out either way. If it joins
+  them through its transformer, the TX pair's 4.7 k bias and the sense's own loads put about
+  1.4 V on pin 8 between frames by the numbers, under Qa's 1.8 V at worst.
+- Whether a test cable holds the sense low as the numbers say (above).
 - A Mac on a direct cable reads as a printer. AirWriter then asks it the printer question,
   which a Mac ignores.

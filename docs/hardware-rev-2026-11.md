@@ -168,8 +168,8 @@ neither (Wells's measurements are in W-1185 and the port-sense design).
   the board's 0.15 mm rule, so the combined panel's 0.2 mm default counts them among its
   false clearance items (about 220 in all).
 - The LC leaves all twelve off: it has one socket and never sends AppleTalk.
-- The firmware doesn't read the sense yet (W-1179's listen-first rule still stands); it's
-  untested on hardware.
+- The firmware reads it (SPEC 3.19, Port sense and Listening first); it's untested on
+  hardware.
 
 ## The LC's one light: D26 and JP1
 

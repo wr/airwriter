@@ -335,8 +335,15 @@ Traps already explained in a code comment are listed only when the comment is ea
   AppleTalk port fed about 3 sheets, junk every 8 or 9 lines with line feeds and form feeds. With
   SELECT off it took 20 echoes with nothing on paper and printed them when SELECT was pressed:
   a deselected ImageWriter keeps what it is sent, and looks like an empty socket (not ready).
-  Nothing is sent on a rev 2026.11 socket until LocalTalk is heard there (SPEC 3.19, Listening
-  first); don't add a send that bypasses `localtalk_set_hold`.
+  Nothing is sent on a rev 2026.11 socket until its port sense reads clear or LocalTalk is heard
+  there, and nothing while the sense holds a printer (SPEC 3.19, Listening first); don't add a
+  send that bypasses `localtalk_set_hold`.
+- **A test cable from port 1 to port 2 makes the port sense read a printer** (rev 2026.11, by
+  the circuit's numbers; W-1185). A socket on the printer job idles its driver at mark, about
+  3 V on the other socket's pin 8, over Qa's threshold (1.8 to 2.9 V over parts and
+  temperature); with DE off the TX pair's 4.7 k bias still holds it near 2.7 V, inside that
+  spread. Anything that refuses on a low sense must tell a test cable apart: the cable test
+  does it by the handshake (`cable_into_printer`).
 - **TashTalk can go deaf to a fresh UART2 link with the node off** (seen once on board 1, W-1055):
   no transmit and no relay, while its CTS read ready and it took the 1024-NUL sync. A node-mode
   boot in between cleared it; the PIC is never reset by an ESP32 reboot. The cable test retries

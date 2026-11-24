@@ -62,14 +62,22 @@ void      localtalk_park(int sock);
 // Frames TashTalk relayed with a good FCS, from any node, quiet or not, since start: a socket
 // whose count moves has a LocalTalk network on it.
 uint32_t  localtalk_frames(int sock);
+// W-1185: when the socket's node last queued a frame for TashTalk, its own or the cable test's
+// (localtalk_send_raw), in esp_timer milliseconds; 0 if never. Its frames may reach its own
+// socket's sense through a LocalTalk box, so the sense waits them out.
+uint32_t  localtalk_tx_at(int sock);
 // W-1179: listening. The node sends nothing (TashTalk answers for no node, and lookups, the PAP
 // client and echoes send nothing) while frames are still heard and counted, until main lets it
-// once LocalTalk has been heard on its socket: frames sent into a printer print as junk,
-// selected or not. Letting it acquires a node as at start. Set before start, the node starts
+// once LocalTalk has been heard on its socket or W-1185 its sense is held clear: frames sent
+// into a printer print as junk, selected or not. Letting it acquires a node as at start. Set before start, the node starts
 // listening. The switch is remembered meanwhile, and the cable test's frames
 // (localtalk_send_raw) still go.
 void      localtalk_set_hold(int sock, int hold);
 int       localtalk_holding(int sock);
+// W-1185: asked before each of a node's frames, on the LocalTalk task; 0 drops it. Main's
+// hold follows on its next check, but a printer switched on in a socket stops the frames as
+// soon as its sense holds it. The cable test's frames (localtalk_send_raw) aren't asked.
+void      localtalk_set_gate(int (*may_send)(int sock));
 // A side running, not quiet, and answering as the ImageWriter (W-1082): what the
 // AppleTalk Port card and /api/status call on. A node running for a
 // LaserWriter alone is not.

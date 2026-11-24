@@ -2,7 +2,7 @@
 //
 // W-1179: what each rev 2026.11 socket has plugged in, worked out from what it shows. Socket 0
 // is J2 (port 1), socket 1 J4 (port 2); jobs 1 printer, 2 LocalTalk. W-1186: each socket by
-// itself, so both may do LocalTalk.
+// itself, so both may do LocalTalk. W-1185: each socket's port sense.
 #include "test_util.h"
 #include "port_detect_core.h"
 
@@ -529,6 +529,279 @@ static void test_two_trials_at_once(void)
     }
 }
 
+// ------------------------------------------------------------------ W-1185: the port sense
+
+enum { NONE = PD_SENSE_NONE, CLEAR = PD_SENSE_CLEAR, PRINTER = PD_SENSE_PRINTER };
+
+// A LaserWriter switched on before it was cabled in: the socket hears nothing, but its sense
+// is held clear, so it sends at once and the LaserWriter is found.
+static void test_a_clear_sense_sends_unheard(void)
+{
+    rig_t r;
+    rig(&r, PR, LT);
+    r.in[1].sense = CLEAR;
+    run(&r, 500, NULL);
+    CHECK_EQ_INT(may(&r, 1), 0);                 // the handshake and clock get PD_BOOT_MS
+    run(&r, PD_BOOT_MS, NULL);
+    CHECK_EQ_INT(may(&r, 1), 1);
+    CHECK_EQ_INT(pd_heard(&r.d, 1), 0);
+    CHECK_EQ_INT(may(&r, 0), 0);                 // a printer socket never sends, clear or not
+    r.in[0].sense = CLEAR;
+    run(&r, 500, NULL);
+    CHECK_EQ_INT(may(&r, 0), 0);
+    CHECK_EQ_INT(run(&r, 600000, NULL), 0);      // and neither changes job for it
+    CHECK_EQ_INT(r.in[0].job, PR);
+    CHECK_EQ_INT(r.in[1].job, LT);
+    // With no level held yet the socket listens, as without a sense.
+    rig(&r, PR, LT);
+    run(&r, 60000, NULL);
+    CHECK_EQ_INT(may(&r, 1), 0);
+}
+
+// The handshake and the clock still count with the sense clear: a Mac on a direct cable that
+// holds its handshake ready is heard first, as before.
+static void test_a_clear_sense_keeps_the_handshake_and_clock(void)
+{
+    rig_t r;
+    rig(&r, PR, LT);
+    r.in[1].sense = CLEAR;
+    r.in[1].ready = 1;
+    run(&r, PD_BOOT_MS + 500, NULL);
+    CHECK_EQ_INT(may(&r, 1), 0);
+    r.in[1].frames = 1;
+    run(&r, 500, NULL);
+    CHECK_EQ_INT(may(&r, 1), 1);
+    rig(&r, PR, LT);
+    r.in[1].sense = CLEAR;
+    run(&r, PD_BOOT_MS, NULL);
+    CHECK_EQ_INT(may(&r, 1), 1);
+    r.in[1].clocked = 1;                         // a QuickDraw LaserWriter's clock
+    CHECK_EQ_INT(may(&r, 1), 0);
+    pd_act_t a;
+    CHECK_EQ_INT(run(&r, PD_READY_MS, &a), 1);
+    CHECK_EQ_INT(a.why, PD_WHY_CLOCK);
+}
+
+// A deselected ImageWriter plugged into a socket that heard LocalTalk: its sense holds a
+// printer, so not another frame, and the socket becomes a printer port once that has held.
+static void test_a_sensed_printer_stops_sending_and_takes_the_socket(void)
+{
+    rig_t r;
+    rig(&r, PR, LT);
+    r.in[1].sense = CLEAR;
+    r.in[1].frames = 1;
+    run(&r, 40000, NULL);
+    CHECK_EQ_INT(may(&r, 1), 1);
+    r.in[1].sense = PRINTER;                     // handshake down: deselected
+    pd_act_t a;
+    CHECK_EQ_INT(run(&r, 500, &a), 0);
+    CHECK_EQ_INT(may(&r, 1), 0);                 // the next tick
+    CHECK_EQ_INT(pd_heard(&r.d, 1), 0);
+    CHECK_EQ_INT(run(&r, PD_READY_MS, &a), 1);   // held PD_READY_MS, quiet or not lately
+    CHECK_EQ_INT(a.sock, 1);
+    CHECK_EQ_INT(a.job, PR);
+    CHECK_EQ_INT(a.why, PD_WHY_SENSE);
+    CHECK_EQ_INT(r.in[0].job, PR);
+    CHECK_EQ_INT(run(&r, 60000, NULL), 0);       // it stays a printer port
+    CHECK_EQ_INT(may(&r, 1), 0);
+}
+
+// Frames heard while the sense holds a printer: it is stale (a frame pulses the line, and a
+// network busy enough leaves it no gap to hold another level in), so the socket keeps
+// LocalTalk, sending nothing. Held low once the frames stop: a printer after all.
+static void test_frames_keep_localtalk_against_the_sense(void)
+{
+    rig_t r;
+    rig(&r, PR, LT);
+    run(&r, 5000, NULL);
+    r.in[1].sense = PRINTER;
+    for (int k = 0; k < 8; k++) {
+        r.in[1].frames = 1;
+        CHECK_EQ_INT(run(&r, 1000, NULL), 0);
+        CHECK_EQ_INT(may(&r, 1), 0);
+    }
+    CHECK_EQ_INT(r.in[1].job, LT);
+    r.in[1].sense = CLEAR;                       // the line rests between frames
+    run(&r, 500, NULL);
+    CHECK_EQ_INT(may(&r, 1), 1);
+    r.in[1].sense = PRINTER;
+    r.in[1].frames = 1;
+    run(&r, 500, NULL);
+    pd_act_t a;
+    CHECK_EQ_INT(run(&r, PD_READY_MS - 500, NULL), 0);
+    CHECK_EQ_INT(run(&r, 500, &a), 1);
+    CHECK_EQ_INT(a.sock, 1);
+    CHECK_EQ_INT(a.why, PD_WHY_SENSE);
+}
+
+// A socket set to LocalTalk is never changed, and never sends into a printer with power.
+static void test_a_sensed_printer_on_a_socket_set_to_localtalk(void)
+{
+    rig_t r;
+    rig(&r, PR, LT);
+    r.in[1].fixed = 1;
+    r.in[1].sense = PRINTER;
+    CHECK_EQ_INT(run(&r, 60000, NULL), 0);
+    CHECK_EQ_INT(r.in[1].job, LT);
+    CHECK_EQ_INT(may(&r, 1), 0);
+    r.in[1].sense = CLEAR;
+    run(&r, 500, NULL);
+    CHECK_EQ_INT(may(&r, 1), 1);
+    r.in[1].sense = NONE;
+    run(&r, 500, NULL);
+    CHECK_EQ_INT(may(&r, 1), 1);
+}
+
+// A printer socket whose sense holds a printer is never tried for LocalTalk, whatever its line
+// says, and a trial ends the moment the sense holds one.
+static void test_a_sensed_printer_blocks_and_ends_a_trial(void)
+{
+    rig_t r;
+    rig(&r, PR, LT);
+    run(&r, 40000, NULL);
+    r.in[0].sense = PRINTER;                     // a deselected ImageWriter, switched on
+    r.in[0].silent = 1;
+    for (int k = 0; k < 6; k++) {
+        r.in[0].junk = 1;
+        CHECK_EQ_INT(run(&r, 1000, NULL), 0);
+    }
+    CHECK_EQ_INT(r.in[0].job, PR);
+    // Junk while the printer was off starts a trial; switched on, it ends it.
+    rig(&r, PR, LT);
+    run(&r, 40000, NULL);
+    r.in[0].sense = CLEAR;
+    for (int k = 0; k < 3; k++) {
+        r.in[0].junk = 1;
+        run(&r, 1000, NULL);
+    }
+    CHECK_EQ_INT(r.in[0].job, LT);
+    CHECK_EQ_INT(may(&r, 0), 1);                 // clear: the trial's node may look around
+    r.in[0].sense = PRINTER;
+    pd_act_t a;
+    CHECK_EQ_INT(run(&r, 500, &a), 1);
+    CHECK_EQ_INT(a.sock, 0);
+    CHECK_EQ_INT(a.job, PR);
+    CHECK_EQ_INT(a.why, PD_WHY_SENSE);
+    CHECK_EQ_INT(r.d.s[0].trial, 0);
+    CHECK_EQ_INT(may(&r, 0), 0);
+}
+
+// A level counts once it has held PD_SENSE_HOLD_MS with no edge and the node quiet, looked at
+// every PD_SENSE_LOOK_MS.
+static void test_the_sense_holds_a_level(void)
+{
+    pd_sense_t s = { 0 };
+    uint32_t t = 5000;
+    CHECK_EQ_INT(pd_sense_look(&s, 1, 0, 0, t), NONE);       // the first look starts a run
+    t += PD_SENSE_LOOK_MS;
+    CHECK_EQ_INT(pd_sense_look(&s, 1, 0, 0, t), CLEAR);
+    // A printer plugged in: one edge, then low.
+    t += PD_SENSE_LOOK_MS;
+    CHECK_EQ_INT(pd_sense_look(&s, 0, 1, 0, t), CLEAR);
+    t += PD_SENSE_LOOK_MS;
+    CHECK_EQ_INT(pd_sense_look(&s, 0, 0, 0, t), PRINTER);
+    // It answers a question: edges, and the line back low. Nothing changes.
+    for (int k = 0; k < 5; k++) {
+        t += PD_SENSE_LOOK_MS;
+        CHECK_EQ_INT(pd_sense_look(&s, 0, 1, 0, t), PRINTER);
+    }
+    // Unplugged with no edge counted (the look between): the level alone restarts the run.
+    t += PD_SENSE_LOOK_MS;
+    CHECK_EQ_INT(pd_sense_look(&s, 1, 0, 0, t), PRINTER);
+    t += PD_SENSE_HOLD_MS - 1;
+    CHECK_EQ_INT(pd_sense_look(&s, 1, 0, 0, t), PRINTER);    // a late look early is not enough
+    t += 1;
+    CHECK_EQ_INT(pd_sense_look(&s, 1, 0, 0, t), CLEAR);
+}
+
+// LocalTalk frames pulse the line: every look with an edge restarts the run, so a busy network
+// holds nothing new, and a low sampled mid-frame never reads as a printer.
+static void test_frames_never_hold_the_sense(void)
+{
+    pd_sense_t s = { 0 };
+    uint32_t t = 5000;
+    pd_sense_look(&s, 1, 0, 0, t);
+    t += PD_SENSE_LOOK_MS;
+    CHECK_EQ_INT(pd_sense_look(&s, 1, 0, 0, t), CLEAR);
+    for (int k = 0; k < 100; k++) {              // a frame in every window, caught low or high
+        t += PD_SENSE_LOOK_MS;
+        CHECK_EQ_INT(pd_sense_look(&s, k & 1, 1, 0, t), CLEAR);
+    }
+    pd_sense_t n = { 0 };                        // and from boot, nothing at all
+    for (int k = 0; k < 100; k++) {
+        t += PD_SENSE_LOOK_MS;
+        CHECK_EQ_INT(pd_sense_look(&n, 0, 1, 0, t), NONE);
+    }
+}
+
+// The socket's own node sending: its frames may reach the line through a LocalTalk box, so a
+// high is not taken until PD_SENSE_TX_MS after its last frame. A low holds regardless: its
+// frames would leave edges, and a printer plugged in mid-burst must stop them.
+static void test_the_sense_waits_out_its_own_frames(void)
+{
+    pd_sense_t s = { 0 };
+    uint32_t t = 5000, tx = t;
+    CHECK_EQ_INT(pd_sense_look(&s, 1, 0, tx, t), NONE);
+    for (int k = 0; k < 6; k++) {                // high, steady, while it sends: not clear yet
+        t += PD_SENSE_LOOK_MS;
+        tx = t - 10;
+        CHECK_EQ_INT(pd_sense_look(&s, 1, 0, tx, t), NONE);
+    }
+    t = tx + PD_SENSE_TX_MS - 1;
+    CHECK_EQ_INT(pd_sense_look(&s, 1, 0, tx, t), NONE);
+    t = tx + PD_SENSE_TX_MS;                     // quiet from here: a run starts at the last look
+    CHECK_EQ_INT(pd_sense_look(&s, 1, 0, tx, t), NONE);
+    t += PD_SENSE_HOLD_MS;
+    CHECK_EQ_INT(pd_sense_look(&s, 1, 0, tx, t), CLEAR);
+    // A printer plugged in while the node keeps sending: held within a look or two.
+    t += PD_SENSE_LOOK_MS;
+    CHECK_EQ_INT(pd_sense_look(&s, 0, 0, t - 5, t), CLEAR);
+    t += PD_SENSE_LOOK_MS;
+    CHECK_EQ_INT(pd_sense_look(&s, 0, 0, t - 5, t), PRINTER);
+}
+
+// A frame queued in the moment after the look read the time is sending, not 49 days ago; one
+// queued 2^31 ms ago is long ago, not in the future.
+static void test_the_sense_reads_its_frames_times_right(void)
+{
+    pd_sense_t s = { 0 };
+    uint32_t t = 5000;
+    pd_sense_look(&s, 0, 0, 0, t);
+    t += PD_SENSE_LOOK_MS;
+    CHECK_EQ_INT(pd_sense_look(&s, 0, 0, 0, t), PRINTER);
+    t += PD_SENSE_LOOK_MS;                       // unplugged: high from here, steady
+    CHECK_EQ_INT(pd_sense_look(&s, 1, 0, 0, t), PRINTER);
+    t += PD_SENSE_LOOK_MS;
+    CHECK_EQ_INT(pd_sense_look(&s, 1, 0, t + 1, t), PRINTER);     // queued just after
+    t += PD_SENSE_LOOK_MS;
+    uint32_t tx = t - PD_SENSE_LOOK_MS + 1;
+    CHECK_EQ_INT(pd_sense_look(&s, 1, 0, tx, t), PRINTER);
+    t = tx + PD_SENSE_TX_MS + PD_SENSE_HOLD_MS;
+    CHECK_EQ_INT(pd_sense_look(&s, 1, 0, tx, t), CLEAR);
+    // A frame long ago, past half the clock's range: the sense holds as if never sent.
+    pd_sense_t o = { 0 };
+    t = 0x90000000u;
+    tx = t - 0x80000000u;
+    pd_sense_look(&o, 1, 0, tx, t);
+    t += PD_SENSE_LOOK_MS;
+    CHECK_EQ_INT(pd_sense_look(&o, 1, 0, tx, t), CLEAR);
+    tx = t - 0xF0000000u;
+    t += PD_SENSE_LOOK_MS;
+    CHECK_EQ_INT(pd_sense_look(&o, 0, 1, tx, t), CLEAR);
+    t += PD_SENSE_LOOK_MS;
+    CHECK_EQ_INT(pd_sense_look(&o, 0, 0, tx, t), PRINTER);
+}
+
+// The cable test sends into a socket held clear, or with no sense, but into one holding a
+// printer only when the test cable shows itself.
+static void test_the_cable_test_never_sends_into_a_printer(void)
+{
+    CHECK_EQ_INT(pd_test_may_send(NONE, 0), 1);
+    CHECK_EQ_INT(pd_test_may_send(CLEAR, 0), 1);
+    CHECK_EQ_INT(pd_test_may_send(PRINTER, 0), 0);
+    CHECK_EQ_INT(pd_test_may_send(PRINTER, 1), 1);
+}
+
 int main(void)
 {
     test_quiet_sockets_keep_their_jobs();
@@ -553,5 +826,16 @@ int main(void)
     test_a_socket_set_to_localtalk_sends();
     test_a_printer_showing_ends_a_trial();
     test_two_trials_at_once();
+    test_a_clear_sense_sends_unheard();
+    test_a_clear_sense_keeps_the_handshake_and_clock();
+    test_a_sensed_printer_stops_sending_and_takes_the_socket();
+    test_frames_keep_localtalk_against_the_sense();
+    test_a_sensed_printer_on_a_socket_set_to_localtalk();
+    test_a_sensed_printer_blocks_and_ends_a_trial();
+    test_the_sense_holds_a_level();
+    test_frames_never_hold_the_sense();
+    test_the_sense_waits_out_its_own_frames();
+    test_the_sense_reads_its_frames_times_right();
+    test_the_cable_test_never_sends_into_a_printer();
     TEST_END;
 }
