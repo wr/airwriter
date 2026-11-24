@@ -184,6 +184,8 @@ def upward_flats(part, ceiling_z, min_area=MIN_BAND_AREA):
 
 
 class TestTray(unittest.TestCase):
+    rim = p.Z_WALL_TOP
+
     @classmethod
     def setUpClass(cls):
         cls.t = case.tray()
@@ -217,11 +219,11 @@ class TestTray(unittest.TestCase):
         # every probe below, so a generic "* volume / p.WALL" cancels to
         # the same constant for all of them and checks nothing extra.
         from build123d import Box, Pos
-        # The seat band runs Z_LID_UNDER..Z_WALL_TOP, under the 0.40 top
+        # The seat band runs Z_LID_UNDER up to the rim, under the 0.40 top
         # chamfer, so its probes sit 0.1 inside both. Below the seat every
         # wall is THIN_WALL.
-        seat_z = (p.Z_LID_UNDER + p.Z_WALL_TOP - p.TOP_CHAMFER) / 2
-        seat_h = p.Z_WALL_TOP - p.TOP_CHAMFER - p.Z_LID_UNDER - 0.2
+        seat_z = (p.Z_LID_UNDER + self.rim - p.TOP_CHAMFER) / 2
+        seat_h = self.rim - p.TOP_CHAMFER - p.Z_LID_UNDER - 0.2
         probes = [
             ("west seat", Pos(-p.WALL / 2, 90.0, seat_z), (p.WALL, 4.0, seat_h),
              MIN_WALL * 4.0 * seat_h),
@@ -242,6 +244,15 @@ class TestTray(unittest.TestCase):
             probe = pos * Box(*size)
             got = (self.t & probe).volume
             self.assertGreaterEqual(got, want - 0.05, name)
+
+
+class TestLCTray(TestTray):
+    """The LC's taller tray prints as the tray does."""
+    rim = p.Z_LC_WALL_TOP
+
+    @classmethod
+    def setUpClass(cls):
+        cls.t = case.lc_tray()
 
 
 class TestLid(unittest.TestCase):

@@ -32,14 +32,14 @@ class TestLCFrame(unittest.TestCase):
 
     def test_glued_acrylic_sits_just_under_the_rim_clear_of_the_shells(self):
         # The frame stops GLUE_LINE short of the acrylic's underside. Its face
-        # must never stand proud of the tray's rim, and should sit close enough
+        # must never stand proud of the LC tray's rim, and should sit close enough
         # under it to read flush; its underside never below J2/J4's shells.
         bb = self.frame.bounding_box()
         self.assertAlmostEqual(bb.min.Z, 0.0, places=3)
         self.assertAlmostEqual(bb.max.Z + p.GLUE_LINE, p.ACRYLIC_UNDERSIDE, places=3)
         self.assertGreaterEqual(p.ACRYLIC_UNDERSIDE, p.MINIDIN_TOP - 1e-6)
         face = p.ACRYLIC_UNDERSIDE + p.ACRYLIC
-        rim = case.shell().bounding_box().max.Z
+        rim = case.shell(p.Z_LC_WALL_TOP).bounding_box().max.Z
         self.assertLessEqual(face, rim)
         self.assertGreaterEqual(face, rim - 0.20)
 

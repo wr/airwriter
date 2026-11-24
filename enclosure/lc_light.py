@@ -16,7 +16,7 @@ Two chambers in one block, from the board to LC_LIGHT_PLAY under the acrylic:
   "this will also help stabilize the switch and center the part").
 
 D26 sits mid-board, far from the frame, so this is a part of its own rather
-than an arm across the clear top (Wells): set over D26 and SW3 before the top
+than an arm across the top (Wells): set over D26 and SW3 before the top
 goes on, it stands on the board and the acrylic traps it. Printed cap-down."""
 from build123d import Cylinder, Part, Pos
 

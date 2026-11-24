@@ -210,21 +210,27 @@ an open item in the spec; re-cut this if the chosen insert differs."""
 
 INSERT_DEPTH = 4.50
 
-ACRYLIC = 1.50
-"""The LC's clear cast-acrylic top (hardware/panel/airwriter-lc-top.svg):
-1/16 in, sold as 1.5 mm (Wells, 2026-10-29, after a day on 1 mm: his library
-had only 1 and 3, and 3 would stand 1.5 proud of the rim with no room to sink
-it past the mini-DINs). The frame stands it so its face is ACRYLIC_FACE_UNDER
-under the rim, whatever its thickness; at 1.50 it also rests on J2/J4's
-shells, as the Pro's panel does, and a sheet up to 1.60 still sits no prouder
-than the rim."""
+ACRYLIC = 3.00
+"""The LC's top (hardware/panel/airwriter-lc-top.svg): 3 mm frosted cast
+acrylic, matte, the art lasered into it (Wells, 2026-11-24, after Big Mess
+o' Wires' Frosted Ice case). It was 1/16 in clear from 2026-10-29, chosen
+then because 3 mm stood 1.5 proud of the Pro's rim; now the LC has a tray of
+its own (case.lc_tray), its rim raised to take the sheet. Cast sheet varies:
+measure it before printing the tray, and set this to what it is (1/8 in
+sheet can be 3.2), or the face stands proud by the difference."""
 
 ACRYLIC_FACE_UNDER = 0.10
-"""How far the acrylic's face sits under the tray's rim: close enough to read
-flush, never proud."""
+"""How far the acrylic's face sits under the LC tray's rim: close enough to
+read flush, never proud."""
 
-ACRYLIC_UNDERSIDE = CAVITY + PANEL - ACRYLIC_FACE_UNDER - ACRYLIC
-"""The acrylic's underside above the board: 13.04 for 1.5 mm, on the shells."""
+ACRYLIC_UNDERSIDE = CAVITY
+"""The acrylic's underside above the board: on J2/J4's shells, as the Pro's
+panel is, and on the LC frame's glued leg tops, 13.04."""
+
+Z_LC_WALL_TOP = ACRYLIC_UNDERSIDE + ACRYLIC + ACRYLIC_FACE_UNDER
+"""The LC tray's rim: 1.50 above the Pro's Z_WALL_TOP for a 3 mm sheet, which
+is 1.40 thicker than the panel and sits ACRYLIC_FACE_UNDER under the rim,
+where the panel is flush."""
 
 GLUE_LINE = 0.10
 """The UV-cure glue between the LC frame's leg tops and the acrylic (Wells,

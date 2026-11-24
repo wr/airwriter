@@ -1057,6 +1057,51 @@ def _corners(x0, y0, x1, y1):
     ]
 
 
+class TestLCTray(unittest.TestCase):
+    """The LC's tray is the tray with its rim raised for the 3 mm sheet:
+    nothing under the Pro's rim moves, and the sheet on J2/J4's shells sits
+    just under the new one."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.t = case.tray()
+        cls.lc = case.lc_tray()
+
+    def test_is_one_valid_solid(self):
+        self.assertTrue(self.lc.is_valid)
+        self.assertEqual(len(self.lc.solids()), 1)
+
+    def test_the_rim_takes_the_sheet(self):
+        bb = self.lc.bounding_box()
+        self.assertAlmostEqual(bb.min.Z, p.Z_FLOOR_BOTTOM, places=3)
+        self.assertAlmostEqual(bb.max.Z, p.Z_LC_WALL_TOP, places=3)
+        self.assertAlmostEqual(p.ACRYLIC_UNDERSIDE, p.MINIDIN_TOP, places=6)
+        face = p.ACRYLIC_UNDERSIDE + p.ACRYLIC
+        self.assertAlmostEqual(p.Z_LC_WALL_TOP - face, p.ACRYLIC_FACE_UNDER, places=6)
+        self.assertAlmostEqual(p.Z_LC_WALL_TOP - p.Z_WALL_TOP,
+                               p.ACRYLIC + p.ACRYLIC_FACE_UNDER - p.PANEL, places=6)
+
+    def test_below_the_pros_rim_it_is_the_same_tray(self):
+        from build123d import Box, Pos
+        z = p.Z_WALL_TOP - p.TOP_CHAMFER
+        below = Pos(p.BOARD_W / 2, p.BOARD_L / 2, (z + p.Z_FLOOR_BOTTOM - 1) / 2) * Box(
+            p.EXT_W + 10, p.EXT_L + 10, z - p.Z_FLOOR_BOTTOM + 1)
+        a, b = self.t & below, self.lc & below
+        self.assertAlmostEqual(a.volume, b.volume, places=2)
+        self.assertAlmostEqual((a - b).volume, 0.0, places=2)
+
+    def test_the_raised_wall_is_whole_all_round(self):
+        # From the Pro's chamfer up to the LC's, the wall is the full ring
+        # between the outside and the pocket: no opening reaches it.
+        z0, z1 = p.Z_WALL_TOP - p.TOP_CHAMFER, p.Z_LC_WALL_TOP - p.TOP_CHAMFER
+        zc, h = (z0 + z1) / 2, z1 - z0
+        ring = (case._rounded_box(p.EXT_W, p.EXT_L, h, p.BOARD_W / 2, p.BOARD_L / 2, zc, p.EXT_R)
+                - case._rounded_box(p.POCKET_W, p.POCKET_L, h + 1, p.BOARD_W / 2, p.BOARD_L / 2,
+                                    zc, p.POCKET_R))
+        self.assertAlmostEqual((ring - self.lc).volume, 0.0, places=2)
+        self.assertAlmostEqual((self.lc & ring).volume, ring.volume, places=2)
+
+
 class TestCornerRounding(unittest.TestCase):
     """Task 10: the board (hardware/airwriter/airwriter.kicad_pcb) and the
     art panel it shares an outline with both have R2.0 corners, not square

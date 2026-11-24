@@ -14,6 +14,7 @@ OUT = pathlib.Path(__file__).resolve().parent / "out"
 
 PARTS = {
     "airwriter-tray": case.tray,
+    "airwriter-lc-tray": case.lc_tray,
     "airwriter-lc-lid": case.lc_lid,
     "airwriter-lc-frame": lc_frame.lc_frame,
     "airwriter-lc-light": lc_light.lc_light,

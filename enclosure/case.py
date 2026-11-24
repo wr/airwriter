@@ -1,4 +1,4 @@
-"""The AirWriter enclosure: a tray shared by both builds, and an LC lid.
+"""The AirWriter enclosure: the tray, the LC's taller one, and an LC lid.
 
 Everything is modelled in the case frame (see board_geom): X=0 is the west
 wall's inner face, Y=0 is the front (port) wall's inner face, Z=0 is the
@@ -37,8 +37,9 @@ def _rounded_box(w: float, l: float, h: float, cx: float, cy: float,
     return box.fillet(radius, verticals)
 
 
-def shell() -> Part:
-    """Floor plus four walls, hollow from the floor's top face upward.
+def shell(rim: float = p.Z_WALL_TOP) -> Part:
+    """Floor plus four walls, hollow from the floor's top face upward to the
+    rim at `rim`: Z_WALL_TOP, or the LC tray's Z_LC_WALL_TOP.
 
     The board (and the art panel it shares its outline with) has R2.0
     corners, not square ones -- board_geom.corner_radius() reads that off
@@ -58,8 +59,8 @@ def shell() -> Part:
     and the carve-outs are all subtracted by tray().
     """
     outer = _rounded_box(
-        p.EXT_W, p.EXT_L, p.EXT_H,
-        p.BOARD_W / 2, p.BOARD_L / 2, (p.Z_WALL_TOP + p.Z_FLOOR_BOTTOM) / 2,
+        p.EXT_W, p.EXT_L, rim - p.Z_FLOOR_BOTTOM,
+        p.BOARD_W / 2, p.BOARD_L / 2, (rim + p.Z_FLOOR_BOTTOM) / 2,
         p.EXT_R)
     # The bottom outside rim: every edge of the underside face (four lines,
     # four corner arcs), chamfered at 45 degrees -- see params.BOTTOM_CHAMFER.
@@ -72,8 +73,8 @@ def shell() -> Part:
     outer = outer.chamfer(p.TOP_CHAMFER, None, top.edges())
 
     cavity = _rounded_box(
-        p.POCKET_W, p.POCKET_L, p.Z_WALL_TOP - p.Z_FLOOR_TOP,
-        p.BOARD_W / 2, p.BOARD_L / 2, (p.Z_WALL_TOP + p.Z_FLOOR_TOP) / 2,
+        p.POCKET_W, p.POCKET_L, rim - p.Z_FLOOR_TOP,
+        p.BOARD_W / 2, p.BOARD_L / 2, (rim + p.Z_FLOOR_TOP) / 2,
         p.POCKET_R)
 
     return outer - cavity - wall_relief()
@@ -597,8 +598,9 @@ def lc_lid() -> Part:
     return body - plunger
 
 
-def tray() -> Part:
-    """The finished tray, shared by Pro and LC.
+def tray(rim: float = p.Z_WALL_TOP) -> Part:
+    """The finished tray: the Pro's, and the LC's under the printed LC lid.
+    lc_tray() raises its `rim`.
 
     No carveouts() term: RULING 1 (task-6-report.md) found the brief's
     version vacuous -- the cavity is one open prism and U4/R3/U9 all sit well
@@ -613,8 +615,18 @@ def tray() -> Part:
     Z_WALL_TOP and notched the rim, and a roof's layers bridge the same span
     anyway.
     """
-    body = shell() + standoffs()
+    body = shell(rim) + standoffs()
     tray = (body - screw_holes() - foot_pockets() - label_recess() - port_cutouts()
             - reset_pinhole())
     slot = dip_slot()
     return tray - slot if slot is not None else tray
+
+
+def lc_tray() -> Part:
+    """The LC's tray under its 3 mm acrylic top: the same tray with its rim
+    raised to Z_LC_WALL_TOP, 1.50 taller for a 3 mm sheet. The sheet rests on
+    J2/J4's shells, as the Pro's panel does, so everything under it, the
+    openings and the frame included, stays where it is, and the taller wall
+    takes the sheet's extra thickness: its face sits ACRYLIC_FACE_UNDER under
+    the rim."""
+    return tray(p.Z_LC_WALL_TOP)
