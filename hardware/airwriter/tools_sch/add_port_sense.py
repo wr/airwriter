@@ -17,7 +17,6 @@ Q1 and stops.
 """
 import copy
 import os
-import re
 import sys
 import uuid
 
@@ -62,9 +61,8 @@ def at(x, y, rot=0):
     return L(S('at'), num(x), num(y), num(rot))
 
 
-def effects(hide=False):
-    e = [S('effects'), L(S('font'), L(S('size'), Sym('1.27'), Sym('1.27')))]
-    return e
+def effects():
+    return [S('effects'), L(S('font'), L(S('size'), Sym('1.27'), Sym('1.27')))]
 
 
 def prop(name, value, x, y, hide=False):

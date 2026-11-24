@@ -1,4 +1,4 @@
-# Port sense on rev 2026.11 — design
+# Port sense on rev 2026.11
 
 `W-1185 Rev 2026.11: sense each port's receive pair, so a switched-on printer that isn't ready
 is seen`. Started with Wells on 2026-11-23, after measuring his printers' cables.
@@ -46,9 +46,12 @@ side of the 15 k receive legs, so the receive path itself is unchanged:
   about −3.5 V (−2.8 V with a weak pull-up). At −4.5 V it sinks 160 to 200 µA.
 - **The sense line**, the two collectors joined, goes through 4.7 k to a spare GPIO with its
   internal pull-up on (30 to 60 kΩ, at most about 110 µA): low means a device's transmitter is
-  at idle mark. The 4.7 k is there because Qb's collector follows its emitter below ground when
-  Qb pulls alone (an RS-232 printer, whose cable grounds pin 8); through it the GPIO sits near
-  +0.45 V, above the ESP32's −0.3 V limit and under its 0.82 V input low. J2's (Port 1) is IO39
+  at idle mark. Qa pulls the GPIO to +0.5 V at most, under the ESP32's 0.82 V input low. Qb's
+  collector follows its emitter below ground, to about −0.6 V, so when Qb pulls alone (an RS-232
+  printer, whose cable grounds pin 8) the GPIO sits between 0 and −0.35 V with its pull-up on,
+  about the ESP32's −0.3 V limit. With the pull-up off (at reset, before the firmware sets the
+  pin up) the pad's protection diode holds it near −0.4 V, and the 4.7 k keeps that current
+  under 0.1 mA. A larger resistor would lift Qa's low past 0.82 V. J2's (Port 1) is IO39
   and J4's (Port 2) IO38, rev 2026.11's spare pads, whose test pads TP11 and TP10 stay on the
   GPIO side. IO39 leaves reset as JTAG's MTCK: the firmware sets it to a GPIO before reading.
 
@@ -71,9 +74,12 @@ Checks on the numbers:
   to 3 kΩ: nothing a printer or a LocalTalk node notices.
 - **AirWriter unpowered.** The sense is open-collector, so a printer that's on can't power the
   ESP32 through it.
-- **LocalTalk traffic.** A frame swings the pair, so the sense pulses while a node sends. A
-  frame lasts at most about 21 ms at 230.4 kbit/s, and the line rests between frames, so the
-  firmware takes the sense as held only after it has stayed low for longer than that.
+- **LocalTalk traffic.** A frame on a direct cable swings the pair, so the sense pulses while a
+  node sends. A frame lasts at most about 21 ms at 230.4 kbit/s, and the line rests between
+  frames, but the frames of one exchange are only about 200 µs apart: polling every few
+  milliseconds could miss the gaps and take back-to-back frames for one long low. So the
+  firmware watches for the line going high (an interrupt) and takes the sense as held only
+  after it has stayed low, with no high at all, for longer than a frame.
 
 ## On the board
 
@@ -93,11 +99,12 @@ on 2026-11-23.
 
 ## Review
 
-A second model checked the circuit against TI's THVD1452 datasheet on 2026-11-23: Qa switches
-between +2.2 V (60 °C) and +2.8 V (0 °C); an empty socket keeps Qa's base under 0.2 V, under
-1 nA of collector current; the loads leave the receiver's fail-safe at +25 to +120 mV, mark;
-reverse stress stays inside 6 V at ±15 V. It found the below-ground collector, fixed by the
-4.7 k, and no simpler circuit: one transistor across the pair misses the StyleWriter.
+Checked against TI's THVD1452 and onsemi's BC847BDW1 datasheets on 2026-11-23: Qa switches
+between about +1.8 V (hot, a low-VBE part) and +2.9 V (cold, a high-VBE part), clear of an empty
+socket's 0.8 V and the printers' 4.4 V; an empty socket keeps Qa's base under 0.2 V, under 1 nA
+of collector current; the loads leave the receiver's fail-safe at +25 to +120 mV, mark; reverse
+stress stays inside 6 V at ±15 V. The below-ground collector is why the 4.7 k is there. No
+simpler circuit turned up: one transistor across the pair misses the StyleWriter.
 
 ## Firmware
 
@@ -116,5 +123,7 @@ This relaxes W-1179's listen-first rule. It's W-1179's code to change, after the
 - Whether an Apple LocalTalk box joins the transmit and receive pairs, so AirWriter's own
   frames pulse the sense while it sends. The firmware should read the sense only while the
   socket is quiet.
+- Whether each sense line wants a Schottky diode to GND, two more parts, so an RS-232 printer
+  can't take the GPIO past −0.3 V even with the pull-up off.
 - A Mac on a direct cable reads as a printer. AirWriter then asks it the printer question,
   which a Mac ignores.

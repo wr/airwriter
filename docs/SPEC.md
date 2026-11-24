@@ -2145,8 +2145,10 @@ board exists.
   as a serial printer with power does whether it's ready or not, and high for an empty socket,
   a LocalTalk box or device between frames, or a printer with no power
   (`docs/superpowers/specs/2026-11-23-port-sense-design.md`). IO39 leaves reset as JTAG's MTCK,
-  so it must be set to a GPIO first. A frame on the line pulses it, so it counts only when held
-  longer than a frame (about 21 ms). Nothing reads it yet: W-1179's listen-first rule stands.
+  so it must be set to a GPIO first. A frame on the line pulses it, and the frames of one
+  exchange are only about 200 µs apart, so it counts only once it has stayed low with no high
+  at all for longer than a frame (about 21 ms), caught by an interrupt on the line going high,
+  not by polling. Nothing reads it yet: W-1179's listen-first rule stands.
 - **Straps**, rev 2026.11 only, read once at boot with the pull-ups on, which stay on only where
   a strap reads high: IO16 (`BOARD_REV`, low on every 2026.11 board) and IO15 (`BOARD_LC`, low on
   the LC). `/api/status` has `board` (`rev-a` or `2026.11`), `lc`, and `board_ok`, false when a
