@@ -5,6 +5,15 @@
 `W-1102 QuickDraw LaserWriters on the printer port (Personal LaserWriter LS/300, Select 300)`.
 Reverses the StyleWriter cut in `2026-08-04-printer-support-scope-design.md`.
 
+**Amended 2026-11-24** by `W-1193 Vintage Macs print to a StyleWriter through AirWriter, as
+Apple's network adapter shared one (ADSP)`: phase 2 is being built, and its section below is
+rewritten for what changed after 2026-10-25. Each shared StyleWriter gets a listening socket of
+its own (0x89, 0x8A) in place of socket 129, which is the ImageWriter's and can serve one printer;
+rev 2026.11 offers a StyleWriter on each port; the board calls the Mac back without waiting for
+the Mac to close its first connection, as Apple's adapter did for lpstyl; and both fast modes
+are refused on every board for now. There are no captures of Apple's drivers to build from, so
+the exchange comes from lpstyl, TailTalk and InkTalk, and a Mac's print is the check.
+
 **Amended 2026-11-20** by `W-1177 Color StyleWriter: colours print clean and bright, with
 black only for grays` (SPEC §3.16 has the record): blue noise is a StyleWriter's default screen,
 on Apple's `GAMA` 2, the curve its drivers pair with scattered dots, and a colour page has the
@@ -487,28 +496,155 @@ host-built (`components/sw_page`, name the builder's), fed 360 dpi rows:
 
 ## Phase 2: vintage Macs through AirWriter
 
-- **ADSP** in `components/localtalk` (new, pure C, host-tested against `etpeer.py` taught to
-  open an ADSP connection the way a Mac does): connection open and close, the attention
-  messages, sequencing, retransmission and the receive window. TailTalk's `adsp.rs` and
-  InkTalk's server are the references; Inside AppleTalk's ADSP chapter is the source of truth.
-- **The adapter.** On every AppleTalk connection that is on, the port's StyleWriter registers
-  as `<name>:StyleWriter1200AT@*` or `<name>:ColorStyleWriter2400AT@*` by model, on socket 129
-  (0x81; the port ImageWriter's socket today, and the port holds one printer). The open
-  handshake, attentions and data path as InkTalk does them; each fast mode refused unless the
-  port can follow it, since a Mac told the adapter takes one switches the printer over and an
-  adapter that cannot follow drops off the network (FeralFirmware, 2026-10-28). The II and
-  1200's 230,400 baud is likely within rev A's reach; the attentions that ask for either mode
-  are in TailTalk's `tailtalk-core/src/stylewriter.rs`. A request
-  while any job holds the box's lock (AirPrint, the test page, another Mac) answers busy
-  (`0001`); the Mac's driver waits and asks again. The Mac's bytes go to J2 as they are under
-  the job lock, the printer's come back; a Mac that vanishes mid-job leaves the printer reset.
-  A rename from a Mac renames the record. The last job's bytes are kept (`GET /api/sw/job`,
-  as `/api/lt/job`), which also makes every Mac print a capture.
-- **Bench.** Basilisk II on the Mac with Apple's StyleWriter driver, over the tunnel to board 1,
-  with `swfake` on J2 through a USB serial adapter or, without one, a firmware build that
-  routes the port to the software StyleWriter compiled in (`CONFIG_AIRWRITER_SW_FAKE`, builder's
-  name): Chooser finds it, a page prints end to end and decodes, busy both ways with AirPrint.
-  Then the SE/30 on the cable, and an owner's Mac and printer.
+`W-1193`. Rewritten 2026-11-24; the 2026-10-25 sketch is in git history.
+
+### What an owner sees
+
+A vintage Mac opens the Chooser, picks Apple's Color SW 2500 driver (for a 2200, 2400 or 2500)
+or Color SW 1500 driver (for the original, II, 1200 or 1500), and the StyleWriter is listed
+under the name AirWriter gives it, on LocalTalk and on every EtherTalk connection that is on.
+It prints with Apple's driver, at the speed AirPrint does. While the board prints anything
+else the Mac's driver waits and asks again. Renaming the printer from the Mac renames it
+everywhere. The settings page's "In the Chooser on vintage Macs" line lists it with the others.
+
+### Approaches
+
+1. **Stand in for Apple's adapter** (chosen). The Mac's own driver makes the page and paces
+   the printer; the board passes bytes. Apple's quality, every model the drivers cover, and
+   nothing to rip.
+2. Offer the StyleWriter as an AppleTalk ImageWriter and turn the Mac's ImageWriter stream
+   into StyleWriter dots: 144 dpi on a 360 dpi printer, and no colour on most.
+3. Offer it as a LaserWriter: needs a PostScript interpreter on the board.
+
+### What the sources are worth
+
+No capture of a real Mac printing through a real adapter exists, here or in the references.
+What there is: lpstyl's `adsp.c` and `at_printer_*`, written from packet dumps of a real
+adapter printing; TailTalk's replay of a real Mac renaming a real adapter
+(`tailtalk/tests/adsp_test.rs`); and TailTalk's adapter role (`tailtalk-core/src/stylewriter.rs`,
+what InkTalk runs), written from a decompile of Apple's 1500 and 2500 drivers and used with
+real Macs. Where they disagree the board accepts both. The working brief with every byte is
+kept with the plan, outside this repository.
+
+### ADSP (`components/localtalk/adsp.c`, pure C)
+
+A connection engine with no knowledge of the node or the adapter: packets and a clock in,
+packets and events out. DDP type 7, the 13-byte header, the 8-byte open parameters.
+
+- **Accepts and opens.** A listener answers an Open Request with Request+Ack, the same one
+  again for a repeated request, and works whether or not the third leg arrives. An opener
+  resends its request each second, five times, takes a second Request+Ack from a new
+  connection ID as the one to use, and stops on a denial. Connections are told apart by the
+  far address and the far connection ID together.
+- **Stream.** In order only; a packet ahead is dropped, an overlap gives its new bytes. End of
+  message takes one sequence number, kept with unacknowledged bytes so a resend carries it
+  again. An ack for every packet that asks. The receive window is the room the taker has, and
+  an ack goes out unasked when it opens from zero. Sent bytes ask for an ack, respect the far
+  window, and are resent after 3 s, five times, or at once on Retransmit Advice.
+- **Attention messages**, received only: their own sequence, an ack (13 bytes) for every one
+  whether or not it asks, a repeat acked and not delivered. They never touch the stream's
+  acks or window.
+- **Probes.** Answers every probe with one ack. Sends its own after 5 s of silence and closes
+  after the fourth unanswered, so a Mac that vanishes frees the printer in 20 s, and lpstyl's
+  15 s sleep survives.
+- **Forward Reset** is answered (lpstyl sends one at a job's end). Close Advice is sent once
+  and taken as final.
+- Not built: sending attention messages, Forward Reset or Retransmit Advice; buffering out
+  of order; Open Denial (an unknown socket stays silent).
+
+### The adapter (`components/localtalk/sw_adapter.c`, pure C)
+
+One per AppleTalk link, riding the link's node as the PAP client does.
+
+- **Names.** Each shared StyleWriter whose port is doing the printer job and whose printer is
+  the one on the port now is registered as `<name>:ColorStyleWriter2400AT@*` (2200, 2400,
+  2500) or `<name>:StyleWriter1200AT@*` (original, II, 1200, 1500), on every link that is on.
+  Up to two: one a port. Each has a listening socket of its own, 0x89 and 0x8A, which is also
+  where its call-back comes from. A second with the same name and type gets " 2".
+- **A print.** The Mac opens a connection to the name's socket and sends attention `000B`
+  (70 bytes: its data socket in byte 3, its user name). Every attention is acked and then
+  answered on that connection's stream, 2 bytes unless noted; an unknown one gets `00 00` so
+  the Mac never hangs. `000B` gets `00 00` and the job lock, `00 01` while anything else holds
+  the lock, `FF FF` for a body under 5 bytes. The board then opens a connection back to the
+  Mac's data socket at the first of: the Mac closing its connection, attention `0012` on it,
+  or 1 s. If the pipe is not up in 15 s the job is dropped and the lock given back.
+- **The pipe.** The Mac's stream goes to the port as it is, at 57600 with no handshake, and
+  the printer's bytes go back as they come, without end-of-message marks. The window is the
+  room in a 4 KB buffer in front of the port. The Mac paces the printer itself with the
+  printer's own status questions, so answers go back within a tick or two.
+- **Attentions on the pipe.** `0006` (has everything reached the printer?) `FF FF` once the
+  buffer is empty and the port has sent it, else `00 00`. `000A` (status text) kept for the
+  questions below. `0005` gets `00 EF` and `0007` gets `FF EF`: no fast mode. `0003`, `0004`,
+  `0008` get `00 00` and do nothing. A message that is the one byte `x` or `h` is not passed
+  on. `0012` gets `FF FF` and marks the job as ending cleanly.
+- **Questions from any Mac, any time**: `0011` job count and `000D` queue position (`00 01`
+  while the board is busy, else `00 00`), `000E` (72 bytes: the request of the job in the
+  pipe, zeros otherwise) and `0010` (259 bytes: its status text, zeros otherwise), `000C`
+  withdraws a request that has not reached the pipe. Three connections a link beside the pipe;
+  a fourth Mac is not answered and its driver tries again.
+- **The end.** A close after `0012`: nothing is sent to the printer. A pipe lost any other way
+  (a bare close, 20 s of silence, resends spent) or the test button: the board sends the
+  printer `00 FF FF FF 49` and keeps the lock for 10 s, since two resets close together have
+  left a 2500 dark. Either way the port goes back to its record's settings and the printer's
+  next status question is 10 s out.
+- **Rename.** `0009` on a connection, then `0012` on the same one, renames the record: its
+  AirPrint name and its name on every link. An empty name, or one with `:` or `@`, is ignored.
+
+### On the board
+
+- **Offers.** `pr_offers_on` carries the port's StyleWriters beside its ImageWriter;
+  `lt_offers_t` and `lt_node_offer` take up to two adapter names. A cable link is up for a
+  StyleWriter as it is for an ImageWriter. On rev 2026.11 with a printer on each port there is
+  no LocalTalk, so the adapter is on EtherTalk alone.
+- **The lock and the pump.** The link's task takes the job lock without waiting, so busy is
+  answered at once, and starts a task for the job (if it cannot start, busy). That task owns
+  the port: selects it, sets 57600, moves bytes between two PSRAM rings and the UART, and at
+  the end does the reset if one is due, puts the port back and gives the lock. Holding the lock
+  is what pauses the port's questions, AirPrint, other Macs, the test page, cleaning and
+  updates. The link's task never waits on the port.
+- **What the board shows.** The job reads as a Mac's job does today: `ps` printing, the
+  panel's LocalTalk stripes, "LocalTalk job" (or the link's) as the job's name. The record's
+  asleep and answering marks are set at the start and end as a session sets them, so a 2500
+  that goes quiet after a Mac's job reads ready.
+- **Log.** A line when a job starts, one when the pipe is up, and one at the end with the
+  bytes each way and how it ended. Never the Mac's user name, the printer's name or the
+  status text.
+- **`GET /api/sw/job`**: the last job's bytes to the printer, the first 256 KB, as
+  `/api/lt/job`. Every Mac's print is a capture.
+
+### Not in it
+
+The fast modes (a II or 1200 at 230,400 baud; a Colour StyleWriter's clock on HSKi). A queue:
+one job, the rest wait. StyleWriters behind someone else's adapter.
+
+### Checks
+
+- `test_adsp.c`: the codec's vectors, opens both ways with their repeats, the end-of-message
+  arithmetic, windows shut and opened, resends with their marks, probes, Forward Reset, close.
+- `test_sw_adapter.c`: the rename replayed from the real capture; the whole print in Apple's
+  order and lpstyl's; busy and the questions; withdraw; an abandoned request; a Mac that
+  vanishes; fast modes refused and the lone byte dropped.
+- `test_localtalk.c`, `test_ethertalk.c`, `test_printers.c`: the names answered by type, type 7
+  to the right socket, the offers.
+- `etpeer.py` learns ADSP and both orders of print; `swahost` (a link, the adapter and the
+  pump on the host, the port a pty to `swfake.py`) prints a page from it that decodes dot for
+  dot, with each fault (`make -C tools/rip swainterop`).
+- Board 1: Basilisk II with Apple's Color SW 2500 driver over the tunnel to the 2500, then
+  the SE/30 on the cable; busy both ways with AirPrint; the plug pulled mid-page. An owner's
+  Mac for the 1500 driver's models. Rev 2026.11's two StyleWriters are host-tested only.
+
+### Calls made here (check while reading)
+
+- Sockets 0x89 and 0x8A, not 129: lpstyl and TailTalk take the socket from the name's answer
+  and InkTalk, used with real Macs, registers whatever it is given. If Apple's driver turns
+  out to want 129, the ImageWriter's listener moves.
+- The call-back at the first of close, `0012` or 1 s.
+- The 13-byte attention ack; answers without end-of-message marks, as the capture shows.
+- `000E`'s answer as InkTalk lays it out (the request first); lpstyl reads the name two
+  bytes later, and only ever to show it.
+- 10 s of lock after a reset the board sends.
+- Three question connections a link.
+- The first 256 KB of a job kept, not all of it.
 
 ## Docs
 
