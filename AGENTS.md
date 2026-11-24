@@ -75,13 +75,15 @@ reads clear or LocalTalk is heard there, and never into a printer with power.
   LocalTalk port (TashTalk 2.1.3 in U7, which the ESP32 flashes over LVP) and three EtherTalk
   links: the board's own Wi-Fi, Basilisk II's UDP tunnel (port 6066) and Infinite Mac's zone
   relay (off until switched on). One job at a time across all of them, under one job lock.
+  A vintage Mac's own StyleWriter driver prints to a port StyleWriter over any of them, with
+  AirWriter as Apple's StyleWriter network adapter (W-1193: ADSP, SPEC §3.16); host-tested,
+  and nothing has run on a board yet.
 - **Password.** A sold board's password is burned into its chip with its serial at the bench
   (`tools/bench`) and printed on its label. The setup network takes it and the settings page
   signs in with it; printing never asks. A board with none burned (rev A, a dev board) is open
   until its owner sets one. Nothing has run on a burned board yet.
 - **Not built:** Mini vMac (LToUDP), PWG raster, HP LaserJets over serial (designed), AirPrint to
-  an AppleTalk ImageWriter, colour on a colour LaserWriter (it prints gray), vintage Macs
-  printing to a StyleWriter (AirWriter as Apple's StyleWriter network adapter), a StyleWriter's
+  an AppleTalk ImageWriter, colour on a colour LaserWriter (it prints gray), a StyleWriter's
   fast mode, a Select 300's PhotoGrade and its lower cassette, vintage Macs printing to a
   QuickDraw LaserWriter.
 
@@ -112,6 +114,8 @@ Where things are (`firmware/components/` unless a path is given):
 The web UI and API are on port 80: `/api/status`, `/api/general` (settings), `/update` (OTA
 upload), `/api/update` (GitHub releases), `/api/printers`, `/api/lt`, `/api/et`, `/api/log`,
 `/api/laser`, `/api/cable`, `/api/test`, `/api/restart`, `/api/erase`, `/api/localtalk/flash`,
+`/api/lt/job` and `/api/sw/job` (the last vintage Mac's job as captured, an ImageWriter's or a
+StyleWriter's, whichever came last),
 `/api/mem`, `/api/panel` (the LED frame: 37 × RGB, little-endian 8.8) and `/api/auth/*`. On a
 board with a password every route but the page and `/api/auth/*` answers 401 until the browser
 signs in (`tools/webui/signin.py` for curl). The page's own addresses

@@ -524,6 +524,21 @@ Traps already explained in a code comment are listed only when the comment is ea
   the densest 400-row band (the still life beside its ramps) is 73 KB, about 13 s on the wire
   however fast it is drawn.
 
+- **`serial_out_read` with a first wait of 0 does not wait at all**, and answers at once
+  whatever the wait on a parked port or in loopback. A loop that reads the port for its pause
+  spins a core. The StyleWriter adapter's pump (W-1193) waits a tick for a first byte only
+  when it wrote nothing that round, and sleeps a tick itself if the read came back within one.
+- **The StyleWriter adapter's locks, in order: the job lock, a link's lock, the pipe's**
+  (W-1193). A link's task takes the job lock only without waiting (`swa_port_claim`) and never
+  touches the port; the pump holds the job lock for the whole job and takes a link's lock only
+  to have its adapter end the job (`swa_stop`, through `at_swa_owner_t.stop`), never the other
+  way round. The adapter's `job_end` comes on whatever task holds its link's lock (the link's
+  own, the page's offers, a node made anew), so it only marks the pipe ended; the pump does
+  the rest. `swa_stop` from a link's own callback would re-enter the adapter.
+- **A second capture buffer is a 300's page on rev A** (W-1193). The last Mac's job is kept
+  in 256 KB of PSRAM for `/api/lt/job`; a StyleWriter adapter's job uses the same buffer
+  (`at_capture_lend`) instead of one of its own, since rev A has about 115 KB left for a
+  Personal LaserWriter 300's page (above) and board 1 has both printers' records.
 - **A Personal LaserWriter 300 drives a clock on HSKi, IO8 on rev A** (W-1102): 533 kHz while
   it is on. `serial_out` counts its edges with PCNT through the GPIO matrix, so the pad stays
   UART1's CTS. PCNT's counter is 16 bits (32,767 here): the line task counts for 50 ms of each

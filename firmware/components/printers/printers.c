@@ -749,6 +749,32 @@ void printers_offers(int at_link, int on, const char *host, lt_offers_t *o)
     unlock();
 }
 
+int printers_swa_offered(int at_link, int id)
+{
+    if (!s_started) return 0;
+    uint8_t sw[PR_SWA_MAX];
+    int hit = 0;
+    lock();
+    int n = pr_offers_swa(s_l, cable_port_of(at_link), sw);
+    for (int k = 0; k < n; k++) hit |= sw[k] == id;
+    unlock();
+    return hit;
+}
+
+int printers_rename(int id, const char *name)
+{
+    if (!s_started) return -1;
+    lock();
+    const pr_rec_t *r = pr_get(s_l, id);
+    if (!r || r->where != PR_WHERE_PORT || r->kind != PR_KIND_STYLEWRITER) {
+        unlock();
+        return -1;
+    }
+    pr_rename(s_l, id, name);
+    after_change(1);
+    return 0;
+}
+
 int printers_test_target(int *port)
 {
     *port = 0;

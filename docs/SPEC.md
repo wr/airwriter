@@ -1142,7 +1142,8 @@ printed from AirWriter, and Apple's drivers have not been captured** (the rig st
 TailTalk's reading of Apple's drivers (`tailtalk/src/stylewriter/*`, FeralFirmware; read for
 facts, never copied) and lpstyl's `README.protocol`; only the Color StyleWriter 2200 has
 printed from TailTalk on a real printer. Phase 2, vintage Macs printing through AirWriter as
-Apple's StyleWriter adapter (ADSP, not PAP), is not built.
+Apple's StyleWriter adapter (ADSP, not PAP), is built and host-tested (`W-1193`, below); no Mac
+has printed through it on a board yet.
 
 - **Models.** `sw_model_t`: the original StyleWriter, StyleWriter II, StyleWriter 1200, Color
   StyleWriter 1500, 2200, 2400 and 2500 (the names the page and Bonjour use). The Portable
@@ -1563,10 +1564,20 @@ Apple's StyleWriter adapter (ADSP, not PAP), is not built.
   to run one other than a 2500 gets R9 fitted until an owner shows it is not needed (the wiki's
   StyleWriters page says how), and rev B fits it (`W-1091`; an ImageWriter
   ignores that pin, 2.4).
-- **Not built.** Vintage Macs through AirWriter (phase 2: ADSP in `components/localtalk`, the
-  adapter as `<name>:StyleWriter1200AT@*` or `<name>:ColorStyleWriter2400AT@*` on socket 129,
-  busy as `0001`, `GET /api/sw/job`, a fast mode the port cannot follow refused or the Mac
-  switches the printer over and the adapter drops off); the printers' fast modes (a II or 1200
+- **Vintage Macs through AirWriter** (`W-1193`; the StyleWriters design, "Phase 2", has all of
+  it). Each AppleTalk link's node carries an adapter (`components/localtalk`: `adsp.c`,
+  `sw_adapter.c`) that answers as `<name>:StyleWriter1200AT@*` or
+  `<name>:ColorStyleWriter2400AT@*` on sockets 0x89 and 0x8A for each shared port StyleWriter,
+  and a Mac's own driver prints through it: the link's task takes the job lock without waiting
+  (busy is `0001` at once, and a request for a record whose printer is not the one on its port
+  now is busy too), and a task made for the job, the pump (`at_adapter.c`, `sw_pipe.c`), moves
+  the Mac's bytes to the port at 57600 and the printer's back. A job the Mac ends is left as
+  it is; one that ends any other way with bytes at the printer (the Mac gone, the test button)
+  has the printer reset (`00 FF FF FF 49`) and the lock kept 10 s more. The fast modes are
+  refused. `GET /api/sw/job` gives the last such job's bytes toward the printer, the first
+  256 KB, from the one capture `GET /api/lt/job` uses: whichever Mac's job came last has it.
+  Host-tested; nothing has run on a board.
+- **Not built.** The printers' fast modes (a II or 1200
   at 230,400 baud after `h`, likely within rev A's reach; a Colour StyleWriter's clock on HSKi
   after `x`, about 885 kHz on a 2200, which rev A's U3 cannot pass, 2.4, and the ESP32's UART
   cannot follow: `W-1102`'s to work out), so every page goes at 57600; 720 dpi on the 2500, other media and transparencies;

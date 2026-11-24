@@ -39,6 +39,7 @@
 #include "pic_prog.h"
 #include "localtalk.h"
 #include "ethertalk.h"
+#include "at_adapter.h"
 #include "lt_node.h"
 #include "laser.h"
 #include "printers.h"
@@ -211,6 +212,7 @@ static volatile int s_test_cancel;  // a second tap asked to stop it
 // W-1165: a tap stops a vintage Mac's job too. Its start and end set s_lt_owns under
 // s_tap_mux, so a tap as the job ends never lands its cancel on the next one.
 static int s_lt_owns;               // a Mac's job to the port's printer holds the lock
+static int s_swa_owns;              // W-1193: a Mac's own StyleWriter driver's job does
 static volatile int s_relay_stopped;    // a tap stopped the job the relay carries
 
 static volatile int s_job_waiting;
@@ -2348,6 +2350,257 @@ static int lt_print_end(void *ctx, int normal)
     return flushed == ESP_OK;
 }
 
+// ---------------------------------------------- a Mac's own StyleWriter driver
+// W-1193: a vintage Mac prints to a port StyleWriter with Apple's driver, through the adapter
+// each AppleTalk link carries (sw_adapter.h). The driver makes the page and paces the printer
+// itself; the board passes bytes both ways and knows nothing of what they say. at_adapter.c
+// keeps the one job and its pump task, and calls these: claim and begin on the link's task
+// (its lock held, so neither waits), open to close on the pump, which holds the port and the
+// job lock from the claim to the end of close.
+
+static int       s_swa_sock, s_swa_id;      // the job's socket and record, from the claim
+static at_link_t s_swa_link;
+static int       s_swa_open, s_swa_heard;   // the pump's: the port is at 57600; the printer spoke
+
+// The adapter's answer to "is it busy": anything prints, or anyone holds the lock (the port's
+// own questions too, for the moment they take).
+static int swa_port_busy(void *ctx)
+{
+    (void)ctx;
+    return s_printing || uxSemaphoreGetCount(s_job_lock) == 0;
+}
+
+// A printer was plugged into, or switched on at, socket p in the last 10 s and the port task
+// has not asked it what it is yet.
+static int line_fresh(const psock_t *p)
+{
+    return p->ribbon_want && (int32_t)(xTaskGetTickCount() - p->ribbon_due) < (int32_t)pdMS_TO_TICKS(8000);
+}
+
+// A Mac asks to print on port record `id`. Busy at once while anything else has the printer,
+// and busy too unless the record's StyleWriter is the printer on its socket right now, decided
+// here with the lock held and never by the name the Mac found in its Chooser: the list still
+// offers it (shared, the record on its socket, no Something else there, its socket not
+// LocalTalk's), the socket does the printer job, its state is a StyleWriter's own (a flip is
+// the port task's to make, within a tick), no other port record's printer and no ImageWriter
+// is there, no first sighting of another printer awaits its repeat, no clock is on its
+// handshake (a QuickDraw LaserWriter) and no line has just come up unasked. So a request
+// that races a cable swap is refused, and a StyleWriter driver's bytes never reach an
+// ImageWriter. The Mac's driver asks again.
+static int swa_port_claim(void *ctx, at_link_t link, int id)
+{
+    (void)ctx;
+    if (xSemaphoreTake(s_job_lock, 0) != pdTRUE) {
+        s_job_waiting = 1;                  // an update in progress gives way (W-1048)
+        return 1;
+    }
+    int k = printers_record_sock(id);
+    const psock_t *p = k >= 0 && k < PORTS_MAX ? &s_ps[k] : NULL;
+    if (!p || !printers_swa_offered((int)link, id) || !sock_prints(k) ||
+        p->fam != PR_FAM_STYLEWRITER || printers_port_family(k) != PR_FAM_STYLEWRITER ||
+        printers_port_absent(id) || printers_port_on_is_imagewriter(k) ||
+        p->confirm != PA_NONE || p->clocked || line_fresh(p)) {
+        xSemaphoreGive(s_job_lock);
+        return 1;
+    }
+    s_swa_sock = k;
+    s_swa_id = id;
+    s_swa_link = link;
+    return 0;
+}
+
+// The pump's task could not be made (internal RAM short): nothing was begun.
+static void swa_port_unclaim(void *ctx)
+{
+    (void)ctx;
+    xSemaphoreGive(s_job_lock);
+}
+
+// The job's books, as a Mac's ImageWriter job's (lt_print_begin). The panel shows the Mac's
+// stripes, the job reads as the link's, and AirPrint's printer for the same record reads
+// processing (job_on). No name of the Mac's reaches the log or the job's name.
+static void swa_port_begin(void *ctx)
+{
+    (void)ctx;
+    psock_t *p = &s_ps[s_swa_sock];
+    s_job_sock = s_swa_sock;
+    s_job_error[0] = '\0';
+    strncpy(s_last_job, lt_job_name(s_swa_link), sizeof s_last_job - 1);
+    s_printer_failed = 0;
+    portENTER_CRITICAL(&s_tap_mux);
+    s_swa_owns = 1;                      // a tap stops it from here (stop_printing)
+    portEXIT_CRITICAL(&s_tap_mux);
+    p->sw_job_silent = 0;                // as a session's start: what the job finds is the state
+    p->sw_was_answering = p->answering;
+    s_printing = 1;
+    job_touch();
+    led_grid_set_source(LG_SRC_LOCALTALK);
+    line_source();
+    printer_state_post(PS_EV_JOB_START);
+    printer_state_post(PS_EV_ACTIVITY);
+    ESP_LOGI(TAG, "job from a Mac's StyleWriter driver on %s", port_tag(s_swa_sock));
+}
+
+// The pump: the job's socket selected and at a StyleWriter's link. Nonzero if the socket
+// cannot be had after all; nothing is sent then.
+static int swa_port_open(void *ctx)
+{
+    (void)ctx;
+    s_swa_open = s_swa_heard = 0;
+    printer_sock_select(s_swa_sock);
+    if (s_psock != s_swa_sock) return -1;
+    stylewriter_link(1);
+    serial_out_rx_drop();
+    s_swa_open = 1;
+    return 0;
+}
+
+static int swa_port_write(void *ctx, const uint8_t *d, size_t n)
+{
+    (void)ctx;
+    return serial_out_write_raw(d, n, 2000u + (uint32_t)(n / 2));
+}
+
+// The last byte written has left: a 128-byte FIFO at 57600 is 22 ms.
+static int swa_port_flush(void *ctx)
+{
+    (void)ctx;
+    return serial_out_flush(500) == ESP_OK ? 0 : -1;
+}
+
+// The printer's bytes, a tick's wait for the first when the pump has nothing else to do. Its
+// first byte of the job says it is there: the record reads as answering and ready from then,
+// as a session's first answer makes it. What it says after that is the Mac's to read (its
+// driver shows a fault in its own words); the port task asks it itself 10 s after the job.
+static int swa_port_read(void *ctx, uint8_t *buf, size_t cap, int idle)
+{
+    (void)ctx;
+    TickType_t t0 = xTaskGetTickCount();
+    int n = cap ? serial_out_read(buf, cap, idle ? portTICK_PERIOD_MS : 0, 0) : 0;
+    if (n > 0 && !s_swa_heard) {
+        s_swa_heard = 1;
+        P->answering = 1;
+        P->sw_job_silent = 0;
+        P->sw_asleep = 0;                // awake: the driver's reset woke it
+        P->sw_state = SWS_READY;
+        P->iw_ready = 1;
+        line_source();
+        port_push(printer_state_view().state);
+    }
+    // A port with nothing to read answers at once in some states (parked, loopback): the
+    // pump's idle round still takes its tick.
+    if (n <= 0 && idle && xTaskGetTickCount() == t0) vTaskDelay(1);
+    return n > 0 ? n : 0;
+}
+
+// The job is over, on the pump. A clean end (the Mac's driver said so and every byte went
+// out): nothing more is sent. Any other with bytes at the printer -- the Mac vanished, the
+// test button, the port failed -- leaves it partway through a page: what is still queued is
+// dropped, it is reset, and the lock is kept 10 s more, since a second reset close behind the
+// first has left a 2500 dark (docs/traps.md) and the next job's first act is a reset. Then the
+// port goes back to its record's link, the printer's next status question is 10 s out, and
+// the lock is given.
+static void swa_port_close(void *ctx, const at_swa_end_t *e)
+{
+    (void)ctx;
+    portENTER_CRITICAL(&s_tap_mux);
+    s_swa_owns = 0;                      // from here a tap is not this job's to stop
+    portEXIT_CRITICAL(&s_tap_mux);
+    psock_t *p = &s_ps[s_swa_sock];
+    int clean = e->clean && !e->stopped && !e->failed;
+    int reset = 0;
+    if (s_swa_open) {
+        if (clean) {
+            if (serial_out_flush(500) != ESP_OK) serial_out_purge();
+        } else {
+            serial_out_purge();
+            serial_out_rx_drop();
+            if (e->reached) {
+                stylewriter_reset();
+                reset = 1;
+            }
+        }
+    }
+    // The record's marks, as a session leaves them (sw_state_cb, sw_finished): a job that
+    // ended well on a printer that spoke leaves a 2200, 2400 or 2500 to go dark in 5 minutes,
+    // and its silence then reads as ready; one that was reset stays awake; one that took bytes
+    // and said nothing all job is offline until it answers, and is looked at if it answered
+    // before.
+    if (s_swa_heard) {
+        p->sw_asleep = clean;
+        if (clean) p->sw_asleep_model = pr_model_to_sw(printers_record_model(s_swa_id));
+    } else if (e->reached) {
+        p->sw_job_silent = 1;
+        p->sw_state = SWS_OFFLINE;
+        p->answering = 0;
+        p->iw_ready = 0;
+        if (p->sw_was_answering) look_ask_p(p);
+    }
+    p->sw_was_answering = 0;
+    s_last_bytes = e->down;
+    s_last_pages = 0;
+    ESP_LOGI(TAG, "adapter job: %u bytes to the printer, %u back, %s%s", (unsigned)e->down,
+             (unsigned)e->up,
+             clean ? (e->down ? "printed" : "empty") : e->failed ? "the port failed"
+             : e->stopped ? "stopped at the printer" : e->reached ? "cut short" : "abandoned",
+             reset ? "; the printer was reset" : "");
+    // A Mac that goes away is a done job, as one that cancels its ImageWriter job is; the
+    // test button's stop is cancelled; a port that would not take the bytes is a failure.
+    printer_state_post(e->failed ? PS_EV_JOB_FAILED : e->stopped ? PS_EV_JOB_CANCELLED
+                                                                 : PS_EV_JOB_DONE);
+    s_printing = 0;
+    job_touch();
+    line_source();
+    port_push(printer_state_view().state);
+    // W-1059, under the job lock: a Mac's page that went out whole, with the printer
+    // answering, is this firmware printing.
+    if (clean && e->down && s_swa_heard) ota_health_printed();
+    // The lock is all that is held now: the port's questions, AirPrint, other Macs, the test
+    // page, cleaning and updates all wait these 10 s, and nothing here watches for them.
+    if (reset) vTaskDelay(pdMS_TO_TICKS(10000));
+    if (s_swa_open) stylewriter_link_record();
+    s_swa_open = 0;
+    p->last_status_ms = uptime_ms();
+    xSemaphoreGive(s_job_lock);
+}
+
+// A Mac renamed a StyleWriter from its Chooser's Setup. The link's task only leaves it here
+// (it holds its link's lock, and a rename writes flash and takes every link's lock in turn);
+// the port task makes the rename the page would. The name is a person's: never logged.
+static portMUX_TYPE s_swa_mux = portMUX_INITIALIZER_UNLOCKED;
+static int          s_swa_rename_id;
+static char         s_swa_rename[3 * NBP_NAME_MAX + 1];
+
+static void swa_port_rename(void *ctx, int id, const char *name)
+{
+    (void)ctx;
+    portENTER_CRITICAL(&s_swa_mux);
+    s_swa_rename_id = id;
+    strncpy(s_swa_rename, name, sizeof s_swa_rename - 1);
+    s_swa_rename[sizeof s_swa_rename - 1] = '\0';
+    portEXIT_CRITICAL(&s_swa_mux);
+    if (s_kick_handle) xTaskAbortDelay(s_kick_handle);
+}
+
+// On the port task, holding nothing.
+static void swa_rename_apply(void)
+{
+    char name[sizeof s_swa_rename];
+    portENTER_CRITICAL(&s_swa_mux);
+    int id = s_swa_rename_id;
+    s_swa_rename_id = 0;
+    memcpy(name, s_swa_rename, sizeof name);
+    portEXIT_CRITICAL(&s_swa_mux);
+    if (id <= 0) return;
+    if (printers_rename(id, name) == 0) ESP_LOGI(TAG, "printer %d renamed from a Mac", id);
+}
+
+static const uint8_t *sw_job(void *ctx, size_t *len)
+{
+    (void)ctx;
+    return at_swa_bytes(len);
+}
+
 // ------------------------------------------------------------ port / test
 
 // The port task. It runs every 500 ms and asks the printer on J2 whatever the policy
@@ -2705,6 +2958,7 @@ static void kick_task(void *arg)
     for (;;) {
         if (!again) vTaskDelay(pdMS_TO_TICKS(500));
         again = 0;
+        swa_rename_apply();                  // W-1193: a Mac's rename, left for a task that may write flash
         sock_jobs_tick();                    // W-1179: each socket's job, between questions
         for (int k = 0; k < ports_count(); k++)
             if (sock_prints(k)) again |= port_visit(k);
@@ -3175,7 +3429,7 @@ static int stop_printing(void)
         laser_job_cancel();
         return 1;
     }
-    int test = 0, lt = 0;
+    int test = 0, lt = 0, swa = 0;
     portENTER_CRITICAL(&s_tap_mux);
     if (s_test_running) {
         // An ImageWriter's write in progress is aborted; W-1041's resync runs before
@@ -3189,6 +3443,8 @@ static int stop_printing(void)
         s_job_cancelled = 1;
         serial_out_set_abort(1);
         lt = 1;
+    } else if (s_swa_owns) {
+        swa = 1;
     }
     portEXIT_CRITICAL(&s_tap_mux);
     if (test) {
@@ -3198,6 +3454,13 @@ static int stop_printing(void)
     if (lt) {
         at_job_stop();                          // its Mac is told now, not at its next send
         ESP_LOGI(TAG, "test button: stopping the Mac's job");
+        return 1;
+    }
+    if (swa) {
+        // W-1193: only a flag here. The job's pump tells the Mac (its link's lock, a send) and
+        // resets the printer, on its own stack.
+        at_swa_stop();
+        ESP_LOGI(TAG, "test button: stopping the Mac's StyleWriter job");
         return 1;
     }
     if (ipp_server_cancel_printing()) {
@@ -4226,6 +4489,18 @@ static port_job_t sock_job_saved(int i)
     return i ? PORT_JOB_LOCALTALK : PORT_JOB_PRINTER;
 }
 
+// W-1193: what the printer list knows of the sockets' jobs: the lowest LocalTalk socket, for
+// /api/printers, and every one of them, so a StyleWriter whose socket went to LocalTalk is
+// offered to no Mac.
+static void lt_socks_tell(void)
+{
+    unsigned mask = 0;
+    for (int k = 0; k < ports_count(); k++)
+        if (ports_job(k) == PORT_JOB_LOCALTALK) mask |= 1u << k;
+    printers_set_lt_port(ports_with(PORT_JOB_LOCALTALK) + 1);
+    printers_set_lt_socks(mask);
+}
+
 // The socket whose printer the job lock's holder talks to: a job its record's, the port task
 // each socket in turn. Under the job lock (or before anything runs). Each socket keeps its own
 // state (psock_t), so nothing heard on one is lost by selecting the other; only the printer
@@ -4312,7 +4587,7 @@ static int sock_job_set(int i, port_job_t job, const char *why, uint32_t wait_ms
     xSemaphoreGive(s_lt_mx);
     settings_save_port_job(i, job);
     cable_cfg_apply();
-    printers_set_lt_port(ports_with(PORT_JOB_LOCALTALK) + 1);
+    lt_socks_tell();
     xSemaphoreGive(s_job_lock);
     printers_changed();                      // each socket's family, the panel, what Macs see
     // Its node starts on its socket now, or comes back to it, if it is wanted; else its PIC is
@@ -4782,7 +5057,7 @@ void app_main(void)
         ports_init(s_board_lc, jobs);
         s_psock = ports_with(PORT_JOB_PRINTER);
         s_job_sock = s_psock > 0 ? s_psock : 0;
-        printers_set_lt_port(ports_with(PORT_JOB_LOCALTALK) + 1);
+        lt_socks_tell();
         // W-1179: on rev 2026.11 the node starts listening, sending nothing until sock_detect
         // has seen its socket: LocalTalk heard there, or heard before the restart and no
         // printer showing since, or W-1185 its sense held clear. Frames sent into a printer
@@ -4791,6 +5066,14 @@ void app_main(void)
         ports_sense_start(localtalk_tx_at);      // W-1185: rev 2026.11's full board alone
         localtalk_set_gate(sock_sense_clear);
     }
+    // W-1193: the port a Mac's own StyleWriter driver prints through, before any link starts.
+    static const at_swa_port_t swa_port = {
+        .busy = swa_port_busy, .claim = swa_port_claim, .unclaim = swa_port_unclaim,
+        .begin = swa_port_begin, .open = swa_port_open, .write = swa_port_write,
+        .flush = swa_port_flush, .read = swa_port_read, .close = swa_port_close,
+        .rename = swa_port_rename,
+    };
+    at_swa_init(&swa_port);
     // The cables' offers, kept for each node's start: after the sockets are known (the offers
     // are per socket, W-1186), before any node starts.
     offers_apply();
@@ -4895,7 +5178,7 @@ void app_main(void)
         webui_cfg_t wcfg = { .status_json = status_json, .general_saved = general_saved, .captive = 1,
                               .restart = web_restart, .erase = web_erase, .test_page = web_test_page,
                               .localtalk_flash = localtalk_flash,
-                              .lt_json = lt_json, .lt_job = lt_job, .lt_echo = lt_echo,
+                              .lt_json = lt_json, .lt_job = lt_job, .lt_echo = lt_echo, .sw_job = sw_job,
                               .cable_test = cable_web,     // no EtherTalk: the zone stays off the open AP
                               .printers_json = printers_web_json, .printers_post = printers_web_post };
         ESP_ERROR_CHECK(webui_start(&wcfg));
@@ -4930,7 +5213,7 @@ void app_main(void)
     webui_cfg_t wcfg = { .status_json = status_json, .general_saved = general_saved, .captive = 0,
                           .restart = web_restart, .erase = web_erase, .test_page = web_test_page,
                           .localtalk_flash = localtalk_flash,
-                          .lt_json = lt_json, .lt_job = lt_job, .lt_echo = lt_echo,
+                          .lt_json = lt_json, .lt_job = lt_job, .lt_echo = lt_echo, .sw_job = sw_job,
                           .cable_test = cable_web, .et_json = et_json,
                           .et_settings_get = et_settings_get, .et_settings_set = et_settings_set,
                           .laser_json = laser_web_json,

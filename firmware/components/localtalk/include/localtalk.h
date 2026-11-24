@@ -10,6 +10,8 @@
 //
 // A PAP job is the Mac driver's own ImageWriter stream (W-1053), printed
 // through the printer every AppleTalk link shares (at_printer.h, W-1076).
+// W-1193: a side offered a port StyleWriter (lt_offers_t.swa) carries an adapter for a Mac's
+// own StyleWriter driver, which prints through the one job in at_adapter.h.
 #pragma once
 #include <stddef.h>
 #include <stdint.h>

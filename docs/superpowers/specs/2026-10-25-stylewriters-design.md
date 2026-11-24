@@ -610,7 +610,9 @@ One per AppleTalk link, riding the link's node as the PAP client does.
   bytes each way and how it ended. Never the Mac's user name, the printer's name or the
   status text.
 - **`GET /api/sw/job`**: the last job's bytes to the printer, the first 256 KB, as
-  `/api/lt/job`. Every Mac's print is a capture.
+  `/api/lt/job`, and in the same buffer: whichever Mac's job came last, an ImageWriter's or a
+  StyleWriter's, has the capture and the other route answers 404. A second 256 KB would be a
+  Personal LaserWriter 300's page on rev A. Every Mac's print is a capture.
 
 ### Not in it
 
@@ -640,6 +642,19 @@ one job, the rest wait. StyleWriters behind someone else's adapter.
   out to want 129, the ImageWriter's listener moves.
 - The call-back at the first of close, `0012` or 1 s.
 - The 13-byte attention ack; answers without end-of-message marks, as the capture shows.
+- A request is busy (`00 01`), not refused, whenever the record's StyleWriter is not surely the
+  printer on its port at that moment: the list no longer offers it, another port record's
+  printer or an ImageWriter is there, a first sighting of another printer awaits its repeat,
+  a clock is on the handshake, or a line came up in the last 10 s and has not been asked what
+  it is. The Mac's driver asks again, and the name goes from the Chooser once the list knows.
+- A link's adapter (3.7 KB of PSRAM) is made when the link is first offered a StyleWriter, so
+  a board with none pays nothing; the pipe (5 KB) at the first job.
+- The printer's first byte back in a job marks its record answering and ready. The board
+  reads nothing else of what the two say: a fault during a Mac's job shows in the Mac's own
+  dialog, and on the board 10 s after the job, when the port asks again.
+- The reset at an unclean end is the five bytes alone, with no `E` first for the black-only
+  models (a session's abort sends one): the board does not know where in a page the Mac
+  stopped. It does not know either whether the Mac's driver reset the printer moments before.
 - `000E`'s answer as InkTalk lays it out (the request first); lpstyl reads the name two
   bytes later, and only ever to show it.
 - 10 s of lock after a reset the board sends.

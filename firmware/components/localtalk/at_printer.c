@@ -39,6 +39,7 @@ static uint8_t     *s_job;
 static size_t       s_job_len;
 static uint32_t     s_job_total;
 static int          s_job_done;
+static volatile int s_job_lent;              // W-1193: the capture holds the adapter's job
 
 // Drains the spool into the printer. A failed write aborts the job (the Mac
 // is told with CloseConn); an abandoned job's rest is dropped, not printed.
@@ -119,6 +120,7 @@ int at_job_begin(const at_owner_t *o)
     s_job_active = 1;
     s_job_pending = 0;
     xSemaphoreGive(s_begin_lock);
+    s_job_lent = 0;
     s_job_len = 0;
     s_job_total = 0;
     s_job_done = 0;
@@ -178,9 +180,25 @@ void at_printer_note(const char *line)
 
 const uint8_t *at_job_bytes(size_t *len)
 {
-    *len = s_job_len;
-    return s_job_len ? s_job : NULL;
+    *len = s_job_lent ? 0 : s_job_len;
+    return *len ? s_job : NULL;
 }
+
+// One buffer for whichever Mac's job came last: a second 256 KB is a Personal LaserWriter
+// 300's page on rev A (docs/traps.md). The two kinds of job are never at once (the job lock).
+uint8_t *at_capture_lend(size_t *cap)
+{
+    if (!s_job) s_job = heap_caps_malloc(JOB_CAP, MALLOC_CAP_SPIRAM);
+    if (!s_job) return NULL;
+    s_job_lent = 1;
+    s_job_len = 0;
+    s_job_total = 0;
+    s_job_done = 0;
+    *cap = JOB_CAP;
+    return s_job;
+}
+
+int at_capture_lent(void) { return s_job_lent; }
 
 void at_printer_json(char *buf, size_t cap)
 {

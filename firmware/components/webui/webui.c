@@ -259,6 +259,15 @@ static esp_err_t lt_job_get(httpd_req_t *req)
     return httpd_resp_send(req, (const char *)job, (ssize_t)len);
 }
 
+static esp_err_t sw_job_get(httpd_req_t *req)
+{
+    size_t len = 0;
+    const uint8_t *job = s_cfg.sw_job ? s_cfg.sw_job(s_cfg.ctx, &len) : NULL;
+    if (!job) return httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "no stylewriter job");
+    httpd_resp_set_type(req, "application/octet-stream");
+    return httpd_resp_send(req, (const char *)job, (ssize_t)len);
+}
+
 static esp_err_t scan_get(httpd_req_t *req)
 {
     wifi_scan_config_t sc = { .show_hidden = false };
@@ -721,6 +730,7 @@ esp_err_t webui_start(const webui_cfg_t *cfg)
         { .uri = "/api/lt",       .method = HTTP_GET,  .handler = lt_get },
         { .uri = "/api/lt/job",   .method = HTTP_GET,  .handler = lt_job_get },
         { .uri = "/api/lt/echo",  .method = HTTP_POST, .handler = lt_echo_post },
+        { .uri = "/api/sw/job",   .method = HTTP_GET,  .handler = sw_job_get },
         { .uri = "/api/et",       .method = HTTP_GET,  .handler = et_get },
         { .uri = "/api/et/settings", .method = HTTP_GET,  .handler = et_settings_get },
         { .uri = "/api/et/settings", .method = HTTP_POST, .handler = et_settings_post },

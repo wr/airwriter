@@ -104,6 +104,15 @@ void        printers_at_queried(int id, int ok, const lw_info_t *info, int at_li
 // either way.
 void        printers_offers(int at_link, int on, const char *host, lt_offers_t *o);
 
+// W-1193: port record `id` is one a Mac on `at_link` is offered through the StyleWriter
+// adapter right now (pr_offers_swa): asked again as a Mac's request to print arrives, under
+// the job lock, since the offers a link holds are only as new as the list's last change.
+int         printers_swa_offered(int at_link, int id);
+// W-1193: a Mac renamed port StyleWriter `id` through the adapter: the rename the page makes
+// (pr_rename: its AirPrint name and its name on every link), stored and applied. -1 for any
+// other record. Writes flash: never from a link's task.
+int         printers_rename(int id, const char *name);
+
 // Who gets the test page (the button, the page): the port's ImageWriter
 // or StyleWriter, else the first shared printer. Its id, *port 1 for the port's; -1 for none.
 int         printers_test_target(int *port);

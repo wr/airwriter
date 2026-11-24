@@ -6,7 +6,8 @@
 // ImageWriter stream (W-1053): spooled in 16 KB and written to the printer
 // through main.c's hooks by the print task, so a paused printer holds the Mac
 // (no next SendData until the spool has room), never a link's task. The last
-// job's bytes are kept in PSRAM for GET /api/lt/job.
+// job's bytes are kept in PSRAM for GET /api/lt/job, in the one capture a Mac's
+// StyleWriter job (at_adapter.h) also uses: whichever came last has it.
 #pragma once
 #include <stddef.h>
 #include <stdint.h>
@@ -87,7 +88,13 @@ int       at_job_link(void);
 int       at_job_stop(void);
 // A line for the holder's log (lt_print_end's summary); dropped with no holder.
 void      at_printer_note(const char *line);
-// The last job's bytes as captured (up to 256 KB), or NULL.
+// The last job's bytes as captured (up to 256 KB), or NULL. W-1193: NULL too once a Mac's
+// StyleWriter job has come since: the capture is the newest Mac's job, either kind.
 const uint8_t *at_job_bytes(size_t *len);
+// W-1193: the capture, emptied, for the StyleWriter adapter's job that is beginning
+// (at_adapter.c), and its size; NULL with no memory for one. It is that job's until the next
+// PAP job begins (at_capture_lent says whose it is).
+uint8_t  *at_capture_lend(size_t *cap);
+int       at_capture_lent(void);
 // The "job":{..},"print":{..} members of /api/lt, without braces around them.
 void      at_printer_json(char *buf, size_t cap);
