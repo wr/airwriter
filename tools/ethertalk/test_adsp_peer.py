@@ -446,6 +446,24 @@ class Strict(Base):
         with self.assertRaisesRegex(AdspTimeout, "acknowledged to 0 of 4"):
             await ca.write(b"abc", timeout=0.2)
 
+    async def test_ack_from_ahead_is_a_lost_packet_on_a_lossy_wire(self):
+        """The other end's byte is lost, then it acknowledges ours: its acknowledgement is
+        numbered from past the byte we never got. A strict Mac calls that wrong, as on a
+        whole wire it is; a lenient one takes it, and takes the byte when it comes again."""
+        ca, lb = await self.deaf()
+        await ca.write(b"abc", wait=False)
+        await self.raw(ca, lb, 1, 4, 2048, 0x80)
+        with self.assertRaisesRegex(AdspError, "sent from sequence 1; we have taken 0"):
+            await ca.flush(0.2)
+        ca.vanish()
+        ca, lb = await self.deaf(a=dict(strict=False))
+        await ca.write(b"abc", wait=False)
+        await self.raw(ca, lb, 1, 4, 2048, 0x80)
+        await ca.flush(0.2)
+        await self.raw(ca, lb, 0, 4, 2048, 0x40, b"z")
+        self.assertEqual(await ca.read(1, 0.2), b"z")
+        self.assertIsNone(ca.error)
+
     async def test_bytes_past_the_window(self):
         ca, lb = await self.deaf(a=dict(window=8))
         await self.raw(ca, lb, 0, 0, 2048, 0x40, bytes(9))

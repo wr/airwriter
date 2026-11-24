@@ -1329,7 +1329,7 @@ class Mac:
 
     async def print_sw(self, name, nbp_type, job, order="apple", user="etpeer", vanish=None,
                        third_leg=True, attn_desc=None, setup=True, settle=2.0, busy_wait=None,
-                       busy_tries=60, callback_wait=20.0, stall=60.0,
+                       busy_tries=60, callback_wait=20.0, stall=60.0, strict=True,
                        ctl_sock=SW_CTL_SOCK, data_sock=SW_DATA_SOCK):
         """A StyleWriter job to NAME:NBP_TYPE through Apple's network adapter, as a Mac's
         driver sends it (W-1193). job is a page stream as `rip --out-sw` writes it (rects,
@@ -1345,6 +1345,8 @@ class Mac:
         (the adapter's Open Request is never answered), "pipe" (gone with the pipe up and
         nothing sent), "page" (gone after the first page's first block); third_leg=False
         (our open of the control connection never sends its 0x82); attn_desc=0x10 or 0x50.
+        strict=False is for a wire that loses packets (Adsp): there an acknowledgement
+        rightly counts a byte we never got, and what comes ahead is asked for again.
 
         Returns what happened: result, busy (each busy answer's queue queries), ident,
         model, pages, sent (bytes to the printer), end (the last 0012's answer), gone."""
@@ -1364,10 +1366,10 @@ class Mac:
         start = time.monotonic()
         try:
             if vanish != "callback":                  # listening before the adapter can call
-                data = Adsp(self, data_sock, attn_desc=desc).listen()
+                data = Adsp(self, data_sock, attn_desc=desc, strict=strict).listen()
             for _ in range(busy_tries):
                 addr, ctl = await self._sw_control(name, nbp_type, ctl_sock, attn_desc=desc,
-                                                   third_leg=third_leg)
+                                                   third_leg=third_leg, strict=strict)
                 res = u16(await ctl.attention(SWA_PRINT, req))
                 if res == 0:
                     break
