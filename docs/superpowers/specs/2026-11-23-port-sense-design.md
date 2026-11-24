@@ -106,6 +106,13 @@ of collector current; the loads leave the receiver's fail-safe at +25 to +120 mV
 stress stays inside 6 V at ±15 V. The below-ground collector is why the 4.7 k is there. No
 simpler circuit turned up: one transistor across the pair misses the StyleWriter.
 
+No Schottky diode on the sense lines. The ESP32-S3's −0.3 V is the bottom of its input-low
+range, not a rating: its datasheet sets no voltage limit on an I/O pin, and its latch-up test
+drives 200 mA into one, against under 0.1 mA here. The pin still reads low, which is the right
+answer, and only an RS-232 printer gets it there. The firmware turns the pull-ups on in
+app_main's first lines, so the pull-up-off stretch is short. A diode would add two parts in the
+board's most crowded corner for no gain.
+
 ## Firmware
 
 Per socket:
@@ -144,8 +151,5 @@ Built with the board change (SPEC 3.19, Port sense and Listening first):
   them through its transformer, the TX pair's 4.7 k bias and the sense's own loads put about
   1.4 V on pin 8 between frames by the numbers, under Qa's 1.8 V at worst.
 - Whether a test cable holds the sense low as the numbers say (above).
-- Whether each sense line wants a Schottky diode to GND, two more parts, so an RS-232 printer
-  can't take the GPIO past −0.3 V even with the pull-up off. The firmware turns the pull-up on
-  in app_main's first lines.
 - A Mac on a direct cable reads as a printer. AirWriter then asks it the printer question,
   which a Mac ignores.
