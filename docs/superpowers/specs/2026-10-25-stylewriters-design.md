@@ -643,7 +643,12 @@ one job, the rest wait. StyleWriters behind someone else's adapter.
 - `000E`'s answer as InkTalk lays it out (the request first); lpstyl reads the name two
   bytes later, and only ever to show it.
 - 10 s of lock after a reset the board sends.
-- Three question connections a link.
+- Three question connections a link; the fourth place is kept for the pipe, job or no job.
+- A connection that is not the pipe says the window Apple's adapter says, 1716, and its
+  stream is dropped. A Mac that leaves 640 bytes of answers unread is closed.
+- `0006` off the pipe gets `FF FF`: nothing waits there.
+- A lone `x` or `h` whose end of message comes in a packet of its own is still dropped: the
+  byte waits for it.
 - The first 256 KB of a job kept, not all of it.
 
 ## Docs
