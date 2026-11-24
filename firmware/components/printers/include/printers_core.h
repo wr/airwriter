@@ -156,6 +156,10 @@ typedef struct {
     // socket included), and the socket LocalTalk is on, 1 or 2 (0 none), which pr_json gives
     // the records heard there.
     uint8_t   n_ports, port_names, lt_port;
+    // W-1193, not stored: the sockets doing LocalTalk, bit s for socket s (rev 2026.11 may have
+    // both). A port StyleWriter is offered to Macs only while its socket is none of them, nor
+    // lt_port's (pr_offers_swa).
+    uint8_t   lt_socks;
 } pr_list_t;
 
 // A StyleWriter's fault as the board last read it, said to the settings page so it can
@@ -328,7 +332,8 @@ pr_gate_t pr_job_gate(const pr_list_t *l, int id, int heard, pr_model_t heard_mo
 // printer port, the oldest ImageWriter record's (W-1116: fixed across swaps, so a Chooser
 // selection keeps working; a Mac's job goes to whichever ImageWriter answers), and every
 // identified AppleTalk printer, shared over AirPrint or not, never on its own link. A port
-// StyleWriter is carried to none until StyleWriters phase 2.
+// StyleWriter is not among them: no Mac prints to it by PAP. Its own driver finds it through
+// the adapter (pr_offers_swa).
 int  pr_offers(const pr_list_t *l, pr_where_t link, int ids[], int max);
 // W-1186: on the cable on port `cable_port` (1 or 2; 0 as pr_offers): the other cable's
 // printers too. pr_offer_as gives the NBP name (Pascal, MacRoman) an AppleTalk printer is
@@ -337,6 +342,24 @@ int  pr_offers(const pr_list_t *l, pr_where_t link, int ids[], int max);
 // name, the page's. A name the link has already gets " 2" to " 9", never another record's.
 int  pr_offers_on(const pr_list_t *l, pr_where_t link, int cable_port, int ids[], int max);
 int  pr_offer_as(const pr_list_t *l, int id, pr_where_t link, int cable_port, uint8_t out[33]);
+// W-1193 (StyleWriters design, phase 2): the port StyleWriters a Mac's own StyleWriter driver
+// is offered through the adapter (sw_adapter.h), their ids oldest first, at most one a socket
+// and PR_SWA_MAX in all: each shared StyleWriter record that is the printer on its socket now
+// (the one that answered there last, no Something else record listed for the socket) while
+// that socket does the printer job. The list knows a socket's job by lt_socks and lt_port;
+// cable_port (1 or 2; 0 for an EtherTalk link) is the port of the cable asking, which is
+// doing LocalTalk whatever the list has heard. They are offered on every link alike, and
+// whether or not the printer answers just now: a 2500 asleep after a job wakes to the
+// driver's own reset. The board checks again when a Mac asks to print.
+// pr_offer_swa_as: the NBP name and type (Pascal, MacRoman) record `id` is offered under
+// there, 0 when it is not: its record's name, the page's and the phones', and its driver's
+// type (pr_swa_type: ColorStyleWriter2400AT for a 2200, 2400 or 2500, StyleWriter1200AT for
+// the original, II, 1200 and 1500; NULL for anything else). The second of two with one name
+// and type gets " 2", its name cut to fit.
+enum { PR_SWA_MAX = 2 };
+int  pr_offers_swa(const pr_list_t *l, int cable_port, uint8_t ids[PR_SWA_MAX]);
+int  pr_offer_swa_as(const pr_list_t *l, int id, int cable_port, uint8_t obj[33], uint8_t type[33]);
+const char *pr_swa_type(int model);
 
 pr_box_t pr_box_state(const pr_list_t *l, const pr_live_t live[PR_MAX]);
 // Where the test page goes (W-1116): the printer on the port (pr_port_current, an ImageWriter
@@ -418,7 +441,8 @@ int    pr_seen_load(pr_list_t *l, const uint8_t *buf, size_t n);
 // ipp/p<id>, W-1082's LaserWriter ipp/laser), the notices, then `port_on` (the id of the port
 // record whose printer is on the port, pr_port_current while present; 0 for none),
 // `said_other` (a Something else record is in the list), `chooser` (the names vintage Macs
-// see: the port ImageWriter's as on the page, an AppleTalk printer's own NBP name) and
+// see: the port ImageWriter's as on the page, an AppleTalk printer's own NBP name, W-1193 a
+// port StyleWriter's as its own driver finds it, pr_offer_swa_as) and
 // `max_shared` (PR_SHARE_MAX). W-1179: on a board whose case names its ports (port_names), each
 // port record's `port` (1 or 2) and a record heard on LocalTalk the LocalTalk socket's
 // (lt_port); with two printer sockets also port 2's `port2_on` and `port_unsupported_port`, and

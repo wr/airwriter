@@ -98,8 +98,10 @@ void        printers_at_queried(int id, int ok, const lw_info_t *info, int at_li
 
 // What old Macs are offered on a link (at_link_t): on a way in that is on,
 // every printer AirWriter can carry there (pr_offers): the port's ImageWriter
-// as the node's own name, AppleTalk printers from other links under their own;
-// on one that is off, nothing. The AirWriter marker (host) either way.
+// as the node's own name, AppleTalk printers from other links under their own,
+// and (W-1193) the port's StyleWriters for the link's adapter (o->swa,
+// pr_offers_swa); on one that is off, nothing. The AirWriter marker (host)
+// either way.
 void        printers_offers(int at_link, int on, const char *host, lt_offers_t *o);
 
 // Who gets the test page (the button, the page): the port's ImageWriter
@@ -170,6 +172,10 @@ pr_model_t  printers_record_model(int id);
 // none), which /api/printers gives the printers heard there.
 int         printers_record_sock(int id);
 void        printers_set_lt_port(int port);
+// W-1193: every socket doing LocalTalk, bit k for socket k (rev 2026.11 may have both): a port
+// StyleWriter whose socket is one is offered to no Mac (pr_offers_swa). Wherever
+// printers_set_lt_port is called.
+void        printers_set_lt_socks(unsigned mask);
 int         printers_record_screen(int id, char *dither, size_t cap, int *gain);
 // W-1116: what an ImageWriter job (or test page) on port record `id` does after its own ESC ?
 // and plain questions (pr_job_gate), given only what they got -- `heard` (pr_heard_t) and the

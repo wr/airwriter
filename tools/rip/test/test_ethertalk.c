@@ -8,6 +8,7 @@
 #include "et_link.h"
 #include "lt_node.h"
 #include "et_transport.h"
+#include "swa_mac.h"
 
 static const uint8_t SNAP_DDP[8]  = { 0xAA, 0xAA, 0x03, 0x08, 0x00, 0x07, 0x80, 0x9B };
 static const uint8_t SNAP_AARP[8] = { 0xAA, 0xAA, 0x03, 0x00, 0x00, 0x00, 0x80, 0xF3 };
@@ -143,6 +144,16 @@ static void w_send(void *ctx, const uint8_t *f, size_t n)
 {
     if (nfr < MAXF) { memcpy(fr[nfr], f, n); fr_len[nfr] = n; fr_who[nfr] = *(int *)ctx; }
     nfr++;
+    elap_t e;                                             // W-1193: the adapter's packets
+    ddp_t d;
+    uint8_t ll[3 + DDP_LONG_HDR + DDP_MAX_DATA];
+    if (elap_parse(f, n, &e) || e.proto != ET_DDP || e.len > sizeof ll - 3) return;
+    ll[0] = e.data[8]; ll[1] = e.data[9]; ll[2] = LLAP_LONG;
+    memcpy(ll + 3, e.data, e.len);
+    if (!ddp_parse(ll, 3 + e.len, &d) && d.type == DDP_ADSP) {
+        CHECK_EQ_MEM(e.dst, "\xB2\x0A\x00\x01\x6E\x00", 6);     // to the Mac's own MAC, no multicast
+        swm_out(&d);
+    }
 }
 static void w_log(void *ctx, const char *line) { (void)ctx; strncpy(lastlog, line, sizeof lastlog - 1); }
 static int w_begin(void *ctx)
@@ -1040,6 +1051,122 @@ static void test_lookup_out_elap(void)
     CHECK_EQ_INT(d.type, DDP_NBP);
 }
 
+// ------------------------------------------------------------- W-1193: the StyleWriter adapter
+
+// The Mac of swa_mac.h on this link: THEM, at 0xFF10.12, long headers.
+static et_link_t *swm_link;
+static uint64_t   swm_T;
+static void swm_in(uint8_t mac_sock, uint8_t our_sock, const uint8_t *p, size_t n)
+{
+    uint8_t ll[LLAP_MAX], f[ELAP_MAX_FRAME];
+    lt_addr_t to = { swm_link->net, swm_link->nd, our_sock }, src = { 0xFF10, 12, mac_sock };
+    size_t k = ddp_build(ll, sizeof ll, to.node, 12, 1, &to, &src, DDP_ADSP, p, n);
+    CHECK(k > 3);
+    et_link_rx(swm_link, f, elap_build(f, sizeof f, MAC_A, THEM, ET_DDP, ll + 3, k - 3), swm_T);
+}
+static void swm_step(unsigned ms)
+{
+    for (unsigned t = 0; t < ms; t += 10) { swm_T += 10; et_link_tick(swm_link, swm_T); }
+}
+
+static void test_adapter_names_on_a_link(void)
+{
+    et_link_t l;
+    uint64_t t = link_online(&l, &ID_A, MAC_A, 0xFF23, 77);
+    uint8_t obj[NBP_NAME_MAX + 1], sock = 0;
+    CHECK(l.node.swa == NULL);                            // et_link_init leaves none attached
+    CHECK_EQ_INT(lkup_replies(&l, SWA_TYPE_COLOR, t, 0, obj, &sock), 0);
+    swm_attach(&l.node, t);
+    CHECK_EQ_INT(lkup_replies(&l, SWA_TYPE_COLOR, t + 1000, 0, obj, &sock), 1);
+    CHECK_EQ_INT(sock, SWA_SOCK(0));
+    CHECK_EQ_INT(obj[0], 7);
+    CHECK_EQ_MEM(obj + 1, "Inkwell", 7);
+    CHECK_EQ_INT(lkup_replies(&l, SWA_TYPE_MONO, t + 2000, 0, obj, &sock), 1);
+    CHECK_EQ_INT(sock, SWA_SOCK(1));
+    CHECK_EQ_INT(obj[0], 5);
+    CHECK_EQ_MEM(obj + 1, "Quill", 5);
+    CHECK_EQ_INT(lkup_replies(&l, "ImageWriter", t + 3000, 0, obj, &sock), 1);
+    CHECK_EQ_INT(sock, LT_SOCK_SLS);
+}
+
+static void test_whole_print_through_a_link(void)
+{
+    et_link_t l;
+    swm_T = link_online(&l, &ID_A, MAC_A, 0xFF23, 77);
+    swm_link = &l;
+    swm_attach(&l.node, swm_T);
+    reset_printer();
+    swm_whole_print(SWA_SOCK(0), 3);
+    // All of it ADSP to the Mac: no AARP was needed (the Mac spoke first), nothing else sent.
+    CHECK(nfr > 15 && nfr == swm_nsent);
+    for (int i = 0; i < nfr && i < MAXF; i++) {
+        ddp_t d;
+        CHECK_EQ_INT(sent_what(i, NULL, &d), 2);
+        CHECK_EQ_INT(d.type, DDP_ADSP);
+        CHECK_EQ_INT(d.src.net, 0xFF23);
+        CHECK_EQ_INT(d.src.node, 77);
+        CHECK_EQ_INT(d.src.sock, SWA_SOCK(0));
+        CHECK_EQ_INT(d.dst.net, 0xFF10);
+        CHECK_EQ_INT(d.dst.node, 12);
+    }
+    CHECK_EQ_INT(job_len, 0);                             // the ImageWriter's printer saw none of it
+    CHECK(!l.node.pap.open);
+    swm_nsent = 0;
+    swm_whole_print(SWA_SOCK(1), 5);
+}
+
+// A Mac asked to print and was accepted; the pipe is up.
+static void adapter_job(et_link_t *l, swm_conn_t *pipe)
+{
+    static uint8_t req[SWA_REQ_LEN] = { 0, 0, 0, 0xF1, 3, 'B', 'o', 'b' };
+    swm_T = link_online(l, &ID_A, MAC_A, 0xFF23, 77);
+    swm_link = l;
+    swm_attach(&l->node, swm_T);
+    swm_conn_t ctl;
+    CHECK(swm_open(&ctl, 0xE0, SWA_SOCK(0), 0x4D01));
+    swm_ask(&ctl, SWA_PRINT, req, sizeof req, 0x00, 0x00);
+    int from = swm_nsent;
+    swm_ask(&ctl, SWA_END, "\0", 1, 0x00, 0x00);
+    CHECK(swm_called(pipe, 0xF1, SWA_SOCK(0), 0x4D02, from));
+    swm_write(pipe, "\x00\xFF\xFF\xFF\x49", 5);
+    CHECK_EQ_INT(swa_job(&swm_adapter), 2);
+    CHECK_EQ_INT(swm_ends, 0);
+}
+
+// The transport goes, or the link's MAC changes: the adapter's job ends unclean at once, as
+// a PAP job does, and nothing is sent after.
+static void test_link_down_ends_the_adapters_job(void)
+{
+    et_link_t l;
+    swm_conn_t pipe;
+    adapter_job(&l, &pipe);
+    et_link_down(&l, swm_T + 10);
+    CHECK_EQ_INT(swm_ends, 1);
+    CHECK_EQ_INT(swm_end_clean, 0);
+    CHECK_EQ_INT(swa_job(&swm_adapter), 0);
+    CHECK_EQ_INT(swm_printer_n, 5);
+    int quiet = swm_nsent;
+    swm_step(30000);
+    CHECK_EQ_INT(swm_nsent, quiet);
+    CHECK_EQ_INT(swm_ends, 1);
+    // The link is still the node's: a Mac prints again.
+    swm_nsent = 0;
+    swm_whole_print(SWA_SOCK(0), 3);
+
+    adapter_job(&l, &pipe);
+    const uint8_t newmac[6] = { 0x42, 0x32, 0x0A, 0x00, 0x01, 0x80 };
+    et_link_set_mac(&l, newmac, swm_T + 10);
+    CHECK_EQ_INT(swm_ends, 1);
+    CHECK_EQ_INT(swm_end_clean, 0);
+    CHECK_EQ_INT(swa_job(&swm_adapter), 0);
+    CHECK(l.node.swa == &swm_adapter);                    // still attached: its names answer again
+    quiet = swm_nsent;
+    swm_step(30000);                                      // acquiring, then online at the new MAC
+    CHECK_EQ_INT(swm_nsent, quiet);
+    CHECK_EQ_INT(swm_ends, 1);
+    CHECK(l.node.phase == LT_ONLINE);
+}
+
 int main(void)
 {
     test_lookup_out_elap();
@@ -1067,5 +1194,8 @@ int main(void)
     test_peers();
     test_peer_printer();
     test_peer_names();
+    test_adapter_names_on_a_link();
+    test_whole_print_through_a_link();
+    test_link_down_ends_the_adapters_job();
     TEST_END;
 }

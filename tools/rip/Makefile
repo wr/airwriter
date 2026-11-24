@@ -100,17 +100,20 @@ build/test_pic_prog:test/test_pic_prog.c test/pic_sim.c ../../firmware/component
 	$(CC) $(CFLAGS) -I../../firmware/components/pic_prog/include -Itest -o $@ $^
 
 LT := ../../firmware/components/localtalk
-build/test_localtalk: test/test_localtalk.c $(LT)/lt_proto.c $(LT)/lt_node.c $(LT)/pap_client.c $(LT)/lt_tashtalk.c \
-                      $(COMP)/serial_out/serial_writer.c | build
-	$(CC) $(CFLAGS) -I$(LT)/include -I$(COMP)/serial_out/include -Itest -o $@ $^
+# W-1193: lt_node.c calls the StyleWriter adapter, so each rule that links it links adsp.c and
+# sw_adapter.c too.
+build/test_localtalk: test/test_localtalk.c test/swa_mac.h $(LT)/lt_proto.c $(LT)/lt_node.c $(LT)/pap_client.c $(LT)/lt_tashtalk.c \
+                      $(LT)/adsp.c $(LT)/sw_adapter.c $(COMP)/serial_out/serial_writer.c | build
+	$(CC) $(CFLAGS) -I$(LT)/include -I$(COMP)/serial_out/include -Itest -o $@ $(filter %.c,$^)
 
-build/test_ethertalk: test/test_ethertalk.c $(LT)/et_proto.c $(LT)/et_link.c $(LT)/et_transport.c $(LT)/lt_node.c $(LT)/pap_client.c $(LT)/lt_proto.c | build
+build/test_ethertalk: test/test_ethertalk.c test/swa_mac.h $(LT)/et_proto.c $(LT)/et_link.c $(LT)/et_transport.c $(LT)/lt_node.c $(LT)/pap_client.c $(LT)/lt_proto.c \
+                      $(LT)/adsp.c $(LT)/sw_adapter.c | build
+	$(CC) $(CFLAGS) -I$(LT)/include -Itest -o $@ $(filter %.c,$^)
+
+build/test_pap_client: test/test_pap_client.c $(LT)/lt_proto.c $(LT)/lt_node.c $(LT)/pap_client.c $(LT)/adsp.c $(LT)/sw_adapter.c | build
 	$(CC) $(CFLAGS) -I$(LT)/include -Itest -o $@ $^
 
-build/test_pap_client: test/test_pap_client.c $(LT)/lt_proto.c $(LT)/lt_node.c $(LT)/pap_client.c | build
-	$(CC) $(CFLAGS) -I$(LT)/include -Itest -o $@ $^
-
-build/test_pap_relay: test/test_pap_relay.c $(LT)/lt_proto.c $(LT)/lt_node.c $(LT)/pap_client.c $(LT)/pap_relay.c | build
+build/test_pap_relay: test/test_pap_relay.c $(LT)/lt_proto.c $(LT)/lt_node.c $(LT)/pap_client.c $(LT)/pap_relay.c $(LT)/adsp.c $(LT)/sw_adapter.c | build
 	$(CC) $(CFLAGS) -I$(LT)/include -Itest -o $@ $^
 
 # W-1193: ADSP, the connections a Mac's StyleWriter driver makes. The engine keeps no state of
@@ -144,7 +147,7 @@ build/test_lw_core: test/test_lw_core.c $(COMP)/laser/lw_core.c $(COMP)/laser/lw
 
 # The board's LaserWriter side on the host, for test_interop.py (W-1082).
 build/lwhost: lwhost.c $(LT)/et_proto.c $(LT)/et_link.c $(LT)/lt_node.c $(LT)/pap_client.c \
-              $(LT)/lt_proto.c $(COMP)/laser/lw_query.c | build
+              $(LT)/lt_proto.c $(LT)/adsp.c $(LT)/sw_adapter.c $(COMP)/laser/lw_query.c | build
 	$(CC) $(CFLAGS) -I$(LT)/include -I$(COMP)/laser/include -o $@ $^
 
 CT := ../../firmware/components/cable_test

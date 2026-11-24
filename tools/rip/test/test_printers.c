@@ -2718,7 +2718,7 @@ static void test_json_ports(void)
     pr_set_shared(&L, sw, 0);
     CHECK(pr_json(&L, live, buf, sizeof buf) > 0);
     CHECK(strstr(buf, want) == NULL);
-    CHECK(strstr(buf, "\"chooser\":[\"Desk\",\"Office\"]") != NULL);   // a StyleWriter: not offered
+    CHECK(strstr(buf, "\"chooser\":[\"Desk\",\"Office\"]") != NULL);   // a StyleWriter not shared, and not on the port
     // Set to Something else: said, and no longer an ImageWriter for the Chooser.
     CHECK_EQ_INT(pr_set_model(&L, iw, PR_MODEL_NONE), 0);
     CHECK(pr_json(&L, live, buf, sizeof buf) > 0);
@@ -3701,6 +3701,207 @@ static void test_one_socket_reads_no_port_byte(void)
     CHECK_EQ_INT(pr_get(&M2, iw)->port, 0);
 }
 
+// ------------------------------------------------------------- W-1193: the adapter's offers
+
+// What link `cable_port` offers through the adapter: how many, and into ids/obj/type.
+static int swa_on(int cable_port, uint8_t ids[PR_SWA_MAX], uint8_t obj[PR_SWA_MAX][33],
+                  uint8_t type[PR_SWA_MAX][33])
+{
+    int n = pr_offers_swa(&L, cable_port, ids);
+    for (int k = 0; k < n; k++) CHECK(pr_offer_swa_as(&L, ids[k], cable_port, obj[k], type[k]));
+    return n;
+}
+
+static void test_swa_offers_by_model_and_type(void)
+{
+    uint8_t ids[PR_SWA_MAX], obj[PR_SWA_MAX][33], type[PR_SWA_MAX][33];
+    static const struct { pr_model_t m; const char *type; } M[] = {
+        { PR_MODEL_SW1, "StyleWriter1200AT" }, { PR_MODEL_SW2, "StyleWriter1200AT" },
+        { PR_MODEL_SW1200, "StyleWriter1200AT" }, { PR_MODEL_SWC1500, "StyleWriter1200AT" },
+        { PR_MODEL_SWC2200, "ColorStyleWriter2400AT" }, { PR_MODEL_SWC2400, "ColorStyleWriter2400AT" },
+        { PR_MODEL_SWC2500, "ColorStyleWriter2400AT" },
+    };
+    for (size_t i = 0; i < sizeof M / sizeof M[0]; i++) {
+        fresh();
+        int sw = seen_sw(M[i].m);
+        CHECK(sw > 0);
+        CHECK_EQ_INT(swa_on(0, ids, obj, type), 1);
+        CHECK_EQ_INT(ids[0], sw);
+        CHECK_EQ_MEM(type[0], P(M[i].type), 1 + strlen(M[i].type));
+        CHECK_EQ_MEM(obj[0], P(pr_model_name(M[i].m)), 1 + strlen(pr_model_name(M[i].m)));
+        CHECK(!strcmp(pr_swa_type(M[i].m), M[i].type));
+        // On every link alike, rev A's cable (port 2 there) too; and it is no PAP offer.
+        CHECK_EQ_INT(pr_offers_swa(&L, 2, ids), 1);
+        int pap[8];
+        CHECK_EQ_INT(pr_offers(&L, PR_WHERE_TUNNEL, pap, 8), 0);
+    }
+    CHECK(pr_swa_type(PR_MODEL_IW2) == NULL);
+    CHECK(pr_swa_type(PR_MODEL_NONE) == NULL);
+
+    // Under the name the page gives it, whatever the model; a name too long for NBP is cut.
+    fresh();
+    int sw = seen_sw(PR_MODEL_SWC2500);
+    pr_rename(&L, sw, "Inkwell");
+    CHECK_EQ_INT(swa_on(0, ids, obj, type), 1);
+    CHECK_EQ_MEM(obj[0], P("Inkwell"), 8);
+    // Not an id of the list, or a record not offered: nothing.
+    CHECK_EQ_INT(pr_offer_swa_as(&L, 99, 0, obj[0], type[0]), 0);
+    CHECK_EQ_INT(obj[0][0], 0);
+    // Beside an ImageWriter record whose printer is not the one on the port: both lists.
+    int iw = pr_add_port(&L, PR_MODEL_IW2);
+    CHECK(iw > 0);
+    int pap[8];
+    CHECK_EQ_INT(pr_offers(&L, PR_WHERE_TUNNEL, pap, 8), 1);
+    CHECK_EQ_INT(pap[0], iw);
+    CHECK_EQ_INT(pr_offers_swa(&L, 0, ids), 1);
+    CHECK_EQ_INT(ids[0], sw);
+    pr_live_t live[PR_MAX];
+    memset(live, 0, sizeof live);
+    static char js[4096];
+    CHECK(pr_json(&L, live, js, sizeof js) > 0);
+    CHECK(strstr(js, "\"chooser\":[\"Inkwell\",\"ImageWriter II\"]") != NULL);
+}
+
+// Review focus 4: a StyleWriter record whose printer is not the one on its port now, or
+// whose port is not a printer's, is offered to no Mac.
+static void test_swa_not_offered(void)
+{
+    uint8_t ids[PR_SWA_MAX];
+    pr_live_t live[PR_MAX];
+    memset(live, 0, sizeof live);
+    static char js[4096];
+    // Not shared over AirPrint: not offered; shared again, offered.
+    fresh();
+    int sw = seen_sw(PR_MODEL_SWC2500);
+    CHECK_EQ_INT(pr_offers_swa(&L, 0, ids), 1);
+    pr_set_shared(&L, sw, 0);
+    CHECK_EQ_INT(pr_offers_swa(&L, 0, ids), 0);
+    CHECK(pr_json(&L, live, js, sizeof js) > 0);
+    CHECK(strstr(js, "\"chooser\":[]") != NULL);
+    pr_set_shared(&L, sw, 1);
+    CHECK_EQ_INT(pr_offers_swa(&L, 0, ids), 1);
+    CHECK(pr_json(&L, live, js, sizeof js) > 0);
+    CHECK(strstr(js, "\"chooser\":[\"Color StyleWriter 2500\"]") != NULL);
+
+    // An ImageWriter plugged in its place: the port is the ImageWriter's, the StyleWriter's
+    // name goes, and comes back when the StyleWriter answers again.
+    int iw = seen_iw(PR_PORT_IW2);
+    CHECK(iw > 0 && pr_port_current(&L, 0) == pr_get(&L, iw));
+    CHECK_EQ_INT(pr_offers_swa(&L, 0, ids), 0);
+    uint8_t o[33], t[33];
+    CHECK_EQ_INT(pr_offer_swa_as(&L, sw, 0, o, t), 0);
+    CHECK(pr_json(&L, live, js, sizeof js) > 0);
+    CHECK(strstr(js, "\"chooser\":[\"ImageWriter II\"]") != NULL);
+    CHECK_EQ_INT(pr_port_seen_sw(&L, 0, PR_MODEL_SWC2500), sw);
+    CHECK_EQ_INT(pr_offers_swa(&L, 0, ids), 1);
+    CHECK_EQ_INT(ids[0], sw);
+    // Another StyleWriter in its place: that one's record is offered, not this.
+    int sw2 = seen_sw(PR_MODEL_SW2);
+    CHECK(sw2 > 0 && sw2 != sw);
+    CHECK_EQ_INT(pr_offers_swa(&L, 0, ids), 1);
+    CHECK_EQ_INT(ids[0], sw2);
+
+    // The person said Something else is on the port: nothing of the port's is offered.
+    fresh();
+    sw = seen_sw(PR_MODEL_SWC2500);
+    int other = pr_add_port(&L, PR_MODEL_IW2);
+    CHECK(other > 0);
+    CHECK_EQ_INT(pr_set_model(&L, other, PR_MODEL_NONE), 0);
+    CHECK(pr_port_said_other(&L, 0) != NULL);
+    CHECK(pr_port_current(&L, 0) == pr_get(&L, sw));      // the last to answer, all the same
+    CHECK_EQ_INT(pr_offers_swa(&L, 0, ids), 0);
+
+    // Its socket does LocalTalk (rev 2026.11): not offered on any link, by any of the ways
+    // the list knows it. The other socket's StyleWriter still is.
+    fresh2();
+    int a = seen_sw_on(0, PR_MODEL_SWC2500), b = seen_sw_on(1, PR_MODEL_SW2);
+    CHECK(a > 0 && b > 0 && a != b);
+    CHECK_EQ_INT(pr_offers_swa(&L, 0, ids), 2);
+    L.lt_port = 2;                                        // port 2 went to LocalTalk
+    CHECK_EQ_INT(pr_offers_swa(&L, 0, ids), 1);
+    CHECK_EQ_INT(ids[0], a);
+    CHECK_EQ_INT(pr_offers_swa(&L, 2, ids), 1);           // on that cable too
+    CHECK_EQ_INT(ids[0], a);
+    L.lt_port = 0;
+    L.lt_socks = 1 << 1;
+    CHECK_EQ_INT(pr_offers_swa(&L, 0, ids), 1);
+    CHECK_EQ_INT(ids[0], a);
+    L.lt_socks = 0;                                       // the list not told yet: the cable asking is
+    CHECK_EQ_INT(pr_offers_swa(&L, 2, ids), 1);           // port 2's, so port 2 holds no printer
+    CHECK_EQ_INT(ids[0], a);
+    CHECK_EQ_INT(pr_offers_swa(&L, 1, ids), 1);
+    CHECK_EQ_INT(ids[0], b);
+    L.lt_socks = 3;                                       // LocalTalk on both: none
+    L.lt_port = 1;
+    CHECK_EQ_INT(pr_offers_swa(&L, 0, ids), 0);
+    CHECK_EQ_INT(pr_offers_swa(&L, 1, ids), 0);
+    CHECK(pr_json(&L, live, js, sizeof js) > 0);
+    CHECK(strstr(js, "\"chooser\":[]") != NULL);
+    // Rev A: its AppleTalk port is port 2 and its one printer socket is never LocalTalk's.
+    fresh();
+    sw = seen_sw(PR_MODEL_SWC2500);
+    L.lt_port = 2;
+    L.lt_socks = 1 << 1;
+    CHECK_EQ_INT(pr_offers_swa(&L, 2, ids), 1);
+    CHECK_EQ_INT(pr_offers_swa(&L, 0, ids), 1);
+}
+
+static void test_swa_two_stylewriters(void)
+{
+    uint8_t ids[PR_SWA_MAX], obj[PR_SWA_MAX][33], type[PR_SWA_MAX][33];
+    // One on each socket, of different drivers: both, oldest first, each by its type.
+    fresh2();
+    int a = seen_sw_on(1, PR_MODEL_SW2), b = seen_sw_on(0, PR_MODEL_SWC2500);
+    CHECK_EQ_INT(swa_on(0, ids, obj, type), 2);
+    CHECK_EQ_INT(ids[0], a);
+    CHECK_EQ_INT(ids[1], b);
+    CHECK_EQ_MEM(obj[0], P("StyleWriter II"), 15);
+    CHECK_EQ_MEM(type[0], P("StyleWriter1200AT"), 18);
+    CHECK_EQ_MEM(obj[1], P("Color StyleWriter 2500"), 23);
+    CHECK_EQ_MEM(type[1], P("ColorStyleWriter2400AT"), 23);
+    // One name on both, but two types: the Chooser shows each under its own driver, no number.
+    pr_rename(&L, a, "Ink");
+    snprintf(pr_get(&L, b)->name, PR_NAME_MAX, "Ink");
+    CHECK_EQ_INT(swa_on(0, ids, obj, type), 2);
+    CHECK_EQ_MEM(obj[0], P("Ink"), 4);
+    CHECK_EQ_MEM(obj[1], P("Ink"), 4);
+    // A socket's older records, whose printers are not on it now, take no place.
+    int c = seen_sw_on(1, PR_MODEL_SW1200);
+    CHECK(c > 0 && c != a);
+    CHECK_EQ_INT(swa_on(0, ids, obj, type), 2);
+    CHECK_EQ_INT(ids[0], b);
+    CHECK_EQ_INT(ids[1], c);
+
+    // Two of one model and one name: the second, the younger record, gets " 2".
+    fresh2();
+    a = seen_sw_on(0, PR_MODEL_SWC2500);
+    pr_port_up(&L, 0, 1);                                 // it is still there
+    b = seen_sw_on(1, PR_MODEL_SWC2400);
+    CHECK(a > 0 && b > 0 && a != b);
+    snprintf(pr_get(&L, a)->name, PR_NAME_MAX, "Inkwell");
+    snprintf(pr_get(&L, b)->name, PR_NAME_MAX, "inkwell");   // NBP folds case
+    CHECK_EQ_INT(swa_on(0, ids, obj, type), 2);
+    CHECK_EQ_INT(ids[0], a);
+    CHECK_EQ_MEM(obj[0], P("Inkwell"), 8);
+    CHECK_EQ_MEM(obj[1], P("inkwell 2"), 10);
+    CHECK_EQ_MEM(type[0], type[1], 23);
+    pr_live_t live[PR_MAX];
+    memset(live, 0, sizeof live);
+    static char js[4096];
+    CHECK(pr_json(&L, live, js, sizeof js) > 0);
+    CHECK(strstr(js, "\"chooser\":[\"Inkwell\",\"inkwell 2\"]") != NULL);
+    // Alone on a link (the first one's socket is that cable's), the second keeps its name.
+    CHECK_EQ_INT(swa_on(1, ids, obj, type), 1);
+    CHECK_EQ_INT(ids[0], b);
+    CHECK_EQ_MEM(obj[0], P("inkwell"), 8);
+    // A name of 32: cut to make room for the number.
+    snprintf(pr_get(&L, a)->name, PR_NAME_MAX, "12345678901234567890123456789012");
+    snprintf(pr_get(&L, b)->name, PR_NAME_MAX, "12345678901234567890123456789012");
+    CHECK_EQ_INT(swa_on(0, ids, obj, type), 2);
+    CHECK_EQ_INT(obj[0][0], 32);
+    CHECK_EQ_MEM(obj[1], P("123456789012345678901234567890 2"), 33);
+}
+
 int main(void)
 {
     test_icons();
@@ -3792,5 +3993,8 @@ int main(void)
     test_two_sockets_removal_and_model();
     test_two_sockets_json();
     test_one_socket_reads_no_port_byte();
+    test_swa_offers_by_model_and_type();
+    test_swa_not_offered();
+    test_swa_two_stylewriters();
     TEST_END;
 }

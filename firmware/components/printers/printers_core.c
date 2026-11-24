@@ -2,6 +2,7 @@
 #include "printers_core.h"
 #include "lw_caps.h"
 #include "lt_proto.h"
+#include "sw_adapter.h"
 #include "sw_session.h"
 #include "qd_status.h"
 #include <stdio.h>
@@ -1075,9 +1076,9 @@ pr_gate_t pr_job_gate(const pr_list_t *l, int id, int heard, pr_model_t heard_mo
 
 // ------------------------------------------------------------- old Macs, the box
 
-// The port's one offer to vintage Macs: the oldest ImageWriter record (W-1116), fixed
-// across swaps. A StyleWriter is offered to none (phase 2); "Unknown printer" and
-// "Something else" are no printer to offer. NULL: none.
+// The port's one PAP offer to vintage Macs: the oldest ImageWriter record (W-1116), fixed
+// across swaps. A StyleWriter is offered through the adapter (swa_offered, below); "Unknown
+// printer" and "Something else" are no printer to offer. NULL: none.
 static const pr_rec_t *port_offer(const pr_list_t *l)
 {
     for (int i = 0; i < l->n; i++) {
@@ -1176,6 +1177,74 @@ int pr_offers_on(const pr_list_t *l, pr_where_t link, int cable_port, int ids[],
 int pr_offers(const pr_list_t *l, pr_where_t link, int ids[], int max)
 {
     return pr_offers_on(l, link, 0, ids, max);
+}
+
+// ------------------------------------------------------------- W-1193: the adapter's names
+
+_Static_assert(PR_SWA_MAX == SWA_NAMES, "a name in the adapter for each StyleWriter offered");
+
+// Socket s does the printer job as far as a link knows: not one of the LocalTalk sockets,
+// nor the socket the asking cable itself is on (cable_port 1 or 2; 0 for a link off the
+// sockets).
+static int sock_prints(const pr_list_t *l, int s, int cable_port)
+{
+    return !(l->lt_socks >> s & 1) && l->lt_port != s + 1 && cable_port != s + 1;
+}
+
+// Port record r is one a Mac's own StyleWriter driver is offered: a shared StyleWriter, the
+// printer on its socket now (the record that answered there last, with no Something else
+// record on the socket), on a socket doing the printer job. A record whose printer was
+// swapped for an ImageWriter, or whose socket went to LocalTalk, is none.
+static int swa_offered(const pr_list_t *l, const pr_rec_t *r, int cable_port)
+{
+    if (r->where != PR_WHERE_PORT || r->kind != PR_KIND_STYLEWRITER || !r->shared || !r->identified)
+        return 0;
+    int s = pr_port_sock(l, r);
+    return r == pr_port_current(l, s) && !pr_port_said_other(l, s) && sock_prints(l, s, cable_port);
+}
+
+int pr_offers_swa(const pr_list_t *l, int cable_port, uint8_t ids[PR_SWA_MAX])
+{
+    int n = 0;
+    for (int i = 0; i < l->n && n < PR_SWA_MAX; i++)
+        if (swa_offered(l, &l->r[i], cable_port)) ids[n++] = l->r[i].id;
+    return n;
+}
+
+const char *pr_swa_type(int model)
+{
+    switch (model) {
+    case PR_MODEL_SWC2200: case PR_MODEL_SWC2400: case PR_MODEL_SWC2500: return SWA_TYPE_COLOR;
+    case PR_MODEL_SW1: case PR_MODEL_SW2: case PR_MODEL_SW1200: case PR_MODEL_SWC1500:
+        return SWA_TYPE_MONO;
+    default: return NULL;
+    }
+}
+
+int pr_offer_swa_as(const pr_list_t *l, int id, int cable_port, uint8_t obj[NBP_NAME_MAX + 1],
+                    uint8_t type[NBP_NAME_MAX + 1])
+{
+    uint8_t ids[PR_SWA_MAX], was[NBP_NAME_MAX + 1] = { 0 }, was_type[NBP_NAME_MAX + 1] = { 0 };
+    int n = pr_offers_swa(l, cable_port, ids);
+    for (int k = 0; k < n; k++) {
+        const pr_rec_t *r = &l->r[pr_index(l, ids[k])];
+        const char *t = pr_swa_type(r->model);
+        if (!t) continue;                             // no driver of Apple's knows it
+        nbp_name(obj, r->name);
+        if (!obj[0]) nbp_name(obj, pr_model_name(r->model));
+        nbp_name(type, t);
+        // A second of the same name and type (two 2500s nobody renamed): " 2", cut to fit.
+        if (was[0] && pstr_eq(was, obj) && pstr_eq(was_type, type)) {
+            if (obj[0] > NBP_NAME_MAX - 2) obj[0] = NBP_NAME_MAX - 2;
+            obj[++obj[0]] = ' ';
+            obj[++obj[0]] = '2';
+        }
+        if (ids[k] == id) return 1;
+        memcpy(was, obj, sizeof was);
+        memcpy(was_type, type, sizeof was_type);
+    }
+    obj[0] = type[0] = 0;
+    return 0;
 }
 
 static pr_box_t one_state(const pr_live_t *v)
@@ -1777,8 +1846,12 @@ size_t pr_json(const pr_list_t *l, const pr_live_t live[PR_MAX], char *buf, size
     for (int i = 0, n = 0; i < l->n; i++) {
         const pr_rec_t *r = &l->r[i];
         char seen_as[3 * NBP_NAME_MAX + 1];
-        if (r->where == PR_WHERE_PORT ? r != own : !seen[i][0]) continue;
-        if (r->where == PR_WHERE_PORT) snprintf(seen_as, sizeof seen_as, "%s", r->name);
+        uint8_t sw_as[NBP_NAME_MAX + 1], sw_type[NBP_NAME_MAX + 1];
+        // W-1193: and each StyleWriter its own driver finds, under the name it is offered by.
+        int sw = r->where == PR_WHERE_PORT && pr_offer_swa_as(l, r->id, 0, sw_as, sw_type);
+        if (!sw && (r->where == PR_WHERE_PORT ? r != own : !seen[i][0])) continue;
+        if (sw) nbp_utf8(seen_as, sizeof seen_as, sw_as);
+        else if (r->where == PR_WHERE_PORT) snprintf(seen_as, sizeof seen_as, "%s", r->name);
         else nbp_utf8(seen_as, sizeof seen_as, seen[i]);
         esc(e_name, sizeof e_name, seen_as);
         PUT("%s\"%s\"", n++ ? "," : "", e_name);

@@ -6,6 +6,7 @@
 #include "lt_node.h"
 #include "lt_tashtalk.h"
 #include "serial_writer.h"
+#include "swa_mac.h"
 
 // ------------------------------------------------------------- the fake
 
@@ -28,6 +29,8 @@ static void f_send(void *ctx, const uint8_t *f, size_t n)
     (void)ctx;
     if (nsent < MAXSENT) { memcpy(sent[nsent], f, n); sent_len[nsent] = n; }
     nsent++;
+    ddp_t d;                                              // W-1193: the adapter's packets
+    if (!ddp_parse(f, n, &d) && d.type == DDP_ADSP) swm_out(&d);
 }
 static void f_claim(void *ctx, uint8_t node) { (void)ctx; claimed = node; }
 static void f_log(void *ctx, const char *line)
@@ -2108,6 +2111,226 @@ static void test_name_check(void)
     CHECK_EQ_INT(nchecked, 1);
 }
 
+// ------------------------------------------------------------- W-1193: the StyleWriter adapter
+
+// The Mac of swa_mac.h on this cable: node 83, short headers.
+static uint64_t swm_T;
+static void swm_in(uint8_t mac_sock, uint8_t our_sock, const uint8_t *p, size_t n)
+{
+    uint8_t f[LLAP_MAX];
+    lt_addr_t to = { 0, swm_node->node, our_sock }, from = { 0, 83, mac_sock };
+    size_t fl = ddp_build(f, sizeof f, swm_node->node, 83, 0, &to, &from, DDP_ADSP, p, n);
+    CHECK(fl > 0);
+    lt_node_rx(swm_node, f, fl, swm_T);
+}
+static void swm_step(unsigned ms)
+{
+    for (unsigned t = 0; t < ms; t += 10) { swm_T += 10; lt_node_tick(swm_node, swm_T); }
+}
+
+static uint8_t reply_enum(int i) { return sent[i][3 + 5 + 2 + 4]; }
+static const uint8_t *reply_type(int i) { return reply_obj(i) + 1 + reply_obj(i)[0]; }
+
+static void test_lookup_by_adapter_type_answers_with_its_socket(void)
+{
+    lt_node_t n;
+    uint64_t t = online_reg(&n, 200);
+    // No adapter: its types are nobody's, and the node answers as it always did.
+    lkup(&n, PS("="), PS(SWA_TYPE_COLOR), t);
+    CHECK_EQ_INT(nsent, 0);
+    CHECK(strstr(lastlog, "not us") != NULL);
+
+    swm_attach(&n, t);
+    reset_fake();
+    t += 40000;                                           // past the log's memory of that lookup
+    lkup(&n, PS("="), PS(SWA_TYPE_COLOR), t);
+    CHECK_EQ_INT(nsent, 1);
+    CHECK_EQ_INT(sent[0][0], 83);                         // to the Mac, from the names socket
+    CHECK_EQ_INT(sent[0][3 + 3], SOCK_NIS);
+    CHECK_EQ_INT(reply_sock(0), 0x89);
+    CHECK_EQ_INT(reply_sock(0), SWA_SOCK(0));
+    CHECK_EQ_INT(reply_enum(0), LT_REG_MAX);
+    CHECK_EQ_MEM(reply_obj(0), PS("Inkwell"), 8);
+    CHECK_EQ_MEM(reply_type(0), PS(SWA_TYPE_COLOR), 1 + strlen(SWA_TYPE_COLOR));
+    CHECK_EQ_INT(n.st.replies, 1);
+    // Logged by its type, never its name.
+    CHECK(strstr(lastlog, "LkUp " SWA_TYPE_COLOR) != NULL && strstr(lastlog, "answered") != NULL);
+    CHECK(strstr(lastlog, "Inkwell") == NULL);
+
+    reset_fake();
+    lkup(&n, PS("="), PS(SWA_TYPE_MONO), t + 2000);       // the other driver's
+    CHECK_EQ_INT(nsent, 1);
+    CHECK_EQ_INT(reply_sock(0), SWA_SOCK(1));
+    CHECK_EQ_INT(reply_enum(0), LT_REG_MAX + 1);
+    CHECK_EQ_MEM(reply_obj(0), PS("Quill"), 6);
+    reset_fake();
+    lkup(&n, PS("quill"), PS("stylewriter1200at"), t + 3000);   // by name, any case
+    CHECK_EQ_INT(nsent, 1);
+    CHECK_EQ_INT(reply_sock(0), SWA_SOCK(1));
+    reset_fake();
+    lkup(&n, PS("Quill"), PS(SWA_TYPE_COLOR), t + 4000);  // that name is not of this type
+    CHECK_EQ_INT(nsent, 0);
+    lkup(&n, PS("="), PS("ImageWriter"), t + 5000);       // the ImageWriter is still its own
+    CHECK_EQ_INT(nsent, 1);
+    CHECK_EQ_INT(reply_sock(0), LT_SOCK_SLS);
+    CHECK_EQ_INT(reply_enum(0), 0);
+
+    // A name withdrawn is answered no more; one put in its place is.
+    swa_name_t one[1];
+    memset(one, 0, sizeof one);
+    nbp_name(one[0].obj, "Nib");
+    nbp_name(one[0].type, SWA_TYPE_MONO);
+    one[0].id = 7;
+    swa_offer(&swm_adapter, one, 1, t + 6000);
+    reset_fake();
+    lkup(&n, PS("="), PS(SWA_TYPE_COLOR), t + 6000);
+    CHECK_EQ_INT(nsent, 0);
+    lkup(&n, PS("="), PS(SWA_TYPE_MONO), t + 7000);
+    CHECK_EQ_INT(nsent, 1);
+    CHECK_EQ_INT(reply_sock(0), SWA_SOCK(0));
+    CHECK_EQ_MEM(reply_obj(0), PS("Nib"), 4);
+
+    // Detached: silence again.
+    lt_node_attach_swa(&n, NULL);
+    reset_fake();
+    lkup(&n, PS("="), PS(SWA_TYPE_MONO), t + 8000);
+    CHECK_EQ_INT(nsent, 0);
+}
+
+static void test_wildcard_lookup_answers_every_name_once(void)
+{
+    lt_node_t n;
+    uint64_t t = online_reg(&n, 200);
+    lt_node_register(&n, 1, PS("Office"), PS("LaserWriter"), 0x85);
+    swm_attach(&n, t);
+    reset_fake();
+    lkup(&n, PS("="), PS("="), t);
+    CHECK_EQ_INT(nsent, 4);                               // the ImageWriter, Office, the two StyleWriters
+    CHECK_EQ_INT(n.st.replies, 4);
+    int socks[4] = { LT_SOCK_SLS, 0x85, SWA_SOCK(0), SWA_SOCK(1) };
+    int enums[4] = { 0, 1, LT_REG_MAX, LT_REG_MAX + 1 };
+    for (int i = 0; i < 4 && i < nsent; i++) {
+        CHECK_EQ_INT(reply_sock(i), socks[i]);
+        CHECK_EQ_INT(reply_enum(i), enums[i]);
+    }
+    CHECK_EQ_MEM(reply_obj(2), PS("Inkwell"), 8);
+    CHECK_EQ_MEM(reply_obj(3), PS("Quill"), 6);
+    // A node that does not answer as the ImageWriter still answers for its StyleWriters.
+    lt_node_set_serve(&n, 0);
+    reset_fake();
+    lkup(&n, PS("="), PS("="), t + 1000);
+    CHECK_EQ_INT(nsent, 3);
+    CHECK_EQ_INT(reply_sock(1), SWA_SOCK(0));
+}
+
+static void test_adsp_reaches_the_adapter_by_socket(void)
+{
+    lt_node_t n;
+    uint64_t t = online_reg(&n, 200);
+    swm_T = t;
+    swm_conn_t m;
+    // No adapter: type 7 is dropped wherever it is sent.
+    swm_node = &n;
+    swm_nsent = 0;
+    memset(&m, 0, sizeof m);
+    m.sock = 0xE0; m.ours = SWA_SOCK(0); m.id = 0x4D01; m.win = 0x0800;
+    swm_open_pkt(&m, 0x81);
+    CHECK_EQ_INT(nsent, 0);
+
+    swm_attach(&n, t);
+    CHECK(swm_open(&m, 0xE0, SWA_SOCK(0), 0x4D01));       // to 0x89: answered from 0x89
+    CHECK_EQ_INT(nsent, 1);
+    CHECK_EQ_INT(sent[0][0], 83);
+    CHECK_EQ_INT(sent[0][3 + 2], 0xE0);                   // to the Mac's socket
+    CHECK_EQ_INT(sent[0][3 + 3], 0x89);
+    CHECK_EQ_INT(sent[0][3 + 4], DDP_ADSP);
+    CHECK(swm_open(&m, 0xE1, SWA_SOCK(1), 0x4D03));       // and the second name's
+    // To the ImageWriter's socket, the PAP sockets, a registration's and the one past ours:
+    // dropped, and PAP is not disturbed.
+    static const uint8_t others[] = { LT_SOCK_SLS, LT_SOCK_CONN, LT_SOCK_PAPC, 0x85, 0x88, 0x8B, SOCK_NIS };
+    reset_fake();
+    for (size_t i = 0; i < sizeof others; i++) {
+        memset(&m, 0, sizeof m);
+        m.sock = 0xE2; m.ours = others[i]; m.id = 0x4D05; m.win = 0x0800;
+        int before = swm_nsent;
+        swm_open_pkt(&m, 0x81);
+        CHECK_EQ_INT(swm_nsent, before);
+    }
+    CHECK_EQ_INT(nsent, 0);
+    CHECK(!n.pap.open);
+    // Broadcast to our socket: not for a connection.
+    uint8_t f[LLAP_MAX], p[ADSP_HDR + 8] = { 0x4D, 0x07, 0, 0, 0, 0, 0, 0, 0, 0, 0x08, 0x00, 0x81,
+                                             0x01, 0x00, 0, 0, 0, 0, 0, 0 };
+    lt_node_rx(&n, f, mac_ddp(f, 0xFF, SWA_SOCK(0), DDP_ADSP, p, sizeof p), t);
+    CHECK_EQ_INT(nsent, 0);
+    // ATP to the adapter's socket is no PAP either.
+    size_t fl = mac_atp(f, 200, SWA_SOCK(0), ATP_TREQ, 0x01, 0x0301, 0, PAP_SEND_STATUS, 0, 0, NULL, 0);
+    lt_node_rx(&n, f, fl, t);
+    CHECK_EQ_INT(nsent, 0);
+
+    // A node acquiring its ID neither answers for the adapter nor ticks it.
+    lt_node_t a;
+    lt_cfg_t cfg = { "ImageWriter II", "ImageWriter", 0x0000, 201, 1, NULL, NULL };
+    lt_node_init(&a, &cfg, &OPS, 0);
+    CHECK(a.swa == NULL);                                 // init clears it: attach after
+    swm_attach(&a, 0);
+    reset_fake();
+    lkup(&a, PS("="), PS(SWA_TYPE_COLOR), 0);
+    CHECK(!swm_open(&m, 0xE0, SWA_SOCK(0), 0x4D01));
+    CHECK_EQ_INT(swm_nsent, 0);
+}
+
+static void test_whole_print_on_a_cable(void)
+{
+    lt_node_t n;
+    swm_T = online_reg(&n, 200);
+    swm_attach(&n, swm_T);
+    reset_fake();
+    int begins = job_begins;
+    swm_whole_print(SWA_SOCK(0), 3);
+    // Every frame of it went to the Mac from our socket, as ADSP, and nothing else was sent.
+    CHECK(nsent > 15 && nsent == swm_nsent);
+    for (int i = 0; i < nsent && i < MAXSENT; i++) {
+        CHECK_EQ_INT(sent[i][0], 83);
+        CHECK_EQ_INT(sent[i][3 + 3], SWA_SOCK(0));
+        CHECK_EQ_INT(sent[i][3 + 4], DDP_ADSP);
+    }
+    // The second name prints as the second record, and PAP beside it is untouched.
+    swm_nsent = 0;
+    swm_whole_print(SWA_SOCK(1), 5);
+    CHECK(!n.pap.open);
+    CHECK_EQ_INT(job_begins, begins);
+}
+
+// The adapter's Mac goes while its job waits for the pipe: a node made again (the owner
+// resets the adapter and attaches it again) starts clean.
+static void test_adapter_after_a_new_node(void)
+{
+    static uint8_t req[SWA_REQ_LEN] = { 0, 0, 0, 0xF1, 3, 'B', 'o', 'b' };
+    lt_node_t n;
+    swm_T = online_reg(&n, 200);
+    swm_attach(&n, swm_T);
+    swm_conn_t ctl;
+    CHECK(swm_open(&ctl, 0xE0, SWA_SOCK(0), 0x4D01));
+    swm_ask(&ctl, SWA_PRINT, req, sizeof req, 0x00, 0x00);
+    CHECK_EQ_INT(swa_job(&swm_adapter), 1);
+    swm_T = online_reg(&n, 200);                          // lt_node_init: nothing attached
+    CHECK(n.swa == NULL);
+    swa_reset(&swm_adapter);
+    CHECK_EQ_INT(swm_ends, 1);
+    CHECK_EQ_INT(swm_end_clean, 0);
+    lt_node_attach_swa(&n, &swm_adapter);
+    swm_nsent = 0;
+    swm_step(20000);                                      // no call back, no probe to a Mac it forgot
+    CHECK_EQ_INT(swm_nsent, 0);
+    CHECK_EQ_INT(swm_ends, 1);
+    reset_fake();
+    lkup(&n, PS("="), PS(SWA_TYPE_COLOR), swm_T);         // its names were kept
+    CHECK_EQ_INT(nsent, 1);
+    swm_nsent = 0;
+    swm_whole_print(SWA_SOCK(0), 3);
+}
+
 int main(void)
 {
     test_fcs();
@@ -2151,5 +2374,10 @@ int main(void)
     test_serve_off();
     test_lookup_out();
     test_name_check();
+    test_lookup_by_adapter_type_answers_with_its_socket();
+    test_wildcard_lookup_answers_every_name_once();
+    test_adsp_reaches_the_adapter_by_socket();
+    test_whole_print_on_a_cable();
+    test_adapter_after_a_new_node();
     TEST_END;
 }

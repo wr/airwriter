@@ -2,6 +2,7 @@
 // The LocalTalk node; see lt_node.h.
 #include "lt_node.h"
 #include "pap_client.h"
+#include "sw_adapter.h"
 #include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
@@ -151,6 +152,8 @@ static void on_nbp(lt_node_t *n, const ddp_t *d, uint64_t now)
         hits[r] = n->reg[r].sls && nbp_match(q.t.obj, n->reg[r].obj) &&
                   nbp_match(q.t.type, n->reg[r].type);
     for (int r = 0; r < LT_REG_MAX; r++) hit |= hits[r];
+    // W-1193: and the adapter's StyleWriters, each under its driver's type.
+    hit |= n->swa && swa_lookup(n->swa, &q.t, 0, NULL) >= 0;
 
     // Log a lookup once, not every second the Chooser repeats it.
     uint8_t key[sizeof n->last_lkup];
@@ -182,6 +185,21 @@ static void on_nbp(lt_node_t *n, const ddp_t *d, uint64_t now)
                            .enumerator = (uint8_t)r };
         memcpy(me.obj, r ? n->reg[r].obj : n->obj, sizeof me.obj);
         memcpy(me.type, r ? n->reg[r].type : n->type, sizeof me.type);
+        me.zone[0] = 1;
+        me.zone[1] = '*';
+        uint8_t pkt[2 + 5 + 3 * (NBP_NAME_MAX + 1)];
+        size_t pl = nbp_build(pkt, sizeof pkt, NBP_LKUP_REPLY, q.id, &me);
+        if (pl) {
+            send_ddp(n, &to, SOCK_NIS, DDP_NBP, pkt, pl);
+            n->st.replies++;
+        }
+    }
+    const swa_name_t *nm;
+    for (int i = 0; n->swa && (i = swa_lookup(n->swa, &q.t, i, &nm)) >= 0; i++) {
+        nbp_tuple_t me = { .addr = { n->net, n->node, (uint8_t)SWA_SOCK(i) },
+                           .enumerator = (uint8_t)(LT_REG_MAX + i) };
+        memcpy(me.obj, nm->obj, sizeof me.obj);
+        memcpy(me.type, nm->type, sizeof me.type);
         me.zone[0] = 1;
         me.zone[1] = '*';
         uint8_t pkt[2 + 5 + 3 * (NBP_NAME_MAX + 1)];
@@ -638,11 +656,22 @@ void lt_node_send_atp(lt_node_t *n, const lt_route_t *to, uint8_t src_sock, uint
 
 uint16_t lt_node_next_tid(lt_node_t *n) { return next_tid(n); }
 
+void lt_node_send_ddp(lt_node_t *n, const lt_route_t *to, uint8_t src_sock, uint8_t type,
+                      const uint8_t *data, size_t len)
+{
+    send_ddp(n, to, src_sock, type, data, len);
+}
+
 void lt_node_attach(lt_node_t *n, struct pap_client *c)
 {
     if (n->client && n->client != c) n->client->node = NULL;
     n->client = c;
     if (c) c->node = n;
+}
+
+void lt_node_attach_swa(lt_node_t *n, struct sw_adapter *a)
+{
+    n->swa = a;
 }
 
 // ------------------------------------------------------------- the rest
@@ -752,6 +781,8 @@ void lt_node_set_address(lt_node_t *n, uint16_t net, uint8_t node, uint64_t now)
     (void)now;
     if (n->link != LT_LINK_ELAP) return;
     if (n->pap.open && (net != n->net || node != n->node)) pap_close(n, "the address changed", 0);
+    // W-1193: the adapter's connections were to the old address: its job ends too.
+    if (n->swa && (net != n->net || node != n->node)) swa_reset(n->swa);
     n->net = node ? net : 0;
     n->node = node;
     n->phase = node ? LT_ONLINE : LT_ACQUIRING;
@@ -956,6 +987,11 @@ void lt_node_rx(lt_node_t *n, const uint8_t *f, size_t len, uint64_t now)
     case DDP_ATP:  on_atp(n, &d, now); break;
     case DDP_RTMP: on_rtmp(n, &d); break;
     case DDP_AEP:  on_aep(n, &d, now); break;
+    case DDP_ADSP:                                 // W-1193: to the adapter's sockets alone
+        if (n->swa && d.dst.node == n->node && d.dst.sock >= SWA_SOCK(0) &&
+            d.dst.sock < SWA_SOCK(SWA_NAMES))
+            swa_rx(n->swa, &d, now);
+        break;
     default: break;
     }
 }
@@ -966,6 +1002,7 @@ void lt_node_tick(lt_node_t *n, uint64_t now)
         pap_tick(n, now);
         names_tick(n, now);
         if (n->client) papc_tick(n->client, now);
+        if (n->swa) swa_tick(n->swa, now);
         return;
     }
     if (n->link == LT_LINK_ELAP) return;

@@ -38,8 +38,7 @@
 #include "lt_node.h"
 #include "adsp.h"
 
-#define SWA_NAMES    2
-#define SWA_SOCK(i)  (0x89 + (i))
+// SWA_NAMES, SWA_SOCK(i) and swa_name_t are lt_node.h's: the node's offers carry them.
 #define SWA_TYPE_COLOR "ColorStyleWriter2400AT"   // 2200, 2400, 2500
 #define SWA_TYPE_MONO  "StyleWriter1200AT"        // original, II, 1200, 1500
 #define SWA_REQ_LEN  70
@@ -60,7 +59,6 @@ enum {
     SWA_JOB_COUNT = 0x0011, SWA_END = 0x0012,
 };
 
-typedef struct { uint8_t obj[NBP_NAME_MAX + 1], type[NBP_NAME_MAX + 1], id; } swa_name_t; // id 0: none
 typedef struct {
     void  *ctx;
     void   (*send)(void *ctx, const lt_route_t *to, uint8_t src_sock, const uint8_t *p, size_t n);

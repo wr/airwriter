@@ -27,6 +27,7 @@
 #include "lt_proto.h"
 
 struct pap_client;              // pap_client.h (W-1082)
+struct sw_adapter;              // sw_adapter.h (W-1193)
 
 #define LT_SOCK_SLS   0x81      // PAP server listening socket, registered with NBP
 #define LT_SOCK_CONN  0x82      // the one connection's ATP responding socket
@@ -40,6 +41,14 @@ struct pap_client;              // pap_client.h (W-1082)
 #define LT_AIRWRITER_TYPE "AirWriter"
 // One registration: its name (Pascal, MacRoman) and listening socket.
 typedef struct lt_reg { uint8_t obj[NBP_NAME_MAX + 1], type[NBP_NAME_MAX + 1], sls; } lt_reg_t;
+// W-1193: the StyleWriter adapter's names (sw_adapter.h), beside the registrations: up to
+// SWA_NAMES port StyleWriters, each on a listening socket of its own (0x89, 0x8A), where a
+// Mac's driver opens an ADSP connection (DDP type 7) and where its call-back comes from. An
+// NBP answer for name i carries enumerator LT_REG_MAX + i. id is the printer list's record
+// (0: no name).
+#define SWA_NAMES    2
+#define SWA_SOCK(i)  (0x89 + (i))
+typedef struct { uint8_t obj[NBP_NAME_MAX + 1], type[NBP_NAME_MAX + 1], id; } swa_name_t;
 #define LT_FLOW       8         // our flow quantum: 512-byte packets per SendData
 #define LT_READ_MAX   (LT_FLOW * PAP_QUANTUM)   // the most one SendData can bring
 
@@ -298,6 +307,7 @@ typedef struct {
     uint8_t    serve;
     uint8_t    lkup_id;        // the last lt_node_lookup's NBP id
     struct pap_client *client; // the PAP client riding this node, or NULL
+    struct sw_adapter *swa;    // W-1193: the StyleWriter adapter riding it, or NULL
     // W-1088: more names on this node, each with its own listening socket:
     // printers offered to Macs here, and the AirWriter marker. reg[0] is
     // unused (the node's own is obj:type above). The link's room (cfg.regs),
@@ -362,6 +372,11 @@ typedef struct {
     // W-1186: whose each relayed name is, the printer list's record id: a name may not be the
     // printer's own NBP name (two LaserWriters with one name), so the relay goes by this.
     uint8_t    ids[LT_REG_MAX - 2];
+    // W-1193: the port StyleWriters a Mac's own driver prints to through the adapter, for
+    // swa_offer: each one's name, its driver's type and its record id. The node does not keep
+    // them (lt_node_offer leaves them be); the link hands them to its adapter.
+    swa_name_t swa[SWA_NAMES];
+    int        n_swa;
 } lt_offers_t;
 // Which registration the open connection is on (0 the node's own).
 int      lt_node_pap_reg(const lt_node_t *n);
@@ -374,6 +389,16 @@ void     lt_node_send_atp(lt_node_t *n, const lt_route_t *to, uint8_t src_sock, 
                           uint8_t bitmap, uint16_t tid, const uint8_t user[4],
                           const uint8_t *data, size_t len);
 uint16_t lt_node_next_tid(lt_node_t *n);
+// W-1193: any datagram from one of our sockets: the adapter's ADSP packets (DDP_ADSP).
+void     lt_node_send_ddp(lt_node_t *n, const lt_route_t *to, uint8_t src_sock, uint8_t type,
+                          const uint8_t *data, size_t len);
 // The PAP client riding this node: ATP to LT_SOCK_PAPC and LT_SOCK_PAPC_ST
 // goes to it, and lt_node_tick ticks it. NULL detaches.
 void     lt_node_attach(lt_node_t *n, struct pap_client *c);
+// W-1193: the StyleWriter adapter riding this node (one a link, the owner's): a LkUp that
+// matches one of its names (swa_lookup) is answered with that name's socket, a DDP type 7
+// datagram to a SWA_SOCK reaches swa_rx, and lt_node_tick ticks it, all only while the node
+// is online. NULL detaches. lt_node_init clears it, as it does the PAP client: the owner
+// attaches again after every init, and resets the adapter (swa_reset) then. An ELAP node
+// whose address changes or goes resets it itself, as it ends a PAP job.
+void     lt_node_attach_swa(lt_node_t *n, struct sw_adapter *a);

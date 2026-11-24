@@ -1101,7 +1101,8 @@ read back is a list made again). At most 8 records.
   then (W-1116) `port_on` (the id of the port record whose printer is on the port: the one
   that answered last, while it is present; 0 for none), `said_other` (a Something else record
   is in the list), `chooser` (the names vintage Macs see: the port ImageWriter's as on the
-  page, an AppleTalk printer's own NBP name whatever the page calls it) and `max_shared` (6);
+  page, an AppleTalk printer's own NBP name whatever the page calls it, and W-1193 each port
+  StyleWriter its own driver is offered, by the name it is offered under) and `max_shared` (6);
   `swapped` is gone. `POST /api/printers` with `{"look":true}`, `{"add_port":"<model>"}`,
   `{"note":N, "dismiss":true}` or `{"id":N, "name", "shared", "model" ("none" for Something
   else), "remove", "use_anyway", "dither", "gain", "clean"}`; 400 with a sentence for the page
