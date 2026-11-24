@@ -182,6 +182,12 @@ sw_model_t sw_ask_plain(const sw_ops_t *o)
     return ask_once(o, 'p', &p, ID_BYTE_MS) == 1 ? sw_model_from_p(p) : SW_NONE;
 }
 
+int sw_reset(const sw_ops_t *o)
+{
+    if (!o || !o->write) return SW_E_SILENT;
+    return o->write(o->ctx, k_reset, sizeof k_reset) ? SW_E_SILENT : SW_OK;
+}
+
 sw_model_t sw_ask_full(const sw_ops_t *o)
 {
     static const uint32_t settle[2] = { SETTLE_MS, SETTLE_LONG_MS };

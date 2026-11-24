@@ -135,6 +135,12 @@ sw_model_t stylewriter_ask_full(void)
     return m;
 }
 
+void stylewriter_reset(void)
+{
+    stylewriter_link(1);
+    if (sw_reset(&k_ops) == SW_OK) serial_out_flush(500);
+}
+
 int stylewriter_status(sw_model_t m, sw_state_t *st)
 {
     stylewriter_link(1);

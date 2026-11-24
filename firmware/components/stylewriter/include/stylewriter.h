@@ -63,6 +63,11 @@ sw_model_t stylewriter_ask_plain(void);
 // The full sequence, for a printer the person or the record named (sw_ask_full): SW_NONE if
 // it does not answer. The link is the record's again at the end.
 sw_model_t stylewriter_ask_full(void);
+// W-1193: the reset alone (sw_reset) at a StyleWriter's link, which the port is left at: for
+// the adapter's pump, when a Mac's driver left the printer partway through its page. Waits
+// only for the five bytes to leave. The caller holds the port for 10 s after and then puts the
+// link back (stylewriter_link_record).
+void       stylewriter_reset(void);
 // `1` and `2`: SW_OK with *st, or SW_E_SILENT (sw_ask_status).
 int        stylewriter_status(sw_model_t m, sw_state_t *st);
 // The cartridge: 1 colour, 0 black, or SW_E_SILENT / SW_E_CART (sw_ask_cart).

@@ -110,6 +110,12 @@ sw_model_t sw_ask_plain(const sw_ops_t *o);
 // (sw_model_from_p). SW_NONE for no reply, a reply that is not a StyleWriter's, or a CS
 // that does not answer `p`.
 sw_model_t sw_ask_full(const sw_ops_t *o);
+// W-1193: the reset alone, `00 FF FF FF 49`, in one write, for a printer left partway through
+// someone else's page (a Mac's driver that vanished from the adapter's pipe): it ejects the
+// page and starts over. Nothing is read and nothing waited for; the caller leaves it 10 s
+// before anything else is sent, since a second reset close behind has left a 2500 dark. 0, or
+// nonzero when the write failed.
+int sw_reset(const sw_ops_t *o);
 
 // `1` and `2`, for the idle check every 10 s. SW_OK with *st the state, or SW_E_SILENT
 // (and SWS_OFFLINE) when either goes unanswered twice in a second each.

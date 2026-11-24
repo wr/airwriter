@@ -132,6 +132,14 @@ build/test_sw_adapter: test/test_sw_adapter.c $(LT)/sw_adapter.c $(LT)/adsp.c $(
 build/sw_adapter.o: $(LT)/sw_adapter.c | build
 	$(CC) $(CFLAGS) -I$(LT)/include -c -o $@ $<
 
+# W-1193: the pipe between that adapter and the port, and the pump's round. Its rings are the
+# owner's too.
+build/test_sw_pipe: test/test_sw_pipe.c $(LT)/sw_pipe.c | build
+	$(CC) $(CFLAGS) -I$(LT)/include -Itest -o $@ $^
+
+build/sw_pipe.o: $(LT)/sw_pipe.c | build
+	$(CC) $(CFLAGS) -I$(LT)/include -c -o $@ $<
+
 # W-1088: the printer list, beside the LaserWriter pieces it names records with.
 build/test_printers: test/test_printers.c $(COMP)/printers/printers_core.c $(COMP)/laser/lw_caps.c \
                      $(COMP)/laser/lw_query.c $(COMP)/printer_caps/printer_caps.c $(LT)/lt_proto.c \
@@ -228,9 +236,9 @@ QD_OBJS := build/qd_model.o build/qd_wire.o build/qd_status.o build/qd_page.o bu
 build/qd_%.o: $(COMP)/qdlaser/qd_%.c | build
 	$(CC) $(CFLAGS) $(INCS) -c -o $@ $<
 
-test: $(TESTBIN) build/printers_core.o build/port_policy.o build/logbook_core.o build/auth_core.o build/adsp.o build/sw_adapter.o $(SW_OBJS) $(QD_OBJS) $(TP_OBJS)
+test: $(TESTBIN) build/printers_core.o build/port_policy.o build/logbook_core.o build/auth_core.o build/adsp.o build/sw_adapter.o build/sw_pipe.o $(SW_OBJS) $(QD_OBJS) $(TP_OBJS)
 	@fail=0; for t in $(TESTBIN); do ./$$t || fail=1; done; \
-	for o in printers_core port_policy logbook_core auth_core adsp sw_adapter $(basename $(notdir $(SW_OBJS) $(QD_OBJS) $(TP_OBJS))); do \
+	for o in printers_core port_policy logbook_core auth_core adsp sw_adapter sw_pipe $(basename $(notdir $(SW_OBJS) $(QD_OBJS) $(TP_OBJS))); do \
 	  if nm build/$$o.o | grep -E ' [bBdD] ' | grep -v ' ltmp'; then \
 	    echo "FAIL $$o: writable statics (above)"; fail=1; \
 	  else echo "ok  $$o: no writable statics"; fi; \

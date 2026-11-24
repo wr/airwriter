@@ -1217,6 +1217,24 @@ static void test_ask_full(void)
     sw_session_free(s);
 }
 
+// W-1193: the reset alone, for a printer a Mac's driver left partway through a page: the five
+// bytes in one write, nothing asked and nothing waited for.
+static void test_reset_alone(void)
+{
+    sw_ops_t o = ops();
+    fake_init(SW_C2500, 1);
+    CHECK_EQ_INT(sw_reset(&o), SW_OK);
+    static const uint8_t full[] = { 0x00, 0xFF, 0xFF, 0xFF, 0x49 };
+    CHECK_EQ_MEM(F.raw, full, 5);
+    CHECK_STR(F.trace, "00 [I]");
+    CHECK_EQ_INT(F.resets, 1);
+    CHECK_EQ_INT(F.nsleeps, 0);
+    CHECK_EQ_INT(F.bad, 0);
+    CHECK(sw_reset(NULL) != SW_OK);
+    sw_ops_t none = { 0 };
+    CHECK(sw_reset(&none) != SW_OK);
+}
+
 static void test_wrong_model(void)
 {
     // The printer says SW3; the job was made for a StyleWriter II.
@@ -1714,6 +1732,7 @@ int main(void)
     test_ask_cart();
     test_plain();
     test_ask_full();
+    test_reset_alone();
     test_wrong_model();
     test_b_one_short();
     test_letters_counted();
