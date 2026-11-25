@@ -19,10 +19,13 @@
 // What it does:
 // - Accepts an Open Request on any socket the owner says yes for, and opens
 //   to a far socket (the adapter's call-back). Connections are told apart by
-//   our socket, the far address and the far connection ID together.
+//   our socket, the far address and the far connection ID together. An open
+//   of ours is answered, or denied, only by the network and node it went to
+//   (any socket there).
 // - Stream, in order only: a packet ahead is dropped, an overlap gives its
 //   new bytes, bytes beyond the taker's room are not taken. End of message
-//   takes one sequence number. An ack for every packet that asks.
+//   takes one sequence number. An ack for every packet that asks, and one
+//   unasked when the window opens (adsp_window).
 // - Sends with an ack asked on every packet, inside the far window, again
 //   after ADSP_RESEND_MS and at once on Retransmit Advice. It never sends an
 //   end of message.
@@ -141,7 +144,10 @@ int    adsp_open(adsp_t *a, uint8_t local_sock, const lt_route_t *to, uint64_t n
 size_t adsp_write(adsp_t *a, int c, const uint8_t *d, size_t n, uint64_t now);       // bytes taken
 size_t adsp_tx_free(const adsp_t *a, int c);
 int    adsp_tx_idle(const adsp_t *a, int c);            // nothing unacknowledged
-void   adsp_window(adsp_t *a, int c, uint64_t now);     // room changed: say so if it was zero
+// Room changed. Said unasked when the window the far end was last told is
+// used up and there is room, or has under ADSP_MAX_DATA left and there is that
+// much more: a far end that waits for a whole packet's room hears at once.
+void   adsp_window(adsp_t *a, int c, uint64_t now);
 void   adsp_close(adsp_t *a, int c, uint64_t now);      // Close Advice once, then free
 void   adsp_tick(adsp_t *a, uint64_t now);
 int    adsp_is_open(const adsp_t *a, int c);

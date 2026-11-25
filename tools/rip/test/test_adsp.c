@@ -463,6 +463,46 @@ static void test_second_request_ack_from_a_new_conn_id_is_adopted(void)
     CHECK(adsp_tx_idle(E, c));
 }
 
+// Our connection ID is a small number anyone on the network could name: only the network
+// and node the Open Request went to may answer it, from any socket there.
+static void test_request_ack_only_from_the_node_we_asked(void)
+{
+    static const lt_route_t OTHER = { { 0, 21, 0xF1 }, 21, 0 };     // another node
+    static const lt_route_t NET   = { { 5, 20, 0xF1 }, 20, 1 };     // node 20 of another network
+    static const lt_route_t MACX  = { { 0, 20, 0xF7 }, 20, 0 };     // the Mac, another socket
+    fresh(0xA002);
+    int c = adsp_open(E, US, &MACD, T);
+    rx_open(&OTHER, 0x6666, 0x0800, 0x83, 0xA003);
+    rx_open(&NET, 0x6666, 0x0800, 0x83, 0xA003);
+    CHECK_EQ_INT(nsent, 1);                                 // only our request
+    CHECK_EQ_INT(n_opened, 0);
+    CHECK(!adsp_is_open(E, c));
+    rx_open(&OTHER, 0x6666, 0x0800, 0x84, 0xA003);          // nor may they deny it
+    rx_open(&NET, 0x6666, 0x0800, 0x84, 0xA003);
+    CHECK_EQ_INT(n_closed, 0);
+    // The Mac itself, from a socket other than the one we called: taken.
+    rx_open(&MACX, 0x4D02, 0x0800, 0x83, 0xA003);
+    CHECK_EQ_INT(n_opened, 1);
+    CHECK(adsp_is_open(E, c));
+    CHECK_EQ_INT(nsent, 2);
+    EXPECT_OPEN(1, &MACX, 0xA003, 0x1000, 0x82, 0x4D02);
+    CHECK_EQ_INT(adsp_peer(E, c)->addr.sock, 0xF7);
+
+    // A second Request+Ack from a new connection ID is adopted from that node alone.
+    rx_open(&OTHER, 0x7777, 0x0800, 0x83, 0xA003);
+    rx_open(&NET, 0x7777, 0x0800, 0x83, 0xA003);
+    CHECK_EQ_INT(nsent, 2);
+    rx(&OTHER, 0x7777, 0, 0, 0x0800, 0x40, "bad", 3);
+    CHECK_EQ_INT(got_n, 0);
+    CHECK_EQ_INT(adsp_peer(E, c)->addr.node, 20);
+    rx_open(&MACD, 0x4D03, 0x0800, 0x83, 0xA003);           // the Mac's own second answer
+    CHECK_EQ_INT(nsent, 3);
+    EXPECT_OPEN(2, &MACD, 0xA003, 0x1000, 0x82, 0x4D03);
+    rx(&MACD, 0x4D03, 0, 0, 0x0800, 0x40, "new", 3);
+    CHECK_EQ_INT(got_n, 3);
+    CHECK_EQ_MEM(got, "new", 3);
+}
+
 static void test_repeated_request_ack_gets_the_ack_again(void)
 {
     fresh(0xA002);
@@ -681,6 +721,96 @@ static void test_data_both_ways(void)
     CHECK_EQ_INT(nsent, 4);
     EXPECT(3, &MACD, 0xA003, 3, 7, 0x1000, 0x40, "\x08", 1);        // A 3 -> 4
     CHECK_EQ_MEM(got, "?\xFF\xFF\xFF\x31", 5);
+}
+
+// Sequence numbers are 32 bits and wrap: the Mac's stream starts at FFFFFF00, ours at
+// FFFFFF80 and the attentions at FFFFFFFE, and everything goes on across 0.
+static void test_sequences_wrap(void)
+{
+    uint8_t par[8] = { 0x01, 0x00, 0, 0, 0, 0, 0, 0 };
+    fresh(0xA000);
+    rx(&MAC, 0x4D01, 0xFFFFFF00u, 0, 0x0800, 0x81, par, sizeof par);
+    int c = last_opened;
+    CHECK_EQ_INT(n_opened, 1);
+    E->c[c].tx_una = 0xFFFFFF80u;                           // as if we had sent that much
+    E->c[c].tx_limit = 0xFFFFFF80u + 0x0800;
+    E->c[c].attn_rx = 0xFFFFFFFEu;
+    nsent = 0;
+
+    // The Mac's bytes: three packets of 200, the second across 0, the third a message's end.
+    static uint8_t in[600];
+    for (size_t i = 0; i < sizeof in; i++) in[i] = (uint8_t)(i * 11 + 1);
+    rx(&MAC, 0x4D01, 0xFFFFFF00u, 0xFFFFFF80u, 0x0800, 0x40, in, 200);
+    EXPECT(0, &MAC, 0xA001, 0xFFFFFF80u, 0xFFFFFFC8u, 0x1000, 0x80, NULL, 0);
+    rx(&MAC, 0x4D01, 0xFFFFFFC8u, 0xFFFFFF80u, 0x0800, 0x40, in + 200, 200);
+    EXPECT(1, &MAC, 0xA001, 0xFFFFFF80u, 0x00000090u, 0x1000, 0x80, NULL, 0);
+    rx(&MAC, 0x4D01, 0x00000090u, 0xFFFFFF80u, 0x0800, 0x60, in + 400, 200);
+    EXPECT(2, &MAC, 0xA001, 0xFFFFFF80u, 0x00000159u, 0x1000, 0x80, NULL, 0);   // + the end
+    CHECK_EQ_INT(got_n, 600);
+    CHECK_EQ_MEM(got, in, 600);
+    CHECK_EQ_INT(n_eom, 1);
+    // One from before 0 again: acked, not taken. One ahead: dropped. An overlap: its new bytes.
+    rx(&MAC, 0x4D01, 0xFFFFFFC8u, 0xFFFFFF80u, 0x0800, 0x40, in + 200, 200);
+    CHECK_EQ_INT(got_n, 600);
+    EXPECT(3, &MAC, 0xA001, 0xFFFFFF80u, 0x00000159u, 0x1000, 0x80, NULL, 0);
+    rx(&MAC, 0x4D01, 0x00000200u, 0xFFFFFF80u, 0x0800, 0x00, "far", 3);
+    CHECK_EQ_INT(got_n, 600);
+    rx(&MAC, 0x4D01, 0x00000157u, 0xFFFFFF80u, 0x0800, 0x00, "..ok", 4);
+    CHECK_EQ_INT(got_n, 602);
+    CHECK_EQ_MEM(got + 600, "ok", 2);
+
+    // Ours: 300 bytes across 0, acknowledged in two parts; then a far window that ends
+    // before 0 holds the rest until it opens.
+    static uint8_t out[300];
+    for (size_t i = 0; i < sizeof out; i++) out[i] = (uint8_t)(i * 5 + 2);
+    int mark = nsent;
+    CHECK_EQ_INT(adsp_write(E, c, out, sizeof out, T), sizeof out);
+    EXPECT(mark, &MAC, 0xA001, 0xFFFFFF80u, 0x0000015Bu, 0x1000, 0x40, out, 300);
+    rx(&MAC, 0x4D01, 0x0000015Bu, 0xFFFFFFE4u, 0x0800, 0x80, NULL, 0);       // 100 of them
+    CHECK(!adsp_tx_idle(E, c));
+    CHECK_EQ_INT(adsp_tx_free(E, c), ADSP_TX_CAP - 200);
+    T += ADSP_RESEND_MS;
+    adsp_tick(E, T);                                        // the rest, once more
+    EXPECT(nsent - 1, &MAC, 0xA001, 0xFFFFFFE4u, 0x0000015Bu, 0x1000, 0x40, out + 100, 200);
+    rx(&MAC, 0x4D01, 0x0000015Bu, 0x000000ACu, 0x0800, 0x80, NULL, 0);       // all of them
+    CHECK(adsp_tx_idle(E, c));
+    rx(&MAC, 0x4D01, 0x0000015Bu, 0xFFFFFFE4u, 0x0800, 0x80, NULL, 0);       // a stale ack: nothing
+    CHECK(adsp_tx_idle(E, c));
+    mark = nsent;
+    CHECK_EQ_INT(adsp_write(E, c, (const uint8_t *)"next", 4, T), 4);
+    EXPECT(mark, &MAC, 0xA001, 0x000000ACu, 0x0000015Bu, 0x1000, 0x40, "next", 4);
+    rx(&MAC, 0x4D01, 0x0000015Bu, 0x000000B0u, 0x0800, 0x80, NULL, 0);
+    CHECK(adsp_tx_idle(E, c));
+
+    // The same for a far window, with our stream just short of 0.
+    E->c[c].tx_una = 0xFFFFFFFEu;
+    E->c[c].tx_limit = 0xFFFFFFFEu + 3;                     // it takes three bytes, across 0
+    mark = nsent;
+    CHECK_EQ_INT(adsp_write(E, c, (const uint8_t *)"abcdef", 6, T), 6);
+    CHECK_EQ_INT(nsent, mark + 1);
+    EXPECT(mark, &MAC, 0xA001, 0xFFFFFFFEu, 0x0000015Bu, 0x1000, 0x40, "abc", 3);
+    rx(&MAC, 0x4D01, 0x0000015Bu, 0x00000001u, 0x0800, 0x80, NULL, 0);
+    EXPECT(mark + 1, &MAC, 0xA001, 0x00000001u, 0x0000015Bu, 0x1000, 0x40, "def", 3);
+    rx(&MAC, 0x4D01, 0x0000015Bu, 0x00000004u, 0x0800, 0x80, NULL, 0);
+    CHECK(adsp_tx_idle(E, c));
+
+    // Attentions: FFFFFFFE, FFFFFFFF, 0, each delivered once and acked with the next.
+    static const uint32_t seqs[3] = { 0xFFFFFFFEu, 0xFFFFFFFFu, 0x00000000u };
+    for (int i = 0; i < 3; i++) {
+        mark = nsent;
+        rx(&MAC, 0x4D01, seqs[i], 0, 0, 0x50, "\x00\x11\x00", 3);
+        CHECK_EQ_INT(n_attn, i + 1);
+        CHECK_EQ_INT(attn_code, 0x0011);
+        EXPECT(mark, &MAC, 0xA001, 0, seqs[i] + 1, 0, 0x90, NULL, 0);
+    }
+    mark = nsent;
+    rx(&MAC, 0x4D01, 0xFFFFFFFFu, 0, 0, 0x50, "\x00\x11\x00", 3);     // a repeat from before 0
+    CHECK_EQ_INT(n_attn, 3);
+    EXPECT(mark, &MAC, 0xA001, 0, 1, 0, 0x90, NULL, 0);
+    // And none of it moved the stream.
+    CHECK_EQ_INT(got_n, 602);
+    CHECK(adsp_is_open(E, c));
+    CHECK_EQ_INT(n_closed, 0);
 }
 
 static void test_message_across_two_packets(void)
@@ -965,6 +1095,42 @@ static void test_window_filled_without_an_ack_is_still_announced(void)
     held = 0;
     adsp_window(E, c, T);
     CHECK_EQ_INT(nsent, 2);
+}
+
+// A Mac that will not send part of a packet into a window smaller than one would wait for
+// our next probe: with under a packet's room left of what it was told, it hears as soon as
+// there is a whole packet more.
+static void test_small_window_is_announced_when_a_packet_more_fits(void)
+{
+    fresh(0xA000);
+    sink_cap = 4096;
+    rx_open(&MAC, 0x4D01, 0x0800, 0x81, 0);
+    int c = last_opened;
+    static uint8_t b[ADSP_MAX_DATA];
+    uint32_t seq = 0;
+    for (int i = 0; i < 6; i++, seq += ADSP_MAX_DATA) rx(&MAC, 0x4D01, seq, 0, 0x0800, 0x40, b, ADSP_MAX_DATA);
+    rx(&MAC, 0x4D01, seq, 0, 0x0800, 0x40, b, 364);
+    seq += 364;
+    CHECK_EQ_INT(held, 3796);
+    int before = nsent;
+    EXPECT(before - 1, &MAC, 0xA001, 0, seq, 300, 0x80, NULL, 0);   // told 300: not shut
+    adsp_window(E, c, T);
+    CHECK_EQ_INT(nsent, before);
+    held -= 500;                                            // 800 now: not a packet more than 300
+    adsp_window(E, c, T);
+    CHECK_EQ_INT(nsent, before);
+    held -= 71;                                             // 871: one byte short
+    adsp_window(E, c, T);
+    CHECK_EQ_INT(nsent, before);
+    held -= 1;                                              // 872 = 300 + 572
+    adsp_window(E, c, T);
+    CHECK_EQ_INT(nsent, before + 1);
+    EXPECT(before, &MAC, 0xA001, 0, seq, 872, 0x80, NULL, 0);
+    adsp_window(E, c, T);                                   // told once
+    CHECK_EQ_INT(nsent, before + 1);
+    held = 0;                                               // a window of a packet or more: no news
+    adsp_window(E, c, T);
+    CHECK_EQ_INT(nsent, before + 1);
 }
 
 static void test_far_window_zero_holds_our_bytes(void)
@@ -1359,6 +1525,7 @@ int main(void)
     test_open_to_a_silent_mac_gives_up();
     test_open_denied_gives_up_at_once();
     test_second_request_ack_from_a_new_conn_id_is_adopted();
+    test_request_ack_only_from_the_node_we_asked();
     test_repeated_request_ack_gets_the_ack_again();
     test_conn_ids();
     test_attention();
@@ -1367,6 +1534,7 @@ int main(void)
     test_attention_out_of_sequence();
     test_attention_leaves_the_stream_alone();
     test_data_both_ways();
+    test_sequences_wrap();
     test_message_across_two_packets();
     test_bare_eom();
     test_data_without_ack_request_is_not_acked();
@@ -1376,6 +1544,7 @@ int main(void)
     test_bytes_beyond_room_are_not_taken();
     test_window_shut_then_opened_is_announced();
     test_window_filled_without_an_ack_is_still_announced();
+    test_small_window_is_announced_when_a_packet_more_fits();
     test_far_window_zero_holds_our_bytes();
     test_far_window_of_three();
     test_lost_data_comes_again();

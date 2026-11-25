@@ -52,6 +52,12 @@ static int same_addr(const lt_addr_t *x, const lt_addr_t *y)
     return x->net == y->net && x->node == y->node && x->sock == y->sock;
 }
 
+// The same machine, whichever socket of its.
+static int same_node(const lt_addr_t *x, const lt_addr_t *y)
+{
+    return x->net == y->net && x->node == y->node;
+}
+
 // The open connection these packets belong to: our socket, the far address
 // and the far connection ID together.
 static int find(const adsp_t *a, uint8_t local_sock, const lt_route_t *from, uint16_t far_id)
@@ -274,6 +280,9 @@ static void rx_open(adsp_t *a, uint8_t local_sock, const lt_route_t *from, const
         i = find_ours(a, local_sock, dest);
         if (i < 0) return;
         c = &a->c[i];
+        // Only the machine we asked may answer, from any socket of its: our
+        // connection ID is a small number anyone on the network could name.
+        if (!same_node(&c->peer.addr, &from->addr)) return;
         if (c->state == ST_OPENING) {
             c->state = ST_OPEN;
             c->fresh = 1;
@@ -316,7 +325,8 @@ static void rx_open(adsp_t *a, uint8_t local_sock, const lt_route_t *from, const
 
     case ADSP_OPEN_DENY:
         i = find_ours(a, local_sock, dest);
-        if (i >= 0 && a->c[i].state == ST_OPENING) end(a, i, ADSP_END_OPEN);
+        if (i >= 0 && a->c[i].state == ST_OPENING && same_node(&a->c[i].peer.addr, &from->addr))
+            end(a, i, ADSP_END_OPEN);
         return;
     }
 }
@@ -462,12 +472,19 @@ int adsp_tx_idle(const adsp_t *a, int i)
 
 // The far end may send up to rx_limit. Once it has, only we can tell it
 // there is room again: it has nothing left to send that would draw the news.
+// And a far end that will not send part of a packet into a window smaller
+// than one waits the same way, so with less than a whole packet left of what
+// it was told, it hears as soon as there is a whole packet more.
 void adsp_window(adsp_t *a, int i, uint64_t now)
 {
     adsp_conn_t *c = conn(a, i);
     (void)now;
-    if (!c || c->state != ST_OPEN || c->rx_limit != c->rx_seq) return;
-    if (window(a, i)) send_control(a, i, ADSP_CONTROL | ADSP_PROBE_OR_ACK);
+    if (!c || c->state != ST_OPEN) return;
+    uint32_t told = c->rx_limit - c->rx_seq;    // what it may still send
+    if (told >= ADSP_MAX_DATA) return;
+    uint16_t w = window(a, i);
+    if (told ? w >= told + ADSP_MAX_DATA : w > 0)
+        send_control(a, i, ADSP_CONTROL | ADSP_PROBE_OR_ACK);
 }
 
 void adsp_close(adsp_t *a, int i, uint64_t now)
