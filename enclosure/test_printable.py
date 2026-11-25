@@ -1,10 +1,11 @@
 """The gate between "the model closes" and "the print will not fail".
 
-Both parts print flat-side-down with no supports. The check that matters is
+Both parts print flat-side-down with no supports, but for the tray's underside
+recesses, which print on support material (`supported_recesses`). The check that matters is
 unsupported flats steeper than the real FDM 45-degree overhang limit: a
 curved overhang (a port hole's top arc) prints fine at these diameters, a
-horizontal or near-horizontal ledge in mid-air does not. The one flat that IS
-allowed is a lintel: the flat top of an opening cut clean through a wall, a
+horizontal or near-horizontal ledge in mid-air does not. The other flats
+allowed are lintels: the flat top of an opening cut clean through a wall, a
 bridge no deeper than the wall and anchored at both ends (`wall_lintels`).
 
 The two parts print in OPPOSITE orientations relative to their own model:
@@ -26,6 +27,7 @@ from build123d import GeomType
 import case
 import lc_frame
 import params as p
+import reset_jig
 
 MIN_WALL = p.WALL - p.POCKET_CLEAR
 """3.00 nominal minus the 0.30 pocket clearance. Every wall is held to this
@@ -42,14 +44,14 @@ exactly 45 degrees passes, anything flatter fails."""
 
 MIN_BAND_AREA = 5.0
 """Per Z-band (see `_overhangs`), an unsupported area under this genuinely
-bridges at this project's 0.4mm nozzle / 0.2mm layers. It clears the slivers
+bridges at a 0.4 mm nozzle and 0.2 mm layers, and at the tray's 0.6 / 0.42. It clears the slivers
 a hull-derived opening leaves (each well under 1mm^2) while staying far below
 every genuine offender this gate has caught."""
 
 MAX_BRIDGE_SPAN = 25.0
-"""The longest lintel the tray may ask a printer to bridge, in mm. The DIP
-slot is the longest at 20.7; J2/J4 are 14.0 and J1 6.5. A bridge this short
-and only a wall deep (2.8mm) prints clean with part cooling on; the README's
+"""The longest lintel the tray may ask a printer to bridge, in mm. J2/J4's
+are 14.4 and J1's 9.7 (rev A's DIP slot was 20.7). A bridge this short and
+only a wall deep (2.70, WALL - POCKET_CLEAR) prints clean with part cooling on; the README's
 first-print checklist is the backstop."""
 
 
@@ -72,42 +74,39 @@ def wall_lintels():
             depth, bb.size.Y, bb.size.Z)
         out.append(("S1", wall.bounding_box(), bb.size.Y))
     for ref in ("J2", "J4", "J1"):
-        bb = case._grown(ref, p.PORT_CLEAR).bounding_box()
+        if ref == "J1":
+            bb = case._grown(ref, p.PORT_CLEAR).bounding_box()
+        else:
+            bb = case._minidin_window(ref).bounding_box()
         wall = Pos((bb.min.X + bb.max.X) / 2, mid, (bb.min.Z + bb.max.Z) / 2) * Box(
             bb.size.X, depth, bb.size.Z)
         out.append((ref, wall.bounding_box(), bb.size.X))
     return out
 
 
-def foot_bridges():
-    """(name, bounding box, span) for each rubber-foot pocket in the floor's
-    underside. Its ceiling is a bridge across the pocket, anchored all the way
-    round, with the screw counterbore opening up through it."""
+SUPPORTED_LAYER = 0.42
+"""The thickest layer the tray is printed at (a 0.6 mm nozzle). The label
+recess and the foot pockets in the floor's underside print their ceilings on
+support material, the only support the tray takes; each has to be deeper than
+this so the support under it is whole layers that peel off
+(params.RECESS_DEPTH)."""
+
+
+def supported_recesses():
+    """(name, bounding box) for the label recess and each foot pocket in the
+    floor's underside: their ceilings print on support, not as bridges."""
     from build123d import Box, Pos
     d = p.FOOT_D + 2 * p.FOOT_POCKET_CLEAR
     out = []
     for i, (x, y) in enumerate(case.foot_positions()):
         box = Pos(x, y, p.Z_FLOOR_BOTTOM + p.FOOT_POCKET_DEPTH / 2) * Box(d, d, p.FOOT_POCKET_DEPTH)
-        out.append((f"foot {i}", box.bounding_box(), d))
-    return out
-
-
-MAX_BED_BRIDGE_DEPTH = 0.40
-"""A pocket in the floor's underside no deeper than this, two layers, has its
-ceiling printed one or two layers off the bed. However far that bridge sags,
-the bed is right under it, so its span is not capped as a lintel's is."""
-
-
-def label_bridge():
-    """(name, bounding box, span) for the label recess in the floor's
-    underside (case.label_recess). Its ceiling is a bridge across the
-    recess's width, LABEL_DEPTH off the bed."""
-    from build123d import Box, Pos
+        out.append((f"foot {i}", box.bounding_box()))
     w = p.LABEL_W + 2 * p.LABEL_CLEAR
     l = p.LABEL_L + 2 * p.LABEL_CLEAR
     box = Pos(p.BOARD_W / 2, p.BOARD_L / 2, p.Z_FLOOR_BOTTOM + p.LABEL_DEPTH / 2) * Box(
         w, l, p.LABEL_DEPTH)
-    return ("label", box.bounding_box(), min(w, l))
+    out.append(("label", box.bounding_box()))
+    return out
 
 
 def _inside(face, box, tol=0.02):
@@ -193,7 +192,8 @@ class TestTray(unittest.TestCase):
         self.assertEqual(len(self.t.solids()), 1)
 
     def test_no_unsupported_downward_flats(self):
-        lintels = [box for _, box, _ in wall_lintels() + foot_bridges() + [label_bridge()]]
+        lintels = ([box for _, box, _ in wall_lintels()]
+                   + [box for _, box in supported_recesses()])
         flats = [f for f in downward_flats(self.t, p.Z_FLOOR_BOTTOM)
                  if not any(_inside(f, box) for box in lintels)]
         self.assertEqual(
@@ -201,12 +201,36 @@ class TestTray(unittest.TestCase):
               round(f.center().Z, 1), round(f.area, 1)) for f in flats], [])
 
     def test_every_lintel_is_a_short_bridge(self):
-        for name, _, span in wall_lintels() + foot_bridges():
+        for name, _, span in wall_lintels():
             self.assertLessEqual(span, MAX_BRIDGE_SPAN, name)
 
-    def test_the_label_ceiling_bridges_just_off_the_bed(self):
-        # 32.75 across, past MAX_BRIDGE_SPAN, so it must stay shallow.
-        self.assertLessEqual(p.LABEL_DEPTH, MAX_BED_BRIDGE_DEPTH)
+    def test_the_recesses_are_deeper_than_a_layer_of_support(self):
+        for depth in (p.LABEL_DEPTH, p.FOOT_POCKET_DEPTH):
+            self.assertGreater(depth, SUPPORTED_LAYER)
+
+    def test_the_recesses_print_two_layers_deep(self):
+        # params.RECESS_DEPTH. The slicer cuts each layer at its middle, so a
+        # recess prints as the layers whose middles it reaches. Wells's
+        # project splits the second layer (0.30-0.72) in two; on plain layers
+        # the recess must still print two layers deep, and the drawn depth
+        # must sit clear of every cut so rounding can't flip it.
+        split = [0.30, 0.51, 0.72, 1.14]
+        plain = [0.30, 0.72, 1.14]
+
+        def printed(depth, tops):
+            out, bottom = 0.0, 0.0
+            for top in tops:
+                if (bottom + top) / 2 < depth:
+                    out = top
+                bottom = top
+            return out
+
+        for depth in (p.LABEL_DEPTH, p.FOOT_POCKET_DEPTH):
+            self.assertAlmostEqual(printed(depth, split), 0.51)
+            self.assertAlmostEqual(printed(depth, plain), 0.72)
+            for tops in (split, plain):
+                for bottom, top in zip([0.0] + tops, tops):
+                    self.assertGreater(abs(depth - (bottom + top) / 2), 0.03)
 
     def test_walls_keep_their_thickness(self):
         # Probe each wall mid-height, and the floor mid-span, away from any
@@ -242,6 +266,38 @@ class TestTray(unittest.TestCase):
             probe = pos * Box(*size)
             got = (self.t & probe).volume
             self.assertGreaterEqual(got, want - 0.05, name)
+
+
+class TestResetJig(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.jig = reset_jig.reset_jig_printable()
+
+    def test_single_watertight_solid_on_the_bed(self):
+        self.assertTrue(self.jig.is_valid)
+        self.assertEqual(len(self.jig.solids()), 1)
+        self.assertAlmostEqual(self.jig.bounding_box().min.Z, 0.0, places=6)
+
+    def test_no_unsupported_downward_flats_printed_on_its_outer_face(self):
+        self.assertEqual(
+            [(round(f.center().X, 1), round(f.center().Y, 1),
+              round(f.center().Z, 1), round(f.area, 1))
+             for f in downward_flats(self.jig, 0.0)], [])
+
+    def test_the_bore_stands_upright(self):
+        # Printed upright, the guide comes out round (params.JIG_BORE_D). A
+        # rod up the bore's axis, the jig's full thickness, finds no plastic.
+        from build123d import Cylinder, Pos
+        y, z = case.reset_axis()
+        loc = reset_jig.print_location(reset_jig.reset_jig())
+        at = (loc * Pos(reset_jig.X_WALL + 1.0, y, z)).position
+        rod = Pos(at.X, at.Y, p.JIG_BORE_L / 2) * Cylinder(
+            p.JIG_BORE_D / 2 - 0.1, p.JIG_BORE_L + 1.0)
+        hit = self.jig & rod
+        self.assertAlmostEqual(hit.volume if hit else 0.0, 0.0, places=4)
+        # ...and it is the bore: just past its wall, plastic.
+        side = Pos(at.X + p.JIG_BORE_D / 2 + 0.3, at.Y, p.JIG_BORE_L / 2) * Cylinder(0.1, 4.0)
+        self.assertAlmostEqual((self.jig & side).volume, side.volume, places=4)
 
 
 class TestLid(unittest.TestCase):

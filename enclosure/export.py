@@ -9,6 +9,7 @@ import case
 import lattice
 import lc_frame
 import lc_light
+import reset_jig
 
 OUT = pathlib.Path(__file__).resolve().parent / "out"
 
@@ -18,7 +19,15 @@ PARTS = {
     "airwriter-lc-frame": lc_frame.lc_frame,
     "airwriter-lc-light": lc_light.lc_light,
     "airwriter-lattice": lattice.lattice,
+    "airwriter-reset-jig": reset_jig.reset_jig,
 }
+
+PRINT_POSE = {
+    "airwriter-reset-jig": reset_jig.print_pose,
+}
+"""Parts whose STL is written turned into their print orientation; their STEP
+stays in the case frame, for the interference check. The others print as
+their README says."""
 
 
 def main() -> int:
@@ -26,7 +35,7 @@ def main() -> int:
     for name, build in PARTS.items():
         part = build()
         export_step(part, str(OUT / f"{name}.step"))
-        export_stl(part, str(OUT / f"{name}.stl"))
+        export_stl(PRINT_POSE.get(name, lambda x: x)(part), str(OUT / f"{name}.stl"))
         bb = part.bounding_box()
         print(f"{name}: {bb.size.X:.2f} x {bb.size.Y:.2f} x {bb.size.Z:.2f} mm, "
               f"{part.volume / 1000:.1f} cm3")

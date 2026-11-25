@@ -101,6 +101,17 @@ of wall each side. The board pocket is cut 0.20 mm oversize inward on each side 
 AirWriter sits with the socket wall toward the back, and the panel and its lights read from the
 opposite side. This design and the case code keep calling the socket wall the front.*
 
+*Amended 2026-11-24, for the tray printed in PETG-CF on a 0.6 mm nozzle at 0.42 mm layers
+(Wells). Every wall below the panel seat is 2.40 (`THIN_WALL`, was 1.70): at 1.70 the long
+walls flexed in the hand enough to crack along their layers, and rev 2026.11 has no S1 for the
+west wall to bow over. J2's and J4's windows are rectangles round the sockets, 0.20 at the
+sides and bottom (`MINIDIN_CLEAR`). The east wall is solid at SW1, and the reset hole is
+drilled through a printed jig (`reset_jig.py`, §4's pinhole is gone). The foot pockets and
+label recess are 0.55 deep and print on support, so the tray takes support after all (§6):
+Support for PLA/PETG as the interface under those ceilings and the port lintels. The tray's
+screw bores are 3.40 (`TRAY_SCREW_CLEAR_D`); the lattice keeps 2.80. How to slice it is in
+`enclosure/README.md`.*
+
 ## 3. Wall thickness: uniform 3.00 mm
 
 Two placement rulings in `docs/HANDOFF.md` each named a wall thickness, and they are not
@@ -142,7 +153,8 @@ cable before anything else is trusted.
 z 8.11–9.01 above the board's top face, sized so a fingernail or pen tip reaches a key
 recessed 0.80 mm.
 
-**East wall, x = 162.** A 1.2 mm reset pinhole on SW1's plate face at x ≈ 159.4. HANDOFF
+**East wall, x = 162.** A 1.2 mm reset pinhole on SW1's plate face at x ≈ 159.4 *(amended
+2026-11-24: drilled from a jig through a solid wall; see the amendment under §1)*. HANDOFF
 carries a superseded note putting this on the west wall at x = 100; it is **east**.
 
 **Top.** Not a separate rebate: the 62.40 × 104.67 pocket is one constant cross-section
@@ -191,7 +203,9 @@ what makes the interference check in §7 possible at all, and because Python mat
 rest of the hardware pipeline (`place_leds.py`, `route.py`, `emit_board.py`).
 
 Print process the geometry assumes: FDM, 0.4 mm nozzle, 0.2 mm layers, matte black,
-tray printed floor-down. No part of either model needs support.
+tray printed floor-down. No part of either model needs support. *(Amended 2026-11-24: the
+tray prints in PETG-CF on a 0.6 mm nozzle, with support under its recesses and lintels; see the
+amendment under §1.)*
 
 ## 7. Verification
 

@@ -822,8 +822,10 @@ Traps already explained in a code comment are listed only when the comment is ea
 - **Front connectors are not coplanar.** Measured, the mini-DIN mating faces stand 2.75 mm proud
   of the board edge and the USB-C shell ~1.50 mm (enclosure spec §3). An old "all stand 2 mm
   proud" line was intent, not measurement.
-- **The east-wall reset pinhole is at SW1's plate face, x ≈ 159.4**, not on the west wall at
-  x = 100 as an old note said.
+- **The reset hole is in the east wall, on SW1's button axis**, not on the west wall at x = 100
+  as an old note said.
+- **Don't print a small hole sideways through a wall.** It comes out as a slit and marks the
+  layers round it. The reset hole is drilled through a solid wall from a jig (`reset_jig.py`).
 - **Heights the KiCad models get wrong.** SW3's footprint is `SW_PUSH_6mm_H13mm`, but the
   TS-1002-BR16026 stands 16 mm.
 - **Measure the parts the case touches; the models are off.** Mini-DIN shells stand 13.04, not the
@@ -841,6 +843,20 @@ Traps already explained in a code comment are listed only when the comment is ea
   ends (2026-10-17). Keep each wall one thickness along its faces (`THIN_WALL`); change it only
   in height, or behind an opening. To check a design, slice it and look for path ends stacked
   near the outer wall.
+- **A seam on a flat face always shows**, painted, grooved or scarfed: a 40 mm scarf that looked
+  subtle on a test block printed lumpy across the tray's port face (2026-11-21). The tray's seam
+  is painted on a rounded corner.
+- **A recess prints in whole layers.** The slicer cuts each layer at its middle, so a recess
+  prints as deep as the layers whose middles it reaches: 0.60 printed 0.72 on 0.30 + 0.42 layers.
+  A recess one layer deep on the bed traps a single sheet of support that won't come out; make
+  it two (`RECESS_DEPTH`, and the tray's layer-height range in `enclosure/README.md`).
+- **Support's XY distance is to the line's centre.** At 0.3 with 0.62 lines the support's edge
+  touched the foot pockets' walls and couldn't be pried out; 0.6 leaves a gap.
+- **A printed bore comes out at least 0.30 under its drawn size.** A 2.80 bore bit the M2.5
+  screws' thread (`TRAY_SCREW_CLEAR_D`).
+- **Print the tray from its Bambu Studio project, not the `.gcode.3mf`.** Opening a
+  `.gcode.3mf` slices it again from the plate's settings alone: every object and part setting
+  (modifiers, height ranges, scarf) is gone.
 - **kicad-cli's STEP export exits 2 on every run**, because KiCad 10 ships no SK6812MINI model.
   `components.export()` accepts exactly the NO_MODEL parts and names anything else; don't loosen
   that by trusting a stale `out/components.step`.

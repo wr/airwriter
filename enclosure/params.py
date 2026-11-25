@@ -18,10 +18,10 @@ uniform over honouring S1's 2.25mm west-wall placement, so S1's piano keys sit
 0.80mm recessed -- spec section 3."""
 
 FLOOR = 2.40
-"""12 layers at 0.2mm."""
+"""12 layers at 0.2 mm."""
 
 BOTTOM_CHAMFER = 0.80
-"""45-degree chamfer around the tray's bottom outside edge, 4 layers tall. It
+"""45-degree chamfer around the tray's bottom outside edge, 4 layers tall at 0.2 mm. It
 softens the arris the case rests and slides on, and it keeps the first
 layers' elephant's-foot flare inside the wall line instead of proud of it. 45
 degrees is exactly the unsupported-overhang limit (test_printable), so it
@@ -111,53 +111,61 @@ a printed tray. PCBWay routes the outline to +-0.2mm and an FDM pocket comes
 out a little undersize, so 0.20 left no margin for either. The panel/lid gap
 grows by the same 0.10."""
 
-THIN_WALL = 1.70
+THIN_WALL = 2.40
 """Thickness of all four walls from the floor up to the panel seat. A 45-degree
 ramp returns each to the full wall at Z_LID_UNDER, so the panel seat, the rim
 seen from above and the outside are unchanged.
 
-The west wall has to bow outward while S1's keys pass its rim. The keys stand
-2.20mm past the board's west edge, into the wall, and the front-wall windows
-hold the board within 0.40mm side to side, so a rigid west wall leaves no path
-in (docs/enclosure-build-log/flex-wall-report.md). Thinned, it springs back
-over the keys, whose tips then stand in the DIP window. Print the tray in
-PETG: the bend pulls at the layers near the floor, and the first print, at
-0.80, split there.
+2.40 since 2026-11-20. At 1.70 the long walls flexed enough in the hand to
+crack along their layers in PETG-CF (Wells). A wall's stiffness goes with the
+cube of its thickness, so 2.40 is about 2.8 times as stiff, with half the
+strain on its layers for the same squeeze; it is four lines of a 0.6 mm
+nozzle. It stops short of the full WALL for the lattice's edge ridge and the
+LC frame, which reach to within 0.10 of the panel seat: 2.40 leaves them 0.40
+all the way down, where a full wall would leave 0.10 over their whole height.
 
-ALL FOUR walls, the whole of each, since 2026-10-17 (Wells). The thinning used
-to be on the west wall only, tapering back to the full wall near each corner,
-and every print had raised lines up the outside at both ends of the taper. The
-slicer stops and restarts its wall lines where a wall changes thickness, at the
-same spot on every layer, and translucent PETG shows the change itself. One
-thickness all round leaves no change behind any flat face; only the ramp's
-horizontal line under the rim remains. Printed 2026-10-17 in translucent PETG:
-no lines, and the board slips in as before (Wells).
+The walls were first thinned, to 1.70, so that rev A's west wall could bow
+outward over S1's DIP keys as the board went in (git history has the FEA).
+Rev 2026.11 has no S1 (case.dip_slot), so no wall has to bend any more; a
+rev A board needs the old 1.70.
 
-1.70 is four 0.4mm lines. On a test piece of the old taper, 1.70 felt almost
-smooth where 1.20 had a ridge. FEA (flex-wall/fea.py, PETG E 2 GPa, 0.8mm
-mesh, the rim moved out 2.0mm over the keys' path): 46 N, peak strain 2.16% at
-the DIP window's corners, 1.17% vertical at the floor. The old west-only
-thinning took 32 N and 1.99% at 1.20, 53 N and 2.31% at 1.70."""
+One thickness all round since 2026-10-17 (Wells). Where a wall changes
+thickness the slicer stops and restarts its wall lines, at the same spot on
+every layer, and the outside showed raised lines there."""
 
 COVE_R = 1.50
-"""Fillet where each thin wall meets the floor. The west wall bends there, and
-across the print's layers, so the corner is rounded to spread the strain."""
+"""Fillet where each wall meets the floor. A wall squeezed in the hand bends
+most there, and across the print's layers, so the corner is rounded to spread
+the strain."""
 
 # --- fasteners -------------------------------------------------------------
 
 SCREW_CLEAR_D = 2.80
-"""M2.5 clearance."""
+"""M2.5 clearance through the lattice's posts. The tray's is TRAY_SCREW_CLEAR_D."""
+
+TRAY_SCREW_CLEAR_D = 3.40
+"""The screw's bore up through the tray's floor and boss. At 2.80 it printed
+tight enough that the M2.5 screw's thread (2.5 across) cut into it, so the
+screws were slow to go in and out (Wells, 2026-11-24; 0.6 mm nozzle,
+PETG-CF): a printed bore comes out at least 0.30 under its drawn size. 3.40
+is ISO 273's coarse clearance for M2.5 (3.10) plus that. A loose bore costs
+nothing here: the pocket locates the board, and the screw threads into the
+panel's standoff or the LC's insert above. It leaves the boss a 1.30 wall."""
 
 SCREW_HEAD_D = 5.00
 """Counterbore for an M2.5 pan head, in the floor's underside."""
 
-SCREW_HEAD_DEPTH = 1.30
-"""Counterbore depth from the floor's underside: 0.90 above the foot pocket's
-ceiling (FOOT_POCKET_DEPTH), so the head stays out of the foot. 1.40 until
-2026-10-17, when 1.00 pockets left the heads only 0.40 of it; Wells: "make the
-screws go in deeper. Probably just need another .5mm", so 1.90. The pockets
-went to 0.40 on 2026-10-18 and the counterbore came up with them, which also
-keeps the Pro screw's tip clear of the panel's blind standoff."""
+SCREW_HEAD_DEPTH = 1.50
+"""Counterbore depth from the floor's underside: at least 0.90 above the foot
+pocket's ceiling (FOOT_POCKET_DEPTH), so the head stays out of the foot. 1.40
+until 2026-10-17, when 1.00 pockets left the heads only 0.40 of it; Wells:
+"make the screws go in deeper. Probably just need another .5mm", so 1.90. The
+pockets went to 0.40 on 2026-10-18 and the counterbore came up with them, and
+down again with them to 0.60 on 2026-11-19. It stayed when the pockets went to
+0.55 on 2026-11-24, as the screws' reach sets it. The head seat is at Z -5.50: the
+Pro's 18 mm screw stops 0.54 short of the panel's underside (its blind
+standoff wants about 0.5) and the LC's 10 mm screw reaches the bottom of its
+4.50 insert bore."""
 
 FOOT_D = 10.00
 """The rubber feet's diameter (Wells, 2026-10-17)."""
@@ -165,10 +173,28 @@ FOOT_D = 10.00
 FOOT_POCKET_CLEAR = 0.20
 """Per side, round each foot in its pocket: a guiding fit (docs/cad-routine.md)."""
 
-FOOT_POCKET_DEPTH = 0.40
-"""How deep each foot sits in the floor's underside. 1.00 until 2026-10-18,
-then 0.20 (Wells: "make foot recess in bottom case .2mm instead of 1mm"), then
-0.40 the same day. The pocket's ceiling prints as a bridge across it."""
+RECESS_DEPTH = 0.55
+"""How deep the foot pockets and the label recess are, in the floor's
+underside. Their ceilings print on support material, which peels off (Wells
+prints it in Bambu's Support for PLA/PETG). It has to be two layers deep: at
+0.20 and 0.40, on a 0.30 first layer and 0.42 layers, each was one layer deep
+and the support in it a sliver that would not come out (Wells, 2026-11-19).
+
+A recess prints in whole layers: the slicer cuts each layer at its middle. On
+0.30 + 0.42 layers the second layer runs 0.30 to 0.72, so 0.60 printed 0.72
+deep, and the 1.5 mm feet stood only 0.78 proud, too little clearance to the
+table (Wells, 2026-11-24). The tray's project now prints that second layer as
+two of 0.21 (a layer-height range from 0.30 to 0.72), and 0.55 then prints
+0.51 deep, two layers of support, feet 0.99 proud. 0.55 sits clear of every
+cut either way: on plain 0.42 layers it prints 0.72, as before.
+
+The pockets hold the stick-on feet so they don't slide, and the recess keeps
+the label's edges from being scuffed (Wells). History: the foot pockets were
+1.00 until 2026-10-18, then 0.20 (Wells: "make foot recess in bottom case .2mm
+instead of 1mm"), then 0.40 the same day, 0.60 from 2026-11-19; the label
+recess 0.20 from 2026-11-16, 0.60 from 2026-11-19."""
+
+FOOT_POCKET_DEPTH = RECESS_DEPTH
 
 FOOT_COVER = 0.50
 """How far inside its foot's edge each screw counterbore stays, so the foot
@@ -191,15 +217,14 @@ LABEL_R = 1.50
 (1.59); at LABEL_CLEAR, a corner this round also takes a square-cornered
 label, so either fits."""
 
-LABEL_DEPTH = 0.20
-"""One layer. Label stock is about 0.1 thick, so the label sits just under
-the floor's face and its edges can't catch. The recess's ceiling prints as a
-bridge one layer off the bed (test_printable.MAX_BED_BRIDGE_DEPTH); the first
-print of it came out clean (Wells, 2026-11-16: "printed, looks good")."""
+LABEL_DEPTH = RECESS_DEPTH
+"""Label stock is about 0.1 thick, so the label sits well under the floor's
+face and its edges can't catch."""
 
 STANDOFF_D = 6.00
 """Boss diameter under each mounting hole, in the tray. Wide enough to carry
-the board and to leave a printable wall around the 2.80 clearance bore."""
+the board and to leave a printable wall around the screw's bore
+(TRAY_SCREW_CLEAR_D)."""
 
 LEG_D = 6.00
 """LC lid leg diameter -- enough plastic round a 3.60 insert bore."""
@@ -280,12 +305,62 @@ on that branch."""
 
 PORT_CLEAR = 0.40
 """Radial clearance added to each connector's own solid when it is subtracted
-from the front wall. The spec's assertion floor is 0.30."""
+from the front wall, and the clearance over J2's and J4's tops. The spec's
+assertion floor is 0.30; J2's and J4's sides and bottoms have MINIDIN_CLEAR
+instead."""
 
-RESET_PINHOLE_D = 0.80
-"""East wall, on SW1's actuator axis. Only a pilot: "i'm going to drill it out
-to make it perfectly round, but i just need a small dot to serve as a pilot
-hole" (Wells, 2026-10-17). Was 1.20, printed as a hole for the paperclip."""
+MINIDIN_CLEAR = 0.20
+"""J2's and J4's windows, at the sides and the bottom. At PORT_CLEAR the sides
+had 0.40 and the bottom 0.59, and both looked "slightly too big" round the
+real sockets (Wells, 2026-11-19). The top keeps PORT_CLEAR: the sockets'
+tops go in first, under the lintels, and the board rocks down from there, so
+the rest of each socket comes down into place from inside and above the
+window's bottom, never below it. At 0.42 mm layers the window's bottom prints at the
+nearest layer line, which leaves 0.27 here."""
+
+MINIDIN_FACE_DEPTH = 1.90
+"""How far into the front wall, from its outer face, J2's and J4's windows are
+sized to the socket's front shell (MINIDIN_CLEAR, PORT_CLEAR). 2.15 behind the
+face the socket's underside steps down 0.25 (its vendor STEP), inside the
+2.40 wall (THIN_WALL). Behind MINIDIN_FACE_DEPTH each window's bottom drops
+to MINIDIN_STEP_CLEAR under the step, where only the inside of the opening
+sees it, and the opening at the face stays as close as it is. 0.25 in front
+of the step, so the edge where the bottom drops clears the step's face by
+more than MINIDIN_CLEAR."""
+
+MINIDIN_STEP_CLEAR = 0.50
+"""Under the socket's step, behind MINIDIN_FACE_DEPTH. A window's bottom
+prints up to half a layer higher than drawn (the slicer fills a layer whose
+mid-height is solid), so MINIDIN_CLEAR here would print at 0.02 on Wells's
+0.30 + 0.42 mm layers, under the socket's feet. 0.50 prints at 0.44 there,
+and at least 0.29 on any layer up to 0.42. It is inside the wall, out of
+sight, so it can be generous."""
+
+RESET_DRILL_D = 1.20
+"""The bit for SW1's reset hole, drilled through the east wall with the reset
+jig (reset_jig.py): a 1.2 mm or 3/64 in bit, room for a paperclip. The wall is
+solid there since 2026-11-19. Printed sideways through a wall a hole comes out
+as a slit and marks the wall's layers, and Wells drilled it out round anyway
+(2026-10-17: "i'm going to drill it out to make it perfectly round")."""
+
+JIG_BORE_D = 1.30
+"""The jig's guide for RESET_DRILL_D. It prints upright, so it comes out
+round, and a little small, as printed holes do: run the bit through it once
+before using it."""
+
+JIG_BORE_L = 10.00
+"""How far the jig guides the bit: the jig's thickness off the east wall."""
+
+JIG_FENCE = 3.00
+"""Thickness of the jig's fence, which bears on the back wall's outside."""
+
+JIG_REACH = 15.00
+"""How far the fence reaches across the back wall from the east wall's face:
+past the 5 mm corner round onto 10 mm of flat."""
+
+JIG_PAST = 8.00
+"""How far the jig runs past SW1 toward the front, and stands over its
+button's axis."""
 
 PLUNGER_BORE_D = 3.80
 """SW3's test plunger, through the LC lid. Matches the art panel's 3.8mm

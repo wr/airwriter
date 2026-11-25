@@ -196,8 +196,8 @@ def _ridge() -> Part:
 def _part_voids(skip=()) -> Part:
     """Every part's shadow (components.py), grown by PART_CLEAR and
     PART_TOP_CLEAR, from below the board to its top, but those in `skip`. The
-    connectors use their vendor hulls grown by PORT_CLEAR instead, as the tray
-    does."""
+    connectors use their vendor hulls grown by PORT_CLEAR instead, as the tray's
+    USB-C opening does."""
     c = p.PART_CLEAR
     out = []
     for ref, bands in components.envelopes().items():
@@ -226,9 +226,10 @@ def _keepout_void() -> Part:
 
 def _reset_path_void() -> Part:
     """SW1's reset paperclip path, from the switch out through the east edge,
-    and its shadow down to the board."""
+    and its shadow down to the board: the drilled hole (RESET_DRILL_D) and
+    0.20 a side."""
     _, y = bg.to_case(bg.footprint("SW1").x, bg.footprint("SW1").y)
-    half = p.RESET_PINHOLE_D / 2 + p.PART_CLEAR
+    half = p.RESET_DRILL_D / 2 + 0.20
     x0 = bg.courtyard("SW1")[1] - 1.0
     return _box(x0, p.BOARD_W + 1, y - half, y + half, -1, p.RESET_ACTUATOR_Z + half)
 

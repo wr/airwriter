@@ -165,7 +165,7 @@ class TestLattice(unittest.TestCase):
     def test_clears_the_reset_paperclip_path(self):
         _, y = bg.to_case(bg.footprint("SW1").x, bg.footprint("SW1").y)
         path = Pos(p.BOARD_W - 1.0, y, p.RESET_ACTUATOR_Z) * Cylinder(
-            p.RESET_PINHOLE_D / 2, 3.0, rotation=(0, 90, 0))
+            p.RESET_DRILL_D / 2, 3.0, rotation=(0, 90, 0))
         self.assertLess(_vol(self.L, path), 1e-3)
 
     def test_fits_the_tray(self):

@@ -54,8 +54,8 @@ def shell() -> Part:
 
     Below the panel seat every wall is thinner (`wall_relief`).
 
-    No openings: the port cutouts, the DIP slot, the pinhole, the screw holes
-    and the carve-outs are all subtracted by tray().
+    No openings: the port cutouts, the DIP slot, the screw holes and the
+    recesses under the floor are all subtracted by tray().
     """
     outer = _rounded_box(
         p.EXT_W, p.EXT_L, p.EXT_H,
@@ -89,8 +89,8 @@ def wall_relief() -> Part:
     thickness as the straights (radius EXT_R - THIN_WALL, on the exterior
     fillet's axis). Its top edges are chamfered by the ramp's run, which lands
     them exactly on the pocket's outline and POCKET_R corners at Z_LID_UNDER;
-    the ramp faces down at 45 degrees, the overhang limit, so the tray still
-    prints floor-down with no supports. Its bottom edges are filleted by
+    the ramp faces down at 45 degrees, the overhang limit, so the ramp needs
+    no support. Its bottom edges are filleted by
     COVE_R, which leaves a cove where each wall meets the floor."""
     run = p.WALL - p.THIN_WALL - p.POCKET_CLEAR
     z0, z1 = p.Z_FLOOR_TOP, p.Z_LID_UNDER
@@ -135,14 +135,14 @@ def screw_holes() -> Part:
     out = None
     for x, y in bg.mount_holes().values():
         bore = Pos(x, y, (top + bottom) / 2) * Cylinder(
-            p.SCREW_CLEAR_D / 2, top - bottom)
+            p.TRAY_SCREW_CLEAR_D / 2, top - bottom)
         cb_top = p.Z_FLOOR_BOTTOM + p.SCREW_HEAD_DEPTH
         cbore = Pos(x, y, (cb_top + bottom) / 2) * Cylinder(
             p.SCREW_HEAD_D / 2, cb_top - bottom)
         # 45-degree run-out from the counterbore up to the clearance bore.
-        cone_h = (p.SCREW_HEAD_D - p.SCREW_CLEAR_D) / 2
+        cone_h = (p.SCREW_HEAD_D - p.TRAY_SCREW_CLEAR_D) / 2
         cone = Pos(x, y, cb_top + cone_h / 2) * Cone(
-            p.SCREW_HEAD_D / 2, p.SCREW_CLEAR_D / 2, cone_h)
+            p.SCREW_HEAD_D / 2, p.TRAY_SCREW_CLEAR_D / 2, cone_h)
         one = bore + cbore + cone
         out = one if out is None else out + one
     return out
@@ -179,7 +179,9 @@ def foot_positions() -> list[tuple[float, float]]:
 
 
 def foot_pockets() -> Part:
-    """A FOOT_POCKET_DEPTH pocket in the floor's underside for each foot."""
+    """A FOOT_POCKET_DEPTH pocket in the floor's underside for each foot, which
+    holds it so it doesn't slide. Its ceiling prints on support
+    (params.RECESS_DEPTH)."""
     d = p.FOOT_D + 2 * p.FOOT_POCKET_CLEAR
     h = p.FOOT_POCKET_DEPTH + 0.01  # opens through the underside cleanly
     out = None
@@ -191,7 +193,8 @@ def foot_pockets() -> Part:
 
 def label_recess() -> Part:
     """A LABEL_DEPTH recess in the middle of the floor's underside for a
-    2.5 x 1.25 in label, its long side front to back, LABEL_CLEAR round it."""
+    2.5 x 1.25 in label, its long side front to back, LABEL_CLEAR round it.
+    Its ceiling prints on support (params.RECESS_DEPTH)."""
     h = p.LABEL_DEPTH + 0.01  # opens through the underside cleanly
     return _rounded_box(
         p.LABEL_W + 2 * p.LABEL_CLEAR, p.LABEL_L + 2 * p.LABEL_CLEAR, h,
@@ -393,35 +396,57 @@ def _usbc_opening() -> Part:
 
 
 def _minidin_window(ref: str) -> Part:
-    """J2's or J4's opening: the connector's front grown by PORT_CLEAR
-    (`_grown`), with a flat bottom. The grown hull's bottom slopes ~0.3mm
-    through the wall and curves up toward the corners at the outer face (the
-    shell's rounded front edge), which printed as a rough edge the real port
-    has no use for (Wells, 2026-10-17). The bottom is levelled at the lowest
-    point the hull reaches inside the wall, so the connector keeps at least
-    the clearance it had."""
-    hull = _grown(ref, p.PORT_CLEAR, front_only=True)
-    bb = hull.bounding_box()
-    xc = (bb.min.X + bb.max.X) / 2
-    yc = -p.WALL + p.THIN_WALL / 2  # the window's bottom is below the seat
-    wall = Pos(xc, yc, (bb.min.Z + bb.max.Z) / 2) * Box(bb.size.X + 2, p.THIN_WALL, bb.size.Z + 2)
-    z0 = (hull & wall).bounding_box().min.Z
-    # Tall enough to cover the hull's rounded bottom corners (PORT_CLEAR).
-    h = 1.5
-    return hull + Pos(xc, yc, z0 + h / 2) * Box(bb.size.X, p.THIN_WALL + 2, h)
+    """J2's or J4's opening: a rectangle round the socket where it stands in
+    the wall, MINIDIN_CLEAR at the sides and the bottom and PORT_CLEAR over
+    the top, carried straight through the wall.
+
+    Until 2026-11-19 it was the socket's front grown by PORT_CLEAR all round
+    (`_grown`), with a flat bottom levelled at the lowest point that reached
+    inside the wall: 0.40 at the sides and 0.59 under the shell, which looked
+    slightly too big round the real sockets (Wells). Through the wall the
+    socket is a plain box, so its extents there are its outline, but 2.15
+    behind the face its underside steps down 0.25. So the window is two
+    rectangles: one sized to the socket's front shell from outside the face
+    to MINIDIN_FACE_DEPTH, and one sized to the socket behind that, whose
+    bottom sits MINIDIN_STEP_CLEAR under the step, where only the inside of
+    the opening sees it."""
+    solid = connector_solid(ref)
+    split = -p.WALL + p.MINIDIN_FACE_DEPTH
+    inner = -p.WALL + p.THIN_WALL
+    # Each rectangle: (where it cuts, where its socket outline is read). The
+    # back one runs on past the wall's inner face to the pocket, where it
+    # cuts only air, and the seat's full wall over the ramp.
+    bands = (((-p.WALL - 0.5, split), (-p.WALL, split)),
+             ((split, 0.0), (split, inner)))
+    window = None
+    for ((y0, y1), (s0, s1)), under in zip(bands, (p.MINIDIN_CLEAR, p.MINIDIN_STEP_CLEAR)):
+        bb = (solid & (Pos(0, (s0 + s1) / 2, 0) * Box(200, s1 - s0, 100))).bounding_box()
+        x0, x1 = bb.min.X - p.MINIDIN_CLEAR, bb.max.X + p.MINIDIN_CLEAR
+        z0, z1 = bb.min.Z - under, bb.max.Z + p.PORT_CLEAR
+        box = Pos((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2) * Box(x1 - x0, y1 - y0, z1 - z0)
+        window = box if window is None else window + box
+    return window
+
+
+def minidin_face(ref: str) -> tuple[float, float, float, float]:
+    """J2's or J4's window where it opens in the front face, (x0, x1, z0, z1):
+    the front rectangle of `_minidin_window`."""
+    face = _minidin_window(ref) & (Pos(0, -p.WALL - 0.25, 0) * Box(200, 0.5, 100))
+    bb = face.bounding_box()
+    return bb.min.X, bb.max.X, bb.min.Z, bb.max.Z
+
 
 
 def port_cutouts() -> Part:
     """What the front wall gives up to J2, J4 and J1.
 
-    Each opening is the connector's own solid grown by PORT_CLEAR (see
-    `_grown`), so the barrel diameters, flanges and shell heights come from
-    the vendor geometry rather than from a datasheet reading. The mini-DIN
-    windows get flat bottoms (`_minidin_window`); the USB-C receptacle sits
-    ~1.5mm behind the wall's outer face, so its opening is carried straight
-    out to it (`_usbc_opening`). Every envelope is the connector's front
-    only: behind the board edge are its pins and legs, which the wall never
-    meets.
+    Each opening is sized from the connector's own vendor solid rather than
+    from a datasheet reading. The mini-DIN windows are rectangles round the
+    sockets where they meet the wall (`_minidin_window`). J1's is its solid
+    grown by PORT_CLEAR (`_grown`), and since the USB-C receptacle sits
+    ~1.5mm behind the wall's outer face, its opening is carried straight out
+    to it (`_usbc_opening`). Every envelope is the connector's front only:
+    behind the board edge are its pins and legs, which the wall never meets.
     """
     return (_minidin_window("J2") + _minidin_window("J4")
             + _grown("J1", p.PORT_CLEAR, front_only=True) + _usbc_opening())
@@ -463,27 +488,23 @@ def dip_slot() -> Part | None:
         (p.DIP_SLOT_Z0 + p.DIP_SLOT_Z1) / 2,
     ) * Box(depth, y1 - y0, p.DIP_SLOT_Z1 - p.DIP_SLOT_Z0)
     if p.DIP_SLOT_R:
-        # The west wall flexes (params.THIN_WALL): round the window's
+        # On rev A the west wall flexed (at the old 1.70 THIN_WALL): round the window's
         # corners so they don't concentrate the bending strain.
         slot = slot.fillet(p.DIP_SLOT_R, slot.edges().filter_by(Axis.X))
     return slot
 
 
-def reset_pinhole() -> Part:
-    """A pinhole through the EAST wall on SW1's actuator axis.
+def reset_axis() -> tuple[float, float]:
+    """Case (Y, Z) of SW1's button axis, which runs east through the east
+    wall: where the reset jig (reset_jig.py) guides the drill. The wall is
+    solid there (params.RESET_DRILL_D says why).
 
     HANDOFF has a superseded line putting this on the west wall at x=100; the
-    live ruling is the east edge, with SW1's plate face at KiCad x ~ 159.4.
-
-    The pinhole aims at the middle of SW1's button, p.RESET_ACTUATOR_Z above
-    the board (see params.py).
-    """
+    live ruling is the east edge. The axis aims at the middle of SW1's
+    button, RESET_ACTUATOR_Z above the board (see params.py)."""
     fp = bg.footprint("SW1")
     _, y = bg.to_case(fp.x, fp.y)
-    z = p.RESET_ACTUATOR_Z
-    length = p.WALL + 2.0  # overshoot both ends so the cut is clean
-    return Pos(p.BOARD_W + p.WALL - length / 2 + 1.0, y, z) * Cylinder(
-        p.RESET_PINHOLE_D / 2, length, rotation=(0, 90, 0))
+    return y, p.RESET_ACTUATOR_Z
 
 
 def _sw3_plunger_centre() -> tuple[float, float]:
@@ -614,7 +635,6 @@ def tray() -> Part:
     anyway.
     """
     body = shell() + standoffs()
-    tray = (body - screw_holes() - foot_pockets() - label_recess() - port_cutouts()
-            - reset_pinhole())
+    tray = body - screw_holes() - foot_pockets() - label_recess() - port_cutouts()
     slot = dip_slot()
     return tray - slot if slot is not None else tray

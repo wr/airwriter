@@ -104,7 +104,8 @@ class TestShell(unittest.TestCase):
         # off whatever wall sits over an opening. J2/J4's lintels are the
         # shallow ones; keep at least three 0.2mm layers of them there.
         for ref in ("J2", "J4", "J1"):
-            opening_top = case._grown(ref, p.PORT_CLEAR).bounding_box().max.Z
+            cut = case._grown(ref, p.PORT_CLEAR) if ref == "J1" else case._minidin_window(ref)
+            opening_top = cut.bounding_box().max.Z
             left = p.Z_WALL_TOP - p.TOP_CHAMFER - opening_top
             self.assertGreaterEqual(left, 0.6, ref)
 
@@ -144,9 +145,27 @@ class TestStandoffsAndScrews(unittest.TestCase):
         self.assertGreaterEqual(bb.max.Z, p.Z_BOARD_BOTTOM)
         self.assertEqual(len(h.solids()), 4)
 
+    def test_screw_bores_let_the_screw_slide_through(self):
+        # Wells, 2026-11-24: drawn at 2.80, the bore printed tight enough
+        # that the M2.5 screw's thread (2.5 across) cut into it. So a printed
+        # bore comes out at least 0.30 under its drawn size, and the drawn
+        # bore has to be ISO 273's coarse clearance (3.1) plus that, clear
+        # from the counterbore's cone to the top of the boss.
+        import board_geom as bg
+        from build123d import Cylinder, Pos
+        want = 3.1 + 0.30
+        self.assertGreaterEqual(p.TRAY_SCREW_CLEAR_D, want - 1e-9)
+        body = (case.shell() + case.standoffs()) - case.screw_holes()
+        z0 = p.Z_FLOOR_BOTTOM + p.SCREW_HEAD_DEPTH
+        z1 = p.Z_BOARD_BOTTOM - p.BOSS_RELIEF
+        for ref, (x, y) in bg.mount_holes().items():
+            pin = Pos(x, y, (z0 + z1) / 2) * Cylinder(want / 2 - 0.01, z1 - z0)
+            hit = body & pin
+            self.assertLess(0.0 if hit is None else hit.volume, 1e-3, f"{ref}'s bore is under {want}")
+
     def test_counterbore_transition_is_coned_not_a_flat_ledge(self):
-        # Printed floor-down, a flat annulus between a 5.0 counterbore and a
-        # 2.8 clearance hole is an unsupported bridge. It must be a 45 cone.
+        # Printed floor-down, a flat annulus between the 5.0 counterbore and
+        # the clearance bore is an unsupported bridge. It must be a 45 cone.
         #
         # This has to be checked on the assembled result, not on the
         # screw_holes() tool by itself: a tool solid has no downward-facing
@@ -215,26 +234,78 @@ class TestPorts(unittest.TestCase):
             bb = case.connector_solid(ref).bounding_box()
             self.assertAlmostEqual(bb.max.Z, p.MINIDIN_TOP, places=3, msg=ref)
 
-    def test_minidin_windows_have_flat_bottoms(self):
-        # 2026-10-14 print: the windows' bottoms sloped down to -2.4 at the
-        # wall's inner face, because the hull reached back to the pins.
-        # Built from the connector's front part only, a window's bottom never
-        # drops more than PORT_CLEAR under the connector inside the wall, and
-        # slopes only as much as the connector's own underside does (it
-        # steps down 0.25 near the board edge), not 2.1.
+    def test_minidin_windows_fit_close_at_the_sides_and_bottom(self):
+        # 2026-11-19 (Wells): at PORT_CLEAR all round, 0.40 at the sides and
+        # 0.59 under the shell looked slightly too big. Measured through the
+        # wall, each window clears its socket by MINIDIN_CLEAR at the sides
+        # and the bottom, and by PORT_CLEAR over the top; behind the socket's
+        # underside step (-0.7) by MINIDIN_STEP_CLEAR underneath.
         from build123d import Box, Pos
         cuts = case.port_cutouts()
         for ref in ("J2", "J4"):
-            bb = case.connector_solid(ref).bounding_box()
-            xc = (bb.min.X + bb.max.X) / 2
-            front = case.connector_solid(ref) & (Pos(xc, -1.5, 5) * Box(20, 2.4, 30))
-            lowest = front.bounding_box().min.Z - p.PORT_CLEAR
-            bottoms = []
-            for y in (-2.8, -1.5, -0.4):
-                sl = cuts & (Pos(xc, y, 5) * Box(bb.size.X + 2, 0.05, 30))
-                bottoms.append(sl.bounding_box().min.Z)
-            self.assertGreaterEqual(min(bottoms), lowest - 0.05, f"{ref}: {bottoms}")
-            self.assertLess(max(bottoms) - min(bottoms), 0.40, f"{ref}: {bottoms}")
+            solid = case.connector_solid(ref)
+            # Behind the shell's rounded front lip (the last 0.3 or so).
+            for y in (-2.4, -1.9, -1.4, -0.7):
+                sock = (solid & (Pos(0, y, 0) * Box(200, 0.02, 100))).bounding_box()
+                xc = (sock.min.X + sock.max.X) / 2
+                win = (cuts & (Pos(xc, y, 6) * Box(sock.size.X + 4, 0.02, 30))).bounding_box()
+                under = p.MINIDIN_CLEAR if y < -p.WALL + p.MINIDIN_FACE_DEPTH else p.MINIDIN_STEP_CLEAR
+                for side, got, want in (
+                        ("west", sock.min.X - win.min.X, p.MINIDIN_CLEAR),
+                        ("east", win.max.X - sock.max.X, p.MINIDIN_CLEAR),
+                        ("bottom", sock.min.Z - win.min.Z, under),
+                        ("top", win.max.Z - sock.max.Z, p.PORT_CLEAR)):
+                    self.assertAlmostEqual(got, want, delta=0.01, msg=f"{ref} {side} at y {y}")
+
+    def test_the_socket_steps_down_behind_the_face_rectangle(self):
+        # MINIDIN_FACE_DEPTH sits in front of the step in each socket's
+        # underside, so the opening at the face is sized to the front shell
+        # alone, and the step lies within the wall, so the back rectangle
+        # is what clears it.
+        from build123d import Box, Pos
+
+        def bottom(solid, y0, y1):
+            band = solid & (Pos(0, (y0 + y1) / 2, 0) * Box(200, y1 - y0, 100))
+            return band.bounding_box().min.Z
+
+        split = -p.WALL + p.MINIDIN_FACE_DEPTH
+        inner = -p.WALL + p.THIN_WALL
+        for ref in ("J2", "J4"):
+            solid = case.connector_solid(ref)
+            shell = bottom(solid, -2.4, -1.4)
+            self.assertAlmostEqual(bottom(solid, -2.6, split), shell, places=3, msg=ref)
+            self.assertLess(bottom(solid, split, inner), shell - 0.2, msg=ref)
+            x0, x1, z0, z1 = case.minidin_face(ref)
+            self.assertAlmostEqual(z0, shell - p.MINIDIN_CLEAR, places=3, msg=ref)
+        # A bottom prints up to half a layer higher than drawn: at Wells's
+        # 0.42 mm layers the sill under the step still clears it.
+        self.assertGreaterEqual(p.MINIDIN_STEP_CLEAR - 0.42 / 2, p.MINIDIN_CLEAR)
+
+    def test_the_board_rocks_in_ports_first(self):
+        # The sockets go into their windows with the board's back raised
+        # over the back rim, then it rocks down into the pocket. Swept about
+        # a pivot in the windows, from seated to a degree past the tilt at
+        # which the board's back clears the rim, the board and its front
+        # connectors never touch the tray. The pivot is halfway along the
+        # socket's run through the wall, halfway up its window. At 2.40
+        # walls (THIN_WALL) it first touches between 11 and 12 degrees,
+        # nearly 3 past what it needs.
+        from build123d import Pos, Rot
+        x0, x1, z0, z1 = case.minidin_face("J2")
+        front = case.connector_solid("J2").bounding_box().min.Y
+        py, pz = (front + (-p.WALL + p.THIN_WALL)) / 2, (z0 + z1) / 2
+        r = math.hypot(p.BOARD_L - py, p.Z_BOARD_BOTTOM - pz)
+        a0 = math.atan2(p.Z_BOARD_BOTTOM - pz, p.BOARD_L - py)
+        need = math.degrees(math.asin((p.Z_WALL_TOP - pz) / r) - a0)
+        slab = case._rounded_box(p.BOARD_W, p.BOARD_L, p.PCB, p.BOARD_W / 2, p.BOARD_L / 2,
+                                 -p.PCB / 2, p.CORNER_R)
+        parts = [("board", slab)] + [(ref, case.connector_solid(ref)) for ref in ("J1", "J2", "J4")]
+        for deg in range(0, math.ceil(need) + 2):
+            turn = Pos(0, py, pz) * Rot(deg, 0, 0) * Pos(0, -py, -pz)
+            for name, part in parts:
+                hit = self.tray_full & (turn * part)
+                vol = hit.volume if hit else 0.0
+                self.assertLess(vol, 1e-4, f"{name} meets the tray at {deg} degrees")
 
     def test_j1_shell_face_lands_near_case_y_minus_1_5(self):
         # Ground truth 3. Approximate by design: F.Fab is a drawn body
@@ -262,14 +333,16 @@ class TestPorts(unittest.TestCase):
         # a connector mis-placed by 6mm. Assert on real distance instead: the
         # nearest point of whatever wall survives around this connector to
         # the connector's own (real, not grown) solid.
+        # The spec's floor is 0.30; J2's and J4's sides and bottoms are cut
+        # closer since 2026-11-19 (params.MINIDIN_CLEAR).
         from build123d import Box, Pos
-        for ref in ("J2", "J4", "J1"):
+        for ref, floor in (("J2", p.MINIDIN_CLEAR), ("J4", p.MINIDIN_CLEAR), ("J1", 0.30)):
             solid = case.connector_solid(ref)
             bb = solid.bounding_box()
             xc = (bb.min.X + bb.max.X) / 2
             local = self.tray_shell & (
                 Pos(xc, -p.WALL / 2, 4.5) * Box(20, p.WALL, 26))
-            self.assertGreaterEqual(local.distance_to(solid), 0.30, ref)
+            self.assertGreaterEqual(local.distance_to(solid), floor - 0.005, ref)
 
     def test_ports_are_actually_open(self):
         # Finding 4, task-5-report.md: nothing previously checked that a
@@ -329,7 +402,7 @@ class TestPorts(unittest.TestCase):
         # J2 and J4 are centred at case X 13.0 and 32.5; there must be
         # plastic between their openings at the midpoint. At z 5 the wall is
         # THIN_WALL, so a full web fills 1.0 * THIN_WALL * 2.0 of the probe
-        # (3.4mm^3 at 1.70; real geometry leaves all of it). The threshold
+        # (4.8mm^3 at 2.40; real geometry leaves all of it). The threshold
         # is 90% of that rather than a token floor, which would also pass a
         # web reduced to a sliver by a wider connector or a tighter
         # PORT_CLEAR.
@@ -407,13 +480,13 @@ class TestPorts(unittest.TestCase):
         # Same probe as test_openings_clear_each_connector_by_at_least_0_30,
         # against cls.tray_full instead of cls.tray_shell.
         from build123d import Box, Pos
-        for ref in ("J2", "J4", "J1"):
+        for ref, floor in (("J2", p.MINIDIN_CLEAR), ("J4", p.MINIDIN_CLEAR), ("J1", 0.30)):
             solid = case.connector_solid(ref)
             bb = solid.bounding_box()
             xc = (bb.min.X + bb.max.X) / 2
             local = self.tray_full & (
                 Pos(xc, -p.WALL / 2, 4.5) * Box(20, p.WALL, 26))
-            self.assertGreaterEqual(local.distance_to(solid), 0.30, ref)
+            self.assertGreaterEqual(local.distance_to(solid), floor - 0.005, ref)
 
     def test_front_wall_retains_material_above_and_below_each_port_on_the_full_tray(self):
         # Finding 4, task-8-report.md: the top/bottom band probes above run
@@ -498,17 +571,27 @@ class TestPorts(unittest.TestCase):
         # One level face across each window and through the wall (Wells,
         # 2026-10-17). The grown vendor hull sloped it ~0.3mm through the
         # wall and curved it up toward the corners at the outer face, which
-        # printed as a rough edge the real port has no use for.
+        # printed as a rough edge the real port has no use for. Since the
+        # walls went to 2.40 it is two level faces: the one the face shows,
+        # to MINIDIN_FACE_DEPTH, and one lower behind it, under the socket's
+        # step (case._minidin_window).
         from build123d import Box, Pos
+        split = -p.WALL + p.MINIDIN_FACE_DEPTH
+        inner = -p.WALL + p.THIN_WALL
         for ref in ("J2", "J4"):
             bb = case._grown(ref, p.PORT_CLEAR, front_only=True).bounding_box()
-            tops = []
-            for x in (bb.min.X + 0.6, (bb.min.X + bb.max.X) / 2, bb.max.X - 0.6):
-                for y in (-p.WALL + 0.05, -p.WALL + p.THIN_WALL / 2, -p.WALL + p.THIN_WALL - 0.05):
-                    hit = self.tray_full & (Pos(x, y, 0.0) * Box(0.05, 0.05, 2.0))
-                    tops.append(hit.bounding_box().max.Z)
-            self.assertLess(max(tops) - min(tops), 0.01, f"{ref}: window bottom spans "
-                            f"z {min(tops):.3f}..{max(tops):.3f}")
+            levels = []
+            for ys in ((-p.WALL + 0.05, (-p.WALL + split) / 2, split - 0.05),
+                       (split + 0.05, inner - 0.05)):
+                tops = []
+                for x in (bb.min.X + 0.6, (bb.min.X + bb.max.X) / 2, bb.max.X - 0.6):
+                    for y in ys:
+                        hit = self.tray_full & (Pos(x, y, 0.0) * Box(0.05, 0.05, 2.0))
+                        tops.append(hit.bounding_box().max.Z)
+                self.assertLess(max(tops) - min(tops), 0.01, f"{ref}: window bottom spans "
+                                f"z {min(tops):.3f}..{max(tops):.3f}")
+                levels.append(tops[0])
+            self.assertLess(levels[1], levels[0], ref)
 
     def test_port_cutouts_do_not_intersect_the_floor_slab(self):
         # The old inverted cone (see previous test) also over-cut
@@ -666,30 +749,27 @@ class TestSideFeaturesAndTray(unittest.TestCase):
         self.assertAlmostEqual(bb.min.X, -p.WALL, places=3)
         self.assertAlmostEqual(bb.max.X, 1.0, places=3)
 
-    def test_reset_pinhole_is_in_the_EAST_wall(self):
+    def test_the_east_wall_is_solid_where_the_reset_hole_is_drilled(self):
+        # Printed sideways through the wall, the pinhole came out as a slit
+        # and marked the wall's layers (Wells, 2026-11-19). The wall stays
+        # whole; the reset jig guides a drill (params.RESET_DRILL_D).
+        from build123d import Box, Pos
+        y, z = case.reset_axis()
+        probe = Pos(p.BOARD_W + p.WALL - p.THIN_WALL / 2, y, z) * Box(
+            p.THIN_WALL - 0.1, 3.0, 3.0)
+        self.assertAlmostEqual((self.t & probe).volume, probe.volume, places=4)
+
+    def test_reset_axis_is_on_sw1s_button(self):
         # HANDOFF carries a superseded note putting this on the west wall.
-        import board_geom as bg
-        bb = case.reset_pinhole().bounding_box()
-        self.assertGreaterEqual(bb.max.X, p.BOARD_W + p.WALL)
-        self.assertLessEqual(bb.min.X, p.BOARD_W)
-        _, cy = bg.to_case(*[bg.footprint("SW1").x, bg.footprint("SW1").y])
-        self.assertAlmostEqual((bb.min.Y + bb.max.Y) / 2, cy, places=2)
-        self.assertAlmostEqual(bb.size.Z, p.RESET_PINHOLE_D, places=3)
-
-    def test_reset_pinhole_is_only_a_pilot_for_a_drill(self):
-        # Wells drills the hole out round (2026-10-17): printed sideways
-        # through a wall it never comes out round. It only has to centre the
-        # drill, and stay open when sliced (sliced at 0.8: open on 4 layers).
-        self.assertLessEqual(p.RESET_PINHOLE_D, 0.80)
-        self.assertGreaterEqual(p.RESET_PINHOLE_D, 0.60)
-
-    def test_reset_pinhole_z_is_on_sw1s_button(self):
         # Rev 2026.11's SW1, the BZCN TSB001A3518A, has a 3.0 x 1.5 mm button
         # 1.15-2.65 above the board (LCSC's model, lib/make_sw1_model.py):
-        # the pinhole aims at its middle.
-        bb = case.reset_pinhole().bounding_box()
-        z_centre = (bb.min.Z + bb.max.Z) / 2
-        self.assertAlmostEqual(z_centre, 1.90, places=2)
+        # the hole aims at its middle, through the EAST wall.
+        import board_geom as bg
+        fp = bg.footprint("SW1")
+        y, z = case.reset_axis()
+        self.assertAlmostEqual(y, bg.to_case(fp.x, fp.y)[1], places=3)
+        self.assertAlmostEqual(z, 1.90, places=2)
+        self.assertGreater(bg.to_case(fp.x, fp.y)[0], p.BOARD_W / 2)
 
     def test_tray_is_one_valid_watertight_solid(self):
         self.assertTrue(self.t.is_valid)
@@ -739,12 +819,11 @@ class TestThinWalls(unittest.TestCase):
     """Every wall is THIN_WALL thick from the floor up to the panel seat, then
     a 45-degree ramp returns it to the full wall under the rim
     (params.THIN_WALL). One thickness all the way round, so no flat outside
-    face has a change of thickness behind it; the west wall still bows so
-    S1's keys can pass its rim on the way in."""
+    face has a change of thickness behind it."""
 
     # Positions along each wall's straight run (case Y for west/east, case X
     # for front/back), clear of the port windows, the DIP slot (it starts at
-    # z 4.6), the reset pinhole and the bosses. The ends sit 0.5 past where
+    # z 4.6) and the bosses. The ends sit 0.5 past where
     # each corner's arc meets the straight.
     ALONG = {
         "west": (2.5, 12.0, 50.0, 90.0, p.BOARD_L - 2.5),
@@ -863,7 +942,16 @@ class TestFeet(unittest.TestCase):
     def test_screw_heads_clear_the_pocket_floor(self):
         # Wells, 2026-10-17: with a 1.00 pocket the heads needed "another
         # .5mm or so" of counterbore, on top of the 0.40 that was left.
-        self.assertAlmostEqual(p.SCREW_HEAD_DEPTH - p.FOOT_POCKET_DEPTH, 0.90, places=6)
+        self.assertGreaterEqual(p.SCREW_HEAD_DEPTH - p.FOOT_POCKET_DEPTH, 0.90 - 1e-9)
+
+    def test_the_screws_still_fit_from_their_seat(self):
+        # README, Hardware. The Pro's 18 mm screw must stop about 0.5 short of
+        # the panel's underside, in its blind standoff; the LC's 10 mm screw
+        # should reach most of the way down its 4.50 insert bore.
+        seat = p.Z_FLOOR_BOTTOM + p.SCREW_HEAD_DEPTH
+        self.assertGreaterEqual(p.CAVITY - (seat + 18.0), 0.5)
+        self.assertGreaterEqual(seat + 10.0, 4.0)
+        self.assertLessEqual(seat + 10.0, p.INSERT_DEPTH + 0.01)
 
 
 class TestLabelRecess(unittest.TestCase):

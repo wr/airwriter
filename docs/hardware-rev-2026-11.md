@@ -370,7 +370,8 @@ fit: its pins are in other corners and it is 1.95 mm tall.
   front silk off the board, D3's K and SW1's RESET in place, every label reading with the
   sockets at the top, the OSHW logo on top and the nameplate on the back.
 - `enclosure/build.sh`: all tests pass; the tray has no DIP slot (a board without S1 gets
-  none), and the reset pinhole aims at the new button, 1.90 mm up. The lattice's clearances
+  none), and the east wall is solid at SW1, where the reset jig's bore aims at the new button, 1.90 mm
+  up. The lattice's clearances
   follow the new parts.
 - `make_fab.sh`: 153 placements on AirWriter's panel, 63 on the LC's main board alone, drill
   floor 0.30 mm on both. Neither places J2 or J4: Wells fits them after delivery. U7 and U10
