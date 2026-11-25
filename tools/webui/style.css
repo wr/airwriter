@@ -396,10 +396,11 @@ dialog::backdrop{background:var(--scrim)}
 
 /* W-1088 (Wells: "proportions are kinda small for mobile"): on a phone, setup
    fills the screen as a phone's own setup does: a bigger mark and title,
-   roomier rows, and full-width keys at the foot, the next step last, under
-   the thumb. */
+   roomier rows, and full-width keys, the next step last. The keys follow the
+   words, not the foot of the screen: an iPhone's join sheet says it is taller
+   than the part it shows, and keys at its foot were out of reach. */
 @media (max-width:760px){
-  body.setupmode .pane.on{min-height:100svh;display:flex;flex-direction:column;
+  body.setupmode .pane.on{display:flex;flex-direction:column;
     padding-top:max(24px,env(safe-area-inset-top,0px));padding-bottom:max(24px,env(safe-area-inset-bottom,0px))}
   body.setupmode #su-1,body.setupmode #su-2,body.setupmode #su-3{flex:1 1 auto;gap:22px}
   body.setupmode .hero{padding:32px 22px 28px;gap:10px}
@@ -420,7 +421,7 @@ dialog::backdrop{background:var(--scrim)}
   body.setupmode .btnrow .btn .bi{width:17px;height:17px;vertical-align:-3px;margin-right:8px}
   body.setupmode .btnrow .btn .bi.end{margin:0 0 0 8px}
   body.setupmode .foot,body.setupmode .say{font-size:15px}
-  body.setupmode .btnrow{margin-top:auto;display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  body.setupmode .btnrow{display:grid;grid-template-columns:1fr 1fr;gap:10px}
   body.setupmode .btnrow .btn{min-height:50px;font-size:17px}
   body.setupmode .btnrow .btn.primary,body.setupmode .btnrow.one .btn{grid-column:1/-1}
 }
