@@ -80,9 +80,9 @@ reads clear or LocalTalk is heard there, and never into a printer with power.
   shared port StyleWriter over any of them, with AirWriter as Apple's StyleWriter network
   adapter (W-1193: ADSP, SPEC §3.13): each is a name of its own in the Chooser, the Mac hears
   busy while the board prints anything else, and renaming it from the Mac renames the record.
-  Tested on board 1: an SE/30 on EtherTalk over Wi-Fi printed to the Color StyleWriter 2500
-  with Apple's Color SW 2500 driver. The Color SW 1500 driver's printers and a Mac on the
-  LocalTalk cable are host-tested only.
+  Tested on board 1: an SE/30 printed to the Color StyleWriter 2500 with Apple's Color SW 2500
+  driver, on EtherTalk over Wi-Fi and on the LocalTalk cable. The Color SW 1500 driver's
+  printers are host-tested only.
 - **Password.** A sold board's password is burned into its chip with its serial at the bench
   (`tools/bench`) and printed on its label. The setup network takes it and the settings page
   signs in with it; printing never asks. A board with none burned (rev A, a dev board) is open

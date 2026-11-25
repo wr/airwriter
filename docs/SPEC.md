@@ -804,9 +804,9 @@ through AirWriter, as Apple's network adapter shared one (ADSP)`; the StyleWrite
 link's node is also Apple's StyleWriter network adapter: the driver finds a port StyleWriter
 (3.16) by NBP, makes the page and paces the printer itself, and the board passes bytes both
 ways. This is ADSP (DDP type 7), not PAP. Host-tested against a software Mac, and on
-board 1 an SE/30 on EtherTalk over Wi-Fi has printed to a Color StyleWriter 2500 with Apple's
-Color SW 2500 driver (2026-11-25); the Color SW 1500 driver and a Mac on the cable have not been
-tried.
+board 1 an SE/30 has printed to a Color StyleWriter 2500 with Apple's Color SW 2500 driver, on
+EtherTalk over Wi-Fi and on the LocalTalk cable (2026-11-25); the Color SW 1500 driver has not
+been tried.
 
 - **ADSP** (`adsp.c`, pure C, four connections an engine). It accepts an Open Request with
   Request+Ack, the same one again for a repeat, and opens to a far socket itself: the request
