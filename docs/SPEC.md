@@ -803,8 +803,10 @@ through AirWriter, as Apple's network adapter shared one (ADSP)`; the StyleWrite
 "Phase 2", has the reasons). To a Mac with Apple's Color SW 2500 or Color SW 1500 driver, each
 link's node is also Apple's StyleWriter network adapter: the driver finds a port StyleWriter
 (3.16) by NBP, makes the page and paces the printer itself, and the board passes bytes both
-ways. This is ADSP (DDP type 7), not PAP. Host-tested against a software Mac; no real Mac has
-printed through it yet.
+ways. This is ADSP (DDP type 7), not PAP. Host-tested against a software Mac, and on
+board 1 an SE/30 on EtherTalk over Wi-Fi has printed to a Color StyleWriter 2500 with Apple's
+Color SW 2500 driver (2026-11-25); the Color SW 1500 driver and a Mac on the cable have not been
+tried.
 
 - **ADSP** (`adsp.c`, pure C, four connections an engine). It accepts an Open Request with
   Request+Ack, the same one again for a repeat, and opens to a far socket itself: the request
@@ -1238,8 +1240,8 @@ printed from AirWriter, and Apple's drivers have not been captured** (the rig st
 TailTalk's reading of Apple's drivers (`tailtalk/src/stylewriter/*`, FeralFirmware; read for
 facts, never copied) and lpstyl's `README.protocol`; only the Color StyleWriter 2200 has
 printed from TailTalk on a real printer. Phase 2, vintage Macs printing through AirWriter as
-Apple's StyleWriter adapter (ADSP, not PAP), is built and host-tested (`W-1193`, below); no Mac
-has printed through it on a board yet.
+Apple's StyleWriter adapter (ADSP, not PAP), is built (`W-1193`, below): host-tested, and an
+SE/30 has printed to board 1's 2500 through it.
 
 - **Models.** `sw_model_t`: the original StyleWriter, StyleWriter II, StyleWriter 1200, Color
   StyleWriter 1500, 2200, 2400 and 2500 (the names the page and Bonjour use). The Portable
@@ -1672,7 +1674,8 @@ has printed through it on a board yet.
   bytes alone, with no `E` first: the board does not know where in a page the Mac stopped).
   And the record's marks are set as a session sets them: answering and ready at the
   printer's first byte, asleep after a clean end, offline after a job that got no byte back.
-  Host-tested; no Mac has printed through it on a board.
+  Host-tested; on board 1 an SE/30's page with Apple's Color SW 2500 driver printed and ended
+  cleanly, and Apple's driver took the socket from the name's answer.
 - **Not built.** The printers' fast modes (a II or 1200
   at 230,400 baud after `h`, likely within rev A's reach; a Colour StyleWriter's clock on HSKi
   after `x`, about 885 kHz on a 2200, which rev A's U3 cannot pass, 2.4, and the ESP32's UART

@@ -80,7 +80,9 @@ reads clear or LocalTalk is heard there, and never into a printer with power.
   shared port StyleWriter over any of them, with AirWriter as Apple's StyleWriter network
   adapter (W-1193: ADSP, SPEC §3.13): each is a name of its own in the Chooser, the Mac hears
   busy while the board prints anything else, and renaming it from the Mac renames the record.
-  Host-tested against a software Mac; nothing has printed from a real Mac yet.
+  Tested on board 1: an SE/30 on EtherTalk over Wi-Fi printed to the Color StyleWriter 2500
+  with Apple's Color SW 2500 driver. The Color SW 1500 driver's printers and a Mac on the
+  LocalTalk cable are host-tested only.
 - **Password.** A sold board's password is burned into its chip with its serial at the bench
   (`tools/bench`) and printed on its label. The setup network takes it and the settings page
   signs in with it; printing never asks. A board with none burned (rev A, a dev board) is open
@@ -246,8 +248,8 @@ http://192.168.4.1/.
   `swfake.py` over a pty and holds the page to the rip's dots: a 2500 and a II in Apple's
   order and lpstyl's, two StyleWriters, busy, the Mac gone at each point, the board's stop,
   a rename, a slow wire and one that loses frames (about 2.5 minutes, on the adapter's real
-  timers). No real Mac has printed through it: the bench is board 1 with Basilisk II over the
-  tunnel, then a Mac on the cable.
+  timers). On a board: a Mac's Chooser lists the StyleWriter under its driver, a page prints,
+  and the log ends `adapter job: N bytes to the printer, M back, printed`.
 - **QuickDraw LaserWriters** (Python 3 with numpy): `make -C tools/rip qdcheck` decodes the
   rip's packets and the line the board clocks out with `qdfake.py` (a software Personal
   LaserWriter 300, with `--engine 0d` an LS, with `--engine 31` a Select 300 on page memory and

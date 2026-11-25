@@ -653,8 +653,8 @@ one job, the rest wait. StyleWriters behind someone else's adapter.
 ### Calls made here (check while reading)
 
 - Sockets 0x89 and 0x8A, not 129: lpstyl and TailTalk take the socket from the name's answer
-  and InkTalk, used with real Macs, registers whatever it is given. If Apple's driver turns
-  out to want 129, the ImageWriter's listener moves.
+  and InkTalk, used with real Macs, registers whatever it is given. Apple's Color SW
+  2500 driver on an SE/30 does the same (board 1, 2026-11-25).
 - The call-back at the first of close, `0012` or 1 s.
 - The 13-byte attention ack; answers without end-of-message marks, as the capture shows.
 - A request is busy (`00 01`), not refused, whenever the record's StyleWriter is not surely the
