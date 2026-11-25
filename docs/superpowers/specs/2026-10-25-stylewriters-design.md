@@ -534,13 +534,16 @@ packets and events out. DDP type 7, the 13-byte header, the 8-byte open paramete
 - **Accepts and opens.** A listener answers an Open Request with Request+Ack, the same one
   again for a repeated request, and works whether or not the third leg arrives. An opener
   resends its request each second, five times, takes a second Request+Ack from a new
-  connection ID as the one to use, and stops on a denial. Connections are told apart by the
-  far address and the far connection ID together.
-- **Stream.** In order only; a packet ahead is dropped, an overlap gives its new bytes. End of
-  message takes one sequence number, kept with unacknowledged bytes so a resend carries it
-  again. An ack for every packet that asks. The receive window is the room the taker has, and
-  an ack goes out unasked when it opens from zero. Sent bytes ask for an ack, respect the far
-  window, and are resent after 3 s, five times, or at once on Retransmit Advice.
+  connection ID as the one to use, and stops on a denial; an answer or a denial counts only
+  from the network and node the request went to, any socket there. Connections are told
+  apart by the far address and the far connection ID together.
+- **Stream.** In order only; a packet ahead is dropped, an overlap gives its new bytes. A
+  received end of message takes one sequence number; the engine never sends one. An ack for
+  every packet that asks. The receive window is the room the taker has, and an ack goes out
+  unasked when it opens from zero, or when the far end was last told under one packet's room
+  (572 bytes) and there is now a packet more: a Mac that will not send part of a packet into
+  a small window would otherwise wait 5 s for a probe. Sent bytes ask for an ack, respect
+  the far window, and are resent after 3 s, five times, or at once on Retransmit Advice.
 - **Attention messages**, received only: their own sequence, an ack (13 bytes) for every one
   whether or not it asks, a repeat acked and not delivered. They never touch the stream's
   acks or window.
@@ -560,7 +563,9 @@ One per AppleTalk link, riding the link's node as the PAP client does.
   the one on the port now is registered as `<name>:ColorStyleWriter2400AT@*` (2200, 2400,
   2500) or `<name>:StyleWriter1200AT@*` (original, II, 1200, 1500), on every link that is on.
   Up to two: one a port. Each has a listening socket of its own, 0x89 and 0x8A, which is also
-  where its call-back comes from. A second with the same name and type gets " 2".
+  where its call-back comes from, and keeps it while it is offered: when the first is
+  unplugged the second stays on 0x8A, under the Macs that chose it and the job in its pipe.
+  A second with the same name and type gets " 2".
 - **A print.** The Mac opens a connection to the name's socket and sends attention `000B`
   (70 bytes: its data socket in byte 3, its user name). Every attention is acked and then
   answered on that connection's stream, 2 bytes unless noted; an unknown one gets `00 00` so
@@ -576,16 +581,22 @@ One per AppleTalk link, riding the link's node as the PAP client does.
   buffer is empty and the port has sent it, else `00 00`. `000A` (status text) kept for the
   questions below. `0005` gets `00 EF` and `0007` gets `FF EF`: no fast mode. `0003`, `0004`,
   `0008` get `00 00` and do nothing. A message that is the one byte `x` or `h` is not passed
-  on. `0012` gets `FF FF` and marks the job as ending cleanly.
+  on. `0012` gets `FF FF` and marks the job as ending cleanly. An answer always fits: 343 of
+  the pipe's 640 bytes of send buffer are kept from the printer's bytes, room for both long
+  answers and six short ones unacknowledged at once.
 - **Questions from any Mac, any time**: `0011` job count and `000D` queue position (`00 01`
   while the board is busy, else `00 00`), `000E` (72 bytes: the request of the job in the
   pipe, zeros otherwise) and `0010` (259 bytes: its status text, zeros otherwise), `000C`
   withdraws a request that has not reached the pipe. Three connections a link beside the pipe;
   a fourth Mac is not answered and its driver tries again.
 - **The end.** A close after `0012`: nothing is sent to the printer. A pipe lost any other way
-  (a bare close, 20 s of silence, resends spent) or the test button: the board sends the
-  printer `00 FF FF FF 49` and keeps the lock for 10 s, since two resets close together have
-  left a 2500 dark. Either way the port goes back to its record's settings and the printer's
+  (a bare close, 20 s of silence, resends spent, 300 s with nothing through it either way
+  though the Mac answers probes) or the test button, with bytes at the printer: the board
+  sends the printer `00 FF FF FF 49`. Two resets close together have left a 2500 dark, and
+  the Mac's driver resets the printer itself as its first bytes, so each port keeps the time
+  of its printer's last reset, the board's or the driver's: the board's reset waits until
+  10 s after it, a Mac's request inside those 10 s is busy, and the lock is kept until 10 s
+  after the last. Either way the port goes back to its record's settings and the printer's
   next status question is 10 s out.
 - **Rename.** `0009` on a connection, then `0012` on the same one, renames the record: its
   AirPrint name and its name on every link. An empty name, or one with `:` or `@`, is ignored.
@@ -607,8 +618,8 @@ One per AppleTalk link, riding the link's node as the PAP client does.
   asleep and answering marks are set at the start and end as a session sets them, so a 2500
   that goes quiet after a Mac's job reads ready.
 - **Log.** A line when a job starts, one when the pipe is up, and one at the end with the
-  bytes each way and how it ended. Never the Mac's user name, the printer's name or the
-  status text.
+  bytes that reached the printer, the bytes back and how it ended. A busy answer is logged
+  once in 30 s a link. Never the Mac's user name, the printer's name or the status text.
 - **`GET /api/sw/job`**: the last job's bytes to the printer, the first 256 KB, as
   `/api/lt/job`, and in the same buffer: whichever Mac's job came last, an ImageWriter's or a
   StyleWriter's, has the capture and the other route answers 404. A second 256 KB would be a
@@ -621,11 +632,15 @@ one job, the rest wait. StyleWriters behind someone else's adapter.
 
 ### Checks
 
-- `test_adsp.c`: the codec's vectors, opens both ways with their repeats, the end-of-message
-  arithmetic, windows shut and opened, resends with their marks, probes, Forward Reset, close.
+- `test_adsp.c`: the codec's vectors, opens both ways with their repeats and who may answer
+  one, the end-of-message arithmetic, windows shut, small and opened, resends, probes,
+  Forward Reset, close, and all of it across the sequence numbers' wrap.
 - `test_sw_adapter.c`: the rename replayed from the real capture; the whole print in Apple's
   order and lpstyl's; busy and the questions; withdraw; an abandoned request; a Mac that
-  vanishes; fast modes refused and the lone byte dropped.
+  vanishes; a pipe gone quiet; long answers beside the printer's bytes; names keeping their
+  sockets; fast modes refused and the lone byte dropped.
+- `test_sw_session.c`: every reset the session writes is said (`reset_sent`), and the wait
+  between two.
 - `test_localtalk.c`, `test_ethertalk.c`, `test_printers.c`: the names answered by type, type 7
   to the right socket, the offers.
 - `etpeer.py` learns ADSP and both orders of print; `swahost` (a link, the adapter and the
@@ -654,10 +669,28 @@ one job, the rest wait. StyleWriters behind someone else's adapter.
   dialog, and on the board 10 s after the job, when the port asks again.
 - The reset at an unclean end is the five bytes alone, with no `E` first for the black-only
   models (a session's abort sends one): the board does not know where in a page the Mac
-  stopped. It does not know either whether the Mac's driver reset the printer moments before.
+  stopped, so the reset can land inside a block (`docs/traps.md`).
+- Resets are kept 10 s apart across senders, not only after the board's own: the driver's
+  reset is taken to be the job's first bytes to the port, since the board reads nothing of
+  the stream, and a session's are stamped where it writes them. An AirPrint job starting
+  inside 10 s of another session's abort is not held off; that is the session's to pace.
 - `000E`'s answer as InkTalk lays it out (the request first); lpstyl reads the name two
   bytes later, and only ever to show it.
-- 10 s of lock after a reset the board sends.
+- 10 s of lock after the printer's last reset, the board's or the driver's, so a job a Mac
+  ends cleanly seconds after it began keeps the lock for the rest of them.
+- A pipe with no stream byte and no attention either way for 300 s is ended as a Mac gone,
+  though the Mac answers probes (the PAP server's figure for a quiet client). A driver that
+  waits on paper still asks the printer its status through the pipe, so a real wait has
+  traffic; a Mac whose driver hung with the pipe open would otherwise hold every printer
+  on the board for good.
+- A name keeps its socket while its record is offered; the place is the adapter's own, a
+  link at a time, not the list's order.
+- The two job routes share one capture (`/api/lt/job`, `/api/sw/job`): the last Mac's job of
+  either kind has it.
+- An open of ours is answered only by the node it went to. Our connection IDs count up from
+  a random start and are 16 bits: any node could have named one.
+- 343 bytes of the pipe's send buffer kept for answers, 297 for the printer's bytes: a
+  StyleWriter's answers are a byte or a short line.
 - Three question connections a link; the fourth place is kept for the pipe, job or no job.
 - A connection that is not the pipe says the window Apple's adapter says, 1716, and its
   stream is dropped. A Mac that leaves 640 bytes of answers unread is closed.
@@ -723,7 +756,7 @@ one job, the rest wait. StyleWriters behind someone else's adapter.
 - One Clean Print Head key, one cleaning a press, no deep clean and nothing automatic.
 - A StyleWriter test page drawn as a raster on the board.
 - StyleWriters on the network behind an adapter are out.
-- Phase 2's busy answer, rename-renames-the-record, and socket 129.
+- Phase 2's busy answer, rename-renames-the-record, and its sockets (0x89 and 0x8A, not 129).
 
 ## Left to the builder
 

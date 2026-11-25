@@ -91,3 +91,12 @@ EOM stops the job with an error that says which.
 `python3 -m unittest tools/ethertalk/test_adsp_peer.py` runs two ADSP ends
 against each other, and the driver's side against a small adapter and a
 canned printer, with no board.
+
+`make -C tools/rip swainterop` (`test_sw_adapter_interop.py`, python3.14 with
+numpy) prints from this Mac through the board's own adapter, built for this
+computer (`tools/rip/build/swahost`), to `tools/stylewriter/swfake.py` as the
+printer, and holds the page swfake drew to the dots the rip made: a 2500 and
+a StyleWriter II in both orders, two StyleWriters, busy, the Mac gone at each
+point of a job, the board stopping it, a rename, a slow wire and one that
+loses frames. It waits on the adapter's real timers, so it takes about two
+and a half minutes.
