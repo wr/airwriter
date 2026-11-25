@@ -51,10 +51,10 @@ How to design, check and iterate a printed part. Follow it for any new part or c
 | What | Value | Where |
 |---|---|---|
 | Board / panel pocket | 0.30 a side | `POCKET_CLEAR` (0.20 bound on PCBWay's ±0.2 outline) |
-| Connector windows | vendor hull + 0.40 | `PORT_CLEAR`; front part of the hull only |
+| Connector windows | USB-C: vendor hull + 0.40, front part only (`PORT_CLEAR`). Mini-DINs: a rectangle round the socket, 0.20 at the sides and bottom (`MINIDIN_CLEAR`), 0.40 over the top | `case.port_cutouts` |
 | Part clearance under a lowered part | +0.40 sideways, +0.50 on top | `PART_CLEAR`, `PART_TOP_CLEAR` |
 | Guiding fit (steadies, no drag) | 0.20–0.25 a side | test-button collar |
 | Snug against the tray | 0.10 | lattice lip |
 | Light-tight wall | 0.80 (two perimeters) | lattice walls |
-| Wall that flexes in use | 1.70 PETG, the same on every wall (0.80 split; 1.20 on one wall only showed lines) | tray walls below the rim |
+| Tray walls below the rim | 2.40 PETG-CF, the same on every wall (1.70 cracked along its layers when squeezed; rev A's west wall bowed at 1.70, split at 0.80, and 1.20 on one wall only showed lines) | `THIN_WALL` |
 | Light pipe in clear PETG | made D3 dimmer | dropped; rev B dome LED, W-1043 |

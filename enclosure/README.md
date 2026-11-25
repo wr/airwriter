@@ -1,16 +1,18 @@
 # Enclosure (enclosure/out/*.stl)
 
-Five printed parts. The **tray** is shared by both builds. The **LC frame**
+Five printed parts and a drilling jig. The **tray** is shared by both builds. The **LC frame**
 carries the LC's clear acrylic top, which stands in for the dot-grid art panel
 on boards built without it, and the **LC light** is a loose tube round its one
 status LED; the **LC lid** is the all-printed alternative to the frame and top.
 The **lattice** is the Pro build's light guide, between the board and the
-panel.
+panel. The **reset jig** guides a drill through the tray's east wall for the
+reset hole.
 
     ./build.sh          # runs the tests, then writes out/*.{step,stl}
 
 `out/airwriter-tray.stl`, `out/airwriter-lc-frame.stl`, `out/airwriter-lc-light.stl`,
-`out/airwriter-lc-lid.stl` and `out/airwriter-lattice.stl` are committed, so the case can be printed without a
+`out/airwriter-lc-lid.stl`, `out/airwriter-lattice.stl` and `out/airwriter-reset-jig.stl`
+are committed, so the case can be printed without a
 build123d install; re-run `./build.sh` and commit
 them again after any change here or to the board. The STEPs are not (6 MB, and
 the same command rebuilds them).
@@ -23,16 +25,54 @@ each constant commented with where it came from.
 
 ## Print
 
-FDM, 0.4 mm nozzle, 0.2 mm layers, matte black, **PETG** for the tray (see
-"Fitting the board"). **No supports.** Tray floor-down
-(68.00 x 110.27 x 21.64 mm), lid plate-down (62.00 x 104.27 x 14.64 mm — the
-art panel's own outline, not the pocket's; see "First print" below for the
-0.30 mm/side it should clear by).
-Slice the tray with Arachne walls and 4 wall loops: below the rim every wall
-is 1.70 mm, which Arachne fills with exactly four lines, where Classic adds a
-hair-thin filler line down the middle. In translucent PETG also give it 12
-bottom layers (the floor's full 2.4 mm), or the floor's infill grid shows
-through.
+FDM, matte black. The tray prints floor-down (68.00 x 110.27 x 21.64 mm), the
+lid plate-down (62.00 x 104.27 x 14.64 mm: the art panel's own outline, not
+the pocket's; see "First print" below for the 0.30 mm/side it should clear
+by). The other parts print on a 0.4 mm nozzle at 0.2 mm layers with no
+supports.
+
+### The tray
+
+Black **PETG-CF**, 0.6 mm nozzle, 0.42 mm layers on a 0.30 mm first layer,
+Arachne walls, three wall loops of 0.62 mm lines. PETG for its give, carbon
+fibre for crisp detail and a smooth matte face. Below the panel seat every
+wall is 2.40 mm (`THIN_WALL`); at 1.70 the long walls flexed in the hand
+enough to crack along their layers. In translucent PETG make the whole floor
+solid, or its infill shows through.
+
+Support on, with Bambu's Support for PLA/PETG (or any PLA-type support) as
+the interface:
+
+| Setting | Value |
+|---|---|
+| Type | normal (auto), snug, threshold 30 degrees, not only on the bed |
+| Top Z distance | 0 |
+| Top interface layers | 3 (rectilinear, spacing 0) |
+| Bottom interface layers | 2 |
+| XY distance from the part | 0.6 |
+
+The support carries the ceilings of the four foot pockets and the label
+recess in the floor's underside (`RECESS_DEPTH`), and the lintels over the
+ports. At an XY distance of 0.3 the support's outer line touched the pocket
+walls, leaving no edge to pry it out by. A dry support spool and an open door
+or top cover help it come away (Bambu's advice for a PLA-type interface under
+PETG).
+
+Give the slicer a layer-height range of 0.21 mm from Z 0.30 to 0.72: the
+second layer prints as two, so the recesses come out 0.51 deep, two layers of
+support, and the 1.5 mm feet stand 0.99 proud. On plain 0.42 layers they print
+0.72 deep and the feet stand 0.78 proud. A recess one layer deep traps a
+single sheet of support that won't come out.
+
+Paint the seam onto the rounded corner beside port 1 (front west, in the case
+frame), at the corner's 45-degree point from the bottom to the rim, with no
+scarf. A seam on a flat face always shows, and a scarf printed lumpy on the
+port face. Print from the project (`.3mf`), not its sliced `.gcode.3mf`:
+Bambu Studio slices that again from the plate's settings alone and drops
+every object and part setting.
+
+### Every part
+
 The tray's bottom outside edge carries a 0.80 mm 45-degree chamfer
 (`BOTTOM_CHAMFER`): exactly the overhang limit, so it needs no support, and it
 keeps first-layer squish inside the wall line. The top outside edge carries a
@@ -46,11 +86,11 @@ distance, only unsupported flats and minimum wall thickness. See that file's
 module docstring, and its own comments on `downward_flats()`/`upward_flats()`,
 for what it does and doesn't catch (a curved overhang, e.g. a round pinhole
 through a wall, is fine and deliberately not flagged; a flat one is not). The
-one flat it allows is a lintel: the DIP slot and the three port openings keep
-flat tops, each a bridge across its own opening and only a wall deep (20.7 mm
-at the DIP slot, 14.0 at J2/J4, 6.5 at J1; the gate caps the span at 25). Print
-them with part cooling on. The first-print checklist below is the backstop for
-what the gate can't see.
+flats it allows are the three port openings' lintels, each a bridge across its
+own opening and only a wall deep (14.4 at J2/J4, 9.7 at J1; the gate caps the
+span at 25; rev A's DIP slot, 20.7), and the recesses' ceilings in the floor's
+underside, which print on support and must be deeper than a 0.42 layer. The
+first-print checklist below is the backstop for what the gate can't see.
 
 **The gate assumes the print orientation stated above and nothing checks that
 you sliced it that way.** It walks each part's own downward faces in ITS
@@ -67,20 +107,24 @@ real unsupported ceilings once the part is reoriented in the slicer.
 | LC | 4 × M2.5 × 10 | M2.5 brass heat-set inserts in the frame's (or lid's) legs |
 
 LC is **M2.5 × 10, not × 8**: with `STANDOFF` at 3.00 the counterbore seat
-sits at Z = -5.70, so an 8mm screw only reaches 2.30mm into the lid's 4.50mm
-insert bore. 10mm reaches 4.30mm — most of the insert's own length.
+sits at Z = -5.50, so an 8mm screw only reaches 2.50mm into the lid's 4.50mm
+insert bore. 10mm reaches 4.50mm, the bore's full depth.
 
 Pro is **M2.5 × 18, not × 20**. The panel's standoffs are blind: 3.0 mm tall,
 thread in the bottom 1.8 mm, and the screw tip must stop about 0.5 mm short of
-the seat. From the same Z = -5.70 head seat, an 18 mm screw ends at Z 12.30,
-0.74 short of the panel's underside at 13.04 and 2.26 mm into the standoff. A
-20 mm screw would end at 14.30, past the panel's underside, and bottom out.
+the seat. From the same Z = -5.50 head seat, an 18 mm screw ends at Z 12.50,
+0.54 short of the panel's underside at 13.04 and 2.46 mm into the standoff. A
+20 mm screw would end at 14.50, past the panel's underside, and bottom out.
+
+The screws pass through 3.40 mm bores in the tray (`TRAY_SCREW_CLEAR_D`), loose
+enough that the thread doesn't cut the plastic; they thread into the standoffs
+or inserts above.
 
 Press the four inserts into the **bottom** of the frame's or lid's legs before
 assembly.
-Rubber feet go on the floor's underside, over the screw counterbores. The
-2.5 × 1.25 in label goes in the shallow recess between them, its long side
-front to back.
+Rubber feet (10 × 1.5 mm) go in the four pockets in the floor's underside, each
+over a screw counterbore. The 2.5 × 1.25 in label goes in the recess between
+them, its long side front to back.
 
 ## Acrylic top and frame (LC)
 
@@ -183,37 +227,33 @@ way of the keys:
    keys are down in their window. Near the end the board slides forward
    another millimetre or so as the USB-C finds its opening.
 
-Below the panel seat every wall is `THIN_WALL` (1.70 mm) thick, ramping back
-to the full wall at the seat, so the rim, the seat and the outside look the
-same as before. One thickness all round: a wall that changes thickness behind
-a flat face prints a line up the outside there (`docs/traps.md`). Bowing the
-west wall 2 mm takes about 46 N in PETG (about 80 N in PLA) and puts about
-1.2% vertical strain where the wall meets the floor (FEA, `params.THIN_WALL`).
-That strain pulls the print's layers apart, so **print the tray in PETG**. A
-0.80 mm west wall split there on the first print. If the keys still catch at the rim, push the board
-0.3 mm east while it goes down.
+On rev A's tray every wall below the panel seat is 1.70 mm thick, ramping back
+to the full wall at the seat, so the west wall bows. Bowing it 2 mm takes
+about 46 N in PETG (about 80 N in PLA) and puts about 1.2% vertical strain
+where the wall meets the floor (FEA, in git history at `params.THIN_WALL`).
+That strain pulls the print's layers apart, so print rev A's tray in PETG. A
+0.80 mm west wall split there on the first print. If the keys still catch at
+the rim, push the board 0.3 mm east while it goes down. Rev 2026.11's walls
+are 2.40, too stiff to bow; one thickness all round either way, since a wall
+that changes thickness behind a flat face prints a line up the outside there
+(`docs/traps.md`).
 
 ## First print, check in this order
 
 Cheapest-to-verify first — cheap checks first so an early failure is caught
 before it costs you the ones further down the list.
 
-1. The board in, per "Fitting the board". The west wall should bow and spring
-   back without whitening at the DIP window's corners.
+1. The board in, per "Fitting the board". (Rev A) the west wall should bow
+   and spring back without whitening at the DIP window's corners.
 2. A real USB-C cable into its opening, the shell's outline with 0.40 round it.
    The receptacle sits 1.5 mm behind the wall, so the plug's overmould has to
    clear the wall's face: this is the one fit the board file could not settle.
 3. Both mini-DIN plugs.
-4. A pen tip on S1's keys (they sit 0.80 mm recessed by design).
-5. A paperclip on the east-wall reset pinhole. Its Z (1.75mm, half of SW1's
-   footprint-descr body height) is a **derivation, not a measurement** — SW1
-   has no 3D model on the board, so nothing here booleaned it off real
-   geometry, and no Panasonic mechanical drawing is in this repo. The
-   apparent cross-check against `EVQP44B3M_SidePress.wrl` doesn't add
-   independent confidence: that file was hand-authored with the actuator's Z
-   set equal to the body's centre Z — the same assumption `RESET_ACTUATOR_Z`
-   makes — so the two were always going to agree (see `params.py` and
-   task-6-report.md for the full derivation).
+4. (Rev A) a pen tip on S1's keys (they sit 0.80 mm recessed by design).
+5. The reset hole, drilled with the jig ("Reset hole" below), then a
+   paperclip through it onto SW1's button. Its height, 1.90 mm over the board
+   (`RESET_ACTUATOR_Z`), comes from LCSC's model of the switch, not from a
+   real one.
 6. (LC only) The lid, or the acrylic, into the tray's pocket, by hand, before any screws go
    in. It should drop in with a light push and lift back out — expect about
    0.30 mm of clearance per side (`POCKET_CLEAR`), not a press fit and not a
@@ -221,6 +261,23 @@ before it costs you the ones further down the list.
    undersize (common on the first layers of a part this size); too loose
    past a wobble means something upstream drifted.
 7. The full stack screwed together.
+
+## Reset hole
+
+The tray's east wall is solid at SW1: a hole that small, printed sideways
+through a wall, comes out as a slit and marks the layers round it. Drill it
+instead, with a 1.2 mm (or 3/64 in) bit (`RESET_DRILL_D`), through
+`out/airwriter-reset-jig.stl`.
+
+1. Print the jig as its STL lies (on its outer face, the guide bore upright),
+   no supports. Run the bit through its bore once by hand: printed holes come
+   out a little small.
+2. Stand the empty tray on a table, before its feet go on.
+3. Set the jig on the same table against the outside of the east wall, its
+   fence round the corner on the wall opposite the ports. The table sets the
+   height, the fence the place along the wall.
+4. Drill through the jig's bore into the wall, holding the jig flat on the
+   table and against both walls.
 
 ## Interference check
 
@@ -252,5 +309,8 @@ stills.
   45-degree ridge roofs (shop W-806), the bottom chamfer, the top
   chamfer, and (2026-10-14, after rev A would not go in) 0.30 pocket
   clearance with a thinned, flexing west wall, then (2026-10-17) every wall
-  thinned to 1.70 below the rim so no flat face shows a line. `git log --
+  thinned to 1.70 below the rim so no flat face shows a line. Then
+  (2026-11-19 to 11-24, for PETG-CF on a 0.6 mm nozzle) the mini-DIN windows
+  as rectangles round the sockets, walls 2.40, the reset hole drilled from a
+  jig, the recesses printed on support, and 3.40 screw bores. `git log --
   enclosure` has each one with its reasoning.
