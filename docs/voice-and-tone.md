@@ -29,6 +29,12 @@ Write for them. The rest goes in the engineering docs.
 - Status names stay the same on the page, the phone and the wiki: Ready, Printing, Needs
   attention, Offline, The last job failed. Cleaning, a StyleWriter cleaning its print head, is
   the page's and the wiki's only.
+- Status lines are the phone's words exactly, then after the colon one thing to check. No second
+  step, no reason, and no variant for one model or situation: steps and reasons go in the
+  wiki's troubleshooting row for that status.
+- A new screen or dialog gets a title, labels and buttons. Add a help line only if it can't be
+  used without one. No confirmation line after an action and no edge-case foot text the wiki can
+  carry. Error lines only when something went wrong.
 
 **Docs.** What the reader does and what they see. Numbered steps for procedures, tables for
 lookups, problem then fix in troubleshooting. Anything on screen goes in bold, spelled exactly as
@@ -66,6 +72,8 @@ These apply to the product, docs and Wells voices.
    it is".
 6. **Plain and short.** One idea per sentence, with no lists packed into a sentence behind a
    colon.
+7. **What it does, not how it changed.** No "same", "now", "new" or "no longer" about
+   AirWriter's own history. The change goes in the commit and the PR.
 
 ## Words
 
@@ -75,6 +83,8 @@ These apply to the product, docs and Wells voices.
 | phones and computers | iPhone, iPad and Mac (except in per-platform steps) |
 | vintage Macs | old Macs |
 | connection, or the card's name | way in |
+| how it connects ("a LaserWriter on AppleTalk") | PostScript, QuickDraw (to sort printers) |
+| vintage Mac owners | any one forum's name |
 | printer port, AppleTalk port (rev A) | J2, J4, LocalTalk port, serial port |
 | port 1, port 2 (rev 2026.11 and AirWriter LC, as the case says) | J2, J4, printer port, socket |
 | LocalTalk (the card for a Mac's cable on rev 2026.11) | AppleTalk port |
