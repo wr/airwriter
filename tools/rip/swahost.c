@@ -20,7 +20,9 @@
 //                 The first is on the adapter's first socket, the second on its second.
 //   --busy-ms     the board prints something else for MS from the start: requests are
 //                 answered busy until then.
-//   --hold-ms     how long the printer is kept after the board reset it (10000, as the board).
+//   --hold-ms     how far apart two resets of a printer are kept, the Mac's driver's (a
+//                 job's first bytes) and the board's alike, and so how long the printer is
+//                 kept after the board reset it (10000, the board's SW_RESET_GAP_MS).
 //   --baud        the port takes bytes no faster than this (57600 is 5760 a second); 0, the
 //                 default, as fast as the device does.
 //   --stop-after  the board stops the job once BYTES of it have gone to the port, as the
@@ -74,6 +76,8 @@ static int        s_n;
 static atomic_int  s_active;            // from a request taken to the pump's last line
 static atomic_uint s_room_min;          // the least room the Mac was told this job
 static int         s_job_fd = -1;
+static int         s_job_k;             // which name's printer the job is on
+static uint64_t    s_reset_ms[SWA_NAMES];   // when each printer was last reset, 0 for never: under s_pipe_mx
 static uint64_t    s_busy_until;
 static uint32_t    s_hold_ms = 10000, s_baud, s_stop_after;
 
@@ -124,11 +128,34 @@ static int t_busy(void *ctx)
 
 static void *pump_thread(void *arg);
 
+// What is left of the hold since printer k was last reset, and that reset's time.
+static uint32_t reset_wait(int k)
+{
+    pthread_mutex_lock(&s_pipe_mx);
+    uint64_t last = s_reset_ms[k];
+    pthread_mutex_unlock(&s_pipe_mx);
+    return sw_reset_wait(last, now_ms(), s_hold_ms);
+}
+
+static void reset_stamp(int k)
+{
+    pthread_mutex_lock(&s_pipe_mx);
+    s_reset_ms[k] = now_ms();
+    pthread_mutex_unlock(&s_pipe_mx);
+}
+
+static void reset_hold(int k)
+{
+    uint32_t left;
+    while ((left = reset_wait(k)) != 0) sleep_ms(left > 50 ? 50 : left);
+}
+
 static int t_begin(void *ctx, uint8_t id)
 {
     int k = -1;
     for (int i = 0; i < s_n; i++) if (s_names[i].id == id) k = i;
-    if (k < 0 || t_busy(ctx)) {
+    // Busy too while the printer's last reset is inside the hold, as main.c's claim.
+    if (k < 0 || t_busy(ctx) || reset_wait(k)) {
         fprintf(stderr, "busy id=%u\n", id);
         return 1;
     }
@@ -136,6 +163,7 @@ static int t_begin(void *ctx, uint8_t id)
     sw_pipe_begin(&s_pipe);
     atomic_store(&s_room_min, SW_PIPE_DOWN);
     s_job_fd = s_fd[k];
+    s_job_k = k;
     atomic_store(&s_active, 1);
     pthread_t t;
     pthread_attr_t at;
@@ -246,7 +274,7 @@ static int reset_write(void *ctx, const uint8_t *b, size_t n) { return port_writ
 static void *pump_thread(void *arg)
 {
     (void)arg;
-    int fd = s_job_fd;
+    int fd = s_job_fd, k = s_job_k, wrote = 0;
     uint8_t buf[PUMP_CHUNK];
     const sw_pump_io_t io = { port_write, port_flush, port_read, &fd };
     tcflush(fd, TCIFLUSH);
@@ -258,6 +286,11 @@ static void *pump_thread(void *arg)
             sw_pipe_stop(&s_pipe);
         }
         v = sw_pipe_pump(&s_pipe, &io, buf, sizeof buf);
+        // The job's first bytes are the Mac's driver resetting the printer.
+        if (!wrote && sw_pipe_reached(&s_pipe)) {
+            wrote = 1;
+            reset_stamp(k);
+        }
         if (v == SW_PUMP_STOP) {                // under the link's lock, never from its thread
             pthread_mutex_lock(&s_link_mx);
             swa_stop(&s_swa, now_ms());
@@ -272,13 +305,16 @@ static void *pump_thread(void *arg)
             (unsigned)sw_pipe_up_total(&s_pipe), (unsigned)sw_pipe_reached(&s_pipe),
             atomic_load(&s_room_min), sw_pipe_stopped(&s_pipe), sw_pipe_failed(&s_pipe));
     // Any end but a clean one with bytes at the printer leaves it partway through a page: it
-    // is reset, and kept from the next job, whose first act is a reset too.
+    // is reset, no sooner than the hold after the driver's own reset. And the printer is kept
+    // from the next job, whose first act is a reset too, until the hold after its last.
     if (!clean && sw_pipe_reached(&s_pipe)) {
         const sw_ops_t ops = { .write = reset_write, .ctx = &fd };
+        reset_hold(k);
         tcflush(fd, TCIFLUSH);
         if (sw_reset(&ops) == SW_OK) fprintf(stderr, "reset\n");
-        sleep_ms(s_hold_ms);
+        reset_stamp(k);
     }
+    reset_hold(k);
     atomic_store(&s_active, 0);
     fprintf(stderr, "free\n");
     return NULL;

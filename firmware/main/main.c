@@ -387,6 +387,10 @@ typedef struct {
     // (sw_idle_silent). Answering meanwhile leaves it set: the dark comes after.
     volatile int         sw_asleep;
     volatile sw_model_t  sw_asleep_model; // whose: another StyleWriter there is not asleep
+    // W-1193: when its StyleWriter was last reset (ms since boot, 0 for never), by the board
+    // (sw_reset_sent_cb) or by a Mac's driver as its first bytes through the adapter's pipe
+    // (swa_port_write). Nothing resets it again inside SW_RESET_GAP_MS. Under the job lock.
+    uint64_t             sw_reset_ms;
     // W-1102: a Personal LaserWriter 300 on it. Its state as it last said it (a job's session
     // reports it too), and the clock on HSKi as serial_out last reported it: clocked, and its rate.
     volatile qd_state_t  qd_state;
@@ -2361,6 +2365,31 @@ static int lt_print_end(void *ctx, int normal)
 static int       s_swa_sock, s_swa_id;      // the job's socket and record, from the claim
 static at_link_t s_swa_link;
 static int       s_swa_open, s_swa_heard;   // the pump's: the port is at 57600; the printer spoke
+static int       s_swa_wrote;               // the pump's: the job's first bytes reached the port
+
+// ms since boot, never 0: psock_t.sw_reset_ms.
+static uint64_t swa_now_ms(void)
+{
+    uint64_t t = (uint64_t)(esp_timer_get_time() / 1000);
+    return t ? t : 1;
+}
+
+// A reset just went to the selected socket's StyleWriter, whoever asked for it
+// (stylewriter_cfg_t.reset_sent): a job's start or abort, a cleaning, the test page, the port
+// task's full sequence, the adapter's own. Under the job lock, as every one of them is.
+static void sw_reset_sent_cb(void)
+{
+    P->sw_reset_ms = swa_now_ms();
+}
+
+// With the job lock held and nothing else: wait out what is left of SW_RESET_GAP_MS since
+// socket p's printer was last reset, in slices that watch nothing.
+static void swa_reset_hold(const psock_t *p)
+{
+    uint32_t left;
+    while ((left = sw_reset_wait(p->sw_reset_ms, swa_now_ms(), SW_RESET_GAP_MS)) != 0)
+        vTaskDelay(pdMS_TO_TICKS(left > 250 ? 250 : left) + 1);
+}
 
 // The adapter's answer to "is it busy": anything prints, or anyone holds the lock (the port's
 // own questions too, for the moment they take).
@@ -2386,7 +2415,10 @@ static int line_fresh(const psock_t *p)
 // is there, no first sighting of another printer awaits its repeat, no clock is on its
 // handshake (a QuickDraw LaserWriter) and no line has just come up unasked. So a request
 // that races a cable swap is refused, and a StyleWriter driver's bytes never reach an
-// ImageWriter. The Mac's driver asks again.
+// ImageWriter. Busy as well for SW_RESET_GAP_MS after the printer was last reset by anyone (an
+// AirPrint job's abort, the port's full sequence, another Mac's driver): this Mac's driver
+// resets it as its first act, and two resets close together have left a 2500 dark
+// (docs/traps.md). The Mac's driver asks again.
 static int swa_port_claim(void *ctx, at_link_t link, int id)
 {
     (void)ctx;
@@ -2399,7 +2431,8 @@ static int swa_port_claim(void *ctx, at_link_t link, int id)
     if (!p || !printers_swa_offered((int)link, id) || !sock_prints(k) ||
         p->fam != PR_FAM_STYLEWRITER || printers_port_family(k) != PR_FAM_STYLEWRITER ||
         printers_port_absent(id) || printers_port_on_is_imagewriter(k) ||
-        p->confirm != PA_NONE || p->clocked || line_fresh(p)) {
+        p->confirm != PA_NONE || p->clocked || line_fresh(p) ||
+        sw_reset_wait(p->sw_reset_ms, swa_now_ms(), SW_RESET_GAP_MS)) {
         xSemaphoreGive(s_job_lock);
         return 1;
     }
@@ -2427,6 +2460,7 @@ static void swa_port_begin(void *ctx)
     s_job_error[0] = '\0';
     strncpy(s_last_job, lt_job_name(s_swa_link), sizeof s_last_job - 1);
     s_printer_failed = 0;
+    serial_out_set_abort(0);             // a stop left from the last job is not this one's
     portENTER_CRITICAL(&s_tap_mux);
     s_swa_owns = 1;                      // a tap stops it from here (stop_printing)
     portEXIT_CRITICAL(&s_tap_mux);
@@ -2446,7 +2480,7 @@ static void swa_port_begin(void *ctx)
 static int swa_port_open(void *ctx)
 {
     (void)ctx;
-    s_swa_open = s_swa_heard = 0;
+    s_swa_open = s_swa_heard = s_swa_wrote = 0;
     printer_sock_select(s_swa_sock);
     if (s_psock != s_swa_sock) return -1;
     stylewriter_link(1);
@@ -2455,10 +2489,17 @@ static int swa_port_open(void *ctx)
     return 0;
 }
 
+// The job's first bytes are the driver's reset of the printer (the board reads nothing of
+// what the Mac says, so it goes by where they are): the socket's last reset is then.
 static int swa_port_write(void *ctx, const uint8_t *d, size_t n)
 {
     (void)ctx;
-    return serial_out_write_raw(d, n, 2000u + (uint32_t)(n / 2));
+    int rc = serial_out_write_raw(d, n, 2000u + (uint32_t)(n / 2));
+    if (!rc && n && !s_swa_wrote) {
+        s_swa_wrote = 1;
+        s_ps[s_swa_sock].sw_reset_ms = swa_now_ms();
+    }
+    return rc;
 }
 
 // The last byte written has left: a 128-byte FIFO at 57600 is 22 ms.
@@ -2496,10 +2537,12 @@ static int swa_port_read(void *ctx, uint8_t *buf, size_t cap, int idle)
 // The job is over, on the pump. A clean end (the Mac's driver said so and every byte went
 // out): nothing more is sent. Any other with bytes at the printer -- the Mac vanished, the
 // test button, the port failed -- leaves it partway through a page: what is still queued is
-// dropped, it is reset, and the lock is kept 10 s more, since a second reset close behind the
-// first has left a 2500 dark (docs/traps.md) and the next job's first act is a reset. Then the
-// port goes back to its record's link, the printer's next status question is 10 s out, and
-// the lock is given.
+// dropped and it is reset, but not inside SW_RESET_GAP_MS of the last reset it had, which may
+// be the driver's own seconds ago (a Mac that cancels or crashes as its job starts): a second
+// reset close behind the first has left a 2500 dark (docs/traps.md). Either way the lock is
+// kept until that long after the printer's last reset, the board's or the driver's, since the
+// next job's first act is a reset too. Then the port goes back to its record's link, the
+// printer's next status question is 10 s out, and the lock is given.
 static void swa_port_close(void *ctx, const at_swa_end_t *e)
 {
     (void)ctx;
@@ -2516,7 +2559,8 @@ static void swa_port_close(void *ctx, const at_swa_end_t *e)
             serial_out_purge();
             serial_out_rx_drop();
             if (e->reached) {
-                stylewriter_reset();
+                swa_reset_hold(p);       // clear of the driver's own, if that was just now
+                stylewriter_reset();     // stamps the socket (sw_reset_sent_cb)
                 reset = 1;
             }
         }
@@ -2537,11 +2581,12 @@ static void swa_port_close(void *ctx, const at_swa_end_t *e)
         if (p->sw_was_answering) look_ask_p(p);
     }
     p->sw_was_answering = 0;
-    s_last_bytes = e->down;
+    // What reached the printer, not what the Mac had queued behind it.
+    s_last_bytes = e->reached;
     s_last_pages = 0;
-    ESP_LOGI(TAG, "adapter job: %u bytes to the printer, %u back, %s%s", (unsigned)e->down,
+    ESP_LOGI(TAG, "adapter job: %u bytes to the printer, %u back, %s%s", (unsigned)e->reached,
              (unsigned)e->up,
-             clean ? (e->down ? "printed" : "empty") : e->failed ? "the port failed"
+             clean ? (e->reached ? "printed" : "empty") : e->failed ? "the port failed"
              : e->stopped ? "stopped at the printer" : e->reached ? "cut short" : "abandoned",
              reset ? "; the printer was reset" : "");
     // A Mac that goes away is a done job, as one that cancels its ImageWriter job is; the
@@ -2554,10 +2599,12 @@ static void swa_port_close(void *ctx, const at_swa_end_t *e)
     port_push(printer_state_view().state);
     // W-1059, under the job lock: a Mac's page that went out whole, with the printer
     // answering, is this firmware printing.
-    if (clean && e->down && s_swa_heard) ota_health_printed();
+    if (clean && e->reached && s_swa_heard) ota_health_printed();
     // The lock is all that is held now: the port's questions, AirPrint, other Macs, the test
-    // page, cleaning and updates all wait these 10 s, and nothing here watches for them.
-    if (reset) vTaskDelay(pdMS_TO_TICKS(10000));
+    // page, cleaning and updates all wait out the gap after the printer's last reset (the
+    // whole of it after the board's own; nothing after a job that ran longer than the gap
+    // and ended well), and nothing here watches for them.
+    swa_reset_hold(p);
     if (s_swa_open) stylewriter_link_record();
     s_swa_open = 0;
     p->last_status_ms = uptime_ms();
@@ -4521,8 +4568,10 @@ static void psock_reset(int k)
 {
     psock_t *p = &s_ps[k];
     iw_link_t link = p->link;
+    uint64_t reset_ms = p->sw_reset_ms;
     *p = (psock_t)PSOCK_INIT;
     p->link = link;                          // a stream cut on its printer is still owed its resync
+    p->sw_reset_ms = reset_ms;               // and a StyleWriter just reset is still owed its quiet
     p->last_plain_ms = uptime_ms();
     printers_port_clock_gone(k);
     printer_state_port_line(k, 0);
@@ -5132,7 +5181,7 @@ void app_main(void)
     // W-1103: the StyleWriter's line, over the port serial_out just brought up.
     stylewriter_cfg_t swc = { .record_is_sw = sw_record_is_sw, .state = sw_state_cb,
                               .cart = sw_cart_seen, .cancelled = sw_cancelled,
-                              .swapped = sw_swapped };
+                              .swapped = sw_swapped, .reset_sent = sw_reset_sent_cb };
     stylewriter_start(&swc);
     static const qdlaser_cfg_t qdc = { .state = qd_state_cb, .cancelled = sw_cancelled,
                                        .page = qd_page_cb };

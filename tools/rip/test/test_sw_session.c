@@ -92,6 +92,7 @@ typedef struct {
     int g_n, g_complete;
     uint32_t g_len[MAXG];
     int resets, resumes, cleanings;
+    int reset_said;           // sw_ops_t.reset_sent calls
 } fake_t;
 
 static fake_t F;
@@ -349,9 +350,12 @@ static void o_state(void *c, sw_state_t st)
     if (F.nst < 64) { F.st[F.nst] = st; F.st_t[F.nst] = now_ms(); F.nst++; }
 }
 
+static void o_reset_sent(void *c) { (void)c; F.reset_said++; }
+
 static sw_ops_t ops(void)
 {
-    return (sw_ops_t){ o_write, o_read, o_drain, o_sleep, o_now, o_cancelled, o_state, NULL };
+    return (sw_ops_t){ o_write, o_read, o_drain, o_sleep, o_now, o_cancelled, o_state, NULL,
+                       o_reset_sent };
 }
 
 static sw_session_t *session(sw_model_t m, int quality, int colour_job, uint32_t stall_ms)
@@ -1235,6 +1239,61 @@ static void test_reset_alone(void)
     CHECK(sw_reset(&none) != SW_OK);
 }
 
+// W-1193: whoever sends a reset says so (sw_ops_t.reset_sent), once for each, so the board can
+// keep any two SW_RESET_GAP_MS apart; and the arithmetic of that wait.
+static void test_reset_said(void)
+{
+    sw_ops_t o = ops();
+    fake_init(SW_C2500, 1);
+    CHECK_EQ_INT(sw_reset(&o), SW_OK);
+    CHECK_EQ_INT(F.reset_said, 1);
+    // The write failing still counts: some of it may have gone.
+    fake_init(SW_C2500, 1);
+    F.fail_write = 1;
+    CHECK(sw_reset(&o) != SW_OK);
+    CHECK_EQ_INT(F.reset_said, 1);
+    // The full sequence: one for a printer that answers, two for one that does not.
+    fake_init(SW_II, 0);
+    CHECK_EQ_INT(sw_ask_full(&o), SW_II);
+    CHECK_EQ_INT(F.reset_said, 1);
+    CHECK_EQ_INT(F.reset_said, F.resets);
+    fake_init(SW_II, 0);
+    F.ident = "";
+    CHECK_EQ_INT(sw_ask_full(&o), SW_NONE);
+    CHECK_EQ_INT(F.reset_said, 2);
+    // A job's start, and the reset that ends a cancelled one.
+    fake_init(SW_II, 0);
+    F.cancel_on_g = 1;
+    sw_session_t *s = session(SW_II, 4, 0, 600000);
+    size_t n = fr_page(g_job, 0);
+    n += fr_rect(g_job + n, 'R', 0, 0, 99, 99);
+    n += fr_block(g_job + n, 8000);
+    n += fr_end(g_job + n);
+    CHECK_EQ_INT(sw_session_begin(s), SW_OK);
+    CHECK_EQ_INT(F.reset_said, 1);
+    CHECK_EQ_INT(sw_session_feed(s, g_job, n), SW_E_CANCEL);
+    CHECK_EQ_INT(F.reset_said, 2);
+    CHECK_EQ_INT(F.reset_said, F.resets);
+    sw_session_abort(s);
+    CHECK_EQ_INT(F.reset_said, 2);
+    sw_session_free(s);
+    // A plain question resets nothing.
+    fake_init(SW_II, 0);
+    CHECK_EQ_INT(sw_ask_plain(&o), SW_II);
+    CHECK_EQ_INT(F.reset_said, 0);
+
+    // No reset yet: no wait. Then the rest of the gap, to the millisecond, and none after.
+    CHECK_EQ_INT(sw_reset_wait(0, 5000, SW_RESET_GAP_MS), 0);
+    CHECK_EQ_INT(sw_reset_wait(5000, 5000, SW_RESET_GAP_MS), SW_RESET_GAP_MS);
+    CHECK_EQ_INT(sw_reset_wait(5000, 6000, SW_RESET_GAP_MS), SW_RESET_GAP_MS - 1000);
+    CHECK_EQ_INT(sw_reset_wait(5000, 14999, SW_RESET_GAP_MS), 1);
+    CHECK_EQ_INT(sw_reset_wait(5000, 15000, SW_RESET_GAP_MS), 0);
+    CHECK_EQ_INT(sw_reset_wait(5000, 0x200000000ull, SW_RESET_GAP_MS), 0);
+    CHECK_EQ_INT(sw_reset_wait(5000, 4000, SW_RESET_GAP_MS), SW_RESET_GAP_MS);   // a clock gone back
+    CHECK_EQ_INT(sw_reset_wait(5000, 5200, 300), 100);
+    CHECK_EQ_INT(SW_RESET_GAP_MS, 10000);
+}
+
 static void test_wrong_model(void)
 {
     // The printer says SW3; the job was made for a StyleWriter II.
@@ -1733,6 +1792,7 @@ int main(void)
     test_plain();
     test_ask_full();
     test_reset_alone();
+    test_reset_said();
     test_wrong_model();
     test_b_one_short();
     test_letters_counted();

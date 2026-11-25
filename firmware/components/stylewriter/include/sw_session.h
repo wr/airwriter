@@ -88,7 +88,22 @@ typedef struct {
     // The printer's state, when it changes (and once at a job's start).
     void     (*state)(void *ctx, sw_state_t st);
     void      *ctx;
+    // W-1193: the reset, `00 FF FF FF 49`, was just written (or its write failed partway), by
+    // whichever call here sends one: the caller keeps the time, so nothing resets the printer
+    // again inside SW_RESET_GAP_MS. May be NULL.
+    void     (*reset_sent)(void *ctx);
 } sw_ops_t;
+
+// A StyleWriter gets no second reset within this of the last, whoever sent either: a second
+// close behind the first has left a 2500 dark (docs/traps.md). A session's own resets keep to
+// it by their waits; between a session and a Mac's driver, which resets the printer as its
+// first bytes through the adapter's pipe, the board keeps the time of the last
+// (sw_ops_t.reset_sent) and holds the next off.
+#define SW_RESET_GAP_MS 10000
+// How long, in ms, a reset must still wait at now_ms when the last one on that printer went
+// at last_ms (0: none has): 0 once `gap_ms` has passed. A clock that ran backwards waits the
+// whole gap.
+uint32_t sw_reset_wait(uint64_t last_ms, uint64_t now_ms, uint32_t gap_ms);
 
 // ---- Recognition and idle (no job; the caller holds the port and the baud rate)
 
@@ -112,9 +127,9 @@ sw_model_t sw_ask_plain(const sw_ops_t *o);
 sw_model_t sw_ask_full(const sw_ops_t *o);
 // W-1193: the reset alone, `00 FF FF FF 49`, in one write, for a printer left partway through
 // someone else's page (a Mac's driver that vanished from the adapter's pipe): it ejects the
-// page and starts over. Nothing is read and nothing waited for; the caller leaves it 10 s
-// before anything else is sent, since a second reset close behind has left a 2500 dark. 0, or
-// nonzero when the write failed.
+// page and starts over. Nothing is read and nothing waited for; the caller keeps it
+// SW_RESET_GAP_MS clear of any other reset, before and after. 0, or nonzero when the write
+// failed.
 int sw_reset(const sw_ops_t *o);
 
 // `1` and `2`, for the idle check every 10 s. SW_OK with *st the state, or SW_E_SILENT

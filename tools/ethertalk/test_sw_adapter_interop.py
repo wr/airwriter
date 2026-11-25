@@ -537,7 +537,8 @@ class Interop(unittest.IsolatedAsyncioTestCase):
 
     async def test_the_board_stops_the_job(self):
         """The test button, here once the job's first byte has gone to the port: the Mac is
-        told, the printer is reset once, and the printer is free after the hold."""
+        told, the printer is reset once, the hold after the job's first bytes, and the
+        printer is free the hold after that."""
         rig = await self.rig([PII], "--stop-after", 1, "--hold-ms", 3000)
         fake = rig.fakes[0]
         with self.assertRaises(etpeer.AdspError):
@@ -548,8 +549,12 @@ class Interop(unittest.IsolatedAsyncioTestCase):
         self.assertEqual((clean, stopped, failed), (False, 1, 0), rig.text)
         self.assertGreaterEqual(reached, 1)
         await swi.until(lambda: heard(fake)[0].endswith(RESET), 2)
-        got, _ = heard(fake)
+        got, marks = heard(fake)
         self.assertEqual(got[reached:], RESET, got)
+        # The job's first bytes are the driver's own reset of the printer: the board's comes
+        # no sooner than the hold after them, though the stop came at once.
+        at = {off: ms for ms, off in marks}
+        self.assertGreaterEqual(at[reached] - at[0], 3000 - 50, rig.text)
         self.assertTrue(await rig.line("free", 6), rig.text)
         self.assertTrue(2.8 < rig.when("free") - rig.when("reset") < 5.0, rig.text)
 
@@ -575,8 +580,10 @@ class Interop(unittest.IsolatedAsyncioTestCase):
 
     async def test_fast_modes_are_refused(self):
         """The port follows neither fast mode: the driver is told so, and a message that is
-        the one byte that would switch the printer to one never reaches it."""
-        rig = await self.rig([P2500])
+        the one byte that would switch the printer to one never reaches it. The job ends
+        well inside the hold after its first bytes, which stand for the driver's reset of
+        the printer: the printer is kept until the hold is over, for the next job's reset."""
+        rig = await self.rig([P2500], "--hold-ms", 3000)
         data = await self.pipe_up(rig.mac(), P2500)
         for code, body, answer in ((etpeer.SWA_FAST_CLOCK, b"\0", b"\x00\xef"),
                                    (etpeer.SWA_FAST, b"\0\0", b"\xff\xef"),
@@ -596,7 +603,9 @@ class Interop(unittest.IsolatedAsyncioTestCase):
             await asyncio.sleep(0.05)
         self.assertEqual(await data.attention(etpeer.SWA_END, b"\0"), b"\xff\xff")
         await data.close()
-        self.assertTrue(await rig.line("free", 5), rig.text)
+        self.assertTrue(await rig.line("free", 6), rig.text)
+        self.assertGreaterEqual(rig.when("free") - rig.when("log adapter: pipe up"), 2.9, rig.text)
+        self.assertEqual(rig.count("reset"), 0, rig.text)
         self.assertEqual([e[:4] + e[5:] for e in rig.ends()], [(True, 5, 0, 5, 0, 0)], rig.text)
         self.assertEqual(heard(rig.fakes[0])[0], b"xxabh")
         self.assertIsNone(data.error)

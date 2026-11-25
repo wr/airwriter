@@ -39,6 +39,11 @@ typedef struct {
     // present, printers_port_on_is_imagewriter; not the list's last answer): no job, test
     // page or cleaning may start, and nothing is sent. NULL: never.
     int  (*swapped)(void);
+    // W-1193: a reset (`00 FF FF FF 49`) just went to the selected port's printer, from a
+    // job, a cleaning, the test page, the full sequence or stylewriter_reset: main.c keeps
+    // the time, so a Mac's driver, which resets the printer itself, is held off
+    // SW_RESET_GAP_MS. On whichever task sent it, the job lock held. NULL: nobody keeps it.
+    void (*reset_sent)(void);
 } stylewriter_cfg_t;
 
 void stylewriter_start(const stylewriter_cfg_t *cfg);
@@ -65,8 +70,8 @@ sw_model_t stylewriter_ask_plain(void);
 sw_model_t stylewriter_ask_full(void);
 // W-1193: the reset alone (sw_reset) at a StyleWriter's link, which the port is left at: for
 // the adapter's pump, when a Mac's driver left the printer partway through its page. Waits
-// only for the five bytes to leave. The caller holds the port for 10 s after and then puts the
-// link back (stylewriter_link_record).
+// only for the five bytes to leave. The caller keeps it SW_RESET_GAP_MS from the reset before
+// it, holds the port as long after, and then puts the link back (stylewriter_link_record).
 void       stylewriter_reset(void);
 // `1` and `2`: SW_OK with *st, or SW_E_SILENT (sw_ask_status).
 int        stylewriter_status(sw_model_t m, sw_state_t *st);

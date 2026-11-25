@@ -182,10 +182,27 @@ sw_model_t sw_ask_plain(const sw_ops_t *o)
     return ask_once(o, 'p', &p, ID_BYTE_MS) == 1 ? sw_model_from_p(p) : SW_NONE;
 }
 
+// The reset, in one write, and its time for whoever keeps it: said whether or not the write
+// went, since some of it may have. Every reset the board sends a StyleWriter goes through here.
+static int write_reset(const sw_ops_t *o)
+{
+    int rc = o->write(o->ctx, k_reset, sizeof k_reset);
+    if (o->reset_sent) o->reset_sent(o->ctx);
+    return rc;
+}
+
+uint32_t sw_reset_wait(uint64_t last_ms, uint64_t now_ms, uint32_t gap_ms)
+{
+    if (!last_ms) return 0;
+    if (now_ms < last_ms) return gap_ms;
+    uint64_t since = now_ms - last_ms;
+    return since >= gap_ms ? 0 : (uint32_t)(gap_ms - since);
+}
+
 int sw_reset(const sw_ops_t *o)
 {
     if (!o || !o->write) return SW_E_SILENT;
-    return o->write(o->ctx, k_reset, sizeof k_reset) ? SW_E_SILENT : SW_OK;
+    return write_reset(o) ? SW_E_SILENT : SW_OK;
 }
 
 sw_model_t sw_ask_full(const sw_ops_t *o)
@@ -193,7 +210,7 @@ sw_model_t sw_ask_full(const sw_ops_t *o)
     static const uint32_t settle[2] = { SETTLE_MS, SETTLE_LONG_MS };
     if (!ops_ok(o)) return SW_NONE;
     for (int i = 0; i < 2; i++) {
-        if (o->write(o->ctx, k_reset, sizeof k_reset)) return SW_NONE;
+        if (write_reset(o)) return SW_NONE;
         o->sleep_ms(o->ctx, settle[i]);
         uint8_t id[32];
         int n = ask_ident(o, id, sizeof id, ID_BYTE_MS);
@@ -305,7 +322,7 @@ static void abort_seq(sw_session_t *s)
         static const uint8_t e = 'E';
         s->o.write(s->o.ctx, &e, 1);
     }
-    s->o.write(s->o.ctx, k_reset, sizeof k_reset);
+    write_reset(&s->o);
 }
 
 static int cancel_out(sw_session_t *s)
@@ -554,8 +571,8 @@ static int reset_and_status(sw_session_t *s, uint8_t *s1)
     // when a second reset came close behind the first.
     for (int i = 0; i < 3; i++) {
         if (cancelled(s)) return cancel_out(s);
-        int rc = put(s, k_reset, sizeof k_reset);
-        if (rc) return rc;
+        s->touched = 1;
+        if (write_reset(&s->o)) { show(s, SWS_OFFLINE); return SW_E_SILENT; }
         s->o.sleep_ms(s->o.ctx, i == 0 && s->cfg.model != SW_ORIGINAL ? SETTLE_MS : SETTLE_LONG_MS);
         for (int k = 0; k < 2; k++) {
             int r = ask_once(&s->o, '1', s1, ANSWER_MS);
