@@ -37,7 +37,7 @@ false.
   Plans and dated reviews are kept outside this repo.
 - Linear project: AirWriter (id: 9c428072-e8eb-4c3d-88e6-b3eadf604eed), team Personal
 - Branch prefix: wells/
-- PR mode: none
+- PR mode: changes land as ready pull requests from `wells/` branches (pushing straight to `main` is blocked)
 
 ## What's built
 
