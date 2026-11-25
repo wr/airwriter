@@ -147,6 +147,14 @@ cancel in the middle of a band. It checks that the pages swfake drew are the dot
 The silence case waits out the real 30 seconds, so the run takes about 35 seconds. swfake is
 the printer's side only; it never asks anything of the host.
 
+### Behind the adapter a Mac's driver prints through
+
+`make -C tools/rip swainterop` puts swfake behind the board's StyleWriter adapter, built for
+this computer (`tools/rip/build/swahost`), with `tools/ethertalk/etpeer.py` as a Mac printing
+with its own StyleWriter driver. The page swfake draws is held to the rip's dots, and its log
+shows when the board reset the printer and when it did not. About two and a half minutes;
+`tools/ethertalk/README.md` has the cases.
+
 ### Against a board
 
 Wire the board's J2 to a USB serial adapter that speaks RS-422 at 57600 8N1, with

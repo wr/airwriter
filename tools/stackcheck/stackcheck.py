@@ -51,6 +51,10 @@ def roots(build):
         # through a pointer, which GCC's count does not follow, so the root is the tap itself).
         ('test_button', define(os.path.join(comp, 'test_button/test_button.c'), 'BTN_STACK'),
          "the test button's poll task, a tap (main.c), BTN_STACK"),
+        # W-1193: the task made for each job a Mac's StyleWriter driver sends. It reaches main.c
+        # through pointers; its deepest call is the job's end, which may keep the known-good record.
+        ('swa_port_close', define(os.path.join(comp, 'localtalk/at_adapter.c'), 'PUMP_STACK'),
+         "the StyleWriter adapter's pump, a job's end (main.c), PUMP_STACK"),
     ]
 
 

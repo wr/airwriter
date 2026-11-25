@@ -2,6 +2,7 @@
 // One EtherTalk link; see et_link.h.
 #include "et_link.h"
 #include "pap_client.h"
+#include "sw_adapter.h"
 #include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
@@ -313,7 +314,7 @@ void et_link_tick(et_link_t *l, uint64_t now)
 void et_link_set_mac(et_link_t *l, const uint8_t mac[ETH_ALEN], uint64_t now)
 {
     l->now = now;
-    lt_node_set_address(&l->node, 0, 0, now);      // ends any job abandoned
+    lt_node_set_address(&l->node, 0, 0, now);      // ends any job abandoned, the adapter's too
     if (l->node.client) papc_link_down(l->node.client, now);
     memcpy(l->mac, mac, ETH_ALEN);
     memset(l->map, 0, sizeof l->map);
@@ -356,5 +357,6 @@ void et_link_down(et_link_t *l, uint64_t now)
     l->now = now;
     lt_node_pap_abort(&l->node, now);
     if (l->node.client) papc_link_down(l->node.client, now);   // W-1082
+    if (l->node.swa) swa_reset(l->node.swa);                   // W-1193: its job too
     l->pend_len = 0;
 }

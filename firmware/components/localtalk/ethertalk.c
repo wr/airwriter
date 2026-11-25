@@ -29,6 +29,7 @@
 #include "et_link.h"
 #include "et_transport.h"
 #include "et_radio_hook.h"
+#include "at_adapter.h"
 
 static const char *TAG = "et";
 
@@ -56,6 +57,10 @@ typedef struct {
     lt_name_t  *names;             // its Macs' names, in PSRAM (internal RAM is short)
     lt_reg_t   *regs;              // W-1088: its node's registrations, in PSRAM
     lt_offers_t *offers;           // W-1088: what its Macs are offered, in PSRAM
+    // W-1193: the StyleWriter adapter riding its node, made when the link is first offered a
+    // StyleWriter, and how the board's one job reaches it (at_adapter.h).
+    sw_adapter_t  *swa;
+    at_swa_owner_t swa_owner;
 } et_side_t;
 
 // W-1094: the three links and the buffers each context keeps between calls,
@@ -227,6 +232,44 @@ static void side_abort(void *ctx)
     xSemaphoreGive(s_lock);
 }
 
+// ------------------------------------------------------------- the StyleWriter adapter
+// W-1193. Its packets go out as the node's own do.
+
+static void swa_send(void *ctx, const lt_route_t *to, uint8_t src_sock, const uint8_t *p, size_t n)
+{
+    et_side_t *s = ctx;
+    lt_node_send_ddp(&s->link.node, to, src_sock, DDP_ADSP, p, n);
+}
+
+// The board ends the adapter's job (the pump: the test button, a port that failed): its Mac
+// is told. On the pump's task, never ours.
+static void swa_halt(void *ctx)
+{
+    et_side_t *s = ctx;
+    xSemaphoreTake(s_lock, portMAX_DELAY);
+    if (s->swa) swa_stop(s->swa, now_ms());
+    xSemaphoreGive(s_lock);
+}
+
+// The link's adapter on its node, answering for the StyleWriters the link is offered. `fresh`:
+// the link was made anew (et_link_init forgot the adapter). Under s_lock, or before the task
+// starts.
+static void swa_put(et_side_t *s, int fresh)
+{
+    const lt_offers_t *o = s->offers;
+    if (!s->swa && o && o->n_swa) {
+        s->swa_owner = (at_swa_owner_t){ s->owner.link, s, swa_send, op_log, swa_halt };
+        s->swa = at_swa_make(&s->swa_owner, esp_random());
+        fresh = 1;
+    }
+    if (!s->swa) return;
+    if (fresh) {
+        swa_reset(s->swa);
+        lt_node_attach_swa(&s->link.node, s->swa);
+    }
+    swa_offer(s->swa, o ? o->swa : NULL, o ? o->n_swa : 0, now_ms());
+}
+
 // et_send_patiently's: a burst Wi-Fi has not sent yet leaves no buffer.
 static void send_wait(uint32_t ms)
 {
@@ -330,6 +373,7 @@ static void side_init(et_side_t *s, const uint8_t mac[ETH_ALEN])
     et_link_init(&s->link, &c, &o, now_ms());
     if (s->offers)
         lt_node_offer(&s->link.node, s->offers->own, s->offers->rel, s->offers->n_rel, s->offers->marker);
+    swa_put(s, 1);
 }
 
 // ------------------------------------------------------------- the tunnel
@@ -793,7 +837,10 @@ void ethertalk_set_offers(int link, const lt_offers_t *o)
     if (!s->offers) return;
     if (s_lock) xSemaphoreTake(s_lock, portMAX_DELAY);
     *s->offers = *o;
-    if (s_running) lt_node_offer(&s->link.node, o->own, o->rel, o->n_rel, o->marker);
+    if (s_running) {
+        lt_node_offer(&s->link.node, o->own, o->rel, o->n_rel, o->marker);
+        swa_put(s, 0);
+    }
     if (s_lock) xSemaphoreGive(s_lock);
 }
 

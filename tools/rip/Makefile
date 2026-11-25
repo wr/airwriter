@@ -100,18 +100,45 @@ build/test_pic_prog:test/test_pic_prog.c test/pic_sim.c ../../firmware/component
 	$(CC) $(CFLAGS) -I../../firmware/components/pic_prog/include -Itest -o $@ $^
 
 LT := ../../firmware/components/localtalk
-build/test_localtalk: test/test_localtalk.c $(LT)/lt_proto.c $(LT)/lt_node.c $(LT)/pap_client.c $(LT)/lt_tashtalk.c \
-                      $(COMP)/serial_out/serial_writer.c | build
-	$(CC) $(CFLAGS) -I$(LT)/include -I$(COMP)/serial_out/include -Itest -o $@ $^
+# W-1193: lt_node.c calls the StyleWriter adapter, so each rule that links it links adsp.c and
+# sw_adapter.c too.
+build/test_localtalk: test/test_localtalk.c test/swa_mac.h $(LT)/lt_proto.c $(LT)/lt_node.c $(LT)/pap_client.c $(LT)/lt_tashtalk.c \
+                      $(LT)/adsp.c $(LT)/sw_adapter.c $(COMP)/serial_out/serial_writer.c | build
+	$(CC) $(CFLAGS) -I$(LT)/include -I$(COMP)/serial_out/include -Itest -o $@ $(filter %.c,$^)
 
-build/test_ethertalk: test/test_ethertalk.c $(LT)/et_proto.c $(LT)/et_link.c $(LT)/et_transport.c $(LT)/lt_node.c $(LT)/pap_client.c $(LT)/lt_proto.c | build
+build/test_ethertalk: test/test_ethertalk.c test/swa_mac.h $(LT)/et_proto.c $(LT)/et_link.c $(LT)/et_transport.c $(LT)/lt_node.c $(LT)/pap_client.c $(LT)/lt_proto.c \
+                      $(LT)/adsp.c $(LT)/sw_adapter.c | build
+	$(CC) $(CFLAGS) -I$(LT)/include -Itest -o $@ $(filter %.c,$^)
+
+build/test_pap_client: test/test_pap_client.c $(LT)/lt_proto.c $(LT)/lt_node.c $(LT)/pap_client.c $(LT)/adsp.c $(LT)/sw_adapter.c | build
 	$(CC) $(CFLAGS) -I$(LT)/include -Itest -o $@ $^
 
-build/test_pap_client: test/test_pap_client.c $(LT)/lt_proto.c $(LT)/lt_node.c $(LT)/pap_client.c | build
+build/test_pap_relay: test/test_pap_relay.c $(LT)/lt_proto.c $(LT)/lt_node.c $(LT)/pap_client.c $(LT)/pap_relay.c $(LT)/adsp.c $(LT)/sw_adapter.c | build
 	$(CC) $(CFLAGS) -I$(LT)/include -Itest -o $@ $^
 
-build/test_pap_relay: test/test_pap_relay.c $(LT)/lt_proto.c $(LT)/lt_node.c $(LT)/pap_client.c $(LT)/pap_relay.c | build
+# W-1193: ADSP, the connections a Mac's StyleWriter driver makes. The engine keeps no state of
+# its own (below): the owner allocates it, in PSRAM on the board.
+build/test_adsp: test/test_adsp.c $(LT)/adsp.c $(LT)/lt_proto.c | build
 	$(CC) $(CFLAGS) -I$(LT)/include -Itest -o $@ $^
+
+build/adsp.o: $(LT)/adsp.c | build
+	$(CC) $(CFLAGS) -I$(LT)/include -c -o $@ $<
+
+# W-1193: the adapter a Mac's StyleWriter driver prints through, on that engine. The same rule:
+# its state, the engine in it, is the owner's.
+build/test_sw_adapter: test/test_sw_adapter.c $(LT)/sw_adapter.c $(LT)/adsp.c $(LT)/lt_proto.c | build
+	$(CC) $(CFLAGS) -I$(LT)/include -Itest -o $@ $^
+
+build/sw_adapter.o: $(LT)/sw_adapter.c | build
+	$(CC) $(CFLAGS) -I$(LT)/include -c -o $@ $<
+
+# W-1193: the pipe between that adapter and the port, and the pump's round. Its rings are the
+# owner's too.
+build/test_sw_pipe: test/test_sw_pipe.c $(LT)/sw_pipe.c | build
+	$(CC) $(CFLAGS) -I$(LT)/include -Itest -o $@ $^
+
+build/sw_pipe.o: $(LT)/sw_pipe.c | build
+	$(CC) $(CFLAGS) -I$(LT)/include -c -o $@ $<
 
 # W-1088: the printer list, beside the LaserWriter pieces it names records with.
 build/test_printers: test/test_printers.c $(COMP)/printers/printers_core.c $(COMP)/laser/lw_caps.c \
@@ -128,8 +155,15 @@ build/test_lw_core: test/test_lw_core.c $(COMP)/laser/lw_core.c $(COMP)/laser/lw
 
 # The board's LaserWriter side on the host, for test_interop.py (W-1082).
 build/lwhost: lwhost.c $(LT)/et_proto.c $(LT)/et_link.c $(LT)/lt_node.c $(LT)/pap_client.c \
-              $(LT)/lt_proto.c $(COMP)/laser/lw_query.c | build
+              $(LT)/lt_proto.c $(LT)/adsp.c $(LT)/sw_adapter.c $(COMP)/laser/lw_query.c | build
 	$(CC) $(CFLAGS) -I$(LT)/include -I$(COMP)/laser/include -o $@ $^
+
+# The board's StyleWriter adapter on the host, for test_sw_adapter_interop.py (W-1193): the
+# link, the adapter, the pipe and a pump thread, the port swfake.py's pty. sw_reset is the
+# session's, so the StyleWriter's sources come with it.
+build/swahost: swahost.c $(LT)/et_proto.c $(LT)/et_link.c $(LT)/lt_node.c $(LT)/pap_client.c \
+               $(LT)/lt_proto.c $(LT)/adsp.c $(LT)/sw_adapter.c $(LT)/sw_pipe.c $(SRCS) | build
+	$(CC) $(CFLAGS) $(INCS) -I$(LT)/include -o $@ $^ -lm -lz -lpthread
 
 CT := ../../firmware/components/cable_test
 build/test_cable: test/test_cable.c $(CT)/cable_core.c $(LT)/lt_proto.c | build
@@ -209,9 +243,9 @@ QD_OBJS := build/qd_model.o build/qd_wire.o build/qd_status.o build/qd_page.o bu
 build/qd_%.o: $(COMP)/qdlaser/qd_%.c | build
 	$(CC) $(CFLAGS) $(INCS) -c -o $@ $<
 
-test: $(TESTBIN) build/printers_core.o build/port_policy.o build/logbook_core.o build/auth_core.o $(SW_OBJS) $(QD_OBJS) $(TP_OBJS)
+test: $(TESTBIN) build/printers_core.o build/port_policy.o build/logbook_core.o build/auth_core.o build/adsp.o build/sw_adapter.o build/sw_pipe.o $(SW_OBJS) $(QD_OBJS) $(TP_OBJS)
 	@fail=0; for t in $(TESTBIN); do ./$$t || fail=1; done; \
-	for o in printers_core port_policy logbook_core auth_core $(basename $(notdir $(SW_OBJS) $(QD_OBJS) $(TP_OBJS))); do \
+	for o in printers_core port_policy logbook_core auth_core adsp sw_adapter sw_pipe $(basename $(notdir $(SW_OBJS) $(QD_OBJS) $(TP_OBJS))); do \
 	  if nm build/$$o.o | grep -E ' [bBdD] ' | grep -v ' ltmp'; then \
 	    echo "FAIL $$o: writable statics (above)"; fail=1; \
 	  else echo "ok  $$o: no writable statics"; fi; \
@@ -288,6 +322,12 @@ build/swprint: build/swhost
 .PHONY: swinterop
 swinterop: build/swhost build/rip
 	@python3.14 ../stylewriter/test_swinterop.py
+
+# A software Mac printing as Apple's StyleWriter driver does, through the firmware's adapter
+# on the host (swahost) to swfake.py, held to the rip's dots (W-1193). About 2.5 minutes.
+.PHONY: swainterop
+swainterop: build/swahost build/rip
+	@python3.14 ../ethertalk/test_sw_adapter_interop.py
 
 # The Personal LaserWriter 300 on the host (W-1102). qdcheck holds the page stage and session's
 # packets and line image, decoded by tools/qdlaser/qdfake.py, to the rip's dots; qdhost prints

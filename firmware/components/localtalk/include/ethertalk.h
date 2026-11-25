@@ -14,7 +14,9 @@
 //           only while a zone name is set (W-1076).
 //
 // One task owns the three links (et_link.c) and prints through the printer
-// every AppleTalk link shares (at_printer.c). Settings live in NVS namespace
+// every AppleTalk link shares (at_printer.c). W-1193: a link offered a port
+// StyleWriter (lt_offers_t.swa) carries an adapter for a Mac's own StyleWriter
+// driver, which prints through the one job in at_adapter.h. Settings live in NVS namespace
 // "et": radio and tunnel (u8, on by default), zone_on (u8, Infinite Mac's
 // switch) and zone (its name), and each link's last address. The zone name works like a password: it is in NVS and on the
 // settings page, never in a log line or /api/et.

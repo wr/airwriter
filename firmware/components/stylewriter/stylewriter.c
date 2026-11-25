@@ -76,9 +76,17 @@ static void op_state(void *ctx, sw_state_t st)
     if (s_cfg.state) s_cfg.state(st);
 }
 
+// W-1193: every reset the board sends goes out through these ops, whatever asked for it.
+static void op_reset_sent(void *ctx)
+{
+    (void)ctx;
+    if (s_cfg.reset_sent) s_cfg.reset_sent();
+}
+
 static const sw_ops_t k_ops = {
     .write = op_write, .read = op_read, .drain = op_drain, .sleep_ms = op_sleep,
     .now_ms = op_now, .cancelled = op_cancelled, .state = op_state, .ctx = NULL,
+    .reset_sent = op_reset_sent,
 };
 
 const sw_ops_t *stylewriter_ops(void) { return &k_ops; }
@@ -133,6 +141,12 @@ sw_model_t stylewriter_ask_full(void)
     sw_model_t m = sw_ask_full(&k_ops);
     stylewriter_link_record();
     return m;
+}
+
+void stylewriter_reset(void)
+{
+    stylewriter_link(1);
+    if (sw_reset(&k_ops) == SW_OK) serial_out_flush(500);
 }
 
 int stylewriter_status(sw_model_t m, sw_state_t *st)

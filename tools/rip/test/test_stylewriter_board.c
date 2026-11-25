@@ -64,6 +64,8 @@ int64_t esp_timer_get_time(void) { return (int64_t)F.us; }
 void vTaskDelay(TickType_t ticks) { F.us += (uint64_t)ticks * 10000u; }
 void serial_out_rx_drop(void) { F.rx_n = F.rx_pos = 0; }
 int  serial_out_selected(void) { return 0; }   // W-1179: one printer line here
+static int g_flushes;
+esp_err_t serial_out_flush(uint32_t timeout_ms) { (void)timeout_ms; g_flushes++; return ESP_OK; }
 
 void serial_out_set_link(int baud, int cts)
 {
@@ -382,6 +384,30 @@ int main(void)
     CHECK(wire_has("D\xFF\xFF\xFF" "H"));
     F.cart_colour = 0;
     CHECK_EQ_INT(stylewriter_cart(SW_C2500), 0);
+
+    // ---------------------------------------------------------- the reset alone (W-1193)
+    // For the adapter's pump, when a Mac's driver left the printer partway through a page: the
+    // five bytes at a StyleWriter's link, waited out, nothing asked. The link is left there for
+    // the caller's 10 s, and goes back to the record's when the caller says.
+    reset_all(SW_C2500);
+    start(0);
+    stylewriter_link(0);
+    F.nlinks = 0;
+    g_flushes = 0;
+    stylewriter_reset();
+    CHECK_EQ_INT(F.wn, 5);
+    CHECK_EQ_MEM(F.wire, "\x00\xFF\xFF\xFF" "I", 5);
+    CHECK_EQ_INT(F.resets, 1);
+    CHECK_EQ_INT(g_flushes, 1);
+    CHECK_EQ_INT(F.nlinks, 1);
+    CHECK_EQ_INT(F.links[0].baud, 57600);
+    CHECK_EQ_INT(F.links[0].cts, 0);
+    stylewriter_link_record();
+    CHECK_EQ_INT(F.nlinks, 2);
+    CHECK_EQ_INT(F.links[1].baud, 9600);
+    start(1);
+    reset_all(SW_II);
+    stylewriter_link_record();
 
     // ---------------------------------------------------------- a colour job, colour cartridge
     reset_all(SW_C2500);

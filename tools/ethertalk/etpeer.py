@@ -19,6 +19,9 @@ driver does (OpenConn, the board's SendData answered with Data, CloseConn).
     python3 tools/ethertalk/etpeer.py tunnel laserwriter "LaserWriter II NT" [--hex-only] [--out DIR]
                                          [--also "Office LaserWriter"] [--addr NET.NODE]
                                          [--pages N] [--no-check] ...
+    python3 tools/ethertalk/etpeer.py tunnel print-sw "StyleWriter" ColorStyleWriter2400AT page.sw [--lpstyl]
+    python3 tools/ethertalk/etpeer.py tunnel sw-queue "StyleWriter" ColorStyleWriter2400AT
+    python3 tools/ethertalk/etpeer.py tunnel sw-rename "StyleWriter" ColorStyleWriter2400AT "New name"
 
 `named` registers a Macintosh name, as System 7's Sharing Setup does
 (<name>:Workstation), looks the printer up so the board hears it, and answers
@@ -58,6 +61,21 @@ DIR/NAME. Stdin's faults go to the first.
 `pipe laserwriter NAME` is the same over stdin and stdout, frames each a
 big-endian u16 length and the frame (test_interop.py).
 
+`print-sw NAME TYPE FILE` prints to a StyleWriter behind Apple's StyleWriter
+network adapter, or AirWriter standing in for one (W-1193), as a Mac's
+StyleWriter driver does: over ADSP it asks NAME:TYPE to print (attention
+000B), takes the adapter's call back on its data socket, and talks to the
+printer through that connection: a reset, `?`, the setup letters, then FILE's
+rects and blocks, each command one ADSP message, paced by the printer's own
+`1`, `2` and `B` and the adapter's 0006. FILE is a page as `rip --printer
+stylewriter --model M --out-sw FILE` writes it. `--lpstyl` does it in lpstyl's
+order: attentions without Ack Request, the control connection left open, a
+Forward Reset at the end. `sw-queue` asks the adapter what it is printing, and
+`sw-rename` gives it a new name, as the Chooser's setup does. As the Mac's
+side it is strict: an adapter that numbers a packet wrong, acknowledges the
+wrong count (an EOM counts one), sends more than the window it was given or
+ends an attention's answer with EOM stops it with an error that says so.
+
 The file must be an ImageWriter stream: the board prints it as it is. The
 tunnel binds UDP 6066, so it cannot run beside Basilisk II on the same
 computer. The zone needs `pip install websockets` (a venv is fine).
@@ -77,6 +95,17 @@ PAP_CLOSE, PAP_CLOSE_REPLY, PAP_SEND_STATUS, PAP_STATUS = 6, 7, 8, 9
 MY_NIS, MY_ATP = 0xFD, 0xF4          # sockets: lookups come back here; the PAP responder
 LW_TYPE, LW_SLS, LW_SESS = b"LaserWriter", 0xE0, 0xE1   # the fake LaserWriter's sockets
 GS = "/opt/homebrew/bin/gs"           # by path: `gs` is a git alias in some shells
+DDP_ADSP = 7
+ADSP_HDR, ADSP_MAX_DATA, ADSP_VERSION = 13, 572, 0x0100
+AD_CTL, AD_ACKREQ, AD_EOM, AD_ATTN = 0x80, 0x40, 0x20, 0x10      # the descriptor's flags
+(AD_PROBE, AD_OPEN_REQ, AD_OPEN_ACK, AD_OPEN_REQACK, AD_OPEN_DENY, AD_CLOSE, AD_FWD_RESET,
+ AD_FWD_RESET_ACK, AD_RETRANSMIT) = range(9)                     # its control codes
+SW_DATA_SOCK, SW_CTL_SOCK = 0xF1, 0xF2    # sockets: the adapter calls back to the first
+(SWA_BREAK, SWA_BREAK_SEEN, SWA_SERIAL, SWA_OPTIONS, SWA_FAST_CLOCK, SWA_DRAINED, SWA_FAST,
+ SWA_FAST_LOWER, SWA_SET_NAME, SWA_SET_STATUS, SWA_PRINT, SWA_WITHDRAW, SWA_POSITION,
+ SWA_JOB_USER) = range(1, 15)             # the adapter's attention codes, 0001 to 000E
+SWA_JOB_STATUS, SWA_JOB_COUNT, SWA_END = 0x10, 0x11, 0x12
+SW_REQ_LEN, SW_STATUS_PRINTING = 70, 0x0647
 
 
 def mac_str(m):
@@ -265,6 +294,596 @@ class Pipe:
         self.task.cancel()
 
 
+# ------------------------------------------------------------------ ADSP
+
+class AdspError(Exception):
+    """The other end broke ADSP's rules, or never answered: the text says how."""
+
+
+class AdspTimeout(AdspError):
+    pass
+
+
+class AdspClosed(AdspError):
+    pass
+
+
+class SwError(Exception):
+    """A StyleWriter job through the adapter could not go on: the text says why."""
+
+
+def adsp_pack(conn_id, first, nxt, window, desc, data=b""):
+    """An ADSP packet: the 13-byte header and what follows it."""
+    return struct.pack(">HIIHB", conn_id, first & 0xFFFFFFFF, nxt & 0xFFFFFFFF,
+                       max(0, min(0xFFFF, window)), desc) + bytes(data)
+
+
+def adsp_unpack(p):
+    """(ConnID, FirstByteSeq, NextRecvSeq, RecvWindow, descriptor, data); ValueError for a
+    packet too short to hold a header or with a control code past 8."""
+    if len(p) < ADSP_HDR:
+        raise ValueError(f"an ADSP packet of {len(p)} bytes")
+    conn_id, first, nxt, window, desc = struct.unpack(">HIIHB", p[:ADSP_HDR])
+    if desc & AD_CTL and desc & 0x0F > AD_RETRANSMIT:
+        raise ValueError(f"ADSP control code {desc & 0x0F}")
+    return conn_id, first, nxt, window, desc, bytes(p[ADSP_HDR:])
+
+
+def adsp_open_pack(conn_id, window, code, dest_id, attn_recv=0):
+    """One of the four open packets, 21 bytes: the header, the version, the other end's
+    ConnID (0 in a request) and the attention sequence expected first."""
+    return adsp_pack(conn_id, 0, 0, window, AD_CTL | code,
+                     struct.pack(">HHI", ADSP_VERSION, dest_id, attn_recv))
+
+
+class Adsp:
+    """One ADSP connection on one of a Mac's sockets, opened by us (open) or by the other
+    end (listen, accept). It is the Mac's end, so with `strict` (the default) anything the
+    other end gets wrong ends it with an AdspError: a sequence number that is not the next
+    one, an acknowledgement past what was sent or of a message's bytes without its EOM,
+    bytes past the window it was given, an open packet that is not 21 bytes of version
+    0100 with the right ConnID, an attention's answer that carries EOM. `strict=False` is
+    for a wire that loses packets: what is ahead is dropped and asked for again.
+
+    Nothing runs by itself: packets are taken, and timers run, while some coroutine of
+    this Mac waits in an Adsp call or in Mac.adsp_run."""
+
+    open_retry, open_tries = 1.0, 5        # an Open Request again each second, 5 more
+    attn_retry, attn_tries = 1.0, 10       # an attention again each second until its 0x90
+    rto, rto_tries = 3.0, 5                # everything unacknowledged again after 3 s
+
+    def __init__(self, mac, sock, window=2048, strict=True, attn_desc=AD_ATTN | AD_ACKREQ,
+                 third_leg=True, need_third_leg=True):
+        self.mac, self.sock, self.recv_window, self.strict = mac, sock, window, strict
+        self.attn_desc = attn_desc             # 0x50 as a Mac sends it; 0x10 as lpstyl does
+        self.third_leg = third_leg             # False: our open never sends its 0x82
+        self.need_third_leg = need_third_leg   # accepting: open only once the 0x82 is in
+        self.conn_id = mac.adsp_conn_id()
+        self.state = "new"                     # listening, accepting, opening, open, closed
+        self.peer, self.peer_id, self.peer_window = None, 0, 0
+        self.send_seq = self.acked = self.recv_seq = 0
+        self.unacked = []                      # [first, data, eom] sent and not acknowledged
+        self.eom_slots = set()                 # sequence numbers our EOMs took, after data
+        self.rx, self.rx_base, self.rx_eoms = bytearray(), 0, []
+        self.adv_limit = 0                     # the highest sequence we said we would take
+        self.attn_send = self.attn_recv = 0
+        self.attn_out = None                   # [seq, packet, sent at, resends]
+        self.attn_in = []                      # (code, body) the other end sent us
+        self.error = None
+        self.peer_closed = self.denied = self.fwd_acked = False
+        self.dups = self.acks = self.eoms_in = self.heard = self.resent = 0
+        self.t_open = self.t_data = 0.0
+        self.n_open = self.n_rto = 0
+        mac.adsp_conns.append(self)
+
+    def __repr__(self):
+        return f"<Adsp socket {self.sock} ConnID {self.conn_id:04X} {self.state}>"
+
+    # -- small things
+    def _fail(self, why):
+        raise AdspError(f"ADSP socket {self.sock}, ConnID {self.conn_id:04X}: {why}")
+
+    def _check(self):
+        if self.error:
+            raise self.error
+
+    def _drop(self):
+        self.state = "closed"
+        if self in self.mac.adsp_conns:
+            self.mac.adsp_conns.remove(self)
+
+    def window(self):
+        """Bytes we can take now: the buffer less what has not been read."""
+        return max(0, self.recv_window - len(self.rx))
+
+    def _adv(self):
+        w = min(0xFFFF, self.window())
+        self.adv_limit = max(self.adv_limit, self.recv_seq + w)
+        return w
+
+    def room(self):
+        """Bytes the other end's window still allows us."""
+        return self.peer_window - (self.send_seq - self.acked)
+
+    async def _tx(self, payload):
+        if self.mac.adsp_trace is not None:
+            self.mac.adsp_trace.append(("tx", self.sock, bytes(payload)))
+        await self.mac.send_ddp(self.peer[0], self.peer[1], self.peer[2], self.sock, DDP_ADSP,
+                                payload)
+
+    async def _ctl(self, code, flags=0):
+        await self._tx(adsp_pack(self.conn_id, self.send_seq, self.recv_seq, self._adv(),
+                                 AD_CTL | flags | code))
+
+    async def _open_tx(self, code):
+        await self._tx(adsp_open_pack(self.conn_id, self._adv(), code,
+                                      0 if code == AD_OPEN_REQ else self.peer_id, self.attn_recv))
+
+    async def _wait(self, cond, timeout):
+        """True once cond() holds; False after timeout or when the connection ended first."""
+        await self.mac.adsp_run(lambda: cond() or self.error or self.state == "closed", timeout)
+        self._check()
+        return bool(cond())
+
+    # -- opening and closing
+    async def open(self, net, node, sock, timeout=None):
+        """The opener's three legs: 0x81 (again each second), their 0x83, our 0x82."""
+        self.peer, self.state = (net, node, sock), "opening"
+        self.t_open, self.n_open = time.monotonic(), 0
+        await self._open_tx(AD_OPEN_REQ)
+        limit = timeout if timeout is not None else self.open_retry * (self.open_tries + 1) + 1
+        await self._wait(lambda: self.state == "open", limit)
+        if self.state != "open":
+            self._drop()
+            raise AdspError(f"ADSP socket {self.sock}: " + (
+                "the open was denied" if self.denied else
+                f"no answer to the Open Request from {net}.{node} socket {sock}"))
+        return self
+
+    def listen(self):
+        """Takes the next Open Request that reaches this socket."""
+        self.state = "listening"
+        return self
+
+    async def accept(self, timeout=30.0):
+        """Waits for the open to finish: their 0x81, our 0x83, their 0x82."""
+        if self.state == "new":
+            self.listen()
+        if not await self._wait(lambda: self.state == "open", timeout):
+            if self.state == "accepting":
+                raise AdspTimeout(f"ADSP socket {self.sock}: the third open leg (0x82) never came")
+            raise AdspTimeout(f"ADSP socket {self.sock}: no Open Request in {timeout} s")
+        return self
+
+    async def close(self):
+        """Close Advice, once; the connection is forgotten."""
+        if self.state in ("open", "accepting"):
+            await self._tx(adsp_pack(self.conn_id, self.send_seq, self.recv_seq, 0,
+                                     AD_CTL | AD_CLOSE))
+        self._drop()
+
+    def vanish(self):
+        """Gone without a word, as a Mac switched off: nothing more is sent or answered."""
+        self._drop()
+
+    # -- the stream
+    async def write(self, data, eom=True, wait=True, timeout=30.0):
+        """Sends data as one message (eom) or as bytes with no end (eom=False), no faster
+        than the other end's window allows; wait: until all of it is acknowledged."""
+        self._check()
+        if self.state != "open":
+            raise AdspClosed(f"ADSP socket {self.sock}: write on a connection that is {self.state}")
+        data, off = bytes(data), 0
+        if not data and eom:
+            await self._data_tx(b"", True)             # a bare EOM goes whatever the window
+        while off < len(data):
+            n = min(ADSP_MAX_DATA, self.room(), len(data) - off)
+            if n > 0:
+                off += n
+                await self._data_tx(data[off - n:off], eom and off == len(data))
+                continue
+            if not await self._wait(lambda: self.room() > 0, timeout):
+                if self.state == "closed":
+                    raise AdspClosed(f"ADSP socket {self.sock}: closed with {len(data) - off} bytes to send")
+                raise AdspTimeout(f"ADSP socket {self.sock}: the window stayed shut for {timeout} s "
+                                  f"with {len(data) - off} bytes to send, and no one said it had opened")
+        if wait:
+            await self.flush(timeout)
+
+    async def _data_tx(self, chunk, eom):
+        first = self.send_seq
+        self.unacked.append([first, chunk, eom])
+        self.send_seq += len(chunk) + (1 if eom else 0)
+        if eom and chunk:
+            self.eom_slots.add(self.send_seq - 1)
+        self.t_data, self.n_rto = time.monotonic(), 0
+        await self._tx(adsp_pack(self.conn_id, first, self.recv_seq, self._adv(),
+                                 AD_ACKREQ | (AD_EOM if eom else 0), chunk))
+
+    async def flush(self, timeout=30.0):
+        """Waits until everything sent is acknowledged."""
+        if not await self._wait(lambda: self.acked == self.send_seq, timeout):
+            if self.state == "closed":
+                raise AdspClosed(f"ADSP socket {self.sock}: closed with data unacknowledged")
+            raise AdspTimeout(f"ADSP socket {self.sock}: acknowledged to {self.acked} of "
+                              f"{self.send_seq} (an EOM counts one)")
+
+    async def _resend(self):
+        self.t_data = time.monotonic()
+        for first, chunk, eom in list(self.unacked):
+            self.resent += 1
+            await self._tx(adsp_pack(self.conn_id, first, self.recv_seq, self._adv(),
+                                     AD_ACKREQ | (AD_EOM if eom else 0), chunk))
+
+    def _take(self, n, eom_ok=True):
+        lo, hi = self.rx_base, self.rx_base + n
+        if not eom_ok and any(lo <= m <= hi for m in self.rx_eoms):
+            self.error = AdspError(f"ADSP socket {self.sock}, ConnID {self.conn_id:04X}: "
+                                   f"an attention's answer carries EOM")
+            raise self.error
+        out = bytes(self.rx[:n])
+        del self.rx[:n]
+        self.rx_base = hi
+        self.rx_eoms = [m for m in self.rx_eoms if m > hi]
+        return out
+
+    async def _took(self, shut):
+        if shut and self.window() > 0 and self.state == "open":
+            await self._ctl(AD_PROBE)                  # the window is open again: say so unasked
+
+    def _shut(self):
+        return self.adv_limit - self.recv_seq <= 0
+
+    async def read(self, n, timeout=10.0, eom_ok=True):
+        """Exactly n bytes of the stream, as a Mac reads an answer."""
+        if not await self._wait(lambda: len(self.rx) >= n, timeout):
+            if self.state == "closed":
+                raise AdspClosed(f"ADSP socket {self.sock}: closed with {len(self.rx)} of {n} bytes read")
+            raise AdspTimeout(f"ADSP socket {self.sock}: {len(self.rx)} of {n} bytes in {timeout} s")
+        shut = self._shut()
+        out = self._take(n, eom_ok)
+        await self._took(shut)
+        return out
+
+    async def read_some(self, timeout=10.0):
+        """Whatever has come, at least a byte; b"" after timeout or a close."""
+        try:
+            await self._wait(lambda: len(self.rx) > 0, timeout)
+        except AdspError:
+            if not self.rx:
+                raise
+        shut = self._shut()
+        out = self._take(len(self.rx))
+        await self._took(shut)
+        return out
+
+    async def read_until(self, last, timeout=10.0, limit=64):
+        """Bytes up to and with the byte `last` (a printer's `?` answer ends in 0D)."""
+        if not await self._wait(lambda: last in self.rx or len(self.rx) >= limit, timeout):
+            if self.state == "closed":
+                raise AdspClosed(f"ADSP socket {self.sock}: closed before byte {last:02X} came")
+            raise AdspTimeout(f"ADSP socket {self.sock}: no byte {last:02X} in {timeout} s")
+        shut = self._shut()
+        k = self.rx.find(bytes([last]))
+        out = self._take(k + 1 if k >= 0 else len(self.rx))
+        await self._took(shut)
+        return out
+
+    async def read_message(self, timeout=10.0):
+        """The bytes up to the next EOM (a message no longer than the window)."""
+        if not await self._wait(lambda: bool(self.rx_eoms), timeout):
+            if self.state == "closed":
+                raise AdspClosed(f"ADSP socket {self.sock}: closed before a message ended")
+            raise AdspTimeout(f"ADSP socket {self.sock}: no end of message in {timeout} s")
+        shut = self._shut()
+        n = self.rx_eoms.pop(0) - self.rx_base
+        out = bytes(self.rx[:n])
+        del self.rx[:n]
+        self.rx_base += n
+        await self._took(shut)
+        return out
+
+    def discard(self):
+        """Throws away what has come and not been read."""
+        self.rx_base += len(self.rx)
+        self.rx.clear()
+        self.rx_eoms = []
+
+    # -- attentions, probes, Forward Reset
+    async def attention(self, code, body=b"", answer=2, timeout=10.0):
+        """An attention message: sent, again each second until its 0x90, then `answer`
+        bytes read off the stream (the adapter answers every attention there; 0 reads
+        none). The answer must not carry EOM."""
+        self._check()
+        if self.state != "open":
+            raise AdspClosed(f"ADSP socket {self.sock}: attention on a connection that is {self.state}")
+        if self.attn_out:
+            raise AdspError("one attention at a time")
+        pkt = adsp_pack(self.conn_id, self.attn_send, self.attn_recv, 0, self.attn_desc,
+                        struct.pack(">H", code) + bytes(body))
+        self.attn_out = [self.attn_send, pkt, time.monotonic(), 0]
+        await self._tx(pkt)
+        if not await self._wait(lambda: self.attn_out is None, self.attn_retry * (self.attn_tries + 2)):
+            raise AdspClosed(f"ADSP socket {self.sock}: closed before attention {code:04X} was acknowledged")
+        if not answer:
+            return b""
+        try:
+            return await self.read(answer, timeout, eom_ok=False)
+        except AdspTimeout:
+            raise AdspTimeout(f"ADSP socket {self.sock}: attention {code:04X} was acknowledged, but "
+                              f"{len(self.rx)} of its {answer} answer bytes came in {timeout} s") from None
+
+    async def next_attention(self, timeout=10.0):
+        """The next attention the other end sent: (code, body), or None."""
+        try:
+            await self._wait(lambda: bool(self.attn_in), timeout)
+        except AdspError:
+            if not self.attn_in:
+                raise
+        return self.attn_in.pop(0) if self.attn_in else None
+
+    async def probe(self, timeout=5.0):
+        """A probe (0xC0): True when an acknowledgement came back."""
+        seen = self.acks
+        await self._ctl(AD_PROBE, AD_ACKREQ)
+        return await self._wait(lambda: self.acks > seen, timeout)
+
+    async def forward_reset(self, wait=False, timeout=5.0):
+        """Forward Reset, once, as lpstyl sends at a job's end: what was sent and not
+        acknowledged is given up. wait: for the 0x87."""
+        self.unacked, self.acked, self.eom_slots = [], self.send_seq, set()
+        self.fwd_acked = False
+        await self._ctl(AD_FWD_RESET)
+        if wait and not await self._wait(lambda: self.fwd_acked, timeout):
+            raise AdspTimeout(f"ADSP socket {self.sock}: no answer to the Forward Reset")
+
+    # -- timers
+    async def tick(self, now):
+        if self.error or self.state == "closed":
+            return
+        try:
+            if self.state == "opening" and now - self.t_open >= self.open_retry:
+                if self.n_open >= self.open_tries:
+                    self._drop()
+                    return
+                self.n_open, self.t_open = self.n_open + 1, now
+                await self._open_tx(AD_OPEN_REQ)
+            a = self.attn_out
+            if a and now - a[2] >= self.attn_retry:
+                if a[3] >= self.attn_tries:
+                    self._fail(f"an attention was never acknowledged ({a[3] + 1} sent)")
+                a[2], a[3] = now, a[3] + 1
+                await self._tx(a[1])
+            if self.unacked and self.state == "open" and now - self.t_data >= self.rto:
+                if self.n_rto >= self.rto_tries:
+                    self._fail(f"sequence {self.acked} to {self.send_seq} never acknowledged "
+                               f"({self.n_rto} resends)")
+                self.n_rto += 1
+                await self._resend()
+        except AdspError as e:
+            self.error = self.error or e
+
+    # -- packets in
+    async def on_packet(self, src, conn_id, first, nxt, window, desc, data):
+        if self.error or self.state == "closed":
+            return
+        self.heard += 1
+        try:
+            await self._packet(src, conn_id, first, nxt, window, desc, data)
+        except AdspError as e:
+            self.error = self.error or e
+
+    def _ack(self, nxt, window):
+        """A cumulative acknowledgement and the window that came with it."""
+        if nxt > self.send_seq:
+            self._fail(f"an acknowledgement names {nxt}; only {self.send_seq} was sent")
+        if nxt < self.acked:
+            if self.strict:
+                self._fail(f"an acknowledgement went back from {self.acked} to {nxt}")
+            return
+        if self.strict and nxt > self.acked and nxt in self.eom_slots:
+            self._fail(f"an acknowledgement names {nxt}: a message's bytes without its EOM "
+                       f"(an EOM counts one, so {nxt + 1})")
+        if nxt > self.acked:
+            self.t_data, self.n_rto = time.monotonic(), 0
+        self.acked, self.peer_window = nxt, window
+        self.eom_slots = {s for s in self.eom_slots if s >= nxt}
+        keep = []
+        for first, chunk, eom in self.unacked:
+            if first + len(chunk) + (1 if eom else 0) <= nxt:
+                continue
+            if nxt > first:
+                chunk, first = chunk[nxt - first:], nxt
+            keep.append([first, chunk, eom])
+        self.unacked = keep
+
+    async def _open_packet(self, src, conn_id, first, nxt, window, code, data):
+        if len(data) != 8 and self.strict:
+            self._fail(f"an open packet (0x{AD_CTL | code:02X}) of {ADSP_HDR + len(data)} bytes, not 21")
+        if len(data) < 8:
+            return
+        version, dest, attn = struct.unpack(">HHI", data[:8])
+        if self.strict:
+            if version != ADSP_VERSION:
+                self._fail(f"an open packet of version {version:04X}, not 0100")
+            if first or nxt or attn:
+                self._fail(f"an open packet whose sequences are not 0 ({first}, {nxt}, {attn})")
+        if code == AD_OPEN_REQ:
+            if self.state == "listening":
+                if dest and self.strict:
+                    self._fail(f"an Open Request that names a ConnID for us ({dest:04X})")
+                if not conn_id:
+                    self._fail("an Open Request from ConnID 0")
+                self.peer, self.peer_id, self.peer_window = src, conn_id, window
+                self.state = "accepting" if self.need_third_leg else "open"
+            await self._open_tx(AD_OPEN_REQACK)        # the first, or the same again
+        elif code == AD_OPEN_REQACK:
+            if dest != self.conn_id:
+                self._fail(f"an open answer for ConnID {dest:04X}; ours is {self.conn_id:04X}")
+            if self.state == "opening":
+                self.peer, self.peer_id, self.peer_window, self.state = src, conn_id, window, "open"
+            elif conn_id != self.peer_id:              # a second answer from a newer ConnID
+                self.peer, self.peer_id = src, conn_id
+            if self.third_leg:
+                await self._open_tx(AD_OPEN_ACK)
+        elif code == AD_OPEN_ACK:
+            if dest != self.conn_id:
+                self._fail(f"an Open Ack for ConnID {dest:04X}; ours is {self.conn_id:04X}")
+            if self.state == "accepting":
+                self.peer_window, self.state = window, "open"
+            elif self.state == "opening":
+                self.peer, self.peer_id, self.peer_window, self.state = src, conn_id, window, "open"
+        elif code == AD_OPEN_DENY and self.state == "opening":
+            self.denied = True
+            self._drop()
+
+    async def _packet(self, src, conn_id, first, nxt, window, desc, data):
+        code = desc & 0x0F
+        if desc & AD_CTL and not desc & AD_ATTN and AD_OPEN_REQ <= code <= AD_OPEN_DENY:
+            await self._open_packet(src, conn_id, first, nxt, window, code, data)
+            return
+        if self.state == "accepting":
+            if self.strict:
+                self._fail(f"a packet (0x{desc:02X}) before the third open leg (0x82)")
+            self.state = "open"
+        if self.state != "open":
+            return
+        if desc & AD_ATTN:
+            if window and self.strict:
+                self._fail(f"an attention packet (0x{desc:02X}) with a window of {window}, not 0")
+            if desc & AD_CTL:                          # 0x90: our attention is acknowledged
+                a = self.attn_out
+                if a and nxt == a[0] + 1:
+                    self.attn_out, self.attn_send = None, a[0] + 1
+                elif nxt > self.attn_send + (1 if a else 0) and self.strict:
+                    self._fail(f"an attention acknowledgement names {nxt}; "
+                               f"{self.attn_send + (1 if a else 0)} sent")
+                return
+            if len(data) < 2:
+                self._fail("an attention message with no code")
+            if first == self.attn_recv:
+                self.attn_in.append((struct.unpack(">H", data[:2])[0], data[2:]))
+                self.attn_recv += 1
+            elif first > self.attn_recv and self.strict:
+                self._fail(f"attention sequence {first}; {self.attn_recv} is next")
+            await self._tx(adsp_pack(self.conn_id, self.attn_send, self.attn_recv, 0,
+                                     AD_CTL | AD_ATTN))
+            return
+        if desc & AD_CTL:
+            if code == AD_CLOSE:
+                self.peer_closed = True
+                self._drop()
+            elif code == AD_PROBE:
+                if first != self.recv_seq and self.strict:
+                    self._fail(f"an acknowledgement sent from sequence {first}; we have taken "
+                               f"{self.recv_seq}")
+                self._ack(nxt, window)
+                self.acks += 1
+                if desc & AD_ACKREQ:
+                    await self._ctl(AD_PROBE)
+            elif code == AD_FWD_RESET:
+                if self.recv_seq <= first <= self.recv_seq + self.window():
+                    self.recv_seq = first
+                    self.discard()
+                await self._ctl(AD_FWD_RESET_ACK)
+            elif code == AD_FWD_RESET_ACK:
+                self.fwd_acked = True
+            elif code == AD_RETRANSMIT:
+                self._ack(nxt, window)
+                await self._resend()
+            return
+        # Stream data.
+        self._ack(nxt, window)
+        n, eom = len(data), 1 if desc & AD_EOM else 0
+        if first > self.recv_seq:
+            if self.strict:
+                self._fail(f"data at sequence {first}; {self.recv_seq} is next")
+        elif first + n + eom <= self.recv_seq:
+            if n or eom:
+                self.dups += 1                         # had already: acknowledged again below
+        else:
+            if first + n > self.adv_limit and self.strict:
+                self._fail(f"data to sequence {first + n}: {first + n - self.adv_limit} bytes past "
+                           f"the window we gave (to {self.adv_limit})")
+            new = data[self.recv_seq - first:][:self.window()]
+            whole = len(new) == first + n - self.recv_seq
+            self.rx += new
+            self.recv_seq += len(new)
+            if eom and whole:
+                self.rx_eoms.append(self.rx_base + len(self.rx))
+                self.recv_seq += 1
+                self.eoms_in += 1
+        if desc & AD_ACKREQ:
+            await self._ctl(AD_PROBE)
+
+
+# ------------------------------------------------------------------ StyleWriter streams
+
+SW_BARE = b"dnZbsAuDNLHBFYlEP"            # the letters a StyleWriter takes on their own
+SW_IDENT = {b"IJ10": "original", b"SW": "ii", b"SW3": "1200"}
+SW_SUBMODEL = {1: "2400", 2: "2200", 4: "1500", 5: "2500"}
+
+
+def sw_split(job):
+    """A StyleWriter stream cut into its commands, [(kind, bytes)], each to go as one
+    message: "rect" (R or c and four u16), "block" (G, a u16 length, the data, 00),
+    "page" (0C), "query" (FF FF FF and a letter), "ident" (?), "letter" (a setup
+    letter; m with its byte) and "zero" (a 00 between commands). ValueError for a
+    stream that is cut short or holds anything else."""
+    job, out, i = bytes(job), [], 0
+
+    def take(kind, n):
+        nonlocal i
+        if i + n > len(job):
+            raise ValueError(f"the stream ends inside a {kind} at byte {i}")
+        out.append((kind, job[i:i + n]))
+        i += n
+
+    while i < len(job):
+        b = job[i]
+        if b in (0x52, 0x63):
+            take("rect", 9)
+        elif b == 0x47:
+            if i + 3 > len(job):
+                raise ValueError(f"the stream ends inside a block at byte {i}")
+            n = job[i + 1] | job[i + 2] << 8
+            if i + 4 + n > len(job):
+                raise ValueError(f"the stream ends inside a block at byte {i}")
+            if job[i + 3 + n] != 0:
+                raise ValueError(f"the block at byte {i} is not followed by 00")
+            take("block", 4 + n)
+        elif b == 0x0C:
+            take("page", 1)
+        elif b == 0xFF:
+            if job[i:i + 3] != b"\xff\xff\xff" or i + 4 > len(job) or job[i + 3] == 0xFF:
+                raise ValueError(f"not FF FF FF and a letter at byte {i}")
+            take("query", 4)
+        elif b == 0x3F:
+            take("ident", 1)
+        elif b == 0x6D:
+            take("letter", 2)
+        elif b == 0x00:
+            take("zero", 1)
+        elif b in SW_BARE:
+            take("letter", 1)
+        else:
+            raise ValueError(f"unknown byte {b:02X} at {i}")
+    return out
+
+
+def sw_request(data_sock, user):
+    """The 70-byte print request: the data socket as a u32, the user's name (32 at
+    most), and an empty second string."""
+    name = user.encode("mac_roman") if isinstance(user, str) else bytes(user)
+    return (struct.pack(">I", data_sock) + pstr(name[:32])).ljust(SW_REQ_LEN, b"\0")
+
+
+def sw_status(text, ident=SW_STATUS_PRINTING):
+    """Attention 000A's 257 bytes: a message ID, the words."""
+    t = text.encode("mac_roman") if isinstance(text, str) else bytes(text)
+    return (struct.pack(">H", ident) + pstr(t[:254])).ljust(257, b"\0")
+
+
 # ------------------------------------------------------------------ the Mac
 
 class Mac:
@@ -276,6 +895,11 @@ class Mac:
         self.inbox = []                                # datagrams for the caller
         self.online = False
         self.name = None                               # its Macintosh name, MacRoman
+        self.adsp_conns, self.adsp_trace = [], None    # its ADSP connections; a list logs packets
+        self.adsp_stray = 0                            # type 7 datagrams that were no one's
+        self._adsp_id, self._adsp_q = random.randrange(0xFFFF), []
+        self._adsp_busy = self._adsp_reading = False
+        self._adsp_evt = None
 
     def next_tid(self):
         self.tid = (self.tid + 1) & 0xFFFF
@@ -579,6 +1203,415 @@ class Mac:
                 print(f"{time.strftime('%H:%M:%S')} {text}", flush=True)
                 last = text
             await asyncio.sleep(1)
+
+    # -- ADSP (W-1193)
+    def adsp_conn_id(self):
+        """A ConnID no connection of ours has, never 0."""
+        while True:
+            self._adsp_id = self._adsp_id % 0xFFFF + 1
+            if all(c.conn_id != self._adsp_id for c in self.adsp_conns):
+                return self._adsp_id
+
+    def _adsp_route(self, sock, src, p):
+        """The connection a type 7 datagram is for, with its fields; None for no one's."""
+        try:
+            f = adsp_unpack(p)
+        except ValueError:
+            self.adsp_stray += 1
+            return None
+        conn_id, desc, data = f[0], f[4], f[5]
+        conns = [c for c in self.adsp_conns if c.sock == sock]
+        known = [c for c in conns if c.state in ("accepting", "open") and c.peer == src
+                 and c.peer_id == conn_id]
+        code = desc & 0x0F if desc & AD_CTL and not desc & AD_ATTN else None
+        hit = None
+        if code == AD_OPEN_REQ:
+            hit = known or [c for c in conns if c.state == "listening"]
+        elif code in (AD_OPEN_ACK, AD_OPEN_REQACK, AD_OPEN_DENY):
+            if len(data) >= 4:
+                dest = struct.unpack(">H", data[2:4])[0]
+                hit = [c for c in conns if c.conn_id == dest and c.state != "listening"]
+            hit = hit or known or [c for c in conns if c.state == "opening"]
+        else:
+            hit = known
+        if not hit:
+            self.adsp_stray += 1
+            return None
+        return hit[0], f
+
+    async def adsp_dispatch(self):
+        """Type 7 datagrams out of the inbox to their connections, in order, and every
+        connection's timers."""
+        if not self.adsp_conns and not self._adsp_q:
+            return
+        keep = []
+        for d in self.inbox:
+            (self._adsp_q if d[12] == DDP_ADSP and d[8] in (self.node, 0xFF) else keep).append(d)
+        self.inbox[:] = keep
+        if self._adsp_busy:
+            return
+        self._adsp_busy = True
+        try:
+            while self._adsp_q:
+                d = self._adsp_q.pop(0)
+                src = struct.unpack(">H", d[6:8])[0], d[9], d[11]
+                if self.adsp_trace is not None:
+                    self.adsp_trace.append(("rx", d[10], bytes(d[13:])))
+                r = self._adsp_route(d[10], src, d[13:])
+                if r:
+                    await r[0].on_packet(src, *r[1])
+            now = time.monotonic()
+            for c in list(self.adsp_conns):
+                await c.tick(now)
+        finally:
+            self._adsp_busy = False
+
+    async def adsp_run(self, until, seconds):
+        """Takes frames and runs the ADSP connections until until() is true (True) or
+        seconds have passed (False). Several coroutines of one Mac may wait here at once:
+        one reads the wire, the others look again when it has."""
+        end = time.monotonic() + seconds
+        while True:
+            await self.adsp_dispatch()
+            if until():
+                return True
+            left = end - time.monotonic()
+            if left <= 0:
+                return False
+            if self._adsp_reading:
+                try:
+                    await asyncio.wait_for(self._adsp_evt.wait(), min(left, 0.05))
+                except asyncio.TimeoutError:
+                    pass
+                continue
+            self._adsp_reading, self._adsp_evt = True, asyncio.Event()
+            try:
+                f = await self.t.recv(min(left, 0.02))
+                if f:
+                    await self.handle(f)
+                    await self.adsp_dispatch()
+            finally:
+                self._adsp_reading = False
+                self._adsp_evt.set()
+
+    async def nbp_find(self, name, typ, tries=5, wait=1.0):
+        """(net, node, socket) of NAME:TYPE@*, or None: the socket is the NBP answer's."""
+        name = name.encode("mac_roman") if isinstance(name, str) else bytes(name)
+        typ = typ.encode("mac_roman") if isinstance(typ, str) else bytes(typ)
+        nbp = bytes([0x21, 0x2F]) + struct.pack(">HBBB", self.net, self.node, MY_NIS, 0) + \
+              pstr(name) + pstr(typ) + pstr(b"*")
+        hit = []
+
+        def answered():
+            for i, d in enumerate(self.inbox):
+                if d[12] == DDP_NBP and d[10] == MY_NIS and d[13] >> 4 == 3 and d[14] == 0x2F:
+                    hit.append(self.inbox.pop(i))
+                    return True
+            return False
+
+        for _ in range(tries):
+            await self.send_ddp(0, 0xFF, NIS, MY_NIS, DDP_NBP, nbp)
+            if await self.adsp_run(answered, wait):
+                return struct.unpack(">HBB", hit[0][15:19])
+        return None
+
+    async def _sw_control(self, name, nbp_type, sock, **kw):
+        addr = await self.nbp_find(name, nbp_type)
+        if not addr:
+            raise SwError(f"no {name}:{nbp_type} answered the lookup")
+        ctl = Adsp(self, sock, **kw)
+        try:
+            await ctl.open(*addr)
+        except AdspError:
+            ctl.vanish()
+            raise
+        return addr, ctl
+
+    async def print_sw(self, name, nbp_type, job, order="apple", user="etpeer", vanish=None,
+                       third_leg=True, attn_desc=None, setup=True, settle=2.0, busy_wait=None,
+                       busy_tries=60, callback_wait=20.0, stall=60.0, strict=True,
+                       ctl_sock=SW_CTL_SOCK, data_sock=SW_DATA_SOCK):
+        """A StyleWriter job to NAME:NBP_TYPE through Apple's network adapter, as a Mac's
+        driver sends it (W-1193). job is a page stream as `rip --out-sw` writes it (rects,
+        G blocks, 0C); with setup (the default) the reset, `?`, the model's setup letters,
+        each page's letters and the ending letters go round it, as the driver sends them.
+
+        order "apple": after the accept, 0012 and Close Advice on the control connection;
+        at the end 0012 on the data connection, then Close Advice. order "lpstyl": the
+        control connection is left as it is, attentions go without Ack Request, and the
+        job ends with a Forward Reset, 00, FF FF FF I, 0012 and the close.
+
+        To misbehave: vanish="accepted" (gone once the request is accepted), "callback"
+        (the adapter's Open Request is never answered), "pipe" (gone with the pipe up and
+        nothing sent), "page" (gone after the first page's first block); third_leg=False
+        (our open of the control connection never sends its 0x82); attn_desc=0x10 or 0x50.
+        strict=False is for a wire that loses packets (Adsp): there an acknowledgement
+        rightly counts a byte we never got, and what comes ahead is asked for again.
+
+        Returns what happened: result, busy (each busy answer's queue queries), ident,
+        model, pages, sent (bytes to the printer), end (the last 0012's answer), gone."""
+        if order not in ("apple", "lpstyl"):
+            raise ValueError("order is apple or lpstyl")
+        if vanish not in (None, "accepted", "callback", "pipe", "page"):
+            raise ValueError("vanish is accepted, callback, pipe or page")
+        cmds = sw_split(job)
+        desc = attn_desc if attn_desc is not None else (
+            AD_ATTN | AD_ACKREQ if order == "apple" else AD_ATTN)
+        wait = busy_wait if busy_wait is not None else (5.0 if order == "apple" else 15.0)
+        req = sw_request(data_sock, user)
+        out = dict(result=None, busy=[], ident=None, model=None, pages=0, sent=0, end=None,
+                   gone=vanish, order=order)
+        u16 = lambda b: struct.unpack(">H", b)[0]     # noqa: E731
+        ctl = data = None
+        start = time.monotonic()
+        try:
+            if vanish != "callback":                  # listening before the adapter can call
+                data = Adsp(self, data_sock, attn_desc=desc, strict=strict).listen()
+            for _ in range(busy_tries):
+                addr, ctl = await self._sw_control(name, nbp_type, ctl_sock, attn_desc=desc,
+                                                   third_leg=third_leg, strict=strict)
+                res = u16(await ctl.attention(SWA_PRINT, req))
+                if res == 0:
+                    break
+                if res == 0xFFFF:
+                    await ctl.close()
+                    raise SwError("the adapter refused the print request (FF FF)")
+                q = dict(result=res, jobs=u16(await ctl.attention(SWA_JOB_COUNT, b"\0")),
+                         job=await ctl.attention(SWA_JOB_USER, b"\0", 72),
+                         status=await ctl.attention(SWA_JOB_STATUS, b"\0", 259))
+                out["busy"].append(q)
+                print(f"busy (result {res:04X}, {q['jobs']} job); asking again in {wait:g} s",
+                      flush=True)
+                if order == "lpstyl":                 # it sleeps, deaf, then ends the session
+                    await asyncio.sleep(wait)
+                await ctl.attention(SWA_END, b"\0")
+                await ctl.close()
+                if order == "apple":
+                    await self.adsp_run(lambda: False, wait)
+            else:
+                raise SwError("the printer stayed busy")
+            out["result"] = 0
+            print(f"print request accepted by {addr[0]}.{addr[1]} socket {addr[2]}", flush=True)
+            if vanish == "accepted":
+                return out
+            if order == "apple":
+                await ctl.attention(SWA_END, b"\0")
+                await ctl.close()
+            if vanish == "callback":
+                return out
+            try:
+                await data.accept(callback_wait)
+            except AdspTimeout as e:
+                raise SwError(f"the adapter never called back on socket {data_sock}: {e}") from None
+            if data.peer[:2] != addr[:2]:
+                raise SwError(f"the call back came from {data.peer[0]}.{data.peer[1]}, "
+                              f"not the adapter at {addr[0]}.{addr[1]}")
+            out["callback"] = data.peer
+            out["status_answer"] = await data.attention(SWA_SET_STATUS, sw_status("Printing"))
+            print(f"the adapter called back from socket {data.peer[2]}; pipe up", flush=True)
+            if vanish == "pipe":
+                return out
+            if not await self._sw_job(data, cmds, out, setup, settle, stall, vanish):
+                return out
+            if order == "lpstyl":
+                await data.forward_reset()
+                data.discard()
+                await data.write(b"\0")
+                await data.write(b"\xff\xff\xffI")
+            out["end"] = await data.attention(SWA_END, b"\0")
+            await data.close()
+            print(f"sent {out['sent']} bytes, {out['pages']} page(s), in "
+                  f"{time.monotonic() - start:.1f} s", flush=True)
+            return out
+        finally:
+            for c in (ctl, data):                     # whatever is left goes without a word
+                if c:
+                    c.vanish()
+
+    async def _sw_job(self, data, cmds, out, setup, settle, stall, vanish):
+        """The printer's side of the job, through the pipe: False when told to vanish."""
+        async def say(b):
+            await data.write(b)                       # one message, EOM, acknowledged
+            out["sent"] += len(b)
+
+        async def ask(letter, tries=3, each=5.0):
+            for k in range(tries):
+                await say(b"\xff\xff\xff" + letter)
+                try:
+                    r = (await data.read(1, each))[0]
+                except AdspTimeout:
+                    continue
+                if k:                                 # an answer to an earlier asking may follow
+                    await self.adsp_run(lambda: False, 0.5)
+                    data.discard()
+                return r
+            raise SwError(f"the printer does not answer FF FF FF {letter.decode()}")
+
+        async def pause(s):
+            await self.adsp_run(lambda: False, s)
+
+        # Reset, settle, `1`, then `?` and what model that is.
+        await say(b"\0")
+        await say(b"\xff\xff\xffI")
+        await pause(settle)
+        await ask(b"1", tries=4)
+        for _ in range(3):
+            await say(b"?")
+            try:
+                ident = (await data.read_until(0x0D, 5.0)).rstrip(b"\r")
+                break
+            except AdspTimeout:
+                continue
+        else:
+            raise SwError("the printer does not answer ?")
+        model = SW_IDENT.get(ident)
+        if ident == b"CS":
+            model = SW_SUBMODEL.get(await ask(b"p"), "2400")
+        if not model:
+            raise SwError(f"the printer answered ? with {ident!r}")
+        out["ident"], out["model"] = ident, model
+        print(f"the printer says {ident.decode('ascii', 'replace')}: {model}", flush=True)
+        series, bdiv = model in ("2200", "2400", "2500"), 64 if model == "original" else 256
+        free, cart = 1 << 30, False
+        if setup:
+            if model != "ii" and model != "original":
+                await say(b"N" if model == "1200" else b"D")
+            free = await ask(b"B") * bdiv - 2048
+            if model != "original":
+                h = await ask(b"H")
+                if model in ("1500", "2200", "2400", "2500"):
+                    if series and h not in (0x01, 0x81):
+                        raise SwError(f"no cartridge (H answered {h:02X})")
+                    cart = bool(h & 0x80)
+            letters = {"original": b"nuA", "ii": b"unDA", "1200": b"unDA", "1500": b"m2ZA"}.get(
+                model, b"m2nZA" if cart else b"m2bA")
+            await say(letters)
+            free -= len(letters)
+        else:
+            free = await ask(b"B") * bdiv - 2048
+
+        async def clear():                            # `1` and `2` say nothing is wrong
+            t0 = time.monotonic()
+            while True:
+                s1, s2 = await ask(b"1"), await ask(b"2")
+                if not s1 & 0xC6 and not s2 & (0x7F if model in ("2400", "2500") else 0xFF):
+                    return
+                if time.monotonic() - t0 > stall:
+                    raise SwError(f"the printer reports a fault (1 = {s1:02X}, 2 = {s2:02X})")
+                await pause(0.25)
+
+        async def drained():                          # the adapter has passed on all it holds
+            t0 = time.monotonic()
+            while True:
+                a = await data.attention(SWA_DRAINED, b"\0")
+                if a[1]:
+                    return
+                if time.monotonic() - t0 > 10.0:
+                    raise SwError("The printer stopped taking data")
+                await pause(0.1)
+
+        async def page_bytes(b):                      # only what the printer's buffer has room for
+            nonlocal free
+            t0 = time.monotonic()
+            while len(b) > free:
+                free = await ask(b"B") * bdiv - 2048
+                if len(b) <= free:
+                    break
+                if time.monotonic() - t0 > stall:
+                    raise SwError(f"the printer's buffer stayed full ({free} free, {len(b)} to send)")
+                await pause(0.1)
+            await say(b)
+            free -= len(b)
+
+        mode, new_page, blocks = None, True, 0
+        for i, (kind, b) in enumerate(cmds):
+            if kind in ("rect", "block", "page"):
+                if new_page and setup:
+                    new_page, letters = False, b""
+                    if series:
+                        colour = cart and any(c[:1] == b"c" for k, c in self._sw_page(cmds, i)
+                                              if k == "rect")
+                        want = b"H" if colour else b"B"
+                        if want != mode:
+                            mode, letters = want, want
+                    if model in ("1200", "1500", "2200", "2400", "2500"):
+                        letters += b"L"
+                    if letters:
+                        await say(letters)
+                if kind == "rect":
+                    await clear()
+                    await drained()
+                await page_bytes(b)
+                if kind == "page":
+                    new_page, out["pages"] = True, out["pages"] + 1
+                elif kind == "block":
+                    blocks += 1
+                    if vanish == "page" and blocks == 1:
+                        return False
+            elif kind == "query" and b[3:] not in (b"I", b"S", b"D", b"N"):
+                await ask(b[3:])
+            elif kind == "ident":
+                await say(b)
+                await data.read_until(0x0D, 5.0)
+            else:
+                await say(b)
+        if setup:
+            if out["pages"] and model != "original":  # `1` says the last page is printed
+                t0 = time.monotonic()
+                while not await ask(b"1") & 0x08:
+                    if time.monotonic() - t0 > 2 * stall:
+                        raise SwError("the printer never said the page was printed")
+                    await pause(0.25)
+            await say(b"EYl" if model == "1200" else b"El")
+        return True
+
+    @staticmethod
+    def _sw_page(cmds, i):
+        """The commands of the page that starts at cmds[i]."""
+        for kind, b in cmds[i:]:
+            yield kind, b
+            if kind == "page":
+                return
+
+    async def sw_queue(self, name, nbp_type, request=None, ctl_sock=SW_CTL_SOCK,
+                       attn_desc=AD_ATTN | AD_ACKREQ):
+        """What NAME:NBP_TYPE's adapter is printing, asked on a control connection of
+        its own: 0011, 000D (with a 70-byte request, zeros if none), 000E, 0010, 0012,
+        close. Returns jobs, position, job (000E's 72 bytes), data_sock and user (read
+        from them, the request first), status_id, status, status_raw (0010's 259), end."""
+        u16 = lambda b: struct.unpack(">H", b)[0]     # noqa: E731
+        _, ctl = await self._sw_control(name, nbp_type, ctl_sock, attn_desc=attn_desc)
+        try:
+            jobs = u16(await ctl.attention(SWA_JOB_COUNT, b"\0"))
+            pos = u16(await ctl.attention(SWA_POSITION, request or bytes(SW_REQ_LEN)))
+            job = await ctl.attention(SWA_JOB_USER, b"\0\0", 72)
+            st = await ctl.attention(SWA_JOB_STATUS, b"\0", 259)
+            end = u16(await ctl.attention(SWA_END, b"\0"))
+            if ctl.rx:
+                raise SwError(f"{len(ctl.rx)} bytes more than the answers asked for")
+            await ctl.close()
+        finally:
+            ctl.vanish()
+        return dict(jobs=jobs, position=pos, job=job, data_sock=job[3],
+                    user=job[5:5 + min(job[4], 32)].decode("mac_roman"),
+                    status_id=u16(st[:2]), status=st[3:3 + st[2]].decode("mac_roman"),
+                    status_raw=st, end=end)
+
+    async def sw_rename(self, name, nbp_type, new, ctl_sock=SW_CTL_SOCK,
+                        attn_desc=AD_ATTN | AD_ACKREQ):
+        """Renames NAME:NBP_TYPE as the Chooser's setup does: 0011, 0009 with the new
+        name, 0012, close. Returns each answer: jobs, renamed, end."""
+        u16 = lambda b: struct.unpack(">H", b)[0]     # noqa: E731
+        new = new.encode("mac_roman") if isinstance(new, str) else bytes(new)
+        _, ctl = await self._sw_control(name, nbp_type, ctl_sock, attn_desc=attn_desc)
+        try:
+            jobs = u16(await ctl.attention(SWA_JOB_COUNT, b"\0"))
+            renamed = u16(await ctl.attention(SWA_SET_NAME, pstr(new)))
+            end = u16(await ctl.attention(SWA_END, b"\0"))
+            await ctl.close()
+        finally:
+            ctl.vanish()
+        return dict(jobs=jobs, renamed=renamed, end=end)
 
 
 # ------------------------------------------------------------------ the LaserWriter
@@ -980,6 +2013,27 @@ async def main(argv):
                                close_early="--close-early" in rest)
         elif rest[0] == "status" and len(rest) == 3:
             await mac.watch_status(rest[1], float(rest[2]))
+        elif rest[0] == "print-sw" and len([a for a in rest if a != "--lpstyl"]) == 4:
+            a = [a for a in rest if a != "--lpstyl"]
+            try:
+                await mac.print_sw(a[1], a[2], open(a[3], "rb").read(),
+                                   order="lpstyl" if "--lpstyl" in rest else "apple",
+                                   strict=False)   # a real network loses packets
+            except (AdspError, SwError, ValueError) as e:
+                sys.exit(str(e))
+        elif rest[0] == "sw-queue" and len(rest) == 3:
+            try:
+                q = await mac.sw_queue(rest[1], rest[2])
+            except (AdspError, SwError) as e:
+                sys.exit(str(e))
+            print(f"{q['jobs']} job(s), position {q['position']}; user {q['user']!r}, "
+                  f"status {q['status_id']:04X} {q['status']!r}")
+        elif rest[0] == "sw-rename" and len(rest) == 4:
+            try:
+                r = await mac.sw_rename(rest[1], rest[2], rest[3])
+            except (AdspError, SwError) as e:
+                sys.exit(str(e))
+            print(f"asked: the adapter answered {r['renamed']:04X}")
         elif rest[0] == "named" and len(rest) == 3:
             mac.name = rest[1].replace("'", "\u2019").encode("mac_roman")[:31]
             await mac.lookup()

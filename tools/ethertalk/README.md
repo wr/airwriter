@@ -63,3 +63,40 @@ python3 tools/ethertalk/etpeer.py zone ZONE print-ps "LaserWriter II NT" page.ps
 `chooser TYPE` lists every answer to `=:TYPE@*`, as the Chooser does. `print-ps`
 prints PostScript to a LaserWriter by name and shows what the printer says
 back: through the board's relay when the printer is on another link.
+
+## A Mac's StyleWriter driver (W-1193)
+
+`print-sw NAME TYPE FILE` prints to a StyleWriter through Apple's StyleWriter
+network adapter, or through AirWriter standing in for one, as a Mac's
+StyleWriter driver does. Over ADSP it asks `NAME:TYPE@*` to print, takes the
+adapter's call back, and talks to the printer through that connection: a
+reset, `?`, the setup letters, then the page, each command one message, paced
+by the printer's own `1`, `2` and `B`. FILE is a page as the rip writes it:
+
+```sh
+tools/rip/build/rip --sw-testpage colour --model 2500 --out-sw page.sw
+python3 tools/ethertalk/etpeer.py tunnel print-sw "StyleWriter" ColorStyleWriter2400AT page.sw
+python3 tools/ethertalk/etpeer.py tunnel sw-queue "StyleWriter" ColorStyleWriter2400AT
+python3 tools/ethertalk/etpeer.py tunnel sw-rename "StyleWriter" ColorStyleWriter2400AT "Upstairs"
+```
+
+This prints: ask whoever is near the printer first. `--lpstyl` does the job in
+lpstyl's order (attentions without Ack Request, the control connection left
+open, a Forward Reset at the end). `sw-queue` asks the adapter what it is
+printing and `sw-rename` renames it, as the Chooser's setup does. The Mac's
+end is strict: an adapter that numbers a packet wrong, acknowledges the wrong
+count, sends past the window it was given or ends an attention's answer with
+EOM stops the job with an error that says which.
+
+`python3 -m unittest tools/ethertalk/test_adsp_peer.py` runs two ADSP ends
+against each other, and the driver's side against a small adapter and a
+canned printer, with no board.
+
+`make -C tools/rip swainterop` (`test_sw_adapter_interop.py`, python3.14 with
+numpy) prints from this Mac through the board's own adapter, built for this
+computer (`tools/rip/build/swahost`), to `tools/stylewriter/swfake.py` as the
+printer, and holds the page swfake drew to the dots the rip made: a 2500 and
+a StyleWriter II in both orders, two StyleWriters, busy, the Mac gone at each
+point of a job, the board stopping it, a rename, a slow wire and one that
+loses frames. It waits on the adapter's real timers, so it takes about two
+and a half minutes.

@@ -21,6 +21,7 @@
 #include "nvs.h"
 #include "lt_node.h"
 #include "lt_tashtalk.h"
+#include "at_adapter.h"
 
 static const char *TAG = "lt";
 
@@ -79,6 +80,10 @@ typedef struct lt_side {
     pap_client_t *client;           // W-1082: the PAP client riding the node
     lt_offers_t *offers;            // W-1088: its cable's offers, in PSRAM, for each new node
     at_owner_t  owner;              // its link, and how its node is told the printer gave up
+    // W-1193: the StyleWriter adapter riding its node, made when the cable is first offered a
+    // StyleWriter, and how the board's one job reaches it (at_adapter.h).
+    sw_adapter_t  *swa;
+    at_swa_owner_t swa_owner;
     // W-1049: the node's counters as last seen, to tell the panel what changed.
     // The LocalTalk task alone touches these.
     void      (*on_event)(int sock, lt_event_t ev);
@@ -283,6 +288,44 @@ static size_t op_reg_output(void *ctx, int reg, uint8_t *buf, size_t max, int *e
         return 0;
     }
     return at_relay()->output(buf, max, eof, again);
+}
+
+// ------------------------------------------------------------- the StyleWriter adapter
+// W-1193. Its packets go out as the node's own frames do, held and gated with them.
+
+static void swa_send(void *ctx, const lt_route_t *to, uint8_t src_sock, const uint8_t *p, size_t n)
+{
+    lt_side_t *sd = ctx;
+    lt_node_send_ddp(&sd->mem->node, to, src_sock, DDP_ADSP, p, n);
+}
+
+// The board ends the adapter's job (the pump: the test button, a port that failed): its Mac
+// is told. On the pump's task, never this one's.
+static void swa_halt(void *ctx)
+{
+    lt_side_t *sd = ctx;
+    xSemaphoreTake(s_lock, portMAX_DELAY);
+    if (sd->swa) swa_stop(sd->swa, now_ms());
+    xSemaphoreGive(s_lock);
+}
+
+// The side's adapter on its node, answering for the StyleWriters its cable is offered. `fresh`:
+// the node was made anew (lt_node_init forgot the adapter), so a job on the old one ends.
+// Under s_lock, the side started.
+static void swa_put(lt_side_t *sd, int fresh)
+{
+    const lt_offers_t *o = sd->offers;
+    if (!sd->swa && o && o->n_swa) {
+        sd->swa_owner = (at_swa_owner_t){ at_link_of_sock(sd->sock), sd, swa_send, op_log, swa_halt };
+        sd->swa = at_swa_make(&sd->swa_owner, esp_random());
+        fresh = 1;
+    }
+    if (!sd->swa) return;
+    if (fresh) {
+        swa_reset(sd->swa);
+        lt_node_attach_swa(&sd->mem->node, sd->swa);
+    }
+    swa_offer(sd->swa, o ? o->swa : NULL, o ? o->n_swa : 0, now_ms());
 }
 
 static void on_frame(void *ctx, tt_event_t ev, const uint8_t *f, size_t n)
@@ -491,6 +534,7 @@ static esp_err_t start_now(lt_side_t *sd, const localtalk_cfg_t *cfg)
     lt_node_set_serve(&sd->mem->node, s_serve);
     offers_put(sd);
     lt_node_attach(&sd->mem->node, sd->client);
+    swa_put(sd, 1);
     if (sd->hold) {                                // W-1179: listening from the start
         sd->quiet = 1;
         sd->want_on = 1;
@@ -555,6 +599,7 @@ static void quiet_now(lt_side_t *sd, int quiet, const char *line)
     if (quiet) {
         if (node->pap.open) lt_node_pap_abort(node, now);
         if (sd->client) papc_link_down(sd->client, now);
+        if (sd->swa) swa_reset(sd->swa);         // W-1193: a Mac's StyleWriter job ends with the node
         op_claim(sd, 0);                         // TashTalk answers for no node now
         sd->quiet = 1;
     } else {
@@ -566,6 +611,7 @@ static void quiet_now(lt_side_t *sd, int quiet, const char *line)
         lt_node_set_serve(node, s_serve);        // a new node: its roles again
         offers_put(sd);
         lt_node_attach(node, sd->client);
+        swa_put(sd, 1);
         sd->quiet = 0;
     }
     if (line) op_log(sd, line);
@@ -646,7 +692,10 @@ void localtalk_set_offers(int sock, const lt_offers_t *o)
     if (!sd->offers) return;
     if (s_lock) xSemaphoreTake(s_lock, portMAX_DELAY);
     *sd->offers = *o;
-    if (sd->started) offers_put(sd);
+    if (sd->started) {
+        offers_put(sd);
+        swa_put(sd, 0);
+    }
     if (s_lock) xSemaphoreGive(s_lock);
 }
 

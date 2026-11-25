@@ -521,6 +521,50 @@ Traps already explained in a code comment are listed only when the comment is ea
   the densest 400-row band (the still life beside its ramps) is 73 KB, about 13 s on the wire
   however fast it is drawn.
 
+- **`serial_out_read` with a first wait of 0 does not wait at all**, and answers at once
+  whatever the wait on a parked port or in loopback. A loop that reads the port for its pause
+  spins a core. The StyleWriter adapter's pump (W-1193) waits a tick for a first byte only
+  when it wrote nothing that round, and sleeps a tick itself if the read came back within one.
+- **The StyleWriter adapter's locks, in order: the job lock, a link's lock, the pipe's**
+  (W-1193). A link's task takes the job lock only without waiting (`swa_port_claim`) and never
+  touches the port; the pump holds the job lock for the whole job and takes a link's lock only
+  to have its adapter end the job (`swa_stop`, through `at_swa_owner_t.stop`), never the other
+  way round. The adapter's `job_end` comes on whatever task holds its link's lock (the link's
+  own, the page's offers, a node made anew), so it only marks the pipe ended; the pump does
+  the rest. `swa_stop` from a link's own callback would re-enter the adapter.
+- **A second capture buffer is a 300's page on rev A** (W-1193). The last Mac's job is kept
+  in 256 KB of PSRAM for `/api/lt/job`; a StyleWriter adapter's job uses the same buffer
+  (`at_capture_lend`) instead of one of its own, since rev A has about 115 KB left for a
+  Personal LaserWriter 300's page (above) and board 1 has both printers' records. So the two
+  routes share one capture: whichever Mac's job came last has it and the other answers 404.
+- **No two resets of a StyleWriter inside 10 s, whoever sends them** (W-1193,
+  `SW_RESET_GAP_MS`; the 2500 above is why). A Mac's driver resets the printer as its first
+  bytes through the adapter's pipe, and the board cannot see that in the stream, so each
+  socket keeps the time of its printer's last reset (`psock_t.sw_reset_ms`): stamped by
+  `sw_ops_t.reset_sent`, which `sw_session.c` calls from the one place it writes the five
+  bytes (`write_reset`: a job's start and abort, a cleaning, the test page, the full
+  sequence, `sw_reset`), and at an adapter job's first write to the port. A Mac's request
+  inside the gap is busy (`swa_port_claim`), and the adapter's close waits the gap out
+  before its own reset and again before it gives the job lock (`swa_reset_hold`). Send the
+  five bytes any other way and nothing knows. An AirPrint job that starts within 10 s of
+  another session's abort is not held to it: a session paces only its own resets.
+- **The adapter's reset can land inside a block.** A session cancels only between blocks
+  (`send_block`), so its reset follows a whole `G` block. A Mac that vanishes mid-block
+  leaves the printer waiting for the rest of it, and by the protocol the board's
+  `00 FF FF FF 49` would then count as that block's data; InkTalk sends the same five bytes
+  knowing no more. The pipe counts bytes and reads none of them, so it cannot pad the block
+  out. Not tried on a printer.
+- **The adapter asks before it tells** (W-1193). The ADSP engine asks `room` for a connection
+  before `opened` names it (inside `adsp_open`, and for the Request+Ack that accepts one), so
+  `sw_adapter.c` answers for the pipe from its `opening` flag; and the adapter asks
+  `job_room` from the moment `job_begin` returns 0, since the call-back's Open Request
+  carries the window. The pipe must be begun before `job_begin` returns (`at_adapter.c`'s
+  `t_begin`), or the Mac is told a window of 0.
+- **An adapter name's socket is not its place in the offers** (W-1193). `swa_offer` keeps a
+  record on the socket it was first given (0x89 or 0x8A) while it is offered, so the second
+  StyleWriter does not move to 0x89 when the first is unplugged, under a Mac that chose it
+  or printed to it. Go by the record id (`swa_name_t.id`), as the relay does for
+  LaserWriters.
 - **A Personal LaserWriter 300 drives a clock on HSKi, IO8 on rev A** (W-1102): 533 kHz while
   it is on. `serial_out` counts its edges with PCNT through the GPIO matrix, so the pad stays
   UART1's CTS. PCNT's counter is 16 bits (32,767 here): the line task counts for 50 ms of each

@@ -736,7 +736,43 @@ void printers_offers(int at_link, int on, const char *host, lt_offers_t *o)
             o->ids[o->n_rel++] = r->id;
         }
     }
+    // W-1193: the port's StyleWriters, for the adapter: each under its own name and its
+    // driver's type.
+    uint8_t sw[PR_SWA_MAX];
+    int n_sw = pr_offers_swa(s_l, cable_port_of(at_link), sw);
+    for (int k = 0; k < n_sw && o->n_swa < SWA_NAMES; k++) {
+        swa_name_t *x = &o->swa[o->n_swa];
+        if (!pr_offer_swa_as(s_l, sw[k], cable_port_of(at_link), x->obj, x->type)) continue;
+        x->id = sw[k];
+        o->n_swa++;
+    }
     unlock();
+}
+
+int printers_swa_offered(int at_link, int id)
+{
+    if (!s_started) return 0;
+    uint8_t sw[PR_SWA_MAX];
+    int hit = 0;
+    lock();
+    int n = pr_offers_swa(s_l, cable_port_of(at_link), sw);
+    for (int k = 0; k < n; k++) hit |= sw[k] == id;
+    unlock();
+    return hit;
+}
+
+int printers_rename(int id, const char *name)
+{
+    if (!s_started) return -1;
+    lock();
+    const pr_rec_t *r = pr_get(s_l, id);
+    if (!r || r->where != PR_WHERE_PORT || r->kind != PR_KIND_STYLEWRITER) {
+        unlock();
+        return -1;
+    }
+    pr_rename(s_l, id, name);
+    after_change(1);
+    return 0;
 }
 
 int printers_test_target(int *port)
@@ -945,6 +981,14 @@ void printers_set_lt_port(int port)
     if (!s_started) return;
     lock();
     s_l->lt_port = (uint8_t)(port == 1 || port == 2 ? port : 0);
+    unlock();
+}
+
+void printers_set_lt_socks(unsigned mask)
+{
+    if (!s_started) return;
+    lock();
+    s_l->lt_socks = (uint8_t)(mask & ((1u << PR_PORTS) - 1));
     unlock();
 }
 

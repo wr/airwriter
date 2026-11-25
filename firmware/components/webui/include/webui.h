@@ -26,6 +26,9 @@ typedef struct {
     void  (*lt_json)(void *ctx, char *buf, size_t cap);
     // The last PAP job's bytes for GET /api/lt/job; NULL (or no job) is 404.
     const uint8_t *(*lt_job)(void *ctx, size_t *len);
+    // W-1193: the last job a Mac's own StyleWriter driver sent, its bytes toward the printer,
+    // for GET /api/sw/job; NULL (or no job) is 404.
+    const uint8_t *(*sw_job)(void *ctx, size_t *len);
     // POST /api/lt/echo with a node number as the body: an AEP echo request.
     void  (*lt_echo)(void *ctx, int node);
     // POST /api/cable: runs the cable test (W-1055) and writes its JSON into

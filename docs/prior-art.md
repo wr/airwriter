@@ -17,18 +17,31 @@
   uses its facts; `components/stylewriter` is written fresh. Its `lw300/README.md`, from
   Apple's LaserWriter 300 driver 1.1, documents most of the Personal LaserWriter 300's commands
   and agrees with what board 1 measured; `components/qdlaser` uses those facts and none of its
-  code (W-1102).
+  code (W-1102). For the StyleWriter adapter (W-1193) its ADSP engine and its adapter role
+  (`tailtalk-core/src/stylewriter.rs`, written from a decompile of Apple's 1500 and 2500
+  drivers) gave the attention codes and their answers, and `tailtalk/tests/adsp_test.rs`
+  replays a real Mac renaming a real adapter, packet by packet: the only capture of a real
+  adapter there is. `test_sw_adapter.c` replays it byte for byte. Facts only; `adsp.c` and
+  `sw_adapter.c` are written fresh.
 - **lpstyl** (Monroe Williams, 1996-2000, BSD-2-Clause; github.com/Godzil/lpstyl): the public
   account of the StyleWriters' serial protocol, for seven models (`README.protocol`), and of
   Apple's StyleWriter network adapter (`README.atalk`). The identity query, the buffer
   accounting, the run coding with differencing and the CMYK planes are its. Its scanline coder
   is ported for the host tests only (`tools/rip/test/lpstyl_encode.c`, LICENSE.md), as a second
-  coder that `swfake.py`'s decoder and ours are held to; the firmware has its own.
+  coder that `swfake.py`'s decoder and ours are held to; the firmware has its own. Its
+  `adsp.c` and `at_printer_*`, written from packet dumps of a real adapter printing, and
+  `README.atalk` are the account of a real adapter that the board's is built to (W-1193): the
+  order of a print, the 15 s sleep when busy, the Forward Reset at a job's end. The board
+  takes a print in lpstyl's order as well as Apple's, and `etpeer.py --lpstyl` sends one.
+  Nothing of it is ported there.
 - **InkTalk** (FeralFirmware, in the TailTalk repository; firmware `GPL-3.0-or-later`): a board
   that stands in for Apple's StyleWriter network adapter, so a Mac's own driver prints through
-  it. It is the reference for the adapter's ADSP exchange (phase 2 of W-1103, not built), for
+  it, and has done so with real Macs. AirWriter's adapter (W-1193, SPEC §3.13) does what it
+  does where the sources agree: a name registers on whatever socket it has, every attention
+  is answered, `000E`'s answer is laid out its way, a pipe lost without `0012` gets
+  `00 FF FF FF 49`, and a lone `x` or `h` is not passed on. It is also the reference for
   holding the printer's HSKi high so the printer answers (R9 on rev A), and for the printer's
-  fast mode, whose clock is on HSKi. Nothing is ported.
+  fast mode, whose clock is on HSKi and which AirWriter refuses. Nothing is ported.
 - **Apple's StyleWriter drivers** (Color StyleWriter 1500, 2200 and 2500): the source of the
   tone curves, the 16 × 16 screen and the printer's icon, read out by
   `tools/stylewriter/mktables.py` (LICENSE.md). The drivers are never committed.

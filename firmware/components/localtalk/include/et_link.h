@@ -92,7 +92,9 @@ void et_link_tick(et_link_t *l, uint64_t now);
 // dropped, and the address is acquired again under the new MAC.
 void et_link_set_mac(et_link_t *l, const uint8_t mac[ETH_ALEN], uint64_t now);
 // The transport went away (relay closed, Wi-Fi lost): any job ends abandoned
-// now, not when the PAP timers notice.
+// now, not when the PAP timers notice. W-1193: so does a job of the StyleWriter
+// adapter riding the node (lt_node_attach_swa(&l->node, a); et_link_init clears
+// it, as lt_node_init does), and et_link_set_mac ends one the same way.
 void et_link_down(et_link_t *l, uint64_t now);
 // The peers heard in the last within_ms, newest first, one per MAC (its newest
 // address), at most max of them, printers aside (lt_node_is_printer).

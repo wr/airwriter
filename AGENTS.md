@@ -64,7 +64,8 @@ reads clear or LocalTalk is heard there, and never into a printer with power.
   are found by the plain question or named by the person, and print over AirPrint in colour
   with a colour cartridge. All seven are host-tested against a software StyleWriter; a Color
   StyleWriter 2500 prints in colour, tested on board 1, and the other six are untested. On rev A
-  the others may need R9 fitted (`docs/hardware-rev-a.md`). A Personal LaserWriter 300 on the
+  the others may need R9 fitted (`docs/hardware-rev-a.md`). A vintage Mac's own StyleWriter
+  driver prints to them too (Ways in). A Personal LaserWriter 300 on the
   printer port is found by the clock it drives on HSKi and prints over AirPrint in gray, tested
   on board 1. A Personal LaserWriter LS is found and shared the same way, built from its own
   driver and expected to work, untested; docs say so. A LaserWriter Select 300 is found and
@@ -75,13 +76,19 @@ reads clear or LocalTalk is heard there, and never into a printer with power.
   LocalTalk port (TashTalk 2.1.3 in U7, which the ESP32 flashes over LVP) and three EtherTalk
   links: the board's own Wi-Fi, Basilisk II's UDP tunnel (port 6066) and Infinite Mac's zone
   relay (off until switched on). One job at a time across all of them, under one job lock.
+  A vintage Mac's own StyleWriter driver (Apple's Color SW 2500 or Color SW 1500) prints to a
+  shared port StyleWriter over any of them, with AirWriter as Apple's StyleWriter network
+  adapter (W-1193: ADSP, SPEC §3.13): each is a name of its own in the Chooser, the Mac hears
+  busy while the board prints anything else, and renaming it from the Mac renames the record.
+  Tested on board 1: an SE/30 printed to the Color StyleWriter 2500 with Apple's Color SW 2500
+  driver, on EtherTalk over Wi-Fi and on the LocalTalk cable. The Color SW 1500 driver's
+  printers are host-tested only.
 - **Password.** A sold board's password is burned into its chip with its serial at the bench
   (`tools/bench`) and printed on its label. The setup network takes it and the settings page
   signs in with it; printing never asks. A board with none burned (rev A, a dev board) is open
   until its owner sets one. Nothing has run on a burned board yet.
 - **Not built:** Mini vMac (LToUDP), PWG raster, HP LaserJets over serial (designed), AirPrint to
-  an AppleTalk ImageWriter, colour on a colour LaserWriter (it prints gray), vintage Macs
-  printing to a StyleWriter (AirWriter as Apple's StyleWriter network adapter), a StyleWriter's
+  an AppleTalk ImageWriter, colour on a colour LaserWriter (it prints gray), a StyleWriter's
   fast mode, a Select 300's PhotoGrade and its lower cassette, vintage Macs printing to a
   QuickDraw LaserWriter.
 
@@ -96,6 +103,7 @@ Where things are (`firmware/components/` unless a path is given):
 | Recovery, factory resets | `ota_health`, `firmware/bootloader_components/` | SPEC §3.11 |
 | Signed updates | `fw_update` | SPEC §3.12 |
 | LocalTalk, EtherTalk, PAP server, client and relay | `localtalk` | SPEC §3.13 |
+| The StyleWriter adapter a Mac's driver prints through: ADSP, the adapter, its pipe and pump | `localtalk` (`adsp.c`, `sw_adapter.c`, `sw_pipe.c`, `at_adapter.c`); main's `swa_port_*` | SPEC §3.13, StyleWriters design ("Phase 2") |
 | LaserWriters | `laser`, `ps_page` | SPEC §3.14 |
 | The printer list, what the port asks | `printers` (`port_policy.c`) | SPEC §3.15, port-printers design |
 | StyleWriters | `stylewriter` | SPEC §3.16, StyleWriters design |
@@ -112,6 +120,8 @@ Where things are (`firmware/components/` unless a path is given):
 The web UI and API are on port 80: `/api/status`, `/api/general` (settings), `/update` (OTA
 upload), `/api/update` (GitHub releases), `/api/printers`, `/api/lt`, `/api/et`, `/api/log`,
 `/api/laser`, `/api/cable`, `/api/test`, `/api/restart`, `/api/erase`, `/api/localtalk/flash`,
+`/api/lt/job` and `/api/sw/job` (the last vintage Mac's job as captured, an ImageWriter's or a
+StyleWriter's, whichever came last),
 `/api/mem`, `/api/panel` (the LED frame: 37 × RGB, little-endian 8.8) and `/api/auth/*`. On a
 board with a password every route but the page and `/api/auth/*` answers 401 until the browser
 signs in (`tools/webui/signin.py` for curl). The page's own addresses
@@ -198,7 +208,8 @@ http://192.168.4.1/.
 
 ## Verification
 - **Host tests:** `make -C tools/rip test` (every pure-C core, from the raster path to the PAP
-  client and the test page) and `make -C tools/ipp test`.
+  client, the ADSP engine, the StyleWriter adapter and the test page) and `make -C tools/ipp
+  test`.
 - **Raster regression:** `make -C tools/rip regress`; `stream.bin` must match the fixtures byte
   for byte (gray, the iOS capture, and a synthetic sRGB page ripped in colour and as gray). No
   ESP32 needed. The checker fixture is pure black and white and must never change; the other
@@ -229,6 +240,16 @@ http://192.168.4.1/.
   stylewriter --model M --out-sw F` writes a page as the printer would be sent it, `rip
   --sw-testpage` the test page, and `swfake.py decode M F` draws either. Apple's drivers and
   captures live in `~/.config/airwriter/sw-drivers/` and `sw-captures/`, never committed.
+- **The StyleWriter adapter** (W-1193; python3.14 with numpy): `make -C tools/rip test` holds
+  the engine, the adapter, the pipe, the node, the offers and the 10 s between resets;
+  `python3 -m unittest tools/ethertalk/test_adsp_peer.py` holds `etpeer.py`'s ADSP, two ends
+  against each other; `make -C tools/rip swainterop` prints from `etpeer.py`'s Mac through
+  `build/swahost` (the firmware's link, adapter, engine, pipe and pump on the host) to
+  `swfake.py` over a pty and holds the page to the rip's dots: a 2500 and a II in Apple's
+  order and lpstyl's, two StyleWriters, busy, the Mac gone at each point, the board's stop,
+  a rename, a slow wire and one that loses frames (about 2.5 minutes, on the adapter's real
+  timers). On a board: a Mac's Chooser lists the StyleWriter under its driver, a page prints,
+  and the log ends `adapter job: N bytes to the printer, M back, printed`.
 - **QuickDraw LaserWriters** (Python 3 with numpy): `make -C tools/rip qdcheck` decodes the
   rip's packets and the line the board clocks out with `qdfake.py` (a software Personal
   LaserWriter 300, with `--engine 0d` an LS, with `--engine 31` a Select 300 on page memory and
@@ -314,7 +335,8 @@ firmware/             ESP-IDF 5.5 app (components/, above); bootloader_component
                       bootloader's pin clamps and power-up reset
 tools/rip/            host build of the raster path + host tests for the pure-C cores; swhost
                       (swprint for owners) is the StyleWriter session on the host, qdhost the
-                      Personal LaserWriter 300's and LS's
+                      Personal LaserWriter 300's and LS's, swahost the StyleWriter adapter
+                      a Mac's driver prints through
 tools/stylewriter/    swfake.py (a software StyleWriter and page decoder), mktables.py and
                       untome.py (Apple's tables and icon out of its drivers), the owners'
                       README, capture.md (the Apple-driver capture rig), and their tests
@@ -323,8 +345,10 @@ tools/qdlaser/        qdfake.py (a software Personal LaserWriter 300 or LS and p
                       and their tests
 tools/ipp/            IPP host tests and gpa_server (the real encoder on localhost for ipptool)
 tools/ippcap/         stub IPP server that captures a Print-Job body (how fixtures were made)
-tools/ethertalk/      etpeer.py, a software EtherTalk Mac for the tunnel and the relay, and
-                      a fake LaserWriter; test_interop.py
+tools/ethertalk/      etpeer.py, a software EtherTalk Mac for the tunnel and the relay (PAP
+                      as the ImageWriter and LaserWriter drivers, ADSP as the StyleWriter
+                      driver), and a fake LaserWriter; test_interop.py, test_adsp_peer.py,
+                      test_sw_adapter_interop.py
 tools/webui/          settings page sources; mkheader.py generates firmware's webui_page.h;
                       preview.py serves the page in any of states.json's states with no board
 tools/icon/           the printer icons as pixel grids (apple/, one per Apple icon); mkicons.py writes
