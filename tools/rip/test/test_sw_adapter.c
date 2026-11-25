@@ -760,6 +760,26 @@ static void test_busy_and_the_questions(void)
     CHECK_EQ_INT(n_begin, 1);
 }
 
+// A driver told busy asks again every few seconds: the log hears of it once in 30 s.
+static void test_busy_is_logged_now_and_then(void)
+{
+    mac_t q;
+    fresh(0xA000);
+    busy_val = 1; begin_ret = 1;
+    CHECK(m_open(&q, &MAC2, US, 0x4D01));
+    for (int i = 0; i < 6; i++) {               // every 5 s, for 25 s
+        ASK2(&q, SWA_PRINT, REQ2, sizeof REQ2, 0x00, 0x01);
+        run_with(5000, &q, NULL);
+    }
+    CHECK_EQ_INT(n_begin, 6);                   // each was asked for, and answered
+    CHECK_EQ_INT(logged("adapter: busy to 0.21"), 1);
+    ASK2(&q, SWA_PRINT, REQ2, sizeof REQ2, 0x00, 0x01);     // at 30 s
+    CHECK_EQ_INT(logged("adapter: busy to 0.21"), 2);
+    ASK2(&q, SWA_PRINT, REQ2, sizeof REQ2, 0x00, 0x01);
+    CHECK_EQ_INT(logged("adapter: busy to 0.21"), 2);
+    CHECK_EQ_INT(SWA_BUSY_LOG_MS, 30000);
+}
+
 // AirPrint, the test page, cleaning or another link's Mac holds the printer.
 static void test_busy_when_the_board_prints(void)
 {
@@ -1050,14 +1070,50 @@ static void test_mac_gone_idle_pipe(void)
     CHECK_EQ_INT(swa_job(A), 0);
     CHECK_EQ_INT(logged("adapter: job ended Mac gone"), 1);
 
-    // A quiet Mac that answers the probes keeps the printer, ten minutes on.
+    // A quiet Mac that answers the probes keeps the printer, but not for ever: with nothing
+    // through the pipe either way it is kept for under SWA_QUIET_MS and ended then, as a Mac
+    // that went away is, and told so.
     start_job(&ctl, &pipe);
-    run_with(600000, &pipe, NULL);
+    run_with(SWA_QUIET_MS - 100, &pipe, NULL);
     CHECK_EQ_INT(n_end, 0);
     CHECK_EQ_INT(swa_job(A), 2);
+    CHECK_EQ_INT(count_to(&MACD, 0x85, 0), 0);
+    run_with(100, &pipe, NULL);
+    CHECK_EQ_INT(n_end, 1);
+    CHECK_EQ_INT(end_clean, 0);
+    CHECK_EQ_INT(swa_job(A), 0);
+    CHECK_EQ_INT(count_to(&MACD, 0x85, 0), 1);
+    CHECK_EQ_INT(logged("adapter: job ended Mac gone"), 1);
+    CHECK_EQ_INT(SWA_QUIET_MS, 300000);
+    CHECK_EQ_INT(SWA_QUIET_MS, LT_PAP_QUIET_MS);
+
+    // Anything through the pipe starts the count again: the Mac's bytes, the printer's,
+    // an attention. Probes and their answers do not.
+    start_job(&ctl, &pipe);
+    run_with(200000, &pipe, NULL);
     m_send(&pipe, 0x60, "still here", 10);
     CHECK_EQ_INT(printer_n, 10);
+    run_with(SWA_QUIET_MS - 100, &pipe, NULL);
+    CHECK_EQ_INT(n_end, 0);
+    printer_says("ok", 2);
+    run_with(100, &pipe, NULL);
+    m_poll(&pipe);
+    m_ack(&pipe);
+    run_with(SWA_QUIET_MS - 200, &pipe, NULL);
+    CHECK_EQ_INT(n_end, 0);
+    ASK2(&pipe, SWA_DRAINED, "\0", 1, 0xFF, 0xFF);
+    run_with(SWA_QUIET_MS - 100, &pipe, NULL);
+    CHECK_EQ_INT(n_end, 0);
+    CHECK_EQ_INT(swa_job(A), 2);
+    // After 0012 the quiet end is the clean one.
+    ASK2(&pipe, SWA_END, "\0", 1, 0xFF, 0xFF);
+    run_with(SWA_QUIET_MS, &pipe, NULL);
+    CHECK_EQ_INT(n_end, 1);
+    CHECK_EQ_INT(end_clean, 1);
+    CHECK_EQ_INT(logged("adapter: job ended cleanly"), 1);
+
     // Gone after 0012, before its close: the end is still the clean one.
+    start_job(&ctl, &pipe);
     ASK2(&pipe, SWA_END, "\0", 1, 0xFF, 0xFF);
     run(25000);
     CHECK_EQ_INT(n_end, 1);
@@ -1306,6 +1362,51 @@ static void test_printer_bytes_leave_room_for_answers(void)
     CHECK_EQ_INT(out_at, 0);
 }
 
+// The longest answers, 0010's 259 bytes and 000E's 72, asked on the pipe one after the other
+// while the printer's bytes sit unacknowledged in front of them: both fit, and the job goes on.
+static void test_long_answers_fit_beside_printer_bytes(void)
+{
+    mac_t ctl, pipe;
+    start_job(&ctl, &pipe);
+    ASK2(&pipe, SWA_SET_STATUS, STATUS, sizeof STATUS, 0x00, 0x00);
+    pipe.in_n = 0;
+    uint8_t chatter[1500];
+    for (size_t i = 0; i < sizeof chatter; i++) chatter[i] = (uint8_t)(i * 7 + 3);
+    printer_says(chatter, sizeof chatter);
+    swa_tick(A, T);                             // the Mac acks none of it
+    size_t first = ADSP_TX_CAP - SWA_ANSWER_ROOM;
+    CHECK_EQ_INT(out_at, first);
+    CHECK(SWA_ANSWER_ROOM >= 259 + 72 + 2);
+    rx_attn(&MACD, US, 0x4D02, pipe.attn++, 0x50, SWA_JOB_STATUS, "\0", 1);
+    rx_attn(&MACD, US, 0x4D02, pipe.attn++, 0x50, SWA_JOB_USER, "\0", 1);
+    rx_attn(&MACD, US, 0x4D02, pipe.attn++, 0x50, SWA_DRAINED, "\0", 1);
+    CHECK_EQ_INT(swa_job(A), 2);
+    CHECK_EQ_INT(n_end, 0);
+    CHECK_EQ_INT(count_to(&MACD, 0x85, 0), 0);  // not closed for want of room
+    CHECK(adsp_tx_free(&A->adsp, A->pipe) < SWA_ANSWER_ROOM);
+    swa_tick(A, T);                             // and no printer byte takes an answer's place
+    CHECK_EQ_INT(out_at, first);
+    for (int i = 0; i < 20; i++) {
+        m_poll(&pipe);
+        m_ack(&pipe);
+        swa_tick(A, T);
+    }
+    m_poll(&pipe);
+    uint8_t want[259];
+    CHECK_EQ_INT(pipe.in_n, sizeof chatter + 259 + 72 + 2);
+    CHECK_EQ_MEM(pipe.in, chatter, first);
+    memset(want, 0, sizeof want);
+    memcpy(want, STATUS, sizeof STATUS);
+    CHECK_EQ_MEM(pipe.in + first, want, 259);
+    memset(want, 0, sizeof want);
+    memcpy(want, REQ, sizeof REQ);
+    CHECK_EQ_MEM(pipe.in + first + 259, want, 72);
+    CHECK_EQ_MEM(pipe.in + first + 259 + 72, "\xFF\xFF", 2);
+    CHECK_EQ_MEM(pipe.in + first + 259 + 72 + 2, chatter + first, sizeof chatter - first);
+    CHECK_EQ_INT(swa_job(A), 2);
+    CHECK_EQ_INT(n_end, 0);
+}
+
 // A Mac that asks and asks and never reads its answers is not kept.
 static void test_mac_that_reads_nothing_is_dropped(void)
 {
@@ -1492,6 +1593,90 @@ static void test_offer_withdrawn_mid_job_stops_it(void)
     CHECK_EQ_INT(n_end, 1);
 }
 
+// Two StyleWriters, and the first leaves: the second keeps its socket, the Macs on it and the
+// job in its pipe. A newcomer takes the socket that came free.
+static void test_a_name_keeps_its_socket(void)
+{
+    mac_t ctl, pipe, q, x;
+    swa_name_t third, list[2];
+    fresh(0xA000);
+    nbp_name(NAMES[1].obj, "Second");
+    nbp_name(NAMES[1].type, SWA_TYPE_MONO);
+    NAMES[1].id = 5;
+    memset(&third, 0, sizeof third);
+    nbp_name(third.obj, "Third");
+    nbp_name(third.type, SWA_TYPE_COLOR);
+    third.id = 9;
+    swa_offer(A, NAMES, 2, T);
+    CHECK(m_open(&ctl, &MAC, US2, 0x4D01));
+    ASK2(&ctl, SWA_PRINT, REQ, sizeof REQ, 0x00, 0x00);
+    CHECK_EQ_INT(begin_id, 5);
+    int mark = nsent;
+    m_close(&ctl);
+    CHECK(m_called(&pipe, &MACD, US2, 0x4D02, mark));
+    CHECK(m_open(&q, &MAC2, US2, 0x4D01));
+    m_send(&pipe, 0x60, "half", 4);
+
+    // The first goes: the list's only StyleWriter is now the first in it.
+    list[0] = NAMES[1];
+    swa_offer(A, list, 1, T);
+    CHECK_EQ_INT(n_end, 0);
+    CHECK_EQ_INT(swa_job(A), 2);
+    CHECK_EQ_INT(A->names[0].id, 0);
+    CHECK_EQ_INT(A->names[1].id, 5);
+    CHECK_EQ_INT(count_to(&MACD, 0x85, 0), 0);
+    CHECK_EQ_INT(count_to(&MAC2, 0x85, 0), 0);
+    ASK2(&q, SWA_JOB_COUNT, "\0", 1, 0x00, 0x01);
+    m_send(&pipe, 0x60, "more", 4);
+    CHECK_EQ_INT(printer_n, 8);
+    nbp_tuple_t t;
+    memset(&t, 0, sizeof t);
+    nbp_name(t.obj, "Second");
+    nbp_name(t.type, "=");
+    nbp_name(t.zone, "*");
+    CHECK_EQ_INT(swa_lookup(A, &t, 0, NULL), 1);            // still answered with 0x8A
+    CHECK(!m_open(&x, &MAC, US, 0x4D07));                   // and nobody is on 0x89
+
+    // A third comes, after it or before it in the list: it takes the free socket.
+    list[0] = NAMES[1]; list[1] = third;
+    swa_offer(A, list, 2, T);
+    CHECK_EQ_INT(A->names[0].id, 9);
+    CHECK_EQ_INT(A->names[1].id, 5);
+    list[0] = third; list[1] = NAMES[1];
+    swa_offer(A, list, 2, T);
+    CHECK_EQ_INT(A->names[0].id, 9);
+    CHECK_EQ_INT(A->names[1].id, 5);
+    CHECK_EQ_INT(n_end, 0);
+    CHECK_EQ_INT(swa_job(A), 2);
+    CHECK(m_open(&x, &MAC, US, 0x4D07));
+    nbp_name(t.obj, "Third");
+    CHECK_EQ_INT(swa_lookup(A, &t, 0, NULL), 0);
+
+    // A rename of the one printing moves nothing either.
+    nbp_name(list[1].obj, "Second again");
+    swa_offer(A, list, 2, T);
+    CHECK_EQ_INT(n_end, 0);
+    CHECK_EQ_INT(A->names[1].obj[0], 12);
+
+    // The one printing goes: its job ends, and the third stays where it is.
+    list[0] = third;
+    swa_offer(A, list, 1, T);
+    CHECK_EQ_INT(n_end, 1);
+    CHECK_EQ_INT(end_clean, 0);
+    CHECK_EQ_INT(logged("adapter: job ended withdrawn"), 1);
+    CHECK_EQ_INT(A->names[0].id, 9);
+    CHECK_EQ_INT(A->names[1].id, 0);
+    CHECK_EQ_INT(count_to(&MAC, 0x85, 0), 0);               // the Mac on 0x89 is kept
+    // More names than places, or none: the first two, and nothing.
+    swa_name_t many[3] = { third, NAMES[1], NAMES[0] };
+    swa_offer(A, many, 3, T);
+    CHECK_EQ_INT(A->names[0].id, 9);
+    CHECK_EQ_INT(A->names[1].id, 5);
+    swa_offer(A, NULL, 2, T);
+    CHECK_EQ_INT(A->names[0].id, 0);
+    CHECK_EQ_INT(A->names[1].id, 0);
+}
+
 static void test_fourth_control_connection_is_not_answered(void)
 {
     mac_t ctl, pipe, m[4];
@@ -1659,6 +1844,7 @@ int main(void)
     test_call_back_tells_the_printers_room();
     test_busy_and_the_questions();
     test_busy_when_the_board_prints();
+    test_busy_is_logged_now_and_then();
     test_idle_queries();
     test_short_request();
     test_withdraw();
@@ -1673,10 +1859,12 @@ int main(void)
     test_output_drained();
     test_pipe_window_follows_the_printer();
     test_printer_bytes_leave_room_for_answers();
+    test_long_answers_fit_beside_printer_bytes();
     test_mac_that_reads_nothing_is_dropped();
     test_two_jobs_in_a_row();
     test_request_and_status_are_forgotten();
     test_offer_withdrawn_mid_job_stops_it();
+    test_a_name_keeps_its_socket();
     test_fourth_control_connection_is_not_answered();
     test_lookup();
     test_only_our_sockets_and_adsp();

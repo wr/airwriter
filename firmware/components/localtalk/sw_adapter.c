@@ -64,6 +64,22 @@ static void stop(sw_adapter_t *a, const char *how)
     job_over(a, 0, how);
 }
 
+// Stream bytes or an attention moved on the pipe, either way.
+static void pipe_used(sw_adapter_t *a) { a->pipe_at = a->now; }
+
+// A pipe that is up and whose Mac still answers probes, but through which
+// nothing has gone either way for SWA_QUIET_MS: a driver that waits (on paper,
+// on the person) still asks the printer how it is, so this one is not
+// printing. It is told, and the job ends as a Mac that went away does; after
+// 0012 the end is still the clean one.
+static void quiet_pipe(sw_adapter_t *a)
+{
+    if (a->job != JOB_PIPING || a->now - a->pipe_at < SWA_QUIET_MS) return;
+    int clean = a->clean;
+    adsp_close(&a->adsp, a->pipe, a->now);
+    job_over(a, clean, clean ? "cleanly" : "Mac gone");
+}
+
 // Open the pipe: a connection from the name's socket to the Mac's data
 // socket. The engine asks for its window before it says which connection it
 // is, so `opening` answers for it.
@@ -97,7 +113,8 @@ static void gone(sw_adapter_t *a, int c)
 }
 
 // The printer's bytes to the Mac, as far as the pipe's send buffer has room
-// (some of it is kept for answers), and the window said again if it reopened.
+// (SWA_ANSWER_ROOM of it is kept for answers, so the printer's chatter is never
+// why an answer does not fit), and the window said again if it reopened.
 static void service(sw_adapter_t *a)
 {
     if (a->job != JOB_PIPING) return;
@@ -111,6 +128,7 @@ static void service(sw_adapter_t *a)
         if (!n) break;
         if (n > room) n = room;
         adsp_write(&a->adsp, a->pipe, buf, n, a->now);
+        pipe_used(a);
     }
     adsp_window(&a->adsp, a->pipe, a->now);
 }
@@ -153,8 +171,14 @@ static uint16_t print_request(sw_adapter_t *a, int c, const uint8_t *body, size_
     unsigned net = from->addr.net, node = from->addr.node;
     if (a->job != JOB_NONE || !a->ops.job_begin ||
         a->ops.job_begin(a->ops.ctx, a->names[i].id)) {
-        snprintf(line, sizeof line, "adapter: busy to %u.%u", net, node);
-        say(a, line);
+        // A driver told busy asks again every few seconds, all through someone's
+        // long job: the log hears of it once in SWA_BUSY_LOG_MS.
+        if (!a->busy_said || a->now - a->busy_said_at >= SWA_BUSY_LOG_MS) {
+            a->busy_said = 1;
+            a->busy_said_at = a->now;
+            snprintf(line, sizeof line, "adapter: busy to %u.%u", net, node);
+            say(a, line);
+        }
         return 0x0001;
     }
     memset(a->req, 0, sizeof a->req);
@@ -201,6 +225,7 @@ static void e_attention(void *ctx, int c, uint16_t code, const uint8_t *body, si
     sw_adapter_t *a = ctx;
     uint8_t r[2] = { 0, 0 };
     int piped = on_pipe(a, c);
+    if (piped) pipe_used(a);
 
     switch (code) {
     case SWA_JOB_USER:                          // 72 bytes: zeros with no job
@@ -290,6 +315,7 @@ static void e_opened(void *ctx, int c)
     if (a->job == JOB_WAITING && c == a->pipe) {
         a->job = JOB_PIPING;
         a->mid = a->held = 0;
+        pipe_used(a);
         say(a, "adapter: pipe up");
         if (a->ops.job_up) a->ops.job_up(a->ops.ctx);
         return;
@@ -311,6 +337,7 @@ static void e_data(void *ctx, int c, const uint8_t *d, size_t n, int eom)
 {
     sw_adapter_t *a = ctx;
     if (!on_pipe(a, c)) return;                 // a stream that is not the pipe's is dropped
+    pipe_used(a);
     if (a->held) {
         a->held = 0;
         if (!n && eom) { a->mid = 0; return; }
@@ -353,21 +380,34 @@ void swa_reset(sw_adapter_t *a)
     if (a->job != JOB_NONE) job_over(a, 0, "stopped");
 }
 
+// A record keeps the place, and so the socket, it was first given for as long
+// as it is offered: a Mac that chose it in the Chooser holds that socket, and
+// a job on it must not end because another printer left. So an id already
+// here stays where it is, whatever its place in `names`, and the others take
+// the free places in the order they come.
 void swa_offer(sw_adapter_t *a, const swa_name_t *names, int n, uint64_t now)
 {
+    swa_name_t nw[SWA_NAMES];
+    uint8_t placed[SWA_NAMES] = { 0 };
     a->now = now;
+    memset(nw, 0, sizeof nw);
+    if (!names || n < 0) n = 0;
+    if (n > SWA_NAMES) n = SWA_NAMES;
+    for (int k = 0; k < n; k++)
+        for (int i = 0; names[k].id && !placed[k] && i < SWA_NAMES; i++)
+            if (a->names[i].id == names[k].id && !nw[i].id) { nw[i] = names[k]; placed[k] = 1; }
+    for (int k = 0; k < n; k++)
+        for (int i = 0; names[k].id && !placed[k] && i < SWA_NAMES; i++)
+            if (!nw[i].id) { nw[i] = names[k]; placed[k] = 1; }
     for (int i = 0; i < SWA_NAMES; i++) {
-        swa_name_t nw;
-        memset(&nw, 0, sizeof nw);
-        if (names && i < n) nw = names[i];
-        if (nw.obj[0] > NBP_NAME_MAX) nw.obj[0] = NBP_NAME_MAX;
-        if (nw.type[0] > NBP_NAME_MAX) nw.type[0] = NBP_NAME_MAX;
-        if (nw.id != a->names[i].id) {
+        if (nw[i].obj[0] > NBP_NAME_MAX) nw[i].obj[0] = NBP_NAME_MAX;
+        if (nw[i].type[0] > NBP_NAME_MAX) nw[i].type[0] = NBP_NAME_MAX;
+        if (nw[i].id != a->names[i].id) {
             if (a->job != JOB_NONE && a->job_name == i) stop(a, "withdrawn");
             for (int c = 0; c < ADSP_CONNS; c++)
                 if (a->conn[c].open && adsp_sock(&a->adsp, c) == SWA_SOCK(i)) drop(a, c);
         }
-        a->names[i] = nw;
+        a->names[i] = nw[i];
     }
 }
 
@@ -400,6 +440,7 @@ void swa_tick(sw_adapter_t *a, uint64_t now)
     }
     adsp_tick(&a->adsp, now);
     service(a);
+    quiet_pipe(a);
 }
 
 void swa_stop(sw_adapter_t *a, uint64_t now)

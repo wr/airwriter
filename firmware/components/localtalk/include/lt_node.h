@@ -374,7 +374,8 @@ typedef struct {
     uint8_t    ids[LT_REG_MAX - 2];
     // W-1193: the port StyleWriters a Mac's own driver prints to through the adapter, for
     // swa_offer: each one's name, its driver's type and its record id. The node does not keep
-    // them (lt_node_offer leaves them be); the link hands them to its adapter.
+    // them (lt_node_offer leaves them be); the link hands them to its adapter, which gives
+    // each a socket by its id, not by its place here (swa_offer).
     swa_name_t swa[SWA_NAMES];
     int        n_swa;
 } lt_offers_t;

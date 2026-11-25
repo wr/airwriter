@@ -27,6 +27,11 @@
 //   0009 then 0012 on one connection (rename).
 // - One job at a time; SWA_CONTROLS connections beside the pipe. A Mac
 //   beyond that is not answered and its driver tries again.
+// - A name keeps its socket while its record is offered, whatever comes or
+//   goes beside it (swa_offer).
+// - A job ends when its pipe closes: cleanly after 0012, else as a Mac gone
+//   (a bare close, the engine's 20 s of silence or spent resends, or
+//   SWA_QUIET_MS with nothing through the pipe either way).
 //
 // The request and the status text hold a person's name and words: they are
 // kept only to answer 000E and 0010 while that job lives, zeroed when it
@@ -48,7 +53,15 @@
 #define SWA_CALL_MS     1000              // from the accept to the call-back, at the latest
 #define SWA_PIPE_MS     15000             // from the accept to the pipe, or the job is dropped
 #define SWA_STATUS_LEN  257               // 000A: a message ID, a Pascal string, padding
-#define SWA_ANSWER_ROOM 32                // of the pipe's send buffer, kept from the printer's bytes
+// Of the pipe's send buffer, kept from the printer's bytes for answers: the two long ones
+// (0010's and 000E's) and six short ones can all wait unacknowledged at once, so an answer
+// always fits on a pipe whose Mac reads.
+#define SWA_ANSWER_ROOM (SWA_STATUS_LEN + 2 + SWA_REQ_LEN + 2 + 12)
+// A pipe that carries no stream byte and no attention, either way, for this long is ended
+// though its Mac answers probes (LT_PAP_QUIET_MS's figure): a driver that waits on paper still
+// asks the printer how it is, so real waits have traffic.
+#define SWA_QUIET_MS    300000
+#define SWA_BUSY_LOG_MS 30000             // "busy to" is logged once in this, per adapter
 
 // The attention codes a Mac's driver sends.
 enum {
@@ -95,6 +108,9 @@ struct sw_adapter {
     uint8_t    held, held_byte;       // a lone 'x' or 'h' whose message has not ended
     lt_route_t mac;                   // the Mac's data socket
     uint64_t   accepted_at, now;
+    uint64_t   pipe_at;               // when the pipe last carried a stream byte or an attention
+    uint64_t   busy_said_at;          // when "busy to" was last logged, if busy_said
+    uint8_t    busy_said;
     uint8_t    req[SWA_REQ_LEN + 2];          // the accepted request, then 000E's 00 00
     uint8_t    status[SWA_STATUS_LEN + 2];    // the last 000A, then 0010's 00 00
     swa_conn_t conn[ADSP_CONNS];
@@ -105,8 +121,10 @@ typedef struct sw_adapter sw_adapter_t;
 // seed: where the ADSP connection IDs count on from.
 void swa_init(sw_adapter_t *a, const swa_ops_t *ops, uint32_t seed);
 void swa_reset(sw_adapter_t *a);                   // the node was re-made: a job ends unclean
-// The names to answer for, n of them (the rest none). A name whose id changed
-// or went: its connections close and a job on it ends as swa_stop.
+// The names to answer for, n of them (the rest none), each on a socket of its
+// own: a record id already offered keeps the socket it has, wherever it comes
+// in `names`, and a new one takes a free socket. A record that went, or whose
+// socket another took: its connections close and a job on it ends as swa_stop.
 void swa_offer(sw_adapter_t *a, const swa_name_t *names, int n, uint64_t now);
 int  swa_lookup(const sw_adapter_t *a, const nbp_tuple_t *q, int from, swa_name_t const **hit); // next match at or after index from, or -1
 void swa_rx(sw_adapter_t *a, const ddp_t *d, uint64_t now);     // a type 7 datagram to SWA_SOCK(i)
