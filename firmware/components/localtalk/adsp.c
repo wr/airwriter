@@ -52,10 +52,11 @@ static int same_addr(const lt_addr_t *x, const lt_addr_t *y)
     return x->net == y->net && x->node == y->node && x->sock == y->sock;
 }
 
-// The same machine, whichever socket of its.
+// The same machine, whichever socket of its. Network 0 is "this network": a
+// Mac may give 0 in one packet and its network's number in the next.
 static int same_node(const lt_addr_t *x, const lt_addr_t *y)
 {
-    return x->net == y->net && x->node == y->node;
+    return x->node == y->node && (x->net == y->net || !x->net || !y->net);
 }
 
 // The open connection these packets belong to: our socket, the far address

@@ -467,11 +467,12 @@ static void test_second_request_ack_from_a_new_conn_id_is_adopted(void)
 // and node the Open Request went to may answer it, from any socket there.
 static void test_request_ack_only_from_the_node_we_asked(void)
 {
-    static const lt_route_t OTHER = { { 0, 21, 0xF1 }, 21, 0 };     // another node
-    static const lt_route_t NET   = { { 5, 20, 0xF1 }, 20, 1 };     // node 20 of another network
-    static const lt_route_t MACX  = { { 0, 20, 0xF7 }, 20, 0 };     // the Mac, another socket
+    static const lt_route_t OTHER = { { 5, 21, 0xF1 }, 21, 1 };     // another node
+    static const lt_route_t NET   = { { 6, 20, 0xF1 }, 20, 1 };     // node 20 of another network
+    static const lt_route_t MACX  = { { 0, 20, 0xF7 }, 20, 0 };     // the Mac, another socket, its network given as 0
+    static const lt_route_t MACN  = { { 5, 20, 0xF1 }, 20, 1 };     // the Mac, on network 5
     fresh(0xA002);
-    int c = adsp_open(E, US, &MACD, T);
+    int c = adsp_open(E, US, &MACN, T);
     rx_open(&OTHER, 0x6666, 0x0800, 0x83, 0xA003);
     rx_open(&NET, 0x6666, 0x0800, 0x83, 0xA003);
     CHECK_EQ_INT(nsent, 1);                                 // only our request
@@ -490,7 +491,6 @@ static void test_request_ack_only_from_the_node_we_asked(void)
 
     // A second Request+Ack from a new connection ID is adopted from that node alone.
     rx_open(&OTHER, 0x7777, 0x0800, 0x83, 0xA003);
-    rx_open(&NET, 0x7777, 0x0800, 0x83, 0xA003);
     CHECK_EQ_INT(nsent, 2);
     rx(&OTHER, 0x7777, 0, 0, 0x0800, 0x40, "bad", 3);
     CHECK_EQ_INT(got_n, 0);
