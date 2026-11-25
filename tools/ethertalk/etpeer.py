@@ -2017,7 +2017,8 @@ async def main(argv):
             a = [a for a in rest if a != "--lpstyl"]
             try:
                 await mac.print_sw(a[1], a[2], open(a[3], "rb").read(),
-                                   order="lpstyl" if "--lpstyl" in rest else "apple")
+                                   order="lpstyl" if "--lpstyl" in rest else "apple",
+                                   strict=False)   # a real network loses packets
             except (AdspError, SwError, ValueError) as e:
                 sys.exit(str(e))
         elif rest[0] == "sw-queue" and len(rest) == 3:
