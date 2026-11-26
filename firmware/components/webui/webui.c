@@ -397,6 +397,13 @@ static esp_err_t general_post(httpd_req_t *req)
     if (top != INT_MIN && (top < SET_TOP_MIN || top > SET_TOP_MAX))
         return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST,
                                    "top_margin is -216 to 144, in 1/144 in");
+    // The page's colour theme, About's Appearance: "platinum" (the page's own colours) or
+    // one of the stylesheet's names.
+    char theme[12] = {0};
+    int th = -1;
+    if (json_str(body, "theme", theme, sizeof theme) && (th = settings_theme_from_name(theme)) < 0)
+        return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST,
+                                   "theme is platinum, snow, yellow or bondi");
 
     settings_save_general(host, queue, dither, gain);
     if (top != INT_MIN) settings_save_top_margin(top);
@@ -410,6 +417,7 @@ static esp_err_t general_post(httpd_req_t *req)
     // W-1109: Rainbow status lights, the page's switch.
     int rainbow = json_bool(body, "rainbow");
     if (rainbow >= 0) settings_save_rainbow(rainbow);
+    if (th >= 0) settings_save_theme(th);
     int ap = json_bool(body, "airprint"), lt = json_bool(body, "localtalk");
     if (ap >= 0 || lt >= 0) settings_save_switches(ap, lt);
     // W-1179: each rev 2026.11 socket's job, "auto" by default (no control on the page).

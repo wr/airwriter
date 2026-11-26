@@ -72,6 +72,8 @@ esp_err_t settings_load(settings_t *out, const char *mac_suffix)
         if (nvs_get_u8(h, "ribbon", &rb) == ESP_OK && rb <= 2) out->ribbon = rb;
         uint8_t rw = 0;
         if (nvs_get_u8(h, "rainbow", &rw) == ESP_OK) out->rainbow = rw ? 1 : 0;
+        uint8_t th = 0;
+        if (nvs_get_u8(h, "theme", &th) == ESP_OK && th < SET_THEME_COUNT) out->theme = th;
         uint8_t ap = 1, lt = 0xFF;
         nvs_get_u8(h, "airprint", &ap);
         out->airprint = ap ? 1 : 0;
@@ -191,6 +193,32 @@ esp_err_t settings_save_rainbow(int on)
     esp_err_t err = nvs_open(NS, NVS_READWRITE, &h);
     if (err != ESP_OK) return err;
     nvs_set_u8(h, "rainbow", on ? 1 : 0);
+    err = nvs_commit(h);
+    nvs_close(h);
+    return err;
+}
+
+static const char *const THEMES[SET_THEME_COUNT] = { "platinum", "snow", "yellow", "bondi" };
+
+const char *settings_theme_name(int theme)
+{
+    return THEMES[theme > 0 && theme < SET_THEME_COUNT ? theme : 0];
+}
+
+int settings_theme_from_name(const char *name)
+{
+    for (int i = 0; i < SET_THEME_COUNT; i++)
+        if (!strcmp(name, THEMES[i])) return i;
+    return -1;
+}
+
+esp_err_t settings_save_theme(int theme)
+{
+    if (theme < 0 || theme >= SET_THEME_COUNT) return ESP_ERR_INVALID_ARG;
+    nvs_handle_t h;
+    esp_err_t err = nvs_open(NS, NVS_READWRITE, &h);
+    if (err != ESP_OK) return err;
+    nvs_set_u8(h, "theme", (uint8_t)theme);
     err = nvs_commit(h);
     nvs_close(h);
     return err;

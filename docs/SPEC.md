@@ -2309,6 +2309,14 @@ board exists.
   21, 38-42, 47) in their GPIO function with the pad off: IO39-42 come out of reset as JTAG,
   where MTDO is a driven output that a switch left on would short. About's line under the name
   reads `2026.11 · Wells Workshop` or `Rev A · Wells Workshop`.
+- **Colour themes** (`W-1198 Settings page: colour themes, with Platinum as its own look`). The
+  page's colours are a setting of the board, on every board: `{"theme":"snow"}` to
+  `/api/general`, one of `platinum` (the page's own colours, and the default), `snow`, `yellow`
+  or `bondi`, anything else refused with 400; NVS `theme` (a byte, 0 to 3 in that order);
+  `/api/status` has `theme`. The board only keeps the choice. The page sets it as `data-theme`
+  on `<html>` (none for Platinum) and the stylesheet does the rest, light and dark; it also
+  keeps the last theme it was told in the browser's `localStorage`, so a reload starts in that
+  theme before the first status answer. The control is About's **Appearance** tiles.
 - **Cable test.** After both data legs pass, rev 2026.11 checks each handshake wire: it drives
   J4's handshake out high then low and reads J2's in (IO8, J4.1 to J2.2), then J2's out against
   J4's in (IO21, J2.1 to J4.2). A level comes back as itself through U3; an open wire leaves the

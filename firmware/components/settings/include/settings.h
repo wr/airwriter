@@ -29,6 +29,7 @@ typedef struct {
     uint8_t airprint;                // advertise and take AirPrint jobs (W-1079); on
     int8_t  lt_port;                 // the AppleTalk port (W-1079): 1 on, 0 off; on
     uint8_t rainbow;                 // Rainbow status lights (W-1109): the page's switch; off
+    uint8_t theme;                   // the page's colours, About's Appearance: SET_THEME_*; Platinum
     // W-1179, rev 2026.11: what each socket (0 J2, port 1; 1 J4, port 2) is set to do,
     // SET_PORT_*, and the job it last did (ports.h's port_job_t; 0 none yet), so a restart
     // keeps what was worked out. No control on the page: /api/general's port1 and port2.
@@ -67,6 +68,13 @@ esp_err_t settings_save_general(const char *hostname, const char *queue,
                                 const char *dither, int gain);
 esp_err_t settings_save_auto_update(int on);
 esp_err_t settings_save_rainbow(int on);
+// The settings page's colour theme: 0 is Platinum, the page's own colours; all are named as the
+// page's stylesheet names them (data-theme). The board only keeps the choice, so that every
+// browser that opens the page sees the same one.
+#define SET_THEME_COUNT 4
+const char *settings_theme_name(int theme);      // "platinum" when out of range
+int       settings_theme_from_name(const char *name);  // -1 for no such theme
+esp_err_t settings_save_theme(int theme);
 // The printer's model and the user's own name for it (W-1079). NULL keeps
 // each; an empty name goes back to the model's. Also stores the name in
 // effect as "queue", which firmware from before W-1079 reads.

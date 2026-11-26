@@ -400,6 +400,30 @@
    "about": "Board 1 as it is: ready, colour ribbon, home Wi-Fi",
    "patch": {}
   },
+  "theme-snow": {
+   "about": "The Snow White colour theme",
+   "patch": {
+    "GET /api/status": {
+     "theme": "snow"
+    }
+   }
+  },
+  "theme-yellow": {
+   "about": "The yellowed colour theme",
+   "patch": {
+    "GET /api/status": {
+     "theme": "yellow"
+    }
+   }
+  },
+  "theme-bondi": {
+   "about": "The Bondi colour theme",
+   "patch": {
+    "GET /api/status": {
+     "theme": "bondi"
+    }
+   }
+  },
   "no-printer": {
    "about": "No cable, or the printer is off",
    "patch": {
