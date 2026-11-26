@@ -1,5 +1,17 @@
 const $=i=>document.getElementById(i), $$=s=>[...document.querySelectorAll(s)];
 
+/* The colour theme is the board's (About). The browser keeps the last one it
+   was told, so a reload starts in it and not in the standard colours. */
+const THEMES=['snow','yellow','bondi'];   // Platinum is the page's own
+function setTheme(t){
+  const r=document.documentElement;
+  if(!THEMES.includes(t)) t='';
+  if(t) r.dataset.theme=t; else delete r.dataset.theme;
+  $$('#tp button').forEach(b=>b.setAttribute('aria-checked',b.dataset.t===t));
+  try{ localStorage.setItem('theme',t); }catch(e){}
+}
+try{ setTheme(localStorage.getItem('theme')); }catch(e){ setTheme(''); }
+
 /* ── helpers ───────────────────────────────────────────────────────── */
 let SIGNIN=false;
 const cap=s=>s?s[0].toUpperCase()+s.slice(1):'';
@@ -1713,7 +1725,18 @@ function drawBoard(s){
   const name=s.lc?'AirWriter LC':'AirWriter';
   $('brand').textContent=$('about-name').textContent=document.title=name;
   if(!rbBusy) $('rainbow').checked=!!s.rainbow;
+  if(typeof s.theme==='string'&&!thBusy) setTheme(s.theme);
 }
+/* About's Appearance: the page's colours, kept on the board. */
+let thBusy=false;
+$('tp').onclick=async e=>{
+  const b=e.target.closest('button'), was=document.documentElement.dataset.theme||'';
+  if(!b||thBusy||b.dataset.t===was) return;
+  thBusy=true; setTheme(b.dataset.t);
+  const r=await postJSON('/api/general',{theme:b.dataset.t||'platinum'});
+  thBusy=false;
+  if(r.error){ setTheme(was); say('about-say',r.error,1); }
+};
 let rbBusy=false;
 $('rainbow').onchange=async()=>{
   const on=$('rainbow').checked; rbBusy=true;

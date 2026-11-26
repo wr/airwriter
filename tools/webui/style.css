@@ -19,24 +19,24 @@
    face on the printer's badge, for names and titles.
    ═════════════════════════════════════════════════════════════════ */
 :root{
-  --desk:#d6d4cc; --bg:#ecebe6; --side:#e3e1da; --group:#faf9f5; --hover:rgba(70,60,40,.06);
-  --line:rgba(70,60,40,.13); --fg:#1f1e1b; --fg2:#6d6a62; --fg3:#a6a39a;
-  --accent:#3e3d39; --on-accent:#f7f6f2;
-  --field:#ffffff; --fieldline:rgba(70,60,40,.24);
-  --ink-y:#ecbb22; --ink-m:#d23c7c; --ink-c:#1c9bd6; --ink-k:#2c2b28; --ink-g:#3a9b48; --ink-b:#5b4dc1;
-  --track:#d3d0c7; --knob:#ffffff;
-  --shadow:0 1px 2px rgba(60,50,30,.07),0 0 0 .5px rgba(60,50,30,.07);
+  --desk:#d9d9d6; --bg:#f5f5f3; --side:#ededea; --group:#ffffff; --hover:rgba(40,40,35,.05);
+  --line:rgba(40,40,35,.12); --fg:#1c1c1a; --fg2:#666662; --fg3:#9e9e99;
+  --accent:#3a3a38; --on-accent:#f6f6f3;
+  --field:#ffffff; --fieldline:rgba(40,40,35,.24);
+  --ink-y:#ecbb22; --ink-m:#d23c7c; --ink-c:#1c9bd6; --ink-k:#2a2a28; --ink-g:#3a9b48; --ink-b:#5b4dc1;
+  --track:#d8d8d4; --knob:#ffffff;
+  --shadow:0 1px 2px rgba(30,30,25,.07),0 0 0 .5px rgba(30,30,25,.08);
   /* keys: a platinum cap with a lit top edge, standing a pixel proud */
-  --key:#f4f2ec; --key-hover:#f9f8f3; --key-down:#e9e7e0; --key-edge:#bcb9ae;
-  --key-hi:rgba(255,255,255,.9); --key-lift:0 2px 0 #aeaba1,0 3px 6px rgba(0,0,0,.20);
+  --key:#f8f8f6; --key-hover:#fcfcfb; --key-down:#ececea; --key-edge:#b9b9b4;
+  --key-hi:rgba(255,255,255,.9); --key-lift:0 2px 0 #ababa6,0 3px 6px rgba(0,0,0,.16);
   /* lamps: lit plastic, a saturated body and a core the light blows out */
-  --lamp-off:#c4c1b8;
+  --lamp-off:#c3c3be;
   --lamp-g:#33bf1f; --lamp-g-top:#5cdc3c; --lamp-g-core:#9df07a; --glow-g:rgba(70,215,40,.40);
   --lamp-a:#d4931a; --lamp-a-top:#eeb440; --lamp-a-core:#f7cf80; --glow-a:rgba(220,160,30,.35);
   --lamp-r:#cf2f26; --lamp-r-top:#e8564a; --lamp-r-core:#f2887a; --glow-r:rgba(215,60,45,.35);
   /* paper does not invert with the theme: ink on a page is dark in a dark room too */
-  --paper:#ffffff; --paper-edge:#c9c6bb; --paper-perf:#b9b6ab;
-  --sheet-bg:#f4f3ee; --scrim:rgba(30,25,15,.28);
+  --paper:#ffffff; --paper-edge:#c8c8c3; --paper-perf:#b8b8b3;
+  --sheet-bg:#f7f7f5; --scrim:rgba(20,20,15,.26);
   --font:-apple-system,BlinkMacSystemFont,'SF Pro Text','Helvetica Neue','Segoe UI',Roboto,sans-serif;
   --display:'Apple Garamond','Hoefler Text',Garamond,Georgia,serif;
   --mono:ui-monospace,'SF Mono',Menlo,monospace;
@@ -45,17 +45,17 @@
   --feed-w:24px; --hole:13px; --hole-pitch:26px;
 }
 @media (prefers-color-scheme:dark){:root{
-  --desk:#121110; --bg:#1e1d1b; --side:#252421; --group:#2c2b28; --hover:rgba(240,235,220,.06);
-  --line:rgba(240,235,220,.10); --fg:#f0eee8; --fg2:#a29f96; --fg3:#6e6b64;
-  --accent:#d9d6cd; --on-accent:#1e1d1b;
-  --field:#383733; --fieldline:rgba(240,235,220,.16);
-  --ink-k:#46443f; --track:#4a4843; --knob:#f0eee8;
+  --desk:#111111; --bg:#1d1d1d; --side:#242424; --group:#2c2c2c; --hover:rgba(235,235,235,.06);
+  --line:rgba(235,235,235,.10); --fg:#efefed; --fg2:#a0a09d; --fg3:#6c6c69;
+  --accent:#d8d8d5; --on-accent:#1d1d1d;
+  --field:#383838; --fieldline:rgba(235,235,235,.16);
+  --ink-k:#464646; --track:#4a4a49; --knob:#efefed;
   --shadow:0 0 0 .5px rgba(255,250,235,.07);
-  --key:#3a3934; --key-hover:#42413b; --key-down:#33322d; --key-edge:#17160f;
-  --key-hi:rgba(255,250,235,.10); --key-lift:0 2px 0 #0d0c0b,0 3px 6px rgba(0,0,0,.55);
-  --lamp-off:#45433e;
+  --key:#3a3a3a; --key-hover:#424242; --key-down:#333333; --key-edge:#141414;
+  --key-hi:rgba(255,255,255,.10); --key-lift:0 2px 0 #0d0c0b,0 3px 6px rgba(0,0,0,.55);
+  --lamp-off:#454545;
   --paper:#ded9cd; --paper-edge:#a9a49a; --paper-perf:#918d84;
-  --sheet-bg:#2f2e2a; --scrim:rgba(0,0,0,.5); color-scheme:dark}}
+  --sheet-bg:#2f2f2f; --scrim:rgba(0,0,0,.5); color-scheme:dark}}
 
 /* ── base ───────────────────────────────────────────────────────── */
 *{box-sizing:border-box}
@@ -431,6 +431,85 @@ dialog::backdrop{background:var(--scrim)}
 @media (max-width:480px){
   #ssid-row>.txt{display:none}
   #ssid-row .val{flex:1 1 auto;justify-content:flex-start;color:var(--fg)}
+}
+/* ── colour themes ──────────────────────────────────────────────────
+   The page's own colours are Platinum, the ImageWriter II's cool gray, with
+   the Performa's speaker grille at the foot of the sidebar. Three other cases
+   are set as data-theme on <html>: Snow White (the IIc's cream), yellow (that
+   plastic after thirty years by a window) and Bondi (the first iMac). Each is
+   the palette above in another plastic, plus one piece of the case: vents,
+   uneven yellowing and a hairline crack, the iMac's bezel stripes and a
+   frosted selection. No theme changes a control's shape. */
+:root[data-theme=snow]{color-scheme:light;--desk:#e6e2d5;--bg:#fbfaf4;--side:#f6f3ea;--group:#fffdf8;--hover:rgba(80,70,40,.05);--line:rgba(80,70,40,.11);--fg:#22201a;--fg2:#6f6b5d;--fg3:#a9a594;--accent:#4a4740;--on-accent:#fbf9f2;--field:#fffefb;--fieldline:rgba(80,70,40,.22);--ink-k:#2c2b28;--track:#e6e2d6;--knob:#ffffff;--shadow:0 1px 2px rgba(80,70,40,.06),0 0 0 .5px rgba(80,70,40,.07);--key:#fdfcf7;--key-hover:#fffefb;--key-down:#f4f1e8;--key-edge:#cfcabb;--key-hi:rgba(255,255,255,.9);--key-lift:0 2px 0 #c3beae,0 3px 6px rgba(0,0,0,.14);--lamp-off:#d6d2c4;--paper:#ffffff;--paper-edge:#d6d2c4;--paper-perf:#c6c2b3;--sheet-bg:#fcfbf6;--scrim:rgba(40,35,15,.24)}
+:root[data-theme=yellow]{color-scheme:light;--desk:#e6d9ac;--bg:#f6efd6;--side:#efe5c2;--group:#fcf8e8;--hover:rgba(110,80,0,.06);--line:rgba(110,80,0,.14);--fg:#2b2312;--fg2:#74663f;--fg3:#ab9e75;--accent:#6a5118;--on-accent:#fbf4d9;--field:#fffdf3;--fieldline:rgba(110,80,0,.26);--ink-k:#3a3014;--track:#dccf9f;--knob:#ffffff;--shadow:0 1px 2px rgba(90,65,0,.08),0 0 0 .5px rgba(90,65,0,.09);--key:#f8f1d8;--key-hover:#fcf7e4;--key-down:#ece2c0;--key-edge:#c4b480;--key-hi:rgba(255,252,235,.9);--key-lift:0 2px 0 #b6a672,0 3px 6px rgba(60,40,0,.16);--lamp-off:#d2c594;--paper:#fffdf5;--paper-edge:#d0c391;--paper-perf:#c0b27e;--sheet-bg:#f8f2dc;--scrim:rgba(50,35,5,.26)}
+:root[data-theme=bondi]{color-scheme:light;--desk:#b5dfe4;--bg:#f5faf9;--side:#e2f1f2;--group:#ffffff;--hover:rgba(0,90,105,.05);--line:rgba(0,90,105,.12);--fg:#10262b;--fg2:#4f6c72;--fg3:#93adb1;--accent:#00829a;--on-accent:#ffffff;--field:#ffffff;--fieldline:rgba(0,90,105,.24);--ink-k:#17353b;--track:#cfe5e7;--knob:#ffffff;--shadow:0 1px 2px rgba(0,70,85,.06),0 0 0 .5px rgba(0,70,85,.08);--key:#f8fcfb;--key-hover:#ffffff;--key-down:#e9f3f3;--key-edge:#b7d3d6;--key-hi:rgba(255,255,255,.95);--key-lift:0 2px 0 #a9c8cb,0 3px 6px rgba(0,60,70,.15);--lamp-off:#c6dcde;--paper:#ffffff;--paper-edge:#c4dbdd;--paper-perf:#b3cdd0;--sheet-bg:#f6fbfa;--scrim:rgba(0,40,50,.26)}
+/* About's Appearance: a small window in each theme's sidebar, pane and card colours */
+.tph{padding:11px 14px 4px}
+.tp{display:flex;flex-wrap:wrap;gap:6px 4px;padding:4px 8px 12px}
+.tp button{flex:1 1 0;min-width:54px;display:flex;flex-direction:column;align-items:center;gap:6px;padding:6px 2px;border:0;
+  border-radius:8px;background:none;color:var(--fg2);font-size:var(--t-small);line-height:1.15;text-align:center;cursor:pointer}
+.tp button[aria-checked=true]{color:var(--fg);font-weight:600}
+.tile{display:grid;grid-template-columns:32% 1fr;width:100%;max-width:92px;aspect-ratio:3/2;border-radius:7px;overflow:hidden;
+  box-shadow:0 0 0 .5px rgba(0,0,0,.28)}
+.tile i{background:var(--s)} .tile i+i{display:grid;place-items:center;background:var(--b)}
+.tile b{width:70%;height:54%;border-radius:3px;background:var(--g);box-shadow:0 0 0 .5px rgba(0,0,0,.12)}
+.tp [aria-checked=true] .tile{outline:2px solid var(--accent);outline-offset:2px}
+.tp [data-t=snow]{--s:#f6f3ea;--b:#fbfaf4;--g:#fffdf8}
+.tp [data-t=""]{--s:#ededea;--b:#f5f5f3;--g:#fff}
+.tp [data-t=yellow]{--s:#efe5c2;--b:#f6efd6;--g:#fcf8e8}
+.tp [data-t=bondi]{--s:#e2f1f2;--b:#f5faf9;--g:#fff}
+/* vents: cut grooves, a shadow above and a lit edge below, in from the left edge and short of the right */
+[data-theme=snow] .side::after,[data-theme=yellow] .side::after{content:"";flex:none;margin:auto 18px 6px 0;height:102px;
+  border-radius:0 2px 2px 0;background:repeating-linear-gradient(0deg,rgba(50,42,20,.50) 0 1px,rgba(50,42,20,.22) 1px 3px,rgba(255,255,255,.9) 3px 4px,transparent 4px 14px)}
+[data-theme=yellow] .side::after{background:repeating-linear-gradient(0deg,rgba(95,62,0,.36) 0 1px,rgba(95,62,0,.15) 1px 3px,rgba(255,255,255,.9) 3px 4px,transparent 4px 14px)}
+/* the Performa's speaker grille: holes, each with a lit lower lip */
+:root:not([data-theme]) .side::after{content:"";flex:none;margin:auto 18px 8px;height:60px;
+  background:radial-gradient(circle,rgba(30,30,25,.5) 0 1.1px,transparent 1.6px) 0 0/6px 6px,
+    radial-gradient(circle,rgba(255,255,255,.95) 0 1.1px,transparent 1.6px) 0 1px/6px 6px}
+/* the sidebar has yellowed more than the rest, most at the top; brittle, so a crack in the corner */
+[data-theme=yellow] .side{background-image:linear-gradient(180deg,rgba(196,138,20,.30),rgba(196,138,20,.08) 75%)}
+[data-theme=yellow] .app{position:relative}
+[data-theme=yellow] .app::after{content:"";position:absolute;right:0;bottom:0;width:150px;height:120px;pointer-events:none;
+  background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 150 120' fill='none' stroke-linejoin='round'%3E%3Cpath d='M150 109 131 104 121 91 101 86 93 70 74 66 66 54M121 91 126 77 116 68M93 70 84 76' stroke='rgb(255,250,225)' stroke-width='1.6' transform='translate(.7 .8)'/%3E%3Cpath d='M150 109 131 104 121 91 101 86 93 70 74 66 66 54M121 91 126 77 116 68M93 70 84 76' stroke='rgb(95,65,10)' stroke-opacity='.7' stroke-width='.7'/%3E%3C/svg%3E") no-repeat}
+/* Bondi blue is behind the window; the front is milky white with the bezel's faint stripes */
+[data-theme=bondi] body{background:radial-gradient(120% 90% at 30% 0,#3fbcc8,#0d93a5 45%,#006f82) fixed}
+[data-theme=bondi] .side{background-color:#f3f5f5;border-right-color:rgba(120,150,158,.22);
+  background-image:repeating-linear-gradient(90deg,rgba(160,180,187,0) 0,rgba(160,180,187,0) 2.5px,rgba(160,180,187,.14) 3.75px,rgba(160,180,187,.14) 5.25px,rgba(160,180,187,0) 6.5px,rgba(160,180,187,0) 7px)}
+[data-theme=bondi] .detail{background:#f8fafa}
+@media (min-width:761px){
+  [data-theme=bondi] .nav button[aria-current=page]{background:rgba(120,205,220,.42);color:var(--fg);
+    -webkit-backdrop-filter:blur(5px);backdrop-filter:blur(5px);
+    box-shadow:inset 0 0 0 1px rgba(0,130,154,.42),inset 0 1px 0 rgba(255,255,255,.7),0 1px 2px rgba(0,70,85,.14)}
+  [data-theme=bondi] .nav button[aria-current=page] .v{color:#425f65;opacity:1}
+}
+/* small gray text on the sidebar's most yellowed part needs the darker brown to read */
+[data-theme=yellow] .nav .v{color:#5f512c}
+/* The themes in a dark room: the dark palette above, turned toward each plastic. The details
+   keep their place; a groove's shadow deepens and its lit edge dims. */
+@media (prefers-color-scheme:dark){
+  :root[data-theme=snow]{color-scheme:dark;--desk:#16140f;--bg:#23211b;--side:#2a2821;--group:#33302a;--hover:rgba(240,235,220,.06);--line:rgba(240,235,220,.10);--fg:#f4f0e3;--fg2:#a8a393;--fg3:#736f61;--accent:#e6e0cf;--on-accent:#23211b;--field:#3e3b33;--fieldline:rgba(240,235,220,.16);--ink-k:#46443f;--track:#4f4b41;--knob:#f4f0e3;--shadow:0 0 0 .5px rgba(255,250,235,.07);--key:#403d35;--key-hover:#48453c;--key-down:#38352e;--key-edge:#19170f;--key-hi:rgba(255,250,235,.10);--key-lift:0 2px 0 #0d0c0b,0 3px 6px rgba(0,0,0,.55);--lamp-off:#4a463c;--paper:#ded9cd;--paper-edge:#a9a49a;--paper-perf:#918d84;--sheet-bg:#35322b;--scrim:rgba(0,0,0,.5)}
+  :root[data-theme=yellow]{color-scheme:dark;--desk:#17120a;--bg:#241d10;--side:#2c2413;--group:#362c18;--hover:rgba(255,220,140,.06);--line:rgba(255,220,140,.11);--fg:#f5ebc8;--fg2:#b3a376;--fg3:#7b6e4b;--accent:#e6c872;--on-accent:#241d10;--field:#42361e;--fieldline:rgba(255,220,140,.18);--ink-k:#55472a;--track:#584a2a;--knob:#f5ebc8;--shadow:0 0 0 .5px rgba(255,220,140,.08);--key:#453920;--key-hover:#4d4025;--key-down:#3b301a;--key-edge:#150f05;--key-hi:rgba(255,225,150,.10);--key-lift:0 2px 0 #0d0c0b,0 3px 6px rgba(0,0,0,.55);--lamp-off:#504327;--paper:#e4d8b4;--paper-edge:#a8996c;--paper-perf:#8f8158;--sheet-bg:#392f1a;--scrim:rgba(0,0,0,.5)}
+  :root[data-theme=bondi]{color-scheme:dark;--desk:#052f38;--bg:#0f2328;--side:#142c32;--group:#1a343b;--hover:rgba(190,240,245,.06);--line:rgba(190,240,245,.10);--fg:#e6f4f5;--fg2:#93b3b8;--fg3:#5f7f84;--accent:#3cc2d1;--on-accent:#06262c;--field:#23434a;--fieldline:rgba(190,240,245,.17);--ink-k:#2f5158;--track:#325860;--knob:#e6f4f5;--shadow:0 0 0 .5px rgba(190,240,245,.08);--key:#22424a;--key-hover:#294b53;--key-down:#1c3940;--key-edge:#061a1e;--key-hi:rgba(200,245,250,.10);--key-lift:0 2px 0 #04161a,0 3px 6px rgba(0,0,0,.5);--lamp-off:#2e5057;--paper:#d6e4e5;--paper-edge:#9db3b6;--paper-perf:#86a0a3;--sheet-bg:#1c383f;--scrim:rgba(0,0,0,.5)}
+  [data-theme=snow] .side::after,[data-theme=yellow] .side::after{background:repeating-linear-gradient(0deg,rgba(0,0,0,.62) 0 1px,rgba(0,0,0,.32) 1px 3px,rgba(255,245,220,.11) 3px 4px,transparent 4px 14px)}
+  :root:not([data-theme]) .side::after{background:radial-gradient(circle,rgba(0,0,0,.7) 0 1.1px,transparent 1.6px) 0 0/6px 6px,
+    radial-gradient(circle,rgba(255,255,255,.14) 0 1.1px,transparent 1.6px) 0 1px/6px 6px}
+  [data-theme=yellow] .side{background-image:linear-gradient(180deg,rgba(214,150,30,.17),rgba(214,150,30,.03) 75%)}
+  [data-theme=yellow] .app::after{opacity:.4}
+  [data-theme=bondi] body{background:radial-gradient(120% 90% at 30% 0,#127888,#07434e 45%,#03252c) fixed}
+  [data-theme=bondi] .side{background-color:#142c32;border-right-color:rgba(190,240,245,.08);
+    background-image:repeating-linear-gradient(90deg,rgba(190,240,245,0) 0,rgba(190,240,245,0) 2.5px,rgba(190,240,245,.05) 3.75px,rgba(190,240,245,.05) 5.25px,rgba(190,240,245,0) 6.5px,rgba(190,240,245,0) 7px)}
+  [data-theme=bondi] .detail{background:#10262b}
+  [data-theme=yellow] .nav .v{color:var(--fg2)}
+  @media (min-width:761px){
+    [data-theme=bondi] .nav button[aria-current=page]{background:rgba(60,190,205,.26);
+      box-shadow:inset 0 0 0 1px rgba(90,210,225,.45),inset 0 1px 0 rgba(255,255,255,.12),0 1px 2px rgba(0,0,0,.3)}
+    [data-theme=bondi] .nav button[aria-current=page] .v{color:#aecbcf}
+  }
+  .tile{box-shadow:0 0 0 .5px rgba(255,255,255,.2)} .tile b{box-shadow:0 0 0 .5px rgba(255,255,255,.08)}
+  .tp [data-t=snow]{--s:#2a2821;--b:#23211b;--g:#33302a}
+  .tp [data-t=""]{--s:#242424;--b:#1d1d1d;--g:#2c2c2c}
+  .tp [data-t=yellow]{--s:#2c2413;--b:#241d10;--g:#362c18}
+  .tp [data-t=bondi]{--s:#142c32;--b:#0f2328;--g:#1a343b}
 }
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}
   .scanning svg *{opacity:1}}

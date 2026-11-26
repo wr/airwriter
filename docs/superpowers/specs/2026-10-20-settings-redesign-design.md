@@ -154,6 +154,25 @@ Each was looked at in `tools/webui/preview.py` at desktop and phone width, light
 
 ## Amendments
 
+- **2026-11-25, colour themes** (`W-1198 Settings page: colour themes, with Platinum as its own
+  look`; SPEC §3.19). The page comes in four cases, picked from four tiles under **Appearance**
+  on About, above Rainbow status lights. Each tile is a small window in that theme's sidebar,
+  pane and card colours (Wells chose tiles over a pop-up menu and over round swatches).
+  **Platinum** is the page's own look and what a board shows with nothing chosen: the
+  ImageWriter II's cool, neutral gray, lighter than the warm gray it replaces, which is gone.
+  **Snow White** is the IIc's cream, **Brittle and Yellow** that plastic after thirty years by a
+  window, **Bondi** the first iMac. Each has a dark version that follows the device.
+  Each theme is a palette plus one piece of the case, drawn from photos of the machines and
+  kept off the content: a Performa's dot speaker grille at the foot of Platinum's sidebar; the
+  IIc's groove vents there for Snow White and for the yellowed theme, which also yellows the
+  sidebar more than the rest and has a hairline crack in the window's corner; for Bondi a Bondi
+  blue gradient behind the window, the front bezel's faint stripes on the sidebar and a frosted
+  selection. No theme changes a control's shape. Tried and dropped: Mac OS 8 window chrome for
+  Platinum (the themes are cases, not system software), grooves around the window, a sticker's
+  ghost on the yellowed sidebar, pill-shaped buttons, and the iMac port panel's ripple pattern.
+  The choice is the board's, so every browser shows the same one; the browser keeps the last
+  theme it was told, so a reload starts in it.
+
 - **2026-11-16, no DIP switches on any board** (`W-1162 Remove the DIP switch code: rev A boards ignore S1, the page's switches decide`; SPEC §3.19). About loses its DIP
   Switches group, and `/api/status` its `dip`. Rainbow status lights, a switch on About, shows
   on every board. The AppleTalk port's switch alone decides: `lt_port` is 1 or 0, never -1, and

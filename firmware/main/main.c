@@ -685,6 +685,7 @@ static void general_saved(void *ctx)
         s_set.rainbow = fresh.rainbow;
         led_grid_set_gamer(s_set.rainbow);
     }
+    s_set.theme = fresh.theme;
     // W-1179: a socket set to a job takes it as soon as no job holds the lock (sock_jobs_tick).
     for (int i = 0; i < 2; i++) {
         if (fresh.port_set[i] == s_set.port_set[i]) continue;
@@ -4032,7 +4033,7 @@ static void status_json(void *ctx, char *buf, size_t cap)
         "\"model\":\"%s\",\"pic\":%s,"
         "\"pmodel\":\"%s\",\"pname\":\"%s\",\"phost\":\"%s\",\"airprint\":%s,"
         "\"lt_port\":%d,\"lt\":%s,\"lt_chip\":\"%s\",\"board\":\"%s\",\"lc\":%s,"
-        "\"board_ok\":%s,\"rainbow\":%s,\"ap\":\"AirWriter-%s\",\"pw\":\"%s\","
+        "\"board_ok\":%s,\"rainbow\":%s,\"theme\":\"%s\",\"ap\":\"AirWriter-%s\",\"pw\":\"%s\","
         "\"laser\":%s,\"printers\":%s,\"fresh\":%s,\"internal\":{\"free\":%u,\"lowest\":%u}%s,"
         "\"pipe\":{\"in\":%u,\"out\":%u,\"queued\":%u,\"upload_ms\":%u,\"rip_ms\":%u,\"ms\":%u}}",
         state_text(v.state),
@@ -4064,7 +4065,8 @@ static void status_json(void *ctx, char *buf, size_t cap)
         json_esc(e_phost, sizeof e_phost, s_saved_host), s_set.airprint ? "true" : "false", s_set.lt_port,
         localtalk_serving() ? "true" : "false", lt_chip_name(lt_chip_shown()),
         BOARD_NAME, s_board_lc ? "true" : "false", s_board_ok ? "true" : "false",
-        s_set.rainbow ? "true" : "false", s_suffix, auth_kind_name(), laser, printers,
+        s_set.rainbow ? "true" : "false", settings_theme_name(s_set.theme), s_suffix, auth_kind_name(),
+        laser, printers,
         settings_fresh() ? "true" : "false",
         // Internal RAM is what Wi-Fi and lwIP live on: below ~20 KB, replies stall.
         (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
