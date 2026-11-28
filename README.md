@@ -30,6 +30,8 @@ Buy one from [Wells Workshop](https://shop.wells.ee/products/airwriter).
 The [wiki](../../wiki) has setup help and troubleshooting. [Updates](../../releases) install over
 Wi-Fi.
 
+Questions? Ask in [Wells Workshop on Discord](https://discord.gg/gACNgfyB7k), where other builders can help too. Found a bug or want a feature? Open an [issue](https://github.com/wr/airwriter/issues).
+
 ## How it works
 
 Inside is an ESP32-S3. It shows each printer to your network as an AirPrint printer. Each page
